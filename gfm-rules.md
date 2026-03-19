@@ -1,11 +1,36 @@
+# GFM Markdown Rules for CJK Bold Text
+
+How to fix `**bold**` rendering failures on GFM platforms (GitHub, Zenn, etc.) when using CJK (Chinese/Japanese/Korean) text.
+
+## `**` Delimiter Rules
+
+- **Opening `**` (left-flanking)**: Must be followed by a non-whitespace character. If followed by punctuation, must be preceded by whitespace or punctuation.
+- **Closing `**` (right-flanking)**: Must be preceded by a non-whitespace character. If preceded by punctuation, must be followed by whitespace or punctuation.
+
+## Common CJK Breakage Patterns
+
+| Pattern | Problem | Fix |
+|---|---|---|
+| `は**「bold」**` | Opening `**` followed by punctuation, preceded by non-punctuation → left-flanking fails | `は **「bold」**` (add space before) |
+| `（H3）**が` | Closing `**` preceded by punctuation, followed by non-punctuation → right-flanking fails | `（H3）** が` (add space after) |
+| `**bold **next` | Closing `**` preceded by space → right-flanking fails | `**bold**next` (remove space) |
+
+## Notes
+
+- Only add spaces **before the opening `**`**, never before the closing one
+- CJK characters are treated as "regular characters" in GFM. When closing `**` is preceded by fullwidth punctuation and followed by CJK, add a space after closing `**`
+- Never nest `**` inside `**` — this creates `****` which breaks rendering
+
+---
+
 # GFM Markdown ルール（日本語 bold 対策）
 
 zenn.dev 等の GFM プラットフォームで日本語テキストの `**bold**` が壊れるケースへの対処。
 
 ## `**` delimiter ルール
 
-**開き `**`（left-flanking）**: 直後が非空白。直後が句読点なら直前が空白か句読点。
-**閉じ `**`（right-flanking）**: 直前が非空白。直前が句読点なら直後が空白か句読点。
+- **開き `**`（left-flanking）**: 直後が非空白。直後が句読点なら直前が空白か句読点。
+- **閉じ `**`（right-flanking）**: 直前が非空白。直前が句読点なら直後が空白か句読点。
 
 ## 日本語で壊れるパターンと対処
 
