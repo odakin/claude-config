@@ -23,8 +23,6 @@ The idea is simple: keep one authoritative set of conventions and symlink it int
 │   ├── README.md           # this file
 │   ├── setup.sh            # bootstrap script
 │   ├── gfm-rules.md        # CJK markdown reference
-│   ├── articles/           # Zenn.dev articles (auto-deployed via GitHub)
-│   ├── package.json        # zenn-cli dependency
 │   ├── LICENSE             # MIT
 │   └── .gitignore
 ├── project-a/              # your projects
@@ -132,8 +130,6 @@ MIT
 │   ├── README.md           # このファイル
 │   ├── setup.sh            # セットアップスクリプト
 │   ├── gfm-rules.md        # CJK markdown リファレンス
-│   ├── articles/           # Zenn.dev 記事（GitHub 連携で自動デプロイ）
-│   ├── package.json        # zenn-cli 依存
 │   ├── LICENSE             # MIT
 │   └── .gitignore
 ├── project-a/              # 各プロジェクト
