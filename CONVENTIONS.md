@@ -7,6 +7,8 @@
 >
 > **`<username>`** = 自分の GitHub ユーザー名（`gh api user --jq '.login'` で確認）。
 >
+> **パスの記述規則:** CLAUDE.md・SESSION.md 等でローカルパスを記述する際は、ホームディレクトリを `~` で表記すること（例: `~/Dropbox/武田さん/`）。`/Users/odakin/` のようなユーザー固有の絶対パスは、他の端末・共同編集者の環境で壊れるため使わない。
+>
 > **このファイルの正本は `<base>/claude-config/CONVENTIONS.md`。**
 > `<base>/CONVENTIONS.md` は symlink（Windows は cp）。
 > 編集後は必ず **`cd <base>/claude-config && git add CONVENTIONS.md && git commit && git push`** すること。
