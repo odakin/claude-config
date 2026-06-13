@@ -437,6 +437,22 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 
 ---
 
+## 13. mechanism が「発火したか」 を検証する時は依存ゼロの unconditional probe + 独立 discriminator、 「実行」 と「honor」 を分ける
+
+§10 は「silent dead は実 e2e でしか expose できない」、 §12 は「再現 ≠ 検証」 だった。 本節は **mechanism (hook / 自動化 / guard) が特定 context で発火・効果したかを切り分ける**作法。 雑にやると「動いていない」 と「動いたが効果が捨てられた」 を取り違え、 誤った root cause を作話する。
+
+3 つの落とし穴と対処:
+
+1. **conditional な proxy で発火を判定しない** — 「cache の mtime が更新されたか」 「出力が出たか」 等は、 mechanism が **該当なしで silent** な設計だと「発火したが何も出さなかった」 と「そもそも発火しなかった」 を区別できない。 さらに proxy が複数の writer / 別 path / 認証・権限に依存すると交絡する。 → **依存ゼロの unconditional probe** を使う: 「呼ばれたら無条件に痕跡を残す」 だけの仕掛け (= file に 1 行 append する trace 等)。 API / credit / 権限 / 該当有無に依存しないので、 痕跡の有無 = 発火の有無を一意に決める。 ⚠️ 既存 mechanism に後から probe を差すと snapshot 型 harness では当該 session に反映されない (= `hook-authoring.md §9.1`) ので、 新 context (新 session / 新 frontend) で観測する。
+
+2. **env var / 表層の自己申告を frontend/context の discriminator にしない** — 環境変数は継承・leak・汚染しうる (= 例: `CLAUDE_CODE_ENTRYPOINT` が別 context に漏れる)。 → **独立した観測量**で判別する: 親プロセスの実 path / build 番号 / cwd 等、 自己申告でない物。 1 signal が怪しい時は 2 つ目の独立 signal で corroborate (= §convention-design-principles §8.14 の identity corroboration と同根)。
+
+3. **「実行された (executes)」 と「効果が honor された (honored)」 を分ける** — mechanism は **プロセスとして走った**のに、 その出力・決定を上位層が **捨てる**ことがある (= 例: desktop frontend は hook を実行するが stdout 注入 / permission 判定を honor しない、 `hook-authoring.md §9.3`)。 「効果が出ない」 を即「実行されていない」 と結論しない。 副作用 (file 書込等) の有無で「実行」 を、 モデル/flow への反映で「honor」 を別々に確認する。 両者は別の修復を要する (= 未実行なら配線、 honor されないなら surface 自体を変える = `docs/convention-design-principles.md §8.15`)。
+
+reflex: 「この mechanism、 ここで効いてる?」 を検証する時、 (a) 痕跡が conditional な proxy になっていないか、 (b) frontend/context 判別が自己申告 env に依存していないか、 (c) 「効果不在」 を「未実行」 と短絡していないか、 の 3 点を問う。
+
+origin: 2026-06-13 desktop-hook-gap 調査。 当初 SessionStart hook の死活を cache mtime で推定 → 交絡 (cache は別 writer + CLI 認証 credit 切れ + Terminal の EventKit TCC で書かれない) で不確定。 依存ゼロの trace (file append) に切替えて発火を確定、 親プロセス path で frontend を判別 (env var は汚染懸念)、 さらに「desktop は hook を実行するが出力を honor しない」 = 実行 ≠ honor を分離して初めて正確な像を得た。 起票 session は cache mtime 1 点 + env var で「SessionStart 死亡」 と推定し一部誤帰責していた (= §9.1 snapshot 交絡で PreToolUse 非発火も実は未分離だった)。
+
 ## 関連
 
 - [`CONVENTIONS.md §3`](../CONVENTIONS.md) — 4 軸 sweep の base 規約

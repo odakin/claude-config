@@ -546,6 +546,34 @@ reflex: 照合 mechanism を書く時「この一致は identity を保証する
 
 origin: 予定検出器が メールの予定時刻と calendar event を ±10 分一致だけで「同じ会議」 と同定し、 他者の部屋予約メールを偶然同時刻の無関係 event と誤ペアして「登録推奨」 と誤主張した事例 (= 当初「境界」 と矮小化し叱責された)。 同型: 同検出器が ±90 分近接を「変換済」 と誤抑制しかけ「近接別件」 注記に留めた先行修正 (= 時刻近接 ≠ 同一の同根)。 2 事例からの一般化 (§9.8 充足)。
 
+### 8.15 enforcement surface は frontend/実行 context で生存性が違う — guard を「どこで生存すべきか × 何を検査するか」で配置する
+
+§8.12 は発火面の **trigger 品質** (hook>skill>scheduled>doc)、 §8.13 は条件付き発火の **可視性** だった。 本節は直交する第 3 軸: **同じ enforcement surface (= settings.json hook 等) でも、 実行 context (frontend = terminal CLI / IDE 拡張 / desktop app、 machine、 session timing) によって honor されるか否かが変わる**。 「設定したから効く」 は隠れた前提で、 frontend がその surface を honor しない context では guard は **設定済なのに inert** になる (= 配線健全でも沈黙する第 4 の失敗、 §8.13 の「非活性」 とも別 — あちらは未登録、 本節は登録済だが frontend が無視)。
+
+確定事実 (= 2026-06-13 実測、 正本 `conventions/hook-authoring.md §9.3`): **Claude desktop (Cowork) app は settings.json hook を「プロセスとして実行」 はするが、 モデルに向かう出力を honor しない** (SessionStart の additionalContext 注入は捨てられ、 PreToolUse の permissionDecision も無効。 副作用 〔file 書込〕 は走る)。 一方 **declarative な `permissions.deny` は honor される**、 ask は非 bypass mode + frontend 自身の承認系を要する (`conventions/claude-code-permissions.md`)。 ⇒ hook ベースの guard は desktop で大半 inert。
+
+設計枠組み — guard = (1) **検出ロジック** (何の違反を捕まえるか) + (2) **enforcement surface** (どこ・いつ発火するか)。 surface を 「**検出が何を見る必要があるか** × **どの context で生存すべきか** (= stakes × 不可逆性 × incident 履歴)」 で選ぶ:
+
+| 検出が見るもの | 生存する surface | frontend 非依存度 |
+|---|---|---|
+| commit される **内容** | **git-native commit hook** (`.git/hooks/`、 `git commit` で必ず発火) | ◎ 全 frontend |
+| tool call の **可否決定** (block) | declarative `permissions.deny` | ◎ (desktop も honor) |
+| tool call の **確認** (ask) | permission ask (非 bypass mode 必須) + frontend の承認系 | △ mode 依存 |
+| 無人定期の **surface** | launchd/scheduled + OS 通知、 or SessionStart hook の **副作用 file 書込** + CLAUDE.md/skill の読込指示 (hook は injection-drop frontend でも実行されるので副作用は走る) | ○ |
+| surface に出ない **意図** / モデル context への注入 | discipline (CLAUDE.md は全 frontend で読まれる) — 単一視点で最弱 (§5.1) | — |
+
+**メタ規則**: 不可逆・高 stakes の guard ほど **frontend 非依存な surface** (git-native / declarative-deny) に置く。 生存性の梯子 = git-native commit hook > declarative deny > launchd/副作用+読込 > **settings.json hook (= frontend 依存!)** > discipline。 settings.json hook は「中程度に強い」 と錯覚されるが frontend 依存なので、 不可逆 guard をそこにだけ置くのは脆い。
+
+**再配置できない限界** (= 梯子を登れない型):
+- PreToolUse が持っていた 「**新規 content だけを見る**」 視点は commit-time に移せない: commit gate は artifact 全体を見るので、 既存の正当 content に chronic false-positive (§8.8/§10)。 field 単位 diff を足さない限り git-native 化は不可 (= qa.yaml markdown guard の型)。
+- injection 依存の surfacing は injection-drop frontend へ **部分的にしか**橋渡せない (= 副作用 file 書込は機械的だが、 読むのは CLAUDE.md 準拠 = discipline-assisted)。
+
+reflex:
+- guard が 「設定済なのに発火しない」 時、 最初に 「**この surface は この frontend/context で honor されるか?**」 を問う (= 「設定が間違いか」 より先に。 §9.3 の誤帰責防止)。
+- guard を **設計する**時、 「**どの context で守られるべきか? 選んだ surface はそこで生存するか? 検出が何を見る必要があり、 それが surface を制約しないか?**」 を問う。 不可逆 guard が frontend 依存 surface にしか乗らないなら、 検出ロジックを git-native 化できる形 (= committed content で判定) に再定式化できないか検討する。
+
+origin: 2026-06-13 desktop-hook-gap remediation。 odakin は desktop (Cowork) 主運用だが settings.json hook 群 (mail 誤送信 guard 含む) が desktop で hook 出力 honor されず大半 inert と判明。 再配置: mail → permission ask (`defaultMode:default` + `ask:send_email` + routine MCP を allow、 内容表示つき承認 dialog) / surfacing → SessionStart hook 副作用で `~/.claude/surface/*.txt` 書込 + CLAUDE.md 読込指示 / google-url → git-native commit warn。 qa-yaml は commit-time chronic-FP で再配置不可 → discipline、 calendar 自動強制 / memory / per-prompt §2§3 も surface 制約で discipline 受容。 §8.12 (trigger 品質軸) + §8.13 (可視性軸) に直交する frontend 生存性軸として一般化 (§9.8 充足)。
+
 ---
 
 ## 9. Triage と subtraction — 規約システムの成長・代謝バランス
