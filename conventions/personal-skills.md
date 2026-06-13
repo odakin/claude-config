@@ -80,9 +80,9 @@ hook 配信問題と同型)。
 
 **headless `claude -p` での検証は制約が多い** (2026-06-13 実測):
 
-- stdin が開いた pipe だと **EOF 待ちで無期限 hang** する → `< /dev/null` を必ず付ける
+- stdin が開いた pipe (never-EOF) のとき、 prompt を引数で渡していても **stdin を待つ**。 旧 build (2.1.53) は無期限 hang、 新 build (2.1.177) は 3 秒 grace 後に `Warning: no stdin data received in 3s, proceeding without it...` で進む (= build 依存、 `hook-authoring.md §9.2` と同類。 upstream は最新で緩和済、 docs issue #68118 起票時に確認)。 **いずれの build でも `< /dev/null` を付けるのが綺麗** (待ち時間ゼロ + 警告なし)
 - Claude Code session 内から起動するには `env -u CLAUDECODE` が要る (nested guard)
-- CLI の auth は GUI app と別 — 未認証 machine では 401 (`claude auth login` は user 操作)
+- CLI の auth は GUI app と別レイヤー — 未認証 machine では 401 (`claude auth login` は user 操作、 machine ごとに必要)
 - そもそも **trigger 品質は headless で測れない** (prompt に skill 名を入れた時点で汚染)
 
 → **実 session での trace 確認が上位互換** (discovery + trigger を一発で検証できる)。
