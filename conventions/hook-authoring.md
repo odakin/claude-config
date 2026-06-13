@@ -430,17 +430,22 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 
 **メタ規律**: hook 挙動を docs だけで assert せず、 ① logic は stdin で unit-test、 ② live 発火・新 field は **実測** (= throwaway hook / 実 tool call / 新 session)、 ③ 不確実な feature は **古い build でも動く path** を選ぶ (= stderr narrative / deny / new-session verify)。
 
-### 9.3 frontend 依存 — **Claude desktop (Cowork) app は settings.json の hook を実行しない**
+### 9.3 frontend 依存 — **Claude desktop (Cowork) app は hook を実行はするが、 その出力をモデルに honor しない**
 
-hook の発火は build だけでなく **frontend (= terminal CLI / IDE 拡張 / desktop app)** にも依存する。 **実測 (2026-06-13、 desktop 埋込 build 2.1.170)**: `~/.claude/settings.json` に正しく配線した PreToolUse hook が、 terminal CLI では発火するのに **desktop app では一切発火しない** (= matcher `.*create_event` と `Edit|Write` の異なる 2 hook を §2(d) trace で確認、 配線健全 〔(a)(b) green〕 + fresh snapshot 〔settings.json mtime < session 開始〕 でも非発火 = 「matcher bug」 でも「snapshot 古い」 でもない)。 SessionStart hook も発火しない兆候あり (= session 開始で更新されるはずの cache が stale)。
+hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 / desktop app)** にも依存する。 **実測 (2026-06-13、 desktop 埋込 build 2.1.170。 初回 session = PreToolUse 非効きを発見、 同日の cold-eyes 再検証 session で機構を精緻化)**:
 
-- ⚠️ **公式 docs の「Hooks … apply to both 〔CLI and Desktop〕」 は実機と乖離** (= 上記実測で false)。 docs を根拠に「desktop でも hook が効く」 と assume しない (= §9 冒頭「docs を鵜呑みにしない」 の frontend instance)。
+- **SessionStart hook**: desktop でも **プロセスとして実行される** (= 撤去前提の trace hook 〔stdin + 親プロセス path を記録〕 を SessionStart に仕込み、 desktop が `source:startup` の session を生成するたびに発火するのを確認。 親プロセス = 埋込 build 2.1.170)。 **だがその出力 (stdout / `additionalContext`) はモデルの文脈に注入されない** (= 同 hook に unique marker を載せ、 fresh な desktop session に「marker が見えるか」 と問うと「ない」。 加えて検証 session 自身が session 開始時に currentdate-anchor 〔無条件出力〕 や horizon の reminder を一切受領していない)。 ∴ **副作用 (file 書込等) は起きるが、 context injection は捨てられる**。
+- **PreToolUse hook**: その **permissionDecision (deny/ask) が honor されない** (= session 開始時から snapshot に在る memory-guard 〔marker 無し memory write を hard-deny するはず〕 が desktop で素通り。 deny 型ゆえ `bypassPermissions` でも隠れない零交絡で確定)。 execution 自体の有無は未分離 (= 初回 session の §2(d) trace 不在は **mid-session 追加による §9.1 snapshot 交絡**の可能性があり、 「実行されない」 と断定しない。 確実なのは「効果が届かない」)。
+- **正確な像** = **「desktop は hook を実行はするが、 モデルに向かう出力 (SessionStart の context injection / PreToolUse の permission 判定) を harness が honor しない」**。 旧版の「hook を一切実行しない」 / 「SessionStart も発火しない兆候 (cache stale)」 は **不正確** (= cache stale は SessionStart hook が呼ぶ calendar 取得補助 〔EventKit 経由の外部 binary〕 側の失敗 〔Terminal の TCC 不足等〕 が原因で、 hook 非実行の証拠ではなかった)。
+- **declarative permission との非対称**: 同じ desktop でも `~/.claude/settings.json` の `permissions.deny` は **honor される** (= 無害な deny 対象コマンドを叩いて block を実測)。 honor されないのは hook 出力と承認フロー (ask)。 詳細は [`claude-code-permissions.md`](claude-code-permissions.md) §frontend 切り分け。
+
+- ⚠️ **公式 docs の「Hooks … apply to both 〔CLI and Desktop〕」 は実機と乖離** (= desktop では hook の効果がモデルに届かない。 hook は走るが出力が honor されないため実質「効かない」)。 docs を根拠に「desktop でも hook が効く」 と assume しない (= §9 冒頭「docs を鵜呑みにしない」 の frontend instance)。
 - **有効化する手段は無い** (2026-06-13 確認): hook を desktop で on にする setting / CLI flag / env var は存在しない (`--output-format` は出力形式の制御で hook 実行とは無関係)。 desktop-native で最も近い機構は MCP server の `toolPolicy` (= 許可 tool の gating のみ、 PreToolUse のように **script を走らせる pre-tool-call は不可**)。 managed `allowManagedHooksOnly` は enterprise の管理制御で execution 保証ではない。
-- **判別**: `echo $CLAUDE_CODE_ENTRYPOINT` が `claude-desktop` なら hook は走らない (親プロセスが `Claude.app` か、 embedded build が PATH の CLI build と別番かでも判る)。
+- **判別**: `echo $CLAUDE_CODE_ENTRYPOINT` が `claude-desktop` なら **hook 出力はモデルに届かない** (= SessionStart injection も PreToolUse 判定も無効。 SessionStart は実行自体は起きるが出力が捨てられる)。 親プロセスが `Claude.app` 配下か、 embedded build が PATH の CLI build と別番かでも判る。
 
 **設計含意 (重要)**: hook は「Claude が滑った時に機械的に捕まえる第二視点」 (§5)。 desktop ではそれが消え、 guard は「Claude が規律を自力で守る」 単一視点 (§5.1) に degrade する。 ∴ **不可逆な事故を防ぐ guard ほど frontend 非依存の層に置く**:
 - **public leak 防止** = commit-time の **git native hook** (`.git/hooks/pre-commit` + `commit-msg`) に置く (= frontend を経由せず `git commit` で必ず発火。 §2 補足「真の層は commit-time git hook」 と同じ理由 + §2(d) Bash harness-bug も同時に回避)。 ← desktop でも生きる class。
-- **無人定期の surfacing** = launchd / scheduled task + OS 通知 (= frontend 非依存)。
+- **無人定期の surfacing** = launchd / scheduled task + OS 通知 (= frontend 非依存)。 **補足 (2026-06-13)**: SessionStart hook は desktop でも実行される (出力注入は捨てられるが副作用は走る) ので、 「SessionStart hook が surface を file に書く → Claude が起動時にそれを読む 〔CLAUDE.md / skill description は desktop でも読まれる〕」 という橋渡しも成立 (= launchd と並ぶ生成側の選択肢。 死んでいるのは注入だけで、 file 経由なら通常の tool call で読めるため)。
 - **介入型 guard** (= tool 引数を見て deny / rewrite。 mail 誤送信確認・calendar reminder 強制・memory 誤書き込み防止 等) は tool-call 境界が必須で git native 化できない → **desktop では原理的に不能**。 該当操作は CLI で行うか、 規律運用に割り切る。
 
 ---
