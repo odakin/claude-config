@@ -8,7 +8,7 @@
 
 ### 問題と意図判定
 
-冒頭の `conventions/*.md` 列挙が dir 実体 56 file に対し 35 file で drift していた (≈ 2.5 ヶ月分の追加忘れ)。「完全列挙のつもりが drift」 か 「意図的 curation (domain 規約のみ掲載)」 かを git 履歴で判定: (a) 初出 commit `4cdd2d4` (2026-03-31 split) では実体 2 file = 列挙 2 file の完全列挙、 (b) `git log -L` で列挙行の全履歴を見ると entry の除去は一度もなく単調追記のみ、 (c) 直近の追記 `e29fba4` は infra/meta 系 (hook-authoring / personal-skills) を含み 「domain 規約のみ」 仮説と矛盾、 (d) 漏れた 21 file は全て **CONVENTIONS.md を触らない commit** で追加されたもの。 → **完全列挙が意図、 追加忘れ drift と判定**。
+冒頭の `conventions/*.md` 列挙が dir 実体 56 file に対し 35 file で drift していた (≈ 2.5 ヶ月分の追加忘れ)。「完全列挙のつもりが drift」 か 「意図的 curation (domain 規約のみ掲載)」 かを git 履歴で判定: (a) 初出 commit `4cdd2d4` (2026-03-31 split) では実体 2 file = 列挙 2 file の完全列挙、 (b) `git log -L` で列挙行の全履歴を見ると entry の除去は一度もなく単調追記のみ、 (c) 直近の追記 `e29fba4` は infra/meta 系 (hook-authoring / personal-skills) を含み 「domain 規約のみ」 仮説と矛盾、 (d) 漏れた 21 file 中 20 は **CONVENTIONS.md を触らない commit** で追加されたもの (全 21 を commit 単位で検証済。 残る 1 = giving-talks.ja.md だけは CONVENTIONS.md を触った同時追加 commit `24c3775` でも EN のみ列挙されており、 これは drift でなく「翻訳 variant は列挙しない」 意図的前例)。 → **完全列挙が意図、 追加忘れ drift と判定** (.ja variant のみ例外規則として明文化)。
 
 ### 修復
 
