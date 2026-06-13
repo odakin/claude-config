@@ -18,7 +18,9 @@
 #   6.  全リポに pre-commit hook をインストール（Unicode→LaTeX 自動修正、
 #        hook 自体が staged file 判定で no-op skip するので全 repo に install）
 #   6b. JHEP.bst を texmf-local にインストール（全リポからグローバル利用）
-#   7.  Hammerspoon 設定をインストール（Claude Cmd+Q 誤終了防止、macOS のみ）
+#   7.  Hammerspoon 設定をインストール（Claude Cmd+Q 誤終了防止 + クリップボード
+#        整形 hotkey、macOS のみ）。個人層に hammerspoon/local.lua があれば
+#        ~/.hammerspoon/local.lua に symlink（init.lua 末尾の拡張 hook が読む）
 #   8.  Public repo pre-commit + commit-msg stubs をインストール
 #        （`.claude/public-repo.marker` を持つ repo のみ、冪等）+ missing
 #        marker の警告。 commit-msg layer は 2026-05-26 追加 (= claude-code
@@ -1253,6 +1255,31 @@ else
     else
         ln -s "$HS_SRC" "$HS_DST"
         echo "  Created: $HS_DST -> $HS_SRC"
+    fi
+
+    # 個人層が hammerspoon/local.lua を提供していれば ~/.hammerspoon/local.lua
+    # に symlink する。init.lua 末尾の local.lua hook がこれを読み、layer 1 を
+    # fork せずに個人の binding / watcher を足せる (= layer 1 は odakin 等の
+    # path を hardcode せず、検出した個人層から generic に拾う)。
+    if [ -n "${LAYER:-}" ] && [ -f "$LAYER/hammerspoon/local.lua" ]; then
+        HS_LOCAL_SRC="$LAYER/hammerspoon/local.lua"
+        HS_LOCAL_DST="$HS_DIR/local.lua"
+        if [ -L "$HS_LOCAL_DST" ]; then
+            if [ "$(readlink "$HS_LOCAL_DST")" = "$HS_LOCAL_SRC" ]; then
+                echo "  OK: $HS_LOCAL_DST -> $HS_LOCAL_SRC"
+            else
+                rm "$HS_LOCAL_DST"
+                ln -s "$HS_LOCAL_SRC" "$HS_LOCAL_DST"
+                echo "  Updated: $HS_LOCAL_DST -> $HS_LOCAL_SRC"
+            fi
+        elif [ -f "$HS_LOCAL_DST" ]; then
+            mv "$HS_LOCAL_DST" "$HS_LOCAL_DST.bak"
+            ln -s "$HS_LOCAL_SRC" "$HS_LOCAL_DST"
+            echo "  Backed up + created: $HS_LOCAL_DST -> $HS_LOCAL_SRC"
+        else
+            ln -s "$HS_LOCAL_SRC" "$HS_LOCAL_DST"
+            echo "  Created: $HS_LOCAL_DST -> $HS_LOCAL_SRC"
+        fi
     fi
 fi
 
