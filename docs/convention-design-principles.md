@@ -77,7 +77,7 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 
 §2.1/§2.2/§15 は **write 側**（正本を二重に*作る*な・宣言の衝突を sweep せよ・多重記述を是正せよ）。SoT には **read 側の双対**がある: ある案件の status を答えるとき **その案件の SoT を読む** — その entity を*言及するだけ*の別 store（受信メール・領収書・通知・log）を SoT と取り違えてはならない。
 
-一つの実世界 entity は多数の store に現れる（ある予約はメール・PDF・チャット通知・業務台帳に出る）。**特定の案件について authoritative なのは 1 つだけ**で、他は **source document**（SoT が cite する材料）にすぎない。**source document の沈黙・null は案件の答えではない。** ＝「二重 SoT」は多くの場合*存在しない*: 片方を source document と正しく分類すれば 1 SoT に解消する（design-out であって reactive 管理ではない）。
+一つの実世界 entity は多数の store に現れる（ある予約はメール・PDF・チャット通知・業務台帳に出る）。**特定の案件について authoritative なのは 1 つだけ**で、他は **source document**（SoT が cite する材料）にすぎない。さらに **SoT は自分が制御する内部 store（grep 可能・durable・自分の repo）でなければならない**: 外部サービス（予約サイト・vendor portal 等）とそれが送ってくる通知・領収書は、変化・喪失・stale がありこちらが制御できないので **SoT たり得ない external source**（先方の system-of-record であっても、こちらから見れば snapshot にすぎない）。必要な fact は内部 SoT に **absorb** する — 外部 fact を内部にコピーするのは二重 SoT ではない（外部は元々 SoT でない）。**source document・external source の沈黙・null は案件の答えではない。** ＝「二重 SoT」は多くの場合*存在しない*: 内部の非 SoT store / external source と正しく分類すれば内部 1 SoT に解消する（design-out であって reactive 管理ではない）。
 
 **Reflex（read 側）:**
 - 「〜は済んだ?／頼んだ?／どうなってる?」型の **matter-status 質問**には、手近な source document だけで即答せず **その案件の SoT を読んでから**答える。
