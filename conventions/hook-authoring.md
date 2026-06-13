@@ -114,7 +114,7 @@ claude-code が hook を起動するには **4 軸全てが揃う必要**:
 ### 防止策 / audit method
 
 **ゲート質問** (= hook 配信を「fix した」 と claim する前):
-0. **`echo $CLAUDE_CODE_ENTRYPOINT` を確認** — `claude-desktop` なら hook は frontend 上 **一切実行されない** (§9.3)。 desktop session での「非発火」 は配線の問題ではないので、 1-4 を audit する前にここを見る (= 誤帰責の最頻原因)。
+0. **`echo $CLAUDE_CODE_ENTRYPOINT` を確認** — `claude-desktop` なら **hook 出力がモデルに反映されない** (= hook は実行されるが harness が出力を honor しない、 §9.3)。 desktop session での「効かない / 非発火に見える」 は配線の問題ではないので、 1-4 を audit する前にここを見る (= 誤帰責の最頻原因)。
 1. `[ -e ~/.claude/hooks/<name>.sh ]` (= symlink target 健全?)
 2. `jq -e --arg c "<name>.sh" '.hooks.PreToolUse[] | select(.hooks[]?.command | contains($c))' ~/.claude/settings.json` (= entry 存在?)
 3. realistic JSON stdin で hook 起動 → 期待出力 確認 (= logic 健全?)
