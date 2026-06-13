@@ -114,6 +114,7 @@ claude-code が hook を起動するには **4 軸全てが揃う必要**:
 ### 防止策 / audit method
 
 **ゲート質問** (= hook 配信を「fix した」 と claim する前):
+0. **`echo $CLAUDE_CODE_ENTRYPOINT` を確認** — `claude-desktop` なら hook は frontend 上 **一切実行されない** (§9.3)。 desktop session での「非発火」 は配線の問題ではないので、 1-4 を audit する前にここを見る (= 誤帰責の最頻原因)。
 1. `[ -e ~/.claude/hooks/<name>.sh ]` (= symlink target 健全?)
 2. `jq -e --arg c "<name>.sh" '.hooks.PreToolUse[] | select(.hooks[]?.command | contains($c))' ~/.claude/settings.json` (= entry 存在?)
 3. realistic JSON stdin で hook 起動 → 期待出力 確認 (= logic 健全?)
@@ -428,6 +429,19 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 | PreToolUse `updatedInput` で tool 引数 rewrite (= default 注入) | 支持 (= allow/ask + 全 field 含め replace) | 古い build での support 未確認 | deny + 再発行 のほうが古い build でも確実 (= `<personal-layer>/hooks/calendar-reminder-guard.sh` が deny を選んだ理由) |
 
 **メタ規律**: hook 挙動を docs だけで assert せず、 ① logic は stdin で unit-test、 ② live 発火・新 field は **実測** (= throwaway hook / 実 tool call / 新 session)、 ③ 不確実な feature は **古い build でも動く path** を選ぶ (= stderr narrative / deny / new-session verify)。
+
+### 9.3 frontend 依存 — **Claude desktop (Cowork) app は settings.json の hook を実行しない**
+
+hook の発火は build だけでなく **frontend (= terminal CLI / IDE 拡張 / desktop app)** にも依存する。 **実測 (2026-06-13、 desktop 埋込 build 2.1.170)**: `~/.claude/settings.json` に正しく配線した PreToolUse hook が、 terminal CLI では発火するのに **desktop app では一切発火しない** (= matcher `.*create_event` と `Edit|Write` の異なる 2 hook を §2(d) trace で確認、 配線健全 〔(a)(b) green〕 + fresh snapshot 〔settings.json mtime < session 開始〕 でも非発火 = 「matcher bug」 でも「snapshot 古い」 でもない)。 SessionStart hook も発火しない兆候あり (= session 開始で更新されるはずの cache が stale)。
+
+- ⚠️ **公式 docs の「Hooks … apply to both 〔CLI and Desktop〕」 は実機と乖離** (= 上記実測で false)。 docs を根拠に「desktop でも hook が効く」 と assume しない (= §9 冒頭「docs を鵜呑みにしない」 の frontend instance)。
+- **有効化する手段は無い** (2026-06-13 確認): hook を desktop で on にする setting / CLI flag / env var は存在しない (`--output-format` は出力形式の制御で hook 実行とは無関係)。 desktop-native で最も近い機構は MCP server の `toolPolicy` (= 許可 tool の gating のみ、 PreToolUse のように **script を走らせる pre-tool-call は不可**)。 managed `allowManagedHooksOnly` は enterprise の管理制御で execution 保証ではない。
+- **判別**: `echo $CLAUDE_CODE_ENTRYPOINT` が `claude-desktop` なら hook は走らない (親プロセスが `Claude.app` か、 embedded build が PATH の CLI build と別番かでも判る)。
+
+**設計含意 (重要)**: hook は「Claude が滑った時に機械的に捕まえる第二視点」 (§5)。 desktop ではそれが消え、 guard は「Claude が規律を自力で守る」 単一視点 (§5.1) に degrade する。 ∴ **不可逆な事故を防ぐ guard ほど frontend 非依存の層に置く**:
+- **public leak 防止** = commit-time の **git native hook** (`.git/hooks/pre-commit` + `commit-msg`) に置く (= frontend を経由せず `git commit` で必ず発火。 §2 補足「真の層は commit-time git hook」 と同じ理由 + §2(d) Bash harness-bug も同時に回避)。 ← desktop でも生きる class。
+- **無人定期の surfacing** = launchd / scheduled task + OS 通知 (= frontend 非依存)。
+- **介入型 guard** (= tool 引数を見て deny / rewrite。 mail 誤送信確認・calendar reminder 強制・memory 誤書き込み防止 等) は tool-call 境界が必須で git native 化できない → **desktop では原理的に不能**。 該当操作は CLI で行うか、 規律運用に割り切る。
 
 ---
 
