@@ -505,6 +505,32 @@ reflex: 規律を doc に書く瞬間 + doc 記載規律の不発 RCA を書く�
 
 origin: 横断 lookup script が規律表の機械補強 column に**記載済みなのに**初手 routing で 2 回不発した事例 (script 新設の起点になった null 誤結論 + 後日の遠回り routing)。 personal skill 化して description dispatch に乗せた結果、 skill 名を含まない自然な質問への初手発火を新 session trace で確認。 `conventions/hook-authoring.md §5.3` (規律で hook を代替できない) に「中間 tier として skill がある」 を加える位置付け。 2+ 事例 + 既存 §5.3 系列からの一般化 (§9.8 充足)。
 
+### 8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる
+
+§8.12 は発火面の強弱だった。 本節はその前提条件: **出力の不在は ambiguous** — 「動いて該当なし (= 正常な沈黙)」 と「そもそも動いていない (= 未配線・未登録・未 install)」 を外から区別できない。 per-machine wiring / scheduled task 登録 / opt-in install のように **活性化に手動 step を要する mechanism** は、 その step が抜けても何も言わない (= silent dead) ので、 設計者は「動いている」 と誤認し続ける。
+
+帰結:
+- 活性化が conditional / manual な mechanism には、 **「自分は今このマシンで非活性」 を能動 surface する self-check (install-check)** を持たせる。 これが無いと「沈黙 = OK」 と「沈黙 = 死んでいる」 が融合する。
+- self-check は既存の毎 session 発火面 (SessionStart hook / dashboard) に相乗りさせ、 該当ホストでのみ・未活性時のみ surface する (= noise ゼロの非対称、 §8.12 reflex の「相乗り」 と接続)。
+- これは **heartbeat (= 走った痕跡を残す)** と対: install-check は「配線されているか」、 heartbeat は「配線済が実際に走ったか (no-op 含む)」 を別々に可視化する。 両方無いと「設計したのに死んでいる」 と「配線したのに止まった」 を取りこぼす。
+
+reflex: 自動化を「設計 + SKILL/doc を書いた」 で完了と思った瞬間に「これは活性化に手動 step を要するか? 要するなら、 抜けたことを誰が surface するか?」 を問う。 doc に「新 machine では再登録」 と書くだけ (= recall 依存、 §8.12 最弱面) では再演する。
+
+origin: 朝の自動登録 scheduled task が「設計・SKILL 記述済」 なのに backend 登録 step が一度も実行されず長期 silent dead だった事例 (= 出力の不在を「該当なし」 と誤認、 真因の発覚に user の「自動で動いてないんだっけ?」 を要した)。 同型: 週次自動公開ジョブの machine setup drift (install-check 先行実装) / hook 配線 drift (installer の --check)。 3 事例からの一般化 (§9.8 充足)。
+
+### 8.14 単一 field の一致で record を同定すると偶然一致が「同一」 と誤主張される — 行動を伴う同定には corroboration を要求
+
+mechanism が 2 つの store を照合する時 (= メールの予定 ↔ calendar、 inbox ↔ TODO 等)、 **1 つの field (時刻・日付・名前等) の一致を「同じ対象」 と解釈すると、 偶然の一致が false identity を生む**。 dense な store (= 固定枠の繰り返しエントリが密な個人 calendar 等) ほど偶然一致は日常で、 mechanism がその同定に基づいて **action (= 登録推奨・抑制・状態伝播) を取る**と、 誤った identity 主張が下流を誤誘導する。
+
+帰結:
+- identity を主張し action を取る前に **2 つ目の corroborating field** を要求する (= 時刻一致に加えて title の意味的重なり、 等)。 取れなければ identity を主張せず「近接する別物かもしれない」 という弱い注記に留める (= 安全側 = false-negative 側に倒す)。
+- 非対称に設計する: **抑制 (suppress) は低 risk なので単一 field で可、 だが「これは X だ」 と名指し + action 推奨は高 risk** なので corroboration 必須。
+- sweep で偶然一致を見つけたとき「実害は緩和済の境界」 と分類して fix を見送るのは検証の cell 埋め — mechanism が誤った主張を**生成している**なら、 緩和の有無に関わらず欠陥として直す。
+
+reflex: 照合 mechanism を書く時「この一致は identity を保証するか、 一次元の偶然か? identity に基づいて action を取るなら、 2 つ目の証拠は何か?」 を問う。
+
+origin: 予定検出器が メールの予定時刻と calendar event を ±10 分一致だけで「同じ会議」 と同定し、 他者の部屋予約メールを偶然同時刻の無関係 event と誤ペアして「登録推奨」 と誤主張した事例 (= 当初「境界」 と矮小化し叱責された)。 同型: 同検出器が ±90 分近接を「変換済」 と誤抑制しかけ「近接別件」 注記に留めた先行修正 (= 時刻近接 ≠ 同一の同根)。 2 事例からの一般化 (§9.8 充足)。
+
 ---
 
 ## 9. Triage と subtraction — 規約システムの成長・代謝バランス
