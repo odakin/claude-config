@@ -59,3 +59,16 @@ local function cleanClipboardAndPaste()
     end
 end
 hs.hotkey.bind({"ctrl", "alt", "cmd"}, "V", cleanClipboardAndPaste)
+
+-- 個人層 / マシンローカル拡張の読み込み hook
+-- ~/.hammerspoon/local.lua があれば末尾で読む（無ければ何もしない）。
+-- 本ファイル (= layer 1 共有設定) を fork せずに個人の binding を
+-- 足せるようにするための拡張点。個人層 repo のファイルへの symlink を
+-- 置く運用を想定（hooks の layer-3 chain と同じ発想）。
+local localLua = os.getenv("HOME") .. "/.hammerspoon/local.lua"
+if hs.fs.attributes(localLua) then
+    local ok, err = pcall(dofile, localLua)
+    if not ok then
+        hs.alert.show("local.lua の読み込みに失敗: " .. tostring(err), 4)
+    end
+end

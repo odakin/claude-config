@@ -186,6 +186,29 @@
     // 整形ロジックの正本は scripts/clipboard-cleaner.py — 変更時は両方を更新すること。
     const JA_RE = /[\u3000-\u30FF\u4E00-\u9FFF\uFF00-\uFFEF]/;
 
+    // \u300C\u610F\u56F3\u7684\u306A\u6539\u884C\u300D\u5224\u5B9A (1): \u6B21\u306E\u884C\u304C\u65B0\u3057\u3044\u69CB\u9020\u306E\u982D\u3067\u59CB\u307E\u308B
+    // \uFF08\u5B57\u4E0B\u3052 / \u7B87\u6761\u66F8\u304D / \u6761\u6587\u756A\u53F7\u3002\u6B63\u672C = clipboard-cleaner.py \u306E
+    //   INDENT_RE / MARKER_RE \u3068\u540C\u4E00\u5185\u5BB9\uFF09
+    const INDENT_RE = /^(\u3000|\t| {2,})/;
+    const MARKER_RE = /^(\u30FB|[\u25CF\u25CB\u25C6\u25C7\u25A0\u25A1\u25B6\u25B8]|[\uFF08(][0-9\uFF10-\uFF19\u4E00\u4E8C\u4E09\u56DB\u4E94\u516D\u4E03\u516B\u4E5D\u5341]+[\uFF09)]|[0-9\uFF10-\uFF19]+[\uFF0E.\u3001)\uFF09\u3000]|[\u4E00\u4E8C\u4E09\u56DB\u4E94\u516D\u4E03\u516B\u4E5D\u5341\u767E]+[\u3001\u3000]|\u7B2C[0-9\uFF10-\uFF19\u4E00\u4E8C\u4E09\u56DB\u4E94\u516D\u4E03\u516B\u4E5D\u5341\u767E\u5343]+[\u6761\u7AE0\u7BC0\u9805\u7DE8\u6B3E\u76EE]|[\u2460-\u2473])/;
+
+    // \u8868\u793A\u5E45\u306E\u8FD1\u4F3C\uFF08\u5168\u89D2 = 1.0\u3001\u534A\u89D2 = 0.5\u3002CJK\u30FB\u304B\u306A\u30FB\u5168\u89D2\u5F62\u3092\u5168\u89D2\u6271\u3044\uFF09
+    function width(s) {
+      let w = 0;
+      for (const ch of s) {
+        w += /[\u1100-\u115F\u2E80-\u303F\u3040-\u30FF\u3100-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/.test(ch) ? 1.0 : 0.5;
+      }
+      return w;
+    }
+
+    // \u300C\u610F\u56F3\u7684\u306A\u6539\u884C\u300D\u5224\u5B9A (2): \u6298\u308A\u8FD4\u3057\u884C\u306F\u53F3\u7AEF\u8FD1\u304F\u307E\u3067\u8A70\u307E\u3063\u3066\u3044\u308B\u6027\u8CEA\u3092
+    // \u5229\u7528\u3002\u524D\u306E\u884C\u304C\u30D6\u30ED\u30C3\u30AF\u6700\u5927\u5E45\u3088\u308A\u5168\u89D2 2 \u6587\u5B57\u4EE5\u4E0A\u77ED\u3051\u308C\u3070\u610F\u56F3\u7684\u306A\u884C\u672B
+    // \uFF08\u6BB5\u843D\u672B\u30FB\u898B\u51FA\u3057\u30FB\u7B87\u6761\u66F8\u304D\u9805\u76EE\u672B\uFF09\u306A\u306E\u3067\u6539\u884C\u3092\u6B8B\u3059\u3002
+    function keepBreak(prevLine, nextLine, maxW) {
+      if (INDENT_RE.test(nextLine) || MARKER_RE.test(nextLine)) return true;
+      return maxW - width(prevLine) >= 2.0;
+    }
+
     function clean() {
       const raw = inputEl.value;
       if (!raw.trim()) return;
@@ -196,21 +219,29 @@
       const result = [];
       for (const para of paragraphs) {
         const lines = para.split('\n').map(l => l.replace(/\s+$/, '')).filter(l => l.trim());
-        let joined = '';
-        for (const line of lines) {
-          if (!joined) { joined = line; continue; }
-          if (/[A-Za-z]-$/.test(joined)) {
-            // 英語のハイフネーション: ハイフンを除いて直結
+        if (!lines.length) continue;
+        const maxW = Math.max(...lines.map(width));
+        const outLines = [];
+        let joined = lines[0];
+        for (let i = 1; i < lines.length; i++) {
+          const prev = lines[i - 1], line = lines[i];
+          if (/[A-Za-z]-$/.test(prev)) {
+            // 英語のハイフネーション: 折り返し確定、ハイフンを除いて直結
             joined = joined.slice(0, -1) + line;
+          } else if (keepBreak(prev, line, maxW)) {
+            // 意図的な改行: そのまま残す
+            outLines.push(joined);
+            joined = line;
           } else if (JA_RE.test(joined.slice(-1)) || JA_RE.test(line.charAt(0))) {
-            // 行境界のどちらかが日本語: スペース無しで直結
+            // 折り返し・行境界のどちらかが日本語: スペース無しで直結
             joined += line;
           } else {
-            // 英語同士: スペースを挟む
+            // 折り返し・英語同士: スペースを挟む
             joined += ' ' + line;
           }
         }
-        if (joined) result.push(joined);
+        outLines.push(joined);
+        result.push(outLines.join('\n'));
       }
 
       const cleaned = result.join('\n\n');
