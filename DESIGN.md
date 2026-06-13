@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-06-13: CONVENTIONS.md 冒頭の conventions/ 列挙 — 完全列挙と判定して再生成、機械 enforcement は defer
+
+### 問題と意図判定
+
+冒頭の `conventions/*.md` 列挙が dir 実体 56 file に対し 35 file で drift していた (≈ 2.5 ヶ月分の追加忘れ)。「完全列挙のつもりが drift」 か 「意図的 curation (domain 規約のみ掲載)」 かを git 履歴で判定: (a) 初出 commit `4cdd2d4` (2026-03-31 split) では実体 2 file = 列挙 2 file の完全列挙、 (b) `git log -L` で列挙行の全履歴を見ると entry の除去は一度もなく単調追記のみ、 (c) 直近の追記 `e29fba4` は infra/meta 系 (hook-authoring / personal-skills) を含み 「domain 規約のみ」 仮説と矛盾、 (d) 漏れた 21 file は全て **CONVENTIONS.md を触らない commit** で追加されたもの。 → **完全列挙が意図、 追加忘れ drift と判定**。
+
+### 修復
+
+列挙を `ls conventions/*.md` の名前順で再生成し、 冒頭に scope marker (= 全列挙・名前順・新規 file は同 commit で追記・`.ja.md` 翻訳 variant は親 entry に併記) を明記。 これで「漏れ」 と 「意図的除外」 が区別可能になり、 将来の audit は列挙 vs `ls` の機械 diff に還元される。 `.ja.md` の扱いは前例踏襲 (= giving-talks の EN+JA 同時追加 commit `24c3775` でも EN のみ列挙していた) で親 entry への併記とした。 同型 drift だった CLAUDE.md 構造 tree (6 file 欠落) も同 commit で同期。
+
+### 機械 enforcement の defer 判断
+
+「新規 conventions/*.md 追加時に列挙追記を強制する check」 は検討の上 defer:
+
+- blast radius は annoyance 級 (= discovery index の不完全。 CLAUDE.md tree / filesystem という代替発見経路があり実害は軽微) で、 `docs/convention-design-principles.md` §9.1 triage により prevention engineering の対象外
+- 検出器の新設は §9.6 subtraction (= 機構増殖の抑制) に逆行
+- scope marker 化により drift 検出は 1 行 diff で済む状態に格下げ済
+
+**格上げ trigger** (= §8.12 の発火面 hierarchy item 4): 本修復後に列挙 drift が再発したら、 新 standalone 検出器は作らず **既存 channel への相乗り** で機械化する (候補 = claude-config の pre-commit chain に 「staged 新規 conventions/*.md が CONVENTIONS.md に mention されているか」 の check を追加)。
+
+---
+
 ## 2026-06-01: setup.sh の clone step — local dir rename による重複 clone を防ぐ
 
 ### 問題
