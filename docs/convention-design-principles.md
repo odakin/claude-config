@@ -73,6 +73,21 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 
 適用事例: 2026-06-12、同一 session 内で 2 連発 — ① 序列表は note を正本へ更新したのに script の tree 行が「script が SoT」のまま残存、② row 差し替えで旧 derived セルが残り 3 列表が 4 列化。どちらも宣言 commit 直後の grep + 目視で検出・修正。編集者本人の直後 sweep 以外に拾う仕組みがない型。
 
+### 2.3 SoT の read 側 — entity を「言及するだけの store」を SoT と取り違えない
+
+§2.1/§2.2/§15 は **write 側**（正本を二重に*作る*な・宣言の衝突を sweep せよ・多重記述を是正せよ）。SoT には **read 側の双対**がある: ある案件の status を答えるとき **その案件の SoT を読む** — その entity を*言及するだけ*の別 store（受信メール・領収書・通知・log）を SoT と取り違えてはならない。
+
+一つの実世界 entity は多数の store に現れる（ある予約はメール・PDF・チャット通知・業務台帳に出る）。**特定の案件について authoritative なのは 1 つだけ**で、他は **source document**（SoT が cite する材料）にすぎない。**source document の沈黙・null は案件の答えではない。** ＝「二重 SoT」は多くの場合*存在しない*: 片方を source document と正しく分類すれば 1 SoT に解消する（design-out であって reactive 管理ではない）。
+
+**Reflex（read 側）:**
+- 「〜は済んだ?／頼んだ?／どうなってる?」型の **matter-status 質問**には、手近な source document だけで即答せず **その案件の SoT を読んでから**答える。
+- **session 開始時、context window はその案件について空の cache**。会話に流れてきた情報や直前に fetch した 1 store を「知っている＝真実」と扱わない。SoT は disk 上にあり、取りに行くのは option でなく前提。
+- source document を読んで見つからない時の第一仮説は「案件が無い」でなく **「SoT を未読／読む store を間違えた」**。null は世界の事実でなく「探す場所が違う」証拠。
+
+write 側「one fact, one home」（[`personal-layer.md`](personal-layer.md) §publish-boundary の partition / MOVE-not-copy）と対で、read 側は「one matter → read its single SoT」。**二重 SoT を*作らない*のと source document を SoT と*読み違えない*のは同一原則の両面。**
+
+origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問われ、会話冒頭で見ていた source document（個人アカウントのメール通知）を SoT と取り違え、その null から「未対応／記録なし」と結論 + 不在を説明する誤った root cause を作話。実際は別 SoT（業務台帳）に完全記録済で 1 grep の距離にあった。write path（記録）は完璧、read path（SoT を読む）が崩れた型。同日 sibling = 横断 lookup を要する案件で SoT 直読より手近 store を先に見た失敗（§8.11 / §8.12 と同根）。layer-3 機械対策 = source store を業務 query で検索したら正しい SoT へ routing する guard + matter-status を SoT-read に乗せる dispatch（instance は layer 3 archive 残置 = kernel-up / instance-down）。
+
 ---
 
 ## 3. 規約追加の判断基準：「規約がない」のか「規約を読まない」のか
@@ -1076,3 +1091,4 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 | 2026-06-13 | §14.2 に「機械 consumer に positional § 番号を与えない」 追記 | SoT registry の pointer_patterns に "8.12" を登録 + 「restructure 時に同時更新」 注記で残した同日、 user 指摘で即時除去に転換した RCA。 機械 match string は renumber で silent false-negative 化 + 将来条件付き注記は recall 依存 landmine (= §8.12 適用)。 除去後検証で pattern 自体が冗長と判明 |
 | 2026-06-13 | §8.12 新設「規律の発火面 hierarchy」 + conventions/personal-skills.md 新設 + hook-authoring.md §10 新設 | 横断 lookup script が規律表の機械補強 column 記載済みなのに 2 回不発 → personal skill 化で初手発火を実証した session から抽出。 §8.12 = 発火面 (hook / skill / scheduled task / doc) を内容と独立の設計軸として確立、 「reflex の徹底」 という再発防止策は発火面選択 skip の signal。 hook-authoring §10 = trigger が意図を識別できない hook は chronic FP で fleet を毀損 → skill へ切替える判定。 personal-skills.md = auto-discover skill の機構 facts (symlink 可・session 開始時 discovery、 2.1.170 実測) + description の書き方 + 多 machine 配線 (explicit allowlist registry) + 検証作法 (trigger test → discovery test の汚染回避順序、 headless `claude -p` の stdin hang / CLAUDECODE / CLI 別 auth 制約)。 kernel-up / instance-down (= incident 詳細は個人層 archive 残置) |
 | 2026-06-09 | §8.11 新設「downstream 安全網は intake で正しく表現された対象しか守れない」 + §8.10 の §9.8 根拠を softening | 4 軸 self-check で §8.10 が「2 独立観察」 を over-claim (= 直接観察 1 件 + sibling) と発覚 → 「1 強 + 1 sibling、 既存 §1 の対辺補完」 に訂正。 §8.11 は別件: 「期限つき義務の見落とし」 incident 連鎖 (3+ 事例) から、 §8.8 (網が proxy を見る) の上流版 = 「網が見る対象自体が intake で mis-encode され downstream をいくら足しても掴めない / leverage は intake の encoding で、 しばしば機械化不能の判断」 を一般化。 user 方針「上の層へ移せるものは移す」 で layer 3 incident の general kernel を hoist (instance は layer 3 に残置 = kernel-up / instance-down) |
+| 2026-06-13 | §2.3 新設「SoT の read 側」 | 出張案件の status を問われ source document (個人 account のメール通知) を SoT と取り違え、 null から作話で誤結論した RCA を一般化。 §2.1/§2.2/§15 は write 側 (二重に作るな) だが read 側 =「source document の null は答えでない / session 開始時 context window は案件について空 cache / null の第一仮説は『読む store を間違えた』」 が未収録だった。 同日 sibling (cite-me lookup 不発 §8.12 / labnexus burn-down の lookup-context 不実施) と合わせ 2+ 観察 (§9.8 充足)。 layer-3 機械対策 = account routing guard + matter-status SoT-read dispatch (instance 残置 = kernel-up / instance-down) |
