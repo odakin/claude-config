@@ -659,6 +659,18 @@ Claude 側の規律 (work-discipline.md 相当):
 
 §9.1 triage との組み合わせ: annoyance 級 × scope 不明 = **対策せず受容が基本**。material 級以上 × scope 確認済 = 対策設計へ。
 
+### 9.9 新しい定義は自分の origin 例で破られやすく、その自己違反は定義の under-specification を指す probe
+
+新しい分類・定義・原則を導入する fix は、**それを説明するための origin 例（適用事例・動機の story）の中で**最も破られやすい。注意が「原則を正しく言明する」に向き、それを照らすはずの具体 instance を **同じ定義で rigorous に bin する**作業に向かないため。
+
+さらに重要なのは: **自己違反は単なる注意 slip ではなく、定義が under-specified な seam を指す probe** である。原則を破った当の instance こそ、定義が暗黙に 2 つ（以上）の異なる物を 1 語に潰していた箇所を露出している。
+
+**Reflex:**
+- 新しい定義を ship する前に、**それが名指す全 concrete instance（特に origin 例）に self-apply** して bin し直す（既存の「直前に書いた discipline を同 session 内で self-apply scan」を、新定義の例に向けて狙い撃つ）。
+- 自己違反を捕まえたら、**その instance を直すだけで終わらせず、露出した「欠けている区別」を定義に足す**（patch でなく refine）。
+
+**適用例 (2026-06-13)**: §2.3「SoT の read 側」を新設した直後、その origin 例で external service（予約サイト）を SoT 扱いした。原因は §2.3 v1 の「source document」が **「内部の非選択 store」と「制御不能な external source」の 2 つを 1 語に潰していた**こと。user 指摘で external source の区別を §2.3 に追加 = 自己違反が taxonomy の gap を probe した実例。RCA そのものを書く act の中で、その RCA が戒める分類誤りを再演した（= §9.2 asymmetric reflection bias の一形態 / 「直前 discipline の self-apply」の specific 化）。
+
 ---
 
 ## 10. File-role architecture — context 効率のための auto-load tier 設計
@@ -1092,3 +1104,4 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 | 2026-06-13 | §8.12 新設「規律の発火面 hierarchy」 + conventions/personal-skills.md 新設 + hook-authoring.md §10 新設 | 横断 lookup script が規律表の機械補強 column 記載済みなのに 2 回不発 → personal skill 化で初手発火を実証した session から抽出。 §8.12 = 発火面 (hook / skill / scheduled task / doc) を内容と独立の設計軸として確立、 「reflex の徹底」 という再発防止策は発火面選択 skip の signal。 hook-authoring §10 = trigger が意図を識別できない hook は chronic FP で fleet を毀損 → skill へ切替える判定。 personal-skills.md = auto-discover skill の機構 facts (symlink 可・session 開始時 discovery、 2.1.170 実測) + description の書き方 + 多 machine 配線 (explicit allowlist registry) + 検証作法 (trigger test → discovery test の汚染回避順序、 headless `claude -p` の stdin hang / CLAUDECODE / CLI 別 auth 制約)。 kernel-up / instance-down (= incident 詳細は個人層 archive 残置) |
 | 2026-06-09 | §8.11 新設「downstream 安全網は intake で正しく表現された対象しか守れない」 + §8.10 の §9.8 根拠を softening | 4 軸 self-check で §8.10 が「2 独立観察」 を over-claim (= 直接観察 1 件 + sibling) と発覚 → 「1 強 + 1 sibling、 既存 §1 の対辺補完」 に訂正。 §8.11 は別件: 「期限つき義務の見落とし」 incident 連鎖 (3+ 事例) から、 §8.8 (網が proxy を見る) の上流版 = 「網が見る対象自体が intake で mis-encode され downstream をいくら足しても掴めない / leverage は intake の encoding で、 しばしば機械化不能の判断」 を一般化。 user 方針「上の層へ移せるものは移す」 で layer 3 incident の general kernel を hoist (instance は layer 3 に残置 = kernel-up / instance-down) |
 | 2026-06-13 | §2.3 新設「SoT の read 側」 | 出張案件の status を問われ source document (個人 account のメール通知) を SoT と取り違え、 null から作話で誤結論した RCA を一般化。 §2.1/§2.2/§15 は write 側 (二重に作るな) だが read 側 =「source document の null は答えでない / session 開始時 context window は案件について空 cache / null の第一仮説は『読む store を間違えた』」 が未収録だった。 同日 sibling (cite-me lookup 不発 §8.12 / labnexus burn-down の lookup-context 不実施) と合わせ 2+ 観察 (§9.8 充足)。 layer-3 機械対策 = account routing guard + matter-status SoT-read dispatch (instance 残置 = kernel-up / instance-down) |
+| 2026-06-13 | §9.9 新設「新定義は origin 例で自己違反しやすい / 自己違反は under-specification の probe」 | §2.3 を新設した直後、 その origin 例で external service を SoT 扱いした自己違反を user が指摘 → §2.3 に external source 区別を追加した meta。 RCA を書く act 中でその RCA が戒める分類誤りを再演 = §9.2 / 「直前 discipline の self-apply」 の specific 化。 self-violation が定義の seam を probe する (= 「source document」 が内部非選択 store と external source を 1 語に潰していた) を一般化 |
