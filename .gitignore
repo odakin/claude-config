@@ -5,3 +5,4 @@
 __pycache__/
 .claude/*
 !.claude/public-repo.marker
+!.claude/pre-commit-extra.sh

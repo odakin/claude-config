@@ -14,15 +14,18 @@
 
 列挙を `ls conventions/*.md` の名前順で再生成し、 冒頭に scope marker (= 全列挙・名前順・新規 file は同 commit で追記・`.ja.md` 翻訳 variant は親 entry に併記) を明記。 これで「漏れ」 と 「意図的除外」 が区別可能になり、 将来の audit は列挙 vs `ls` の機械 diff に還元される。 `.ja.md` の扱いは前例踏襲 (= giving-talks の EN+JA 同時追加 commit `24c3775` でも EN のみ列挙していた) で親 entry への併記とした。 同型 drift だった CLAUDE.md 構造 tree (6 file 欠落) も同 commit で同期。
 
-### 機械 enforcement の defer 判断
+### 機械 enforcement: 当初 defer → 同 session で実発火に格上げ (`.claude/pre-commit-extra.sh`)
 
-「新規 conventions/*.md 追加時に列挙追記を強制する check」 は検討の上 defer:
+当初は「再 drift したら機械化する」 という **doc 記載の格上げ trigger** で defer した (= blast radius annoyance 級、 §9.1 triage、 §9.6 機構増殖抑制)。 しかし user が「これはしっかりそうなるようになってるか?」 と問うた — これは正しい指摘で、 **doc 記載の trigger は §8.12 の最弱発火面 (recall 依存)** であり、 まさに今回の列挙 drift を ~2.5 ヶ月 silent 累積させた失敗 mode そのもの。 「再 drift したら発動」 は安全網に見えて、 実体は「誰かが DESIGN.md を読んで思い出せたら」 に依存する note にすぎない。
 
-- blast radius は annoyance 級 (= discovery index の不完全。 CLAUDE.md tree / filesystem という代替発見経路があり実害は軽微) で、 `docs/convention-design-principles.md` §9.1 triage により prevention engineering の対象外
-- 検出器の新設は §9.6 subtraction (= 機構増殖の抑制) に逆行
-- scope marker 化により drift 検出は 1 行 diff で済む状態に格下げ済
+→ user の問いを trigger として、 同 session で**既存 channel への相乗り**で機械発火に格上げ済 (= 新 standalone 検出器 / dashboard 項目は増やさない):
 
-**格上げ trigger** (= §8.12 の発火面 hierarchy item 4): 本修復後に列挙 drift が再発したら、 新 standalone 検出器は作らず **既存 channel への相乗り** で機械化する (候補 = claude-config の pre-commit chain に 「staged 新規 conventions/*.md が CONVENTIONS.md に mention されているか」 の check を追加)。
+- **発火面**: `public-precommit-runner.sh` が leak gate pass 後に chain する `<repo>/.claude/pre-commit-extra.sh` (= 既存の設計済み拡張口、 従来 claude-config 未使用) に check を実装。 commit の瞬間・drift を入れた本人に発火する決定的 surface
+- **検査**: CONVENTIONS.md 冒頭の全列挙 + CLAUDE.md 構造 tree の conventions/ block が、 実体 `conventions/*.md` と一致するか (.ja.md は列挙内 variant link として実体集合と一致)
+- **比例性**: §9.1 に従い **warning のみ・常に exit 0** (commit を block しない)。 annoyance 級に block を当てない
+- **検証**: 同期済で無音 / drift 注入で該当 file 名指し warning を self-test 済
+
+残課題: pre-commit は claude-config に commit する瞬間にしか発火しない (= 他 clone / 別経路で dir だけ増えた状態は次 commit まで未検出)。 ただし dir 追加は必ず commit を伴うため実害は最小。
 
 ---
 
