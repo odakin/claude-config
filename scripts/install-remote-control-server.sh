@@ -24,10 +24,11 @@
 # - 認証 (claude.ai OAuth) や初回同意が無いとサーバーは起動拒否で即 exit するが、
 #   KeepAlive + ThrottleInterval が 60 秒間隔で retry するため、解消後に自動で生き返る
 #   (= preflight 失敗でも install は完了させる)。
-# - plist には PATH 依存の `claude` でなく preflight で解決した $CLAUDE_BIN の絶対パスを
-#   焼き込む。さもないと claude が plist の PATH 外 (= 非標準 install 先) にある環境で
-#   preflight だけ通り launchd が永久 cycling する (native install の ~/.local/bin は
-#   auto-update を跨いで安定するので絶対パス焼き込みで問題ない)。
+# - plist は PATH 依存の `exec claude` を使う (= 起動毎に PATH 再解決するので claude の
+#   再 install / 移動に強い)。絶対バイナリパスは焼き込まない (= 移動で stale 化し永久
+#   cycling する弱点を避ける、 = 公開ツールとして多様な install を壊さない)。preflight が
+#   解決した claude の dir を PATH 先頭に足すので、非標準 install 先でも起動する (= preflight
+#   と plist の解決経路を一致させる、 標準 install 先なら重複するだけで無害)。
 
 case "$(uname -s)" in
   Darwin) ;;
@@ -96,6 +97,10 @@ rm -f "$TMPLOG"
 
 # --- install (idempotent) -----------------------------------------------------
 mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
+CLAUDE_DIR=$(dirname "$CLAUDE_BIN")   # preflight 解決先を plist PATH 先頭へ (= 非標準 install 先対応)
+case "$CLAUDE_DIR" in
+  *[\&\<\>\"]*) echo "[error] claude install dir contains XML-unsafe characters: $CLAUDE_DIR" >&2; exit 1 ;;
+esac
 
 if [ -n "$OLD_AGENT" ]; then
   launchctl bootout "gui/$UID_N/$OLD_AGENT" 2>/dev/null
@@ -113,7 +118,7 @@ cat > "$PLIST" <<EOF
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>export PATH="\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; cd "$RC_DIR" &amp;&amp; exec "$CLAUDE_BIN" remote-control</string>
+    <string>export PATH="$CLAUDE_DIR:\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; cd "$RC_DIR" &amp;&amp; exec claude remote-control</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
