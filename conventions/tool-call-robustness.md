@@ -50,6 +50,7 @@ root は backend fix 待ちだが、 発生確率と poisoning ループは以�
 6. **commit message など複数行 + 山括弧を含むものはファイルに書いて `git commit -F`** で渡す (= `-m "..."` 内の山括弧・改行を避ける)。
 7. **malformed が出たら同 session で retry を重ねない**。 #62344 の poisoning で後続も壊れるため、 数回失敗したら **新しい session に切り替える** (= 壊れた context を断ち切る)。
 8. **model を切り替える** (= 最も確実な緩和)。 bug は Opus 4.8 固有で、 #64774 が他 model (Opus 4.7 / Sonnet 4.6) の失敗率 0% を定量報告。 tool-call 密度の高い作業で頻発するなら `/model` で別 model に切り替えるのが root に最も近い回避になる (= backend fix が出るまでの実用解)。
+9. **当該操作をサブエージェント (Agent tool、 例: general-purpose) に委譲する**。 malformed が再発して特定の tool call が通らないとき、 その操作を sub-agent に委譲すると **別 context で実行される**ため回避できることがある (= 2026-06-15 実例: メイン session 〔Opus 4.8 1M-context〕 で `settings.json` の 1 行 Edit が 2 連続 malformed → 同じ編集を sub-agent に委譲したら 1 回で成功)。 位置づけは 7 (新 session) / 8 (model 切替) と同じ「root が直らないとき作業を別経路に逃がす」 系だが、 **新 session より軽量で現 session の context を保ったまま当該操作だけ別経路に出せる**のが利点。 複雑判断を伴わない単発操作 (= ファイル編集・コマンド実行) の委譲に向く (= 判断を要する作業の丸投げではない)。 ⚠️ sub-agent の完了報告自体が偽成功変種で捏造されうる (= 後述「tool 結果の silent 捏造」 節) ので、 委譲結果は ground truth (`git log` / `grep` 等) で裏取りする。
 
 ## 限界 (= 誇張しない)
 
