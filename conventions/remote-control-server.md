@@ -28,8 +28,9 @@ QR (space キー) は使えないが、接続先は ① claude.ai/code のセッ
 
 | 要件 | 欠けた時の症状 | 解消 |
 |---|---|---|
-| macOS + Claude Code v2.1.51+ | — | `claude update` |
-| **claude.ai OAuth login** (subscription 必須) | log に「must be logged in」で即 exit を繰り返す | ターミナルで `claude auth login`。⚠️ API key・旧「managed key」型の credential は不可 — `claude auth status` が loggedIn でも `subscriptionType: null` ならこれ (2026-06-12 実測) |
+| macOS + Claude Code v2.1.51+ (公式 docs 明記) | — | `claude update` |
+| **workspace trust** (= `--dir` で `claude` を一度起動し trust dialog を承認済) | fresh マシンで未承認だと非対話の launchd サーバーが dialog を出せず進めない | 一度 `cd <dir> && claude` で承認 (= fresh setup の盲点) |
+| **claude.ai OAuth login** (subscription 必須) | log に「must be logged in」で即 exit を繰り返す | ターミナルで `claude auth login`。⚠️ API key・旧「managed key」型・`claude setup-token`/`CLAUDE_CODE_OAUTH_TOKEN` の inference-only token は全て不可 (= 公式 docs)。`ANTHROPIC_API_KEY` が env にあれば unset。`claude auth status` が loggedIn でも `subscriptionType: null` ならこれ (2026-06-12 実測) |
 | **初回同意** (一度だけ) | log に「Enable Remote Control? (y/n)」、無人では進めない | ターミナルで `claude remote-control` を一度起動して y (= `~/.claude.json` の `remoteDialogSeen` に永続化) |
 
 この managed-key 非対応は upstream の既知制約 (= anthropics/claude-code #50977〔API key / setup-token OAuth サポート要望〕・#50642〔Bedrock 認証〕の feature request、いずれも未対応)。ユーザ側のミスではないので `subscriptionType: null` を見たら迷わず `claude auth login`。
@@ -69,6 +70,8 @@ QR (space キー) は使えないが、接続先は ① claude.ai/code のセッ
 - **死んだセッションの残骸**: サーバー再起動を跨ぐと旧セッション行が一覧に残り、開くと
   無限スピナーになる。残骸は削除し、新規作成で入り直す。
 - 並列セッションは同じ cwd を共有する (same-dir) ので、同一ファイルの同時編集は衝突し得る。
+- **ultraplan を起動すると Remote Control が切断される** (= 両者が claude.ai/code を占有、公式 docs)。
+- ⚠️ **`--sandbox`/`--no-sandbox` の食い違い**: 公式 docs は server mode の flag に filesystem/network 隔離の `--sandbox` を挙げるが、v2.1.165 の `claude remote-control --help` には**無い** (= 自版で要確認、版依存)。常時公開サーバーで隔離を効かせたい場合は自分の `--help` で実在を確認してから付ける (= docs だけ見て plist に焼くと unknown-flag で永久 cycling し得る)。
 
 ## セキュリティ
 

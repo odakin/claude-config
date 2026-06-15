@@ -24,6 +24,10 @@
 # - 認証 (claude.ai OAuth) や初回同意が無いとサーバーは起動拒否で即 exit するが、
 #   KeepAlive + ThrottleInterval が 60 秒間隔で retry するため、解消後に自動で生き返る
 #   (= preflight 失敗でも install は完了させる)。
+# - preflight / plist の両方で ANTHROPIC_API_KEY と CLAUDE_CODE_OAUTH_TOKEN を unset する。
+#   RC は claude.ai OAuth 必須で、これらが env に居ると inference-only credential を掴んで
+#   起動拒否される (= 公式 docs troubleshooting)。launchd は通常これらを継承しないが
+#   `launchctl setenv` 等で混入し得るので防御的に消す (= 未 set なら no-op)。
 # - plist は PATH 依存の `exec claude` を使う (= 起動毎に PATH 再解決するので claude の
 #   再 install / 移動に強い)。絶対バイナリパスは焼き込まない (= 移動で stale 化し永久
 #   cycling する弱点を避ける、 = 公開ツールとして多様な install を壊さない)。preflight が
@@ -85,13 +89,15 @@ CLAUDE_BIN="$HOME/.local/bin/claude"
 
 echo "[preflight] probing 'claude remote-control' for ~8s..."
 TMPLOG=$(mktemp)
-( cd "$RC_DIR" && exec "$CLAUDE_BIN" remote-control ) >"$TMPLOG" 2>&1 &
+( unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; cd "$RC_DIR" && exec "$CLAUDE_BIN" remote-control ) >"$TMPLOG" 2>&1 &
 PRE_PID=$!
 sleep 8
 kill "$PRE_PID" 2>/dev/null
 wait "$PRE_PID" 2>/dev/null
 AUTH_NG=0; CONSENT_NG=0
-grep -q "must be logged in" "$TMPLOG" && AUTH_NG=1
+# RC の auth 失敗は複数文言 (= subscription 必須 / full-scope token 要 / org policy / 未 enable)。
+# preflight hint なので広めに拾う (= 取りこぼしても install は続行し log に実 error が出る)。
+grep -qE "must be logged in|requires a claude.ai subscription|full-scope login token|disabled by your organization|not yet enabled for your account" "$TMPLOG" && AUTH_NG=1
 grep -q "Enable Remote Control?" "$TMPLOG" && CONSENT_NG=1
 rm -f "$TMPLOG"
 
@@ -118,7 +124,7 @@ cat > "$PLIST" <<EOF
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>export PATH="$CLAUDE_DIR:\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; cd "$RC_DIR" &amp;&amp; exec claude remote-control</string>
+    <string>unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; export PATH="$CLAUDE_DIR:\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; cd "$RC_DIR" &amp;&amp; exec claude remote-control</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
