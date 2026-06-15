@@ -4,6 +4,10 @@
 # related = slugs this section cross-references. Validated by
 # scripts/check-office-automation-index.py (dangling=0 / orphan=0).
 sections:
+  - id: symptom-index
+    level: 2
+    title: "🔑 まず読め + 症状 → 対処 早見表 (= 何も知らない session の入口)"
+    related: [xlsx-to-pdf-script, pdf-prefill-direct, docx-to-pdf-pages, diff-form-xlsx-detection, excel-osascript-cell-write, excel-write-string-autoconvert, openpyxl-destroys-drawings, xlsx-locked-by-excel, form-dump-first, docx-checkbox-content-control]
   - id: form-dump-first
     legacy: "0"
     level: 2

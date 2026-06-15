@@ -16,6 +16,39 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 
 ---
 
+## <a id="symptom-index"></a>🔑 まず読め + 症状 → 対処 早見表 (= 何も知らない session の入口)
+
+⚠️ **Excel / Word を触る前、 自前で osascript / openpyxl を書き始める前に、 まずここで「既出の罠か」 を引く。** この doc は macOS Office 自動化の罠をほぼ網羅しており、 **既存 script で解決できることを hand-roll すると数十ターン溶かす**。 手順:
+
+1. 本 doc + [`office-automation-principles.md`](office-automation-principles.md) (= slug の無い新罠はまず原則編) を読む。 個人層に Office 用 router があるならそれを先に
+2. **既存 script を使う (hand-roll しない)**:
+   - **xlsx → PDF / 視覚確認**: [`scripts/xlsx-to-pdf.sh`](#xlsx-to-pdf-script) (LibreOffice → Excel osascript fallback、 reset + timeout + automation 許可案内 込み)。 ⚠️ 自前で `save workbook as … PDF` を書くと **-50**。 動く形は **sheet 単位** `save as <worksheet> … file format PDF file format` (= script が既に実装済)
+   - **雛形 PDF へ直接印字 (単票・紙提出)**: [`scripts/pdf_form_fill.py`](#pdf-prefill-direct)
+   - **docx → PDF**: [`scripts/docx-to-pdf.sh`](#docx-to-pdf-pages)
+   - **様式改変 / 破損の検出**: [`diff-form-xlsx.py`](#diff-form-xlsx-detection) / `check-xlsx-integrity.py` / `check-docx-integrity.py`
+
+> **RCA 2026-06-16 (= 本 section の存在理由)**: ある session が上を読まずに学術様式の Excel cell 記入を hand-roll した結果、 **既出の罠 (日付 serial 化 [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) / consecutive-op freeze [`excel-osascript-cell-write`](#excel-osascript-cell-write) / PDF export の verb 誤り [`xlsx-to-pdf-script`](#xlsx-to-pdf-script)) を全て再発見し、 さらに Excel を 5 サイクル叩いてクラッシュさせた**。 = 「読めば 1 発、 読まねば数十ターン + クラッシュ」。 後続 session がこの轍を踏まないための入口がこの早見表。
+
+### 症状 → 対処 早見表
+
+| 症状 (観察できること) | 真因 | 対処 (→ slug) |
+|---|---|---|
+| Excel がクラッシュ /「作業内容を回復」 dialog | 同 session で osascript の open/save/close/quit を多数 cycle し既存 instance を酷使 | **補正を 1 pass に織り込む単発記入** + 各 op 前に killall reset → [`excel-osascript-cell-write`](#excel-osascript-cell-write) |
+| osascript が `-1712` (AppleEvent timeout) | Excel が固まり / **background 実行で automation 許可 dialog を出せない** | killall+sleep reset / **初回は foreground で許可 dialog に応答** → [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) |
+| osascript が `-609`「接続が無効」 で全 cell が沈黙・未書込 | 同一 tell に `close saving yes`+`quit` を詰めた / app 未 ready | reset + 4 勘所 → [`excel-osascript-cell-write`](#excel-osascript-cell-write) |
+| osascript が `-50` パラメータエラー | **`save workbook as … PDF` (workbook 単位の verb)** / merged cell への number-format 設定 | PDF は **sheet 単位** `save as <sheet>` ([`xlsx-to-pdf.sh`](#xlsx-to-pdf-script)) / 書式強制は apostrophe (下行) |
+| 日付が「46205」 等の serial 数字で印字される | Excel が和文日付文字列を date 値に auto-convert + cell 書式が General | **apostrophe prefix で text 強制** → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
+| 申請日等が「火曜日, 6/月 16, 2026」 の冗長書式で表示 | `=TODAY()` 等 date 書式の cell を date 値で上書き → 冗長書式を継承 | apostrophe prefix の text で上書き → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
+| 標題・縦書きラベル・textbox が消えた | openpyxl の save が drawing (shape) を破壊 | Excel osascript / fitz 直印字 / 別 file XML 移植 の 3 経路 → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
+| 値は書けたが見た目を PDF で確認したい | — | [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) で render。 ⚠️ **Quick Look (`qlmanage`) は textbox/標題 を忠実に描かない** → drawing 健在は zip 内 drawing 数で、 体裁は xlsx-to-pdf.sh の PDF で |
+| xlsx が openpyxl から save できない / lock `~$…` が残る | Excel が当該 file を開いている | Excel quit + lock 削除 → [`xlsx-locked-by-excel`](#xlsx-locked-by-excel) |
+| Bash tool で `sleep` がブロックされ reset 待ちが打てない | harness が foreground の bare `sleep` を禁止 | bare sleep を打たず **script (xlsx-to-pdf.sh 等) に sleep を内包**させて呼ぶ / osascript 内 `delay` / 別 op は run_in_background |
+| 何を / どこに書くか不明 | — | 着手前に [`form を dump`](#form-dump-first) (原則編が先) |
+| 様式の label を誤って上書きしていないか | label vs input row の混同 | [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で機械検出 |
+| Word が「破損」 と言うが原因不明 | XML 宣言 single-quote / 空 `<w:tc>` 等 | [`check-docx-integrity.py`](#docx-checkbox-content-control) で決定論検出 |
+
+---
+
 ## <a id="form-dump-first"></a>開始前に form を **必ず dump する** (= 推測で書かない)
 
 雛形 xlsx を受け取ったら、 fill コードを書く前に必ず構造を全部出力する。 form ごとに layout・merged 範囲・data validation・列幅・font が異なる。 推測で write 先 cell を決めると merged の途中・validation 不整合・列幅と合わない font size を踏む。 ⚠️ **drawing の有無も起点で確認する**: `unzip -l form.xlsx | grep -iE 'drawing|media'` で textbox/縦書きラベル等の shape があれば openpyxl save で消える ([`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings)) ので、 起点で検出して回避経路を選ぶ。
@@ -148,6 +181,10 @@ osascript -e 'tell application "Microsoft Excel" to quit'
 
 ⚠️ **`-1712` (AppleEvent timeout) は「Excel が固まっている」 signal**: 同一 session で Excel 操作 (= PDF export / cell write) を連続させると、 既存 instance が応答不能になり次の osascript が -1712 で落ちることがある。 復旧 = **`killall "Microsoft Excel"` → `sleep 5` → 再実行** (= -609 と同じ reset で直る、 driver script は 2 段 retry を組み込む)。 origin: 2026-06-11 雛形 PDF 化を 1 日に複数回実行した session。
 
+⚠️ **多 round は -1712 で済まず Excel 本体を CRASH させる → 「単発記入」 を第一原則に** (2026-06-16 RCA): 同 session で open/save/close/quit を **5 cycle 以上**重ねると Excel が落ちて「作業内容を回復します」 dialog が出る (= cell 記入 + 日付 serial 修正 + 書式修正 + PDF 書出 を別々に叩いた)。 → **補正を最初の 1 pass の applescript に織り込み、 修正の往復をゼロにする**: cell を書いてから「serial 化してた / 書式が冗長」 と気づいて再 open するのでなく、 **最初から** [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) の apostrophe prefix / `number format "@"` を入れておく (= 1 回の `open → set 全部 → save → close` で完結)。 round が避けられない時だけ各 op 前に killall reset。 ⚠️ crash しても **save 済 ∧ commit 済の disk file は無傷** (= git が安全網)。 Excel の「ドキュメントの回復」 pane が出ても **回復版を保存せず破棄** (disk の検証済 file が正、 回復版で上書きさせない)。
+
+⚠️ **harness の Bash tool は foreground の bare `sleep` を block する** (= 「`killall …; sleep 6`」 を Bash に直書きすると止まる)。 → reset の待ちは (a) **`xlsx-to-pdf.sh` 等 script の内部 `sleep` に任せて script ごと呼ぶ**、 (b) **applescript 内の `delay`** で待つ、 (c) 長い処理は `run_in_background` で逃がす、 のいずれか。 bare `sleep` 直打ちに依存した reset 手順は harness 上で機能しない。
+
 **検証**: 書き込み後は openpyxl で読み直して値を assert する (= osascript は失敗しても exit 0 で沈黙しがち)。 ⚠️ ただし **merged cell の値は fitz / openpyxl の text 抽出では取れないことがある** (= 結合範囲の左上以外は空に見える / PDF の text 抽出も同様) → 抽出の空振りを「書けていない」 と即断せず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF **画像**で最終確認する。
 
 origin: 2026-06-05 学外者用様式 (= 複数シート + 数式参照 + textbox 標題) の cell 値修正。 killall 直後の 1 osascript (activate→open→set→save→close saving yes→quit) が -609 で全 cell 未書き込み → 上記 4 点で復旧。
@@ -163,6 +200,10 @@ origin: 2026-06-05 学外者用様式 (= 複数シート + 数式参照 + textbo
 **検証**: 書き込み後 openpyxl で read-back し、 **値の型** (= str か datetime/число か) と `cell.number_format` を確認する。 `datetime` + `'General'` の組合せ = serial 印字事故の前兆。 auto-convert された日付が「たまたま日付書式で表示される」 場合もあるが、 様式の前例が文字列なら文字列で揃える (= 事務側の見た目互換)。
 
 origin: 2026-06-12 様式⑭-1 fill。 作業日 cell に書いた和文日付が serial 46198 (General) になり、 PDF 目視前の read-back 検証で捕捉 → apostrophe prefix で復旧。
+
+⚠️ **追加 case 1 — `=TODAY()` 等 date 書式の cell を date 値で上書きすると「冗長書式」 を継承する** (2026-06-16): 申請日 cell が template で `=TODAY()` (date 書式付き) のとき、 そこに `"2026/6/16"` を書くと値が date になり、 cell の date 書式で「火曜日, 6/月 16, 2026」 のように冗長表示される (= General の serial 化とは別症状)。 → **apostrophe prefix の text** (`"'2026年6月16日"`) で上書きしてクリーンな固定文字列にする (= 申請日は提出時点の固定日なので `=TODAY()` の動的値より固定 text が正しい)。
+
+⚠️ **追加 case 2 — `number format "@"` (text 書式化) は merged / 特定 cell で `-50` を返す** (2026-06-16): `set number format of range … to "@"` は普通 cell では効くが、 結合 cell 等では -50 (パラメータエラー) で失敗することがある。 → **apostrophe prefix が cell 種別に依らない universal な text 強制法** (= 書式変更を要さず値だけで text 化)。 `@` 書式に依存せず apostrophe を第一手にすると通る。 ⚠️ ただし「日付に見えない普通の文字列を text にしたい」 だけなら apostrophe 不要 (= auto-convert は日付・数値に見える文字列のみ)。
 
 ### <a id="xlimage-size-silent-fail"></a>`XLImage.width` / `.height` setter は silent fail する
 
