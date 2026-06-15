@@ -6,6 +6,18 @@ LaTeX を含むリポで適用。CLAUDE.md から参照: `~/Claude/claude-config
 - **equation/align 環境内は原則変更しない。** 変更は事前にユーザー確認。物理的内容の追加はコメントとして提案（ハルシネーション混入防止）
 - 英語校正・文法修正など確実に正しい本文修正は可
 
+## comment-out 流儀の編集後は live `\cite` 集合を照合する
+
+旧文を `%...` で残して次行に新文を書く「comment-out keep」 流儀で編集すると、 行末まで `%` が
+飲み込むため、 同じ行にあった `\cite{...}` を**意図せずコメントアウトして引用が落ちる**危険がある。
+**comment-out edit のたびに、 各行の code 部 (= 最初の `%` より前) の live `\cite` key 集合を
+baseline と照合**し不変を確認する (= `\bibcite` や aux 経由でなく source の `%` 前を見る)。 安価:
+
+```bash
+# 各行の最初の % より前に現れる \cite キーを抽出して sort -u で集合化、 baseline と diff
+awk -F'%' '{print $1}' file.tex | grep -oE '\\cite[a-zA-Z]*\{[^}]*\}' | sort -u
+```
+
 ## 地の文に math 文字を裸で書かない (math mode 保護)
 
 **ルール:** 地の文 (= `$...$` `\(...\)` `equation` 環境の外) では、 `^` `_` `\dagger` `\hat` 等の **math mode 専用記号を含む式片**を裸で書かない。 全部 `$...$` で囲うか、 日本語に置き換える。
@@ -262,6 +274,17 @@ hook (`scripts/fix-bib-unicode.py`) の `UNICODE_MAP` は **U+2013 (en-dash) と
 | **U+2500** | `─` (box drawings light horizontal) | **scope 外、 保持** | 日本語典籍の罫線 (1 つでは細い、 2 つ並べて `──` で長い横棒) |
 | U+2015 | `―` (horizontal bar) | scope 外、 保持 | 日本語小説の dash 様 (= em-dash 様の太い横棒) |
 | U+30FC | `ー` (katakana-hiragana prolonged sound mark) | scope 外、 保持 | カタカナ長音 (= dash ではないが視覚的に紛らわしい) |
+
+⚠️ **math 内の en-dash も問答無用で変換される**: `$–$` (= U+2013 を math mode 内で minus の
+つもりで書く) も hook は `$--$` に変換し、 LaTeX は `--` を minus 2 個と印字する (= 意図が
+single minus `$-$` なら壊れる)。 math の負号は最初から ASCII `-` で書く。
+
+**hook が file を必ず書換える 2 つの帰結** (= byte-pristine が要る場面の運用):
+- **byte-pristine な baseline は tracked にしない**: 共著者版の verbatim copy を latexdiff 用に
+  置く等、 byte 一致を保ちたい file は **untracked + gitignore** にする (= tracked だと commit 時に
+  hook が dash/accent/quote を書換えて baseline が崩れる)。
+- **byte-pristine な subset を commit/push する時は `git commit --no-verify`** (= hook を bypass、
+  Overleaf scoped subset push 等。 `conventions/overleaf-integration.md §scoped subset push`)。
 
 **Claude 規律**: `.tex/.bib` を書くとき、 「視覚的に em-dash」 のつもりで何の codepoint を打鍵しているか自覚する。 input method (= IME) が打鍵によって違う codepoint を吐くことがあり、 同じ文書内で codepoint 不一致が発生する (= 2026-05-15 個人層 private 日本語 LaTeX project の lecture draft で comments 部 U+2014 / body 部 U+2500 の混在を 1 セッション内で気付かずに作成、 hook が U+2014 のみ変換した結果 visual 一致だが source 不一致に着地)。 IME の確認 + 章執筆 1 個分書いたら `grep -P "[\x{2013}\x{2014}\x{2015}\x{2500}]"` で出現 codepoint を audit する。
 

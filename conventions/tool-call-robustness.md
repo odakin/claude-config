@@ -52,6 +52,14 @@ root は backend fix 待ちだが、 発生確率と poisoning ループは以�
 8. **model を切り替える** (= 最も確実な緩和)。 bug は Opus 4.8 固有で、 #64774 が他 model (Opus 4.7 / Sonnet 4.6) の失敗率 0% を定量報告。 tool-call 密度の高い作業で頻発するなら `/model` で別 model に切り替えるのが root に最も近い回避になる (= backend fix が出るまでの実用解)。
 9. **当該操作をサブエージェント (Agent tool、 例: general-purpose) に委譲する**。 malformed が再発して特定の tool call が通らないとき、 その操作を sub-agent に委譲すると **別 context で実行される**ため回避できることがある (= 2026-06-15 実例: メイン session 〔Opus 4.8 1M-context〕 で `settings.json` の 1 行 Edit が 2 連続 malformed → 同じ編集を sub-agent に委譲したら 1 回で成功)。 位置づけは 7 (新 session) / 8 (model 切替) と同じ「root が直らないとき作業を別経路に逃がす」 系だが、 **新 session より軽量で現 session の context を保ったまま当該操作だけ別経路に出せる**のが利点。 複雑判断を伴わない単発操作 (= ファイル編集・コマンド実行) の委譲に向く (= 判断を要する作業の丸投げではない)。 ⚠️ sub-agent の完了報告自体が偽成功変種で捏造されうる (= 後述「tool 結果の silent 捏造」 節) ので、 委譲結果は ground truth (`git log` / `grep` 等) で裏取りする。
 
+   **委譲時の refinement (= 2026-06-16 実例、 6 + 2 + 9 の合成)**: malformed は Bash だけでなく
+   **長く backslash/LaTeX/日本語が密な Agent tool call 自体**にも刺さる (= 当 session で観測)。
+   一方 **short ASCII の Agent call / Write tool (長 file でも) / short ASCII Bash は通り続けた**。
+   よって poisoned session では (a) tool 実行を要する作業を**丸ごと subagent に委譲**し、 (b) 長文・
+   特殊文字を多く含む指示は **まず `Write` で file 化**して subagent には **short ASCII の pointer
+   prompt** (= 「/tmp/x.md を読んで実行しろ」) だけ渡す (= 長文/特殊文字を tool call に inline しない)。
+   この (a)+(b) は Overleaf scoped push + 検証で end-to-end に機能した実証あり。
+
 ## 限界 (= 誇張しない)
 
 - root は **Anthropic backend の model serialization bug** であり、 **prompt の書き方変更でも narrative でも直らない**。 上記「副次緩和」 は発生確率を下げるだけで 0 にはできない。

@@ -121,6 +121,28 @@ behind>0 / ID 未設定 / 未 bootstrap / 「Overleaf 連携の記述がある�
 4. (管理 file を Overleaf に push しない運用なら) installer に `--ahead-expected` を
    付けるか script の `AHEAD_EXPECTED=1` を立てる
 
+## scoped subset push (= 一部の編集だけ Overleaf に出し、 残り本文は共著者版と byte 同一に保つ)
+
+論文の **一部 (例: abstract + intro) だけを Overleaf に push** し、 それ以外の本文は共著者の
+Overleaf 版と byte 一致のまま保ちたい場合 (= 自分の本文 markup / 管理 file を Overleaf に
+漏らさない)。 direct remote + 手動 merge 変種 (上記) で有効。
+
+**レシピ**:
+1. 編集分を含む `main` 側 file と `overleaf/master` 側 file を、 **clean な section-marker 行**
+   (= `\section`/`\begin{abstract}` 等、 両版で確実に同一な行) で splice する: marker までは
+   main 側 (= 自分の編集を含む)、 marker 以降は `overleaf/master` 側 (= 共著者版 byte 同一)。
+2. `git worktree add <tmp> overleaf/master` (= この tree には paper file のみ、 SESSION/CLAUDE/
+   scripts 等の管理 file が無い = Overleaf に管理 file を漏らさない経路)。
+3. splice した file を worktree に置く。
+4. `git commit --no-verify` で commit (= pre-commit char-normalizer hook が **共著者版の本文を
+   書換えない**ようにする。 hook を通すと byte-pristine でなくなる)。
+5. `git push <overleaf-url> HEAD:master` で Overleaf に push (= user 明示 OK 必須、 共著者に直接影響)。
+6. `main` を `git merge overleaf/master` で reconcile (= abstract/intro は両側同一・本文 markup は
+   main のみ、 なので clean merge)。
+
+**push 前 gate**: behind=0; 本文が `overleaf/master` と byte 同一; scope diff が意図領域のみ;
+live (uncomment) な author markup (`\cl`/`\CL` 等) の leak 無し; compile が通る。
+
 ## ID 回収 runbook (= ID を喪失した repo の復旧手順、 三例目の実地経験から)
 
 費用の安い順に。 回収したら直ちに §Sync script 契約 で script に焼いて commit
