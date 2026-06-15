@@ -24,6 +24,10 @@
 # - 認証 (claude.ai OAuth) や初回同意が無いとサーバーは起動拒否で即 exit するが、
 #   KeepAlive + ThrottleInterval が 60 秒間隔で retry するため、解消後に自動で生き返る
 #   (= preflight 失敗でも install は完了させる)。
+# - plist には PATH 依存の `claude` でなく preflight で解決した $CLAUDE_BIN の絶対パスを
+#   焼き込む。さもないと claude が plist の PATH 外 (= 非標準 install 先) にある環境で
+#   preflight だけ通り launchd が永久 cycling する (native install の ~/.local/bin は
+#   auto-update を跨いで安定するので絶対パス焼き込みで問題ない)。
 
 case "$(uname -s)" in
   Darwin) ;;
@@ -109,7 +113,7 @@ cat > "$PLIST" <<EOF
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>export PATH="\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; cd "$RC_DIR" &amp;&amp; exec claude remote-control</string>
+    <string>export PATH="\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; cd "$RC_DIR" &amp;&amp; exec "$CLAUDE_BIN" remote-control</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>

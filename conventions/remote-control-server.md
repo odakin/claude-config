@@ -20,7 +20,9 @@ sh scripts/install-remote-control-server.sh --uninstall   # 解除
 ```
 
 接続側: スマホ Claude アプリ → Code タブ (またはブラウザで claude.ai/code) →
-**緑ドット + computer icon** の environment を選んで新規セッション作成。
+**緑ドット + computer icon** の environment を選んで新規セッション作成。launchd 常駐では
+QR (space キー) は使えないが、接続先は ① claude.ai/code のセッション一覧 ② log 内の
+`https://claude.ai/code?environment=env_…` URL の 2 経路で入れる (= QR 不要)。
 
 ## 要件 (= 欠けていても install は通り、解消後 60 秒以内に自動で生き返る)
 
@@ -29,6 +31,20 @@ sh scripts/install-remote-control-server.sh --uninstall   # 解除
 | macOS + Claude Code v2.1.51+ | — | `claude update` |
 | **claude.ai OAuth login** (subscription 必須) | log に「must be logged in」で即 exit を繰り返す | ターミナルで `claude auth login`。⚠️ API key・旧「managed key」型の credential は不可 — `claude auth status` が loggedIn でも `subscriptionType: null` ならこれ (2026-06-12 実測) |
 | **初回同意** (一度だけ) | log に「Enable Remote Control? (y/n)」、無人では進めない | ターミナルで `claude remote-control` を一度起動して y (= `~/.claude.json` の `remoteDialogSeen` に永続化) |
+
+この managed-key 非対応は upstream の既知制約 (= anthropics/claude-code #50977〔API key / setup-token OAuth サポート要望〕・#50642〔Bedrock 認証〕の feature request、いずれも未対応)。ユーザ側のミスではないので `subscriptionType: null` を見たら迷わず `claude auth login`。
+
+## CLI フラグ早見 (= `claude remote-control --help`、2026-06-12 実測)
+
+| フラグ | 効果 |
+|---|---|
+| `--spawn same-dir\|worktree\|session` | 既定 same-dir = 全セッション cwd 共有 / worktree = セッション毎に git worktree (起動 dir が git repo 必須) / session = 単一セッション (それが終わると server も exit)。実行中 `w` キーで same-dir↔worktree トグル |
+| `--capacity N` | same-dir / worktree の最大同時セッション数 (既定 32) |
+| `--permission-mode MODE` | spawn するセッションの permission mode (acceptEdits / auto / bypassPermissions / default / dontAsk / plan) |
+| `--name NAME` | セッション表示名のみ (cwd には無関係) |
+| `--remote-control-session-name-prefix PREFIX` | 自動生成名の接頭辞 (既定 hostname、env `CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX`) |
+| `--[no-]create-session-in-dir` | 起動時に cwd でセッションを 1 個先行作成 (既定 on)。worktree モードではこの 1 個だけ cwd に残り以後の on-demand が worktree 化 |
+| `--debug-file PATH` / `-v,--verbose` | デバッグログ |
 
 ## 設計の要点 (= 変更・移植する人向け)
 
