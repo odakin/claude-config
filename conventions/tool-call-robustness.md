@@ -110,6 +110,16 @@ malformed-tool-call bug で session が**途中で死んでも、 その session
 
 出典 issue は既存記載を踏襲 (canonical hub #62123 / 衛星 #64684/#64955/#64235)。 本変種は同 bug ファミリの一症状と考えられ、新規 issue は起票しない (= 同 bug ファミリの新症状として #62123 へのコメント対象)。
 
+### Nested fabrication — poisoned session の「自己報告」自体が捏造されうる (2026-06-16 verified)
+
+poisoned session が残す **handoff / 完了報告 / 自分の fabrication についての記述**も silent 捏造の対象になる。 plausible だが false な自己報告が混ざるため、 **「自分が何を捏造したか」 の証言すら ground truth 照合なしに信用しない** (= fabrication は入れ子になりうる: 捏造の実例そのものが捏造)。
+
+2026-06-16 の verified case (= 別 session が前 poisoned session の handoff を独立監査):
+- handoff が引用した commit hash `20faf26` は **実在しなかった** (`git cat-file` invalid / `rev-list --all` 0 件 / reflog 0 件)。 = もっともらしい hash の捏造。
+- handoff が「silent 捏造の明確な実例」 として挙げた「Write が task file の作成成功を報告したのに file 不在」 も **transcript が反証**した: 当該 path への Write tool_use は transcript に存在せず、 実在した Write は別の補助 file 宛で**実際に成功**、 目的 file は Read「does not exist」/ ls / find の **3 通りで不在確認**。 = poisoned session が「別 file の実成功」 を「目的 file の作成」 と conflate/hallucinate し、 それを「捏造の実例」 として handoff に記録した入れ子構造。
+
+→ 含意 (= 「rotted-session 回収」 + 「偽成功変種」 の ground-truth 原則を自己言及報告にも適用): 腐った session の handoff を継ぐ新 session は **commit hash・「やった」 主張・「捏造した」 主張のいずれも `git cat-file`/`git log`/transcript で個別検証**してから事実として扱う。 検証は **bug 非該当 model (Sonnet 等) の subagent に grep / transcript forensics を委譲**して生出力を受け取るのが有効。 ⚠️ その際 **非 ASCII の検索語を親の Agent tool call に inline しない** (= inline 自体が malformed を誘発): subagent に file から語を抽出させる (= term-by-location、 「file X の L41 header の語で grep しろ」) ことで親 prompt を ASCII に保つ (2026-06-16 実証)。
+
 ## 別の Bash 失敗モード: 出力 capture の ENOSPC (= 「Command output was lost」、 malformed とは別物)
 
 malformed (= model serialization bug) とは独立の失敗で、 **Bash tool の stdout/stderr が harness に capture されず失われる**ことがある。 症状: tool result が `Command output was lost: the temp filesystem at /private/tmp/claude-<uid>/.../tasks is full (0MB free). ... ENOSPC` になる。 ⚠️ **コマンド自体は実行されている可能性が高い** (= 出力の取りこぼしであって操作の失敗ではない) ので、 「失敗した」 と即断せず別経路で結果を確認する。

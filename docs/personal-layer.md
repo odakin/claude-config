@@ -19,6 +19,8 @@ The numbering follows audience containment: `public ⊃ collaborator set ⊃ own
 
 **Core rule**: each layer may only depend on layers whose audience contains its own. So a shared-project layer (layer 2) can reference claude-config (layer 1, public) but **must not depend on** your personal layer (layer 3, only you), because your collaborators cannot see your personal layer.
 
+**Direction, stated plainly (so the 上層/下層 framing is never flipped).** A *smaller* number = *wider* audience = the **upper / foundational** layer (上層); a *larger* number = *narrower* audience = a **lower** layer (下層). Layer 1 (claude-config) is the topmost 上層; layer 4 (memory) is the bottom 下層. **A reference or dependency that points from a lower layer *up* to a wider one (下層 → 上層 — e.g. personal layer → claude-config, layer 3 → 1) is ALLOWED; it is the normal, intended direction**, exactly what the "Depends on" column grants. The **only forbidden direction is the reverse**: a wider-audience layer structurally depending on a narrower one (上層 → 下層 — e.g. layer 2 → 3), because that wider audience cannot see the narrower layer. So you never need to hesitate to point *up* the stack — pointing 下層 → 上層 is free. The restriction only bites pointing *down* (上層 → 下層), and even there a *mention* (as opposed to a structural dependency) is still fine — see the next section.
+
 ### What "depend" means: structural dependency vs. mention
 
 The rule above bans **structural dependencies** across layer boundaries, not **mentions**. The distinction matters because the harm comes from one but not the other — and conflating them produces docs that are *less* helpful to the wider audience, not more safe.
