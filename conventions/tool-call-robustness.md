@@ -108,8 +108,6 @@ malformed-tool-call bug で session が**途中で死んでも、 その session
 2. **バグ検知時は別 model のサブエージェントに逃がす**: 親が Opus 4.8 1M-context session で汚染されていても、Sonnet 等の bug 非該当 model のサブエージェントは健全な tool 実行ができる。 実作業・検証ともサブエージェントに委譲し、その出力を親で受け取る際も独立確認を維持する。 これは上記「副次緩和 8」(model 切替) の偽成功変種への適用。
 3. **副次トリガーは既存と同じ**: 非 ASCII 多用 / 長い context / 連続 tool 実行 / 装飾本文。 これらが発生確率を上げる点は偽成功変種でも同様。 1 ターン 1 tool call (副次緩和 1) は引き続き有効。
 
-出典 issue は既存記載を踏襲 (canonical hub #62123 / 衛星 #64684/#64955/#64235)。 本変種は同 bug ファミリの一症状と考えられ、新規 issue は起票しない (= 同 bug ファミリの新症状として #62123 へのコメント対象)。
-
 ### Nested fabrication — poisoned session の「自己報告」自体が捏造されうる (2026-06-16 verified)
 
 poisoned session が残す **handoff / 完了報告 / 自分の fabrication についての記述**も silent 捏造の対象になる。 plausible だが false な自己報告が混ざるため、 **「自分が何を捏造したか」 の証言すら ground truth 照合なしに信用しない** (= fabrication は入れ子になりうる: 捏造の実例そのものが捏造)。
@@ -118,7 +116,9 @@ poisoned session が残す **handoff / 完了報告 / 自分の fabrication に�
 - handoff が引用した commit hash `20faf26` は **実在しなかった** (`git cat-file` invalid / `rev-list --all` 0 件 / reflog 0 件)。 = もっともらしい hash の捏造。
 - handoff が「silent 捏造の明確な実例」 として挙げた「Write が task file の作成成功を報告したのに file 不在」 も **transcript が反証**した: 当該 path への Write tool_use は transcript に存在せず、 実在した Write は別の補助 file 宛で**実際に成功**、 目的 file は Read「does not exist」/ ls / find の **3 通りで不在確認**。 = poisoned session が「別 file の実成功」 を「目的 file の作成」 と conflate/hallucinate し、 それを「捏造の実例」 として handoff に記録した入れ子構造。
 
-→ 含意 (= 「rotted-session 回収」 + 「偽成功変種」 の ground-truth 原則を自己言及報告にも適用): 腐った session の handoff を継ぐ新 session は **commit hash・「やった」 主張・「捏造した」 主張のいずれも `git cat-file`/`git log`/transcript で個別検証**してから事実として扱う。 検証は **bug 非該当 model (Sonnet 等) の subagent に grep / transcript forensics を委譲**して生出力を受け取るのが有効。 ⚠️ その際 **非 ASCII の検索語を親の Agent tool call に inline しない** (= inline 自体が malformed を誘発): subagent に file から語を抽出させる (= term-by-location、 「file X の L41 header の語で grep しろ」) ことで親 prompt を ASCII に保つ (2026-06-16 実証)。
+→ 含意 (= 「rotted-session 回収」 + 「偽成功変種」 の ground-truth 原則を自己言及報告にも適用): 腐った session の handoff を継ぐ新 session は **commit hash・「やった」 主張・「捏造した」 主張のいずれも `git cat-file`/`git log`/transcript で個別検証**してから事実として扱う。 検証手段は **対策 2 (bug 非該当 model の subagent へ委譲) + 副次緩和 10 mechanics (非 ASCII/長文を tool call に inline しない) を流用**し、 その特化形として **term-by-location** (= 非 ASCII の grep 語を親 prompt に書かず subagent に file から抽出させる: 「file X の L41 header の語で grep しろ」) を足す (2026-06-16 実証)。
+
+出典 issue は既存記載を踏襲 (canonical hub #62123 / 衛星 #64684/#64955/#64235)。 本変種は同 bug ファミリの一症状と考えられ、新規 issue は起票しない (= 同 bug ファミリの新症状として #62123 へのコメント対象)。
 
 ## 別の Bash 失敗モード: 出力 capture の ENOSPC (= 「Command output was lost」、 malformed とは別物)
 
