@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-06-17: layer-1 convention の発火面 — 「正しい層配置」 と「発火確率」 の tension (= future work)
+
+### 問題
+
+universal な規律 (= 全 Claude Code ユーザーで true) は 4 層 model 上 **layer 1 (`conventions/*.md`) が正しい配置**。 だが §10 (`docs/convention-design-principles.md`) の auto-load tier では `conventions/*.md` は T0 (= 毎 session 強制 load = CLAUDE.md / MEMORY.md のみ) でなく **on-demand**。 つまり layer-1 convention は「何かがそれを指していて、 かつその pointer が読まれた時」 にしか発火しない (= §8.12 発火面 hierarchy で最弱の **doc 記載 / recall 依存**)。
+
+→ **tension**: 規律を正しく layer 1 に置くと観客は最大化されるが、 **発火確率は下がりうる** (= 個人層 CLAUDE.md の「読み込み必須」 経由でしか辿られず、 該当 convention file を実際に開かないと効かない)。 「正しく記録したのに発火しない」 が起こりうる。
+
+### 暫定 mitigation (= 2026-06-17 に実証した「下層から参照を張る」)
+
+universal rule を layer 1 に置いたうえで、 **その規律が効くべき作業文脈で読まれる下層 doc (layer 2 / 3) から pointer を張る** (= 規則実体は重複させず「正本 = layer 1」 と書いた pointer のみ。 §2 ポインタ原則)。 pointer が in-context で読まれることで layer-1 の doc 規律が下層の reading path 経由で発火する。 worked example (2026-06-17): ある universal な LaTeX 編集則を `conventions/latex.md` に新設し、 それが効く文脈で読まれる layer-3 の paper 執筆 doc + layer-2 の該当 paper repo CLAUDE.md から pointer を張った。
+
+### open (= future work、 未決定)
+
+manual な per-rule pointer は (a) scale しない (b) 「pointer を張るのを忘れない」 という recall に再依存する。 より系統的な発火面を探す (= 本 entry の主題):
+
+- personal skill (`conventions/personal-skills.md`、 auto-discover = 全 session 可視) を「LaTeX / paper 編集の時に latex.md を引く」 等の topic-trigger 発火面にする
+- §3 の「規約を読まない」 問題 + routing を「declared → consulted at topic detection」 へ強化 (= topic 検出時に required-reading を能動 surface)
+- dashboard / SessionStart の hint surface への相乗り (= §8.12「新機構を増やす前に既存 channel への相乗りを先に検討」)
+- 個人層「読み込み必須」 table の trigger column に該当 convention を登録する運用 (= 既存 channel)
+
+### un-defer trigger (= signal / 機械判定)
+
+- layer-1 に記録済の規律が**発火せず見落とされた incident** が 1 件発生 (= 「L1 に書いたのに効かなかった」 の再演)
+- L1-rule-surfacing のための manual 下層 pointer を **3 件目**張ろうとした時 (= DRY 圧 → 系統化、 §9.6 機構増殖抑制と両睨み)
+- convention の発火面を別件で再設計する時 (= personal-skills 拡張等に相乗り)
+
+### 関連
+
+- `docs/convention-design-principles.md` §8.12 (発火面 hierarchy、 doc=最弱) / §8.13 (silent dead) / §8.14 (frontend honor) / §3 (「規約がない」 か「規約を読まない」 か) / §10 (auto-load tier)
+- `conventions/personal-skills.md` (skill = auto-discover 発火面)
+- 起点: universal な LaTeX 編集則 (= 段落長の判断でコメントアウト行を数えない) を latex.md に hoist した際、 user が「層 1 だと逆に読まれなくなる」 と発火面の弱さを指摘 → 下層 pointer で暫定対応 + 本 entry で系統化を future work 化
+
+---
+
 ## 2026-06-13: CONVENTIONS.md 冒頭の conventions/ 列挙 — 完全列挙と判定して再生成、機械 enforcement は defer
 
 ### 問題と意図判定
