@@ -1185,7 +1185,7 @@ label cell に narrative を直接書き込んでしまう (= overwriting the pr
 - merged input cell が大きく開いていても「装飾の空き」 にしか見えない
 
 **実害**:
-- 提出後に審査機関 (= 教育研究支援課等) から 「**①様式の改変**」 として差戻し
+- 提出後に審査機関 (= 大学事務等) から 「**①様式の改変**」 として差戻し
 - ファイル単位の reject や再提出処理コスト
 - 2026-05-13 JST SPReAD で 提出者が同 pattern で 3 箇所 (= Sheet 3 行 10/18/28) で発生、 所属機関の事務担当者から指摘で発覚。 提出者申告では prior form fill でも同 pattern を起こしていた (= 再発 pattern)
 
