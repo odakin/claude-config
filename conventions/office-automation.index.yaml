@@ -7,7 +7,7 @@ sections:
   - id: symptom-index
     level: 2
     title: "🔑 まず読め + 症状 → 対処 早見表 (= 何も知らない session の入口)"
-    related: [xlsx-to-pdf-script, pdf-prefill-direct, docx-to-pdf-pages, diff-form-xlsx-detection, excel-osascript-cell-write, excel-write-string-autoconvert, openpyxl-destroys-drawings, xlsx-locked-by-excel, form-dump-first, docx-checkbox-content-control]
+    related: [xlsx-to-pdf-script, pdf-prefill-direct, docx-to-pdf-pages, diff-form-xlsx-detection, excel-osascript-cell-write, excel-write-string-autoconvert, excel-pdf-bottom-border-drop, openpyxl-destroys-drawings, xlsx-locked-by-excel, form-dump-first, docx-checkbox-content-control]
   - id: form-dump-first
     legacy: "0"
     level: 2
@@ -32,6 +32,10 @@ sections:
     level: 3
     title: "Excel 経由 write は文字列を auto-convert する (= 日付文字列が serial 数字で印字される)"
     related: [openpyxl-destroys-drawings, excel-osascript-cell-write]
+  - id: excel-pdf-bottom-border-drop
+    level: 3
+    title: "Excel→PDF はフォーム最下部の結合セル下罫線を落とす (= 承認欄ボックス等が下に開く)"
+    related: [fitz-pdf-toolkit, xlsx-to-pdf-script, excel-osascript-cell-write, symptom-index]
   - id: xlimage-size-silent-fail
     legacy: "1-1"
     level: 3

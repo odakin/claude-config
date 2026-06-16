@@ -41,6 +41,7 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 | 申請日等が「火曜日, 6/月 16, 2026」 の冗長書式で表示 | `=TODAY()` 等 date 書式の cell を date 値で上書き → 冗長書式を継承 | apostrophe prefix の text で上書き → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
 | 標題・縦書きラベル・textbox が消えた | openpyxl の save が drawing (shape) を破壊 | Excel osascript / fitz 直印字 / 別 file XML 移植 の 3 経路 → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
 | 値は書けたが見た目を PDF で確認したい | — | [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) で render。 ⚠️ **Quick Look (`qlmanage`) は textbox/標題 を忠実に描かない** → drawing 健在は zip 内 drawing 数で、 体裁は xlsx-to-pdf.sh の PDF で |
+| 承認欄/印影欄ボックスの**下罫線が出ない** (box が下に開く) | Excel→PDF が最下部の結合セル下罫線を落とす (罫線は xlsx に在るのに出力で消える) | 出力 PDF に fitz で閉じ線を描く (print_area 拡張では直らない) → [`excel-pdf-bottom-border-drop`](#excel-pdf-bottom-border-drop) |
 | xlsx が openpyxl から save できない / lock `~$…` が残る | Excel が当該 file を開いている | Excel quit + lock 削除 → [`xlsx-locked-by-excel`](#xlsx-locked-by-excel) |
 | Bash tool で `sleep` がブロックされ reset 待ちが打てない | harness が foreground の bare `sleep` を禁止 | bare sleep を打たず **script (xlsx-to-pdf.sh 等) に sleep を内包**させて呼ぶ / osascript 内 `delay` / 別 op は run_in_background |
 | 何を / どこに書くか不明 | — | 着手前に [`form を dump`](#form-dump-first) (原則編が先) |
@@ -204,6 +205,33 @@ origin: 2026-06-12 様式⑭-1 fill。 作業日 cell に書いた和文日付�
 ⚠️ **追加 case 1 — `=TODAY()` 等 date 書式の cell を date 値で上書きすると「冗長書式」 を継承する** (2026-06-16): 申請日 cell が template で `=TODAY()` (date 書式付き) のとき、 そこに `"2026/6/16"` を書くと値が date になり、 cell の date 書式で「火曜日, 6/月 16, 2026」 のように冗長表示される (= General の serial 化とは別症状)。 → **apostrophe prefix の text** (`"'2026年6月16日"`) で上書きしてクリーンな固定文字列にする (= 申請日は提出時点の固定日なので `=TODAY()` の動的値より固定 text が正しい)。
 
 ⚠️ **追加 case 2 — `number format "@"` (text 書式化) は merged / 特定 cell で `-50` を返す** (2026-06-16): `set number format of range … to "@"` は普通 cell では効くが、 結合 cell 等では -50 (パラメータエラー) で失敗することがある。 → **apostrophe prefix が cell 種別に依らない universal な text 強制法** (= 書式変更を要さず値だけで text 化)。 `@` 書式に依存せず apostrophe を第一手にすると通る。 ⚠️ ただし「日付に見えない普通の文字列を text にしたい」 だけなら apostrophe 不要 (= auto-convert は日付・数値に見える文字列のみ)。
+
+### <a id="excel-pdf-bottom-border-drop"></a>⚠️ Excel→PDF はフォーム最下部の結合セル下罫線を落とす (= 承認欄ボックス等が下に開く)
+
+**症状**: Excel→PDF (印刷/書き出し) で、 フォーム**最下部にある結合セルの下罫線** (= 承認欄/印影欄ボックスの底辺の閉じ線) が描画されず、 ボックスが下に開いて見える。 罫線は xlsx に**定義済** (openpyxl の `cell.border.bottom.style` read-back で `'thin'` が返る) なのに、 出力 PDF だけで消える。 日本の行政・学術様式は全項目を枠で囲う文化なので、 承認欄が閉じていないと目立つ (= 2026-06-16 user 指摘「日本の糞エクセル文化ではすべてを枠で囲いがち」)。
+
+**原因**: Excel は出力時にシート最下部の (特に結合セルの) 下罫線を落とす癖がある。 結合セル (例 `AC48:AG51` / `AH49:AJ51`) の bottom は最下行 (row 51) にあり、 その下が trailing empty row だと描画されない。 ⚠️ **`print_area` を下に伸ばしても直らない** (= 単純な「印刷境界での border drop」 ではない、 2026-06-16 に print_area row51→54 拡張で未改善を実証済)。
+
+**検証の罠**: 「全幅の横罫線を pixel scan」 では **box 下罫線が部分幅 (承認欄の列幅のみ) なので検出できず**、 「下は白＝余白」 と誤判定する (= 2026-06-16 に実際にこれで user の正しい指摘を 1 度 dismiss した)。 → (a) PDF を**実画像で目視**、 or (b) `page.get_drawings()` で box 縦線群の bottom y に左右を繋ぐ水平線セグメントが在るか確認 (無ければ開いている)。
+
+**対処 (確実)**: 出力 PDF 側で **fitz で閉じ線を描く** (= [`fitz-pdf-toolkit`](#fitz-pdf-toolkit) 応用)。 右下領域 (x>0.6W) で最下端 (y>0.88H) まで伸びる縦線群を検出 → その最下 y に縦線群の左端→右端を繋ぐ水平線を draw:
+
+```python
+import fitz
+d=fitz.open(pdf); pg=d[0]; W,H=pg.rect.width,pg.rect.height
+verts=[]
+for dr in pg.get_drawings():
+    for it in dr['items']:
+        if it[0]=='l':
+            x0,y0,x1,y1=it[1].x,it[1].y,it[2].x,it[2].y
+            if abs(x0-x1)<1.5 and x0>0.6*W and max(y0,y1)>0.88*H: verts.append((x0,max(y0,y1)))
+xs=[v[0] for v in verts]; ybot=max(v[1] for v in verts)
+sh=pg.new_shape(); sh.draw_line(fitz.Point(min(xs),ybot), fitz.Point(max(xs),ybot))
+sh.finish(color=(0,0,0), width=0.75); sh.commit(); d.save(pdf+'.t')  # → os.replace
+```
+Excel 側で結合セル border を再設定する手もあるが merged-cell border は描画が不安定なので、 出力 PDF への線描が確実。 ⚠️ ただし**生成物 PDF への後描画なので、 再生成したら再度引く必要**がある (= pipeline の最後に挟む)。
+
+origin: 2026-06-16 様式⑭-1 の承認欄ボックス (`AC48:AG51`/`AH49:AJ51`) 下罫線が複数件とも未描画 → user 指摘 → 上記 fitz draw で閉じた。
 
 ### <a id="xlimage-size-silent-fail"></a>`XLImage.width` / `.height` setter は silent fail する
 
