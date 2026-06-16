@@ -41,7 +41,7 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 | 申請日等が「火曜日, 6/月 16, 2026」 の冗長書式で表示 | `=TODAY()` 等 date 書式の cell を date 値で上書き → 冗長書式を継承 | apostrophe prefix の text で上書き → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
 | 標題・縦書きラベル・textbox が消えた | openpyxl の save が drawing (shape) を破壊 | Excel osascript / fitz 直印字 / 別 file XML 移植 の 3 経路 → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
 | 値は書けたが見た目を PDF で確認したい | — | [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) で render。 ⚠️ **Quick Look (`qlmanage`) は textbox/標題 を忠実に描かない** → drawing 健在は zip 内 drawing 数で、 体裁は xlsx-to-pdf.sh の PDF で |
-| 承認欄/印影欄ボックスの**下罫線が出ない** (box が下に開く) | Excel→PDF が最下部の結合セル下罫線を落とす (罫線は xlsx に在るのに出力で消える) | 出力 PDF に fitz で閉じ線を描く (print_area 拡張では直らない) → [`excel-pdf-bottom-border-drop`](#excel-pdf-bottom-border-drop) |
+| 承認欄/印影欄ボックスの**下罫線が出ない** (box が下に開く) | Excel→PDF が最下部の結合セル下罫線を落とす (罫線は xlsx に在るのに出力で消える) | **`close-pdf-form-boxes.py`** を pipeline 最後に挟む (= 開いた枠を全検出して閉じる、 print_area 拡張では直らない) → [`excel-pdf-bottom-border-drop`](#excel-pdf-bottom-border-drop) |
 | xlsx が openpyxl から save できない / lock `~$…` が残る | Excel が当該 file を開いている | Excel quit + lock 削除 → [`xlsx-locked-by-excel`](#xlsx-locked-by-excel) |
 | Bash tool で `sleep` がブロックされ reset 待ちが打てない | harness が foreground の bare `sleep` を禁止 | bare sleep を打たず **script (xlsx-to-pdf.sh 等) に sleep を内包**させて呼ぶ / osascript 内 `delay` / 別 op は run_in_background |
 | 何を / どこに書くか不明 | — | 着手前に [`form を dump`](#form-dump-first) (原則編が先) |
@@ -214,7 +214,14 @@ origin: 2026-06-12 様式⑭-1 fill。 作業日 cell に書いた和文日付�
 
 **検証の罠**: 「全幅の横罫線を pixel scan」 では **box 下罫線が部分幅 (承認欄の列幅のみ) なので検出できず**、 「下は白＝余白」 と誤判定する (= 2026-06-16 に実際にこれで user の正しい指摘を 1 度 dismiss した)。 → (a) PDF を**実画像で目視**、 or (b) `page.get_drawings()` で box 縦線群の bottom y に左右を繋ぐ水平線セグメントが在るか確認 (無ければ開いている)。
 
-**対処 (確実)**: 出力 PDF 側で **fitz で閉じ線を描く** (= [`fitz-pdf-toolkit`](#fitz-pdf-toolkit) 応用)。 右下領域 (x>0.6W) で最下端 (y>0.88H) まで伸びる縦線群を検出 → その最下 y に縦線群の左端→右端を繋ぐ水平線を draw:
+**原則 (= user 確立 2026-06-16「枠の下線が無くて開いている事は有り得ない」)**: 日本の行政・学術様式は全項目を枠で囲う文化なので、 **枠が「下罫線無しで開いている」 状態は設計上あり得ず、 必ず出力欠落**。 = 開いた枠を見つけたら「設計かも」 と迷わず**全て閉じる**。
+
+**対処 (= システム、 確実)**: 一回限りの座標手描きでなく [`scripts/close-pdf-form-boxes.py`](../scripts/close-pdf-form-boxes.py) を **xlsx→PDF pipeline の最後に固定で挟む**:
+
+```
+xlsx → PDF (xlsx-to-pdf.sh) → fitz で p1 抽出 → close-pdf-form-boxes.py  ← この最後の 1 段で全枠を閉じる
+```
+PDF のベクター線だけで「**3 辺あって 1 辺欠けた矩形 (= 開いた枠)**」 を**全て**検出して欠けた辺を draw する (= xlsx 不要・engine 非依存、 **fill-in 下線〔縦線対を持たない単独の水平線〕 は枠でないので触れない = 設計を壊さない**、 冪等、 `--dry-run`/`--selftest` 内蔵)。 ⚠️ 検証は必ず **PDF→PNG 実画像で目視** (= 全幅 pixel scan は部分幅の box 罫線を拾えず「白=余白」 と誤判定する)。 内部実装の中核は下記 (= script の検出ロジック):
 
 ```python
 import fitz
@@ -231,7 +238,7 @@ sh.finish(color=(0,0,0), width=0.75); sh.commit(); d.save(pdf+'.t')  # → os.re
 ```
 Excel 側で結合セル border を再設定する手もあるが merged-cell border は描画が不安定なので、 出力 PDF への線描が確実。 ⚠️ ただし**生成物 PDF への後描画なので、 再生成したら再度引く必要**がある (= pipeline の最後に挟む)。
 
-origin: 2026-06-16 様式⑭-1 の承認欄ボックス (`AC48:AG51`/`AH49:AJ51`) 下罫線が複数件とも未描画 → user 指摘 → 上記 fitz draw で閉じた。
+origin: 2026-06-16 様式⑭-1 の承認欄ボックス (`AC48:AG51`/`AH49:AJ51`) 下罫線が複数件とも未描画 → user 指摘 → 当初 1 箇所を座標手描きで閉じたが、 user「他も全部チェックする system を作れ」 で [`scripts/close-pdf-form-boxes.py`](../scripts/close-pdf-form-boxes.py) に格上げ (= 全枠を検査して閉じる、 selftest 付)。
 
 ### <a id="xlimage-size-silent-fail"></a>`XLImage.width` / `.height` setter は silent fail する
 
