@@ -58,18 +58,15 @@ root は backend fix 待ちだが、 発生確率と poisoning ループは以�
     - **nuance (= 誇張しない)**: subagent を起動する Agent call も、 file 化の Write も、 それ自体 tool call である。 これらは **minimal-surface で通り続ける call** (= short ASCII の Agent / 長 file でも Write / short ASCII Bash) なので使える。 本 rule は「**work tool を自分で実行するな**」 であって「tool call を 0 にしろ」 ではない。
     - **位置づけ**: 7 (新 session) は context を捨てて切り直す、 8 (model 切替) は root に最も近い、 9 は 1 操作だけ逃がす。 本 rule (10) は **現 session の context を保ったまま、 work tool 実行だけを別 context に出し続ける** escalation で、 7/8/9 と排他でなく相補。 (a) tool 実行作業を丸ごと subagent 委譲 + (b) 長文を Write で file 化 + short ASCII pointer の組合せは、 Overleaf scoped push + 検証 + 本 rule の記録自体が全て poisoned 後に subagent 経由で完遂した end-to-end 実証あり (2026-06-16)。
 
-## entrypoint 別の脆弱性 — desktop (Cowork) は tool-heavy 作業に最も弱い
+## entrypoint = claude-desktop の注意 (⚠️ 「desktop だから悪い・CLI に変えろ」 ではない)
 
-同じ Opus 4.8 1M-context でも **どの entrypoint で動いているかで malformed の影響度が変わる**。 ⚠️ **Claude desktop (Cowork) app は tool-heavy / office 作業で最も脆い**:
-- serialization bug 自体は desktop でも CLI でも出るが、 desktop は **hook の出力をモデルに honor しない** ([`hook-authoring.md §9.3`](hook-authoring.md)) ため SessionStart surface も PreToolUse guard も効かず、 **「滑った時に捕まえる第二視点」 が消えて自力規律だけ**になる (= backstop 不在)。
-- 2026-06-16 実例: desktop session が「提出書類を 3 つ探して開く」 だけに **~50 分**かかり 1/3 しか開けず poison して「新 session で」 と投げて終了 (= 17 分・15 分の dead-zone + 「お疲れさま、 また明日」 の文脈喪失 hallucination)。 同じ作業を **CLI で再開したら数分で完遂**し、 form 修正・layer-1 整備まで走り切れた。
+`$CLAUDE_CODE_ENTRYPOINT` が `claude-desktop` = **Claude Code を desktop app の surface で動かしている**状態。 ⚠️ これは「Cowork という別物を誤って使った」 のではなく、 **user によっては Claude Code の通常の (唯一の) 走らせ方**であり、 選択ミスではない。
 
-→ **運用則**:
-1. **tool 数が多い作業 (= file を多数開く / Excel-osascript / 多段 pipeline / 多 commit) は CLI で行う**。 desktop は会話・軽い単発操作向き。
-2. **desktop で malformed / 長い沈黙が出たら粘らず CLI に移る** (= 50 分溶かす前に early bail。 緩和 7「新 session」 の desktop 版 = 新しい **CLI** session)。 自分の entrypoint は `echo $CLAUDE_CODE_ENTRYPOINT` が `claude-desktop` か否かで判る。
-3. desktop を使い続けるなら緩和 9/10 (subagent 委譲) を早めに発動する。
+⚠️ **2026-06-16 誤帰責 RCA (= 本節を書き直した理由)**: 当初 Claude は失敗 session の transcript に `entrypoint:claude-desktop` を見て「user が Cowork を経由する間違いをした、 CLI に変えろ」 と書いた。 だが **失敗 session も、 それを完遂した session も、 両方 `claude-desktop`** だった (= live env で確認)。 user は一貫して Claude Code を使っており、 「CLI で再開したら直った」 も事実でない (完遂 session も claude-desktop)。 = transcript の値 (事実) の上に「user の app 選択ミス」 という誤った narrative を被せ、 root (model/harness の bug) から目を逸らした。
 
-⚠️ **「なぜ desktop を経由したか」 の正直な答え = user が desktop app を開いて作業を始めたから** (= 「system が Cowork に誤誘導した」 のではない)。 layer-1 でできるのは「desktop は脆いと知り、 tool-heavy は CLI に寄せ、 早く bail する」 規律を明文化することまで (= user の environment 選択そのものは規約では縛れない)。
+**claude-desktop で実際に効く制約は狭い**: **hook の出力をモデルに honor しない** ([`hook-authoring.md §9.3`](hook-authoring.md)) ので SessionStart surface / PreToolUse guard が無く、 malformed/stall の「第二視点 backstop」 が消えて自力規律だけになる。 これは environment の事実であって user の落ち度ではない。
+
+⚠️ **file 作業の沈黙・低速を entrypoint のせいにしない**: 主因は (a) serialization bug = **model-level** (Opus 4.8 固有) の malformed/retry/poisoning と、 (b) **harness-level の偽 ENOSPC** (= Bash の stdout capture が「tmp full (0MB)」 と誤報し exit 1 → file-redirect 回避で実質 2x の tool call。 実 disk は潤沢でも出る、 2026-06-16 に df で 195GB 空き・tmp 32K を確認)。 **どちらも `claude-desktop` か `cli` かでは決まらない**ので「app / CLI を変えろ」 は緩和にならない。 効くのは 7 (新 session) / 8 (model 切替、 root に最も近い) / 9・10 (subagent 委譲) と、 stall を感じたら粘らず早く bail すること。 root に entrypoint を据えず model/harness を疑う (= 上記メタ規律と同型)。
 
 ## 限界 (= 誇張しない)
 
