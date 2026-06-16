@@ -49,6 +49,14 @@ SoT の不変条件 (= 重複なし / uniqueness / schema 準拠) を、 それ�
 - **field-scoped prune**: prune するのは新 home に移った field だけ。 移っていない field (= photo / 連絡先 / pipeline status 等) は旧 file に残し resolver も触らない。
 - cross-repo read (= consumer が別 repo の新 home を読む) は層依存が合法な範囲で OK (= 依存先が同等以上に public な層、 owner script → 共有 repo 等)。
 
+### Pattern: 生成物に焼き込んだ marker は snapshot であって live state でない
+
+生成時にファイル名・本文へ焼き込んだ状態 marker (= 「要押印」 「draft」 「提出用」 等) は **作った瞬間の snapshot** で、 その後の進行を反映しない。 これを live state と誤読すると **済んだものが未済として残り続ける** (= drift)。
+
+- **症状の型**: ファイル名 `提出用_…_要押印.pdf` を「要押印か」 の判定に使うと、 押印・提出が済んでも marker は変わらず、 提出済みが「要押印」 として surface し続ける (= 2026-06 提出書類一覧で、 ファイル名 marker だけ見て提出済みを誤掲載 + 当日締切分を見落とした)。
+- **規律**: 「今どうか」 の判定は **live SoT** (= task の status field 等、 人が更新する 1 箇所) を権威にし、 焼き込み marker は飾り扱い。 「持っていく書類はどれか」 等の一覧は **手書きリストを別途持たず、 live SoT (status/期限) と実ファイルを呼び出し時に join して導出する派生 view** にする (= §1 の単一ソース化 + lifecycle resolver と同思想。 一覧を別 file で持つと SoT 二重化して必ず drift)。
+- **副次**: 「手で 1 個ずつ探して開く」 ような痛い機械的作業は、 痛みを感じた時点で **決定論 script 化** する (= 派生 view + `--open` 等)。 機械的・再現可能なのにモデルが毎回探索する形は malformed/低速にも弱い ([`tool-call-robustness.md`](tool-call-robustness.md))。
+
 ---
 
 ## 2. forward-only schema migration

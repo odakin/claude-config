@@ -68,6 +68,16 @@ root は backend fix 待ちだが、 発生確率と poisoning ループは以�
 
 ⚠️ **file 作業の沈黙・低速を entrypoint のせいにしない**: 主因は (a) serialization bug = **model-level** (Opus 4.8 固有) の malformed/retry/poisoning と、 (b) **harness-level の偽 ENOSPC** (= Bash の stdout capture が「tmp full (0MB)」 と誤報し exit 1 → file-redirect 回避で実質 2x の tool call。 実 disk は潤沢でも出る、 2026-06-16 に df で 195GB 空き・tmp 32K を確認)。 **どちらも `claude-desktop` か `cli` かでは決まらない**ので「app / CLI を変えろ」 は緩和にならない。 効くのは 7 (新 session) / 8 (model 切替、 root に最も近い) / 9・10 (subagent 委譲) と、 stall を感じたら粘らず早く bail すること。 root に entrypoint を据えず model/harness を疑う (= 上記メタ規律と同型)。
 
+## 偽 ENOSPC — Bash stdout capture が「tmp full (0MB)」 と誤報する harness 不具合
+
+malformed bug とは別系統だが、 同じく **harness 由来で tool-heavy session を低速化**するので併記する。
+
+**症状**: Bash tool の出力が `the temp filesystem at /private/tmp/claude-*/…/tasks is full (0MB free)` で失われ exit 1。 ⚠️ **実 disk 残量とは無関係** (= 2026-06-16 に `df` で 195GB 空き・当該 tmp dir 32K を確認)。 harness が child の stdout を tmp に capture する経路の誤報。
+
+**回避**: コマンド出力を **workdir 内の file に redirect して stdout を出さない** → その file を **`Read` tool で読む**。 ⚠️ `cat file` で読み返すと cat の出力がまた capture されて同じ ENOSPC になるので **`cat` でなく `Read`**。 形: `cmd > <workdir>/.tmp_out.txt 2>&1; true` → `Read <workdir>/.tmp_out.txt`。 `CLAUDE_CODE_TMPDIR` をコマンド内で export しても capture 経路は実行前に確定済で効かない (= 2026-06-16 実測)。
+
+**影響と帰属**: 出力が要る Bash 毎に redirect+Read の 2 手になり実質 tool call が 2x = tool-heavy session の体感低速の主因の 1 つ。 root は harness 側で Claude の書き方では直せない (= 偽の原因を user / entrypoint に帰さない)。 machine 固有の出方は machine-local memory に記録する (layer 4)。
+
 ## 限界 (= 誇張しない)
 
 - root は **Anthropic backend の model serialization bug** であり、 **prompt の書き方変更でも narrative でも直らない**。 上記「副次緩和」 は発生確率を下げるだけで 0 にはできない。

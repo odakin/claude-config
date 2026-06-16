@@ -449,7 +449,9 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 
 3. **「実行された (executes)」 と「効果が honor された (honored)」 を分ける** — mechanism は **プロセスとして走った**のに、 その出力・決定を上位層が **捨てる**ことがある (= 例: desktop frontend は hook を実行するが stdout 注入 / permission 判定を honor しない、 `hook-authoring.md §9.3`)。 「効果が出ない」 を即「実行されていない」 と結論しない。 副作用 (file 書込等) の有無で「実行」 を、 モデル/flow への反映で「honor」 を別々に確認する。 両者は別の修復を要する (= 未実行なら配線、 honor されないなら surface 自体を変える = `docs/convention-design-principles.md §8.15`)。
 
-reflex: 「この mechanism、 ここで効いてる?」 を検証する時、 (a) 痕跡が conditional な proxy になっていないか、 (b) frontend/context 判別が自己申告 env に依存していないか、 (c) 「効果不在」 を「未実行」 と短絡していないか、 の 3 点を問う。
+4. **帰責する signal は control case で discriminate できることを確認する** (= 発火検証に限らない一般原則) — ある事象 (= 失敗 / 低速 / 異常) の原因として signal X を挙げる前に、 **正常に動いた case (= control) で X を観測**する。 失敗 case と成功 case の **両方に在る** signal は両者の差を説明しない = 原因ではない。 ⚠️ point 2 は「env 値が不正確かも」 だが本点は **env 値が正確でも刺さる**罠 = 値は正しいが discriminate しない。 例 (2026-06-16): 失敗 session の `entrypoint=claude-desktop` を見て「desktop (Cowork) を使った user のミス」 と帰責したが、 **正常に完遂した現 session も同じ `claude-desktop`** だった (= live env で確認) → entrypoint は失敗を discriminate せず原因でない。 control を 1 度見れば即 falsify できたのに、 actionable / 外部帰属に飛びついた (= tool-call-robustness.md メタ規律「自分で塞げる/相手のせいにできる原因に飛びつくバイアス」 の attribution 版)。 ⚠️ 特に **user / 外部の選択を「ミス」 と断ずる**前に必ず control で discriminate する (= 誤帰責は user の信頼を直接損なう)。
+
+reflex: 「この mechanism、 ここで効いてる?」 / 「この症状の原因は X?」 を検証する時、 (a) 痕跡が conditional な proxy になっていないか、 (b) frontend/context 判別が自己申告 env に依存していないか、 (c) 「効果不在」 を「未実行」 と短絡していないか、 (d) 原因として挙げる signal が control case で不在 (= discriminate) することを確認したか、 の 4 点を問う。
 
 origin: 2026-06-13 desktop-hook-gap 調査。 当初 SessionStart hook の死活を cache mtime で推定 → 交絡 (cache は別 writer + CLI 認証 credit 切れ + Terminal の EventKit TCC で書かれない) で不確定。 依存ゼロの trace (file append) に切替えて発火を確定、 親プロセス path で frontend を判別 (env var は汚染懸念)、 さらに「desktop は hook を実行するが出力を honor しない」 = 実行 ≠ honor を分離して初めて正確な像を得た。 起票 session は cache mtime 1 点 + env var で「SessionStart 死亡」 と推定し一部誤帰責していた (= §9.1 snapshot 交絡で PreToolUse 非発火も実は未分離だった)。
 

@@ -222,6 +222,8 @@ layer 1 (= 本 repo) の **test file source code に実 private repo 名を lite
 
 → **implementer reflex**: layer 1 test file を書く瞬間に「この test data は public commit に焼き付く、 実 layer 3 data の literal が混入していないか?」 を問う。 過去事例の literal copy-paste は最も再演しやすい failure mode (= 「過去事例の reproduce」 が目的化される)。
 
+⚠️ **2026-06-16 拡張 — test file に限らず「規約本文の例」 と「script の docstring / `--selftest` fixture」 も同じ**: layer 1 の convention 本文に書く**例**や script の selftest data も public surface。 trigger となった実 incident の **実人名・所属・固有値をそのまま例に使わず**、 架空データ (= 「甲野 太郎」 「架空大学」 等) に置換する。 2026-06-16 near-miss: office-automation の文字 clipping を整備中、 検出器 script の selftest と convention 本文の症状例へ **実セミナー講演者の氏名・所属 (= まさに結合セルで clip した当の値)** を literal で書き込み、 commit 直前の leak grep で検出して匿名化した。 = **incident を正確に記録しようとするほど実 PII を例に焼き込む引力が強い** (= 上記「過去事例の reproduce が目的化」 の PII 版)。 → commit 前に **変更 diff を実名 list で grep する** のを最終 gate にする (= 2026-06-16 はこれで救われた)。
+
 ### Layer 軸 vs Leak 軸の関係 (= 混同しないための table)
 
 | | layer dependency 軸 | leak prevention 軸 (本節) |
