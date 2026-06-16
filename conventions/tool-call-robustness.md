@@ -58,6 +58,19 @@ root は backend fix 待ちだが、 発生確率と poisoning ループは以�
     - **nuance (= 誇張しない)**: subagent を起動する Agent call も、 file 化の Write も、 それ自体 tool call である。 これらは **minimal-surface で通り続ける call** (= short ASCII の Agent / 長 file でも Write / short ASCII Bash) なので使える。 本 rule は「**work tool を自分で実行するな**」 であって「tool call を 0 にしろ」 ではない。
     - **位置づけ**: 7 (新 session) は context を捨てて切り直す、 8 (model 切替) は root に最も近い、 9 は 1 操作だけ逃がす。 本 rule (10) は **現 session の context を保ったまま、 work tool 実行だけを別 context に出し続ける** escalation で、 7/8/9 と排他でなく相補。 (a) tool 実行作業を丸ごと subagent 委譲 + (b) 長文を Write で file 化 + short ASCII pointer の組合せは、 Overleaf scoped push + 検証 + 本 rule の記録自体が全て poisoned 後に subagent 経由で完遂した end-to-end 実証あり (2026-06-16)。
 
+## entrypoint 別の脆弱性 — desktop (Cowork) は tool-heavy 作業に最も弱い
+
+同じ Opus 4.8 1M-context でも **どの entrypoint で動いているかで malformed の影響度が変わる**。 ⚠️ **Claude desktop (Cowork) app は tool-heavy / office 作業で最も脆い**:
+- serialization bug 自体は desktop でも CLI でも出るが、 desktop は **hook の出力をモデルに honor しない** ([`hook-authoring.md §9.3`](hook-authoring.md)) ため SessionStart surface も PreToolUse guard も効かず、 **「滑った時に捕まえる第二視点」 が消えて自力規律だけ**になる (= backstop 不在)。
+- 2026-06-16 実例: desktop session が「提出書類を 3 つ探して開く」 だけに **~50 分**かかり 1/3 しか開けず poison して「新 session で」 と投げて終了 (= 17 分・15 分の dead-zone + 「お疲れさま、 また明日」 の文脈喪失 hallucination)。 同じ作業を **CLI で再開したら数分で完遂**し、 form 修正・layer-1 整備まで走り切れた。
+
+→ **運用則**:
+1. **tool 数が多い作業 (= file を多数開く / Excel-osascript / 多段 pipeline / 多 commit) は CLI で行う**。 desktop は会話・軽い単発操作向き。
+2. **desktop で malformed / 長い沈黙が出たら粘らず CLI に移る** (= 50 分溶かす前に early bail。 緩和 7「新 session」 の desktop 版 = 新しい **CLI** session)。 自分の entrypoint は `echo $CLAUDE_CODE_ENTRYPOINT` が `claude-desktop` か否かで判る。
+3. desktop を使い続けるなら緩和 9/10 (subagent 委譲) を早めに発動する。
+
+⚠️ **「なぜ desktop を経由したか」 の正直な答え = user が desktop app を開いて作業を始めたから** (= 「system が Cowork に誤誘導した」 のではない)。 layer-1 でできるのは「desktop は脆いと知り、 tool-heavy は CLI に寄せ、 早く bail する」 規律を明文化することまで (= user の environment 選択そのものは規約では縛れない)。
+
 ## 限界 (= 誇張しない)
 
 - root は **Anthropic backend の model serialization bug** であり、 **prompt の書き方変更でも narrative でも直らない**。 上記「副次緩和」 は発生確率を下げるだけで 0 にはできない。

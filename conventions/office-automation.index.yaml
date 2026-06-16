@@ -27,7 +27,7 @@ sections:
   - id: excel-osascript-cell-write
     level: 3
     title: "Excel osascript で cell 値を書く堅牢パターン (= drawing 保護 + -609 回避)"
-    related: [openpyxl-destroys-drawings, xlsx-to-pdf-script]
+    related: [openpyxl-destroys-drawings, xlsx-to-pdf-script, merged-cell-text-clipping]
   - id: excel-write-string-autoconvert
     level: 3
     title: "Excel 経由 write は文字列を auto-convert する (= 日付文字列が serial 数字で印字される)"
@@ -36,6 +36,10 @@ sections:
     level: 3
     title: "Excel→PDF はフォーム最下部の結合セル下罫線を落とす (= 承認欄ボックス等が下に開く)"
     related: [fitz-pdf-toolkit, xlsx-to-pdf-script, excel-osascript-cell-write, symptom-index]
+  - id: merged-cell-text-clipping
+    level: 3
+    title: "結合セルの長文 clipping は shrink_to_fit が効かない → font size を下げる"
+    related: [excel-osascript-cell-write, clear-yellow-fill-marks, pdf-visual-confirm, xlsx-to-pdf-script, merged-cell-write-topleft, openpyxl-destroys-drawings]
   - id: xlimage-size-silent-fail
     legacy: "1-1"
     level: 3

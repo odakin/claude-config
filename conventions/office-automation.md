@@ -42,6 +42,7 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 | 標題・縦書きラベル・textbox が消えた | openpyxl の save が drawing (shape) を破壊 | Excel osascript / fitz 直印字 / 別 file XML 移植 の 3 経路 → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
 | 値は書けたが見た目を PDF で確認したい | — | [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) で render。 ⚠️ **Quick Look (`qlmanage`) は textbox/標題 を忠実に描かない** → drawing 健在は zip 内 drawing 数で、 体裁は xlsx-to-pdf.sh の PDF で |
 | 承認欄/印影欄ボックスの**下罫線が出ない** (box が下に開く) | Excel→PDF が最下部の結合セル下罫線を落とす (罫線は xlsx に在るのに出力で消える) | **`close-pdf-form-boxes.py`** を pipeline 最後に挟む (= 開いた枠を全検出して閉じる、 print_area 拡張では直らない) → [`excel-pdf-bottom-border-drop`](#excel-pdf-bottom-border-drop) |
+| 氏名/所属など**長い文字列が結合セルで両端切れ** | 固定 font でセル幅超過 + **shrink_to_fit は結合セルで無効** | **font size を下げる** (osascript は `font size of font object`) + `check-form-clipping.py` で機械検出 → [`merged-cell-text-clipping`](#merged-cell-text-clipping) |
 | xlsx が openpyxl から save できない / lock `~$…` が残る | Excel が当該 file を開いている | Excel quit + lock 削除 → [`xlsx-locked-by-excel`](#xlsx-locked-by-excel) |
 | Bash tool で `sleep` がブロックされ reset 待ちが打てない | harness が foreground の bare `sleep` を禁止 | bare sleep を打たず **script (xlsx-to-pdf.sh 等) に sleep を内包**させて呼ぶ / osascript 内 `delay` / 別 op は run_in_background |
 | 何を / どこに書くか不明 | — | 着手前に [`form を dump`](#form-dump-first) (原則編が先) |
@@ -178,7 +179,7 @@ osascript -e 'tell application "Microsoft Excel" to quit'
 
 ⚠️ delay/quit/cold-start の非同期対策は **AppleScript で Office app を automation する一般則** (= -609「接続無効」 は quit 後も AppleScript が reference を clear せず vanishing app にコマンドが届く / app 未 ready で起き、 **any app に共通**)。 Word docx→PDF も同根の gotcha ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache) の cold-start / quit)。
 
-⚠️ **merged cell の font 属性設定で `-10006` (errAEPrivilegeError) が返る場合**: osascript で merged cell の font size 等を変えようとすると -10006 が返ることがある。 Python 側で `try/except` を各操作に被せて続行し、 文字 clipping の根本解決は openpyxl の `shrink_to_fit=True` で行う ([`clear-yellow-fill-marks`](#clear-yellow-fill-marks) 参照)。 origin: 2026-06-04 謝金様式の fill 後微修正。
+⚠️ **merged cell の font size を osascript で変える正しい構文** (= 長い氏名/所属が結合セルで両端切れた時の根本対処): `set font size of font object of range "G13" of ws to 9` (= **property 名は `font size`**)。 よくある誤り = `set size of font object of …` → **`-1728` (object not found)** で沈黙失敗する (= `size` という property は font object に無い)。 setup によっては `-10006` (errAEPrivilegeError) が返ることもあり、 その時は各操作を `try` で囲んで続行。 ⚠️ **font が効かない時の fallback を `shrink_to_fit=True` にしてはいけない** — **shrink_to_fit は結合セルでは no-op** (Excel 制約) で、 立てても何も縮まず「直したつもり」 で clip が残る (= 2026-06-16 謝金様式⑭-1 所属見切れ事故の温床)。 結合セルの文字溢れは **font size を下げる** のが唯一効く手。 詳細・検出・検証は [`merged-cell-text-clipping`](#merged-cell-text-clipping)。 origin: 2026-06-04 謝金様式の fill 後微修正 + 2026-06-16 G13 所属見切れ RCA。
 
 ⚠️ **`-1712` (AppleEvent timeout) は「Excel が固まっている」 signal**: 同一 session で Excel 操作 (= PDF export / cell write) を連続させると、 既存 instance が応答不能になり次の osascript が -1712 で落ちることがある。 復旧 = **`killall "Microsoft Excel"` → `sleep 5` → 再実行** (= -609 と同じ reset で直る、 driver script は 2 段 retry を組み込む)。 origin: 2026-06-11 雛形 PDF 化を 1 日に複数回実行した session。
 
@@ -239,6 +240,27 @@ sh.finish(color=(0,0,0), width=0.75); sh.commit(); d.save(pdf+'.t')  # → os.re
 Excel 側で結合セル border を再設定する手もあるが merged-cell border は描画が不安定なので、 出力 PDF への線描が確実。 ⚠️ ただし**生成物 PDF への後描画なので、 再生成したら再度引く必要**がある (= pipeline の最後に挟む)。
 
 origin: 2026-06-16 様式⑭-1 の承認欄ボックス (`AC48:AG51`/`AH49:AJ51`) 下罫線が複数件とも未描画 → user 指摘 → 当初 1 箇所を座標手描きで閉じたが、 user「他も全部チェックする system を作れ」 で [`scripts/close-pdf-form-boxes.py`](../scripts/close-pdf-form-boxes.py) に格上げ (= 全枠を検査して閉じる、 selftest 付)。
+
+### <a id="merged-cell-text-clipping"></a>⚠️ 結合セルの長文 clipping は shrink_to_fit が効かない → font size を下げる
+
+**症状**: 氏名・所属など長い文字列を**結合セル** (例 `G13:M13`) に固定 font で書くと、 セル幅を超えた分が PDF 描画で **両端 clip** (center 配置なら左右、 left 配置なら右) される。 セル値そのものは完全なので値 diff (diff-form-xlsx) や read-back では出ず、 視覚確認も所属行を凝視しないと気づかない。 2026-06 謝金様式⑭-1 で長い研究機関名 (= 16 字相当) が中央付近だけ表示され目視で発覚 (= 値は完全)。 短い所属 (= 11 字程度) は収まるので **長い値でだけ顕在化する silent failure**。
+
+**原因 + 効かない対処**: ⚠️ **shrink_to_fit は結合セルでは no-op** (Excel 制約)。 `Alignment(..., shrink_to_fit=True)` を立てても結合セルでは何も縮まない。 font 設定が効かない時の fallback を shrink_to_fit にすると「直したつもり」 で clip が残る (= この罠で 1 度はまった)。
+
+**対処 (= 結合セルで唯一効く = font size を下げる)**:
+- osascript (= 標題 drawing を保護したい様式。 [`excel-osascript-cell-write`](#excel-osascript-cell-write) 経由): `set font size of font object of range "G13" of ws to 9` — property 名は **`font size`** (`size` だと `-1728` object-not-found で沈黙失敗)。
+- openpyxl (= drawing 無しの form): `from copy import copy; f = copy(c.font); f.size = 9; c.font = f` を**結合範囲の左上 cell** ([`merged-cell-write-topleft`](#merged-cell-write-topleft)) に。 ⚠️ ただし openpyxl save は drawing を消す ([`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings)) ので標題付き様式では osascript 必須。
+- size の目安: 収まる近傍値から比例で当てる (例: 11 字 @14pt が収まるなら 16 字相当は 14×11/16 ≈ 9pt) → 検出器 + 視覚で詰める。
+
+**検証 (= 機械 + 視覚、 両方)**: [`scripts/check-form-clipping.py`](../scripts/check-form-clipping.py) `<雛形.xlsx> <記入済.xlsx> <生成.pdf>` が、 雛形 diff で**記入セルだけ**に絞り、 各記入値が PDF 抽出テキストに完全な部分文字列として現れるか機械照合する (= 欠落 ≥3 字を clip 疑いとして flag、 `--selftest` 内蔵)。 ⚠️ レンダラによっては clip でも text 層に全文が残るので **[`pdf-visual-confirm`](#pdf-visual-confirm) の視覚確認も必ず併用** (= 検証 3 層は相互代替不可)。
+
+**再生成 pipeline** (= 様式⑭ 系を直したら毎回この順):
+
+```
+font 修正 → xlsx-to-pdf.sh → fitz で p1 抽出 → close-pdf-form-boxes.py → check-form-clipping.py + 視覚確認
+```
+
+origin: 2026-06 謝金様式⑭-1 の G13 所属見切れ。 当時の規約が [`clear-yellow-fill-marks`](#clear-yellow-fill-marks) で shrink_to_fit=True を勧めていた (= 結合セルで無効) ため「規約どおりにやると直らない」 状態だった → font 縮小に訂正 + 機械検出器 (check-form-clipping.py) を新設し principles §2「機械層は clipping 捕捉不能」 を更新。
 
 ### <a id="xlimage-size-silent-fail"></a>`XLImage.width` / `.height` setter は silent fail する
 
@@ -1312,7 +1334,7 @@ origin: 2026-06 学外者旅費様式 (`3_…`) 支給方法選択。 前 sessio
 - 黄色 cell の機械走査: `cell.fill.patternType == 'solid' and getattr(cell.fill.fgColor, 'rgb', None) == 'FFFFFF00'`。
 
 同じ [`pdf-visual-confirm`](#pdf-visual-confirm) PDF visual で**同時に捕捉される他の落とし穴** (= いずれも cell 値検証では見えない。 2026-06-03 教研支援課様式⑭-1 fill で 3 件同時発見):
-- **文字 clipping**: center 配置の長い文字列 (= 例「東京大学大学院工学系研究科」) が cell 幅超過で**両端が clip** (= left 配置なら右のみ clip)。 fix = `cell.alignment = Alignment(horizontal=a.horizontal, vertical=a.vertical, ..., shrink_to_fit=True)` (= 既存 alignment 属性を保持して shrink_to_fit だけ足す)。
+- **文字 clipping**: center 配置の長い文字列 (= 例「東京大学大学院工学系研究科」) が cell 幅超過で**両端が clip** (= left 配置なら右のみ clip)。 **非結合セル**なら fix = `cell.alignment = Alignment(horizontal=a.horizontal, vertical=a.vertical, ..., shrink_to_fit=True)` (= 既存 alignment 属性を保持して shrink_to_fit だけ足す)。 ⚠️ **結合セル (例 G13:M13) では shrink_to_fit は no-op** = 効かない。 結合セルは **font size を下げる**のが唯一の手 ([`merged-cell-text-clipping`](#merged-cell-text-clipping))。
 - **multi-sheet workbook → PDF 全ページ出力**: `xlsx-to-pdf.sh` ([`xlsx-to-pdf-script`](#xlsx-to-pdf-script)) に sheet 名を渡しても Excel engine が **workbook 全 sheet を各ページ出力**することがある (= 例 様式⑭-1/⑭-2/⑭-3/領収書/dropdown の 5 sheet → 5 ページ PDF)。 提出は目的 sheet のみなので **PyMuPDF で目的ページを抽出**: `import fitz; src=fitz.open(big); out=fitz.open(); out.insert_pdf(src, from_page=0, to_page=0); out.save(submit)`。 [`multi-sheet-form`](#multi-sheet-form) の多 sheet 注意と併読。
 
 ---
@@ -1388,7 +1410,7 @@ end tell'
 **したがって [`pdf-visual-confirm`](#pdf-visual-confirm) を精緻化 (= 否定でなく検証目的の分離)**: 「何を確かめるか」 で道具を分ける。 ⚠️ **text-first は「視覚確認を省く」 ではない** — [`pdf-visual-confirm`](#pdf-visual-confirm) の視覚確認 mandate は LAYOUT について不変。
 
 - **CONTENT 検証** (= 正しい文字列が在る / 無い) → **text-first**。 「PDF を render → 目視」 より「PDF テキスト抽出 → 期待文字列を assert」 が優れる (= image render は遅い + image budget を消費 + [`docx-pdf-stale-cache`](#docx-pdf-stale-cache) の stale を見逃す)。 text で十分なのはこの目的**だけ**。
-- **LAYOUT 検証** (= 文字 clipping / `###` overflow / row height 不足 / page break / 体裁、 [`bool-cell-hash-overflow`](#bool-cell-hash-overflow) / [`datetime-cell-hash-overflow`](#datetime-cell-hash-overflow) / [`claude-cannot-observe-render`](#claude-cannot-observe-render)) → **text では捕捉できない** (= clip された文字も PDF テキスト層には残る)。 [`pdf-visual-confirm`](#pdf-visual-confirm) の視覚確認は依然 **必須**。 image budget が枯渇しているときは Claude が render するのでなく **user に PDF を見てもらって relay** で行う (= mandate を満たす手段を user に移すだけ)。
+- **LAYOUT 検証** (= 文字 clipping / `###` overflow / row height 不足 / page break / 体裁、 [`bool-cell-hash-overflow`](#bool-cell-hash-overflow) / [`datetime-cell-hash-overflow`](#datetime-cell-hash-overflow) / [`claude-cannot-observe-render`](#claude-cannot-observe-render)) → 多くは **text では捕捉できない**。 ⚠️ **例外 = 結合セルの記入値 clipping は [`check-form-clipping.py`](../scripts/check-form-clipping.py) で機械検出できる** (= LibreOffice/Excel は clip 時に text 層も truncate するので「記入値↔PDF 描画文字列」 照合で出る。 ただし clip-path で全文を残す renderer もあるので engine 依存 = 第一防衛線)。 `###` / row height / page break / 罫線欠けは依然 text 不可。 いずれにせよ [`pdf-visual-confirm`](#pdf-visual-confirm) の視覚確認は **必須** (= 機械検出は視覚を置換しない、 [`merged-cell-text-clipping`](#merged-cell-text-clipping))。 image budget が枯渇しているときは Claude が render するのでなく **user に PDF を見てもらって relay** で行う (= mandate を満たす手段を user に移すだけ)。
 
 **visual が要る具体例** (= 体裁・削除後の空き詰め・手書き赤入れ・上記 LAYOUT 問題) は **user に見てもらって relay** する (= [`visual-check-by-user`](#visual-check-by-user)「視覚確認は user に依頼」 を、 image limit が "速いから" でなく "そうするしかない" に格上げ)。 自分への「目視で確認」 は責任放棄 + 循環検証の温床 (= 削除に使った判定で見ると漏れが見えない、 [`manual-review-required`](#manual-review-required))。
 

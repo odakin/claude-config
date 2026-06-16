@@ -55,7 +55,7 @@ content control / XML 宣言 / bookmark)。 **どの道具も、 この地層の
 
 | 層 | 何で検証 | 捕まえられるもの | 捕まえられないもの |
 |---|---|---|---|
-| ① 機械 (決定論) | 雛形 diff / integrity script / NFKC text 照合 | label 上書き、 構造破損、 値の欠落 | 見た目の破綻 (overflow / 配置ズレ / glyph 不描画) |
+| ① 機械 (決定論) | 雛形 diff / integrity script / NFKC text 照合 / 結合セル clipping 照合 (check-form-clipping.py) | label 上書き、 構造破損、 値の欠落、 **結合セルの記入値 clipping** (= 値↔描画 text 照合、 engine 依存の第一防衛線) | 見た目の破綻 (overflow `###` / 配置ズレ / glyph 不描画) |
 | ② 視覚 (render) | PDF を**画像として**目視 | `###` / 文字切れ / 標題消失 / ズレ | 次の解釈器の挙動 (printer 化け) |
 | ③ 実機 | 実際に Word/Excel で開く、 実際に印刷する | 「破損」 ダイアログ、 printer RIP 問題 | — (最終 ground truth) |
 
@@ -63,6 +63,9 @@ content control / XML 宣言 / bookmark)。 **どの道具も、 この地層の
 - **①で済ませた気にならない** — text 層の検証は「値が存在する」 ことしか言わない。 glyph が
   描画されない PDF も text 検証は通る。 layout 問題 (overflow `###`) は text 抽出では不定
   ([`clear-yellow-fill-marks`](office-automation.md#clear-yellow-fill-marks) 末尾の警告)。
+  ⚠️ **例外的に結合セルの記入値 clipping だけは ① で機械検出できる** (= 値↔PDF 描画 text の照合、
+  [`merged-cell-text-clipping`](office-automation.md#merged-cell-text-clipping))。 ただし clip しても
+  text 層に全文を残す renderer もある (engine 依存) ので ② 視覚は依然必須 = ① は第一防衛線。
 - **②の目視で見つけた異常は print-blocker** — 「その欄はどうせ後で書くから」 等の理由で
   **黙認して進まない** (直すか user に確認)。 時間圧の下で最も踏みやすい失敗は
   「異常に気づいたのに合理化して進む」 こと (実例 3 連: `###` 黙認印刷 / 標題なしを「設計通り」 と
