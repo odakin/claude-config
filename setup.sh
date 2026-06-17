@@ -542,8 +542,12 @@ configure_permissions() {
         echo "  Done."
     else
         # allow が存在する場合、不足しているツールを追加
+        # Windows の jq.exe (winget) は出力を CRLF で吐くため、tr -d '\r' で
+        # 末尾 CR を除去する。除去しないと "Bash\r" のような不正値が
+        # permissions.allow に追加され (実ツール名に一致しない死にエントリ)、
+        # setup.sh を再実行するたびに増殖する。
         UPDATED=false
-        for TOOL in $(echo "$SAFE_TOOLS" | jq -r '.[]'); do
+        for TOOL in $(echo "$SAFE_TOOLS" | jq -r '.[]' | tr -d '\r'); do
             if ! jq -e --arg t "$TOOL" '.permissions.allow | index($t)' "$SETTINGS" > /dev/null 2>&1; then
                 echo "  Adding missing permission: $TOOL"
                 jq --arg t "$TOOL" \
