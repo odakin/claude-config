@@ -1,4 +1,5 @@
 # Claude Code hooks の作成 + 配信規律
+<!-- slug index: hook-authoring.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
 
 > 適用対象: `claude-config/hooks/` (= layer 1) + 個人層の `<personal-layer>/hooks/` (= layer 3) の hook script 全般。 hook 作成・配信・audit の **3 種類の構造的 trap** を扱う。
 >
@@ -6,7 +7,7 @@
 
 ---
 
-## 概論: hook は他の script と質的に異なる category
+## <a id="hook-category-intro"></a>概論: hook は他の script と質的に異なる category
 
 普通の utility script は:
 - (i) 実行環境を作者が選べる (= `#!/usr/bin/env python3` 等で modern runtime を assume 可)
@@ -22,7 +23,7 @@ claude-code hook は **3 つとも逆**:
 
 ---
 
-## §0. naming convention: suffix で behavior を区別
+## <a id="naming-convention"></a>§0. naming convention: suffix で behavior を区別
 
 hook script の filename suffix で **block するか否か** を機械的に区別する:
 
@@ -42,15 +43,15 @@ suffix と behavior の対応がずれている (= 例: `-nudge` 接尾辞だが
 
 ---
 
-## §1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug
+## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug
 
-### 問題
+### <a id="bash32-problem"></a>問題
 
 `$(...)` command substitution 内に heredoc を置き、 heredoc body に literal `"` または `'` (= 例えば Python regex の `[\"']` パターン) を含めると、 bash 3.2 の parser が外側 `$(...)` の閉じ `)` を find する際に body 内の quote を一部 consume、 **遥か後の行 で `syntax error near unexpected token '('`** を報告する。
 
 quoted heredoc 開始 token (`<<'PYEOF'`) は body を no-expansion にする contract のはずだが、 bash 3.2 の `$(...)` parser は **その contract を無視して body を scan する** (= 既知の bash 3.2 限界、 5.x で修正)。
 
-### Reproducer (= 2026-05-20 実遭遇)
+### <a id="bash32-reproducer"></a>Reproducer (= 2026-05-20 実遭遇)
 
 ```bash
 HEREDOC_MSG="$(
@@ -65,7 +66,7 @@ PYEOF
 - `bash` (homebrew 5.x): 通る
 - `/bin/bash` (macOS stock 3.2.57): `syntax error near unexpected token '('` を 50〜100 行先で報告
 
-### 回避策
+### <a id="bash32-workaround"></a>回避策
 
 heredoc body 内の literal quote を **hex escape で書き換える**:
 
@@ -78,7 +79,7 @@ pat = re.compile(r"<<-?\s*[\x22\x27]?([A-Z]+)[\x22\x27]?\s*")
 
 別解: 中間 file に書き出す (= `python3 -c '...'` への移行は引用問題が増えるので非推奨、 heredoc を `>/tmp/script.py` で先に書いて `python3 /tmp/script.py` で呼ぶのは clean だが手数が増える)。
 
-### Debug が困難な理由 / メタ規律
+### <a id="bash32-debug-difficulty"></a>Debug が困難な理由 / メタ規律
 
 - minimal isolated test (= heredoc 1 個を `$(...)` 無しで実行) は通る → 「block の中身が壊れた」 と reflex 判定しがち。 真因は **block 間 interaction** (= 外側 parser が内側 body を scan する parser bug)
 - 「error 報告行」 と「真因行」 が大きく乖離する → 修正対象を誤特定して時間を溶かす
@@ -87,9 +88,9 @@ pat = re.compile(r"<<-?\s*[\x22\x27]?([A-Z]+)[\x22\x27]?\s*")
 
 ---
 
-## §2. hook 配信正常性の 4 軸 audit (= 1 軸欠けて silent malfunction)
+## <a id="delivery-audit-4-axes"></a>§2. hook 配信正常性の 4 軸 audit (= 1 軸欠けて silent malfunction)
 
-### 問題
+### <a id="delivery-audit-problem"></a>問題
 
 claude-code が hook を起動するには **4 軸全てが揃う必要**:
 
@@ -102,7 +103,7 @@ claude-code が hook を起動するには **4 軸全てが揃う必要**:
 
 4 軸全て silent failure mode を持つ。 「symlink 作った」 「settings.json 直した」 「テスト書いた」 「invoke 経路も確認した」 のどれか 1〜3 つで「fix 完了」 と claim するのは error。
 
-### 実例 (= 2026-05-20 retroactive 発覚)
+### <a id="delivery-audit-example"></a>実例 (= 2026-05-20 retroactive 発覚)
 
 | 失敗 mode | 詳細 | 観測された機能停止期間 |
 |---|---|---|
@@ -111,7 +112,7 @@ claude-code が hook を起動するには **4 軸全てが揃う必要**:
 | partial install (= §4 参照) | symlink だけ手動修復 + settings.json は手付かず → (a) 解消、 (b) は残存 | (b) 軸単独の silent malfunction が継続 |
 | **(d) harness invoke 死亡 (= 2026-05-21 追加)** | claude-code 2.1.x で **`PostToolUse[Bash]` + `PreToolUse[Bash]` 両 hook が harness invoke されない** silent failure。 (a)(b)(c) 全 green、 manual invoke で hook script が正しく動作するにもかかわらず実 Bash tool call で hook が fire しない (= 他 matcher 〔Write / Read / SessionStart 等〕 は同 session で fires fine、 Bash matcher 限定) | **少なくとも 2026-05-21 朝以降** persistent (= arm64 + Intel x86_64 の異 arch + 異 macOS version 2 machine 両方で再現 + Claude.app restart 後も dead)。 Anthropic 既存 issue [#52715](https://github.com/anthropics/claude-code/issues/52715) + [#59513](https://github.com/anthropics/claude-code/issues/59513) で同症状を CLI 2.1.53 → VSCode 拡張 2.1.145 の version range で報告済。 **2026-05-26 mitigation 投入**: leak 防御に特化した workaround として **git native commit-msg hook** を `claude-config/scripts/commit-msg-leak-guard-runner.sh` (BLOCK mode) で投入、 全 public repo の `.git/hooks/commit-msg` に `install-public-commit-msg.sh` で配信。 git 層は harness を経由しないので bypass されない (= matcher logic は claude-code hook と shared library `lib/commit-msg-leak-matcher.sh` で DRY)。 Anthropic fix 完了後も BLOCK mode のほうが §5.1 single-viewpoint trap を回避するので継続維持予定。 設計詳細 (= 4 案 evaluation + Resolution + なぜ BLOCK + なぜ matcher を layer 1 + 反省) は [`DESIGN.md §2026-05-26`](../DESIGN.md) |
 
-### 防止策 / audit method
+### <a id="delivery-audit-method"></a>防止策 / audit method
 
 **ゲート質問** (= hook 配信を「fix した」 と claim する前):
 0. **`echo $CLAUDE_CODE_ENTRYPOINT` を確認** — `claude-desktop` なら **hook 出力がモデルに反映されない** (= hook は実行されるが harness が出力を honor しない、 §9.3)。 desktop session での「効かない / 非発火に見える」 は配線の問題ではないので、 1-4 を audit する前にここを見る (= 誤帰責の最頻原因)。
@@ -148,7 +149,7 @@ cat /tmp/hook-trace.log       # 起動時 cwd / pid も同時 audit
 
 setup.sh 自体は idempotent design なので (i) は実装コスト低。 但し `git pull` のたびに走るとうるさい場合あり、 trade-off は user 判断。
 
-### §2 補足: tool-matcher の coverage boundary — Bash/script write は Edit/Write guard を素通りする
+### <a id="tool-matcher-coverage-boundary"></a>§2 補足: tool-matcher の coverage boundary — Bash/script write は Edit/Write guard を素通りする
 
 配信が健全 (= (a)(b)(c) 全 green) でも、 PreToolUse hook は **登録した matcher の tool にしか fire しない**。 `PreToolUse(Edit|Write|MultiEdit)` guard は **Bash / script (`python ... open(w)` / `cat > f` 等) で書いた file を一切見ない** (= それらは Edit/Write tool call でないため)。 bug ではなく matcher の設計境界 (§2 (d) の harness-invoke-bug 〔Bash matcher が bug で fire しない〕 とは別軸)。 guard を分類すると塞ぎ方が決まる:
 
@@ -160,9 +161,9 @@ setup.sh 自体は idempotent design なので (i) は実装コスト低。 但�
 
 ---
 
-## §3. PreToolUse warn mode 出力の spec uncertainty
+## <a id="warn-mode-spec-uncertainty"></a>§3. PreToolUse warn mode 出力の spec uncertainty
 
-### 問題
+### <a id="warn-mode-problem"></a>問題
 
 claude-code hook の PreToolUse phase で **warn** (= block しないが user / Claude に message を surface) を実装するとき、 spec 上 visible になる経路が複数あり version 依存:
 
@@ -174,7 +175,7 @@ claude-code hook の PreToolUse phase で **warn** (= block しないが user / 
 
 `ask` / `deny` (= block 系) は spec 確立済で stderr が確実に surface する。 warn (= 通すが message 出す) は claude-code 内部の通常 permission flow に乗せるため、 message 経路が spec で明確に定義されていない。
 
-### 実装推奨
+### <a id="warn-mode-implementation"></a>実装推奨
 
 warn 用途では **3 経路を defensive に併用** (= どれが surface しても OK):
 
@@ -196,7 +197,7 @@ exit 0
 
 `permissionDecision` field は **出さない** (= 通常 permission flow に流す = ユーザー設定の auto-allow / ask を override しない)。 `permissionDecision: "allow"` を出すと user の手動許可 flow を bypass する副作用があるので warn 用途では不適切。
 
-### Dry-run 観察事項 (= warn hook 投入後に user に依頼)
+### <a id="warn-mode-dry-run"></a>Dry-run 観察事項 (= warn hook 投入後に user に依頼)
 
 warn hook を MVP で投入したら、 一定期間 (= 数週間〜1 ヶ月) 観察して以下を decide:
 - どの経路 (stderr / additionalContext / systemMessage) が **実際 surface したか** (= claude-code 当該 version での実 spec)
@@ -207,9 +208,9 @@ surface しなかった場合: 残り 2 経路に依存している、 または
 
 ---
 
-## §4. Partial install state (= §2 の specific failure mode、 注意喚起)
+## <a id="partial-install-state"></a>§4. Partial install state (= §2 の specific failure mode、 注意喚起)
 
-### 問題
+### <a id="partial-install-problem"></a>問題
 
 §2 の delivery 3 軸 (= (a)(b)(c))を分離して扱った時の典型 failure mode (= 「一部だけ直した」 が「全部直した」 と誤認):
 
@@ -219,7 +220,7 @@ surface しなかった場合: 残り 2 経路に依存している、 または
 
 setup.sh の `install_hooks()` 関数内の **「symlink 配置 → settings.json への jq merge」 dual-step は atomic な 1 unit として扱う** (= 関数内で逐次実行、 該当 logic の正本は `claude-config/setup.sh`)。 これを分離して片方だけ実行すると partial state を produce する。
 
-### 防止策
+### <a id="partial-install-prevention"></a>防止策
 
 hook 配信を「fix した」 と claim する前に **§2 の delivery 3 軸 (= (a)(b)(c))ゲート質問を独立に通す**。 「`ln -s` 通った」 「config に書き足した」 のどちらか単独では不十分。
 
@@ -227,11 +228,11 @@ hook 配信を「fix した」 と claim する前に **§2 の delivery 3 軸 (
 
 ---
 
-## §5. hook の架構的根拠 — 第 2 視点としての harness
+## <a id="hook-architectural-rationale"></a>§5. hook の架構的根拠 — 第 2 視点としての harness
 
 §1-4 は hook を **書くときの実装 gotcha** を扱った。 §5 は hook の **存在理由** を architectural に明示する section。 規律 (= prompt-level instruction / CLAUDE.md convention) で代替できない領域を hook が引受ける、 という分担を Claude / user が mental model として持つことの value。
 
-### 5.1 単一視点 self-reference の geometric 不能
+### <a id="self-reference-impossibility"></a>5.1 単一視点 self-reference の geometric 不能
 
 Claude の generation は forward token stream で、 自分の生成物を **同じ stream 内で外から見る** ことは geometric に不能。 単一カメラで depth perception ができないのと同質の問題で、 algorithm の改善で解決しない (= 第 2 視点が必要)。
 
@@ -242,7 +243,7 @@ Claude の generation は forward token stream で、 自分の生成物を **�
 
 これらは「Claude が規律を覚えていれば防げる」 という framing で語られがちだが、 **覚えていても同 stream 内で自己 gate できない**ことが本質。 規律で言う「pre-output 自己問い」 を毎回 reliably に起動できないのは attention shape の問題で、 規律の書き方を工夫しても根本解決しない。 hook = harness 側の view = 第 2 視点が **geometric necessity**。
 
-### 5.2 narrative-vs-mechanism の非対称 visibility
+### <a id="narrative-vs-mechanism-visibility"></a>5.2 narrative-vs-mechanism の非対称 visibility
 
 規律本体 (= CLAUDE.md / convention narrative) と hook は 2 種類の防御 layer だが、 **decay 検出の visibility が非対称**:
 
@@ -257,7 +258,7 @@ Claude の generation は forward token stream で、 自分の生成物を **�
 - hook を書いたら「機能している前提で narrative を縮退する」 reflex は危険 (= §6 で詳述)
 - hook の存在を「visible」 と reflex で扱わない、 定期 audit (= §2 の delivery 3 軸 (= (a)(b)(c)) audit) で動作を継続確認する運用 mechanism が必要
 
-### 5.3 規律で hook を代替できない (= 逆も真)
+### <a id="discipline-cannot-replace-hook"></a>5.3 規律で hook を代替できない (= 逆も真)
 
 逆も同様: narrative 規律で hook の代替を試みると失敗する。 「Claude が規律を読んで自己 gate する」 は §5.1 の geometric 制約で reliability が確保できない。 規律と hook は **代替関係ではなく補完関係**:
 
@@ -268,11 +269,11 @@ Claude の generation は forward token stream で、 自分の生成物を **�
 
 ---
 
-## §6. hook 投入後の規律 narrative 縮退判定
+## <a id="discipline-narrative-reduction"></a>§6. hook 投入後の規律 narrative 縮退判定
 
 機械的 enforcement (= hook) が新規投入されたとき、 同 rule を文書化した narrative (= CLAUDE.md / convention) を縮退するか維持するかの判定 framework。 hook と narrative が同じ rule を扱う場合、 attention budget 観点では narrative の縮退余地があるが、 §5.2 の非対称 visibility が縮退判断を複雑にする。
 
-### 6.1 4 状態の防御 equation
+### <a id="defense-equation"></a>6.1 4 状態の防御 equation
 
 | hook 状態 | narrative 状態 | 防御 layer |
 |---|---|---|
@@ -285,7 +286,7 @@ Claude の generation は forward token stream で、 自分の生成物を **�
 
 これは attention budget 圧迫 (= narrative 累積) を交換に「**silent regression risk**」 を抱え込む構造で、 単純な負荷減ではなく **risk の質的 transformation**。 「規律を減らす」 = 「気付ける失敗を減らす + 気付けない失敗を増やす」 という非対称な trade、 と認識する必要がある。
 
-### 6.2 縮退の前提条件 — (P1) + (P2) 両必須
+### <a id="reduction-prerequisites"></a>6.2 縮退の前提条件 — (P1) + (P2) 両必須
 
 - **(P1) 現時点の hook 健全性**: 該当 hook 全件で §2 の delivery 3 軸 (= (a)(b)(c)) audit (= symlink + settings.json + try-fire) が pass
 - **(P2) 継続監視 mechanism**: hook の silent decay (= 配信失効 + matcher 失効 の両方) が dashboard 等で **session 開始時に毎回 surface** される運用が established
@@ -294,7 +295,7 @@ Claude の generation は forward token stream で、 自分の生成物を **�
 
 縮退の判定者 (= cold session / user) は (P2) infrastructure が無い状態を「縮退の盲点」 として認識し、 縮退着手前に (P2) を establish するか、 (P2) 無しで縮退 risk を accept するかを **明示判断**する。 reflex で「hook あるから縮退 OK」 と進めない。
 
-### 6.3 段階的縮退の推奨手順
+### <a id="reduction-procedure"></a>6.3 段階的縮退の推奨手順
 
 (P1)(P2) 両方 establish 後も、 一気に大量の narrative を縮退するのは risky。 推奨:
 
@@ -303,7 +304,7 @@ Claude の generation は forward token stream で、 自分の生成物を **�
 3. **問題なければ次の 1 個に進む**: 段階的 progress、 大量変更を避ける
 4. **silent decay の検出能力が dashboard で実証されたら**、 縮退 pace を上げる判断余地
 
-### 6.4 縮退判定で考慮する factor
+### <a id="reduction-factors"></a>6.4 縮退判定で考慮する factor
 
 - **規律 narrative の memory aid 価値**: user / Claude が読んだとき context を喚起する効果。 「過去事例の歴史的価値」 「条件分岐 / edge case の説明価値」 等
 - **hook の機構の単純さ**: 単純な機構ほど silent decay リスクが低い (= regex 1 本 < script 10 行 < script 100 行 + 外部 dependency)
@@ -314,13 +315,13 @@ Claude の generation は forward token stream で、 自分の生成物を **�
 
 ---
 
-## §7. Shared matcher library + mock-personal-layer test pattern
+## <a id="shared-matcher-mock-pattern"></a>§7. Shared matcher library + mock-personal-layer test pattern
 
-### 問題
+### <a id="shared-matcher-problem"></a>問題
 
 2 種類の hook (= claude-code PreToolUse / git native commit-msg) が同じ matcher logic (= 「commit message に非例外 private repo 名が含まれるか」 等) を必要とすることがある。 単純に 2 hook で logic を duplicate すると drift する (= matcher rule が片方だけ update + 片方が stale という failure mode)。 共通 library 化したいが、 library が **layer 3 data (= 個人層の `repos.md` / `sensitive-terms.txt` 等)** を参照する場合、 library 本体の test を **layer 1 (= public claude-config)** に置く design challenge がある: 実 layer 3 data を test fixture に embed すると public leak になる。
 
-### Pattern
+### <a id="shared-matcher-pattern"></a>Pattern
 
 **(a) Shared library を layer 1 に置く**: library source 自体は algorithm のみで public-safe (= allowlist 名は既に layer 1 で公開済の場合に限る、 そうでなければ allowlist literal も layer 3 に外出し)、 layer 3 data 参照は `lib/find-personal-layer.sh` の cascade で動的解決。 foreign user (= 個人層なし) では fail-open (= matcher が hit 0 を返す = `commit-msg-leak-guard-runner.sh` で実装済)。
 
@@ -328,7 +329,7 @@ Claude の generation は forward token stream で、 自分の生成物を **�
 
 **(c) Layer 1 test file は mock-personal-layer pattern**: test 実行時に `CLAUDE_PERSONAL_LAYER` env var を temp dir に向け、 dir 内に **偽の** `repos.md` + `sensitive-terms.txt` を provisioning。 test case は mock literal (= `mockpriv-foo` / `MOCK_SECRET_TERM_ALPHA` 等) で matcher logic を検証。 実 layer 3 data の literal は **layer 3 test file 側** (= 個人層 hook の test) に閉じ込める。
 
-### 配置決定 flowchart
+### <a id="placement-flowchart"></a>配置決定 flowchart
 
 ```
 matcher logic を共通化したい?
@@ -347,7 +348,7 @@ matcher logic を共通化したい?
             └── No  → 通常の layer 1 test (= mock 不要)
 ```
 
-### Mock-personal-layer test fixture の最小実装 (= bash)
+### <a id="mock-personal-layer-fixture"></a>Mock-personal-layer test fixture の最小実装 (= bash)
 
 ```bash
 # test 開始時に temp dir で偽 layer 3 を構築
@@ -375,23 +376,23 @@ export CLAUDE_PERSONAL_LAYER="$MOCK_LAYER"
 # (= 実 private repo 名は test file source に embed しない)
 ```
 
-### 設計動機 (= 2026-05-26 RCA)
+### <a id="shared-matcher-motivation"></a>設計動機 (= 2026-05-26 RCA)
 
 本 pattern は `commit-msg-leak-guard-runner.sh` 実装時に **self-leak event** で学習。 当初 layer 1 test file の test case literal に **実 private repo 名 (= 4 種) を直接 embed** していた (= 「過去事例の reproduce」 を目的化、 mock 化 reflex を skip)。 hook 自身は file body を scope 外として通過 → public commit に焼き付き → 4 軸 sweep 安全性軸で発覚 → mock-personal-layer pattern に refactor (= 詳細 [`DESIGN.md §2026-05-26`](../DESIGN.md) 反省 section)。
 
 → **layer 1 test file は最初から mock pattern で書く reflex** が implementer 側に必要。 hook の覆える scope の外で leak しないよう「自分の change が hook scope OUTSIDE 経由で leak しないか」 を実装時に問う。
 
-### 関連 leak prevention rule
+### <a id="leak-prevention-rules"></a>関連 leak prevention rule
 
 claude-config `CLAUDE.md §「安全規則 (公開リポ)」` に **「layer 1 test file での private repo 名 literal は禁止、 mock-personal-layer pattern で代替」** rule あり (= 本 §7 と相補、 §7 = how、 安全規則 = what)。
 
 ---
 
-## §8. chain hook は primary hook の early-exit で silent skip される
+## <a id="chain-hook-early-exit"></a>§8. chain hook は primary hook の early-exit で silent skip される
 
 hook A が末尾で hook B を呼ぶ (= chain) 構造で、 A が **自身の no-op 条件**で early-exit すると B に到達しない。 B は呼ばれないだけで error を出さず silent dead になる (= §2 の silent malfunction の chain 版、 `docs/convention-design-principles.md §8.8` の false confidence)。
 
-### 実例 (2026-06-06 RCA)
+### <a id="chain-hook-example"></a>実例 (2026-06-06 RCA)
 
 pre-commit hook A (= LaTeX Unicode fixer) が「対象 file (LaTeX) が staged されてなければ exit 0」 と early-exit。 A は末尾で layer-3 chain hook B (= yaml/data gate) を呼ぶ設計だったが、 対象外 file のみの commit (= data file のみ) では A が early-exit して B に未到達。 B にした gate が **silent dead**。 B が catch すべき violation を仕込んだ commit が reject されず通る **実 commit e2e で初めて発覚** (= logic 確認・syntax 確認・関数シミュレートは全て pass していた、 実 e2e のみが expose した)。
 
@@ -402,11 +403,11 @@ pre-commit hook A (= LaTeX Unicode fixer) が「対象 file (LaTeX) が staged �
 
 ---
 
-## §9. hook の挙動は build 依存 — 同 session snapshot + feature 差 (= upstream docs を鵜呑みにしない)
+## <a id="build-dependent-behavior"></a>§9. hook の挙動は build 依存 — 同 session snapshot + feature 差 (= upstream docs を鵜呑みにしない)
 
 claude-code の hook 関連挙動は **running build によって docs と乖離する**。 最新 docs を読んだだけで「こう動くはず」 と assert すると、 古い build で silent に外れる。 inline §3 (= 単一情報源で結論に飛躍しない) の hook domain instance。
 
-### 9.1 新規 hook は同 session で live 発火しない (= session 開始時 snapshot)
+### <a id="new-hook-session-snapshot"></a>9.1 新規 hook は同 session で live 発火しない (= session 開始時 snapshot)
 
 **実測 (2026-06-10、 Opus 4.8 1M harness)**: settings.json に hook を **mid-session で追加しても、 その session 中は発火しない**。 = この build は hook 設定を **session 開始時に snapshot** する。
 
@@ -420,7 +421,7 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 - §6 (P1) の「該当 hook 全件で try-fire pass」 gate も、 新規追加 hook は新 session 必須。
 - **新規 hook 追加の作法**: ① stdin JSON で logic unit-test (同 session) → ② install + (a)(b) 配線 audit (同 session) → ③ live 発火は次 session で確認。
 
-### 9.2 同種の「docs と乖離」 build 依存 feature
+### <a id="build-dependent-docs-drift"></a>9.2 同種の「docs と乖離」 build 依存 feature
 
 | feature | 最新 docs | 実測された乖離 | robust な cross-build 選択 |
 |---|---|---|---|
@@ -430,7 +431,7 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 
 **メタ規律**: hook 挙動を docs だけで assert せず、 ① logic は stdin で unit-test、 ② live 発火・新 field は **実測** (= throwaway hook / 実 tool call / 新 session)、 ③ 不確実な feature は **古い build でも動く path** を選ぶ (= stderr narrative / deny / new-session verify)。
 
-### 9.3 frontend 依存 — **Claude desktop (Cowork) app は hook を実行はするが、 その出力をモデルに honor しない**
+### <a id="frontend-dependent-cowork"></a>9.3 frontend 依存 — **Claude desktop (Cowork) app は hook を実行はするが、 その出力をモデルに honor しない**
 
 hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 / desktop app)** にも依存する。 **実測 (2026-06-13、 desktop 埋込 build 2.1.170。 初回 session = PreToolUse 非効きを発見、 同日の cold-eyes 再検証 session で機構を精緻化)**:
 
@@ -450,9 +451,9 @@ hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 
 
 ---
 
-## §10. hook を見送る判定 — trigger が「意図」 を識別できないなら chronic false positive が fleet を毀損する
+## <a id="hook-no-go-judgment"></a>§10. hook を見送る判定 — trigger が「意図」 を識別できないなら chronic false positive が fleet を毀損する
 
-### 問題
+### <a id="hook-no-go-problem"></a>問題
 
 hook の matcher / 条件は tool call の**表層** (command 文字列・file path・引数) しか見えない。
 同じ表層で意図が分岐する操作に hook を書くと false positive が恒常化する。 典型例:
@@ -463,7 +464,7 @@ nudge (= 非 deny の reminder) は「無害」 に見えるが、 噪音は当�
 **hook 出力という機構全体への注意を磨耗させる** — 狼少年 effect は hook 単位でなく
 fleet 単位で効く。 deny 型なら誤 block の作業中断がそのまま実害になる。
 
-### 判定
+### <a id="no-go-judgment-criteria"></a>判定
 
 hook 起案時に 1 問: **「この trigger 条件は、 介入すべき呼び出しだけを機械的に識別できるか?」**
 
@@ -474,7 +475,7 @@ hook 起案時に 1 問: **「この trigger 条件は、 介入すべき呼び�
 - skill は発火が確率的 (model 判断) なので、 **不発の実害が再発したら hook へ格上げ**する
   escalation trigger を導入時に書き残す (= evidence-driven の双方向切替)
 
-### 実例 (2026-06-13)
+### <a id="no-go-example"></a>実例 (2026-06-13)
 
 「内部 context 検索の前に横断 lookup script を回す」 規律の機械化で、 記録系 yaml への
 grep を検出する PreToolUse nudge hook 案を検討 → grep の意図 (context-hunting vs
@@ -484,7 +485,7 @@ personal skill (description dispatch) に切替。 skill 名を含まない自�
 
 ---
 
-## 関連
+## <a id="related-docs"></a>関連
 
 - `claude-config/setup.sh §Step 2 install_hooks()` — 配信機構の正本 (= delivery 軸 (a) symlink + (b) settings.json を atomic 化する reference implementation。 (c) logic は hook script 側、 (d) invoke 経路は claude-code harness 側で別 layer)
 - `claude-config/hooks/*.sh` — 既存 hook 8 個 (= 本 file 作成時点)。 §1 (bash 3.2 trap) の audit 対象

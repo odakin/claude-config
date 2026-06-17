@@ -1,0 +1,208 @@
+# Stable slug index for hook-authoring.md (Phase 1 slug migration).
+# id = canonical identity (cross-refs use it). legacy = pre-migration §-number,
+# kept ONLY here so dated/historical inbound refs stay resolvable.
+# related = slugs this section cross-references. Validated by
+# scripts/check-office-automation-index.py (dangling=0 / orphan=0).
+sections:
+  - id: hook-category-intro
+    level: 2
+    title: "概論: hook は他の script と質的に異なる category"
+  - id: naming-convention
+    legacy: "0"
+    level: 2
+    title: "§0. naming convention: suffix で behavior を区別"
+    related: [hook-category-intro]
+  - id: bash32-heredoc-parser-bug
+    legacy: "1"
+    level: 2
+    title: "§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug"
+  - id: bash32-problem
+    level: 3
+    title: "問題"
+    related: [bash32-reproducer, bash32-workaround, bash32-debug-difficulty]
+  - id: bash32-reproducer
+    level: 3
+    title: "Reproducer (= 2026-05-20 実遭遇)"
+    related: [bash32-problem, bash32-workaround]
+  - id: bash32-workaround
+    level: 3
+    title: "回避策"
+    related: [bash32-problem, bash32-reproducer]
+  - id: bash32-debug-difficulty
+    level: 3
+    title: "Debug が困難な理由 / メタ規律"
+    related: [bash32-problem, bash32-workaround]
+  - id: delivery-audit-4-axes
+    legacy: "2"
+    level: 2
+    title: "§2. hook 配信正常性の 4 軸 audit (= 1 軸欠けて silent malfunction)"
+    related: [delivery-audit-problem, delivery-audit-example, delivery-audit-method, partial-install-state]
+  - id: delivery-audit-problem
+    level: 3
+    title: "問題"
+    related: [delivery-audit-method, tool-matcher-coverage-boundary]
+  - id: delivery-audit-example
+    level: 3
+    title: "実例 (= 2026-05-20 retroactive 発覚)"
+    related: [delivery-audit-method]
+  - id: delivery-audit-method
+    level: 3
+    title: "防止策 / audit method"
+    related: [delivery-audit-example, tool-matcher-coverage-boundary]
+  - id: tool-matcher-coverage-boundary
+    legacy: "2-supplement"
+    level: 3
+    title: "§2 補足: tool-matcher の coverage boundary — Bash/script write は Edit/Write guard を素通りする"
+    related: [delivery-audit-method]
+  - id: warn-mode-spec-uncertainty
+    legacy: "3"
+    level: 2
+    title: "§3. PreToolUse warn mode 出力の spec uncertainty"
+    related: [warn-mode-problem, warn-mode-implementation, warn-mode-dry-run]
+  - id: warn-mode-problem
+    level: 3
+    title: "問題"
+    related: [warn-mode-implementation]
+  - id: warn-mode-implementation
+    level: 3
+    title: "実装推奨"
+    related: [warn-mode-problem, warn-mode-dry-run]
+  - id: warn-mode-dry-run
+    level: 3
+    title: "Dry-run 観察事項 (= warn hook 投入後に user に依頼)"
+    related: [warn-mode-implementation]
+  - id: partial-install-state
+    legacy: "4"
+    level: 2
+    title: "§4. Partial install state (= §2 の specific failure mode、 注意喚起)"
+    related: [delivery-audit-4-axes, partial-install-problem, partial-install-prevention]
+  - id: partial-install-problem
+    level: 3
+    title: "問題"
+    related: [partial-install-prevention]
+  - id: partial-install-prevention
+    level: 3
+    title: "防止策"
+    related: [partial-install-problem]
+  - id: hook-architectural-rationale
+    legacy: "5"
+    level: 2
+    title: "§5. hook の架構的根拠 — 第 2 視点としての harness"
+    related: [self-reference-impossibility, narrative-vs-mechanism-visibility, discipline-cannot-replace-hook]
+  - id: self-reference-impossibility
+    legacy: "5.1"
+    level: 3
+    title: "5.1 単一視点 self-reference の geometric 不能"
+    related: [hook-architectural-rationale]
+  - id: narrative-vs-mechanism-visibility
+    legacy: "5.2"
+    level: 3
+    title: "5.2 narrative-vs-mechanism の非対称 visibility"
+    related: [hook-architectural-rationale]
+  - id: discipline-cannot-replace-hook
+    legacy: "5.3"
+    level: 3
+    title: "5.3 規律で hook を代替できない (= 逆も真)"
+    related: [hook-architectural-rationale]
+  - id: discipline-narrative-reduction
+    legacy: "6"
+    level: 2
+    title: "§6. hook 投入後の規律 narrative 縮退判定"
+    related: [defense-equation, reduction-prerequisites, reduction-procedure, reduction-factors]
+  - id: defense-equation
+    legacy: "6.1"
+    level: 3
+    title: "6.1 4 状態の防御 equation"
+    related: [discipline-narrative-reduction]
+  - id: reduction-prerequisites
+    legacy: "6.2"
+    level: 3
+    title: "6.2 縮退の前提条件 — (P1) + (P2) 両必須"
+    related: [discipline-narrative-reduction, defense-equation]
+  - id: reduction-procedure
+    legacy: "6.3"
+    level: 3
+    title: "6.3 段階的縮退の推奨手順"
+    related: [discipline-narrative-reduction]
+  - id: reduction-factors
+    legacy: "6.4"
+    level: 3
+    title: "6.4 縮退判定で考慮する factor"
+    related: [discipline-narrative-reduction]
+  - id: shared-matcher-mock-pattern
+    legacy: "7"
+    level: 2
+    title: "§7. Shared matcher library + mock-personal-layer test pattern"
+    related: [shared-matcher-problem, shared-matcher-pattern, placement-flowchart, mock-personal-layer-fixture, shared-matcher-motivation, leak-prevention-rules]
+  - id: shared-matcher-problem
+    level: 3
+    title: "問題"
+    related: [shared-matcher-pattern]
+  - id: shared-matcher-pattern
+    level: 3
+    title: "Pattern"
+    related: [shared-matcher-problem, mock-personal-layer-fixture]
+  - id: placement-flowchart
+    level: 3
+    title: "配置決定 flowchart"
+  - id: mock-personal-layer-fixture
+    level: 3
+    title: "Mock-personal-layer test fixture の最小実装 (= bash)"
+    related: [shared-matcher-pattern]
+  - id: shared-matcher-motivation
+    level: 3
+    title: "設計動機 (= 2026-05-26 RCA)"
+    related: [shared-matcher-problem]
+  - id: leak-prevention-rules
+    level: 3
+    title: "関連 leak prevention rule"
+    related: [shared-matcher-mock-pattern]
+  - id: chain-hook-early-exit
+    legacy: "8"
+    level: 2
+    title: "§8. chain hook は primary hook の early-exit で silent skip される"
+    related: [chain-hook-example]
+  - id: chain-hook-example
+    level: 3
+    title: "実例 (2026-06-06 RCA)"
+    related: [chain-hook-early-exit]
+  - id: build-dependent-behavior
+    legacy: "9"
+    level: 2
+    title: "§9. hook の挙動は build 依存 — 同 session snapshot + feature 差 (= upstream docs を鵜呑みにしない)"
+    related: [new-hook-session-snapshot, build-dependent-docs-drift, frontend-dependent-cowork]
+  - id: new-hook-session-snapshot
+    legacy: "9.1"
+    level: 3
+    title: "9.1 新規 hook は同 session で live 発火しない (= session 開始時 snapshot)"
+    related: [build-dependent-behavior]
+  - id: build-dependent-docs-drift
+    legacy: "9.2"
+    level: 3
+    title: "9.2 同種の「docs と乖離」 build 依存 feature"
+    related: [build-dependent-behavior]
+  - id: frontend-dependent-cowork
+    legacy: "9.3"
+    level: 3
+    title: "9.3 frontend 依存 — **Claude desktop (Cowork) app は hook を実行はするが、 その出力をモデルに honor しない**"
+    related: [build-dependent-behavior]
+  - id: hook-no-go-judgment
+    legacy: "10"
+    level: 2
+    title: "§10. hook を見送る判定 — trigger が「意図」 を識別できないなら chronic false positive が fleet を毀損する"
+    related: [hook-no-go-problem, no-go-judgment-criteria, no-go-example]
+  - id: hook-no-go-problem
+    level: 3
+    title: "問題"
+    related: [no-go-judgment-criteria]
+  - id: no-go-judgment-criteria
+    level: 3
+    title: "判定"
+    related: [hook-no-go-problem, no-go-example]
+  - id: no-go-example
+    level: 3
+    title: "実例 (2026-06-13)"
+    related: [no-go-judgment-criteria]
+  - id: related-docs
+    level: 2
+    title: "関連"
