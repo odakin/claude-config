@@ -215,9 +215,21 @@ def selftest():
 
 
 if __name__ == "__main__":
-    if "--selftest" in sys.argv:
+    import argparse
+    # Generalized 2026-06-16: defaults validate office-automation (dashboard caller
+    # unchanged), but --doc/--index let this validate ANY slug-indexed convention
+    # (convention-design-principles, hook-authoring, ...). See convention-design-principles
+    # §14 / §14.7. Name kept for caller compatibility; it is now a generic validator.
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--doc", default=str(DOC))
+    ap.add_argument("--index", default=str(INDEX))
+    ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--silent-if-clean", action="store_true")
+    a = ap.parse_args()
+    if a.selftest:
         sys.exit(selftest())
-    silent = "--silent-if-clean" in sys.argv
-    sys.exit(1 if run(DOC.read_text(encoding="utf-8"),
-                      INDEX.read_text(encoding="utf-8"),
-                      silent_if_clean=silent) else 0)
+    doc_path, index_path = Path(a.doc), Path(a.index)
+    label = doc_path.name if doc_path.resolve() != DOC.resolve() else ""
+    sys.exit(1 if run(doc_path.read_text(encoding="utf-8"),
+                      index_path.read_text(encoding="utf-8"),
+                      label=label, silent_if_clean=a.silent_if_clean) else 0)
