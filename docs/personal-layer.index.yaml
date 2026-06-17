@@ -1,0 +1,44 @@
+# Stable slug index for personal-layer.md (Phase 1 slug migration).
+# id = canonical identity (cross-refs use it). No legacy §-numbers (unnumbered headings).
+# related = slugs this section cross-references. Validated by
+# scripts/check-office-automation-index.py (dangling=0 / orphan=0).
+sections:
+  - id: what-is-personal-layer
+    level: 2
+    title: "What is the personal layer?"
+    related: [what-depend-means-structural-dependency-vs-mention, why-layer-4-isolates-machine-local]
+  - id: what-depend-means-structural-dependency-vs-mention
+    level: 3
+    title: "What \"depend\" means: structural dependency vs. mention"
+    related: [what-is-personal-layer]
+  - id: why-layer-4-isolates-machine-local
+    level: 3
+    title: "Why does layer 4 isolate machine-local facts?"
+    related: [what-is-personal-layer, when-to-create-personal-layer]
+  - id: when-to-create-personal-layer
+    level: 2
+    title: "When should you create a personal layer?"
+    related: [creating-personal-layer, layout]
+  - id: layout
+    level: 2
+    title: "Layout"
+    related: [creating-personal-layer, shared-project-key-mapping]
+  - id: creating-personal-layer
+    level: 2
+    title: "Creating your own personal layer"
+    related: [layout, when-to-create-personal-layer]
+  - id: multiple-personal-layers
+    level: 2
+    title: "Multiple personal layers? Override?"
+  - id: shared-project-key-mapping
+    level: 2
+    title: "Shared-project key mapping"
+    related: [owner-automation-shared-project]
+  - id: owner-automation-shared-project
+    level: 2
+    title: "Owner automation acting on a shared project"
+    related: [shared-project-key-mapping]
+  - id: faq
+    level: 2
+    title: "FAQ"
+    related: [what-is-personal-layer, what-depend-means-structural-dependency-vs-mention]

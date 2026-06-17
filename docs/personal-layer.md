@@ -1,8 +1,9 @@
 # Personal Layer — odakin's four-layer architecture
+<!-- slug index: personal-layer.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
 
 > **日本語版**: 同じファイル内で日本語セクションを併記しています。
 
-## What is the personal layer?
+## <a id="what-is-personal-layer"></a>What is the personal layer?
 
 Claude Code conventions live in **four layers**, numbered by **audience size** (largest to smallest):
 
@@ -21,7 +22,7 @@ The numbering follows audience containment: `public ⊃ collaborator set ⊃ own
 
 **Direction, stated plainly (so the 上層/下層 framing is never flipped).** A *smaller* number = *wider* audience = the **upper / foundational** layer (上層); a *larger* number = *narrower* audience = a **lower** layer (下層). Layer 1 (claude-config) is the topmost 上層; layer 4 (memory) is the bottom 下層. **A reference or dependency that points from a lower layer *up* to a wider one (下層 → 上層 — e.g. personal layer → claude-config, layer 3 → 1) is ALLOWED; it is the normal, intended direction**, exactly what the "Depends on" column grants. The **only forbidden direction is the reverse**: a wider-audience layer structurally depending on a narrower one (上層 → 下層 — e.g. layer 2 → 3), because that wider audience cannot see the narrower layer. So you never need to hesitate to point *up* the stack — pointing 下層 → 上層 is free. The restriction only bites pointing *down* (上層 → 下層), and even there a *mention* (as opposed to a structural dependency) is still fine — see the next section.
 
-### What "depend" means: structural dependency vs. mention
+### <a id="what-depend-means-structural-dependency-vs-mention"></a>What "depend" means: structural dependency vs. mention
 
 The rule above bans **structural dependencies** across layer boundaries, not **mentions**. The distinction matters because the harm comes from one but not the other — and conflating them produces docs that are *less* helpful to the wider audience, not more safe.
 
@@ -63,7 +64,7 @@ The compact rule: **name it, don't path into it.**
 
 Per-layer documents apply this principle to their own boundary. The L2-specific application (= what an L2 shared-project repo may or may not contain) lives in [`conventions/shared-repo.md`](../conventions/shared-repo.md) §「L2 における「名指し」 の適用 (boundary 明示付き)」, which references this section as the canonical source. The L1-specific application (= claude-config itself as a public repo) adds a **separate leak-prevention axis** on top of the layer rule, documented in `claude-config/CLAUDE.md` §「安全規則（公開リポ）」. The leak axis is stricter: even mention with a boundary statement is governed by an explicit exception list, because once a name appears in public git history, the boundary statement cannot un-publish it.
 
-### Why does layer 4 isolate machine-local facts?
+### <a id="why-layer-4-isolates-machine-local"></a>Why does layer 4 isolate machine-local facts?
 
 Each step downward narrows the audience by **one meaningful boundary**:
 
@@ -83,7 +84,7 @@ The third case is the subtle one. If a fact is *about* the differences between y
 
 A useful heuristic: **if the fact would feel incomplete without mentioning the other machine (because it's a comparison or a branch), it's layer 3. If the fact stands alone as an observation about one machine and the other machine is irrelevant to it, it's layer 4.** When in doubt, prefer layer 3 with a branching table — pure layer-4-only facts are rarer than they feel.
 
-## When should you create a personal layer?
+## <a id="when-to-create-personal-layer"></a>When should you create a personal layer?
 
 You should create one when you start having:
 - preferences that span multiple projects (writing style, identity blocks, signature lines)
@@ -93,7 +94,7 @@ You should create one when you start having:
 
 If you only ever work in one repo and have nothing to share between projects, you don't need a personal layer at all. claude-config alone is enough.
 
-## Layout
+## <a id="layout"></a>Layout
 
 A personal layer is a **directory** (typically a private git repo, but a local-only directory works) containing:
 
@@ -116,7 +117,7 @@ See [`conventions/dropbox-refs.md`](../conventions/dropbox-refs.md) for the sche
 
 The **marker file** `.claude-personal-layer` is the canonical signal that this directory is a personal layer. claude-config's `setup.sh` looks for it under `~/Claude/*/` (or whichever base directory you use) and, if it finds exactly one match, links `~/Claude/CLAUDE.md` to that directory's `CLAUDE.md`.
 
-## Creating your own personal layer
+## <a id="creating-personal-layer"></a>Creating your own personal layer
 
 1. Make a directory next to claude-config:
    ```bash
@@ -132,7 +133,7 @@ The **marker file** `.claude-personal-layer` is the canonical signal that this d
 3. Copy the templates from `claude-config/templates/personal-layer/` and fill them in (see [templates README](../templates/personal-layer/README.md)).
 4. Re-run `claude-config/setup.sh` so the symlink at `~/Claude/CLAUDE.md` is updated to point at your new layer.
 
-## Multiple personal layers? Override?
+## <a id="multiple-personal-layers"></a>Multiple personal layers? Override?
 
 If `setup.sh` finds **more than one** directory with the marker, it errors out and asks you to disambiguate via the `CLAUDE_PERSONAL_LAYER` environment variable:
 
@@ -146,7 +147,7 @@ To opt out entirely (e.g. on a shared machine), use:
 CLAUDE_PERSONAL_LAYER=none ./setup.sh
 ```
 
-## Shared-project key mapping
+## <a id="shared-project-key-mapping"></a>Shared-project key mapping
 
 If you participate in shared-project layers that use git-crypt with shared keys (one common pattern: the key file lives in a Dropbox folder shared with the team, each team member places it at their preferred local path), put the local paths in `shared-project-keys.md`:
 
@@ -160,7 +161,7 @@ If you participate in shared-project layers that use git-crypt with shared keys 
 
 Claude reads this file via the personal-layer cascade and uses the right path automatically when entering a shared-project repo. Without this file, Claude falls back to the convention path `~/.secrets/<project-name>.key`.
 
-## Owner automation acting on a shared project
+## <a id="owner-automation-shared-project"></a>Owner automation acting on a shared project
 
 The key-mapping section above handles the case where a **shared** layer needs a **private** thing (a key). The opposite direction needs a rule too: an **owner automation** (layer 3 or 4 — runs on the owner's machine, reads owner-private inputs, holds the owner's credentials) that **writes into a shared-project (layer 2) repo**. The canonical example is a nightly publisher that mirrors an owner-private source-of-truth into a shared website, or a bot that posts generated content into a shared repo.
 
@@ -189,7 +190,7 @@ But "the code lives at layer 3" must not become "the mechanism is invisible at l
 
 This is the forward-direction analog of key-mapping: keep the private bit private, but never let the shared audience hit a wall they can neither see nor reason about — and never let the same fact have two homes.
 
-## FAQ
+## <a id="faq"></a>FAQ
 
 **Q. Is the personal layer required?**
 No. claude-config works without one. The default `~/Claude/CLAUDE.md` from `templates/root-CLAUDE.md.default` is installed instead.
