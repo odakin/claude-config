@@ -1124,6 +1124,41 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 
 ---
 
+## 16. 要約は load-bearing な「関係」を不可視に落とす — derive-not-summarize の徹底
+
+### 16.1 観察された pathology
+
+ある事実の意味が、単一の節でなく**複数の節の関係**に宿ることがある。典型は**交渉された立場**: {① 既存の want / ② それと衝突する制約 / ③ 部分的な譲歩 / ④ yes-no の問い} (例: 「減らしたいが、この件では減らせない、ただし増えもしない、それで可か」)。意味は 4 部の**関係**であって、どの 1 節でもない。
+
+この種の事実を**要約**すると、関係・動機の接着剤が落ちる。しかも損失は**不可視**: 各圧縮は「真の事実」を残し、接着剤 (= 「なぜ ① を欲したか」「④ の交渉性」) を「背景」として削るので、残った断片は単体で正しく**壊れて見えない**。これは inline §3 (= 不確実性を expose か hide か) の**要約ドメインの双子**である — 安価な操作 (要約) が load-bearing な損失を隠す、残ったものが真だから。
+
+2 つのバイアスが重なる:
+
+- **(i) 離散事実は残り、関係/動機が落ちる** — 関係は「文脈」に見え、記録時に最初に削られる。
+- **(ii) 二面ある事実は palatable な半分が残り、不都合な条件付き半分が落ちる** — 「増えない」(安心) は残り「減らせない」(痛い) は落ちる、で記録は rosy・capability 寄りに drift する。
+
+**再演の signature**: 同じ nuance が **2 回以上「訂正」される** (= re-drop)。「前に間違えた」 という散文注記は次の脱落を**防げない** (= §8 系の「散文規則は行動を縛らない → 設計で消すか機械化する」)。
+
+### 16.2 なぜ単一-SoT 原則 (§2/§15) では足りないか
+
+§2/§15 は「同じ事実を**複数 file に**重複させるな (= dedup)」。本節は直交する: **単一 file の単一記録**でも、source からの**要約**である限り fidelity を失う。問題は重複でなく **lossy transcription** であり、別 axis。
+
+### 16.3 修正 (構造的に強い順)
+
+1. **Derive, not summarize** — 「何を諮った/合意した/頼まれたか」型の事実は、**正本 = source artifact の逐語** (= 送信メールの原文) とし、要約は明示的に二次 + source への pointer。SoT 成熟度の「T1 generated/derived」を**散文台帳に適用**したもの。実務的帰結: 原本を**転送/引用**する方が語り直すより faithful (= reply domain では literal forward が最強)。
+2. **substance-first** — 記録の最も目立つ行は load-bearing な crux であって workflow status (「回答する」) ではない。matter には**検索 key と一致する home**を与える (= §14.2 の slug 同様、retrieval key を identity に)。
+3. **slot template** — 構造を持つ事実 (交渉 = want/constraint/concession/ask) は枠で書く。落ちた slot が**空欄として可視化**され、黙って消えない。
+4. **active completeness check** (= §15-5 の anchor token 機構の逆向き) — 実証済み再犯 nuance の**必須共起 token**を registry 登録し、topic を名指すのに token を欠く要約を flag。⚠️ 限界は §8.8 と同じ (登録 topic しか見ない) + 偶発 mention への false positive → **scope を「要約 field」に絞る**。補助輪であって芯ではない。
+5. **frame-first** — 要約前に matter の型 (capability / 交渉 / 通知 / 決定) を分類。型が load-bearing を決める (= 交渉なら trade-off が load-bearing で「背景」ではない)。型の取り違え (= 交渉を capability と読む) が crux を「背景」に降格する根。
+
+### 16.4 honest scope
+
+完全機械化は意味解析で hard。信頼できる芯は **1 (derive/verbatim)**。本節は §8.11 (= downstream net は intake で正しく encode された対象しか守れない) の specific form でもある: ここでの intake mis-encoding は「source を要約で写した」こと、leverage は「写さず原本を保つ」という設計判断。4 (check) は §8.11 が言う通り downstream の補助に過ぎない。
+
+由来: ある交渉案件の肝 (= 既存の削減要望には応えられないが少なくとも増えはしない、で可か) が、source・中間台帳・会話のいずれの要約段でも繰り返し「増えない/提供可否」へ圧縮され、同じ nuance が 2 回 re-drop した RCA を一般化 (instance は個人層に残置 = §8.11 の kernel-up / instance-down)。user が選んだ修正 (= 原本を転送して語り直さない) が、本節の芯 1 の reply-domain 実例。
+
+---
+
 ## 変更履歴
 
 | 日付 | 変更 | 動機 |
@@ -1151,3 +1186,4 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 | 2026-06-13 | §2.3 新設「SoT の read 側」 | 出張案件の status を問われ source document (個人 account のメール通知) を SoT と取り違え、 null から作話で誤結論した RCA を一般化。 §2.1/§2.2/§15 は write 側 (二重に作るな) だが read 側 =「source document の null は答えでない / session 開始時 context window は案件について空 cache / null の第一仮説は『読む store を間違えた』」 が未収録だった。 同日 sibling (cite-me lookup 不発 §8.12 / labnexus burn-down の lookup-context 不実施) と合わせ 2+ 観察 (§9.8 充足)。 layer-3 機械対策 = account routing guard + matter-status SoT-read dispatch (instance 残置 = kernel-up / instance-down) |
 | 2026-06-13 | §9.9 新設「新定義は origin 例で自己違反しやすい / 自己違反は under-specification の probe」 | §2.3 を新設した直後、 その origin 例で external service を SoT 扱いした自己違反を user が指摘 → §2.3 に external source 区別を追加した meta。 RCA を書く act 中でその RCA が戒める分類誤りを再演 = 「直前 discipline の self-apply」 の specific 化。 self-violation が定義の seam を probe する (= 「source document」 が内部非選択 store と external source を 1 語に潰していた) を一般化 |
 | 2026-06-13 | §9.9/§9.2 cross-ref 訂正 (mis-fit 削除) | §9.9 適用例 + changelog 行が §2.3 origin 事例を「§9.2 asymmetric reflection bias の一形態」と cross-ref していたのを fresh-eyes 独立検証で mis-fit と確認し削除。§9.2 = corpus の蓄積非対称 (失敗のみ記録 → 予防一辺倒肥大化、file 内の他 §9.2 言及と一貫) で、§9.9 の self-application miss (直前に書いた定義を自分の origin 例で破る) とは別機序。citation は surface 語「reflection」(= corpus が経験を非対称に映す vs 自己反省 act 中の盲点) の意味違いに乗っていた。純粋な §9.9 self-violation =「直前 discipline の self-apply」の specific 化として残置 |
+| 2026-06-17 | §16 新設「要約は load-bearing な関係を不可視に落とす — derive-not-summarize」 | 交渉案件の「肝」(= 既存削減要望に応えられないが増えはしない、で可か) が source・中間台帳・会話の各要約段で繰り返し palatable 半分へ圧縮され同一 nuance が 2 回 re-drop した RCA を一般化。inline §3 (expose/hide) の要約ドメイン双子 + §8.11 (intake encoding) の specific form。芯 = derive-not-summarize (原本逐語保持)、補助 = §15-5 逆向き completeness check。instance は個人層 work-discipline + email-office 記録に残置 (kernel-up/instance-down) |
