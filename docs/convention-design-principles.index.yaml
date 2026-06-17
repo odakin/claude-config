@@ -1,0 +1,410 @@
+# Stable slug index for convention-design-principles.md (Phase 1 slug migration).
+# id = canonical identity (cross-refs use it). legacy = pre-migration §-number,
+# kept ONLY here so dated/historical inbound refs (§8.12 etc.) stay resolvable.
+# related = slugs this section cross-references. Validated by
+# scripts/check-office-automation-index.py (dangling=0 / orphan=0).
+sections:
+  - id: placement-by-scope
+    legacy: "1"
+    level: 2
+    title: "1. 規約の配置原則：影響範囲の最大公約数に置く"
+  - id: no-duplicate-rules
+    legacy: "2"
+    level: 2
+    title: "2. ルールの重複を避ける：定義は1箇所、他はポインタ"
+  - id: sot-ranking-declaration
+    legacy: "2.1"
+    level: 3
+    title: "2.1 自動検出が届かない format の fact には「SoT 序列表」を宣言する"
+  - id: sot-declaration-collision-sweep
+    legacy: "2.2"
+    level: 3
+    title: "2.2 正本の宣言・引っ越しは「衝突宣言 sweep」とワンセット"
+  - id: sot-read-side
+    legacy: "2.3"
+    level: 3
+    title: "2.3 SoT の read 側 — entity を「言及するだけの store」を SoT と取り違えない"
+  - id: rule-addition-criteria
+    legacy: "3"
+    level: 2
+    title: "3. 規約追加の判断基準：「規約がない」のか「規約を読まない」のか"
+  - id: orient-before-act
+    legacy: "4"
+    level: 2
+    title: "4. Orient before act（行動前に方位を取れ）"
+  - id: motivated-substitution-trap
+    legacy: "4.1"
+    level: 3
+    title: "4.1 指定された成果物・手段から逸脱する時の self-justification trap（motivated substitution）"
+  - id: memory-positioning
+    legacy: "5"
+    level: 2
+    title: "5. メモリの位置づけ"
+  - id: design-exploring-separation
+    legacy: "6"
+    level: 2
+    title: "6. DESIGN.md と EXPLORING.md の分離"
+  - id: design-mixing-problem
+    level: 3
+    title: "問題: DESIGN.md に 3 種類が混ざっていた"
+  - id: design-separation-rationale
+    level: 3
+    title: "なぜ分けるべきか（3 つの実害）"
+  - id: design-two-files-not-three
+    level: 3
+    title: "なぜ 2 ファイルで、3 ファイルではないか"
+  - id: design-no-tags
+    level: 3
+    title: "なぜタグ付け (1 ファイル) ではないか"
+  - id: design-boundary-rules
+    level: 3
+    title: "DESIGN.md との境界判別ルール"
+  - id: design-exploration-promotion
+    level: 3
+    title: "lifecycle: 探索 → 決定の昇格"
+  - id: design-application-cases
+    level: 3
+    title: "適用事例"
+  - id: design-snapshot-operation
+    legacy: "7"
+    level: 2
+    title: "7. DESIGN.md の snapshot 運用"
+  - id: design-entry-types
+    legacy: "7.1"
+    level: 3
+    title: "7.1 DESIGN.md の 3 entry 種別"
+  - id: design-supersession-handling
+    legacy: "7.2"
+    level: 3
+    title: "7.2 超越時の処理"
+  - id: description-vs-judgment
+    legacy: "7.3"
+    level: 3
+    title: "7.3 Description と Judgment の境界"
+  - id: design-entry-granularity
+    legacy: "7.4"
+    level: 3
+    title: "7.4 粒度: 代替検討があった判断のみ entry にする"
+  - id: design-aggregation-pattern
+    legacy: "7.5"
+    level: 3
+    title: "7.5 集約 pattern: 散在を避ける"
+  - id: design-when-in-doubt
+    legacy: "7.6"
+    level: 3
+    title: "7.6 When in doubt デフォルト"
+  - id: design-diagnostic-retroactive
+    legacy: "7.7"
+    level: 3
+    title: "7.7 Diagnostic と retroactive 救済"
+  - id: design-self-consistency
+    legacy: "7.8"
+    level: 3
+    title: "7.8 適用事例と self-consistency"
+  - id: rule-vs-mechanism
+    legacy: "8"
+    level: 2
+    title: "8. ルールは文脈、メカニズムは制御 — LLM 基盤の非対称性"
+  - id: structural-facts
+    legacy: "8.1"
+    level: 3
+    title: "8.1 構造的事実"
+  - id: rule-to-mechanism-shift
+    legacy: "8.2"
+    level: 3
+    title: "8.2 設計原則: rule → mechanism への重心移動"
+  - id: precedent-as-training-data
+    legacy: "8.3"
+    level: 3
+    title: "8.3 Precedent-as-training-data (memory の毒性)"
+  - id: friction-asymmetry
+    legacy: "8.4"
+    level: 3
+    title: "8.4 Friction asymmetry と memory bias"
+  - id: memory-anxiety-response
+    legacy: "8.5"
+    level: 3
+    title: "8.5 Memory 書き込みは「不安応答」としても発動する"
+  - id: agent-learning-illusion
+    legacy: "8.6"
+    level: 3
+    title: "8.6 Agent 学習の錯覚 — session を越えて persist するのはシステム改変のみ"
+  - id: mechanism-application-example
+    legacy: "8.7"
+    level: 3
+    title: "8.7 適用例"
+  - id: proxy-blind-spot
+    legacy: "8.8"
+    level: 3
+    title: "8.8 メカニズムが proxy を検証すると、proxy の盲点を検証の盲点として継ぐ"
+  - id: set-diff-false-positive
+    legacy: "8.9"
+    level: 3
+    title: "8.9 set 差分で drift を検出する時、差分には「真の違反」 と「正当な乖離」 が混在する"
+  - id: fail-loud-not-fail-empty
+    legacy: "8.10"
+    level: 3
+    title: "8.10 mechanism は parse/load 失敗を fail-empty で飲み込まず fail-loud に + 不変条件は編集時 gate で守る"
+  - id: downstream-net-intake-leverage
+    legacy: "8.11"
+    level: 3
+    title: "8.11 downstream の安全網は intake で正しく表現された対象しか守れない — leverage は上流にあり、しばしば判断 (= 機械化不能)"
+  - id: firing-surface-hierarchy
+    legacy: "8.12"
+    level: 3
+    title: "8.12 規律の発火面 hierarchy — doc 記載 (recall 依存) は最弱、 書く前に発火面を選ぶ"
+  - id: conditional-firing-visibility
+    legacy: "8.13"
+    level: 3
+    title: "8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる"
+  - id: single-field-identity-corroboration
+    legacy: "8.14"
+    level: 3
+    title: "8.14 単一 field の一致で record を同定すると偶然一致が「同一」 と誤主張される — 行動を伴う同定には corroboration を要求"
+  - id: enforcement-surface-frontend-survival
+    legacy: "8.15"
+    level: 3
+    title: "8.15 enforcement surface は frontend/実行 context で生存性が違う — guard を「どこで生存すべきか × 何を検査するか」で配置する"
+  - id: triage-and-subtraction
+    legacy: "9"
+    level: 2
+    title: "9. Triage と subtraction — 規約システムの成長・代謝バランス"
+  - id: blast-radius-triage
+    legacy: "9.1"
+    level: 3
+    title: "9.1 失敗の blast radius triage"
+  - id: asymmetric-reflection-bias
+    legacy: "9.2"
+    level: 3
+    title: "9.2 Asymmetric reflection bias"
+  - id: subtraction-trigger-design
+    legacy: "9.3"
+    level: 3
+    title: "9.3 Subtraction trigger の設計"
+  - id: preference-approximation-gap
+    legacy: "9.4"
+    level: 3
+    title: "9.4 Preference-approximation gap"
+  - id: closed-loop-mutual-reinforcement
+    legacy: "9.5"
+    level: 3
+    title: "9.5 Closed loop: 規約構造と Claude 応答構造の相互強化"
+  - id: subtraction-forms
+    legacy: "9.6"
+    level: 3
+    title: "9.6 Subtraction の形態: 削除 > migrate > 規約追加"
+  - id: diminishing-returns-detection
+    legacy: "9.7"
+    level: 3
+    title: "9.7 Diminishing-returns detection と meta-loop 離脱 (Claude 側の規律)"
+  - id: single-observation-scope-check
+    legacy: "9.8"
+    level: 3
+    title: "9.8 単一観察から構造対策に飛ばない (scope 確認先行)"
+  - id: new-definition-self-violation-probe
+    legacy: "9.9"
+    level: 3
+    title: "9.9 新しい定義は自分の origin 例で破られやすく、その自己違反は定義の under-specification を指す probe"
+  - id: completeness-audit-add-bias
+    legacy: "9.10"
+    level: 3
+    title: "9.10 完全性 audit の add-bias — 「何が欠けているか」 frame が低価値・mis-weighted な追加を製造する"
+  - id: file-role-architecture
+    legacy: "10"
+    level: 2
+    title: "10. File-role architecture — context 効率のための auto-load tier 設計"
+  - id: four-tier-classification
+    legacy: "10.1"
+    level: 3
+    title: "10.1 4 tier 分類"
+  - id: tier-criteria
+    legacy: "10.2"
+    level: 3
+    title: "10.2 切り分け基準"
+  - id: narrative-extraction-pattern
+    legacy: "10.3"
+    level: 3
+    title: "10.3 narrative 抽出 pattern (T1 → T3)"
+  - id: tier-failure-patterns
+    legacy: "10.4"
+    level: 3
+    title: "10.4 失敗 pattern"
+  - id: tier-lifecycle
+    legacy: "10.5"
+    level: 3
+    title: "10.5 Tier 間 lifecycle"
+  - id: tier-application-example
+    legacy: "10.6"
+    level: 3
+    title: "10.6 適用例 (2026-04-17 odakin-prefs)"
+  - id: auto-context-byte-budget
+    legacy: "10.7"
+    level: 3
+    title: "10.7 auto-context byte budget (行数 proxy からの脱却)"
+  - id: deletion-delegation-trap
+    legacy: "10.8"
+    level: 3
+    title: "10.8 削除・委譲判断の trap"
+  - id: code-canonical-doc-dedup
+    legacy: "10.9"
+    level: 3
+    title: "10.9 Code を canonical とする doc dedup pattern (§10.8 と併読)"
+  - id: claudemd-chain-nested-autoload
+    legacy: "10.10"
+    level: 3
+    title: "10.10 CLAUDE.md chain の nested auto-load (Claude Code 実装依存)"
+  - id: super-summary-pattern
+    legacy: "10.11"
+    level: 3
+    title: "10.11 「超要約 (super-summary)」pattern"
+  - id: migration-level-ladder
+    legacy: "10.12"
+    level: 3
+    title: "10.12 Migration level の階段"
+  - id: in-plan-exploration-trail
+    legacy: "11"
+    level: 2
+    title: "11. In-plan exploration trail — single-session walkback の保存"
+  - id: walkback-trail-disappears
+    legacy: "11.1"
+    level: 3
+    title: "11.1 問題: walkback の trail が plan close 時に消える"
+  - id: exploring-md-difference
+    legacy: "11.2"
+    level: 3
+    title: "11.2 §6 EXPLORING.md との違い"
+  - id: exploration-trail-section
+    legacy: "11.3"
+    level: 3
+    title: "11.3 解決: plan §1.6 etc. に「探索過程」 セクションを置く"
+  - id: when-to-write-trail
+    legacy: "11.4"
+    level: 3
+    title: "11.4 適用判断: いつ §1.6 を書くか"
+  - id: rejected-alternatives-relationship
+    legacy: "11.5"
+    level: 3
+    title: "11.5 §11 「やらないこと」 との関係"
+  - id: trail-application-example
+    legacy: "11.6"
+    level: 3
+    title: "11.6 適用事例"
+  - id: monitoring-list-scope-marker
+    legacy: "12"
+    level: 2
+    title: "12. 監視 list の scope marker — 「監視」 と「禁止」 の categorical 分離"
+  - id: monitoring-scope-pathology
+    legacy: "12.1"
+    level: 3
+    title: "12.1 観察された pathology"
+  - id: monitoring-vs-prohibition-separation
+    legacy: "12.2"
+    level: 3
+    title: "12.2 「監視」 と「禁止」 の categorical 分離"
+  - id: explicit-scope-marker
+    legacy: "12.3"
+    level: 3
+    title: "12.3 解法: explicit scope marker を必須化"
+  - id: monitoring-scope-origin
+    legacy: "12.4"
+    level: 3
+    title: "12.4 由来"
+  - id: monitoring-scope-applicability
+    legacy: "12.5"
+    level: 3
+    title: "12.5 適用範囲"
+  - id: monitoring-scope-related-rules
+    legacy: "12.6"
+    level: 3
+    title: "12.6 周辺規律"
+  - id: cross-repo-migration-ordering
+    legacy: "13"
+    level: 2
+    title: "13. Cross-repo refactor の migration ordering — データ側を先に commit"
+  - id: migration-order-footgun
+    legacy: "13.1"
+    level: 3
+    title: "13.1 観察された footgun"
+  - id: data-first-commit-principle
+    legacy: "13.2"
+    level: 3
+    title: "13.2 原則: データ側を先に commit、 コード側を後に commit"
+  - id: graceful-skip-design
+    legacy: "13.3"
+    level: 3
+    title: "13.3 graceful skip 設計の併用"
+  - id: collaborator-shared-ordering
+    legacy: "13.4"
+    level: 3
+    title: "13.4 collaborator-shared 場合"
+  - id: migration-order-origin
+    legacy: "13.5"
+    level: 3
+    title: "13.5 由来"
+  - id: migration-order-applicability
+    legacy: "13.6"
+    level: 3
+    title: "13.6 適用範囲"
+  - id: migration-order-related-rules
+    legacy: "13.7"
+    level: 3
+    title: "13.7 周辺規律"
+  - id: intrafile-slug-identity
+    legacy: "14"
+    level: 2
+    title: "14. 大規模 reference / gotcha convention の intra-file 構造 — slug identity + 検証可能 index"
+  - id: intrafile-trigger-signals
+    legacy: "14.1"
+    level: 3
+    title: "14.1 trigger signal (= 3 つのいずれか)"
+  - id: slug-over-positional
+    legacy: "14.2"
+    level: 3
+    title: "14.2 cross-ref は positional 番号でなく安定 slug で"
+  - id: thin-index-db-benefits
+    legacy: "14.3"
+    level: 3
+    title: "14.3 薄い index で「DB の利点」 を prose を動かさず得る"
+  - id: split-axis-access-pattern
+    legacy: "14.4"
+    level: 3
+    title: "14.4 split-axis は access pattern に合わせる + slug を先に振る"
+  - id: mechanical-script-extraction
+    legacy: "14.5"
+    level: 3
+    title: "14.5 mechanical な部分は script 化 (§10.9 と整合)"
+  - id: intrafile-origin-example
+    legacy: "14.6"
+    level: 3
+    title: "14.6 由来 + worked example"
+  - id: inbound-ref-robustness
+    legacy: "14.7"
+    level: 3
+    title: "14.7 cross-repo inbound-ref robustness — 下流からの参照を restructure で黙って壊さない"
+  - id: sot-consolidation-recipe
+    legacy: "15"
+    level: 2
+    title: "15. SoT consolidation recipe — README-as-SoT / 多重記述の是正手順"
+  - id: derive-not-summarize
+    legacy: "16"
+    level: 2
+    title: "16. 要約は load-bearing な「関係」を不可視に落とす — derive-not-summarize の徹底"
+  - id: summarize-pathology
+    legacy: "16.1"
+    level: 3
+    title: "16.1 観察された pathology"
+  - id: why-single-sot-insufficient
+    legacy: "16.2"
+    level: 3
+    title: "16.2 なぜ単一-SoT 原則 (§2/§15) では足りないか"
+  - id: summarize-remediation
+    legacy: "16.3"
+    level: 3
+    title: "16.3 修正 (構造的に強い順)"
+  - id: summarize-honest-scope
+    legacy: "16.4"
+    level: 3
+    title: "16.4 honest scope"
+  - id: changelog
+    level: 2
+    title: "変更履歴"

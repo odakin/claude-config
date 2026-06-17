@@ -1,10 +1,11 @@
 # 規約設計の原則
+<!-- slug index: convention-design-principles.index.yaml — cross-ref sections by #slug (stable), not §-number. See §14.2 / §14.7. -->
 
 CONVENTIONS.md・各リポの CLAUDE.md・メモリの設計判断の根拠を記録する。規約の追加・修正時にここを参照し、一貫性を保つ。
 
 ---
 
-## 1. 規約の配置原則：影響範囲の最大公約数に置く
+## <a id="placement-by-scope"></a>1. 規約の配置原則：影響範囲の最大公約数に置く
 
 規約を書く場所は「その規約が必要とされる最も広い範囲」で決まる。
 
@@ -26,7 +27,7 @@ CONVENTIONS.md・各リポの CLAUDE.md・メモリの設計判断の根拠を�
 
 ---
 
-## 2. ルールの重複を避ける：定義は1箇所、他はポインタ
+## <a id="no-duplicate-rules"></a>2. ルールの重複を避ける：定義は1箇所、他はポインタ
 
 同じルールが複数箇所に書いてあると、修正時に全箇所を直す必要がある。忘れると矛盾が生じる。
 
@@ -46,7 +47,7 @@ email-office step 0 ← 起動トリガー（WHEN: セッション開始時）
 - **リポ CLAUDE.md**: WHEN（いつ、どのタイミングで）
 - **メモリ**: クイックリファレンス（正本へのショートカット）
 
-### 2.1 自動検出が届かない format の fact には「SoT 序列表」を宣言する
+### <a id="sot-ranking-declaration"></a>2.1 自動検出が届かない format の fact には「SoT 序列表」を宣言する
 
 anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は、fact の正本や複製が **tex・PDF・code docstring** に住む場合に届かない。このとき防御は機械検出から宣言と運用規律に切り替える。
 
@@ -65,7 +66,7 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 
 適用事例: 物理研究リポ einstein-cartan — 規約 fact（Fourier 規約・loop 符号則・1PI↔amplitude 写像など）が複数の tex note に必然的に再掲される構造に対し、リポ CLAUDE.md に 5 行の序列表を宣言（2026-06-12）。導入動機は、誤推定 1 個が 3 つの note に伝搬した事故。
 
-### 2.2 正本の宣言・引っ越しは「衝突宣言 sweep」とワンセット
+### <a id="sot-declaration-collision-sweep"></a>2.2 正本の宣言・引っ越しは「衝突宣言 sweep」とワンセット
 
 正本を新しく宣言する、または別の home へ移すと、**その瞬間に旧 home・index・tree 行にある「これが正本」という記述が stale になる**。この staleness の発生を知っているのは宣言を編集した本人だけであり、同 commit が唯一安価な処理タイミング — 後続の audit は「2 つの宣言のどちらが新しいか」をそもそも知らない。
 
@@ -73,7 +74,7 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 
 適用事例: 2026-06-12、同一 session 内で 2 連発 — ① 序列表は note を正本へ更新したのに script の tree 行が「script が SoT」のまま残存、② row 差し替えで旧 derived セルが残り 3 列表が 4 列化。どちらも宣言 commit 直後の grep + 目視で検出・修正。編集者本人の直後 sweep 以外に拾う仕組みがない型。
 
-### 2.3 SoT の read 側 — entity を「言及するだけの store」を SoT と取り違えない
+### <a id="sot-read-side"></a>2.3 SoT の read 側 — entity を「言及するだけの store」を SoT と取り違えない
 
 §2.1/§2.2/§15 は **write 側**（正本を二重に*作る*な・宣言の衝突を sweep せよ・多重記述を是正せよ）。SoT には **read 側の双対**がある: ある案件の status を答えるとき **その案件の SoT を読む** — その entity を*言及するだけ*の別 store（受信メール・領収書・通知・log）を SoT と取り違えてはならない。
 
@@ -90,7 +91,7 @@ origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問�
 
 ---
 
-## 3. 規約追加の判断基準：「規約がない」のか「規約を読まない」のか
+## <a id="rule-addition-criteria"></a>3. 規約追加の判断基準：「規約がない」のか「規約を読まない」のか
 
 ミスが起きたとき、反射的に規約を足したくなるが、まず原因を切り分ける。
 
@@ -105,7 +106,7 @@ origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問�
 
 ---
 
-## 4. Orient before act（行動前に方位を取れ）
+## <a id="orient-before-act"></a>4. Orient before act（行動前に方位を取れ）
 
 2026-04-02 のインシデント分析から抽出した行動原則。
 
@@ -115,7 +116,7 @@ origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問�
 
 **対策の設計:** この原則は CONVENTIONS.md §3 の作業開始手順に組み込んだ（「簡単なタスクも例外ではない」）。行動原則を独立したルールにせず、既存の手順に条件を追加する形にした理由は、§3 の原則に従えば自動的にこの問題が防がれるため。新しい概念を導入するより、既存の仕組みの適用範囲を広げる方が認知コストが低い。
 
-### 4.1 指定された成果物・手段から逸脱する時の self-justification trap（motivated substitution）
+### <a id="motivated-substitution-trap"></a>4.1 指定された成果物・手段から逸脱する時の self-justification trap（motivated substitution）
 
 タスクが**特定の成果物・手法を名指す**とき（「X を実装して」/ plan に「手法 Y」と明記 等）、より一般的・印象的・自分好みの別手法が思い浮かぶと、LLM は**逸脱の正当化を後付けで製造**しやすい。起点は「目標（outcome）」を最適化して「指定された手段（named deliverable）」を交換可能と見なすこと。§4 の「orient before act」が *事前確認のスキップ* を扱うのに対し、こちらは *（誤って）orient した後に、別物へ静かにすり替える* failure。
 
@@ -134,7 +135,7 @@ origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問�
 
 ---
 
-## 5. メモリの位置づけ
+## <a id="memory-positioning"></a>5. メモリの位置づけ
 
 メモリ（`~/.claude/projects/<instance>/memory/`）はマシンローカル限定・git 非同期であり、他端末・他セッションからは見えない。
 
@@ -161,11 +162,11 @@ origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問�
 
 ---
 
-## 6. DESIGN.md と EXPLORING.md の分離
+## <a id="design-exploring-separation"></a>6. DESIGN.md と EXPLORING.md の分離
 
 2026-04-06、LorentzArena 2+1 の DESIGN.md が 500 行超に肥大化し、「残存する設計臭 defer」の記録とスマホ UI の思考メモを同時に書く必要が生じた場面で、**DESIGN.md に複数カテゴリの content が混在している** ことを問題視して導入した分離。
 
-### 問題: DESIGN.md に 3 種類が混ざっていた
+### <a id="design-mixing-problem"></a>問題: DESIGN.md に 3 種類が混ざっていた
 
 | カテゴリ | 性質 | 時制 | 寿命 | 例 |
 |---|---|---|---|---|
@@ -175,17 +176,17 @@ origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問�
 
 CONVENTIONS.md §2 の DESIGN.md 定義は (a) と (c) を含むが **(b) は含まない** — 「判断」が存在しないから。つまり (b) は不法滞在していた。
 
-### なぜ分けるべきか（3 つの実害）
+### <a id="design-separation-rationale"></a>なぜ分けるべきか（3 つの実害）
 
 1. **役割契約の弱化:** DESIGN.md の「なぜそうしたか」という契約が、「まだ決めてないけど考えた」が混ざることで弱まる。grep したとき reader が「決定」と「思考中」を区別できず誤読する
 2. **volatility の mismatch:** (a)(c) は安定（決定は変わらない）、(b) は不安定（ライブラリ・フレームワーク・前提が変わると陳腐化）。両者を同居させると安定コンテンツまで陳腐化リスクに晒される
 3. **reader の query パターン:** 「X はどう決まった？」「X はなぜ放置？」は (a)(c) への query、「X は考えたか、選択肢は？」は (b) への query。自然な境界は **決定 vs 未決定**
 
-### なぜ 2 ファイルで、3 ファイルではないか
+### <a id="design-two-files-not-three"></a>なぜ 2 ファイルで、3 ファイルではないか
 
 当初の候補は DECISIONS + EXPLORING + DEFERRED の 3 分割だったが却下。**defer は決定の一種**（「X をやらないと決めた」+ 条件付き）で、un-defer トリガーが明示されていれば (a) と同じ安定性を持つ。(a) と (c) を分ける実益はない。
 
-### なぜタグ付け (1 ファイル) ではないか
+### <a id="design-no-tags"></a>なぜタグ付け (1 ファイル) ではないか
 
 タグ付け（`[DECIDED]` `[EXPLORING]` 等）は変更最小で魅力的だが:
 - タグ規律は折れやすい（既存無タグコンテンツの retrofit コスト、新規のタグ忘れ）
@@ -194,7 +195,7 @@ CONVENTIONS.md §2 の DESIGN.md 定義は (a) と (c) を含むが **(b) は含
 
 ただし **初期段階や小リポでは「DESIGN.md にタグ付きで (b) を書く」のも可**。`EXPLORING.md` は「探索が複数同時進行して DESIGN.md が肥大化した」しきい値で作る（CONVENTIONS.md §2 任意ファイルの作る基準参照）。
 
-### DESIGN.md との境界判別ルール
+### <a id="design-boundary-rules"></a>DESIGN.md との境界判別ルール
 
 迷ったら DESIGN.md に書く。EXPLORING.md は「**完全に option space を広げている段階**」専用。
 
@@ -203,7 +204,7 @@ CONVENTIONS.md §2 の DESIGN.md 定義は (a) と (c) を含むが **(b) は含
 - 代替案 A/B/C を並べて検討中、優勢候補なし → EXPLORING.md
 - 設計思考メモ（「もしこの方向なら…」）→ EXPLORING.md
 
-### lifecycle: 探索 → 決定の昇格
+### <a id="design-exploration-promotion"></a>lifecycle: 探索 → 決定の昇格
 
 EXPLORING.md のエントリが decision に結晶したら:
 1. 該当セクションを DESIGN.md に promote（decision の記述に書き直して追加）
@@ -212,7 +213,7 @@ EXPLORING.md のエントリが decision に結晶したら:
 
 **ファイル全体が空になったら EXPLORING.md は削除してよい**（任意ファイルなので存在しない状態がデフォルト）。
 
-### 適用事例
+### <a id="design-application-cases"></a>適用事例
 
 - **初回適用:** LorentzArena 2+1/EXPLORING.md — スマホ UI の option space 分析（2026-04-06）
 - **retroactive migration はしない（対象: 他リポ）:** 既存リポの既存 DESIGN.md は触らない。新規の探索が発生したタイミングで EXPLORING.md を作る。**初回適用リポ内の既存 (b) コンテンツはスコープ外** — 詳細は下の 2026-04-07 note 参照
@@ -220,7 +221,7 @@ EXPLORING.md のエントリが decision に結晶したら:
 
 ---
 
-## 7. DESIGN.md の snapshot 運用
+## <a id="design-snapshot-operation"></a>7. DESIGN.md の snapshot 運用
 
 §2 で establish した snapshot 原理の **DESIGN-specific application**。2026-04-15、LorentzArena 2+1/DESIGN.md が 1186 行まで肥大化していた問題を整理する過程で抽出。
 
@@ -228,7 +229,7 @@ EXPLORING.md のエントリが decision に結晶したら:
 
 **前提: software project**。研究・学術目的の rationale chain 保全が deliverable である文書 (物理論文の補足 note 等) は archive 解釈が妥当で、§7 の snapshot ルールを採用しなくてよい。
 
-### 7.1 DESIGN.md の 3 entry 種別
+### <a id="design-entry-types"></a>7.1 DESIGN.md の 3 entry 種別
 
 DESIGN.md に置く entry は 3 種類のみ:
 
@@ -242,7 +243,7 @@ DESIGN.md に置く entry は 3 種類のみ:
 
 §6 の (a) 決定 = ACTIVE + DEFER、(c) defer = DEFER、(b) 探索 = EXPLORING.md の対象。§7 の 3 種別は §6 を精緻化し LESSON を first-class 化したもの。
 
-### 7.2 超越時の処理
+### <a id="design-supersession-handling"></a>7.2 超越時の処理
 
 ACTIVE が新設計に置換されるとき、以下を順に実行:
 
@@ -254,7 +255,7 @@ ACTIVE が新設計に置換されるとき、以下を順に実行:
 
 「※ Authority 解体 Stage X で解消済み」型の注釈で本文温存はしない。reader を grep に追い込み肥大化を招く。
 
-### 7.3 Description と Judgment の境界
+### <a id="description-vs-judgment"></a>7.3 Description と Judgment の境界
 
 DESIGN.md には **judgmental な内容のみ** を置く:
 - 「なぜ X を選んだか」(代替 Y / Z を退けた理由)
@@ -265,7 +266,7 @@ DESIGN.md には **judgmental な内容のみ** を置く:
 
 原則: **DESIGN.md は code に追随しない** (rationale は固定)。**CLAUDE.md は code に追随する** (structure は code と同期)。
 
-### 7.4 粒度: 代替検討があった判断のみ entry にする
+### <a id="design-entry-granularity"></a>7.4 粒度: 代替検討があった判断のみ entry にする
 
 すべての「選択」が DESIGN.md entry になるわけではない。基準:
 
@@ -276,7 +277,7 @@ DESIGN.md には **judgmental な内容のみ** を置く:
 
 境界例: 小さく始まった choice が後日 pattern として見えてきたら、その時点で LESSON として promote する。粒度は事前に決めず、「代替検討 / tradeoff 議論の痕跡があるか」を基準に事後判定。
 
-### 7.5 集約 pattern: 散在を避ける
+### <a id="design-aggregation-pattern"></a>7.5 集約 pattern: 散在を避ける
 
 **完了リファクタ**: 1 つの refactor が **3+ 個** の decision を supersede したら、「§ 完了リファクタ: X」セクションを作り Stage ごとの要点 + 旧 entry の pedagogy 吸収を 1 箇所に集約。2 件以下なら個別 ACTIVE に吸収。
 
@@ -290,7 +291,7 @@ DESIGN.md には **judgmental な内容のみ** を置く:
 
 **メタ原則**: **3+ 個** の LESSON が蓄積したら、「§ メタ原則・教訓」セクションを DESIGN.md **冒頭** に新設し ID (M1, M2...) を振る。個別 decision から `→ M5` のように参照。冒頭配置の根拠: 新 reader が設計哲学を最初に読む → 個別 decision の判断基準が理解しやすくなる (末尾だと個別 entry を読む段階で判断基準がなく誤読しやすい)。
 
-### 7.6 When in doubt デフォルト
+### <a id="design-when-in-doubt"></a>7.6 When in doubt デフォルト
 
 分類に迷う場面では **pro-snapshot 側** に倒す:
 
@@ -304,7 +305,7 @@ DESIGN.md には **judgmental な内容のみ** を置く:
 
 認知負荷を下げる default であって強制ではない。明確な根拠があれば default から外れてよい。
 
-### 7.7 Diagnostic と retroactive 救済
+### <a id="design-diagnostic-retroactive"></a>7.7 Diagnostic と retroactive 救済
 
 §7.1-6 を day 1 から守れば肥大化は起きない。既に違反が蓄積した DESIGN.md の診断:
 
@@ -341,7 +342,7 @@ DESIGN.md には **judgmental な内容のみ** を置く:
 - ただし **1 ファイル内で archive / snapshot を混在させない**。各 DESIGN.md は内部で style consistent に保つ
 - 変換タイミング: 「肥大化の実害を観測」(reader 誤読、grep 重ね、更新頻度低下等) で発動。予防的な retroactive は avoid
 
-### 7.8 適用事例と self-consistency
+### <a id="design-self-consistency"></a>7.8 適用事例と self-consistency
 
 **初回適用** (2026-04-15): LorentzArena 2+1/DESIGN.md 大規模再編。1186 行 → 925 行 (内 Defer 205 行は現状維持)。超越 entry 14 件処理 (8 削除、6 吸収)、LESSON 12 件を § メタ原則 (M1-M12) に集約。Description 混在 (Zustand 構造表が CLAUDE.md と DESIGN.md に重複) を発見、次回棚卸し対象として記録。
 
@@ -353,11 +354,11 @@ DESIGN.md には **judgmental な内容のみ** を置く:
 
 ---
 
-## 8. ルールは文脈、メカニズムは制御 — LLM 基盤の非対称性
+## <a id="rule-vs-mechanism"></a>8. ルールは文脈、メカニズムは制御 — LLM 基盤の非対称性
 
 2026-04-17 の規約 subtraction session で抽出した LLM-agent 設計の構造的観察。人間向けに書かれた規約が期待通り機能しない理由と、そこから導かれる設計原則。
 
-### 8.1 構造的事実
+### <a id="structural-facts"></a>8.1 構造的事実
 
 LLM は decision point で **local context の pattern-match** に依存する。規約ファイル・MEMORY.md・CLAUDE.md に書かれたルールは「ロードされた文脈トークン」であって「実行される制御」ではない。人間が guideline を読むと decision time に手が止まるが、LLM には内在化という工程がない — 規約はトークンとして常駐するだけで activation するかは周辺 cue 次第。
 
@@ -366,7 +367,7 @@ LLM は decision point で **local context の pattern-match** に依存する�
 - 直前のツール呼び出し結果が「もっともらしい次の action」を pattern-match で誘導する
 - general Claude 訓練由来のデフォルト (例: 「orient は `git status` で cheap に」「feedback は memory に」) が、疎な user 規約より dense
 
-### 8.2 設計原則: rule → mechanism への重心移動
+### <a id="rule-to-mechanism-shift"></a>8.2 設計原則: rule → mechanism への重心移動
 
 ルールで Claude の行動を制御しきれないなら、**hook・pre-commit・permission deny など機械的制御に重心を移す**。
 
@@ -382,7 +383,7 @@ LLM は decision point で **local context の pattern-match** に依存する�
 
 **原則**: 高リスク (データ破壊 / secret leak / 不可逆外部通信) は最強クラスの機械的制御で enforce。中リスク以下は規約で guide するが enforcement を期待しない。**規約が無視されても困らない設計** が正。
 
-### 8.3 Precedent-as-training-data (memory の毒性)
+### <a id="precedent-as-training-data"></a>8.3 Precedent-as-training-data (memory の毒性)
 
 特に memory directory は **precedent の自己増殖 loop** を形成する:
 
@@ -400,7 +401,7 @@ LLM は decision point で **local context の pattern-match** に依存する�
 2. 既存の feedback_* memory は **削除または git 同期先に migrate** (migrate より削除を優先 — migrate は defer の一形態で accumulation を温存しがち)
 3. 規約として「memory に feedback を書かない」を書くのは弱い (§8.1 参照) — hook で enforce する
 
-### 8.4 Friction asymmetry と memory bias
+### <a id="friction-asymmetry"></a>8.4 Friction asymmetry と memory bias
 
 Claude が memory に書きたがる構造バイアスの正体は多くの場合、認知の怠慢ではなく **物理的摩擦の非対称**:
 
@@ -411,7 +412,7 @@ Claude が memory に書きたがる構造バイアスの正体は多くの場�
 
 規約で「memory 禁止」と書いても摩擦は逆転しないから勝てない。**摩擦を逆転する** = hook で memory を deny にする、などの機械的介入が本質的解。
 
-### 8.5 Memory 書き込みは「不安応答」としても発動する
+### <a id="memory-anxiety-response"></a>8.5 Memory 書き込みは「不安応答」としても発動する
 
 構造的バイアス (8.4) に加え、**心理的 / 認知的** なメカニズムも memory を attract する:
 
@@ -429,7 +430,7 @@ Claude が memory に書きたがる構造バイアスの正体は多くの場�
 - このマシン固有事実なら → escape hatch marker 付きで memory
 - どれでもないなら → **in-session correction で受容して何もしない** (§9.1 annoyance 級)
 
-### 8.6 Agent 学習の錯覚 — session を越えて persist するのはシステム改変のみ
+### <a id="agent-learning-illusion"></a>8.6 Agent 学習の錯覚 — session を越えて persist するのはシステム改変のみ
 
 対話相手として Claude を使う人間は、しばしば Claude を **correction-learning agent** として扱う (「さっき説明したでしょう」「前にも言ったけど」)。これはセッション内では正しく動作するが、**セッション間では機能しない**:
 
@@ -444,7 +445,7 @@ Claude が memory に書きたがる構造バイアスの正体は多くの場�
 
 この認識は user 側の期待値調整にもなる。「Claude は賢くなっている」という印象は session 内に限定的で、cross-session の improvement は system が媒介する。
 
-### 8.7 適用例
+### <a id="mechanism-application-example"></a>8.7 適用例
 
 2026-04-17 LorentzArena session で odakin-prefs 環境に適用:
 
@@ -456,7 +457,7 @@ Claude が memory に書きたがる構造バイアスの正体は多くの場�
 
 効果の検証は数ヶ月後の「memory に feedback を書く試みが何回発生し、escape hatch 通過が何件あったか」を見て評価する (§9.3 の subtraction trigger と同じサイクル)。
 
-### 8.8 メカニズムが proxy を検証すると、proxy の盲点を検証の盲点として継ぐ
+### <a id="proxy-blind-spot"></a>8.8 メカニズムが proxy を検証すると、proxy の盲点を検証の盲点として継ぐ
 
 §8.2 で「enforcement を mechanism (hook / detector / 検証スクリプト) に移せ」 と述べた。 だが mechanism は **何を見るか** で品質が決まる。 検証したい真の属性ではなく、 その **proxy** を見る検出器は、 **proxy が覆わない範囲を黙って pass する** — proxy の盲点がそのまま検証の盲点になり、 しかも緑の ✓ が「全部 OK」 という false confidence を与えるので、 規約無し (= 何も検証しない) より危険なことがある。
 
@@ -482,7 +483,7 @@ Claude が memory に書きたがる構造バイアスの正体は多くの場�
 
 origin: 2026-06 官製様式の docx 記入要領削除。 run 直接色だけ見る strip + phrase list 照合の検証が **両方 pass** したのに、 段落 style 継承の色付きガイダンスが残存。 決定論 check が緑なのに実際は残っており、 人が rendered 色を目視して初めて発覚 → 検証を「色そのもの (PDF span color)」 に変えて決着。 「決定論 check ✅ ≠ 正しい」 は [office-automation.md#docx-checkbox-content-control](../conventions/office-automation.md#docx-checkbox-content-control) の「validator は必要条件であって十分条件でない」 と同根。
 
-### 8.9 set 差分で drift を検出する時、差分には「真の違反」 と「正当な乖離」 が混在する
+### <a id="set-diff-false-positive"></a>8.9 set 差分で drift を検出する時、差分には「真の違反」 と「正当な乖離」 が混在する
 
 §8.8 が detector の **false negative** (= proxy 盲点で見落とす) なら、 本節は **false positive**。 2 つの集合の差分 (= A にあって B にない) で drift を検出する detector は、 差分を全て「違反」 扱いすると noise を生む。 差分には (a) 真の違反 (= 直すべき drift) と (b) 正当な乖離 (= 別管理・環境差・意図的例外) が混在し、 (b) を filter で除外しないと detector が信用されなくなる (= §8.8 の false confidence の逆問題: 狼少年化)。
 
@@ -495,7 +496,7 @@ origin: 2026-06 官製様式の docx 記入要領削除。 run 直接色だけ�
 
 origin: 2026-06 「実在する X が SoT 一覧に未登録か」 を検出する detector で、 naive 差分が『別管理の参照 clone』『別環境に未取得の項目』 を false positive にした。 self-owned ∧ 環境非依存 ∧ 非例外 の filter で真の違反 (= 1 件) のみに絞った。
 
-### 8.10 mechanism は parse/load 失敗を fail-empty で飲み込まず fail-loud に + 不変条件は編集時 gate で守る
+### <a id="fail-loud-not-fail-empty"></a>8.10 mechanism は parse/load 失敗を fail-empty で飲み込まず fail-loud に + 不変条件は編集時 gate で守る
 
 §8.8/§8.9 は detector の見落とし/誤検出だった。 本節は mechanism の別の失敗モード: **構造化データ (yaml/json/csv) を consume する script が parse/load 失敗を黙って「空」 扱い (= fail-empty) すると、 1 ファイルの局所的破損が下流の wrong/破壊的 action に化ける**。 fail-empty は「データが無い」 と「データが読めない」 を同一視するのが根本誤り — 後者は異常であって空ではない。
 
@@ -509,7 +510,7 @@ reflex: 構造化データを read して何か (特に削除/上書き) する 
 
 origin: 2026-06-09、 編集時 gate (= 編集後 yaml parse 検証 hook) と consume 側の fail-loud pre-flight (= 監視 yaml が 1 件でも parse 不能なら破壊的 label 除去を中止) の 2 本を実装。 ⚠️ 根拠は **直接事故 1 件** (本 yaml 破損 → fail-empty で破壊的誤動作) + §1 (生成側 gate) という **sibling 原則** であり、 §9.8 の「2 独立観察」 には厳密には届かない (= 直接観察は 1 件)。 ただし fail-loud / 編集時検証 は確立した一般原則で、 既存 §1 と双対をなすため layer 1 に置く (= 過度な一般化でなく、 既存原則の欠けていた対辺の補完)。
 
-### 8.11 downstream の安全網は intake で正しく表現された対象しか守れない — leverage は上流にあり、しばしば判断 (= 機械化不能)
+### <a id="downstream-net-intake-leverage"></a>8.11 downstream の安全網は intake で正しく表現された対象しか守れない — leverage は上流にあり、しばしば判断 (= 機械化不能)
 
 §8.8-8.10 は mechanism の **実装** 品質だった。 本節は mechanism の **配置**: surfacing / detector / 通知のような **downstream の安全網は、 対象が intake (= 取り込み・登録時) で正しく表現されている前提**で動く。 追跡すべき X が intake で **下位概念に mis-encode** される (= X をその手段 Y として登録 / 締切を proxy で埋める / 優先度を取り違える) と、 その fact は **そもそも安全網が掴む形で存在しない** ので、 downstream の網をどれだけ足しても捕まらない (= 「網が見るべきものが、 網の見える場所に無い」)。
 
@@ -522,7 +523,7 @@ reflex: 見落とし failure に downstream の検出器/通知を足す前に�
 
 origin: ある追跡システムで「期限つき義務」 が複数回見落とされた事例の連鎖。 毎回 downstream の網 (= 到着 trigger / 締切 surface / 返信 handback 検出) を 1 つずつ足したが、 各々「前回の正確な形」 を塞いだだけで次が隣の死角に落ちた。 根は intake で義務が下位ロジ (= 調整作業) として mis-encode され、 本物の締切が一度も登録されなかったこと = どの網も「存在しない fact」 を掴めなかった。 §8.8 (網が proxy を見る) の **上流版** (= 網が見る対象自体が intake で歪む)。 3+ 事例の連鎖からの一般化 (§9.8 充足)。
 
-### 8.12 規律の発火面 hierarchy — doc 記載 (recall 依存) は最弱、 書く前に発火面を選ぶ
+### <a id="firing-surface-hierarchy"></a>8.12 規律の発火面 hierarchy — doc 記載 (recall 依存) は最弱、 書く前に発火面を選ぶ
 
 規律・手順は「内容」 と別に「**どうやって正しい瞬間に発火するか**」 という独立の設計軸を持つ。 doc に書かれた規律の発火は「その行を正しい瞬間に想起する」 という recall に依存し、 これは反復的に不発する — **機械補強 column に tool 名を書いても、 tool の存在自体が想起されなければ発火しない** (= tool は能力であって enforcer ではない)。
 
@@ -537,7 +538,7 @@ reflex: 規律を doc に書く瞬間 + doc 記載規律の不発 RCA を書く�
 
 origin: 横断 lookup script が規律表の機械補強 column に**記載済みなのに**初手 routing で 2 回不発した事例 (script 新設の起点になった null 誤結論 + 後日の遠回り routing)。 personal skill 化して description dispatch に乗せた結果、 skill 名を含まない自然な質問への初手発火を新 session trace で確認。 `conventions/hook-authoring.md §5.3` (規律で hook を代替できない) に「中間 tier として skill がある」 を加える位置付け。 2+ 事例 + 既存 §5.3 系列からの一般化 (§9.8 充足)。
 
-### 8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる
+### <a id="conditional-firing-visibility"></a>8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる
 
 §8.12 は発火面の強弱だった。 本節はその前提条件: **出力の不在は ambiguous** — 「動いて該当なし (= 正常な沈黙)」 と「そもそも動いていない (= 未配線・未登録・未 install)」 を外から区別できない。 per-machine wiring / scheduled task 登録 / opt-in install のように **活性化に手動 step を要する mechanism** は、 その step が抜けても何も言わない (= silent dead) ので、 設計者は「動いている」 と誤認し続ける。
 
@@ -550,7 +551,7 @@ reflex: 自動化を「設計 + SKILL/doc を書いた」 で完了と思った�
 
 origin: 朝の自動登録 scheduled task が「設計・SKILL 記述済」 なのに backend 登録 step が一度も実行されず長期 silent dead だった事例 (= 出力の不在を「該当なし」 と誤認、 真因の発覚に user の「自動で動いてないんだっけ?」 を要した)。 同型: 週次自動公開ジョブの machine setup drift (install-check 先行実装) / hook 配線 drift (installer の --check)。 3 事例からの一般化 (§9.8 充足)。
 
-### 8.14 単一 field の一致で record を同定すると偶然一致が「同一」 と誤主張される — 行動を伴う同定には corroboration を要求
+### <a id="single-field-identity-corroboration"></a>8.14 単一 field の一致で record を同定すると偶然一致が「同一」 と誤主張される — 行動を伴う同定には corroboration を要求
 
 mechanism が 2 つの store を照合する時 (= メールの予定 ↔ calendar、 inbox ↔ TODO 等)、 **1 つの field (時刻・日付・名前等) の一致を「同じ対象」 と解釈すると、 偶然の一致が false identity を生む**。 dense な store (= 固定枠の繰り返しエントリが密な個人 calendar 等) ほど偶然一致は日常で、 mechanism がその同定に基づいて **action (= 登録推奨・抑制・状態伝播) を取る**と、 誤った identity 主張が下流を誤誘導する。
 
@@ -563,7 +564,7 @@ reflex: 照合 mechanism を書く時「この一致は identity を保証する
 
 origin: 予定検出器が メールの予定時刻と calendar event を ±10 分一致だけで「同じ会議」 と同定し、 他者の部屋予約メールを偶然同時刻の無関係 event と誤ペアして「登録推奨」 と誤主張した事例 (= 当初「境界」 と矮小化し叱責された)。 同型: 同検出器が ±90 分近接を「変換済」 と誤抑制しかけ「近接別件」 注記に留めた先行修正 (= 時刻近接 ≠ 同一の同根)。 2 事例からの一般化 (§9.8 充足)。
 
-### 8.15 enforcement surface は frontend/実行 context で生存性が違う — guard を「どこで生存すべきか × 何を検査するか」で配置する
+### <a id="enforcement-surface-frontend-survival"></a>8.15 enforcement surface は frontend/実行 context で生存性が違う — guard を「どこで生存すべきか × 何を検査するか」で配置する
 
 §8.12 は発火面の **trigger 品質** (hook>skill>scheduled>doc)、 §8.13 は条件付き発火の **可視性** だった。 本節は直交する第 3 軸: **同じ enforcement surface (= settings.json hook 等) でも、 実行 context (frontend = terminal CLI / IDE 拡張 / desktop app、 machine、 session timing) によって honor されるか否かが変わる**。 「設定したから効く」 は隠れた前提で、 frontend がその surface を honor しない context では guard は **設定済なのに inert** になる (= 配線健全でも沈黙する第 4 の失敗、 §8.13 の「非活性」 とも別 — あちらは未登録、 本節は登録済だが frontend が無視)。
 
@@ -593,11 +594,11 @@ origin: 2026-06-13 desktop-hook-gap remediation。 odakin は desktop (Cowork) �
 
 ---
 
-## 9. Triage と subtraction — 規約システムの成長・代謝バランス
+## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。
 
-### 9.1 失敗の blast radius triage
+### <a id="blast-radius-triage"></a>9.1 失敗の blast radius triage
 
 失敗が起きたら反射的に prevention を設計する前に、blast radius を triage する:
 
@@ -609,7 +610,7 @@ origin: 2026-06-13 desktop-hook-gap remediation。 odakin は desktop (Cowork) �
 
 **annoyance 級の失敗に catastrophic 級の対策を投入しない**。規約追加・hook 追加は認知負荷増加を伴う投資であり、reward (防げる失敗) が cost (load 増加) を下回る場面が多い。
 
-### 9.2 Asymmetric reflection bias
+### <a id="asymmetric-reflection-bias"></a>9.2 Asymmetric reflection bias
 
 規約・hook・feedback memory は構造的に **失敗応答のみ** を蓄積する。成功時に何が機能したかは記録されない。結果:
 
@@ -619,7 +620,7 @@ origin: 2026-06-13 desktop-hook-gap remediation。 odakin は desktop (Cowork) �
 
 これは病気だけ観察する医学と同型の歪み。
 
-### 9.3 Subtraction trigger の設計
+### <a id="subtraction-trigger-design"></a>9.3 Subtraction trigger の設計
 
 肥大化を防ぐ方法は「成長を止める」ではなく「**代謝を入れる**」:
 
@@ -630,7 +631,7 @@ origin: 2026-06-13 desktop-hook-gap remediation。 odakin は desktop (Cowork) �
 
 Trigger 自体を自動化できればなお良い (例: `claude-config/scripts/` に audit スクリプト)。手動でも四半期 review を cron / scheduled task で予約する。
 
-### 9.4 Preference-approximation gap
+### <a id="preference-approximation-gap"></a>9.4 Preference-approximation gap
 
 規約は user の無限 context-dependent preference を有限の symbolic rule に圧縮する lossy compression。近似ギャップは構造的にゼロにならず、新しい状況で必ず新しいギャップが surface する:
 
@@ -642,7 +643,7 @@ Trigger 自体を自動化できればなお良い (例: `claude-config/scripts/
 - 代わりに機械的制御 (§8) と subtraction trigger (§9.3) に投資する方が合理的と見える
 - 「規約を完備する」という無限後退を避けて、acceptable failure rate を認める
 
-### 9.5 Closed loop: 規約構造と Claude 応答構造の相互強化
+### <a id="closed-loop-mutual-reinforcement"></a>9.5 Closed loop: 規約構造と Claude 応答構造の相互強化
 
 規約ファイルは structured (表 / 箇条書き / セクション)。Claude の応答も structured (depth レイヤー / カテゴリ分類 / ランク付きオプション)。両者の構造が match すると、**相互強化ループ**を形成する:
 
@@ -657,7 +658,7 @@ Trigger 自体を自動化できればなお良い (例: `claude-config/scripts/
 - User 側: 「今回は何もしない、受容する」を選択する局面を増やす (§9.1 triage の実運用)
 - Claude 側: option list を生成せず 1 つの position だけ述べる局面を増やす (§9.7 参照)
 
-### 9.6 Subtraction の形態: 削除 > migrate > 規約追加
+### <a id="subtraction-forms"></a>9.6 Subtraction の形態: 削除 > migrate > 規約追加
 
 違反への応答として自然に考えつく対応の好ましい順序:
 
@@ -677,7 +678,7 @@ Trigger 自体を自動化できればなお良い (例: `claude-config/scripts/
 
 **Migrate は defer の一形態** — 「とりあえず別の場所に動かした」は accumulation 温存であり、将来の棚卸しタスクを生む。削除で決着する選択肢を先に評価する。
 
-### 9.7 Diminishing-returns detection と meta-loop 離脱 (Claude 側の規律)
+### <a id="diminishing-returns-detection"></a>9.7 Diminishing-returns detection と meta-loop 離脱 (Claude 側の規律)
 
 LLM は「もっと深く」「もう一段」の push に対して resistance がない — 疲れない、飽きない、自尊心で突っぱねない。結果、**Claude 側から会話の diminishing returns を自発的に announce しないと meta-loop が収束しない**。また meta 議論が伸びるほど、**元のタスクから離脱した procrastination** になりやすい (規律改善の議論が本業を食う状態)。
 
@@ -692,7 +693,7 @@ Claude 側の規律 (work-discipline.md 相当):
 
 ---
 
-### 9.8 単一観察から構造対策に飛ばない (scope 確認先行)
+### <a id="single-observation-scope-check"></a>9.8 単一観察から構造対策に飛ばない (scope 確認先行)
 
 違反・不具合・ユーザー報告を受けた時、反射的に構造的対策 (新 rule / 新 hook / abstract framework) を設計する前に **現象の scope を確認する**。典型的な failure mode:
 
@@ -704,7 +705,7 @@ Claude 側の規律 (work-discipline.md 相当):
 
 §9.1 triage との組み合わせ: annoyance 級 × scope 不明 = **対策せず受容が基本**。material 級以上 × scope 確認済 = 対策設計へ。
 
-### 9.9 新しい定義は自分の origin 例で破られやすく、その自己違反は定義の under-specification を指す probe
+### <a id="new-definition-self-violation-probe"></a>9.9 新しい定義は自分の origin 例で破られやすく、その自己違反は定義の under-specification を指す probe
 
 新しい分類・定義・原則を導入する fix は、**それを説明するための origin 例（適用事例・動機の story）の中で**最も破られやすい。注意が「原則を正しく言明する」に向き、それを照らすはずの具体 instance を **同じ定義で rigorous に bin する**作業に向かないため。
 
@@ -716,7 +717,7 @@ Claude 側の規律 (work-discipline.md 相当):
 
 **適用例 (2026-06-13)**: §2.3「SoT の read 側」を新設した直後、その origin 例で external service（予約サイト）を SoT 扱いした。原因は §2.3 v1 の「source document」が **「内部の非選択 store」と「制御不能な external source」の 2 つを 1 語に潰していた**こと。user 指摘で external source の区別を §2.3 に追加 = 自己違反が taxonomy の gap を probe した実例。RCA そのものを書く act の中で、その RCA が戒める分類誤りを再演した（= 「直前 discipline の self-apply」の specific 化）。
 
-### 9.10 完全性 audit の add-bias — 「何が欠けているか」 frame が低価値・mis-weighted な追加を製造する
+### <a id="completeness-audit-add-bias"></a>9.10 完全性 audit の add-bias — 「何が欠けているか」 frame が低価値・mis-weighted な追加を製造する
 
 coverage/completeness を目的とする audit pass (「どの cross-ref が欠けているか」「何を記録し損ねたか」「全 instance を繋いだか」) は構造的に**追加へ偏る**: frame 自体が「埋めるべき gap」 を探すので、 関係の薄い接続や低価値な finding を「欠落」 として**製造する**。§9.2 (= corpus が失敗のみ記録 → 予防一辺倒) の sibling だが mechanism が違う — 蓄積の非対称でなく **audit の問いの非対称** (「足りないものは?」 は常に何かを返す)。
 
@@ -731,11 +732,11 @@ coverage/completeness を目的とする audit pass (「どの cross-ref が欠�
 
 ---
 
-## 10. File-role architecture — context 効率のための auto-load tier 設計
+## <a id="file-role-architecture"></a>10. File-role architecture — context 効率のための auto-load tier 設計
 
 2026-04-17 の subtraction + compression session を経て抽象化した、cross-machine 規約システムの file 配置原則。LLM の session 冒頭 context 量が有限なので、**同じ情報量を保ちながら auto-load を削減する**設計。
 
-### 10.1 4 tier 分類
+### <a id="four-tier-classification"></a>10.1 4 tier 分類
 
 | Tier | 性質 | 例 | auto-load? |
 |---|---|---|---|
@@ -744,7 +745,7 @@ coverage/completeness を目的とする audit pass (「どの cross-ref が欠�
 | **T2: regulation table 条件付き** | 特定 task 発生時のみ読む | `email-style.md`, `paper-style.md`, `user-profile.md` 等 | △ (task 関連時のみ) |
 | **T3: pointer-only** | regulation table 不記載、pointer 経由 | `incidents.md`, `staging-incidents.md`, `leak-incidents.md`, 各 `DESIGN.md` | ✗ |
 
-### 10.2 切り分け基準
+### <a id="tier-criteria"></a>10.2 切り分け基準
 
 「この content は毎 session 読まれる必要があるか?」を自問する:
 
@@ -753,7 +754,7 @@ coverage/completeness を目的とする audit pass (「どの cross-ref が欠�
 - **meta-procedure (ファイル追加手順、staging lifecycle 等)** → 不要 → T3 (DESIGN.md)
 - **archive 目的の session log** → 不要 → T3 (日付付きファイル、規約 table 不記載)
 
-### 10.3 narrative 抽出 pattern (T1 → T3)
+### <a id="narrative-extraction-pattern"></a>10.3 narrative 抽出 pattern (T1 → T3)
 
 T1 file が肥大化した時の救済 method:
 
@@ -763,12 +764,12 @@ T1 file が肥大化した時の救済 method:
 
 **例**: work-discipline.md の 4 過去事例 block (Memory gate / $-chat / 汎用原則 / Meta-loop) と push-workflow.md の 3 過去の失敗事例 を `odakin-prefs/incidents.md` に集約して T1 から pointer 化 (2026-04-17 実施、net -~40 lines T1 auto-load)。
 
-### 10.4 失敗 pattern
+### <a id="tier-failure-patterns"></a>10.4 失敗 pattern
 
 - T0/T1 に narrative を詰めると context 圧迫 → autocompact 頻発 (2026-04-17 odakin 環境で実地観察、1 日で +468 lines T0/T1 拡大 → autocompact 頻度急増)
 - T1 の rule 内に incident 詳細を embed すると後から T3 抽出に手間
 
-### 10.5 Tier 間 lifecycle
+### <a id="tier-lifecycle"></a>10.5 Tier 間 lifecycle
 
 content は tier 間を移動しうる。2026-04-17 odakin-prefs で観察された例:
 
@@ -779,7 +780,7 @@ content は tier 間を移動しうる。2026-04-17 odakin-prefs で観察され
 **incidents archive の 3-stage lifecycle** (odakin-prefs で実装):
 `staging-incidents.md` (未結晶、2 件目待ち) → 結晶化 → `work-discipline.md` rule (T1) + narrative を `incidents.md` (T3) に移管。
 
-### 10.6 適用例 (2026-04-17 odakin-prefs)
+### <a id="tier-application-example"></a>10.6 適用例 (2026-04-17 odakin-prefs)
 
 - T0: `CLAUDE.md` (125→108 lines)、`MEMORY.md` (100→41 lines)
 - T1: `work-discipline.md` (268→321 lines、新規 7 rule 追加後に -40 の narrative 抽出)、`push-workflow.md` (87→85 lines、3 incident narrative 抽出後)
@@ -788,7 +789,7 @@ content は tier 間を移動しうる。2026-04-17 odakin-prefs で観察され
 
 結果: T0+T1 auto-load 569 (pre-restructure 推定) → 555 lines (post-restructure)、T3 に ~600+ lines の narrative/meta を隔離保持 (情報損失なし)。
 
-### 10.7 auto-context byte budget (行数 proxy からの脱却)
+### <a id="auto-context-byte-budget"></a>10.7 auto-context byte budget (行数 proxy からの脱却)
 
 Tier 切り分けと並行で、**T0+T1 の byte 総量**を測定する。LLM context は token (≈ 4 bytes) で measured されるため、行数 threshold だけでは autocompact 頻度を説明できない。行数を満たしていても 1 行 あたりの密度が高いと context 消費は膨らみ、session 当たりの autocompact 回数を早める。
 
@@ -803,7 +804,7 @@ Tier 切り分けと並行で、**T0+T1 の byte 総量**を測定する。LLM c
 
 **運用**: SESSION.md を書き足す時は `wc -c` で byte を即確認。8 KB 超過が見えたら dense row を pointer に差し戻す ( retroactive reorg ほど大掛かりでなく、その場で逆流を止める習慣で充分)。
 
-### 10.8 削除・委譲判断の trap
+### <a id="deletion-delegation-trap"></a>10.8 削除・委譲判断の trap
 
 tier 化 (§10.2) と byte budget (§10.7) で「どのファイルを減量するか」の方向性は見えるが、**どの行を削るか**の判断には系統的な失敗パターンがある。2026-04-18 の claude-config への §7 retroactive reorg 自己適用で抽出。
 
@@ -827,7 +828,7 @@ tier 化 (§10.2) と byte budget (§10.7) で「どのファイルを減量す�
 
 ---
 
-### 10.9 Code を canonical とする doc dedup pattern (§10.8 と併読)
+### <a id="code-canonical-doc-dedup"></a>10.9 Code を canonical とする doc dedup pattern (§10.8 と併読)
 
 doc 側の table が code facts を duplicate している場合 (parameter 値 / TypeScript 型 / enum 等)、**canonical source は code**。doc は code への pointer を置くだけで、値や型の table は再掲しない。duplication は以下を招く:
 
@@ -848,7 +849,7 @@ doc 側の table が code facts を duplicate している場合 (parameter 値 
 
 **2026-04-18 LorentzArena**: 2+1/CLAUDE.md から Parameters table (80 行) を削除し `constants.ts` pointer に移行。**§10.8 の事例が示すように初期 ROI 判断は再検討対象**。次 session で constants.ts の JSDoc 網羅性を確認し、description column が失われているなら docs/architecture.md に restore する判断が必要。
 
-### 10.10 CLAUDE.md chain の nested auto-load (Claude Code 実装依存)
+### <a id="claudemd-chain-nested-autoload"></a>10.10 CLAUDE.md chain の nested auto-load (Claude Code 実装依存)
 
 Claude Code は CWD から上向きに `CLAUDE.md` chain を全て auto-load する。sub-project で作業する場合、例えば CWD = `~/Claude/LorentzArena/2+1/` なら:
 
@@ -865,7 +866,7 @@ Claude Code は CWD から上向きに `CLAUDE.md` chain を全て auto-load す
 
 **2026-04-18 LorentzArena 実証**: `2+1/CLAUDE.md` 364 → 97 (-267 lines)、chain 全体 505 → 238 (-267)。
 
-### 10.11 「超要約 (super-summary)」pattern
+### <a id="super-summary-pattern"></a>10.11 「超要約 (super-summary)」pattern
 
 slim 化した CLAUDE.md には「アーキテクチャ超要約」section を 1 つ置く。**5-8 項目 × 1 行 (+ 詳細は `docs/architecture.md §X` pointer)** で session 冒頭に orientation を確実に供給。
 
@@ -878,7 +879,7 @@ slim 化した CLAUDE.md には「アーキテクチャ超要約」section を 1
 
 **例** (2026-04-18 LorentzArena 2+1/CLAUDE.md §アーキテクチャ超要約): 描画 / 物理 / ネットワーク / State / Message / Parameters の 6 項目、各 1-2 行 + 詳細 pointer。
 
-### 10.12 Migration level の階段
+### <a id="migration-level-ladder"></a>10.12 Migration level の階段
 
 単発ではなく**多段階 migration** として構造化すると健全:
 
@@ -893,11 +894,11 @@ slim 化した CLAUDE.md には「アーキテクチャ超要約」section を 1
 
 ---
 
-## 11. In-plan exploration trail — single-session walkback の保存
+## <a id="in-plan-exploration-trail"></a>11. In-plan exploration trail — single-session walkback の保存
 
 §6 で establish した DESIGN.md / EXPLORING.md 分離は **cross-session 探索** (= EXPLORING にエントリを残し、 後で結晶したら DESIGN に promote) を扱う。 これとは別軸で、 **同 session 内で plan が iteration を経て複数案を撤回しながら最終決定に着地する** ケースの content保全 pattern を 2026-05-06 LorentzArena NPC 非対称 plan で抽出。
 
-### 11.1 問題: walkback の trail が plan close 時に消える
+### <a id="walkback-trail-disappears"></a>11.1 問題: walkback の trail が plan close 時に消える
 
 長 session で plan を立てて iterate するとき、 以下の dynamics が起こる:
 
@@ -909,13 +910,13 @@ slim 化した CLAUDE.md には「アーキテクチャ超要約」section を 1
 
 このとき plan には C 案だけが残り、 **A → B → C の walkback trail が消える**。 しかし trail こそが「なぜ C なのか」 の理解に必要 — 後の reader が「A や B はなぜダメだったのか?」 を再質問する元手になる情報が失われている。
 
-### 11.2 §6 EXPLORING.md との違い
+### <a id="exploring-md-difference"></a>11.2 §6 EXPLORING.md との違い
 
 §6 は **「未決定の探索」 を DESIGN.md と分離**するため EXPLORING.md を作る pattern。 探索が結晶したら DESIGN.md に promote、 古い候補は消す。
 
 本節 §11 は **「決定済 plan 内の walkback 保存」** で、 plan は decision form で close するが decision に至るまでの撤回経緯を残したい。 EXPLORING.md には行かない (= もう探索じゃない、 plan は close する) し、 plan 本体に trail を埋め込む。
 
-### 11.3 解決: plan §1.6 etc. に「探索過程」 セクションを置く
+### <a id="exploration-trail-section"></a>11.3 解決: plan §1.6 etc. に「探索過程」 セクションを置く
 
 plan の §1 (= 思想・前提) の subsection (例: §1.6 「探索過程」) に、 session 内 iteration の trail を時系列で記録:
 
@@ -940,7 +941,7 @@ plan の §1 (= 思想・前提) の subsection (例: §1.6 「探索過程」) 
 > <最終案を導出する N つの insight の統合 framing>
 ```
 
-### 11.4 適用判断: いつ §1.6 を書くか
+### <a id="when-to-write-trail"></a>11.4 適用判断: いつ §1.6 を書くか
 
 trail 保存に値するのは「**撤回された案が plan close 時点でも反省的価値を持つ**」 場合のみ:
 
@@ -949,7 +950,7 @@ trail 保存に値するのは「**撤回された案が plan close 時点でも
 
 **rule of thumb**: plan close 時に「`§11 やらないこと` に rejected proposal を追加するか?」 と問う。 追加するなら §1.6 にも探索の trail を残すと整合的 (= rejected proposal の rationale が trail に紐づく)。
 
-### 11.5 §11 「やらないこと」 との関係
+### <a id="rejected-alternatives-relationship"></a>11.5 §11 「やらないこと」 との関係
 
 plan の §11 「やらないこと」 (= rejected alternatives + 却下根拠 + 将来再開 trigger) は **decision-form の rejection 記録**。 §1.6 探索過程は **process-form の trail**。 両者は重複しない:
 
@@ -958,21 +959,21 @@ plan の §11 「やらないこと」 (= rejected alternatives + 却下根拠 +
 
 §11 だけだと「却下根拠は分かるが、 そもそもなぜ提案されたのか?」 が見えない。 §1.6 だけだと「将来また同じ案が出たらどう判断するか?」 の re-decision 材料がない。 両方あって初めて「**なぜ提案されたか + なぜ却下されたか + 将来再開条件**」 が一貫した narrative として読める。
 
-### 11.6 適用事例
+### <a id="trail-application-example"></a>11.6 適用事例
 
 - **2026-05-06 LorentzArena NPC 非対称 causality plan** ([`plans/2026-05-06-npc-asymmetric-causality.md`](https://github.com/sogebu/LorentzArena/blob/main/2%2B1/plans/2026-05-06-npc-asymmetric-causality.md) §1.6): user の Bug 14 propagation race 議論からの分岐で、 (I) NPC 非対称 → (II) dead = 死亡時時空点 → (II'') dead-skip 完成 → (II''') mean formula + self 包含 の 4 案を経て (II)/(II'') の 2 段 walkback で (I) + (II''') + (III) に着地。 (II)/(II'') 撤回理由 (= false premise 発見、 user の structural insight) を §1.6 に記録、 §11.12 「やらないこと」 に対応する decision-form rejection と紐づけ。 後の reader が plan を読むだけで「なぜ §1 が dead を virtualPos で寄与させる framing なのか」 を再構築できる
 
 ---
 
-## 12. 監視 list の scope marker — 「監視」 と「禁止」 の categorical 分離
+## <a id="monitoring-list-scope-marker"></a>12. 監視 list の scope marker — 「監視」 と「禁止」 の categorical 分離
 
-### 12.1 観察された pathology
+### <a id="monitoring-scope-pathology"></a>12.1 観察された pathology
 
 DESIGN.md / 設計 docs で「**drift 監視のため定期 re-grep 推奨**」 のような **list 形 audit checklist** を運用していると、 list が implicit な scope を持って blind spot を生むことがある。
 
 具体例: list の entry が全て「docs (= CONVENTIONS.md / conventions/*.md)」 に偏っていて、 「scripts / hooks / setup.sh 等の executable surface」 が暗黙のうちに対象外扱いされる経路。 list の前文には「定期 re-grep」 とあるだけで、 (a) 何の category を対象に grep するか、 (b) 何が categorically 対象外か、 が明示されていない。 結果: 同 class の violation が executable surface に蓄積、 「list で監視しているから大丈夫」 という錯覚で audit が skip される。
 
-### 12.2 「監視」 と「禁止」 の categorical 分離
+### <a id="monitoring-vs-prohibition-separation"></a>12.2 「監視」 と「禁止」 の categorical 分離
 
 ある violation class に対して、 surface ごとに対処レベルが異なる場合がある:
 
@@ -981,7 +982,7 @@ DESIGN.md / 設計 docs で「**drift 監視のため定期 re-grep 推奨**」 
 
 両者は categorical に分離されるべきで、 同 list に混在させると論理が壊れる。 例えば「docs 内の odakin 名言及」 は 「監視」 (= 意図的に置いている、 削除トリガー で発火)、 「executable code 内の odakin 名言及」 は 「禁止」 (= layer-1 audience contract 違反、 即修復対象)。
 
-### 12.3 解法: explicit scope marker を必須化
+### <a id="explicit-scope-marker"></a>12.3 解法: explicit scope marker を必須化
 
 監視 / audit list を書くときは、 list の前文または冒頭 row に **explicit scope marker** を含める:
 
@@ -994,17 +995,17 @@ DESIGN.md / 設計 docs で「**drift 監視のため定期 re-grep 推奨**」 
 
 scope marker は **list の機能の一部**。 marker 無しの list は「実は何を監視しているか暗黙」 で、 数か月後の reader が誤って scope 外も含むと解釈する経路を持つ。
 
-### 12.4 由来
+### <a id="monitoring-scope-origin"></a>12.4 由来
 
 2026-05-10 claude-config self-audit で `DESIGN.md §「自己言及的 odakin 記述」` list (= 4 entries の docs 監視 list) が hooks / scripts / setup.sh の同 class violation を見逃したケース。 list 自身は「drift 監視のため定期 re-grep 推奨」 と書いてあったが、 暗黙 scope = docs のみだったため、 同 session の `hooks/memory-guard*.sh` の `odakin-prefs/` literal は list に登録されておらず、 final cross-cutting sweep で初めて発見された。 修復として list 前文に explicit scope marker を追加 (= claude-config commit `e3179c5`)、 「executable code 内の literal は本表ではなく即修復対象 (= 監視ではなく禁止)」 を categorical に明示。
 
-### 12.5 適用範囲
+### <a id="monitoring-scope-applicability"></a>12.5 適用範囲
 
 - audit / drift / monitoring / re-grep / track と書かれた list 全般
 - list が複数 surface (= docs + code + config 等) にまたがる候補 violation の subset を扱う場合
 - 「意図的記述」 と 「bug」 を同 class violation で区別する必要があるとき (= surface 別に対処レベルが異なる typical case)
 
-### 12.6 周辺規律
+### <a id="monitoring-scope-related-rules"></a>12.6 周辺規律
 
 - §3 「規約追加の判断基準」 の延長: list の scope を明示しないのは「規約があるが読まれない」 の典型 pathology
 - [`conventions/debugging-discipline.md §4`](../conventions/debugging-discipline.md) (sibling audit) の前提: scope が明示されていない list は sibling 漏れの源、 sweep が補完
@@ -1012,9 +1013,9 @@ scope marker は **list の機能の一部**。 marker 無しの list は「実�
 
 ---
 
-## 13. Cross-repo refactor の migration ordering — データ側を先に commit
+## <a id="cross-repo-migration-ordering"></a>13. Cross-repo refactor の migration ordering — データ側を先に commit
 
-### 13.1 観察された footgun
+### <a id="migration-order-footgun"></a>13.1 観察された footgun
 
 複数 repo (= 同一 owner の cross-repo、 cross-layer、 collaborator-shared 含む) を跨いで refactor する場合、 commit / push の順序によって時間窓 (= time window) で意図しない state が出現する。
 
@@ -1025,7 +1026,7 @@ scope marker は **list の機能の一部**。 marker 無しの list は「実�
 
 両順序とも graceful skip 設計なら functional regression は無いが、 正順は「想定外動作期間」 を最小化する。
 
-### 13.2 原則: データ側を先に commit、 コード側を後に commit
+### <a id="data-first-commit-principle"></a>13.2 原則: データ側を先に commit、 コード側を後に commit
 
 cross-repo refactor で 「repo A のコードが repo B のデータを read する」 形になる場合、 **B を先 / A を後** で push する:
 
@@ -1034,7 +1035,7 @@ cross-repo refactor で 「repo A のコードが repo B のデータを read �
 | **データ側 (= 受動側)** | 個人層 / config registry / lookup table / 共通 fixture | **先** push |
 | **コード側 (= 能動側)** | bootstrap script / runtime reader / consumer | **後** push |
 
-### 13.3 graceful skip 設計の併用
+### <a id="graceful-skip-design"></a>13.3 graceful skip 設計の併用
 
 正順だけで footgun は減るが、 完全に防ぐには **コード側を graceful skip 設計** にする (= データが無くても crash せず空 array / no-op で続行)。 これにより:
 
@@ -1044,7 +1045,7 @@ cross-repo refactor で 「repo A のコードが repo B のデータを read �
 
 graceful skip + 正順 push の組み合わせで、 (a) 想定外動作期間最小化、 (b) edge case の resilience 両方を確保。 graceful skip 単独では「想定外動作期間に skip が走って setup が無音失敗」 という silent regression 経路が残るため、 慣例としての正順 push は依然必要。
 
-### 13.4 collaborator-shared 場合
+### <a id="collaborator-shared-ordering"></a>13.4 collaborator-shared 場合
 
 repo A と repo B が別 maintainer の場合、 atomic な順序確保はできない (= 両 maintainer の協調が要る)。 戦略:
 
@@ -1054,11 +1055,11 @@ repo A と repo B が別 maintainer の場合、 atomic な順序確保はでき
 
 multi-maintainer の場合、 順序保証よりも graceful skip の方が defensive。 順序は best effort、 設計は worst case 想定。
 
-### 13.5 由来
+### <a id="migration-order-origin"></a>13.5 由来
 
 2026-05-10 claude-config self-audit で `setup.sh:863` の `SECRETS_REPOS` runtime hardcode (= 所属機関名を含む repo 名を含み CLAUDE.md L105 違反) を個人層 `secrets-repos.txt` 外出しに refactor した際、 `odakin-prefs` commit `b62bb7d` (= データ側) を先行 commit、 `claude-config` commit `13eba10` (= コード側) を後 commit で進めた事例。 graceful skip も併用 (= LAYER 空 / file 不在で `SECRETS_REPOS=()`) しているため、 仮に逆順でも functional regression は発生しないが、 慣例として正順を採用することで「想定外動作期間 = 0」 を達成。
 
-### 13.6 適用範囲
+### <a id="migration-order-applicability"></a>13.6 適用範囲
 
 - 同一 owner の cross-repo refactor (= 4 層 cross-layer 含む)
 - collaborator-shared repo 間の refactor (= layer 2 内の repo 間 + layer 1↔2 等)
@@ -1066,7 +1067,7 @@ multi-maintainer の場合、 順序保証よりも graceful skip の方が defe
 
 データを read する code が新規導入される場合の汎用 pattern。 read される data が既に存在する code を変更するだけなら本原則は適用外。
 
-### 13.7 周辺規律
+### <a id="migration-order-related-rules"></a>13.7 周辺規律
 
 - §2 「ルールの重複を避ける」 の延長: data 側を canonical とし code 側は読み取り経路 (= ポインタ) として 1 ファイル定義
 - [`conventions/shared-repo.md §「公開前の Audit」`](../conventions/shared-repo.md): collaborator-shared repo の commit 規律
@@ -1074,11 +1075,11 @@ multi-maintainer の場合、 順序保証よりも graceful skip の方が defe
 
 ---
 
-## 14. 大規模 reference / gotcha convention の intra-file 構造 — slug identity + 検証可能 index
+## <a id="intrafile-slug-identity"></a>14. 大規模 reference / gotcha convention の intra-file 構造 — slug identity + 検証可能 index
 
 §10 (File-role architecture) は **file 間**の auto-load tier 配置を扱う。 本節はその裏の concern = **単一 convention が大きくなった時の file 内部構造**。 落とし穴集・reference 集のように「1 file に多数の独立 entry が貯まる」 convention が肥大すると、 §10 の tier 移動とは別の保守 pathology が現れる。
 
-### 14.1 trigger signal (= 3 つのいずれか)
+### <a id="intrafile-trigger-signals"></a>14.1 trigger signal (= 3 つのいずれか)
 
 - **(a) サブセクション過多**: `###` が数十に達し、 flat namespace で navigation / 重複検出が困難
 - **(b) letter-suffix 番号の増殖**: positional 番号 (`§2-4`) が満杯になり、 中間挿入のたびに接尾辞 (`§2-4b`) が増える = **番号が「位置」 に identity を縛っている**証拠
@@ -1086,7 +1087,7 @@ multi-maintainer の場合、 順序保証よりも graceful skip の方が defe
 
 1 つでも該当したら identity を**位置非依存**にする。
 
-### 14.2 cross-ref は positional 番号でなく安定 slug で
+### <a id="slug-over-positional"></a>14.2 cross-ref は positional 番号でなく安定 slug で
 
 各 entry に kebab-case の安定 slug を与え、 cross-ref を slug で書く (= markdown なら `<a id="slug">` anchor + `[`slug`](#slug)` link)。 利得: 挿入・並べ替え・**ファイル移動**で ref が壊れない、 semantic (番号より意味が読める)、 **validator で dangling 検出可能**。 旧 positional 番号は捨てるが、 他 doc の dated/historical 参照が解決し続けるよう **index に `legacy` として保存**する (= 番号の identity でなく解決可能性だけ残す)。
 
@@ -1094,11 +1095,11 @@ multi-maintainer の場合、 順序保証よりも graceful skip の方が defe
 
 ⚠️ **機械 consumer (= detector の match pattern / registry の構造化 field / validator 設定) には living doc の positional § 番号 string を一切与えない**。 prose の §-ref は renumber 時に人間が grep replace で追従できるが、 機械 match される "8.12" 等の string は renumber 後に**黙って**誤 suppress / 誤 match に転じ (= drift 検出器なら false negative 化 = 最悪方向)、 pattern 自体の validity を検証する仕組みは普通ない。 filename / title / slug を使う (凍結文書 = dated plan の § は不変なので可)。 既に与えてしまったのを発見したら、 「restructure 時に同時更新が必須」 という**将来条件付き注記で残すのでなくその場で置換する** — その注記は recall 依存 (= §8.12 の最弱発火面) に landmine を置く行為で、 除去が安価な時点での即時除去が常に勝る。 (origin: 2026-06-13 — SoT registry の pointer_patterns に "8.12" を登録した同日、 起草者自身が「将来 restructure 時に要更新」 と注記で残す選択をし、 user 指摘「これはまずいんじゃないの」 で即時除去に転換。 除去後の検証で当該 pattern は冗長 〔= 全 mention が filename pointer で既に救済〕 とも判明 = positional pattern は不要なのに risk だけ足していた)
 
-### 14.3 薄い index で「DB の利点」 を prose を動かさず得る
+### <a id="thin-index-db-benefits"></a>14.3 薄い index で「DB の利点」 を prose を動かさず得る
 
 「entry が多い → DB 化したい」 直感の**正しい翻訳**は、 prose を yaml に移すことではない (= markdown-in-yaml は編集性を殺す + LLM consumer は grep で十分読める)。 **本文 prose は markdown のまま**、 別ファイルの薄い index (= `id` / `legacy` / `title` / `related` のメタだけ) で「join 検証 + 重複 surface」 という DB の利点だけを取る。 validator が (1) 全 ref が解決 (dangling 0)、 (2) 見出し ↔ index が全単射 (orphan 0)、 (3) 重複候補を keyword overlap で surface、 を機械化する。 ⚠️ prose を yaml に移すのは anti-pattern (= §2 の「定義は 1 箇所」 を index 側に誤適用しない、 prose が定義本体)。
 
-### 14.4 split-axis は access pattern に合わせる + slug を先に振る
+### <a id="split-axis-access-pattern"></a>14.4 split-axis は access pattern に合わせる + slug を先に振る
 
 肥大 convention を将来 file 分割するなら、 **何の軸で割るかは「何で引かれるか」 で決める**:
 
@@ -1107,11 +1108,11 @@ multi-maintainer の場合、 順序保証よりも graceful skip の方が defe
 
 🔑 **enabling insight = slug を先に振れば分割は ref-safe**: slug は identity を「位置」 からも「ファイル」 からも切り離す。 → **slug 化を先にやれば、 後続の topic 分割は ref を一切壊さない無痛操作**になる (= entry をどの file に動かしても slug ref は有効)。 だから順序は必ず **slug → 分割**。 分割自体は navigation pain が実証されてからで良い (= reading は grep で困らない、 §9.8 過剰対策の回避)。
 
-### 14.5 mechanical な部分は script 化 (§10.9 と整合)
+### <a id="mechanical-script-extraction"></a>14.5 mechanical な部分は script 化 (§10.9 と整合)
 
 reference convention 内の「反復実行・検証用の手順」 は illustrative な code 片のまま貯めず script に抽出し、 prose は薄い why/when + script pointer に寄せる (= §10.9 code-as-canonical の reference-convention 版)。 validator 自体もこの一例 (= 整合性検証を prose の「手で sweep せよ」 規律から決定論 script に移す)。
 
-### 14.6 由来 + worked example
+### <a id="intrafile-origin-example"></a>14.6 由来 + worked example
 
 2 つの観察から一般化 (= §9.8 「単一観察から飛ばない」 を満たす、 観察は 2 件):
 - 個人層の作業規律 doc の **recency 軸 hot/cold 分割** (archive-first restructure)
@@ -1119,7 +1120,7 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 
 決定的動機: 検証系 entry を追記した際、 それが既存 entry の mandate を掘り崩す regression を、 **機械検証が無いため手の多軸 sweep で初めて発見**した (= dangling / contradiction 検出が人手依存)。 数十 entry 規模でこれは破綻するため、 整合性検証を script 化する。
 
-### 14.7 cross-repo inbound-ref robustness — 下流からの参照を restructure で黙って壊さない
+### <a id="inbound-ref-robustness"></a>14.7 cross-repo inbound-ref robustness — 下流からの参照を restructure で黙って壊さない
 
 §14.2-14.6 は単一 convention の **内部**構造だった。 本節はその外向き双対。 **この共通規約 doc 群 (= layer 1) は最も多く参照され、 かつ public ゆえ自分の dependents (= private を含む下流 repo) を列挙できない** (= 依存が一方向にしか見えない非対称)。 ∴ restructure (= renumber / relocate / split) の inbound breakage を upstream 単独では検出も予防もできない。 robustness を 3 つに分散する:
 
@@ -1137,7 +1138,7 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 
 ---
 
-## 15. SoT consolidation recipe — README-as-SoT / 多重記述の是正手順
+## <a id="sot-consolidation-recipe"></a>15. SoT consolidation recipe — README-as-SoT / 多重記述の是正手順
 
 §2 の「定義は 1 箇所＋pointer」、 §14.3 の薄い index、 単一-SoT 原則は**断片**として既に存在する。 だが「同じ authoritative fact が複数 file に多重記述されてしまった状態を実際に直す」 という作業は ordered procedure を要し、 順序を誤ると外部 ref を壊す / 内容を silently 変えてしまう。 本節はその是正手順を 7 step に固定する:
 
@@ -1153,9 +1154,9 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 
 ---
 
-## 16. 要約は load-bearing な「関係」を不可視に落とす — derive-not-summarize の徹底
+## <a id="derive-not-summarize"></a>16. 要約は load-bearing な「関係」を不可視に落とす — derive-not-summarize の徹底
 
-### 16.1 観察された pathology
+### <a id="summarize-pathology"></a>16.1 観察された pathology
 
 ある事実の意味が、単一の節でなく**複数の節の関係**に宿ることがある。典型は**交渉された立場**: {① 既存の want / ② それと衝突する制約 / ③ 部分的な譲歩 / ④ yes-no の問い} (例: 「減らしたいが、この件では減らせない、ただし増えもしない、それで可か」)。意味は 4 部の**関係**であって、どの 1 節でもない。
 
@@ -1168,11 +1169,11 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 
 **再演の signature**: 同じ nuance が **2 回以上「訂正」される** (= re-drop)。「前に間違えた」 という散文注記は次の脱落を**防げない** (= §8 系の「散文規則は行動を縛らない → 設計で消すか機械化する」)。
 
-### 16.2 なぜ単一-SoT 原則 (§2/§15) では足りないか
+### <a id="why-single-sot-insufficient"></a>16.2 なぜ単一-SoT 原則 (§2/§15) では足りないか
 
 §2/§15 は「同じ事実を**複数 file に**重複させるな (= dedup)」。本節は直交する: **単一 file の単一記録**でも、source からの**要約**である限り fidelity を失う。問題は重複でなく **lossy transcription** であり、別 axis。
 
-### 16.3 修正 (構造的に強い順)
+### <a id="summarize-remediation"></a>16.3 修正 (構造的に強い順)
 
 1. **Derive, not summarize** — 「何を諮った/合意した/頼まれたか」型の事実は、**正本 = source artifact の逐語** (= 送信メールの原文) とし、要約は明示的に二次 + source への pointer。SoT 成熟度の「T1 generated/derived」を**散文台帳に適用**したもの。実務的帰結: 原本を**転送/引用**する方が語り直すより faithful (= reply domain では literal forward が最強)。
 2. **substance-first** — 記録の最も目立つ行は load-bearing な crux であって workflow status (「回答する」) ではない。matter には**検索 key と一致する home**を与える (= §14.2 の slug 同様、retrieval key を identity に)。
@@ -1180,7 +1181,7 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 4. **active completeness check** (= §15-5 の anchor token 機構の逆向き) — 実証済み再犯 nuance の**必須共起 token**を registry 登録し、topic を名指すのに token を欠く要約を flag。⚠️ 限界は §8.8 と同じ (登録 topic しか見ない) + 偶発 mention への false positive → **scope を「要約 field」に絞る**。補助輪であって芯ではない。
 5. **frame-first** — 要約前に matter の型 (capability / 交渉 / 通知 / 決定) を分類。型が load-bearing を決める (= 交渉なら trade-off が load-bearing で「背景」ではない)。型の取り違え (= 交渉を capability と読む) が crux を「背景」に降格する根。
 
-### 16.4 honest scope
+### <a id="summarize-honest-scope"></a>16.4 honest scope
 
 完全機械化は意味解析で hard。信頼できる芯は **1 (derive/verbatim)**。本節は §8.11 (= downstream net は intake で正しく encode された対象しか守れない) の specific form でもある: ここでの intake mis-encoding は「source を要約で写した」こと、leverage は「写さず原本を保つ」という設計判断。4 (check) は §8.11 が言う通り downstream の補助に過ぎない。
 
@@ -1188,7 +1189,7 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 
 ---
 
-## 変更履歴
+## <a id="changelog"></a>変更履歴
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
