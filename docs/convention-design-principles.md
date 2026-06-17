@@ -716,6 +716,19 @@ Claude 側の規律 (work-discipline.md 相当):
 
 **適用例 (2026-06-13)**: §2.3「SoT の read 側」を新設した直後、その origin 例で external service（予約サイト）を SoT 扱いした。原因は §2.3 v1 の「source document」が **「内部の非選択 store」と「制御不能な external source」の 2 つを 1 語に潰していた**こと。user 指摘で external source の区別を §2.3 に追加 = 自己違反が taxonomy の gap を probe した実例。RCA そのものを書く act の中で、その RCA が戒める分類誤りを再演した（= 「直前 discipline の self-apply」の specific 化）。
 
+### 9.10 完全性 audit の add-bias — 「何が欠けているか」 frame が低価値・mis-weighted な追加を製造する
+
+coverage/completeness を目的とする audit pass (「どの cross-ref が欠けているか」「何を記録し損ねたか」「全 instance を繋いだか」) は構造的に**追加へ偏る**: frame 自体が「埋めるべき gap」 を探すので、 関係の薄い接続や低価値な finding を「欠落」 として**製造する**。§9.2 (= corpus が失敗のみ記録 → 予防一辺倒) の sibling だが mechanism が違う — 蓄積の非対称でなく **audit の問いの非対称** (「足りないものは?」 は常に何かを返す)。
+
+**cross-ref 域での具体 failure mode**: 一般原則 (= 親) の本文から tangential な niche instance (= 子) へ**下向き pointer** を張りたくなる。二重に悪い: (a) **重み付けの転倒** — 親の surface に niche 子を昇格させ一般則が domain-specific に見える / (b) **方向の転倒** — この system の流儀 (§1 配置原則 / §2 定義は home / kernel-up・instance-down) は具体→一般へ**上向き**。親が子を列挙し始めると全 niche 子への下向き pointer が溜まりスケールしない。これは §16 (= load-bearing でないものを prominent に置く mis-weighting) の audit 域での発現でもある。
+
+**restraint (= reflex)**:
+- **完全性は「instance が一般 home へ上向きに指す」 で満たされる、 親が instance を列挙して満たすのではない。** 接続を記録するなら子側に置く。
+- **「missing cross-ref / 欠落」 finding は relevance bar を通す**: 「2 つの考えが触れる」 では不十分、「読み手の判断を変える load-bearing な接続か」 を問う。触れるだけなら張らない (= over-cross-referencing は §2 dedup と逆向きの bloat)。
+- audit の goal を「未接続を全部繋ぐ」 でなく「**load-bearing な欠落を見つける**」 に framing し直す (= §9.8「単一観察から構造に飛ばない」 の audit-output 版)。
+
+由来 (2026-06-17): §16 を新設した直後の 4軸 sweep が「§16 が物理ノートの添字規約への cross-ref を欠く」 を missed-cross-ref finding として出し、 一般則 §16 から niche な数式記法規約へ下向き pointer を張った。 user 指摘「超絶マイナーな子と一般則なら後者が親、 親に子を並べるな」 で撤回。 **finding 自体が completeness-frame の add-bias product だった** (= §9.9 的に、 audit を書く act が自分の audit に §16 を踏ませた)。
+
 ---
 
 ## 10. File-role architecture — context 効率のための auto-load tier 設計
@@ -1187,3 +1200,4 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 | 2026-06-13 | §9.9 新設「新定義は origin 例で自己違反しやすい / 自己違反は under-specification の probe」 | §2.3 を新設した直後、 その origin 例で external service を SoT 扱いした自己違反を user が指摘 → §2.3 に external source 区別を追加した meta。 RCA を書く act 中でその RCA が戒める分類誤りを再演 = 「直前 discipline の self-apply」 の specific 化。 self-violation が定義の seam を probe する (= 「source document」 が内部非選択 store と external source を 1 語に潰していた) を一般化 |
 | 2026-06-13 | §9.9/§9.2 cross-ref 訂正 (mis-fit 削除) | §9.9 適用例 + changelog 行が §2.3 origin 事例を「§9.2 asymmetric reflection bias の一形態」と cross-ref していたのを fresh-eyes 独立検証で mis-fit と確認し削除。§9.2 = corpus の蓄積非対称 (失敗のみ記録 → 予防一辺倒肥大化、file 内の他 §9.2 言及と一貫) で、§9.9 の self-application miss (直前に書いた定義を自分の origin 例で破る) とは別機序。citation は surface 語「reflection」(= corpus が経験を非対称に映す vs 自己反省 act 中の盲点) の意味違いに乗っていた。純粋な §9.9 self-violation =「直前 discipline の self-apply」の specific 化として残置 |
 | 2026-06-17 | §16 新設「要約は load-bearing な関係を不可視に落とす — derive-not-summarize」 | 交渉案件の「肝」(= 既存削減要望に応えられないが増えはしない、で可か) が source・中間台帳・会話の各要約段で繰り返し palatable 半分へ圧縮され同一 nuance が 2 回 re-drop した RCA を一般化。inline §3 (expose/hide) の要約ドメイン双子 + §8.11 (intake encoding) の specific form。芯 = derive-not-summarize (原本逐語保持)、補助 = §15-5 逆向き completeness check。instance は個人層 work-discipline + email-office 記録に残置 (kernel-up/instance-down) |
+| 2026-06-17 | §9.10 新設「完全性 audit の add-bias」 | §16 新設直後の 4軸 sweep が一般則 §16 から niche な数式記法規約 (physics-notes 添字) へ下向き cross-ref を張る missed-cross-ref finding を出し user に撤回された RCA を一般化。完全性 frame は構造的に追加へ偏り低価値/mis-weighted な接続を製造 (§9.2 sibling・§16 の audit 域発現)。restraint = instance が一般 home へ上向き / missing-cross-ref は relevance bar / audit goal を「load-bearing な欠落」 に framing。 |
