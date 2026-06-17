@@ -1119,6 +1119,22 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 
 決定的動機: 検証系 entry を追記した際、 それが既存 entry の mandate を掘り崩す regression を、 **機械検証が無いため手の多軸 sweep で初めて発見**した (= dangling / contradiction 検出が人手依存)。 数十 entry 規模でこれは破綻するため、 整合性検証を script 化する。
 
+### 14.7 cross-repo inbound-ref robustness — 下流からの参照を restructure で黙って壊さない
+
+§14.2-14.6 は単一 convention の **内部**構造だった。 本節はその外向き双対。 **この共通規約 doc 群 (= layer 1) は最も多く参照され、 かつ public ゆえ自分の dependents (= private を含む下流 repo) を列挙できない** (= 依存が一方向にしか見えない非対称)。 ∴ restructure (= renumber / relocate / split) の inbound breakage を upstream 単独では検出も予防もできない。 robustness を 3 つに分散する:
+
+**(B) 参照する側の規律 (= inbound ref の書き方)**: 別 repo から layer-1 doc を指すときの優先順位 — ① **slug-anchor `file.md#slug`** (= renumber/reorder/intra-file 移動に耐える) / ② filename + 見出しテキスト or topic 名 / ③ **bare positional `§N.M` を単独 locator にしない** (= renumber で silent mis-resolve する、 §14.2)。 これは §14.2 (= intra-file「slug で ref」) の **cross-repo 版**。
+
+**(D) restructure する側の protocol**: layer-1 doc を restructure するときは —
+1. **slug-first** (§14.4): 識別子を slug 化してから renumber/split する (= slug 参照は無傷で残る)。
+2. **additive を default に**: slug を**足す**だけで §-番号は据え置く方が、 既存の positional inbound ref が壊れない (= 番号を動かさず slug を併設、 legacy mapping は §14.2)。 番号を実際に動かすなら、 下流 ref の migrate と**同 commit** で行う (§13 data-first)。
+3. **relocate したら旧 path を redirect** (= thin pointer file) するか、 同 commit で下流 fix (§15 step3 の「外部が指す path を dangle させない」)。
+4. **cross-repo sweep を同梱** (= §2.2「衝突宣言 sweep」 の cross-repo 版): restructure commit の前後で `scripts/check-inbound-refs.py` を回し、 HARD dangling (= 消えた file / anchor) を baseline に保つ。
+
+**(C) 検出器とその限界 (= 正直に明示)**: `scripts/check-inbound-refs.py` は **anchor 存在 / path 存在**という mechanically-checkable な HARD dangling のみ検出する。 **positional `§N.M` が renumber 後も同じ意味を指すか (= silent mis-resolve) は検出できない** (= §8.8 の semantic blind spot)。 ∴ §-ref を anchor に migrate するのが唯一の真の fix で、 検出器はその補完にすぎない (= fragile 件数を INFO で出すだけ、 「全部見た」 と読ませない §8.8 (3))。
+
+由来: 2026-06-16、 inbound ref を実測 (= ~1000 行が layer-1 doc を名指し、 robust な anchor 形は ~20、 fragile な positional は ~440) し、 「restructure すると下流が黙って壊れる」 構造を確認。 帰結として **slug 化の優先順位は内部 sub-section 数でなく inbound ref 数で決める** (= 最も参照される doc から slug-first)。 incident/設計史は odakin 個人層 plan に残置 (= kernel-up / instance-down)。
+
 ---
 
 ## 15. SoT consolidation recipe — README-as-SoT / 多重記述の是正手順
