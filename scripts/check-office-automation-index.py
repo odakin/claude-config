@@ -27,6 +27,12 @@ REF_RE = re.compile(r'\[`([a-z0-9][a-z0-9-]*)`\]\(#([a-z0-9][a-z0-9-]*)\)')
 BARE_SECTION_RE = re.compile(r'§([0-9]+(?:\.[0-9]+)?(?:-[0-9]+[a-z]?)?)')
 STOP = {"の", "は", "が", "を", "に", "で", "と", "vs", "=", "+", "/", "の落とし穴",
         "form", "cell", "xlsx", "docx", "pdf", "excel", "設定", "確認", "義務"}
+# Illustrative placeholders for the ref SYNTAX itself. convention-design-principles §14.2
+# shows `[`slug`](#slug)` as an EXAMPLE of how to write a slug ref, not a real cross-ref.
+# The meta-doc that documents the convention legitimately contains such placeholders; real
+# section slugs are always descriptive, never these bare words, so skipping them in the
+# dangling check is safe (§8.9 = filter legitimate non-violations).
+PLACEHOLDER_TARGETS = {"slug", "name", "id", "anchor", "their-name"}
 
 
 def parse_index(text):
@@ -122,6 +128,8 @@ def validate(doc, index_entries):
             if r not in idset:
                 fails.append(f"dangling: index '{e['id']}' related -> unknown '{r}'")
     for label, target in doc_refs(doc):
+        if target in PLACEHOLDER_TARGETS:
+            continue  # illustrative syntax example (e.g. §14.2's `[`slug`](#slug)`), not a real ref
         if target not in idset:
             fails.append(f"dangling: doc ref [#{target}] resolves to nothing")
         if label != target:
@@ -179,6 +187,7 @@ def selftest():
     good_doc = (
         '## <a id="alpha"></a>Alpha section\n'
         'See [`beta`](#beta) for details.\n'
+        'Syntax example [`slug`](#slug) is a placeholder, must NOT count as a real ref.\n'
         '## <a id="beta"></a>Beta section\n'
         'Refs [`alpha`](#alpha). External §14 should be ignored.\n'
     )
