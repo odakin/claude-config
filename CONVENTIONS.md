@@ -1,4 +1,5 @@
 # リポジトリ規約
+<!-- slug index: CONVENTIONS.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
 
 最終更新: 2026-04-07
 
@@ -13,7 +14,7 @@
 
 ---
 
-## 1. リポジトリ作成・同期
+## <a id="repo-create-sync"></a>1. リポジトリ作成・同期
 
 ```bash
 gh repo create <username>/<name> --private --description "<English description>" --clone
@@ -25,7 +26,7 @@ description は英語。リポ一覧の正本は個人層の `repos.md`（未設
 
 ---
 
-## 2. 必須ファイル
+## <a id="required-files"></a>2. 必須ファイル
 
 `CLAUDE.md` / `SESSION.md` / `DESIGN.md` などの dynamic docs は **snapshot 原理** に従う — 現状のみを記録し、graduation event (決定結晶 / 判断超越 / タスク完了 / 規約昇格) では source から除去、履歴は git log に委ねる。下記「任意ファイル」§6 (EXPLORING lifecycle) と `docs/convention-design-principles.md` §7 (DESIGN lifecycle) はこの原理の file-specific application。
 
@@ -40,7 +41,7 @@ description は英語。リポ一覧の正本は個人層の `repos.md`（未設
 
 CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「なぜそうしたか」(judgmental)、SESSION.md は「今どこにいるか」(揮発的)、README は「外の人が 30 秒で判断するための玄関」。
 
-### README の流儀
+### <a id="readme-style"></a>README の流儀
 
 **役割**: GitHub を開いた未知の訪問者が、(a) これは何か、(b) 自分の問題を解くか、(c) 次にどこを読むべきか、を短時間で判断するための index。リポの開発者・Claude 自身が日常作業で読むのは CLAUDE.md / SESSION.md で、README ではない。
 
@@ -66,7 +67,7 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
 
 **他リポ整備時**: 既存リポが claude-config 準拠になったとき、README を上のパターンで整える。CLAUDE.md / SESSION.md / DESIGN.md の整備と並行で行い、重複が見つかれば README 側を削る。
 
-### 任意ファイル
+### <a id="optional-files"></a>任意ファイル
 
 **`ARCHITECTURE.md`**（または `docs/ARCHITECTURE.md`）— コードの 30,000ft ナラティブ。レイヤ構成・主要概念・データフローを散文で書く。
 
@@ -87,7 +88,7 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
 - **DESIGN.md との境界判別:** 迷ったら DESIGN.md に書く。EXPLORING.md は「完全に option space を広げている段階」専用。70% 決まっていて 30% 迷っている状態は DESIGN.md に「暫定決定（再検討トリガー: X）」として書く
 - **根拠:** 決定（安定・長寿命）と探索（不安定・短寿命）を同じファイルに同居させると DESIGN.md の役割契約（「なぜそうしたか」）が弱まり、reader の signal-to-noise が下がる。詳細は `docs/convention-design-principles.md` §6
 
-### 記録先の判別
+### <a id="record-location-decision"></a>記録先の判別
 
 | 情報の性質 | 書き先 |
 |---|---|
@@ -108,7 +109,7 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
 
 ---
 
-## 3. 自動更新プロトコル
+## <a id="auto-update-protocol"></a>3. 自動更新プロトコル
 
 **人間に言われなくても自動で行う。**
 
@@ -120,7 +121,7 @@ SESSION.md:
 
 MEMORY.md（index-only、`docs/convention-design-principles.md` §8.7）: マシンローカル事実への pointer のみ置く。2 週間以上未使用プロジェクトを除去、解決済み案件を除去。feedback 形式の残留があれば削除（§8.3 で `memory-guard.sh` が deny する対象）。
 
-### push の粒度と障害対応
+### <a id="push-granularity-and-recovery"></a>push の粒度と障害対応
 
 git の状態管理は 1 本の `PostToolUse` hook で機械的に支援する: `claude-config/hooks/git-state-nudge.sh`。Bash 実行ごとに動作し、現在の CWD が git リポなら以下 3 ケースを検査して警告を session context に注入する。clean / in-sync な repo では完全に silent (Claude Code の hook 実行 notification も出ない)。
 
@@ -135,7 +136,7 @@ git の状態管理は 1 本の `PostToolUse` hook で機械的に支援する: 
 - **作業単位ごとの push を推奨。** まとまった単位 (1 件の処理完了、1 つの構造変更など) が終わるごとに commit + push すると、後で他の作業者と衝突したときの解決が楽になる。バッチ push する流儀の人は各自の判断で。ただし §4 の「コミット後は常に push」は必須で、その強制は hook が担う。
 - **push 障害は即座に解決する。** rebase コンフリクト・認証エラー等を放置しない。大規模な diverge が判明した場合は、破壊的な `reset --hard` を実行する前に必ず `/tmp` などに現状をバックアップ。
 
-### push 前チェック
+### <a id="pre-push-check"></a>push 前チェック
 
 1. SESSION.md 更新（長ければ棚卸し） 2. CLAUDE.md 更新（構造変更時のみ） 3. 4軸レビュー → commit → push。軽微な変更では 2-3 スキップ可。
 
@@ -154,7 +155,7 @@ git の状態管理は 1 本の `PostToolUse` hook で機械的に支援する: 
 
 **`git fetch` を最初に置く理由:** `git status` の `Your branch is up to date with 'origin/main'` 表示は **fetch 前なら local の origin/main ref が stale** であり、リモートが先行していても "up to date" と出る。共有リポ (共同編集者あり / 自分の別マシンも push しうる) では fetch なしの状態確認は誤読を生む。`git-state-nudge.sh` hook の first-sighting fetch は 4h window で抑制される (= 直近 4h 以内に同 repo を触ったマシン/セッションがあると fetch しない) ため hook 単独では穴がある。手動 fetch + behind 確認を作業開始時の必須項目にすることで、「いきなり commit して non-fast-forward reject」「stale ref 上の意思決定」を防ぐ。
 
-### sweep / review / audit の goal alignment
+### <a id="sweep-goal-alignment"></a>sweep / review / audit の goal alignment
 
 4 軸 sweep / 3 軸 sweep / 任意の review / audit / verification / check / 確認 / チェック 系の作業を呼ばれた時、 **goal は error 発見であって report 生産ではない**。 sweep 開始時に chat 本文で goal declaration を書く: 「**今から error 発見試行に入る、 sweep report 生産ではない**」。 sweep 中の各 step で「これは error を expose する操作か、 cell を埋める操作か」 を 1 度問い、 cell 埋めなら expose 操作に置換する。
 
@@ -189,7 +190,7 @@ step 3 を省略すると、 1 修正で別 issue を作り、 user の次 turn 
 
 **実例 (= 2026-05-19 cosmology infographic、 [odakin/infographics](https://github.com/odakin/infographics) `cosmology-history/`)**: 20 turn の user iteration で、 私が「fix した」 と複数 turn 報告した直後に user が screenshot 添付で「ぜんぜん減ってなくない？空白」 と再指摘した事例多数。 build success / log clean を「✓ pass」 と扱った結果、 visual に残った gap / overflow / 重なりに私自身は気付かず、 user 確認のたびに新 issue が露見する loop が発生。 各 turn の cascade は `conventions/tikz-pgfplots.md §「サイクル: 『compile 成功』 ≠ 『visual 成功』」` で TikZ/pgfplots 特化の症例集として残置。
 
-### SESSION.md 棚卸し時の cross-repo anchor preservation
+### <a id="session-trim-anchor-preservation"></a>SESSION.md 棚卸し時の cross-repo anchor preservation
 
 SESSION.md の棚卸し (= trim / restructure / archive 切り出し / 専用 file 抽出) は section heading の rename / 削除 / 移動を伴うため、 **他リポからの cross-repo anchor refs が壊れる**。 「⌘+click でリンク先 section に飛ぶ」 reader experience が「path は valid だが anchor text が file 内に存在しない」 で broken 化、 archive 移動された content は forwarding pointer + 1 extra click が必要に。 棚卸しの **同 turn 内に cross-repo grep matrix を必ず回す** ことで expose + reroute:
 
@@ -222,7 +223,7 @@ grep -rn '<target-repo>/SESSION.md §' --include='*.md' --include='*.yaml' ~/Cla
 
 > **実例 (2026-05-26 物理研究 project)**: SESSION.md 冒頭 retraction blocks (3 件) を `RETRACTIONS.md` に extract、 SESSION.md に「🚨 必読: RETRACTIONS.md」 forwarding pointer 設置。 ただし internal docs 11 件 (= DESIGN.md / plans/ / notes/ の各 file) が「SESSION.md 冒頭 retraction block」 を verbatim ref していたため、 forwarding pointer 経由で 1-extra-click 化。 同 session 内に sed で全 11 件を `RETRACTIONS.md` 直 ref に reroute。
 
-### 「別ファイル抽出 + 参照」 pattern の有効性 criterion
+### <a id="extract-reference-pattern-criterion"></a>「別ファイル抽出 + 参照」 pattern の有効性 criterion
 
 SESSION.md の content を別 file に抽出する判断軸 (= 棚卸し時の「inline 維持 vs 抽出」 dispatch):
 
@@ -252,7 +253,7 @@ SESSION.md の content を別 file に抽出する判断軸 (= 棚卸し時の�
 
 ---
 
-## 4. Git 規約
+## <a id="git-conventions"></a>4. Git 規約
 
 - ブランチ `main` 統一。コミットメッセージは英語・動詞始まりを推奨（命令形: `Add X`, `Fix Y`, `Update Z`）。絶対ルールではなく、名詞句始まりや過去形でも意味が通れば許容
 - **コミット後は常に push。** 複数リモートがあれば全リモートに push。`git-state-nudge.sh` hook (§3) が直近 60 秒以内の未 push commit を機械的に検出して警告するため、Claude はこの警告を見たら次の Bash で push を実行すること
@@ -261,7 +262,7 @@ SESSION.md の content を別 file に抽出する判断軸 (= 棚卸し時の�
 
 ---
 
-## 5. 安全規則（絶対厳守）
+## <a id="safety-rules"></a>5. 安全規則（絶対厳守）
 
 1. 他人のファイル削除前に確認しユーザーに提示
 2. 既存データ削除時はリネーム (`mv old old.bak`) を優先提案
@@ -275,6 +276,6 @@ SESSION.md の content を別 file に抽出する判断軸 (= 棚卸し時の�
 
 ---
 
-## 6. 網羅性の検証
+## <a id="completeness-check"></a>6. 網羅性の検証
 
 「全部」を主張する場合、列挙の前に機械的な検証基準を定め、列挙後に照合する。

@@ -1,0 +1,61 @@
+# Stable slug index for CONVENTIONS.md (Phase 1 slug migration).
+# id = canonical identity (cross-refs use it). legacy = pre-migration §-number,
+# kept ONLY here so dated/historical inbound refs stay resolvable.
+# related = slugs this section cross-references. Validated by
+# scripts/check-office-automation-index.py (dangling=0 / orphan=0).
+sections:
+  - id: repo-create-sync
+    legacy: "1"
+    level: 2
+    title: "1. リポジトリ作成・同期"
+  - id: required-files
+    legacy: "2"
+    level: 2
+    title: "2. 必須ファイル"
+    related: [readme-style, optional-files]
+  - id: readme-style
+    level: 3
+    title: "README の流儀"
+    related: [required-files]
+  - id: optional-files
+    level: 3
+    title: "任意ファイル"
+    related: [required-files, record-location-decision]
+  - id: record-location-decision
+    level: 3
+    title: "記録先の判別"
+  - id: auto-update-protocol
+    legacy: "3"
+    level: 2
+    title: "3. 自動更新プロトコル"
+    related: [push-granularity-and-recovery, pre-push-check, sweep-goal-alignment, session-trim-anchor-preservation, extract-reference-pattern-criterion]
+  - id: push-granularity-and-recovery
+    level: 3
+    title: "push の粒度と障害対応"
+    related: [auto-update-protocol, pre-push-check]
+  - id: pre-push-check
+    level: 3
+    title: "push 前チェック"
+    related: [push-granularity-and-recovery, sweep-goal-alignment]
+  - id: sweep-goal-alignment
+    level: 3
+    title: "sweep / review / audit の goal alignment"
+    related: [pre-push-check]
+  - id: session-trim-anchor-preservation
+    level: 3
+    title: "SESSION.md 棚卸し時の cross-repo anchor preservation"
+  - id: extract-reference-pattern-criterion
+    level: 3
+    title: "「別ファイル抽出 + 参照」 pattern の有効性 criterion"
+  - id: git-conventions
+    legacy: "4"
+    level: 2
+    title: "4. Git 規約"
+  - id: safety-rules
+    legacy: "5"
+    level: 2
+    title: "5. 安全規則（絶対厳守）"
+  - id: completeness-check
+    legacy: "6"
+    level: 2
+    title: "6. 網羅性の検証"
