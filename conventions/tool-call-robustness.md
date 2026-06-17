@@ -140,7 +140,7 @@ poisoned session が残す **handoff / 完了報告 / 自分の fabrication に�
 
 → 含意 (= 「rotted-session 回収」 + 「偽成功変種」 の ground-truth 原則を自己言及報告にも適用): 腐った session の handoff を継ぐ新 session は **commit hash・「やった」 主張・「捏造した」 主張のいずれも `git cat-file`/`git log`/transcript で個別検証**してから事実として扱う。 検証手段は **対策 2 (bug 非該当 model の subagent へ委譲) + 副次緩和 10 mechanics (非 ASCII/長文を tool call に inline しない) を流用**し、 その特化形として **term-by-location** (= 非 ASCII の grep 語を親 prompt に書かず subagent に file から抽出させる: 「file X の L41 header の語で grep しろ」) を足す (2026-06-16 実証)。
 
-出典 issue は既存記載を踏襲 (canonical hub #62123 / 衛星 #64684/#64955/#64235)。 本変種は同 bug ファミリの一症状と考えられ、新規 issue は起票しない (= 同 bug ファミリの新症状として #62123 へのコメント対象)。
+出典 issue は冒頭 §真因 の canonical (= #64774 系) に紐付く。 本変種も Opus 4.8 model 系の一症状で新規 issue は起票せず、 occurrence は §真因 が指す canonical issue へコメントする (= canonical 番号は **§真因 を単一 home** とし、 ここで再掲して drift させない、 §14.2。 旧版はここで #62123 を canonical と再掲し §真因 〔#64774〕 と矛盾していた = restatement drift の実例)。
 
 ## 別の Bash 失敗モード: 出力 capture の ENOSPC (= 「Command output was lost」、 malformed とは別物)
 
