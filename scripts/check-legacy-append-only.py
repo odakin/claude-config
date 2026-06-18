@@ -45,11 +45,23 @@ def git_show(ref_path):
 
 
 def discover():
-    try:
-        r = subprocess.run(["git", "ls-files", "*.index.yaml"], capture_output=True, text=True)
-        return [p for p in r.stdout.split("\n") if p.strip()]
-    except Exception:
-        return []
+    """Index files to check = HEAD's committed set UNION the current tracked set.
+
+    Iterating HEAD's set is what closes the whole-file-deletion hole: a deleted index.yaml
+    vanishes from the working/staged set, so iterating ONLY the current set would miss it and
+    let its ENTIRE legacy map drop silently (= deleting a whole convention's index would erase
+    all its §-ref forwarding undetected). With HEAD's set included, a deleted/renamed-away index
+    is still compared -- its current legacy set is empty, so ALL of HEAD's legacies count as
+    dropped -> BLOCK (a deliberate whole-doc removal uses LEGACY_RETIRE_OK=1)."""
+    paths = set()
+    for args in (["git", "ls-tree", "-r", "--name-only", "HEAD"], ["git", "ls-files"]):
+        try:
+            r = subprocess.run(args, capture_output=True, text=True)
+            if r.returncode == 0:
+                paths |= {p for p in r.stdout.split("\n") if p.endswith(".index.yaml")}
+        except Exception:
+            pass
+    return sorted(paths)
 
 
 def selftest():
