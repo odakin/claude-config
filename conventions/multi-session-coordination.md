@@ -115,6 +115,12 @@ git log --oneline --all -- analyses/data/foo.yaml | head -3
 
 防御: `git log -p -3` で最近 3 commit の **完全 diff** を読み、 prev session の意図を context として吸収してから自 session の action を判断。
 
+### SESSION narrative の stale (= state を変えた session が SESSION を更新しなかった)
+
+prev session が repo の **state を変える commit** (例: review markup の accept 変換、 設定の切替) を打ったのに **SESSION.md を更新しなかった**場合、 SESSION の prose が現状を**積極的に誤って記述**する (= §2 `[x]` の aspirational 疑いより強く、 「〜は未反映 / 未着手」 等の断定が事実と逆になる)。
+
+防御: 行動を分岐させる load-bearing な SESSION 主張 (= 「X は未反映」「Y は提案 markup のまま」 等) は **file/git の実体と突き合わせてから信用**する。 特に `git log --oneline -- SESSION.md` の「最後に SESSION を触った commit」 と「state を変えた commit」 がズレていたら narrative を疑う (= state 変更が SESSION を伴っていない = 記述が古い signal)。 grep / ls-tree / byte 比較等の安価な実測で裏取りし、 narrative を黙って上書きせず **stale を注記で flag してから user に渡す**。
+
 ---
 
 ## 4. zoom 中の real-time co-editing
