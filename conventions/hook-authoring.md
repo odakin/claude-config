@@ -396,7 +396,7 @@ hook A が末尾で hook B を呼ぶ (= chain) 構造で、 A が **自身の no
 
 pre-commit hook A (= LaTeX Unicode fixer) が「対象 file (LaTeX) が staged されてなければ exit 0」 と early-exit。 A は末尾で layer-3 chain hook B (= yaml/data gate) を呼ぶ設計だったが、 対象外 file のみの commit (= data file のみ) では A が early-exit して B に未到達。 B にした gate が **silent dead**。 B が catch すべき violation を仕込んだ commit が reject されず通る **実 commit e2e で初めて発覚** (= logic 確認・syntax 確認・関数シミュレートは全て pass していた、 実 e2e のみが expose した)。
 
-### 防止策
+### <a id="chain-hook-prevention"></a>防止策
 
 - chain hook を呼ぶ primary は **自身の no-op 条件で early-exit しない**。 primary の処理を `if [[ 条件 ]]; then ...; fi` で囲み、 chain は無条件に末尾で呼ぶ (= chain は primary の関心事と独立に走るべき)。
 - **chain reachability を実 e2e で verify** (= §2 の 4 軸 audit に加える 5 軸目)。 chain B が catch すべき violation を実際に仕込み、 primary A の no-op path (= A が何もしない commit) でも B が発火するか確認する。 logic / syntax / シミュレートでは expose できない (= 本 RCA がまさにそれらを通過していた)。

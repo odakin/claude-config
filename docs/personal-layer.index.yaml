@@ -1,7 +1,8 @@
-# Stable slug index for personal-layer.md (Phase 1 slug migration).
-# id = canonical identity (cross-refs use it). No legacy §-numbers (unnumbered headings).
-# related = slugs this section cross-references. Validated by
-# scripts/check-office-automation-index.py (dangling=0 / orphan=0).
+# Stable slug index -- AUTO-GENERATED from the doc by scripts/generate-doc-index.py.
+# id/level/title are DERIVED from the markdown (edit the md + re-run, do NOT hand-edit
+# them here). legacy (a section's original §-number = a permanent forwarding address),
+# related, and any other hand field are PRESERVED. See convention-design-principles §14.7.
+# Validated by scripts/check-office-automation-index.py (dangling=0 / orphan=0).
 sections:
   - id: what-is-personal-layer
     level: 2
