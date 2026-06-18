@@ -143,6 +143,36 @@ Overleaf 版と byte 一致のまま保ちたい場合 (= 自分の本文 markup
 **push 前 gate**: behind=0; 本文が `overleaf/master` と byte 同一; scope diff が意図領域のみ;
 live (uncomment) な author markup (`\cl`/`\CL` 等) の leak 無し; compile が通る。
 
+## full-body push + 管理ファイルの cleanup (= 本文まるごと反映 / 既流出の除去)
+
+subset でなく **現行 paper file をまるごと Overleaf に反映**したい場合 (= 全 finding を共著者に
+渡す等)。direct remote + 手動 merge 変種で:
+
+1. `git worktree add --detach <tmp> overleaf/master`。
+2. 現行 paper file を worktree に上書き copy (`cp paper.tex <tmp>/`)。byte 一致のまま運ぶ。
+3. (cleanup する場合) Overleaf に漏れている管理 file を除去: `git -C <tmp> rm CLAUDE.md SESSION.md`。
+4. `git -C <tmp> commit --no-verify` (= char-normalizer hook を本文に走らせない)。
+5. **token を mask して push**: 出力に `git:<token>@` が現れても潰す ―
+   `git -C <tmp> push <url> HEAD:master 2>&1 | sed -E 's#git:[^@]*@#git:REDACTED@#g'`
+   (= token は file から実行時に読む、 command 文字列に literal を焼かない)。
+6. **検証**: `git show overleaf/master:paper.tex` を `HEAD:paper.tex` と byte 比較;
+   `git ls-tree overleaf/master` が paper file のみか確認; reconcile 後 behind=0。
+
+⚠️ **管理 file は既に Overleaf に漏れている可能性がある**: worktree は `overleaf/master` の tree を
+そのまま持つので、 過去の naive な `main:master` 直 push 等で `CLAUDE.md`/`SESSION.md` が混入して
+いると worktree にも出る (= 共著者が Overleaf の file tree でこれらを開ける)。 `\input` されない
+ので build には無害だが、 内部メモが見えるので cleanup したければ step 3 で除去する。 → 既存
+「scoped subset push」 の「tree には paper file のみ」 は楽観で、 実態は要確認 (本 §の step 6 ls-tree)。
+
+⚠️ **reconcile の merge strategy は削除の有無で変える**: cleanup で管理 file を削除した Overleaf 側
+commit を `main` に**通常 merge すると、 その削除が main にも伝播して** `CLAUDE.md`/`SESSION.md` が
+main から消える。 これを防ぐには `git merge -s ours overleaf/master` を使う (= main の tree を保持
+したまま overleaf/master を ancestor 化して behind=0)。 削除を伴わない通常の push なら従来どおり
+`git merge` (正本である Overleaf 側採用) でよい。
+
+⚠️ Overleaf push は共著者に直接影響 → **user 明示 OK 必須** (autonomy 禁則)。 paper repo 側は
+本 § を参照し、 baseline commit・PROJECT_ID 等の repo 固有値だけを自身の SESSION/scripts に置く。
+
 ## ID 回収 runbook (= ID を喪失した repo の復旧手順、 三例目の実地経験から)
 
 費用の安い順に。 回収したら直ちに §Sync script 契約 で script に焼いて commit
