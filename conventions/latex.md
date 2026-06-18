@@ -18,6 +18,48 @@ baseline と照合**し不変を確認する (= `\bibcite` や aux 経由でな�
 awk -F'%' '{print $1}' file.tex | grep -oE '\\cite[a-zA-Z]*\{[^}]*\}' | sort -u
 ```
 
+## latexdiff で差分レビュー PDF を作る
+
+共著者に「どこを変えたか」を渡すとき、`latexdiff old.tex new.tex > diff.tex` で **追加=下線 / 削除=取り消し線** のレンダリング済み PDF を作れる。comment-out-keep 流儀（旧文を `%` 化）の編集は raw の git diff では読みにくいので、latexdiff の方が共著者に優しい。
+
+**baseline は git revision から都度取り出す**（aux file は symlink で借り、作業 tree を汚さない）:
+
+```bash
+D=$(mktemp -d)
+git show <BASELINE>:paper.tex > "$D/old.tex"            # 過去版
+cp paper.tex "$D/new.tex"                                # 現在版
+ln -s "$PWD/Figures" "$PWD/ref.bib" "$PWD"/*.bst "$D"/   # 図・bib・bst を借りる
+```
+
+⚠️ byte-pristine な baseline を**作業 tree に tracked file として置かない**: char-normalizer pre-commit hook が commit 時に dash/accent/quote を書き換えて baseline byte が崩れ、spurious 差分になる。byte 一致が要る baseline は **untracked + gitignore** にするか、上のように git revision から都度取り出す（下記 §pre-commit hook「byte-pristine な baseline は tracked にしない」と同根）。
+
+**plain `latexdiff` がそのままコンパイルできない時の定石**（複雑な原稿で頻発。diff の前処理・後処理で回避する）:
+
+| 症状 | 原因 | 対処 |
+|---|---|---|
+| diff のノイズが多すぎる | レビュー markup（色付き注釈コマンド等）まで差分対象になる | diff 前に markup を strip（中身は残し注釈コマンドだけ除去） |
+| `Missing \cr` / `\endgroup` / display math 破壊 | 環境を隠した自作マクロ（例: align を包む `\al{}`）が `\DIFadd` に巻かれる | diff 前に当該マクロを本物の `\begin{align}…\end{align}` へ展開 |
+| tikz error の連鎖 | ネストした tikzpicture/feynman 図が壊れる | 図を placeholder 文字列へ置換 +（下の）`--config PICTUREENV=…` |
+| 3 分かかる / output が無限ループ | CFONT の color markup が page builder と干渉 | `--type=UNDERLINE`（色でなく下線/取消線）+ ソースの `twocolumn`→`onecolumn` |
+| `Paragraph ended before \align` | latexdiff が変更 align 内に空行（`\par`）を挿入 | 後処理で数式環境内の空行を除去 |
+| natbib citation でハング | citation markup × natbib | `--disable-citation-markup` |
+
+**推奨 flag の既定**（複雑な物理原稿で安定する組合せ）:
+
+```bash
+latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
+  --config "PICTUREENV=(?:picture|tikzpicture|feynman|DIFnomarkup)[\w\d*@]*" \
+  "$D/old.tex" "$D/new.tex" > "$D/diff.tex"
+# 後処理（数式環境内の \par 除去 + twocolumn→onecolumn）後に pdflatex を 2 回
+```
+
+- `--math-markup=off`: 式中の add/del は色付けしない（式の変更は新版として出るが色は付かない）。数式の add/del markup はコンパイルを壊しやすいので既定 off にし、文章・構造・コメント削除の差分を確実に出す方を取る。
+- **「投稿用でなく差分レビュー用」と割り切る**: markup 除去・図 placeholder・数式色なしは*意図的な簡略化*。
+
+**別解（latexdiff のコンパイル問題を完全回避）**: Overleaf 連携の原稿なら **Overleaf の History 比較**（baseline 版 ↔ 現在）が確実で、pre/post 処理が要らず数式まで色分けされる。
+
+> この pre/post 処理は各 paper repo の `latexdiff/` 配下の再生成スクリプトに固める運用でよい。**baseline commit・どのマクロを展開するか等の原稿固有値はその repo 側に置き、手法の正本（本節）を参照する**（= SoT は上層 1 つ、下層から参照）。
+
 ## 長さ・段落構造の判断にコメントアウト行を数えない
 
 **ルール:** 段落の切れ目・節の分割・restructure 等、 「文書の長さ / 段落の重さ」 を根拠にした編集判断は **rendered 出力 (= PDF に出る内容) だけで見積もる**。 `%` でコメントアウトされた行・ブロック (= 旧 draft・代替表現・comment-out keep で残した旧文) は source 行数を膨らませるだけで読者には出ないので、 長さの勘定に入れない。
