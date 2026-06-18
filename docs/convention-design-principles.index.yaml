@@ -381,6 +381,18 @@ sections:
     legacy: "14.7"
     level: 3
     title: "14.7 cross-repo inbound-ref robustness — 下流からの参照を restructure で黙って壊さない"
+  - id: db-metadata-not-content
+    legacy: "14.8"
+    level: 3
+    title: "14.8 「DB 化」 は metadata-DB であって content-DB ではない — prose は markdown に残す"
+  - id: index-autogenerate
+    legacy: "14.9"
+    level: 3
+    title: "14.9 薄い index は markdown から自動生成する (= 手で 2 ファイル同期しない)"
+  - id: legacy-append-only
+    legacy: "14.10"
+    level: 3
+    title: "14.10 legacy は永久転送先 — append-only を機械 enforce する"
   - id: sot-consolidation-recipe
     legacy: "15"
     level: 2

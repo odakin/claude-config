@@ -1134,7 +1134,53 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 
 **(C) 検出器とその限界 (= 正直に明示)**: `scripts/check-inbound-refs.py` は **anchor 存在 / path 存在**という mechanically-checkable な HARD dangling のみ検出する。 **positional `§N.M` が renumber 後も同じ意味を指すか (= silent mis-resolve) は検出できない** (= §8.8 の semantic blind spot)。 ∴ §-ref を anchor に migrate するのが唯一の真の fix で、 検出器はその補完にすぎない (= fragile 件数を INFO で出すだけ、 「全部見た」 と読ませない §8.8 (3))。
 
-由来: 2026-06-16、 inbound ref を実測 (= ~1000 行が layer-1 doc を名指し、 robust な anchor 形は ~20、 fragile な positional は ~440) し、 「restructure すると下流が黙って壊れる」 構造を確認。 帰結として **slug 化の優先順位は内部 sub-section 数でなく inbound ref 数で決める** (= 最も参照される doc から slug-first)。 incident/設計史は odakin 個人層 plan に残置 (= kernel-up / instance-down)。
+由来: 2026-06-16、 inbound ref を実測 (= ~1000 行が layer-1 doc を名指し、 robust な anchor 形は ~20、 fragile な positional は ~440) し、 「restructure すると下流が黙って壊れる」 構造を確認。 帰結として **slug 化の優先順位は内部 sub-section 数でなく inbound ref 数で決める** (= 最も参照される doc から slug-first)。 incident/設計史は個人層 plan に残置 (= kernel-up / instance-down)。
+
+### <a id="db-metadata-not-content"></a>14.8 「DB 化」 は metadata-DB であって content-DB ではない — prose は markdown に残す
+
+§14.3 の「prose を yaml に移す anti-pattern」 に対して**なぜか**の理由を補う。 規模の大きい reference convention が育つと「DB に migrate して、 元の md はその DB への pointer stub に降格」 という直観が生まれる。 だが **prose convention にこれを適用するとその消費モデルが壊れる**。
+
+**分割線: records → DB、 prose → markdown**。 records (= paper / date / presenter 等の fixed field を持つ構造化データ) は DB バックエンド + 自動生成で正しく機能する (= 自動公開される派生 yaml がその例)。 prose (= エッセイ的な convention 本文 / design principle) は markdown に残す。
+
+**content を DB に出してはいけない 3 つの理由**:
+
+1. **(DECISIVE) LLM consumer が grep/Read で context token として convention を読む**という前提が壊れる。 DB バックエンドの pointer-stub は query layer なしに context に読み込めない。 これは convention が機能するための前提条件そのものを破壊する (= greppable markdown が precondition)。
+2. **人間も rendered markdown を読む** (GitHub / editor)。 stub だけでは render されず読めない。
+3. **編集可能性と ownership の問題**: prose を yaml/DB に入れると authoring と diff が苦痛になる (markdown-in-yaml の escape)。 自動生成 artifact は「ownership」 を失う (= 生成後に手直しできない、 overlay 生成の教訓)。
+
+**決定打**: §14 が実際に解いている問題 (= positional reference の脆さ) に対して、 content-DB は slug に対して何も優位性を持たない。 slug は position 非依存の key を markdown に留まったまま実現する。 content-DB はさらに可読性・編集性のコストを積み上げるだけ。
+
+**「将来 queryable/browsable/app 化したい」 という目標も content-DB を正当化しない**。 正しいアーキテクチャは 「markdown を source とし、 view (= search index / docs site) を生成する」 だ。 markdown が source に留まる。 content が DB に移動するのは「人間も LLM も読まず、 プログラムだけが触る」 段階になって初めて正当化される。 convention はその逆 (= 人間と LLM が主読者) なので、 その段階は来ない。
+
+∴ §14.3 の薄い index は **metadata-DB であって content-DB ではない** (= id / legacy / title / related だけ)。 format 選択の決定軸は **consuming agent (LLM) と人間の read+write の容易さを最優先する** こと — grep で読み、 Edit で書く = markdown + 薄い index が最軽量。
+
+### <a id="index-autogenerate"></a>14.9 薄い index は markdown から自動生成する (= 手で 2 ファイル同期しない)
+
+§14.3 の薄い index を手動で維持すると、 新しい section を書くたびに「md と index の両方を更新する」 という書き手税が発生する。 sync 忘れ = drift。 これは §14.8 の「read+write の容易さ最優先」 に反する。 ∴ **index を md から派生として自動生成する**。
+
+**生成する (= md が SoT)**: id (= heading の `<a id>` slug)、 level (= `##` / `###`)、 title (= heading テキスト verbatim)。
+
+**保存・freeze する (= 手の判断、 生成が破壊してはいけない)**: legacy (= 永久転送先、 §14.10)、 related (= 関係グラフ)、 その他の手フィールド。 新しい section は登録時点の §-番号を legacy として freeze する。
+
+著者は **markdown (= prose + `<a id>` anchor) だけを書く**。 generator が index を同期する。 ツール: `scripts/generate-doc-index.py` (= `--check` で md ↔ index drift を gate 可能)。
+
+⚠️ generator は **anchor を持たない heading を surface する** (= bijection validator が構造上検出できない「anchor なし heading」 の盲点を補完する)。
+
+⚠️ 既存の index が **別の title 規約** (= 手で整理した title vs verbatim heading) で書かれている doc は round-trip しない — generator をあてず手動維持にとどめる (= §8.9 legitimate-deviation 規律、 全 doc を generator に強制しない)。
+
+### <a id="legacy-append-only"></a>14.10 legacy は永久転送先 — append-only を機械 enforce する
+
+§14.2 の legacy (= 旧 §-番号 → slug の転送表) は **絶対に縮小してはならない**。 理由: 一度公開された §-番号は、 こちらが把握できない下流 repo / 他ユーザー / 古いノートが永久に参照し続ける可能性がある。 各 legacy entry は**永久転送先** (= mail forwarding order は期限なしで保持する) であり、 slug rename / section 削除 / index 再生成によって黙って消えることは許されない。
+
+これは特に **他ユーザー保護**の文脈で重要: layer 1 は public であり、 自分の dependents を列挙できない (§14.7)。 他ユーザーはローカルの tooling も discipline も持たない。 **彼らに届く唯一の可搬な保護は repo に同梱されているもの = index の legacy map** (著者が自分の ref を migrate するのは private な利便であって、 他ユーザーには届かない)。 legacy map の完全性こそが public 向けの保護である。
+
+§9.1 triage: 黙って消えた legacy は**回復不能** (= 下流 ref が永久に壊れる) = catastrophic tier。 ∴ warning でなく機械的 BLOCK で enforce する。
+
+gate: index の legacy 集合が HEAD (= 直前 commit) に対して **append-only** であること。 縮小するような commit を block する。 git history を SoT とし、 別途 ledger を持たない。 ツール: `scripts/check-legacy-append-only.py` (pre-commit)。
+
+意図的な削除は許容するが **明示的な行為**でなければならない: `LEGACY_RETIRE_OK=1` で retire できる (= section を消すことはできる、 ただし黙ってでなく意識的な行為として)。 転送 entry は意識的で承認された行為によってのみ削除できる。 これは §8.2 (high-stakes → rule でなく mechanism) + §8.10 (invariant を edit-time gate で守る) の転送専用実例。
+
+由来: 実測値・commit・office-automation の verbatim-title divergence・並行 session 干渉の詳細は個人層 plan `plans/2026-06-16-claude-config-dbification-eval.md §10-11` に残置 (kernel-up / instance-down)。
 
 ---
 
