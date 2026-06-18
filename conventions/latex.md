@@ -332,9 +332,13 @@ hook (`scripts/fix-bib-unicode.py`) の `UNICODE_MAP` は **U+2013 (en-dash) と
 | U+2015 | `―` (horizontal bar) | scope 外、 保持 | 日本語小説の dash 様 (= em-dash 様の太い横棒) |
 | U+30FC | `ー` (katakana-hiragana prolonged sound mark) | scope 外、 保持 | カタカナ長音 (= dash ではないが視覚的に紛らわしい) |
 
-⚠️ **math 内の en-dash も問答無用で変換される**: `$–$` (= U+2013 を math mode 内で minus の
-つもりで書く) も hook は `$--$` に変換し、 LaTeX は `--` を minus 2 個と印字する (= 意図が
-single minus `$-$` なら壊れる)。 math の負号は最初から ASCII `-` で書く。
+✅ **math 内の en/em-dash は math-mode-aware に正規化される (2026-06-18 修正)**: 以前は `$–$`
+(= U+2013 を math mode 内で minus のつもりで書く) も hook が `$--$` に変換し、 LaTeX が `--` を
+minus 2 個と印字して壊れていた。 現在は `fix-bib-unicode.py` の `_fix_dashes_math_aware` walker が
+math (`$...$` / `$$...$$` / `\(...\)` / `\[...\]` / equation 系環境) 内の en/em-dash を **単一 ASCII
+`-`** に正規化する (text mode の `–`→`--` とは別扱い)。 変換時は stderr に note が出るので意図を
+確認すること。 とはいえ math の負号は最初から ASCII `-` で書くのが確実 (= walker の `\text{}` ネスト
+等の限界に依存しない)。
 
 **hook が file を必ず書換える 2 つの帰結** (= byte-pristine が要る場面の運用):
 - **byte-pristine な baseline は tracked にしない**: 共著者版の verbatim copy を latexdiff 用に
