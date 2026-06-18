@@ -1,5 +1,5 @@
 #!/bin/bash
-# .claude/pre-commit-extra.sh — claude-config 固有の pre-commit 規律 (警告のみ・非 block)
+# .claude/pre-commit-extra.sh — claude-config 固有の pre-commit 規律 (検査 1-2 = 警告のみ / 検査 3 legacy gate = BLOCK)
 #
 # public-precommit-runner.sh が leak gate を pass 後に chain で呼ぶ (= 既存 channel への
 # 相乗り。 新規 standalone 検出器 / dashboard 項目を増やさない)。 exit code は親に透過するが、
@@ -64,4 +64,18 @@ if [ "$warned" -eq 1 ]; then
   echo "    → 名前順で同期してください (CONVENTIONS.md §8 行 / CLAUDE.md tree、 DESIGN.md 2026-06-13 参照)。" >&2
   echo "    (警告のみ・commit は継続)" >&2
 fi
+
+# --- 検査 3: legacy append-only (= 上の warn-only 群と違い BLOCK する例外) ---
+# catastrophic 級: published §-number の転送先 (slug index の legacy 値) を黙って落とすと、
+# 下層 repo / 他ユーザ / 過去メモの §-ref が永久に解決不能になる (= 回収不可)。 §9.1 triage で
+# block。 staged の *.index.yaml を HEAD と比較し、 legacy が縮んでいたら commit を止める。 意図的な
+# 節削除は `LEGACY_RETIRE_OK=1 git commit ...` で明示 override (= 消すのは可・黙っては不可)。
+# 正本: scripts/check-legacy-append-only.py / convention-design-principles §14.7。
+GATE="$REPO_ROOT/scripts/check-legacy-append-only.py"
+if [ -f "$GATE" ]; then
+  if ! python3 "$GATE" --staged >&2; then
+    exit 1
+  fi
+fi
+
 exit 0

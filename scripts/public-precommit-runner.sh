@@ -85,9 +85,10 @@ while IFS= read -r file; do
       ' >> "$ADDED_BUF"
 done <<< "$STAGED"
 
-if [ ! -s "$ADDED_BUF" ]; then
-  exit 0  # 追加行なし (削除のみ・空 commit 等)
-fi
+# 追加行なしでも early-exit しない (2026-06-18): 削除のみ commit (= 例: slug index の legacy 行
+# 削除) でも、 末尾の repo-local chain hook (.claude/pre-commit-extra.sh = legacy append-only
+# gate / tree drift) を走らせる必要があるため。 leak scan 自体は ADDED_BUF が空なら下流の
+# awk/grep が自然に no-op になり HITS 空 → chain 到達、 で安全。
 
 # ----------------------------------------------------------------------
 # Tier A regex check
