@@ -26,6 +26,13 @@
 
 set -euo pipefail
 
+# Resolve the runner (a sibling of this installer) so the generated stub
+# works regardless of where claude-config is cloned. This previously
+# hardcoded "$HOME/Claude/claude-config/...", which broke whenever the repo
+# lived anywhere other than ~/Claude (e.g. Windows clones directly under ~).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUNNER="$SCRIPT_DIR/commit-msg-leak-guard-runner.sh"
+
 REPO="${1:-$(pwd)}"
 REPO="$(cd "$REPO" 2>/dev/null && pwd)" || { echo "not a directory: ${1:-$(pwd)}" >&2; exit 1; }
 
@@ -58,11 +65,11 @@ mkdir -p "$HOOKS_DIR"
 HOOK="$HOOKS_DIR/commit-msg"
 
 STUB_MARKER="commit-msg-leak-guard-runner.sh"
-STUB_CONTENT='#!/bin/bash
+STUB_CONTENT="#!/bin/bash
 # Stub installed by claude-config/scripts/install-public-commit-msg.sh
 # Do not edit — update commit-msg-leak-guard-runner.sh instead.
-exec "$HOME/Claude/claude-config/scripts/commit-msg-leak-guard-runner.sh" "$@"
-'
+exec \"$RUNNER\" \"\$@\"
+"
 
 # --- 既存 hook の扱い ---
 if [ -f "$HOOK" ]; then
