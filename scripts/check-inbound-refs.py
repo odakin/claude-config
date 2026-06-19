@@ -28,12 +28,15 @@ so this lives in layer 1 and is invoked over the whole ~/Claude tree.
 
 Usage:
   check-inbound-refs.py [--base DIR] [--target REPO] [--list] [--quiet]
+  check-inbound-refs.py --selftest
 Exit code: 1 if any HARD dangling ref found, else 0.
 """
 import os
 import re
 import sys
 import glob
+import shutil
+import tempfile
 import argparse
 
 # Generic per-repo scaffold filenames: present in many repos, so an anchor ref like
@@ -130,13 +133,78 @@ def scan(base, target_name, docs, relpaths):
     return hard, fragile, fragile_samples
 
 
+def selftest():
+    """Hermetic fixture: a temp base dir with a tiny target repo + a downstream repo,
+    exercising every HARD/INFO/de-noise rule. Touches no real ~/Claude file."""
+    ok = True
+    tmp = tempfile.mkdtemp(prefix='check-inbound-refs-selftest-')
+    try:
+        # --- target repo: one distinctive doc with a known anchor, one generic README ---
+        tgt = os.path.join(tmp, 'tgt')
+        os.makedirs(os.path.join(tgt, 'conventions'))
+        with open(os.path.join(tgt, 'conventions', 'real.md'), 'w', encoding='utf-8') as f:
+            f.write('## <a id="present-slug"></a>Present heading\n\nbody\n')
+        with open(os.path.join(tgt, 'README.md'), 'w', encoding='utf-8') as f:
+            f.write('## A README heading\n')  # generic name; must not anchor-index
+
+        # --- downstream repo with one of every reference kind ---
+        ds = os.path.join(tmp, 'downstream')
+        os.makedirs(ds)
+        with open(os.path.join(ds, 'doc.md'), 'w', encoding='utf-8') as f:
+            f.write(
+                # HARD anchor: present (NOT flagged) vs missing (FLAGGED)
+                'See real.md#present-slug for details.\n'                # line 1: OK
+                'But real.md#missing-slug is wrong.\n'                   # line 2: HARD anchor
+                # HARD path: existing (NOT flagged) vs missing (FLAGGED)
+                'Path tgt/conventions/real.md exists.\n'                 # line 3: OK
+                'Path tgt/conventions/gone.md is missing.\n'             # line 4: HARD path
+                # DE-NOISE: README.md#x in this repo must NOT be flagged (generic name)
+                'Our own README.md#whatever is local.\n'                 # line 5: de-noised
+                # DE-NOISE: github blob/<branch>/ infix must strip to docs/x.md and exist
+                'GH link tgt/blob/main/conventions/real.md works.\n'     # line 6: de-noised path
+                # DE-NOISE: single-letter placeholder X.md must be skipped
+                'In prose we sometimes write tgt/X.md as an example.\n'  # line 7: placeholder
+                # FRAGILE positional: §N.M naming a target doc -> INFO (counted, not HARD)
+                'See real.md §1.2 for the rationale.\n'                  # line 8: fragile
+            )
+
+        docs, relpaths = build_target_index(tgt)
+        # README.md must NOT be in the anchor-indexed docs (generic)
+        if 'README.md' in docs:
+            print("  selftest MISS: generic README.md leaked into target anchor index"); ok = False
+        if 'real.md' not in docs or 'present-slug' not in docs.get('real.md', set()):
+            print("  selftest MISS: distinctive real.md / present-slug not indexed"); ok = False
+
+        hard, fragile, _ = scan(tmp, 'tgt', docs, relpaths)
+        hard_kinds = sorted((kind, ref) for _, _, kind, ref in hard)
+        expected = sorted([
+            ('anchor', 'real.md#missing-slug'),
+            ('path',   'tgt/conventions/gone.md'),
+        ])
+        if hard_kinds != expected:
+            print("  selftest MISS: HARD set mismatch")
+            print("    got:      %s" % hard_kinds)
+            print("    expected: %s" % expected)
+            ok = False
+        if fragile < 1:
+            print("  selftest MISS: fragile §1.2 positional ref not counted"); ok = False
+
+        print("✅ selftest passed" if ok else "❌ selftest FAILED")
+        return 0 if ok else 1
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--base', default=os.path.expanduser('~/Claude'))
     ap.add_argument('--target', default='claude-config')
     ap.add_argument('--list', action='store_true', help='list every hard dangling ref')
     ap.add_argument('--quiet', action='store_true', help='print nothing when green')
+    ap.add_argument('--selftest', action='store_true')
     args = ap.parse_args()
+    if args.selftest:
+        return selftest()
 
     target_dir = os.path.join(args.base, args.target)
     if not os.path.isdir(target_dir):

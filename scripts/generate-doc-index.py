@@ -31,6 +31,7 @@ Surfaces (does NOT auto-fix) two review-worthy conditions:
 Generic + public-safe. Usage:
   generate-doc-index.py <doc.md> <doc.index.yaml>            # write the index
   generate-doc-index.py <doc.md> <doc.index.yaml> --check    # don't write; exit 1 if out of sync
+  generate-doc-index.py --selftest                            # in-memory regression fixtures
 """
 import re
 import sys
@@ -123,12 +124,128 @@ def build_index(sections, existing):
     return "\n".join(out) + "\n", vanished
 
 
+def selftest():
+    """Exercise the pure helpers in-memory: round-trip preservation of legacy / related /
+    extras, derivation of id/level/title, NEW-section legacy freezing, code-fence skipping,
+    and the missing-anchor / vanished-slug WARN surfaces."""
+    ok = True
+
+    # --- fixture md: covers derived, preserved, new-section, code-fence, missing-anchor ---
+    md = (
+        '## <a id="alpha"></a>Alpha heading\n'
+        'body\n'
+        '### <a id="beta"></a>Beta heading\n'
+        '### 8.12 No-anchor heading\n'           # PLAIN level-3: missing-anchor WARN
+        '### <a id="gamma"></a>8.12 New section gamma\n'  # NEW slug, leading §-number
+        '### <a id="delta"></a>Plain-titled delta\n'      # NEW slug, NO leading number
+        '```\n'
+        '### <a id="fenced"></a>Fenced heading should be ignored\n'  # CODE FENCE
+        '```\n'
+        '#### <a id="too-deep"></a>level-4 also ignored\n'           # level-4 not slug-anchored
+    )
+    # --- fixture existing index: alpha+beta have legacy/related/extras to preserve; epsilon
+    #     is in the index but vanished from the md -> vanished-slug WARN ---
+    existing_yaml = (
+        "sections:\n"
+        '  - id: alpha\n'
+        '    legacy: "1"\n'
+        '    level: 2\n'
+        '    title: "Alpha heading"\n'
+        '    related: [beta]\n'
+        '    origin: hand-authored\n'              # EXTRA -- must survive verbatim
+        '  - id: beta\n'
+        '    legacy: "2-5b"\n'
+        '    level: 3\n'
+        '    title: "Beta heading"\n'
+        '    related: [alpha, gamma]\n'
+        '  - id: epsilon\n'                         # VANISHED -- not in md
+        '    legacy: "9"\n'
+        '    level: 3\n'
+        '    title: "Gone"\n'
+    )
+
+    existing = parse_existing(existing_yaml)
+    if existing.get("alpha", {}).get("legacy") != "1":
+        print("  selftest MISS: legacy '1' for alpha not parsed"); ok = False
+    if existing.get("beta", {}).get("related") != ["alpha", "gamma"]:
+        print("  selftest MISS: related for beta not parsed"); ok = False
+    if ("origin", "hand-authored") not in existing.get("alpha", {}).get("extras", []):
+        print("  selftest MISS: extra 'origin' for alpha not preserved by parser"); ok = False
+
+    sections, missing = scan_md(md)
+    slugs = [s[0] for s in sections]
+    if slugs != ["alpha", "beta", "gamma", "delta"]:
+        print("  selftest MISS: scan_md slug order: %s" % slugs); ok = False
+    # level: alpha is ##, others are ###
+    levels = {s: lvl for s, lvl, _, _ in sections}
+    if levels.get("alpha") != 2 or levels.get("beta") != 3:
+        print("  selftest MISS: level not derived"); ok = False
+    # title: verbatim, including the "8.12 " prefix on gamma
+    title_gamma = [t for s, _, t, _ in sections if s == "gamma"][0]
+    if title_gamma != "8.12 New section gamma":
+        print("  selftest MISS: gamma title not verbatim: %r" % title_gamma); ok = False
+    # NEW-section legacy: gamma freezes its leading §-number; delta gets no number
+    cur_nums = {s: cn for s, _, _, cn in sections}
+    if cur_nums.get("gamma") != "8.12":
+        print("  selftest MISS: gamma cur_num not '8.12': %r" % cur_nums.get("gamma")); ok = False
+    if cur_nums.get("delta") is not None:
+        print("  selftest MISS: delta cur_num should be None: %r" % cur_nums.get("delta")); ok = False
+    # CODE FENCE: the fenced heading must NOT appear
+    if "fenced" in slugs:
+        print("  selftest MISS: fenced heading leaked through code-fence skip"); ok = False
+    # missing-anchor WARN: the plain '### 8.12 No-anchor heading' line
+    if not any("No-anchor heading" in h for _, h in missing):
+        print("  selftest MISS: missing-anchor heading not reported"); ok = False
+
+    new_index, vanished = build_index(sections, existing)
+
+    # PRESERVED: alpha's legacy/related/origin survive verbatim
+    if 'legacy: "1"' not in new_index:
+        print("  selftest MISS: alpha legacy '1' not preserved in regen"); ok = False
+    if 'related: [beta]' not in new_index:
+        print("  selftest MISS: alpha related not preserved"); ok = False
+    if 'origin: hand-authored' not in new_index:
+        print("  selftest MISS: extra 'origin' field dropped on regen"); ok = False
+    # PRESERVED: beta's legacy "2-5b" survives (not re-derived from current §-number, which
+    # beta does not have anyway). beta's related survives.
+    if 'legacy: "2-5b"' not in new_index:
+        print("  selftest MISS: beta legacy '2-5b' not preserved"); ok = False
+    if 'related: [alpha, gamma]' not in new_index:
+        print("  selftest MISS: beta related not preserved"); ok = False
+    # NEW: gamma freezes "8.12" as legacy; delta has none
+    if 'legacy: "8.12"' not in new_index:
+        print("  selftest MISS: gamma new-section legacy '8.12' not frozen"); ok = False
+    gamma_block = new_index.split("- id: gamma", 1)[-1].split("- id:", 1)[0]
+    if 'legacy: "8.12"' not in gamma_block:
+        print("  selftest MISS: gamma's legacy block missing"); ok = False
+    delta_block = new_index.split("- id: delta", 1)[-1]
+    if "legacy:" in delta_block:
+        print("  selftest MISS: delta should have NO legacy (no leading §-number)"); ok = False
+    # vanished-slug WARN: epsilon was in the index but absent from the md
+    if "epsilon" not in vanished:
+        print("  selftest MISS: vanished slug 'epsilon' not reported"); ok = False
+
+    # IDEMPOTENCE: regenerating from the just-written index reproduces the same yaml.
+    existing2 = parse_existing(new_index)
+    new_index2, _ = build_index(sections, existing2)
+    if new_index != new_index2:
+        print("  selftest MISS: regeneration is not idempotent"); ok = False
+
+    print("✅ selftest passed" if ok else "❌ selftest FAILED")
+    return 0 if ok else 1
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("doc")
-    ap.add_argument("index")
+    ap.add_argument("doc", nargs="?")
+    ap.add_argument("index", nargs="?")
     ap.add_argument("--check", action="store_true", help="don't write; exit 1 if out of sync")
+    ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
+    if a.selftest:
+        return selftest()
+    if not a.doc or not a.index:
+        ap.error("doc and index are required (or use --selftest)")
     doc_p, idx_p = Path(a.doc), Path(a.index)
 
     md = doc_p.read_text(encoding="utf-8")

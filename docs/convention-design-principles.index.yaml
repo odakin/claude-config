@@ -24,6 +24,10 @@ sections:
     legacy: "2.3"
     level: 3
     title: "2.3 SoT の read 側 — entity を「言及するだけの store」を SoT と取り違えない"
+  - id: errata-on-preserved-records
+    legacy: "2.4"
+    level: 3
+    title: "2.4 削除できない誤り記録には errata marker を残す"
   - id: rule-addition-criteria
     legacy: "3"
     level: 2

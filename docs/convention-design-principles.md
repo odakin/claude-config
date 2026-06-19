@@ -89,6 +89,20 @@ write 側「one fact, one home」（[`personal-layer.md`](personal-layer.md) §p
 
 origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問われ、会話冒頭で見ていた source document（個人アカウントのメール通知）を SoT と取り違え、その null から「未対応／記録なし」と結論 + 不在を説明する誤った root cause を作話。実際は別 SoT（業務台帳）に完全記録済で 1 grep の距離にあった。write path（記録）は完璧、read path（SoT を読む）が崩れた型。同日 sibling = 横断 lookup を要する案件で SoT 直読より手近 store を先に見た失敗（§8.11 / §8.12 と同根）。layer-3 機械対策 = source store を業務 query で検索したら正しい SoT へ routing する guard + matter-status を SoT-read に乗せる dispatch（instance は layer 3 archive 残置 = kernel-up / instance-down）。
 
+### <a id="errata-on-preserved-records"></a>2.4 削除できない誤り記録には errata marker を残す
+
+§2.2 は「正本を移したら旧 home の stale な正本宣言を sweep せよ」。その sweep で見つかる誤り記述には **削除できないもの**がある — その記述自体が**忠実な履歴**であることに価値がある記録（送信済メールの draft、監査証跡、過去に「誰に何を聞いたか」の打診記録、当時の判断ログ）。これらには 3 つの選択肢がどれも単独では成り立たない:
+
+- **削除**すると記録が falsify される（「何を送った／聞いたか」が history から消える）。§7.2「DESIGN.md は削除、git log が履歴」は当てはまらない — そこでは entry の価値 = decision で、pedagogy を新 entry に抽出後は本体不要だが、**履歴記録は entry 自体が成果物**。
+- その場で**内容を書き換える**と、後から事実を改変した捏造記録になる。
+- かといって**黙って残す**と、誤った旧記述が「現在の真実」として読まれ続ける（数か月後の reader / fresh session が現行 rule と取り違える）。
+
+→ **errata marker を付ける**: 本文は当時のまま温存し、直近に `⚠️ errata (日付): これは誤り（= 当時の暫定）。正は X〔pointer〕。本記述は履歴として保持` を添える。本文（何を考え／送り／聞いたか）と訂正（それが誤りと今わかる）の**両方**を後から読めるようにする。
+
+判別フロー: **正本そのものの誤り → 本文を是正**（§2.2、marker でなく書き換え）/ **削除可能な決定記録**（価値が別所に抽出済 + git が履歴を保つ）**→ §7.2 で削除** / **削除不能な忠実履歴**（falsify せず残す要）**→ 本節 errata marker**。errata marker は「保持必須の非正本記録」専用で、正本や DESIGN.md entry には使わない（§7.2「※注釈で本文温存しない」と矛盾しない — 対象が別物）。
+
+origin: 2026-06-18 — 研究費様式の交通費記入ルールを是正した session。確定版を SoT（規約 md）へ書いた後も既存 TODO 2 件が旧暫定を live で肯定していた（= §2.2 sweep で発見し本文是正）。加えて**削除できない履歴**（事務担当宛の送信済メール draft / 過去の打診記録）に旧暫定が残り、こちらは是正でなく errata marker で「当時の誤り」を明示し本文は温存した。user 指摘「過去の誤った判断・知見には『これは誤り』とあとで分かる注を、上層で規律化してよい」。
+
 ---
 
 ## <a id="rule-addition-criteria"></a>3. 規約追加の判断基準：「規約がない」のか「規約を読まない」のか
