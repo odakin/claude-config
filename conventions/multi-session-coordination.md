@@ -216,9 +216,19 @@ robust 解:
 
 ### 注意 (caveat)
 
-- `send_message` は **常に user 確認を挟み、 unsupervised (auto / bypass) mode では使えない** ⇒ 本 technique は **supervised session 専用** (= scheduled-task / cron 文脈では発火不能)。
+- `send_message` は **常に user 確認を挟み、 unsupervised (auto / bypass) mode では使えない** ⇒ **この push 経路は supervised 専用**。 unsupervised (scheduled-task / cron) では下記「Unsupervised 返送」 の file-handoff (pull) を使う。
 - **非同期**: 結果は spawned 完了時に届く (呼び元はブロックしない = 「自分の作業を続けたい」 と両立)。
 - token は一意性を持たせる。 複数 HIT したら最も最近 active な該当 session を呼び元とする。 **token を持つ呼び元以外には絶対送らない** (= 誤着防止)。
+
+### Unsupervised 返送 (= cron / scheduled / auto / bypass): file-handoff (pull)
+
+返す先の live 会話も承認 user も居ない文脈では `send_message` が発火しない。 代わりに **decoupled な pull**:
+
+- **どこに書くか**: orchestrator が **spawn 時に result path を契約として固定** (= ここでは **path が token の役割を兼ねる**。 supervised で token-handshake が要るのは consumer の addressable id が事前に不明だから / unsupervised は orchestrator が path を決めるので id discovery 不要)。 場所は **決定的なリポ内 path** (`/tmp` は不可 = reboot で消える + 別 session の誤参照、 [`expensive-intermediate-artifacts.md`](expensive-intermediate-artifacts.md))、 **self-describing な structured file** (`status: done|partial|failed` / timestamp / payload / error = cold な consumer が context ゼロで parse 可)、 collision-free な命名 (slug / run-id)。
+- **consumer の拾い方**: (a) [主] 次の run が既知 path を読む (= cron の自然形、 `status==done ∧ fresh` を確認して consume + marker clear)、 (b) [従] spawner が live だが unsupervised なら既知 path を **bounded poll + timeout**。 timestamp で staleness 判定。
+- **使い分け基準 (1 文)**: 結果を受け取る live 会話 (+ 承認 user) が在る → **send_message (push)** / 受け手も承認者も居ない → **決定的 path に書き consumer が次 run で読む (pull)**。
+
+= push (send_message、 id を token で探す) と pull (file、 path が token を兼ねる) は同じ hand-off の **supervised / unsupervised 双対**。 producer が決定的 path に書き consumer が自分の schedule で読む pull は、 他の決定的-path/pull 機構 (定期生成物・status marker file 等) と同型。
 
 ### この technique の射程 (honest)
 
