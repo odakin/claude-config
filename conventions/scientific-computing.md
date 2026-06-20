@@ -442,6 +442,7 @@ Ward 恒等式・対称性・内部無矛盾性・projector 代数 等の check 
 1. **overall scale は『同じ機構で既知量を計算』 して calibrate**: 自分の loop / 数値機構 (= 積分 measure・trace・pole 抽出・単位) で、 textbook 値が分かっている量を計算し、 一致を確認。 例: 場の理論の loop 機構なら QED vacuum polarization (= 1 Dirac fermion で発散 |Π|=4/3、 units 1/(16π²ε)、 transverse も同時 check)。 これが ratio check では届かない絶対 scale の唯一の anchor。
 2. **外部比較は magnitude と sign を分けて述べる**: 絶対値は calibrate 可能だが、 符号は規約依存 (= Euclidean vs Minkowski、 self-energy の overall sign 定義 等) のことが多い。 「match」 と一括りにせず「magnitude 一致 (calibrate 済) / sign は規約依存」 と分けて記す。
 3. **doc の数値 claim には実 check を紐付ける**: 「~を 1e-16 で満たす」 等と書いたら、 それを実際に検証する script が存在するか確認。 無ければ claim は未検証 — check を足す (= §13 の「cell 埋めでなく error expose」 の claim-vs-check 版)。
+4. **calibration は『その既知量が exercise した構造的特徴』 の scale しか fix しない** (= calibration の scope 限界): 防止策 1 の QED calibration (= 単一添字 γ^μ 頂点) は、 target が持つ richer な構造 (= 多添字の縮約 / index-mixing) を cover しない。 単純構造の calibration pass を「pipeline 全体が absolute に正しい」 と一般化すると、 target の未 calibrate な構造を **crude な射影のまま信じる**死角になる (= §8 防止策 4「特殊値縮退」 の構造版 = **特殊構造縮退**)。 汚染されうる量は crude な index-trace/sum でなく、 **汚染構造が恒等的に消える clean probe** (= 関心量に直交する添字・配置を選ぶ) で直接抽出して cross-check する (= calibration が validation した「構造的特徴」 が target の構造を網羅しているかを問う、 一般則は `convention-design-principles.md §8.8` list-audit implicit-scope の数値 calibration 版)。
 
 ### 実例 (2026-06、 場の理論の 1-loop 2 点関数)
 
@@ -453,6 +454,7 @@ Ward 恒等式・対称性・内部無矛盾性・projector 代数 等の check 
 
 - 全 ratio/構造 check pass を「結果は absolute に正しい」 と読み、 overall scale の死角を見落とす
 - 外部既知量との「match」 を magnitude と sign 一括で主張 (= 符号規約の罠)
+- 単純構造の calibration (例: 単一添字頂点) pass を「pipeline 全体が airtight」 と一般化し、 target の未 calibrate な構造 (= 多添字 mixing 等) を crude 射影のまま信じる (= calibration の scope を validation した構造に限定して読まない)
 - doc に「verified」 と書くが実 check の script が無い
 
 ### 関連
