@@ -136,6 +136,16 @@ req = urllib.request.Request(
 
 順序が重要: **まず UA を疑う** (= 即修正可能、 NW 経路に責を着せる前に自分の request を直す)。 UA 修正で通れば NW は無罪。 通らなければ NW egress filter を疑い、 自宅 / GHA で再現テスト。 NW 起因と確定したら、 組織 NW で API 動作を当てにしない設計 (= 動かないのが default と考える)。
 
+## Developer Portal: application 名に AI provider 名を入れない
+
+Discord Developer Portal (= https://discord.com/developers/applications) で new application を作るとき、 **名前に "claude" を入れると create が拒絶される** (= 2026-06-20 user 報告 で観測、 odakin が `odakin-claude-secretary` で create 試行 → invalid)。 対処は名前から AI provider 識別子を抜く (例: `odakin-secretary`)。
+
+**推定メカニズム** (= 観測から逆算、 Discord 公式 docs に明文の AI 命名規約は確認できていない):
+- (a) Anthropic trademark policy への配慮 (= 「Claude」 は Anthropic の trademark、 Discord 側の自動 filter)
+- (b) 広義の AI provider 名 filter (= "openai" "gpt" "gemini" "anthropic" 等も同じ filter で reject される可能性、 個別 reproduce はしていない)
+
+**規律**: bot の **役割** に AI 駆動である事実を name で expose したい (= transparency) ケースでも、 application 名は AI provider 識別子を避けて命名する。 user-visible な「AI 駆動である」 announcement は bot の About 文 (Developer Portal の application Description field) や server 内 introduction post で代替する。
+
 ## 関連
 
 - `identity-in-config.md`: Discord user ID 等を config に書くときの PII レイヤ判定
