@@ -111,6 +111,16 @@ origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問�
 
 **戦略 = 事実を (C) から (A)/(B) へ寄せる。** drift 検出器を保守しているなら、その存在自体が「その事実がまだ (C) にいる」症状 (§8.11: leverage は上流の design にあり、下流に検出器を足し続けるのは whack-a-mole)。
 
+**防御の序列 (= drift をどの層で止めるか、 強→弱; §8.12 発火面 hierarchy の SoT 版で、 最上段は「発火しない」):**
+
+| 層 | 機構 | drift への効き方 | 強さ |
+|---|---|---|---|
+| ① design-out | (A) 正規化 / (B) 生成 | **起こさせない** (重複が author されない / 派生は生成物) | 最強・構造的 (発火不要) |
+| ② commit-time 規律 | §2.2 衝突宣言 sweep + declaration warn hook | 生まれた瞬間に捕える | 中 (write 時、 hook + recall 依存) |
+| ③ continuous 検出 | check-sot-drift + registry (= drift-patch 検出器) | 後追いで surface | 弱 (ambient、 登録 topic のみ = §8.8 blind-spot) |
+
+上段ほど強い。 ③ は ①② をすり抜けた登録済 topic の後追い網であって、 frame の goal は「事実を ① に寄せて ③ を要らなくする」 (= §8.11 leverage は上流)。
+
 **成熟度 lens (事実を type で分類して design-out 手段を選ぶ):**
 
 | 事実の type | design-out 手段 | drift 耐性 |
