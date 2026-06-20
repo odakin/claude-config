@@ -81,7 +81,8 @@ claude-config/
 │   ├── physics-notes.md    # 物理・数理ノートの 3 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
 │   ├── giving-talks.md     # 講演のしかた (= Robert Geroch "Suggestions For Giving Talks" arXiv:gr-qc/9703019 の own-words ダイジェスト、 主題選択 / 3-4 メッセージ構成 / 導入は全体の 1-5 / 視覚資料は図>言葉>式 / 1h で非自明な式 5 本・スライド 10 枚 / 質問は完全に正直に 等。 セミナー・JC・卒論発表の準備時に読む、 英語本体)
 │   ├── giving-talks.ja.md  # ↑ giving-talks.md の日本語版
-│   └── beamer-slides.md    # Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可。giving-talks.md〔中身/作法〕と相補)
+│   ├── beamer-slides.md    # Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可。giving-talks.md〔中身/作法〕と相補)
+│   └── chalkboard-close-up-merge.md # 板書写真 PDF で「広域 + close-up annotation」 2 枚を 1 page に統合する手順 (= Keynote 手作業経路 〔黒板 theme + 透過 chalk PNG overlay〕 を推奨、 PIL inline composite は anchor 明確時のみ。 free-form 配置は user が掴んでドラッグ、 AppleScript で .key auto 生成 + slide PNG export までを台本化、 chalk-only RGBA mask threshold 100-140 + Gaussian blur 1.5 px の標準値、 lectures 板書 reflex の延長)
 ├── hooks/
 │   ├── memory-guard.sh             # メモリ書き込みガード — Edit/Write 用（§8 feedback deny + escape hatch: machine-local marker）
 │   ├── memory-guard-bash.sh        # メモリ書き込みガード — Bash 用（§8 feedback deny + escape hatch）
