@@ -127,6 +127,45 @@ else
   fail=$((fail+1)); results+=("❌ C1: 鍵概念欠落:$missing")
 fi
 
+# ---------- §D write/send capability block (= 2026-06-20 write-tool RCA、 axis B) ----------
+# tool 名に send verb が無い = capability 不在の guarantee ではない、 を session 冒頭で anchor。
+echo ""
+echo "=== §D write/send capability anchor ==="
+
+out="$(printf '%s' '{"hook_event_name":"SessionStart","source":"startup"}' | "$HOOK" 2>&1)"
+
+# D1. capability block の鍵概念が全部出る
+missing_d=""
+for key in "write/send capability" "send_email" "Cowork hosted connector" "account-direct.py"; do
+  if ! printf '%s' "$out" | grep -qF "$key"; then
+    missing_d="$missing_d [$key]"
+  fi
+done
+if [ -z "$missing_d" ]; then
+  pass=$((pass+1)); results+=("✅ D1: capability block の鍵概念が全て output に含まれる")
+else
+  fail=$((fail+1)); results+=("❌ D1: capability 鍵概念欠落:$missing_d")
+fi
+
+# D2. 「read-only」 と書かず「send 不可」 と正確に framing している (= 起票 plan の誤 framing 修正)
+if printf '%s' "$out" | grep -qF 'send 不可' && printf '%s' "$out" | grep -qF 'draft 作成'; then
+  pass=$((pass+1)); results+=("✅ D2: 「send 不可」 + draft 可 と正確に framing (read-only と誤記しない)")
+else
+  fail=$((fail+1)); results+=("❌ D2: capability の正確 framing 欠落")
+fi
+
+# D3. KNOWN_GMAIL がある machine では send route に alias 列が出る / 無い machine でも fail-open
+if [ -d "$HOME/.gmail-mcp" ] && ls "$HOME/.gmail-mcp"/*/credentials.json >/dev/null 2>&1; then
+  if printf '%s' "$out" | grep -qF 'register 済 alias:'; then
+    pass=$((pass+1)); results+=("✅ D3: standalone alias 登録 machine で send route に alias 列挙")
+  else
+    fail=$((fail+1)); results+=("❌ D3: alias 登録あるのに send route に列挙なし")
+  fi
+else
+  # foreign / standalone 未 register でも capability block は出る (DESKTOP_CONNECTORS 経由) か silent
+  results+=("⚠️ D3: standalone alias 未 register — send route 列挙 skip")
+fi
+
 echo ""
 echo "=== 結果 ==="
 for r in "${results[@]}"; do echo "  $r"; done

@@ -9,6 +9,9 @@
 #   session 開始時に「machine 上に register 済 MCP account / connector の
 #   list」 + 「session-active subset は別物の可能性、 universal claim 前に
 #   verify する規律」 を inject する。 該当 register が 0 なら silent。
+#   (2026-06-20 追加) §4b で write/send capability の anchor も inject =
+#   「Cowork connector は send_email を出さない、 send は standalone alias /
+#   account-direct.py」 = read scope の null trap とは別軸の write-tool 不在 trap。
 #
 #   foreign user (= ~/.gmail-mcp / desktop config 不在) では generic な
 #   meta-reminder 1 文だけ inject (= 「MCP 経由検索の null は scope unknown
@@ -28,6 +31,10 @@
 #   0 件」 と universalize する slip を予防できた可能性ある。 詳細 RCA + 設計:
 #   ~/Claude/odakin-prefs/plans/2026-06-20-mcp-scope-guard-hooks.md (= 個人層、
 #   実 incident の固有名・thread 内容は public layer 1 に出さない方針)
+#   §4b write/send capability block の設計動機 = 2026-06-20 write-tool RCA: 上記 RCA の
+#   姉妹 incident。 Cowork connector に send_email が無いのを「メール送信できない」 と
+#   誤解しうる (= read scope の null universalization とは別軸の capability 不在 trap)。
+#   詳細 = ~/Claude/odakin-prefs/plans/2026-06-20-write-tool-availability-defense.md
 #
 # Honest framing (= cold-eyes 設計判断):
 #   本 hook は「filesystem に register 済の account 名」 を列挙するだけで、
@@ -135,6 +142,26 @@ universal claim を書く前の必須 anchoring (= 起票 RCA で破綻した 4 
   2. 見えない account は ~/Claude/gmail-mcp-config/scripts/account-direct.py で Python 直叩き
   3. それでも null なら user に「以下のみ verify、 残り <list> は未 verify」 と honest framing
   4. Cowork desktop session なら user 操作で connector 追加を依頼 (= user 経路)"
+
+# ---------- 4b. write/send capability (= read scope と別軸、 2026-06-20 write-tool RCA) ----------
+# tool 名に send verb が「無い」 のは capability 不在の guarantee ではない: 別 connector type が
+# 同 account で send を出す。 Cowork connector の capability は filesystem から推定不可だが、
+# name PATTERN (= UUID vs alias) で capability TYPE は確実に判別できる (= blocker (3) の非対称性)。
+if [ -n "$KNOWN_GMAIL" ]; then
+  SEND_ROUTE="standalone mcp__gmail-<alias>__send_email (= register 済 alias: $KNOWN_GMAIL)"
+else
+  SEND_ROUTE="この machine に standalone alias は未 register (= account-direct.py か user に依頼)"
+fi
+REMINDER="${REMINDER}
+
+✉️ write/send capability (= read と別軸、 universal claim template とは別の trap):
+   tool 名に send/delete/modify verb が「無い」 のは「操作不能」 ではなく「この connector が
+   出さない」 だけ。 ❌「Cowork に send_email が無い → メール送信できない」 と即断するな。
+   - Cowork hosted connector (mcp__<UUID>__*) = read (search_threads/get_thread) +
+     draft 作成 (create_draft) + label 操作のみ。 send_email / delete_email / modify_email は
+     expose しない (= 「read-only」 ではなく「send 不可」 が正確 — draft/label は書ける)。
+   - send/delete/modify は: $SEND_ROUTE
+     ✅ 「送れない」 と結論する前に ToolSearch で mcp__gmail-<alias>__send_email の wire を確認。"
 
 if [ "$IS_DESKTOP" = 1 ]; then
   REMINDER="${REMINDER}

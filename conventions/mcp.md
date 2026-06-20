@@ -220,6 +220,15 @@ hook C は session 起動時に filesystem + desktop config から register 済 
 | `mcp__filesystem__*` | desktop config で許可された path tree (= 全 file が見えるわけではない) | `claude_desktop_config.json` の filesystem entry の path 引数 |
 | `mcp__computer-use__*` | macOS GUI + user 承認した application のみ | `list_granted_applications` で session 中の許可 list を確認 |
 
+**capability profile (= read scope と write scope は別軸、 2026-06-20 write-tool RCA)**: 上記表は「どの account / data が見えるか」 の scope。 別軸として「その tool で何が**できるか**」 (= capability) があり、 特に **Gmail は connector type で send capability が分かれる**:
+
+| connector type | read | draft 作成 + label | send / delete / modify |
+|---|---|---|---|
+| Cowork hosted (`mcp__<UUID>__*`) | ✅ `search_threads` / `get_thread` | ✅ `create_draft` / `label_*` / `create_label` | ❌ **expose しない** (= `send_email` / `delete_email` / `modify_email` 不在) |
+| standalone gongrzhe (`mcp__gmail-<alias>__*`) | ✅ `search_emails` / `read_email` | ✅ `draft_email` | ✅ `send_email` / `delete_email` / `modify_email` / `batch_*` |
+
+⚠️ **tool 名に send verb が「無い」 = 「送信不能」 ではない**: Cowork connector は **「read-only」 ではなく「send 不可」 が正確** (= draft / label は書ける、 send だけ出さない)。 capability は connector type で決まり、 同 account でも別 connector type が send を出すので、 Cowork connector に `send_email` が無いのを見て「メール送信できない」 と即断しない。 send したい時 = (a) standalone `mcp__gmail-<alias>__send_email` の wire を ToolSearch で確認 → (b) なければ `account-direct.py` (= 上記「対処 3 経路」 (c) の Python wrapper) → (c) それも無理なら user に手動送信を依頼。 wire-*account* は UUID から推定不可だが、 **capability *TYPE* は name pattern (= UUID vs alias) で確実に判別できる** (= 静的推論可能、 これが account 軸との非対称性)。 起票 = 2026-06-20 write-tool RCA (= Cowork-only session で send_email 不在を観察、 詳細は個人層 `odakin-prefs/plans/2026-06-20-write-tool-availability-defense.md`)。
+
 ⚠️ **session-active subset の verify は manifest だけでは不能** = 上記は **machine 上 register 済の universe** であって、 session で実際 wire されている subset は別。 desktop Cowork session は `--allowedTools` で大幅に subset される (= 上記 §「desktop Cowork session の `--allowedTools` 制限」)。 session 内 verify = (a) ToolSearch で `mcp__` 接頭辞 query して deferred tool list を取得 / (b) 各 tool に identity 系 call (= `get_profile` / `whoami`) を 1 回投げて実 wire を verify。
 
 **起票 incident** (2026-06-20、 詳細 = 個人層 plan): Cowork desktop session で Cowork connector (`mcp__<UUID>__*`) 1 個のみ wired、 他の複数 Gmail account (`mcp__gmail-<alias>__*` 群) は register 済だが session subset 外 → search で「該当無し」 を universalize → 4 回 push 後に Python wrapper (= account-direct.py、 上記「対処 3 経路」 (c)) で別 account に到達。 = **manifest を session 冒頭で「machine 上 register vs session-active」 の差分として読まないと、 同 trap が再演する** (= hook C が surface する役)。
@@ -235,6 +244,8 @@ scope-related artifact 3 つの責務分離:
 | 個人層 discipline | `odakin-prefs/CLAUDE.md inline §3` 表の「MCP tool / 外部 search の null」 行 | reflex (= 0 件 → universalize 前の self-question) + 機構 + 本節への routing |
 
 = **同じ事実を 3 場所に書かない**: hook の reminder 内容 / 本節の manifest / inline reflex の文言、 それぞれ責務が異なる layer なので一見重複に見えても各 layer の観客 (= 機構 / 人読知識 / Claude reflex) に対する用途が違う。 drift 防止は inline reflex の機械補強欄が「mcp.md §機械 enforcement + §MCP tool scope manifest」 を pointer 参照することで吸収 (= manifest 変更時に inline は触らなくて良い)。
+
+**capability 軸 (= write/send tool 不在 trap、 2026-06-20 write-tool RCA) も同 3 layer pattern**: 機構 = `session-start-mcp-scope-nudge.sh §4b` の write/send capability block / 人読 = 上記「capability profile」 表 / inline reflex = `odakin-prefs/CLAUDE.md inline §3` 表「MCP tool / 外部 search の null」 行の capability-absence 句。 read scope の null 軸とは別 trap (= 「0 件 → universal absence」 でなく「verb 不在 → 操作不能」 の誤推論) だが、 上流 trait は同一 (= **tool 名は何が含まれ・何ができるかの hint であって guarantee ではない**)。 起票 plan = `odakin-prefs/plans/2026-06-20-write-tool-availability-defense.md`。
 
 ---
 
