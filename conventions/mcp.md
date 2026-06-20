@@ -168,6 +168,32 @@ MCP 設定リポは private にすること（認証情報のパスやアカウ�
 
 ---
 
+## desktop Cowork session の `--allowedTools` 制限 (= 「登録済なのに使えない」 trap)
+
+Claude desktop (Cowork) app から起動した Claude Code session は `--allowedTools` で **限られた tool list (= 6 個程度: `mcp__computer-use` / `mcp__ccd_session__*` / `mcp__ccd_session_mgmt__*`)** しか渡してこない。 `~/.claude.json` の `mcpServers` に `gmail-personal` / `calendar-cis` 等が登録されていても、 そのまま自動 spawn されず session 内で見えない。
+
+= 「`~/.claude.json` 登録 ≠ session 内可用」 の構造ギャップ。 user が「Gmail MCP 設定してるはずなのに動かない」 と感じる典型 trap。
+
+### 切り分け 3 step
+
+1. **`ps -ef | grep -i "gmail\|mcp"`** で gmail-* MCP server process が走っているか確認。 0 件なら spawn されていない
+2. **当該 session の親 process command を `ps -p <pid> -o command`** で確認。 `--allowedTools` の中身を見て gmail-* が含まれているか
+3. **`~/.claude.json` の projects.<workdir>.mcpServers**  に登録があり、 spawn だけされてない (= allowedTools 由来) なら下記対処
+
+### 対処 3 経路
+
+| (a) | desktop Cowork に Gmail connector を追加 | desktop UI → Connectors → Gmail → OAuth で新規 wire。 `mcp__<UUID>__*` 形式で見えるようになる (= Cowork hosted 経路、 1 connector / 1 account) |
+| (b) | Terminal から Claude Code を直起動 | desktop Cowork でなく `claude` コマンドを直接 launch → `~/.claude.json` 登録 MCP が allowedTools に含まれる起動になる (= 制限なし運用) |
+| (c) | 本 session 内で OAuth token 直叩き Python | `~/.gmail-mcp/<account>/credentials.json` (= access_token + refresh_token) + `oauth-keys.json` (= client_id + client_secret) を Python で読み、 `oauth2.googleapis.com/token` で refresh → Gmail API 直叩き。 MCP layer 経由しない (= 当 session 内即効性ある) |
+
+### 教訓 (= sweep skipping 防止)
+
+「MCP 経由で取れた = 該当 account 全部見えた」 と判断するな。 **lab Gmail だけ wired で personal Gmail を見落としたまま「Naumov 過去往来 0 件で確定」 と 4 回繰り返した RCA** (2026-06-20)。 真因 = personal Gmail に 10 message Naumov thread が眠っていた。 「該当 account が全部 session に bind されているか」 を**最初に**確認するのが正しい sweep の入口。
+
+詳細 = `odakin-prefs/work-discipline.md` の「sweep skipping under structural gap」 項参照。
+
+---
+
 ## MCP で不十分な場合: API 直接アクセス
 
 MCP ツールは個別操作に最適だが、バッチ操作（一括削除・ラベル付け・統計取得等）には向かない。Gmail MCP の `modify_email` は1件ずつだが、Gmail API の `batchModify` は1回で最大1000件を処理できる。
