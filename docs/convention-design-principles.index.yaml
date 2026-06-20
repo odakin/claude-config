@@ -28,6 +28,10 @@ sections:
     legacy: "2.4"
     level: 3
     title: "2.4 削除できない誤り記録には errata marker を残す"
+  - id: sot-duplication-trichotomy
+    legacy: "2.5"
+    level: 3
+    title: "2.5 SoT 重複の 3 つの扱い (design-out vs reactive) — 成熟度で分類し、検出器を「未 design-out の症状」と読む"
   - id: rule-addition-criteria
     legacy: "3"
     level: 2
