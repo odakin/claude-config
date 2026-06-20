@@ -41,8 +41,10 @@
 #   「session-active 状態」 は判別しない (= hook process から確実に判別する
 #   経路が無い、 SessionStart の stdin は wired tool list を expose しない)。
 #   従って reminder は「以下が register 済、 session subset は別物の可能性、
-#   ToolSearch / get_profile で verify せよ」 という stance を取る。 false
-#   confidence (= 「✅ personal wired」 と書いて実は subset 外) を避ける。
+#   ToolSearch で verify せよ (= deferred tool list で実 wire を確認、 gmail は
+#   alias 名 = account)」 という stance を取る。 false confidence (= 「✅ personal
+#   wired」 と書いて実は subset 外) を避ける。 ⚠️ get_profile という MCP tool は
+#   現行 setup に存在しない (= 旧 built-in connector の名残、 mcp.md §共通「確認方法」)。
 #
 # Enumeration source:
 #   (a) $HOME/.gmail-mcp/<account>/credentials.json 群 (= gongrzhe gmail-mcp 系)
@@ -168,7 +170,8 @@ if [ "$IS_DESKTOP" = 1 ]; then
 
 ⚠️ CLAUDE_CODE_ENTRYPOINT=claude-desktop 検出 — 本 session は Cowork desktop。
    --allowedTools 制限により $HOME/.gmail-mcp/* の subset しか wire されない可能性高い。
-   各 Gmail account の get_profile を試して deferred tools list と照合せよ。"
+   ToolSearch で mcp__gmail-<alias> を query し、 実際に wire された alias を確認せよ
+   (= alias 名 = account、 get_profile という MCP tool は無い)。"
 fi
 
 REMINDER="${REMINDER}

@@ -36,7 +36,7 @@ CONVENTIONS.md・各リポの CLAUDE.md・メモリの設計判断の根拠を�
 ```
 CONVENTIONS.md §5.7 ← ルールの定義（WHAT: 確認せよ、WHY: 不可逆）
     ↓ ポインタ
-conventions/mcp.md  ← 手順の詳細（HOW: get_profile を実行）
+conventions/mcp.md  ← 手順の詳細（HOW: alias 名 / list_calendars 等で account 確認）
     ↑ 参照
 email-office step 0 ← 起動トリガー（WHEN: セッション開始時）
 ```

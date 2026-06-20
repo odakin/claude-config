@@ -6,9 +6,13 @@ MCP ツールを使うリポで適用。CLAUDE.md から参照: `~/Claude/claude
 
 ## 共通（CONVENTIONS.md §5.7 の手順詳細）
 
-- **確認方法**: Gmail は `gmail_get_profile`、Calendar は `gcal_list_calendars` で接続先アカウントを確認
-- **複数 MCP がある場合**: セッションの deferred tools 一覧で同一サービスの MCP が何個あるか確認し、それぞれ `get_profile` を実行して UUID→アカウントの対応を把握する
-- **UUID→アカウント対応表は MCP 設定リポに保持**: 各 MCP 設定リポ (例: `gmail-mcp-config`) の CLAUDE.md または SESSION.md に UUID→アカウントの対応を記録する。memory には書かない (machine-local で cross-machine 不整合を招く。詳細: [docs/convention-design-principles.md §5](../docs/convention-design-principles.md))。新規セッションで対応表が不明・古ければ、全 MCP で `get_profile` を実行して deferred tools の UUID 一覧と照合し、差分を MCP 設定リポに追記する
+- **確認方法** (⚠️ 2026-06-20 訂正 — 現行 setup に `get_profile` / `gmail_get_profile` という **MCP tool は存在しない**、 旧 built-in connector の名残。 実在 tool ベースで確認する):
+  - **gongrzhe standalone** (`mcp__gmail-<alias>__*`): **alias 名 = account** (1:1、 `~/.gmail-mcp/<alias>/`)。 runtime の identity tool は無いので alias 名が account の identity。
+  - **Cowork UUID** (`mcp__<UUID>__*`): identity tool 無し。 自分発 mail を `search_threads`→`get_thread` で読んで From を確認 / desktop Connectors UI / user 確認 のいずれか。
+  - **Calendar**: `list_calendars` の primary calendar id = 接続 account の email。
+  - (script レベルの API `users().getProfile` は reauth.sh が account 検証に使うが、 session から呼べる MCP tool ではない)
+- **複数 MCP がある場合**: セッションの deferred tools 一覧で同一サービスの MCP が何個あるか確認し、上記方法 (alias 名 / Calendar は list_calendars / Cowork は自分宛 mail 読み) で UUID→アカウントの対応を把握する
+- **UUID→アカウント対応表は MCP 設定リポに保持**: 各 MCP 設定リポ (例: `gmail-mcp-config`) の CLAUDE.md または SESSION.md に UUID→アカウントの対応を記録する。memory には書かない (machine-local で cross-machine 不整合を招く。詳細: [docs/convention-design-principles.md §5](../docs/convention-design-principles.md))。新規セッションで対応表が不明・古ければ、上記方法で UUID→account を照合し、差分を MCP 設定リポに追記する
 - **アカウント一覧の正本**: 各 MCP 設定リポの CLAUDE.md を参照（各プロジェクトリポの CLAUDE.md にはハードコードしない）
 
 ## `claude mcp` の project 解決ルール (注意)
@@ -214,8 +218,8 @@ hook C は session 起動時に filesystem + desktop config から register 済 
 
 | tool prefix pattern | wire scope (= 何が見えるか) | account 推定の起点 |
 |---|---|---|
-| `mcp__gmail-<alias>__*` (= gongrzhe `@gongrzhe/server-gmail-autoauth-mcp`) | **1 account / 1 alias** (= alias と Gmail account の 1:1 対応、 「register 済 ≠ session-active」 は SessionStart hook で確認) | `~/.gmail-mcp/<alias>/credentials.json` の存在 + 各 server 起動時 `gmail_get_profile` で実 account 確認 |
-| `mcp__<UUID>__*` (= Cowork hosted connector、 UUID 形式) | **1 connector / 1 account**、 ただし **UUID から account を filesystem 由来で推定不可** (= Cowork app 内部の wiring) | session 内で `<UUID>__get_profile` 等の identity tool を 1 回呼んで実 account を verify |
+| `mcp__gmail-<alias>__*` (= gongrzhe `@gongrzhe/server-gmail-autoauth-mcp`) | **1 account / 1 alias** (= alias と Gmail account の 1:1 対応、 「register 済 ≠ session-active」 は SessionStart hook で確認) | **alias 名 = account** (= `~/.gmail-mcp/<alias>/credentials.json`)。 ⚠️ gongrzhe server に `get_profile` MCP tool は無い (= account 検証は reauth.sh が API `getProfile` を script で叩く、 session の MCP tool ではない) |
+| `mcp__<UUID>__*` (= Cowork hosted connector、 UUID 形式) | **1 connector / 1 account**、 ただし **UUID から account を filesystem 由来で推定不可** (= Cowork app 内部の wiring) | identity MCP tool 無し。 account を知るには 自分発 mail を `search_threads`→`get_thread` で読んで From 確認 / desktop Connectors UI / user 確認 |
 | `mcp__calendar-<alias>__*` (= 個別 Google Calendar MCP) | 1 alias の Google account / 紐付く全 calendar (= 個人 + 共有) | `~/Library/Application Support/Claude/claude_desktop_config.json` の `mcpServers.<alias>` |
 | `mcp__filesystem__*` | desktop config で許可された path tree (= 全 file が見えるわけではない) | `claude_desktop_config.json` の filesystem entry の path 引数 |
 | `mcp__computer-use__*` | macOS GUI + user 承認した application のみ | `list_granted_applications` で session 中の許可 list を確認 |
@@ -229,7 +233,7 @@ hook C は session 起動時に filesystem + desktop config から register 済 
 
 ⚠️ **tool 名に send verb が「無い」 = 「送信不能」 ではない**: Cowork connector は **「read-only」 ではなく「send 不可」 が正確** (= draft / label は書ける、 send だけ出さない)。 capability は connector type で決まり、 同 account でも別 connector type が send を出すので、 Cowork connector に `send_email` が無いのを見て「メール送信できない」 と即断しない。 send したい時 = (a) standalone `mcp__gmail-<alias>__send_email` の wire を ToolSearch で確認 → (b) なければ `account-direct.py` (= 上記「対処 3 経路」 (c) の Python wrapper) → (c) それも無理なら user に手動送信を依頼。 wire-*account* は UUID から推定不可だが、 **capability *TYPE* は name pattern (= UUID vs alias) で確実に判別できる** (= 静的推論可能、 これが account 軸との非対称性)。 起票 = 2026-06-20 write-tool RCA (= Cowork-only session で send_email 不在を観察、 詳細は個人層 `odakin-prefs/plans/2026-06-20-write-tool-availability-defense.md`)。
 
-⚠️ **session-active subset の verify は manifest だけでは不能** = 上記は **machine 上 register 済の universe** であって、 session で実際 wire されている subset は別。 desktop Cowork session は `--allowedTools` で大幅に subset される (= 上記 §「desktop Cowork session の `--allowedTools` 制限」)。 session 内 verify = (a) ToolSearch で `mcp__` 接頭辞 query して deferred tool list を取得 / (b) 各 tool に identity 系 call (= `get_profile` / `whoami`) を 1 回投げて実 wire を verify。
+⚠️ **session-active subset の verify は manifest だけでは不能** = 上記は **machine 上 register 済の universe** であって、 session で実際 wire されている subset は別。 desktop Cowork session は `--allowedTools` で大幅に subset される (= 上記 §「desktop Cowork session の `--allowedTools` 制限」)。 session 内 verify = (a) ToolSearch で `mcp__` 接頭辞 query して deferred tool list を取得 / (b) wire account の確認は上記 §「MCP tool scope manifest」 表の「account 推定の起点」 列に従う (= gmail alias は alias 名、 Cowork は自分宛 mail 読み、 Calendar は `list_calendars`)。 ⚠️ `get_profile` / `whoami` という MCP tool は現行 setup に**存在しない** (= 旧 built-in connector の名残、 §共通「確認方法」 参照)。
 
 **起票 incident** (2026-06-20、 詳細 = 個人層 plan): Cowork desktop session で Cowork connector (`mcp__<UUID>__*`) 1 個のみ wired、 他の複数 Gmail account (`mcp__gmail-<alias>__*` 群) は register 済だが session subset 外 → search で「該当無し」 を universalize → 4 回 push 後に Python wrapper (= account-direct.py、 上記「対処 3 経路」 (c)) で別 account に到達。 = **manifest を session 冒頭で「machine 上 register vs session-active」 の差分として読まないと、 同 trap が再演する** (= hook C が surface する役)。
 
