@@ -232,7 +232,7 @@ robust 解:
 
 ### この technique の射程 (honest)
 
-これは「結果が返らないから独立 session を避ける」 動機を解消し route を *可能にする*。 ただし route は **選択の瞬間に想起されている必要**があり (= 存在を知っているだけでは pre-deliberative な既定を変えない)、 そこは習慣化依存。 ⇒ technique は route を *可能にする* enabler であって、 それを必ず選ばせる仕組みではない。 (⚠️ 「結果が要らない場面でも独立を避けるなら *作る主体でいたい* 別動機が残る」 という説は証拠が薄く speculative — tool availability / 動機づけられた task 誤読で説明でき、 別個の cure を要する load-bearing 問題として扱わない。)
+これは「結果が返らないから独立 session を避ける」 動機を解消し route を *可能にする*。 ただし route は **選択の瞬間に表象されている必要**があり (= 存在を知っているだけでは pre-deliberative な既定を変えない)。 ⚠️ **cross-session の「使えば馴染む」 習慣化は起きない** (= 各 session は fresh instance で学習の持ち越しが無い)。 route が選択の瞬間に表象されるのは (a) 同一 session 内で既に使った後 (in-context) か (b) auto-loaded surface (= session 冒頭で必ず読まれる場所) 経由のみで、 **ambient な convention doc (本 doc 含む) は cold session では発火しない**。 ⇒ technique は route を *可能にする* enabler であって、 それを必ず選ばせる仕組みではない (= 「書いた」 だけでは fresh session の既定は変わらない)。 (⚠️ 「結果が要らない場面でも独立を避けるなら *作る主体でいたい* 別動機が残る」 という説は証拠が薄く speculative — tool availability / 動機づけられた task 誤読で説明でき、 別個の cure を要する load-bearing 問題として扱わない。)
 
 ---
 
