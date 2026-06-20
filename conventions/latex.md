@@ -6,6 +6,13 @@ LaTeX を含むリポで適用。CLAUDE.md から参照: `~/Claude/claude-config
 - **equation/align 環境内は原則変更しない。** 変更は事前にユーザー確認。物理的内容の追加はコメントとして提案（ハルシネーション混入防止）
 - 英語校正・文法修正など確実に正しい本文修正は可
 
+## `\mathbb{数字}` は黙って化ける — 単位行列は `\mathbbm{1}` (bbm)
+
+- **`\mathbb{数字}`(例 `\mathbb 1`, `\mathbb 0`)を使わない。** `amssymb` の `\mathbb` は**大文字 A–Z しかグリフを持たない**ため、数字を渡すと **compile error を出さずに黙って化ける**(missing glyph / 別字へ fallback)。= **視覚 QA でしか気づかない**沈黙故障(コンパイル成功 = 正しい、ではない好例)。
+- **単位行列・恒等作用素は `\usepackage{bbm}` + `\mathbbm{1}`**(真の黒板太字 1)。代替: `\mathds{1}`(dsfont)、最低限 `\mathbf{1}`。同様に黒板太字の数字が要る一般ケースも `\mathbb` でなく bbm/dsfont 系を使う。
+- **発火**: PDF の**視覚 QA で実物確認**が第一(doc 記載だけでは発火しない)。より確実には pre-commit / build で `\mathbb\s*\{?\s*[0-9]` を grep する mechanical guard を足す(= doc rule より発火信頼度が高い)。
+- 実例: ある物理ノートの式で $\gamma_5^2=\,$`\mathbb 1` が化けていた(`\mathbbm{1}` で修正)。`\mathbb` を識別子マクロのつもりで数字に当てると起きる。
+
 ## comment-out 流儀の編集後は live `\cite` 集合を照合する
 
 旧文を `%...` で残して次行に新文を書く「comment-out keep」 流儀で編集すると、 行末まで `%` が
