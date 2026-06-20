@@ -193,6 +193,10 @@ HOOK_ENTRIES='[
   {
     "matcher": "Bash",
     "hooks": [{"type": "command", "command": "~/.claude/hooks/expensive-tmp-guard.sh"}]
+  },
+  {
+    "matcher": "mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)",
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/mcp-search-scope-reminder-nudge.sh"}]
   }
 ]'
 
@@ -214,6 +218,10 @@ POST_TOOL_USE_ENTRIES='[
   {
     "matcher": "Edit|Write|MultiEdit",
     "hooks": [{"type": "command", "command": "~/.claude/hooks/session-commit-nudge.sh track"}]
+  },
+  {
+    "matcher": "mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)",
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/mcp-search-zero-result-nudge.sh"}]
   }
 ]'
 
@@ -237,6 +245,9 @@ STOP_ENTRIES='[
 SESSION_START_ENTRIES='[
   {
     "hooks": [{"type": "command", "command": "~/.claude/hooks/currentdate-anchor.py"}]
+  },
+  {
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-mcp-scope-nudge.sh"}]
   }
 ]'
 
@@ -328,7 +339,7 @@ install_hooks() {
                 "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
         else
             # PreToolUse が存在する場合、各 hook が含まれているか個別確認
-            for HOOK_CMD in "memory-guard.sh" "public-leak-guard.sh" "memory-guard-bash.sh" "google-url-guard.sh" "expensive-tmp-guard.sh"; do
+            for HOOK_CMD in "memory-guard.sh" "public-leak-guard.sh" "memory-guard-bash.sh" "google-url-guard.sh" "expensive-tmp-guard.sh" "mcp-search-scope-reminder-nudge.sh"; do
                 if ! jq -e --arg cmd "$HOOK_CMD" \
                     '.hooks.PreToolUse[] | select(.hooks[]?.command | contains($cmd))' \
                     "$SETTINGS" > /dev/null 2>&1; then
@@ -375,7 +386,7 @@ install_hooks() {
                 '.hooks.SessionStart = $entries' \
                 "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
         else
-            for HOOK_CMD in "currentdate-anchor.py"; do
+            for HOOK_CMD in "currentdate-anchor.py" "session-start-mcp-scope-nudge.sh"; do
                 if ! jq -e --arg cmd "$HOOK_CMD" \
                     '.hooks.SessionStart[] | select(.hooks[]?.command | contains($cmd))' \
                     "$SETTINGS" > /dev/null 2>&1; then
@@ -396,7 +407,7 @@ install_hooks() {
                 '.hooks.PostToolUse = $entries' \
                 "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
         else
-            for HOOK_CMD in "git-state-nudge.sh" "pdf-read-fallback-nudge.sh" "session-commit-nudge.sh track"; do
+            for HOOK_CMD in "git-state-nudge.sh" "pdf-read-fallback-nudge.sh" "session-commit-nudge.sh track" "mcp-search-zero-result-nudge.sh"; do
                 if ! jq -e --arg cmd "$HOOK_CMD" \
                     '.hooks.PostToolUse[] | select(.hooks[]?.command | contains($cmd))' \
                     "$SETTINGS" > /dev/null 2>&1; then

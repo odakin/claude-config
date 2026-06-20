@@ -188,9 +188,23 @@ Claude desktop (Cowork) app から起動した Claude Code session は `--allowe
 
 ### 教訓 (= sweep skipping 防止)
 
-「MCP 経由で取れた = 該当 account 全部見えた」 と判断するな。 **lab Gmail だけ wired で personal Gmail を見落としたまま「Naumov 過去往来 0 件で確定」 と 4 回繰り返した RCA** (2026-06-20)。 真因 = personal Gmail に 10 message Naumov thread が眠っていた。 「該当 account が全部 session に bind されているか」 を**最初に**確認するのが正しい sweep の入口。
+「MCP 経由で取れた = 該当 account 全部見えた」 と判断するな。 **2026-06-20 layer-3 RCA**: 単一 Gmail account のみ wired の状態で人名 query 0 件を「Gmail で 0 件で確定」 と universalize、 4 回繰り返してから user の繰返 push で別 account に該当 thread が存在することが判明。 真因 = MCP tool metadata が wire account を expose しない構造ギャップ。 「該当 account が全部 session に bind されているか」 を**最初に**確認するのが正しい sweep の入口。 〔起票 commit (= 2026-06-20 prior version) は **incident 固有名・thread 内容を本節に literal で焼き込んでいた** = 自身が public layer 1 安全規則 §「2026-06-16 拡張」 を踏んだ leak。 該当 literal は 2026-06-20 cold-eyes session でこの commit で sanitize、 git history 側は不可逆〕
 
-詳細 = `odakin-prefs/work-discipline.md` の「sweep skipping under structural gap」 項参照。
+詳細 (= 固有名・transcript 内容含む incident 記録) = layer 3 (個人層) の `odakin-prefs/work-discipline.md §「sweep skipping under structural gap」` + `odakin-prefs/plans/2026-06-20-mcp-scope-guard-hooks.md` 参照。
+
+### 機械 enforcement (= 2026-06-20 RCA 後に追加、 soft guard を hard mechanism で強化)
+
+上記「教訓」 は文字どおり読まれない場合の保険として、 以下 3 hook を `claude-config/hooks/` に投入済 (= setup.sh で全 machine の `~/.claude/hooks/` に symlink + settings.json 登録、 起源 plan = `odakin-prefs/plans/2026-06-20-mcp-scope-guard-hooks.md`):
+
+| hook | phase | matcher | 役割 |
+|---|---|---|---|
+| [`mcp-search-scope-reminder-nudge.sh`](../hooks/mcp-search-scope-reminder-nudge.sh) | PreToolUse | `mcp__.*__(search_threads\|search_emails\|list_messages\|list_threads\|search_threads_by\|list_events)` | search 系 tool 呼び出し直前に scope universalization trap の reminder + fill-in template (= `Verified scope = ___ / NOT verified = ___`) を inject |
+| [`mcp-search-zero-result-nudge.sh`](../hooks/mcp-search-zero-result-nudge.sh) | PostToolUse | 同上 | 0 件結果 (= `No threads found` / `"messages": []` / `Found 0` / `resultSizeEstimate: 0` 等の明確 marker) を検出した直後に強 reminder + 「universal claim 禁止 list (= 「Gmail で 0 件」 「Mac Mail 全 sweep 0 件で確定」 等)」 を inject |
+| [`session-start-mcp-scope-nudge.sh`](../hooks/session-start-mcp-scope-nudge.sh) | SessionStart | (matcher なし) | session 起動時に `~/.gmail-mcp/` + `claude_desktop_config.json` から register 済 account を列挙、 「register 済 ≠ session-active subset」 caveat 込みで anchor として inject |
+
+3 hook とも `-nudge` suffix (= 非 block、 informational only)、 出力経路は `additionalContext` JSON + `~/.claude/surface/*.txt` の 2 段 defensive (= CLI session は前者、 desktop Cowork session は後者、 [hook-authoring.md §9.3](hook-authoring.md) 「desktop は hook を実行はするが出力を honor しない」)。 配線は `claude-config/setup.sh install_hooks` で全自動、 各 hook 直下に `*.test.sh` (= logic test §A + 起票 transcript の retroactive selftest §B) 同梱。
+
+⚠️ 二次 trap 自覚: hook も「reminder を読み飛ばす Claude」 の前で必ず機能する保証はない (= 起票 session author confession)。 多層化 (= 3 hook 並走 + ToolSearch enumeration + user 側 wire 拡張 = Cowork connector に personal Gmail 追加、 plan §blocker (4)) でリスク低減を狙う。 効果検証は live invoke (= §9.1 build-dependent: 新規 hook は同 session 非発火、 次 session で観察) が必要、 数回の Gmail-search session で「scope-template が実際に埋められるか」 を観察 → false negative 多発なら escalate (= `permissionDecision: ask` 化、 hook-authoring §6.3)。
 
 ---
 
