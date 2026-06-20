@@ -146,6 +146,17 @@ Discord Developer Portal (= https://discord.com/developers/applications) で new
 
 **規律**: bot の **役割** に AI 駆動である事実を name で expose したい (= transparency) ケースでも、 application 名は AI provider 識別子を避けて命名する。 user-visible な「AI 駆動である」 announcement は bot の About 文 (Developer Portal の application Description field) や server 内 introduction post で代替する。
 
+## Developer Portal: アプリ認証 (App Verification) は 100+ server 拡大用、 個人 bot は無視可能
+
+Discord Developer Portal の左 sidebar には **`アプリ認証`** (英: `App Verification`) という entry があり、 click すると未達 checklist に ⚠️ アイコンが並ぶ画面が出る (例: チーム所属 / ToS link / Privacy Policy link / 全メンバー 2FA)。 これは **「アプリケーションを 100 件を超えるサーバーに拡大する」** ための opt-in 認証で、 個人運用 bot (= 数 server に invite するだけの用途) では **完全に無関係 + 無視可能**。 ⚠️ アイコンは「100+ server 配布を目指すなら N 件足りない」 の pre-flight checklist の意味であって、 「bot が動かない」 ではない。
+
+**観測 (2026-06-20)**: odakin が `odakin-secretary` application 作成直後にこのページに行き当たり、「以前にも同じエラーを見た記憶があるが記録がない」 と flag。 検索の結果、 当 convention にも personal layer の `discord.md` にも記録なし = 過去 2 回の bot 作成 (twcu-phys-bot / qm-textbook-bot) の際に同 page を踏んでいたが institutional knowledge として落ちていた。 本節で記録化。
+
+**規律**:
+- Application 作成直後に sidebar `アプリ認証` を click しない (= 個人 bot 用途では用無し、 ⚠️ で動揺するだけ)
+- Token 発行は sidebar **`Bot`** (= `OAuth2` の 1 つ下) に直行
+- もし誤って `アプリ認証` page を開いて ⚠️ が並んでも、 そのまま閉じて `Bot` に移動して OK
+
 ## 関連
 
 - `identity-in-config.md`: Discord user ID 等を config に書くときの PII レイヤ判定
