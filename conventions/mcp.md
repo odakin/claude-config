@@ -206,6 +206,36 @@ Claude desktop (Cowork) app から起動した Claude Code session は `--allowe
 
 ⚠️ 二次 trap 自覚: hook も「reminder を読み飛ばす Claude」 の前で必ず機能する保証はない (= 起票 session author confession)。 多層化 (= 3 hook 並走 + ToolSearch enumeration + user 側 wire 拡張 = Cowork connector に personal Gmail 追加、 plan §blocker (4)) でリスク低減を狙う。 効果検証は live invoke (= §9.1 build-dependent: 新規 hook は同 session 非発火、 次 session で観察) が必要、 数回の Gmail-search session で「scope-template が実際に埋められるか」 を観察 → false negative 多発なら escalate (= `permissionDecision: ask` 化、 hook-authoring §6.3)。
 
+### MCP tool scope manifest (= 人読 reference、 hook の動的 enumeration を補完)
+
+hook C は session 起動時に filesystem + desktop config から register 済 tool を動的に列挙するが、 hook 出力に出ない時 (= silent fail / desktop frontend で surface 経由) や hook が読まれない時のために、 **「どの tool prefix がどの scope に対応するか」 の人読 manifest** を以下に置く。 odakin-prefs/CLAUDE.md inline §3 行「MCP tool / 外部 search の null」 がこの節を pointer 参照する (= reflex の機械補強欄)。
+
+⚠️ leak 規律: 本節は public layer 1 ゆえ **特定 account の email literal は書かない** (= 「odakin@<domain>」 等の literal は禁止、 alias 名と filesystem location までで止める。 詳細 = [`claude-config/CLAUDE.md §「安全規則 (公開リポ)」 + §「2026-06-16 拡張」`](../CLAUDE.md))。
+
+| tool prefix pattern | wire scope (= 何が見えるか) | account 推定の起点 |
+|---|---|---|
+| `mcp__gmail-<alias>__*` (= gongrzhe `@gongrzhe/server-gmail-autoauth-mcp`) | **1 account / 1 alias** (= alias と Gmail account の 1:1 対応、 「register 済 ≠ session-active」 は SessionStart hook で確認) | `~/.gmail-mcp/<alias>/credentials.json` の存在 + 各 server 起動時 `gmail_get_profile` で実 account 確認 |
+| `mcp__<UUID>__*` (= Cowork hosted connector、 UUID 形式) | **1 connector / 1 account**、 ただし **UUID から account を filesystem 由来で推定不可** (= Cowork app 内部の wiring) | session 内で `<UUID>__get_profile` 等の identity tool を 1 回呼んで実 account を verify |
+| `mcp__calendar-<alias>__*` (= 個別 Google Calendar MCP) | 1 alias の Google account / 紐付く全 calendar (= 個人 + 共有) | `~/Library/Application Support/Claude/claude_desktop_config.json` の `mcpServers.<alias>` |
+| `mcp__filesystem__*` | desktop config で許可された path tree (= 全 file が見えるわけではない) | `claude_desktop_config.json` の filesystem entry の path 引数 |
+| `mcp__computer-use__*` | macOS GUI + user 承認した application のみ | `list_granted_applications` で session 中の許可 list を確認 |
+
+⚠️ **session-active subset の verify は manifest だけでは不能** = 上記は **machine 上 register 済の universe** であって、 session で実際 wire されている subset は別。 desktop Cowork session は `--allowedTools` で大幅に subset される (= 上記 §「desktop Cowork session の `--allowedTools` 制限」)。 session 内 verify = (a) ToolSearch で `mcp__` 接頭辞 query して deferred tool list を取得 / (b) 各 tool に identity 系 call (= `get_profile` / `whoami`) を 1 回投げて実 wire を verify。
+
+**起票 incident** (2026-06-20): Cowork desktop session で Cowork connector (`mcp__<UUID>__*`) 1 個のみ wired、 他 4 Gmail account (`mcp__gmail-{personal,cis,lab,twcuphys,gr}__*`) は register 済だが session subset 外 → search で「該当無し」 を universalize → 4 回 push 後に Python wrapper (= account-direct.py、 上記「対処 3 経路」 (c)) で別 account に到達。 = **manifest を session 冒頭で「machine 上 register vs session-active」 の差分として読まないと、 同 trap が再演する** (= hook C が surface する役)。
+
+### scope manifest と reflex の関係 (= 重複防止の整理、 起票 plan = `2026-06-20-tool-scope-verification-reflex.md`)
+
+scope-related artifact 3 つの責務分離:
+
+| layer | artifact | 役割 |
+|---|---|---|
+| 機構 (hook) | 上記「機械 enforcement」 の 3 hook | 自動 inject + 0 件結果 trap |
+| 人読 reference (= 本節) | 「MCP tool scope manifest」 表 | tool prefix → scope の type system 的 documentation |
+| 個人層 discipline | `odakin-prefs/CLAUDE.md inline §3` 表の「MCP tool / 外部 search の null」 行 | reflex (= 0 件 → universalize 前の self-question) + 機構 + 本節への routing |
+
+= **同じ事実を 3 場所に書かない**: hook の reminder 内容 / 本節の manifest / inline reflex の文言、 それぞれ責務が異なる layer なので一見重複に見えても各 layer の観客 (= 機構 / 人読知識 / Claude reflex) に対する用途が違う。 drift 防止は inline reflex の機械補強欄が「mcp.md §機械 enforcement + §MCP tool scope manifest」 を pointer 参照することで吸収 (= manifest 変更時に inline は触らなくて良い)。
+
 ---
 
 ## MCP で不十分な場合: API 直接アクセス
