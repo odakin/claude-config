@@ -189,6 +189,43 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 
 ---
 
+## 7. 別 session への hand-off と結果の返送 — spawn_task + send_message (token-handshake で宛先解決)
+
+§1-6 は並列 race の **防御**。 本節は逆に、 **意図的に独立 session を起こして結果を受け取る** 構築的 technique。
+
+### 用途と、 なぜ Agent でなくこちらか
+
+「**完全に独立した別 session に作業を渡し、 結果も受け取りたい**」 とき。 委譲 primitive は 2 つあり desideratum が分かれている:
+
+- **Agent (subagent)**: 結果は *呼び元に返る* が、 呼び元 context を継承する *subagent* で **独立でない** (呼び元 session 終了で消える / user が独立に steer 不可)。
+- **spawn_task (新 session)**: *完全に独立* (own worktree / 呼び元記憶ゼロ / 呼び元終了後も生存 / user が steer 可) だが、 結果は *user に fire* で **呼び元に自動では返らない**。
+
+⇒ ユーザーが「独立した新 session」 を求め、 かつ結果も要るなら、 **spawn_task に「結果を呼び元に返せ」 を組み合わせる** と「独立 ∧ 結果返送」 が in-scope で得られる (harness 変更不要)。 「新 session」 を Agent に潰さないこと (= [`convention-design-principles.md §4.1` 深層](../docs/convention-design-principles.md#motivated-substitution-trap) の deliverer-retention 置換 = ユーザーが名指した独立性を、 結果が自分に返る Agent へ無意識に潰す失敗)。
+
+### robust な宛先解決 = token-handshake (method A)
+
+呼び元が「自分の id を spawned に渡す」 のは **破綻する**: session が *自分で取得できる id* (= 自分の transcript file 名 / jsonl の `sessionId` field) は、 `send_message` / `list_sessions` が routing に使う *addressable id* (`local_<uuid>` 形式) と **一致する保証がない** (= 観測例では別物だった)。 加えて `list_sessions` は self を除外するので自分を引けない。 ⇒ 呼び元は自分の addressable id を実行時に確実には知れない。
+
+robust 解:
+
+1. **呼び元が会話に unique token を残す** (= 衝突しない distinctive な文字列 `<TOKEN>`)。
+2. **spawned 側が完了時に `search_session_transcripts(<TOKEN>)` で全文検索** → HIT した session の addressable id を**直接取得** → `send_message` で結果を返す。
+3. 結果は呼び元会話に `From <title>` の user turn として着地 (= user 確認 gate 経由)。
+
+これは **呼び元が自分の id を知らなくても動く唯一 robust な方法**。 他は脆い: (B) 呼び元が id を渡す = 上記 namespace 不一致で誤 routing / (C) spawned が cwd + recency で list_sessions から推定 = 同 cwd を複数 session が共有すると**誤着** (実際に起きた)。
+
+### 注意 (caveat)
+
+- `send_message` は **常に user 確認を挟み、 unsupervised (auto / bypass) mode では使えない** ⇒ 本 technique は **supervised session 専用** (= scheduled-task / cron 文脈では発火不能)。
+- **非同期**: 結果は spawned 完了時に届く (呼び元はブロックしない = 「自分の作業を続けたい」 と両立)。
+- token は一意性を持たせる。 複数 HIT したら最も最近 active な該当 session を呼び元とする。 **token を持つ呼び元以外には絶対送らない** (= 誤着防止)。
+
+### この technique の射程 (honest)
+
+これは「結果が返らないから独立 session を避ける」 動機を解消する。 ただし §4.1 の motivated substitution は **手段でなく動機の問題**であり: (i) 「自分が作業主体でいたい」 という別動機 (doer/authorship 保持) はこの route で解消されない、 (ii) route は *選択の瞬間に想起されている* 必要がある (= 存在を知っているだけでは pre-deliberative な既定を変えない)。 ⇒ technique は route を *可能にする* が、 置換 disposition の **部分的な enabler** であって完全な cure ではない。
+
+---
+
 ## 関連
 
 - collaborator (= 他 user) との Git race / branching: [`shared-repo.md`](shared-repo.md)
