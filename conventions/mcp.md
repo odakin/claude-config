@@ -222,7 +222,7 @@ hook C は session 起動時に filesystem + desktop config から register 済 
 
 ⚠️ **session-active subset の verify は manifest だけでは不能** = 上記は **machine 上 register 済の universe** であって、 session で実際 wire されている subset は別。 desktop Cowork session は `--allowedTools` で大幅に subset される (= 上記 §「desktop Cowork session の `--allowedTools` 制限」)。 session 内 verify = (a) ToolSearch で `mcp__` 接頭辞 query して deferred tool list を取得 / (b) 各 tool に identity 系 call (= `get_profile` / `whoami`) を 1 回投げて実 wire を verify。
 
-**起票 incident** (2026-06-20): Cowork desktop session で Cowork connector (`mcp__<UUID>__*`) 1 個のみ wired、 他 4 Gmail account (`mcp__gmail-{personal,cis,lab,twcuphys,gr}__*`) は register 済だが session subset 外 → search で「該当無し」 を universalize → 4 回 push 後に Python wrapper (= account-direct.py、 上記「対処 3 経路」 (c)) で別 account に到達。 = **manifest を session 冒頭で「machine 上 register vs session-active」 の差分として読まないと、 同 trap が再演する** (= hook C が surface する役)。
+**起票 incident** (2026-06-20、 詳細 = 個人層 plan): Cowork desktop session で Cowork connector (`mcp__<UUID>__*`) 1 個のみ wired、 他の複数 Gmail account (`mcp__gmail-<alias>__*` 群) は register 済だが session subset 外 → search で「該当無し」 を universalize → 4 回 push 後に Python wrapper (= account-direct.py、 上記「対処 3 経路」 (c)) で別 account に到達。 = **manifest を session 冒頭で「machine 上 register vs session-active」 の差分として読まないと、 同 trap が再演する** (= hook C が surface する役)。
 
 ### scope manifest と reflex の関係 (= 重複防止の整理、 起票 plan = `2026-06-20-tool-scope-verification-reflex.md`)
 

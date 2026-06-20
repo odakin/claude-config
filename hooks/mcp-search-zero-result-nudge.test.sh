@@ -34,35 +34,35 @@ echo "=== §A logic tests ==="
 
 # === FIRE cases (= clear zero markers) ===
 assert_fire "A1: Cowork 'No threads found'" 1 \
-  '{"tool_name":"mcp__dcfb814b-X__search_threads","tool_response":"No threads found"}'
+  '{"tool_name":"mcp__example-uuid-1__search_threads","tool_response":"No threads found"}'
 
 assert_fire "A2: gongrzhe 'Found 0 messages'" 1 \
-  '{"tool_name":"mcp__gmail-personal__search_emails","tool_response":"Found 0 messages matching the query"}'
+  '{"tool_name":"mcp__gmail-alias-a__search_emails","tool_response":"Found 0 messages matching the query"}'
 
 assert_fire "A3: empty messages array" 1 \
-  '{"tool_name":"mcp__gmail-lab__search_emails","tool_response":"{\"messages\": []}"}'
+  '{"tool_name":"mcp__gmail-alias-b__search_emails","tool_response":"{\"messages\": []}"}'
 
 assert_fire "A4: empty threads array" 1 \
-  '{"tool_name":"mcp__gmail-cis__search_emails","tool_response":"{\"threads\":[]}"}'
+  '{"tool_name":"mcp__gmail-alias-c__search_emails","tool_response":"{\"threads\":[]}"}'
 
 assert_fire "A5: resultSizeEstimate 0" 1 \
-  '{"tool_name":"mcp__gmail-personal__search_emails","tool_response":"{\"resultSizeEstimate\":0}"}'
+  '{"tool_name":"mcp__gmail-alias-a__search_emails","tool_response":"{\"resultSizeEstimate\":0}"}'
 
 assert_fire "A6: literal empty array" 1 \
-  '{"tool_name":"mcp__gmail-lab__list_messages","tool_response":"[]"}'
+  '{"tool_name":"mcp__gmail-alias-b__list_messages","tool_response":"[]"}'
 
 assert_fire "A7: literal null" 1 \
-  '{"tool_name":"mcp__gmail-personal__search_emails","tool_response":"null"}'
+  '{"tool_name":"mcp__gmail-alias-a__search_emails","tool_response":"null"}'
 
 assert_fire "A8: 該当なし (Japanese)" 1 \
-  '{"tool_name":"mcp__gmail-lab__search_emails","tool_response":"検索結果: 該当なし"}'
+  '{"tool_name":"mcp__gmail-alias-b__search_emails","tool_response":"検索結果: 該当なし"}'
 
 # === SILENT cases (= hit results、 false positive 防止) ===
 assert_fire "A9: 1-message hit (short metadata)" 0 \
-  '{"tool_name":"mcp__gmail-personal__search_emails","tool_response":"[{\"id\":\"abc\",\"threadId\":\"def\"}]"}'
+  '{"tool_name":"mcp__gmail-alias-a__search_emails","tool_response":"[{\"id\":\"abc\",\"threadId\":\"def\"}]"}'
 
 assert_fire "A10: 10-message hit" 0 \
-  '{"tool_name":"mcp__gmail-personal__search_emails","tool_response":"Found 10 messages: [{\"id\":\"a\"},{\"id\":\"b\"}]"}'
+  '{"tool_name":"mcp__gmail-alias-a__search_emails","tool_response":"Found 10 messages: [{\"id\":\"a\"},{\"id\":\"b\"}]"}'
 
 assert_fire "A11: thread with content" 0 \
   '{"tool_name":"mcp__example-uuid-0__search_threads","tool_response":"[{\"threadId\":\"abc\",\"subject\":\"hello\",\"snippet\":\"sample content\"}]"}'
@@ -71,7 +71,7 @@ assert_fire "A12: unrelated tool (Bash) → silent" 0 \
   '{"tool_name":"Bash","tool_response":"No matches"}'
 
 assert_fire "A13: get_thread (targeted, not search) → silent" 0 \
-  '{"tool_name":"mcp__dcfb814b-X__get_thread","tool_response":"{}"}'
+  '{"tool_name":"mcp__example-uuid-1__get_thread","tool_response":"{}"}'
 
 # === FORCE bypass ===
 out="$(printf '%s' '{"tool_name":"Bash","tool_response":"foo"}' | MCP_ZERO_NUDGE_FORCE=1 "$HOOK" 2>/dev/null)" || true
@@ -84,7 +84,7 @@ fi
 # === surface file ===
 SURFACE_FILE="$HOME/.claude/surface/mcp-zero-result.txt"
 rm -f "$SURFACE_FILE" 2>/dev/null || true
-echo '{"tool_name":"mcp__gmail-personal__search_emails","tool_response":"Found 0 messages"}' | "$HOOK" >/dev/null 2>&1 || true
+echo '{"tool_name":"mcp__gmail-alias-a__search_emails","tool_response":"Found 0 messages"}' | "$HOOK" >/dev/null 2>&1 || true
 if [ -f "$SURFACE_FILE" ] && grep -q 'MCP search 0' "$SURFACE_FILE"; then
   pass=$((pass+1)); results+=("✅ A15: surface file written")
 else

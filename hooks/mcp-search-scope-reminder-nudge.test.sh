@@ -49,25 +49,27 @@ echo "=== §A logic tests (= 合成 stdin JSON) ==="
 assert_fire "A1: Cowork connector search_threads with query" 1 \
   '{"tool_name":"mcp__example-uuid-0000-0000__search_threads","tool_input":{"query":"example-query"}}'
 
-# A2. gongrzhe gmail-personal search_emails → FIRE
-assert_fire "A2: gmail-personal search_emails" 1 \
-  '{"tool_name":"mcp__gmail-personal__search_emails","tool_input":{"query":"foo"}}'
+# A2. gongrzhe gmail-<alias1> search_emails → FIRE
+# 注: alias 名は generic placeholder (= alias-a/-b)。 layer 1 leak 防止のため
+#     実 alias (= odakin の所属示唆につながる組合せ) は public test に出さない
+assert_fire "A2: gmail-<alias-a> search_emails" 1 \
+  '{"tool_name":"mcp__gmail-alias-a__search_emails","tool_input":{"query":"foo"}}'
 
-# A3. gmail-lab search_emails → FIRE
-assert_fire "A3: gmail-lab search_emails" 1 \
-  '{"tool_name":"mcp__gmail-lab__search_emails","tool_input":{"query":"x"}}'
+# A3. gmail-<alias2> search_emails → FIRE (= 別 alias で同 matcher が拾うか)
+assert_fire "A3: gmail-<alias-b> search_emails" 1 \
+  '{"tool_name":"mcp__gmail-alias-b__search_emails","tool_input":{"query":"x"}}'
 
 # A4. Calendar list_events → FIRE (scope risk あり)
 assert_fire "A4: calendar list_events" 1 \
-  '{"tool_name":"mcp__1e209594-X__list_events","tool_input":{"calendarId":"primary"}}'
+  '{"tool_name":"mcp__example-cal-uuid__list_events","tool_input":{"calendarId":"primary"}}'
 
 # A5. Cowork get_thread (targeted ID で取得、 scope risk 無し) → SILENT
 assert_fire "A5: Cowork get_thread (targeted) → silent" 0 \
-  '{"tool_name":"mcp__dcfb814b-X__get_thread","tool_input":{"threadId":"abc"}}'
+  '{"tool_name":"mcp__example-uuid-1__get_thread","tool_input":{"threadId":"abc"}}'
 
-# A6. Cowork read_email (targeted ID) → SILENT
+# A6. gmail read_email (targeted ID) → SILENT
 assert_fire "A6: gmail read_email (targeted) → silent" 0 \
-  '{"tool_name":"mcp__gmail-personal__read_email","tool_input":{"messageId":"abc"}}'
+  '{"tool_name":"mcp__gmail-alias-a__read_email","tool_input":{"messageId":"abc"}}'
 
 # A7. unrelated Bash → SILENT
 assert_fire "A7: Bash tool → silent" 0 \
