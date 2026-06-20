@@ -101,6 +101,34 @@ origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問�
 
 → **errata marker を付ける**: 本文は当時のまま温存し、直近に `⚠️ errata (日付): これは誤り（= 当時の暫定）。正は X〔pointer〕。本記述は履歴として保持` を添える。本文（何を考え／送り／聞いたか）と訂正（それが誤りと今わかる）の**両方**を後から読めるようにする。
 
+### <a id="sot-duplication-trichotomy"></a>2.5 SoT 重複の 3 つの扱い (design-out vs reactive) — 成熟度で分類し、検出器を「未 design-out の症状」と読む
+
+§2.1-2.4 / §15 / §8.11 は個別の戦術。その上位の戦略 frame: **同じ事実が複数 file に要るとき、扱いには 2 つの安定形と 1 つの不安定な中間がある。**
+
+- **(A) 完全正規化** — 事実の home は 1 つ、他は pointer/view。重複ゼロ → drift 原理的に不可能 → 検出器不要。コスト = 単体可読性 (1 file で完結) を失い、pointer を辿る join が要る。§2.1 序列表・§2.2 stub 規律・§15 consolidation はこの (A) を実現する戦術。
+- **(B) 完全非正規化 + 生成** — 派生 file は重複してよいが、**generator が単一 SoT から再生成** (手編集禁止)。派生は生成物ゆえ drift 不可能。
+- **(C) 非正規化 + 手編集 + 規約 + 検出器** ← **不安定な中間 = 「両方の悪いとこ取り」**。重複あり (drift risk) ∧ 手編集 (drift が実際起きる) ∧ 検出器 fleet (保守コスト) ∧ 所有権ルールの認知負荷。
+
+**戦略 = 事実を (C) から (A)/(B) へ寄せる。** drift 検出器を保守しているなら、その存在自体が「その事実がまだ (C) にいる」症状 (§8.11: leverage は上流の design にあり、下流に検出器を足し続けるのは whack-a-mole)。
+
+**成熟度 lens (事実を type で分類して design-out 手段を選ぶ):**
+
+| 事実の type | design-out 手段 | drift 耐性 |
+|---|---|---|
+| 派生データ (= 他 file から導出可能) | (B) 生成 (mirror / overlay 再生成) | ✅ 構造的に不可能 |
+| 散文・知識 (規約 / RCA / reference) | (A) 1 home + pointer (§2.1 / §15) | 〜成熟 (pointer 規律次第) |
+| 運用台帳・相互参照 state (= tracker ⇄ linked record / id・日付の多重コピー) | (A) view 導出 or (B) 編集時 gate | ❌ (C) に居残りやすい最難 |
+
+派生データと散文は design-out 手段が確立しやすい。**手編集される運用台帳 (= 人が複数 store に同じ state/id/日付を書く) が (C) に残る最後の領域**で、drift 多発源。
+
+**検出器 fleet の仕分け (= 全部が消せるわけではない):**
+- **drift-patch 検出器** (= 同じ事実の不整合を後追い検出: set 差分 / 非対称 cross-ref / 散文重複) → **design-out で不要化しうる側**。(C)→(A)/(B) が進むと縮小する。
+- **surfacing 安全網** (= 見落とし防止: 締切 horizon / 未 triage / 到着検知) → **正当に永続**。「重複の drift」でなく「対象の見落とし」を見るので design-out 対象外 (= 別 domain)。
+
+**正直なトレードオフ (= 「全部 normalize」が誤りな理由):** (A) は単体可読性を犠牲にする (1 file を読めば案件が分かる、が壊れる)。非正規化はしばしばその可読性のための意図的選択。ゆえに **事実ごとに「可読性をどこまで犠牲にして重複を消すか」を選ぶ**のが設計の本体で、多くは **機械化できない判断 = home owner が決める** (Claude が reflex で「全正規化」に倒すのは誤り)。
+
+origin: SoT 重複が複数 domain で再発する構造を一般化 (2026-06-21 hoist)。§2.1-2.4/§15/§8.11 が個別戦術として散在し、それらを束ねる「reactive 管理 (C) を design-out (A/B) へ寄せる」戦略 frame + 成熟度 lens + 検出器の仕分けが layer-3 plan にしか無かった。application (= ある運用系のどの台帳がどの tier か) は instance ゆえ layer-3 に残置 (kernel-up / instance-down)。
+
 判別フロー: **正本そのものの誤り → 本文を是正**（§2.2、marker でなく書き換え）/ **削除可能な決定記録**（価値が別所に抽出済 + git が履歴を保つ）**→ §7.2 で削除** / **削除不能な忠実履歴**（falsify せず残す要）**→ 本節 errata marker**。errata marker は「保持必須の非正本記録」専用で、正本や DESIGN.md entry には使わない（§7.2「※注釈で本文温存しない」と矛盾しない — 対象が別物）。
 
 origin: 2026-06-18 — 研究費様式の交通費記入ルールを是正した session。確定版を SoT（規約 md）へ書いた後も既存 TODO 2 件が旧暫定を live で肯定していた（= §2.2 sweep で発見し本文是正）。加えて**削除できない履歴**（事務担当宛の送信済メール draft / 過去の打診記録）に旧暫定が残り、こちらは是正でなく errata marker で「当時の誤り」を明示し本文は温存した。user 指摘「過去の誤った判断・知見には『これは誤り』とあとで分かる注を、上層で規律化してよい」。
@@ -1283,3 +1311,4 @@ gate: index の legacy 集合が HEAD (= 直前 commit) に対して **append-on
 | 2026-06-13 | §9.9/§9.2 cross-ref 訂正 (mis-fit 削除) | §9.9 適用例 + changelog 行が §2.3 origin 事例を「§9.2 asymmetric reflection bias の一形態」と cross-ref していたのを fresh-eyes 独立検証で mis-fit と確認し削除。§9.2 = corpus の蓄積非対称 (失敗のみ記録 → 予防一辺倒肥大化、file 内の他 §9.2 言及と一貫) で、§9.9 の self-application miss (直前に書いた定義を自分の origin 例で破る) とは別機序。citation は surface 語「reflection」(= corpus が経験を非対称に映す vs 自己反省 act 中の盲点) の意味違いに乗っていた。純粋な §9.9 self-violation =「直前 discipline の self-apply」の specific 化として残置 |
 | 2026-06-17 | §16 新設「要約は load-bearing な関係を不可視に落とす — derive-not-summarize」 | 交渉案件の「肝」(= 既存削減要望に応えられないが増えはしない、で可か) が source・中間台帳・会話の各要約段で繰り返し palatable 半分へ圧縮され同一 nuance が 2 回 re-drop した RCA を一般化。inline §3 (expose/hide) の要約ドメイン双子 + §8.11 (intake encoding) の specific form。芯 = derive-not-summarize (原本逐語保持)、補助 = §15-5 逆向き completeness check。instance は個人層 work-discipline + email-office 記録に残置 (kernel-up/instance-down) |
 | 2026-06-17 | §9.10 新設「完全性 audit の add-bias」 | §16 新設直後の 4軸 sweep が一般則 §16 から niche な数式記法規約 (physics-notes 添字) へ下向き cross-ref を張る missed-cross-ref finding を出し user に撤回された RCA を一般化。完全性 frame は構造的に追加へ偏り低価値/mis-weighted な接続を製造 (§9.2 sibling・§16 の audit 域発現)。restraint = instance が一般 home へ上向き / missing-cross-ref は relevance bar / audit goal を「load-bearing な欠落」 に framing。 |
+| 2026-06-21 | §2.5 新設「SoT 重複の 3 つの扱い (design-out vs reactive)」 | SoT-drift の戦略 frame (A/B/C trichotomy + 成熟度 lens + 検出器の drift-patch/surfacing 仕分け) が layer-3 plan (sot-maturity-normalization) にしか無く、§2.1-2.4/§15/§8.11 が個別戦術として散在していた。frame を hoist して上位 home を与え、plan は odakin 運用台帳への適用として上を指す (kernel-up/instance-down)。sot-registry に topic 追加 (§15-5)。user 依頼。 |
