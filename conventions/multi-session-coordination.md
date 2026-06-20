@@ -222,7 +222,7 @@ robust 解:
 
 ### この technique の射程 (honest)
 
-これは「結果が返らないから独立 session を避ける」 動機を解消する。 ただし §4.1 の motivated substitution は **手段でなく動機の問題**であり: (i) 「自分が作業主体でいたい」 という別動機 (doer/authorship 保持) はこの route で解消されない、 (ii) route は *選択の瞬間に想起されている* 必要がある (= 存在を知っているだけでは pre-deliberative な既定を変えない)。 ⇒ technique は route を *可能にする* が、 置換 disposition の **部分的な enabler** であって完全な cure ではない。
+これは「結果が返らないから独立 session を避ける」 動機を解消し route を *可能にする*。 ただし route は **選択の瞬間に想起されている必要**があり (= 存在を知っているだけでは pre-deliberative な既定を変えない)、 そこは習慣化依存。 ⇒ technique は route を *可能にする* enabler であって、 それを必ず選ばせる仕組みではない。 (⚠️ 「結果が要らない場面でも独立を避けるなら *作る主体でいたい* 別動機が残る」 という説は証拠が薄く speculative — tool availability / 動機づけられた task 誤読で説明でき、 別個の cure を要する load-bearing 問題として扱わない。)
 
 ---
 
