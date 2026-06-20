@@ -74,6 +74,8 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 
 適用事例: 2026-06-12、同一 session 内で 2 連発 — ① 序列表は note を正本へ更新したのに script の tree 行が「script が SoT」のまま残存、② row 差し替えで旧 derived セルが残り 3 列表が 4 列化。どちらも宣言 commit 直後の grep + 目視で検出・修正。編集者本人の直後 sweep 以外に拾う仕組みがない型。
 
+**use-site の stub 規律（= 宣言の双対）:** fact の正本を宣言したら、それを*言及するだけ*の他の use-site は「最小安定警告 + pointer の stub」にする — volatile な詳細（係数・出典・erratum・手順）を copy せず正本だけに置く（詳細を copy した瞬間に新たな重複が born する）。point-of-use marker は (a) 発火に要る最小・安定・行動可能な警告 + pointer と、(b) 発火に不要で drift する詳細 payload に分解でき、use-site が要るのは (a) だけ。これは §16「正本本体は source の逐語」の反転 dual =「derived な use-site は最小要約 + pointer であれ」で、詳細の home を 1 つに保ったまま fact を point-of-use で発火させられる（= 発火と SoT 単一性は両立する、「自己完結 marker が詳細 copy を強制する」は false dilemma）。最高 leverage の発火面は宣言が born する commit 時点（= 機械化できるなら commit-time の declaration warn）。
+
 ### <a id="sot-read-side"></a>2.3 SoT の read 側 — entity を「言及するだけの store」を SoT と取り違えない
 
 §2.1/§2.2/§15 は **write 側**（正本を二重に*作る*な・宣言の衝突を sweep せよ・多重記述を是正せよ）。SoT には **read 側の双対**がある: ある案件の status を答えるとき **その案件の SoT を読む** — その entity を*言及するだけ*の別 store（受信メール・領収書・通知・log）を SoT と取り違えてはならない。
