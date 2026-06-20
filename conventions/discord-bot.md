@@ -146,6 +146,22 @@ Discord Developer Portal (= https://discord.com/developers/applications) で new
 
 **規律**: bot の **役割** に AI 駆動である事実を name で expose したい (= transparency) ケースでも、 application 名は AI provider 識別子を避けて命名する。 user-visible な「AI 駆動である」 announcement は bot の About 文 (Developer Portal の application Description field) や server 内 introduction post で代替する。
 
+## Developer Portal: Message Content Intent は **message content fetch 用途では必須**
+
+Discord Developer Portal の `Bot` page 下部に **`Privileged Gateway Intents`** という 3 toggle section があり、 default は全部 OFF:
+
+- `Presence Intent` — member の online status を receive
+- `Server Members Intent` — guild の member 一覧 + join/leave event を receive
+- **`Message Content Intent`** — message の **`content` field を REST + Gateway 両方で受け取る**
+
+2022 年 8 月の Discord 仕様変更で、 **`Message Content Intent` を OFF のままだと `GET /channels/{id}/messages` の response で全 message の `content: ''` (空文字) が返る** (= attachments / embeds / flags は普通に来るが本文だけ blank)。 bot 自身が mention された message と bot 自身が送信した message は intent 無くても content が返るが、 それ以外は不可視。
+
+**fetch bot (= twcu-phys-bot / qm-textbook-bot / odakin-secretary catch-all 等) では必須**: 1 個目の toggle (Message Content Intent) を ON、 Save Changes。 他 2 つ (Presence / Server Members) は OFF のまま (= 用途上不要、 blast radius 最小化)。
+
+100 server 未満なら toggle で即有効化可能 (= App Verification 不要)。 100 server 超え配布なら App Verification が要る (= 個人 bot は射程外、 上記 §「アプリ認証」 節参照)。
+
+**観測 (2026-06-20)**: odakin-secretary を作成 → 招待 → fetch 試行で 100 message 全 content が `''` だった。 原因 = step 1 の私の誤指示「Privileged Gateway Intents は全部 OFF のまま」 (= 当時「fetch は intent 不要」 と誤認)。 Save Changes 後の retry で content 取得確認。 過去の twcu-phys-bot / qm-textbook-bot 立ち上げ時にもこの toggle 操作は行われていたはずだが、 institutional knowledge として落ちていた (= 上記「アプリ認証」 節と同型の記録漏れ)。
+
 ## Developer Portal: アプリ認証 (App Verification) は 100+ server 拡大用、 個人 bot は無視可能
 
 Discord Developer Portal の左 sidebar には **`アプリ認証`** (英: `App Verification`) という entry があり、 click すると未達 checklist に ⚠️ アイコンが並ぶ画面が出る (例: チーム所属 / ToS link / Privacy Policy link / 全メンバー 2FA)。 これは **「アプリケーションを 100 件を超えるサーバーに拡大する」** ための opt-in 認証で、 個人運用 bot (= 数 server に invite するだけの用途) では **完全に無関係 + 無視可能**。 ⚠️ アイコンは「100+ server 配布を目指すなら N 件足りない」 の pre-flight checklist の意味であって、 「bot が動かない」 ではない。
