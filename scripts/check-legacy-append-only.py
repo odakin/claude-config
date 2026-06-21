@@ -29,6 +29,21 @@ import sys
 import argparse
 import subprocess
 
+
+def _force_utf8_stdio():
+    """Force UTF-8 stdout/stderr.
+
+    Windows consoles default to a legacy code page (e.g. cp932 on Japanese
+    Windows) that cannot encode the status emoji printed below, raising
+    UnicodeEncodeError mid-run. macOS/Linux already default to UTF-8 so this
+    is a no-op there, as it is where a stream has no reconfigure()."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
+
+
 LEGACY_RE = re.compile(r'^\s*legacy:\s*"?([^"\n]+?)"?\s*$', re.M)
 
 
@@ -38,7 +53,8 @@ def legacy_set(text):
 
 def git_show(ref_path):
     try:
-        r = subprocess.run(["git", "show", ref_path], capture_output=True, text=True)
+        r = subprocess.run(["git", "show", ref_path], capture_output=True,
+                            text=True, encoding="utf-8")
         return r.stdout if r.returncode == 0 else ""
     except Exception:
         return ""
@@ -56,7 +72,7 @@ def discover():
     paths = set()
     for args in (["git", "ls-tree", "-r", "--name-only", "HEAD"], ["git", "ls-files"]):
         try:
-            r = subprocess.run(args, capture_output=True, text=True)
+            r = subprocess.run(args, capture_output=True, text=True, encoding="utf-8")
             if r.returncode == 0:
                 paths |= {p for p in r.stdout.split("\n") if p.endswith(".index.yaml")}
         except Exception:
@@ -81,6 +97,7 @@ def selftest():
 
 
 def main():
+    _force_utf8_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument("indexes", nargs="*")
     ap.add_argument("--staged", action="store_true", help="compare staged content vs HEAD (pre-commit)")
