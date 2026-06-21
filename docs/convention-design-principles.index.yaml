@@ -44,6 +44,10 @@ sections:
     legacy: "4.1"
     level: 3
     title: "4.1 指定された成果物・手段から逸脱する時の self-justification trap（motivated substitution）"
+  - id: self-rca-framing-minimization
+    legacy: "4.2"
+    level: 3
+    title: "4.2 自分の失敗を framing する時の severity-minimization — §4.1 の cure-不能な残余クラス"
   - id: memory-positioning
     legacy: "5"
     level: 2
