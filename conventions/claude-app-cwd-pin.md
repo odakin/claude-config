@@ -44,10 +44,11 @@ time the picker can stay on a wrong folder after you manually browse away.
 
 Default-ON on macOS. To disable:
 
-- **Before/again at setup:** `touch ~/.claude/pin-claude-cwd.off` (marker file), or run
-  setup once with `CLAUDE_PIN_CWD=0 ./setup.sh`. With the marker present, `setup.sh`
-  will not (re)install it.
-- **Remove a running agent:**
+- **Recommended (one step):** `touch ~/.claude/pin-claude-cwd.off`, then run `./setup.sh`.
+  With the marker present, `setup.sh` will not (re)install it **and will stop + remove a
+  job a previous run already loaded** (so the marker can never lie about an agent that is
+  still running). `CLAUDE_PIN_CWD=0 ./setup.sh` does the same for a single run.
+- **Manual (without re-running setup):**
   ```sh
   launchctl bootout "gui/$(id -u)" ~/Library/LaunchAgents/com.claude-config.pin-claude-cwd.plist
   rm ~/Library/LaunchAgents/com.claude-config.pin-claude-cwd.plist

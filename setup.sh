@@ -455,6 +455,11 @@ if ! install_hooks; then
     echo "  ERROR: Hook installation failed. Continuing with remaining steps."
 fi
 
+# XML-escape a value before interpolating it into a plist heredoc below. Paths
+# (e.g. $HOME, $SCRIPT_DIR) are interpolated into <string> elements; a path
+# containing & < > would otherwise produce a malformed plist.
+xml_escape() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+
 # --- 2b. Install launchd agent for snapshot PATH fix (macOS only) ---
 # fix-snapshot-path-patch.sh を自動実行する launchd エージェントをインストール
 PLIST_LABEL="com.user.claude-snapshot-fix"
@@ -481,11 +486,11 @@ if [ "$(uname -s)" = "Darwin" ] && [ -f "$HOOKS_DST/fix-snapshot-path-patch.sh" 
     <string>$PLIST_LABEL</string>
     <key>WatchPaths</key>
     <array>
-        <string>$SNAPSHOT_DIR</string>
+        <string>$(xml_escape "$SNAPSHOT_DIR")</string>
     </array>
     <key>ProgramArguments</key>
     <array>
-        <string>$PATCH_SCRIPT</string>
+        <string>$(xml_escape "$PATCH_SCRIPT")</string>
     </array>
 </dict>
 </plist>
@@ -516,6 +521,13 @@ if [ "$(uname -s)" = "Darwin" ]; then
     if [ -f "$HOME/.claude/pin-claude-cwd.off" ] || [ "$CLAUDE_PIN_CWD" = "0" ]; then
         echo ""
         echo "=== Step 2b2: Claude folder-picker pin — SKIPPED (opted out) ==="
+        # Opt-out must also STOP a job a previous run already loaded — otherwise the
+        # marker says "off" while the agent keeps rewriting the preference.
+        if launchctl list "$PIN_LABEL" &>/dev/null; then
+            launchctl bootout "gui/$(id -u)" "$PIN_PLIST" 2>/dev/null
+            rm -f "$PIN_PLIST"
+            echo "  Stopped and removed previously-installed $PIN_LABEL."
+        fi
     elif launchctl list "$PIN_LABEL" &>/dev/null; then
         echo ""
         echo "=== Step 2b2: Claude folder-picker pin — already loaded ($PIN_LABEL) ==="
@@ -536,8 +548,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
     <key>ProgramArguments</key>
     <array>
         <string>/bin/sh</string>
-        <string>$PIN_SCRIPT</string>
-        <string>$CLAUDE_DIR</string>
+        <string>$(xml_escape "$PIN_SCRIPT")</string>
+        <string>$(xml_escape "$CLAUDE_DIR")</string>
     </array>
     <key>StartInterval</key>
     <integer>2</integer>
