@@ -52,6 +52,29 @@ wc -c ~/.secrets/<name>
 
 これは **必ず別ブロックで提示する**。書き込みコマンドと `&&` で連結すると、ユーザーがその 1 行を clipboard コピーした時点で secret が消える同じ罠を踏ませる。
 
+## 配置先と耐久性: handoff は「配置」 の半分でしかない
+
+上記までは **handoff の作法** (= clipboard 競合を避けて secret をローカルに書き込む) を扱う。これは独立した第 2 の問いを残す: **その secret はこの 1 台が壊れても / 別マシンでも生き残るか (= cross-machine 耐久性)**。両者は別 concern で、handoff だけ済ませて耐久化を忘れる decouple が再発する。
+
+### 罠: 「今動く配置」 ≠ 「耐久な配置」
+
+`~/.secrets/<name>` への直書きは **その 1 台でしか有効でない揮発配置**。secret を複数マシンで使う (= ほぼ全ての bot token / API key) なら、**canonical は「private secrets repo に git-crypt 暗号化で commit したファイル」** であるべきで、各マシンの `~/.secrets/<name>` はそこへの **symlink** (= repo の setup が自動生成) にする。
+
+decouple の失敗形: 「今動かす配置」 (= `~/.secrets` へ直書き) だけ実行し、「耐久化」 (= canonical へ commit) を別ステップとして doc に意図だけ書いて実行しない。**同一マシンの動作確認 (例: API の `GET /me` が通る) は揮発配置でも成功するため、作成したマシン上では耐久性の欠落が構造的に見えない** — 別マシンで読もうとして初めて露見する。これは「条件付き発火 mechanism の非活性は可視信号化せよ」 (= [`convention-design-principles.md §8.13`](../docs/convention-design-principles.md)) の secrets domain での現れ。
+
+### 耐久な secret を作るときの順序 (= handoff の配置先を canonical にする)
+
+1. **stdin-wait の配置先を canonical にする** — `cat > ~/.secrets/<name>` ではなく `cat > <secrets-repo>/secrets/<name>` (= git-crypt 暗号化対象 path) に handoff する。これで「配置」 と「耐久化」 が 1 動作になり、揮発場所への直書きが起きない。
+2. **commit 前に leak gate** — staged blob が実際に暗号化されているか raw で確認する (= git-crypt なら stored blob 先頭が `\0GITCRYPT\0` magic。平文のまま commit すると private repo でも GitHub 上に literal が乗る)。`git cat-file -p :<path>` で smudge を経ない stored blob の magic を確認してから push (= secret 本体の中身は出さない、 先頭 magic のみ)。
+3. **commit + push** → 別マシンは pull + setup で `~/.secrets/<name>` symlink が自動生成。
+4. **(任意) オフライン暗号化 backup** — repo 喪失時の最後の砦。ただし git-crypt 経路があれば自動復元は既に成立するので必須ではない。
+
+### doc は「実状態」 を書く + 機械が現実を照合する
+
+secret の保管 doc に「canonical / backup / 登録済」 と書く前に **それが実在するか** を確認する。未構築なら「未整備」 と明示マーカーを付ける (= 完成して見える表は gap を覆い隠し、後から読む者〔検証する自分自身を含む〕 が気づけない)。
+
+ただし「正直にマーカーを付ける」 こと自体が reflex なので、最終的な backstop は **doc の自己申告でなく現実を見る機械 audit** — 各マシンの `~/.secrets/*` を走査して「symlink→canonical (耐久) / 平文+暗号化 backup あり (復元可) / どちらも無い (= 単一マシン地雷)」 に分類し、地雷を継続的に surface する。⚠️ その audit は backup の所在を **doc から読んで複数経路を照合** すること (= backup は単一 dir に限らない〔共有鍵 / 個人鍵 / 別鍵流用〕。単一 dir を仮定して不在を断定すると偽陽性を量産する)。
+
 ## Anti-pattern (使ってはいけない)
 
 ```bash
