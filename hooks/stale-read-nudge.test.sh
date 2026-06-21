@@ -5,7 +5,7 @@
 #
 # mock repo (= behind 状態を実 git で再現) で発火 4 条件を検証する。 transcript 依存の
 # retroactive selftest (mcp-search-zero-result.test.sh の §B 型) は本 incident
-# (discord.md behind 12) の transcript が当 session に無いため非採用 — 代わりに incident
+# (= behind なリポの stale doc read) の transcript が当 session に無いため非採用 — 代わりに incident
 # の本質 (= behind 区間で変更された file を読む → 発火 / 無変更 file → silent) を mock で
 # 決定的に再現する。 leak 防止: fixture は generic 名のみ (= 実 private repo 名・PII 不使用)。
 #

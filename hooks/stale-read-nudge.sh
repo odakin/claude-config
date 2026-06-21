@@ -43,17 +43,16 @@
 # desktop gap (= CLI only):
 #   Claude desktop (Cowork) app は PostToolUse hook の model 向き出力 (additionalContext) を
 #   honor しない (hook-authoring.md §9.3)。 → 本 hook は CLI session でのみ効く。 desktop 主運用
-#   では work-discipline.md A 節の規律が唯一の防御。 surface file fallback (= session 冒頭読込) は
+#   では個人層 (layer 3) の read-stale 規律が唯一の防御。 surface file fallback (= session 冒頭読込) は
 #   per-file・時限的な本警告と相性が悪く (= 古い無関係警告が次 session 冒頭に出る noise)、 意図的に
 #   不採用 (= mcp-search-zero-result とは別判断、 あちらは session 冒頭 anchoring に価値がある別 incident)。
 #
-# 設計動機 (= 2026-06-21 RCA):
-#   discord.md (behind 12) を read-only で読んで「sogebu server は無い」 等を誤断定。 read-only safe
-#   バイアス (= 書かない/push しないから安全) が罠で、 stale file で事実主張すると結論が腐る。 規律本体 =
-#   work-discipline.md A 節「behind なリポのファイルを読んで判断する前に sync 解消 or stale 確認」
-#   (= odakin-prefs、 commit 300e046)、 incident = incidents.md §2026-06-21、 設計 plan =
-#   odakin-prefs/plans/2026-06-21-stale-read-warning-hook.md。 ⚠️ hook は「reminder を読み飛ばす
-#   Claude」 の前で必ず機能する保証はない = 規律が本体、 hook は補完。
+# 設計動機:
+#   behind なリポの stale file を read-only で読んで「古い版に無い記述を『無い』」 と誤断定する
+#   failure mode を機械的に防ぐ。 read-only safe バイアス (= 書かない/push しないから安全) が罠で、
+#   stale file で事実主張すると結論が腐る。 規律本体は個人層 (layer 3) の read-stale 規律
+#   (= Read 前に sync 解消 or stale 確認)、 本 hook はその機械化 backstop。 ⚠️ hook は「reminder を
+#   読み飛ばす Claude」 の前で必ず機能する保証はない = 規律が本体、 hook は補完。
 #
 # 安全: 全 path で fail-open (= Read を絶対に止めない、 exit 0 のみ、 stdin/jq/git 不在で silent)。
 #
