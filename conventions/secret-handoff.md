@@ -14,6 +14,8 @@ Token / API key / SSH 鍵 / 各種 credential を Claude がユーザーに `~/.
 
 正しい順序は **「先にターミナルでコマンド受付状態を作る → ブラウザに切り替えて secret コピー → ターミナルに戻って Cmd+V」**。これなら clipboard は 1 回だけ secret 専用に使われ、競合しない。
 
+⚠️ **配置先の注意**: 以下のパターンは例として `~/.secrets/<name>` を使うが、これは clipboard 作法を示すためのもの。**複数マシンで使う secret (= ほぼ全ての token / key) は揮発する `~/.secrets/<name>` でなく canonical (`<secrets-repo>/secrets/<name>`) に handoff する** — 配置先の判断は後述 §配置先と耐久性 を必ず読むこと (= ここで `~/.secrets` に直書きしたまま耐久化を忘れるのが再発する decouple)。
+
 ### パターン A: `cat > file` (シンプル、画面 echo 許容)
 
 ```bash
