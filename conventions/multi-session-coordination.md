@@ -216,6 +216,7 @@ robust 解:
 
 ### 注意 (caveat)
 
+- **⚠️ これらのツール (`spawn_task` / `send_message` / `search_session_transcripts` / `list_sessions`) は harness 依存で、 全環境にある保証はない。** Claude Code CLI (= 2026-06-21 確認) では deferred tools 一覧にも ToolSearch (= 概念検索 + exact name select の双方) にも無く呼べなかった。 = 本 §7 は Cowork 等これらを提供する harness での「観測例」 を前提に書かれており、 **その観測を全 harness に一般化していた** (= `convention-design-principles.md` の「一度の観察を一般法則化しない」 の doc-authoring 版 = doc が tool の実在を裏取りせず前提化する drift)。 CLI で「独立 session + 結果返送」 が要るときは **下記 file-handoff (pull) で spec ファイル化 → user が手動で別 CLI session を開いて拾う** 形にする (= Agent は「独立」 要件を満たさないので代替にしない)。 ⚠️ ただし deferred tools は session 中に動的 surface されうるので「絶対に無い」 とも断定しない (= 「現時点で呼べる tool に無い」 までが正確、 = inline §3「null を universal absence にしない」 の presence 版)。
 - `send_message` は **常に user 確認を挟み、 unsupervised (auto / bypass) mode では使えない** ⇒ **この push 経路は supervised 専用**。 unsupervised (scheduled-task / cron) では下記「Unsupervised 返送」 の file-handoff (pull) を使う。
 - **非同期**: 結果は spawned 完了時に届く (呼び元はブロックしない = 「自分の作業を続けたい」 と両立)。
 - token は一意性を持たせる。 複数 HIT したら最も最近 active な該当 session を呼び元とする。 **token を持つ呼び元以外には絶対送らない** (= 誤着防止)。
