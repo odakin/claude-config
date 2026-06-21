@@ -606,7 +606,7 @@ origin: 横断 lookup script が規律表の機械補強 column に**記載済�
 
 reflex: 自動化を「設計 + SKILL/doc を書いた」 で完了と思った瞬間に「これは活性化に手動 step を要するか? 要するなら、 抜けたことを誰が surface するか?」 を問う。 doc に「新 machine では再登録」 と書くだけ (= recall 依存、 §8.12 最弱面) では再演する。
 
-origin: 朝の自動登録 scheduled task が「設計・SKILL 記述済」 なのに backend 登録 step が一度も実行されず長期 silent dead だった事例 (= 出力の不在を「該当なし」 と誤認、 真因の発覚に user の「自動で動いてないんだっけ?」 を要した)。 同型: 週次自動公開ジョブの machine setup drift (install-check 先行実装) / hook 配線 drift (installer の --check)。 3 事例からの一般化 (§9.8 充足)。
+origin: 朝の自動登録 scheduled task が「設計・SKILL 記述済」 なのに backend 登録 step が一度も実行されず長期 silent dead だった事例 (= 出力の不在を「該当なし」 と誤認、 真因の発覚に user の「自動で動いてないんだっけ?」 を要した)。 同型: 週次自動公開ジョブの machine setup drift (install-check 先行実装) / hook 配線 drift (installer の --check) / **新規 secret の cross-machine 耐久化 step (= canonical への暗号化 commit) が skip され単一マシン地雷化** (= 作成したマシンでは動作確認が通り絶対に不可視、 別マシンで初めて露見。 self-check = 各マシンの secret 配置を耐久性分類して非耐久を surface)。 4 事例からの一般化 (§9.8 充足)。
 
 ### <a id="single-field-identity-corroboration"></a>8.14 単一 field の一致で record を同定すると偶然一致が「同一」 と誤主張される — 行動を伴う同定には corroboration を要求
 

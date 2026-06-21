@@ -67,7 +67,11 @@ decouple の失敗形: 「今動かす配置」 (= `~/.secrets` へ直書き) �
 ### 耐久な secret を作るときの順序 (= handoff の配置先を canonical にする)
 
 1. **stdin-wait の配置先を canonical にする** — `cat > ~/.secrets/<name>` ではなく `cat > <secrets-repo>/secrets/<name>` (= git-crypt 暗号化対象 path) に handoff する。これで「配置」 と「耐久化」 が 1 動作になり、揮発場所への直書きが起きない。
-2. **commit 前に leak gate** — staged blob が実際に暗号化されているか raw で確認する (= git-crypt なら stored blob 先頭が `\0GITCRYPT\0` magic。平文のまま commit すると private repo でも GitHub 上に literal が乗る)。`git cat-file -p :<path>` で smudge を経ない stored blob の magic を確認してから push (= secret 本体の中身は出さない、 先頭 magic のみ)。
+2. **commit 前に leak gate** — staged blob が実際に暗号化されているか確認する (= git-crypt なら stored blob 先頭が `\0GITCRYPT\0` magic、 openssl `.enc` なら `Salted__`。平文のまま commit すると private repo でも GitHub 上に literal が乗る)。⚠️ **確認は magic の boolean 判定で行い、 先頭バイトを画面に印字しない**:
+   ```bash
+   git cat-file -p :<path> | head -c 9 | grep -qa GITCRYPT && echo encrypted || echo "PLAINTEXT — abort"
+   ```
+   `xxd` / `od` で先頭を**印字**すると、 もし暗号化が失敗して中身が平文だった場合 (= まさに検出したい失敗) その先頭バイト = secret の prefix を leak する。 boolean check なら平文でも何も出力されない。`encrypted` を確認してから push。
 3. **commit + push** → 別マシンは pull + setup で `~/.secrets/<name>` symlink が自動生成。
 4. **(任意) オフライン暗号化 backup** — repo 喪失時の最後の砦。ただし git-crypt 経路があれば自動復元は既に成立するので必須ではない。
 
@@ -129,6 +133,12 @@ Secret を `~/.secrets/<name>` 系に運ぶ手順を提示する時は **必ず 
 - Overleaf token (= `~/.secrets/overleaf-token`) を `xxd ~/.secrets/overleaf-token | tail -1` で format 確認した結果、 末尾 8 文字 (= 40 char token の 20%) が chat 出力に流出
 - 直接的 impact は限定的 (= 8/40 文字で brute-force 範囲縮小は微小、 user の判断で rotate 不要となった) だが、 user に rotate 推奨を伝える必要が発生、 paper 作業の流れを中断
 - もし「`xxd` で確認したい」 という reflex が起こったら、 `wc -c` + `head -c 4` + `tr -d '\n' | wc -c` の 3 段で代替
+
+### 例外: 暗号文 (ciphertext) の format magic 確認は可 — ただし boolean で
+
+secret を git-crypt / openssl で **暗号化したことの確認** (= leak gate、 §配置先と耐久性 step 2) は、 暗号文の先頭 magic (`\0GITCRYPT\0` / `Salted__`) を見る操作で、 これは secret 本体ではなく「暗号化されているか」 の判定。 これは可。
+
+⚠️ ただし **`grep -qa` / `cmp` の boolean で判定し、 `xxd` / `od` で印字しない**: もし暗号化が失敗して中身が平文だった場合 (= leak gate がまさに検出したい状態)、 先頭を印字すると平文 secret の prefix が leak する (= 上の 2026-05-19 と同型を、 暗号化検証の名目で踏む)。 boolean check (`… | head -c 9 | grep -qa GITCRYPT`) なら平文でも何も出力されない。 = 「暗号文の magic 確認」 と「平文 secret の inspection」 は別だが、 失敗時に後者へ化けるので boolean に固定する。
 
 ## Claude への規律 (secret 取扱の根本)
 
