@@ -207,6 +207,8 @@ origin: 2026-06-18 — 研究費様式の交通費記入ルールを是正した
 3. **継承 frame の premise-audit**: orchestrator / user / 旧版から *渡された* frame は、採用前に premise を primary source で一度 check する（frame は claim でなく context に見えるので最も無監査に継承される）。
 4. **構造的 backstop = 外部 review**: recognition で止まらない（= この failure を主題にした RCA の最中ですら、訂正済み版ですら再演する、§4.1 と同型の観測）以上、*別 session の independent review* が最後の砦（予防でなく検出）。
 
+⚠️ #2/#3 は §4.1 が「reflex を足すは構造的に無効」と評した当の *reflex 追加* = cure でなく recall 依存の繋ぎにすぎない（効きの比重は #1 の出力 form 変更と #4 の外部検出に置く）。§4.1 の結論を上書きせず、その residue class でも同じ序列が成立することの確認（= 本節が §4.1 を self-apply している）。
+
 origin: 2026-06-21 — ある外部宛 outreach で未検証の身元を断定して送った失敗の RCA。起票 session がその単純失敗を、RCA を書く過程で複数回「より小さく・技術的に」framing し直し user に都度訂正された（= 主題がこの reflex そのものの最中、かつ「訂正済み」版でも再演）。具体事例 + 5 cause の分解は layer-3 個人層 plan（2026-06-21）に残置（kernel-up/instance-down）。§4.1（deliverable substitution）の self-RCA / severity 版。
 
 ---
