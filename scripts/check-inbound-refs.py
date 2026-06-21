@@ -39,6 +39,21 @@ import shutil
 import tempfile
 import argparse
 
+
+def _force_utf8_stdio():
+    """Force UTF-8 stdout/stderr.
+
+    Windows consoles default to a legacy code page (e.g. cp932 on Japanese
+    Windows) that cannot encode the status emoji printed below, raising
+    UnicodeEncodeError mid-run. macOS/Linux already default to UTF-8 so this
+    is a no-op there, as it is where a stream has no reconfigure()."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
+
+
 # Generic per-repo scaffold filenames: present in many repos, so an anchor ref like
 # `README.md#foo` almost always points at the referencing repo's OWN file, not the
 # target's. Excluded from the anchor-checkable target index (path-existence still uses them).
@@ -196,6 +211,7 @@ def selftest():
 
 
 def main():
+    _force_utf8_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument('--base', default=os.path.expanduser('~/Claude'))
     ap.add_argument('--target', default='claude-config')
