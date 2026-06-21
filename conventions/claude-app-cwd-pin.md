@@ -1,6 +1,7 @@
 # Pinning the Claude desktop folder picker (`com.claude-config.pin-claude-cwd`)
 
-**macOS only.** Installed **by default** by `setup.sh` (Step 2b2). Opt-out is supported and documented below.
+**macOS only.** Installed **by default** by `setup.sh` (Step 2b2) **when the Claude desktop
+app is in use** (CLI-only Macs are skipped — see [Desktop-app gate](#desktop-app-gate)). Opt-out is supported and documented below.
 
 ## What it does
 
@@ -15,22 +16,38 @@ To keep it pinned, `setup.sh` installs a launchd LaunchAgent that re-writes the
 value on a short interval:
 
 - **Agent:** `com.claude-config.pin-claude-cwd` (user LaunchAgent)
-- **Script:** `scripts/pin-claude-cwd.sh` — a one-liner `defaults write … NSNavLastRootDirectory`
+- **Script:** `scripts/pin-claude-cwd.sh` — reads `NSNavLastRootDirectory` and writes it
+  back **only when it differs** from the target (see [Cost](#cost) below)
 - **Pins to:** `<base>` = the parent of your `claude-config` checkout (where `setup.sh`
   clones your repos). Passed to the script as `$1` at install time.
 - **Interval:** every ~2 seconds (see the throttle note below)
 - **Log:** `/tmp/pin-claude-cwd.log` (normally empty)
 
 This only affects the **Claude desktop app's folder picker**. It does not touch
-any other app, the CLI, or any file. It is harmless (a no-op in effect) if you
-never open the desktop app.
+any other app, the CLI, or any file.
+
+### Desktop-app gate
+
+`setup.sh` installs the agent only if the `com.anthropic.claudefordesktop` prefs
+domain exists (i.e. you've run the desktop app at least once). On a **CLI-only Mac**
+the step is skipped — there's no picker to pin, so no point running a poller. If you
+start using the desktop app later, just re-run `setup.sh`.
+
+### Cost
+
+The agent fires every ~2 s, but the `defaults` invocation (~7 ms CPU, read ≈ write)
+is what costs — not the write itself. So the script **reads first and only writes on
+drift**: in steady state it's a cheap read, avoiding tens of thousands of redundant
+prefs writes (and cfprefsd disk flushes) per day. launchd does not fire `StartInterval`
+jobs while the machine is asleep, so the awake-only CPU cost is on the order of a couple
+of CPU-minutes per day — negligible energy (well under 0.3 % of a laptop battery/day).
 
 ## Why a polling loop (and not a hook / WatchPath)
 
 The value is written by the app through `cfprefsd` (which caches and batches
 writes to disk), so a `WatchPaths` trigger on the preferences plist is
-unreliable. A short `StartInterval` poll is robust. The script is a trivial
-one-liner, so the cost of running it every couple of seconds is negligible.
+unreliable. A short `StartInterval` poll is robust; its cost is negligible (see
+[Cost](#cost)).
 
 ### ⚠️ launchd throttle gotcha (if you tune the interval)
 

@@ -507,7 +507,10 @@ fi
 # --- 2b2. Install launchd agent that pins the Claude.app folder picker (macOS only) ---
 # Keeps the Claude desktop "New session" folder picker opening at <base> (= the
 # parent of this checkout, where your repos live) instead of drifting to whatever
-# folder you last browsed to. Default-ON on macOS; opt out with either:
+# folder you last browsed to. Default-ON on macOS *when the Claude desktop app is
+# in use* (skipped on CLI-only Macs — see the desktop-detection branch below).
+# The agent rewrites the pref every ~2s but only when it actually drifted (the
+# script reads first and skips the write when already pinned). Opt out with either:
 #   - a marker file:  touch ~/.claude/pin-claude-cwd.off
 #   - an env var:     CLAUDE_PIN_CWD=0 ./setup.sh
 # To remove after install: launchctl bootout gui/$UID <plist> && rm <plist>
@@ -531,6 +534,13 @@ if [ "$(uname -s)" = "Darwin" ]; then
     elif launchctl list "$PIN_LABEL" &>/dev/null; then
         echo ""
         echo "=== Step 2b2: Claude folder-picker pin — already loaded ($PIN_LABEL) ==="
+    elif ! defaults read com.anthropic.claudefordesktop &>/dev/null; then
+        # The pin only matters for the Claude desktop app. If its prefs domain
+        # doesn't exist, this is a CLI-only Mac — don't install a 2s poller it
+        # would never benefit from. Re-running setup.sh after first opening the
+        # desktop app picks it up.
+        echo ""
+        echo "=== Step 2b2: Claude folder-picker pin — SKIPPED (Claude desktop app not detected) ==="
     elif [ -f "$PIN_SCRIPT" ]; then
         echo ""
         echo "=== Step 2b2: Installing launchd agent to pin the Claude folder picker ==="

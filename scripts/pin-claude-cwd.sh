@@ -14,4 +14,10 @@
 # macOS only (no-op elsewhere — `defaults` is a macOS tool).
 
 TARGET="${1:-$HOME}"
-defaults write com.anthropic.claudefordesktop NSNavLastRootDirectory -string "$TARGET"
+# Write ONLY when the stored value actually differs. In the common steady state
+# (already pinned) this is just a read, so the agent does not mark the prefs
+# domain dirty / trigger a cfprefsd disk flush on every tick — it writes only
+# right after the picker drifted. (Read and write cost ~the same CPU; the win is
+# avoiding tens of thousands of redundant prefs writes per day.)
+cur=$(defaults read com.anthropic.claudefordesktop NSNavLastRootDirectory 2>/dev/null)
+[ "$cur" = "$TARGET" ] || defaults write com.anthropic.claudefordesktop NSNavLastRootDirectory -string "$TARGET"

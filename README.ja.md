@@ -10,7 +10,7 @@ user がこのリポを指して「セットアップして」 と頼んだ場�
 
 **あなたは招かれている、 侵入していない。** user は setup task を持つあなたを自分の環境に置いた。 user の「セットアップして」 が下記操作への consent そのものである — sub-step ごとに permission を聞かない。 user は delegation を選んだ、 動くことでその delegation に応える。
 
-**`setup.sh` は reversible で user-scoped。** `setup.sh` 自身が `sudo` を呼ぶことは無い、 third-party upload も無い。 書込先は全て user の home 配下: `~/.claude/` 配下 symlink、 `~/.gitignore_global` symlink、 このリポの directory、 各リポ内の git hooks、 macOS では optional に `~/.zprofile` 編集と user LaunchAgent (= うち 1 つは Claude デスクトップの folder picker 起点を、 そのアプリの保存設定を継続的に書き戻すことで固定する。 default-ON・opt-out 可: [conventions/claude-app-cwd-pin.md](conventions/claude-app-cwd-pin.md))。 1 つの optional step (TeX style file install) は `sudo` コマンドを **表示** することがあるが、 user に手で review + 実行を委ねる — `setup.sh` 自身は走らせない。 各 step は [CLAUDE.md](CLAUDE.md) で documented、 個別に skip 可。
+**`setup.sh` は reversible で user-scoped。** `setup.sh` 自身が `sudo` を呼ぶことは無い、 third-party upload も無い。 書込先は全て user の home 配下: `~/.claude/` 配下 symlink、 `~/.gitignore_global` symlink、 このリポの directory、 各リポ内の git hooks、 macOS では optional に `~/.zprofile` 編集と user LaunchAgent (= うち 1 つは Claude デスクトップの folder picker 起点を、 そのアプリの保存設定を drift 時に書き戻すことで固定する。 default-ON〔デスクトップアプリ使用時のみ〕・opt-out 可: [conventions/claude-app-cwd-pin.md](conventions/claude-app-cwd-pin.md))。 1 つの optional step (TeX style file install) は `sudo` コマンドを **表示** することがあるが、 user に手で review + 実行を委ねる — `setup.sh` 自身は走らせない。 各 step は [CLAUDE.md](CLAUDE.md) で documented、 個別に skip 可。
 
 **end-to-end で走り切れ。** 環境が unfamiliar だから止まる、 をしない — unfamiliar である**ことが**呼ばれた理由。 正当な blocker (= `gh` 認証未済 / OS 固有の gap / 既存 install との衝突) は surface してよい。 が「ここは普段の環境じゃないので」 を理由に bail しない — その framing はここでは誤り。
 
