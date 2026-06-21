@@ -5,6 +5,8 @@
 #   1b. グローバル gitignore をインストール（~/.gitignore_global に symlink）
 #   2.  Claude Code hooks をインストール（symlink + settings.json マージ）
 #   2b. launchd エージェントをインストール（スナップショット PATH 自動修正、macOS のみ）
+#   2b2. launchd エージェントをインストール（Claude.app の新セッション folder picker を
+#        <base> に固定、macOS のみ・default-ON・opt-out 可。conventions/claude-app-cwd-pin.md）
 #   2c. .zprofile の重複 brew shellenv を修正（PATH 消失防止、macOS のみ）
 #   3.  Claude Code パーミッション設定（安全なツールを自動許可）
 #   4.  git post-merge hook をインストール（git pull 時に hooks を自動同期）
@@ -493,6 +495,68 @@ PLIST_EOF
             echo "  Installed and loaded: $PLIST_DST"
         else
             echo "  WARNING: Failed to load $PLIST_LABEL"
+        fi
+    fi
+fi
+
+# --- 2b2. Install launchd agent that pins the Claude.app folder picker (macOS only) ---
+# Keeps the Claude desktop "New session" folder picker opening at <base> (= the
+# parent of this checkout, where your repos live) instead of drifting to whatever
+# folder you last browsed to. Default-ON on macOS; opt out with either:
+#   - a marker file:  touch ~/.claude/pin-claude-cwd.off
+#   - an env var:     CLAUDE_PIN_CWD=0 ./setup.sh
+# To remove after install: launchctl bootout gui/$UID <plist> && rm <plist>
+#   (also `touch ~/.claude/pin-claude-cwd.off` so re-running setup.sh won't reinstall).
+# Details / rationale: conventions/claude-app-cwd-pin.md
+PIN_LABEL="com.claude-config.pin-claude-cwd"
+PIN_PLIST="$HOME/Library/LaunchAgents/$PIN_LABEL.plist"
+PIN_SCRIPT="$SCRIPT_DIR/scripts/pin-claude-cwd.sh"
+
+if [ "$(uname -s)" = "Darwin" ]; then
+    if [ -f "$HOME/.claude/pin-claude-cwd.off" ] || [ "$CLAUDE_PIN_CWD" = "0" ]; then
+        echo ""
+        echo "=== Step 2b2: Claude folder-picker pin — SKIPPED (opted out) ==="
+    elif launchctl list "$PIN_LABEL" &>/dev/null; then
+        echo ""
+        echo "=== Step 2b2: Claude folder-picker pin — already loaded ($PIN_LABEL) ==="
+    elif [ -f "$PIN_SCRIPT" ]; then
+        echo ""
+        echo "=== Step 2b2: Installing launchd agent to pin the Claude folder picker ==="
+        mkdir -p "$(dirname "$PIN_PLIST")"
+        # launchd's default ThrottleInterval is 10s, which would floor StartInterval;
+        # set both so the rewrite actually fires every ~2s.
+        cat > "$PIN_PLIST" << PIN_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$PIN_LABEL</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>$PIN_SCRIPT</string>
+        <string>$CLAUDE_DIR</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>2</integer>
+    <key>ThrottleInterval</key>
+    <integer>2</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/pin-claude-cwd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/pin-claude-cwd.log</string>
+</dict>
+</plist>
+PIN_EOF
+        launchctl bootstrap "gui/$(id -u)" "$PIN_PLIST" 2>/dev/null || launchctl load "$PIN_PLIST" 2>&1
+        if launchctl list "$PIN_LABEL" &>/dev/null; then
+            echo "  Installed and loaded: pins picker to $CLAUDE_DIR (opt out: touch ~/.claude/pin-claude-cwd.off)"
+        else
+            echo "  WARNING: Failed to load $PIN_LABEL"
         fi
     fi
 fi

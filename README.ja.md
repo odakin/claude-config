@@ -48,7 +48,7 @@ gh repo clone <your-username>/claude-config
 cd claude-config && ./setup.sh
 ```
 
-`setup.sh` は symlink・グローバル gitignore・Claude Code hooks とパーミッション・`post-merge` による自動同期・LaTeX pre-commit hooks・git-crypt 自動 unlock、macOS では PATH スナップショット修正と Hammerspoon 設定（オプション）までを一括で処理する。**全ステップの列挙と副作用の範囲**は [CLAUDE.md](CLAUDE.md) を参照。
+`setup.sh` は symlink・グローバル gitignore・Claude Code hooks とパーミッション・`post-merge` による自動同期・LaTeX pre-commit hooks・git-crypt 自動 unlock、macOS では PATH スナップショット修正・Claude デスクトップの folder picker 固定（default-ON・opt-out 可、 [conventions/claude-app-cwd-pin.md](conventions/claude-app-cwd-pin.md)）・Hammerspoon 設定（オプション）までを一括で処理する。**全ステップの列挙と副作用の範囲**は [CLAUDE.md](CLAUDE.md) を参照。
 
 Windows（MSYS/Cygwin）では symlink の代わりにファイルコピーを使い、`post-merge` hook が自動同期する。
 

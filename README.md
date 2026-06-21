@@ -48,7 +48,7 @@ gh repo clone <your-username>/claude-config
 cd claude-config && ./setup.sh
 ```
 
-`setup.sh` handles symlinks, global gitignore, Claude Code hooks and permissions, a `post-merge` hook for auto-sync, LaTeX pre-commit hooks, git-crypt auto-unlock, and (on macOS) a PATH snapshot fix plus optional Hammerspoon config. **Full step list and exactly what it touches**: [CLAUDE.md](CLAUDE.md).
+`setup.sh` handles symlinks, global gitignore, Claude Code hooks and permissions, a `post-merge` hook for auto-sync, LaTeX pre-commit hooks, git-crypt auto-unlock, and (on macOS) a PATH snapshot fix, a Claude desktop folder-picker pin (default-on, opt-out — see [conventions/claude-app-cwd-pin.md](conventions/claude-app-cwd-pin.md)), plus optional Hammerspoon config. **Full step list and exactly what it touches**: [CLAUDE.md](CLAUDE.md).
 
 On Windows (MSYS/Cygwin) symlinks are replaced with file copies and the `post-merge` hook keeps them in sync.
 
