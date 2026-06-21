@@ -38,6 +38,21 @@ import sys
 import argparse
 from pathlib import Path
 
+
+def _force_utf8_stdio():
+    """Force UTF-8 stdout/stderr.
+
+    Windows consoles default to a legacy code page (e.g. cp932 on Japanese
+    Windows) that cannot encode the status emoji printed below, raising
+    UnicodeEncodeError mid-run. macOS/Linux already default to UTF-8 so this
+    is a no-op there, as it is where a stream has no reconfigure()."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
+
+
 # slug-ification anchors only level-2/3 headings (level-4 #### are intentionally skipped).
 SLUG_RE = re.compile(r'^(#{2,3})\s+<a id="([a-z0-9][a-z0-9-]*)"></a>\s*(.*)$')
 PLAIN_RE = re.compile(r'^(#{2,3})\s+(?!<a id=)(\S.*)$')
@@ -236,6 +251,7 @@ def selftest():
 
 
 def main():
+    _force_utf8_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument("doc", nargs="?")
     ap.add_argument("index", nargs="?")
