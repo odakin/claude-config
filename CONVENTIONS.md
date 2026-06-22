@@ -209,7 +209,7 @@ grep -rn '<target-repo>/SESSION.md §' --include='*.md' --include='*.yaml' ~/Cla
 # 各 hit に対し anchor が現在の SESSION.md に substring 存在するか目視確認
 ```
 
-**3 種の broken ref pattern** (= 2026-05-26 SESSION 棚卸し sweep で全 expose、 fix 例 [odakin-prefs 99d7cbe](https://github.com/odakin/odakin-prefs/commit/99d7cbe) + 物理研究 project の同 turn fix + [email-office 37eb6fc](https://github.com/odakin/email-office/commit/37eb6fc)):
+**3 種の broken ref pattern** (= 2026-05-26 SESSION 棚卸し sweep で全 expose、 fix 例 = 個人層 + 物理研究 project + 学内事務 repo の各 commit で同 turn 修正 〔commit は各 owner 管理 private repo、 public link は付さない〕):
 
 | pattern | 例 | fix |
 |---|---|---|
