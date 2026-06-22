@@ -41,7 +41,7 @@ SETUP.md (= `templates/shared-project/SETUP.md.template` を埋めて生成し�
 ```
 <project-name>/
 ├── CLAUDE.md            # このファイル
-├── README.md            # 公開向け説明（最小限）
+├── README.md            # 公開向け説明（最小限。public 化 / CLAUDE.md を読まない読者がいるなら build/quickstart もここ: CONVENTIONS §README の流儀）
 ├── SESSION.md           # 現在の作業状態
 ├── DESIGN.md            # 設計判断と理由
 ├── TODO.yaml            # タスクの正本（あれば）

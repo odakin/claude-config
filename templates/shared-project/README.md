@@ -39,3 +39,4 @@ See [`docs/personal-layer.md`](../../docs/personal-layer.md) for the layer model
 - **Layer dependency**: shared projects can depend on `claude-config` (public, layer 1) only. NOT on your personal layer (`<your>-prefs/`, layer 3). See `conventions/shared-repo.md` for the rationale.
 - **Audit before sharing**: Always run AUDIT.md before adding the first collaborator.
 - **Standalone**: The repo's CLAUDE.md must work for someone who has no personal layer of their own.
+- **README build placement**: build/quickstart/deploy lives in **README** for public repos and any repo with readers who don't open CLAUDE.md (contributors, users, forkers); in **CLAUDE.md / SETUP.md** for private repos read only by CLAUDE.md-readers. The home is keyed per-instruction on "does a README-only reader need it?". See [`CONVENTIONS.md` §README の流儀](../../CONVENTIONS.md#readme-style).

@@ -10,6 +10,12 @@
 
 ⚠️ git-crypt unlock は **必ず** SETUP.md の手順 (推奨経路: `cd ~/Claude/claude-config && ./setup.sh`) で進める。手動 `openssl enc -d ...` から始めない (path 誤りで bad-decrypt 残骸事故あり、SETUP.md §反パターン警告 参照)。
 
+<!-- build/quickstart/deploy の置き場は「README-only 読者が居るか」で決まる:
+     ・本テンプレは private + CLAUDE.md を読む collaborator 前提 → build は CLAUDE.md / SETUP.md 側が正本、README は薄い玄関のまま。
+     ・もし public 化する / CLAUDE.md を読まない利用者・contributor・forker が想定されるなら、build の実コマンドはこの README に置く（= 正本）、CLAUDE.md は README へ pointer する。
+     判別軸: claude-config CONVENTIONS §README の流儀
+     https://github.com/<owner>/claude-config/blob/main/CONVENTIONS.md#readme-style -->
+
 ## What's where
 
 - `<主要ディレクトリ 1>` — <1 行の説明>
