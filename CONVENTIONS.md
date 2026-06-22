@@ -35,7 +35,7 @@ description は英語。リポ一覧の正本は個人層の `repos.md`（未設
 | `CLAUDE.md` | 永続的な構造・実行方法・復帰手順の**記述** (「こうなっている」の事実、判断理由は DESIGN.md へ)。構造変更時のみ更新 |
 | `SESSION.md` | 揮発的な現在状態（作業中タスク・直近の決定）。進行に応じて更新 |
 | `DESIGN.md` | 現在採用されている設計**判断**・Defer 判断・横断原則 (LESSON) の snapshot。Why / 代替案 / tradeoff を記録。判断が生じたら即記録、超越されたら `docs/convention-design-principles.md` §7 の lifecycle で処理 (pedagogy 抽出後に旧本体削除、履歴は git log)。構造の記述は CLAUDE.md へ。未決定の探索は `EXPLORING.md`（任意）へ |
-| `README.md` / `README.ja.md` | **外部訪問者向けの玄関** (public リポで必須、private リポでは任意)。30 秒で「何か / 使うか」を判断させる index。構造ツリー・setup 手順の enumeration・規約本体・設計根拠は **正本 (CLAUDE.md / CONVENTIONS.md / DESIGN.md / conventions/ / docs/ / SETUP.md) へリンクするだけ** で、README 内に転載しない。詳細は下の「README の流儀」 |
+| `README.md` / `README.ja.md` | **外部訪問者向けの玄関** (public リポで必須、private リポでは任意)。30 秒で「何か / 使うか」を判断させる index。構造ツリー・規約本体・設計根拠は **正本 (CLAUDE.md / CONVENTIONS.md / DESIGN.md / conventions/ / docs/ / SETUP.md) へリンクするだけ** で、README 内に転載しない。**例外 = 外部 contributor のいる OSS リポの build/quickstart/deploy は README が正本**（下の「README の流儀」の判別軸）。詳細は下の「README の流儀」 |
 | `SETUP.md` | **共同編集者向けセットアップ walkthrough** (任意、private collaborative repo で git-crypt 等 onboarding が複雑な場合に新設)。CLAUDE.md は auto-load コストがあるため full walkthrough を入れず、SETUP.md に分離して薄いポインタ + 反パターン警告のみ持たせる。配置はリポ root (`docs/` を git-crypt 暗号化していると未 unlock の collaborator が読めない catch-22)。テンプレ: `templates/shared-project/SETUP.md.template`、設計理由は `conventions/shared-repo.md` §「共同編集者向けの SETUP.md」|
 | `.gitignore` | ビルド成果物・OS/エディタファイル・機密情報の除外。共有リポでは全パターン明記 |
 
@@ -43,7 +43,14 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
 
 ### <a id="readme-style"></a>README の流儀
 
-**役割**: GitHub を開いた未知の訪問者が、(a) これは何か、(b) 自分の問題を解くか、(c) 次にどこを読むべきか、を短時間で判断するための index。リポの開発者・Claude 自身が日常作業で読むのは CLAUDE.md / SESSION.md で、README ではない。
+**役割**: GitHub を開いた未知の訪問者が、(a) これは何か、(b) 自分の問題を解くか、(c) 次にどこを読むべきか、を短時間で判断するための index。**内部 / 個人リポでは** リポの開発者・Claude 自身が日常作業で読むのは CLAUDE.md / SESSION.md で、README ではない。**外部 contributor のいる公開 OSS リポでは** contributor の入口が README になる（CLAUDE.md の存在を知らない前提）— 下の「判別軸」で 2 ケースに分ける。
+
+**判別軸 — CLAUDE.md を読まない外部 contributor が想定されるか**: README をどこまで薄くするか・build/quickstart/deploy 手順の **home がどちらの file か** は、「このリポに、CLAUDE.md を開かず README だけを入口にする外部 contributor がいるか」で決まる。**SoT として「build の home は 1 つ」原則は不変**で、変わるのは home が README か CLAUDE.md かだけ。
+
+- **(a) 内部 / 個人リポ** (= 触るのは所有者自身、または CLAUDE.md を読む少数の共同編集者のみ。drive-by の外部 PR を想定しない): 開発者の日常 read は CLAUDE.md / SESSION.md。README は薄い玄関で、**build/setup 手順・構造ツリーの home = CLAUDE.md**、README はそこへリンクするだけ。← 下記「禁忌」「判定規則」の default。
+- **(b) 外部 contributor のいる公開 OSS リポ** (= GitHub で他人の PR を歓迎する / contributor は CLAUDE.md を開かない): contributor の入口は README であって CLAUDE.md ではない。∴ **build/quickstart/deploy 手順の home = README**（= OSS 慣習どおり README に実コマンドを enumerate する）。CLAUDE.md は構造 / navigation / Claude 向け作業規律を足し、**build は README に pointer する**（重複させない）。README から正当な build を剥がして CLAUDE.md へ移すのは **この軸では劣化**。
+
+迷ったら: public リポで他人の PR を歓迎する姿勢なら (b)、自分（+ CLAUDE.md を読む少数）しか触らないなら (a)。実例 = 本 repo でも参照している公開 OSS（下「任意ファイル」§の sogebu/LorentzArena 等）は build/dev を README に置き（正解）、CLAUDE.md は README へ pointer する形を取っている。
 
 **言語別ファイルの命名**: 英語 README を `README.md`、日本語 README を `README.ja.md` (他言語も ISO 639-1 サフィックス)。**相互リンクや tips リンクのラベルは英語に統一** (`English version` / `Japanese version` / `English tips` / `Japanese tips` 等) — 英語話者は日本語文字を読めないので英語 README 内に「日本語版」のような日本語文字を置くと引っかかる。逆方向は日本語話者も `English` 程度の英語は読めるため、対称を崩して「英語版」と書くより両方を英語ラベルで統一する方が単純でミスが起きにくい。
 
@@ -51,21 +58,28 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
 1. 1 行 tagline + 他言語版があれば相互リンク (上記の命名規則で)
 2. **Why this exists** — 動機・解く問題
 3. **具体例を 1 つ** — 抽象説明ではなく、このリポが何を起こすかを示す short walkthrough (例: autocompact 復帰の 3 ステップ、典型ワークフロー の before/after)
-4. **Quick start** — 1 コマンドだけ。詳細な手順は CLAUDE.md へのリンク
+4. **Quick start / Build** — 内部リポ (a) は 1 コマンドだけ + 詳細は CLAUDE.md へリンク。外部 contributor のいる OSS (b) は build/test/deploy の実コマンドを README に置く（= contributor の入口なので CLAUDE.md へ追い出さない）
 5. **What's where / どこに何があるか** — 正本ファイルと主要ディレクトリへの bullet リスト (各 1–2 行)。構造ツリーは張らず CLAUDE.md を参照
 6. **Core concepts** (必要なら) — 核となる設計の 2–4 項目を 1 行ずつ要約、詳細は CONVENTIONS.md / DESIGN.md へのリンク
 7. Customization / License
 
 **禁忌** (これが書かれていたら引き剥がす):
-- `setup.sh` / bootstrap script の全手順を enumerate する → CLAUDE.md が正本、README はリンクのみ。**ただし共同編集者 onboarding 用 git-crypt unlock walkthrough は CLAUDE.md ではなく `SETUP.md` (任意ファイル、上の表参照) に置く** — CLAUDE.md は毎セッション auto-load されるためコスト増、SETUP.md は cold reference で済む
+- **(case (a) のみ)** `setup.sh` / bootstrap script の全手順を enumerate する → 内部リポでは CLAUDE.md が正本、README はリンクのみ。**case (b) の OSS では build/quickstart/deploy の正本は README なので、enumerate されていて正しい — 剥がさない**（剥がすのが上の判別軸でいう「劣化」）。共同編集者 onboarding 用 git-crypt unlock walkthrough は（どちらのケースでも）CLAUDE.md ではなく `SETUP.md` (任意ファイル、上の表参照) に置く — CLAUDE.md は毎セッション auto-load されるためコスト増、SETUP.md は cold reference で済む
 - 完全なディレクトリ構造ツリー → CLAUDE.md が正本
 - 規約本体の表・判別ルールの転載 → CONVENTIONS.md / 対応する `conventions/*.md` へリンク
 - 設計根拠・トレードオフの議論 → DESIGN.md が正本
 - SESSION 的な現在進捗 (「現在〜を実装中」)
 
-**判定規則**: 同じ情報が README と CLAUDE.md/CONVENTIONS.md/DESIGN.md の両方にあるときは、**README 側を削ってリンクに置き換える** (正本の update で README がドリフトするため)。例外は「具体例を 1 つ」のセクションで、これは訪問者の判断のために意図的に短い再構成を置いてよい。
+上の 2〜5 番目（構造ツリー / 規約本体 / 設計根拠 / SESSION 進捗）は **case 非依存** — home が常に dynamic docs（CLAUDE.md / CONVENTIONS.md / DESIGN.md / SESSION.md）なので、どちらのケースでも README から剥がす。case で切り替わるのは 1 番目（build/quickstart/deploy）だけ。
 
-**他リポ整備時**: 既存リポが claude-config 準拠になったとき、README を上のパターンで整える。CLAUDE.md / SESSION.md / DESIGN.md の整備と並行で行い、重複が見つかれば README 側を削る。
+**判定規則**: 同じ情報が README と CLAUDE.md/CONVENTIONS.md/DESIGN.md の両方にあるときは、**重複を削り、home でない側を pointer に置き換える** (正本の update で複製がドリフトするため)。どちらが home かは内容の種類で決まる:
+
+- **設計根拠 / 規約本体 / 構造ツリー / 現在進捗** の home は **常に dynamic docs** (DESIGN.md / CONVENTIONS.md / CLAUDE.md / SESSION.md) → README にあれば **常に README 側を削る**（case 非依存）。
+- **build / quickstart / deploy 手順** の home は **上の判別軸で決まる**: 内部リポ (a) は CLAUDE.md が home → README 側を削る。OSS (b) は README が home → **CLAUDE.md 側を削って README に pointer**（README の build は剥がさない）。
+
+例外は「具体例を 1 つ」のセクションで、これは訪問者の判断のために意図的に短い再構成を置いてよい。
+
+**他リポ整備時**: 既存リポが claude-config 準拠になったとき、README を上のパターンで整える。まず判別軸で (a)/(b) を確定してから整える（OSS なら README の build を残す）。CLAUDE.md / SESSION.md / DESIGN.md の整備と並行で行い、重複が見つかれば **home でない側を削る**（build/quickstart の home は判別軸で決定、それ以外は常に dynamic docs が home）。
 
 ### <a id="optional-files"></a>任意ファイル
 
