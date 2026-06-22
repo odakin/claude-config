@@ -83,7 +83,7 @@ claude-config/
 │   ├── giving-talks.md     # 講演のしかた (= Robert Geroch "Suggestions For Giving Talks" arXiv:gr-qc/9703019 の own-words ダイジェスト、 主題選択 / 3-4 メッセージ構成 / 導入は全体の 1-5 / 視覚資料は図>言葉>式 / 1h で非自明な式 5 本・スライド 10 枚 / 質問は完全に正直に 等。 セミナー・JC・卒論発表の準備時に読む、 英語本体)
 │   ├── giving-talks.ja.md  # ↑ giving-talks.md の日本語版
 │   ├── beamer-slides.md    # Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可。giving-talks.md〔中身/作法〕と相補)
-│   ├── claude-app-cwd-pin.md # Claude.app (Cowork desktop) の新セッション folder picker 起点を `<base>` に固定する launchd エージェント (= NSNavLastRootDirectory を 2 秒間隔で書き戻し、 picker の drift 防止。 setup.sh Step 2b2 が macOS で default-ON install〔ただし desktop アプリ未使用の CLI 専用 Mac は skip〕、 drift 時のみ書込〔read-first〕、 opt-out marker `~/.claude/pin-claude-cwd.off` / `CLAUDE_PIN_CWD=0` で稼働中 job も停止、 launchd ThrottleInterval=10s 罠の対処込み)
+│   ├── claude-app-cwd-pin.md # Claude.app (Cowork desktop) の新セッション folder picker 起点を `<base>` に固定する launchd エージェント (= NSNavLastRootDirectory を 1 秒間隔で書き戻し、 picker の drift 防止。 setup.sh Step 2b2 が macOS で default-ON install〔ただし desktop アプリ未使用の CLI 専用 Mac は skip〕、 drift 時のみ書込〔read-first〕、 opt-out marker `~/.claude/pin-claude-cwd.off` / `CLAUDE_PIN_CWD=0` で稼働中 job も停止、 launchd ThrottleInterval=10s 罠の対処込み)
 │   └── chalkboard-close-up-merge.md # 板書写真 PDF で「広域 + close-up annotation」 2 枚を 1 page に統合する手順 (= Keynote 手作業経路 〔黒板 theme + 透過 chalk PNG overlay〕 を推奨、 PIL inline composite は anchor 明確時のみ。 free-form 配置は user が掴んでドラッグ、 AppleScript で .key auto 生成 + slide PNG export までを台本化、 chalk-only RGBA mask threshold 100-140 + Gaussian blur 1.5 px の標準値、 lectures 板書 reflex の延長)
 ├── hooks/
 │   ├── memory-guard.sh             # メモリ書き込みガード — Edit/Write 用（§8 feedback deny + escape hatch: machine-local marker）
@@ -97,7 +97,7 @@ claude-config/
 ├── hammerspoon/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── scripts/
-│   ├── pin-claude-cwd.sh               # Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 2 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
+│   ├── pin-claude-cwd.sh               # Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
 │   ├── fix-bib-unicode.py              # Unicode→LaTeX 変換スクリプト
 │   ├── pre-commit-bib                  # Git pre-commit hook（上記を呼ぶ）
 │   ├── public-precommit-runner.sh      # 公開リポ pre-commit gate（Tier A + sensitive-terms.txt ephemeral）
@@ -170,7 +170,7 @@ setup.sh が自動で行うこと:
 1. `<base>/CONVENTIONS.md` → `claude-config/CONVENTIONS.md` の symlink（Windows は cp）
 2. `~/.gitignore_global` → `claude-config/gitignore_global` の symlink + `git config --global core.excludesfile` 設定
 3. Claude Code hooks を `~/.claude/hooks/` に symlink + `settings.json` に設定マージ
-4. *(macOS のみ)* PATH 消失防止（`.zprofile` の重複 `brew shellenv` 修正 + スナップショット自動パッチ用 launchd エージェント）+ **Claude.app の新セッション folder picker を `<base>` に固定する launchd エージェント**（default-ON = **デスクトップアプリ使用時のみ** install〔CLI 専用 Mac は skip〕、 2 秒間隔だが drift 時のみ書込 = steady-state は read のみ、 opt-out 可 = `touch ~/.claude/pin-claude-cwd.off` or `CLAUDE_PIN_CWD=0`。 詳細・除去手順は `conventions/claude-app-cwd-pin.md`）
+4. *(macOS のみ)* PATH 消失防止（`.zprofile` の重複 `brew shellenv` 修正 + スナップショット自動パッチ用 launchd エージェント）+ **Claude.app の新セッション folder picker を `<base>` に固定する launchd エージェント**（default-ON = **デスクトップアプリ使用時のみ** install〔CLI 専用 Mac は skip〕、 1 秒間隔だが drift 時のみ書込 = steady-state は read のみ、 opt-out 可 = `touch ~/.claude/pin-claude-cwd.off` or `CLAUDE_PIN_CWD=0`。 詳細・除去手順は `conventions/claude-app-cwd-pin.md`）
 5. Claude Code パーミッション設定 — 安全なツール（Bash, Read, Edit, Write, Glob, Grep, WebFetch, WebSearch）を自動許可
 6. git post-merge hook をインストール（`git pull` 後に hooks と CONVENTIONS.md を自動同期）
 7. 認証ユーザーの全リポを `<base>/` 以下に clone（未取得のもののみ）

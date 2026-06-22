@@ -20,7 +20,7 @@ value on a short interval:
   back **only when it differs** from the target (see [Cost](#cost) below)
 - **Pins to:** `<base>` = the parent of your `claude-config` checkout (where `setup.sh`
   clones your repos). Passed to the script as `$1` at install time.
-- **Interval:** every ~2 seconds (see the throttle note below)
+- **Interval:** every ~1 second (see the throttle note below)
 - **Log:** `/tmp/pin-claude-cwd.log` (normally empty)
 
 This only affects the **Claude desktop app's folder picker**. It does not touch
@@ -35,12 +35,12 @@ start using the desktop app later, just re-run `setup.sh`.
 
 ### Cost
 
-The agent fires every ~2 s, but the `defaults` invocation (~7 ms CPU, read ≈ write)
+The agent fires every ~1 s, but the `defaults` invocation (~7 ms CPU, read ≈ write)
 is what costs — not the write itself. So the script **reads first and only writes on
 drift**: in steady state it's a cheap read, avoiding tens of thousands of redundant
 prefs writes (and cfprefsd disk flushes) per day. launchd does not fire `StartInterval`
-jobs while the machine is asleep, so the awake-only CPU cost is on the order of a couple
-of CPU-minutes per day — negligible energy (well under 0.3 % of a laptop battery/day).
+jobs while the machine is asleep, so the awake-only CPU cost is on the order of a few
+CPU-minutes per day — negligible energy (well under 0.6 % of a laptop battery/day).
 
 ## Why a polling loop (and not a hook / WatchPath)
 
@@ -54,7 +54,7 @@ unreliable. A short `StartInterval` poll is robust; its cost is negligible (see
 launchd's default `ThrottleInterval` is **10 seconds** — a job will not relaunch
 more than once per `ThrottleInterval` regardless of `StartInterval`. So lowering
 `StartInterval` alone does **not** speed it up; you must lower `ThrottleInterval`
-too. The installed plist sets **both** to `2`. The 2-second window is the maximum
+too. The installed plist sets **both** to `1`. The 1-second window is the maximum
 time the picker can stay on a wrong folder after you manually browse away.
 
 ## Opt out

@@ -509,7 +509,7 @@ fi
 # parent of this checkout, where your repos live) instead of drifting to whatever
 # folder you last browsed to. Default-ON on macOS *when the Claude desktop app is
 # in use* (skipped on CLI-only Macs — see the desktop-detection branch below).
-# The agent rewrites the pref every ~2s but only when it actually drifted (the
+# The agent rewrites the pref every ~1s but only when it actually drifted (the
 # script reads first and skips the write when already pinned). Opt out with either:
 #   - a marker file:  touch ~/.claude/pin-claude-cwd.off
 #   - an env var:     CLAUDE_PIN_CWD=0 ./setup.sh
@@ -536,7 +536,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
         echo "=== Step 2b2: Claude folder-picker pin — already loaded ($PIN_LABEL) ==="
     elif ! defaults read com.anthropic.claudefordesktop &>/dev/null; then
         # The pin only matters for the Claude desktop app. If its prefs domain
-        # doesn't exist, this is a CLI-only Mac — don't install a 2s poller it
+        # doesn't exist, this is a CLI-only Mac — don't install a 1s poller it
         # would never benefit from. Re-running setup.sh after first opening the
         # desktop app picks it up.
         echo ""
@@ -546,7 +546,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
         echo "=== Step 2b2: Installing launchd agent to pin the Claude folder picker ==="
         mkdir -p "$(dirname "$PIN_PLIST")"
         # launchd's default ThrottleInterval is 10s, which would floor StartInterval;
-        # set both so the rewrite actually fires every ~2s.
+        # set both so the rewrite actually fires every ~1s.
         cat > "$PIN_PLIST" << PIN_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -562,9 +562,9 @@ if [ "$(uname -s)" = "Darwin" ]; then
         <string>$(xml_escape "$CLAUDE_DIR")</string>
     </array>
     <key>StartInterval</key>
-    <integer>2</integer>
+    <integer>1</integer>
     <key>ThrottleInterval</key>
-    <integer>2</integer>
+    <integer>1</integer>
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
