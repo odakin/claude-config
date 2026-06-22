@@ -72,7 +72,7 @@ dashboard 全体の末尾で呼び出し (= 既存 TODO 表示等の後)、 user
 ```
 gmail filter setup    -> 各 user の MCP 設定リポ + Gmail コンソール
 batch_modify code     -> 各 user の odakin-prefs 等個人層の scripts/
-dashboard surface     -> odakin-prefs/scripts/<surface-name>.py を
+dashboard surface     -> 個人層 scripts の <surface-name>.py を
                          unified-dashboard.py 末尾から subprocess invoke
 session-start step    -> 該当業務リポの CLAUDE.md §「セッション開始時 (自動実行)」
                          で「dashboard を必ず走らせる + surface セクションを

@@ -84,7 +84,7 @@ odakin の私的環境で同一 remote の二重 clone が session 間で drift 
 
 ### 起点
 
-2026-05-25 evening の言語移植 session で claude-config 公開リポに連続 leak 発生 (= 詳細は `odakin-prefs/leak-incidents.md` 5/25 entry)。 既存 layer 3 hook (= `commit-msg-leak-guard.sh`、 2026-05-20 MVP shipped、 PreToolUse Bash matcher、 warn mode) が **本 leak を捕まえなかった**。 5/26 follow-up session で root cause 究明、 仮説 5 件 verify → **真因 = claude-code 2.1.x の `PreToolUse[Bash]` matcher harness invoke bug** (= 既存 `conventions/hook-authoring.md §2 (d)` entry、 Anthropic issues [#52715](https://github.com/anthropics/claude-code/issues/52715) + [#59513](https://github.com/anthropics/claude-code/issues/59513)) と確定。 hook script + 配信 (a)(b)(c) は全 healthy、 harness が invoke しない silent failure で、 (a)(b)(c) audit だけでは expose できない。
+2026-05-25 evening の言語移植 session で claude-config 公開リポに連続 leak 発生 (= 詳細は `個人層の leak-incidents.md` 5/25 entry)。 既存 layer 3 hook (= `commit-msg-leak-guard.sh`、 2026-05-20 MVP shipped、 PreToolUse Bash matcher、 warn mode) が **本 leak を捕まえなかった**。 5/26 follow-up session で root cause 究明、 仮説 5 件 verify → **真因 = claude-code 2.1.x の `PreToolUse[Bash]` matcher harness invoke bug** (= 既存 `conventions/hook-authoring.md §2 (d)` entry、 Anthropic issues [#52715](https://github.com/anthropics/claude-code/issues/52715) + [#59513](https://github.com/anthropics/claude-code/issues/59513)) と確定。 hook script + 配信 (a)(b)(c) は全 healthy、 harness が invoke しない silent failure で、 (a)(b)(c) audit だけでは expose できない。
 
 ### 修復 candidate 4 案 evaluation
 
@@ -478,27 +478,27 @@ Claude Code の Bash ツールは起動時に生成したシェルスナップ�
 2. **public リポに private リポ名が露出:** 名指しされていた管理リポは private。claude-config の安全規則 (CLAUDE.md) は非公開リポ名のコミットを禁じており、その例外リストにも該当しない
 3. **一般化しても情報密度が失われる:** 「ドメイン固有の参照データは専用ツール参照」のような曖昧化では実用価値ゼロ
 
-**移管先の選定:** 候補は (a) odakin-prefs/CLAUDE.md (private cross-machine 個人規約), (b) memory (~/.claude/...), (c) 該当 private リポの CLAUDE.md。
+**移管先の選定:** 候補は (a) 個人層の CLAUDE.md (private cross-machine 個人規約), (b) memory (~/.claude/...), (c) 該当 private リポの CLAUDE.md。
 
 - (b) memory はルール定義の置き場ではない (`docs/convention-design-principles.md` §5)
 - (c) 該当 private リポの CLAUDE.md に置くと、同ドメインの他リポで作業中にこの横断ルールが見えない (リポ単位のスコープでは届かない)
 - (a) odakin-prefs は cross-machine な個人規約のために設計された場所であり、最も適合する
 
-**odakin-prefs 側の構造:** odakin-prefs/CLAUDE.md は「1 ルール = 1 ファイル」「テーブルに載っているファイルだけが実効的」という原則を持つ。これに従い専用ファイルを新規作成し、CLAUDE.md のテーブルに追記した。
+**odakin-prefs 側の構造:** 個人層の CLAUDE.md は「1 ルール = 1 ファイル」「テーブルに載っているファイルだけが実効的」という原則を持つ。これに従い専用ファイルを新規作成し、CLAUDE.md のテーブルに追記した。
 
 ---
 
 ## ~/Claude/CLAUDE.md の symlink 化 (完了 2026-04-06)
 
-戦略 **(b) 個別ファイル化 + symlink 置換** で移管完了。`~/Claude/CLAUDE.md` は `odakin-prefs/CLAUDE.md` への symlink。
+戦略 **(b) 個別ファイル化 + symlink 置換** で移管完了。`~/Claude/CLAUDE.md` は `個人層の CLAUDE.md` への symlink。
 
 移管マッピング:
 
 | 旧セクション | 移管先 |
 |---|---|
-| 作業ディレクトリ宣言 / プロジェクト構成 / preview リンク出力 | `odakin-prefs/project-structure.md` (bundle) |
-| ユーザー情報 (氏名・所属・メール) | `odakin-prefs/user-profile.md` |
-| CONVENTIONS.md 参照リスト | `odakin-prefs/CLAUDE.md` 「規約参照」セクション |
+| 作業ディレクトリ宣言 / プロジェクト構成 / preview リンク出力 | `個人層の project-structure.md` (bundle) |
+| ユーザー情報 (氏名・所属・メール) | `個人層の user-profile.md` |
+| CONVENTIONS.md 参照リスト | `個人層の CLAUDE.md` 「規約参照」セクション |
 
 bundle 判断 (「関連密接かつ合計 10 行未満のルールは bundle 可」) は `docs/convention-design-principles.md §1` に LESSON として昇格。setup.sh 側の symlink 置換経路は Step 5a (L460-481)、手動操作詳細は git log 参照。
 
@@ -588,7 +588,7 @@ PreToolUse Bash 系 hook は memory-guard-bash.sh と google-url-guard.sh の 2 
 
 **判断**: `setup.sh` Step 5a (= `.claude-personal-layer` marker file による個人層検出) と同じロジックを sourceable shell function `find_personal_layer` として `scripts/lib/find-personal-layer.sh` に extract、 layer-1 scripts (`public-precommit-runner.sh`, `audit-public-repos.sh`) から source して個人層 path を動的解決する。
 
-**Why**: もともと layer-1 scripts は `SENSITIVE_TERMS="$HOME/Claude/odakin-prefs/sensitive-terms.txt"` のように特定個人層名を hardcode していて、 layer-1 audience contract (= layer 1 は特定の layer 3 名を仮定しない) に違反していた。 foreign user の machine では path が存在せず silent skip → leak detection の literal layer が機能不全になる。 abstract に書き換えるだけでは path lookup が成立しないため、 実際に個人層を動的検出する mechanism が必要。
+**Why**: もともと layer-1 scripts は `SENSITIVE_TERMS="$HOME/Claude/<personal-layer>/sensitive-terms.txt"` のように特定個人層名を hardcode していて、 layer-1 audience contract (= layer 1 は特定の layer 3 名を仮定しない) に違反していた。 foreign user の machine では path が存在せず silent skip → leak detection の literal layer が機能不全になる。 abstract に書き換えるだけでは path lookup が成立しないため、 実際に個人層を動的検出する mechanism が必要。
 
 **棄却した代替案**:
 - *env var (`CLAUDE_PERSONAL_LAYER`) を `setup.sh` が export して script は env 経由で path 解決*: 棄却。 pre-commit hook (git が起動する子 process) や scheduled-task (cron 系 process) で env が継承されない経路がある。 Helper の self-contained 検出ならどこから呼ばれても動く
@@ -600,7 +600,7 @@ PreToolUse Bash 系 hook は memory-guard-bash.sh と google-url-guard.sh の 2 
 - 呼び出し側は `[ -n "$PERSONAL_LAYER" ]` チェックで graceful に skip
 - 既存の `[ -f "$SENSITIVE_TERMS" ]` チェックも空文字列を「ファイルなし」 として扱うため、 既存 control flow を破壊しない (= odakin の既存運用にも影響なし、 dry-run で同 path に解決することを 2026-05-10 に検証)
 
-**由来**: 2026-05-10 self-audit で memory-guard hooks の同 class 違反を発見・修復 (commit `60a58c0`) した後、 final cross-cutting sweep で `scripts/*` にも 13 箇所の同 class 違反 (= `odakin-prefs/sensitive-terms.txt` / `odakin-prefs/leak-incidents.md` の hardcode) を追加発見、 hooks のように abstract 文面では逃げられない (= path lookup が必要) ため mechanism 化で全 closure。
+**由来**: 2026-05-10 self-audit で memory-guard hooks の同 class 違反を発見・修復 (commit `60a58c0`) した後、 final cross-cutting sweep で `scripts/*` にも 13 箇所の同 class 違反 (= `個人層の sensitive-terms.txt` / `個人層の leak-incidents.md` の hardcode) を追加発見、 hooks のように abstract 文面では逃げられない (= path lookup が必要) ため mechanism 化で全 closure。
 
 ---
 
@@ -779,15 +779,15 @@ STALE_DIRT は **汎用 safety net**。各 repo の root cause level の対処�
 ## 公開リポ leak 防止: 構造制約 hook + pre-commit ephemeral literal check
 
 **状態**: 2026-04-09〜10 に 5 セッションで実装完了。受容 leak の記録は
-`odakin-prefs/leak-incidents.md`。将来課題 (段階 3 + 3-3 純粋化) は
-`odakin-prefs/next-steps.md`。
+`個人層の leak-incidents.md`。将来課題 (段階 3 + 3-3 純粋化) は
+`個人層の next-steps.md`。
 
 ### 契機
 2026-04-09、LorentzArena (public) の 5 ファイル 16 行に、組織環境を
 暗示する間接表現 (`<wifi_term>` 系) が複数セッションに渡って累積して
 いたのを user 指摘で発見、`ae25604` で一般化して修正した。Claude は
 drafting 中にも push 前にも catch しておらず、既存の指示層
-(`odakin-prefs/work-network.md` の「公開リポで組織名を書かない」
+(`個人層の work-network.md` の「公開リポで組織名を書かない」
 ルール) は reliably トリガーが引けないと判明した。`memory-guard.sh`
 (§「メモリ書き込みガード」) と `git-state-nudge.sh` (§「git-state-nudge.sh: cross-session WIP leakage の検出」)
 で既に確立している「指示 → hook 化」の pattern upgrade を、leak 防止
@@ -799,12 +799,12 @@ drafting 中にも push 前にも catch しておらず、既存の指示層
    blocklist は乗せない。`sensitive-repo-patterns.ja.md §3-3`
    「構造制約の設計思想」を純粋に適用する層
 2. **pre-commit hook** (`public-precommit-runner.sh`) — 同じ Tier A
-   regex に加えて、`odakin-prefs/sensitive-terms.txt` が存在すれば
+   regex に加えて、`個人層の sensitive-terms.txt` が存在すれば
    **ephemeral に load** して staged diff に literal check をかける。
    script 本体には literal が埋め込まれない構造分離が核心
 3. **audit** (`audit-public-repos.sh`) — 週次で全 public repo を sweep、
    Tier A + sensitive-terms.txt の両方を適用して retroactive 検出
-4. **情報配置の分離 (段階 1)** — `odakin-prefs/work-network.md` の
+4. **情報配置の分離 (段階 1)** — `個人層の work-network.md` の
    組織名 literal を `sensitive-terms.txt` (gitignore + network-notes
    git-crypt symlink) に分離、本文は placeholder 化。odakin-prefs が万一 leak
    しても sensitive literal が git に乗っていない状態にする
@@ -842,7 +842,7 @@ Tier A を完璧にしても、現実の事例類型に対する防御が致命�
 点に気付いた。具体的には:
 - hook **本体** には literal を埋め込まない (script source は
   claude-config の public に置いても literal leak しない)
-- literal **data** は `odakin-prefs/sensitive-terms.txt` (gitignore +
+- literal **data** は `個人層の sensitive-terms.txt` (gitignore +
   network-notes git-crypt symlink)、hook 実行時に読んで終了時に unload
 - PreToolUse 層には literal を持ち込まない (3-3 純粋を維持)
 - pre-commit 層に限って ephemeral load を許す (stage 済み diff のみ
@@ -871,7 +871,7 @@ sensitive-terms.txt に分離) で当面の risk は大きく下がる。段階 
 
 ### 副次的な設計判断
 
-**public/private 判定: marker file 一本** — `odakin-prefs/public-repos.yaml`
+**public/private 判定: marker file 一本** — `個人層の public-repos.yaml`
 一本化や `gh repo view` 自動判定とも比較した。各 repo の visibility
 は各 repo 固有の情報 (`convention-design-principles.md §1` 配置原則の
 「影響範囲の最大公約数」)、正本は repo 自身にあるべき。marker 付け
@@ -1053,9 +1053,9 @@ docs↔SESSION.md 警告を移設。本機能の動作確認も兼ねた。
 
 ### 関連文書
 - `docs/sensitive-repo-patterns.ja.md` — 設計思想の出所 (§3-3, §5-1, §5-2)
-- `odakin-prefs/leak-incidents.md` — 受容 leak の記録と類型判断
-- `odakin-prefs/next-steps.md` — 段階 2-3 の分離計画と un-defer トリガー
-- `odakin-prefs/DESIGN.md §2026-04-14` — articulation→application gap と prose 追加バイアスの同定 (本追補の認知側対応)
+- `個人層の leak-incidents.md` — 受容 leak の記録と類型判断
+- `個人層の next-steps.md` — 段階 2-3 の分離計画と un-defer トリガー
+- `個人層の DESIGN.md §2026-04-14` — articulation→application gap と prose 追加バイアスの同定 (本追補の認知側対応)
 - `conventions/shared-repo.md §公開前 Audit` — 旧来の人間 audit 手順 (本設計で hook 化)
 
 ## 4 層モデルの renumber: layer 2 ↔ 3 swap (2026-05-01)
@@ -1091,8 +1091,8 @@ claude-config 26 箇所 + odakin-prefs 2 箇所 = 28 箇所 (= 各 owner の sha
 ### 同時に行った関連変更
 
 - `personal-layer.md` の表に「numbering follows audience containment」 の根拠 1 段落を追加 (= future readers が「なぜこの numbering か」 を理解できる)
-- `odakin-prefs/work-discipline.md` L102 の依存方向逆記述 bug fix (= 「layer 1 → layer 2 OK」 と書かれていたのを「layer 3 → layer 1 OK」 に訂正、4 層モデル本体ルールと整合)
-- `odakin-prefs/work-discipline.md` L160 直前に別軸 Layer (= 規約配置 strategic) との用語注 1 行追加 (= 同 file 内に 2 軸の Layer N が同居していたため、混乱回避用 escape hatch)
+- `個人層の work-discipline.md` L102 の依存方向逆記述 bug fix (= 「layer 1 → layer 2 OK」 と書かれていたのを「layer 3 → layer 1 OK」 に訂正、4 層モデル本体ルールと整合)
+- `個人層の work-discipline.md` L160 直前に別軸 Layer (= 規約配置 strategic) との用語注 1 行追加 (= 同 file 内に 2 軸の Layer N が同居していたため、混乱回避用 escape hatch)
 
 ### 別軸 Layer N との関係
 
@@ -1112,7 +1112,7 @@ odakin-prefs 内には 4 層モデルとは別軸の「Layer N」表記が 14 �
 **現状の運用 architecture**:
 
 ```
-odakin-prefs/sensitive-terms.txt     →  ../<sensitive-repo>/sensitive-terms.txt
+個人層の sensitive-terms.txt     →  ../<sensitive-repo>/sensitive-terms.txt
   (gitignored、 symlink only)            (git-crypt encrypted、 layer 3 repo)
 ```
 
@@ -1159,7 +1159,7 @@ git commit -m "test"     # → 期待: tier-b で reject
 
 ### 起点 = 2 連続失敗の RCA
 
-2026-05-18 朝、 別 Claude session が個人層の private research repo plan ファイルでの議論中に arXiv preprint PDF を Read tool で読もうとして `Error: pdftoppm is not installed` で fail (= Intel Mac の Tier 2 で poppler の bottle 不在 + source build 失敗 という既知パターン)、 arXiv HTML v1 に lazy substitution → HTML v1 の section 構造から別 group の review と誤 attribution → 真は research paper で別著者 chain (= arXiv ID 自体は public、 攻撃面なし) で 1〜2 hour の議論が誤前提で進行。 個人層で規律化 (= CLAUDE.md inline §18 + work-discipline.md §「PDF Read tool error...」 + memory `reference_install_failures.md` の poppler entry に代替経路試行順序)。
+2026-05-18 朝、 別 Claude session が個人層の private research repo plan ファイルでの議論中に arXiv preprint PDF を Read tool で読もうとして `Error: pdftoppm is not installed` で fail (= Intel Mac の Tier 2 で poppler の bottle 不在 + source build 失敗 という既知パターン)、 arXiv HTML v1 に lazy substitution → HTML v1 の section 構造から別 group の review と誤 attribution → 真は research paper で別著者 chain (= arXiv ID 自体は public、 攻撃面なし) で 1〜2 hour の議論が誤前提で進行。 個人層で規律化 (= 個人層 CLAUDE.md の PDF-read-fallback 規律 + work-discipline.md §「PDF Read tool error...」 + memory `reference_install_failures.md` の poppler entry に代替経路試行順序)。
 
 同日後続セッションで第二事例: CosmoVerse PDF (24 MB) を Read tool fail → 「Wolfram で完全に賄える」 と発話 + PyMuPDF / sips 試行 skip + 即 Mathematica で PDF text 抽出を実行。 Mathematica 実行自体は valid だったが、 規律された default 経路 (= PyMuPDF) を skip して別 valid path に jump した = 規律順守 reflex の gap。 旧 wording 「arXiv HTML への lazy substitution」 を別セッションが arXiv HTML specific と reflex 解釈、 「Wolfram への substitution は別 issue」 と読まれた。
 
@@ -1198,7 +1198,7 @@ hook 本体 (script + settings.json schema) = **layer 1** (claude-config、 全 
 
 ### 規律 wording との併用設計
 
-規律本体 (= odakin-prefs CLAUDE.md inline §18 + work-discipline.md §「PDF Read tool error を別経路への lazy substitution で覆い隠さない」 + memory poppler entry) は **wording-level の reflex 起動**、 hook は **mechanical enforcement layer**。 2 重 (規律 + hook) で reflex の癖に依存しない設計。 加えて §18 の冒頭 1 行を command-form punchy 化 (= 2026-05-18 同日 commit) して reflex 起動の起点を最短化、 これと hook の system reminder の wording を一致 (= 「`python3 -c "import fitz; ..."` を 1 回」) させて、 Claude が「規律で読んだ 1-liner」 = 「hook が injection した 1-liner」 と認識できるよう設計。
+規律本体 (= 個人層 CLAUDE.md の PDF-read-fallback 規律 + work-discipline.md §「PDF Read tool error を別経路への lazy substitution で覆い隠さない」 + memory poppler entry) は **wording-level の reflex 起動**、 hook は **mechanical enforcement layer**。 2 重 (規律 + hook) で reflex の癖に依存しない設計。 加えて当該規律の冒頭 1 行を command-form punchy 化 (= 2026-05-18 同日 commit) して reflex 起動の起点を最短化、 これと hook の system reminder の wording を一致 (= 「`python3 -c "import fitz; ..."` を 1 回」) させて、 Claude が「規律で読んだ 1-liner」 = 「hook が injection した 1-liner」 と認識できるよう設計。
 
 ### 既知の limitation
 
@@ -1230,5 +1230,5 @@ jq '.hooks.PostToolUse[] | select(.hooks[]?.command | contains("pdf-read-fallbac
 
 ### 関連事故 / 規律
 
-- 2026-05-18 朝 arXiv preprint attribution 誤同定 RCA: 個人層 research repo の関連 plan + 個人層 work-discipline.md §「PDF Read tool error を別経路への lazy substitution で覆い隠さない」 + odakin-prefs CLAUDE.md inline §18
+- 2026-05-18 朝 arXiv preprint attribution 誤同定 RCA: 個人層 research repo の関連 plan + 個人層 work-discipline.md §「PDF Read tool error を別経路への lazy substitution で覆い隠さない」 + 個人層 CLAUDE.md の PDF-read-fallback 規律
 - 2026-05-18 同日後続 Wolfram lazy substitution (= 第二事例): 同 plan の対応 sub-section + メタ層 RCA (= 規律を書く Claude も §16「context 構築での単一情報源 null 結論飛躍」 を起こす)
