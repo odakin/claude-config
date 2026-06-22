@@ -107,7 +107,10 @@ def build_target_index(target_dir):
 def scan(base, target_name, docs, relpaths):
     target_dir = os.path.join(base, target_name)
     anchor_re = re.compile(r'([A-Za-z0-9_.\-]+\.md)#([A-Za-z0-9_\-]+)')
-    path_re = re.compile(r'(?:\.\./)*' + re.escape(target_name) + r'/([\w./\-]+\.md)')
+    # `\.md` may carry a scaffold suffix (`X.md.template`, `X.md.example`); capture it so
+    # a ref to `templates/.../SETUP.md.template` checks the real file, not a phantom `SETUP.md`
+    # (2026-06-23: false-positive fix — bare `\.md` stopped at the wrong extension boundary).
+    path_re = re.compile(r'(?:\.\./)*' + re.escape(target_name) + r'/([\w./\-]+\.md(?:\.template|\.example)?)')
     blob_re = re.compile(r'^(?:blob|tree)/[^/]+/')
     placeholder_re = re.compile(r'^[A-Z]\.md$')
     sec_re = re.compile(r'§\s*\d+(?:[.\-]\d+)*[a-z]?')
@@ -161,6 +164,9 @@ def selftest():
             f.write('## <a id="present-slug"></a>Present heading\n\nbody\n')
         with open(os.path.join(tgt, 'README.md'), 'w', encoding='utf-8') as f:
             f.write('## A README heading\n')  # generic name; must not anchor-index
+        os.makedirs(os.path.join(tgt, 'templates'))
+        with open(os.path.join(tgt, 'templates', 'SETUP.md.template'), 'w', encoding='utf-8') as f:
+            f.write('scaffold template\n')  # a ref to this `.md.template` must resolve, not flag
 
         # --- downstream repo with one of every reference kind ---
         ds = os.path.join(tmp, 'downstream')
@@ -179,6 +185,8 @@ def selftest():
                 'GH link tgt/blob/main/conventions/real.md works.\n'     # line 6: de-noised path
                 # DE-NOISE: single-letter placeholder X.md must be skipped
                 'In prose we sometimes write tgt/X.md as an example.\n'  # line 7: placeholder
+                # RESOLVE: an `X.md.template` ref must check the real file, not phantom X.md
+                'Scaffold from tgt/templates/SETUP.md.template here.\n'   # line 7b: .md.template OK
                 # FRAGILE positional: §N.M naming a target doc -> INFO (counted, not HARD)
                 'See real.md §1.2 for the rationale.\n'                  # line 8: fragile
             )
