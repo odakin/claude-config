@@ -38,6 +38,7 @@ claude-config/
 │   ├── scheduled-tasks.md  # Scheduled Tasks 規約（SKILL.md 二重構造・同期ルール）
 │   ├── claude-ai-routines.md # claude.ai routines (= RemoteTrigger API、 旧「scheduled remote agents」) の知識集 — cloud 側に CCR session を spawn する cron / one-time trigger、 local 機構の scheduled-tasks.md との区別、 操作は RemoteTrigger tool / /schedule skill 経由
 │   ├── substack.md         # Substack 規約（入稿: Markdown→リッチテキスト変換手順 / 取得: notes・コメントの Gmail MCP + WebFetch 経由回収）
+│   ├── zenn.md             # Zenn.dev 記事執筆規約（platform 仕様: タイトル 70 字 / HTML サニタイズ / `:::message`系 / 文字数見積もり、 GFM bold×全角句読点 等の執筆落とし穴。 substack.md の対、 zenn-cli 運用は各リポ CLAUDE.md 側）
 │   ├── shell-env.md        # シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール）
 │   ├── dropbox-refs.md     # 共同 PDF を Dropbox に置いてリポから symlink で参照する規約 (§10 で OneDrive / Google Drive 等の他クラウド + 索引自動生成 launchd gotchas へ応用)
 │   ├── dropbox-placeholder-diagnosis.md # Dropbox の online-only placeholder (0 byte) 診断: xattr `com.dropbox.placeholder` 検出 + OS 別 materialize 方法 + 「0 byte = 配置忘れ」 reflex 防止
