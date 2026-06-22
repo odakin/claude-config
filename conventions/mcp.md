@@ -323,6 +323,27 @@ create + UI で開く検証で associatedWithDeveloper 永続フラグによる 
 - 共有カレンダー命名: `{共同研究者名}{自分の名字}共同研究`
 - イベント作成時は日時・タイトル・参加者をユーザーに確認してから作成
 
+## Gmail 本文の plain-text / HTML 二重表現 (= 読み「空」誤認 + 書き HTML entity)
+
+メール本文は **plain-text 表現と HTML 表現の 2 つ**を持ちうる (multipart/alternative)。**HTML-only のメール** (= text/plain パートを持たない。HTML メーラ + S/MIME 署名や一部の通知系で起きる) を素朴に扱うと**読み・書きの両方向で事故る**。両者は同じ「plain-text と HTML を取り違える」混同の表裏。
+
+### 読み側: 「text/plain が無い」 ≠ 「本文が空」
+
+- **text/plain だけを抽出する body extractor は、HTML-only メールに対して無音で空文字列を返す**。読み手はそれを「本文空」と誤読する (= 単一の表現〔text/plain〕の null を「本文不在」に飛躍させる失敗。安価な検証を先に回す原則の email-body 形態)。実際には HTML パートに実質的な本文が入っている。
+- 標準の `read_email` (= `@gongrzhe/server-gmail-autoauth-mcp`) は `body = text || html` で **HTML に fallback** し `[Note: This email is HTML-formatted. Plain text version not available.]` を付けるので「空」を出さない。**だが自作の直読 helper / Python snippet で `mimeType == "text/plain"` だけ拾う実装は空を返す** (= ここが事故源)。
+- **reflex**: メール本文が「空」に見えたら結論する前に、それが**表現の artifact でなく本当の空**かを 1 操作で verify する — (1) `format=full` で text/html パートを見る、または (2) 標準 `read_email` で読み直す。
+- body extractor を自作するなら **text/plain 不在時は text/html に fallback** し (de-tag + 「HTML-only」 marker)、空を返すのは plain も html も無い時だけにする (= 標準 MCP と同じ契約)。空文字列を「本文空」の意味で出さない。
+
+### 書き側: send_email の body は plain text — HTML entity を書かない
+
+- MCP / API の send は body を plain text として MIME に詰めるだけで HTML entity を**decode しない**。`<` を `&lt;`・`>` を `&gt;`・`&` を `&amp;` と (XML/JSON escape の reflex で) 書くと、**受信側に literal `&gt;` がそのまま表示**される。返信の引用行 `> 元本文` で特に起きやすい。
+- `<` `>` `&` は **literal で書く**。「XML/JSON 内だから escape が要る」と感じたら危険サイン (= 実際には plain text を渡している)。
+
+### 機械化の射程 (= honest、effective な層だけに置く)
+
+- **読み側**は body extractor のコードで根治できる (= 自作 helper を text/html fallback にする)。これは tool が返す値そのものを直すので **hook 不要・どの frontend でも効く** (= Cowork desktop でも有効)。最も leverage が高い。
+- **書き側は本質的に機械化が難しい**。PreToolUse hook で send body を scan する手はあるが、**Cowork desktop では hook 出力が honor されない** ([hook-authoring.md §9.3](hook-authoring.md))ため、まさに事故が起きる環境で無効 = 足しても「対策済」の false confidence にしかならない。送信が Bash script (= 直叩き wrapper) 経由なら script 内に entity の事前 scan を仕込めば**その経路では**機械的に止まる (frontend 非依存)。だが **MCP send 経路 (`mcp__gmail-*__send_email`) は介入できない**。∴ MCP-send-in-desktop の `&gt;` は **prose 規律 + human review が最後の floor**。欠陥自体は cosmetic (引用が崩れて見えるだけで趣旨は伝わる) なので、効かない機械層を積むより honest にそう書く。
+
 ## Gmail MCP: read_email の大容量出力と chunked 処理
 
 ### 現象
