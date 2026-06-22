@@ -344,6 +344,13 @@ create + UI で開く検証で associatedWithDeveloper 永続フラグによる 
 - **読み側**は body extractor のコードで根治できる (= 自作 helper を text/html fallback にする)。これは tool が返す値そのものを直すので **hook 不要・どの frontend でも効く** (= Cowork desktop でも有効)。最も leverage が高い。
 - **書き側は本質的に機械化が難しい**。PreToolUse hook で send body を scan する手はあるが、**Cowork desktop では hook 出力が honor されない** ([hook-authoring.md §9.3](hook-authoring.md))ため、まさに事故が起きる環境で無効 = 足しても「対策済」の false confidence にしかならない。送信が Bash script (= 直叩き wrapper) 経由なら script 内に entity の事前 scan を仕込めば**その経路では**機械的に止まる (frontend 非依存)。だが **MCP send 経路 (`mcp__gmail-*__send_email`) は介入できない**。∴ MCP-send-in-desktop の `&gt;` は **prose 規律 + human review が最後の floor**。欠陥自体は cosmetic (引用が崩れて見えるだけで趣旨は伝わる) なので、効かない機械層を積むより honest にそう書く。
 
+## Gmail send: 添付ファイルは明示 MIME が要る
+
+send (= MCP `send_email` / Gmail API `messages/send`) に file を添付するには、 plain-text body をセットするだけでは**付かない**。 multipart MIME を組んで file パートを足す要がある: stdlib なら `EmailMessage.set_content(body)` の後に `msg.add_attachment(data, maintype=…, subtype=…, filename=…)` (= MIME type は拡張子から `mimetypes.guess_type` で推定)、 それを `base64.urlsafe_b64encode(msg.as_bytes())` して `messages/send` の `raw` に渡す。
+
+- **body だけ受ける send helper / thin wrapper は body しか送らない** (= 添付フィールドを持たない)。 添付が要るなら API 直叩きで raw MIME を自前で組む経路に切り替える (= `send_email` MCP tool が添付 param を出すかは server / version 依存、 確実なのは raw MIME)。
+- **送信前に添付パスの存在を atomic に検証**する (= 1 つでも欠けたら batch 全体を abort)。 §書き側 の HTML-entity gate と同様、 部分送信してから気付く事故を防ぐ。
+
 ## Gmail MCP: read_email の大容量出力と chunked 処理
 
 ### 現象
