@@ -23,7 +23,7 @@ CONVENTIONS.md・各リポの CLAUDE.md・メモリの設計判断の根拠を�
 - リポ固有の CLAUDE.md だけに書く → 別リポで再発する
 - CONVENTIONS.md に何でも書く → 過剰規約で読まれなくなる
 
-**pragmatic relaxation (bundle rule):** 「1 ルール = 1 ファイル」の厳格適用は 1 行ファイルを生む。**関連密接かつ合計 10 行未満のルールは bundle 可** (配置先は影響範囲の最大公約数に従う)。例: `odakin-prefs/project-structure.md` は作業ディレクトリ宣言 + 配置ルール + preview リンク出力を 1 ファイルに束ねた (2026-04-06 の `~/Claude/CLAUDE.md` 解体時の判断、`claude-config/DESIGN.md §~/Claude/CLAUDE.md の symlink 化` 参照)。
+**pragmatic relaxation (bundle rule):** 「1 ルール = 1 ファイル」の厳格適用は 1 行ファイルを生む。**関連密接かつ合計 10 行未満のルールは bundle 可** (配置先は影響範囲の最大公約数に従う)。例: 個人層の project-structure.md は作業ディレクトリ宣言 + 配置ルール + preview リンク出力を 1 ファイルに束ねた (2026-04-06 の `~/Claude/CLAUDE.md` 解体時の判断、`claude-config/DESIGN.md §~/Claude/CLAUDE.md の symlink 化` 参照)。
 
 ---
 
@@ -840,7 +840,7 @@ T1 file が肥大化した時の救済 method:
 2. T1 側は 1 行 pointer に置換 (「詳細 → `<archive>.md` §YYYY-MM-DD」)
 3. archive 側に「Related rules:」逆 link を置く
 
-**例**: work-discipline.md の 4 過去事例 block (Memory gate / $-chat / 汎用原則 / Meta-loop) と push-workflow.md の 3 過去の失敗事例 を `odakin-prefs/incidents.md` に集約して T1 から pointer 化 (2026-04-17 実施、net -~40 lines T1 auto-load)。
+**例**: work-discipline.md の 4 過去事例 block (Memory gate / $-chat / 汎用原則 / Meta-loop) と push-workflow.md の 3 過去の失敗事例 を個人層の incidents 記録に集約して T1 から pointer 化 (2026-04-17 実施、net -~40 lines T1 auto-load)。
 
 ### <a id="tier-failure-patterns"></a>10.4 失敗 pattern
 
@@ -1274,7 +1274,7 @@ gate: index の legacy 集合が HEAD (= 直前 commit) に対して **append-on
 6. **migration は逐語 relocation のみに留める**: 移設の最中に内容を「ついでに改善」 しない。 grep で home 前後の text が zero-loss であることを verify する (= これは移設であって内容変更ではない、 両者を 1 commit に混ぜると review で改変が埋もれる)。
 7. **4 軸 sweep (= goal は error 発見) ＋同 session 内で commit/push する**: 是正は複数 file を跨ぐので、 別 session の救済に依存せず同 session 内で push 完了まで持っていく (= cross-repo drift を残さない)。
 
-由来: ある運用ルールを複数 file に独立 author してしまい、 効率性軸の sweep が多重化を見逃した RCA を一般化 (= §13 の cell 埋め trap が SoT domain で発現した形態)。 本節は §2 / §14.3 の断片を「直す手順」 として束ねたもので、 新規原理ではなく ordered procedure の明文化。
+由来: ある運用ルールを複数 file に独立 author してしまい、 効率性軸の sweep が多重化を見逃した RCA を一般化 (= cell 埋め trap が SoT domain で発現した形態)。 本節は §2 / §14.3 の断片を「直す手順」 として束ねたもので、 新規原理ではなく ordered procedure の明文化。
 
 ---
 

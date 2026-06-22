@@ -95,4 +95,4 @@ INSPIRE BAI (`K.Y.Oda.1`, `N.Ogawa.4` 等) は **同姓同名の別著者を別 
 
 ## 変更履歴
 
-- 2026-04-14 作成。`arxiv-digest` の takeda / ogawa / onda profile で Discord 数値 ID が public config.yaml に直書きされていた leak を根本原因まで遡った結果として、identity-in-config カテゴリを独立規約として分離。事例記録は private layer の `odakin-prefs/leak-incidents.md` 2026-04-14 entry (ε + β 類型、force-push 修正)
+- 2026-04-14 作成。`arxiv-digest` の複数 user profile で Discord 数値 ID が public config.yaml に直書きされていた leak を根本原因まで遡った結果として、identity-in-config カテゴリを独立規約として分離。事例記録は owner の private layer の leak-incidents 記録の 2026-04-14 entry (ε + β 類型、force-push 修正)

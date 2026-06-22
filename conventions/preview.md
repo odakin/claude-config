@@ -50,7 +50,7 @@
 
 **例外の例外 — build config 変更は例外に含まれない**: `vite.config.ts` / `webpack.config.js` / `rollup.config.js` / `package.json` の bundler 設定・scripts / `tsconfig.json` の `paths` / `module` 等の変更は「観察不能」に見えるが、**bundle 構造が変わった結果として本番だけで顕在化する runtime error** を生むことがある。代表例:
 
-- **chunk 間循環 import**: vendor を細分割した結果、chunk 境界で ESM 循環 → ブラウザの module loader が TDZ (Temporal Dead Zone) error を throw → 真っ白。`pnpm run build` / `pnpm preview` ではエラーなしで通過することがある (2026-04-22 LorentzArena 事故、`odakin-prefs/staging-incidents.md §2026-04-22 Vite manualChunks 細分割で循環 import` 参照)
+- **chunk 間循環 import**: vendor を細分割した結果、chunk 境界で ESM 循環 → ブラウザの module loader が TDZ (Temporal Dead Zone) error を throw → 真っ白。`pnpm run build` / `pnpm preview` ではエラーなしで通過することがある (2026-04-22 LorentzArena 事故)
 - **base path / asset URL 解決の差**: 本番 CDN (GitHub Pages / Cloudflare Pages 等) では dev/preview と異なる URL resolution が働き、特定 chunk が 404 になる
 - **module preload タイミング**: 本番 HTTP/2 + CDN の multiplexing 順序が local preview と異なり、初期化順序依存の error が本番だけ再現する
 

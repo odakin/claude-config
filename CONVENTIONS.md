@@ -213,9 +213,9 @@ grep -rn '<target-repo>/SESSION.md §' --include='*.md' --include='*.yaml' ~/Cla
 
 | pattern | 例 | fix |
 |---|---|---|
-| **archive 移動 path drift** | ref = `email-office/SESSION.md §SPReAD` だが section は `SESSION-archive/2026-05-pre-20.md` に移動済 | path を archive に update + 「YYYY-MM-DD archive split で移動済」 marker を inline 付加 |
-| **wording rename drift** | ref = `gmail-mcp-config/SESSION.md §「YYYY-MM-DD X ツール追加」` だが新 heading は `§「直近の変更 (YYYY-MM-DD) — X」` | ref を新 wording に揃える |
-| **duplicate header dedup 漏れ** | ref = `odakin-prefs/SESSION.md §「2026-05-20 (cross_ref...)」` だが私が duplicate header dedup で「2026-05-20 (cross_ref...)」 (no evening) 版を削除 + 「evening」 版のみ保持 | ref に「evening」 を付加 (= 残った版に合わせる) |
+| **archive 移動 path drift** | ref = `<repo>/SESSION.md §SPReAD` だが section は `SESSION-archive/2026-05-pre-20.md` に移動済 | path を archive に update + 「YYYY-MM-DD archive split で移動済」 marker を inline 付加 |
+| **wording rename drift** | ref = `<repo>/SESSION.md §「YYYY-MM-DD X ツール追加」` だが新 heading は `§「直近の変更 (YYYY-MM-DD) — X」` | ref を新 wording に揃える |
+| **duplicate header dedup 漏れ** | ref = `<repo>/SESSION.md §「2026-05-20 (cross_ref...)」` だが私が duplicate header dedup で「2026-05-20 (cross_ref...)」 (no evening) 版を削除 + 「evening」 版のみ保持 | ref に「evening」 を付加 (= 残った版に合わせる) |
 
 **duplicate header dedup の事前 grep 義務**: SESSION.md 内に同 wording (or 近接 wording) の duplicate header が見つかった場合、 dedup する **前に**「どちらの wording が外部 ref に使われているか」 cross-repo grep。 ref が多い版を残す。 grep なしで「より informative な版」 を直感で選ぶと wording drift を量産する。
 

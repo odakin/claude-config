@@ -266,4 +266,4 @@ step 3 を省略すると、 1 修正で別 issue を作り、 user の次 turn 
 
 - 全 LaTeX 規約 (= 数式マクロ規律、 PDF 視覚検証 reflex 等): [`latex.md`](latex.md)
 - pgfplots 公式 manual: [pgfplots.sourceforge.net](https://pgfplots.sourceforge.net/pgfplots.pdf)
-- 個人層の「規律の reflex 化」 関連: `odakin-prefs/work-discipline.md`
+- 「規律の reflex 化」 関連は owner の personal layer に記録 (= collaborator は access 不要)

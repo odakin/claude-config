@@ -273,7 +273,7 @@ done
 
 ## 11. Cross-references
 
-- 各 user の repo 集合に対する具体 baseline 適用は **layer 3** (= 個人 prefs) で記録 (= 例: `odakin-prefs/security-automation.md`)
-- 新 repo onboarding script の template は **layer 3** で保持 (= 例: `odakin-prefs/scripts/secure-new-repo.sh` + `scripts/templates/`)
-- visibility 判断 framework も **layer 3** (= 例: `odakin-prefs/repo-visibility-criteria.md`)
+- 各 user の repo 集合に対する具体 baseline 適用は **layer 3** (= 個人 prefs) で記録 (= 各自の personal layer に、 例えば security-automation.md のような file を置く)
+- 新 repo onboarding script の template は **layer 3** で保持 (= 各自の personal layer、 例えば scripts/secure-new-repo.sh + scripts/templates/)
+- visibility 判断 framework も **layer 3** (= 各自の personal layer、 例えば repo-visibility-criteria.md)
 - 本 file (= layer 1) は generic pattern + tool-level gotcha のみ

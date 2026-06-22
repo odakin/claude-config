@@ -149,4 +149,4 @@ secret を git-crypt / openssl で **暗号化したことの確認** (= leak ga
 
 の手がかりになる。 partial = 安全という reflex は誤り。
 
-これは CLAUDE.md inline §13 trait family (= 安価な操作で expensive な操作を bypass する) の secret 取扱 domain での現れ。 `xxd` は「token 確認」 という目的に対して **安価すぎる手段** で、 「partial だから OK」 という illusion で leak risk を覆い隠す。
+これは「安価な操作で expensive な操作を bypass する」 trait family の secret 取扱 domain での現れ。 `xxd` は「token 確認」 という目的に対して **安価すぎる手段** で、 「partial だから OK」 という illusion で leak risk を覆い隠す。

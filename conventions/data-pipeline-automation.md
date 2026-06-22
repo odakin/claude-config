@@ -217,14 +217,14 @@ run-time に人間が居る半自動 (§3) では placeholder を出力に残し
 - **固有名詞 / 外部事実 (= 所属の公式英語名 等)**: 翻訳すると誤る (= 直訳 ≠ 公式名) が、 真の値は **retrievable** (= その機関の公式サイトを web-search)。 **出典つきの grounded retrieval は guess ではない** → LLM が web-search で実在値を取り SoT に充填 (+ 出典 URL + review marker)。
 - **content も出典も無い純粋な事実** → やはり surface / 人手 (= blind-guess は禁止)。
 
-つまり「推測で埋めない」 (= §16) は守ったまま、 **grounded な自動完成 (翻訳 + retrieval) を LLM 層に足す**ことで人間 pre-fill すら不要にできる。 これで「全 item 自動 publish」 が成立する (= armed ゲートが「人間が 1 field 埋めた item」 から「LLM が grounded に埋めた item」 に広がる)。
+つまり「推測で埋めない」 規律は守ったまま、 **grounded な自動完成 (翻訳 + retrieval) を LLM 層に足す**ことで人間 pre-fill すら不要にできる。 これで「全 item 自動 publish」 が成立する (= armed ゲートが「人間が 1 field 埋めた item」 から「LLM が grounded に埋めた item」 に広がる)。
 
 適用上の規律:
 - **run-time に LLM が要る** → 機構は LLM-in-loop な定期実行 (= [scheduled-tasks.md](scheduled-tasks.md) §0「Claude judgment 要 → scheduled task」)。 純 deterministic 層 (= mirror) と LLM 層 (= 翻訳/retrieval で SoT 完成) を分離し、 LLM 層は SoT を埋めるだけ・公開生成は deterministic 層が行う (= テスト可能性 + 翻訳/retrieval を SoT に残してレビュー可能)
 - **人間提供値を最優先**: 既に人間が入れた値 (= 非 TBA) は LLM で上書きしない
 - **auto-completed には review marker を付け、 即ライブ + 早期レビュー** (= 公開を止めない代わりに、 通知 + drift 検出器で「自動生成・要目視」 を surface し人間が数日内に微修正)
 - **retrieved fact には出典を残す** (= 後で検証可能、 grounded であることの証跡)
-- それでも grounded に解決できない field は TBA で ja-first 公開 + flag (= block より degrade、 §16 の「不確実性を expose」)
+- それでも grounded に解決できない field は TBA で ja-first 公開 + flag (= block より degrade、 「不確実性を expose」 する側)
 
 ### Pattern: 高 stakes な無人 publish は pre-push の fresh-eyes adversarial 検証ゲートを足す
 

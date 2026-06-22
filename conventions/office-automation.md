@@ -1767,7 +1767,7 @@ print(f"margins px: L={xs.min()} R={W-1-xs.max()} T={ys.min()} B={H-1-ys.max()}"
   B27 = '月日' / F27 = '交通費経路' / W27 = '運賃' / AC27 = 'その他'
 3_ 旅費請求書 row 28+ = actual input row
 
-→ 私が B27 / F27 を input で fill = label overwrite (= §14 violation)
+→ 私が B27 / F27 を input で fill = label overwrite (= 様式 label 上書き禁止 violation)
 → diff-form-xlsx.py は「VALUE_CHANGED: B27 月日 -> 2026-06-12」 と表示するだけで LABEL_OVERWRITE 検出せず
 → 「✓ No label overwrites detected」 で pass → 手 review なしで stop → user 指摘で発覚
 ```
@@ -1837,7 +1837,7 @@ forward mail send 後、 同 turn で:
 1. `inbox/{月}.yaml` に entry (= category=送信済、 messageId、 cross_ref で全関連 entry 双方向接続)
 2. `<project-thread-repo>/threads/<project>.yaml` に同型 thread entry
 3. 関連 grant / event repo の cross_ref も update
-4. 全 repo commit + push (= §17 圧力 4 同 session 完結)
+4. 全 repo commit + push (= cross-repo drift 圧力 4「同 session 完結」 規律)
 
 「mail send + yaml 記録 → 完了」 ではなく「mail send + yaml 記録 + commit + push → 完了」 を 1 unit として扱う (= 別 session の救済に依存しない)。
 
@@ -1895,7 +1895,7 @@ print('value 変更:', [k for k in tpl_inkan & edit_inkan if values[k]['TPL'] !=
 
 ### <a id="seal-question-reflex"></a>user 質問への reflex 統合
 
-「~~~ 印欄ない?」 「~~~ 承認印は?」 等の form 構造に関する質問は **即 [`seal-diff-with-template`](#seal-diff-with-template) sweep 実行 + 結果 expose**。 推測 / memory base で「無いと思います」 と回答しない (= §16 「不確実性を expose」 reflex の form structure domain 適用)。
+「~~~ 印欄ない?」 「~~~ 承認印は?」 等の form 構造に関する質問は **即 [`seal-diff-with-template`](#seal-diff-with-template) sweep 実行 + 結果 expose**。 推測 / memory base で「無いと思います」 と回答しない (= 「不確実性を expose」 reflex の form structure domain 適用)。
 
 加えて、 「無い」 と確認できた場合も **sweep range + keyword + confidence** を明示 (= 「全 sheet (visible + hidden) で keyword N 種類 grep、 0 hit、 confidence high」 等)。
 

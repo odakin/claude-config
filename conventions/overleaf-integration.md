@@ -210,7 +210,7 @@ main から消える。 これを防ぐには `git merge -s ours overleaf/master
 
 設計判断で「既存サービスの built-in 機能は困難 / 不可能」 と assertion する前に、 user の web UI を確認するか user に「サービスに X 機能ないか?」 と聞く。 文献的推測 (= service capability の cell 埋め) で却下すると、 後で built-in 機能が存在することが判明して設計やり直しになる (= ある private paper repo で 1 度発生)。
 
-これは CLAUDE.md inline §13 trait family (= 安価な操作で expensive な操作を bypass する) の現れ。 設計の reasoning domain でも同じ trait が出る。
+これは「安価な操作で expensive な操作を bypass する」 trait family の現れ。 設計の reasoning domain でも同じ trait が出る。
 
 ## 実例
 

@@ -8,7 +8,7 @@ multi-paper merger (= P1+P2 統合等の「2 個 1 フランケンシュタイ�
 
 ## 3 Phase 構造
 
-「1 pass で paper 全体読み」 は cell 埋め (= CLAUDE.md inline §13 trait) になりがちなので、 **機械的検出 + AI 精読** の 2 段に分ける。
+「1 pass で paper 全体読み」 は cell 埋め (= 安価な操作で expensive な検証を bypass する trait) になりがちなので、 **機械的検出 + AI 精読** の 2 段に分ける。
 
 ### Phase 1: 機械的 inventory (script)
 
@@ -114,7 +114,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 - trace 確保 (= 各 commit message で「何を削除、 何を残した」 を明示)
 - conflict 解消の単位が小さい
 
-CLAUDE.md inline §17 (= cross-repo drift 3 圧力下での §10 維持) と整合: 「多 commit 連打 = 1 つの作業で 2 つ以上 commit を打つと自覚した瞬間に『最後の commit 後に必ず横断 4 軸 sweep を 1 回回す』 を declare」 を、 paper audit の修正フェーズでも適用 (= 全 step 完了後の最終 sweep)。
+多 commit 連打時の 4 軸 sweep 規律と整合: 「多 commit 連打 = 1 つの作業で 2 つ以上 commit を打つと自覚した瞬間に『最後の commit 後に必ず横断 4 軸 sweep を 1 回回す』 を declare」 を、 paper audit の修正フェーズでも適用 (= 全 step 完了後の最終 sweep)。
 
 ## 実例: (該当 private paper repo) (2026-05-19、 1 day で完了)
 

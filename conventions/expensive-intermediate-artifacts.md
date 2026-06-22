@@ -85,4 +85,4 @@ CLI tool に出力先 path を渡す前に問う:
 
 - 機械的検出: `claude-config/hooks/expensive-tmp-guard.sh` (= PreToolUse Bash で `Audiveris ... -output /tmp/...` 等のパターンを `permissionDecision: ask` で警告)
 - 類縁規約: `claude-config/conventions/scientific-computing.md` (= 数値計算の silent bug)、 `claude-config/conventions/dropbox-refs.md` (= 共有 PDF の参照規約)
-- odakin の personal layer (= `odakin-prefs/work-discipline.md`) には本規約の application 例 / 反例 / odakin-specific reflex-trap 規律が記録されている。 本 file が universal な核 (= 規約として完結)、 personal layer は odakin の歴史的事例 + 個人 reflex 規律 (suppl reference、 必須参照ではない)
+- owner の personal layer (= layer 3、 collaborator は access 不要) には本規約の application 例 / 反例 / 個人特有の reflex-trap 規律が記録されている。 本 file が universal な核 (= 規約として完結)、 personal layer は個人の歴史的事例 + reflex 規律 (suppl reference、 必須参照ではない)

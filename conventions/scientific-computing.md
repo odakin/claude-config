@@ -413,7 +413,7 @@ disputed な量 (vertex 係数・規格化・符号) を「相手の結果に一
 ### 防止策
 
 1. **数値出力を第一原理で必ず cross-check**: (a) 次元解析 (= 同次性)、 (b) 対称性 (= Bose / 離散対称)、 (c) ゲージ/Ward 恒等式 (= 数値結果が満たすべき identity)、 (d) 既知極限 (= 質量ゼロ・運動量ゼロ・共形点)、 (e) 文献値。
-2. **数値が第一原理と矛盾したら数値を疑え** (= 数値はバグり得るが第一原理は不変)。 「数値が出たから正しい」 は §13「cell 埋め」 の数値 domain 形態。
+2. **数値が第一原理と矛盾したら数値を疑え** (= 数値はバグり得るが第一原理は不変)。 「数値が出たから正しい」 は「cell 埋め」 trait の数値 domain 形態。
 3. **verify は疑わしい機構を共有しない独立な方法で**: バグった関数を使った再計算は同じバグを継承する。 独立経路 (= 別定義・別積分法・解析的手計算・第一原理) で。 実例では seagull を頂点 Feynman 則から独立に再構成して確認。
 4. **特殊値 (m=1 等) だけで検証しない** (= バグが特殊値で縮退して隠れる)。 一般値 (= 一般 m, 一般運動量) で sweep。
 5. **verify 方法それ自体もバグり得る (= 隠れた仮定)**: reconstruction / back-solve が既検証 (= established) record と矛盾したら、 即「record が誤り」 と結論せず、 まず reconstruction の隠れた仮定を疑い ground truth (= 実コード・実データ) で確認。 防止策 3「独立な方法で verify」 の**独立性も暗黙の仮定に依存すれば誤る** (= 例: 係数を m 非依存と仮定した back-solve が m 依存の真値を見逃す)。 ground truth は reconstruction でなく source 自身。
@@ -429,7 +429,7 @@ disputed な量 (vertex 係数・規格化・符号) を「相手の結果に一
 
 - §7 — source からの独立導出 (= 本 § は「自分の数値を第一原理より優先する」 inverse trap、 §7 は「相手の数値に合わせる circular」)
 - §6 — transcript hallucination の sympy verify (= 同 trait family)
-- 同 trait family = 「安価な操作 (= 数値の盲信) で expensive 操作 (= 第一原理 cross-check) を bypass」。 個人層の RCA は `odakin-prefs/work-discipline.md §「自前の数値が第一原理と矛盾したら数値を疑う」`、 詳細物理 narrative は当該 private research project の DESIGN.md / RETRACTIONS.md
+- 同 trait family = 「安価な操作 (= 数値の盲信) で expensive 操作 (= 第一原理 cross-check) を bypass」。 個人層の RCA と詳細物理 narrative は owner の private layer に記録されている (= collaborator は access 不要)
 
 ## 9. Ratio/構造 check は overall scale を fix しない; 既知量で calibrate し、 magnitude と sign を分ける
 
@@ -441,7 +441,7 @@ Ward 恒等式・対称性・内部無矛盾性・projector 代数 等の check 
 
 1. **overall scale は『同じ機構で既知量を計算』 して calibrate**: 自分の loop / 数値機構 (= 積分 measure・trace・pole 抽出・単位) で、 textbook 値が分かっている量を計算し、 一致を確認。 例: 場の理論の loop 機構なら QED vacuum polarization (= 1 Dirac fermion で発散 |Π|=4/3、 units 1/(16π²ε)、 transverse も同時 check)。 これが ratio check では届かない絶対 scale の唯一の anchor。
 2. **外部比較は magnitude と sign を分けて述べる**: 絶対値は calibrate 可能だが、 符号は規約依存 (= Euclidean vs Minkowski、 self-energy の overall sign 定義 等) のことが多い。 「match」 と一括りにせず「magnitude 一致 (calibrate 済) / sign は規約依存」 と分けて記す。
-3. **doc の数値 claim には実 check を紐付ける**: 「~を 1e-16 で満たす」 等と書いたら、 それを実際に検証する script が存在するか確認。 無ければ claim は未検証 — check を足す (= §13 の「cell 埋めでなく error expose」 の claim-vs-check 版)。
+3. **doc の数値 claim には実 check を紐付ける**: 「~を 1e-16 で満たす」 等と書いたら、 それを実際に検証する script が存在するか確認。 無ければ claim は未検証 — check を足す (= 「cell 埋めでなく error expose」 の claim-vs-check 版)。
 4. **calibration は『その既知量が exercise した構造的特徴』 の scale しか fix しない** (= calibration の scope 限界): 防止策 1 の QED calibration (= 単一添字 γ^μ 頂点) は、 target が持つ richer な構造 (= 多添字の縮約 / index-mixing) を cover しない。 単純構造の calibration pass を「pipeline 全体が absolute に正しい」 と一般化すると、 target の未 calibrate な構造を **crude な射影のまま信じる**死角になる (= §8 防止策 4「特殊値縮退」 の構造版 = **特殊構造縮退**)。 汚染されうる量は crude な index-trace/sum でなく、 **汚染構造が恒等的に消える clean probe** (= 関心量に直交する添字・配置を選ぶ) で直接抽出して cross-check する (= calibration が validation した「構造的特徴」 が target の構造を網羅しているかを問う、 一般則は `convention-design-principles.md §8.8` list-audit implicit-scope の数値 calibration 版)。
 
 ### 実例 (2026-06、 場の理論の 1-loop 2 点関数)
@@ -461,7 +461,7 @@ Ward 恒等式・対称性・内部無矛盾性・projector 代数 等の check 
 
 - §8 — 数値は第一原理で cross-check (= 本 § は「第一原理 check も ratio なら scale を fix しない」 の補完、 絶対 scale には別 anchor 要)
 - §7 — source からの独立導出
-- 同 trait family = 「verify したつもり」 の死角 (= scale / sign / claim-vs-check の 3 つ)。 個人層 reflex は `odakin-prefs/work-discipline.md`、 詳細物理 narrative は当該 private research project の DESIGN.md §5.5
+- 同 trait family = 「verify したつもり」 の死角 (= scale / sign / claim-vs-check の 3 つ)。 個人層 reflex は owner の private layer に記録 (= collaborator access 不要)、 詳細物理 narrative は当該 private research project の DESIGN.md §5.5
 
 ## 次に追加される予定 (placeholder)
 

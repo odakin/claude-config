@@ -2,7 +2,7 @@
 
 Bug fix 提案を 「root だ」 と確信する前に通すべき audit と、 fix 採択後の drift 防止規律。 Claude が fix 提案を生成する際の reflex として universal applicable。
 
-LorentzArena Bug 14 完全治療 (2026-05-06) の spiral で複数の fail-recover round を経験した経緯から、 odakin-prefs/work-discipline.md にあった odakin-specific 規律のうち universal な核を抽出 promote。
+LorentzArena Bug 14 完全治療 (2026-05-06) の spiral で複数の fail-recover round を経験した経緯から、 個人の personal layer にあった個人特有の規律のうち universal な核を抽出 promote (= personal layer は owner 管理 / collaborator は access 不要)。
 
 ---
 
@@ -344,7 +344,7 @@ sys.stdout.flush()
 
 ---
 
-## 9. MCP / API の count return「0」 / 「期待と違う検索結果」 を reflex で「想定外」 と結論しない (= §16 trait family の MCP / tool 健全性 domain)
+## 9. MCP / API の count return「0」 / 「期待と違う検索結果」 を reflex で「想定外」 と結論しない (= 「単一情報源の null result を結論に飛躍させない」 trait family の MCP / tool 健全性 domain)
 
 **ルール**: MCP tool / API 呼び出しの count-style return (= `added=0`、 `affected_rows=0`、 `total: 0`、 list が空、 etc.) や「期待と違う検索結果」 を見て即座に「想定外」 「未発生」 「未登録」 「存在しない」 と reflex 結論しない。 その 0 / 結果が「true な空」 か「正常 dedup / filter による empty」 か「**tool が間違った接続先 (account / endpoint) を見ている**」 かを **別 query で 1 path 必ず cross-check** する。 特に user が「絶対あるはず」 と確信を示したら、 source 不在より先に tool 健全性を疑う。
 
@@ -357,14 +357,14 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 
 (a) で reflex 結論 → (b) で誤判定の 2 重 cost: (1) user に「想定外」 を伝えて余計な調査を発生させる、 (2) 真の dedup 判定を error と誤認して fix を試み 健全な script を壊す。
 
-これは [既存 `~/Claude/odakin-prefs/work-discipline.md §「context 構築での単一情報源 null 結論飛躍を避ける」](https://github.com/odakin/odakin-prefs/blob/main/work-discipline.md) (= CLAUDE.md inline §16) と **同 trait family** の MCP / API tool 出力 domain。 §16 は web 検索 / gmail 検索 の null result が domain、 本 §9 は MCP wrapper / sync script の count return が domain。
+これは **「単一情報源の null result を結論に飛躍させない」 trait family** (= web 検索 / gmail 検索 の null result が domain) の、 MCP / API tool 出力 domain への現れ。 本 §9 は MCP wrapper / sync script の count return が domain。
 
 ### How to apply
 
 1. count-style return「0」 / 「added=0」 / 「empty list」 / 「期待と違う中身」 を観察した瞬間に「これは (a) true 不在か (b) dedup 等正常結果か (c) tool が間違った接続先を見ているか?」 を必ず問う
 2. 即座に **より低 level な query** で cross-check (= MCP 経由なら raw API 直接 query、 sync script なら DB 内 entry count 直接 grep、 etc.)
 3. **(c) の cross-check は tool の接続先確認**: MCP / OAuth token なら `getProfile` 系で「今どの account を見ているか」 を直接確認 (= 検索結果の中身が「らしくない」 = 別 account の data ばかり、 が強い signal)。 期待と一致しなければ tool 故障 → reauth / 接続修復が先で、 source 調査は無意味
-4. cross-check で (b)/(c) と判明したら「想定外」 narrative を即訂正、 不確実性を expose した path として記録 (= §13 alignment)
+4. cross-check で (b)/(c) と判明したら「想定外」 narrative を即訂正、 不確実性を expose した path として記録
 5. 「想定外」 「存在しない」 を user に伝える前に最低 1 cross-check を通す reflex を hardcode。 **user が確信を示したら tool 健全性を最優先で疑う** (= source 不在の結論より tool の (c) を先に潰す)
 
 ### 関連事故
@@ -464,4 +464,4 @@ origin: 2026-06-13 desktop-hook-gap 調査。 当初 SessionStart hook の死活
 
 ### 個人層との関係
 
-odakin の personal layer (= `odakin-prefs/work-discipline.md`) には本規律の application 例 / 反例 / odakin-specific 補強規律が記録されている (= 一部は本規律の precursor)。 本 file が universal な核、 personal layer は odakin の歴史的事例 + 個人 reflex 規律。
+owner の personal layer (= layer 3、 collaborator は access 不要) には本規律の application 例 / 反例 / 個人特有の補強規律が記録されている (= 一部は本規律の precursor)。 本 file が universal な核、 personal layer は個人の歴史的事例 + reflex 規律。

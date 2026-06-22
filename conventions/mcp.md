@@ -194,11 +194,11 @@ Claude desktop (Cowork) app から起動した Claude Code session は `--allowe
 
 「MCP 経由で取れた = 該当 account 全部見えた」 と判断するな。 **2026-06-20 layer-3 RCA**: 単一 Gmail account のみ wired の状態で人名 query 0 件を「Gmail で 0 件で確定」 と universalize、 4 回繰り返してから user の繰返 push で別 account に該当 thread が存在することが判明。 真因 = MCP tool metadata が wire account を expose しない構造ギャップ。 「該当 account が全部 session に bind されているか」 を**最初に**確認するのが正しい sweep の入口。 〔起票 commit (= 2026-06-20 prior version) は **incident 固有名・thread 内容を本節に literal で焼き込んでいた** = 自身が public layer 1 安全規則 §「2026-06-16 拡張」 を踏んだ leak。 該当 literal は 2026-06-20 cold-eyes session でこの commit で sanitize、 git history 側は不可逆〕
 
-詳細 (= 固有名・transcript 内容含む incident 記録) = layer 3 (個人層) の `odakin-prefs/work-discipline.md §「sweep skipping under structural gap」` + `odakin-prefs/plans/2026-06-20-mcp-scope-guard-hooks.md` 参照。
+詳細 (= 固有名・transcript 内容含む incident 記録) = owner の personal layer (= layer 3、 collaborator は access 不要) に記録。
 
 ### 機械 enforcement (= 2026-06-20 RCA 後に追加、 soft guard を hard mechanism で強化)
 
-上記「教訓」 は文字どおり読まれない場合の保険として、 以下 3 hook を `claude-config/hooks/` に投入済 (= setup.sh で全 machine の `~/.claude/hooks/` に symlink + settings.json 登録、 起源 plan = `odakin-prefs/plans/2026-06-20-mcp-scope-guard-hooks.md`):
+上記「教訓」 は文字どおり読まれない場合の保険として、 以下 3 hook を `claude-config/hooks/` に投入済 (= setup.sh で全 machine の `~/.claude/hooks/` に symlink + settings.json 登録、 起源 = owner の personal layer の設計 plan (2026-06-20、 collaborator access 不要)):
 
 | hook | phase | matcher | 役割 |
 |---|---|---|---|
@@ -212,7 +212,7 @@ Claude desktop (Cowork) app から起動した Claude Code session は `--allowe
 
 ### MCP tool scope manifest (= 人読 reference、 hook の動的 enumeration を補完)
 
-hook C は session 起動時に filesystem + desktop config から register 済 tool を動的に列挙するが、 hook 出力に出ない時 (= silent fail / desktop frontend で surface 経由) や hook が読まれない時のために、 **「どの tool prefix がどの scope に対応するか」 の人読 manifest** を以下に置く。 odakin-prefs/CLAUDE.md inline §3 行「MCP tool / 外部 search の null」 がこの節を pointer 参照する (= reflex の機械補強欄)。
+hook C は session 起動時に filesystem + desktop config から register 済 tool を動的に列挙するが、 hook 出力に出ない時 (= silent fail / desktop frontend で surface 経由) や hook が読まれない時のために、 **「どの tool prefix がどの scope に対応するか」 の人読 manifest** を以下に置く。 owner の personal layer の MCP-scope reflex (= 「MCP tool / 外部 search の null」 行) がこの節を pointer 参照する (= reflex の機械補強欄、 personal layer は collaborator access 不要)。
 
 ⚠️ leak 規律: 本節は public layer 1 ゆえ **特定 account の email literal は書かない** (= 「odakin@<domain>」 等の literal は禁止、 alias 名と filesystem location までで止める。 詳細 = [`claude-config/CLAUDE.md §「安全規則 (公開リポ)」 + §「2026-06-16 拡張」`](../CLAUDE.md))。
 
@@ -231,7 +231,7 @@ hook C は session 起動時に filesystem + desktop config から register 済 
 | Cowork hosted (`mcp__<UUID>__*`) | ✅ `search_threads` / `get_thread` | ✅ `create_draft` / `label_*` / `create_label` | ❌ **expose しない** (= `send_email` / `delete_email` / `modify_email` 不在) |
 | standalone gongrzhe (`mcp__gmail-<alias>__*`) | ✅ `search_emails` / `read_email` | ✅ `draft_email` | ✅ `send_email` / `delete_email` / `modify_email` / `batch_*` |
 
-⚠️ **tool 名に send verb が「無い」 = 「送信不能」 ではない**: Cowork connector は **「read-only」 ではなく「send 不可」 が正確** (= draft / label は書ける、 send だけ出さない)。 capability は connector type で決まり、 同 account でも別 connector type が send を出すので、 Cowork connector に `send_email` が無いのを見て「メール送信できない」 と即断しない。 send したい時 = (a) standalone `mcp__gmail-<alias>__send_email` の wire を ToolSearch で確認 → (b) なければ `account-direct.py` (= 上記「対処 3 経路」 (c) の Python wrapper) → (c) それも無理なら user に手動送信を依頼。 wire-*account* は UUID から推定不可だが、 **capability *TYPE* は name pattern (= UUID vs alias) で確実に判別できる** (= 静的推論可能、 これが account 軸との非対称性)。 起票 = 2026-06-20 write-tool RCA (= Cowork-only session で send_email 不在を観察、 詳細は個人層 `odakin-prefs/plans/2026-06-20-write-tool-availability-defense.md`)。
+⚠️ **tool 名に send verb が「無い」 = 「送信不能」 ではない**: Cowork connector は **「read-only」 ではなく「send 不可」 が正確** (= draft / label は書ける、 send だけ出さない)。 capability は connector type で決まり、 同 account でも別 connector type が send を出すので、 Cowork connector に `send_email` が無いのを見て「メール送信できない」 と即断しない。 send したい時 = (a) standalone `mcp__gmail-<alias>__send_email` の wire を ToolSearch で確認 → (b) なければ `account-direct.py` (= 上記「対処 3 経路」 (c) の Python wrapper) → (c) それも無理なら user に手動送信を依頼。 wire-*account* は UUID から推定不可だが、 **capability *TYPE* は name pattern (= UUID vs alias) で確実に判別できる** (= 静的推論可能、 これが account 軸との非対称性)。 起票 = 2026-06-20 write-tool RCA (= Cowork-only session で send_email 不在を観察、 詳細は owner の personal layer の設計 plan、 collaborator access 不要)。
 
 ⚠️ **session-active subset の verify は manifest だけでは不能** = 上記は **machine 上 register 済の universe** であって、 session で実際 wire されている subset は別。 desktop Cowork session は `--allowedTools` で大幅に subset される (= 上記 §「desktop Cowork session の `--allowedTools` 制限」)。 session 内 verify = (a) ToolSearch で `mcp__` 接頭辞 query して deferred tool list を取得 / (b) wire account の確認は上記 §「MCP tool scope manifest」 表の「account 推定の起点」 列に従う (= gmail alias は alias 名、 Cowork は自分宛 mail 読み、 Calendar は `list_calendars`)。 ⚠️ `get_profile` / `whoami` という MCP tool は現行 setup に**存在しない** (= 旧 built-in connector の名残、 §共通「確認方法」 参照)。
 
@@ -245,11 +245,11 @@ scope-related artifact 3 つの責務分離:
 |---|---|---|
 | 機構 (hook) | 上記「機械 enforcement」 の 3 hook | 自動 inject + 0 件結果 trap |
 | 人読 reference (= 本節) | 「MCP tool scope manifest」 表 | tool prefix → scope の type system 的 documentation |
-| 個人層 discipline | `odakin-prefs/CLAUDE.md inline §3` 表の「MCP tool / 外部 search の null」 行 | reflex (= 0 件 → universalize 前の self-question) + 機構 + 本節への routing |
+| 個人層 discipline | owner の personal layer reflex (= 「MCP tool / 外部 search の null」 行、 collaborator access 不要) | reflex (= 0 件 → universalize 前の self-question) + 機構 + 本節への routing |
 
 = **同じ事実を 3 場所に書かない**: hook の reminder 内容 / 本節の manifest / inline reflex の文言、 それぞれ責務が異なる layer なので一見重複に見えても各 layer の観客 (= 機構 / 人読知識 / Claude reflex) に対する用途が違う。 drift 防止は inline reflex の機械補強欄が「mcp.md §機械 enforcement + §MCP tool scope manifest」 を pointer 参照することで吸収 (= manifest 変更時に inline は触らなくて良い)。
 
-**capability 軸 (= write/send tool 不在 trap、 2026-06-20 write-tool RCA) も同 3 layer pattern**: 機構 = `session-start-mcp-scope-nudge.sh §4b` の write/send capability block / 人読 = 上記「capability profile」 表 / inline reflex = `odakin-prefs/CLAUDE.md inline §3` 表「MCP tool / 外部 search の null」 行の capability-absence 句。 read scope の null 軸とは別 trap (= 「0 件 → universal absence」 でなく「verb 不在 → 操作不能」 の誤推論) だが、 上流 trait は同一 (= **tool 名は何が含まれ・何ができるかの hint であって guarantee ではない**)。 起票 plan = `odakin-prefs/plans/2026-06-20-write-tool-availability-defense.md`。
+**capability 軸 (= write/send tool 不在 trap、 2026-06-20 write-tool RCA) も同 3 layer pattern**: 機構 = `session-start-mcp-scope-nudge.sh §4b` の write/send capability block / 人読 = 上記「capability profile」 表 / inline reflex = owner の personal layer reflex (= 「MCP tool / 外部 search の null」 行) の capability-absence 句。 read scope の null 軸とは別 trap (= 「0 件 → universal absence」 でなく「verb 不在 → 操作不能」 の誤推論) だが、 上流 trait は同一 (= **tool 名は何が含まれ・何ができるかの hint であって guarantee ではない**)。 起票 = owner の personal layer の設計 plan (collaborator access 不要)。
 
 ---
 
@@ -316,9 +316,7 @@ Google API 経由で create された Calendar event / Classroom coursework / Dr
 「期限後に提出を締め切る」 toggle を ON にできない**ことが判明。 第一段では Discovery
 doc + 8 field name experimental 投稿で API field 不存在を確認、 第二段では DRAFT で
 create + UI で開く検証で associatedWithDeveloper 永続フラグによる UI grayout も確認
-→ API ルート完全 close。 詳細: `gmail-mcp-config/SESSION.md §「直近の変更 (2026-05-09) — classroom_create_coursework ツール追加 + dogfood 失敗」`、 メタ教訓は
-`odakin-prefs/work-discipline.md §広い指示を受けたら... §失敗例 (Classroom
-短答課題の自動 publish) §追加発見`。
+→ API ルート完全 close。 詳細・メタ教訓は owner の private layer (= gmail-mcp 運用記録 + personal layer、 collaborator access 不要) に記録。
 
 ## Google Calendar MCP
 - 操作前にカレンダー一覧で対象カレンダーが正しいことを確認

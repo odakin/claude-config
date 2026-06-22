@@ -224,7 +224,7 @@ worldLine.history 等の **直近 N entry cap** を持つ data structure は、 
 | WebSocket 接続で 403 Forbidden | `--remote-allow-origins` 制約 | `origin=""` workaround (§4.1) |
 | `curl http://localhost:9222/json/version` がタイムアウト | port forward 確立済だが対象 tab が background suspended | tab を foreground に戻す + 数秒待つ |
 | `chrome_devtools_remote` socket が複数 app で競合 (= Chrome + Brave 同時 install 等) | abstract namespace で同名 socket、 後続 app は **別名 (例: `webview_devtools_remote_<pid>`)** で listen | `cat /proc/net/unix` で実 socket 名確認 + その名前で forward |
-| `public-precommit-runner.sh` が UA `Chrome/N.0.0.0` (= `N` は major version 整数) を ipv4 false positive | Tier-A ipv4 detector regex `(\d+\.){3}\d+` が `N.0.0.0` 形式の version string も match | escape hatch (`--no-verify`) で bypass + `odakin-prefs/leak-incidents.md` (or 各 user の incidents 記録) に記載。 detector 改修は false positive 2 件目以降で検討 |
+| `public-precommit-runner.sh` が UA `Chrome/N.0.0.0` (= `N` は major version 整数) を ipv4 false positive | Tier-A ipv4 detector regex `(\d+\.){3}\d+` が `N.0.0.0` 形式の version string も match | escape hatch (`--no-verify`) で bypass + 各 user の incidents 記録に記載。 detector 改修は false positive 2 件目以降で検討 |
 
 ---
 
