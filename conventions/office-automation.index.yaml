@@ -153,7 +153,12 @@ sections:
     level: 3
     title: "Word docx → PDF AppleScript の二大故障: stale in-memory cache + cold-start 失敗"
     origin: "2026-06"
-    related: [docx-to-pdf-pages, docx-checkbox-content-control, manual-review-required, image-budget-exhaustion, docx-password-roundtrip-edit, docx-section-extract-preview, word-applescript-password-open]
+    related: [docx-to-pdf-pages, docx-checkbox-content-control, manual-review-required, image-budget-exhaustion, docx-password-roundtrip-edit, docx-section-extract-preview, word-applescript-password-open, docx-tmp-sandbox-deny]
+  - id: docx-tmp-sandbox-deny
+    level: 3
+    title: "Word が触る docx は /tmp 配下に置かない (= sandbox grant 不能、 project 配下で扱う)"
+    origin: "2026-06"
+    related: [docx-pdf-stale-cache, docx-password-roundtrip-edit, docx-section-extract-preview, docx-to-pdf-pages]
   - id: word-applescript-password-open
     level: 3
     title: "Word.app の AppleScript で PW 暗号化 docx を開く / select/find が動かない罠"
@@ -172,7 +177,7 @@ sections:
     level: 3
     title: "PW 暗号化 docx を編集して PW 維持で返す: msoffcrypto + python-docx round-trip 5 step"
     origin: "2026-06"
-    related: [docx-fill-xml-edit, docx-pdf-stale-cache, docx-section-extract-preview, word-applescript-password-open, docx-checkbox-content-control]
+    related: [docx-fill-xml-edit, docx-pdf-stale-cache, docx-section-extract-preview, word-applescript-password-open, docx-checkbox-content-control, docx-tmp-sandbox-deny]
   - id: docx-python-docx-surgical-edit
     level: 3
     title: "確定済 docx の外科編集: python-docx で run / 段落を直接いじる"

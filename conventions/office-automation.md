@@ -802,6 +802,18 @@ docx を検証して「正しい」 と確認しても、 export が stale な�
 
 origin: 2026-06 ある官製様式 (JST 系) の docx 修正。 docx を直しても PDF が古いまま (= stale) → quit 不十分が真因 → `pkill` + fresh open で解消。 さらに Word が cold-start で `missing value` / 空ドキュメント複数の状態に陥り automation 不能 → Pages で代替 → 最終は user の Word 書き出しに委ねた。
 
+### <a id="docx-tmp-sandbox-deny"></a>Word が触る docx は `/tmp` 配下に置かない (= sandbox grant 不能、 project 配下で扱う)
+
+Microsoft Word は **macOS sandbox app** (= App Sandbox + TeamIdentifier `UBF8T346G9`)。 sandbox 外フォルダの docx を open しようとすると Word が独自の「ファイル アクセスを許可」 ダイアログ (= `<folder> という名前のフォルダーへのアクセス許可を必要としています`) を出す。 通常パス (= `$HOME` 配下の project dir 等) では grant が **security-scoped bookmark で persist** するので最悪初回 1 回。 ところが `/tmp` (= `/private/tmp`) は **grant が permanent化されず、 ダイアログの「アクセス権を付与」 ボタン自体が disabled の場合がある** (= folder 単位で macOS が `/tmp` を sandbox grant の対象として拒否する pattern が観察される)。 → 一度ハマると **その docx を Word で開けず、 automation も手動も詰む**。
+
+**規律**: Word.app で `open` / AppleScript 駆動する docx は **input・scratch・round-trip 中間物・preview 抽出・repair 用 copy も全部 `~/<repo>/...` 等の project 配下に置く**。 `/tmp/` を docx の作業場所にしない。 加えて `/tmp` は macOS の定期 purge 対象なので作業中 file 消失リスクもある (= [`docx-pdf-stale-cache`](#docx-pdf-stale-cache) の窓復元ループ 二次災害源)。
+
+**機械化**: [`scripts/docx-to-pdf.sh`](../scripts/docx-to-pdf.sh) は input が `/tmp/` または `/private/tmp/` 配下なら `⚠️ docx-to-pdf: input is under /tmp ...` を stderr に出して project 配下移動を促す (= warn のみで block しない、 user 判断)。 docx を新規生成する script も同様の reflex (= 出力先を project 配下に決める) で書く。
+
+**既に `/tmp` で Word が開いてしまった file の救出**: Word で「名前を付けて保存」 → project 配下 (= sandbox grant が永続する path) → 以後は無音。 開いている file を外から `mv` / `rm` しない (= Word の resume queue に死んだパスが残ると、 次の Word 起動で「文書を開くことができません。 アクセス権がありません。」 ダイアログが queue 数だけ連続して出る、 詳細は [`docx-pdf-stale-cache`](#docx-pdf-stale-cache))。
+
+origin: 2026-06 PW 暗号化 docx を `/tmp/<work>/` に展開して round-trip 編集していた session で、 ファイル目視のため Word.app が open ダイアログを出した時に**「アクセス権を付与」 ボタンが disabled で押せない** 状態を観察。 file 自体は disk に存在し ls 等 ですべて読めるが Word の sandbox layer から先には通せない構図。 規律違反は当 session 自身、 機械化反映と layer 1 hoist でこの場で固定。
+
 ### <a id="word-applescript-password-open"></a>Word.app の AppleScript で PW 暗号化 docx を開く / select/find が動かない罠
 
 PW 暗号化された docx を Word.app で開く時、 user に PW prompt を出させず AppleScript から渡せる。 visual confirm を user に頼む際の手間を 1 段減らす。
