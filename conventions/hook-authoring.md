@@ -31,7 +31,7 @@ hook script の filename suffix で **block するか否か** を機械的に区
 |---|---|---|---|
 | `-nudge` | **non-blocking** (= informational injection only) | exit 0 + stdout に `<system-reminder>...` または `additionalContext` JSON | `pdf-read-fallback-nudge.sh`, `git-state-nudge.sh` |
 | `-guard` | **blocking via PreToolUse permissionDecision** (= ask / deny) | exit 0 + stdout に `{"permissionDecision": "ask"\|"deny"}` JSON | `memory-guard.sh`, `google-url-guard.sh`, `expensive-tmp-guard.sh`, `public-leak-guard.sh`, `commit-msg-leak-guard.sh` |
-| `-enforce` | **blocking via Stop / Pre*ToolUse 非 ask 経路** (= 別 phase での block) | exit 2 または stdout に `{"decision": "block"}` JSON | `pdf-open-enforce.sh` (Stop hook) |
+| `-enforce` | **blocking via Stop / Pre*ToolUse 非 ask 経路** (= 別 phase での block) | exit 2 または stdout に `{"decision": "block"}` JSON | (⚠️ かつての例 `pdf-open-enforce.sh` は 2026-06-23 に side-effect action へ転換 = 下記注。現在 active な `-enforce` hook は無し) |
 
 suffix と behavior の対応がずれている (= 例: `-nudge` 接尾辞だが実際は block する) hook は、 後の audit / 縮退判断 (= §6) で「nudge だから止めても安全」 「enforce だから drift しても catastrophic」 等の reflex 判断と整合が取れず事故の元。
 
@@ -40,6 +40,8 @@ suffix と behavior の対応がずれている (= 例: `-nudge` 接尾辞だが
 2. block 経路は PreToolUse の `permissionDecision: ask|deny`? → Yes なら `-guard`、 No (= Stop / 他 phase / 直接 `decision: block`) なら `-enforce`
 
 既存 hook の rename は不要 (= 命名規約導入以前の hook は behavior が `-nudge` / `-guard` のいずれかで揃っており suffix と整合済)、 新規 hook からこの規約を follow する。 初出: `pdf-open-enforce.sh` (= 2026-05-21、 Stop hook で `{"decision": "block"}` を返す初の hook)。
+
+⚠️ **`pdf-open-enforce.sh` の suffix は 2026-06-23 から grandfathered (= suffix↔behavior 不一致)**: 同 hook は **block (`-enforce`) から side-effect ACTION (= hook 自身が `open <pdf>` を実行、 block せず always exit 0) へ転換**した。理由 = block 型は §9.3 の desktop-hook-gap で死ぬ (= Stop の `decision:block` が honれない) ため、 §9.3 の「side effect は走る」 非対称を使って hook が直接 `open` する形に変えた (= RCA `<personal-layer>/plans/2026-06-23-pdf-preview-discipline-rca.md`)。**side-effect action は本 §0 の 3 suffix のどれにも当てはまらない 4 つ目の behavior class** だが、 rename の blast radius (= settings.json + symlink + manifest + test + cross-doc ref) を避けて filename を据え置いた。新規に side-effect action hook を作るなら `-open` / `-action` 等の suffix を検討し、 本 hook も将来 pass で rename 余地あり。audit (§6) で「`-enforce` だから block する」 と reflex 判定しないこと (= 本 hook は exit 0 / 非 block)。
 
 ---
 
