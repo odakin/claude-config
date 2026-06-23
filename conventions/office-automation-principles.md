@@ -40,14 +40,25 @@ content control / XML 宣言 / bookmark)。 **どの道具も、 この地層の
 
 | 状況 | 道具 | 理由 |
 |---|---|---|
-| 読み取り・分析だけ | openpyxl / fitz 何でも | lossy でも害がない |
+| 読み取り・分析だけ | openpyxl / fitz / python-docx 何でも | lossy でも害がない |
 | drawing 無し + xlsx 提出 | openpyxl fill + [`diff-form-xlsx-detection`](office-automation.md#diff-form-xlsx-detection) | 最速で機械検証可能 |
 | drawing 有り + xlsx 提出 | Excel osascript ([`excel-osascript-cell-write`](office-automation.md#excel-osascript-cell-write)) or zip 注入 + integrity gate | openpyxl は drawing を破壊する ([`openpyxl-destroys-drawings`](office-automation.md#openpyxl-destroys-drawings)) |
 | **紙だけ** 必要 (単票) | 雛形を Excel で PDF 化 → fitz で直接印字 ([`pdf-prefill-direct`](office-automation.md#pdf-prefill-direct)、 汎用実装 = `scripts/pdf_form_fill.py`) | drawing は render 済で安全、 最速 |
 | 紙だけだが **多項目 + 派生 sheet が数式導出される** workbook | Excel osascript で雛形 copy に記入 → PDF → ページ抽出 | drawing native 保持 + 依頼書/承諾書等の**派生書類が数式で自動的に埋まる** (= PDF 印字だと派生分も手で印字する羽目になる)。 紙のみでもこちらが速くて正しい |
+| **docx fill** (本文提出も visual confirm も) | python-docx で XML/run/段落編集 ([`docx-fill-xml-edit`](office-automation.md#docx-fill-xml-edit) / [`docx-python-docx-surgical-edit`](office-automation.md#docx-python-docx-surgical-edit))。 配置先は `~/<repo>/...` 必須 ([`docx-tmp-sandbox-deny`](office-automation.md#docx-tmp-sandbox-deny)) | Word.app は sandbox で `/tmp` の grant 永続化不能、 一度詰むと automation も手動も止まる |
+| **docx → PDF** (内容確認・正式書類提出いずれも) | **Word AppleScript 駆動が default** ([`docx-to-pdf-pages`](office-automation.md#docx-to-pdf-pages) / [`docx-pdf-stale-cache`](office-automation.md#docx-pdf-stale-cache))。 既存 wrapper = `scripts/docx-to-pdf.sh` (引数なし = Word、 `--pages` で明示 Pages) | docx は「Word 体裁が契約」 の正式書類が大半。 Pages は re-typeset で見出し/表が重なる artifact + reviewer は Word 体裁を見る。 Word automation の cold-start trap は [`docx-pdf-stale-cache`](office-automation.md#docx-pdf-stale-cache) で対処済 (= fallback 1 = user の Word 書き出し) |
 
 **原則: 道具を使う前に「この道具はこの file の何を round-trip できないか?」 を 1 回問う。**
 答えを知らない道具で本番 file を触らない (= まず copy で挙動を観察する)。
+
+⚡ **新規 docx automation script を書く時の default engine 選択 reflex** (= 上の梯子の docx 行に直結):
+
+1. **default は Word 忠実版に倒す** (= `docx-to-pdf.sh` の 2026-06 反転と同じ哲学)。 「Pages の方が automation が安定」 という旧 reflex は **正式書類の体裁 contract を壊すコストの方が大きい** ので **default にしない**。 Pages は `--pages` 等の明示 opt-in で使う。
+2. **`/tmp` 配下を docx の作業場所にしない** = script が docx を生成 / 受領 / 中間保存する場所は project 配下 (= cwd か `~/<repo>/...`) を default に。 `/tmp` を input/output に取る引数は [`docx-tmp-sandbox-deny`](office-automation.md#docx-tmp-sandbox-deny) と同じ warn (= block でなく user 判断) を出す。
+3. **Word AppleScript の cold-start trap を踏むのは前提**。 timeout を `with timeout of N seconds` で 60s default から伸ばす + 失敗時は **旧 default (= Pages 等) に自動 fallback しない** + 「user の Word.app で File > 名前を付けて保存 > PDF」 を error message で案内する (= [`docx-pdf-stale-cache`](office-automation.md#docx-pdf-stale-cache) §「automation が続けて失敗するときの fallback 階層」)。 自動裏起動で「気づいたら Pages が立ち上がっている」 を作らない。
+4. **既存 sibling script を流用するなら `docx-to-pdf.sh` の構造を模倣する** — engine flag、 `/tmp` warn、 cold-start timeout、 fallback error message の 4 点を最低限 mirror。
+
+✅ 既存 wrapper を呼ぶだけで済むなら新 script を書かず `docx-to-pdf.sh` を呼ぶ (= 上の 4 点を 1 か所に集約)。 新 script を書くのは「複数 docx を batch 処理」 「pipeline の一部に組み込む」 等で wrapper では足りない時のみ。
 
 ---
 
