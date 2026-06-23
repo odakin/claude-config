@@ -161,13 +161,13 @@ origin: 2026-06 連続発生した「様式の標題テキストボックスが 
 # gen-pdf driver の冒頭 (= openpyxl 編集後の xlsx を読み込む直後)
 wb_cached = load_workbook(SRC, data_only=True)
 # sentinel: 別 sheet を参照する formula cell (= 不変、 普通は非 None)
-sentinel = wb_cached["申請者情報シート名"]["A5"]  # 別 sheet 参照 formula で氏名等を引く cell
+sentinel = wb_cached["申請者情報"]["A5"]  # 別 sheet 参照 formula で氏名等を引く cell (例)
 if sentinel.value is None:
     sys.exit("⚠️ formula cache が空。 openpyxl save が cache を破壊した可能性。 "
              "Excel.app で xlsx を open+save 1-pass 走らせて再計算を強制してから再実行してください。")
 ```
 
-⚠️ sentinel cell は **driver の最終出力に直接影響しない位置の cell** を選ぶ (= driver 本体が読み始める前の prophylactic gate)。 要件は (a) 値が普通は非 None、 (b) 編集 script が触らない位置 (= 不変)、 (c) 別 sheet 参照 formula で cache 依存 (= cache が消えれば None になる)。
+⚠️ sentinel cell の要件: (a) **編集 script が触らない位置** (= 不変)、 (b) **別 sheet 参照 formula で cache 依存** (= cache が消えれば None になる)、 (c) **元 file で formula が valid に解決済** (= 非 None が期待値)。 driver が後で値を読む cell でも要件を満たせば sentinel になりうる (= 「driver の出力に使わない cell」 は要件でなく、 cache 依存性が本質)。
 
 **修復経路 (= 既に cache が消えてしまった後)**: Excel.app で xlsx を **open + save 1-pass** する applescript で全 formula を再計算 + 保存する:
 
@@ -250,7 +250,7 @@ tell application "Microsoft Excel"
 end tell
 ```
 
-⚠️ 名称が紛らわしいが上記 line 182 の `-1728` (= property 名 `size` 誤り → `font size`) とは **異なる発火経路** で、 同じ error code が両方で出る。 区別: (a) `font size of font object` 関連の操作中なら property 名問題、 (b) `workbook` / `active workbook` 関連なら本 anti-pattern。 origin: 2026-06-23 cell 編集 + cache 復元 1-pass applescript で `active workbook` 参照が起動直後 fail → `workbook 1` 書き換えで復旧。
+⚠️ 名称が紛らわしいが本節既出の **`font size of font object` 関連の `-1728`** (= property 名 `size` 誤り → `font size`) とは **異なる発火経路** で、 同じ error code が両方で出る。 区別: (a) `font size of font object` 関連の操作中なら property 名問題、 (b) `workbook` / `active workbook` 関連なら本 anti-pattern。 origin: 2026-06-23 cell 編集 + cache 復元 1-pass applescript で `active workbook` 参照が起動直後 fail → `workbook 1` 書き換えで復旧。
 
 ⚠️ **`-1712` (AppleEvent timeout) は「Excel が固まっている」 signal**: 同一 session で Excel 操作 (= PDF export / cell write) を連続させると、 既存 instance が応答不能になり次の osascript が -1712 で落ちることがある。 復旧 = **`killall "Microsoft Excel"` → `sleep 5` → 再実行** (= -609 と同じ reset で直る、 driver script は 2 段 retry を組み込む)。 origin: 2026-06-11 雛形 PDF 化を 1 日に複数回実行した session。
 
