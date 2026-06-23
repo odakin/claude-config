@@ -212,14 +212,35 @@ robust 解:
 2. **spawned 側が完了時に `search_session_transcripts(<TOKEN>)` で全文検索** → HIT した session の addressable id を**直接取得** → `send_message` で結果を返す。
 3. 結果は呼び元会話に `From <title>` の user turn として着地 (= user 確認 gate 経由)。
 
-これは **呼び元が自分の id を知らなくても動く唯一 robust な方法**。 他は脆い: (B) 呼び元が id を渡す = 上記 namespace 不一致で誤 routing / (C) spawned が cwd + recency で list_sessions から推定 = 同 cwd を複数 session が共有すると**誤着** (実際に起きた)。
+これは **呼び元が自分の id を知らなくても動く唯一 robust な方法**。 他は脆い: (B) 呼び元が id を渡す = 上記 namespace 不一致で誤 routing / (C) spawned が **similarity heuristic (title 意味一致 / cwd 一致 / recency / 話題近さ) で宛先を推定** = それは findability であって identity でない (= [`§8.14`](../docs/convention-design-principles.md#single-field-identity-corroboration) 単一一致≠同定 の cross-session routing 版) → **誤着** (実際に起きた; 観測例では起票元の title が generic だったため spawned が *話題が一致する無関係な sibling* を起票元と誤断。 recency はむしろ正解を指していたので「recency を見れば直る」 でもない = どの similarity 軸も identity の代用にできない)。
+
+### 既定の返送路 + 子側 fail-safe (= token が落ちた / push が後付けされた時)
+
+**既定の返送路は durable artifact (commit) = robust。 live session push は token が事前配置されている時のみ。** push の必要は *後から* 呼び元 user が live で要求して生じうる (= 起票時に async-only で設計しても後で push を頼まれる) ので、 token の事前配置は「push を計画しているか」 に condition せず常に行う。
+
+token / handle が無いのに「起票元に返せ」 と言われた spawned は、 **絶対に similarity (title / cwd / recency / topic) で宛先を推測して push してはならない** (= 上記 (C) findability≠identity)。 手順:
+
+1. `search_session_transcripts(<token>、 無ければ自分の spec の distinctive な語句)` で **自分を起票した session を content 照合で特定** (= identity を establish)。
+2. self を除外し一意に解決できれば、 その session **のみ** に send_message。
+3. 一意化できない / 候補ゼロなら **push せず durable file (commit 済) に倒し、 user に確認** (= 誤着を safe degrade に変える)。
+
+identity は similarity でなく content corroboration でしか establish できない。
+
+### spawn-spec template (= 結果を返したい委譲の必須 boilerplate)
+
+spawn する spec に必ず含める:
+
+- **token 行**: 起票側の会話に unique token を残し spec にも明記 (例 `RET-<slug>-<date>-<rand>`)。 ⚠️ 「親の session-id 欄」 は作らない (= addressable id ≠ transcript id の namespace 不一致で起票側は自分の宛先 id を確実には知れず、 誤 id は推測より悪い。 robust なのは spawned が検索する content marker = token)。
+- **返送指示**: 「完了時 `search_session_transcripts(<token>)` で起票元を特定し send_message。 self/他 session 除外、 token を持つ起票元以外に絶対送らない。 token で解決不能なら push せず durable file のみ + user 確認 (推測 push 禁止)」。
+- **durable deliverable**: 成果物を決定的 path に commit (= 既定の返送路、 push が無くても結果が残る)。
 
 ### 注意 (caveat)
 
 - **⚠️ これらのツール (`spawn_task` / `send_message` / `search_session_transcripts` / `list_sessions`) は harness 依存で、 全環境にある保証はない。** Claude Code CLI (= 2026-06-21 確認) では deferred tools 一覧にも ToolSearch (= 概念検索 + exact name select の双方) にも無く呼べなかった。 = 本 §7 は Cowork 等これらを提供する harness での「観測例」 を前提に書かれており、 **その観測を全 harness に一般化していた** (= `convention-design-principles.md` の「一度の観察を一般法則化しない」 の doc-authoring 版 = doc が tool の実在を裏取りせず前提化する drift)。 CLI で「独立 session + 結果返送」 が要るときは **下記 file-handoff (pull) で spec ファイル化 → user が手動で別 CLI session を開いて拾う** 形にする (= Agent は「独立」 要件を満たさないので代替にしない)。 ⚠️ ただし deferred tools は session 中に動的 surface されうるので「絶対に無い」 とも断定しない (= 「現時点で呼べる tool に無い」 までが正確、 = inline §3「null を universal absence にしない」 の presence 版)。
 - `send_message` は **常に user 確認を挟み、 unsupervised (auto / bypass) mode では使えない** ⇒ **この push 経路は supervised 専用**。 unsupervised (scheduled-task / cron) では下記「Unsupervised 返送」 の file-handoff (pull) を使う。
 - **非同期**: 結果は spawned 完了時に届く (呼び元はブロックしない = 「自分の作業を続けたい」 と両立)。
-- token は一意性を持たせる。 複数 HIT したら最も最近 active な該当 session を呼び元とする。 **token を持つ呼び元以外には絶対送らない** (= 誤着防止)。
+- token は一意性を持たせる。 複数 HIT した場合 (= token が spawned の spec にも引用される等) も **recency で選ばない** (= similarity≠identity)。 self を除外し、 その token を *自分の発話として最初に残した* 起票元を呼び元とする。 判別不能なら push せず user 確認。 **token を持つ呼び元以外には絶対送らない** (= 誤着防止)。
+- **⚠️ 機械 enforcement の限界**: spawn_task / send_message への PreToolUse guard は (a) 一部 harness (Cowork desktop 等) が hook を honor しない + (b) これらの tool が hook 非対応 harness に偏在し『hook が効く環境 ∩ tool がある環境』 が乏しいため ~無効 (= placebo にしない、 = [`hook-authoring.md §9.3`](hook-authoring.md))。 `list_sessions` に lineage (spawnedBy) field が在れば spawned が宛先を推測する必要自体が消えるが、 これは harness 側の改修 (= upstream、 本 doc の scope 外)。 ∴ 現状の防御は本 § の規律 (token + 子側 fail-safe) が担う。
 
 ### Unsupervised 返送 (= cron / scheduled / auto / bypass): file-handoff (pull)
 
