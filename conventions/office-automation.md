@@ -54,17 +54,38 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 
 ## <a id="form-dump-first"></a>開始前に form を **必ず dump する** (= 推測で書かない)
 
-雛形 xlsx を受け取ったら、 fill コードを書く前に必ず構造を全部出力する。 form ごとに layout・merged 範囲・data validation・列幅・font が異なる。 推測で write 先 cell を決めると merged の途中・validation 不整合・列幅と合わない font size を踏む。 ⚠️ **drawing の有無も起点で確認する**: `unzip -l form.xlsx | grep -iE 'drawing|media'` で textbox/縦書きラベル等の shape があれば openpyxl save で消える ([`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings)) ので、 起点で検出して回避経路を選ぶ。
+雛形 xlsx を受け取ったら、 fill コードを書く前に必ず構造を全部出力する。 form ごとに layout・merged 範囲・data validation・列幅・font が異なる。 推測で write 先 cell を決めると merged の途中・validation 不整合・列幅と合わない font size を踏む。
+
+🚨 **openpyxl で書く前の絶対 preflight (= drawing 検出)**: 下記 `dump_form.py` は **冒頭で zipfile から drawing 数を表示** する。 出力に `🚨 DRAWINGS DETECTED:` が出たら openpyxl `wb.save()` は textbox / 縦書きラベル / autoshape を **破壊する**ので、 [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の回避経路 (= `excel-osascript-cell-write` / fitz 直印字 / drawing XML migration の 3 択) を選んでから fill code を書き始めること。 dump 出力を見ずに openpyxl 編集に進んだ瞬間が **drawing 破壊の発火点** (= 2026-06 に複数回再演された)。 single-line 確認は `unzip -l form.xlsx | grep -iE 'drawing|media'` でも可、 dump_form.py の自動化はその chore を不要にする。
 
 下記 `dump_form.py` を雛形毎に 1 回実行 → 出力を見て fill 対象 cell を確定する:
 
 ```python
 #!/usr/bin/env python3
-"""Inspect xlsx template structure: cells, merged, validation, column widths."""
+"""Inspect xlsx template structure: cells, merged, validation, column widths.
+
+🚨 Drawing preflight is the FIRST inspection (= openpyxl destroys drawings on save,
+   see openpyxl-destroys-drawings). Out put surfaces drawing count before sheet loop.
+"""
 import sys
+import zipfile
 from openpyxl import load_workbook
 
 PATH = sys.argv[1] if len(sys.argv) > 1 else 'template.xlsx'
+
+# 🚨 Drawing preflight (= openpyxl wb.save() destroys these — pick avoidance path FIRST)
+with zipfile.ZipFile(PATH) as z:
+    drawings = [n for n in z.namelist() if 'drawings/drawing' in n]
+    media = [n for n in z.namelist() if 'xl/media/' in n]
+    if drawings:
+        print(f"🚨 DRAWINGS DETECTED: {drawings}")
+        print("   ⚠️  openpyxl `wb.save()` will destroy these (textbox/shape/縦書きラベル等)。")
+        print("   → 回避経路: excel-osascript-cell-write / fitz 直印字 / drawing XML migration")
+    else:
+        print("(drawings: none — openpyxl save 安全)")
+    if media:
+        print(f"(media: {len(media)} file(s))")
+
 wb = load_workbook(PATH, data_only=False)
 
 for sname in wb.sheetnames:
