@@ -55,7 +55,7 @@ claude-config/
 │   ├── secret-handoff.md   # Secret を clipboard 経由で安全に運ぶ手順 (chat に literal を貼らせない原則と clipboard 1 個競合の回避)
 │   ├── clipboard-cleaner.md # PDF コピーの段落内改行・RTF 書式の後始末 (= ⌃⌥⌘V hotkey 〔貼り付け先で押す = 整形+即貼り付け〕 / CLI / ブラウザ版の 3 入口、全て明示発火・常駐 poll なし〔誤爆 + secret-handoff の clipboard 単一資源原則と衝突するため daemon 不採用〕、整形ロジック正本は scripts/clipboard-cleaner.py)
 │   ├── ui-toggle-convention.md # UI panel 内 toggle group の default 側統一ルール (slider 位置 + bright label を panel scope で揃える)
-│   ├── web-tools.md        # WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block)
+│   ├── web-tools.md        # WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block)
 │   ├── expensive-intermediate-artifacts.md # `-output /tmp/...` reflex 防止 (= OCR / ML / 数値計算で 5 分以上要する artifact をリポ内永続化、 hooks/expensive-tmp-guard.sh で機械的検出)
 │   ├── data-pipeline-automation.md # データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script) を bundle
 │   ├── github-security-automation.md # 全 repo 横断の Dependabot/CodeQL/Semgrep/auto-merge baseline + Free plan silent rejection + Dependabot PR tier-based merge discipline + ESM migration backwards-compatible normalizer + `gh` CLI gotcha (= users/X/repos public-only / mergeStateStatus UNKNOWN retry) + bash set -e + heredoc + $() interaction fix + monorepo dependabot.yml directories+groups + cascading PR convergence loop

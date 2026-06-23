@@ -33,6 +33,21 @@ WebFetch は HTML → markdown 変換 + 内部要約モデル処理を経るた�
 
 WebFetch に「`<head>` 内の meta タグを抽出して」 と prompt しても「<head> セクションは提供されていません」 と返答するケースがある。post-processing で削られているため。代わりに `curl + sed` で head を取得して verification meta / Open Graph / JSON-LD を直接確認する。SEO 検証 (Search Console verification token / OG image / Event JSON-LD 等の live 確認) で典型的に発生する。
 
+## CSR な SPA は WebFetch / fetch に空シェルしか返さない (= 200 ≠ ページ実在)
+
+Client-side rendering の SPA (= JS が描画してから中身が入るサイト) は、**WebFetch も同一オリジンの `fetch()` も、実在 route と存在しない route に対して同一の空アプリシェル (HTTP 200・ほぼ同一バイト数・本文テキストなし) を返す**。サーバーが routing を JS に委ねており unknown route でも 404 を返さず shell を返すため。つまり **HTTP status 200 や fetch 成功は「その URL が実在し、その内容である」 ことの保証にならない** (= `mcp.md` / inline §3「tool の signal を guarantee と取り違えない」 の false-positive 版 — null を不在と短絡する裏返しで、 200 を実在と短絡する形)。
+
+### How to apply
+
+- SPA の URL の**実在・内容**を確認したいときは、**JS を実行する実ブラウザ (Claude in Chrome 等) で navigate して、描画後の DOM** (本文テキスト量・`<h1>`/見出し・期待語の有無) で判定する。`curl`/WebFetch の status や生 HTML では判別できない
+- **404 の見分けは status でなく描画後の content** で行う: 実在ページは本文が十分長く期待トークン (固有名・見出し) を含む / 不在ページは別 fallback (極端に短い本文・無関係な見出し) に落ちる。両者を 1 件ずつ実測して閾値を掴んでから一括判定する
+- 描画ツールが**無い**環境では「fetch では検証不能」 と正直に surface する (= search index が返す**そのページ自身の `<title>` + 一致するスコア/固有名**は弱い corroboration として使えるが、 live render 確認ではないと明示する)
+- WebFetch は記事本文抽出・要約には有効 (= サーバーが本文を返す従来型ページ向け)。SPA の存在確認には不適
+
+### 典型パターン
+
+CSR SPA のニュース/結果ページの URL を多数検証する場面 (例: fifa.com の試合レポート URL を 40 本) で、`fetch` は実在 URL も故意の偽 URL も同一の空シェル (200・~4.5KB・本文/og:title なし) を返し status からは判別不能だった。実ブラウザで navigate すると、実在ページは本文数千字 + 該当見出しが描画され、不在ページは本文 ~140 字の無関係 fallback に落ちる明確な差が出た。**「200 が返った = ページがある」 と短絡せず描画後 DOM を読む**ことで全件を確定できた。
+
 ## Multi-national service の global と local entity は別 product line
 
 Multi-national の regulated service (証券 broker / banking / payment / SaaS の地域版等) で「Service X が feature Y を提供しているか」 を user 居住国の文脈で確認するとき、**global parent の product page と local entity の product page を別々に検証する**。entity-level で product line が大きく異なり、global の宣伝に local が含まれていない sub-feature が頻繁にある。
