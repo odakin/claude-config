@@ -40,6 +40,7 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 | 日付が「46205」 等の serial 数字で印字される | Excel が和文日付文字列を date 値に auto-convert + cell 書式が General | **apostrophe prefix で text 強制** → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
 | 申請日等が「火曜日, 6/月 16, 2026」 の冗長書式で表示 | `=TODAY()` 等 date 書式の cell を date 値で上書き → 冗長書式を継承 | apostrophe prefix の text で上書き → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
 | 標題・縦書きラベル・textbox が消えた | openpyxl の save が drawing (shape) を破壊 | Excel osascript / fitz 直印字 / 別 file XML 移植 の 3 経路 → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
+| formula 編集後 PDF / xlsx で別 cell の値が空欄 / `None` 化 | openpyxl の save が周辺 cell の formula cache を消す (= AST は保持するが cached value を再計算せず drop) | sentinel guard で abort + Excel.app open+save で再計算復元 → [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) |
 | 値は書けたが見た目を PDF で確認したい | — | [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) で render。 ⚠️ **Quick Look (`qlmanage`) は textbox/標題 を忠実に描かない** → drawing 健在は zip 内 drawing 数で、 体裁は xlsx-to-pdf.sh の PDF で |
 | 承認欄/印影欄ボックスの**下罫線が出ない** (box が下に開く) | Excel→PDF が最下部の結合セル下罫線を落とす (罫線は xlsx に在るのに出力で消える) | **`close-pdf-form-boxes.py`** を pipeline 最後に挟む (= 開いた枠を全検出して閉じる、 print_area 拡張では直らない) → [`excel-pdf-bottom-border-drop`](#excel-pdf-bottom-border-drop) |
 | 氏名/所属など**長い文字列が結合セルで両端切れ** | 固定 font でセル幅超過 + **shrink_to_fit は結合セルで無効** | **font size を下げる** (osascript は `font size of font object`) + `check-form-clipping.py` で機械検出 → [`merged-cell-text-clipping`](#merged-cell-text-clipping) |
@@ -144,7 +145,52 @@ unzip -l form.xlsx | grep -iE 'drawing|media'
 
 **事後の横断 sweep**: この罠を一度踏んでいたと発覚したら、 同 repo の**過去の openpyxl 製 xlsx を全部 drawing 数で走査**する (= 1 件見つかった時点で同経路の他 file も喪失している可能性が高い。 2026-06-12 の走査では 3 file 中 3 file が喪失済みだった)。
 
-origin: 2026-06 連続発生した「様式の標題テキストボックスが openpyxl save で消える」 事故。 cell value の一致検証では検出できず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF 画像確認で初めて気づく。 2026-06-12 に前例 script 流用経路で再発 (= 上記 reflex の起源)。
+**事後の救済 (= 既に喪失してしまった file の復元)**: Excel.app で xlsx を **open + save 1-pass** すると、 Excel が元 file に在った drawing 構造を知っているケース (= vmlDrawing 等の legacy drawing で base 雛形に痕跡が残っている場合) では drawing が **re-emit される**ことが観察されている (= `commentsDrawing1.vml` → `vmlDrawing1.vml` への戻りを観測した実例あり)。 ⚠️ **universal な復元保証ではない** (= sample size 限定、 base 雛形が drawing 情報を完全に失っているケースは復元しない)。 osascript snippet は [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) の修復経路を流用 (= 副次効果として formula cache も同時復元)。 = 喪失検出 → まず Excel.app open+save で復元を試す → drawing 数 (`unzip -l xxx.xlsx | grep -iE 'drawing'`) で復元成否を verify → 復元しなければ回避 2 (= drawing XML migration) で再構成。
+
+origin: 2026-06 連続発生した「様式の標題テキストボックスが openpyxl save で消える」 事故。 cell value の一致検証では検出できず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF 画像確認で初めて気づく。 2026-06-12 に前例 script 流用経路で再発 (= 上記 reflex の起源)。 2026-06-23 に Excel.app open+save 経由の drawing re-emit を観測 (= 上記「事後の救済」 の起源)。
+
+### <a id="openpyxl-clears-formula-cache"></a>⚠️ openpyxl の save は周辺 cell の formula cache を消す
+
+**症状**: 既存 xlsx の cell X を openpyxl で書いて save した後、 編集対象**でない**別 cell (= 別 sheet 参照 formula や同 sheet 内 cross-cell formula) の cached value が `None` 化する。 後段で xlsx を `data_only=True` で読む driver (= 生成 PDF script で formula 結果を取り出す類) は **値が空欄**として読み、 PDF に空欄印字 or sentinel guard で abort する。
+
+**原因**: openpyxl は cell formula の **AST** は保持するが、 計算結果 (cached value) を **save 時に再計算せず捨てる** (= openpyxl の構造的制約、 Excel の formula engine を持たないので再計算できない)。 編集された cell の周辺に限らず、 file 全体の cached value が drop されうる。 Excel.app で xlsx を **open + save** すると Excel の formula engine が全 formula を再計算して cache を埋め直すので復元する。
+
+**事前検出 (= driver 側 reflex)**: openpyxl 編集後の xlsx を `data_only=True` で読む driver が pipeline に居る場合、 **編集対象外の不変 cell を sentinel として cache 空判定**するロジックを driver の冒頭に組み込む:
+
+```python
+# gen-pdf driver の冒頭 (= openpyxl 編集後の xlsx を読み込む直後)
+wb_cached = load_workbook(SRC, data_only=True)
+# sentinel: 別 sheet を参照する formula cell (= 不変、 普通は非 None)
+sentinel = wb_cached["申請者情報シート名"]["A5"]  # 別 sheet 参照 formula で氏名等を引く cell
+if sentinel.value is None:
+    sys.exit("⚠️ formula cache が空。 openpyxl save が cache を破壊した可能性。 "
+             "Excel.app で xlsx を open+save 1-pass 走らせて再計算を強制してから再実行してください。")
+```
+
+⚠️ sentinel cell は **driver の最終出力に直接影響しない位置の cell** を選ぶ (= driver 本体が読み始める前の prophylactic gate)。 要件は (a) 値が普通は非 None、 (b) 編集 script が触らない位置 (= 不変)、 (c) 別 sheet 参照 formula で cache 依存 (= cache が消えれば None になる)。
+
+**修復経路 (= 既に cache が消えてしまった後)**: Excel.app で xlsx を **open + save 1-pass** する applescript で全 formula を再計算 + 保存する:
+
+```applescript
+-- shell 側で先に reset: killall "Microsoft Excel"; sleep 6
+tell application "Microsoft Excel"
+  activate
+  delay 3
+  open POSIX file "/abs/path/form.xlsx"
+  delay 3
+  save workbook 1                          -- ★ workbook 1 (= active workbook は -1728 で fail)
+  delay 2
+  close workbook 1 saving no
+end tell
+```
+
+⚠️ **`workbook 1` 参照必須** (= `active workbook` は app 起動直後で `-1728 active workbook を取り出すことはできません` で fail、 詳細 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の `-1728 active workbook` anti-pattern)。
+
+副次効果として **drawing 構造も同時に re-emit される**ことが観察されている (= [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の事後救済と同じ経路、 sample size 限定の正直注記)。 つまり cache 破壊と drawing 破壊は **同じ Excel.app open+save 1-pass で両方救済**できるケースがある。
+
+**回避 (= 破壊そのものを起こさない)**: [`excel-osascript-cell-write`](#excel-osascript-cell-write) 経由で値を書けば cache も drawing も保護される (= Excel の formula engine が常時走っているので cache が消えない)。 openpyxl 経路は cache + drawing の構造的損失を 2 軸で抱える。
+
+origin: 2026-06 連続発生した「openpyxl save 後に gen-pdf で空欄/`#REF!` が出る」 事故。 cell value 一致検証では検出できず、 sentinel guard pattern + PDF visual confirm で気づく。 [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の sibling (= 両方 openpyxl save の構造的損失、 drawing は `xl/drawings/` part、 cache は cell の cached value)。
 
 ### <a id="excel-osascript-cell-write"></a>Excel osascript で cell 値を書く堅牢パターン (= drawing 保護 + -609 回避)
 
@@ -182,6 +228,29 @@ osascript -e 'tell application "Microsoft Excel" to quit'
 ⚠️ **merged cell の font size を osascript で変える正しい構文** (= 長い氏名/所属が結合セルで両端切れた時の根本対処): `set font size of font object of range "G13" of ws to 9` (= **property 名は `font size`**)。 よくある誤り = `set size of font object of …` → **`-1728` (object not found)** で沈黙失敗する (= `size` という property は font object に無い)。 setup によっては `-10006` (errAEPrivilegeError) が返ることもあり、 その時は各操作を `try` で囲んで続行。 ⚠️ **font が効かない時の fallback を `shrink_to_fit=True` にしてはいけない** — **shrink_to_fit は結合セルでは no-op** (Excel 制約) で、 立てても何も縮まず「直したつもり」 で clip が残る (= 2026-06-16 謝金様式⑭-1 所属見切れ事故の温床)。 結合セルの文字溢れは **font size を下げる** のが唯一効く手。 詳細・検出・検証は [`merged-cell-text-clipping`](#merged-cell-text-clipping)。 origin: 2026-06-04 謝金様式の fill 後微修正 + 2026-06-16 G13 所属見切れ RCA。
 
 ⚠️ **正しい AppleScript property 名が不明なときの特定法** (= 上記 `font size` を当てた手順): Excel の scripting 定義は `sdef "/Applications/Microsoft Excel.app"` で引けるが **Xcode が要る** (Command Line Tools のみだと `xcode-select: error … requires Xcode` で空振り)。 → 候補構文を **`try` ブロックで順に試し、 効いたものだけ flag を立てて最後に save する probe applescript** を 1 本書けば **1 起動で特定**できる (= 構文を当て推量で叩いて Excel を毎回 cold-start するより速い + [`excel-osascript-cell-write`](#excel-osascript-cell-write) の crash リスクも減る)。 2026-06-16 に `size of font object` (誤、 -1728) → `font size of font object` (正) を probe で 1 発特定。
+
+⚠️ **`-1728 active workbook を取り出すことはできません` anti-pattern (= workbook 参照の選び方)**: `tell application "Microsoft Excel" to set theBook to active workbook` は **app 起動直後 / open 完了前の context では `-1728` (object not found) で fail** する。 `active workbook` は app 内部で「ユーザー focus が当たった workbook」 の意味のため、 automation context (= バックグラウンドで起動 + open 直後 + ユーザー操作なし) では undefined になりうる。 `delay` で待っても解消しない。 → **代替 = `workbook 1`** (= 最も最近 open した workbook の index 参照、 起動直後でも安定):
+
+```applescript
+-- ❌ anti-pattern (= 起動直後の active workbook = -1728)
+tell application "Microsoft Excel"
+  activate
+  open POSIX file "/abs/path/form.xlsx"
+  set theBook to active workbook                  -- -1728 で fail
+end tell
+
+-- ✅ workbook 1 で順序参照 (= automation context で安定)
+tell application "Microsoft Excel"
+  activate
+  delay 3
+  open POSIX file "/abs/path/form.xlsx"
+  delay 3
+  save workbook 1                                  -- ★ workbook 1 = 最も最近 open
+  close workbook 1 saving no
+end tell
+```
+
+⚠️ 名称が紛らわしいが上記 line 182 の `-1728` (= property 名 `size` 誤り → `font size`) とは **異なる発火経路** で、 同じ error code が両方で出る。 区別: (a) `font size of font object` 関連の操作中なら property 名問題、 (b) `workbook` / `active workbook` 関連なら本 anti-pattern。 origin: 2026-06-23 cell 編集 + cache 復元 1-pass applescript で `active workbook` 参照が起動直後 fail → `workbook 1` 書き換えで復旧。
 
 ⚠️ **`-1712` (AppleEvent timeout) は「Excel が固まっている」 signal**: 同一 session で Excel 操作 (= PDF export / cell write) を連続させると、 既存 instance が応答不能になり次の osascript が -1712 で落ちることがある。 復旧 = **`killall "Microsoft Excel"` → `sleep 5` → 再実行** (= -609 と同じ reset で直る、 driver script は 2 段 retry を組み込む)。 origin: 2026-06-11 雛形 PDF 化を 1 日に複数回実行した session。
 

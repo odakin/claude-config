@@ -7,7 +7,7 @@ sections:
   - id: symptom-index
     level: 2
     title: "🔑 まず読め + 症状 → 対処 早見表 (= 何も知らない session の入口)"
-    related: [xlsx-to-pdf-script, pdf-prefill-direct, docx-to-pdf-pages, diff-form-xlsx-detection, excel-osascript-cell-write, excel-write-string-autoconvert, excel-pdf-bottom-border-drop, openpyxl-destroys-drawings, xlsx-locked-by-excel, form-dump-first, docx-checkbox-content-control]
+    related: [xlsx-to-pdf-script, pdf-prefill-direct, docx-to-pdf-pages, diff-form-xlsx-detection, excel-osascript-cell-write, excel-write-string-autoconvert, excel-pdf-bottom-border-drop, openpyxl-destroys-drawings, openpyxl-clears-formula-cache, xlsx-locked-by-excel, form-dump-first, docx-checkbox-content-control]
   - id: form-dump-first
     legacy: "0"
     level: 2
@@ -23,11 +23,16 @@ sections:
   - id: openpyxl-destroys-drawings
     level: 3
     title: "openpyxl の save は既存の textbox / shape (= 標題・縦書きラベル・図形) を破壊する"
-    related: [excel-osascript-cell-write, label-overwrite-bug]
+    related: [excel-osascript-cell-write, label-overwrite-bug, openpyxl-clears-formula-cache]
+  - id: openpyxl-clears-formula-cache
+    level: 3
+    title: "openpyxl の save は周辺 cell の formula cache を消す"
+    origin: "2026-06"
+    related: [openpyxl-destroys-drawings, excel-osascript-cell-write, xlsx-to-pdf-script]
   - id: excel-osascript-cell-write
     level: 3
     title: "Excel osascript で cell 値を書く堅牢パターン (= drawing 保護 + -609 回避)"
-    related: [openpyxl-destroys-drawings, xlsx-to-pdf-script, merged-cell-text-clipping]
+    related: [openpyxl-destroys-drawings, openpyxl-clears-formula-cache, xlsx-to-pdf-script, merged-cell-text-clipping]
   - id: excel-write-string-autoconvert
     level: 3
     title: "Excel 経由 write は文字列を auto-convert する (= 日付文字列が serial 数字で印字される)"
