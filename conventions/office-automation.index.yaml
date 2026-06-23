@@ -153,15 +153,30 @@ sections:
     level: 3
     title: "Word docx → PDF AppleScript の二大故障: stale in-memory cache + cold-start 失敗"
     origin: "2026-06"
-    related: [docx-to-pdf-pages, docx-checkbox-content-control, manual-review-required, image-budget-exhaustion]
+    related: [docx-to-pdf-pages, docx-checkbox-content-control, manual-review-required, image-budget-exhaustion, docx-password-roundtrip-edit, docx-section-extract-preview, word-applescript-password-open]
+  - id: word-applescript-password-open
+    level: 3
+    title: "Word.app の AppleScript で PW 暗号化 docx を開く / select/find が動かない罠"
+    origin: "2026-06"
+    related: [docx-pdf-stale-cache, docx-section-extract-preview, docx-password-roundtrip-edit]
+  - id: docx-section-extract-preview
+    level: 3
+    title: "機密書類の「必要なところだけ見せる」: 関心 table のみ平文 preview docx を生成して Word.app open"
+    origin: "2026-06"
+    related: [docx-password-roundtrip-edit, word-applescript-password-open, docx-pdf-stale-cache, manual-review-required]
   - id: docx-fill-xml-edit
     legacy: "2-5"
     level: 3
     title: "docx fill: `python-docx` で XML 直編集 (= 共通パターン)"
+  - id: docx-password-roundtrip-edit
+    level: 3
+    title: "PW 暗号化 docx を編集して PW 維持で返す: msoffcrypto + python-docx round-trip 5 step"
+    origin: "2026-06"
+    related: [docx-fill-xml-edit, docx-pdf-stale-cache, docx-section-extract-preview, word-applescript-password-open, docx-checkbox-content-control]
   - id: docx-python-docx-surgical-edit
     level: 3
     title: "確定済 docx の外科編集: python-docx で run / 段落を直接いじる"
-    related: [docx-fill-xml-edit, docx-guidance-deletion, docx-checkbox-content-control, docx-pdf-stale-cache]
+    related: [docx-fill-xml-edit, docx-guidance-deletion, docx-checkbox-content-control, docx-pdf-stale-cache, docx-password-roundtrip-edit]
   - id: docx-checkbox-content-control
     legacy: "2-5b"
     level: 3

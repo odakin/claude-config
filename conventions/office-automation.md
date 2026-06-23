@@ -798,7 +798,61 @@ docx を検証して「正しい」 と確認しても、 export が stale な�
 2. **Pages export ([`docx-to-pdf-pages`](#docx-to-pdf-pages)) を automation fallback に**。 動くが **layout が Word と一致しない** (= 組版し直し)。 ⚠️ よくある懸念「Pages はデータを壊す」 は **PDF 書き出し用途では誤解** — **内容は保持され、 崩れるのは体裁だけ** (= re-typeset、 文字落ちではない、 docx 本体は read-only)。 だが官製様式では体裁差が問題になるので最終版には使わない。 ⚠️ **ただし PDF 書き出し限定**: Pages で開いて **docx として保存し直すと** content control / field code / コメント等の Word 固有機能が失われうる (= [`docx-checkbox-content-control`](#docx-checkbox-content-control) の checkbox 等) → **docx round-trip には使わない**。
 3. 中身の machine 検証 (= 上記 PDF テキスト照合) は automation の成否と独立 → automation が死んでも検証は止めない。
 
+⚡ **context-first reflex — 用件が「官公署様式の visual confirm」 なら最初から Pages 不可** (= 上記 reflex の前段、 2026-06 RCA で補強): [`docx-to-pdf.sh`](#docx-to-pdf-pages) の mac default は Pages なので**無思考で叩くと文脈に反する** — 官公署様式・決裁書類は体裁が契約 → Pages の re-typeset で「見出し/表の重なり」 artifact が出る可能性 + そもそも reviewer は Word 体裁を見るので Pages 出力は提出にも目視確認にも不向き。 ① script を打つ前に「これは正式書類か?」 を 1 秒問う ② 正式書類なら `--word` を最初から付ける or fallback 1 (user の Word 書き出し / Word.app 目視) に直行 ③ docx が PW 暗号化なら automation はそもそも PW 入力 prompt にハマる → fallback 1 一択 (= [`docx-password-roundtrip-edit`](#docx-password-roundtrip-edit) からの誘導)。 origin = 2026-06 PW 暗号化 docx の visual confirm 場面で、 中身は python-docx readback + [`check-docx-integrity.py`](#docx-checkbox-content-control) で完全検証済なのに「画面で見たい」 欲求で default Pages を叩き、 cold-start を 3 回連続踏んだ後やっと fallback 1 (= 平文抽出 preview docx を Word.app open) に降りた RCA。 reflex を再活性化させたのは **「画面で見たい = PDF 化必須」 の誤等式** で、 実は user 目視確認は **Word.app で docx を直接開く方が早い** (= PDF 中継不要)。
+
 origin: 2026-06 ある官製様式 (JST 系) の docx 修正。 docx を直しても PDF が古いまま (= stale) → quit 不十分が真因 → `pkill` + fresh open で解消。 さらに Word が cold-start で `missing value` / 空ドキュメント複数の状態に陥り automation 不能 → Pages で代替 → 最終は user の Word 書き出しに委ねた。
+
+### <a id="word-applescript-password-open"></a>Word.app の AppleScript で PW 暗号化 docx を開く / select/find が動かない罠
+
+PW 暗号化された docx を Word.app で開く時、 user に PW prompt を出させず AppleScript から渡せる。 visual confirm を user に頼む際の手間を 1 段減らす。
+
+**正しい syntax** (= 2026-06 確認、 `password document` parameter):
+
+```applescript
+tell application "Microsoft Word"
+    activate
+    open file name "/abs/path/to/encrypted.docx" password document "<PW>"
+end tell
+```
+
+- `open POSIX file "..." with password protect "..."` は **syntax error** (= Word AppleScript dictionary に無い)、 `open file name ... password document ...` が正解
+- 戻り値は `document <basename>` (= success のサイン)
+- 同 syntax で連続 open する場合は `activate` を 1 回でよい
+- ⚠️ 当然だが PW literal を AppleScript source に書く時は **leak guard** が効く layer か確認 (= 本リポ等 public は不可、 個人層 / private repo の script や 1 回限りの shell heredoc に留める)
+
+**select/find/特定ページへ jump は AppleScript で不安定**:
+
+- `tell active document to select` → `active document は "select" メッセージを認識できません` (= -1708)
+- `tell selection to find object` → `find object of selection は "clear formatting" メッセージを認識できません`
+- Word.app の AppleScript dictionary は Find 系オブジェクトの coercion が脆く、 cold-start に弱い (= [`docx-pdf-stale-cache`](#docx-pdf-stale-cache) と同根)
+- → **「特定シートだけ見せる」 用途では Find/select に頼らず [`docx-section-extract-preview`](#docx-section-extract-preview) で別 docx に抜き出す方が確実**
+
+origin: 2026-06 ある PW 暗号化 6 シート様式の visual confirm で、 物理シートだけ見せたい → AppleScript で `tell active document to select` / `tell selection to find object` を試行 → 全 syntax で error → 関心 table のみ deepcopy で別 docx に抽出する pattern に切替で解決。
+
+### <a id="docx-section-extract-preview"></a>機密書類の「必要なところだけ見せる」: 関心 table のみ平文 preview docx を生成して Word.app open
+
+機密 / PW 暗号化された大型 form (= 多科目 / 多シート構成) で、 user に「自分の担当ページだけ目視確認したい」 と言われた時の確実 pattern。 [`word-applescript-password-open`](#word-applescript-password-open) の find/select が動かない代替経路。
+
+**設計**: 関心 table を python-docx で deepcopy → **新しい平文 docx** に挿入 → preview として Word.app で open (= PW 不要)。 元の **提出用 docx は別ファイル**として PW 維持で保存 (= [`docx-password-roundtrip-edit`](#docx-password-roundtrip-edit))。 二本立てで「visual confirm = 平文 preview」 + 「提出 = 暗号化 final」 を分離。
+
+```python
+from docx import Document
+from copy import deepcopy
+
+src = Document('filled_decrypted.docx')   # 復号 + 記入済の作業 copy
+new = Document()                          # 平文 / 空白テンプレ
+new.add_heading('用紙X (関心領域) — preview / 平文', level=1)
+new.add_paragraph('科目: 物理')             # 元 docx の前後 paragraph で「どの table か」 を user に示す
+tbl_xml = deepcopy(src.tables[5]._element)  # 関心 table を deepcopy
+new.element.body.append(tbl_xml)
+new.save('preview_butsuri.docx')
+```
+
+**注意**:
+- **preview docx は提出に使わない** (= 機密性 / 体裁 / 完全性が落ちる)。 必ず `提出用` と `preview` を明確に別名 (例: `*_記入済.docx` vs `preview_*.docx`) で保存
+- preview は **平文** なので、 leak risk のある場所 (= 共有 cloud / 公開リポ) に置かない。 一時 work dir (= `/tmp/` 配下 or 元の private repo 配下) で完結させる
+- Word.app で open する時は `open <file>` (shell) で十分 (= AppleScript の cold-start trap を回避)
+- 既存 cell の paragraph 構造を deepcopy で持っていくので、 fill した値 (= 改行・font・spacing) も忠実に再現される
 
 ### <a id="docx-fill-xml-edit"></a>docx fill: `python-docx` で XML 直編集 (= 共通パターン)
 
@@ -848,6 +902,69 @@ with zipfile.ZipFile(dest_docx, 'w', zipfile.ZIP_DEFLATED) as z:
 ```
 
 **事前 dump 必須**: docx の XML 構造を必ず最初に `unzip -p form.docx word/document.xml | python3 -c "..."` で grep して確認。 placeholder が `＿` 何文字か、 ラベルと placeholder が同じ run か分かれた run かを事前に把握。
+
+### <a id="docx-password-roundtrip-edit"></a>PW 暗号化 docx を編集して PW 維持で返す: msoffcrypto + python-docx round-trip 5 step
+
+行政・学術・社内 配布の form が **「Word ファイルのパスワードを解除せず、 元のメールに添付返信」** を要求する場合の確実 pattern。 提出物として **PW 暗号化を維持したまま中身を書き換える** ための 5 step。
+
+**前提**: `msoffcrypto-tool` 5.4 以降は `encrypt` mode (`-e` flag) を持つ (= 旧版は decrypt only だった)。 `pip show msoffcrypto-tool` で 5.4+ を確認。 PW は配布元 mail / 別送 mail / 関連 doc から取得 (= 本リポ等 public surface に literal を書かない)。
+
+**5 step**:
+
+```bash
+# 1. backup + decrypt
+cp form_encrypted.docx form_orig.docx          # 元 file を保全 (常に手元 backup)
+msoffcrypto-tool -p "$PW" form_encrypted.docx form_decrypted.docx
+
+# 2. python-docx で fill (= 別 file に書き出し、 decrypted は触らない)
+python3 fill.py form_decrypted.docx form_filled.docx
+
+# 3. 再暗号化 (= 同 PW で encrypt)
+msoffcrypto-tool -e -p "$PW" form_filled.docx form_final.docx
+
+# 4. roundtrip verify (= 再 decrypt → readback で内容一致 + XML 健全性)
+msoffcrypto-tool -p "$PW" form_final.docx form_rt.docx
+python3 -c "from docx import Document; d=Document('form_rt.docx'); ... # cell readback"
+python3 ~/Claude/claude-config/scripts/check-docx-integrity.py form_rt.docx
+
+# 5. visual confirm = user の Word.app 目視 (= [`docx-pdf-stale-cache`] の reflex 通り)。
+#    関心セクションだけ抜き出した平文 preview は [`docx-section-extract-preview`]、
+#    PW 付き open は [`word-applescript-password-open`]。
+```
+
+**step 2 (python-docx fill) の cell 編集 gotcha**:
+
+- **既存 cell の paragraph 構造を温存** する: cell.text への代入は 1 paragraph に collapse して既存 formatting / 改行を壊す。 cell が複数 paragraph (= 散文 + 空行 + 散文 等) なら paragraph index で書き分ける
+- **空 paragraph に文字を入れる**: `p = cell.paragraphs[i]; for r in list(p.runs): r._element.getparent().remove(r._element); p.add_run(text)` (= 既存 run を全削除 → 新 run 追加で formatting を維持)
+- **新規行追加**: `cell.add_paragraph('text')` (= 既存 paragraph の後に追加)
+- **複数行 cell をリセット**: 既存 paragraph を全削除 (`for p in list(cell.paragraphs): p._element.getparent().remove(p._element)`) してから `add_paragraph` × N
+
+```python
+# 例: cell に氏名 3 名を改行区切りで入れる (= 既存 paragraph リセット → 3 個追加)
+cell = doc.tables[5].cell(2, 2)
+for p in list(cell.paragraphs):
+    p._element.getparent().remove(p._element)
+cell.add_paragraph('氏名 A')
+cell.add_paragraph('氏名 B')
+cell.add_paragraph('氏名 C')
+
+# 例: 既存 paragraph (= 空行プレースホルダ) の特定 index 行に文言を流す
+lines = ['散文 1 行目', '散文 2 行目', '散文 3 行目']
+for idx, line in enumerate(lines):
+    p = cell.paragraphs[2 + idx]  # 0 = ラベル "【点検方法】"、 1 = 空、 2-4 = 記入領域
+    for r in list(p.runs):
+        r._element.getparent().remove(r._element)
+    p.add_run(line)
+```
+
+**step 4 (verify) は print-blocker**: roundtrip readback で「自分が書いた内容と一致」 を確認し、 加えて [`check-docx-integrity.py`](#docx-checkbox-content-control) を pass させる。 暗号化済 docx は zip 直 grep が効かないため、 verify は **必ず再 decrypt 経由**。 失敗時に step 1 の `form_orig.docx` から再開できる (= backup 規律)。
+
+**visual confirm の注意 (= 上の §[`docx-pdf-stale-cache`] context-first reflex を遵守)**:
+- PW 暗号化 docx を `docx-to-pdf.sh` の mac default (= Pages) に投げると cold-start + PW prompt の両罠に当たる → 最初から不可
+- 平文 [`docx-section-extract-preview`](#docx-section-extract-preview) を生成して Word.app で open する fallback 1 が確実
+- final (= encrypted) を user に手渡したい時は [`word-applescript-password-open`](#word-applescript-password-open) で PW 付き open
+
+origin: 2026-06 ある官公署様式 (= 担当者表 + 体制表 の 2 docx、 配布元から PW 別送) の記入返送。 form 構造は 6 シート (= 多科目分の table)、 自分の担当 1 シートのみ記入。 step 4 (roundtrip readback) で「点検方法の散文行が空 paragraph に流し込まれていない」 (= 私の paragraph index 取り違え) を 1 度検出 → 修正。 step 5 (visual confirm) で Pages cold-start を 3 回踏んで時間を浪費 → [`docx-pdf-stale-cache`] reflex に降りて平文抽出 preview pattern を確立。
 
 ### <a id="docx-python-docx-surgical-edit"></a>確定済 docx の外科編集: python-docx で run / 段落を直接いじる
 
