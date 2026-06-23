@@ -42,6 +42,21 @@ Claude バックエンド（リモート）    ← 実際に実行される prom
 
 SKILL.md を single source of truth にできない。リポの SKILL.md とバックエンドの prompt が乖離するリスクが常にある。
 
+## 登録できる session 種別 (= bridge / Cowork backend session では create_scheduled_task が wire されない)
+
+`create_scheduled_task` / `update_scheduled_task` は **harness 組み込み tool** (= MCP server ではない。 `~/.claude.json` の `mcpServers` に現れない、 CronCreate と同類)。 これらが session で呼べるかは **起動経路で決まる**:
+
+- ✅ **登録できる**: Terminal から `claude` を直接起動した通常 Claude Code CLI session (= `--allowedTools` 無制限運用)。 既存の登録済 task (`weekly-web-freshness` 等) はこの経路で作られている。
+- ❌ **登録できない**: desktop / Cowork app が裏で起動する **bridge session** (= 判定 = `env | grep CLAUDE_CODE_ENVIRONMENT_KIND` が `bridge` + `CLAUDE_CODE_ENTRYPOINT=sdk-cli`)。 `--allowedTools` で tool が大幅に subset され、 `create_scheduled_task` が **session に wire されない** (= `ToolSearch "select:create_scheduled_task"` が "No matching deferred tools found")。 これは [mcp.md §「desktop Cowork session の `--allowedTools` 制限」](mcp.md) と同根 (= 同じ subset 機構が組み込み scheduled-task tool も削る)。
+
+**対処**: bridge session で scheduled task を登録したくなったら、 同じマシンの **Terminal で `claude` を直起動**した session に移って `create_scheduled_task` を呼ぶ (= mcp.md 対処 (b))。 bridge session 自身からは制限なし session を生やせない (= harness 仕様)、 user の手動操作が要る。
+
+### ⚠️ bridge session で `CronCreate durable` に逃げない (= 永続化されない trap)
+
+「定期実行が要る、 でも `create_scheduled_task` が無い」 となったとき harness の `CronCreate` に逃げると、 **`durable: true` を渡しても無視され session-only になる** (= 2026-06-23 実証: `CronList` が `[session-only]` 表示、 `~/.claude/scheduled_tasks.json` が未作成、 session を閉じると消える)。 `RemoteTrigger` (= claude.ai routine) は cloud 実行で local file に触れない (§0)。 → **bridge session には永続 local scheduled task を作る手段が無い**。 唯一の道は上記 Terminal 直起動 session での `create_scheduled_task`。
+
+> 判定 reflex: 定期 local job を登録する前に起動経路を疑う。 `env | grep CLAUDE_CODE_ENVIRONMENT_KIND` が `bridge` なら登録系 tool が削られている前提で、 Terminal 直起動 session に移る。 (= harness 版 2.1.165 で観察。 `--allowedTools` の subset 内容は版で変わりうる — UI 同様に実機で確認する。 ⚠️ scheduled task 自体は backend 実行されれば local file に access できる 〔§アーキテクチャ〕。 ここで言う制約は **登録 (= create/update tool) を呼べる session** の話であって、 実行 locus の話ではない)
+
 ## ルール
 
 ### SKILL.md にステップ0: SESSION.md チェックを含める（必須）

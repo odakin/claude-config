@@ -190,6 +190,10 @@ Claude desktop (Cowork) app から起動した Claude Code session は `--allowe
 | (b) | Terminal から Claude Code を直起動 | desktop Cowork でなく `claude` コマンドを直接 launch → `~/.claude.json` 登録 MCP が allowedTools に含まれる起動になる (= 制限なし運用) |
 | (c) | 本 session 内で OAuth token 直叩き Python | `~/.gmail-mcp/<account>/credentials.json` (= access_token + refresh_token) + `oauth-keys.json` (= client_id + client_secret) を Python で読み、 `oauth2.googleapis.com/token` で refresh → Gmail API 直叩き。 MCP layer 経由しない (= 当 session 内即効性ある) |
 
+### harness 組み込み tool への波及 (= scheduled task 登録不可)
+
+⚠️ この `--allowedTools` subset は MCP server だけでなく **harness 組み込み tool** も削る: bridge session (= `CLAUDE_CODE_ENVIRONMENT_KIND=bridge`) では `create_scheduled_task` / `update_scheduled_task` が wire されず (= `ToolSearch "select:create_scheduled_task"` が空)、 fallback の `CronCreate` も `durable: true` を渡して **session-only 化** する (= 永続 local scheduled task を登録できない、 2026-06-23 実証)。 → 定期 task の登録は Terminal 直起動 session (= 上記対処 (b)) に移って行う。 詳細は [scheduled-tasks.md §登録できる session 種別](scheduled-tasks.md)。
+
 ### 教訓 (= sweep skipping 防止)
 
 「MCP 経由で取れた = 該当 account 全部見えた」 と判断するな。 **2026-06-20 layer-3 RCA**: 単一 Gmail account のみ wired の状態で人名 query 0 件を「Gmail で 0 件で確定」 と universalize、 4 回繰り返してから user の繰返 push で別 account に該当 thread が存在することが判明。 真因 = MCP tool metadata が wire account を expose しない構造ギャップ。 「該当 account が全部 session に bind されているか」 を**最初に**確認するのが正しい sweep の入口。 〔起票 commit (= 2026-06-20 prior version) は **incident 固有名・thread 内容を本節に literal で焼き込んでいた** = 自身が public layer 1 安全規則 §「2026-06-16 拡張」 を踏んだ leak。 該当 literal は 2026-06-20 cold-eyes session でこの commit で sanitize、 git history 側は不可逆〕
