@@ -154,7 +154,7 @@ claude-config/
 │   ├── convention-design-principles.md # 規約設計の原則（メタレベル）
 │   └── personal-layer.md             # 4 層モデルの正本 (audience size 順 numbering、 layer 1-4 の責務と依存規則)
 ├── gitignore_global        # グローバル gitignore（~/.gitignore_global に symlink）
-├── gfm-rules.md            # GFM CJK bold 対策リファレンス
+├── gfm-rules.md            # GFM レンダリング落とし穴リファレンス（CJK bold × 全角句読点 / 裸 URL を `**…**` で囲むと autolink が壊れる 等）
 ├── LICENSE                  # MIT
 └── .gitignore
 ```
