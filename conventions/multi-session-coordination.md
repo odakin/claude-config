@@ -226,15 +226,19 @@ token / handle が無いのに「起票元に返せ」 と言われた spawned �
 
 identity は similarity でなく content corroboration でしか establish できない。
 
-### spawn-spec template (= 結果を返したい委譲の必須 boilerplate)
+### spawn-spec template (= 結果を返したい委譲の boilerplate)
 
-⚠️ **2026-06-24 訂正 — 設計目標は「結果が人間に *自動で* 返り、 人間は何もしない」**: 一度この template を「durable file を required spine・live-push を optional (= 人間が file を読みに行く)」 へ書き換えたが、 **人間に fetch させる方向は思想が逆** (= 機械は人間の手間を消すために在る) で user 訂正により撤回した。 正しい目標は、 child 完了時に結果が *人間の目に勝手に届く* 自動返送を robust 化すること (= deliverable を決定的 path に書く + その完了を **機械が surface する** 〔dashboard / session 開始 surface / OS 通知〕。 surfacing は file を読む script 操作なので機械化可能、 = horizon-surface fleet と同 paradigm)。 機構が整うまで本 template は一旦原状。
+**設計目標 = 結果が呼び元 (人間) に *自動で* 届く。 人間に検索/記憶/fetch させない (= 機械が手間を消す、 2026-06-24 RCA + user 訂正「機械が人間を楽にするためにある」)。** ⚠️ 一度この template を「durable file を人間が読みに行く」 方向へ書き換えたが、 機械から人間へ手間を移す逆方向で撤回した。
 
-spawn する spec に必ず含める:
+**required (= 機械が結果を人間に届ける spine)**:
 
-- **token 行**: 起票側の会話 (= assistant の message turn) に unique token を残し spec にも明記 (例 `RET-<slug>-<date>-<rand>`)。 ⚠️ **token は message turn に出す (spec=tool_use 引数だけでは `search_session_transcripts` に引っかからず呼び元が findable にならない、 = method A step 1)**。 ⚠️ 「親の session-id 欄」 は作らない (= addressable id ≠ transcript id の namespace 不一致で起票側は自分の宛先 id を確実には知れず、 誤 id は推測より悪い。 robust なのは spawned が検索する content marker = token)。
-- **返送指示**: 「完了時 `search_session_transcripts(<token>)` で起票元を特定し send_message。 self/他 session 除外、 token を持つ起票元以外に絶対送らない。 token で解決不能なら push せず durable file のみ + user 確認 (推測 push 禁止)」。
-- **durable deliverable**: 成果物を決定的 path に commit (= push が落ちた時の fallback、 push が無くても結果が残る)。 ⚠️ ただし fallback を「人間が読みに行く」 を *既定* にしない (= 上記訂正)。
+- **deliverable を決定的 path に commit** (= 結果の実体、 push が無くても残る)。
+- **完了 marker を決定的な "results inbox" に 1 個落とす** (= status / result_path / 1 行要約)。 これを **surfacing 機構** (= session 開始時の surface・dashboard・OS 通知) が拾い、 人間が次に居る *どの session でも* 「結果が届いた・場所はここ」 と自動表示する。 surfacing は file を読む script 操作なので機械化可能 (= model の chat 出力にも親の findability 仕込みにも依存しない)。 ⚠️ marker は **子自身の完了 action** なので live-push より reliable。 ⚠️ inbox / surfacing 機構の実体は各 user の private layer に置く (= 本 public doc は *形* のみ規定、 具体 path は書かない)。
+
+**optional (= live-push の bonus。 効けば即時 push、 落ちても上の auto-surface が拾うので人間は何もしない)**:
+
+- **token 行**: 起票側の会話 (= assistant の message turn) に unique token を残す (spec にも明記、 例 `RET-<slug>-<date>-<rand>`)。 ⚠️ **chat に出さないと `search_session_transcripts` に引っかからず呼び元が findable にならない** (= method A step 1、 spec=tool_use 引数は search 対象外)。 ⚠️ 「親の session-id 欄」 は作らない (= addressable id ≠ transcript id の namespace 不一致、 誤 id は推測より悪い、 robust なのは content marker = token)。
+- **返送指示**: 「完了時 `search_session_transcripts(<token>)` で起票元を特定し send_message。 self/他 session 除外、 token を持つ起票元以外に絶対送らない。 解決不能なら push せず + user 確認 (推測 push 禁止)」。
 
 ### 注意 (caveat)
 
