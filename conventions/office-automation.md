@@ -49,6 +49,7 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 | 何を / どこに書くか不明 | — | 着手前に [`form を dump`](#form-dump-first) (原則編が先) |
 | 様式の label を誤って上書きしていないか | label vs input row の混同 | [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で機械検出 |
 | Word が「破損」 と言うが原因不明 | XML 宣言 single-quote / 空 `<w:tc>` 等 | [`check-docx-integrity.py`](#docx-checkbox-content-control) で決定論検出 |
+| docx の font を下げても・行間を詰めても**ページ数が減らない** (日本語 Word) | section の `docGrid` (snap-to-grid) が行高を grid pitch に固定し font 縮小を無効化 | 本文段落の `snapToGrid` 無効化 / `linePitch` 縮小 → [`docx-pdf-page-compress`](#docx-pdf-page-compress) |
 
 ---
 
@@ -1353,9 +1354,60 @@ while doc.paragraphs and not doc.paragraphs[-1].text.strip():
 - 末尾空段落 3 個 削除で ~36pt 短縮 (= 12pt × 3)
 - 計 ~110pt 圧縮 → 2 page → 1 page を実現可能
 
-これでも収まらない場合は font_size を 10pt → 9.5pt に下げる (但し可読性低下)。
+これでも収まらない場合は font_size を 10pt → 9.5pt に下げる (但し可読性低下)。 **⚠️ ただし日本語 Word では font を下げても効かないことがある (次項)。**
 
-origin: 2026-05-14 JST SPReAD で 様式 0 = 2 → 1 page、 様式 2 = 3 → 2 page を上記 3 段階で達成。
+#### ⚠️ font を下げても・行間を詰めてもページが減らない = 日本語 Word の行グリッド (snap-to-grid)
+
+`<w:sectPr>` に `<w:docGrid w:type="lines" w:linePitch="N"/>` があると、 各行は **linePitch (twips、 ÷20 = pt) の grid に snap** され、 font を grid pitch 以下に縮めても **行高が固定**される (= font 10.5→9pt にしても 1 行 18pt のまま vertical space が一切減らない)。 日本語の官公署・学術様式 docx は大半がこの grid を持つので、 上の「font を下げる」 が **単独では効かない**。 line_spacing 変更も grid 下では無効。
+
+```python
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+g = doc.sections[0]._sectPr.find(qn('w:docGrid'))      # 診断
+print(g.get(qn('w:linePitch')) if g is not None else 'no docGrid')   # 360 → 18pt/行
+
+def no_grid(p):                                         # 解法A(推奨): 本文段落だけ grid 解除 → 行高が font 追従に
+    pPr = p._p.get_or_add_pPr()
+    if pPr.find(qn('w:snapToGrid')) is None:
+        e = OxmlElement('w:snapToGrid'); e.set(qn('w:val'), '0'); pPr.append(e)
+# 解法B: doc 全体の linePitch を下げる (grid 自体を詰める = 全段に効くが様式ヘッダの行間も変わる)
+```
+
+**解法 A を回答本文の段落だけに適用**すれば、 ヘッダの表組み様式 (grid 維持 = 見た目不変) を保ったまま本文だけ圧縮できる。 font だけ下げて「効かない」 とハマるのが日本語様式の定番。
+
+#### 表組み様式 (= 推薦書・調査票・同意書) 固有の 2 圧縮源
+
+上の 3 段階 (margin / line_spacing / 末尾空段落) は doc 直下の段落向け。 表組み様式ではさらに:
+
+- **行の明示 min-height (`<w:trHeight>`)**: 雛形が回答欄行に空行ぶんの大きな min-height (例 224pt) を焼いていることがある → 記入後は内容に対し過大なので除去して auto-fit。
+  ```python
+  for row in table.rows:
+      trPr = row._tr.find(qn('w:trPr'))
+      h = trPr.find(qn('w:trHeight')) if trPr is not None else None
+      if h is not None: trPr.remove(h)
+  ```
+- **セル内の空白回答段落**: 雛形は回答欄セルに手書き用の空段落を多数持つ → 記入後はそれが page を割る。 セル内の trailing 空段落を除去 (doc 末尾空段落除去と同型だが table cell 内、 ⚠️ cell は最低 1 段落必要なので content 段落は残す)。
+
+#### 「推測で font 変えて再ビルド」 を繰り返さず fitz で実測ループ
+
+各 iteration の効果を数値で見て、 font か margin か trHeight かを選ぶ (= 推測再ビルドの溶解を防ぐ):
+
+```python
+import fitz
+d = fitz.open(pdf); print('pages:', d.page_count)
+if d.page_count == 1:
+    p = d[0]; blocks = [b for b in p.get_text('blocks') if b[4].strip()]
+    last_y = max(b[3] for b in blocks)
+    print('p1 末尾 y=%.0f / 下端余白=%.0f' % (last_y, p.rect.height - bottom_margin_pt - last_y))
+else:
+    print('溢れ:', d[1].get_text()[:80])   # 残り 1 行なら font/trHeight、 1 ブロックなら本文圧縮
+```
+
+#### 様式を編集する時の不変条件 (= 「様式 = 見た目が契約」 の page-fit 適用)
+
+pre-fill 済み項目・本文テキスト・様式の表構造は**触らず書式だけ**変える ([`office-automation-principles.md`](office-automation-principles.md))。 編集後は **本文の文字数が変わっていない** (`cell.text` の len 比較) + pre-fill 項目が全部残っている、 を機械検証してから PDF 化・[`pdf-visual-confirm`](#pdf-visual-confirm)。 ⚠️ [`check-docx-integrity.py`](#docx-checkbox-content-control) が `table#N row#M: 論理列数 X ≠ gridCol Y` を出しても、 **元雛形でも同じ警告が出るなら横 merge 様式由来の benign** (= 自分の編集が壊したのではない) — 必ず元雛形と比較してから判断する (= 横 merge した row の論理セル数が gridCol より少ないのは正常)。
+
+origin: 2026-05-14 JST SPReAD で 様式 0 = 2 → 1 page、 様式 2 = 3 → 2 page を上記 3 段階で達成。 2026-06 推薦書様式 (A4 1 枚厳守の表組み docx) を 2→1 page = font 9pt + 行間圧縮が **docGrid linePitch=360 で全く効かず**、 本文段落の snapToGrid 無効化 + trHeight 除去 + セル内空段落除去で解決 (= docGrid 段・表組み 2 圧縮源の動機)。
 
 ---
 

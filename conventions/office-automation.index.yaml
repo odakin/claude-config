@@ -229,7 +229,8 @@ sections:
   - id: docx-pdf-page-compress
     legacy: "2-9"
     level: 3
-    title: "docx → PDF の page count 圧縮 (= 余白縮小 + 行間 + 末尾空段落削除)"
+    title: "docx → PDF の page count 圧縮 (= 余白縮小 + 行間 + 末尾空段落削除 + 日本語 Word の docGrid/snapToGrid 解除 + 様式の trHeight/セル内空段落除去 + fitz 実測ループ)"
+    related: [docx-to-pdf-pages, docx-pdf-stale-cache, pdf-visual-confirm, docx-checkbox-content-control, print-area-one-page, form-dump-first]
     origin: "2026-05"
   - id: tts-review
     legacy: "3"
