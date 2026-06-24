@@ -177,13 +177,20 @@ origin: 2026-06 連続発生した「様式の標題テキストボックスが 
 
 **原因**: openpyxl は cell formula の **AST** は保持するが、 計算結果 (cached value) を **save 時に再計算せず捨てる** (= openpyxl の構造的制約、 Excel の formula engine を持たないので再計算できない)。 編集された cell の周辺に限らず、 file 全体の cached value が drop されうる。 Excel.app で xlsx を **open + save** すると Excel の formula engine が全 formula を再計算して cache を埋め直すので復元する。
 
-**事前検出 (= driver 側 reflex)**: openpyxl 編集後の xlsx を `data_only=True` で読む driver が pipeline に居る場合、 **編集対象外の不変 cell を sentinel として cache 空判定**するロジックを driver の冒頭に組み込む:
+**事前検出 (= driver 側 reflex)**: openpyxl 編集後の xlsx を `data_only=True` で読む driver が pipeline に居る場合、 **編集対象外の不変 cell を sentinel として cache 空判定**するロジックを driver の冒頭に組み込む。 **engine helper として `pdf_form_fill.assert_formula_cache_intact(path, [(sheet, cell), ...])` を使うのが推奨** (= sentinel 要件のチェックと修復 hint message を 1 呼び出しに、 各 driver で同じ inline 例を書き写さなくて良い):
 
 ```python
 # gen-pdf driver の冒頭 (= openpyxl 編集後の xlsx を読み込む直後)
+from pdf_form_fill import assert_formula_cache_intact
+assert_formula_cache_intact(SRC, [("申請者情報", "A5")])  # 別 sheet 参照 formula で氏名等を引く cell (例)
+```
+
+helper が import できない context (= layer 1 engine への path が通っていない / 単発の調査 script 等) では下記 inline pattern と等価:
+
+```python
+# 等価 inline (= helper を使わない場合)
 wb_cached = load_workbook(SRC, data_only=True)
-# sentinel: 別 sheet を参照する formula cell (= 不変、 普通は非 None)
-sentinel = wb_cached["申請者情報"]["A5"]  # 別 sheet 参照 formula で氏名等を引く cell (例)
+sentinel = wb_cached["申請者情報"]["A5"]
 if sentinel.value is None:
     sys.exit("⚠️ formula cache が空。 openpyxl save が cache を破壊した可能性。 "
              "Excel.app で xlsx を open+save 1-pass 走らせて再計算を強制してから再実行してください。")

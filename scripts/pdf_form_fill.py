@@ -152,6 +152,48 @@ def ensure_template_pdf(template_xlsx: Path) -> Path:
     return pdf
 
 
+def assert_formula_cache_intact(workbook_path, sentinel_cells) -> None:
+    """openpyxl save 後の周辺 cell の formula cache 消失を検出 (= driver の冒頭 reflex)。
+
+    openpyxl `wb.save()` は cell formula の AST は保持するが cached value を再計算せず
+    drop する。 後段で `data_only=True` で読む driver は値を空欄として読み、 PDF に空欄
+    印字 / `#REF!` などの silent failure に至る (= cell value 一致検証では検出できない)。
+    本 helper は openpyxl 編集後の xlsx を読み込む直後に呼んで、 不変 sentinel cell の
+    cache が空判定なら driver を loud fail させる (= sentinel guard pattern を engine
+    helper として hoist、 各 driver で同じ inline コードを書かなくて良くする)。
+
+    workbook_path  : 検査対象 xlsx の path (= openpyxl 編集を経た出力 xlsx)
+    sentinel_cells : list of (sheet_name, cell_ref) tuples。 各 cell は要件 3 つ:
+                     (a) **編集 script が触らない位置** (= 不変)
+                     (b) **別 sheet 参照 formula で cache 依存** (= cache 喪失 → None)
+                     (c) **元 file で formula が valid に解決済** (= 非 None が期待値)
+                     driver の最終出力 PDF に直接影響しない位置である必要は **無い**
+                     (= cache 依存性が本質、 「出力に使わない」 は要件ではない)。
+
+    Raises SystemExit (with helpful message) if any sentinel cache is None。
+    sheet 自体が存在しなければその sentinel は silent skip (= driver 側の責任で、
+    bootstrap 期の sheet 追加と本 helper の同時 wire を許容)。
+
+    See: claude-config/conventions/office-automation.md §openpyxl-clears-formula-cache
+    修復: Excel.app で xlsx を open+save 1-pass (= 全 formula を再計算して cache を埋め直す)。
+    """
+    from openpyxl import load_workbook
+    wb_cached = load_workbook(workbook_path, data_only=True)
+    failures = []
+    for sheet_name, cell_ref in sentinel_cells:
+        if sheet_name not in wb_cached.sheetnames:
+            continue  # silent skip = caller の責任 (= sheet 不在の form もあるため)
+        val = wb_cached[sheet_name][cell_ref].value
+        if val is None:
+            failures.append(f"{sheet_name}!{cell_ref}")
+    if failures:
+        raise SystemExit(
+            f"⚠️ formula cache 空: {failures}。 openpyxl save が cache を破壊した可能性。\n"
+            f"   Excel.app で {workbook_path} を open+save 1-pass 走らせて再計算を強制 → 再実行してください。\n"
+            f"   詳細: office-automation.md §openpyxl-clears-formula-cache"
+        )
+
+
 def find_page(doc: "fitz.Document", contains: list, not_contains: list = ()) -> int:
     """内容特徴語でページを特定 (= ページ番号 hardcode 禁止)。"""
     for i, page in enumerate(doc):
