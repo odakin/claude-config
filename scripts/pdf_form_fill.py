@@ -203,14 +203,18 @@ def redact_words(page, words: list) -> int:
 
 def build_document(template_pdf, page_contains, items, out_base,
                    page_not_contains=(), drop_words=(), dpi=600,
-                   font=None, check_double_print=True) -> dict:
+                   font=None, check_double_print=True, assert_present=()) -> dict:
     """1 書類 (= 1 ページ) を生成。 return = {"filled": path, "raster": path}。
 
     font=None なら雛形 PDF の埋込フォントに自動マッチ (#pdf-prefill-font-match)。
     check_double_print=True で「雛形に既に存在する値を再印字 = 二重印字」 を検出して
     例外 (#pdf-prefill-template-prefilled)。 申請者欄等が雛形に prefill 済の様式で、
     その値を誤って item に入れると重なる事故を loud fail させる (= 黙って二重刷りを防ぐ)。
-    雛形が legitimately 同値を持つ item は `allow_preexisting: True` で個別 opt-out。"""
+    雛形が legitimately 同値を持つ item は `allow_preexisting: True` で個別 opt-out。
+    assert_present = 雛形に prefill 済で item には入れない値 (= 申請者ブロック等) のうち、
+    出力に存在することを sanity-check したいもの。 別財源で雛形を差し替えて prefill 値が
+    欠落した時に loud fail させる (= check_double_print の対称: 再印字を止める一方、 こちらは
+    「在るべき prefill が消えていないか」 を検証。 #pdf-prefill-template-prefilled)。"""
     font = font or pick_font(template_pdf)
     src = fitz.open(str(template_pdf))
     pno = find_page(src, list(page_contains), list(page_not_contains))
@@ -265,6 +269,7 @@ def build_document(template_pdf, page_contains, items, out_base,
     t = flat(fitz.open(out_filled)[0].get_text())
     expected = [str(it["text"]).replace("\n", "") for it in items
                 if it.get("verify", True) and it.get("type") != "check"]
+    expected += [str(x) for x in assert_present]   # = 雛形 prefill 済の sanity-check (欠落で fail)
     missing = [e for e in expected if flat(e).replace(" ", "") not in t.replace(" ", "").replace("\n", "")]
     if missing or "##" in t or fitz.open(out_filled).page_count != 1:
         raise AssertionError(f"検証 FAIL ({out_base}): missing={missing} hash={'##' in t}")

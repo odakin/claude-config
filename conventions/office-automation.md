@@ -782,7 +782,7 @@ origin: 2026-06-11 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefil
 
 **規律**: fill 前に **雛形 PDF の text を dump して「その欄が既に埋まっていないか」 を確認**する (= [`form-dump-first`](#form-dump-first) の PDF prefill 版)。 既に値がある欄は item に入れない (= 雛形側が正、 後乗せしない)。 別財源で雛形を差し替える時は雛形側の申請者欄を直す。
 
-汎用エンジン [`pdf_form_fill.py`](../scripts/pdf_form_fill.py) は `check_double_print=True` (既定) で **印字しようとする値が既に雛形 PDF に存在したら例外で止める** (= loud fail。 雛形が legitimately 同値を持つ item は `allow_preexisting:True` で opt-out)。 黙って二重刷りするより止める。
+汎用エンジン [`pdf_form_fill.py`](../scripts/pdf_form_fill.py) は `check_double_print=True` (既定) で **印字しようとする値が既に雛形 PDF に存在したら例外で止める** (= loud fail。 雛形が legitimately 同値を持つ item は `allow_preexisting:True` で opt-out)。 黙って二重刷りするより止める。 逆に **雛形 prefill 済で「在るべき値」 が消えていないか**の検証は `assert_present=[...]` (= 別財源で雛形を差し替えて申請者ブロックが欠落した時に loud fail。 check_double_print の対称: 一方は再印字を止め、 もう一方は欠落を止める)。
 
 ### <a id="print-raster-pdf"></a>加工した PDF の印刷は 600dpi ラスタ化してから (= WYSIWYG 保証)
 
