@@ -30,6 +30,8 @@ item の仕様:
   text        : 印字する文字列。 "\n" 区切りで複数行 (行送りは fontsize*1.45)
   size        : fontsize (default 9)
   verify      : False にすると検証対象から外す (= "✓" 等、 重複しうる短い記号用)
+  type        : "check" で anchor (= "□..." 等の checkbox 語) の □ 内に ✓ をベクター描画
+                (= font の ✓ glyph 有無に非依存)。 text 不要、 検証・二重印字 guard 対象外。
 """
 
 from __future__ import annotations
@@ -167,6 +169,18 @@ def word_rect(page, label: str, occurrence: int = 0) -> "fitz.Rect":
     return hits[occurrence]
 
 
+def _draw_check(page, r: "fitz.Rect") -> None:
+    """anchor (= "□普通" 等の checkbox 語) の □ 内に ✓ をベクター描画。
+    font の ✓ glyph 有無に依存せず確実に印字する (= □ は語頭の全角1字、 r.x0 が □ の左端)。"""
+    bw = r.y1 - r.y0
+    x0 = r.x0 + 1.0
+    p1 = fitz.Point(x0 + 1.0, r.y0 + bw * 0.55)
+    p2 = fitz.Point(x0 + bw * 0.42, r.y1 - 1.5)
+    p3 = fitz.Point(x0 + bw * 0.95, r.y0 + 1.5)
+    page.draw_line(p1, p2, width=1.1, color=(0, 0, 0))
+    page.draw_line(p2, p3, width=1.1, color=(0, 0, 0))
+
+
 def redact_hash_runs(page) -> int:
     """`####` 等 (= =TODAY() の列幅 overflow、 個数は出力時の列幅依存) を除去。"""
     rects = [fitz.Rect(w[:4]) for w in page.get_text("words") if re.fullmatch(r"#+", w[4])]
@@ -209,7 +223,8 @@ def build_document(template_pdf, page_contains, items, out_base,
         base_t = flat(page.get_text()).replace(" ", "").replace("\n", "")
         clashes = sorted({
             str(it["text"]) for it in items
-            if it.get("verify", True) and not it.get("allow_preexisting", False)
+            if it.get("type") != "check"
+            and it.get("verify", True) and not it.get("allow_preexisting", False)
             and len(str(it["text"]).strip()) >= 2
             and flat(str(it["text"]).replace("\n", "")).replace(" ", "") in base_t
         })
@@ -222,13 +237,17 @@ def build_document(template_pdf, page_contains, items, out_base,
     if drop_words:
         redact_words(page, list(drop_words))
 
+    overlay_font = fitz.Font(fontfile=font)   # = 右寄せ印字の文字幅計測用 (= fitz.Font.text_length)
     for it in items:
         r = word_rect(page, it["anchor"], it.get("occurrence", 0))
+        if it.get("type") == "check":
+            _draw_check(page, r)
+            continue
         size = it.get("size", 9)
         F = dict(fontname="JPF", fontfile=font, fontsize=size)
         lines = str(it["text"]).split("\n")
         if it.get("align", "left") == "right":
-            width = max(fitz.get_text_length(ln, fontfile=font, fontsize=size) for ln in lines)
+            width = max(overlay_font.text_length(ln, fontsize=size) for ln in lines)
             x = r.x0 - width + it.get("dx", -4)
         else:
             x = r.x1 + it.get("dx", 6)
@@ -244,7 +263,8 @@ def build_document(template_pdf, page_contains, items, out_base,
 
     # --- 検証 (機械層): 全値の存在 (NFKC + dash 正規化) + ## 残存 + ページ数 ---
     t = flat(fitz.open(out_filled)[0].get_text())
-    expected = [str(it["text"]).replace("\n", "") for it in items if it.get("verify", True)]
+    expected = [str(it["text"]).replace("\n", "") for it in items
+                if it.get("verify", True) and it.get("type") != "check"]
     missing = [e for e in expected if flat(e).replace(" ", "") not in t.replace(" ", "").replace("\n", "")]
     if missing or "##" in t or fitz.open(out_filled).page_count != 1:
         raise AssertionError(f"検証 FAIL ({out_base}): missing={missing} hash={'##' in t}")
