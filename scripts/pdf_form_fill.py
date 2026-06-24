@@ -35,28 +35,108 @@ item の仕様:
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import unicodedata
 from pathlib import Path
 
 import fitz
 
+# overlay フォント候補 (= macOS の既知 path)。 ⚠️ 先頭 = 游ゴシック Regular (= Office 同梱)
+# = Excel が吐く雛形 PDF の既定日本語フォント。 雛形と overlay でフォントが違うと太さ・字形が
+# 不揃いになる (#pdf-prefill-font-match。 Arial Unicode は太く雛形と不揃いになった実害が origin)。
+# 非 macOS (= Linux 等) ではこれらは存在しないので pick_font が fontconfig (fc-match) で
+# Noto Sans CJK 等に解決し、 それも無ければ build_document(font=...) を要求する。
 FONT_CANDIDATES = [
-    "/Library/Fonts/Arial Unicode.ttf",
+    "/Applications/Microsoft Excel.app/Contents/Resources/DFonts/YuGothR.ttc",
+    "/Applications/Microsoft Word.app/Contents/Resources/DFonts/YuGothR.ttc",
+    "/Applications/Microsoft PowerPoint.app/Contents/Resources/DFonts/YuGothR.ttc",
+    "/Library/Fonts/Arial Unicode.ttf",          # fallback (= 太め、 雛形と不揃いになる)
     "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
 ]
+# 雛形 PDF の埋込フォント基底名 (= subset prefix 除去後) → 揃える system font file。
+KNOWN_TEMPLATE_FONTS = {
+    "YuGothic": [
+        "/Applications/Microsoft Excel.app/Contents/Resources/DFonts/YuGothR.ttc",
+        "/Applications/Microsoft Word.app/Contents/Resources/DFonts/YuGothR.ttc",
+    ],
+    "Hiragino": ["/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc"],
+}
 XLSX_TO_PDF = Path(__file__).resolve().parent / "xlsx-to-pdf.sh"
+
+# 各種ダッシュ/ハイフンを ASCII '-' に畳む (= 埋込フォント subset がハイフン '-' を
+# 抽出時 U+2010/U+2011 等に round-trip するため、 検証の substring 照合が空振りする。
+# #pdf-text-match-nfkc の dash 拡張)。
+_DASH_MAP = {ord(c): "-" for c in "‐‑‒–—―−﹣－"}
 
 
 def nfkc(s: str) -> str:
     return unicodedata.normalize("NFKC", s)
 
 
-def pick_font() -> str:
-    for f in FONT_CANDIDATES:
-        if Path(f).exists():
-            return f
-    raise FileNotFoundError(f"日本語フォントが見つからない: {FONT_CANDIDATES}")
+def flat(s: str) -> str:
+    """NFKC + ダッシュ正規化 (= 照合専用、 描画は変えない)。"""
+    return nfkc(s).translate(_DASH_MAP)
+
+
+def _first_existing(paths):
+    return next((p for p in paths if Path(p).exists()), None)
+
+
+def _has_cjk(path: str) -> bool:
+    """font file が CJK glyph を持つか (= 「日」 で判定)。 fc-match は family 不在時に
+    非 CJK のデフォルト font を返すため、 採用前に必ず CJK 被覆を検証する (= 豆腐防止)。"""
+    try:
+        return bool(fitz.Font(fontfile=path).has_glyph(ord("日")))
+    except Exception:
+        return False
+
+
+def _fc_match(family: str):
+    """非 macOS: fontconfig (fc-match) で family 名 → 実 font file を解決 (= OS 非依存の CJK 解決)。
+    ⚠️ fc-match は不在 family でもデフォルト font を返すので、 CJK 被覆を検証してから返す。"""
+    if not shutil.which("fc-match"):
+        return None
+    try:
+        out = subprocess.run(["fc-match", "-f", "%{file}", family],
+                             capture_output=True, text=True, timeout=5)
+        p = out.stdout.strip()
+        return p if p and Path(p).exists() and _has_cjk(p) else None
+    except Exception:
+        return None
+
+
+# 非 macOS で CJK glyph を持つ font を family 名で探す順 (= fontconfig 経由)。
+_CJK_FAMILIES = ("Yu Gothic", "Noto Sans CJK JP", "Noto Sans JP", "Hiragino Sans", "IPAGothic")
+
+
+def pick_font(template_pdf=None) -> str:
+    """overlay フォントを選ぶ。 template_pdf を渡すと雛形の埋込フォントに合わせる
+    (#pdf-prefill-font-match)。 macOS は既知 path、 非 macOS は fontconfig で CJK font を解決。
+    どれも無ければ FileNotFoundError (= build_document(font=...) で明示指定を要求)。"""
+    if template_pdf is not None:
+        try:
+            doc = fitz.open(str(template_pdf))
+            names = [f[3].split("+")[-1] for pg in doc for f in pg.get_fonts(full=True)]
+            body = [n for n in names if "Bold" not in n]   # 値の本文は Regular に揃える
+            for key, files in KNOWN_TEMPLATE_FONTS.items():
+                if any(key in n for n in body):
+                    hit = _first_existing(files) or _fc_match("Yu Gothic" if key == "YuGothic" else key)
+                    if hit:
+                        return hit
+        except Exception:
+            pass
+    hit = _first_existing(FONT_CANDIDATES)          # macOS 既知 path (= 高速)
+    if hit:
+        return hit
+    for fam in _CJK_FAMILIES:                        # 非 macOS (Linux 等): fontconfig で名前解決
+        fc = _fc_match(fam)
+        if fc:
+            return fc
+    raise FileNotFoundError(
+        "CJK glyph を持つ font が見つかりません。 macOS は Office (游ゴシック) / Arial Unicode、 "
+        "非 macOS は fontconfig に Noto Sans CJK 等を入れるか、 build_document(font='/path/to.ttf') "
+        "で明示指定してください。")
 
 
 def ensure_template_pdf(template_xlsx: Path) -> Path:
@@ -108,14 +188,35 @@ def redact_words(page, words: list) -> int:
 
 
 def build_document(template_pdf, page_contains, items, out_base,
-                   page_not_contains=(), drop_words=(), dpi=600) -> dict:
-    """1 書類 (= 1 ページ) を生成。 return = {"filled": path, "raster": path}。"""
-    font = pick_font()
+                   page_not_contains=(), drop_words=(), dpi=600,
+                   font=None, check_double_print=True) -> dict:
+    """1 書類 (= 1 ページ) を生成。 return = {"filled": path, "raster": path}。
+
+    font=None なら雛形 PDF の埋込フォントに自動マッチ (#pdf-prefill-font-match)。
+    check_double_print=True で「雛形に既に存在する値を再印字 = 二重印字」 を検出して
+    例外 (#pdf-prefill-template-prefilled)。 申請者欄等が雛形に prefill 済の様式で、
+    その値を誤って item に入れると重なる事故を loud fail させる (= 黙って二重刷りを防ぐ)。
+    雛形が legitimately 同値を持つ item は `allow_preexisting: True` で個別 opt-out。"""
+    font = font or pick_font(template_pdf)
     src = fitz.open(str(template_pdf))
     pno = find_page(src, list(page_contains), list(page_not_contains))
     doc = fitz.open()
     doc.insert_pdf(src, from_page=pno, to_page=pno)
     page = doc[0]
+
+    # --- 二重印字 guard (= 雛形に既に値がある欄を item に入れていないか、 印字前に検出) ---
+    if check_double_print:
+        base_t = flat(page.get_text()).replace(" ", "").replace("\n", "")
+        clashes = sorted({
+            str(it["text"]) for it in items
+            if it.get("verify", True) and not it.get("allow_preexisting", False)
+            and len(str(it["text"]).strip()) >= 2
+            and flat(str(it["text"]).replace("\n", "")).replace(" ", "") in base_t
+        })
+        if clashes:
+            raise AssertionError(
+                f"二重印字の恐れ ({out_base}): 次の値は雛形 PDF に既に存在する "
+                f"(= item から外すか allow_preexisting:True、 #pdf-prefill-template-prefilled): {clashes}")
 
     redact_hash_runs(page)
     if drop_words:
@@ -141,10 +242,10 @@ def build_document(template_pdf, page_contains, items, out_base,
     out_filled.parent.mkdir(parents=True, exist_ok=True)
     doc.save(out_filled, garbage=3, deflate=True)
 
-    # --- 検証 (機械層): 全値の存在 (NFKC) + ## 残存 + ページ数 ---
-    t = nfkc(fitz.open(out_filled)[0].get_text())
+    # --- 検証 (機械層): 全値の存在 (NFKC + dash 正規化) + ## 残存 + ページ数 ---
+    t = flat(fitz.open(out_filled)[0].get_text())
     expected = [str(it["text"]).replace("\n", "") for it in items if it.get("verify", True)]
-    missing = [e for e in expected if nfkc(e).replace(" ", "") not in t.replace(" ", "").replace("\n", "")]
+    missing = [e for e in expected if flat(e).replace(" ", "") not in t.replace(" ", "").replace("\n", "")]
     if missing or "##" in t or fitz.open(out_filled).page_count != 1:
         raise AssertionError(f"検証 FAIL ({out_base}): missing={missing} hash={'##' in t}")
 

@@ -750,22 +750,39 @@ subprocess.run([
 
 ```python
 import fitz
+from pdf_form_fill import pick_font   # = 雛形に合わせた font を返す (#pdf-prefill-font-match)
 doc = fitz.open("template.pdf")   # Excel が吐いた雛形 PDF (標題 drawing は render 済)
 p = doc[0]
-p.insert_text((125, 165), "〇〇学科",
-              fontname="Anything", fontfile="/Library/Fonts/Arial Unicode.ttf", fontsize=9)
+p.insert_text((125, 165), "〇〇学科",   # font は雛形に合わせる (Arial Unicode は太く不揃い)
+              fontname="JPF", fontfile=pick_font("template.pdf"), fontsize=9)
 doc.subset_fonts()                # 必須: full embed だと 20MB 超 → subset で ~0.2MB
 doc.save("filled.pdf", garbage=3, deflate=True)
 ```
 
 - **座標の取り方**: `page.get_text("words")` で label 語の bbox を取り、 その右/下に置く。 `search_for()` は CJK 互換字形で空振りするので [`pdf-text-match-nfkc`](#pdf-text-match-nfkc) 必読
-- ⚠️ **組み込み `fontname="japan"` を使わない**: text 層には入る (= 抽出検証は通る) のに **glyph が描画されない renderer がある** (= 数字と ASCII だけ見える紙ができる)。 必ず実フォント file (= 例: `/Library/Fonts/Arial Unicode.ttf`) を `fontfile=` で渡し、 `subset_fonts()` でサイズを潰す
+- ⚠️ **組み込み `fontname="japan"` を使わない**: text 層には入る (= 抽出検証は通る) のに **glyph が描画されない renderer がある** (= 数字と ASCII だけ見える紙ができる)。 必ず実フォント file を `fontfile=` で渡し、 `subset_fonts()` でサイズを潰す。 ⚠️ **どのフォントを渡すかは [`pdf-prefill-font-match`](#pdf-prefill-font-match) (= 雛形に揃える) を見る** — `Arial Unicode` ハードコードは雛形 (= 游ゴシック) と太さ・字形が不揃いになる
 - 雛形 PDF 内の `=TODAY()` 起因の `###############` は `add_redact_annot` + `apply_redactions()` で除去。 ⚠️ redact 矩形は**隣接文字の bbox に被ると巻き添え削除**する — `search_for` の返す rect を数 pt 縮めて適用
 - 検証 3 点 set: ① text 抽出 (NFKC) で全値 in ② **画像で目視** (= 配置ズレ・glyph 不描画は text 検証で見えない) ③ 印刷は [`print-raster-pdf`](#print-raster-pdf) 経由 (= subset font は printer で化けることがある)
 
 origin: 2026-06-11 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefill、 紙だけ必要な当日運用)。 openpyxl 派生の旧 file は標題消失で 1 枚無駄刷り → 本経路で 標題 + prefill 両立。
 
 **汎用実装**: [`scripts/pdf_form_fill.py`](../scripts/pdf_form_fill.py) (= library。 anchor 印字 / NFKC 照合 / `#+` redact / font subset / 内蔵検証 / 600dpi ラスタ化 を `build_document()` 1 呼び出しに集約)。 様式ごとの driver はこれを import して item spec (anchor / dx / dy / align / text) だけ書く。 **適用境界**: 単票向け。 記入項目が多く**派生 sheet が数式導出される workbook** (= 依頼書・承諾書が sheet 1 から自動で埋まる類) は、 [`excel-osascript-cell-write`](#excel-osascript-cell-write) で雛形 copy に Excel 記入 → PDF → ページ抽出の方が速くて正しい (= 派生書類も自動で完成する。 2026-06-11 旅費請求書一式で実証)。
+
+### <a id="pdf-prefill-font-match"></a>overlay フォントは雛形の埋込フォントに合わせる (= 太さ・字形の不揃い防止)
+
+**症状**: 雛形 PDF への直接印字で、 雛形 (= Excel 出力) の文字と後乗せした値とで **フォント / 太さが不揃い**になる (= 雛形は 游ゴシック Regular なのに後乗せが `Arial Unicode` で太く見える等)。 紙にすると「明らかに後から書き足した」 体裁になり様式の品位を損なう。 ⚠️ **text 抽出検証は通ってしまう** (= 字は合っている) ので、 [`pdf-visual-confirm`](#pdf-visual-confirm) でしか捕捉できない。
+
+**規律**: overlay フォントは **雛形の埋込フォントに合わせる**。 雛形のフォントは `fitz.open(tpl)[pno].get_fonts(full=True)` で確認 (= 基底名、 例 `AAAAAC+YuGothic-Regular` → `YuGothic-Regular`)。 **macOS で Excel が吐く PDF の既定日本語フォントは 游ゴシック** (= Office 同梱 `/Applications/Microsoft Excel.app/Contents/Resources/DFonts/YuGothR.ttc`)。 値の本文は **Regular** に揃える (= 雛形の Bold 見出しに引きずられない)。
+
+汎用エンジン [`pdf_form_fill.py`](../scripts/pdf_form_fill.py) は **`font=None` (既定) で雛形の埋込フォントに自動マッチ** (= `pick_font(template_pdf)` が `get_fonts` を読み `KNOWN_TEMPLATE_FONTS` から system font file を選ぶ)、 `FONT_CANDIDATES` 先頭も 游ゴシック。 雛形が游ゴシック以外なら `font=` で明示。 ⚠️ **既知 path は macOS** (= Office / macOS system フォント)。 **非 macOS では `pick_font` が `fc-match` (fontconfig) で `Noto Sans CJK` 等に解決**し、 それも無ければ `build_document(font=...)` で明示指定を要求する (= crash でなく actionable error)。 origin: 2026-06-24 謝金⑭-2 完成版で後乗せが `Arial Unicode` で太く雛形の游ゴシックと不揃い → user 指摘で発覚。
+
+### <a id="pdf-prefill-template-prefilled"></a>雛形に既に値がある欄を二重印字しない (= 申請者欄 prefill 済の様式)
+
+**症状**: 様式の雛形 xlsx が **一部の欄を既に印字済** (= 例: 科研費の申請者ブロック〔所属・氏名・課題番号〕が雛形に prefill 済) なのに、 fill script がその欄も `insert_text` で書く → **同じ値が二重に重なって印字**される。 雛形を「ブランク版」 と思い込むと起きる。 画面で薄く重なると気付きにくく、 紙に出て / user 指摘で初めて分かる (= 2026-06-24 ⑭-2 で 6/22 送付版から二重のまま流れていた)。
+
+**規律**: fill 前に **雛形 PDF の text を dump して「その欄が既に埋まっていないか」 を確認**する (= [`form-dump-first`](#form-dump-first) の PDF prefill 版)。 既に値がある欄は item に入れない (= 雛形側が正、 後乗せしない)。 別財源で雛形を差し替える時は雛形側の申請者欄を直す。
+
+汎用エンジン [`pdf_form_fill.py`](../scripts/pdf_form_fill.py) は `check_double_print=True` (既定) で **印字しようとする値が既に雛形 PDF に存在したら例外で止める** (= loud fail。 雛形が legitimately 同値を持つ item は `allow_preexisting:True` で opt-out)。 黙って二重刷りするより止める。
 
 ### <a id="print-raster-pdf"></a>加工した PDF の印刷は 600dpi ラスタ化してから (= WYSIWYG 保証)
 
@@ -803,6 +820,8 @@ assert fitz.open("p1.pdf").page_count == 1
 **症状**: PDF の text 層が 「日」 を U+2F49 (康熙部首「⽇」)、 「谷」 を 「⾕」 等の**互換字形で返す**ことがあり (= フォントの cmap 由来)、 `"申請日" in text` / `page.search_for("<氏名>")` が**正常な文書に対して空振り**する。 「prefill が消えている」 「ラベルが消えた」 等の誤診断 → 不要な作り直しに直結する。
 
 **規律**: PDF text 抽出に対する文字列照合は、 **必ず `unicodedata.normalize("NFKC", text)` してから比較**する。 `search_for()` は内部照合を正規化できないので、 互換字形を含みうる語の bbox が要る時は `get_text("words")` を取って NFKC 照合で探す。 1 度の検証で 2 回連続 false negative を踏んだ実害 (= 2026-06-11 ⑭-2、 「氏名欄・申請者欄が空」 と 2 度誤診断)。
+
+**dash 拡張 (= 同根)**: 同じ機構で、 埋込フォント (= subset 後) が **ASCII ハイフン `-` (U+002D) を抽出時に U+2010 (‐) / U+2011 (‑) 等へ round-trip** することがある (= 游ゴシック等で実観測)。 郵便番号 `123-4567` / 電話番号 / 口座番号のハイフンが照合で空振りし「印字が消えた」 と誤診断する (= 数字部は一致するので原因が掴みにくい)。 照合は NFKC に加えて **各種ダッシュを ASCII `-` に畳んでから**比較する (= `pdf_form_fill.py` の `flat()` = `NFKC` + dash map `‐‑‒–—―−﹣－` → `-`)。 origin: 2026-06-24 ⑭-2 完成版で住所郵便番号・TEL が verify 空振り (= 游ゴシック化で発生)。
 
 ### <a id="docx-to-pdf-pages"></a>docx → PDF: Pages.app AppleScript が macOS では最も robust
 

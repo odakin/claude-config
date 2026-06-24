@@ -135,7 +135,15 @@ sections:
   - id: pdf-prefill-direct
     level: 3
     title: "雛形 PDF への直接印字 (= drawing 保護の回避経路 3、 紙提出専用)"
-    related: [openpyxl-destroys-drawings, pdf-text-match-nfkc, print-raster-pdf]
+    related: [openpyxl-destroys-drawings, pdf-text-match-nfkc, print-raster-pdf, pdf-prefill-font-match, pdf-prefill-template-prefilled]
+  - id: pdf-prefill-font-match
+    level: 3
+    title: "overlay フォントは雛形の埋込フォントに合わせる (= 太さ・字形の不揃い防止)"
+    related: [pdf-prefill-direct, pdf-visual-confirm]
+  - id: pdf-prefill-template-prefilled
+    level: 3
+    title: "雛形に既に値がある欄を二重印字しない (= 申請者欄 prefill 済の様式)"
+    related: [pdf-prefill-direct, form-dump-first]
   - id: print-raster-pdf
     level: 3
     title: "加工した PDF の印刷は 600dpi ラスタ化してから (= WYSIWYG 保証)"
