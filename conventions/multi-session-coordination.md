@@ -226,12 +226,15 @@ token / handle が無いのに「起票元に返せ」 と言われた spawned �
 
 identity は similarity でなく content corroboration でしか establish できない。
 
-### spawn-spec template (= 結果を返したい委譲の boilerplate、 順 = robust 度)
+### spawn-spec template (= 結果を返したい委譲の必須 boilerplate)
 
-- **durable deliverable (= required な spine)**: 成果物を決定的 path に commit し **その path を spec で固定**する (= 既定の返送路、 robust、 push が無くても結果が残る)。 呼び元は完了後その path を読む (= supervised でも「path が token を兼ねる」 pull が成立、 search も id discovery も不要)。 ⚠️ 置き場は spawn 時にどのみち決める = **construction-forced で落ちにくい** (= 2026-06-24 incident でも durable path は固定され機能し、 結果喪失ゼロだった — 壊れたのは下記 live-push の方だけ)。
-- **token 行 + 返送指示 (= live-push を使うなら。 optional。 落としても上の durable pull が無傷なので harmless)**: 起票側の **会話 (message turn) に** unique token を残す (例 `RET-<slug>-<date>-<rand>`)。 ⚠️ spec にも token を書くが、 **呼び元を findable にするのは chat echo だけ** (= 上記 method A step 1 の機械、 spec=tool_use 引数は search 対象外)。 ⚠️ 「親の session-id 欄」 は作らない (= addressable id ≠ transcript id の namespace 不一致、 誤 id は推測より悪い、 robust なのは content marker = token)。 返送指示 = 「完了時 `search_session_transcripts(<token>)` で起票元を特定し send_message。 self/他 session 除外、 token を持つ起票元以外に絶対送らない。 token で解決不能なら push せず durable file のみ + user 確認 (推測 push 禁止)」。
+⚠️ **2026-06-24 訂正 — 設計目標は「結果が人間に *自動で* 返り、 人間は何もしない」**: 一度この template を「durable file を required spine・live-push を optional (= 人間が file を読みに行く)」 へ書き換えたが、 **人間に fetch させる方向は思想が逆** (= 機械は人間の手間を消すために在る) で user 訂正により撤回した。 正しい目標は、 child 完了時に結果が *人間の目に勝手に届く* 自動返送を robust 化すること (= deliverable を決定的 path に書く + その完了を **機械が surface する** 〔dashboard / session 開始 surface / OS 通知〕。 surfacing は file を読む script 操作なので機械化可能、 = horizon-surface fleet と同 paradigm)。 機構が整うまで本 template は一旦原状。
 
-⚠️ **「分離不能な 1 単位」 の真の atomic は spawn_task + durable deliverable** (= live-push の token/echo/push は optional layer)。 過去の「片方だけ適用」 失敗 (token 全落とし→誤着 / spec-only token→search 0 件) は、 live-push を required と誤認したことが半分。 live-push を optional と正しく置けば、 落ちやすい肢 (= chat echo、 局所 forcing が無く帰結が remote) が非 load-bearing になり、 失敗が「事故」 から「ping が無いだけ (= 固定 path の file を読めばよい)」 へ degrade する (= reminder を積む 〔§4.1 が構造的に無効と評価〕 でなく、 落ちる肢を非 load-bearing にして dissolve する subtraction)。
+spawn する spec に必ず含める:
+
+- **token 行**: 起票側の会話 (= assistant の message turn) に unique token を残し spec にも明記 (例 `RET-<slug>-<date>-<rand>`)。 ⚠️ **token は message turn に出す (spec=tool_use 引数だけでは `search_session_transcripts` に引っかからず呼び元が findable にならない、 = method A step 1)**。 ⚠️ 「親の session-id 欄」 は作らない (= addressable id ≠ transcript id の namespace 不一致で起票側は自分の宛先 id を確実には知れず、 誤 id は推測より悪い。 robust なのは spawned が検索する content marker = token)。
+- **返送指示**: 「完了時 `search_session_transcripts(<token>)` で起票元を特定し send_message。 self/他 session 除外、 token を持つ起票元以外に絶対送らない。 token で解決不能なら push せず durable file のみ + user 確認 (推測 push 禁止)」。
+- **durable deliverable**: 成果物を決定的 path に commit (= push が落ちた時の fallback、 push が無くても結果が残る)。 ⚠️ ただし fallback を「人間が読みに行く」 を *既定* にしない (= 上記訂正)。
 
 ### 注意 (caveat)
 
