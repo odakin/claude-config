@@ -26,10 +26,12 @@
 ## 例
 
 ✗ NG: 「修正しました。ブラウザでハードリロードしてください」
-✓ OK: 「修正しました。**http://localhost:8742/index.html** をハードリロード (Cmd+Shift+R) してください」
+✗ NG: 「修正しました。`**http://localhost:8742/index.html**` をハードリロード」 (= bare URL を `**…**` で囲むと GFM autolinker が末尾の `**` を URL に飲み込み、 全体が 1 個の壊れたリンクになる。 詳細: `~/Claude/claude-config/gfm-rules.md` §「Don't wrap a bare URL」)
+✓ OK: 「修正しました。 [http://localhost:8742/index.html](http://localhost:8742/index.html) をハードリロード (Cmd+Shift+R) してください」 (= markdown link 形式、 最も安全)
+✓ OK: 「修正しました。 http://localhost:8742/index.html をハードリロード (Cmd+Shift+R) してください」 (= bare URL は前後に必ず空白)
 
 ✗ NG: 「デプロイ完了。ステージングで確認お願いします」
-✓ OK: 「デプロイ完了。https://app-staging.example.com/foo で確認お願いします」
+✓ OK: 「デプロイ完了。 https://app-staging.example.com/foo で確認お願いします」
 
 ## Deploy 前のユーザー確認を省かない
 
