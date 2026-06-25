@@ -131,6 +131,14 @@ origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問�
 
 派生データと散文は design-out 手段が確立しやすい。**手編集される運用台帳 (= 人が複数 store に同じ state/id/日付を書く) が (C) に残る最後の領域**で、drift 多発源。
 
+⚠️ **「散文・知識」 row は外見で決めると mis-classify する。** 行を分ける真の軸は外見でなく **「SoT が prose 自身に住むか、別所に住み prose はその mirror か」**:
+- **prose が home そのもの** (規約の定義 / RCA の結論 / reference 値) → 複製は use-site への必然再掲のみで、prose に transclusion primitive が無い以上 **構造的 ceiling**。「〜成熟」 は楽観でなく天井 (= §2.1 stub + human sweep が available な最善)。
+- **prose が別所の state を mirror するだけ** (status field「✅/🟡」 / 一覧が実 directory を映す / version 数が code を映す / 進捗 % が実作業を映す) → SoT は prose に無く別所 (実状態 / 生成元 / code) に在る = **散文の顔をした「運用台帳」 row** で design-out 可能 (生成 / 編集時 gate / view 導出)。これを「散文ゆえ〜成熟」 と読むと **over-rate** する (= 未 design-out を「成熟」 と誤認)。人的 drift 機構は §4.1 (ii) under-execution の *change-time* facet (= state 変化時に mirror の更新を 1 つ脱落、creation 時に全 home へ複製する重複の双対)。
+
+診断: 重複 prose fact を見たら **「直すべき唯一の正しい値は *この prose 内* で決まるか、 *別所* を見ないと分からないか」** を問う。後者なら散文でなく運用台帳として扱い design-out へ寄せる。
+
+origin (この refinement): 2026-06-25 — 同一内容を複数 doc に複製する重複 (creation 時) と、doc が映す運用 state の更新漏れ (change 時) が複数 domain で再発した分析。「散文 → 〜成熟」 評価が prose-home には honest・prose-mirror には optimistic と判明 (= 後者の正しい home は運用台帳 row の design-out track)。どの台帳がどちらかの application は instance ゆえ layer-3 (kernel-up/instance-down)。
+
 **検出器 fleet の仕分け (= 全部が消せるわけではない):**
 - **drift-patch 検出器** (= 同じ事実の不整合を後追い検出: set 差分 / 非対称 cross-ref / 散文重複) → **design-out で不要化しうる側**。(C)→(A)/(B) が進むと縮小する。
 - **surfacing 安全網** (= 見落とし防止: 締切 horizon / 未 triage / 到着検知) → **正当に永続**。「重複の drift」でなく「対象の見落とし」を見るので design-out 対象外 (= 別 domain)。
