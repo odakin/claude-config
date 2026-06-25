@@ -705,6 +705,7 @@ xlsx-to-pdf.sh <input.xlsx> [sheet] [output.pdf]
 🔑 **macOS + Excel engine は「オートメーション権限」が前提**:
 - 初回実行時に macOS が「"osascript" が "Microsoft Excel" を制御することを求めています」ダイアログを出す → 「許可」。
 - ⚠️ **background 実行 (`run_in_background` / nohup 等) はダイアログが見えず AppleEvent timeout (-1712) で失敗する**。 初回は必ず **foreground** で実行してダイアログに応答する。 一度許可すれば以後は無確認。 ⚠️ **長時間コマンド (= 「PDF 生成 + fitz 抽出 + git commit」 を 1 コマンドに詰める等) は harness が自動で background に回すことがある** (= `run_in_background` 未指定でも「Command running in background」 になる) → Excel GUI 操作が background 化されて同 timeout。 **Excel を呼ぶコマンドは単独・短命に保つ** (= PDF 生成だけ。 fitz 抽出 / git commit は別コマンドに分離)。
+- ⚠️ **近年の macOS は許可 dialog を最前面に出さないことがある** (= 要求元が非最前面の `osascript` 〔CLI / Claude 経由〕だと通知が focus を奪わず他 window の背後に出る、 既に許可済なら dialog 自体が出ない)。 → 「foreground で実行すれば dialog が見える」 とは限らない。 automation が無反応 (-1712) なら **見えない dialog が応答待ち**を疑い、 下記 System Settings で**事前に**許可しておくのが確実 (2026-06-25 観察: PowerPoint の初回 automation が dialog を観察できぬまま成功 = pre-grant か silent grant)。
 - 後から変更: システム設定 > プライバシーとセキュリティ > オートメーション。
 
 🔑 **連続 Excel 操作の不安定化と確実な reset (= 2026-06-05 RCA)**: 1 セッションで Excel を多数回 (= 10 回以上) 開閉すると、 `osascript ... to quit` が **非同期** (quit が返っても Excel は終了処理中) なため、 次の `open` 時に**前プロセスが残存** → AppleEvent 無応答 **(-1712)** / パラメータ拒否 **(-50)** が散発する。
