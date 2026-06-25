@@ -25,6 +25,7 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
    - **xlsx → PDF / 視覚確認**: [`scripts/xlsx-to-pdf.sh`](#xlsx-to-pdf-script) (LibreOffice → Excel osascript fallback、 reset + timeout + automation 許可案内 込み)。 ⚠️ 自前で `save workbook as … PDF` を書くと **-50**。 動く形は **sheet 単位** `save as <worksheet> … file format PDF file format` (= script が既に実装済)
    - **雛形 PDF へ直接印字 (単票・紙提出)**: [`scripts/pdf_form_fill.py`](#pdf-prefill-direct)
    - **docx → PDF**: [`scripts/docx-to-pdf.sh`](#docx-to-pdf-pages)
+   - **pptx → PDF (スライド、 網掛け/pattern fill を潰さない)**: [`scripts/pptx-to-pdf.sh`](#pptx-to-pdf-powerpoint) (PowerPoint native export 優先 = 最高忠実度、 LibreOffice は潰すので fallback のみ)
    - **様式改変 / 破損の検出**: [`diff-form-xlsx.py`](#diff-form-xlsx-detection) / `check-xlsx-integrity.py` / `check-docx-integrity.py`
 
 > **RCA 2026-06-16 (= 本 section の存在理由)**: ある session が上を読まずに学術様式の Excel cell 記入を hand-roll した結果、 **既出の罠 (日付 serial 化 [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) / consecutive-op freeze [`excel-osascript-cell-write`](#excel-osascript-cell-write) / PDF export の verb 誤り [`xlsx-to-pdf-script`](#xlsx-to-pdf-script)) を全て再発見し、 さらに Excel を 5 サイクル叩いてクラッシュさせた**。 = 「読めば 1 発、 読まねば数十ターン + クラッシュ」。 後続 session がこの轍を踏まないための入口がこの早見表。
@@ -682,7 +683,7 @@ origin: 2026-05-14 JST SPReAD 様式 1 Sheet 2 A15 (研究業績欄) で提出�
 
 ---
 
-## <a id="xlsx-md-to-pdf"></a>xlsx / md → PDF 変換 (macOS)
+## <a id="xlsx-md-to-pdf"></a>xlsx / md / pptx → PDF 変換 (macOS)
 
 ### <a id="xlsx-to-pdf-script"></a>xlsx → PDF: `xlsx-to-pdf.sh` (LibreOffice → Excel fallback)
 
@@ -715,6 +716,36 @@ xlsx-to-pdf.sh <input.xlsx> [sheet] [output.pdf]
 注意:
 - 印刷範囲・ページレイアウトが未設定だと各 sheet が複数ページに分割される。 提案書用途では問題ないが、 1 ページに収めたい場合は事前に [`print-area-one-page`](#print-area-one-page) (`ws.page_setup.fitToWidth = 1` 等) を openpyxl で set。
 - 提出本体は xlsx、 PDF は確認 / 添付用 snapshot ([`pdf-snapshot-xlsx-submission`](#pdf-snapshot-xlsx-submission))。 fill 後の見た目崩れ (= merged cell の値潰れ・列幅不足の `###`、 [`bool-cell-hash-overflow`](#bool-cell-hash-overflow) / [`datetime-cell-hash-overflow`](#datetime-cell-hash-overflow)) はこの PDF でのみ可視化される (= [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF visual confirmation 義務)。
+
+### <a id="pptx-to-pdf-powerpoint"></a>pptx → PDF: `pptx-to-pdf.sh` (PowerPoint native export = fidelity-first)
+
+スライド (pptx) を PDF 化するときは、 汎用スクリプト [`scripts/pptx-to-pdf.sh`](../scripts/pptx-to-pdf.sh) を使う。 ⚠️ **xlsx と engine 優先順位が逆**: pptx は **Microsoft PowerPoint の native export を最優先**し、 LibreOffice は fallback に回す。
+
+```bash
+pptx-to-pdf.sh <input.pptx> [output.pdf]
+```
+
+| 優先 | engine | platform | 採用条件 |
+|---|---|---|---|
+| 1 | **Microsoft PowerPoint (osascript)** | macOS のみ | PowerPoint.app がある (= **最高忠実度**、 表示と同じ renderer) |
+| 2 | LibreOffice (`soffice --convert-to pdf`) | Linux / Windows / macOS | PowerPoint 不在時のみ。 ⚠️ pattern fill を潰す |
+
+🔑 **なぜ native export を優先するか (= 忠実度)**: サードパーティ変換器 (LibreOffice/soffice) は PowerPoint の **pattern fill (= 網掛け / ハッチング / スクリーン / グラデーション)** を単色に**潰す**ことがあり、 低 DPI でラスタライズする。 PowerPoint 自身の export は**スライド表示と同じ renderer**を使うので、 vector shape と pattern fill がそのまま生き残る。 「図の網掛けが潰れないように」 が要件なら native export 一択。
+
+🔑 **macOS PowerPoint の 2 つの罠** (script に組込み済):
+- **(a) `save … in` は HFS path を要求**: PowerPoint の `save in` に **POSIX path 文字列** (`"/Users/…"`) を渡すと、 `/` を**ファイル名の文字**とみなす HFS path として解釈し、 default フォルダに junk 名のファイルを**黙って書いて成功を返す** — 目的地にファイルが**できない**。 → colon 区切りの HFS path を渡す: `(POSIX file p) as text`。 (Excel の `save as` は `filename (POSIX file p)` = file object を受けるので挙動が違う点に注意。)
+- **(b) オートメーション権限**: 初回 foreground 実行で「"osascript" が "Microsoft PowerPoint" を制御することを求めています」 dialog → 許可。 background 実行は dialog を出せず -1743 / -1712 で失敗する (= [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の Excel と同じ機構)。
+
+🔒 **安全性 (= user の作業を壊さない)**: script は **開いた document だけを閉じる** (`close … saving no`) — **PowerPoint を quit せず**、 他の開いている document にも触らない。 user が別スライドを開いて作業中でも安全に走る (= 起動中 app への破壊的介入を避ける一般原則)。
+
+⚠️ **EMF 図 + 忠実度の検証義務**: macOS では PowerPoint が export 時に **embedded EMF vector 図をラスタライズ**する (= 通常は十分な解像度)。 だが図が**細かいハッチング / pattern fill** (= 「潰れ」 リスクのある 網掛け) を持つ deck では、 export 結果を**必ず目視 verify** する — 該当ページを高 DPI で render して確認する ([`pdf-visual-confirm`](#pdf-visual-confirm) の PDF visual confirmation、 LAYOUT 検証は [`image-budget-exhaustion`](#image-budget-exhaustion) の切り分け):
+
+```python
+import fitz  # 該当ページ (0-indexed) を高 DPI PNG 化して網掛けの潰れを目視
+fitz.open("out.pdf")[41].get_pixmap(dpi=200).save("p42.png")
+```
+
+📦 **大きな pptx の保管**: 講演 deck の pptx は数十〜100 MB+ になりがちで、 git に commit すると履歴を永久に肥大させる。 **成果物 PDF だけを版管理し、 編集可能な pptx 原本は repo 外** (= Dropbox / Drive 等の外部ストレージ) に置いて、 その所在を pointer として記録する (= 「派生物は版管理、 巨大原本は外部 + 参照」)。
 
 ### <a id="md-to-pdf-chrome"></a>md → PDF: Chrome headless + Python markdown
 

@@ -118,12 +118,16 @@ sections:
   - id: xlsx-md-to-pdf
     legacy: "2"
     level: 2
-    title: "xlsx / md → PDF 変換 (macOS)"
+    title: "xlsx / md / pptx → PDF 変換 (macOS)"
   - id: xlsx-to-pdf-script
     legacy: "2-1"
     level: 3
     title: "xlsx → PDF: `xlsx-to-pdf.sh` (LibreOffice → Excel fallback)"
     related: [print-area-one-page, pdf-snapshot-xlsx-submission, bool-cell-hash-overflow, datetime-cell-hash-overflow, pdf-visual-confirm]
+  - id: pptx-to-pdf-powerpoint
+    level: 3
+    title: "pptx → PDF: `pptx-to-pdf.sh` (PowerPoint native export = fidelity-first)"
+    related: [xlsx-to-pdf-script, pdf-visual-confirm, image-budget-exhaustion]
   - id: md-to-pdf-chrome
     legacy: "2-2"
     level: 3
