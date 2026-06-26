@@ -25,6 +25,30 @@ baseline と照合**し不変を確認する (= `\bibcite` や aux 経由でな�
 awk -F'%' '{print $1}' file.tex | grep -oE '\\cite[a-zA-Z]*\{[^}]*\}' | sort -u
 ```
 
+## comment-out / `\begin{comment}` した構造的要素を「原稿にある」と主張しない
+
+**ルール:** 式・節・定義・分解・関数といった**構造的要素が「原稿 (= rendered PDF) に存在する」と主張する前に、その要素が active state に在るかを source で 1 query verify する**。`%` 行・`\begin{comment}...\end{comment}` ブロック内の要素は **source には文字列として在るが output には出ない (= silent non-existence)**。prose 上の summary (= `SESSION.md` / `DESIGN.md` / handoff / メール下書き) に「ある / 移行済み」と書いてあっても、それは authoritative ではない。**authoritative なのは active source だけ**。
+
+**Why:** comment-out-keep 流儀 (= 旧 draft を `%` で寝かせる) や「Obsolete 節へ隔離」運用では、ある要素が *かつて active だった* 時点の prose summary が残り、後で `%` 化されても summary は追従しない (= summary は active state の **mirror** で、change 時に更新が 1 つ脱落する)。この stale summary を SoT として読むと、**存在しない対象に対する解決策**を考え・共著者に相談し・外部発信してしまう (= phantom problem への labor 浪費)。さらに `grep` で要素名を引くと `%` 行も hit するため、**素朴な「grep したら在った」では verify にならない** — hit 行の先頭が `%` か、`\begin{comment}` 内かまで見て初めて active 判定になる (= `%` が素朴 grep を無効化する)。
+
+**How to apply:**
+
+1. 構造的要素を chat / メール / 規約 / handoff で「原稿にある」と参照する前に、active 本文だけを見る:
+
+```bash
+# コメント行を落として live 本文だけ grep (= 先頭 % 行を除外)
+grep -vE '^\s*%' file.tex | grep -nE '<element>'
+# または各 hit 行の先頭が % / \begin{comment} 内でないかを必ず確認
+grep -nE '<element>' file.tex
+```
+
+2. prose summary (`SESSION.md`「migration 完了」等) と active source が食い違ったら **active source が勝つ**。summary 側を errata / 更新する。
+3. 第三者 (共著者・レビュアー) が「その要素が原稿のどこにあるか分からない」と言ったら、それは **記憶の曖昧さでなく grep 等価の signal** — 推測で解決策を返す前に自分で active grep を回す。
+
+これは上の「comment-out 流儀の編集後は live `\cite` 集合を照合する」「長さ・段落構造の判断にコメントアウト行を数えない」と同じ **`%` は output から silent** という kernel の、*存在主張* 版 (前者 = 引用落ち / 中者 = 長さ誤算 / 本節 = 存在誤主張、3 つの consequence)。一般則 — 単一情報源の positive 主張の前に安価な検証を回す / prose summary を SoT と読み違えない — の正本は `CLAUDE.md` inline §3 (positive-claim branch) + [`docs/convention-design-principles.md`](../docs/convention-design-principles.md) §2.3 (read 側 SoT)・§2.5 (prose-mirror は別所 state の mirror で change 時に drift) で、本節はその LaTeX source への HOW 適用。
+
+**事例 (2026-06、物理 LaTeX 原稿):** ある直和分解 (`H = A ⊕ B` 型) が運用台帳の prose で「migration 完了」と記録されたまま、4 日後に `%` + `\begin{comment}` で寝かされた。prose summary はその stale を ~7 週間保持し、その間に派生ノート PDF・`DESIGN.md` entry・共著者宛メール 3 通が**この分解を active 前提で**論じた (左辺の macro 名すら prose 側と source 側で食い違っていた = source 未参照の tell)。共著者が「その分解が原稿のどこにあるか把握できない」と明示 signal を出していたが、当時は記憶の問題と読み流し active grep を回さなかった。最終的に「まだ原稿にあるんだっけ?」の直接質問で初めて comment-out 状態が発覚した。
+
 ## latexdiff で差分レビュー PDF を作る
 
 共著者に「どこを変えたか」を渡すとき、`latexdiff old.tex new.tex > diff.tex` で **追加=下線 / 削除=取り消し線** のレンダリング済み PDF を作れる。comment-out-keep 流儀（旧文を `%` 化）の編集は raw の git diff では読みにくいので、latexdiff の方が共著者に優しい。
