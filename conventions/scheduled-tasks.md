@@ -18,6 +18,15 @@ Claude Code scheduled tasks を使うリポで適用。CLAUDE.md から参照: `
 
 machine-local job を「どのマシンに登録するか / 登録漏れをどう surface するか」 は [multi-machine-state.md](multi-machine-state.md)。 無人 publish の安全 gate は [data-pipeline-automation.md](data-pipeline-automation.md) §7。
 
+### アカウント切り替えに非依存にしたいとき (= Cowork app と CLI の 2 認証ストア)
+
+Claude Code の認証は **2 つの独立ストア**を持つ: **Cowork desktop app** と **CLI (`claude`、 `~/.claude.json` の単一 `oauthAccount`)**。両者は別アカウントで**共存**しうる — `claude auth` は login/logout/status のみ (= 同時 1 アカウント) だが、 **Cowork 側のアカウント切り替えは CLI の `~/.claude.json` を上書きしない** (実測: Cowork と CLI が別アカウントで同時に存在した)。これが無人ジョブの機構選択に効く:
+
+- **scheduled task はアカウントに紐づく** → Cowork のアカウントを切り替えると、 別アカウントで作った task が見えなくなり **発火が止まる** (実測: 切替後に定時ジョブが約 37h 未発火)。
+- **launchd cron + `claude -p --permission-mode auto` は CLI 認証 (= 固定・Cowork 切替に非依存) で走る**。`claude -p` は Claude judgment (翻訳・判定・検証ゲート) と MCP も headless で提供する (実測: `--permission-mode auto` で MCP 込みの SKILL が headless 完走し、 SKILL の安全則も順守された)。
+
+→ 上の表は「Claude judgment 要 → scheduled task」 だが、 **Claude judgment が要り、 かつ アカウント切替で止めたくないなら、 第 3 の道 = launchd cron + `claude -p` (= CLI 認証を固定土台にする)**。同じ理由で `claude remote-control` サーバーモード (= CLI 認証で常駐、 [remote-control-server.md](remote-control-server.md)) も Cowork 切替に非依存。 ⚠️ ただし launchd は LANG 空 (C locale) なので `claude -p` の prompt は ASCII のみにする ([shell-multibyte-truncation.md](shell-multibyte-truncation.md))。
+
 ## アーキテクチャ: SKILL.md とバックエンドの二重構造
 
 ### 構造
