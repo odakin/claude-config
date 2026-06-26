@@ -250,6 +250,9 @@ SESSION_START_ENTRIES='[
   },
   {
     "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-mcp-scope-nudge.sh"}]
+  },
+  {
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-claude-account-change.sh"}]
   }
 ]'
 
@@ -388,7 +391,7 @@ install_hooks() {
                 '.hooks.SessionStart = $entries' \
                 "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
         else
-            for HOOK_CMD in "currentdate-anchor.py" "session-start-mcp-scope-nudge.sh"; do
+            for HOOK_CMD in "currentdate-anchor.py" "session-start-mcp-scope-nudge.sh" "session-start-claude-account-change.sh"; do
                 if ! jq -e --arg cmd "$HOOK_CMD" \
                     '.hooks.SessionStart[] | select(.hooks[]?.command | contains($cmd))' \
                     "$SETTINGS" > /dev/null 2>&1; then
