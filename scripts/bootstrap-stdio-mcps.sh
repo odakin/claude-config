@@ -23,10 +23,10 @@
 # Exit code: 0 always (fail-open)。 ファイル不在・npm 失敗・claude not found
 #   は silent skip。 呼び出し側 (= layer 3 hook) は stdout の有無で「何か追加されたか」 を判定。
 #
-# 設計動機 (= 2026-06-26 odafgpt 移行 + cross-machine 切替頻発化対応):
-#   各 user が odakin-prefs/hooks/ 等に inline 重複実装する必要を消す。
-#   layer-3 (= odakin-prefs) は thin wrapper hook で本 script を call するだけ、
-#   mechanism は layer 1 で単一 SoT 化 (= user 指示 「なるべく層１にSoTを置いて参照」)。
+# 設計動機 (= 2026-06-26 cross-machine 切替頻発化対応):
+#   各 user が <personal-layer>/hooks/ 等に inline 重複実装する必要を消す。
+#   layer 3 (個人層) は thin wrapper hook で本 script を call するだけ、
+#   mechanism は layer 1 で単一 SoT 化。
 #
 # 環境変数:
 #   CLAUDE_BOOTSTRAP_NO_ADD  1 なら `claude mcp add` を実際には call しない (= dry-run、 test 用)
@@ -51,9 +51,32 @@ if ! command -v claude >/dev/null 2>&1; then
   exit 0
 fi
 
-# 現状の登録済 MCP list (= test 用 mock 経由優先、 normal は claude mcp list)
+# 現状の登録済 MCP list (= test 用 mock 経由優先)
+# Fast path: ~/.claude.json を python 直読 (= ~50ms)。 `claude mcp list` は
+# MCP health check で 3-4s 食う (= --no-health-check flag 不在、 2026-06-26 計測) →
+# SessionStart hook の latency が爆発するため直読を default、 fail で claude mcp list へ fallback。
+# format: ~/.claude.json の projects[*].mcpServers の key 全部 (= 全 project 横断)、 改行区切り。
+# 「<mcp-name>:」 prefix を付けて出力 = grep -E "^<name>[: ]" pattern と互換。
 if [ "${CLAUDE_BOOTSTRAP_MCP_LIST+set}" = "set" ]; then
   current_mcps="$CLAUDE_BOOTSTRAP_MCP_LIST"
+elif [ -f "$HOME/.claude.json" ] && command -v python3 >/dev/null 2>&1; then
+  current_mcps="$(python3 -c '
+import json, os, sys
+try:
+    d = json.load(open(os.path.expanduser("~/.claude.json")))
+    names = set()
+    for proj in d.get("projects", {}).values():
+        for name in (proj.get("mcpServers", {}) or {}).keys():
+            names.add(name)
+    for n in sorted(names):
+        print(f"{n}: stdio")
+except Exception:
+    sys.exit(0)
+' 2>/dev/null || true)"
+  # 直読 fail (= 空) なら fallback (= 健全側に倒す = 過剰 add より silent skip)
+  if [ -z "$current_mcps" ]; then
+    current_mcps="$(claude mcp list 2>/dev/null || true)"
+  fi
 else
   current_mcps="$(claude mcp list 2>/dev/null || true)"
 fi
