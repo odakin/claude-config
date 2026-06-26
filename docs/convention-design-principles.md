@@ -125,7 +125,7 @@ origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問�
 
 | 事実の type | design-out 手段 | drift 耐性 |
 |---|---|---|
-| 派生データ (= 他 file から導出可能) | (B) 生成 (mirror / overlay 再生成) | ✅ 構造的に不可能 |
+| 派生データ (= 他 file から導出可能) | (B) whole-file 生成 (mirror / overlay 再生成) / (A) field-level view (= 導出可能な field は書かず read 時に key から導出、 手編集 file 内の単一 field でも適用可) | ✅ 構造的に不可能 |
 | 散文・知識 (規約 / RCA / reference) | (A) 1 home + pointer (§2.1 / §15) | 〜成熟 (pointer 規律次第) |
 | 運用台帳・相互参照 state (= tracker ⇄ linked record / id・日付の多重コピー) | (A) view 導出 or (B) 編集時 gate | ❌ (C) に居残りやすい最難 |
 
@@ -1356,3 +1356,4 @@ gate: index の legacy 集合が HEAD (= 直前 commit) に対して **append-on
 | 2026-06-17 | §9.10 新設「完全性 audit の add-bias」 | §16 新設直後の 4軸 sweep が一般則 §16 から niche な数式記法規約 (physics-notes 添字) へ下向き cross-ref を張る missed-cross-ref finding を出し user に撤回された RCA を一般化。完全性 frame は構造的に追加へ偏り低価値/mis-weighted な接続を製造 (§9.2 sibling・§16 の audit 域発現)。restraint = instance が一般 home へ上向き / missing-cross-ref は relevance bar / audit goal を「load-bearing な欠落」 に framing。 |
 | 2026-06-21 | §2.5 新設「SoT 重複の 3 つの扱い (design-out vs reactive)」 | SoT-drift の戦略 frame (A/B/C trichotomy + 成熟度 lens + 検出器の drift-patch/surfacing 仕分け) が layer-3 plan (sot-maturity-normalization) にしか無く、§2.1-2.4/§15/§8.11 が個別戦術として散在していた。frame を hoist して上位 home を与え、plan は odakin 運用台帳への適用として上を指す (kernel-up/instance-down)。sot-registry に topic 追加 (§15-5)。user 依頼。 |
 | 2026-06-22 | §4.2 新設「自己 RCA の severity-minimization — §4.1 の cure 不能な残余クラス」 + §4.1 内の解放済 positional ref (§4.2/§4.3) を脱-positional 化 | 外部宛 outreach で未検証身元を断定送信した失敗を RCA する session が、単純失敗を複数回「小さく・技術的に」 framing し直し user に都度訂正された incident を一般化 (= 主題がこの reflex の最中・訂正済み版でも再演)。§4.1 (motivated substitution) の self-RCA/severity 姉妹で、両 cure (機械 gate / payoff 変更) が使えない残余クラス → goal を予防→可視化+訂正ループ短縮へ下げ、blunt-first (出力 form 変更) + 外部 review backstop。pure minimization と区別する signature = dignified な失敗の inflate による displacement。instance は layer-3 個人層 (kernel-up/instance-down)。user 依頼。 |
+| 2026-06-25 | §2.5 成熟度 lens「派生データ」row に (A) field-level view を併記 | 旧記載は (B) whole-file 生成のみで、手編集 file 内の単一導出可能 field (例: slug の純関数たる公開 path) を「書かず read 時に導出」 する design-out が表に無かった。2026-06-25「派生可能な値は格納しない」 一般化 handoff の cold-eyes verdict (= build all-no、規則は §2.5 に既存) が flagged した micro-edit を owner 採用。1 cell の clarification。 |
