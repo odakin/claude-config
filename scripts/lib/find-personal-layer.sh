@@ -13,9 +13,11 @@
 # Returns: absolute path of the personal-layer directory on stdout, or
 # empty string if none is detected (or detection disabled).
 #
-# 検出ロジックは `setup.sh` Step 5a (L592-622) と同じ — どちらかが変わったら
-# 両方を sync する責任が編集者にある。 Conceptual reference は
-# `docs/personal-layer.md`。
+# 検出ロジックは `setup.sh` Step 5a と同じ — どちらかが変わったら両方を sync
+# する責任が編集者にある (= 行番号は drift するので Step 名で参照)。 ただし
+# setup.sh は bash で実行され (zsh で source されない) ので、 本 helper だけが
+# 持つ shell 可搬性 (= zsh の自己位置・配列 index 吸収) は setup.sh には不要。
+# Conceptual reference は `docs/personal-layer.md`。
 #
 # Logic:
 #   1. CLAUDE_PERSONAL_LAYER=none      → empty (detection disabled)
@@ -28,6 +30,8 @@
 #
 # `<base>` は本 file の location から計算される: 本 file は
 # `<base>/claude-config/scripts/lib/` に置かれているので、 三つ親が <base>。
+# 本 helper は bash と zsh のどちらで source されても同じ結果を返す (自己位置と
+# 配列 index の shell 差を関数内で吸収している)。
 #
 # Layer-1 (claude-config, public) の design contract:
 #   - 本 helper は特定の personal-layer ディレクトリ名 (例: `<owner>-prefs`) を
@@ -38,8 +42,19 @@
 #     fail-safe な選択。 setup.sh はこれを error にして symlink 競合を避ける)。
 
 find_personal_layer() {
-    local self_dir base layers d
-    self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local self_dir base layers d _src
+    # 本 helper は bash でも zsh でも source できる。 自己位置の idiom は shell
+    # 依存: bash は ${BASH_SOURCE[0]}、 zsh では BASH_SOURCE は未設定で、 かつ
+    # 関数内の $0 は (関数名であって file path ではないので) 使えない → zsh は
+    # ${(%):-%x} を使う。 zsh 専用構文は eval で隔離し bash の parser に晒さない。
+    if [ -n "${BASH_SOURCE[0]:-}" ]; then
+        _src="${BASH_SOURCE[0]}"
+    elif [ -n "${ZSH_VERSION:-}" ]; then
+        eval '_src=${(%):-%x}'
+    else
+        _src="$0"
+    fi
+    self_dir="$(cd "$(dirname "$_src")" && pwd)"
     # self_dir = .../claude-config/scripts/lib
     # base     = .../   (parent of claude-config repo root)
     base="$(cd "$self_dir/../../.." && pwd)"
@@ -66,7 +81,10 @@ find_personal_layer() {
         fi
     done
     if [ "${#layers[@]}" -eq 1 ]; then
-        echo "${layers[0]}"
+        # "${layers[@]}" (not [0]): zsh は配列が 1-indexed で ${layers[0]} は
+        # 空になる。 要素がちょうど 1 個なら [@] は bash/zsh 両方でその 1 要素を
+        # 印字する。
+        echo "${layers[@]}"
     else
         echo ""
     fi
