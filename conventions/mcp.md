@@ -8,10 +8,10 @@ MCP ツールを使うリポで適用。CLAUDE.md から参照: `~/Claude/claude
 
 - **確認方法** (⚠️ 2026-06-20 訂正 — 現行 setup に `get_profile` / `gmail_get_profile` という **MCP tool は存在しない**、 旧 built-in connector の名残。 実在 tool ベースで確認する):
   - **gongrzhe standalone** (`mcp__gmail-<alias>__*`): **alias 名 = account** (1:1、 `~/.gmail-mcp/<alias>/`)。 runtime の identity tool は無いので alias 名が account の identity。
-  - **Cowork UUID** (`mcp__<UUID>__*`): identity tool 無し。 自分発 mail を `search_threads`→`get_thread` で読んで From を確認 / desktop Connectors UI / user 確認 のいずれか。
+  - **アプリ内蔵 connector の UUID** (`mcp__<UUID>__*`): identity tool 無し。 自分発 mail を `search_threads`→`get_thread` で読んで From を確認 / desktop Connectors UI / user 確認 のいずれか。
   - **Calendar**: `list_calendars` の primary calendar id = 接続 account の email。
   - (script レベルの API `users().getProfile` は reauth.sh が account 検証に使うが、 session から呼べる MCP tool ではない)
-- **複数 MCP がある場合**: セッションの deferred tools 一覧で同一サービスの MCP が何個あるか確認し、上記方法 (alias 名 / Calendar は list_calendars / Cowork は自分宛 mail 読み) で UUID→アカウントの対応を把握する
+- **複数 MCP がある場合**: セッションの deferred tools 一覧で同一サービスの MCP が何個あるか確認し、上記方法 (alias 名 / Calendar は list_calendars / アプリ内蔵 connector は自分宛 mail 読み) で UUID→アカウントの対応を把握する
 - **UUID→アカウント対応表は MCP 設定リポに保持**: 各 MCP 設定リポ (例: `gmail-mcp-config`) の CLAUDE.md または SESSION.md に UUID→アカウントの対応を記録する。memory には書かない (machine-local で cross-machine 不整合を招く。詳細: [docs/convention-design-principles.md §5](../docs/convention-design-principles.md))。新規セッションで対応表が不明・古ければ、上記方法で UUID→account を照合し、差分を MCP 設定リポに追記する
 - **アカウント一覧の正本**: 各 MCP 設定リポの CLAUDE.md を参照（各プロジェクトリポの CLAUDE.md にはハードコードしない）
 
@@ -172,9 +172,9 @@ MCP 設定リポは private にすること（認証情報のパスやアカウ�
 
 ---
 
-## desktop Cowork session の `--allowedTools` 制限 (= 「登録済なのに使えない」 trap)
+## Claude Code desktop session の `--allowedTools` 制限 (= 「登録済なのに使えない」 trap)
 
-Claude desktop (Cowork) app から起動した Claude Code session は `--allowedTools` で **限られた tool list (= 6 個程度: `mcp__computer-use` / `mcp__ccd_session__*` / `mcp__ccd_session_mgmt__*`)** しか渡してこない。 `~/.claude.json` の `mcpServers` に `gmail-personal` / `calendar-cis` 等が登録されていても、 そのまま自動 spawn されず session 内で見えない。
+Claude Code desktop app から起動した Claude Code session は `--allowedTools` で **限られた tool list (= 6 個程度: `mcp__computer-use` / `mcp__ccd_session__*` / `mcp__ccd_session_mgmt__*`)** しか渡してこない。 `~/.claude.json` の `mcpServers` に `gmail-personal` / `calendar-cis` 等が登録されていても、 そのまま自動 spawn されず session 内で見えない。
 
 = 「`~/.claude.json` 登録 ≠ session 内可用」 の構造ギャップ。 user が「Gmail MCP 設定してるはずなのに動かない」 と感じる典型 trap。
 
@@ -186,8 +186,8 @@ Claude desktop (Cowork) app から起動した Claude Code session は `--allowe
 
 ### 対処 3 経路
 
-| (a) | desktop Cowork に Gmail connector を追加 | desktop UI → Connectors → Gmail → OAuth で新規 wire。 `mcp__<UUID>__*` 形式で見えるようになる (= Cowork hosted 経路、 1 connector / 1 account) |
-| (b) | Terminal から Claude Code を直起動 | desktop Cowork でなく `claude` コマンドを直接 launch → `~/.claude.json` 登録 MCP が allowedTools に含まれる起動になる (= 制限なし運用) |
+| (a) | Claude Code desktop に Gmail connector を追加 | desktop UI → Connectors → Gmail → OAuth で新規 wire。 `mcp__<UUID>__*` 形式で見えるようになる (= アプリ内蔵 経路、 1 connector / 1 account) |
+| (b) | Terminal から Claude Code を直起動 | Claude Code desktop でなく `claude` コマンドを直接 launch → `~/.claude.json` 登録 MCP が allowedTools に含まれる起動になる (= 制限なし運用) |
 | (c) | 本 session 内で OAuth token 直叩き Python | `~/.gmail-mcp/<account>/credentials.json` (= access_token + refresh_token) + `oauth-keys.json` (= client_id + client_secret) を Python で読み、 `oauth2.googleapis.com/token` で refresh → Gmail API 直叩き。 MCP layer 経由しない (= 当 session 内即効性ある) |
 
 ### harness 組み込み tool への波及 (= scheduled task 登録不可)
@@ -210,9 +210,9 @@ Claude desktop (Cowork) app から起動した Claude Code session は `--allowe
 | [`mcp-search-zero-result-nudge.sh`](../hooks/mcp-search-zero-result-nudge.sh) | PostToolUse | 同上 | 0 件結果 (= `No threads found` / `"messages": []` / `Found 0` / `resultSizeEstimate: 0` 等の明確 marker) を検出した直後に強 reminder + 「universal claim 禁止 list (= 「Gmail で 0 件」 「Mac Mail 全 sweep 0 件で確定」 等)」 を inject |
 | [`session-start-mcp-scope-nudge.sh`](../hooks/session-start-mcp-scope-nudge.sh) | SessionStart | (matcher なし) | session 起動時に `~/.gmail-mcp/` + `claude_desktop_config.json` から register 済 account を列挙、 「register 済 ≠ session-active subset」 caveat 込みで anchor として inject |
 
-3 hook とも `-nudge` suffix (= 非 block、 informational only)、 出力経路は `additionalContext` JSON + `~/.claude/surface/*.txt` の 2 段 defensive (= CLI session は前者、 desktop Cowork session は後者、 [hook-authoring.md §9.3](hook-authoring.md) 「desktop は hook を実行はするが出力を honor しない」)。 配線は `claude-config/setup.sh install_hooks` で全自動、 各 hook 直下に `*.test.sh` (= logic test §A + 起票 transcript の retroactive selftest §B) 同梱。
+3 hook とも `-nudge` suffix (= 非 block、 informational only)、 出力経路は `additionalContext` JSON + `~/.claude/surface/*.txt` の 2 段 defensive (= CLI session は前者、 Claude Code desktop session は後者、 [hook-authoring.md §9.3](hook-authoring.md) 「desktop は hook を実行はするが出力を honor しない」)。 配線は `claude-config/setup.sh install_hooks` で全自動、 各 hook 直下に `*.test.sh` (= logic test §A + 起票 transcript の retroactive selftest §B) 同梱。
 
-⚠️ 二次 trap 自覚: hook も「reminder を読み飛ばす Claude」 の前で必ず機能する保証はない (= 起票 session author confession)。 多層化 (= 3 hook 並走 + ToolSearch enumeration + user 側 wire 拡張 = Cowork connector に personal Gmail 追加、 plan §blocker (4)) でリスク低減を狙う。 効果検証は live invoke (= §9.1 build-dependent: 新規 hook は同 session 非発火、 次 session で観察) が必要、 数回の Gmail-search session で「scope-template が実際に埋められるか」 を観察 → false negative 多発なら escalate (= `permissionDecision: ask` 化、 hook-authoring §6.3)。 **2026-06-20 post-ship 観察 (n=1)**: 別 session で同 trap 構造 (= Cowork に write tool 不在) を踏みかけたが、 SessionStart capability anchor + 人読 manifest 経由で attempt 前に fallback (= `account-direct.py` Python wrapper) へ routing し完遂、 stuck-state 回避を 1 件で観察。 ⚠️ n=1 の一般化禁止 (= `work-discipline.md §A` 「一度の観察を一般法則化しない」 遵守)、 同型 case の複数 session 再現で仮説支持強化、 逆 case で escalation 検討。
+⚠️ 二次 trap 自覚: hook も「reminder を読み飛ばす Claude」 の前で必ず機能する保証はない (= 起票 session author confession)。 多層化 (= 3 hook 並走 + ToolSearch enumeration + user 側 wire 拡張 = アプリ内蔵 connector に personal Gmail 追加、 plan §blocker (4)) でリスク低減を狙う。 効果検証は live invoke (= §9.1 build-dependent: 新規 hook は同 session 非発火、 次 session で観察) が必要、 数回の Gmail-search session で「scope-template が実際に埋められるか」 を観察 → false negative 多発なら escalate (= `permissionDecision: ask` 化、 hook-authoring §6.3)。 **2026-06-20 post-ship 観察 (n=1)**: 別 session で同 trap 構造 (= Claude Code (desktop) に write tool 不在) を踏みかけたが、 SessionStart capability anchor + 人読 manifest 経由で attempt 前に fallback (= `account-direct.py` Python wrapper) へ routing し完遂、 stuck-state 回避を 1 件で観察。 ⚠️ n=1 の一般化禁止 (= `work-discipline.md §A` 「一度の観察を一般法則化しない」 遵守)、 同型 case の複数 session 再現で仮説支持強化、 逆 case で escalation 検討。
 
 ### MCP tool scope manifest (= 人読 reference、 hook の動的 enumeration を補完)
 
@@ -223,7 +223,7 @@ hook C は session 起動時に filesystem + desktop config から register 済 
 | tool prefix pattern | wire scope (= 何が見えるか) | account 推定の起点 |
 |---|---|---|
 | `mcp__gmail-<alias>__*` (= gongrzhe `@gongrzhe/server-gmail-autoauth-mcp`) | **1 account / 1 alias** (= alias と Gmail account の 1:1 対応、 「register 済 ≠ session-active」 は SessionStart hook で確認) | **alias 名 = account** (= `~/.gmail-mcp/<alias>/credentials.json`)。 ⚠️ gongrzhe server に `get_profile` MCP tool は無い (= account 検証は reauth.sh が API `getProfile` を script で叩く、 session の MCP tool ではない) |
-| `mcp__<UUID>__*` (= Cowork hosted connector、 UUID 形式) | **1 connector / 1 account**、 ただし **UUID から account を filesystem 由来で推定不可** (= Cowork app 内部の wiring) | identity MCP tool 無し。 account を知るには 自分発 mail を `search_threads`→`get_thread` で読んで From 確認 / desktop Connectors UI / user 確認 |
+| `mcp__<UUID>__*` (= アプリ内蔵 connector、 UUID 形式) | **1 connector / 1 account**、 ただし **UUID から account を filesystem 由来で推定不可** (= Claude Code desktop app 内部の wiring) | identity MCP tool 無し。 account を知るには 自分発 mail を `search_threads`→`get_thread` で読んで From 確認 / desktop Connectors UI / user 確認 |
 | `mcp__calendar-<alias>__*` (= 個別 Google Calendar MCP) | 1 alias の Google account / 紐付く全 calendar (= 個人 + 共有) | `~/Library/Application Support/Claude/claude_desktop_config.json` の `mcpServers.<alias>` |
 | `mcp__filesystem__*` | desktop config で許可された path tree (= 全 file が見えるわけではない) | `claude_desktop_config.json` の filesystem entry の path 引数 |
 | `mcp__computer-use__*` | macOS GUI + user 承認した application のみ | `list_granted_applications` で session 中の許可 list を確認 |
@@ -232,14 +232,14 @@ hook C は session 起動時に filesystem + desktop config から register 済 
 
 | connector type | read | draft 作成 + label | send / delete / modify |
 |---|---|---|---|
-| Cowork hosted (`mcp__<UUID>__*`) | ✅ `search_threads` / `get_thread` | ✅ `create_draft` / `label_*` / `create_label` | ❌ **expose しない** (= `send_email` / `delete_email` / `modify_email` 不在) |
+| アプリ内蔵 (`mcp__<UUID>__*`) | ✅ `search_threads` / `get_thread` | ✅ `create_draft` / `label_*` / `create_label` | ❌ **expose しない** (= `send_email` / `delete_email` / `modify_email` 不在) |
 | standalone gongrzhe (`mcp__gmail-<alias>__*`) | ✅ `search_emails` / `read_email` | ✅ `draft_email` | ✅ `send_email` / `delete_email` / `modify_email` / `batch_*` |
 
-⚠️ **tool 名に send verb が「無い」 = 「送信不能」 ではない**: Cowork connector は **「read-only」 ではなく「send 不可」 が正確** (= draft / label は書ける、 send だけ出さない)。 capability は connector type で決まり、 同 account でも別 connector type が send を出すので、 Cowork connector に `send_email` が無いのを見て「メール送信できない」 と即断しない。 send したい時 = (a) standalone `mcp__gmail-<alias>__send_email` の wire を ToolSearch で確認 → (b) なければ `account-direct.py` (= 上記「対処 3 経路」 (c) の Python wrapper) → (c) それも無理なら user に手動送信を依頼。 wire-*account* は UUID から推定不可だが、 **capability *TYPE* は name pattern (= UUID vs alias) で確実に判別できる** (= 静的推論可能、 これが account 軸との非対称性)。 起票 = 2026-06-20 write-tool RCA (= Cowork-only session で send_email 不在を観察、 詳細は owner の personal layer の設計 plan、 collaborator access 不要)。
+⚠️ **tool 名に send verb が「無い」 = 「送信不能」 ではない**: アプリ内蔵 connector は **「read-only」 ではなく「send 不可」 が正確** (= draft / label は書ける、 send だけ出さない)。 capability は connector type で決まり、 同 account でも別 connector type が send を出すので、 アプリ内蔵 connector に `send_email` が無いのを見て「メール送信できない」 と即断しない。 send したい時 = (a) standalone `mcp__gmail-<alias>__send_email` の wire を ToolSearch で確認 → (b) なければ `account-direct.py` (= 上記「対処 3 経路」 (c) の Python wrapper) → (c) それも無理なら user に手動送信を依頼。 wire-*account* は UUID から推定不可だが、 **capability *TYPE* は name pattern (= UUID vs alias) で確実に判別できる** (= 静的推論可能、 これが account 軸との非対称性)。 起票 = 2026-06-20 write-tool RCA (= アプリ内蔵 connector のみの session で send_email 不在を観察、 詳細は owner の personal layer の設計 plan、 collaborator access 不要)。
 
-⚠️ **session-active subset の verify は manifest だけでは不能** = 上記は **machine 上 register 済の universe** であって、 session で実際 wire されている subset は別。 desktop Cowork session は `--allowedTools` で大幅に subset される (= 上記 §「desktop Cowork session の `--allowedTools` 制限」)。 session 内 verify = (a) ToolSearch で `mcp__` 接頭辞 query して deferred tool list を取得 / (b) wire account の確認は上記 §「MCP tool scope manifest」 表の「account 推定の起点」 列に従う (= gmail alias は alias 名、 Cowork は自分宛 mail 読み、 Calendar は `list_calendars`)。 ⚠️ `get_profile` / `whoami` という MCP tool は現行 setup に**存在しない** (= 旧 built-in connector の名残、 §共通「確認方法」 参照)。
+⚠️ **session-active subset の verify は manifest だけでは不能** = 上記は **machine 上 register 済の universe** であって、 session で実際 wire されている subset は別。 Claude Code desktop session は `--allowedTools` で大幅に subset される (= 上記 §「Claude Code desktop session の `--allowedTools` 制限」)。 session 内 verify = (a) ToolSearch で `mcp__` 接頭辞 query して deferred tool list を取得 / (b) wire account の確認は上記 §「MCP tool scope manifest」 表の「account 推定の起点」 列に従う (= gmail alias は alias 名、 アプリ内蔵 connector は自分宛 mail 読み、 Calendar は `list_calendars`)。 ⚠️ `get_profile` / `whoami` という MCP tool は現行 setup に**存在しない** (= 旧 built-in connector の名残、 §共通「確認方法」 参照)。
 
-**起票 incident** (2026-06-20、 詳細 = 個人層 plan): Cowork desktop session で Cowork connector (`mcp__<UUID>__*`) 1 個のみ wired、 他の複数 Gmail account (`mcp__gmail-<alias>__*` 群) は register 済だが session subset 外 → search で「該当無し」 を universalize → 4 回 push 後に Python wrapper (= account-direct.py、 上記「対処 3 経路」 (c)) で別 account に到達。 = **manifest を session 冒頭で「machine 上 register vs session-active」 の差分として読まないと、 同 trap が再演する** (= hook C が surface する役)。
+**起票 incident** (2026-06-20、 詳細 = 個人層 plan): Claude Code desktop session で アプリ内蔵 connector (`mcp__<UUID>__*`) 1 個のみ wired、 他の複数 Gmail account (`mcp__gmail-<alias>__*` 群) は register 済だが session subset 外 → search で「該当無し」 を universalize → 4 回 push 後に Python wrapper (= account-direct.py、 上記「対処 3 経路」 (c)) で別 account に到達。 = **manifest を session 冒頭で「machine 上 register vs session-active」 の差分として読まないと、 同 trap が再演する** (= hook C が surface する役)。
 
 ### scope manifest と reflex の関係 (= 重複防止の整理、 起票 plan = `2026-06-20-tool-scope-verification-reflex.md`)
 
@@ -345,8 +345,8 @@ create + UI で開く検証で associatedWithDeveloper 永続フラグによる 
 
 ### 機械化の射程 (= honest、effective な層だけに置く)
 
-- **読み側**は body extractor のコードで根治できる (= 自作 helper を text/html fallback にする)。これは tool が返す値そのものを直すので **hook 不要・どの frontend でも効く** (= Cowork desktop でも有効)。最も leverage が高い。
-- **書き側は本質的に機械化が難しい**。PreToolUse hook で send body を scan する手はあるが、**Cowork desktop では hook 出力が honor されない** ([hook-authoring.md §9.3](hook-authoring.md))ため、まさに事故が起きる環境で無効 = 足しても「対策済」の false confidence にしかならない。送信が Bash script (= 直叩き wrapper) 経由なら script 内に entity の事前 scan を仕込めば**その経路では**機械的に止まる (frontend 非依存)。だが **MCP send 経路 (`mcp__gmail-*__send_email`) は介入できない**。∴ MCP-send-in-desktop の `&gt;` は **prose 規律 + human review が最後の floor**。欠陥自体は cosmetic (引用が崩れて見えるだけで趣旨は伝わる) なので、効かない機械層を積むより honest にそう書く。
+- **読み側**は body extractor のコードで根治できる (= 自作 helper を text/html fallback にする)。これは tool が返す値そのものを直すので **hook 不要・どの frontend でも効く** (= Claude Code desktop でも有効)。最も leverage が高い。
+- **書き側は本質的に機械化が難しい**。PreToolUse hook で send body を scan する手はあるが、**Claude Code desktop では hook 出力が honor されない** ([hook-authoring.md §9.3](hook-authoring.md))ため、まさに事故が起きる環境で無効 = 足しても「対策済」の false confidence にしかならない。送信が Bash script (= 直叩き wrapper) 経由なら script 内に entity の事前 scan を仕込めば**その経路では**機械的に止まる (frontend 非依存)。だが **MCP send 経路 (`mcp__gmail-*__send_email`) は介入できない**。∴ MCP-send-in-desktop の `&gt;` は **prose 規律 + human review が最後の floor**。欠陥自体は cosmetic (引用が崩れて見えるだけで趣旨は伝わる) なので、効かない機械層を積むより honest にそう書く。
 
 ## Gmail send: 添付ファイルは明示 MIME が要る
 

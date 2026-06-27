@@ -658,7 +658,7 @@ origin: 予定検出器が メールの予定時刻と calendar event を ±10 �
 
 §8.12 は発火面の **trigger 品質** (hook>skill>scheduled>doc)、 §8.13 は条件付き発火の **可視性** だった。 本節は直交する第 3 軸: **同じ enforcement surface (= settings.json hook 等) でも、 実行 context (frontend = terminal CLI / IDE 拡張 / desktop app、 machine、 session timing) によって honor されるか否かが変わる**。 「設定したから効く」 は隠れた前提で、 frontend がその surface を honor しない context では guard は **設定済なのに inert** になる (= 配線健全でも沈黙する第 4 の失敗、 §8.13 の「非活性」 とも別 — あちらは未登録、 本節は登録済だが frontend が無視)。
 
-確定事実 (= 2026-06-13 実測、 正本 `conventions/hook-authoring.md §9.3`): **Claude desktop (Cowork) app は settings.json hook を「プロセスとして実行」 はするが、 モデルに向かう出力を honor しない** (SessionStart の additionalContext 注入は捨てられ、 PreToolUse の permissionDecision も無効。 副作用 〔file 書込〕 は走る)。 一方 **declarative な `permissions.deny` は honor される**、 ask は非 bypass mode + frontend 自身の承認系を要する (`conventions/claude-code-permissions.md`)。 ⇒ hook ベースの guard は desktop で大半 inert。
+確定事実 (= 2026-06-13 実測、 正本 `conventions/hook-authoring.md §9.3`): **Claude Code desktop app は settings.json hook を「プロセスとして実行」 はするが、 モデルに向かう出力を honor しない** (SessionStart の additionalContext 注入は捨てられ、 PreToolUse の permissionDecision も無効。 副作用 〔file 書込〕 は走る)。 一方 **declarative な `permissions.deny` は honor される**、 ask は非 bypass mode + frontend 自身の承認系を要する (`conventions/claude-code-permissions.md`)。 ⇒ hook ベースの guard は desktop で大半 inert。
 
 設計枠組み — guard = (1) **検出ロジック** (何の違反を捕まえるか) + (2) **enforcement surface** (どこ・いつ発火するか)。 surface を 「**検出が何を見る必要があるか** × **どの context で生存すべきか** (= stakes × 不可逆性 × incident 履歴)」 で選ぶ:
 
@@ -680,7 +680,7 @@ reflex:
 - guard が 「設定済なのに発火しない」 時、 最初に 「**この surface は この frontend/context で honor されるか?**」 を問う (= 「設定が間違いか」 より先に。 §9.3 の誤帰責防止)。
 - guard を **設計する**時、 「**どの context で守られるべきか? 選んだ surface はそこで生存するか? 検出が何を見る必要があり、 それが surface を制約しないか?**」 を問う。 不可逆 guard が frontend 依存 surface にしか乗らないなら、 検出ロジックを git-native 化できる形 (= committed content で判定) に再定式化できないか検討する。
 
-origin: 2026-06-13 desktop-hook-gap remediation。 odakin は desktop (Cowork) 主運用だが settings.json hook 群 (mail 誤送信 guard 含む) が desktop で hook 出力 honor されず大半 inert と判明。 再配置: mail → permission ask (`defaultMode:default` + `ask:send_email` + routine MCP を allow、 内容表示つき承認 dialog) / surfacing → SessionStart hook 副作用で `~/.claude/surface/*.txt` 書込 + CLAUDE.md 読込指示 / google-url → git-native commit warn。 qa-yaml は commit-time chronic-FP で再配置不可 → discipline、 calendar 自動強制 / memory / per-prompt §2§3 も surface 制約で discipline 受容。 §8.12 (trigger 品質軸) + §8.13 (可視性軸) に直交する frontend 生存性軸として一般化 (§9.8 充足)。
+origin: 2026-06-13 desktop-hook-gap remediation。 odakin は Claude Code desktop 主運用だが settings.json hook 群 (mail 誤送信 guard 含む) が desktop で hook 出力 honor されず大半 inert と判明。 再配置: mail → permission ask (`defaultMode:default` + `ask:send_email` + routine MCP を allow、 内容表示つき承認 dialog) / surfacing → SessionStart hook 副作用で `~/.claude/surface/*.txt` 書込 + CLAUDE.md 読込指示 / google-url → git-native commit warn。 qa-yaml は commit-time chronic-FP で再配置不可 → discipline、 calendar 自動強制 / memory / per-prompt §2§3 も surface 制約で discipline 受容。 §8.12 (trigger 品質軸) + §8.13 (可視性軸) に直交する frontend 生存性軸として一般化 (§9.8 充足)。
 
 ---
 

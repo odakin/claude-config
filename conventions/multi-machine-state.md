@@ -64,7 +64,7 @@ launchd / cron の定期ジョブは **登録したマシンでだけ走る**。
 - gate は最新の **committed** 台帳を読む (best-effort `git fetch` → working-tree fallback)。 standby マシンは新台帳が push された瞬間に従う (= 手動 pull 不要)。
 - **failover = 台帳の `host` を書き換えて push するだけ** (install / uninstall 不要)。 launchd cron engine ([scheduled-tasks.md](scheduled-tasks.md) §登録機構) の `--gate "<snippet>"` が wrapper に gate を焼く (`cd && <gate> || exit 0; exec <routine>`)。
 - ⚠️ gate は **両マシンの plist に焼かれて初めて両方向対称**。 旧 install (gate 無し) のマシンは台帳に関係なく走るので、 そのマシンを standby にしたいなら一度 install し直して gate を焼く (それまでは「そのマシンの土台アカウントが止まっている」 ことに依存)。
-- ⚠️ **headless 実行アカウントには `claude auth login` で確立した generation-capable な CLI OAuth が要る**。 デスクトップ app (Cowork) が対話シェルに注入する session token は **launchd には来ない**。 `claude auth status` が `loggedIn:true` を返しても、 env token 無しの headless 生成は **401 になりうる** (= keychain の credential が refresh 切れ等で生成に使えない)。 → **failover 先マシンでは事前に `claude auth login` を済ませて headless 401 が出ないことを確認する** (= 実 launchd で 1 回 kickstart して log を見るのが確実、 対話シェルからの nested `claude -p` は別 session guard / env 汚染で当てにならない)。
+- ⚠️ **headless 実行アカウントには `claude auth login` で確立した generation-capable な CLI OAuth が要る**。 Claude Code desktop app が対話シェルに注入する session token は **launchd には来ない**。 `claude auth status` が `loggedIn:true` を返しても、 env token 無しの headless 生成は **401 になりうる** (= keychain の credential が refresh 切れ等で生成に使えない)。 → **failover 先マシンでは事前に `claude auth login` を済ませて headless 401 が出ないことを確認する** (= 実 launchd で 1 回 kickstart して log を見るのが確実、 対話シェルからの nested `claude -p` は別 session guard / env 汚染で当てにならない)。
 
 ## zero-setup な cross-machine surfacing (= 別マシンの「やるべきこと」 を浮上させる)
 

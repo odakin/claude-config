@@ -5,7 +5,7 @@ app is in use** (CLI-only Macs are skipped — see [Desktop-app gate](#desktop-a
 
 ## What it does
 
-The Claude desktop app (Cowork) "New session" **folder picker** opens at the
+The Claude Code desktop app "New session" **folder picker** opens at the
 directory stored in `NSNavLastRootDirectory` under the
 `com.anthropic.claudefordesktop` defaults domain — this is standard macOS AppKit
 `NSOpenPanel` behavior. When you browse to a different folder in that picker,

@@ -18,14 +18,14 @@ Claude Code scheduled tasks を使うリポで適用。CLAUDE.md から参照: `
 
 machine-local job を「どのマシンに登録するか / 登録漏れをどう surface するか」 は [multi-machine-state.md](multi-machine-state.md)。 無人 publish の安全 gate は [data-pipeline-automation.md](data-pipeline-automation.md) §7。
 
-### アカウント切り替えに非依存にしたいとき (= Cowork app と CLI の 2 認証ストア)
+### アカウント切り替えに非依存にしたいとき (= Claude Code desktop app と CLI の 2 認証ストア)
 
-Claude Code の認証は **2 つの独立ストア**を持つ: **Cowork desktop app** と **CLI (`claude`、 `~/.claude.json` の単一 `oauthAccount`)**。両者は別アカウントで**共存**しうる — `claude auth` は login/logout/status のみ (= 同時 1 アカウント) だが、 **Cowork 側のアカウント切り替えは CLI の `~/.claude.json` を上書きしない** (実測: Cowork と CLI が別アカウントで同時に存在した)。これが無人ジョブの機構選択に効く:
+Claude Code の認証は **2 つの独立ストア**を持つ: **Claude Code desktop app** と **CLI (`claude`、 `~/.claude.json` の単一 `oauthAccount`)**。両者は別アカウントで**共存**しうる — `claude auth` は login/logout/status のみ (= 同時 1 アカウント) だが、 **Claude Code (desktop) 側のアカウント切り替えは CLI の `~/.claude.json` を上書きしない** (実測: Claude Code (desktop) と CLI が別アカウントで同時に存在した)。これが無人ジョブの機構選択に効く:
 
-- **scheduled task はアカウントに紐づく** → Cowork のアカウントを切り替えると、 別アカウントで作った task が見えなくなり **発火が止まる** (実測: 切替後に定時ジョブが約 37h 未発火)。
-- **launchd cron + `claude -p --permission-mode auto` は CLI 認証 (= 固定・Cowork 切替に非依存) で走る**。`claude -p` は Claude judgment (翻訳・判定・検証ゲート) と MCP も headless で提供する (実測: `--permission-mode auto` で MCP 込みの SKILL が headless 完走し、 SKILL の安全則も順守された)。
+- **scheduled task はアカウントに紐づく** → Claude Code (desktop) のアカウントを切り替えると、 別アカウントで作った task が見えなくなり **発火が止まる** (実測: 切替後に定時ジョブが約 37h 未発火)。
+- **launchd cron + `claude -p --permission-mode auto` は CLI 認証 (= 固定・Claude Code (desktop) 切替に非依存) で走る**。`claude -p` は Claude judgment (翻訳・判定・検証ゲート) と MCP も headless で提供する (実測: `--permission-mode auto` で MCP 込みの SKILL が headless 完走し、 SKILL の安全則も順守された)。
 
-→ 上の表は「Claude judgment 要 → scheduled task」 だが、 **Claude judgment が要り、 かつ アカウント切替で止めたくないなら、 第 3 の道 = launchd cron + `claude -p` (= CLI 認証を固定土台にする)**。同じ理由で `claude remote-control` サーバーモード (= CLI 認証で常駐、 [remote-control-server.md](remote-control-server.md)) も Cowork 切替に非依存。 ⚠️ ただし launchd は LANG 空 (C locale) なので `claude -p` の prompt は ASCII のみにする ([shell-multibyte-truncation.md](shell-multibyte-truncation.md))。
+→ 上の表は「Claude judgment 要 → scheduled task」 だが、 **Claude judgment が要り、 かつ アカウント切替で止めたくないなら、 第 3 の道 = launchd cron + `claude -p` (= CLI 認証を固定土台にする)**。同じ理由で `claude remote-control` サーバーモード (= CLI 認証で常駐、 [remote-control-server.md](remote-control-server.md)) も Claude Code (desktop) 切替に非依存。 ⚠️ ただし launchd は LANG 空 (C locale) なので `claude -p` の prompt は ASCII のみにする ([shell-multibyte-truncation.md](shell-multibyte-truncation.md))。
 
 ### launchd cron の登録機構 (= 汎用エンジン)
 
@@ -39,7 +39,7 @@ install-launchd-cron.sh --label-prefix PREFIX [--workdir DIR] \
 - **ACTION**: (既定 install) / `--status` / `--run <id>` / `--install-one <id>` / `--uninstall-one <id>` / `--uninstall`。 `--uninstall-one` は label-prefix + id だけで動く (= routine spec 不要、 期間限定ジョブの停止に使える)。
 - **type**: `skill` = `claude -p --permission-mode bypassPermissions` で SKILL.md を indirection 実行 (= Claude judgment 要) / `cmd` = script を直接実行 (= 決定的・claude 不要)。
 - **cron** は 5-field。 **`*/N` step 分** (= `*/30` → Minute `[0,30,...]`) と **`N-M` 曜日範囲** (= `1-5` → Weekday 月〜金) を StartCalendarInterval 配列へ展開する (launchd は step を持たないため)。
-- CLI 認証 (`~/.claude.json` の単一 account) で走るので Cowork のアカウント切替に非依存 (= 上記)。 launchd は LANG 空なので prompt は ASCII のみ ([shell-multibyte-truncation.md](shell-multibyte-truncation.md))。
+- CLI 認証 (`~/.claude.json` の単一 account) で走るので Claude Code (desktop) のアカウント切替に非依存 (= 上記)。 launchd は LANG 空なので prompt は ASCII のみ ([shell-multibyte-truncation.md](shell-multibyte-truncation.md))。
 - **`--gate "<snippet>"`** (任意): wrapper に `cd WORKDIR && <snippet> || exit 0; exec <routine>` の形で gate を挿入する。 snippet が非 0 で終わると routine は実行されず exit 0 (= defer)。 複数マシンで「今どのマシンが本番か」 を台帳で切り替える **active-routine-host failover** ([multi-machine-state.md](multi-machine-state.md) §「account / host failover」) に使う (gate 実体 = `scripts/routine-host-gate.py`)。
 
 **止め方の違い (= launchd cron 版 vs scheduled-task MCP 版)**: 同じ「定期ジョブ」 でも停止操作が機構で異なる。 launchd cron 版は `--uninstall-one <task-id>` (= `launchctl bootout` + plist 削除)、 scheduled-task MCP 版は `scheduled-tasks` MCP の delete。 期間限定ジョブ (= 大会期間だけ等) の自己停止 runbook を書くときは、 **どちらの機構で登録したか**に応じた停止コマンドを記す (= 機構を取り違えると停止できない)。
@@ -68,12 +68,12 @@ Claude バックエンド（リモート）    ← 実際に実行される prom
 
 SKILL.md を single source of truth にできない。リポの SKILL.md とバックエンドの prompt が乖離するリスクが常にある。
 
-## 登録できる session 種別 (= bridge / Cowork backend session では create_scheduled_task が wire されない)
+## 登録できる session 種別 (= bridge / デスクトップアプリ backend session では create_scheduled_task が wire されない)
 
 `create_scheduled_task` / `update_scheduled_task` は **harness 組み込み tool** (= MCP server ではない。 `~/.claude.json` の `mcpServers` に現れない、 CronCreate と同類)。 これらが session で呼べるかは **起動経路で決まる**:
 
 - ✅ **登録できる**: Terminal から `claude` を直接起動した通常 Claude Code CLI session (= `--allowedTools` 無制限運用)。 既存の登録済 task (`weekly-web-freshness` 等) はこの経路で作られている。
-- ❌ **登録できない**: desktop / Cowork app が裏で起動する **bridge session** (= 判定 = `env | grep CLAUDE_CODE_ENVIRONMENT_KIND` が `bridge` + `CLAUDE_CODE_ENTRYPOINT=sdk-cli`)。 `--allowedTools` で tool が大幅に subset され、 `create_scheduled_task` が **session に wire されない** (= `ToolSearch "select:create_scheduled_task"` が "No matching deferred tools found")。 これは [mcp.md §「desktop Cowork session の `--allowedTools` 制限」](mcp.md) と同根 (= 同じ subset 機構が組み込み scheduled-task tool も削る)。
+- ❌ **登録できない**: desktop / Claude Code desktop app が裏で起動する **bridge session** (= 判定 = `env | grep CLAUDE_CODE_ENVIRONMENT_KIND` が `bridge` + `CLAUDE_CODE_ENTRYPOINT=sdk-cli`)。 `--allowedTools` で tool が大幅に subset され、 `create_scheduled_task` が **session に wire されない** (= `ToolSearch "select:create_scheduled_task"` が "No matching deferred tools found")。 これは [mcp.md §「Claude Code desktop session の `--allowedTools` 制限」](mcp.md) と同根 (= 同じ subset 機構が組み込み scheduled-task tool も削る)。
 
 **対処**: bridge session で scheduled task を登録したくなったら、 同じマシンの **Terminal で `claude` を直起動**した session に移って `create_scheduled_task` を呼ぶ (= mcp.md 対処 (b))。 bridge session 自身からは制限なし session を生やせない (= harness 仕様)、 user の手動操作が要る。
 
