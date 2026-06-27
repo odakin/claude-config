@@ -215,7 +215,11 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 | **答えを自分の手元に戻して今の作業に繋ぐ調査** | **background Agent** (`run_in_background: true`) | 非同期 — 委譲した瞬間に呼び元が解放され、 完了時に通知で戻る |
 | 上記以外 (= 前景 Agent) | **ほぼ封印** | 前景 Agent *だけ* が呼び元を同期ブロックして仕事を止める。 使うのは「この同じターン内で答えを使って次の行を書く」 純粋逐次の稀ケースのみ |
 
-**∴ Agent を使うなら既定で `run_in_background: true` を付ける。** 前景 (= background なし) は上表 3 行目の稀ケース限定で、 それ以外は親が止まる = 事故。 ⚠️ この既定を **機械強制できるのは CLI のみ** (= PreToolUse guard で background 無しを deny→再発行)、 **desktop app では介入型 guard が原理的に不能** ([`hook-authoring.md §9.3`](hook-authoring.md))。 ∴ desktop ではこの既定は *規律* として効く (= 機械 backstop 無し、 最後の砦は human-steering)。
+**∴ Agent を使うなら既定で `run_in_background: true` を付ける。** 前景 (= background なし) は上表 3 行目の稀ケース限定で、 それ以外は親が止まる = 事故。 ⚠️ **機械 backstop の frontend 別整理** (= 2 段ある):
+- **(a) 細かい強制** (= 「background 無しの Agent だけ deny して付け直させる」 等、 tool 引数を見る介入型 guard) は **CLI のみ可**。 desktop app は介入型 guard が原理的に不能 ([`hook-authoring.md §9.3`](hook-authoring.md))。
+- **(b) 粗い pre-launch gate** (= settings.json `permissions.ask` に **`Agent` ツール名を入れる**) は **desktop でも honor される**: Agent 起動の*前*に承認ダイアログが出て human が veto できる (= mail 誤送信 gate と同機構、 `defaultMode: default` 前提、 [`claude-code-permissions.md §desktop で特定 tool に確認を課す`](claude-code-permissions.md))。 前景/background の自動判別はできない (= 引数を見ないので) が、 human が dialog で「background か別 session で」 と差し戻せる。 tradeoff = 正当な調査 Agent も毎回承認。
+
+∴ desktop でも「Agent 起動を human の一拍に乗せる」 機械 backstop は在る ((b))。 その上で background 既定を保つのは依然 *規律* (= dialog を通った後に前景か background かを決めるのは Claude 側) で、 最後の砦は human-steering。
 
 ### robust な宛先解決 = token-handshake (method A)
 
