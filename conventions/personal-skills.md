@@ -54,7 +54,7 @@ dispatch は description だけで決まる。 body がどれだけ良くても 
 
 skill 実体は git repo (個人層) に置き、 installer が `~/.claude/skills/` に symlink する。
 このとき **「file 到着 (git pull)」 と 「配線 (machine-local symlink)」 の 2 段配達**になる
-ことに注意 — prose の「あとで install して」 は発火しない (= [`hook-authoring.md` delivery-audit-4-axes](hook-authoring.md#delivery-audit-4-axes) / [partial-install-state](hook-authoring.md#partial-install-state) の
+ことに注意 — prose の「あとで install して」 は発火しない (= [`hook-authoring.md` delivery-audit-4-axes](hook-authoring.md#delivery-audit-4-axes) / [`hook-authoring.md` partial-install-state](hook-authoring.md#partial-install-state) の
 hook 配信問題と同型)。
 
 - installer に read-only `--check` mode を持たせ、 SessionStart hook から毎 session 呼ぶ
