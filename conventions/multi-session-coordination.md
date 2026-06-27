@@ -280,6 +280,7 @@ identity は similarity でなく content corroboration でしか establish で�
 ### 注意
 
 - この判断は **hand-off / 隔離オプションを選ぶその瞬間に表象されている必要**がある (= §7「この technique の射程」 と同じく、 ambient な doc は cold session では発火しない)。 ∴ spawn_task の spec を書く・`isolation` を渡す **まさにその時** に本節を想起する。
+- **chip / spawn_task UI で human が worktree か local を選ぶ hand-off では、 本節 verdict を chip の *title 頭* に `[local推奨]` / `[worktree推奨]` で付ける**。 理由: `spawn_task` には isolation 引数が **無い** (= Agent / Workflow `agent()` の `isolation` 引数と非対称) ので system が推奨を pre-select できず、 worktree/local は human が UI で選ぶしかない。 → 推奨の **default 化は不可、 visibility で代替**する。 tldr (= ホバーしないと出ない tooltip) でなく **常時表示の title** が唯一の視認 lever ゆえ、 human が何も考えず押しても推奨が目に入るようにする。
 
 ---
 
