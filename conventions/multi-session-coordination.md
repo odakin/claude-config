@@ -207,6 +207,16 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 
 ⇒ **ユーザーが「別セッション / 独立した新 session」 を名指したら、 Agent でなく別 session を使う** (spawn_task、 無ければ下記 §file-handoff)。 これは破ってはならない既定: Agent は (a) 上記の通り呼び元をブロックして仕事を止め、 (b) そもそも独立 session でない (= ユーザーが名指した「別」 を満たさない)。 結果も要るなら spawn_task に「結果を呼び元に返せ」 を併せれば **「独立 ∧ 非ブロッキング ∧ 結果返送」 が同時に in-scope** で得られる (harness 変更不要)。 「新 session」 を Agent に潰すのは [`convention-design-principles.md §4.1` 深層](../docs/convention-design-principles.md#motivated-substitution-trap) の deliverer-retention 置換 (= ユーザーが名指した独立性を、 結果が自分に返る Agent へ無意識に潰す失敗) — §4.1 は **「なぜ滑るか」** の説明であって、 **滑った時の実害がこのブロッキング (= 仕事が止まる)**。
 
+**🚦 標準ルーティング (= 「仕事を止めない」 ための既定。 本節の運用結論 = 必ずこれに従う):**
+
+| 仕事の性質 | 使う道具 | なぜ親 (呼び元) が止まらないか |
+|---|---|---|
+| **長い / 独立 / ユーザーがオーナーの仕事** | **別セッション** (spawn_task / 下記 file-handoff) | 構造上ぜったいに親を止めない (別プロセス・別 context window) |
+| **答えを自分の手元に戻して今の作業に繋ぐ調査** | **background Agent** (`run_in_background: true`) | 非同期 — 委譲した瞬間に呼び元が解放され、 完了時に通知で戻る |
+| 上記以外 (= 前景 Agent) | **ほぼ封印** | 前景 Agent *だけ* が呼び元を同期ブロックして仕事を止める。 使うのは「この同じターン内で答えを使って次の行を書く」 純粋逐次の稀ケースのみ |
+
+**∴ Agent を使うなら既定で `run_in_background: true` を付ける。** 前景 (= background なし) は上表 3 行目の稀ケース限定で、 それ以外は親が止まる = 事故。 ⚠️ この既定を **機械強制できるのは CLI のみ** (= PreToolUse guard で background 無しを deny→再発行)、 **desktop app では介入型 guard が原理的に不能** ([`hook-authoring.md §9.3`](hook-authoring.md))。 ∴ desktop ではこの既定は *規律* として効く (= 機械 backstop 無し、 最後の砦は human-steering)。
+
 ### robust な宛先解決 = token-handshake (method A)
 
 呼び元が「自分の id を spawned に渡す」 のは **破綻する**: session が *自分で取得できる id* (= 自分の transcript file 名 / jsonl の `sessionId` field) は、 `send_message` / `list_sessions` が routing に使う *addressable id* (`local_<uuid>` 形式) と **一致する保証がない** (= 観測例では別物だった)。 加えて `list_sessions` は self を除外するので自分を引けない。 ⇒ 呼び元は自分の addressable id を実行時に確実には知れない。
