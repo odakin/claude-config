@@ -195,12 +195,17 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 
 ### 用途と、 なぜ Agent でなくこちらか
 
-「**完全に独立した別 session に作業を渡し、 結果も受け取りたい**」 とき。 委譲 primitive は 2 つあり desideratum が分かれている:
+「**完全に独立した別 session に作業を渡し、 結果も受け取りたい**」 とき。 委譲 primitive は 2 つあり、 **3 軸**で性質が分かれる:
 
-- **Agent (subagent)**: 結果は *呼び元に返る* が、 呼び元 context を継承する *subagent* で **独立でない** (呼び元 session 終了で消える / user が独立に steer 不可)。
-- **spawn_task (新 session)**: *完全に独立* (own worktree〔= 任意。 worktree か shared checkout かの選択は §8〕 / 呼び元記憶ゼロ / 呼び元終了後も生存 / user が steer 可) だが、 結果は *user に fire* で **呼び元に自動では返らない**。
+| 軸 | Agent (subagent) | 別 session (spawn_task / 下記 file-handoff) |
+|---|---|---|
+| **ブロッキング (= 並列性)** | **既定で同期 — 呼び元は Agent 完了までブロックし、 その間 idle で待つ** (結果が tool result として返るまで次の作業に進めない。 `run_in_background:true` で非同期化はできるが、 それでも独立 session ではない = 下段) | **非同期 — 委譲した瞬間に呼び元が解放され、 別 session が走る間も自分の作業を続けられる** (真の並列) |
+| 独立性 | 呼び元 context を継承する *subagent* で **独立でない** (呼び元 session 終了で消える / user が独立に steer 不可) | **完全に独立** (own worktree〔= 任意、 §8〕 / 呼び元記憶ゼロ / 呼び元終了後も生存 / user が steer 可) |
+| 結果返送 | 結果は *呼び元に自動で返る* | 結果は *自動では返らない* → 下記 token-handshake (push) / file-handoff (pull) で返す |
 
-⇒ ユーザーが「独立した新 session」 を求め、 かつ結果も要るなら、 **spawn_task に「結果を呼び元に返せ」 を組み合わせる** と「独立 ∧ 結果返送」 が in-scope で得られる (harness 変更不要)。 「新 session」 を Agent に潰さないこと (= [`convention-design-principles.md §4.1` 深層](../docs/convention-design-principles.md#motivated-substitution-trap) の deliverer-retention 置換 = ユーザーが名指した独立性を、 結果が自分に返る Agent へ無意識に潰す失敗)。
+**⚠️ 最重要 (= 見落とされやすい実害): Agent は呼び元を同期ブロックする。** Agent が走っている間、 呼び元の会話 (= 人間が今見ている session) は次の作業に進めず手待ちになる。 作業が長いほど待ちは長い。 さらに **複数の session がそれぞれ Agent に委譲すると、 その全部が同時に凍る** = 人間の手元の全 session が一斉に手待ちになり **仕事が止まる = 純粋な無駄** (= 2026-06-27 に実際に 2 session 同時 stall で観測、 本節強化の契機)。 別 session は真に並列ゆえ、 委譲の瞬間に呼び元が解放され、 人間は他の作業を続けられる。
+
+⇒ **ユーザーが「別セッション / 独立した新 session」 を名指したら、 Agent でなく別 session を使う** (spawn_task、 無ければ下記 §file-handoff)。 これは破ってはならない既定: Agent は (a) 上記の通り呼び元をブロックして仕事を止め、 (b) そもそも独立 session でない (= ユーザーが名指した「別」 を満たさない)。 結果も要るなら spawn_task に「結果を呼び元に返せ」 を併せれば **「独立 ∧ 非ブロッキング ∧ 結果返送」 が同時に in-scope** で得られる (harness 変更不要)。 「新 session」 を Agent に潰すのは [`convention-design-principles.md §4.1` 深層](../docs/convention-design-principles.md#motivated-substitution-trap) の deliverer-retention 置換 (= ユーザーが名指した独立性を、 結果が自分に返る Agent へ無意識に潰す失敗) — §4.1 は **「なぜ滑るか」** の説明であって、 **滑った時の実害がこのブロッキング (= 仕事が止まる)**。
 
 ### robust な宛先解決 = token-handshake (method A)
 
