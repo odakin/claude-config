@@ -7,7 +7,7 @@ this scans the md and (re)writes `<doc>.index.yaml`:
   DERIVED from the md   : id (the anchor slug), level (## / ###), title (verbatim heading).
   PRESERVED across regen : legacy  (a section's ORIGINAL §-number = a permanent forwarding
                                    address for old `§N.M` refs; FROZEN once set --
-                                   convention-design-principles.md §14.7),
+                                   convention-design-principles.md §14.7 = #inbound-ref-robustness),
                           related (the hand-authored relation graph),
                           and ANY other hand field (e.g. origin) -- preserved verbatim, so
                           the generator never silently drops data it does not understand.

@@ -73,7 +73,7 @@ claude-config 自体の auto-load はほぼ空: デフォルトの `<base>/CLAUD
 
 個人層やサブプロジェクトの `CLAUDE.md` を足すと、**合計 auto-load サイズ**を監視する必要が出てくる — Claude Code は作業ディレクトリから親方向に `CLAUDE.md` を全て auto-load するため、各階層が積み上がる。
 
-目安 ([`docs/convention-design-principles.md`](docs/convention-design-principles.md) §10.7 参照):
+目安 ([`docs/convention-design-principles.md` §10.7](docs/convention-design-principles.md#auto-context-byte-budget) 参照):
 
 - **200K コンテキストモデル** (autocompact 発火 ≈ 167K): 長いセッション中の autocompact を稀に保ちたいなら、合計 auto-load を ~50 KB 以下に抑える。
 - **1M コンテキストモデル**: 同じ目標は実質無料だが、chain-load の規律はセッション立ち上げ速度の観点で依然有効。

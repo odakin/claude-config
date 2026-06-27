@@ -4,7 +4,7 @@
 # public-precommit-runner.sh が leak gate を pass 後に chain で呼ぶ (= 既存 channel への
 # 相乗り。 新規 standalone 検出器 / dashboard 項目を増やさない)。 exit code は親に透過するが、
 # 本 hook は **warning のみで常に exit 0** にして commit を止めない (= drift は annoyance 級で、
-# convention-design-principles.md §9.1 の triage に従い catastrophic 級の block を当てない)。
+# convention-design-principles.md §9.1 (= #blast-radius-triage) の triage に従い catastrophic 級の block を当てない)。
 #
 # 検査: CONVENTIONS.md 冒頭の conventions/ 全列挙 と CLAUDE.md 構造 tree の conventions/ block が、
 #       実体 `conventions/*.md` と一致しているか。 不一致なら「その commit の瞬間・その本人」に

@@ -52,7 +52,7 @@ memory-guard-bash: メモリディレクトリへの Bash 書き込みを deny �
 Memory directory はマシンローカル (git 非同期)。cross-machine で効かせたい情報は
 git 同期先 (claude-config/, あなたの個人層 (あれば), 該当プロジェクトの CLAUDE.md / SESSION.md / DESIGN.md) に書く。
 
-詳細: claude-config/docs/convention-design-principles.md §8 (memory policy)。
+詳細: claude-config/docs/convention-design-principles.md §8 (= #rule-vs-mechanism) (memory policy)。
 
 意図的なマシンローカル書き込みの escape hatch:
   command 文字列のどこかに "machine-local" を含めると pass する

@@ -50,7 +50,7 @@ Ask Claude to fetch a competitor's site and analyze: "What are we losing to this
 
 ## 6. Invest feedback in conventions and hooks, not memory
 
-When Claude makes a recurring mistake, the intuitive fix is to save a feedback memory (`~/.claude/` memory system). **Don't.** This repo's `memory-guard.sh` hook actively denies feedback-style writes to the memory directory, because memory behaves as precedent-as-training-data: the same entry that's supposed to correct behavior gets re-loaded each session and reinforces the pattern more than it corrects it. Full reasoning: [`convention-design-principles.md`](convention-design-principles.md) §8.3.
+When Claude makes a recurring mistake, the intuitive fix is to save a feedback memory (`~/.claude/` memory system). **Don't.** This repo's `memory-guard.sh` hook actively denies feedback-style writes to the memory directory, because memory behaves as precedent-as-training-data: the same entry that's supposed to correct behavior gets re-loaded each session and reinforces the pattern more than it corrects it. Full reasoning: [`convention-design-principles.md` §8.3](convention-design-principles.md#precedent-as-training-data).
 
 Write durable corrections where they survive across machines and sessions:
 
@@ -84,7 +84,7 @@ Keep each layer to its own role:
 - **Repo `CLAUDE.md`** — repo overview, how to run things, pointers to details.
 - **Sub-project `CLAUDE.md`** — commands, quirks, an architecture super-summary of 5–8 one-line items with pointers to `docs/architecture.md`. Target ~80–100 lines.
 
-Heavy narrative, parameter tables, and design rationale live in `docs/` (not auto-loaded) and are referenced by pointer. Principles and worked examples in [`convention-design-principles.md`](convention-design-principles.md) §10.10–10.11.
+Heavy narrative, parameter tables, and design rationale live in `docs/` (not auto-loaded) and are referenced by pointer. Principles and worked examples in [`convention-design-principles.md` §10.10–10.11](convention-design-principles.md#claudemd-chain-nested-autoload).
 
 ## 9. Project doc role separation: "don't write the same insight five times"
 

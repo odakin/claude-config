@@ -73,7 +73,7 @@ claude-config itself ships a near-empty auto-load: the default `<base>/CLAUDE.md
 
 Once you add a personal layer or sub-project `CLAUDE.md`s, watch the **combined auto-load size** — Claude Code auto-loads every `CLAUDE.md` from the working directory up the tree, so layers accumulate.
 
-Rough targets (from [`docs/convention-design-principles.md`](docs/convention-design-principles.md) §10.7):
+Rough targets (from [`docs/convention-design-principles.md` §10.7](docs/convention-design-principles.md#auto-context-byte-budget)):
 
 - **200K-context model** (autocompact fires ≈ 167K): keep the combined auto-load under ~50 KB to keep autocompact rare during long sessions.
 - **1M-context model**: the same target is effectively free, but the chain-load discipline still keeps session startup snappy.

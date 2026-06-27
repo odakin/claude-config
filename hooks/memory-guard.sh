@@ -46,7 +46,7 @@ memory-guard: メモリファイルへの書き込みを deny しました。
 Memory directory はマシンローカル (git 非同期)。cross-machine で効かせたい情報は
 git 同期先 (claude-config/, あなたの個人層 (あれば), 該当プロジェクトの CLAUDE.md / SESSION.md / DESIGN.md) に書く。
 
-詳細: claude-config/docs/convention-design-principles.md §8 (memory policy)、
+詳細: claude-config/docs/convention-design-principles.md §8 (= #rule-vs-mechanism) (memory policy)、
       claude-config/docs/personal-layer.md (4 層モデル)。
 
 このマシン固有の事実 (macOS 設定・ハード構成等) を意図的に記録する escape hatch:

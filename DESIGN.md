@@ -408,7 +408,7 @@ owner email は personal layer (= 個人層) の secrets-related docs に明記�
 - Google API 直接アクセス setup は GCP project を持つ任意の user に共通
 - GCP project owner と Workspace の layer 区別は GCP utility ユーザー全員に通用
 
-PII (= 実名・固有部署名・固有 spreadsheet ID 等) は全て placeholder 化、 examples は abstract (= 「重要部署からのメール」 「学科 ML」 等の generic 表現)。 layer 2 (= 共有プロジェクト) や layer 3 (= personal) に書くと、 同型問題に当たる他 Claude Code ユーザーが再発見しないといけない。 一般則は layer 1 に置くのが配置原則 (`docs/convention-design-principles.md §1`)。
+PII (= 実名・固有部署名・固有 spreadsheet ID 等) は全て placeholder 化、 examples は abstract (= 「重要部署からのメール」 「学科 ML」 等の generic 表現)。 layer 2 (= 共有プロジェクト) や layer 3 (= personal) に書くと、 同型問題に当たる他 Claude Code ユーザーが再発見しないといけない。 一般則は layer 1 に置くのが配置原則 ([`docs/convention-design-principles.md §1`](docs/convention-design-principles.md#placement-by-scope))。
 
 ---
 
@@ -534,7 +534,7 @@ Claude Code の Bash ツールは起動時に生成したシェルスナップ�
 | ユーザー情報 (氏名・所属・メール) | `個人層の user-profile.md` |
 | CONVENTIONS.md 参照リスト | `個人層の CLAUDE.md` 「規約参照」セクション |
 
-bundle 判断 (「関連密接かつ合計 10 行未満のルールは bundle 可」) は `docs/convention-design-principles.md §1` に LESSON として昇格。setup.sh 側の symlink 置換経路は Step 5a (L460-481)、手動操作詳細は git log 参照。
+bundle 判断 (「関連密接かつ合計 10 行未満のルールは bundle 可」) は [`docs/convention-design-principles.md §1`](docs/convention-design-principles.md#placement-by-scope) に LESSON として昇格。setup.sh 側の symlink 置換経路は Step 5a (L460-481)、手動操作詳細は git log 参照。
 
 ---
 
@@ -575,7 +575,7 @@ bundle 判断 (「関連密接かつ合計 10 行未満のルールは bundle �
 
 ## DESIGN.md と EXPLORING.md の分離 (2026-04-06)
 
-原則は `docs/convention-design-principles.md §6` に昇格済 (§7 の 3 分類 ACTIVE/DEFER/LESSON はこれを精緻化したもの)。初回適用: `LorentzArena/2+1/EXPLORING.md` 新設 (`88ed267`)、同日 orphan bullets を migrate (`cadf135`)。「他リポへの retroactive migration はしない」という適用方針も §6 に収録済。
+原則は [`docs/convention-design-principles.md §6`](docs/convention-design-principles.md#design-exploring-separation) に昇格済 (§7 の 3 分類 ACTIVE/DEFER/LESSON はこれを精緻化したもの)。初回適用: `LorentzArena/2+1/EXPLORING.md` 新設 (`88ed267`)、同日 orphan bullets を migrate (`cadf135`)。「他リポへの retroactive migration はしない」という適用方針も §6 に収録済。
 
 ---
 
@@ -907,7 +907,7 @@ sensitive-terms.txt に分離) で当面の risk は大きく下がる。段階 
 
 **public/private 判定: marker file 一本** — `個人層の public-repos.yaml`
 一本化や `gh repo view` 自動判定とも比較した。各 repo の visibility
-は各 repo 固有の情報 (`convention-design-principles.md §1` 配置原則の
+は各 repo 固有の情報 ([`convention-design-principles.md §1`](docs/convention-design-principles.md#placement-by-scope) 配置原則の
 「影響範囲の最大公約数」)、正本は repo 自身にあるべき。marker 付け
 忘れによる false negative は audit script の missing marker 検出と
 `setup.sh` の 2 点で補う。日常 hook は marker 1 ファイルのみ見る
@@ -921,7 +921,7 @@ sensitive-terms.txt に分離) で当面の risk は大きく下がる。段階 
 **Tier A regex の 3 ファイル重複** — `public-leak-guard.sh` (PreToolUse)
 / `public-precommit-runner.sh` (pre-commit) / `audit-public-repos.sh`
 (audit) に同じ 4 regex + allowlist が独立に定義されている。
-`convention-design-principles.md §2` (定義は 1 箇所) に技術的に
+[`convention-design-principles.md §2`](docs/convention-design-principles.md#no-duplicate-rules) (定義は 1 箇所) に技術的に
 違反するが、以下の理由で現状維持:
 (1) 3 ファイルの実行コンテキストが完全に独立 (Claude hook stdin /
 git diff / git grep)。共通 source file への extract は shell
