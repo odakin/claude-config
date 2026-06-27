@@ -15,7 +15,7 @@ MCP ツールを使うリポで適用。CLAUDE.md から参照: `~/Claude/claude
 - **UUID→アカウント対応表は MCP 設定リポに保持**: 各 MCP 設定リポ (例: `gmail-mcp-config`) の CLAUDE.md または SESSION.md に UUID→アカウントの対応を記録する。memory には書かない (machine-local で cross-machine 不整合を招く。詳細: [docs/convention-design-principles.md §5](../docs/convention-design-principles.md))。新規セッションで対応表が不明・古ければ、上記方法で UUID→account を照合し、差分を MCP 設定リポに追記する
 - **アカウント一覧の正本**: 各 MCP 設定リポの CLAUDE.md を参照（各プロジェクトリポの CLAUDE.md にはハードコードしない）
 
-## `claude mcp` の project 解決ルール (注意)
+## <a id="claude-mcp-project-resolution"></a>`claude mcp` の project 解決ルール (注意)
 
 `claude mcp add` / `claude mcp remove` の default scope は **local** = 「対象 Claude Code project 内の MCP 登録」(`~/.claude.json` の `projects[<path>].mcpServers` 配下)。"対象 project" は cwd ではなく **cwd から ancestor を辿って最初に見つかる `.claude/` を持つディレクトリ** で決まる (= claude CLI が project と認識するディレクトリ)。
 
@@ -58,7 +58,7 @@ echo '{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":
 
 応答に `"result":{"protocolVersion":...}` が返れば server 側は健全。問題は Claude Code の MCP daemon 側の cache。
 
-#### handshake は「起動確認」 であって「依存検証」 ではない (= dependency bump 時の落とし穴)
+#### <a id="handshake-not-dependency-check"></a>handshake は「起動確認」 であって「依存検証」 ではない (= dependency bump 時の落とし穴)
 
 `initialize` handshake が PASS しても、それは **server の boot + protocol negotiation** を確認したに過ぎない。多くの MCP server は API client (`googleapis` 等) を **lazy に構築する** (= 初回 `tools/call` まで未構築)。したがって、ある dependency が **tool handler の中でしか使われない** 場合、handshake では一切 exercise されず、**handshake PASS は「その依存が動く」 証明にならない**。
 
@@ -172,7 +172,7 @@ MCP 設定リポは private にすること（認証情報のパスやアカウ�
 
 ---
 
-## Claude Code desktop session の `--allowedTools` 制限 (= 「登録済なのに使えない」 trap)
+## <a id="desktop-allowedtools-restriction"></a>Claude Code desktop session の `--allowedTools` 制限 (= 「登録済なのに使えない」 trap)
 
 Claude Code desktop app から起動した Claude Code session は `--allowedTools` で **限られた tool list (= 6 個程度: `mcp__computer-use` / `mcp__ccd_session__*` / `mcp__ccd_session_mgmt__*`)** しか渡してこない。 `~/.claude.json` の `mcpServers` に `gmail-personal` / `calendar-cis` 等が登録されていても、 そのまま自動 spawn されず session 内で見えない。
 
@@ -192,7 +192,7 @@ Claude Code desktop app から起動した Claude Code session は `--allowedToo
 
 ### harness 組み込み tool への波及 (= scheduled task 登録不可)
 
-⚠️ この `--allowedTools` subset は MCP server だけでなく **harness 組み込み tool** も削る: bridge session (= `CLAUDE_CODE_ENVIRONMENT_KIND=bridge`) では `create_scheduled_task` / `update_scheduled_task` が wire されず (= `ToolSearch "select:create_scheduled_task"` が空)、 fallback の `CronCreate` も `durable: true` を渡して **session-only 化** する (= 永続 local scheduled task を登録できない、 2026-06-23 実証)。 → 定期 task の登録は Terminal 直起動 session (= 上記対処 (b)) に移って行う。 詳細は [scheduled-tasks.md §登録できる session 種別](scheduled-tasks.md)。
+⚠️ この `--allowedTools` subset は MCP server だけでなく **harness 組み込み tool** も削る: bridge session (= `CLAUDE_CODE_ENVIRONMENT_KIND=bridge`) では `create_scheduled_task` / `update_scheduled_task` が wire されず (= `ToolSearch "select:create_scheduled_task"` が空)、 fallback の `CronCreate` も `durable: true` を渡して **session-only 化** する (= 永続 local scheduled task を登録できない、 2026-06-23 実証)。 → 定期 task の登録は Terminal 直起動 session (= 上記対処 (b)) に移って行う。 詳細は [`scheduled-tasks.md` registrable-session-types](scheduled-tasks.md#registrable-session-types)。
 
 ### 教訓 (= sweep skipping 防止)
 
@@ -212,7 +212,7 @@ Claude Code desktop app から起動した Claude Code session は `--allowedToo
 
 3 hook とも `-nudge` suffix (= 非 block、 informational only)、 出力経路は `additionalContext` JSON + `~/.claude/surface/*.txt` の 2 段 defensive (= CLI session は前者、 Claude Code desktop session は後者、 [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork) 「desktop は hook を実行はするが出力を honor しない」)。 配線は `claude-config/setup.sh install_hooks` で全自動、 各 hook 直下に `*.test.sh` (= logic test §A + 起票 transcript の retroactive selftest §B) 同梱。
 
-⚠️ 二次 trap 自覚: hook も「reminder を読み飛ばす Claude」 の前で必ず機能する保証はない (= 起票 session author confession)。 多層化 (= 3 hook 並走 + ToolSearch enumeration + user 側 wire 拡張 = アプリ内蔵 connector に personal Gmail 追加、 plan §blocker (4)) でリスク低減を狙う。 効果検証は live invoke (= §9.1 build-dependent: 新規 hook は同 session 非発火、 次 session で観察) が必要、 数回の Gmail-search session で「scope-template が実際に埋められるか」 を観察 → false negative 多発なら escalate (= `permissionDecision: ask` 化、 hook-authoring §6.3)。 **2026-06-20 post-ship 観察 (n=1)**: 別 session で同 trap 構造 (= Claude Code (desktop) に write tool 不在) を踏みかけたが、 SessionStart capability anchor + 人読 manifest 経由で attempt 前に fallback (= `account-direct.py` Python wrapper) へ routing し完遂、 stuck-state 回避を 1 件で観察。 ⚠️ n=1 の一般化禁止 (= `work-discipline.md §A` 「一度の観察を一般法則化しない」 遵守)、 同型 case の複数 session 再現で仮説支持強化、 逆 case で escalation 検討。
+⚠️ 二次 trap 自覚: hook も「reminder を読み飛ばす Claude」 の前で必ず機能する保証はない (= 起票 session author confession)。 多層化 (= 3 hook 並走 + ToolSearch enumeration + user 側 wire 拡張 = アプリ内蔵 connector に personal Gmail 追加、 plan §blocker (4)) でリスク低減を狙う。 効果検証は live invoke (= §9.1 build-dependent: 新規 hook は同 session 非発火、 次 session で観察) が必要、 数回の Gmail-search session で「scope-template が実際に埋められるか」 を観察 → false negative 多発なら escalate (= `permissionDecision: ask` 化、 [`hook-authoring.md` reduction-procedure](hook-authoring.md#reduction-procedure))。 **2026-06-20 post-ship 観察 (n=1)**: 別 session で同 trap 構造 (= Claude Code (desktop) に write tool 不在) を踏みかけたが、 SessionStart capability anchor + 人読 manifest 経由で attempt 前に fallback (= `account-direct.py` Python wrapper) へ routing し完遂、 stuck-state 回避を 1 件で観察。 ⚠️ n=1 の一般化禁止 (= `work-discipline.md §A` 「一度の観察を一般法則化しない」 遵守)、 同型 case の複数 session 再現で仮説支持強化、 逆 case で escalation 検討。
 
 ### MCP tool scope manifest (= 人読 reference、 hook の動的 enumeration を補完)
 
@@ -257,7 +257,7 @@ scope-related artifact 3 つの責務分離:
 
 ---
 
-## MCP で不十分な場合: API 直接アクセス
+## <a id="api-direct-access"></a>MCP で不十分な場合: API 直接アクセス
 
 MCP ツールは個別操作に最適だが、バッチ操作（一括削除・ラベル付け・統計取得等）には向かない。Gmail MCP の `modify_email` は1件ずつだが、Gmail API の `batchModify` は1回で最大1000件を処理できる。
 

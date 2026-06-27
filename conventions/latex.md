@@ -309,7 +309,7 @@ JHEP.bst のような `F.~Last` 形式の bst では、ブレース内が全部 
 
 **やってはいけないこと**:
 
-- WebSearch の summary だけを根拠に entry を作る（summary は hallucinate する。`conventions/web-tools.md §「WebSearch の summary は hallucinate する」` 参照）
+- WebSearch の summary だけを根拠に entry を作る（summary は hallucinate する。[`web-tools.md` websearch-summary-hallucinates](web-tools.md#websearch-summary-hallucinates) 参照）
 - 既存 refs.bib の entry を**検証せずに**信用する（共同編集者や過去の自分が誤同定している可能性。実例: 同名著者の別論文と取り違え、改訂版のタイトルを初版と混同 等）
 - 似たキーワード・近い年代の論文を「これだろう」 と推測して埋める
 
@@ -390,7 +390,7 @@ math (`$...$` / `$$...$$` / `\(...\)` / `\[...\]` / equation 系環境) 内の e
   置く等、 byte 一致を保ちたい file は **untracked + gitignore** にする (= tracked だと commit 時に
   hook が dash/accent/quote を書換えて baseline が崩れる)。
 - **byte-pristine な subset を commit/push する時は `git commit --no-verify`** (= hook を bypass、
-  Overleaf scoped subset push 等。 `conventions/overleaf-integration.md §scoped subset push`)。
+  Overleaf scoped subset push 等。 [`overleaf-integration.md` scoped-subset-push](overleaf-integration.md#scoped-subset-push))。
 
 **Claude 規律**: `.tex/.bib` を書くとき、 「視覚的に em-dash」 のつもりで何の codepoint を打鍵しているか自覚する。 input method (= IME) が打鍵によって違う codepoint を吐くことがあり、 同じ文書内で codepoint 不一致が発生する (= 2026-05-15 個人層 private 日本語 LaTeX project の lecture draft で comments 部 U+2014 / body 部 U+2500 の混在を 1 セッション内で気付かずに作成、 hook が U+2014 のみ変換した結果 visual 一致だが source 不一致に着地)。 IME の確認 + 章執筆 1 個分書いたら `grep -P "[\x{2013}\x{2014}\x{2015}\x{2500}]"` で出現 codepoint を audit する。
 
@@ -564,7 +564,7 @@ PDF 上で段落区切りが visible (= LaTeX default `\parskip` で 1 行分の
 
 editorial typography で「機械改行を許容しない」 のは標準。 magazine cover / book cover / 学会ポスター等の display title は **文節境界改行**が defacto standard で、 auto-wrap 結果は visual quality を下げる。 yaml で行配列を持つ pattern は (a) wrap が text 編集の一部として扱える (b) display と web (= wrap なし) で同じ source から両方 generate できる、 2 つの利点がある。
 
-## PDF 視覚検証 reflex: compile success + log no-error だけで完了としない
+## <a id="pdf-visual-verification"></a>PDF 視覚検証 reflex: compile success + log no-error だけで完了としない
 
 LaTeX edit 後、 `pdflatex` が完走しても visual の overflow / misalignment / text 切れは普通に起きる。 「compile 成功」 を成功 signal にすると見落とす。 edit のたびに以下を回す:
 
@@ -637,7 +637,7 @@ scientific infographic で Latin (= 英文) + math + Japanese を共存させる
 \setsansjfont{HiraginoSans-W3}[BoldFont=HiraginoSans-W6]
 ```
 
-PostScript 名 (= `HiraMinProN-W3` 等) が必要。 display name (= `Hiragino Mincho ProN W3`) では fontspec が見つけられない。 詳細は [`conventions/tikz-pgfplots.md` §「macOS Hiragino font は PostScript 名で指定」](tikz-pgfplots.md#macos-hiragino-font-は-postscript-名で指定)。
+PostScript 名 (= `HiraMinProN-W3` 等) が必要。 display name (= `Hiragino Mincho ProN W3`) では fontspec が見つけられない。 詳細は [`tikz-pgfplots.md` hiragino-postscript-name](tikz-pgfplots.md#hiragino-postscript-name)。
 
 ### 数式 + 日本語を mix する align 環境
 

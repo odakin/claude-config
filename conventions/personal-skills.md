@@ -89,6 +89,6 @@ hook 配信問題と同型)。
 
 ## 関連
 
-- [`hook-authoring.md`](hook-authoring.md) — §10 (hook を見送る判定 = skill へ切替える分岐) / §9 (build 依存挙動) / §2・§4 (配信 2 段配達)
+- [`hook-authoring.md`](hook-authoring.md) — [hook-no-go-judgment](hook-authoring.md#hook-no-go-judgment) (hook を見送る判定 = skill へ切替える分岐) / [build-dependent-behavior](hook-authoring.md#build-dependent-behavior) (build 依存挙動) / [delivery-audit-4-axes](hook-authoring.md#delivery-audit-4-axes)・[partial-install-state](hook-authoring.md#partial-install-state) (配信 2 段配達)
 - [`scheduled-tasks.md`](scheduled-tasks.md) — 無人定期実行の SKILL.md (= 別機構、 混同注意: あちらは backend に prompt が保存され、 本 file の auto-discover とは独立)
 - `docs/convention-design-principles.md §8.12` — 発火面 hierarchy の一般原則 (本 file は skill 面の機構詳細)

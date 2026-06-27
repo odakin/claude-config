@@ -27,7 +27,7 @@ Claude Code の認証は **2 つの独立ストア**を持つ: **Claude Code des
 
 → 上の表は「Claude judgment 要 → scheduled task」 だが、 **Claude judgment が要り、 かつ アカウント切替で止めたくないなら、 第 3 の道 = launchd cron + `claude -p` (= CLI 認証を固定土台にする)**。同じ理由で `claude remote-control` サーバーモード (= CLI 認証で常駐、 [remote-control-server.md](remote-control-server.md)) も Claude Code (desktop) 切替に非依存。 ⚠️ ただし launchd は LANG 空 (C locale) なので `claude -p` の prompt は ASCII のみにする ([shell-multibyte-truncation.md](shell-multibyte-truncation.md))。
 
-### launchd cron の登録機構 (= 汎用エンジン)
+### <a id="launchd-cron-engine"></a>launchd cron の登録機構 (= 汎用エンジン)
 
 launchd cron で無人ルーチンを回す plist の生成・登録・状態確認・解除は、 `scripts/install-launchd-cron.sh` が **汎用エンジンの SoT** (= [remote-control-server.md](remote-control-server.md) と同じ「スクリプトが plist / label 設計の SoT、 doc に複製しない」 パターン)。 呼び出し側は label prefix・workdir・ROUTINES を渡すだけで、 **ROUTINES list / 個別ジョブ定義はエンジンに焼かない** (= エンジンは汎用機構のみ、 個別ジョブは呼び出し側の責務)。
 
@@ -40,7 +40,7 @@ install-launchd-cron.sh --label-prefix PREFIX [--workdir DIR] \
 - **type**: `skill` = `claude -p --permission-mode bypassPermissions` で SKILL.md を indirection 実行 (= Claude judgment 要) / `cmd` = script を直接実行 (= 決定的・claude 不要)。
 - **cron** は 5-field。 **`*/N` step 分** (= `*/30` → Minute `[0,30,...]`) と **`N-M` 曜日範囲** (= `1-5` → Weekday 月〜金) を StartCalendarInterval 配列へ展開する (launchd は step を持たないため)。
 - CLI 認証 (`~/.claude.json` の単一 account) で走るので Claude Code (desktop) のアカウント切替に非依存 (= 上記)。 launchd は LANG 空なので prompt は ASCII のみ ([shell-multibyte-truncation.md](shell-multibyte-truncation.md))。
-- **`--gate "<snippet>"`** (任意): wrapper に `cd WORKDIR && <snippet> || exit 0; exec <routine>` の形で gate を挿入する。 snippet が非 0 で終わると routine は実行されず exit 0 (= defer)。 複数マシンで「今どのマシンが本番か」 を台帳で切り替える **active-routine-host failover** ([multi-machine-state.md](multi-machine-state.md) §「account / host failover」) に使う (gate 実体 = `scripts/routine-host-gate.py`)。
+- **`--gate "<snippet>"`** (任意): wrapper に `cd WORKDIR && <snippet> || exit 0; exec <routine>` の形で gate を挿入する。 snippet が非 0 で終わると routine は実行されず exit 0 (= defer)。 複数マシンで「今どのマシンが本番か」 を台帳で切り替える **active-routine-host failover** ([`multi-machine-state.md` account-host-failover](multi-machine-state.md#account-host-failover)) に使う (gate 実体 = `scripts/routine-host-gate.py`)。
 
 **止め方の違い (= launchd cron 版 vs scheduled-task MCP 版)**: 同じ「定期ジョブ」 でも停止操作が機構で異なる。 launchd cron 版は `--uninstall-one <task-id>` (= `launchctl bootout` + plist 削除)、 scheduled-task MCP 版は `scheduled-tasks` MCP の delete。 期間限定ジョブ (= 大会期間だけ等) の自己停止 runbook を書くときは、 **どちらの機構で登録したか**に応じた停止コマンドを記す (= 機構を取り違えると停止できない)。
 
@@ -68,12 +68,12 @@ Claude バックエンド（リモート）    ← 実際に実行される prom
 
 SKILL.md を single source of truth にできない。リポの SKILL.md とバックエンドの prompt が乖離するリスクが常にある。
 
-## 登録できる session 種別 (= bridge / デスクトップアプリ backend session では create_scheduled_task が wire されない)
+## <a id="registrable-session-types"></a>登録できる session 種別 (= bridge / デスクトップアプリ backend session では create_scheduled_task が wire されない)
 
 `create_scheduled_task` / `update_scheduled_task` は **harness 組み込み tool** (= MCP server ではない。 `~/.claude.json` の `mcpServers` に現れない、 CronCreate と同類)。 これらが session で呼べるかは **起動経路で決まる**:
 
 - ✅ **登録できる**: Terminal から `claude` を直接起動した通常 Claude Code CLI session (= `--allowedTools` 無制限運用)。 既存の登録済 task (`weekly-web-freshness` 等) はこの経路で作られている。
-- ❌ **登録できない**: desktop / Claude Code desktop app が裏で起動する **bridge session** (= 判定 = `env | grep CLAUDE_CODE_ENVIRONMENT_KIND` が `bridge` + `CLAUDE_CODE_ENTRYPOINT=sdk-cli`)。 `--allowedTools` で tool が大幅に subset され、 `create_scheduled_task` が **session に wire されない** (= `ToolSearch "select:create_scheduled_task"` が "No matching deferred tools found")。 これは [mcp.md §「Claude Code desktop session の `--allowedTools` 制限」](mcp.md) と同根 (= 同じ subset 機構が組み込み scheduled-task tool も削る)。
+- ❌ **登録できない**: desktop / Claude Code desktop app が裏で起動する **bridge session** (= 判定 = `env | grep CLAUDE_CODE_ENVIRONMENT_KIND` が `bridge` + `CLAUDE_CODE_ENTRYPOINT=sdk-cli`)。 `--allowedTools` で tool が大幅に subset され、 `create_scheduled_task` が **session に wire されない** (= `ToolSearch "select:create_scheduled_task"` が "No matching deferred tools found")。 これは [`mcp.md` desktop-allowedtools-restriction](mcp.md#desktop-allowedtools-restriction) と同根 (= 同じ subset 機構が組み込み scheduled-task tool も削る)。
 
 **対処**: bridge session で scheduled task を登録したくなったら、 同じマシンの **Terminal で `claude` を直起動**した session に移って `create_scheduled_task` を呼ぶ (= mcp.md 対処 (b))。 bridge session 自身からは制限なし session を生やせない (= harness 仕様)、 user の手動操作が要る。
 

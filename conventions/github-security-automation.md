@@ -148,7 +148,7 @@ Tier 4 の例:
 
 ### Tier 4 の「local build test」 が build を持たない project (= 自作 MCP server 等) では何を指すか
 
-build step を持たない runtime project (= 自作 MCP server、 CLI、 script 群) の major dep bump では「build test」 の中身を明示する必要がある。 特に **自作 MCP server は API client (`googleapis` 等) を lazy 構築する** (= 初回 `tools/call` まで未構築) ため、 stdio `initialize` handshake は server boot + protocol negotiation のみ確認し、 **その依存を一切 exercise しない**。 → handshake PASS は major dep bump の検証として **不十分**、 read-only な `tools/call` を投げて**実 API round-trip**まで確認する (= 手順は [`mcp.md` runbook §1](mcp.md) の「handshake は依存検証ではない」)。 staged verification (= 1 dir bump → bump 前と live 結果比較 → 全 dir 展開) で blast radius 最小化。
+build step を持たない runtime project (= 自作 MCP server、 CLI、 script 群) の major dep bump では「build test」 の中身を明示する必要がある。 特に **自作 MCP server は API client (`googleapis` 等) を lazy 構築する** (= 初回 `tools/call` まで未構築) ため、 stdio `initialize` handshake は server boot + protocol negotiation のみ確認し、 **その依存を一切 exercise しない**。 → handshake PASS は major dep bump の検証として **不十分**、 read-only な `tools/call` を投げて**実 API round-trip**まで確認する (= 手順は [`mcp.md` handshake-not-dependency-check](mcp.md#handshake-not-dependency-check))。 staged verification (= 1 dir bump → bump 前と live 結果比較 → 全 dir 展開) で blast radius 最小化。
 
 ### Dependabot security-update PR は monorepo の全 manifest を cover しないことがある
 

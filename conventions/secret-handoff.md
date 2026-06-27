@@ -1,6 +1,6 @@
 # secret-handoff: Secret をユーザーの clipboard 経由で安全に運ぶ手順
 
-Token / API key / SSH 鍵 / 各種 credential を Claude がユーザーに `~/.secrets/<name>` 等のローカル配置先へ書き込ませる場面で、**chat に literal を貼らせない原則** (例: `discord-bot.md §「Bot Token の取り扱い」`) と組み合わさったとき、ユーザーは secret を **clipboard 経由で** ブラウザ → ターミナルに運ぶことになる。このときに発生する再現性の高い罠と回避手順。
+Token / API key / SSH 鍵 / 各種 credential を Claude がユーザーに `~/.secrets/<name>` 等のローカル配置先へ書き込ませる場面で、**chat に literal を貼らせない原則** (例: [`discord-bot.md` bot-token-handling](discord-bot.md#bot-token-handling)) と組み合わさったとき、ユーザーは secret を **clipboard 経由で** ブラウザ → ターミナルに運ぶことになる。このときに発生する再現性の高い罠と回避手順。
 
 ## The trap: clipboard は 1 個しかない
 
@@ -108,7 +108,7 @@ Secret を `~/.secrets/<name>` 系に運ぶ手順を提示する時は **必ず 
 
 ## 関連
 
-- `discord-bot.md §「Bot Token の取り扱い」` — Token を chat に貼らせない原則 (本ファイルの前提条件)
+- [`discord-bot.md` bot-token-handling](discord-bot.md#bot-token-handling) — Token を chat に貼らせない原則 (本ファイルの前提条件)
 - `~/Claude/CONVENTIONS.md §5「安全規則」` — secret 全般の git/ chat への流出禁止
 
 ## Secret file の binary inspection 禁止

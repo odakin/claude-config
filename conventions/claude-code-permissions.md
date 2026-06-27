@@ -44,7 +44,7 @@ settings.json はセッション開始時に読まれる。**途中変更が即�
 `setup.sh` の `configure_permissions()` は `permissions.allow` に安全ツール (Bash/Read/Edit/Write/Glob/Grep/WebFetch/WebSearch) の**不足分を足すだけ**で、`additionalDirectories` と `deny` には**一切触らない**。
 → `~/.claude/settings.json` に直書きした `additionalDirectories` / `deny` は **setup 再走でも消えない** (永続)。バックアップを取ってから jq で書き換えるのが安全。
 
-## frontend 切り分け (同じ症状でも 3 系統)
+## <a id="frontend-split"></a>frontend 切り分け (同じ症状でも 3 系統)
 
 「いちいちアクセス権を聞かれる」は別系統の原因がありうる。**対処の前にどのフロントエンドか切り分ける** (Claude は CLI / デスクトップアプリ / IDE 拡張の 3 経路で使われうる):
 
@@ -55,7 +55,7 @@ settings.json はセッション開始時に読まれる。**途中変更が即�
    - ⚠️ **「settings.json をいじっても変わらない」 の例外 = `deny` (2026-06-13 実測)**: desktop でも `~/.claude/settings.json` の `permissions.deny` は **honor される** (= 無害な deny 対象コマンドを叩くと block された)。 desktop で効かないのは **hook 出力** (= [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork)) と **`defaultMode: bypassPermissions` 下の ask** (= bypass は全 tool auto-approve なので ask が void)。 **だが `defaultMode: default` なら settings.json の `permissions.ask` は desktop でも効く** (= 2026-06-13 実証: send_email を ask にすると内容表示つき承認 dialog が出て拒否で送信ブロック。 下記「desktop で特定 tool に確認を課す」)。 ∴ desktop UI の「バイパス権限モードを許可」 トグルは lever ではなく、 **settings.json の `defaultMode` が実効モードを支配**する (= トグル OFF だけでは gate されない)。
 3. **macOS TCC** (OS のフォルダアクセス許可、Desktop/Documents/Downloads 等の保護) — macOS システムダイアログで、Claude 側の設定では消えない。Claude.app が versioned path に置かれる影響で再 prompt される構造的症状は [`macos-claude-code-tcc-recurring-prompt.md`](macos-claude-code-tcc-recurring-prompt.md) 参照。
 
-## desktop で特定 tool に確認を課す (= hook 不可な frontend での per-tool gate、 2026-06-13)
+## <a id="desktop-per-tool-gate"></a>desktop で特定 tool に確認を課す (= hook 不可な frontend での per-tool gate、 2026-06-13)
 
 PreToolUse hook (mail 誤送信 guard 等) は desktop で出力 honor されず inert (= §frontend 切り分け 2 / [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork))。 desktop で「特定の高 stakes tool だけ実行前に人間が一拍」 を機械的に課す working recipe は **settings.json の permission のみ** (= hook 不要、 2026-06-13 実証):
 

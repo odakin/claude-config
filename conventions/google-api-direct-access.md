@@ -2,7 +2,7 @@
 
 MCP では cover できない (= bulk 操作・xlsx parse・特殊 scope) Google API call を Python から直接行うときの setup と運用規約。 個別 MCP (Gmail / Calendar / Classroom 等) と並存して動かす想定。 CLAUDE.md から参照: `~/Claude/claude-config/conventions/google-api-direct-access.md`
 
-関連: `conventions/mcp.md §「MCP で不十分な場合: API 直接アクセス」` (= 使い分け基準)、 `conventions/google-url.md §「GCP project 管理操作の特殊性」` (= URL 規約)。
+関連: [`mcp.md` api-direct-access](mcp.md#api-direct-access) (= 使い分け基準)、 [`google-url.md` gcp-project-management](google-url.md#gcp-project-management) (= URL 規約)。
 
 ## 全体像 (= 3 layer)
 
@@ -45,7 +45,7 @@ https://docs.google.com/spreadsheets/d/e/<published-id>/pub?gid=<gid>&single=tru
 
 各 Google API (Gmail / Sheets / Drive / Calendar / Classroom / etc.) は GCP project ごとに**個別 enable 必要**。 1 つ enable しても他は別。
 
-**URL 規約** (= `conventions/google-url.md §「GCP project 管理操作の特殊性」`):
+**URL 規約** (= [`google-url.md` gcp-project-management](google-url.md#gcp-project-management)):
 ```
 https://console.developers.google.com/apis/api/{api}.googleapis.com/overview?project={projectNumber}&authuser=<project_owner_email>
 ```

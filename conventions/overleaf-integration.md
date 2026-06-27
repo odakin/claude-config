@@ -121,7 +121,7 @@ behind>0 / ID 未設定 / 未 bootstrap / 「Overleaf 連携の記述がある�
 4. (管理 file を Overleaf に push しない運用なら) installer に `--ahead-expected` を
    付けるか script の `AHEAD_EXPECTED=1` を立てる
 
-## scoped subset push (= 一部の編集だけ Overleaf に出し、 残り本文は共著者版と byte 同一に保つ)
+## <a id="scoped-subset-push"></a>scoped subset push (= 一部の編集だけ Overleaf に出し、 残り本文は共著者版と byte 同一に保つ)
 
 論文の **一部 (例: abstract + intro) だけを Overleaf に push** し、 それ以外の本文は共著者の
 Overleaf 版と byte 一致のまま保ちたい場合 (= 自分の本文 markup / 管理 file を Overleaf に

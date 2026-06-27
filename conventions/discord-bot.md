@@ -74,7 +74,7 @@ GitHub Actions の workflow 側で **後続 step に `if: always()`** を付け�
 
 これで「UI failure を見て修復する signal を保つ」+「正常 channel の data は反映される」を両立。1 channel が permission 系で死んでいても他の data 鮮度は守られる。
 
-## Bot Token の取り扱い
+## <a id="bot-token-handling"></a>Bot Token の取り扱い
 
 - canonical 配置: `~/.secrets/<bot>-token` の形 (チーム / project 単位、`secrets-config` 規約と整合)
 - リポ内 backup を持つ場合は **git-crypt 暗号化必須**。平文 commit は禁止
@@ -82,7 +82,7 @@ GitHub Actions の workflow 側で **後続 step に `if: always()`** を付け�
 - GitHub Actions では `${{ secrets.<NAME> }}` 経由で env var に注入し、log で `***` mask されることを確認 (`echo $TOKEN` のような直接出力をしない)
 - **Token を初回 `~/.secrets/<bot>-token` に配置する手順は [`secret-handoff.md`](secret-handoff.md) を参照** — `pbpaste` 系で書き込む案は clipboard 上書きの罠で確実に破綻するため厳禁。stdin-wait 先行 pattern (`cat > file` または `read -rs`) が canonical
 
-## Token 共有プロトコル: owner 単独運用 vs. collaborator 共有
+## <a id="token-sharing-protocol"></a>Token 共有プロトコル: owner 単独運用 vs. collaborator 共有
 
 Bot Token を **誰が持つか** を明示的に判断する。Token を持つ人だけが Bot 操作 (ローカル API call / Bot 投稿 script のテスト等) でき、持たない人は GitHub Actions 経由でのみ動かせる (= `workflow_dispatch` で trigger)。
 

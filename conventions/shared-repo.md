@@ -6,7 +6,7 @@
 
 ## Git workflow（必須）
 
-### セッション開始時
+### <a id="session-start"></a>セッション開始時
 「作業開始」「スタート」等の合図があったら:
 1. `git status` で状態チェック
    - **未コミット変更あり** → 「前回の変更が未 commit です。先に commit & push しますか？」
@@ -16,7 +16,7 @@
    - **判断材料**: PR が触るファイルと今のタスクの重なり（競合可能性）、CI 失敗・reviewer unblock 待ちの緊急度
 4. リマインダー表示: **「作業が終わったら commit & push を忘れずに！」**
 
-### セッション終了時
+### <a id="session-end"></a>セッション終了時
 「おわり」「終了」「今日はここまで」等の合図、またはお礼・挨拶があったら:
 - `git status` を実行し、未コミット/未 push があればリマインドする
 - クリーンなら「変更なし。お疲れさまでした。」
@@ -176,7 +176,7 @@ label 名にも owner literal を入れない (例: `local.<owner>.foo` では�
 
 template 化 (sed substitution) が必要なのは macOS plist のみ (経験上)。
 
-## 「standalone で成立」 の操作的定義
+## <a id="standalone-operational-definition"></a>「standalone で成立」 の操作的定義
 
 「standalone で成立」は **完全自己完結** ではなく、**標準 dev environment + 明示された外部依存** で動作する状態を指す。
 
@@ -205,7 +205,7 @@ shared 層が依存していい外部リソースと、その doc 明示義務:
 **共同編集者が clone → setup.sh を走らせた時、何が動いて何が動かないかが doc から判断できる** ことが standalone 要件の本質:
 
 - ✅ 動く例: cron 駆動の自動 job (= GitHub Actions)、yaml/script 編集 + push、機能サマリの参照
-- ⚠️ 制約付きで動く例: secret 必要操作 (owner 依頼経路に従う、具体的には `conventions/discord-bot.md §「Token 共有プロトコル」` 参照)、macOS only スクリプト (他 OS では skip)
+- ⚠️ 制約付きで動く例: secret 必要操作 (owner 依頼経路に従う、具体的には [`discord-bot.md` token-sharing-protocol](discord-bot.md#token-sharing-protocol) 参照)、macOS only スクリプト (他 OS では skip)
 - ❌ doc 不明示で動かない = layer 違反: 共同編集者がトラブルシュートで詰む状態
 
 ### operational 完結性の文書化義務

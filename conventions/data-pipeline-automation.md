@@ -254,7 +254,7 @@ clean 前提を preflight で保証してから `git clean -fd <dirs>` する設
 
 - §3 (judgment-required placeholder) = run-time 人間あり版、 本 §7 = 無人版。 同じ「機械は推測しない」 思想の対話/無人の両極
 - §5 (過去手書き出力を script で reproduce) は無人 publish 前の validity 確認に必須 (= 生成物が手書き正本と同形式かを事前検証してから arm)
-- 実行 locus の選択 (= そもそも無人 job を launchd / cron / scheduled task / GitHub Actions のどれで回すか) は [scheduled-tasks.md](scheduled-tasks.md) §「実行 locus で機構を選ぶ」
+- 実行 locus の選択 (= そもそも無人 job を launchd / cron / scheduled task / GitHub Actions のどれで回すか) は [`scheduled-tasks.md` execution-locus-selection](scheduled-tasks.md#execution-locus-selection)
 - 無人 job を「どのマシンで」 走らせるかの判定 + install 未済の surface は [multi-machine-state.md](multi-machine-state.md)
 
 ---

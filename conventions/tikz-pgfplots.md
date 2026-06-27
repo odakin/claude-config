@@ -1,6 +1,6 @@
 # TikZ / pgfplots 規約
 
-TikZ や pgfplots を含む LaTeX project で適用。 一般 LaTeX 規約は [`conventions/latex.md`](latex.md)、 PDF 視覚検証規律は同 latex.md §「PDF 視覚検証 reflex」 を併読。
+TikZ や pgfplots を含む LaTeX project で適用。 一般 LaTeX 規約は [`conventions/latex.md`](latex.md)、 PDF 視覚検証規律は [`latex.md` pdf-visual-verification](latex.md#pdf-visual-verification) を併読。
 
 本 file の知見は **cosmology infographic 制作 (= [odakin/infographics](https://github.com/odakin/infographics) `cosmology-history/`) で多数 iteration を user feedback 駆動で回した記録** (= 2026-05-19 初版 20 iteration + 2026-06-02 に密度プロット再設計で更に多数、 後者で「床塗り closedcycle」「named anchor の scope 非追従」「中央寄せ＝平行移動」「aspect 変更時の回転再計算」 を追加)。 大半は「公式 doc 通りには動かない / 動くが直感に反する」 系の罠で、 1 度踏むと原因特定に 1-2 turn 浪費する。
 
@@ -143,7 +143,7 @@ Higgs / Mexican hat の cross-section は数学的には W 形状だが、 **cen
 - V(±2.7) = 0.32 × (7.29 − 1.96)² ≈ 9.1
 - 比 outer/peak ≈ 7.4 → sombrero 様
 
-## macOS Hiragino font は PostScript 名で指定
+## <a id="hiragino-postscript-name"></a>macOS Hiragino font は PostScript 名で指定
 
 **症状**: `\setmainjfont{Hiragino Mincho ProN W3}` は `! Package fontspec Error: The font "Hiragino Mincho ProN W3" cannot be found.` で失敗する。
 
@@ -235,7 +235,7 @@ TikZ / pgfplots の edit 直後、 `lualatex` exit code 0 + log error 0 でも *
 - 数式中央揃えが微妙にズレている
 - font が想定と違う (= 別 face fallback)
 
-`latex.md §「PDF 視覚検証 reflex」` で defined されている **render → PNG → 視覚確認** loop を、 TikZ / pgfplots では特に必須化する。 公式 doc 通りに書いても rendering は doc と異なることが多いため、 「公式 doc を引用して fixed と主張」 は使えない (= user に「動いてない」 と指摘される)。
+[`latex.md` pdf-visual-verification](latex.md#pdf-visual-verification) で defined されている **render → PNG → 視覚確認** loop を、 TikZ / pgfplots では特に必須化する。 公式 doc 通りに書いても rendering は doc と異なることが多いため、 「公式 doc を引用して fixed と主張」 は使えない (= user に「動いてない」 と指摘される)。
 
 ### TikZ / pgfplots 編集後の render reflex
 

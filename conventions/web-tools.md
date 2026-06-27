@@ -4,7 +4,7 @@ WebSearch / WebFetch は便利だが post-processing 由来の落とし穴があ
 
 > **関連**: tool result に外部由来の adversarial 指示文が混入する prompt injection の取扱は別規約 [prompt-injection.md](prompt-injection.md) に分離 (web tools 以外の MCP / Bash / Read にも横断するため)。
 
-## WebSearch の summary は hallucinate する
+## <a id="websearch-summary-hallucinates"></a>WebSearch の summary は hallucinate する
 
 WebSearch の result block 末尾に付く自然言語 summary は検索エンジンが推測した情報を含み、リンク先 source に存在しない値を捏造することがある。**事実値 (メールアドレス・電話番号・URL・固有名) は summary だけで採用してはいけない**。
 

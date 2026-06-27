@@ -292,7 +292,7 @@ Pattern B では collaborator (および将来の自分) に **2 つの mental c
 
 ### 9.2 同期チャネル 2 系統の table
 
-Pattern B では何が git で運ばれて何が Dropbox で運ばれるかが分裂する。 collaborator にこれを明示する義務がある (= `conventions/shared-repo.md` §「standalone で成立」 の operational 完結性に相当):
+Pattern B では何が git で運ばれて何が Dropbox で運ばれるかが分裂する。 collaborator にこれを明示する義務がある (= [`shared-repo.md` standalone-operational-definition](shared-repo.md#standalone-operational-definition) の operational 完結性に相当):
 
 | チャネル | 何が運ばれるか | trigger |
 |---|---|---|

@@ -21,7 +21,7 @@ session A の commit を session B が pull せずに開始すると、 session 
 
 **(A) Session 開始時 reflex** (= 最優先、 全 session の冒頭で必須)
 
-`shared-repo.md §「セッション開始時」` の `git fetch` + `git status` に加えて:
+[`shared-repo.md` session-start](shared-repo.md#session-start) の `git fetch` + `git status` に加えて:
 
 1. **`git log --oneline -5`** で **最後の 5 commit を確認** (= session の prev work と被っていないか)
 2. **`SESSION.md` + 進行中 plan を読む** (= plan の `[x]` mark で「すでに実装済み」 と分かる task は重複実装しない)
@@ -134,7 +134,7 @@ zoom session で user + Claude session が並列に動き、 user が手で `CLA
 - **Edit エラー時の再 Read は必須** (§1 (C))
 - **user の手動編集を尊重**: 自分の Edit と user の edit が conflict した時、 user の edit を優先 (= 「user の意図が反映された latest」 として再 Read)
 - **重複 Edit を避けるための同期 signal**: zoom 中で user が「これは私が書く」 等の signal を出していたら、 当該 file は自 Edit を保留して user の commit を待つ
-- **session 終了前に未 push commit + 未 commit 変更を確認** (= [`shared-repo.md §「セッション終了時」`](shared-repo.md))。 zoom 後に user が別マシンから pull する経路を保持
+- **session 終了前に未 push commit + 未 commit 変更を確認** (= [`shared-repo.md` session-end](shared-repo.md#session-end))。 zoom 後に user が別マシンから pull する経路を保持
 
 ### user による手動編集の検出パターン
 
@@ -217,7 +217,7 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 
 **∴ Agent は必ず `run_in_background: true` を明示で付ける (= 前景〔background 無し〕は禁止、 「ほぼ」 でなく全面)。** 理由は 2 つ: (i) 前景 *だけ* が親を止める、 (ii) **legibility** = `ask:Agent` の承認ダイアログは生引数を出すだけで前景/background を読み取りにくい (= `run_in_background` を省くと前景なのに dialog に何の印も出ない) → **常に background に固定すれば「dialog に現れた Agent は必ず background (= 止まらない)」 と確定**し、 human は gate で「これは止まるやつか?」 を判定せず済む (= veto は『そもそも立てるべきか・別 session にすべきか』 だけに使える)。 明示 `true` は dialog 引数でも裏取りできる二重化。 ⚠️ **機械 backstop の frontend 別整理** (= 2 段ある):
 - **(a) 細かい強制** (= 「background 無しの Agent だけ deny して付け直させる」 等、 tool 引数を見る介入型 guard) は **CLI のみ可**。 desktop app は介入型 guard が原理的に不能 ([`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork))。
-- **(b) 粗い pre-launch gate** (= settings.json `permissions.ask` に **`Agent` ツール名を入れる**) は **desktop でも honor される**: Agent 起動の*前*に承認ダイアログが出て human が veto できる (= mail 誤送信 gate と同機構、 `defaultMode: default` 前提、 [`claude-code-permissions.md §desktop で特定 tool に確認を課す`](claude-code-permissions.md))。 前景/background の自動判別はできない (= 引数を見ないので) が、 human が dialog で「background か別 session で」 と差し戻せる。 tradeoff = 正当な調査 Agent も毎回承認。
+- **(b) 粗い pre-launch gate** (= settings.json `permissions.ask` に **`Agent` ツール名を入れる**) は **desktop でも honor される**: Agent 起動の*前*に承認ダイアログが出て human が veto できる (= mail 誤送信 gate と同機構、 `defaultMode: default` 前提、 [`claude-code-permissions.md` desktop-per-tool-gate](claude-code-permissions.md#desktop-per-tool-gate))。 前景/background の自動判別はできない (= 引数を見ないので) が、 human が dialog で「background か別 session で」 と差し戻せる。 tradeoff = 正当な調査 Agent も毎回承認。
 
 ∴ desktop でも「Agent 起動を human の一拍に乗せる」 機械 backstop は在る ((b))。 その上で *前景禁止 (= 常に background)* を保つのは依然 *規律* (= dialog 通過後に Claude が前景を選ばない保証は機械化されない — desktop は引数を見て前景だけ弾けない) で、 最後の砦は human-steering。
 
