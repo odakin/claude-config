@@ -178,7 +178,7 @@ grep -nE '\\(newcommand|renewcommand|providecommand|nc|def|NewDocumentCommand|De
 → 各 LaTeX repo に **3 段の機械 enforcement** を置く:
 
 1. **repo-local の check script**（例: `scripts/check-preamble-aliases.py`）— body を走査し、プリアンブルに macro があるのに raw を使う箇所を HARD 違反として列挙、hard>0 で `exit 1`。macro vocabulary は repo ごとに違うので script は **Layer 2（各 repo の `scripts/`）に置く**（本 Layer 1 doc は pattern の SoT、実装は repo 側）。検出規則には atom だけでなく **その repo の compound macro をバイパスした形**（lookahead で対象を絞り、別概念の同形記号を誤検出しない）まで含めるのが肝。
-2. **committed pre-commit hook**（`.githooks/pre-commit` + `core.hooksPath` を張る `scripts/install-hooks.{sh,ps1}`）— clone 初回に 1 度 install すれば、以後の commit で 1. を自動実行し raw を含む commit を block。hook は version 管理下に置き、各著者の環境（mac / Windows git-bash）で動くよう `sh` で書く。既存の char-fixer 等があれば conditional に chain（無い環境では no-op）。
+2. **committed pre-commit hook**（`.githooks/pre-commit` + `core.hooksPath` を張る `scripts/install-hooks.{sh,ps1}`）— clone 初回に 1 度 install すれば、以後の commit で 1. を自動実行し raw を含む commit を block。hook は version 管理下に置き、各著者の環境（mac / Windows git-bash）で動くよう `sh` で書く。既存の char-fixer 等があれば conditional に chain（無い環境では no-op）。⚠️ **Windows gotcha**: `.gitattributes` で hook と `*.sh` を `eol=lf` 強制しないと、checkout 時に CRLF 化して shebang（`#!/bin/sh`）が壊れる（`* text=auto eol=lf` 1 行で足りる）。git-bash の挙動は version 差があるので、Windows 共著者が居るなら初回に実機 smoke-test（適当な違反を commit して block されるか）を 1 度回す。
 3. **CI**（`.github/workflows/*.yml` で push/PR ごとに 1. を実行）— pre-commit hook を install していない clone（= 制御できない共著者）でも server 側で必ず検出する最終防衛線。pure-script なので LaTeX build 不要・高速。
 
 ⚠️ **mechanize の限界を明示する**: 微分の `d` のように「regex で raw と正用を判別できない」 category は lint 不能 → discipline に残す（noisy rule を足すと false positive で linter の信頼を失う）。mechanize できる subset とできない subset を分け、後者は doc に明記する。
