@@ -78,6 +78,6 @@ launchd / cron の定期ジョブは **登録したマシンでだけ走る**。
 ## 関連
 
 - 同じ system に対する別マシンの観察結果を比較する経路は、各 repo の `DESIGN.md` に「<date> の machine-X observation」の節を立て、別マシンでの観察を追記する形で蓄積するのが追跡しやすい (「audit を上書きする」のではなく「audit に scope qualifier と別マシン観察を追加する」アプローチ)
-- 定期ジョブの機構選択 (launchd / cron / scheduled task / GitHub Actions) は [scheduled-tasks.md](scheduled-tasks.md) §0。 hook の配信正常性 audit は [hook-authoring.md](hook-authoring.md)
+- 定期ジョブの機構選択 (launchd / cron / scheduled task / GitHub Actions) は [`scheduled-tasks.md` execution-locus-selection](scheduled-tasks.md#execution-locus-selection)。 hook の配信正常性 audit は [hook-authoring.md](hook-authoring.md)
 - マシン横断の repo pull 経路は各ユーザーの個人レイヤーで決める (例: 個人スクリプト `pull-all.sh` を持つ等) — 本リポ public 共通規約には組み込まない
 - マシン固有の install 不可な package (= `brew install foo` の試行失敗) の蓄積規律は [`install-failures.md`](install-failures.md) — layer 4 (machine-local memory) に試行結果を貯めて再試行コストを回避する pattern

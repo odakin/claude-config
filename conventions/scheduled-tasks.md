@@ -2,7 +2,7 @@
 
 Claude Code scheduled tasks を使うリポで適用。CLAUDE.md から参照: `~/Claude/claude-config/conventions/scheduled-tasks.md`
 
-## 0. 実行 locus で機構を選ぶ (= scheduled task が正しい道具か先に問う)
+## <a id="execution-locus-selection"></a>0. 実行 locus で機構を選ぶ (= scheduled task が正しい道具か先に問う)
 
 定期/自動ジョブを組む前に、 **(1) run-time に Claude の judgment が要るか** + **(2) 何にアクセスするか** で実行機構を選ぶ。 「定期 = scheduled task」 と reflex で選ぶと、 deterministic job に Claude を毎回起こす過剰や、 cloud routine の local-access 不在に後で衝突する。
 
@@ -16,7 +16,7 @@ Claude Code scheduled tasks を使うリポで適用。CLAUDE.md から参照: `
 
 **reflex**: 「定期実行 = scheduled task」 ではない。 まず **(1) run-time に Claude judgment が要るか** — 不要 (= 純粋 script) なら launchd/cron (= Claude を毎回起こさない、 決定的、 無料)。 要るなら scheduled task (= local access あり)。 次に **(2) cloud に出す必要があるか** — NW block 回避なら GitHub Actions、 それ以外で local 依存があるなら cloud routine (schedule skill) を避ける。 実行 locus が不確かな機構は、 local access を前提にする前に locus を検証する (= 機構名から「remote だろう」 と推測せず実証する)。
 
-machine-local job を「どのマシンに登録するか / 登録漏れをどう surface するか」 は [multi-machine-state.md](multi-machine-state.md)。 無人 publish の安全 gate は [data-pipeline-automation.md](data-pipeline-automation.md) §7。
+machine-local job を「どのマシンに登録するか / 登録漏れをどう surface するか」 は [multi-machine-state.md](multi-machine-state.md)。 無人 publish の安全 gate は [`data-pipeline-automation.md` autonomous-execution-gate](data-pipeline-automation.md#autonomous-execution-gate)。
 
 ### アカウント切り替えに非依存にしたいとき (= Claude Code desktop app と CLI の 2 認証ストア)
 

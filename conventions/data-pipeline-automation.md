@@ -187,7 +187,7 @@ local build (= PDF/.tex 生成) と external publish (= 別リポへ mirror、 P
 
 ---
 
-## 7. 無人実行 (autonomous / scheduled) の gate
+## <a id="autonomous-execution-gate"></a>7. 無人実行 (autonomous / scheduled) の gate
 
 ### 規律
 
@@ -220,7 +220,7 @@ run-time に人間が居る半自動 (§3) では placeholder を出力に残し
 つまり「推測で埋めない」 規律は守ったまま、 **grounded な自動完成 (翻訳 + retrieval) を LLM 層に足す**ことで人間 pre-fill すら不要にできる。 これで「全 item 自動 publish」 が成立する (= armed ゲートが「人間が 1 field 埋めた item」 から「LLM が grounded に埋めた item」 に広がる)。
 
 適用上の規律:
-- **run-time に LLM が要る** → 機構は LLM-in-loop な定期実行 (= [scheduled-tasks.md](scheduled-tasks.md) §0「Claude judgment 要 → scheduled task」)。 純 deterministic 層 (= mirror) と LLM 層 (= 翻訳/retrieval で SoT 完成) を分離し、 LLM 層は SoT を埋めるだけ・公開生成は deterministic 層が行う (= テスト可能性 + 翻訳/retrieval を SoT に残してレビュー可能)
+- **run-time に LLM が要る** → 機構は LLM-in-loop な定期実行 (= [`scheduled-tasks.md` execution-locus-selection](scheduled-tasks.md#execution-locus-selection)「Claude judgment 要 → scheduled task」)。 純 deterministic 層 (= mirror) と LLM 層 (= 翻訳/retrieval で SoT 完成) を分離し、 LLM 層は SoT を埋めるだけ・公開生成は deterministic 層が行う (= テスト可能性 + 翻訳/retrieval を SoT に残してレビュー可能)
 - **人間提供値を最優先**: 既に人間が入れた値 (= 非 TBA) は LLM で上書きしない
 - **auto-completed には review marker を付け、 即ライブ + 早期レビュー** (= 公開を止めない代わりに、 通知 + drift 検出器で「自動生成・要目視」 を surface し人間が数日内に微修正)
 - **retrieved fact には出典を残す** (= 後で検証可能、 grounded であることの証跡)

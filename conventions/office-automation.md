@@ -1584,7 +1584,7 @@ python3 ~/Claude/claude-config/scripts/diff-form-docx.py --selftest
 
 HARD 検出時は exit 1。 完成度 finding (surface) は `--strict` で exit 1 化。 記入版生成 pipeline の最後に必ず通す。 `--selftest` 内蔵。
 
-判定は**構造的** = 「箱・列・箇条書きが空」「ラベルが置換」 は機械で言えるが、 **「散文の中身が薄い / 箱が半分しか埋まってない」 は判定不可** = 審査員の目の最終 pass が残る ([`office-automation-principles.md`](office-automation-principles.md) §「記入後は『審査員の目』 で閉じる」)。
+判定は**構造的** = 「箱・列・箇条書きが空」「ラベルが置換」 は機械で言えるが、 **「散文の中身が薄い / 箱が半分しか埋まってない」 は判定不可** = 審査員の目の最終 pass が残る ([`office-automation-principles.md` reviewer-eye-completion](office-automation-principles.md#reviewer-eye-completion))。
 
 ⚠️ EMPTY_LABELED_COL は blank 様式の row 0 が**全セル非空 (= 真のヘッダ行)** の表だけに適用 (= 表紙の key-value 表 〔ラベル|値|ラベル〕 は row 0 に空セルがあるので除外、 略歴/予算表だけ対象) = 列ヘッダ型と key-value 型の誤判定回避。
 
