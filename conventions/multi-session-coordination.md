@@ -213,13 +213,13 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 |---|---|---|
 | **長い / 独立 / ユーザーがオーナーの仕事** | **別セッション** (spawn_task / 下記 file-handoff) | 構造上ぜったいに親を止めない (別プロセス・別 context window) |
 | **答えを自分の手元に戻して今の作業に繋ぐ調査** | **background Agent** (`run_in_background: true`) | 非同期 — 委譲した瞬間に呼び元が解放され、 完了時に通知で戻る |
-| 上記以外 (= 前景 Agent) | **ほぼ封印** | 前景 Agent *だけ* が呼び元を同期ブロックして仕事を止める。 使うのは「この同じターン内で答えを使って次の行を書く」 純粋逐次の稀ケースのみ |
+| 前景 Agent (= `run_in_background` 無し) | **禁止** | 前景 *だけ* が呼び元を同期ブロックして止める。 同ターン内 inline chaining の便宜は失うが、 background + ターンを跨いで結果受領で代替でき (= 結果は呼び元の context に戻る・1 往復遅いだけ)、 親は止まらない |
 
-**∴ Agent を使うなら既定で `run_in_background: true` を付ける。** 前景 (= background なし) は上表 3 行目の稀ケース限定で、 それ以外は親が止まる = 事故。 ⚠️ **機械 backstop の frontend 別整理** (= 2 段ある):
+**∴ Agent は必ず `run_in_background: true` を明示で付ける (= 前景〔background 無し〕は禁止、 「ほぼ」 でなく全面)。** 理由は 2 つ: (i) 前景 *だけ* が親を止める、 (ii) **legibility** = `ask:Agent` の承認ダイアログは生引数を出すだけで前景/background を読み取りにくい (= `run_in_background` を省くと前景なのに dialog に何の印も出ない) → **常に background に固定すれば「dialog に現れた Agent は必ず background (= 止まらない)」 と確定**し、 human は gate で「これは止まるやつか?」 を判定せず済む (= veto は『そもそも立てるべきか・別 session にすべきか』 だけに使える)。 明示 `true` は dialog 引数でも裏取りできる二重化。 ⚠️ **機械 backstop の frontend 別整理** (= 2 段ある):
 - **(a) 細かい強制** (= 「background 無しの Agent だけ deny して付け直させる」 等、 tool 引数を見る介入型 guard) は **CLI のみ可**。 desktop app は介入型 guard が原理的に不能 ([`hook-authoring.md §9.3`](hook-authoring.md))。
 - **(b) 粗い pre-launch gate** (= settings.json `permissions.ask` に **`Agent` ツール名を入れる**) は **desktop でも honor される**: Agent 起動の*前*に承認ダイアログが出て human が veto できる (= mail 誤送信 gate と同機構、 `defaultMode: default` 前提、 [`claude-code-permissions.md §desktop で特定 tool に確認を課す`](claude-code-permissions.md))。 前景/background の自動判別はできない (= 引数を見ないので) が、 human が dialog で「background か別 session で」 と差し戻せる。 tradeoff = 正当な調査 Agent も毎回承認。
 
-∴ desktop でも「Agent 起動を human の一拍に乗せる」 機械 backstop は在る ((b))。 その上で background 既定を保つのは依然 *規律* (= dialog を通った後に前景か background かを決めるのは Claude 側) で、 最後の砦は human-steering。
+∴ desktop でも「Agent 起動を human の一拍に乗せる」 機械 backstop は在る ((b))。 その上で *前景禁止 (= 常に background)* を保つのは依然 *規律* (= dialog 通過後に Claude が前景を選ばない保証は機械化されない — desktop は引数を見て前景だけ弾けない) で、 最後の砦は human-steering。
 
 ### robust な宛先解決 = token-handshake (method A)
 
