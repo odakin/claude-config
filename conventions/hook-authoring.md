@@ -423,6 +423,8 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 - §6 (P1) の「該当 hook 全件で try-fire pass」 gate も、 新規追加 hook は新 session 必須。
 - **新規 hook 追加の作法**: ① stdin JSON で logic unit-test (同 session) → ② install + (a)(b) 配線 audit (同 session) → ③ live 発火は次 session で確認。
 
+⚠️ **frontend で snapshot 粒度が違う — desktop app は *app 起動時* snapshot (2026-06-27 実測)**: 上記 ③「次 session で確認」 は CLI (= session 単位 snapshot) の作法。 **Claude Code の desktop app (`CLAUDE_CODE_ENTRYPOINT=claude-desktop`、 = Claude for Mac の Code) は hook list を *app 起動時* に snapshot する** ので、 既に起動している app の中で「新しい session を開く」 だけでは、 後から settings.json に足した hook は **発火しない**。 → desktop で新規 hook を活かす・live verify するには **app を quit + 再起動**してから新 session を開く (= ③ は desktop では「app 再起動 → 次 session」)。 実測 (2026-06-27 probe): 13:03 に追加した SessionStart hook が、 13:25 に *起動済 app 内で* 開いた fresh session で**非発火** — 一方、 同じ fresh session で *app 起動前から settings.json に在った* 他 ~10 個の SessionStart hook は全て発火 (= それぞれの surface file が当該時刻に新規書込)。 ∴ 非発火は hook 不良でなく **app-launch snapshot 未収載**が原因 (logic は手動実行で健全確認済)。 これは §9.3 (= 出力が honor されない) とは**別軸の desktop 制約** (= §9.3「載った hook の出力が届くか」 / 本項「そもそも snapshot に載るか」)。
+
 ### <a id="build-dependent-docs-drift"></a>9.2 同種の「docs と乖離」 build 依存 feature
 
 | feature | 最新 docs | 実測された乖離 | robust な cross-build 選択 |
