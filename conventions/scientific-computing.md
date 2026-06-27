@@ -4,7 +4,7 @@
 
 ---
 
-## 1. Scale-dependent default は unit system 変更で silently 壊れる
+## <a id="scale-dependent-default"></a>1. Scale-dependent default は unit system 変更で silently 壊れる
 
 ### 問題
 
@@ -36,7 +36,7 @@
 **code 側**:
 - Numerical hyperparameter (integration upper bound, grid bracket, bin size, step size 等) の default を**定数で書かない**。`xs`, `sigmas`, data range から計算する scale-adaptive な式にする
 - どうしても定数を置くなら、関数先頭で data scale を assert して範囲外なら fail loudly にする
-- **sibling sweep at fix time** (= 2026-05-25 RCA 追加、 関連: [`debugging-discipline.md §4` の fix-time sibling sweep](debugging-discipline.md)): scale-blind default を 1 件 fix する際、 **同 file / 同 function / 同 関数族**を grep で sweep して `Max[xs] - 10` 系 (= 中性子寿命用) や `1000` 系 (= s² 想定) の literal を全 enumerate、 同 fix を全 sibling に同時適用する。 「flagged された 1 件を fix」 で止めると残存 sibling が将来 silently symptom を出す (= 上 2026-05-25 case)
+- **sibling sweep at fix time** (= 2026-05-25 RCA 追加、 関連: [`debugging-discipline.md` sibling-audit-on-violation](debugging-discipline.md#sibling-audit-on-violation) の fix-time sibling sweep): scale-blind default を 1 件 fix する際、 **同 file / 同 function / 同 関数族**を grep で sweep して `Max[xs] - 10` 系 (= 中性子寿命用) や `1000` 系 (= s² 想定) の literal を全 enumerate、 同 fix を全 sibling に同時適用する。 「flagged された 1 件を fix」 で止めると残存 sibling が将来 silently symptom を出す (= 上 2026-05-25 case)
 - **scale-adaptive default が非 robust 統計量を使うと outlier で破綻** (= 2026-06-01 RCA 追加): `Max[σ]` / `Min[]` ベースの adaptive 式は 1 点の outlier がそれを数桁膨張させて破綻しうる (= scale-adaptive 化は「定数を避ける」 の必要条件だが十分条件ではない)。 対処の優先順位: (1) **bound を消費する grid / integrator を scale-free にする** (= geometric/log 間隔、 適応分割) — bound の exact 値に依存しなくなり最も根治的 (+ bound 非変更ゆえ既存検証値を保てる)、 (2) それが無理なら bound 自体に robust 統計量 (median / percentile) を使う、 (3) どちらも無理なら data scale assert で fail loudly。 ただし robust 統計量だけでは `(5·data spread)²` のような second term が残ると不十分なことがある (= 上 2026-06-01 case) ので (1) を先に検討
 
 **discipline 側**:
@@ -57,7 +57,7 @@
 
 ---
 
-## 2. Explicit integrator は dτ 安定境界を超えると silently 発散、 implicit Euler / 解析解で根治
+## <a id="explicit-integrator-instability"></a>2. Explicit integrator は dτ 安定境界を超えると silently 発散、 implicit Euler / 解析解で根治
 
 ### 問題
 
@@ -134,7 +134,7 @@ for (let i = 0; i < N; i++) {
 | 厳密解が elementary functions で書ける | **(B) analytic** (= exact、 数値誤差 floating-point のみ) |
 | 強い非線形 / 多自由度 coupling で implicit が intractable | **(C) substep + explicit** |
 
-LorentzArena Bug 14 では当初 (C) substep を採用したが、 user 「原理的におかしくない?」 push back を契機に (A) implicit Euler に refactor (= friction が線形項なので closed-form solve 可能、 substep は workaround だった)。 詳細経緯: [LorentzArena 5/6 plan §6.5](https://github.com/sogebu/LorentzArena/blob/main/2%2B1/plans/2026-05-06-bug14-global-active-time.md) + [`debugging-discipline.md §1`](debugging-discipline.md) V1/V3 reflection。
+LorentzArena Bug 14 では当初 (C) substep を採用したが、 user 「原理的におかしくない?」 push back を契機に (A) implicit Euler に refactor (= friction が線形項なので closed-form solve 可能、 substep は workaround だった)。 詳細経緯: [LorentzArena 5/6 plan §6.5](https://github.com/sogebu/LorentzArena/blob/main/2%2B1/plans/2026-05-06-bug14-global-active-time.md) + [`debugging-discipline.md` fix-verification-3-axis](debugging-discipline.md#fix-verification-3-axis) V1/V3 reflection。
 
 **discipline 側**: physics simulation で「caller がいつでも well-bounded な dτ を渡す」 と仮定しない。 lag spike / browser suspend / debugger break で dτ が秒〜時間オーダーになる経路は実環境で必ず発生する。 integrator は **caller-agnostic に任意 dτ で stable** であるべき、 そのための first-line tool は implicit Euler、 substep は fallback。
 
@@ -150,7 +150,7 @@ LorentzArena Bug 14 では当初 (C) substep を採用したが、 user 「原�
 
 - LorentzArena Bug 14 完全治療 plan: [`plans/2026-05-06-bug14-global-active-time.md`](https://github.com/sogebu/LorentzArena/blob/main/2%2B1/plans/2026-05-06-bug14-global-active-time.md) §2.1 + §6.1-6.5 (= 却下した代替案 + implicit Euler refactor 経緯)
 - 数値解析教科書: Numerical Recipes §16.6 「Stiff Sets and Multistep Methods」、 implicit method / BDF / step size adaptation 等の古典的扱い
-- 関連メタ規律: [`debugging-discipline.md §1`](debugging-discipline.md) (= V1 numeric trace で代替 algorithm を網羅したか check、 V3 algorithm enumeration の domain-specific 適用が本 §)
+- 関連メタ規律: [`debugging-discipline.md` fix-verification-3-axis](debugging-discipline.md#fix-verification-3-axis) (= V1 numeric trace で代替 algorithm を網羅したか check、 V3 algorithm enumeration の domain-specific 適用が本 §)
 
 ---
 
@@ -307,7 +307,7 @@ migration / refactor で 旧 implementation を archive / removal する **不�
 
 ---
 
-## 6. Visual source (= 写真 / scan / PDF) からの数式 transcript の hallucination は sympy symbolic verify で expose する
+## <a id="sympy-verify-transcript"></a>6. Visual source (= 写真 / scan / PDF) からの数式 transcript の hallucination は sympy symbolic verify で expose する
 
 ### 問題
 
@@ -350,7 +350,7 @@ assert abs(expectation - sigma/2) < 1e-9, "MISMATCH"
 1. 数式を含む transcript を commit したら、 sweep の中で「algebra で検証可能な claim」 を列挙
 2. sympy 1-liner で symbolic verify、 0 / true / 期待値 一致 を expose
 3. mismatch を発見したら **fixup commit** で source を読み直して訂正 (= 「源 transcript の re-read」 + 「sympy verify pass」 の組で確定)
-4. 「fix できた」 を symbolic な 0 / true return で expose、 chat 上「✓ pass」 と書くだけで終わらせない (= [`debugging-discipline.md §1`](debugging-discipline.md) と整合)
+4. 「fix できた」 を symbolic な 0 / true return で expose、 chat 上「✓ pass」 と書くだけで終わらせない (= [`debugging-discipline.md` fix-verification-3-axis](debugging-discipline.md#fix-verification-3-axis) と整合)
 
 ### 反例 (= verify が無効な場面)
 
@@ -364,7 +364,7 @@ assert abs(expectation - sigma/2) < 1e-9, "MISMATCH"
 
 ### 関連
 
-- [`debugging-discipline.md §1`](debugging-discipline.md) — 「conceptually clean」 主張の verify 義務 (= 同 trait の異 framing、 transcript domain への応用)
+- [`debugging-discipline.md` fix-verification-3-axis](debugging-discipline.md#fix-verification-3-axis) — 「conceptually clean」 主張の verify 義務 (= 同 trait の異 framing、 transcript domain への応用)
 - sweep の goal alignment (= error 発見であって report 生産ではない) の数式 transcript domain 応用
 
 ---
@@ -396,7 +396,7 @@ disputed な量 (vertex 係数・規格化・符号) を「相手の結果に一
 ### 関連
 
 - §6 — transcript hallucination の sympy verify (= 本 § は「source 自体の error」 への拡張)
-- [`debugging-discipline.md §1`](debugging-discipline.md) — 「conceptually clean」 主張の verify 義務 (= 同 trait)
+- [`debugging-discipline.md` fix-verification-3-axis](debugging-discipline.md#fix-verification-3-axis) — 「conceptually clean」 主張の verify 義務 (= 同 trait)
 - 同 trait family = 「安価な操作 (= 一致合わせ / memory recall / literal-copy) で expensive 操作 (= 独立導出 / 数値 verify) を bypass する」。 review / sweep / context 構築 domain にも同型に現れる
 
 ## 8. 数値結果は第一原理 (次元解析・対称性・Ward 恒等式・既知極限) で cross-check; 自前の数値がバグり得る

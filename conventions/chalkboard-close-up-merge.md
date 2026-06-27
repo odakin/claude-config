@@ -206,4 +206,4 @@ Image.fromarray(wide_arr).save('merged.png')
 
 - 板書 PDF の自動取り込み手順 (Picker API → Dropbox 配置) は project 側 doc を参照 (例: `lectures/CLAUDE.md §「Google Photos からの自動取り込み」`)
 - AppleScript 全般の制約 (theme ローカライズ等) は OS 言語設定依存。 macOS 日本語環境前提
-- 板書写真 PDF → notes.md transcript 時の sympy verify reflex は [`scientific-computing.md §6`](scientific-computing.md)
+- 板書写真 PDF → notes.md transcript 時の sympy verify reflex は [`scientific-computing.md` sympy-verify-transcript](scientific-computing.md#sympy-verify-transcript)

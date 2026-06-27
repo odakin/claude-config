@@ -189,7 +189,7 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 
 ---
 
-## 7. 別 session への hand-off と結果の返送 — spawn_task + send_message (token-handshake で宛先解決)
+## <a id="spawn-handoff-token-return"></a>7. 別 session への hand-off と結果の返送 — spawn_task + send_message (token-handshake で宛先解決)
 
 §1-6 は並列 race の **防御**。 本節は逆に、 **意図的に独立 session を起こして結果を受け取る** 構築的 technique。
 
@@ -216,7 +216,7 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 | 前景 Agent (= `run_in_background` 無し) | **禁止** | 前景 *だけ* が呼び元を同期ブロックして止める。 同ターン内 inline chaining の便宜は失うが、 background + ターンを跨いで結果受領で代替でき (= 結果は呼び元の context に戻る・1 往復遅いだけ)、 親は止まらない |
 
 **∴ Agent は必ず `run_in_background: true` を明示で付ける (= 前景〔background 無し〕は禁止、 「ほぼ」 でなく全面)。** 理由は 2 つ: (i) 前景 *だけ* が親を止める、 (ii) **legibility** = `ask:Agent` の承認ダイアログは生引数を出すだけで前景/background を読み取りにくい (= `run_in_background` を省くと前景なのに dialog に何の印も出ない) → **常に background に固定すれば「dialog に現れた Agent は必ず background (= 止まらない)」 と確定**し、 human は gate で「これは止まるやつか?」 を判定せず済む (= veto は『そもそも立てるべきか・別 session にすべきか』 だけに使える)。 明示 `true` は dialog 引数でも裏取りできる二重化。 ⚠️ **機械 backstop の frontend 別整理** (= 2 段ある):
-- **(a) 細かい強制** (= 「background 無しの Agent だけ deny して付け直させる」 等、 tool 引数を見る介入型 guard) は **CLI のみ可**。 desktop app は介入型 guard が原理的に不能 ([`hook-authoring.md §9.3`](hook-authoring.md))。
+- **(a) 細かい強制** (= 「background 無しの Agent だけ deny して付け直させる」 等、 tool 引数を見る介入型 guard) は **CLI のみ可**。 desktop app は介入型 guard が原理的に不能 ([`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork))。
 - **(b) 粗い pre-launch gate** (= settings.json `permissions.ask` に **`Agent` ツール名を入れる**) は **desktop でも honor される**: Agent 起動の*前*に承認ダイアログが出て human が veto できる (= mail 誤送信 gate と同機構、 `defaultMode: default` 前提、 [`claude-code-permissions.md §desktop で特定 tool に確認を課す`](claude-code-permissions.md))。 前景/background の自動判別はできない (= 引数を見ないので) が、 human が dialog で「background か別 session で」 と差し戻せる。 tradeoff = 正当な調査 Agent も毎回承認。
 
 ∴ desktop でも「Agent 起動を human の一拍に乗せる」 機械 backstop は在る ((b))。 その上で *前景禁止 (= 常に background)* を保つのは依然 *規律* (= dialog 通過後に Claude が前景を選ばない保証は機械化されない — desktop は引数を見て前景だけ弾けない) で、 最後の砦は human-steering。
@@ -265,7 +265,7 @@ identity は similarity でなく content corroboration でしか establish で�
 - `send_message` は **常に user 確認を挟み、 unsupervised (auto / bypass) mode では使えない** ⇒ **この push 経路は supervised 専用**。 unsupervised (scheduled-task / cron) では下記「Unsupervised 返送」 の file-handoff (pull) を使う。
 - **非同期**: 結果は spawned 完了時に届く (呼び元はブロックしない = 「自分の作業を続けたい」 と両立)。
 - token は一意性を持たせる。 複数 HIT した場合 (= token が spawned の spec にも引用される等) も **recency で選ばない** (= similarity≠identity)。 self を除外し、 その token を *自分の発話として最初に残した* 起票元を呼び元とする。 判別不能なら push せず user 確認。 **token を持つ呼び元以外には絶対送らない** (= 誤着防止)。
-- **⚠️ 機械 enforcement の限界**: spawn_task / send_message への PreToolUse guard は (a) 一部 harness (Claude Code desktop 等) が hook を honor しない + (b) これらの tool が hook 非対応 harness に偏在し『hook が効く環境 ∩ tool がある環境』 が乏しいため ~無効 (= placebo にしない、 = [`hook-authoring.md §9.3`](hook-authoring.md))。 `list_sessions` に lineage (spawnedBy) field が在れば spawned が宛先を推測する必要自体が消えるが、 これは harness 側の改修 (= upstream、 本 doc の scope 外)。 ∴ 現状の防御は本 § の規律 (token + 子側 fail-safe) が担う。
+- **⚠️ 機械 enforcement の限界**: spawn_task / send_message への PreToolUse guard は (a) 一部 harness (Claude Code desktop 等) が hook を honor しない + (b) これらの tool が hook 非対応 harness に偏在し『hook が効く環境 ∩ tool がある環境』 が乏しいため ~無効 (= placebo にしない、 = [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork))。 `list_sessions` に lineage (spawnedBy) field が在れば spawned が宛先を推測する必要自体が消えるが、 これは harness 側の改修 (= upstream、 本 doc の scope 外)。 ∴ 現状の防御は本 § の規律 (token + 子側 fail-safe) が担う。
 
 ### Unsupervised 返送 (= cron / scheduled / auto / bypass): file-handoff (pull)
 
@@ -292,7 +292,7 @@ identity は similarity でなく content corroboration でしか establish で�
 - ✅ **現実解 = `list_sessions` を chip の distinctive な title で突き合わせ**: `isRunning` / `lastActivityAt` で走行を確認 (sessionId / cwd / branch も取れる)。 ⚠️ `list_sessions` は **self 除外 + task_id → session の対応無し**ゆえ title / cwd / branch の **突き合わせ** が要る。 title が generic だと誤特定 ([`§8.14`](../docs/convention-design-principles.md#single-field-identity-corroboration) の cross-session 版) → **chip に distinctive な title を付ける** (§8 の `[local推奨]` / `[worktree推奨]` prefix も識別の足しになる)。
 - ❌ **`dismiss_task` の "already started" 返りを起動確認に使うな**: 破壊的意図と紛らわしく、 消そうとしないと分からない偶然依存。
 
-honest な天井: **「起動した」 を *live 親に自動 push* する経路は harness 上ほぼ無い** (= harness 通知無し / desktop hook gap で SessionStart 注入が live 親に効かない 〔[`hook-authoring.md §9.3`](hook-authoring.md)〕 / `send_message` は child → parent + user 確認)。 ∴ realistic な上限は **discoverable な pull** = 本手順で、 「完了は auto-deliver のまま起動確認だけ on-demand に倒した」 honest な fallback (= 結果を取りこぼす穴ではない)。 真の根治は **upstream** (`spawn_task` が session_id を返す / `list_sessions` に `spawnedBy` lineage field があれば突き合わせ fragility も discoverability も一掃される = §7 caveat の lineage field と同根、 harness 改修ゆえ本 doc scope 外)。
+honest な天井: **「起動した」 を *live 親に自動 push* する経路は harness 上ほぼ無い** (= harness 通知無し / desktop hook gap で SessionStart 注入が live 親に効かない 〔[`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork)〕 / `send_message` は child → parent + user 確認)。 ∴ realistic な上限は **discoverable な pull** = 本手順で、 「完了は auto-deliver のまま起動確認だけ on-demand に倒した」 honest な fallback (= 結果を取りこぼす穴ではない)。 真の根治は **upstream** (`spawn_task` が session_id を返す / `list_sessions` に `spawnedBy` lineage field があれば突き合わせ fragility も discoverability も一掃される = §7 caveat の lineage field と同根、 harness 改修ゆえ本 doc scope 外)。
 
 〔3 方向の責務境界: **完了** = results-inbox marker (child → 人間 / 未来 session) ／ **findability** = 本 §7 method A (child → parent) ／ **本節** = parent → child 起動。〕
 

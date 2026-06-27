@@ -1,7 +1,7 @@
 # Tool call robustness — Claude の tool 呼び出しが「malformed」 で壊れるのを防ぐ
 
 > 適用対象: Claude が **任意の tool call (特に Bash / Edit)** を生成する全ての場面。 hook 作成に限らない。
-> hook script を書くときの bash 3.2 parser bug は **別 layer** の話 (= `hook-authoring.md §1` 参照)。
+> hook script を書くときの bash 3.2 parser bug は **別 layer** の話 (= [`hook-authoring.md` bash32-heredoc-parser-bug](hook-authoring.md#bash32-heredoc-parser-bug) 参照)。
 
 ---
 
@@ -50,7 +50,7 @@ root は backend fix 待ちだが、 発生確率と poisoning ループは以�
 6. **commit message など複数行 + 山括弧を含むものはファイルに書いて `git commit -F`** で渡す (= `-m "..."` 内の山括弧・改行を避ける)。
 7. **malformed が出たら同 session で retry を重ねない**。 #62344 の poisoning で後続も壊れるため、 数回失敗したら **新しい session に切り替える** (= 壊れた context を断ち切る)。
 8. **model を切り替える** (= **最も確実な緩和、 最優先で検討**)。 bug は Opus 4.8 固有で、 #64774 が他 model の失敗率 0% を定量報告 (= Opus 4.7 / Opus 4.6 / Sonnet 4.6 / Haiku 4.5 すべて 0、 Opus 4.8 のみ ~1.5%)。 **本命は Opus 4.7 1M** (`/model claude-opus-4-7[1m]`) = Opus tier で Sonnet 4.6 より賢く Claude Code 既定 xhigh = 「賢さ最大 × バグ回避」 の最適解。 Sonnet 4.6 は次善 (= bug 0% だが Opus 4.7 より賢さで劣る)。 Fable 5 は最賢だが日本不可。 tool-call 密度の高い作業で頻発するなら `/model` で Opus 4.7 へ切り替えるのが root に最も近い回避になる (= backend fix が出るまでの実用解)。
-9. **当該操作をサブエージェント (Agent tool、 例: general-purpose) に委譲する**。 malformed が再発して特定の tool call が通らないとき、 その操作を sub-agent に委譲すると **別 context で実行される**ため回避できることがある (= 2026-06-15 実例: メイン session 〔Opus 4.8 1M-context〕 で `settings.json` の 1 行 Edit が 2 連続 malformed → 同じ編集を sub-agent に委譲したら 1 回で成功)。 位置づけは 7 (新 session) / 8 (model 切替) と同じ「root が直らないとき作業を別経路に逃がす」 系だが、 **新 session より軽量で現 session の context を保ったまま当該操作だけ別経路に出せる**のが利点。 複雑判断を伴わない単発操作 (= ファイル編集・コマンド実行) の委譲に向く (= 判断を要する作業の丸投げではない)。 ⚠️ sub-agent の完了報告自体が偽成功変種で捏造されうる (= 後述「tool 結果の silent 捏造」 節) ので、 委譲結果は ground truth (`git log` / `grep` 等) で裏取りする。 ⚠️ **用途の切り分け**: 本項の Agent は「現 session の context を保ったまま軽量に逃がす」 用途。 これと違い **完全に独立した別 session** (own worktree / 呼び元終了後も生存 / user steer 可) に渡して結果を受け取りたい場合は Agent でなく **spawn_task + 結果返送** ([`multi-session-coordination.md §7`](multi-session-coordination.md))。 ユーザーが「新 session」 を名指したのに Agent に潰すのは別問題 (= `convention-design-principles.md §4.1` deliverer-retention)。
+9. **当該操作をサブエージェント (Agent tool、 例: general-purpose) に委譲する**。 malformed が再発して特定の tool call が通らないとき、 その操作を sub-agent に委譲すると **別 context で実行される**ため回避できることがある (= 2026-06-15 実例: メイン session 〔Opus 4.8 1M-context〕 で `settings.json` の 1 行 Edit が 2 連続 malformed → 同じ編集を sub-agent に委譲したら 1 回で成功)。 位置づけは 7 (新 session) / 8 (model 切替) と同じ「root が直らないとき作業を別経路に逃がす」 系だが、 **新 session より軽量で現 session の context を保ったまま当該操作だけ別経路に出せる**のが利点。 複雑判断を伴わない単発操作 (= ファイル編集・コマンド実行) の委譲に向く (= 判断を要する作業の丸投げではない)。 ⚠️ sub-agent の完了報告自体が偽成功変種で捏造されうる (= 後述「tool 結果の silent 捏造」 節) ので、 委譲結果は ground truth (`git log` / `grep` 等) で裏取りする。 ⚠️ **用途の切り分け**: 本項の Agent は「現 session の context を保ったまま軽量に逃がす」 用途。 これと違い **完全に独立した別 session** (own worktree / 呼び元終了後も生存 / user steer 可) に渡して結果を受け取りたい場合は Agent でなく **spawn_task + 結果返送** ([`multi-session-coordination.md` spawn-handoff-token-return](multi-session-coordination.md#spawn-handoff-token-return))。 ユーザーが「新 session」 を名指したのに Agent に潰すのは別問題 (= `convention-design-principles.md §4.1` deliverer-retention)。
 
 10. **session が poisoned したら work tool を自分で実行せず、 全ての tool 実行を subagent に逃がす** (= 9 の escalation、 単発委譲 → blanket 委譲)。 9 は「通らない 1 操作を別経路に出す」 だが、 malformed が繰り返し再発して session 全体が poisoned した時点では、 main agent は Bash / Edit / NotebookEdit / 重い MCP 等の **work tool を自分で実行するのをやめ、 残り session の tool 実行を丸ごと subagent に委譲**する。
 
@@ -66,7 +66,7 @@ root は backend fix 待ちだが、 発生確率と poisoning ループは以�
 
 ⚠️ **2026-06-16 誤帰責 RCA (= 本節を書き直した理由)**: 当初 Claude は失敗 session の transcript に `entrypoint:claude-desktop` を見て「user が Cowork を経由する間違いをした、 CLI に変えろ」 と書いた。 だが **失敗 session も、 それを完遂した session も、 両方 `claude-desktop`** だった (= live env で確認)。 user は一貫して Claude Code を使っており、 「CLI で再開したら直った」 も事実でない (完遂 session も claude-desktop)。 = transcript の値 (事実) の上に「user の app 選択ミス」 という誤った narrative を被せ、 root (model/harness の bug) から目を逸らした。
 
-**claude-desktop で実際に効く制約は狭い**: **hook の出力をモデルに honor しない** ([`hook-authoring.md §9.3`](hook-authoring.md)) ので SessionStart surface / PreToolUse guard が無く、 malformed/stall の「第二視点 backstop」 が消えて自力規律だけになる。 これは environment の事実であって user の落ち度ではない。
+**claude-desktop で実際に効く制約は狭い**: **hook の出力をモデルに honor しない** ([`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork)) ので SessionStart surface / PreToolUse guard が無く、 malformed/stall の「第二視点 backstop」 が消えて自力規律だけになる。 これは environment の事実であって user の落ち度ではない。
 
 ⚠️ **file 作業の沈黙・低速を entrypoint のせいにしない**: 主因は (a) serialization bug = **model-level** (Opus 4.8 固有) の malformed/retry/poisoning と、 (b) **harness-level の偽 ENOSPC** (= Bash の stdout capture が「tmp full (0MB)」 と誤報し exit 1 → file-redirect 回避で実質 2x の tool call。 実 disk は潤沢でも出る、 2026-06-16 に df で 195GB 空き・tmp 32K を確認)。 **どちらも `claude-desktop` か `cli` かでは決まらない**ので「app / CLI を変えろ」 は緩和にならない。 効くのは 7 (新 session) / 8 (model 切替、 root に最も近い) / 9・10 (subagent 委譲) と、 stall を感じたら粘らず早く bail すること。 root に entrypoint を据えず model/harness を疑う (= 上記メタ規律と同型)。
 
@@ -83,7 +83,7 @@ malformed bug とは別系統だが、 同じく **harness 由来で tool-heavy 
 ## 限界 (= 誇張しない)
 
 - root は **Anthropic backend の model serialization bug** であり、 **prompt の書き方変更でも narrative でも直らない**。 上記「副次緩和」 は発生確率を下げるだけで 0 にはできない。
-- hook での機械 enforcement も困難 (= 生成前の self-gate であり、 `hook-authoring.md §5.1` の単一視点 self-reference 不能と同型)。 本 file は memory aid であって enforcement ではない、 という前提で読むこと。
+- hook での機械 enforcement も困難 (= 生成前の self-gate であり、 [`hook-authoring.md` self-reference-impossibility](hook-authoring.md#self-reference-impossibility) の単一視点 self-reference 不能と同型)。 本 file は memory aid であって enforcement ではない、 という前提で読むこと。
 - **fix は upstream (Anthropic) 待ち**。 上記 issue 番号を追跡し、 解決報告が出たら「副次緩和」 を緩められる。 CLI を新しめの版に上げると retry handling が改善する可能性はあるが、 **root (model 出力) は version 更新では消えない** (= CLI 2.1.165 の改善効果は未検証、 retry handling 改善の可能性のみ)。
 
 ## メタ規律 (= なぜ当初 root を読み違えたか)
@@ -159,5 +159,5 @@ some-cmd > /abs/path/out.txt 2>&1; true   # stdout を出さない。 末尾 tru
 
 ## 関連
 
-- `hook-authoring.md §1` — bash 3.2 の `$(...)` + heredoc parser bug。 **別 parser** (= macOS stock bash) だが回避策 (中間 file 化) が共通。
-- `hook-authoring.md §5.1` — 単一視点 self-reference の geometric 不能 (= 本 file「限界」 section の理論的根拠)。
+- [`hook-authoring.md` bash32-heredoc-parser-bug](hook-authoring.md#bash32-heredoc-parser-bug) — bash 3.2 の `$(...)` + heredoc parser bug。 **別 parser** (= macOS stock bash) だが回避策 (中間 file 化) が共通。
+- [`hook-authoring.md` self-reference-impossibility](hook-authoring.md#self-reference-impossibility) — 単一視点 self-reference の geometric 不能 (= 本 file「限界」 section の理論的根拠)。

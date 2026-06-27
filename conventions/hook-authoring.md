@@ -475,7 +475,7 @@ hook 起案時に 1 問: **「この trigger 条件は、 介入すべき呼び�
 - Yes → hook で良い (§0-§9 の作法へ)
 - No → hook を見送り、 **発火面を変える**:
   - 「正しい瞬間に手順を想起する」 が問題 → **personal skill** ([`personal-skills.md`](personal-skills.md)。 description が全 session 常時可視 = recall を harness が肩代わり。 非発火時 noise ゼロ、 worst case = 現状維持の非対称 upside)
-  - 無人定期 → scheduled task ([`scheduled-tasks.md §0`](scheduled-tasks.md))
+  - 無人定期 → scheduled task ([`scheduled-tasks.md` execution-locus-selection](scheduled-tasks.md#execution-locus-selection))
 - skill は発火が確率的 (model 判断) なので、 **不発の実害が再発したら hook へ格上げ**する
   escalation trigger を導入時に書き残す (= evidence-driven の双方向切替)
 
@@ -485,7 +485,7 @@ hook 起案時に 1 問: **「この trigger 条件は、 介入すべき呼び�
 grep を検出する PreToolUse nudge hook 案を検討 → grep の意図 (context-hunting vs
 maintenance) が表層から識別不能、 当該 repo の整備 session では常時発火と判定 →
 personal skill (description dispatch) に切替。 skill 名を含まない自然な質問に対する
-初手 `Skill(...)` 発火を新 session の trace で確認 (検証作法 = `personal-skills.md §4`)。
+初手 `Skill(...)` 発火を新 session の trace で確認 (検証作法 = [`personal-skills.md` verification-procedure](personal-skills.md#verification-procedure))。
 
 ---
 

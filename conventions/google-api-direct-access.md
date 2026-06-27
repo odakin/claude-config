@@ -226,7 +226,7 @@ OAuth token JSON (= credentials.json) には **どの account の token か** �
 
 ### 検索結果が「らしくない」 時の reflex
 
-MCP / API の検索結果が期待と違う account の中身ばかり返る (= 業務 account のはずが個人購読 newsletter ばかり) なら、 token が別 account を指している疑い。 `getProfile` で接続先 account を直接確認する。 一般原則は [debugging-discipline.md §9](debugging-discipline.md) 状態 (c) tool 接続先誤り。 reauth フローの login_hint + getProfile 検証の実装は各 MCP 設定リポ側 (= personal layer)。
+MCP / API の検索結果が期待と違う account の中身ばかり返る (= 業務 account のはずが個人購読 newsletter ばかり) なら、 token が別 account を指している疑い。 `getProfile` で接続先 account を直接確認する。 一般原則は [`debugging-discipline.md` mcp-zero-result-not-absence](debugging-discipline.md#mcp-zero-result-not-absence) 状態 (c) tool 接続先誤り。 reauth フローの login_hint + getProfile 検証の実装は各 MCP 設定リポ側 (= personal layer)。
 
 ## documentation の義務
 

@@ -15,12 +15,12 @@ auto-discover skill** のみを扱う。
 |---|---|---|
 | hook | tool call の決定的 interception | 止める / 書き換えるべき呼び出しを**機械条件で識別できる** |
 | **personal skill** | description が全 session 常時 context 内、 model が「今がその瞬間」 と判断して自律 invoke | trigger を機械条件で書けないが、 **正しい瞬間の想起**が問題 (= doc 記載 reflex の不発) |
-| scheduled task | 無人定期 + Claude judgment | [`scheduled-tasks.md §0`](scheduled-tasks.md) |
+| scheduled task | 無人定期 + Claude judgment | [`scheduled-tasks.md` execution-locus-selection](scheduled-tasks.md#execution-locus-selection) |
 | doc 記載 | 読んだ session の recall 依存 | 上 3 つが不可のときの最弱手段。 後日格上げの trigger 条件を書き残す |
 
 **skill の非対称性が要点**: 非発火時の noise はゼロで、 worst case = skill が無いのと同じ
 (= 現状維持)。 hook の false positive と違い、 機構 fleet 全体の信号価値を毀損しない
-(= hook を見送るべき場合の判定は [`hook-authoring.md §10`](hook-authoring.md))。
+(= hook を見送るべき場合の判定は [`hook-authoring.md` hook-no-go-judgment](hook-authoring.md#hook-no-go-judgment))。
 代償は発火が**確率的** (model 判断) であること — 不発が実害を生む domain では
 hook への格上げを evidence-driven で検討する (escalation trigger を skill 導入時に書き残す)。
 
@@ -32,10 +32,10 @@ hook への格上げを evidence-driven で検討する (escalation trigger を 
 - frontmatter は全 field optional、 `description` のみ推奨 (= auto-invoke の判断材料。
   `when_to_use` と**合算 1536 char cap**)
 - **symlink された skill dir も拾われる** (= 公式 doc 未記載の実測、 2026-06-13
-  claude-code 2.1.170)。 build 依存の可能性に注意 (= `hook-authoring.md §9` と同類:
+  claude-code 2.1.170)。 build 依存の可能性に注意 (= [`hook-authoring.md` build-dependent-behavior](hook-authoring.md#build-dependent-behavior) と同類:
   upstream docs / build 挙動は変わりうる、 新環境では §4 の検証を回す)
 - **discovery は session 開始時** (= 新規 skill は既存 session に現れず、 新 session で
-  出現するのを実測。 hook の snapshot 挙動 `hook-authoring.md §9.1` と整合)
+  出現するのを実測。 hook の snapshot 挙動 [`hook-authoring.md` new-hook-session-snapshot](hook-authoring.md#new-hook-session-snapshot) と整合)
 
 ## §2. description の書き方 (= trigger 品質が設計の本体)
 
@@ -54,7 +54,7 @@ dispatch は description だけで決まる。 body がどれだけ良くても 
 
 skill 実体は git repo (個人層) に置き、 installer が `~/.claude/skills/` に symlink する。
 このとき **「file 到着 (git pull)」 と 「配線 (machine-local symlink)」 の 2 段配達**になる
-ことに注意 — prose の「あとで install して」 は発火しない (= `hook-authoring.md §2/§4` の
+ことに注意 — prose の「あとで install して」 は発火しない (= [`hook-authoring.md` delivery-audit-4-axes](hook-authoring.md#delivery-audit-4-axes) / [partial-install-state](hook-authoring.md#partial-install-state) の
 hook 配信問題と同型)。
 
 - installer に read-only `--check` mode を持たせ、 SessionStart hook から毎 session 呼ぶ
@@ -65,7 +65,7 @@ hook 配信問題と同型)。
 - 新規機構 (専用 installer 等) を増やす前に、 既存の installer / `--check` channel に
   相乗りできないか先に問う (= 機構増殖の抑制)
 
-## §4. 検証作法
+## <a id="verification-procedure"></a>§4. 検証作法
 
 **順序が重要: trigger test → discovery test** (skill 名を一度でも口にすると、 以後の
 「自然に発火するか」 test が汚染される)。
@@ -80,7 +80,7 @@ hook 配信問題と同型)。
 
 **headless `claude -p` での検証は制約が多い** (2026-06-13 実測):
 
-- stdin が開いた pipe (never-EOF) のとき、 prompt を引数で渡していても **stdin を待つ**。 旧 build (2.1.53) は無期限 hang、 新 build (2.1.177) は 3 秒 grace 後に `Warning: no stdin data received in 3s, proceeding without it...` で進む (= build 依存、 `hook-authoring.md §9.2` と同類。 upstream は最新で緩和済、 docs issue #68118 起票時に確認)。 **いずれの build でも `< /dev/null` を付けるのが綺麗** (待ち時間ゼロ + 警告なし)
+- stdin が開いた pipe (never-EOF) のとき、 prompt を引数で渡していても **stdin を待つ**。 旧 build (2.1.53) は無期限 hang、 新 build (2.1.177) は 3 秒 grace 後に `Warning: no stdin data received in 3s, proceeding without it...` で進む (= build 依存、 [`hook-authoring.md` build-dependent-docs-drift](hook-authoring.md#build-dependent-docs-drift) と同類。 upstream は最新で緩和済、 docs issue #68118 起票時に確認)。 **いずれの build でも `< /dev/null` を付けるのが綺麗** (待ち時間ゼロ + 警告なし)
 - Claude Code session 内から起動するには `env -u CLAUDECODE` が要る (nested guard)
 - CLI の auth は GUI app と別レイヤー — 未認証 machine では 401 (`claude auth login` は user 操作、 machine ごとに必要)
 - そもそも **trigger 品質は headless で測れない** (prompt に skill 名を入れた時点で汚染)

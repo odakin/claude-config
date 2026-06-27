@@ -6,7 +6,7 @@ LorentzArena Bug 14 完全治療 (2026-05-06) の spiral で複数の fail-recov
 
 ---
 
-## 1. Fix 提案の 3 verification (= L4-L5 + numeric trace + code coverage)
+## <a id="fix-verification-3-axis"></a>1. Fix 提案の 3 verification (= L4-L5 + numeric trace + code coverage)
 
 **ルール**: fix 提案を 「root だ」 と確信する前に **3 verification** を全て通す。 全 pass まで commit / approval / 「root 確定」 NG。
 
@@ -14,7 +14,7 @@ LorentzArena Bug 14 完全治療 (2026-05-06) の spiral で複数の fail-recov
 |---|---|---|
 | **V1 (semantic + numeric)** | Semantic / scenario trace | L4 (= 概念モデル / 設計柱と矛盾なし) + L5 (= 数値解析的安定性 / 不変条件) で root を identify、 全 case scenario で実数値 / 状態 trace、 corner case 破綻 (= over/under count、 race、 boundary 不整合) が無いか |
 | **V2 (code coverage)** | 「既存が handle 済」 主張 verify | pattern match で済まさず **actual code を読んで scenario trace で coverage 確認**、 grep + 関数 read + walk-through で想定 path = actual path を confirm |
-| **V3 (algorithm enumeration、 L5 fix のみ)** | 代替 algorithm 網羅 | L5 fix で「substep / cap / clamp」 系 workaround を提案したら、 **代替 algorithm 全列挙** (= explicit / implicit / analytic / symplectic / RK4 / substep) して 1st choice の正当性 confirm。 線形 ODE は通常 closed-form で解ける、 substep は workaround で root ではない (= 詳細: [`scientific-computing.md §2`](scientific-computing.md)) |
+| **V3 (algorithm enumeration、 L5 fix のみ)** | 代替 algorithm 網羅 | L5 fix で「substep / cap / clamp」 系 workaround を提案したら、 **代替 algorithm 全列挙** (= explicit / implicit / analytic / symplectic / RK4 / substep) して 1st choice の正当性 confirm。 線形 ODE は通常 closed-form で解ける、 substep は workaround で root ではない (= 詳細: [`scientific-computing.md` explicit-integrator-instability](scientific-computing.md#explicit-integrator-instability)) |
 
 「conceptually clean」 「既存 mechanism handle するはず」 はいずれも **未検証の仮説**、 user / 自己が「ad hoc 感」 を覚えたら 3 verification を反射的に走らせる trigger。
 
@@ -91,7 +91,7 @@ LorentzArena Bug 14 完全治療 (2026-05-06) の spiral で複数の fail-recov
 
 ---
 
-## 4. Rule violation 1 件発見 → sibling audit 即時実施
+## <a id="sibling-audit-on-violation"></a>4. Rule violation 1 件発見 → sibling audit 即時実施
 
 **ルール**: structural rule (= state 単一化、 4 層モデル、 命名規約 等) で **1 件 violation を発見** したら、 同 session 内に同 rule の他 sibling violations を即時 sweep。
 
@@ -118,7 +118,7 @@ structural rule の違反は同 codebase / 同型コード設計で **再生産�
 
 **Why**: 「flagged された 1 件を fix」 だけで止まると、 同 trait family の sibling default / sibling pattern が **未 flagged のまま残存** し、 別 unit system / 別 context で symptom が顕在化する遅延発見 cycle になる。
 
-**実例 (2026-04-20 → 2026-05-25 の 13 ヶ月遅延発見)**: `scientific-computing.md §1` の `TauSqMax` scale-blind default fix を 2026-04-20 に commit。 同 fix で `TauSqMax` を scale-adaptive 化したが、 **同 file 同 function の `MuRange` default (= `{Min[xs]-10, Max[xs]+10}` = 同形式 scale-blind)** を sweep しなかった。 13 ヶ月後 (2026-05-25) 別 unit system (= dimensionless S₈ tension) で S₈ scale で margin 10 が data spread の 110× 過大 → posterior peak under-resolved → SE が 30-50% inflated として symptom 顕在化。 fix-time に同 file の sibling default を grep していれば同 commit で防げた。
+**実例 (2026-04-20 → 2026-05-25 の 13 ヶ月遅延発見)**: [`scientific-computing.md` scale-dependent-default](scientific-computing.md#scale-dependent-default) の `TauSqMax` scale-blind default fix を 2026-04-20 に commit。 同 fix で `TauSqMax` を scale-adaptive 化したが、 **同 file 同 function の `MuRange` default (= `{Min[xs]-10, Max[xs]+10}` = 同形式 scale-blind)** を sweep しなかった。 13 ヶ月後 (2026-05-25) 別 unit system (= dimensionless S₈ tension) で S₈ scale で margin 10 が data spread の 110× 過大 → posterior peak under-resolved → SE が 30-50% inflated として symptom 顕在化。 fix-time に同 file の sibling default を grep していれば同 commit で防げた。
 
 **How to apply (= 通常 fix workflow に追加)**:
 
@@ -344,7 +344,7 @@ sys.stdout.flush()
 
 ---
 
-## 9. MCP / API の count return「0」 / 「期待と違う検索結果」 を reflex で「想定外」 と結論しない (= 「単一情報源の null result を結論に飛躍させない」 trait family の MCP / tool 健全性 domain)
+## <a id="mcp-zero-result-not-absence"></a>9. MCP / API の count return「0」 / 「期待と違う検索結果」 を reflex で「想定外」 と結論しない (= 「単一情報源の null result を結論に飛躍させない」 trait family の MCP / tool 健全性 domain)
 
 **ルール**: MCP tool / API 呼び出しの count-style return (= `added=0`、 `affected_rows=0`、 `total: 0`、 list が空、 etc.) や「期待と違う検索結果」 を見て即座に「想定外」 「未発生」 「未登録」 「存在しない」 と reflex 結論しない。 その 0 / 結果が「true な空」 か「正常 dedup / filter による empty」 か「**tool が間違った接続先 (account / endpoint) を見ている**」 かを **別 query で 1 path 必ず cross-check** する。 特に user が「絶対あるはず」 と確信を示したら、 source 不在より先に tool 健全性を疑う。
 
@@ -385,7 +385,7 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 
 ### 関連事故 / 検証例
 
-- 2026-06-06: pre-commit chain gate が primary hook の early-exit で **silent dead** (= `hook-authoring.md §8`)。 logic / syntax / 関数シミュレートは全 pass、 4 軸 sweep も error 0、 重複を仕込んだ **実 commit e2e (= reject されるべき commit が通る)** でのみ発覚。 confidence 境界に「pre-commit e2e 未実行」 と明示していたのを実検証して捕捉。
+- 2026-06-06: pre-commit chain gate が primary hook の early-exit で **silent dead** (= [`hook-authoring.md` chain-hook-early-exit](hook-authoring.md#chain-hook-early-exit))。 logic / syntax / 関数シミュレートは全 pass、 4 軸 sweep も error 0、 重複を仕込んだ **実 commit e2e (= reject されるべき commit が通る)** でのみ発覚。 confidence 境界に「pre-commit e2e 未実行」 と明示していたのを実検証して捕捉。
 - §6 (dry-run = 動作観測) と本 § (= 発火 verify) は相補: dry-run でも、 そもそも発火しない機構は観測すらされない。
 
 ---
@@ -443,11 +443,11 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 
 3 つの落とし穴と対処:
 
-1. **conditional な proxy で発火を判定しない** — 「cache の mtime が更新されたか」 「出力が出たか」 等は、 mechanism が **該当なしで silent** な設計だと「発火したが何も出さなかった」 と「そもそも発火しなかった」 を区別できない。 さらに proxy が複数の writer / 別 path / 認証・権限に依存すると交絡する。 → **依存ゼロの unconditional probe** を使う: 「呼ばれたら無条件に痕跡を残す」 だけの仕掛け (= file に 1 行 append する trace 等)。 API / credit / 権限 / 該当有無に依存しないので、 痕跡の有無 = 発火の有無を一意に決める。 ⚠️ 既存 mechanism に後から probe を差すと snapshot 型 harness では当該 session に反映されない (= `hook-authoring.md §9.1`) ので、 新 context (新 session / 新 frontend) で観測する。
+1. **conditional な proxy で発火を判定しない** — 「cache の mtime が更新されたか」 「出力が出たか」 等は、 mechanism が **該当なしで silent** な設計だと「発火したが何も出さなかった」 と「そもそも発火しなかった」 を区別できない。 さらに proxy が複数の writer / 別 path / 認証・権限に依存すると交絡する。 → **依存ゼロの unconditional probe** を使う: 「呼ばれたら無条件に痕跡を残す」 だけの仕掛け (= file に 1 行 append する trace 等)。 API / credit / 権限 / 該当有無に依存しないので、 痕跡の有無 = 発火の有無を一意に決める。 ⚠️ 既存 mechanism に後から probe を差すと snapshot 型 harness では当該 session に反映されない (= [`hook-authoring.md` new-hook-session-snapshot](hook-authoring.md#new-hook-session-snapshot)) ので、 新 context (新 session / 新 frontend) で観測する。
 
 2. **env var / 表層の自己申告を frontend/context の discriminator にしない** — 環境変数は継承・leak・汚染しうる (= 例: `CLAUDE_CODE_ENTRYPOINT` が別 context に漏れる)。 → **独立した観測量**で判別する: 親プロセスの実 path / build 番号 / cwd 等、 自己申告でない物。 1 signal が怪しい時は 2 つ目の独立 signal で corroborate (= §convention-design-principles §8.14 の identity corroboration と同根)。
 
-3. **「実行された (executes)」 と「効果が honor された (honored)」 を分ける** — mechanism は **プロセスとして走った**のに、 その出力・決定を上位層が **捨てる**ことがある (= 例: desktop frontend は hook を実行するが stdout 注入 / permission 判定を honor しない、 `hook-authoring.md §9.3`)。 「効果が出ない」 を即「実行されていない」 と結論しない。 副作用 (file 書込等) の有無で「実行」 を、 モデル/flow への反映で「honor」 を別々に確認する。 両者は別の修復を要する (= 未実行なら配線、 honor されないなら surface 自体を変える = `docs/convention-design-principles.md §8.15`)。
+3. **「実行された (executes)」 と「効果が honor された (honored)」 を分ける** — mechanism は **プロセスとして走った**のに、 その出力・決定を上位層が **捨てる**ことがある (= 例: desktop frontend は hook を実行するが stdout 注入 / permission 判定を honor しない、 [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork))。 「効果が出ない」 を即「実行されていない」 と結論しない。 副作用 (file 書込等) の有無で「実行」 を、 モデル/flow への反映で「honor」 を別々に確認する。 両者は別の修復を要する (= 未実行なら配線、 honor されないなら surface 自体を変える = `docs/convention-design-principles.md §8.15`)。
 
 4. **帰責する signal は control case で discriminate できることを確認する** (= 発火検証に限らない一般原則) — ある事象 (= 失敗 / 低速 / 異常) の原因として signal X を挙げる前に、 **正常に動いた case (= control) で X を観測**する。 失敗 case と成功 case の **両方に在る** signal は両者の差を説明しない = 原因ではない。 ⚠️ point 2 は「env 値が不正確かも」 だが本点は **env 値が正確でも刺さる**罠 = 値は正しいが discriminate しない。 例 (2026-06-16): 失敗 session の `entrypoint=claude-desktop` を見て「Claude Code desktop を使った user のミス」 と帰責したが、 **正常に完遂した現 session も同じ `claude-desktop`** だった (= live env で確認) → entrypoint は失敗を discriminate せず原因でない。 control を 1 度見れば即 falsify できたのに、 actionable / 外部帰属に飛びついた (= tool-call-robustness.md メタ規律「自分で塞げる/相手のせいにできる原因に飛びつくバイアス」 の attribution 版)。 ⚠️ 特に **user / 外部の選択を「ミス」 と断ずる**前に必ず control で discriminate する (= 誤帰責は user の信頼を直接損なう)。
 
@@ -458,7 +458,7 @@ origin: 2026-06-13 desktop-hook-gap 調査。 当初 SessionStart hook の死活
 ## 関連
 
 - [`CONVENTIONS.md §3`](../CONVENTIONS.md) — 4 軸 sweep の base 規約
-- [`conventions/scientific-computing.md §2`](scientific-computing.md) — L5 numerical fix の (A)/(B)/(C) 階層、 V3 algorithm 網羅の domain-specific application
+- [`scientific-computing.md` explicit-integrator-instability](scientific-computing.md#explicit-integrator-instability) — L5 numerical fix の (A)/(B)/(C) 階層、 V3 algorithm 網羅の domain-specific application
 - [`docs/convention-design-principles.md`](../docs/convention-design-principles.md) — 規約配置の meta-rule
 - [`docs/sensitive-repo-patterns.ja.md §パターン 5-3`](../docs/sensitive-repo-patterns.ja.md) — 実装直後の 4 軸 review
 
