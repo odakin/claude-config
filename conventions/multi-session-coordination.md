@@ -264,8 +264,28 @@ identity は similarity でなく content corroboration でしか establish で�
 
 ---
 
+## 8. worktree (隔離) か shared checkout (ローカル) か — 並列変更の隔離 vs live 反映
+
+独立 session / subagent を起こすとき (= §7 の spawn_task hand-off、 Agent tool の `isolation: "worktree"` オプション 等)、 その作業を **隔離 worktree** (= 同じリポの別フォルダ checkout、 履歴は共有・作業中の中身は独立) でやるか **本物の checkout (ローカル、 共有作業ツリー)** でやるかを選ぶ。 これは §1「同 file path を別 session が並列上書きする race」 の構造的な解 (= 隔離) と、 その**適用限界**の節。
+
+### 判断ルール (default + 例外)
+
+- **worktree (隔離) が向くのは**: 並列の別 session/agent が同じ file を変更して衝突しうる **∧** 作業が **自己完結** (= 成果が隔離コピーの中でコミットまで完結し、 live 環境に反映されなくても検証できる) とき。 worktree は安くない (= 別 checkout の setup コスト + disk。 Agent tool の説明も「並列衝突する時だけ使え」 と注意している) ので、 衝突の実害が無いなら使わない。
+- **ローカル (shared checkout) にすべきは**: 成果が **本物の作業ツリーに反映されて初めて意味を持つ / 検証できる** とき。 典型 = symlink や install/setup スクリプトで **live 環境** (= 例: hook や dotfile を home 配下の決まった場所へ配線する構成) に効く変更、 live 環境がないと動作検証できない変更。 worktree だと (a) 変更が live の場所に **届かない** (= 別フォルダなので symlink 先の実体は変わらない)、 (b) 隔離コピー内で setup/install を走らせると symlink が **後で自動削除されるコピー** を指して **live 設定を壊す**。 この場合、 並列衝突の risk は worktree でなく §1 の規律 (= 着手前 `git fetch` + 自分の file だけ明示 path で commit + 他 session の未 commit 変更に触れない) で抑える。
+
+### 迷ったら 1 問
+
+> 「この成果物は **隔離コピーの中で完結** するか、 それとも **本物のツリーに効いて初めて完成** か?」 → 前者 worktree / 後者 ローカル。
+
+### 注意
+
+- この判断は **hand-off / 隔離オプションを選ぶその瞬間に表象されている必要**がある (= §7「この technique の射程」 と同じく、 ambient な doc は cold session では発火しない)。 ∴ spawn_task の spec を書く・`isolation` を渡す **まさにその時** に本節を想起する。
+
+---
+
 ## 関連
 
+- worktree (隔離) か ローカルか = 並列変更の隔離 vs live 反映のトレードオフ: §8
 - collaborator (= 他 user) との Git race / branching: [`shared-repo.md`](shared-repo.md)
 - 4 軸 sweep + sweep goal alignment (= 「✓ pass」 closure を禁じる規律): [`CONVENTIONS.md` §3](../CONVENTIONS.md)
 - review / audit の goal は error 発見 規律: 同上 §3 「sweep / review / audit の goal alignment」
