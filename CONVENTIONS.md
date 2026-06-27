@@ -1,5 +1,5 @@
 # リポジトリ規約
-<!-- slug index: CONVENTIONS.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
+<!-- slug index: CONVENTIONS.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 (= docs/convention-design-principles.md#slug-over-positional) / §14.7 (= #inbound-ref-robustness). -->
 
 最終更新: 2026-04-07
 
@@ -28,13 +28,13 @@ description は英語。リポ一覧の正本は個人層の `repos.md`（未設
 
 ## <a id="required-files"></a>2. 必須ファイル
 
-`CLAUDE.md` / `SESSION.md` / `DESIGN.md` などの dynamic docs は **snapshot 原理** に従う — 現状のみを記録し、graduation event (決定結晶 / 判断超越 / タスク完了 / 規約昇格) では source から除去、履歴は git log に委ねる。下記「任意ファイル」§6 (EXPLORING lifecycle) と `docs/convention-design-principles.md` §7 (DESIGN lifecycle) はこの原理の file-specific application。
+`CLAUDE.md` / `SESSION.md` / `DESIGN.md` などの dynamic docs は **snapshot 原理** に従う — 現状のみを記録し、graduation event (決定結晶 / 判断超越 / タスク完了 / 規約昇格) では source から除去、履歴は git log に委ねる。下記「任意ファイル」§6 (EXPLORING lifecycle) と [`docs/convention-design-principles.md` §7](docs/convention-design-principles.md#design-snapshot-operation) (DESIGN lifecycle) はこの原理の file-specific application。
 
 | ファイル | 役割 |
 |---------|------|
 | `CLAUDE.md` | 永続的な構造・実行方法・復帰手順の**記述** (「こうなっている」の事実、判断理由は DESIGN.md へ)。構造変更時のみ更新 |
 | `SESSION.md` | 揮発的な現在状態（作業中タスク・直近の決定）。進行に応じて更新 |
-| `DESIGN.md` | 現在採用されている設計**判断**・Defer 判断・横断原則 (LESSON) の snapshot。Why / 代替案 / tradeoff を記録。判断が生じたら即記録、超越されたら `docs/convention-design-principles.md` §7 の lifecycle で処理 (pedagogy 抽出後に旧本体削除、履歴は git log)。構造の記述は CLAUDE.md へ。未決定の探索は `EXPLORING.md`（任意）へ |
+| `DESIGN.md` | 現在採用されている設計**判断**・Defer 判断・横断原則 (LESSON) の snapshot。Why / 代替案 / tradeoff を記録。判断が生じたら即記録、超越されたら [`docs/convention-design-principles.md` §7](docs/convention-design-principles.md#design-snapshot-operation) の lifecycle で処理 (pedagogy 抽出後に旧本体削除、履歴は git log)。構造の記述は CLAUDE.md へ。未決定の探索は `EXPLORING.md`（任意）へ |
 | `README.md` / `README.ja.md` | **外部訪問者向けの玄関** (public リポで必須、private リポでは任意)。30 秒で「何か / 使うか」を判断させる index。構造ツリー・規約本体・設計根拠は **正本 (CLAUDE.md / CONVENTIONS.md / DESIGN.md / conventions/ / docs/ / SETUP.md) へリンクするだけ** で、README 内に転載しない。**例外 = 公開リポ（README-only 読者あり）の build/quickstart/deploy は README が正本**（下の「README の流儀」の判別軸）。詳細は下の「README の流儀」 |
 | `SETUP.md` | **共同編集者向けセットアップ walkthrough** (任意、private collaborative repo で git-crypt 等 onboarding が複雑な場合に新設)。CLAUDE.md は auto-load コストがあるため full walkthrough を入れず、SETUP.md に分離して薄いポインタ + 反パターン警告のみ持たせる。配置はリポ root (`docs/` を git-crypt 暗号化していると未 unlock の collaborator が読めない catch-22)。テンプレ: `templates/shared-project/SETUP.md.template`、設計理由は `conventions/shared-repo.md` §「共同編集者向けの SETUP.md」|
 | `.gitignore` | ビルド成果物・OS/エディタファイル・機密情報の除外。共有リポでは全パターン明記 |
@@ -92,7 +92,7 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
 **`EXPLORING.md`** — 未決定の思考・代替案・option space の棚卸し
 
 - **作る基準:** DESIGN.md が肥大化してきて（目安 400 行超）、かつ未決定の思考メモが複数同時進行しているとき。小さいリポや「決定しか書くことがない」リポでは不要
-- DESIGN.md が 1000 行超になったら、トピック別再編と完了リファクタ集約を検討（詳細は `docs/convention-design-principles.md` §7）
+- DESIGN.md が 1000 行超になったら、トピック別再編と完了リファクタ集約を検討（詳細は [`docs/convention-design-principles.md` §7](docs/convention-design-principles.md#design-snapshot-operation)）
 - **書くもの:** 決定前の代替案比較、候補の tradeoff 表、open questions、暫定方向（commit せずに「A が有力、B はこの理由で却下」程度の踏み込み）、pre-decision の設計思考
 - **書かないもの:**
   - 決定したこと → DESIGN.md
@@ -100,15 +100,15 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
   - 現在の作業状態・未完了タスク → SESSION.md
 - **lifecycle:** 探索が決定に結晶したら該当セクションを DESIGN.md に promote し、EXPLORING.md から削除する。陳腐化した選択肢も削る。ファイル全体が空になったら削除してよい
 - **DESIGN.md との境界判別:** 迷ったら DESIGN.md に書く。EXPLORING.md は「完全に option space を広げている段階」専用。70% 決まっていて 30% 迷っている状態は DESIGN.md に「暫定決定（再検討トリガー: X）」として書く
-- **根拠:** 決定（安定・長寿命）と探索（不安定・短寿命）を同じファイルに同居させると DESIGN.md の役割契約（「なぜそうしたか」）が弱まり、reader の signal-to-noise が下がる。詳細は `docs/convention-design-principles.md` §6
+- **根拠:** 決定（安定・長寿命）と探索（不安定・短寿命）を同じファイルに同居させると DESIGN.md の役割契約（「なぜそうしたか」）が弱まり、reader の signal-to-noise が下がる。詳細は [`docs/convention-design-principles.md` §6](docs/convention-design-principles.md#design-exploring-separation)
 
 ### <a id="record-location-decision"></a>記録先の判別
 
 | 情報の性質 | 書き先 |
 |---|---|
-| このマシン固有事実・外部サービス（Linear, Grafana 等）への参照 | メモリ（マシンローカル、`docs/convention-design-principles.md` §8.5・§8.7）。feedback は不可（§8.3 で `memory-guard.sh` が deny） |
-| ユーザーの恒久的好み・身元情報・リポ一覧 | 個人層（`docs/personal-layer.md`）または `CLAUDE.md` chain（cross-machine、git 同期。§8.6） |
-| 繰り返しミスへの再発防止（feedback） | 一般化可なら `CONVENTIONS.md` / `conventions/*.md`、catastrophic 級（データ破壊・secret leak 等）は hook、annoyance 級は書かない（§8.2・§8.3・§9.1） |
+| このマシン固有事実・外部サービス（Linear, Grafana 等）への参照 | メモリ（マシンローカル、[`docs/convention-design-principles.md` §8.5](docs/convention-design-principles.md#memory-anxiety-response)・[§8.7](docs/convention-design-principles.md#mechanism-application-example)）。feedback は不可（[§8.3](docs/convention-design-principles.md#precedent-as-training-data) で `memory-guard.sh` が deny） |
+| ユーザーの恒久的好み・身元情報・リポ一覧 | 個人層（`docs/personal-layer.md`）または `CLAUDE.md` chain（cross-machine、git 同期。[§8.6](docs/convention-design-principles.md#agent-learning-illusion)） |
+| 繰り返しミスへの再発防止（feedback） | 一般化可なら `CONVENTIONS.md` / `conventions/*.md`、catastrophic 級（データ破壊・secret leak 等）は hook、annoyance 級は書かない（[§8.2](docs/convention-design-principles.md#rule-to-mechanism-shift)・[§8.3](docs/convention-design-principles.md#precedent-as-training-data)・[§9.1](docs/convention-design-principles.md#blast-radius-triage)） |
 | 現在の作業状態・未完了タスク | SESSION.md |
 | 構造・実行方法・復帰手順の**記述** (descriptive、「こうなっている」) | CLAUDE.md |
 | 現在採用されている判断・Defer・横断原則 (LESSON) (judgmental、「なぜそうしたか」) | DESIGN.md |
@@ -119,7 +119,7 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
 **よくある間違い:**
 - 進行状態をメモリに書く → SESSION.md に書くべき（リポに入り全端末で共有される）
 - `~/Claude/` 内の別リポへのパスをメモリに書く → メモリは `~/.claude/` 配下でマシンローカル（git 同期されない）。cross-repo ポインタは CLAUDE.md 等の git 側に書く。メモリの reference 型は外部 SaaS (Linear, Grafana 等) への参照用
-- 再発防止の feedback（「次からはこうする」系）をメモリに書く → `memory-guard.sh` hook が deny する（`docs/convention-design-principles.md` §8.3 の precedent-as-training-data 問題）。一般化可なら `conventions/*.md`、catastrophic 級なら hook、annoyance 級なら何も書かない（§8.2・§9.1）
+- 再発防止の feedback（「次からはこうする」系）をメモリに書く → `memory-guard.sh` hook が deny する（[`docs/convention-design-principles.md` §8.3](docs/convention-design-principles.md#precedent-as-training-data) の precedent-as-training-data 問題）。一般化可なら `conventions/*.md`、catastrophic 級なら hook、annoyance 級なら何も書かない（[§8.2](docs/convention-design-principles.md#rule-to-mechanism-shift)・[§9.1](docs/convention-design-principles.md#blast-radius-triage)）
 
 ---
 
@@ -133,7 +133,7 @@ SESSION.md:
 - **棚卸し（目安80行以内）:** 完了 `[x]` を除去、実装詳細は git log に委任、重複を排除、**恒久的決定・セッションをまたいで効くルール/規約/編集流儀は CLAUDE.md（or 該当 convention file）に移動**（= SESSION.md は揮発的 state 専用、durable rule を SESSION に置かない。置くと状態 file を読まない者・別セッションに発火しない＝役割表 §2 違反）。
 - **新セッションテスト:** セッション終了前に SESSION.md だけで What/Why/How が復元できるか検証。
 
-MEMORY.md（index-only、`docs/convention-design-principles.md` §8.7）: マシンローカル事実への pointer のみ置く。2 週間以上未使用プロジェクトを除去、解決済み案件を除去。feedback 形式の残留があれば削除（§8.3 で `memory-guard.sh` が deny する対象）。
+MEMORY.md（index-only、[`docs/convention-design-principles.md` §8.7](docs/convention-design-principles.md#mechanism-application-example)）: マシンローカル事実への pointer のみ置く。2 週間以上未使用プロジェクトを除去、解決済み案件を除去。feedback 形式の残留があれば削除（[§8.3](docs/convention-design-principles.md#precedent-as-training-data) で `memory-guard.sh` が deny する対象）。
 
 ### <a id="push-granularity-and-recovery"></a>push の粒度と障害対応
 
@@ -158,7 +158,7 @@ git の状態管理は 1 本の `PostToolUse` hook で機械的に支援する: 
 |---|---|
 | **整合性** | 変更ファイル間で数値・用語・参照先が一致しているか |
 | **無矛盾性** | 既存ルール・テンプレートと矛盾していないか |
-| **効率性** | 重複がないか。SESSION.md ~80行、MEMORY.md は index-only（§8.7）か |
+| **効率性** | 重複がないか。SESSION.md ~80行、MEMORY.md は index-only（[§8.7](docs/convention-design-principles.md#mechanism-application-example)）か |
 | **安全性** | 個人情報・認証情報が公開リポに含まれていないか |
 
 ユーザーが「**3軸チェック**」と言った場合は上表のうち **整合性・無矛盾性・効率性** のみを指す（安全性は除外）。「4軸チェック」は全 4 軸。

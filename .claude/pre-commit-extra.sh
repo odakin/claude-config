@@ -4,7 +4,7 @@
 # public-precommit-runner.sh が leak gate を pass 後に chain で呼ぶ (= 既存 channel への
 # 相乗り。 新規 standalone 検出器 / dashboard 項目を増やさない)。 exit code は親に透過するが、
 # 本 hook は **warning のみで常に exit 0** にして commit を止めない (= drift は annoyance 級で、
-# convention-design-principles.md §9.1 (= #blast-radius-triage) の triage に従い catastrophic 級の block を当てない)。
+# convention-design-principles.md §9.1 〔= #blast-radius-triage〕 の triage に従い catastrophic 級の block を当てない)。
 #
 # 検査: CONVENTIONS.md 冒頭の conventions/ 全列挙 と CLAUDE.md 構造 tree の conventions/ block が、
 #       実体 `conventions/*.md` と一致しているか。 不一致なら「その commit の瞬間・その本人」に
@@ -70,7 +70,7 @@ fi
 # 下層 repo / 他ユーザ / 過去メモの §-ref が永久に解決不能になる (= 回収不可)。 §9.1 triage で
 # block。 staged の *.index.yaml を HEAD と比較し、 legacy が縮んでいたら commit を止める。 意図的な
 # 節削除は `LEGACY_RETIRE_OK=1 git commit ...` で明示 override (= 消すのは可・黙っては不可)。
-# 正本: scripts/check-legacy-append-only.py / convention-design-principles §14.7。
+# 正本: scripts/check-legacy-append-only.py / convention-design-principles §14.7 (= #inbound-ref-robustness)。
 GATE="$REPO_ROOT/scripts/check-legacy-append-only.py"
 if [ -f "$GATE" ]; then
   if ! python3 "$GATE" --staged >&2; then

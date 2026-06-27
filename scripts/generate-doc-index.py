@@ -7,7 +7,7 @@ this scans the md and (re)writes `<doc>.index.yaml`:
   DERIVED from the md   : id (the anchor slug), level (## / ###), title (verbatim heading).
   PRESERVED across regen : legacy  (a section's ORIGINAL §-number = a permanent forwarding
                                    address for old `§N.M` refs; FROZEN once set --
-                                   convention-design-principles.md §14.7 = #inbound-ref-robustness),
+                                   convention-design-principles.md §14.7 〔= #inbound-ref-robustness〕),
                           related (the hand-authored relation graph),
                           and ANY other hand field (e.g. origin) -- preserved verbatim, so
                           the generator never silently drops data it does not understand.
@@ -114,7 +114,7 @@ def build_index(sections, existing):
         "# Stable slug index -- AUTO-GENERATED from the doc by scripts/generate-doc-index.py.",
         "# id/level/title are DERIVED from the markdown (edit the md + re-run, do NOT hand-edit",
         "# them here). legacy (a section's original §-number = a permanent forwarding address),",
-        "# related, and any other hand field are PRESERVED. See convention-design-principles §14.7.",
+        "# related, and any other hand field are PRESERVED. See convention-design-principles §14.7 (= #inbound-ref-robustness).",
         "# Validated by scripts/check-office-automation-index.py (dangling=0 / orphan=0).",
         "sections:",
     ]

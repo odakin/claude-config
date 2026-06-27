@@ -4,7 +4,7 @@ APPEND-ONLY.
 
 WHY: once a §-number is published, downstream repos / other users / old notes can reference
 it forever and we can NEVER recall those refs. So each `legacy:` entry is a PERMANENT
-forwarding address (convention-design-principles.md §14.7 = #inbound-ref-robustness -- the 'mail-forwarding-order you
+forwarding address (convention-design-principles.md §14.7 〔= #inbound-ref-robustness〕 -- the 'mail-forwarding-order you
 keep forever' guarantee). It must never be SILENTLY dropped (by a slug rename, a section
 delete, or an index regeneration). This gate compares every slug index's CURRENT legacy set
 against its committed (HEAD) version and FAILS if any legacy value disappeared.

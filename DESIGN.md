@@ -42,7 +42,7 @@ router §4 で参照する `scripts/diff-form-docx.py` を新設 (= `diff-form-x
 
 ### 問題
 
-universal な規律 (= 全 Claude Code ユーザーで true) は 4 層 model 上 **layer 1 (`conventions/*.md`) が正しい配置**。 だが §10 (`docs/convention-design-principles.md`) の auto-load tier では `conventions/*.md` は T0 (= 毎 session 強制 load = CLAUDE.md / MEMORY.md のみ) でなく **on-demand**。 つまり layer-1 convention は「何かがそれを指していて、 かつその pointer が読まれた時」 にしか発火しない (= §8.12 発火面 hierarchy で最弱の **doc 記載 / recall 依存**)。
+universal な規律 (= 全 Claude Code ユーザーで true) は 4 層 model 上 **layer 1 (`conventions/*.md`) が正しい配置**。 だが [§10](docs/convention-design-principles.md#file-role-architecture) (`docs/convention-design-principles.md`) の auto-load tier では `conventions/*.md` は T0 (= 毎 session 強制 load = CLAUDE.md / MEMORY.md のみ) でなく **on-demand**。 つまり layer-1 convention は「何かがそれを指していて、 かつその pointer が読まれた時」 にしか発火しない (= [§8.12](docs/convention-design-principles.md#firing-surface-hierarchy) 発火面 hierarchy で最弱の **doc 記載 / recall 依存**)。
 
 → **tension**: 規律を正しく layer 1 に置くと観客は最大化されるが、 **発火確率は下がりうる** (= 個人層 CLAUDE.md の「読み込み必須」 経由でしか辿られず、 該当 convention file を実際に開かないと効かない)。 「正しく記録したのに発火しない」 が起こりうる。
 
@@ -67,7 +67,7 @@ manual な per-rule pointer は (a) scale しない (b) 「pointer を張るの�
 
 ### 関連
 
-- `docs/convention-design-principles.md` §8.12 (発火面 hierarchy、 doc=最弱) / §8.13 (silent dead) / §8.14 (frontend honor) / §3 (「規約がない」 か「規約を読まない」 か) / §10 (auto-load tier)
+- [`docs/convention-design-principles.md` §8.12](docs/convention-design-principles.md#firing-surface-hierarchy) (発火面 hierarchy、 doc=最弱) / [§8.13](docs/convention-design-principles.md#conditional-firing-visibility) (silent dead) / [§8.15](docs/convention-design-principles.md#enforcement-surface-frontend-survival) (frontend honor、 ⚠️ ex-§8.14 typo: label "frontend honor" は §8.15 と semantically 一致、 §8.14 は identity corroboration) / [§3](docs/convention-design-principles.md#rule-addition-criteria) (「規約がない」 か「規約を読まない」 か) / [§10](docs/convention-design-principles.md#file-role-architecture) (auto-load tier)
 - `conventions/personal-skills.md` (skill = auto-discover 発火面)
 - 起点: universal な LaTeX 編集則 (= 段落長の判断でコメントアウト行を数えない) を latex.md に hoist した際、 user が「層 1 だと逆に読まれなくなる」 と発火面の弱さを指摘 → 下層 pointer で暫定対応 + 本 entry で系統化を future work 化
 
@@ -474,7 +474,7 @@ Claude Code の Bash ツールは起動時に生成したシェルスナップ�
 
 **Why:** 2026-04-06 に全 30 リポの CLAUDE.md を行数・コードファイル数・見出しで実地レビューした結果:
 
-1. **適用範囲が狭い:** ARCHITECTURE.md が筋良く効くのは ~3-4 リポのみ（LorentzArena / mhlw-ec-pharmacy-finder / arxiv-digest など複数レイヤを持つコードリポ）。残り 26-27 リポは LaTeX 論文・記事・データ運用・薄いスクリプト集で、構造説明が CLAUDE.md の表 1 つに収まる。必須化すると形だけのファイルが量産され、`docs/convention-design-principles.md` §3「過剰規約の害」と直接衝突する。
+1. **適用範囲が狭い:** ARCHITECTURE.md が筋良く効くのは ~3-4 リポのみ（LorentzArena / mhlw-ec-pharmacy-finder / arxiv-digest など複数レイヤを持つコードリポ）。残り 26-27 リポは LaTeX 論文・記事・データ運用・薄いスクリプト集で、構造説明が CLAUDE.md の表 1 つに収まる。必須化すると形だけのファイルが量産され、[`docs/convention-design-principles.md` §3](docs/convention-design-principles.md#rule-addition-criteria)「過剰規約の害」と直接衝突する。
 2. **CLAUDE.md 肥大化の救済策にならない:** 行数トップ群（300 行超 2 件、120-200 行 3 件）の見出しを精査すると、嵩を稼いでいるのは「動作プロトコル」「更新手順」「rotate チェックリスト」など**ランブック系**であって、構造説明ではない。ARCHITECTURE.md を切り出してもこれらは減らない。
 3. **§2 役割定義との衝突:** CLAUDE.md の役割に「構造」が既に含まれている。ARCHITECTURE.md を必須化すると CLAUDE.md の役割定義を書き換える必要があり、既存 30 リポに波及する。
 4. **実例不足:** 「ARCHITECTURE.md がなくて困った」事例は LorentzArena 1 件のみ。規約は実例から抽出するのが原則（`convention-design-principles.md` 冒頭）。1 サンプルでの規約化は早い。
@@ -514,7 +514,7 @@ Claude Code の Bash ツールは起動時に生成したシェルスナップ�
 
 **移管先の選定:** 候補は (a) 個人層の CLAUDE.md (private cross-machine 個人規約), (b) memory (~/.claude/...), (c) 該当 private リポの CLAUDE.md。
 
-- (b) memory はルール定義の置き場ではない (`docs/convention-design-principles.md` §5)
+- (b) memory はルール定義の置き場ではない ([`docs/convention-design-principles.md` §5](docs/convention-design-principles.md#memory-positioning))
 - (c) 該当 private リポの CLAUDE.md に置くと、同ドメインの他リポで作業中にこの横断ルールが見えない (リポ単位のスコープでは届かない)
 - (a) odakin-prefs は cross-machine な個人規約のために設計された場所であり、最も適合する
 
@@ -583,7 +583,7 @@ bundle 判断 (「関連密接かつ合計 10 行未満のルールは bundle �
 
 | ファイル | 呼び出し元 | 役割 |
 |---|---|---|
-| memory-guard.sh | PreToolUse (Edit/Write) | メモリディレクトリへの書き込みを `permissionDecision=deny` でブロック。escape hatch: content に `<!-- machine-local: <理由> -->` marker（`docs/convention-design-principles.md` §8.3/§8.7）。 deny message は layer-1 abstract (foreign user 対応、 個人層名は仮定しない) |
+| memory-guard.sh | PreToolUse (Edit/Write) | メモリディレクトリへの書き込みを `permissionDecision=deny` でブロック。escape hatch: content に `<!-- machine-local: <理由> -->` marker（[`docs/convention-design-principles.md` §8.3](docs/convention-design-principles.md#precedent-as-training-data)/[§8.7](docs/convention-design-principles.md#mechanism-application-example)）。 deny message は layer-1 abstract (foreign user 対応、 個人層名は仮定しない) |
 | memory-guard-bash.sh | PreToolUse (Bash) | Bash 経由のメモリ書き込みも同様に deny。escape hatch: command に `machine-local` 文字列。 deny message は layer-1 abstract |
 | public-leak-guard.sh | PreToolUse (Edit/Write/MultiEdit) | `.claude/public-repo.marker` 付きリポへの書き込みを Tier A 構造制約 regex (email / abs_path / non-private IPv4 / token prefix / discord_mention) で scan、 hit 時 `ask`。 literal blocklist は持たない (= 公開して安全な hook、 literal 正本は personal layer の `sensitive-terms.txt` + pre-commit 層 `public-precommit-runner.sh` に分離) |
 | google-url-guard.sh | PreToolUse (Edit/Write/MultiEdit/Bash) | Google URL の `/u/N/` パターン検出 + account-sensitive URL の `?authuser=<email>` 抜け検出 → `ask`。 placeholder URL (= path 末尾が `{...}` 等) は case glob で false positive を回避 |
@@ -907,7 +907,7 @@ sensitive-terms.txt に分離) で当面の risk は大きく下がる。段階 
 
 **public/private 判定: marker file 一本** — `個人層の public-repos.yaml`
 一本化や `gh repo view` 自動判定とも比較した。各 repo の visibility
-は各 repo 固有の情報 ([`convention-design-principles.md §1`](docs/convention-design-principles.md#placement-by-scope) 配置原則の
+は各 repo 固有の情報 ([`docs/convention-design-principles.md §1`](docs/convention-design-principles.md#placement-by-scope) 配置原則の
 「影響範囲の最大公約数」)、正本は repo 自身にあるべき。marker 付け
 忘れによる false negative は audit script の missing marker 検出と
 `setup.sh` の 2 点で補う。日常 hook は marker 1 ファイルのみ見る
@@ -921,7 +921,7 @@ sensitive-terms.txt に分離) で当面の risk は大きく下がる。段階 
 **Tier A regex の 3 ファイル重複** — `public-leak-guard.sh` (PreToolUse)
 / `public-precommit-runner.sh` (pre-commit) / `audit-public-repos.sh`
 (audit) に同じ 4 regex + allowlist が独立に定義されている。
-[`convention-design-principles.md §2`](docs/convention-design-principles.md#no-duplicate-rules) (定義は 1 箇所) に技術的に
+[`docs/convention-design-principles.md §2`](docs/convention-design-principles.md#no-duplicate-rules) (定義は 1 箇所) に技術的に
 違反するが、以下の理由で現状維持:
 (1) 3 ファイルの実行コンテキストが完全に独立 (Claude hook stdin /
 git diff / git grep)。共通 source file への extract は shell

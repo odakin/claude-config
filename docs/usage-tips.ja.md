@@ -84,7 +84,7 @@ Claude Code は作業ディレクトリから親方向に `CLAUDE.md` を全て 
 - **リポ `CLAUDE.md`** — リポの概要・起動方法・詳細への pointer。
 - **サブプロジェクト `CLAUDE.md`** — コマンド・特有の注意・アーキ超要約（5〜8 項目 × 1 行 + `docs/architecture.md` への pointer）。80〜100 行目安。
 
-重い narrative・パラメータ表・設計根拠は `docs/`（auto-load されない）に置いて pointer で参照する。原則と事例は [`convention-design-principles.md` §10.10–10.11](convention-design-principles.md#claudemd-chain-nested-autoload)。
+重い narrative・パラメータ表・設計根拠は `docs/`（auto-load されない）に置いて pointer で参照する。原則と事例は `convention-design-principles.md` [§10.10](convention-design-principles.md#claudemd-chain-nested-autoload)–[§10.11](convention-design-principles.md#super-summary-pattern)。
 
 ## 9. プロジェクト docs の role 分離: 「同じ知見を 5 箇所に書かない」
 

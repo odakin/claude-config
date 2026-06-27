@@ -27,7 +27,7 @@ REF_RE = re.compile(r'\[`([a-z0-9][a-z0-9-]*)`\]\(#([a-z0-9][a-z0-9-]*)\)')
 BARE_SECTION_RE = re.compile(r'§([0-9]+(?:\.[0-9]+)?(?:-[0-9]+[a-z]?)?)')
 STOP = {"の", "は", "が", "を", "に", "で", "と", "vs", "=", "+", "/", "の落とし穴",
         "form", "cell", "xlsx", "docx", "pdf", "excel", "設定", "確認", "義務"}
-# Illustrative placeholders for the ref SYNTAX itself. convention-design-principles §14.2
+# Illustrative placeholders for the ref SYNTAX itself. convention-design-principles §14.2 (= #slug-over-positional)
 # shows `[`slug`](#slug)` as an EXAMPLE of how to write a slug ref, not a real cross-ref.
 # The meta-doc that documents the convention legitimately contains such placeholders; real
 # section slugs are always descriptive, never these bare words, so skipping them in the

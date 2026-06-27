@@ -33,4 +33,4 @@
 
 ## Projects
 
-リポ一覧の正本は [`repos.md`](repos.md)。現在の作業プロジェクト（autocompact 復帰時に巡回する active な repo）は、この `CLAUDE.md` の下に `### 現在の作業プロジェクト` セクションを置いて列挙する（git 同期先が正。`~/.claude/.../memory/MEMORY.md` は index-only、`docs/convention-design-principles.md` §8.7）。
+リポ一覧の正本は [`repos.md`](repos.md)。現在の作業プロジェクト（autocompact 復帰時に巡回する active な repo）は、この `CLAUDE.md` の下に `### 現在の作業プロジェクト` セクションを置いて列挙する（git 同期先が正。`~/.claude/.../memory/MEMORY.md` は index-only、[`docs/convention-design-principles.md` §8.7](../claude-config/docs/convention-design-principles.md#mechanism-application-example)）。

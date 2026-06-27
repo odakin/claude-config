@@ -84,7 +84,7 @@ Keep each layer to its own role:
 - **Repo `CLAUDE.md`** — repo overview, how to run things, pointers to details.
 - **Sub-project `CLAUDE.md`** — commands, quirks, an architecture super-summary of 5–8 one-line items with pointers to `docs/architecture.md`. Target ~80–100 lines.
 
-Heavy narrative, parameter tables, and design rationale live in `docs/` (not auto-loaded) and are referenced by pointer. Principles and worked examples in [`convention-design-principles.md` §10.10–10.11](convention-design-principles.md#claudemd-chain-nested-autoload).
+Heavy narrative, parameter tables, and design rationale live in `docs/` (not auto-loaded) and are referenced by pointer. Principles and worked examples in `convention-design-principles.md` [§10.10](convention-design-principles.md#claudemd-chain-nested-autoload)–[§10.11](convention-design-principles.md#super-summary-pattern).
 
 ## 9. Project doc role separation: "don't write the same insight five times"
 
