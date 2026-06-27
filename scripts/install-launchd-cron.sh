@@ -60,12 +60,15 @@ CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "$HOME/.local/
 
 LABEL_PREFIX=""
 WORKDIR='$HOME'           # 既定: literal。 plist の `cd "..."` 内で launchd runtime に展開される
+GATE_SNIPPET=""           # 任意: 各 job の wrapper に挿入する gate。 `cd && <gate> || exit 0; exec ...`
+                          #       gate が非 0 で終わると routine は実行されず exit 0 (= defer)。
+                          #       active-routine-host pattern (multi-machine-state.md) 等に使う
 ROUTINES_ACC=""           # newline 区切りで "id|type|target|cron" を蓄積
 ACTION="install"
 ACTION_ARG=""
 
 usage() {
-  echo "usage: $0 --label-prefix PREFIX [--workdir DIR] --routine \"id|type|target|cron\" [--routine ...] \\"
+  echo "usage: $0 --label-prefix PREFIX [--workdir DIR] [--gate SNIPPET] --routine \"id|type|target|cron\" [--routine ...] \\"
   echo "          [install | --status | --run <id> | --install-one <id> | --uninstall-one <id> | --uninstall]"
 }
 
@@ -73,6 +76,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --label-prefix)  LABEL_PREFIX="${2:-}"; shift ;;
     --workdir)       WORKDIR="${2:-}"; shift ;;
+    --gate)          GATE_SNIPPET="${2:-}"; shift ;;
     --routine)       ROUTINES_ACC="${ROUTINES_ACC}${2:-}
 " ; shift ;;
     --status)        ACTION="status" ;;
@@ -118,9 +122,9 @@ write_plist() {
   task_id="$1"; kind="$2"; target="$3"; cron="$4"
   label="$(label_for "$task_id")"; plist="$(plist_path "$task_id")"; logf="$(log_for "$task_id")"
   if [ "$kind" = skill ]; then prompt="$(prompt_for "$target")"; else prompt=""; fi
-  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" <<'PYEOF'
+  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" <<'PYEOF'
 import sys, plistlib
-label, claude_bin, kind, target, prompt, logf, cron, out, model, workdir = sys.argv[1:11]
+label, claude_bin, kind, target, prompt, logf, cron, out, model, workdir, gate = sys.argv[1:12]
 minute, hour, dom, month, dow = cron.split()
 # minute: '*' / 整数 / '*/N' step (= 毎 N 分。 StartCalendarInterval は step を持たないので
 # Minute 値を列挙して array に展開する。 例: '*/30' → [0, 30])
@@ -151,11 +155,13 @@ sci = entries[0] if len(entries) == 1 else entries
 prefix = ('unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; '
           'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; '
           'cd "%s" && ' % workdir)
+# 任意の gate: cd の後・exec の前に挿入。 `cd && <gate> || exit 0;` で gate 非 0 = defer (exit 0)。
+gate_prefix = (gate + ' || exit 0; ') if gate else ''
 if kind == 'skill':
     model_flag = ('--model %s ' % model) if model else ''
-    cmd = prefix + 'exec "%s" -p --permission-mode bypassPermissions %s"%s"' % (claude_bin, model_flag, prompt)
+    cmd = prefix + gate_prefix + 'exec "%s" -p --permission-mode bypassPermissions %s"%s"' % (claude_bin, model_flag, prompt)
 else:  # cmd = 決定的 script を直接実行 (claude 不要)
-    cmd = prefix + 'exec bash "%s"' % target
+    cmd = prefix + gate_prefix + 'exec bash "%s"' % target
 d = {
     'Label': label,
     'ProgramArguments': ['/bin/sh', '-c', cmd],

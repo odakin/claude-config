@@ -54,6 +54,18 @@ launchd / cron の定期ジョブは **登録したマシンでだけ走る**。
 - arch 判定は fleet 構成 (= どのマシンが何 arch か) に依存する **cross-machine な比較 fact**。 これは個人レイヤー (= 各 user の machine 構成 doc) に置く。 本 public 規約には具体 arch を hardcode しない
 - 将来 arch が揃う (例: 全マシン Apple Silicon 化) と arch discriminator は効かなくなる → hostname / 明示 marker file へ移行
 
+### account / host failover: active-routine-host 台帳 + gate
+
+上の「1 台に決める」 は、 その 1 台の**土台アカウントが使えなくなる** (= 週間 usage 制限・障害・別作業に枠を回したい) と全ルーチンが止まる single point。 別マシン / 別アカウントへ **素早く・繰り返し** failover したいときは、 候補マシン全部にジョブを (gate 付きで) install しておき、 **git-commit した台帳 1 ファイルが「今の本番ホスト」 を決める** 構成にする:
+
+- **台帳** (例 `active-routine-host.json`、 同期 repo 内) = `{"host": "<hostname-short>", "account": "...", "since": ..., "reason": ...}`。 load-bearing は `host` だけ (= gate が見るのはこれ)、 残りは人間 / 監視 surface 用。
+- 各ジョブの wrapper は実行頭で **gate** (`scripts/routine-host-gate.py <repo> <ledger-relpath>`) を呼び、 台帳の `host` が自分でなければ静かに **defer** (exit 0、 = ジョブを走らせない)。
+- gate は **fail-open**: 台帳が無い / 壊れている / host 欄が空なら「ゲート無し」 として普通に走る。 = 台帳の事故で全ルーチンが沈黙することはない (= 安全網は止めない側に倒す)。
+- gate は最新の **committed** 台帳を読む (best-effort `git fetch` → working-tree fallback)。 standby マシンは新台帳が push された瞬間に従う (= 手動 pull 不要)。
+- **failover = 台帳の `host` を書き換えて push するだけ** (install / uninstall 不要)。 launchd cron engine ([scheduled-tasks.md](scheduled-tasks.md) §登録機構) の `--gate "<snippet>"` が wrapper に gate を焼く (`cd && <gate> || exit 0; exec <routine>`)。
+- ⚠️ gate は **両マシンの plist に焼かれて初めて両方向対称**。 旧 install (gate 無し) のマシンは台帳に関係なく走るので、 そのマシンを standby にしたいなら一度 install し直して gate を焼く (それまでは「そのマシンの土台アカウントが止まっている」 ことに依存)。
+- ⚠️ **headless 実行アカウントには `claude auth login` で確立した generation-capable な CLI OAuth が要る**。 デスクトップ app (Cowork) が対話シェルに注入する session token は **launchd には来ない**。 `claude auth status` が `loggedIn:true` を返しても、 env token 無しの headless 生成は **401 になりうる** (= keychain の credential が refresh 切れ等で生成に使えない)。 → **failover 先マシンでは事前に `claude auth login` を済ませて headless 401 が出ないことを確認する** (= 実 launchd で 1 回 kickstart して log を見るのが確実、 対話シェルからの nested `claude -p` は別 session guard / env 汚染で当てにならない)。
+
 ## zero-setup な cross-machine surfacing (= 別マシンの「やるべきこと」 を浮上させる)
 
 「マシン B でやるべき作業 (= 例: machine-local job の install)」 を **マシン B で何も setup していない段階から**自動で浮上させたい時、 surface 機構を **マシン B で既に配線済 ∧ source が git-synced** な経路に相乗りさせる。 そうすれば `git pull` だけでマシン B に届く (= 新規 wiring 不要)。

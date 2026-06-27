@@ -40,6 +40,7 @@ install-launchd-cron.sh --label-prefix PREFIX [--workdir DIR] \
 - **type**: `skill` = `claude -p --permission-mode bypassPermissions` で SKILL.md を indirection 実行 (= Claude judgment 要) / `cmd` = script を直接実行 (= 決定的・claude 不要)。
 - **cron** は 5-field。 **`*/N` step 分** (= `*/30` → Minute `[0,30,...]`) と **`N-M` 曜日範囲** (= `1-5` → Weekday 月〜金) を StartCalendarInterval 配列へ展開する (launchd は step を持たないため)。
 - CLI 認証 (`~/.claude.json` の単一 account) で走るので Cowork のアカウント切替に非依存 (= 上記)。 launchd は LANG 空なので prompt は ASCII のみ ([shell-multibyte-truncation.md](shell-multibyte-truncation.md))。
+- **`--gate "<snippet>"`** (任意): wrapper に `cd WORKDIR && <snippet> || exit 0; exec <routine>` の形で gate を挿入する。 snippet が非 0 で終わると routine は実行されず exit 0 (= defer)。 複数マシンで「今どのマシンが本番か」 を台帳で切り替える **active-routine-host failover** ([multi-machine-state.md](multi-machine-state.md) §「account / host failover」) に使う (gate 実体 = `scripts/routine-host-gate.py`)。
 
 **止め方の違い (= launchd cron 版 vs scheduled-task MCP 版)**: 同じ「定期ジョブ」 でも停止操作が機構で異なる。 launchd cron 版は `--uninstall-one <task-id>` (= `launchctl bootout` + plist 削除)、 scheduled-task MCP 版は `scheduled-tasks` MCP の delete。 期間限定ジョブ (= 大会期間だけ等) の自己停止 runbook を書くときは、 **どちらの機構で登録したか**に応じた停止コマンドを記す (= 機構を取り違えると停止できない)。
 
