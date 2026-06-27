@@ -198,7 +198,7 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 「**完全に独立した別 session に作業を渡し、 結果も受け取りたい**」 とき。 委譲 primitive は 2 つあり desideratum が分かれている:
 
 - **Agent (subagent)**: 結果は *呼び元に返る* が、 呼び元 context を継承する *subagent* で **独立でない** (呼び元 session 終了で消える / user が独立に steer 不可)。
-- **spawn_task (新 session)**: *完全に独立* (own worktree / 呼び元記憶ゼロ / 呼び元終了後も生存 / user が steer 可) だが、 結果は *user に fire* で **呼び元に自動では返らない**。
+- **spawn_task (新 session)**: *完全に独立* (own worktree〔= 任意。 worktree か shared checkout かの選択は §8〕 / 呼び元記憶ゼロ / 呼び元終了後も生存 / user が steer 可) だが、 結果は *user に fire* で **呼び元に自動では返らない**。
 
 ⇒ ユーザーが「独立した新 session」 を求め、 かつ結果も要るなら、 **spawn_task に「結果を呼び元に返せ」 を組み合わせる** と「独立 ∧ 結果返送」 が in-scope で得られる (harness 変更不要)。 「新 session」 を Agent に潰さないこと (= [`convention-design-principles.md §4.1` 深層](../docs/convention-design-principles.md#motivated-substitution-trap) の deliverer-retention 置換 = ユーザーが名指した独立性を、 結果が自分に返る Agent へ無意識に潰す失敗)。
 
