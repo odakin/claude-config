@@ -49,6 +49,7 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 | Bash tool で `sleep` がブロックされ reset 待ちが打てない | harness が foreground の bare `sleep` を禁止 | bare sleep を打たず **script (xlsx-to-pdf.sh 等) に sleep を内包**させて呼ぶ / osascript 内 `delay` / 別 op は run_in_background |
 | 何を / どこに書くか不明 | — | 着手前に [`form を dump`](#form-dump-first) (原則編が先) |
 | 様式の label を誤って上書きしていないか | label vs input row の混同 | [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で機械検出 |
+| **docx 様式**でラベル欄に値を上書き / 欄を空欄のまま / labeled 列が空 / 見出し消失 | label vs input の混同・記入漏れ・視覚確認が「自分の記入箇所」 止まり | [`diff-form-docx.py`](#diff-form-docx-detection) で機械検出 (= 表紙/申請書 docx 様式、 xlsx 版の docx 対) |
 | Word が「破損」 と言うが原因不明 | XML 宣言 single-quote / 空 `<w:tc>` 等 | [`check-docx-integrity.py`](#docx-checkbox-content-control) で決定論検出 |
 | docx の font を下げても・行間を詰めても**ページ数が減らない** (日本語 Word) | section の `docGrid` (snap-to-grid) が行高を grid pitch に固定し font 縮小を無効化 | 本文段落の `snapToGrid` 無効化 / `linePitch` 縮小 → [`docx-pdf-page-compress`](#docx-pdf-page-compress) |
 
@@ -1562,6 +1563,32 @@ critical 検出時は exit code 1。 提出前 / commit 前に必ず実行する
 label 判定は heuristic で suffix 一致 (= `の必要性 / の明細 / について / の内容 / の確認 / の有無 / の状況`)。 新しい雛形で別 suffix が現れたら script の `LABEL_SUFFIXES` に追記する。
 
 ⚠️ **盲点: 比較基準のテンプレ自身が記入済みだと、 残骸が見えない**。 diff は「両 file で違う cell」 しか出さないので、 **テンプレに他人の記入値が残っている場合、 自分が触らなかった cell の残骸は filled 側にもそのまま在って diff に現れない** (= 他人の氏名・金額が新規書類に混入したまま全検証 pass する)。 → テンプレを使う前に [`template-provenance-check`](#template-provenance-check) で素性を確認するのが上流対策。
+
+### <a id="diff-form-docx-detection"></a>機械的検出: `diff-form-docx.py` (= docx 様式の記入ミス)
+
+`diff-form-xlsx.py` の docx 版。 Word 様式 (表紙・申請書) には記入チェックの機械層が無く、 **人間が PDF を render して「見た」 のにミスが素通りする** (= 自分が記入した所だけ見て、 審査員視点の空欄・上書き・配置崩れを見ない)。 blank 様式と記入版を渡して検出する。
+
+```bash
+python3 ~/Claude/claude-config/scripts/diff-form-docx.py \
+    /path/to/filled.docx /path/to/blank.docx [--strict]
+python3 ~/Claude/claude-config/scripts/diff-form-docx.py --selftest
+```
+
+- **`LABEL_OVERWRITE`** (= HARD, exit 1): 表セルの blank ラベルが別 text に**置換** (= どちらも相手を含まない)。 = 表紙の**ラベル欄に値を書き込む**バグ (例: 生年月日を「年令」 ラベルセルに入力 → 縦潰れ)
+- **`LABEL_DELETED`** (= HARD): blank ラベルセルが記入版で空
+- **`HEADING_VANISHED`** (= HARD): 構造見出し (`（N）` / `N．`) が記入版から消失 (= off-by-one 記入等で見出しを clobber)
+- **`BULLET_EMPTY`** (= surface): 箇条書きプレースホルダ「・」 が空のまま (= 「・・・」 のセクション丸ごと未記入)
+- **`EMPTY_LABELED_COL`** (= surface): ヘッダ非空の列が全データセル空 (= 「年月」 等の labeled 列を空のまま)
+- **`LABEL_PARTIAL`** (= info): filled が blank ラベルの部分集合 (= ラベルを行分割等で再構成、 意図的なら無視)
+- **`INPUT_FILLED`** (= info): blank empty → fill (= 正常)
+
+HARD 検出時は exit 1。 完成度 finding (surface) は `--strict` で exit 1 化。 記入版生成 pipeline の最後に必ず通す。 `--selftest` 内蔵。
+
+判定は**構造的** = 「箱・列・箇条書きが空」「ラベルが置換」 は機械で言えるが、 **「散文の中身が薄い / 箱が半分しか埋まってない」 は判定不可** = 審査員の目の最終 pass が残る ([`office-automation-principles.md`](office-automation-principles.md) §「記入後は『審査員の目』 で閉じる」)。
+
+⚠️ EMPTY_LABELED_COL は blank 様式の row 0 が**全セル非空 (= 真のヘッダ行)** の表だけに適用 (= 表紙の key-value 表 〔ラベル|値|ラベル〕 は row 0 に空セルがあるので除外、 略歴/予算表だけ対象) = 列ヘッダ型と key-value 型の誤判定回避。
+
+origin: 2026-06-27 ある研究費 docx 申請様式で同一様式に 4 記入ミスを連続 (= 年令ラベル上書き / 「（１）」 箇条書き空欄 / 「年月」 列空 / 概要箱が半分・薄い) → そのつど申請者が発見・指摘。 視覚 render しても自分の記入箇所しか見ず素通りした = recall 依存の規律では止まらない実証 → 機械化。
 
 ### <a id="template-provenance-check"></a>テンプレの素性確認 (= 「最新様式」 が誰かの記入済み修正版である罠)
 

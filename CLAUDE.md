@@ -108,6 +108,7 @@ claude-config/
 │   ├── install-public-commit-msg.sh    # 各 public repo に commit-msg stub を冪等配置（marker check + core.hooksPath cascade）
 │   ├── audit-public-repos.sh           # 全 public repo の leak 定期監査（週次 scheduled-task 対象）
 │   ├── diff-form-xlsx.py               # 様式 xlsx の label 上書き (= 様式改変) を雛形 diff で検出（office-automation.md#diff-form-xlsx-detection）
+│   ├── diff-form-docx.py               # 様式 docx の記入ミスを blank diff で検出（ラベル欄上書き/見出し消失=HARD・空の箇条書き/全空 labeled 列=surface、xlsx 版の docx 対、--selftest 内蔵、office-automation.md#diff-form-docx-detection）
 │   ├── scan-form-instructions.py       # 様式 xlsx の label 内 embedded instruction を category 別に抽出（office-automation.md#embedded-instruction-in-label）
 │   ├── xlsx-to-pdf.sh                   # spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、office-automation.md#xlsx-to-pdf-script）
 │   ├── pdf_form_fill.py                 # 雛形 PDF への直接印字エンジン（library。anchor 印字 / NFKC 照合 / #+ redact / font subset / 内蔵検証 / 600dpi ラスタ化、office-automation.md#pdf-prefill-direct の汎用実装。単票向け — 派生 sheet 数式導出付き workbook は excel-osascript 経路）

@@ -280,7 +280,11 @@ sections:
     legacy: "5-3"
     level: 3
     title: "機械的検出: `diff-form-xlsx.py`"
-    related: [template-provenance-check]
+    related: [template-provenance-check, diff-form-docx-detection]
+  - id: diff-form-docx-detection
+    level: 3
+    title: "機械的検出: `diff-form-docx.py` (= docx 様式の記入ミス)"
+    related: [diff-form-xlsx-detection, pdf-visual-confirm, docx-fill-xml-edit, docx-checkbox-content-control]
   - id: template-provenance-check
     level: 3
     title: "テンプレの素性確認 (= 「最新様式」 が誰かの記入済み修正版である罠)"
