@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-06-27: Office handling 入口 router を layer 1 に hoist (`office-files.md` 新設)
+
+### 問題
+
+Office ファイル (Excel / Word / PDF / pptx) の handling は layer 1 に knowledge が散在していた:
+- 考え方 = `office-automation-principles.md`
+- 罠 = `office-automation.md` (+ `index.yaml` validator)
+- 道具 = `scripts/diff-form-xlsx.py` / `pdf_form_fill.py` / `docx-to-pdf.sh` / `xlsx-to-pdf.sh` / `pptx-to-pdf.sh` / 各種 integrity check
+- 権限 = `claude-code-permissions.md`
+- e-Rad = `erad-submission.md`
+
+しかし**全部を束ねる単一入口が layer 1 に無く**、 個人層 (layer 3) の `office-file-handling.md` に router がある状態だった。 = layer 1 only の参照ルートが存在せず、 「universal な Office 仕事の入口」 として generic な user が辿れる経路が欠けていた。
+
+### 設計
+
+`conventions/office-files.md` を**薄い router** として新設:
+- 入口 ⓪〜⑥ (考え方 / 権限 / skill 判断 / 罠 / PDF 化 / 機械監査 / e-Rad) を 1 表で
+- 中身は持たず**全 pointer** (layer 1 内の各 home に飛ぶ)。 罠の早見は `office-automation.md#symptom-index` 経由
+- layer 3 (個人層) の `office-file-handling.md` は env 追補 (機械別 install / 生成 driver 実装例) に薄化、 入口は layer 1 へ
+
+これに伴う 2 つの dedup:
+- 「**入口の順番**」 を `office-automation-principles.md` も宣言していた (旧 L6) → 「考え方の正本、 router は `office-files.md`」 に書き換え (= 入口の 2 重宣言を解消)
+- `skill vs 手動` 判断表は principles §1 「道具選択の梯子」 と同じ「道具を選ぶ判断」 軸 → principles §1 に統合 (router 側は pointer)
+
+### 同時に投入した機械層
+
+router §4 で参照する `scripts/diff-form-docx.py` を新設 (= `diff-form-xlsx.py` の docx 版、 ラベル欄上書き / 見出し消失 / 空の箇条書き / 全空 labeled 列を blank diff で検出)。 `office-automation.md#diff-form-docx-detection` slug + principles §5b「記入後は『審査員の目』 で閉じる」 とセット。
+
+### origin
+
+2026-06-27 ある研究費 docx 申請様式で同一様式に 4 記入ミス連続 → 申請者発見 ×4。 視覚 render しても自分の記入箇所しか見ない = recall 依存の規律では止まらない実証 → 機械化 + router hoist。
+
+---
+
 ## 2026-06-17: layer-1 convention の発火面 — 「正しい層配置」 と「発火確率」 の tension (= future work)
 
 ### 問題

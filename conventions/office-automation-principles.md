@@ -3,7 +3,9 @@
 行政・学術様式の Excel / Word / PDF を機械で扱うときの**思考の枠組み**。 個別の罠と手順は
 [`office-automation.md`](office-automation.md) (= slug 付き gotcha 集) が正本で、 本 file は
 「**新しい様式・新しい罠に出会ったとき、 slug が無くても正しい判断に辿り着く**」 ための原則を
-まとめる。 入口の順番: 本 file (考え方) → office-automation.md (該当 slug を grep) → 実装。
+まとめる。
+
+> Office 仕事の**単一入口 router** は [`office-files.md`](office-files.md) (= 罠 / 道具 / 検証 / 権限 / PDF 化 / e-Rad への参照マップ)。 本 file は router の ⓪「考え方」 から参照される**考え方の正本**。 読みの順番: router → 本 file (考え方) → `office-automation.md` (該当 slug を grep) → 実装。
 
 ---
 
@@ -47,6 +49,15 @@ content control / XML 宣言 / bookmark)。 **どの道具も、 この地層の
 | 紙だけだが **多項目 + 派生 sheet が数式導出される** workbook | Excel osascript で雛形 copy に記入 → PDF → ページ抽出 | drawing native 保持 + 依頼書/承諾書等の**派生書類が数式で自動的に埋まる** (= PDF 印字だと派生分も手で印字する羽目になる)。 紙のみでもこちらが速くて正しい |
 | **docx fill** (本文提出も visual confirm も) | python-docx で XML/run/段落編集 ([`docx-fill-xml-edit`](office-automation.md#docx-fill-xml-edit) / [`docx-python-docx-surgical-edit`](office-automation.md#docx-python-docx-surgical-edit))。 配置先は `~/<repo>/...` 必須 ([`docx-tmp-sandbox-deny`](office-automation.md#docx-tmp-sandbox-deny)) | Word.app は sandbox で `/tmp` の grant 永続化不能、 一度詰むと automation も手動も止まる |
 | **docx → PDF** (内容確認・正式書類提出いずれも) | **Word AppleScript 駆動が default** ([`docx-to-pdf-pages`](office-automation.md#docx-to-pdf-pages) / [`docx-pdf-stale-cache`](office-automation.md#docx-pdf-stale-cache))。 既存 wrapper = `scripts/docx-to-pdf.sh` (引数なし = Word、 `--pages` で明示 Pages) | docx は「Word 体裁が契約」 の正式書類が大半。 Pages は re-typeset で見出し/表が重なる artifact + reviewer は Word 体裁を見る。 Word automation の cold-start trap は [`docx-pdf-stale-cache`](office-automation.md#docx-pdf-stale-cache) で対処済 (= fallback 1 = user の Word 書き出し) |
+
+**⚙️ skill が使える環境では (= anthropic-skills の `xlsx` / `docx` / `pdf` / `pptx` skill) の判断軸**:
+
+| ケース | 推奨 |
+|---|---|
+| 一般的な読み取り・編集・整形・形式変換・新規作成・データクリーニング | **skill** (xlsx / docx / pptx) — 速い |
+| 行政・学術**様式**の精密 fill (cell 単位制御 / label 非改変 / merged / data validation / 数式連動 / 印影) | **openpyxl / python-docx 手動** + 上記の梯子と [`office-automation.md`](office-automation.md) の規律 — skill は様式の微妙な構造を壊しうる |
+| PDF の抽出・結合・分割・OCR・フォーム fill | **pdf skill** |
+| 様式 xlsx/docx → 提出 PDF | 上記の梯子の docx/xlsx→PDF 行 (= Word/Excel AppleScript wrapper) |
 
 **原則: 道具を使う前に「この道具はこの file の何を round-trip できないか?」 を 1 回問う。**
 答えを知らない道具で本番 file を触らない (= まず copy で挙動を観察する)。

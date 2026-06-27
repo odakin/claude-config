@@ -14,10 +14,10 @@
 |---|---|---|
 | ⓪ **考え方** | 初見の様式 / slug の無い罠 / 道具選択に迷う? | [`office-automation-principles.md`](office-automation-principles.md) (= 様式=見た目が契約 / file=地層 / lossy 解釈器連鎖 / 道具選択の梯子 / 検証 3 層モデル / 「記入後は審査員の目で閉じる」 / 人間系原則 〔既知情報 prefill・print-last・記入分担 4 区分・受理側で閉じる〕) |
 | ① **権限** | その file は作業ルート (cwd) の外 (`~/Downloads` / `~/Desktop` / `~/Documents` / `~/Dropbox` 等) か? | [`claude-code-permissions.md`](claude-code-permissions.md) (= `additionalDirectories` の 3 frontend 切り分け 〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕)。 ⚠️ Word の `/tmp` sandbox 許可ダイアログは別系統 → [`docx-tmp-sandbox-deny`](office-automation.md#docx-tmp-sandbox-deny) (docx は必ず project 配下で開く) |
-| ② **skill か手動か** | 単純な読み書き・整形・形式変換か / 行政学術様式の精密 fill か | 下記 §4 |
+| ② **skill か手動か** | 単純な読み書き・整形・形式変換か / 行政学術様式の精密 fill か | 下記 §3 |
 | ③ **手順・落とし穴** | openpyxl / python-docx / 様式改変防止 / 検証 | **本丸** = [`office-automation.md`](office-automation.md)。 まず [症状 → 対処 早見表 (`#symptom-index`)](office-automation.md#symptom-index) で逆引き (= Excel crash / 日付 serial 印字 / 標題消失 / PDF -50/-1712/-609 等を症状から slug・既存 script に飛べる)。 各 subsection は安定 slug-anchor を持ち、 全 slug ↔ title ↔ related は併設 [`office-automation.index.yaml`](office-automation.index.yaml) (validator で dangling/orphan 0) |
-| ④ **PDF 化** | xlsx / docx / pptx → 提出 PDF | 下記 §3 |
-| ⑤ **記入後の機械監査** | 様式に値を fill した後、 ラベル上書き / 空欄 / 配置崩れが残っていないか? | 下記 §5 検証 script 一覧 (`diff-form-xlsx.py` / `diff-form-docx.py`)。 原則 = [`office-automation-principles.md §5b`](office-automation-principles.md) 「記入後は『審査員の目』 で閉じる」 |
+| ④ **PDF 化** | xlsx / docx / pptx → 提出 PDF | 下記 §2 |
+| ⑤ **記入後の機械監査** | 様式に値を fill した後、 ラベル上書き / 空欄 / 配置崩れが残っていないか? | 下記 §4 (原則 + script) |
 | ⑥ **e-Rad 経由** | JST / 科研費 / 財団等の研究費応募で e-Rad に書類を上げる? | [`erad-submission.md`](erad-submission.md) (= 制度横断で効く e-Rad 挙動・字数・書式・つまずきどころ) |
 
 ---
@@ -50,22 +50,13 @@
 
 ## 3. skill vs 手動の使い分け
 
-CLI で **anthropic-skills の `xlsx` / `docx` / `pdf` / `pptx` skill** が使える環境では:
-
-| ケース | 推奨 |
-|---|---|
-| 一般的な読み取り・編集・整形・形式変換・新規作成・データクリーニング | **skill** (xlsx / docx / pptx) — 速い |
-| 行政・学術**様式**の精密 fill (cell 単位制御 / label 非改変 / merged / data validation / 数式連動 / 印影) | **openpyxl / python-docx 手動** + [`office-automation.md`](office-automation.md) の規律 — skill は様式の微妙な構造を壊しうる |
-| PDF の抽出・結合・分割・OCR・フォーム fill | **pdf skill** |
-| 様式 xlsx/docx → 提出 PDF | §2 の wrapper |
+判断表 (一般処理は skill / 様式精密 fill は手動 / PDF 抽出は pdf skill / 提出 PDF 化は §2 wrapper) は [`office-automation-principles.md §1`](office-automation-principles.md) (= 道具選択の梯子) の `⚙️ skill が使える環境では` 表を参照。
 
 ## 4. 記入後は「審査員の目」 で閉じる (= 機械監査と最終確認)
 
-様式に値を fill して PDF を render するだけでは、 **ラベル欄への値上書き / 全 labeled 域の取りこぼし / 配置崩れ** がしばしば素通りする (= 人は自分が記入した所しか見ない、 全 labeled 域を点呼しない)。 完成度監査の入口:
-
-- 原則: [`office-automation-principles.md §5b`](office-automation-principles.md) 「記入後は『審査員の目』 で閉じる」 (= 機械監査を先に通す → 全 labeled 域の点呼 → 散文の質だけ人の目)
-- xlsx 機械監査: [`scripts/diff-form-xlsx.py`](../scripts/diff-form-xlsx.py) (= 雛形 diff、 LABEL_OVERWRITE / LABEL_DELETED で exit 1)
-- docx 機械監査: [`scripts/diff-form-docx.py`](../scripts/diff-form-docx.py) (= blank diff、 ラベル上書き / 見出し消失 = HARD、 箇条書き空 / labeled 列空 = surface)
+- 原則: [`office-automation-principles.md §5b`](office-automation-principles.md) 「記入後は『審査員の目』 で閉じる」
+- xlsx 機械監査: [`scripts/diff-form-xlsx.py`](../scripts/diff-form-xlsx.py)
+- docx 機械監査: [`scripts/diff-form-docx.py`](../scripts/diff-form-docx.py)
 
 ## 5. 検証・変換 script 一覧 (層 1: `claude-config/scripts/`)
 
