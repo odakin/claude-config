@@ -171,7 +171,7 @@ grep -nE '\\(newcommand|renewcommand|providecommand|nc|def|NewDocumentCommand|De
 
 リポ固有の active semantic macro 一覧と例外運用は各リポの `CLAUDE.md §LaTeX rules` 参照 (Layer 2)。Layer 1 の本則は「プリアンブルにあれば必ず使う」、Layer 2 は「このリポで何が active か」 のディレクトリ。
 
-## マクロ alias の forcing function（機械 enforcement）
+## マクロ alias の forcing function
 
 上の絶対則を「読めば守る」 discipline だけに頼ると、共著者の Claude や別 session で raw 記法が静かに再混入する。**典型的な抜け道**: atom（`\h`・`\bs`・各 subscript alias）が個別には正規 alias なのに、それらを束ねた **compound macro をバイパスして書き下した形**（`\h T_{...}` を専用マクロの代わりに longhand）は、atom-level の grep / linter をすり抜ける。違反は linter が見る一段上で起きる。さらに別 dialect（別の綴り・別 primitive）でまるごと書かれた領域は、denylist に列挙していない綴りなので 0 hit で素通りする。
 
