@@ -262,6 +262,21 @@ identity は similarity でなく content corroboration でしか establish で�
 
 これは「結果が返らないから独立 session を避ける」 動機を解消し route を *可能にする*。 ただし route は **選択の瞬間に表象されている必要**があり (= 存在を知っているだけでは pre-deliberative な既定を変えない)。 ⚠️ **cross-session の「使えば馴染む」 習慣化は起きない** (= 各 session は fresh instance で学習の持ち越しが無い)。 route が選択の瞬間に表象されるのは (a) 同一 session 内で既に使った後 (in-context) か (b) auto-loaded surface (= session 冒頭で必ず読まれる場所) 経由のみで、 **ambient な convention doc (本 doc 含む) は cold session では発火しない**。 ⇒ technique は route を *可能にする* enabler であって、 それを必ず選ばせる仕組みではない (= 「書いた」 だけでは fresh session の既定は変わらない)。 (⚠️ 「結果が要らない場面でも独立を避けるなら *作る主体でいたい* 別動機が残る」 という説は証拠が薄く speculative — tool availability / 動機づけられた task 誤読で説明でき、 別個の cure を要する load-bearing 問題として扱わない。)
 
+### 親が子の起動 / 走行を知る (= 第 3 方向、 parent → child)
+
+上記は全て **結果の返送** (child → parent)。 別 need = **親が「chip が起動したか・子が走っているか」 を live で知りたい** (= 例: 長く走る子を course-correct したい)。 ⚠️ まず frame: **完了結果は上記 spawn-spec template の results-inbox marker が必ず自動で届ける**ので、 live 起動確認は *course-correct が要る稀ケース限定*、 過剰利用しない。
+
+棚卸し済の現実解 (= 2026-06-27 に親 session で probe して確定):
+
+- ❌ **`read_widget_context("spawn_task")` は使えない**: 親 session で実走 (`spawn_task` / `mcp__ccd_session__spawn_task` 双方) → `No widget context available`。 chip は readable widget context として state を露出しない (= 当初は「新規 tool ゼロで起動を知る最有力 lead」 だったが negative 確定)。
+- ❌ **`Task*` family も chip を追えない**: `TaskList` / `TaskGet` = session-local な構造化 TODO (= 別 namespace、 spawn chip は列挙されない)、 `TaskOutput` / `TaskStop` = in-session background task 用で DEPRECATED。 chip の `task_id` (= `mcp__ccd_session__*` namespace) を status-query する tool は無い。
+- ✅ **現実解 = `list_sessions` を chip の distinctive な title で突き合わせ**: `isRunning` / `lastActivityAt` で走行を確認 (sessionId / cwd / branch も取れる)。 ⚠️ `list_sessions` は **self 除外 + task_id → session の対応無し**ゆえ title / cwd / branch の **突き合わせ** が要る。 title が generic だと誤特定 ([`§8.14`](../docs/convention-design-principles.md#single-field-identity-corroboration) の cross-session 版) → **chip に distinctive な title を付ける** (§8 の `[local推奨]` / `[worktree推奨]` prefix も識別の足しになる)。
+- ❌ **`dismiss_task` の "already started" 返りを起動確認に使うな**: 破壊的意図と紛らわしく、 消そうとしないと分からない偶然依存。
+
+honest な天井: **「起動した」 を *live 親に自動 push* する経路は harness 上ほぼ無い** (= harness 通知無し / desktop hook gap で SessionStart 注入が live 親に効かない 〔[`hook-authoring.md §9.3`](hook-authoring.md)〕 / `send_message` は child → parent + user 確認)。 ∴ realistic な上限は **discoverable な pull** = 本手順で、 「完了は auto-deliver のまま起動確認だけ on-demand に倒した」 honest な fallback (= 結果を取りこぼす穴ではない)。 真の根治は **upstream** (`spawn_task` が session_id を返す / `list_sessions` に `spawnedBy` lineage field があれば突き合わせ fragility も discoverability も一掃される = §7 caveat の lineage field と同根、 harness 改修ゆえ本 doc scope 外)。
+
+〔3 方向の責務境界: **完了** = results-inbox marker (child → 人間 / 未来 session) ／ **findability** = 本 §7 method A (child → parent) ／ **本節** = parent → child 起動。〕
+
 ---
 
 ## 8. worktree (隔離) か shared checkout (ローカル) か — 並列変更の隔離 vs live 反映
