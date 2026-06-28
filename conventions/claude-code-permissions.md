@@ -70,6 +70,20 @@ PreToolUse hook (mail 誤送信 guard 等) は desktop で出力 honor されず
 - hook の完全代替ではない (= draft 全文提示 + autonomy 禁則の文面までは再現せず「内容表示 + 人間承認」 まで)。 一次防御は CLAUDE.md の discipline (全 frontend で読まれる)、 本 recipe は機械の一拍を足す第二視点。
 - 一般原理 (= enforcement surface の frontend 生存性) は [`docs/convention-design-principles.md §8.15`](../docs/convention-design-principles.md)。
 
+## <a id="always-approve-tools"></a>permission 設定で抑止できない tool (= always-prompt class、 2026-06-28)
+
+一部の tool は **tool 側が「毎回明示承認を要求する」と宣言**しており、 settings.json の permission layer (`allow` / `defaultMode`) では**抑止できない**。 承認 dialog にこの一文が出る:
+
+> This tool requires explicit approval **regardless of permission mode.**
+
+**観測 (2026-06-28)**: `mcp__ccd_session_mgmt__search_session_transcripts` が、 `permissions.allow` に **明示登録済** (= `mcp__ccd_session_mgmt` も `mcp__ccd_session_mgmt__search_session_transcripts` も列挙済) かつ `defaultMode: default` の状態でも承認チップを出した。 ∴ この class は **deny > ask > allow の precedence の外**にある tool-level の always-ask で、 **`allow` に入れても素通りにならない**。
+
+- **settings.json では消せない**。 `bypassPermissions` でも出る想定 (= dialog の "regardless of permission mode" 文言どおり。 ただし bypass 下の実測は未取得ゆえ「想定」)。 precedence 最強の `deny` だけは**ブロック (= 実行自体を不可)** にはできるが silent-allow にはできない (= deny 挙動も未実測)。
+- **回避は「呼ばないこと」**: チップを踏みたくなければ、 その tool を経路から外す (= 抑止設定でなく経路設計で避ける)。
+- **該当が確認できている tool**: `ccd_session_mgmt__search_session_transcripts` (= 直接観測のみ)。 同 server の cross-session 系 (`send_message` / `archive_session` 等) も同機構で同挙動と**推定**されるが直接観測は search のみ。 `list_sessions` も allow 済だが挙動は未観測 (= 過度に一般化しない、 inline §3「単一観測を universal に飛躍させない」)。
+
+**token-handshake 返送への含意** ([`multi-session-coordination.md §7`](multi-session-coordination.md#spawn-handoff-token-return)): 返送の **optional live-push** (`search_session_transcripts(<token>)` → `send_message`) はこの always-prompt class を必ず通るので、 **起票元へ返すたびにチップが出る** (= allow-list で消せない)。 チップを踏まずに結果を届けたいなら、 §7 の **required spine = "results inbox" marker** (= 子の完了 action で marker を 1 個落とし、 surfacing 機構が拾う) に寄せる。 marker 経路は cross-session tool を呼ばないのでチップが出ない。
+
 ## 個人ごとの適用
 
 「どのフォルダを additionalDirectories に登録するか」は各ユーザー / 各マシンの選好なので、本 public 規約には書かず、各自の personal config (machine-local の `~/.claude/settings.json`) に置く。`~/.claude/settings.json` は git 同期されないため、複数マシンで揃えたい場合は各マシンで設定するか、各自の setup 機構に組み込む。
