@@ -4,7 +4,7 @@
 # templates/overleaf-sync.sh.template を <repo>/scripts/overleaf-sync.sh に展開し、
 # PROJECT_ID (= URL からの抽出可) / MERGE_OPTS / AHEAD_EXPECTED を焼き込んで chmod +x
 # する。 設置後の commit と repo CLAUDE.md への mode + conflict 方針の明記は案内表示
-# (= 規約 conventions/overleaf-integration.md §Sync script 契約)。
+# (= 規約 conventions/overleaf-integration.md#sync-script-contract)。
 #
 # Usage:
 #   install-overleaf-sync.sh <repo_dir> <overleaf_url_or_24hex_id> [options]
@@ -105,5 +105,5 @@ cat <<'NEXT'
 [install-overleaf-sync] 残り 2 手 (手動):
   1. git add scripts/overleaf-sync.sh && commit (= PROJECT_ID の SoT を恒久化)
   2. repo の CLAUDE.md に同期 mode + merge conflict 方針を明記
-     (規約 = claude-config/conventions/overleaf-integration.md §Sync script 契約)
+     (規約 = claude-config/conventions/overleaf-integration.md#sync-script-contract)
 NEXT

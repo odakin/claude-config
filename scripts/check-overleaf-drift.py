@@ -26,7 +26,7 @@ skip (silent): script 出力に DEPRECATED (= Overleaf 連携を廃止した rep
 使い方: 個人層の dashboard / cron の末尾から呼ぶ。 finding 0 件なら silent。
 --root DIR で走査 root 変更 (既定 ~/Claude)、 --selftest 内蔵 (fixture repo 群で分類検証)。
 sync script の契約 (--status が "ahead=N behind=M" を出す / exit 2 = 設定不足 /
-廃止は DEPRECATED 表示) の正本 = conventions/overleaf-integration.md §Sync script 契約。
+廃止は DEPRECATED 表示) の正本 = conventions/overleaf-integration.md#sync-script-contract。
 template = templates/overleaf-sync.sh.template。
 """
 
@@ -118,7 +118,7 @@ def classify(repo: Path, script, code, out):
     if "PROJECT_ID 未設定" in out or "FIXME_PROJECT_ID" in out:
         findings["CRITICAL"].append(
             f"  - {name}: PROJECT_ID 未設定 (= ID 喪失状態。 回収 runbook ="
-            f" overleaf-integration.md §ID 回収、 記入は install-overleaf-sync.sh"
+            f" overleaf-integration.md#id-recovery-runbook、 記入は install-overleaf-sync.sh"
             f" {repo.name} <URL|ID> の 1 コマンド)"
         )
         return findings

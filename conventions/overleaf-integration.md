@@ -78,7 +78,7 @@ Overleaf を直接編集し、 owner が overleaf remote から fetch + merge �
 - merge は特定マシンの clone で行われがち = その clone が消えると remote 設定ごと
   project ID も消える (= 三例目の ID 喪失経路)。 下記 §Sync script 契約 が必須
 
-## Sync script 契約 (= 全変種共通の標準、 三例目 2026-06-12 で標準化)
+## <a id="sync-script-contract"></a>Sync script 契約 (= 全変種共通の標準、 三例目 2026-06-12 で標準化)
 
 Overleaf 連携 repo には **`scripts/overleaf-sync.sh` を必ず置く** (= 連携を張った
 session 内で作る。 「あとで整備」 は ID 喪失の前兆)。 **汎用 template =
@@ -111,7 +111,7 @@ behind>0 / ID 未設定 / 未 bootstrap / 「Overleaf 連携の記述がある�
 0 件なら silent / `--selftest` 内蔵 / `--root` で走査 root 変更)。 個人層の dashboard
 末尾から呼んで毎 session 発火させる (odakin の case: unified-dashboard 統合)。
 
-### 新規連携 checklist (= 連携を張った session 内で完遂、 計 ~2 分)
+### <a id="new-integration-checklist"></a>新規連携 checklist (= 連携を張った session 内で完遂、 計 ~2 分)
 
 1. `bash <claude-config>/scripts/install-overleaf-sync.sh <repo_dir> <Overleaf URL>`
    (= template 展開 + ID 焼き込み + chmod + token があれば --status smoke まで自動。
@@ -173,7 +173,7 @@ main から消える。 これを防ぐには `git merge -s ours overleaf/master
 ⚠️ Overleaf push は共著者に直接影響 → **user 明示 OK 必須** (autonomy 禁則)。 paper repo 側は
 本 § を参照し、 baseline commit・PROJECT_ID 等の repo 固有値だけを自身の SESSION/scripts に置く。
 
-## ID 回収 runbook (= ID を喪失した repo の復旧手順、 三例目の実地経験から)
+## <a id="id-recovery-runbook"></a>ID 回収 runbook (= ID を喪失した repo の復旧手順、 三例目の実地経験から)
 
 費用の安い順に。 回収したら直ちに §Sync script 契約 で script に焼いて commit
 (= 再喪失防止):
@@ -188,7 +188,7 @@ main から消える。 これを防ぐには `git merge -s ours overleaf/master
    ⚠️ `www.overleaf.com` と地域 domain (例 `ja.overleaf.com`) は **login session が別** —
    普段使いの domain と token 発行 domain がどちらかを確認してから探す
 
-## 変種: direct nested clone (Overleaf = 唯一の source、 GitHub linking 無し)
+## <a id="variant-nested-clone"></a>変種: direct nested clone (Overleaf = 唯一の source、 GitHub linking 無し)
 
 共著者が Overleaf でノートを書き、 GitHub linking を張らない / 張れない場合 (= Overleaf project がそのまま唯一の正本、 GitHub repo を介さない)、 paper repo 内に **gitignore 除外のローカル専用入れ子 clone** を置いて read 方向で取り込む。 上の GitHub linking 経路とは別物 (= こちらは master が Overleaf 側、 push は共著者に直接影響するので user 明示 OK 必須)。
 

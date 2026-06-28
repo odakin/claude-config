@@ -127,8 +127,8 @@ claude-config/
 │   ├── install-remote-control-server.sh # Remote Control サーバーモードを launchd 常駐化（--dir / --replace-agent / --status / --uninstall、KeepAlive 60s 自動復帰、preflight で auth/同意の欠落を案内、idempotent、macOS 限定、conventions/remote-control-server.md）
 │   ├── install-launchd-cron.sh         # 汎用 launchd cron 登録エンジン（無人ルーチンを launchd cron で回す plist 生成・登録・状態確認・解除。--label-prefix / --workdir / --routine "id\|type\|target\|cron" を呼び出し側が渡す＝ROUTINES 焼かず汎用、cron は */N step + N-M 曜日範囲を StartCalendarInterval へ展開、skill=claude -p indirection / cmd=直接実行、CLI 認証で Claude Code (desktop) 切替非依存、--status/--run/--install-one/--uninstall-one/--uninstall、idempotent、macOS 限定、conventions/scheduled-tasks.md#launchd-cron-engine）
 │   ├── routine-host-gate.py            # 汎用 active-routine-host gate（無人ルーチンを複数マシンに install しつつ「今の本番ホスト」を台帳1ファイルで決める。台帳の host が自分でなければ defer〔exit 1〕、台帳不在/破損は fail-open〔exit 0〕、最新 committed 台帳を fetch して読む、--selftest 内蔵。install-launchd-cron.sh --gate から呼ぶ、conventions/multi-machine-state.md#account-host-failover）
-│   ├── check-overleaf-drift.py         # Overleaf 正本 repo の drift / 整備漏れ検出（各 repo の scripts/overleaf-sync.sh --status を並列実行、 ID 未設定=CRITICAL / behind>0=WARN / DEPRECATED=silent / ahead-expected marker で恒常 ahead INFO 抑制、 finding 0 件 silent、 --selftest 内蔵。 個人層 dashboard 末尾から呼ぶ、 conventions/overleaf-integration.md §Sync script 契約）
-│   ├── install-overleaf-sync.sh        # Overleaf 連携 repo に sync script を 1 コマンド設置（template 展開 + URL から ID 抽出・焼き込み + --merge-opts / --ahead-expected + token があれば --status smoke、 冪等・別 ID は --force、 conventions/overleaf-integration.md §新規連携 checklist）
+│   ├── check-overleaf-drift.py         # Overleaf 正本 repo の drift / 整備漏れ検出（各 repo の scripts/overleaf-sync.sh --status を並列実行、 ID 未設定=CRITICAL / behind>0=WARN / DEPRECATED=silent / ahead-expected marker で恒常 ahead INFO 抑制、 finding 0 件 silent、 --selftest 内蔵。 個人層 dashboard 末尾から呼ぶ、 conventions/overleaf-integration.md#sync-script-contract）
+│   ├── install-overleaf-sync.sh        # Overleaf 連携 repo に sync script を 1 コマンド設置（template 展開 + URL から ID 抽出・焼き込み + --merge-opts / --ahead-expected + token があれば --status smoke、 冪等・別 ID は --force、 conventions/overleaf-integration.md#new-integration-checklist）
 │   ├── clipboard-cleaner.py            # クリップボード一発整形 CLI（PDF コピーの段落内改行除去 + pbcopy 書き戻しで RTF 書式除去、明示発火のみ・常駐なし、--selftest 内蔵、hammerspoon ⌃⌥⌘V から呼ばれる、conventions/clipboard-cleaner.md）
 │   ├── pdf-cleaner.html                # ↑のブラウザ版 fallback（非 macOS / pbcopy なし環境用、整形ロジックの正本は clipboard-cleaner.py で両実装を同期）
 │   └── lib/                            # sourceable helper (個人層検出の共通化)
@@ -136,7 +136,7 @@ claude-config/
 │       └── commit-msg-leak-matcher.sh  # commit message leak matcher (= sensitive-terms.txt + repos.md private list - 6 allowlist の (a)(b)(c) check)、 claude-code hook + git-side runner の両方が source する DRY 実装
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)
-│   ├── overleaf-sync.sh.template       # Overleaf 連携 repo 用 sync script template（PROJECT_ID hardcode = ID の SoT、 --status/--merge、 conventions/overleaf-integration.md §Sync script 契約）
+│   ├── overleaf-sync.sh.template       # Overleaf 連携 repo 用 sync script template（PROJECT_ID hardcode = ID の SoT、 --status/--merge、 conventions/overleaf-integration.md#sync-script-contract）
 │   ├── personal-layer/                 # 個人層 (layer 3) bootstrap skeleton
 │   │   ├── README.md
 │   │   ├── CLAUDE.md.template

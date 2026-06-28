@@ -7,12 +7,12 @@
 #   1. PROJECT_ID を記入 (= Overleaf web → Menu → Git の clone URL 末尾 24 桁 hex)
 #   2. MERGE_OPTS を repo の conflict 方針に合わせて調整
 #   3. chmod +x して commit (= PROJECT_ID の single source of truth になる)
-# 契約の正本 = conventions/overleaf-integration.md §Sync script 契約。
+# 契約の正本 = conventions/overleaf-integration.md#sync-script-contract。
 # 横断監視 = scripts/check-overleaf-drift.py (個人層 dashboard から呼ぶ)。
 #
 # この template は「direct remote + 手動 merge」 変種 (= 共著者は Overleaf を直接編集、
 # owner が fetch + merge で GitHub repo へ取込み) 用。 nested clone 変種 (= Overleaf が
-# 唯一の source) は conventions/overleaf-integration.md §変種 を参照して書き換える。
+# 唯一の source) は conventions/overleaf-integration.md#variant-nested-clone を参照して書き換える。
 #
 # 設計 (= 三例目 2026-06-12 RCA の再発防止):
 #   - PROJECT_ID を本 script に hardcode = ID を手で持ち回らない恒久記録
