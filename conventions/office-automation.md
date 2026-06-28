@@ -1381,6 +1381,8 @@ for p in doc.paragraphs:
 
 幅 1.8 inch (= ~4.5 cm) が標準的な「署名らしい」 サイズ。 0.5 inch だと縮小されすぎて読めない。
 
+⚠️ **薄く / 細く見える時**: source PNG の antialias edge + 中間 alpha が原因で全 renderer で淡く出る (= 経路非依存)。 [`signature-image-overlay-density`](#signature-image-overlay-density) の PIL boost (= alpha × N + RGB pure black 固定) を `add_picture` 前にかけた temp PNG を渡せば docx 経路でも濃く出せる。
+
 **認印 (= 朱印) との使い分け**:
 - 「印 / 印鑑 / 認印」 が要求 → hanko PNG (= 朱印) で可
 - 「署名 / 電子署名 / 本人署名」 が要求 → **signature PNG (= 手書き) 必須**
@@ -1399,9 +1401,13 @@ origin: 2026-05-14 JST SPReAD 様式 0 + 様式 2 の氏名欄、 当初 hanko �
 
 origin: 2026-06 ある学内事務窓口で、 出張様式に貼り付けた電子印影を印刷提出 → 「印刷された印影は不可、 紙に実押印を」 と差戻し。 同窓口は謝金様式でも「ハンコ画像貼付は不可、 紙に朱肉 / シャチハタ捺印した原本を」 と一貫 (= 署名だけでなく **認印も電子貼付不可** の窓口が存在)。
 
-### <a id="signature-image-overlay-density"></a>署名 PNG overlay の濃度 boost (= 薄い signature を濃く読ませる)
+### <a id="signature-image-overlay-density"></a>署名 PNG 挿入時の濃度 boost (= 薄い signature を濃く読ませる、 経路非依存)
 
-**症状**: 自筆署名を scan した透過 PNG ([`signature-not-stamp`](#signature-not-stamp) で要求される手書き署名画像) を fitz `Page.insert_image` で雛形 PDF / 訂正版 PDF に overlay すると、 **画面 + 印刷で薄く / 細く見える**。 元 PNG は antialias edge に灰色 RGB を持ち、 中間 alpha の pixel が多いため、 PDF 上で render すると元より淡く出る。 「自筆らしい濃さ」 が出ず reviewer に「薄印で読みにくい」 と判定されたり、 印刷で線が掠れる。
+**症状**: 自筆署名を scan した透過 PNG ([`signature-not-stamp`](#signature-not-stamp) で要求される手書き署名画像) を form に挿入すると、 **画面 + 印刷で薄く / 細く見える**。 元 PNG は antialias edge に灰色 RGB を持ち、 中間 alpha の pixel が多いため、 どの renderer (= fitz / Word / Pages / LibreOffice) も元より淡く composite する。 「自筆らしい濃さ」 が出ず reviewer に「薄印で読みにくい」 と判定されたり、 印刷で線が掠れる。 **問題は PNG file 自身の性質**ゆえ経路非依存 (= 修正は source PNG の前処理で行う):
+
+- **PDF overlay**: fitz `Page.insert_image(rect, filename, keep_proportion=True, overlay=True)` ([`pdf-prefill-direct`](#pdf-prefill-direct) の image 版)
+- **docx 埋込**: python-docx `run.add_picture(filename, width=Inches(N))` ([`signature-not-stamp`](#signature-not-stamp) の docx 例)
+- 両者とも source PNG が薄ければ render 後も薄い
 
 **対処**: PIL で 2 段階前処理した temp PNG を fitz に渡す:
 
@@ -1429,13 +1435,17 @@ def boost_signature(src: Path, alpha_boost: float = 3.0, force_black: bool = Tru
     return tmp
 
 sig_boosted = boost_signature(SIG_PNG, alpha_boost=3.0, force_black=True)
+# PDF 経路:
 page.insert_image(SIG_RECT, filename=str(sig_boosted), keep_proportion=True, overlay=True)
+# docx 経路 (= python-docx):
+# run.add_picture(str(sig_boosted), width=Inches(1.8))
 sig_boosted.unlink(missing_ok=True)   # cleanup
 ```
 
-- `keep_proportion=True` 必須: signature は aspect 3-4:1 が典型 (横長)、 cell 横幅に fit させると縦が自動で決まる
+- `keep_proportion=True` (PDF) / `width=Inches(...)` (docx) で aspect 比保持: signature は aspect 3-4:1 が典型 (横長)、 cell 横幅 / 段落幅に fit させると縦が自動で決まる
 - BOOST 値: 1.0 = 原寸、 1.8 = ~80% 濃く、 3.0 = ほぼ全 alpha を 255 化 (= 完全不透明)。 線形に効くので段階的に上げる
 - **判断 sequence**: BOOST 無しで 1 回作成 → 視覚薄ければ ×1.8 → なお薄ければ ×3.0 + force_black (= user feedback loop で iteration、 単発で確信できる metric は無い)
+- ⚠️ **force_black=True の trade-off**: 完全均一の黒に揃うので、 reviewer が線の濃淡を「scan 由来の自然な手書き」 の signal として見る窓口では「digital 加工 = 電子貼付」 と看破される余地がある (= [`physical-seal-required`](#physical-seal-required) の signature 版類推)。 標準の 推薦書 / 同意書 / 一般 様式は経験的に問題ないが、 警戒窓口や法的契約で線質を見る reviewer が想定される場合は `force_black=False` で alpha boost のみ適用 (= antialias edge を grey で残して手書き痕跡保持)
 
 **配置先 cell の特定**: signature 欄の rect は [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation) で正しく特定してから渡す (= label cell に overlay すると label と signature が重なり「様式改変 + 濃度 boost で更に label が読めない」 の二重事故)。
 
@@ -1594,7 +1604,7 @@ GUI 確認は MCP round-trip より user の直接視認が **常に速い**の�
 
 ## <a id="label-vs-input-antipattern"></a>**label vs input row anti-pattern** (= 様式 改変 の主因)
 
-行政・学術 様式 xlsx の頻発バグ。 **記入前に必ず読む**。 ⚠️ 様式改変の主因はもう 1 系統ある: **openpyxl の save が既存 textbox/shape を破壊** ([`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings))。 label 上書き (本節) と併せて様式改変の二大主因。
+行政・学術 様式 xlsx の頻発バグ。 **記入前に必ず読む**。 ⚠️ 様式改変の主因はもう 2 系統ある: (a) **openpyxl の save が既存 textbox/shape を破壊** ([`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings))、 (b) **PDF 様式で label cell に値・画像を overlay** ([`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation) = 本節の PDF 版、 同型の認知盲点で xlsx 行構造でなく PDF cell 構造に現れる)。 label 上書き (本節) と併せて様式改変の三大主因。
 
 ### <a id="label-input-structure"></a>構造
 
@@ -1631,6 +1641,8 @@ label cell に narrative を直接書き込んでしまう (= overwriting the pr
 - 提出後に審査機関 (= 大学事務等) から 「**①様式の改変**」 として差戻し
 - ファイル単位の reject や再提出処理コスト
 - 2026-05-13 JST SPReAD で 提出者が同 pattern で 3 箇所 (= Sheet 3 行 10/18/28) で発生、 所属機関の事務担当者から指摘で発覚。 提出者申告では prior form fill でも同 pattern を起こしていた (= 再発 pattern)
+
+**PDF 版** (= 同型の認知盲点が PDF cell 構造で発火): PDF 雛形では label と data が「縦並び 2 行」 でなく「label cell + 隣接 data cell」 の**横並び 2 cell 構造**で組まれ、 label cell に書かれた「○○欄/(自筆にて記載)」 等の指示文を data field と reflex 判定して **画像/値を label cell に overlay** する事故が起きる。 真の data cell は隣接の text ゼロ cell。 判別手順 + assertion gate は [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation)。
 
 ### <a id="diff-form-xlsx-detection"></a>機械的検出: `diff-form-xlsx.py`
 

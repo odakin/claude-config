@@ -279,6 +279,7 @@ sections:
     legacy: "5"
     level: 2
     title: "**label vs input row anti-pattern** (= 様式 改変 の主因)"
+    related: [label-overwrite-bug, openpyxl-destroys-drawings, pdf-cell-label-vs-data-disambiguation, diff-form-xlsx-detection, diff-form-docx-detection]
   - id: label-input-structure
     legacy: "5-1"
     level: 3
@@ -287,6 +288,7 @@ sections:
     legacy: "5-2"
     level: 3
     title: "典型バグ (= 様式改変)"
+    related: [label-vs-input-antipattern, pdf-cell-label-vs-data-disambiguation, diff-form-xlsx-detection]
   - id: diff-form-xlsx-detection
     legacy: "5-3"
     level: 3
