@@ -50,6 +50,9 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 | 何を / どこに書くか不明 | — | 着手前に [`form を dump`](#form-dump-first) (原則編が先) |
 | 様式の label を誤って上書きしていないか | label vs input row の混同 | [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で機械検出 |
 | **docx 様式**でラベル欄に値を上書き / 欄を空欄のまま / labeled 列が空 / 見出し消失 | label vs input の混同・記入漏れ・視覚確認が「自分の記入箇所」 止まり | [`diff-form-docx.py`](#diff-form-docx-detection) で機械検出 (= 表紙/申請書 docx 様式、 xlsx 版の docx 対) |
+| **PDF 様式**で署名・値が label 文字に重なる (= 「○○欄」 が書かれた cell に画像/値を overlay) | label cell vs data cell の判別失敗 (= label を data と早合点)、 真の data cell は隣接の text ゼロ cell | placement 前に隣接 cell も列挙して text ゼロ cell を data と特定 + assert で gate → [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation) |
+| 自筆署名 PNG overlay が薄く / 細く見える / 印刷で線が掠れる | antialias edge の灰色 RGB + 中間 alpha pixel が PDF render で淡く出る | PIL で alpha boost ×3.0 + RGB pure black 固定 → [`signature-image-overlay-density`](#signature-image-overlay-density) |
+| PDF を mutate (image insert / 値 overlay) した後、 意図せず text 破壊 / 過去訂正の undo / image 重複が起きないか機械で点呼したい | 視覚確認だけでは「在って当然のものに目が行く」 = 「あるはずの無いもの」 を読み飛ばす | page 数 + text 不変 + must-present/absent + image stream delta の 5 項目 schema → [`pdf-mutation-verification-schema`](#pdf-mutation-verification-schema) |
 | Word が「破損」 と言うが原因不明 | XML 宣言 single-quote / 空 `<w:tc>` 等 | [`check-docx-integrity.py`](#docx-checkbox-content-control) で決定論検出 |
 | docx の font を下げても・行間を詰めても**ページ数が減らない** (日本語 Word) | section の `docGrid` (snap-to-grid) が行高を grid pitch に固定し font 縮小を無効化 | 本文段落の `snapToGrid` 無効化 / `linePitch` 縮小 → [`docx-pdf-page-compress`](#docx-pdf-page-compress) |
 
@@ -824,6 +827,44 @@ origin: 2026-06-11 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefil
 
 汎用エンジン [`pdf_form_fill.py`](../scripts/pdf_form_fill.py) は `check_double_print=True` (既定) で **印字しようとする値が既に雛形 PDF に存在したら例外で止める** (= loud fail。 雛形が legitimately 同値を持つ item は `allow_preexisting:True` で opt-out)。 黙って二重刷りするより止める。 逆に **雛形 prefill 済で「在るべき値」 が消えていないか**の検証は `assert_present=[...]` (= 別財源で雛形を差し替えて申請者ブロックが欠落した時に loud fail。 check_double_print の対称: 一方は再印字を止め、 もう一方は欠落を止める)。
 
+### <a id="pdf-cell-label-vs-data-disambiguation"></a>PDF 様式の label cell vs data cell の判別 (= 「右隣に書く欄」 罠)
+
+**症状**: 雛形 PDF 内の cell に label 文字 (例: 「○○欄 / (自筆にて記載)」) が書かれていると、 「これが記入欄」 と reflex 判定して値・画像を overlay してしまう。 実際は label cell が**隣接する空欄 cell を指す説明文**であり、 正しい記入位置はその右・下・上の **text ゼロ cell** であることが多い (= 日本の行政・学術様式の標準 layout = label + data の 2 cell 構造)。 結果: 署名画像 / 値が label 文字の上に重なる → 様式改変扱いで差し戻し ([`label-overwrite-bug`](#label-overwrite-bug) の **PDF 版**)。
+
+**原因**: probe で cell 構造を取った時、 label 文字の在る cell が target だと**早合点**する (= 「text in cell → input cell」 の誤等価)。 真の data cell は text ゼロで「中身が無い = 見落としやすい」。 「label = instruction in cell」 と「label = adjacent data cell へのポインタ」 の 2 択を判別しない reflex 失敗。
+
+**判別手順** (= 値・画像 overlay 前の reflex):
+
+1. **probe 段階で隣接 cell も一緒に列挙**: label の bbox を取ったら、 その**右隣・下隣・上隣** (= 共有 border を持つ neighboring cell) の rect も全て列挙する。 fitz `page.get_drawings()` で cell border rect を全取得 → label cell に隣接する rect を探す:
+   ```python
+   import fitz
+   doc = fitz.open(tpl); p = doc[0]
+   label_rect = p.search_for("○○欄")[0]   # label の text bbox
+   # label cell の外枠 = label_rect を含む最小の filled-rect
+   cell_rects = [d["rect"] for d in p.get_drawings()
+                 if d.get("rect") and d["rect"].contains(label_rect)]
+   label_cell = min(cell_rects, key=lambda r: r.get_area())
+   # 隣接 cell (= label_cell の右隣 = x0 が label_cell.x1 付近、 同じ y range)
+   neighbors = [d["rect"] for d in p.get_drawings()
+                if d.get("rect")
+                and abs(d["rect"].x0 - label_cell.x1) < 2
+                and abs(d["rect"].y0 - label_cell.y0) < 2
+                and d["rect"].get_area() > 10]
+   ```
+2. **各候補 cell の内部 text を確認**: `page.get_text(clip=rect)` で各 cell の内側 text を取る → **text を持つ cell = label** / **text ゼロ cell = data field**
+3. **alternative interpretation を明示列挙してから選ぶ**: cell 配置を chat / log に書き出して「(a) label cell に直接記入 / (b) 隣接の text ゼロ cell に記入」 の 2 択を expose、 (b) を採用する根拠 (= text ゼロ ∧ label cell が「○○欄」 等の説明を含む) を明記してから placement。 inline §3「不確実性 expose」 reflex の PDF cell domain 適用
+4. **mechanical guard**: data cell 候補の text が空 (= text ゼロ) であることを `assert` してから insert_image / insert_text する:
+   ```python
+   t = p.get_text(clip=data_cell).strip()
+   assert not t, f"data cell とした rect が text を含む = label cell の可能性 (text={t!r})"
+   ```
+
+**Why**: 様式 reviewer は「label が読める ∧ data が label の隣に綺麗に収まる」 を期待する。 label と重なった signature / 値は「様式改変」 と判定されて差し戻し対象 ([`label-overwrite-bug`](#label-overwrite-bug) と同根の認知盲点 = 「text が在る cell に書きに行く」 reflex)。 user 訂正待ち reactive (= 「そこは label cell、 data はその右」 と教わってから直す) でなく、 reflex に判別ロジックを織り込むのが正。
+
+**xlsx 版との対応** (= [`label-vs-input-antipattern`](#label-vs-input-antipattern) との sibling 関係): xlsx 版は「**label 行 (label/value 縦並び) の label 行に値を書く** = 様式改変」、 本 PDF 版は「**label cell (label/data 横並び or 縦並び) の label cell に画像/値を overlay** = 様式改変」。 構造が縦か横かと、 介入手段 (cell value set vs PDF overlay) が違うだけで、 失敗 mode は同型。 両者とも [`form-dump-first`](#form-dump-first) (= 雛形構造を最初に全 dump する) で予防 + 機械検出器で backstop する系列。
+
+origin: 2026-06-28 推薦書様式の自筆署名欄 overlay。 cell `Rect(316.1, 151.7, 392.6, 205.7)` に label 文字「○○欄/(自筆にて記載)」 が書かれていたので「これが署名欄」 と reflex 判定 → 署名画像を overlay (= label 文字に画像が重なる)。 user 訂正「そこは『○○欄はこの右側』 というラベル欄」 で発覚 → 隣接 cell `Rect(393.1, 151.7, 537.1, 205.7)` (= 内部 text ゼロ = 真の data cell) に再配置で正しく合成。 同 session に [`label-vs-input-antipattern`](#label-vs-input-antipattern) の構造を一度 trip した = 「reflex に判別ロジックを織り込めば catch できた」 例。
+
 ### <a id="print-raster-pdf"></a>加工した PDF の印刷は 600dpi ラスタ化してから (= WYSIWYG 保証)
 
 **症状**: fitz で text 印字 + `subset_fonts()` した PDF が、 **画面プレビュー (MuPDF/Preview 系) では完全に正常なのに、 印刷すると日本語が文字化け**する (= printer 側 RIP / CUPS filter の subset font 解釈問題)。 PDF file 自体は正しいので、 **どれだけ画面で検証しても捕捉できない経路**。
@@ -1323,6 +1364,10 @@ xlsx 内部 (= 審査員が読む書類) は制限なし (= ギリシャ文字 /
 
 行政・学術 様式 (= 助成金応募同意確認書、 推薦書、 法的同意書等) で「**署名 又は 電子署名**」 「**本人が署名**」 と明記された欄に、 認印 (= 朱印 PNG) を貼っても reject される。 「電子署名 (e-signature)」 が広義に「電子的に署名処理されたもの」 と解釈されるため認印画像で代替できそうに見えるが、 実務上 reviewer は **手書き署名 (= scan された自筆画像) または 電子署名 cert 付き PDF** を期待する。
 
+**関連手順** (= 署名 PNG を実 form に貼る周辺):
+- docx の氏名欄に挿入: 下の python-docx 例
+- **PDF 様式に overlay**: [`pdf-prefill-direct`](#pdf-prefill-direct) で位置特定 → [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation) で label cell に重ねない → [`signature-image-overlay-density`](#signature-image-overlay-density) で濃度 boost → [`pdf-mutation-verification-schema`](#pdf-mutation-verification-schema) で機械検証 → [`pdf-visual-confirm`](#pdf-visual-confirm) で目視
+
 **対処**: 自筆署名 (= 紙に署名 → scan or タブレット → 透過 PNG) を準備して docx 氏名欄に挿入:
 
 ```python
@@ -1353,6 +1398,50 @@ origin: 2026-05-14 JST SPReAD 様式 0 + 様式 2 の氏名欄、 当初 hanko �
 - **生成時の reflex**: 様式を openpyxl 等で生成するとき、 押印欄に印影画像を埋め込まず**空で出力**し、 印刷後の物理押印を前提にする (= そういう窓口は [`pdf-snapshot-xlsx-submission`](#pdf-snapshot-xlsx-submission) の通り提出本体も紙原本を要求しがち)。
 
 origin: 2026-06 ある学内事務窓口で、 出張様式に貼り付けた電子印影を印刷提出 → 「印刷された印影は不可、 紙に実押印を」 と差戻し。 同窓口は謝金様式でも「ハンコ画像貼付は不可、 紙に朱肉 / シャチハタ捺印した原本を」 と一貫 (= 署名だけでなく **認印も電子貼付不可** の窓口が存在)。
+
+### <a id="signature-image-overlay-density"></a>署名 PNG overlay の濃度 boost (= 薄い signature を濃く読ませる)
+
+**症状**: 自筆署名を scan した透過 PNG ([`signature-not-stamp`](#signature-not-stamp) で要求される手書き署名画像) を fitz `Page.insert_image` で雛形 PDF / 訂正版 PDF に overlay すると、 **画面 + 印刷で薄く / 細く見える**。 元 PNG は antialias edge に灰色 RGB を持ち、 中間 alpha の pixel が多いため、 PDF 上で render すると元より淡く出る。 「自筆らしい濃さ」 が出ず reviewer に「薄印で読みにくい」 と判定されたり、 印刷で線が掠れる。
+
+**対処**: PIL で 2 段階前処理した temp PNG を fitz に渡す:
+
+1. **alpha channel × N boost** (= 半透明 pixel を不透明寄りに): `alpha *= 3.0` 程度、 255 で clip
+2. **RGB を pure black に固定** (= alpha > 0 pixel の RGB を `(0, 0, 0)` に置換): antialias の灰色 edge を真っ黒へ。 元 PNG が黒インクの signature であれば情報損失ゼロ (= 「線の形」 は alpha が保持、 「インクの色」 は元々黒の意図)
+
+```python
+from PIL import Image
+import numpy as np
+import tempfile
+from pathlib import Path
+
+def boost_signature(src: Path, alpha_boost: float = 3.0, force_black: bool = True) -> Path:
+    img = Image.open(src).convert("RGBA")
+    r, g, b, a = img.split()
+    a_arr = np.clip(np.array(a, dtype=np.float32) * alpha_boost, 0, 255).astype(np.uint8)
+    a_new = Image.fromarray(a_arr)
+    if force_black:
+        zero = Image.new("L", img.size, 0)
+        out = Image.merge("RGBA", (zero, zero, zero, a_new))
+    else:
+        out = Image.merge("RGBA", (r, g, b, a_new))
+    tmp = Path(tempfile.mkstemp(suffix=".png", prefix="sig_")[1])
+    out.save(tmp)
+    return tmp
+
+sig_boosted = boost_signature(SIG_PNG, alpha_boost=3.0, force_black=True)
+page.insert_image(SIG_RECT, filename=str(sig_boosted), keep_proportion=True, overlay=True)
+sig_boosted.unlink(missing_ok=True)   # cleanup
+```
+
+- `keep_proportion=True` 必須: signature は aspect 3-4:1 が典型 (横長)、 cell 横幅に fit させると縦が自動で決まる
+- BOOST 値: 1.0 = 原寸、 1.8 = ~80% 濃く、 3.0 = ほぼ全 alpha を 255 化 (= 完全不透明)。 線形に効くので段階的に上げる
+- **判断 sequence**: BOOST 無しで 1 回作成 → 視覚薄ければ ×1.8 → なお薄ければ ×3.0 + force_black (= user feedback loop で iteration、 単発で確信できる metric は無い)
+
+**配置先 cell の特定**: signature 欄の rect は [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation) で正しく特定してから渡す (= label cell に overlay すると label と signature が重なり「様式改変 + 濃度 boost で更に label が読めない」 の二重事故)。
+
+**検証**: [`pdf-mutation-verification-schema`](#pdf-mutation-verification-schema) を通せば「PDF を mutate した結果が想定通り」 が確認できる (= image stream +1 / text 不変)。 ⚠️ 濃さそのものは pixel 階調 metric では決めにくいので、 [`pdf-visual-confirm`](#pdf-visual-confirm) (= Preview で目視) + user OK が最終 gate。
+
+origin: 2026-06-28 推薦書様式の signature overlay。 元 PNG (1000×278 px、 antialias edge 多数) を素のまま insert_image → user 「もっと濃く」 → alpha ×1.8 → user 「更に濃く」 → ×3.0 + RGB pure black で確定。 印刷した紙でも自筆署名と同等の濃度で読める。
 
 ### <a id="placeholder-trailing-underscore"></a>docx template の placeholder 末尾装飾 underscore の cleanup
 
@@ -1748,6 +1837,62 @@ end tell'
 ⚠️ AppleScript の save as syntax は Excel for Mac の version で異なる + parameter error 出やすい。 fallback として **user に Excel で「ファイル → 印刷 → PDF として保存」 を依頼 + PDF を chat 添付してもらう**。
 
 **運用 reflex**: 「私の setting した xlsx を 私の判断だけで完成宣言しない」 を 1 つの問い として保持。 PDF visual confirmation は form fill の **必須 prerequisite** で、 「user 指摘待ち」 reactive ではなく **proactive 早期催促** が筋。 user 指摘で初めて気付く pattern は連鎖失敗 (= 同 user に複数 turn の修復依頼) を必ず生む。
+
+### <a id="pdf-mutation-verification-schema"></a>PDF mutation 後の機械検証 schema (= text 不変 + keyword in/out + image stream delta)
+
+**症状**: PDF を fitz で mutate (= 値 overlay / 署名画像 insert / redact 等) した後、 視覚確認だけで「正しく出来た」 と判断して送付・印刷すると、 **意図せず text を破壊した** / **過去の hallucination 修正が undo された** / **image が重複挿入された** / **配置位置を間違えた**等の事故が機械で捕捉できない。 視覚は人間の集中力依存で「label と data の取り違え [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation)」 等は読み飛ばす。
+
+**規律**: PDF mutation script の末尾に **機械検証 schema** を内蔵し、 fail なら exit 1 で送付・印刷 step に進ませない。 5 項目:
+
+1. **page 数不変** (= image insert / value overlay は page 数を変えない想定): `assert orig.page_count == out.page_count`
+2. **text content 完全不変** (= image-only mutation なら text 1 byte も変わらない想定。 value overlay や redact なら expected diff を別途定義): `assert orig.get_text() == out.get_text()`
+3. **MUST-PRESENT keywords が出力に在る** (= 重要な fact / 過去訂正の保持を確認): 雛形に元々在る pre-fill / label / 過去の hallucination 修正後の正しい値が全部残っているか
+4. **MUST-ABSENT keywords が出力に無い** (= 過去の hallucination repair の preservation 確認): 削除済の誤値 / 訂正で消した実体名が再混入していないか — **訂正版 PDF を mutate するときに特に効く**
+5. **image stream count の delta が想定通り** (= 1 枚 insert なら +1): `len(out[0].get_images(full=True)) - len(orig[0].get_images(full=True)) == EXPECTED_DELTA`
+
+```python
+import fitz
+
+def verify_pdf_mutation(orig_path, out_path, *,
+                        must_present=(), must_absent=(),
+                        expected_image_delta=0,
+                        text_must_be_identical=True) -> list:
+    orig = fitz.open(orig_path); out = fitz.open(out_path)
+    errors = []
+    if orig.page_count != out.page_count:
+        errors.append(f"page 数差: orig={orig.page_count} out={out.page_count}")
+    out_text = out[0].get_text()   # 単票前提
+    if text_must_be_identical and orig[0].get_text() != out_text:
+        errors.append("text content 差分検出 (image-only mutation の想定なら fail)")
+    for kw in must_present:
+        if kw not in out_text:
+            errors.append(f"MUST-PRESENT 不在: {kw!r}")
+    for kw in must_absent:
+        if kw in out_text:
+            errors.append(f"MUST-ABSENT 残存: {kw!r}")
+    img_delta = len(out[0].get_images(full=True)) - len(orig[0].get_images(full=True))
+    if img_delta != expected_image_delta:
+        errors.append(f"image stream delta 想定外: got={img_delta} expected={expected_image_delta}")
+    return errors
+
+errors = verify_pdf_mutation(
+    SRC, OUT,
+    must_present=["<推薦者氏名>", "<論文 DOI>", "○○欄"],
+    must_absent=["<過去 hallucination で削除済の実体名>"],
+    expected_image_delta=1,   # signature 1 枚 insert
+)
+if errors:
+    for e in errors: print(f"  ✗ {e}")
+    sys.exit(1)
+```
+
+**規律の境界**: [`pdf-visual-confirm`](#pdf-visual-confirm) と相互代替不可 (= 機械は配置ズレ・glyph 不描画・濃淡を見ない、 視覚は keyword 残存・text 不変・image 数を見ない)。 両方を pipeline に組み込む。 user OK は最終 gate で、 機械 + 視覚の 2 段を通った上で human signoff を取る ([`office-automation-principles.md` の検証 3 層モデル](office-automation-principles.md) の機械層を本 schema が担う)。
+
+**MUST-ABSENT の重要性** (= 訂正版 PDF の mutate で特に効く): 過去 session が hallucination で誤記した実体名 / 誤論文 / 誤所属を訂正済の PDF を更に mutate する場合、 「訂正が undo されていないか」 を machine で点呼するのが MUST-ABSENT。 視覚では「在って当然のものに目が行く」 ので「あるはずの無いもの」 は読み飛ばしやすい (= [`label-vs-input-antipattern`](#label-vs-input-antipattern) の認知盲点と同根)。 [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation) で配置先を間違えても、 過去訂正 keyword は残存し続けるので本 schema は label 誤判定を直接は catch しない (= 配置誤りは視覚の領分)。
+
+**text-only mutation との関係**: value overlay (= [`pdf-prefill-direct`](#pdf-prefill-direct)) の場合は text が変わるので `text_must_be_identical=False` にし、 代わりに**期待 text の delta** を `must_present` で網羅する (= 新規 overlay 値が全部 in を確認)。 image-only mutation (= 署名・印影 insert) は `text_must_be_identical=True` で「触ってないはずの text が本当に不変」 を強い invariant として点呼できる (= 過去訂正の保護に最強)。
+
+origin: 2026-06-28 推薦書様式の自筆署名 overlay 後の検証。 過去 session で §2 内の hallucination (= 別人姓を著者と取り違え) を訂正した PDF に対し signature overlay する際、 (1) text 不変 (= overlay が image-only である保証)、 (4) MUST-ABSENT に旧 hallucination 名を入れて「訂正が壊れていない」 を点呼、 (5) image stream +1 で「署名が確かに 1 枚だけ追加された」 を確認。 視覚は別途 [`pdf-visual-confirm`](#pdf-visual-confirm) で実施。
 
 ### <a id="image-budget-exhaustion"></a>画像レンダリング検証の "image budget" 枯渇 → text-first 原則
 

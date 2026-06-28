@@ -148,6 +148,11 @@ sections:
     level: 3
     title: "雛形に既に値がある欄を二重印字しない (= 申請者欄 prefill 済の様式)"
     related: [pdf-prefill-direct, form-dump-first]
+  - id: pdf-cell-label-vs-data-disambiguation
+    level: 3
+    title: "PDF 様式の label cell vs data cell の判別 (= 「右隣に書く欄」 罠)"
+    origin: "2026-06-28"
+    related: [pdf-prefill-direct, label-vs-input-antipattern, label-overwrite-bug, form-dump-first, signature-not-stamp, signature-image-overlay-density, pdf-mutation-verification-schema]
   - id: print-raster-pdf
     level: 3
     title: "加工した PDF の印刷は 600dpi ラスタ化してから (= WYSIWYG 保証)"
@@ -227,12 +232,18 @@ sections:
     level: 3
     title: "「署名」 要求は手書き署名 or 電子署名、 認印画像では不可"
     origin: "2026-05"
+    related: [physical-seal-required, signature-image-overlay-density, pdf-cell-label-vs-data-disambiguation, pdf-prefill-direct, pdf-mutation-verification-schema, pdf-visual-confirm]
   - id: physical-seal-required
     legacy: "2-7b"
     level: 3
     title: "紙原本要求の窓口では貼付電子印影は印刷しても拒否される (= 実押印が確実)"
     origin: "2026-06"
     related: [signature-not-stamp, pdf-snapshot-xlsx-submission]
+  - id: signature-image-overlay-density
+    level: 3
+    title: "署名 PNG overlay の濃度 boost (= 薄い signature を濃く読ませる)"
+    origin: "2026-06-28"
+    related: [signature-not-stamp, pdf-prefill-direct, pdf-cell-label-vs-data-disambiguation, pdf-mutation-verification-schema, pdf-visual-confirm]
   - id: placeholder-trailing-underscore
     legacy: "2-8"
     level: 3
@@ -340,6 +351,12 @@ sections:
     legacy: "6-4"
     level: 3
     title: "PDF visual confirmation 義務"
+    related: [pdf-mutation-verification-schema, image-budget-exhaustion, signature-image-overlay-density]
+  - id: pdf-mutation-verification-schema
+    level: 3
+    title: "PDF mutation 後の機械検証 schema (= text 不変 + keyword in/out + image stream delta)"
+    origin: "2026-06-28"
+    related: [pdf-prefill-direct, pdf-visual-confirm, signature-image-overlay-density, pdf-cell-label-vs-data-disambiguation, label-vs-input-antipattern]
   - id: image-budget-exhaustion
     legacy: "6-5"
     level: 3
