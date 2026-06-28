@@ -234,10 +234,11 @@ def find_data_cell_for_label(page, label_text: str, direction: str = None,
                  (= search_for 結果の y→x 順 indexing、 default 0)
 
     Algorithm (= 2-tier、 PDF cell の描かれ方の variant を吸収):
-      tier 1 = filled-rect approach: label を contain する rect 群を area 昇順で列挙し、
-               各々で direction 方向の adjacent filled rect (= border share ∧ text ゼロ)
-               を探索。 Excel-derived PDF で cell が opaque な filled rect として描かれて
-               いる場合に hit
+      tier 1 = filled-rect approach: label を contain する rect 群を **area 降順** で
+               列挙し (= 「outer block cell = 真の label cell unit」 を先に試す、 inner-
+               tight cell は drawing 構造の artifact で偽 hit の origin)、 各々で direction
+               方向の adjacent filled rect (= border share ∧ text ゼロ) を探索。 Excel-
+               derived PDF で cell が opaque な filled rect として描かれている場合に hit
       tier 2 = border-segment approach: 各 containing cell について direction 方向の最近接
                border line segment (= 細い rect = horizontal/vertical line) から data cell
                の rect を構築 (= label cell の y range を borrow + 右/下/上/左の line までを span)。

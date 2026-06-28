@@ -839,21 +839,21 @@ origin: 2026-06-11 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefil
 
 以下は helper を**使えない context** (= 古い script / 異なる依存環境 / helper の外側で独自判別が要る) 用の equivalent fallback (= helper 内部の参考実装):
 
-1. **probe 段階で隣接 cell も一緒に列挙**: label の bbox を取ったら、 その**右隣・下隣・上隣** (= 共有 border を持つ neighboring cell) の rect も全て列挙する。 fitz `page.get_drawings()` で cell border rect を全取得 → label cell に隣接する rect を探す:
+1. **probe 段階で隣接 cell も一緒に列挙**: label の bbox を取ったら、 その**右隣・下隣・上隣** (= 共有 border を持つ neighboring cell) の rect も全て列挙する。 fitz `page.get_drawings()` で cell border rect を全取得 → label cell に隣接する rect を探す。 ⚠️ **fitz.Rect の area は `r.width * r.height` で取る** (= `r.get_area()` method は無い)、 **containing cell は area 降順** (= 「outer block = 真の label cell unit」、 inner-tight cell は drawing 構造の artifact で偽 hit の origin) で sort して outer から探索する:
    ```python
    import fitz
    doc = fitz.open(tpl); p = doc[0]
    label_rect = p.search_for("○○欄")[0]   # label の text bbox
-   # label cell の外枠 = label_rect を含む最小の filled-rect
+   # label cell の外枠 = label_rect を含む最大の filled-rect (= outer-first)
    cell_rects = [d["rect"] for d in p.get_drawings()
                  if d.get("rect") and d["rect"].contains(label_rect)]
-   label_cell = min(cell_rects, key=lambda r: r.get_area())
-   # 隣接 cell (= label_cell の右隣 = x0 が label_cell.x1 付近、 同じ y range)
+   label_cell = max(cell_rects, key=lambda r: r.width * r.height)
+   # 隣接 cell (= label_cell の右隣 = x0 が label_cell.x1 付近、 y range overlap)
    neighbors = [d["rect"] for d in p.get_drawings()
                 if d.get("rect")
                 and abs(d["rect"].x0 - label_cell.x1) < 2
-                and abs(d["rect"].y0 - label_cell.y0) < 2
-                and d["rect"].get_area() > 10]
+                and d["rect"].y0 < label_cell.y1 and d["rect"].y1 > label_cell.y0
+                and d["rect"].width * d["rect"].height > 50]
    ```
 2. **各候補 cell の内部 text を確認**: `page.get_text(clip=rect)` で各 cell の内側 text を取る → **text を持つ cell = label** / **text ゼロ cell = data field**
 3. **alternative interpretation を明示列挙してから選ぶ**: cell 配置を chat / log に書き出して「(a) label cell に直接記入 / (b) 隣接の text ゼロ cell に記入」 の 2 択を expose、 (b) を採用する根拠 (= text ゼロ ∧ label cell が「○○欄」 等の説明を含む) を明記してから placement。 inline §3「不確実性 expose」 reflex の PDF cell domain 適用
