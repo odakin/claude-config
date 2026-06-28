@@ -44,13 +44,13 @@
 | docx → PDF | [`scripts/docx-to-pdf.sh`](../scripts/docx-to-pdf.sh) (= macOS では Word AppleScript 駆動が default、 `--pages` で明示 Pages、 非 macOS は LibreOffice) | [`office-automation.md#docx-to-pdf-pages`](office-automation.md#docx-to-pdf-pages) + [`docx-pdf-stale-cache`](office-automation.md#docx-pdf-stale-cache) (= stale cache / cold-start 対処) |
 | pptx → PDF | [`scripts/pptx-to-pdf.sh`](../scripts/pptx-to-pdf.sh) (= PowerPoint native export 優先、 LibreOffice fallback) | [`office-automation.md#pptx-to-pdf-powerpoint`](office-automation.md#pptx-to-pdf-powerpoint) (= 網掛け / pattern fill を潰さない要件は native 一択) |
 
-⚠️ **docx は「Word 体裁が契約」 の正式書類が大半** ゆえ Pages re-typeset は重なり artifact を生む。 default を Word に倒している (2026-06 反転)。 詳細・新規 docx automation script を書く時の reflex は [`office-automation-principles.md` 道具選択の梯子](office-automation-principles.md#tool-selection-ladder) 参照。
+⚠️ **docx は「Word 体裁が契約」 の正式書類が大半** ゆえ Pages re-typeset は重なり artifact を生む。 default を Word に倒している (2026-06 反転)。 詳細・新規 docx automation script を書く時の reflex は [`office-automation-principles.md` tool-selection-ladder](office-automation-principles.md#tool-selection-ladder) 参照。
 
 ⚠️ **提出は xlsx/docx 本体、 PDF は確認・印刷・後参照用** ([`pdf-snapshot-xlsx-submission`](office-automation.md#pdf-snapshot-xlsx-submission))。
 
 ## <a id="skill-vs-manual"></a>3. skill vs 手動の使い分け
 
-判断表 (一般処理は skill / 様式精密 fill は手動 / PDF 抽出は pdf skill / 提出 PDF 化は §2 wrapper) は [`office-automation-principles.md` 道具選択の梯子](office-automation-principles.md#tool-selection-ladder) の `⚙️ skill が使える環境では` 表を参照。
+判断表 (一般処理は skill / 様式精密 fill は手動 / PDF 抽出は pdf skill / 提出 PDF 化は §2 wrapper) は [`office-automation-principles.md` tool-selection-ladder](office-automation-principles.md#tool-selection-ladder) の `⚙️ skill が使える環境では` 表を参照。
 
 ## <a id="completion-audit"></a>4. 記入後は「審査員の目」 で閉じる (= 機械監査と最終確認)
 
