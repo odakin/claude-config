@@ -127,7 +127,7 @@ REMINDER="${REMINDER}
 ⚠️ register 済 ≠ session-active。 当 session で実際 wire されている tool subset は
    ToolSearch の deferred tools list / mcp__* で始まる tool が見えるかで verify する
    (= Cowork desktop session の --allowedTools は subset に絞る、 詳細
-   claude-config/conventions/mcp.md §「desktop Cowork session の --allowedTools 制限」)。
+   claude-config/conventions/mcp.md#desktop-allowedtools-restriction)。
 
 universal claim を書く前の必須 anchoring (= 起票 RCA で破綻した 4 軸 sweep の修復):
 

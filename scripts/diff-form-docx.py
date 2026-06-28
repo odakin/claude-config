@@ -34,7 +34,7 @@ SURFACE (printed; exit 0 unless --strict):
 The check is structural, not semantic: it can tell that a box / column / bullet is
 EMPTY or that a label was REPLACED, but it cannot judge whether prose content is
 *thin* — that remains a human "reviewer's-eye" pass (see
-office-automation-principles.md §「記入後の reviewer's-eye 完成度監査」).
+office-automation-principles.md#reviewer-eye-completion).
 
 Why this script exists
 ----------------------

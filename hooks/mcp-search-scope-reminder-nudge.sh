@@ -112,7 +112,7 @@ if [ -n "$KNOWN_ACCOUNTS" ] && [ "$DOMAIN" = "Gmail" ]; then
   REMINDER="$REMINDER
 known Gmail accounts on this machine: $KNOWN_ACCOUNTS
 ⚠️ session-active subset may be SMALLER (= Cowork desktop session の --allowedTools 制限、
-   詳細: claude-config/conventions/mcp.md §「desktop Cowork session の --allowedTools 制限」)。"
+   詳細: claude-config/conventions/mcp.md#desktop-allowedtools-restriction)。"
 fi
 
 REMINDER="$REMINDER

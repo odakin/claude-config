@@ -66,7 +66,7 @@ elif [ "$(uname)" = "Darwin" ]; then
   #   NOTE: this also closes any workbook the user has open in Excel — safe only while
   #   the user is NOT editing in Excel during the run. If -1712/-50 still occurs, the
   #   caller should `killall "Microsoft Excel"; sleep 4` (last resort; see
-  #   conventions/office-automation.md §xlsx-to-pdf).
+  #   conventions/office-automation.md#xlsx-to-pdf-script).
   osascript -e 'tell application "Microsoft Excel" to quit' >/dev/null 2>&1 || true
   sleep 3
   osascript - "$SRC" "$SHEET" "$PDF" <<'AS'
