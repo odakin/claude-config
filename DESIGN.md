@@ -272,7 +272,7 @@ done
 
 - `setup.sh` Step 6 の検出 logic 削除、 全 repo install に変更
 - `claude-config/CLAUDE.md` Step 8 説明を更新
-- `conventions/latex.md §pre-commit hook` 節を全 repo install 方式 + Claude 規律の明示 + 旧設計失敗の経緯記述に拡張
+- `conventions/latex.md#pre-commit-hook` 節を全 repo install 方式 + Claude 規律の明示 + 旧設計失敗の経緯記述に拡張
 - 既存 36 repos に retroactive install + 1 repo update (= network-notes の旧 hook `../../scripts/pre-commit.sh` を上書き、 git history で復元可) + 13 repos で既存 hook を `.bak` backup して上書き
 
 ### Claude 側の reflex 失敗 (sub-RCA)

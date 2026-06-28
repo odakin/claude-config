@@ -11,7 +11,7 @@ En/em-dash conversion is **math-mode aware** (see _fix_dashes_math_aware):
 in text a Unicode en/em-dash is the LaTeX --/--- ligature, but in math mode
 those render as 2/3 minus signs, so a dash there is normalized to a single
 ASCII '-'. (RCA: a "$<en-dash>$" silently became "$--$" = two minuses and
-shipped to a coauthor before being caught. conventions/latex.md §pre-commit.)
+shipped to a coauthor before being caught. conventions/latex.md#pre-commit-hook.)
 
 Exit codes:
   0 - no changes needed

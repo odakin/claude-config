@@ -242,7 +242,7 @@ STOP_ENTRIES='[
 # SessionStart hooks: run on session start (= 起動時 1 回のみ fire)。
 # currentdate-anchor.py: currentDate + 曜日 を inject (= multi-day session の
 # day change を early notice、 私 (Claude) の reflex anchor refresh)。
-# 詳細: conventions/time-context.md §「設計史」 参照。 UserPromptSubmit hook
+# 詳細: conventions/time-context.md#design-history 参照。 UserPromptSubmit hook
 # は 2026-05-20 試行 → user UI 汚染で同日中に退役、 SessionStart のみ復活。
 SESSION_START_ENTRIES='[
   {
@@ -373,7 +373,7 @@ install_hooks() {
         # Cleanup: remove obsolete UserPromptSubmit currentdate-anchor.py hook
         # (= 2026-05-20 試行 → 同日中に退役。 SessionStart は別途 install logic で
         # keep、 SessionStart は session 起動時 1 回のみ fire = user UI 汚染問題なし)
-        # 詳細: conventions/time-context.md §「設計史」
+        # 詳細: conventions/time-context.md#design-history
         if jq -e '.hooks.UserPromptSubmit' "$SETTINGS" > /dev/null 2>&1; then
             if jq -e '.hooks.UserPromptSubmit[] | select(.hooks[]?.command | contains("currentdate-anchor.py"))' \
                "$SETTINGS" > /dev/null 2>&1; then

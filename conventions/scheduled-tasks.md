@@ -18,7 +18,7 @@ Claude Code scheduled tasks を使うリポで適用。CLAUDE.md から参照: `
 
 machine-local job を「どのマシンに登録するか / 登録漏れをどう surface するか」 は [multi-machine-state.md](multi-machine-state.md)。 無人 publish の安全 gate は [`data-pipeline-automation.md` autonomous-execution-gate](data-pipeline-automation.md#autonomous-execution-gate)。
 
-### アカウント切り替えに非依存にしたいとき (= Claude Code desktop app と CLI の 2 認証ストア)
+### <a id="account-switch-independent"></a>アカウント切り替えに非依存にしたいとき (= Claude Code desktop app と CLI の 2 認証ストア)
 
 Claude Code の認証は **2 つの独立ストア**を持つ: **Claude Code desktop app** と **CLI (`claude`、 `~/.claude.json` の単一 `oauthAccount`)**。両者は別アカウントで**共存**しうる — `claude auth` は login/logout/status のみ (= 同時 1 アカウント) だが、 **Claude Code (desktop) 側のアカウント切り替えは CLI の `~/.claude.json` を上書きしない** (実測: Claude Code (desktop) と CLI が別アカウントで同時に存在した)。これが無人ジョブの機構選択に効く:
 

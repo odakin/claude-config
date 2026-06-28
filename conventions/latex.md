@@ -336,7 +336,7 @@ JHEP.bst はフィールドから自動リンクを生成するので `\href` �
 - 完全に枠も色も無くしたい場合は `\hypersetup{hidelinks}` を追加
 - 既存の `\hypersetup{colorlinks=true}` がある場合はリンク色を改善するため上記に migrate する
 
-## pre-commit hook（Unicode→LaTeX 自動修正）
+## <a id="pre-commit-hook"></a>pre-commit hook（Unicode→LaTeX 自動修正）
 `setup.sh` が **全リポに自動インストール** (Step 6)。 hook 自体が staged file 中の `.tex/.bib/.bst/.cls/.sty` の有無を判定し、 LaTeX file 不在の repo では no-op で exit 0 (`scripts/pre-commit-bib` L31-35)。 よって LaTeX file 検出は install 時に不要、 全 repo install で robust。
 
 手動確認・インストール:

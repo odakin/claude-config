@@ -18,7 +18,7 @@ Claude は session 開始時に `# currentDate` context を持っているが、
 
 これは「単一観察 (= 単一情報源の null / positive) を、 その frame を expose しないまま結論に変換する」 という一般的な failure trait の **時刻 domain での現れ**: 「user 発話の『明日』」 という単一観察 (= 言語表現) を、 currentDate context を bypass して「会話流れ」 で解釈 (= cell 埋め)、 実際の時刻 anchor (= currentDate) を expose せず暗黙化。 「不確実性を expose か隠すか」 の問いで「隠す」 を選んだ assertion。
 
-## 設計史: 機械的 enforcement の段階的調整 (2026-05-20)
+## <a id="design-history"></a>設計史: 機械的 enforcement の段階的調整 (2026-05-20)
 
 本規律 §1-3 を wording (= 散文の指示) で書いても reflex で skip される risk (= aspirational instruction risk) があるため、 機械的 enforcement layer の hook 化を試行。 同日に 3 段階で調整:
 

@@ -6,7 +6,7 @@
 #
 # 効果: 無人ルーチンを launchd cron で回す plist を生成・登録・状態確認・解除する。
 # 実行は CLI 認証 (= ~/.claude.json の単一 oauthAccount) で行われ、 Cowork desktop app の
-# アカウント切り替えに非依存 (= scheduled-tasks.md §アカウント切り替えに非依存にしたいとき)。
+# アカウント切り替えに非依存 (= scheduled-tasks.md#account-switch-independent)。
 # idempotent (再実行可)。 2 type をサポート:
 #   - skill : `claude -p --permission-mode bypassPermissions` で SKILL.md を indirection 実行
 #             (= run-time に Claude judgment が要る routine)
