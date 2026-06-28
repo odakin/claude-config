@@ -332,5 +332,5 @@ load→dump round-trip (PyYAML 等) は comment / 整形 / key 順を破壊し�
 
 ### 関連 convention
 
-- 既存 [convention-design-principles.md](../docs/convention-design-principles.md) §2 「ルールの重複を避ける」 は **規約** の単一ソース化、 本 convention §1 は **データ** の単一ソース化。 思想は同じ
+- 既存 [convention-design-principles.md §2](../docs/convention-design-principles.md#no-duplicate-rules) 「ルールの重複を避ける」 は **規約** の単一ソース化、 本 convention §1 は **データ** の単一ソース化。 思想は同じ
 - [scientific-computing.md](scientific-computing.md): 計算結果 artifact の保存規律 (= 似たテーマ、 個別 domain)
