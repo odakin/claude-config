@@ -211,6 +211,238 @@ def word_rect(page, label: str, occurrence: int = 0) -> "fitz.Rect":
     return hits[occurrence]
 
 
+def _rect_area(r: "fitz.Rect") -> float:
+    return abs(r.width * r.height)
+
+
+def find_data_cell_for_label(page, label_text: str, direction: str = None,
+                             occurrence: int = 0) -> "fitz.Rect":
+    """label を含む cell に隣接する text-empty data cell の rect を返す
+    (= label cell vs data cell の判別罠を構造的に消す helper)。
+
+    日本の行政・学術様式の標準 layout は「label cell + 隣接 data cell」 の 2 cell 構造で、
+    label cell に書かれた「○○欄/(自筆にて記載)」 を reflex で記入欄と取り違える事故が起きる
+    (= [`pdf-cell-label-vs-data-disambiguation`](office-automation.md#pdf-cell-label-vs-data-disambiguation))。
+    本 helper は label cell を機械で identify し、 隣接する text ゼロの真 data cell を返す
+    ことで、 driver の reflex 判断を不要化する (= helper を使う限り label cell に overlay
+    する事故は起きない)。
+
+    direction  : 'right' / 'below' / 'above' / 'left' / None (= 全方向探索、 right > below
+                 > above > left の優先順)。 日本様式の最頻 pattern は右側または下側だが、
+                 form 設計に依存するため呼出し側で direction を pin できる
+    occurrence : 同 label が複数欄で出る form (例: 「氏名」 が複数箇所) で何番目かを選ぶ
+                 (= search_for 結果の y→x 順 indexing、 default 0)
+
+    Algorithm (= 2-tier、 PDF cell の描かれ方の variant を吸収):
+      tier 1 = filled-rect approach: label を contain する rect 群を area 昇順で列挙し、
+               各々で direction 方向の adjacent filled rect (= border share ∧ text ゼロ)
+               を探索。 Excel-derived PDF で cell が opaque な filled rect として描かれて
+               いる場合に hit
+      tier 2 = border-segment approach: 各 containing cell について direction 方向の最近接
+               border line segment (= 細い rect = horizontal/vertical line) から data cell
+               の rect を構築 (= label cell の y range を borrow + 右/下/上/左の line までを span)。
+               Excel-derived PDF で cell が 4 本の thin border + transparent fill として
+               描かれている場合 (= 推薦書 PDF の実観測 pattern) に hit
+
+    Returns: fitz.Rect (= 真の data cell)。 caller は insert_image / insert_text の rect
+             として直接渡せる。 cell border に喰い込みたくなければ margin を別途引く。
+
+    Raises:
+      LookupError if (a) label 不在 / (b) containing rect ゼロ (= image-only PDF で
+                     drawings 無し、 本 helper 非対応) / (c) 全 containing cell で
+                     direction 方向の empty data cell 候補ゼロ。 (c) は debug 用に
+                     候補列挙を message に含める
+
+    See: office-automation.md#pdf-cell-label-vs-data-disambiguation
+    """
+    PRIORITY = ("right", "below", "above", "left")
+    dirs = (direction,) if direction else PRIORITY
+    for d in dirs:
+        if d not in PRIORITY:
+            raise ValueError(f"direction must be one of {PRIORITY} or None, got {d!r}")
+
+    hits = page.search_for(nfkc(label_text))
+    if len(hits) <= occurrence:
+        raise LookupError(
+            f"label「{label_text}」(#{occurrence}) が見つからない "
+            f"(雛形改訂? hit={len(hits)})"
+        )
+    label_bbox = hits[occurrence]
+
+    drawings = page.get_drawings()
+    all_rects = [d["rect"] for d in drawings if d.get("rect")]
+    if not all_rects:
+        raise LookupError(
+            f"page に drawings 無し (= image-only PDF か、 雛形が cell 構造を持たない)。 "
+            f"本 helper は cell border を持つ雛形 PDF 専用 (label={label_text!r})"
+        )
+
+    AREA_FLOOR = 50.0
+    TOL = 2.0
+
+    # containing cells = label bbox を完全に含む rect を **area 降順** (= 大きい
+    # 「label cell unit」 から先に探索)。 nest 構造では outer block が真の label cell で、
+    # inner-tight cell は「文字 tight 囲み」 でしかない (= drawing 構造の artifact、 その
+    # 右隣探索は outer cell 内部を hit して偽 data cell を返す失敗 mode の origin)。
+    # 大きい cell の隣接で hit しなかった時のみ小さい cell に fallback (= robustness)。
+    containing = sorted(
+        [r for r in all_rects if r.contains(label_bbox) and _rect_area(r) >= AREA_FLOOR],
+        key=_rect_area, reverse=True,
+    )
+    if not containing:
+        raise LookupError(
+            f"label「{label_text}」 を contain する rect 無し (label_bbox={label_bbox})"
+        )
+
+    def is_h_line(r):
+        return r.height < 1.5 and r.width > 5
+
+    def is_v_line(r):
+        return r.width < 1.5 and r.height > 5
+
+    debug_attempts = []
+
+    def adjacent_filled(cell, d):
+        """tier 1: cell に direction d で隣接する filled rect で text ゼロのものを返す。
+        無ければ None。"""
+        for r in all_rects:
+            if r == cell or _rect_area(r) < AREA_FLOOR:
+                continue
+            if d == "right":
+                shares = abs(r.x0 - cell.x1) < TOL and r.y0 < cell.y1 - TOL and r.y1 > cell.y0 + TOL
+            elif d == "left":
+                shares = abs(r.x1 - cell.x0) < TOL and r.y0 < cell.y1 - TOL and r.y1 > cell.y0 + TOL
+            elif d == "below":
+                shares = abs(r.y0 - cell.y1) < TOL and r.x0 < cell.x1 - TOL and r.x1 > cell.x0 + TOL
+            elif d == "above":
+                shares = abs(r.y1 - cell.y0) < TOL and r.x0 < cell.x1 - TOL and r.x1 > cell.x0 + TOL
+            else:
+                continue
+            if shares and not page.get_text(clip=r).strip():
+                return r
+        return None
+
+    def adjacent_from_borders(cell, d):
+        """tier 2: cell の direction d で最近接 border line から data cell rect を構築。
+        無ければ None。"""
+        if d == "right":
+            verts = sorted(
+                [r for r in all_rects if is_v_line(r) and r.x0 > cell.x1
+                 and r.y0 < cell.y1 + TOL and r.y1 > cell.y0 - TOL],
+                key=lambda r: r.x0,
+            )
+            if not verts:
+                return None
+            cand = fitz.Rect(cell.x1, cell.y0, verts[0].x0, cell.y1)
+        elif d == "left":
+            verts = sorted(
+                [r for r in all_rects if is_v_line(r) and r.x1 < cell.x0
+                 and r.y0 < cell.y1 + TOL and r.y1 > cell.y0 - TOL],
+                key=lambda r: -r.x1,
+            )
+            if not verts:
+                return None
+            cand = fitz.Rect(verts[0].x1, cell.y0, cell.x0, cell.y1)
+        elif d == "below":
+            horizs = sorted(
+                [r for r in all_rects if is_h_line(r) and r.y0 > cell.y1
+                 and r.x0 < cell.x1 + TOL and r.x1 > cell.x0 - TOL],
+                key=lambda r: r.y0,
+            )
+            if not horizs:
+                return None
+            cand = fitz.Rect(cell.x0, cell.y1, cell.x1, horizs[0].y0)
+        elif d == "above":
+            horizs = sorted(
+                [r for r in all_rects if is_h_line(r) and r.y1 < cell.y0
+                 and r.x0 < cell.x1 + TOL and r.x1 > cell.x0 - TOL],
+                key=lambda r: -r.y1,
+            )
+            if not horizs:
+                return None
+            cand = fitz.Rect(cell.x0, horizs[0].y1, cell.x1, cell.y0)
+        else:
+            return None
+        if _rect_area(cand) < AREA_FLOOR:
+            return None
+        if page.get_text(clip=cand).strip():
+            return None
+        return cand
+
+    for cell in containing:
+        for d in dirs:
+            r = adjacent_filled(cell, d)
+            if r:
+                return r
+            debug_attempts.append(f"tier1 {d} of cell {cell}: miss")
+            r = adjacent_from_borders(cell, d)
+            if r:
+                return r
+            debug_attempts.append(f"tier2 {d} of cell {cell}: miss")
+
+    raise LookupError(
+        f"label「{label_text}」 の隣接 data cell 候補ゼロ "
+        f"(direction={direction or 'any'}, occurrence={occurrence})。\n"
+        f"  containing cells: {[str(c) for c in containing]}\n"
+        f"  attempts: {debug_attempts[:8]}{'...' if len(debug_attempts) > 8 else ''}"
+    )
+
+
+def boost_signature_alpha(src_png, alpha_boost: float = 3.0,
+                          force_black: bool = True) -> "Path":
+    """透過 PNG 署名の濃度を boost した temp PNG path を返す
+    (= [`signature-image-overlay-density`](office-automation.md#signature-image-overlay-density)
+    の経路非依存 helper)。
+
+    自筆署名の scan PNG は antialias edge の灰色 RGB + 中間 alpha の pixel が多いため、
+    どの renderer (fitz / Word / Pages / LibreOffice) も元より淡く composite する。
+    本 helper は PIL で 2 段階前処理 (alpha × N で半透明 pixel を不透明寄り + RGB を pure
+    black に固定で antialias 灰色 edge を真っ黒へ) した temp PNG を返す。
+
+    alpha_boost : alpha channel × N (上限 255 で clip)。 1.0=原寸、 1.8=~80% 濃く、
+                  3.0=ほぼ全 alpha を 255 化。 線形に効くので段階的 iteration 推奨
+    force_black : True なら alpha > 0 pixel の RGB を (0, 0, 0) に固定 (= antialias の灰色
+                  edge を真っ黒へ)。 False なら手書き濃淡を温存 (= 「digital 加工バレ」 を
+                  警戒する窓口や法的契約向け)
+
+    Returns: Path to temp PNG。 ⚠️ caller 責任で .unlink(missing_ok=True) で cleanup。
+
+    Raises:
+      ImportError if PIL + numpy 不在 (= `pip3 install Pillow numpy` を message に案内)
+      ValueError if alpha_boost < 0
+
+    See: office-automation.md#signature-image-overlay-density
+    """
+    if alpha_boost < 0:
+        raise ValueError(f"alpha_boost must be >= 0, got {alpha_boost}")
+    try:
+        from PIL import Image
+        import numpy as np
+    except ImportError as e:
+        raise ImportError(
+            "boost_signature_alpha requires Pillow + numpy. "
+            "Install with: pip3 install Pillow numpy"
+        ) from e
+    import tempfile
+    import os
+
+    img = Image.open(src_png).convert("RGBA")
+    r, g, b, a = img.split()
+    a_arr = np.array(a, dtype=np.float32) * float(alpha_boost)
+    a_arr = np.clip(a_arr, 0, 255).astype(np.uint8)
+    a_new = Image.fromarray(a_arr)
+    if force_black:
+        zero = Image.new("L", img.size, 0)
+        out = Image.merge("RGBA", (zero, zero, zero, a_new))
+    else:
+        out = Image.merge("RGBA", (r, g, b, a_new))
+    fd, tmp_name = tempfile.mkstemp(suffix=".png", prefix="sig_boosted_")
+    os.close(fd)
+    tmp = Path(tmp_name)
+    out.save(tmp)
+    return tmp
+
+
 def _draw_check(page, r: "fitz.Rect") -> None:
     """anchor (= "□普通" 等の checkbox 語) の □ 内に ✓ をベクター描画。
     font の ✓ glyph 有無に依存せず確実に印字する (= □ は語頭の全角1字、 r.x0 が □ の左端)。"""
@@ -327,3 +559,331 @@ def build_document(template_pdf, page_contains, items, out_base,
     rast.save(out_raster, deflate=True)
     png.unlink()
     return {"filled": out_filled, "raster": out_raster}
+
+
+def verify_pdf_mutation(orig_path, out_path, *,
+                        must_present=(), must_absent=(),
+                        expected_image_delta: int = 0,
+                        text_must_be_identical: bool = True,
+                        page_count_must_match: bool = True) -> list:
+    """PDF mutation 前後で機械検証 schema 5 項目を回す
+    (= [`pdf-mutation-verification-schema`](office-automation.md#pdf-mutation-verification-schema)
+    の engine helper 化)。
+
+    1. page 数不変 (image insert / value overlay は page 数を変えない想定)
+    2. text content 完全不変 (image-only mutation なら text 1 byte も変わらない想定。
+       value overlay や redact なら text_must_be_identical=False、 期待差分を must_present
+       で網羅)
+    3. MUST-PRESENT keywords が出力に在る (= 雛形 prefill / 過去 hallucination 訂正後の
+       正しい値が残っているか)
+    4. MUST-ABSENT keywords が出力に無い (= 訂正版 PDF を mutate する時の preservation
+       確認、 「視覚は『在って当然のもの』 に目が行き『あるはずの無いもの』 を読み飛ばす」
+       認知盲点への machine 点呼)
+    5. image stream count delta が想定通り (= 1 枚 insert なら +1)
+
+    text comparison: 全 page を join した raw string で == 比較 (= 単票単独で投げる
+    convention。 multi-page form は呼出し側で per-page に invoke 推奨)。
+
+    Returns: list of error string (空 = 全 pass)。 caller は `if errors: sys.exit(1)`
+             で送付・印刷 step に進ませない。
+
+    Raises: 引数の型/値が明らかに不正な場合のみ ValueError。 mutation 自体の異常は
+            list の error として返す (= 中断せず 5 項目を全て列挙して driver 側で一括処理)。
+
+    See: office-automation.md#pdf-mutation-verification-schema
+    """
+    if expected_image_delta < 0:
+        raise ValueError(f"expected_image_delta must be >= 0, got {expected_image_delta}")
+    errors = []
+    orig = fitz.open(str(orig_path))
+    out = fitz.open(str(out_path))
+    try:
+        if page_count_must_match and orig.page_count != out.page_count:
+            errors.append(f"page 数差: orig={orig.page_count} out={out.page_count}")
+
+        orig_text = "".join(p.get_text() for p in orig)
+        out_text = "".join(p.get_text() for p in out)
+        if text_must_be_identical and orig_text != out_text:
+            for i, (a, b) in enumerate(zip(orig_text, out_text)):
+                if a != b:
+                    errors.append(
+                        f"text 不変性 fail: pos {i}, "
+                        f"orig={orig_text[i:i+20]!r}, out={out_text[i:i+20]!r}"
+                    )
+                    break
+            else:
+                errors.append(
+                    f"text 長さ差: orig={len(orig_text)}, out={len(out_text)}"
+                )
+
+        for kw in must_present:
+            if kw not in out_text:
+                errors.append(f"MUST-PRESENT 不在: {kw!r}")
+        for kw in must_absent:
+            if kw in out_text:
+                errors.append(f"MUST-ABSENT 残存: {kw!r}")
+
+        orig_imgs = sum(len(p.get_images(full=True)) for p in orig)
+        out_imgs = sum(len(p.get_images(full=True)) for p in out)
+        img_delta = out_imgs - orig_imgs
+        if img_delta != expected_image_delta:
+            errors.append(
+                f"image stream delta 想定外: got={img_delta} expected={expected_image_delta}"
+            )
+    finally:
+        orig.close()
+        out.close()
+    return errors
+
+
+def _selftest():
+    """programmatic な minimal PDF fixture を fitz で組んで 3 helper を検証 (= 単独実行
+    で全 assertion pass 確認)。 PIL/numpy が無ければ A-2 部分を skip。
+    実行: `python3 pdf_form_fill.py --selftest`
+    """
+    import tempfile
+    import os
+    print("=== pdf_form_fill --selftest ===")
+
+    # ⚠️ selftest fixture は ASCII label のみ使う (= fitz の built-in helv font は CJK
+    # glyph を持たず、 CJK を insert_text しても text 層に乗らない / search_for で hit
+    # しない。 algorithm 検証は ASCII で十分、 実 PDF (推薦書様式等) での probe は
+    # office-automation.md §pdf-cell-label-vs-data-disambiguation origin が cover)
+    # ------------------------------------------------------------------
+    # Fixture A: horizontal 2 cell (= filled rect approach for tier 1)
+    # ------------------------------------------------------------------
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=200)
+    # left filled cell with "Name" text
+    page.draw_rect(fitz.Rect(50, 50, 150, 100), color=(0, 0, 0), fill=(0.95, 0.95, 0.95))
+    # right filled cell empty
+    page.draw_rect(fitz.Rect(150, 50, 300, 100), color=(0, 0, 0), fill=(0.95, 0.95, 0.95))
+    # label text in left cell
+    page.insert_text((70, 80), "Name", fontname="helv", fontsize=10)
+    fix_a = Path(tempfile.mkstemp(suffix=".pdf", prefix="fix_A_")[1])
+    doc.save(fix_a)
+    doc.close()
+
+    da = fitz.open(fix_a)
+    r = find_data_cell_for_label(da[0], "Name", direction="right")
+    assert abs(r.x0 - 150) < 3 and abs(r.x1 - 300) < 3, f"A right cell wrong: {r}"
+    print(f"  ✓ A horizontal: data cell = {r}")
+    # default direction=None should also find right (priority order)
+    r2 = find_data_cell_for_label(da[0], "Name")
+    assert r2 == r, "default direction should find right cell"
+    print(f"  ✓ A direction=None: same result")
+    # label 不在 → LookupError
+    try:
+        find_data_cell_for_label(da[0], "NotPresent")
+        assert False, "should LookupError"
+    except LookupError as e:
+        assert "見つからない" in str(e)
+        print(f"  ✓ A label not found → LookupError")
+    da.close()
+    fix_a.unlink(missing_ok=True)
+
+    # ------------------------------------------------------------------
+    # Fixture B: vertical 2 cell (= filled rect approach, direction=below)
+    # ------------------------------------------------------------------
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=200)
+    page.draw_rect(fitz.Rect(50, 30, 200, 70), color=(0, 0, 0), fill=(0.95, 0.95, 0.95))
+    page.draw_rect(fitz.Rect(50, 70, 200, 130), color=(0, 0, 0), fill=(0.95, 0.95, 0.95))
+    page.insert_text((70, 55), "Addr", fontname="helv", fontsize=10)
+    fix_b = Path(tempfile.mkstemp(suffix=".pdf", prefix="fix_B_")[1])
+    doc.save(fix_b)
+    doc.close()
+
+    db = fitz.open(fix_b)
+    r = find_data_cell_for_label(db[0], "Addr", direction="below")
+    assert abs(r.y0 - 70) < 3 and abs(r.y1 - 130) < 3, f"B below cell wrong: {r}"
+    print(f"  ✓ B vertical: data cell = {r}")
+    db.close()
+    fix_b.unlink(missing_ok=True)
+
+    # ------------------------------------------------------------------
+    # Fixture C: nested cell (label cell inside outer block) + border-segment data cell
+    # (= real-world PDF pattern mimick: outer cell contains label cell, data cell
+    # exists only as 4 thin border line segments to the right of label cell)
+    # ------------------------------------------------------------------
+    doc = fitz.open()
+    page = doc.new_page(width=600, height=300)
+    # outer block (= label cell, contains label area)
+    page.draw_rect(fitz.Rect(100, 50, 250, 150), color=(0, 0, 0), fill=(0.95, 0.95, 0.95))
+    # inner label-tight cell (smaller, contains label text)
+    page.draw_rect(fitz.Rect(110, 70, 240, 100), color=(0, 0, 0), fill=(0.95, 0.95, 0.95))
+    page.insert_text((130, 90), "Sign", fontname="helv", fontsize=10)
+    # data cell drawn as 4 thin border line segments (no filled rect)
+    page.draw_line(fitz.Point(250, 50), fitz.Point(450, 50))    # top
+    page.draw_line(fitz.Point(250, 150), fitz.Point(450, 150))  # bottom
+    page.draw_line(fitz.Point(250, 50), fitz.Point(250, 150))   # left (shared with outer)
+    page.draw_line(fitz.Point(450, 50), fitz.Point(450, 150))   # right
+    fix_c = Path(tempfile.mkstemp(suffix=".pdf", prefix="fix_C_")[1])
+    doc.save(fix_c)
+    doc.close()
+
+    dc = fitz.open(fix_c)
+    r = find_data_cell_for_label(dc[0], "Sign", direction="right")
+    # should find border-segment-constructed cell
+    assert r.x0 >= 245 and r.x1 >= 445, f"C border-segment cell wrong: {r}"
+    assert dc[0].get_text(clip=r).strip() == "", f"C cell not empty: {dc[0].get_text(clip=r)!r}"
+    print(f"  ✓ C nested + border-segment: data cell = {r}")
+    dc.close()
+    fix_c.unlink(missing_ok=True)
+
+    # ------------------------------------------------------------------
+    # Fixture D: image-only PDF (= no drawings) → LookupError
+    # ------------------------------------------------------------------
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=200)
+    page.insert_text((100, 100), "Lonely", fontname="helv", fontsize=10)
+    fix_d = Path(tempfile.mkstemp(suffix=".pdf", prefix="fix_D_")[1])
+    doc.save(fix_d)
+    doc.close()
+
+    dd = fitz.open(fix_d)
+    try:
+        find_data_cell_for_label(dd[0], "Lonely")
+        assert False, "should LookupError (no drawings)"
+    except LookupError as e:
+        assert "contain" in str(e) or "drawings" in str(e), f"unexpected msg: {e}"
+        print(f"  ✓ D image-only PDF (containing rect 無し) → LookupError")
+    dd.close()
+    fix_d.unlink(missing_ok=True)
+
+    # ------------------------------------------------------------------
+    # A-2: boost_signature_alpha (PIL optional)
+    # ------------------------------------------------------------------
+    try:
+        from PIL import Image
+        import numpy as np
+        has_pil = True
+    except ImportError:
+        has_pil = False
+        print("  ~ A-2 skipped (PIL/numpy not installed)")
+
+    if has_pil:
+        from PIL import Image
+        import numpy as np
+        # gradient alpha PNG fixture
+        a = np.linspace(0, 100, 100, dtype=np.uint8)
+        a_img = np.tile(a, (50, 1))
+        rgba = np.zeros((50, 100, 4), dtype=np.uint8)
+        rgba[..., 0] = 128  # mid-gray RGB
+        rgba[..., 1] = 128
+        rgba[..., 2] = 128
+        rgba[..., 3] = a_img
+        src = Path(tempfile.mkstemp(suffix=".png", prefix="sig_src_")[1])
+        Image.fromarray(rgba).save(src)
+
+        # boost ×3, force_black=True
+        tmp = boost_signature_alpha(src, alpha_boost=3.0, force_black=True)
+        arr = np.array(Image.open(tmp).convert("RGBA"))
+        # alpha should be clipped at 255 for source alpha >= 85
+        assert (arr[..., 3].max() == 255), f"alpha max {arr[..., 3].max()} != 255"
+        # RGB pixels with alpha>0 should be (0,0,0)
+        mask = arr[..., 3] > 0
+        if mask.any():
+            assert (arr[..., :3][mask] == 0).all(), "force_black violated"
+        print(f"  ✓ A-2 boost ×3 + force_black: alpha clipped, RGB pure black")
+        tmp.unlink(missing_ok=True)
+
+        # alpha_boost < 0 → ValueError
+        try:
+            boost_signature_alpha(src, alpha_boost=-1.0)
+            assert False, "should ValueError"
+        except ValueError as e:
+            assert "alpha_boost" in str(e)
+            print(f"  ✓ A-2 alpha_boost<0 → ValueError")
+
+        src.unlink(missing_ok=True)
+
+    # ------------------------------------------------------------------
+    # A-3: verify_pdf_mutation
+    # ------------------------------------------------------------------
+    doc1 = fitz.open()
+    p1 = doc1.new_page(width=400, height=200)
+    p1.insert_text((50, 50), "Hello correct value", fontname="helv", fontsize=10)
+    p1.insert_text((50, 80), "B prior correction", fontname="helv", fontsize=10)
+    orig_p = Path(tempfile.mkstemp(suffix=".pdf", prefix="orig_")[1])
+    doc1.save(orig_p)
+    doc1.close()
+
+    # identical copy (image-only mutation simulation)
+    import shutil
+    same_p = Path(tempfile.mkstemp(suffix=".pdf", prefix="same_")[1])
+    shutil.copy(orig_p, same_p)
+
+    # case 1: same PDF, no image delta → 全 pass
+    errs = verify_pdf_mutation(orig_p, same_p,
+                               must_present=["Hello", "correct value"],
+                               must_absent=["XYZ hallucination"],
+                               expected_image_delta=0)
+    assert errs == [], f"case1 should pass: {errs}"
+    print(f"  ✓ A-3 identical PDF: 0 errors")
+
+    # case 2: text differs but text_must_be_identical=True → fail
+    doc2 = fitz.open()
+    p2 = doc2.new_page(width=400, height=200)
+    p2.insert_text((50, 50), "Hello DIFFERENT", fontname="helv", fontsize=10)
+    diff_p = Path(tempfile.mkstemp(suffix=".pdf", prefix="diff_")[1])
+    doc2.save(diff_p)
+    doc2.close()
+    errs = verify_pdf_mutation(orig_p, diff_p,
+                               must_present=[], must_absent=[],
+                               expected_image_delta=0)
+    assert any("text" in e for e in errs), f"case2 should have text error: {errs}"
+    print(f"  ✓ A-3 text differs: caught ({len(errs)} errors)")
+
+    # case 3: MUST-PRESENT missing → fail
+    errs = verify_pdf_mutation(orig_p, same_p,
+                               must_present=["完全に不在の語"],
+                               must_absent=[], expected_image_delta=0)
+    assert any("MUST-PRESENT" in e for e in errs), f"case3 missing detection: {errs}"
+    print(f"  ✓ A-3 MUST-PRESENT missing: caught")
+
+    # case 4: MUST-ABSENT residual → fail
+    errs = verify_pdf_mutation(orig_p, same_p,
+                               must_present=[], must_absent=["Hello"],
+                               expected_image_delta=0)
+    assert any("MUST-ABSENT" in e for e in errs), f"case4 residual detection: {errs}"
+    print(f"  ✓ A-3 MUST-ABSENT residual: caught")
+
+    # case 5: image delta mismatch → fail
+    errs = verify_pdf_mutation(orig_p, same_p,
+                               must_present=[], must_absent=[],
+                               expected_image_delta=1)
+    assert any("image stream" in e for e in errs), f"case5 image delta: {errs}"
+    print(f"  ✓ A-3 image delta mismatch: caught")
+
+    # case 6: text_must_be_identical=False allows text drift
+    errs = verify_pdf_mutation(orig_p, diff_p,
+                               must_present=[], must_absent=[],
+                               text_must_be_identical=False,
+                               expected_image_delta=0)
+    text_errs = [e for e in errs if "text" in e]
+    assert text_errs == [], f"case6 text drift should be allowed: {text_errs}"
+    print(f"  ✓ A-3 text_must_be_identical=False: text drift allowed")
+
+    # case 7: expected_image_delta<0 → ValueError
+    try:
+        verify_pdf_mutation(orig_p, same_p, expected_image_delta=-1)
+        assert False, "should ValueError"
+    except ValueError as e:
+        assert "expected_image_delta" in str(e)
+        print(f"  ✓ A-3 expected_image_delta<0 → ValueError")
+
+    orig_p.unlink(missing_ok=True)
+    same_p.unlink(missing_ok=True)
+    diff_p.unlink(missing_ok=True)
+
+    print("=== ALL PASS ===")
+
+
+if __name__ == "__main__":
+    import sys
+    if "--selftest" in sys.argv:
+        _selftest()
+    else:
+        print("Usage: python3 pdf_form_fill.py --selftest")
+        sys.exit(2)

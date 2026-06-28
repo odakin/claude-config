@@ -835,6 +835,10 @@ origin: 2026-06-11 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefil
 
 **判別手順** (= 値・画像 overlay 前の reflex):
 
+⚡ **engine 化済 helper を使うのが既定路**: `pdf_form_fill.find_data_cell_for_label(page, label_text, direction=None, occurrence=0)` を呼ぶと、 下記 4 段の判別 logic (= containing cell 列挙 + 隣接 cell 探索 + text empty 確認 + assertion gate) + nested cell handling + filled-rect ∧ border-segment の 2-tier algorithm (= Excel-derived PDF で cell が opaque rect / 4 本の thin border line のどちらで描かれていても hit) が内蔵される。 失敗時 (= label 不在 / containing rect 無し / 隣接 empty 候補ゼロ) は `LookupError` を debug message 付きで raise。 helper を使う限り「label cell に overlay」 事故は構造的に起きない。 driver の実例は §pdf-prefill-direct の engine 統合 form。
+
+以下は helper を**使えない context** (= 古い script / 異なる依存環境 / helper の外側で独自判別が要る) 用の equivalent fallback (= helper 内部の参考実装):
+
 1. **probe 段階で隣接 cell も一緒に列挙**: label の bbox を取ったら、 その**右隣・下隣・上隣** (= 共有 border を持つ neighboring cell) の rect も全て列挙する。 fitz `page.get_drawings()` で cell border rect を全取得 → label cell に隣接する rect を探す:
    ```python
    import fitz
@@ -858,6 +862,8 @@ origin: 2026-06-11 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefil
    t = p.get_text(clip=data_cell).strip()
    assert not t, f"data cell とした rect が text を含む = label cell の可能性 (text={t!r})"
    ```
+
+⚠️ **fallback の限界**: 上記 inline は cell が opaque な filled rect として描かれている前提の最小例。 雛形が **4 本の thin border line + transparent fill** で data cell を表現する流儀 (= 推薦書様式の実観測) では fallback 単独では空振りする (= 真の data rect が drawings rect として直接 enumerable でないため)。 その場合は helper の tier 2 (= border-segment 構築 = label cell の y range borrow + 最近接 vertical line までを span) を直接呼ぶか、 helper をそのまま使う。
 
 **Why**: 様式 reviewer は「label が読める ∧ data が label の隣に綺麗に収まる」 を期待する。 label と重なった signature / 値は「様式改変」 と判定されて差し戻し対象 ([`label-overwrite-bug`](#label-overwrite-bug) と同根の認知盲点 = 「text が在る cell に書きに行く」 reflex)。 user 訂正待ち reactive (= 「そこは label cell、 data はその右」 と教わってから直す) でなく、 reflex に判別ロジックを織り込むのが正。
 
@@ -1414,6 +1420,18 @@ origin: 2026-06 ある学内事務窓口で、 出張様式に貼り付けた電
 1. **alpha channel × N boost** (= 半透明 pixel を不透明寄りに): `alpha *= 3.0` 程度、 255 で clip
 2. **RGB を pure black に固定** (= alpha > 0 pixel の RGB を `(0, 0, 0)` に置換): antialias の灰色 edge を真っ黒へ。 元 PNG が黒インクの signature であれば情報損失ゼロ (= 「線の形」 は alpha が保持、 「インクの色」 は元々黒の意図)
 
+⚡ **engine 化済 helper を使うのが既定路**: `pdf_form_fill.boost_signature_alpha(src_png, alpha_boost=3.0, force_black=True)` を呼ぶと下記 2 段階前処理 + 引数 validation (= `alpha_boost<0` で `ValueError`) + PIL/numpy 不在時の明示的 `ImportError` 案内が内蔵される。 返り値は `Path` で、 caller が `.unlink(missing_ok=True)` で cleanup する契約:
+
+```python
+from pdf_form_fill import boost_signature_alpha
+
+sig_boosted = boost_signature_alpha(SIG_PNG, alpha_boost=3.0, force_black=True)
+page.insert_image(SIG_RECT, filename=str(sig_boosted), keep_proportion=True, overlay=True)
+sig_boosted.unlink(missing_ok=True)
+```
+
+以下は helper を**使えない context** (= 非 pdf_form_fill な docx 経路の直接挿入、 helper の外側で独自前処理が要る等) 用の equivalent fallback (= helper 内部の参考実装):
+
 ```python
 from PIL import Image
 import numpy as np
@@ -1861,6 +1879,25 @@ end tell'
 3. **MUST-PRESENT keywords が出力に在る** (= 重要な fact / 過去訂正の保持を確認): 雛形に元々在る pre-fill / label / 過去の hallucination 修正後の正しい値が全部残っているか
 4. **MUST-ABSENT keywords が出力に無い** (= 過去の hallucination repair の preservation 確認): 削除済の誤値 / 訂正で消した実体名が再混入していないか — **訂正版 PDF を mutate するときに特に効く**
 5. **image stream count の delta が想定通り** (= 1 枚 insert なら +1): `len(out[0].get_images(full=True)) - len(orig[0].get_images(full=True)) == EXPECTED_DELTA`
+
+⚡ **engine 化済 helper を使うのが既定路**: `pdf_form_fill.verify_pdf_mutation(orig_path, out_path, *, must_present, must_absent, expected_image_delta, text_must_be_identical, page_count_must_match)` を呼ぶと上記 5 項目を一括検証し、 error list (= 空なら全 pass) を返す。 caller は `if errors: sys.exit(1)` で送付 step を gate する契約:
+
+```python
+from pdf_form_fill import verify_pdf_mutation
+
+errors = verify_pdf_mutation(
+    SRC, OUT,
+    must_present=["<推薦者氏名>", "<論文 DOI>", "○○欄"],
+    must_absent=["<過去 hallucination で削除済の実体名>"],
+    expected_image_delta=1,    # signature 1 枚 insert
+    text_must_be_identical=True,   # image-only mutation の最強 invariant
+)
+if errors:
+    for e in errors: print(f"  ✗ {e}")
+    sys.exit(1)
+```
+
+以下は helper を**使えない context** 用の equivalent fallback (= helper 内部の参考実装、 単票前提・全 page text join 拡張済):
 
 ```python
 import fitz
