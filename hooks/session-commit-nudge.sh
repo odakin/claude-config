@@ -28,7 +28,7 @@
 #   editing なので STALE 化せず、 各 file は git-state-nudge.sh 経路に乗ら
 #   ない」 case を Stop boundary で expose。
 #
-# Naming convention (= conventions/hook-authoring.md §0):
+# Naming convention (= conventions/hook-authoring.md#naming-convention):
 #   `-nudge` suffix = non-blocking、 stdout に injection、 exit 0 (= 規約通り)
 #
 # Modes (起動引数で dispatch):
@@ -70,7 +70,7 @@
 #   test script (= session-commit-nudge.test.sh) はこれを使う。
 #
 # bash 3.2 互換:
-#   macOS stock /bin/bash で動作必須 (= conventions/hook-authoring.md §1)。
+#   macOS stock /bin/bash で動作必須 (= conventions/hook-authoring.md#bash32-heredoc-parser-bug)。
 #   $(...) + heredoc body の quote escape は本 hook では使わない (= 純 bash
 #   logic のみ、 Python heredoc 等の interop なし)。
 

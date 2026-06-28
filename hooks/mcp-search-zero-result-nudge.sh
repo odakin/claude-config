@@ -25,7 +25,7 @@
 #   明確な zero marker が無い response は silent pass (= Hook A の PreToolUse
 #   anchoring が既に効いている、 重複 nudge より miss を許容)。 false positive
 #   を避ける方を強く優先 = normal flow の noise 抑制 + Claude が hook 出力
-#   全般を discount し始める二次 decay 予防 (hook-authoring.md §10)。
+#   全般を discount し始める二次 decay 予防 (hook-authoring.md#hook-no-go-judgment)。
 #
 # Matcher (settings.json 側): Hook A と同じ
 #   mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)

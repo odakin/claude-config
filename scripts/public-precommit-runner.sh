@@ -40,7 +40,7 @@
 #   本 script は **file 本文** (= stage 済 file の追加行) を Tier A/B で scan する。
 #   commit message + subject は別 hook `commit-msg-leak-guard-runner.sh` (BLOCK)
 #   が cover (= 2026-05-26 追加、 claude-code 2.1.x harness invoke bug の
-#   mitigation option B、 詳細 conventions/hook-authoring.md §2 (d) + DESIGN.md
+#   mitigation option B、 詳細 conventions/hook-authoring.md#delivery-audit-4-axes (d) + DESIGN.md
 #   §2026-05-26)。 install は `install-public-precommit.sh` (= 本 stub) +
 #   `install-public-commit-msg.sh` (= sibling stub) で setup.sh Step 8 内 1 loop
 #   で同時 install。 2 hook の matcher logic は分離 (= Tier A regex vs commit-msg

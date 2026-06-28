@@ -11,7 +11,7 @@
 #   stdout = additionalContext JSON (CLI session に inject)、 副作用で
 #   $HOME/.claude/surface/mcp-search-reminder.txt に同 reminder を書出し
 #   (= desktop Cowork session は SessionStart 経由で読まれる fallback、
-#   hook-authoring.md §9.3 / lib-surface.sh と同 pattern)。
+#   hook-authoring.md#frontend-dependent-cowork / lib-surface.sh と同 pattern)。
 #
 # Matcher (settings.json 側):
 #   mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)
@@ -44,7 +44,7 @@
 #   起動時 anchor) + ② B (= 0-result 時の強 reminder) + ③ user 側 wire 拡張
 #   (= Cowork connector に personal Gmail 追加) で多層防御。
 #
-# 出力経路 (= warn mode、 hook-authoring.md §3 に従う):
+# 出力経路 (= warn mode、 hook-authoring.md#warn-mode-spec-uncertainty に従う):
 #   stdout = `hookSpecificOutput.additionalContext` + `systemMessage` (= 2 経路
 #     defensive 併用、 spec 確度が build 依存のため)
 #   stderr = narrative log (= ask/deny 時の確実経路、 allow 時は best-effort)
@@ -138,7 +138,7 @@ scope を埋められないなら、 結論を保留して以下のいずれか�
   詳細: 個人層 plan (~/Claude/odakin-prefs/plans/2026-06-20-mcp-scope-guard-hooks.md)"
 
 # ---------- surface file (= desktop Cowork session の SessionStart 読込 path) ----------
-# hook-authoring.md §9.3: desktop frontend は PreToolUse 出力をモデルに honor しない
+# hook-authoring.md#frontend-dependent-cowork: desktop frontend は PreToolUse 出力をモデルに honor しない
 # が file 副作用は走る。 surface 経由で次 session に持ち越し可能。
 SURFACE_DIR="$HOME/.claude/surface"
 mkdir -p "$SURFACE_DIR" 2>/dev/null || true

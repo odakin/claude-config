@@ -22,7 +22,7 @@
 #   副作用 = $HOME/.claude/surface/mcp-scope.txt に同 reminder を書出し
 #           (= desktop Cowork session は SessionStart 注入が dropped されるが、
 #            file 副作用は走る、 odakin-prefs/CLAUDE.md の surface 読込指示で
-#            拾われる。 hook-authoring.md §9.3 / lib-surface.sh と同 pattern)
+#            拾われる。 hook-authoring.md#frontend-dependent-cowork / lib-surface.sh と同 pattern)
 #
 # 設計動機 (= 2026-06-20 layer-3 RCA、 個人層 plan 参照):
 #   起票 session は Cowork desktop frontend の `--allowedTools` 制限により

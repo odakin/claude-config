@@ -27,7 +27,7 @@
 #        （`.claude/public-repo.marker` を持つ repo のみ、冪等）+ missing
 #        marker の警告。 commit-msg layer は 2026-05-26 追加 (= claude-code
 #        2.1.x harness invoke bug 修復 option B、 詳細は
-#        conventions/hook-authoring.md §2 (d))
+#        conventions/hook-authoring.md#delivery-audit-4-axes (d))
 #   9.  python-docx XML 宣言 auto-patch をインストール（Word「破損」回避）
 #   10. (macOS) pty-leak mitigation の opt-in ヒント表示（自動 install しない、
 #        conventions/macos-claude-app-pty-leak.md）

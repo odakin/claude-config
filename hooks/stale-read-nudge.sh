@@ -42,7 +42,7 @@
 #
 # desktop gap (= CLI only):
 #   Claude desktop (Cowork) app は PostToolUse hook の model 向き出力 (additionalContext) を
-#   honor しない (hook-authoring.md §9.3)。 → 本 hook は CLI session でのみ効く。 desktop 主運用
+#   honor しない (hook-authoring.md#frontend-dependent-cowork)。 → 本 hook は CLI session でのみ効く。 desktop 主運用
 #   では個人層 (layer 3) の read-stale 規律が唯一の防御。 surface file fallback (= session 冒頭読込) は
 #   per-file・時限的な本警告と相性が悪く (= 古い無関係警告が次 session 冒頭に出る noise)、 意図的に
 #   不採用 (= mcp-search-zero-result とは別判断、 あちらは session 冒頭 anchoring に価値がある別 incident)。

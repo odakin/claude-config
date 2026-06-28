@@ -20,7 +20,7 @@
 #   理由 = WARN だと §5.1 single-viewpoint trap で hook output を読み流す
 #   risk があり、 git 層で BLOCK にすると harness が抜けても止まる (=
 #   2026-05-26 confirmed root cause = claude-code 2.1.x harness invoke bug
-#   の修復 option B、 詳細 `conventions/hook-authoring.md §2 (d) 軸`)。
+#   の修復 option B、 詳細 `conventions/hook-authoring.md#delivery-audit-4-axes (d) 軸`)。
 #
 # Gating: `.claude/public-repo.marker` を持つ repo のみ install されるので、
 #   private repo の commit には fire しない (= install-public-commit-msg.sh
@@ -131,7 +131,7 @@ literal term が含まれます (= git log で grep 可能な public surface)。
 詳細規約:
   - claude-config/CLAUDE.md §「安全規則 (公開リポ)」
   - odakin-prefs/leak-incidents.md (事例集計)
-  - claude-config/conventions/hook-authoring.md §2 (d) (= 2026-05-26 root
+  - claude-config/conventions/hook-authoring.md#delivery-audit-4-axes (d) (= 2026-05-26 root
     cause + 本 hook の設計動機)
 EOF
 

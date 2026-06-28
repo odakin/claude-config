@@ -19,7 +19,7 @@
 #   に波及する)。
 #
 # 動機 (2026-05-26): claude-code 2.1.x harness invoke bug (= Anthropic
-#   issues #52715 + #59513、 詳細 `conventions/hook-authoring.md §2 (d)`)
+#   issues #52715 + #59513、 詳細 `conventions/hook-authoring.md#delivery-audit-4-axes (d)`)
 #   で PreToolUse Bash hook が silent skip される。 git native commit-msg
 #   hook は harness 経由しないので bypass されない。 既存
 #   public-precommit-runner.sh (= file 本文 Tier A) と相補的 2 layer 防御。

@@ -1,7 +1,7 @@
 #!/bin/bash
 # audit-hooks.sh — 3 軸 hook 配信 audit (= silent malfunction の構造的検出)
 #
-# 設計動機: conventions/hook-authoring.md §2 の 3 軸 audit 規律を script 化。
+# 設計動機: conventions/hook-authoring.md#delivery-audit-4-axes の 3 軸 audit 規律を script 化。
 # 単発 (P1) check + dashboard 統合 (= unified-dashboard.py 経由の P2 continuous
 # monitoring) の dual purpose。
 #
@@ -136,5 +136,5 @@ for issue in "${issues[@]}"; do
 done
 echo ""
 echo "  → 3 軸 (symlink + settings.json + syntax) で expose"
-echo "  → 規律: ~/Claude/claude-config/conventions/hook-authoring.md §2"
+echo "  → 規律: ~/Claude/claude-config/conventions/hook-authoring.md#delivery-audit-4-axes"
 exit 0
