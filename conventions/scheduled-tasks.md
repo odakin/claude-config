@@ -36,7 +36,7 @@ install-launchd-cron.sh --label-prefix PREFIX [--workdir DIR] \
   --routine "id|type|target|cron" [--routine ...] [ACTION]
 ```
 
-- **ACTION**: (既定 install) / `--status` / `--run <id>` / `--install-one <id>` / `--uninstall-one <id>` / `--uninstall`。 `--uninstall-one` は label-prefix + id だけで動く (= routine spec 不要、 期間限定ジョブの停止に使える)。
+- **ACTION**: (既定 install) / `--status` / `--run <id>` / `--install-one <id>` / `--uninstall-one <id>` / `--uninstall` / `--ensure`。 `--uninstall-one` は label-prefix + id だけで動く (= routine spec 不要、 期間限定ジョブの停止に使える)。 `--ensure` は **未 install の routine だけを install** する冪等・quiet・fail-open アクション (= loaded 済 / target 未取得 / 非 macOS を無音 skip) で、 **SessionStart hook から呼んで「新 routine を git pull したマシンに自動配備」** する用途 (= ROUTINES に足して pull すれば次 session でそのマシン〔新 active host 等〕に自動 install、 「新ホストへ手動 install」 gap を塞ぐ)。
 - **type**: `skill` = `claude -p --permission-mode bypassPermissions` で SKILL.md を indirection 実行 (= Claude judgment 要) / `cmd` = script を直接実行 (= 決定的・claude 不要)。
 - **cron** は 5-field。 **`*/N` step 分** (= `*/30` → Minute `[0,30,...]`) と **`N-M` 曜日範囲** (= `1-5` → Weekday 月〜金) を StartCalendarInterval 配列へ展開する (launchd は step を持たないため)。
 - CLI 認証 (`~/.claude.json` の単一 account) で走るので Claude Code (desktop) のアカウント切替に非依存 (= 上記)。 launchd は LANG 空なので prompt は ASCII のみ ([shell-multibyte-truncation.md](shell-multibyte-truncation.md))。

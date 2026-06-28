@@ -22,6 +22,8 @@
 #
 #   ACTION (既定 = 全 routine install):
 #     (なし) | install          全 routine を install / 更新
+#     --ensure                   未 install の routine だけ install (= 冪等・quiet・fail-open)。
+#                                 SessionStart 等から呼び、 新 routine を git pull したマシンに自動配備
 #     --status                   全 routine の状態 + log tail
 #     --run <task-id>            1 routine を前景で 1 回実行 (= 動作確認)
 #     --install-one <task-id>    1 routine だけ install
@@ -69,7 +71,7 @@ ACTION_ARG=""
 
 usage() {
   echo "usage: $0 --label-prefix PREFIX [--workdir DIR] [--gate SNIPPET] --routine \"id|type|target|cron\" [--routine ...] \\"
-  echo "          [install | --status | --run <id> | --install-one <id> | --uninstall-one <id> | --uninstall]"
+  echo "          [install | --ensure | --status | --run <id> | --install-one <id> | --uninstall-one <id> | --uninstall]"
 }
 
 while [ $# -gt 0 ]; do
@@ -84,6 +86,7 @@ while [ $# -gt 0 ]; do
     --install-one)   ACTION="install_one"; ACTION_ARG="${2:-}"; shift ;;
     --uninstall-one) ACTION="uninstall_one"; ACTION_ARG="${2:-}"; shift ;;
     --uninstall)     ACTION="uninstall" ;;
+    --ensure)        ACTION="ensure" ;;
     install|"")      ACTION="install" ;;
     -h|--help)       usage; exit 0 ;;
     *) echo "ERROR: unknown arg: $1" >&2; usage >&2; exit 2 ;;
@@ -282,11 +285,29 @@ cmd_uninstall() {
   echo "✅ uninstall 完了"
 }
 
+cmd_ensure() {  # 未 install の routine だけ install (= SessionStart 等から冪等に呼ぶ自己修復。 quiet + fail-open)
+  # loaded 済みは無音 skip / target 未取得 (git pull 待ち) も無音 skip / skill で claude 不在も skip。
+  # → 新 routine を ROUTINES に足して git pull した後、 次 session でそのマシンに自動 install される。
+  mkdir -p "$LA_DIR" "$LOG_DIR" 2>/dev/null
+  printf '%s\n' "$ROUTINES_ACC" | while IFS='|' read -r task_id kind target cron; do
+    [ -n "$task_id" ] || continue
+    label="$(label_for "$task_id")"
+    launchctl print "$DOMAIN/$label" >/dev/null 2>&1 && continue   # 既に loaded = 冪等 skip
+    [ -f "$target" ] || continue                                    # target 未取得 = 静かに skip
+    { [ "$kind" = skill ] && [ ! -x "$CLAUDE_BIN" ]; } && continue  # skill は claude 必須
+    echo "  + ensure install: $task_id"
+    write_plist "$task_id" "$kind" "$target" "$cron"
+    bootstrap_one "$task_id"
+  done
+  return 0
+}
+
 case "$ACTION" in
   status)         cmd_status ;;
   run)            cmd_run ;;
   install_one)    cmd_install_one ;;
   uninstall_one)  cmd_uninstall_one ;;
   uninstall)      cmd_uninstall ;;
+  ensure)         cmd_ensure ;;
   install)        cmd_install ;;
 esac
