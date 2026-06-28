@@ -163,7 +163,7 @@ $CHANGED_LOG
 
 printf '%s\n' "$REMINDER" >&2
 
-# ---------- 6. stdout JSON (= PostToolUse additionalContext + systemMessage、 hook-authoring §3) ----------
+# ---------- 6. stdout JSON (= PostToolUse additionalContext + systemMessage、 hook-authoring.md#warn-mode-spec-uncertainty) ----------
 jq -n --arg msg "$REMINDER" '{
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",

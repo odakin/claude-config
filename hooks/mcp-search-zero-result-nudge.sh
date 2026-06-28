@@ -161,7 +161,7 @@ NOT verified が空でない場合、 結論を保留して以下のいずれか
   push でようやく別 account 経路で実 thread を発見。 詳細:
   ~/Claude/odakin-prefs/plans/2026-06-20-mcp-scope-guard-hooks.md (= 個人層)"
 
-# ---------- surface file (= desktop fallback、 hook-authoring §9.3) ----------
+# ---------- surface file (= desktop fallback、 hook-authoring.md#frontend-dependent-cowork) ----------
 SURFACE_DIR="$HOME/.claude/surface"
 mkdir -p "$SURFACE_DIR" 2>/dev/null || true
 { printf '# 🛑 MCP search 0 件 (= 直前の search tool 結果、 universal claim 禁止)\n\n'
@@ -170,7 +170,7 @@ mkdir -p "$SURFACE_DIR" 2>/dev/null || true
 printf '%s\n' "$REMINDER" >&2
 
 # stdout JSON (= PostToolUse の additionalContext + systemMessage、 spec
-# 確度が build 依存ゆえ 2 経路併用。 hook-authoring §3)
+# 確度が build 依存ゆえ 2 経路併用。 hook-authoring.md#warn-mode-spec-uncertainty)
 if command -v jq >/dev/null 2>&1; then
   jq -n --arg msg "$REMINDER" '{
     "hookSpecificOutput": {

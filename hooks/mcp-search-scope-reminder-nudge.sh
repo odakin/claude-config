@@ -149,7 +149,7 @@ mkdir -p "$SURFACE_DIR" 2>/dev/null || true
 printf '%s\n' "$REMINDER" >&2
 
 # ---------- stdout (= JSON、 hookSpecificOutput.additionalContext + systemMessage の
-#                       2 経路 defensive、 hook-authoring §3 warn-mode 仕様) ----------
+#                       2 経路 defensive、 hook-authoring.md#warn-mode-spec-uncertainty warn-mode 仕様) ----------
 # permissionDecision は出さない (= 通常 permission flow を維持、 read-only tool に
 # 不必要な block / ask を入れない)
 if command -v jq >/dev/null 2>&1; then

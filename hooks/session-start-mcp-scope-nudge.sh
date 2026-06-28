@@ -96,7 +96,7 @@ if [ -f "$DESKTOP_CFG" ] && command -v jq >/dev/null 2>&1; then
   DESKTOP_CONNECTORS="$(jq -r '.mcpServers // {} | keys[]?' "$DESKTOP_CFG" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
 fi
 
-# ---------- 3. frontend 判定 (= Cowork desktop か否か、 hook-authoring §9.3) ----------
+# ---------- 3. frontend 判定 (= Cowork desktop か否か、 hook-authoring.md#frontend-dependent-cowork) ----------
 FRONTEND="${CLAUDE_CODE_ENTRYPOINT:-unknown}"
 IS_DESKTOP=0
 case "$FRONTEND" in
@@ -178,7 +178,7 @@ REMINDER="${REMINDER}
 
 全文 RCA + 設計: ~/Claude/odakin-prefs/plans/2026-06-20-mcp-scope-guard-hooks.md"
 
-# ---------- 5. surface file (= desktop fallback、 hook-authoring §9.3) ----------
+# ---------- 5. surface file (= desktop fallback、 hook-authoring.md#frontend-dependent-cowork) ----------
 SURFACE_DIR="$HOME/.claude/surface"
 mkdir -p "$SURFACE_DIR" 2>/dev/null || true
 { printf '%s\n' "$REMINDER"; } > "$SURFACE_DIR/mcp-scope.txt" 2>/dev/null || true
