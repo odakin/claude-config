@@ -2,7 +2,7 @@
 
 Token / API key / SSH 鍵 / 各種 credential を Claude がユーザーに `~/.secrets/<name>` 等のローカル配置先へ書き込ませる場面で、**chat に literal を貼らせない原則** (例: [`discord-bot.md` bot-token-handling](discord-bot.md#bot-token-handling)) と組み合わさったとき、ユーザーは secret を **clipboard 経由で** ブラウザ → ターミナルに運ぶことになる。このときに発生する再現性の高い罠と回避手順。
 
-## The trap: clipboard は 1 個しかない
+## <a id="clipboard-single-resource"></a>The trap: clipboard は 1 個しかない
 
 「ブラウザで secret コピー → Claude が出したコマンドを chat からコピー → ターミナルに貼って Enter」 という流れだと、**Claude のコマンドを clipboard にコピーした時点で secret は消えている**。特に `pbpaste > ~/.secrets/<name>` のように clipboard 内容そのものをファイルに書く方式は完全に破綻する — ファイルには **Claude が提示したコマンド文字列がそのまま書き込まれる**。
 
@@ -10,7 +10,7 @@ Token / API key / SSH 鍵 / 各種 credential を Claude がユーザーに `~/.
 
 この罠は構造的で、reflex で何度も再発する (2026-05-01、Discord Bot Token を `~/.secrets/<bot>-token` に運ぶ手順で Claude が同セッション内で 2 回連続して `pbpaste` 系を提示してしまい、ファイル内容は両方とも提示コマンド文字列そのものだった)。
 
-## Fix: ターミナル側を先に「stdin 待ち」 状態にする
+## <a id="terminal-stdin-first"></a>Fix: ターミナル側を先に「stdin 待ち」 状態にする
 
 正しい順序は **「先にターミナルでコマンド受付状態を作る → ブラウザに切り替えて secret コピー → ターミナルに戻って Cmd+V」**。これなら clipboard は 1 回だけ secret 専用に使われ、競合しない。
 
@@ -54,7 +54,7 @@ wc -c ~/.secrets/<name>
 
 これは **必ず別ブロックで提示する**。書き込みコマンドと `&&` で連結すると、ユーザーがその 1 行を clipboard コピーした時点で secret が消える同じ罠を踏ませる。
 
-## 配置先と耐久性: handoff は「配置」 の半分でしかない
+## <a id="placement-and-durability"></a>配置先と耐久性: handoff は「配置」 の半分でしかない
 
 上記までは **handoff の作法** (= clipboard 競合を避けて secret をローカルに書き込む) を扱う。これは独立した第 2 の問いを残す: **その secret はこの 1 台が壊れても / 別マシンでも生き残るか (= cross-machine 耐久性)**。両者は別 concern で、handoff だけ済ませて耐久化を忘れる decouple が再発する。
 
@@ -62,7 +62,7 @@ wc -c ~/.secrets/<name>
 
 `~/.secrets/<name>` への直書きは **その 1 台でしか有効でない揮発配置**。secret を複数マシンで使う (= ほぼ全ての bot token / API key) なら、**canonical は「private secrets repo に git-crypt 暗号化で commit したファイル」** であるべきで、各マシンの `~/.secrets/<name>` はそこへの **symlink** (= repo の setup が自動生成) にする。
 
-decouple の失敗形: 「今動かす配置」 (= `~/.secrets` へ直書き) だけ実行し、「耐久化」 (= canonical へ commit) を別ステップとして doc に意図だけ書いて実行しない。**同一マシンの動作確認 (例: API の `GET /me` が通る) は揮発配置でも成功するため、作成したマシン上では耐久性の欠落が構造的に見えない** — 別マシンで読もうとして初めて露見する。これは「条件付き発火 mechanism の非活性は可視信号化せよ」 (= [`convention-design-principles.md §8.13`](../docs/convention-design-principles.md)) の secrets domain での現れ。
+decouple の失敗形: 「今動かす配置」 (= `~/.secrets` へ直書き) だけ実行し、「耐久化」 (= canonical へ commit) を別ステップとして doc に意図だけ書いて実行しない。**同一マシンの動作確認 (例: API の `GET /me` が通る) は揮発配置でも成功するため、作成したマシン上では耐久性の欠落が構造的に見えない** — 別マシンで読もうとして初めて露見する。これは「条件付き発火 mechanism の非活性は可視信号化せよ」 (= [`convention-design-principles.md §8.13`](../docs/convention-design-principles.md#conditional-firing-visibility)) の secrets domain での現れ。
 
 ### 耐久な secret を作るときの順序 (= handoff の配置先を canonical にする)
 
@@ -81,7 +81,7 @@ secret の保管 doc に「canonical / backup / 登録済」 と書く前に **�
 
 ただし「正直にマーカーを付ける」 こと自体が reflex なので、最終的な backstop は **doc の自己申告でなく現実を見る機械 audit** — 各マシンの `~/.secrets/*` を走査して「symlink→canonical (耐久) / 平文+暗号化 backup あり (復元可) / どちらも無い (= 単一マシン地雷)」 に分類し、地雷を継続的に surface する。⚠️ その audit は backup の所在を **doc から読んで複数経路を照合** すること (= backup は単一 dir に限らない〔共有鍵 / 個人鍵 / 別鍵流用〕。単一 dir を仮定して不在を断定すると偽陽性を量産する)。
 
-## Anti-pattern (使ってはいけない)
+## <a id="anti-pattern"></a>Anti-pattern (使ってはいけない)
 
 ```bash
 pbpaste > ~/.secrets/<name>             # 罠: Claude のこの行をコピーした瞬間に secret が消える
@@ -91,7 +91,7 @@ some_cmd "$(pbpaste)"                   # 同上、clipboard を読む全コマ�
 
 `pbpaste` (macOS) / `xclip -o` / `wl-paste` (Linux) を **secret 取り込みに使う案を Claude が出した時点で誤り**。Claude のコマンド文字列で clipboard が確実に上書きされている。
 
-## Claude への指示 (How to apply)
+## <a id="how-to-apply"></a>Claude への指示 (How to apply)
 
 Secret を `~/.secrets/<name>` 系に運ぶ手順を提示する時は **必ず stdin-wait 先行 pattern** を使う:
 
@@ -100,7 +100,7 @@ Secret を `~/.secrets/<name>` 系に運ぶ手順を提示する時は **必ず 
 3. 検証 (`wc -c`) と permission (`chmod 600`) は **必ず別ブロック**で並べる
 4. `pbpaste` を使うコマンド案が頭をよぎったら、それは clipboard 競合の罠 — 即破棄
 
-## なぜ繰り返すのか (構造的バイアス)
+## <a id="why-recurs"></a>なぜ繰り返すのか (構造的バイアス)
 
 「ユーザーが secret を clipboard で運ぶ」 と「Claude がコマンドを clipboard 経由で提示する」 を独立に扱ってしまう reflex。両者が同じ clipboard を競合する事実が見えない。`pbpaste > file` の **見た目の単純さ** が、その内側で `pbpaste` が実行される時点では clipboard が既に汚染されている事実を覆い隠す。
 
@@ -111,7 +111,7 @@ Secret を `~/.secrets/<name>` 系に運ぶ手順を提示する時は **必ず 
 - [`discord-bot.md` bot-token-handling](discord-bot.md#bot-token-handling) — Token を chat に貼らせない原則 (本ファイルの前提条件)
 - `~/Claude/CONVENTIONS.md §5「安全規則」` — secret 全般の git/ chat への流出禁止
 
-## Secret file の binary inspection 禁止
+## <a id="no-binary-inspection"></a>Secret file の binary inspection 禁止
 
 ⚠️ **secret file (`~/.secrets/*`、 `gcp-oauth.keys.json`、 `.env` 等) に対して `xxd` / `od` / `hexdump` 等の binary inspection コマンドを実行しない。**
 
@@ -140,7 +140,7 @@ secret を git-crypt / openssl で **暗号化したことの確認** (= leak ga
 
 ⚠️ ただし **`grep -qa` / `cmp` の boolean で判定し、 `xxd` / `od` で印字しない**: もし暗号化が失敗して中身が平文だった場合 (= leak gate がまさに検出したい状態)、 先頭を印字すると平文 secret の prefix が leak する (= 上の 2026-05-19 と同型を、 暗号化検証の名目で踏む)。 boolean check (`… | head -c 9 | grep -qa GITCRYPT`) なら平文でも何も出力されない。 = 「暗号文の magic 確認」 と「平文 secret の inspection」 は別だが、 失敗時に後者へ化けるので boolean に固定する。
 
-## Claude への規律 (secret 取扱の根本)
+## <a id="secret-handling-discipline"></a>Claude への規律 (secret 取扱の根本)
 
 「secret file の内容を chat に流す可能性のある操作」 を見たら、 まず **「partial でも leak の手がかりになるか?」** を自問する。 partial leak でも:
 - token 全体の同定性 (= どの token かが特定できる)

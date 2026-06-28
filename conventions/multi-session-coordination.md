@@ -6,7 +6,7 @@ scope: 1 user の手元で 2 つ以上の Claude session 〜 過去の自分 ses
 
 ---
 
-## 1. 同 file path を別 session が独立に書く race
+## <a id="file-path-race"></a>1. 同 file path を別 session が独立に書く race
 
 ### 問題
 
@@ -58,7 +58,7 @@ Read it again before attempting to write it.
 
 ---
 
-## 2. Plan / SESSION の `[x]` mark を「実装済」 と reflex 解釈する race
+## <a id="plan-checkbox-semantics"></a>2. Plan / SESSION の `[x]` mark を「実装済」 と reflex 解釈する race
 
 ### 問題
 
@@ -96,7 +96,7 @@ git log --oneline --all -- analyses/data/foo.yaml | head -3
 
 ---
 
-## 3. 自 session の prev commit を「他人 commit」 と扱う
+## <a id="prev-commit-as-foreign"></a>3. 自 session の prev commit を「他人 commit」 と扱う
 
 ### 観察
 
@@ -123,7 +123,7 @@ prev session が repo の **state を変える commit** (例: review markup の 
 
 ---
 
-## 4. zoom 中の real-time co-editing
+## <a id="realtime-coediting"></a>4. zoom 中の real-time co-editing
 
 ### 状況
 
@@ -149,7 +149,7 @@ This change was intentional, so make sure to take it into account as you proceed
 
 ---
 
-## 5. 並列 session が共有 tmpdir を埋め、 Bash 出力が ENOSPC で消える
+## <a id="shared-tmpdir-enospc"></a>5. 並列 session が共有 tmpdir を埋め、 Bash 出力が ENOSPC で消える
 
 ### 問題
 
@@ -170,11 +170,11 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 
 ---
 
-## 6. Pilot single-brain — 並列 session に同型の構造/規約タスクを渡す時
+## <a id="pilot-single-brain"></a>6. Pilot single-brain — 並列 session に同型の構造/規約タスクを渡す時
 
 ### 問題
 
-同じ convention / structural task (= anchor schema 設計、 SoT 統合、 index 形式の確定 等) を**複数の parallel session に「各自 完成まで」 渡す**と、 各 session が独立に設計判断を下し、 **divergent な解に着地**する。 §1 の「同 file を別 session が独立に書く」 race と違い、 ここで衝突するのは file content でなく **設計それ自体** (= anchor の命名規則、 slug の振り方、 registry の schema)。 結果、 各 session が「正しいが互いに非互換な convention」 を生み、 **"multiple SoT" 問題**を 1 段上 (= メタレベル) で再生産する (= 後で統合する羽目になり、 [`convention-design-principles.md` §15 「SoT consolidation recipe」](../docs/convention-design-principles.md) の是正手順を回す対象が増える)。
+同じ convention / structural task (= anchor schema 設計、 SoT 統合、 index 形式の確定 等) を**複数の parallel session に「各自 完成まで」 渡す**と、 各 session が独立に設計判断を下し、 **divergent な解に着地**する。 §1 の「同 file を別 session が独立に書く」 race と違い、 ここで衝突するのは file content でなく **設計それ自体** (= anchor の命名規則、 slug の振り方、 registry の schema)。 結果、 各 session が「正しいが互いに非互換な convention」 を生み、 **"multiple SoT" 問題**を 1 段上 (= メタレベル) で再生産する (= 後で統合する羽目になり、 [`convention-design-principles.md` §15](../docs/convention-design-principles.md#sot-consolidation-recipe) 「SoT consolidation recipe」 の是正手順を回す対象が増える)。
 
 ### 規律: sequential な pilot→worker にする (= parallel-to-completion にしない)
 
@@ -299,7 +299,7 @@ honest な天井: **「起動した」 を *live 親に自動 push* する経路
 
 ---
 
-## 8. worktree (隔離) か shared checkout (ローカル) か — 並列変更の隔離 vs live 反映
+## <a id="worktree-vs-shared-checkout"></a>8. worktree (隔離) か shared checkout (ローカル) か — 並列変更の隔離 vs live 反映
 
 独立 session / subagent を起こすとき (= §7 の spawn_task hand-off、 Agent tool の `isolation: "worktree"` オプション 等)、 その作業を **隔離 worktree** (= 同じリポの別フォルダ checkout、 履歴は共有・作業中の中身は独立) でやるか **本物の checkout (ローカル、 共有作業ツリー)** でやるかを選ぶ。 これは §1「同 file path を別 session が並列上書きする race」 の構造的な解 (= 隔離) と、 その**適用限界**の節。
 

@@ -6,10 +6,10 @@ scheduled task の SKILL.md (= 別機構、 backend に prompt が保存され�
 [`scheduled-tasks.md`](scheduled-tasks.md) が正本 — 本 file は **全 session 常時可視の
 auto-discover skill** のみを扱う。
 
-## §0. 発火面の選択 — doc / skill / hook / scheduled task
+## <a id="firing-surface-choice"></a>§0. 発火面の選択 — doc / skill / hook / scheduled task
 
 規律や手順を書く前に、 それが「いつ・どうやって発火するか」 を選ぶ
-(一般原則 = `docs/convention-design-principles.md §8.12`):
+(一般原則 = [`docs/convention-design-principles.md §8.12`](../docs/convention-design-principles.md#firing-surface-hierarchy)):
 
 | 発火面 | 発火機構 | 向く場合 |
 |---|---|---|
@@ -24,7 +24,7 @@ auto-discover skill** のみを扱う。
 代償は発火が**確率的** (model 判断) であること — 不発が実害を生む domain では
 hook への格上げを evidence-driven で検討する (escalation trigger を skill 導入時に書き残す)。
 
-## §1. 機構 facts (2026-06-13 検証、 claude-code 2.1.170 / macOS)
+## <a id="mechanism-facts"></a>§1. 機構 facts (2026-06-13 検証、 claude-code 2.1.170 / macOS)
 
 - `~/.claude/skills/<name>/SKILL.md` は**全 session で auto-discover** され、 frontmatter
   `description` を根拠に model が自律 invoke する (project 単位は `.claude/skills/`)。
@@ -37,7 +37,7 @@ hook への格上げを evidence-driven で検討する (escalation trigger を 
 - **discovery は session 開始時** (= 新規 skill は既存 session に現れず、 新 session で
   出現するのを実測。 hook の snapshot 挙動 [`hook-authoring.md` new-hook-session-snapshot](hook-authoring.md#new-hook-session-snapshot) と整合)
 
-## §2. description の書き方 (= trigger 品質が設計の本体)
+## <a id="description-writing"></a>§2. description の書き方 (= trigger 品質が設計の本体)
 
 dispatch は description だけで決まる。 body がどれだけ良くても description が悪いと発火しない。
 
@@ -50,7 +50,7 @@ dispatch は description だけで決まる。 body がどれだけ良くても 
 - **body は薄く**: 手順 + 参照 pointer に徹する。 規律の正本・RCA は別 doc に置き、
   skill は dispatch + 手順書 (= SoT 重複を作らない)
 
-## §3. git 配信 + 多 machine 配線 pattern
+## <a id="git-multi-machine-wiring"></a>§3. git 配信 + 多 machine 配線 pattern
 
 skill 実体は git repo (個人層) に置き、 installer が `~/.claude/skills/` に symlink する。
 このとき **「file 到着 (git pull)」 と 「配線 (machine-local symlink)」 の 2 段配達**になる
@@ -91,4 +91,4 @@ hook 配信問題と同型)。
 
 - [`hook-authoring.md`](hook-authoring.md) — [hook-no-go-judgment](hook-authoring.md#hook-no-go-judgment) (hook を見送る判定 = skill へ切替える分岐) / [build-dependent-behavior](hook-authoring.md#build-dependent-behavior) (build 依存挙動) / [delivery-audit-4-axes](hook-authoring.md#delivery-audit-4-axes)・[partial-install-state](hook-authoring.md#partial-install-state) (配信 2 段配達)
 - [`scheduled-tasks.md`](scheduled-tasks.md) — 無人定期実行の SKILL.md (= 別機構、 混同注意: あちらは backend に prompt が保存され、 本 file の auto-discover とは独立)
-- `docs/convention-design-principles.md §8.12` — 発火面 hierarchy の一般原則 (本 file は skill 面の機構詳細)
+- [`docs/convention-design-principles.md §8.12`](../docs/convention-design-principles.md#firing-surface-hierarchy) — 発火面 hierarchy の一般原則 (本 file は skill 面の機構詳細)

@@ -6,7 +6,7 @@
 
 ---
 
-## 1. データの単一ソース化 (= soft duplication 回避)
+## <a id="single-source-of-truth"></a>1. データの単一ソース化 (= soft duplication 回避)
 
 ### 規律
 
@@ -59,7 +59,7 @@ SoT の不変条件 (= 重複なし / uniqueness / schema 準拠) を、 それ�
 
 ---
 
-## 2. forward-only schema migration
+## <a id="forward-only-migration"></a>2. forward-only schema migration
 
 ### 規律
 
@@ -82,7 +82,7 @@ schema を拡張する時 (= 例: 候補 DB の新規 field 追加)、 既存全
 
 ---
 
-## 3. judgment-required content の placeholder pattern
+## <a id="judgment-required-placeholder"></a>3. judgment-required content の placeholder pattern
 
 ### 規律
 
@@ -104,7 +104,7 @@ schema を拡張する時 (= 例: 候補 DB の新規 field 追加)、 既存全
 
 ---
 
-## 4. script 入力の検証 (= input validation)
+## <a id="script-input-validation"></a>4. script 入力の検証 (= input validation)
 
 ### 規律
 
@@ -140,7 +140,7 @@ local build (= PDF/.tex 生成) と external publish (= 別リポへ mirror、 P
 
 ---
 
-## 5. 自動化機構の validity 検証
+## <a id="automation-validity-check"></a>5. 自動化機構の validity 検証
 
 ### 規律
 
@@ -165,7 +165,7 @@ local build (= PDF/.tex 生成) と external publish (= 別リポへ mirror、 P
 
 ---
 
-## 6. 副作用つき自動 edit よりも reminder 出力
+## <a id="reminder-over-side-effect"></a>6. 副作用つき自動 edit よりも reminder 出力
 
 ### 規律
 
@@ -259,7 +259,7 @@ clean 前提を preflight で保証してから `git clean -fd <dirs>` する設
 
 ---
 
-## 8. 無人で「人間が curate した file」 を auto-edit する
+## <a id="auto-edit-curated-file"></a>8. 無人で「人間が curate した file」 を auto-edit する
 
 §6 は「yaml の fine-grained 自動 edit を避け print reminder にせよ」 と説く。 だが **無人実行 (§7)** では reminder を受け取る人間が run-time に居ない。 かつ対象が「人間も編集する curated file」 (= 過去エントリに手作業の清書・補足が入っている) なら、 file ごと regenerate すると人手 curation を破壊する。 この交差点での規律。
 

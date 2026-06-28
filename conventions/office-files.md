@@ -2,7 +2,7 @@
 
 行政・学術様式の Excel / Word / PDF / PowerPoint を機械で扱う作業の **最初に開く単一の入口 (router)**。
 中身の正本は各 home file に置き、 本 file は「**どこに何があるか**」 の pointer に徹する
-(= [`docs/convention-design-principles.md` §2](../docs/convention-design-principles.md) 「定義は1箇所、 他はポインタ」)。
+(= [`docs/convention-design-principles.md` §2](../docs/convention-design-principles.md#no-duplicate-rules) 「定義は1箇所、 他はポインタ」)。
 
 > **なぜ専用の入口が要るか**: office files の処理は (a) **見た目が契約** (= reviewer は rendered PDF を見る、 値が正しくても layout が崩れれば差し戻される) / (b) **道具ごとに守れる地層が違う** (= openpyxl は drawing を破壊、 python-docx は破損 docx を作りうる) / (c) **lossy な解釈器の連鎖** (= xlsx → openpyxl → Excel → PDF → printer の各段で別パーサが別解釈) — の 3 性質ゆえに 1 章だけ読んでも安全に書けない。 規約・道具・原則が複数 file に分かれているのを束ねる入口が要る。
 

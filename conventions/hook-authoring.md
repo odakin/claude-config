@@ -392,7 +392,7 @@ claude-config `CLAUDE.md §「安全規則 (公開リポ)」` に **「layer 1 t
 
 ## <a id="chain-hook-early-exit"></a>§8. chain hook は primary hook の early-exit で silent skip される
 
-hook A が末尾で hook B を呼ぶ (= chain) 構造で、 A が **自身の no-op 条件**で early-exit すると B に到達しない。 B は呼ばれないだけで error を出さず silent dead になる (= §2 の silent malfunction の chain 版、 `docs/convention-design-principles.md §8.8` の false confidence)。
+hook A が末尾で hook B を呼ぶ (= chain) 構造で、 A が **自身の no-op 条件**で early-exit すると B に到達しない。 B は呼ばれないだけで error を出さず silent dead になる (= §2 の silent malfunction の chain 版、 [`docs/convention-design-principles.md §8.8`](../docs/convention-design-principles.md#proxy-blind-spot) の false confidence)。
 
 ### <a id="chain-hook-example"></a>実例 (2026-06-06 RCA)
 

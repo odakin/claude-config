@@ -2,7 +2,7 @@
 
 研究共同研究のメール通信を管理するリポで適用。CLAUDE.md から参照: `~/Claude/claude-config/conventions/research-email.md`
 
-## メール分類
+## <a id="mail-classification"></a>メール分類
 
 受信メールを以下の基準で分類する:
 
@@ -12,7 +12,7 @@
 | 事務メール | 大学事務・委員会・人事・学生対応 | `email-office/TODO.yaml` |
 | その他 | 上記以外 | 通常対応（必要に応じて分類） |
 
-## スレッド記録ルール
+## <a id="thread-recording-rules"></a>スレッド記録ルール
 
 ### 記録するもの
 - 共同研究者との往復メール
@@ -49,7 +49,7 @@
 - **waiting**: 相手の返信待ち
 - **resolved**: 議論終了、アクション完了
 
-## セッション開始時の手順
+## <a id="session-start-procedure"></a>セッション開始時の手順
 
 プロジェクトリポで作業開始する際:
 1. `research-collab/threads/{project}.yaml` を読む
@@ -57,7 +57,7 @@
 3. 未完了の action_items を報告
 4. Gmail MCP で新着メールをチェック（共同研究者からのもの）
 
-## メール送信後の記録
+## <a id="post-send-recording"></a>メール送信後の記録
 
 Claude がメールを送信（またはドラフト作成）した場合、**同じセッション内で即時に**以下を実行:
 1. 該当スレッドの `last_message` を更新
@@ -66,7 +66,7 @@ Claude がメールを送信（またはドラフト作成）した場合、**�
 
 「次のセッションでやる」は禁止。送信と記録は原子的操作。
 
-## 研究者連絡先 (email) の取得手順
+## <a id="researcher-contact-lookup"></a>研究者連絡先 (email) の取得手順
 
 新規研究者にコンタクトする際、メールアドレスが手元になければ以下の優先順位で探す:
 
@@ -87,7 +87,7 @@ Claude がメールを送信（またはドラフト作成）した場合、**�
 - メールアドレスは PII。**取得経路 (= どこで見つけたか) を log に残す** (= researchers.yaml の notes に source を書く) と、後日「このアドレスは公開情報か?」を判定できる
 - 公開ページに載っていない address を間接ルート (= 紹介・名刺) で取得した場合は、そのことも notes に記録 (= 受信者から「どこで知ったか」と聞かれた場合の説明責任)
 
-## アウトリーチ前の身元確認 (= 誰に書いているか裏取りする)
+## <a id="pre-outreach-identity-check"></a>アウトリーチ前の身元確認 (= 誰に書いているか裏取りする)
 
 上の手順で email が取れても、**「その人が論文 X の著者本人か」は別問題**。相手を「論文 X の著者」「定理 Y を打ち立てた本人」と **事実として断定して外部メールを送る前に**、以下を守る。一般原則は [`docs/convention-design-principles.md#single-field-identity-corroboration`](../docs/convention-design-principles.md#single-field-identity-corroboration) (= 単一 field の一致で同定して action を取るな) の outreach 適用。
 

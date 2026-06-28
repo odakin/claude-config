@@ -12,7 +12,7 @@ MCP ツールを使うリポで適用。CLAUDE.md から参照: `~/Claude/claude
   - **Calendar**: `list_calendars` の primary calendar id = 接続 account の email。
   - (script レベルの API `users().getProfile` は reauth.sh が account 検証に使うが、 session から呼べる MCP tool ではない)
 - **複数 MCP がある場合**: セッションの deferred tools 一覧で同一サービスの MCP が何個あるか確認し、上記方法 (alias 名 / Calendar は list_calendars / アプリ内蔵 connector は自分宛 mail 読み) で UUID→アカウントの対応を把握する
-- **UUID→アカウント対応表は MCP 設定リポに保持**: 各 MCP 設定リポ (例: `gmail-mcp-config`) の CLAUDE.md または SESSION.md に UUID→アカウントの対応を記録する。memory には書かない (machine-local で cross-machine 不整合を招く。詳細: [docs/convention-design-principles.md §5](../docs/convention-design-principles.md))。新規セッションで対応表が不明・古ければ、上記方法で UUID→account を照合し、差分を MCP 設定リポに追記する
+- **UUID→アカウント対応表は MCP 設定リポに保持**: 各 MCP 設定リポ (例: `gmail-mcp-config`) の CLAUDE.md または SESSION.md に UUID→アカウントの対応を記録する。memory には書かない (machine-local で cross-machine 不整合を招く。詳細: [docs/convention-design-principles.md §5](../docs/convention-design-principles.md#memory-positioning))。新規セッションで対応表が不明・古ければ、上記方法で UUID→account を照合し、差分を MCP 設定リポに追記する
 - **アカウント一覧の正本**: 各 MCP 設定リポの CLAUDE.md を参照（各プロジェクトリポの CLAUDE.md にはハードコードしない）
 
 ## <a id="claude-mcp-project-resolution"></a>`claude mcp` の project 解決ルール (注意)
@@ -31,11 +31,11 @@ MCP ツールを使うリポで適用。CLAUDE.md から参照: `~/Claude/claude
 
 設置時 / 撤去時の冪等化 (`claude mcp remove "<name>" 2>/dev/null || true; claude mcp add ...`) は target project が正しいときに初めて意味を持つので、target 解決を先に固める。
 
-## MCP 接続失敗時のセッション内復旧 (runbook)
+## <a id="mcp-recovery-runbook"></a>MCP 接続失敗時のセッション内復旧 (runbook)
 
 session 中に MCP server が `Failed to connect` / `disconnected` 状態になったときの対応手順。**Claude Code の設計上、stdio MCP server は session 起動時に bind されており、起動時に接続失敗するとそのセッション内で再接続する built-in 経路がない** (上流既知 bug、GitHub claude-code issues #20684, #33468 参照)。HTTP/SSE 系は exponential backoff で auto-retry するが、stdio は手動。以下、軽い順に試す:
 
-### 0. 状態確認
+### <a id="runbook-status-check"></a>0. 状態確認
 
 ```bash
 # 全 MCP の現状
@@ -47,7 +47,7 @@ claude mcp get <server-name>
 
 `claude mcp list` の "Connected" は **session 起動時の bind 結果**で、その後 server が落ちても更新されない場合がある。実際のツール呼び出しが通るかどうかが真の動作確認。
 
-### 1. 該当 server を素手で立ち上げて handshake 通る確認
+### <a id="runbook-handshake-check"></a>1. 該当 server を素手で立ち上げて handshake 通る確認
 
 stdio server の場合、生 stdio で `initialize` リクエストを投げて応答するか確認:
 
@@ -74,7 +74,7 @@ echo '{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":
 
 **OAuth-backed server を live test する時の副作用**: 実 `tools/call` は token refresh を誘発し、credential file が drift する (= ephemeral な `access_token` / `expiry_date` のみ、durable な `refresh_token` は標準的 refresh では rotate されない)。検証後は drift を `git checkout --` で破棄してよい (= 次回使用時に refresh_token から自動再 refresh)。git-crypt'd credential file の durable field が不変かを `git show <rev>:<path>` で diff 確認することは**できない** (= ciphertext が返る、[git-crypt-guide.ja.md トラブルシューティング](../docs/git-crypt-guide.ja.md) 参照) ので、OAuth refresh semantics に依拠する。
 
-### 2. log を確認
+### <a id="runbook-log-check"></a>2. log を確認
 
 ```bash
 ls -t ~/Library/Caches/claude-cli-nodejs/-Users-odakin-Claude/mcp-logs-<server>/ | head -3
@@ -83,7 +83,7 @@ cat ~/Library/Caches/claude-cli-nodejs/-Users-odakin-Claude/mcp-logs-<server>/$(
 
 `Successfully connected` で終わっていれば session 起動時は OK だった = mid-session で落ちた。`timeout` / `stderr` で終わっていれば起動時失敗。
 
-### 3. remove + re-add で再登録 (transient 失敗のリトライ誘発)
+### <a id="runbook-remove-readd"></a>3. remove + re-add で再登録 (transient 失敗のリトライ誘発)
 
 ```bash
 cd ~/Claude  # ★ ~/Claude project scope 必須
@@ -101,11 +101,11 @@ ToolSearch select:mcp__<server>__<tool>
 
 実際に tool を呼んでみる。MCP daemon が新登録を pick up していれば動く。
 
-### 4. `/mcp` slash command (status 確認のみ、reconnect ボタンなし)
+### <a id="runbook-mcp-slash"></a>4. `/mcp` slash command (status 確認のみ、reconnect ボタンなし)
 
 Claude for Mac の Code タブで `/mcp` を打つと UI 一覧が出る。**stdio server の reconnect/restart アクションは無い** (上流バグ #33468 で feature request 中)。HTTP/SSE は auto-retry 進捗が見える。status 確認用途のみ。
 
-### 5. `claude --resume` で session 再起動 (最終手段)
+### <a id="runbook-resume"></a>5. `claude --resume` で session 再起動 (最終手段)
 
 ステップ 0-4 で復旧しなければ:
 
@@ -125,7 +125,7 @@ session の会話 / context / tool 許可は **保たれる**。MCP server だ�
 - **credential lock 競合**: OAuth token file を読む系の server が、別プロセス (Python script 等) と同時に lock を取りに行くと timeout。MCP 起動と batch script の同時実行を避ける
 - **cold-start タイムアウト**: googleapis 等の重い import で 2-3 sec かかる。MCP daemon の timeout (30s) には収まるが、複数 server 同時起動で IO 競合があると押し出される。重い server は esbuild 等で single-file bundle を試す
 
-### Chrome MCP (Claude in Chrome) の特殊事情
+### <a id="runbook-root-cause-checklist"></a>Chrome MCP (Claude in Chrome) の特殊事情
 
 Chrome MCP は `claude mcp` 配下ではなく **Claude.app の Chrome extension 経由** で別経路。`claude mcp list` には出ない。復旧:
 

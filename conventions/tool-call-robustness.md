@@ -5,11 +5,11 @@
 
 ---
 
-## 現象
+## <a id="symptom"></a>現象
 
 tool call が `Your tool call was malformed and could not be parsed. Please retry.` で失敗し、 retry も失敗すると `ターンが失敗しました` になる。 これは harness が **生成された tool call (構造化テキスト) を deserialize できなかった** failure であって、 危険操作の block ではない (= permission dialog / hook deny とは別物)。 実害は通常なし (= tool は実行されず状態は不変) だが、 user を待たせ session が止まる。 「やってはならない操作をした」 と誤解されやすいので、 発生時は **まず「フォーマットが壊れただけで何も実行・破壊していない」 と明示**する。
 
-## 真因 (= 2026-06-05 調査で同定、 確度高)
+## <a id="root-cause"></a>真因 (= 2026-06-05 調査で同定、 確度高)
 
 **Anthropic backend 側の model serialization bug** (= 大きい context 長で動く Opus 系 model が tool_use block を構造的に壊れた形で出力する)。 報告環境は **Opus 4.8 の 1M-context session (macOS)**。 **Claude Code CLI の bug でも、 prompt の書き方の問題でもない**。 当初仮説 (= 後述「副次トリガー」 の特殊文字密集が *主因*) は誤りで、 root は model 出力側にある。
 
@@ -28,7 +28,7 @@ tool call が `Your tool call was malformed and could not be parsed. Please retr
 
 Opus 4.8 固有のこの bug の **canonical evidence は #64774** (= 6/2 開設、 報告者が ~1 万ターンのローカル log を集計、 `claude-opus-4-8` が 9805 ターン中 148 失敗 ~1.5% / `opus-4-7` 4468 ターン 0 / `sonnet-4-6` 8622 ターン 0 / `haiku-4-5` 0 / `opus-4-6` 0、 CLI 2.1.156–160 横断で発生継続 = CLI 版でなく model 起因、 タイムライン上 4.7 主体の〜5/28 は 0 件で 4.8 主役の 5/30 から発生、 76% が text 後に新しい tool call を出す瞬間に発生、 retry も必ず再失敗、 area:model、 OPEN 未修正)。 ⚠️ **以前の版が canonical hub と書いた #62123 は別 issue** (= 5/25 開設、 本文は `claude code opus 4.7` の同症状報告、 platform:macos / platform:vscode、 OPEN)。 同じエラー文字列でも原因が別 (= #62123 は 4.7 + VS Code 環境系、 #64774 は 4.8 の model 系)。 #64774 の「4.7 = 0%」 と #62123 の「4.7 で発生」 が表面上ぶつかるのは、 同一視せず**別 variant** として扱う signal。 衛星 (#64684 / #64955 / #64235) は #64774 系の議論に紐付ける (= いずれも 4.8 model 系の症状、 `duplicate` ラベル)。 **新たな 4.8 系 occurrence を報告するときは #64774 にコメント**する (= 重複 issue はノイズ、 新しい trigger profile / 頻度 data point のみ価値がある)。 ⚠️ #64774 自体は Anthropic 公式認定でなく**報告者の統計推論**である点に留意 (= 強い証拠だが backend 側の公式 root-cause 認定ではない)。
 
-## 副次トリガー (= 発生確率を上げるだけ、 root ではない)
+## <a id="secondary-triggers"></a>副次トリガー (= 発生確率を上げるだけ、 root ではない)
 
 | トリガー | 例 | なぜ確率を上げるか |
 |---|---|---|
@@ -38,7 +38,7 @@ Opus 4.8 固有のこの bug の **canonical evidence は #64774** (= 6/2 開設
 | **CLI 引数に渡す JSON literal** (= 引用符の入れ子) | `node x.mjs '{"k":5}'` のように tool call で nested-quote JSON を生成 | nested quote が干渉しやすい。 → 引数なし default にする、 または args を file に書いて path だけ渡す |
 | **長い本文 + markdown テーブル + 絵文字** の直後の tool call | 表 + 絵文字を詰めた長文応答の末尾に tool call | 装飾過多で生成 token 列が長大化 |
 
-## 副次緩和 (= 発生確率を下げる運用、 root は直さない)
+## <a id="secondary-mitigations"></a>副次緩和 (= 発生確率を下げる運用、 root は直さない)
 
 root は backend fix 待ちだが、 発生確率と poisoning ループは以下で下げられる:
 
@@ -50,7 +50,7 @@ root は backend fix 待ちだが、 発生確率と poisoning ループは以�
 6. **commit message など複数行 + 山括弧を含むものはファイルに書いて `git commit -F`** で渡す (= `-m "..."` 内の山括弧・改行を避ける)。
 7. **malformed が出たら同 session で retry を重ねない**。 #62344 の poisoning で後続も壊れるため、 数回失敗したら **新しい session に切り替える** (= 壊れた context を断ち切る)。
 8. **model を切り替える** (= **最も確実な緩和、 最優先で検討**)。 bug は Opus 4.8 固有で、 #64774 が他 model の失敗率 0% を定量報告 (= Opus 4.7 / Opus 4.6 / Sonnet 4.6 / Haiku 4.5 すべて 0、 Opus 4.8 のみ ~1.5%)。 **本命は Opus 4.7 1M** (`/model claude-opus-4-7[1m]`) = Opus tier で Sonnet 4.6 より賢く Claude Code 既定 xhigh = 「賢さ最大 × バグ回避」 の最適解。 Sonnet 4.6 は次善 (= bug 0% だが Opus 4.7 より賢さで劣る)。 Fable 5 は最賢だが日本不可。 tool-call 密度の高い作業で頻発するなら `/model` で Opus 4.7 へ切り替えるのが root に最も近い回避になる (= backend fix が出るまでの実用解)。
-9. **当該操作をサブエージェント (Agent tool、 例: general-purpose) に委譲する**。 malformed が再発して特定の tool call が通らないとき、 その操作を sub-agent に委譲すると **別 context で実行される**ため回避できることがある (= 2026-06-15 実例: メイン session 〔Opus 4.8 1M-context〕 で `settings.json` の 1 行 Edit が 2 連続 malformed → 同じ編集を sub-agent に委譲したら 1 回で成功)。 位置づけは 7 (新 session) / 8 (model 切替) と同じ「root が直らないとき作業を別経路に逃がす」 系だが、 **新 session より軽量で現 session の context を保ったまま当該操作だけ別経路に出せる**のが利点。 複雑判断を伴わない単発操作 (= ファイル編集・コマンド実行) の委譲に向く (= 判断を要する作業の丸投げではない)。 ⚠️ sub-agent の完了報告自体が偽成功変種で捏造されうる (= 後述「tool 結果の silent 捏造」 節) ので、 委譲結果は ground truth (`git log` / `grep` 等) で裏取りする。 ⚠️ **用途の切り分け**: 本項の Agent は「現 session の context を保ったまま軽量に逃がす」 用途。 これと違い **完全に独立した別 session** (own worktree / 呼び元終了後も生存 / user steer 可) に渡して結果を受け取りたい場合は Agent でなく **spawn_task + 結果返送** ([`multi-session-coordination.md` spawn-handoff-token-return](multi-session-coordination.md#spawn-handoff-token-return))。 ユーザーが「新 session」 を名指したのに Agent に潰すのは別問題 (= `convention-design-principles.md §4.1` deliverer-retention)。
+9. **当該操作をサブエージェント (Agent tool、 例: general-purpose) に委譲する**。 malformed が再発して特定の tool call が通らないとき、 その操作を sub-agent に委譲すると **別 context で実行される**ため回避できることがある (= 2026-06-15 実例: メイン session 〔Opus 4.8 1M-context〕 で `settings.json` の 1 行 Edit が 2 連続 malformed → 同じ編集を sub-agent に委譲したら 1 回で成功)。 位置づけは 7 (新 session) / 8 (model 切替) と同じ「root が直らないとき作業を別経路に逃がす」 系だが、 **新 session より軽量で現 session の context を保ったまま当該操作だけ別経路に出せる**のが利点。 複雑判断を伴わない単発操作 (= ファイル編集・コマンド実行) の委譲に向く (= 判断を要する作業の丸投げではない)。 ⚠️ sub-agent の完了報告自体が偽成功変種で捏造されうる (= 後述「tool 結果の silent 捏造」 節) ので、 委譲結果は ground truth (`git log` / `grep` 等) で裏取りする。 ⚠️ **用途の切り分け**: 本項の Agent は「現 session の context を保ったまま軽量に逃がす」 用途。 これと違い **完全に独立した別 session** (own worktree / 呼び元終了後も生存 / user steer 可) に渡して結果を受け取りたい場合は Agent でなく **spawn_task + 結果返送** ([`multi-session-coordination.md` spawn-handoff-token-return](multi-session-coordination.md#spawn-handoff-token-return))。 ユーザーが「新 session」 を名指したのに Agent に潰すのは別問題 (= [`convention-design-principles.md §4.1`](../docs/convention-design-principles.md#motivated-substitution-trap) deliverer-retention)。
 
 10. **session が poisoned したら work tool を自分で実行せず、 全ての tool 実行を subagent に逃がす** (= 9 の escalation、 単発委譲 → blanket 委譲)。 9 は「通らない 1 操作を別経路に出す」 だが、 malformed が繰り返し再発して session 全体が poisoned した時点では、 main agent は Bash / Edit / NotebookEdit / 重い MCP 等の **work tool を自分で実行するのをやめ、 残り session の tool 実行を丸ごと subagent に委譲**する。
 
@@ -60,7 +60,7 @@ root は backend fix 待ちだが、 発生確率と poisoning ループは以�
 
 11. **session が深く poisoned したら残作業を spec ファイル化して別 session へプレーンテキスト handoff** (= 7「新 session 切り替え」 + 8「model 切替」 の実務 mechanics、 10 の subagent 委譲も session 内で詰む段階の上位手)。 同 session で 10 の Agent call すら malformed が連発したり、 圧縮で context が薄まる前に切り出したい場合、 残作業を **self-contained な spec md として `Write`** し、 user に「新 session に貼るプレーンテキスト」 を渡す: `<repo> で開いた新 session に、 <spec path> を読んで実行しろ、 と平文で伝える` の形 (= 新 session には会話履歴を渡さず、 spec file の path 指示と最小限の文脈だけ)。 spec が**会話履歴に依存しない self-contained 設計**なら、 圧縮・切替・新 session のいずれでも結果は同じ。 spec には不変条件 (= 数式不改変等の hard constraints) + 各 edit の old→new または anchor+削除 + 検証手順 (= compile / grep / 集合比較) を明示し、 完了後の scratch 削除も書く。 **2026-06-16 実証**: ec_one_loop_notes 清掃の round 2 が poisoned した Opus 4.8 session で 3 回連続 malformed (10 の Agent call も含む) → spec を `notes/_cleanup2-spec.md` へ Write → 新 Sonnet session へ「`notes/_cleanup2-spec.md` を読んで実行しろ」 のプレーンテキストで handoff → 一発完遂、 新 session が独立 ground truth 検証 (compile + dangling-ref grep + 数式 set diff) も込みで完了。 **位置づけ**: 10 は work tool だけ subagent に逃がす (同 session 維持)、 本 rule (11) は **session 自体を畳んで spec → 新 session へ knowledge handoff する** escalation。 user に明示的に「新 session へ移行」 を渡す必要があるので silent には実行できない (= 規律として user に handoff text を提示する)。
 
-## entrypoint = claude-desktop の注意 (⚠️ 「desktop だから悪い・CLI に変えろ」 ではない)
+## <a id="claude-desktop-note"></a>entrypoint = claude-desktop の注意 (⚠️ 「desktop だから悪い・CLI に変えろ」 ではない)
 
 `$CLAUDE_CODE_ENTRYPOINT` が `claude-desktop` = **Claude Code を desktop app の surface で動かしている**状態。 ⚠️ これは「Cowork という別物を誤って使った」 のではなく、 **user によっては Claude Code の通常の (唯一の) 走らせ方**であり、 選択ミスではない。
 
@@ -70,7 +70,7 @@ root は backend fix 待ちだが、 発生確率と poisoning ループは以�
 
 ⚠️ **file 作業の沈黙・低速を entrypoint のせいにしない**: 主因は (a) serialization bug = **model-level** (Opus 4.8 固有) の malformed/retry/poisoning と、 (b) **harness-level の偽 ENOSPC** (= Bash の stdout capture が「tmp full (0MB)」 と誤報し exit 1 → file-redirect 回避で実質 2x の tool call。 実 disk は潤沢でも出る、 2026-06-16 に df で 195GB 空き・tmp 32K を確認)。 **どちらも `claude-desktop` か `cli` かでは決まらない**ので「app / CLI を変えろ」 は緩和にならない。 効くのは 7 (新 session) / 8 (model 切替、 root に最も近い) / 9・10 (subagent 委譲) と、 stall を感じたら粘らず早く bail すること。 root に entrypoint を据えず model/harness を疑う (= 上記メタ規律と同型)。
 
-## 偽 ENOSPC — Bash stdout capture が「tmp full (0MB)」 と誤報する harness 不具合
+## <a id="false-enospc"></a>偽 ENOSPC — Bash stdout capture が「tmp full (0MB)」 と誤報する harness 不具合
 
 malformed bug とは別系統だが、 同じく **harness 由来で tool-heavy session を低速化**するので併記する。
 
@@ -80,17 +80,17 @@ malformed bug とは別系統だが、 同じく **harness 由来で tool-heavy 
 
 **影響と帰属**: 出力が要る Bash 毎に redirect+Read の 2 手になり実質 tool call が 2x = tool-heavy session の体感低速の主因の 1 つ。 root は harness 側で Claude の書き方では直せない (= 偽の原因を user / entrypoint に帰さない)。 machine 固有の出方は machine-local memory に記録する (layer 4)。
 
-## 限界 (= 誇張しない)
+## <a id="limits"></a>限界 (= 誇張しない)
 
 - root は **Anthropic backend の model serialization bug** であり、 **prompt の書き方変更でも narrative でも直らない**。 上記「副次緩和」 は発生確率を下げるだけで 0 にはできない。
 - hook での機械 enforcement も困難 (= 生成前の self-gate であり、 [`hook-authoring.md` self-reference-impossibility](hook-authoring.md#self-reference-impossibility) の単一視点 self-reference 不能と同型)。 本 file は memory aid であって enforcement ではない、 という前提で読むこと。
 - **fix は upstream (Anthropic) 待ち**。 上記 issue 番号を追跡し、 解決報告が出たら「副次緩和」 を緩められる。 CLI を新しめの版に上げると retry handling が改善する可能性はあるが、 **root (model 出力) は version 更新では消えない** (= CLI 2.1.165 の改善効果は未検証、 retry handling 改善の可能性のみ)。
 
-## メタ規律 (= なぜ当初 root を読み違えたか)
+## <a id="meta-discipline"></a>メタ規律 (= なぜ当初 root を読み違えたか)
 
 最初の RCA は原因を「特殊文字の密度」 = **自分で制御できる writing-style 要因** に帰属させた。 自分の操作で塞げる原因の方が actionable なので、 そちらに飛びつくバイアスがある。 だが実際は **外部 (backend model) の bug** で、 別 session で書き方を整えても再発した — この「書き方を変えても消えない」 という観察こそが root が自分の外にある signal だった。 **書き方変更で消えない再発は、 自分の挙動でなく tool/backend を疑う** へ早く切り替える (= 表層の writing-style モグラ叩きで時間を溶かさない)。
 
-## Rotted-session knowledge recovery — malformed-bug で死んだ session の知見回収
+## <a id="rotted-session-recovery"></a>Rotted-session knowledge recovery — malformed-bug で死んだ session の知見回収
 
 malformed-tool-call bug で session が**途中で死んでも、 その session が積んだ知見は回収可能**である (= 上記「副次緩和 7」 で新 session に切り替えた後、 死んだ session を捨てずに knowledge salvage する手順)。 死んだ session には (a) chat に出ただけで file に未保存の知見と、 (b) 完了したが報告前に死んだ作業、 の 2 種が残りうる。 両方を別経路で拾う:
 
@@ -101,7 +101,7 @@ malformed-tool-call bug で session が**途中で死んでも、 その session
 
 ⚠️ root が backend bug である以上、 この回収手順は「死を防ぐ」 ものではなく「死んだ後に損失を最小化する」 ものである (= 「限界」 section と整合、 新 session 切り替えとセットで運用する)。
 
-## 別の症状変種: tool 結果の silent 捏造 (偽成功 / fabricated success、 2026-06-10 観測)
+## <a id="silent-fabrication-variant"></a>別の症状変種: tool 結果の silent 捏造 (偽成功 / fabricated success、 2026-06-10 観測)
 
 ### 既存症状との違い
 
@@ -142,7 +142,7 @@ poisoned session が残す **handoff / 完了報告 / 自分の fabrication に�
 
 出典 issue は冒頭 §真因 の canonical (= #64774 系) に紐付く。 本変種も Opus 4.8 model 系の一症状で新規 issue は起票せず、 occurrence は §真因 が指す canonical issue へコメントする (= canonical 番号は **§真因 を単一 home** とし、 ここで再掲して drift させない、 §14.2。 旧版はここで #62123 を canonical と再掲し §真因 〔#64774〕 と矛盾していた = restatement drift の実例)。
 
-## 別の Bash 失敗モード: 出力 capture の ENOSPC (= 「Command output was lost」、 malformed とは別物)
+## <a id="bash-enospc-output-loss"></a>別の Bash 失敗モード: 出力 capture の ENOSPC (= 「Command output was lost」、 malformed とは別物)
 
 malformed (= model serialization bug) とは独立の失敗で、 **Bash tool の stdout/stderr が harness に capture されず失われる**ことがある。 症状: tool result が `Command output was lost: the temp filesystem at /private/tmp/claude-<uid>/.../tasks is full (0MB free). ... ENOSPC` になる。 ⚠️ **コマンド自体は実行されている可能性が高い** (= 出力の取りこぼしであって操作の失敗ではない) ので、 「失敗した」 と即断せず別経路で結果を確認する。
 
@@ -157,7 +157,7 @@ some-cmd > /abs/path/out.txt 2>&1; true   # stdout を出さない。 末尾 tru
 - `CLAUDE_CODE_TMPDIR` を余裕のある dir に向ければ capture 先を移せるが、 **harness は親プロセス env から読む**ため child の Bash 内で export しても効かない (= 設定変更は session 再起動が要る)。
 - 上記「副次緩和 2」 (複雑ロジックを `Write` で file 化) と相性がよい: script を file 化 → `bash script > out.txt 2>&1` → `Read` で、 **malformed と ENOSPC の両方を同時に回避**できる。
 
-## 関連
+## <a id="related"></a>関連
 
 - [`hook-authoring.md` bash32-heredoc-parser-bug](hook-authoring.md#bash32-heredoc-parser-bug) — bash 3.2 の `$(...)` + heredoc parser bug。 **別 parser** (= macOS stock bash) だが回避策 (中間 file 化) が共通。
 - [`hook-authoring.md` self-reference-impossibility](hook-authoring.md#self-reference-impossibility) — 単一視点 self-reference の geometric 不能 (= 本 file「限界」 section の理論的根拠)。

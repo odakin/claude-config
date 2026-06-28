@@ -16,9 +16,9 @@ git-crypt 等の暗号化ツールの**使い方**は [git-crypt-guide.ja.md](gi
 
 ---
 
-## Part 1: 暗号化の "外" を意識する
+## <a id="part-1-public-surface"></a>Part 1: 暗号化の "外" を意識する
 
-### パターン 1-1: 暗号化は中身だけ。それ以外は全部見える
+### <a id="pattern-1-1"></a>パターン 1-1: 暗号化は中身だけ。それ以外は全部見える
 
 git-crypt (及び類似ツール) が守るのは**ファイルの中身**だけ。以下は**全て平文のまま git 履歴に残り**、private repo でも collaborator 招待や誤 public 化で露出しうる:
 
@@ -36,7 +36,7 @@ git-crypt (及び類似ツール) が守るのは**ファイルの中身**だけ
 
 **含意**: ファイル中身以外の全ての要素を**「公開面 (public surface)」**として明示的に設計する必要がある。
 
-### パターン 1-2: 公開面のフルリストを持つ
+### <a id="pattern-1-2"></a>パターン 1-2: 公開面のフルリストを持つ
 
 リポを作るとき、以下を全て洗い出して「これ公開して大丈夫か?」を 1 つずつ確認する:
 
@@ -58,9 +58,9 @@ git-crypt (及び類似ツール) が守るのは**ファイルの中身**だけ
 
 ---
 
-## Part 2: 暗号化の設定
+## <a id="part-2-encryption"></a>Part 2: 暗号化の設定
 
-### パターン 2-1: Default-encrypt を第一選択に
+### <a id="pattern-2-1"></a>パターン 2-1: Default-encrypt を第一選択に
 
 暗号化対象を allow-list 方式で書くと、後でファイルを追加したときに `.gitattributes` 更新を忘れて**平文で push してしまう**事故が構造的に起きる。代わりに default-encrypt パターンを使う:
 
@@ -78,14 +78,14 @@ README.md !filter !diff
 3. **監査が楽**: plain 側は 3 ファイルしかないので、leak scan の対象が絞れる
 4. **コメント不要**: allow-list 方式では「なぜここを暗号化するか」のコメントを書きたくなるが、そのコメント自体が leak 源になる。default-encrypt では不要
 
-### パターン 2-2: `.gitattributes` と `.gitignore` は構造的に平文
+### <a id="pattern-2-2"></a>パターン 2-2: `.gitattributes` と `.gitignore` は構造的に平文
 
 - `.gitattributes`: git-crypt が「どのファイルを暗号化するか」を決めるために読む必要がある → 暗号化すると chicken-and-egg で破綻 → **必ず平文**
 - `.gitignore`: 一般的に平文で OK。中身が汎用的 (`.DS_Store`, `*.log` 等) なら leak なし。ただし実在サーバー名やカスタムツール名を含める場合は注意
 
 これらが平文であることを**前提として受け入れ**、中身を最小化・汎用化する。コメントは削除。
 
-### パターン 2-3: コメントは leak 源
+### <a id="pattern-2-3"></a>パターン 2-3: コメントは leak 源
 
 `.gitattributes` にコメントを書くと、そのコメントが leak する:
 
@@ -109,9 +109,9 @@ README.md !filter !diff
 
 ---
 
-## Part 3: 公開面の最小化
+## <a id="part-3-minimize"></a>Part 3: 公開面の最小化
 
-### パターン 3-1: slug 設計 — 識別情報をファイル名に入れない
+### <a id="pattern-3-1"></a>パターン 3-1: slug 設計 — 識別情報をファイル名に入れない
 
 複数の機密対象 (顧客・組織・環境・インシデント) を 1 リポで扱うとき、対象識別名をファイル名に入れたくなる。しかし git-crypt はファイル名を暗号化しないので、**ツリー構造だけで内部が推定可能**になる。
 
@@ -126,7 +126,7 @@ notes/                        notes/
 
 **slug → 実名のマッピングは暗号化された INDEX ファイル 1 つに集約**する。slug 自体は単一文字の連番 (`a`, `b`, ...) か、意味を持たない識別子 (`n1`, `env3` 等) にする。意味のある略語 (`ac`, `tok`, `bnk`) は組合せで特定されうるので避ける。
 
-### パターン 3-2: commit message は汎用ラベルのみ
+### <a id="pattern-3-2"></a>パターン 3-2: commit message は汎用ラベルのみ
 
 commit message は**永続に git log に残る**。後から rewrite しても GitHub の pack/reflog に痕跡が残る可能性がある。**具体的な環境・組織・調査結果・観測事実を書かない**:
 
@@ -148,7 +148,7 @@ commit message は**永続に git log に残る**。後から rewrite しても 
 
 変更が複数ある場合も、具体を出さない汎用ラベルで統一する。これは「何を commit したか分からなくなる」トレードオフを生むが、中身の変更履歴はファイル内部のセクション追記で残せる。公開面の簡潔さを優先する。
 
-### パターン 3-3: 平文 README を構造的に守る
+### <a id="pattern-3-3"></a>パターン 3-3: 平文 README を構造的に守る
 
 clone 直後の reader (別マシンの自分、新規 collaborator) のために、**unlock 方法を伝える最小限の README** が必要。しかし README は平文なので、そこに書いた内容は全て公開される。
 
@@ -201,9 +201,9 @@ exit 0
 
 ---
 
-## Part 4: ブートストラップの設計
+## <a id="part-4-bootstrap"></a>Part 4: ブートストラップの設計
 
-### パターン 4-1: 新マシンから zero → readable の経路を全て文書化
+### <a id="pattern-4-1"></a>パターン 4-1: 新マシンから zero → readable の経路を全て文書化
 
 別の端末で初めてこのリポを開くときの手順を、**最初の authn からノート閲覧可能になるまで**、途切れなく書く。よくある抜け:
 
@@ -230,7 +230,7 @@ exit 0
 
 各ステップを**平文 README か別の cross-reference 可能な場所**に書く。暗号化側にだけ書いてあると 6 に到達できない reader が詰む。
 
-### パターン 4-2: "X は here ではない" と書いたら必ず "X は there" も書く
+### <a id="pattern-4-2"></a>パターン 4-2: "X は here ではない" と書いたら必ず "X は there" も書く
 
 「個人鍵はこのファイルには記録しない」とだけ書いてあると、reader は「じゃあどこ?」と迷う。
 
@@ -254,7 +254,7 @@ exit 0
 
 negative pointer (X はここではない) と positive pointer (X はそこ) は必ずセットにする。**単独の negative pointer は reader を迷子にする antipattern**。
 
-### パターン 4-3: Cross-machine vs machine-local の軸を意識する
+### <a id="pattern-4-3"></a>パターン 4-3: Cross-machine vs machine-local の軸を意識する
 
 以下のものは**マシンローカル**になりがち:
 
@@ -276,9 +276,9 @@ negative pointer (X はここではない) と positive pointer (X はそこ) �
 
 ---
 
-## Part 5: 運用規律
+## <a id="part-5-discipline"></a>Part 5: 運用規律
 
-### パターン 5-1: Forcing functions > discipline
+### <a id="pattern-5-1"></a>パターン 5-1: Forcing functions > discipline
 
 人間 (あるいは AI) が繰り返し同じミスをする領域には、**規律 ("気をつけよう") ではなく構造的な forcing function を置く**。以下の事象が観察されたら規律の限界を疑う:
 
@@ -298,7 +298,7 @@ Forcing function の例:
 
 Forcing function 自身が leak 源にならないよう注意 (hook script 本体は暗号化側に置く等)。
 
-### パターン 5-2: 新規ルールと既存違反の同日 sweep
+### <a id="pattern-5-2"></a>パターン 5-2: 新規ルールと既存違反の同日 sweep
 
 新しいルールを追加したとき、**既存の違反を audit して同日に修正する**。そうしないと:
 
@@ -308,7 +308,7 @@ Forcing function 自身が leak 源にならないよう注意 (hook script 本�
 
 作業単位は「新規ルール設置 → 既存違反 audit → 一括移行 → commit」を 1 セットとする。例: 新規に「機密は暗号化側」ルールを作ったら、その場で既存の平文機密を grep して全部移動する。
 
-### パターン 5-3: 実装直後の 4 軸レビュー
+### <a id="pattern-5-3"></a>パターン 5-3: 実装直後の 4 軸レビュー
 
 実装 (新規作成・大規模変更) の直後に、以下の 4 軸で自己レビューする:
 
@@ -321,7 +321,7 @@ Forcing function 自身が leak 源にならないよう注意 (hook script 本�
 
 「実装して完了」ではなく、「実装 + 4 軸レビュー + 指摘事項の修正 = 1 単位」として扱う。レビューを省くと、上記 4 項目のいずれかに必ず drift が残る。
 
-### パターン 5-4: DESIGN と examples の co-aging
+### <a id="pattern-5-4"></a>パターン 5-4: DESIGN と examples の co-aging
 
 ルールを書いた文書 (DESIGN.md 等) に具体例を入れると、**後日ルールが refine されたときに example だけが古くなる** ことがある。古い example は新ルールから見ると「ルール違反」として読めてしまい、自己矛盾になる。
 
@@ -335,7 +335,7 @@ refinement を書き加えるときには、**古い section の example が新�
 
 ---
 
-## Appendix A: リポ新設時チェックリスト
+## <a id="appendix-a-new-repo"></a>Appendix A: リポ新設時チェックリスト
 
 ```
 □ repo name / description / topics に固有名詞を含めない
@@ -352,7 +352,7 @@ refinement を書き加えるときには、**古い section の example が新�
 □ 4 軸レビュー (整合性・無矛盾性・効率性・安全性)
 ```
 
-## Appendix B: 新規ノート追加時チェックリスト
+## <a id="appendix-b-new-note"></a>Appendix B: 新規ノート追加時チェックリスト
 
 ```
 □ ノートのファイル名は既存の slug 命名規則に従う (新規環境なら INDEX も更新)
@@ -362,7 +362,7 @@ refinement を書き加えるときには、**古い section の example が新�
 □ push 前に git-crypt status で当該ファイルが encrypted 表記であることを確認
 ```
 
-## Appendix C: 定期監査チェックリスト
+## <a id="appendix-c-audit"></a>Appendix C: 定期監査チェックリスト
 
 ```
 □ 平文ファイルの grep 監査: 固有名・IP・URL・非 ASCII が混入していないか

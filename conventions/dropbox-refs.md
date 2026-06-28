@@ -10,7 +10,7 @@
 
 ---
 
-## 0. まず決める: Pattern A (Dropbox-direct) か Pattern B (このファイル)
+## <a id="pattern-a-vs-b"></a>0. まず決める: Pattern A (Dropbox-direct) か Pattern B (このファイル)
 
 Dropbox にある PDF を git リポから触りたいとき、採りうる戦略は 2 つ。このファイルが詳述するのは Pattern B。Pattern A のほうが適合するケースも少なくないので、着手前に必ず選択する。
 
@@ -108,7 +108,7 @@ rm <base>/<repo>/dropbox-refs
 
 ---
 
-## 1. What
+## <a id="what"></a>1. What
 
 各リポの直下に gitignored な `dropbox-refs/` symlink を置き、そのターゲットを Dropbox 内の subpath にする。スクリプト・notebook・TeX・ノートからは `./dropbox-refs/foo.pdf` という相対 path で参照する。
 
@@ -125,7 +125,7 @@ rm <base>/<repo>/dropbox-refs
 
 ---
 
-## 2. Why
+## <a id="why"></a>2. Why
 
 - Dropbox のインストール先 (`~/Dropbox`, `~/Library/CloudStorage/Dropbox`, `~/Library/CloudStorage/Dropbox-Personal`, …) は OS / Dropbox バージョン / multi-account 構成によって違う。共有リポに絶対パスを書けない
 - 共同編集者ごとに Dropbox 内のフォルダ階層も違う可能性があるため、symlink の target も per-user で決める
@@ -135,9 +135,9 @@ rm <base>/<repo>/dropbox-refs
 
 ---
 
-## 3. How
+## <a id="how"></a>3. How
 
-### 3.1 Personal layer の registry (`dropbox-collabs.yaml`)
+### <a id="registry"></a>3.1 Personal layer の registry (`dropbox-collabs.yaml`)
 
 各 user は自分の personal layer (例: `~/Claude/<personal-layer>/`) に `dropbox-collabs.yaml` を置く。Schema:
 
@@ -163,7 +163,7 @@ collaborations:
 
 `<repo-name>` は canonical 名。setup スクリプトは `<base-dir>/<repo-name>/dropbox-refs` に symlink を作るので、ローカル checkout のディレクトリ名と一致させる必要がある。
 
-### 3.2 Setup script
+### <a id="setup-script"></a>3.2 Setup script
 
 **前提**: Python 3 + PyYAML (`python3 -c "import yaml"` で確認可能)。macOS は Homebrew 経由の Python 3 で `pip3 install pyyaml`、Linux は `pip install pyyaml` または distro パッケージ (`python3-yaml`) で導入。
 
@@ -181,13 +181,13 @@ collaborations:
 - **non-fatal warnings**: repo dir 不在 / Dropbox target 不在は WARN で skip、exit 0
 - **non-clobber**: 既存の通常ファイルやディレクトリが destination にあれば error で停止 (ユーザーデータを上書きしない)
 
-### 3.3 自動実行
+### <a id="auto-run"></a>3.3 自動実行
 
 `claude-config/setup.sh` は personal layer を検出した後、その中に `dropbox-collabs.yaml` があれば自動で setup-dropbox-refs.sh を呼ぶ。さらに personal layer の `.git/hooks/post-merge` に同スクリプトを呼ぶ hook を install するため、`git pull` で YAML を更新したら symlink が自動で再生成される。
 
 新マシンへの bootstrap も既存リポでの YAML 更新も、明示的な手動 setup なしで symlink が最新に保たれる。
 
-### 3.4 各リポへの設定
+### <a id="per-repo-config"></a>3.4 各リポへの設定
 
 リポ root に以下を追加:
 
@@ -214,7 +214,7 @@ CLAUDE.md セクションのテンプレート:
 
 ---
 
-## 4. Dropbox install root の解決
+## <a id="dropbox-root-resolution"></a>4. Dropbox install root の解決
 
 `scripts/dropbox-root.sh` は以下の優先順で resolve する:
 
@@ -229,14 +229,14 @@ CLAUDE.md セクションのテンプレート:
 
 ---
 
-## 5. When to use
+## <a id="when-to-use"></a>5. When to use
 
 - 共同研究のリポで、共著者と Dropbox 上の参照 PDF folder を共有しているとき
 - 自分が複数 machine で同じ参照 PDF folder を使いたいとき
 - 参照 PDF が大量で git に commit すると bloat する場合
 - 参照 PDF が non-arXiv (preprint, 非公開 draft, journal proof, スライド等) で、何らかの共有手段が必要な場合
 
-## 6. When NOT to use
+## <a id="when-not-to-use"></a>6. When NOT to use
 
 - 参照論文がすべて arXiv 公開: refs.bib に `eprint` を入れるだけで足りる。共著者は自分で arXiv から取得すれば良い
 - リポ全体を Dropbox に置きたい: 「リポ root 自身を Dropbox folder への symlink にする」whole-repo Dropbox パターンのほうがフィット
@@ -245,7 +245,7 @@ CLAUDE.md セクションのテンプレート:
 
 ---
 
-## 7. Collaborator が同じ機構を使う場合
+## <a id="collaborator-same-mechanism"></a>7. Collaborator が同じ機構を使う場合
 
 同じパターンが任意の user に適用できる。各 user が:
 
@@ -263,7 +263,7 @@ CLAUDE.md セクションのテンプレート:
 
 ---
 
-## 8. 制約と既知の問題
+## <a id="constraints-known-issues"></a>8. 制約と既知の問題
 
 - **Selective sync**: Dropbox の選択同期で folder を除外していると、target は存在するが中身が "online-only" になる。symlink は問題なく作られるが、ファイル read 時に Dropbox が download を試みる
 - **同期競合**: PDF を read-only 運用すれば衝突は起きにくい。複数 user が同じ folder で notebook を同時編集する場合は別途注意 (Dropbox の conflict copy が増える)
@@ -273,11 +273,11 @@ CLAUDE.md セクションのテンプレート:
 
 ---
 
-## 9. Pattern B のメンタルモデル: 「同一 file への 2 つの access path」 と「同期チャネル 2 系統」
+## <a id="pattern-b-mental-model"></a>9. Pattern B のメンタルモデル: 「同一 file への 2 つの access path」 と「同期チャネル 2 系統」
 
 Pattern B では collaborator (および将来の自分) に **2 つの mental confusion 源** が生まれる。 §0 trade-off 表で「mental model layer が増える」 と書いた具体内容がこれ。 Pattern B を採用した repo の CLAUDE.md / SETUP.md には、 以下 2 点を明示することを推奨する。
 
-### 9.1 junction = 「同一 file への 2 つの access path」 (= コピーではない)
+### <a id="junction-two-paths"></a>9.1 junction = 「同一 file への 2 つの access path」 (= コピーではない)
 
 `<repo>/dropbox-refs/` は **symlink (POSIX) または junction (Windows)** で、 ターゲットは `$DBROOT/<subpath>/`。 すなわち:
 
@@ -290,7 +290,7 @@ Pattern B では collaborator (および将来の自分) に **2 つの mental c
 
 初見の collaborator は「Dropbox にもあるし repo にもある = 2 つのコピーを sync する仕組みが要るのか?」 と誤解しやすい。 「junction = 近道、 本体は Dropbox 側 1 つ」 と説明するのが mental model 上有効。
 
-### 9.2 同期チャネル 2 系統の table
+### <a id="two-sync-channels"></a>9.2 同期チャネル 2 系統の table
 
 Pattern B では何が git で運ばれて何が Dropbox で運ばれるかが分裂する。 collaborator にこれを明示する義務がある (= [`shared-repo.md` standalone-operational-definition](shared-repo.md#standalone-operational-definition) の operational 完結性に相当):
 
@@ -305,7 +305,7 @@ Pattern B では何が git で運ばれて何が Dropbox で運ばれるかが�
 2. それ以外 (notes / docs / PDF snapshot) を編集 → `git add` + `git commit` + `git push`
 3. 「PDF snapshot を提出版として commit する」 ような cross-channel 操作のみ明示的に行う (`cp dropbox-refs/<output> drafts/<dated>.pdf && git add -f`)
 
-### 9.3 SETUP.md inline テンプレート
+### <a id="setup-md-template"></a>9.3 SETUP.md inline テンプレート
 
 Pattern B repo の SETUP.md に以下を追加することを推奨:
 
@@ -324,14 +324,14 @@ path (例 `~/Dropbox/<subpath>` ・ `~/Library/CloudStorage/Dropbox/<subpath>` �
 | (project 固有: 例 .tex / 図 / 参照 PDF) | Dropbox 自動 sync | 保存だけで OK |
 | (project 固有: 例 notes / drafts/ PDF) | git push/pull | `git commit` + `git push` |
 
-詳細規約: `~/Claude/claude-config/conventions/dropbox-refs.md §9`
+詳細規約: [`~/Claude/claude-config/conventions/dropbox-refs.md §9`](dropbox-refs.md#pattern-b-mental-model)
 ```
 
 `(project 固有: ...)` は各 project の実 path を書く。 SETUP.md は collaborator 向け cold reference なので、 抽象 (= 「assets vs notes」) ではなく具体 path を書くこと。
 
 ---
 
-## 10. 他クラウドストレージへの応用 (OneDrive / Google Drive)
+## <a id="other-cloud-storage"></a>10. 他クラウドストレージへの応用 (OneDrive / Google Drive)
 
 Pattern B の本質 (= 実 working tree と `.git/` をクラウド同期の外に置き、 asset folder へは gitignored な per-machine symlink で参照する) は Dropbox 固有ではない。OneDrive / Google Drive でも同型で使える。実証例: 授業教材 PDF を OneDrive に置いたまま、 個人リポから索引を git 管理する運用 (2026-06)。
 

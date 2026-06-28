@@ -8,7 +8,7 @@ Design patterns for repositories that need to track sensitive data (customer inv
 
 The mechanics of encryption tools (git-crypt, etc.) are covered in [git-crypt-guide.md](git-crypt-guide.md). This document is a layer above: **what to put where, and in what shape, so that information does not leak outside the encrypted layer.**
 
-## Part 1: Recognize the Public Surface
+## <a id="part-1-public-surface"></a>Part 1: Recognize the Public Surface
 
 **git-crypt (and similar tools) encrypt only file contents.** Everything else remains in plaintext in the git history and is exposed to anyone with read access, even if you only intend the repo to be private:
 
@@ -22,7 +22,7 @@ The mechanics of encryption tools (git-crypt, etc.) are covered in [git-crypt-gu
 
 **Practice**: Before publishing, walk through a public-surface checklist (see the Japanese version, Part 1-2) and verify every item.
 
-## Part 2: Encryption Configuration
+## <a id="part-2-encryption"></a>Part 2: Encryption Configuration
 
 **Pattern 2-1: Prefer default-encrypt over allow-list.**
 
@@ -39,7 +39,7 @@ New files are encrypted automatically. No one forgets to add a filter line. The 
 
 **Pattern 2-3:** Comments in `.gitattributes` explaining *why* files are encrypted are themselves a leak of operational intent. Strip them.
 
-## Part 3: Minimize the Public Surface
+## <a id="part-3-minimize"></a>Part 3: Minimize the Public Surface
 
 **Pattern 3-1: Slug design.** Do not encode identities in filenames. Use opaque slugs (`a.md`, `b.md`, `n1.md`) and keep the slug-to-identity mapping only in an encrypted `INDEX` file. Semantic fragments (`ac`, `tok`, `bnk`) are combinable into guesses and should be avoided.
 
@@ -57,7 +57,7 @@ New files are encrypted automatically. No one forgets to add a filter line. The 
 3. **Store the hook script in the encrypted side** so the script's logic and allowlists do not themselves leak.
 4. Structural constraints (size/encoding/patterns) beat keyword blacklists: they need no maintenance, do not leak, and catch novel identifiers.
 
-## Part 4: Bootstrap Design
+## <a id="part-4-bootstrap"></a>Part 4: Bootstrap Design
 
 **Pattern 4-1: Document the full chain from zero to readable state on a fresh machine.** Do not leave any step buried in encrypted files that cannot be read before unlock. Common gaps:
 
@@ -73,7 +73,7 @@ New files are encrypted automatically. No one forgets to add a filter line. The 
 
 If no, and the information is not inherently machine-specific, use a git-synced location (or equivalent cross-machine sync) instead.
 
-## Part 5: Operational Discipline
+## <a id="part-5-discipline"></a>Part 5: Operational Discipline
 
 **Pattern 5-1: Forcing functions beat discipline.** Where the same kind of mistake recurs, do not rely on "try harder." Install structural defenses: secure defaults, pre-commit hooks, always-loaded gate questions, size caps, design-level impossibility (opaque slugs).
 
@@ -90,7 +90,7 @@ If no, and the information is not inherently machine-specific, use a git-synced 
 
 **Pattern 5-4: Examples co-age with the rule.** When you refine a design rule, the examples cited in the old rule may become violations under the new rule. Check and either correct them, annotate them as historical, or delete them. Leaving a self-contradictory example undermines the new rule.
 
-## Appendix: Checklists
+## <a id="appendix-checklists"></a>Appendix: Checklists
 
 See the Japanese version's Appendix A/B/C for:
 
@@ -98,7 +98,7 @@ See the Japanese version's Appendix A/B/C for:
 - New-note-addition checklist
 - Periodic audit checklist
 
-## Related documents
+## <a id="related-documents"></a>Related documents
 
 - [git-crypt-guide.md](git-crypt-guide.md) — tool-level usage (install, init, export-key, remote machine setup)
 - [convention-design-principles.md](convention-design-principles.md) — meta-level principles for writing conventions

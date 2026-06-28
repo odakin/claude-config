@@ -6,7 +6,7 @@ multi-paper merger (= P1+P2 統合等の「2 個 1 フランケンシュタイ�
 - **subsection name / content duplicates** — merger artifact (= 同名 subsection、 word-for-word identical な散文 + 数式)
 - **structural issues** — `\begin{comment}...\end{comment}` で disabled、 `\end{document}` 後の section、 section title vs label name 不一致 等
 
-## 3 Phase 構造
+## <a id="three-phase-structure"></a>3 Phase 構造
 
 「1 pass で paper 全体読み」 は cell 埋め (= 安価な操作で expensive な検証を bypass する trait) になりがちなので、 **機械的検出 + AI 精読** の 2 段に分ける。
 
@@ -42,7 +42,7 @@ Pass 単位の分割 (= context window 内で扱える size + 中断耐性):
 4. 修正実装 (= 各 step ごとに commit + compile 確認)
 5. status を `approved → implemented`
 
-## Findings YAML database schema
+## <a id="findings-yaml-schema"></a>Findings YAML database schema
 
 `plans/<date>-findings.yaml` で構造化管理:
 
@@ -83,7 +83,7 @@ YAML 採用理由:
 - **状態 update が field 書き換えで完結** (= markdown text の status 行を手動書き換えるより堅牢)
 - **plan の slim 化** (= markdown text に詳細を埋め込むと plan が肥大化、 yaml に正本を集約)
 
-## plan 文書と yaml の役割分担
+## <a id="plan-vs-yaml-roles"></a>plan 文書と yaml の役割分担
 
 - **plan (`<date>-<topic>.md`)**: 長期 roadmap、 process record (= 各 Pass の作業ログ)、 yaml への pointer + summary table
 - **findings.yaml**: 個別 finding の正本 (= 詳細 + status)
@@ -91,7 +91,7 @@ YAML 採用理由:
 
 plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml = state、 TodoWrite = active work。
 
-## 修正フェーズの規律
+## <a id="fix-phase-discipline"></a>修正フェーズの規律
 
 - **数式の意味変更** は user 承認: overall 方針確定 (= 軸 N=A 等) で代用可能か個別承認かを判断。 数式 label 削除 + 同 content の別 label への ref 化 (= App C で identical な式が defined) なら overall 承認で OK
 - **削除する label の use 確認** を必ず先に: 全 use 箇所を grep + redirect or 削除を確定 (= 削除後の compile で undefined refs ゼロ)
@@ -99,7 +99,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 - **1 step = 1 commit** で中断耐性 + revert 可能性確保
 - **page 数の累積効果** を意識: text 行数削減 != page 数削減 (= LaTeX の line breaking で reflow、 累積効果は後段で reflect)
 
-## paper 規模圧縮 vs self-containment review の trade-off
+## <a id="compression-vs-self-containment"></a>paper 規模圧縮 vs self-containment review の trade-off
 
 「multi-paper merger artifact」 を持つ paper では:
 - **方針 A (parsimonious)**: 重複削除、 page 数圧縮、 ref で代替
@@ -107,7 +107,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 どちらも valid、 paper の流儀 + referee 期待で **user 判断**。 critical 重複の規模が大きい (= 70+ 行) ほど方針 A の利得が大きい。
 
-## 多 commit 連打規律
+## <a id="multi-commit-discipline"></a>多 commit 連打規律
 
 修正フェーズで 13 step を 1 commit にまとめるのではなく、 各 step (= finding 1 つ) で 1 commit。 利点:
 - session 中断耐性 (= 各 step 完了状態で revert 可能)
@@ -116,7 +116,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 多 commit 連打時の 4 軸 sweep 規律と整合: 「多 commit 連打 = 1 つの作業で 2 つ以上 commit を打つと自覚した瞬間に『最後の commit 後に必ず横断 4 軸 sweep を 1 回回す』 を declare」 を、 paper audit の修正フェーズでも適用 (= 全 step 完了後の最終 sweep)。
 
-## 実例: (該当 private paper repo) (2026-05-19、 1 day で完了)
+## <a id="worked-example"></a>実例: (該当 private paper repo) (2026-05-19、 1 day で完了)
 
 - paper 39p → **37p** (-119 行)、 **13 findings** (= 12 implemented + 1 rejected)
 - Phase 1 script: `(該当 private paper repo の scripts/audit-forward-refs.py)`
@@ -134,6 +134,6 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 「2 個 1 フランケンシュタイン」 の核心 = P2 (= `formalism_v1`) の主要 content が App B/C に embedded、 P1 (= `implementation_v1`) と並走 → paper 全体で ~170 行重複。
 
-## 二例目が出たら refine
+## <a id="second-example-refine"></a>二例目が出たら refine
 
 将来別 paper で同様の audit を実施したら、 script を `claude-config/scripts/` に generic 化、 本 convention を refine。 現状は 該当 private paper repo で完結。

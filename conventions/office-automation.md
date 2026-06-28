@@ -8,7 +8,7 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 
 > 🍳 **入口 — 多 sheet 様式 xlsx → 提出用 PDF を端から端まで** (= 構造把握 → fill → ページ分割 → 余白均等化 → 結合 → 検証) やる手順は [`multi-sheet-pdf-assembly`](#multi-sheet-pdf-assembly) の **RECIPE** に集約。 週次の様式 PDF 業務はまずそこを見る。
 
-> 🧭 **構造メモ — 各 subsection は安定 slug-anchor で ident性を持つ** (= positional §-番号は廃止)。 cross-ref は `[`<slug>`](#<slug>)` で書く (= 挿入・移動・ファイル分割で壊れない、 機械検証可能)。 slug ↔ 旧 §-番号 ↔ title ↔ related の対応は併設 [`office-automation.index.yaml`](office-automation.index.yaml) が正本。 旧 §-番号は他 doc の dated 参照解決のため index の `legacy` に保存。 一般則は [`docs/convention-design-principles.md`](../docs/convention-design-principles.md) §14。
+> 🧭 **構造メモ — 各 subsection は安定 slug-anchor で ident性を持つ** (= positional §-番号は廃止)。 cross-ref は `[`<slug>`](#<slug>)` で書く (= 挿入・移動・ファイル分割で壊れない、 機械検証可能)。 slug ↔ 旧 §-番号 ↔ title ↔ related の対応は併設 [`office-automation.index.yaml`](office-automation.index.yaml) が正本。 旧 §-番号は他 doc の dated 参照解決のため index の `legacy` に保存。 一般則は [`docs/convention-design-principles.md` §14](../docs/convention-design-principles.md#intrafile-slug-identity)。
 >
 > **新規 subsection を足すとき**: (1) kebab-case の slug を heading に `<a id="...">` で付与、 (2) index.yaml に entry 追加 (id / legacy は空可 / title / related)、 (3) `python3 scripts/check-office-automation-index.py` で dangling 0 / orphan 0 を確認。 既存と内容が重複しないか先に dedup 確認 (= 検証系の [`pdf-visual-confirm`](#pdf-visual-confirm) / [`image-budget-exhaustion`](#image-budget-exhaustion) / [`docx-pdf-stale-cache`](#docx-pdf-stale-cache) は overlap しやすい — validator が keyword 重複を surface する)。 🔎 **dedup info の仕分け**: validator の dedup は **title token 共有の heuristic** なので、 出たら精査して **FP (= 親子 `##`⊃`###` / 別概念 / 既に pointer 済) と 真の内容重複 (= 要 SoT 統一) を分ける**。 FP は触らない (= info を 0 にするのを目的化しない、 keyword 共有は構造上残り続ける)。
 >

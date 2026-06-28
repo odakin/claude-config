@@ -44,7 +44,7 @@ LorentzArena Bug 14 完全治療 (2026-05-06) の spiral で複数の fail-recov
 
 ---
 
-## 2. Audit verdict 「正当化済」 は user 質問で再評価
+## <a id="audit-verdict-reeval"></a>2. Audit verdict 「正当化済」 は user 質問で再評価
 
 **ルール**: audit / 4 軸 sweep / 設計 review で 「正当化済」 「scope 外」 「fully closed」 と verdict を出した後でも、 user の epistemic skepticism signal (= 「絆創膏に見える」 「原理的におかしくない?」 「もう一度深く」 「ad hoc では?」 「本当?」) を受けたら、 **verdict を reset して 3 verification を再 trigger**。
 
@@ -65,7 +65,7 @@ LorentzArena Bug 14 完全治療 (2026-05-06) の spiral で複数の fail-recov
 
 ---
 
-## 3. Multi-commit refactor で 4 軸 sweep + docstring drift
+## <a id="multi-commit-sweep"></a>3. Multi-commit refactor で 4 軸 sweep + docstring drift
 
 **ルール**: 連続 commit 後の最終 push 前に 4 軸 sweep (= [`CONVENTIONS.md §3`](../CONVENTIONS.md)) を回し、 **docstring と実装の drift** を必ず捕まえる。 commit 単位では一貫していても session 横断で docstring が stale 化することがある。
 
@@ -104,7 +104,7 @@ structural rule の違反は同 codebase / 同型コード設計で **再生産�
 具体例:
 - state 単一化 (= 「同じ概念を複数 ref に置かない」) の violation 1 件発見 → 同 codebase で類似 dual-state pattern 兄弟 sweep
 - 4 層モデル layer 違反 1 件発見 → 同 repo 内全 cross-layer reference grep で他 violations も発見、 同 commit で全件修正
-- **2026-05-10 claude-config self-audit**: `hooks/memory-guard*.sh` の deny message に `odakin-prefs/` literal 1 件発見 → 同 session で hooks → scripts → setup.sh と段階的に sweep を broaden、 結果 sibling 20+ 件 (= `git-state-nudge.sh` の runtime emit、 `public-precommit-runner.sh` 等 3 scripts の hardcode、 `setup.sh:863` の `SECRETS_REPOS` hardcode + comment 言及) を 6 commits + 個人層 1 commit で全件 closure。 narrow scope (= memory-guard 2 件) で stop していたら sibling は次 session 以降に発見 / 残存リスク。 broadening pattern: surface ごと (= hooks → scripts → setup.sh) に「同 class があるか」 を順次問う。 関連 universal 原則: [`docs/convention-design-principles.md §12`](../docs/convention-design-principles.md) (= 監視 list の scope marker = 暗黙 scope blind spot を防ぐ doc 規律)
+- **2026-05-10 claude-config self-audit**: `hooks/memory-guard*.sh` の deny message に `odakin-prefs/` literal 1 件発見 → 同 session で hooks → scripts → setup.sh と段階的に sweep を broaden、 結果 sibling 20+ 件 (= `git-state-nudge.sh` の runtime emit、 `public-precommit-runner.sh` 等 3 scripts の hardcode、 `setup.sh:863` の `SECRETS_REPOS` hardcode + comment 言及) を 6 commits + 個人層 1 commit で全件 closure。 narrow scope (= memory-guard 2 件) で stop していたら sibling は次 session 以降に発見 / 残存リスク。 broadening pattern: surface ごと (= hooks → scripts → setup.sh) に「同 class があるか」 を順次問う。 関連 universal 原則: [`docs/convention-design-principles.md §12`](../docs/convention-design-principles.md#monitoring-list-scope-marker) (= 監視 list の scope marker = 暗黙 scope blind spot を防ぐ doc 規律)
 
 ### How to apply
 
@@ -138,7 +138,7 @@ structural rule の違反は同 codebase / 同型コード設計で **再生産�
 
 ---
 
-## 5. Plan ファイル lifecycle = multi-doc atomic operation
+## <a id="plan-file-lifecycle"></a>5. Plan ファイル lifecycle = multi-doc atomic operation
 
 **ルール**: plan file (= `plans/YYYY-MM-DD-*.md` 等の session を跨いだ将来の自分への message を encode する artifact) を新規作成 / 大幅 supersede する commit には、 同 commit 内で以下を全て含める:
 
@@ -180,7 +180,7 @@ Plan creation / supersede commit にも 3 verification を application:
 
 ---
 
-## 6. Introspection facility (= dry-run / --force / --print-only / -n / --noop 等) を grep / code review より優先
+## <a id="introspection-facility-first"></a>6. Introspection facility (= dry-run / --force / --print-only / -n / --noop 等) を grep / code review より優先
 
 **ルール**: 容疑者として name 上がった script / tool / CLI が **dry-run-like introspection facility** を持つなら、 grep / code review / docstring 読み を skip して**先に実行** (= `--dry-run`、 `--force --dry-run`、 `-n`、 `--noop`、 `--print-only`、 `--what-if`、 framework によって `--plan` 等)。 実行ログが「**この script は何を touch するか**」 の ground truth、 code review は「**何を touch するつもりか**」 の intention でしかない。
 
@@ -230,7 +230,7 @@ introspection が **存在しない / 信頼できない** ケース:
 
 ---
 
-## 7. Claude 自身を容疑者から外す手法: `~/.claude/projects/*/*.jsonl` の tool_use grep
+## <a id="claude-self-suspect-jsonl"></a>7. Claude 自身を容疑者から外す手法: `~/.claude/projects/*/*.jsonl` の tool_use grep
 
 **ルール**: 「過去の Claude session が悪さしたのでは?」 という容疑が浮上したら、 `~/.claude/projects/<project-hash>/*.jsonl` を grep して **過去の actual tool_use 履歴**を確認。 user の記憶 / 想像でなく、 実際の tool 呼び出し ledger が ground truth。
 
@@ -281,7 +281,7 @@ project-hash は `~/.claude/projects/` 直下の `-` 区切り path 表現 (= �
 
 ---
 
-## 8. Interactive script (= URL 出力 + polling) を `| tail -N` 等の pipe と combine しない
+## <a id="no-pipe-interactive-script"></a>8. Interactive script (= URL 出力 + polling) を `| tail -N` 等の pipe と combine しない
 
 **ルール**: 「URL を stdout に出して user の手操作を待つ」 系 interactive script を `run_in_background` で起動する際、 `| tail -N` / `| head -N` / `| grep PATTERN` 等の pipe と combine すると **stdout が buffer に閉じ込められて URL が出力されない**。 unbuffered (= `python3 -u`、 `stdbuf -oL`、 `node` も default で line-buffer) + pipe なしで起動する。 注意: pipe だけでなく **plain redirect (`> file`) / `run_in_background` でも、 un-line-buffered な script は block-buffer する** (= 「pipe を避ければ安全」 は誤り)。 script を編集できるなら下記「Root fix」 (= stdout を line-buffer 化) が根本対処で `-u` を不要にできる。
 
@@ -374,9 +374,9 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 
 ---
 
-## 10. silent dead / 経路の穴は「violation を仕込んだ実 e2e」 でしか expose できない
+## <a id="silent-dead-e2e-only"></a>10. silent dead / 経路の穴は「violation を仕込んだ実 e2e」 でしか expose できない
 
-§1 (3 verification) / §6 (dry-run 観測) は機構が **何をするか** を verify するが、 機構が **そもそも発火するか** は別問題。 gate / hook / detector / validator が **silent dead** (= 呼ばれない・経路の穴で skip・条件分岐で素通り) の場合、 logic 確認・syntax 確認・関数単体シミュレート・dry-run は **全て pass する** (= 機構の中身は正しいので)。 緑の ✓ が「動く」 の証明にならない (= `docs/convention-design-principles.md §8.8` の false confidence)。
+§1 (3 verification) / §6 (dry-run 観測) は機構が **何をするか** を verify するが、 機構が **そもそも発火するか** は別問題。 gate / hook / detector / validator が **silent dead** (= 呼ばれない・経路の穴で skip・条件分岐で素通り) の場合、 logic 確認・syntax 確認・関数単体シミュレート・dry-run は **全て pass する** (= 機構の中身は正しいので)。 緑の ✓ が「動く」 の証明にならない (= [`docs/convention-design-principles.md §8.8`](../docs/convention-design-principles.md#proxy-blind-spot) の false confidence)。
 
 ### How to apply
 
@@ -390,7 +390,7 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 
 ---
 
-## 11. 症状の本格 forensics 前に「既存 conventions / docs に同症状の記録が無いか」を grep
+## <a id="grep-existing-docs-first"></a>11. 症状の本格 forensics 前に「既存 conventions / docs に同症状の記録が無いか」を grep
 
 **ルール**: 観測した症状 (= error 文字列 / 異常挙動) で fresh forensics (= lsof 全 attribution / web 検索 / transcript 解析 / 実験) に投資する**前**に、 まず project 自身の `conventions/` + docs を症状の distinctive token で grep する。 既知症状なら workaround doc が診断手順・root・対処まで持つことが多く、 再導出は時間の丸損。 = CLAUDE.md inline §3 (= 事実主張前に内部 grep) の debugging domain への適用 (= 「外部検索の null で結論する前に内部 grep」 の対偶 = 「外部 forensics を始める前に内部 grep」)。
 
@@ -415,7 +415,7 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 
 ---
 
-## 12. 再現 ≠ 検証: 決定論的 / 撤回済 artifact は誤っていても再現する
+## <a id="reproduce-not-verify"></a>12. 再現 ≠ 検証: 決定論的 / 撤回済 artifact は誤っていても再現する
 
 ある計算が以前報告された数値を再現したことは、 両者が同じ (誤りうる) convention / 実装を共有している限り **検証にならない**。 決定論的 artifact は正しさと無関係に再現する。 特に **既存の analysis / audit script を結論の根拠に使う前に provenance を確認**せよ — project の retraction log (`RETRACTIONS.md` 等) と script の docstring を distinctive token で grep し、 過去に「非物理 / convention-mismatch / 撤回済」 と判定されていないか見る。
 
@@ -437,7 +437,7 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 
 ---
 
-## 13. mechanism が「発火したか」 を検証する時は依存ゼロの unconditional probe + 独立 discriminator、 「実行」 と「honor」 を分ける
+## <a id="firing-probe-execute-vs-honor"></a>13. mechanism が「発火したか」 を検証する時は依存ゼロの unconditional probe + 独立 discriminator、 「実行」 と「honor」 を分ける
 
 §10 は「silent dead は実 e2e でしか expose できない」、 §12 は「再現 ≠ 検証」 だった。 本節は **mechanism (hook / 自動化 / guard) が特定 context で発火・効果したかを切り分ける**作法。 雑にやると「動いていない」 と「動いたが効果が捨てられた」 を取り違え、 誤った root cause を作話する。
 
@@ -447,7 +447,7 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 
 2. **env var / 表層の自己申告を frontend/context の discriminator にしない** — 環境変数は継承・leak・汚染しうる (= 例: `CLAUDE_CODE_ENTRYPOINT` が別 context に漏れる)。 → **独立した観測量**で判別する: 親プロセスの実 path / build 番号 / cwd 等、 自己申告でない物。 1 signal が怪しい時は 2 つ目の独立 signal で corroborate (= §convention-design-principles §8.14 の identity corroboration と同根)。
 
-3. **「実行された (executes)」 と「効果が honor された (honored)」 を分ける** — mechanism は **プロセスとして走った**のに、 その出力・決定を上位層が **捨てる**ことがある (= 例: desktop frontend は hook を実行するが stdout 注入 / permission 判定を honor しない、 [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork))。 「効果が出ない」 を即「実行されていない」 と結論しない。 副作用 (file 書込等) の有無で「実行」 を、 モデル/flow への反映で「honor」 を別々に確認する。 両者は別の修復を要する (= 未実行なら配線、 honor されないなら surface 自体を変える = `docs/convention-design-principles.md §8.15`)。
+3. **「実行された (executes)」 と「効果が honor された (honored)」 を分ける** — mechanism は **プロセスとして走った**のに、 その出力・決定を上位層が **捨てる**ことがある (= 例: desktop frontend は hook を実行するが stdout 注入 / permission 判定を honor しない、 [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork))。 「効果が出ない」 を即「実行されていない」 と結論しない。 副作用 (file 書込等) の有無で「実行」 を、 モデル/flow への反映で「honor」 を別々に確認する。 両者は別の修復を要する (= 未実行なら配線、 honor されないなら surface 自体を変える = [`docs/convention-design-principles.md §8.15`](../docs/convention-design-principles.md#enforcement-surface-frontend-survival))。
 
 4. **帰責する signal は control case で discriminate できることを確認する** (= 発火検証に限らない一般原則) — ある事象 (= 失敗 / 低速 / 異常) の原因として signal X を挙げる前に、 **正常に動いた case (= control) で X を観測**する。 失敗 case と成功 case の **両方に在る** signal は両者の差を説明しない = 原因ではない。 ⚠️ point 2 は「env 値が不正確かも」 だが本点は **env 値が正確でも刺さる**罠 = 値は正しいが discriminate しない。 例 (2026-06-16): 失敗 session の `entrypoint=claude-desktop` を見て「Claude Code desktop を使った user のミス」 と帰責したが、 **正常に完遂した現 session も同じ `claude-desktop`** だった (= live env で確認) → entrypoint は失敗を discriminate せず原因でない。 control を 1 度見れば即 falsify できたのに、 actionable / 外部帰属に飛びついた (= tool-call-robustness.md メタ規律「自分で塞げる/相手のせいにできる原因に飛びつくバイアス」 の attribution 版)。 ⚠️ 特に **user / 外部の選択を「ミス」 と断ずる**前に必ず control で discriminate する (= 誤帰責は user の信頼を直接損なう)。
 

@@ -2,7 +2,7 @@
 
 Repo 群を横断する **Dependabot / CodeQL / Semgrep / auto-merge** 系の自動化 + 関連 gotcha の規約。 ある GitHub user / org が一定数 (= ~10+) の repo を抱えるようになった時点から有用。
 
-## 1. Baseline 構成 (= 全 repo 共通)
+## <a id="baseline-config"></a>1. Baseline 構成 (= 全 repo 共通)
 
 ```
 [1] Dependabot alerts (= vulnerability-alerts) ─── 全 plan 無料、 全 repo に有効化
@@ -17,7 +17,7 @@ Repo 群を横断する **Dependabot / CodeQL / Semgrep / auto-merge** 系の自
 
 各 step は **idempotent** に design すること (= 既設定なら no-op)、 新 repo 作成時の reproducibility を担保。
 
-## 2. Free plan の silent rejection に注意
+## <a id="free-plan-silent-rejection"></a>2. Free plan の silent rejection に注意
 
 GitHub Free plan + private repo で **API は 200 を返すが設定は反映されない** silent rejection が複数機能で発生:
 
@@ -30,7 +30,7 @@ GitHub Free plan + private repo で **API は 200 を返すが設定は反映さ
 
 **規律**: setting 変更系 API は必ず write 後に read で verify、 報告は実 state ベース。 「API が 200 返したから success」 を rely しない。
 
-## 3. Auto-merge workflow の設計
+## <a id="auto-merge-workflow"></a>3. Auto-merge workflow の設計
 
 ### Trigger 選定
 
@@ -80,7 +80,7 @@ Pro / 公開 repo では auto-merge 動作、 Free private では notice + 手�
 
 `major` は **review に残す** (= semver で breaking 可)。 composite (= 1 PR で複数 package) も判定不能なので残す。
 
-## 4. Workflow permissions: explicit declaration
+## <a id="workflow-permissions"></a>4. Workflow permissions: explicit declaration
 
 CodeQL の `actions/missing-workflow-permissions` 警告は **default token が write 過剰** なため。 minimum 権限を explicit に宣言:
 
@@ -99,7 +99,7 @@ migration 時の判定:
 
 upload-artifact は contents 権限と独立 (= 必要なら `actions: write` を別途)。
 
-## 5. Monorepo dependabot.yml
+## <a id="monorepo-dependabot-yml"></a>5. Monorepo dependabot.yml
 
 サブディレクトリに manifest がある (= e.g. `package.json` が `/sheets/`, `/classroom/` 等に分散) repo は `directory: "/"` 単独では検出不能。 `directories:` (= plural、 list) + `groups:` で対処:
 
@@ -129,7 +129,7 @@ updates:
 
 `groups:` で minor/patch を 1 PR に集約、 major は個別 PR でレビュー。 limit を 10 程度に上げる (= subdir × ecosystem × group で PR 数増加するため)。
 
-## 6. Dependabot PR review tier discipline
+## <a id="dependabot-pr-tier-discipline"></a>6. Dependabot PR review tier discipline
 
 PR を流入させた時の **risk 分類 + 判断基準**:
 
@@ -154,7 +154,7 @@ build step を持たない runtime project (= 自作 MCP server、 CLI、 script
 
 `directories:` 設定の monorepo で、 同一脆弱 package が複数 subdir の lockfile に出ても、 Dependabot の **security-update PR は一部 dir のみ生成される** ことがある (= rate-limit / batching)。 partial PR だけ merge すると残 dir の alert を見逃す。 → **全 affected dir 横断の local `npm audit fix` (non-`--force`) の方が完全**。 local fix → push → 残った partial PR は supersede として close、 が確実 (= §10 cascading loop に乗せて PR を 1 件ずつ追う より速い)。
 
-## 7. ESM migration backwards-compatible normalizer
+## <a id="esm-migration-normalizer"></a>7. ESM migration backwards-compatible normalizer
 
 CommonJS → ESM library で `require()` の戻り型が変わる (= bare function → `{default: fn, ...}`) ケースに reusable な pattern:
 
@@ -180,7 +180,7 @@ const usable = raw.default || raw;
 
 逆順 (= bumping PR を先 merge) だと CI 落ちる + 修正の commit が分かれて不便。
 
-## 8. `gh` CLI の subtle な gotcha
+## <a id="gh-cli-gotchas"></a>8. `gh` CLI の subtle な gotcha
 
 ### `users/X/repos` vs `gh repo list X`
 
@@ -223,7 +223,7 @@ gh search prs --author "app/dependabot" --state open \
 
 `--owner` は repeat 可 (= 複数 user/org 跨ぐ)。 dashboard 系 script で頻出。
 
-## 9. Bash `set -e` + heredoc + `$(...)` の interaction
+## <a id="bash-set-e-heredoc"></a>9. Bash `set -e` + heredoc + `$(...)` の interaction
 
 `set -euo pipefail` 下で heredoc 入りの `$(...)` を書くと、 内部 command の非 0 終了で `set -e` が trip する場合がある (= bash version + `inherit_errexit` shopt 依存)。
 
@@ -252,7 +252,7 @@ set -e
 
 `if ... then ... else ... fi` で wrap する方法もあるが、 heredoc + 複数行 + 出力 capture が絡むと syntax が読みにくくなる。 set +e / set -e bracketing が最も読みやすい。
 
-## 10. Cascading Dependabot PR の convergence loop
+## <a id="cascading-pr-convergence"></a>10. Cascading Dependabot PR の convergence loop
 
 Monorepo + `directories:` 設定で 1 PR を merge すると、 **sibling subdir で同 package の同 version bump PR が次々に開く** (= 1 merge → main 動く → Dependabot scan → 別 subdir で同 vuln 検出 → PR open)。
 
@@ -271,7 +271,7 @@ done
 
 5 iteration で typically converge。 alert count が一定値以下になったら手動 review に shift。
 
-## 11. Cross-references
+## <a id="cross-references"></a>11. Cross-references
 
 - 各 user の repo 集合に対する具体 baseline 適用は **layer 3** (= 個人 prefs) で記録 (= 各自の personal layer に、 例えば security-automation.md のような file を置く)
 - 新 repo onboarding script の template は **layer 3** で保持 (= 各自の personal layer、 例えば scripts/secure-new-repo.sh + scripts/templates/)

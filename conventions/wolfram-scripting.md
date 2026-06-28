@@ -6,7 +6,7 @@ scope 補足: 「数値計算が silently 壊れる patterns (= scale-dependent 
 
 ---
 
-## 1. `Print[NumberForm[x, spec]]` は script モードで literal 化する
+## <a id="numberform-literal"></a>1. `Print[NumberForm[x, spec]]` は script モードで literal 化する
 
 ### 問題
 
@@ -59,7 +59,7 @@ wolframscript の `-file` および `-code` 両方で発生。 notebook (`.nb` �
 
 ---
 
-## 2. `SetDirectory[DirectoryName[$InputFileName]]` で `$InputFileName` が空文字の fallback
+## <a id="inputfilename-empty-fallback"></a>2. `SetDirectory[DirectoryName[$InputFileName]]` で `$InputFileName` が空文字の fallback
 
 ### 問題
 
@@ -98,7 +98,7 @@ Get["my_package.wl"];
 
 ---
 
-## 3. PDF text 抽出の secondary fallback としての `Import["...pdf", "Plaintext"]`
+## <a id="pdf-plaintext-import"></a>3. PDF text 抽出の secondary fallback としての `Import["...pdf", "Plaintext"]`
 
 ### 位置付け
 

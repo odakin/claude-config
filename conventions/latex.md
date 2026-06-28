@@ -45,7 +45,7 @@ grep -nE '<element>' file.tex
 2. prose summary (`SESSION.md`「migration 完了」等) と active source が食い違ったら **active source が勝つ**。summary 側を errata / 更新する。
 3. 第三者 (共著者・レビュアー) が「その要素が原稿のどこにあるか分からない」と言ったら、それは **記憶の曖昧さでなく grep 等価の signal** — 推測で解決策を返す前に自分で active grep を回す。
 
-これは上の「comment-out 流儀の編集後は live `\cite` 集合を照合する」「長さ・段落構造の判断にコメントアウト行を数えない」と同じ **`%` は output から silent** という kernel の、*存在主張* 版 (前者 = 引用落ち / 中者 = 長さ誤算 / 本節 = 存在誤主張、3 つの consequence)。一般則 — 単一情報源の positive 主張の前に安価な検証を回す / prose summary を SoT と読み違えない — の正本は `CLAUDE.md` inline §3 (positive-claim branch) + [`docs/convention-design-principles.md`](../docs/convention-design-principles.md) §2.3 (read 側 SoT)・§2.5 (prose-mirror は別所 state の mirror で change 時に drift) で、本節はその LaTeX source への HOW 適用。
+これは上の「comment-out 流儀の編集後は live `\cite` 集合を照合する」「長さ・段落構造の判断にコメントアウト行を数えない」と同じ **`%` は output から silent** という kernel の、*存在主張* 版 (前者 = 引用落ち / 中者 = 長さ誤算 / 本節 = 存在誤主張、3 つの consequence)。一般則 — 単一情報源の positive 主張の前に安価な検証を回す / prose summary を SoT と読み違えない — の正本は `CLAUDE.md` inline §3 (positive-claim branch) + [`docs/convention-design-principles.md` §2.3](../docs/convention-design-principles.md#sot-read-side) (read 側 SoT)・[§2.5](../docs/convention-design-principles.md#sot-duplication-trichotomy) (prose-mirror は別所 state の mirror で change 時に drift) で、本節はその LaTeX source への HOW 適用。
 
 **事例 (2026-06、物理 LaTeX 原稿):** ある直和分解 (`H = A ⊕ B` 型) が運用台帳の prose で「migration 完了」と記録されたまま、4 日後に `%` + `\begin{comment}` で寝かされた。prose summary はその stale を ~7 週間保持し、その間に派生ノート PDF・`DESIGN.md` entry・共著者宛メール 3 通が**この分解を active 前提で**論じた (左辺の macro 名すら prose 側と source 側で食い違っていた = source 未参照の tell)。共著者が「その分解が原稿のどこにあるか把握できない」と明示 signal を出していたが、当時は記憶の問題と読み流し active grep を回さなかった。最終的に「まだ原稿にあるんだっけ?」の直接質問で初めて comment-out 状態が発覚した。
 

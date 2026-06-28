@@ -154,7 +154,7 @@ LorentzArena Bug 14 では当初 (C) substep を採用したが、 user 「原�
 
 ---
 
-## 3. NIntegrate WorkingPrecision propagation: 入力配列の precision を inherit させないと `NIntegrate::precw` 大量発火
+## <a id="nintegrate-workingprecision"></a>3. NIntegrate WorkingPrecision propagation: 入力配列の precision を inherit させないと `NIntegrate::precw` 大量発火
 
 ### 問題
 
@@ -221,7 +221,7 @@ Quiet の第 2 引数で **特定の message symbol だけ** を suppress (= 全
 
 ---
 
-## 4. 言語移植 verification: 副次 metric vs main metric の divergence は edge-of-stability boundary として documented で済む
+## <a id="porting-metric-divergence"></a>4. 言語移植 verification: 副次 metric vs main metric の divergence は edge-of-stability boundary として documented で済む
 
 ### 問題
 
@@ -263,7 +263,7 @@ Quiet の第 2 引数で **特定の message symbol だけ** を suppress (= 全
 
 ---
 
-## 5. archive / cutover の precondition: smoke (= exit 0) ではなく sample assertion (= 1 件以上 byte exact verify)
+## <a id="archive-cutover-precondition"></a>5. archive / cutover の precondition: smoke (= exit 0) ではなく sample assertion (= 1 件以上 byte exact verify)
 
 ### 問題
 
@@ -369,7 +369,7 @@ assert abs(expectation - sigma/2) < 1e-9, "MISMATCH"
 
 ---
 
-## 7. 検証は source からの独立導出 — 一致合わせは検証でない; 公表式の係数も数値 verify
+## <a id="verify-independent-derivation"></a>7. 検証は source からの独立導出 — 一致合わせは検証でない; 公表式の係数も数値 verify
 
 ### 問題
 
@@ -399,7 +399,7 @@ disputed な量 (vertex 係数・規格化・符号) を「相手の結果に一
 - [`debugging-discipline.md` fix-verification-3-axis](debugging-discipline.md#fix-verification-3-axis) — 「conceptually clean」 主張の verify 義務 (= 同 trait)
 - 同 trait family = 「安価な操作 (= 一致合わせ / memory recall / literal-copy) で expensive 操作 (= 独立導出 / 数値 verify) を bypass する」。 review / sweep / context 構築 domain にも同型に現れる
 
-## 8. 数値結果は第一原理 (次元解析・対称性・Ward 恒等式・既知極限) で cross-check; 自前の数値がバグり得る
+## <a id="first-principles-crosscheck"></a>8. 数値結果は第一原理 (次元解析・対称性・Ward 恒等式・既知極限) で cross-check; 自前の数値がバグり得る
 
 ### 問題
 
@@ -431,7 +431,7 @@ disputed な量 (vertex 係数・規格化・符号) を「相手の結果に一
 - §6 — transcript hallucination の sympy verify (= 同 trait family)
 - 同 trait family = 「安価な操作 (= 数値の盲信) で expensive 操作 (= 第一原理 cross-check) を bypass」。 個人層の RCA と詳細物理 narrative は owner の private layer に記録されている (= collaborator は access 不要)
 
-## 9. Ratio/構造 check は overall scale を fix しない; 既知量で calibrate し、 magnitude と sign を分ける
+## <a id="calibrate-magnitude-sign"></a>9. Ratio/構造 check は overall scale を fix しない; 既知量で calibrate し、 magnitude と sign を分ける
 
 ### 問題
 
@@ -442,7 +442,7 @@ Ward 恒等式・対称性・内部無矛盾性・projector 代数 等の check 
 1. **overall scale は『同じ機構で既知量を計算』 して calibrate**: 自分の loop / 数値機構 (= 積分 measure・trace・pole 抽出・単位) で、 textbook 値が分かっている量を計算し、 一致を確認。 例: 場の理論の loop 機構なら QED vacuum polarization (= 1 Dirac fermion で発散 |Π|=4/3、 units 1/(16π²ε)、 transverse も同時 check)。 これが ratio check では届かない絶対 scale の唯一の anchor。
 2. **外部比較は magnitude と sign を分けて述べる**: 絶対値は calibrate 可能だが、 符号は規約依存 (= Euclidean vs Minkowski、 self-energy の overall sign 定義 等) のことが多い。 「match」 と一括りにせず「magnitude 一致 (calibrate 済) / sign は規約依存」 と分けて記す。
 3. **doc の数値 claim には実 check を紐付ける**: 「~を 1e-16 で満たす」 等と書いたら、 それを実際に検証する script が存在するか確認。 無ければ claim は未検証 — check を足す (= 「cell 埋めでなく error expose」 の claim-vs-check 版)。
-4. **calibration は『その既知量が exercise した構造的特徴』 の scale しか fix しない** (= calibration の scope 限界): 防止策 1 の QED calibration (= 単一添字 γ^μ 頂点) は、 target が持つ richer な構造 (= 多添字の縮約 / index-mixing) を cover しない。 単純構造の calibration pass を「pipeline 全体が absolute に正しい」 と一般化すると、 target の未 calibrate な構造を **crude な射影のまま信じる**死角になる (= §8 防止策 4「特殊値縮退」 の構造版 = **特殊構造縮退**)。 汚染されうる量は crude な index-trace/sum でなく、 **汚染構造が恒等的に消える clean probe** (= 関心量に直交する添字・配置を選ぶ) で直接抽出して cross-check する (= calibration が validation した「構造的特徴」 が target の構造を網羅しているかを問う、 一般則は `convention-design-principles.md §8.8` list-audit implicit-scope の数値 calibration 版)。
+4. **calibration は『その既知量が exercise した構造的特徴』 の scale しか fix しない** (= calibration の scope 限界): 防止策 1 の QED calibration (= 単一添字 γ^μ 頂点) は、 target が持つ richer な構造 (= 多添字の縮約 / index-mixing) を cover しない。 単純構造の calibration pass を「pipeline 全体が absolute に正しい」 と一般化すると、 target の未 calibrate な構造を **crude な射影のまま信じる**死角になる (= §8 防止策 4「特殊値縮退」 の構造版 = **特殊構造縮退**)。 汚染されうる量は crude な index-trace/sum でなく、 **汚染構造が恒等的に消える clean probe** (= 関心量に直交する添字・配置を選ぶ) で直接抽出して cross-check する (= calibration が validation した「構造的特徴」 が target の構造を網羅しているかを問う、 一般則は [`convention-design-principles.md §8.8`](../docs/convention-design-principles.md#proxy-blind-spot) list-audit implicit-scope の数値 calibration 版)。
 
 ### 実例 (2026-06、 場の理論の 1-loop 2 点関数)
 

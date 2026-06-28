@@ -1,6 +1,6 @@
 # シェル環境（Claude Code + macOS）
 
-## 問題
+## <a id="path-loss-problem"></a>問題
 
 Claude Code（デスクトップ版）は起動時にシェルスナップショット（`~/.claude/shell-snapshots/`）を生成し、Bash ツール実行のたびにそれを source する。スナップショットには `export PATH=...` が含まれ、シェル init で設定した PATH がここで確定する。
 
@@ -26,7 +26,7 @@ Claude Code（デスクトップ版）は起動時にシェルスナップショ
 | `settings.json` の `env.PATH` | スナップショットが優先される |
 | LaunchAgent plist | 同上 |
 
-## 実態: 第2層が主対策 (2026-04-07 検証)
+## <a id="layer2-main-fix"></a>実態: 第2層が主対策 (2026-04-07 検証)
 
 当初は「第1層 (`.zprofile`/`.zshenv` 修正) で根治、第2層 (snapshot patch) は防御的措置」という設計だったが、Intel Mac での実証で **第1層は Claude Code Bash tool には届かない**ことが判明:
 
@@ -36,7 +36,7 @@ Claude Code（デスクトップ版）は起動時にシェルスナップショ
 
 **したがって実態は: 第2層 (snapshot patch) が Claude Code 用の主対策、第1層は terminal/login shell 用の補完**。以下の見出しでは「第1層 = 根本対策」と書いているが、これは「terminal 系での根治」の意味で、Claude Code には届かない。
 
-## 解決策: 二層防御
+## <a id="two-layer-defense"></a>解決策: 二層防御
 
 ### 第1層: `.zprofile` の修正（terminal 用の根本対策）
 
@@ -122,7 +122,7 @@ REQUIRED_PATHS リストで管理。各スナップショットをスキャン�
 
 `launchctl load ~/Library/LaunchAgents/com.user.claude-snapshot-fix.plist` で有効化。
 
-## macOS システムコマンドの deny ルール
+## <a id="macos-deny-rules"></a>macOS システムコマンドの deny ルール
 
 settings.json の `deny` に以下を設定し、破壊的な macOS システムコマンドをブロックする:
 

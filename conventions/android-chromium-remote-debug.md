@@ -6,7 +6,7 @@ Android phone 上の Brave / Chrome で動いている web app の **生 state �
 
 ---
 
-## §1 経路選択: USB ADB vs WiFi ADB
+## <a id="route-selection"></a>§1 経路選択: USB ADB vs WiFi ADB
 
 **WiFi ADB を first-line 推奨**。 USB ADB は cable / port の data 通信疎通確認が必要で詰まりがち、 「Anker 等 high-quality cable でも data 非対応 model がある」 「MacBook の USB-C port が data 通すかは port 別」 等で時間溶ける。 WiFi ADB は Android 11+ なら ケーブル不要で 5 分で確立。
 
@@ -14,9 +14,9 @@ Android phone 上の Brave / Chrome で動いている web app の **生 state �
 
 **事前判定**: Android version が 11 以上か確認 (= `設定 → デバイス情報 → Android バージョン`)。 11+ なら WiFi 経路。
 
-## §2 WiFi ADB セットアップ
+## <a id="wifi-adb-setup"></a>§2 WiFi ADB セットアップ
 
-### §2.1 スマホ側
+### <a id="wifi-adb-phone"></a>§2.1 スマホ側
 
 1. **開発者モード有効化** (= 既に ON なら skip):
    - 設定 → デバイス情報 → 「ビルド番号」 を 7 回 tap
@@ -28,7 +28,7 @@ Android phone 上の Brave / Chrome で動いている web app の **生 state �
    - 「**ペア設定コードによるデバイスのペア設定**」 tap
    - 画面に **6 桁数字** + **IP:port** (例: `<RFC1918-IP>:<random-pair-port>` 形式、 RFC1918 は `192.168.x.x` / `10.x.x.x` / `172.16-31.x.x` のいずれか) 表示、 **画面を閉じない**
 
-### §2.2 Mac 側
+### <a id="wifi-adb-mac"></a>§2.2 Mac 側
 
 ```bash
 # adb がなければ install (= homebrew)
@@ -47,15 +47,15 @@ adb devices -l
 # → "<RFC1918-IP>:<connect-port>  device product:..."
 ```
 
-### §2.3 同 WiFi 必須
+### <a id="wifi-adb-same-network"></a>§2.3 同 WiFi 必須
 
 スマホとこの Mac が **同じ WiFi network** に接続している必要あり。 違うなら片方を合わせる。
 
 ---
 
-## §3 Chromium DevTools Protocol (CDP) 接続
+## <a id="cdp-connection"></a>§3 Chromium DevTools Protocol (CDP) 接続
 
-### §3.1 socket 確認 + port forward
+### <a id="cdp-socket-forward"></a>§3.1 socket 確認 + port forward
 
 ```bash
 # Brave / Chrome の devtools_remote socket を確認
@@ -72,7 +72,7 @@ curl -s http://localhost:9222/json/version
 # → JSON return、 "Android-Package": "com.brave.browser" 等
 ```
 
-### §3.2 LorentzArena タブ等の検索
+### <a id="cdp-tab-search"></a>§3.2 LorentzArena タブ等の検索
 
 ```bash
 # 全 tab list (= 各 tab の WebSocket debug URL 含む)
@@ -88,7 +88,7 @@ print(json.dumps(hit, indent=2))
 "
 ```
 
-### §3.3 前提: スマホ側で対象 tab が foreground
+### <a id="cdp-foreground-prereq"></a>§3.3 前提: スマホ側で対象 tab が foreground
 
 Pixel 系 (and 一般 Android) では **対象タブが foreground でないと DevTools tab list に出ない / response 来ない** ことがある。 確認:
 
@@ -102,15 +102,15 @@ LorentzArena 等の long-running tab はこの間 background suspend の risk �
 
 ---
 
-## §4 Runtime.evaluate via WebSocket (= JavaScript 実行)
+## <a id="runtime-evaluate-ws"></a>§4 Runtime.evaluate via WebSocket (= JavaScript 実行)
 
-### §4.1 origin header workaround
+### <a id="origin-header-workaround"></a>§4.1 origin header workaround
 
 Chromium-based Android browser は WebSocket 接続元 origin を厳しく check、 `--remote-allow-origins` flag が無いと **HTTP 403 で reject** される (= browser 起動時に flag 渡せないため、 production app では設定不能)。
 
 **workaround**: WebSocket client から **Origin header を空で送る** (= "" / null)、 browser が許可する。
 
-### §4.2 Python helper script
+### <a id="python-helper-script"></a>§4.2 Python helper script
 
 ```python
 # /tmp/cdp_eval.py
@@ -152,7 +152,7 @@ if __name__ == "__main__":
 pip3 install websocket-client --break-system-packages
 ```
 
-### §4.3 使い方
+### <a id="runtime-eval-usage"></a>§4.3 使い方
 
 ```bash
 # 簡易 1-liner
@@ -165,9 +165,9 @@ python3 /tmp/cdp_eval.py "JSON.stringify(window.__game.getState(), null, 2)"
 
 ---
 
-## §5 mobile-only bug RCA pattern
+## <a id="mobile-only-bug-rca"></a>§5 mobile-only bug RCA pattern
 
-### §5.1 `performance.now()` vs `Date.now()` で suspend 時間を逆算
+### <a id="performance-now-suspend"></a>§5.1 `performance.now()` vs `Date.now()` で suspend 時間を逆算
 
 mobile Chromium の background tab は **timer suspend** されるが (= setInterval fire しない)、 `Date.now()` (= wall_clock) は経過、 一方 `performance.now()` は **suspend 中も停止しない場合があるが UA 依存**。 但し Android Chromium は **suspend 中も performance.now() が止まる** 挙動が観測されている。
 
@@ -184,7 +184,7 @@ mobile Chromium の background tab は **timer suspend** されるが (= setInte
 
 `suspendDurationSec` が大きければ background suspend されていた時間が判明。 LorentzArena の「12.5h suspend 確認」 はこの diff から逆算した。
 
-### §5.2 Live state capture before reload
+### <a id="live-state-capture"></a>§5.2 Live state capture before reload
 
 mobile bug は reload で state 失う class が多い (= localStorage で persist しない揮発 state が原因)。 RCA で「reload して直る = 真因不明」 を避けるには **reload 前に state 完全 dump**:
 
@@ -207,7 +207,7 @@ JSON.stringify({
 # 3. 結果を repo の repro/<date>-<bug-name>/ に persist
 ```
 
-### §5.3 ring buffer GC を意識した「真因 event の痕跡が消える」 problem
+### <a id="ring-buffer-gc"></a>§5.3 ring buffer GC を意識した「真因 event の痕跡が消える」 problem
 
 worldLine.history 等の **直近 N entry cap** を持つ data structure は、 真因 event から **N × dτ 時間以上経過すると GC されて消える**。 LorentzArena では history.length=2000 + dτ=0.013 sec = 26 sec の寿命。 真因が「数時間前」 に発生していると痕跡なし。
 
@@ -215,7 +215,7 @@ worldLine.history 等の **直近 N entry cap** を持つ data structure は、 
 
 ---
 
-## §6 注意点 / よくあるハマり
+## <a id="gotchas"></a>§6 注意点 / よくあるハマり
 
 | 症状 | 原因 | 対処 |
 |---|---|---|
@@ -228,7 +228,7 @@ worldLine.history 等の **直近 N entry cap** を持つ data structure は、 
 
 ---
 
-## §7 References
+## <a id="references"></a>§7 References
 
 - 由来 session: 2026-05-06 LorentzArena Bug 14 live state capture (= [`2+1/repro/2026-05-06-bug14-state/README.md`](https://github.com/sogebu/LorentzArena/blob/main/2%2B1/repro/2026-05-06-bug14-state/README.md))
 - Android ADB docs: https://developer.android.com/tools/adb
