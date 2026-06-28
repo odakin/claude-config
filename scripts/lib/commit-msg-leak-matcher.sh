@@ -40,8 +40,8 @@
 # は本 library と同 dir (lib/) に存在 (= source 済前提)。
 #
 # 設計 notes:
-#   - 7 allowlist 名 (= gmail-mcp-config / research-collab / email-office /
-#     odakin-prefs / secrets-config / physics-research / conferences) は本 file
+#   - 8 allowlist 名 (= gmail-mcp-config / research-collab / email-office /
+#     odakin-prefs / secrets-config / physics-research / conferences / 推薦書) は本 file
 #     に literal embed。 これらは既に claude-config/CLAUDE.md §例外 list で public、
 #     leak 軸の問題なし。 list 変更時は両方を sync (= §10 4 軸 sweep 義務)
 #   - repos.md 内 format: `| \`<repo>/\` | <desc> | private[ (...)] |` の
@@ -51,7 +51,7 @@
 # ====================================================================
 # allowlist: claude-config/CLAUDE.md §例外 list と sync
 # ====================================================================
-LEAK_MATCHER_ALLOWLIST="gmail-mcp-config research-collab email-office odakin-prefs secrets-config physics-research conferences"
+LEAK_MATCHER_ALLOWLIST="gmail-mcp-config research-collab email-office odakin-prefs secrets-config physics-research conferences 推薦書"
 
 # ====================================================================
 # main entry point

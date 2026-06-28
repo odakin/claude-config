@@ -32,6 +32,21 @@ item の仕様:
   verify      : False にすると検証対象から外す (= "✓" 等、 重複しうる短い記号用)
   type        : "check" で anchor (= "□..." 等の checkbox 語) の □ 内に ✓ をベクター描画
                 (= font の ✓ glyph 有無に非依存)。 text 不要、 検証・二重印字 guard 対象外。
+
+エンジン helper inventory (= 様式 driver から使う API):
+  build_document()                    : 主 entry。 1 書類分の overlay + 検証 + ラスタ化 を pipeline (#pdf-prefill-direct)
+  pick_font()                         : 雛形 PDF の埋込フォントに自動マッチ (#pdf-prefill-font-match)
+  ensure_template_pdf()               : 雛形 xlsx → PDF 化 (xlsx-to-pdf.sh wrapper)
+  assert_formula_cache_intact()       : openpyxl save 後の formula cache 喪失を sentinel cell で検出 (#openpyxl-clears-formula-cache)
+  find_page()                         : 内容特徴語でページ特定 (= ページ番号 hardcode 禁止)
+  word_rect()                         : label 語 1 語の bbox
+  find_data_cell_for_label()          : ⭐ label cell に隣接する text-empty data cell の rect を返す
+                                        (#pdf-cell-label-vs-data-disambiguation、 label-vs-input の PDF 版を catch する核心)
+  boost_signature_alpha()             : 透過 PNG 署名の濃度 boost (PIL alpha × N + 必要なら RGB pure black 固定、
+                                        #signature-image-overlay-density、 経路非依存 = PDF overlay / docx add_picture どちらも)
+  verify_pdf_mutation()               : PDF mutation 後の機械検証 5 項目 schema (page 数 / text 不変 / must-present /
+                                        must-absent / image stream delta、 #pdf-mutation-verification-schema)
+  redact_hash_runs() / redact_words() : 不要表示 (= `#+` overflow 等) を redact で除去
 """
 
 from __future__ import annotations

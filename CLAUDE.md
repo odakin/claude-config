@@ -133,7 +133,7 @@ claude-config/
 │   ├── pdf-cleaner.html                # ↑のブラウザ版 fallback（非 macOS / pbcopy なし環境用、整形ロジックの正本は clipboard-cleaner.py で両実装を同期）
 │   └── lib/                            # sourceable helper (個人層検出の共通化)
 │       ├── find-personal-layer.sh      # `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
-│       └── commit-msg-leak-matcher.sh  # commit message leak matcher (= sensitive-terms.txt + repos.md private list - 6 allowlist の (a)(b)(c) check)、 claude-code hook + git-side runner の両方が source する DRY 実装
+│       └── commit-msg-leak-matcher.sh  # commit message leak matcher (= sensitive-terms.txt + repos.md private list - 8 allowlist の (a)(b)(c) check)、 claude-code hook + git-side runner の両方が source する DRY 実装
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)
 │   ├── overleaf-sync.sh.template       # Overleaf 連携 repo 用 sync script template（PROJECT_ID hardcode = ID の SoT、 --status/--merge、 conventions/overleaf-integration.md#sync-script-contract）
@@ -222,6 +222,7 @@ setup.sh が自動で行うこと:
 | `secrets-config` | 秘密情報の保管経路 | 機能カテゴリ名 |
 | `physics-research` | 物理研究 career DB | category 名、 odakin が物理学者であることは INSPIRE 等から公知 |
 | `conferences` | 研究会・workshop 参加 lifecycle ledger | 一般語、 研究者が学会に参加・発表することは public profile (= CV / talks list) から既知 |
+| `推薦書` | 学生・共同研究者向け推薦書 (recommendation letter) ledger | 日本語の共通名詞「推薦書」 = generic category name、 大学教員が student / collaborator の推薦書を書くことは public profile (= 教員業務) から既知。 2026-06-28 追加 (= 既 layer 1 history に 9 mention 在 + commit-msg-leak-guard が BLOCK する body/commit-msg 挙動非対称を解消、 追加判断は user delegation 経由) |
 
 **criterion**: 名前が (1) category-level / function-level の一般語であり、 (2) 名前から推察される specifics が **既に public profile から得られる範囲を増やさない** なら例外 OK。 NG 例: `<institution-code>-<topic>` (= 所属 institution が public でも、 そこに紐付く具体 topic の組合せは更なる leak)、 `<project-codename-specific>` (= 個別 project codename)、 `<collaborator-name>-collab` (= 共著者名 leak)、 `<unpublished-result>-analysis` (= 未公開研究 leak)。
 

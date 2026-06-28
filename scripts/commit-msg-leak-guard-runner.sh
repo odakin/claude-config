@@ -121,9 +121,10 @@ literal term が含まれます (= git log で grep 可能な public surface)。
     (= claude-config/CLAUDE.md §「安全規則」 + odakin-prefs/leak-incidents.md
     の運用と整合)
 
-例外 list (= mention OK な非公開 repo 6 個):
+例外 list (= mention OK な非公開 repo 8 個):
   gmail-mcp-config, research-collab, email-office,
-  odakin-prefs, secrets-config, physics-research
+  odakin-prefs, secrets-config, physics-research,
+  conferences, 推薦書
 
 意図的に commit したい場合は \`git commit --no-verify\` で bypass 可能
 (escape hatch)。 但し意図的 bypass は leak-incidents.md に記録推奨。
