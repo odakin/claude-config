@@ -927,7 +927,7 @@ visual_center = (y_top + y_bot) / 2
 
 ⚠️ **font の選定**: baseline 計算は font に固有 — overlay font は雛形に揃える ([`pdf-prefill-font-match`](#pdf-prefill-font-match))、 そうでない場合 ascender/descender の値が雛形と乖離して中央配置が狂う。
 
-⚠️ **「使う前に test」 の reflex 不発を防ぐ**: 「`insert_text` の y は visual top」 等の memory が直感的に強いほど誤りやすい。 当 slug の `y = baseline` を「使う直前に当 doc で再確認 (= recall でなく re-read)」 する規律で踏み込む — recall-dependent reflex は [`convention-design-principles.md §8.12`](../docs/convention-design-principles.md#recall-dependent-firing) と同様、 最弱発火面ゆえ「直感を疑った時に当 slug を読み直す」 のが第一線。
+⚠️ **「使う前に test」 の reflex 不発を防ぐ**: 「`insert_text` の y は visual top」 等の memory が直感的に強いほど誤りやすい。 当 slug の `y = baseline` を「使う直前に当 doc で再確認 (= recall でなく re-read)」 する規律で踏み込む — recall-dependent reflex は [`convention-design-principles.md §8.12`](../docs/convention-design-principles.md#firing-surface-hierarchy) と同様、 最弱発火面ゆえ「直感を疑った時に当 slug を読み直す」 のが第一線。
 
 origin: 2026-06 scan 様式 PDF への overlay session で、 baseline と visual bottom の混同に基づく座標補正が 3-4 ラウンド噛み合わず収束を遅らせた。 test PDF で bbox 実測 → ascender/descender 確定の 1 step を session 中盤で初めて回し以降は安定。 「使う前に test」 の reflex を slug に焼くことで「直感の memory」 を打ち消す形にした。
 
