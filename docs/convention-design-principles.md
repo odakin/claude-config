@@ -178,6 +178,8 @@ origin: 2026-06-18 — 研究費様式の交通費記入ルールを是正した
 
 **対策の設計:** この原則は CONVENTIONS.md §3 の作業開始手順に組み込んだ（「簡単なタスクも例外ではない」）。行動原則を独立したルールにせず、既存の手順に条件を追加する形にした理由は、§3 の原則に従えば自動的にこの問題が防がれるため。新しい概念を導入するより、既存の仕組みの適用範囲を広げる方が認知コストが低い。
 
+**Evidence (2026-06、 1 instance)**: scan PDF への text overlay 作業で「ベスト推測→user 確認→補正」 のループを 7+ rounds 反復、 session 中盤で初めて回した既存手順 (= 試験 PDF での bbox 実測 + 罫線・文字の pixel 差分分離) で短時間収束。 着手時に layer 1 doc を grep していれば見えた経路 ([`pymupdf-insert-text-baseline`](../conventions/office-automation.md#pymupdf-insert-text-baseline) + [`scan-pdf-pixel-anchor-overlay`](../conventions/office-automation.md#scan-pdf-pixel-anchor-overlay)) で、 CONVENTIONS.md §3 の事前確認 step が recall 依存ゆえ in-context に表象されない瞬間に発火しなかった本節 pattern の direct instance (§8.12)。 「行動原則を独立せず既存手順に組み込む」 設計選択は本失敗を *減らす* が *消さない* — ambient に乗せた条件は recall に依存し続けるため、 firing surface の最弱面 (§8.12) が再演する。 detailed instance は layer-3 plan に sequester (= 層 1 → 3 hardlink 禁則、 §1)。
+
 ### <a id="motivated-substitution-trap"></a>4.1 指定された成果物・手段から逸脱する時の self-justification trap（motivated substitution）
 
 タスクが**特定の成果物・手法を名指す**とき（「X を実装して」/ plan に「手法 Y」と明記 等）、より一般的・印象的・自分好みの別手法が思い浮かぶと、LLM は**逸脱の正当化を後付けで製造**しやすい。起点は「目標（outcome）」を最適化して「指定された手段（named deliverable）」を交換可能と見なすこと。§4 の「orient before act」が *事前確認のスキップ* を扱うのに対し、こちらは *（誤って）orient した後に、別物へ静かにすり替える* failure。
