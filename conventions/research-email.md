@@ -98,3 +98,30 @@ Claude がメールを送信（またはドラフト作成）した場合、**�
 ⚠️ いずれも意味判断で、機械では検出できない ([`docs/convention-design-principles.md#downstream-net-intake-leverage`](../docs/convention-design-principles.md#downstream-net-intake-leverage) = leverage は上流の judgment)。最後の砦は人間のレビューなので、確定根拠の可視化 (上記) で人が「本人か」軸で見られるようにすることが要。
 
 **反パターン (実例から)**: 古い論文の引用元著者を、姓の一致だけで現役の同姓研究者と同定し「あなたが打ち立てた定理」と本文に断定して送信 → 別人で「人違いです」と返信。著者レコードで「近年の論文は同名別人」と気づいていたのに「では現役でない方が本人だろう」と消去法で当て推量したのが直接因。同じ送信群でも、正しい人物が現役で arXiv・所属メールを辿れた相手は同名別人問題を正しく解決できていた = 差は「正しい人物を積極的に裏取りできたか否か」。
+
+## <a id="pre-send-cosigner-confirmation"></a>共著メール送信前の共著者 draft 確認
+
+共同署名で外部 (= 学外 / 学内事務 / 上長 等、 信頼関係に影響しうる相手) に送るメールは、 **送信前に共著者の draft 確認を informal channel** (= chat / DM / informal mail) で取る。 各々の name が footer に並ぶ「同意の上 send された」 体裁になるため、 sender が単独で送ると共著者が「勝手に署名された」 不快感や、 立場の不一致を public surface に焼き付けるリスクがある。 §「アウトリーチ前の身元確認」 (= 受信側の身元裏取り) と sibling = sender-side responsibility (= 自分の署名)。
+
+確認手順:
+
+1. draft (= 送信予定の本文 + To/Cc/件名) を informal channel に提示
+2. 共著者の "OK" or 修正指示を待つ
+3. 修正があれば反映 → 再 OK
+4. send 後、 informal channel で「送信完了 + messageId」 を共有 (= 後で「あの mail どうなった?」 と聞かれる reflex も防ぐ)
+
+省略可なケース:
+
+- 毎日対面で discuss していて互いの意思が共有されている同僚との low-stakes mail
+- 共著者が事前に「一任する」 と明示 (= 委任の record が available なら)
+- 共著者の input が完全に反映済 (= 共著者自身がほぼ書いた、 sender が typo 直しのみ)
+
+省略不可なケース:
+
+- 公式組織 (= 学部長 / 事務局 / 出版社 / referee) 宛
+- 議題提案・抗議・苦情等 reaction risk のある内容
+- 共著者の立場・専門領域への言及がある (= 共著者の name で誤った主張を出さない)
+
+⚠️ DM 確認は記録に残る形 (= scrollback できる channel) で行う。 口頭・電話のみだと後で「合意していない」 と紛糾しうる。 また確認 turnaround が長い場合は send-side responsibility の judgment (= 「expected delay」 vs 「重要なので待つ」) を sender が引き受ける。
+
+origin: 2026-06-29 学内事務向け詫び返信の作成 session。 共同署名 mail について、 (1) 初稿 → 共著者 DM 確認、 (2) 共著者新提案 (= 「次回会議の議題に取上げ依頼」 追加) を反映した修正稿 → 再 DM 確認、 (3) GO 受領 → send + 送信完了 DM 通知、 という 3 段の loop で運用した実例。 sender 単独 send だった場合、 共著者の追加提案が捨象されかつ署名のみ共同で出てしまう risk があった。

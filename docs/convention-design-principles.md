@@ -684,6 +684,21 @@ reflex:
 
 origin: 2026-06-13 desktop-hook-gap remediation。 odakin は Claude Code desktop 主運用だが settings.json hook 群 (mail 誤送信 guard 含む) が desktop で hook 出力 honor されず大半 inert と判明。 再配置: mail → permission ask (`defaultMode:default` + `ask:send_email` + routine MCP を allow、 内容表示つき承認 dialog) / surfacing → SessionStart hook 副作用で `~/.claude/surface/*.txt` 書込 + CLAUDE.md 読込指示 / google-url → git-native commit warn。 qa-yaml は commit-time chronic-FP で再配置不可 → discipline、 calendar 自動強制 / memory / per-prompt §2§3 も surface 制約で discipline 受容。 §8.12 (trigger 品質軸) + §8.13 (可視性軸) に直交する frontend 生存性軸として一般化 (§9.8 充足)。
 
+### <a id="absence-channel-coverage"></a>8.16 不在主張の channel scope — single-channel null は universal absence の証明ではない
+
+ある事実 (= 制度・期限・告知・連絡) の不在を断定する前に、 その fact が伝わりうる **全 communication channel category** を sweep した範囲を明示する規律。 単一 channel の null は「全 channel に無い」 の証明にならない。 [`§8.14`](#single-field-identity-corroboration) が「単一 field の一致で同定するな」 (= identity 軸) なのに対し、 本節は「単一 channel の null で不在断定するな」 (= channel 軸)。
+
+特に institutional / 組織内事実 (= 規程 / 締切 / 公式運用) では 2 category が併存することが多い:
+
+- **person-to-person** (= 直接送られてくる notice): mail / chat DM / 個別通知
+- **broadcast** (= 受信者が読みに来る型): 内部 portal / 掲示板 / 公式 bulletin / 共有 cron / LMS
+
+後者は構成員全員に同時 distribute されるが「読みに来ない人には届かない」 性質。 person-to-person mail sweep だけで「告知されていない」 と universalize すると、 broadcast channel に actual notice があった場合に大きな失敗 (= 「告知なし」 と argue → 実は portal で N 日前から告知済) を生む。
+
+**reflex**: 「事前告知が無い」 / 「規程に書かれていない」 / 「未連絡」 等を断定する前に、 sweep scope を「Verified scope = ___ / NOT verified = ___」 で明示する。 アクセス経路が機械化されていない channel (= 手動 login portal、 MCP 経路無し) は **「未 verify」 と honest framing して保留**、 内部 portal が institution に存在することが分かっている場合は universal absence を主張せず、 確認手段を user / 他 channel に委ねる。
+
+origin: 2026-06-29 ある institutional 締切超過の指摘を受け、 person-to-person mail (= Gmail) と 個別 reference PDF (= 配付資料) のみ sweep して「事前告知が見当たらない」 と 2 段で argue した RCA。 実際は institutional broadcast (= 学内 portal 掲示板) に 4 ヶ月前から告知が出ており、 単に sweep scope に portal が入っていなかった (= 共著者から portal URL 指摘で catch)。 [`§8.11`](#downstream-net-intake-leverage) (downstream net は intake で正しく表現された対象しか守れない) の dual: intake の channel category を取りこぼすと downstream sweep がいくら丁寧でも universal absence は嘘になる。
+
 ---
 
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
@@ -1361,3 +1376,4 @@ gate: index の legacy 集合が HEAD (= 直前 commit) に対して **append-on
 | 2026-06-21 | §2.5 新設「SoT 重複の 3 つの扱い (design-out vs reactive)」 | SoT-drift の戦略 frame (A/B/C trichotomy + 成熟度 lens + 検出器の drift-patch/surfacing 仕分け) が layer-3 plan (sot-maturity-normalization) にしか無く、§2.1-2.4/§15/§8.11 が個別戦術として散在していた。frame を hoist して上位 home を与え、plan は odakin 運用台帳への適用として上を指す (kernel-up/instance-down)。sot-registry に topic 追加 (§15-5)。user 依頼。 |
 | 2026-06-22 | §4.2 新設「自己 RCA の severity-minimization — §4.1 の cure 不能な残余クラス」 + §4.1 内の解放済 positional ref (§4.2/§4.3) を脱-positional 化 | 外部宛 outreach で未検証身元を断定送信した失敗を RCA する session が、単純失敗を複数回「小さく・技術的に」 framing し直し user に都度訂正された incident を一般化 (= 主題がこの reflex の最中・訂正済み版でも再演)。§4.1 (motivated substitution) の self-RCA/severity 姉妹で、両 cure (機械 gate / payoff 変更) が使えない残余クラス → goal を予防→可視化+訂正ループ短縮へ下げ、blunt-first (出力 form 変更) + 外部 review backstop。pure minimization と区別する signature = dignified な失敗の inflate による displacement。instance は layer-3 個人層 (kernel-up/instance-down)。user 依頼。 |
 | 2026-06-25 | §2.5 成熟度 lens「派生データ」row に (A) field-level view を併記 | 旧記載は (B) whole-file 生成のみで、手編集 file 内の単一導出可能 field (例: slug の純関数たる公開 path) を「書かず read 時に導出」 する design-out が表に無かった。2026-06-25「派生可能な値は格納しない」 一般化 handoff の cold-eyes verdict (= build all-no、規則は §2.5 に既存) が flagged した micro-edit を owner 採用。1 cell の clarification。 |
+| 2026-06-29 | §8.16 新設「不在主張の channel scope — single-channel null は universal absence の証明ではない」 | layer-3 で institutional 締切超過の指摘に対し person-to-person mail sweep の null から「事前告知無し」 と universalize → 実は internal broadcast (= 学内 portal 掲示板) に 4 ヶ月前から告知あり、 を 2 段繰り返した RCA を一般化 (= 1 段目: mail sweep null → universal absence / 2 段目: 締切時刻を verify せず時間軸で「十分早い」 argue)。 §8.11 (intake leverage) の channel-category 軸 dual = downstream sweep がいくら丁寧でも intake で channel を取りこぼすと universal absence は嘘になる。 §8.14 (identity 軸 corroboration) との対 = channel 軸 coverage。 reflex = sweep scope template 「Verified = ___ / NOT verified = ___」 を埋める、 機械化されていない broadcast は honest framing で保留。 共著メール送信前の共著者 draft 確認 (= sender-side responsibility) を research-email.md に sibling section として併設、 receiver-side responsibility (= pre-outreach-identity-check) の対辺補完 (§9.8 充足)。 user 依頼。 |
