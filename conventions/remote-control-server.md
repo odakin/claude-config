@@ -87,3 +87,12 @@ QR (space キー) は使えないが、接続先は ① claude.ai/code のセッ
 - `remoteControlAtStartup: true` (`~/.claude/settings.json`、machine-local): 手元で開いた
   **対話セッション全部**を自動でリモート続行可能にする。サーバーモード (= 何も開いて
   いなくても外から新規に生やす) とは役割が別で、併用が自然。
+
+## <a id="multi-account-servers"></a>複数アカウント — 1 マシンに 2 サーバー
+
+別アカウントの新規 session をスマホから選べるようにするには、 1 マシンで remote-control サーバーを**アカウントごとに 1 本**立てる。 認証ストアの分離は `CLAUDE_CONFIG_DIR` で行う:
+
+- `install-remote-control-server.sh --config-dir DIR --label-suffix SUF` で 2 本目以降を別 config dir + 別 launchd label で常駐 (= 既定サーバーと衝突しない)。 既定 (flag 無し) が 1 本目。 outbound polling なので 2 本同時起動でポート/ロック衝突なし。
+- ⚠️ **`CLAUDE_CONFIG_DIR` は `~/.claude/` を丸ごと別 dir に分離する** (認証・`settings.json`・hooks・MCP・projects すべて)。 何もしないと 2 本目の名義 session は leak-guard 等の hooks を失う。 → 2 本目の config dir に `settings.json` を symlink で持ち込む (hook の command は `~/.claude/hooks/...` の絶対パスなので実体は共有先に解決される)。 MCP server は `.claude.json` 側で分離され別名義には付かない (= 安全性でなく機能差、 要れば別途その config dir で `claude mcp add`)。
+- ⚠️⚠️ **OAuth はブラウザの現在 claude.ai アカウントを掴む** (= config dir を分けても、 `claude auth login` の認可画面が別アカウントでサインイン済だとそっちで認可されてしまう)。 2 本目を**別アカウントで認証するときは、 認可の瞬間にブラウザをその別アカウントに切り替える** (claude.ai のアカウントメニューで切替、 またはサインアウトして選び直す)。 認可後はブラウザを戻してよい (= 資格は config dir に保存される)。 必ず `CLAUDE_CONFIG_DIR=DIR claude auth status` で email を確認してから本番化する。
+- スマホ側は **アプリのアカウント = 見える environment 群のスイッチ** (= odakin でサインインすると odakin 名義サーバーの environment が、 別名義でサインインすると別名義の environment が候補に出る)。
