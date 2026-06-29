@@ -137,3 +137,24 @@ settings.json の `deny` に以下を設定し、破壊的な macOS システム
 `Bash(*)` パターンはコマンド文字列全体にマッチするため、文字列中に含まれるだけでもブロックされる。正当な用途（grep 等）は専用ツール（Grep, Read）で代替可能なので実害なし。
 
 **背景:** `tccutil reset Calendar` を実行して全アプリのカレンダー権限が消失する事故が発生（2026-04-03）。PreToolUse フックの `exit 2` ではブロックできなかったため、deny ルールで対応。
+
+## <a id="no-inline-comments-in-pasted-commands"></a>ユーザーに渡すコマンドに行内 `#` コメントを付けない (zsh)
+
+macOS の既定 shell は zsh。 **interactive zsh は `interactive_comments` が既定で OFF** なので、対話プロンプトに貼り付けた行の `#` は**コメントにならない** — `#` 以降が glob 修飾子や `claude` 等への余計な引数として解釈され、 コマンドが壊れる / 誤動作する。 bash の interactive は同オプションが既定 ON なので bash ユーザーは平気 = これは zsh 固有の罠 (= macOS 既定 shell なので最も踏みやすい)。
+
+→ **Claude が「ターミナルで実行して」 とユーザーにコマンドを提示するときは、 行内 `#` コメントを付けない**。 説明はコマンドの前後に**散文**で書く。
+
+✅ 安全 (説明は散文、 コマンドは素のまま):
+
+```sh
+CLAUDE_CONFIG_DIR=~/.claude-alt claude auth login
+```
+（↑ ブラウザで alt アカウントにサインイン、 のように説明はコマンドの外に出す）
+
+❌ 壊れる (貼り付けると `#` 以降が `claude` への余計な引数 / glob になる):
+
+```sh
+CLAUDE_CONFIG_DIR=~/.claude-alt claude auth login   # alt にサインイン
+```
+
+例外: **script ファイル内**の `#` は常にコメント (= 非対話 parse なので問題ない)。 本ルールは「ユーザーが対話プロンプトに貼り付ける用に提示するコマンド」 にのみ適用。 ユーザーが `setopt interactive_comments` を `.zshrc` に入れていれば行内 # も通るが、 提示側は「既定 OFF + 環境差」 を前提にできないので、 常に行内 # なしで出す。
