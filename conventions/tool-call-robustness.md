@@ -5,6 +5,32 @@
 
 ---
 
+## ⚡ Reflex — 出たら速やかに諦めて Opus 4.7 へ切り替える
+
+malformed (or §別の症状変種「silent 捏造」) を観測したら、 **粘らずに `/model claude-opus-4-7[1m]` で Opus 4.7 1M に切り替える**。 これが root に最も近い唯一の有効緩和で、 「次は通るかも」 で retry を重ねるほど **context が poison されて後続も壊れる** (= §真因 #62344 機序) ため、 早い切替が累積コスト最小。
+
+**諦めしきい値 (= ここまで来たら問答無用で切替)**:
+
+- 同一 tool call が **2 回 malformed** で返った
+- 同 session 内で **3 回目の malformed** を観測した (= 別の tool call で)
+- 1 回目の malformed の後 (= context が poison し始めた段階) でも、 残作業が tool-call 密で「あと数十回 tool を呼ぶ」 と分かっているなら**先回りで切替**
+
+**切替先の優先順位**:
+
+1. 🥇 `/model claude-opus-4-7[1m]` — Opus 4.7 1M (= **本命**、 Opus tier で賢さ最大、 #64774 統計で失敗率 0%)
+2. 🥈 `/model claude-sonnet-4-6` — Sonnet 4.6 (= 次善、 bug 0% だが Opus 4.7 より賢さで劣る)
+3. 🥉 (Fable 5 = 最賢だが本ユーザの環境では選択外)
+
+**なぜ「諦める」 と書くか**:
+
+malformed bug は **Anthropic backend の Opus 4.8 1M-context 固有 serialization bug** (= 詳細は §真因)、 **書き方では直らない** (= §副次緩和は発生確率を下げるだけ、 0 にはできない)。 「並列を 1 つに減らせば通るかも」 「heredoc を file 化すれば通るかも」 と粘ると、 通る回もあるが poisoning が累積して結局 session 全体が腐る。 諦め=敗北ではなく **root に対する最短経路**。
+
+**切替後も poisoning は完全に消えない**ので、 深く poisoned した session は §副次緩和 7 (新 session) や §副次緩和 9-10 (subagent 委譲) と併用する。
+
+**下層からの参照**: 本 reflex は layer 3 (`odakin-prefs/CLAUDE.md` inline §7) からも pointer されている。 下層は短い reflex + 本 file への link のみで、 諦めしきい値・切替先一覧・variant 症状の SoT は本 file が唯一の home。
+
+---
+
 ## <a id="symptom"></a>現象
 
 tool call が `Your tool call was malformed and could not be parsed. Please retry.` で失敗し、 retry も失敗すると `ターンが失敗しました` になる。 これは harness が **生成された tool call (構造化テキスト) を deserialize できなかった** failure であって、 危険操作の block ではない (= permission dialog / hook deny とは別物)。 実害は通常なし (= tool は実行されず状態は不変) だが、 user を待たせ session が止まる。 「やってはならない操作をした」 と誤解されやすいので、 発生時は **まず「フォーマットが壊れただけで何も実行・破壊していない」 と明示**する。
