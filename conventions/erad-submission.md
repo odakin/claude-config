@@ -87,3 +87,40 @@ Excel/docx の fill・docx→PDF・署名合成の **一般技法は `office-aut
 - 基本情報: 課題名/研究期間（年度単位、最短=最長で固定のことあり）/研究分野(主)+キーワード/**研究目的・研究概要（各1000字、改行スペースも1字）**。様式1本文を流用しつつ1000字近くまで拡張可。[文字種の制限](#文字種の制限)を厳守。
 - **経費**: 年度別・円単位。e-Rad は費目を細分（設備備品/消耗品/謝金/旅費/外注/印刷製本/会議/通信運搬/光熱水/その他諸経費/間接）。**API・クラウド計算資源・利用料は原則「その他（諸経費）」**。間接＝直接×30%固定。
 - ⚠️ **補助上限が「直接経費基準」のことがある**（SPReAD＝**直接500万以下＋間接30%別途上乗せ**＝総計最大650万）。交付内定＝充足率×上限・申請額が上限なので**満額申請が有利**。下書きが「総計≤上限」で組まれていたら直接を満額に積み直す。
+
+### 全体パイプライン（素材→提出物の再現順）
+draft（研究内容）+ 公式空様式 + 署名画像 → ① 様式1 xlsx を openpyxl で記入 → ② Excel で再計算保存（式キャッシュ確定）→ ③ 様式0/2/3/4 を docx で記入 → ④ docx→PDF（`docx-to-pdf.sh`）→ ⑤ 署名を PDF に合成 → ⑥ ファイル名規定にリネーム → ⑦ `research_plan_self_check.py` で検証。**各案件のソース（記入スクリプト・記入済 docx・署名 png）と具体値は応募管理リポ側の `src/BUILD.md` に置き、本節を参照する**（＝作り方の SoT は本節、案件固有値は各リポ）。
+
+### 再現スニペット（署名処理・PDF 合成・Excel 再計算）
+署名画像の生成・PDF への合成の helper は `scripts/pdf_form_fill.py`（`boost_signature_alpha` 等）にもある。最小手順:
+```python
+# 手書き写真 → 透過黒 PNG（暗い隅を避け署名のある帯に限定切出し）
+import numpy as np; from PIL import Image
+im=Image.open("sig.jpg").convert("RGB"); W,H=im.size
+band=im.crop((int(W*.14),int(H*.17),int(W*.76),int(H*.42)))   # 署名のある帯
+a=np.asarray(band).astype(np.int16); lum=.299*a[:,:,0]+.587*a[:,:,1]+.114*a[:,:,2]
+ys,xs=np.where(lum<120); m=18                                  # ink=暗い画素で bbox
+sig=band.crop((max(0,xs.min()-m),max(0,ys.min()-m),min(band.size[0],xs.max()+m),min(band.size[1],ys.max()+m)))
+l=.299*np.asarray(sig)[:,:,0]+.587*np.asarray(sig)[:,:,1]+.114*np.asarray(sig)[:,:,2]
+alpha=np.clip((145-l)/95*255*1.9,0,255).astype("uint8")        # 暗いほど不透明・boost
+rgba=np.zeros((*l.shape,4),"uint8"); rgba[:,:,3]=alpha; Image.fromarray(rgba).save("sig.png")
+# 既製の透過署名が薄い場合は alpha を ×2-3、 RGB=0（純黒）に boost
+```
+```python
+# PDF の「氏名：」の右に印字名と併記で合成（複数ページは全ページ探索）
+import fitz; d=fitz.open("form.pdf")
+for pg in d:
+    r=(pg.search_for("氏名：") or [None])[0]
+    if r: pg.insert_image(fitz.Rect(r.x1+100,(r.y0+r.y1)/2-13,r.x1+235,(r.y0+r.y1)/2+13),
+                          filename="sig.png", keep_proportion=True, overlay=True)
+d.save("signed.pdf")   # 検証: ページ数が空様式と一致 / get_images()==1 / 氏名text残存
+```
+```bash
+# 様式1 xlsx の式キャッシュ確定（openpyxl は字数/経費キャッシュを空にする）
+osascript -e 'tell application "Microsoft Excel"
+  open POSIX file "<abs>.xlsx"
+  delay 1
+  calculate
+  save active workbook
+  close active workbook saving yes
+end tell'   # quit しない・対象ブックのみ。formulas/pycel 未導入時の唯一手
