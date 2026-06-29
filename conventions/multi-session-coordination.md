@@ -308,9 +308,18 @@ honest な天井: **「起動した」 を *live 親に自動 push* する経路
 - **worktree (隔離) が向くのは**: 並列の別 session/agent が同じ file を変更して衝突しうる **∧** 作業が **自己完結** (= 成果が隔離コピーの中でコミットまで完結し、 live 環境に反映されなくても検証できる) とき。 worktree は安くない (= 別 checkout の setup コスト + disk。 Agent tool の説明も「並列衝突する時だけ使え」 と注意している) ので、 衝突の実害が無いなら使わない。
 - **ローカル (shared checkout) にすべきは**: 成果が **本物の作業ツリーに反映されて初めて意味を持つ / 検証できる** とき。 典型 = symlink や install/setup スクリプトで **live 環境** (= 例: hook や dotfile を home 配下の決まった場所へ配線する構成) に効く変更、 live 環境がないと動作検証できない変更。 worktree だと (a) 変更が live の場所に **届かない** (= 別フォルダなので symlink 先の実体は変わらない)、 (b) 隔離コピー内で setup/install を走らせると symlink が **後で自動削除されるコピー** を指して **live 設定を壊す**。 この場合、 並列衝突の risk は worktree でなく §1 の規律 (= 着手前 `git fetch` + 自分の file だけ明示 path で commit + 他 session の未 commit 変更に触れない) で抑える。
 
-### 迷ったら 1 問
+### 迷ったら 2 問 (= worktree は AND 条件、 1 問 shortcut だと片方を見落とす)
 
-> 「この成果物は **隔離コピーの中で完結** するか、 それとも **本物のツリーに効いて初めて完成** か?」 → 前者 worktree / 後者 ローカル。
+worktree は **(a) 別 session が同じ file (path) を並列に上書きしうる (= 衝突 risk あり) ∧ (b) 成果が隔離コピー内で完結** の両方 yes で初めて正当化される (= 上 line 308 規則の operational 再述):
+
+> (a) 別 session が同じ file (path) を並列に上書きしうるか? — no → **local 確定** (= worktree は衝突解、 衝突 risk 無しに expensive option を正当化しない) / yes → (b) へ
+> (b) 成果物は **隔離コピーの中で完結** するか? — no → **local** (= worktree は live 反映できない、 隔離コピー内の変更が live に届かない) / yes → **worktree**
+
+### 既定: 新規 unique-名 file の handoff は local
+
+新規 unique-名 file 1 本を書いて commit/push で完成する handoff (= cold-eyes RCA / 一回限りの調査 note / 個別 slug の plan 等) は **file path が unique で他 session と衝突しえない** ゆえ (a)=no → **既定 `[local推奨]`**。 既存 file 編集や複数 file 触りを含む handoff はこの既定の射程外 (= conflict-risk を個別判断)。
+
+⚠️ **観測された application error pattern**: (b) 自己完結だけ見て (a) 衝突 risk を未確認のまま worktree を選ぶ (= 2026-06-29、 4 軸 family の (ii) under-execution residual の correctness 軸 instance、 詳細 [`docs/convention-design-principles.md` §4.1 evidence](../docs/convention-design-principles.md#motivated-substitution-trap) + layer-3 plan)。 ⚠️ 本節 codify は **correctness 軸** (= worktree AND 条件の明示化) であって firing 軸 (= prefix 脱落自体) ではない — firing は build-nothing verdict (= 同 §4.1 evidence、 firing-surface lever 枯渇)。
 
 ### 注意
 
