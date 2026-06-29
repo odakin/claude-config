@@ -590,6 +590,22 @@ LaTeX edit 後、 `pdflatex` が完走しても visual の overflow / misalignme
 
 `pdflatex` の exit code 0 + `! ` error 不在は **build success** の signal であって **visual success** の signal ではない。 `Overfull \hbox` は warning として log に出るだけで build を止めない (= 文字が page 外に hanging するだけ)。 PDF を visual で見ない限り「✓ IS RIGHT (phy...」 で truncate されている等の事故は気付けない。 PyMuPDF (`fitz`) は poppler 不要で macOS default で使えるので、 reflex として安価。
 
+→ overflow を**そもそも出さない**設計則は [固定幅の箱に可変幅テキストを入れない](#fixed-width-box-overflow) (= 検出の前に予防)。
+
+## <a id="fixed-width-box-overflow"></a>固定幅の箱に可変幅テキストを入れない (= 枠線が壊れる)
+
+`\fbox{\begin{minipage}{Nmm}...\end{minipage}}` / `\parbox{Nmm}{...}` / 固定幅 `tabular` 列 (`p{Nmm}`) のような **固定幅コンテナに幅が読めない可変テキスト** (= 氏名・住所・機関名・タイトル・引用文字列 等、 長さが input 次第で変わるもの) を入れると、 内容が箱幅を超えた瞬間に **Overfull \hbox** になり、 視覚的には **枠線が割れる / 右にはみ出す / 紙面外へ流れる**。 source では「幅 Nmm 指定だから収まる」 ように見えるが、 収まるかは render しないと分からない (= [PDF 視覚検証](#pdf-visual-verification) の source-render asymmetry の layout 版)。
+
+**回避設計 (= 1st choice = 幅を当てない)**: 箱幅を固定値で**推測しない**。 内容に自動フィットする container を使う:
+
+- 複数行ブロックを枠で囲む (= 住所ラベル・宛名等) → **固定幅 minipage でなく `\fbox{\begin{tabular}{@{}l@{}} 行1 \\ 行2 \\ ... \end{tabular}}`**。 `\fbox` が tabular の自然幅 (= 最長行) にフィットするので overflow し得ない。
+- 1 行なら `\fbox{...}` を直接 (= 自然幅)。
+- レイアウト上どうしても固定幅で揃えたい場合 → **最長行が収まる幅を render で確認**してから固定 + auto-wrap が要るなら `p{Nmm}` 等で**改行を許す** (= はみ出しを折返しに変える)。
+
+**検証**: 上記を使っても、 commit / 印刷 / user 提示の前に必ず [PDF 視覚検証](#pdf-visual-verification) を回す (= log の `Overfull \hbox` を 0 にする + PNG render で枠が 4 辺とも閉じているか目視)。 Overfull が残っているのに「できた」 と言わない。
+
+**過去事例**: 固定幅 `minipage{150mm}` に長い機関名を `\LARGE` で入れた住所ラベルで、 機関名行が箱幅を超えて右枠線が消えた。 幅を広げる対症療法 (→158mm) でも Overfull が残り、 `tabular` 自動フィットに変えて根治した (= Overfull 0 + 枠 4 辺復活)。 幅当ては input 依存で脆い。
+
 ---
 
 ## 編集向け infographic / poster / 1 枚 figure の design 規約
