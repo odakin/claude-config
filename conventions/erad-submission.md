@@ -64,7 +64,7 @@ Excel/docx の fill・docx→PDF・署名合成の **一般技法は `office-aut
 - **ファイル名**: `第N回_様式M_様式名_e-Rad所属機関コード_ローマ字氏名.{xlsx,pdf}`。⚠️ **接頭辞の有無は回で変わる**（当回の様式0「提出書類リスト」+ 公式 self-check の例で必ず確認。SPReAD は R1 が接頭辞なし・第2回が「第2回_」付き）。ローマ字＝姓先頭大文字で続けて記載。
 - **様式1 のみ Excel**、他様式は PDF 化（`docx-to-pdf.sh`）。
 - **公式 self-check**: 別紙の `research_plan_self_check.py <様式1.xlsx>`（字数・形式・ファイル名を検証、**要確認ゼロ＝完全クリア**。字数は改行・スペースも1字）。ファイル名が要確認に残るのは接頭辞欠落のことがある。
-- **様式1 の式キャッシュ**: openpyxl で記入すると字数・経費の式キャッシュが空になる（self-check は再計算するが、提出ファイル自体に値を残すには **Excel で開いて保存** が必要＝公式案内）。osascript で対象ブックのみ `open→calculate→save active workbook→close saving yes`（quit しない）。`formulas`/`pycel` 未導入時の唯一手。`load_workbook(data_only=True)` で再計算結果を確認。
+- **様式1 の式キャッシュ**: openpyxl 記入で字数・経費の式キャッシュが空になる→提出ファイルに値を残すには **Excel で開いて保存**（公式案内）。手順・gate ヘルパー（`assert_formula_cache_intact`）・修復は [`openpyxl-clears-formula-cache`](office-automation.md#openpyxl-clears-formula-cache)。`load_workbook(data_only=True)` で結果確認。
 - **応募内容提案書プレビュー**（e-Rad が吐く `E0204R01_*.pdf` 等）= **添付した様式PDF の連結**。様式1（xlsx）と e-Rad 入力欄（課題名・研究目的・経費）は含まれない＝それらはタブ側で別途確認。
 
 ### 様式 xlsx の入力セル特定（gov 様式 共通の経験則）
@@ -77,7 +77,7 @@ Excel/docx の fill・docx→PDF・署名合成の **一般技法は `office-aut
 ### docx 同意確認書の記入＋署名合成
 - ＿＿ blank は `re.sub('＿+', 値)`、「氏名：」後の空白 run に値。run 分割に注意（先に run dump）。チェックボックスの content control は toggle 困難＝PDF 化前提なら全 `w:t` の `☐→☒` 置換で視覚チェック。
 - ⚠️ **記入で行が増えるとページ数が空様式より増える**（判断記載欄等）。**空様式のページ数に合わせる**（文を短縮、フォントは入力欄継承＝本文と同サイズ）。
-- **署名合成**: 手書き写真→透過黒PNG（暗い帯を切出し→輝度しきい値で ink 抽出→alpha boost・RGB 純黒）。PDF で `氏名：` を `search_for` し**右隣に印字氏名と併記**で `insert_image(keep_proportion=True)`。複数ページは全ページ探索。補足に「直筆署名 **又は** 氏名入力（電子的記名）も可」とあることが多い。
+- **署名合成**: 手書き写真→透過黒PNG→PDF の `氏名：` を `search_for` し**右隣に印字氏名と併記**で配置（複数ページは全ページ探索）。画像濃度・anchor 配置の技法は [`signature-image-overlay-density`](office-automation.md#signature-image-overlay-density) / [`pdf-prefill-direct`](office-automation.md#pdf-prefill-direct)。補足に「直筆署名 **又は** 氏名入力（電子的記名）も可」とあることが多い。
 
 ### 学生が研究代表者として応募（代理応募）
 - 様式 = 様式0/1/2 ＋ **様式3（学生署名）/様式4（指導教員署名）**。学生に研究者番号が無ければ**指導教員の番号で代理応募**（指導教員枠は消費しない）。
@@ -88,39 +88,12 @@ Excel/docx の fill・docx→PDF・署名合成の **一般技法は `office-aut
 - **経費**: 年度別・円単位。e-Rad は費目を細分（設備備品/消耗品/謝金/旅費/外注/印刷製本/会議/通信運搬/光熱水/その他諸経費/間接）。**API・クラウド計算資源・利用料は原則「その他（諸経費）」**。間接＝直接×30%固定。
 - ⚠️ **補助上限が「直接経費基準」のことがある**（SPReAD＝**直接500万以下＋間接30%別途上乗せ**＝総計最大650万）。交付内定＝充足率×上限・申請額が上限なので**満額申請が有利**。下書きが「総計≤上限」で組まれていたら直接を満額に積み直す。
 
-### 全体パイプライン（素材→提出物の再現順）
-draft（研究内容）+ 公式空様式 + 署名画像 → ① 様式1 xlsx を openpyxl で記入 → ② Excel で再計算保存（式キャッシュ確定）→ ③ 様式0/2/3/4 を docx で記入 → ④ docx→PDF（`docx-to-pdf.sh`）→ ⑤ 署名を PDF に合成 → ⑥ ファイル名規定にリネーム → ⑦ `research_plan_self_check.py` で検証。**各案件のソース（記入スクリプト・記入済 docx・署名 png）と具体値は応募管理リポ側の `src/BUILD.md` に置き、本節を参照する**（＝作り方の SoT は本節、案件固有値は各リポ）。
+### 様式一式の組み立て手順（assembly order。各技法は office-automation.md スラッグが SoT、再掲しない）
+draft + 公式空様式 + 署名画像 → 提出物 の順序。本節は「e-Rad 様式一式に組む順序」だけを持ち、各技法の実装はスラッグへ:
+1. **計算式を含む xlsx 様式**を openpyxl で記入 → ⚠️ save で式キャッシュが飛ぶので Excel 再計算保存（[`openpyxl-clears-formula-cache`](office-automation.md#openpyxl-clears-formula-cache)、driver は `pdf_form_fill.assert_formula_cache_intact` で gate）。標題 drawing を持つ様式は [`excel-osascript-cell-write`](office-automation.md#excel-osascript-cell-write) 経由で値を書く。
+2. 公式 self-check（あれば `research_plan_self_check.py`）で字数・形式・ファイル名を要確認ゼロまで。
+3. **署名する docx 様式**を記入（記入要領削除・☒・run 分割注意）→ `docx-to-pdf.sh` で PDF 化（[`docx-to-pdf-pages`](office-automation.md#docx-to-pdf-pages)、空様式とページ数を一致させる）。
+4. **署名を PDF に合成**: 画像濃度 = [`signature-image-overlay-density`](office-automation.md#signature-image-overlay-density)（alpha boost + 純黒）、anchor（「氏名：」等）右への配置 = [`pdf-prefill-direct`](office-automation.md#pdf-prefill-direct) + baseline 注意 [`pymupdf-insert-text-baseline`](office-automation.md#pymupdf-insert-text-baseline)、helper = `pdf_form_fill.boost_signature_alpha`。
+5. ファイル名規定にリネーム → 提出。
 
-### 再現スニペット（署名処理・PDF 合成・Excel 再計算）
-署名画像の生成・PDF への合成の helper は `scripts/pdf_form_fill.py`（`boost_signature_alpha` 等）にもある。最小手順:
-```python
-# 手書き写真 → 透過黒 PNG（暗い隅を避け署名のある帯に限定切出し）
-import numpy as np; from PIL import Image
-im=Image.open("sig.jpg").convert("RGB"); W,H=im.size
-band=im.crop((int(W*.14),int(H*.17),int(W*.76),int(H*.42)))   # 署名のある帯
-a=np.asarray(band).astype(np.int16); lum=.299*a[:,:,0]+.587*a[:,:,1]+.114*a[:,:,2]
-ys,xs=np.where(lum<120); m=18                                  # ink=暗い画素で bbox
-sig=band.crop((max(0,xs.min()-m),max(0,ys.min()-m),min(band.size[0],xs.max()+m),min(band.size[1],ys.max()+m)))
-l=.299*np.asarray(sig)[:,:,0]+.587*np.asarray(sig)[:,:,1]+.114*np.asarray(sig)[:,:,2]
-alpha=np.clip((145-l)/95*255*1.9,0,255).astype("uint8")        # 暗いほど不透明・boost
-rgba=np.zeros((*l.shape,4),"uint8"); rgba[:,:,3]=alpha; Image.fromarray(rgba).save("sig.png")
-# 既製の透過署名が薄い場合は alpha を ×2-3、 RGB=0（純黒）に boost
-```
-```python
-# PDF の「氏名：」の右に印字名と併記で合成（複数ページは全ページ探索）
-import fitz; d=fitz.open("form.pdf")
-for pg in d:
-    r=(pg.search_for("氏名：") or [None])[0]
-    if r: pg.insert_image(fitz.Rect(r.x1+100,(r.y0+r.y1)/2-13,r.x1+235,(r.y0+r.y1)/2+13),
-                          filename="sig.png", keep_proportion=True, overlay=True)
-d.save("signed.pdf")   # 検証: ページ数が空様式と一致 / get_images()==1 / 氏名text残存
-```
-```bash
-# 様式1 xlsx の式キャッシュ確定（openpyxl は字数/経費キャッシュを空にする）
-osascript -e 'tell application "Microsoft Excel"
-  open POSIX file "<abs>.xlsx"
-  delay 1
-  calculate
-  save active workbook
-  close active workbook saving yes
-end tell'   # quit しない・対象ブックのみ。formulas/pycel 未導入時の唯一手
+案件固有のソース・具体値（記入スクリプト・記入済 docx・どの署名がどの様式か）は応募管理リポの `src/BUILD.md` 側に置き本節を参照する（＝組み立て順序の SoT は本節、技法の SoT は office-automation.md、案件値は各リポ）。
