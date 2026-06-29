@@ -20,6 +20,8 @@
 #   選べる)。別アカウントには必ず distinct な --label-suffix を付ける (= plist / log path 衝突回避)。
 #   その config-dir で `CLAUDE_CONFIG_DIR=DIR claude auth login` 済 + 初回同意 y が前提。
 #   --status / --uninstall でその 2 本目を対象にするときも同じ --label-suffix を渡す。
+# --no-preflight: 起動前の 8 秒 probe を skip (= SessionStart hook 等から呼ぶとき、 install を
+#   ブロックしない。 probe は auth/consent の hint 専用で install には不要、 KeepAlive が自動復帰)。
 # --replace-agent LABEL: 旧 (個人) ラベルの登録を bootout + rm してから入れる移行用。
 #
 # ⚠️ 設計上の注意 (= 変更する人へ):
@@ -51,16 +53,18 @@ OLD_AGENT=""
 MODE="install"
 CONFIG_DIR=""
 LABEL_SUFFIX=""
+NO_PREFLIGHT=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir) RC_DIR="$2"; shift ;;
     --config-dir) CONFIG_DIR="$2"; shift ;;
     --label-suffix) LABEL_SUFFIX="$2"; shift ;;
+    --no-preflight) NO_PREFLIGHT=1 ;;
     --replace-agent) OLD_AGENT="$2"; shift ;;
     --status) MODE="status" ;;
     --uninstall) MODE="uninstall" ;;
-    *) echo "usage: $0 [--dir DIR] [--config-dir DIR] [--label-suffix SUF] [--replace-agent LABEL] [--status|--uninstall]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--dir DIR] [--config-dir DIR] [--label-suffix SUF] [--no-preflight] [--replace-agent LABEL] [--status|--uninstall]" >&2; exit 2 ;;
   esac
   shift
 done
@@ -108,19 +112,23 @@ CLAUDE_BIN="$HOME/.local/bin/claude"
 [ -x "$CLAUDE_BIN" ] || CLAUDE_BIN="$(command -v claude || true)"
 [ -n "$CLAUDE_BIN" ] || { echo "[error] claude binary not found (native install expected at ~/.local/bin/claude)" >&2; exit 1; }
 
-echo "[preflight] probing 'claude remote-control' for ~8s..."
-TMPLOG=$(mktemp)
-( unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; [ -n "$CONFIG_DIR" ] && export CLAUDE_CONFIG_DIR="$CONFIG_DIR"; cd "$RC_DIR" && exec "$CLAUDE_BIN" remote-control ) >"$TMPLOG" 2>&1 &
-PRE_PID=$!
-sleep 8
-kill "$PRE_PID" 2>/dev/null
-wait "$PRE_PID" 2>/dev/null
 AUTH_NG=0; CONSENT_NG=0
-# RC の auth 失敗は複数文言 (= subscription 必須 / full-scope token 要 / org policy / 未 enable)。
-# preflight hint なので広めに拾う (= 取りこぼしても install は続行し log に実 error が出る)。
-grep -qE "must be logged in|requires a claude.ai subscription|full-scope login token|disabled by your organization|not yet enabled for your account" "$TMPLOG" && AUTH_NG=1
-grep -q "Enable Remote Control?" "$TMPLOG" && CONSENT_NG=1
-rm -f "$TMPLOG"
+# --no-preflight: 8 秒 probe を skip (= SessionStart hook 等から呼ぶとき。 probe は auth/consent の
+# hint を出すだけで install 自体には不要 — KeepAlive が解消後 60s で自動復帰する)。
+if [ "$NO_PREFLIGHT" != "1" ]; then
+  echo "[preflight] probing 'claude remote-control' for ~8s..."
+  TMPLOG=$(mktemp)
+  ( unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; [ -n "$CONFIG_DIR" ] && export CLAUDE_CONFIG_DIR="$CONFIG_DIR"; cd "$RC_DIR" && exec "$CLAUDE_BIN" remote-control ) >"$TMPLOG" 2>&1 &
+  PRE_PID=$!
+  sleep 8
+  kill "$PRE_PID" 2>/dev/null
+  wait "$PRE_PID" 2>/dev/null
+  # RC の auth 失敗は複数文言 (= subscription 必須 / full-scope token 要 / org policy / 未 enable)。
+  # preflight hint なので広めに拾う (= 取りこぼしても install は続行し log に実 error が出る)。
+  grep -qE "must be logged in|requires a claude.ai subscription|full-scope login token|disabled by your organization|not yet enabled for your account" "$TMPLOG" && AUTH_NG=1
+  grep -q "Enable Remote Control?" "$TMPLOG" && CONSENT_NG=1
+  rm -f "$TMPLOG"
+fi
 
 # --- install (idempotent) -----------------------------------------------------
 mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
@@ -158,9 +166,25 @@ cat > "$PLIST" <<EOF
 </plist>
 EOF
 
+# ⚠️ bootout は非同期 — busy な稼働サービス (= active polling 中の remote-control) は即死しない。
+# 即 bootstrap すると残留参照で "Bootstrap failed: 5: Input/output error" になりサービスが落ちたまま
+# になる (2026-06-29 RCA: 稼働中サーバーの再 install で実発生)。 → 完全に消えるまで poll してから
+# bootstrap、 さらに bootstrap 自体も数回 retry (各 retry 前に bootout 再試行) で race に強くする。
 launchctl bootout "gui/$UID_N/$LABEL" 2>/dev/null
-sleep 1
-launchctl bootstrap "gui/$UID_N" "$PLIST" || { echo "[error] launchctl bootstrap failed" >&2; exit 1; }
+i=0
+while launchctl print "gui/$UID_N/$LABEL" >/dev/null 2>&1 && [ "$i" -lt 10 ]; do
+  sleep 1
+  i=$((i + 1))
+done
+bs_ok=0
+j=0
+while [ "$j" -lt 5 ]; do
+  if launchctl bootstrap "gui/$UID_N" "$PLIST" 2>/dev/null; then bs_ok=1; break; fi
+  launchctl bootout "gui/$UID_N/$LABEL" 2>/dev/null
+  sleep 1
+  j=$((j + 1))
+done
+[ "$bs_ok" = 1 ] || { echo "[error] launchctl bootstrap failed after retries" >&2; exit 1; }
 launchctl kickstart "gui/$UID_N/$LABEL" 2>/dev/null
 
 echo "[ok] installed ($LABEL, dir=$RC_DIR)"
