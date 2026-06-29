@@ -81,14 +81,50 @@ run_leak_matcher() {
 
   # ----------------------------------------------------------------
   # (a) sensitive-terms.txt literal match
+  #
+  # Word-boundary semantics (2026-06-29 sibling fix with
+  # public-precommit-runner.sh Tier B):
+  #   - ASCII-only term: grep -wF (word-boundary)、 短 ASCII token の
+  #     substring FP class (= 例: arxiv 英文 abstract 内の longer word に
+  #     偶然一致) を消す
+  #   - 非 ASCII term (日本語等): grep -F (substring) を維持、 CJK は
+  #     word 境界 ill-defined ゆえ -w 一律適用は破壊的
   # ----------------------------------------------------------------
   sensitive_terms="$personal_layer/sensitive-terms.txt"
   if [ -s "$sensitive_terms" ]; then
+    local ascii_terms na_terms ascii_hits na_hits
+    ascii_terms="$(mktemp)"
+    na_terms="$(mktemp)"
+    awk -v a="$ascii_terms" -v n="$na_terms" '
+      /^[[:space:]]*$/ { next }
+      /^[[:space:]]*#/ { next }
+      /^[ -~]+$/      { print > a; next }
+                      { print > n }
+    ' "$sensitive_terms"
+
+    ascii_hits=""
+    if [ -s "$ascii_terms" ]; then
+      ascii_hits="$(
+        printf '%s' "$message" \
+          | grep -wFf "$ascii_terms" 2>/dev/null \
+          || true
+      )"
+    fi
+    na_hits=""
+    if [ -s "$na_terms" ]; then
+      na_hits="$(
+        printf '%s' "$message" \
+          | grep -Ff "$na_terms" 2>/dev/null \
+          || true
+      )"
+    fi
+    rm -f "$ascii_terms" "$na_terms"
+
     literal_hits="$(
-      printf '%s' "$message" \
-        | grep -Ff "$sensitive_terms" 2>/dev/null \
-        | head -5 \
-        || true
+      {
+        [ -n "$ascii_hits" ] && printf '%s\n' "$ascii_hits"
+        [ -n "$na_hits" ]    && printf '%s\n' "$na_hits"
+      } | sed '/^$/d' | head -5
     )"
     if [ -n "$literal_hits" ]; then
       hit_count="$(printf '%s\n' "$literal_hits" | wc -l | tr -d ' ')"

@@ -159,17 +159,66 @@ fi
 
 # ----------------------------------------------------------------------
 # Tier B: sensitive-terms.txt ephemeral literal check
+#
+# Word-boundary semantics (2026-06-29 追加):
+#   - ASCII-only term (= 0x20-0x7e の printable のみで構成): word-boundary
+#     一致 (`grep -wF`) を適用。 短 ASCII token (= 4-6 字程度) が arxiv 等の
+#     英文 abstract 中の longer word の substring に偶然一致する FP class を
+#     構造的に消す。 grep の word 境界 = `[A-Za-z0-9_]` 外、 つまり space /
+#     punctuation / `-` 等は境界。 「SECRET」 in 「SECRET-KEY」 は依然 match
+#     (= 意図的 leak、 substring でなく word の左境界が `-` で成立)
+#   - 非 ASCII term (= 日本語等): 単純 substring 一致 (`grep -F`)。 CJK 連続
+#     文字列に word 境界 概念が ill-defined ゆえ全 term 一律 `-w` 化は破壊的
+#     (= 日本語 token は隣接 CJK と連結し空白で区切られないので、 grep の
+#      ASCII word 境界が現れず単独 hit が不可能になる)
+#   - sensitive-terms.txt は read-only、 ephemeral 分割 (= temp file 経由)
+#     のみ。 script memory に literal は残さず (= path 引数で grep に渡す)
+#
+# 設計動機: 2026-06-29 arxiv-digest archive 8 file が短 ASCII term の
+#   substring FP で commit block。 user 確定方針 = root 治療 (= word-boundary
+#   化)、 escape hatch (= --no-verify) で逃げない。 詳細 RCA:
+#   odakin-prefs/plans/2026-06-29-archive-leak-wordbound-results.md
 # ----------------------------------------------------------------------
 if [ -f "$SENSITIVE_TERMS" ] && [ -s "$SENSITIVE_TERMS" ]; then
-  # grep -F -f でファイル参照のみ。script の memory に literal が残らない
+  ASCII_TERMS="$(mktemp)"
+  NA_TERMS="$(mktemp)"
+  # 既存 EXIT trap は ADDED_BUF のみ — 拡張
+  # shellcheck disable=SC2064
+  trap "rm -f '$ADDED_BUF' '$ASCII_TERMS' '$NA_TERMS'" EXIT
+
+  awk -v a="$ASCII_TERMS" -v n="$NA_TERMS" '
+    /^[[:space:]]*$/ { next }
+    /^[[:space:]]*#/ { next }
+    /^[ -~]+$/      { print > a; next }
+                    { print > n }
+  ' "$SENSITIVE_TERMS"
+
+  LITERAL_HITS_ASCII=""
+  if [ -s "$ASCII_TERMS" ]; then
+    LITERAL_HITS_ASCII="$(
+      awk -F'\t' '{ print $2 }' "$ADDED_BUF" \
+        | grep -wFf "$ASCII_TERMS" 2>/dev/null \
+        || true
+    )"
+  fi
+  LITERAL_HITS_NA=""
+  if [ -s "$NA_TERMS" ]; then
+    LITERAL_HITS_NA="$(
+      awk -F'\t' '{ print $2 }' "$ADDED_BUF" \
+        | grep -Ff "$NA_TERMS" 2>/dev/null \
+        || true
+    )"
+  fi
+
+  # 結合 (= 空行除去 + head -5 で上限)
   LITERAL_HITS="$(
-    awk -F'\t' '{ print $2 }' "$ADDED_BUF" \
-      | grep -Ff "$SENSITIVE_TERMS" 2>/dev/null \
-      | head -5 \
-      || true
+    {
+      [ -n "$LITERAL_HITS_ASCII" ] && printf '%s\n' "$LITERAL_HITS_ASCII"
+      [ -n "$LITERAL_HITS_NA" ]    && printf '%s\n' "$LITERAL_HITS_NA"
+    } | sed '/^$/d' | head -5
   )"
+
   if [ -n "$LITERAL_HITS" ]; then
-    # 表示時も literal 本体を晒さず「何行 hit した」と該当ファイル名のみ
     LITERAL_COUNT="$(printf '%s\n' "$LITERAL_HITS" | wc -l | tr -d ' ')"
     LITERAL_FILES="$(
       awk -F'\t' 'NR==FNR { bad[$0]=1; next }

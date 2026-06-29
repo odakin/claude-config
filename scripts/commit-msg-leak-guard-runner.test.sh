@@ -54,9 +54,15 @@ cat > "$MOCK_LAYER/repos.md" << 'REPOS_EOF'
 REPOS_EOF
 
 # 偽 sensitive-terms.txt (= matcher (a) が grep -F する literal list)
+# - long ASCII term: word-boundary 化前後で挙動が変わらない (= 「embed されにくい」)
+# - 短 ASCII term `NXYZ` (4 char): word-boundary 化の対象 (= 2026-06-29
+#   arxiv-digest FP class の検出 fixture、 embed 内では match しないこと)
+# - 非 ASCII term: substring 維持 (= 日本語 boundary ill-defined)
 cat > "$MOCK_LAYER/sensitive-terms.txt" << 'TERMS_EOF'
 MOCK_SECRET_TERM_ALPHA
 mock-confidential-keyword
+NXYZ
+モック秘語
 TERMS_EOF
 
 export CLAUDE_PERSONAL_LAYER="$MOCK_LAYER"
@@ -156,6 +162,18 @@ expect_block "block-sensitive-literal" \
 expect_block "block-sensitive-literal-kebab" \
   "rotate mock-confidential-keyword settings"
 
+# 2026-06-29 word-boundary regression suite
+# (a-1) 短 ASCII term: standalone word は依然 hit
+expect_block "block-short-ascii-word" \
+  "ship NXYZ milestone today"
+
+# (a-2) 非 ASCII term: substring 維持 ゆえ word 外の embed でも hit
+expect_block "block-nonascii-substring" \
+  "ここにモック秘語があります"
+
+expect_block "block-nonascii-embed-in-cjk" \
+  "プレフィックスモック秘語サフィックス"
+
 # (c) ~/Claude/<X>/ path pattern (= matcher で (b) が hit する条件下、
 # matcher 実装は (b) hit 時 (c) skip)。 (c) を独立に観るなら repo 名 を
 # 含まない path-only message が必要だが、 path 内に repo 名が出る限り (b)
@@ -198,6 +216,26 @@ expect_pass "skip-comment-only-leak" \
 # empty message = skip
 expect_pass "skip-empty-message" \
   ""
+
+# 2026-06-29 word-boundary regression suite (PASS side = FP class)
+# (a-3) 短 ASCII term の substring embed: word-boundary 化で hit しないこと
+#   (= 旧 substring match では "NXYZ" を含む "XNXYZX" 等で誤 BLOCK されていた、
+#    arxiv-digest 6/24_ogawa.json FP の構造的代表)
+expect_pass "skip-short-ascii-embed-prefix" \
+  "audit XNXYZ component"
+
+expect_pass "skip-short-ascii-embed-suffix" \
+  "audit NXYZX component"
+
+expect_pass "skip-short-ascii-embed-both" \
+  "audit XNXYZX component"
+
+expect_pass "skip-short-ascii-embed-alnum" \
+  "audit NXYZA component"
+
+# underscore は grep -w で word char ゆえ、 NXYZ_FOO の embed も match しない
+expect_pass "skip-short-ascii-embed-underscore" \
+  "audit NXYZ_FOO component"
 
 # ====================================================================
 echo ""
