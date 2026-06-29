@@ -173,6 +173,89 @@ Discord Developer Portal の左 sidebar には **`アプリ認証`** (英: `App 
 - Token 発行は sidebar **`Bot`** (= `OAuth2` の 1 つ下) に直行
 - もし誤って `アプリ認証` page を開いて ⚠️ が並んでも、 そのまま閉じて `Bot` に移動して OK
 
+## <a id="bot-dm-surface"></a>Bot DM channel の未記録 message surface (= 死角の埋め方)
+
+Discord bot が **DM channel** で会話を受け取ると、 daily fetcher (= `GET /channels/{id}/messages` を回す cron) は JSON を更新し続けるが、 **読み手側に「未読返信が来た」 を知らせる surface 経路がデフォルトで存在しない**。 mail (= Gmail / IMAP) なら inbox / unread が natural surface だが、 bot DM の JSON は静かに更新されるだけで、 user は Discord 通知に気付くか chat client を能動的に開くかしないと catch できない。 これは fetch (= ingest) と surface (= 未処理を出す) が別物であるという §「複数 channel から data を fetch するときの error handling」 の延長で、 後者の不在は具体的な事故 (= 重要返信の長期放置) を生む。
+
+### 標準的な surface 構造 (= 2 段)
+
+**段 1 — daily fetcher** (既存):
+- bot Token + `GET /channels/{id}/messages` で各 channel (DM 含む) の message を JSON で保存
+- 出力命名規約: `discord_<channel_key>_dm.json` (= DM channel は **`_dm` suffix** で識別) を推奨。 普通の server channel は `_dm` を付けず `discord_<channel_key>.json` (= 区別が glob で取れる、 下記 engine の `--json-glob` default も `discord_*_dm.json`)
+- 取得先 repo は private + git-crypt 推奨 (= DM 内容は personal communication)
+
+**段 2 — surface engine** (= 本節で hoist):
+- JSON を読み、 bot 自身の send を除外、 user 側 ledger (= inbox/threads/notes 等の text/YAML record) に messageId が既に書かれているかで diff
+- 未記録 = CRITICAL surface (dashboard / SessionStart hook 経由)
+- 「読んだ」 ことを ledger に messageId 記録した瞬間 silent 化 = **intake で encode する原則**
+
+### Engine (layer 1): `scripts/surface-discord-bot-dm.py`
+
+汎用 CLI engine。 個別環境への依存ゼロ、 引数で全 config を渡す。
+
+```
+surface-discord-bot-dm.py
+    --bot-id <DISCORD_USER_ID>          # bot 自身の send を除外 (repeated, ≥1)
+    --json-dir <PATH>                    # daily fetcher の output 先
+    --ledger-dir <PATH>                  # messageId 記録 ledger の dir
+    [--json-glob "discord_*_dm.json"]    # JSON file pattern (default)
+    [--ledger-glob "*.yaml"]             # ledger file pattern (default)
+    [--counterpart <ID>:<NAME>]          # display name mapping (repeated 可)
+    [--title <TITLE>]                    # surface header title
+    [--selftest]                         # 内蔵 5 検証
+```
+
+検出 logic:
+- json-dir/json-glob 配下の各 JSON 内 message について:
+    - `author.bot == True` → skip
+    - `author.id ∈ --bot-id` → skip (= API field 不在時の明示 fallback)
+    - `message.id ∈ ledger 内で text として書かれた Discord snowflake (17-19 digit)` → skip
+    - 残り → 未記録 = surface
+
+⚠️ **ledger からの ID 抽出は regex (= snowflake 17-19 digit) で text を grep する loose match**。 user ID / channel ID も同 range だが Discord snowflake は globally unique なので message ID と collide せず、 false positive を harvest set に入れても harmless (= 不要 ID が混ざっても message ID の skip 漏れにならない、 skip 過剰のみ起きる)。
+
+### 個別環境への接続 (= layer 3 thin wrapper の template)
+
+各 user の personal layer に薄い wrapper を 1 つ置いて engine を呼ぶ:
+
+```python
+#!/usr/bin/env python3
+"""<bot-name> DM channel の未記録 message surface (thin wrapper)."""
+import subprocess, sys
+from pathlib import Path
+
+HOME = Path.home()
+ENGINE = HOME / "Claude" / "claude-config" / "scripts" / "surface-discord-bot-dm.py"
+
+BOT_IDS = ["<DISCORD_BOT_USER_ID>"]
+JSON_DIR = HOME / "Claude" / "<fetcher-output-repo>" / "src" / "_data"
+LEDGER_DIR = HOME / "Claude" / "<inbox-repo>" / "inbox"
+COUNTERPARTS = ["<USER_ID>:<DISPLAY_NAME>"]
+TITLE = "<bot-name> DM channel の未記録 message"
+
+args = [sys.executable, str(ENGINE)]
+for bid in BOT_IDS: args += ["--bot-id", bid]
+args += ["--json-dir", str(JSON_DIR), "--ledger-dir", str(LEDGER_DIR)]
+for cp in COUNTERPARTS: args += ["--counterpart", cp]
+args += ["--title", TITLE] + sys.argv[1:]
+sys.exit(subprocess.call(args))
+```
+
+`unified-dashboard.py` 等から呼ぶ (= 標準の subprocess pattern)。 layer-1 engine 不在時は wrapper が silent 0 exit (= dashboard 連鎖を止めない) するのが堅牢。
+
+### 効果限定 (= 正直 framing)
+
+- **latency 最大 = daily fetcher の cron 周期** (= 即時 push は別機構が要る)
+- **ledger 記録規律が前提** (= 「読んだ」 を ledger に messageId として encode しない限り、 同じ message を surface し続ける)
+- **fetcher 側の access path 必須** (= git-crypt unlock 等)
+- **bot ID の手動追加** (= 新規 bot 採用時は wrapper の BOT_IDS に追記)
+
+### 設計の参照点
+
+- fetcher 側 (= 段 1) の non-fatal error handling = 上記 §「複数 channel から data を fetch するときの error handling」
+- ledger に何を書くかは personal layer own preference (= ledger format は text/YAML どれでも snowflake が grep できれば OK)
+- 「intake で encode する原則」 (= 「読んだ」 を text に書く discipline) は inbox / email surface 全般に共通する設計指針
+
 ## 関連
 
 - `identity-in-config.md`: Discord user ID 等を config に書くときの PII レイヤ判定
