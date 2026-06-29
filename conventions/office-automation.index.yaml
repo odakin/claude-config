@@ -139,24 +139,34 @@ sections:
   - id: pdf-prefill-direct
     level: 3
     title: "雛形 PDF への直接印字 (= drawing 保護の回避経路 3、 紙提出専用)"
-    related: [openpyxl-destroys-drawings, pdf-text-match-nfkc, print-raster-pdf, pdf-prefill-font-match, pdf-prefill-template-prefilled]
+    related: [openpyxl-destroys-drawings, pdf-text-match-nfkc, print-raster-pdf, pdf-prefill-font-match, pdf-prefill-template-prefilled, pymupdf-insert-text-baseline, scan-pdf-pixel-anchor-overlay]
   - id: pdf-prefill-font-match
     level: 3
     title: "overlay フォントは雛形の埋込フォントに合わせる (= 太さ・字形の不揃い防止)"
-    related: [pdf-prefill-direct, pdf-visual-confirm]
+    related: [pdf-prefill-direct, pdf-visual-confirm, pymupdf-insert-text-baseline]
   - id: pdf-prefill-template-prefilled
     level: 3
     title: "雛形に既に値がある欄を二重印字しない (= 申請者欄 prefill 済の様式)"
-    related: [pdf-prefill-direct, form-dump-first]
+    related: [pdf-prefill-direct, form-dump-first, scan-pdf-pixel-anchor-overlay, pymupdf-insert-text-baseline]
   - id: pdf-cell-label-vs-data-disambiguation
     level: 3
     title: "PDF 様式の label cell vs data cell の判別 (= 「右隣に書く欄」 罠)"
     origin: "2026-06-28"
-    related: [pdf-prefill-direct, label-vs-input-antipattern, label-overwrite-bug, form-dump-first, signature-not-stamp, signature-image-overlay-density, pdf-mutation-verification-schema]
+    related: [pdf-prefill-direct, label-vs-input-antipattern, label-overwrite-bug, form-dump-first, signature-not-stamp, signature-image-overlay-density, pdf-mutation-verification-schema, scan-pdf-pixel-anchor-overlay]
+  - id: pymupdf-insert-text-baseline
+    level: 3
+    title: "PyMuPDF `insert_text` の y 座標は **font baseline** (= visual top/bottom と混同しない)"
+    origin: "2026-06-29"
+    related: [scan-pdf-pixel-anchor-overlay, pdf-prefill-direct, pdf-prefill-font-match, signature-image-overlay-density, pdf-prefill-template-prefilled]
+  - id: scan-pdf-pixel-anchor-overlay
+    level: 3
+    title: "🔥 scan PDF (vector 無し) への text/image overlay の位置決定 (= 既存印字を pixel anchor にして baseline を完全一致) — **重要度最大**"
+    origin: "2026-06-29"
+    related: [pymupdf-insert-text-baseline, pdf-prefill-direct, pdf-cell-label-vs-data-disambiguation, form-dump-first, pdf-prefill-template-prefilled, signature-not-stamp, physical-seal-required, pdf-mutation-verification-schema, pdf-visual-confirm, print-raster-pdf]
   - id: print-raster-pdf
     level: 3
     title: "加工した PDF の印刷は 600dpi ラスタ化してから (= WYSIWYG 保証)"
-    related: [pdf-prefill-direct]
+    related: [pdf-prefill-direct, scan-pdf-pixel-anchor-overlay]
   - id: lp-page-ranges-distrust
     level: 3
     title: "`lp -o page-ranges` を信用しない (= 印刷は単独ページ PDF を抽出してから)"
@@ -232,7 +242,7 @@ sections:
     level: 3
     title: "「署名」 要求は手書き署名 or 電子署名、 認印画像では不可"
     origin: "2026-05"
-    related: [physical-seal-required, signature-image-overlay-density, pdf-cell-label-vs-data-disambiguation, pdf-prefill-direct, pdf-mutation-verification-schema, pdf-visual-confirm]
+    related: [physical-seal-required, signature-image-overlay-density, pdf-cell-label-vs-data-disambiguation, pdf-prefill-direct, pdf-mutation-verification-schema, pdf-visual-confirm, scan-pdf-pixel-anchor-overlay]
   - id: physical-seal-required
     legacy: "2-7b"
     level: 3
@@ -358,7 +368,7 @@ sections:
     level: 3
     title: "PDF mutation 後の機械検証 schema (= text 不変 + keyword in/out + image stream delta)"
     origin: "2026-06-28"
-    related: [pdf-prefill-direct, pdf-visual-confirm, signature-image-overlay-density, pdf-cell-label-vs-data-disambiguation, label-vs-input-antipattern]
+    related: [pdf-prefill-direct, pdf-visual-confirm, signature-image-overlay-density, pdf-cell-label-vs-data-disambiguation, label-vs-input-antipattern, scan-pdf-pixel-anchor-overlay]
   - id: image-budget-exhaustion
     legacy: "6-5"
     level: 3

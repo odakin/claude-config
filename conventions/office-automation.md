@@ -51,6 +51,8 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 | 様式の label を誤って上書きしていないか | label vs input row の混同 | [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で機械検出 |
 | **docx 様式**でラベル欄に値を上書き / 欄を空欄のまま / labeled 列が空 / 見出し消失 | label vs input の混同・記入漏れ・視覚確認が「自分の記入箇所」 止まり | [`diff-form-docx.py`](#diff-form-docx-detection) で機械検出 (= 表紙/申請書 docx 様式、 xlsx 版の docx 対) |
 | **PDF 様式**で署名・値が label 文字に重なる (= 「○○欄」 が書かれた cell に画像/値を overlay) | label cell vs data cell の判別失敗 (= label を data と早合点)、 真の data cell は隣接の text ゼロ cell | placement 前に隣接 cell も列挙して text ゼロ cell を data と特定 + assert で gate → [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation) |
+| **scan PDF** (= vector 無し / AcroForm 無し / 背景が raster image) のマス目欄に文字を overlay したら**マスの外・下罫線にぶら下がる・ずれる**ずれが多ラウンド収束しない | `get_drawings()` 空で cell 罫線が取れず、 当て勘 baseline で配置している (= scan PDF は pixel 解析が唯一の経路) | 記入見本ページを rosetta stone に + 罫線/文字を**差分法で分離** + baseline 計算 (descender 注意) → [`scan-pdf-pixel-anchor-overlay`](#scan-pdf-pixel-anchor-overlay) (🔥 重要度最大) |
+| fitz `insert_text((x, y), s, ...)` の y にマス中心を渡したら**文字がマス上半分にずれる** | `y` は **font baseline** であって visual top / center / bottom ではない (= 一番混同される PyMuPDF API contract) | 数字は descender 0 / 漢字は descender 0.12em で baseline = visual_center + (ascender - \|descender\|)×size/2、 test PDF で bbox 実測してから本番 → [`pymupdf-insert-text-baseline`](#pymupdf-insert-text-baseline) |
 | 自筆署名 PNG overlay が薄く / 細く見える / 印刷で線が掠れる | antialias edge の灰色 RGB + 中間 alpha pixel が PDF render で淡く出る | PIL で alpha boost ×3.0 + RGB pure black 固定 → [`signature-image-overlay-density`](#signature-image-overlay-density) |
 | PDF を mutate (image insert / 値 overlay) した後、 意図せず text 破壊 / 過去訂正の undo / image 重複が起きないか機械で点呼したい | 視覚確認だけでは「在って当然のものに目が行く」 = 「あるはずの無いもの」 を読み飛ばす | page 数 + text 不変 + must-present/absent + image stream delta の 5 項目 schema → [`pdf-mutation-verification-schema`](#pdf-mutation-verification-schema) |
 | Word が「破損」 と言うが原因不明 | XML 宣言 single-quote / 空 `<w:tc>` 等 | [`check-docx-integrity.py`](#docx-checkbox-content-control) で決定論検出 |
@@ -870,6 +872,191 @@ origin: 2026-06-11 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefil
 **xlsx 版との対応** (= [`label-vs-input-antipattern`](#label-vs-input-antipattern) との sibling 関係): xlsx 版は「**label 行 (label/value 縦並び) の label 行に値を書く** = 様式改変」、 本 PDF 版は「**label cell (label/data 横並び or 縦並び) の label cell に画像/値を overlay** = 様式改変」。 構造が縦か横かと、 介入手段 (cell value set vs PDF overlay) が違うだけで、 失敗 mode は同型。 両者とも [`form-dump-first`](#form-dump-first) (= 雛形構造を最初に全 dump する) で予防 + 機械検出器で backstop する系列。
 
 origin: 2026-06-28 推薦書様式の自筆署名欄 overlay。 cell `Rect(316.1, 151.7, 392.6, 205.7)` に label 文字「○○欄/(自筆にて記載)」 が書かれていたので「これが署名欄」 と reflex 判定 → 署名画像を overlay (= label 文字に画像が重なる)。 user 訂正「そこは『○○欄はこの右側』 というラベル欄」 で発覚 → 隣接 cell `Rect(393.1, 151.7, 537.1, 205.7)` (= 内部 text ゼロ = 真の data cell) に再配置で正しく合成。 同 session に [`label-vs-input-antipattern`](#label-vs-input-antipattern) の構造を一度 trip した = 「reflex に判別ロジックを織り込めば catch できた」 例。
+
+### <a id="pymupdf-insert-text-baseline"></a>PyMuPDF `insert_text` の y 座標は **font baseline** (= visual top/bottom と混同しない)
+
+**症状**: fitz `page.insert_text((x, y), s, fontname=..., fontsize=size)` で「マスの真ん中に書く」 つもりで y にマス中心を渡したら、 **文字がマスの上半分にずれて配置**された。 修正に `y += size` 等を当て勘で試して何ラウンドも user 訂正が入り収束しない。 起源は **`y` の意味の誤認**: `insert_text` の `y` は **font baseline** であって、 visual top でも visual bottom でも文字 bbox 中心でもない。
+
+**事実 (= PyMuPDF API contract)**:
+
+```
+                            ↑
+            (visual top) ─┬─ baseline - ascender × size
+                          │  ← 文字の上端 (例: 「あ」 の上端)
+                          │
+   baseline (= insert_text y) ─── ← API が受け取る y
+                          │  ← 数字・ASCII の bottom はここ (= descender 0)
+            (visual bot) ─┴─ baseline + |descender| × size
+                          │  ← 漢字・かなの bottom はここ (= descender ≠ 0)
+                            ↓
+```
+
+- ascender / descender は font ごとの em 単位の比率 (= 日本語フォント例: 游ゴシック Regular で ascender ≈ 0.88、 descender ≈ -0.12)。 `Page.get_fonts(full=True)` で font name を取れば、 fitz 内蔵 `fitz.Font(fontfile=...)` の `ascender` / `descender` で取得可能
+- **数字・ASCII は descender 0** → visual bottom = baseline (= y そのもの)
+- **漢字・かなは descender ≠ 0** → visual bottom = baseline + |descender| × size (= y より下にはみ出す)
+- visual height = (ascender + |descender|) × size ≈ size × 1.0
+
+**規律 (= 使う前に test PDF で実測)**: 値・画像 overlay の本番座標を計算する前に、 **必ず test PDF で bbox を実測して font の ascender / descender を確定**する (= API 仕様の memory に頼らない、 fontfile/subset の状態で値が動く)。 出る数字は使う font + size に固定なので 1 度だけで済む:
+
+```python
+import fitz
+doc = fitz.open(); p = doc.new_page(width=200, height=100)
+y_test = 50.0
+p.insert_text((10, y_test), "あ漢2A", fontname="JPF", fontfile=FONT, fontsize=11)
+# 描画後 span['bbox'] を取り、 ascender / descender を逆算
+words = p.get_text("dict")["blocks"][0]["lines"][0]["spans"][0]
+bbox = words["bbox"]   # (x0, top, x1, bottom)
+ascender_em = (y_test - bbox[1]) / 11.0   # 例: 0.88
+descender_em = (bbox[3] - y_test) / 11.0  # 例: 0.12 (漢字/かなを含む場合)
+```
+
+**マス内中央配置の baseline 計算** (= 数字・ASCII / 漢字・かな の場合分け):
+
+```python
+# 上罫線 y = y_top、 下罫線 y = y_bot (= 別途 pixel 解析で同定、 #scan-pdf-pixel-anchor-overlay)
+# 文字の visual center をマス中心に揃えたい:
+visual_center = (y_top + y_bot) / 2
+# baseline = visual_center + (ascender - |descender|) × size / 2
+# 数字・ASCII (descender=0):  baseline = visual_center + ascender × size / 2  (= マス中心より下)
+# 漢字・かな:                  baseline = visual_center + (ascender - |descender|) × size / 2
+```
+
+⚠️ **mass-test PDF より「実紙の見本」 を優先**: scan PDF の場合、 既存印字 (= 見本ページ等) の visual bottom を pixel で測れば baseline 計算を逆算不要にできる (= 「あるべき baseline」 を実測値から取る、 #scan-pdf-pixel-anchor-overlay の step 5)。 test PDF からの em 比率は font + subset で変動するので、 **scan PDF への overlay では pixel 実測が常に優先**。
+
+⚠️ **同一値の二重 overlay 防止**: baseline 概念を理解した上で値座標を確定したら、 二重印字防止は [`pdf-prefill-template-prefilled`](#pdf-prefill-template-prefilled) の `check_double_print` gate。
+
+⚠️ **font の選定**: baseline 計算は font に固有 — overlay font は雛形に揃える ([`pdf-prefill-font-match`](#pdf-prefill-font-match))、 そうでない場合 ascender/descender の値が雛形と乖離して中央配置が狂う。
+
+⚠️ **「使う前に test」 の reflex 不発を防ぐ**: 「`insert_text` の y は visual top」 等の memory が直感的に強いほど誤りやすい。 当 slug の `y = baseline` を「使う直前に当 doc で再確認 (= recall でなく re-read)」 する規律で踏み込む — recall-dependent reflex は [`convention-design-principles.md §8.12`](../docs/convention-design-principles.md#recall-dependent-firing) と同様、 最弱発火面ゆえ「直感を疑った時に当 slug を読み直す」 のが第一線。
+
+origin: 2026-06 scan 様式 PDF への overlay session で、 baseline と visual bottom の混同に基づく座標補正が 3-4 ラウンド噛み合わず収束を遅らせた。 test PDF で bbox 実測 → ascender/descender 確定の 1 step を session 中盤で初めて回し以降は安定。 「使う前に test」 の reflex を slug に焼くことで「直感の memory」 を打ち消す形にした。
+
+### <a id="scan-pdf-pixel-anchor-overlay"></a>🔥 scan PDF (vector 無し) への text/image overlay の位置決定 (= 既存印字を pixel anchor にして baseline を完全一致) — **重要度最大**
+
+**症状**: 行政・銀行・証券 等の **scan PDF** (= AcroForm widget 不在 / vector 線情報無し / 背景が 1 枚の高解像度 raster image) のマス目欄に氏名・住所・口座番号を overlay する時、 既存 [`pdf-prefill-direct`](#pdf-prefill-direct) (= Excel-derived PDF で `page.get_drawings()` から cell 罫線が取れる前提) の経路が **`get_drawings()` 空 / `widgets()` 空**で空振りする。 当て勘で座標を決めると **マスの外・下罫線にぶら下がる・マス上半分にずれる・既存印字数字に重なる** などの ずれ が連発し、 user 訂正を多ラウンド浴びても収束しない (= 「上にズレすぎ」 → 補正 → 「下にズレすぎ」 → 補正 …)。
+
+**前提認識**: scan PDF は **vector 情報がゼロ** で、 cell 構造を `page.get_drawings()` から直接取れない。 唯一の手掛かりは **raster image 上の pixel pattern** (= 罫線の黒 pixel 並び・既存印字文字の黒 pixel cluster)。 ∴ 「PDF 構造の dump」 でなく「**page を高 dpi で render → numpy で pixel 解析 → 既存印字を anchor として正解座標を逆算**」 が唯一の堅実経路。
+
+**設計**: 「ベスト推測で書いて user に見せる → ずれを指摘される → 補正値を勘で当てる」 の反復は構造的に収束しない (= ずれの方向だけ分かって量が分からない、 「上だから下に動かす」 の幅が当て勘)。 代わりに、 ① **同 form の「記入見本」 ページ** (= form 設計者が user 向けに置いた dummy 値の付いた reference page、 行政・銀行・証券書類の多くで p4-p5 等に存在) を rosetta stone として使い、 見本値の pixel 位置を実測すれば **空ページの正解位置が逆算で確定**する。 ② 既存印字の visual bottom / top の **pixel 同定**で罫線と文字を **差分法で分離** (= 「死ぬほど重要」 step、 後述)。
+
+#### 手順 (= scan PDF overlay の安定手続き 6 step)
+
+**Step 1: vector / widget の有無を最初に確認** (= 経路分岐):
+
+```python
+import fitz
+doc = fitz.open(template_pdf); page = doc[page_no]
+widgets = list(page.widgets() or [])
+drawings = page.get_drawings()
+if widgets:
+    # AcroForm 経路 → widget.update() で値を書く (本 slug の射程外)
+    ...
+elif drawings:
+    # vector cell border あり → pdf-prefill-direct + find_data_cell_for_label 経路
+    ...
+else:
+    # vector 完全不在 = scan PDF → 本 slug の pixel 解析経路へ
+    ...
+```
+
+**Step 2: 「記入見本ページ」 を rosetta stone として探す**:
+
+- 行政・銀行・証券書類の多くは **p4-p5 等に「記入見本」 ページ** (= 「山田太郎」 / 「XXXX」 等の dummy 値を埋めた reference) を含む
+- 見本値の位置 (PDF x, y) は **実書き込み位置の正解** (= 設計者が「ここに書く」 を視覚的に示した anchor)
+- 見本ページ自体も scan の場合は text extract で取れないので **pixel 解析で見本値を測る**
+- ⚠️ 見本ページの存在を最初に user に確認するか、 全 page を render して目視サーチ (= 私の session 序盤では見本を活用せず多ラウンド試行錯誤、 user の「記入見本ちゃんとあるやん」 で初めて気付いた pitfall)
+
+**Step 3: page を高 dpi で render して numpy で pixel 解析**:
+
+```python
+import fitz, numpy as np
+page = doc[page_no_blank]      # 空白の入力ページ
+pix = page.get_pixmap(dpi=300)  # 300 dpi: PDF y * 300/72 = pixel y (本 slug 全体で dpi の換算式を統一して保持)
+arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+gray = arr[:, :, 0] if pix.n >= 1 else arr   # gray 化 (= scan は概ね無彩色)
+# 横罫線: 行平均が暗い行
+row_mean = gray.mean(axis=1)
+horiz_row_px = np.where(row_mean < threshold)[0]    # threshold ≈ 220 (= 255-35 程度、 form ごと調整)
+# 罫線 group 化: 連続 px range を 1 本の罫線として grouping
+```
+
+- `dpi=300` の換算: **pixel_y = PDF_y × 300 / 72** (= PDF 既定の 72 dpi 単位を 300 dpi raster に乗せた比率)。 dpi を変えるなら換算式を当 slug で必ず統一して使う (= mix すると最後の baseline 計算で ±数 pt 滑る)
+- 縦罫線: 行帯 (= 罫線 group の上下端) 内で `band.mean(axis=0)` を取って x 方向に同様の cluster 化
+- **見本値の数字 cluster の x 中心** = 「マス N の中心 PDF x」: 見本値「XXXX」 が記入されたマス列の各マスについて、 各マスの x 中心は cluster の中央 → cluster 間の間隔から **マス幅を逆算**できる (= 当て勘で「マス幅 N pt」 と仮定するより 確実)
+
+**Step 4 (= 🔥 死ぬほど重要 / 引用部の核心): 罫線と文字を「差分法」 で分離**
+
+scan PDF の最大の落とし穴は、 **既存印字文字の visual bottom と下罫線の pixel 位置が一致 (or 近接) する**ケース。 数字「7」 の cluster bottom を取ったつもりが、 実は cluster に下罫線の黒 pixel が混入していて、 「7 の bottom = 罫線位置」 と誤判定する。 baseline 計算でその y を使うと **新規 overlay 文字が下罫線にぶら下がる** (= 私の session で複数ラウンドこれで止まった)。
+
+**判別の正しい方法 (= 差分法)**:
+
+```
+文字 col (= 既存印字の x 範囲)     隣接空マス col (= 文字を含まない x 範囲、 同 y 帯)
+─────────────────────         ─────────────────────
+ ↑ 上罫線 pixel (両 col 共通)          ↑ 上罫線 pixel (両 col 共通)
+ ↑ 文字 pixel (このカラム独自)         ↑ 何も無い (= 白)
+ ↑ 下罫線 pixel (両 col 共通)          ↑ 下罫線 pixel (両 col 共通)
+─────────────────────         ─────────────────────
+
+文字 col の黒 pixel 量 - 隣接空マス col の黒 pixel 量
+    = 文字独自の黒 pixel 量 (= 罫線は両方に共通なので差分 0)
+    → 差分 > threshold の y range = 「文字の真の visual top / bottom」
+```
+
+実装の例:
+
+```python
+# 既存印字 cluster の x 範囲 = [x_char_lo, x_char_hi] (= 文字が含まれる x 範囲)
+# 隣接 空マス col の x 範囲 = [x_empty_lo, x_empty_hi] (= 文字を含まない同 mass 構造の x 範囲)
+char_col   = gray[y_band_lo : y_band_hi, x_char_lo  : x_char_hi].mean(axis=1)
+empty_col  = gray[y_band_lo : y_band_hi, x_empty_lo : x_empty_hi].mean(axis=1)
+char_only  = (255 - char_col) - (255 - empty_col)   # 黒度量を 0-255 で正向きにして差を取る
+# char_only > diff_threshold の y range = 文字独自の visual top / bottom
+char_y_top_px  = y_band_lo + np.where(char_only > diff_threshold)[0][0]
+char_y_bot_px  = y_band_lo + np.where(char_only > diff_threshold)[0][-1]
+```
+
+**反例 (= 差分法 skip の帰結)**: 文字 col 単独で「最下行が暗い = visual bottom」 と判定すると、 cluster bottom = 下罫線位置になり、 baseline を下罫線に合わせてしまう → 新規 overlay は下罫線にぶら下がる。 「文字と罫線は別」 を 1 step 余分に確認する作業をサボると 数ラウンド分の試行錯誤が発生する (= 私の session で 4 ラウンドかかった)。
+
+**Step 5: 罫線位置 + 文字 visual bottom + descender → baseline を計算**:
+
+[`pymupdf-insert-text-baseline`](#pymupdf-insert-text-baseline) の式に従う。 注意: scan で得るのは **pixel** だから、 fitz `insert_text` に渡すのは **PDF 単位 (= pt)** ゆえ最後に dpi 換算で戻す:
+
+```
+pixel_y → PDF_y = pixel_y × 72 / dpi
+```
+
+- 既存印字数字 (= descender 0 想定) の visual bottom px → PDF y_bottom = baseline (= そのまま baseline として使える)
+- 既存印字が漢字・かな (= descender 有り) のとき、 既存印字の visual bottom px は baseline + |descender|×size の位置 → baseline = visual_bottom - |descender| × size (= step を 1 つ余分に挟む、 怠ると数 pt 下にズレる)
+- **見本ページ用法**: 見本値が overlay する内容と同じ字種なら、 見本値の visual bottom px を**そのまま** PDF y に換算して baseline にできる (= 字種一致が前提、 数字欄なら数字見本、 氏名欄なら漢字見本)
+
+**Step 6: マス数の推定は「cluster 数を numpy で数える」** (= visual 推定で当てずに):
+
+- 「お客様コードのマス数は visual で 8 マス」 等の推定は誤りやすい (= 私の session で visual 推定 8 マスが実は 6 マスだった事故)
+- 見本値の数字 cluster を numpy で count: x 軸方向に black pixel が連続して並ぶ「島」 を数えれば確定する
+- マス**幅**は cluster 中心間隔 / マス**数**は cluster 数の純数値 (= 直接 cluster.count())、 visual 観察を介在させない
+
+**page-local 座標の絶対規律 (= 教訓 E 統合)**: 同じ form 種でも別 page の cell 座標は別物 (= p2 と p3 の (乙) 氏名欄が別 x 等を観測)。 「同じ form だから同じ x」 という reflex を持ち込まず、 **各 page で独立に Step 1-6 を回す**。 [`form-dump-first`](#form-dump-first) の scan PDF 版 = 各 page を独立に pixel 解析。
+
+**scan 上の固定値 vs マス目 prefix の判別 (= 教訓 G 統合)**: マス目の 1 マス目に既存印字 (例: 部店コード 4 マスの 1 マス目に「7」 prefix 固定) があった時、 (i) form 設計者の prefix 固定 / (ii) 見本ページの dummy 値の残骸 / (iii) 別意味 のどれかを user 確認で確定する (= 推測で「無視」 「削除」 「上書き」 を判断しない)。 [`pdf-prefill-template-prefilled`](#pdf-prefill-template-prefilled) の sibling = 推測二重印字防止と同じ class の問題。
+
+**「印」 欄の扱い**: マス内に「印」 と書かれた円形 marker は **物理捺印 (= 印鑑) を押す欄**、 氏名印字 / 自筆署名と並存することがある。 慣行は [`signature-not-stamp`](#signature-not-stamp) + [`physical-seal-required`](#physical-seal-required) に従い、 印欄に氏名 overlay する判断は user 判断に従う (= 同 form 内に氏名欄が別にある場合は氏名は印字でも自筆署名でも書類により可、 「印」 は物理捺印必須)。
+
+#### 検証 (= overlay 後の点呼)
+
+- **印字後の PDF を 300 dpi 程度で render → 見本ページの同マス値と pixel 重ねて目視**: 「自分が書いた値の visual bottom」 と「見本値の visual bottom」 が pixel 単位で一致するなら、 baseline 完全一致が達成できている (= 紙に出した時の「設計通りの記入」 を pixel 視点で確認)
+- 機械検証は [`pdf-mutation-verification-schema`](#pdf-mutation-verification-schema) (= text 不変 + must_present + image stream delta) を経由
+- 視覚確認は [`pdf-visual-confirm`](#pdf-visual-confirm) の user 目視 (= image budget 配慮)
+- 印刷経路は [`print-raster-pdf`](#print-raster-pdf) (= 600dpi ラスタ化、 ただし scan PDF の場合は背景が既に raster なので化け risk が低いが、 念のため通す)
+
+#### 学び (= 起票 session の試行錯誤を 1 段抽象化)
+
+- **「ベスト推測 → 見せる → 補正」 の反復は構造的に収束しない**: ずれの方向は分かるが量が分からない、 補正幅が当て勘で 4 回連続「上だから下」 で誤探索する。 → 「**最初に見本ページを measure する**」 を着手 step として固定するのが正
+- **罫線と文字の pixel 一致は scan PDF の本質的罠**: scan は両者を黒 pixel として均一に拾うので、 差分法 (= 隣接空マス col との差) を skip すると baseline が罫線位置に固定される。 1 step の差分 計算で 4 ラウンドの user 訂正を skip できる
+- **visual 推定でなく cluster 数で確定**: マス数も、 マス幅も、 cluster 中心も、 全て numpy で確定 (= 直接 count / direct measure)。 「マス N 個に見える」 「マス幅 14 pt くらい」 等の visual 推定は信頼できない
+- **page-local の絶対視**: 同 form 種でも別 page の座標は別。 「同じ layout だから同じ x」 reflex は bug の根
+
+origin: 2026-06-29 行政・金融 scan 様式 PDF に氏名・住所・口座コード等を overlay した session で、 user 多ラウンド push (「ずれてる」 「線に重なってる」 「下にズレすぎ」 「マスの真ん中じゃない」) を浴びた後、 ようやく ① 見本ページ rosetta + ② 差分法による罫線/文字分離 + ③ cluster 数の numpy count + ④ baseline = visual_bottom - |descender|×size の 4 つの手順を組み合わせて収束。 各 step を 1 つでも skip すると数ラウンド相当の試行錯誤を費やす。 user 発言「死ぬほど重要なので念入りに SoT と参照」 で本 slug を念入りに layer 1 化 (= scan PDF への overlay は行政・金融・大学 様式の標準的事務作業で再発確率が高い、 そのときに「pixel 解析の手順を 0 から再構築」 する代わりに当 slug を読めば 1 ラウンドで収束する状態を保つ)。
 
 ### <a id="print-raster-pdf"></a>加工した PDF の印刷は 600dpi ラスタ化してから (= WYSIWYG 保証)
 
