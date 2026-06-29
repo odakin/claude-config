@@ -8,13 +8,18 @@
 # 未認証) で常駐させる。常時起動しているマシンで 1 回実行すれば以後手入れ不要。
 #
 # usage (idempotent):
-#   sh scripts/install-remote-control-server.sh [--dir DIR] [--replace-agent LABEL]
-#   sh scripts/install-remote-control-server.sh --status
-#   sh scripts/install-remote-control-server.sh --uninstall
+#   sh scripts/install-remote-control-server.sh [--dir DIR] [--config-dir DIR] [--label-suffix SUF] [--replace-agent LABEL]
+#   sh scripts/install-remote-control-server.sh --status [--label-suffix SUF]
+#   sh scripts/install-remote-control-server.sh --uninstall [--label-suffix SUF]
 #
 # --dir DIR: リモート生成セッションの root (既定: $HOME)。サーバーはこの dir で起動し、
 #   リモートから作る新規セッションは全てここを cwd に持つ (= 既定 --spawn same-dir。
 #   モバイル UI に「リポ選択」が出ても same-dir では cwd を変えない、 2026-06-12 実測)。
+# --config-dir DIR + --label-suffix SUF: 別アカウントの認証ストア (CLAUDE_CONFIG_DIR=DIR) で
+#   2 本目以降のサーバーを同一マシンに共存させる (= スマホから複数アカウントの新規セッションを
+#   選べる)。別アカウントには必ず distinct な --label-suffix を付ける (= plist / log path 衝突回避)。
+#   その config-dir で `CLAUDE_CONFIG_DIR=DIR claude auth login` 済 + 初回同意 y が前提。
+#   --status / --uninstall でその 2 本目を対象にするときも同じ --label-suffix を渡す。
 # --replace-agent LABEL: 旧 (個人) ラベルの登録を bootout + rm してから入れる移行用。
 #
 # ⚠️ 設計上の注意 (= 変更する人へ):
@@ -39,24 +44,34 @@ case "$(uname -s)" in
   *) echo "[skip] Remote Control server install is macOS-only (got $(uname -s))"; exit 0 ;;
 esac
 
-LABEL="com.claude-config.remote-control-server"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-LOG="$HOME/Library/Logs/$LABEL.log"
+LABEL_BASE="com.claude-config.remote-control-server"
 UID_N=$(id -u)
 RC_DIR="$HOME"
 OLD_AGENT=""
 MODE="install"
+CONFIG_DIR=""
+LABEL_SUFFIX=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir) RC_DIR="$2"; shift ;;
+    --config-dir) CONFIG_DIR="$2"; shift ;;
+    --label-suffix) LABEL_SUFFIX="$2"; shift ;;
     --replace-agent) OLD_AGENT="$2"; shift ;;
     --status) MODE="status" ;;
     --uninstall) MODE="uninstall" ;;
-    *) echo "usage: $0 [--dir DIR] [--replace-agent LABEL] [--status|--uninstall]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--dir DIR] [--config-dir DIR] [--label-suffix SUF] [--replace-agent LABEL] [--status|--uninstall]" >&2; exit 2 ;;
   esac
   shift
 done
+
+# --config-dir DIR: 別アカウントの認証ストア (CLAUDE_CONFIG_DIR) を使う = 1 マシンに複数
+#   アカウントのサーバーを共存させるとき。空 = 既定 (~/.claude.json)。別アカウントには
+#   distinct な --label-suffix を付けて label 衝突 (= plist / log path 共有) を避ける。
+LABEL="$LABEL_BASE"
+[ -n "$LABEL_SUFFIX" ] && LABEL="$LABEL_BASE.$LABEL_SUFFIX"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+LOG="$HOME/Library/Logs/$LABEL.log"
 
 status() {
   if launchctl print "gui/$UID_N/$LABEL" >/dev/null 2>&1; then
@@ -82,6 +97,12 @@ esac
 case "$RC_DIR" in
   *[\&\<\>\"]*) echo "[error] --dir contains XML-unsafe characters (& < > \"): $RC_DIR" >&2; exit 1 ;;
 esac
+if [ -n "$CONFIG_DIR" ]; then
+  case "$CONFIG_DIR" in
+    *[\&\<\>\"]*) echo "[error] --config-dir contains XML-unsafe characters (& < > \"): $CONFIG_DIR" >&2; exit 1 ;;
+  esac
+  mkdir -p "$CONFIG_DIR"
+fi
 
 CLAUDE_BIN="$HOME/.local/bin/claude"
 [ -x "$CLAUDE_BIN" ] || CLAUDE_BIN="$(command -v claude || true)"
@@ -89,7 +110,7 @@ CLAUDE_BIN="$HOME/.local/bin/claude"
 
 echo "[preflight] probing 'claude remote-control' for ~8s..."
 TMPLOG=$(mktemp)
-( unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; cd "$RC_DIR" && exec "$CLAUDE_BIN" remote-control ) >"$TMPLOG" 2>&1 &
+( unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; [ -n "$CONFIG_DIR" ] && export CLAUDE_CONFIG_DIR="$CONFIG_DIR"; cd "$RC_DIR" && exec "$CLAUDE_BIN" remote-control ) >"$TMPLOG" 2>&1 &
 PRE_PID=$!
 sleep 8
 kill "$PRE_PID" 2>/dev/null
@@ -107,6 +128,8 @@ CLAUDE_DIR=$(dirname "$CLAUDE_BIN")   # preflight 解決先を plist PATH 先頭
 case "$CLAUDE_DIR" in
   *[\&\<\>\"]*) echo "[error] claude install dir contains XML-unsafe characters: $CLAUDE_DIR" >&2; exit 1 ;;
 esac
+CONFIG_EXPORT=""
+[ -n "$CONFIG_DIR" ] && CONFIG_EXPORT="export CLAUDE_CONFIG_DIR=\"$CONFIG_DIR\"; "
 
 if [ -n "$OLD_AGENT" ]; then
   launchctl bootout "gui/$UID_N/$OLD_AGENT" 2>/dev/null
@@ -124,7 +147,7 @@ cat > "$PLIST" <<EOF
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; export PATH="$CLAUDE_DIR:\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; cd "$RC_DIR" &amp;&amp; exec claude remote-control</string>
+    <string>unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; ${CONFIG_EXPORT}export PATH="$CLAUDE_DIR:\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; cd "$RC_DIR" &amp;&amp; exec claude remote-control</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
