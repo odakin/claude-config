@@ -177,9 +177,15 @@ related_files:
 
 検証結果を `analysis.md §X` に reflect。 申請の真の novelty (= 残る gap) を狭く evaluation し直す根拠とする。
 
-### 関連: 単一情報源 null 結論飛躍
+### 関連: 単一情報源 trust 禁則 family
 
-申請書記述 (= 単一情報源) で結論せず、 引用元で 2 情報源化するのは [`convention-design-principles.md §3 (= #rule-addition-criteria)`](../docs/convention-design-principles.md#rule-addition-criteria) と sibling: 「外部検索 null で結論する前に内部 source を verify」 の **research domain での variant**。
+申請書記述 (= 単一情報源) で結論せず引用元で 2 情報源化するのは、 同 trait family の 3 sibling と並ぶ:
+
+- [`convention-design-principles.md §3 (= #rule-addition-criteria)`](../docs/convention-design-principles.md#rule-addition-criteria) = 「外部検索 null で結論前に内部 source を verify」 (= **research domain での variant**)
+- [`convention-design-principles.md §8.14 (= #single-field-identity-corroboration)`](../docs/convention-design-principles.md#single-field-identity-corroboration) = 「単一 field の一致で同定して action を取るな」 (= **identity 軸 corroboration**、 outreach 域で research-email.md §pre-outreach-identity-check として再演)
+- [`convention-design-principles.md §8.16 (= #absence-channel-coverage)`](../docs/convention-design-principles.md#absence-channel-coverage) = 「単一 channel null で不在断定するな」 (= **channel 軸 coverage**)
+
+本節は同 trait family の **citation 軸** instance (= 申請書の wording label 単独で結論せず引用元現物で 2 情報源化)。
 
 ---
 
