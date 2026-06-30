@@ -177,21 +177,22 @@ related_files:
 
 検証結果を `analysis.md §X` に reflect。 申請の真の novelty (= 残る gap) を狭く evaluation し直す根拠とする。
 
-### 関連: 単一情報源 trust 禁則 family
+### 関連: 「単一 source trust 禁則」 family の related axes
 
-申請書記述 (= 単一情報源) で結論せず引用元で 2 情報源化するのは、 同 trait family の 3 sibling と並ぶ:
+申請書 wording (= 単一情報源) で結論せず引用元現物で 2 情報源化する本節の規律は、 「single source = false confidence」 family の **citation 軸 wording** instance。 layer 1 で近接する **related axes** (= 同じ mechanism family、 ただし domain / mechanism は各々異なる):
 
-- [`convention-design-principles.md §3 (= #rule-addition-criteria)`](../docs/convention-design-principles.md#rule-addition-criteria) = 「外部検索 null で結論前に内部 source を verify」 (= **research domain での variant**)
-- [`convention-design-principles.md §8.14 (= #single-field-identity-corroboration)`](../docs/convention-design-principles.md#single-field-identity-corroboration) = 「単一 field の一致で同定して action を取るな」 (= **identity 軸 corroboration**、 outreach 域で research-email.md §pre-outreach-identity-check として再演)
-- [`convention-design-principles.md §8.16 (= #absence-channel-coverage)`](../docs/convention-design-principles.md#absence-channel-coverage) = 「単一 channel null で不在断定するな」 (= **channel 軸 coverage**)
+- [`convention-design-principles.md §8.14 (= #single-field-identity-corroboration)`](../docs/convention-design-principles.md#single-field-identity-corroboration) = 「mechanism が 2 store 照合する時の identity 主張に corroboration 要求」 (= **identity 軸**、 outreach 域での再演は [`research-email.md §pre-outreach-identity-check`](research-email.md#pre-outreach-identity-check))
+- [`convention-design-principles.md §8.16 (= #absence-channel-coverage)`](../docs/convention-design-principles.md#absence-channel-coverage) = 「ある事実の不在断定前に全 channel category sweep」 (= **channel 軸** absence)
 
-本節は同 trait family の **citation 軸** instance (= 申請書の wording label 単独で結論せず引用元現物で 2 情報源化)。
+各 sibling は mechanism / domain が異なる related axis (= 「sibling」 framing は marginal、 strict 1-to-1 mapping ではない)。 本節 (= citation 軸 wording) の直接の layer 1 anchor は存在せず、 本節がその新 niche を埋める。
 
 ---
 
 ## <a id="framework-calibration"></a>Framework calibration (= 申請の性質ごとに評価軸を調整)
 
 同じ審査区分 / 同じ field 内でも、 **申請の性質によって適用 framework は変えるべき**:
+
+⚠️ **field-dependent (= 下記 examples は physics / 数理科学 系の慣例)**: biology / 社会科学 / 人文 系等では別 categorization (= 例: 実証研究 vs 理論研究 / 質的 vs 量的 / 介入 vs 観察) が適切。 reviewer の domain expertise で field-specific framework を選ぶ。 下記表は **pattern の例示**であって全分野 universal な categorization ではない。
 
 | 申請性質 | 適切な評価軸 | 不適切な criteria 持ち込み |
 |---|---|---|
@@ -217,7 +218,9 @@ AI が複数申請を続けて draft する時、 同じ framework が転用さ�
 
 ## <a id="scoring-scale-calibration"></a>Scoring scale calibration (= 項目別 vs 総合の scale 不整合)
 
-多くの peer review system で **項目別評点と総合評点で scale の意味が異なる**:
+⚠️ **scope caveat**: 本節 pattern は主に **日本の grant peer review system** (= 科研費 / 学振 / 各種財団 等) で observed。 international journal peer review (= 「accept / minor revision / major revision / reject」 等の 4 段階で項目別なし) では構造が異なる。 reviewer は自分の system で scale 設計を毎回確認、 本節 pattern が適用可能か判断。
+
+(observed pattern as follows) — 多くの (日本系) peer review system で **項目別評点と総合評点で scale の意味が異なる**:
 
 - 項目別 4 = "outstanding aspect" 程度
 - 総合 4 = "exceptional overall" (= 1 段階上の reservation)
