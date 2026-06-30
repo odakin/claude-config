@@ -12,6 +12,12 @@ sections:
     legacy: "0"
     level: 2
     title: "開始前に form を **必ず dump する** (= 推測で書かない)"
+    related: [gov-form-input-cell-heuristics]
+  - id: gov-form-input-cell-heuristics
+    level: 2
+    title: "gov-form xlsx の入力セル特定 経験則 (= dump 後の読み方)"
+    origin: "2026-06-30"
+    related: [form-dump-first, label-overwrite-bug, label-vs-input-antipattern, openpyxl-clears-formula-cache, diff-form-xlsx-detection]
   - id: form-filename-convention
     legacy: "0.5"
     level: 2
@@ -249,11 +255,16 @@ sections:
     title: "紙原本要求の窓口では貼付電子印影は印刷しても拒否される (= 実押印が確実)"
     origin: "2026-06"
     related: [signature-not-stamp, pdf-snapshot-xlsx-submission]
+  - id: signature-photo-to-transparent-png
+    level: 3
+    title: "署名: 手書き写真 → 透過 PNG (raw → transparent、 signature-image-overlay-density の上流)"
+    origin: "2026-06-30"
+    related: [signature-image-overlay-density, signature-not-stamp, pdf-prefill-direct, pymupdf-insert-text-baseline, pdf-text-match-nfkc]
   - id: signature-image-overlay-density
     level: 3
     title: "署名 PNG overlay の濃度 boost (= 薄い signature を濃く読ませる)"
     origin: "2026-06-28"
-    related: [signature-not-stamp, pdf-prefill-direct, pdf-cell-label-vs-data-disambiguation, pdf-mutation-verification-schema, pdf-visual-confirm]
+    related: [signature-not-stamp, pdf-prefill-direct, pdf-cell-label-vs-data-disambiguation, pdf-mutation-verification-schema, pdf-visual-confirm, signature-photo-to-transparent-png]
   - id: placeholder-trailing-underscore
     legacy: "2-8"
     level: 3

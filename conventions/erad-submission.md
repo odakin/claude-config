@@ -67,17 +67,13 @@ Excel/docx の fill・docx→PDF・署名合成の **一般技法は `office-aut
 - **様式1 の式キャッシュ**: openpyxl 記入で字数・経費の式キャッシュが空になる→提出ファイルに値を残すには **Excel で開いて保存**（公式案内）。手順・gate ヘルパー（`assert_formula_cache_intact`）・修復は [`openpyxl-clears-formula-cache`](office-automation.md#openpyxl-clears-formula-cache)。`load_workbook(data_only=True)` で結果確認。
 - **応募内容提案書プレビュー**（e-Rad が吐く `E0204R01_*.pdf` 等）= **添付した様式PDF の連結**。様式1（xlsx）と e-Rad 入力欄（課題名・研究目的・経費）は含まれない＝それらはタブ側で別途確認。
 
-### 様式 xlsx の入力セル特定（gov 様式 共通の経験則）
-- **文字数カウント列の `=LEN($Dn)` 式が指す先が入力セル**（例: E列=LEN(D列)→入力は D列。1枚目の課題名/活用方法も N列=LEN(C列)→C列）。
-- **チェックボックス/Y入力**: ラベルセルと入力セルは別。Y入力セルは **data validation（list "Y"）で特定**（多くはラベルの1つ左の列）。ラベルセルに直接書くと壊れる。
-- **業績等**: 「項目ごとに改行」でも **1件1セル**（self-check が「N項目記入済み」で数える）。merged か個別かを必ず確認。
-- **必要性テキスト**: ラベル行の **1つ下の merged セル**が入力欄。
-- **経費 1枚目サマリは他シートからの自動集計式＝触らない**。明細を埋める。
+### 様式 xlsx の入力セル特定
+gov-form xlsx 共通の経験則（LEN 式の先 = 入力 / Y入力は data validation / 業績は 1 件 1 セル / 必要性はラベル 1 つ下の merged / サマリは触らない）は [`gov-form-input-cell-heuristics`](office-automation.md#gov-form-input-cell-heuristics)（観測元: 学振 DC2 + SPReAD 第2回）。 e-Rad 経由 SPReAD の例: 課題名 / 活用方法 = `N列=LEN(C列)` → C列入力。
 
-### docx 同意確認書の記入＋署名合成
-- ＿＿ blank は `re.sub('＿+', 値)`、「氏名：」後の空白 run に値。run 分割に注意（先に run dump）。チェックボックスの content control は toggle 困難＝PDF 化前提なら全 `w:t` の `☐→☒` 置換で視覚チェック。
-- ⚠️ **記入で行が増えるとページ数が空様式より増える**（判断記載欄等）。**空様式のページ数に合わせる**（文を短縮、フォントは入力欄継承＝本文と同サイズ）。
-- **署名合成**: 手書き写真→透過黒PNG→PDF の `氏名：` を `search_for` し**右隣に印字氏名と併記**で配置（複数ページは全ページ探索）。画像濃度・anchor 配置の技法は [`signature-image-overlay-density`](office-automation.md#signature-image-overlay-density) / [`pdf-prefill-direct`](office-automation.md#pdf-prefill-direct)。補足に「直筆署名 **又は** 氏名入力（電子的記名）も可」とあることが多い。
+### docx 同意確認書の記入
+- ＿＿ blank → 値 / ☐→☒ / run 分割の対処は [`docx-fill-xml-edit`](office-automation.md#docx-fill-xml-edit)（zip+XML 直編集が runtime 軽量 + run 分割 dump 必須）+ [`docx-checkbox-content-control`](office-automation.md#docx-checkbox-content-control)（content control checkbox は toggle 困難 → PDF 化前提なら `☐→☒` 文字置換で視覚チェック）。
+- ⚠️ **記入で行が増えるとページ数が空様式より増える**（判断記載欄等）。**空様式のページ数に合わせる**（文・所属を短縮、フォントは入力欄継承＝本文と同サイズ）。
+- 補足に「**直筆署名 又は 氏名入力（電子的記名）も可**」とあることが多い（直筆署名の合成は step 4 = 様式一式の組み立て手順参照）。
 
 ### 学生が研究代表者として応募（代理応募）
 - 様式 = 様式0/1/2 ＋ **様式3（学生署名）/様式4（指導教員署名）**。学生に研究者番号が無ければ**指導教員の番号で代理応募**（指導教員枠は消費しない）。
@@ -93,7 +89,7 @@ draft + 公式空様式 + 署名画像 → 提出物 の順序。本節は「e-R
 1. **計算式を含む xlsx 様式**を openpyxl で記入 → ⚠️ save で式キャッシュが飛ぶので Excel 再計算保存（[`openpyxl-clears-formula-cache`](office-automation.md#openpyxl-clears-formula-cache)、driver は `pdf_form_fill.assert_formula_cache_intact` で gate）。標題 drawing を持つ様式は [`excel-osascript-cell-write`](office-automation.md#excel-osascript-cell-write) 経由で値を書く。
 2. 公式 self-check（あれば `research_plan_self_check.py`）で字数・形式・ファイル名を要確認ゼロまで。
 3. **署名する docx 様式**を記入（記入要領削除・☒・run 分割注意）→ `docx-to-pdf.sh` で PDF 化（[`docx-to-pdf-pages`](office-automation.md#docx-to-pdf-pages)、空様式とページ数を一致させる）。
-4. **署名を PDF に合成**: 画像濃度 = [`signature-image-overlay-density`](office-automation.md#signature-image-overlay-density)（alpha boost + 純黒）、anchor（「氏名：」等）右への配置 = [`pdf-prefill-direct`](office-automation.md#pdf-prefill-direct) + baseline 注意 [`pymupdf-insert-text-baseline`](office-automation.md#pymupdf-insert-text-baseline)、helper = `pdf_form_fill.boost_signature_alpha`。
+4. **署名を PDF に合成**: ① 手書き写真 → 透過 PNG（帯切出し + 輝度しきい値 + alpha 計算）= [`signature-photo-to-transparent-png`](office-automation.md#signature-photo-to-transparent-png)（raw photo を持っているとき）→ ② 濃度 boost = [`signature-image-overlay-density`](office-automation.md#signature-image-overlay-density)（alpha boost + 純黒、helper = `pdf_form_fill.boost_signature_alpha`）→ ③ anchor（「氏名：」等）右への配置 = [`pdf-prefill-direct`](office-automation.md#pdf-prefill-direct) + baseline 注意 [`pymupdf-insert-text-baseline`](office-automation.md#pymupdf-insert-text-baseline)。⚠️ `search_for("氏名：")` は CJK 互換字形で空振りリスクあり、 空振り時は [`pdf-text-match-nfkc`](office-automation.md#pdf-text-match-nfkc)（`get_text("words")` + NFKC 照合）に降りる。
 5. ファイル名規定にリネーム → 提出。
 
 案件固有のソース・具体値（記入スクリプト・記入済 docx・どの署名がどの様式か）は応募管理リポの `src/BUILD.md` 側に置き本節を参照する（＝組み立て順序の SoT は本節、技法の SoT は office-automation.md、案件値は各リポ）。

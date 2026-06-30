@@ -130,6 +130,27 @@ for sname in wb.sheetnames:
 
 > **注**: openpyxl は **extension 形式の data validation** (Excel 2007+ で追加された list dropdown 等) を読めない (= `UserWarning: Data Validation extension is not supported and will be removed` で警告 + skip)。 dropdown 選択肢を知るには 雛形 xlsx を Excel/Numbers で開いて目視するか、 「リスト」 タブ (= form 内部の選択肢シート) を openpyxl で別途読む。
 
+## <a id="gov-form-input-cell-heuristics"></a>gov-form xlsx の入力セル特定 経験則 (= dump 後の読み方)
+
+[`form-dump-first`](#form-dump-first) で全 dump した後、 **どのセルが入力か** を見分ける heuristic。 学振・JST・科研費・厚労省・財団等の gov-form xlsx に共通して観測される pattern (= 共通の文書様式パッケージ起源と推測)。
+
+| heuristic | 内容 |
+|---|---|
+| **文字数カウント列の式** | `=LEN($Dn)` のような **文字カウント式が指す先が入力セル**。 例: E列に `=LEN(D列)` → 入力は **D列**、 N列に `=LEN(C列)` → 入力は **C列**。 ⚠️ 字数表示用の式は label でなく**入力セル位置の signal** として読む |
+| **Y入力/チェックボックス** | ラベルセルと**入力セルは別**。 入力セルは `data_validations` の `list "Y"` で特定 (= 多くは**ラベルの 1 つ左の列**)。 ラベルセル自体に "Y" を書くと [`label-overwrite-bug`](#label-overwrite-bug) |
+| **業績等の reps** | 「項目ごとに改行」 と書いてあっても **1 件 1 セル** が多い (= 公式 self-check が「N 項目記入済み」 で行数を数えるため)。 merged か個別かは dump で確認 |
+| **必要性 / 長文記述** | ラベル行の **1 つ下の merged セル** が入力欄 (= ラベル行は header、 下に伸びる)。 ラベル行を上書きすると [`label-vs-input-antipattern`](#label-vs-input-antipattern) |
+| **サマリ式 (経費等)** | 1 枚目のサマリは **他シートからの自動集計式** = 触らない。 明細を埋めると自動で集計される (= [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) で再計算保存も忘れずに) |
+
+**driver reflex**:
+
+1. dump 出力で `=LEN(` 式を全列で grep → 入力列 candidate を抽出
+2. `data_validations` (extension format は openpyxl が読めないので [`form-dump-first`](#form-dump-first) の注を参照) を `list "Y"` で grep → checkbox 入力セル candidate を抽出
+3. 各 candidate に書き込み → `data_only=True` で読み戻して expected 字数を assert (= 雛形 self-check が再計算するなら整合確認も同時に走る)
+4. 並行して [`diff-form-xlsx.py`](../scripts/diff-form-xlsx.py) で label 改変を機械検証
+
+⚠️ これは経験則: 全 gov-form が従うとは限らない。 個別 form ではまず dump して確認、 「LEN 式の先 = 入力」 が成立しない例 (= 別 sheet 集計 / 縦並び list / radio button) があれば dump の値で判断。 観測元: 学振 DC2 (2026-05)、 SPReAD 第2回 (2026-06) で安定。
+
 ## <a id="form-filename-convention"></a>ファイル命名規約 (form 別 registry)
 
 行政・学術 form ごとに「ファイル名フォーマット」 が指定されている場合が多い。 fill 先のファイル名は **form 仕様通り** に作る (= submit 時の自動検証に必要)。 観測したパターン (placeholder のみ、 literal は private repo 側に置く):
@@ -1593,6 +1614,45 @@ origin: 2026-05-14 JST SPReAD 様式 0 + 様式 2 の氏名欄、 当初 hanko �
 - **生成時の reflex**: 様式を openpyxl 等で生成するとき、 押印欄に印影画像を埋め込まず**空で出力**し、 印刷後の物理押印を前提にする (= そういう窓口は [`pdf-snapshot-xlsx-submission`](#pdf-snapshot-xlsx-submission) の通り提出本体も紙原本を要求しがち)。
 
 origin: 2026-06 ある学内事務窓口で、 出張様式に貼り付けた電子印影を印刷提出 → 「印刷された印影は不可、 紙に実押印を」 と差戻し。 同窓口は謝金様式でも「ハンコ画像貼付は不可、 紙に朱肉 / シャチハタ捺印した原本を」 と一貫 (= 署名だけでなく **認印も電子貼付不可** の窓口が存在)。
+
+### <a id="signature-photo-to-transparent-png"></a>署名: 手書き写真 → 透過 PNG (raw → transparent、 [`signature-image-overlay-density`](#signature-image-overlay-density) の上流)
+
+**症状/use case**: 手書き署名を**スマホ等で撮影した raw JPG/PNG** (背景に紙の陰・影・指・縁の暗部を含む) を form に重ねたい。 [`signature-image-overlay-density`](#signature-image-overlay-density) は**既に透過 PNG が手元にある前提**で濃度を調整するが、 raw photo を持っていたらまずここで透過 PNG に変換する (= 不在だった上流 step)。
+
+**入力の特徴**: 自然光・蛍光灯下のスマホ撮影は (a) 紙白が灰色 (背景 RGB 200-230)、 (b) 影・縁の暗部 (背景 < 100)、 (c) インクは黒寄り (lum < 100)。 **そのまま輝度しきい値だけで ink 抽出すると影や指が ink と判定される** → 帯切出し (= ROI 限定) を入れる。
+
+**4 step**:
+
+1. **帯切出し (= ROI 制限)**: 撮影時の紙の中央・上 1/3 等、 署名が写る region に crop。 例 `band = im.crop((W*.14, H*.17, W*.76, H*.42))` (= 中央 ~60% 横幅 × 上 1/4 縦幅)。 ⚠️ ROI は撮影に依存 → 1 度開いて目視で決める (= 規約値なし、 fit-the-photo)
+2. **輝度しきい値で ink 抽出**: `lum = 0.299*R + 0.587*G + 0.114*B` (= ITU-R BT.601)、 `lum < 120` の pixel を ink 候補とする (= 紙白 ~200 と inked black ~50-100 の中間)
+3. **ink bbox に再 crop**: ink pixel の bbox を取り margin 18 px ほど付けて再 crop (= 帯切出しで漏れた周辺ノイズを最終除去)
+4. **輝度ベース alpha 生成**: `alpha = clip((threshold - lum)/range * 255 * boost, 0, 255)` で**暗いほど不透明**な PNG を出す。 例 `(145-lum)/95*255*1.9` → lum=50 で alpha~255、 lum=145 で alpha=0。 RGB は 0 固定 (= 純黒)。 ⚠️ helper `pdf_form_fill.boost_signature_alpha` は**既に透過 PNG がある場合の濃度 boost** であり、 raw photo → 透過 PNG はカバーしない (= 本 slug が upstream)
+
+**最小スケルトン**:
+
+```python
+import numpy as np
+from PIL import Image
+
+im = Image.open("sig.jpg").convert("RGB")
+W, H = im.size
+band = im.crop((int(W*0.14), int(H*0.17), int(W*0.76), int(H*0.42)))   # ROI: 撮影依存
+a = np.asarray(band).astype(np.int16)
+lum = 0.299*a[:,:,0] + 0.587*a[:,:,1] + 0.114*a[:,:,2]
+ys, xs = np.where(lum < 120)
+m = 18
+sig = band.crop((max(0,xs.min()-m), max(0,ys.min()-m),
+                 min(band.size[0],xs.max()+m), min(band.size[1],ys.max()+m)))
+l = 0.299*np.asarray(sig)[:,:,0] + 0.587*np.asarray(sig)[:,:,1] + 0.114*np.asarray(sig)[:,:,2]
+alpha = np.clip((145-l)/95*255*1.9, 0, 255).astype("uint8")
+rgba = np.zeros((*l.shape, 4), "uint8")
+rgba[:,:,3] = alpha
+Image.fromarray(rgba).save("sig.png")
+```
+
+**ROI 値の決め方** (= 規約値なし): (1) raw を Preview / Read tool で開き目視 → (2) 「署名が写る矩形」 を縦横の比率で決める → (3) `band = im.crop((W*l, H*t, W*r, H*b))` の数値だけ書き換えて 1 回試行 → (4) 出力 PNG を開き ink の抜けを確認 → 不足なら ROI を広げる。 自動 ROI 検出 (= edge detection で紙の枠を取って中身を取る) は紙の影で誤検出多発、 N=1 のときは手動が速い。
+
+**下流**: 出した `sig.png` がまだ薄ければ [`signature-image-overlay-density`](#signature-image-overlay-density) で alpha boost → 配置は [`pdf-prefill-direct`](#pdf-prefill-direct) + [`pymupdf-insert-text-baseline`](#pymupdf-insert-text-baseline)。 PDF anchor (氏名: 等) が CJK 互換字形で空振りなら [`pdf-text-match-nfkc`](#pdf-text-match-nfkc)。
 
 ### <a id="signature-image-overlay-density"></a>署名 PNG 挿入時の濃度 boost (= 薄い signature を濃く読ませる、 経路非依存)
 
