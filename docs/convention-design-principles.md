@@ -1344,6 +1344,80 @@ gate: index の legacy 集合が HEAD (= 直前 commit) に対して **append-on
 
 ---
 
+## <a id="hierarchical-name-collision"></a>17. 階層内の同名 entity 併存 — SoT 表現で context path を明示
+
+異なる組織階層 / data 階層 / 概念階層 で同じ word が**別 entity を指す**場合、 SoT 表現で context path を explicit に declare しないと reference 側で混同が起きる。 §2 (= 重複避け) や §15 (= 多重記述是正) とは直交: 重複でなく **collision** (= 同じ name token が独立の referent を持つ legitimate な並存) の問題。
+
+### <a id="hierarchical-name-collision-pattern"></a>17.1 観察 pattern
+
+| 階層 1 | 階層 2 | 同名 word | 別 referent の指示先 |
+|---|---|---|---|
+| 大学 学部 | 大学 大学院 | 「専攻」 | 学部内専攻 (= 学科内 specialization) / 大学院専攻 (= 研究科内 program) |
+| user config | system config | 「config」 | per-user override / global default |
+| project-local | repo-shared | 「conventions」 | local override / shared baseline |
+| Python builtin | user-defined | `id`, `type`, `list` | builtin / shadowed name |
+
+### <a id="hierarchical-name-collision-trap"></a>17.2 Trap pattern (= 同型再発の signature)
+
+1. **暗黙の 1 階層仮定**: 同名 word が **1 階層でしか存在しない** と暗黙仮定 (= 受け取った reference を 1 階層 frame で解釈)
+2. **誤反射の伝播**: 1 階層の SoT を更新 → 同名 entity を反射的に「同じ fact の synonym」 と扱い関連 file の literal を一括書換え → **別階層の正名まで誤って rewrite**
+3. **二度ハマる**: user 訂正 (= 「実は別階層 entity」) を受けても「では別階層こそが正」 と 1 階層 frame で再仮定し逆方向 over-correct
+4. **literal の散在**: 過去 SoT に同名 literal が散在し、 どこを直すかの judgment が立たない
+
+これは §2 (= 重複避け) でも §15 (= 多重記述 consolidation) でも catch されない: 各 reference は legitimate に別 entity を指す literal で、 重複でない (= 重複検出器の射程外)。
+
+### <a id="hierarchical-name-collision-discipline"></a>17.3 規律: SoT 表現で path を明示
+
+**(a) 単一名でなく path で declared** — 各 entity を hierarchical path で書く:
+
+```yaml
+# Bad (= 1 階層 frame で collision risk)
+所属 (学部): <intra-dept-program-X>
+所属 (大学院): <intra-dept-program-X>  # 同 word で別 entity の混同 risk
+
+# Good (= path で disambiguation)
+所属 (学部): <faculty> > <department> > <intra-dept-program-X>
+所属 (大学院): <graduate-school> > <research-school> > <grad-program-Y>
+```
+
+= 同じ word でも階層 path で disambiguation。 path 表現自体が collision を visible にする (= structure が discipline を運ぶ)。
+
+**(b) 階層併存を SoT 自身に明示** (= warning 句として):
+
+```markdown
+⚠️ 「学部内 X」 と「大学院 Y」 は別組織階層、 同じ「専攻」 word だが referent が異なる。
+```
+
+= 読者 / future-self に「ここは collision domain」 を明示。 reflex で同名 literal を 1 階層 frame で扱う risk を抑える。
+
+**(c) 過去誤りを history として保存** — [§2.4 errata marker](#errata-on-preserved-records) の collision domain 版:
+
+削除すると future-self が同 trap を再演する。 errata 形式で「過去のここで誤った frame で update した」 を保存:
+
+```markdown
+⚠️ 過去の誤り: 同 word を 1 階層 frame で扱い、 別階層の名前を一度誤って一括書換えした。
+正は <level-1 entity> と <level-2 entity> の 2 階層併存。
+```
+
+**(d) References は context-tagged pointer 化**:
+
+```markdown
+<reference>: <value> (= <level/context-tag>、 正本 = <home> の <relevant section>)
+```
+
+= 「正本」 と「level/context」 をセットで明示。 reference を読むだけで collision の存在 + 該当階層が分かる。
+
+### <a id="hierarchical-name-collision-relation"></a>17.4 関連
+
+- 一般 SoT 重複避け = [§2 (= #no-duplicate-rules)](#no-duplicate-rules) (= 別軸: 同 entity の複数記述)
+- intra-file slug stability = [§14 (= #intrafile-slug-identity)](#intrafile-slug-identity) (= 別軸: doc 内 anchor identity)
+- 削除不能な誤り記録の errata = [§2.4 (= #errata-on-preserved-records)](#errata-on-preserved-records) (= history 保存の type、 本節 (c) の base)
+- Frame error の一般則 = [§4 (= #orient-before-act)](#orient-before-act) (= 行動前に方位を取れ、 本節 trap (1) の prevention 上流)
+
+由来: 2026-06-29 — 大学組織で「学部内 X 専攻」 と「大学院 Y 専攻」 が同 word「専攻」 で並存する fact を 3 回の user 訂正連鎖を経て理解した RCA を一般化。 1 階層 frame で解釈する暗黙仮定 → 1 階層更新 → 別階層誤訂正 → 二度ハマる cycle が観察され、 collision domain の SoT 表現に path / context tagging を要求する規律として hoist。 instance は layer-3 (= 個別 user profile の SoT) に sequester (= kernel-up / instance-down)。
+
+---
+
 ## <a id="changelog"></a>変更履歴
 
 | 日付 | 変更 | 動機 |
@@ -1377,3 +1451,4 @@ gate: index の legacy 集合が HEAD (= 直前 commit) に対して **append-on
 | 2026-06-22 | §4.2 新設「自己 RCA の severity-minimization — §4.1 の cure 不能な残余クラス」 + §4.1 内の解放済 positional ref (§4.2/§4.3) を脱-positional 化 | 外部宛 outreach で未検証身元を断定送信した失敗を RCA する session が、単純失敗を複数回「小さく・技術的に」 framing し直し user に都度訂正された incident を一般化 (= 主題がこの reflex の最中・訂正済み版でも再演)。§4.1 (motivated substitution) の self-RCA/severity 姉妹で、両 cure (機械 gate / payoff 変更) が使えない残余クラス → goal を予防→可視化+訂正ループ短縮へ下げ、blunt-first (出力 form 変更) + 外部 review backstop。pure minimization と区別する signature = dignified な失敗の inflate による displacement。instance は layer-3 個人層 (kernel-up/instance-down)。user 依頼。 |
 | 2026-06-25 | §2.5 成熟度 lens「派生データ」row に (A) field-level view を併記 | 旧記載は (B) whole-file 生成のみで、手編集 file 内の単一導出可能 field (例: slug の純関数たる公開 path) を「書かず read 時に導出」 する design-out が表に無かった。2026-06-25「派生可能な値は格納しない」 一般化 handoff の cold-eyes verdict (= build all-no、規則は §2.5 に既存) が flagged した micro-edit を owner 採用。1 cell の clarification。 |
 | 2026-06-29 | §8.16 新設「不在主張の channel scope — single-channel null は universal absence の証明ではない」 | layer-3 で institutional 締切超過の指摘に対し person-to-person mail sweep の null から「事前告知無し」 と universalize → 実は internal broadcast (= 学内 portal 掲示板) に 4 ヶ月前から告知あり、 を 2 段繰り返した RCA を一般化 (= 1 段目: mail sweep null → universal absence / 2 段目: 締切時刻を verify せず時間軸で「十分早い」 argue)。 §8.11 (intake leverage) の channel-category 軸 dual = downstream sweep がいくら丁寧でも intake で channel を取りこぼすと universal absence は嘘になる。 §8.14 (identity 軸 corroboration) との対 = channel 軸 coverage。 reflex = sweep scope template 「Verified = ___ / NOT verified = ___」 を埋める、 機械化されていない broadcast は honest framing で保留。 共著メール送信前の共著者 draft 確認 (= sender-side responsibility) を research-email.md に sibling section として併設、 receiver-side responsibility (= pre-outreach-identity-check) の対辺補完 (§9.8 充足)。 user 依頼。 |
+| 2026-06-30 | §17 新設「階層内の同名 entity 併存 — SoT 表現で context path を明示」 | 大学組織で「学部内 X 専攻」 と「大学院 Y 専攻」 が同 word「専攻」 で並存する fact を 3 回の user 訂正連鎖を経て理解した RCA を一般化。 §2 (= 重複避け) §15 (= 多重記述 consolidation) と直交 (= 重複でなく collision、 各 reference は legitimate に別 entity を指す literal、 重複検出器の射程外)。 1 階層 frame 暗黙仮定 → 別階層誤訂正 → 二度ハマる cycle の prevention に SoT 表現の path 明示 + 階層併存 warning + errata history + context-tagged pointer を要求。 §4 (orient before act) trap (1) の上流、 §2.4 (errata marker) の collision domain 適用。 instance は layer-3 (= 個別 user profile) に sequester (= kernel-up / instance-down)。 user 依頼。 |
