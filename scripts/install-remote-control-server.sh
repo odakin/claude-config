@@ -21,7 +21,9 @@
 #   その config-dir で `CLAUDE_CONFIG_DIR=DIR claude auth login` 済 + 初回同意 y が前提。
 #   --status / --uninstall でその 2 本目を対象にするときも同じ --label-suffix を渡す。
 # --no-preflight: 起動前の 8 秒 probe を skip (= SessionStart hook 等から呼ぶとき、 install を
-#   ブロックしない。 probe は auth/consent の hint 専用で install には不要、 KeepAlive が自動復帰)。
+#   ブロックしない。 probe は auth/consent/version の hint 専用で install には不要、 KeepAlive が
+#   自動復帰。 なお `claude --version` に依存する version gate は probe と独立なので --no-preflight
+#   でも走る)。
 # --replace-agent LABEL: 旧 (個人) ラベルの登録を bootout + rm してから入れる移行用。
 #
 # ⚠️ 設計上の注意 (= 変更する人へ):
@@ -112,7 +114,18 @@ CLAUDE_BIN="$HOME/.local/bin/claude"
 [ -x "$CLAUDE_BIN" ] || CLAUDE_BIN="$(command -v claude || true)"
 [ -n "$CLAUDE_BIN" ] || { echo "[error] claude binary not found (native install expected at ~/.local/bin/claude)" >&2; exit 1; }
 
-AUTH_NG=0; CONSENT_NG=0
+AUTH_NG=0; CONSENT_NG=0; VERSION_NG=0
+# RC は v2.1.139 以上を要求 (= 公式 min。 旧 CLI で叩くと misleading な "Remote Control is not
+# enabled for your account" が返り、 org policy blocker と誤読して support に issue を切りに走る
+# trap の元 → 直接発火の runtime signal 〔`too old for Remote Control`〕 と、 probe を待たない
+# deterministic な version parse の 2 経路で拾う。 parse 失敗は silent skip (= fail-open)。
+MIN_VER="2.1.139"
+CLAUDE_VER=$("$CLAUDE_BIN" --version 2>/dev/null | awk 'NR==1{for(i=1;i<=NF;i++)if($i~/^[0-9]+(\.[0-9]+)+$/){print $i;exit}}')
+if [ -n "$CLAUDE_VER" ]; then
+  # sort -V の highest が MIN_VER なら CLAUDE_VER < MIN_VER (= 昇順末尾 == MIN_VER ∧ 等しくない)
+  HIGHEST=$(printf '%s\n%s\n' "$CLAUDE_VER" "$MIN_VER" | sort -V | tail -1)
+  [ "$HIGHEST" = "$MIN_VER" ] && [ "$CLAUDE_VER" != "$MIN_VER" ] && VERSION_NG=1
+fi
 # --no-preflight: 8 秒 probe を skip (= SessionStart hook 等から呼ぶとき。 probe は auth/consent の
 # hint を出すだけで install 自体には不要 — KeepAlive が解消後 60s で自動復帰する)。
 if [ "$NO_PREFLIGHT" != "1" ]; then
@@ -123,9 +136,15 @@ if [ "$NO_PREFLIGHT" != "1" ]; then
   sleep 8
   kill "$PRE_PID" 2>/dev/null
   wait "$PRE_PID" 2>/dev/null
-  # RC の auth 失敗は複数文言 (= subscription 必須 / full-scope token 要 / org policy / 未 enable)。
+  # version 起因は VERSION_NG に分離 (= fix hint「claude update / PATH 修正」 が AUTH と別)。
+  grep -qE "too old for Remote Control" "$TMPLOG" && VERSION_NG=1
+  # RC の auth 失敗は複数文言 (= subscription 必須 / full-scope token 要 / org policy / 未 enable /
+  # v2.1.53 misleading 変種 `is not enabled for your account` (= 「未 enable」 と別 wording) /
+  # 新 CLI が ANTHROPIC_API_KEY 混入時に返す `requires claude.ai subscription auth`)。
   # preflight hint なので広めに拾う (= 取りこぼしても install は続行し log に実 error が出る)。
-  grep -qE "must be logged in|requires a claude.ai subscription|full-scope login token|disabled by your organization|not yet enabled for your account" "$TMPLOG" && AUTH_NG=1
+  # ⚠️ この subshell は ANTHROPIC_API_KEY を unset するので key 混入 error は本 probe 単独では
+  # 発火しないが、 別経路 (= 手動 `claude remote-control`) の diagnostic に流用可能なので載せる。
+  grep -qE "must be logged in|requires a claude\\.ai subscription|full-scope login token|disabled by your organization|not yet enabled for your account|is not enabled for your account|requires claude\\.ai subscription auth" "$TMPLOG" && AUTH_NG=1
   grep -q "Enable Remote Control?" "$TMPLOG" && CONSENT_NG=1
   rm -f "$TMPLOG"
 fi
@@ -188,12 +207,35 @@ done
 launchctl kickstart "gui/$UID_N/$LABEL" 2>/dev/null
 
 echo "[ok] installed ($LABEL, dir=$RC_DIR)"
+if [ "$VERSION_NG" = 1 ]; then
+  # $CLAUDE_VER が空 (parse fail) の時は runtime signal (= `too old for Remote Control`) 経由で
+  # ここに来ている。 その場合も同じ fix hint で十分。
+  cat <<MSG
+
+[warn] Claude Code CLI version is older than $MIN_VER (Remote Control minimum).
+       Detected: ${CLAUDE_VER:-unknown} at $CLAUDE_BIN
+       Fix options (any one):
+         - claude update
+         - ensure the newest install is first in PATH — macOS \`path_helper\` (\`/etc/zprofile\`)
+           can push \`/usr/local/bin\` ahead of user-scoped \`~/.npm-global/bin\` even when
+           \`.zshenv\` re-prepends; \`~/.zprofile\` re-prepend is one fix
+         - remove the older install (typical suspect: \`/usr/local/bin/claude\` left by an
+           old \`npm install -g\` under root)
+       See conventions/remote-control-server.md "Troubleshooting" for details.
+       The server self-heals within 60s after the CLI update — no re-install needed.
+MSG
+fi
 if [ "$AUTH_NG" = 1 ]; then
   cat <<'MSG'
 
 [warn] auth preflight failed: stored credential is not a claude.ai OAuth login.
        Run once in a terminal:   claude auth login
        (sign in with your claude.ai subscription account; API keys are not supported)
+       If `ANTHROPIC_API_KEY` is set in your shell, `unset` it before `claude auth login`
+       (RC requires claude.ai OAuth; an env-set API key overrides OAuth for the same shell).
+       The launchd plist unsets it defensively so the running server is unaffected, but
+       your install/verify shell can still be tripped by it. See conventions/
+       remote-control-server.md "Troubleshooting" for details.
        The server self-heals within 60s after login — no re-install needed.
 MSG
 fi

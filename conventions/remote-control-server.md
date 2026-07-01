@@ -24,11 +24,11 @@ sh scripts/install-remote-control-server.sh --uninstall   # 解除
 QR (space キー) は使えないが、接続先は ① claude.ai/code のセッション一覧 ② log 内の
 `https://claude.ai/code?environment=env_…` URL の 2 経路で入れる (= QR 不要)。
 
-## 要件 (= 欠けていても install は通り、解消後 60 秒以内に自動で生き返る)
+## <a id="requirements-and-selfheal"></a>要件 (= 欠けていても install は通り、解消後 60 秒以内に自動で生き返る)
 
 | 要件 | 欠けた時の症状 | 解消 |
 |---|---|---|
-| macOS + Claude Code v2.1.51+ (公式 docs 明記) | — | `claude update` |
+| macOS + Claude Code v2.1.139+ (RC server 起動 minimum。 v2.1.51+ 系は `remote-control` サブコマンド自体は存在するが server 起動時に runtime error で cycling する、 詳細 [Troubleshooting](#ts-version-mismatch)) | 起動時 `too old for Remote Control` error | `claude update` |
 | **workspace trust** (= `--dir` で `claude` を一度起動し trust dialog を承認済) | fresh マシンで未承認だと非対話の launchd サーバーが dialog を出せず進めない | 一度 `cd <dir> && claude` で承認 (= fresh setup の盲点) |
 | **claude.ai OAuth login** (subscription 必須) | log に「must be logged in」で即 exit を繰り返す | ターミナルで `claude auth login`。⚠️ API key・旧「managed key」型・`claude setup-token`/`CLAUDE_CODE_OAUTH_TOKEN` の inference-only token は全て不可 (= 公式 docs)。`ANTHROPIC_API_KEY` が env にあれば unset。`claude auth status` が loggedIn でも `subscriptionType: null` ならこれ (2026-06-12 実測) |
 | **初回同意** (一度だけ) | log に「Enable Remote Control? (y/n)」、無人では進めない | ターミナルで `claude remote-control` を一度起動して y (= `~/.claude.json` の `remoteDialogSeen` に永続化) |
@@ -72,6 +72,55 @@ QR (space キー) は使えないが、接続先は ① claude.ai/code のセッ
 - 並列セッションは同じ cwd を共有する (same-dir) ので、同一ファイルの同時編集は衝突し得る。
 - **ultraplan を起動すると Remote Control が切断される** (= 両者が claude.ai/code を占有、公式 docs)。
 - ⚠️ **`--sandbox`/`--no-sandbox` の食い違い**: 公式 docs は server mode の flag に filesystem/network 隔離の `--sandbox` を挙げるが、v2.1.165 の `claude remote-control --help` には**無い** (= 自版で要確認、版依存)。常時公開サーバーで隔離を効かせたい場合は自分の `--help` で実在を確認してから付ける (= docs だけ見て plist に焼くと unknown-flag で永久 cycling し得る)。
+
+## <a id="troubleshooting"></a>Troubleshooting
+
+install が通ったのに server がまともに起動しない・接続できないときの実測 pattern。 いずれも `install-remote-control-server.sh` の preflight が `[warn]` として拾う設計 (= 静かに素通りさせない)。
+
+### <a id="ts-version-mismatch"></a>"Remote Control is not enabled for your account" — 実は CLI 古すぎ (v2.1.139 未満)
+
+**症状**: `claude remote-control` 直後に `Error: Remote Control is not enabled for your account. Contact your administrator.` が返る。 org policy の blocker と読めるが実は誤誘導 — RC server 起動は v2.1.139 以上を要求し (= server 側が返す runtime error `too old for Remote Control` の閾値)、 v2.1.53 系の古い CLI がこの misleading な wording を返す。 launchd log tail に `Your version of Claude Code (X.Y.Z) is too old for Remote Control.` があれば確定。
+
+**検出**:
+- `claude --version` が 2.1.139 未満 → install script の version gate が `[warn]` を出す
+- `which -a claude` が複数を返す → 古い方が先に呼ばれている疑い (次項)
+
+**Fix (どれか)**:
+- `claude update` (現在 first-in-PATH の CLI が更新される)
+- 新しい install (例: `~/.npm-global/bin/claude`) を PATH 前置き ([`shell-env.md`](shell-env.md) の PATH 二層防御と併読、 次項)
+- 古い install を削除 (例: 過去に `sudo npm install -g` で置いた `/usr/local/bin/claude` が root 所有で残置、 通常の `claude update` では触れない)
+
+⚠️ この error の literal を org policy blocker と誤読して support に issue を切る前に必ず `claude --version` と `which -a claude` を確認。 実測で **~1.5h 診断に溶かした** 事例あり。
+
+### <a id="ts-api-key-conflict"></a>"Remote Control requires claude.ai subscription auth" — `ANTHROPIC_API_KEY` が混入
+
+**症状**: v2.1.139+ の新しい CLI で `Error: Remote Control requires claude.ai subscription auth. ANTHROPIC_API_KEY is set, so this session is using API-key auth — unset it (or run in a shell without it) to use Remote Control.` が返る。 これは**正直な error** で wording どおり。
+
+**launchd 側は既に安全** (= plist が defensive に `unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN` してから `exec claude remote-control` する = `install-remote-control-server.sh` の SoT)。 問題は **install / verify を叩く user shell** に env が残っているとき — probe / `claude auth login` / 手動 `claude remote-control` が全部この error に落ちる。
+
+**Fix**:
+- 一時: `unset ANTHROPIC_API_KEY` してから作業
+- 恒久: shell 起動 file (`.zshenv` / `.zprofile` / `.zshrc` / `~/.config/`) を grep して export 元を除去。 出所不明な場合は `launchctl getenv ANTHROPIC_API_KEY` や Terminal.app / iTerm2 の per-profile plist も確認 (= GUI で env を渡している可能性)。 詳細な env var 二層防御は [`shell-env.md`](shell-env.md)
+
+⚠️ RC は claude.ai OAuth (subscription) 必須で API key auth を拒否する upstream 制約 (= `#50977` feature request、 [§要件](#requirements-and-selfheal) 参照)。 「動いていたのに動かなくなった」 系は API key を後から export した回帰が疑わしい。
+
+### <a id="ts-path-helper-inversion"></a>macOS `path_helper` が PATH を反転させて古い CLI が呼ばれる
+
+**症状**: `.zshenv` で user-scoped bin (例: `~/.npm-global/bin`) を PATH 先頭に prepend しても、 login shell (= Terminal 起動時 / launchd job 実行時) では `/usr/local/bin` 等 system path が上に来ていて古い CLI が呼ばれる。 [前項の version mismatch](#ts-version-mismatch) の root cause として典型。
+
+**機構**: macOS の `/etc/zprofile` が `eval "$(/usr/libexec/path_helper -s)"` を実行し、 `/etc/paths` (先頭 `/usr/local/bin`) を PATH の**前**に押し込む。 `.zshenv` が login 前に走っても、 `.zprofile` 段階で反転する。
+
+**検出**:
+```
+zsh -l -c 'echo $PATH' | tr ':' '\n' | head -5
+```
+先頭に `/usr/local/bin` が居て、 user-scoped bin (`~/.npm-global/bin` / `~/.local/bin` 等) がその下なら反転している。
+
+**Fix**: `~/.zprofile` (login shell が `/etc/zprofile` の直後に読む) で user path を **再 prepend** する。 この axis (= `/etc/zprofile` の後始末) と、 [`shell-env.md`](shell-env.md) の PATH 二層防御 (= スナップショットパッチによる不足補填) は**直交する別 axis** で、 両方必要。 前者は「順序」 の問題、 後者は「消失」 の問題。
+
+### 併発 pattern
+
+上記は独立に起こるが、 特に **dual-install (v2.1.53 残置) + `path_helper` 反転** はセットで潜みやすい (= 古い install が `sudo npm install -g` で `/usr/local/bin` に落とされ、 `path_helper` がそこを先頭に置く → 新しい `~/.npm-global/bin/claude` が影に隠れる)。 install script の `[warn]` version mismatch を見たら両方 check。
 
 ## セキュリティ
 
