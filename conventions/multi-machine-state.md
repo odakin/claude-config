@@ -75,6 +75,20 @@ launchd / cron の定期ジョブは **登録したマシンでだけ走る**。
 - 判定ロジックは 1 実装に集約し (= 例 `<tool> --install-check` が「ホスト ∧ 未 install ∧ repo synced」 を判定して 1 行返す or 空)、 既配線の複数 surface (SessionStart hook + dashboard) から呼ぶ。 install 完了で機械的に沈黙する条件 (= job が登録されたか launchctl 等で検出) を入れる
 - 既配線 hook に相乗りする時は、 その hook の既存 test を壊さないようガード (= test harness が立てる env flag では追加 surface を skip する等)
 
+## <a id="fleet-heartbeat"></a>Fleet heartbeat — cross-machine state の bounded 可視化
+
+マシン A からマシン B の launchd server / auth 状態は直接 query できない ([multi-account-machine-surface.md #honest-limits](multi-account-machine-surface.md#honest-limits))。 この不可視を **各マシンの自己報告を git 経由で集約**する pattern で bounded staleness の fleet view に変える:
+
+- **writer** = [`scripts/fleet-heartbeat.py`](../scripts/fleet-heartbeat.py) (generic engine): 毎時の launchd cron が自マシンの remote-control server 群 (launchd loaded + **server ログ末尾の marker parse** = "Connected" / auth error / version error) + config-dir auth metadata + 設定を `<repo>/<subdir>/<hostname>.json` にまとめて commit + push
+- **reader** = [`scripts/check-fleet-status.py`](../scripts/check-fleet-status.py): 全マシン分を読み、 role 別に異常を surface (always-on マシンの heartbeat 停止 = 🔴 / best-effort マシンのスリープ = 仕様で silent / どのマシンも beat が新鮮な時の server 異常 = 🔴)
+
+設計原則 (詳細 = 各 script docstring が SoT):
+
+1. **監視が監視対象に依存しない**: writer は `claude` コマンドを一切呼ばない (launchctl / log parse / git のみ)。 auth 失効で server 群が全滅しても heartbeat は動き続け、 その全滅をログ marker で報告できる (= auth 失効 → 数時間内に他マシンで 🔴、 という検出線。 実 incident: 常時起動機の auth expire で server + cron 群が ~19.5h silent 死、 検出は成果物 staleness の間接信号頼みだった)
+2. **state-change-or-age commit policy**: essence が変わった時 + 一定時間経過時のみ commit (= git history を汚さない。 liveness 上限 = interval + cron 周期)
+3. **gate 対象外**: [account/host failover](#account-host-failover) の gate は「本番ホストだけが走る」 ためのものだが、 heartbeat は**全マシンが各自を報告してこそ意味がある** → gate を掛けず、 label prefix も分離する (= gate 検査機構の「gate 無し二重実行」 警告と衝突させない。 全マシン同時実行は仕様: 各マシンが別 file に書くので競合しない)
+4. **reader は fetch しない**: 読むのは working tree = 呼び出し側 (dashboard の一斉 fetch / session 開始時の pull) が鮮度を担う
+
 ## 関連
 
 - 同じ system に対する別マシンの観察結果を比較する経路は、各 repo の `DESIGN.md` に「<date> の machine-X observation」の節を立て、別マシンでの観察を追記する形で蓄積するのが追跡しやすい (「audit を上書きする」のではなく「audit に scope qualifier と別マシン観察を追加する」アプローチ)

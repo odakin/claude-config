@@ -49,7 +49,7 @@
 
 ## <a id="honest-limits"></a>正直な限界
 
-- **マシン間の state は直接見えない**: マシン 1 から マシン 2 の server 稼働は直接 query できない。 見える経路は (a) スマホ / web の environment 一覧 (= そのアカウントに登録済みの生きた server が全部出る = 事実上の fleet view)、 (b) git-commit された台帳 / heartbeat。 「別マシンも動いているはず」 は必ずこのどちらかで verify する
+- **マシン間の state は直接見えない**: マシン 1 から マシン 2 の server 稼働は直接 query できない。 見える経路は (a) スマホ / web の environment 一覧 (= そのアカウントに登録済みの生きた server が全部出る = 事実上の fleet view)、 (b) git-commit された台帳 / heartbeat。 「別マシンも動いているはず」 は必ずこのどちらかで verify する。 (b) を体系化した bounded-staleness の fleet view = [multi-machine-state.md #fleet-heartbeat](multi-machine-state.md#fleet-heartbeat) (= 毎時の自己報告 + role 別 staleness 判定。 「直接見えない」 が「数時間以内の異常は自動 surface される」 に狭まる)
 - **スリープ中のマシンのセルは死んでいる**: 可搬機は蓋を閉じれば environment から消える。 これは仕様 (= 常時起動機を本番、 可搬機を best-effort と役割分けする)
 - **remoteControlAtStartup の適用範囲**: CLI の対話 session に効くことは実測済。 desktop app 内 session への適用は環境により要実測 (= 設定後に新 session を開いて web / スマホの一覧に出るかで確認)
 
