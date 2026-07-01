@@ -18,9 +18,16 @@ server 異常 (どの役割でも beat が新鮮なら報告):
 - last_status consent_pending → 🟠 初回同意プロンプト待ちで進めない
 - pid 無し (loaded but dead)  → 🟠
 
+coverage check (--expect-account、 repeatable):
+  pinned per-account 構成 (= remote-control-server.md#multi-account-servers の推奨形:
+  server はアカウントごとの pinned config dir + suffix label で立てる) を前提に、
+  **beat が新鮮なマシンに expected account の suffix server が loaded されているか** を検査。
+  欠けていれば 🟠 (= そのマシンのその account の mobile セルが未開通)。
+  suffix と account の対応は label 末尾 (= `<rc-prefix>.<acct>`) で判定。
+
 usage:
   check-fleet-status.py --dir <fleet-status-dir> [--role HOST=always-on ...]
-      [--stale-hours 6]
+      [--stale-hours 6] [--expect-account <acct> ...]
   check-fleet-status.py --selftest
 
 ⚠️ 読むのは git working tree = 「最後に pull した時点の他マシン状態」。 呼び出し側の
@@ -40,8 +47,9 @@ BAD = {
 }
 
 
-def scan(dir_, roles, stale_hours, now=None):
+def scan(dir_, roles, stale_hours, now=None, expect_accounts=None):
     now = now or time.time()
+    expect_accounts = expect_accounts or []
     findings = []
     seen = set()
     for f in sorted(dir_.glob("*.json")):
@@ -73,6 +81,13 @@ def scan(dir_, roles, stale_hours, now=None):
                 findings.append(f"🟠 {host}: server {s.get('label')} が loaded だが process 無し")
         if role == "always-on" and not d.get("servers"):
             findings.append(f"🟠 {host} (always-on): RC server が 1 本も loaded されていない")
+        # coverage check: expected account の suffix server (= label 末尾 .<acct>) が居るか
+        for acct in expect_accounts:
+            if not any(s.get("label", "").endswith(f".{acct}") for s in d.get("servers", [])):
+                findings.append(
+                    f"🟠 {host}: {acct} の per-account server 無し = このマシンの {acct} mobile セル未開通 "
+                    f"(1 回の OAuth + suffix server install で永続開通)"
+                )
     for host, role in roles.items():
         if role == "always-on" and host not in seen:
             findings.append(f"ℹ️ {host} (always-on): heartbeat 未開始 (= そのマシンで fleet-heartbeat の install 待ち)")
@@ -111,6 +126,15 @@ def selftest():
         f = scan(d, {"srv": "always-on"}, 6, now)
         assert f == [], f
         ok += 1
+        # 4b: coverage check — expected account の suffix server 欠け → 🟠、 両方あれば silent
+        write("lap", now - 600, [{"label": "p.a1", "pid": "1", "last_status": "connected"}])
+        write("srv", now - 600, [
+            {"label": "p.a1", "pid": "2", "last_status": "connected"},
+            {"label": "p.a2", "pid": "3", "last_status": "connected"}])
+        f = scan(d, {}, 6, now, expect_accounts=["a1", "a2"])
+        assert any("lap" in x and "a2" in x and "未開通" in x for x in f), f
+        assert not any("srv" in x for x in f), f
+        ok += 1
         # 5: always-on で beat file 不在 → ℹ️
         f = scan(d, {"ghost": "always-on"}, 6, now)
         assert any("ghost" in x and "未開始" in x for x in f), f
@@ -120,7 +144,7 @@ def selftest():
         f = scan(d, {}, 6, now)
         assert any("process 無し" in x for x in f), f
         ok += 1
-    print(f"selftest: {ok}/6 PASS")
+    print(f"selftest: {ok}/7 PASS")
 
 
 def main():
@@ -128,6 +152,7 @@ def main():
     ap.add_argument("--dir")
     ap.add_argument("--role", action="append", default=[])
     ap.add_argument("--stale-hours", type=float, default=6)
+    ap.add_argument("--expect-account", action="append", default=[])
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
@@ -144,7 +169,7 @@ def main():
     if not dir_.is_dir():
         sys.exit(0)  # fleet 未開始 = silent (fail-open)
     try:
-        findings = scan(dir_, roles, args.stale_hours)
+        findings = scan(dir_, roles, args.stale_hours, expect_accounts=args.expect_account)
     except Exception:
         sys.exit(0)
     if findings:

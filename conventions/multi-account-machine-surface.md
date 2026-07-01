@@ -34,7 +34,7 @@
 
 | # | invariant | 破れの症状 | 検出 / 修復 |
 |---|---|---|---|
-| I1 | 各マシンに RC server をアカウントごとに 1 本 (= 2 本) 常駐 | スマホで片方のアカウントにするとそのマシンが出てこない | session 開始時の coverage check が自動配備 + 未 auth なら手順 surface ([remote-control-server.md #multi-account-servers](remote-control-server.md#multi-account-servers)) |
+| I1 | 各マシンに RC server をアカウントごとに 1 本 (= 2 本) 常駐、 **アカウント固定の pinned config dir に載せる** (= 既定 `~/.claude/` は account が可変なので載せない。 pinned 方式なら interactive OAuth はマシン × アカウントごとに 1 回だけで永続 = account 切替が coverage に波及しない) | スマホで片方のアカウントにするとそのマシンが出てこない / 既定 dir の account 切替で片セル silent 消失 | session 開始時の coverage check が自動配備 + 未 auth なら 1 回きり OAuth 手順を surface ([remote-control-server.md #multi-account-servers](remote-control-server.md#multi-account-servers)) |
 | I2 | alt config dir に `settings.json` / `skills` の guard-rail symlink | alt 名義 session だけ hooks / guard が効かない | alt server の install wrapper が symlink を self-healing |
 | I3 | `remoteControlAtStartup: true` を全マシンに | そのマシンの手元 session がスマホから続行できない (= 新規は作れるのに続きができない非対称) | settings.json を machine ごとに確認 (machine-local ゆえ git 同期されない点に注意) |
 | I4 | CLI 土台アカウントは **live fact** (固定 design にしない) + **マシン間でアカウントを分散** | 全マシンの土台が同一アカウントだと、 そのアカウントの rate limit 到達で全マシンの無人ルーチンが同時死する | 土台の現在値は `claude auth status` / 切替 helper で live 導出。 分散していれば「アカウント枯渇 failover = マシン failover」 が 1 動作になる |

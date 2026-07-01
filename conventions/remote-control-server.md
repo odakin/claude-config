@@ -141,6 +141,8 @@ zsh -l -c 'echo $PATH' | tr ':' '\n' | head -5
 
 別アカウントの新規 session をスマホから選べるようにするには、 1 マシンで remote-control サーバーを**アカウントごとに 1 本**立てる。 認証ストアの分離は `CLAUDE_CONFIG_DIR` で行う (⚠️ アカウント × マシン × 端末の**運用全体像** = [multi-account-machine-surface.md](multi-account-machine-surface.md)、 本節はその I1 の機構):
 
+⚠️ **推奨構成 = pinned per-account (全 server を suffix label + アカウント固定の config dir で立て、 既定 `~/.claude/` には載せない)**。 既定 dir の account は desktop / CLI の都合でいつでも切替わる**変数**なので、 そこに server を載せると account 切替のたびにそのマシンの mobile coverage が壊れる (実測: 既定 dir の account 切替で片方のセルが silent 消失)。 pinned dir 方式なら interactive OAuth は「マシン × アカウントごとに 1 回だけ」 で永続 — 以後は既定 dir の account をいくら切替えても coverage 不変 (再 auth が要るのは token 失効時のみ)。 base label (flag 無し install) は単一アカウント運用でのみ使う。
+
 - `install-remote-control-server.sh --config-dir DIR --label-suffix SUF` で 2 本目以降を別 config dir + 別 launchd label で常駐 (= 既定サーバーと衝突しない)。 既定 (flag 無し) が 1 本目。 outbound polling なので 2 本同時起動でポート/ロック衝突なし。
 - ⚠️ **`CLAUDE_CONFIG_DIR` は `~/.claude/` を丸ごと別 dir に分離する** (認証・`settings.json`・hooks・MCP・projects すべて)。 何もしないと 2 本目の名義 session は leak-guard 等の hooks を失う。 → 2 本目の config dir に `settings.json` を symlink で持ち込む (hook の command は `~/.claude/hooks/...` の絶対パスなので実体は共有先に解決される)。 MCP server は `.claude.json` 側で分離され別名義には付かない (= 安全性でなく機能差、 要れば別途その config dir で `claude mcp add`)。
 - ⚠️⚠️ **OAuth はブラウザの現在 claude.ai アカウントを掴む** (= config dir を分けても、 `claude auth login` の認可画面が別アカウントでサインイン済だとそっちで認可されてしまう)。 2 本目を**別アカウントで認証するときは、 認可の瞬間にブラウザをその別アカウントに切り替える** (claude.ai のアカウントメニューで切替、 またはサインアウトして選び直す)。 認可後はブラウザを戻してよい (= 資格は config dir に保存される)。 必ず `CLAUDE_CONFIG_DIR=DIR claude auth status` で email を確認してから本番化する。
