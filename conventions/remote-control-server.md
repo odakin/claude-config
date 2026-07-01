@@ -104,6 +104,8 @@ install が通ったのに server がまともに起動しない・接続でき�
 
 ⚠️ RC は claude.ai OAuth (subscription) 必須で API key auth を拒否する upstream 制約 (= `#50977` feature request、 [§要件](#requirements-and-selfheal) 参照)。 「動いていたのに動かなくなった」 系は API key を後から export した回帰が疑わしい。
 
+⚠️ **status-check 版の同 trap (2026-07-02 実測)**: `ANTHROPIC_API_KEY` が env にあると **`claude auth status` が `authMethod: api_key` で `loggedIn: true` (email 無し) を返す** — 「login 済か」 を auth status で判定する automation (install wrapper / SessionStart hook 等) が **偽 auth 判定** (= 「別アカウント ()」 の空 email error や、 未 auth dir を auth 済と誤認) に落ちる。 automation 側の Fix = auth 確認は必ず `env -u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN` で叩き、 判定は `"loggedIn": true` でなく **`"authMethod": "claude.ai"`** を要求する (= launchd plist の defensive unset と同じ発想を status-check にも)。
+
 ### <a id="ts-path-helper-inversion"></a>macOS `path_helper` が PATH を反転させて古い CLI が呼ばれる
 
 **症状**: `.zshenv` で user-scoped bin (例: `~/.npm-global/bin`) を PATH 先頭に prepend しても、 login shell (= Terminal 起動時 / launchd job 実行時) では `/usr/local/bin` 等 system path が上に来ていて古い CLI が呼ばれる。 [前項の version mismatch](#ts-version-mismatch) の root cause として典型。
