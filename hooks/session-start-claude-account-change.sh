@@ -11,7 +11,7 @@
 #   reconcile 手順 (= scheduled task 再登録 + self-hosted MCP 健全性確認) を surface。
 #
 # Why this exists (= 2026-06-26 odafgpt 移行 RCA):
-#   Claude account を切り替えると ① user-OAuth した Cowork connector ② scheduled task
+#   Claude account を切り替えると ① user-OAuth したアプリ内蔵 connector ② scheduled task
 #   ③ 揮発 session 状態 が消える。 ②③ は機械検知できないので、 ① を「self-hosted MCP に
 #   migrate 済」 という前提のもと、 切替自体を検知して ② の reregister を促す surface。
 #
@@ -88,8 +88,8 @@ fi
 
 generic_reconcile=$(cat <<'GENERIC'
 切替で消えるもの (= 一般 Claude account 切替セマンティクス):
-  ① user-OAuth した Cowork connector (= UUID 形式 MCP) → 新 account 下で消える
-     対策: 必要なら Cowork 設定 UI で再認証、 もしくは self-hosted stdio MCP に migrate
+  ① user-OAuth したアプリ内蔵 connector (= UUID 形式 MCP) → 新 account 下で消える
+     対策: 必要なら Claude Code desktop app の設定 UI で再認証、 もしくは self-hosted stdio MCP に migrate
   ② scheduled task (= 切替先 Claude account の registry には未登録 = 宙吊り)
      対策: 既存の routine 一覧を別経路 (= 個人層 helper or 手書き) で吸い出して
      `create_scheduled_task` で再登録

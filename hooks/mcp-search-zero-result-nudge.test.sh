@@ -33,7 +33,7 @@ assert_fire() {
 echo "=== §A logic tests ==="
 
 # === FIRE cases (= clear zero markers) ===
-assert_fire "A1: Cowork 'No threads found'" 1 \
+assert_fire "A1: アプリ内蔵 connector 'No threads found'" 1 \
   '{"tool_name":"mcp__example-uuid-1__search_threads","tool_response":"No threads found"}'
 
 assert_fire "A2: gongrzhe 'Found 0 messages'" 1 \

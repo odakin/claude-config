@@ -31,7 +31,7 @@
 #   mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)
 #
 # 設計動機 (= 2026-06-20 layer-3 RCA、 個人層 plan 参照):
-#   起票 session で 単一 account wired の Cowork search_threads の 0 件結果を
+#   起票 session で 単一 account wired のアプリ内蔵 connector search_threads の 0 件結果を
 #   「Gmail で 0 件」 「Mac Mail 全 sweep 0 件」 と 5 回 universalize。 fill-in
 #   template 無しでは scope を埋めずに summary 形成へ滑り込んだ。 本 hook は
 #   0 件結果の PostToolUse で「scope enumerate せよ」 を強制 inject する 2 段目
@@ -133,7 +133,7 @@ result: 0 件 / empty"
 if [ -n "$KNOWN_ACCOUNTS" ] && [ "$DOMAIN" = "Gmail" ]; then
   REMINDER="$REMINDER
 known Gmail accounts on this machine: $KNOWN_ACCOUNTS
-session-active subset may be smaller (= Cowork desktop --allowedTools 制限)。"
+session-active subset may be smaller (= Claude Code desktop --allowedTools 制限)。"
 fi
 
 REMINDER="$REMINDER

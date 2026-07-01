@@ -136,7 +136,7 @@ out="$(printf '%s' '{"hook_event_name":"SessionStart","source":"startup"}' | "$H
 
 # D1. capability block の鍵概念が全部出る
 missing_d=""
-for key in "write/send capability" "send_email" "Cowork hosted connector" "account-direct.py"; do
+for key in "write/send capability" "send_email" "アプリ内蔵 connector" "account-direct.py"; do
   if ! printf '%s' "$out" | grep -qF "$key"; then
     missing_d="$missing_d [$key]"
   fi

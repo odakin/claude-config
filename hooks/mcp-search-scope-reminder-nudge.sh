@@ -10,7 +10,7 @@
 #   wire scope の不可視性を思い出させる system-reminder を inject する。
 #   stdout = additionalContext JSON (CLI session に inject)、 副作用で
 #   $HOME/.claude/surface/mcp-search-reminder.txt に同 reminder を書出し
-#   (= desktop Cowork session は SessionStart 経由で読まれる fallback、
+#   (= Claude Code desktop session は SessionStart 経由で読まれる fallback、
 #   hook-authoring.md#frontend-dependent-cowork / lib-surface.sh と同 pattern)。
 #
 # Matcher (settings.json 側):
@@ -21,7 +21,7 @@
 #
 # 設計動機 (= 2026-06-20 layer-3 RCA、 詳細は odakin-prefs 内 plan 参照):
 #   起票 session で `mcp__<UUID>__search_threads` (= 単一 account のみ wired
-#   な Cowork connector) で人名 query 0 件 → 「Gmail で 0 件」 に scope を
+#   なアプリ内蔵 connector) で人名 query 0 件 → 「Gmail で 0 件」 に scope を
 #   universalize → 「Mac Mail 全 sweep 0 件で確定」 と 5 回宣言 → user 複数回
 #   push でようやく別 Gmail account 経由で実 thread を発見。 真因 = MCP tool
 #   metadata が wire account を expose せず、 0 件結果を「私の sight に入った
@@ -42,7 +42,7 @@
 #   reminder は「読み飛ばす Claude」 の前で必ずしも機能しない。 本 hook 単独で
 #   trap 完全防止と claim しない。 補完: ① C (= SessionStart enumeration、
 #   起動時 anchor) + ② B (= 0-result 時の強 reminder) + ③ user 側 wire 拡張
-#   (= Cowork connector に personal Gmail 追加) で多層防御。
+#   (= アプリ内蔵 connector に personal Gmail 追加) で多層防御。
 #
 # 出力経路 (= warn mode、 hook-authoring.md#warn-mode-spec-uncertainty に従う):
 #   stdout = `hookSpecificOutput.additionalContext` + `systemMessage` (= 2 経路
@@ -111,7 +111,7 @@ tool: $TOOL_NAME"
 if [ -n "$KNOWN_ACCOUNTS" ] && [ "$DOMAIN" = "Gmail" ]; then
   REMINDER="$REMINDER
 known Gmail accounts on this machine: $KNOWN_ACCOUNTS
-⚠️ session-active subset may be SMALLER (= Cowork desktop session の --allowedTools 制限、
+⚠️ session-active subset may be SMALLER (= Claude Code desktop session の --allowedTools 制限、
    詳細: claude-config/conventions/mcp.md#desktop-allowedtools-restriction)。"
 fi
 
@@ -137,7 +137,7 @@ scope を埋められないなら、 結論を保留して以下のいずれか�
   universalize、 user 複数回 push でようやく別 account に到達 → 該当 thread 発見)。
   詳細: 個人層 plan (~/Claude/odakin-prefs/plans/2026-06-20-mcp-scope-guard-hooks.md)"
 
-# ---------- surface file (= desktop Cowork session の SessionStart 読込 path) ----------
+# ---------- surface file (= Claude Code desktop session の SessionStart 読込 path) ----------
 # hook-authoring.md#frontend-dependent-cowork: desktop frontend は PreToolUse 出力をモデルに honor しない
 # が file 副作用は走る。 surface 経由で次 session に持ち越し可能。
 SURFACE_DIR="$HOME/.claude/surface"

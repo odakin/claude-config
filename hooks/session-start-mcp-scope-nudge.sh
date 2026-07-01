@@ -10,7 +10,7 @@
 #   list」 + 「session-active subset は別物の可能性、 universal claim 前に
 #   verify する規律」 を inject する。 該当 register が 0 なら silent。
 #   (2026-06-20 追加) §4b で write/send capability の anchor も inject =
-#   「Cowork connector は send_email を出さない、 send は standalone alias /
+#   「アプリ内蔵 connector は send_email を出さない、 send は standalone alias /
 #   account-direct.py」 = read scope の null trap とは別軸の write-tool 不在 trap。
 #
 #   foreign user (= ~/.gmail-mcp / desktop config 不在) では generic な
@@ -20,19 +20,19 @@
 # 出力経路:
 #   stdout = additionalContext JSON (= CLI session に inject)
 #   副作用 = $HOME/.claude/surface/mcp-scope.txt に同 reminder を書出し
-#           (= desktop Cowork session は SessionStart 注入が dropped されるが、
+#           (= Claude Code desktop session は SessionStart 注入が dropped されるが、
 #            file 副作用は走る、 odakin-prefs/CLAUDE.md の surface 読込指示で
 #            拾われる。 hook-authoring.md#frontend-dependent-cowork / lib-surface.sh と同 pattern)
 #
 # 設計動機 (= 2026-06-20 layer-3 RCA、 個人層 plan 参照):
-#   起票 session は Cowork desktop frontend の `--allowedTools` 制限により
+#   起票 session は Claude Code desktop frontend の `--allowedTools` 制限により
 #   単一 Gmail account のみ wired、 残り account は session 内で見えなかった。
 #   session 開始時にこの非対称性が明示されていれば、 0 件結果を「Gmail で
 #   0 件」 と universalize する slip を予防できた可能性ある。 詳細 RCA + 設計:
 #   ~/Claude/odakin-prefs/plans/2026-06-20-mcp-scope-guard-hooks.md (= 個人層、
 #   実 incident の固有名・thread 内容は public layer 1 に出さない方針)
 #   §4b write/send capability block の設計動機 = 2026-06-20 write-tool RCA: 上記 RCA の
-#   姉妹 incident。 Cowork connector に send_email が無いのを「メール送信できない」 と
+#   姉妹 incident。 アプリ内蔵 connector に send_email が無いのを「メール送信できない」 と
 #   誤解しうる (= read scope の null universalization とは別軸の capability 不在 trap)。
 #   詳細 = ~/Claude/odakin-prefs/plans/2026-06-20-write-tool-availability-defense.md
 #
@@ -48,7 +48,7 @@
 #
 # Enumeration source:
 #   (a) $HOME/.gmail-mcp/<account>/credentials.json 群 (= gongrzhe gmail-mcp 系)
-#   (b) (検出のみ) Cowork desktop connector の存在 (= ~/Library/Application Support/
+#   (b) (検出のみ) Claude Code desktop connector の存在 (= ~/Library/Application Support/
 #       Claude/claude_desktop_config.json の mcpServers エントリ、 UUID 形式の
 #       connector は wire scope が UI 任せで filesystem から不明、 honest に
 #       「UUID connector は scope 不明」 と書く)
@@ -87,7 +87,7 @@ if [ -d "$HOME/.gmail-mcp" ]; then
   done
 fi
 
-# ---------- 2. desktop Cowork connector 検出 (= 名前で識別可能な範囲のみ) ----------
+# ---------- 2. Claude Code desktop connector 検出 (= 名前で識別可能な範囲のみ) ----------
 # UUID 形式の connector は wire scope が UI 任せで filesystem から不明。
 # claude_desktop_config.json に mcpServers エントリがあれば server 名は拾える。
 DESKTOP_CONNECTORS=""
@@ -96,7 +96,7 @@ if [ -f "$DESKTOP_CFG" ] && command -v jq >/dev/null 2>&1; then
   DESKTOP_CONNECTORS="$(jq -r '.mcpServers // {} | keys[]?' "$DESKTOP_CFG" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
 fi
 
-# ---------- 3. frontend 判定 (= Cowork desktop か否か、 hook-authoring.md#frontend-dependent-cowork) ----------
+# ---------- 3. frontend 判定 (= Claude Code desktop か否か、 hook-authoring.md#frontend-dependent-cowork) ----------
 FRONTEND="${CLAUDE_CODE_ENTRYPOINT:-unknown}"
 IS_DESKTOP=0
 case "$FRONTEND" in
@@ -126,7 +126,7 @@ REMINDER="${REMINDER}
 
 ⚠️ register 済 ≠ session-active。 当 session で実際 wire されている tool subset は
    ToolSearch の deferred tools list / mcp__* で始まる tool が見えるかで verify する
-   (= Cowork desktop session の --allowedTools は subset に絞る、 詳細
+   (= Claude Code desktop session の --allowedTools は subset に絞る、 詳細
    claude-config/conventions/mcp.md#desktop-allowedtools-restriction)。
 
 universal claim を書く前の必須 anchoring (= 起票 RCA で破綻した 4 軸 sweep の修復):
@@ -143,11 +143,11 @@ universal claim を書く前の必須 anchoring (= 起票 RCA で破綻した 4 
   1. session で見える MCP search tool を ToolSearch で enumerate
   2. 見えない account は ~/Claude/gmail-mcp-config/scripts/account-direct.py で Python 直叩き
   3. それでも null なら user に「以下のみ verify、 残り <list> は未 verify」 と honest framing
-  4. Cowork desktop session なら user 操作で connector 追加を依頼 (= user 経路)"
+  4. Claude Code desktop session なら user 操作で connector 追加を依頼 (= user 経路)"
 
 # ---------- 4b. write/send capability (= read scope と別軸、 2026-06-20 write-tool RCA) ----------
 # tool 名に send verb が「無い」 のは capability 不在の guarantee ではない: 別 connector type が
-# 同 account で send を出す。 Cowork connector の capability は filesystem から推定不可だが、
+# 同 account で send を出す。 アプリ内蔵 connector の capability は filesystem から推定不可だが、
 # name PATTERN (= UUID vs alias) で capability TYPE は確実に判別できる (= blocker (3) の非対称性)。
 if [ -n "$KNOWN_GMAIL" ]; then
   SEND_ROUTE="standalone mcp__gmail-<alias>__send_email (= register 済 alias: $KNOWN_GMAIL)"
@@ -158,8 +158,8 @@ REMINDER="${REMINDER}
 
 ✉️ write/send capability (= read と別軸、 universal claim template とは別の trap):
    tool 名に send/delete/modify verb が「無い」 のは「操作不能」 ではなく「この connector が
-   出さない」 だけ。 ❌「Cowork に send_email が無い → メール送信できない」 と即断するな。
-   - Cowork hosted connector (mcp__<UUID>__*) = read (search_threads/get_thread) +
+   出さない」 だけ。 ❌「アプリ内蔵 connector に send_email が無い → メール送信できない」 と即断するな。
+   - アプリ内蔵 connector (mcp__<UUID>__*) = read (search_threads/get_thread) +
      draft 作成 (create_draft) + label 操作のみ。 send_email / delete_email / modify_email は
      expose しない (= 「read-only」 ではなく「send 不可」 が正確 — draft/label は書ける)。
    - send/delete/modify は: $SEND_ROUTE
@@ -168,7 +168,7 @@ REMINDER="${REMINDER}
 if [ "$IS_DESKTOP" = 1 ]; then
   REMINDER="${REMINDER}
 
-⚠️ CLAUDE_CODE_ENTRYPOINT=claude-desktop 検出 — 本 session は Cowork desktop。
+⚠️ CLAUDE_CODE_ENTRYPOINT=claude-desktop 検出 — 本 session は Claude Code desktop。
    --allowedTools 制限により $HOME/.gmail-mcp/* の subset しか wire されない可能性高い。
    ToolSearch で mcp__gmail-<alias> を query し、 実際に wire された alias を確認せよ
    (= alias 名 = account、 get_profile という MCP tool は無い)。"

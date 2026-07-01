@@ -1,5 +1,5 @@
 #!/bin/sh
-# Pin the Claude.app (Cowork desktop) "New session" folder picker start directory.
+# Pin the Claude.app (Claude Code desktop) "New session" folder picker start directory.
 #
 # The picker opens at the value of `NSNavLastRootDirectory` in the
 # `com.anthropic.claudefordesktop` defaults domain (macOS AppKit NSOpenPanel

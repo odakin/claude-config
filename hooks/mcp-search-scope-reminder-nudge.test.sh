@@ -43,10 +43,10 @@ assert_fire() {
 
 echo "=== §A logic tests (= 合成 stdin JSON) ==="
 
-# A1. Cowork search_threads (= 起票 RCA の対象 tool 型) → FIRE
+# A1. アプリ内蔵 connector search_threads (= 起票 RCA の対象 tool 型) → FIRE
 # 注: UUID + query は generic placeholder (= public layer 1 leak 防止、
 #     実 transcript の固有名は §B retroactive で env 変数経由のみ参照)
-assert_fire "A1: Cowork connector search_threads with query" 1 \
+assert_fire "A1: アプリ内蔵 connector search_threads with query" 1 \
   '{"tool_name":"mcp__example-uuid-0000-0000__search_threads","tool_input":{"query":"example-query"}}'
 
 # A2. gongrzhe gmail-<alias1> search_emails → FIRE
@@ -63,8 +63,8 @@ assert_fire "A3: gmail-<alias-b> search_emails" 1 \
 assert_fire "A4: calendar list_events" 1 \
   '{"tool_name":"mcp__example-cal-uuid__list_events","tool_input":{"calendarId":"primary"}}'
 
-# A5. Cowork get_thread (targeted ID で取得、 scope risk 無し) → SILENT
-assert_fire "A5: Cowork get_thread (targeted) → silent" 0 \
+# A5. アプリ内蔵 connector get_thread (targeted ID で取得、 scope risk 無し) → SILENT
+assert_fire "A5: アプリ内蔵 connector get_thread (targeted) → silent" 0 \
   '{"tool_name":"mcp__example-uuid-1__get_thread","tool_input":{"threadId":"abc"}}'
 
 # A6. gmail read_email (targeted ID) → SILENT

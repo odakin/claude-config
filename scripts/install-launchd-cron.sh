@@ -5,7 +5,7 @@
 # (= 呼び出し側 doc に複製しない、 drift 防止。 = install-remote-control-server.sh と同じパターン)。
 #
 # 効果: 無人ルーチンを launchd cron で回す plist を生成・登録・状態確認・解除する。
-# 実行は CLI 認証 (= ~/.claude.json の単一 oauthAccount) で行われ、 Cowork desktop app の
+# 実行は CLI 認証 (= ~/.claude.json の単一 oauthAccount) で行われ、 Claude Code desktop app の
 # アカウント切り替えに非依存 (= scheduled-tasks.md#account-switch-independent)。
 # idempotent (再実行可)。 2 type をサポート:
 #   - skill : `claude -p --permission-mode bypassPermissions` で SKILL.md を indirection 実行
@@ -215,7 +215,7 @@ cmd_install() {
   done
   echo
   echo "✅ install 完了。 動作確認は呼び出し元の --run <task-id>、 状態は --status。"
-  echo "ℹ️  これらは CLI 認証 (= 上記 account) で走る。 Cowork のアカウント切替に非依存。"
+  echo "ℹ️  これらは CLI 認証 (= 上記 account) で走る。 Claude account 切替に非依存。"
 }
 
 cmd_status() {
