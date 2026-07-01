@@ -139,7 +139,7 @@ zsh -l -c 'echo $PATH' | tr ':' '\n' | head -5
 
 ## <a id="multi-account-servers"></a>複数アカウント — 1 マシンに 2 サーバー
 
-別アカウントの新規 session をスマホから選べるようにするには、 1 マシンで remote-control サーバーを**アカウントごとに 1 本**立てる。 認証ストアの分離は `CLAUDE_CONFIG_DIR` で行う:
+別アカウントの新規 session をスマホから選べるようにするには、 1 マシンで remote-control サーバーを**アカウントごとに 1 本**立てる。 認証ストアの分離は `CLAUDE_CONFIG_DIR` で行う (⚠️ アカウント × マシン × 端末の**運用全体像** = [multi-account-machine-surface.md](multi-account-machine-surface.md)、 本節はその I1 の機構):
 
 - `install-remote-control-server.sh --config-dir DIR --label-suffix SUF` で 2 本目以降を別 config dir + 別 launchd label で常駐 (= 既定サーバーと衝突しない)。 既定 (flag 無し) が 1 本目。 outbound polling なので 2 本同時起動でポート/ロック衝突なし。
 - ⚠️ **`CLAUDE_CONFIG_DIR` は `~/.claude/` を丸ごと別 dir に分離する** (認証・`settings.json`・hooks・MCP・projects すべて)。 何もしないと 2 本目の名義 session は leak-guard 等の hooks を失う。 → 2 本目の config dir に `settings.json` を symlink で持ち込む (hook の command は `~/.claude/hooks/...` の絶対パスなので実体は共有先に解決される)。 MCP server は `.claude.json` 側で分離され別名義には付かない (= 安全性でなく機能差、 要れば別途その config dir で `claude mcp add`)。
