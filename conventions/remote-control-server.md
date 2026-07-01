@@ -145,3 +145,20 @@ zsh -l -c 'echo $PATH' | tr ':' '\n' | head -5
 - ⚠️ **`CLAUDE_CONFIG_DIR` は `~/.claude/` を丸ごと別 dir に分離する** (認証・`settings.json`・hooks・MCP・projects すべて)。 何もしないと 2 本目の名義 session は leak-guard 等の hooks を失う。 → 2 本目の config dir に `settings.json` を symlink で持ち込む (hook の command は `~/.claude/hooks/...` の絶対パスなので実体は共有先に解決される)。 MCP server は `.claude.json` 側で分離され別名義には付かない (= 安全性でなく機能差、 要れば別途その config dir で `claude mcp add`)。
 - ⚠️⚠️ **OAuth はブラウザの現在 claude.ai アカウントを掴む** (= config dir を分けても、 `claude auth login` の認可画面が別アカウントでサインイン済だとそっちで認可されてしまう)。 2 本目を**別アカウントで認証するときは、 認可の瞬間にブラウザをその別アカウントに切り替える** (claude.ai のアカウントメニューで切替、 またはサインアウトして選び直す)。 認可後はブラウザを戻してよい (= 資格は config dir に保存される)。 必ず `CLAUDE_CONFIG_DIR=DIR claude auth status` で email を確認してから本番化する。
 - スマホ側は **アプリのアカウント = 見える environment 群のスイッチ** (= odakin でサインインすると odakin 名義サーバーの environment が、 別名義でサインインすると別名義の environment が候補に出る)。
+
+### <a id="account-auth-keychain"></a>auth の保存構造 — 「切替」 は config-dir の選択であって copy ではない
+
+複数アカウント運用の設計を縛る基礎 fact (macOS、 2026-07-01 実測):
+
+- **auth トークンは `.claude.json` でなく macOS keychain に保存される**。 keychain service 名は `Claude Code-credentials[-<hash>]` の形で、 `<hash>` は **config-dir の path から導出**される (= keychain namespace が config-dir 固有)。
+- ゆえに **`.claude.json` を config-dir 間で copy しても auth は移動しない**: `oauthAccount` 欄 (email 等の metadata) だけが付いてきて `claude auth status` は `loggedIn: false` を返す = **metadata が嘘をつく状態**になる (copy はむしろ有害。 metadata だけ copy された dir は「email 表示 = login 済」 と誤読される)。
+- config-dir に auth を確立する唯一の経路 = `CLAUDE_CONFIG_DIR=<dir> claude auth login` (browser OAuth、 新しい keychain entry を hash 付きで作成。 ⚠️ 上の browser 罠がここでも効く)。
+- **∴ アカウント切替の正しい primitive は「どの config-dir を使うか」 の選択 = `CLAUDE_CONFIG_DIR` env var の切替**。 file 操作で account を「移す」 発想は成立しない。
+
+運用面は 3 面が独立に切替可能:
+
+| 面 | 切替 mechanism |
+|---|---|
+| CLI (ターミナル) | `CLAUDE_CONFIG_DIR` の export / unset (shell function 化すると快適) |
+| desktop app | 起動プロセスの env なので shell からは届かない。 `launchctl setenv` + app 再起動 / `CLAUDE_CONFIG_DIR=<dir> open -na "Claude"` の単発起動 / 実用上は 1 つの primary 固定が楽 |
+| mobile (remote-control) | 切替不要 — 本節の 2 サーバー構成なら**両アカウントの environment が常時見える** (アプリ側のアカウント切替だけで選ぶ) |
