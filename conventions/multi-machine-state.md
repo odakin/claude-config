@@ -85,7 +85,7 @@ launchd / cron の定期ジョブは **登録したマシンでだけ走る**。
 設計原則 (詳細 = 各 script docstring が SoT):
 
 1. **監視が監視対象に依存しない**: writer は `claude` コマンドを一切呼ばない (launchctl / log parse / git のみ)。 auth 失効で server 群が全滅しても heartbeat は動き続け、 その全滅をログ marker で報告できる (= auth 失効 → 数時間内に他マシンで 🔴、 という検出線。 実 incident: 常時起動機の auth expire で server + cron 群が ~19.5h silent 死、 検出は成果物 staleness の間接信号頼みだった)
-2. **state-change-or-age commit policy**: essence が変わった時 + 一定時間経過時のみ commit (= git history を汚さない。 liveness 上限 = interval + cron 周期)
+2. **state-change-or-age commit policy**: essence が変わった時 + 一定時間経過時のみ commit (= git history を汚さない。 liveness 上限 = interval + cron 周期)。 ⚠️ **読み手への注意 — beat の欠落を即異常と誤読しない**: beat は「毎時」 ではない。 状態変化がなければ commit 間隔は最悪 interval + cron 周期 (既定 4h + 1h ≒ 5h、 境界判定が interval 未満と判定して 1 周期余分に skip する off-by-one 込み) まで開くのが**正常動作**。 実例 (2026-07-02): 「毎時 beat」 前提で 4 回連続の欠落を『heartbeat 停止 = マシン死の疑い』 と 2 度誤診したが、 実際は全て設計どおりの skip で系は終始健全だった。 reader の `--stale-hours` はこの上限より大きく取る (既定 6h > 5h)
 3. **gate 対象外**: [account/host failover](#account-host-failover) の gate は「本番ホストだけが走る」 ためのものだが、 heartbeat は**全マシンが各自を報告してこそ意味がある** → gate を掛けず、 label prefix も分離する (= gate 検査機構の「gate 無し二重実行」 警告と衝突させない。 全マシン同時実行は仕様: 各マシンが別 file に書くので競合しない)
 4. **reader は fetch しない**: 読むのは working tree = 呼び出し側 (dashboard の一斉 fetch / session 開始時の pull) が鮮度を担う
 
