@@ -43,7 +43,8 @@ from pathlib import Path
 BAD = {
     "auth_error": ("🔴", "auth 失効で cycling 中 (= そのマシンで `claude auth login`。 remote-control-server.md#ts-api-key-conflict / #account-auth-keychain)"),
     "version_error": ("🔴", "CLI が古くて RC 不能 (remote-control-server.md#ts-version-mismatch)"),
-    "consent_pending": ("🟠", "初回同意プロンプト待ちで進めない (そのマシンで `claude remote-control` に y)"),
+    "consent_pending": ("🟠", "初回同意プロンプト待ちで進めない (= install script 再実行で自動 seed、 remote-control-server.md#ts-workspace-trust)"),
+    "trust_error": ("🔴", "workspace trust 未承認で exit-1 cycling (= install script 再実行で自動 seed、 remote-control-server.md#ts-workspace-trust)"),
 }
 
 
@@ -120,6 +121,11 @@ def selftest():
         f = scan(d, {}, 6, now)
         assert any("lap" in x and "auth_error" in x for x in f), f
         ok += 1
+        # 3b: fresh + trust_error → 🔴 (= virgin config dir の headless 死)
+        write("lap", now - 600, [{"label": "x", "pid": None, "last_status": "trust_error"}])
+        f = scan(d, {}, 6, now)
+        assert any("lap" in x and "trust_error" in x and "🔴" in x for x in f), f
+        ok += 1
         # 4: fresh + connected → silent
         write("lap", now - 600, [{"label": "x", "pid": "1", "last_status": "connected"}])
         write("srv", now - 600, [{"label": "y", "pid": "2", "last_status": "connected"}])
@@ -144,7 +150,7 @@ def selftest():
         f = scan(d, {}, 6, now)
         assert any("process 無し" in x for x in f), f
         ok += 1
-    print(f"selftest: {ok}/7 PASS")
+    print(f"selftest: {ok}/8 PASS")
 
 
 def main():

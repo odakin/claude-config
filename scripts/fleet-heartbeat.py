@@ -59,6 +59,9 @@ LOG_MARKERS = [
     ("too old for Remote Control", "version_error"),
     ("not enabled for your account", "version_error"),
     ("Enable Remote Control?", "consent_pending"),
+    # virgin config dir の headless 死 (= trust dialog を出せず exit-1 cycling、
+    # remote-control-server.md#ts-workspace-trust。 2026-07-02 実測 RCA で追加)
+    ("Workspace not trusted", "trust_error"),
 ]
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\[[0-9]+[A-Z]")
@@ -129,14 +132,18 @@ def collect(rc_prefix, cron_prefix):
     if cron_prefix:
         data["cron_jobs"] = cron_count
     data["servers"].sort(key=lambda s: s["label"])
-    # config dirs の auth metadata (= secret は読まない、 email 欄のみ)
+    # config dirs の auth metadata (= secret は読まない、 email 欄のみ)。
+    # ⚠️ config JSON の場所は default と pinned dir で違う: 既定 (CLAUDE_CONFIG_DIR 未指定) は
+    # ~/.claude.json (home 直下)、 pinned dir は <dir>/.claude.json。 旧実装は default も
+    # ~/.claude/.claude.json を読んでいて常に null になっていた (2026-07-02 fix)。
     for d in sorted([home / ".claude", *home.glob(".claude-*")]):
         if not d.is_dir():
             continue
         alias = "default" if d.name == ".claude" else d.name[len(".claude-"):]
+        cfg = (home / ".claude.json") if alias == "default" else (d / ".claude.json")
         email = None
         try:
-            j = json.load(open(d / ".claude.json"))
+            j = json.load(open(cfg))
             email = j.get("oauthAccount", {}).get("emailAddress") or None
         except Exception:
             pass
@@ -217,6 +224,11 @@ def selftest():
         st, _ = parse_log_status(log)
         assert st == "connected", st
         ok += 1
+        # trust_error: 過去に Connected でも最後の marker が trust なら trust_error
+        log.write_bytes("Connected · Claude · HEAD\nError: Workspace not trusted. Please run `claude` in /x first\n".encode())
+        st, _ = parse_log_status(log)
+        assert st == "trust_error", st
+        ok += 1
         # essence: ts/pid 差は無視、 status 差は検出
         a = {"servers": [{"label": "l", "pid": "1", "last_status": "connected", "log_age_min": 3}],
              "config_dirs": {}, "remote_control_at_startup": True,
@@ -241,7 +253,7 @@ def selftest():
         r2 = beat(repo, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
         assert r2.startswith("skip"), r2
         ok += 1
-    print(f"selftest: {ok}/6 PASS")
+    print(f"selftest: {ok}/7 PASS")
 
 
 def main():

@@ -29,9 +29,9 @@ QR (space キー) は使えないが、接続先は ① claude.ai/code のセッ
 | 要件 | 欠けた時の症状 | 解消 |
 |---|---|---|
 | macOS + Claude Code v2.1.139+ (RC server 起動 minimum。 v2.1.51+ 系は `remote-control` サブコマンド自体は存在するが server 起動時に runtime error で cycling する、 詳細 [Troubleshooting](#ts-version-mismatch)) | 起動時 `too old for Remote Control` error | `claude update` |
-| **workspace trust** (= `--dir` で `claude` を一度起動し trust dialog を承認済) | fresh マシンで未承認だと非対話の launchd サーバーが dialog を出せず進めない | 一度 `cd <dir> && claude` で承認 (= fresh setup の盲点) |
-| **claude.ai OAuth login** (subscription 必須) | log に「must be logged in」で即 exit を繰り返す | ターミナルで `claude auth login`。⚠️ API key・旧「managed key」型・`claude setup-token`/`CLAUDE_CODE_OAUTH_TOKEN` の inference-only token は全て不可 (= 公式 docs)。`ANTHROPIC_API_KEY` が env にあれば unset。`claude auth status` が loggedIn でも `subscriptionType: null` ならこれ (2026-06-12 実測) |
-| **初回同意** (一度だけ) | log に「Enable Remote Control? (y/n)」、無人では進めない | ターミナルで `claude remote-control` を一度起動して y (= `~/.claude.json` の `remoteDialogSeen` に永続化) |
+| **workspace trust** (= config JSON `projects[<dir>].hasTrustDialogAccepted`) | 未承認だと非対話の launchd サーバーが dialog を出せず `Workspace not trusted` で exit-1 永久 cycling ([#ts-workspace-trust](#ts-workspace-trust)) | **install script が install 時に自動 seed** (2026-07-02〜)。 手動 fallback = 一度 `cd <dir> && claude` で承認 |
+| **claude.ai OAuth login** (subscription 必須) | log に「must be logged in」で即 exit を繰り返す | ターミナルで `claude auth login`。⚠️ API key・旧「managed key」型・`claude setup-token`/`CLAUDE_CODE_OAUTH_TOKEN` の inference-only token は全て不可 (= 公式 docs)。`ANTHROPIC_API_KEY` が env にあれば unset。`claude auth status` が loggedIn でも `subscriptionType: null` ならこれ (2026-06-12 実測)。 **唯一 seed 不能な interactive 段** (= keychain + browser OAuth、 マシン × アカウント 1 回きり) |
+| **初回同意** (= config JSON top-level `remoteDialogSeen`) | log に「Enable Remote Control? (y/n)」、無人では進めない | **install script が install 時に自動 seed** (2026-07-02〜)。 手動 fallback = `claude remote-control` を一度起動して y |
 
 この managed-key 非対応は upstream の既知制約 (= anthropics/claude-code #50977〔API key / setup-token OAuth サポート要望〕・#50642〔Bedrock 認証〕の feature request、いずれも未対応)。ユーザ側のミスではないので `subscriptionType: null` を見たら迷わず `claude auth login`。
 
@@ -120,9 +120,32 @@ zsh -l -c 'echo $PATH' | tr ':' '\n' | head -5
 
 **Fix**: `~/.zprofile` (login shell が `/etc/zprofile` の直後に読む) で user path を **再 prepend** する。 この axis (= `/etc/zprofile` の後始末) と、 [`shell-env.md`](shell-env.md) の PATH 二層防御 (= スナップショットパッチによる不足補填) は**直交する別 axis** で、 両方必要。 前者は「順序」 の問題、 後者は「消失」 の問題。
 
+### <a id="ts-workspace-trust"></a>"Workspace not trusted" — virgin config dir の headless 死 (exit-1 永久 cycling)
+
+**症状**: launchd label は loaded なのに process が居ない (`launchctl list` で pid `-` / `last exit code = 1`)。 server log が `Error: Workspace not trusted. Please run claude in <dir> first to review and accept the workspace trust dialog.` で埋まる。 KeepAlive が 60 秒ごとに retry して**永久 cycling** — 表面上は「server が silent に消えた」 ようにしか見えない (2026-07-02 実測: desktop app の bridged session 切断調査から発覚)。
+
+**機構**: workspace trust と RC 初回同意は、 いずれも config dir ごとの config JSON (`<config-dir>/.claude.json`、 既定は `~/.claude.json`) に保存される **interactive dialog 由来の flag**。 pinned per-account 構成で config dir を新設すると、 **OAuth (keychain) を済ませても trust / consent は virgin のまま** — headless の launchd server は dialog を出せず exit 1。 「OAuth 1 回で永続」 の裏に interactive 段がもう 2 つ隠れていた、 が本質。
+
+**Fix (どれか)**:
+- install script を再実行 (= 2026-07-02 以降、 install 時に `projects[<dir>].hasTrustDialogAccepted` + `remoteDialogSeen` を自動 seed。 server は 60s 以内に self-heal)
+- 手動 seed: config JSON に上記 2 flag を書く
+- interactive fallback: `cd <dir> && CLAUDE_CONFIG_DIR=<cfg> claude` で trust 承認 → `claude remote-control` に y
+
+**検出**: fleet-heartbeat が log marker `Workspace not trusted` → `trust_error` として記録し、 reader (`check-fleet-status.py`) が 🔴 surface する。
+
+**セキュリティ note**: 自動 seed は「この dir を root に server を install する」 という user の明示行為を trust consent と見なす (= trust dialog が確認したい内容と install の意図が一致するため、 consent の機械化であって bypass ではない)。 seed 対象は指定 `--dir` 1 個のみ。
+
+### <a id="ts-desktop-bridge-4090"></a>desktop app の「リモートコントロールが切断されました」 — bridged worker の code 4090 eviction
+
+**症状**: Claude desktop app の conversation が「ターミナルの Claude Code セッションが応答しなくなりました / The bridged Claude Code process stopped responding mid-turn」 を表示する。 RC server の障害と紛らわしいが**別物** — desktop の対話 session はマシン上の bridged CLI process が worker として動いており、 それが turn 中に落ちた症状。
+
+**機構**: 別の connection が同じ session を claim すると、 先住 worker が `Transport closed: this connection is no longer the active worker for the session (code 4090)` で eject される (= app log `~/Library/Logs/Claude/main.log` に記録)。 同マシンの RC server / auth が不安定な時に再接続 race で連発しやすい。
+
+**対処**: (1) `main.log` を `code 4090` で grep して時刻を特定 (2) config の projects dir にある `bridge-pointer.json` の pid が死んでいれば stale (= 削除可) (3) 同時期に RC server が cycling していれば先にそれ (前項 trust / auth / version) を治す (4) conversation はメッセージ再送 or 新規作成で復帰。 root は upstream の worker 管理で client 側から予防は不能 — できるのは検出と復旧のみ。
+
 ### 併発 pattern
 
-上記は独立に起こるが、 特に **dual-install (v2.1.53 残置) + `path_helper` 反転** はセットで潜みやすい (= 古い install が `sudo npm install -g` で `/usr/local/bin` に落とされ、 `path_helper` がそこを先頭に置く → 新しい `~/.npm-global/bin/claude` が影に隠れる)。 install script の `[warn]` version mismatch を見たら両方 check。
+上記は独立に起こるが、 特に **dual-install (v2.1.53 残置) + `path_helper` 反転** はセットで潜みやすい (= 古い install が `sudo npm install -g` で `/usr/local/bin` に落とされ、 `path_helper` がそこを先頭に置く → 新しい `~/.npm-global/bin/claude` が影に隠れる)。 install script の `[warn]` version mismatch を見たら両方 check。 また **virgin config dir では trust / consent / auth の 3 つが同時に欠けている** — install script の自動 seed が前 2 者を消すので、 残るのは OAuth 1 回のみ ([#ts-workspace-trust](#ts-workspace-trust))。
 
 ## セキュリティ
 

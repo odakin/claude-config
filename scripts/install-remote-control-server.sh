@@ -18,7 +18,8 @@
 # --config-dir DIR + --label-suffix SUF: 別アカウントの認証ストア (CLAUDE_CONFIG_DIR=DIR) で
 #   2 本目以降のサーバーを同一マシンに共存させる (= スマホから複数アカウントの新規セッションを
 #   選べる)。別アカウントには必ず distinct な --label-suffix を付ける (= plist / log path 衝突回避)。
-#   その config-dir で `CLAUDE_CONFIG_DIR=DIR claude auth login` 済 + 初回同意 y が前提。
+#   その config-dir で `CLAUDE_CONFIG_DIR=DIR claude auth login` 済が前提 (= 唯一の interactive 段。
+#   workspace trust + RC 初回同意は install 時に自動 seed される、 下の設計 note 参照)。
 #   --status / --uninstall でその 2 本目を対象にするときも同じ --label-suffix を渡す。
 # --no-preflight: 起動前の 8 秒 probe を skip (= SessionStart hook 等から呼ぶとき、 install を
 #   ブロックしない。 probe は auth/consent/version の hint 専用で install には不要、 KeepAlive が
@@ -42,6 +43,15 @@
 #   cycling する弱点を避ける、 = 公開ツールとして多様な install を壊さない)。preflight が
 #   解決した claude の dir を PATH 先頭に足すので、非標準 install 先でも起動する (= preflight
 #   と plist の解決経路を一致させる、 標準 install 先なら重複するだけで無害)。
+# - install 時に workspace trust + RC 初回同意を config JSON へ自動 seed する (= headless-ready 化、
+#   2026-07-02)。両者は interactive dialog 由来の `.claude.json` flag に過ぎず、 launchd の
+#   non-TTY server は dialog を出せない — virgin config dir (= per-account pinned dir 新設直後)
+#   だと OAuth 済でも "Workspace not trusted" → exit 1 → KeepAlive 永久 cycling の silent 死になる
+#   (2026-07-02 実測 RCA、 conventions/remote-control-server.md#ts-workspace-trust)。
+#   セキュリティ根拠: 「この dir を root に server を install する」 という user の明示行為が
+#   trust dialog の確認内容そのものなので、 seed は consent の機械化であって bypass ではない。
+#   seed 対象は指定 --dir 1 個のみ。 python3 不在 / JSON 破損時は fail-open で skip + warn
+#   (= preflight の TRUST_NG backstop が拾う)。
 
 case "$(uname -s)" in
   Darwin) ;;
@@ -114,7 +124,59 @@ CLAUDE_BIN="$HOME/.local/bin/claude"
 [ -x "$CLAUDE_BIN" ] || CLAUDE_BIN="$(command -v claude || true)"
 [ -n "$CLAUDE_BIN" ] || { echo "[error] claude binary not found (native install expected at ~/.local/bin/claude)" >&2; exit 1; }
 
-AUTH_NG=0; CONSENT_NG=0; VERSION_NG=0
+# --- headless-ready seed (= workspace trust + RC 初回同意、 設計 note は冒頭コメント) ---------
+# probe より前に seed する (= virgin dir でも probe が trust を素通りして auth 検査まで届く)。
+# config JSON の場所: CLAUDE_CONFIG_DIR 指定時は $CONFIG_DIR/.claude.json、 既定は ~/.claude.json。
+CFG_JSON="$HOME/.claude.json"
+[ -n "$CONFIG_DIR" ] && CFG_JSON="$CONFIG_DIR/.claude.json"
+if command -v python3 >/dev/null 2>&1; then
+  RC_DIR="$RC_DIR" CFG_JSON="$CFG_JSON" python3 - <<'PY' || echo "[warn] headless seed failed (fail-open); preflight TRUST warning below applies"
+import json, os, sys, tempfile
+cfg = os.environ["CFG_JSON"]; rc_dir = os.environ["RC_DIR"]
+data = {}
+if os.path.exists(cfg):
+    try:
+        with open(cfg) as f:
+            data = json.load(f)
+    except Exception:
+        print(f"[warn] {cfg} unreadable JSON; not seeding (repair it, then re-run install)")
+        sys.exit(0)
+projects = data.setdefault("projects", {})
+if rc_dir not in projects:
+    # interactive 承認が作る entry と同じ field set (= 実機で検証済の shape、 欠け field 起因の
+    # 未知挙動を避ける)。 既存 entry には trust flag だけ立てて他は触らない。
+    projects[rc_dir] = {
+        "allowedTools": [], "mcpContextUris": [], "mcpServers": {},
+        "enabledMcpjsonServers": [], "disabledMcpjsonServers": [],
+        "hasTrustDialogAccepted": True, "projectOnboardingSeenCount": 0,
+        "hasClaudeMdExternalIncludesApproved": False,
+        "hasClaudeMdExternalIncludesWarningShown": False,
+        "hasCompletedProjectOnboarding": True,
+    }
+    changed = ["workspace-trust (new project entry)"]
+else:
+    changed = []
+    if not projects[rc_dir].get("hasTrustDialogAccepted"):
+        projects[rc_dir]["hasTrustDialogAccepted"] = True
+        changed.append("workspace-trust")
+if not data.get("remoteDialogSeen"):
+    data["remoteDialogSeen"] = True
+    changed.append("remote-consent")
+if changed:
+    d = os.path.dirname(cfg) or "."
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".claude.json.seed.")
+    with os.fdopen(fd, "w") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, cfg)  # mkstemp = 0600 で原本と同等の秘匿
+    print("[ok] headless-ready seed: " + ", ".join(changed) + " -> " + cfg)
+PY
+else
+  echo "[warn] python3 not found; cannot seed workspace trust / RC consent."
+  echo "       Run once manually: cd \"$RC_DIR\" && ${CONFIG_DIR:+CLAUDE_CONFIG_DIR=$CONFIG_DIR }claude   (accept trust)"
+  echo "       then: claude remote-control   (answer y)"
+fi
+
+AUTH_NG=0; CONSENT_NG=0; VERSION_NG=0; TRUST_NG=0
 # RC は v2.1.139 以上を要求 (= 公式 min。 旧 CLI で叩くと misleading な "Remote Control is not
 # enabled for your account" が返り、 org policy blocker と誤読して support に issue を切りに走る
 # trap の元 → 直接発火の runtime signal 〔`too old for Remote Control`〕 と、 probe を待たない
@@ -146,6 +208,9 @@ if [ "$NO_PREFLIGHT" != "1" ]; then
   # 発火しないが、 別経路 (= 手動 `claude remote-control`) の diagnostic に流用可能なので載せる。
   grep -qE "must be logged in|requires a claude\\.ai subscription|full-scope login token|disabled by your organization|not yet enabled for your account|is not enabled for your account|requires claude\\.ai subscription auth" "$TMPLOG" && AUTH_NG=1
   grep -q "Enable Remote Control?" "$TMPLOG" && CONSENT_NG=1
+  # 通常は直前の seed が通すので発火しない backstop (= seed が python3 不在 / JSON 破損で skip
+  # された時だけ出る)。 conventions/remote-control-server.md#ts-workspace-trust
+  grep -q "Workspace not trusted" "$TMPLOG" && TRUST_NG=1
   rm -f "$TMPLOG"
 fi
 
@@ -245,6 +310,17 @@ if [ "$CONSENT_NG" = 1 ]; then
 [warn] first-run consent pending: run `claude remote-control` once in a terminal
        and answer y to "Enable Remote Control?" (persisted; the launchd server
        then self-heals within 60s — no re-install needed).
+MSG
+fi
+if [ "$TRUST_NG" = 1 ]; then
+  cat <<MSG
+
+[warn] workspace trust missing and automatic seed did not take effect
+       (python3 missing or unreadable config JSON). The server will cycle with
+       "Workspace not trusted" until fixed. Run once in a terminal:
+         cd "$RC_DIR" && ${CONFIG_DIR:+CLAUDE_CONFIG_DIR=$CONFIG_DIR }claude
+       and accept the trust dialog. The server self-heals within 60s.
+       See conventions/remote-control-server.md#ts-workspace-trust
 MSG
 fi
 echo

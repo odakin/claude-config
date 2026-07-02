@@ -30,7 +30,7 @@
 
 ## <a id="seamless-invariants"></a>Seamless の invariant (= 8 セル + セル間移動が全部生きている条件)
 
-以下 5 つが**全マシンで**成立していれば、 8 セルのどこからでも仕事が始められ・続けられる。 各 invariant は機械 check 可能にする (= 固定表に書いた「はず」 ではなく live 状態から検証する。 固定表は現実と drift する):
+以下 6 つが**全マシンで**成立していれば、 8 セルのどこからでも仕事が始められ・続けられる。 各 invariant は機械 check 可能にする (= 固定表に書いた「はず」 ではなく live 状態から検証する。 固定表は現実と drift する):
 
 | # | invariant | 破れの症状 | 検出 / 修復 |
 |---|---|---|---|
@@ -39,10 +39,12 @@
 | I3 | `remoteControlAtStartup: true` を全マシンに | そのマシンの手元 session がスマホから続行できない (= 新規は作れるのに続きができない非対称) | settings.json を machine ごとに確認 (machine-local ゆえ git 同期されない点に注意) |
 | I4 | CLI 土台アカウントは **live fact** (固定 design にしない) + **マシン間でアカウントを分散** | 全マシンの土台が同一アカウントだと、 そのアカウントの rate limit 到達で全マシンの無人ルーチンが同時死する | 土台の現在値は `claude auth status` / 切替 helper で live 導出。 分散していれば「アカウント枯渇 failover = マシン failover」 が 1 動作になる |
 | I5 | 無人ルーチンは active-host 台帳に bind + drift 検出 | 「切替えたつもり」 のアカウントとルーチンが実際に消費するアカウントの乖離 | [multi-machine-state.md #account-host-failover](multi-machine-state.md#account-host-failover) の台帳 + drift 検出 |
+| I6 | pinned config dir は **headless-ready** (= workspace trust + RC 初回同意の flag が seed 済。 install script が install 時に自動 seed するので通常は自動成立、 残る interactive 段は OAuth 1 回のみ) | OAuth 済なのに server が dialog 待ちで exit-1 永久 cycling (= loaded だが process 無し) → そのマシン × アカウントの mobile セルが **silent 消失** | fleet-heartbeat の log marker (`trust_error` / `consent_pending`) を reader が 🔴/🟠 surface。 heal = install script 再実行 ([remote-control-server.md #ts-workspace-trust](remote-control-server.md#ts-workspace-trust)) |
 
 ## <a id="failure-modes"></a>典型的な破れかたと検出
 
 - **auth 失効で server 群が silent 死**: launchd KeepAlive は process は再起動できるが auth は直せない。 長時間気づかない事故になりやすい → 無人成果物の heartbeat 監視 + session 開始時 coverage check が網
+- **virgin config dir の headless 死 (I6)**: OAuth を通しても trust / consent の dialog flag が virgin だと launchd server は dialog を出せず exit-1 cycling。 「OAuth 1 回で開通」 の裏に interactive 段が 2 つ隠れていた (2026-07-02 実測) → install 時自動 seed で design-out 済 + heartbeat `trust_error` marker が backstop ([remote-control-server.md #ts-workspace-trust](remote-control-server.md#ts-workspace-trust))
 - **desktop app 切替 ≠ CLI 切替の認知乖離**: app で B に切替えても無人ルーチンは A のまま消費 → I5 の drift 検出が surface
 - **古い CLI が PATH 反転で優先解決され RC が死ぬ**: [remote-control-server.md #troubleshooting](remote-control-server.md#troubleshooting) の 3 パターン (version mismatch / API key 混入 / path_helper 反転)
 - **auth の file-copy 誤解**: `.claude.json` を copy してもアカウントは移らない ([remote-control-server.md #account-auth-keychain](remote-control-server.md#account-auth-keychain))
