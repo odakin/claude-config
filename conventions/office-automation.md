@@ -58,6 +58,7 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 | Word が「破損」 と言うが原因不明 | XML 宣言 single-quote / 空 `<w:tc>` 等 | [`check-docx-integrity.py`](#docx-checkbox-content-control) で決定論検出 |
 | docx の font を下げても・行間を詰めても**ページ数が減らない** (日本語 Word) | section の `docGrid` (snap-to-grid) が行高を grid pitch に固定し font 縮小を無効化 | 本文段落の `snapToGrid` 無効化 / `linePitch` 縮小 → [`docx-pdf-page-compress`](#docx-pdf-page-compress) |
 | 研究費様式の提出後に機関事務から**差戻し** (経費の費目分け / 機関コード / 「本人に下線」 等の書式指示欠落) | 費目区分・コード verify・format 指示は fill driver 設計時に発火しないと構造的に落ちる (転記は書式を運ばない) | 差戻し対応 checklist = [erad-submission.md#sashimodoshi-response](erad-submission.md#sashimodoshi-response)、 費目 = [#keihi-himoku-kubun](erad-submission.md#keihi-himoku-kubun)、 コード = [#kikan-code-verify](erad-submission.md#kikan-code-verify)、 下線 = [`xlsx-rich-text-underline`](#xlsx-rich-text-underline) fill-driver caveat |
+| 計算式を持つ xlsx に**画像を挿入**したい (図の貼付欄等) / openpyxl `add_image` 後に cache が消える・Excel 再保存で画像が消える | openpyxl save は cache を落とし、 その復元の Excel open+save が openpyxl 由来 drawing を落とす (= 堂々巡り) | **Excel clipboard paste 一択** (`paste worksheet`、 サイズは PNG の DPI で制御) → [`xlsx-image-insert-excel-paste`](#xlsx-image-insert-excel-paste) |
 
 ---
 
@@ -249,6 +250,40 @@ end tell
 **回避 (= 破壊そのものを起こさない)**: [`excel-osascript-cell-write`](#excel-osascript-cell-write) 経由で値を書けば cache も drawing も保護される (= Excel の formula engine が常時走っているので cache が消えない)。 openpyxl 経路は cache + drawing の構造的損失を 2 軸で抱える。
 
 origin: 2026-06 連続発生した「openpyxl save 後に gen-pdf で空欄/`#REF!` が出る」 事故。 cell value 一致検証では検出できず、 sentinel guard pattern + PDF visual confirm で気づく。 [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の sibling (= 両方 openpyxl save の構造的損失、 drawing は `xl/drawings/` part、 cache は cell の cached value)。
+
+### <a id="xlsx-image-insert-excel-paste"></a>計算式を持つ xlsx への画像挿入は Excel clipboard paste 一択 (= openpyxl add_image は cache 復元と両立しない)
+
+様式の「図の貼付」 欄等に画像を入れる task。 **openpyxl `add_image` は使うな** — 板挟みが実測されている:
+
+1. openpyxl `add_image` + save → 画像は入るが **formula cache が消える** ([`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache))
+2. cache 復元のため Excel open+save → 今度は **openpyxl が挿入した画像が消える** (= Excel が open 時に openpyxl 由来 drawing part を silent drop して保存。 check-xlsx-integrity pass の file でも起きる)
+3. 1 に戻る (= 堂々巡り)
+
+**正解経路 = Excel 自身に貼らせる** (cache・rich text・既存 drawing すべて無傷):
+
+```applescript
+set the clipboard to (read (POSIX file "/abs/path/figure.png") as «class PNGf»)
+tell application "Microsoft Excel"
+  activate
+  delay 3
+  open POSIX file "/abs/path/form.xlsx"
+  delay 3
+  set ws to worksheet "対象シート名" of workbook 1
+  activate object ws
+  paste worksheet ws destination range "B21" of ws   -- ★ TCC 権限不要の Excel ネイティブ paste
+  delay 2
+  save workbook 1
+  delay 2
+  close workbook 1 saving no
+end tell
+```
+
+- **表示サイズは PNG の DPI metadata で制御**する: 貼り付け時のサイズ指定 API が無いので、 生成側 (matplotlib 等) で `dpi=200` 等を焼き込む → Excel が DPI を尊重して縮小表示 (例: 1342×840px @200dpi → 483×302pt ≈ 644×403px 表示)。 貼り付け先の空き寸法 (行高合計 × 列幅合計) を先に測ってから DPI を逆算する。
+- 検証: `unzip -l form.xlsx | grep media` (画像存在) + anchor/サイズは `xl/drawings/drawing1.xml` の `<xdr:from>`/`ext cx cy` (EMU、 ÷9525=px) + cache sentinel + (rich text があれば) runs assert。
+- ❌ 不成立の経路 (試行済): `make new picture ... with properties {file name:...}` = **-2710** (class 作成不可、 新しめ Excel for Mac の AppleScript 制限) / System Events `keystroke "v"` = **TCC 1002** (osascript にキー送信権限なし、 権限付与すれば通るが不要) / `save as ws file format PDF file format` = **-1712** AppleEvent timeout (PDF export も AppleScript 経由は不安定)。
+- LibreOffice `soffice` 変換 PDF で図がページ分割されて見えても、 それは**変換器が印刷スケールを無視する現象** — xlsx 内の図は 1 枚。 実機確認は Excel で開く。
+
+origin: 2026-07-02 研究費様式の「図の貼付」 欄対応。 openpyxl↔Excel の堂々巡りを 1 往復実測した後、 clipboard paste 経路で画像・cache・下線 (rich text) 全部無傷を機械検証 17 項で確認。
 
 ### <a id="excel-osascript-cell-write"></a>Excel osascript で cell 値を書く堅牢パターン (= drawing 保護 + -609 回避)
 

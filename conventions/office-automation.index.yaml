@@ -35,6 +35,11 @@ sections:
     title: "openpyxl の save は周辺 cell の formula cache を消す"
     origin: "2026-06"
     related: [openpyxl-destroys-drawings, excel-osascript-cell-write, xlsx-to-pdf-script]
+  - id: xlsx-image-insert-excel-paste
+    level: 3
+    title: "計算式を持つ xlsx への画像挿入は Excel clipboard paste 一択 (= openpyxl add_image は cache 復元と両立しない)"
+    origin: "2026-07-02"
+    related: [openpyxl-clears-formula-cache, openpyxl-destroys-drawings, excel-osascript-cell-write, xlsx-rich-text-underline]
   - id: excel-osascript-cell-write
     level: 3
     title: "Excel osascript で cell 値を書く堅牢パターン (= drawing 保護 + -609 回避)"
