@@ -47,6 +47,9 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 | 氏名/所属など**長い文字列が結合セルで両端切れ** | 固定 font でセル幅超過 + **shrink_to_fit は結合セルで無効** | **font size を下げる** (osascript は `font size of font object`) + `check-form-clipping.py` で機械検出 → [`merged-cell-text-clipping`](#merged-cell-text-clipping) |
 | xlsx が openpyxl から save できない / lock `~$…` が残る | Excel が当該 file を開いている | Excel quit + lock 削除 → [`xlsx-locked-by-excel`](#xlsx-locked-by-excel) |
 | Bash tool で `sleep` がブロックされ reset 待ちが打てない | harness が foreground の bare `sleep` を禁止 | bare sleep を打たず **script (xlsx-to-pdf.sh 等) に sleep を内包**させて呼ぶ / osascript 内 `delay` / 別 op は run_in_background |
+| 事務からの zip を展開したらファイル名が文字化け (`+ˆé—l.xlsx` 等) | zip のファイル名が cp932 (Shift-JIS) で、 macOS unzip が cp437 と解釈 | python zipfile で cp437→cp932 re-decode 展開 → [`zip-cp932-filenames`](#zip-cp932-filenames) |
+| 様式が「記入例」 入り sheet 1 枚だけ (空欄の記入 sheet が無い) | 記入例をそのまま実データに置換して提出する型の様式 | 記入例 rows を全 clear + 実データ、 ⚠️ pulldown 源泉 cell を消さない → [`example-sheet-to-real-data`](#example-sheet-to-real-data) |
+| fill 済 xlsx を**納品する**が計・合計 cell が data_only / preview で空 | fresh 雛形の formula は元々 cache 無し + openpyxl save も cache を作らない | 納品前に Excel open+save で焼き込み → data_only で検算 assert → [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) |
 | 何を / どこに書くか不明 | — | 着手前に [`form を dump`](#form-dump-first) (原則編が先) |
 | 様式の label を誤って上書きしていないか | label vs input row の混同 | [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で機械検出 |
 | **docx 様式**でラベル欄に値を上書き / 欄を空欄のまま / labeled 列が空 / 見出し消失 | label vs input の混同・記入漏れ・視覚確認が「自分の記入箇所」 止まり | [`diff-form-docx.py`](#diff-form-docx-detection) で機械検出 (= 表紙/申請書 docx 様式、 xlsx 版の docx 対) |
@@ -246,6 +249,8 @@ end tell
 ⚠️ **`workbook 1` 参照必須** (= `active workbook` は app 起動直後で `-1728 active workbook を取り出すことはできません` で fail、 詳細 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の `-1728 active workbook` anti-pattern)。
 
 副次効果として **drawing 構造も同時に re-emit される**ことが観察されている (= [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の事後救済と同じ経路、 sample size 限定の正直注記)。 つまり cache 破壊と drawing 破壊は **同じ Excel.app open+save 1-pass で両方救済**できるケースがある。
+
+**納品 xlsx の cache 焼き込み (= deliverable baking、 事故対応でなく納品工程として)**: 雛形の計・合計・差引 cell が formula である様式を openpyxl で fill して**そのまま先方に納品する**場合も同じ機構が効く — fresh 雛形は cache を持たないことが多く openpyxl save も作らないので、 受領側の添付 preview や自分の `data_only` 検算で数値が見えない。 納品前工程: (1) 上記 applescript の open+save を納品 file 全部に回す (= 焼き込み)、 (2) 焼き込み後に `data_only=True` で計・合計・差引 cell を読み**手元の期待値と assert 照合** (= 様式に「申請額 − 月次計」 のような検算 cell があればそれが 0 かも verify)。 受領側が Excel で開けば再計算されるので焼き込み自体は「開かずに読む」 経路のためだが、 (2) の検算が本体の価値 — **数式の実結果を検証せずに納品しない**。 ⚠️ user が Excel で作業中でありうる環境では batch 前に起動状態を確認し (`tell application "System Events" to (name of processes) contains "Microsoft Excel"`)、 起動中なら割り込まない (= user の未保存 workbook を巻き込む save/quit は不可逆事故。 workbook 単位の open/close に留めるか user に確認)。
 
 **回避 (= 破壊そのものを起こさない)**: [`excel-osascript-cell-write`](#excel-osascript-cell-write) 経由で値を書けば cache も drawing も保護される (= Excel の formula engine が常時走っているので cache が消えない)。 openpyxl 経路は cache + drawing の構造的損失を 2 軸で抱える。
 
@@ -2747,6 +2752,35 @@ print('value 変更:', [k for k in tpl_inkan & edit_inkan if values[k]['TPL'] !=
 - ⚠️ **openpyxl は reload で `img.width/height` を読むと PNG ネイティブ size (= 500) を返す**ので表示 size の verify には使えない (= 誤判定 trap)。 **実表示 size は drawing XML の `<ext cx cy>` (= EMU 単位、 9525 EMU = 1px)** で確認: `zipfile` で `xl/drawings/drawing1.xml` を読み `cx/9525` px 換算。 最終 verify は [`pdf-visual-confirm`](#pdf-visual-confirm) PDF visual で印影の位置・はみ出しを目視 (= 認印が氏名に重なる / 右余白からはみ出していないか)。
 
 ---
+
+## <a id="zip-cp932-filenames"></a>日本語ファイル名 zip の展開 (= cp932 文字化け)
+
+事務・官公庁からの添付 zip は**ファイル名が cp932 (Shift-JIS) エンコード**のことが多く、 macOS の `unzip` は cp437 と解釈して文字化けする (macOS 版 unzip には `-O cp932` オプションが**無い**)。 python の zipfile で cp437 → cp932 に re-decode して展開する:
+
+```python
+import zipfile
+with zipfile.ZipFile('書類.zip') as z:
+    for name in z.namelist():
+        try:
+            decoded = name.encode('cp437').decode('cp932')
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            try:
+                decoded = name.encode('cp437').decode('utf-8')
+            except Exception:
+                decoded = name
+        with z.open(name) as src, open(decoded, 'wb') as dst:
+            dst.write(src.read())
+```
+
+UTF-8 フラグ付き zip (最近の Windows / macOS 生成) は decode が例外になるので fallback で素通しする。 dir 構造を含む zip は `decoded` の親 dir を `os.makedirs(..., exist_ok=True)` してから書く。
+
+## <a id="example-sheet-to-real-data"></a>「記入例」 シートの実データ化 (= 記入例置換型の様式)
+
+様式によっては**空欄の記入 sheet が無く、 記入例入りの sheet 1 枚だけ**が配られ、 記入例を実データに置き換えて提出する型がある (sheet 名に「記入例」 が残っていてもそのまま提出する)。 この型の罠:
+
+1. **記入例の残骸**: 例示の人物・データ行 (○○○○ / ◇◇大学 等) を**全 cell クリアしてから**実データを書く。 実データ行数 < 例示行数 なら余った例示行も全列クリア (= 例示のまま提出しない)。 行 delete は merged 範囲 / validation 範囲がずれるので不可、 値クリアで対応。 [`diff-form-xlsx.py`](#diff-form-xlsx-detection) の出力で「例示が消えた (VALUE_CHANGED → empty)」 と「実データが入った (INPUT_FILLED)」 を分けて検収できる。
+2. ⚠️ **pulldown 源泉 cell を消さない**: この型の様式は list validation の**選択肢そのものを同 sheet の helper cell** (= 表の右外の列等、 `formula1=$N$34:$N$37` のような cell 参照) に生値で置いていることがある。 記入例クリアの範囲に helper cell を含めると **validation の選択肢が壊れる**。 [`form-dump-first`](#form-dump-first) の data_validations 出力で `formula1` が cell 参照のものを特定し、 クリア範囲から除外する。
+3. 条件付きチェック項目 (= 「上記②〜⑤が確認できない場合…」 型) は**前提が満たされていれば空欄が正**のことがある (= 案内 PDF の補足事項に「チェックは必須ではありません」 と明記される型)。 全項目を ○ で埋める reflex を出さず、 各項目の条件文を読んでから埋める。
 
 ## <a id="related-repos"></a>関連リポ
 

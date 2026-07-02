@@ -342,6 +342,7 @@ create + UI で開く検証で associatedWithDeveloper 永続フラグによる 
 
 - MCP / API の send は body を plain text として MIME に詰めるだけで HTML entity を**decode しない**。`<` を `&lt;`・`>` を `&gt;`・`&` を `&amp;` と (XML/JSON escape の reflex で) 書くと、**受信側に literal `&gt;` がそのまま表示**される。返信の引用行 `> 元本文` で特に起きやすい。
 - `<` `>` `&` は **literal で書く**。「XML/JSON 内だから escape が要る」と感じたら危険サイン (= 実際には plain text を渡している)。
+- **`inReplyTo` 等の header 系 param も同じ**: RFC Message-ID (= `<...>` で囲まれた message id 文字列) を entity (`&lt;...&gt;`) で渡すと In-Reply-To / References header が `<&lt;...&gt;>` に壊れる (実発生 2026-07)。 Gmail 同士は件名で thread されるため気づきにくいが RFC threading は壊れている。 literal の `<>` で渡す。
 
 ### 機械化の射程 (= honest、effective な層だけに置く)
 

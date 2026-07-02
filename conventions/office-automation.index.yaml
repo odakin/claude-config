@@ -7,7 +7,7 @@ sections:
   - id: symptom-index
     level: 2
     title: "🔑 まず読め + 症状 → 対処 早見表 (= 何も知らない session の入口)"
-    related: [xlsx-to-pdf-script, pdf-prefill-direct, docx-to-pdf-pages, diff-form-xlsx-detection, excel-osascript-cell-write, excel-write-string-autoconvert, excel-pdf-bottom-border-drop, openpyxl-destroys-drawings, openpyxl-clears-formula-cache, xlsx-locked-by-excel, form-dump-first, docx-checkbox-content-control]
+    related: [xlsx-to-pdf-script, pdf-prefill-direct, docx-to-pdf-pages, diff-form-xlsx-detection, excel-osascript-cell-write, excel-write-string-autoconvert, excel-pdf-bottom-border-drop, openpyxl-destroys-drawings, openpyxl-clears-formula-cache, xlsx-locked-by-excel, form-dump-first, docx-checkbox-content-control, zip-cp932-filenames, example-sheet-to-real-data]
   - id: form-dump-first
     legacy: "0"
     level: 2
@@ -558,6 +558,15 @@ sections:
     level: 3
     title: "認印画像の生成 + xlsx 埋め込み (= 印影が必要な認印レベル様式)"
     related: [pdf-visual-confirm]
+  - id: zip-cp932-filenames
+    level: 2
+    title: "日本語ファイル名 zip の展開 (= cp932 文字化け)"
+    origin: "2026-07-02"
+  - id: example-sheet-to-real-data
+    level: 2
+    title: "「記入例」 シートの実データ化 (= 記入例置換型の様式)"
+    origin: "2026-07-02"
+    related: [diff-form-xlsx-detection, form-dump-first]
   - id: related-repos
     legacy: "13"
     level: 2
