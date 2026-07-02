@@ -82,6 +82,7 @@ claude-config/
 │   ├── overleaf-integration.md # Overleaf↔GitHub 連携 (= canonical は Overleaf web UI の GitHub linking、 sync script 契約 〔--status が ahead/behind を出す + PROJECT_ID hardcode = ID の SoT〕、 新規連携 checklist + ID 回収 runbook、 drift 検出は scripts/check-overleaf-drift.py)
 │   ├── paper-audit.md      # multi-paper merger 等の forward ref / 重複 subsection / structure issue を Phase1 機械検出 + Phase2 section-by-section AI 精読 + findings.yaml で体系 audit
 │   ├── rebuttal-letter.md  # referee report への point-by-point 返信 (= author response) 作成 6 reflex (= 回答は本文 grep 照合・起源でない文献は see e.g.・referee 誤記は静かに正す・自己否定語回避・全 comment フル引用・旧式番号は submission 版基準)、 paper-audit.md と相補
+│   ├── peer-review-workflow.md # 他者の paper / 申請書を referee・審査委員として評価する時の規律 (= SoT 4 file pattern・引用文献の現物 verify・framework calibration・scoring scale 整合・既送信 score の不可逆性。 paper-audit / rebuttal-letter / erad-submission の sibling で方向違い)
 │   ├── physics-notes.md    # 物理・数理ノートの 3 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
 │   ├── giving-talks.md     # 講演のしかた (= Robert Geroch "Suggestions For Giving Talks" arXiv:gr-qc/9703019 の own-words ダイジェスト、 主題選択 / 3-4 メッセージ構成 / 導入は全体の 1-5 / 視覚資料は図>言葉>式 / 1h で非自明な式 5 本・スライド 10 枚 / 質問は完全に正直に 等。 セミナー・JC・卒論発表の準備時に読む、 英語本体)
 │   ├── giving-talks.ja.md  # ↑ giving-talks.md の日本語版
