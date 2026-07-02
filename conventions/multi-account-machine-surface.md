@@ -30,7 +30,7 @@
 
 ## <a id="seamless-invariants"></a>Seamless の invariant (= 8 セル + セル間移動が全部生きている条件)
 
-以下 6 つが**全マシンで**成立していれば、 8 セルのどこからでも仕事が始められ・続けられる。 各 invariant は機械 check 可能にする (= 固定表に書いた「はず」 ではなく live 状態から検証する。 固定表は現実と drift する):
+以下 7 つが**全マシンで**成立していれば、 8 セルのどこからでも仕事が始められ・続けられる。 各 invariant は機械 check 可能にする (= 固定表に書いた「はず」 ではなく live 状態から検証する。 固定表は現実と drift する):
 
 | # | invariant | 破れの症状 | 検出 / 修復 |
 |---|---|---|---|
@@ -40,6 +40,7 @@
 | I4 | CLI 土台アカウントは **live fact** (固定 design にしない) + **マシン間でアカウントを分散** | 全マシンの土台が同一アカウントだと、 そのアカウントの rate limit 到達で全マシンの無人ルーチンが同時死する | 土台の現在値は `claude auth status` / 切替 helper で live 導出。 分散していれば「アカウント枯渇 failover = マシン failover」 が 1 動作になる |
 | I5 | 無人ルーチンは active-host 台帳に bind + drift 検出 | 「切替えたつもり」 のアカウントとルーチンが実際に消費するアカウントの乖離 | [multi-machine-state.md #account-host-failover](multi-machine-state.md#account-host-failover) の台帳 + drift 検出 |
 | I6 | pinned config dir は **headless-ready** (= workspace trust + RC 初回同意の flag が seed 済。 install script が install 時に自動 seed するので通常は自動成立、 残る interactive 段は OAuth 1 回のみ) | OAuth 済なのに server が dialog 待ちで exit-1 永久 cycling (= loaded だが process 無し) → そのマシン × アカウントの mobile セルが **silent 消失** | fleet-heartbeat の log marker (`trust_error` / `consent_pending`) を reader が 🔴/🟠 surface。 heal = install script 再実行 ([remote-control-server.md #ts-workspace-trust](remote-control-server.md#ts-workspace-trust)) |
+| I7 | session は**自分の worker host を会話ログに自己申告**する (= SessionStart hook が hostname / config-dir label / session-id を注入し、 最初の返信の冒頭に 1 行 stamp。 stamp は会話ログに残るので **bridge が死んだ後も scroll-back で読める**。 タイトルには頼れない — RC の auto-name は hostname prefix 既定だが AI 自動タイトルが上書きすると消える 〔2026-07-02 実測〕) | bridged session が切断した時 (= [remote-control-server.md #ts-desktop-bridge-4090](remote-control-server.md#ts-desktop-bridge-4090)) 「どのマシンに行けば復旧できるか」 が UI から分からず、 host 特定が transcript / reflog の forensics になる (2026-07-02 実測 ~30 分) | 注入 hook は personal layer に配線。 ⚠️ desktop app は注入を drop ([hook-authoring.md #frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork)) ゆえ CLI / RC session のみ有効 — 残余セルは復帰後に on-demand で `hostname` を 1 回打たせる ground truth で補完 |
 
 ## <a id="failure-modes"></a>典型的な破れかたと検出
 
