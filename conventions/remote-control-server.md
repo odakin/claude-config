@@ -127,7 +127,7 @@ zsh -l -c 'echo $PATH' | tr ':' '\n' | head -5
 **機構**: workspace trust と RC 初回同意は、 いずれも config dir ごとの config JSON (`<config-dir>/.claude.json`、 既定は `~/.claude.json`) に保存される **interactive dialog 由来の flag**。 pinned per-account 構成で config dir を新設すると、 **OAuth (keychain) を済ませても trust / consent は virgin のまま** — headless の launchd server は dialog を出せず exit 1。 「OAuth 1 回で永続」 の裏に interactive 段がもう 2 つ隠れていた、 が本質。
 
 **Fix (どれか)**:
-- install script を再実行 (= 2026-07-02 以降、 install 時に `projects[<dir>].hasTrustDialogAccepted` + `remoteDialogSeen` を自動 seed。 server は 60s 以内に self-heal)
+- install script を再実行 (= 2026-07-02 以降、 install 時に `projects[<dir>].hasTrustDialogAccepted` + `remoteDialogSeen` を自動 seed = **headless-ready 化**。 server は 60s 以内に self-heal)
 - 手動 seed: config JSON に上記 2 flag を書く
 - interactive fallback: `cd <dir> && CLAUDE_CONFIG_DIR=<cfg> claude` で trust 承認 → `claude remote-control` に y
 
