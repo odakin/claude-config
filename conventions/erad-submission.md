@@ -40,6 +40,20 @@ e-Rad の入力欄は厳格な charset 制限があり、**欄の種類で置換
 - **直接経費と間接経費は別欄**。合計を 1 欄に入れない（合計は自動表示）。
 - **年度配分**: 日本の年度 = 4月〜翌3月。研究期間・招へい/滞在期間が年度境界（3月→4月）を跨ぐ費目は年度分割（例: 1〜6月の活動 → 1〜3月＝前年度・4〜6月＝当年度に按分）。1 年度に収まれば全額その年度・他年度 0（必須欄なので 0 を明示入力）。
 
+## <a id="keihi-himoku-kubun"></a>研究経費の費目区分（府省共通経費取扱区分表）— 頻出差戻しパターン
+
+様式の経費明細・e-Rad 経費タブの費目分けは**「（参考）府省共通経費取扱区分表」が判定基準**（様式の注意事項が参照を明記している。競争的研究費で府省共通）。直感的な費目分けは機関事務チェックで差し戻される。**実応募 2 件・差戻し 3 回で同型指摘が反復観測された頻出 3 パターン**:
+
+| 直感で書きがち | 正 | 理由 |
+|---|---|---|
+| オープンアクセス投稿料・データ保存ストレージ・印刷費 → 消耗品費 | **「その他」** | 役務・利用料は物品でない（**2 応募連続で同一指摘**） |
+| 学会・国際会議の**参加登録料** → 旅費に含める | **「その他」に分離** | 旅費は交通・宿泊・日当のみ。「発表 1 件（登録料・渡航・滞在）」のような一括明細は登録料の分離を求められる |
+| 学生 RA への支払い → 「学生 RA（〜の補助）」と書く | **「学生労務作業（作業内容）」等、区分表の項目名で表記** | 競争的研究費から RA「雇用」の給与は出ない。労務への謝金として区分表の語で書く（「時給によらない学生謝金」を指示された例もある。指示された語をそのまま使う） |
+
+- **明細を直したら 3 箇所の整合を必ず取る**: ① 様式の明細シート → ② 様式 1 枚目のサマリ（自動集計式 = 触らず **Excel 再計算保存**で反映、[`openpyxl-clears-formula-cache`](office-automation.md#openpyxl-clears-formula-cache)）→ ③ **e-Rad 経費タブ（Web 手入力 = 様式とは別物、自動連動しない）**。①だけ直して③を忘れると金額不一致で再差戻しになる。
+- 費目間で金額を移しても**直接経費の総額は不変**に保つ（満額申請を崩さない）。
+- 「その他」に API・計算資源を計上する場合の詳細記載義務（様式 4 枚目等）は様式の注意事項に従う。
+
 ## 応募・受入状況（不合理な重複・過度の集中）
 - **「研究内容の相違点及び他の研究費に加えて本応募研究課題に応募する理由」欄を、応募中・実施中の他の競争的資金すべてに記入**する。本応募自身の行は空欄。テーマ・対象・手法・経費使途の違い＋当該資金が固有に必要な理由を簡潔に書く。
 - 同制度の別申請を先に提出済みだと、それも「応募中」として並ぶ。同制度同士は **招へい者・テーマ等の独立性**を明記。
@@ -58,12 +72,34 @@ e-Rad の入力欄は厳格な charset 制限があり、**欄の種類で置換
 - 「提出済の課題 ＞ 課題一覧」でステータスを確認。控え（応募内容提案書 PDF）は「応募内容提案書のプレビュー」or 課題一覧から取得できる。
 - 機関決裁した事務へ **提出完了の一報**を入れると事務が状態を把握できる。
 
+## <a id="kikan-code-verify"></a>e-Rad 所属機関コードの verify（過去実績値を流用しない）
+
+ファイル名規定・様式の機関コード欄に入れる **e-Rad 所属機関コード（10 桁）** は、転記元を誤りやすい高リスク値:
+
+- **SoT は機関事務が当該応募で指定した値**。**過去に通った応募のコードを流用しない** — 誤ったコードでも受理・承認まで通ることがあり、後日の別応募の差戻しで初めて誤りと発覚した実例がある（= 「通った」は正しさの保証ではない）。
+- **事務の指定値も転記ミスがありうる**（11 桁・9 桁の指示を受けた実例が複数回。訂正メールが数分後に来ることも）。**桁数（10 桁）を数えて合わなければ事務に確認**してから進める。勝手に桁を削る/足すときは「この解釈で進める」ことを事務に明示確認。
+- 出現箇所は **2 つ**: 全提出ファイルのファイル名 + 様式 1 の機関コード欄。**同期して直す**（片方だけの修正は再差戻し）。
+- ⚠️ 科研費の機関番号（5 桁）とは別物（様式の注記にも明記されている）。
+
+## <a id="sashimodoshi-response"></a>差戻し（修正依頼）への対応
+
+機関事務のチェック → 差戻しは**正常フロー**（初回でノーチェック通過する方が例外。実応募 2 件で v1→v4 の 4 回提出・差戻し 3 回を観測）。パターン: **修正依頼メール + 赤字書き込み PDF 添付**（添付忘れ・コード誤記の訂正再送で同 thread に 2-3 通来ることがある → **最新の訂正版を正とする**）、**再提出期限は短い**（翌日正午等）。
+
+checklist（着手から完了報告まで）:
+
+1. **赤字 PDF を取得して全ページ解読**する（メール本文の指摘列挙は要約で、赤字にしかない指摘がある。本文とPDFの両方から指摘を番号付きで列挙してから着手）。
+2. 修正は**指摘箇所のみ**（指摘されていない欄・提出日等を「ついでに」触らない。署名済み PDF 様式はファイル名だけの修正なら rename のみで済む）。
+3. 各修正に**期待値 assert の機械検証**を付ける（値・[rich text 下線](office-automation.md#xlsx-rich-text-underline)・[式キャッシュ](office-automation.md#openpyxl-clears-formula-cache)）。経費を動かしたら[3 箇所整合](#keihi-himoku-kubun)。
+4. Excel 再計算保存 → 公式 self-check 再実行（要確認ゼロ）→ ファイル名規定に rename（機関コード修正はファイル名にも及ぶことに注意）。
+5. e-Rad で**ファイル差し替え + Web タブ側の連動修正**（経費タブ等）→ 再提出処理。
+6. 事務へ**完了報告**（指摘番号ごとに「どう直したか」を列挙して返信。次回チェックが速くなる）。
+
 ## 様式の機械記入・署名合成・提出ファイル（2026 SPReAD 学生応募で確立）
 
 Excel/docx の fill・docx→PDF・署名合成の **一般技法は `office-automation.md` が SoT**。本節は e-Rad / 学生応募 固有のみ。
 
 ### 提出ファイルの規定
-- **ファイル名**: `第N回_様式M_様式名_e-Rad所属機関コード_ローマ字氏名.{xlsx,pdf}`。⚠️ **接頭辞の有無は回で変わる**（当回の様式0「提出書類リスト」+ 公式 self-check の例で必ず確認。SPReAD は R1 が接頭辞なし・第2回が「第2回_」付き）。ローマ字＝姓先頭大文字で続けて記載。
+- **ファイル名**: `第N回_様式M_様式名_e-Rad所属機関コード_ローマ字氏名.{xlsx,pdf}`。⚠️ **接頭辞の有無は回で変わる**（当回の様式0「提出書類リスト」+ 公式 self-check の例で必ず確認。SPReAD は R1 が接頭辞なし・第2回が「第2回_」付き）。ローマ字＝姓先頭大文字で続けて記載。**機関コードは当該応募での事務指定値を verify してから使う**（過去実績値の流用は差戻し実例あり → [機関コードの verify](#kikan-code-verify)）。
 - **様式1 のみ Excel**、他様式は PDF 化（`docx-to-pdf.sh`）。
 - **公式 self-check**: 別紙の `research_plan_self_check.py <様式1.xlsx>`（字数・形式・ファイル名を検証、**要確認ゼロ＝完全クリア**。字数は改行・スペースも1字）。ファイル名が要確認に残るのは接頭辞欠落のことがある。
 - **様式1 の式キャッシュ**: openpyxl 記入で字数・経費の式キャッシュが空になる→提出ファイルに値を残すには **Excel で開いて保存**（公式案内）。手順・gate ヘルパー（`assert_formula_cache_intact`）・修復は [`openpyxl-clears-formula-cache`](office-automation.md#openpyxl-clears-formula-cache)。`load_workbook(data_only=True)` で結果確認。
@@ -86,10 +122,11 @@ gov-form xlsx 共通の経験則（LEN 式の先 = 入力 / Y入力は data vali
 - **経費**: 年度別・円単位。e-Rad は費目を細分（設備備品/消耗品/謝金/旅費/外注/印刷製本/会議/通信運搬/光熱水/その他諸経費/間接）。**API・クラウド計算資源・利用料は原則「その他（諸経費）」**。間接＝直接×30%固定。
 - ⚠️ **補助上限が「直接経費基準」のことがある**（SPReAD＝**直接500万以下＋間接30%別途上乗せ**＝総計最大650万）。交付内定＝充足率×上限・申請額が上限なので**満額申請が有利**。下書きが「総計≤上限」で組まれていたら直接を満額に積み直す。
 
-### 様式一式の組み立て手順（assembly order。各技法は office-automation.md スラッグが SoT、再掲しない）
+### <a id="assembly-order"></a>様式一式の組み立て手順（assembly order。各技法は office-automation.md スラッグが SoT、再掲しない）
 draft + 公式空様式 + 署名画像 → 提出物 の順序。本節は「e-Rad 様式一式に組む順序」だけを持ち、各技法の実装はスラッグへ:
+0. **fill driver を書く前に、様式の label 埋め込み指示を機械で洗う**: `claude-config/scripts/scan-form-instructions.py <様式.xlsx>`（[`embedded-instruction-in-label`](office-automation.md#embedded-instruction-in-label)）+ [`form-dump-first`](office-automation.md#form-dump-first)。検出した **format 系指示（「本人に下線」等）は fill driver の仕様に組み込む** — plain text 転記は書式を運ばないので、転記だけの driver は指示を構造的に落とす（[`xlsx-rich-text-underline`](office-automation.md#xlsx-rich-text-underline) の fill-driver caveat。⚠️ 同一様式シリーズで **2 応募連続で下線欠落の差戻し**を食った実績のある最頻出指示）。**経費明細は[費目区分の頻出差戻しパターン](#keihi-himoku-kubun)を先に読んでから割り付ける**。
 1. **計算式を含む xlsx 様式**を openpyxl で記入 → ⚠️ save で式キャッシュが飛ぶので Excel 再計算保存（[`openpyxl-clears-formula-cache`](office-automation.md#openpyxl-clears-formula-cache)、driver は `pdf_form_fill.assert_formula_cache_intact` で gate）。標題 drawing を持つ様式は [`excel-osascript-cell-write`](office-automation.md#excel-osascript-cell-write) 経由で値を書く。
-2. 公式 self-check（あれば `research_plan_self_check.py`）で字数・形式・ファイル名を要確認ゼロまで。
+2. 公式 self-check（あれば `research_plan_self_check.py`）で字数・形式・ファイル名を要確認ゼロまで。**記入後の機械監査** = `diff-form-xlsx.py`（label 上書き検出）+ 書式指示の反映 verify（下線は `rich_text=True` readback or XML grep、[`xlsx-rich-text-underline`](office-automation.md#xlsx-rich-text-underline)）。
 3. **署名する docx 様式**を記入（記入要領削除・☒・run 分割注意）→ `docx-to-pdf.sh` で PDF 化（[`docx-to-pdf-pages`](office-automation.md#docx-to-pdf-pages)、空様式とページ数を一致させる）。
 4. **署名を PDF に合成**: ① 手書き写真 → 透過 PNG（帯切出し + 輝度しきい値 + alpha 計算）= [`signature-photo-to-transparent-png`](office-automation.md#signature-photo-to-transparent-png)（raw photo を持っているとき）→ ② 濃度 boost = [`signature-image-overlay-density`](office-automation.md#signature-image-overlay-density)（alpha boost + 純黒、helper = `pdf_form_fill.boost_signature_alpha`）→ ③ anchor（「氏名：」等）右への配置 = [`pdf-prefill-direct`](office-automation.md#pdf-prefill-direct) + baseline 注意 [`pymupdf-insert-text-baseline`](office-automation.md#pymupdf-insert-text-baseline)。⚠️ `search_for("氏名：")` は CJK 互換字形で空振りリスクあり、 空振り時は [`pdf-text-match-nfkc`](office-automation.md#pdf-text-match-nfkc)（`get_text("words")` + NFKC 照合）に降りる。
 5. ファイル名規定にリネーム → 提出。

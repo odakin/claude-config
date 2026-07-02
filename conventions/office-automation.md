@@ -57,6 +57,7 @@ origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募
 | PDF を mutate (image insert / 値 overlay) した後、 意図せず text 破壊 / 過去訂正の undo / image 重複が起きないか機械で点呼したい | 視覚確認だけでは「在って当然のものに目が行く」 = 「あるはずの無いもの」 を読み飛ばす | page 数 + text 不変 + must-present/absent + image stream delta の 5 項目 schema → [`pdf-mutation-verification-schema`](#pdf-mutation-verification-schema) |
 | Word が「破損」 と言うが原因不明 | XML 宣言 single-quote / 空 `<w:tc>` 等 | [`check-docx-integrity.py`](#docx-checkbox-content-control) で決定論検出 |
 | docx の font を下げても・行間を詰めても**ページ数が減らない** (日本語 Word) | section の `docGrid` (snap-to-grid) が行高を grid pitch に固定し font 縮小を無効化 | 本文段落の `snapToGrid` 無効化 / `linePitch` 縮小 → [`docx-pdf-page-compress`](#docx-pdf-page-compress) |
+| 研究費様式の提出後に機関事務から**差戻し** (経費の費目分け / 機関コード / 「本人に下線」 等の書式指示欠落) | 費目区分・コード verify・format 指示は fill driver 設計時に発火しないと構造的に落ちる (転記は書式を運ばない) | 差戻し対応 checklist = [erad-submission.md#sashimodoshi-response](erad-submission.md#sashimodoshi-response)、 費目 = [#keihi-himoku-kubun](erad-submission.md#keihi-himoku-kubun)、 コード = [#kikan-code-verify](erad-submission.md#kikan-code-verify)、 下線 = [`xlsx-rich-text-underline`](#xlsx-rich-text-underline) fill-driver caveat |
 
 ---
 
@@ -694,7 +695,11 @@ while True:
 cell.value = CellRichText(parts)
 ```
 
-**重要 caveat — openpyxl readback の flatten bug**: 上記で書いた xlsx を後で `cell.value` で read back すると **`str` 型に flatten される** (= rich text の run 構造が見えない)。 format が正しく保存されたかを verify するには **xlsx の生 XML を unzip → `xl/worksheets/sheetN.xml` で `<u val="single"/>` 等を grep** する:
+🚨 **fill-driver caveat — plain text 転記は書式を運ばない (= 2 応募連続で同じ差戻しを食った構造 trap)**: draft (md / plain text) から様式へ転記する fill driver は、 転記だけでは rich text 書式が乗らない。 様式 label に「本人に下線」 等の format 指示があるのに driver が `cell.value = text` で終わっていると、 **指示は構造的に落ちる** — 本 slug が既に存在し過去応募で適用実績があっても、 新 driver を書いた session がここに来なければ再演する (実例: 同一様式シリーズの第 1 回応募で本 slug を確立 → 第 2 回応募の新 driver が plain 転記のみ → 業績 5 件全部下線欠落で差戻し、 2026-07)。 → **対策は driver 設計時に発火させる**: fill driver を書く前に `scan-form-instructions.py` で format 系指示を洗い ([`embedded-instruction-in-label`](#embedded-instruction-in-label))、 検出したら「転記 step の直後に rich text 適用 step」 を driver 仕様に含める (= e-Rad 系は [erad-submission.md 組み立て手順 step 0](erad-submission.md#assembly-order) が checklist 化済)。
+
+**readback の 2 経路 (= 検証と再編集で使い分け)**:
+- **`load_workbook(path, rich_text=True)`** (openpyxl >= 3.1): rich text cell が `CellRichText` として読め、 **runs を直接 assert できる** (= `[b.text for b in cell.value if hasattr(b,'font') and b.font and b.font.u]` で下線 run を列挙)。 下線適用後の機械検証はこれが最短。 ⚠️ **既に rich text を持つ xlsx を再編集するときも必ず `rich_text=True` で load** する — default load で save すると既存 rich text が flatten されて消える。
+- **default load (`rich_text` なし)**: `cell.value` は `str` に flatten される (= run 構造が見えない)。 この経路しか使えない場合の verify は **xlsx の生 XML を unzip → `xl/worksheets/sheetN.xml` で `<u val="single"/>` 等を grep** する:
 
 ```python
 import zipfile, re
@@ -706,7 +711,7 @@ print(f"Underlined runs: {underline_runs}")  # ['<applicant-initial>', '<applica
 
 xlsx XML の文字エンコード形式: ＭＳ Ｐゴシック等の全角文字は `&#65325;&#65331;` 等の numeric character reference にされる。 visual diff には decode しなければ読みにくい。
 
-origin: 2026-05-14 JST SPReAD 様式 1 Sheet 2 A15 (研究業績欄) で提出者本人氏名 (= 業績 5 件すべて) に underline を rich text で適用。 readback は str だったが xlsx 内部 XML 上で `<u val="single"/>` × 5 個 確認で OK 検証。
+origin: 2026-05-14 JST SPReAD 様式 1 Sheet 2 A15 (研究業績欄) で提出者本人氏名 (= 業績 5 件すべて) に underline を rich text で適用。 readback は str だったが xlsx 内部 XML 上で `<u val="single"/>` × 5 個 確認で OK 検証。 2026-07-02 同シリーズ第 2 回応募の差戻し対応で fill-driver caveat + `rich_text=True` readback 経路を追記 (= 新 driver が plain 転記のみで下線を落とし、 業績 5 件が 1 件 1 セルだったため cell ごとに本人名 1 run の下線を `rich_text=True` load → 適用 → runs assert で修復した)。
 
 ---
 
