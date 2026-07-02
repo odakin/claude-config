@@ -133,6 +133,16 @@ https://drive.google.com/drive/folders/{folderId}
 (= authuser= 削除、 受信者の active account で開く)
 ```
 
+### <a id="public-surfaces-no-authuser"></a>(e) 公開 surface は `authuser=` 不要 (= 規律 2 の対象外)
+
+規律 2 の対象は「開く account によって見え方が変わる URL」。 **誰がどの account で開いても同じ表示になる公開 surface** には `authuser=` を付けない (= 決定論性に寄与せず、 他人の公開ページを contact 情報として記録する用途では不自然なパラメータになる):
+
+- **published Google Sites** (`sites.google.com/view/<name>`) — 研究者の公開ホームページ等。 ⚠️ `/view/` でも共有制限された site は存在し得る (= その場合は account-sensitive だが稀)。 **編集 URL (`sites.google.com/d/...`) と workspace domain 配下 (`sites.google.com/a/<domain>/...`) は常に account-sensitive** として扱う
+- **Google Scholar** (`scholar.google.com/citations?user=...`) — 公開プロフィール
+- **Google Maps** の場所 URL 等の公開 content
+
+機械 guard の扱い: `hooks/google-url-guard.sh` は最初から **ID を持つ account-sensitive service path のみ**を case whitelist で対象にしており (= mail/classroom/drive/docs/calendar/photos/meet)、 公開 surface は元々 flag しない。 broad regex (= domain 一致) で downstream に別実装 (commit-time warn 等) を作る場合は、 published Sites `/view/` 等の公開 path を例外にして chronic false positive を避ける (= 2026-07-02: 研究者 DB に公開ホームページ URL を記録するたび warn が出た事例)。
+
 ## 例
 
 **NG** (account-dependent、 壊れる):
