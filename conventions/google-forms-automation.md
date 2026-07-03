@@ -153,6 +153,25 @@ Body: entry.<N>=value&entry.<M>=value&...
 - Selenium / Playwright + cookie 抽出
 - experimental、 fragile (cookie 期限管理)
 
+## <a id="respondent-side-constraints"></a>回答者 (respondent) 側の提出制約
+
+form を「作る・解析する」 側でなく「**提出する**」 側の制約。 file 添付付きの提出 workflow (= 様式 xlsx/docx を作って form に upload する類) を支援する時に効く。
+
+### 観測済みの制約 4 点
+
+1. **file-upload 質問付き form は Google ログイン強制 + 多くは Workspace domain 縛り**: form 所有 organization の account でしか回答できない設定が一般的で、 回答した account が form 側に記録される。 → **普段のメール account と提出 account が別になりうる** — どの account で提出したかを自分の記録側に残す (= 受領 mail・回答控えの届く場所が変わる)。
+2. **回答回数制限 (= limit to 1 response) の form は再回答不可**: 提出後の追加・訂正は form でなく**別経路 (= 担当者宛メール等) に切り替わる** — 主催側からその指示が来るのが典型。 「form に出し直せばよい」 を前提に workflow を組まない。
+3. **提出した file は form からは回収できない** (= form は提出物を返さない)。 → **提出版 snapshot を final 名でリポに保存してから提出する**。 提出後に「何を出したか」 を復元できる唯一の経路で、 2. (再回答不可) + 訂正メール経路と組み合わさると控えの有無が直接効く。
+4. **受領 mail の「回答を編集」 link は form 設定依存**: あれば後から編集可、 無ければ 2. の別経路のみ。 提出直後に受領 mail と link の有無を確認して記録する。
+
+### reflex (= 提出前 3 点 checklist)
+
+- [ ] 提出版 file を final 名 (= `_draft` 抜き) でリポに保存したか
+- [ ] どの account で提出するか (= domain 縛りの有無) を確認したか
+- [ ] 提出後、 受領 mail と「回答を編集」 link の有無を記録したか
+
+origin: 2026-07、 institutional compliance form (= 誓約チェック + 計画書 xlsx 添付) で 4 点を 1 事例で全部観測 — domain 縛りで通常メール account と別 account 提出 / 回答回数制限により追加提出は「担当者宛メールで」 の指示 / 提出版 xlsx はリポ保存済で控え確保。
+
 ## 関連
 
 - Forms API 公式 doc (= form 構造 read 用、 ただし entry id 取得不可): https://developers.google.com/forms/api

@@ -19,6 +19,7 @@
 | ④ **PDF 化** | xlsx / docx / pptx → 提出 PDF | [下記 §2](#pdf-conversion) |
 | ⑤ **記入後の機械監査** | 様式に値を fill した後、 ラベル上書き / 空欄 / 配置崩れが残っていないか? | [下記 §4](#completion-audit) (原則 + script) |
 | ⑥ **e-Rad 経由** | JST / 科研費 / 財団等の研究費応募で e-Rad に書類を上げる? | [`erad-submission.md`](erad-submission.md) (= 制度横断で効く e-Rad 挙動・字数・書式・つまずきどころ) |
+| ⑦ **入手・提出の経路** | 雛形が Google Drive folder 配布? / 提出先が Google Form? | 入手 = [`google-api-direct-access.md#drive-folder-bulk-download`](google-api-direct-access.md#drive-folder-bulk-download) (folder 一括 DL + manifest)。 提出 = [`google-forms-automation.md#respondent-side-constraints`](google-forms-automation.md#respondent-side-constraints) (= **提出前にリポへ snapshot 保存** / 回答回数制限 = 再回答不可・訂正は別経路 / account domain 縛り) |
 
 ---
 

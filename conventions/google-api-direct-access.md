@@ -137,6 +137,46 @@ elif mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     # wb.sheetnames + wb[name].iter_rows(values_only=True)
 ```
 
+## <a id="drive-folder-bulk-download"></a>Drive folder の一括 download (= list + native-export map + 再帰)
+
+配布資料が「Drive folder ごと」 で来る場合 (= 説明会資料・様式 template 一式・委員会配布物 等) に、 folder 内の全 file を local に落として保存する recipe。 scope は `drive.readonly` で足りる (= write token 不要)。 手で 1 file ずつ開いて DL するより速く、 provenance (= いつの版を取ったか) が manifest に残る。
+
+### 手順の骨格 (= 4 step、 このまま実装できる)
+
+1. **folder listing** (pagination 必須):
+   ```python
+   resp = drive.files().list(
+       q=f"'{folder_id}' in parents and trashed = false",
+       fields="nextPageToken, files(id, name, mimeType, modifiedTime, size)",
+       pageSize=200, pageToken=page,
+       supportsAllDrives=True, includeItemsFromAllDrives=True,  # 共有 drive 対応
+   ).execute()
+   # nextPageToken が尽きるまで loop
+   ```
+2. **file 種別で download 経路を分岐**:
+   - Google native (= mimeType が `application/vnd.google-apps.*`) → `files().export_media(fileId=…, mimeType=<export 先>)` (= binary 実体を持たないため export 必須、 下表)
+   - それ以外 (= PDF / xlsx / docx 等の binary) → `files().get_media(fileId=…, supportsAllDrives=True)`
+   - どちらも `MediaIoBaseDownload` で chunk 読み → `BytesIO` → file 書き出し
+3. **subfolder** (= mimeType `application/vnd.google-apps.folder`) は download せず**再帰** (dest 側にも同名 dir を掘る)。
+4. **manifest 保存**: listing の json を dest に `_drive_manifest.json` として落とす (= file 名・id・modifiedTime の provenance。 後日「更新されたか」 の diff 基準になる)。
+
+### native → export の対応表
+
+| Google native mimeType | export mimeType | 拡張子 |
+|---|---|---|
+| `…google-apps.document` | `application/pdf` (or docx) | `.pdf` |
+| `…google-apps.spreadsheet` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` | `.xlsx` |
+| `…google-apps.presentation` | `…presentationml.presentation` | `.pptx` |
+
+### gotchas
+
+- **native file は listing の `size` が None**: 「空 file」 と誤判定しない (= binary 実体を持たないだけで中身はある)。
+- **`export_media` は ~10 MB 上限**: 超える native doc は export が fail する — その時は UI 経由等の代替に切り替え (無理に chunk しても回避できない)。
+- **file 名は原名のまま保存** (= 「〜のコピー」 等の重複 suffix 含む): rename すると manifest との対応が切れる。 名前衝突時のみ連番 suffix。
+- **DL した様式はそのまま雛形として保存し、 fill は copy に対して行う** (= [`office-files.md`](office-files.md) の template-provenance 原則。 提出物で雛形を上書きすると再 fill・diff 検証が死ぬ)。
+
+worked example: 配布 folder 30 file (root 6 + subfolder 24、 PDF + xlsx 混在) を 1 script で取得し、 repo docs/ に binary + manifest を保存 (2026-07)。
+
 ## Token refresh の運用
 
 `google-auth` の `Credentials.refresh(Request())` で access_token を自動更新する。 refresh_token は通常 rotate しないが、 まれに Google 側で rotate される場合あり (= 7 日以上の長期未使用後等)。 rotate された場合は古い token が invalid_grant になるので、 再 reauth が必要。
