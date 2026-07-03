@@ -84,6 +84,10 @@ PreToolUse hook (mail 誤送信 guard 等) は desktop で出力 honor されず
 2. **ask は action flag の実行形に anchor**: 例 `Bash(*send_mail.py*--send*)`。不可逆 invocation だけが ask を踏み、開発・記録・検証系コマンドは素通り。
 3. **gate 対象 invocation は chain しない**: ask の match は Bash command 文字列単位なので、`&&` chain の 1 成分が match すると **dialog は chain 全体を表示**する (= 承認対象がぼやける + 無関係な成分に確認が伝染)。逆も然りで、「commit + push を atomic に chain する」類の良規律と広い ask パターンは正面衝突する。gate を踏むコマンドは単体で打ち、dialog = action そのものにする。
 
+⚠️ **移行順序は「tool の fail-safe 化が先・ask の絞り込みが後」厳守**: 「絞った ask (flag anchor) + 旧 default-実行 tool」の組合せは、flag 無しの実行が ask に match せず**素通りで実行される** (= 唯一の危険な遷移順)。逆順 (旧 broad ask + 新 fail-safe tool) は誤爆が残るだけで安全。複数マシン運用では、tool が git 同期・settings.json が machine-local なため**マシンごとにこの順序ずれが起きうる** — 必ず tool 側の pull を確認してから ask を絞る。
+
+⚠️ **この gate の限界 (= 過信しない)**: ask の match は「typed command 文字列」への glob なので、変数間接 (`S=<path>; python3 $S --send`) や glob 表記で literal を外すと素通りする。敵対的回避への防御ではなく、**good-faith な呼び出しに機械の一拍を課す speed bump**。最終防御は呼び出し側の規律 (draft 提示 + user 明示承認) と、hook が生きている surface での hook 層。
+
 反映は session 起動時ロード (§反映タイミング) なので、パターン変更後も**既存 session には旧パターンが残る**。domain 実例 (メール送信の --send 化) は [`gmail-sending.md`](gmail-sending.md#permission-gate-anchor)。
 
 ## <a id="always-approve-tools"></a>permission 設定で抑止できない tool (= always-prompt class、 2026-06-28)
