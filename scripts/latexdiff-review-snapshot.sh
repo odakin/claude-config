@@ -1,9 +1,11 @@
 #!/bin/bash
 # latexdiff-review-snapshot.sh — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備する engine
 #
-# = このスクリプトが手順の SoT (code-as-SoT)。手法の背景・落とし穴表は
-#   conventions/latex.md「latexdiff で差分レビュー PDF を作る」節、
+# = このスクリプトが手順の SoT (code-as-SoT)。手法の背景・落とし穴表・「既定」の使い分けは
+#   conventions/latex.md#latexdiff-review-snapshot、
 #   snapshot の命名規則は conventions/expensive-intermediate-artifacts.md#snapshot-artifact-naming が正本。
+#   検証状況: macOS + TeX Live (lualatex) で e2e 済。Windows (git-bash) は未検証
+#   (open は command -v guard 済、bash 3.2+ 想定)。
 #
 # やること (= 共著レビュー中に「相手の push を取り込んだ最新の diff PDF」を回す loop の機械化):
 #   1. baseline 版 tex を git revision から取り出す (作業 tree を汚さない、mktemp workdir + aux symlink)
