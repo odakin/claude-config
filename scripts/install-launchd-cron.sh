@@ -9,7 +9,10 @@
 # アカウント切り替えに非依存 (= scheduled-tasks.md#account-switch-independent)。
 # idempotent (再実行可)。 2 type をサポート:
 #   - skill : `claude -p --permission-mode bypassPermissions` で SKILL.md を indirection 実行
-#             (= run-time に Claude judgment が要る routine)
+#             (= run-time に Claude judgment が要る routine)。 CLI が対応していれば
+#             `--no-session-persistence` を併用 = 無人 run の session を保存しない
+#             (= 他マシンの「最近の項目」/session 一覧を cron session で汚さない。
+#             transcript は残らないため事後デバッグは StandardOutPath の log file が唯一の手掛かり)
 #   - cmd   : script を直接実行 (= 決定的 routine、 claude 不要 = token ゼロ)
 #
 # == 汎用エンジンとしての境界 ==
@@ -59,6 +62,12 @@ LOG_DIR="${LCRON_LOG_DIR:-$HOME/Library/Logs}"
 DOMAIN="gui/$(id -u)"
 CRON_MODEL="${CRON_MODEL:-}"
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")}"
+
+# skill routine の session を保存しない (= 「最近の項目」 を無人 run で汚さない)。 --print 専用 flag。
+# 古い CLI は未対応の可能性があるため install/run 時に capability check し、 対応時のみ付与
+# (= 未対応 CLI では従来挙動に degrade、 routine を殺さない)。
+NOPERSIST_FLAG=""
+"$CLAUDE_BIN" --help 2>/dev/null | grep -q -- --no-session-persistence && NOPERSIST_FLAG="--no-session-persistence"
 
 LABEL_PREFIX=""
 WORKDIR='$HOME'           # 既定: literal。 plist の `cd "..."` 内で launchd runtime に展開される
@@ -125,9 +134,9 @@ write_plist() {
   task_id="$1"; kind="$2"; target="$3"; cron="$4"
   label="$(label_for "$task_id")"; plist="$(plist_path "$task_id")"; logf="$(log_for "$task_id")"
   if [ "$kind" = skill ]; then prompt="$(prompt_for "$target")"; else prompt=""; fi
-  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" <<'PYEOF'
+  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" <<'PYEOF'
 import sys, plistlib
-label, claude_bin, kind, target, prompt, logf, cron, out, model, workdir, gate = sys.argv[1:12]
+label, claude_bin, kind, target, prompt, logf, cron, out, model, workdir, gate, nopersist = sys.argv[1:13]
 minute, hour, dom, month, dow = cron.split()
 # minute: '*' / 整数 / '*/N' step (= 毎 N 分。 StartCalendarInterval は step を持たないので
 # Minute 値を列挙して array に展開する。 例: '*/30' → [0, 30])
@@ -162,7 +171,8 @@ prefix = ('unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; '
 gate_prefix = (gate + ' || exit 0; ') if gate else ''
 if kind == 'skill':
     model_flag = ('--model %s ' % model) if model else ''
-    cmd = prefix + gate_prefix + 'exec "%s" -p --permission-mode bypassPermissions %s"%s"' % (claude_bin, model_flag, prompt)
+    nopersist_flag = (nopersist + ' ') if nopersist else ''
+    cmd = prefix + gate_prefix + 'exec "%s" -p %s--permission-mode bypassPermissions %s"%s"' % (claude_bin, nopersist_flag, model_flag, prompt)
 else:  # cmd = 決定的 script を直接実行 (claude 不要)
     cmd = prefix + gate_prefix + 'exec bash "%s"' % target
 d = {
@@ -243,7 +253,7 @@ EOF
   echo "== 手動実行: $task_id ($kind) =="
   if [ "$kind" = skill ]; then
     mflag=""; [ -n "$CRON_MODEL" ] && mflag="--model $CRON_MODEL"
-    eval "cd \"$WORKDIR\"" && exec "$CLAUDE_BIN" -p --permission-mode bypassPermissions $mflag "$(prompt_for "$target")"
+    eval "cd \"$WORKDIR\"" && exec "$CLAUDE_BIN" -p $NOPERSIST_FLAG --permission-mode bypassPermissions $mflag "$(prompt_for "$target")"
   else
     eval "cd \"$WORKDIR\"" && exec bash "$target"
   fi
