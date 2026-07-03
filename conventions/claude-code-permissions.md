@@ -70,6 +70,22 @@ PreToolUse hook (mail 誤送信 guard 等) は desktop で出力 honor されず
 - hook の完全代替ではない (= draft 全文提示 + autonomy 禁則の文面までは再現せず「内容表示 + 人間承認」 まで)。 一次防御は CLAUDE.md の discipline (全 frontend で読まれる)、 本 recipe は機械の一拍を足す第二視点。
 - 一般原理 (= enforcement surface の frontend 生存性) は [`docs/convention-design-principles.md §8.15`](../docs/convention-design-principles.md#enforcement-surface-frontend-survival)。
 
+## <a id="ask-pattern-action-anchor"></a>ask パターンは「tool への言及」でなく「不可逆 action の実行形」に anchor する (2026-07-03)
+
+高 stakes 操作 (メール送信等) を `permissions.ask` の Bash パターンで gate するときの設計規約。
+
+**なぜ ask パターン自体を狭くするしかないか**: precedence は deny > ask > allow で、**ask は allow に勝つ**。つまり「広い ask を張って、無害ケースだけ allow で例外を彫る」は構造的に組めない。誤爆を消す手段は ask パターンの絞り込み**だけ**。
+
+**誤爆の失敗モード**: 対象 script の file 名 substring に match するパターン (例: `Bash(*send_mail.py*)`) は、不可逆 action だけでなく「file 名に言及するだけの無害コマンド」全部に発火する — syntax check (py_compile) / git add / grep / (実行前に必須とされる) dry-run。すると ① 承認ダイアログが「危険操作の合図」でなく「開発ノイズ」になり、② user が反射で承認する習慣がつき、③ 本物の dialog も反射承認される = **gate の信号価値が壊れて実質死ぬ** (実例 2026-07-03: syntax check + commit + push の chain に送信 gate が発火し続け、user が「いちいち聞かれてうざい」と flag)。
+
+**設計 3 点 set**:
+
+1. **tool 側を fail-safe 既定にする**: 不可逆 action に explicit flag (例: `--send`) を必須にし、flag 無しは常に dry-run。flag を忘れた時の事故方向が「実行されない」になる。
+2. **ask は action flag の実行形に anchor**: 例 `Bash(*send_mail.py*--send*)`。不可逆 invocation だけが ask を踏み、開発・記録・検証系コマンドは素通り。
+3. **gate 対象 invocation は chain しない**: ask の match は Bash command 文字列単位なので、`&&` chain の 1 成分が match すると **dialog は chain 全体を表示**する (= 承認対象がぼやける + 無関係な成分に確認が伝染)。逆も然りで、「commit + push を atomic に chain する」類の良規律と広い ask パターンは正面衝突する。gate を踏むコマンドは単体で打ち、dialog = action そのものにする。
+
+反映は session 起動時ロード (§反映タイミング) なので、パターン変更後も**既存 session には旧パターンが残る**。domain 実例 (メール送信の --send 化) は [`gmail-sending.md`](gmail-sending.md#permission-gate-anchor)。
+
 ## <a id="always-approve-tools"></a>permission 設定で抑止できない tool (= always-prompt class、 2026-06-28)
 
 一部の tool は **tool 側が「毎回明示承認を要求する」と宣言**しており、 settings.json の permission layer (`allow` / `defaultMode`) では**抑止できない**。 承認 dialog にこの一文が出る:

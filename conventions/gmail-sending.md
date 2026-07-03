@@ -80,15 +80,9 @@ sandbox 内の Python/network script が `socket.gaierror: nodename nor servname
 
 ## <a id="permission-gate-anchor"></a>7. 承認 gate は「script 名」でなく「実送信 flag」に anchor する
 
-Claude Code の宣言 permission (`permissions.ask`) で送信 script を gate するとき、file 名 substring のパターン (例: `Bash(*send_mail.py*)`) は **file 名を含むだけの無害コマンド全部** (py_compile / git add / grep / 送信前に必須の dry-run) に誤爆する。承認ダイアログが「送信の合図」でなく「開発作業のノイズ」になり、user は反射で承認するようになる = gate の信号価値が壊れる (2026-07-03 実例: syntax check + commit + push の chain で発火)。
+送信 script を `permissions.ask` で gate するときの mail-domain 適用形: ① script は **`--send` 必須の fail-safe 既定** (flag 無し = 常に dry-run) にし、② ask パターンは file 名 substring (`Bash(*send_mail.py*)`) でなく**実送信 invocation** (`Bash(*send_mail.py*--send*)`) に match させ、③ **実送信コマンドは chain せず単体で打つ** (= ダイアログ = 送信内容そのもの)。
 
-正しい設計 (3 点 set):
-
-1. **送信 script は fail-safe 既定にする**: 実送信に explicit flag (例: `--send`) を必須にし、flag 無しは常に dry-run。flag を忘れたときの事故方向が「送信されない」になる。
-2. **ask パターンは action flag に anchor**: 例 `Bash(*send_mail.py*--send*)`。不可逆操作の invocation だけが ask を踏み、開発・記録系コマンドは素通り。
-3. **--send invocation は chain しない**: 他コマンドと `&&` で繋ぐとダイアログが chain 全体を表示し、承認対象がぼやける。実送信は単体コマンドで打つ (= ダイアログ = 送信内容そのもの)。
-
-hook が効かない surface (Claude Code desktop / bridge) では宣言 permission が唯一の機械 gate なので、この anchor 設計がそのまま送信 gate の品質になる。一般化: **ask/deny パターンは「tool への言及」でなく「不可逆 action の実行形」にマッチさせる**。
+file 名 substring パターンは「file 名に言及するだけの無害コマンド」 (py_compile / git add / grep / 送信前に必須の dry-run) に全部誤爆し、承認ダイアログの信号価値を壊す (2026-07-03 実例: syntax check + commit + push の chain で発火)。**一般則の正本 = [`claude-code-permissions.md`](claude-code-permissions.md#ask-pattern-action-anchor)** (= なぜ ask パターン自体を絞るしかないか 〔precedence 上 allow で ask の例外を彫れない〕 + 設計 3 点 set + 起動時ロードの注意)。hook が効かない surface (Claude Code desktop / bridge) では宣言 permission が唯一の機械 gate なので、この anchor 設計がそのまま送信 gate の品質になる。
 
 ## 関連
 
