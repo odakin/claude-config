@@ -70,6 +70,14 @@ CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "$HOME/.local/
 NOPERSIST_FLAG=""
 "$CLAUDE_BIN" --help 2>/dev/null | grep -q -- --no-session-persistence && NOPERSIST_FLAG="--no-session-persistence"
 
+# さらに Remote Control の startup 自動有効化 (= settings の remoteControlAtStartup: true) を
+# cron run では per-invocation で無効化する。 有効のままだと無人 run が hostname-prefix の
+# RC session (例: <hostname>-<codename>) として claude.ai に登録され「最近の項目」 に出る +
+# session が終了せず積み上がる事例あり (機構差の SoT = scheduled-tasks.md#headless-session-persistence)。
+# 対話 session の I3 (= 手元 session のリモート続行) には影響しない (= cron invocation のみ override)。
+RCOFF=""
+"$CLAUDE_BIN" --help 2>/dev/null | grep -q -- --settings && RCOFF=1
+
 LABEL_PREFIX=""
 WORKDIR='$HOME'           # 既定: literal。 plist の `cd "..."` 内で launchd runtime に展開される
 GATE_SNIPPET=""           # 任意: 各 job の wrapper に挿入する gate。 `cd && <gate> || exit 0; exec ...`
@@ -135,9 +143,9 @@ write_plist() {
   task_id="$1"; kind="$2"; target="$3"; cron="$4"
   label="$(label_for "$task_id")"; plist="$(plist_path "$task_id")"; logf="$(log_for "$task_id")"
   if [ "$kind" = skill ]; then prompt="$(prompt_for "$target")"; else prompt=""; fi
-  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" <<'PYEOF'
+  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" <<'PYEOF'
 import sys, plistlib
-label, claude_bin, kind, target, prompt, logf, cron, out, model, workdir, gate, nopersist = sys.argv[1:13]
+label, claude_bin, kind, target, prompt, logf, cron, out, model, workdir, gate, nopersist, rcoff = sys.argv[1:14]
 minute, hour, dom, month, dow = cron.split()
 # minute: '*' / 整数 / '*/N' step (= 毎 N 分。 StartCalendarInterval は step を持たないので
 # Minute 値を列挙して array に展開する。 例: '*/30' → [0, 30])
@@ -173,7 +181,8 @@ gate_prefix = (gate + ' || exit 0; ') if gate else ''
 if kind == 'skill':
     model_flag = ('--model %s ' % model) if model else ''
     nopersist_flag = (nopersist + ' ') if nopersist else ''
-    cmd = prefix + gate_prefix + 'exec "%s" -p %s--permission-mode bypassPermissions %s"%s"' % (claude_bin, nopersist_flag, model_flag, prompt)
+    rcoff_flag = '--settings \'{"remoteControlAtStartup":false}\' ' if rcoff else ''
+    cmd = prefix + gate_prefix + 'exec "%s" -p %s%s--permission-mode bypassPermissions %s"%s"' % (claude_bin, nopersist_flag, rcoff_flag, model_flag, prompt)
 else:  # cmd = 決定的 script を直接実行 (claude 不要)
     cmd = prefix + gate_prefix + 'exec bash "%s"' % target
 d = {
@@ -254,7 +263,8 @@ EOF
   echo "== 手動実行: $task_id ($kind) =="
   if [ "$kind" = skill ]; then
     mflag=""; [ -n "$CRON_MODEL" ] && mflag="--model $CRON_MODEL"
-    eval "cd \"$WORKDIR\"" && exec "$CLAUDE_BIN" -p $NOPERSIST_FLAG --permission-mode bypassPermissions $mflag "$(prompt_for "$target")"
+    RCOFF_ARGS=""; [ -n "$RCOFF" ] && RCOFF_ARGS='--settings {"remoteControlAtStartup":false}'
+    eval "cd \"$WORKDIR\"" && exec "$CLAUDE_BIN" -p $NOPERSIST_FLAG $RCOFF_ARGS --permission-mode bypassPermissions $mflag "$(prompt_for "$target")"
   else
     eval "cd \"$WORKDIR\"" && exec bash "$target"
   fi

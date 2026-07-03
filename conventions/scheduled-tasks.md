@@ -51,14 +51,15 @@ install-launchd-cron.sh --label-prefix PREFIX [--workdir DIR] \
 | 機構 | session 痕跡 (2026-07 実測) |
 |---|---|
 | **Claude Code desktop app の scheduled task** | 1 run ごとに desktop session が作られ「最近の項目」 に積まれる。 **抑止 option なし** (= task 側に session を隠す設定が存在しない)。 掃除は `archive_session` (1 件ずつ承認) か手動 |
-| **launchd cron + `claude -p`** (既定) | transcript は local `~/.claude/projects/<dir>/<session-id>.jsonl` に保存される。 **desktop の「最近の項目」 には出ないのを実測観測** (= 30 分ごと routine の session が一覧に 1 件も現れなかった。 documented ではなく観測事実、 build 依存の可能性あり) |
-| **launchd cron + `claude -p --no-session-persistence`** | **session が disk にも session 一覧にも一切残らない** (実測: .jsonl 生成ゼロ + `list_sessions` 不出現。 session object 自体が作られないので同期しようがない) |
+| **launchd cron + `claude -p`** (既定) | transcript は local `~/.claude/projects/<dir>/<session-id>.jsonl` に保存される。 ⚠️ さらに **settings で `remoteControlAtStartup: true` のマシンでは headless run も Remote Control session として claude.ai に登録され「最近の項目」 に出る** (= `--remote-control-session-name-prefix` default = hostname による自動命名 `<hostname>-<codename>`。 2026-07-04 実測: 30 分 cron の完走 run が別マシンの一覧に出現 + run session が終了せず**数十件 live で積み上がる**事例)。 ⚠️ errata (同日): 初版の「recents に出ない実測」 は standby マシン (= active-routine-host gate defer で cron が実行されない側) での観測で、 **観測として無効**だった |
+| **launchd cron + `claude -p --no-session-persistence` + RC override** (= 下記、 engine 既定) | **session が disk にも session 一覧にも一切残らない** (実測: .jsonl 生成ゼロ + `list_sessions` 不出現)。 `--no-session-persistence` 単独で RC 登録まで抑止するかは未検証のため、 RC override と併用する (= belt-and-braces) |
 
 - **`--no-session-persistence` は `--print` (= `-p`) 専用 flag**。 resume 不可・transcript 無しになるので、 **事後デバッグは plist の `StandardOutPath` log file が唯一の手掛かり** — 無人 routine は元々 log file が主 debug surface なので通常は失うものがない。 対話 session には使わない。
-- `scripts/install-launchd-cron.sh` (= 汎用エンジン) は skill 型 routine にこの flag を **capability-gated で自動付与** (= install/run 時に `--help` probe、 未対応 CLI では従来挙動に degrade して routine を殺さない)。
+- **RC 自動有効化の per-invocation override**: settings の `remoteControlAtStartup: true` (= 手元対話 session のリモート続行用) は**そのマシンの CLI 全 session に効く**ため、 cron run には `--settings '{"remoteControlAtStartup":false}'` を渡して RC 登録を無効化する (= 対話 session 側の設定・リモート続行は不変。 これを怠ると上表の「hostname-prefix RC session が recents に出る + live 積み上がり」 が起きる)。
+- `scripts/install-launchd-cron.sh` (= 汎用エンジン) は skill 型 routine に **`--no-session-persistence` と RC override の両方を capability-gated で自動付与** (= install/run 時に `--help` probe、 未対応 CLI では従来挙動に degrade して routine を殺さない)。 ⚠️ **flag は plist 生成時に焼かれる** — engine 更新後は各マシンで再 install しないと既存 routine に反映されない (`--ensure` は未 install 分のみで既存 plist を再生成しない)。
 - 旧 CLI 世代の代替: `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` (= 全 transcript 書込み抑止、 対話含め全 run に効くので過剰) / `cleanupPeriodDays` (= 起動時の古い session 掃除、 即時性なし)。 `--no-save` / `--incognito` / session-sync 無効化 env は**存在しない** (2026-07 時点 docs + issue 調査)。
 - **PushNotification は headless `claude -p` でも動く** (実測: wire 健全)。 ⚠️ user がキーボード操作中 (直近 ~60s) は「Not sent (user active)」 で suppress される **documented 挙動 = エラーでない**。 無人 routine の SKILL には「Not sent は正常、 リトライしない」 と書いておく (= 無人時間帯なら届く)。
-- **機構選択への含意**: 毎日/高頻度の無人 routine を desktop scheduled task で回すと「最近の項目」 noise が構造的に発生する。 launchd cron + `claude -p` + 本 flag なら zero-trace (= [#account-switch-independent](#account-switch-independent) のアカウント非依存に加えた第 2 の移行動機)。
+- **機構選択への含意**: 毎日/高頻度の無人 routine を desktop scheduled task で回すと「最近の項目」 noise が構造的に発生する。 launchd cron + `claude -p` + 上記 2 flag なら zero-trace (= [#account-switch-independent](#account-switch-independent) のアカウント非依存に加えた第 2 の移行動機)。
 
 ## アーキテクチャ: SKILL.md とバックエンドの二重構造
 
