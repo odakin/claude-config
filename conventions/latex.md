@@ -49,7 +49,7 @@ grep -nE '<element>' file.tex
 
 **事例 (2026-06、物理 LaTeX 原稿):** ある直和分解 (`H = A ⊕ B` 型) が運用台帳の prose で「migration 完了」と記録されたまま、4 日後に `%` + `\begin{comment}` で寝かされた。prose summary はその stale を ~7 週間保持し、その間に派生ノート PDF・`DESIGN.md` entry・共著者宛メール 3 通が**この分解を active 前提で**論じた (左辺の macro 名すら prose 側と source 側で食い違っていた = source 未参照の tell)。共著者が「その分解が原稿のどこにあるか把握できない」と明示 signal を出していたが、当時は記憶の問題と読み流し active grep を回さなかった。最終的に「まだ原稿にあるんだっけ?」の直接質問で初めて comment-out 状態が発覚した。
 
-## latexdiff で差分レビュー PDF を作る
+## <a id="latexdiff-review-snapshot"></a>latexdiff で差分レビュー PDF を作る
 
 共著者に「どこを変えたか」を渡すとき、`latexdiff old.tex new.tex > diff.tex` で **追加=下線 / 削除=取り消し線** のレンダリング済み PDF を作れる。comment-out-keep 流儀（旧文を `%` 化）の編集は raw の git diff では読みにくいので、latexdiff の方が共著者に優しい。
 
@@ -89,7 +89,9 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 
 **別解（latexdiff のコンパイル問題を完全回避）**: Overleaf 連携の原稿なら **Overleaf の History 比較**（baseline 版 ↔ 現在）が確実で、pre/post 処理が要らず数式まで色分けされる。
 
-> この pre/post 処理は各 paper repo の `latexdiff/` 配下の再生成スクリプトに固める運用でよい。**baseline commit・どのマクロを展開するか等の原稿固有値はその repo 側に置き、手法の正本（本節）を参照する**（= SoT は上層 1 つ、下層から参照）。
+> **標準ケースは engine script で機械化済**: [`scripts/latexdiff-review-snapshot.sh`](../scripts/latexdiff-review-snapshot.sh) が「baseline 取り出し → markup unwrap (`--strip-cmd`/`--strip-color`) → latexdiff → compile cycle → snapshot 命名 ([`expensive-intermediate-artifacts.md#snapshot-artifact-naming`](expensive-intermediate-artifacts.md#snapshot-artifact-naming) 準拠、 head 側は main tex を最後に触った commit に pin) → 同 baseline 旧版の supersede 削除 → commit+push+open」 を 1 コマンドで回す (= 共著レビュー中に相手の push を取り込んで diff を更新する loop 用。 behind / dirty guard 内蔵、 手順詳細 = script docstring が SoT)。 **原稿固有値 (= baseline commit・strip 対象 markup・engine) は各 repo の CLAUDE.md に呼び出し 1 行として置き、 手法の正本 (本節 + engine) を参照する** (= SoT は上層 1 つ、下層から参照)。 engine で吸収できない exotic な pre/post 処理 (マクロ展開・図 placeholder 等) が要る原稿のみ、 従来通り repo の `latexdiff/` 配下に固有スクリプトを置く。
+>
+> ⚠️ markup unwrap が必要な理由: `\DIFadd{\cl{長文}}` のように **group を丸ごと下線 markup に包むと ulem が改行不能 box 化してページ外に溢れる** (= 描画はされるが 1 行で切れる)。 review 注釈系コマンドは diff 前に unwrap するのが根治 (= diff 内で draft 色は冗長でもある)。 両版に同一適用すれば未変更 markup が spurious diff にならない。
 
 ## 長さ・段落構造の判断にコメントアウト行を数えない
 
