@@ -72,6 +72,30 @@ CLI tool に出力先 path を渡す前に問う:
 
 ---
 
+## <a id="snapshot-artifact-naming"></a>Snapshot artifact の命名 (= 入力状態を filename に焼く)
+
+永続化する artifact が「ある時点の入力状態を凍結した snapshot」 (= latexdiff PDF / 特定 commit のビルド成果物 / 外部サービスの membership dump / 実測データ等。 再生成が安価な snapshot にも適用してよい naming 一般則) の場合、 filename に次の 2 つを焼く:
+
+1. **日付 `YYYY-MM-DD`** — 常に。 同日に複数回生成し得る種類なら **時分 `HHMM`** も付ける
+2. **入力状態の識別子** — snapshot が「何を」 凍結したか:
+   - **git 状態由来** (latexdiff / 特定時点のビルド) → **commit hash (range)** が正確な identity。 日付は人間用の staleness 可視化として併記する (= hash だけでは古さが読めない)
+   - **外界由来** (membership dump / 実測データ / API response) → timestamp 自体が identity (= 日付粒度で足りることが多い)
+
+例:
+
+- `latexdiff-2026-07-03-1647-a1b2c3d-to-e4f5a6b.pdf` (= git 由来 + レビュー中の同日再生成があり得るので時分付き)
+- `members-snapshot-2026-07-03.yaml` (= 外界由来、 daily 粒度で十分)
+
+**理由**: 入力状態が名前に無い snapshot (`diff-latest.pdf` / `diff-since-<base>.pdf` 等) は (a) 後から「何に対する snapshot か」 を再構成できない (b) 同日の再生成で silent 上書きされ、 受け手が新旧を区別できない (c) stale 化しても誰も気づかない。
+
+**snapshot vs view の区別**: 「常に最新へ追従する固定名 mirror」 を意図する場合 (= 例: ビルド成果物の `<paper>-latest.pdf` 自動 publish) は **view** であって snapshot ではなく、 固定名が正しい。 凍結するなら日付+識別子、 追従するなら固定名 — どちらの意図かを名前で宣言するのが本質。
+
+**disposal 条件**: 使い捨て snapshot は「いつ消してよいか」 (= レビュー完了後 / 次回 release 後 等) を commit message か README に 1 行残す (= 後の session / collaborator が削除判断できる)。
+
+関連: [`docs/convention-design-principles.md` §2.5 (= #sot-duplication-trichotomy)](../docs/convention-design-principles.md#sot-duplication-trichotomy) — snapshot は「派生可能な値は格納しない」 原則の明示的例外であり、 例外だからこそ marker (= 名前の日付 + 入力識別子) を必須にする。
+
+---
+
 ## Anti-pattern
 
 - **「実験中だから /tmp で十分」**: 実験成功直後の判断は valid だが、 user feedback が入った瞬間に「再現入力素材」 に昇格する。 移行のタイミングを逃すと永久に /tmp。 対策: feedback turn で permanence を再評価する習慣
