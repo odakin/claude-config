@@ -11,8 +11,9 @@
 #   - skill : `claude -p --permission-mode bypassPermissions` で SKILL.md を indirection 実行
 #             (= run-time に Claude judgment が要る routine)。 CLI が対応していれば
 #             `--no-session-persistence` を併用 = 無人 run の session を保存しない
-#             (= 他マシンの「最近の項目」/session 一覧を cron session で汚さない。
-#             transcript は残らないため事後デバッグは StandardOutPath の log file が唯一の手掛かり)
+#             (= 「最近の項目」/session 一覧を cron session で汚さない。 transcript は残らないため
+#             事後デバッグは StandardOutPath の log file が唯一の手掛かり。 機構差の SoT =
+#             conventions/scheduled-tasks.md#headless-session-persistence)
 #   - cmd   : script を直接実行 (= 決定的 routine、 claude 不要 = token ゼロ)
 #
 # == 汎用エンジンとしての境界 ==

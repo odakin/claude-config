@@ -9,7 +9,7 @@ Claude Code scheduled tasks を使うリポで適用。CLAUDE.md から参照: `
 | ジョブの要件 | 機構 | 理由 |
 |---|---|---|
 | **deterministic** な機械処理 (= run-time に Claude judgment 不要) で local file/repo/CLI (sips, npm, git push) に依存 | **launchd / cron (該当マシンで local 実行)** | local 実行・token cost ゼロ・LLM 非依存・Claude runtime 不要。 純粋な script はこれが最適 |
-| **Claude の judgment / draft** が run-time に要る (+ PushNotification を使いたい) | **Claude Code scheduled task (SKILL.md)** | **local の fresh Claude session で実行され local file/cred に アクセスできる** (= 実例: daily-mail-triage-check が `~/Claude/.../*.py` を local OAuth `~/.gmail-mcp/` で実行)。 「backend」 は **prompt の保存先**であって実行 locus ではない (下記 §アーキテクチャ) |
+| **Claude の judgment / draft** が run-time に要る (+ PushNotification を使いたい) | **Claude Code scheduled task (SKILL.md)** | **local の fresh Claude session で実行され local file/cred に アクセスできる** (= 実例: daily-mail-triage-check が `~/Claude/.../*.py` を local OAuth `~/.gmail-mcp/` で実行)。 「backend」 は **prompt の保存先**であって実行 locus ではない (下記 §アーキテクチャ)。 ⚠️ 1 run = 1 session が「最近の項目」 に積まれる ([#headless-session-persistence](#headless-session-persistence)、 launchd cron + `claude -p` なら回避可) |
 | 職場/組織 NW から API が block される (例: campus から Discord API が Cloudflare 1010) | **GitHub Actions (cloud cron)** | 別 network egress から実行 + secret で credential 供給 |
 
 ⚠️ **`schedule` skill の「remote agent / routine」 は上記 scheduled task とは別物**: これは **cloud で起動し local file に一切アクセスできない** (= 過去に「local 完結 script を schedule skill で trigger」 が cloud 実行で根本的に動かず redesign した RCA)。 local 依存ジョブを cloud routine に載せない。 **scheduled task (= local) と混同しない** (= 「scheduled task は local 不可」 は誤り、 上記の通り local access あり)。
@@ -43,6 +43,22 @@ install-launchd-cron.sh --label-prefix PREFIX [--workdir DIR] \
 - **`--gate "<snippet>"`** (任意): wrapper に `cd WORKDIR && <snippet> || exit 0; exec <routine>` の形で gate を挿入する。 snippet が非 0 で終わると routine は実行されず exit 0 (= defer)。 複数マシンで「今どのマシンが本番か」 を台帳で切り替える **active-routine-host failover** ([`multi-machine-state.md` account-host-failover](multi-machine-state.md#account-host-failover)) に使う (gate 実体 = `scripts/routine-host-gate.py`)。
 
 **止め方の違い (= launchd cron 版 vs scheduled-task MCP 版)**: 同じ「定期ジョブ」 でも停止操作が機構で異なる。 launchd cron 版は `--uninstall-one <task-id>` (= `launchctl bootout` + plist 削除)、 scheduled-task MCP 版は `scheduled-tasks` MCP の delete。 期間限定ジョブ (= 大会期間だけ等) の自己停止 runbook を書くときは、 **どちらの機構で登録したか**に応じた停止コマンドを記す (= 機構を取り違えると停止できない)。
+
+### <a id="headless-session-persistence"></a>無人 run の session 痕跡 (= 「最近の項目」 noise と `--no-session-persistence`)
+
+定期 routine は **1 run = 1 session** を作る。 これがどの surface に痕跡を残すかは機構で違い、 daily × 複数本を数週間回すと session 一覧 (= desktop app の「最近の項目」) が routine session で埋まる実害になる (2026-07 実測: 3 本/日 × 数週間 ≈ 数十 entry を手で消す羽目)。
+
+| 機構 | session 痕跡 (2026-07 実測) |
+|---|---|
+| **Claude Code desktop app の scheduled task** | 1 run ごとに desktop session が作られ「最近の項目」 に積まれる。 **抑止 option なし** (= task 側に session を隠す設定が存在しない)。 掃除は `archive_session` (1 件ずつ承認) か手動 |
+| **launchd cron + `claude -p`** (既定) | transcript は local `~/.claude/projects/<dir>/<session-id>.jsonl` に保存される。 **desktop の「最近の項目」 には出ないのを実測観測** (= 30 分ごと routine の session が一覧に 1 件も現れなかった。 documented ではなく観測事実、 build 依存の可能性あり) |
+| **launchd cron + `claude -p --no-session-persistence`** | **session が disk にも session 一覧にも一切残らない** (実測: .jsonl 生成ゼロ + `list_sessions` 不出現。 session object 自体が作られないので同期しようがない) |
+
+- **`--no-session-persistence` は `--print` (= `-p`) 専用 flag**。 resume 不可・transcript 無しになるので、 **事後デバッグは plist の `StandardOutPath` log file が唯一の手掛かり** — 無人 routine は元々 log file が主 debug surface なので通常は失うものがない。 対話 session には使わない。
+- `scripts/install-launchd-cron.sh` (= 汎用エンジン) は skill 型 routine にこの flag を **capability-gated で自動付与** (= install/run 時に `--help` probe、 未対応 CLI では従来挙動に degrade して routine を殺さない)。
+- 旧 CLI 世代の代替: `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` (= 全 transcript 書込み抑止、 対話含め全 run に効くので過剰) / `cleanupPeriodDays` (= 起動時の古い session 掃除、 即時性なし)。 `--no-save` / `--incognito` / session-sync 無効化 env は**存在しない** (2026-07 時点 docs + issue 調査)。
+- **PushNotification は headless `claude -p` でも動く** (実測: wire 健全)。 ⚠️ user がキーボード操作中 (直近 ~60s) は「Not sent (user active)」 で suppress される **documented 挙動 = エラーでない**。 無人 routine の SKILL には「Not sent は正常、 リトライしない」 と書いておく (= 無人時間帯なら届く)。
+- **機構選択への含意**: 毎日/高頻度の無人 routine を desktop scheduled task で回すと「最近の項目」 noise が構造的に発生する。 launchd cron + `claude -p` + 本 flag なら zero-trace (= [#account-switch-independent](#account-switch-independent) のアカウント非依存に加えた第 2 の移行動機)。
 
 ## アーキテクチャ: SKILL.md とバックエンドの二重構造
 
