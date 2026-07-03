@@ -1,6 +1,6 @@
 # Pinning the Claude desktop folder picker (`com.claude-config.pin-claude-cwd`)
 
-**macOS only.** Installed **by default** by `setup.sh` (Step 2b2) **when the Claude desktop
+**macOS only** (the pinning agent; **Windows** is covered — with the opposite conclusion — in [§ Windows](#windows) below). Installed **by default** by `setup.sh` (Step 2b2) **when the Claude desktop
 app is in use** (CLI-only Macs are skipped — see [Desktop-app gate](#desktop-app-gate)). Opt-out is supported and documented below.
 
 ## What it does
@@ -90,3 +90,53 @@ launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.claude-config.pin-
 
 cf. Adding `<base>` to Finder Favorites (a one-click shortcut in the picker's left
 sidebar) is orthogonal and complementary.
+
+## Windows
+
+**No equivalent is installed, and building one is not worth it** (evaluated 2026-06-24 on
+Windows 11 with the Claude desktop Electron app). The macOS mechanism above does **not** port,
+and there is no clean Windows analog to replace it with:
+
+- The desktop app is **Electron**; its "New session" folder picker is Chromium's
+  `IFileOpenDialog`. The picker's start directory is most likely tracked by **the running
+  app's own state** (Chromium's last-directory memory inside its profile / leveldb), not by an
+  OS preference an outside poller can rewrite. macOS's trick works precisely because
+  `NSNavLastRootDirectory` is an external `defaults` **string**; Windows has no such external,
+  writable pin point held for the picker.
+- The OS-level last-folder memory that *does* exist —
+  `HKCU\…\Explorer\ComDlg32\LastVisitedPidlMRU` / `OpenSavePidlMRU` — stores **binary PIDLs,
+  not path strings**, so there is no `defaults write <path>` equivalent. And if the app passes
+  an explicit `defaultPath`, that registry MRU is **ignored entirely**, so rewriting it does
+  nothing.
+- Sub-second polling on Windows needs a **resident process** (Task Scheduler's minimum
+  interval is 1 minute), which is heavier than a launchd `StartInterval` job — for a target the
+  poller can't even reliably reach.
+
+Mapping of the macOS pieces (none port):
+
+| macOS piece | role | Windows counterpart | portable? |
+|---|---|---|---|
+| `NSNavLastRootDirectory` | the picker's start pref | `ComDlg32\…PidlMRU` (binary PIDL) or in-app Chromium state | ✗ not an external path string |
+| `defaults write` | rewrite the pref in one line | `reg` / `Set-ItemProperty` (but must synthesize a PIDL) | ✗ no one-line path write |
+| launchd (~1 s) | resident scheduler | Task Scheduler (≥ 1 min) or a resident process | △ heavier, and no valid target |
+
+### First, confirm it even drifts (GUI test)
+
+Behavior depends on whether the app sets `defaultPath`, so verify before building anything:
+
+1. New session → "Select folder". Note the starting folder.
+2. Browse to folder **A** and **Cancel** (don't select).
+3. Reopen the picker → starts at **A** ⇒ it drifts; back at step 1's folder ⇒ it doesn't
+   (nothing to do).
+4. If it drifts: actually select **B**, start the session, then open the picker in the *next*
+   new session and see whether it follows to **B** or stays fixed.
+
+### If it drifts, the proportionate fix (zero-maintenance)
+
+Pin your workspace to **Explorer Quick access** (drag the folder into the picker's left
+"Quick access" list, or right-click the folder → "Pin to Quick access"). Wherever the start
+point drifts, your workspace is then one click away — the Windows analog of the Finder
+Favorites note above, recovering most of the value with **no resident job**. The real fix is
+upstream: an app-side "default project folder" setting. A registry/ACL pin is **not**
+recommended (PIDL synthesis is fiddly, an explicit `defaultPath` would ignore it, and locking
+the key risks the dialog misbehaving).
