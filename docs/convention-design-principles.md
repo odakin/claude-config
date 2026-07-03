@@ -699,6 +699,23 @@ origin: 2026-06-13 desktop-hook-gap remediation。 odakin は Claude Code deskto
 
 origin: 2026-06-29 ある institutional 締切超過の指摘を受け、 person-to-person mail (= Gmail) と 個別 reference PDF (= 配付資料) のみ sweep して「事前告知が見当たらない」 と 2 段で argue した RCA。 実際は institutional broadcast (= 学内 portal 掲示板) に 4 ヶ月前から告知が出ており、 単に sweep scope に portal が入っていなかった (= 共著者から portal URL 指摘で catch)。 [`§8.11`](#downstream-net-intake-leverage) (downstream net は intake で正しく表現された対象しか守れない) の dual: intake の channel category を取りこぼすと downstream sweep がいくら丁寧でも universal absence は嘘になる。
 
+### <a id="broadcast-obligation-blind-spot"></a>8.17 broadcast で届く個人義務 — per-person addressing proxy の構造的 false negative
+
+個人を拘束する義務 (= 受講報告・書類提出・会議出席・投票、 締切付き) は、 個人宛 mail だけでなく **broadcast 形態** (= BCC 一斉配信・ML・宛名「各位」) でも届く。 mail surfacing / triage を **per-person addressing** (= To/Cc の自分一致・本文/件名の名前 mention) を proxy に設計すると、 この class は**構造的に全通貫通する** — 宛名は「各位」 で名前はどこにも現れず、 To は list アドレスだから。 [`§8.8`](#proxy-blind-spot) の proxy 盲点の 1 具体形だが、 盲点が「institution が義務を配る**標準経路**そのもの」 と重なる点で被害が大きい: 初回 + リマインド数通が全て素通りし、 institution 側の escalation (= 業を煮やした個別名指しの催促) が唯一の catch になる = 最後の網が相手の善意。 [`§8.16`](#absence-channel-coverage) が「不在主張」 で broadcast channel を取りこぼす軸なら、 本節は「義務検出」 で broadcast channel を取りこぼす軸 (= 同じ channel category の別 direction)。
+
+観測された failure は 2 層が結合する:
+1. **検出層**: broadcast 義務 mail が per-person proxy を貫通 (= 上記)。
+2. **intake 層** (= [`§8.11`](#downstream-net-intake-leverage) の instance): 義務をどこかの時点で**認識**していても、 prose (= session 記録・「今週やること」 メモ) に書いただけでは tracked object (= deadline 付き task entry) にならず、 deadline 網は「存在しない fact」 を掴めない。 prose 記載は recall 依存 = 最弱発火面 ([`§8.12`](#firing-surface-hierarchy))。
+
+**対策 pattern** (強い順):
+- **同 turn encoding (= 判断規律、 機械化不能な芯)**: 義務を認識した瞬間に tracked object 化する。 「認識して prose に書いた」 は encoding ではない。 後回しにする場合こそ、 先に最低限の tracked entry (= 締切 + 出典) を立ててから後回しする。
+- **obligation-signal surfacing (= 機械層、 proxy-subset)**: institutional sender × 義務 keyword (= 「〆」「期限」「要提出」「受講依頼」「リマインド」 等) の組合せで broadcast も surface する層を、 per-person 検出と**独立に**持つ。 これ自体 keyword whitelist (= [`§8.8`](#proxy-blind-spot) の list-based audit) なので盲点を明示し、 「broadcast は全部 catch できている」 と読ませない。
+- **リマインド反復を escalation 信号に**: 同 subject の (再) リマインド ≥2 通は「未 discharge 義務」 の高信号 — 個別 mail か broadcast かに関わらず surface を上げる。 institution がリマインドを重ねる行為自体が「あなたの網から漏れている」 という外部観測になっている。
+
+reflex: mail surfacing / triage 系の検出を設計・評価する時、 「個人義務が broadcast で届く経路」 を test case に含める (= per-person proxy の盲点を設計時に名指しする)。 逆に broadcast mail を noise として suppress する filter を書く時は「この経路で個人拘束の義務も届くか?」 を問う (= 会議招集・受講依頼・投票依頼は ML/BCC で届くのが典型)。
+
+origin: 2026-07、 年次の institutional 義務 (= 受講報告 + 書類提出、 学内締切付き) が BCC 一斉配信 (宛名「各位」) で初回 + リマインド 2 通の計 3 通届いたが、 name-mention surfacing を 3 通とも構造的に貫通。 4 通目 (= 個別名指しの Fwd 催促) で初めて surface し、 その時点で締切を 1.5 ヶ月超過。 しかも初回の 1 週間後に義務自体は認識され session 記録の prose に「今週の事務 N 件」 として書かれていたが、 tracked object 化されず deadline 網から不可視のまま (= 検出層と intake 層の複合failure)。 sibling 観測: 役員 ML の会議招集 3 通が ML bracket noise filter で suppress され会議欠席 (2026-06) / 学内 ML の会議通知が同型 filter で不検出 → filter 緩和 (2026-06)。 3+ 観察からの一般化 ([`§9.8`](#single-observation-scope-check) 充足)。 instance (= 検出器実装・sender 具体値) は個人層に残置 (= kernel-up / instance-down)。
+
 ---
 
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
@@ -1452,3 +1469,4 @@ gate: index の legacy 集合が HEAD (= 直前 commit) に対して **append-on
 | 2026-06-25 | §2.5 成熟度 lens「派生データ」row に (A) field-level view を併記 | 旧記載は (B) whole-file 生成のみで、手編集 file 内の単一導出可能 field (例: slug の純関数たる公開 path) を「書かず read 時に導出」 する design-out が表に無かった。2026-06-25「派生可能な値は格納しない」 一般化 handoff の cold-eyes verdict (= build all-no、規則は §2.5 に既存) が flagged した micro-edit を owner 採用。1 cell の clarification。 |
 | 2026-06-29 | §8.16 新設「不在主張の channel scope — single-channel null は universal absence の証明ではない」 | layer-3 で institutional 締切超過の指摘に対し person-to-person mail sweep の null から「事前告知無し」 と universalize → 実は internal broadcast (= 学内 portal 掲示板) に 4 ヶ月前から告知あり、 を 2 段繰り返した RCA を一般化 (= 1 段目: mail sweep null → universal absence / 2 段目: 締切時刻を verify せず時間軸で「十分早い」 argue)。 §8.11 (intake leverage) の channel-category 軸 dual = downstream sweep がいくら丁寧でも intake で channel を取りこぼすと universal absence は嘘になる。 §8.14 (identity 軸 corroboration) との対 = channel 軸 coverage。 reflex = sweep scope template 「Verified = ___ / NOT verified = ___」 を埋める、 機械化されていない broadcast は honest framing で保留。 共著メール送信前の共著者 draft 確認 (= sender-side responsibility) を research-email.md に sibling section として併設、 receiver-side responsibility (= pre-outreach-identity-check) の対辺補完 (§9.8 充足)。 user 依頼。 |
 | 2026-06-30 | §17 新設「階層内の同名 entity 併存 — SoT 表現で context path を明示」 | 大学組織で「学部内 X 専攻」 と「大学院 Y 専攻」 が同 word「専攻」 で並存する fact を 3 回の user 訂正連鎖を経て理解した RCA を一般化。 §2 (= 重複避け) §15 (= 多重記述 consolidation) と直交 (= 重複でなく collision、 各 reference は legitimate に別 entity を指す literal、 重複検出器の射程外)。 1 階層 frame 暗黙仮定 → 別階層誤訂正 → 二度ハマる cycle の prevention に SoT 表現の path 明示 + 階層併存 warning + errata history + context-tagged pointer を要求。 §4 (orient before act) trap (1) の上流、 §2.4 (errata marker) の collision domain 適用。 instance は layer-3 (= 個別 user profile) に sequester (= kernel-up / instance-down)。 user 依頼。 |
+| 2026-07-03 | §8.17 新設「broadcast で届く個人義務 — per-person addressing proxy の構造的 false negative」 | layer-3 で年次 institutional 義務 (= 受講報告 + 書類提出、 学内締切付き) の BCC 一斉配信 3 通 (宛名「各位」) が name-mention surfacing を全通貫通し、 個別名指しの 4 通目催促で発覚 = 締切 1.5 ヶ月超過の RCA を一般化。 検出層 (= per-person proxy の盲点、 §8.8 の broadcast 形) + intake 層 (= 認識済み義務の prose 記載 ≠ encoding、 §8.11/§8.12) の複合 failure と特定。 対策 = 同 turn encoding (= 判断規律の芯) + obligation-signal surfacing (= proxy-subset と明示) + リマインド反復の escalation 信号化。 sibling 2 件 (= 役員 ML 会議招集 suppress / 学内 ML 会議通知不検出) と合わせ 3+ 観察 (§9.8 充足)。 §8.16 (= 不在主張の channel 軸) の義務検出 direction 対。 user 依頼。 |
