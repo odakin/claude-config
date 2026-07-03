@@ -79,8 +79,8 @@ launchd / cron の定期ジョブは **登録したマシンでだけ走る**。
 
 マシン A からマシン B の launchd server / auth 状態は直接 query できない ([multi-account-machine-surface.md #honest-limits](multi-account-machine-surface.md#honest-limits))。 この不可視を **各マシンの自己報告を git 経由で集約**する pattern で bounded staleness の fleet view に変える:
 
-- **writer** = [`scripts/fleet-heartbeat.py`](../scripts/fleet-heartbeat.py) (generic engine): 毎時の launchd cron が自マシンの remote-control server 群 (launchd loaded + **server ログ末尾の marker parse** = "Connected" / auth error / version error) + config-dir auth metadata + 設定を `<repo>/<subdir>/<hostname>.json` にまとめて commit + push
-- **reader** = [`scripts/check-fleet-status.py`](../scripts/check-fleet-status.py): 全マシン分を読み、 role 別に異常を surface (always-on マシンの heartbeat 停止 = 🔴 / best-effort マシンのスリープ = 仕様で silent / どのマシンも beat が新鮮な時の server 異常 = 🔴)
+- **writer** = [`scripts/fleet-heartbeat.py`](../scripts/fleet-heartbeat.py) (generic engine): 毎時の launchd cron が自マシンの remote-control server 群 (launchd loaded + **server ログ末尾の marker parse** = "Connected" / auth error / version error) + config-dir auth metadata + **desktop app 全 account registry の enabled scheduled task id** (= account 切替による旧 task 復活の監視、 2026-07-04 追加) + 設定を `<repo>/<subdir>/<hostname>.json` にまとめて commit + push
+- **reader** = [`scripts/check-fleet-status.py`](../scripts/check-fleet-status.py): 全マシン分を読み、 role 別に異常を surface (always-on マシンの heartbeat 停止 = 🔴 / best-effort マシンのスリープ = 仕様で silent / どのマシンも beat が新鮮な時の server 異常 = 🔴 / `--warn-desktop-tasks` 指定時は enabled な desktop scheduled task = 🔴 〔= launchd-only 方針マシン向け opt-in、 [multi-account-machine-surface.md](multi-account-machine-surface.md) I8〕)
 
 設計原則 (詳細 = 各 script docstring が SoT):
 

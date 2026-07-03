@@ -160,7 +160,33 @@ def collect(rc_prefix, cron_prefix):
         rc, out = sh([str(old), "--version"], timeout=10)
         m = re.search(r"\d+(?:\.\d+)+", out)
         data["old_usr_local_cli"] = m.group(0) if m else "unparseable"
+    # desktop app の scheduled task registry 監視 (= account × app-install scoped な registry が
+    # アカウント切替で enabled task を黙って復活させ、 launchd 移行済ジョブと二重実行する事故の
+    # 機械検出。 2026-07-04 実測: swap 2 日後まで silent だった)。 registry ごとに enabled id を列挙。
+    data["desktop_scheduled_tasks"] = scan_desktop_tasks(home)
     return data
+
+
+def scan_desktop_tasks(home: Path):
+    """全 account registry の scheduled-tasks.json から enabled task id を収集 (fail-open)。"""
+    out = []
+    try:
+        base = home / "Library/Application Support/Claude/claude-code-sessions"
+        for f in sorted(base.glob("*/*/scheduled-tasks.json")):
+            try:
+                d = json.load(open(f))
+                ids = sorted(
+                    t.get("id") or t.get("taskId") or "?"
+                    for t in d.get("scheduledTasks", [])
+                    if t.get("enabled")
+                )
+                # registry の識別は account uuid の先頭 8 桁 (= PII でない、 突合には十分)
+                out.append({"registry": f.parent.parent.name[:8], "enabled_ids": ids})
+            except Exception:
+                out.append({"registry": f.parent.parent.name[:8], "enabled_ids": None})
+    except Exception:
+        pass
+    return out
 
 
 def essence(d: dict):
@@ -172,6 +198,8 @@ def essence(d: dict):
             "rcs": d.get("remote_control_at_startup"),
             "old_cli": d.get("old_usr_local_cli"),
             "cron_jobs": d.get("cron_jobs"),
+            # enabled task の変化 (= 復活) は即 commit させる (= state-change-or-age policy に乗せる)
+            "desktop_tasks": d.get("desktop_scheduled_tasks"),
         },
         sort_keys=True,
     )

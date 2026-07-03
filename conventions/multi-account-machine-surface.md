@@ -30,7 +30,7 @@
 
 ## <a id="seamless-invariants"></a>Seamless の invariant (= 8 セル + セル間移動が全部生きている条件)
 
-以下 7 つが**全マシンで**成立していれば、 8 セルのどこからでも仕事が始められ・続けられる。 各 invariant は機械 check 可能にする (= 固定表に書いた「はず」 ではなく live 状態から検証する。 固定表は現実と drift する):
+以下 9 つが**全マシンで**成立していれば、 8 セルのどこからでも仕事が始められ・続けられる。 各 invariant は機械 check 可能にする (= 固定表に書いた「はず」 ではなく live 状態から検証する。 固定表は現実と drift する):
 
 | # | invariant | 破れの症状 | 検出 / 修復 |
 |---|---|---|---|
@@ -41,6 +41,8 @@
 | I5 | 無人ルーチンは active-host 台帳に bind + drift 検出 | 「切替えたつもり」 のアカウントとルーチンが実際に消費するアカウントの乖離 | [multi-machine-state.md #account-host-failover](multi-machine-state.md#account-host-failover) の台帳 + drift 検出 |
 | I6 | pinned config dir は **headless-ready** (= workspace trust + RC 初回同意の flag が seed 済。 install script が install 時に自動 seed するので通常は自動成立、 残る interactive 段は OAuth 1 回のみ) | OAuth 済なのに server が dialog 待ちで exit-1 永久 cycling (= loaded だが process 無し) → そのマシン × アカウントの mobile セルが **silent 消失** | fleet-heartbeat の log marker (`trust_error` / `consent_pending`) を reader が 🔴/🟠 surface。 heal = install script 再実行 ([remote-control-server.md #ts-workspace-trust](remote-control-server.md#ts-workspace-trust)) |
 | I7 | session は**自分の worker host を会話ログに自己申告**する (= SessionStart hook が hostname / config-dir label / session-id を注入し、 最初の返信の冒頭に 1 行 stamp。 stamp は会話ログに残るので **bridge が死んだ後も scroll-back で読める**。 タイトルには頼れない — RC の auto-name は hostname prefix 既定だが AI 自動タイトルが上書きすると消える 〔2026-07-02 実測〕) | bridged session が切断した時 (= [remote-control-server.md #ts-desktop-bridge-4090](remote-control-server.md#ts-desktop-bridge-4090)) 「どのマシンに行けば復旧できるか」 が UI から分からず、 host 特定が transcript / reflog の forensics になる (2026-07-02 実測 ~30 分) | 注入 hook は personal layer に配線。 ⚠️ desktop app は注入を drop ([hook-authoring.md #frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork)) ゆえ CLI / RC session のみ有効 — 残余セルは復帰後に on-demand で `hostname` を 1 回打たせる ground truth で補完 |
+| I8 | **無人ジョブは launchd + CLI 認証 only** — desktop app の scheduled task に置かない (= registry が account × app-install scoped で、 アカウント切替が旧 registry の enabled task を**黙って復活**させ、 移行済ジョブと二重実行 + session 一覧 noise になる。 2026-07-04 実測: swap から発覚まで 2 日 silent) | account swap 後に旧 scheduled task が並走 (= 同一ジョブの heartbeat 二重打刻 / recents に routine session が数十件積み上がる) | fleet-heartbeat が全 account registry の enabled task id を毎時収集、 reader が `--warn-desktop-tasks` で 🔴 surface ([multi-machine-state.md #fleet-heartbeat](multi-machine-state.md#fleet-heartbeat))。 解除 = 該当マシンの desktop app で enabled:false 化 ([scheduled-tasks.md #registrable-session-types](scheduled-tasks.md#registrable-session-types)) |
+| I9 | RC server / spawn session の名前に **host と account の両方**を焼く (= installer が `--name` + `--remote-control-session-name-prefix` に `<host>-<alias>` を設定) | スマホの環境 picker に同 host の server が hostname だけで並び、 **どちらの account か見分けられない** → 意図しない account の session に入って「tool が無い」 で気づく (2026-07-04 実測) | install script が label-suffix から自動命名 (capability-gated、 [remote-control-server.md #multi-account-servers](remote-control-server.md#multi-account-servers)) |
 
 ## <a id="failure-modes"></a>典型的な破れかたと検出
 

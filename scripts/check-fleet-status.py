@@ -48,7 +48,7 @@ BAD = {
 }
 
 
-def scan(dir_, roles, stale_hours, now=None, expect_accounts=None):
+def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_tasks=False):
     now = now or time.time()
     expect_accounts = expect_accounts or []
     findings = []
@@ -89,6 +89,19 @@ def scan(dir_, roles, stale_hours, now=None, expect_accounts=None):
                     f"🟠 {host}: {acct} の per-account server 無し = このマシンの {acct} mobile セル未開通 "
                     f"(1 回の OAuth + suffix server install で永続開通)"
                 )
+        # desktop scheduled task の復活検出 (= opt-in。 「無人ジョブは launchd only」 方針の
+        # マシンで、 account 切替が旧 registry の enabled task を黙って復活させ launchd 移行済
+        # ジョブと二重実行する事故を surface。 2026-07-04 実測: swap から発覚まで 2 日 silent)
+        if warn_desktop_tasks:
+            for reg in d.get("desktop_scheduled_tasks", []) or []:
+                ids = reg.get("enabled_ids")
+                if ids:
+                    findings.append(
+                        f"🔴 {host}: desktop scheduled task {len(ids)} 件 enabled "
+                        f"(registry {reg.get('registry')}: {', '.join(ids)}) — "
+                        f"launchd 移行方針下では account-swap 復活の疑い = 二重実行 + session 一覧 noise。 "
+                        f"該当マシンの desktop app で enabled:false 化 (scheduled-tasks.md#registrable-session-types)"
+                    )
     for host, role in roles.items():
         if role == "always-on" and host not in seen:
             findings.append(f"ℹ️ {host} (always-on): heartbeat 未開始 (= そのマシンで fleet-heartbeat の install 待ち)")
@@ -150,7 +163,25 @@ def selftest():
         f = scan(d, {}, 6, now)
         assert any("process 無し" in x for x in f), f
         ok += 1
-    print(f"selftest: {ok}/8 PASS")
+        # 7: desktop scheduled task enabled → flag ON なら 🔴、 OFF なら silent、 空 [] は常に silent
+        beat = {"host": "lap", "epoch": now - 600,
+                "servers": [{"label": "x", "pid": "1", "last_status": "connected"}],
+                "desktop_scheduled_tasks": [
+                    {"registry": "deadbeef", "enabled_ids": ["old-task-a", "old-task-b"]},
+                    {"registry": "cafebabe", "enabled_ids": []}]}
+        (d / "lap.json").write_text(json.dumps(beat))
+        f = scan(d, {}, 6, now, warn_desktop_tasks=True)
+        assert any("desktop scheduled task 2 件" in x and "old-task-a" in x and "🔴" in x for x in f), f
+        assert not any("cafebabe" in x for x in f), f
+        f = scan(d, {}, 6, now)
+        assert f == [], f
+        ok += 1
+        # 8: field 不在 (旧 heartbeat) は flag ON でも silent
+        write("lap", now - 600, [{"label": "x", "pid": "1", "last_status": "connected"}])
+        f = scan(d, {}, 6, now, warn_desktop_tasks=True)
+        assert f == [], f
+        ok += 1
+    print(f"selftest: {ok}/10 PASS")
 
 
 def main():
@@ -159,6 +190,8 @@ def main():
     ap.add_argument("--role", action="append", default=[])
     ap.add_argument("--stale-hours", type=float, default=6)
     ap.add_argument("--expect-account", action="append", default=[])
+    ap.add_argument("--warn-desktop-tasks", action="store_true",
+                    help="enabled な desktop scheduled task を 🔴 surface (= 無人ジョブ launchd-only 方針のマシン向け opt-in)")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
@@ -175,7 +208,8 @@ def main():
     if not dir_.is_dir():
         sys.exit(0)  # fleet 未開始 = silent (fail-open)
     try:
-        findings = scan(dir_, roles, args.stale_hours, expect_accounts=args.expect_account)
+        findings = scan(dir_, roles, args.stale_hours, expect_accounts=args.expect_account,
+                        warn_desktop_tasks=args.warn_desktop_tasks)
     except Exception:
         sys.exit(0)
     if findings:

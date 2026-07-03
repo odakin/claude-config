@@ -124,6 +124,23 @@ CLAUDE_BIN="$HOME/.local/bin/claude"
 [ -x "$CLAUDE_BIN" ] || CLAUDE_BIN="$(command -v claude || true)"
 [ -n "$CLAUDE_BIN" ] || { echo "[error] claude binary not found (native install expected at ~/.local/bin/claude)" >&2; exit 1; }
 
+# --- account 可視命名 (= multi-account 構成の picker / session 名曖昧性解消) -------------------
+# --label-suffix (= account alias) がある場合、 server の表示名と spawn session 名 prefix に
+# "<host-short>-<alias>" を焼く (例: imac-3-odakin)。 スマホの環境 picker と「最近の項目」 で
+# どの account の server / session か一目で分かる (= 無いと同 host の 2 server が同名で並ぶ)。
+# 古い CLI は flag 未対応の可能性があるため capability-gated (= 未対応なら従来 hostname 既定)。
+RC_NAME_ARGS=""
+if [ -n "$LABEL_SUFFIX" ]; then
+  HOST_SHORT="$(hostname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')"
+  if [ -n "$HOST_SHORT" ]; then
+    RC_HELP="$("$CLAUDE_BIN" remote-control --help 2>/dev/null || true)"
+    printf '%s' "$RC_HELP" | grep -q -- '--name' \
+      && RC_NAME_ARGS=" --name \"$HOST_SHORT-$LABEL_SUFFIX\""
+    printf '%s' "$RC_HELP" | grep -q -- '--remote-control-session-name-prefix' \
+      && RC_NAME_ARGS="$RC_NAME_ARGS --remote-control-session-name-prefix \"$HOST_SHORT-$LABEL_SUFFIX\""
+  fi
+fi
+
 # --- headless-ready seed (= workspace trust + RC 初回同意、 設計 note は冒頭コメント) ---------
 # probe より前に seed する (= virgin dir でも probe が trust を素通りして auth 検査まで届く)。
 # config JSON の場所: CLAUDE_CONFIG_DIR 指定時は $CONFIG_DIR/.claude.json、 既定は ~/.claude.json。
@@ -239,7 +256,7 @@ cat > "$PLIST" <<EOF
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; ${CONFIG_EXPORT}export PATH="$CLAUDE_DIR:\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; cd "$RC_DIR" &amp;&amp; exec claude remote-control</string>
+    <string>unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; ${CONFIG_EXPORT}export PATH="$CLAUDE_DIR:\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; cd "$RC_DIR" &amp;&amp; exec claude remote-control$RC_NAME_ARGS</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
