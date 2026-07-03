@@ -126,7 +126,7 @@ CLAUDE_BIN="$HOME/.local/bin/claude"
 
 # --- account 可視命名 (= multi-account 構成の picker / session 名曖昧性解消) -------------------
 # --label-suffix (= account alias) がある場合、 server の表示名と spawn session 名 prefix に
-# "<host-short>-<alias>" を焼く (例: imac-3-odakin)。 スマホの環境 picker と「最近の項目」 で
+# "<host-short>-<alias>" を焼く (例: myhost-alice)。 スマホの環境 picker と「最近の項目」 で
 # どの account の server / session か一目で分かる (= 無いと同 host の 2 server が同名で並ぶ)。
 # 古い CLI は flag 未対応の可能性があるため capability-gated (= 未対応なら従来 hostname 既定)。
 RC_NAME_ARGS=""
