@@ -67,8 +67,9 @@ CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "$HOME/.local/
 # skill routine の session を保存しない (= 「最近の項目」 を無人 run で汚さない)。 --print 専用 flag。
 # 古い CLI は未対応の可能性があるため install/run 時に capability check し、 対応時のみ付与
 # (= 未対応 CLI では従来挙動に degrade、 routine を殺さない)。
+CLAUDE_HELP="$("$CLAUDE_BIN" --help 2>/dev/null || true)"
 NOPERSIST_FLAG=""
-"$CLAUDE_BIN" --help 2>/dev/null | grep -q -- --no-session-persistence && NOPERSIST_FLAG="--no-session-persistence"
+printf '%s' "$CLAUDE_HELP" | grep -q -- --no-session-persistence && NOPERSIST_FLAG="--no-session-persistence"
 
 # さらに Remote Control の startup 自動有効化 (= settings の remoteControlAtStartup: true) を
 # cron run では per-invocation で無効化する。 有効のままだと無人 run が hostname-prefix の
@@ -76,7 +77,7 @@ NOPERSIST_FLAG=""
 # session が終了せず積み上がる事例あり (機構差の SoT = scheduled-tasks.md#headless-session-persistence)。
 # 対話 session の I3 (= 手元 session のリモート続行) には影響しない (= cron invocation のみ override)。
 RCOFF=""
-"$CLAUDE_BIN" --help 2>/dev/null | grep -q -- --settings && RCOFF=1
+printf '%s' "$CLAUDE_HELP" | grep -q -- --settings && RCOFF=1
 
 LABEL_PREFIX=""
 WORKDIR='$HOME'           # 既定: literal。 plist の `cd "..."` 内で launchd runtime に展開される
