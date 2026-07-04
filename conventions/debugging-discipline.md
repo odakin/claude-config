@@ -455,6 +455,18 @@ reflex: 「この mechanism、 ここで効いてる?」 / 「この症状の原
 
 origin: 2026-06-13 desktop-hook-gap 調査。 当初 SessionStart hook の死活を cache mtime で推定 → 交絡 (cache は別 writer + CLI 認証 credit 切れ + Terminal の EventKit TCC で書かれない) で不確定。 依存ゼロの trace (file append) に切替えて発火を確定、 親プロセス path で frontend を判別 (env var は汚染懸念)、 さらに「desktop は hook を実行するが出力を honor しない」 = 実行 ≠ honor を分離して初めて正確な像を得た。 起票 session は cache mtime 1 点 + env var で「SessionStart 死亡」 と推定し一部誤帰責していた (= §9.1 snapshot 交絡で PreToolUse 非発火も実は未分離だった)。
 
+## <a id="execution-path-attribution"></a>14. 実行経路の帰属診断は「内容指紋」 で確定 + A/B の negative arm は前提を検証
+
+同じジョブ / 同種の artifact を **複数の実行経路**が生み得る状況 (= 機構移行の旧登録残置 [`scheduled-tasks.md` mechanism-migration-kill-all-registrations](scheduled-tasks.md#mechanism-migration-kill-all-registrations)、 多重配備、 similar な自動化の並走) で、 観測された run / session / 成果物が**どの経路か**を診断する作法。 §13 は「発火したか」、 本節は「発火したのは**誰**か」。
+
+1. **命名 pattern・タイミング・もっともらしい機構仮説で帰属を断定しない。 経路ごとに必然的に異なる「内容指紋」 で確定する** — 実例 (2026-07-04): 正体不明の定期 session 群の帰属を、 命名から 2 回・設定値から 1 回、 **3 連続で誤帰属** (別 task 群 → headless cron session → RC 自動登録) し、 各仮説に対策を built した後、 session の**登録 prompt 本文** (= engine 生成の ASCII 英文 vs 手書き日本語 + 自己無効化手順つき) が一発で真因 (= 旧 desktop task の復活) を確定した。 経路が違えば必然的に違う内容 (= prompt 文面 / 生成物の format / 署名的な引数) が最強の discriminator。
+2. **A/B 比較の negative arm (= 「こちらでは起きない」) は、 その経路がそこで実際に走っていることを先に確認しないと無効** — 実例 (同日): standby マシン (= failover gate が cron を defer = **一度も走っていない**) で「session が一覧に出ない」 を観測し、 「headless は出ない」 と layer 1 doc に焼いて同日 errata。 negative arm の前提 (= 走っている) を 1 コマンド (`launchctl print` / log / gate 状態) で確認してから比較する。
+3. **判定 check 自体の環境を容疑者に含める** — check の負結果が domain の負 (= 「未 login」 「不在」) でなく、 **check 自身の実行失敗**であり得る。 実例 (同日): PATH に tool が無い shell で bare コマンドの auth check が silent fail し、 login 済 account を「未 login」 と偽判定 → install 拒否。 negative を報告する前に check の脚 (binary 解決・実 exit code・stderr) を 1 回 expose する (= §9 の null-result 飛躍と同 family、 こちらは「check の infrastructure 故障」 variant)。
+
+reflex: 「この run はどの経路?」 には (a) 内容指紋を 1 つ挙げたか、 「こっちでは起きない」 には (b) その経路がそこで走っている証拠を見たか、 「check が negative」 には (c) check 自身の脚を疑ったか。
+
+origin: 2026-07-04 「最近の項目に routine session が数十件」 調査。 3 誤帰属それぞれに実装を積んでから (= どれも無害・一部は独立に有益だったが真因には無効)、 prompt 本文の指紋で 5 手目に確定した。 negative-arm 無効観測は同調査で 2 回 (採用しかけ 1 + doc 焼き errata 1)。
+
 ## 関連
 
 - [`CONVENTIONS.md §3`](../CONVENTIONS.md) — 4 軸 sweep の base 規約

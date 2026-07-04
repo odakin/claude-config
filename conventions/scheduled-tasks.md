@@ -50,7 +50,7 @@ install-launchd-cron.sh --label-prefix PREFIX [--workdir DIR] \
 
 | 機構 | session 痕跡 (2026-07 実測) |
 |---|---|
-| **Claude Code desktop app の scheduled task** | 1 run ごとに desktop session が作られ「最近の項目」 に積まれる。 **抑止 option なし** (= task 側に session を隠す設定が存在しない)。 掃除は `archive_session` (1 件ずつ承認) か手動。 ⚠️ 2026-07-04 実測: `remoteControlAtStartup: true` のマシンでは task run session が `<hostname>-<codename>` の RC 風名称で**他端末の recents にも**現れ、 終了せず live のまま数十件積み上がった。 ⚠️ **registry は account × app-install scoped**: 同一マシンでアカウントを切り替えると旧 account registry の enabled task が**黙って復活**し、 launchd へ移行済のジョブと**二重実行**になる (2026-07-04 実測: swap 2 日後に発覚、 同一ジョブの heartbeat 二重打刻で実証)。 復活地雷の解除 = 移行済 task を delete か enabled:false 化 (disabled は swap を跨いで保持される) |
+| **Claude Code desktop app の scheduled task** | 1 run ごとに desktop session が作られ「最近の項目」 に積まれる。 **抑止 option なし** (= task 側に session を隠す設定が存在しない)。 掃除は `archive_session` (1 件ずつ承認) か手動。 ⚠️ 2026-07-04 実測: `remoteControlAtStartup: true` のマシンでは task run session が `<hostname>-<codename>` の RC 風名称で**他端末の recents にも**現れ、 終了せず live のまま数十件積み上がった。 ⚠️ **registry は account × app-install scoped**: 同一マシンでアカウントを切り替えると旧 account registry の enabled task が**黙って復活**し、 launchd へ移行済のジョブと**二重実行**になる (2026-07-04 実測: swap 2 日後に発覚、 同一ジョブの heartbeat 二重打刻で実証)。 復活地雷の解除 = 移行済 task を delete か enabled:false 化 (disabled は swap を跨いで保持される)。 移行手順の一般則 = [#mechanism-migration-kill-all-registrations](#mechanism-migration-kill-all-registrations) |
 | **launchd cron + `claude -p`** (既定) | transcript は local `~/.claude/projects/<dir>/<session-id>.jsonl` に保存される。 **recents に出た確証事例は無し**: 同日 A/B で remoteControlAtStartup: true のマシンの plain `-p` 単発 (CLI 2.1.198) は recents に出なかった。 ⚠️ errata ×2 (2026-07-04、 同日中の 2 段階訂正): 初版「recents に出ない実測」 は standby マシン (= gate defer で cron 未実行) での観測 = **無効** / 第 2 版「30 分 cron run が RC session として recents に出現」 は **誤帰属** = 出ていた session は同一ジョブが二重登録されていた **desktop scheduled task 側の run** と後に確定 (= 左行の話。 prompt 文面が registry 登録版と一致したことで判別)。 headless への remoteControlAtStartup 波及は docs が interactive のみ言及で理論上排除しきれないため、 engine は念のため RC override を付与する (= 下記) |
 | **launchd cron + `claude -p --no-session-persistence` + RC override** (= 下記、 engine 既定) | **session が disk にも session 一覧にも一切残らない** (実測: .jsonl 生成ゼロ + `list_sessions` 不出現)。 `--no-session-persistence` 単独で RC 登録まで抑止するかは未検証のため、 RC override と併用する (= belt-and-braces) |
 
@@ -60,6 +60,19 @@ install-launchd-cron.sh --label-prefix PREFIX [--workdir DIR] \
 - 旧 CLI 世代の代替: `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` (= 全 transcript 書込み抑止、 対話含め全 run に効くので過剰) / `cleanupPeriodDays` (= 起動時の古い session 掃除、 即時性なし)。 `--no-save` / `--incognito` / session-sync 無効化 env は**存在しない** (2026-07 時点 docs + issue 調査)。
 - **PushNotification は headless `claude -p` でも動く** (実測: wire 健全)。 ⚠️ user がキーボード操作中 (直近 ~60s) は「Not sent (user active)」 で suppress される **documented 挙動 = エラーでない**。 無人 routine の SKILL には「Not sent は正常、 リトライしない」 と書いておく (= 無人時間帯なら届く)。
 - **機構選択への含意**: 毎日/高頻度の無人 routine を desktop scheduled task で回すと「最近の項目」 noise が構造的に発生する。 launchd cron + `claude -p` + 上記 2 flag なら zero-trace (= [#account-switch-independent](#account-switch-independent) のアカウント非依存に加えた第 2 の移行動機)。
+
+### <a id="mechanism-migration-kill-all-registrations"></a>機構を移行するとき — 旧登録の「全 context 点呼」
+
+定期ジョブを機構 A → B へ移行する作業は「B を install して、 目の前の A を 1 つ止めた」 では終わらない。 **登録は context ごとの独立 state** である (= desktop scheduled task は account × マシン × app-install ごとの registry / launchd は マシンごとの plist / cloud routine は account の trigger registry) — そして **dormant な旧登録は context switch で黙って復活する**。 2026-07-04 実測: 移行 6 日後の account swap が旧 registry の enabled 版 6 job を復活させ、 新機構 (launchd) と **2 日間二重実行** (検出は user の目視、 監視は当時なし)。
+
+移行 checklist:
+
+1. **そのジョブが過去に登録されたことのある全 context を列挙する** — 記憶や「今見えている一覧」 でなく、 各 context の registry file / `--status` / trigger list を**実際に読む** (= 今見えている registry は現在の account/マシンの 1 context に過ぎない)。
+2. 各 context で旧登録を **delete か enabled:false 化** (= disabled 状態は context switch を跨いで保持されるので、 地雷解除として delete と同等に有効)。
+3. 移行台帳 (= re-register 防止の MIGRATED set 等) を**同 commit で**更新する (実測: 台帳への登録漏れ 1 件が、 復活発生時の「これは移行済か?」 判断を鈍らせた)。
+4. **二重実行の検出線を数日観察する** — 最強のシグナルは同一ジョブの成果物の二重化 (= heartbeat の二重打刻・同一 commit の連打等)。 可能なら常設監視に昇格 (例: fleet-heartbeat が全 registry の enabled task id を収集 → reader が surface、 [multi-machine-state.md #fleet-heartbeat](multi-machine-state.md#fleet-heartbeat))。
+
+二重実行を見つけた後の「この run はどちらの経路か」 の帰属診断は [debugging-discipline.md #execution-path-attribution](debugging-discipline.md#execution-path-attribution) (= 命名・タイミングでなく内容指紋で確定する)。
 
 ## アーキテクチャ: SKILL.md とバックエンドの二重構造
 
