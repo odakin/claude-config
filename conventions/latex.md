@@ -93,6 +93,31 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 >
 > ⚠️ markup unwrap が必要な理由: `\DIFadd{\cl{長文}}` のように **group を丸ごと下線 markup に包むと ulem が改行不能 box 化してページ外に溢れる** (= 描画はされるが 1 行で切れる)。 review 注釈系コマンドは diff 前に unwrap するのが根治 (= diff 内で draft 色は冗長でもある)。 両版に同一適用すれば未変更 markup が spurious diff にならない。
 
+## <a id="text-structure-hierarchy"></a>文章の構造化と見出し階層 (`\paragraph` は `\subsubsection` より下)
+
+**ルール (3 段):**
+
+1. **文章はなるべく構造化する** — 論文・研究ノート・technical doc の本文を長い prose ブロックで流さず、意味のまとまりごとに見出し (`\section` / `\subsection` / `\subsubsection`) で区切る。読者 (共著者・レビュアー・後の自分) が目次と body の対応で navigate できることを既定にする。
+2. **意味のまとまりで段落を分ける** — 1 段落 = 1 主張 (topic sentence 1 本を発展させる本文数文)。話題転換・新しい観点への移行では段落を切る。1 節を単一の巨大段落で書かない。
+3. **`\paragraph` は `\subsubsection` より下の階層** — LaTeX 見出し階層は `\section` > `\subsection` > `\subsubsection` > `\paragraph` > `\subparagraph`。`\paragraph` は **run-in inline header** (見出し行が本文冒頭と同一行に流れる形式) なので、番号付き block heading の代替として top-level に並べない。`\subsubsection` を先に使い、その下で更に細分化が要る箇所でのみ `\paragraph` を置く。
+
+**Why:**
+
+- `\paragraph` は本来 4 段目 (`\section`/`\subsection`/`\subsubsection` の下) の inline header。トップに並べると (a) 目次に出ない (デフォルト `tocdepth`)、(b) 番号が振られない、(c) 直後に `\colorbox`/`\begin{itemize}` 等の block 要素を置くと **paragraph の continuation** として解釈され layout が壊れる (右にはみ出す・page break が変になる、 [PDF 視覚検証 typical trap](#pdf-visual-verification) の 1 行目参照)。読者にも「これは節見出しなのか単なる段落強調なのか」判別が付かない。
+- run-on paragraph (段落が延々と続く) は topic sentence が拾えず読解負荷が上がる。共著レビュー・rebuttal でも「どこを直せば直るか」の議論単位が失われる。
+
+**How to apply:**
+
+- 新規 note・論文の draft を書く段階で「この節は subsection で切るか / subsubsection で切るか / paragraph で inline header にするか」を hierarchy を意識して決める。「とりあえず `\paragraph{...}` で見出しっぽく書く」を default にしない。
+- 既存 note で run-in `\paragraph` を top-level 見出しとして使ってしまっている場合の移行 heuristic (= 既存 §番号を動かさないための現場判断):
+  - **既に `\subsection` を持つ note** → `\paragraph` を `\subsubsection` に昇格 (既存 §N.M 番号不変)
+  - **`\subsection` を持たない小物 note (section 直下に paragraph)** → `\paragraph` を `\subsection` に昇格 (subsubsection にすると `X.0.N` 型に壊れるため)
+  - 大物 note (≥15pp) には TOC (`\tableofcontents` + 適宜 `tocdepth=2`) を付け、目次から navigate できるようにする
+- 意味段落の切り方: (a) topic sentence が変わる、(b) 主語 / 論点が移る、(c) 例示 → 一般化 の遷移、(d) 逆接 (「しかし」「一方」) の直前 — いずれかで段落を切る候補。1 段落が 15 行を超えたら 2 段落以上に割れないかを疑う。
+- edit 判断のとき **段落の重さは source 行数でなく rendered 分量で見る** (= 下の「§長さ・段落構造の判断にコメントアウト行を数えない」の kernel を継承)。
+
+**事例 (2026-07-04 einstein-cartan LIVE note family 統一)**: `induced-action` / `induced-action-per-term` / `verified-results` / `docs/ec_one_loop_notes` / `convention-conversion` / `handcheck-final` + 小物 8 note で run-in `\paragraph` を top-level heading として使っていた計 ~150 本を、既存 §番号を保ったまま `\subsubsection` (subsection ありの大物) または `\subsection` (subsection なしの小物) に一斉昇格 (Chip H/I/J/K/L)。詳細 = `einstein-cartan/CLAUDE.md §「見出しの論文型規律 (2026-07-04 確立)」`。
+
 ## 長さ・段落構造の判断にコメントアウト行を数えない
 
 **ルール:** 段落の切れ目・節の分割・restructure 等、 「文書の長さ / 段落の重さ」 を根拠にした編集判断は **rendered 出力 (= PDF に出る内容) だけで見積もる**。 `%` でコメントアウトされた行・ブロック (= 旧 draft・代替表現・comment-out keep で残した旧文) は source 行数を膨らませるだけで読者には出ないので、 長さの勘定に入れない。
