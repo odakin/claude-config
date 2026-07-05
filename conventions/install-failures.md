@@ -73,6 +73,36 @@ type: reference
 2. 代替手段を検討 (Python lib / version manager / Releases binary 等)
 3. `reference_install_failures.md` の「install 不可」 セクションに新 entry を追加 (= 試行日 + コマンド + 原因 + 代替)
 
+## <a id="prebuilt-binary-fallback"></a>source build 陥落時の定番脱出路: GitHub Releases の prebuilt binary 直置き
+
+`brew install foo` が依存 chain (openssl@3 等) の source build に陥落して数十分コースになったら (= 兆候: `==> Cloning`、 または `ps` に `build.rb` / コンパイラ process が見える)、 完走を待たずにこの fallback を検討する:
+
+1. **upstream の GitHub Releases に prebuilt binary があるか確認** — Go / Rust 製 CLI はほぼ確実にある (git-lfs / gh / ripgrep / fd / jq 等)。 C 依存が深いもの (poppler 等) は無いことが多い
+2. `uname -m` で arch を特定 (`x86_64` → release 名は多くの場合 `amd64` / `arm64` はそのまま) → 該当 zip / tar.gz を curl で取得
+3. `~/bin` 等 **user 書込可能な場所**に実体を置き、 PATH 上のディレクトリへ symlink (macOS + Homebrew なら `/usr/local/bin` ないし `/opt/homebrew/bin` が admin group 書込可能なことが多い)
+
+コマンド例 (git-lfs):
+
+```bash
+V=3.5.1; A=amd64   # A は uname -m から (x86_64 → amd64)
+curl -fsSL -o /tmp/git-lfs.zip \
+  "https://github.com/git-lfs/git-lfs/releases/download/v${V}/git-lfs-darwin-${A}-v${V}.zip"
+cd /tmp && unzip -o -q git-lfs.zip
+mkdir -p ~/bin && cp "/tmp/git-lfs-${V}/git-lfs" ~/bin/ && chmod +x ~/bin/git-lfs
+ln -sf ~/bin/git-lfs /usr/local/bin/git-lfs
+```
+
+運用ノート:
+
+- ⚠️ **install に走る前に、 binary が既にどこかに置かれていないか探す**: `ls ~/.local/bin/<foo> ~/bin/<foo> 2>/dev/null` + layer 4 memory / 個人層 doc を package 名で grep。 「`which foo` が not found」 は「**現在の PATH で**見えない」 であって「マシンに無い」 の証明ではない (= 過去 session が既に直置きしていて PATH 問題だけ、 というケースが実在する。 下の non-interactive PATH trap 参照)
+- ⚠️ **配置先は non-interactive shell の PATH に載る場所にする** — `~/.local/bin` 等 **`.zshrc` (= interactive 専用) でしか PATH に足されないディレクトリに置くと、 Claude の Bash tool / launchd / cron からは不可視**で「未 install」 と誤診され、 後日同じ install が再試行される (= 直置き repair が数ヶ月後に silent 再発する構造)。 `/usr/local/bin` (Intel) / `/opt/homebrew/bin` (Apple Silicon) への symlink が確実 (= `.zshenv` レベルで PATH に載る)。 配置後、 **実際に使う非 interactive shell で `which foo` を verify** — interactive shell でだけ通っても意味がない
+- 走行中の brew source build は kill してよい (`pkill -9 -f "Formula/.*/<formula>.rb"`)。 依存 chain (llvm 等) の中間ファイルが `/private/tmp/<dep>-YYYYMMDD-*` に **数 GB** 残るので `du -sh` で確認して削除する
+- この経路を採った fact (= package / version / 実体の場所 / symlink 先) は layer 4 の「install 不可」 entry の**代替手段**欄に記録する (= 次 session が brew 再試行せず binary 経路を直行できる)
+
+### 付随 gotcha: git-lfs 不在は LFS repo の全 push を block する
+
+Git LFS 設定済み repo では `.git/hooks/pre-push` (LFS 導入時に自動配置) が binary 不在を検出すると **exit 2 で push 全体を block する** — **今回の diff に LFS 管理 file が 1 つも無くても** fail する (= hook は content を見る前に `command -v git-lfs` で門前払い)。 一方 commit 側は post-commit hook が warn を出すだけで**通る**。 症状 signature = 「commit は成功したのに push だけが LFS hook message で fail」。 自分の変更内容を疑う前に **env (binary 有無) を疑う**。 対処 = 上記 prebuilt binary 直置き (LFS content を触らない push なら、 install 後そのまま `git push` が通る)。
+
 ## Machine-specific install state vs cross-machine 規律の分担
 
 layer 1 (本ファイル) | 全 Claude Code ユーザーが従う **規律 / format / 配置場所**
