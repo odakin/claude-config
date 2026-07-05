@@ -47,7 +47,7 @@ claude-config/
 │   ├── scientific-computing.md # 数値解析 gotchas (scale-dependent default 等、科学計算リポ共通)
 │   ├── multi-account-machine-surface.md # アカウント × マシン × 端末 (desktop app / スマホ remote) の 2×2×2 を全部シームレスにする設計原理 (= 3 軸の本質差・切替 mechanics・seamless invariant I1-I6・破れの検出・cross-machine 不可視の正直な限界。 RC server / multi-machine-state / scheduled-tasks の全体像 doc)
 │   ├── multi-machine-state.md # 複数マシンで同じ Claude Code セットアップを使うときの規律 (audit scope 明示・実機検証・idempotent setup.sh)
-│   ├── install-failures.md     # マシン固有の install 不可 package を layer 4 (machine-local memory) に蓄積する規律 (再試行コスト回避、 frontmatter format + machine-local marker + 試行日/コマンド/原因/代替の必須項目)
+│   ├── install-failures.md     # マシン固有の install 不可 package を layer 4 (machine-local memory) に蓄積する規律 (再試行コスト回避、 frontmatter format + machine-local marker + 試行日/コマンド/原因/代替の必須項目) + source build 陥落時の GitHub Releases prebuilt binary 直置き recipe (#prebuilt-binary-fallback = 配置先は non-interactive PATH 必須〔.zshrc 専用 PATH は Claude Bash から不可視で silent 再発〕+ git-lfs 不在は LFS repo の全 push を diff 内容と無関係に block)
 │   ├── debugging-discipline.md # Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)
 │   ├── discord-bot.md      # Discord Bot 運用 (権限ポリシー・private channel 加入・per-channel error non-fatal な fetcher・Token 取扱・組織 NW での API ブロック)
 │   ├── prompt-injection.md # Tool result 内の prompt injection を flag する規律 (適用範囲・同ターン flag・literal 原文併示・確度二段・注入指示は従わない)
