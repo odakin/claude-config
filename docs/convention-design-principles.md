@@ -553,12 +553,13 @@ Claude が memory に書きたがる構造バイアスの正体は多くの場�
 
 §8.2 で「enforcement を mechanism (hook / detector / 検証スクリプト) に移せ」 と述べた。 だが mechanism は **何を見るか** で品質が決まる。 検証したい真の属性ではなく、 その **proxy** を見る検出器は、 **proxy が覆わない範囲を黙って pass する** — proxy の盲点がそのまま検証の盲点になり、 しかも緑の ✓ が「全部 OK」 という false confidence を与えるので、 規約無し (= 何も検証しない) より危険なことがある。
 
-**頻出する 2 種の proxy**:
+**頻出する proxy 型**:
 
 | proxy 型 | 仕組み | 盲点 | 事例 |
 |---|---|---|---|
 | **keyword / registry whitelist** (= list-based audit) | 登録した語/topic だけ flag | **list 外**は全て素通し | `check-sot-drift.py` (登録 anchor token のみ) / `check-i18n-drift.py` (登録 field のみ) / 「記入要領を消したか」 を phrase list で照合 |
 | **継承・上書きされうる surface 属性** | 要素の直接属性だけ読む | 別の場所 (style / 親 / config) で設定された値を見落とす | docx の run **直接色**だけ見る → 段落 style 継承の色を素通し / 変数の local 値だけ見る → 環境/config の override を見落とす |
+| **相関量の quantitative threshold** | 真の属性と相関する量に閾値を置く (密度比 / 端の値 / line count 等) | 属性と proxy の**感度構造が違う領域**を素通し — proxy が「無視できる」 値でも属性は判定を flip する | 統計 pipeline の grid-truncation guard 設計 (2026-07): 「grid 外の確率質量が peak 比 1% 未満なら形状判定は安全」 という閾値案が、 実測で **0.1-0.7% の外側質量が moment 系判定量を判定閾値越えに flip** することを見落とす (= moment は質量 × 距離⁴ で遠距離質量に鋭敏、 閾値をどこに下げても安全にならない)。 第 2 案「grid 端の値が減衰していれば安全」 も端が谷に落ちる幾何で不検出を実測。 → **属性そのもの** = 補正条件下で判定を再計算して diff する直接比較に転換 (threshold 調整が不要になり self-calibrating)。 line count を doc 重量の proxy にして byte 密度を見落とした §7.7/§10.7 の観察も同型 |
 | **委譲した調査の結論** (= subagent / 別 agent に投げた grep / audit の return) | 限定 scope を調べて結論 (特に「異常なし」「drift なし」) を返す | subagent が **調べなかった軸 / 範囲** を黙って「なし」 に含める (= 調査軸の盲点 = 結論の盲点)。 negative 結論ほど false confidence が大きい | agent に「X に drift あるか」 委譲 → 「なし」 だが、 自分で広く grep したら複数発見 (= agent の照合軸が狭かった)。 → subagent の **negative 結論は ground truth でなく**、 安い再 verify (= 自分で grep 1 本) を通してから採用する (= §3 単一情報源 null 飛躍の subagent 版) |
 
 **原則**: **属性が直接観測できるなら、 proxy でなく属性そのものを ground truth にする**。
