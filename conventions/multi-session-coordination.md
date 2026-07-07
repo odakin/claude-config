@@ -259,6 +259,28 @@ identity は similarity でなく content corroboration でしか establish で�
 - **token 行**: 起票側の会話 (= assistant の message turn) に unique token を残す (spec にも明記、 例 `RET-<slug>-<date>-<rand>`)。 ⚠️ **chat に出さないと `search_session_transcripts` に引っかからず呼び元が findable にならない** (= method A step 1、 spec=tool_use 引数は search 対象外)。 ⚠️ 「親の session-id 欄」 は作らない (= addressable id ≠ transcript id の namespace 不一致、 誤 id は推測より悪い、 robust なのは content marker = token)。
 - **返送指示**: 「完了時 `search_session_transcripts(<token>)` で起票元を特定し send_message。 self/他 session 除外、 token を持つ起票元以外に絶対送らない。 解決不能なら push せず + user 確認 (推測 push 禁止)」。
 
+### <a id="receiver-side-recognition"></a>受け取った側 = 「自分が worker か」 の判定 (2026-07-07 試験 rule)
+
+sender 側は上記 spawn-spec template を書いて chip を投げる。 receiver 側の逆問い = **自分が今受け取っている message は spawn-spec template そのものか**。 そうであれば **君 = worker**、 その prompt を再度 spawn_task に転記して grandchild を作らない (= 冗長な 1 段 indirection、 handoff-chain の無限延長を招く)。 execute in-tree。
+
+**判別 signal (form-syntactic、 動詞の semantic 判別より頑健)**:
+
+- 決定的 path (spec / results / return spine) 明示
+- unique token
+- 完了時実行 command 全文 (= results-inbox の `--record` 系)
+- 「上位 session の次回起動時に自動 surface」 等の **上位 session 前提** wording
+
+これらが揃った message を受けたら **その prompt を再 spawn しない**。 template の構造要素そのものが「君は終端の worker」 を示す **addressing の form marker** である (sender は自分を「上位」 として frame している = message は自分より下位 = 君に向けて書かれている)。 動詞 semantic 判別 (「投げて」 = spawn 明示 vs 「担当してほしい」 = execute 明示 vs あいまい 3-way) より、 form の syntactic 判別が頑健 = 前者は [`convention-design-principles.md §8.8 (= #proxy-blind-spot)`](../docs/convention-design-principles.md#proxy-blind-spot) の意味的 proxy 判別に該当、 後者は proxy でなく form 直接。
+
+**根**: [`convention-design-principles.md §4.1 (= #motivated-substitution-trap)`](../docs/convention-design-principles.md#motivated-substitution-trap) の inverse-direction 発現 = 泥仕事を admin 役 (chip-authoring) に退避 = deliverer-retention の反方向 substitution。 2026-07-07 Evidence 参照。
+
+⚠️ **試験 rule 段階 (2026-07-07 land 時点、 empirically untested)**: §4.1 doctrine「ambient rule 追加は既に override された最強信号より弱い → 構造的に無効」 は本 rule にも fade を **predict** する。 他 rule で fade は実証あり (2026-06-27 SPAWN-STATUS-CONFAB F3 = 4 分前 in-context Read でも未発火 / 2026-06-29 WTLOCAL-TITLE-REMISS = 2 日前 land + 常時 load でも未発火 / 2026-07-04 CHATLINK F1 = 4 重 load 下でも未発火)。 receiver-side recognition は未 test の rule で、 「form-syntactic な rule は semantic reflex より頑健」 という hypothesis の test 素材。 2-3 週の observation で判定:
+
+- **効いた (再発ゼロ)** → §4.1 doctrine の boundary refine (= form-syntactic rule は fade しない亜種の可能性)
+- **再発 (fade)** → §4.1 evidence 追記 + 本 rule 廃止 or 縮退。 「rule 追加は無効」 doctrine を form-syntactic domain にも extend する追認。
+
+⚠️ 判定 trigger = (a) 3 ヶ月以内に本 rule が発火した観測 (= assistant が chip-prompt-format を receive して in-tree 実行に切替えた明示 record)、 (b) 3 ヶ月以内に同型再発 (= chip-prompt-format 受領 → grandchild 誤 spawn)、 (c) いずれも観測されない (= evidence 不足 for evaluate)。 (c) は「本 rule の fire は目立たない = 予防効果ゆえ observe 困難」 の可能性を含む (= placebo と区別困難)。
+
 ### 注意 (caveat)
 
 - **⚠️ これらのツール (`spawn_task` / `send_message` / `search_session_transcripts` / `list_sessions`) は harness 依存で、 全環境にある保証はない。** Claude Code CLI (= 2026-06-21 確認) では deferred tools 一覧にも ToolSearch (= 概念検索 + exact name select の双方) にも無く呼べなかった。 = 本 §7 は Claude Code (desktop) 等これらを提供する harness での「観測例」 を前提に書かれており、 **その観測を全 harness に一般化していた** (= `convention-design-principles.md` の「一度の観察を一般法則化しない」 の doc-authoring 版 = doc が tool の実在を裏取りせず前提化する drift)。 CLI で「独立 session + 結果返送」 が要るときは **下記 file-handoff (pull) で spec ファイル化 → user が手動で別 CLI session を開いて拾う** 形にする (= Agent は「独立」 要件を満たさないので代替にしない)。 ⚠️ ただし deferred tools は session 中に動的 surface されうるので「絶対に無い」 とも断定しない (= 「現時点で呼べる tool に無い」 までが正確、 = inline §3「null を universal absence にしない」 の presence 版)。
