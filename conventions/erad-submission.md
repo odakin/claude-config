@@ -4,7 +4,7 @@
 
 制度ごとの個別値（費目・分野分類・字数上限・締切・予算枠）は各制度の**公募要領**＋応募管理リポの制度別ディレクトリを正とし、本書は**制度横断で効く e-Rad フォームの挙動**を扱う。出典 = JST 公募要領・e-Rad 操作マニュアル（例: JST 各事業の e-Rad マニュアル）＋ 実応募での観察。
 
-**Sibling docs** (= 全 4 で paper / proposal lifecycle を cover): 自分 paper の internal audit = [`paper-audit.md`](paper-audit.md) / referee report への返信 (= author response) = [`rebuttal-letter.md`](rebuttal-letter.md) / 自分が referee として外部 paper / 申請書を評価 = [`peer-review-workflow.md`](peer-review-workflow.md)。 本書 (= 申請書 submit) はこれら 3 と方向違いで、 申請書を出す著者側。
+**Sibling docs** (= 全 5 で paper / proposal lifecycle を cover): 自分 paper の internal audit = [`paper-audit.md`](paper-audit.md) / referee report への返信 (= author response) = [`rebuttal-letter.md`](rebuttal-letter.md) / 自分が referee として外部 paper / 申請書を評価 = [`peer-review-workflow.md`](peer-review-workflow.md) / 論文の journal / arXiv 投稿ポータル経由の submit = [`paper-submission.md`](paper-submission.md)。 本書 (= grant 申請書 submit) はこれら 4 と方向違いで、 grant 申請書を出す著者側。
 
 > ⚠️ **本書の一般則は限られた制度での実応募観察に基づく**（全制度を網羅検証したものではない）。e-Rad は制度ごとに項目・制限・必須欄が異なるため、各記述は「観察された挙動」として扱い、実際の応募では必ず当該制度の公募要領・e-Rad マニュアルで裏取りすること。
 

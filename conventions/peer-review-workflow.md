@@ -315,6 +315,7 @@ peer review の resourcing は通常 confidentiality 要件あり (= 審査委�
 - **自分の paper 内部の structure audit**: [`paper-audit.md`](paper-audit.md) (= forward refs, duplicates, structure)
 - **自分が rebuttal letter を書く (= author response)**: [`rebuttal-letter.md`](rebuttal-letter.md)
 - **自分が grant 申請書を提出**: [`erad-submission.md`](erad-submission.md)
+- **自分の paper を journal / arXiv 投稿ポータル経由で提出**: [`paper-submission.md`](paper-submission.md)
 - **メール身元確認 (= 受信側 verify)**: [`research-email.md §pre-outreach-identity-check`](research-email.md#pre-outreach-identity-check)
 
 ### 一般則 (= meta level)
