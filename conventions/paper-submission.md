@@ -12,7 +12,7 @@
 | 2 | "Missing resources referenced by the TeX document" (revtex4-2 / tikz-feynman 等が Missing 判定) | ローカル TeX 環境から `.cls`/`.sty`/`.rtx`/`.tex`/`.lua` を **source zip に同梱** (§[package-bundling](#package-bundling)) |
 | 3 | Cover page の author affiliation が LaTeX 修正で追随しない | **Authors & Institutions form を別途更新** (§[form-vs-source-independence](#form-vs-source-independence)) |
 | 4 | "PDF should embed only Type1 fonts" 警告 | figure PDF に TrueType Courier 混入 が典型。 soft 要求のため実運用では通ることが多い、 blocker になったら figure 再生成 (§[type1-fonts](#type1-fonts)) |
-| 5 | arXiv v2 upload で processing error | **PDF は source tarball に含めない** — arXiv は source から自動ビルド (§[arxiv-v2-no-pdf](#arxiv-v2-no-pdf)) |
+| 5 | arXiv upload で processing error | **PDF は source tarball に含めない** — arXiv は source から自動ビルド (v1 / replace-file 全 version 共通、§[arxiv-source-only](#arxiv-source-only)) |
 
 ## <a id="browser-fallback"></a>1. Portal upload の generic error → 別ブラウザで retry
 
@@ -160,13 +160,13 @@ print(f"Non-Type1: {non_type1}")
 
 - 2026-07-08 EPJC = 5 figure PDF 全てに TrueType Courier が MacRomanEncoding で埋め込み、 hyperref の URL 経由 Courier も 1 個。 `\urlstyle{rm}` 追加は無関係 (原因は figure)。 arXiv v1 が同 font 構成で受理済のため EPJC 投稿でも blocker にならなかった。
 
-## <a id="arxiv-v2-no-pdf"></a>5. arXiv v2 は最終 PDF を受け付けない
+## <a id="arxiv-source-only"></a>5. arXiv は最終 PDF を受け付けない (source-only、v1 / v2 共通)
 
-arXiv は **source から自動ビルド** する processing model なので、 replace-file (v2 以降) upload の tarball / zip に **PDF を含めると processing error になる**。
+arXiv は **source から自動ビルド** する processing model なので、 **v1 initial upload でも v2 以降の replace-file でも、 tarball / zip に PDF を含めると processing error になる**。 「v2 特有のルール」 ではなく arXiv 一般則。
 
-### v1 と v2 で構成が同じ (PDF を含めない)
+### 常に source-only で、v1/v2 で構成を揃える
 
-v1 が受理された時と **同じ source 構成** で v2 も upload する。 典型的な v1/v2 構成 (revtex 系 pdflatex 論文):
+typical 構成 (revtex 系 pdflatex 論文):
 
 ```
 draft_A.tex           # 本文
@@ -221,7 +221,7 @@ cp <paper>/Figures/*.pdf submission/arxiv-vN/Figures/  # 本文で参照され�
    - **非標準パッケージを事前同梱** (revtex4-2, tikz-feynman 等、 §[package-bundling](#package-bundling))
    - aux ファイル削除
 3. **PDF 版**
-   - journal 用は最終 PDF 同梱 (Main Document)、 arXiv 用は PDF 含めない (§[arxiv-v2-no-pdf](#arxiv-v2-no-pdf))
+   - journal 用は最終 PDF 同梱 (Main Document)、 arXiv 用は PDF 含めない (v1/v2 共通、§[arxiv-source-only](#arxiv-source-only))
    - Type1 font 状況を確認 (§[type1-fonts](#type1-fonts))
 4. **Authors & Institutions form**
    - LaTeX の `\author{}` と form 入力を **両方** update (§[form-vs-source-independence](#form-vs-source-independence))
@@ -238,4 +238,4 @@ cp <paper>/Figures/*.pdf submission/arxiv-vN/Figures/  # 本文で参照され�
 
 ## <a id="refine-history"></a>実例と refine 履歴 (= 新例が出たら本 convention を refine)
 
-- **2026-07-08 EPJC 投稿 (neutrino-real-virtual)** = ScholarOne Manuscripts、 Brave で Step 2 failed → Safari 通過 (§[browser-fallback](#browser-fallback))、 revtex4-2 と tikz-feynman が Missing → 追加 zip 同梱 (§[package-bundling](#package-bundling))、 affiliation 修正が LaTeX と form で 2 系統管理 (§[form-vs-source-independence](#form-vs-source-independence))、 figure PDF 由来の TrueType Courier は soft 要求で受理 (§[type1-fonts](#type1-fonts))、 arXiv v2 用 zip は PDF 非同梱で共著者配布 (§[arxiv-v2-no-pdf](#arxiv-v2-no-pdf))。 Manuscript ID EPJC-26-07-091。
+- **2026-07-08 EPJC 投稿 (neutrino-real-virtual)** = ScholarOne Manuscripts、 Brave で Step 2 failed → Safari 通過 (§[browser-fallback](#browser-fallback))、 revtex4-2 と tikz-feynman が Missing → 追加 zip 同梱 (§[package-bundling](#package-bundling))、 affiliation 修正が LaTeX と form で 2 系統管理 (§[form-vs-source-independence](#form-vs-source-independence))、 figure PDF 由来の TrueType Courier は soft 要求で受理 (§[type1-fonts](#type1-fonts))、 arXiv v2 用 zip は PDF 非同梱で共著者配布 (§[arxiv-source-only](#arxiv-source-only))。 Manuscript ID EPJC-26-07-091。
