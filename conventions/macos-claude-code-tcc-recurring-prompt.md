@@ -89,4 +89,5 @@ Anthropic 側 fix を待つ前提なら、 dialog が出たときだけ押す運
 ## 関連
 
 - `macos-claude-app-pty-leak.md` (= sibling、 Claude.app Desktop 側の別 pty leak 症状、 同じく Anthropic side fix 待ち)
+- `launchd-cloudstorage-tcc.md` (= 別型の TCC 症状 — launchd 経由の script が `~/Library/CloudStorage/` を読めない、 invoker 単位で TCC 判定される macOS 15+ の permission 継承挙動が原因。 本 doc が「versioned path で TCC db entry 無効化」 なのに対し、 sibling は「invoker の TCC identity 不足」 が root)
 - macOS App Management TCC service: `kTCCServiceSystemPolicyAppData` (Ventura 13.0+)
