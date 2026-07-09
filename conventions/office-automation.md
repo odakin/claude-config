@@ -757,6 +757,256 @@ origin: 2026-05-14 JST SPReAD 様式 1 Sheet 2 A15 (研究業績欄) で提出�
 
 ---
 
+## <a id="pptx-fill"></a>pptx (PowerPoint) fill の落とし穴とテクニック
+
+xlsx の label vs input と同型の罠が pptx にもある — 提出用のシート・ポスターを人手でなく機械 fill する場面で毎回落ちる箇所。 xlsx より shape tree が **group で階層化**、 **font 継承 と bullet 継承が別 chain** で走る点が特殊。 SPReAD 自己紹介シート・様式・ポスター等の template 塗りで共通。
+
+### <a id="pptx-shape-tree-and-path"></a>Shape tree の再帰 walk + path-based addressing + EMU 座標
+
+pptx の shape は slide 直下に並ぶだけでなく **`GroupShape` で任意深く入れ子**にできる。 template は section 単位で group 化されているのが普通 (例: 「01 自己紹介」 group の中に「番号バッジ / label / hint / content Rectangle」 4 shape 相当)。 fill 対象を addressing するには shape tree を再帰 walk して **path (= idx list) で指す**:
+
+```python
+from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+def walk_dump(shapes, path=""):
+    for i, shape in enumerate(shapes):
+        p = f"{path}[{i}]"
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            print(f"{p} GROUP name={shape.name!r}")
+            walk_dump(shape.shapes, p+"/")
+        elif shape.has_text_frame:
+            txt = shape.text_frame.text[:60].replace("\n", " | ")
+            print(f"{p} TEXT text={txt!r}")
+
+def get_shape(shapes, path):
+    """path = list of int; last idx = target, others = group descent."""
+    node = shapes
+    for i in path[:-1]:
+        node = node[i].shapes
+    return node[path[-1]]
+```
+
+path 例: `[21, 15, 3]` = slide 直下 [21] の Group 14 → その中の [15] の Group 20 → その中の [3] の Rectangle。
+
+**shape.top / shape.height は group 越しでも絶対 EMU 座標**を返す (= 親 group の position は関与しない、 group は container として存在するだけで空間関係を強制しない)。 group 内 shape の位置を変えても group 自体は auto-resize しない (= 逆に自由度が高い)。
+
+**EMU cheat sheet**: **914400 EMU = 1 inch**, **12700 EMU = 1 pt** (= 1/72 inch × 914400)、 **9525 EMU = 1 pixel@96dpi**。 slide 幅 default 12192000 EMU = 13.33 inch (16:9)、 4:3 slide は 9144000 EMU = 10 inch。
+
+**Container capacity 概算 (CJK)**: 1 行に入る CJK char 数 ≈ `container_width_inches × 72 / font_pt` (= CJK 全角 char は font_pt 相当の pt 幅を占める近似)。 e.g. 3.6 inch × 72 / 10pt = 26 chars/line、 7.5 inch × 72 / 9.5pt = 57 chars/line。 実際は bullet indent (marL 228600 EMU 等) で使える幅が減るので保守的に見積もる。
+
+origin: 2026-07-08 SPReAD 自己紹介シート session (= template の group 構造把握と path addressing で正確な fill を可能にした)。
+
+### <a id="pptx-example-slide-as-palette"></a>Example slide は palette source (font family / color / size を採取)
+
+多くの template は **「slide 1 = 空 template / slide 2 = 塗り例」** の 2-slide 構成で配布される (SPReAD 自己紹介シート・大学の様式など)。 fill 前に slide 2 (= 例) を recursion walk して **font family / color RGB / size** を section 別に採取すると palette が確定する:
+
+```python
+for para in shape.text_frame.paragraphs:
+    for run in para.runs:
+        color = None
+        try:
+            if run.font.color and run.font.color.type is not None:
+                color = run.font.color.rgb
+        except AttributeError:
+            color = None  # scheme color、 次項参照
+        print(f"size={run.font.size.pt if run.font.size else '-'} "
+              f"name={run.font.name!r} color={color} text={run.text[:40]!r}")
+```
+
+抽出結果を fill script の palette 定数として焼き込む (= 「濃紺 = `RGBColor(0x1E, 0x2A, 0x38)`、 灰色 = `RGBColor(0x57, 0x57, 0x57)`」 等)。
+
+⚠️ **slide 1 の空 placeholder (「X」 等) から font を継承すると多くの場合 font color が白 / 薄色**で fill 後に不可視になる (= placeholder は視認性を落として「消す」 設計、 2026-07-08 SPReAD 実発生、 初回 fill が「透明字で見えない」 で 1 round 無駄になった)。 palette は必ず **slide 2 の 実塗り済 shape から採取** すること。
+
+origin: 2026-07-08 SPReAD 自己紹介シート session (= slide 1 placeholder の透明字継承で 1 round bury、 slide 2 から palette 採取に切替えて解決)。
+
+### <a id="pptx-scheme-color-guard"></a>SchemeColor / ThemeColor の .rgb アクセスは AttributeError
+
+`run.font.color.rgb` は **RGB color の時のみ動作**。 template の shape が **SchemeColor** (= theme accent1 等の abstraction) や ThemeColor を使っていると `.rgb` は例外 `no .rgb property on color type '_SchemeColor'` を投げる:
+
+```python
+try:
+    if run.font.color and run.font.color.type is not None:
+        rgb = run.font.color.rgb
+    else:
+        rgb = None
+except AttributeError:
+    rgb = None  # scheme/theme color — 継承をやめて explicit RGB 指定に切替
+```
+
+palette 採取 helper に必ず入れる。 引き継ぎ (fill) 側では **explicit RGB を指定するのが最も可搬** (= scheme color 継承は brand kit 依存で持ち運びに弱い)。
+
+origin: 2026-07-08 SPReAD シート session の palette 採取中に発火 (= 04 セクションの Rectangle 12/13 が SchemeColor で AttributeError)。
+
+### <a id="pptx-explicit-size-not-autofit"></a>auto_size (TEXT_TO_FIT_SHAPE) は viewer で shrink されない — 明示 size + word_wrap + 文字量予算
+
+python-pptx の `text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE` は XML には書き込まれるが、 **Keynote / PowerPoint は起動時に shrink を honor しない** (2026-07-09 実観測)。 内容がはみ出しても renderer 側で「勝手に小さくして収める」 挙動は起きず、 文字がそのまま container 下端を突き抜けて overflow する。
+
+対策:
+1. **font size を section 別に explicit 指定** (`run.font.size = Pt(9.5)` 等)。 目安 = section の container height / 予定行数 / 1.2 (line height 補正)
+2. **`tf.word_wrap = True` 明示** — 横方向 overflow を container 幅で強制改行
+3. **文字量予算** — [`pptx-shape-tree-and-path`](#pptx-shape-tree-and-path) の CJK char/line 概算で `text_length ≤ chars_per_line × available_lines` を守る。 予算超過が見えたら (a) 内容を切る (b) font size を下げる のいずれか (= 上方拡張は [`pptx-hint-fixed-position-trap`](#pptx-hint-fixed-position-trap) 参照、 大抵は逆効果)
+
+origin: 2026-07-09 SPReAD 自己紹介シート session (= auto_size 設定したのに Keynote / PowerPoint 両方で shrink されず、 03 セクションが下方 overflow → 明示 font size に切替えて解決)。
+
+### <a id="pptx-clear-and-ppr-propagation"></a>tf.clear() + add_paragraph() は pPr を継承しない → deepcopy で propagate
+
+python-pptx の `text_frame.clear()` は **runs を全消し + `<a:p>` 要素 1 個を空で残す**。 残った 1 個の p の paragraph properties (`<a:pPr>` = bullet char / marL / indent / level / spacing) は template のまま。 だが **`tf.add_paragraph()` で追加する新 paragraph には pPr が全く付かない** (plain paragraph)。
+
+結果: template が bullet list 用の shape でも、 1 行目だけ bullet + 2 行目以降 plain text という **半端な描画**になる。 fix:
+
+```python
+from copy import deepcopy
+A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+def set_bulleted_items(shape, items, *, color, font_pt, font_name):
+    from pptx.util import Pt
+    tf = shape.text_frame
+    tf.clear()
+    tf.word_wrap = True
+
+    # 1 行目の pPr を snapshot (bullet char / marL / indent 情報を保持)
+    first_p = tf.paragraphs[0]._pPr
+    bullet_pPr = deepcopy(first_p) if first_p is not None else None
+
+    for i, item in enumerate(items):
+        para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        # 2 行目以降にも pPr を注入 (先頭に insert)
+        if i > 0 and bullet_pPr is not None:
+            existing = para._p.find(f"{{{A_NS}}}pPr")
+            if existing is not None:
+                para._p.remove(existing)
+            para._p.insert(0, deepcopy(bullet_pPr))
+        run = para.add_run()
+        run.text = item
+        run.font.name = font_name
+        run.font.size = Pt(font_pt)
+        run.font.color.rgb = color
+```
+
+⚠️ **`insert(0, ...)` = pPr は `<a:p>` 要素の最初の子でなければならない** (schema 要求)。 順序を間違えると PPT が「破損」 判定を出す risk (docx の [`docx-word-corruption-diagnosis`](#docx-word-corruption-diagnosis) と同 spectrum)。
+
+origin: 2026-07-08 SPReAD 自己紹介シート session (= 04 得たい / 共有 で最初の 1 行だけ bullet 付、 2 行目以降が plain paragraph で描画されていた RCA)。
+
+### <a id="pptx-cross-shape-ppr-borrow"></a>bullet template の無い shape に別 shape の pPr を借用
+
+template によっては **section によって bullet-list template と prose template が混在**する。 fill 時に「本来 prose 用の shape (bullet 定義なしの pPr)」 に bullet 表示させたいとき、 別の shape (= 別 section の bulleted list template 等) から `_pPr` を取り出して注入する:
+
+```python
+# 04 の Rectangle 12 が bullet-list 用に定義されているなら、
+# その pPr を取り出して 02 / 03 の Rectangle にも apply する。
+bullet_template = get_shape(slide.shapes, [21, 15, 3])  # 04 得たい (bulleted)
+bullet_pPr = deepcopy(bullet_template.text_frame.paragraphs[0]._pPr)
+
+for target_path in [[21, 13, 2], [21, 14, 2]]:  # 02 / 03 (bullet 無し template)
+    target = get_shape(slide.shapes, target_path)
+    set_bulleted_items(target, items, color=color, font_pt=font_pt,
+                       font_name=font_name, bullet_pPr=bullet_pPr)
+```
+
+= 「見た目の一貫性」 を fill 側で強制するテクニック。 template designer は section ごとに bullet の有無を判断しているが、 fill 内容の性質 (= 「並列項目の列挙」 vs 「散文」) と合わないことがあるため、 fill 側で pPr を統一する。
+
+origin: 2026-07-08 SPReAD シート session (= 02 / 03 も 04 と同じ bullet 見栄えにしたい要件、 template 側は prose のみで無 bullet 設計だったので 04 から pPr borrow で解決)。
+
+### <a id="pptx-double-bullet-trap"></a>「・」 手入力 + template bullet = 「• ・」 二重描画
+
+fill する text の各行冒頭に **「・」 を手打ちで prepend しない**。 template shape の pPr が既に bullet char (`<a:buChar char="•"/>` 等) を描画するので、 手打ちが追加されて「• ・text」 と二重表示になる:
+
+```python
+# NG: 手打ち bullet を含む
+items = ["・研究 repo を Claude で運用", "・セミナー運営を Claude で回す"]
+# → 描画結果: "• ・研究 repo..." (二重)
+
+# OK: template の bullet に任せる
+items = ["研究 repo を Claude で運用", "セミナー運営を Claude で回す"]
+# → 描画結果: "• 研究 repo..." (単重、意図通り)
+```
+
+判別: template shape が bullet を出しているかは `paragraphs[0]._pPr` の `a:buChar` / `a:buAutoNum` element 有無で確認。
+
+origin: 2026-07-09 SPReAD シート session (= 私が「・」 を手入力 prepend、 user 指摘「bullet 重複してる」 で発覚)。
+
+### <a id="pptx-hint-fixed-position-trap"></a>Template hint (薄字の注意書き) を消しても空白が固定位置に残る → 消さない選択が妥当
+
+多くの template は section の label (「01 自己紹介」) と content Rectangle の間に **薄字 (通常灰色) で「〜を簡潔に。 AI で実現したいことを...」 等の記入 hint** を挟む。 fill 時に「見た目が汚いから消したい」 と `tf.clear()` で text を消しても **hint shape はそのまま (空の状態で) 固定位置に残る**。 content Rectangle は fixed top で下方に配置されているので、 hint 上の空白がそのまま padding として残り、 content の実描画エリアは変わらない。
+
+「空白を回収」 しようと content Rectangle を上方拡張 (`shape.top ← hint.top`, `shape.height += hint_height`) すると **今度は下部余白が過剰**になる — hint の物理占有分に見合う内容が無いと後段が間延びして見える。
+
+**pragmatic な結論** (2026-07-09 SPReAD シート実運用):
+
+> hint は消さない。 template の意匠のまま残しておく方が縦方向のバランスがとれる。 hint は薄字なので目線に強く入らず、 fill 済 content と競合しない。
+
+= 「template layout designer が hint の縦占有と content Rectangle の縦占有を セットで設計している」 事実を尊重する。 消す判断は特殊な pptx (= hint が主張しすぎる template) に限定する。
+
+origin: 2026-07-09 SPReAD シート session (= 私が hint を消 + Rectangle 上方拡張、 user 判断「消す必要も無い気もするな (下が余る)」 で revert)。
+
+### <a id="pptx-keynote-preferred-for-export"></a>Keynote AppleScript export ≫ PowerPoint AppleScript export (PDF / PNG 経路)
+
+pptx → PDF / PNG の AppleScript 経路は **Keynote が圧倒的に堅牢**。 PowerPoint の AppleScript は script dictionary が古く、 `save in POSIX file "..." as save as PNG` を投げると **`パラメータのエラーです (-50)`** を返すことが多い (= 2026-07-08 実観測)。
+
+```applescript
+-- Keynote 経由 (堅牢)
+tell application "Keynote"
+    activate
+    open POSIX file "/path/to/file.pptx"
+    delay 2
+    export document 1 to POSIX file "/path/to/out.pdf" as PDF
+end tell
+```
+
+PowerPoint を使う必然性 (= fidelity 保持のため独自 pattern fill を再現したい 等) が無ければ **Keynote を第一選択**。 提出物 (Slack / Box / SNS) 用の PNG は Keynote → PDF → sips → PNG の 3 段 pipeline が最も再現性高い (次項)。
+
+⚠️ **PowerPoint process 起動しているが window 0 個 = subscription / license 状態**: `pgrep "Microsoft PowerPoint"` はヒットするのに `osascript -e 'tell application "Microsoft PowerPoint" to get name of every window'` が空を返す状態は、 license 認証 dialog が別 space で待機していたり subscription 期限切れの UI 表示待ちだったりする。 このとき AppleScript の `open POSIX file` は silent fail。 Keynote で開き直すのが最短復帰。
+
+origin: 2026-07-08 SPReAD シート session (= PowerPoint AppleScript が -50 error 連発、 Keynote 経路に切替えて全成功)。 xlsx の [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) が Excel を preferred にしているのと**逆の優先順位**なので混同注意。 sibling = [`pptx-to-pdf-powerpoint`](#pptx-to-pdf-powerpoint) は「fidelity-first で PowerPoint 経路」 を扱うが、 automation 経路の堅牢性は本節で扱う (= 2 節は「fidelity vs automation robustness」 の trade-off)。
+
+### <a id="pptx-png-via-pdf-sips"></a>PNG は PDF → sips 経由 (2400px 長辺 で SNS 品質)
+
+pptx のスライドを PNG 化する堅牢経路は Keynote export の PDF → sips (macOS 標準の画像変換 CLI) の 2 段:
+
+```bash
+# 1. Keynote 経由で PDF export (前項)
+osascript -e 'tell application "Keynote" to export document 1 to POSIX file "/tmp/out.pdf" as PDF'
+
+# 2. PDF 1 ページ目を PNG に (2400px 長辺 = SNS post 用に十分)
+sips -s format png -Z 2400 /tmp/out.pdf --out /tmp/slide1.png
+```
+
+`sips -Z <px>` は long-edge を指定 px にリサイズ (= aspect 保持)。 2400px は Slack / X / 一般 web preview で綺麗に表示される目安 (16:9 slide なら 2400 × 1350)。 SPReAD `#02_自己紹介` に image 添付する想定のサイズ感 (実測: 2400px で 900 KB PNG)。
+
+**sips の落とし穴**:
+- PDF 複数ページを一括変換すると 1 ページ目のみ処理 (= 意図通り)。 特定ページを指す場合は事前に PDF を単一ページに分割 (`pdftk` / `pdftoppm`)
+- long-edge 指定なので短辺は暗黙に決まる。 正方形 crop したい場合は sips の後に別の crop step
+
+origin: 2026-07-08 SPReAD シート session (= Slack `#02_自己紹介` に載せる image が要る、 Keynote AppleScript の PNG export が -2753 error、 sips 経路に切替えて成功)。
+
+### <a id="pptx-reload-workflow"></a>fill → 目視 loop の reload 手順 (close all + reopen)
+
+pptx を編集 → viewer で確認 → 修正 → 再確認 の iterative loop で、 viewer が **編集前の pptx を掴んだまま**になると変更が反映されない (= stale display)。 AppleScript で明示的に close all + reopen する:
+
+```bash
+osascript <<'EOF'
+tell application "Microsoft PowerPoint"  # or "Keynote"
+    try
+        repeat with w in every window
+            try
+                close w saving no
+            end try
+        end repeat
+    end try
+end tell
+delay 1
+tell application "Microsoft PowerPoint"
+    open POSIX file "/path/to/file.pptx"
+end tell
+EOF
+```
+
+= 「編集後 reload」 を 1 step 化。 `saving no` で未保存変更を破棄 (= 手動編集混入を意図的に廃棄、 fill script が唯一の SoT の前提)。
+
+origin: 2026-07-08 SPReAD シート session (= 複数 round の fill → 確認 → 修正 loop で stale display 事故を反復、 close all + reopen で解消)。
+
+---
+
 ## <a id="xlsx-md-to-pdf"></a>xlsx / md / pptx → PDF 変換 (macOS)
 
 ### <a id="xlsx-to-pdf-script"></a>xlsx → PDF: `xlsx-to-pdf.sh` (LibreOffice → Excel fallback)

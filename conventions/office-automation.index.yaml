@@ -126,6 +126,66 @@ sections:
     level: 3
     title: "xlsx rich text formatting (= 部分 underline / bold / italic)"
     origin: "2026-05"
+  - id: pptx-fill
+    level: 2
+    title: "pptx (PowerPoint) fill の落とし穴とテクニック"
+    origin: "2026-07-08"
+    related: [pptx-to-pdf-powerpoint, openpyxl-xlsx-fill, docx-fill-xml-edit]
+  - id: pptx-shape-tree-and-path
+    level: 3
+    title: "Shape tree の再帰 walk + path-based addressing + EMU 座標"
+    origin: "2026-07-08"
+    related: [pptx-fill, pptx-example-slide-as-palette, pptx-explicit-size-not-autofit, pptx-hint-fixed-position-trap]
+  - id: pptx-example-slide-as-palette
+    level: 3
+    title: "Example slide は palette source (font family / color / size を採取)"
+    origin: "2026-07-08"
+    related: [pptx-fill, pptx-scheme-color-guard, pptx-shape-tree-and-path]
+  - id: pptx-scheme-color-guard
+    level: 3
+    title: "SchemeColor / ThemeColor の .rgb アクセスは AttributeError"
+    origin: "2026-07-08"
+    related: [pptx-example-slide-as-palette, pptx-explicit-size-not-autofit]
+  - id: pptx-explicit-size-not-autofit
+    level: 3
+    title: "auto_size (TEXT_TO_FIT_SHAPE) は viewer で shrink されない — 明示 size + word_wrap + 文字量予算"
+    origin: "2026-07-09"
+    related: [pptx-fill, pptx-shape-tree-and-path, pptx-hint-fixed-position-trap, merged-cell-text-clipping]
+  - id: pptx-clear-and-ppr-propagation
+    level: 3
+    title: "tf.clear() + add_paragraph() は pPr を継承しない → deepcopy で propagate"
+    origin: "2026-07-08"
+    related: [pptx-cross-shape-ppr-borrow, pptx-double-bullet-trap, docx-word-corruption-diagnosis, docx-empty-cell]
+  - id: pptx-cross-shape-ppr-borrow
+    level: 3
+    title: "bullet template の無い shape に別 shape の pPr を借用"
+    origin: "2026-07-08"
+    related: [pptx-clear-and-ppr-propagation, pptx-double-bullet-trap]
+  - id: pptx-double-bullet-trap
+    level: 3
+    title: "「・」 手入力 + template bullet = 「• ・」 二重描画"
+    origin: "2026-07-09"
+    related: [pptx-clear-and-ppr-propagation, pptx-cross-shape-ppr-borrow]
+  - id: pptx-hint-fixed-position-trap
+    level: 3
+    title: "Template hint (薄字の注意書き) を消しても空白が固定位置に残る → 消さない選択が妥当"
+    origin: "2026-07-09"
+    related: [pptx-shape-tree-and-path, pptx-explicit-size-not-autofit, pptx-fill]
+  - id: pptx-keynote-preferred-for-export
+    level: 3
+    title: "Keynote AppleScript export ≫ PowerPoint AppleScript export (PDF / PNG 経路)"
+    origin: "2026-07-08"
+    related: [pptx-png-via-pdf-sips, pptx-reload-workflow, pptx-to-pdf-powerpoint, xlsx-to-pdf-script]
+  - id: pptx-png-via-pdf-sips
+    level: 3
+    title: "PNG は PDF → sips 経由 (2400px 長辺 で SNS 品質)"
+    origin: "2026-07-08"
+    related: [pptx-keynote-preferred-for-export, pptx-to-pdf-powerpoint]
+  - id: pptx-reload-workflow
+    level: 3
+    title: "fill → 目視 loop の reload 手順 (close all + reopen)"
+    origin: "2026-07-08"
+    related: [pptx-keynote-preferred-for-export, pptx-fill]
   - id: xlsx-md-to-pdf
     legacy: "2"
     level: 2
