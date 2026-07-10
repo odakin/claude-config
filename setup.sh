@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # claude-config/setup.sh
 # 新しい端末で clone 後に実行するセットアップスクリプト
 #   1.  CONVENTIONS.md の symlink を作成（相対パス）
