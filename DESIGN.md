@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-07-10: 検証の発火面化 — CI + run-all-checks + hook 配線の単一リスト駆動化](#ci-and-single-list-wiring)
 - [2026-07-10: 構造 tree / 列挙 / カテゴリ index の自動生成 (generate-tree.py)](#generated-docs-tree-autogen)
 - [2026-07-10: DESIGN.md の archive-first 再編](#design-reorg-archive-first)
 - [2026-06-27: Office handling 入口 router を layer 1 に hoist](#office-files-router-hoist)
@@ -27,6 +28,26 @@
 - [公開リポ leak 防止: 構造制約 hook + pre-commit ephemeral literal check](#public-repo-leak-prevention)
 - [sensitive-terms.txt の symlink architecture (2026-05-14 追補)](#sensitive-terms-symlink-architecture)
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
+
+---
+
+## <a id="ci-and-single-list-wiring"></a>2026-07-10: 検証の発火面化 — CI + run-all-checks (検査リスト単一 SoT) + hook 配線の単一リスト駆動化
+
+### 問題
+
+(a) selftest / .test.sh 資産 20 本超がどの発火面にも載っておらず、 自動生成 index 4 本の OUT OF SYNC (= §17 が slug DB から欠落) が ~10 日 silent だった。 (b) hook 配線が JSON 定義 + merge loop の hardcode 名前リスト ×4 の二重管理で、 同期漏れが実発生 (= stale-read-nudge.sh が実装 + test 完備のまま setup.sh 未配線 = header 主張と食い違う silent dead)。 (c) 下流 repo からの inbound 参照検証 (check-inbound-refs.py) が偽陽性 3 クラス込みで 25 HARD を報告し、 狼少年化しかけていた。
+
+### 設計
+
+- **検査リストの SoT = `scripts/run-all-checks.sh`** に一元化し、 CI (`.github/workflows/checks.yml`) は**それを呼ぶだけ** (= CI yml と local 実行の drift を design-out)。 検査対象は自動発見 (= `--selftest` を持つ python script の grep / `*.test.sh` glob) で hardcode リストを持たない。
+- **環境依存 test の SKIP 契約**: 前提 (jq / macOS 固有 tool / owner 環境) が無い test は SKIP を出力して exit 0 (= silent skip 禁止、 skip 理由は test 自身が出す)。 runner は集計のみ。
+- **hook 配線は entries JSON から jq で期待リストを導出** (`scripts/lib/merge-hook-event.sh`) — 「JSON と loop を同時に更新せよ」 という人力同期を構造的に不可能化。
+- **check-inbound-refs の偽陽性 3 クラスを informational 降格**: code file (.py/.sh) 由来 = selftest fixture / path 直後の「新規・未作成・却下」 marker = 構想言及 / 参照元 repo に同名 doc = local 解決が自然 (= §17 hierarchical-name-collision の機械対処)。 HARD = 真の壊れ参照のみに純化。
+- runner は ubuntu (public repo = Actions 無料)。 macOS 固有検査は SKIP 契約で吸収。
+
+### 効果 (初日実測)
+
+CI 初回走行が「macOS では不可視だった Linux 全滅バグ」 3 種を検出 (= GNU stat の stdout 混合 〔[hook-authoring.md#substitution-fallback-stdout-mixing](conventions/hook-authoring.md#substitution-fallback-stdout-mixing) に SoT 化〕 / bootstrap の CLI gate が hermetic test を殺す / hook header と実装の食い違い)。 以後 push / PR ごとに 37 検査 + commit 時の pre-commit warn 層の二層構成。
 
 ---
 

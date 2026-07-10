@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: ci-and-single-list-wiring
+    legacy: "2026-07-10"
+    level: 2
+    title: "2026-07-10: 検証の発火面化 — CI + run-all-checks (検査リスト単一 SoT) + hook 配線の単一リスト駆動化"
   - id: generated-docs-tree-autogen
     legacy: "2026-07-10"
     level: 2

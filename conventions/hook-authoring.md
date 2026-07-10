@@ -59,6 +59,22 @@ repo 内 shell script (hooks/ + scripts/ + setup.sh) の統一方針 (2026-07-10
 - **set -u を既存 script に後付けする時は、 先に .test.sh で挙動を固定してから** (= unbound 参照が実行 path 依存で潜んでいることがあり、 挙動変化 (途中死) が silent に起きるため。 hooks/ の guard hook は全数 .test.sh 持ち)。
 - scripts/ 側の `set` は script の性質で選ぶ (fail-open が契約の surface 系は敢えて緩くする場合がある) が、 新規 script は `set -u` 以上を default とする。
 
+### <a id="substitution-fallback-stdout-mixing"></a>§0 補足 2: `$(a || b)` fallback は「a の部分 stdout」 を混入させる — BSD/GNU 分岐は exit code でなく出力検証で
+
+**罠**: `VAL="$(cmd_bsd 2>/dev/null || cmd_gnu 2>/dev/null || echo default)"` の fallback idiom は、 **cmd_bsd が「失敗しつつ stdout に何か吐く」 場合に壊れる** — command substitution は chain 中の**全 command の stdout を連結**するので、 VAL には「cmd_bsd のゴミ + cmd_gnu の正解」 が混ざる。 `2>/dev/null` は stderr しか殺さない。
+
+**実例 (2026-07-10、 CI 初回走行で検出)**: `stat -f %m <file>` は BSD (macOS) では file mtime を返すが、 **GNU (Linux) では「%m という filesystem」 の照会と解釈され、 exit 1 を返しながら stdout に filesystem 情報数行を dump する**。 `$(stat -f %m F || stat -c %Y F || echo 0)` の結果は Linux で「FS dump + 正しい mtime」 の複数行文字列になり、 後段の `$((NOW - VAL))` が算術エラーで script ごと死ぬ。 この idiom で `stale-read-nudge.sh` と `git-state-nudge.sh` が**全 Linux ユーザー環境で silent 死**していた (macOS では正常なので owner 環境では不可視 = CI が初めて露出させた)。
+
+**正しい形 = 出力の数値検証で分岐** (exit code を信用しない):
+
+```bash
+VAL="$(stat -f %m "$F" 2>/dev/null)"
+case "$VAL" in ''|*[!0-9]*) VAL="$(stat -c %Y "$F" 2>/dev/null)" ;; esac
+case "$VAL" in ''|*[!0-9]*) VAL=0 ;; esac
+```
+
+**一般則**: 出力を後段で使う fallback chain は、 「前段が失敗した」 の判定を **exit code でなく出力の形 (数値・非空・pattern) の検証**で行う。 exit code 分岐が安全なのは「失敗時に stdout が確実に空」 と分かっている command のみ — 他人の実装 (特に GNU/BSD 両生類の coreutils) にその保証を仮定しない。 適用実例: `hooks/stale-read-nudge.sh` (cache TTL) / `hooks/git-state-nudge.sh` (marker mtime ×2)。
+
 ---
 
 ## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug

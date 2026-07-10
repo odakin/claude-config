@@ -149,7 +149,7 @@ check_repo_state() {
     FIRST_SIGHTING=1
   else
     local SEEN_MTIME
-    # BSD/GNU stat 両対応 (数値検証分岐、 stale-read-nudge.sh と同 fix、 2026-07-10)
+    # BSD/GNU stat: 数値検証分岐 (正本 = hook-authoring.md#substitution-fallback-stdout-mixing)
     SEEN_MTIME="$(stat -f %m "$SEEN_FILE" 2>/dev/null)"
     case "$SEEN_MTIME" in ''|*[!0-9]*) SEEN_MTIME="$(stat -c %Y "$SEEN_FILE" 2>/dev/null)" ;; esac
     case "$SEEN_MTIME" in ''|*[!0-9]*) SEEN_MTIME="$NOW" ;; esac
@@ -202,7 +202,7 @@ check_repo_state() {
     if [ -n "$PORCELAIN_HASH" ] && [ "$PORCELAIN_LAST" = "$PORCELAIN_HASH" ]; then
       # Same dirty set as last seen — measure how long it has persisted.
       local PMTIME PAGE
-      # BSD/GNU stat 両対応 (数値検証分岐、 同上)
+      # BSD/GNU stat: 数値検証分岐 (同上、 正本 = hook-authoring.md#substitution-fallback-stdout-mixing)
       PMTIME="$(stat -f %m "$PORCELAIN_FILE" 2>/dev/null)"
       case "$PMTIME" in ''|*[!0-9]*) PMTIME="$(stat -c %Y "$PORCELAIN_FILE" 2>/dev/null)" ;; esac
       case "$PMTIME" in ''|*[!0-9]*) PMTIME="$NOW" ;; esac
