@@ -66,6 +66,20 @@ STAGED="$(git diff --cached --name-status 2>/dev/null | awk '$1 != "D" { print $
 [ -z "$STAGED" ] && exit 0
 
 # ----------------------------------------------------------------------
+# Merge conflict marker gate (staged content 全体、 shared lib)。
+# 検出 logic / escape hatch / 設計動機 (2026-07-10 = conflict marker 入り conventions/*.md
+# が public repo に commit+push された実事故) の SoT = lib/staged-conflict-markers.sh header。
+# lib 不在は skip (= fail-open、 leak gate 本体を壊さない)。
+# ----------------------------------------------------------------------
+CONFLICT_LIB="$(dirname "$0")/lib/staged-conflict-markers.sh"
+if [ -f "$CONFLICT_LIB" ]; then
+  . "$CONFLICT_LIB"
+  if ! check_staged_conflict_markers; then
+    exit 1
+  fi
+fi
+
+# ----------------------------------------------------------------------
 # 各ファイルの追加行を 1 つのバッファに集約 (file:line prefix 付き)
 # `git diff --cached -U0 --no-color -- <file>` の出力から `+` 行を抜く。
 # +++ ヘッダを除外し、先頭の `+` を剥がす。

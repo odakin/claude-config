@@ -67,6 +67,22 @@ else
     echo "pre-commit: fix-bib-unicode.py not found. Skipping LaTeX check." >&2
 fi
 
+# Merge conflict marker gate — この commit で触る file の staged 内容に行頭 conflict
+# marker が残っていれば BLOCK。 検出 logic / escape hatch / 設計動機 (2026-07-10 実事故)
+# の SoT = lib/staged-conflict-markers.sh header。 lib 不在 (= Windows cp 設置の古い
+# 環境等) は warn + skip (= fail-open、 hook 全体を壊さない)。
+CONFLICT_LIB="$SCRIPTS_DIR/lib/staged-conflict-markers.sh"
+[[ -f "$CONFLICT_LIB" ]] || CONFLICT_LIB="$HOME/Claude/claude-config/scripts/lib/staged-conflict-markers.sh"
+if [[ -f "$CONFLICT_LIB" ]]; then
+    # shellcheck source=/dev/null
+    source "$CONFLICT_LIB"
+    if ! check_staged_conflict_markers; then
+        exit 1
+    fi
+else
+    echo "pre-commit: staged-conflict-markers.sh not found. Skipping conflict-marker gate." >&2
+fi
+
 # Optional chain to layer-3 (= personal layer) custom hook.
 # odakin-prefs/scripts/pre-commit-yaml-scan.sh があれば呼ぶ。 他 user で本 file
 # 不在なら silent skip (= layer 3 不在の他 Claude Code user の env に影響なし)。
