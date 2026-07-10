@@ -1,5 +1,7 @@
 # claude-config
 
+[![checks](https://github.com/odakin/claude-config/actions/workflows/checks.yml/badge.svg)](https://github.com/odakin/claude-config/actions/workflows/checks.yml)
+
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) で複数プロジェクトを一元管理するための共有規約・セットアップツール。
 
 > **English version**: [README.md](README.md)
