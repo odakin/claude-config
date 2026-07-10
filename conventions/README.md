@@ -19,7 +19,7 @@ layer 1 (public) のドメイン固有規約 71 file をカテゴリ別に列挙
 - **[mcp.md](mcp.md)** — MCP ツールを使うとき (アカウント確認・scope 判定を含む)
   - MCP 固有規約（MCP 使用時に参照）
 - **[multi-account-machine-surface.md](multi-account-machine-surface.md)** — アカウント × マシン × 端末の複数セル運用を設計・診断するとき
-  - アカウント × マシン × 端末 (desktop app / スマホ remote) の 2×2×2 を全部シームレスにする設計原理 (= 3 軸の本質差・切替 mechanics・seamless invariant I1-I6・破れの検出・cross-machine 不可視の正直な限界。 RC server / multi-machine-state / scheduled-tasks の全体像 doc)
+  - アカウント × マシン × 端末 (desktop app / スマホ remote) の 2×2×2 を全部シームレスにする設計原理 (= 3 軸の本質差・切替 mechanics・seamless invariant I1-I9・破れの検出・cross-machine 不可視の正直な限界。 RC server / multi-machine-state / scheduled-tasks の全体像 doc)
 - **[multi-machine-state.md](multi-machine-state.md)** — 複数マシンで同じ Claude Code setup を運用・audit するとき
   - 複数マシンで同じ Claude Code セットアップを使うときの規律 (audit scope 明示・実機検証・idempotent setup.sh)
 - **[multi-session-coordination.md](multi-session-coordination.md)** — 並列 Claude session と同じ repo を触るとき + spawn/handoff を設計するとき

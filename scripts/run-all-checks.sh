@@ -12,6 +12,7 @@
 #   3. python validator selftest 群 (--selftest を持つ全 script を自動発見)
 #   4. bash test 群            (hooks/*.test.sh + scripts/**/*.test.sh)
 #   5. bash 構文検査           (setup.sh + hooks/*.sh + scripts/*.sh の bash -n)
+#   6. merge conflict marker 残置検査 (tracked file 全対象の git grep)
 #
 # 環境依存 test の扱い: 各 .test.sh / --selftest は自分の依存 (jq / macOS 固有 tool /
 # owner transcript) が無い時に SKIP を出して exit 0 する責務を持つ (silent skip 禁止、
@@ -73,6 +74,21 @@ for sh in setup.sh hooks/*.sh scripts/*.sh scripts/lib/*.sh; do
     fi
 done
 run "bash -n (all shell scripts)" test "$syntax_fail" -eq 0
+
+# 6. merge conflict marker 残置 (tracked file 全対象。 実事故 2026-07-10 = conflict marker 入りの
+#    conventions/*.md を commit+push、 検出器ゼロで同日 review まで気づかず。 pattern は {7} 表記 =
+#    本 script 自身の自己 match 回避。 marker を例として引用したい doc は行頭を避ける / indent する)
+check_conflict_markers() {
+    local hits
+    hits="$(git grep -n -E '^(<{7}|>{7}) ' 2>/dev/null || true)"
+    if [ -n "$hits" ]; then
+        echo "$hits"
+        echo "  ✗ merge conflict marker が tracked file に残置"
+        return 1
+    fi
+    return 0
+}
+run "conflict markers (git grep)" check_conflict_markers
 
 echo ""
 echo "════════════════════════════════════"

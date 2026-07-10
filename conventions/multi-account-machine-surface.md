@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: アカウント × マシン × 端末の複数セル運用を設計・診断するとき
 category: harness-core
-summary: アカウント × マシン × 端末 (desktop app / スマホ remote) の 2×2×2 を全部シームレスにする設計原理 (= 3 軸の本質差・切替 mechanics・seamless invariant I1-I6・破れの検出・cross-machine 不可視の正直な限界。 RC server / multi-machine-state / scheduled-tasks の全体像 doc)
+summary: アカウント × マシン × 端末 (desktop app / スマホ remote) の 2×2×2 を全部シームレスにする設計原理 (= 3 軸の本質差・切替 mechanics・seamless invariant I1-I9・破れの検出・cross-machine 不可視の正直な限界。 RC server / multi-machine-state / scheduled-tasks の全体像 doc)
 -->
 # multi-account-machine-surface.md — アカウント × マシン × 端末 の 2×2×2 を全部シームレスにする
 
