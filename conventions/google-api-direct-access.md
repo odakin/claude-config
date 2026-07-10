@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Google API を Python から直接叩く setup をするとき
 category: infra
-summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避)
+summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避)
 -->
 # Google API を Python から直接アクセスする setup
 
@@ -181,6 +181,27 @@ elif mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 - **DL した様式はそのまま雛形として保存し、 fill は copy に対して行う** (= [`office-files.md`](office-files.md) の template-provenance 原則。 提出物で雛形を上書きすると再 fill・diff 検証が死ぬ)。
 
 worked example: 配布 folder 30 file (root 6 + subfolder 24、 PDF + xlsx 混在) を 1 script で取得し、 repo docs/ に binary + manifest を保存 (2026-07)。
+
+## <a id="storage-quota-monitoring"></a>Storage quota 監視 (= about.get、 アカウント容量の唯一の機械監視点)
+
+Google アカウントの保存容量 (= Gmail + フォト + Drive の**合算** 15GB 等) を API で監視する recipe。 満杯になると**メールの送受信が止まる**ため、 溢れやすいアカウント (= フォト backup 専用サブアカウント・長年運用の主アカウント) は閾値監視の価値が高い。
+
+### 機構 fact
+
+- **Drive API `about.get` の `storageQuota` が合算 usage の唯一の API 取得点**: `GET https://www.googleapis.com/drive/v3/about?fields=storageQuota,user` → `{limit, usage, usageInDrive, usageInDriveTrash}`。 Gmail 単体 / フォト単体の内訳 field は **API に存在しない** (= 内訳は storage 管理 UI でしか見えない)。 API で分離できるのは `usage - usageInDrive` (= Gmail + フォトの合算) まで。
+- **Photos Library API は 2025-03-31 以降 app-created content 限定**: フォトの中身 (= 列挙・削除・整理) は外部 app から API 不可 → フォト起因の容量問題も **storageQuota 経由の監視が唯一の機械化点** (= 取り込み側は Picker API = user が UI で選択する半自動のみ)。
+- **最小 scope = `drive.metadata.readonly`**: about.get はこれで足りる (= file 中身への access なし)。 監視専用 token は write 系 scope と分けて発行する (= least privilege、 §OAuth scope の設計)。
+- **`limit` は GiB 基準**: 無料 15 GB plan の `limit` は `16106127360` bytes (= 15 × 2³⁰)。 10⁹ 割りで表示すると「16.1 GB」 に見える — 表示単位の混同に注意。
+
+### Gotchas (= 監視値の解釈)
+
+- **反映ラグ**: ゴミ箱 purge / 大量削除後、 usage への反映は数分〜最大 48h 遅れる。 「消したのに減らない」 の第一仮説はラグ (= 慌てて追加削除しない)。
+- **ゴミ箱も usage に乗る**: Gmail もフォトも「ゴミ箱へ移動」 では解放されない (= 空にして初めて減る。 Gmail trash は 30 日で自動 purge されるので放置でも最終的には解放)。
+- **token の account 検証**: about.get 応答の `user.emailAddress` を期待 account と照合する (= 下記 §OAuth token のアカウント検証 の about.get 版。 サブアカウント運用 = 同一ブラウザに複数 account が並ぶ環境では consent 画面の選択ミスが silent に残るので、 発行直後の 1 query 検証を必須にする)。
+
+### 運用 pattern
+
+発行は本 doc の通常手順 (= installed-app flow + localhost redirect + refresh_token 保存)。 check script は `--warn <pct>` (= 閾値超で exit 非 0) を付けておくと cron / dashboard 統合が 1 行で済む。 実装 instance (= 対象 account・保管場所・port 割当) は personal layer 側の各 API 設定リポに置く。
 
 ## Token refresh の運用
 
