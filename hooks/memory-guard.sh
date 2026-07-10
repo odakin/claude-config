@@ -12,6 +12,21 @@
 #       - content に "<!-- machine-local:" marker があれば escape hatch として pass
 # 依存: jq（なければ grep フォールバック）
 #
+# jq 不在時の fallback 挙動 (= 方針: deny 判定は狭めず、 escape hatch 側を緩める):
+#   - FILE_PATH は grep/sed で抽出 (file_path キーのみ対応)。 抽出できなければ
+#     exit 0 = その入力形については fail-open。
+#   - CONTENT は入力 JSON 全体で代用 → machine-local marker 判定が「content 内」
+#     でなく「入力のどこか」に緩む (= escape hatch が広がる方向の fail-open)。
+#     deny 判定自体 (path pattern) は jq 有無で不変。
+#
+# ⚠️ 検出限界 (= 本 hook は defense-in-depth の一層であり保証ではない):
+#   本 hook が見るのは Edit/Write tool の file_path だけ。 Bash 経由の書き込みは
+#   sibling の memory-guard-bash.sh が cover するが、 そちらも redirect/tee/cp/mv
+#   の高信号 pattern のみで interpreter 経由等は素通りする (そちらの header 参照)。
+#   完全検出は原理的に不能 (proxy 盲点、
+#   docs/convention-design-principles.md#proxy-blind-spot) なので、 検出を際限なく
+#   強化するのでなく、 限界を明示して規律 + human-steering と併用する。
+#
 # 2026-04-17 変更: ask → deny に格上げ (memory/ への feedback_* 流入を構造的に防ぐ)
 
 INPUT=$(cat)

@@ -13,6 +13,23 @@
 #       - rm / ls / cat 等の read/delete は対象外 (書き込みパターンのみ)
 # 依存: jq（なければ入力全体をパターンマッチ）
 #
+# jq 不在時の fallback 挙動: COMMAND に入力 JSON 全体を代用する。 WRITE_PATTERN は
+# 「書き込み記号の後に memory path が続く」形なので JSON 全体でも概ね同じ判定に
+# なるが、 tool_input 以外のフィールドに書き込み風文字列があると偽陽性 deny に
+# なりうる (= fail-closed 側に倒れる、 escape hatch で通せる)。
+#
+# ⚠️ WRITE_PATTERN の検出限界 (= 本 hook は defense-in-depth の一層であり保証ではない):
+#   検出するのは高信号 pattern (>, >>, tee, cp, mv と同一 command 内でその後に
+#   memory path が literal で続く形) のみ。 以下は原理的に検出**不能**:
+#     - interpreter 経由:  python3 -c "open('<memory path>','w').write(...)"
+#     - 変数間接 redirect: OUT=<memory path>; echo x > "$OUT"
+#       (redirect 記号の後に /memory/ literal が現れないため)
+#     - script file 経由:  書き込みロジックを file に書いて bash script.sh
+#   完全検出は shell 意味解析が必要で regex では原理的に不能 (proxy 盲点、
+#   docs/convention-design-principles.md#proxy-blind-spot)。 検出を際限なく
+#   強化するのでなく、 限界を明示して規律 + human-steering と併用する。
+#   既知の非検出形は memory-guard-bash.test.sh の P6/P7 で回帰仕様として固定済。
+#
 # 2026-04-17 変更: warning-only → deny に格上げ (Edit/Write ガードとの一貫性)
 
 INPUT=$(cat)
