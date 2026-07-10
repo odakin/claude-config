@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # memory-guard-bash.sh — メモリ書き込みガード — Bash 用（§8 feedback deny + escape hatch）
 # memory-guard-bash.sh — Bash 経由のメモリ書き込みガード (deny + escape-hatch)
 # Edit/Write ツールのガード (memory-guard.sh) を補完
@@ -31,6 +31,8 @@
 #   既知の非検出形は memory-guard-bash.test.sh の P6/P7 で回帰仕様として固定済。
 #
 # 2026-04-17 変更: warning-only → deny に格上げ (Edit/Write ガードとの一貫性)
+
+set -uo pipefail  # -e は使わない (grep no-match 等の正当な非ゼロ exit があるため、 hook-authoring.md#shebang-set-policy)
 
 INPUT=$(cat)
 

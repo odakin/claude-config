@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # latexdiff-review-snapshot.sh — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex 最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
 # latexdiff-review-snapshot.sh — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備する engine
 #

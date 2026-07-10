@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # audit-hooks.sh — 3 軸 hook 配信 audit (= silent malfunction の構造的検出)
 #
 # 設計動機: conventions/hook-authoring.md#delivery-audit-4-axes の 3 軸 audit 規律を script 化。

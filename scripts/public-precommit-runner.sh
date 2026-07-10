@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # public-precommit-runner.sh — 公開リポ pre-commit gate（Tier A + sensitive-terms.txt ephemeral）
 # public-precommit-runner.sh — 公開リポの pre-commit gate
 #

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # expensive-tmp-guard.sh — PreToolUse(Bash): Audiveris / oemer / ML training 系の -output /tmp/ パターンを検出して `permissionDecision: ask`
 # expensive-tmp-guard.sh — 高コスト中間 artifact を /tmp に書く reflex を機械的に warn
 #

@@ -35,6 +35,8 @@
 #   CLAUDE_ACCT_CHANGE_NO_STASH      1 なら stash 更新を skip (test 用)
 #   CLAUDE_PERSONAL_LAYER            個人層 dir を明示指定 (or 'none' で検出無効化、 find-personal-layer.sh 経由)
 
+set -uo pipefail  # -e は使わない (fail-open 契約と両立しないため、 hook-authoring.md#shebang-set-policy)
+
 CLAUDE_JSON="${CLAUDE_ACCT_CHANGE_CLAUDE_JSON:-$HOME/.claude.json}"
 STASH="${CLAUDE_ACCT_CHANGE_STASH:-$HOME/.claude/last-claude-userid}"
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # commit-msg-leak-matcher.sh — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 8 allowlist の (a)(b)(c) check)、 claude-code hook + git-side runner の両方が source する DRY 実装
 # commit-msg-leak-matcher.sh — sourceable matcher library
 #

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # memory-guard.sh — メモリ書き込みガード — Edit/Write 用（§8 feedback deny + escape hatch: machine-local marker）
 # memory-guard.sh — メモリファイル書き込みガード (deny + escape-hatch)
 # CONVENTIONS.md §2「記録先の判別」の機械的チェックポイント
@@ -28,6 +28,8 @@
 #   強化するのでなく、 限界を明示して規律 + human-steering と併用する。
 #
 # 2026-04-17 変更: ask → deny に格上げ (memory/ への feedback_* 流入を構造的に防ぐ)
+
+set -uo pipefail  # -e は使わない (grep no-match 等の正当な非ゼロ exit があるため、 hook-authoring.md#shebang-set-policy)
 
 INPUT=$(cat)
 

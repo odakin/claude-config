@@ -12,6 +12,9 @@ sections:
     level: 2
     title: "§0. naming convention: suffix で behavior を区別"
     related: [hook-category-intro]
+  - id: shebang-set-policy
+    level: 3
+    title: "§0 補足: shebang / set 方針"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2

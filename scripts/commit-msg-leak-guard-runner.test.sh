@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # commit-msg-leak-guard-runner.test.sh — 上記 runner の self-test（15 case、 BLOCK / PASS / merge skip 等）
 # commit-msg-leak-guard-runner.test.sh — self-tests for the git-side runner
 #

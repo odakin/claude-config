@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # public-precommit-runner.test.sh — self-tests for the file-body pre-commit gate
 #
 # 設計動機: 2026-06-29 arxiv-digest archive 8 file が public-precommit-runner.sh

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # google-url-guard.sh — Google URL 安定性ガード — PreToolUse(Edit|Write|MultiEdit|Bash): /u/N/ 禁止 + `?authuser=<email>` 必須
 # google-url-guard.sh — Google URL の安定性 / 多アカウント対応をガード
 #

@@ -48,6 +48,17 @@ suffix と behavior の対応がずれている (= 例: `-nudge` 接尾辞だが
 
 ⚠️ **`pdf-open-enforce.sh` の suffix は 2026-06-23 から grandfathered (= suffix↔behavior 不一致)**: 同 hook は **block (`-enforce`) から side-effect ACTION (= hook 自身が `open <pdf>` を実行、 block せず always exit 0) へ転換**した。理由 = block 型は §9.3 の desktop-hook-gap で死ぬ (= Stop の `decision:block` が honれない) ため、 §9.3 の「side effect は走る」 非対称を使って hook が直接 `open` する形に変えた (= RCA `<personal-layer>/plans/2026-06-23-pdf-preview-discipline-rca.md`)。**side-effect action は本 §0 の 3 suffix のどれにも当てはまらない 4 つ目の behavior class** だが、 rename の blast radius (= settings.json + symlink + manifest + test + cross-doc ref) を避けて filename を据え置いた。新規に side-effect action hook を作るなら `-open` / `-action` 等の suffix を検討し、 本 hook も将来 pass で rename 余地あり。audit (§6) で「`-enforce` だから block する」 と reflex 判定しないこと (= 本 hook は exit 0 / 非 block)。
 
+### <a id="shebang-set-policy"></a>§0 補足: shebang / set 方針
+
+repo 内 shell script (hooks/ + scripts/ + setup.sh) の統一方針 (2026-07-10):
+
+- **shebang 標準 = `#!/usr/bin/env bash`**。 `/bin/bash` 直指定は macOS で bash 3.2 に固定される — 3.2 互換で**書く**規律 (§1) と、 PATH 上の新しい bash でも**動く**ことは両立するので、 env 経由を標準とする。
+- **`#!/bin/sh` は POSIX 徹底が確認できた script のみ** (= bashism ゼロ + `sh -n` pass を確認してから)。 該当は launchd から呼ばれる install / watchdog 系 (`install-launchd-cron.sh` / `install-pty-leak-mitigation.sh` / `install-remote-control-server.sh` / `pin-claude-cwd.sh` / `pty-leak-watch.sh`) — 最小 shell 前提の文脈で意図的。 bashism を足したくなったら shebang ごと bash に切り替える (= sh のまま bashism 混入が最悪)。
+- **例外: `fix-snapshot-path-patch.sh` は `#!/bin/zsh`** (= zsh 環境の PATH snapshot を patch する対象整合で zsh、 launchd WatchPaths 起動)。
+- **hook (hooks/*.sh) は `set -uo pipefail` を標準**。 `set -e` は**使わない** — hook 内の grep / git は「no match」 等で正当に非ゼロ exit するので、 -e は最初のそれで hook を殺す (git-state-nudge.sh header の設計 note 参照)。 optional な env / 変数は `${VAR:-default}` で明示するのが -u との契約。
+- **set -u を既存 script に後付けする時は、 先に .test.sh で挙動を固定してから** (= unbound 参照が実行 path 依存で潜んでいることがあり、 挙動変化 (途中死) が silent に起きるため。 hooks/ の guard hook は全数 .test.sh 持ち)。
+- scripts/ 側の `set` は script の性質で選ぶ (fail-open が契約の surface 系は敢えて緩くする場合がある) が、 新規 script は `set -u` 以上を default とする。
+
 ---
 
 ## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug
