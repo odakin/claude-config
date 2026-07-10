@@ -23,7 +23,7 @@ layer 1 (public) のドメイン固有規約 71 file をカテゴリ別に列挙
 - **[multi-machine-state.md](multi-machine-state.md)** — 複数マシンで同じ Claude Code setup を運用・audit するとき
   - 複数マシンで同じ Claude Code セットアップを使うときの規律 (audit scope 明示・実機検証・idempotent setup.sh)
 - **[multi-session-coordination.md](multi-session-coordination.md)** — 並列 Claude session と同じ repo を触るとき + spawn/handoff を設計するとき
-  - 同 user の並列 Claude session が同 file path を race する防御 (= session 開始 git fetch + log + plan read、 Write 前 ls/find、 Edit 前 Read 強制、 plan checkbox [x] は実装済のみ semantics、 prev session の commit を「他人 commit」 として cold-read)
+  - 同 user の並列 Claude session が同 file path を race する防御 (= session 開始 git fetch + log + plan read、 Write 前 ls/find、 Edit 前 Read 強制、 commit 時は git add -A でなく明示 add 〔= 並行 session の未 commit WIP 巻き込み防止〕、 plan checkbox [x] は実装済のみ semantics、 prev session の commit を「他人 commit」 として cold-read)
 - **[personal-skills.md](personal-skills.md)** — personal skill (~/.claude/skills/) を規律の発火面として使うとき
   - personal skill (= ~/.claude/skills/、 全 session 常時可視の auto-discover) を規律の発火面として使う規約 — 機構 fact 〔symlink 可・session 開始時 discovery〕 + description の書き方 + 多 machine 配線 〔explicit allowlist registry〕 + 検証作法 〔trigger test → discovery test の汚染回避順序、 headless claude -p の制約〕
 - **[preview.md](preview.md)** — preview / dev server 稼働中に user へ動作確認を依頼するとき
@@ -144,7 +144,7 @@ layer 1 (public) のドメイン固有規約 71 file をカテゴリ別に列挙
 ## エンジニアリング一般 (`infra`)
 
 - **[data-pipeline-automation.md](data-pipeline-automation.md)** — 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
-  - データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script) を bundle
+  - データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script)・埋め込み import の fail-open guard は SystemExit も吸収 (= 子の import-時 sys.exit が except Exception を素通りして監視 script が silent 死する罠) を bundle
 - **[debugging-discipline.md](debugging-discipline.md)** — bug fix を提案する前・audit verdict を出す前 (検証規律)
   - Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)
 - **[discord-bot.md](discord-bot.md)** — Discord Bot を運用・実装するとき

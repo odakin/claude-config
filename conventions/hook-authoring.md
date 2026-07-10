@@ -77,6 +77,22 @@ case "$VAL" in ''|*[!0-9]*) VAL=0 ;; esac
 
 **兄弟形 = pipe 越しの成否判定** (同 kernel「見かけの exit code を信用しない」): `if cmd | sed 's/^/  /'; then` は **sed の exit code** を test している — cmd が失敗しても sed が成功すれば偽 success。 表示整形の pipe を挟むなら判定は `{ cmd 2>&1 | sed 's/^/  /'; exit "${PIPESTATUS[0]}"; }` の subshell 形で **PIPESTATUS[0]** に anchor する (`set -o pipefail` は「どれかが失敗した」 しか言えず「どれが」 を区別しない点に注意)。 実例: setup.sh の git-crypt unlock 判定が sed の exit code を見て失敗を success 計上していた (2026-07-10 修正)。
 
+### <a id="err-trap-inline-conditional-substitution"></a>§0 補足 3: `trap 'exit 0' ERR` × 条件付き inline 置換 = 値が空の環境でだけ hook が silent 死
+
+**罠**: fail-open hook の定番 `trap 'exit 0' ERR` の下で、 optional な値を `msg="... $([ -n "$x" ] && printf ' (%s)' "$x") ..."` のように **command substitution 内の条件で整形**すると、 値が空のとき置換の exit status 1 が **assignment (= simple command) に伝播して ERR trap が発火**し、 hook がそこで silent 終了する。 素の `[ -n "$x" ] && cmd` の失敗は ERR trap 免除 (= && list 内) だが、 **それを含む置換の status を受け取った assignment は免除されない**のが非対称の罠。
+
+**実例 (2026-07-10、 CI 初回走行で検出)**: session の worker host を自己申告する SessionStart hook が、 config metadata から email を読めた環境 (= owner の常用機) では正常、 **email の無い環境 (= 未 auth の config dir / fresh マシン) でだけ無出力で死んでいた** — マシン判別が一番要る状況でこそ stamp が消える倒錯。 author 環境では test 全 pass なので構造的に不可視 (= §0 補足 2 と同じく CI が初めて露出させた class)。
+
+**正しい形 = 条件整形は if で組む** (置換の中に条件を入れない):
+
+```bash
+x_part=""
+if [ -n "$x" ]; then x_part=" (${x})"; fi
+msg="prefix${x_part} suffix"
+```
+
+**一般則**: `trap ... ERR` 下では「**空でありうる値**を条件付きで整形する command substitution」 が全て地雷 — 値が空の環境でだけ発火し、 author の環境では再現しない。 grep 検査: trap ERR 持ち hook に対して `grep -n '\$(\[ ' hooks/*.sh`。
+
 ---
 
 ## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug

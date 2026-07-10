@@ -18,6 +18,9 @@ sections:
   - id: substitution-fallback-stdout-mixing
     level: 3
     title: "§0 補足 2: `$(a || b)` fallback は「a の部分 stdout」 を混入させる — BSD/GNU 分岐は exit code でなく出力検証で"
+  - id: err-trap-inline-conditional-substitution
+    level: 3
+    title: "§0 補足 3: `trap 'exit 0' ERR` × 条件付き inline 置換 = 値が空の環境でだけ hook が silent 死"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2

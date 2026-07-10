@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 並列 Claude session と同じ repo を触るとき + spawn/handoff を設計するとき
 category: harness-core
-summary: 同 user の並列 Claude session が同 file path を race する防御 (= session 開始 git fetch + log + plan read、 Write 前 ls/find、 Edit 前 Read 強制、 plan checkbox [x] は実装済のみ semantics、 prev session の commit を「他人 commit」 として cold-read)
+summary: 同 user の並列 Claude session が同 file path を race する防御 (= session 開始 git fetch + log + plan read、 Write 前 ls/find、 Edit 前 Read 強制、 commit 時は git add -A でなく明示 add 〔= 並行 session の未 commit WIP 巻き込み防止〕、 plan checkbox [x] は実装済のみ semantics、 prev session の commit を「他人 commit」 として cold-read)
 -->
 # Multi-session coordination — 同 user の並列 Claude session が race する
 
@@ -55,11 +55,17 @@ Read it again before attempting to write it.
 2. 自分の予定変更が依然意味があるか確認 (= 別 session が同じ意図で先に edit していれば自分の変更は冗長)
 3. 矛盾なし & 必要 → retry / 冗長 → skip / 矛盾あり → user 確認
 
+**(D) Commit 時 reflex** (= stage する時)
+
+- 並行 session が同 tree に居る (可能性がある) 環境では **`git add -A` / `git add .` を使わない** — 相手の**未 commit の WIP** を丸ごと自 commit に巻き込む (= 自分の commit message が説明しない変更が push され、 相手の WIP が中間状態で publish される + 相手側からは自分の編集が「勝手に consume された」 ように見える)。 **自分が編集した file を明示列挙して add** する
+- 実例 (2026-07-10): session X が script を編集中 (前半 commit 済・続き未 commit) のところへ、 session Y が別作業の `git add -A` で X の未 commit 分 42 行を無関係な message の commit に混入させて push。 X はその上に続きを積めたため実害は attribution の濁りに留まったが、 X の WIP が中間状態で publish される class の事故
+
 ### Anti-pattern
 
 - **`git status` が clean だから別 session の work と被らないと assume**: clean は「自 session の uncommitted がない」 を意味するだけで、 別 session の最新 commit を pull したかは別問題。 fetch + log 確認が必要
 - **Edit retry エラーを「またユーザーが触ったか」 で済ませて再 try**: 再 Read せずに retry すると pre-empt 内容を上書き
 - **「新規 Write だから Read 不要」**: 新規だと思った path が既存だった事故が頻発。 Write tool は `read_before_write` を強制しないので、 自己規律で `find` or `ls` で先に確認
+- **`git add -A` なら「自分の変更だけが stage される」 と assume**: 並行 session の未 commit WIP も無差別に拾う ((D) 参照)。 明示 add が defense
 
 ---
 

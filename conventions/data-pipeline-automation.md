@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
 category: infra
-summary: データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script) を bundle
+summary: データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script)・埋め込み import の fail-open guard は SystemExit も吸収 (= 子の import-時 sys.exit が except Exception を素通りして監視 script が silent 死する罠) を bundle
 -->
 # データ pipeline と半自動化の設計規律
 
@@ -311,6 +311,24 @@ load→dump round-trip (PyYAML 等) は comment / 整形 / key 順を破壊し�
 - 症状: PyYAML 側で `d.get("no")` が `None` を返す (= 実 key は `False`)。 build (js-yaml) は正常なので「script だけ」 が静かに誤読する。
 - 対処: script 側で両対応 (`d.get("no", d.get(False))`)、 または yaml 側で当該 key/値を quote。
 - reflex: 「この yaml は他 parser も読むか? key/値に `no/yes/on/off` 系の bare token はないか?」 を script を書く時に問う。
+
+---
+
+## <a id="embedded-import-systemexit"></a>9. 埋め込み import (= 他 CLI script の関数を importlib で借りる) の fail-open guard は SystemExit も吸収する
+
+### 規律
+
+CLI script A の loader / helper を script B が `importlib.util.spec_from_file_location` + `exec_module` で借りるとき、 B 側の fail-open guard は `except Exception` では**不十分** — `except (Exception, SystemExit)` と書く。 併せて A 側 (貸す側) の module-level dependency guard (`except ImportError: print(...); sys.exit(0)`) は **`__name__ == "__main__"` の時のみ exit し、 import された時は raise** の 2 分岐にする (= importlib 経由では `__name__` = spec 名 ≠ `"__main__"`)。
+
+### Why
+
+`sys.exit()` が送出する `SystemExit` は **`Exception` の subclass ではない** (BaseException 直下)。 A が module-level に「依存 lib 不在なら friendly message + sys.exit(0)」 の CLI 向け guard を持っていると、 B の `except Exception` を素通りして **B 本体ごと終了**する。 B が「該当なしなら沈黙」 型の surface / 監視 script の場合、 この死は**正常な沈黙と区別がつかない** — 「安全網が休止中」 を警告するはずの行ごと消える。 依存 lib が揃った author 環境では再現せず、 CI / fresh 環境で初めて露出する (2026-07-10 実測: 監視 script 群のうち**過去に同じ罠を踏んだ script だけ**が `except SystemExit` を個別に持つ非対称 drift として発見された — kernel を規約化せず instance 修理だけしていた形)。
+
+### How to apply
+
+- B 側 guard は `except (Exception, SystemExit)` — ただし fail-open が文書化された意図の import guard に限る (`except BaseException` で KeyboardInterrupt まで飲む形は使わない)
+- A 側 dependency guard は `if __name__ == "__main__": exit / else: raise` の 2 分岐
+- 検査: `grep -l exec_module scripts/*.py` の各 file を `grep -L "SystemExit"` に通して未対応 caller を列挙
 
 ---
 
