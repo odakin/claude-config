@@ -1,11 +1,11 @@
 <!-- doc-meta
 when: 研究費/教務/学術様式の xlsx/docx を機械で fill するとき (罠の症例集)
 category: office
-summary: 研究費/教務/学術様式の Excel xlsx を openpyxl で fill + 生成物 PDF 化 / TTS の落とし穴集 (= form 構造 dump 必須・label vs input 改変防止・rich text underline・docx XML 宣言由来の Word 破損 §2-5b・**Word docx→PDF の stale in-memory cache + cold-start 失敗の対処 §2-4b**・**記入要領削除は構造保持+content-control も走査+双方向検証 §2-5c (青字ガイダンスは effective-color〔run→rStyle→pStyle の style 継承〕で strip + PDF span 色=非黒0 で検証)**・**Pages は横並び表を重ねて出す artifact = docx 不具合と誤認するな (Word render で確認・creator metadata で判別)**・PDF visual confirmation 義務・**画像読みすぎで image budget 枯渇時の text-first 検証 §6-5**・印影/署名の電子可否・多 sheet form sweep)
+summary: 研究費/教務/学術様式の Excel xlsx を openpyxl で fill + 生成物 PDF 化 の落とし穴集 (= form 構造 dump 必須・label vs input 改変防止・rich text underline・docx XML 宣言由来の Word 破損 §2-5b・**Word docx→PDF の stale in-memory cache + cold-start 失敗の対処 §2-4b**・**記入要領削除は構造保持+content-control も走査+双方向検証 §2-5c (青字ガイダンスは effective-color〔run→rStyle→pStyle の style 継承〕で strip + PDF span 色=非黒0 で検証)**・**Pages は横並び表を重ねて出す artifact = docx 不具合と誤認するな (Word render で確認・creator metadata で判別)**・PDF visual confirmation 義務・**画像読みすぎで image budget 枯渇時の text-first 検証 §6-5**・印影/署名の電子可否・多 sheet form sweep。 TTS 音声校正は tts-review.md へ切り出し済)
 -->
-# Office automation (macOS): xlsx form fill, PDF conversion, TTS review
+# Office automation (macOS): xlsx form fill, PDF conversion
 
-研究費応募書類 / 教務書類 / 学術様式の Excel xlsx を **openpyxl で fill する作業**、 および生成物の **PDF 化 / 印刷 / 音声読み上げ** に関する規約と落とし穴集。
+研究費応募書類 / 教務書類 / 学術様式の Excel xlsx を **openpyxl で fill する作業**、 および生成物の **PDF 化 / 印刷** に関する規約と落とし穴集 (音声読み上げ校正は [`tts-review.md`](tts-review.md) へ切り出し済)。
 
 > 🧠 **考え方 (原則編) は [`office-automation-principles.md`](office-automation-principles.md)** — 様式 = 「見た目が契約」 / file = 地層 / 処理 = lossy 解釈器の連鎖、 という枠組みと、 道具選択の梯子・検証 3 層モデル・既知情報 prefill / print-last 等の人間系原則。 **新しい様式・新しい罠 (= 本 file に slug が無い状況) ではまず原則編を読む**。 本 file は個別 gotcha の正本。
 
@@ -2138,18 +2138,7 @@ origin: 2026-05-14 JST 系公募で 様式 0 = 2 → 1 page、 様式 2 = 3 → 
 
 ## <a id="tts-review"></a>提案書を音声で確認 (macOS `say` で TTS)
 
-長文 (= 6 セクション数千字) を視覚読みで疲れた時、 macOS 標準の `say` で TTS して耳で確認。
-
-```bash
-say -v "Kyoko (Enhanced)" -r 200 "本研究の目的は..."
-```
-
-- 日本語音声: `Kyoko` (女性) / `Otoya` (男性)、 各 Enhanced 版が高音質
-- `-r 200` は WPM (Words Per Minute)、 200 が読み上げに自然なペース
-- 長文を sections で区切って速報生成: `bash` script で `say` を順次呼ぶと中断 (`killall say`) しやすい
-- 数式記号や英略語 (LLM、 H₀、 EJP-C 等) は読みづらいので script で読みやすく書き換え (例: `H₀` → `エイチゼロ`)
-
-提案書 self-review 用途では、 自分で書いた文章の「不自然な日本語」 が聞いて初めてバレることが多い。
+**→ 本節は [`tts-review.md`](tts-review.md) へ MOVE (2026-07-10)** — 音声読み上げ校正は form fill と独立の topic (= 任意の長文に効く) のため単独 file に切り出した。 `say` の voice 選択 / WPM / 数式記号・英略語の読み替え前処理 / self-review の使い所は移動先が正本。
 
 ---
 
