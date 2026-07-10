@@ -32,6 +32,10 @@ sections:
     legacy: "2.5"
     level: 3
     title: "2.5 SoT 重複の 3 つの扱い (design-out vs reactive) — 成熟度で分類し、検出器を「未 design-out の症状」と読む"
+  - id: time-decaying-fact-authoring
+    legacy: "2.6"
+    level: 3
+    title: "2.6 時点依存 fact は undated 断定で書かない — 「環境が変わると偽になる文」の authoring 規律"
   - id: rule-addition-criteria
     legacy: "3"
     level: 2
