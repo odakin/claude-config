@@ -101,7 +101,7 @@ Bot Token を **誰が持つか** を明示的に判断する。Token を持つ�
 
 **shared リポの CLAUDE.md は方針を明記**: 「Token 必要な操作は owner に依頼」 or 「Token は `secrets/<bot>-token` の暗号化 backup から取得 (setup.sh 自動展開)」 — どちらかを書いて共同編集者の「Token どこ?」 の行き止まりを解消する。書いていないと collaborator が場面ごとに owner に問い合わせる手間が発生する。
 
-## Discord API call の User-Agent header 必須
+## <a id="discord-api-user-agent"></a>Discord API call の User-Agent header 必須
 
 Discord Bot API (`discord.com/api/v10/...`) を curl / Python urllib / requests から叩く場合、**Discord 仕様で User-Agent header 必須**。 default UA (= `Python-urllib/3.x` 等) は Cloudflare で **error 1010 (Access denied) で reject** される。
 
