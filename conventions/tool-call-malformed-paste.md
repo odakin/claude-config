@@ -25,7 +25,7 @@ Claude Code CLI の bug でも、prompt の書き方の問題でもない。
 
 ## 緩和策 (確実順)
 
-1. **model 切替** (最優先) — Opus 4.8 固有。本命は **Opus 4.7 1M** (`/model claude-opus-4-7[1m]` = 賢さ最大 × バグ 0%)、Sonnet 4.6 は次善 (#64774)
+1. **model 切替** (最優先) — Opus 4.8 固有。優先順位 = **Fable 5** (可用なら最賢、 2026-07-10 local 実測 4,169 turn で 0 件) → **Opus 4.7 1M** (`/model claude-opus-4-7[1m]`、 1M context 要件の本命、 #64774 で 0%) → Sonnet 4.6 (正本 = tool-call-robustness.md §Reflex)
 2. **新 session** — poisoned context を断ち切る
 3. **sub-agent 委譲** — work tool 実行を Agent に逃がす (現 session の context 保持可)
 4. **1 ターン 1 tool call** — 並列を避ける (#64955 対策)

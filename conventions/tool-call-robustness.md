@@ -5,9 +5,9 @@
 
 ---
 
-## ⚡ Reflex — 出たら速やかに諦めて Opus 4.7 へ切り替える
+## ⚡ Reflex — 出たら速やかに諦めて bug 非該当 model へ切り替える
 
-malformed (or §別の症状変種「silent 捏造」) を観測したら、 **粘らずに `/model claude-opus-4-7[1m]` で Opus 4.7 1M に切り替える**。 これが root に最も近い唯一の有効緩和で、 「次は通るかも」 で retry を重ねるほど **context が poison されて後続も壊れる** (= §真因 #62344 機序) ため、 早い切替が累積コスト最小。
+malformed (or §別の症状変種「silent 捏造」) を観測したら、 **粘らずに `/model` で bug 非該当 model (下の優先順位) に切り替える**。 これが root に最も近い唯一の有効緩和で、 「次は通るかも」 で retry を重ねるほど **context が poison されて後続も壊れる** (= §真因 #62344 機序) ため、 早い切替が累積コスト最小。
 
 **諦めしきい値 (= ここまで来たら問答無用で切替)**:
 
@@ -17,9 +17,9 @@ malformed (or §別の症状変種「silent 捏造」) を観測したら、 **�
 
 **切替先の優先順位**:
 
-1. 🥇 `/model claude-opus-4-7[1m]` — Opus 4.7 1M (= **本命**、 Opus tier で賢さ最大、 #64774 統計で失敗率 0%)
-2. 🥈 `/model claude-sonnet-4-6` — Sonnet 4.6 (= 次善、 bug 0% だが Opus 4.7 より賢さで劣る)
-3. 🥉 (Fable 5 = 最賢だが本ユーザの環境では選択外)
+1. 🥇 `/model claude-fable-5` — Fable 5 (= **最賢**。 2026-07-10 の local transcript 実測で 4,169 turn / malformed 0 件 = 発生報告なし。 ⚠️ #64774 は Fable 5 の統計を持たない = 公開定量は未収集、 local n=1 環境の 0 件である点は明示しておく。 ⚠️ 旧版本 doc は「日本不可」 と書いていたが 2026-07-10 に日本の owner 環境で実稼働を確認済 = 可用性は時点依存、 選べなければ次へ)
+2. 🥈 `/model claude-opus-4-7[1m]` — Opus 4.7 1M (= **1M context が必要な作業の本命**、 Opus tier で賢さ大、 #64774 統計で失敗率 0%)
+3. 🥉 `/model claude-sonnet-4-6` — Sonnet 4.6 (= 次善、 bug 0% だが上 2 つより賢さで劣る)
 
 **なぜ「諦める」 と書くか**:
 
@@ -75,7 +75,7 @@ root は backend fix 待ちだが、 発生確率と poisoning ループは以�
 5. **`cd` を compound command に入れない** (= 別途 permission prompt を誘発)。 `git -C <dir>` 等で代替。
 6. **commit message など複数行 + 山括弧を含むものはファイルに書いて `git commit -F`** で渡す (= `-m "..."` 内の山括弧・改行を避ける)。
 7. **malformed が出たら同 session で retry を重ねない**。 #62344 の poisoning で後続も壊れるため、 数回失敗したら **新しい session に切り替える** (= 壊れた context を断ち切る)。
-8. **model を切り替える** (= **最も確実な緩和、 最優先で検討**)。 bug は Opus 4.8 固有で、 #64774 が他 model の失敗率 0% を定量報告 (= Opus 4.7 / Opus 4.6 / Sonnet 4.6 / Haiku 4.5 すべて 0、 Opus 4.8 のみ ~1.5%)。 **本命は Opus 4.7 1M** (`/model claude-opus-4-7[1m]`) = Opus tier で Sonnet 4.6 より賢く Claude Code 既定 xhigh = 「賢さ最大 × バグ回避」 の最適解。 Sonnet 4.6 は次善 (= bug 0% だが Opus 4.7 より賢さで劣る)。 Fable 5 は最賢だが日本不可。 tool-call 密度の高い作業で頻発するなら `/model` で Opus 4.7 へ切り替えるのが root に最も近い回避になる (= backend fix が出るまでの実用解)。
+8. **model を切り替える** (= **最も確実な緩和、 最優先で検討**)。 bug は Opus 4.8 固有で、 #64774 が他 model の失敗率 0% を定量報告 (= Opus 4.7 / Opus 4.6 / Sonnet 4.6 / Haiku 4.5 すべて 0、 Opus 4.8 のみ ~1.5%)。 **切替先の優先順位は冒頭 §Reflex の表が SoT** (= Fable 5 〔可用なら最賢、 2026-07-10 local 実測 4,169 turn で 0 件〕 → Opus 4.7 1M 〔1M context 要件の本命、 #64774 で 0%〕 → Sonnet 4.6)。 ⚠️ 可用 model の lineup は時点依存で decay する — 本 doc の記述時点と検証方法を確認し、 `/model` で実際に選べるかが最終 ground truth (旧版は「Fable 5 = 日本不可」 と書き、 後日その環境自身で反証された)。 tool-call 密度の高い作業で頻発するなら先回りで `/model` 切替が root に最も近い回避 (= backend fix が出るまでの実用解)。
 9. **当該操作をサブエージェント (Agent tool、 例: general-purpose) に委譲する**。 malformed が再発して特定の tool call が通らないとき、 その操作を sub-agent に委譲すると **別 context で実行される**ため回避できることがある (= 2026-06-15 実例: メイン session 〔Opus 4.8 1M-context〕 で `settings.json` の 1 行 Edit が 2 連続 malformed → 同じ編集を sub-agent に委譲したら 1 回で成功)。 位置づけは 7 (新 session) / 8 (model 切替) と同じ「root が直らないとき作業を別経路に逃がす」 系だが、 **新 session より軽量で現 session の context を保ったまま当該操作だけ別経路に出せる**のが利点。 複雑判断を伴わない単発操作 (= ファイル編集・コマンド実行) の委譲に向く (= 判断を要する作業の丸投げではない)。 ⚠️ sub-agent の完了報告自体が偽成功変種で捏造されうる (= 後述「tool 結果の silent 捏造」 節) ので、 委譲結果は ground truth (`git log` / `grep` 等) で裏取りする。 ⚠️ **用途の切り分け**: 本項の Agent は「現 session の context を保ったまま軽量に逃がす」 用途。 これと違い **完全に独立した別 session** (own worktree / 呼び元終了後も生存 / user steer 可) に渡して結果を受け取りたい場合は Agent でなく **spawn_task + 結果返送** ([`multi-session-coordination.md` spawn-handoff-token-return](multi-session-coordination.md#spawn-handoff-token-return))。 ユーザーが「新 session」 を名指したのに Agent に潰すのは別問題 (= [`convention-design-principles.md §4.1`](../docs/convention-design-principles.md#motivated-substitution-trap) deliverer-retention)。
 
 10. **session が poisoned したら work tool を自分で実行せず、 全ての tool 実行を subagent に逃がす** (= 9 の escalation、 単発委譲 → blanket 委譲)。 9 は「通らない 1 操作を別経路に出す」 だが、 malformed が繰り返し再発して session 全体が poisoned した時点では、 main agent は Bash / Edit / NotebookEdit / 重い MCP 等の **work tool を自分で実行するのをやめ、 残り session の tool 実行を丸ごと subagent に委譲**する。

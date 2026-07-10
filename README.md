@@ -64,8 +64,8 @@ On Windows (MSYS/Cygwin) symlinks are replaced with file copies and the `post-me
 ## Core concepts
 
 - **CLAUDE.md vs SESSION.md** — CLAUDE.md is "how to work on this project" (rarely updated). SESSION.md is "where we are right now" (continuously updated). This separation is what makes autocompact recovery reliable.
-- **Information destinations** — every piece of information has one correct home (memory / SESSION.md / CLAUDE.md / DESIGN.md / CONVENTIONS.md / don't-write-it). Table and rationale in [CONVENTIONS.md §2](CONVENTIONS.md). The `memory-guard` hooks enforce it on Edit/Write into the memory directory.
-- **Push-before-check** — a 4-axis review (consistency, non-contradiction, efficiency, safety) before every `git push`. Detail in [CONVENTIONS.md §3](CONVENTIONS.md).
+- **Information destinations** — every piece of information has one correct home (memory / SESSION.md / CLAUDE.md / DESIGN.md / CONVENTIONS.md / don't-write-it). Table and rationale in [CONVENTIONS.md "記録先の判別"](CONVENTIONS.md#record-location-decision). The `memory-guard` hooks enforce it on Edit/Write into the memory directory.
+- **Push-before-check** — a 4-axis review (consistency, non-contradiction, efficiency, safety) before every `git push`. Detail in [CONVENTIONS.md "push 前チェック"](CONVENTIONS.md#pre-push-check).
 
 ## Context budget
 

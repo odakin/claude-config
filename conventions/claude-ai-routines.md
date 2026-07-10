@@ -79,7 +79,7 @@ create body の minimal shape:
     "ccr": {
       "environment_id": "<env_id>",
       "session_context": {
-        "model": "claude-sonnet-4-6",
+        "model": "<model id、 例は執筆時点 (2026-06) の claude-sonnet-4-6 — 現行 lineup から選ぶ>",
         "sources": [{"git_repository": {"url": "https://github.com/<org>/<repo>"}}],
         "allowed_tools": ["Bash", "Read", "Write", "Edit"]
       },

@@ -219,6 +219,7 @@ setup.sh が自動で行うこと:
 - 金融データ・口座情報
 - 所属機関名
 - 他ユーザーのユーザー名
+  - **例外 (2026-07-10、 user 承認)**: **公開 OSS repository の attribution** (= `<owner>/<repo>` 形式で実在の *public* repo を例・前例・依存として参照する場合) は owner handle を書いてよい。 その handle は当該 repo の公開 page で既に世界に可視であり、 mention は増分 leak を生まない (= 例外 criterion と同じ「public profile から得られる範囲を増やさない」 判定)。 ⚠️ 書く前に repo が実際に public であることを確認する (private repo の owner/名は従来通り禁止)。 適用例: `sogebu/LorentzArena` (= README 流儀・scientific-computing 等の実例参照)
 
 変更前に「公開リポに載せて問題ないか」を必ず確認すること。
 

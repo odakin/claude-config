@@ -1,7 +1,7 @@
 # Personal Layer — odakin's four-layer architecture
 <!-- slug index: personal-layer.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
 
-> **日本語版**: 同じファイル内で日本語セクションを併記しています。
+> **Language**: this doc is English-primary (no full Japanese twin). 日本語の対応する説明は `CONVENTIONS.md` と各層の CLAUDE.md 側にあります。
 
 ## <a id="what-is-personal-layer"></a>What is the personal layer?
 
