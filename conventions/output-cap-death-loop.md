@@ -65,5 +65,6 @@ spec 規律は wording レベルの誘導であって保証ではない (worker 
 ## 関連
 
 - spawn handoff の spec template・token-handshake・返送 spine: [`multi-session-coordination.md` §7](multi-session-coordination.md#spawn-handoff-token-return) (spec を書く時に本 doc の予防規律を焼き込む)
+- task をどの大きさに切るか (sizing 述語 = 新規概念を数える) + input 側 = orientation cost の spec 前払い: [`multi-session-coordination.md` §9](multi-session-coordination.md#worker-task-sizing) (= 本 doc の prevention rule 1 の上流補完)
 - 別 root の session 死 (malformed tool call、 model 切替が本命): [`tool-call-robustness.md`](tool-call-robustness.md) — 「粘らず root に近い一手」 の精神は共通、 機構と対処は別
 - 並列 worker が共有 tmpdir を埋めて Bash 出力が消える別症状: [`multi-session-coordination.md` §5](multi-session-coordination.md#shared-tmpdir-enospc)

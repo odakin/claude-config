@@ -265,7 +265,7 @@ identity は similarity でなく content corroboration でしか establish で�
 - **deliverable を決定的 path に commit** (= 結果の実体、 push が無くても残る)。
 - **完了 marker を決定的な "results inbox" に 1 個落とす** (= status / result_path / 1 行要約)。 これを **surfacing 機構** (= session 開始時の surface・dashboard・OS 通知) が拾い、 人間が次に居る *どの session でも* 「結果が届いた・場所はここ」 と自動表示する。 surfacing は file を読む script 操作なので機械化可能 (= model の chat 出力にも親の findability 仕込みにも依存しない)。 ⚠️ marker は **子自身の完了 action** なので live-push より reliable。 ⚠️ inbox / surfacing 機構の実体は各 user の private layer に置く (= 本 public doc は *形* のみ規定、 具体 path は書かない)。
 
-**task sizing (= worker を殺さない)**: 長い導出・生成 task を 1 spec に mega 盛りしない — worker は 1 応答の出力上限 (thinking 込み) を超える巨大 turn を試みると **決定的 retry loop で silent 死する**。 spec に焼き込む分割・turn 規律・部分結果 permission の正本 = [`output-cap-death-loop.md`](output-cap-death-loop.md#prevention-spec-rules)。
+**task sizing (= worker を殺さない)**: 長い導出・生成 task を 1 spec に mega 盛りしない — worker は 1 応答の出力上限 (thinking 込み) を超える巨大 turn を試みると **決定的 retry loop で silent 死する**。 spec に焼き込む分割・turn 規律・部分結果 permission の正本 = [`output-cap-death-loop.md`](output-cap-death-loop.md#prevention-spec-rules)。 **どの大きさに切るか** (= sizing 述語) と **orientation cost の spec 前払い** は [§9](#worker-task-sizing)。
 
 **optional (= live-push の bonus。 効けば即時 push、 落ちても上の auto-surface が拾うので人間は何もしない)**:
 
@@ -363,8 +363,41 @@ worktree は **(a) 別 session が同じ file (path) を並列に上書きしう
 
 ---
 
+## <a id="worker-task-sizing"></a>9. worker task の適正サイズと orientation の spec 前払い — 委譲 spec の切り方 (宛先は spec author)
+
+§7 が hand-off の**運び方** (token / 返送 spine)、 [`output-cap-death-loop.md`](output-cap-death-loop.md) が worker の **output (生成) 側**の死機構と予防の正本。 本節はその上流 = **task をどの大きさに切るか** (sizing) と、 **input (読解) 側**の立ち上がり費用 (orientation) を spec 側で前払いする規律。 worker は cold session で ambient doc は発火しない (§7 「この technique の射程」) — ここでも操縦桿は spec だけなので、 両方とも spec author (親) の仕事。
+
+### <a id="sizing-predicate"></a>sizing 述語: 新規概念 1 個 + 既存部品の合成まで
+
+spec を書く前に **「この chip に新規概念がいくつあるか」 を数える** (新規概念 = worker が spec と名指し部品だけからは組み立てられず、 自力で設計・導出しなければならない要素):
+
+- **0-1 個** (例: 部品 library 単体 / 較正 1 本 / 既存 pipeline への 1 部品差し替え / 検証済み手法の新 target への適用) → 1 chip で OK。 機械的な合成の**量**は大きくてよい (= 1 つの coherent な新規概念 + repo 内の既存部品の組み合わせで完結する大きめの chip は一発 landed した実測)。
+- **2 個以上** (例: 「machinery 構築 + 較正 + 適用 + 検証」 を 1 spec に束ねる monolith) → **直列 stage に分割** (機械 stage 先・判断 stage 後、 前 stage の成果物 (file / API) を次 spec が名指す)。 = [`output-cap-death-loop.md` prevention rule 1](output-cap-death-loop.md#prevention-spec-rules) 「1 worker = 1 bounded stage」 の "bounded" を、 spec を書く手が数えられる述語にしたもの。
+
+### <a id="orientation-prepay"></a>orientation cost は spec 側で先払いする
+
+worker の立ち上がりの「何を読むべきか探す」 段階は、 最初の durable 成果 (= 初 commit) が出る**前に** context と時間を消費する = そこで死ぬと全損になる無防備区間。 spec author が前払いする:
+
+- (a) **読んでよい file を名指しで cap** (≤ ~4-5 個 + 「他を開かない。 疑問が出たら results に書いて進む」)。
+- (b) **copy 元を関数名まで名指す** (「pipeline の copy 元 = script X の関数 F / G / H」)。
+- (c) **組み立て図を 1-2 行で書く** (「X の関数 F の部品 Y を Z の G に差し替えるだけ」)。
+
+(a)-(c) が書けないのは**親自身が構成を把握していない signal** で、 その chip はまだ切り出せる状態にない (= 先に親が scout するか、 scout 自体を bounded chip にする)。 write 側の cap (「触ってよい file はこれだけ」 「成果物はこれだけ、 増やさない」) は並列衝突防止 (§1) と scope creep 防止を兼ねる。
+
+### Evidence と正直な限界 (2026-07-11)
+
+単一 project・単一日の staged numerical-audit chain (worker 委譲 6 chip) の実測:
+
+- **一発 landed 4** = 部品 library 単体 / 較正 1 本 / 既存 pipeline への部品差し替え / 1 概念 + 既存部品再構成の大きめ chip。 4 spec 全部に write-scope cap + 成果物 cap があり、 読む側の名指し (前提 file / 参照 script) も程度の差はあれ入っていた (= 弱い形の orientation 前払い)。
+- **死亡 2 (いずれも成果物ゼロ)** = ① 「machinery + 較正 + 適用 + 検証」 の 6-stage monolith が 6h stall (= output-cap 死 loop、 機構と実測の正本 = [`output-cap-death-loop.md` §Evidence](output-cap-death-loop.md#evidence) の project B) / ② bounded 寄りの spec でも **orientation 段階で死亡** (proximate は infra error — 「orientation が長いほど初 commit 前に死ぬ露出時間が延びる」 という robustness 解釈までが誠実な範囲で、 orientation cost 自体が死因と断定はできない)。
+
+⚠️ **一般化は暫定** (N = 単一 project・単一日、 成功 4 / 失敗 2)。 (a)-(c) の最強形 (explicit な file cap + 関数名指し) を焼いた再発注 chip は本節起票時点で**未着地** = 効果の直接実証はまだ無く、 evidence は「landed 側は全部 orientation 前払いあり ∧ 死亡側の片方は monolith・片方は orientation 中に死んだ」 という相関どまり。 反例 (= cap 付き chip の同型死 / multi-concept monolith の一発 landed) や追加観察が出たら本節を更新する。
+
+---
+
 ## 関連
 
+- worker task の切り方 (sizing 述語 + orientation 前払い) = spec author 宛の規律: §9 (output 側の死機構は [`output-cap-death-loop.md`](output-cap-death-loop.md))
 - worktree (隔離) か ローカルか = 並列変更の隔離 vs live 反映のトレードオフ: §8
 - collaborator (= 他 user) との Git race / branching: [`shared-repo.md`](shared-repo.md)
 - 4 軸 sweep + sweep goal alignment (= 「✓ pass」 closure を禁じる規律): [`CONVENTIONS.md` §3](../CONVENTIONS.md)
