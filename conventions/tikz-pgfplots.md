@@ -7,7 +7,7 @@ summary: TikZ/pgfplots 固有 gotchas（infographic / poster / 1 枚 figure 制�
 
 TikZ や pgfplots を含む LaTeX project で適用。 一般 LaTeX 規約は [`conventions/latex.md`](latex.md)、 PDF 視覚検証規律は [`latex.md` pdf-visual-verification](latex.md#pdf-visual-verification) を併読。
 
-本 file の知見は **cosmology infographic 制作 (= [odakin/infographics](https://github.com/odakin/infographics) `cosmology-history/`) で多数 iteration を user feedback 駆動で回した記録** (= 2026-05-19 初版 20 iteration + 2026-06-02 に密度プロット再設計で更に多数、 後者で「床塗り closedcycle」「named anchor の scope 非追従」「中央寄せ＝平行移動」「aspect 変更時の回転再計算」 を追加)。 大半は「公式 doc 通りには動かない / 動くが直感に反する」 系の罠で、 1 度踏むと原因特定に 1-2 turn 浪費する。
+本 file の知見は **cosmology infographic 制作 (= [odakin/infographics](https://github.com/odakin/infographics) `cosmology-history/`) で多数 iteration を user feedback 駆動で回した記録** (= 2026-05-19 初版 20 iteration + 2026-06-02 に密度プロット再設計で更に多数、 後者で「床塗り closedcycle」「named anchor の scope 非追従」「中央寄せ＝平行移動」「aspect 変更時の回転再計算」 を追加。 2026-07-10 には共著論文の集合図・写像図 〔= 手描きホワイトボードの paper 図化〕 を author feedback 駆動で ~10 iteration 回し、 §集合図の anchor / §セマンティック配色の移植 / §数値検証 / §縦積み包含鎖 を追加)。 大半は「公式 doc 通りには動かない / 動くが直感に反する」 系の罠で、 1 度踏むと原因特定に 1-2 turn 浪費する。
 
 ## pgfplots `width` / `height` は axis title / xlabel を含めて bounding しない
 
@@ -231,6 +231,67 @@ const (= 水平線) は `\addplot` を諦めて矩形 `\fill[...] (axis cs:xmin,
 4. 再 render → 再実測で左右差・上下差が ~0 か確認 (= 本 session で 0.04mm まで追い込んだ)
 
 §「width/height は label を bound しない」 + §「outer top と data top の internal padding」 で見たように pgfplots の内部 geometry は直感と違う。 **モデルで推論せず実測する** のが速い (= 本 session で誤った geometry モデルから推論して数 turn 浪費した。 既存の本 file を読めば width/height の挙動は書いてあったのに、 読まず再導出した反省)。
+
+## <a id="set-diagram-analytic-geometry"></a>集合図・写像図の anchor は解析的に計算する (目測しない)
+
+数学論文の集合図 (= Venn 風の楕円 + 写像矢印 + 特別な点) では、 **「接している / 被っている / 中心からズレている」 が author の目に即座に留まる**。 目測配置は iteration を浪費する (= 実測 ~10 往復のうち大半が sub-mm の位置調整だった)。 幾何は全部解析的に決められる:
+
+- **楕円周上の点**: 中心 $(x_0,y_0)$、 半径 $(a,b)$ の楕円は $(x_0 + a\cos t,\ y_0 + b\sin t)$。 矢印の始点・終点を「楕円周上ぴったり」 にするにはこのパラメータ点を使う。 既存座標が周上に乗っているかは $((x-x_0)/a)^2 + ((y-y_0)/b)^2 = 1$ で検算
+- **外点から円への接線**: 中心 $C$、 半径 $r$ の円と外点 $P$ (距離 $d = |CP|$) の接点は、 $C{\to}P$ 方向から **$\pm\arccos(r/d)$** の角度にある (= 「kernel の縁キワキワから 1 点に潰れる」 系の破線はこれで厳密に引ける)
+- **座標を hardcode したら計算式を直上コメントに残す** (= 図形を動かした人が再計算できる。 例: `% C=(-0.8,-0.72), r=0.66, P=(6.6,-0.72); tangent points at +-acos(r/d)`)
+- **矢頭のクリアランス**: `very thick` + `Stealth` の矢頭は **~0.2-0.3cm** 占有する。 tip 座標だけでなく「tip から 0.3cm 後方」 が他の stroke に触れないかまで見る (= 「先端の三角が楕円に被って醜い」 は tip が線から 0.1cm 逃げていても起きる)
+- **集合内 label は内側に収まるか計算**: 高さ $y$ での楕円の半幅は $a\sqrt{1-(y/b)^2}$。 label の中心 + 半幅がこれを超えたら位置を変える。 境界近くの点の label は下でなく **横 (left=/right=)** に置くと安全
+- **矢印は「数学的に正しい集合」 に着地させる**: 写像 $f\colon A \to B$ の矢印は ambient set でなく **像の集合 (= 内側の楕円) の周上** に終点を置く。 逆写像の矢印は定義域 (= その像集合) の周上から出す。 「どの集合からどの集合へ」 が図の主張そのものなので、 便宜配置は誤読を生む
+- **弧の caption は弧の頂点に密着**: cubic Bezier `(P0) .. controls (P1) and (P2) .. (P3)` の $t$ での点は $\sum \binom{3}{i}(1-t)^{3-i}t^i P_i$。 頂点付近 ($t \approx 0.35$-$0.5$) を計算して `anchor=south` を直上に置く。 制御点を変えたら再計算 (= §pos=p の「aspect を変えたら回転再計算」 と同型の reflex)
+
+## <a id="standalone-figure-semantic-colors"></a>standalone 図に本文のセマンティック配色を移植する
+
+本文が「概念ごとに色を割り当てる」 論文 (= 例: 古典観測量 = 青 / 量子観測量 = 赤 の color coding) の図を `\documentclass[tikz]{standalone}` で作るとき:
+
+1. **色は名前でなく定義ごとコピー**: stock xcolor の `blue` / `red` は本文の palette と **別の色** (= 特に Okabe–Ito 等の color-blind friendly palette は CMYK 指定)。 本文 preamble の `\definecolor` 行を **verbatim で** standalone に移植し、 同じ色名を使う。 「だいたい青」 で stock 色を使うと author の「論文で定義した通りの色になってる？」 で差し戻される
+2. **セマンティック macro の展開は定義を読んでから**: 図中で本文の記法 (= 例: `\rff{R}{\Omega}` = 「R と括弧は青、 引数は黒」) を手展開するとき、 **どの部分にどの色が掛かるかは preamble の macro 定義が正本**。 記憶や見た目からの推測は間違える (= 実測: 状態色を 2 回取り違えた)。 `grep 'Command{\\<name>}' main.tex` して展開する
+3. **standalone の必須 package**: `\operatorname` は amsmath、 `\mathscr` は mathrsfs が要る (= 素の standalone では Undefined control sequence)。 本文が使う書体 (= mathsfit 等) は図では `\mathsf` 近似で通ることが多い
+4. **図の .tex source は生成 .pdf の隣に置く** (= `fig/name.tex` + `fig/name.pdf`)、 冒頭コメントに compile 行を書く。 共著者が独立に再生成・編集できる
+
+## <a id="numeric-color-glyph-verification"></a>色と glyph の検証は目視でなく PyMuPDF で数値確認
+
+render PNG の目視は **色と字形については信用できない**:
+
+- 細い花文字 (= script 書体) を高倍率で見ると **黒が暖色に見える** (= 実測: 黒指定の $\mathscr{H}$ を橙と誤認して再修正しかけた)
+- 低 DPI render では **glyph の形を誤読する** (= 実測: 他論文の上付き $-1$ を「フック付きの特殊記号」 と誤認、 900dpi + 文字コード抽出で普通の minus と確定)
+
+ground truth は PDF の text layer にある:
+
+```python
+import fitz
+page = fitz.open("fig.pdf")[0]
+for block in page.get_text("rawdict")["blocks"]:
+    for line in block.get("lines", []):
+        for span in line["spans"]:
+            txt = "".join(ch["c"] for ch in span["chars"])
+            print(repr(txt), "color=%06x" % span["color"], span["font"])
+```
+
+- `span["color"]` = 実際に焼かれた色 (= `000000` なら黒で確定)、 `span["font"]` = 実 face、 `ch["c"]` = Unicode codepoint (= glyph の同定)、 `ch["bbox"]` = 高 DPI crop の正確な切り出し座標
+- 用途: (a) 色変更が本当に反映されたかの確認 (b) 参照論文の記法の同定 (= 「あの記号は何か」) (c) 特定要素の zoom render の座標取り
+- §「compile 成功 ≠ visual 成功」 の render loop と相補 (= layout は目視、 色・字形は数値)
+
+## <a id="vertical-inclusion-stack"></a>横長の包含鎖は縦積み node にする
+
+$A \supset B \supset C$ の鎖が長い名前で横に伸びて不格好なときは、 数学書の塔記法 (= Galois 拡大の図式と同じ) で縦に積む:
+
+```latex
+\node[anchor=south, align=center, inner sep=1pt] at (0,1.9)
+  {$A$\\
+   $\cup$\\
+   $B$\\
+   $\cup$\\
+   $C$};
+```
+
+- 縦書きの包含は **cup glyph `$\cup$`** で書く (= どちら向きに 90° 回しても cup 形に収束するので、 rotatebox は不要かつ無意味)
+- 同じ図に交わり $\cap$ (= 二項演算子) が居ても混同はまず起きない (= 縦積みは「上下に被演算子」、 演算子は「左右に被演算子」 で構文が割れる)。 気になる場合の実質的代替は横鎖に戻すことだけ
+- 集合を名指す最下段の項が、 その集合の図形の真上に来るように積むと「塔 = この図形の名前」 が読める
 
 ## サイクル: 「compile 成功」 ≠ 「visual 成功」
 
