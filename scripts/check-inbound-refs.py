@@ -110,11 +110,15 @@ def scan(base, target_name, docs, relpaths):
     # `\.md` may carry a scaffold suffix (`X.md.template`, `X.md.example`); capture it so
     # a ref to `templates/.../SETUP.md.template` checks the real file, not a phantom `SETUP.md`
     # (2026-06-23: false-positive fix — bare `\.md` stopped at the wrong extension boundary).
-    path_re = re.compile(r'(?:\.\./)*' + re.escape(target_name) + r'/([\w./\-]+\.md(?:\.template|\.example)?)')
+    path_re = re.compile(r'(?:\.\./)*' + re.escape(target_name) + r'/([\w./\-]+\.md(?:\.template|\.example|\.default)?)')
     blob_re = re.compile(r'^(?:blob|tree)/[^/]+/')
     placeholder_re = re.compile(r'^[A-Z]\.md$')
     sec_re = re.compile(r'§\s*\d+(?:[.\-]\d+)*[a-z]?')
     hard = []          # (relfile, lineno, kind, ref)
+    local_md_cache = {}  # source-repo top dir -> set of .md basenames in that repo
+                         # (bare-name anchor refs resolve locally first; binding them to the
+                         #  target repo when the source repo has a same-named doc is a
+                         #  hierarchical name collision false positive, 2026-07-10)
     code_soft = []     # same shape; refs from code files (.py/.sh) -- often selftest
                        # fixtures ('conventions/foo.md' etc.), so informational not HARD
                        # (2026-07-10: 14 false positives from a downstream validator's fixtures)
@@ -135,14 +139,30 @@ def scan(base, target_name, docs, relpaths):
             relfp = os.path.relpath(fp, base)
             sink = code_soft if f.endswith(('.py', '.sh')) else hard
             for ln, line in enumerate(txt.splitlines(), 1):
+                src_repo = relfp.split(os.sep, 1)[0]
                 for m in anchor_re.finditer(line):
                     bn, slug = m.group(1), m.group(2)
                     if bn in docs and slug not in docs[bn]:
+                        if src_repo not in local_md_cache:
+                            names = set()
+                            for r2, d2, f2 in os.walk(os.path.join(base, src_repo)):
+                                d2[:] = [d for d in d2 if d not in SKIP_DIRS]
+                                names.update(x for x in f2 if x.endswith('.md'))
+                            local_md_cache[src_repo] = names
+                        if bn in local_md_cache[src_repo]:
+                            continue  # same-named doc in the source repo: local ref, not ours
                         sink.append((relfp, ln, 'anchor', bn + '#' + slug))
                 for m in path_re.finditer(line):
                     rel = blob_re.sub('', m.group(1))  # strip github blob/<branch>/
                     if placeholder_re.match(os.path.basename(rel)):
                         continue  # obvious placeholder in illustrative prose
+                    # DE-NOISE: an explicit not-yet-created marker right after the path
+                    # ("...foo.md` 新規" / "（新規）" / "(未作成)" / "却下") marks a *proposal*
+                    # mention, not a broken link (2026-07-10; historical plans mention
+                    # files that were proposed and later rejected).
+                    tail = line[m.end():m.end() + 15]
+                    if any(k in tail for k in ('新規', '未作成', '却下')):
+                        continue
                     if rel not in relpaths and not os.path.exists(os.path.join(target_dir, rel)):
                         sink.append((relfp, ln, 'path', target_name + '/' + rel))
                 if sec_re.search(line):
@@ -171,6 +191,8 @@ def selftest():
         os.makedirs(os.path.join(tgt, 'templates'))
         with open(os.path.join(tgt, 'templates', 'SETUP.md.template'), 'w', encoding='utf-8') as f:
             f.write('scaffold template\n')  # a ref to this `.md.template` must resolve, not flag
+        with open(os.path.join(tgt, 'templates', 'SETUP.md.default'), 'w', encoding='utf-8') as f:
+            f.write('default scaffold\n')   # `.md.default` must bind to the real file too
 
         # --- downstream repo with one of every reference kind ---
         ds = os.path.join(tmp, 'downstream')
@@ -191,9 +213,22 @@ def selftest():
                 'In prose we sometimes write tgt/X.md as an example.\n'  # line 7: placeholder
                 # RESOLVE: an `X.md.template` ref must check the real file, not phantom X.md
                 'Scaffold from tgt/templates/SETUP.md.template here.\n'   # line 7b: .md.template OK
+                # RESOLVE: `.md.default` suffix must also bind (was mis-cut to phantom X.md)
+                'Default from tgt/templates/SETUP.md.default here.\n'     # line 7c: .md.default OK
+                # DE-NOISE: not-yet-created marker right after the path -> proposal mention
+                'Proposal: tgt/conventions/future.md 新規作成する。\n'    # line 7d: de-noised
                 # FRAGILE positional: §N.M naming a target doc -> INFO (counted, not HARD)
                 'See real.md §1.2 for the rationale.\n'                  # line 8: fragile
             )
+
+        # --- name-collision case: downstream repo has its own real2.md; a bare-name
+        #     anchor ref to real2.md#... must resolve locally, NOT bind to target ---
+        with open(os.path.join(tgt, 'conventions', 'real2.md'), 'w', encoding='utf-8') as f:
+            f.write('## <a id="tgt-only"></a>Target heading\n')
+        with open(os.path.join(ds, 'real2.md'), 'w', encoding='utf-8') as f:
+            f.write('## local twin\n')
+        with open(os.path.join(ds, 'doc2.md'), 'w', encoding='utf-8') as f:
+            f.write('See real2.md#local-slug here.\n')  # local twin exists -> de-noised
 
         # --- a downstream CODE file with a fixture-style dangling ref (must go to
         #     code_soft, not hard: 2026-07-10 informational demotion) ---
