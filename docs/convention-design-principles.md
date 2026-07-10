@@ -153,6 +153,20 @@ origin: 2026-06-18 — 研究費様式の交通費記入ルールを是正した
 
 ---
 
+### <a id="time-decaying-fact-authoring"></a>2.6 時点依存 fact は undated 断定で書かない — 「環境が変わると偽になる文」の authoring 規律
+
+**問題**: 環境依存の fact (= model / サービスの可用性・lineup、 tool の版挙動、 手動の「最終更新」日付、 config 例への現行値 hardcode) を **undated の断定形**で doc に書くと、 世界が変わった瞬間に doc が silent に嘘をつき始める — 誤りとして書かれたのではなく、 **正しかった文が読者の時点で偽になる** (= [§2.4](#errata-on-preserved-records) errata の対象になる前の、 予防可能な段階)。 断定形は読み手 (別 session の Claude を含む) に検証を skip させる力があるため、 stale 化した断定は能動的に害する。 実例 (2026-07-10、 同日に同 class 3 instance): 「この model は本環境で選択不可」 という断定が可用化後も数週間残り、 まさにその環境で動く session の選択を歪めた (= 環境自身が反証を持っているのに文が勝った) / config 例に現行 model id を hardcode (= 世代交代で必ず rot) / 手動「最終更新: <date>」 が 3 ヶ月 stale で本文と乖離。
+
+**cure (強い順)**:
+
+1. **design-out** — その fact を書かず**導出**する (= 日付は git log / 一覧は generator / 現行値は実行時取得)。 手動日付・手動 mirror は「削除が最善の更新」。
+2. **時点 + 検証方法の併記** — 「2026-07 時点で X (確認: `<command>` / 実測 n=…)」。 読者が「今も真か」 を 1 手で再検証できる形にして、 断定の賞味期限を可視化する。
+3. **use-time verify への書き換え** — 「X である」 でなく「X かどうかは `<手順>` で確認してから」 — fact を運ばず**手順**を運ぶ (= 陳腐化しない)。
+
+**書く瞬間の問い**: 「この文は世界のどの変化で偽になるか? 偽になった時、 読者は気づけるか?」 — 気づけないなら cure 1-3 のどれかに変形してから書く。 read 側の対規律 (= 手順書の記述を陳腐化前提で疑う) は各層の作業規律側、 本節は **write 側** の SoT。
+
+---
+
 ## <a id="rule-addition-criteria"></a>3. 規約追加の判断基準：「規約がない」のか「規約を読まない」のか
 
 ミスが起きたとき、反射的に規約を足したくなるが、まず原因を切り分ける。
@@ -631,6 +645,8 @@ origin: ある追跡システムで「期限つき義務」 が複数回見落�
 reflex: 規律を doc に書く瞬間 + doc 記載規律の不発 RCA を書く瞬間に「これは 1-3 のどれかに乗らないか?」 を問う。 「reflex の徹底」 を再発防止策として書きそうになったら、 それは発火面の選択を skip した signal。 併せて、 新機構を増やす前に既存 enforcement channel (installer / `--check` / SessionStart surface 等) への相乗りを先に検討する (= 機構増殖の抑制、 §9.6 subtraction と同方向)。
 
 origin: 横断 lookup script が規律表の機械補強 column に**記載済みなのに**初手 routing で 2 回不発した事例 (script 新設の起点になった null 誤結論 + 後日の遠回り routing)。 personal skill 化して description dispatch に乗せた結果、 skill 名を含まない自然な質問への初手発火を新 session trace で確認。 [`conventions/hook-authoring.md §5.3`](../conventions/hook-authoring.md#discipline-cannot-replace-hook) (規律で hook を代替できない) に「中間 tier として skill がある」 を加える位置付け。 2+ 事例 + 既存 §5.3 系列からの一般化 (§9.8 充足)。
+
+⚠️ **検証資産 (selftest / \*.test.sh / index `--check`) も同じ hierarchy に従う** — 存在するが CI / pre-commit に未配線の test は doc-tier (= 誰かが思い出して回した時だけ効く recall 依存)。 実例 (2026-07-10): test 資産 20 本超を持つ repo に CI を初導入した**初日**に、 owner 環境では不可視だった別 OS 全滅 bug と自動生成 index の 10 日 drift が露出した — 資産の存在と発火面は別物。
 
 ### <a id="conditional-firing-visibility"></a>8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる
 
