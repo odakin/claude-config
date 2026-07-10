@@ -103,17 +103,23 @@ claude-config/
 ├── hooks/                # Claude Code hooks (setup.sh が ~/.claude/hooks/ に symlink、説明の源 = 各 file header 1 行目)
 │   ├── currentdate-anchor.py               # session start temporal anchor
 │   ├── expensive-tmp-guard.sh              # PreToolUse(Bash): Audiveris / oemer / ML training 系の -output /tmp/ パターンを検出して `permissionDecision: ask`
+│   ├── expensive-tmp-guard.test.sh         # expensive-tmp-guard.sh の self-test (hermetic)
 │   ├── fix-snapshot-path-patch.sh          # PATH スナップショット自動パッチ（REQUIRED_PATHS 方式、launchd WatchPaths から呼ばれる）
 │   ├── git-state-nudge.sh                  # PostToolUse(Bash): 直近 commit の未 push 検出 + first-sighting で fetch+stale 検出
+│   ├── git-state-nudge.test.sh             # git-state-nudge.sh の self-test (決定的 mock git repo ベース)
 │   ├── google-url-guard.sh                 # Google URL 安定性ガード — PreToolUse(Edit|Write|MultiEdit|Bash): /u/N/ 禁止 + `?authuser=<email>` 必須
+│   ├── google-url-guard.test.sh            # google-url-guard.sh の self-test (hermetic)
 │   ├── mcp-search-scope-reminder-nudge.sh  # PreToolUse hook (layer 1)
 │   ├── mcp-search-scope-reminder-nudge.test.sh # logic + retroactive selftest
 │   ├── mcp-search-zero-result-nudge.sh     # PostToolUse hook (layer 1)
 │   ├── mcp-search-zero-result-nudge.test.sh # logic + retroactive selftest
 │   ├── memory-guard-bash.sh                # メモリ書き込みガード — Bash 用（§8 feedback deny + escape hatch）
+│   ├── memory-guard-bash.test.sh           # memory-guard-bash.sh (Bash 用) の self-test (hermetic)
 │   ├── memory-guard.sh                     # メモリ書き込みガード — Edit/Write 用（§8 feedback deny + escape hatch: machine-local marker）
+│   ├── memory-guard.test.sh                # memory-guard.sh (Edit/Write 用) の self-test (hermetic)
 │   ├── pdf-read-fallback-nudge.sh          # PostToolUse(Read): Read tool が .pdf を `pdftoppm is not installed` で fail した時に PyMuPDF 1-liner を system reminder で injection (= 2026-05-18 RCA、 規律 wording に依存しない機械的 enforcement layer)
 │   ├── public-leak-guard.sh                # 公開リポ leak 防止 — PreToolUse(Edit|Write|MultiEdit) Tier A 構造制約 regex
+│   ├── public-leak-guard.test.sh           # public-leak-guard.sh の self-test (hermetic)
 │   ├── session-commit-nudge.sh             # session-commit-nudge.sh
 │   ├── session-commit-nudge.test.sh        # self-tests for session-commit-nudge.sh
 │   ├── session-start-claude-account-change.sh # SessionStart hook (layer 1, claude-config)
