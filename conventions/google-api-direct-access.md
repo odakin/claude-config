@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Google API を Python から直接叩く setup をするとき
 category: infra
-summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避)
+summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避)
 -->
 # Google API を Python から直接アクセスする setup
 
@@ -181,6 +181,32 @@ elif mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 - **DL した様式はそのまま雛形として保存し、 fill は copy に対して行う** (= [`office-files.md`](office-files.md) の template-provenance 原則。 提出物で雛形を上書きすると再 fill・diff 検証が死ぬ)。
 
 worked example: 配布 folder 30 file (root 6 + subfolder 24、 PDF + xlsx 混在) を 1 script で取得し、 repo docs/ に binary + manifest を保存 (2026-07)。
+
+## <a id="gmail-bulk-cleanup"></a>Gmail 一括掃除 (= batchModify TRASH + 送信者別集計 + 本文入り通知の salvage)
+
+storage 満杯対策等で Gmail を数千〜数万通単位で掃除するときの安全 pattern。 query 一発の削除より 1 段精密な「集計 → レビュー → ID list 削除 → salvage」 の流れ。
+
+### 安全機構 (= 不可逆にしない)
+
+- **削除は `messages.delete` でなく `messages.batchModify` の `addLabelIds:["TRASH"]`** (= 30 日間 undo 可能、 `removeLabelIds:["TRASH"]` で復元。 完全削除 = ゴミ箱を空にする、 は user の手操作に残す)。 batchModify は 1 call 1,000 ids 上限。
+- **削除対象はレビュー済み ID list で駆動する** (= 集計時に sender→message-ids を JSON 保存し、 削除はその ids に対して実行。 削除時に fresh query し直すと「レビューした集合」 と乖離しうる)。 trash 前に件数 assert、 trash 後に元 query 0 件 + ゴミ箱件数一致を検証。
+- **`from:` query の限界**: `+` 付き alias アドレス (`noreply+xxx@…`) に `from:` 部分一致が効かないことがある / 古いメールで query が実在数より少なく返る観測例あり (= 機構未検証)。 「残す」 と決めた送信者は事後に `in:trash from:X` で取りこぼし点呼するのが安全。
+
+### 集計 → bucket → 承認
+
+metadata batch fetch (= 本 doc §Batch request、 429 retry 込み) で From + sizeEstimate を集め、 **送信者別に件数 + 合計 MB** を出す (= サイズ帯別 〔larger:/smaller: の排他帯〕 も並用)。 削除判断は送信者 bucket 単位で人間の承認を取る。
+
+### Salvage pattern (= 一括削除の必須の対、 削除前後に回す)
+
+機械送信者のカテゴリ一括削除は「**通知メールに本文が埋まっているもの**」 を巻き込む。 purge 前にゴミ箱内の件名を pattern スキャンして外科的に復元する:
+
+- SNS 通知に **DM / メッセージ本文** (= 旧 Twitter / Facebook の「〜さんからメッセージ」 通知は本文入り。 platform 側アカウントが消えるとメールが唯一の記録。 実測で SNS 通知の過半が DM 通知だった例あり)
+- noreply 送信者に**購入レシート** (= note 等は宣伝と購入完了通知を同一アドレスから送る)
+- **全文入りのブログ更新通知** (= WordPress 系。 ブログが消えると唯一のアーカイブ)
+
+**残す / 消すの判断基準 = 「そのメールは唯一の機械検索可能な記録か」**: サービス側 (注文履歴・web) に正本があっても、 **agent がログイン必須のサイト側履歴に確実にアクセスできるとは限らない** — mail box は agent にとって最も確実な検索経路なので、 タイムライン記録 (購入・旅行・予約・人とのやりとり) は容量僅少なら残す。 配達通知のような「鮮度が命」 の類は「直近 1 ヶ月だけ残す」 折衷が効く。
+
+quota への反映 (= ゴミ箱 purge・ラグ) は次節 #storage-quota-monitoring 参照。
 
 ## <a id="storage-quota-monitoring"></a>Storage quota 監視 (= about.get、 アカウント容量の唯一の機械監視点)
 
