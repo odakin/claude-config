@@ -153,6 +153,7 @@ claude-config/
 │   ├── count-malformed-tool-call-events.py # local transcript から malformed-tool-call bug の genuine event を集計（synthetic 文言の user entry のみ = doc/議論 echo を除外〔naive substring は 19x overcount〕、 month×model×client-version 内訳 + model 別 rate、 upstream issue への occurrence 報告用 data point 生成、 read-only、 --selftest 内蔵、 conventions/tool-call-robustness.md#root-cause）
 │   ├── diff-form-docx.py                   # 様式 docx の記入ミスを blank diff で検出（ラベル欄上書き/見出し消失=HARD・空の箇条書き/全空 labeled 列=surface、xlsx 版の docx 対、--selftest 内蔵、office-automation.md#diff-form-docx-detection）
 │   ├── diff-form-xlsx.py                   # 様式 xlsx の label 上書き (= 様式改変) を雛形 diff で検出（office-automation.md#diff-form-xlsx-detection）
+│   ├── discord-post.py                     # canonical Discord Bot API poster (stdlib only).
 │   ├── docx-to-pdf.sh                      # Word docx/doc → PDF 変換（macOS 既定 Pages → --word で Word 忠実版 → 非 macOS LibreOffice、office-automation.md#docx-to-pdf-pages）
 │   ├── docx_decl_patch.py                  # python-docx の Document.save() を auto-patch し XML 宣言を Word 形式(double-quote+CRLF)で書く（厳格 Word の「破損」回避、 save 時 source 修正・lazy import hook、 office-automation.md#docx-checkbox-content-control）
 │   ├── dropbox-root.sh                     # Dropbox install root を OS 横断で resolve（dropbox-refs 規約用）
