@@ -322,9 +322,16 @@ install_hooks() {
         fi
     done
 
-    # (currentdate-anchor.py の symlink は上の for HOOK loop で install 済、
-    # 退役 hook の cleanup は現状なし — 過去の退役 hook が再発生したら
-    # 上の for OBSOLETE pattern で追加する)
+    # (currentdate-anchor.py の symlink は上の for HOOK loop で install 済)
+
+    # .test.sh 残骸の掃除: 旧版 setup.sh は .test.sh も配信していたため
+    # 過去に作られた symlink/copy が ~/.claude/hooks/ に残り得る。 配信対象外化
+    # (上の case skip) だけでは既存残骸が消えないので、 ここで除去する。
+    for STALE in "$HOOKS_DST"/*.test.sh; do
+        { [ -e "$STALE" ] || [ -L "$STALE" ]; } || continue
+        rm -f "$STALE"
+        echo "  Removed stale test hook: $(basename "$STALE")"
+    done
 
     # settings.json に hooks 設定をマージ
     if ! command -v jq &> /dev/null; then
