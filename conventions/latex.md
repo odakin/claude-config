@@ -98,6 +98,21 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 >
 > ⚠️ markup unwrap が必要な理由: `\DIFadd{\cl{長文}}` のように **group を丸ごと下線 markup に包むと ulem が改行不能 box 化してページ外に溢れる** (= 描画はされるが 1 行で切れる)。 review 注釈系コマンドは diff 前に unwrap するのが根治 (= diff 内で draft 色は冗長でもある)。 両版に同一適用すれば未変更 markup が spurious diff にならない。
 
+## <a id="stash-roundtrip-build-artifacts"></a>baseline 比較に git stash round-trip を使わない (tracked 生成物と衝突する)
+
+**ルール:** 「この overfull / warning / 挙動は自分の編集**前**からあったか?」 という baseline 比較のために、 compile が上書きする tracked 生成物 (committed PDF 等) を持つ tree で `git stash` → 再 build → `git stash pop` の round-trip をしない。 baseline は tree を動かさない read-only 経路で取る:
+
+```bash
+# 単一 file の baseline を取り出して比較 (working tree 不動)
+git show HEAD:notes/foo.tex > /tmp/foo-baseline.tex
+# tree 全体の baseline build が要るなら worktree (元 tree は不動)
+git worktree add /tmp/baseline-wt HEAD && (cd /tmp/baseline-wt && <build>)
+```
+
+**Why:** stash してから build を走らせると、 tracked 生成物が working tree で再生成され**新しい local change になる** → `git stash pop` が「Your local changes ... would be overwritten by merge」 で **abort する**。 このとき編集一式は stash に閉じ込められ、 tree は baseline 状態のまま — 気付かず作業を続けると、 disk 上の file が全部「編集前」 を見せる (実 incident 2026-07-10: rename 編集一式が pop fail で stash に残留し、 直後の参照がすべて pre-rename 状態を読んだ)。 PDF に限らず、 build が上書きする tracked 生成物 (図・生成 tex・data file) すべてで同型。
+
+**復旧 (pop が abort した場合):** 作業は失われていない (abort 時 stash entry は保持される、 `git stash list` で確認)。 衝突している生成物 (= baseline build が作った側、 どうせ再生成できる) を `git checkout -- <生成物>` で捨ててから `git stash pop` すれば全編集が戻る。 pop 成功後、 生成物は編集後 source から再 build すれば一致する。
+
 ## <a id="text-structure-hierarchy"></a>文章の構造化と見出し階層 (`\paragraph` は `\subsubsection` より下)
 
 **ルール (3 段):**

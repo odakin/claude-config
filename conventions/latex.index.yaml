@@ -19,6 +19,9 @@ sections:
   - id: latexdiff-review-snapshot
     level: 2
     title: "latexdiff で差分レビュー PDF を作る"
+  - id: stash-roundtrip-build-artifacts
+    level: 2
+    title: "baseline 比較に git stash round-trip を使わない (tracked 生成物と衝突する)"
   - id: text-structure-hierarchy
     level: 2
     title: "文章の構造化と見出し階層 (`\\paragraph` は `\\subsubsection` より下)"
