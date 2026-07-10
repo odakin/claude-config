@@ -65,6 +65,20 @@ if [ "$warned" -eq 1 ]; then
   echo "    (警告のみ・commit は継続)" >&2
 fi
 
+# --- 検査 2.5: 自動生成 index の同期 (warn のみ) ---
+# md に section を足して index 再生成を忘れる drift (実例: 2026-06-30 の §17/§8.16/§8.17 が
+# principles index から ~10 日欠落) を commit の瞬間に surface する。 CI (checks.yml ->
+# run-all-checks.sh) が push 後の block 層、 ここは commit 時の早期 warn 層 (二層は意図的)。
+IDXGEN="$REPO_ROOT/scripts/generate-doc-index.py"
+if [ -f "$IDXGEN" ] && command -v python3 >/dev/null 2>&1; then
+  if ! python3 "$IDXGEN" --check-all "$REPO_ROOT" >/dev/null 2>&1; then
+    echo "  ⚠️ [pre-commit-extra] 自動生成 index が md と OUT OF SYNC:" >&2
+    python3 "$IDXGEN" --check-all "$REPO_ROOT" 2>&1 | grep "❌" | sed 's/^/    /' >&2
+    echo "    → python3 scripts/generate-doc-index.py <doc.md> <doc.index.yaml> で再生成 (警告のみ・commit は継続)" >&2
+    warned=1
+  fi
+fi
+
 # --- 検査 3: legacy append-only (= 上の warn-only 群と違い BLOCK する例外) ---
 # catastrophic 級: published §-number の転送先 (slug index の legacy 値) を黙って落とすと、
 # 下層 repo / 他ユーザ / 過去メモの §-ref が永久に解決不能になる (= 回収不可)。 §9.1 triage で

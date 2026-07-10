@@ -1,0 +1,30 @@
+# checks.yml — claude-config の機械検査 CI
+#
+# 検査リストの SoT は scripts/run-all-checks.sh (= CI はそれを呼ぶだけ、
+# local 実行と CI の drift を design-out)。 検査内容はそちらのヘッダ参照。
+#
+# runner は ubuntu (無料枠・高速)。 macOS 固有 tool (osascript / sips 等) に依存する
+# 検査は各 test / selftest 自身が SKIP を宣言して exit 0 する契約 (silent skip 禁止、
+# skip 理由は test が出力する — run-all-checks.sh ヘッダの契約)。
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install python deps (selftests exercise the office/PDF scripts)
+        run: pip install -q -r requirements.txt
+      - name: Run all checks
+        run: bash scripts/run-all-checks.sh

@@ -1,0 +1,13 @@
+# claude-config scripts の python 依存 (optional: 使う script を使う時に必要)。
+# コアの doc validator 群 (generate-doc-index.py / check-inbound-refs.py /
+# check-office-automation-index.py / check-legacy-append-only.py) は標準ライブラリのみで動く。
+# CI (.github/workflows/checks.yml) は全 selftest を回すため全部 install する。
+
+# PDF 系 (pdf_form_fill.py / close-pdf-form-boxes.py / check-form-clipping.py / pptx-to-pdf.sh の verify)
+PyMuPDF>=1.23
+
+# xlsx 系 (diff-form-xlsx.py / scan-form-instructions.py / check-xlsx-integrity.py / check-form-clipping.py)
+openpyxl>=3.1
+
+# docx 系 (diff-form-docx.py / docx_decl_patch.py / normalize-docx-decl.py / check-docx-integrity.py)
+python-docx>=1.1

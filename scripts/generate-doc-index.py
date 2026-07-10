@@ -31,6 +31,9 @@ Surfaces (does NOT auto-fix) two review-worthy conditions:
 Generic + public-safe. Usage:
   generate-doc-index.py <doc.md> <doc.index.yaml>            # write the index
   generate-doc-index.py <doc.md> <doc.index.yaml> --check    # don't write; exit 1 if out of sync
+  generate-doc-index.py --check-all [repo_root]               # verify EVERY auto-generated index
+                                                              # (files whose head says AUTO-GENERATED;
+                                                              #  hand-maintained indexes are skipped)
   generate-doc-index.py --selftest                            # in-memory regression fixtures
 """
 import re
@@ -250,16 +253,53 @@ def selftest():
     return 0 if ok else 1
 
 
+def check_all(root):
+    """--check every AUTO-GENERATED index under root (hand-maintained ones are skipped:
+    they carry no AUTO-GENERATED head marker and have their own validator).
+    Pairs <name>.index.yaml with its sibling <name>.md. Exit 1 on any drift."""
+    root = Path(root)
+    fails = checked = 0
+    for idx_p in sorted(root.rglob("*.index.yaml")):
+        if ".git" in idx_p.parts:
+            continue
+        head = idx_p.read_text(encoding="utf-8")[:200]
+        if "AUTO-GENERATED" not in head:
+            continue  # hand-maintained (e.g. office-automation.index.yaml)
+        doc_p = idx_p.with_name(idx_p.name.replace(".index.yaml", ".md"))
+        if not doc_p.exists():
+            print("❌ %s: paired doc %s not found" % (idx_p, doc_p.name))
+            fails += 1
+            continue
+        checked += 1
+        md = doc_p.read_text(encoding="utf-8")
+        existing = parse_existing(idx_p.read_text(encoding="utf-8"))
+        sections, _ = scan_md(md)
+        new_index, _ = build_index(sections, existing)
+        cur = idx_p.read_text(encoding="utf-8")
+        if cur.rstrip("\n") != new_index.rstrip("\n"):
+            print("❌ %s OUT OF SYNC with %s -- run generate-doc-index.py" % (idx_p, doc_p.name))
+            fails += 1
+        else:
+            print("✅ %s in sync (%d sections)" % (idx_p.relative_to(root), len(sections)))
+    if checked == 0 and fails == 0:
+        print("⚠️ --check-all: no AUTO-GENERATED index found under %s" % root)
+    return 1 if fails else 0
+
+
 def main():
     _force_utf8_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument("doc", nargs="?")
     ap.add_argument("index", nargs="?")
     ap.add_argument("--check", action="store_true", help="don't write; exit 1 if out of sync")
+    ap.add_argument("--check-all", nargs="?", const=".", metavar="ROOT",
+                    help="verify every AUTO-GENERATED *.index.yaml under ROOT (default .)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.check_all:
+        return check_all(a.check_all)
     if not a.doc or not a.index:
         ap.error("doc and index are required (or use --selftest)")
     doc_p, idx_p = Path(a.doc), Path(a.index)

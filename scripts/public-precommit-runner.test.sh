@@ -19,7 +19,7 @@
 
 set -uo pipefail
 
-RUNNER="$(dirname "$0")/public-precommit-runner.sh"
+RUNNER="$(cd "$(dirname "$0")" && pwd)/public-precommit-runner.sh"  # 絶対化: test は mock repo へ cd するため相対 path は壊れる (2026-07-10 fix)
 [ -x "$RUNNER" ] || { echo "ERROR: $RUNNER not executable"; exit 1; }
 
 PASS=0
