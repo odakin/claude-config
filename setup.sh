@@ -549,7 +549,10 @@ fi
 # if-blocks で追加した PATH（TeX, Python 等）を上書きする。
 # 詳細: conventions/shell-env.md
 if [ "$(uname -s)" = "Darwin" ] && [ -f "$HOME/.zprofile" ]; then
-    if grep -q 'brew shellenv' "$HOME/.zprofile" && grep -q 'brew shellenv' "$HOME/.zshenv" 2>/dev/null; then
+    # gate は sed が置換する行 (= eval 実行行) と同じパターンで判定する。
+    # 'brew shellenv' だけだと置換後コメント自身にマッチし毎回 no-op 置換
+    # + 「Replaced」 の偽報告を出し続ける
+    if grep -q 'eval.*brew shellenv' "$HOME/.zprofile" && grep -q 'brew shellenv' "$HOME/.zshenv" 2>/dev/null; then
         echo ""
         echo "=== Step 2c: Fixing .zprofile duplicate brew shellenv ==="
         # brew shellenv 行をコメントに置換（他の内容は保持）
@@ -971,8 +974,11 @@ if command -v git-crypt &> /dev/null && [ -x "$DROPBOX_ROOT_SCRIPT" ]; then
             REPO_KEY="$HOME/.secrets/${REPO_NAME}.key"
             BACKUP_CONF="$REPO_DIR/.claude/git-crypt-backup"
 
-            # 鍵が既にある or backup 設定がない → スキップ
+            # 鍵が既にある or 既に unlock 済 or backup 設定がない → スキップ
+            # (unlock 済なら鍵 restore は不要 — 毎回 openssl の passphrase
+            #  prompt / 非対話では "bad password read" WARNING を出すだけになる)
             [ -f "$REPO_KEY" ] && continue
+            [ -f "$REPO_DIR/.git/git-crypt/keys/default" ] && continue
             [ -f "$BACKUP_CONF" ] || continue
 
             BACKUP_FILENAME="$(head -1 "$BACKUP_CONF" | tr -d '\r')"
@@ -1022,12 +1028,20 @@ if command -v git-crypt &> /dev/null && { [ -f "$GIT_CRYPT_KEY" ] || ls "$HOME"/
         [ -f "$REPO_DIR/.gitattributes" ] || continue
         grep -q "git-crypt" "$REPO_DIR/.gitattributes" 2>/dev/null || continue
         REPO_NAME="$(basename "$REPO_DIR")"
+        # 既に unlock 済 (= .git/git-crypt に key 保存済) なら再 unlock 不要。
+        # 再 unlock は dirty working tree で fail するので、 unlock 済 repo に
+        # 対して毎回試みると偽の失敗を量産する (ephemeral credential drift 等)。
+        if [ -f "$REPO_DIR/.git/git-crypt/keys/default" ]; then
+            SKIPPED_CRYPT=$((SKIPPED_CRYPT + 1))
+            continue
+        fi
         if (cd "$REPO_DIR" && git-crypt status 2>/dev/null | grep -q "encrypted:"); then
             # 共有プロジェクト鍵 (~/.secrets/<repo>.key) があれば優先
+            # (exit code は sed でなく git-crypt のものを見る = PIPESTATUS)
             REPO_KEY="$HOME/.secrets/${REPO_NAME}.key"
             if [ -f "$REPO_KEY" ]; then
                 echo "  Unlocking $REPO_NAME (shared key) ..."
-                if (cd "$REPO_DIR" && git-crypt unlock "$REPO_KEY" 2>&1 | sed 's/^/    /'); then
+                if (cd "$REPO_DIR" && git-crypt unlock "$REPO_KEY" 2>&1 | sed 's/^/    /'; exit "${PIPESTATUS[0]}"); then
                     UNLOCKED=$((UNLOCKED + 1))
                     continue
                 fi
@@ -1035,8 +1049,11 @@ if command -v git-crypt &> /dev/null && { [ -f "$GIT_CRYPT_KEY" ] || ls "$HOME"/
             fi
             if [ -f "$GIT_CRYPT_KEY" ]; then
                 echo "  Unlocking $REPO_NAME ..."
-                (cd "$REPO_DIR" && git-crypt unlock "$GIT_CRYPT_KEY" 2>&1 | sed 's/^/    /')
-                UNLOCKED=$((UNLOCKED + 1))
+                if (cd "$REPO_DIR" && git-crypt unlock "$GIT_CRYPT_KEY" 2>&1 | sed 's/^/    /'; exit "${PIPESTATUS[0]}"); then
+                    UNLOCKED=$((UNLOCKED + 1))
+                else
+                    echo "  WARNING: unlock failed for $REPO_NAME (see message above)."
+                fi
             else
                 echo "  WARNING: No key available for $REPO_NAME. Skipping."
             fi
@@ -1172,6 +1189,15 @@ else
         HOOK_DST="$REPO_DIR.git/hooks/pre-commit"
         REPO_NAME="$(basename "$REPO_DIR")"
 
+        # public repo (= .claude/public-repo.marker 持ち) の pre-commit は
+        # Step 8 (install-public-precommit.sh) の stub が管轄。 ここで fix-bib
+        # symlink を重ねると ln が File exists で fail + .bak を毎回 clobber
+        # するだけなので skip する (最終状態は Step 8 が保証)。
+        if [ -f "$REPO_DIR.claude/public-repo.marker" ]; then
+            SKIPPED_HOOK=$((SKIPPED_HOOK + 1))
+            continue
+        fi
+
         if [ "$IS_WINDOWS" = true ]; then
             # Windows: コピー
             if [ -f "$HOOK_DST" ] && grep -q "fix-bib-unicode" "$HOOK_DST" 2>/dev/null; then
@@ -1208,6 +1234,7 @@ else
                 else
                     cp "$HOOK_DST" "$HOOK_DST.bak"
                     echo "  WARNING: $REPO_NAME had existing pre-commit → backed up to .bak"
+                    rm "$HOOK_DST"
                     ln -s "$PRE_COMMIT_SRC" "$HOOK_DST"
                     echo "  Installed (symlink): $REPO_NAME"
                     INSTALLED=$((INSTALLED + 1))
