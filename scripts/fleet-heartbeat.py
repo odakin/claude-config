@@ -234,7 +234,11 @@ def beat(repo: Path, subdir: str, min_interval_h: float, rc_prefix: str, cron_pr
     rc, _ = git(repo, "commit", "-q", "-m", f"fleet-heartbeat: {data['host']}")
     if rc != 0:
         return "commit failed (fail-open)"
-    git(repo, "pull", "--rebase", "-q")
+    # --autostash: 他 session が残した無関係な dirty file で rebase が
+    # 拒否されると、 beat が local commit に積み上がるだけで push されず
+    # 他マシンから silent 死に見える (2026-07-10 実測 RCA: dirty 残置 2 日で
+    # divergence 76/12 まで雪だるま化)。 autostash なら dirty をまたいで流れる。
+    git(repo, "pull", "--rebase", "--autostash", "-q")
     rc, _ = git(repo, "push", "-q", timeout=90)
     return "committed+pushed" if rc == 0 else "committed (push failed, retry next beat)"
 
