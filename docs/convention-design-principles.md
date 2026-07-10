@@ -616,6 +616,7 @@ reflex: 見落とし failure に downstream の検出器/通知を足す前に�
 
 origin: ある追跡システムで「期限つき義務」 が複数回見落とされた事例の連鎖。 毎回 downstream の網 (= 到着 trigger / 締切 surface / 返信 handback 検出) を 1 つずつ足したが、 各々「前回の正確な形」 を塞いだだけで次が隣の死角に落ちた。 根は intake で義務が下位ロジ (= 調整作業) として mis-encode され、 本物の締切が一度も登録されなかったこと = どの網も「存在しない fact」 を掴めなかった。 §8.8 (網が proxy を見る) の **上流版** (= 網が見る対象自体が intake で歪む)。 3+ 事例の連鎖からの一般化 (§9.8 充足)。
 
+<a id="recall-dependent-firing"></a><!-- legacy alias: 旧 anchor 名 (rename 前) への外部参照を生かす後方互換 -->
 ### <a id="firing-surface-hierarchy"></a>8.12 規律の発火面 hierarchy — doc 記載 (recall 依存) は最弱、 書く前に発火面を選ぶ
 
 規律・手順は「内容」 と別に「**どうやって正しい瞬間に発火するか**」 という独立の設計軸を持つ。 doc に書かれた規律の発火は「その行を正しい瞬間に想起する」 という recall に依存し、 これは反復的に不発する — **機械補強 column に tool 名を書いても、 tool の存在自体が想起されなければ発火しない** (= tool は能力であって enforcer ではない)。

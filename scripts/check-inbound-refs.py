@@ -115,6 +115,9 @@ def scan(base, target_name, docs, relpaths):
     placeholder_re = re.compile(r'^[A-Z]\.md$')
     sec_re = re.compile(r'§\s*\d+(?:[.\-]\d+)*[a-z]?')
     hard = []          # (relfile, lineno, kind, ref)
+    code_soft = []     # same shape; refs from code files (.py/.sh) -- often selftest
+                       # fixtures ('conventions/foo.md' etc.), so informational not HARD
+                       # (2026-07-10: 14 false positives from a downstream validator's fixtures)
     fragile = 0
     fragile_samples = []
     for root, dirs, files in os.walk(base):
@@ -130,17 +133,18 @@ def scan(base, target_name, docs, relpaths):
             except Exception:
                 continue
             relfp = os.path.relpath(fp, base)
+            sink = code_soft if f.endswith(('.py', '.sh')) else hard
             for ln, line in enumerate(txt.splitlines(), 1):
                 for m in anchor_re.finditer(line):
                     bn, slug = m.group(1), m.group(2)
                     if bn in docs and slug not in docs[bn]:
-                        hard.append((relfp, ln, 'anchor', bn + '#' + slug))
+                        sink.append((relfp, ln, 'anchor', bn + '#' + slug))
                 for m in path_re.finditer(line):
                     rel = blob_re.sub('', m.group(1))  # strip github blob/<branch>/
                     if placeholder_re.match(os.path.basename(rel)):
                         continue  # obvious placeholder in illustrative prose
                     if rel not in relpaths and not os.path.exists(os.path.join(target_dir, rel)):
-                        hard.append((relfp, ln, 'path', target_name + '/' + rel))
+                        sink.append((relfp, ln, 'path', target_name + '/' + rel))
                 if sec_re.search(line):
                     for bn in docs:
                         if bn in line:
@@ -148,7 +152,7 @@ def scan(base, target_name, docs, relpaths):
                             if len(fragile_samples) < 10:
                                 fragile_samples.append((relfp, ln, bn))
                             break
-    return hard, fragile, fragile_samples
+    return hard, code_soft, fragile, fragile_samples
 
 
 def selftest():
@@ -191,6 +195,11 @@ def selftest():
                 'See real.md §1.2 for the rationale.\n'                  # line 8: fragile
             )
 
+        # --- a downstream CODE file with a fixture-style dangling ref (must go to
+        #     code_soft, not hard: 2026-07-10 informational demotion) ---
+        with open(os.path.join(ds, 'validator.py'), 'w', encoding='utf-8') as f:
+            f.write("FIXTURE = 'tgt/conventions/fixture-only.md'\n")
+
         docs, relpaths = build_target_index(tgt)
         # README.md must NOT be in the anchor-indexed docs (generic)
         if 'README.md' in docs:
@@ -198,12 +207,16 @@ def selftest():
         if 'real.md' not in docs or 'present-slug' not in docs.get('real.md', set()):
             print("  selftest MISS: distinctive real.md / present-slug not indexed"); ok = False
 
-        hard, fragile, _ = scan(tmp, 'tgt', docs, relpaths)
+        hard, code_soft, fragile, _ = scan(tmp, 'tgt', docs, relpaths)
         hard_kinds = sorted((kind, ref) for _, _, kind, ref in hard)
         expected = sorted([
             ('anchor', 'real.md#missing-slug'),
             ('path',   'tgt/conventions/gone.md'),
         ])
+        code_kinds = sorted((kind, ref) for _, _, kind, ref in code_soft)
+        if code_kinds != [('path', 'tgt/conventions/fixture-only.md')]:
+            print("  selftest MISS: code-file fixture ref not demoted to code_soft: %s" % code_kinds)
+            ok = False
         if hard_kinds != expected:
             print("  selftest MISS: HARD set mismatch")
             print("    got:      %s" % hard_kinds)
@@ -236,7 +249,7 @@ def main():
         return 0  # fail-open: do not block on a missing target
 
     docs, relpaths = build_target_index(target_dir)
-    hard, fragile, fragile_samples = scan(args.base, args.target, docs, relpaths)
+    hard, code_soft, fragile, fragile_samples = scan(args.base, args.target, docs, relpaths)
 
     if hard:
         print('[check-inbound-refs] HARD DANGLING into %s: %d ref(s)' % (args.target, len(hard)))
@@ -246,6 +259,8 @@ def main():
         if not args.list and len(hard) > 20:
             print('  ... (%d more; rerun with --list)' % (len(hard) - 20))
         print('  fragile positional refs (informational): %d' % fragile)
+        if code_soft:
+            print('  code-file refs dangling (informational, likely fixtures): %d' % len(code_soft))
         return 1
 
     if not args.quiet:
@@ -255,6 +270,8 @@ def main():
               '-- these RESOLVE today but silently mis-resolve on renumber;' % fragile)
         print('  migrate to anchors (convention-design-principles.md 14.2). '
               'Positional-ref SEMANTICS are not checkable here (blind spot).')
+        if code_soft:
+            print('  code-file refs dangling (informational, likely selftest fixtures): %d' % len(code_soft))
     return 0
 
 
