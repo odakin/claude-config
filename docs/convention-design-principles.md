@@ -23,7 +23,7 @@ CONVENTIONS.md・各リポの CLAUDE.md・メモリの設計判断の根拠を�
 - リポ固有の CLAUDE.md だけに書く → 別リポで再発する
 - CONVENTIONS.md に何でも書く → 過剰規約で読まれなくなる
 
-**pragmatic relaxation (bundle rule):** 「1 ルール = 1 ファイル」の厳格適用は 1 行ファイルを生む。**関連密接かつ合計 10 行未満のルールは bundle 可** (配置先は影響範囲の最大公約数に従う)。例: 個人層の project-structure.md は作業ディレクトリ宣言 + 配置ルール + preview リンク出力を 1 ファイルに束ねた (2026-04-06 の `~/Claude/CLAUDE.md` 解体時の判断、`claude-config/DESIGN.md §~/Claude/CLAUDE.md の symlink 化` 参照)。
+**pragmatic relaxation (bundle rule):** 「1 ルール = 1 ファイル」の厳格適用は 1 行ファイルを生む。**関連密接かつ合計 10 行未満のルールは bundle 可** (配置先は影響範囲の最大公約数に従う)。例: 個人層の project-structure.md は作業ディレクトリ宣言 + 配置ルール + preview リンク出力を 1 ファイルに束ねた (2026-04-06 の `~/Claude/CLAUDE.md` 解体時の判断、`claude-config/DESIGN-archive.md §~/Claude/CLAUDE.md の symlink 化` 参照 〔= 2026-07-10 DESIGN archive split で移動済〕)。
 
 ---
 

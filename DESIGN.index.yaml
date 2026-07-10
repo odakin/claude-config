@@ -1,0 +1,84 @@
+# Stable slug index -- AUTO-GENERATED from the doc by scripts/generate-doc-index.py.
+# id/level/title are DERIVED from the markdown (edit the md + re-run, do NOT hand-edit
+# them here). legacy (a section's original §-number = a permanent forwarding address),
+# related, and any other hand field are PRESERVED. See convention-design-principles §14.7 (= #inbound-ref-robustness).
+# Validated by scripts/check-office-automation-index.py (dangling=0 / orphan=0).
+sections:
+  - id: toc
+    level: 2
+    title: "目次"
+  - id: design-reorg-archive-first
+    legacy: "2026-07-10"
+    level: 2
+    title: "2026-07-10: DESIGN.md の archive-first 再編 (DESIGN-archive.md 分離 + slug anchor + index 化)"
+  - id: office-files-router-hoist
+    legacy: "2026-06-27"
+    level: 2
+    title: "2026-06-27: Office handling 入口 router を layer 1 に hoist (`office-files.md` 新設)"
+  - id: layer1-firing-surface-tension
+    legacy: "2026-06-17"
+    level: 2
+    title: "2026-06-17: layer-1 convention の発火面 — 「正しい層配置」 と「発火確率」 の tension (= future work)"
+  - id: conventions-listing-regeneration
+    legacy: "2026-06-13"
+    level: 2
+    title: "2026-06-13: CONVENTIONS.md 冒頭の conventions/ 列挙 — 完全列挙と判定して再生成、機械 enforcement は defer"
+  - id: setup-clone-rename-skip
+    legacy: "2026-06-01"
+    level: 2
+    title: "2026-06-01: setup.sh の clone step — local dir rename による重複 clone を防ぐ"
+  - id: commit-msg-leak-guard-option-b
+    legacy: "2026-05-26"
+    level: 2
+    title: "2026-05-26: commit-msg leak guard option B (= git native BLOCK mode) を harness invoke bug の mitigation として投入"
+  - id: depend-vs-mention-distinction
+    legacy: "2026-05-19"
+    level: 2
+    title: "2026-05-19: 4 層 model の Core rule に「依存 vs 名指し」 区別を明示"
+  - id: pre-commit-bib-all-repos
+    legacy: "2026-05-14"
+    level: 2
+    title: "2026-05-14: 全 repo に pre-commit-bib install (= 時点依存検出の撤廃)"
+  - id: path-two-layer-defense
+    level: 2
+    title: "PATH 管理: 二層防御の設計"
+  - id: dangerous-commands-deny-rules
+    level: 2
+    title: "危険コマンドのブロック: deny ルール vs PreToolUse フック"
+  - id: architecture-md-optional
+    level: 2
+    title: "ARCHITECTURE.md: 必須化せず任意ファイルに留める"
+  - id: runbook-files-defer
+    level: 2
+    title: "RUNBOOK 系ファイル: 規約化を待つ（実例先行）"
+  - id: history-scrubbing-declined
+    level: 2
+    title: "claude-config git history scrubbing (確定: 見送り 2026-04-06)"
+  - id: self-mention-monitoring
+    level: 2
+    title: "CONVENTIONS.md / conventions/ 内の自己言及的 odakin 記述 (確定: 現状維持 2026-04-06)"
+  - id: hooks-role-table
+    level: 2
+    title: "hooks/ の役割分担"
+  - id: secrets-repos-externalization
+    level: 2
+    title: "SECRETS_REPOS の個人層外出し (2026-05-10)"
+  - id: find-personal-layer-helper
+    level: 2
+    title: "個人層検出 helper (scripts/lib/find-personal-layer.sh) (2026-05-10)"
+  - id: dropbox-refs-design
+    level: 2
+    title: "dropbox-refs convention: per-repo symlink + personal-layer registry (2026-04-07)"
+  - id: stale-dirt-detection
+    level: 2
+    title: "git-state-nudge.sh: cross-session WIP leakage の検出 — STALE_DIRT (2026-04-08)"
+  - id: public-repo-leak-prevention
+    level: 2
+    title: "公開リポ leak 防止: 構造制約 hook + pre-commit ephemeral literal check"
+  - id: sensitive-terms-symlink-architecture
+    level: 2
+    title: "sensitive-terms.txt の symlink architecture (2026-05-14 追補)"
+  - id: pdf-read-fallback-hook
+    legacy: "2026-05-18"
+    level: 2
+    title: "2026-05-18: PDF Read tool fallback hook 設計判断"

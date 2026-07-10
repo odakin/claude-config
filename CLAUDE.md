@@ -18,7 +18,8 @@ claude-config/
 ├── CLAUDE.md               # このファイル（リポ固有の指示書）
 ├── SESSION.md              # 現在の作業状態・残タスク（当月 + Open items、hot/cold 分離）
 ├── SESSION-archive.md      # SESSION.md から分離した 2026-05 以前の dated entry（grep 専用）
-├── DESIGN.md               # 設計判断とその理由
+├── DESIGN.md               # 設計判断とその理由（live な判断のみ、冒頭 TOC + slug anchor + DESIGN.index.yaml）
+├── DESIGN-archive.md       # DESIGN.md から分離した完了・超越済みの dated entry（grep 専用、2026-07-10 分離）
 ├── CONVENTIONS.md          # 全リポ共通規約（正本）
 ├── README.md               # プロジェクト説明（English）
 ├── README.ja.md            # プロジェクト説明（日本語）
@@ -243,13 +244,13 @@ setup.sh が自動で行うこと:
 
 新規リポを例外 list に追加する判断は user が行う (= Claude が独断で追加しない)。 また「既に commit history に名前が出てしまった repo」 を追跡的に追加するのも user 判断 (= 過去 leak の追認 vs 「list に入れず history 内残置は許容」 の判断は user の risk 評価による、 Claude は自動 list 化しない)。
 
-**commit message 拡張の根拠 (2026-05-13)**: file 本文では意識的に抽象化 (例: 「upstream リポ」) しても commit message で同 session の private repo 名を直書きする事故が複数 commit にわたって発生 (incident 集計は owner の private layer の leak-incidents 記録にあり)。 commit message は `git log` で grep 可能な public surface なので file 本文と同じ規律を適用する。 既存 `public-precommit-runner.sh` は file 本文の Tier A 検出のみで commit-msg は対象外だが、 2026-05-26 に `commit-msg-leak-guard-runner.sh` (BLOCK mode、 git native hook) で commit message scan を導入済 (= 設計詳細 [`DESIGN.md §2026-05-26`](DESIGN.md))。
+**commit message 拡張の根拠 (2026-05-13)**: file 本文では意識的に抽象化 (例: 「upstream リポ」) しても commit message で同 session の private repo 名を直書きする事故が複数 commit にわたって発生 (incident 集計は owner の private layer の leak-incidents 記録にあり)。 commit message は `git log` で grep 可能な public surface なので file 本文と同じ規律を適用する。 既存 `public-precommit-runner.sh` は file 本文の Tier A 検出のみで commit-msg は対象外だが、 2026-05-26 に `commit-msg-leak-guard-runner.sh` (BLOCK mode、 git native hook) で commit message scan を導入済 (= 設計詳細 [`DESIGN.md §2026-05-26`](DESIGN.md#commit-msg-leak-guard-option-b))。
 
 ### Test file の private repo 名 literal 禁止 (2026-05-26 追加)
 
 layer 1 (= 本 repo) の **test file source code に実 private repo 名を literal で書かない**。 fixture / test case で「private repo 名を含む input」 を必要とする場合は **mock-personal-layer pattern** で代替する (= `CLAUDE_PERSONAL_LAYER` env var で temp dir 注入 + 偽 `repos.md` + mock literal で test、 詳細手順 [`conventions/hook-authoring.md#shared-matcher-mock-pattern`](conventions/hook-authoring.md#shared-matcher-mock-pattern))。
 
-根拠 (= 2026-05-26 self-leak RCA): `commit-msg-leak-guard-runner.test.sh` 初版 (= commit `4f4e636`) で test case literal に実 private repo 名 4 種を embed していた self-leak event。 hook 自身は commit message scan のみで file body を scope 外として通過、 public commit に焼き付き → 4 軸 sweep 安全性軸で発覚 → `c7a9144` で mock pattern に refactor。 詳細経緯: [`DESIGN.md §2026-05-26`](DESIGN.md) 反省 section + [`hook-authoring.md#shared-matcher-mock-pattern`](conventions/hook-authoring.md#shared-matcher-mock-pattern) implementation pattern。
+根拠 (= 2026-05-26 self-leak RCA): `commit-msg-leak-guard-runner.test.sh` 初版 (= commit `4f4e636`) で test case literal に実 private repo 名 4 種を embed していた self-leak event。 hook 自身は commit message scan のみで file body を scope 外として通過、 public commit に焼き付き → 4 軸 sweep 安全性軸で発覚 → `c7a9144` で mock pattern に refactor。 詳細経緯: [`DESIGN.md §2026-05-26`](DESIGN.md#commit-msg-leak-guard-option-b) 反省 section + [`hook-authoring.md#shared-matcher-mock-pattern`](conventions/hook-authoring.md#shared-matcher-mock-pattern) implementation pattern。
 
 → **implementer reflex**: layer 1 test file を書く瞬間に「この test data は public commit に焼き付く、 実 layer 3 data の literal が混入していないか?」 を問う。 過去事例の literal copy-paste は最も再演しやすい failure mode (= 「過去事例の reproduce」 が目的化される)。
 
