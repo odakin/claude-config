@@ -1,7 +1,7 @@
 # Stable slug index -- AUTO-GENERATED from the doc by scripts/generate-doc-index.py.
 # id/level/title are DERIVED from the markdown (edit the md + re-run, do NOT hand-edit
 # them here). legacy (a section's original §-number = a permanent forwarding address),
-# related, and any other hand field are PRESERVED. See convention-design-principles §14.7.
+# related, and any other hand field are PRESERVED. See convention-design-principles §14.7 (= #inbound-ref-robustness).
 # Validated by scripts/check-office-automation-index.py (dangling=0 / orphan=0).
 sections:
   - id: hook-category-intro
@@ -187,7 +187,7 @@ sections:
   - id: frontend-dependent-cowork
     legacy: "9.3"
     level: 3
-    title: "9.3 frontend 依存 — **Claude desktop (Cowork) app は hook を実行はするが、 その出力をモデルに honor しない**"
+    title: "9.3 frontend 依存 — **Claude Code desktop app は hook を実行はするが、 その出力をモデルに honor しない**"
     related: [build-dependent-behavior]
   - id: hook-no-go-judgment
     legacy: "10"

@@ -177,6 +177,14 @@ sections:
     legacy: "8.15"
     level: 3
     title: "8.15 enforcement surface は frontend/実行 context で生存性が違う — guard を「どこで生存すべきか × 何を検査するか」で配置する"
+  - id: absence-channel-coverage
+    legacy: "8.16"
+    level: 3
+    title: "8.16 不在主張の channel scope — single-channel null は universal absence の証明ではない"
+  - id: broadcast-obligation-blind-spot
+    legacy: "8.17"
+    level: 3
+    title: "8.17 broadcast で届く個人義務 — per-person addressing proxy の構造的 false negative"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
@@ -429,6 +437,26 @@ sections:
     legacy: "16.4"
     level: 3
     title: "16.4 honest scope"
+  - id: hierarchical-name-collision
+    legacy: "17"
+    level: 2
+    title: "17. 階層内の同名 entity 併存 — SoT 表現で context path を明示"
+  - id: hierarchical-name-collision-pattern
+    legacy: "17.1"
+    level: 3
+    title: "17.1 観察 pattern"
+  - id: hierarchical-name-collision-trap
+    legacy: "17.2"
+    level: 3
+    title: "17.2 Trap pattern (= 同型再発の signature)"
+  - id: hierarchical-name-collision-discipline
+    legacy: "17.3"
+    level: 3
+    title: "17.3 規律: SoT 表現で path を明示"
+  - id: hierarchical-name-collision-relation
+    legacy: "17.4"
+    level: 3
+    title: "17.4 関連"
   - id: changelog
     level: 2
     title: "変更履歴"
