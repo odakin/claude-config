@@ -7,6 +7,7 @@ summary: Claude の tool call が「malformed and could not be parsed」 で壊�
 
 > 適用対象: Claude が **任意の tool call (特に Bash / Edit)** を生成する全ての場面。 hook 作成に限らない。
 > hook script を書くときの bash 3.2 parser bug は **別 layer** の話 (= [`hook-authoring.md` bash32-heredoc-parser-bug](hook-authoring.md#bash32-heredoc-parser-bug) 参照)。
+> 無人 worker session が「実作業ゼロ + **空 thinking block の規則的周期**」 で死に続けるのは**別 root** (= 1 応答の出力上限超過の retry loop、 [`output-cap-death-loop.md`](output-cap-death-loop.md) 参照) — malformed は壊れた tool call が transcript に残るが、 あちらは**何も残らない**。 「粘らず root に近い一手」 の精神は共通。
 
 ---
 
