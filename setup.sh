@@ -817,7 +817,7 @@ else
     [ "$RENAMED_SKIP" -gt 0 ] && echo "  Skipped (renamed local dir, remote already present): $RENAMED_SKIP repos"
 fi
 
-# --- 5a. Personal home symlink (four-layer architecture, layer 2) ---
+# --- 5a. Personal home symlink (four-layer architecture, layer 3) ---
 # ユーザの個人層 (personal layer) を検出し、~/Claude/CLAUDE.md をそこへ symlink する。
 # 詳しい層モデルは docs/personal-layer.md 参照。
 #

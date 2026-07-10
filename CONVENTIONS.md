@@ -1,7 +1,6 @@
 # リポジトリ規約
 <!-- slug index: CONVENTIONS.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 (= docs/convention-design-principles.md#slug-over-positional) / §14.7 (= #inbound-ref-robustness). -->
-
-最終更新: 2026-04-07
+<!-- 最終更新日は書かない: 手動日付は drift 源 (実例: 2026-04-07 のまま 3 ヶ月放置)。更新履歴の SoT は git log。 -->
 
 > **正本は `~/Claude/claude-config/CONVENTIONS.md`。** `~/Claude/CONVENTIONS.md` は symlink。
 > 編集後は `cd ~/Claude/claude-config && git add -A && git commit && git push`。

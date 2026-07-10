@@ -16,7 +16,7 @@
 
 ## 個人層について
 
-個人ごとの好み・身元情報・リポ一覧などを Claude に覚えさせたい場合は、**個人層** (層 2) を作ることを推奨します。詳細とテンプレートは:
+個人ごとの好み・身元情報・リポ一覧などを Claude に覚えさせたい場合は、**個人層** (層 3) を作ることを推奨します。詳細とテンプレートは:
 
 - 概念: `<base>/claude-config/docs/personal-layer.md`
 - テンプレート: `<base>/claude-config/templates/personal-layer/`
