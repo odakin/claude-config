@@ -130,6 +130,8 @@ req = urllib.request.Request(
 
 公式 SDK (discord.py / discord.js 等) は自動で正しい UA を付けるため、 SDK 経由なら気にする必要なし。 **生 HTTP request を書く時だけ落とし穴**。 ad-hoc な one-shot post script (= odakin が CLI からメッセージ送信する典型ユースケース) で頻発する。
 
+**⚠️ 2026-07-10 に「本節はあったのに再発」した**: 送信 session は運用 doc (= ID・token 表) を grep で読むため、 別 doc の本節が発火面にならない (= 文末 pointer は grep 到達者に届かない)。 design-out として **canonical 送信 script [`scripts/discord-post.py`](../scripts/discord-post.py)** に規則を焼き込んだ (= 正しい UA / エラー code 解読 hint / **既定 dry-run + 明示 `--send`** 〔= claude-code-permissions.md #ask-pattern-action-anchor 準拠〕 / `--dm-user` で DM channel 開設 / `--check` で read-only 疎通確認 / `--selftest` 内蔵)。 **ad-hoc な curl / urllib を書く前にまずこれを使う。**
+
 ## Cloudflare 1010 error の鑑別: User-Agent vs 組織 NW egress filter
 
 `discord.com` への request が Cloudflare 1010 で reject されたら、 まず **どちらの原因か** を鑑別する:
