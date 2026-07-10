@@ -13,9 +13,10 @@
 #   「アプリ内蔵 connector は send_email を出さない、 send は standalone alias /
 #   account-direct.py」 = read scope の null trap とは別軸の write-tool 不在 trap。
 #
-#   foreign user (= ~/.gmail-mcp / desktop config 不在) では generic な
-#   meta-reminder 1 文だけ inject (= 「MCP 経由検索の null は scope unknown
-#   を universalize しない」)、 何も無ければ silent。
+#   foreign user (= ~/.gmail-mcp / desktop config とも不在 = register 0 件) では
+#   silent exit (= 実装 L「register が完全に 0 件なら silent」。 旧 header は
+#   「generic な meta-reminder 1 文を inject」 と書いていたが実装と食い違い、
+#   2026-07-10 に実装側を正として訂正 — 無関係ユーザーへの毎 session noise を避ける)。
 #
 # 出力経路:
 #   stdout = additionalContext JSON (= CLI session に inject)

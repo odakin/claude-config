@@ -106,7 +106,11 @@ BEHIND_CACHE="$STATE_DIR/$REPO_HASH.behind"
 # ---------- 2. behind 判定 (= per-repo short-TTL cache 経由) ----------
 BEHIND=""
 if [ -f "$BEHIND_CACHE" ]; then
-  CMTIME="$(stat -f %m "$BEHIND_CACHE" 2>/dev/null || stat -c %Y "$BEHIND_CACHE" 2>/dev/null || echo 0)"
+  # BSD/GNU stat 両対応: GNU では `stat -f %m` が exit 1 でも stdout に FS dump を吐き、
+  # `a || b` の command substitution は両出力を連結する -> exit code でなく数値検証で分岐 (2026-07-10 CI 検出)
+  CMTIME="$(stat -f %m "$BEHIND_CACHE" 2>/dev/null)"
+  case "$CMTIME" in ''|*[!0-9]*) CMTIME="$(stat -c %Y "$BEHIND_CACHE" 2>/dev/null)" ;; esac
+  case "$CMTIME" in ''|*[!0-9]*) CMTIME=0 ;; esac
   if [ $((NOW - CMTIME)) -lt "$CACHE_TTL" ]; then
     BEHIND="$(cat "$BEHIND_CACHE" 2>/dev/null || echo '')"
   fi

@@ -9,6 +9,15 @@ set -uo pipefail
 HOOK="$(cd "$(dirname "$0")" && pwd)/session-start-mcp-scope-nudge.sh"
 [ -x "$HOOK" ] || { echo "FAIL: hook not executable: $HOOK"; exit 1; }
 
+# foreign-user / CI 環境 (= ~/.gmail-mcp も desktop config も不在 = register 0 件) では
+# hook は設計上 silent exit するため owner 前提の fire assertion が成立しない -> SKIP を宣言
+# (run-all-checks.sh の契約: 前提が無い test は SKIP を出力して exit 0、 silent skip 禁止)
+DESKTOP_CFG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+if [ ! -d "$HOME/.gmail-mcp" ] && [ ! -f "$DESKTOP_CFG" ]; then
+  echo "SKIP: register 済 MCP が 0 件の環境 (foreign user / CI) — owner 前提の fire assertion は対象外"
+  exit 0
+fi
+
 pass=0; fail=0; results=()
 
 echo "=== §A logic tests ==="

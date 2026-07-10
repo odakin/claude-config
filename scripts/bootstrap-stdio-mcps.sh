@@ -48,7 +48,9 @@ if [ ! -f "$REGISTRY" ]; then
 fi
 
 if ! command -v claude >/dev/null 2>&1; then
-  exit 0
+  # test mock (CLAUDE_BOOTSTRAP_MCP_LIST) 注入時は dry-run 経路のみで CLI 不要 ->
+  # CLI 不在の CI でも test が回るよう続行 (2026-07-10)
+  [ "${CLAUDE_BOOTSTRAP_MCP_LIST+set}" = "set" ] || exit 0
 fi
 
 # 現状の登録済 MCP list (= test 用 mock 経由優先)

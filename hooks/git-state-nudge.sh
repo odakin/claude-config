@@ -149,7 +149,10 @@ check_repo_state() {
     FIRST_SIGHTING=1
   else
     local SEEN_MTIME
-    SEEN_MTIME="$(stat -f %m "$SEEN_FILE" 2>/dev/null || stat -c %Y "$SEEN_FILE" 2>/dev/null || echo "$NOW")"
+    # BSD/GNU stat 両対応 (数値検証分岐、 stale-read-nudge.sh と同 fix、 2026-07-10)
+    SEEN_MTIME="$(stat -f %m "$SEEN_FILE" 2>/dev/null)"
+    case "$SEEN_MTIME" in ''|*[!0-9]*) SEEN_MTIME="$(stat -c %Y "$SEEN_FILE" 2>/dev/null)" ;; esac
+    case "$SEEN_MTIME" in ''|*[!0-9]*) SEEN_MTIME="$NOW" ;; esac
     local SEEN_AGE=$((NOW - SEEN_MTIME))
     [ "$SEEN_AGE" -gt "$SEEN_THRESHOLD" ] && FIRST_SIGHTING=1
   fi
@@ -199,7 +202,10 @@ check_repo_state() {
     if [ -n "$PORCELAIN_HASH" ] && [ "$PORCELAIN_LAST" = "$PORCELAIN_HASH" ]; then
       # Same dirty set as last seen — measure how long it has persisted.
       local PMTIME PAGE
-      PMTIME="$(stat -f %m "$PORCELAIN_FILE" 2>/dev/null || stat -c %Y "$PORCELAIN_FILE" 2>/dev/null || echo "$NOW")"
+      # BSD/GNU stat 両対応 (数値検証分岐、 同上)
+      PMTIME="$(stat -f %m "$PORCELAIN_FILE" 2>/dev/null)"
+      case "$PMTIME" in ''|*[!0-9]*) PMTIME="$(stat -c %Y "$PORCELAIN_FILE" 2>/dev/null)" ;; esac
+      case "$PMTIME" in ''|*[!0-9]*) PMTIME="$NOW" ;; esac
       PAGE=$((NOW - PMTIME))
       PAGE_HOURS=$((PAGE / 3600))
       if [ "$PAGE" -gt 86400 ]; then
