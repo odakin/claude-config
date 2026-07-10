@@ -174,7 +174,9 @@ HOOKS_DST="$HOME/.claude/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 
 # 期待する hook 定義（settings.json にマージする内容）
-# hook を追加・削除する場合はここと HOOK_CMD の for ループを同時に更新する
+# hook の追加・削除はこの JSON だけを更新すればよい (単一リスト駆動):
+# merge 側の期待リストは scripts/lib/merge-hook-event.sh が JSON から jq で導出する
+# (旧: JSON + for ループの二重管理 -> stale-read-nudge.sh の同期漏れ silent dead RCA、 2026-07-10)
 HOOK_ENTRIES='[
   {
     "matcher": "Edit|Write",
@@ -216,6 +218,10 @@ POST_TOOL_USE_ENTRIES='[
   {
     "matcher": "Read",
     "hooks": [{"type": "command", "command": "~/.claude/hooks/pdf-read-fallback-nudge.sh"}]
+  },
+  {
+    "matcher": "Read",
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/stale-read-nudge.sh"}]
   },
   {
     "matcher": "Edit|Write|MultiEdit",
@@ -314,6 +320,10 @@ install_hooks() {
         return 0
     fi
 
+    # 単一リスト駆動 merge 関数 (期待 hook リストを JSON から導出、 二重管理を排除)
+    # shellcheck source=scripts/lib/merge-hook-event.sh
+    . "$SCRIPT_DIR/scripts/lib/merge-hook-event.sh"
+
     if [ ! -f "$SETTINGS" ]; then
         echo "  Creating settings.json with hooks config."
         mkdir -p "$(dirname "$SETTINGS")"
@@ -338,27 +348,8 @@ install_hooks() {
             "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
         echo "  Done."
     else
-        # PreToolUse 処理
-        if ! jq -e '.hooks.PreToolUse' "$SETTINGS" > /dev/null 2>&1; then
-            echo "  Adding PreToolUse hooks ..."
-            jq --argjson entries "$HOOK_ENTRIES" \
-                '.hooks.PreToolUse = $entries' \
-                "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-        else
-            # PreToolUse が存在する場合、各 hook が含まれているか個別確認
-            for HOOK_CMD in "memory-guard.sh" "public-leak-guard.sh" "memory-guard-bash.sh" "google-url-guard.sh" "expensive-tmp-guard.sh" "mcp-search-scope-reminder-nudge.sh"; do
-                if ! jq -e --arg cmd "$HOOK_CMD" \
-                    '.hooks.PreToolUse[] | select(.hooks[]?.command | contains($cmd))' \
-                    "$SETTINGS" > /dev/null 2>&1; then
-                    echo "  Adding missing PreToolUse hook: $HOOK_CMD"
-                    ENTRY=$(echo "$HOOK_ENTRIES" | jq --arg cmd "$HOOK_CMD" \
-                        '[.[] | select(.hooks[]?.command | contains($cmd))][0]')
-                    jq --argjson entry "$ENTRY" \
-                        '.hooks.PreToolUse += [$entry]' \
-                        "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-                fi
-            done
-        fi
+        # PreToolUse 処理 (期待リストは JSON から導出 = scripts/lib/merge-hook-event.sh)
+        merge_hook_event "PreToolUse" "$HOOK_ENTRIES" "$SETTINGS"
 
         # Cleanup: remove obsolete SessionStart session-git-check hook if present
         # (it was retired in favour of git-state-nudge's first-sighting fetch).
@@ -387,69 +378,15 @@ install_hooks() {
         fi
 
         # SessionStart 処理 (= 2026-05-20 SessionStart のみ復活)
-        if ! jq -e '.hooks.SessionStart' "$SETTINGS" > /dev/null 2>&1; then
-            echo "  Adding SessionStart hooks ..."
-            jq --argjson entries "$SESSION_START_ENTRIES" \
-                '.hooks.SessionStart = $entries' \
-                "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-        else
-            for HOOK_CMD in "currentdate-anchor.py" "session-start-mcp-scope-nudge.sh" "session-start-claude-account-change.sh"; do
-                if ! jq -e --arg cmd "$HOOK_CMD" \
-                    '.hooks.SessionStart[] | select(.hooks[]?.command | contains($cmd))' \
-                    "$SETTINGS" > /dev/null 2>&1; then
-                    echo "  Adding missing SessionStart hook: $HOOK_CMD"
-                    ENTRY=$(echo "$SESSION_START_ENTRIES" | jq --arg cmd "$HOOK_CMD" \
-                        '[.[] | select(.hooks[]?.command | contains($cmd))][0]')
-                    jq --argjson entry "$ENTRY" \
-                        '.hooks.SessionStart += [$entry]' \
-                        "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-                fi
-            done
-        fi
+        merge_hook_event "SessionStart" "$SESSION_START_ENTRIES" "$SETTINGS"
 
         # PostToolUse 処理
-        if ! jq -e '.hooks.PostToolUse' "$SETTINGS" > /dev/null 2>&1; then
-            echo "  Adding PostToolUse hooks ..."
-            jq --argjson entries "$POST_TOOL_USE_ENTRIES" \
-                '.hooks.PostToolUse = $entries' \
-                "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-        else
-            for HOOK_CMD in "git-state-nudge.sh" "pdf-read-fallback-nudge.sh" "session-commit-nudge.sh track" "mcp-search-zero-result-nudge.sh"; do
-                if ! jq -e --arg cmd "$HOOK_CMD" \
-                    '.hooks.PostToolUse[] | select(.hooks[]?.command | contains($cmd))' \
-                    "$SETTINGS" > /dev/null 2>&1; then
-                    echo "  Adding missing PostToolUse hook: $HOOK_CMD"
-                    ENTRY=$(echo "$POST_TOOL_USE_ENTRIES" | jq --arg cmd "$HOOK_CMD" \
-                        '[.[] | select(.hooks[]?.command | contains($cmd))][0]')
-                    jq --argjson entry "$ENTRY" \
-                        '.hooks.PostToolUse += [$entry]' \
-                        "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-                fi
-            done
-        fi
+        merge_hook_event "PostToolUse" "$POST_TOOL_USE_ENTRIES" "$SETTINGS"
 
         # Stop 処理 (= 2026-05-26 layer 1 統合、 session-commit-nudge.sh nudge
         # を install。 layer 3 hooks/install.sh が別 entry (= pdf-open-enforce.sh
         # 等) を append する、 両者は同 array 内で共存する)
-        if ! jq -e '.hooks.Stop' "$SETTINGS" > /dev/null 2>&1; then
-            echo "  Adding Stop hooks ..."
-            jq --argjson entries "$STOP_ENTRIES" \
-                '.hooks.Stop = $entries' \
-                "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-        else
-            for HOOK_CMD in "session-commit-nudge.sh nudge"; do
-                if ! jq -e --arg cmd "$HOOK_CMD" \
-                    '.hooks.Stop[] | select(.hooks[]?.command | contains($cmd))' \
-                    "$SETTINGS" > /dev/null 2>&1; then
-                    echo "  Adding missing Stop hook: $HOOK_CMD"
-                    ENTRY=$(echo "$STOP_ENTRIES" | jq --arg cmd "$HOOK_CMD" \
-                        '[.[] | select(.hooks[]?.command | contains($cmd))][0]')
-                    jq --argjson entry "$ENTRY" \
-                        '.hooks.Stop += [$entry]' \
-                        "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-                fi
-            done
-        fi
+        merge_hook_event "Stop" "$STOP_ENTRIES" "$SETTINGS"
 
         echo "  Hooks check complete."
     fi
