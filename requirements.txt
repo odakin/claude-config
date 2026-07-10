@@ -7,7 +7,7 @@
 PyMuPDF>=1.23
 
 # xlsx 系 (diff-form-xlsx.py / scan-form-instructions.py / check-xlsx-integrity.py / check-form-clipping.py)
-openpyxl>=3.1
+openpyxl>=3.1.5
 
 # docx 系 (diff-form-docx.py / docx_decl_patch.py / normalize-docx-decl.py / check-docx-integrity.py)
 python-docx>=1.1
