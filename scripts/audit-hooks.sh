@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # audit-hooks.sh — 3 軸 hook 配信 audit (= silent malfunction の構造的検出)
+# 付随: 本番 hooks dir に残置された *.test.sh は「未登録」 でなく掃除対象 (🧹) として分類する (2026-07-10)
 #
 # 設計動機: conventions/hook-authoring.md#delivery-audit-4-axes の 3 軸 audit 規律を script 化。
 # 単発 (P1) check + dashboard 統合 (= unified-dashboard.py 経由の P2 continuous

@@ -73,7 +73,7 @@ Everything else (hooks, permissions, mass repo cloning, launchd agents) stays op
 - **[DESIGN.md](DESIGN.md)** — why the rules are shaped this way; design decisions, alternatives, trade-offs.
 - **[conventions/](conventions/)** — domain-specific rules (LaTeX, MCP, shared repos, Substack, scheduled tasks, shell env, Dropbox refs, …). Each file's header states when to load it.
 - **[docs/](docs/)** — usage tips, git-crypt guide, sensitive-repo patterns, convention design principles. Start with [English tips](docs/usage-tips.md) or [Japanese tips](docs/usage-tips.ja.md).
-- **[hooks/](hooks/) and [scripts/](scripts/)** — mechanical enforcement: memory-guard, git-state-nudge, public-leak-guard, LaTeX Unicode auto-fix, public-repo audit. Public repos additionally get a **2-layer leak gate** at commit time: `public-precommit-runner.sh` (= file body Tier A regex + ephemeral Tier B literal) and `commit-msg-leak-guard-runner.sh` (= commit message scan via shared matcher library, BLOCK mode); both gated by `.claude/public-repo.marker` and bundled by `setup.sh` Step 8.
+- **[hooks/](hooks/) and [scripts/](scripts/)** — mechanical enforcement (verify everything locally with one command: `bash scripts/run-all-checks.sh`, the same suite CI runs): memory-guard, git-state-nudge, public-leak-guard, LaTeX Unicode auto-fix, public-repo audit. Public repos additionally get a **2-layer leak gate** at commit time: `public-precommit-runner.sh` (= file body Tier A regex + ephemeral Tier B literal) and `commit-msg-leak-guard-runner.sh` (= commit message scan via shared matcher library, BLOCK mode); both gated by `.claude/public-repo.marker` and bundled by `setup.sh` Step 8.
 
 ## Core concepts
 

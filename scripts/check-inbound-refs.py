@@ -30,6 +30,13 @@ Usage:
   check-inbound-refs.py [--base DIR] [--target REPO] [--list] [--quiet]
   check-inbound-refs.py --selftest
 Exit code: 1 if any HARD dangling ref found, else 0.
+
+INFORMATIONAL demotions (reported but never exit-1, 2026-07-10 — three false-positive
+classes found on the live tree):
+  * refs from code files (.py/.sh)      -> often selftest fixtures ('conventions/foo.md')
+  * path followed by 新規/未作成/却下   -> a *proposal* mention of a never-created file
+  * bare-name anchor ref where the SOURCE repo has a same-named doc -> resolves locally
+    (hierarchical name collision; binding it to the target repo was wrong)
 """
 import os
 import re
