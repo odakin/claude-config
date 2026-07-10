@@ -16,7 +16,11 @@ cross-machine state の不可視問題 (multi-account-machine-surface.md #honest
   から --min-commit-interval-hours 経過時のみ commit。 変化なし & 期間内なら working
   tree に触らない (= 他の git 機構を汚さない)。 liveness の上限 = interval + cron 周期。
 - **fail-open**: 何が起きても exit 0 (= cron を止めない)。 push 失敗は local commit を
-  残して次 beat で再 push。
+  残して次 beat で再 push。 commit 後の pull は `--rebase --autostash` — 他 session が
+  無関係な dirty file を残置していると autostash なしでは rebase が拒否され、 beat が
+  local commit に積み上がるだけで push されない = fleet からこのマシンが silent 死に
+  見え、 このマシン自身の fleet view も stale 化する (= 双方向の盲目)。 failure mode の
+  正本 = conventions/multi-machine-state.md#fleet-heartbeat 設計原則 5。
 - server の実況は **launchd loaded/pid + server ログ末尾の marker parse** で判定
   (= "Connected" / "Not logged in" / "too old" / "Enable Remote Control?" を新しい順に
   評価)。 process が生きていても auth 失効で cycling している状態を検出できるのが肝。
