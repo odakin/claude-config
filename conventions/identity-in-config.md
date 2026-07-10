@@ -78,7 +78,7 @@ odakin の 4 層アーキテクチャ (`docs/personal-layer.md`) に従って、
 
 ## Homonym 注意: author ID (INSPIRE BAI 等) の取り違え
 
-INSPIRE BAI (`K.Y.Oda.1`, `N.Ogawa.4` 等) は **同姓同名の別著者を別 ID として管理する**が、setup 時に検索結果から **同姓の誰か別人**を選んでしまうと、「subscriber は実際 A さんなのに INSPIRE profile は A' さんのもの」という状態になる。公開リポに BAI を書くことで:
+INSPIRE BAI (`T.Kono.1`, `H.Otsu.4` のような形式の author ID。 例は架空) は **同姓同名の別著者を別 ID として管理する**が、setup 時に検索結果から **同姓の誰か別人**を選んでしまうと、「subscriber は実際 A さんなのに INSPIRE profile は A' さんのもの」という状態になる。公開リポに BAI を書くことで:
 
 - 第三者の共同研究者リスト (Super-K collaboration 15 名等) がその subscriber の profile として公開される
 - arxiv-digest の scorer が A' さんの研究分野で採点するため、本来の A さんの興味と乖離する
@@ -90,7 +90,7 @@ INSPIRE BAI (`K.Y.Oda.1`, `N.Ogawa.4` 等) は **同姓同名の別著者を別 
   - 最近の論文タイトル 2-3 件が本人の研究と一致するか
   - affiliation 履歴が本人の経歴と一致するか
   - 共著者 list の top 5 が知り合いか
-- **不一致を発見した場合**: `inspire_id: null` に戻し、`inspire_profile.txt` を削除、`collaborators.yaml` の該当 entry の `notes` に homonym 訂正経緯を記録する (事例: 2026-04-14 ogawa 訂正)
+- **不一致を発見した場合**: `inspire_id: null` に戻し、`inspire_profile.txt` を削除、`collaborators.yaml` の該当 entry の `notes` に homonym 訂正経緯を記録する (実事例あり: 2026-04-14 に subscriber 1 名の homonym 誤同定を訂正)
 - **どうしても BAI が特定できない場合**: `inspire_id: null` のまま運用。scorer は `interest_profile.txt` のみを使う (精度は少し落ちるが誤同定リスクはゼロ)
 
 ## 変更履歴

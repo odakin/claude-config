@@ -4,7 +4,7 @@
 
 > 🧠 **考え方 (原則編) は [`office-automation-principles.md`](office-automation-principles.md)** — 様式 = 「見た目が契約」 / file = 地層 / 処理 = lossy 解釈器の連鎖、 という枠組みと、 道具選択の梯子・検証 3 層モデル・既知情報 prefill / print-last 等の人間系原則。 **新しい様式・新しい罠 (= 本 file に slug が無い状況) ではまず原則編を読む**。 本 file は個別 gotcha の正本。
 
-origin: 2026-05 SPReAD (AI for Science 萌芽的挑戦研究創出事業) 応募で得た知見 (= 様式 1 研究計画調書 xlsx の Python 自動 fill、 figure 埋め込み、 字数制限管理、 PDF snapshot 生成、 TTS 確認)。
+origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計画調書 xlsx の Python 自動 fill、 figure 埋め込み、 字数制限管理、 PDF snapshot 生成、 TTS 確認)。
 
 > 🍳 **入口 — 多 sheet 様式 xlsx → 提出用 PDF を端から端まで** (= 構造把握 → fill → ページ分割 → 余白均等化 → 結合 → 検証) やる手順は [`multi-sheet-pdf-assembly`](#multi-sheet-pdf-assembly) の **RECIPE** に集約。 週次の様式 PDF 業務はまずそこを見る。
 
@@ -154,7 +154,7 @@ for sname in wb.sheetnames:
 3. 各 candidate に書き込み → `data_only=True` で読み戻して expected 字数を assert (= 雛形 self-check が再計算するなら整合確認も同時に走る)
 4. 並行して [`diff-form-xlsx.py`](../scripts/diff-form-xlsx.py) で label 改変を機械検証
 
-⚠️ これは経験則: 全 gov-form が従うとは限らない。 個別 form ではまず dump して確認、 「LEN 式の先 = 入力」 が成立しない例 (= 別 sheet 集計 / 縦並び list / radio button) があれば dump の値で判断。 観測元: 学振 DC2 (2026-05)、 SPReAD 第2回 (2026-06) で安定。
+⚠️ これは経験則: 全 gov-form が従うとは限らない。 個別 form ではまず dump して確認、 「LEN 式の先 = 入力」 が成立しない例 (= 別 sheet 集計 / 縦並び list / radio button) があれば dump の値で判断。 観測元: 学振系様式 (2026-05)、 JST 系公募様式 (2026-06) で安定。
 
 ## <a id="form-filename-convention"></a>ファイル命名規約 (form 別 registry)
 
@@ -162,7 +162,7 @@ for sname in wb.sheetnames:
 
 | Form | 命名規則 |
 |---|---|
-| JST SPReAD 様式1 | `様式1＿研究計画調書＿<機関コード半角数字>＿<姓ローマ字><名ローマ字>.xlsx` (区切りは **全角アンダースコア `＿`**、 「様式1」 の `1` は半角、 ローマ字氏名は姓名の順で連続書き) |
+| JST 系公募の様式1 | `様式1＿研究計画調書＿<機関コード半角数字>＿<姓ローマ字><名ローマ字>.xlsx` (区切りは **全角アンダースコア `＿`**、 「様式1」 の `1` は半角、 ローマ字氏名は姓名の順で連続書き) |
 | 科研費 学振 DC1/DC2 | (個別の e-Rad 仕様、 form 毎に DC1.pdf / DC2.pdf 形式が指示される) |
 | 学内・財団推薦書 (汎用) | `<書類種別>_<年度>_<対象者識別>_<目的>.<拡張子>` (区切りは form 仕様に従う、 半角_全角＿混在に注意) |
 
@@ -690,7 +690,7 @@ for r in range(1, ws.max_row + 1):
         ws.row_dimensions[r].height = min(409, _calc_height_for_cell(ws, r))
 ```
 
-origin: 2026-05-14 JST SPReAD で 行 22 = 591.5pt / 行 26 = 2754pt の状態が「行 20-22 が非表示」 として事務担当者から指摘 → 行 22 = 30pt / 行 26 = 150pt に reset で修復。
+origin: 2026-05-14 JST 系公募で 行 22 = 591.5pt / 行 26 = 2754pt の状態が「行 20-22 が非表示」 として事務担当者から指摘 → 行 22 = 30pt / 行 26 = 150pt に reset で修復。
 
 ### <a id="topleftcell-scroll-persist"></a>sheetView.topLeftCell の scroll 位置 persistence
 
@@ -707,7 +707,7 @@ for sname in wb.sheetnames:
 
 または最初の submission で行高 (= [`row-height-409pt-limit`](#row-height-409pt-limit)) を適切化していれば、 topLeftCell も自然に A1 のままになる (= scroll 履歴が template 配布時点のまま)。
 
-origin: 2026-05-14 JST SPReAD で「行 20-22 が非表示」 指摘と同時に発覚。 topLeftCell="A17" のままだと先頭の研究者情報行 (= 行 6-15) が viewport 外で「行を欠落して提出された」 と誤読される risk。
+origin: 2026-05-14 JST 系公募で「行 20-22 が非表示」 指摘と同時に発覚。 topLeftCell="A17" のままだと先頭の研究者情報行 (= 行 6-15) が viewport 外で「行を欠落して提出された」 と誤読される risk。
 
 ### <a id="xlsx-rich-text-underline"></a>xlsx rich text formatting (= 部分 underline / bold / italic)
 
@@ -737,7 +737,7 @@ while True:
 cell.value = CellRichText(parts)
 ```
 
-🚨 **fill-driver caveat — plain text 転記は書式を運ばない (= 2 応募連続で同じ差戻しを食った構造 trap)**: draft (md / plain text) から様式へ転記する fill driver は、 転記だけでは rich text 書式が乗らない。 様式 label に「本人に下線」 等の format 指示があるのに driver が `cell.value = text` で終わっていると、 **指示は構造的に落ちる** — 本 slug が既に存在し過去応募で適用実績があっても、 新 driver を書いた session がここに来なければ再演する (実例: 同一様式シリーズの第 1 回応募で本 slug を確立 → 第 2 回応募の新 driver が plain 転記のみ → 業績 5 件全部下線欠落で差戻し、 2026-07)。 → **対策は driver 設計時に発火させる**: fill driver を書く前に `scan-form-instructions.py` で format 系指示を洗い ([`embedded-instruction-in-label`](#embedded-instruction-in-label))、 検出したら「転記 step の直後に rich text 適用 step」 を driver 仕様に含める (= e-Rad 系は [erad-submission.md 組み立て手順 step 0](erad-submission.md#assembly-order) が checklist 化済)。
+🚨 **fill-driver caveat — plain text 転記は書式を運ばない (= 2 応募連続で同じ修正指示を受けた構造 trap)**: draft (md / plain text) から様式へ転記する fill driver は、 転記だけでは rich text 書式が乗らない。 様式 label に「本人に下線」 等の format 指示があるのに driver が `cell.value = text` で終わっていると、 **指示は構造的に落ちる** — 本 slug が既に存在し過去応募で適用実績があっても、 新 driver を書いた session がここに来なければ再演する (実例: 同一様式シリーズの第 1 回応募で本 slug を確立 → 第 2 回応募の新 driver が plain 転記のみ → 業績欄全件で下線欠落の修正指示、 2026-07)。 → **対策は driver 設計時に発火させる**: fill driver を書く前に `scan-form-instructions.py` で format 系指示を洗い ([`embedded-instruction-in-label`](#embedded-instruction-in-label))、 検出したら「転記 step の直後に rich text 適用 step」 を driver 仕様に含める (= e-Rad 系は [erad-submission.md 組み立て手順 step 0](erad-submission.md#assembly-order) が checklist 化済)。
 
 **readback の 2 経路 (= 検証と再編集で使い分け)**:
 - **`load_workbook(path, rich_text=True)`** (openpyxl >= 3.1): rich text cell が `CellRichText` として読め、 **runs を直接 assert できる** (= `[b.text for b in cell.value if hasattr(b,'font') and b.font and b.font.u]` で下線 run を列挙)。 下線適用後の機械検証はこれが最短。 ⚠️ **既に rich text を持つ xlsx を再編集するときも必ず `rich_text=True` で load** する — default load で save すると既存 rich text が flatten されて消える。
@@ -753,13 +753,13 @@ print(f"Underlined runs: {underline_runs}")  # ['<applicant-initial>', '<applica
 
 xlsx XML の文字エンコード形式: ＭＳ Ｐゴシック等の全角文字は `&#65325;&#65331;` 等の numeric character reference にされる。 visual diff には decode しなければ読みにくい。
 
-origin: 2026-05-14 JST SPReAD 様式 1 Sheet 2 A15 (研究業績欄) で提出者本人氏名 (= 業績 5 件すべて) に underline を rich text で適用。 readback は str だったが xlsx 内部 XML 上で `<u val="single"/>` × 5 個 確認で OK 検証。 2026-07-02 同シリーズ第 2 回応募の差戻し対応で fill-driver caveat + `rich_text=True` readback 経路を追記 (= 新 driver が plain 転記のみで下線を落とし、 業績 5 件が 1 件 1 セルだったため cell ごとに本人名 1 run の下線を `rich_text=True` load → 適用 → runs assert で修復した)。
+origin: 2026-05-14 JST 系公募の様式 1 Sheet 2 A15 (研究業績欄) で提出者本人氏名 (= 業績欄の全行) に underline を rich text で適用。 readback は str だったが xlsx 内部 XML 上で `<u val="single"/>` × 5 個 確認で OK 検証。 2026-07-02 同シリーズ第 2 回応募の修正対応で fill-driver caveat + `rich_text=True` readback 経路を追記 (= 新 driver が plain 転記のみで下線を落とし、 業績が 1 件 1 セルだったため cell ごとに本人名 1 run の下線を `rich_text=True` load → 適用 → runs assert で修復した)。
 
 ---
 
 ## <a id="pptx-fill"></a>pptx (PowerPoint) fill の落とし穴とテクニック
 
-xlsx の label vs input と同型の罠が pptx にもある — 提出用のシート・ポスターを人手でなく機械 fill する場面で毎回落ちる箇所。 xlsx より shape tree が **group で階層化**、 **font 継承 と bullet 継承が別 chain** で走る点が特殊。 SPReAD 自己紹介シート・様式・ポスター等の template 塗りで共通。
+xlsx の label vs input と同型の罠が pptx にもある — 提出用のシート・ポスターを人手でなく機械 fill する場面で毎回落ちる箇所。 xlsx より shape tree が **group で階層化**、 **font 継承 と bullet 継承が別 chain** で走る点が特殊。 研究コミュニティの自己紹介シート・様式・ポスター等の template 塗りで共通。
 
 ### <a id="pptx-shape-tree-and-path"></a>Shape tree の再帰 walk + path-based addressing + EMU 座標
 
@@ -794,11 +794,11 @@ path 例: `[21, 15, 3]` = slide 直下 [21] の Group 14 → その中の [15] �
 
 **Container capacity 概算 (CJK)**: 1 行に入る CJK char 数 ≈ `container_width_inches × 72 / font_pt` (= CJK 全角 char は font_pt 相当の pt 幅を占める近似)。 e.g. 3.6 inch × 72 / 10pt = 26 chars/line、 7.5 inch × 72 / 9.5pt = 57 chars/line。 実際は bullet indent (marL 228600 EMU 等) で使える幅が減るので保守的に見積もる。
 
-origin: 2026-07-08 SPReAD 自己紹介シート session (= template の group 構造把握と path addressing で正確な fill を可能にした)。
+origin: 2026-07-08 研究コミュニティの自己紹介シート session (= template の group 構造把握と path addressing で正確な fill を可能にした)。
 
 ### <a id="pptx-example-slide-as-palette"></a>Example slide は palette source (font family / color / size を採取)
 
-多くの template は **「slide 1 = 空 template / slide 2 = 塗り例」** の 2-slide 構成で配布される (SPReAD 自己紹介シート・大学の様式など)。 fill 前に slide 2 (= 例) を recursion walk して **font family / color RGB / size** を section 別に採取すると palette が確定する:
+多くの template は **「slide 1 = 空 template / slide 2 = 塗り例」** の 2-slide 構成で配布される (研究コミュニティの自己紹介シート・大学の様式など)。 fill 前に slide 2 (= 例) を recursion walk して **font family / color RGB / size** を section 別に採取すると palette が確定する:
 
 ```python
 for para in shape.text_frame.paragraphs:
@@ -815,9 +815,9 @@ for para in shape.text_frame.paragraphs:
 
 抽出結果を fill script の palette 定数として焼き込む (= 「濃紺 = `RGBColor(0x1E, 0x2A, 0x38)`、 灰色 = `RGBColor(0x57, 0x57, 0x57)`」 等)。
 
-⚠️ **slide 1 の空 placeholder (「X」 等) から font を継承すると多くの場合 font color が白 / 薄色**で fill 後に不可視になる (= placeholder は視認性を落として「消す」 設計、 2026-07-08 SPReAD 実発生、 初回 fill が「透明字で見えない」 で 1 round 無駄になった)。 palette は必ず **slide 2 の 実塗り済 shape から採取** すること。
+⚠️ **slide 1 の空 placeholder (「X」 等) から font を継承すると多くの場合 font color が白 / 薄色**で fill 後に不可視になる (= placeholder は視認性を落として「消す」 設計、 2026-07-08 自己紹介シートで実発生、 初回 fill が「透明字で見えない」 で 1 round 無駄になった)。 palette は必ず **slide 2 の 実塗り済 shape から採取** すること。
 
-origin: 2026-07-08 SPReAD 自己紹介シート session (= slide 1 placeholder の透明字継承で 1 round bury、 slide 2 から palette 採取に切替えて解決)。
+origin: 2026-07-08 研究コミュニティの自己紹介シート session (= slide 1 placeholder の透明字継承で 1 round bury、 slide 2 から palette 採取に切替えて解決)。
 
 ### <a id="pptx-scheme-color-guard"></a>SchemeColor / ThemeColor の .rgb アクセスは AttributeError
 
@@ -835,7 +835,7 @@ except AttributeError:
 
 palette 採取 helper に必ず入れる。 引き継ぎ (fill) 側では **explicit RGB を指定するのが最も可搬** (= scheme color 継承は brand kit 依存で持ち運びに弱い)。
 
-origin: 2026-07-08 SPReAD シート session の palette 採取中に発火 (= 04 セクションの Rectangle 12/13 が SchemeColor で AttributeError)。
+origin: 2026-07-08 自己紹介シート session の palette 採取中に発火 (= 04 セクションの Rectangle 12/13 が SchemeColor で AttributeError)。
 
 ### <a id="pptx-explicit-size-not-autofit"></a>auto_size (TEXT_TO_FIT_SHAPE) は viewer で shrink されない — 明示 size + word_wrap + 文字量予算
 
@@ -846,7 +846,7 @@ python-pptx の `text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE` は XML
 2. **`tf.word_wrap = True` 明示** — 横方向 overflow を container 幅で強制改行
 3. **文字量予算** — [`pptx-shape-tree-and-path`](#pptx-shape-tree-and-path) の CJK char/line 概算で `text_length ≤ chars_per_line × available_lines` を守る。 予算超過が見えたら (a) 内容を切る (b) font size を下げる のいずれか (= 上方拡張は [`pptx-hint-fixed-position-trap`](#pptx-hint-fixed-position-trap) 参照、 大抵は逆効果)
 
-origin: 2026-07-09 SPReAD 自己紹介シート session (= auto_size 設定したのに Keynote / PowerPoint 両方で shrink されず、 03 セクションが下方 overflow → 明示 font size に切替えて解決)。
+origin: 2026-07-09 研究コミュニティの自己紹介シート session (= auto_size 設定したのに Keynote / PowerPoint 両方で shrink されず、 03 セクションが下方 overflow → 明示 font size に切替えて解決)。
 
 ### <a id="pptx-clear-and-ppr-propagation"></a>tf.clear() + add_paragraph() は pPr を継承しない → deepcopy で propagate
 
@@ -885,7 +885,7 @@ def set_bulleted_items(shape, items, *, color, font_pt, font_name):
 
 ⚠️ **`insert(0, ...)` = pPr は `<a:p>` 要素の最初の子でなければならない** (schema 要求)。 順序を間違えると PPT が「破損」 判定を出す risk (docx の [`docx-word-corruption-diagnosis`](#docx-word-corruption-diagnosis) と同 spectrum)。
 
-origin: 2026-07-08 SPReAD 自己紹介シート session (= 04 得たい / 共有 で最初の 1 行だけ bullet 付、 2 行目以降が plain paragraph で描画されていた RCA)。
+origin: 2026-07-08 研究コミュニティの自己紹介シート session (= 04 得たい / 共有 で最初の 1 行だけ bullet 付、 2 行目以降が plain paragraph で描画されていた RCA)。
 
 ### <a id="pptx-cross-shape-ppr-borrow"></a>bullet template の無い shape に別 shape の pPr を借用
 
@@ -905,7 +905,7 @@ for target_path in [[21, 13, 2], [21, 14, 2]]:  # 02 / 03 (bullet 無し templat
 
 = 「見た目の一貫性」 を fill 側で強制するテクニック。 template designer は section ごとに bullet の有無を判断しているが、 fill 内容の性質 (= 「並列項目の列挙」 vs 「散文」) と合わないことがあるため、 fill 側で pPr を統一する。
 
-origin: 2026-07-08 SPReAD シート session (= 02 / 03 も 04 と同じ bullet 見栄えにしたい要件、 template 側は prose のみで無 bullet 設計だったので 04 から pPr borrow で解決)。
+origin: 2026-07-08 自己紹介シート session (= 02 / 03 も 04 と同じ bullet 見栄えにしたい要件、 template 側は prose のみで無 bullet 設計だったので 04 から pPr borrow で解決)。
 
 ### <a id="pptx-double-bullet-trap"></a>「・」 手入力 + template bullet = 「• ・」 二重描画
 
@@ -923,7 +923,7 @@ items = ["研究 repo を Claude で運用", "セミナー運営を Claude で�
 
 判別: template shape が bullet を出しているかは `paragraphs[0]._pPr` の `a:buChar` / `a:buAutoNum` element 有無で確認。
 
-origin: 2026-07-09 SPReAD シート session (= 私が「・」 を手入力 prepend、 user 指摘「bullet 重複してる」 で発覚)。
+origin: 2026-07-09 自己紹介シート session (= 私が「・」 を手入力 prepend、 user 指摘「bullet 重複してる」 で発覚)。
 
 ### <a id="pptx-hint-fixed-position-trap"></a>Template hint (薄字の注意書き) を消しても空白が固定位置に残る → 消さない選択が妥当
 
@@ -931,13 +931,13 @@ origin: 2026-07-09 SPReAD シート session (= 私が「・」 を手入力 prep
 
 「空白を回収」 しようと content Rectangle を上方拡張 (`shape.top ← hint.top`, `shape.height += hint_height`) すると **今度は下部余白が過剰**になる — hint の物理占有分に見合う内容が無いと後段が間延びして見える。
 
-**pragmatic な結論** (2026-07-09 SPReAD シート実運用):
+**pragmatic な結論** (2026-07-09 自己紹介シート実運用):
 
 > hint は消さない。 template の意匠のまま残しておく方が縦方向のバランスがとれる。 hint は薄字なので目線に強く入らず、 fill 済 content と競合しない。
 
 = 「template layout designer が hint の縦占有と content Rectangle の縦占有を セットで設計している」 事実を尊重する。 消す判断は特殊な pptx (= hint が主張しすぎる template) に限定する。
 
-origin: 2026-07-09 SPReAD シート session (= 私が hint を消 + Rectangle 上方拡張、 user 判断「消す必要も無い気もするな (下が余る)」 で revert)。
+origin: 2026-07-09 自己紹介シート session (= 私が hint を消 + Rectangle 上方拡張、 user 判断「消す必要も無い気もするな (下が余る)」 で revert)。
 
 ### <a id="pptx-keynote-preferred-for-export"></a>Keynote AppleScript export ≫ PowerPoint AppleScript export (PDF / PNG 経路)
 
@@ -957,7 +957,7 @@ PowerPoint を使う必然性 (= fidelity 保持のため独自 pattern fill を
 
 ⚠️ **PowerPoint process 起動しているが window 0 個 = subscription / license 状態**: `pgrep "Microsoft PowerPoint"` はヒットするのに `osascript -e 'tell application "Microsoft PowerPoint" to get name of every window'` が空を返す状態は、 license 認証 dialog が別 space で待機していたり subscription 期限切れの UI 表示待ちだったりする。 このとき AppleScript の `open POSIX file` は silent fail。 Keynote で開き直すのが最短復帰。
 
-origin: 2026-07-08 SPReAD シート session (= PowerPoint AppleScript が -50 error 連発、 Keynote 経路に切替えて全成功)。 xlsx の [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) が Excel を preferred にしているのと**逆の優先順位**なので混同注意。 sibling = [`pptx-to-pdf-powerpoint`](#pptx-to-pdf-powerpoint) は「fidelity-first で PowerPoint 経路」 を扱うが、 automation 経路の堅牢性は本節で扱う (= 2 節は「fidelity vs automation robustness」 の trade-off)。
+origin: 2026-07-08 自己紹介シート session (= PowerPoint AppleScript が -50 error 連発、 Keynote 経路に切替えて全成功)。 xlsx の [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) が Excel を preferred にしているのと**逆の優先順位**なので混同注意。 sibling = [`pptx-to-pdf-powerpoint`](#pptx-to-pdf-powerpoint) は「fidelity-first で PowerPoint 経路」 を扱うが、 automation 経路の堅牢性は本節で扱う (= 2 節は「fidelity vs automation robustness」 の trade-off)。
 
 ### <a id="pptx-png-via-pdf-sips"></a>PNG は PDF → sips 経由 (2400px 長辺 で SNS 品質)
 
@@ -971,13 +971,13 @@ osascript -e 'tell application "Keynote" to export document 1 to POSIX file "/tm
 sips -s format png -Z 2400 /tmp/out.pdf --out /tmp/slide1.png
 ```
 
-`sips -Z <px>` は long-edge を指定 px にリサイズ (= aspect 保持)。 2400px は Slack / X / 一般 web preview で綺麗に表示される目安 (16:9 slide なら 2400 × 1350)。 SPReAD `#02_自己紹介` に image 添付する想定のサイズ感 (実測: 2400px で 900 KB PNG)。
+`sips -Z <px>` は long-edge を指定 px にリサイズ (= aspect 保持)。 2400px は Slack / X / 一般 web preview で綺麗に表示される目安 (16:9 slide なら 2400 × 1350)。 研究コミュニティ Slack の自己紹介 channel に image 添付する想定のサイズ感 (実測: 2400px で 900 KB PNG)。
 
 **sips の落とし穴**:
 - PDF 複数ページを一括変換すると 1 ページ目のみ処理 (= 意図通り)。 特定ページを指す場合は事前に PDF を単一ページに分割 (`pdftk` / `pdftoppm`)
 - long-edge 指定なので短辺は暗黙に決まる。 正方形 crop したい場合は sips の後に別の crop step
 
-origin: 2026-07-08 SPReAD シート session (= Slack `#02_自己紹介` に載せる image が要る、 Keynote AppleScript の PNG export が -2753 error、 sips 経路に切替えて成功)。
+origin: 2026-07-08 自己紹介シート session (= Slack `#02_自己紹介` に載せる image が要る、 Keynote AppleScript の PNG export が -2753 error、 sips 経路に切替えて成功)。
 
 ### <a id="pptx-reload-workflow"></a>fill → 目視 loop の reload 手順 (close all + reopen)
 
@@ -1003,7 +1003,7 @@ EOF
 
 = 「編集後 reload」 を 1 step 化。 `saving no` で未保存変更を破棄 (= 手動編集混入を意図的に廃棄、 fill script が唯一の SoT の前提)。
 
-origin: 2026-07-08 SPReAD シート session (= 複数 round の fill → 確認 → 修正 loop で stale display 事故を反復、 close all + reopen で解消)。
+origin: 2026-07-08 自己紹介シート session (= 複数 round の fill → 確認 → 修正 loop で stale display 事故を反復、 close all + reopen で解消)。
 
 ---
 
@@ -1900,7 +1900,7 @@ for p in doc.paragraphs:
 
 個人 user は事前に両方準備しておく (= 個人層 layer に置く)。
 
-origin: 2026-05-14 JST SPReAD 様式 0 + 様式 2 の氏名欄、 当初 hanko を挿入 → 「電子署名必要」 と事務担当者から電話指摘 → signature PNG に差替えて再提出。
+origin: 2026-05-14 JST 系公募の様式 0 + 様式 2 の氏名欄、 当初 hanko を挿入 → 「電子署名必要」 と事務担当者から電話指摘 → signature PNG に差替えて再提出。
 
 ### <a id="physical-seal-required"></a>紙原本要求の窓口では貼付電子印影は印刷しても拒否される (= 実押印が確実)
 
@@ -2036,7 +2036,7 @@ xml = xml.replace('<w:t>__</w:t>', '<w:t></w:t>')           # trailing 半角 2 
 
 各 form template ごとに trailing pattern が違うので、 dump で全 `<w:t>` を出力して目視確認後に置換 pattern を確定。
 
-origin: 2026-05-14 JST SPReAD 様式 0 で発覚 (= 「氏名: <提出者氏名>＿」 という末尾装飾 _ が user 視覚に悪い印象を与えると指摘) → 上記 cleanup を fill_forms に追加。 様式 2 は trailing 装飾を持たない雛形だったため変更不要。
+origin: 2026-05-14 JST 系公募の様式 0 で発覚 (= 「氏名: <提出者氏名>＿」 という末尾装飾 _ が user 視覚に悪い印象を与えると指摘) → 上記 cleanup を fill_forms に追加。 様式 2 は trailing 装飾を持たない雛形だったため変更不要。
 
 ### <a id="docx-pdf-page-compress"></a>docx → PDF の page count 圧縮 (= 余白縮小 + 行間 + 末尾空段落削除)
 
@@ -2127,7 +2127,7 @@ else:
 
 pre-fill 済み項目・本文テキスト・様式の表構造は**触らず書式だけ**変える ([`office-automation-principles.md`](office-automation-principles.md))。 編集後は **本文の文字数が変わっていない** (`cell.text` の len 比較) + pre-fill 項目が全部残っている、 を機械検証してから PDF 化・[`pdf-visual-confirm`](#pdf-visual-confirm)。 ⚠️ [`check-docx-integrity.py`](#docx-checkbox-content-control) が `table#N row#M: 論理列数 X ≠ gridCol Y` を出しても、 **元雛形でも同じ警告が出るなら横 merge 様式由来の benign** (= 自分の編集が壊したのではない) — 必ず元雛形と比較してから判断する (= 横 merge した row の論理セル数が gridCol より少ないのは正常)。
 
-origin: 2026-05-14 JST SPReAD で 様式 0 = 2 → 1 page、 様式 2 = 3 → 2 page を上記 3 段階で達成。 2026-06 推薦書様式 (A4 1 枚厳守の表組み docx) を 2→1 page = font 9pt + 行間圧縮が **docGrid linePitch=360 で全く効かず**、 本文段落の snapToGrid 無効化 + trHeight 除去 + セル内空段落除去で解決 (= docGrid 段・表組み 2 圧縮源の動機)。
+origin: 2026-05-14 JST 系公募で 様式 0 = 2 → 1 page、 様式 2 = 3 → 2 page を上記 3 段階で達成。 2026-06 推薦書様式 (A4 1 枚厳守の表組み docx) を 2→1 page = font 9pt + 行間圧縮が **docGrid linePitch=360 で全く効かず**、 本文段落の snapToGrid 無効化 + trHeight 除去 + セル内空段落除去で解決 (= docGrid 段・表組み 2 圧縮源の動機)。
 
 ---
 
@@ -2177,7 +2177,7 @@ Row N:    "<セクション名>の必要性" / "<セクション名>の明細"  
 Row N+1:  (空白、 列方向に merged)                        ← 記入位置
 ```
 
-例 (= 2026-05 JST SPReAD 様式 1 研究計画調書 Sheet 3):
+例 (= 2026-05 JST 系公募の様式 1 研究計画調書 Sheet 3):
 
 | 行 | 内容 | role |
 |---|---|---|
@@ -2202,7 +2202,7 @@ label cell に narrative を直接書き込んでしまう (= overwriting the pr
 **実害**:
 - 提出後に審査機関 (= 大学事務等) から 「**①様式の改変**」 として差戻し
 - ファイル単位の reject や再提出処理コスト
-- 2026-05-13 JST SPReAD で 提出者が同 pattern で 3 箇所 (= Sheet 3 行 10/18/28) で発生、 所属機関の事務担当者から指摘で発覚。 提出者申告では prior form fill でも同 pattern を起こしていた (= 再発 pattern)
+- 2026-05-13 JST 系公募で 提出者が同 pattern で 3 箇所 (= Sheet 3 行 10/18/28) で発生、 所属機関の事務担当者から指摘で発覚。 提出者申告では prior form fill でも同 pattern を起こしていた (= 再発 pattern)
 
 **PDF 版** (= 同型の認知盲点が PDF cell 構造で発火): PDF 雛形では label と data が「縦並び 2 行」 でなく「label cell + 隣接 data cell」 の**横並び 2 cell 構造**で組まれ、 label cell に書かれた「○○欄/(自筆にて記載)」 等の指示文を data field と reflex 判定して **画像/値を label cell に overlay** する事故が起きる。 真の data cell は隣接の text ゼロ cell。 判別手順 + assertion gate は [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation)。
 
@@ -2277,7 +2277,7 @@ origin: 2026-06-12 様式⑭-1。 「6/2 版で上書き済」 と記述され�
 
 ### <a id="embedded-instruction-in-label"></a>label 内 embedded instruction の見落とし防止
 
-label cell には input cell に対する **embedded instruction** が書かれていることがある。 例 (= JST SPReAD 様式 1 から):
+label cell には input cell に対する **embedded instruction** が書かれていることがある。 例 (= JST 系公募の様式 1 から):
 
 - 「研究業績等\n※ ... **著者（本人に下線）**...」 → input cell で本人氏名を rich text underline 必須
 - 「研究目的(日本語：**80 文字以上 400 文字以内**)」 → input cell で字数制限を守る
@@ -2302,7 +2302,7 @@ python3 ~/Claude/claude-config/scripts/scan-form-instructions.py /path/to/form.x
 
 **運用**: 提出前に scan を回し、 各 instruction が input cell に反映されているかを user/Claude が手動 verify。 keyword 検出は informational (= critical/non-critical 判定なし、 exit 0)。
 
-origin: 2026-05-14 JST SPReAD で「本人氏名に下線」 (= 様式 1 Sheet 2 A14 ラベル内) を見落として複数回再提出。 A14 ラベル全文 (= 80 字 truncate せず) を読んでいれば検出できた典型例。
+origin: 2026-05-14 JST 系公募で「本人氏名に下線」 (= 様式 1 Sheet 2 A14 ラベル内) を見落として複数回再提出。 A14 ラベル全文 (= 80 字 truncate せず) を読んでいれば検出できた典型例。
 
 ### <a id="label-detection-at-dump"></a>dump 段階での label 識別
 
@@ -2571,7 +2571,7 @@ for sn in wb.sheetnames:
 user 指摘で 1 cell の修復を行う時、 **同型文字列 (= 同じ narrative pattern) を含む全 cell を grep で sweep** + 全部修復する:
 
 ```python
-target_keywords = ['大阪大学', '大阪府', '量子波束']
+target_keywords = ['架空大学', '架空県', '架空キーワード']  # 例は架空 (実案件の固有値を書かない)
 for sn in wb.sheetnames:               # hidden も含む全シート (= 全シート把握原則)
     ws = wb[sn]
     mark = ' [HIDDEN]' if ws.sheet_state == 'hidden' else ''   # skip せず marker 併記
