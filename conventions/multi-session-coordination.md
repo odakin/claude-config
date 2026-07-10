@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 並列 Claude session と同じ repo を触るとき + spawn/handoff を設計するとき
+category: harness-core
+summary: 同 user の並列 Claude session が同 file path を race する防御 (= session 開始 git fetch + log + plan read、 Write 前 ls/find、 Edit 前 Read 強制、 plan checkbox [x] は実装済のみ semantics、 prev session の commit を「他人 commit」 として cold-read)
+-->
 # Multi-session coordination — 同 user の並列 Claude session が race する
 
 同じ user が同じマシン (or 別マシン) で **複数の Claude session を並列起動して同じ shared repo を同時編集** している状況は、 zoom session 中の long-running 議論や autocompact 復帰直後の sub-task spawn 等で日常的に発生する。 collaborator (= 他 user) との race は [`shared-repo.md`](shared-repo.md) の Git workflow で扱うが、 本ファイルは **同 user の concurrent Claude session 同士の race** という別軸の risk と防御を扱う。

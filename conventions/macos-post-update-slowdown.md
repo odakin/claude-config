@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: macOS update 直後に体感が重いとき + 定期メンテ棚卸し
+category: macos
+summary: macOS メジャー/マイナー update 後の体感重さ playbook (= mdutil -a -i off は corespotlightd を止めない / Apple Intelligence が suggestd を XPC で respawn = 根治は GUI で AI OFF / 4K 動画壁紙で WallpaperImageExtension が常時 30-50% + com.apple.wallpaper.agent cache が 100 GB+ に育つ既知バグ / softwareupdated 背景 DL / 3rd-party AV アンインストール後の launch plist 残置 / AppTranslocation zombie plist / macOS 15+ の containermanagerd が sudo でも ~/Library/Containers/* を守る / 診断 30 秒定形 + disk cleanup target list + 再起動が commit point)
+-->
 # macOS post-update slowdown: 診断 + 撃退 playbook
 
 macOS のメジャー / マイナー update 直後 (= 特に Sonoma → Tahoe のような bundle 一新のケース) に体感が「バカみたいに重い」 状態に陥ることが繰り返し起きる。 background daemon の再構築 / index 再生成 / cache 再肥大 / login item 復活 / AI 系 subsystem 有効化 / 削除アプリの launch plist 残置 等の要因が**同時多発**するため、 「主犯 1 匹」 でなく「疑わしい 5-10 匹を順に絞る」 playbook が必要。

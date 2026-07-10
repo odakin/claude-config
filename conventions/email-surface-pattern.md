@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 重要送信者・ML topic の見落とし防止 surface を設計するとき
+category: mail
+summary: 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止
+-->
 # Email surface pattern (= 重要送信者・ML トピックの見落とし防止)
 
 特定の送信者 (= 重要部署・取引先・上長) や ML 上のトピック (= 入試・会議・人事) を**機械的に検出して Claude セッション開始時に必ず surface する**仕組み。 「見落とした」 を「規律違反」 ではなく「仕組み不足」 と捉えて構造化する。 CLAUDE.md から参照: `~/Claude/claude-config/conventions/email-surface-pattern.md`

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 研究費/教務/学術様式の xlsx/docx を機械で fill するとき (罠の症例集)
+category: office
+summary: 研究費/教務/学術様式の Excel xlsx を openpyxl で fill + 生成物 PDF 化 / TTS の落とし穴集 (= form 構造 dump 必須・label vs input 改変防止・rich text underline・docx XML 宣言由来の Word 破損 §2-5b・**Word docx→PDF の stale in-memory cache + cold-start 失敗の対処 §2-4b**・**記入要領削除は構造保持+content-control も走査+双方向検証 §2-5c (青字ガイダンスは effective-color〔run→rStyle→pStyle の style 継承〕で strip + PDF span 色=非黒0 で検証)**・**Pages は横並び表を重ねて出す artifact = docx 不具合と誤認するな (Word render で確認・creator metadata で判別)**・PDF visual confirmation 義務・**画像読みすぎで image budget 枯渇時の text-first 検証 §6-5**・印影/署名の電子可否・多 sheet form sweep)
+-->
 # Office automation (macOS): xlsx form fill, PDF conversion, TTS review
 
 研究費応募書類 / 教務書類 / 学術様式の Excel xlsx を **openpyxl で fill する作業**、 および生成物の **PDF 化 / 印刷 / 音声読み上げ** に関する規約と落とし穴集。

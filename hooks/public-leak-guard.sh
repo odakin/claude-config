@@ -1,4 +1,5 @@
 #!/bin/bash
+# public-leak-guard.sh — 公開リポ leak 防止 — PreToolUse(Edit|Write|MultiEdit) Tier A 構造制約 regex
 # public-leak-guard.sh — 公開リポへの構造的 leak の検出 (Tier A regex only)
 #
 # 正本: claude-config/hooks/public-leak-guard.sh

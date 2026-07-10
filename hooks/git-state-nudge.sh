@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# git-state-nudge.sh
+# git-state-nudge.sh — PostToolUse(Bash): 直近 commit の未 push 検出 + first-sighting で fetch+stale 検出
 #
 # PostToolUse(Bash) hook: nudge Claude when a git repo has state needing
 # attention. The hook is the SOLE git-state monitor — it subsumes the

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Beamer/metropolis で研究スライドを作る・直すとき
+category: paper
+summary: Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可。giving-talks.md〔中身/作法〕と相補)
+-->
 # Beamer (metropolis) 研究スライド — ビルド・図・落とし穴
 
 LaTeX Beamer(特に **metropolis** テーマ)で研究発表スライドを**プログラム的に作る/直す**ときの

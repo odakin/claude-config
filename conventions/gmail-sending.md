@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Gmail でメールを送信する経路・MIME 実装を選ぶとき
+category: mail
+summary: Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕)
+-->
 # Gmail 送信の経路選択と MIME 落とし穴
 
 Gmail でメールを 1 通送る作業が「経路探し → threading 用 header 探し → 送信 → 添付 filename 壊れ → 再送」という数十分の探索に化ける事故 (2026-07-03 実例) の再発防止 SoT。**送信前にこの file を読めば、探索なしで正しい 1 コマンドに到達できる**ことが目標 (= 能力の低い model でも同じ道を通れる)。

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Compare a filled-in 様式 xlsx against its template; flag label overwrites.
+"""diff-form-xlsx.py — 様式 xlsx の label 上書き (= 様式改変) を雛形 diff で検出（office-automation.md#diff-form-xlsx-detection）
+Compare a filled-in 様式 xlsx against its template; flag label overwrites.
 
 Usage:
     diff-form-xlsx.py <filled.xlsx> <template.xlsx>

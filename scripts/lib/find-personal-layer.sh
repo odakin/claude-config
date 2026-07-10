@@ -1,4 +1,5 @@
 #!/bin/bash
+# find-personal-layer.sh — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
 # find-personal-layer.sh — sourceable helper to resolve the personal-layer dir.
 #
 # 正本: claude-config/scripts/lib/find-personal-layer.sh

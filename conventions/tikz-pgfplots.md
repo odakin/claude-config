@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: TikZ / pgfplots を含む LaTeX project で図を作るとき
+category: paper
+summary: TikZ/pgfplots 固有 gotchas（infographic / poster / 1 枚 figure 制作で必読、 latex.md と併読）
+-->
 # TikZ / pgfplots 規約
 
 TikZ や pgfplots を含む LaTeX project で適用。 一般 LaTeX 規約は [`conventions/latex.md`](latex.md)、 PDF 視覚検証規律は [`latex.md` pdf-visual-verification](latex.md#pdf-visual-verification) を併読。

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: tool call が malformed で壊れたとき・その予防を設計するとき
+category: harness-core
+summary: Claude の tool call が「malformed and could not be parsed」 で壊れるのを防ぐ (= 真因は Anthropic backend の Opus 4.8 1M-context model serialization bug 〔canonical evidence = #64774 = 6/2 開設・~1万ターン統計・model 別失敗率 Opus 4.8 のみ ~1.5% / Opus 4.7・4.6・Sonnet 4.6・Haiku 4.5 すべて 0、 CLI 横断 = model 起因、 76% が text→tool_use 切り替え瞬間、 OPEN 未修正・area:model、 occurrence 報告は #64774 へコメント。 ⚠️ 旧版が canonical hub と書いた #62123 は別 variant = Opus 4.7 + VS Code 系で「4.7 = 0%」 と矛盾するため別扱い、 衛星 #64684/#64955/#64235 は duplicate〕 で書き方の問題ではない、 特殊文字密集/並列 tool call/非 ASCII/装飾過多は発生確率を上げる副次トリガー、 副次緩和 = 1 ターン 1 tool call / 複雑ロジックは Write でファイル化 / tool call ターンは本文プレーン / malformed 連発は新 session / **model 切替が最優先**・本命 Opus 4.7 1M 〔`/model claude-opus-4-7[1m]` = 賢さ最大 × バグ 0%〕、 Sonnet 4.6 は次善 / poisoned したら work tool を subagent 委譲 + 残作業 spec ファイル化して別 session へ平文 handoff、 root は backend fix 待ち、 2026-06-05 RCA + 2026-06-16 canonical 訂正 + rotted-session 回収手順 〔transcript salvage / git log / stale-handoff-plan vs working-tree の罠〕、 hook-authoring.md#bash32-heredoc-parser-bug の bash 3.2 parser bug とは別 layer)
+-->
 # Tool call robustness — Claude の tool 呼び出しが「malformed」 で壊れるのを防ぐ
 
 > 適用対象: Claude が **任意の tool call (特に Bash / Edit)** を生成する全ての場面。 hook 作成に限らない。

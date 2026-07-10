@@ -7,6 +7,7 @@
 #
 # 検査内容:
 #   1. 自動生成 index の同期   (generate-doc-index.py --check-all)
+#   1b. 生成 doc の同期        (generate-tree.py --check: CLAUDE.md tree / CONVENTIONS.md 列挙 / conventions/README.md)
 #   2. 手動保守 index の整合   (check-office-automation-index.py: dangling/orphan)
 #   3. python validator selftest 群 (--selftest を持つ全 script を自動発見)
 #   4. bash test 群            (hooks/*.test.sh + scripts/**/*.test.sh)
@@ -39,6 +40,10 @@ run() {
 
 # 1. 自動生成 index 同期
 run "index sync (--check-all)" python3 scripts/generate-doc-index.py --check-all "$ROOT"
+
+# 1b. 生成 doc の同期 (CLAUDE.md 構造 tree / CONVENTIONS.md 列挙 / conventions/README.md、
+#     源 = conventions/*.md 冒頭 doc-meta + scripts/hooks の header 1 行目)
+run "generated docs sync (generate-tree.py --check)" python3 scripts/generate-tree.py --check
 
 # 2. 手動保守 index (office-automation ほか、 validator が対象を自分で解決)
 run "office-automation index" python3 scripts/check-office-automation-index.py

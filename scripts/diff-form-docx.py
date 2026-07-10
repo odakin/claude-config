@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Compare a filled-in 様式 docx against its blank template; flag fill mistakes.
+"""diff-form-docx.py — 様式 docx の記入ミスを blank diff で検出（ラベル欄上書き/見出し消失=HARD・空の箇条書き/全空 labeled 列=surface、xlsx 版の docx 対、--selftest 内蔵、office-automation.md#diff-form-docx-detection）
+Compare a filled-in 様式 docx against its blank template; flag fill mistakes.
 
 Usage:
     diff-form-docx.py <filled.docx> <blank.docx> [--strict]

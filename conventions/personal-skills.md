@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: personal skill (~/.claude/skills/) を規律の発火面として使うとき
+category: harness-core
+summary: personal skill (= ~/.claude/skills/、 全 session 常時可視の auto-discover) を規律の発火面として使う規約 — 機構 fact 〔symlink 可・session 開始時 discovery〕 + description の書き方 + 多 machine 配線 〔explicit allowlist registry〕 + 検証作法 〔trigger test → discovery test の汚染回避順序、 headless claude -p の制約〕
+-->
 # Personal skills — 規律の発火を doc recall でなく description dispatch に乗せる
 
 `~/.claude/skills/<name>/SKILL.md` (= personal skill) を「規律・手順の発火面」として使う規約。

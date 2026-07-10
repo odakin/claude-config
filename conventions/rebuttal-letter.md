@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: referee report への point-by-point 返信を書くとき
+category: paper
+summary: referee report への point-by-point 返信 (= author response) 作成 6 reflex (= 回答は本文 grep 照合・起源でない文献は see e.g.・referee 誤記は静かに正す・自己否定語回避・全 comment フル引用・旧式番号は submission 版基準)、 paper-audit.md と相補
+-->
 # Rebuttal Letter (= Author Response to referees)
 
 paper revision で referee report に point-by-point 回答する rebuttal letter (= response-to-referees / author response) 作成の規律。 [`paper-audit.md`](paper-audit.md) (= 誤り検出 / forward ref / 重複) と相補 (= こちらは「referee への返信作成」 側)。

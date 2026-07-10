@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: config file に ID/PII (Discord ID 等) を置く設計をするとき
+category: infra
+summary: Identity-in-Config 規約（Discord 等 PII-in-disguise、layer 2 + env var bridge）
+-->
 # Identity-in-Config 規約
 
 **対象**: 設定ファイル (`*.yaml` / `*.toml` / `*.json` / `.env` / 等) に埋め込まれる、実在する特定個人を指す identifier の取扱い。

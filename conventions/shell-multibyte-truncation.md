@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: shell で多バイト文字列を truncate・加工するとき
+category: infra
+summary: シェルの多バイト UTF-8 切り詰め gotchas (= cut -c/head -c/bash 部分文字列は byte 単位で多バイト文字を割り invalid UTF-8 → osascript 等下流で文字列全体が文字化け、 launchd は LANG 空で C locale ゆえ特に注意、 安全策=python 文字単位 truncate + valid UTF-8 検証 1-liner、 2026-06-24 osascript 通知 RCA)
+-->
 # シェルの多バイト文字 (UTF-8) 切り詰め gotchas
 
 **読むタイミング**: shell script で日本語等の**非 ASCII text を切り詰め / 部分抽出**する時 (= 通知本文・ログ・サマリの短縮、ファイル名生成 等)。または **macOS 通知 (osascript) や CLI 出力が文字化けして読めない**症状の診断時。

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Count genuine malformed-tool-call events in local Claude Code transcripts.
+"""count-malformed-tool-call-events.py — local transcript から malformed-tool-call bug の genuine event を集計（synthetic 文言の user entry のみ = doc/議論 echo を除外〔naive substring は 19x overcount〕、 month×model×client-version 内訳 + model 別 rate、 upstream issue への occurrence 報告用 data point 生成、 read-only、 --selftest 内蔵、 conventions/tool-call-robustness.md#root-cause）
+Count genuine malformed-tool-call events in local Claude Code transcripts.
 
 Companion to conventions/tool-call-robustness.md (the Opus 4.8 "malformed and
 could not be parsed" model-serialization bug). Produces the statistics needed

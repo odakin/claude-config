@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 5 分以上かかる生成物の出力先を決めるとき + snapshot artifact を命名するとき
+category: infra
+summary: `-output /tmp/...` reflex 防止 (= OCR / ML / 数値計算で 5 分以上要する artifact をリポ内永続化、 hooks/expensive-tmp-guard.sh で機械的検出) + snapshot artifact の命名規約 (= 日付〔同日複数なら時分〕+ 入力状態 ID 〔git 由来は commit range〕 を filename に焼く、 snapshot vs view の名前区別、 #snapshot-artifact-naming)
+-->
 # Expensive intermediate artifacts は `/tmp` に置かない
 
 > 適用対象: OCR / ML training / 数値シミュレーション / 重い CI ビルド等で「再生成に **5 分以上** かかる」 中間成果物を扱うリポ。

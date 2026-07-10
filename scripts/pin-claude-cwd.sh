@@ -1,4 +1,5 @@
 #!/bin/sh
+# pin-claude-cwd.sh — Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
 # Pin the Claude.app (Claude Code desktop) "New session" folder picker start directory.
 #
 # The picker opens at the value of `NSNavLastRootDirectory` in the

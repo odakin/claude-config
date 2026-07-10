@@ -1,4 +1,5 @@
 #!/bin/sh
+# install-pty-leak-mitigation.sh — pty-leak-watch.sh watchdog + persistent bump LaunchDaemon を現ユーザに 1 コマンド install（--persist / --replace-agent / --replace-daemon、idempotent、macOS 限定）
 # install-pty-leak-mitigation.sh — macOS Claude.app の pty leak 緩和を現ユーザに install。
 # 原理 doc: conventions/macos-claude-app-pty-leak.md (= 説明・判断材料)。
 # このスクリプト + pty-leak-watch.sh が段階 bump 数列 / LaunchDaemon plist /

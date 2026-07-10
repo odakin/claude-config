@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""routine-host-gate.py — "am I the active routine host?" gate for unmanned launchd/cron jobs.
+"""routine-host-gate.py — 汎用 active-routine-host gate（無人ルーチンを複数マシンに install しつつ「今の本番ホスト」を台帳1ファイルで決める。台帳の host が自分でなければ defer〔exit 1〕、台帳不在/破損は fail-open〔exit 0〕、最新 committed 台帳を fetch して読む、--selftest 内蔵。install-launchd-cron.sh --gate から呼ぶ、conventions/multi-machine-state.md#account-host-failover）
+routine-host-gate.py — "am I the active routine host?" gate for unmanned launchd/cron jobs.
 
 == What this is for ==
 When unmanned routines (launchd cron + `claude -p`, see conventions/scheduled-tasks.md) run on

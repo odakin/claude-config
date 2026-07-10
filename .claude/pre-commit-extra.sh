@@ -6,62 +6,37 @@
 # 本 hook は **warning のみで常に exit 0** にして commit を止めない (= drift は annoyance 級で、
 # convention-design-principles.md §9.1 〔= #blast-radius-triage〕 の triage に従い catastrophic 級の block を当てない)。
 #
-# 検査: CONVENTIONS.md 冒頭の conventions/ 全列挙 と CLAUDE.md 構造 tree の conventions/ block が、
-#       実体 `conventions/*.md` と一致しているか。 不一致なら「その commit の瞬間・その本人」に
+# 検査: 生成 doc (CLAUDE.md 構造 tree / CONVENTIONS.md 冒頭列挙 / conventions/README.md) が
+#       源 (conventions/*.md 冒頭 doc-meta + scripts/hooks の header 1 行目) と同期しているか
+#       (scripts/generate-tree.py --check)。 不一致なら「その commit の瞬間・その本人」に
 #       warning を出す (= doc 記載の recall 依存 trigger 〔§8.12 最弱発火面〕 を機械発火に格上げ)。
-#       .ja.md 翻訳 variant も列挙内に variant link として現れるため実体集合と一致する。
 #
-# 由来: DESIGN.md 2026-06-13「CONVENTIONS.md 冒頭の conventions/ 列挙」 の格上げ trigger の実体。
-#       35→56 file の列挙 drift が ~2.5 ヶ月 silent 累積した RCA に対する発火面の機械化。
+# 由来: DESIGN.md 2026-06-13「CONVENTIONS.md 冒頭の conventions/ 列挙」 の格上げ trigger の実体
+#       (35→56 file の列挙 drift が ~2.5 ヶ月 silent 累積した RCA)。 2026-07-10 に comm ベースの
+#       hook 内実装から generate-tree.py --check へ置換 (DESIGN.md 2026-07-10 参照)。
 set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONV="$REPO_ROOT/CONVENTIONS.md"
-CLAUDE_MD="$REPO_ROOT/CLAUDE.md"
-DIR="$REPO_ROOT/conventions"
 
-[ -d "$DIR" ] || exit 0
-
-# 実体: conventions/*.md の basename (名前順)
-actual="$(cd "$DIR" && ls -1 ./*.md 2>/dev/null | sed 's#^\./##' | sort -u)"
-[ -n "$actual" ] || exit 0
+[ -d "$REPO_ROOT/conventions" ] || exit 0
 
 warned=0
 
-# --- 検査 1: CONVENTIONS.md 冒頭の全列挙 ---
-if [ -f "$CONV" ]; then
-  enum_line="$(grep -m1 'ドメイン固有規約は' "$CONV" || true)"
-  enumerated="$(printf '%s\n' "$enum_line" \
-    | grep -oE 'conventions/[a-zA-Z0-9._-]+\.md' | sed 's#conventions/##' | sort -u)"
-  miss="$(comm -23 <(printf '%s\n' "$actual") <(printf '%s\n' "$enumerated"))"
-  extra="$(comm -13 <(printf '%s\n' "$actual") <(printf '%s\n' "$enumerated"))"
-  if [ -n "$miss" ] || [ -n "$extra" ]; then
-    echo "⚠️  [claude-config] CONVENTIONS.md 冒頭の conventions/ 全列挙が実体と drift:" >&2
-    [ -n "$miss" ]  && echo "    列挙漏れ (実体にあり列挙になし): $(echo $miss)"  >&2
-    [ -n "$extra" ] && echo "    列挙過剰 (列挙にあり実体になし): $(echo $extra)" >&2
+# --- 検査 1+2: 生成 doc の同期 (CLAUDE.md tree / CONVENTIONS.md 列挙 / conventions/README.md) ---
+# 旧実装 (2026-06-13): 本 hook 内の comm ベース列挙照合 (存在のみ、 説明文 drift は検出外)。
+# 2026-07-10 に scripts/generate-tree.py --check へ置換 (= 検出 logic の二重実装を解消 + 説明文
+# レベルの drift も検出。 源 = conventions/*.md 冒頭 doc-meta + scripts/hooks の header 1 行目)。
+GEN="$REPO_ROOT/scripts/generate-tree.py"
+if [ -f "$GEN" ] && command -v python3 >/dev/null 2>&1; then
+  if ! python3 "$GEN" --check >/dev/null 2>&1; then
+    echo "⚠️  [claude-config] 生成 doc (CLAUDE.md tree / CONVENTIONS.md 列挙 / conventions/README.md) が源と drift:" >&2
+    python3 "$GEN" --check 2>&1 | grep -v "in sync" | head -20 | sed 's/^/    /' >&2
+    echo "    → python3 scripts/generate-tree.py --write で再生成 (警告のみ・commit は継続)" >&2
     warned=1
   fi
 fi
 
-# --- 検査 2: CLAUDE.md 構造 tree の conventions/ block ---
-# branch marker (├──/└──) anchor で tree entry のみ抽出 (= 説明文中の .md cross-ref を拾わない)
-if [ -f "$CLAUDE_MD" ]; then
-  tree_listed="$(awk '/├── conventions\//{f=1;next} /├── hooks\//{f=0} f' "$CLAUDE_MD" \
-    | grep -oE '[├└]── [a-zA-Z0-9._-]+\.md' | sed -E 's/^[├└]── //' | sort -u)"
-  if [ -n "$tree_listed" ]; then
-    tmiss="$(comm -23 <(printf '%s\n' "$actual") <(printf '%s\n' "$tree_listed"))"
-    textra="$(comm -13 <(printf '%s\n' "$actual") <(printf '%s\n' "$tree_listed"))"
-    if [ -n "$tmiss" ] || [ -n "$textra" ]; then
-      echo "⚠️  [claude-config] CLAUDE.md 構造 tree の conventions/ block が実体と drift:" >&2
-      [ -n "$tmiss" ]  && echo "    tree 漏れ:  $(echo $tmiss)"  >&2
-      [ -n "$textra" ] && echo "    tree 過剰:  $(echo $textra)" >&2
-      warned=1
-    fi
-  fi
-fi
-
 if [ "$warned" -eq 1 ]; then
-  echo "    → 名前順で同期してください (CONVENTIONS.md §8 行 / CLAUDE.md tree、 DESIGN.md 2026-06-13 参照)。" >&2
   echo "    (警告のみ・commit は継続)" >&2
 fi
 

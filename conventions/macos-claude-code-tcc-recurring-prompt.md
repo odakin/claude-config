@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Claude Code の App Management TCC dialog が繰り返し出るとき
+category: macos
+summary: Claude Code の app bundle が `~/Library/Application Support/Claude/claude-code/<version>/claude.app` という versioned path に置かれているため、 App Management TCC 権限が auto-update 毎に invalidate されて dialog が再 prompt される構造的症状 (= sibling pty-leak と同じく Anthropic 側 fix 待ち候補、 stable launcher path 化が root 対策)
+-->
 # macOS Claude Code app-bundle versioned-path → TCC App Management recurring prompt
 
 **症状**: macOS Ventura 以降で Claude Code 起動時 (= 内部で CLI 同梱 `.app` を起動するタイミング) に **「"claude.app" がほかのアプリからのデータへのアクセスを求めています。」** (英: `"claude.app" wants access to data from other apps`) という macOS App Management 権限 dialog が **繰り返し** 表示される。 「許可」 を押しても、 後日同じ dialog が再び出る。

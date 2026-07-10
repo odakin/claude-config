@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Google Forms の自動化・prefill・回答提出を扱うとき
+category: web
+summary: Google Forms の `FB_PUBLIC_LOAD_DATA_` HTML scrape で entry id 抽出 (= Forms API は entry id を返さない)、 prefill URL は単 section form のみ動作 (多 section で section navigation 後に prefill 失効)、 完全自動化は Selenium/Playwright + cookie 経由、 + 回答者側の提出制約 (= file-upload form の domain 縛り account / 回答回数制限 = 再回答不可・訂正は別経路 / **提出前にリポへ snapshot 保存** / 「回答を編集」 link は設定依存、 #respondent-side-constraints)
+-->
 # Google Forms の構造解析と prefill 自動化の限界
 
 Google Forms を programmatic に扱う (= 構造解析、 prefill URL 生成、 submit 自動化) ときの実装パターンと、 失敗する境界を documented する。

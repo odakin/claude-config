@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Claude Code hook を作成・配信・debug するとき
+category: harness-core
+summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕)
+-->
 # Claude Code hooks の作成 + 配信規律
 <!-- slug index: hook-authoring.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
 

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Overleaf↔GitHub 連携 repo を設定・sync するとき
+category: paper
+summary: Overleaf↔GitHub 連携 (= canonical は Overleaf web UI の GitHub linking、 sync script 契約 〔--status が ahead/behind を出す + PROJECT_ID hardcode = ID の SoT〕、 新規連携 checklist + ID 回収 runbook、 drift 検出は scripts/check-overleaf-drift.py)
+-->
 # Overleaf <-> GitHub Integration
 
 複数 author で論文を書くとき (= 共著者 1 人以上、 Overleaf project + GitHub repo を併用) の同期経路。

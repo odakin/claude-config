@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 新しい様式・slug の無い罠に当たったとき (考え方の原則編)
+category: office
+summary: office-automation.md の原則編 (= 考え方)。 様式=「見た目が契約」/ file=地層 / 処理=lossy 解釈器の連鎖 の枠組み、 道具選択の梯子 (成果物は何か × 雛形にどの層があるか)、 検証 3 層モデル (機械/視覚/実機 — 相互代替不可 + 異常は print-blocker)、 文字列照合 NFKC 必須、 座標は label anchor から導出、 人間系原則 (既知情報 prefill / print-last / 記入分担 4 区分表 / 受理側で閉じる)、 新しい罠の体系への拡張手順。 **新しい様式・slug の無い罠ではまずこちら**
+-->
 # Office ファイル処理の考え方 (= 原則編)
 
 行政・学術様式の Excel / Word / PDF を機械で扱うときの**思考の枠組み**。 個別の罠と手順は

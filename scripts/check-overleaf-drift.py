@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check-overleaf-drift.py — Overleaf 連携 repo の drift / 整備漏れ検出器。
+"""check-overleaf-drift.py — Overleaf 正本 repo の drift / 整備漏れ検出（各 repo の scripts/overleaf-sync.sh --status を並列実行、 ID 未設定=CRITICAL / behind>0=WARN / DEPRECATED=silent / ahead-expected marker で恒常 ahead INFO 抑制、 finding 0 件 silent、 --selftest 内蔵。 個人層 dashboard 末尾から呼ぶ、 conventions/overleaf-integration.md#sync-script-contract）
+check-overleaf-drift.py — Overleaf 連携 repo の drift / 整備漏れ検出器。
 
 「Overleaf 側が正本」の repo で GitHub pull だけして「最新」と誤信する構造的死角を塞ぐ。
 設計動機 = ある物理共著 paper repo で 3 ヶ月の silent drift + project ID 喪失が発覚した

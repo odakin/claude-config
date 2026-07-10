@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: scheduled task / launchd routine を作成・管理するとき
+category: harness-core
+summary: Scheduled Tasks 規約（SKILL.md 二重構造・同期ルール）
+-->
 # Scheduled Tasks 規約
 
 Claude Code scheduled tasks を使うリポで適用。CLAUDE.md から参照: `~/Claude/claude-config/conventions/scheduled-tasks.md`

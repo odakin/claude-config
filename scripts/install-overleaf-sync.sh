@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# install-overleaf-sync.sh — Overleaf 連携 repo に sync script を 1 コマンド設置（template 展開 + URL から ID 抽出・焼き込み + --merge-opts / --ahead-expected + token があれば --status smoke、 冪等・別 ID は --force、 conventions/overleaf-integration.md#new-integration-checklist）
 # install-overleaf-sync.sh — Overleaf 連携 repo に sync script を 1 コマンド設置。
 #
 # templates/overleaf-sync.sh.template を <repo>/scripts/overleaf-sync.sh に展開し、

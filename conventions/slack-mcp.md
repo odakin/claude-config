@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Slack workspace を MCP で wire するとき
+category: harness-core
+summary: Slack workspace を user session token (xoxc/xoxd) で wire する規約（= admin 承認不要で一般 member として read+post、korotovsky/slack-mcp-server + wrapper で secret を config 外に逃がす + token 抽出手順〔Console `copy()` で xoxc / Application タブで xoxd cookie〕+ self-XSS「allow pasting」gate + clipboard 上書き/file名取り違え trap + post は SLACK_MCP_ADD_MESSAGE_TOOL=true で有効化・file upload tool は無く画像は user 手動 + reauth ~30日 + registration 介さず wrapper 直接 JSON-RPC invoke で当 session 使用。generic 機構のみ、workspace 固有値は個人層側）
+-->
 # Slack MCP を user session token で wire する
 
 Slack workspace を Claude Code の MCP として繋ぐ規約。 **admin ではない一般 member** として参加している workspace を、 workspace admin の承認なしに read + post まで使えるようにする方法の SoT。

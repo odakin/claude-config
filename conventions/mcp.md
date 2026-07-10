@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: MCP ツールを使うとき (アカウント確認・scope 判定を含む)
+category: harness-core
+summary: MCP 固有規約（MCP 使用時に参照）
+-->
 # MCP 規約
 
 MCP ツールを使うリポで適用。CLAUDE.md から参照: `~/Claude/claude-config/conventions/mcp.md`

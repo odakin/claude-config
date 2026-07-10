@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 共同編集者がいるリポで作業するとき
+category: infra
+summary: 共有リポ固有規約
+-->
 # 共有リポ規約 — Shared Project Layer
 
 共同編集者がいるリポで適用。CLAUDE.md から参照: `~/Claude/claude-config/conventions/shared-repo.md`

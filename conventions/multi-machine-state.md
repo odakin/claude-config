@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 複数マシンで同じ Claude Code setup を運用・audit するとき
+category: harness-core
+summary: 複数マシンで同じ Claude Code セットアップを使うときの規律 (audit scope 明示・実機検証・idempotent setup.sh)
+-->
 # multi-machine-state: 複数マシンで同じ Claude Code セットアップを使うときの規律
 
 複数マシン (家・職場、ノート・デスクトップ等) で同じ `~/Claude/` (または等価な base dir) を運用する場合、**マシンごとに state が drift する** 前提で設計・記録・audit する。

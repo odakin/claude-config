@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# dropbox-root.sh — Dropbox install root を OS 横断で resolve（dropbox-refs 規約用）
 # claude-config/scripts/dropbox-root.sh
 #
 # Resolve the Dropbox install root for the current user. Prints absolute

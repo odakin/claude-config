@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Android 実機の Brave/Chrome を remote debug (WiFi ADB + CDP) するとき
+category: web
+summary: Android Brave/Chrome の remote debugging (WiFi ADB + CDP、 reload 前の live state capture procedure)
+-->
 # Android Chromium 系 (Brave / Chrome) の remote debugging
 
 Android phone 上の Brave / Chrome で動いている web app の **生 state を、 reload なしで Mac から取得する** 手順。 mobile-only bug (= overnight runaway / background suspend / 等) の RCA で「タブを reload せずに state を吸い出したい」 class の問題で必須。

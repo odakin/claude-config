@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# pre-commit-bib — Git pre-commit hook（上記を呼ぶ）
 # pre-commit hook: auto-fix non-LaTeX characters in LaTeX source files.
 #
 # Canonical location: claude-config/scripts/pre-commit-bib

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: PATH 消失・shell 環境変数まわりを触るとき
+category: macos
+summary: シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール）
+-->
 # シェル環境（Claude Code + macOS）
 
 ## <a id="path-loss-problem"></a>問題

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+"""check-xlsx-integrity.py — xlsx の Excel「破損」判定源を Excel 不要・決定論で検出（XML well-formed〔unbound prefix〕/ rels 両方向参照整合 / rId 重複 / Content_Types coverage。 zip 直編集 xlsx の納品前 gate、 office-automation.md#openpyxl-destroys-drawings）
 check-xlsx-integrity.py — xlsx の Excel「破損」判定源を Excel 不要・決定論で検出する出荷前 gate
 
 Usage:

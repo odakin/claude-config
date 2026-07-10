@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# docx-to-pdf.sh — Word docx/doc → PDF 変換（macOS 既定 Pages → --word で Word 忠実版 → 非 macOS LibreOffice、office-automation.md#docx-to-pdf-pages）
 # docx-to-pdf.sh — convert a Word document (docx/doc) to PDF, cross-platform.
 #
 # Sibling of xlsx-to-pdf.sh (spreadsheets). python-docx / textutil can read or

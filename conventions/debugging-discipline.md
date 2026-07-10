@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: bug fix を提案する前・audit verdict を出す前 (検証規律)
+category: infra
+summary: Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)
+-->
 # Debugging discipline
 
 Bug fix 提案を 「root だ」 と確信する前に通すべき audit と、 fix 採択後の drift 防止規律。 Claude が fix 提案を生成する際の reflex として universal applicable。

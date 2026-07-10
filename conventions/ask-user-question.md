@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: AskUserQuestion (選択肢 UI) の使用可否・使い所を判断するとき
+category: harness-core
+summary: AskUserQuestion (選択肢 UI) の使い所 — turn 同期 block + user 入力中 text との UI 競合という機構 fact と、 平文質問との使い分け表 (使用頻度の選好は個人層 override)
+-->
 # AskUserQuestion (選択肢 UI) の使い所 — blocking 特性と平文質問との使い分け
 
 **いつ読む**: Claude が user に確認・質問を出そうとする時 (特に AskUserQuestion tool を呼ぶ直前)。

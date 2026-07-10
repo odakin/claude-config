@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: アカウント × マシン × 端末の複数セル運用を設計・診断するとき
+category: harness-core
+summary: アカウント × マシン × 端末 (desktop app / スマホ remote) の 2×2×2 を全部シームレスにする設計原理 (= 3 軸の本質差・切替 mechanics・seamless invariant I1-I6・破れの検出・cross-machine 不可視の正直な限界。 RC server / multi-machine-state / scheduled-tasks の全体像 doc)
+-->
 # multi-account-machine-surface.md — アカウント × マシン × 端末 の 2×2×2 を全部シームレスにする
 
 複数の Claude アカウント (= 例: 個人 A / 予備 B) と複数のマシン (= 例: 常時起動のデスクトップ機 / 可搬でスリープするラップトップ) と複数の端末 surface (= Claude for Mac などの desktop app / スマホ・web からのリモート) を併用するとき、 **2×2×2 = 8 セルのどこにいても仕事が始められ・続けられ・移れる** ための設計原理。 個別機構の正本は各 doc にあり (下の cross-ref)、 本 doc は**全体像と invariant** を持つ。

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 研究メールのスレッド記録・分類・アウトリーチをするとき
+category: mail
+summary: 研究メール分類・記録規約
+-->
 # 研究メール規約
 
 研究共同研究のメール通信を管理するリポで適用。CLAUDE.md から参照: `~/Claude/claude-config/conventions/research-email.md`

@@ -1,4 +1,5 @@
 #!/bin/bash
+# memory-guard-bash.sh — メモリ書き込みガード — Bash 用（§8 feedback deny + escape hatch）
 # memory-guard-bash.sh — Bash 経由のメモリ書き込みガード (deny + escape-hatch)
 # Edit/Write ツールのガード (memory-guard.sh) を補完
 #

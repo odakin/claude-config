@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-07-10: 構造 tree / 列挙 / カテゴリ index の自動生成 (generate-tree.py)](#generated-docs-tree-autogen)
 - [2026-07-10: DESIGN.md の archive-first 再編](#design-reorg-archive-first)
 - [2026-06-27: Office handling 入口 router を layer 1 に hoist](#office-files-router-hoist)
 - [2026-06-17: layer-1 convention の発火面 tension (future work)](#layer1-firing-surface-tension)
@@ -28,6 +29,19 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="generated-docs-tree-autogen"></a>2026-07-10: 構造 tree / 冒頭列挙 / カテゴリ index の自動生成 (generate-tree.py)
+
+**問題**: conventions/*.md の説明文が (1) CLAUDE.md 構造 tree (2) CONVENTIONS.md 冒頭の全列挙 (3) 各 file 本文 の 3 箇所に手動同期されていた。 pre-commit-extra.sh の comm ベース検査 (2026-06-13) は「列挙の存在」 しか見ず説明文 drift は検出外。 実測: 2026-07-10 時点で CLAUDE.md tree に hooks 7 本 + scripts 9 本 + lib 1 本 (+ test file 群) が未記載。
+
+**設計 (= design-out、 検出でなく生成)**:
+
+- **源の単一化**: conventions/*.md は各 file 冒頭の HTML comment frontmatter `<!-- doc-meta / when: / category: / summary: -->` が唯一の説明 home (YAML frontmatter は GitHub render に出るので不採用)。 scripts/ hooks/ は各 file header の説明 1 行目 (.py = docstring 1 行目 / .sh = shebang 直後の # comment / .html = 冒頭 `<!-- -->`) が home。 移行時、 旧 tree の長文説明は情報量が最大だったため各 file header へ verbatim MOVE した (114 件 byte 一致を機械検証、 位置依存表現「↑の」 3 件のみ自己完結化)。
+- **生成**: `scripts/generate-tree.py --write` が (1) CLAUDE.md の `<!-- AUTO-TREE:{conventions,hooks,scripts} BEGIN/END -->` marker 間 (2) CONVENTIONS.md の `<!-- AUTO-ENUM BEGIN/END -->` 間 (3) `conventions/README.md` 全体 (カテゴリ別 index、 8 カテゴリ) を再生成。 tree の他 block (templates/ docs/ hammerspoon/ 等) は手動のまま (scope 限定)。
+- **源は git-tracked file のみ** (git 不在時 disk fallback): untracked file (並列 session の未 commit 作業・一時 file) を tree に載せると committed checkout で --check を回す CI と結果が割れるため。 実際、 初回生成時に並列 session の未 commit test file 3 本を拾いかけたのが動機。 新 file は `git add` した瞬間に源へ入る = commit 単位で自己整合。
+- **検査の一本化**: `--check` (drift = exit 1 / 源の validation error 〔doc-meta 欠落・不正 category・header 説明無し・未知 subdir〕 = exit 2) を run-all-checks.sh (= CI) と pre-commit-extra.sh (= warn-only、 旧 comm ベース検査 1+2 を置換 = 検出 logic の二重実装解消) の両方に配線。 `--selftest` 20 check 内蔵 (hermetic tempdir fixture、 git-mode の untracked 除外 fixture 含む)。
+
+**新規 file の手順** (旧「同 commit でここにも追記」 discipline を置換): conventions/*.md → doc-meta を書く / scripts・hooks → header 1 行目に説明を書く → `git add` → `python3 scripts/generate-tree.py --write`。 忘れは pre-commit warn + CI fail が拾う。
 
 ## <a id="design-reorg-archive-first"></a>2026-07-10: DESIGN.md の archive-first 再編 (DESIGN-archive.md 分離 + slug anchor + index 化)
 

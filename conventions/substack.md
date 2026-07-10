@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Substack 記事の入稿・notes/コメント回収をするとき
+category: web
+summary: Substack 規約（入稿: Markdown→リッチテキスト変換手順 / 取得: notes・コメントの Gmail MCP + WebFetch 経由回収）
+-->
 # Substack 規約
 
 本ファイルは Substack 上の「書く側」（入稿）と「読む側／集める側」（取得）の両方の運用ノウハウを記録する。

@@ -1,4 +1,5 @@
 #!/bin/bash
+# audit-public-repos.sh — 全 public repo の leak 定期監査（週次 scheduled-task 対象）
 # audit-public-repos.sh — public repo 群の leak 監査
 #
 # 動作:

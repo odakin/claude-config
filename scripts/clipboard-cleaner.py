@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""クリップボード一発整形 CLI — PDF からコピーしたテキストの後始末。
+"""clipboard-cleaner.py — クリップボード一発整形 CLI（PDF コピーの段落内改行除去 + pbcopy 書き戻しで RTF 書式除去、明示発火のみ・常駐なし、--selftest 内蔵、hammerspoon ⌃⌥⌘V から呼ばれる、conventions/clipboard-cleaner.md）
+クリップボード一発整形 CLI — PDF からコピーしたテキストの後始末。
 
 PDF からコピーしたテキストをそのまま貼ると、(a) 段落内の見た目改行が
 そのまま入る、(b) RTF 書式（イタリック等）が付いてくる、の 2 つが起きる。

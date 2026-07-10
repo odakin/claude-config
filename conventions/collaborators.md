@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 共同研究者 DB (collaborators.yaml) を作成・更新するとき
+category: research-domain
+summary: 共同研究者DB規約
+-->
 # 共同研究者DB規約
 
 共同研究者の管理ルール。CLAUDE.md から参照: `~/Claude/claude-config/conventions/collaborators.md`

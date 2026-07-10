@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""雛形 PDF への直接印字エンジン (= office-automation.md #pdf-prefill-direct の汎用実装)。
+"""pdf_form_fill.py — 雛形 PDF への直接印字エンジン（library。anchor 印字 / NFKC 照合 / #+ redact / font subset / 内蔵検証 / 600dpi ラスタ化、office-automation.md#pdf-prefill-direct の汎用実装。単票向け — 派生 sheet 数式導出付き workbook は excel-osascript 経路）
+雛形 PDF への直接印字エンジン (= office-automation.md #pdf-prefill-direct の汎用実装)。
 
 行政・学術様式の「標題・押印マーク等が drawing の xlsx」 を openpyxl で編集すると drawing が
 全消失する (#openpyxl-destroys-drawings)。 紙提出だけが必要な場合の最速安全経路 =

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Claude.app の folder picker 起点固定 (launchd) を設定・解除するとき
+category: macos
+summary: Claude.app (Claude Code デスクトップ) の新セッション folder picker 起点を `<base>` に固定する launchd エージェント (= NSNavLastRootDirectory を 1 秒間隔で書き戻し、 picker の drift 防止。 setup.sh Step 2b2 が macOS で default-ON install〔ただし desktop アプリ未使用の CLI 専用 Mac は skip〕、 drift 時のみ書込〔read-first〕、 opt-out marker `~/.claude/pin-claude-cwd.off` / `CLAUDE_PIN_CWD=0` で稼働中 job も停止、 launchd ThrottleInterval=10s 罠の対処込み)
+-->
 # Pinning the Claude desktop folder picker (`com.claude-config.pin-claude-cwd`)
 
 **macOS only** (the pinning agent; **Windows** is covered — with the opposite conclusion — in [§ Windows](#windows) below). Installed **by default** by `setup.sh` (Step 2b2) **when the Claude desktop

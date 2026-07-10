@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: macOS で直接入力と IME のキー配列を分けたいとき
+category: macos
+summary: macOS で「直接入力=非 US 配列、IME 中=US 配列」を共存させる gotchas (= IME のキー変換は MRU ASCII-capable layout 従属 / TISSetInputMethodKeyboardLayoutOverride は外部から効かない / 無効化 layout は MRU 候補外 / CGEvent 書き換え 2 経路は IME バイパス・mozc の Option=ALT 扱いで不成立 / 成立解 = IME 切替検知 + US layout 動的有効化+瞬間選択〔権限不要〕 / CLI バイナリの tap は .app bundle 化で TCC 安定)
+-->
 # macOS IME × 非 US キーボードレイアウト共存の gotchas
 
 **読むタイミング**: 「直接入力は非 US 配列 (= Canadian-CSA / AZERTY 等)、日本語 IME のローマ字・英数入力は US 配列」のような **配列の使い分け**を macOS で組もうとした時。または「IME に切り替えたら記号の配置が変 (= フランス語配列っぽい等)」という症状の診断時。

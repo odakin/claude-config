@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: repo の Dependabot/CodeQL/Semgrep baseline や Dependabot PR を扱うとき
+category: infra
+summary: 全 repo 横断の Dependabot/CodeQL/Semgrep/auto-merge baseline + Free plan silent rejection + Dependabot PR tier-based merge discipline + ESM migration backwards-compatible normalizer + `gh` CLI gotcha (= users/X/repos public-only / mergeStateStatus UNKNOWN retry) + bash set -e + heredoc + $() interaction fix + monorepo dependabot.yml directories+groups + cascading PR convergence loop
+-->
 # GitHub Security Automation
 
 Repo 群を横断する **Dependabot / CodeQL / Semgrep / auto-merge** 系の自動化 + 関連 gotcha の規約。 ある GitHub user / org が一定数 (= ~10+) の repo を抱えるようになった時点から有用。

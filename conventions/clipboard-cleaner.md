@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: PDF コピー由来の段落内改行・RTF 書式をクリップボードで整形したいとき
+category: macos
+summary: PDF コピーの段落内改行・RTF 書式の後始末 (= ⌃⌥⌘V hotkey 〔貼り付け先で押す = 整形+即貼り付け〕 / CLI / ブラウザ版の 3 入口、全て明示発火・常駐 poll なし〔誤爆 + secret-handoff の clipboard 単一資源原則と衝突するため daemon 不採用〕、整形ロジック正本は scripts/clipboard-cleaner.py)
+-->
 # clipboard-cleaner — PDF コピーの改行・RTF 書式の後始末
 
 ## 問題

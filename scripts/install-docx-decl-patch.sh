@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# install-docx-decl-patch.sh — 上記 patch を user site-packages に `.pth`+symlink で install（setup.sh Step 9、 全 python3 起動で auto-load、 idempotent）
 # python-docx の Document.save() を全 python3 起動で自動正規化する patch を install。
 # = single-quote XML 宣言 → Word ネイティブ (double-quote+CRLF) を save 時に自動適用し、
 #   厳格 macOS Word の「破損/開いて修復」ダイアログを source で根絶する (race-free)。

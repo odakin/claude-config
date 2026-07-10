@@ -1,4 +1,5 @@
 #!/bin/sh
+# install-remote-control-server.sh — Remote Control サーバーモードを launchd 常駐化（--dir / --replace-agent / --status / --uninstall、KeepAlive 60s 自動復帰、preflight で auth/同意の欠落を案内、idempotent、macOS 限定、conventions/remote-control-server.md）
 # install-remote-control-server.sh — Claude Code Remote Control サーバーモードを launchd で常駐化。
 # 原理 doc: conventions/remote-control-server.md (= 要件・落とし穴・troubleshooting)。
 # このスクリプトが plist / label / KeepAlive 設計の SoT (= doc 側に複製しない、 drift 防止)。

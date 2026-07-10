@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: UI panel 内の toggle group を設計するとき
+category: web
+summary: UI panel 内 toggle group の default 側統一ルール (slider 位置 + bright label を panel scope で揃える)
+-->
 # Toggle switch のラベル配置 convention
 
 UI panel に複数の toggle switch (= 左 label / slider / 右 label の構造) を並べるとき、 panel 内

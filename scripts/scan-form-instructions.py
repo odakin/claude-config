@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Scan a 様式 xlsx for embedded instructions in label cells.
+"""scan-form-instructions.py — 様式 xlsx の label 内 embedded instruction を category 別に抽出（office-automation.md#embedded-instruction-in-label）
+Scan a 様式 xlsx for embedded instructions in label cells.
 
 Usage:
     scan-form-instructions.py <form.xlsx>

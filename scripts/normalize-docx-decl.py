@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""docx の XML 宣言を Word ネイティブ形式に正規化 — python-docx 出力の Word「破損」回避。
+"""normalize-docx-decl.py — 既存 docx の XML 宣言を Word 形式へ後追い正規化する CLI（docx_decl_patch の path-based 版、 office-automation.md#docx-checkbox-content-control）
+docx の XML 宣言を Word ネイティブ形式に正規化 — python-docx 出力の Word「破損」回避。
 
 python-docx (lxml) が再シリアライズした OOXML パーツの XML 宣言は
   <?xml version='1.0' encoding='UTF-8' standalone='yes'?>\\n   (single-quote + LF)

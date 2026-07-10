@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check-fleet-status.py — fleet heartbeat の reader (layer 1 generic)。
+"""check-fleet-status.py — fleet heartbeat の reader（全マシン分の beat を読み role 別に異常 surface = always-on の heartbeat 停止 🔴 / best-effort のスリープは仕様で silent / beat が新鮮な時の server auth/version error 🔴。finding 0 件 silent、fetch しない = 呼び出し側が鮮度担保、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
+check-fleet-status.py — fleet heartbeat の reader (layer 1 generic)。
 
 sibling `fleet-heartbeat.py` (writer) が各マシンから git repo に commit する
 `<dir>/<hostname>.json` を全部読み、 マシン役割 (role) に応じて異常を surface する。

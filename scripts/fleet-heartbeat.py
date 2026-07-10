@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""fleet-heartbeat.py — per-machine heartbeat writer (layer 1 generic engine).
+"""fleet-heartbeat.py — per-machine heartbeat writer（毎時 launchd cron から自マシンの RC server 群〔launchd loaded + server ログ末尾 marker parse = Connected/auth error/version error〕 + config-dir auth metadata を <repo>/<subdir>/<host>.json に commit+push。**claude を一切呼ばない** = auth 失効でも監視が生き残る、state-change-or-age commit policy で git history を汚さない、fail-open、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
+fleet-heartbeat.py — per-machine heartbeat writer (layer 1 generic engine).
 
 cross-machine state の不可視問題 (multi-account-machine-surface.md #honest-limits) を
 狭める: 各マシンが自分の remote-control server / CLI 環境の live 状態を JSON 1 file に

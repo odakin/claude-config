@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# pptx-to-pdf.sh — PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、office-automation.md#pptx-to-pdf-powerpoint）
 # pptx-to-pdf.sh — convert a PowerPoint deck (pptx/ppt) to PDF, FIDELITY-FIRST.
 #
 # Why this exists:

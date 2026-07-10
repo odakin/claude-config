@@ -1,4 +1,5 @@
 #!/bin/bash
+# memory-guard.sh — メモリ書き込みガード — Edit/Write 用（§8 feedback deny + escape hatch: machine-local marker）
 # memory-guard.sh — メモリファイル書き込みガード (deny + escape-hatch)
 # CONVENTIONS.md §2「記録先の判別」の機械的チェックポイント
 #

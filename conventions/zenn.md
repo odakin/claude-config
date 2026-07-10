@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Zenn.dev 記事を執筆・入稿するとき
+category: web
+summary: Zenn.dev 記事執筆規約（platform 仕様: タイトル 70 字 / HTML サニタイズ / `:::message`系 / 文字数見積もり、 GFM bold×全角句読点 等の執筆落とし穴。 substack.md の対、 zenn-cli 運用は各リポ CLAUDE.md 側）
+-->
 # Zenn.dev 記事執筆の規約
 
 Zenn.dev (日本語技術記事プラットフォーム) に記事を書く / 既存記事を編集するときの **platform 仕様と markdown の落とし穴**。zenn-cli + GitHub 連携での運用手順 (`zenn new:article` / preview / 自動デプロイ) は各リポの CLAUDE.md (例: `zenn-articles/CLAUDE.md`) 側、dev.to へのクロスポスト変換は `devto-articles/CLAUDE.md` 側に置く — 本 file は platform の制約と GFM 執筆作法に閉じる (Substack 版の対は `substack.md`)。

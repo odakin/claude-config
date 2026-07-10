@@ -1,4 +1,5 @@
 #!/bin/zsh
+# fix-snapshot-path-patch.sh — PATH スナップショット自動パッチ（REQUIRED_PATHS 方式、launchd WatchPaths から呼ばれる）
 # Claude Code のシェルスナップショットの PATH を自動パッチ
 # launchd WatchPaths から呼ばれる（~/.claude/shell-snapshots を監視）
 #

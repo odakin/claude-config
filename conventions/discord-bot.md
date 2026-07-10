@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Discord Bot を運用・実装するとき
+category: infra
+summary: Discord Bot 運用 (権限ポリシー・private channel 加入・per-channel error non-fatal な fetcher・Token 取扱・組織 NW での API ブロック)
+-->
 # discord-bot: Discord Bot を運用するときの規律
 
 Bot を Discord API 経由で動かす場合の一般則。具体的な server / channel / Bot ID は個人層 (private リポ) に置き、本ファイルには generic pattern のみ。

@@ -1,4 +1,5 @@
-"""python-docx の Document.save() を自動 patch し、XML 宣言を Word ネイティブ形式で書く。
+"""docx_decl_patch.py — python-docx の Document.save() を auto-patch し XML 宣言を Word 形式(double-quote+CRLF)で書く（厳格 Word の「破損」回避、 save 時 source 修正・lazy import hook、 office-automation.md#docx-checkbox-content-control）
+python-docx の Document.save() を自動 patch し、XML 宣言を Word ネイティブ形式で書く。
 
 問題: python-docx (lxml) が save する OOXML パーツの宣言は
   <?xml version='1.0' encoding='UTF-8' standalone='yes'?>\\n   (single-quote + LF)

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: malformed tool call バグを別 session に説明するとき (貼り付け用短縮版)
+category: harness-core
+summary: 別 session 貼り付け用 malformed バグ概要 (= 正本 tool-call-robustness.md の短縮版、 現象 + 真因 + 報告先 issue 一覧 + 緩和策 6 + poisoned 時の対処を 1 file に凝縮、 別 session が初対面で即理解できる self-contained memo)
+-->
 # Tool call malformed バグ — 別セッションへのペースト用メモ
 
 > 正本: `claude-config/conventions/tool-call-robustness.md`

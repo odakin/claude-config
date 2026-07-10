@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: preview / dev server 稼働中に user へ動作確認を依頼するとき
+category: harness-core
+summary: preview / dev server 動作中はユーザー確認依頼ターンに URL を毎回明示する出力ルール
+-->
 # プレビュー・テスト URL の出力ルール
 
 ユーザーに動作確認・プレビューを依頼するときは、**毎回 URL を併記**すること。

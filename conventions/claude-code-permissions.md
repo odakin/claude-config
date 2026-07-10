@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき
+category: harness-core
+summary: Claude Code CLI の permission プロンプト削減 (= cwd 外 file 〔`~/Downloads` 等〕の Read/Edit/Write が毎回確認される症状を `additionalDirectories` で cwd 同様に無確認化、 bare tool allow は cwd 外を素通ししない observed〔docs 解釈と食い違い〕、 deny > ask > allow で機密は `deny` 優先、 setup.sh `configure_permissions` は `allow` のみ触る = additionalDirectories/deny は直書き永続、 settings 反映は次セッション、 frontend 3 系統切り分け〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕、 §always-approve-tools = permission 設定で抑止できない always-prompt tool class〔`ccd_session_mgmt__search_session_transcripts` 等 cross-session tool は `allow` 登録でも承認チップが出る = 経路を外す以外に消せない、 token-handshake 返送への含意込み〕、 #ask-pattern-action-anchor = 高 stakes Bash gate の ask パターンは file 名 substring でなく不可逆 action の実行形〔`--send` 等の explicit flag〕に anchor〔ask > allow ゆえ allow で例外を彫れない = パターン絞りが唯一の手段・tool 側は fail-safe 既定・gate 対象 invocation は chain 禁止〕)
+-->
 # Claude Code の permission プロンプトを減らす (additionalDirectories と working directory 境界)
 
 Claude Code CLI で「**ファイル操作のたびにアクセス権を聞かれて鬱陶しい**」を構造的に解消するための規約。とくに作業ルート (cwd) の外にあるファイル (GUI の置き場 `~/Downloads` / `~/Desktop` / `~/Documents` など) を弄らせるときに毎回確認が出る症状が対象。

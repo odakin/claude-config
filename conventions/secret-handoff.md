@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: secret を user から受け取る・別マシンへ運ぶとき
+category: infra
+summary: Secret を clipboard 経由で安全に運ぶ手順 (chat に literal を貼らせない原則と clipboard 1 個競合の回避)
+-->
 # secret-handoff: Secret をユーザーの clipboard 経由で安全に運ぶ手順
 
 Token / API key / SSH 鍵 / 各種 credential を Claude がユーザーに `~/.secrets/<name>` 等のローカル配置先へ書き込ませる場面で、**chat に literal を貼らせない原則** (例: [`discord-bot.md` bot-token-handling](discord-bot.md#bot-token-handling)) と組み合わさったとき、ユーザーは secret を **clipboard 経由で** ブラウザ → ターミナルに運ぶことになる。このときに発生する再現性の高い罠と回避手順。

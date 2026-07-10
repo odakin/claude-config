@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: LaTeX を含むリポで作業するとき
+category: paper
+summary: LaTeX 固有規約（物理リポで参照）
+-->
 # LaTeX 規約
 
 LaTeX を含むリポで適用。CLAUDE.md から参照: `~/Claude/claude-config/conventions/latex.md`

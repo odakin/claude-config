@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
+category: infra
+summary: データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script) を bundle
+-->
 # データ pipeline と半自動化の設計規律
 
 下流自動化 (= build script / mirror script / template render) を伴うデータ管理で適用。 CLAUDE.md から参照: `~/Claude/claude-config/conventions/data-pipeline-automation.md`

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 板書写真 PDF に close-up annotation を統合するとき
+category: office
+summary: 板書写真 PDF で「広域 + close-up annotation」 2 枚を 1 page に統合する手順 (= Keynote 手作業経路 〔黒板 theme + 透過 chalk PNG overlay〕 を推奨、 PIL inline composite は anchor 明確時のみ。 free-form 配置は user が掴んでドラッグ、 AppleScript で .key auto 生成 + slide PNG export までを台本化、 chalk-only RGBA mask threshold 100-140 + Gaussian blur 1.5 px の標準値、 lectures 板書 reflex の延長)
+-->
 # Chalkboard close-up merge — 板書写真の close-up annotation を広域写真に統合
 
 ## 場面

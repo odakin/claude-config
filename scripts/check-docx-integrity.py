@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""docx 整合チェッカー — Word の「破損しています / 開いて修復しますか?」判定を出荷前に機械検出。
+"""check-docx-integrity.py — docx の Word「破損」判定源を Word 不要・決定論で検出（single-quote 宣言 / checkbox 状態↔グリフ / bookmark / table grid / dangling r:id 等、 office-automation.md#docx-checkbox-content-control）
+docx 整合チェッカー — Word の「破損しています / 開いて修復しますか?」判定を出荷前に機械検出。
 
 python-docx や zipfile+document.xml 直編集で Word 製テンプレを fill すると、zip も
 XML も well-formed なのに Word だけが「破損」と判定し、開くたびに修復ダイアログを出す

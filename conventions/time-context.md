@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: multi-day session で「今日・明日・今夜」等の時刻 deictic を解釈するとき
+category: harness-core
+summary: multi-turn / multi-day session で「今日・明日・今夜」等の時刻 deictic を旧 frame (= 前ターンの仮想 today) で解釈する reflex failure 防止 — 必ず currentDate を起算点に再翻訳
+-->
 # Time context — currentDate anchor 規律
 
 Claude は session 開始時に `# currentDate` context を持っているが、 multi-turn / multi-day session で user 発話の「今日 / 明日 / 今夜 / 明朝」 等の時刻 deictic 表現を、 **会話の流れで暗黙に旧 frame (= 「前ターンの仮想 today」) で解釈する reflex failure** を起こすことがある。

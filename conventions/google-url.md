@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Google サービスの URL をチャットや文書に書くとき
+category: web
+summary: Google サービス URL 書式 (`/u/N/` 禁止 + `?authuser=<email>` 必須、 hooks/google-url-guard.sh で機械的強制、 GCP project 管理 URL もカバー)
+-->
 # Google 系サービスの URL 書式
 
 Gmail / Drive / Photos / Classroom / Calendar / Docs / Sheets / Slides 等の Google 系サービスで Claude がチャットや文書に URL を出力するときの規約。CLAUDE.md から参照: `~/Claude/claude-config/conventions/google-url.md`

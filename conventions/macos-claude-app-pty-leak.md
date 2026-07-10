@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: macOS で forkpty: Device not configured が出たとき
+category: macos
+summary: macOS で Claude.app が `kern.tty.ptmx_max=511` を独占 → Terminal 等で `forkpty: Device not configured` 発生時の段階的 sysctl bump workaround (hard ceiling ~960、 root 対処は Claude.app restart、 Anthropic bug report 候補)
+-->
 # macOS Claude.app pty leak workaround
 
 **症状**: Claude.app desktop プロセス (= `/Applications/Claude.app/Contents/MacOS/Claude`、 Electron parent) が **`/dev/ptmx` master fd を解放せず蓄積**し、 `kern.tty.ptmx_max` (= macOS default 511) に達すると **system 全体の pty 確保が枯渇**。 新規 Terminal.app / iTerm2 / VS Code 等が `forkpty: Device not configured` (= 「新しいプロセスを作成して擬似 tty を開くことができませんでした。」) で起動不可になる。 Claude.app 自身は normal app に見えるので Terminal 側の故障と誤認しやすいが、 **Terminal は無罪**。

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: referee・審査委員として他者の paper / 申請書を評価するとき
+category: paper
+summary: 他者の paper / 申請書を referee・審査委員として評価する時の規律 (= SoT 4 file pattern・引用文献の現物 verify・framework calibration・scoring scale 整合・既送信 score の不可逆性。 paper-audit / rebuttal-letter / erad-submission の sibling で方向違い)
+-->
 # Peer Review Workflow (= as a reviewer of external proposals / papers)
 
 reviewer として外部の grant proposal / scientific paper / 申請書 等を評価する work flow の SoT 構造と規律。 reviewer 側 (= 自分が referee / 審査委員) の workflow。 sibling 3 doc 関係:

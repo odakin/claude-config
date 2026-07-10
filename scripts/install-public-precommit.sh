@@ -1,4 +1,5 @@
 #!/bin/bash
+# install-public-precommit.sh — 各 public repo に pre-commit stub を冪等配置
 # install-public-precommit.sh — public repo に pre-commit gate の
 # 1 行 stub を配置する。
 #

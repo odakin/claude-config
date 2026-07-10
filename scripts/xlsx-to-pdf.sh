@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# xlsx-to-pdf.sh — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、office-automation.md#xlsx-to-pdf-script）
 # xlsx-to-pdf.sh — convert a spreadsheet (xlsx/xls/ods) to PDF, cross-platform.
 #
 # Why this exists:

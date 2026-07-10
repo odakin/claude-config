@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: wolframscript を書く・debug するとき
+category: research-domain
+summary: wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用 (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
+-->
 # Wolfram / wolframscript scripting conventions
 
 Wolfram Language を script モード (= `wolframscript -file foo.wl` / `wolframscript -code ...`) で使うときの gotcha を集約する。 対象 = 数値解析・記号計算・図生成・PDF 抽出 等で wolframscript を CLI として叩く全般のリポ。 notebook (`.nb`) では起きない、 **script 特有の semantic 差** が大半なので、 notebook で動いていた code を script に移植する場面で踏みやすい。

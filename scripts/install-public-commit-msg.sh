@@ -1,4 +1,5 @@
 #!/bin/bash
+# install-public-commit-msg.sh — 各 public repo に commit-msg stub を冪等配置（marker check + core.hooksPath cascade）
 # install-public-commit-msg.sh — public repo に commit-msg leak guard hook
 # の 1 行 stub を配置する。
 #

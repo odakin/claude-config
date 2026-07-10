@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Office file (Excel/Word/PDF/PowerPoint) 仕事に入るとき最初に開く入口
+category: office
+summary: Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入口マップ** = 様式仕事に入るとき最初に開く単一 router (= 考え方→principles / 罠→automation の symptom-index / 権限→claude-code-permissions / skill vs 手動 / PDF 化 wrapper / 記入後の機械監査〔diff-form-xlsx/docx〕/ e-Rad)。 中身は持たず全て pointer、 新規 office 関連 file の入口
+-->
 # Office ファイル (Excel / Word / PDF / PowerPoint) ハンドリング — 入口マップ
 
 行政・学術様式の Excel / Word / PDF / PowerPoint を機械で扱う作業の **最初に開く単一の入口 (router)**。

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 論文 merger 等の構造 issue を体系 audit するとき
+category: paper
+summary: multi-paper merger 等の forward ref / 重複 subsection / structure issue を Phase1 機械検出 + Phase2 section-by-section AI 精読 + findings.yaml で体系 audit
+-->
 # Paper Audit (= forward references, duplicates, structure issues)
 
 multi-paper merger (= P1+P2 統合等の「2 個 1 フランケンシュタイン」) や複雑な LaTeX paper で、 以下を体系的に audit + 修正:

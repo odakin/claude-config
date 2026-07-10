@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 共同 PDF を Dropbox に置いてリポから symlink 参照するとき
+category: infra
+summary: 共同 PDF を Dropbox に置いてリポから symlink で参照する規約 (§10 で OneDrive / Google Drive 等の他クラウド + 索引自動生成 launchd gotchas へ応用)
+-->
 # Dropbox 共有 PDF への参照規約
 
 複数の git リポから「Dropbox 上の特定フォルダにある参照 PDF」を、リポ内の安定した相対 path で参照したいときの標準パターン。

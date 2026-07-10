@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: claude.ai routines (RemoteTrigger / cloud cron) を作成・管理するとき
+category: harness-core
+summary: claude.ai routines (= RemoteTrigger API、 旧「scheduled remote agents」) の知識集 — cloud 側に CCR session を spawn する cron / one-time trigger、 local 機構の scheduled-tasks.md との区別、 操作は RemoteTrigger tool / /schedule skill 経由
+-->
 # claude.ai routines (= RemoteTrigger API) 規約
 
 claude.ai の **routines** (= かつての「scheduled remote agents」) を扱う際の知識集。 cron expression or one-time trigger で **cloud 側に CCR (Claude Code Remote) session を spawn** する仕組みで、 user の local machine とは独立して動く。

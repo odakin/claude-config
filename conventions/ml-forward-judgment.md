@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: ML forward された依頼メールを inbox 化するとき
+category: mail
+summary: ML forward された依頼メールの inbox 化時の reflex 判定 trap 防止 (= 元 TO に名前なし = action なし、 ではない / 過去 ML の分野割当を遡る規律)
+-->
 # ML forward された依頼メールの inbox 化判定規律
 
 学科 ML / 部署 ML / 委員会 ML 経由で「Forwarded / 転送」 された**依頼メール**を inbox に記録するときの reflex 判定 trap と、 それを防ぐためのゲート質問。 CLAUDE.md から参照: `~/Claude/claude-config/conventions/ml-forward-judgment.md`

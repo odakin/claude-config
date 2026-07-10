@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: launchd agent が ~/Library/CloudStorage/ 配下を読む script を書く前
+category: macos
+summary: launchd agent が ~/Library/CloudStorage/ (Dropbox / iCloud Drive / OneDrive / Box) 配下を読む script を書くための TCC 越え pattern (= 症状 Operation not permitted は手動実行なら通るが launchd 経由で失敗 / 3 択 A: /bin/zsh に FDA〔広すぎ非推奨〕 A': osacompile で狭い .app wrapper + narrow FDA〔推奨、 permission holder が narrow + 自己記述性〕 B: CloudStorage 外に mirror〔permission dance 不要〕 / A' 実装テンプレ = osacompile + open -g -a + EnvironmentVariables LANG + FDA panel での .app 選択 / gotcha = LANG 未設定で日本語 path 壊れる / open -a 非同期 / bundle ID 衝突)
+-->
 # launchd agent が `~/Library/CloudStorage/` を読むための TCC 越え pattern
 
 macOS 15+ で launchd agent (`~/Library/LaunchAgents/*.plist`) から呼び出したシェル script が **`~/Library/CloudStorage/` 配下 (= Dropbox / iCloud Drive / OneDrive / Google Drive / Box 等の FileProvider 経路)** を読もうとすると `Operation not permitted` で失敗する。

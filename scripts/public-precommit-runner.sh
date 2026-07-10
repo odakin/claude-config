@@ -1,4 +1,5 @@
 #!/bin/bash
+# public-precommit-runner.sh — 公開リポ pre-commit gate（Tier A + sensitive-terms.txt ephemeral）
 # public-precommit-runner.sh — 公開リポの pre-commit gate
 #
 # 正本: claude-config/scripts/public-precommit-runner.sh

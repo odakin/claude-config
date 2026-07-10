@@ -1,4 +1,5 @@
 #!/bin/sh
+# pty-leak-watch.sh — macOS Claude.app pty leak watchdog（LaunchAgent、枯渇前に macOS 通知、conventions/macos-claude-app-pty-leak.md）
 # pty-leak-watch.sh — macOS の pty プール (kern.tty.ptmx_max) が Claude.app の
 # /dev/ptmx leak で枯渇する前に通知する watchdog。
 # 正本 doc: conventions/macos-claude-app-pty-leak.md

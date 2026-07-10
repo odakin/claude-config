@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 講演・セミナー・発表の準備をするとき
+category: paper
+summary: 講演のしかた (= Robert Geroch "Suggestions For Giving Talks" arXiv:gr-qc/9703019 の own-words ダイジェスト、 主題選択 / 3-4 メッセージ構成 / 導入は全体の 1-5 / 視覚資料は図>言葉>式 / 1h で非自明な式 5 本・スライド 10 枚 / 質問は完全に正直に 等。 セミナー・JC・卒論発表の準備時に読む、 英語本体)
+-->
 # Giving talks — Robert Geroch's suggestions, distilled
 
 A practical checklist for preparing and delivering a research talk (seminar, colloquium,

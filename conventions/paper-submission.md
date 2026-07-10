@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき
+category: paper
+summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕)、 投稿 checklist 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
+-->
 # Paper Submission Workflow (= 投稿ポータル経由の落とし穴と定型対処)
 
 論文投稿ポータル (Springer ScholarOne Manuscripts / Elsevier Editorial Manager / IOP EJP submission / arXiv 等) 経由で journal / preprint server に投稿する時の、 **ポータル固有の落とし穴 + 定型的な対処** の SoT。 Overleaf 連携経路は別 doc: [`overleaf-integration.md`](overleaf-integration.md)。

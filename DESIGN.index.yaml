@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: generated-docs-tree-autogen
+    legacy: "2026-07-10"
+    level: 2
+    title: "2026-07-10: 構造 tree / 冒頭列挙 / カテゴリ index の自動生成 (generate-tree.py)"
   - id: design-reorg-archive-first
     legacy: "2026-07-10"
     level: 2

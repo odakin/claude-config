@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Remote Control サーバーモードを常駐・troubleshoot するとき
+category: harness-core
+summary: Claude Code Remote Control サーバーモードの launchd 常駐 (= スマホ / claude.ai/code から自マシンに新規セッションを生やす待ち受け。 要件 = claude.ai OAuth 〔managed key 不可〕 + 初回同意 y、 ⚠️ PTY 経由は stdin EOF cycling、 モバイル UI のリポ選択は same-dir で cwd 不変、 cloud session との見分け = 緑ドット computer icon。 install SoT は scripts/install-remote-control-server.sh)
+-->
 # Remote Control サーバーモードの launchd 常駐 (= スマホからいつでも Claude Code)
 
 `claude remote-control` (サーバーモード) は、スマホの Claude アプリや claude.ai/code から

@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Google API を Python から直接叩く setup をするとき
+category: infra
+summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避)
+-->
 # Google API を Python から直接アクセスする setup
 
 MCP では cover できない (= bulk 操作・xlsx parse・特殊 scope) Google API call を Python から直接行うときの setup と運用規約。 個別 MCP (Gmail / Calendar / Classroom 等) と並存して動かす想定。 CLAUDE.md から参照: `~/Claude/claude-config/conventions/google-api-direct-access.md`

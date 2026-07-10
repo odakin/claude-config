@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# setup-dropbox-refs.sh — personal layer の dropbox-collabs.yaml を読んで symlink を生成
 # claude-config/scripts/setup-dropbox-refs.sh
 #
 # Read a personal-layer YAML registry of "collaboration name → Dropbox

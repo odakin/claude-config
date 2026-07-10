@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: brew install を試行する前後 + source build 陥落時
+category: infra
+summary: マシン固有の install 不可 package を layer 4 (machine-local memory) に蓄積する規律 (再試行コスト回避、 frontmatter format + machine-local marker + 試行日/コマンド/原因/代替の必須項目) + source build 陥落時の GitHub Releases prebuilt binary 直置き recipe (#prebuilt-binary-fallback = 配置先は non-interactive PATH 必須〔.zshrc 専用 PATH は Claude Bash から不可視で silent 再発〕+ git-lfs 不在は LFS repo の全 push を diff 内容と無関係に block)
+-->
 # install-failures: machine-local な install 不可 package を memory に蓄積する
 
 同じマシンで `brew install foo` を試行して失敗 → 別セッションで再試行 → 同じ失敗、 という再試行コストを払い続ける問題が起きやすい。 マシン差 (= macOS バージョン / arch / Homebrew Tier 等) に起因する install 不可は **machine-local な事実**であり、 layer 4 (= machine-local memory) の典型用途である。 本規約はその記録運用を定義する。

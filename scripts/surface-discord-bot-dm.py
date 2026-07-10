@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""surface-discord-bot-dm.py — Discord bot DM channel の未記録 message 検出 engine。
+"""surface-discord-bot-dm.py — Discord bot DM channel の未記録 message surface engine（daily fetcher が吐く JSON と user 側 ledger（text/YAML 内 messageId）の diff で「bot DM に返事が来ても誰も読まない」 死角を埋める汎用 CLI、 個別環境への依存ゼロ＝引数で bot ID / json-dir / ledger-dir / counterpart map / title を渡す、 finding 0 件 silent、 --selftest 内蔵。 personal layer に thin wrapper を 1 つ置いて呼ぶ、 conventions/discord-bot.md#bot-dm-surface）
+surface-discord-bot-dm.py — Discord bot DM channel の未記録 message 検出 engine。
 
 「daily fetcher で取得した bot DM の JSON は更新されるが、 そこへの返信を読む経路が
 無く『誰も読まないまま放置される』」 という構造的死角を塞ぐ汎用 engine。 fetch (=

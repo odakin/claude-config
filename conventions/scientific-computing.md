@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 数値解析・科学計算 code を書くとき
+category: research-domain
+summary: 数値解析 gotchas (scale-dependent default 等、科学計算リポ共通)
+-->
 # Scientific computing conventions
 
 数値解析を伴うコードで silently 壊れる典型パターンと防止策を集約する。対象: 物理シミュレーション、 Bayesian fit pipeline、 場理論計算、 数値積分・ODE integrator など、 任意の科学計算系リポ (= public 例: [sogebu/LorentzArena](https://github.com/sogebu/LorentzArena))。

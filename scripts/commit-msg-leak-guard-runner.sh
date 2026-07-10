@@ -1,4 +1,5 @@
 #!/bin/bash
+# commit-msg-leak-guard-runner.sh — 公開リポ commit-msg hook（BLOCK mode、 2026-05-26 追加。 shared matcher library を source。 claude-code 2.1.x harness invoke bug の修復 option B）
 # commit-msg-leak-guard-runner.sh — git native commit-msg hook (BLOCK mode)
 #
 # 正本: claude-config/scripts/commit-msg-leak-guard-runner.sh (layer 1)

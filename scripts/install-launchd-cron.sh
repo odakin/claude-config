@@ -1,4 +1,5 @@
 #!/bin/sh
+# install-launchd-cron.sh — 汎用 launchd cron 登録エンジン（無人ルーチンを launchd cron で回す plist 生成・登録・状態確認・解除。--label-prefix / --workdir / --routine "id\|type\|target\|cron" を呼び出し側が渡す＝ROUTINES 焼かず汎用、cron は */N step + N-M 曜日範囲を StartCalendarInterval へ展開、skill=claude -p indirection / cmd=直接実行、CLI 認証で Claude Code (desktop) 切替非依存、--status/--run/--install-one/--uninstall-one/--uninstall/--ensure（未install のみ install=新ホスト自動配備、SessionStart から呼ぶ）、idempotent、macOS 限定、conventions/scheduled-tasks.md#launchd-cron-engine）
 # install-launchd-cron.sh — 汎用 launchd cron 登録エンジン (macOS)。
 # 原理 doc: conventions/scheduled-tasks.md (= 機構選択の一般則 §0 + 本エンジンの SoT note)。
 # このスクリプトが plist / label / cron→StartCalendarInterval 設計の SoT

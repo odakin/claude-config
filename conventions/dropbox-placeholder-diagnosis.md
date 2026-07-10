@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: Dropbox 配下の file が 0 byte に見えたとき
+category: infra
+summary: Dropbox の online-only placeholder (0 byte) 診断: xattr `com.dropbox.placeholder` 検出 + OS 別 materialize 方法 + 「0 byte = 配置忘れ」 reflex 防止
+-->
 # Dropbox の online-only placeholder (0 byte 診断)
 
 `~/Dropbox/...` (macOS) や `%USERPROFILE%\Dropbox\...` (Windows) 配下の file が **0 byte に見える** とき、 第一仮説は **Dropbox Smart Sync の online-only placeholder** (= 実体はクラウド側、 ローカル file system 上は 0 byte stub)。

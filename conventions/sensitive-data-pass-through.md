@@ -1,3 +1,8 @@
+<!-- doc-meta
+when: 受信した URL / file を別 recipient に forward する前
+category: infra
+summary: 受信した URL / file を別 recipient に forward する前に「依頼の scope」 と「届いた data の scope」 を必ず照合する規律 (= over-share / permission mismatch / scope downscope 機会損失の 3 失敗モード回避)
+-->
 # Pass-through 時に scope を必ず照合する規律
 
 依頼で「~~の URL / file を共有して」 と頼まれて、 受け取った別経路の URL や file を そのまま forward する reflex は **scope 取り違え事故を起こしやすい**。 「依頼の scope」 と「届いた data の scope」 を必ず照合する。

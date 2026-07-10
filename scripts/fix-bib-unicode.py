@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Replace non-LaTeX characters in LaTeX source files with LaTeX equivalents.
+"""fix-bib-unicode.py — Unicode→LaTeX 変換スクリプト
+Replace non-LaTeX characters in LaTeX source files with LaTeX equivalents.
 
 Works on any LaTeX-related file (.tex, .bib, .bst, .cls, .sty, etc.).
 

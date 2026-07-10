@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pdf-read-fallback-nudge.sh
+# pdf-read-fallback-nudge.sh — PostToolUse(Read): Read tool が .pdf を `pdftoppm is not installed` で fail した時に PyMuPDF 1-liner を system reminder で injection (= 2026-05-18 RCA、 規律 wording に依存しない機械的 enforcement layer)
 #
 # PostToolUse(Read) hook: when Read tool fails on a .pdf path with the
 # `pdftoppm is not installed` error (typical on machines where poppler
