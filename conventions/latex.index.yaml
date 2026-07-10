@@ -1,0 +1,156 @@
+# Stable slug index -- AUTO-GENERATED from the doc by scripts/generate-doc-index.py.
+# id/level/title are DERIVED from the markdown (edit the md + re-run, do NOT hand-edit
+# them here). legacy (a section's original §-number = a permanent forwarding address),
+# related, and any other hand field are PRESERVED. See convention-design-principles §14.7 (= #inbound-ref-robustness).
+# Validated by scripts/check-office-automation-index.py (dangling=0 / orphan=0).
+sections:
+  - id: equation-safety
+    level: 2
+    title: "式の安全規則"
+  - id: mathbb-digits
+    level: 2
+    title: "`\\mathbb{数字}` は黙って化ける — 単位行列は `\\mathbbm{1}` (bbm)"
+  - id: cite-set-after-commentout
+    level: 2
+    title: "comment-out 流儀の編集後は live `\\cite` 集合を照合する"
+  - id: commented-out-not-present
+    level: 2
+    title: "comment-out / `\\begin{comment}` した構造的要素を「原稿にある」と主張しない"
+  - id: latexdiff-review-snapshot
+    level: 2
+    title: "latexdiff で差分レビュー PDF を作る"
+  - id: text-structure-hierarchy
+    level: 2
+    title: "文章の構造化と見出し階層 (`\\paragraph` は `\\subsubsection` より下)"
+  - id: exclude-comments-from-length
+    level: 2
+    title: "長さ・段落構造の判断にコメントアウト行を数えない"
+  - id: math-mode-protection
+    level: 2
+    title: "地の文に math 文字を裸で書かない (math mode 保護)"
+  - id: preamble-macros-first
+    level: 2
+    title: "プリアンブル定義のマクロを優先する (絶対則)"
+  - id: preamble-macros-scope-examples
+    level: 3
+    title: "対象範囲の例 (= 全部対象、これでも非網羅)"
+  - id: preamble-macros-check-grep
+    level: 3
+    title: "確認用 grep (= 「定義がある macro 名なのか?」 をチェック)"
+  - id: preamble-macros-rationale
+    level: 3
+    title: "理由 (rule の hard 化を支える 4 条)"
+  - id: preamble-macros-repo-fallback
+    level: 3
+    title: "リポ固有 fallback"
+  - id: macro-alias-forcing-function
+    level: 2
+    title: "マクロ alias の forcing function"
+  - id: fixed-framing-macro
+    level: 2
+    title: "新規 macro に fixed framing text を含める前に source-render asymmetry の罠を抑える"
+  - id: compilers
+    level: 2
+    title: "コンパイラ"
+  - id: bibliography-style
+    level: 2
+    title: "Bibliography スタイル"
+  - id: no-biblatex
+    level: 2
+    title: "biblatex は使わない（JHEP.bst と非互換）"
+  - id: japanese-authors-bibtex
+    level: 2
+    title: "日本語著者の BibTeX 処理"
+  - id: refs-bib-verification
+    level: 2
+    title: "refs.bib 整備フロー（実物検証によるハルシネーション防止）"
+  - id: jhep-bst-notation
+    level: 2
+    title: "JHEP.bst 記法"
+  - id: hyperref-settings
+    level: 2
+    title: "hyperref 設定"
+  - id: pre-commit-hook
+    level: 2
+    title: "pre-commit hook（Unicode→LaTeX 自動修正）"
+  - id: pre-commit-hook-old-design-failure
+    level: 3
+    title: "旧設計の失敗 (2026-05-14)"
+  - id: fix-bib-unicode-codepoint-scope
+    level: 3
+    title: "fix-bib-unicode の codepoint scope (2026-05-15 確認)"
+  - id: vendored-latex-opt-out
+    level: 3
+    title: "vendored / verbatim LaTeX の opt-out (2026-06-09)"
+  - id: pre-commit-hook-design-motivation
+    level: 3
+    title: "設計動機 (2026-06-09)"
+  - id: japanese-horizontal-rule
+    level: 2
+    title: "日本語横罫線 (em-dash 系) の書き方 (2026-05-15、 個人層 LaTeX project 経験で導入)"
+  - id: document-reading
+    level: 2
+    title: "ドキュメント読み取り"
+  - id: grep-arxiv-source
+    level: 3
+    title: "論文を grep/検証する: PDF プログラム抽出より arXiv ソース (2026-06-09)"
+  - id: chat-position-reference
+    level: 2
+    title: "チャット本文での位置参照"
+  - id: latex-in-chat-codeblock
+    level: 2
+    title: "チャットで LaTeX / 数式を渡すときは code block で（コピペ保全）"
+  - id: gitignore
+    level: 2
+    title: ".gitignore"
+  - id: gitattributes-line-endings
+    level: 2
+    title: ".gitattributes（改行コード正規化）"
+  - id: japanese-title-wrap
+    level: 2
+    title: "日本語長 title の文節境界改行 (title_wrap pattern)"
+  - id: title-wrap-how-to-apply
+    level: 3
+    title: "How to apply"
+  - id: title-wrap-when-to-use
+    level: 3
+    title: "When to use"
+  - id: title-wrap-font-override
+    level: 3
+    title: "font override pattern (= long content への対応)"
+  - id: title-wrap-paragraph-break
+    level: 3
+    title: "paragraph break の保持 (= 段落区切り)"
+  - id: title-wrap-why
+    level: 3
+    title: "Why"
+  - id: pdf-visual-verification
+    level: 2
+    title: "PDF 視覚検証 reflex: compile success + log no-error だけで完了としない"
+  - id: pdf-visual-verification-traps
+    level: 3
+    title: "典型 trap (= 2026-05-18 EC erratum note 編集で連続再発)"
+  - id: pdf-visual-verification-why
+    level: 3
+    title: "Why"
+  - id: fixed-width-box-overflow
+    level: 2
+    title: "固定幅の箱に可変幅テキストを入れない (= 枠線が壊れる)"
+  - id: infographic-design
+    level: 2
+    title: "編集向け infographic / poster / 1 枚 figure の design 規約"
+  - id: infographic-light-theme-print
+    level: 3
+    title: "印刷前提なら light theme + cream paper"
+  - id: infographic-libertinus-font
+    level: 3
+    title: "Libertinus フォントファミリー (= 数式統一の選択肢)"
+  - id: infographic-hiragino-libertinus
+    level: 3
+    title: "macOS Hiragino と Libertinus の組合せ"
+  - id: infographic-math-japanese-align
+    level: 3
+    title: "数式 + 日本語を mix する align 環境"
+  - id: infographic-print-a4
+    level: 3
+    title: "print fidelity を A4 強制したい場合"

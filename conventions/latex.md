@@ -7,18 +7,18 @@ summary: LaTeX 固有規約（物理リポで参照）
 
 LaTeX を含むリポで適用。CLAUDE.md から参照: `~/Claude/claude-config/conventions/latex.md`
 
-## 式の安全規則
+## <a id="equation-safety"></a>式の安全規則
 - **equation/align 環境内は原則変更しない。** 変更は事前にユーザー確認。物理的内容の追加はコメントとして提案（ハルシネーション混入防止）
 - 英語校正・文法修正など確実に正しい本文修正は可
 
-## `\mathbb{数字}` は黙って化ける — 単位行列は `\mathbbm{1}` (bbm)
+## <a id="mathbb-digits"></a>`\mathbb{数字}` は黙って化ける — 単位行列は `\mathbbm{1}` (bbm)
 
 - **`\mathbb{数字}`(例 `\mathbb 1`, `\mathbb 0`)を使わない。** `amssymb` の `\mathbb` は**大文字 A–Z しかグリフを持たない**ため、数字を渡すと **compile error を出さずに黙って化ける**(missing glyph / 別字へ fallback)。= **視覚 QA でしか気づかない**沈黙故障(コンパイル成功 = 正しい、ではない好例)。
 - **単位行列・恒等作用素は `\usepackage{bbm}` + `\mathbbm{1}`**(真の黒板太字 1)。代替: `\mathds{1}`(dsfont)、最低限 `\mathbf{1}`。同様に黒板太字の数字が要る一般ケースも `\mathbb` でなく bbm/dsfont 系を使う。
 - **発火**: PDF の**視覚 QA で実物確認**が第一(doc 記載だけでは発火しない)。より確実には pre-commit / build で `\mathbb\s*\{?\s*[0-9]` を grep する mechanical guard を足す(= doc rule より発火信頼度が高い)。
 - 実例: ある物理ノートの式で $\gamma_5^2=\,$`\mathbb 1` が化けていた(`\mathbbm{1}` で修正)。`\mathbb` を識別子マクロのつもりで数字に当てると起きる。
 
-## comment-out 流儀の編集後は live `\cite` 集合を照合する
+## <a id="cite-set-after-commentout"></a>comment-out 流儀の編集後は live `\cite` 集合を照合する
 
 旧文を `%...` で残して次行に新文を書く「comment-out keep」 流儀で編集すると、 行末まで `%` が
 飲み込むため、 同じ行にあった `\cite{...}` を**意図せずコメントアウトして引用が落ちる**危険がある。
@@ -30,7 +30,7 @@ baseline と照合**し不変を確認する (= `\bibcite` や aux 経由でな�
 awk -F'%' '{print $1}' file.tex | grep -oE '\\cite[a-zA-Z]*\{[^}]*\}' | sort -u
 ```
 
-## comment-out / `\begin{comment}` した構造的要素を「原稿にある」と主張しない
+## <a id="commented-out-not-present"></a>comment-out / `\begin{comment}` した構造的要素を「原稿にある」と主張しない
 
 **ルール:** 式・節・定義・分解・関数といった**構造的要素が「原稿 (= rendered PDF) に存在する」と主張する前に、その要素が active state に在るかを source で 1 query verify する**。`%` 行・`\begin{comment}...\end{comment}` ブロック内の要素は **source には文字列として在るが output には出ない (= silent non-existence)**。prose 上の summary (= `SESSION.md` / `DESIGN.md` / handoff / メール下書き) に「ある / 移行済み」と書いてあっても、それは authoritative ではない。**authoritative なのは active source だけ**。
 
@@ -123,7 +123,7 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 
 **事例 (2026-07-04 einstein-cartan LIVE note family 統一)**: `induced-action` / `induced-action-per-term` / `verified-results` / `docs/ec_one_loop_notes` / `convention-conversion` / `handcheck-final` + 小物 8 note で run-in `\paragraph` を top-level heading として使っていた計 ~150 本を、既存 §番号を保ったまま `\subsubsection` (subsection ありの大物) または `\subsection` (subsection なしの小物) に一斉昇格 (Chip H/I/J/K/L)。詳細 = `einstein-cartan/CLAUDE.md §「見出しの論文型規律 (2026-07-04 確立)」`。
 
-## 長さ・段落構造の判断にコメントアウト行を数えない
+## <a id="exclude-comments-from-length"></a>長さ・段落構造の判断にコメントアウト行を数えない
 
 **ルール:** 段落の切れ目・節の分割・restructure 等、 「文書の長さ / 段落の重さ」 を根拠にした編集判断は **rendered 出力 (= PDF に出る内容) だけで見積もる**。 `%` でコメントアウトされた行・ブロック (= 旧 draft・代替表現・comment-out keep で残した旧文) は source 行数を膨らませるだけで読者には出ないので、 長さの勘定に入れない。
 
@@ -138,7 +138,7 @@ grep -vE '^\s*%' file.tex
 
 display math・図は行数でなく rendered での専有量で別途見積もる。
 
-## 地の文に math 文字を裸で書かない (math mode 保護)
+## <a id="math-mode-protection"></a>地の文に math 文字を裸で書かない (math mode 保護)
 
 **ルール:** 地の文 (= `$...$` `\(...\)` `equation` 環境の外) では、 `^` `_` `\dagger` `\hat` 等の **math mode 専用記号を含む式片**を裸で書かない。 全部 `$...$` で囲うか、 日本語に置き換える。
 
@@ -155,7 +155,7 @@ display math・図は行数でなく rendered での専有量で別途見積も�
 
 **事例 (2026-05-10 quantum-mechanics-textbook 第 1 部最終章 draft restructure)**: 7 commit に渡る章書き直しの過程で、 Claude が地の文に「a^† と a の代数構造」 「α_n の積」 「a^†|n⟩ ∝ |n+1⟩」 等を裸で書いて 3 箇所で build を破壊。 1 commit 内で 3 回 build retry が必要だった。 edit 直後の build verify で発覚 → 該当箇所を `$\hat{a}^\dagger$` 等で囲って修正。
 
-## プリアンブル定義のマクロを優先する (絶対則)
+## <a id="preamble-macros-first"></a>プリアンブル定義のマクロを優先する (絶対則)
 
 **リポのプリアンブルで定義されているマクロ (semantic / typing shortcut / 色付き / 数式 alias / その他、種類問わず) が対象概念に存在する場合、生の primitive 記法を使うことを禁止する。**
 
@@ -167,7 +167,7 @@ display math・図は行数でなく rendered での専有量で別途見積も�
 
 これ以外、「raw でも動くから raw で書く」 「見た目同じだから raw で OK」 「タイプが少し短いから raw で済ます」 は全部 NG。
 
-### 対象範囲の例 (= 全部対象、これでも非網羅)
+### <a id="preamble-macros-scope-examples"></a>対象範囲の例 (= 全部対象、これでも非網羅)
 
 | カテゴリ | マクロ例 | 対応する生記法 (= 禁止) |
 |---|---|---|
@@ -183,7 +183,7 @@ display math・図は行数でなく rendered での専有量で別途見積も�
 | typing shortcut | `\md` (= `\middle|`) | `\middle\|` |
 | 物理 alias | `\rh` (= `\hat\rho`)、`\Ah` (= `\hat A`)、`\TD` (= `T_\tx{D}`) 等 | バラ書き (`\hat\rho`、`\hat A`、`T_\tx{D}`) |
 
-### 確認用 grep (= 「定義がある macro 名なのか?」 をチェック)
+### <a id="preamble-macros-check-grep"></a>確認用 grep (= 「定義がある macro 名なのか?」 をチェック)
 
 ```bash
 # ある token (e.g. \red, \op, \fn, \Tr) の定義をプリアンブルで探す
@@ -192,18 +192,18 @@ grep -nE '\\(newcommand|renewcommand|providecommand|nc|def|NewDocumentCommand|De
 
 `\NewDocumentCommand` / `\nc` (= `\newcommand` の独自 shortcut) / `\providecommand` 形式は `\newcommand` 1 種類だけ grep してると見落とすので、上の widening grep を必ず使う。
 
-### 理由 (rule の hard 化を支える 4 条)
+### <a id="preamble-macros-rationale"></a>理由 (rule の hard 化を支える 4 条)
 
 1. **一斉追従**: macro 定義を refine (e.g. journal 投稿時に色除去 + ハットスタイル変更、フォント差し替え) すると全箇所が一斉追従、生記法は drift する。プリアンブルがあるのに使わないと「定義したが効かない」 dead 領域になる
 2. **Greppability**: `\op{T}` は概念として grep 可能 (= 全 operator 占用箇所が `grep '\\op{'` で引ける)、生 `\hat{T}` は raw notation で grep しても operator かどうか判別不能
 3. **意図の明示**: `\op{T}` は読み手に「operator T」 を伝えるが、`\hat{T}` は単なる hat 記号で物理 / 数学的意味が伝わらない
 4. **共著者・後継者の dx**: 1 人が手で raw を選ぶたびに、共著者の grep が外れる、後継者の refine が壊れる、レビュアーが「なぜここだけ違うの?」 と問う。**プリアンブル定義 = 既に「これを使え」 と全員に向けて宣言されている。raw 書きはその宣言を裏切る行為。**
 
-### リポ固有 fallback
+### <a id="preamble-macros-repo-fallback"></a>リポ固有 fallback
 
 リポ固有の active semantic macro 一覧と例外運用は各リポの `CLAUDE.md §LaTeX rules` 参照 (Layer 2)。Layer 1 の本則は「プリアンブルにあれば必ず使う」、Layer 2 は「このリポで何が active か」 のディレクトリ。
 
-## マクロ alias の forcing function
+## <a id="macro-alias-forcing-function"></a>マクロ alias の forcing function
 
 上の絶対則を「読めば守る」 discipline だけに頼ると、共著者の Claude や別 session で raw 記法が静かに再混入する。**典型的な抜け道**: atom（`\h`・`\bs`・各 subscript alias）が個別には正規 alias なのに、それらを束ねた **compound macro をバイパスして書き下した形**（`\h T_{...}` を専用マクロの代わりに longhand）は、atom-level の grep / linter をすり抜ける。違反は linter が見る一段上で起きる。さらに別 dialect（別の綴り・別 primitive）でまるごと書かれた領域は、denylist に列挙していない綴りなので 0 hit で素通りする。
 
@@ -217,7 +217,7 @@ grep -nE '\\(newcommand|renewcommand|providecommand|nc|def|NewDocumentCommand|De
 
 各 repo の `CLAUDE.md §LaTeX rules` から本節を参照し、session 開始時に `git config core.hooksPath` が `.githooks` を指すか確認 → 空なら install を促す手順を repo 側に書く。
 
-## 新規 macro に fixed framing text を含める前に source-render asymmetry の罠を抑える
+## <a id="fixed-framing-macro"></a>新規 macro に fixed framing text を含める前に source-render asymmetry の罠を抑える
 
 `\newcommand{\foo}[N]{...prefix...#1...suffix...}` 形式で **argument の前後に hardcoded prose を持つ macro** を定義する場合、 source level (= `.tex` の grep / git diff / 自分の音読) では prefix/suffix と argument の grammatical 統合が **見えない**。 短 argument で正しく書けた fixed text が、 長 / 拡張 argument で render 後に文法的 broken する。 これは pdftotext / 視覚 PDF inspection でしか expose 不能な class の bug。
 
@@ -260,7 +260,7 @@ grep -B1 -A2 "your-marker-keyword" /tmp/render.txt
 
 **一般化 (= 同 class の bug が出やすい構造)**: figure caption macro / table header macro / footnote wrapper macro / theorem environment / itemize/enumerate label customization / hyperref anchor macro 等、 「macro 側で fixed prose を author し、 argument で variable 部分のみ受ける」 全ての構造に同警戒。 source 静的解析 (grep / lint) では基本的に expose 不能、 render が唯一の検証手段。
 
-## コンパイラ
+## <a id="compilers"></a>コンパイラ
 
 odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2 段ワークフローは**英語論文では使わない**。
 
@@ -283,14 +283,14 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 
 ⚠️ **`ptex2pdf` / `platex` の exit code は信用しない**: clean な DVI（`Output written on ....dvi`）が出ていても wrapper が非ゼロ exit を返すことがある。確実な build は **`platex → platex → dvipdfmx` を個別実行**し、(a) log を `grep -iE "^! |Overfull"`、(b) `.pdf` が実際に再生成されたか（timestamp / `dvipdfmx` の `... bytes written`）で判定する。exit code 単独を成功 signal にしない。
 
-## Bibliography スタイル
+## <a id="bibliography-style"></a>Bibliography スタイル
 - **JHEP.bst を使う**（個人的好み）。`note` フィールドも表示するバージョンを使用
 - 正本: `~/Claude/claude-config/JHEP.bst`（ver. 2.18 ベース + note 全 entry type で有効化、md5: `bcca8042…`）
 - `setup.sh` が texmf-local にインストール（odakin: 自動、他ユーザー: オプション表示）
 - texmf-local 未設定の場合は正本からリポにコピーして使う
 - `\bibliographystyle{JHEP}` を指定
 
-## biblatex は使わない（JHEP.bst と非互換）
+## <a id="no-biblatex"></a>biblatex は使わない（JHEP.bst と非互換）
 
 JHEP.bst は **legacy BibTeX 用の `.bst`** であり、`biblatex` とは互換性が無い。次のようなコードを見つけたら legacy BibTeX に切り替える:
 
@@ -308,7 +308,7 @@ JHEP.bst は **legacy BibTeX 用の `.bst`** であり、`biblatex` とは互換
 
 biblatex で同等の出力スタイルを使いたければ `biblatex-jheppub` 等の別パッケージが要るが、odakin の運用では legacy BibTeX + JHEP.bst が canonical。
 
-## 日本語著者の BibTeX 処理
+## <a id="japanese-authors-bibtex"></a>日本語著者の BibTeX 処理
 
 `bibtex`（legacy, ASCII 想定）は日本語著者を name parse できず、姓の最初の 1 文字が文字化け（U+FFFD）または "First Last" 誤判定で姓だけ消える。対策は 2 段:
 
@@ -331,7 +331,7 @@ author = {{川上 紳一} and {吉田 英太郎}}
 
 JHEP.bst のような `F.~Last` 形式の bst では、ブレース内が全部 Last 扱いになって「川上 紳一」 のまま出力される。
 
-## refs.bib 整備フロー（実物検証によるハルシネーション防止）
+## <a id="refs-bib-verification"></a>refs.bib 整備フロー（実物検証によるハルシネーション防止）
 
 文献情報（著者・タイトル・巻号ページ）を refs.bib に追加する前に、次の優先順で**実物検証**する:
 
@@ -351,14 +351,14 @@ JHEP.bst のような `F.~Last` 形式の bst では、ブレース内が全部 
 - 同姓著者の別人（例: 「川上 紳一」 と「川上 智一」）
 - 巻通しページと号内ページの混在（学会誌で 2 種の page number が併記される場合）
 
-## JHEP.bst 記法
+## <a id="jhep-bst-notation"></a>JHEP.bst 記法
 JHEP.bst はフィールドから自動リンクを生成するので `\href` 手書き不要（二重リンクの原因）。
 - `doi`: DOI 本体のみ（例: `10.1103/PhysRevA.61.012104`）
 - `eprint`: arXiv ID のみ（例: `quant-ph/9905023`）。`archivePrefix = "arXiv"` と併用
 - `url`: doi や eprint があれば不要
 - `note`: 自由テキスト。自動リンク対象外の補足情報に使う
 
-## hyperref 設定
+## <a id="hyperref-settings"></a>hyperref 設定
 **新規 LaTeX ドキュメントは以下の hyperref 設定を使う:**
 ```latex
 \usepackage[bookmarks=true,bookmarksnumbered=true,setpagesize=false]{hyperref}
@@ -388,7 +388,7 @@ ln -s ~/Claude/claude-config/scripts/pre-commit-bib .git/hooks/pre-commit
 
 **Claude への規律**: `.tex/.bib` を新規作成・編集する前に本 convention を読むこと。 Markdown 流儀で literal `—` を直書きすると LaTeX で正しく render されない (Unicode em-dash は通常の LaTeX font に欠落することが多い)。 hook が機械的に catch するが、 hook 未 install repo では catch されない (= 2026-05-14 個人層 private repo の深い path で発生、 RCA は `claude-config/DESIGN.md`)。
 
-### 旧設計の失敗 (2026-05-14)
+### <a id="pre-commit-hook-old-design-failure"></a>旧設計の失敗 (2026-05-14)
 
 旧 setup.sh Step 6 は「`.tex/.bib` を含む repo にだけ install」 という時点依存検出を採用していた。 問題は 2 つ:
 
@@ -397,7 +397,7 @@ ln -s ~/Claude/claude-config/scripts/pre-commit-bib .git/hooks/pre-commit
 
 → 全 repo install に切替えた (hook 自体が no-op skip するので害無し)。 移行は `setup.sh` を 1 回再実行すれば既存 repo に retroactive install される。
 
-### fix-bib-unicode の codepoint scope (2026-05-15 確認)
+### <a id="fix-bib-unicode-codepoint-scope"></a>fix-bib-unicode の codepoint scope (2026-05-15 確認)
 
 hook (`scripts/fix-bib-unicode.py`) の `UNICODE_MAP` は **U+2013 (en-dash) と U+2014 (em-dash) のみ** dash 系で handle する。 他の「視覚的に似ているが codepoint が違う horizontal-line 系文字」 は scope 外:
 
@@ -426,7 +426,7 @@ math (`$...$` / `$$...$$` / `\(...\)` / `\[...\]` / equation 系環境) 内の e
 
 **Claude 規律**: `.tex/.bib` を書くとき、 「視覚的に em-dash」 のつもりで何の codepoint を打鍵しているか自覚する。 input method (= IME) が打鍵によって違う codepoint を吐くことがあり、 同じ文書内で codepoint 不一致が発生する (= 2026-05-15 個人層 private 日本語 LaTeX project の lecture draft で comments 部 U+2014 / body 部 U+2500 の混在を 1 セッション内で気付かずに作成、 hook が U+2014 のみ変換した結果 visual 一致だが source 不一致に着地)。 IME の確認 + 章執筆 1 個分書いたら `grep -P "[\x{2013}\x{2014}\x{2015}\x{2500}]"` で出現 codepoint を audit する。
 
-### vendored / verbatim LaTeX の opt-out (2026-06-09)
+### <a id="vendored-latex-opt-out"></a>vendored / verbatim LaTeX の opt-out (2026-06-09)
 
 hook は自分が書く LaTeX を正規化する道具なので、 **第三者の vendored ソース (arXiv 論文ソース等) を repo に byte-for-byte で取り込む時は触られると困る** (= 著者名アクセントや dash が勝手に LaTeX エスケープ化され、 upstream と diff したとき spurious 差分になる)。
 
@@ -443,11 +443,11 @@ papers/upstream/ms.tex     -latex-autofix
 - `.gitattributes` は commit に乗るので全 clone (共同編集者含む) に伝播する。
 - ⚠️ opt-out は「自動 fix からの保護」 であって「自分が書く新規 .tex でアクセント直書き OK」 ではない。 vendored 取り込み専用。
 
-### 設計動機 (2026-06-09)
+### <a id="pre-commit-hook-design-motivation"></a>設計動機 (2026-06-09)
 
 hook に除外機構が無く、 ある repo に arXiv の LaTeX ソースを verbatim 取り込んだ時、 初回 commit で bibliography 著者名 (`Krämer`→`Kr{\"a}mer`) と dash が自動正規化され「verbatim」 が崩れた。 public な本 repo から全 repo に配られる hook に opt-out が無いのは設計欠陥、 と判断して `.gitattributes` honor を追加。 改変は意味的には identity-preserving (LaTeX 描画同一) だが、 vendored source は upstream との byte 一致が価値なので除外できるべき。
 
-## 日本語横罫線 (em-dash 系) の書き方 (2026-05-15、 個人層 LaTeX project 経験で導入)
+## <a id="japanese-horizontal-rule"></a>日本語横罫線 (em-dash 系) の書き方 (2026-05-15、 個人層 LaTeX project 経験で導入)
 
 日本語典籍 (= 物理書・数学書・小説・新聞) で多用される「**思考の挿入・補足・話題転換**」 を示す長い横棒 (typographically: `──` or `――`) を LaTeX で書く 3 方式の比較。 視覚的には全て似ているが source / build / hook との相互作用が異なる。
 
@@ -467,12 +467,12 @@ hook に除外機構が無く、 ある repo に arXiv の LaTeX ソースを ve
 
 **過去の事故 + 判断経緯**: 個人層 LaTeX project の lecture draft で当初 (a) U+2500 doubled を使用、 5/15 セッションで Claude が「uplatex + okumacro が日本語横罫線として render する」 と verify なし主張、 user の「これ本当?」 で実物 verify、 (b) `---` に一旦切替するも user が日本語典籍の見た目を考慮し直して (c) `------` に再切替で着地。 okumacro は実際には U+2500 の render に関与しておらず、 単に uplatex default の日本語 font が U+2500 を box-drawing glyph で render するだけだった (= Claude の typographic 主張は実物 verify なしには信用しない、 詳細規律は個人層 work-discipline.md §「Typographic claim」)。
 
-## ドキュメント読み取り
+## <a id="document-reading"></a>ドキュメント読み取り
 
 - **内容理解が目的なら PDF を `pages` パラメータ付きで読む。** tex ソースはトークン消費が大きい（数万トークンになることも）。PDF なら必要なページだけ効率的に読める
 - tex は **数式の編集が必要な場合のみ** 開く。その場合も `offset`/`limit` で必要な範囲に限定する
 
-### 論文を grep/検証する: PDF プログラム抽出より arXiv ソース (2026-06-09)
+### <a id="grep-arxiv-source"></a>論文を grep/検証する: PDF プログラム抽出より arXiv ソース (2026-06-09)
 
 上の「PDF を `pages` で読む」は **Read tool の視覚読解**（page を rendered で見るので数式も正確）。一方、**論文を grep / 数値裏取り / 反復参照** したくて `fitz`(PyMuPDF) や `pymupdf4llm` で**プログラム的にテキスト抽出**する場合は別問題で、数式忠実度が崩れる:
 
@@ -481,21 +481,21 @@ hook に除外機構が無く、 ある repo に arXiv の LaTeX ソースを ve
 
 ⇒ **数式が命の物理論文を機械的に扱うなら arXiv の LaTeX ソース (.tex) を取る**（math は LaTeX のまま完全、変換を挟むほど壊れる）。繰り返し参照する論文は .tex を repo に vendoring する手もある（その際 `-latex-autofix` で auto-fix から除外 = 上記「vendored / verbatim LaTeX の opt-out」）。図バイナリ・class file は除外し PDF/Dropbox 等に。worked example: 2026-06-09 Planck 2018 読書会で arXiv ソースを採用。
 
-## チャット本文での位置参照
+## <a id="chat-position-reference"></a>チャット本文での位置参照
 
 - **ページ番号・セクション名・式番号で位置を示す。tex の行番号は使わない。** 行番号はツールが tex を読むときの内部座標で、ユーザー側 (PDF / TeXShop) には不可視。ユーザーがナビゲートできない参照は無効
 - 行番号は Edit 等の tool 引数として内部で使うだけに留める
 - ページ番号・**式番号・節番号**は `.aux` の `\newlabel{<label>}{{<番号>}{<page>}...}` の**第 1 フィールド (= 番号)** から引ける (= `zref-clever` を使う note は `\zref@newlabel{<label>}{\default{<番号>}...}` 行も同値)。最新ビルドの aux が無ければ PDF を読む
 - **共著者の未 compile な `.tex` から番号を引く**には、 preamble の driver で 1 パス compile して aux を生成する。日本語 note (`ascmac` / `[dvipdfmx]` graphicx 等) は `uplatex -output-directory=<tmp> -interaction=nonstopmode <file>.tex` で通す (= pdflatex では通らない)。出力を tmp に逃がせば元の clone / Overleaf 入れ子を汚さない
 
-## チャットで LaTeX / 数式を渡すときは code block で（コピペ保全）
+## <a id="latex-in-chat-codeblock"></a>チャットで LaTeX / 数式を渡すときは code block で（コピペ保全）
 
 ユーザーがコピペして使う LaTeX / 数式片を chat 本文に出すときは **必ず code block（fenced or inline backtick）に入れる**。 markdown は code span の**外**では `_` を強調（italic）マーカーとして消費するため、 `x_{\mu}` のような下付き満載の LaTeX を地の文に書くと **`_` が剥がれてコピペが壊れる**（`^` も環境次第）。 code span 内は markdown 非適用で `_` `^` `\` `{}` が literal 保持される。
 
 - **コピペ用**の LaTeX / コード / `_` を含むパス → **code block**（保全優先）
 - chat 上で**読ませるだけ**の数式（コピペ不要）は別軸 — 環境によって `$...$` が未レンダーなので Unicode 添字・上付きで書く
 
-## .gitignore
+## <a id="gitignore"></a>.gitignore
 **LaTeX 生成 PDF はリポに含める（ignore しない）。** 共同編集者がコンパイル環境を持っていない場合でも最新の PDF を参照できるようにするため。`*.pdf` を ignore する場合は `!<main>.pdf` で除外対象から外す。
 
 共有リポでは共同編集者のために .gitignore に LaTeX 中間ファイルのパターンを明記する（`~/.gitignore_global` に頼らない）:
@@ -503,7 +503,7 @@ hook に除外機構が無く、 ある repo に arXiv の LaTeX ソースを ve
 *.aux *.bbl *.blg *.log *.out *.toc *.fdb_latexmk *.fls *.synctex.gz *.synctex(busy) *.dvi
 ```
 
-## .gitattributes（改行コード正規化）
+## <a id="gitattributes-line-endings"></a>.gitattributes（改行コード正規化）
 
 以下のケースでは LaTeX リポに `.gitattributes` を置くことを推奨:
 - Dropbox / iCloud 等のクラウド同期配下で運用するリポ（同期中に改行コードが書き換わることがある）
@@ -524,7 +524,7 @@ hook に除外機構が無く、 ある repo に arXiv の LaTeX ソースを ve
 
 ---
 
-## 日本語長 title の文節境界改行 (title_wrap pattern)
+## <a id="japanese-title-wrap"></a>日本語長 title の文節境界改行 (title_wrap pattern)
 
 ポスター・slide・cover page 等の **display title** で日本語 long title (= 15 文字以上) を扱う時、 LaTeX の auto-wrap は機械的に「N 文字/行」 で改行するため、 助詞「に」 「の」 や単語「保存量」 の途中で改行されて editorial 不自然になる。
 
@@ -533,7 +533,7 @@ hook に除外機構が無く、 ある repo に arXiv の LaTeX ソースを ve
 - auto-wrap (= 32pt × text_width 100mm): 「一般相対性理論に / おける二つの保存 / 量:エネルギーと重 / 力電荷」 (= 4 行、 助詞・単語途中改行)
 - title_wrap で手動指定: 「一般相対性理論における / 二つの保存量: / エネルギーと重力電荷」 (= 3 行、 文節境界)
 
-### How to apply
+### <a id="title-wrap-how-to-apply"></a>How to apply
 
 1. yaml の data file に `title_wrap.ja` 配列 (= 行 list) を optional field で許可:
    ```yaml
@@ -554,11 +554,11 @@ hook に除外機構が無く、 ある repo に arXiv の LaTeX ソースを ve
    - 32pt: 約 9 chars/line
    - 25pt: 約 11 chars/line
 
-### When to use
+### <a id="title-wrap-when-to-use"></a>When to use
 
 short title (= 13 chars 以下) は auto-wrap で OK、 title_wrap 不要。 long title で auto-wrap 結果が editorial 不自然なときのみ **opt-in** で使う (= 全 title に title_wrap を強制すると過剰運用、 short title での手動指定は冗長)。
 
-### font override pattern (= long content への対応)
+### <a id="title-wrap-font-override"></a>font override pattern (= long content への対応)
 
 title だけでなく abstract 等の長 content も同様の課題が出る (= 2 段落 abstract が default 10pt で footer 領域を侵食、 等)。 解: yaml に `font.{title,abstract}.{size,leading}` override block を許可、 default は template の `\providecommand` で:
 
@@ -582,7 +582,7 @@ template 側:
 
 これで content 長に応じた個別 case adjustment を yaml で完結 (= テンプレ本体は触らない、 各 case は yaml の override で対応)。
 
-### paragraph break の保持 (= 段落区切り)
+### <a id="title-wrap-paragraph-break"></a>paragraph break の保持 (= 段落区切り)
 
 abstract 等の長 content で **段落区切り**を保ちたい場合: yaml の block scalar `|` の空行は LaTeX `\providecommand{...}{<value>}` 内では消える (= 単純 space 化される) ので、 build script で `\n\n` → `\par ` 変換する:
 
@@ -592,7 +592,7 @@ abstract_latex = re.sub(r"\n\s*\n", r"\\par ", abstract_yaml)
 
 PDF 上で段落区切りが visible (= LaTeX default `\parskip` で 1 行分の vertical gap)。 強調したいなら template 側で `\setlength{\parskip}{4pt}` 等。
 
-### Why
+### <a id="title-wrap-why"></a>Why
 
 editorial typography で「機械改行を許容しない」 のは標準。 magazine cover / book cover / 学会ポスター等の display title は **文節境界改行**が defacto standard で、 auto-wrap 結果は visual quality を下げる。 yaml で行配列を持つ pattern は (a) wrap が text 編集の一部として扱える (b) display と web (= wrap なし) で同じ source から両方 generate できる、 2 つの利点がある。
 
@@ -606,7 +606,7 @@ LaTeX edit 後、 `pdflatex` が完走しても visual の overflow / misalignme
 3. `/tmp/check.png` を Read tool で開いて **視覚確認** (= 「compile OK」 だけで完了としない)
 4. `Overfull \hbox (N pt too wide)` warning が出たら必ず該当 page を render して overflow が visual に問題ないか確認
 
-### 典型 trap (= 2026-05-18 EC erratum note 編集で連続再発)
+### <a id="pdf-visual-verification-traps"></a>典型 trap (= 2026-05-18 EC erratum note 編集で連続再発)
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -618,7 +618,7 @@ LaTeX edit 後、 `pdflatex` が完走しても visual の overflow / misalignme
 | table の comment 列が page 右を超えて truncate | column が自然幅で expand、 long text で overflow | `p{width}` で wrap 化 + `\setlength{\tabcolsep}{4pt}` で間隔調整 + 必要なら `\footnotesize` |
 | tikzpicture 全体が page 右に偏る | tikz の `\node[align=center]` の width が長い text で右に extend、 bounding box が asymmetric | text 位置を `align=center` の代わりに固定 coord で配置 + node 間 spacing を測って overlap 避ける |
 
-### Why
+### <a id="pdf-visual-verification-why"></a>Why
 
 `pdflatex` の exit code 0 + `! ` error 不在は **build success** の signal であって **visual success** の signal ではない。 `Overfull \hbox` は warning として log に出るだけで build を止めない (= 文字が page 外に hanging するだけ)。 PDF を visual で見ない限り「✓ IS RIGHT (phy...」 で truncate されている等の事故は気付けない。 PyMuPDF (`fitz`) は poppler 不要で macOS default で使えるので、 reflex として安価。
 
@@ -640,11 +640,11 @@ LaTeX edit 後、 `pdflatex` が完走しても visual の overflow / misalignme
 
 ---
 
-## 編集向け infographic / poster / 1 枚 figure の design 規約
+## <a id="infographic-design"></a>編集向け infographic / poster / 1 枚 figure の design 規約
 
 scientific infographic (= A4 / A3 1 枚もの) や poster を LaTeX で制作するときの design choice。 TikZ / pgfplots を多用する制作では本 file の上記 LaTeX 一般規約 + `conventions/tikz-pgfplots.md` (TikZ/pgfplots gotchas) を併読。
 
-### 印刷前提なら light theme + cream paper
+### <a id="infographic-light-theme-print"></a>印刷前提なら light theme + cream paper
 
 dark theme (= 黒背景 + 明色 text) は screen で映えるが **印刷時 toner / inkjet を大量消費**する。 1 枚 infographic を「印刷物として家に貼る / 配布する」 用途なら light theme 一択。 cream paper (`#FBF8F2` 系) は pure white より editorial で目に優しい。
 
@@ -658,7 +658,7 @@ dark theme (= 黒背景 + 明色 text) は screen で映えるが **印刷時 to
 \AddToShipoutPictureBG*{\AtPageLowerLeft{\color{bgpage}\rule{\paperwidth}{\paperheight}}}
 ```
 
-### Libertinus フォントファミリー (= 数式統一の選択肢)
+### <a id="infographic-libertinus-font"></a>Libertinus フォントファミリー (= 数式統一の選択肢)
 
 scientific infographic で Latin (= 英文) + math + Japanese を共存させる場合、 `TeX Gyre Pagella` 系より `Libertinus` 系の方が refined。 4 family を 1 set で揃えられる:
 
@@ -678,7 +678,7 @@ scientific infographic で Latin (= 英文) + math + Japanese を共存させる
 
 **`Numbers=Lining` (vs `OldStyle`)**: Libertinus の数字は default で OldStyle (= 「123」 が baseline からはみ出す古風な numerals) になりがち。 印刷 / 図表で数値を扱うなら `Lining` (= 現代的、 同高 numerals) に明示。 `Numbers=OldStyle` を意図的に選ぶのは literary 書籍用途のみ。
 
-### macOS Hiragino と Libertinus の組合せ
+### <a id="infographic-hiragino-libertinus"></a>macOS Hiragino と Libertinus の組合せ
 
 ```latex
 \setmainjfont{HiraMinProN-W3}[BoldFont=HiraMinProN-W6]
@@ -687,7 +687,7 @@ scientific infographic で Latin (= 英文) + math + Japanese を共存させる
 
 PostScript 名 (= `HiraMinProN-W3` 等) が必要。 display name (= `Hiragino Mincho ProN W3`) では fontspec が見つけられない。 詳細は [`tikz-pgfplots.md` hiragino-postscript-name](tikz-pgfplots.md#hiragino-postscript-name)。
 
-### 数式 + 日本語を mix する align 環境
+### <a id="infographic-math-japanese-align"></a>数式 + 日本語を mix する align 環境
 
 infographic / poster で「label / 関係記号 / 値」 を縦に揃えたいとき、 個別 TikZ node × 3 で配置するより `array{r@{\;}c@{\;}l}` 1 個に集約する方が baseline 整列が math engine 任せで精密:
 
@@ -714,7 +714,7 @@ infographic / poster で「label / 関係記号 / 値」 を縦に揃えたい�
 
 luatexja は `$過去$` (= 裸の kanji) も accept するが、 標準 idiom は `\text{過去}` (= 移植性 / 明示性で勝る)。
 
-### print fidelity を A4 強制したい場合
+### <a id="infographic-print-a4"></a>print fidelity を A4 強制したい場合
 
 ```latex
 \documentclass[10pt]{article}
