@@ -48,6 +48,21 @@ Client-side rendering の SPA (= JS が描画してから中身が入るサイ�
 
 CSR SPA のニュース/結果ページの URL を多数検証する場面 (例: fifa.com の試合レポート URL を 40 本) で、`fetch` は実在 URL も故意の偽 URL も同一の空シェル (200・~4.5KB・本文/og:title なし) を返し status からは判別不能だった。実ブラウザで navigate すると、実在ページは本文数千字 + 該当見出しが描画され、不在ページは本文 ~140 字の無関係 fallback に落ちる明確な差が出た。**「200 が返った = ページがある」 と短絡せず描画後 DOM を読む**ことで全件を確定できた。
 
+## <a id="cookie-replay-oauth-spa"></a>Browser cookie replay は OAuth-token SPA を認証しない (= member 限定クラウドフォルダは無人 upload 不可)
+
+Chromium (Brave/Chrome) の cookie DB を復号して session cookie を replay すれば authenticated アクセスできる — これは **cookie-session 方式のサイト (伝統的サーバーセッション、 Slack の `d` cookie 等) にのみ成立**する。 **OAuth/token 方式の modern SPA (Box enterprise・多くの SaaS) では成立しない**: 認証本体は login 後に fetch される **in-memory の access token** で、 cookie DB には persist されないため、 cookie を全部そろえて replay しても API 呼び出しが 401 になる。
+
+### How to apply
+
+- **クラウドフォルダの共有 link の種別を最初に見分ける**: 公開共有 link (Box `/s/…`、 Drive の「リンクを知っている全員」) は anonymous / cookie 経路が効くことがある。 **member 限定フォルダ (Box `/f/{folder-id}`、 login required) は無人 upload の経路が構造的に無い** (= shared-item API は `sharedNotFound` 404、 cookie replay は session API が 401)
+- member 限定フォルダへの提出を自動化しようとする前に、 **cookie replay が効くか 1 回 spike** して決める: session cookie を復号 → `common/session` 等の authenticated endpoint を叩く → 401 なら cookie 経路は死んでいると確定し、 深追いしない
+- 残る automation 経路は **live authenticated browser を driving する** (Claude in Chrome MCP で file input に `file_upload`) のみ。 これは semi-manual (browser を開いた状態が要る) + SPA UI 変更に脆い。 payoff (= 5 秒の drag & drop) と天秤にかけ、 大抵は **user 手動 upload を正規手順**にするのが妥当
+- API 直叩きの正道は OAuth App 登録だが、 **他組織 tenant (省庁・大学の Box 等) では tenant admin 承認が要る** = 現実的でないことが多い
+
+### 典型パターン
+
+省庁運営の Box enterprise (member 限定 `/f/` フォルダ) への書類提出を自動化しようとした場面。 Brave の `Brave Safe Storage` 鍵で box.com cookie (`z` session ほか) を復号・replay したが、 `common/session` が **401**、 `shared-item?sharedName=…` が **404 sharedNotFound** で、 cookie 経路は認証を carry しないと確定した (= `z` は httponly session cookie だが OAuth access token を含まない)。 Claude in Chrome も未接続だったため無人経路は不在と結論し、 user 手動 upload を正規手順として維持した。 **member 限定クラウドフォルダは「cookie を取れれば自動化できる」 という直感が成立しない**ことを最初の spike で確定させるのが、 深追いで時間を溶かさない鍵。
+
 ## Multi-national service の global と local entity は別 product line
 
 Multi-national の regulated service (証券 broker / banking / payment / SaaS の地域版等) で「Service X が feature Y を提供しているか」 を user 居住国の文脈で確認するとき、**global parent の product page と local entity の product page を別々に検証する**。entity-level で product line が大きく異なり、global の宣伝に local が含まれていない sub-feature が頻繁にある。

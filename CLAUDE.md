@@ -29,6 +29,7 @@ claude-config/
 │   ├── latex.md            # LaTeX 固有規約（物理リポで参照）
 │   ├── tikz-pgfplots.md    # TikZ/pgfplots 固有 gotchas（infographic / poster / 1 枚 figure 制作で必読、 latex.md と併読）
 │   ├── mcp.md              # MCP 固有規約（MCP 使用時に参照）
+│   ├── slack-mcp.md        # Slack workspace を user session token (xoxc/xoxd) で wire する規約（= admin 承認不要で一般 member として read+post、korotovsky/slack-mcp-server + wrapper で secret を config 外に逃がす + token 抽出手順〔Console `copy()` で xoxc / Application タブで xoxd cookie〕+ self-XSS「allow pasting」gate + clipboard 上書き/file名取り違え trap + post は SLACK_MCP_ADD_MESSAGE_TOOL=true で有効化・file upload tool は無く画像は user 手動 + reauth ~30日 + registration 介さず wrapper 直接 JSON-RPC invoke で当 session 使用。generic 機構のみ、workspace 固有値は個人層側）
 │   ├── research-email.md   # 研究メール分類・記録規約
 │   ├── gmail-sending.md    # Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕)
 │   ├── japanese-email-honorifics.md # 日本語メールの敬称規約 (内 vs 外、身内に「様」「皆様」を使わない)
@@ -58,7 +59,7 @@ claude-config/
 │   ├── secret-handoff.md   # Secret を clipboard 経由で安全に運ぶ手順 (chat に literal を貼らせない原則と clipboard 1 個競合の回避)
 │   ├── clipboard-cleaner.md # PDF コピーの段落内改行・RTF 書式の後始末 (= ⌃⌥⌘V hotkey 〔貼り付け先で押す = 整形+即貼り付け〕 / CLI / ブラウザ版の 3 入口、全て明示発火・常駐 poll なし〔誤爆 + secret-handoff の clipboard 単一資源原則と衝突するため daemon 不採用〕、整形ロジック正本は scripts/clipboard-cleaner.py)
 │   ├── ui-toggle-convention.md # UI panel 内 toggle group の default 側統一ルール (slider 位置 + bright label を panel scope で揃える)
-│   ├── web-tools.md        # WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block)
+│   ├── web-tools.md        # WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block)
 │   ├── expensive-intermediate-artifacts.md # `-output /tmp/...` reflex 防止 (= OCR / ML / 数値計算で 5 分以上要する artifact をリポ内永続化、 hooks/expensive-tmp-guard.sh で機械的検出) + snapshot artifact の命名規約 (= 日付〔同日複数なら時分〕+ 入力状態 ID 〔git 由来は commit range〕 を filename に焼く、 snapshot vs view の名前区別、 #snapshot-artifact-naming)
 │   ├── data-pipeline-automation.md # データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script) を bundle
 │   ├── github-security-automation.md # 全 repo 横断の Dependabot/CodeQL/Semgrep/auto-merge baseline + Free plan silent rejection + Dependabot PR tier-based merge discipline + ESM migration backwards-compatible normalizer + `gh` CLI gotcha (= users/X/repos public-only / mergeStateStatus UNKNOWN retry) + bash set -e + heredoc + $() interaction fix + monorepo dependabot.yml directories+groups + cascading PR convergence loop
