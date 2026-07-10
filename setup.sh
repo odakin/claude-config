@@ -270,6 +270,8 @@ install_hooks() {
     for HOOK in "$HOOKS_SRC"/*.sh "$HOOKS_SRC"/*.py; do
         [ -f "$HOOK" ] || continue
         HOOK_NAME="$(basename "$HOOK")"
+        # .test.sh は開発用 self-test であり配信対象外 (本番 ~/.claude/hooks/ に置かない)
+        case "$HOOK_NAME" in *.test.sh) continue ;; esac
         LINK="$HOOKS_DST/$HOOK_NAME"
         if [ "$IS_WINDOWS" = true ]; then
             # Windows: cp で同期（git pull 後の自動更新は post-merge hook が担当）
@@ -696,6 +698,8 @@ if [ -d "$HOOKS_SRC" ] && [ -d "$HOOKS_DST" ]; then
     for HOOK in "$HOOKS_SRC"/*.sh "$HOOKS_SRC"/*.py; do
         [ -f "$HOOK" ] || continue
         HOOK_NAME="$(basename "$HOOK")"
+        # .test.sh は開発用 self-test であり配信対象外 (本番 ~/.claude/hooks/ に置かない)
+        case "$HOOK_NAME" in *.test.sh) continue ;; esac
         DEST="$HOOKS_DST/$HOOK_NAME"
         # symlink でなければコピー（Windows の cp ファイルを更新）
         if [ -f "$DEST" ] && [ ! -L "$DEST" ]; then

@@ -49,6 +49,9 @@ fi
 registered_files=()
 while IFS= read -r cmd; do
     [ -z "$cmd" ] && continue
+    # command は "path [args...]" 形式がありうる (例: session-commit-nudge.sh track)
+    # → 第 1 token だけを file path として扱う (この repo の hook path は space を含まない前提)
+    cmd="${cmd%% *}"
     # ~/... を $HOME に expand
     expanded="${cmd/#\~/$HOME}"
     registered_files+=("$expanded")
@@ -69,6 +72,14 @@ shopt -s nullglob 2>/dev/null || true
 for hook in "$HOOKS_DIR"/*.sh "$HOOKS_DIR"/*.py; do
     [ ! -e "$hook" ] && continue
     name=$(basename "$hook")
+
+    # .test.sh は開発用 self-test で配信対象外 (setup.sh も除外) — 「未登録」 finding に数えない。
+    # 過去の setup.sh が配った残置 symlink は掃除対象として別途 flag する
+    case "$name" in
+        *.test.sh)
+            issues+=("🧹 $name: .test.sh が本番 hooks dir に残置 (= 旧 setup.sh の配信残骸、 rm 可)")
+            continue ;;
+    esac
 
     # (a) symlink target 健全性
     if [ -L "$hook" ]; then
