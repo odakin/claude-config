@@ -4,7 +4,7 @@
 # CI (.github/workflows/checks.yml) は全 selftest を回すため全部 install する。
 
 # PDF 系 (pdf_form_fill.py / close-pdf-form-boxes.py / check-form-clipping.py / pptx-to-pdf.sh の verify)
-PyMuPDF>=1.23
+PyMuPDF>=1.28.0
 
 # xlsx 系 (diff-form-xlsx.py / scan-form-instructions.py / check-xlsx-integrity.py / check-form-clipping.py)
 openpyxl>=3.1
