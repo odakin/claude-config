@@ -52,6 +52,18 @@ cd claude-config && ./setup.sh
 
 Windows（MSYS/Cygwin）では symlink の代わりにファイルコピーを使い、`post-merge` hook が自動同期する。
 
+## 規約だけ導入する (最小導入)
+
+フル setup が要らない場合、最小導入は clone 1 回 + symlink 1 本。これだけで Claude Code が共通規約を拾い、マシンの他の状態は一切変わらない:
+
+```bash
+mkdir -p ~/Claude && cd ~/Claude
+gh repo clone <your-username>/claude-config   # fork でも原本の git clone でも可
+ln -s claude-config/CONVENTIONS.md CONVENTIONS.md
+```
+
+それ以外 (hooks・パーミッション・全リポ clone・launchd エージェント) は `./setup.sh` 経由の opt-in のまま。全リポ clone の step 自体も対話実行では確認 prompt が出る (既定 = No)。`./setup.sh --no-clone` で丸ごと skip もできる。
+
 ## どこに何があるか
 
 - **[CONVENTIONS.md](CONVENTIONS.md)** — 規約本体。何をどこに書くか、安全ガードレール、push プロトコル、情報書き先の判別表。

@@ -52,6 +52,18 @@ cd claude-config && ./setup.sh
 
 On Windows (MSYS/Cygwin) symlinks are replaced with file copies and the `post-merge` hook keeps them in sync.
 
+## Adopt just the conventions
+
+Don't want the full setup? The minimal adoption is one clone and one symlink — Claude Code then picks up the shared rule set and nothing else changes on your machine:
+
+```bash
+mkdir -p ~/Claude && cd ~/Claude
+gh repo clone <your-username>/claude-config   # a fork, or git clone the original
+ln -s claude-config/CONVENTIONS.md CONVENTIONS.md
+```
+
+Everything else (hooks, permissions, mass repo cloning, launchd agents) stays opt-in via `./setup.sh`. The repo-cloning step itself asks for confirmation on interactive runs (default: No) and can be skipped outright with `./setup.sh --no-clone`.
+
 ## What's where
 
 - **[CONVENTIONS.md](CONVENTIONS.md)** — the rule set. Where to write what, safety guardrails, push protocol, information-destination table.

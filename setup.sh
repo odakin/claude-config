@@ -35,11 +35,29 @@
 # 使い方:
 #   mkdir -p <base> && cd <base>
 #   gh repo clone <your-username>/claude-config
-#   cd claude-config && ./setup.sh
+#   cd claude-config && ./setup.sh [--no-clone]
+#
+#   --no-clone : Step 5 (全リポ clone) を skip する。対話実行では flag が無くても
+#                clone 前に確認 prompt が出る (既定 = No)。非対話 (pipe / cron) は
+#                従来どおり自動 clone (= 既存ユーザーの再走の後方互換)。
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAUDE_DIR="$(dirname "$SCRIPT_DIR")"
 REPO_DIRNAME="$(basename "$SCRIPT_DIR")"
+
+# --- 引数 parse ---
+NO_CLONE=0
+for _arg in "$@"; do
+    case "$_arg" in
+        --no-clone) NO_CLONE=1 ;;
+        -h|--help)
+            echo "Usage: ./setup.sh [--no-clone]"
+            echo "  --no-clone   Skip Step 5 (cloning all your GitHub repos into $CLAUDE_DIR/)."
+            echo "               Interactive runs also confirm before cloning (default: No)."
+            exit 0 ;;
+        *) echo "WARNING: unknown option: $_arg (ignored)" ;;
+    esac
+done
 
 # --- GitHub ユーザー名を認証情報から自動検出（Step 4 で使用）---
 GH_USER=$(gh api user --jq '.login' 2>/dev/null)
@@ -696,7 +714,21 @@ fi
 echo ""
 echo "=== Step 5: Cloning repos ==="
 
-if [ -z "$GH_USER" ]; then
+# 対話実行では clone 前に確認する (既定 = No)。 非対話 stdin (pipe / cron / CI) は
+# 従来どおり自動 clone = 既存ユーザーの再走 (非対話経路) の後方互換を維持する。
+confirm_clone() {
+    [ -t 0 ] || return 0
+    printf '  Clone ALL GitHub repos of %s into %s/? [y/N] ' "$GH_USER" "$CLAUDE_DIR"
+    read -r _clone_reply
+    case "$_clone_reply" in
+        [yY]*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+if [ "$NO_CLONE" = 1 ]; then
+    echo "  SKIPPED: --no-clone."
+elif [ -z "$GH_USER" ]; then
     echo "  SKIPPED: GitHub user not detected. Run 'gh auth login' and re-run setup.sh."
 elif ! command -v gh &> /dev/null; then
     echo "  SKIPPED: gh (GitHub CLI) is not installed."
@@ -707,6 +739,10 @@ elif ! command -v gh &> /dev/null; then
     fi
 elif ! gh auth status &> /dev/null; then
     echo "  SKIPPED: gh is not authenticated. Run: gh auth login"
+elif ! confirm_clone; then
+    echo "  SKIPPED: declined at prompt (interactive default is No)."
+    echo "  To clone everything later, re-run ./setup.sh and answer y."
+    echo "  To silence this prompt, run ./setup.sh --no-clone."
 else
     echo "  User: $GH_USER"
 
