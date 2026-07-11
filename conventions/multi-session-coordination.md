@@ -403,9 +403,39 @@ orientation 直後の silent stall (session は running のまま・活動 times
 
 ---
 
+## <a id="delegate-model-routing"></a>10. delegate の model 選択と routing — main と別 model で走らせる
+
+§7-8 は hand-off の運び方 (token / 返送 / worktree-vs-local)、 §9 は spec を書く時の task サイズだが、 それらと**直交**する軸として、 **delegate (Agent tool / headless CLI / spawn_task 別 session) を main session と別 model で走らせる**選択がある。 main を高価 or 最新の model に置いたまま、 機械的な sweep / rename / doc 編集 / verification-gate 回し等を安価 or 安定な model へ振ると、 (a) main の premium-model budget を温存でき、 (b) 特定 model 版に既知 bug がある場合 ([`tool-call-robustness.md`](tool-call-robustness.md) 参照) それを避けられる。 ただし **version 粒度で pin できる経路は限られる**ので、 選択の瞬間に本節を思い出す必要がある。
+
+### 3 経路の比較 (2026-07-12 実測)
+
+| 経路 | model 指定粒度 | pin 精度 | いつ使う |
+|---|---|---|---|
+| **(a) Agent per-call `model` 引数** | **alias のみ** (`sonnet`/`opus`/`haiku`/`fable`) | ✗ **alias は最新解決** = `opus` → `claude-opus-4-8[1m]` (実測)、 特定 version への固定は構造的に不能 | main から subagent を投げるだけ・model 保証不要な bg 調査 |
+| **(b) custom agent 定義** (`.claude/agents/*.md` の frontmatter `model:` + `effort:`) | **full model ID** (例: `claude-opus-4-7[1m]`)+`effort:` | ○ pin 可、 durable | delegate の既定を version 単位で固定・毎回 CLI 引数を書きたくない (⚠️ registry は session 開始時 load = mid-session 追加した定義は次 session から) |
+| **(c) headless CLI** (`claude --model <full-id> --effort <level> -p …`) | **full model ID** + effort | ○ pin 可、 起動時即時反映 | scheduled / cron / launchd から model を明示的に pin して走らせる・(b) との組合せ可 |
+
+- ⚠️ **`spawn_task` (chip → 別 session) には model 引数が無い** (= chip はアプリ既定 model で開く)。 起票側から見て model は成り行きになる。 chip を通した独立 session に version pin したい needs が生じたら、 現状は upstream 依存 (= harness 側で model 引数を追加してもらう) しかない。
+- 既知 bug のある最新 model を alias が掴む事故は (a) では構造的に避けられない (= alias は最新解決)。 bug 回避目的の delegate は必ず (b) / (c) で pin する。
+
+### 使い分け litmus
+
+- **model 保証 + 非 block + fresh context で足りる** → (b) の pinned custom agent、 または (c) の headless CLI で pin。
+- **真の並列 UI session が要る** (= 人が途中で対話する / user が独立に steer する) → `spawn_task` (§7)。 model 保証は諦める (= アプリ既定で開く) — その代わり真の並列と live steer が得られる。
+
+### 注意
+
+- **(a) の alias 解決 gotcha が最大の見落とし**: 「`opus` を指定したから 4.7 か 4.8 のどちらか安定な方が来る」 は幻想で、 alias は常に**最新**を返す。 特定 version で走らせたいなら (b) / (c)。
+- **(b) の frontmatter `model:` には alias でなく full ID** (= 例 `claude-opus-4-7[1m]`、 `[1m]` suffix 込み) を書く。 alias を書くと (a) と同じ「最新解決」 の穴が空く。 `effort:` も frontmatter で pin する (`low`/`medium`/`high`/`xhigh`/`max`)。
+- **(b) の registry load timing**: `.claude/agents/foo.md` を mid-session に追加しても当 session からは呼べず (`Agent type 'foo' not found`)、 次 session から効く。 起票時に「あるはず」 と assume して呼ぶ前に、 定義が session 開始前に配置済みかを確認する。
+- **(c) の headless run は auth を消費する**アカウントで CLI が login 済みでなければならない (= `~/.claude.json` の login と launchd job の`claude` 実体が同 account を指す)。 cron / launchd に組込むときの auth 経路の正本は [`multi-machine-state.md`](multi-machine-state.md#account-host-failover)。
+
+---
+
 ## 関連
 
 - worker task の切り方 (sizing 述語 + orientation 前払い) = spec author 宛の規律: §9 (output 側の死機構は [`output-cap-death-loop.md`](output-cap-death-loop.md))
+- delegate を main と別 model で走らせる選択 (alias 不能 / custom agent / headless CLI): §10 (bug 回避のみを目的にした model 切替は [`tool-call-robustness.md`](tool-call-robustness.md))
 - worktree (隔離) か ローカルか = 並列変更の隔離 vs live 反映のトレードオフ: §8
 - collaborator (= 他 user) との Git race / branching: [`shared-repo.md`](shared-repo.md)
 - 4 軸 sweep + sweep goal alignment (= 「✓ pass」 closure を禁じる規律): [`CONVENTIONS.md` §3](../CONVENTIONS.md)
