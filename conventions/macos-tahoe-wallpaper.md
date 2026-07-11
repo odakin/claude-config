@@ -8,7 +8,7 @@ summary: macOS Tahoe (26.5.1) で NSWorkspace.setDesktopImageURL と osascript "
 
 macOS 26 (Tahoe) で **wallpaper 変更を script / CLI / API から自動化する** ときの網羅ガイド。 2026-07-11 の半日探索で得た知見の SoT。 layer 3 の rotation 実装 (例: `wallpaper-rotation.md` 等) はこの SoT を参照して個別環境の paths だけ焼き込む形にする。
 
-⚠️ **前提**: 本 doc の全知見は **macOS 26.5.1** での実測。 macOS の update で挙動が変わる可能性ある。 2026-10 頃の 26.5.2+ が出たら再検証すべき。
+⚠️ **前提**: 本 doc の全知見は **macOS 26.5.1** での実測、 **26.5.2 (Build 25F84) でも 5 罠すべて同一挙動を再検証済** (2026-07-11、 osascript silent-fail 継続 / WallpaperImageExtension `CFBundleVersion=245.4.8` 変更なし / daemon-mode recipe そのまま動作)。 Apple は wallpaper subsystem を point release で touch していない = 完成 recipe は 26.5.x 系列で有効。 次 major update (27.x?) が出たら再検証すべき。
 
 ## <a id="tldr"></a>TL;DR
 
