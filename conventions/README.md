@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 72 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 73 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -112,6 +112,8 @@ layer 1 (public) のドメイン固有規約 72 file をカテゴリ別に列挙
   - macOS で「直接入力=非 US 配列、IME 中=US 配列」を共存させる gotchas (= IME のキー変換は MRU ASCII-capable layout 従属 / TISSetInputMethodKeyboardLayoutOverride は外部から効かない / 無効化 layout は MRU 候補外 / CGEvent 書き換え 2 経路は IME バイパス・mozc の Option=ALT 扱いで不成立 / 成立解 = IME 切替検知 + US layout 動的有効化+瞬間選択〔権限不要〕 / CLI バイナリの tap は .app bundle 化で TCC 安定)
 - **[macos-post-update-slowdown.md](macos-post-update-slowdown.md)** — macOS update 直後に体感が重いとき + 定期メンテ棚卸し
   - macOS メジャー/マイナー update 後の体感重さ playbook (= mdutil -a -i off は corespotlightd を止めない / Apple Intelligence が suggestd を XPC で respawn = 根治は GUI で AI OFF / 4K 動画壁紙で WallpaperImageExtension が常時 30-50% + com.apple.wallpaper.agent cache が 100 GB+ に育つ既知バグ / softwareupdated 背景 DL / 3rd-party AV アンインストール後の launch plist 残置 / AppTranslocation zombie plist / macOS 15+ の containermanagerd が sudo でも ~/Library/Containers/* を守る / 診断 30 秒定形 + disk cleanup target list + 再起動が commit point)
+- **[macos-tahoe-wallpaper.md](macos-tahoe-wallpaper.md)** — macOS Tahoe (26.x) で wallpaper 変更を script/CLI/API から自動化しようとする前 + 起きてる wallpaper rotation が視覚的に効いてないと感じたとき
+  - macOS Tahoe (26.5.1) で NSWorkspace.setDesktopImageURL と osascript "tell every desktop to set picture" が silent-fail する (rc=0 + Index.plist は更新するが display に届かない、 CocoaKit API 自体が dead)。 desktoppr / sindresorhus/wallpaper / Swift 直接 call も同一症状。 真の書換え path = ~/Library/Application Support/com.apple.wallpaper/Store/Index.plist を Python で再帰 walker により全 Desktop.Content.Choices 上書き (state は SystemDefault / Spaces × Displays / 個別 Displays の 8 箇所に分散、 1 箇所書きは respawn 時 self-repair)、 + killall -HUP cfprefsd + killall WallpaperAgent (SIGTERM) + killall Dock (SIGTERM) の triple kill、 + launchd は daemon-mode (KeepAlive=true / RunAtLoad=true / StartInterval なし + script 内 sleep loop) にして kTCCServiceSystemPolicyAppData の per-process 発火を 1 回のみに抑える。 CLI tools は現接続 NSScreen displayID を書くが Index.plist の stale UUID と mismatch = active display に効かない。 SIGKILL は /var/db/Wallpapers/<uuid>/Metadata.plist (root:wheel) から last-known-good 復元。 cache prune は 60s 間隔なら 100+ GB 肥大するので file-count cap で KEEP=1 に。 探索経路: notification-based reload や private XPC endpoint / debug listener enable / class-dump ImageFolder provider schema はすべて dead-end
 - **[shell-env.md](shell-env.md)** — PATH 消失・shell 環境変数まわりを触るとき
   - シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール）
 

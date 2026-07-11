@@ -113,6 +113,8 @@ macOS Sonoma+ の Aerial 系動画壁紙 (= 4K 240fps `.mov` を desktop backgro
 1. **`WallpaperImageExtension.appex` が動画を常時デコード → 30-50% CPU を張り付く**
 2. **`~/Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches` が延々肥大する** (= 過去に選んだ動画壁紙が GC されず溜まる、 100 GB 超え事例あり)
 
+⚠️ **静止画 rotation でも同型で肥大する** (2026-07-11 実測: 60 秒間隔の自作 rotation で 3 日 21 GB / 1,556 file、 各 3456×2234 非圧縮 bmp ~13 MB)。 対策は同じ (cache 撲滅 + rotation script 末尾で file-count cap prune)。 Tahoe の wallpaper API 全体は [`macos-tahoe-wallpaper.md`](macos-tahoe-wallpaper.md) 参照。
+
 ### 診断
 
 ```bash

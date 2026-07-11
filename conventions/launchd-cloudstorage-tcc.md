@@ -214,6 +214,14 @@ launchd 環境はデフォルトで **`LANG` / `LC_ALL` が空**。 日本語文
 
 `osacompile` は生成物の bundle ID を **`com.apple.ScriptEditor.id.<applet-name>`** に自動設定する (= applet 名部分は input file 名から派生)。 同じ system 上に複数の osacompile wrapper を作るとき、 `.app` name を別々にしないと bundle ID conflict で TCC 判定が混線する。
 
+### <a id="tahoe-app-data-per-process-gotcha"></a>macOS Tahoe (26+) の `kTCCServiceSystemPolicyAppData` は per-process semantic
+
+Tahoe 26.5.1 で **`~/Library/Application Support/<app>/`** (= 他アプリのデータ dir) への書込みが `kTCCServiceSystemPolicyAppData` の TCC prompt を発火するようになった。 System Settings → プライバシーとセキュリティ → アプリ管理 で明示 grant しても **grant が persist しない** (2026-07-11 実測)、 `StartInterval` 経由の launchd 発火だと毎回 new process spawn ゆえ **60 秒ごとに TCC prompt が繰り返し表示される**。
+
+**回避策**: launchd を **daemon mode** に = `StartInterval` 削除 + `KeepAlive=true` + `RunAtLoad=true`、 script 内で `while true; sleep N; done` の rotation loop。 → applet プロセスが 1 個だけ常駐、 TCC prompt は起動時 1 回のみ。 script は `trap 'exit 0' TERM INT` で SIGTERM に clean 対応 (bootout で最終 rotation 途中でも安全 exit)。
+
+⚠️ **再起動 / logout / `launchctl bootout` で prompt 復活** (新 process = 新 grant)。 起動時に 1 回押す運用で受容。 詳細と wallpaper 系の Tahoe API 全罠は [`macos-tahoe-wallpaper.md`](macos-tahoe-wallpaper.md) 参照。
+
 ---
 
 ## <a id="option-b-mirror"></a>Option B: CloudStorage 外に mirror する場合
