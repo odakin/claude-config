@@ -384,14 +384,22 @@ worker の立ち上がりの「何を読むべきか探す」 段階は、 最�
 
 (a)-(c) が書けないのは**親自身が構成を把握していない signal** で、 その chip はまだ切り出せる状態にない (= 先に親が scout するか、 scout 自体を bounded chip にする)。 write 側の cap (「触ってよい file はこれだけ」 「成果物はこれだけ、 増やさない」) は並列衝突防止 (§1) と scope creep 防止を兼ねる。
 
-### Evidence と正直な限界 (2026-07-11)
+### <a id="junction-fanin"></a>sizing 述語の追加軸: 合流点の入力 fan-in (2026-07-11 追記)
 
-単一 project・単一日の staged numerical-audit chain (worker 委譲 6 chip) の実測:
+新規概念数と別に、 **「読ませる入力 context をいくつ融合させるか」 (= fan-in)** も数える。 複数の独立した部品 script / 結果 file を 1 つに突き合わせる **junction chip** は、 新規概念が 1 個でも「全入力を読了した直後の最初の設計 turn」 に thinking が集中し、 orientation 前払い (a)-(c) が完備でも**読了直後に silent stall し得る** (実測 1 件: 入力 5 file の junction chip が file 読了直後に ~30 分沈黙・durable 出力ゼロ)。 fan-in が 4-5 file に達する junction は、 **「最小の must-close anchor 1 本を通して commit するまで」 を第 1 stage に切り出す** (= 巨大設計 turn を構造的に不可能にする) か、 spec に「骨格 Write → 実行 → append の逐次 turn 規律 + 部分 commit permission」 を焼き込む。
 
-- **一発 landed 4** = 部品 library 単体 / 較正 1 本 / 既存 pipeline への部品差し替え / 1 概念 + 既存部品再構成の大きめ chip。 4 spec 全部に write-scope cap + 成果物 cap があり、 読む側の名指し (前提 file / 参照 script) も程度の差はあれ入っていた (= 弱い形の orientation 前払い)。
-- **死亡 2 (いずれも成果物ゼロ)** = ① 「machinery + 較正 + 適用 + 検証」 の 6-stage monolith が 6h stall (= output-cap 死 loop、 機構と実測の正本 = [`output-cap-death-loop.md` §Evidence](output-cap-death-loop.md#evidence) の project B) / ② bounded 寄りの spec でも **orientation 段階で死亡** (proximate は infra error — 「orientation が長いほど初 commit 前に死ぬ露出時間が延びる」 という robustness 解釈までが誠実な範囲で、 orientation cost 自体が死因と断定はできない)。
+### <a id="stall-rescue"></a>stalled worker の rescue: message 注入 (2026-07-11 追記)
 
-⚠️ **一般化は暫定** (N = 単一 project・単一日、 成功 4 / 失敗 2)。 (a)-(c) の最強形 (explicit な file cap + 関数名指し) を焼いた再発注 chip は本節起票時点で**未着地** = 効果の直接実証はまだ無く、 evidence は「landed 側は全部 orientation 前払いあり ∧ 死亡側の片方は monolith・片方は orientation 中に死んだ」 という相関どまり。 反例 (= cap 付き chip の同型死 / multi-concept monolith の一発 landed) や追加観察が出たら本節を更新する。
+orientation 直後の silent stall (session は running のまま・活動 timestamp 停止・durable 出力ゼロ) は、 **稼働中 session への cross-session message 送信で復活できる** (= message は相手 session に新 user turn を注入する → 死んだ生成 loop を捨てて新 turn から再開される)。 実測 1 件で有効だった rescue message の 4 要素: ① scope 縮小 (最小 must-close 単位に落とす) ② turn 規律の明示 (1 turn = 1 小 step、 骨格 → 実行 → append) ③ 部分結果 permission (「gate 1 本通過時点で commit + marker してよい」) ④ 放棄予告 (「応答なければ session を放棄して fresh chip で再発注する」)。 rescue 失敗時は **zombie session を閉じてから** fresh chip を切る (= local-tree worker は同じ file path に書くので、 後で目を覚ました zombie と fresh worker の併走は衝突源)。
+
+### Evidence と正直な限界 (2026-07-11、 同日 2 回更新)
+
+単一 project・単一日の staged numerical-audit chain (worker 委譲 9 chip) の実測:
+
+- **一発 landed 8** = 部品 library / 較正 1 本 / 部品差し替え / 1 概念 + 既存部品再構成の大きめ chip (以上 4 = 弱い前払い) + **(a)-(c) 最強形 (explicit file cap + 関数名指し) を焼いた 4 chip が全部一発 landed** (= 起票時 「未着地」 だった直接実証は同日中に解消。 うち 1 chip は死んだ monolith の scope を分割した再発注)。
+- **死亡 3 (いずれも初回成果物ゼロ)** = ① 6-stage monolith 6h stall (= output-cap 死 loop、 正本 = [`output-cap-death-loop.md` §Evidence](output-cap-death-loop.md#evidence) の project B) / ② bounded 寄り spec の orientation 段階死 (proximate は infra error — 「orientation が長いほど初 commit 前に死ぬ露出時間が延びる」 という robustness 解釈までが誠実な範囲) / ③ **(a)-(c) 完備でも入力 5 file の junction chip が読了直後に stall** (= 上の fan-in 軸の evidence。 この 1 件は message 注入 rescue により縮小 scope で完遂 = 全損回避、 上の rescue 節の evidence)。
+
+⚠️ **一般化は暫定** (N = 単一 project・単一日、 landed 8 / 死亡 3 うち 1 rescue 成功)。 fan-in 述語と rescue 手順はどちらも **N=1**。 反例 (= 高 fan-in junction の一発 landed / rescue message 無効例 / cap 付き非 junction chip の同型死) や追加観察が出たら本節を更新する。
 
 ---
 
