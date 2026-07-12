@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 73 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 74 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -104,6 +104,8 @@ layer 1 (public) のドメイン固有規約 73 file をカテゴリ別に列挙
   - PDF コピーの段落内改行・RTF 書式の後始末 (= ⌃⌥⌘V hotkey 〔貼り付け先で押す = 整形+即貼り付け〕 / CLI / ブラウザ版の 3 入口、全て明示発火・常駐 poll なし〔誤爆 + secret-handoff の clipboard 単一資源原則と衝突するため daemon 不採用〕、整形ロジック正本は scripts/clipboard-cleaner.py)
 - **[launchd-cloudstorage-tcc.md](launchd-cloudstorage-tcc.md)** — launchd agent が ~/Library/CloudStorage/ 配下を読む script を書く前
   - launchd agent が ~/Library/CloudStorage/ (Dropbox / iCloud Drive / OneDrive / Box) 配下を読む script を書くための TCC 越え pattern (= 症状 Operation not permitted は手動実行なら通るが launchd 経由で失敗 / 3 択 A: /bin/zsh に FDA〔広すぎ非推奨〕 A': osacompile で狭い .app wrapper + narrow FDA〔推奨、 permission holder が narrow + 自己記述性〕 B: CloudStorage 外に mirror〔permission dance 不要〕 / A' 実装テンプレ = osacompile + open -g -a + EnvironmentVariables LANG + FDA panel での .app 選択 / gotcha = LANG 未設定で日本語 path 壊れる / open -a 非同期 / bundle ID 衝突)
+- **[macos-calendar-write.md](macos-calendar-write.md)** — macOS Calendar.app 上の iCloud (または CalDAV / local) 所有 calendar に AppleScript / osascript で event を書き込もうとする前 + Google Calendar API から見て read-only (webcal 購読) な calendar に write する経路を探しているとき
+  - macOS Calendar.app の calendar に AppleScript (osascript) で event を作る universal recipe。 `tell application "Calendar" ... make new event with properties {summary, location, description, start date, end date}` で書ける。 property 名は英語 literal (日本語は syntax error)、 calendar name は Calendar.app が list する literal string (全角括弧 / 空白 込み)、 iCloud 側の write は数分〜数十分で iCloud sync 経由で Google Calendar の webcal 購読 view (`@import.calendar.google.com`) に反映、 他 iCloud 端末には即時反映。 TCC = Terminal.app / iTerm 側に Calendar 権限を付与、 osascript 経由も同 grant で通る。 verify は `every event whose summary contains "..."` で件数 + start date 確認。 「MCP から write 不可能な calendar (= webcal import は Google 側 read-only)」 の唯一の Claude-executable 経路
 - **[macos-claude-app-pty-leak.md](macos-claude-app-pty-leak.md)** — macOS で forkpty: Device not configured が出たとき
   - macOS で Claude.app が `kern.tty.ptmx_max=511` を独占 → Terminal 等で `forkpty: Device not configured` 発生時の段階的 sysctl bump workaround (hard ceiling ~960、 root 対処は Claude.app restart、 Anthropic bug report 候補)
 - **[macos-claude-code-tcc-recurring-prompt.md](macos-claude-code-tcc-recurring-prompt.md)** — Claude Code の App Management TCC dialog が繰り返し出るとき
