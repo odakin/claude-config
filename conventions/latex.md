@@ -373,6 +373,23 @@ JHEP.bst はフィールドから自動リンクを生成するので `\href` �
 - `url`: doi や eprint があれば不要
 - `note`: 自由テキスト。自動リンク対象外の補足情報に使う
 
+## <a id="jhep-future-citation"></a>JHEP.bst で future citation（in preparation、タイトル未定）を引く
+
+執筆中の続編論文などを「著者 + in preparation」だけで引きたい（タイトル未確定なので入れない）場合の recipe（2026-07-13、Overleaf 共著 paper で確立）:
+
+```bibtex
+@unpublished{Oda:2026prep,
+    author = "Oda, Kin-ya and friends",
+    note = "{\unskip}, in preparation"
+}
+```
+
+- **`@unpublished` を使う**。`@article` + `journal = "in preparation"` は workaround としては動くが、entry type の意味が誤り。また `@article` で journal を空にすると空 journal block の「`, .`」が残骸として render される
+- **note 先頭の `{\unskip},`**: title が空だと bst が author と note の間の区切り（カンマ）を落とし「`friends in preparation`」と連結される。素の `", in preparation"` では今度は author block 末尾の space が残り「`friends , in`」になる。`{\unskip},` が前の space を潰してから comma を置く → 「`K.-y. Oda and friends, in preparation.`」
+- bibtex の `Warning--empty title` は想定内（無害）
+- **タイトル確定時**: `title = "{...}"` を追加し、note を素の `"in preparation"` に戻す（title があれば bst が区切りを正しく出すので `{\unskip},` hack は不要になる）
+- 前提: note を render する版の JHEP.bst（[正本](#bibliography-style)）。stock JHEP.bst は note を落とすのでこの recipe 全体が silent no-op になる
+
 ## <a id="hyperref-settings"></a>hyperref 設定
 **新規 LaTeX ドキュメントは以下の hyperref 設定を使う:**
 ```latex
