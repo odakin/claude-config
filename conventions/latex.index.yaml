@@ -70,6 +70,9 @@ sections:
   - id: jhep-bst-notation
     level: 2
     title: "JHEP.bst 記法"
+  - id: jhep-future-citation
+    level: 2
+    title: "JHEP.bst で future citation（in preparation、タイトル未定）を引く"
   - id: hyperref-settings
     level: 2
     title: "hyperref 設定"
