@@ -281,6 +281,17 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 
 - **英語のみ** → **`lualatex`** が odakin の標準 (= TeXShop が `LuaTeX-1.21.0` で生成、PDF Producer 欄で確認済)。`pdflatex` も可 (どちらも pdf 直接出力で互換)
 - **日本語含む** → `ptex2pdf` (内部で platex + dvipdfmx) または `lualatex` (jlreq クラス等)
+- **<a id="class-dictates-engine"></a>class が engine を決める** (= 齟齬は engine 側で patch できない、 class を変えるか engine を変えるかの二択):
+
+  | documentclass | 使う engine |
+  |---|---|
+  | `article` / `book` / `report` 等 (LaTeX default) | pdflatex / lualatex |
+  | `jsarticle` / `jsbook` / `jarticle` / `jbook` (pTeX classes) | **platex + dvipdfmx** (pdflatex / lualatex は不可) |
+  | `uplatex` 系 (Unicode 日本語 pTeX) | **uplatex + dvipdfmx** |
+  | `ltjsarticle` / `ltjsbook` / `jlreq` 等 (LuaLaTeX-JS) | **lualatex** (luatexja 経由) |
+  | `bxjsarticle` 等 (BX/JS series、 engine-agnostic) | class option で切替 |
+
+  **診断**: `jsarticle` 等の pTeX class に `pdflatex` を打つと `! LaTeX Error: Unicode character X (U+XXXX) not set up for use with LaTeX` が日本語 1 文字ごとに連発する fingerprint が出る (2026-07-13 観測)。 log にこの pattern を見たら engine 選択ミス確定 → 正しい経路は `platex → platex → dvipdfmx` または `latexmk -latex=platex -pdfdvi <file>`。 `pdflatex` に別 patch を当てる方向は原理的に不可 (= class 側で pLaTeX 前提の macro を使っているため)。
 - **BibTeX フルビルド**:
   - **lualatex (英語、odakin 標準)**: `lualatex → bibtex → lualatex → lualatex`
   - pdflatex (英語、互換代替): `pdflatex → bibtex → pdflatex → pdflatex`

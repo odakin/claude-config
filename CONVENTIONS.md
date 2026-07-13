@@ -153,7 +153,7 @@ git の状態管理は 1 本の `PostToolUse` hook で機械的に支援する: 
 
 ### <a id="pre-push-check"></a>push 前チェック
 
-1. SESSION.md 更新（長ければ棚卸し） 2. CLAUDE.md 更新（構造変更時のみ） 3. 4軸レビュー → commit → push。軽微な変更では 2-3 スキップ可。
+1. SESSION.md 更新（長ければ棚卸し） 2. CLAUDE.md 更新（構造変更時のみ） 3. 4軸レビュー → commit → **[subject-content 点呼](#commit-subject-content-parity)** → push。軽微な変更では 2-3 スキップ可。
 
 | 軸 | 内容 |
 |---|---|
@@ -165,6 +165,8 @@ git の状態管理は 1 本の `PostToolUse` hook で機械的に支援する: 
 ユーザーが「**3軸チェック**」と言った場合は上表のうち **整合性・無矛盾性・効率性** のみを指す（安全性は除外）。「4軸チェック」は全 4 軸。
 
 **sweep の goal alignment** (= 「✓ pass」 closure を禁じ、 cell 埋めではなく error 発見が goal、 終了時に sweep 範囲 / 未 sweep 範囲 / confidence 境界を明示) は次の `### sweep / review / audit の goal alignment` 参照。 上記 4 軸 table が **何を** check するかの axis、 goal alignment が **どの goal で** check するかの mode、 両方を combine して使う。
+
+**<a id="commit-subject-content-parity"></a>commit 後 subject-content 点呼**: `git commit -m "A + B + C"` のように message subject に複数項目を列挙したら、 commit 直後に `git show --stat HEAD` を回して message subject 全部が file 一覧に反映されているか点呼する。 特に (i) staged 未確認で `git commit`、 (ii) 直前に Edit した file の `git add` 忘れ、 の 2 条件が同時に成立すると staged 分だけ commit されて subject と content が silent に乖離する (= renames/moves の diff 量に満足して file 名の見落としが起きやすい)。 点呼で乖離が判明したら追い commit で新規 landing (= history rewrite せず正直な commit message で追う)。 push 前に検知すれば公開されずに済む。 2026-07-13 coruscation で「message は 3 file 更新と書いたが実際は rename のみ commit、 3 file の Edit は git add 忘れで staged 外」 の事故から明文化。
 
 **リポでの作業開始手順（全場面共通）:** `git fetch` → CLAUDE.md → SESSION.md（要対応を確認）→ 作業開始。autocompact 復帰・scheduled task・SKILL 実行・手動作業すべてに適用。親ディレクトリで作業中にタスクが既存リポの管轄だと判明した場合も同様（MEMORY.md リポ一覧で特定 → そのリポの CLAUDE.md を読む）。「簡単なタスク」も例外ではない。CLAUDE.md 内のポインタ（「正本は X」「詳細は Y 参照」）は必ず辿る
 
