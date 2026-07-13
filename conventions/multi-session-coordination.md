@@ -272,6 +272,17 @@ identity は similarity でなく content corroboration でしか establish で�
 - **token 行**: 起票側の会話 (= assistant の message turn) に unique token を残す (spec にも明記、 例 `RET-<slug>-<date>-<rand>`)。 ⚠️ **chat に出さないと `search_session_transcripts` に引っかからず呼び元が findable にならない** (= method A step 1、 spec=tool_use 引数は search 対象外)。 ⚠️ 「親の session-id 欄」 は作らない (= addressable id ≠ transcript id の namespace 不一致、 誤 id は推測より悪い、 robust なのは content marker = token)。
 - **返送指示**: 「完了時 `search_session_transcripts(<token>)` で起票元を特定し send_message。 self/他 session 除外、 token を持つ起票元以外に絶対送らない。 解決不能なら push せず + user 確認 (推測 push 禁止)」。
 
+### <a id="return-signal-economy"></a>Marker 経済 — 完了 marker は「受領義務」 の model であって完了 log ではない (2026-07-14)
+
+required spine の完了 marker は「**人間が受領するまで surface し続ける義務**」 を 1 個 mint する操作 (= consumed になるまで毎 session 開始時に出る、 消すには手動 consume が要る)。 ∴ mint は「完了の記録」 でなく「**受領してもらう必要**」 がある時に行う — 記録自体は deliverable の commit が既に担っている。 これを無差別に行うと委譲 chain (実装 → 検品 → 検品の検品 …) の各段が marker を増殖させ、 子 marker・孫 marker が誰にも consume されず滞留する = **人間の注意を節約するための機構が人間の注意に課税し始める** (2026-07-14 観測: 起票者が「報告不要」 と明示した検品 spec に、 spine を反射で丸写しして 2 個目の marker 義務を焼き込み user 訂正)。
+
+1. **報告 waiver は marker にも及ぶ。** 起票者が「返事不要・完了通知不要」 と明示したら、 それは live-push (send_message) だけでなく完了 marker (= もう一つの返送経路) にも適用する — clean 完了は mint しない、 deliverable の commit が durable 記録。 ⚠️ waiver が放棄したのは「完了通知」 であって「問題の報告」 ではない: **行動を要する発見** (= FAIL verdict / major issue / user 判断 gate) が出たらその時だけ mint する (= findings-only marker policy)。
+2. **1 系譜 1 marker。** 同一作業系譜の follow-up (検品 / land / fix) は新 token で 2 個目を mint しない — root token の marker を更新する (= 同 token での再 record は in-place 更新挙動にする) か、 旧 marker を consume してから置く。 常に高々 1 個。
+3. **meta-work の default = findings-only。** 検品・review 等の meta 段は clean pass なら silent 終端 (= 結果 file のみ)。 これで chain は自然に沈黙終息し、 孫 marker が構造的に生まれない。
+4. **consume は受領した turn 内で完遂。** marker の内容を人間が受領した (= surface を見て言及した / live で結果を受け取った) session は、 同 turn で consume まで実行する。 「後で consume」 が滞留の入口。 consume は marker の所在 + token だけで誰でも可 (= 親 session である必要はない、 下の「consumer の拾い方」 と同型)。
+
+不変条件は変えない: 「**作られた受領義務は取りこぼさない** (= consumed まで surface し続ける)」 は維持し、 本節は「**義務をいつ作るか**」 を絞る = no-silent-drop と no-noise-accumulation の両立。
+
 ### <a id="receiver-side-recognition"></a>受け取った側 = 「自分が worker か」 の判定 (2026-07-07 試験 rule)
 
 sender 側は上記 spawn-spec template を書いて chip を投げる。 receiver 側の逆問い = **自分が今受け取っている message は spawn-spec template そのものか**。 そうであれば **君 = worker**、 その prompt を再度 spawn_task に転記して grandchild を作らない (= 冗長な 1 段 indirection、 handoff-chain の無限延長を招く)。 execute in-tree。
