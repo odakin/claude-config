@@ -4,10 +4,12 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 74 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 75 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
+- **[actor-attribution.md](actor-attribution.md)** — 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間)
+  - carrier proxy (= commit author / push 者 / 送信者 / 記録の書き手) を内容の判断主体・発言主体と等値しない — 帰属 5 規律 (proxy 種類の明示 / collaborative default = group product / inline marker = 宛先 tag / 発言者 ≠ 記録者 / load-bearing 帰属は複数 proxy verify) + 機械化不能の honest 限界
 - **[ask-user-question.md](ask-user-question.md)** — AskUserQuestion (選択肢 UI) の使用可否・使い所を判断するとき
   - AskUserQuestion (選択肢 UI) の使い所 — turn 同期 block + user 入力中 text との UI 競合という機構 fact と、 平文質問との使い分け表 (使用頻度の選好は個人層 override)
 - **[claude-ai-routines.md](claude-ai-routines.md)** — claude.ai routines (RemoteTrigger / cloud cron) を作成・管理するとき

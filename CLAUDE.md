@@ -27,6 +27,7 @@ claude-config/
 ├── JHEP.bst                # 物理論文用 BibTeX style (setup.sh が texmf-local に install)
 <!-- AUTO-TREE:conventions BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check、 源 = conventions/*.md 冒頭の doc-meta) -->
 ├── conventions/          # ドメイン固有規約 (カテゴリ index = conventions/README.md、説明の源 = 各 file 冒頭の doc-meta)
+│   ├── actor-attribution.md                # carrier proxy (= commit author / push 者 / 送信者 / 記録の書き手) を内容の判断主体・発言主体と等値しない — 帰属 5 規律 (proxy 種類の明示 / collaborative default = group product / inline marker = 宛先 tag / 発言者 ≠ 記録者 / load-bearing 帰属は複数 proxy verify) + 機械化不能の honest 限界
 │   ├── android-chromium-remote-debug.md    # Android Brave/Chrome の remote debugging (WiFi ADB + CDP、 reload 前の live state capture procedure)
 │   ├── ask-user-question.md                # AskUserQuestion (選択肢 UI) の使い所 — turn 同期 block + user 入力中 text との UI 競合という機構 fact と、 平文質問との使い分け表 (使用頻度の選好は個人層 override)
 │   ├── beamer-slides.md                    # Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可。giving-talks.md〔中身/作法〕と相補)
