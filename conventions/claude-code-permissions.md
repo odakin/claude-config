@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき
 category: harness-core
-summary: Claude Code CLI の permission プロンプト削減 (= cwd 外 file 〔`~/Downloads` 等〕の Read/Edit/Write が毎回確認される症状を `additionalDirectories` で cwd 同様に無確認化、 bare tool allow は cwd 外を素通ししない observed〔docs 解釈と食い違い〕、 deny > ask > allow で機密は `deny` 優先、 setup.sh `configure_permissions` は `allow` のみ触る = additionalDirectories/deny は直書き永続、 settings 反映は次セッション、 frontend 3 系統切り分け〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕、 §always-approve-tools = permission 設定で抑止できない always-prompt tool class〔`ccd_session_mgmt__search_session_transcripts` 等 cross-session tool は `allow` 登録でも承認チップが出る = 経路を外す以外に消せない、 token-handshake 返送への含意込み〕、 #ask-pattern-action-anchor = 高 stakes Bash gate の ask パターンは file 名 substring でなく不可逆 action の実行形〔`--send` 等の explicit flag〕に anchor〔ask > allow ゆえ allow で例外を彫れない = パターン絞りが唯一の手段・tool 側は fail-safe 既定・gate 対象 invocation は chain 禁止〕)
+summary: Claude Code CLI の permission プロンプト削減 (= cwd 外 file 〔`~/Downloads` 等〕の Read/Edit/Write が毎回確認される症状を `additionalDirectories` で cwd 同様に無確認化、 bare tool allow は cwd 外を素通ししない observed〔docs 解釈と食い違い〕、 deny > ask > allow で機密は `deny` 優先、 setup.sh `configure_permissions` は `allow` のみ触る = additionalDirectories/deny は直書き永続、 settings 反映は次セッション、 #chat-link-rendering-scope = chat 応答内の markdown link `[label](path)` を click した右パネル rendering も同 scope〔session cwd + additionalDirectories〕に従い scope 外は「読み取れませんでした / 作業ディレクトリの外」 表示、 frontend 3 系統切り分け〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕、 §always-approve-tools = permission 設定で抑止できない always-prompt tool class〔`ccd_session_mgmt__search_session_transcripts` 等 cross-session tool は `allow` 登録でも承認チップが出る = 経路を外す以外に消せない、 token-handshake 返送への含意込み〕、 #ask-pattern-action-anchor = 高 stakes Bash gate の ask パターンは file 名 substring でなく不可逆 action の実行形〔`--send` 等の explicit flag〕に anchor〔ask > allow ゆえ allow で例外を彫れない = パターン絞りが唯一の手段・tool 側は fail-safe 既定・gate 対象 invocation は chain 禁止〕)
 -->
 # Claude Code の permission プロンプトを減らす (additionalDirectories と working directory 境界)
 
@@ -48,6 +48,32 @@ settings.json はセッション開始時に読まれる。**途中変更が即�
 
 `setup.sh` の `configure_permissions()` は `permissions.allow` に安全ツール (Bash/Read/Edit/Write/Glob/Grep/WebFetch/WebSearch) の**不足分を足すだけ**で、`additionalDirectories` と `deny` には**一切触らない**。
 → `~/.claude/settings.json` に直書きした `additionalDirectories` / `deny` は **setup 再走でも消えない** (永続)。バックアップを取ってから jq で書き換えるのが安全。
+
+## <a id="chat-link-rendering-scope"></a>chat 右パネルの markdown link rendering も同 scope に従う
+
+Claude Code (desktop app / VS Code 拡張の chat panel) は、応答本文内の markdown link `[label](path/to/file.md)` を click すると右パネルで file を render する。この rendering は **Read/Edit/Write tool と同じ permission scope** (= session cwd + `additionalDirectories`) を通し、**scope 外の path は render 拒否**される (= 同じ working directory 境界の別 surface)。
+
+**症状**: chat 内の link を click した右パネルに以下いずれかが表示される (file 実在にも関わらず):
+
+> このファイルを読み取れませんでした — 削除または移動された可能性があるか、作業ディレクトリの外に存在する可能性があります
+
+**診断**:
+
+1. session の実 cwd を確認 (session 起動時に選んだ folder — `pwd` 相当)。
+2. click した link の href (相対 path なら cwd 基準で解決) の絶対 path を求める。
+3. `~/.claude/settings.json` の `permissions.additionalDirectories` に、その絶対 path の**祖先 dir** が登録されているか。
+
+祖先が登録されていなければ scope 外 = rendering 拒否される (= 期待通りの enforcement)。file 実在・path form (相対 / 絶対) は原因ではない。
+
+**対処**: 該当 path の親 dir を `additionalDirectories` に追加 (§対処 / §機密は deny で守る と同じ手順)。**反映は次 session から** (§反映タイミング)。
+
+**応急 (現 session で見たい)**: chat 右パネル rendering は諦め、`open <path>` で外部アプリ (Preview / エディタ) に投げる。OS 経由なので Claude Code の permission scope を通らない。
+
+⚠️ **診断反射の落とし穴**: error message は「削除または移動された可能性」 を並列で提示するため、**path form 誤り (相対 vs 絶対、typo、リネーム) を先に疑って retry する**引力が強い。file 実在・form 正しい状態で失敗が続いたら、次に触る仮説は **scope 外**であって別 form の retry ではない (= 単一情報源〔error message〕null からの結論飛躍防止)。1 コマンドで確認できる: `jq '.permissions.additionalDirectories' ~/.claude/settings.json`。
+
+**frontend 差**: この rendering scope 挙動は **chat 右パネルを持つ frontend** (= desktop app、VS Code 拡張の chat panel) で発生する。CLI-only session には右パネル rendering 自体が無いので該当しない。scope 判定機構自体は harness 側で共通 (= Read/Edit/Write tool と同じ layer)。
+
+**Bash 経由との非対称**: 上記 §核心 / §対処 の Bash tool は cwd 外 path でも通りやすい観察と同型 (= Bash は permission 判定が緩い、Read/Edit/Write と chat rendering は厳しい)。「Bash で `cat <path>` は通ったのに chat link は落ちる」という非対称は、この scope 差の同じ現れ。
 
 ## <a id="frontend-split"></a>frontend 切り分け (同じ症状でも 3 系統)
 
