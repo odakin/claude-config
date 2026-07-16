@@ -130,7 +130,50 @@ req = urllib.request.Request(
 
 公式 SDK (discord.py / discord.js 等) は自動で正しい UA を付けるため、 SDK 経由なら気にする必要なし。 **生 HTTP request を書く時だけ落とし穴**。 ad-hoc な one-shot post script (= odakin が CLI からメッセージ送信する典型ユースケース) で頻発する。
 
-**⚠️ 2026-07-10 に「本節はあったのに再発」した**: 送信 session は運用 doc (= ID・token 表) を grep で読むため、 別 doc の本節が発火面にならない (= 文末 pointer は grep 到達者に届かない)。 design-out として **canonical 送信 script [`scripts/discord-post.py`](../scripts/discord-post.py)** に規則を焼き込んだ (= 正しい UA / エラー code 解読 hint / **既定 dry-run + 明示 `--send`** 〔= claude-code-permissions.md #ask-pattern-action-anchor 準拠〕 / `--dm-user` で DM channel 開設 / `--check` で read-only 疎通確認 / `--selftest` 内蔵)。 **ad-hoc な curl / urllib を書く前にまずこれを使う。**
+**⚠️ 2026-07-10 に「本節はあったのに再発」した**: 送信 session は運用 doc (= ID・token 表) を grep で読むため、 別 doc の本節が発火面にならない (= 文末 pointer は grep 到達者に届かない)。 design-out として **canonical 送信 script [`scripts/discord-post.py`](../scripts/discord-post.py)** に規則を焼き込んだ (= 正しい UA / エラー code 解読 hint / **既定 dry-run + 明示 `--send`** 〔= claude-code-permissions.md #ask-pattern-action-anchor 準拠〕 / `--dm-user` で DM channel 開設 / `--check` で read-only 疎通確認 / **`--attach` でファイル添付 (repeat 可、 下記 §「ファイル添付付き送信」)** / `--selftest` 内蔵)。 **ad-hoc な curl / urllib を書く前にまずこれを使う。**
+
+## <a id="send-attachments"></a>ファイル添付付き送信 (= multipart/form-data)
+
+Discord API で message に**ファイル添付**を付けるには、 通常の `Content-Type: application/json` 単発 POST では**不能** (Discord は attachment part を認識しない)。 `POST /channels/{id}/messages` を **`multipart/form-data`** で送る必要がある:
+
+```
+Content-Type: multipart/form-data; boundary=<BOUNDARY>
+
+--<BOUNDARY>
+Content-Disposition: form-data; name="payload_json"
+Content-Type: application/json
+
+{"content": "本文", "allowed_mentions": {...}}
+--<BOUNDARY>
+Content-Disposition: form-data; name="files[0]"; filename="doc.pdf"
+Content-Type: application/pdf
+
+<binary bytes>
+--<BOUNDARY>--
+```
+
+`payload_json` part が message body (JSON)、 `files[i]` part が各添付 (i=0,1,...)、 その他 header 規則 (Authorization / User-Agent = 上記 §「User-Agent header 必須」) は JSON path と共通で multipart にも適用される (= UA 欠落は multipart でも Cloudflare 1010)。 参考: [Discord Docs — Uploading Files](https://discord.com/developers/docs/reference#uploading-files)。
+
+**canonical usage** = `discord-post.py --attach`:
+
+```bash
+python3 ~/Claude/claude-config/scripts/discord-post.py \
+  --token-file ~/.secrets/<bot-token> \
+  --channel <CHANNEL_ID> --content-file msg.txt \
+  --attach path/to/doc.pdf [--attach path/to/img.png ...] [--send]
+```
+
+- `--attach` は**繰り返し可** (順序保持で `files[0]`, `files[1]`, ... に割当)
+- 存在 check + size soft-warn (単ファイル > 25 MB = Discord unboosted cap `40005` を preflight で警告、 実 send は API 判断)
+- 既定 dry-run で attach path + size を pretty print、 承認後 `--send` で multipart 送信
+- filename の `"` は header injection 防止のため strip、 UTF-8 filename は Discord が accept する
+
+**Discord ファイルサイズ上限** (= `40005 Request entity too large`):
+- unboosted server + free user = **25 MB / file**
+- 一部 boosted server (level 2+) や Nitro 有効時は 50 MB〜 (= 実 send 時に channel/user 依存で判定される)
+- **多ファイル同時添付でも各ファイル単位で判定される** (合計サイズ cap は別 concern、 通常 100 MB 前後)
+
+⚠️ **本節を書く前は `discord-post.py` に `--attach` が無く**、 送信 session は raw curl / Python `requests` の multipart を毎回手書きしていた (2026-07-16 実測)。 canonical script に焼き込んだ (= §「User-Agent header 必須」 で hoist した design-out 原則を「添付」 領域にも適用)。 test = `scripts/discord-post.py --selftest` に multipart body 構築 + Content-Type header + boundary 閉じ + attachment bytes 含有 の 5 case を追加。
 
 ## Cloudflare 1010 error の鑑別: User-Agent vs 組織 NW egress filter
 
