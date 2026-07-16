@@ -1414,7 +1414,7 @@ assert fitz.open("p1.pdf").page_count == 1
 
 ### <a id="pdf-text-match-nfkc"></a>PDF text 照合は両辺 NFKC 正規化必須 (= CJK 互換字形の false negative)
 
-**症状**: PDF の text 層が 「日」 を U+2F49 (康熙部首「⽇」)、 「谷」 を 「⾕」 等の**互換字形で返す**ことがあり (= フォントの cmap 由来)、 `"申請日" in text` / `page.search_for("<氏名>")` が**正常な文書に対して空振り**する。 「prefill が消えている」 「ラベルが消えた」 等の誤診断 → 不要な作り直しに直結する。
+**症状**: PDF の text 層が 「日」 を U+2F49 (康熙部首「⽇」)、 「谷」 を 「⾕」、 **「田」 を U+2F53 (「⽥」)** 等の**互換字形で返す**ことがあり (= フォントの cmap 由来)、 `"申請日" in text` / `page.search_for("<氏名>")` が**正常な文書に対して空振り**する。 「prefill が消えている」 「ラベルが消えた」 等の誤診断 → 不要な作り直しに直結する。 発生源は多様: **fitz native embed だけでなく、 python-docx で書いた「田」 を Word.app AppleScript で PDF 化した経路** でも 「田」 (U+7530) → 「⽥」 (U+2F53) 変換が発生する (= 2026-07-16 若手賞 推薦書 signature 合成 verify で「尾田」 MUST_PRESENT が空振り、 視覚は正常だが raw `in` check 失敗)。 pipeline 全長で NFKC 前提を貫くこと。
 
 **規律**: PDF text 抽出に対する文字列照合は、 **必ず `unicodedata.normalize("NFKC", text)` してから比較**する。 `search_for()` は内部照合を正規化できないので、 互換字形を含みうる語の bbox が要る時は `get_text("words")` を取って NFKC 照合で探す。 1 度の検証で 2 回連続 false negative を踏んだ実害 (= 2026-06-11 ⑭-2、 「氏名欄・申請者欄が空」 と 2 度誤診断)。
 
@@ -2100,18 +2100,21 @@ def no_grid(p):                                         # 解法A(推奨): 本�
 
 **解法 A を回答本文の段落だけに適用**すれば、 ヘッダの表組み様式 (grid 維持 = 見た目不変) を保ったまま本文だけ圧縮できる。 font だけ下げて「効かない」 とハマるのが日本語様式の定番。
 
-#### 表組み様式 (= 推薦書・調査票・同意書) 固有の 2 圧縮源
+#### 表組み様式 (= 推薦書・調査票・同意書) 固有の 3 圧縮源
 
 上の 3 段階 (margin / line_spacing / 末尾空段落) は doc 直下の段落向け。 表組み様式ではさらに:
 
-- **行の明示 min-height (`<w:trHeight>`)**: 雛形が回答欄行に空行ぶんの大きな min-height (例 224pt) を焼いていることがある → 記入後は内容に対し過大なので除去して auto-fit。
+- **行の明示 min-height (`<w:trHeight>`) + 行分割禁止 flag (`<w:cantSplit>`) の 2 属性は必ず**セット**で除去**: 雛形が回答欄行に空行ぶんの大きな min-height (例 224pt = ~7.9cm) を焼いている + cantSplit で「行境界で page split 不可」 を宣言していることがある。 min-height だけ除去しても cantSplit が残ると「現 page に fit しなければ行全体が次 page 頭に強制移動」 の判定が働き、 内容を圧縮しても overflow が消えない (= 2026-07-16 若手賞推薦書 A4 1 枚 fit で実測: page 1 残 ~6cm < 行 min-height 7.9cm ゆえ全内容が page 2 に移動、 min-height 除去だけでは cantSplit が同判定を維持したため両方除去でようやく fit)。 **書式属性の変更**ゆえ「書式変更禁止」 制約と競合するが、 「A4 1 枚以内」 が hard 制約なら後者を優先 (= レンダリング上のフォント・段落 spacing・文字数・余白は不変、 ページ分割属性のみの除去で制約 trade-off が localized)。
   ```python
+  from docx.oxml.ns import qn
   for row in table.rows:
       trPr = row._tr.find(qn('w:trPr'))
-      h = trPr.find(qn('w:trHeight')) if trPr is not None else None
-      if h is not None: trPr.remove(h)
+      if trPr is None: continue
+      for tag in ('w:trHeight', 'w:cantSplit'):
+          for h in trPr.findall(qn(tag)):
+              trPr.remove(h)
   ```
-- **セル内の空白回答段落**: 雛形は回答欄セルに手書き用の空段落を多数持つ → 記入後はそれが page を割る。 セル内の trailing 空段落を除去 (doc 末尾空段落除去と同型だが table cell 内、 ⚠️ cell は最低 1 段落必要なので content 段落は残す)。
+- **セル内の空白回答段落**: 雛形は回答欄セルに手書き用の空段落を多数持つ → 記入後はそれが page を割る。 セル内の trailing 空段落を除去 (doc 末尾空段落除去と同型だが table cell 内、 ⚠️ cell は最低 1 段落必要なので content 段落は残す)。 **より積極的な pattern**: 空段落 N 個 pre-alloc された「回答欄」 cell に少数段落しか入れないケースでは、 cell の全 paragraph を削除して必要数だけ再生成する (= template の rPr/pPr は先頭 paragraph から採取して deepcopy、 `w:t xml:space="preserve"` で書く)。 pre-alloc 空 paragraph が残ると空行を占有し vertical space を無駄に食う。
 
 #### 「推測で font 変えて再ビルド」 を繰り返さず fitz で実測ループ
 
@@ -2132,7 +2135,7 @@ else:
 
 pre-fill 済み項目・本文テキスト・様式の表構造は**触らず書式だけ**変える ([`office-automation-principles.md`](office-automation-principles.md))。 編集後は **本文の文字数が変わっていない** (`cell.text` の len 比較) + pre-fill 項目が全部残っている、 を機械検証してから PDF 化・[`pdf-visual-confirm`](#pdf-visual-confirm)。 ⚠️ [`check-docx-integrity.py`](#docx-checkbox-content-control) が `table#N row#M: 論理列数 X ≠ gridCol Y` を出しても、 **元雛形でも同じ警告が出るなら横 merge 様式由来の benign** (= 自分の編集が壊したのではない) — 必ず元雛形と比較してから判断する (= 横 merge した row の論理セル数が gridCol より少ないのは正常)。
 
-origin: 2026-05-14 JST 系公募で 様式 0 = 2 → 1 page、 様式 2 = 3 → 2 page を上記 3 段階で達成。 2026-06 推薦書様式 (A4 1 枚厳守の表組み docx) を 2→1 page = font 9pt + 行間圧縮が **docGrid linePitch=360 で全く効かず**、 本文段落の snapToGrid 無効化 + trHeight 除去 + セル内空段落除去で解決 (= docGrid 段・表組み 2 圧縮源の動機)。
+origin: 2026-05-14 JST 系公募で 様式 0 = 2 → 1 page、 様式 2 = 3 → 2 page を上記 3 段階で達成。 2026-06 推薦書様式 (A4 1 枚厳守の表組み docx) を 2→1 page = font 9pt + 行間圧縮が **docGrid linePitch=360 で全く効かず**、 本文段落の snapToGrid 無効化 + trHeight 除去 + セル内空段落除去で解決 (= docGrid 段・表組み 2 圧縮源の動機)。 **2026-07-16 若手賞 推薦書 (別候補者・同 系統様式)** で trHeight 除去だけでは overflow 消えず、 `w:cantSplit` (= 行分割禁止 flag) も並存していたのが根 → 両方除去で fit (= 3 圧縮源の 1 番目に cantSplit を追加。 min-height 単独 fix の見落としは trap になりやすい)。
 
 ---
 
