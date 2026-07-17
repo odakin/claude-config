@@ -31,6 +31,8 @@ description は英語。リポ一覧の正本は個人層の `repos.md`（未設
 
 `CLAUDE.md` / `SESSION.md` / `DESIGN.md` などの dynamic docs は **snapshot 原理** に従う — 現状のみを記録し、graduation event (決定結晶 / 判断超越 / タスク完了 / 規約昇格) では source から除去、履歴は git log に委ねる。下記「任意ファイル」§6 (EXPLORING lifecycle) と [`docs/convention-design-principles.md` §7](docs/convention-design-principles.md#design-snapshot-operation) (DESIGN lifecycle) はこの原理の file-specific application。
 
+<a id="graduation-identifier-verify"></a>**graduation 時の識別子照合 gate**: dynamic doc の narrative を除去する前に、その narrative 内で参照している unique identifier (id / hash / token / messageId 等 regex 可能な高信号 subset) が destination の case-SoT に存在することを機械照合してから除去する (= 「graduate 済みのはず」 を仮定しない、 安価な grep で silent data loss を防ぐ)。 除去済 narrative の archive file は原則作らない — 案件の durable fact は case-SoT に、 作業履歴は git log に既に存在する (= archive file は第 3 の重複 home 化して drift 源になる、 §2.5 の (C) 非正規化 + 手編集を作る反例)。 domain-specific な照合手順 (対象 identifier の regex + SoT corpus の shape) は各 project の SESSION.md 冒頭に snippet で埋める (= 削除前 checklist を doc 上に固定)。
+
 | ファイル | 役割 |
 |---------|------|
 | `CLAUDE.md` | 永続的な構造・実行方法・復帰手順の**記述** (「こうなっている」の事実、判断理由は DESIGN.md へ)。構造変更時のみ更新 |
