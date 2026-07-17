@@ -68,8 +68,10 @@ def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_
         if role == "always-on" and not fresh:
             findings.append(
                 f"🔴 {host} (always-on): heartbeat が {age_h:.1f}h 停止 (threshold {stale_hours:g}h) "
-                f"= マシン / ネットワーク / launchd / git push のどれかが死んでいる可能性。 "
-                f"スマホの environment 一覧でも server 生存を cross-check"
+                f"= マシン / ネットワーク / launchd / git push / **読み手 clone の behind** のどれか。 "
+                f"結論前に heartbeat repo を git fetch + pull して再実行 (= 読み手側 stale による"
+                f"偽アラーム排除、 multi-machine-state.md#fleet-heartbeat 原則 4)。 "
+                f"実 stale ならスマホの environment 一覧でも server 生存を cross-check"
             )
             continue
         if not fresh:
