@@ -65,6 +65,7 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 | PDF を mutate (image insert / 値 overlay) した後、 意図せず text 破壊 / 過去訂正の undo / image 重複が起きないか機械で点呼したい | 視覚確認だけでは「在って当然のものに目が行く」 = 「あるはずの無いもの」 を読み飛ばす | page 数 + text 不変 + must-present/absent + image stream delta の 5 項目 schema → [`pdf-mutation-verification-schema`](#pdf-mutation-verification-schema) |
 | Word が「破損」 と言うが原因不明 | XML 宣言 single-quote / 空 `<w:tc>` 等 | [`check-docx-integrity.py`](#docx-checkbox-content-control) で決定論検出 |
 | docx の font を下げても・行間を詰めても**ページ数が減らない** (日本語 Word) | section の `docGrid` (snap-to-grid) が行高を grid pitch に固定し font 縮小を無効化 | 本文段落の `snapToGrid` 無効化 / `linePitch` 縮小 → [`docx-pdf-page-compress`](#docx-pdf-page-compress) |
+| フォント指定 (MSゴシック等) のある docx 様式を python-docx で fill して提出 → **「記載欄のフォントが指定と異なる」 差し戻し** | 新規 run に rFonts 無し → docDefaults theme (游明朝) に落ちる。 paragraph mark の rFonts は新規 run に**継承されない** + 空欄 cell は deepcopy 元 run が無い | fill 後に全 run + paragraph mark + header/footer へ rFonts enforce pass + PDF 埋め込みフォント allowlist assert → [`docx-new-run-rfonts-fallback`](#docx-new-run-rfonts-fallback) |
 | 研究費様式の提出後に機関事務から**差戻し** (経費の費目分け / 機関コード / 「本人に下線」 等の書式指示欠落) | 費目区分・コード verify・format 指示は fill driver 設計時に発火しないと構造的に落ちる (転記は書式を運ばない) | 差戻し対応 checklist = [erad-submission.md#sashimodoshi-response](erad-submission.md#sashimodoshi-response)、 費目 = [#keihi-himoku-kubun](erad-submission.md#keihi-himoku-kubun)、 コード = [#kikan-code-verify](erad-submission.md#kikan-code-verify)、 下線 = [`xlsx-rich-text-underline`](#xlsx-rich-text-underline) fill-driver caveat |
 | 計算式を持つ xlsx に**画像を挿入**したい (図の貼付欄等) / openpyxl `add_image` 後に cache が消える・Excel 再保存で画像が消える | openpyxl save は cache を落とし、 その復元の Excel open+save が openpyxl 由来 drawing を落とす (= 堂々巡り) | **Excel clipboard paste 一択** (`paste worksheet`、 サイズは PNG の DPI で制御) → [`xlsx-image-insert-excel-paste`](#xlsx-image-insert-excel-paste) |
 
@@ -1722,6 +1723,57 @@ for line in new_lines:
 
 **保存後**: python-docx で save したら [`docx-checkbox-content-control`](#docx-checkbox-content-control) の XML 宣言正規化を通す (auto-patch 済なら自動)。 ⚠️ **段落 / セル内容を削除する編集は空セル (段落なし `<w:tc>`) を生みうる** → save 後に `check-docx-integrity.py` ([`docx-empty-cell`](#docx-empty-cell) クラス8) を必ず通す。 PDF 化は [`docx-pdf-stale-cache`](#docx-pdf-stale-cache)、 検証は docx でなく **PDF テキスト**で回す (= 削除マーカーの不在・追記の存在を grep + 色 histogram)。 ⚠️ content 保全 verifier (= テンプレ差分照合) は **意図的に消した文字列を「欠落」 と flag する** — 想定どおりで regression ではない ([`docx-guidance-deletion`](#docx-guidance-deletion) 方向 B と同型)。
 
+### <a id="docx-new-run-rfonts-fallback"></a>python-docx で新規 run を作る時は rFonts を明示する (= docDefault テーマフォント落ち → 様式フォント指定違反)
+
+官製様式 docx (= 記載欄フォントを「MSゴシック 10.5pt」 等と**明示指定**し「書式設定は絶対に変更しない」 と書くタイプ) を python-docx で fill して提出したら、 受付側の書式 audit で**「記載欄のフォントが指定と異なる」 差し戻し**を受ける事故。 2026-07-17 実事故 (= 表彰推薦様式、 記入本文のほぼ全部が指定外フォントで提出され翌日差し戻し・期限当日再送)。
+
+**機構 — 新規 run はテーマフォントに落ちる**:
+
+- 新規 `<w:r>` に `w:rPr/w:rFonts` が無いと、 描画フォントは **docDefaults → theme (`minorEastAsia`)** に解決される。 日本語 template の theme minor font は通常**游明朝** — 様式指定が MSゴシックならその瞬間に違反。
+- **paragraph mark (`w:pPr/w:rPr`) の rFonts は新規 run に継承されない**。 Word UI で空段落に打鍵すると mark 書式が新規テキストに効くが、 **XML を直接生成する経路ではこの継承は起きない** (= 非対称)。 「cell の段落 mark に正しいフォントが付いているから大丈夫」 は嘘。
+- 「template run の rPr を deepcopy して継承」 する fill 実装でも、 **空欄 data cell の典型 = 第 1 段落に run が 1 つも無い** → deepcopy 元が無く rPr 無し run が生まれる。 = fill した記入欄 (推薦者欄・自由記述本文) だけが指定外フォントになり、 様式由来の label / pre-fill は正しいままなので**目視では気づきにくい** (明朝 vs ゴシックの本文差は流し読みで素通りする) が、 チェック側は確実に見る。
+
+**対策 = fill 後の enforce pass** (idempotent に書き、 driver に恒久実装する):
+
+```python
+from docx.oxml.ns import qn
+FONT = "ＭＳ ゴシック"   # 様式指定フォント
+
+def ensure_fonts(host):                    # host = <w:r> または <w:pPr>
+    rPr = host.find(qn("w:rPr"))
+    if rPr is None:
+        rPr = host.makeelement(qn("w:rPr"), {}); host.insert(0, rPr)
+    if rPr.find(qn("w:rFonts")) is None:
+        f = rPr.makeelement(qn("w:rFonts"), {})
+        for a in ("w:ascii", "w:eastAsia", "w:hAnsi"): f.set(qn(a), FONT)
+        f.set(qn("w:hint"), "eastAsia"); rPr.insert(0, f); return 1
+    return 0
+
+def walk(p):                               # 全 run + paragraph mark
+    n = sum(ensure_fonts(r._element) for r in p.runs)
+    pPr = p._element.find(qn("w:pPr"))
+    if pPr is None:
+        pPr = p._element.makeelement(qn("w:pPr"), {}); p._element.insert(0, pPr)
+    return n + ensure_fonts(pPr)
+# doc.paragraphs + 全 table cell paragraphs + sec.header/sec.footer の paragraphs を全部 walk する
+```
+
+- **size (`w:sz`) は注入しない** (= docDefault の指定 pt をそのまま使う)、 **bold / underline を mark から継承しない** (= 削除済み記載例・赤字注釈の残置書式が mark に残っていることがあり、 継承すると本文が下線だらけになる)。 rFonts だけを埋める。
+- **header / footer + 空段落の mark まで対象にする**: Word の PDF 出力は**空段落 (footer 末尾等) にも mark フォントで空白 glyph を emit** する。 本文を全部直しても、 footer の空段落 1 個が rFonts 無しだと **PDF 埋め込みフォント一覧に異種フォントが 1 個残り** (中身は不可視の空白 1 文字)、 Acrobat のフォント一覧を見る audit に「まだ直っていない」 と映る。
+
+**機械 gate — PDF 埋め込みフォントの allowlist assert** (= 「見た目 OK」 の null protection、 決定論・1 秒):
+
+```python
+import fitz
+doc = fitz.open(pdf_path)
+fonts = {f[3] for f in doc[0].get_fonts(full=True)}   # 例: {'AAAAAC+MS-Gothic', ...}
+assert all("MS-Gothic" in f for f in fonts), f"指定外フォント混入: {fonts}"
+```
+
+fill driver の verify 段 ([`pdf-mutation-verification-schema`](#pdf-mutation-verification-schema) の隣) に足す。 フォント指定のある様式では **page 数・text 照合と同格の必須 assert** — 違反は render 上ほぼ不可視で、 これが唯一の検出面になる。
+
+関連: 継承の解決順は [`docx-guidance-deletion`](#docx-guidance-deletion) 落とし穴 a (= 色の style 継承) と同型の「効いている値は直接値と限らない」 系。 fill の共通 pattern は [`docx-fill-xml-edit`](#docx-fill-xml-edit)、 page 数側の制約は [`docx-pdf-page-compress`](#docx-pdf-page-compress)。
+
 ### <a id="docx-checkbox-content-control"></a>☐ チェックは「ただの文字」か「コンテンツコントロール」かを見分ける
 
 > ⚠️ **2026-06-05 RCA 確定 (3 度の誤診の末 ground-truth で決着)**: Word「破損/開いて修復」の**確定真因は XML 宣言の形式**だった。 python-docx (lxml) が再シリアライズした OOXML パーツの宣言は `<?xml version='1.0' ... ?>` (**single-quote + LF**) になるが、 厳格な macOS Word (実証: 16.108) はこれを「このファイルは破損しています」と判定し開くたびにダイアログを出す。 Word 正規形 `<?xml version="1.0" ... ?>` (**double-quote + CRLF**) に揃えると解消 (= 実機 open で確定・内容不変)。 **fix = [`scripts/normalize-docx-decl.py`](../scripts/normalize-docx-decl.py)` FILE.docx`** (宣言のみ書換・idempotent)。 **python-docx で docx を save したら必ず通す**。 `check-docx-integrity.py` もこの single-quote 宣言を検出するよう更新済。 ⚠️ この症状は普遍でない (python-docx は通常 Word で開ける) が厳格 Word 個体で再現。 **以下の checkbox 節は「直す価値のある別の実在 inconsistency だが Word 破損の真因ではなかった」** として読む (= 当初 checkbox を真因と誤診 → ground-truth で反証 → 宣言が真因と判明)。 教訓: **決定論 check ✅ ≠ Word 受理、 最終 ground truth は実機 open** (= validator は必要条件であって十分条件でない)。
@@ -1803,7 +1855,7 @@ def ensure_cell_paragraphs(doc):
 
 **(2) 削除対象を grep するとき content-control / table / textbox を見逃さない**:
 
-python-docx の `doc.paragraphs` は **本文段落しか拾わず**、 **表セル・テキストボックス・content control (`<w:sdt>`) 内のテキストを取りこぼす**。 官製様式はガイダンスを content control や表セルに埋めることが多く、 「`doc.paragraphs` で grep して 0 件 → 消えた」 が嘘になる (= 別 variant が content control 内に残存)。 body 全体の `<w:p>` を走査する:
+python-docx の `doc.paragraphs` は **本文段落しか拾わず**、 **表セル・テキストボックス・content control (`<w:sdt>`) 内のテキストを取りこぼす**。 官製様式はガイダンスを content control や表セルに埋めることが多く、 「`doc.paragraphs` で grep して 0 件 → 消えた」 が嘘になる (= 別 variant が content control 内に残存)。 ⚠️ さらに **header / footer part は body 走査 (`doc.element.body.iter`) の外** — 赤字注釈 (= 「注）Ａ４縦用紙１枚にまとめること。」 型の 「赤字は削除」 対象、 典型 `w:color=FF0000`) が **footer に刷られている**様式があり、 body だけ消して「全消し」 と主張すると footer の赤字が提出版に残る (2026-07-17 実事故、 同一様式の先行提出では削除済 = 前例との非対称も検出 signal)。 `sec.header` / `sec.footer` (per section) も走査対象に含める。 body 全体の `<w:p>` を走査する:
 
 ```python
 from docx.oxml.ns import qn

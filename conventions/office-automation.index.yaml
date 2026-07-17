@@ -285,6 +285,11 @@ sections:
     level: 3
     title: "確定済 docx の外科編集: python-docx で run / 段落を直接いじる"
     related: [docx-fill-xml-edit, docx-guidance-deletion, docx-checkbox-content-control, docx-pdf-stale-cache, docx-password-roundtrip-edit]
+  - id: docx-new-run-rfonts-fallback
+    level: 3
+    title: "python-docx で新規 run を作る時は rFonts を明示する (= docDefault テーマフォント落ち → 様式フォント指定違反)"
+    origin: "2026-07-17"
+    related: [docx-fill-xml-edit, docx-python-docx-surgical-edit, docx-guidance-deletion, docx-pdf-page-compress, pdf-mutation-verification-schema]
   - id: docx-checkbox-content-control
     legacy: "2-5b"
     level: 3
