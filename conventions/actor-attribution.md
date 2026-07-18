@@ -5,7 +5,7 @@ summary: carrier proxy (= commit author / push 者 / 送信者 / 記録の書き
 -->
 # Actor / statement attribution — 行為・発言の帰属規律
 
-共同作業の記録 (git log / 共同編集 doc / メール thread / 議事メモ / チャット) を読んで「誰がやった・誰が言った」を報告・記録する時の規律。
+共同作業の記録 (git log / 共同編集 doc / メール thread / 議事メモ / チャット) を読んで「誰がやった・誰が言った」を報告・記録する時の規律。核心 = carrier proxy を内容の判断主体・発言主体と等値しない。
 
 ## <a id="carrier-not-author"></a>問題の形: carrier proxy ≠ author
 
