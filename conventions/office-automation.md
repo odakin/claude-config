@@ -431,6 +431,8 @@ origin: 2026-06-16 様式⑭-1 の承認欄ボックス (`AC48:AG51`/`AH49:AJ51`
 
 **検証 (= 機械 + 視覚、 両方)**: [`scripts/check-form-clipping.py`](../scripts/check-form-clipping.py) `<雛形.xlsx> <記入済.xlsx> <生成.pdf>` が、 雛形 diff で**記入セルだけ**に絞り、 各記入値が PDF 抽出テキストに完全な部分文字列として現れるか機械照合する (= 欠落 ≥3 字を clip 疑いとして flag、 `--selftest` 内蔵)。 ⚠️ レンダラによっては clip でも text 層に全文が残るので **[`pdf-visual-confirm`](#pdf-visual-confirm) の視覚確認も必ず併用** (= 検証 3 層は相互代替不可)。
 
+⚠️ **formula fan-out cell の変種 (= 上の機械照合の射程から構造的に漏れる)**: 様式は記入 cell を `=IF(旅費請求書!G17="","",旅費請求書!G17)` のような**数式で他 sheet に複製** (fan-out) することが多い。 この fan-out 先 merged cell が wrap 無しだと、 **参照元の文面を長くしたときだけ**そこで右端 truncate が発現する。 検証の穴が 2 重: (a) 数式 cell は雛形と同一なので**雛形 diff に出ない** = check-form-clipping の走査対象にならない、 (b) 記入値の全文は fan-out **元** (や wrap 済みの別 fan-out 先) のページの text 層で hit するので、 **PDF 全体からの部分文字列 search は truncate した 1 箇所を見逃す**。 さらに雛形が承認実績を持っていても、 それは**当時の短い文面で発現しなかった**だけ (= 承認済み template の流用は安全を保証しない)。 **対処**: 参照元の文面を差し替え/延長したら、 `=…!` の grep ([`cross-sheet-formula-chain`](#cross-sheet-formula-chain)) で fan-out 先を列挙 → 各先の wrap_text (+ [`wrap-text-needs-row-height`](#wrap-text-needs-row-height) の行高) を確認 → [`pdf-visual-confirm`](#pdf-visual-confirm) で**該当ページを個別に**目視。 embedded `\n` 入りの文面は wrap_text が立って初めて複数行 render される ([`explicit-newline-break`](#explicit-newline-break))。 origin: 2026-07 (承認済み雛形の流用で用務文面を延長 → 報告書 sheet の fan-out 先だけ truncate、 依頼書・承諾書側は wrap 済みで無事 = 全体 text search では検出不能だった)。
+
 **再生成 pipeline** (= 様式⑭ 系を直したら毎回この順):
 
 ```
@@ -2706,7 +2708,7 @@ Excel UI の印刷 dialog で **default 「アクティブシート」** の場�
 > 1. **構造把握**: [`form-dump-first`](#form-dump-first) で全 sheet を dump → 提出に含める sheet / 1 sheet を 2 ページに割る sheet を決める ([`multi-sheet-form`](#multi-sheet-form))
 > 2. **fill**: [`openpyxl-xlsx-fill`](#openpyxl-xlsx-fill) 各則で記入 → [`all-sheet-sweep`](#all-sheet-sweep) + [`same-pattern-grep-sweep`](#same-pattern-grep-sweep) で全 sheet sweep + 同型文字列の横断修正 + [`label-vs-input-antipattern`](#label-vs-input-antipattern) を踏まない
 > 3. **ページ体裁**: [`print-area-bbox-fit`](#print-area-bbox-fit) で印刷範囲を実内容に詰める + [`even-margins-centering`](#even-margins-centering) で余白均等化 + [`trailing-print-artifact`](#trailing-print-artifact) の点線を除去
-> 4. **出力**: [`excel-pdf-whole-workbook-export`](#excel-pdf-whole-workbook-export) (= 不要 sheet を temp で削除) + 必要なら [`one-sheet-multi-page-split`](#one-sheet-multi-page-split) → [`fitz-pdf-toolkit`](#fitz-pdf-toolkit) で結合
+> 4. **出力**: [`excel-pdf-whole-workbook-export`](#excel-pdf-whole-workbook-export) (= 不要 sheet を temp で削除) + 必要なら [`one-sheet-multi-page-split`](#one-sheet-multi-page-split) → [`fitz-pdf-toolkit`](#fitz-pdf-toolkit) で結合 (⚠️ 結合 index は hardcode したまま構成変更すると黙ってずれる → [`fitz-insert-pdf-index-clamp`](#fitz-insert-pdf-index-clamp) の page-count assert を焼き込む)
 > 5. **検証**: [`pdf-visual-confirm`](#pdf-visual-confirm) (= 全ページ目視、 LAYOUT) + [`pdf-margin-pixel-measure`](#pdf-margin-pixel-measure) (= 余白を px 実測) + [`image-budget-exhaustion`](#image-budget-exhaustion) (= 画像は 1 枚ずつ・fail したら即 text 切替、 budget 節約)
 > 6. **永続化**: 生成手順が複雑・反復するなら [`expensive-intermediate-artifacts.md`](expensive-intermediate-artifacts.md) 準拠で生成 script をリポに置く (= 毎回手で組み直さない)
 
@@ -2809,6 +2811,24 @@ sheet.thumbnail((1400, 1400)); sheet.save("/tmp/contact.png")   # 1 枚で全ペ
 ```
 
 ⚠️ contact sheet は **全体把握用** (= ページ抜け・空白ページ・大崩れ・ページ数違いを 1 Read で検出、 [`image-budget-exhaustion`](#image-budget-exhaustion) を温存)。 細部 (= 罫線欠け・文字 clip・誤字) は解像度が足りないので**個別ページ render で確認**する (= 役割分担: contact sheet で当たりを付け → 怪しいページだけ拡大)。
+
+### <a id="fitz-insert-pdf-index-clamp"></a>⚠️ `insert_pdf` の from_page/to_page は範囲外 index を silent clamp する → 構成変更で結合がずれても黙って通る + page-count assert を焼き込む
+
+**症状**: 上の結合 pattern (= `insert_pdf(A, from_page=…, to_page=…)` を hardcode した生成 script) を流用しつつ**パッケージ構成を変えた** (= 提出 sheet を 1 枚減らした/増やした) とき、 出力 PDF のページが**黙って重複・欠落**する。 実例: 7 ページ構成の script から 1 sheet を REMOVE して 6 ページ構成にしたのに `insert_pdf(A, from_page=5, to_page=5)` (= 旧構成の最終ページ) を残したら、 5 ページしかない A に対して **fitz が範囲を clamp して最終ページをもう一度挿入** = 同一ページが 2 回入った 7p の PDF が **エラーなしで**生成された。
+
+**原因**: PyMuPDF の `insert_pdf` は from_page/to_page が範囲外でも **raise せず有効範囲に丸める** (= 仕様)。 結合 index の hardcode は「元 PDF のページ数」 という暗黙の前提を持ち、 sheet の追加/削除 (= [`excel-pdf-whole-workbook-export`](#excel-pdf-whole-workbook-export) の REMOVE list 変更) がその前提を黙って壊す。
+
+**対処 (= 3 層、 上から必須)**:
+1. **出力ページ数の assert を script に焼き込む** (= 最安の網。 構成変更で index がずれた瞬間に fail する):
+   ```python
+   out.insert_pdf(A, from_page=0, to_page=4); out.insert_pdf(B, from_page=4, to_page=4)
+   assert out.page_count == 6, f"expected 6 pages, got {out.page_count}"
+   ```
+   ⚠️ ただし assert が catch するのは「合計数が変わる」 ずれのみ (= 重複 1 + 欠落 1 が同時に起きると数は合う) — 必ず 2 と併用。
+2. **結合後に各ページを text で同定** ([`fitz-pdf-toolkit`](#fitz-pdf-toolkit) の `get_text` で先頭 80 字 → ページ見出しが期待順か確認)。 重複挿入は「同一 text のページが 2 枚」 で一目で分かる。
+3. **REMOVE list / パッケージ構成を変えたら concat の index 定数を必ず点呼** (= 流用時 checklist。 index は「変更した sheet 数」 だけでなく元 PDF のページ順にも依存するので、 迷ったら 2 の text 同定で決める)。
+
+origin: 2026-07 (7p→6p 構成変更で旧 index が最終ページを重複挿入、 page-count assert 追加で構造的に再発防止)。
 
 ### <a id="pdf-annotation-markup-read"></a>共同編集者の「青字 / 赤字」 マークアップは text 色でなく注釈 (ink / Stamp) のことがある
 

@@ -55,7 +55,7 @@ sections:
   - id: merged-cell-text-clipping
     level: 3
     title: "結合セルの長文 clipping は shrink_to_fit が効かない → font size を下げる"
-    related: [excel-osascript-cell-write, clear-yellow-fill-marks, pdf-visual-confirm, xlsx-to-pdf-script, merged-cell-write-topleft, openpyxl-destroys-drawings]
+    related: [excel-osascript-cell-write, clear-yellow-fill-marks, pdf-visual-confirm, xlsx-to-pdf-script, merged-cell-write-topleft, openpyxl-destroys-drawings, cross-sheet-formula-chain, wrap-text-needs-row-height, explicit-newline-break]
   - id: xlimage-size-silent-fail
     legacy: "1-1"
     level: 3
@@ -535,6 +535,11 @@ sections:
     level: 3
     title: "PyMuPDF (fitz) で PDF を render / crop / 結合 / ページ数確認"
     related: [pdf-visual-confirm, image-budget-exhaustion, one-sheet-multi-page-split]
+  - id: fitz-insert-pdf-index-clamp
+    level: 3
+    title: "insert_pdf の from_page/to_page は範囲外 index を silent clamp する → 構成変更で結合がずれても黙って通る + page-count assert を焼き込む"
+    origin: "2026-07"
+    related: [fitz-pdf-toolkit, excel-pdf-whole-workbook-export, one-sheet-multi-page-split]
   - id: pdf-annotation-markup-read
     level: 3
     title: "共同編集者の「青字 / 赤字」 マークアップは text 色でなく注釈 (ink / Stamp) のことがある"
