@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 76 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 77 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -55,6 +55,8 @@ layer 1 (public) のドメイン固有規約 76 file をカテゴリ別に列挙
   - e-Rad 経由の研究費応募 (JST・科研費・財団等) のフォーム固有制限・書式ルール・つまずきどころ (= 制度横断で効く e-Rad 挙動のみ、 制度個別値 〔費目・字数上限・締切〕 は各公募要領 + 応募管理リポが正)
 - **[jps-talk-submission.md](jps-talk-submission.md)** — 日本物理学会 (JPS) 年次大会の一般講演を申し込むとき
   - 日本物理学会 (JPS) 大会 一般講演申込の form 機構と落とし穴 (= 会員マイページ経由・締切 14:00 型 / 登壇 1人1件 + 領域13 例外 + 2件目参加費免除 / キーワードは code 入力 / ^@^ 登壇者印・^A^ 区分記号・全角カンマ連結 / 受理票は別ドメイン外部運営から = from:jps.or.jp では検索不可 / 登録番号+パスワード durable 保存義務 / 要旨欄は非公開・題目のみ公開 → 集客は題目勝負。 制度個別値は当年の募集要項が正、 erad-submission.md の sibling)
+- **[media-transcription-ledger.md](media-transcription-ledger.md)** — 定期的に届く画像 stream (板書写真・スキャン書類・写真メモ) を SoT 化する仕組みを設計するとき + 手書き画像の読取結果を記録・転記するとき
+  - 画像 stream は fetch されるだけでは SoT に入らない — transcript home + 読取 ledger + 未読 detector + 保守的自動読取 routine の 4 点セットで「読んだか不可視」問題を design-out する
 - **[office-automation-principles.md](office-automation-principles.md)** — 新しい様式・slug の無い罠に当たったとき (考え方の原則編)
   - office-automation.md の原則編 (= 考え方)。 様式=「見た目が契約」/ file=地層 / 処理=lossy 解釈器の連鎖 の枠組み、 道具選択の梯子 (成果物は何か × 雛形にどの層があるか)、 検証 3 層モデル (機械/視覚/実機 — 相互代替不可 + 異常は print-blocker)、 文字列照合 NFKC 必須、 座標は label anchor から導出、 人間系原則 (既知情報 prefill / print-last / 記入分担 4 区分表 / 受理側で閉じる)、 新しい罠の体系への拡張手順。 **新しい様式・slug の無い罠ではまずこちら**
 - **[office-automation.md](office-automation.md)** — 研究費/教務/学術様式の xlsx/docx を機械で fill するとき (罠の症例集)
