@@ -189,6 +189,10 @@ sections:
     legacy: "8.17"
     level: 3
     title: "8.17 broadcast で届く個人義務 — per-person addressing proxy の構造的 false negative"
+  - id: request-mail-two-date-axes
+    legacy: "8.18"
+    level: 3
+    title: "8.18 依頼 mail の二日付軸 — event 日を urgency の proxy にすると行動〆切が落ちる"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

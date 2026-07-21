@@ -630,6 +630,8 @@ reflex: 見落とし failure に downstream の検出器/通知を足す前に�
 
 origin: ある追跡システムで「期限つき義務」 が複数回見落とされた事例の連鎖。 毎回 downstream の網 (= 到着 trigger / 締切 surface / 返信 handback 検出) を 1 つずつ足したが、 各々「前回の正確な形」 を塞いだだけで次が隣の死角に落ちた。 根は intake で義務が下位ロジ (= 調整作業) として mis-encode され、 本物の締切が一度も登録されなかったこと = どの網も「存在しない fact」 を掴めなかった。 §8.8 (網が proxy を見る) の **上流版** (= 網が見る対象自体が intake で歪む)。 3+ 事例の連鎖からの一般化 (§9.8 充足)。
 
+<a id="receiverless-handoff"></a>変種 (2026-07 追記) — **受信者不在 handoff / documented false coverage**: mechanism A が case を「それは mechanism B の領分」 という routing 根拠で除外・suppress する時、 **B がその case を実際に受け取る channel を持つか**を verify する。 B の coverage が intake 前提 (= 人間判断による tracked object 化を待つ) なら、 その除外は誰も受け取らない handoff になり、 しかも code comment / doc に routing 根拠が明記されているせいで**意図された設計に見える** (= gap が最も発見されにくい形 — 網の不在でなく「網があるという文書化された誤信」)。 観測 (2026-07、 同一 incident 内で独立に 2 機構): ① 日付抽出器が締切文脈の日付を「期限 mechanism の領分」 として除外 — 先方は登録済み対象しか読めず、 無人窓では登録する主体が不在 / ② mail 検出器が特定 label を「専用表示段が cover」 として日次 push から除外 — 専用段は pull 専用で無人経路ゼロ = 除外が silent な配信降格になっていた。 evidence base は 1 incident 2 機構 (= §9.8 の 2+ は機構数で充足、 incident 数では N=1 と正直に注記)。
+
 <a id="recall-dependent-firing"></a><!-- legacy alias: 旧 anchor 名 (rename 前) への外部参照を生かす後方互換 -->
 ### <a id="firing-surface-hierarchy"></a>8.12 規律の発火面 hierarchy — doc 記載 (recall 依存) は最弱、 書く前に発火面を選ぶ
 
@@ -735,6 +737,14 @@ origin: 2026-06-29 ある institutional 締切超過の指摘を受け、 person
 reflex: mail surfacing / triage 系の検出を設計・評価する時、 「個人義務が broadcast で届く経路」 を test case に含める (= per-person proxy の盲点を設計時に名指しする)。 逆に broadcast mail を noise として suppress する filter を書く時は「この経路で個人拘束の義務も届くか?」 を問う (= 会議招集・受講依頼・投票依頼は ML/BCC で届くのが典型)。
 
 origin: 2026-07、 年次の institutional 義務 (= 受講報告 + 書類提出、 学内締切付き) が BCC 一斉配信 (宛名「各位」) で初回 + リマインド 2 通の計 3 通届いたが、 name-mention surfacing を 3 通とも構造的に貫通。 4 通目 (= 個別名指しの Fwd 催促) で初めて surface し、 その時点で締切を 1.5 ヶ月超過。 しかも初回の 1 週間後に義務自体は認識され session 記録の prose に「今週の事務 N 件」 として書かれていたが、 tracked object 化されず deadline 網から不可視のまま (= 検出層と intake 層の複合failure)。 sibling 観測: 役員 ML の会議招集 3 通が ML bracket noise filter で suppress され会議欠席 (2026-06) / 学内 ML の会議通知が同型 filter で不検出 → filter 緩和 (2026-06)。 3+ 観察からの一般化 ([`§9.8`](#single-observation-scope-check) 充足)。 instance (= 検出器実装・sender 具体値) は個人層に残置 (= kernel-up / instance-down)。
+
+### <a id="request-mail-two-date-axes"></a>8.18 依頼 mail の二日付軸 — event 日を urgency の proxy にすると行動〆切が落ちる
+
+依頼 mail はしばしば **2 つの日付軸**を運ぶ: (1) **event 日** (= 会議・開催・実施日) と (2) **行動〆切** (= 出欠入力・登録・提出の期限)。 検出器・reminder・push gate を event 日軸に keying する (= 「event が今日・明日なら通知」) と、 行動〆切が **event 日より手前に来る**依頼類 (= 日程調整・RSVP・登録窓口) で通知が構造的に間に合わない — 〆切当日、 event はまだ「数日先」 で gate は静かに閉じたまま。 さらに **日程調整型** (= 候補日提示・開催日未確定) では event 軸そのものが未定義なので、 行動〆切だけが検出可能な軸になる。 [`§8.8`](#proxy-blind-spot) の proxy 盲点の日付版 (= event 日近接を urgency の proxy にした) であり、 [`§8.17`](#broadcast-obligation-blind-spot) の宛先軸とは独立 (= 1:1 mail でも起きる)。
+
+reflex: 日付を扱う surfacing / reminder を設計・評価する時、 「この mail の actionable な日付はどれか — event 日か、 その手前の行動〆切か」 を分離して問い、 gate は**行動〆切軸に (も)** keying する。 締切文脈 (「までに」 等) の日付を「アポでない」 として捨てる filter を書く時は、 捨てた先に受け手が実在するかを [`§8.11 変種`](#receiverless-handoff) として verify する。
+
+origin: 2026-07、 会議日程調整の broadcast 依頼 (候補日 2 つ + 入力〆切が中 1 日) で、 検出器は候補日 (event 軸) を正しく抽出しながら入力〆切の日付を「期限 = 別 mechanism の領分」 として除外し、 push gate も event 日近接のみ → 〆切は event の 2 日前に silent 超過 (週末 + 祝日と重なり human catch も無し)。 sibling 観測 (同年 7 月): 候補日未確定型の日程調整 mail が「具体日時のあるアポ」 検出の圏外に落ち、 user の直接質問だけが catch。 2 観察 ([`§9.8`](#single-observation-scope-check) の 2+ bar 充足)。 instance (= 検出器の入力〆切 class 実装) は個人層に残置。
 
 ---
 
