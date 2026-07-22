@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 77 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 78 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -148,6 +148,8 @@ layer 1 (public) のドメイン固有規約 77 file をカテゴリ別に列挙
   - Substack 規約（入稿: Markdown→リッチテキスト変換手順 / 取得: notes・コメントの Gmail MCP + WebFetch 経由回収）
 - **[ui-toggle-convention.md](ui-toggle-convention.md)** — UI panel 内の toggle group を設計するとき
   - UI panel 内 toggle group の default 側統一ルール (slider 位置 + bright label を panel scope で揃える)
+- **[web-form-automation.md](web-form-automation.md)** — 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき
+  - flaky web form 入力の一般則 — 送信結果はレスポンスページで判断しない (過負荷サイトは POST 成功後にエラーページを返す、重複確認画面 = 前回送信成功の証拠、#submit-truth-is-server-state)、公開 read API の cache による false negative (#read-api-cache-lag)、radio/checkbox は click より form_input 直接設定 (#form-input-over-click)、動的 combobox は form_input 不可、多言語ペア validation の非対称発火と「同値を両欄に焼く」回避 (#language-pair-validation)、metadata 自動取り込みの著者順 verify (#imported-metadata-verify)、リトライ規律 (フォーム状態は保存されない前提で SoT から再入力)
 - **[web-tools.md](web-tools.md)** — WebSearch / WebFetch / browser 自動化の信頼性を判断するとき
   - WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block)
 - **[zenn.md](zenn.md)** — Zenn.dev 記事を執筆・入稿するとき
