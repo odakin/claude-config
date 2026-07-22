@@ -177,15 +177,19 @@ on idle
 	try
 		do shell script "$HOME/.local/bin/rotate-wallpaper.sh --once"
 	end try
+	set iv to 60
 	try
-		set iv to (system attribute "WALLPAPER_INTERVAL") as integer
-		if iv < 10 then set iv to 10
-		return iv
-	on error
-		return 60
+		set envval to system attribute "WALLPAPER_INTERVAL"
+		if envval is not "" then
+			set n to envval as integer
+			if n >= 10 then set iv to n
+		end if
 	end try
+	return iv
 end idle
 ```
+
+⚠️ `system attribute` の unset env は `""` を返し、 **AppleScript の `"" as integer` は error でなく `0` に化ける** (実測)。 「coerce → 下限 clamp」 の素朴な書き方だと unset 時に clamp 値 (例 10 秒) が interval になる — 空文字を明示 check してから coerce する (上記形)。
 
 ```bash
 osacompile -s -o ~/Applications/WallpaperRotator.app rotator.applescript   # -s = stay-open
