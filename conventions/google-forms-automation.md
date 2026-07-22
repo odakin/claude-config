@@ -7,6 +7,8 @@ summary: Google Forms の `FB_PUBLIC_LOAD_DATA_` HTML scrape で entry id 抽出
 
 Google Forms を programmatic に扱う (= 構造解析、 prefill URL 生成、 submit 自動化) ときの実装パターンと、 失敗する境界を documented する。
 
+> サイト非依存の web form 入力一般則 (= 送信成否の確認・リトライ規律・click vs 値直接設定 等) は [`web-form-automation.md`](web-form-automation.md)、 別のサイト固有 doc は [`researchmap.md`](researchmap.md)。 本 file は Google Forms 固有。
+
 ## FB_PUBLIC_LOAD_DATA_ HTML scrape で form 構造取得
 
 Google Forms の `viewform` ページは、 form 全体のメタデータと questions の構造を `<script>` 内の **JavaScript 変数 `FB_PUBLIC_LOAD_DATA_`** に JSON 配列として埋め込んでいる。 これを scrape すれば **anonymous fetch だけで form 構造が取得可能** (= Workspace-restricted form でも viewform page 自体は anonymous でも 200 OK で返る、 submission のみ auth 要)。

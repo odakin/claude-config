@@ -5,9 +5,11 @@ summary: flaky web form 入力の一般則 — 送信結果はレスポンスペ
 -->
 # flaky web form への browser-automation 入力の一般則
 
-過負荷・レガシー・validation の癖が強い web サイト (研究者 DB、行政ポータル、学会申込システム等) のフォーム入力を browser automation (Chrome MCP 等) で代行するときの、サイト非依存の一般則。個別サイトの gotcha は各層の運用 doc に置き、ここには「どのサイトでも起こる失敗形」だけを置く。
+過負荷・レガシー・validation の癖が強い web サイト (研究者 DB、行政ポータル、学会申込システム等) のフォーム入力を browser automation (Chrome MCP 等) で代行するときの、サイト非依存の一般則。個別サイトの gotcha はサイト別 doc に置き、ここには「どのサイトでも起こる失敗形」だけを置く。
 
-隣接 doc: [`google-forms-automation.md`](google-forms-automation.md) (= Google Forms 固有の構造解析・prefill)、[`office-automation.md`](office-automation.md) (= 様式 xlsx/PDF の file 入力)、[`data-pipeline-automation.md`](data-pipeline-automation.md)。本 file は「ブラウザ越しの対話的 form」domain。
+隣接 doc:
+- サイト固有 doc (本 file の一般則の instance を持つ): [`researchmap.md`](researchmap.md) (= researchmap 固有の write 経路・DOI 取り込み・類似データ確認・言語ペア validation の現れ方)、[`google-forms-automation.md`](google-forms-automation.md) (= Google Forms 固有の構造解析・prefill・提出制約)
+- 別 domain: [`office-automation.md`](office-automation.md) (= 様式 xlsx/PDF の file 入力)、[`data-pipeline-automation.md`](data-pipeline-automation.md)。本 file は「ブラウザ越しの対話的 form」domain。
 
 ## <a id="submit-truth-is-server-state"></a>1. 送信結果はレスポンスページで判断しない — 真実はサーバー側の一覧
 

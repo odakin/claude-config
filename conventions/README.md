@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 78 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 79 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -144,6 +144,8 @@ layer 1 (public) のドメイン固有規約 78 file をカテゴリ別に列挙
   - Google サービス URL 書式 (`/u/N/` 禁止 + `?authuser=<email>` 必須、 hooks/google-url-guard.sh で機械的強制、 GCP project 管理 URL もカバー)
 - **[paste-destined-plain-text.md](paste-destined-plain-text.md)** — Claude が書いた文面を user がコピペして web UI (plain text 入力欄) に投稿する workflow を設計・実行するとき
   - 貼り付け先行きテキストの 3 層規律 (= ① authoring: 最終的に plain text 入力欄へ貼られる文面は中間 artifact 込みで最初から markdown 装飾ゼロ 〔「いま md/yaml に書いている」 は適用除外の理由にならない〕 / ② delivery: クリップボード直渡し 〔pbcopy 等〕 か code block、 rendered md 表示からのコピーは bold span ごとテキスト消失する事故源なので禁止 / ③ verification: 投稿後に read-back API で読み戻して draft と機械照合、 記録 commit はその後。 記号剥がれ 〔文は残る〕 と span 消失 〔文ごと消える〕 の 2 段階の悪性差)
+- **[researchmap.md](researchmap.md)** — researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
+  - researchmap 固有の機構と gotcha — write 経路は実質 web UI のみ (公開 API は read-only・write API は利用申請制、#write-paths)、/settings/imports の json/csv/zip 一括インポート (#bulk-import)、論文は ORCID 連携で自動反映・手動登録は非 DOI 系と講演のみ (#orcid-autofeed)、DOI 取り込みボタンと CrossRef metadata の癖 (#doi-import)、類似データ確認画面の 4 択 (#duplicate-screen)、タイトル日本語必須 + 言語ペア validation と「同値焼き」実務解 (#title-validation)、講演の会議種別の選び方 (#presentation-category)、radio は form_input 直接設定 (#radio-quirk)、混雑・公開 API cache lag (#congestion)
 - **[substack.md](substack.md)** — Substack 記事の入稿・notes/コメント回収をするとき
   - Substack 規約（入稿: Markdown→リッチテキスト変換手順 / 取得: notes・コメントの Gmail MCP + WebFetch 経由回収）
 - **[ui-toggle-convention.md](ui-toggle-convention.md)** — UI panel 内の toggle group を設計するとき
