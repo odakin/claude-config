@@ -1,14 +1,14 @@
 <!-- doc-meta
 when: macOS Tahoe (26.x) で wallpaper 変更を script/CLI/API から自動化しようとする前 + 起きてる wallpaper rotation が視覚的に効いてないと感じたとき
 category: macos
-summary: macOS Tahoe (26.5.1) で NSWorkspace.setDesktopImageURL と osascript "tell every desktop to set picture" が silent-fail する (rc=0 + Index.plist は更新するが display に届かない、 CocoaKit API 自体が dead)。 desktoppr / sindresorhus/wallpaper / Swift 直接 call も同一症状。 真の書換え path = ~/Library/Application Support/com.apple.wallpaper/Store/Index.plist を Python で再帰 walker により全 Desktop.Content.Choices 上書き (state は SystemDefault / Spaces × Displays / 個別 Displays の 8 箇所に分散、 1 箇所書きは respawn 時 self-repair)、 + killall -HUP cfprefsd + killall WallpaperAgent (SIGTERM) + killall Dock (SIGTERM) の triple kill、 + launchd は daemon-mode (KeepAlive=true / RunAtLoad=true / StartInterval なし + script 内 sleep loop) にして kTCCServiceSystemPolicyAppData の per-process 発火を 1 回のみに抑える。 CLI tools は現接続 NSScreen displayID を書くが Index.plist の stale UUID と mismatch = active display に効かない。 SIGKILL は /var/db/Wallpapers/<uuid>/Metadata.plist (root:wheel) から last-known-good 復元。 cache prune は 60s 間隔なら 100+ GB 肥大するので file-count cap で KEEP=1 に。 探索経路: notification-based reload や private XPC endpoint / debug listener enable / class-dump ImageFolder provider schema はすべて dead-end
+summary: macOS Tahoe (26.5.1) で NSWorkspace.setDesktopImageURL と osascript "tell every desktop to set picture" が silent-fail する (rc=0 + Index.plist は更新するが display に届かない、 CocoaKit API 自体が dead)。 desktoppr / sindresorhus/wallpaper / Swift 直接 call も同一症状。 真の書換え path = ~/Library/Application Support/com.apple.wallpaper/Store/Index.plist を Python で再帰 walker により全 Desktop.Content.Choices 上書き (state は SystemDefault / Spaces × Displays / 個別 Displays の 8 箇所に分散、 1 箇所書きは respawn 時 self-repair)、 + killall -HUP cfprefsd + killall WallpaperAgent (SIGTERM) + killall Dock (SIGTERM) の triple kill、 + launchd は stay-open applet 常駐 (osacompile -s + on idle + KeepAlive=true / RunAtLoad=true / StartInterval なし、 applet binary 直接 exec) にして kTCCServiceSystemPolicyAppData の per-process 発火を 1 回のみに抑える (⚠️ 旧 v1 = 通常 applet の do shell script で script 内 sleep loop を永久 block する形は event loop に戻れず autorelease 非 drain で applet が ~120 MB/日 leak + 「応答なし」、 2026-07-22 実測で v2 に置換)。 CLI tools は現接続 NSScreen displayID を書くが Index.plist の stale UUID と mismatch = active display に効かない。 SIGKILL は /var/db/Wallpapers/<uuid>/Metadata.plist (root:wheel) から last-known-good 復元。 cache prune は 60s 間隔なら 100+ GB 肥大するので file-count cap で KEEP=1 に。 探索経路: notification-based reload や private XPC endpoint / debug listener enable / class-dump ImageFolder provider schema はすべて dead-end
 -->
 
 # macOS Tahoe (26.5.1) で wallpaper を CLI から変える技術 SoT
 
 macOS 26 (Tahoe) で **wallpaper 変更を script / CLI / API から自動化する** ときの網羅ガイド。 2026-07-11 の半日探索で得た知見の SoT。 layer 3 の rotation 実装 (例: `wallpaper-rotation.md` 等) はこの SoT を参照して個別環境の paths だけ焼き込む形にする。
 
-⚠️ **前提**: 本 doc の全知見は **macOS 26.5.1** での実測、 **26.5.2 (Build 25F84) でも 5 罠すべて同一挙動を再検証済** (2026-07-11、 osascript silent-fail 継続 / WallpaperImageExtension `CFBundleVersion=245.4.8` 変更なし / daemon-mode recipe そのまま動作)。 Apple は wallpaper subsystem を point release で touch していない = 完成 recipe は 26.5.x 系列で有効。 次 major update (27.x?) が出たら再検証すべき。
+⚠️ **前提**: 本 doc の全知見は **macOS 26.5.1** での実測、 **26.5.2 (Build 25F84) でも 5 罠すべて同一挙動を再検証済** (2026-07-11、 osascript silent-fail 継続 / WallpaperImageExtension `CFBundleVersion=245.4.8` 変更なし / v1 常駐 recipe そのまま動作 〔※ 2026-07-22 に v1 の applet leak が判明、 §tahoe-app-data-per-process の v2 stay-open へ置換済〕)。 Apple は wallpaper subsystem を point release で touch していない = 完成 recipe は 26.5.x 系列で有効。 次 major update (27.x?) が出たら再検証すべき。
 
 ## <a id="tldr"></a>TL;DR
 
@@ -16,7 +16,7 @@ macOS 26 は wallpaper API を**完全に封じている**。 「動く」 recip
 
 1. **`~/Library/Application Support/com.apple.wallpaper/Store/Index.plist`** の**全 8 箇所** の `Desktop.Content.Choices[0].Configuration` を **Python で再帰 walker** で target image を指す `imageFile` provider に上書き
 2. **`killall -HUP cfprefsd`** + **`killall WallpaperAgent`** (SIGTERM) + **`killall Dock`** (SIGTERM) で強制 display refresh
-3. **launchd 経路は daemon mode** (`KeepAlive=true` + `RunAtLoad=true` + script 内で `sleep` loop) で **kTCCServiceSystemPolicyAppData** の prompt を起動時 1 回に抑える
+3. **launchd 経路は stay-open applet 常駐** (`osacompile -s` + `on idle` + `KeepAlive=true` + `RunAtLoad=true`) で **kTCCServiceSystemPolicyAppData** の prompt を起動時 1 回に抑える (⚠️ 旧「do shell script で script 内 sleep loop を永久 block」 は applet leak、 §tahoe-app-data-per-process)
 
 `osascript` / `desktoppr` / `sindresorhus/wallpaper` / **Swift の `NSWorkspace.setDesktopImageURL`** も**すべて silent-fail** する (rc=0 + Index.plist は更新するが display に届かない)。 これは CLI tool のバグでなく **Cocoa `setDesktopImageURL` API 自体が Tahoe で dead**。
 
@@ -41,9 +41,10 @@ macOS 26 は wallpaper API を**完全に封じている**。 「動く」 recip
 | `class-dump` で **`com.apple.wallpaper.choice.image-folder` provider** の Configuration schema を reverse engineer (WallpaperAgent 内に定数として実在、 GUI 側の `AddPhotoButton` + `_showImageFolderPicker` も存在) | class-dump が CLT に無く追加 install 要、 進めても built-in shuffle interval は `12H/1D/2D/1W/1M/CONTINUOUSLY` (＋ dead code の `Every 5 Seconds Internal`) しか無く 60s rotation の user goal 未達 | scope 外 |
 | System Settings → 壁紙 → Add Photos → folder shuffle UI | **Tahoe 26.5.1 で UI 削除済** (実装 binary には残ってるが到達 path 消失、 実測) | UI dead |
 | System Settings → プライバシーとセキュリティ → アプリ管理 で **`WallpaperRotator.app` を「+」で追加** して toggle ON | prompt は毎 rotation で再発 (grant は毎回 Create event 記録されるが persist しない、 App Data protection が per-process semantic) | insufficient |
-| launchd `StartInterval=60` で 60s ごと new process fork | **毎 fork で kTCCServiceSystemPolicyAppData の TCC prompt** 発火 = 60s ごと user が「許可」 押す羽目 | daemon mode に置換 |
+| launchd `StartInterval=60` で 60s ごと new process fork | **毎 fork で kTCCServiceSystemPolicyAppData の TCC prompt** 発火 = 60s ごと user が「許可」 押す羽目 | 常駐 applet に置換 |
+| 通常 applet の `do shell script` で「script 内 sleep loop」 を永久 block 起動 (v1 常駐形) | TCC prompt は 1 回になるが **applet が ~120 MB/日 leak** (event loop に戻れず autorelease 非 drain、 実測 1.3 GB / 10.7 日) + 「応答なし」 | stay-open `on idle` に置換 (2026-07-22) |
 
-**結論**: 上記全部が dead-end、 **Index.plist 再帰 walker + triple kill + daemon-mode launchd** の組合せだけが動く。
+**結論**: 上記全部が dead-end、 **Index.plist 再帰 walker + triple kill + stay-open applet 常駐 (launchd KeepAlive)** の組合せだけが動く。
 
 ---
 
@@ -159,15 +160,43 @@ Index.plist write 直後に:
 
 ⚠️ **副作用**: Dock が **1-2 秒消えて再表示** される。 60s rotation なら毎分 Dock フラッシュ。
 
-## <a id="tahoe-app-data-per-process"></a>完成 recipe (3): daemon-mode launchd で TCC prompt を 1 回に
+## <a id="tahoe-app-data-per-process"></a>完成 recipe (3): stay-open applet 常駐で TCC prompt を 1 回に
 
 Tahoe 26 で `~/Library/Application Support/com.apple.wallpaper/Store/Index.plist` への書込みは **`kTCCServiceSystemPolicyAppData`** (アプリ管理 / 他アプリのデータへのアクセス権) の TCC prompt を発火する。 System Settings → プライバシーとセキュリティ → アプリ管理 で該当 app を明示 grant しても **grant が persist しない** (TCC log で `AUTHREQ_PROMPTING` → `Create` event が毎回発行される、 実測)。
 
 **hypothesized 原因**: Tahoe が `kTCCServiceSystemPolicyAppData` を **1 process 1 grant** の semantic に変更した (session 限定 grant)。 launchd `StartInterval=60` で毎回 new process を fork すると新規 grant が要求される。
 
-**回避策 (実測有効)**: launchd を **daemon mode** に = `StartInterval` 削除 + `KeepAlive=true` + `RunAtLoad=true`、 script 内で `while true; sleep N; done` の rotation loop。 → **1 プロセスが常駐**、 TCC prompt は起動時 1 回のみ、 user が「許可」 1 回押せば以後静か。
+**回避策 (実測有効)**: applet を **常駐** させる = `StartInterval` 削除 + `KeepAlive=true` + `RunAtLoad=true`。 → **1 プロセスが常駐**、 TCC prompt は起動時 1 回のみ、 user が「許可」 1 回押せば以後静か。 子プロセスは毎 cycle fresh でも parent (applet) の grant を継承する (実測: python3 が毎 cycle fresh spawn で Index.plist を書けている)。
 
-**launchd plist template**:
+⚠️ **常駐のさせ方に罠 (2026-07-22 実測)**: v1 recipe (= 通常 applet が `do shell script` で「script 内 `while true; sleep N` loop」 を**永久 block 起動**する形) は **applet が ~120 MB/日 leak する** (実測 1.3 GB / 10.7 日、 26.5.2)。 機構 = `do shell script` の待機中 AppleScript runtime は内部 poll loop を回すが **event loop に一度も戻らないため autorelease pool が drain されない** (footprint 内訳 = MALLOC_SMALL dirty : untagged VM_ALLOCATE ≈ 3:1 = 小 object + pool page の署名)。 Activity Monitor で「応答なし」 表示になるのも同根 (= event 処理ゼロ)。 → **v2 recipe (下記、 stay-open applet + `on idle`) を使う**: 毎 idle で 1 回分 rotation だけ `do shell script` し、 idle 間で event loop に戻る = autorelease が毎周期 drain、 「応答なし」 も消える。 applet process は同一のまま常駐なので per-process grant は維持される。
+
+**applet source (stay-open、 v2)**:
+
+```applescript
+on idle
+	try
+		do shell script "$HOME/.local/bin/rotate-wallpaper.sh --once"
+	end try
+	try
+		set iv to (system attribute "WALLPAPER_INTERVAL") as integer
+		if iv < 10 then set iv to 10
+		return iv
+	on error
+		return 60
+	end try
+end idle
+```
+
+```bash
+osacompile -s -o ~/Applications/WallpaperRotator.app rotator.applescript   # -s = stay-open
+plutil -replace CFBundleIdentifier -string com.example.WallpaperRotator \
+  ~/Applications/WallpaperRotator.app/Contents/Info.plist
+plutil -replace LSUIElement -bool true \
+  ~/Applications/WallpaperRotator.app/Contents/Info.plist                  # Dock icon 非表示
+codesign -f -s - ~/Applications/WallpaperRotator.app                       # Info.plist 編集後に ad-hoc 再署名
+```
+
+**launchd plist template (applet binary 直接 exec)**:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -177,50 +206,30 @@ Tahoe 26 で `~/Library/Application Support/com.apple.wallpaper/Store/Index.plis
   <key>Label</key><string>com.example.wallpaper-rotate</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/open</string><string>-g</string><string>-a</string>
-    <string>WallpaperRotator</string>
+    <string>/Users/<you>/Applications/WallpaperRotator.app/Contents/MacOS/applet</string>
   </array>
   <key>KeepAlive</key><true/>
   <key>RunAtLoad</key><true/>
-  <!-- StartInterval は無し。 script 内で sleep loop -->
+  <!-- StartInterval は無し。 周期は applet の on idle が持つ -->
   <key>StandardErrorPath</key><string>/tmp/wallpaper-rotate.err</string>
 </dict>
 </plist>
 ```
 
-**shell script (daemon mode)**:
+⚠️ `open -g -a` 間接起動 + `KeepAlive` の組合せは使わない: `open` が即 exit するため launchd は app 本体を追跡できず、 KeepAlive が `open` の respawn loop に化ける (v1 の残骸 pattern)。 applet binary 直接 exec なら KeepAlive が applet 自体に効く (= crash 時自動再起動)。
 
-```zsh
-#!/bin/zsh
-# SIGTERM 受信で clean 終了 (launchd bootout 対応)
-trap 'exit 0' TERM INT
-
-while true; do
-  IMAGE=$(find "$FOLDER" -maxdepth 1 -type f -iname "*.jpg" -size +1k | sort -R | head -1)
-  [[ -n "$IMAGE" ]] || { sleep "$INTERVAL"; continue; }
-
-  # Index.plist 8 箇所書換え (§tahoe-full-write の Python を呼び出す)
-  /usr/bin/python3 - "$IMAGE" "$INDEX" <<'PY'
-  # ... §tahoe-full-write の Python コード
-  PY
-
-  # triple kill (§tahoe-refresh-sigterm)
-  /usr/bin/killall -HUP cfprefsd 2>/dev/null
-  /usr/bin/killall WallpaperAgent 2>/dev/null
-  /usr/bin/killall Dock 2>/dev/null
-
-  sleep "$INTERVAL"
-done
-```
+**shell script 側**: rotation 1 回分を `--once` として切り出す (loop も sleep も持たない)。 §tahoe-full-write の Python 書換え + §tahoe-refresh-sigterm の triple kill + §cache prune を 1 pass 実行して exit。
 
 **trade-off**:
 - ○ TCC prompt 1 回 (user が 1 回「許可」 で以後 grant 保持)
-- ○ 60s rotation 維持
-- ○ applet プロセス常駐 ~10MB RSS
+- ○ 60s rotation 維持 (周期は applet の `return` 値、 `WALLPAPER_INTERVAL` env で override)
+- ○ applet 常駐 RSS ~100 MB (AppKit 分) で **flat** (v1 は単調増加)
 - × **再起動 / logout / `launchctl bootout` で prompt 復活** (新 process = 新 grant、 起動時に 1 回押す)
 - × `launchctl kickstart -k` (再起動と等価) も同様
 
-**併用推奨**: System Settings → プライバシーとセキュリティ → **アプリ管理** に該当 app を「+」 で追加して toggle ON (これだけでは insufficient、 daemon 化と併用が本命)。
+**併用推奨**: System Settings → プライバシーとセキュリティ → **アプリ管理** に該当 app を「+」 で追加して toggle ON (これだけでは insufficient、 常駐化と併用が本命)。
+
+**rebuild と TCC grant (2026-07-22 実測)**: applet を osacompile で作り直しても (= ad-hoc 再署名で cdhash が変わっても)、 **bundle ID + 絶対 path が同一なら FDA / アプリ管理の既存 grant はそのまま効く** (re-toggle 不要だった)。 rebuild 後の初回起動も新 process なので App Data prompt は 1 回想定 (実測では prompt 無しで書けたケースあり = 直前 grant の残存と推定、 出たら 1 回押す)。
 
 ---
 
