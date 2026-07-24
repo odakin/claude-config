@@ -1995,7 +1995,7 @@ origin: 2026-06 ある学内事務窓口で、 出張様式に貼り付けた電
 
 ### <a id="signature-photo-to-transparent-png"></a>署名: 手書き写真 → 透過 PNG (raw → transparent、 [`signature-image-overlay-density`](#signature-image-overlay-density) の上流)
 
-**症状/use case**: 手書き署名を**スマホ等で撮影した raw JPG/PNG** (背景に紙の陰・影・指・縁の暗部を含む) を form に重ねたい。 [`signature-image-overlay-density`](#signature-image-overlay-density) は**既に透過 PNG が手元にある前提**で濃度を調整するが、 raw photo を持っていたらまずここで透過 PNG に変換する (= 不在だった上流 step)。
+**症状/use case**: 手書き署名を**スマホ等で撮影した raw JPG/PNG** (背景に紙の陰・影・指・縁の暗部を含む) を form に重ねたい。 [`signature-image-overlay-density`](#signature-image-overlay-density) は**既に透過 PNG が手元にある前提**で濃度を調整するが、 raw photo を持っていたらまずここで透過 PNG に変換する (= 不在だった上流 step)。 ⚠️ **押印 (ハンコ / 朱印) の photo はここでなく [`hanko-digitization.md`](hanko-digitization.md) のフル pipeline** (= ベクトル化で鮮鋭化 13 倍 + かすれ合成 + 写真色転写 + variant 量産。 本 slug は署名向けの簡易しきい値系統で、 小さく写った印影に使うとボケる)。
 
 **入力の特徴**: 自然光・蛍光灯下のスマホ撮影は (a) 紙白が灰色 (背景 RGB 200-230)、 (b) 影・縁の暗部 (背景 < 100)、 (c) インクは黒寄り (lum < 100)。 **そのまま輝度しきい値だけで ink 抽出すると影や指が ink と判定される** → 帯切出し (= ROI 限定) を入れる。
 
