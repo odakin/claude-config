@@ -68,6 +68,7 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 | フォント指定 (MSゴシック等) のある docx 様式を python-docx で fill して提出 → **「記載欄のフォントが指定と異なる」 差し戻し** | 新規 run に rFonts 無し → docDefaults theme (游明朝) に落ちる。 paragraph mark の rFonts は新規 run に**継承されない** + 空欄 cell は deepcopy 元 run が無い | fill 後に全 run + paragraph mark + header/footer へ rFonts enforce pass + PDF 埋め込みフォント allowlist assert → [`docx-new-run-rfonts-fallback`](#docx-new-run-rfonts-fallback) |
 | 研究費様式の提出後に機関事務から**差戻し** (経費の費目分け / 機関コード / 「本人に下線」 等の書式指示欠落) | 費目区分・コード verify・format 指示は fill driver 設計時に発火しないと構造的に落ちる (転記は書式を運ばない) | 差戻し対応 checklist = [erad-submission.md#sashimodoshi-response](erad-submission.md#sashimodoshi-response)、 費目 = [#keihi-himoku-kubun](erad-submission.md#keihi-himoku-kubun)、 コード = [#kikan-code-verify](erad-submission.md#kikan-code-verify)、 下線 = [`xlsx-rich-text-underline`](#xlsx-rich-text-underline) fill-driver caveat |
 | 計算式を持つ xlsx に**画像を挿入**したい (図の貼付欄等) / openpyxl `add_image` 後に cache が消える・Excel 再保存で画像が消える | openpyxl save は cache を落とし、 その復元の Excel open+save が openpyxl 由来 drawing を落とす (= 堂々巡り) | **Excel clipboard paste 一択** (`paste worksheet`、 サイズは PNG の DPI で制御) → [`xlsx-image-insert-excel-paste`](#xlsx-image-insert-excel-paste) |
+| **表 PDF を読んだら**値が隣の行・列と混ざる / 「誰の行の値か」 を取り違える / 数値列が「読めない」 ように見える | plain `get_text()` は内部格納順の連結で視覚順を保証しない (= 崩れて見えないまま誤帰属) | **layout-aware 抽出 ladder** (words+bbox y-band → dict → find_tables → clip) を降りる、 「読めない」 結論は ladder 全段の後 → [`pdf-table-layout-aware-reading`](#pdf-table-layout-aware-reading) |
 
 ---
 
@@ -1422,6 +1423,27 @@ assert fitz.open("p1.pdf").page_count == 1
 **規律**: PDF text 抽出に対する文字列照合は、 **必ず `unicodedata.normalize("NFKC", text)` してから比較**する。 `search_for()` は内部照合を正規化できないので、 互換字形を含みうる語の bbox が要る時は `get_text("words")` を取って NFKC 照合で探す。 1 度の検証で 2 回連続 false negative を踏んだ実害 (= 2026-06-11 ⑭-2、 「氏名欄・申請者欄が空」 と 2 度誤診断)。
 
 **dash 拡張 (= 同根)**: 同じ機構で、 埋込フォント (= subset 後) が **ASCII ハイフン `-` (U+002D) を抽出時に U+2010 (‐) / U+2011 (‑) 等へ round-trip** することがある (= 游ゴシック等で実観測)。 郵便番号 `123-4567` / 電話番号 / 口座番号のハイフンが照合で空振りし「印字が消えた」 と誤診断する (= 数字部は一致するので原因が掴みにくい)。 照合は NFKC に加えて **各種ダッシュを ASCII `-` に畳んでから**比較する (= `pdf_form_fill.py` の `flat()` = `NFKC` + dash map `‐‑‒–—―−﹣－` → `-`)。 origin: 2026-06-24 ⑭-2 完成版で住所郵便番号・TEL が verify 空振り (= 游ゴシック化で発生)。
+
+### <a id="pdf-table-layout-aware-reading"></a>表・多段組 PDF は素の `get_text()` で読まない (= layout-aware 抽出 ladder、 「読めない」 禁止)
+
+**症状 (2 つ、 どちらも「それらしい出力」 が出るのが悪質)**:
+
+1. **誤帰属**: `page.get_text()` (plain) は text block を **PDF 内部の格納順で連結するだけ**で、 表のセル・多段組の列を視覚順に並べる保証がない。 表 PDF (= 研究組織表 / 名簿 / 料金表 / 時間割) では**隣の行・列の値が連続して見える「読める風」 テキスト**が出るため、 行 A の値 (役割分担・金額・担当) を行 B の人物・項目に**誤帰属したまま信じて報告**する。 崩れて見えないので error signal がゼロ。
+2. **偽・抽出不能**: 数値列・merged cell・右端の列が plain 出力で見当たらず「この PDF は layout 依存で数値が読めない」 と**早断**する。 実際は words 抽出で全部取れる (下記)。 さらに「真に空欄 (= 未記入欄)」 と「抽出できていない」 の区別も plain 出力では付かない。
+
+**規律 (= 抽出 ladder、 「読めない」 と言う前に全段降りる)**:
+
+1. **`page.get_text("words")` + bbox sort/cluster** (= 第一選択): `(x0, y0, x1, y1, text, …)` を y で row cluster → x で列判定して視覚 layout を復元。 表の行帰属は **同一 y-band に在ることを確認してから**主張する
+2. **`page.get_text("dict")`**: block/line/span 構造 + font/size/color で見出しと値を判別 (= 青字ガイダンス検出等と同経路)
+3. **`page.find_tables()`** (PyMuPDF 1.23+): 罫線ベースの表構造を直接抽出 (= vector 罫線がある表なら最短)
+4. **`page.get_text(clip=rect)`**: 特定セル矩形に絞って読む (= [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation) の読み側適用)
+5. それでも空 → **「空欄 (未記入)」 と「抽出不能」 を区別して報告** (= merged cell の非左上は空に見える罠も [`merged-cell-text-clipping`](#merged-cell-text-clipping) 注記済)。 scan PDF (text 層なし) なら raster 画像の目視 / pixel 解析 ([`scan-pdf-pixel-anchor-overlay`](#scan-pdf-pixel-anchor-overlay)) が最後の砦
+
+**帰属主張の前の必須 check**: 表 PDF から「誰の行にどの値があるか」 (= 担当・金額・数量の人物/項目への帰属) を報告する時、 plain `get_text()` の線形テキストからの推測を禁止 — ladder 1 の y-band 一致を確認してからにする。 照合には [`pdf-text-match-nfkc`](#pdf-text-match-nfkc) (NFKC + dash 畳み) を併用。
+
+**Why (= fill 側と同格の工程として扱う)**: 書き側 (fill / 変換) は本 doc で厚く規律化されている一方、 読み側は「fitz で読めば OK」 と暗黙に信頼されがち。 だが plain `get_text()` は **lossy な解釈器** (= [`office-automation-principles.md`](office-automation-principles.md) の「処理 = lossy 解釈器の連鎖」 の読み方向) であり、 表 PDF では**沈黙して間違える**。 誤帰属した値が mail / 記録 / 判断に流れると訂正コストは抽出 1 回のコストの数十倍。
+
+**origin**: 2026-07 研究費調書 (15pp) の研究組織表。 plain `get_text()` 出力で隣接する分担者の役割分担 wording が行間に混ざり、 **別の分担者の担当テーマを本人の担当と誤帰属して報告** + 経費・エフォート数値列を「layout 依存で抽出できず」 と早断 → user 訂正 (「読めない、 とかありえんやろ」) → `get_text("words")` + y-sort で全行・全数値を回収 (= 経費値は取れ、 エフォート欄は**真に空欄** = 承諾操作時の本人入力待ち、 という「空欄 vs 抽出不能」 の区別も ladder で初めて確定)。
 
 ### <a id="docx-to-pdf-pages"></a>docx → PDF: Pages.app AppleScript が macOS では最も robust
 

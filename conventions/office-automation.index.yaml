@@ -245,7 +245,11 @@ sections:
   - id: pdf-text-match-nfkc
     level: 3
     title: "PDF text 照合は両辺 NFKC 正規化必須 (= CJK 互換字形の false negative)"
-    related: [pdf-prefill-direct, pdf-visual-confirm]
+    related: [pdf-prefill-direct, pdf-visual-confirm, pdf-table-layout-aware-reading]
+  - id: pdf-table-layout-aware-reading
+    level: 3
+    title: "表・多段組 PDF は素の `get_text()` で読まない (= layout-aware 抽出 ladder、 「読めない」 禁止)"
+    related: [pdf-text-match-nfkc, pdf-cell-label-vs-data-disambiguation, merged-cell-text-clipping, pdf-visual-confirm, scan-pdf-pixel-anchor-overlay, symptom-index]
   - id: docx-to-pdf-pages
     legacy: "2-4"
     level: 3
