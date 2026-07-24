@@ -681,25 +681,21 @@ if [ -f "$CONV_DEST" ] && [ ! -L "$CONV_DEST" ]; then
     echo "[claude-config] Updated: CONVENTIONS.md"
 fi
 
-# --- JHEP.bst の同期（texmf-local にインストール済みの場合）---
+# --- JHEP.bst の同期（TEXMFHOME にインストール済みの場合）---
+# TEXMFHOME (user 所有) は ls-R 不要で runtime search されるため texhash 不要。
+# 旧方式の texmf-local + texhash は ls-R が root 所有だと silent fail して
+# 「cp 成功・index されず・kpsewhich 不可視」 になる (2026-07-24 実測 RCA)。
 JHEP_SRC="$REPO_DIR/JHEP.bst"
 if [ -f "$JHEP_SRC" ] && command -v kpsewhich &> /dev/null; then
-    TEXMF_LOCAL="$(kpsewhich -var-value TEXMFLOCAL 2>/dev/null)"
-    BST_DST="$TEXMF_LOCAL/bibtex/bst/local/JHEP.bst"
-    if [ -n "$BST_DST" ] && [ -f "$BST_DST" ]; then
+    TEXMF_HOME="$(kpsewhich -var-value TEXMFHOME 2>/dev/null)"
+    BST_DST="$TEXMF_HOME/bibtex/bst/local/JHEP.bst"
+    if [ -n "$TEXMF_HOME" ] && [ -f "$BST_DST" ]; then
         if ! diff -q "$JHEP_SRC" "$BST_DST" > /dev/null 2>&1; then
-            GH_LOGIN="$(gh api user --jq '.login' 2>/dev/null)"
-            if [ "$GH_LOGIN" = "odakin" ]; then
-                if cp -f "$JHEP_SRC" "$BST_DST" 2>/dev/null; then
-                    texhash "$TEXMF_LOCAL" 2>/dev/null
-                    echo "[claude-config] JHEP.bst updated in texmf-local."
-                else
-                    echo "[claude-config] JHEP.bst updated. Run:"
-                    echo "  sudo cp $JHEP_SRC $BST_DST && sudo texhash"
-                fi
+            if cp -f "$JHEP_SRC" "$BST_DST" 2>/dev/null; then
+                echo "[claude-config] JHEP.bst updated in TEXMFHOME."
             else
                 echo "[claude-config] JHEP.bst updated. To sync:"
-                echo "  sudo cp $JHEP_SRC $BST_DST && sudo texhash"
+                echo "  cp $JHEP_SRC $BST_DST"
             fi
         fi
     fi
@@ -1258,22 +1254,21 @@ else
     echo "  Already up to date: $SKIPPED_HOOK repos"
 fi
 
-# --- 6b. Install JHEP.bst to texmf-local (optional) ---
-# JHEP.bst (modified ver. 2.18, note 有効化) を texmf-local にインストール
+# --- 6b. Install JHEP.bst to TEXMFHOME (optional) ---
+# JHEP.bst (modified ver. 2.18, note 有効化) を TEXMFHOME にインストール。
+# TEXMFHOME (~/texmf 系、 user 所有) は ls-R 不要で runtime search されるため
+# sudo も texhash も不要 = 全ユーザーで安全に自動 install 可能。
+# ⚠️ 旧方式 (texmf-local + texhash) は ls-R が root 所有のマシンで texhash が
+# silent fail し「cp 成功・index されず・kpsewhich 不可視」 の死角を作っていた
+# (2026-07-24 実測 RCA: 4/7 install 分が一度も index されていなかった)。
 # odakin: 自動インストール / 他ユーザー: オプション表示のみ
 JHEP_SRC="$SCRIPT_DIR/JHEP.bst"
 
-if [ -f "$JHEP_SRC" ]; then
-    # texmf-local のパスを検出
-    TEXMF_LOCAL=""
-    if command -v kpsewhich &> /dev/null; then
-        TEXMF_LOCAL="$(kpsewhich -var-value TEXMFLOCAL 2>/dev/null)"
-    elif [ -d "/usr/local/texlive/texmf-local" ]; then
-        TEXMF_LOCAL="/usr/local/texlive/texmf-local"
-    fi
+if [ -f "$JHEP_SRC" ] && command -v kpsewhich &> /dev/null; then
+    TEXMF_HOME="$(kpsewhich -var-value TEXMFHOME 2>/dev/null)"
 
-    if [ -n "$TEXMF_LOCAL" ]; then
-        BST_DIR="$TEXMF_LOCAL/bibtex/bst/local"
+    if [ -n "$TEXMF_HOME" ]; then
+        BST_DIR="$TEXMF_HOME/bibtex/bst/local"
         BST_DST="$BST_DIR/JHEP.bst"
         NEEDS_UPDATE=false
 
@@ -1285,26 +1280,23 @@ if [ -f "$JHEP_SRC" ]; then
 
         if [ "$NEEDS_UPDATE" = true ]; then
             echo ""
-            echo "=== Step 6b: JHEP.bst (texmf-local) ==="
+            echo "=== Step 6b: JHEP.bst (TEXMFHOME) ==="
             if [ "$GH_USER" = "odakin" ]; then
-                # 自分の端末: 自動インストール試行
+                # 自分の端末: 自動インストール（sudo 不要）
                 mkdir -p "$BST_DIR" 2>/dev/null
                 if cp -f "$JHEP_SRC" "$BST_DST" 2>/dev/null; then
                     echo "  Installed: $BST_DST"
-                    if command -v texhash &> /dev/null; then
-                        texhash "$TEXMF_LOCAL" 2>&1 | sed 's/^/    /'
-                    fi
+                    echo "  (TEXMFHOME needs no texhash; verify: kpsewhich JHEP.bst)"
                 else
                     echo "  JHEP.bst needs update. Run:"
-                    echo "    sudo cp $JHEP_SRC $BST_DST && sudo texhash"
+                    echo "    mkdir -p $BST_DIR && cp $JHEP_SRC $BST_DST"
                 fi
             else
-                # 他ユーザー: オプション表示のみ
+                # 他ユーザー: オプション表示のみ（sudo 不要）
                 echo "  Optional: JHEP.bst (modified ver. 2.18, note enabled) is available."
-                echo "  To install globally for BibTeX:"
-                echo "    sudo mkdir -p $BST_DIR"
-                echo "    sudo cp $JHEP_SRC $BST_DST"
-                echo "    sudo texhash"
+                echo "  To install for BibTeX (user-scoped, no sudo needed):"
+                echo "    mkdir -p $BST_DIR"
+                echo "    cp $JHEP_SRC $BST_DST"
             fi
         fi
     fi

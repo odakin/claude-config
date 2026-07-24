@@ -312,9 +312,10 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 ## <a id="bibliography-style"></a>Bibliography スタイル
 - **JHEP.bst を使う**（個人的好み）。`note` フィールドも表示するバージョンを使用
 - 正本: `~/Claude/claude-config/JHEP.bst`（ver. 2.18 ベース + note 全 entry type で有効化、md5: `0934fe19…`。 2026-07-24 に header comment 内の Unicode curly quotes を LaTeX 式 ``…'' に正規化 = char-fixer 配下 repo へ配布しても md5 が割れない idempotent 化、 機能変更なし）
-- `setup.sh` が texmf-local にインストール（odakin: 自動、他ユーザー: オプション表示）
-- texmf-local 未設定の場合は正本からリポにコピーして使う
+- `setup.sh` が **TEXMFHOME** にインストール（odakin: 自動、他ユーザー: オプション表示。 user 所有 + ls-R 不要ゆえ sudo/texhash 不要。 ⚠️ 旧方式 texmf-local + texhash は ls-R が root 所有だと silent fail し「cp 成功・kpsewhich 不可視」 の死角を作る = 2026-07-24 実測 RCA、 導線 verify は `kpsewhich JHEP.bst` の md5 照合）
+- **リポに vendor する場合は必ず正本から copy し、 `md5 -q <repo>/JHEP.bst` を正本 md5 と照合する**。 ⚠️ **他 repo からの copy は禁止** — 既存 repo には note 無効の stock v2.7 等の stale copy が複数残存しており、 そこから copy すると stale が増殖する（2026-07-24 RCA: `@unpublished` in-preparation entry の note が silent に落ちる形で発覚。 「note 表示有効」 と信じている file が実は stock、 は目視で見抜けない = md5 照合が唯一の cheap gate）
 - `\bibliographystyle{JHEP}` を指定
+- 将来 style を改版したら: 正本を編集 → 本節の md5 更新 → `setup.sh` 再実行で TEXMFHOME 同期 → vendor 済み repo は次に触る時に md5 照合で気付く
 
 ## <a id="no-biblatex"></a>biblatex は使わない（JHEP.bst と非互換）
 
