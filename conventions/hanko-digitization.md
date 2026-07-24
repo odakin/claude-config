@@ -213,6 +213,7 @@ im = im.rotate(angle, resample=Image.BICUBIC, expand=False,
 - **原盤は最大解像度 1 系列だけ durable な場所に残す** (縮小はいつでもできる、 逆は不可)。 git repo には縮小派生版のみ commit し、 原盤は cloud storage 等の git 外 archive + README back-pointer (= ルールは書かず個人層の SoT を指す)。
 - **派生版は content fill を一定に正規化する** (bbox trim → 一定余白 pad → 固定 px、 例 fill 0.89 / 600×600): variant ごとの余白差を消し、 挿入 driver の px 指定と独立にどの variant でも同じ見た目サイズになる。
 - **挿入のたびに variant を random に選ぶ** (pool = canonical + variants の一様 sample): 実物の押印は毎回微妙に違うので、 byte 一致の同一印影を全書類に使い回さない。 同一書類内の複数押印欄は相異なる variant を引く。
+- **canonical を後から差し替えるときは互換契約を守る** (= swap-in-place migration): 消費側 (driver / doc) が ① 単一 canonical path を参照し ② 挿入サイズを px で明示指定 (= 元画像の pixel 寸法に非依存) していれば、 **asset file の差し替えだけで全使用箇所に伝播しコード変更ゼロ**にできる。 その際**新 asset の content fill を旧 asset に揃えて正規化**する (= fill が違うと同じ px 指定でも印字サイズが変わる。 実例: 旧 0.89 / 新 0.82 のまま入れると一回り小さく出る)。 提出・送付済みの旧生成物は再生成しない (= 歴史的成果物として凍結)。
 - canonical path・picker script・どの窓口で画像印影が通るか等の個別運用は各自の layer 3 に置き、 本 doc は手順の SoT に留める。
 
 ## user とのやり取りで学んだこと
