@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Gmail でメールを送信する経路・MIME 実装を選ぶとき
 category: mail
-summary: Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕 / #double-confirmation-design = chat 承認〔規律層 = 内容〕と harness chip〔backstop = 未承認送信〕は別の脅威モデル — chip の品質 3 条件〔実行形 anchor・1 送信 1 個・dialog = 内容〕、 うざい chip の治療は廃止でなく anchor 絞り、 宣言配線は silent 消失しうる = 登録直後 verify + documented ⊆ live の機械 audit)
+summary: Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕 / #double-confirmation-design = chat 承認〔規律層 = 内容〕と harness chip〔backstop = 未承認送信〕は別の脅威モデル — chip の品質 3 条件〔実行形 anchor・1 送信 1 個・dialog = 内容〕、 うざい chip の治療は廃止でなく anchor 絞り、 宣言配線は silent 消失しうる = 登録直後 verify + documented ⊆ live の機械 audit、 並走 gate 層〔宣言 ask・hook・fail-safe〕は同じ実送信-flag anchor を共有〔片層だけ script 名 match だと dry-run に誤爆 chip / argparse prefix 短縮は allow_abbrev=False で殺す〕)
 -->
 # Gmail 送信の経路選択と MIME 落とし穴
 
@@ -105,6 +105,7 @@ file 名 substring パターンは「file 名に言及するだけの無害コ�
 3. **frontend 非対称に注意**: hook 由来の ask は CLI でのみ honor される frontend がある (= [`hook-authoring.md`](hook-authoring.md#frontend-dependent-cowork))。 その frontend では**宣言 `permissions.ask` が唯一の機械 gate** — hook にだけ置いた gate は「ある」 ように見えて特定 frontend で不在になる。
 4. **fail-safe 既定は chip の前提**: 送信 tool/script は「無指定 = 送らない」 (dry-run 既定 / `--send` 必須) にする。 chip が消えても (下記 5)、 誤 invocation では何も送られない床を作る。
 5. **宣言配線は silent に消えうる = 「doc に書いた」 ≠ 「gate がある」**: `permissions.ask` は machine-local file で、 他の設定 UI / installer / 手編集に上書きされうる。 gate を doc に記録しただけでは守られない — **登録直後に実 invocation で chip 発火を verify** し、 高 stakes gate は「documented パターン ⊆ live settings」 を機械 audit する (実例 2026-07: 送信 gate の narrow ask パターンが記録上「登録済」 のまま live settings から消失しており、 送信 3 通が chip ゼロで通って初めて発覚 — 規律層 + fail-safe が守ったが、 backstop は不在だった)。
+6. **並走する gate 層 (宣言 ask / hook / script fail-safe) は同じ anchor を共有する**: 送信 gate は複数層に住む (= `permissions.ask` パターン + PreToolUse hook + tool 側 fail-safe) が、 **発火条件 (= 実送信 flag) を全層で揃える**。 片層だけ「script 名 match」 のような広い述語で残ると、 dry-run / `--help` にも chip が出て条件 (a) 誤爆ゼロが破れる (実例 2026-07: tool 側を fail-safe 既定に反転した際、 hook の述語だけ script 名 anchor のまま未追随 → 1 通の送信で chip 3 個 — 検証 invocation への誤爆 2 + 引数エラーでの実送信形打ち直し 1。 anchor 統一 + 「dry-run で検証してから実送信 flag は 1 発」 の実行規律で 1 送信 1 chip に回復)。 ⚠️ anchor を flag に絞るなら **tool 側で argparse の prefix 短縮 (= `--sen` → `--send` 展開) を `allow_abbrev=False` で殺す** — 短縮形は literal flag pattern に match せず全 gate を素通りする。
 
 ## 関連
 
