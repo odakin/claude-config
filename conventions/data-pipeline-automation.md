@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
 category: infra
-summary: データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script)・埋め込み import の fail-open guard は SystemExit も吸収 (= 子の import-時 sys.exit が except Exception を素通りして監視 script が silent 死する罠) を bundle
+summary: データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script)・#targeted-dirty-gate = 無人 engine の dirty gate は SoT source repo では read/write path に絞る (blanket は無関係 dirt で publish を silent block、 path 限定 commit + 多層 gate 整合とセット)・埋め込み import の fail-open guard は SystemExit も吸収 (= 子の import-時 sys.exit が except Exception を素通りして監視 script が silent 死する罠) を bundle
 -->
 # データ pipeline と半自動化の設計規律
 
@@ -255,6 +255,15 @@ clean 前提を preflight で保証してから `git clean -fd <dirs>` する設
 
 **Pitfall: 「clean」 判定 (`git status --porcelain`) は untracked file も拾う**。 つまり repo に**無関係な stray untracked file が 1 個でもあると preflight が dirty と判定して無人 job が静かに止まる** (= 別 session の中途 WIP、 migration 生成物、 手で置いた tmp file 等)。 これは安全側 (= 散らかった tree を触らない) だが、 停止の**原因が非自明** (= 「なぜ今日 publish されてない?」 が untracked file 由来と気付きにくい)。 対策: 無人 job には別途 **heartbeat / staleness 検出** (= N 時間 publish 無し or 実行痕跡無しを surface) を持たせ、 停止に気付ける状態にする (= preflight abort 自体は正しい、 検出層で可視化する)。
 
+<a id="targeted-dirty-gate"></a>**refinement: SoT source repo の dirty gate は blanket でなく engine の read/write path に targeted する** (= 上の Pitfall の検出層に対する design-out 側。 2026-07 実例: 運用 repo が人間の作業で頻繁に dirty になる環境で、 blanket gate が無関係 file の dirt により publish を 10 日 silent block した):
+
+1. **repo の役割で gate を分ける**: (i) **mutation target repo** (= engine が広く commit + build 検証する側) は従来どおり **repo 全体の clean を要求** — engine 自身の commit に混入する余地を残さない。 (ii) **SoT source repo** (= engine が読む + 特定 file だけ書く側) は、 dirty 判定を **engine が実際に読む/書く path prefix に絞る** — 無関係な運用 file (TODO / SESSION / ログ類) の dirt では publish を止めない。
+2. **絞った gate とセットで commit を path 限定** (`git commit -m ... -- <その file>`): 別 session が staged したまま残した無関係 file を engine の commit に巻き込まない (= 絞り込みの安全前提)。
+3. **無関係 dirt を素通りさせた事実は明示出力** (= 「無関係 dirt N 件は gate 対象外 (公開は実行)」) — gate の判断を silent にしない。
+4. **gate 述語は純関数に抽出して selftest** (= prefix 判定・untracked の扱い・rename 行の扱いを fixture で固定。 untracked は dirty 扱いのまま = 保存直後の未 commit source は保守側で延期される)。
+5. ⚠️ **多層 gate の整合**: engine の外側 (= 呼び出し手順 / SKILL / wrapper) に**粗い blanket 指示** (「dirty repo には publish しない」) が残っていると、 内側の精密 gate が dead code 化する。 判断は**最も精密な層 (= engine) に委譲**し、 外層は自分の mutation target の保護だけを言う。
+6. 兄弟 pattern: gate で書けない時に **書き込みを退避 dir に defer して後で回収** (= writer 側が dirty tree を汚さない選択肢。 clean gate を「止める」 でなく「迂回する」 形)。
+
 ### 関連
 
 - §3 (judgment-required placeholder) = run-time 人間あり版、 本 §7 = 無人版。 同じ「機械は推測しない」 思想の対話/無人の両極
@@ -347,7 +356,7 @@ CLI script A の loader / helper を script B が `importlib.util.spec_from_file
 - [ ] **SoT の home が lifecycle で移動するなら**: 全 consumer を grep で洗い出し共有 resolver 経由に redirect した? prune は新 home に移った field だけ (field-scoped)? (§1 Pattern)
 - [ ] **無人実行なら**: 自動 publish は推測ゼロの変換だけ? 導出不能 field は事前入力 (armed) or surface? (§7)
 - [ ] **高 stakes な無人 publish なら**: push 手前に fresh-eyes adversarial な AI 検証ゲート (= 別呼び出しで「間違いを探せ」、 clean だけ push・疑義は hold+surface) を足した? (§7 Pattern)
-- [ ] **無人 commit なら**: clean∧ff-only-or-abort → build 検証 → 失敗 revert → commit → push retry を mechanize した? (§7)
+- [ ] **無人 commit なら**: clean∧ff-only-or-abort → build 検証 → 失敗 revert → commit → push retry を mechanize した? SoT source repo の dirty gate は read/write path に targeted + commit は path 限定? (§7 #targeted-dirty-gate)
 - [ ] **無人で curated file を auto-edit するなら**: surgical text-edit + 再 parse integrity (round-trip でなく)? human/machine 共有なら ownership marker で人手所有を保護? (§8)
 - [ ] **上流が下流より雑なら**: 純 mirror が品質回帰しないか? 安全 subset だけ auto・残りは surface? (§8)
 - [ ] **ownership marker で重複が温存され下流を実質 pipeline/AI しか編集しないなら**: overlay (source + overrides → generated artifact) へ昇格を検討? (= 純導出行は重複ゼロ、 判断データは overrides 1 home、 下流は手編集禁止の生成物。 §8)

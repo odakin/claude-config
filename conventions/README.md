@@ -160,7 +160,7 @@ layer 1 (public) のドメイン固有規約 79 file をカテゴリ別に列挙
 ## エンジニアリング一般 (`infra`)
 
 - **[data-pipeline-automation.md](data-pipeline-automation.md)** — 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
-  - データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script)・埋め込み import の fail-open guard は SystemExit も吸収 (= 子の import-時 sys.exit が except Exception を素通りして監視 script が silent 死する罠) を bundle
+  - データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script)・#targeted-dirty-gate = 無人 engine の dirty gate は SoT source repo では read/write path に絞る (blanket は無関係 dirt で publish を silent block、 path 限定 commit + 多層 gate 整合とセット)・埋め込み import の fail-open guard は SystemExit も吸収 (= 子の import-時 sys.exit が except Exception を素通りして監視 script が silent 死する罠) を bundle
 - **[debugging-discipline.md](debugging-discipline.md)** — bug fix を提案する前・audit verdict を出す前 (検証規律)
   - Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)、 性能修復は measure-first + 出力等価性 + 決定的並列化 (§15)
 - **[discord-bot.md](discord-bot.md)** — Discord Bot を運用・実装するとき
