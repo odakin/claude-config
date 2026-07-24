@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: bug fix を提案する前・audit verdict を出す前 (検証規律)
 category: infra
-summary: Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)
+summary: Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)、 性能修復は measure-first + 出力等価性 + 決定的並列化 (§15)
 -->
 # Debugging discipline
 
@@ -471,6 +471,19 @@ origin: 2026-06-13 desktop-hook-gap 調査。 当初 SessionStart hook の死活
 reflex: 「この run はどの経路?」 には (a) 内容指紋を 1 つ挙げたか、 「こっちでは起きない」 には (b) その経路がそこで走っている証拠を見たか、 「check が negative」 には (c) check 自身の脚を疑ったか。
 
 origin: 2026-07-04 「最近の項目に routine session が数十件」 調査。 3 誤帰属それぞれに実装を積んでから (= どれも無害・一部は独立に有益だったが真因には無効)、 prompt 本文の指紋で 5 手目に確定した。 negative-arm 無効観測は同調査で 2 回 (採用しかけ 1 + doc 焼き errata 1)。
+
+## <a id="performance-fix-discipline"></a>15. 性能修復は measure-first + 出力等価性が受け入れ条件 (= 「速くなったが結果が減った」 は改悪)
+
+「遅い」 の修復は debugging の一種として同じ規律に従う: 症状から原因を推測で断定せず実測し、 fix の正しさを挙動保存で検証する。
+
+1. **measure-first**: 「遅い = network だろう」 等の直感で並列化・cache 化に着手しない。 まず (a) 構成要素ごとの実測 (= per-stage timer を先に仕込む) で犯人を分布として見る、 (b) 最大犯人は profiler (`cProfile` 等) で関数レベルまで落とす。 実例 (2026-07): 多数の network 検査を束ねる dashboard の最大単一犯人は network でなく **local の YAML re-parse ループ** (`yaml.safe_load` 524 回 = 52s CPU) だった — 直感だけで並列化していたら 52s が wall にそのまま残った (= §9 の「単一情報源で結論しない」 の performance domain 形態)。
+2. **出力等価性が受け入れ条件**: 性能 fix の検証は「速くなった」 でなく「**同じ結果のまま**速くなった」。 検証の強い順: (a) 修正前後の出力 byte 一致 (diff) → (b) 出力構造の完全性 (= 全 section / 全 finding 種の存在) + 失敗・timeout ゼロ → (c) 件数の目視。 触った component は (a) を要求、 触っていない component は (b) で足りる。 実例: 逐次 API 呼びの batch 化 (2026-06) と parse cache 化 (2026-07) はいずれも「逐次版と出力一致」 を明示の受け入れ条件にして landed。
+3. **並列化は決定性・可視性とセットで**: 独立 subscript 群を並列化するときの 4 点 set — (a) **出力は宣言順 buffer flush で決定的に** (= diff 可能性が (2) の検証と将来の regression 検出の基盤)、 (b) **外部 API は resource lane の semaphore で絞る** (= rate-limit 429 → fail-open silent skip で **finding が黙って減る** のが並列化の典型的な機能退行。 backoff/retry 保証の無い呼び出しが混在する lane は保守的 cap)、 (c) **`stdin=DEVNULL`** (= 子 process の対話 prompt 待ちで全体が無限 hang する経路を閉じる)、 (d) **per-unit timeout + 失敗 marker** (= 1 本の hang が全体を止めない + 「検査が走らなかった」 と 「finding 0 件」 を区別可能に保つ)。
+4. **cache は所有権を明示**: parse cache が返す object は共有 (= caller の mutate が別 caller に漏れる)。 read-only 前提を docstring に焼き、 可能なら mutate しない設計 (= audit / render 用途) に限定する。
+
+reflex: 性能修復に入る瞬間に「実測したか (per-unit timer → profiler)」、 fix を宣言する瞬間に「何と何の出力が等価だと **どの操作で** 確認したか」。
+
+origin: 2026-06-03 Gmail 逐次 fetch の batch 化 (= 540s timeout RCA、 「逐次版と出力一致」 要件で landed) + 2026-07-24 dashboard 検査 fleet の並列 stage runner 化 (= 数分 → ~1 分、 cProfile が直感と違う最大犯人を特定、 byte 一致 + section 完全性で受け入れ)。 いずれも owner の personal layer に実装・設計史 (= 機構の正本は各 script docstring)。
 
 ## 関連
 
