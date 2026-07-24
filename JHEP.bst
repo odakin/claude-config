@@ -252,7 +252,7 @@ FUNCTION {format.url}
 
 %% from http://mirrors.ctan.org/biblio/bibtex/contrib/doc/btxFAQ.pdf Q.35
 %% from Philip G. Ratcliffe on the newsgroup comp.text.tex on June 28, 2002
-%% in the thread “BiBTeX, bst hackers, format.name$, please help”.
+%% in the thread ``BiBTeX, bst hackers, format.name$, please help''.
 FUNCTION {remove.spaces}
 { 'z :=
   ""

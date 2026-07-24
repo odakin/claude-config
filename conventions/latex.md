@@ -311,7 +311,7 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 
 ## <a id="bibliography-style"></a>Bibliography スタイル
 - **JHEP.bst を使う**（個人的好み）。`note` フィールドも表示するバージョンを使用
-- 正本: `~/Claude/claude-config/JHEP.bst`（ver. 2.18 ベース + note 全 entry type で有効化、md5: `bcca8042…`）
+- 正本: `~/Claude/claude-config/JHEP.bst`（ver. 2.18 ベース + note 全 entry type で有効化、md5: `0934fe19…`。 2026-07-24 に header comment 内の Unicode curly quotes を LaTeX 式 ``…'' に正規化 = char-fixer 配下 repo へ配布しても md5 が割れない idempotent 化、 機能変更なし）
 - `setup.sh` が texmf-local にインストール（odakin: 自動、他ユーザー: オプション表示）
 - texmf-local 未設定の場合は正本からリポにコピーして使う
 - `\bibliographystyle{JHEP}` を指定
