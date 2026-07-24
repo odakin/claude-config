@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Gmail でメールを送信する経路・MIME 実装を選ぶとき
 category: mail
-summary: Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕)
+summary: Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕 / #double-confirmation-design = chat 承認〔規律層 = 内容〕と harness chip〔backstop = 未承認送信〕は別の脅威モデル — chip の品質 3 条件〔実行形 anchor・1 送信 1 個・dialog = 内容〕、 うざい chip の治療は廃止でなく anchor 絞り、 宣言配線は silent 消失しうる = 登録直後 verify + documented ⊆ live の機械 audit)
 -->
 # Gmail 送信の経路選択と MIME 落とし穴
 
@@ -88,6 +88,23 @@ sandbox 内の Python/network script が `socket.gaierror: nodename nor servname
 送信 script を `permissions.ask` で gate するときの mail-domain 適用形: ① script は **`--send` 必須の fail-safe 既定** (flag 無し = 常に dry-run) にし、② ask パターンは file 名 substring (`Bash(*send_mail.py*)`) でなく**実送信 invocation** (`Bash(*send_mail.py*--send*)`) に match させ、③ **実送信コマンドは chain せず単体で打つ** (= ダイアログ = 送信内容そのもの)。
 
 file 名 substring パターンは「file 名に言及するだけの無害コマンド」 (py_compile / git add / grep / 送信前に必須の dry-run) に全部誤爆し、承認ダイアログの信号価値を壊す (2026-07-03 実例: syntax check + commit + push の chain で発火)。**一般則の正本 = [`claude-code-permissions.md`](claude-code-permissions.md#ask-pattern-action-anchor)** (= なぜ ask パターン自体を絞るしかないか 〔precedence 上 allow で ask の例外を彫れない〕 + 設計 3 点 set + 起動時ロードの注意)。hook が効かない surface (Claude Code desktop / bridge) では宣言 permission が唯一の機械 gate なので、この anchor 設計がそのまま送信 gate の品質になる。
+
+## <a id="double-confirmation-design"></a>8. 二重確認の設計: chat 承認と harness chip は別の脅威モデル (= chip は減らすもの、 消すものではない)
+
+送信の確認は 2 層あり、**役割が違う** — この区別を持たないと「chip がうざい → 消す」 か「不安 → 全部に chip」 の両極端に落ちる:
+
+| 層 | gate | 守る脅威 |
+|---|---|---|
+| 規律層 (primary) | draft 全文の chat 提示 → user の **send-verb 明示承認** (「送って」等) → 送信 | 内容の誤り・宛先の誤り・そもそも送るべきでない判断 |
+| harness 層 (backstop) | permission ask chip (宣言 `permissions.ask` / hook) | **chat 承認を経ない送信** = autonomy 拡張解釈・誤 invocation・prompt injection 由来の送信 |
+
+設計原則:
+
+1. **chip の品質 3 条件**: (a) 発火は**不可逆 action の実行形にのみ** (= §7 の anchor 設計、 誤爆ゼロ) (b) 頻度は実送信 1 回につき 1 個まで (c) ダイアログの中身 = 送信内容/コマンドそのもの (= 確認に情報価値がある)。 「うざい chip」 の正体はほぼ常に**誤爆** (broad pattern) か**同一 gate の重複** (同じ送信に複数 chip) であり、 治療は chip の廃止でなく anchor の絞り込み。
+2. **chat 承認は chip を代替しない**: 規律層が守るのは「何を送るか」、 chip が守るのは「承認なしに送られない」 という invariant。 user が chat で承認済みでも、 chip は 「Claude が規律を破る / 騙される」 case の最後の機械防御として独立に意味を持つ。 逆に chip があっても draft 提示 + send-verb は省略できない (= chip は内容 review の場ではない)。
+3. **frontend 非対称に注意**: hook 由来の ask は CLI でのみ honor される frontend がある (= [`hook-authoring.md`](hook-authoring.md#frontend-dependent-cowork))。 その frontend では**宣言 `permissions.ask` が唯一の機械 gate** — hook にだけ置いた gate は「ある」 ように見えて特定 frontend で不在になる。
+4. **fail-safe 既定は chip の前提**: 送信 tool/script は「無指定 = 送らない」 (dry-run 既定 / `--send` 必須) にする。 chip が消えても (下記 5)、 誤 invocation では何も送られない床を作る。
+5. **宣言配線は silent に消えうる = 「doc に書いた」 ≠ 「gate がある」**: `permissions.ask` は machine-local file で、 他の設定 UI / installer / 手編集に上書きされうる。 gate を doc に記録しただけでは守られない — **登録直後に実 invocation で chip 発火を verify** し、 高 stakes gate は「documented パターン ⊆ live settings」 を機械 audit する (実例 2026-07: 送信 gate の narrow ask パターンが記録上「登録済」 のまま live settings から消失しており、 送信 3 通が chip ゼロで通って初めて発覚 — 規律層 + fail-safe が守ったが、 backstop は不在だった)。
 
 ## 関連
 

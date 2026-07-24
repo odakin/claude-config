@@ -71,7 +71,7 @@ layer 1 (public) のドメイン固有規約 79 file をカテゴリ別に列挙
 - **[email-surface-pattern.md](email-surface-pattern.md)** — 重要送信者・ML topic の見落とし防止 surface を設計するとき
   - 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止
 - **[gmail-sending.md](gmail-sending.md)** — Gmail でメールを送信する経路・MIME 実装を選ぶとき
-  - Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕)
+  - Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕 / #double-confirmation-design = chat 承認〔規律層 = 内容〕と harness chip〔backstop = 未承認送信〕は別の脅威モデル — chip の品質 3 条件〔実行形 anchor・1 送信 1 個・dialog = 内容〕、 うざい chip の治療は廃止でなく anchor 絞り、 宣言配線は silent 消失しうる = 登録直後 verify + documented ⊆ live の機械 audit)
 - **[japanese-email-honorifics.md](japanese-email-honorifics.md)** — 日本語メールで敬称 (様 / 皆様 / さん) を書くとき
   - 日本語メールの敬称規約 (内 vs 外、身内に「様」「皆様」を使わない)
 - **[ml-forward-judgment.md](ml-forward-judgment.md)** — ML forward された依頼メールを inbox 化するとき
