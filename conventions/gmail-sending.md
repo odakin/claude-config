@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Gmail でメールを送信する経路・MIME 実装を選ぶとき
 category: mail
-summary: Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕 / #double-confirmation-design = chat 承認〔規律層 = 内容〕と harness chip〔backstop = 未承認送信〕は別の脅威モデル — chip の品質 3 条件〔実行形 anchor・1 送信 1 個・dialog = 内容〕、 うざい chip の治療は廃止でなく anchor 絞り、 宣言配線は silent 消失しうる = 登録直後 verify + documented ⊆ live の機械 audit、 並走 gate 層〔宣言 ask・hook・fail-safe〕は同じ実送信-flag anchor を共有〔片層だけ script 名 match だと dry-run に誤爆 chip / argparse prefix 短縮は allow_abbrev=False で殺す〕)
+summary: Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕 / #double-confirmation-design = chat 承認〔規律層 = 内容〕と harness chip〔backstop = 未承認送信〕は別の脅威モデル — chip の品質 3 条件〔実行形 anchor・1 送信 1 個・dialog = 内容〕、 うざい chip の治療は廃止でなく anchor 絞り、 宣言配線は silent 消失しうる = 登録直後 verify + documented ⊆ live の機械 audit、 並走 gate 層〔宣言 ask・hook・fail-safe〕は同じ実送信-flag anchor を共有〔片層だけ script 名 match だと dry-run に誤爆 chip / argparse prefix 短縮は allow_abbrev=False で殺す〕 / #draft-approval-single-source = chat 提示 draft と送信 body-file の 2 度書きは乖離源 — body-file 先行 Write + chat は view、 承認後の変更は再提示、 全外部発信に適用)
 -->
 # Gmail 送信の経路選択と MIME 落とし穴
 
@@ -106,6 +106,16 @@ file 名 substring パターンは「file 名に言及するだけの無害コ�
 4. **fail-safe 既定は chip の前提**: 送信 tool/script は「無指定 = 送らない」 (dry-run 既定 / `--send` 必須) にする。 chip が消えても (下記 5)、 誤 invocation では何も送られない床を作る。
 5. **宣言配線は silent に消えうる = 「doc に書いた」 ≠ 「gate がある」**: `permissions.ask` は machine-local file で、 他の設定 UI / installer / 手編集に上書きされうる。 gate を doc に記録しただけでは守られない — **登録直後に実 invocation で chip 発火を verify** し、 高 stakes gate は「documented パターン ⊆ live settings」 を機械 audit する (実例 2026-07: 送信 gate の narrow ask パターンが記録上「登録済」 のまま live settings から消失しており、 送信 3 通が chip ゼロで通って初めて発覚 — 規律層 + fail-safe が守ったが、 backstop は不在だった)。
 6. **並走する gate 層 (宣言 ask / hook / script fail-safe) は同じ anchor を共有する**: 送信 gate は複数層に住む (= `permissions.ask` パターン + PreToolUse hook + tool 側 fail-safe) が、 **発火条件 (= 実送信 flag) を全層で揃える**。 片層だけ「script 名 match」 のような広い述語で残ると、 dry-run / `--help` にも chip が出て条件 (a) 誤爆ゼロが破れる (実例 2026-07: tool 側を fail-safe 既定に反転した際、 hook の述語だけ script 名 anchor のまま未追随 → 1 通の送信で chip 3 個 — 検証 invocation への誤爆 2 + 引数エラーでの実送信形打ち直し 1。 anchor 統一 + 「dry-run で検証してから実送信 flag は 1 発」 の実行規律で 1 送信 1 chip に回復)。 ⚠️ anchor を flag に絞るなら **tool 側で argparse の prefix 短縮 (= `--sen` → `--send` 展開) を `allow_abbrev=False` で殺す** — 短縮形は literal flag pattern に match せず全 gate を素通りする。
+
+## <a id="draft-approval-single-source"></a>9. 承認対象と実送信 body の single-source 原則 (= chat 提示 draft と body-file の 2 度書き乖離)
+
+§8 の規律層 (= draft 全文 chat 提示 → user 承認 → 送信) には暗黙の前提がある: **user が chat で見た文面 = 実際に送信される文面**。 この前提は、 draft を chat 用 text と送信用 body-file で**別々に 2 度書きすると壊れる** — 片方だけに typo・編集漏れが混入し、 「承認された文面」 と「送った文面」 が乖離する = 承認 flow の完全性が崩れる (実例 2026-07: chat 提示 draft に助詞 typo が混入し user はその typo 版を見て承認、 実送信 file は偶然正しかった。 今回は無害な向きだったが、 **逆向き 〔file 側だけに typo / 編集反映漏れ〕 なら user が承認していない文面が外部に出ていた** — 発覚経路も user が送信後に typo に気づいた偶然で、 機械検出は無い)。
+
+原則:
+
+1. **draft は 1 source から導出**: 送信 body-file を**先に Write** し、 chat 提示はその file 内容を read した結果を貼る (= file が SoT、 chat は view)。 逆順 (chat で起草 → 承認後に file 化) になった場合は、 **送信前 dry-run の decoded body を chat 提示文と突合**してから送る (= §5 の dry-run truncation に注意、 末尾まで比較する)。
+2. **承認後の文面変更は再提示**: 承認済み draft に 1 字でも手を入れたら (typo 修正・改行調整含む) 再提示 + 再承認。 「良くなる方向の修正だから」 は skip の理由にならない (= user が見た物と違う物を送らない)。
+3. **mail に限らず全外部発信に適用**: Discord 投稿・issue comment・公開 site へ載せる text 等、 「draft 承認 → 送信」 flow を踏む全てで同じ 2 度書き乖離が起きうる (= content-file 経由の送信 tool は全部同型)。
 
 ## 関連
 
