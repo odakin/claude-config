@@ -62,7 +62,7 @@ layer 1 (public) のドメイン固有規約 79 file をカテゴリ別に列挙
 - **[office-automation.md](office-automation.md)** — 研究費/教務/学術様式の xlsx/docx を機械で fill するとき (罠の症例集)
   - 研究費/教務/学術様式の Excel xlsx を openpyxl で fill + 生成物 PDF 化 の落とし穴集 (= form 構造 dump 必須・label vs input 改変防止・rich text underline・docx XML 宣言由来の Word 破損 §2-5b・**Word docx→PDF の stale in-memory cache + cold-start 失敗の対処 §2-4b**・**記入要領削除は構造保持+content-control も走査+双方向検証 §2-5c (青字ガイダンスは effective-color〔run→rStyle→pStyle の style 継承〕で strip + PDF span 色=非黒0 で検証)**・**Pages は横並び表を重ねて出す artifact = docx 不具合と誤認するな (Word render で確認・creator metadata で判別)**・PDF visual confirmation 義務・**画像読みすぎで image budget 枯渇時の text-first 検証 §6-5**・印影/署名の電子可否・多 sheet form sweep。 TTS 音声校正は tts-review.md へ切り出し済)
 - **[office-files.md](office-files.md)** — Office file (Excel/Word/PDF/PowerPoint) 仕事に入るとき最初に開く入口
-  - Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入口マップ** = 様式仕事に入るとき最初に開く単一 router (= 考え方→principles / 罠→automation の symptom-index / 権限→claude-code-permissions / skill vs 手動 / PDF 化 wrapper / 記入後の機械監査〔diff-form-xlsx/docx〕/ e-Rad)。 中身は持たず全て pointer、 新規 office 関連 file の入口
+  - Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入口マップ** = 様式仕事に入るとき最初に開く単一 router (= 考え方→principles / 罠→automation の symptom-index / 権限→claude-code-permissions / skill vs 手動 / PDF 化 wrapper / **PDF 読み取り〔表は layout-aware 抽出 ladder、 plain get_text 禁止〕** / 記入後の機械監査〔diff-form-xlsx/docx〕/ e-Rad)。 中身は持たず全て pointer、 新規 office 関連 file の入口
 - **[tts-review.md](tts-review.md)** — 長文ドキュメント (提案書・原稿・メール draft 等) を音声読み上げで校正したいとき
   - macOS `say` による長文の音声読み上げ校正 (= 日本語 voice の選択・WPM・数式記号 / 英略語の読み替え前処理・「聞いて初めてバレる不自然な日本語」 の self-review 用途。 office-automation.md から 2026-07-10 切り出し)
 
