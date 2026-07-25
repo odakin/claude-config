@@ -45,6 +45,10 @@ Thumbs.db
 *.nav
 *.snm
 *.vrb
+# REVTeX's apsrev/aps bst writes an empty <jobname>Notes.bib beside the
+# document on every run. Hand-written bibliographies are unaffected: the
+# pattern is case-sensitive, so `mynotes.bib` and `refs.bib` do not match.
+*Notes.bib
 
 # === Python ===
 __pycache__/
