@@ -19,6 +19,19 @@ server 異常 (どの役割でも beat が新鮮なら報告):
 - last_status consent_pending → 🟠 初回同意プロンプト待ちで進めない
 - pid 無し (loaded but dead)  → 🟠
 
+inventory parity (writer 側 --inventory の対、 追加設定不要):
+  writer が記録した `inventories: {label: [name...]}` を全マシン分で突合し、 **他マシンには
+  在るのにこのマシンには無い** entry を 🟠 で surface する。 期待集合は **fleet の union** =
+  宣言 registry を持たない (= 登録忘れという規律依存の穴を作らない)。 = 「あるマシンにだけ
+  設定・credential が無い」 状態が誰にも見えないまま放置される問題への対処
+  (2026-07-25 実測: ある account の credential が 1 台だけ未配置のまま 45 日 silent)。
+  - label を報告していないマシンは比較対象外 (= 旧 beat / 未設定を「全部欠落」 と誤判定しない)
+  - 報告マシンが 1 台だけなら silent (= union == self で比較の意味がない)
+  - stale な beat も比較に入れる (= inventory は liveness でなく持ち物の状態。 ただし
+    finding に beat 年齢を併記し、 断定でなく「疑い」 として渡す)
+  - **限界: どのマシンにも無い物は検出できない** (= union が空)。 宣言集合を持つ検出器
+    (例: mail 検出器の ACCOUNTS) との相補関係で埋める
+
 coverage check (--expect-account、 repeatable):
   pinned per-account 構成 (= remote-control-server.md#multi-account-servers の推奨形:
   server はアカウントごとの pinned config dir + suffix label で立てる) を前提に、
@@ -49,11 +62,48 @@ BAD = {
 }
 
 
+def inventory_findings(beats):
+    """全マシンの inventories を union と突合し、 このマシンだけ欠けている entry を surface。
+
+    beats = [(host, data, age_h)]。 期待集合 = fleet の union (= 宣言 registry 不要)。
+    label を報告していない host は比較対象外、 報告 host が 1 台なら silent。
+    """
+    per_label = {}
+    for host, d, age_h in beats:
+        inv = d.get("inventories")
+        if not isinstance(inv, dict):
+            continue  # 旧 beat / --inventory 未設定 = 比較対象外 (「全部欠落」 と誤判定しない)
+        for label, names in inv.items():
+            if not isinstance(names, list):
+                continue
+            per_label.setdefault(label, {})[host] = (set(map(str, names)), age_h)
+    out = []
+    for label in sorted(per_label):
+        hosts = per_label[label]
+        if len(hosts) < 2:
+            continue  # 比較の基準が無い (= union == self)
+        union = set().union(*(v[0] for v in hosts.values()))
+        for host in sorted(hosts):
+            names, age_h = hosts[host]
+            missing = sorted(union - names)
+            if not missing:
+                continue
+            others = sorted(h for h, v in hosts.items() if set(missing) & v[0])
+            out.append(
+                f"🟠 {host}: inventory {label} に {', '.join(missing)} が無い "
+                f"(他マシンには在る: {', '.join(others)}) = このマシンだけ未配置の疑い "
+                f"[beat {age_h:.0f}h 前] — 該当マシンで配置するか、 意図的な差なら "
+                f"writer の --inventory から除外 (multi-machine-state.md#fleet-heartbeat)"
+            )
+    return out
+
+
 def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_tasks=False):
     now = now or time.time()
     expect_accounts = expect_accounts or []
     findings = []
     seen = set()
+    beats = []
     for f in sorted(dir_.glob("*.json")):
         try:
             d = json.load(open(f))
@@ -65,6 +115,9 @@ def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_
         role = roles.get(host, "best-effort")
         age_h = (now - d.get("epoch", 0)) / 3600
         fresh = age_h <= stale_hours
+        # inventory は「持ち物の状態」 で liveness ではないので stale な beat も比較に入れる
+        # (= スリープ中のマシンの欠落こそ、 起きている側から見えるべき情報)
+        beats.append((host, d, age_h))
         if role == "always-on" and not fresh:
             findings.append(
                 f"🔴 {host} (always-on): heartbeat が {age_h:.1f}h 停止 (threshold {stale_hours:g}h) "
@@ -108,6 +161,7 @@ def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_
     for host, role in roles.items():
         if role == "always-on" and host not in seen:
             findings.append(f"ℹ️ {host} (always-on): heartbeat 未開始 (= そのマシンで fleet-heartbeat の install 待ち)")
+    findings.extend(inventory_findings(beats))
     return findings
 
 
@@ -184,7 +238,40 @@ def selftest():
         f = scan(d, {}, 6, now, warn_desktop_tasks=True)
         assert f == [], f
         ok += 1
-    print(f"selftest: {ok}/10 PASS")
+
+        # 9-13: inventory parity (= 2026-07-25 「1 台だけ account 未認証が 45 日 silent」 RCA)
+        def winv(host, epoch, inv):
+            j = {"host": host, "epoch": epoch,
+                 "servers": [{"label": "x", "pid": "1", "last_status": "connected"}]}
+            if inv is not None:
+                j["inventories"] = inv
+            (d / f"{host}.json").write_text(json.dumps(j))
+
+        # 9: 片方だけ欠落 → 欠落側のみ 🟠 (= 実 incident の形)
+        winv("srv", now - 600, {"accts": ["a1", "a2", "a3"]})
+        winv("lap", now - 600, {"accts": ["a1", "a3"]})
+        f = scan(d, {}, 6, now)
+        assert any("lap" in x and "a2" in x and "🟠" in x for x in f), f
+        assert not any(x.startswith("🟠 srv") for x in f), f
+        ok += 1
+        # 10: 一致 → silent
+        winv("lap", now - 600, {"accts": ["a1", "a2", "a3"]})
+        assert scan(d, {}, 6, now) == [], scan(d, {}, 6, now)
+        ok += 1
+        # 11: 片方が label 未報告 (旧 beat / 未設定) → 「全部欠落」 と誤判定せず silent
+        winv("lap", now - 600, None)
+        assert scan(d, {}, 6, now) == [], scan(d, {}, 6, now)
+        ok += 1
+        # 12: 報告マシンが 1 台だけ → 比較基準が無いので silent
+        (d / "lap.json").unlink()
+        assert scan(d, {}, 6, now) == [], scan(d, {}, 6, now)
+        ok += 1
+        # 13: stale な beat も比較に入る (= 寝ているマシンの欠落を起きている側から見る)
+        winv("lap", now - 96 * 3600, {"accts": ["a1"]})
+        f = scan(d, {}, 6, now)
+        assert any("lap" in x and "a2" in x and "a3" in x and "96h" in x for x in f), f
+        ok += 1
+    print(f"selftest: {ok}/15 PASS")
 
 
 def main():

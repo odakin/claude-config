@@ -25,17 +25,36 @@ cross-machine state の不可視問題 (multi-account-machine-surface.md #honest
   (= "Connected" / "Not logged in" / "too old" / "Enable Remote Control?" を新しい順に
   評価)。 process が生きていても auth 失効で cycling している状態を検出できるのが肝。
 
+inventory (--inventory、 opt-in、 repeatable):
+  「このマシンに何が置かれているか」 の **名前だけ** の一覧を記録する generic hook。
+  machine-local な設定・credential・token dir は「あるマシンにだけ無い」 状態を作りうるが、
+  それを見る機械が無いと誰にも見えないまま放置される (= 2026-07-25 実測: ある account の
+  credential が 1 台だけ未配置のまま 45 日 silent)。 sibling reader が全マシン分を
+  突合し、 **他マシンには在るのにこのマシンには無い** entry を surface する。
+  ⚠️ 期待集合は **fleet の union** = 宣言 registry を持たない (= 「registry への登録忘れ」
+     という規律依存の穴を作らない)。 代償 = **どのマシンにも無い物は検出できない**。
+  ⚠️ 記録するのは path 要素の名前のみ。 **file の中身は一切読まない**。
+
 usage:
   fleet-heartbeat.py --repo <git-repo-root> --subdir <relative-dir>
       [--min-commit-interval-hours 4]
       [--rc-label-prefix com.claude-config.remote-control-server]
       [--cron-label-prefix <prefix>]     # optional: 無人 cron job 数も記録
+      [--inventory 'LABEL=GLOB' ...]     # optional: 名前一覧を記録 (下記 name 規則)
   fleet-heartbeat.py --selftest
 
 書かれる JSON (subdir/<hostname>.json):
   { host, ts (iso), epoch, servers: [{label, pid, last_status, log_age_min}],
     config_dirs: {alias: email_metadata_or_null},
-    remote_control_at_startup, old_usr_local_cli, cron_jobs }
+    remote_control_at_startup, old_usr_local_cli, cron_jobs,
+    desktop_scheduled_tasks: [{registry, enabled_ids}],
+    inventories: {label: [name, ...]} }        # --inventory 指定時のみ
+
+  name 規則 = **glob の最初の `*` 以降の最初の path 要素**:
+    'gmail_accounts=~/.gmail-mcp/*/credentials.json' → 各 account dir 名の一覧 (= 親 dir 名)
+    'secrets=~/.secrets/*'                          → 各 file 名の一覧 (= 末端の file 名)
+  match 0 件でも label は `[]` として記録する (= 「field 不在 = 旧 beat」 と
+  「報告した上で空」 を reader が区別できるようにするため)。
 
 ⚠️ email は .claude.json の oauthAccount **metadata** (= keychain 実 auth とはズレうる、
    remote-control-server.md#account-auth-keychain)。 fleet view の cheap signal として
@@ -43,6 +62,7 @@ usage:
 """
 
 import argparse
+import glob as globmod
 import json
 import os
 import re
@@ -105,7 +125,29 @@ def parse_log_status(log_path: Path):
         return "unknown", None
 
 
-def collect(rc_prefix, cron_prefix):
+def scan_inventory(spec: str):
+    """'LABEL=GLOB' を (label, [names]) にする。 name = glob の最初の `*` 以降の最初の path 要素。
+
+    ⚠️ 名前のみを収集し file の中身は読まない (= secret の inventory にも安全に使える)。
+    不正な spec は None (= caller が無視、 fail-open)。
+    """
+    label, sep, pat = spec.partition("=")
+    label, pat = label.strip(), pat.strip()
+    if not sep or not label or not pat:
+        return None
+    expanded = os.path.expanduser(pat)
+    star = expanded.find("*")
+    prefix = expanded[:star] if star >= 0 else ""
+    names = set()
+    for m in globmod.glob(expanded):
+        rest = m[len(prefix):] if (prefix and m.startswith(prefix)) else os.path.basename(m)
+        n = rest.split(os.sep, 1)[0]
+        if n:
+            names.add(n)
+    return label, sorted(names)
+
+
+def collect(rc_prefix, cron_prefix, inventory_specs=None):
     home = Path.home()
     data = {
         "host": hostname_short(),
@@ -169,6 +211,19 @@ def collect(rc_prefix, cron_prefix):
     # アカウント切替で enabled task を黙って復活させ、 launchd 移行済ジョブと二重実行する事故の
     # 機械検出。 2026-07-04 実測: swap 2 日後まで silent だった)。 registry ごとに enabled id を列挙。
     data["desktop_scheduled_tasks"] = scan_desktop_tasks(home)
+    # inventory (opt-in): 「このマシンに何が置かれているか」 の名前一覧。 reader が fleet 横断で
+    # 突合して「他マシンには在るのにここには無い」 を surface する (docstring §inventory)。
+    if inventory_specs:
+        inv = {}
+        for spec in inventory_specs:
+            try:
+                r = scan_inventory(spec)
+            except Exception:
+                r = None  # fail-open (= 1 spec の失敗で beat 全体を落とさない)
+            if r:
+                inv[r[0]] = r[1]
+        if inv:
+            data["inventories"] = inv
     return data
 
 
@@ -205,6 +260,8 @@ def essence(d: dict):
             "cron_jobs": d.get("cron_jobs"),
             # enabled task の変化 (= 復活) は即 commit させる (= state-change-or-age policy に乗せる)
             "desktop_tasks": d.get("desktop_scheduled_tasks"),
+            # inventory の増減 (= account 追加 / 欠落) も即 commit (= 他マシンの reader に早く届く)
+            "inventories": d.get("inventories"),
         },
         sort_keys=True,
     )
@@ -214,8 +271,9 @@ def git(repo: Path, *args, timeout=60):
     return sh(["git", "-C", str(repo), *args], timeout=timeout)
 
 
-def beat(repo: Path, subdir: str, min_interval_h: float, rc_prefix: str, cron_prefix):
-    data = collect(rc_prefix, cron_prefix)
+def beat(repo: Path, subdir: str, min_interval_h: float, rc_prefix: str, cron_prefix,
+         inventory_specs=None):
+    data = collect(rc_prefix, cron_prefix, inventory_specs)
     rel = f"{subdir}/{data['host']}.json"
     fpath = repo / rel
     fpath.parent.mkdir(parents=True, exist_ok=True)
@@ -290,7 +348,44 @@ def selftest():
         r2 = beat(repo, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
         assert r2.startswith("skip"), r2
         ok += 1
-    print(f"selftest: {ok}/7 PASS")
+        # inventory: name = 最初の `*` 以降の最初の path 要素 (= 親 dir 名 / file 名の両形)
+        inv_root = Path(td) / "invroot"
+        for a in ("a1", "a2"):
+            (inv_root / a).mkdir(parents=True)
+            (inv_root / a / "credentials.json").write_text("x")
+        (inv_root / "empty").mkdir()  # credentials.json 無し = 名前に出ない
+        r = scan_inventory(f"accts={inv_root}/*/credentials.json")
+        assert r == ("accts", ["a1", "a2"]), r
+        ok += 1
+        r = scan_inventory(f"files={inv_root}/*/*.json")
+        assert r == ("files", ["a1", "a2"]), r  # 最初の `*` 以降の最初の要素 = 親 dir
+        ok += 1
+        flat = Path(td) / "flat"
+        flat.mkdir()
+        (flat / "a.key").write_text("x")
+        (flat / "b.key").write_text("x")
+        r = scan_inventory(f"secrets={flat}/*")
+        assert r == ("secrets", ["a.key", "b.key"]), r
+        ok += 1
+        # match 0 件でも label は [] で報告 (= 「旧 beat の field 不在」 と区別できるように)
+        r = scan_inventory(f"none={flat}/nope-*/x")
+        assert r == ("none", []), r
+        ok += 1
+        # 不正 spec は None (= caller が無視、 beat を落とさない)
+        assert scan_inventory("no-equals-sign") is None
+        assert scan_inventory("=/tmp/*") is None
+        ok += 1
+        # collect() 配線 + essence が inventory 変化を拾う (= 即 commit 対象)
+        d1 = collect(RC_LABEL_PREFIX_DEFAULT, None, [f"accts={inv_root}/*/credentials.json"])
+        assert d1["inventories"] == {"accts": ["a1", "a2"]}, d1.get("inventories")
+        d2 = json.loads(json.dumps(d1))
+        d2["inventories"]["accts"] = ["a1"]
+        assert essence(d1) != essence(d2)
+        ok += 1
+        # --inventory 未指定なら field 自体を作らない (= 旧 beat と同形、 opt-in)
+        assert "inventories" not in collect(RC_LABEL_PREFIX_DEFAULT, None, None)
+        ok += 1
+    print(f"selftest: {ok}/14 PASS")
 
 
 def main():
@@ -300,6 +395,10 @@ def main():
     ap.add_argument("--min-commit-interval-hours", type=float, default=4)
     ap.add_argument("--rc-label-prefix", default=RC_LABEL_PREFIX_DEFAULT)
     ap.add_argument("--cron-label-prefix", default=None)
+    ap.add_argument("--inventory", action="append", default=[],
+                    metavar="LABEL=GLOB",
+                    help="このマシンに置かれた物の **名前だけ** を記録 (repeatable、 中身は読まない)。 "
+                         "reader が fleet 横断で突合し「他マシンには在るのにここには無い」 を surface")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
@@ -311,7 +410,7 @@ def main():
     try:
         msg = beat(Path(args.repo).expanduser(), args.subdir,
                    args.min_commit_interval_hours, args.rc_label_prefix,
-                   args.cron_label_prefix)
+                   args.cron_label_prefix, args.inventory)
         print(msg)
     except Exception as e:
         print(f"fail-open: {e}", file=sys.stderr)
