@@ -58,7 +58,7 @@ Read it again before attempting to write it.
 **(D) Commit 時 reflex** (= stage する時)
 
 - 並行 session が同 tree に居る (可能性がある) 環境では **`git add -A` / `git add .` を使わない** — 相手の**未 commit の WIP** を丸ごと自 commit に巻き込む (= 自分の commit message が説明しない変更が push され、 相手の WIP が中間状態で publish される + 相手側からは自分の編集が「勝手に consume された」 ように見える)。 **自分が編集した file を明示列挙して add** する
-- 実例 (2026-07-10): session X が script を編集中 (前半 commit 済・続き未 commit) のところへ、 session Y が別作業の `git add -A` で X の未 commit 分 42 行を無関係な message の commit に混入させて push。 X はその上に続きを積めたため実害は attribution の濁りに留まったが、 X の WIP が中間状態で publish される class の事故
+- 実例 (2026-07-10): session X が script を編集中 (前半 commit 済・続き未 commit) のところへ、 session Y が別作業の `git add -A` で X の未 commit 分 42 行を無関係な message の commit に混入させて push。 X はその上に続きを積めたため実害は attribution の濁りに留まったが、 X の WIP が中間状態で publish される class の事故。 **同型再発 (2026-07-25)**: 「repo A は並行 session が編集中だから add を限定しろ」 という警告を chat で受け **repo A では遵守した** session が、 直後に隣の repo B で `git add -A` を打ち並行 session の WIP 3 file を巻き込んだ — 警告を named repo の話として受け取り一般原則に拡張し損ねた形で、 **rule の in-context presence でも止まらなかった** (= 防御は「並行 session が居る間はどの repo でも明示 add」 という無条件 reflex 側に置く。 巻き込んだ側の事後責務 = 相手 session への通知 + 巻き込み内容の commit message / 記録での明示、 history 書き換えはしない)
 
 ### Anti-pattern
 
