@@ -77,7 +77,7 @@ echo '{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":
 
 複数行 JSON を順に書く client は **`Write` で小さな node/python harness にして単純コマンドで起動**する (= inline の nested-quote JSON は tool call malformed を誘発、 [tool-call-robustness.md](tool-call-robustness.md) 参照)。staged verification 推奨: 1 dir だけ先に bump → bump 前と live 結果を比較 (同一なら回帰なし) → 全 dir 展開、で blast radius を最小化。
 
-**OAuth-backed server を live test する時の副作用**: 実 `tools/call` は token refresh を誘発し、credential file が drift する (= ephemeral な `access_token` / `expiry_date` のみ、durable な `refresh_token` は標準的 refresh では rotate されない)。検証後は drift を `git checkout --` で破棄してよい (= 次回使用時に refresh_token から自動再 refresh)。git-crypt'd credential file の durable field が不変かを `git show <rev>:<path>` で diff 確認することは**できない** (= ciphertext が返る、[git-crypt-guide.ja.md トラブルシューティング](../docs/git-crypt-guide.ja.md) 参照) ので、OAuth refresh semantics に依拠する。
+**OAuth-backed server を live test する時の副作用**: 実 `tools/call` は token refresh を誘発し、**refresh 結果を書き戻す実装なら** credential file が drift する (= ephemeral な `access_token` / `expiry_date` のみ、durable な `refresh_token` は標準的 refresh では rotate されない。下の §実装時の注意 のとおり、そもそも ephemeral field を書き戻さない実装なら drift しない)。検証後は drift を `git checkout --` で破棄してよい (= 次回使用時に refresh_token から自動再 refresh)。git-crypt'd credential file の durable field が不変かを `git show <rev>:<path>` で diff 確認することは**できない** (= ciphertext が返る、[git-crypt-guide.ja.md トラブルシューティング](../docs/git-crypt-guide.ja.md) 参照) ので、OAuth refresh semantics に依拠する。
 
 ### <a id="runbook-log-check"></a>2. log を確認
 
@@ -292,7 +292,7 @@ MCP サーバーが取得した OAuth トークンのスコープによって使
 
 ### 実装時の注意
 
-- Python スクリプトがトークンを refresh した場合、access_token だけでなく **refresh_token も書き戻す**。Google が refresh_token を回転させた場合に旧トークンだけがファイルに残ると、MCP サーバーも Python スクリプトも認証不能になる
+- Python スクリプトがトークンを refresh した場合、**書き戻すのは `refresh_token` が実際に変わったときだけにする**。回転したのに書き戻さないと、旧トークンだけがファイルに残って MCP サーバーも Python スクリプトも認証不能になる。一方 `access_token` / `expiry_date` は短時間で失効し `refresh_token` からいつでも再生成でき、しかも複数個が同時に有効なので、永続化しても情報は増えない (書き戻さなくても各プロセスが起動後の初回 API 呼び出しで自前に refresh する)。**credential file を VCS で追跡しているなら、この 2 field の書き戻しは conflict を生むだけ**で、暗号化していれば binary 扱いになり自動マージも効かない (= 中身を読めないまま ours/theirs を選ぶ羽目になる)。⚠️ 実際に回転するかは **token 応答に `refresh_token` が含まれるか**で確認できる。標準的な refresh では含まれない (= 上の live test 副作用の項と同じ理由で、durable field は不変)
 - MCP サーバーと Python スクリプトの同時実行は避ける（token refresh の競合リスク）
 
 各ユーザーの具体的な実装（認証情報のパス、スクリプト等）は MCP 設定リポの DESIGN.md に記録すること。
