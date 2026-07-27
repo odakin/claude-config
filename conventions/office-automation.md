@@ -267,6 +267,7 @@ overlay-seal-pdf.py IN.pdf --out OUT.pdf \
 ```
 
 - **配置は page 上の text anchor 基準** (`page.search_for`) — pixel 座標でなく「『印』 の 2 個目」 「氏名文字列の右」 で指すので、 再生成で layout が微動しても追従する。 押印欄に「印」 マークがある様式は **anchor=印 + 負 dx で字に重ねる** (= 実押印の見た目)、 マークが無い様式 (= 氏名下線のみ) は **anchor=氏名 + 正 dx で右に置く**。
+- 🚨 **罫線・下線に重ねない** (= user 判断 2026-07-27): 印刷印影が黒い罫線と交差すると**印刷だと判別されやすい** — 実物押印は朱肉が線の**上に**乗って自然に見えるが、 印刷では黒線がくっきり残って不自然。 engine の `avoid=h` (default on) が水平罫線との交差弦長を最小化する縦シフトを自動で選ぶ。 **表の行高が印影より小さい場合はシフトでは回避できない** (engine が残交差を warn) → その欄では**行内に収まるサイズに絞る** (例: 行高 21pt の「印」 欄 → 20pt。 実物サイズより小さくなるが、 小径の訂正印・認印は実在するので不自然ではない — 線またぎより優先)。
 - engine は overlay 後に**対象領域の赤 px を assert** (= グレー化・置き忘れを機械検出、 fail なら出力を消して exit 2)。
 - `--place` と `--image` は順序で対に (= 押印ごとに別 variant を渡せる)。
 - 副次利点: workbook が pristine のまま (= drawing part を足さないので [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) 系の hazard がゼロ)。

@@ -34,6 +34,16 @@ Usage
   centered on the anchor line + ``dy``. ``size`` is the square edge in points.
 * In-place editing is refused: ``--out`` must differ from the input.
 
+* ``avoid=h`` (default on) nudges the seal vertically off ruled lines: a
+  printed seal crossing a black rule is a giveaway (a real impression inks
+  *over* the line; a printed one visibly loses to it). The engine collects
+  horizontal line segments from ``page.get_drawings()``, computes the chord
+  length where each crosses the seal's inscribed circle, and picks the
+  vertical shift (at most 0.6 x size) minimizing total crossing; ties prefer
+  the smallest shift. When no shift clears every line (e.g. a table row
+  shorter than the seal), it reports the residual crossing — consider a
+  smaller ``size`` that fits inside the row.
+
 Verification built in: after stamping, each target region is rasterized and
 asserted to contain saturated-red pixels (a gray/monochrome seal fails the
 run). Exit 2 on any failure; the output file is removed.
@@ -48,7 +58,7 @@ import fitz
 
 
 def parse_place(spec: str) -> dict:
-    out = {"occurrence": 1, "size": 24.0, "dx": 6.0, "dy": 0.0}
+    out = {"occurrence": 1, "size": 24.0, "dx": 6.0, "dy": 0.0, "avoid": "h"}
     for chunk in spec.split(","):
         if "=" not in chunk:
             sys.exit(f"bad --place chunk: {chunk!r} (expected key=value)")
@@ -60,12 +70,65 @@ def parse_place(spec: str) -> dict:
             out[k] = int(v)
         elif k in ("size", "dx", "dy"):
             out[k] = float(v)
+        elif k == "avoid":
+            out[k] = v  # "h" = avoid horizontal rules (default), "none" = off
         else:
             sys.exit(f"unknown --place key: {k!r}")
     for req in ("page", "anchor"):
         if req not in out:
             sys.exit(f"--place needs {req}=: {spec!r}")
     return out
+
+
+def hline_ys(page: fitz.Page, rect: fitz.Rect) -> list:
+    """Horizontal ruled-line y's near rect (from vector drawings; thin rects count)."""
+    ys = []
+    pad = rect.height
+    for dr in page.get_drawings():
+        for item in dr["items"]:
+            if item[0] == "l":
+                q1, q2 = item[1], item[2]
+                if abs(q1.y - q2.y) < 0.7 and min(q1.x, q2.x) < rect.x1 and max(q1.x, q2.x) > rect.x0 \
+                        and rect.y0 - pad < q1.y < rect.y1 + pad:
+                    ys.append((q1.y + q2.y) / 2)
+            elif item[0] == "re":
+                r = item[1]
+                if r.height < 1.5 and r.width > 5 and r.x0 < rect.x1 and r.x1 > rect.x0 \
+                        and rect.y0 - pad < r.y0 < rect.y1 + pad:
+                    ys.append((r.y0 + r.y1) / 2)
+    return sorted(set(round(y, 1) for y in ys))
+
+
+def crossing(cy: float, radius: float, ys: list) -> float:
+    """Total chord length where horizontal lines cross the inscribed circle."""
+    total = 0.0
+    for y in ys:
+        d = abs(y - cy)
+        if d < radius:
+            total += 2 * (radius ** 2 - d ** 2) ** 0.5
+    return total
+
+
+def avoid_hlines(page: fitz.Page, rect: fitz.Rect, size: float) -> fitz.Rect:
+    """Shift rect vertically to minimize ruled-line crossings (printed-seal giveaway)."""
+    radius = size / 2
+    cy = (rect.y0 + rect.y1) / 2
+    ys = hline_ys(page, rect)
+    if not ys:
+        return rect
+    cands = {0.0}
+    for y in ys:  # shifts that just clear each line (0.5pt margin)
+        for sgn in (-1, 1):
+            shift = (y + sgn * (radius + 0.5)) - cy
+            if abs(shift) <= 0.6 * size:
+                cands.add(round(shift, 1))
+    best = min(cands, key=lambda sh: (round(crossing(cy + sh, radius, ys), 2), abs(sh)))
+    res = crossing(cy + best, radius, ys)
+    if best != 0.0:
+        print(f"  avoid=h: shifted {best:+.1f}pt (crossing {crossing(cy, radius, ys):.1f} -> {res:.1f}pt)")
+    if res > 0.5:
+        print(f"  ⚠️ avoid=h: {res:.1f}pt of ruled line still crossed (row shorter than seal? consider smaller size)")
+    return fitz.Rect(rect.x0, rect.y0 + best, rect.x1, rect.y1 + best)
 
 
 def red_fraction(page: fitz.Page, rect: fitz.Rect) -> float:
@@ -109,6 +172,8 @@ def main() -> None:
         x0 = a.x1 + p["dx"]
         y0 = (a.y0 + a.y1) / 2 - size / 2 + p["dy"]
         rect = fitz.Rect(x0, y0, x0 + size, y0 + size)
+        if p.get("avoid", "h") == "h":
+            rect = avoid_hlines(page, rect, size)
         page.insert_image(rect, filename=image, keep_proportion=True, overlay=True)
         targets.append((p["page"], rect, image))
 
