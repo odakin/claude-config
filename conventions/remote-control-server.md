@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Remote Control サーバーモードを常駐・troubleshoot するとき
 category: harness-core
-summary: Claude Code Remote Control サーバーモードの launchd 常駐 (= スマホ / claude.ai/code から自マシンに新規セッションを生やす待ち受け。 要件 = claude.ai OAuth 〔managed key 不可〕 + 初回同意 y、 ⚠️ PTY 経由は stdin EOF cycling、 モバイル UI のリポ選択は same-dir で cwd 不変、 cloud session との見分け = 緑ドット computer icon。 install SoT は scripts/install-remote-control-server.sh)
+summary: Claude Code Remote Control サーバーモードの launchd 常駐 (= スマホ / claude.ai/code から自マシンに新規セッションを生やす待ち受け。 要件 = claude.ai OAuth 〔managed key 不可〕 + 初回同意 y、 ⚠️ PTY 経由は stdin EOF cycling、 モバイル UI のリポ選択は same-dir で cwd 不変、 cloud session との見分け = 緑ドット computer icon、 #ts-rc-file-panel = RC 閲覧では chat 内 file link の右パネル render 不可 〔file は worker host 側にのみ在る、 正本 = claude-code-permissions.md#rc-chat-panel-no-render〕。 install SoT は scripts/install-remote-control-server.sh)
 -->
 # Remote Control サーバーモードの launchd 常駐 (= スマホからいつでも Claude Code)
 
@@ -147,6 +147,10 @@ zsh -l -c 'echo $PATH' | tr ':' '\n' | head -5
 **機構**: 別の connection が同じ session を claim すると、 先住 worker が `Transport closed: this connection is no longer the active worker for the session (code 4090)` で eject される (= app log `~/Library/Logs/Claude/main.log` に記録)。 同マシンの RC server / auth が不安定な時に再接続 race で連発しやすい。
 
 **対処**: (1) `main.log` を `code 4090` で grep して時刻を特定 (2) config の projects dir にある `bridge-pointer.json` の pid が死んでいれば stale (= 削除可) (3) 同時期に RC server が cycling していれば先にそれ (前項 trust / auth / version) を治す (4) conversation はメッセージ再送 or 新規作成で復帰 — ⚠️ ただし **worker は eject されず turn を完走している場合がある** (2026-07-02 実測: 「応答しなくなりました」 表示中もホスト側 worker は作業を継続し repo への push まで完遂、 壊れていたのは viewer→worker の再接続だけ 〔sleep/網断後に viewer 側 reconnect が 404 を繰り返す変種、 別マシンから見ると repo には pull で成果が届き続ける〕)。 **再送で同じ作業を二重実行させないよう、 先にホスト側 repo の `git log` / transcript で成果を確認**してから再送する。 ホスト機がどれか曖昧なら、 復帰後にその session に `hostname` を 1 回打たせるのが最速の ground truth。 root は upstream の worker 管理で client 側から予防は不能 — できるのは検出と復旧のみ。
+
+### <a id="ts-rc-file-panel"></a>RC 閲覧中は chat 内 file link の右パネル rendering が効かない
+
+**症状**: RC で別端末から session を見ているとき、 chat 応答内の markdown link `[label](path)` を click すると「このファイルを読み取れませんでした — 削除または移動された可能性があるか、作業ディレクトリの外に存在する可能性」。 file は worker host に実在し、 permission scope も通っているのに出る (= error 文言が scope 問題と同一で誤誘導)。 file が worker host のディスクにのみ在り、 閲覧端末側に無いのが原因。 診断手順・対処 (唯一 RC で完結するのは「内容を chat 本文に出させる」) の正本 = [claude-code-permissions.md #rc-chat-panel-no-render](claude-code-permissions.md#rc-chat-panel-no-render)。
 
 ### 併発 pattern
 

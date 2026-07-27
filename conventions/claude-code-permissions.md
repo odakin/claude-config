@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき
 category: harness-core
-summary: Claude Code CLI の permission プロンプト削減 (= cwd 外 file 〔`~/Downloads` 等〕の Read/Edit/Write が毎回確認される症状を `additionalDirectories` で cwd 同様に無確認化、 bare tool allow は cwd 外を素通ししない observed〔docs 解釈と食い違い〕、 deny > ask > allow で機密は `deny` 優先、 setup.sh `configure_permissions` は `allow` のみ触る = additionalDirectories/deny は直書き永続、 settings 反映は次セッション、 #chat-link-rendering-scope = chat 応答内の markdown link `[label](path)` を click した右パネル rendering も同 scope〔session cwd + additionalDirectories〕に従い scope 外は「読み取れませんでした / 作業ディレクトリの外」 表示、 frontend 3 系統切り分け〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕、 §always-approve-tools = permission 設定で抑止できない always-prompt tool class〔`ccd_session_mgmt__search_session_transcripts` 等 cross-session tool は `allow` 登録でも承認チップが出る = 経路を外す以外に消せない、 token-handshake 返送への含意込み〕、 #ask-pattern-action-anchor = 高 stakes Bash gate の ask パターンは file 名 substring でなく不可逆 action の実行形〔`--send` 等の explicit flag〕に anchor〔ask > allow ゆえ allow で例外を彫れない = パターン絞りが唯一の手段・tool 側は fail-safe 既定・gate 対象 invocation は chain 禁止〕)
+summary: Claude Code CLI の permission プロンプト削減 (= cwd 外 file 〔`~/Downloads` 等〕の Read/Edit/Write が毎回確認される症状を `additionalDirectories` で cwd 同様に無確認化、 bare tool allow は cwd 外を素通ししない observed〔docs 解釈と食い違い〕、 deny > ask > allow で機密は `deny` 優先、 setup.sh `configure_permissions` は `allow` のみ触る = additionalDirectories/deny は直書き永続、 settings 反映は次セッション、 #chat-link-rendering-scope = chat 応答内の markdown link `[label](path)` を click した右パネル rendering も同 scope〔session cwd + additionalDirectories〕に従い scope 外は「読み取れませんでした / 作業ディレクトリの外」 表示〔#rc-chat-panel-no-render = Remote Control 閲覧では scope 通過でも同一 error で render 不可 = file が worker host 側にのみ在る、 唯一 RC で完結する対処 = 内容を chat 本文に出させる、 observed n=1〕、 frontend 3 系統切り分け〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕、 §always-approve-tools = permission 設定で抑止できない always-prompt tool class〔`ccd_session_mgmt__search_session_transcripts` 等 cross-session tool は `allow` 登録でも承認チップが出る = 経路を外す以外に消せない、 token-handshake 返送への含意込み〕、 #ask-pattern-action-anchor = 高 stakes Bash gate の ask パターンは file 名 substring でなく不可逆 action の実行形〔`--send` 等の explicit flag〕に anchor〔ask > allow ゆえ allow で例外を彫れない = パターン絞りが唯一の手段・tool 側は fail-safe 既定・gate 対象 invocation は chain 禁止〕)
 -->
 # Claude Code の permission プロンプトを減らす (additionalDirectories と working directory 境界)
 
@@ -59,6 +59,7 @@ Claude Code (desktop app / VS Code 拡張の chat panel) は、応答本文内�
 
 **診断**:
 
+0. **Remote Control 経由で見ていないか** (→ 下の「Remote Control 経由では scope 通過でも render 不可」)。RC なら 1-3 は無関係 — scope を直しても解決しない。
 1. session の実 cwd を確認 (session 起動時に選んだ folder — `pwd` 相当)。
 2. click した link の href (相対 path なら cwd 基準で解決) の絶対 path を求める。
 3. `~/.claude/settings.json` の `permissions.additionalDirectories` に、その絶対 path の**祖先 dir** が登録されているか。
@@ -72,6 +73,14 @@ Claude Code (desktop app / VS Code 拡張の chat panel) は、応答本文内�
 ⚠️ **診断反射の落とし穴**: error message は「削除または移動された可能性」 を並列で提示するため、**path form 誤り (相対 vs 絶対、typo、リネーム) を先に疑って retry する**引力が強い。file 実在・form 正しい状態で失敗が続いたら、次に触る仮説は **scope 外**であって別 form の retry ではない (= 単一情報源〔error message〕null からの結論飛躍防止)。1 コマンドで確認できる: `jq '.permissions.additionalDirectories' ~/.claude/settings.json`。
 
 **frontend 差**: この rendering scope 挙動は **chat 右パネルを持つ frontend** (= desktop app、VS Code 拡張の chat panel) で発生する。CLI-only session には右パネル rendering 自体が無いので該当しない。scope 判定機構自体は harness 側で共通 (= Read/Edit/Write tool と同じ layer)。
+
+### <a id="rc-chat-panel-no-render"></a>Remote Control 経由では scope 通過でも render 不可
+
+**scope 診断 (上の 1-3) を全部通過しているのに拒否される**ケースがある: session を **Remote Control で別端末から閲覧している**とき。file は worker host のディスクにあり、**閲覧している端末側には存在しない**ため、右パネルは render できない。error message は scope 外のときと**同一文言** (「削除または移動された可能性があるか、作業ディレクトリの外に存在する可能性」) なので、**scope 問題だと誤誘導される** (= 「作業ディレクトリの外」はどちらの原因でも表示される)。
+
+- **見分け方**: scope 3 段が全部 ✅ なのに拒否 → 次に疑うのは「この画面は RC か」。session の worker host は冒頭の自己同定 stamp ([multi-account-machine-surface.md I7](multi-account-machine-surface.md)) か `hostname` 1 発で確認できる。
+- **対処**: worker host 側の画面で開く / `open <path>` を worker host で実行して OS アプリに出す (RC 画面には届かない) / **内容を chat 本文に出させる** (= text は bridge を通るので RC でも読める。唯一 RC 画面で完結する手)。
+- ⚠️ observed n=1 (2026-07-27、user 側の切り分けによる同定。scope 3 段通過 + file 実在 + RC 閲覧の組で再現、worker host 側での表示は未検証)。
 
 **Bash 経由との非対称**: 上記 §核心 / §対処 の Bash tool は cwd 外 path でも通りやすい観察と同型 (= Bash は permission 判定が緩い、Read/Edit/Write と chat rendering は厳しい)。「Bash で `cat <path>` は通ったのに chat link は落ちる」という非対称は、この scope 差の同じ現れ。
 
