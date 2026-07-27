@@ -46,6 +46,7 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 | 日付が「46205」 等の serial 数字で印字される | Excel が和文日付文字列を date 値に auto-convert + cell 書式が General | **apostrophe prefix で text 強制** → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
 | 申請日等が「火曜日, 6/月 16, 2026」 の冗長書式で表示 | `=TODAY()` 等 date 書式の cell を date 値で上書き → 冗長書式を継承 | apostrophe prefix の text で上書き → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
 | **提出用 PDF を再生成したら日付が変わった** / 報告書の日付が用務より前 | 様式の日付欄が `=TODAY()` のまま (= 生成日が入る) | fill 完了時に日付シリアルの固定値へ焼く → [`form-today-formula-freeze`](#form-today-formula-freeze) |
+| **印影が印刷でグレーになる** / blackAndWhite off にしたら背景色が出た | 様式の `blackAndWhite=True` は背景色抑制に必要で、 workbook 内の画像は必ず白黒化される | 白黒 PDF を生成後に **overlay-seal-pdf.py** で印影を乗せる (text anchor 配置 + 赤 px assert) → [`seal-color-pdf-overlay`](#seal-color-pdf-overlay) |
 | **印影・署名の画像を xlsx に置きたい** | openpyxl `add_image` は comments part を倍増させ Excel が破損警告 (+ formula cache も消える) | Excel osascript で `make new picture` (= anchor cell の left/top から points 指定) → [`xlsx-image-via-excel`](#xlsx-image-via-excel)、 script = `affix-image-xlsx.py` |
 | 標題・縦書きラベル・textbox が消えた | openpyxl の save が drawing (shape) を破壊 | Excel osascript / fitz 直印字 / 別 file XML 移植 の 3 経路 → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
 | formula 編集後 PDF / xlsx で別 cell の値が空欄 / `None` 化 | openpyxl の save が周辺 cell の formula cache を消す (= AST は保持するが cached value を再計算せず drop) | sentinel guard で abort + Excel.app open+save で再計算復元 → [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) |
@@ -248,6 +249,32 @@ if isinstance(c.value,str) and 'TODAY' in c.value])" book.xlsx
 
 ⚠️ 同じ罠は `=NOW()` / `=YEAR(TODAY())` 等の派生にもある。 grep は `TODAY|NOW` で当てる。
 
+### <a id="seal-color-pdf-overlay"></a>🔥 印影を**赤いまま**印刷するには xlsx に埋めず **PDF 化後に overlay** する (= blackAndWhite 様式の色 trap)
+
+**症状**: 事務様式 xlsx に赤い印影 PNG を入れて印刷 / PDF 化すると**印影がグレーになる**。 原因は様式テンプレの **`page_setup.blackAndWhite = True`** (= ほぼ全シートに入っている) — このフラグは**入力欄の背景色 (記入ヒントの塗り) を印刷に出さない**ために存在するので、 単純に off にすると今度は**背景色が全部紙に出て様式の見た目が変わる** (= どちらに倒しても壊れる)。
+
+**構造**: 「様式は白黒で刷りたい」 と 「印影は赤で刷りたい」 は **workbook の印刷設定 1 個では両立しない**。 分離するには印影を workbook の外に出す:
+
+1. workbook は blackAndWhite **のまま** PDF 化 (= 背景色が出ない、 従来どおりの見た目)
+2. できた PDF に印影を **overlay** (= PDF レイヤには page setup が及ばないので色が残る)
+
+**実装 = [`scripts/overlay-seal-pdf.py`](../scripts/overlay-seal-pdf.py)**:
+
+```bash
+overlay-seal-pdf.py IN.pdf --out OUT.pdf \
+  --place 'page=1,anchor=印,occurrence=2,size=22,dx=-17' --image seal1.png \
+  --place 'page=3,anchor=<氏名>,size=26,dx=12'          --image seal2.png
+```
+
+- **配置は page 上の text anchor 基準** (`page.search_for`) — pixel 座標でなく「『印』 の 2 個目」 「氏名文字列の右」 で指すので、 再生成で layout が微動しても追従する。 押印欄に「印」 マークがある様式は **anchor=印 + 負 dx で字に重ねる** (= 実押印の見た目)、 マークが無い様式 (= 氏名下線のみ) は **anchor=氏名 + 正 dx で右に置く**。
+- engine は overlay 後に**対象領域の赤 px を assert** (= グレー化・置き忘れを機械検出、 fail なら出力を消して exit 2)。
+- `--place` と `--image` は順序で対に (= 押印ごとに別 variant を渡せる)。
+- 副次利点: workbook が pristine のまま (= drawing part を足さないので [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) 系の hazard がゼロ)。
+
+**使い分け** (vs [`xlsx-image-via-excel`](#xlsx-image-via-excel)): 画像が**白黒で構わない** (or blackAndWhite の無い workbook) なら xlsx 内挿入も可。 **色が意味を持つ画像 (= 印影) は常に本 overlay 経路**。 driver (= 様式ごとの gen-pdf script) に組み込んで「1 コマンドで印影つき提出 PDF」 にするのが運用形。
+
+origin: 2026-07-27 大学出張様式 — xlsx 内挿入 (Excel osascript 経由) で入れた印影が印刷でグレー化 → blackAndWhite off にしたら入力欄の背景色 (オレンジ/青) が紙に出た → 本 2 段構成で両立。
+
 ### <a id="xlsx-image-via-excel"></a>xlsx に画像 (印影・署名) を置くなら Excel osascript — openpyxl `add_image` は **comments を倍増**させ formula cache も消す
 
 **症状**: 既存の事務様式 xlsx に認印 PNG を入れようとして openpyxl の `add_image` + `wb.save()` を使うと、 画像自体は入るが **cell comment の part が二重に生成され** (= `xl/comments*.xml` が倍増)、 Excel が「ファイルが破損しています」 と警告する。 同時に [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) も併発する。
@@ -284,6 +311,8 @@ end tell
 - **`left position` / `top` は range から読める** ので、 セル座標さえ決めれば px 当て勘は要らない。 微調整は points の offset で。
 - **script 化済み**: [`scripts/affix-image-xlsx.py`](../scripts/affix-image-xlsx.py) (= `--sheet/--cell/--image/--size/--dx/--dy`)。 実行前に「Excel が同じ book を開いていないか」 を確認し (= 未保存編集の破壊回避)、 実行後に **inventory 差分と formula cache を assert** して、 期待 (media +1 / vml・comments 不変 / cache 生存) を外れたら backup から自動復旧する。 `--dry-run` で位置だけ確認可。
 - 位置の最終確認は PDF に render して目視 ([`pdf-visual-confirm`](#pdf-visual-confirm))。
+
+⚠️ **印影など「色が意味を持つ」 画像はこの経路では駄目なことが多い** — 様式テンプレの `page_setup.blackAndWhite=True` が印刷/PDF 化で画像をグレー化する。 その場合は [`seal-color-pdf-overlay`](#seal-color-pdf-overlay) (= PDF 化後に overlay) が正。
 
 ⚠️ **画像印影を埋めてよいのは紙で提出する成果物だけ** (= 印刷を挟まずファイルのまま相手に渡ると、 画像を貼ったことが判別されうる)。 媒体で運用が分かれる点は各自の運用 SoT で規定すること。
 

@@ -180,6 +180,7 @@ claude-config/
 │   ├── install-remote-control-server.sh    # Remote Control サーバーモードを launchd 常駐化（--dir / --replace-agent / --status / --uninstall、KeepAlive 60s 自動復帰、preflight で auth/同意の欠落を案内、idempotent、macOS 限定、conventions/remote-control-server.md）
 │   ├── latexdiff-review-snapshot.sh        # 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex 最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
 │   ├── normalize-docx-decl.py              # 既存 docx の XML 宣言を Word 形式へ後追い正規化する CLI（docx_decl_patch の path-based 版、 office-automation.md#docx-checkbox-content-control）
+│   ├── overlay-seal-pdf.py                 # Overlay a seal / signature image onto a generated PDF — keeping its color.
 │   ├── pdf-cleaner.html                    # clipboard-cleaner.py のブラウザ版 fallback（非 macOS / pbcopy なし環境用、整形ロジックの正本は clipboard-cleaner.py で両実装を同期）
 │   ├── pdf_form_fill.py                    # 雛形 PDF への直接印字エンジン（library。anchor 印字 / NFKC 照合 / #+ redact / font subset / 内蔵検証 / 600dpi ラスタ化、office-automation.md#pdf-prefill-direct の汎用実装。単票向け — 派生 sheet 数式導出付き workbook は excel-osascript 経路）
 │   ├── pin-claude-cwd.sh                   # Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
