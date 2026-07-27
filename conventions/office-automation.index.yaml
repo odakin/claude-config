@@ -30,6 +30,10 @@ sections:
     level: 3
     title: "openpyxl の save は既存の textbox / shape (= 標題・縦書きラベル・図形) を破壊する"
     related: [excel-osascript-cell-write, label-overwrite-bug, openpyxl-clears-formula-cache]
+  - id: form-today-formula-freeze
+    level: 3
+    title: "様式に埋まった =TODAY() は fill 完了時に固定値へ焼く (= 再生成のたびに日付が動く)"
+    related: [excel-osascript-cell-write, openpyxl-clears-formula-cache, form-dump-first, diff-form-xlsx-detection]
   - id: xlsx-image-via-excel
     level: 3
     title: "xlsx に画像 (印影・署名) を置くなら Excel osascript (= openpyxl add_image は comments を倍増させ formula cache も消す)"

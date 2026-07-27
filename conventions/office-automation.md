@@ -45,6 +45,7 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 | osascript が `-50` パラメータエラー | **`save workbook as … PDF` (workbook 単位の verb)** / merged cell への number-format 設定 | PDF は **sheet 単位** `save as <sheet>` ([`xlsx-to-pdf.sh`](#xlsx-to-pdf-script)) / 書式強制は apostrophe (下行) |
 | 日付が「46205」 等の serial 数字で印字される | Excel が和文日付文字列を date 値に auto-convert + cell 書式が General | **apostrophe prefix で text 強制** → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
 | 申請日等が「火曜日, 6/月 16, 2026」 の冗長書式で表示 | `=TODAY()` 等 date 書式の cell を date 値で上書き → 冗長書式を継承 | apostrophe prefix の text で上書き → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
+| **提出用 PDF を再生成したら日付が変わった** / 報告書の日付が用務より前 | 様式の日付欄が `=TODAY()` のまま (= 生成日が入る) | fill 完了時に日付シリアルの固定値へ焼く → [`form-today-formula-freeze`](#form-today-formula-freeze) |
 | **印影・署名の画像を xlsx に置きたい** | openpyxl `add_image` は comments part を倍増させ Excel が破損警告 (+ formula cache も消える) | Excel osascript で `make new picture` (= anchor cell の left/top から points 指定) → [`xlsx-image-via-excel`](#xlsx-image-via-excel)、 script = `affix-image-xlsx.py` |
 | 標題・縦書きラベル・textbox が消えた | openpyxl の save が drawing (shape) を破壊 | Excel osascript / fitz 直印字 / 別 file XML 移植 の 3 経路 → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
 | formula 編集後 PDF / xlsx で別 cell の値が空欄 / `None` 化 | openpyxl の save が周辺 cell の formula cache を消す (= AST は保持するが cached value を再計算せず drop) | sentinel guard で abort + Excel.app open+save で再計算復元 → [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) |
@@ -211,6 +212,41 @@ unzip -l form.xlsx | grep -iE 'drawing|media'
 **事後の救済 (= 既に喪失してしまった file の復元)**: Excel.app で xlsx を **open + save 1-pass** すると、 Excel が元 file に在った drawing 構造を知っているケース (= vmlDrawing 等の legacy drawing で base 雛形に痕跡が残っている場合) では drawing が **re-emit される**ことが観察されている (= `commentsDrawing1.vml` → `vmlDrawing1.vml` への戻りを観測した実例あり)。 ⚠️ **universal な復元保証ではない** (= sample size 限定、 base 雛形が drawing 情報を完全に失っているケースは復元しない)。 osascript snippet は [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) の修復経路を流用 (= 副次効果として formula cache も同時復元)。 = 喪失検出 → まず Excel.app open+save で復元を試す → drawing 数 (`unzip -l xxx.xlsx | grep -iE 'drawing'`) で復元成否を verify → 復元しなければ回避 2 (= drawing XML migration) で再構成。
 
 origin: 2026-06 連続発生した「様式の標題テキストボックスが openpyxl save で消える」 事故。 cell value の一致検証では検出できず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF 画像確認で初めて気づく。 2026-06-12 に前例 script 流用経路で再発 (= 上記 reflex の起源)。 2026-06-23 に Excel.app open+save 経由の drawing re-emit を観測 (= 上記「事後の救済」 の起源)。
+
+### <a id="form-today-formula-freeze"></a>⚠️ 様式に埋まった `=TODAY()` は fill 完了時に**固定値へ焼く** (= 再生成のたびに日付が動く)
+
+**症状**: 官製様式の日付欄が `=TODAY()` で作られていることがある (= 「作成日が自動で入る」 親切機能のつもり)。 これを放置したまま提出用 PDF を生成すると、 **生成し直すたびに日付が変わる**。 提出済みの紙が 7/24 付なのに、 差し戻し対応で PDF を作り直したら 7/27 付になる — **相手が受け取った書類と手元の再生成物が食い違う**。
+
+**なぜ「後で生成し直せば正しい日付になる」 は誤りか**: 書類は用務のずっと前に作る。 `=TODAY()` が出せるのは常に「いま」 であって、 **書類の意味が要求する日付ではない**。 典型的に食い違う:
+
+| 欄 | 意味が要求する日付 | `=TODAY()` が入れる日付 |
+|---|---|---|
+| 依頼書・承諾書 | 依頼した日 / 承諾を得た日 (= 相手と共有済みの固定日) | 最後に PDF 化した日 |
+| 報告書 | **用務が終わった後**の日 (= 事前提出は書式上ありえない) | 書類を作った日 = 用務の前 |
+| 請求書 | 請求日 | 同上 |
+
+**対処**: fill が終わった時点で `=TODAY()` を**その欄の意味で決めた固定値**に置き換える (= Excel の日付シリアル値を書く)。 数式を残さない。
+
+```python
+from datetime import date
+serial = (date(2026, 8, 13) - date(1899, 12, 30)).days   # 1900 date system
+```
+```applescript
+tell workbook 1 to set value of range "Y10" of worksheet "報告書" to 46247
+```
+
+- 書式 (`number_format`) は雛形のものが効くので、 **シリアル値を書くだけで表示は「2026年8月13日 木曜日」 のまま**。
+- 書き込み経路は [`excel-osascript-cell-write`](#excel-osascript-cell-write) (= drawing / comment / formula cache を壊さない)。
+- **提出パッケージに含まれないシート** (= 未使用の海外用・マスタ 等) の `TODAY()` は放置してよい。 焼くのは出力される欄だけ。
+
+**検出** (= fill 後の点呼に入れる):
+```bash
+python3 -c "import openpyxl,sys; wb=openpyxl.load_workbook(sys.argv[1]); \
+print([(s,c.coordinate) for s in wb.sheetnames for r in wb[s].iter_rows() for c in r \
+if isinstance(c.value,str) and 'TODAY' in c.value])" book.xlsx
+```
+
+⚠️ 同じ罠は `=NOW()` / `=YEAR(TODAY())` 等の派生にもある。 grep は `TODAY|NOW` で当てる。
 
 ### <a id="xlsx-image-via-excel"></a>xlsx に画像 (印影・署名) を置くなら Excel osascript — openpyxl `add_image` は **comments を倍増**させ formula cache も消す
 
