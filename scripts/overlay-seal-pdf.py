@@ -138,6 +138,27 @@ def avoid_hlines(page: fitz.Page, rect: fitz.Rect, size: float) -> fitz.Rect:
     return fitz.Rect(rect.x0, rect.y0 + best, rect.x1, rect.y1 + best)
 
 
+def content_fill(image: str) -> float:
+    """Opaque-content diameter / canvas edge of a seal PNG (e.g. 0.895).
+
+    ``insert_image`` fits the *canvas* to the rect, so a seal PNG with margin
+    prints smaller than the requested size — an 11% systematic error that took
+    a whole calibration session to hunt down (every size judgment was
+    consistently off by the same factor). The engine divides the rect by this
+    factor so that **requested size = ink diameter on paper**.
+    """
+    import numpy as np
+    from PIL import Image
+
+    a = np.asarray(Image.open(image).convert("RGBA"))
+    op = a[:, :, 3] > 50
+    if not op.any():
+        return 1.0
+    ys, xs = np.where(op)
+    d = ((xs.max() - xs.min()) + (ys.max() - ys.min())) / 2
+    return max(0.2, min(1.0, d / a.shape[1]))
+
+
 def stamp_multiply(page: fitz.Page, rect: fitz.Rect, image: str, dpi: int = 600) -> None:
     """Composite the seal onto the page region with multiply blending.
 
@@ -200,8 +221,8 @@ def main() -> None:
         if len(hits) < p["occurrence"]:
             sys.exit(f'anchor {p["anchor"]!r} occurrence {p["occurrence"]}: only {len(hits)} hit(s) on page {p["page"]}')
         a = hits[p["occurrence"] - 1]
-        size = p["size"]
-        x0 = a.x1 + p["dx"]
+        size = p["size"] / content_fill(image)   # request = ink diameter, not canvas
+        x0 = a.x1 + p["dx"] - (size - p["size"]) / 2
         y0 = (a.y0 + a.y1) / 2 - size / 2 + p["dy"]
         rect = fitz.Rect(x0, y0, x0 + size, y0 + size)
         if p.get("avoid", "none") == "h":
@@ -222,7 +243,7 @@ def main() -> None:
         os.remove(args.out)
         sys.exit("seal color verification failed (output removed):\n  " + "\n  ".join(failures))
     for pageno, rect, image in targets:
-        print(f"ok: p{pageno} {os.path.basename(image)} at ({rect.x0:.0f},{rect.y0:.0f}) size {rect.width:.0f}pt")
+        print(f"ok: p{pageno} {os.path.basename(image)} at ({rect.x0:.0f},{rect.y0:.0f}) canvas {rect.width:.1f}pt (ink dia = requested)")
 
 
 if __name__ == "__main__":
