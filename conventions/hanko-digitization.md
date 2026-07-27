@@ -220,7 +220,19 @@ im = im.rotate(angle, resample=Image.BICUBIC, expand=False,
 
 **適用 = [`scripts/tune-seal-image.py`](../scripts/tune-seal-image.py)**: alpha dilation (伸長部は**最近傍 inpaint** で元テクスチャを外へ伸ばす — RGB を Max/Min filter で伸ばすと縁取りアーティファクトが出る) + affine 色 remap (`c*mul+add`、 flat fill でなく affine なのでインク濃淡テクスチャが保存される)。 `--report` で測定のみ。
 
-**worked example** (2026-07-27、 Canon レーザー): 元 (171,31,18)/被覆0.335 が印刷で濃部(130,71,63)の赤茶・細線に。 実物は濃部(178,76,48)・被覆0.59。 → `--dilate 3 --r-mul 1.25 --g-mul 1.6 --g-add 30 --b-mul 1.6 --b-add 18` で (202,83,52)/被覆0.457 に補正 → 印刷結果が実物に接近。 **1 loop で足りなければ試し刷り → 再撮影 → パラメータ微調整を繰り返す** (= 変換は決定論なので再現可能)。
+**worked example (2026-07-27、 Canon レーザー、 実測 3 周で確定)**:
+
+| 周 | 測定 | 適用 |
+|---|---|---|
+| 1 | 印刷 濃部(130,71,63)・細線 vs 実物 (178,76,48)・被覆0.59 | `--dilate 3 --r-mul 1.25 --g-mul 1.6 --g-add 30 --b-mul 1.6 --b-add 18` → (202,83,52)/0.457 |
+| 2 | まだ R 不足 (146 vs 173-178) | 色のみ追い補正 `--dilate 0 --r-mul 1.15 --g-mul 1.30 --b-mul 1.25` (= R は 255 cap に近いので G/B も持ち上げて実物の色比 2.6:1.3:1 へ) |
+| 3 | 濃部 R 一致 → サイズ裁定のみ (初周の 31pt 推定は測定過大、 真値 ≈24pt、 持ち主許容の確定値 28pt) | 変換なし・overlay サイズ確定 |
+
+**loop の運用知恵** (= 3 周から):
+- **試し刷りは該当 1-2 ページだけ切り出して出す** (フル束を毎周刷らない)。
+- サイズの写真推定は **±25% 程度ブレる** (crop 範囲・押印の傾きで直径測定が揺れる) — 1 枚の写真で確定せず、 **印刷版との並置比を毎周取り直して収束**させる。 最後は持ち主の目 (「ちっちゃすぎ」/「これで固定」) が確定値。
+- 実物を**複数回押してもらう**と ばらつきの主軸が分かる (実測: 3 連押しで直径・太さはほぼ一定、 **ばらつきは色味 〔インク乗り〕 が主**) → variant pool の設計 ([`variant-mass-production`](#variant-mass-production) = サイズ固定・かすれ+回転で変奏) を実物側から検証できる。
+- 写真を PIL で直読みするときは **EXIF 回転**で座標系が表示と食い違うことがある (`ImageOps.exif_transpose` で正規化、 または赤 px の全体分布から cluster を逆引きして座標を確定)。
 
 ⚠️ variant pool ([`variant-mass-production`](#variant-mass-production)) を持つ場合は**全 variant に同一パラメータ**を適用する (= pool 内の見た目一貫性)。 検証は [`verification-checklist`](#verification-checklist) + 平均色 / 被覆率 / 不透明白 px の 3 assert。
 
