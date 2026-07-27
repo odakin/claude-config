@@ -194,6 +194,7 @@ claude-config/
 │   ├── scan-form-instructions.py           # 様式 xlsx の label 内 embedded instruction を category 別に抽出（office-automation.md#embedded-instruction-in-label）
 │   ├── setup-dropbox-refs.sh               # personal layer の dropbox-collabs.yaml を読んで symlink を生成
 │   ├── surface-discord-bot-dm.py           # Discord bot DM channel の未記録 message surface engine（daily fetcher が吐く JSON と user 側 ledger（text/YAML 内 messageId）の diff で「bot DM に返事が来ても誰も読まない」 死角を埋める汎用 CLI、 個別環境への依存ゼロ＝引数で bot ID / json-dir / ledger-dir / counterpart map / title を渡す、 finding 0 件 silent、 --selftest 内蔵。 personal layer に thin wrapper を 1 つ置いて呼ぶ、 conventions/discord-bot.md#bot-dm-surface）
+│   ├── tune-seal-image.py                  # Calibrate a digitized seal PNG against a *printed* reference — stroke width and ink color.
 │   ├── xlsx-to-pdf.sh                      # spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、office-automation.md#xlsx-to-pdf-script）
 │   └── lib/                            # sourceable helper 群
 │       ├── commit-msg-leak-matcher.sh     # commit message leak matcher (= sensitive-terms.txt + repos.md private list - 8 allowlist の (a)(b)(c) check)、 claude-code hook + git-side runner の両方が source する DRY 実装

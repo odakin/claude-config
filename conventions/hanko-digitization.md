@@ -206,6 +206,24 @@ im = im.rotate(angle, resample=Image.BICUBIC, expand=False,
 4. インク部に薄い色 (redness<60) が混ざっていないか
 5. 文字の隙間 (穴) が全て保存されているか
 
+## <a id="print-calibration-loop"></a>印刷実測からの校正 loop (= 画面で合っていても印刷で狂う)
+
+デジタル化した印影は**画面上の見た目では校正できない** — レーザープリンタは飽和した暗い赤を沈めて赤茶にし、 細いストロークをさらに細く出す。 ground truth は**紙**: 実物のハンコを印刷物の隣に押して同じ写真に収めれば、 照明条件が共通になり差分がそのまま校正データになる。
+
+**測定** (= 同一写真内の相対比較のみ使う。 絶対値はカメラ露出に汚染されている):
+
+| 軸 | 測り方 | 決まるもの |
+|---|---|---|
+| サイズ | 実物直径 px ÷ 印刷直径 px × 印刷時の pt | overlay の point size (例: 実測 257/216×26 ≈ 31pt = 11mm 認印) |
+| 色 | 両者の**濃部** (= 暗い側 1/4 分位) RGB を比較 | remap 方向 (印刷が実物より R 低 / B 高 → 元画像の R を上げ G/B の床を少し持ち上げる = 印刷で沈む分の先行補償) |
+| 線の太さ | 赤 px 数 ÷ 外接円面積 (= 被覆率) | dilation 半径 (印刷自体が dot gain で ~+0.1 乗る分を差し引いて目標化) |
+
+**適用 = [`scripts/tune-seal-image.py`](../scripts/tune-seal-image.py)**: alpha dilation (伸長部は**最近傍 inpaint** で元テクスチャを外へ伸ばす — RGB を Max/Min filter で伸ばすと縁取りアーティファクトが出る) + affine 色 remap (`c*mul+add`、 flat fill でなく affine なのでインク濃淡テクスチャが保存される)。 `--report` で測定のみ。
+
+**worked example** (2026-07-27、 Canon レーザー): 元 (171,31,18)/被覆0.335 が印刷で濃部(130,71,63)の赤茶・細線に。 実物は濃部(178,76,48)・被覆0.59。 → `--dilate 3 --r-mul 1.25 --g-mul 1.6 --g-add 30 --b-mul 1.6 --b-add 18` で (202,83,52)/被覆0.457 に補正 → 印刷結果が実物に接近。 **1 loop で足りなければ試し刷り → 再撮影 → パラメータ微調整を繰り返す** (= 変換は決定論なので再現可能)。
+
+⚠️ variant pool ([`variant-mass-production`](#variant-mass-production)) を持つ場合は**全 variant に同一パラメータ**を適用する (= pool 内の見た目一貫性)。 検証は [`verification-checklist`](#verification-checklist) + 平均色 / 被覆率 / 不透明白 px の 3 assert。
+
 ## <a id="downstream-derivative-pattern"></a>下流運用の一般 pattern (= 量産後にどう使うか)
 
 原盤 (最大解像度) と書類挿入用の派生版を分ける:
