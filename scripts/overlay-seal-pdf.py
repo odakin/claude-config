@@ -34,15 +34,22 @@ Usage
   centered on the anchor line + ``dy``. ``size`` is the square edge in points.
 * In-place editing is refused: ``--out`` must differ from the input.
 
-* ``avoid=h`` (default on) nudges the seal vertically off ruled lines: a
-  printed seal crossing a black rule is a giveaway (a real impression inks
-  *over* the line; a printed one visibly loses to it). The engine collects
-  horizontal line segments from ``page.get_drawings()``, computes the chord
-  length where each crosses the seal's inscribed circle, and picks the
-  vertical shift (at most 0.6 x size) minimizing total crossing; ties prefer
-  the smallest shift. When no shift clears every line (e.g. a table row
-  shorter than the seal), it reports the residual crossing — consider a
-  smaller ``size`` that fits inside the row.
+* **Multiply compositing (the core realism trick)**: real seal ink is
+  translucent — black rules and printed characters *show through* the red
+  impression (subtractive mixing). A PNG pasted opaquely *erases* whatever
+  it covers, which is the visible giveaway of a printed seal. So the engine
+  does not paste the PNG directly: it renders the target region of the page
+  (rules and text included) at high DPI, multiplies it with the seal image
+  (``out = base x lerp(1, seal_rgb/255, alpha)``), and pastes the composite
+  back. Black under red comes out near-black (the line shows through);
+  white paper under red stays red. Seams are impossible by construction
+  (the composite contains the untouched base outside the ink).
+
+* ``avoid=h`` (optional, default **none** since multiply landed) nudges the
+  seal vertically off ruled lines. With multiply compositing a line crossing
+  looks natural (it shows through, like a real impression), so avoidance is
+  no longer needed for realism — keep it only when the seal would cover
+  *content that must stay legible* (e.g. an amount figure).
 
 Verification built in: after stamping, each target region is rasterized and
 asserted to contain saturated-red pixels (a gray/monochrome seal fails the
@@ -58,7 +65,7 @@ import fitz
 
 
 def parse_place(spec: str) -> dict:
-    out = {"occurrence": 1, "size": 24.0, "dx": 6.0, "dy": 0.0, "avoid": "h"}
+    out = {"occurrence": 1, "size": 24.0, "dx": 6.0, "dy": 0.0, "avoid": "none"}
     for chunk in spec.split(","):
         if "=" not in chunk:
             sys.exit(f"bad --place chunk: {chunk!r} (expected key=value)")
@@ -131,6 +138,31 @@ def avoid_hlines(page: fitz.Page, rect: fitz.Rect, size: float) -> fitz.Rect:
     return fitz.Rect(rect.x0, rect.y0 + best, rect.x1, rect.y1 + best)
 
 
+def stamp_multiply(page: fitz.Page, rect: fitz.Rect, image: str, dpi: int = 600) -> None:
+    """Composite the seal onto the page region with multiply blending.
+
+    Renders the base (rules / text included), multiplies with the seal RGBA,
+    and pastes the composite back — black shows through red like real ink.
+    """
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    zoom = dpi / 72.0
+    base_pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), clip=rect)
+    base = Image.frombytes("RGB", (base_pix.width, base_pix.height), base_pix.samples)
+    seal = Image.open(image).convert("RGBA").resize(base.size, Image.LANCZOS)
+    b = np.asarray(base).astype(float)
+    sarr = np.asarray(seal).astype(float)
+    alpha = sarr[:, :, 3:4] / 255.0
+    factor = (1.0 - alpha) + alpha * (sarr[:, :, :3] / 255.0)
+    out = (b * factor).clip(0, 255).astype("uint8")
+    buf = io.BytesIO()
+    Image.fromarray(out).save(buf, format="PNG")
+    page.insert_image(rect, stream=buf.getvalue(), overlay=True)
+
+
 def red_fraction(page: fitz.Page, rect: fitz.Rect) -> float:
     pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=rect)
     total = red = 0
@@ -172,9 +204,9 @@ def main() -> None:
         x0 = a.x1 + p["dx"]
         y0 = (a.y0 + a.y1) / 2 - size / 2 + p["dy"]
         rect = fitz.Rect(x0, y0, x0 + size, y0 + size)
-        if p.get("avoid", "h") == "h":
+        if p.get("avoid", "none") == "h":
             rect = avoid_hlines(page, rect, size)
-        page.insert_image(rect, filename=image, keep_proportion=True, overlay=True)
+        stamp_multiply(page, rect, image)
         targets.append((p["page"], rect, image))
 
     doc.save(args.out)
