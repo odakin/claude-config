@@ -45,6 +45,7 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 | osascript が `-50` パラメータエラー | **`save workbook as … PDF` (workbook 単位の verb)** / merged cell への number-format 設定 | PDF は **sheet 単位** `save as <sheet>` ([`xlsx-to-pdf.sh`](#xlsx-to-pdf-script)) / 書式強制は apostrophe (下行) |
 | 日付が「46205」 等の serial 数字で印字される | Excel が和文日付文字列を date 値に auto-convert + cell 書式が General | **apostrophe prefix で text 強制** → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
 | 申請日等が「火曜日, 6/月 16, 2026」 の冗長書式で表示 | `=TODAY()` 等 date 書式の cell を date 値で上書き → 冗長書式を継承 | apostrophe prefix の text で上書き → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
+| **印影・署名の画像を xlsx に置きたい** | openpyxl `add_image` は comments part を倍増させ Excel が破損警告 (+ formula cache も消える) | Excel osascript で `make new picture` (= anchor cell の left/top から points 指定) → [`xlsx-image-via-excel`](#xlsx-image-via-excel)、 script = `affix-image-xlsx.py` |
 | 標題・縦書きラベル・textbox が消えた | openpyxl の save が drawing (shape) を破壊 | Excel osascript / fitz 直印字 / 別 file XML 移植 の 3 経路 → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
 | formula 編集後 PDF / xlsx で別 cell の値が空欄 / `None` 化 | openpyxl の save が周辺 cell の formula cache を消す (= AST は保持するが cached value を再計算せず drop) | sentinel guard で abort + Excel.app open+save で再計算復元 → [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) |
 | 値は書けたが見た目を PDF で確認したい | — | [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) で render。 ⚠️ **Quick Look (`qlmanage`) は textbox/標題 を忠実に描かない** → drawing 健在は zip 内 drawing 数で、 体裁は xlsx-to-pdf.sh の PDF で |
@@ -210,6 +211,45 @@ unzip -l form.xlsx | grep -iE 'drawing|media'
 **事後の救済 (= 既に喪失してしまった file の復元)**: Excel.app で xlsx を **open + save 1-pass** すると、 Excel が元 file に在った drawing 構造を知っているケース (= vmlDrawing 等の legacy drawing で base 雛形に痕跡が残っている場合) では drawing が **re-emit される**ことが観察されている (= `commentsDrawing1.vml` → `vmlDrawing1.vml` への戻りを観測した実例あり)。 ⚠️ **universal な復元保証ではない** (= sample size 限定、 base 雛形が drawing 情報を完全に失っているケースは復元しない)。 osascript snippet は [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) の修復経路を流用 (= 副次効果として formula cache も同時復元)。 = 喪失検出 → まず Excel.app open+save で復元を試す → drawing 数 (`unzip -l xxx.xlsx | grep -iE 'drawing'`) で復元成否を verify → 復元しなければ回避 2 (= drawing XML migration) で再構成。
 
 origin: 2026-06 連続発生した「様式の標題テキストボックスが openpyxl save で消える」 事故。 cell value の一致検証では検出できず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF 画像確認で初めて気づく。 2026-06-12 に前例 script 流用経路で再発 (= 上記 reflex の起源)。 2026-06-23 に Excel.app open+save 経由の drawing re-emit を観測 (= 上記「事後の救済」 の起源)。
+
+### <a id="xlsx-image-via-excel"></a>xlsx に画像 (印影・署名) を置くなら Excel osascript — openpyxl `add_image` は **comments を倍増**させ formula cache も消す
+
+**症状**: 既存の事務様式 xlsx に認印 PNG を入れようとして openpyxl の `add_image` + `wb.save()` を使うと、 画像自体は入るが **cell comment の part が二重に生成され** (= `xl/comments*.xml` が倍増)、 Excel が「ファイルが破損しています」 と警告する。 同時に [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) も併発する。
+
+⚠️ [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) には「`add_image` で入れた純画像は残る」 とあるが、 **それは「入れた画像が消えない」 という意味であって「他の part が無傷」 という意味ではない**。 comment を持つ様式では別経路で壊れる。
+
+**実測** (= 大学の出張様式 1 件、 comment 6 個入り、 2026-07-27):
+
+| part | 元 | openpyxl `add_image` | **Excel osascript** |
+|---|---|---|---|
+| `xl/drawings/*.vml` | 6 | 6 | 6 |
+| `xl/comments*.xml` | 6 | **12** 🔴 | 6 ✅ |
+| `xl/media/*` | 0 | 1 | 1 |
+| 数式 cache | 値あり | **全 `None`** 🔴 | 値あり ✅ |
+
+**対処**: Excel に挿させる (= [`excel-osascript-cell-write`](#excel-osascript-cell-write) の画像版)。 anchor cell の左上を基準に points で置く:
+
+```applescript
+tell application "Microsoft Excel"
+  open POSIX file "/abs/book.xlsx"
+  delay 1
+  tell workbook 1
+    tell worksheet "依頼書"
+      set r to range "AH11"
+      make new picture at it with properties {file name:(POSIX file "/abs/seal.png"), ¬
+        left position:((left position of r) - 8), top:((top of r)), width:34, height:34}
+    end tell
+    save
+  end tell
+  close workbook 1 saving no
+end tell
+```
+
+- **`left position` / `top` は range から読める** ので、 セル座標さえ決めれば px 当て勘は要らない。 微調整は points の offset で。
+- **script 化済み**: [`scripts/affix-image-xlsx.py`](../scripts/affix-image-xlsx.py) (= `--sheet/--cell/--image/--size/--dx/--dy`)。 実行前に「Excel が同じ book を開いていないか」 を確認し (= 未保存編集の破壊回避)、 実行後に **inventory 差分と formula cache を assert** して、 期待 (media +1 / vml・comments 不変 / cache 生存) を外れたら backup から自動復旧する。 `--dry-run` で位置だけ確認可。
+- 位置の最終確認は PDF に render して目視 ([`pdf-visual-confirm`](#pdf-visual-confirm))。
+
+⚠️ **画像印影を埋めてよいのは紙で提出する成果物だけ** (= 印刷を挟まずファイルのまま相手に渡ると、 画像を貼ったことが判別されうる)。 媒体で運用が分かれる点は各自の運用 SoT で規定すること。
 
 ### <a id="openpyxl-clears-formula-cache"></a>⚠️ openpyxl の save は周辺 cell の formula cache を消す
 

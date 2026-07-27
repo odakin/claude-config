@@ -143,6 +143,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check、 源 = 各 script file header 1 行目) -->
 ├── scripts/              # 運用 script 群 (説明の源 = 各 file header 1 行目)
+│   ├── affix-image-xlsx.py                 # Place an image (seal / signature) into an .xlsx via Excel.app — without destroying the file.
 │   ├── audit-hooks.sh                      # 3 軸 hook 配信 audit (= silent malfunction の構造的検出)
 │   ├── audit-public-repos.sh               # 全 public repo の leak 定期監査（週次 scheduled-task 対象）
 │   ├── bootstrap-stdio-mcps.sh             # generic auto-bootstrap library for self-hosted stdio MCPs.

@@ -30,6 +30,10 @@ sections:
     level: 3
     title: "openpyxl の save は既存の textbox / shape (= 標題・縦書きラベル・図形) を破壊する"
     related: [excel-osascript-cell-write, label-overwrite-bug, openpyxl-clears-formula-cache]
+  - id: xlsx-image-via-excel
+    level: 3
+    title: "xlsx に画像 (印影・署名) を置くなら Excel osascript (= openpyxl add_image は comments を倍増させ formula cache も消す)"
+    related: [openpyxl-destroys-drawings, openpyxl-clears-formula-cache, excel-osascript-cell-write, pdf-visual-confirm]
   - id: openpyxl-clears-formula-cache
     level: 3
     title: "openpyxl の save は周辺 cell の formula cache を消す"
