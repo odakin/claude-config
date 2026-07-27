@@ -74,8 +74,8 @@ layer 1 (public) のドメイン固有規約 80 file をカテゴリ別に列挙
   - 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止
 - **[gmail-sending.md](gmail-sending.md)** — Gmail でメールを送信する経路・MIME 実装を選ぶとき
   - Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕 / #double-confirmation-design = chat 承認〔規律層 = 内容〕と harness chip〔backstop = 未承認送信〕は別の脅威モデル — chip の品質 3 条件〔実行形 anchor・1 送信 1 個・dialog = 内容〕、 うざい chip の治療は廃止でなく anchor 絞り、 宣言配線は silent 消失しうる = 登録直後 verify + documented ⊆ live の機械 audit、 並走 gate 層〔宣言 ask・hook・fail-safe〕は同じ実送信-flag anchor を共有〔片層だけ script 名 match だと dry-run に誤爆 chip / argparse prefix 短縮は allow_abbrev=False で殺す〕 / #draft-approval-single-source = chat 提示 draft と送信 body-file の 2 度書きは乖離源 — body-file 先行 Write + chat は view、 承認後の変更は再提示、 全外部発信に適用)
-- **[japanese-email-honorifics.md](japanese-email-honorifics.md)** — 日本語メールで敬称 (様 / 皆様 / さん) を書くとき
-  - 日本語メールの敬称規約 (内 vs 外、身内に「様」「皆様」を使わない)
+- **[japanese-email-honorifics.md](japanese-email-honorifics.md)** — 日本語メールで敬称 (様 / 皆様 / さん) を書くとき + 相手の文面を引用・要約して「ご/お」付き名詞を自分の文に持ち込むとき
+  - 日本語メールの敬称規約 (内 vs 外、身内に「様」「皆様」を使わない、引用・要約時の「ご/お」帰属反転)
 - **[ml-forward-judgment.md](ml-forward-judgment.md)** — ML forward された依頼メールを inbox 化するとき
   - ML forward された依頼メールの inbox 化時の reflex 判定 trap 防止 (= 元 TO に名前なし = action なし、 ではない / 過去 ML の分野割当を遡る規律)
 - **[research-email.md](research-email.md)** — 研究メールのスレッド記録・分類・アウトリーチをするとき
