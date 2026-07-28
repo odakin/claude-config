@@ -64,7 +64,7 @@ layer 1 (public) のドメイン固有規約 80 file をカテゴリ別に列挙
 - **[office-automation.md](office-automation.md)** — 研究費/教務/学術様式の xlsx/docx を機械で fill するとき (罠の症例集)
   - 研究費/教務/学術様式の Excel xlsx を openpyxl で fill + 生成物 PDF 化 の落とし穴集 (= form 構造 dump 必須・label vs input 改変防止・rich text underline・docx XML 宣言由来の Word 破損 §2-5b・**Word docx→PDF の stale in-memory cache + cold-start 失敗の対処 §2-4b**・**記入要領削除は構造保持+content-control も走査+双方向検証 §2-5c (青字ガイダンスは effective-color〔run→rStyle→pStyle の style 継承〕で strip + PDF span 色=非黒0 で検証)**・**Pages は横並び表を重ねて出す artifact = docx 不具合と誤認するな (Word render で確認・creator metadata で判別)**・PDF visual confirmation 義務・**画像読みすぎで image budget 枯渇時の text-first 検証 §6-5**・印影/署名の電子可否・多 sheet form sweep。 TTS 音声校正は tts-review.md へ切り出し済)
 - **[office-files.md](office-files.md)** — Office file (Excel/Word/PDF/PowerPoint) 仕事に入るとき最初に開く入口
-  - Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入口マップ** = 様式仕事に入るとき最初に開く単一 router (= 考え方→principles / 罠→automation の symptom-index / 権限→claude-code-permissions / skill vs 手動 / PDF 化 wrapper / **PDF 読み取り〔表は layout-aware 抽出 ladder、 plain get_text 禁止〕** / 記入後の機械監査〔diff-form-xlsx/docx〕/ e-Rad)。 中身は持たず全て pointer、 新規 office 関連 file の入口
+  - Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入口マップ** = 様式仕事に入るとき最初に開く単一 router (= 考え方→principles / 罠→automation の symptom-index / 権限→claude-code-permissions / skill vs 手動 / PDF 化 wrapper / **PDF 読み取り〔表は layout-aware 抽出 ladder、 plain get_text 禁止 = pdf-table-layout-aware-reading〕** / 記入後の機械監査〔diff-form-xlsx/docx〕/ e-Rad)。 中身は持たず全て pointer、 新規 office 関連 file の入口
 - **[tts-review.md](tts-review.md)** — 長文ドキュメント (提案書・原稿・メール draft 等) を音声読み上げで校正したいとき
   - macOS `say` による長文の音声読み上げ校正 (= 日本語 voice の選択・WPM・数式記号 / 英略語の読み替え前処理・「聞いて初めてバレる不自然な日本語」 の self-review 用途。 office-automation.md から 2026-07-10 切り出し)
 
@@ -94,7 +94,7 @@ layer 1 (public) のドメイン固有規約 80 file をカテゴリ別に列挙
 - **[paper-audit.md](paper-audit.md)** — 論文 merger 等の構造 issue を体系 audit するとき
   - multi-paper merger 等の forward ref / 重複 subsection / structure issue を Phase1 機械検出 + Phase2 section-by-section AI 精読 + findings.yaml で体系 audit
 - **[paper-submission.md](paper-submission.md)** — 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき
-  - 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕)、 投稿 checklist 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
+  - 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕)、 投稿 checklist + **投稿後の status 追跡** (= ポータルの role 略語 AE/EIC/ADM の役割分担・status 階梯の読み方・Author Center は corresponding author しか見られないので共著者への共有義務・催促の宛先) 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
 - **[peer-review-workflow.md](peer-review-workflow.md)** — referee・審査委員として他者の paper / 申請書を評価するとき
   - 他者の paper / 申請書を referee・審査委員として評価する時の規律 (= SoT 4 file pattern・引用文献の現物 verify・framework calibration・scoring scale 整合・既送信 score の不可逆性。 paper-audit / rebuttal-letter / erad-submission の sibling で方向違い)
 - **[rebuttal-letter.md](rebuttal-letter.md)** — referee report への point-by-point 返信を書くとき

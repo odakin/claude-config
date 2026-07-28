@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき
 category: paper
-summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕)、 投稿 checklist 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
+summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕)、 投稿 checklist + **投稿後の status 追跡** (= ポータルの role 略語 AE/EIC/ADM の役割分担・status 階梯の読み方・Author Center は corresponding author しか見られないので共著者への共有義務・催促の宛先) 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
 -->
 # Paper Submission Workflow (= 投稿ポータル経由の落とし穴と定型対処)
 
@@ -18,6 +18,8 @@ summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv)
 | 3 | Cover page の author affiliation が LaTeX 修正で追随しない | **Authors & Institutions form を別途更新** (§[form-vs-source-independence](#form-vs-source-independence)) |
 | 4 | "PDF should embed only Type1 fonts" 警告 | figure PDF に TrueType Courier 混入 が典型。 soft 要求のため実運用では通ることが多い、 blocker になったら figure 再生成 (§[type1-fonts](#type1-fonts)) |
 | 5 | arXiv upload で processing error | **PDF は source tarball に含めない** — arXiv は source から自動ビルド (v1 / replace-file 全 version 共通、§[arxiv-source-only](#arxiv-source-only)) |
+
+投稿が通った後の「音沙汰が無い」 は §[post-submission-status](#post-submission-status) (= role 略語 AE/EIC/ADM と status 階梯、 Author Center は corresponding author しか見られない)。
 
 ## <a id="browser-fallback"></a>1. Portal upload の generic error → 別ブラウザで retry
 
@@ -215,6 +217,42 @@ cp <paper>/Figures/*.pdf submission/arxiv-vN/Figures/  # 本文で参照され�
 
 - 2026-07-08 arXiv 2606.19548 v2 replace = v1 と同構成 (draft_A.tex + ref.bib + utphysmod.bst + Figures 2 枚、 6 files 142 KB、 PDF 非同梱) で共著者に配布
 
+## <a id="post-submission-status"></a>6. 投稿後の status 追跡 (= role 略語と status 階梯)
+
+投稿完了後は **ポータルの Author Center (= 著者用 dashboard) が唯一の一次情報**。 受領確認メール以降、 decision が出るまで journal からメールは来ないので、 「音沙汰が無い」 は「何も起きていない」 を意味しない (= 内部では AE 割当 → referee 打診 → 査読が進んでいる)。 進捗を知りたければ **著者側から見に行く**。
+
+### role 略語 (ScholarOne Manuscripts の表示)
+
+投稿 record に併記される 3 つの担当者。 **誰に何を言うかが違う**:
+
+| 略語 | 正式名 | 役割 | 著者から見た意味 |
+|---|---|---|---|
+| **AE** | Associate Editor | referee を選んで打診し、 report を読んで判断 (accept / revise / reject) を EIC に**推薦**する | **実質の運命を握る人**。 分野が論文と合っているかが査読の質を左右する。 cover letter の推薦エディタが通ったかはここで分かる |
+| **EIC** | Editor-in-Chief | AE の推薦を受けて**最終決定**、 decision letter に署名 | 分野別に複数いることが多い。 実質は AE の推薦に乗ることが多い |
+| **ADM** | Administrator | 編集事務局のスタッフ (書式チェック・著者との事務連絡) | **催促・技術的トラブルの窓口**。 科学的な中身の問い合わせ先ではない |
+
+Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Manager 等) が、 **「中身を裁く人 / 最終決定する人 / 事務」 の 3 分割は同型**。
+
+### status 値の階梯
+
+典型的な遷移 (= ポータル・journal で文字列は異なるが順序は同型)。 **どこで止まっているかで解釈と対処が変わる**:
+
+| status | 意味 | 経過時間が長い時の解釈 |
+|---|---|---|
+| Awaiting AE Assignment | 担当エディタすら未割当 | 時計がまだ動き出していない。 数週間続くなら事務局に照会する根拠になる |
+| Awaiting Reviewer Selection | AE が referee を探している | AE は着任済。 分野によっては時間がかかる |
+| Awaiting Reviewer Invitation / Assignment | referee に打診中・受諾待ち | 断られて探し直しが起きている可能性 |
+| **Under Review** | referee が読んでいる | **正常に進行中**。 ここから decision までが査読期間の本体 |
+| Awaiting AE Recommendation | 査読終了、 AE が推薦を作成中 | decision が近い |
+| Awaiting EIC Decision | EIC の最終判断待ち | decision 直前 |
+
+### 実務上の含意
+
+- **Author Center は corresponding author のアカウントにしか出ない** — 共著者は Manuscript ID を知っていても status を見られない。 ∴ **status は corresponding author が能動的に共有する義務がある** (= 共著者は「音沙汰が無い」 としか観測できない)
+- **催促は事務局宛** (= ポータル上の "Contact Journal" リンク or 編集部メール)。 AE / EIC に直接督促しない
+- **status を見るのは「音沙汰が無い」 と思った時** — 受領確認から数週間後に一度見るだけで、 「順調に査読中」 と「AE 未割当で止まっている」 を区別できる。 前者なら待つ、 後者なら照会する、 と対処が分かれる
+- ⚠️ **status を見るにはログインが必要** = Claude からは読めない (= 認証情報の入力は不可)。 著者が画面を開いて内容を渡す経路になる
+
 ## <a id="workflow-checklist"></a>投稿 workflow の定型 checklist
 
 新しい journal に投稿する時、 以下を **submission 開始前** に整えると詰まりが減る:
@@ -240,7 +278,9 @@ cp <paper>/Figures/*.pdf submission/arxiv-vN/Figures/  # 本文で参照され�
    - Manuscript ID を SESSION.md 系に記録
    - 受領確認メールを共著者に転送
    - arXiv v2 upload zip を投稿担当共著者に配布
+   - **数週間後に Author Center で status を一度確認** し、 AE / EIC の顔ぶれと合わせて共著者に共有 (§[post-submission-status](#post-submission-status)。 共著者は自分では見られない)
 
 ## <a id="refine-history"></a>実例と refine 履歴 (= 新例が出たら本 convention を refine)
 
 - **2026-07-08 EPJC 投稿 (neutrino-real-virtual)** = ScholarOne Manuscripts、 Brave で Step 2 failed → Safari 通過 (§[browser-fallback](#browser-fallback))、 revtex4-2 と tikz-feynman が Missing → 追加 zip 同梱 (§[package-bundling](#package-bundling))、 affiliation 修正が LaTeX と form で 2 系統管理 (§[form-vs-source-independence](#form-vs-source-independence))、 figure PDF 由来の TrueType Courier は soft 要求で受理 (§[type1-fonts](#type1-fonts))、 arXiv v2 用 zip は PDF 非同梱で共著者配布 (§[arxiv-source-only](#arxiv-source-only))。 Manuscript ID EPJC-26-07-091。
+- **2026-07-28 同 manuscript の status 確認 (投稿 + 20 日)** = 受領確認以降メールは一切来ていなかったが、 Author Center 上は既に **AE 割当済 + Under Review** (= referee が読んでいる) で正常進行だった。 **cover letter の推薦エディタ 3 名のうち第 2 希望がそのまま AE に割り当てられていた** = 推薦は実際に効く。 「メールが来ない ≠ 止まっている」 と、 status を見て初めて分かる情報 (AE の分野適合・推薦の通過) があることから §[post-submission-status](#post-submission-status) を追加。 共著者は Author Center を見られないため、 この情報は corresponding author が共有しないと誰にも伝わらない。

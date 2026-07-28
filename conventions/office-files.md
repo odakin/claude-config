@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Office file (Excel/Word/PDF/PowerPoint) 仕事に入るとき最初に開く入口
 category: office
-summary: Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入口マップ** = 様式仕事に入るとき最初に開く単一 router (= 考え方→principles / 罠→automation の symptom-index / 権限→claude-code-permissions / skill vs 手動 / PDF 化 wrapper / **PDF 読み取り〔表は layout-aware 抽出 ladder、 plain get_text 禁止〕** / 記入後の機械監査〔diff-form-xlsx/docx〕/ e-Rad)。 中身は持たず全て pointer、 新規 office 関連 file の入口
+summary: Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入口マップ** = 様式仕事に入るとき最初に開く単一 router (= 考え方→principles / 罠→automation の symptom-index / 権限→claude-code-permissions / skill vs 手動 / PDF 化 wrapper / **PDF 読み取り〔表は layout-aware 抽出 ladder、 plain get_text 禁止 = pdf-table-layout-aware-reading〕** / 記入後の機械監査〔diff-form-xlsx/docx〕/ e-Rad)。 中身は持たず全て pointer、 新規 office 関連 file の入口
 -->
 # Office ファイル (Excel / Word / PDF / PowerPoint) ハンドリング — 入口マップ
 
