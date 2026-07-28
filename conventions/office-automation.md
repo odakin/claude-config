@@ -480,6 +480,27 @@ end tell
 
 origin: 2026-06-05 学外者用様式 (= 複数シート + 数式参照 + textbox 標題) の cell 値修正。 killall 直後の 1 osascript (activate→open→set→save→close saving yes→quit) が -609 で全 cell 未書き込み → 上記 4 点で復旧。
 
+### <a id="excel-merged-cell-write-anchor"></a>merged cell への AppleScript `set value` は非 anchor だと silent no-op — 書く前に merge 構造を読む
+
+Excel AppleScript で `set value of range "AF13"` のように **merged range の非 anchor セル** (= 結合範囲の左上以外) を指定すると、 **エラーも出ず値も入らない** (VBA の「anchor に書かれる」 挙動とは違う)。 osascript は exit 0 で完走するので、 書けたつもりで進むと後段で「値が無い」 として発覚する。
+
+- **書く前に merge 構造を dump する**: `openpyxl load_workbook(f)[sheet].merged_cells.ranges` を出力し、 **anchor (= 各 range の左上) に対してだけ** set value を発行する。
+- 行政様式は**列ごとに merge 単位が違う**ことがある (= 実例: 日時列 = 3 行結合 × 12、 別の列 = 6 行結合 × 6、 さらに最初の block だけ 3+3 分割)。 「同じ行間隔で繰り返し」 と仮定して等差で書くと、 半分が silent no-op になる。
+- 書き込み後の openpyxl 読み戻し assert ([`excel-osascript-cell-write`](#excel-osascript-cell-write) の検証項) はこの罠も一緒に catch する — 必ず回す。
+
+origin: 2026-07-28 出張日程表 (滞在日数列 = 6 行 merge) への日別値書き込みで、 3 行間隔で発行した set value の半分が silent 消失 → merge dump で構造判明 → anchor 行のみに再発行で解決。
+
+### <a id="excel-merged-border-anchor-seed"></a>merged cell の罫線は anchor セルの style が「種」 — 物理セルだけ消しても Excel save で復活する
+
+xlsx の罫線を機械で消す/変える時の 3 段の罠:
+
+1. **AppleScript の border 書き込みは効かない辺がある** (実測: `set line style of (get border of range … which border edge bottom) to line style none` が silent no-op、 同じ構文で edge top は効いた)。 罫線操作は openpyxl の方が確実。
+2. openpyxl で **表示上の境界セル** (= merge 範囲の最終行の bottom 等) の border を消しても、 **merge の anchor セルが同じ辺の style を保持していると、 次に Excel が open+save した時に anchor から再伝播して復活する**。 消す時は 「**物理境界セル + anchor セルの両方**」 を kill する。 どこに style が残っているかは推測せず、 **対象 style (例: `'hair'`) の全所在 map** (全行 × 全列 × 4 辺の走査) を出して潰す。
+3. openpyxl で border を触ると formula cache が消える ([`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache)) → **Excel open+save で cache 復元**が必要 → その save が (2) の再伝播を起こす、 という循環がある。 手順は 「openpyxl で種ごと全部消す → Excel open+save → **再度 style 走査で残存ゼロを assert** → PDF render を PNG 化して**目視**」。 1 周で確定せず、 走査 → 消去 → save → 再走査のループで収束させる。
+   - ⚠️ 走査範囲は **print_area 全域** (= 途中の行で打ち切ると表の最終 block を見落とす。 実例: r45 で打ち切って r46-51 の 2 block の placeholder と罫線を見落とし、 PNG 目視で発覚)。
+
+origin: 2026-07-28 出張日程表の hair 点線仕切り除去。 AppleScript no-op → openpyxl 物理セルのみ → Excel save で復活 → anchor 種の発見 → 全所在 map + ループで収束、 の 4 段を実測。
+
 ### <a id="excel-write-string-autoconvert"></a>Excel 経由 write は文字列を auto-convert する (= 日付文字列が serial 数字で印字される)
 
 **症状**: osascript で `set value of range "D12" ... to "2026年6月25日"` と**文字列**を書いたのに、 読み戻すと cell 値が date (= serial `46198`) になっている。 cell の表示形式が `General` のままだと **PDF / 印刷に「46198」 という生の serial 数字が印字**される (= 様式の作業日欄が数字の羅列になる事故)。 同様に `"1/2"` → 日付、 先頭 0 付き番号 → 数値、 等。
