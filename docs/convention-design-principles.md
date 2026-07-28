@@ -747,6 +747,26 @@ reflex: 日付を扱う surfacing / reminder を設計・評価する時、 「�
 
 origin: 2026-07、 会議日程調整の broadcast 依頼 (候補日 2 つ + 入力〆切が中 1 日) で、 検出器は候補日 (event 軸) を正しく抽出しながら入力〆切の日付を「期限 = 別 mechanism の領分」 として除外し、 push gate も event 日近接のみ → 〆切は event の 2 日前に silent 超過 (週末 + 祝日と重なり human catch も無し)。 sibling 観測 (同年 7 月): 候補日未確定型の日程調整 mail が「具体日時のあるアポ」 検出の圏外に落ち、 user の直接質問だけが catch。 2 観察 ([`§9.8`](#single-observation-scope-check) の 2+ bar 充足)。 instance (= 検出器の入力〆切 class 実装) は個人層に残置。
 
+### <a id="retrieval-key-choice"></a>8.19 retrieval の null は「対象が無い」 でなく「key が悪い」 を先に疑う — 人間可読な属性は経路で失われ、 案件 ID は残る
+
+ある記録を探して見つからなかったとき、 「存在しない」 と結論する前に **query の key 選択**を疑う規律。 [`§8.16`](#absence-channel-coverage) が「見た channel が足りない」 (= channel 軸)、 [`§8.14`](#single-field-identity-corroboration) が「一致させた field が足りない」 (= identity 軸) なのに対し、 本節は **正しい channel を正しく見ていても引き方だけで null になる** (= key 軸)。
+
+**人間可読な属性は経路のどこかで失われる**:
+
+| key | 失われ方 |
+|---|---|
+| 送信者 | system 送信 (= `noreply@` / 投稿ポータル / 発券系) を人が転送すると From が同僚に変わる |
+| 件名の語 | 転送は元 subject を引き継ぐので、 組織名・製品名・誌名がどこにも現れないことがある |
+| 添付の有無 | 転送で添付が落ちる / そもそも本文にしか無い record が実在する。 添付前提の絞り込みはそれを全滅させる |
+| 表示名 | 公開ページ・ディレクトリでは mask される |
+| 時間窓 | 直近 N 日で切ると案件の**発端側**が落ちる (= 決着だけ見て起点を失う) |
+
+**案件 ID は残る**: 発行体が採番した ID (= 原稿番号 / 申請番号 / 課題番号 / ticket ID / 伝票番号) は、 system が件名と本文の両方に literal で刻み、 転送・引用・機械翻訳を越えてそのまま運ばれる。 ∴ **過去の案件記録を掘り起こす第一の key は ID**、 人間可読な属性は補助に落とす。
+
+**reflex**: retrieval が null または想定より薄いとき、 「無い」 と報告する前に (1) 使った key を列挙し (2) 各 key が上表のどれかで失われないかを問い (3) 案件 ID が分かるなら **ID 単独で**引き直す。 ID が不明なら、 ID を必ず含む隣接 record (= 受理通知・確認メール・自動返信) を先に探して ID を得る。 報告時は [`§8.16`](#absence-channel-coverage) と同じく「Verified scope = ___ / NOT verified = ___」 を key 軸でも埋める。
+
+origin: 2026-07、 ある論文の過去の査読所見を「メールに残っていない」 と報告した RCA。 誌名・送信者・添付の有無・直近時間窓で引いて null → 実際は**原稿管理 ID 単独で引けば全 round が残っていた** (= 最終報は本文のみで添付なし / 転送の件名に誌名が一度も出てこない / 発端は時間窓の外)。 sibling 観測: 同じ運用の連絡先取得手順に、 mask された公開ページを見て「取得できない」 と結論したが一次資料 (= 論文 PDF) には在った失敗例が既に記録されていた (= source 選択の同型)。 2 観察 ([`§9.8`](#single-observation-scope-check) の 2+ bar 充足)。 なお本節は「引き方」 の話で、 [`§8.11`](#downstream-net-intake-leverage) (= intake で表現されていない対象は下流で守れない) とは独立 — ID で引けたのは、 対象が最初から正しく記録されていたから。
+
 ---
 
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス

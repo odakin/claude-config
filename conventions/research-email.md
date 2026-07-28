@@ -91,6 +91,8 @@ Claude がメールを送信（またはドラフト作成）した場合、**�
 
 メンバーページの mask された表示を見て「公開で取得できない」と user に尋ねたが、論文 PDF を直接見ればすぐ取れた case があった。**arXiv 論文がある相手なら、まず PDF を見る**。
 
+一般則 = [`docs/convention-design-principles.md#retrieval-key-choice`](../docs/convention-design-principles.md#retrieval-key-choice) (= retrieval の null は「対象が無い」でなく「key / source が悪い」を先に疑う)。 **過去の投稿・査読記録をメールから掘り起こす場合は、誌名や送信者でなく発行体の案件 ID (= 原稿番号 `XXNNNNN` / 投稿番号) を第一の検索 key にする** — 転送されると From は同僚に変わり、件名に誌名が一度も出ないことがあり、報告が本文のみで添付が無いこともあるが、ID は件名と本文の両方に literal で残る。
+
 ### 注意
 
 - メールアドレスは PII。**取得経路 (= どこで見つけたか) を log に残す** (= researchers.yaml の notes に source を書く) と、後日「このアドレスは公開情報か?」を判定できる

@@ -193,6 +193,10 @@ sections:
     legacy: "8.18"
     level: 3
     title: "8.18 依頼 mail の二日付軸 — event 日を urgency の proxy にすると行動〆切が落ちる"
+  - id: retrieval-key-choice
+    legacy: "8.19"
+    level: 3
+    title: "8.19 retrieval の null は「対象が無い」 でなく「key が悪い」 を先に疑う — 人間可読な属性は経路で失われ、 案件 ID は残る"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
