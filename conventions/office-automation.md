@@ -52,6 +52,7 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 | formula 編集後 PDF / xlsx で別 cell の値が空欄 / `None` 化 | openpyxl の save が周辺 cell の formula cache を消す (= AST は保持するが cached value を再計算せず drop) | sentinel guard で abort + Excel.app open+save で再計算復元 → [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) |
 | 値は書けたが見た目を PDF で確認したい | — | [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) で render。 ⚠️ **Quick Look (`qlmanage`) は textbox/標題 を忠実に描かない** → drawing 健在は zip 内 drawing 数で、 体裁は xlsx-to-pdf.sh の PDF で |
 | 承認欄/印影欄ボックスの**下罫線が出ない** (box が下に開く) | Excel→PDF が最下部の結合セル下罫線を落とす (罫線は xlsx に在るのに出力で消える) | **`close-pdf-form-boxes.py`** を pipeline 最後に挟む (= 開いた枠を全検出して閉じる、 print_area 拡張では直らない) → [`excel-pdf-bottom-border-drop`](#excel-pdf-bottom-border-drop) |
+| 値検査は全部通るのに **PDF にすると見た目が崩れる** (点線が残る / 字が小さい / 行の下半分が空白 / 未使用欄に記号) | 崩れの原因が**セルの外側の属性** (border / 行高 / merge 単位) にあり値 dump では原理的に不可視 | レイアウト不変条件の gate を書いて**生成 driver の冒頭に配線** (FAIL なら成果物を作らない) → [`form-layout-invariant-gate`](#form-layout-invariant-gate) |
 | 氏名/所属など**長い文字列が結合セルで両端切れ** | 固定 font でセル幅超過 + **shrink_to_fit は結合セルで無効** | **font size を下げる** (osascript は `font size of font object`) + `check-form-clipping.py` で機械検出 → [`merged-cell-text-clipping`](#merged-cell-text-clipping) |
 | xlsx が openpyxl から save できない / lock `~$…` が残る | Excel が当該 file を開いている | Excel quit + lock 削除 → [`xlsx-locked-by-excel`](#xlsx-locked-by-excel) |
 | Bash tool で `sleep` がブロックされ reset 待ちが打てない | harness が foreground の bare `sleep` を禁止 | bare sleep を打たず **script (xlsx-to-pdf.sh 等) に sleep を内包**させて呼ぶ / osascript 内 `delay` / 別 op は run_in_background |
@@ -2617,6 +2618,29 @@ end tell'
 ⚠️ AppleScript の save as syntax は Excel for Mac の version で異なる + parameter error 出やすい。 fallback として **user に Excel で「ファイル → 印刷 → PDF として保存」 を依頼 + PDF を chat 添付してもらう**。
 
 **運用 reflex**: 「私の setting した xlsx を 私の判断だけで完成宣言しない」 を 1 つの問い として保持。 PDF visual confirmation は form fill の **必須 prerequisite** で、 「user 指摘待ち」 reactive ではなく **proactive 早期催促** が筋。 user 指摘で初めて気付く pattern は連鎖失敗 (= 同 user に複数 turn の修復依頼) を必ず生む。
+
+### <a id="form-layout-invariant-gate"></a>値が正しくても紙で崩れる — form には**レイアウト不変条件の gate** を作って生成 driver に配線する
+
+**症状**: openpyxl の値 dump / 合計の検算 / formula cache の sentinel / drawing 数 — 機械検査を**全部通しているのに、 PDF にすると見た目がおかしい**。 そして誰も気づかず提出・送付まで行く (or 人間が毎回目視で拾う羽目になる)。
+
+**なぜ値検査で見えないか**: 帳票の品質は「セルに何が入っているか」 だけでなく **セルの外側の属性** で決まる。 これらは値を 1 バイトも変えずに出力を壊す:
+
+| 崩れの型 | 実体 | 値 dump での見え方 |
+|---|---|---|
+| 未使用欄の placeholder 残置 | 雛形が最初から `：` `～` を入れている | 「値がある」 = 正常に見える |
+| 妙な点線の仕切り | `border.style == 'hair'` | 不可視 |
+| 全体が縮小されて字が小さい | 行高の合計 > 印字可能高 → fitToHeight | 不可視 |
+| 行の下半分が空白 | 未使用の下段 slot の行高が大きいまま | 不可視 |
+| 1 行に複数レコードを詰めた | merge 単位の数え違い | 「値がある」 = 正常に見える |
+| 明細に対応する集計欄の欠落 | merge anchor がずれて別セルに書いた | 個別には値があるので気づかない |
+
+**規律**: 帳票ごとに **レイアウト不変条件を assert する検証 script** を書き、 **生成 driver の冒頭から呼んで FAIL なら成果物を作らずに中断**する (= `build-poster.py` → `verify-poster.py` と同じ「生成物の手前に gate」 パターン)。 検査の中身は帳票固有だが、 **型は上表がそのまま使える**。 script 側は `--selftest` に programmatic fixture を持ち、 各検査が実際に発火することを示す。
+
+- **判定値の正本は規約 doc 側に置き、 script はその機械化と位置づける** (= 閾値を script に散らさない。 変更時は doc を先に直す)。
+- **gate を通しても目視は省かない**: gate は**既知の失敗形しか見ない**。 未知の崩れは render → 画像確認でしか捕まらない ([`pdf-visual-confirm`](#pdf-visual-confirm))。 gate の価値は「既知の型が二度と人間の目に頼らなくなる」 ことにある。
+- **retroactive fixture が効く**: 壊れていた版の実ファイルを取っておき、 gate がそれを FAIL にすることを確認する。 「今日の失敗を今日の gate が捕まえる」 が確認できて初めて配線完了。
+
+origin: 2026-07-28 の出張日程表。 5 種の欠陥 (= 日別記入漏れ / 集計値の旧ルール / placeholder 残置 / hair 点線 / 行高不揃いによる全体縮小とブロック内空白) が **全て値検査を素通りし、 提出者の目視だけが catch した**。 レイアウト不変条件 6 件を assert する gate を新設して生成 driver に配線し、 壊れていた版で retroactive に全件発火することを確認した。
 
 ### <a id="pdf-mutation-verification-schema"></a>PDF mutation 後の機械検証 schema (= text 不変 + keyword in/out + image stream delta)
 

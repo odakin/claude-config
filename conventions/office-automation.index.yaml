@@ -466,6 +466,11 @@ sections:
     legacy: "6-3"
     level: 3
     title: "explicit `\\n` 改行 = wrap_text 依存しない確実方法"
+  - id: form-layout-invariant-gate
+    level: 3
+    title: "値が正しくても紙で崩れる — form にはレイアウト不変条件の gate を作って生成 driver に配線する"
+    origin: "2026-07-28"
+    related: [pdf-visual-confirm, pdf-mutation-verification-schema, excel-merged-cell-write-anchor, excel-merged-border-anchor-seed, diff-form-xlsx-detection]
   - id: pdf-visual-confirm
     legacy: "6-4"
     level: 3
