@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: wolframscript を書く・debug するとき
 category: research-domain
-summary: wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用 (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
+summary: wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用、 #plotlegends-export = PlotLegends は Graphics でなく Legended を返すため GUI 保存で凡例が落ち (対処 = 変数に入れて Export)、 位置調整で LineLegend を挟むと PlotStyle の色継承が切れて凡例だけ黒くなる (対処 = Placed にラベルだけ渡す) (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
 -->
 # Wolfram / wolframscript scripting conventions
 
@@ -152,6 +152,78 @@ If[Head[res] === List, Length[res], StringLength[res]]
 
 - **`Import["...pdf"]` を引数なしで実行**: default format で raster image list を返し、 OCR していない以上 text にならない。 必ず `"Plaintext"` を明示
 - **page 単位の loop で毎回 `Import` 全文**: 全 page を String 1 個で受けて position split する方が桁外れに速い (= ファイル open 1 回で済む)
+
+---
+
+## <a id="plotlegends-export"></a>4. `PlotLegends` は `Graphics` を返さない — GUI 保存で凡例が落ち、`LineLegend` を書くと色が落ちる
+
+### 問題
+
+`PlotLegends -> {...}` の戻り値は `Graphics` **ではなく** `Legended` wrapper:
+
+```
+Head[fig]  = Legended
+fig[[1]]   = Graphics                    (* プロット本体 *)
+fig[[2]]   = Placed[LineLegend[...]]     (* 凡例。Graphics の「外」にいる *)
+```
+
+ここから 2 つの独立した罠が出る。
+
+**罠 1 — GUI 保存で凡例が消える。** notebook 上で図をクリックして選択されるのは内側の `Graphics` (= `fig[[1]]`) だけ。右クリック → "Save Graphic As…" や Copy As ▸ PDF はその `Graphics` しか掴まないので、凡例のない PDF が出る。「プロットを PDF にすると凡例が選ばれない」の正体。
+
+**罠 2 — `LineLegend` を自分で書くと凡例が黒くなる。** 位置を変えたくて `Placed[LineLegend[styles, labels], {x, y}]` と書き直すと、`LineLegend` の第 1 引数は**凡例自身のスタイル**なので、`PlotStyle` の色は継承されない。`{Automatic, {Thick, Dashed}}` のように色を含まない directive を渡すと凡例だけ黒一色になる。
+
+実測 (`wolframscript` で export → 生成 PDF からテキスト・ピクセルを抽出して判定):
+
+| 書き方 | 凡例 | 凡例の色 |
+|---|---|---|
+| `Export["f.pdf", fig]` (`Legended` のまま) | ✅ あり (ページ幅が広がり右外に配置) | 曲線と一致 |
+| `Export["f.pdf", fig[[1]]]` (= GUI クリック相当) | ❌ **無し** | — |
+| `PlotLegends -> Placed[labels, {x, y}]` | ✅ あり (枠内) | ✅ 曲線と一致 |
+| `PlotLegends -> Placed[LineLegend[stylesWithoutColor, labels], {x, y}]` | ✅ あり (枠内) | ❌ **黒** |
+
+いずれもラスタ化されず、埋め込み画像 0・フォント + パスのみのベクタ PDF になる。
+
+### 解決策 1: GUI 保存をやめて `Export` する
+
+```mathematica
+fig = Plot[..., PlotLegends -> {"a", "b"}];
+Export["out.pdf", fig]     (* Legended をそのまま渡す *)
+```
+
+`Export` は `Legended` を受け取れる。落ちるのは GUI 選択経路だけなので、**変数に入れて `Export` を書く**だけで直る。凡例はページ右外に置かれ、その分ページ幅が広がる。
+
+### 解決策 2: 図の枠内に置きたいなら `Placed` に**ラベルだけ**渡す
+
+```mathematica
+PlotLegends -> Placed[{"a", "b"}, {0.78, 0.82}]
+```
+
+`Placed` は位置を指定するだけでスタイル継承を壊さない。ページ幅も元のまま。
+
+### 解決策 3: どうしても `LineLegend` が要るなら色を明示する
+
+凡例の間隔・枠を細かく制御したい場合のみ。既定の系列色は `ColorData[97][n]`:
+
+```mathematica
+PlotLegends -> Placed[
+   LineLegend[{Directive[ColorData[97][1]],
+               Directive[ColorData[97][2], Thick, Dashed]},
+              {"a", "b"}],
+   {0.78, 0.82}]
+```
+
+`PlotStyle` に書いた directive を `LineLegend` にもう一度書き、さらに色を足す必要がある = **二重管理**。位置を変えたいだけなら解決策 2 を選ぶ。
+
+### Anti-pattern
+
+- **図をクリックして "Save Graphic As…"**: `Legended` の内側しか取れない。論文用の図なら必ず `Export` を書く
+- **`Placed` を使うために `LineLegend` を挟む**: 位置指定だけが目的なら `Placed[labels, pos]` で足りる。`LineLegend` を挟んだ瞬間にスタイル継承が切れる
+- **`Rasterize` で逃げる**: 凡例は入るがベクタ性を失う。上記 3 解のいずれもベクタのままなので、論文図では不要
+
+### 検証のしかた
+
+「凡例が入ったか」は目視でなく生成 PDF から機械的に確認できる。テキスト抽出でラベル文字列の有無を、ラベル文字の**直左**のピクセル彩度で色見本の有無を判定する (凡例の裏を曲線が横切ると誤検出しうるので、複数ラベルで照合する)。
 
 ---
 

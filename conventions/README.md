@@ -134,7 +134,7 @@ layer 1 (public) のドメイン固有規約 80 file をカテゴリ別に列挙
 - **[scientific-computing.md](scientific-computing.md)** — 数値解析・科学計算 code を書くとき
   - 数値解析 gotchas (scale-dependent default 等、科学計算リポ共通)
 - **[wolfram-scripting.md](wolfram-scripting.md)** — wolframscript を書く・debug するとき
-  - wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用 (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
+  - wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用、 #plotlegends-export = PlotLegends は Graphics でなく Legended を返すため GUI 保存で凡例が落ち (対処 = 変数に入れて Export)、 位置調整で LineLegend を挟むと PlotStyle の色継承が切れて凡例だけ黒くなる (対処 = Placed にラベルだけ渡す) (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
 
 ## Web・公開プラットフォーム (`web`)
 
