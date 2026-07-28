@@ -44,6 +44,21 @@ description は英語。リポ一覧の正本は個人層の `repos.md`（未設
 
 CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「なぜそうしたか」(judgmental)、SESSION.md は「今どこにいるか」(揮発的)、README は「外の人が 30 秒で判断するための玄関」。
 
+<a id="session-no-durable-record"></a>**SESSION に durable record を書かない (= snapshot 原理の SESSION 版、全リポ共通)**: SESSION が持つのは **揮発的な現在地 + case-SoT への pointer** だけ。以下は SESSION でなく、それぞれの正本 (= task ledger / 受信記録 / 連絡先 / 設計 doc) に置く:
+
+| SESSION に書かない | 正本 |
+|---|---|
+| **handled-state** (= ボール位置・「待ち」「残」「未履行」「user OK 待ち」・完了宣言) | task ledger の status field |
+| **識別子** (= messageId / チケット番号 / commit hash 等、後から引くための key) | 案件ごとの case-SoT |
+| **決定・合意の内容** | 案件の case-SoT (判断理由なら DESIGN.md) |
+| **規約・手順** | 該当の規約 file |
+
+**why (= 単なる整理でなく drift 源)**: handled-state を SESSION narrative に複製すると task ledger の status と二重管理になり、**両者が食い違っても機械検出に掛からない**。cross-ref 検査は「明示的に link された対」しか見ず、SESSION が prose で抱えた state は射程外だから — つまり SESSION に書いた瞬間、その fact は**自動検出のない場所**へ移る。書き手は「記録した」つもりで、実際には検出網の外に置いている。
+
+**how**: 案件の状態を SESSION に書きたくなったら、代わりに **case-SoT の識別子への pointer 1 行**にする (= 「案件 X の状態は `<ledger>#<id>` が SoT」)。narrative を溜めない — 古い節は上の [`graduation-identifier-verify`](#graduation-identifier-verify) で識別子の destination 実在を機械照合してから除去する。
+
+⚠️ この規則は**リポ種別を問わない**。個別 project リポの SESSION も同じで、「このリポの案件だから状態もここに」は誤り (= case-SoT が別リポにあるなら pointer にする)。
+
 ### <a id="readme-style"></a>README の流儀
 
 **役割**: GitHub を開いた未知の訪問者が、「これは何か」「自分の問題を解くか」「次にどこを読むべきか」を短時間で判断するための index（以下で使う **(a)/(b)** は下の判別軸の 2 ケースを指す）。**内部 / 非公開リポでは** リポの開発者・Claude 自身が日常作業で読むのは CLAUDE.md / SESSION.md で、README ではない。**公開リポでは** README-only の読者（= 外部 contributor / 利用者 / forker — CLAUDE.md の存在を知らない前提）の入口が README になる — 下の「判別軸」で 2 ケースに分ける。
