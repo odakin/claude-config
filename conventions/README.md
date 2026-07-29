@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 80 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 81 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -161,6 +161,8 @@ layer 1 (public) のドメイン固有規約 80 file をカテゴリ別に列挙
 
 ## エンジニアリング一般 (`infra`)
 
+- **[batch-text-edits.md](batch-text-edits.md)** — 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき)
+  - plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 4 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる)
 - **[data-pipeline-automation.md](data-pipeline-automation.md)** — 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
   - データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script)・#targeted-dirty-gate = 無人 engine の dirty gate は SoT source repo では read/write path に絞る (blanket は無関係 dirt で publish を silent block、 path 限定 commit + 多層 gate 整合とセット)・埋め込み import の fail-open guard は SystemExit も吸収 (= 子の import-時 sys.exit が except Exception を素通りして監視 script が silent 死する罠) を bundle
 - **[debugging-discipline.md](debugging-discipline.md)** — bug fix を提案する前・audit verdict を出す前 (検証規律)
