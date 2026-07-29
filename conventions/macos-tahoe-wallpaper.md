@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: macOS Tahoe (26.x) で wallpaper 変更を script/CLI/API から自動化しようとする前 + 起きてる wallpaper rotation が視覚的に効いてないと感じたとき
 category: macos
-summary: macOS Tahoe (26.5.1) で NSWorkspace.setDesktopImageURL と osascript "tell every desktop to set picture" が silent-fail する (rc=0 + Index.plist は更新するが display に届かない、 CocoaKit API 自体が dead)。 desktoppr / sindresorhus/wallpaper / Swift 直接 call も同一症状。 真の書換え path = ~/Library/Application Support/com.apple.wallpaper/Store/Index.plist を Python で再帰 walker により全 Desktop.Content.Choices 上書き (state は SystemDefault / Spaces × Displays / 個別 Displays の 8 箇所に分散、 1 箇所書きは respawn 時 self-repair)、 + killall -HUP cfprefsd + killall WallpaperAgent (SIGTERM) + killall Dock (SIGTERM) の triple kill、 + launchd は stay-open applet 常駐 (osacompile -s + on idle + KeepAlive=true / RunAtLoad=true / StartInterval なし、 applet binary 直接 exec) にして kTCCServiceSystemPolicyAppData の per-process 発火を 1 回のみに抑える (⚠️ 旧 v1 = 通常 applet の do shell script で script 内 sleep loop を永久 block する形は event loop に戻れず autorelease 非 drain で applet が ~120 MB/日 leak + 「応答なし」、 2026-07-22 実測で v2 に置換)。 CLI tools は現接続 NSScreen displayID を書くが Index.plist の stale UUID と mismatch = active display に効かない。 SIGKILL は /var/db/Wallpapers/<uuid>/Metadata.plist (root:wheel) から last-known-good 復元。 cache prune は 60s 間隔なら 100+ GB 肥大するので file-count cap で KEEP=1 に。 探索経路: notification-based reload や private XPC endpoint / debug listener enable / class-dump ImageFolder provider schema はすべて dead-end
+summary: macOS Tahoe (26.5.1) で NSWorkspace.setDesktopImageURL と osascript "tell every desktop to set picture" が silent-fail する (rc=0 + Index.plist は更新するが display に届かない、 CocoaKit API 自体が dead)。 desktoppr / sindresorhus/wallpaper / Swift 直接 call も同一症状。 真の書換え path = ~/Library/Application Support/com.apple.wallpaper/Store/Index.plist を Python で再帰 walker により全 Desktop.Content.Choices 上書き (state は SystemDefault / Spaces × Displays / 個別 Displays の 8 箇所に分散、 1 箇所書きは respawn 時 self-repair)、 + killall -HUP cfprefsd + killall WallpaperAgent (SIGTERM) の double kill (⚠️ killall Dock は不要 — 2026-07-29 ablation で確定、 60s rotation に入れると毎分の WindowServer サーフェス全再構築 = 17 日で WindowServer ~3.8 GB 肥大 + load avg 200 + swap thrash の自傷 load generator、 refresh 不発の OS 版でのみ最後の fallback)、 + launchd は stay-open applet 常駐 (osacompile -s + on idle + KeepAlive=true / RunAtLoad=true / StartInterval なし、 applet binary 直接 exec) にして kTCCServiceSystemPolicyAppData の per-process 発火を 1 回のみに抑える (⚠️ 旧 v1 = 通常 applet の do shell script で script 内 sleep loop を永久 block する形は event loop に戻れず autorelease 非 drain で applet が ~120 MB/日 leak + 「応答なし」、 2026-07-22 実測で v2 に置換)。 CLI tools は現接続 NSScreen displayID を書くが Index.plist の stale UUID と mismatch = active display に効かない。 SIGKILL は /var/db/Wallpapers/<uuid>/Metadata.plist (root:wheel) から last-known-good 復元。 cache prune は 60s 間隔なら 100+ GB 肥大するので file-count cap で KEEP=1 に。 探索経路: notification-based reload や private XPC endpoint / debug listener enable / class-dump ImageFolder provider schema はすべて dead-end
 -->
 
 # macOS Tahoe (26.5.1) で wallpaper を CLI から変える技術 SoT
@@ -15,7 +15,7 @@ macOS 26 (Tahoe) で **wallpaper 変更を script / CLI / API から自動化す
 macOS 26 は wallpaper API を**完全に封じている**。 「動く」 recipe は 1 つだけ:
 
 1. **`~/Library/Application Support/com.apple.wallpaper/Store/Index.plist`** の**全 8 箇所** の `Desktop.Content.Choices[0].Configuration` を **Python で再帰 walker** で target image を指す `imageFile` provider に上書き
-2. **`killall -HUP cfprefsd`** + **`killall WallpaperAgent`** (SIGTERM) + **`killall Dock`** (SIGTERM) で強制 display refresh
+2. **`killall -HUP cfprefsd`** + **`killall WallpaperAgent`** (SIGTERM) で強制 display refresh (⚠️ `killall Dock` は**不要** — 2026-07-29 ablation で確定、 常用 rotation に入れると WindowServer 自傷 load、 §tahoe-refresh-sigterm)
 3. **launchd 経路は stay-open applet 常駐** (`osacompile -s` + `on idle` + `KeepAlive=true` + `RunAtLoad=true`) で **kTCCServiceSystemPolicyAppData** の prompt を起動時 1 回に抑える (⚠️ 旧「do shell script で script 内 sleep loop を永久 block」 は applet leak、 §tahoe-app-data-per-process)
 
 `osascript` / `desktoppr` / `sindresorhus/wallpaper` / **Swift の `NSWorkspace.setDesktopImageURL`** も**すべて silent-fail** する (rc=0 + Index.plist は更新するが display に届かない)。 これは CLI tool のバグでなく **Cocoa `setDesktopImageURL` API 自体が Tahoe で dead**。
@@ -44,7 +44,7 @@ macOS 26 は wallpaper API を**完全に封じている**。 「動く」 recip
 | launchd `StartInterval=60` で 60s ごと new process fork | **毎 fork で kTCCServiceSystemPolicyAppData の TCC prompt** 発火 = 60s ごと user が「許可」 押す羽目 | 常駐 applet に置換 |
 | 通常 applet の `do shell script` で「script 内 sleep loop」 を永久 block 起動 (v1 常駐形) | TCC prompt は 1 回になるが **applet が ~120 MB/日 leak** (event loop に戻れず autorelease 非 drain、 実測 1.3 GB / 10.7 日) + 「応答なし」 | stay-open `on idle` に置換 (2026-07-22) |
 
-**結論**: 上記全部が dead-end、 **Index.plist 再帰 walker + triple kill + stay-open applet 常駐 (launchd KeepAlive)** の組合せだけが動く。
+**結論**: 上記全部が dead-end、 **Index.plist 再帰 walker + double kill (cfprefsd HUP + WallpaperAgent SIGTERM) + stay-open applet 常駐 (launchd KeepAlive)** の組合せだけが動く。
 
 ---
 
@@ -146,19 +146,29 @@ print(Counter(urls(d)).most_common(3))  # top 1 が (url, 8) なら成功
 PY
 ```
 
-## <a id="tahoe-refresh-sigterm"></a>完成 recipe (2): display refresh triple kill
+## <a id="tahoe-refresh-sigterm"></a>完成 recipe (2): display refresh double kill (⚠️ Dock kill は入れない)
 
 Index.plist write 直後に:
 
 ```bash
 /usr/bin/killall -HUP cfprefsd 2>/dev/null   # defaults cache 無効化
 /usr/bin/killall WallpaperAgent 2>/dev/null  # SIGTERM (default) — graceful shutdown で新 plist 読込
-/usr/bin/killall Dock 2>/dev/null            # SIGTERM — wallpaper composite 層再構築
 ```
 
 ⚠️ **`-9` (SIGKILL) を使わない**: `/var/db/Wallpapers/<uuid>/Metadata.plist` から last-known-good 復元されて write が revert する。 SIGTERM で graceful shutdown させれば復元 path を通らない (実測)。
 
-⚠️ **副作用**: Dock が **1-2 秒消えて再表示** される。 60s rotation なら毎分 Dock フラッシュ。
+### `killall Dock` は不要 — 常用 rotation に入れると自傷 load generator になる (2026-07-29 ablation)
+
+初版 recipe (2026-07-11 debug 一括確立) は `killall Dock` を含む **triple kill** だったが、 ablation の結果 **Dock kill 抜きでも display refresh は成功する** (26.5.2 実測、 目視 verify)。 Dock kill は debug 時に他の変数と一括導入されたまま最小化されていなかった。
+
+**入れたまま 60s rotation で常用した場合の実害** (17 日間の実測):
+
+- 毎分の Dock 再起動 = WindowServer が Dock / Mission Control / 全 Space のサーフェスを毎分破棄・再構築
+- WindowServer が CPU 60-90% 常駐 + メモリ ~3.8 GB に肥大 → メモリ枯渇 → swap thrash
+- load average が CPU core 数の **20 倍** (10 core で 200) に到達、 CPU idle は 65% のまま体感だけ死ぬ (= ページフォルト待ち渋滞の署名)
+- 二次症状: `runningboardd` ~9% / `distnoted` × 20 / `cfprefsd` × 14 (= プロセス lifecycle daemon 群が毎分の respawn 処理で常時忙しい)
+
+**教訓**: compositor 隣接プロセス (Dock / WallpaperAgent) の kill を毎分周期の常用 pipeline に入れるのは self-DoS。 debug で一括確立した kill set は、 常用に載せる前に **1 変数ずつ ablation して最小化する**。 Dock kill は「double kill で refresh が効かない OS 版に当たった時に最後の fallback として単発で試す」 位置に格下げ。
 
 ## <a id="tahoe-app-data-per-process"></a>完成 recipe (3): stay-open applet 常駐で TCC prompt を 1 回に
 
@@ -222,7 +232,7 @@ codesign -f -s - ~/Applications/WallpaperRotator.app                       # Inf
 
 ⚠️ `open -g -a` 間接起動 + `KeepAlive` の組合せは使わない: `open` が即 exit するため launchd は app 本体を追跡できず、 KeepAlive が `open` の respawn loop に化ける (v1 の残骸 pattern)。 applet binary 直接 exec なら KeepAlive が applet 自体に効く (= crash 時自動再起動)。
 
-**shell script 側**: rotation 1 回分を `--once` として切り出す (loop も sleep も持たない)。 §tahoe-full-write の Python 書換え + §tahoe-refresh-sigterm の triple kill + §cache prune を 1 pass 実行して exit。
+**shell script 側**: rotation 1 回分を `--once` として切り出す (loop も sleep も持たない)。 §tahoe-full-write の Python 書換え + §tahoe-refresh-sigterm の double kill + §cache prune を 1 pass 実行して exit。
 
 **trade-off**:
 - ○ TCC prompt 1 回 (user が 1 回「許可」 で以後 grant 保持)
