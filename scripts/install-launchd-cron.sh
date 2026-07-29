@@ -46,6 +46,7 @@
 #   env:
 #     CRON_MODEL   skill routine の `--model` を pin (空なら CLI 既定)。 既定 model が unavailable
 #                  なとき (例: 停止 model) に `CRON_MODEL=sonnet ... --install-one X` で渡す
+#     CRON_EFFORT  skill routine の `--effort` を pin (空なら CLI 既定)。 low/medium/high/xhigh/max
 #     CLAUDE_BIN   claude バイナリ path を上書き (既定 = command -v claude → ~/.local/bin/claude)
 #
 # ⚠️ macOS 限定 (launchd)。 ⚠️ launchd は LANG 空 (C locale) なので skill prompt は ASCII のみ
@@ -63,6 +64,7 @@ LA_DIR="${LCRON_LA_DIR:-$HOME/Library/LaunchAgents}"   # LCRON_LA_DIR は test �
 LOG_DIR="${LCRON_LOG_DIR:-$HOME/Library/Logs}"
 DOMAIN="gui/$(id -u)"
 CRON_MODEL="${CRON_MODEL:-}"
+CRON_EFFORT="${CRON_EFFORT:-}"
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")}"
 
 # skill routine の session を保存しない (= 「最近の項目」 を無人 run で汚さない)。 --print 専用 flag。
@@ -145,9 +147,10 @@ write_plist() {
   task_id="$1"; kind="$2"; target="$3"; cron="$4"
   label="$(label_for "$task_id")"; plist="$(plist_path "$task_id")"; logf="$(log_for "$task_id")"
   if [ "$kind" = skill ]; then prompt="$(prompt_for "$target")"; else prompt=""; fi
-  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" <<'PYEOF'
+  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" "$CRON_EFFORT" <<'PYEOF'
 import sys, plistlib
 label, claude_bin, kind, target, prompt, logf, cron, out, model, workdir, gate, nopersist, rcoff = sys.argv[1:14]
+effort = sys.argv[14] if len(sys.argv) > 14 else ""
 minute, hour, dom, month, dow = cron.split()
 # minute: '*' / 整数 / '*/N' step (= 毎 N 分。 StartCalendarInterval は step を持たないので
 # Minute 値を列挙して array に展開する。 例: '*/30' → [0, 30])
@@ -182,6 +185,7 @@ prefix = ('unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; '
 gate_prefix = (gate + ' || exit 0; ') if gate else ''
 if kind == 'skill':
     model_flag = ('--model %s ' % model) if model else ''
+    model_flag += ('--effort %s ' % effort) if effort else ''
     nopersist_flag = (nopersist + ' ') if nopersist else ''
     rcoff_flag = '--settings \'{"remoteControlAtStartup":false}\' ' if rcoff else ''
     cmd = prefix + gate_prefix + 'exec "%s" -p %s%s--permission-mode bypassPermissions %s"%s"' % (claude_bin, nopersist_flag, rcoff_flag, model_flag, prompt)
@@ -265,6 +269,7 @@ EOF
   echo "== 手動実行: $task_id ($kind) =="
   if [ "$kind" = skill ]; then
     mflag=""; [ -n "$CRON_MODEL" ] && mflag="--model $CRON_MODEL"
+    [ -n "$CRON_EFFORT" ] && mflag="$mflag --effort $CRON_EFFORT"
     RCOFF_ARGS=""; [ -n "$RCOFF" ] && RCOFF_ARGS='--settings {"remoteControlAtStartup":false}'
     eval "cd \"$WORKDIR\"" && exec "$CLAUDE_BIN" -p $NOPERSIST_FLAG $RCOFF_ARGS --permission-mode bypassPermissions $mflag "$(prompt_for "$target")"
   else

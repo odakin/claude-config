@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: scheduled task / launchd routine を作成・管理するとき
 category: harness-core
-summary: Scheduled Tasks 規約（SKILL.md 二重構造・同期ルール）
+summary: Scheduled Tasks 規約（SKILL.md 二重構造・同期ルール・headless context budget = cwd の CLAUDE.md 肥大で "Prompt is too long" 全滅する罠と診断 ladder）
 -->
 # Scheduled Tasks 規約
 
@@ -170,6 +170,42 @@ backend は prompt 本文を保存し SKILL.md を実行時に読まない (= �
 2. **indirection**: prompt = 「`<絶対path>/SKILL.md` を Read tool で読み上から self-contained に実行せよ」 + 最小限の前提だけ。 SKILL.md (= git canonical) が手順の SoT で、 **手順変更が backend 再登録なしで次回実行に反映される** (= drift しない、 = §「制約」 の SKILL.md↔backend 乖離を構造的に解消)。
    - ⚠️ **trade-off**: prompt に説明文 (= 頻度・背景) や安全則を焼くなら、 その焼いた値は **設定値変更時に prompt 本体も sweep** する (= 焼いた分だけ drift 対象に戻る)。 2026-06-04 RCA: ある定期 publish task の頻度を変えた際、 cron と description は `update_scheduled_task` したが **prompt 冒頭に焼いた「週次」表記を取り逃した** (= cron / description / SKILL.md / 周辺 doc は直したのに backend prompt 本体だけ漏れた、 整合性軸 sweep の死角)。 設定値を 1 つ変えたら **その値が現れる全 surface (= コード / doc / backend prompt) を grep して sweep** する (`CONVENTIONS.md §3` 整合性軸)。
    - indirection でも安全則を prompt に焼く判断はある (= fresh session が SKILL.md read に失敗しても安全則が効く保険)。 その場合「焼いた分だけ drift 対象」 と自覚する。
+
+## <a id="headless-context-budget"></a>headless `claude -p` の context budget (= "Prompt is too long" 全滅の防止)
+
+**無人 routine (`claude -p`) は起動時に cwd の memory file (CLAUDE.md 連鎖) を丸ごとロードする。**
+memory file が肥大している repo を workdir にすると、 SessionStart hook の注入と MCP tool schema が
+積み上がって **200k context を起動直後に超え、 全 routine が `Prompt is too long` (exit 1) で
+黙って全滅する** — cron は毎日失敗し続けても誰にも見えない (log と `launchctl list` の
+exit status にしか痕跡が残らない)。
+
+実例 (2026-07-29 owner 環境の実測): workdir の CLAUDE.md ~276 KB + hook 注入 ~35 KB で、
+最小 prompt は辛うじて通るが skill 実行は数回の tool 呼び出しで溢れ、 **日次 routine 5 本が
+4-5 日間連続で 1 度も走っていなかった**。 memory file は日々数 KB ずつ成長するため、
+**閾値は漸進的に・気付かぬうちに越える** (重い routine から順に落ちる)。
+
+### 診断 ladder (= 15 分で確定する)
+
+1. **最小 prompt** (`claude -p "Reply OK"` を同 workdir で) — 通れば基底は収まっている
+2. **同 skill を cwd=/tmp で** — 通れば memory file ロードが犯人と確定
+3. **同 workdir + 1M context model** — 通れば model 切替で解消可能
+
+### 対処の選択 (= trade-off を明示して選ぶ)
+
+- **1M context model に pin する** (`CRON_MODEL` に full ID) — **規約を保ったまま** context を
+  広げる。 memory file が運ぶ規約 (メール文体 / calendar の書き先 / leak 規則) を無人実行が
+  失わない。 mail draft や calendar 書き込みをする routine ではこちらが正解。
+- **workdir を memory file の無い場所へ逃がす** — 安価だが **規約が全て失われる**。
+  読み取り専用で規約非依存の routine に限る。
+- ⚠️ どちらも対症で、 **真の root = memory file の肥大**。 定期的な縮退 (hot/cold 分離、
+  完了 entry の archive graduate) が本筋。 memory file のサイズは実質「毎 session /
+  毎 routine が払う税」 であり、 有限資源として扱う。
+
+### 監視 (= 「黙って全滅」 を二度と起こさないために)
+
+`launchctl list` の LastExitStatus ≠ 0 を surface する watcher を持つこと。 exit status は
+残っているのに**それを見る機械が無い**のが本失敗の delivery layer だった (= agent の生死を見る
+heartbeat とは別 layer: job は「生きて」 いて毎日失敗していた)。
 
 ## recurring task の jitter
 

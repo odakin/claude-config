@@ -423,7 +423,7 @@ orientation 直後の silent stall (session は running のまま・活動 times
 | 経路 | model 指定粒度 | pin 精度 | いつ使う |
 |---|---|---|---|
 | **(a) Agent per-call `model` 引数** | **alias のみ** (`sonnet`/`opus`/`haiku`/`fable`) | ✗ **alias は最新解決** = `opus` → `claude-opus-4-8[1m]` (実測)、 特定 version への固定は構造的に不能 | main から subagent を投げるだけ・model 保証不要な bg 調査 |
-| **(b) custom agent 定義** (`.claude/agents/*.md` の frontmatter `model:` + `effort:`) | **full model ID** (例: `claude-opus-4-7[1m]`)+`effort:` | ○ pin 可、 durable | delegate の既定を version 単位で固定・毎回 CLI 引数を書きたくない (⚠️ registry は session 開始時 load = mid-session 追加した定義は次 session から) |
+| **(b) custom agent 定義** (`.claude/agents/*.md` の frontmatter `model:` + `effort:`) | **full model ID** (例: `claude-opus-5[1m]`)+`effort:` | ○ pin 可、 durable | delegate の既定を version 単位で固定・毎回 CLI 引数を書きたくない (⚠️ registry は session 開始時 load = mid-session 追加した定義は次 session から) |
 | **(c) headless CLI** (`claude --model <full-id> --effort <level> -p …`) | **full model ID** + effort | ○ pin 可、 起動時即時反映 | scheduled / cron / launchd から model を明示的に pin して走らせる・(b) との組合せ可 |
 
 - ⚠️ **`spawn_task` (chip → 別 session) には model 引数が無い** (= chip はアプリ既定 model で開く)。 起票側から見て model は成り行きになる。 chip を通した独立 session に version pin したい needs が生じたら、 現状は upstream 依存 (= harness 側で model 引数を追加してもらう) しかない。
@@ -437,7 +437,7 @@ orientation 直後の silent stall (session は running のまま・活動 times
 ### 注意
 
 - **(a) の alias 解決 gotcha が最大の見落とし**: 「`opus` を指定したから 4.7 か 4.8 のどちらか安定な方が来る」 は幻想で、 alias は常に**最新**を返す。 特定 version で走らせたいなら (b) / (c)。
-- **(b) の frontmatter `model:` には alias でなく full ID** (= 例 `claude-opus-4-7[1m]`、 `[1m]` suffix 込み) を書く。 alias を書くと (a) と同じ「最新解決」 の穴が空く。 `effort:` も frontmatter で pin する (`low`/`medium`/`high`/`xhigh`/`max`)。
+- **(b) の frontmatter `model:` には alias でなく full ID** (= 例 `claude-opus-5[1m]`、 `[1m]` suffix 込み) を書く。 alias を書くと (a) と同じ「最新解決」 の穴が空く。 `effort:` も frontmatter で pin する (`low`/`medium`/`high`/`xhigh`/`max`)。
 - **(b) の registry load timing**: `.claude/agents/foo.md` を mid-session に追加しても当 session からは呼べず (`Agent type 'foo' not found`)、 次 session から効く。 起票時に「あるはず」 と assume して呼ぶ前に、 定義が session 開始前に配置済みかを確認する。
 - **(c) の headless run は auth を消費する**アカウントで CLI が login 済みでなければならない (= `~/.claude.json` の login と launchd job の`claude` 実体が同 account を指す)。 cron / launchd に組込むときの auth 経路の正本は [`multi-machine-state.md`](multi-machine-state.md#account-host-failover)。
 
