@@ -139,6 +139,21 @@ if not (candidate.get("title") or {}).get("ja"):
 
 silent fallback (= `TBA` で render) は drift を隠す。 「データが揃ってないなら script は止まる」 が筋。
 
+### Pattern: 出力の書き込みは「生成 → parse 検証 → write」 の順
+
+edit script が SoT file (YAML / JSON / 構造化 md) を書き換えるとき、 **新しい内容を
+memory 上で組み立てて parse 検証してから disk に書く**。 「write してから検証」 だと
+検証が fail した時点で**壊れた状態が disk に残り**、 並行 session / pre-commit gate /
+後続 script に波及する (実例 2026-07-29: flow-scalar の YAML field に block text を
+差し込んで write → 検証 fail → 壊れた file が working tree に残置され、 gate が commit を
+block して初めて発覚。 同 session 内で「validate-then-write」 に反転して再発ゼロ)。
+
+```python
+s2 = s.replace(old, new)
+yaml.safe_load(s2)        # ← 書く前に検証
+open(p, "w").write(s2)
+```
+
 ### Pattern: build → publish の責務分離
 
 local build (= PDF/.tex 生成) と external publish (= 別リポへ mirror、 PDF copy) は別 script に分ける。 publish script は build 済 artifact の存在を前提に動き、 不在なら explicit error。 1 script に統合すると失敗時の責務切り分けが難しくなる。
@@ -361,6 +376,37 @@ CLI script A の loader / helper を script B が `importlib.util.spec_from_file
 - [ ] **上流が下流より雑なら**: 純 mirror が品質回帰しないか? 安全 subset だけ auto・残りは surface? (§8)
 - [ ] **ownership marker で重複が温存され下流を実質 pipeline/AI しか編集しないなら**: overlay (source + overrides → generated artifact) へ昇格を検討? (= 純導出行は重複ゼロ、 判断データは overrides 1 home、 下流は手編集禁止の生成物。 §8)
 - [ ] **同一 yaml を 2 parser (js-yaml + PyYAML) が読むなら**: YAML 1.1 の `no/yes/on/off` boolean key 食い違いを確認? (§8)
+
+## <a id="date-driven-firing"></a>10. 期限つき機会 DB の発火設計 (= status でなく日付で発火 + anchor 切れ invariant)
+
+### 規律 3 点
+
+1. **人手更新される status field を発火条件にしない。** status は「人が最後にどう思ったか」
+   の記録であって「今それが起きているか」 の事実ではない。 「公募が始まったら status を
+   open にする」 型の運用は、 開始を知る者がいなければ誰も更新せず、 **entry が丸ごと
+   surface から消える** (= 実例 2026-07: 助成金 DB で status filter に阻まれた締切が
+   期限 6 日前まで一度も表示されず、 応募機会を 1 回失った)。 発火は**日付だけ**で判定し、
+   status の drift は同じ行の warning marker として可視化する (= 検出器を増やさない)。
+2. **anchor 切れ invariant**: 監視対象の entry は常に「未来の発火日を 1 つ以上持つ」 か
+   「明示 exempt (= rolling / concluded / 対象外 priority)」 のどちらかでなければならない —
+   これを機械が見張る。 発火日の point-fix は**一度きりの掃除**にしかならない: 締切が
+   過ぎるたびに同じ穴が再生する (= 次サイクルの日付を仕込み忘れた entry は黙って過ぎる)。
+   invariant 化すると、 穴が再生した瞬間に surface される。
+3. **機械が読む field に人間向けの日付注記を書かない。** 「発火は ignition 側 (4/15) が担う」
+   のような注記を日付 parser が読む field に書くと、 **注記内の YYYY-MM-DD が締切として
+   誤読される** (実例: 偽の締切が surface された)。 field 自身の comment に「この field に
+   YYYY-MM-DD を書くと誤読される」 と焼き込み、 注記は日付 pattern を避けた表現にする。
+
+### How to apply
+
+- 発火 predicate は「eligible ∧ 未来の day-precision 日付あり」 のみ。 月精度 (`YYYY-MM`) は
+  noise が多ければ発火に使わず、 「日精度に verify する運用」 を促す側に回す
+- exempt は entry 側で宣言する (= `cadence: rolling` / `status: concluded` 等)。
+  検出器側の除外 list に書くと entry と drift する
+- 一括で anchor を仕込んだら、 「締切通過後の世界」 を日付固定 replay して
+  invariant が穴の再生を実際に捕まえることを実証してから ship する
+
+---
 
 ### 関連 convention
 
