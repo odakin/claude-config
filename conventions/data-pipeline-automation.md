@@ -376,6 +376,7 @@ CLI script A の loader / helper を script B が `importlib.util.spec_from_file
 - [ ] **上流が下流より雑なら**: 純 mirror が品質回帰しないか? 安全 subset だけ auto・残りは surface? (§8)
 - [ ] **ownership marker で重複が温存され下流を実質 pipeline/AI しか編集しないなら**: overlay (source + overrides → generated artifact) へ昇格を検討? (= 純導出行は重複ゼロ、 判断データは overrides 1 home、 下流は手編集禁止の生成物。 §8)
 - [ ] **同一 yaml を 2 parser (js-yaml + PyYAML) が読むなら**: YAML 1.1 の `no/yes/on/off` boolean key 食い違いを確認? (§8)
+- [ ] **index / 逆引き table を作るなら**: 全 ingest 経路と読み手が**同じ正規化関数**を通っている? 実データの key 分布を数えた? 揺れた表記の selftest fixture を置いた? (§11 [#multipath-key-normalization](#multipath-key-normalization))
 
 ## <a id="date-driven-firing"></a>10. 期限つき機会 DB の発火設計 (= status でなく日付で発火 + anchor 切れ invariant)
 
@@ -405,6 +406,50 @@ CLI script A の loader / helper を script B が `importlib.util.spec_from_file
   検出器側の除外 list に書くと entry と drift する
 - 一括で anchor を仕込んだら、 「締切通過後の世界」 を日付固定 replay して
   invariant が穴の再生を実際に捕まえることを実証してから ship する
+
+## <a id="multipath-key-normalization"></a>11. 複数の link 経路が同じ index を作るなら、key 正規化を単一関数に集約する
+
+index / 逆引き table には **書き手 (= 値を harvest して key を作る側)** と **読み手 (= key で引く側)** がある。
+書き手が 2 本以上の経路から値を受け取り、 **一部の経路だけを正規化**すると key 空間が静かに分岐する。
+非正規化の経路で書かれた entry は、 読み手の key 形式と永久に一致せず、 **見つからない**。
+
+**この失敗が危険なのは silent だから**: lookup は 0 件を返し、 それは「該当データが無い」 と
+区別がつかない。 例外も warning も出ない。 index の上に立つ検出器は healthy と報告し続け、
+その裏で対象の一部が恒久的に不可視になる。
+
+### 兄弟の失敗モード (= 同じ family)
+
+| 失敗 | 症状 |
+|---|---|
+| 経路 A を**読んでいない** | A 経由の link が最初から index に載らない |
+| 経路 A を読むが**正規化していない** | 載るが読み手と key 形式が違い、引けない |
+
+前者を直した時に後者が残るのが典型 (= 「両方の経路を読む」 fix を入れても、
+**経路ごとに値の表記が違えば効果は半分**)。 経路を 1 本足す・直す瞬間に必ず
+「この経路の値は他経路と同じ形か」 を問う。
+
+### How to apply
+
+- **正規化関数を 1 つだけ定義**し、全 ingest 経路と読み手の両方をそれに通す。
+  経路ごとに「こちらは bare id・あちらは prefixed」 と分岐させない
+- **実データの key 分布を数えてから判断する**。 「規約上こう書くはず」 は当てにならない —
+  記録は人間や複数 session が書くので表記揺れは必ず混ざる (実測例: 「bare id で書く」
+  と doc に明記された field に、 prefixed 形式が 107 entry 混在していた)
+- **selftest に揺れた形式の fixture を置く** (= bare と prefixed の両方、 および
+  両経路が同じ対象を別表記で指した時の dedupe)
+- **index の外側に invariant 検査を持つ**。 「この集合の全要素は index から到達可能」 型の
+  audit があると、 key 分岐は「到達不能」 として顕在化する。 index 自身の検出器は
+  key が分岐しても沈黙するので、 **同じ index を使う検査では発見できない**
+
+### 実例 (2026-07)
+
+受信記録 entry → 課題台帳 entry の逆引き index で、 一方の field は正規表現で id を抽出し、
+もう一方の field は文字列を verbatim に key にしていた。 後者に `<repo>/TODO:<id>` 形式が
+混在していたため、 bare id で引く読み手から 107 entry 分の救援経路が失われていた。
+発見は index を使う検出器ではなく、 **独立の到達可能性 audit** が「返信待ちの送信が
+どの open 課題からも到達不能」 と報告したことによる。
+
+---
 
 ---
 
