@@ -44,6 +44,10 @@ CLAUDE.md 連鎖 (= session 開始時に丸ごとロードされる memory file)
    - **⚠️ live な行動制約** (= 「〜してはいけない」「〜は射程外」 級の、 誤用を防ぐ caveat)
    - **SoT pointer** (= 正本の file#anchor / docstring / plan)
    ⚠️ の判別: **行動制約の ⚠️ は残す、 経緯の ⚠️ は落とす。 迷ったら残す。**
+   routing table (= 「いつ何を読むか」 の row 群) の row では **trigger 列 (適用タイミング)
+   こそが row の routing 機能** — trigger は残し、 rule の digest (= 対象 doc の要約・日付・
+   優先順) を payload として落とす。 digest が対象 doc に実在することを照合してから
+   (= digest は doc の目次代わりに見えるが、 drift する複製にすぎない)。
    編集は [`scripts/replace-line.py`](../scripts/replace-line.py) (= 一意 prefix assert 付き
    行置換、 「検証してから書く」 の機械化。 行番号指定や sed の多重 hit 事故を構造的に防ぐ)。
 5. **greppability 確認**: unit から落とした固有名 (= 事故名・incident の呼び名) が
@@ -52,7 +56,9 @@ CLAUDE.md 連鎖 (= session 開始時に丸ごとロードされる memory file)
 ## gates (全部 pass してから push)
 
 1. repo の全機械検査 runner が全 PASS (= 縮退前の基準本数と比較、 増減は理由を記録)
-2. SoT drift 検査が**縮退作業由来の新規 finding ゼロ**
+2. SoT drift 検査が**縮退作業由来の新規 finding ゼロ**。 帰属判定 = flagged file が
+   自分の編集集合に含まれるか (= 含まれなければ pre-existing。 直さず「out-of-scope
+   引き継ぎ」 として results に記録する — 縮退 commit に無関係な修正を混ぜない)
 3. **構造 invariant の機械検証**: routing 構造 (table の全 row 存在 / bullet 本数) が不変
 4. docstring を触った script 全部の `--selftest` 再走 = 全 PASS
 5. before/after のサイズ実測を results に記録
