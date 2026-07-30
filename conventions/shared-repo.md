@@ -149,6 +149,21 @@ grep -rE '<other-private-repo>/[a-z]' --exclude-dir=.git .
 >
 > **カバレッジ ギャップ**: 上の hook chain は **public** リポを対象とする (`.claude/public-repo.marker` の有無で判定)。**private shared** リポ (= collaborator あり、public marker なし) では fire しないため、layer-2 違反 (= owner literal) は session-end / push-time の手動 audit に依存する。private shared リポで新規 file に絶対パスを焼き付ける commit を書いた直後は、`grep -rn "/Users/<owner>"` を 4 軸 sweep の整合性軸に組み込むのが安全。
 
+## <a id="l2-style-digest"></a>執筆スタイル規約の層 2 instantiation（style digest pattern）
+
+所有者の執筆規約（文体・記法・構成の選好）は通常 layer 3（個人層）に正本を持つ。共有 paper repo（layer 2）では、共同編集者と**共同編集者側の AI assistant** がその規約に従って原稿を触る必要があるが、layer 2 → layer 3 参照は禁止（上記 Core rule = collaborator に解決不能な pointer を作らない）なので、「正本への参照を張る」という経路がそもそも存在しない。放置すると collaborator 側の編集で規約違反が構造的に再混入し、所有者側の再整形が無限ループする。
+
+この緊張の解: **採用 (adoption) が選好を project 規約に変える**。「所有者が one-sentence-per-line を好む」は layer 3 の fact だが、project がそれを採用した瞬間、「本 project の原稿は one-sentence-per-line で書く」は layer 2 の観客全員にとって true な fact になる。従って共有リポには **rule 本文そのものを自己完結の digest として置く**（= 参照でなく instantiation）。provenance（所有者の個人正本の存在）は boundary 文つきの名指しに留める（[`personal-layer.md` §depend vs mention](../docs/personal-layer.md#what-depend-means-structural-dependency-vs-mention)）。
+
+運用の要点 4 つ:
+
+1. **配置は CLAUDE.md**（= 唯一 auto-load される発火面）。別 file に置いて pointer で誘導する形は recall 依存で弱い。digest は rule 本文と適用法だけに絞って tight に保つ（CLAUDE.md のサイズは毎 session が払う税）。
+2. **drift は生成で design-out**: 所有者側の単一配布 source から script で各共有リポの AUTO block（`<!-- AUTO-* BEGIN/END -->` marker 間の idempotent 置換）へ配布する。手動コピー × N repo は必ず drift する。marker 行に「自動生成・手編集禁止・恒久変更は所有者へ」を明記する（= [`personal-layer.md` §Owner automation acting on a shared project](../docs/personal-layer.md#owner-automation-shared-project) の announce 義務）。
+3. **layer-2-safe filter**: 配布内容に PII・機関名・layer 3 の file 名 / path・私的文脈（規約成立の経緯・発言引用・他 private repo 名）を含めない。rule 本文と適用法だけを出す。一次防御は配布 source 側の記述規律、機械 backstop は配布 script の leak gate と、「正本に § を足したら配布判断（export / skip）を必ず記録する」parity gate。
+4. **layer 1 に既にある一般則は public URL で引く**: claude-config は public なので、共有リポからは所有者マシンの local path でなく GitHub URL（`https://github.com/<owner>/claude-config/blob/main/...`）を併記すれば collaborator と collaborator 側 AI も読める。CLAUDE.md の「規約参照」節も dual-form（local path + public URL）にすると collaborator 環境で dead link にならない。
+
+なお、記法（notation）の project 固有 convention は各 repo の DESIGN.md 等が担う別問題で、本 pattern の対象は「project をまたいで所有者が一貫させたい執筆スタイル」の側。両者の役割分担（どちらが正本か）を digest 節の近くに 1 行明記しておくと衝突しない。
+
 ## macOS LaunchAgent / launchd plist の literal-path trap
 
 macOS の **LaunchAgent / LaunchDaemon plist は `~` も `$HOME` も自然展開しない** (= `ProgramArguments` / `WatchPaths` 等の path は literal でなければ launchd に loaded されない)。共有リポに plist をそのまま commit すると、所有者の絶対パス (`/Users/<owner>/…`) が file に焼き付き、上記 §「公開前の Audit」 の grep に hit する layer-2 違反になる。
