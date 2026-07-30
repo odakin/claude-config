@@ -152,14 +152,36 @@ macOS の既定 shell は zsh。 **interactive zsh は `interactive_comments` �
 ✅ 安全 (説明は散文、 コマンドは素のまま):
 
 ```sh
-CLAUDE_CONFIG_DIR=~/.claude-alt claude auth login
+CLAUDE_CONFIG_DIR="$HOME/.claude-alt" claude auth login
 ```
 （↑ ブラウザで alt アカウントにサインイン、 のように説明はコマンドの外に出す）
 
 ❌ 壊れる (貼り付けると `#` 以降が `claude` への余計な引数 / glob になる):
 
 ```sh
-CLAUDE_CONFIG_DIR=~/.claude-alt claude auth login   # alt にサインイン
+CLAUDE_CONFIG_DIR="$HOME/.claude-alt" claude auth login   # alt にサインイン
 ```
 
 例外: **script ファイル内**の `#` は常にコメント (= 非対話 parse なので問題ない)。 本ルールは「ユーザーが対話プロンプトに貼り付ける用に提示するコマンド」 にのみ適用。 ユーザーが `setopt interactive_comments` を `.zshrc` に入れていれば行内 # も通るが、 提示側は「既定 OFF + 環境差」 を前提にできないので、 常に行内 # なしで出す。
+
+## <a id="no-tilde-in-pasted-commands"></a>ユーザーに渡すコマンドに `~` を書かない (zsh は `env` 前置で展開しない)
+
+上の兄弟ルールと同じ「zsh 固有 × 貼り付け用コマンド」 の罠。 zsh は **assignment prefix** (`VAR=~/x cmd`) なら tilde を展開するが、 **`env VAR=~/x cmd` では展開しない** (= コマンド引数中の `=` 以降を tilde 展開する `magicequalsubst` が既定 OFF)。 bash は同等挙動が既定 ON で両方展開するため、 bash で書いて zsh で壊れる非対称になる。
+
+展開されないと `~` が **literal な dir 名**として使われ、 cwd 配下に `./~/…` が生える。 とくに設定 dir を渡す env var (`CLAUDE_CONFIG_DIR` 等) だと、 **誰も見ない場所に状態が書かれる一方で本物の `~/…` は空のまま** = 「認証したのに効いていない」 「設定が反映されない」 という debug しにくい症状になり、 生えた `./~/` は後続の tree scan にも noise として残る。
+
+→ **ユーザーに提示するコマンドでは `~` を使わず `"$HOME/…"` (or 絶対パス) を書く**。 危険が顕在化するのは **`env -u FOO …` のような prefix を足す瞬間**: prefix を足す側は既存の `~` 表記をそのまま残すので、 その 1 手で silent に壊れる。
+
+✅ 安全 (どんな prefix を足しても壊れない):
+
+```sh
+env -u ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR="$HOME/.claude-alt" claude auth login
+```
+
+❌ 壊れる (`env` 前置で `~` が literal → `<cwd>/~/.claude-alt/` が生える):
+
+```sh
+env -u ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR=~/.claude-alt claude auth login
+```
+
+**背景 (2026-07-02)**: alt アカウント用 config dir の初回 auth 手順で、 script 自身は絶対パスを印字していた (= script は正しかった) のに、 chat に手順を書き直す段で `~` 表記へ置き換え + `env -u ANTHROPIC_API_KEY` 前置を併記した。 ユーザーがそれを貼って 3 コマンド実行 → `$HOME/~/` と `<base>/~/` の 2 箇所に literal `~` dir が生成され、 6 MB の空 config dir が 4 週間残置した (= 本物の dir は別途正しい手順で auth し直して復旧)。 **script が正しくても chat での書き直しで壊れる** = 提示する文面そのものが検査対象。 検出は `find "$HOME" -maxdepth 4 -name '~' -type d`。
