@@ -185,3 +185,16 @@ env -u ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR=~/.claude-alt claude auth login
 ```
 
 **背景 (2026-07-02)**: alt アカウント用 config dir の初回 auth 手順で、 script 自身は絶対パスを印字していた (= script は正しかった) のに、 chat に手順を書き直す段で `~` 表記へ置き換え + `env -u ANTHROPIC_API_KEY` 前置を併記した。 ユーザーがそれを貼って 3 コマンド実行 → `$HOME/~/` と `<base>/~/` の 2 箇所に literal `~` dir が生成され、 6 MB の空 config dir が 4 週間残置した (= 本物の dir は別途正しい手順で auth し直して復旧)。 **script が正しくても chat での書き直しで壊れる** = 提示する文面そのものが検査対象 (= 共通 kernel と他 domain の instance は [paste-destined-plain-text.md #same-framework-other-paste-targets](paste-destined-plain-text.md#same-framework-other-paste-targets)、 4 週間気付かれなかった構造は [debugging-discipline.md #recovery-ends-investigation](debugging-discipline.md#recovery-ends-investigation))。 検出は `find "$HOME" -maxdepth 4 -name '~' -type d`。
+
+### scope の観測境界 — 「貼り付け用」 の外側 (= n=1、 未規約化)
+
+本節と兄弟節の scope は意図的に「**user に貼り付けさせる**コマンド」 に限定してある。 だが同じ「**zsh の pattern/parse semantics が bash 前提の想定と違う**」 class は、 **Claude 自身が Bash tool で発行するコマンド**にも及ぶ。 観測 1 件 (2026-07-30、 上記 incident の検証中):
+
+```sh
+l="pre(post)"; print -r -- "${l##*(}"    # zsh: bad pattern: *(  /  bash: post)
+l="pre(post)"; print -r -- "${l##*\(}"   # zsh でも通る (= ( を escape)
+```
+
+`##` の pattern 内の `(` を zsh は glob 構文として厳しく parse する (= bash は literal 扱い)。 兄弟 2 節と同じ非対称 (bash で書いて zsh で壊れる) だが、 **貼り付けを経由せず Claude 自身の 1 コマンドが失敗するだけ**なので事故 mode が違う (= 即 error・実害なし。 上記 1 件は同 turn に python で書き直して完了)。
+
+⚠️ **n=1 なので規約化していない** (= 「incident 無しで規約を書かない」)。 **un-defer trigger = 同 class の 2 件目** — Claude 自身が発行した shell コマンドが zsh 固有 semantics で壊れる事例を再度観測したら、 本 family の scope を「貼り付け用」 から「Claude が発行する全 shell コマンド」 へ広げる判断に入る (= 現状は「pattern を含む 1-liner は python で書く」 が実務上の回避策で、 規律化する価値があるかは 2 件目まで保留)。 症状 token: `bad pattern:` (= 観測済)、 近縁で未観測 = `no matches found` / `unmatched`。 この記録自体が trigger の成立条件 (= 記録しなければ次の観測者は 1 件目を知らず永遠に n=1 のまま = [debugging-discipline.md #recovery-ends-investigation](debugging-discipline.md#recovery-ends-investigation) の「記録されない残骸は trigger を持たない」 と同型)。
