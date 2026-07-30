@@ -199,7 +199,9 @@ exit status にしか痕跡が残らない)。
   読み取り専用で規約非依存の routine に限る。
 - ⚠️ どちらも対症で、 **真の root = memory file の肥大**。 定期的な縮退 (hot/cold 分離、
   完了 entry の archive graduate) が本筋。 memory file のサイズは実質「毎 session /
-  毎 routine が払う税」 であり、 有限資源として扱う。
+  毎 routine が払う税」 であり、 有限資源として扱う。 **縮退の手順正本 =
+  [`memory-file-slimming.md`](memory-file-slimming.md)** (= MOVE + pointer 化・DELETE 禁止、
+  義務を落とさない gates つき)。
 
 ### 監視 (= 「黙って全滅」 を二度と起こさないために)
 

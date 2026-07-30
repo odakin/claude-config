@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 81 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 82 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -20,6 +20,8 @@ layer 1 (public) のドメイン固有規約 81 file をカテゴリ別に列挙
   - Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕)
 - **[mcp.md](mcp.md)** — MCP ツールを使うとき (アカウント確認・scope 判定を含む)
   - MCP 固有規約（MCP 使用時に参照）
+- **[memory-file-slimming.md](memory-file-slimming.md)** — CLAUDE.md 等の memory file が肥大して縮退 (slimming) するとき + 完了 entry を archive へ graduate するとき + 長大 bullet / table row を pointer 化するとき
+  - memory file のサイズは毎 session + 毎 headless routine が払う税 — 縮退は「MOVE + pointer 化、 DELETE 禁止」 が大原則で、 SoT 照合 → 不足 MOVE → trim の順を 1 unit ずつ守れば義務を落とさず 25% 級の削減ができる (検証済手順 + gates + 一意 prefix 行置換 helper)
 - **[multi-account-machine-surface.md](multi-account-machine-surface.md)** — アカウント × マシン × 端末の複数セル運用を設計・診断するとき
   - アカウント × マシン × 端末 (desktop app / スマホ remote) の 2×2×2 を全部シームレスにする設計原理 (= 3 軸の本質差・切替 mechanics・seamless invariant I1-I9・破れの検出・cross-machine 不可視の正直な限界。 RC server / multi-machine-state / scheduled-tasks の全体像 doc)
 - **[multi-machine-state.md](multi-machine-state.md)** — 複数マシンで同じ Claude Code setup を運用・audit するとき
