@@ -157,7 +157,7 @@ grep -rE '<other-private-repo>/[a-z]' --exclude-dir=.git .
 
 運用の要点 4 つ:
 
-1. **配置は CLAUDE.md**（= 唯一 auto-load される発火面）。別 file に置いて pointer で誘導する形は recall 依存で弱い。digest は rule 本文と適用法だけに絞って tight に保つ（CLAUDE.md のサイズは毎 session が払う税）。
+1. **配置は CLAUDE.md**（= 唯一 auto-load される発火面）。別 file に置いて pointer で誘導する形は recall 依存で弱い。digest は rule 本文と適用法だけに絞って tight に保つ（CLAUDE.md のサイズは毎 session が払う税 = [`scheduled-tasks.md #headless-context-budget`](scheduled-tasks.md#headless-context-budget)）。
 2. **drift は生成で design-out**: 所有者側の単一配布 source から script で各共有リポの AUTO block（`<!-- AUTO-* BEGIN/END -->` marker 間の idempotent 置換）へ配布する。手動コピー × N repo は必ず drift する。marker 行に「自動生成・手編集禁止・恒久変更は所有者へ」を明記する（= [`personal-layer.md` §Owner automation acting on a shared project](../docs/personal-layer.md#owner-automation-shared-project) の announce 義務）。
 3. **layer-2-safe filter**: 配布内容に PII・機関名・layer 3 の file 名 / path・私的文脈（規約成立の経緯・発言引用・他 private repo 名）を含めない。rule 本文と適用法だけを出す。一次防御は配布 source 側の記述規律、機械 backstop は配布 script の leak gate と、「正本に § を足したら配布判断（export / skip）を必ず記録する」parity gate。
 4. **layer 1 に既にある一般則は public URL で引く**: claude-config は public なので、共有リポからは所有者マシンの local path でなく GitHub URL（`https://github.com/<owner>/claude-config/blob/main/...`）を併記すれば collaborator と collaborator 側 AI も読める。CLAUDE.md の「規約参照」節も dual-form（local path + public URL）にすると collaborator 環境で dead link にならない。
