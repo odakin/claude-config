@@ -123,7 +123,7 @@ paste-and-transcribe で rendered DOM を写す方針を取った後で問題が
 
 ---
 
-## 外部 system からの snapshot は raw export + 構造化 + script の 3 点 set
+## <a id="raw-export-snapshot-3set"></a>外部 system からの snapshot は raw export + 構造化 + script の 3 点 set
 
 外部 web app / SaaS / API から data の point-in-time snapshot を取るとき、**(a) raw export (CSV/Excel/JSON 等) + (b) 構造化 form (YAML/parquet 等) + (c) (a) → (b) の conversion script** を 3 点 set で保存する。後で再 derive、schema 拡張、問題追跡 (transcribe error 検出等) が可能になる。
 

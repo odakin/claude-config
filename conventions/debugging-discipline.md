@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: bug fix を提案する前・audit verdict を出す前 (検証規律)
 category: infra
-summary: Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)、 性能修復は measure-first + 出力等価性 + 決定的並列化 (§15)
+summary: Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)、 性能修復は measure-first + 出力等価性 + 決定的並列化 (§15)、 機能の回復は調査終了の条件でない = 症状が「余剰」 型だと retry で直った瞬間に原因が再発源に残る + origin 不明の残骸は恒常 noise 化して調査 trigger を失う (§16)
 -->
 # Debugging discipline
 
@@ -485,6 +485,16 @@ origin: 2026-07-04 「最近の項目に routine session が数十件」 調査�
 reflex: 性能修復に入る瞬間に「実測したか (per-unit timer → profiler)」、 fix を宣言する瞬間に「何と何の出力が等価だと **どの操作で** 確認したか」。
 
 origin: 2026-06-03 Gmail 逐次 fetch の batch 化 (= 540s timeout RCA、 「逐次版と出力一致」 要件で landed) + 2026-07-24 dashboard 検査 fleet の並列 stage runner 化 (= 数分 → ~1 分、 cProfile が直感と違う最大犯人を特定、 byte 一致 + section 完全性で受け入れ)。 いずれも owner の personal layer に実装・設計史 (= 機構の正本は各 script docstring)。
+
+## <a id="recovery-ends-investigation"></a>16. 機能の回復は調査終了の条件ではない — 症状が「欠落」 でなく「余剰」 のとき
+
+失敗が「動くべきものが動かない」 形なら、 直った時点で原因はほぼ手中にある (= 直し方を知っていたから直った)。 だが失敗が **「動くようにはなったが、 副産物がどこかに残った」** 形のとき、 retry で機能が回復した瞬間に調査の圧力が消え、 **原因は再発源 (= recipe / doc / user に提示した文面) に残ったまま**になる。 1 回目を「なぜか失敗した」 で閉じた時点で、 それは workaround を選んだ判断ですらない (= §1 の「絆創膏」 は選択の自覚がある分まだ良い。 ここでは選択自体が発生しない)。
+
+さらに悪いのは残った副産物の運命: **origin 不明の残骸は、 検出器に拾われても「恒常 noise」 として定着し、 調査 trigger としての力を失う**。 surfacing 検出器を多数抱える system ではこれが致命的 — noise は「見えている」 のに「効いていない」 状態で任意に長く生存できる。
+
+reflex: (a) retry / やり直しで直ったとき、 **「1 回目は何をどこに書き込んだか」 を 1 操作分だけ問う** (= 生成物の場所を数える。 失敗した試行も副作用を残す)。 (b) 検出器の finding が origin 不明のまま 2 回目の session を越えたら、 finding の内容ではなく **origin を** 調査対象に格上げする。 ⚠️ この段階で noise の抑制設定 / 除外 glob を先に入れてはならない (= trigger の永久放棄。 除外は origin 確定後に、 その origin に対してのみ)。
+
+origin: 2026-07-02 → 07-30 (= 詳細は owner の personal layer の incident 記録)。 貼り付け用に提示したコマンドで tilde が展開されず、 作業ツリー直下と home に literal `~` dir が 2 箇所生成された。 同日に別形式で認証し直して機能は回復 → そこで調査終了。 残った 6 MB の空 config dir は 4 週間、 別 repo の scan が拾う「発生元不明の恒常 noise」 として定着し、 最終的に user が dir 自体を目で発見して初めて RCA に至った (= 検出器は 4 週間ずっと「見えて」 いた)。
 
 ## 関連
 
