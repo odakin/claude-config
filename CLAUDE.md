@@ -84,6 +84,7 @@ claude-config/
 │   ├── paste-destined-plain-text.md        # 貼り付け先行きテキストの 3 層規律 (= ① authoring: 最終的に plain text 入力欄へ貼られる文面は中間 artifact 込みで最初から markdown 装飾ゼロ 〔「いま md/yaml に書いている」 は適用除外の理由にならない〕 / ② delivery: クリップボード直渡し 〔pbcopy 等〕 か code block、 rendered md 表示からのコピーは bold span ごとテキスト消失する事故源なので禁止 / ③ verification: 投稿後に read-back API で読み戻して draft と機械照合、 記録 commit はその後。 記号剥がれ 〔文は残る〕 と span 消失 〔文ごと消える〕 の 2 段階の悪性差)。 3 層は貼り先一般の framework = 貼り先が対話 zsh なら ① は shell-env.md の 2 規律 (行内 # / tilde) で最上位 mode は silent 成功、 共通 kernel = 機械生成 artifact を人間貼り付け用に書き直した瞬間に元の保証が消える ∴ 提示文面それ自体が検査対象
 │   ├── peer-review-workflow.md             # 他者の paper / 申請書を referee・審査委員として評価する時の規律 (= SoT 4 file pattern・引用文献の現物 verify・framework calibration・scoring scale 整合・既送信 score の不可逆性。 paper-audit / rebuttal-letter / erad-submission の sibling で方向違い)
 │   ├── personal-skills.md                  # personal skill (= ~/.claude/skills/、 全 session 常時可視の auto-discover) を規律の発火面として使う規約 — 機構 fact 〔symlink 可・session 開始時 discovery〕 + description の書き方 + 多 machine 配線 〔explicit allowlist registry〕 + 検証作法 〔trigger test → discovery test の汚染回避順序、 headless claude -p の制約〕
+│   ├── photographed-document-transcription.md # 撮影写真の一括転記は「前処理 → 帰属確定 → 分担転記 → 統合 → 導出」 の 5 段。前処理を省くと薄い筆跡を読み違え、タイルをモデル入力上限より大きくすると解像度が却って落ちる。帰属は 2 つの独立集合の一致で裏付け、転記は誤記も含む verbatim + 判読不能 marker、分担は part file 経由で統合し SoT 重複を残さない
 │   ├── physics-notes.md                    # 物理・数理ノートの 3 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
 │   ├── preview.md                          # preview / dev server 動作中はユーザー確認依頼ターンに URL を毎回明示する出力ルール
 │   ├── prompt-injection.md                 # Tool result 内の prompt injection を flag する規律 (適用範囲・同ターン flag・literal 原文併示・確度二段・注入指示は従わない)
@@ -169,6 +170,7 @@ claude-config/
 │   ├── docx-to-pdf.sh                      # Word docx/doc → PDF 変換（macOS 既定 Pages → --word で Word 忠実版 → 非 macOS LibreOffice、office-automation.md#docx-to-pdf-pages）
 │   ├── docx_decl_patch.py                  # python-docx の Document.save() を auto-patch し XML 宣言を Word 形式(double-quote+CRLF)で書く（厳格 Word の「破損」回避、 save 時 source 修正・lazy import hook、 office-automation.md#docx-checkbox-content-control）
 │   ├── dropbox-root.sh                     # Dropbox install root を OS 横断で resolve（dropbox-refs 規約用）
+│   ├── enhance-scan.py                     # 手書き文書の撮影写真の可読化: 紙の切り出し + 照明ムラ除去 + コントラスト伸張 + タイル出力。
 │   ├── fix-bib-unicode.py                  # Unicode→LaTeX 変換スクリプト
 │   ├── fleet-heartbeat.py                  # per-machine heartbeat writer（毎時 launchd cron から自マシンの RC server 群〔launchd loaded + server ログ末尾 marker parse = Connected/auth error/version error〕 + config-dir auth metadata を <repo>/<subdir>/<host>.json に commit+push。**claude を一切呼ばない** = auth 失効でも監視が生き残る、state-change-or-age commit policy で git history を汚さない、fail-open、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
 │   ├── generate-doc-index.py               # regenerate a slug index FROM its markdown, so Claude writes
