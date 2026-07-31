@@ -369,7 +369,22 @@ end tell
 
 **納品 xlsx の cache 焼き込み (= deliverable baking、 事故対応でなく納品工程として)**: 雛形の計・合計・差引 cell が formula である様式を openpyxl で fill して**そのまま先方に納品する**場合も同じ機構が効く — fresh 雛形は cache を持たないことが多く openpyxl save も作らないので、 受領側の添付 preview や自分の `data_only` 検算で数値が見えない。 納品前工程: (1) 上記 applescript の open+save を納品 file 全部に回す (= 焼き込み)、 (2) 焼き込み後に `data_only=True` で計・合計・差引 cell を読み**手元の期待値と assert 照合** (= 様式に「申請額 − 月次計」 のような検算 cell があればそれが 0 かも verify)。 受領側が Excel で開けば再計算されるので焼き込み自体は「開かずに読む」 経路のためだが、 (2) の検算が本体の価値 — **数式の実結果を検証せずに納品しない**。 ⚠️ user が Excel で作業中でありうる環境では batch 前に起動状態を確認し (`tell application "System Events" to (name of processes) contains "Microsoft Excel"`)、 起動中なら割り込まない (= user の未保存 workbook を巻き込む save/quit は不可逆事故。 workbook 単位の open/close に留めるか user に確認)。
 
-**回避 (= 破壊そのものを起こさない)**: [`excel-osascript-cell-write`](#excel-osascript-cell-write) 経由で値を書けば cache も drawing も保護される (= Excel の formula engine が常時走っているので cache が消えない)。 openpyxl 経路は cache + drawing の構造的損失を 2 軸で抱える。
+**回避 A (= 値を書くだけなら)**: [`excel-osascript-cell-write`](#excel-osascript-cell-write) 経由で値を書けば cache も drawing も保護される (= Excel の formula engine が常時走っているので cache が消えない)。 openpyxl 経路は cache + drawing の構造的損失を 2 軸で抱える。
+
+**回避 B (= 体裁は openpyxl でしか触れない場合: 使い捨て temp に当てて原本を触らない)**: **行高 / `print_area` / sheet 削除**のような体裁操作は osascript で書けない or 不安定なので (下記 ⚠️) openpyxl が要る。 このとき原本を save すると回避 A が使えず cache 破壊が確定する。 → **原本は read-only のまま、 load したブックを temp path に save し、 temp だけを PDF 化する**:
+
+```python
+def build_tmp():
+    wb = openpyxl.load_workbook(SRC)          # ★ SRC は最後まで書き換えない
+    for n in REMOVE: wb.remove(wb[n])         # 提出しない sheet を落とす
+    for r in range(70, 119): wb[SHEET].row_dimensions[r].height = 11
+    wb[SHEET].print_area = "$A$1:$AH$118"
+    wb.save(TMP)                              # ★ 壊れるのは捨てる temp だけ
+```
+
+原本の cache と drawing は無傷のまま残り、 体裁は generate のたびに driver が再現する (= 体裁が code 側に持たれるので、 原本を人が Excel で編集しても壊れない)。 ⚠️ 成立条件 = **残す sheet 内の数式が削除 sheet を参照していない** (= 参照していると `#REF!` 化する)。 temp 側の cache は Excel が PDF 出力時に再計算するので空欄にならない。
+
+⚠️ **`print_area` は AppleScript で設定できない** (= `set print area of worksheet … to "$A$1:$AH$118"` が `-10006` で失敗する実測報告。 上記 §font size と同じ errAEPrivilegeError 系)。 ∴ 「osascript で全部書けば cache を守れる」 は print_area については成立せず、 回避 B に落ちる。 🔲 独立再現は未実施 (= 1 環境 1 例の観測、 2026-07-31)。
 
 origin: 2026-06 連続発生した「openpyxl save 後に gen-pdf で空欄/`#REF!` が出る」 事故。 cell value 一致検証では検出できず、 sentinel guard pattern + PDF visual confirm で気づく。 [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の sibling (= 両方 openpyxl save の構造的損失、 drawing は `xl/drawings/` part、 cache は cell の cached value)。
 

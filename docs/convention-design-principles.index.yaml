@@ -197,6 +197,10 @@ sections:
     legacy: "8.19"
     level: 3
     title: "8.19 retrieval の null は「対象が無い」 でなく「key が悪い」 を先に疑う — 人間可読な属性は経路で失われ、 案件 ID は残る"
+  - id: acceptance-is-not-specification
+    legacy: "8.20"
+    level: 3
+    title: "8.20 「通った」 は仕様ではない — 前例成果物を base にするとき、 受理は正しさの証拠にならない"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
