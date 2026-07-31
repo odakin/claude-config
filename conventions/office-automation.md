@@ -45,6 +45,7 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 | osascript が `-50` パラメータエラー | **`save workbook as … PDF` (workbook 単位の verb)** / merged cell への number-format 設定 | PDF は **sheet 単位** `save as <sheet>` ([`xlsx-to-pdf.sh`](#xlsx-to-pdf-script)) / 書式強制は apostrophe (下行) |
 | 日付が「46205」 等の serial 数字で印字される | Excel が和文日付文字列を date 値に auto-convert + cell 書式が General | **apostrophe prefix で text 強制** → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
 | 申請日等が「火曜日, 6/月 16, 2026」 の冗長書式で表示 | `=TODAY()` 等 date 書式の cell を date 値で上書き → 冗長書式を継承 | apostrophe prefix の text で上書き → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
+| **前回通った書類を copy したのに差し戻された** / 別の trip の値が紛れ込む | 前例ファイル base (= 受理は正しさの証拠にならない + 見えない残骸を運ぶ) | 配布雛形 base + 値は spec・体裁は temp の 3 分離 → [`template-base-not-precedent-base`](#template-base-not-precedent-base) |
 | **提出用 PDF を再生成したら日付が変わった** / 報告書の日付が用務より前 | 様式の日付欄が `=TODAY()` のまま (= 生成日が入る) | fill 完了時に日付シリアルの固定値へ焼く → [`form-today-formula-freeze`](#form-today-formula-freeze) |
 | **印影が印刷でグレーになる** / blackAndWhite off にしたら背景色が出た | 様式の `blackAndWhite=True` は背景色抑制に必要で、 workbook 内の画像は必ず白黒化される | 白黒 PDF を生成後に **overlay-seal-pdf.py** で印影を乗せる (text anchor 配置 + 赤 px assert) → [`seal-color-pdf-overlay`](#seal-color-pdf-overlay) |
 | **印影・署名の画像を xlsx に置きたい** | openpyxl `add_image` は comments part を倍増させ Excel が破損警告 (+ formula cache も消える) | Excel osascript で `make new picture` (= anchor cell の left/top から points 指定) → [`xlsx-image-via-excel`](#xlsx-image-via-excel)、 script = `affix-image-xlsx.py` |
@@ -214,6 +215,28 @@ unzip -l form.xlsx | grep -iE 'drawing|media'
 **事後の救済 (= 既に喪失してしまった file の復元)**: Excel.app で xlsx を **open + save 1-pass** すると、 Excel が元 file に在った drawing 構造を知っているケース (= vmlDrawing 等の legacy drawing で base 雛形に痕跡が残っている場合) では drawing が **re-emit される**ことが観察されている (= `commentsDrawing1.vml` → `vmlDrawing1.vml` への戻りを観測した実例あり)。 ⚠️ **universal な復元保証ではない** (= sample size 限定、 base 雛形が drawing 情報を完全に失っているケースは復元しない)。 osascript snippet は [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) の修復経路を流用 (= 副次効果として formula cache も同時復元)。 = 喪失検出 → まず Excel.app open+save で復元を試す → drawing 数 (`unzip -l xxx.xlsx | grep -iE 'drawing'`) で復元成否を verify → 復元しなければ回避 2 (= drawing XML migration) で再構成。
 
 origin: 2026-06 連続発生した「様式の標題テキストボックスが openpyxl save で消える」 事故。 cell value の一致検証では検出できず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF 画像確認で初めて気づく。 2026-06-12 に前例 script 流用経路で再発 (= 上記 reflex の起源)。 2026-06-23 に Excel.app open+save 経由の drawing re-emit を観測 (= 上記「事後の救済」 の起源)。
+
+### <a id="template-base-not-precedent-base"></a>🔥 様式の新規 fill は「配布雛形 base + 3 分離」 — 前回提出したファイルを copy しない
+
+**症状**: 新しい申請 / 出張 / 届の書類を作るとき、 「前回窓口を通ったファイル」 を copy して日付と行き先だけ差し替える。 楽で、 一見安全に見える (= 通った実績があるから)。 実際には**同型の誤りを何度でも再生産する**。
+
+**なぜ前例 copy が事故るのか** (2026-07-31 に 1 日で 3 連再発した実測):
+
+1. **受理された ≠ 正しい** ([`convention-design-principles.md#acceptance-is-not-specification`](../docs/convention-design-principles.md#acceptance-is-not-specification))。 前回ファイルは「事務が見逃した誤り」 を含んだまま通っていることがある (= 実例: 事務記入欄への記入・記入要領の赤字残置を含んだまま受理)。 copy はその誤りごと運ぶ。
+2. **見えない残骸を運ぶ**。 提出に使わないシート (報告書等) に前 trip の literal (別の出張の経路・日付) が残っていて、 次の phase で顔を出す。 雛形なら数式が正しいシートから自動転記する。
+3. **体裁カスタムと値が混ざる**。 何が意図した記入で何が前 trip の遺物か、 diff の基準を失う。
+
+**処方 = 3 分離** (それぞれ home を分け、 混ぜない):
+
+| 何 | home | 備考 |
+|---|---|---|
+| **値** (埋める / 空にする / なぜ) | **機械照合可能な spec** (yaml 等) + 一次情報 (主催者 program・本人回答・財源記録) | 空欄は散文では守れない — 「事務の欄だから空」 と「まだ埋めていない」 は、 spec が `state: empty / owner: …` と宣言して初めて機械的に区別できる |
+| **体裁** (印字 scale・白黒・行高・print_area) | **生成 driver の使い捨て temp** | 元 xlsx に適用しない。 ⚠️ 配布雛形は素のままだと印刷に耐えないことがある (scale 無指定 = 横溢れでページ倍増 / blackAndWhite 無指定 = 入力欄の背景色が紙に出る) — その補正も temp で |
+| **雛形** | 配布物のまま不変 | 触らない。 手に入る最新版か確認してから使う |
+
+**再構築の実務** (= 既存の前例 base ファイルを雛形 base に移行する): 現行ファイルと雛形の**全 cell diff を機械で取る** — 差分 = 「意図した記入」 の完全リストが自動で得られる。 それを雛形 copy へ転記する (実測: 記入 70+ cells の様式 2 件で移行 ~30 分)。 diff に「現=None / 雛形=値」 として現れるのが**消すべき placeholder** で、 転記時に空文字を書く。
+
+origin: 2026-07-31。 前回受理ファイルを base にした結果、 事務記入欄への記入・赤字残置・決裁 routing 欄の欠落を同日中に 3 回指摘され、 user 「なんでちゃんともとからあるテンプレを使わないの？」 で本 pattern に転換。 diff 転記による再構築で前 trip の残骸 (別出張の経路 literal) も同時に発見・解消した。
 
 ### <a id="form-today-formula-freeze"></a>⚠️ 様式に埋まった `=TODAY()` は fill 完了時に**固定値へ焼く** (= 再生成のたびに日付が動く)
 
