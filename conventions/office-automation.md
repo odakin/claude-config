@@ -2065,6 +2065,41 @@ assert not blue, f"色付きガイダンス残存: {blue[:3]}"
 
 origin: 2026-06 官製様式 docx の記入要領削除。 (a) 上部様式見出しブロックを過剰削除 → 復元、 (b) ※注記を削除し漏れ、 (c) `doc.paragraphs` 走査で content control 内の variant を取りこぼし「全消し」 と誤宣言、 (d) 青字記入要領を **run 直接色だけ見て strip** → 段落 style 継承の青字 (`a0`) を素通し + phrase 検証も list 外で pass → user が rendered 色を目視して発覚、 を反復。 テンプレ基準 + PDF テキスト + **PDF span 色** の検証で決着。
 
+### <a id="form-guidance-color-residue"></a>xlsx form の記入要領は **条件付き書式**で赤い — font 色検査は空振りする
+
+[`docx-guidance-deletion`](#docx-guidance-deletion) の xlsx 版。 **同じ「色付き記入要領の削除漏れ」 だが、 色の出どころが違うので検出方法が変わる**。 docx の落とし穴 a が「run 直接色でなく style 継承」 だったのに対し、 xlsx は **条件付き書式 (conditional formatting)** で来る。
+
+**機構 — 様式作成者は placeholder を条件付き書式で宣言している**:
+
+```
+sqref='M38:R40'  type=containsText  text='日付選択'  dxf.font.color=FF9C0006
+```
+
+`FF9C0006` は Excel 標準スタイル「悪い」 の font 色 (= `rgb(156,0,6)`)。 つまり様式作成者は **「この欄にこの文字列が残っている = 未記入」 を機械可読な形で宣言している**。 記入すると文字列が消えてルールが外れ、 黒に戻る。
+
+- ⚠️ **`cell.font.color` を見る検査は 0 件を返して素通りする** — セル自身の font は黒 (`theme 1`) のまま。 「赤いのに font は黒」 が正常な状態。 ここで空振りすると「赤字は無い」 と誤結論する。
+- ⚠️ **同じ発行元の様式でも有無が割れる**: 実測で、 同一機関の出張様式 8 種のうち 6 種は CF ルールを持ち 2 種は 0 件だった。 さらに `page_setup.blackAndWhite` が `True` の様式は色が紙に出ない。 ∴ **「隣の様式では問題にならなかった」 は前例にならない** (= 様式ごとに CF 有無 × blackAndWhite 有無 で 4 通り)。
+
+**検出 — 2 段で見る** (`scripts/verify-form-guidance.py` がこの 2 段の実装):
+
+| 段 | 何を見るか | 性質 |
+|---|---|---|
+| xlsx | CF の `containsText` ルール (dxf font が赤系/青系) の trigger 文字列が、 その sqref 範囲のセルに**実在するか** | **厳密**。 様式自身の宣言なので原理的に偽陽性が無い。 生成前に落とせる |
+| PDF | 描画後の非黒 text span | heuristic。 CF を持たない様式・直接 font 色・図形内文字も拾う。 継承解決済 ([`docx-guidance-deletion`](#docx-guidance-deletion) 落とし穴 b と同じ理屈) |
+
+```python
+rule.text                      # ← containsText の trigger 文字列 (openpyxl が直接くれる)
+rule.dxf.font.color.rgb        # ← 'FF9C0006' 等。 赤系/青系なら記入要領の宣言
+for cr in cf.sqref.ranges:     # sqref は複数レンジを持ちうる ∴ ws[str(sqref)] では読めない
+    for row in ws[str(cr)]: ...
+```
+
+**gate の噛ませ方 — 生成前と生成後の 2 点**。 xlsx 段は Excel を起こす前に落とせるので安い。 PDF 段は生成後にしか走れないので、 **temp PDF を検査してから最終成果物 path に書く** (= FAIL 時にリポへ半端な成果物を残さない)。
+
+⚠️ **検出器であって修正器にしない**。 [`docx-guidance-deletion`](#docx-guidance-deletion) (1) のとおり「様式構造の見出しは残す / 記入要領は消す」 の境界判断は機械にはできない。 さらに **消すのが正解とも限らない** — placeholder が「単位表記」 を兼ねている欄 (例: `時` `分` に number_format `0\:` が付いている = 数値を入れると `9:` と表示される設計) では、 正解は「消す」 ではなく「**入れる**」。 機械は「N 個ある / どのセルか / trigger は何か」 まで出して人間に渡す。
+
+origin: 2026-07-31、 出張様式の休講欄 (`日付選択` / `時限`) と会期時間欄 (`時` / `分`) を赤字のまま印刷。 最初に試した `cell.font.color.rgb` 検査が 0 件を返して素通りし、 人の目視が唯一の gate だった。 同型の残置は同じ様式の 2 ヶ月前の提出物にも在り、 「前例では問題なかった」 という確認自体が別書類を見ていた。
+
 ### <a id="erad-forbidden-chars"></a>e-Rad の使用禁止文字 (= 入力フィールド charset 制限)
 
 e-Rad の long-textarea フィールド (= 研究目的・研究概要・経費根拠・役割分担等) は厳格な charset を強制。 以下は **エラーで弾かれる**:

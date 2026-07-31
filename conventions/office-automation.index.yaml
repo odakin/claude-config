@@ -334,7 +334,12 @@ sections:
     level: 3
     title: "docx form から記入要領 / ガイダンスを削除する: 構造は残す + content-control を見逃さない + 双方向検証"
     origin: "2026-06"
-    related: [manual-review-required, docx-pdf-stale-cache]
+    related: [manual-review-required, docx-pdf-stale-cache, form-guidance-color-residue]
+  - id: form-guidance-color-residue
+    level: 3
+    title: "xlsx form の記入要領は **条件付き書式**で赤い — font 色検査は空振りする"
+    origin: "2026-07-31"
+    related: [docx-guidance-deletion, manual-review-required, xlsx-visual-unobservable, pdf-visual-confirm]
   - id: erad-forbidden-chars
     legacy: "2-6"
     level: 3
