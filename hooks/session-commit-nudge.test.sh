@@ -21,6 +21,13 @@ FAILED_CASES=""
 
 # Isolated state + repo dirs (= test 全 case 共有、 各 case で session_id 分離)
 TEST_ROOT="$(mktemp -d -t session-commit-nudge-test.XXXXXX)"
+# 被検体 hook は repo path を `git rev-parse --show-toplevel` で得る。 Git for Windows は
+# これを native 形式 (= "C:/Users/...") で返す一方、 mktemp -d は MSYS 形式 (= "/tmp/...")
+# を返すため、 期待値と実出力が同じ dir を指したまま文字列として一致しない。 生成直後に
+# 同じ native 形式へ畳んでおく (cygpath 不在の POSIX では no-op)。
+if command -v cygpath >/dev/null 2>&1; then
+  TEST_ROOT="$(cygpath -m "$TEST_ROOT")"
+fi
 export SESSION_TOUCH_STATE_DIR="$TEST_ROOT/state"
 mkdir -p "$SESSION_TOUCH_STATE_DIR"
 
