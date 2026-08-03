@@ -277,6 +277,9 @@ SESSION_START_ENTRIES='[
   },
   {
     "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-claude-account-change.sh"}]
+  },
+  {
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-windows-bootstrap.sh"}]
   }
 ]'
 

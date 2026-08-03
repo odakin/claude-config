@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Windows (Git Bash / MSYS) 上で本リポの script・hook を動かす / 移植性のある shell・Python を書くとき
 category: infra
-summary: Windows (MSYS/Git Bash) 固有の silent failure 集 (= native Win32 tool の stdout は text mode ゆえ jq/gh が CRLF を吐き `while read` だけが CR を残す / drive root `C:` は `dirname` の不動点で `!= "/"` 型の上り詰め loop が無限化 / MSYS path `/tmp` と native path `C:/` は同じ dir を指しても文字列一致しない・native library は前者を開けない / Windows Python に `python3.exe` は無く Store の App Execution Alias が「Python」 とだけ印字して成功終了する / console は cp932 で emoji 印字が UnicodeEncodeError / core.autocrlf=true が shell script を壊す / Windows では hook は symlink でなく copy なのでリポ修正が installed hook に伝播しない / mkstemp の fd を捨てると Windows でだけ後続 save が Permission denied)。 共通 kernel = すべて例外を出さず「もっともらしく」 失敗するため症状が原因から遠い。 新規 Windows 機の一括 setup = `scripts/bootstrap-windows.ps1` (#bootstrap-one-liner、 実機検証待ち)
+summary: Windows (MSYS/Git Bash) 固有の silent failure 集 (= native Win32 tool の stdout は text mode ゆえ jq/gh が CRLF を吐き `while read` だけが CR を残す / drive root `C:` は `dirname` の不動点で `!= "/"` 型の上り詰め loop が無限化 / MSYS path `/tmp` と native path `C:/` は同じ dir を指しても文字列一致しない・native library は前者を開けない / Windows Python に `python3.exe` は無く Store の App Execution Alias が「Python」 とだけ印字して成功終了する / console は cp932 で emoji 印字が UnicodeEncodeError / core.autocrlf=true が shell script を壊す / Windows では hook は symlink でなく copy なのでリポ修正が installed hook に伝播しない / mkstemp の fd を捨てると Windows でだけ後続 save が Permission denied)。 共通 kernel = すべて例外を出さず「もっともらしく」 失敗するため症状が原因から遠い。 新規 Windows 機の一括 setup = `scripts/bootstrap-windows.ps1` + 以後の毎 session 自己治癒 = `hooks/session-start-windows-bootstrap.sh` (#bootstrap-one-liner、 実機検証待ち)
 -->
 # Windows (Git Bash / MSYS) の silent failure 集
 
@@ -18,6 +18,8 @@ irm https://raw.githubusercontent.com/odakin/claude-config/main/scripts/bootstra
 ```
 
 やること (全 step 冪等 = 導入済みは skip): ① Git for Windows (winget) + `core.autocrlf=false` ② Python 3 実体 (Store stub 判別つき) + `python3.exe` shim ③ `PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8` (User env) ④ Claude Code CLI (公式 installer、 `$env:CLAUDE_BOOTSTRAP_SKIP_CLI=1` で skip)。 詳細は script header 参照。
+
+**以後の維持は自動**: `setup.sh` を一度通せば SessionStart hook `hooks/session-start-windows-bootstrap.sh` が毎 session 冒頭に ①〜③ を自己点検・自動修復する (= python 再インストールで shim が消えても次 session で復活する自己治癒。 非 Windows では即 silent exit、 健全時は stamp fast path で subprocess ゼロ)。 ⚠️ 既存 install に新規追加された hook の settings.json 登録は post-merge では走らない — pull 後に `setup.sh` を 1 回再実行すること。
 
 背景: Claude desktop app の Code 機能は git 不在だと local session を門前払いし、 エラー文言の "Git" を非開発者は "GitHub" と区別できず「GitHub 登録」 の迷路に迷い込む (= 上流 FR [anthropics/claude-code#83539](https://github.com/anthropics/claude-code/issues/83539))。 gate の実体は git という開発ツールの不在 1 個であって、 GitHub アカウントは一切不要。
 

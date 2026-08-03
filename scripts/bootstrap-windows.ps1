@@ -91,7 +91,7 @@ if ($py -and ($py.Source -notlike '*WindowsApps*')) {
     $py3 = Join-Path (Split-Path $py.Source) 'python3.exe'
     if (Test-Path $py3) { Skip "python3.exe shim あり: $py3" }
     else { Copy-Item $py.Source $py3; Ok "python3.exe shim を copy: $py3" }
-    Warn 'Python 再インストール / アップデート後は shim が消えるので本 script を再実行すること'
+    Warn 'Python 再インストール / アップデート後は shim が消える (claude-config setup 済みなら SessionStart hook が次 session で自動復活、 未 setup なら本 script を再実行)'
 }
 
 Step 'User 環境変数 (cp932 console 対策)'
