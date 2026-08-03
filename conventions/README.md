@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 83 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 84 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -195,3 +195,5 @@ layer 1 (public) のドメイン固有規約 83 file をカテゴリ別に列挙
   - 共有リポ固有規約
 - **[shell-multibyte-truncation.md](shell-multibyte-truncation.md)** — shell で多バイト文字列を truncate・加工するとき
   - シェルの多バイト UTF-8 切り詰め gotchas (= cut -c/head -c/bash 部分文字列は byte 単位で多バイト文字を割り invalid UTF-8 → osascript 等下流で文字列全体が文字化け、 launchd は LANG 空で C locale ゆえ特に注意、 安全策=python 文字単位 truncate + valid UTF-8 検証 1-liner、 2026-06-24 osascript 通知 RCA)
+- **[windows-msys.md](windows-msys.md)** — Windows (Git Bash / MSYS) 上で本リポの script・hook を動かす / 移植性のある shell・Python を書くとき
+  - Windows (MSYS/Git Bash) 固有の silent failure 集 (= native Win32 tool の stdout は text mode ゆえ jq/gh が CRLF を吐き `while read` だけが CR を残す / drive root `C:` は `dirname` の不動点で `!= "/"` 型の上り詰め loop が無限化 / MSYS path `/tmp` と native path `C:/` は同じ dir を指しても文字列一致しない・native library は前者を開けない / Windows Python に `python3.exe` は無く Store の App Execution Alias が「Python」 とだけ印字して成功終了する / console は cp932 で emoji 印字が UnicodeEncodeError / core.autocrlf=true が shell script を壊す / Windows では hook は symlink でなく copy なのでリポ修正が installed hook に伝播しない / mkstemp の fd を捨てると Windows でだけ後続 save が Permission denied)。 共通 kernel = すべて例外を出さず「もっともらしく」 失敗するため症状が原因から遠い

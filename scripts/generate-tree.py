@@ -391,7 +391,12 @@ def run(root: Path, check: bool) -> int:
             if len(diff) > 12:
                 print(f"     … (+{len(diff) - 12} lines)")
         else:
-            path.write_text(new_text, encoding="utf-8")
+            # newline="\n" 必須: 既定 (newline=None) は "\n" を os.linesep へ変換するため、
+            # Windows で --write すると生成 3 file が丸ごと CRLF 化して全行 diff になる
+            # (= 実測 850 行の phantom diff)。 open() 経由なのは Path.write_text の
+            # newline 引数が 3.10+ のため。
+            with open(path, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(new_text)
             print(f"📝 {rel}: regenerated")
     return 1 if (check and drift) else 0
 
