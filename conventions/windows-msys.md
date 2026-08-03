@@ -1,13 +1,27 @@
 <!-- doc-meta
 when: Windows (Git Bash / MSYS) 上で本リポの script・hook を動かす / 移植性のある shell・Python を書くとき
 category: infra
-summary: Windows (MSYS/Git Bash) 固有の silent failure 集 (= native Win32 tool の stdout は text mode ゆえ jq/gh が CRLF を吐き `while read` だけが CR を残す / drive root `C:` は `dirname` の不動点で `!= "/"` 型の上り詰め loop が無限化 / MSYS path `/tmp` と native path `C:/` は同じ dir を指しても文字列一致しない・native library は前者を開けない / Windows Python に `python3.exe` は無く Store の App Execution Alias が「Python」 とだけ印字して成功終了する / console は cp932 で emoji 印字が UnicodeEncodeError / core.autocrlf=true が shell script を壊す / Windows では hook は symlink でなく copy なのでリポ修正が installed hook に伝播しない / mkstemp の fd を捨てると Windows でだけ後続 save が Permission denied)。 共通 kernel = すべて例外を出さず「もっともらしく」 失敗するため症状が原因から遠い
+summary: Windows (MSYS/Git Bash) 固有の silent failure 集 (= native Win32 tool の stdout は text mode ゆえ jq/gh が CRLF を吐き `while read` だけが CR を残す / drive root `C:` は `dirname` の不動点で `!= "/"` 型の上り詰め loop が無限化 / MSYS path `/tmp` と native path `C:/` は同じ dir を指しても文字列一致しない・native library は前者を開けない / Windows Python に `python3.exe` は無く Store の App Execution Alias が「Python」 とだけ印字して成功終了する / console は cp932 で emoji 印字が UnicodeEncodeError / core.autocrlf=true が shell script を壊す / Windows では hook は symlink でなく copy なのでリポ修正が installed hook に伝播しない / mkstemp の fd を捨てると Windows でだけ後続 save が Permission denied)。 共通 kernel = すべて例外を出さず「もっともらしく」 失敗するため症状が原因から遠い。 新規 Windows 機の一括 setup = `scripts/bootstrap-windows.ps1` (#bootstrap-one-liner、 実機検証待ち)
 -->
 # Windows (Git Bash / MSYS) の silent failure 集
 
 **いつ読む**: Windows 端末で `setup.sh` / hooks / `scripts/*` が「動いているように見えて実は違う」 とき。 または shell / Python を書いていて **POSIX 以外でも動く必要がある**とき。
 
 > 本 file の全項目は 2026-08-03 に Windows 11 Pro (MINGW64, 日本語 locale, Python 3.13) で実測した症状に基づく。 macOS/Linux では 1 つも再現しない — それが厄介さの本体で、 開発機で緑なら CI と手元で永久に見えない。
+
+## <a id="bootstrap-one-liner"></a>新規 Windows 機の一括 bootstrap (1 行)
+
+本 file の予防可能な地雷 (git 不在 gate / autocrlf / python3 stub / cp932) を、 新しい Windows 機で最初にまとめて design-out する script を用意している。 PowerShell に 1 行貼るだけ:
+
+```powershell
+irm https://raw.githubusercontent.com/odakin/claude-config/main/scripts/bootstrap-windows.ps1 | iex
+```
+
+やること (全 step 冪等 = 導入済みは skip): ① Git for Windows (winget) + `core.autocrlf=false` ② Python 3 実体 (Store stub 判別つき) + `python3.exe` shim ③ `PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8` (User env) ④ Claude Code CLI (公式 installer、 `$env:CLAUDE_BOOTSTRAP_SKIP_CLI=1` で skip)。 詳細は script header 参照。
+
+背景: Claude desktop app の Code 機能は git 不在だと local session を門前払いし、 エラー文言の "Git" を非開発者は "GitHub" と区別できず「GitHub 登録」 の迷路に迷い込む (= 上流 FR [anthropics/claude-code#83539](https://github.com/anthropics/claude-code/issues/83539))。 gate の実体は git という開発ツールの不在 1 個であって、 GitHub アカウントは一切不要。
+
+⚠️ **2026-08-03 起草時点で実機未検証** (起草環境 = macOS)。 初回実行者は成否を issue / PR で報告してほしい — 検証が取れたらこの marker を実測日付に置換する。
 
 ## 総論: 「POSIX に見える層」 と native binary の境界
 
