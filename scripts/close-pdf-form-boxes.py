@@ -27,7 +27,7 @@ USAGE:
   close-pdf-form-boxes.py input.pdf --dry-run       # 検出のみ報告 (描かない)
   close-pdf-form-boxes.py input.pdf --selftest      # 内蔵 self-test
 """
-import sys, os
+import sys, os, tempfile
 
 SNAP = 1.0     # 同一線とみなす座標スナップ (= 二重描画される細線を 1 本に、 整数丸め)
 MTOL = 2.5     # 線の存在判定の許容 (= この距離内に線があれば「在る」)
@@ -188,7 +188,7 @@ def _selftest():
     sh.draw_line(fitz.Point(150, 50), fitz.Point(150, 150))
     sh.draw_line(fitz.Point(50, 50), fitz.Point(150, 50))
     sh.finish(color=(0, 0, 0), width=0.75); sh.commit()
-    p = "/tmp/_cpfb_selftest.pdf"; d.save(p); d.close()
+    p = os.path.join(tempfile.gettempdir(), "_cpfb_selftest.pdf"); d.save(p); d.close()
     n1 = close_boxes(p, dry_run=True)
     assert n1 == 1, f"下辺欠けを検出できず (got {n1})"
     close_boxes(p)

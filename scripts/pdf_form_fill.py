@@ -662,6 +662,15 @@ def _selftest():
     import os
     print("=== pdf_form_fill --selftest ===")
 
+    def _mktemp(suffix, prefix):
+        # mkstemp は *開いた* fd を返す。 fd を捨てると handle が開いたままになり、
+        # Windows では後続の save() が "Permission denied" で落ちる (POSIX では
+        # fd leak として黙って溜まる)。 本 file の boost_signature_alpha() は
+        # 既にこの close を行っている — selftest 側だけが漏らしていた。
+        fd, name = tempfile.mkstemp(suffix=suffix, prefix=prefix)
+        os.close(fd)
+        return Path(name)
+
     # ⚠️ selftest fixture は ASCII label のみ使う (= fitz の built-in helv font は CJK
     # glyph を持たず、 CJK を insert_text しても text 層に乗らない / search_for で hit
     # しない。 algorithm 検証は ASCII で十分、 実 PDF (推薦書様式等) での probe は
@@ -677,7 +686,7 @@ def _selftest():
     page.draw_rect(fitz.Rect(150, 50, 300, 100), color=(0, 0, 0), fill=(0.95, 0.95, 0.95))
     # label text in left cell
     page.insert_text((70, 80), "Name", fontname="helv", fontsize=10)
-    fix_a = Path(tempfile.mkstemp(suffix=".pdf", prefix="fix_A_")[1])
+    fix_a = _mktemp(".pdf", "fix_A_")
     doc.save(fix_a)
     doc.close()
 
@@ -707,7 +716,7 @@ def _selftest():
     page.draw_rect(fitz.Rect(50, 30, 200, 70), color=(0, 0, 0), fill=(0.95, 0.95, 0.95))
     page.draw_rect(fitz.Rect(50, 70, 200, 130), color=(0, 0, 0), fill=(0.95, 0.95, 0.95))
     page.insert_text((70, 55), "Addr", fontname="helv", fontsize=10)
-    fix_b = Path(tempfile.mkstemp(suffix=".pdf", prefix="fix_B_")[1])
+    fix_b = _mktemp(".pdf", "fix_B_")
     doc.save(fix_b)
     doc.close()
 
@@ -735,7 +744,7 @@ def _selftest():
     page.draw_line(fitz.Point(250, 150), fitz.Point(450, 150))  # bottom
     page.draw_line(fitz.Point(250, 50), fitz.Point(250, 150))   # left (shared with outer)
     page.draw_line(fitz.Point(450, 50), fitz.Point(450, 150))   # right
-    fix_c = Path(tempfile.mkstemp(suffix=".pdf", prefix="fix_C_")[1])
+    fix_c = _mktemp(".pdf", "fix_C_")
     doc.save(fix_c)
     doc.close()
 
@@ -754,7 +763,7 @@ def _selftest():
     doc = fitz.open()
     page = doc.new_page(width=400, height=200)
     page.insert_text((100, 100), "Lonely", fontname="helv", fontsize=10)
-    fix_d = Path(tempfile.mkstemp(suffix=".pdf", prefix="fix_D_")[1])
+    fix_d = _mktemp(".pdf", "fix_D_")
     doc.save(fix_d)
     doc.close()
 
@@ -790,7 +799,7 @@ def _selftest():
         rgba[..., 1] = 128
         rgba[..., 2] = 128
         rgba[..., 3] = a_img
-        src = Path(tempfile.mkstemp(suffix=".png", prefix="sig_src_")[1])
+        src = _mktemp(".png", "sig_src_")
         Image.fromarray(rgba).save(src)
 
         # boost ×3, force_black=True
@@ -822,13 +831,13 @@ def _selftest():
     p1 = doc1.new_page(width=400, height=200)
     p1.insert_text((50, 50), "Hello correct value", fontname="helv", fontsize=10)
     p1.insert_text((50, 80), "B prior correction", fontname="helv", fontsize=10)
-    orig_p = Path(tempfile.mkstemp(suffix=".pdf", prefix="orig_")[1])
+    orig_p = _mktemp(".pdf", "orig_")
     doc1.save(orig_p)
     doc1.close()
 
     # identical copy (image-only mutation simulation)
     import shutil
-    same_p = Path(tempfile.mkstemp(suffix=".pdf", prefix="same_")[1])
+    same_p = _mktemp(".pdf", "same_")
     shutil.copy(orig_p, same_p)
 
     # case 1: same PDF, no image delta → 全 pass
@@ -843,7 +852,7 @@ def _selftest():
     doc2 = fitz.open()
     p2 = doc2.new_page(width=400, height=200)
     p2.insert_text((50, 50), "Hello DIFFERENT", fontname="helv", fontsize=10)
-    diff_p = Path(tempfile.mkstemp(suffix=".pdf", prefix="diff_")[1])
+    diff_p = _mktemp(".pdf", "diff_")
     doc2.save(diff_p)
     doc2.close()
     errs = verify_pdf_mutation(orig_p, diff_p,
