@@ -64,7 +64,13 @@ while [ "$dir" != "/" ] && [ -n "$dir" ]; do
     REPO_ROOT="$dir"
     break
   fi
-  dir="$(dirname "$dir")"
+  # 不動点検出で上り詰めを止める。 Windows (MSYS/Git Bash) の drive root は
+  # `/` でなく `C:` で、 `dirname C:` は `C:` を返す = 上の `!= "/"` guard に
+  # 永久に到達せず無限 loop になる (= PreToolUse hook が Edit/Write を無限に
+  # block する)。 POSIX でも `dirname /` は `/` なので同じ不動点で安全に閉じる。
+  parent="$(dirname "$dir")"
+  [ "$parent" = "$dir" ] && break
+  dir="$parent"
 done
 
 [ -z "${REPO_ROOT:-}" ] && exit 0
