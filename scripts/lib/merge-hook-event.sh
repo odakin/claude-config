@@ -45,5 +45,5 @@ merge_hook_event() {
                 ".hooks.${event} += [\$entry]" \
                 "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
         fi
-    done < <(printf '%s' "$entries" | jq -r '.[].hooks[]?.command | sub("^.*/hooks/"; "")')
+    done < <(printf '%s' "$entries" | jq -r '.[].hooks[]?.command | sub("^.*/hooks/"; "")' | tr -d '\r')
 }
