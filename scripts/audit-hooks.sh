@@ -59,7 +59,7 @@ while IFS= read -r cmd; do
 done < <(jq -r '
   .hooks // {} | to_entries | .[] |
   .value[]? | .hooks[]? | .command // empty
-' "$SETTINGS" 2>/dev/null)
+' "$SETTINGS" 2>/dev/null | tr -d '\r')
 
 # bash 3.2 では空配列に対する "${arr[@]}" は unbound、 set -u と組合せ防御
 [ ${#registered_files[@]} -eq 0 ] && registered_files=("")

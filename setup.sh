@@ -753,7 +753,7 @@ else
     echo "  User: $GH_USER"
 
     # Get all repo names from GitHub
-    REPOS=$(gh repo list "$GH_USER" --limit 100 --json name --jq '.[].name')
+    REPOS=$(gh repo list "$GH_USER" --limit 100 --json name --jq '.[].name' | tr -d '\r')
     CLONED=0
     SKIPPED=0
     RENAMED_SKIP=0
@@ -1442,7 +1442,7 @@ else
                 echo "    - $name"
                 MISSING_COUNT=$((MISSING_COUNT + 1))
             fi
-        done < <(gh repo list --visibility public --limit 200 --json name --jq '.[].name' 2>/dev/null)
+        done < <(gh repo list --visibility public --limit 200 --json name --jq '.[].name' 2>/dev/null | tr -d '\r')
         if [ "$MISSING_COUNT" -gt 0 ]; then
             echo "  To opt each in, create \`.claude/public-repo.marker\` and re-run setup.sh."
         fi
