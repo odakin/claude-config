@@ -18,6 +18,7 @@ If a user pointed you at this repo and asked you to set it up, **read this secti
 
 **Flow** (full step list in [CLAUDE.md](CLAUDE.md)):
 
+0. On Windows, if `git` or a real `python3` is missing (or the Claude app itself is blocked on the Git gate), run the bootstrap one-liner first — see [Quick start → Windows](#windows-start-here-fresh-machine). `setup.sh` needs Git Bash to run at all.
 1. Run `./setup.sh` end-to-end. It is idempotent — safe to re-run.
 2. Personal-layer detection is automatic if the user already has a `*-prefs` repo with a `.claude-personal-layer` marker. If not, ask the user **once** (not per step) whether they want one started — [`templates/personal-layer/`](templates/personal-layer/) is the skeleton.
 3. When done, report: what landed, what was skipped (with reason), and what optional capabilities (MCP servers, scheduled tasks, additional `conventions/`, …) they may want next.
@@ -51,6 +52,16 @@ cd claude-config && ./setup.sh
 ```
 
 `setup.sh` handles symlinks, global gitignore, Claude Code hooks and permissions, a `post-merge` hook for auto-sync, LaTeX pre-commit hooks, git-crypt auto-unlock, and (on macOS) a PATH snapshot fix, a Claude desktop folder-picker pin (default-on, opt-out — see [conventions/claude-app-cwd-pin.md](conventions/claude-app-cwd-pin.md)), plus optional Hammerspoon config. **Full step list and exactly what it touches**: [CLAUDE.md](CLAUDE.md).
+
+### Windows: start here (fresh machine)
+
+If the Claude app refuses to start Code sessions ("Install Git, Git for Windows is required..." — this is about the *git tool*, **not** GitHub; no GitHub account is needed), or the machine has none of the prerequisites yet, paste this one line into PowerShell and everything below becomes possible:
+
+```powershell
+irm https://raw.githubusercontent.com/odakin/claude-config/main/scripts/bootstrap-windows.ps1 | iex
+```
+
+It idempotently installs Git (with `core.autocrlf=false`), real Python 3 (plus the `python3.exe` shim), UTF-8 console env vars, and the Claude Code CLI. After `setup.sh` runs, a SessionStart hook re-checks and self-heals these on every session ([conventions/windows-msys.md](conventions/windows-msys.md#bootstrap-one-liner)).
 
 On Windows (MSYS/Cygwin) symlinks are replaced with file copies and the `post-merge` hook keeps them in sync.
 

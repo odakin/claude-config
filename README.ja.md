@@ -18,6 +18,7 @@ user がこのリポを指して「セットアップして」 と頼んだ場�
 
 **Flow** (フル step list は [CLAUDE.md](CLAUDE.md)):
 
+0. Windows で `git` や実体の `python3` が無い場合 (もしくは Claude アプリ自体が Git gate で止まっている場合)、先に bootstrap 1 行を実行する — [クイックスタート → Windows](#windows-の人はまずこれ-まっさらな機) 参照。 `setup.sh` 自体が Git Bash 前提。
 1. `./setup.sh` を end-to-end で実行。 idempotent なので re-run 安全。
 2. Personal-layer 検出は automatic (= user に既に `*-prefs` リポ + `.claude-personal-layer` marker があれば script が auto-detect)。 なければ user に**一度だけ**「start するか」 を聞く ([`templates/personal-layer/`](templates/personal-layer/) が skeleton) — step ごとに聞かない、 一度きり。
 3. 完了したら報告: 何が land したか / 何を skip したか (理由付き) / 次に検討しうる optional capabilities (MCP servers / scheduled tasks / 追加の `conventions/` / …)。
@@ -51,6 +52,16 @@ cd claude-config && ./setup.sh
 ```
 
 `setup.sh` は symlink・グローバル gitignore・Claude Code hooks とパーミッション・`post-merge` による自動同期・LaTeX pre-commit hooks・git-crypt 自動 unlock、macOS では PATH スナップショット修正・Claude デスクトップの folder picker 固定（default-ON・opt-out 可、 [conventions/claude-app-cwd-pin.md](conventions/claude-app-cwd-pin.md)）・Hammerspoon 設定（オプション）までを一括で処理する。**全ステップの列挙と副作用の範囲**は [CLAUDE.md](CLAUDE.md) を参照。
+
+### Windows の人はまずこれ (まっさらな機)
+
+Claude アプリが Code を始めさせてくれない場合（「Install Git, Git for Windows is required...」— これは *git というツール* の話で **GitHub とは無関係**、GitHub アカウントは一切不要）、または前提ツールが何も入っていない場合、PowerShell にこの 1 行を貼れば以降が全部可能になる:
+
+```powershell
+irm https://raw.githubusercontent.com/odakin/claude-config/main/scripts/bootstrap-windows.ps1 | iex
+```
+
+Git（`core.autocrlf=false` 込み）・Python 3 実体（`python3.exe` shim 付き）・UTF-8 console 環境変数・Claude Code CLI を冪等に一括導入する。`setup.sh` を通した後は SessionStart hook が毎セッション自己点検・自動修復する（[conventions/windows-msys.md](conventions/windows-msys.md#bootstrap-one-liner)）。
 
 Windows（MSYS/Cygwin）では symlink の代わりにファイルコピーを使い、`post-merge` hook が自動同期する。
 
