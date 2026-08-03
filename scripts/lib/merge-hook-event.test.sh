@@ -66,7 +66,7 @@ jq -e '.hooks.Stop[] | select(.hooks[].command | contains("c-multi.sh nudge"))' 
   && ok || miss "case5: arg-variant hook not installed into Stop"
 
 # --- case 6: 導出リストが JSON と一致 (hardcode 無しの根拠) ---
-derived=$(printf '%s' "$ENTRIES" | jq -r '.[].hooks[]?.command | sub("^.*/hooks/"; "")' | tr '\n' ' ')
+derived=$(printf '%s' "$ENTRIES" | jq -r '.[].hooks[]?.command | sub("^.*/hooks/"; "")' | tr -d '\r' | tr '\n' ' ')
 [ "$derived" = "a-guard.sh b-nudge.sh c-multi.sh track " ] && ok || miss "case6: derived list mismatch: '$derived'"
 
 echo ""
