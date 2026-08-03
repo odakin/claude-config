@@ -30,6 +30,11 @@ sections:
     level: 3
     title: "openpyxl の save は既存の textbox / shape (= 標題・縦書きラベル・図形) を破壊する"
     related: [excel-osascript-cell-write, label-overwrite-bug, openpyxl-clears-formula-cache]
+  - id: template-base-not-precedent-base
+    level: 3
+    title: "🔥 様式の新規 fill は「配布雛形 base + 3 分離」 — 前回提出したファイルを copy しない"
+    origin: "2026-07-31"
+    related: [form-dump-first, template-provenance-check, diff-form-xlsx-detection, form-guidance-color-residue]
   - id: form-today-formula-freeze
     level: 3
     title: "様式に埋まった =TODAY() は fill 完了時に固定値へ焼く (= 再生成のたびに日付が動く)"
