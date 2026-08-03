@@ -225,6 +225,7 @@ def _selftest():
             for k, v in values.items():
                 ws[k] = v
             f = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+            f.close()  # Windows: 開いた handle が残ると save() が Permission denied
             wb.save(f.name)
             return f.name
 
@@ -256,6 +257,7 @@ def _selftest():
                      "M40": "日付選択", "S40": "時限", "AC25": "時", "AE25": "分"}.items():
             ws[k] = v
         f = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+        f.close()  # Windows: 開いた handle が残ると save() が Permission denied
         wb.save(f.name)
         hits = check_xlsx(f.name)
         n = len([h for h in hits if h[0] == FAIL])
@@ -276,6 +278,7 @@ def _selftest():
                 pg.insert_text((72, y), text, fontsize=11, color=color)
                 y += 20
             f = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+            f.close()  # Windows: 開いた handle が残ると save() が Permission denied
             d.save(f.name)
             d.close()
             return f.name

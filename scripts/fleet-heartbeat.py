@@ -94,7 +94,11 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\[[0-9]+[A-Z]")
 
 def sh(cmd, timeout=20):
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        # errors="replace": 子プロセスの出力が現在の locale encoding で decode できない
+        # ことがある (= Windows の cp932 出力を UTF-8 で読む等)。 既定の "strict" だと
+        # decode が capture 用の reader thread 内で例外になり、 その thread は本 try/except
+        # の外なので握り潰せず、 traceback を撒いたうえで出力が失われる。
+        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=timeout)
         return r.returncode, r.stdout
     except Exception:
         return 1, ""
@@ -138,10 +142,16 @@ def scan_inventory(spec: str):
     expanded = os.path.expanduser(pat)
     star = expanded.find("*")
     prefix = expanded[:star] if star >= 0 else ""
+    # glob() は platform の separator で返す (Windows は "\") 一方 pattern は "/" で
+    # 書かれる。 素の startswith 比較は Windows で必ず外れ、 basename fallback に落ちて
+    # 全 entry が glob 末尾の file 名 (= "credentials.json" 等) に潰れる = inventory が
+    # 「1 個だけある」 と誤報告する。 両辺を "/" に正規化してから比較・分割する。
+    prefix_n = prefix.replace(os.sep, "/")
     names = set()
     for m in globmod.glob(expanded):
-        rest = m[len(prefix):] if (prefix and m.startswith(prefix)) else os.path.basename(m)
-        n = rest.split(os.sep, 1)[0]
+        m_n = m.replace(os.sep, "/")
+        rest = m_n[len(prefix_n):] if (prefix_n and m_n.startswith(prefix_n)) else os.path.basename(m)
+        n = rest.split("/", 1)[0]
         if n:
             names.add(n)
     return label, sorted(names)
