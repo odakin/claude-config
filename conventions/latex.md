@@ -113,6 +113,30 @@ git worktree add /tmp/baseline-wt HEAD && (cd /tmp/baseline-wt && <build>)
 
 **復旧 (pop が abort した場合):** 作業は失われていない (abort 時 stash entry は保持される、 `git stash list` で確認)。 衝突している生成物 (= baseline build が作った側、 どうせ再生成できる) を `git checkout -- <生成物>` で捨ててから `git stash pop` すれば全編集が戻る。 pop 成功後、 生成物は編集後 source から再 build すれば一致する。
 
+## <a id="out-of-tree-build-input-shadowing"></a>tree 外 build で source dir を入力 path の先頭に置かない (古い生成物が新しい生成物を隠す)
+
+**ルール:** baseline 比較や scratch build のために source tree の外で compile するとき、 `TEXINPUTS` / `BIBINPUTS` / `BSTINPUTS` に source dir を **cwd より先**に置かない。 cwd を先頭にする:
+
+```bash
+# 正: cwd (= scratch dir、 今の run が生成した .bbl/.aux がある) を先に見る
+export TEXINPUTS=".:$SRC:" BIBINPUTS=".:$SRC:" BSTINPUTS=".:$SRC:"
+# 誤: source dir が先。 $SRC に残る古い paper.bbl 等を掴む
+export TEXINPUTS="$SRC:"
+```
+
+**Why:** source dir には過去の in-place compile が残した生成物 (`.bbl` / `.aux` / `.toc` / `.ind`) が untracked で残っていることがある。 `$SRC` が先だと、 scratch dir で bibtex が**今まさに書いた** `.bbl` を LaTeX が読まず、 source dir 側の**古い** `.bbl` を読む。 症状は「新しく追加した `\cite` だけが undefined」「TOC の項目が古い」 等、 **自分の編集と無関係に見える偽陽性**で、 しかも bib entry を grep すると存在するので原因に辿り着きにくい。
+
+**診断:** 生成物側と aux 側の key 集合を突き合わせる。 数が 1 つ違い、 欠けている key が「最近追加されたもの」 なら入力 path の shadowing を疑う:
+
+```bash
+comm -23 <(grep -o '^\\bibitem{[^}]*}' paper.bbl | sed 's/.*{\(.*\)}/\1/' | sort) \
+         <(grep -o 'bibcite{[^}]*}'    paper.aux | sed 's/.*{\(.*\)}/\1/' | sort)
+```
+
+実 incident (2026-08-04): 共著論文の baseline 比較で `TEXINPUTS="$SRC:"` を使い、 共著者が当日追加した cite 1 件を「未解決」 と誤報告しかけた。 `.bbl` には `\bibitem` があるのに `.aux` の `\bibcite` が 1 件だけ足りない、 が決め手だった。 **根治は scratch dir を汚さないことでなく、 source dir 側の古い生成物を掴ませないこと** — source tree で一度でも in-place compile したことがあるなら常に該当する。
+
+⚠️ 同じ shadowing は `\input` / `\includegraphics` の解決先でも起きる (= source dir 側の古い生成 tex / 古い図を掴む)。 cwd 優先は path 変数 3 つ全部に効かせる。
+
 ## <a id="text-structure-hierarchy"></a>文章の構造化と見出し階層 (`\paragraph` は `\subsubsection` より下)
 
 **ルール (3 段):**

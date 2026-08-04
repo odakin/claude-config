@@ -22,6 +22,9 @@ sections:
   - id: stash-roundtrip-build-artifacts
     level: 2
     title: "baseline 比較に git stash round-trip を使わない (tracked 生成物と衝突する)"
+  - id: out-of-tree-build-input-shadowing
+    level: 2
+    title: "tree 外 build で source dir を入力 path の先頭に置かない (古い生成物が新しい生成物を隠す)"
   - id: text-structure-hierarchy
     level: 2
     title: "文章の構造化と見出し階層 (`\\paragraph` は `\\subsubsection` より下)"
