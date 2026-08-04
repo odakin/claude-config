@@ -50,6 +50,7 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 | **印影が印刷でグレーになる** / blackAndWhite off にしたら背景色が出た | 様式の `blackAndWhite=True` は背景色抑制に必要で、 workbook 内の画像は必ず白黒化される | 白黒 PDF を生成後に **overlay-seal-pdf.py** で印影を乗せる (text anchor 配置 + 赤 px assert) → [`seal-color-pdf-overlay`](#seal-color-pdf-overlay) |
 | **印影・署名の画像を xlsx に置きたい** | openpyxl `add_image` は comments part を倍増させ Excel が破損警告 (+ formula cache も消える) | Excel osascript で `make new picture` (= anchor cell の left/top から points 指定) → [`xlsx-image-via-excel`](#xlsx-image-via-excel)、 script = `affix-image-xlsx.py` |
 | 標題・縦書きラベル・textbox が消えた | openpyxl の save が drawing (shape) を破壊 | Excel osascript / fitz 直印字 / 別 file XML 移植 の 3 経路 → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
+| 様式の**チェックボックスの箱が紙 / PDF から消える** (窓口から「どちらか判別できない」 と照会が来る) | openpyxl の save が form control (= `xl/ctrlProps/*` + VML Checkbox) を drop (標題 textbox と同経路・より無症状) | 雛形と ctrlProps 数比較で検出 → 該当側 label セルに文字 ☑ 前置の fallback → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
 | formula 編集後 PDF / xlsx で別 cell の値が空欄 / `None` 化 | openpyxl の save が周辺 cell の formula cache を消す (= AST は保持するが cached value を再計算せず drop) | sentinel guard で abort + Excel.app open+save で再計算復元 → [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) |
 | 値は書けたが見た目を PDF で確認したい | — | [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) で render。 ⚠️ **Quick Look (`qlmanage`) は textbox/標題 を忠実に描かない** → drawing 健在は zip 内 drawing 数で、 体裁は xlsx-to-pdf.sh の PDF で |
 | 承認欄/印影欄ボックスの**下罫線が出ない** (box が下に開く) | Excel→PDF が最下部の結合セル下罫線を落とす (罫線は xlsx に在るのに出力で消える) | **`close-pdf-form-boxes.py`** を pipeline 最後に挟む (= 開いた枠を全検出して閉じる、 print_area 拡張では直らない) → [`excel-pdf-bottom-border-drop`](#excel-pdf-bottom-border-drop) |
@@ -192,11 +193,14 @@ for sname in wb.sheetnames:
 
 **原因**: openpyxl は drawing part (`xl/drawings/drawingN.xml`) を完全には round-trip できない。 load 時に解釈できない shape を保持せず、 save 時に drop する。 **`add_image` で入れた純画像は残るが、 textbox / autoshape / グループ化図形は失われる**。
 
+**form control (checkbox / radio / dropdown) も同じ経路で全滅する**: `xl/ctrlProps/*` + vmlDrawing 内の `ObjectType="Checkbox"` + 対応 drawingML part がまとめて drop される (= 実測: checkbox 22 個の様式雛形を load→save 1 往復しただけで 0 個)。 標題消失より**無症状** — 値も体裁も一見正常なまま「該当に ☑」 欄の**箱そのものが紙から消え**、 窓口の「どちらにチェックか判別できない」 照会で初めて発覚する。 ⚠️ 一度消えると下記「事後の救済」 の Excel open+save re-emit は **form control には効かない** (= 喪失後に Excel 経由編集を重ねた file が 0 個のままだった観測)。 検出 = 雛形と成果物で `python3 -c "import zipfile;print(sum(1 for n in zipfile.ZipFile('f.xlsx').namelist() if 'ctrlProp' in n))"` を比較。 復旧 = 回避 1 (Excel fill) / 回避 2 (XML 移植) のほか、 **実務 fallback = 該当側 label セルに文字 ☑ を前置** (= cell 値なので xlsx でも PDF text 層でも機械 assert でき gate 化できる。 未チェック側の空箱は戻らないが、 窓口要求が「該当側の判別」 である限り足りる)。
+
 **事前確認** (= 触る前に drawing の有無と種類を判定):
 ```bash
-unzip -l form.xlsx | grep -iE 'drawing|media'
+unzip -l form.xlsx | grep -iE 'drawing|media|ctrlProp'
 #   xl/drawings/drawing1.xml          → twoCellAnchor/oneCellAnchor の textbox/shape (= openpyxl が壊す。要保護)
 #   xl/drawings/commentsDrawingN.vml  → セルコメントの吹き出し (= 別物。標題ではない)
+#   xl/ctrlProps/ctrlPropN.xml        → form control (checkbox 等。= openpyxl が全滅させる。要保護)
 #   xl/media/imageN.png               → 埋め込み画像
 ```
 
