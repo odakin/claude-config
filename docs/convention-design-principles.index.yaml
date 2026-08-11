@@ -201,6 +201,10 @@ sections:
     legacy: "8.20"
     level: 3
     title: "8.20 「通った」 は仕様ではない — 前例成果物を base にするとき、 受理は正しさの証拠にならない"
+  - id: noise-obligation-signal-sharing
+    legacy: "8.21"
+    level: 3
+    title: "8.21 noise 抑制の識別 signal を義務 mail が共有する — bucket 混在には obligation-class override"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

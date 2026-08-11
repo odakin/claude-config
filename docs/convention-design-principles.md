@@ -791,6 +791,21 @@ origin: 2026-07-31、 官製様式 (出張申請) の提出物を作る際に、
 
 ---
 
+### <a id="noise-obligation-signal-sharing"></a>8.21 noise 抑制の識別 signal を義務 mail が共有する — bucket 混在には obligation-class override
+
+noise 抑制 rule は **identity signal** (= sender domain / ML bracket / mail category) に key する。 低頻度の義務 mail が高 volume の noise とその signal を**共有**するとき (= 同一 domain から勧誘 spam と依頼が両方来る、 同一 ML bracket で案内と召集が両方来る)、 signal 単位の suppress は義務を silent drop する。 [`§8.17`](#broadcast-obligation-blind-spot) が**宛先軸の false negative** (= broadcast が per-person 検出を貫通) なのに対し、 本節は**抑制軸の false positive** (= noise filter が義務を積極的に殺す)。 [`§8.8`](#proxy-blind-spot) の 1 具体形。
+
+**なぜ登録時に見落とすのか**: 抑制 entry を足す burn-down は「surface 件数を減らす」 が目標関数で、 sample された着信の**多数派** (= spam) だけを見て domain を分類する。 base rate が高い noise に低頻度の義務が混在する分布では、 観測の多数決は常に「noise domain」 と結論する — 義務側は登録の瞬間に問わなければ永遠に問われない。 最悪形は「義務を surface するために作った機構の tuning で、 hit してきた義務 mail を noise 側に登録して黙らせる」 (= 検出器の感度向上が抑制 list の肥大で相殺され、 しかも登録は『チューニング完了』 として成功に見える)。
+
+**対策 pattern**:
+- **登録時 gate (= 判断規律)**: noise entry を足す瞬間に「この signal を共有する義務 mail は何か?」 を 1 問挟む。 義務密度が高い sender class (= editorial office / 事務局 / 委員会 system) はそもそも登録しない。
+- **obligation-class override (= 機械層)**: 義務 lifecycle の class pattern (= 依頼・督促・accept/decline 要求・取消) を、 抑制の**全軸より優先**して貫通させる例外レイヤーとして持つ (= allowlist-over-blocklist)。 抑制 entry の増減と独立に義務が守られる。
+- **記録付き opt-out (= 例外の例外)**: 「義務 class だが既定 decline とする」 sender は、 抑制 list へ戻すのでなく override 側の**明示 opt-out** に置く (= 判断の日付・理由を併記)。 silent な再 suppress と、 監査可能な意思決定を区別する。
+
+reflex: noise blocklist / 抑制 filter に entry を足す瞬間に「この signal から義務も届くか?」 を問う。 義務 mail の miss を RCA するとき、 検出器の感度でなく**抑制 list との交差**を第一容疑にする (= 同型 incident の axis が bracket / domain / category と違っても generator は同一)。
+
+origin: 2026-08、 出版社 domain の noise 登録 (= 出版勧誘 spam が着信の大半) が同一 domain から来る査読依頼 + 督促を全 surface 段で suppress し、 未応答のまま依頼引き上げに至った RCA。 retroactive sweep で同型 3 件 (= 別誌の改訂 round 再依頼が督促多数の末に referee 解任 等)、 うち 2 件の抑制 entry は「義務を surface する名指し検出を tuning した同じ commit」 で登録されていた。 [`§8.17`](#broadcast-obligation-blind-spot) origin の sibling 観測 (= 2026-06 の ML bracket 軸 3 件) と合わせ、 axis と detector が違っても generator が同一 ([`§9.8`](#single-observation-scope-check) 充足)。 instance (= override 実装・pattern / sender 具体値) は個人層 config に残置 (= kernel-up / instance-down)。 domain 別 instantiation (査読依頼) = [`peer-review-workflow.md#invitation-intake`](../conventions/peer-review-workflow.md#invitation-intake)。
+
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。

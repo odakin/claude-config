@@ -49,6 +49,8 @@ surface 機構の noise filter に落ちて人間に届かなかった)。
   義務 class の subject pattern (例: `(?i)invitation to review` / `(?i)review request`)
   を blocklist より**優先する override** として設計する (= allowlist-over-blocklist)。
   editorial office 系 domain (義務密度がほぼ 100% の sender) はそもそも登録しない。
+  一般則 (= 査読以外の義務 class にも共通する signal 共有の構造) =
+  [`convention-design-principles.md#noise-obligation-signal-sharing`](../docs/convention-design-principles.md#noise-obligation-signal-sharing)。
 - **取消・解任通知も記録**: 「取り消されたから対応不要」 で流さない — 無応答による
   解任は incident として記録し、 どの filter / 経路で落ちたかを RCA してから閉じる。
 
