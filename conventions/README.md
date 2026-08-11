@@ -100,7 +100,7 @@ layer 1 (public) のドメイン固有規約 84 file をカテゴリ別に列挙
 - **[paper-submission.md](paper-submission.md)** — 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき
   - 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕)、 投稿 checklist + **投稿後の status 追跡** (= ポータルの role 略語 AE/EIC/ADM の役割分担・status 階梯の読み方・Author Center は corresponding author しか見られないので共著者への共有義務・催促の宛先) 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
 - **[peer-review-workflow.md](peer-review-workflow.md)** — referee・審査委員として他者の paper / 申請書を評価するとき
-  - 他者の paper / 申請書を referee・審査委員として評価する時の規律 (= SoT 4 file pattern・引用文献の現物 verify・framework calibration・scoring scale 整合・既送信 score の不可逆性。 paper-audit / rebuttal-letter / erad-submission の sibling で方向違い)
+  - 他者の paper / 申請書を referee・審査委員として評価する時の規律 (= invitation intake 〔依頼は失効型義務、 noise blocklist に査読 domain を入れない〕・SoT 4 file pattern・引用文献の現物 verify・framework calibration・scoring scale 整合・既送信 score の不可逆性。 paper-audit / rebuttal-letter / erad-submission の sibling で方向違い)
 - **[rebuttal-letter.md](rebuttal-letter.md)** — referee report への point-by-point 返信を書くとき
   - referee report への point-by-point 返信 (= author response) 作成 6 reflex (= 回答は本文 grep 照合・起源でない文献は see e.g.・referee 誤記は静かに正す・自己否定語回避・全 comment フル引用・旧式番号は submission 版基準)、 paper-audit.md と相補
 - **[tikz-pgfplots.md](tikz-pgfplots.md)** — TikZ / pgfplots を含む LaTeX project で図を作るとき
