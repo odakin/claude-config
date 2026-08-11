@@ -242,6 +242,8 @@ origin: 2026-06 連続発生した「様式の標題テキストボックスが 
 
 origin: 2026-07-31。 前回受理ファイルを base にした結果、 事務記入欄への記入・赤字残置・決裁 routing 欄の欠落を同日中に 3 回指摘され、 user 「なんでちゃんともとからあるテンプレを使わないの？」 で本 pattern に転換。 diff 転記による再構築で前 trip の残骸 (別出張の経路 literal) も同時に発見・解消した。
 
+**既知の誤りを含む提出版の保存 folder には quarantine marker を置く** (2026-08-11 追記): 提出済み版は史実 record として書き換えずに保存する ([`#errata-on-preserved-records`](../docs/convention-design-principles.md#errata-on-preserved-records) family) が、 **無印のまま置くと将来の作業者 (人間・AI とも) が「通った実績のあるファイル」 として copy する** — 本 pattern の origin 事故がまさにそれで、 散文の errata 記録だけでは再発した。 folder 冒頭に ls で必ず目に入る marker file (例: `00-⚠️-DO-NOT-USE-AS-BASE.md`) を置き、 中身は「既知の誤り正本への pointer + 本 § への参照」 の最小警告に留める (= 誤り明細の payload は errata 正本側に一元化、 重複させない)。
+
 ### <a id="form-today-formula-freeze"></a>⚠️ 様式に埋まった `=TODAY()` は fill 完了時に**固定値へ焼く** (= 再生成のたびに日付が動く)
 
 **症状**: 官製様式の日付欄が `=TODAY()` で作られていることがある (= 「作成日が自動で入る」 親切機能のつもり)。 これを放置したまま提出用 PDF を生成すると、 **生成し直すたびに日付が変わる**。 提出済みの紙が 7/24 付なのに、 差し戻し対応で PDF を作り直したら 7/27 付になる — **相手が受け取った書類と手元の再生成物が食い違う**。
