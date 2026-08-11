@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: referee・審査委員として他者の paper / 申請書を評価するとき
 category: paper
-summary: 他者の paper / 申請書を referee・審査委員として評価する時の規律 (= SoT 4 file pattern・引用文献の現物 verify・framework calibration・scoring scale 整合・既送信 score の不可逆性。 paper-audit / rebuttal-letter / erad-submission の sibling で方向違い)
+summary: 他者の paper / 申請書を referee・審査委員として評価する時の規律 (= invitation intake 〔依頼は失効型義務、 noise blocklist に査読 domain を入れない〕・SoT 4 file pattern・引用文献の現物 verify・framework calibration・scoring scale 整合・既送信 score の不可逆性。 paper-audit / rebuttal-letter / erad-submission の sibling で方向違い)
 -->
 # Peer Review Workflow (= as a reviewer of external proposals / papers)
 
@@ -16,6 +16,7 @@ reviewer として外部の grant proposal / scientific paper / 申請書 等を
 
 ## TOC
 
+- [Invitation intake (= 依頼受信 → 即応。 lifecycle の入口)](#invitation-intake)
 - [SoT 4 file pattern (= 1 review case の source 分離)](#sot-four-file-pattern)
 - [Source 分離 (= AI analysis vs reviewer judgment)](#source-separation)
 - [Frontmatter discipline (= 各 file の metadata)](#frontmatter-discipline)
@@ -25,6 +26,31 @@ reviewer として外部の grant proposal / scientific paper / 申請書 等を
 - [Scan PDF → markdown transcription discipline](#scan-pdf-transcription)
 - [提出済 score の不可逆性 + audit-trail](#submitted-score-irreversibility)
 - [Cross-references](#cross-references)
+
+---
+
+## <a id="invitation-intake"></a>Invitation intake (= 依頼受信 → 即応。 lifecycle の入口)
+
+本 doc の以降の節は「review を引き受けた後」 の規律だが、 lifecycle はその前の
+**依頼 mail の受信**から始まる。 ここが最も落ちやすい (= 2026-08 実例: 依頼→督促→
+5 日で自動取消 / 別誌では督促 5 通の末に referee 解任。 いずれも依頼 mail が
+surface 機構の noise filter に落ちて人間に届かなかった)。
+
+- **査読依頼は失効型期限つきの義務 class**: 応答しないまま数日〜数週で自動取消・
+  referee 解任に至る。 「後で考える」 = 実質辞退 + editor の時間浪費 + 信用毀損。
+  受諾でも辞退でも**返答すること自体が義務** (辞退 link の 1 click が editor の
+  次候補打診を早める)。
+- **認識した同 turn で hard-deadline つき task 化**: 期限 = 依頼文の応答期限、 明記
+  なければ受信 +3 日を仮置き (仮置きであることを task に明記)。 受諾/辞退の判断は
+  人間、 期限管理は機械。
+- **mail surface 機構の noise blocklist に査読 platform の domain を入れない**:
+  出版勧誘 spam と査読依頼が**同一 domain** から来る publisher が多く (bucket 混在)、
+  domain 単位の suppress は義務 mail を silent drop する。 spam を抑制したい場合は
+  義務 class の subject pattern (例: `(?i)invitation to review` / `(?i)review request`)
+  を blocklist より**優先する override** として設計する (= allowlist-over-blocklist)。
+  editorial office 系 domain (義務密度がほぼ 100% の sender) はそもそも登録しない。
+- **取消・解任通知も記録**: 「取り消されたから対応不要」 で流さない — 無応答による
+  解任は incident として記録し、 どの filter / 経路で落ちたかを RCA してから閉じる。
 
 ---
 
