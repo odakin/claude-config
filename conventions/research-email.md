@@ -147,4 +147,4 @@ origin: 2026-06-29 学内事務向け詫び返信の作成 session。 共同署�
 
 **Why:** 2026-08 の共著論文再投稿の実例。当初 draft は開いた確認 2 問 + 検証 note 添付だったが、user の連続指摘 (「こっちで極限まで深く考えられない？相手は忙しそうだし」「これ言う意味ある？」) で自力決着 → 依頼は「diff 2 箇所の承認 → 投稿」 のみに縮み、相手の負担が数十分から数分になった。
 
-関連: 断言 framing・査読実績の照合は [`rebuttal-letter.md #defensive-revision`](rebuttal-letter.md#defensive-revision)、検証 note の最小構成は [`physics-notes.md`](physics-notes.md) §4。
+関連: 断言 framing・査読実績の照合は [`rebuttal-letter.md #defensive-revision`](rebuttal-letter.md#defensive-revision)、検証 note の最小構成は [`physics-notes.md #verification-note-minimal`](physics-notes.md#verification-note-minimal)。
