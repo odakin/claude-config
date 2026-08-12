@@ -71,3 +71,13 @@ referee は submission PDF の番号で書く。 merge/restructure した改訂�
 - 「a reference … has been added」 ← 実際は旧版から `\eqref` で既に参照済みだった (= added でなく対応済み)。
 
 両方とも task tracker の記録ベースで回答を書いたために発生。 残り 35 Response は検証可能 claim (= 20+ の用語置換 / 削除 / 引用 + 質的 4 項目) が全て本文と一致。 → **教訓: rebuttal は最初から本文 grep で書く (= 記録ベースは removed/added が本文とズレる)、 §1 reflex を最初に回せば 2 件を未然に防げた**。
+
+## <a id="defensive-revision"></a>reject 後の誌替え再投稿: 防御改訂の 3 検査 (2026-08)
+
+rebuttal を書かない誌替え再投稿 (= reject 済み原稿を修正して別誌へ) で、本文に claim・引用・修正を足すときの検査 3 点。いずれも 2026-08 の実例 (reject を重ねた共著論文の 5 誌目) で発火した。
+
+1. **断言 framing 検査**: 足す文が「予言 + 精密実験の制限」型の量的主張なら、referee がその場で back-of-envelope できるかを自分で先に計算する。安全に通過すると示せない (= 見積もりが現行 bound と同 order 以下にならない) 制限は断言せず、**test/example framing** (「can be tested by ...」の例示) に落とす。新規主張ゼロで引用は復活でき、攻撃面を作らない。
+2. **修正の 2 次露出 sweep**: 表記・整合性の修正 (例: 未定義記号をただしい結合定数に relabel) が、それまで曖昧さの陰に隠れていた本文内矛盾 (= 図の使用パラメータ vs 本文の許容域、など) を**露出させないか**を突き合わせる。露出するなら、力学の駆動変数を特定して scaling で読み替えられないかをまず調べ、成立するなら caption/本文の 1 文で先回りして塞ぐ (= 数値の再計算より先に構造を疑う)。
+3. **査読実績の照合**: 「referee に突かれうる」と主張・対策する前に、過去の report 群を機械照合 (grep) して**実績あり (= 対応必須) と純予防 (= 入れ得だが optional)** を区別し、その label 付きで判断者に提示する。予防コストの妥当性は実績の有無で変わる。
+
+関連: 依頼側の縮小原則 = [`research-email.md #shrink-the-ask`](research-email.md#shrink-the-ask)。
