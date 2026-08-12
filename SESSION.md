@@ -2,6 +2,10 @@
 
 > 📌 **このファイル = 直近 (当月) の作業 + Open items**。 古い dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)。
 
+## 2026-08-12: 共著改訂事例の学び 3 点を hoist
+
+- `research-email.md #shrink-the-ask` (確認依頼の縮小) / `rebuttal-letter.md #defensive-revision` (誌替え再投稿の 3 検査) / `physics-notes.md §4` (検証 note は問題・結論・手当のみ、 summary 3→4 規約 + index 再生成)
+
 ## 現在の状態
 
 **2026-07-31 (`scripts/verify-form-guidance.py` 新設 + office-automation [`#form-guidance-color-residue`](conventions/office-automation.md#form-guidance-color-residue))** (5b70e40): 官製様式 xlsx の「記入要領 (赤字/青字)」 残置を機械検出する gate を新設。 **決定的事実 = xlsx の赤字は cell font でなく条件付き書式 (`containsText` + dxf font `FF9C0006` = Excel 標準「悪い」 スタイル、 `rgb(156,0,6)`) で来る** ∴ `cell.font.color` を見る検査は 0 件を返して素通りする。 検出 2 段: (A) xlsx = CF ルールの trigger 文字列がその sqref 範囲に実在するか (= 様式作成者自身の「この欄は未記入」 宣言なので**原理的に偽陽性が無い**、 生成前に落とせる) / (B) PDF = 描画後の非黒 span (= CF を持たない様式・直接 font 色・継承色を拾う heuristic、 既存 [`docx-guidance-deletion`](conventions/office-automation.md#docx-guidance-deletion) 落とし穴 b と同じ理屈)。 **検出器であって修正器にしない** — 「様式構造の見出しは残す」 の境界判断に加え、 placeholder が単位表記を兼ねる欄 (`時`/`分` に number_format `0\:`) では正解が「消す」 でなく「入れる」 なので、 機械は該当セルと trigger を出して人間に渡す。 `--selftest` 13 件 (= 実事故 8 セルの retroactive fixture 含む) が run-all-checks に自動収載 (42/42 PASS)。 ⚠️ **`generate-tree.py --check` は untracked file を見ない** ので新 script は `git add` してから check する (= 本 session で silent pass を踏んだ)。 origin = 2026-07-31 出張様式の赤字残置印刷 (= instance / 遡及検査結果は層 3 に分離)。 全 generic (機関名 / 様式ファイル名 / 個人値なし)。
