@@ -134,7 +134,7 @@ layer 1 (public) のドメイン固有規約 84 file をカテゴリ別に列挙
 - **[collaborators.md](collaborators.md)** — 共同研究者 DB (collaborators.yaml) を作成・更新するとき
   - 共同研究者DB規約
 - **[physics-notes.md](physics-notes.md)** — 物理・数理ノートを書くとき
-  - 物理・数理ノートの 3 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
+  - 物理・数理ノートの 4 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側 / 検証 note は問題・結論・手当のみ) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
 - **[scientific-computing.md](scientific-computing.md)** — 数値解析・科学計算 code を書くとき
   - 数値解析 gotchas (scale-dependent default 等、科学計算リポ共通)
 - **[wolfram-scripting.md](wolfram-scripting.md)** — wolframscript を書く・debug するとき
