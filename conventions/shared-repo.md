@@ -149,6 +149,20 @@ grep -rE '<other-private-repo>/[a-z]' --exclude-dir=.git .
 >
 > **カバレッジ ギャップ**: 上の hook chain は **public** リポを対象とする (`.claude/public-repo.marker` の有無で判定)。**private shared** リポ (= collaborator あり、public marker なし) では fire しないため、layer-2 違反 (= owner literal) は session-end / push-time の手動 audit に依存する。private shared リポで新規 file に絶対パスを焼き付ける commit を書いた直後は、`grep -rn "/Users/<owner>"` を 4 軸 sweep の整合性軸に組み込むのが安全。
 
+## <a id="pii-data-minimization"></a>連絡先・PII を共有リポに書くかの判断基準（data minimization）
+
+collaborator 本人の連絡先（メールアドレス等）や PII を layer 2（private 共有リポ）に書いてよいか。default は「**書かない** = 所有者の個人層（layer 3）に SoT を置き、共有リポからは『所有者が別管理』と一般化して参照する」。これは [`personal-layer.md`](../docs/personal-layer.md) の配置ゲート「PII を含むか → 層 3」の **why** にあたる判断基準 3 つ:
+
+**基準 1 — 機能テスト（最重要）**: 置く前に「**この repo にこのデータの read-path はあるか**」を問う。連絡先の典型は、本人は自分の連絡先を知っており、所有者は個人層から引け、repo の script / doc がそれを読む処理は存在しない = **書いて得られる機能がゼロ**。機能ゼロのデータは、置いてもリスク（漏洩面・履歴永続）だけ増えて利益がない。データは必要とする audience が最も狭い層に置く（= data minimization）。逆に repo の機能が本当にそれを読むなら（例: CI の通知先）、機能を持つデータとして本人合意の上で置く判断はありうる。
+
+**基準 2 — git 履歴の不可逆性**: commit した文字列は履歴に永久に残る。private repo が将来 public 化される可能性（成果公開・OSS 化）に対し、PII が履歴にあると public 化は履歴 rewrite を要して高くつく。**最初から入れないのは、将来の visibility 選択肢を無料で保つ手段**。「PII を含みうるから private 固定」と判断している repo ほど、PII を入れない運用がその判断を将来変える余地を作る。
+
+**基準 3 — 本人の期待**: 他人の連絡先の置き場所は本人の期待に関わる。公開的な business アドレスでも、合意なしに置き場所（特に第三者や AI agent から見える場所）を増やさないのが無難な default。
+
+**判断基準にしないもの 2 つ**: (a) **collaborator への信頼度** — 基準 1–3 は collaborator を完全に信頼していても成立する（機能ゼロ・履歴永続・本人期待は信頼と独立）。信頼度を論拠にすると「信頼できるから書く」の per-case 例外が増殖する。(b) **「private だから安全」** — private は現在の visibility 状態であって履歴の性質（基準 2）を変えない。
+
+運用は**一律ルール**にする: repo の CLAUDE.md に「連絡先・PII は書かない」を例外なしで書き、基準 1 の機能テストを pass するデータが現れた時にだけ明示的に緩める（per-case の例外判断は erode する）。所有者側の連絡先 SoT（個人層）には出典・取得日を残す。
+
 ## <a id="l2-style-digest"></a>執筆スタイル規約の層 2 instantiation（style digest pattern）
 
 所有者の執筆規約（文体・記法・構成の選好）は通常 layer 3（個人層）に正本を持つ。共有 paper repo（layer 2）では、共同編集者と**共同編集者側の AI assistant** がその規約に従って原稿を触る必要があるが、layer 2 → layer 3 参照は禁止（上記 Core rule = collaborator に解決不能な pointer を作らない）なので、「正本への参照を張る」という経路がそもそも存在しない。放置すると collaborator 側の編集で規約違反が構造的に再混入し、所有者側の再整形が無限ループする。
