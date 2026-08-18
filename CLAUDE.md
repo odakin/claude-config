@@ -219,9 +219,7 @@ claude-config/
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)
 │   ├── overleaf-sync.sh.template       # Overleaf 連携 repo 用 sync script template（PROJECT_ID hardcode = ID の SoT、 --status/--merge、 conventions/overleaf-integration.md#sync-script-contract）
-│   ├── gmail-mcp/                      # 多アカウント Gmail MCP 用 template 3 点（runbook = conventions/gmail-mcp-multiaccount.md）
-│   │   ├── reauth.sh.template          # OAuth (再)認証（login_hint + 認証後 account 一致検証 + symlink 越し canonical 書込）
-│   │   ├── install-runtime-links.sh.template # ~/.gmail-mcp/ → repo canonical の symlink 張り（冪等、account は secrets/ から導出）
+│   ├── gmail-mcp/                      # 多アカウント Gmail MCP（runbook = conventions/gmail-mcp-multiaccount.md、実行エンジンは scripts/gmail-mcp-*.sh）
 │   │   └── accounts.yaml.example       # alias → email 一覧の雛形（git-crypt で commit）
 │   ├── personal-layer/                 # 個人層 (layer 3) bootstrap skeleton
 │   │   ├── README.md

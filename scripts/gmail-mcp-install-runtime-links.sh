@@ -1,7 +1,7 @@
 #!/bin/bash
-# install-runtime-links.sh — ~/.gmail-mcp/ の runtime credential を repo canonical への
-# symlink に張り替える (冪等)。generic template。
-# Runbook: claude-config/conventions/gmail-mcp-multiaccount.md
+# gmail-mcp-install-runtime-links.sh — ~/.gmail-mcp/ の runtime credential を config repo canonical への symlink に張り替える冪等エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
+#
+# Usage: gmail-mcp-install-runtime-links.sh <config-repo-dir>
 #
 # 設計:
 #   canonical = 本リポ secrets/gmail-<account>-credentials.json (git-crypt 暗号化 tracked)
@@ -25,7 +25,12 @@
 
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="${1:-}"
+if [ -z "$REPO_DIR" ] || [ ! -d "$REPO_DIR/secrets" ]; then
+    echo "Usage: $0 <config-repo-dir>  (= secrets/ を持つ private config repo)" >&2
+    exit 1
+fi
+REPO_DIR="$(cd "$REPO_DIR" && pwd)"
 MCP_DIR="$HOME/.gmail-mcp"
 TS="$(date +%Y%m%d%H%M%S)"
 # アカウント一覧は secrets/ の canonical file 名から導出 (ハードコードしない)

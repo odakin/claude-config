@@ -14,10 +14,14 @@ summary: 多アカウント Gmail MCP の end-to-end runbook — @gongrzhe serve
 ## 構成
 
 ```
+claude-config/scripts/                 # 実行実体 (エンジン) は本リポ = 層 1 の 1 本だけ
+├── gmail-mcp-reauth.sh                #   OAuth (再)認証エンジン
+└── gmail-mcp-install-runtime-links.sh #   symlink 張りエンジン (冪等)
+
 <your-private-config-repo>/            # private + git-crypt (メール・token を含むため)
-├── accounts.yaml                      # alias → email の一覧 (git-crypt。script が実行時に読む)
-├── reauth.sh                          # OAuth (再)認証 (templates/gmail-mcp/ から copy)
-├── install-runtime-links.sh           # symlink 張り (同上)
+├── accounts.yaml                      # alias → email の一覧 (git-crypt。エンジンが実行時に読む)
+├── reauth.sh                          # 2 行 wrapper: exec <claude-config>/scripts/gmail-mcp-reauth.sh "$(dirname "$0")" "$@"
+├── install-runtime-links.sh           # 2 行 wrapper (同上、 install-runtime-links エンジンへ)
 └── secrets/                           # 🔒 git-crypt (.gitattributes: secrets/** filter=git-crypt)
     ├── gmail-<alias>-credentials.json # OAuth token (canonical、アカウント毎)
     └── gmail-gcp-oauth.keys.json      # OAuth client keys (全アカウント共有)
@@ -46,9 +50,14 @@ summary: 多アカウント Gmail MCP の end-to-end runbook — @gongrzhe serve
    デスクトップ) 作成 → `gcp-oauth.keys.json` として保存。consent screen が
    テストモードの場合、**繋ぐ Google アカウントを全部テストユーザーに登録**。
 2. **private repo**: 上の構成で作成 (git-crypt 有効化、`secrets/** filter=git-crypt`)。
-   [`templates/gmail-mcp/`](../templates/gmail-mcp/) の 3 file を copy
-   (`accounts.yaml.example` → `accounts.yaml` に自分の alias/email)。
-3. `~/.gmail-mcp/reauth.sh` → repo の reauth.sh へ symlink。
+   [`templates/gmail-mcp/accounts.yaml.example`](../templates/gmail-mcp/accounts.yaml.example)
+   → `accounts.yaml` に自分の alias/email。wrapper 2 本 (各 2 行、上の構成図の形) を作成。
+3. `~/.gmail-mcp/reauth.sh` → private repo の wrapper reauth.sh へ symlink。
+
+**なぜ engine を層 1 に置くか** (= fork drift の design-out): instance ごとに script を
+copy すると必ず実装が分岐する。実行実体を層 1 の 1 本に統一し、instance 側は
+「data (accounts.yaml / secrets) + 2 行 wrapper」だけにすれば、engine の改良が
+全 instance に git pull で届き、逆に instance 固有の値は engine に混入しない。
 
 ## アカウント追加 checklist (N 個目、~10 分)
 
@@ -72,6 +81,26 @@ summary: 多アカウント Gmail MCP の end-to-end runbook — @gongrzhe serve
 - **新マシン** → clone + `git-crypt unlock` + `install-runtime-links.sh` (再認証不要)
 - MCP に無い操作 (添付 byte 列・batch 削除等) は同じ credential で Gmail REST API を
   Python から直叩き ([`google-api-direct-access.md`](google-api-direct-access.md))
+
+## セキュリティ設計 (invariant として維持するもの)
+
+1. **公開面 (層 1 engine) に秘匿情報ゼロ**: メールアドレス・alias・token・client keys
+   は engine に一切書かない。engine は実行時に private repo の git-crypt な
+   accounts.yaml / secrets/ を読むだけ。engine を変更するときはこの invariant を
+   毎回 grep で確認する (email regex + 固有名)。
+2. **token の露出面**: credential file は 0600、engine は token 本体を print しない
+   (presence の yes/no のみ)。`.expired.*` backup はローカル実 file (= repo に乗らない)。
+3. **trust model の変化に注意**: engine は public repo から git pull で更新される =
+   **credential を触るコードの供給路が public repo になる**。書き込みは owner 単独 +
+   branch protection + push protection + secret scanning が前提。それでも
+   **engine の diff は pull 時に他の code より一段注意して見る** (特に token の
+   書き込み先・print・network 先の変更)。不安なら instance 側 wrapper で engine を
+   commit hash に pin する選択肢もある (更新が手動になる trade-off)。
+4. **送信は必ず ask gate 越し** (checklist 5)。gate の宣言配線は silent に消えうるので
+   機械 audit で恒常監視する ([`gmail-sending.md#double-confirmation-design`](gmail-sending.md#double-confirmation-design))。
+5. **アカウント取り違え防止**: reauth engine は login_hint 事前選択 + 認証後
+   getProfile 照合で、違うアカウントの token が alias に紐づく事故を構造的に防ぐ
+   (不一致 = token 自動破棄)。
 
 実例 instance: 所有者の `gmail-mcp-config` (private) が 6 アカウントでこの構成を運用
 (collaborator はアクセス不要 — 本 doc + templates だけで独立に構築できる)。

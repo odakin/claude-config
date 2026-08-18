@@ -1,11 +1,12 @@
 #!/bin/bash
-# Gmail MCP OAuth Re-authentication Script (generic template)
-# Location: ~/.gmail-mcp/reauth.sh (symlink → this file inside your private config repo)
-# Runbook: claude-config/conventions/gmail-mcp-multiaccount.md
+# gmail-mcp-reauth.sh — 多アカウント Gmail MCP の OAuth (再)認証エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 #
-# Usage: ~/.gmail-mcp/reauth.sh [account|all]
+# Usage: gmail-mcp-reauth.sh <config-repo-dir> [account|all]
+#   <config-repo-dir>: your private config repo (accounts.yaml + secrets/ を持つ dir)
 #   account: any alias with a ~/.gmail-mcp/<alias>/ directory (default: personal)
 #   "all" re-auths every alias found under ~/.gmail-mcp/
+# 呼び出しは private repo 側の 2 行 wrapper (reauth.sh) 経由を推奨 — engine は
+# git pull で更新されるので、 credential を触る script として pull 時の diff review 推奨。
 #
 # Flow:
 #   1. Reads OAuth client credentials from ~/.gmail-mcp/<account>/gcp-oauth.keys.json
@@ -26,9 +27,13 @@
 
 set -euo pipefail
 
-# Resolve the config repo from this script's real location (works through the
-# ~/.gmail-mcp/reauth.sh symlink; no hardcoded repo path).
-REPO_DIR="$(python3 -c "import os,sys;print(os.path.dirname(os.path.realpath(sys.argv[1])))" "$0")"
+REPO_DIR="${1:-}"
+if [ -z "$REPO_DIR" ] || [ ! -d "$REPO_DIR" ]; then
+    echo "Usage: $0 <config-repo-dir> [account|all]" >&2
+    echo "Error: config repo dir が不正: '$REPO_DIR'" >&2
+    exit 1
+fi
+REPO_DIR="$(cd "$REPO_DIR" && pwd)"
 
 # Resolve the expected email for an account alias from accounts.yaml (git-crypt
 # decrypted locally). Empty if accounts.yaml is locked/unreadable → verification
@@ -134,9 +139,9 @@ reauth_account() {
     export REAUTH_ACCOUNT="$ACCOUNT"
 
     # Print URL on stdout so the user (or an agent driving the script) can click it
-    # manually if `open` fails to foreground the browser. Observed 2026-04-27 with
-    # personal/twcuphys timing out — `open` exit=0 but the browser didn't surface,
-    # and the URL had to be reconstructed from gcp-oauth.keys.json by hand.
+    # manually if `open` fails to foreground the browser. Observed 2026-04-27:
+    # `open` exit=0 but the browser didn't surface, and the URL had to be
+    # reconstructed from gcp-oauth.keys.json by hand.
     echo ""
     echo "If the browser does not open, click this URL manually:"
     echo "  $AUTH_URL"
@@ -321,7 +326,7 @@ kill_mcp_server() {
 }
 
 # Main
-ACCOUNT="${1:-personal}"
+ACCOUNT="${2:-personal}"
 
 if [ "$ACCOUNT" = "all" ]; then
     echo "=== 全アカウント再認証 ==="
