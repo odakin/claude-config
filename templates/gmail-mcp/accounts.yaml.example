@@ -1,0 +1,15 @@
+# accounts.yaml — alias → email の一覧 (⚠️ git-crypt で暗号化して commit すること)
+# reauth.sh が実行時に読み、login_hint の事前選択と認証後の account 一致検証に使う。
+# REPLACE-ME を実際のメールアドレスに置き換える (この example は public repo に置くため
+# 意図的に email 形を書いていない)。
+gmail_mcp:
+  - server: gmail-per-account
+    package: "@gongrzhe/server-gmail-autoauth-mcp"
+    accounts:
+      - alias: personal
+        email: REPLACE-ME   # 例: 個人 Gmail
+        ownership: personal
+      - alias: work
+        email: REPLACE-ME   # 例: 職場アカウント
+        ownership: personal
+        note: "追加した日付・用途をここにメモ"
