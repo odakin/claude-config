@@ -120,7 +120,8 @@ copy すると必ず実装が分岐する。実行実体を層 1 の 1 本に統
    state 不一致で拒否)。さらに **expected email を解決できない reauth は既定で中止**
    (= 5 の getProfile 照合が空振りになる状態で consent に進まない。accounts.yaml の
    unlock を先に直すのが正道、意図的に未検証で進む場合のみ
-   `REAUTH_ALLOW_UNVERIFIED=1`)。
+   `REAUTH_ALLOW_UNVERIFIED=1`)。一般則・レシピの正本 =
+   [`google-api-direct-access.md#oauth-loopback-hardening`](google-api-direct-access.md#oauth-loopback-hardening)。
 8. **引数は信頼しない**: account alias は plain token (`A-Za-z0-9_-`) のみ受理 —
    alias は filesystem path と `pgrep -f` pattern に流れるため、traversal (`..`) や
    ERE metachar (`|` は alternation で kill 対象が任意プロセスに化ける) を入口で拒否する。

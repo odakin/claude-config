@@ -315,7 +315,7 @@ OAuth token JSON (= credentials.json) には **どの account の token か** �
 
 1. **reauth 時に login_hint で正しい account を事前選択**: consent URL に `&login_hint=<email>` を付けると Google が該当 account を事前選択し、 手動選択ミスを減らす (= email は平文 git に hardcode せず、 暗号化済 config から実行時取得)。
 2. **token 取得後に getProfile で account 検証**: 保存した token で `users().getProfile(userId='me')` (gmail) / userinfo (他 API) を叩き、 emailAddress を期待値と照合。 不一致なら token を削除して fail させる (= silent 保存を構造的に防ぐ)。 token JSON に email が無いので、 この 1 query が唯一の判別手段。
-   ⚠️ **この検証は hard-fail であること (= 空振り禁止)**: 期待 email の解決 (= 暗号化 config の読取り) や getProfile 呼び出しは「config が locked / 欠落」「network 一時失敗」で**黙って skip されがち** = 補償制御が自分で自分を無効化する。期待値を解決できない consent は**既定で中止**し (config unlock を案内)、 意図して未検証で進むときだけ明示 flag で override。 getProfile 失敗も quiet skip でなく retry + 「未検証」 の明示表示にする。 これは「条件付き発火 mechanism の非活性を可視信号化せよ」 ([`convention-design-principles.md#conditional-firing-visibility`](../docs/convention-design-principles.md#conditional-firing-visibility)) の security-control 版。
+   ⚠️ **この検証は hard-fail であること (= 空振り禁止)**: 期待 email の解決 (= 暗号化 config の読取り) や getProfile 呼び出しは「config が locked / 欠落」「network 一時失敗」で**黙って skip されがち** = 補償制御が自分で自分を無効化する。期待値を解決できない consent は**既定で中止**し (config unlock を案内)、 意図して未検証で進むときだけ明示 flag で override。 getProfile 失敗も quiet skip でなく retry + 「未検証」 の明示表示にする。 これは「条件付き発火 mechanism の非活性を可視信号化せよ」 ([`convention-design-principles.md#conditional-firing-visibility`](../docs/convention-design-principles.md#conditional-firing-visibility)) の security-control 版。 (⚠️ 区別: hard-fail は**守り** 〔= 通す/止めるを決める gate〕 の規範。 監視・surfacing 系 script の fail-open 〔= 壊れても他の作業を止めず「未チェック」 を可視化する〕 とは責務が逆で矛盾しない — 守りの失敗は進行を止める、 監視の失敗は報せる。)
 
 ### 検索結果が「らしくない」 時の reflex
 
@@ -337,6 +337,8 @@ MCP / API の検索結果が期待と違う account の中身ばかり返る (= 
 4. **補償制御は hard-fail**: 上記「account 検証」節の getProfile 照合が空振りする状態 (期待 email 未解決) では consent に進まない。
 
 + **入口で識別子を検証**: reauth engine は alias / account 名を **filesystem path** と **`pgrep -f "…/${alias}/…"` pattern** に流すことが多い。alias を plain token (`A-Za-z0-9_-`) に検証しないと、`..` で path traversal / `|` で pgrep の ERE が alternation 化し **kill 対象が任意プロセスに化ける** (confused-deputy)。引数は入口で charset 検証する。
+
+⚠️ **consent URL 自体が secret を運ぶ (= 1-3 の残余経路)**: URL には `state` と `code_challenge` が載る。browser 起動でこれを **argv** に渡す (`open <url>` / `xdg-open <url>`) と、他 local user が `ps` で読める窓ができる (macOS は他 user の argv を隠さない。drive-by web page は ps を読めないのでこの経路は「別 local user」脅威モデル限定)。採取した URL のまま自分の account で consent を完了した攻撃者の code は、採取した challenge に bound され本物の verifier で交換が通り state も一致 = **1-3 を全部通過する**。∴ **4 (account 検証の hard-fail) がこの経路の backstop** — 期待 account 照合を持たない flow では 1-3 だけだと login-CSRF がここから復活する (= 4 点 set から削らない。緩和 = URL を argv に載せない起動経路、または残余として明記)。
 
 実装済 reference: gmail MCP reauth engine ([`gmail-mcp-multiaccount.md`](gmail-mcp-multiaccount.md) invariant 7-8、hermetic test 付き)。**同型の loopback OAuth フローを他にも持つなら同じ hardening を横展開する** (どのフローが未対応かは公開面に書かず個人層で追跡)。
 
