@@ -110,6 +110,8 @@ else
 fi
 [ "$(mode_of "$REPO/secrets/gmail-alpha-credentials.json")" = "0o600" ] \
     && ok "canonical corrected to 0600" || ng "canonical should be 0600"
+[ "$(mode_of "$REPO/secrets")" = "0o700" ] \
+    && ok "secrets dir corrected to 0700" || ng "secrets dir should be 0700"
 [ "$(mode_of "$FAKE_HOME/.gmail-mcp")" = "0o700" ] \
     && ok "~/.gmail-mcp corrected to 0700" || ng "~/.gmail-mcp should be 0700"
 [ "$(mode_of "$FAKE_HOME/.gmail-mcp/alpha")" = "0o700" ] \

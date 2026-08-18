@@ -317,12 +317,15 @@ try:
     tokens['expiry_date'] = int((time.time() + tokens.get('expires_in', 3600)) * 1000)
 
     creds_path = os.environ['REAUTH_CREDS_FILE']
-    # (D) 移行後 creds_path は repo canonical への symlink。open(w)/chmod は symlink を
+    # (D) 移行後 creds_path は repo canonical への symlink。open/chmod は symlink を
     # 辿って canonical に書く (= 意図どおり。書いた後は repo の commit + push が必要)。
-    with open(creds_path, 'w') as f:
+    # os.open(…, 0o600) で born-0600 にする (open('w') は umask 依存で一瞬 644 の
+    # file が生まれてから chmod する窓があった)。
+    fd = os.open(creds_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as f:
         json.dump(tokens, f, indent=2)
 
-    os.chmod(creds_path, stat.S_IRUSR | stat.S_IWUSR)
+    os.chmod(creds_path, stat.S_IRUSR | stat.S_IWUSR)   # 既存 file だった場合の mode 矯正
 
     rt_expires = tokens.get('refresh_token_expires_in', 'unknown')
     if isinstance(rt_expires, int):

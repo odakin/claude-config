@@ -40,6 +40,7 @@ MCP_DIR="$HOME/.gmail-mcp"
 TS="$(date +%Y%m%d%H%M%S)"
 mkdir -p "$MCP_DIR"
 chmod 700 "$MCP_DIR"   # credential 置き場は owner-only
+chmod 700 "$REPO_DIR/secrets" 2>/dev/null || true   # filename (= alias 一覧) も他 user に見せない
 # アカウント一覧は secrets/ の canonical file 名から導出 (ハードコードしない)。
 # alias は path 部品になるので plain token のみ許可 (traversal 等の surprise を skip)。
 ACCOUNTS=()
