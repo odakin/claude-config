@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 85 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 86 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -78,6 +78,8 @@ layer 1 (public) のドメイン固有規約 85 file をカテゴリ別に列挙
 
 - **[email-surface-pattern.md](email-surface-pattern.md)** — 重要送信者・ML topic の見落とし防止 surface を設計するとき
   - 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止
+- **[gmail-mcp-multiaccount.md](gmail-mcp-multiaccount.md)** — 複数 Gmail アカウントを Claude Code の MCP として繋ぎたいとき + N 個目のアカウントを追加するとき
+  - 多アカウント Gmail MCP の end-to-end runbook — @gongrzhe server を account 数ぶん起動 (1:1)、credential は git-crypt な private repo を canonical に symlink 運用 (1 回認証で全マシン)、reauth / runtime-links は templates/gmail-mcp/ の実証済 script、送信は ask gate 必須
 - **[gmail-sending.md](gmail-sending.md)** — Gmail でメールを送信する経路・MIME 実装を選ぶとき
   - Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕 / #double-confirmation-design = chat 承認〔規律層 = 内容〕と harness chip〔backstop = 未承認送信〕は別の脅威モデル — chip の品質 3 条件〔実行形 anchor・1 送信 1 個・dialog = 内容〕、 うざい chip の治療は廃止でなく anchor 絞り、 宣言配線は silent 消失しうる = 登録直後 verify + documented ⊆ live の機械 audit、 並走 gate 層〔宣言 ask・hook・fail-safe〕は同じ実送信-flag anchor を共有〔片層だけ script 名 match だと dry-run に誤爆 chip / argparse prefix 短縮は allow_abbrev=False で殺す〕 / #draft-approval-single-source = chat 提示 draft と送信 body-file の 2 度書きは乖離源 — body-file 先行 Write + chat は view、 承認後の変更は再提示、 全外部発信に適用)
 - **[japanese-email-honorifics.md](japanese-email-honorifics.md)** — 日本語メールで敬称 (様 / 皆様 / さん) を書くとき + 相手の文面を引用・要約して「ご/お」付き名詞を自分の文に持ち込むとき

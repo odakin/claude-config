@@ -1,6 +1,6 @@
 <!-- doc-meta
 when: 複数 Gmail アカウントを Claude Code の MCP として繋ぎたいとき + N 個目のアカウントを追加するとき
-category: integration
+category: mail
 summary: 多アカウント Gmail MCP の end-to-end runbook — @gongrzhe server を account 数ぶん起動 (1:1)、credential は git-crypt な private repo を canonical に symlink 運用 (1 回認証で全マシン)、reauth / runtime-links は templates/gmail-mcp/ の実証済 script、送信は ask gate 必須
 -->
 
