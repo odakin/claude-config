@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 複数 Gmail アカウントを Claude Code の MCP として繋ぎたいとき + N 個目のアカウントを追加するとき
 category: mail
-summary: 多アカウント Gmail MCP の end-to-end runbook — @gongrzhe server を account 数ぶん起動 (1:1)、credential は git-crypt な private repo を canonical に symlink 運用 (1 回認証で全マシン)、reauth / runtime-links は templates/gmail-mcp/ の実証済 script、送信は ask gate 必須
+summary: 多アカウント Gmail MCP の end-to-end runbook — @gongrzhe server を account 数ぶん起動 (1:1)、credential は git-crypt な private repo を canonical に symlink 運用 (1 回認証で全マシン)、reauth / runtime-links エンジンは scripts/gmail-mcp-*.sh (state+PKCE / alias 検証 / permission 矯正込み)、送信は ask gate 必須
 -->
 
 # 多アカウント Gmail MCP (multi-account runbook)
@@ -78,6 +78,9 @@ copy すると必ず実装が分岐する。実行実体を層 1 の 1 本に統
 ## 運用
 
 - **`invalid_grant`** (token 失効) → `~/.gmail-mcp/reauth.sh <alias>` → commit + push
+- reauth が「期待 email を解決できません」で中止 → **先に `git-crypt unlock`** (+
+  accounts.yaml に alias entry があるか確認)。未検証で押し切る escape hatch は
+  `REAUTH_ALLOW_UNVERIFIED=1` (アカウント選び間違いが検出されなくなる、常用しない)
 - **新マシン** → clone + `git-crypt unlock` + `install-runtime-links.sh` (再認証不要)
 - MCP に無い操作 (添付 byte 列・batch 削除等) は同じ credential で Gmail REST API を
   Python から直叩き ([`google-api-direct-access.md`](google-api-direct-access.md))
@@ -90,6 +93,10 @@ copy すると必ず実装が分岐する。実行実体を層 1 の 1 本に統
    毎回 grep で確認する (email regex + 固有名)。
 2. **token の露出面**: credential file は 0600、engine は token 本体を print しない
    (presence の yes/no のみ)。`.expired.*` backup はローカル実 file (= repo に乗らない)。
+   backup (`.expired.*` / `.premigration.*`) は engine が必ず chmod 600 に矯正し
+   (`cp -p` は旧 mode を保存するため — 644 backup が残った実例 2026-08-18)、
+   `~/.gmail-mcp` と account dir は 0700 (macOS の $HOME は staff group traverse 可の
+   構成がありうるため、credential 置き場自体を owner-only にする)。
 3. **trust model の変化に注意**: engine は public repo から git pull で更新される =
    **credential を触るコードの供給路が public repo になる**。書き込みは owner 単独 +
    branch protection + push protection + secret scanning が前提。それでも
@@ -105,11 +112,18 @@ copy すると必ず実装が分岐する。実行実体を層 1 の 1 本に統
    `@gongrzhe/server-gmail-autoauth-mcp@<version>` と exact pin する (unpinned だと
    npx cache miss 時に upstream の最新 = 悪意ある新 release がそのまま mailbox token
    を握る)。version 更新は意図的な bump として diff review とセットで行う。
-7. **既知の限界 (hardening 候補)**: reauth の OAuth flow は loopback (127.0.0.1)
-   bind だが `state` nonce / PKCE 未実装 — 同一マシン上の他プロセスや drive-by page
-   が listener に偽 code を先着させる窓が理論上ある。補償制御は 5 の getProfile 照合
-   (accounts.yaml が unlock 済みのときのみ有効)。**accounts.yaml を lock したまま
-   reauth しない**こと。state/PKCE 追加は将来の hardening 課題。
+7. **OAuth callback は state nonce + PKCE (S256) で保護** (2026-08-18 実装):
+   loopback (127.0.0.1) listener は state 一致の request しか受理せず、不一致
+   (drive-by page / 同一マシン他プロセスの偽 callback) は 400 で無視して本物を
+   待ち続ける。token 交換は code_verifier 必須 = 横取りされた code の再利用も不能。
+   手動 URL 貼付 fallback でも state を検証する (= phishing された URL は貼っても
+   state 不一致で拒否)。さらに **expected email を解決できない reauth は既定で中止**
+   (= 5 の getProfile 照合が空振りになる状態で consent に進まない。accounts.yaml の
+   unlock を先に直すのが正道、意図的に未検証で進む場合のみ
+   `REAUTH_ALLOW_UNVERIFIED=1`)。
+8. **引数は信頼しない**: account alias は plain token (`A-Za-z0-9_-`) のみ受理 —
+   alias は filesystem path と `pgrep -f` pattern に流れるため、traversal (`..`) や
+   ERE metachar (`|` は alternation で kill 対象が任意プロセスに化ける) を入口で拒否する。
 
 実例 instance: 所有者の `gmail-mcp-config` (private) が 6 アカウントでこの構成を運用
 (collaborator はアクセス不要 — 本 doc + templates だけで独立に構築できる)。
