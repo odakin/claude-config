@@ -181,6 +181,7 @@ claude-config/
 │   ├── fleet-heartbeat.py                  # per-machine heartbeat writer（毎時 launchd cron から自マシンの RC server 群〔launchd loaded + server ログ末尾 marker parse = Connected/auth error/version error〕 + config-dir auth metadata を <repo>/<subdir>/<host>.json に commit+push。**claude を一切呼ばない** = auth 失効でも監視が生き残る、state-change-or-age commit policy で git history を汚さない、fail-open、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
 │   ├── generate-doc-index.py               # regenerate a slug index FROM its markdown, so Claude writes
 │   ├── generate-tree.py                    # CLAUDE.md 構造 tree (conventions/hooks/scripts) + CONVENTIONS.md 冒頭列挙 +
+│   ├── gmail-mcp-engines.test.sh           # gmail MCP engine 2 本 (reauth / install-runtime-links) の hermetic self-test
 │   ├── gmail-mcp-install-runtime-links.sh  # ~/.gmail-mcp/ の runtime credential を config repo canonical への symlink に張り替える冪等エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 │   ├── gmail-mcp-reauth.sh                 # 多アカウント Gmail MCP の OAuth (再)認証エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 │   ├── install-docx-decl-patch.sh          # 上記 patch を user site-packages に `.pth`+symlink で install（setup.sh Step 9、 全 python3 起動で auto-load、 idempotent）
