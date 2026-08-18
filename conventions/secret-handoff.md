@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: secret を user から受け取る・別マシンへ運ぶとき
 category: infra
-summary: Secret を clipboard 経由で安全に運ぶ手順 (chat に literal を貼らせない原則と clipboard 1 個競合の回避)
+summary: Secret を clipboard 経由で安全に運ぶ手順 (chat に literal を貼らせない原則と clipboard 1 個競合の回避、 配置先と cross-machine 耐久性、 mode 衛生 〔cp -p / git / open() は 0600 を運ばず dir 755 も露出面 = 生成側で冪等矯正、 #mode-hygiene〕)
 -->
 # secret-handoff: Secret をユーザーの clipboard 経由で安全に運ぶ手順
 
@@ -79,6 +79,18 @@ decouple の失敗形: 「今動かす配置」 (= `~/.secrets` へ直書き) �
    `xxd` / `od` で先頭を**印字**すると、 もし暗号化が失敗して中身が平文だった場合 (= まさに検出したい失敗) その先頭バイト = secret の prefix を leak する。 boolean check なら平文でも何も出力されない。`encrypted` を確認してから push。
 3. **commit + push** → 別マシンは pull + setup で `~/.secrets/<name>` symlink が自動生成。
 4. **(任意) オフライン暗号化 backup** — repo 喪失時の最後の砦。ただし git-crypt 経路があれば自動復元は既に成立するので必須ではない。
+
+### <a id="mode-hygiene"></a>耐久化の副作用: copy と VCS は mode を運ばない
+
+canonical / symlink 化で耐久性を満たしても、**file mode は別に落ちる**。3 つの実測パターン:
+
+1. **`cp -p` は旧 mode を保存する** — 「backup を取ってから置換」 の rotation は、置換前 file が緩い mode だとその緩さごと backup に転写する。secret の backup は **必ず明示 `chmod 600`** を置換直後に打つ (`cp -p` に任せない)。実例: OAuth client secret を含む backup が 0644 のまま数週間残っていた (2026-08-18)。
+2. **git は mode を保存しない (実行ビット以外)** — git-crypt canonical を pull した直後の mode は umask 依存。canonical を使う側の setup script が **毎回 `chmod 600` で矯正**する (冪等な自己修復にする、初回だけ直す設計にしない)。
+3. **`open(path,'w')` は umask 依存の窓を作る** — 新規 secret file は「644 で生まれてから chmod 600」 の一瞬がある。`os.open(path, O_WRONLY|O_CREAT|O_TRUNC, 0o600)` で **born-0600** にする。
+
++ **dir も対象**: secret 置き場の dir が 755 だと、同一マシンの別 local user が **list できる** (= file 名から alias / account 構成が読める) し、緩い mode の file があれば読める。secret dir は 700 に矯正する (`$HOME` 自体が group-traversable な OS 構成がありうる — home が守ってくれる前提を置かない)。
+
+⚠️ **どれも「動作確認」 では検出できない** (= 自分が読める限りテストは通る)。前節の機械 audit に **mode 検査を含める**か、生成する側の script に冪等な矯正を焼き込むのが唯一の防御。
 
 ### doc は「実状態」 を書く + 機械が現実を照合する
 

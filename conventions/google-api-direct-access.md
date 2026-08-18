@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Google API を Python から直接叩く setup をするとき
 category: infra
-summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避)
+summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避、 loopback OAuth consent フローの CSRF/横取り対策 〔state nonce + PKCE S256 + request-loop + 手動貼付の state 検証 + 補償制御 hard-fail + 識別子 charset 検証、 #oauth-loopback-hardening〕)
 -->
 # Google API を Python から直接アクセスする setup
 
@@ -315,10 +315,30 @@ OAuth token JSON (= credentials.json) には **どの account の token か** �
 
 1. **reauth 時に login_hint で正しい account を事前選択**: consent URL に `&login_hint=<email>` を付けると Google が該当 account を事前選択し、 手動選択ミスを減らす (= email は平文 git に hardcode せず、 暗号化済 config から実行時取得)。
 2. **token 取得後に getProfile で account 検証**: 保存した token で `users().getProfile(userId='me')` (gmail) / userinfo (他 API) を叩き、 emailAddress を期待値と照合。 不一致なら token を削除して fail させる (= silent 保存を構造的に防ぐ)。 token JSON に email が無いので、 この 1 query が唯一の判別手段。
+   ⚠️ **この検証は hard-fail であること (= 空振り禁止)**: 期待 email の解決 (= 暗号化 config の読取り) や getProfile 呼び出しは「config が locked / 欠落」「network 一時失敗」で**黙って skip されがち** = 補償制御が自分で自分を無効化する。期待値を解決できない consent は**既定で中止**し (config unlock を案内)、 意図して未検証で進むときだけ明示 flag で override。 getProfile 失敗も quiet skip でなく retry + 「未検証」 の明示表示にする。 これは「条件付き発火 mechanism の非活性を可視信号化せよ」 ([`convention-design-principles.md#conditional-firing-visibility`](../docs/convention-design-principles.md#conditional-firing-visibility)) の security-control 版。
 
 ### 検索結果が「らしくない」 時の reflex
 
 MCP / API の検索結果が期待と違う account の中身ばかり返る (= 業務 account のはずが個人購読 newsletter ばかり) なら、 token が別 account を指している疑い。 `getProfile` で接続先 account を直接確認する。 一般原則は [`debugging-discipline.md` mcp-zero-result-not-absence](debugging-discipline.md#mcp-zero-result-not-absence) 状態 (c) tool 接続先誤り。 reauth フローの login_hint + getProfile 検証の実装は各 MCP 設定リポ側 (= personal layer)。
+
+## <a id="oauth-loopback-hardening"></a>OAuth consent フロー (loopback) の CSRF / code 横取り対策
+
+デスクトップ / native app 型 OAuth は `http://127.0.0.1:<port>` に consent 結果を受ける loopback listener を立てる。この listener は **同一マシンの他プロセス / ブラウザ上の drive-by web page** から触れる (= `fetch("http://127.0.0.1:PORT/?code=…")` は cross-origin でも fire-and-forget で届く)。素朴実装は 3 つの穴を持つ:
+
+- **偽 code の先着 (login-CSRF)**: consent 待ちの窓に攻撃者が自分の authorization code を先着させると、**攻撃者アカウントの token が user の alias に保存**され、以後の読み書きが攻撃者側 mailbox を向く (= data exfiltration)。
+- **単発 listener の DoS**: `server.handle_request()` 1 回だけだと、無関係 / 偽 request 1 発で本物の callback も潰せる。
+- **手動 URL 貼付 fallback の phishing**: 「localhost refused」 画面の URL を貼らせる経路は、別フロー / phishing された URL を貼らせる窓。
+
+対策 (Python stdlib だけで実装可能):
+
+1. **state nonce**: consent URL に `&state=<secrets.token_urlsafe(24)>` を付け、callback は **state 一致の request だけ受理**。不一致は 400 で無視し、**deadline まで本物を待ち続ける loop** にする (= per-request timeout を短くして `while` で回す。単発 `handle_request` にしない)。
+2. **PKCE (S256)**: `code_verifier` (48B) + `code_challenge = BASE64URL(SHA256(verifier))` を consent に付け、token 交換に `code_verifier` を必須化。万一 code を横取りされても、verifier を知らない攻撃者は交換できない。
+3. **手動貼付でも state を検証**: 貼られた URL の state を照合し、不一致は拒否 (= phishing URL は貼っても弾かれる)。
+4. **補償制御は hard-fail**: 上記「account 検証」節の getProfile 照合が空振りする状態 (期待 email 未解決) では consent に進まない。
+
++ **入口で識別子を検証**: reauth engine は alias / account 名を **filesystem path** と **`pgrep -f "…/${alias}/…"` pattern** に流すことが多い。alias を plain token (`A-Za-z0-9_-`) に検証しないと、`..` で path traversal / `|` で pgrep の ERE が alternation 化し **kill 対象が任意プロセスに化ける** (confused-deputy)。引数は入口で charset 検証する。
+
+実装済 reference: gmail MCP reauth engine ([`gmail-mcp-multiaccount.md`](gmail-mcp-multiaccount.md) invariant 7-8、hermetic test 付き)。**同型の loopback OAuth フローを他にも持つなら同じ hardening を横展開する** (どのフローが未対応かは公開面に書かず個人層で追跡)。
 
 ## documentation の義務
 
