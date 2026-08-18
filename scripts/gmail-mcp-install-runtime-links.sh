@@ -21,6 +21,9 @@
 #   - canonical / backup は 0600 (cp -p は旧 mode を保存するので backup も明示矯正 —
 #     644 の premigration backup が group-readable な $HOME 配下に残った実例 2026-08-18)
 #   - ~/.gmail-mcp と account dir は 0700 (credential 置き場に group/other の traverse 不要)
+#   - 既存 backup (*.premigration.* / *.expired*) と legacy dir 内の loose secret file も
+#     毎 run 0600 に self-heal (= 「backup を作る瞬間の chmod」 だけでは、旧版 engine が
+#     他マシンに残した 0644 backup は永遠に直らない — run するだけで矯正される位置に置く)
 #
 # 前提: git-crypt unlock 済 (ciphertext のまま link を張ると全 consumer が JSON parse
 #       error で死ぬため、magic bytes を見て abort する。空 file も同様に abort)
@@ -63,6 +66,31 @@ CHANGED=0
 is_ciphertext() {
     # git-crypt の magic bytes (\0GITCRYPT) なら true (= unlock されていない)
     [ "$(head -c 9 "$1" 2>/dev/null | LC_ALL=C tr -d '\0')" = "GITCRYPT" ]
+}
+
+harden_existing_secrets() {
+    # 既存 backup (*.premigration.* / *.expired*) と legacy dir (旧構成の残骸等) 内の
+    # loose secret file を毎 run 0600 に、group/other bit の立った dir を 0700 に矯正する
+    # self-heal。link_one の backup-時 chmod は「この run が作る backup」 しか守らない —
+    # 旧版 engine が残した 0644 backup が group-readable な $HOME 構成で他 local user に
+    # 読める実例 (2026-08-18) の再発防止で、pull + run の自然な動線だけで直るようにする。
+    # 冪等・非致命 (既に 0600/0700 なら黙る)。中身は一切読まない (名前 pattern + mode のみ)。
+    # find の -perm は BSD/GNU 両対応の「-g+r 形式 (= 当該 bit が立っている)」 のみ使う。
+    local f d
+    while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        chmod 600 "$f" 2>/dev/null && echo "  🔒 mode 矯正 0600: $f" || true
+    done < <(find "$MCP_DIR" -type f \
+        \( -name '*.premigration.*' -o -name '*.expired*' \
+           -o -name '*credentials*.json*' -o -name '*oauth*.json*' -o -name '*token*.json*' \) \
+        \( -perm -g+r -o -perm -g+w -o -perm -g+x \
+           -o -perm -o+r -o -perm -o+w -o -perm -o+x \) 2>/dev/null)
+    while IFS= read -r d; do
+        [ -d "$d" ] || continue
+        chmod 700 "$d" 2>/dev/null && echo "  🔒 mode 矯正 0700: $d/" || true
+    done < <(find "$MCP_DIR" -type d \
+        \( -perm -g+r -o -perm -g+w -o -perm -g+x \
+           -o -perm -o+r -o -perm -o+w -o -perm -o+x \) 2>/dev/null)
 }
 
 link_one() {
@@ -111,6 +139,9 @@ for acct in ${ACCOUNTS[@]+"${ACCOUNTS[@]}"}; do
     link_one "$REPO_DIR/secrets/gmail-gcp-oauth.keys.json" \
              "$MCP_DIR/$acct/gcp-oauth.keys.json"
 done
+
+# 既存 backup / legacy 残骸の mode self-heal (冪等、clean なら無音)
+harden_existing_secrets
 
 echo ""
 if [ "$CHANGED" = 1 ]; then

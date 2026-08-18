@@ -161,6 +161,33 @@ else
     ng "zero-account run should link client keys (rc=$rc, out=$out)"
 fi
 
+# ---------- T10: install — 既存 0644 backup / legacy dir の self-heal ----------
+echo "=== T10: install — 既存 backup / legacy 残骸の mode self-heal (0600/0700) ==="
+# 旧版 engine が残した状況を再現: 0644 の premigration/expired backup + 755 の legacy dir
+legacy="$FAKE_HOME/.gmail-mcp/ATTIC-legacy"
+mkdir -p "$legacy"
+chmod 755 "$legacy"
+printf '{"old":"keys"}' > "$legacy/oauth-keys.json"
+chmod 644 "$legacy/oauth-keys.json"
+printf '{"old":"token"}' > "$FAKE_HOME/.gmail-mcp/alpha/credentials.json.expired.20200101000000"
+chmod 644 "$FAKE_HOME/.gmail-mcp/alpha/credentials.json.expired.20200101000000"
+out="$(HOME="$FAKE_HOME" bash "$INSTALL" "$REPO" 2>&1)"; rc=$?
+[ $rc -eq 0 ] && ok "install succeeds with legacy debris present" \
+    || ng "install should succeed (rc=$rc, out=$out)"
+[ "$(mode_of "$legacy/oauth-keys.json")" = "0o600" ] \
+    && ok "legacy loose secret healed to 0600" || ng "legacy loose secret should be 0600"
+[ "$(mode_of "$FAKE_HOME/.gmail-mcp/alpha/credentials.json.expired.20200101000000")" = "0o600" ] \
+    && ok "expired backup healed to 0600" || ng "expired backup should be 0600"
+[ "$(mode_of "$legacy")" = "0o700" ] \
+    && ok "legacy dir healed to 0700" || ng "legacy dir should be 0700"
+# 再実行 (= 既に clean) では self-heal は無音
+out="$(HOME="$FAKE_HOME" bash "$INSTALL" "$REPO" 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && ! printf '%s' "$out" | grep -q "mode 矯正"; then
+    ok "self-heal silent when already clean"
+else
+    ng "self-heal should be silent on clean rerun (rc=$rc, out=$out)"
+fi
+
 echo ""
 echo "== gmail-mcp-engines: PASS=$PASS FAIL=$FAIL =="
 [ "$FAIL" -eq 0 ] || exit 1
