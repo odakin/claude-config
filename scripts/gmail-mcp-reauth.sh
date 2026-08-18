@@ -29,6 +29,10 @@
 #     injection 防止)
 #   - OAuth callback は state nonce 一致のみ受理 + PKCE S256 (偽 callback 先着 /
 #     code 横取りの両方を塞ぐ)。手動 URL 貼付 fallback でも state を検証
+#   - macOS のブラウザ起動は osascript `open location` + env 経由で consent URL を
+#     argv に載せない (= state/code_challenge を運ぶ URL の ps 採取窓を塞ぐ。
+#     Linux の xdg-open は URL を argv に取る以外の入口が無く残余あり — 他 local
+#     user の居る Linux では stdout の URL を手動 click 推奨)
 #   - accounts.yaml から expected email を解決できない reauth は既定で中止
 #     (= 認証後 getProfile 照合の空振り防止。意図的に進むなら REAUTH_ALLOW_UNVERIFIED=1)
 
@@ -212,9 +216,22 @@ def open_browser(url):
     # ブラウザ起動は best-effort — 失敗しても URL は stdout に印字済みなので手動で開ける。
     # (`open` 不在の非 macOS 環境で FileNotFoundError = OSError が port-in-use と
     # 誤診されないよう、listener 生成の except とは分離する。)
+    #
+    # ⚠️ AUTH_URL は state + code_challenge を運ぶ secret 運搬体 — argv に載せると
+    # 他 local user が `ps` で採取できる (macOS は他 user の argv も見せる)。macOS は
+    # osascript の `open location` + env 経由で argv に URL を出さない (env は他 UID
+    # 不可視、argv に出るのは AppleScript 文と env 変数名のみ)。
+    # Linux (xdg-open) は URL を argv に取る以外の汎用入口が無く、この残余は残る —
+    # 他 local user が居る Linux では stdout の URL を手動 click する方が安全。
     try:
-        subprocess.Popen([('open' if sys.platform == 'darwin' else 'xdg-open'), url],
-                         stdout=subprocess.DEVNULL)
+        if sys.platform == 'darwin':
+            env = dict(os.environ, REAUTH_OPEN_URL=url)
+            subprocess.Popen(
+                ['osascript', '-e',
+                 'open location (system attribute "REAUTH_OPEN_URL")'],
+                env=env, stdout=subprocess.DEVNULL)
+        else:
+            subprocess.Popen(['xdg-open', url], stdout=subprocess.DEVNULL)
     except Exception as e:
         print(f"⚠️  ブラウザ自動起動失敗 ({e}) — 上に印字した URL を手動で開いてください")
 

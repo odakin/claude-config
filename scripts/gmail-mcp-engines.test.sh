@@ -188,6 +188,71 @@ else
     ng "self-heal should be silent on clean rerun (rc=$rc, out=$out)"
 fi
 
+# ---------- T11: reauth — consent URL を browser 起動の argv に載せない ----------
+echo "=== T11: reauth — browser 起動の argv hygiene (URL は env 経由、 ps 採取窓なし) ==="
+# port 8370 を先に塞いで手動 mode に落とす (= listener の 300s 待ちを踏まずに
+# open_browser 呼び出し → input() EOF 即死、 で決定的に終わる)。stub browser が
+# argv と REAUTH_OPEN_URL env を記録する。
+STUBS="$TMP/stubs"; RECORD="$TMP/record"
+mkdir -p "$STUBS" "$RECORD"
+for stub in osascript xdg-open open; do
+    cat > "$STUBS/$stub" <<EOF
+#!/bin/bash
+printf '%s\n' "\$@" > "$RECORD/argv"
+printf '%s\n' "\${REAUTH_OPEN_URL:-}" > "$RECORD/env_url"
+exit 0
+EOF
+    chmod +x "$STUBS/$stub"
+done
+# best-effort で 8370 を占有 (既に使用中でも手動 mode になるので OK)
+python3 -c "
+import http.server, socketserver
+try:
+    s = socketserver.TCPServer(('127.0.0.1', 8370), http.server.BaseHTTPRequestHandler)
+    s.serve_forever()
+except OSError:
+    pass
+" &
+PORT_HOG=$!
+sleep 1
+printf '{"installed":{"client_id":"cid.example","client_secret":"cs-example"}}' \
+    > "$FAKE_HOME/.gmail-mcp/testacct/gcp-oauth.keys.json"
+out="$(HOME="$FAKE_HOME" PATH="$STUBS:$PATH" REAUTH_ALLOW_UNVERIFIED=1 \
+       bash "$REAUTH" "$REPO" testacct </dev/null 2>&1)" || true
+kill "$PORT_HOG" 2>/dev/null; wait "$PORT_HOG" 2>/dev/null
+# stub は Popen で fire-and-forget — record file を最大 5 秒 poll
+for _i in 1 2 3 4 5 6 7 8 9 10; do
+    [ -s "$RECORD/env_url" ] && break
+    sleep 0.5
+done
+if [ -f "$RECORD/argv" ]; then
+    ok "browser stub invoked"
+else
+    ng "browser stub was not invoked (out=$out)"
+fi
+if [ "$(uname)" = "Darwin" ]; then
+    if [ -f "$RECORD/argv" ] && ! grep -q "accounts.google.com" "$RECORD/argv"; then
+        ok "macOS: consent URL not in browser argv"
+    else
+        ng "macOS: consent URL must not appear in argv (argv=$(cat "$RECORD/argv" 2>/dev/null))"
+    fi
+    if grep -q "accounts.google.com" "$RECORD/env_url" 2>/dev/null \
+       && grep -q "state=" "$RECORD/env_url" 2>/dev/null \
+       && grep -q "code_challenge=" "$RECORD/env_url" 2>/dev/null; then
+        ok "macOS: URL (with state + code_challenge) delivered via env"
+    else
+        ng "macOS: env REAUTH_OPEN_URL should carry the full URL (env_url=$(cat "$RECORD/env_url" 2>/dev/null))"
+    fi
+else
+    # Linux: xdg-open は URL を argv に取る以外の入口が無い = 文書化済みの残余。
+    # ここでは「URL が browser に渡っている」 挙動だけを確認する (SKIP 相当の注記)。
+    if [ -f "$RECORD/argv" ] && grep -q "accounts.google.com" "$RECORD/argv"; then
+        ok "linux: xdg-open received URL (argv residual is documented, not asserted away)"
+    else
+        ng "linux: xdg-open should receive the URL (argv=$(cat "$RECORD/argv" 2>/dev/null))"
+    fi
+fi
+
 echo ""
 echo "== gmail-mcp-engines: PASS=$PASS FAIL=$FAIL =="
 [ "$FAIL" -eq 0 ] || exit 1
