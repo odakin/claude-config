@@ -36,8 +36,9 @@ reviewer として外部の grant proposal / scientific paper / 申請書 等を
 5 日で自動取消 / 別誌では督促 5 通の末に referee 解任。 いずれも依頼 mail が
 surface 機構の noise filter に落ちて人間に届かなかった)。
 
-- **査読依頼は失効型期限つきの義務 class**: 応答しないまま数日〜数週で自動取消・
-  referee 解任に至る。 「後で考える」 = 実質辞退 + editor の時間浪費 + 信用毀損。
+- **査読依頼は失効型期限つきの義務 class** (= 一般概念の正本 =
+  [`convention-design-principles.md#lapsing-deadline`](../docs/convention-design-principles.md#lapsing-deadline)):
+  応答しないまま数日〜数週で自動取消・referee 解任に至る。 「後で考える」 = 実質辞退 + editor の時間浪費 + 信用毀損。
   受諾でも辞退でも**返答すること自体が義務** (辞退 link の 1 click が editor の
   次候補打診を早める)。
 - **認識した同 turn で hard-deadline つき task 化**: 期限 = 依頼文の応答期限、 明記

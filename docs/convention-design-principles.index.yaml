@@ -205,6 +205,10 @@ sections:
     legacy: "8.21"
     level: 3
     title: "8.21 noise 抑制の識別 signal を義務 mail が共有する — bucket 混在には obligation-class override"
+  - id: lapsing-deadline
+    legacy: "8.22"
+    level: 3
+    title: "8.22 失効型期限 — 超過が「遅れ」でなく「義務の消滅」になる deadline class"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

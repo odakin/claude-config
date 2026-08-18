@@ -806,6 +806,19 @@ reflex: noise blocklist / 抑制 filter に entry を足す瞬間に「この si
 
 origin: 2026-08、 出版社 domain の noise 登録 (= 出版勧誘 spam が着信の大半) が同一 domain から来る査読依頼 + 督促を全 surface 段で suppress し、 未応答のまま依頼引き上げに至った RCA。 retroactive sweep で同型 3 件 (= 別誌の改訂 round 再依頼が督促多数の末に referee 解任 等)、 うち 2 件の抑制 entry は「義務を surface する名指し検出を tuning した同じ commit」 で登録されていた。 [`§8.17`](#broadcast-obligation-blind-spot) origin の sibling 観測 (= 2026-06 の ML bracket 軸 3 件) と合わせ、 axis と detector が違っても generator が同一 ([`§9.8`](#single-observation-scope-check) 充足)。 instance (= override 実装・pattern / sender 具体値) は個人層 config に残置 (= kernel-up / instance-down)。 domain 別 instantiation (査読依頼) = [`peer-review-workflow.md#invitation-intake`](../conventions/peer-review-workflow.md#invitation-intake)。
 
+### <a id="lapsing-deadline"></a>8.22 失効型期限 — 超過が「遅れ」でなく「義務の消滅」になる deadline class
+
+期限には 2 class ある。 **通常の期限**は超過後も挽回できる (= 遅れて出す・詫びる・延長を頼む — 損失は連続的に増える)。 **失効型期限** (lapsing deadline) は超過の瞬間に義務・機会そのものが不可逆に消える — 依頼の自動取消・役割の解任・応募窓の閉鎖・権利の失効。 損失が階段関数なので、 期限管理の設計要件が通常の期限と質的に違う:
+
+- **重要度と失効性は独立軸**: triage を優先度 (importance) proxy で行うと「重要度 中 × 失効型」 が件数 summary に畳まれて named visibility を失う ([`§8.8`](#proxy-blind-spot) の deadline 版 — 失効性は優先度から導出できない)。 ∴ intake の時点で失効性を**第一級属性として明示的に encode** する ([`§8.11`](#downstream-net-intake-leverage) — intake で表現されない属性は下流の網が守れない)。
+- **発火は期限前でなければ価値がほぼゼロ**: 通常の期限では「超過に気づく」 安全網にも挽回価値があるが、 失効型は超過に気づいても義務が戻らない。 surfacing は期限**前**に、 優先度・件数 cap と独立の named 表示で出す。
+- **超過直後の救出窓**: 失効が即時でない運用 (= 相手方がまだ再割当していない・取消に猶予がある) では、 超過直後の短い窓に限り挽回可能性が残る — 超過側も「過ぎたから畳む」 でなく、 救出窓の間は surface を続ける。
+- **失効が確定したら incident**: 「取り消されたから対応不要」 で流さない — どの経路・filter で期限前 signal が落ちたかを RCA してから閉じる ([`§8.21`](#noise-obligation-signal-sharing) の抑制交差が第一容疑)。
+
+domain 別 instantiation (査読依頼 = 依頼→数日で自動取消・解任) = [`peer-review-workflow.md#invitation-intake`](../conventions/peer-review-workflow.md#invitation-intake)。 機械 semantics (= marker field・cap 除外表示・救出窓の実装) は個人層 tooling に残置 (= kernel-up / instance-down)。
+
+origin: 2026-06、 研究 platform への招待 (返答期限つき) が priority 中で件数 summary に畳まれ 11 日埋もれた RCA (= 失効型 marker + cap 除外 + 救出窓を個人層で tooling 化した契機)。 sibling 観測 (2026-08): 査読依頼が応答期限内に人間に届かず自動取消 (= [`§8.21`](#noise-obligation-signal-sharing) origin と同 incident の deadline 軸)。 2 観察 ([`§9.8`](#single-observation-scope-check) 充足)。 2026-08-18 に個人層 home から本節へ昇格 (= 層 1 doc が層 3 home を参照できない registry 制約の解消)。
+
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。
