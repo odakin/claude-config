@@ -101,6 +101,15 @@ copy すると必ず実装が分岐する。実行実体を層 1 の 1 本に統
 5. **アカウント取り違え防止**: reauth engine は login_hint 事前選択 + 認証後
    getProfile 照合で、違うアカウントの token が alias に紐づく事故を構造的に防ぐ
    (不一致 = token 自動破棄)。
+6. **npm package は version pin**: `~/.claude.json` の args は
+   `@gongrzhe/server-gmail-autoauth-mcp@<version>` と exact pin する (unpinned だと
+   npx cache miss 時に upstream の最新 = 悪意ある新 release がそのまま mailbox token
+   を握る)。version 更新は意図的な bump として diff review とセットで行う。
+7. **既知の限界 (hardening 候補)**: reauth の OAuth flow は loopback (127.0.0.1)
+   bind だが `state` nonce / PKCE 未実装 — 同一マシン上の他プロセスや drive-by page
+   が listener に偽 code を先着させる窓が理論上ある。補償制御は 5 の getProfile 照合
+   (accounts.yaml が unlock 済みのときのみ有効)。**accounts.yaml を lock したまま
+   reauth しない**こと。state/PKCE 追加は将来の hardening 課題。
 
 実例 instance: 所有者の `gmail-mcp-config` (private) が 6 アカウントでこの構成を運用
 (collaborator はアクセス不要 — 本 doc + templates だけで独立に構築できる)。
