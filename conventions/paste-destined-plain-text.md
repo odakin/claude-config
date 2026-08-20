@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude が書いた文面 / コマンドを user が手で貼り付けて実行・投稿する workflow を設計・実行するとき (= 貼り先が plain text 入力欄でも terminal でも)
 category: web
-summary: 貼り付け先行きテキストの 3 層規律 (= ① authoring: 最終的に plain text 入力欄へ貼られる文面は中間 artifact 込みで最初から markdown 装飾ゼロ 〔「いま md/yaml に書いている」 は適用除外の理由にならない〕 / ② delivery: クリップボード直渡し 〔pbcopy 等〕 か code block、 rendered md 表示からのコピーは bold span ごとテキスト消失する事故源なので禁止 / ③ verification: 投稿後に read-back API で読み戻して draft と機械照合、 記録 commit はその後。 記号剥がれ 〔文は残る〕 と span 消失 〔文ごと消える〕 の 2 段階の悪性差)。 3 層は貼り先一般の framework = 貼り先が対話 zsh なら ① は shell-env.md の 2 規律 (行内 # / tilde) で最上位 mode は silent 成功、 共通 kernel = 機械生成 artifact を人間貼り付け用に書き直した瞬間に元の保証が消える ∴ 提示文面それ自体が検査対象
+summary: 貼り付け先行きテキストの 3 層規律 (= ① authoring: 最終的に plain text 入力欄へ貼られる文面は中間 artifact 込みで最初から markdown 装飾ゼロ 〔「いま md/yaml に書いている」 は適用除外の理由にならない〕 / ② delivery: クリップボード直渡し 〔pbcopy 等〕 か code block、 rendered md 表示からのコピーは bold span ごとテキスト消失する事故源なので禁止 / ③ verification: 投稿後に read-back API で読み戻して draft と機械照合、 記録 commit はその後。 記号剥がれ 〔文は残る〕 / span 消失 〔文ごと消える〕 / 後続全損 〔最初の span 以降が全部消える〕 の 3 段階の悪性差 + 切断位置 fingerprinting 〔切断点と装飾境界の照合で経路確定〕 + chat に出す参考データも貼り付け素材)。 3 層は貼り先一般の framework = 貼り先が対話 zsh なら ① は shell-env.md の 2 規律 (行内 # / tilde) で最上位 mode は silent 成功、 共通 kernel = 機械生成 artifact を人間貼り付け用に書き直した瞬間に元の保証が消える ∴ 提示文面それ自体が検査対象
 -->
 # 貼り付け先行きテキスト — plain text authoring・クリップボード直渡し・投稿後照合
 
@@ -13,8 +13,9 @@ Google Classroom の課題文・学務 system の入力欄・CMS の投稿 form 
 |---|---|---|
 | **記号剥がれ** | `**` 等の marker だけ残る/消え、 文は残るが読みにくい | plain text として markdown 原文をそのまま貼る |
 | **span 消失** | `**bold**` で囲んだ**テキストごと**消える (= 課題の本体指示 1 文が丸ごと欠落する等、 文意が壊れる) | **rendered md 表示** (chat 描画 / viewer panel) を選択コピー → contenteditable な web UI に貼る。 renderer → クリップボード → 貼り先の変換で装飾 span が落ちる |
+| **後続全損** | **最初の装飾 span を境に、 それ以降の全テキスト**が消える (= span 単体でなく残り全部。 貼り付け内容が span 境界で打ち切られる) | span 消失と同経路の悪化形 (= rendered md 表示のコピー)。 同一文面で再現性あり (実測 2 連続) |
 
-span 消失は記号剥がれより悪性 (= 欠落に気づきにくく、 貼った本人の目視 proofread をすり抜けやすい)。
+span 消失・後続全損は記号剥がれより悪性 (= 欠落に気づきにくく、 貼った本人の目視 proofread をすり抜けやすい)。
 
 ## 3 層規律
 
@@ -23,6 +24,8 @@ span 消失は記号剥がれより悪性 (= 欠落に気づきにくく、 貼�
 最終的に plain text 入力欄へ貼られる文面は、 **どこに書く場合でも** markdown 装飾 (bold / heading / table / link 記法 / inline code) を使わず書く。 「いま chat に書いている」 「いま yaml field に書いている」 「いま draft の .md に書いている」 は適用除外の理由にならない — **判断基準は「最終的にどの UI に貼られるか」** (= 中間 artifact 原則)。 draft file 自体の metadata header・検討事項 list など「貼られない部分」 は markdown で構わない。
 
 強調の代替は plain text 内で可能な手段 (「鍵カッコ」 / `[見出し]` 独立行 / ・箇条書き / 番号 (1)(2))。
+
+⚠️ **「draft」 だけでなく chat に出す参考データも貼り付け素材になる**: 集計値・基準の一覧など「user が文面を自作するための素材」 として提示したテキストからも、 user は部分コピペで転記する。 貼り先が plain text UI と分かっている文脈では、 素材も code block か装飾ゼロで出す (= 実測: 装飾付きで出した参考データから user が転記し、 bold 境界で後続全損 ×2)。
 
 ### ② delivery — コピー操作を機械側に寄せる
 
@@ -34,11 +37,16 @@ span 消失は記号剥がれより悪性 (= 欠落に気づきにくく、 貼�
 
 user が「投稿した」 と言ったら、 **同 turn で** 投稿先の read API (Classroom なら `classroom_list_coursework` 等) で読み戻し、 draft と機械照合する (= 欠落文・orphan 句読点・壊れ行の検出)。 目視 proofread は span 消失を素通しした実績があるので、 照合は substring match 等の機械で行う。 投稿の記録 commit はこの照合を通してから。 read API が無い投稿先では user に「貼った結果の全文コピー」 を返してもらって照合する。
 
-## 根拠 (= 実測 3 incident、 2026-05〜07、 大学講義の Classroom 運用)
+### 切断位置 fingerprinting (= 事故発生後の経路診断)
+
+投稿が途中で切れていたら、 **切断位置を source の装飾境界と照合する**: 切断点が source の最初の bold / 装飾 span の開始直前と一致するなら、 rendered md 表示からのコピー経路と確定できる (= 後続全損 mode の指紋)。 実測では同一文面の再投稿 2 回がいずれも最初の bold span 直前で切断しており、 経路確定 → クリップボード直渡しへの切替で 1 発解消した。 この診断は ③ の read-back が前提 (= 切断は貼った本人の目視をすり抜ける)。
+
+## 根拠 (= 実測 4 incident、 2026-05〜08、 大学講義の Classroom 運用)
 
 1. **2026-05**: chat に markdown で出した説明 draft を user が送信用に流用 → 記号剥がれで bold 部の主語・述語が消えた文面が学生に届いた (= ① の欠如)
 2. **2026-05 (2 週後)**: 「chat では plain text」 規律の確立後、 yaml field に書く draft で markdown が再発 (= 中間 artifact を別カテゴリと reflex 分類する trap → ① の「最終的にどの UI に貼られるか」 基準を明文化)
 3. **2026-07**: 課題文 draft .md の本文に bold 2 文 → user が rendered 表示からコピペ投稿 → **span 消失** (課題の本体指示 1 文が丸ごと欠落)。 投稿後 read-back 照合が欠落を検出し、 学生の実害前に修正 (= ③ が実働した初例。 ②③ を規律化)
+4. **2026-08**: chat に markdown bold 入りで提示した**参考データ** (成績集計の素材) から user がコピペ投稿 → **後続全損** (最初の bold span 以降が全部消えた)。 read-back 照合が 2 回連続で切断を検出 → 切断位置 fingerprinting で経路確定 → クリップボード直渡しで解消 (= 後続全損 mode・診断法・「素材も貼り付け素材」 の 3 点を規律化)
 
 ## <a id="same-framework-other-paste-targets"></a>同じ framework の別 instance — 貼り付け先が terminal のとき
 
