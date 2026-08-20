@@ -521,6 +521,8 @@ end tell
 
 ⚠️ **harness の Bash tool は foreground の bare `sleep` を block する** (= 「`killall …; sleep 6`」 を Bash に直書きすると止まる)。 → reset の待ちは (a) **`xlsx-to-pdf.sh` 等 script の内部 `sleep` に任せて script ごと呼ぶ**、 (b) **applescript 内の `delay`** で待つ、 (c) 長い処理は `run_in_background` で逃がす、 のいずれか。 bare `sleep` 直打ちに依存した reset 手順は harness 上で機能しない。
 
+⚠️ **遅いマシンでは cold-start の `open` だけで 90-120 秒を超える** (= thermal throttle 中の旧 Intel 機で実測): osascript client を短い timeout で回すと「ハング」 に見えるが、 実体はまだ launch 中。 対処 3 点: (a) **client 側 timeout は 300 秒以上**で呼ぶ、 (b) **client を kill しても Excel 側の open は止まらない** — Excel は後から open を完了して workbook を保持し続けるので、 リトライ前に `timeout 10 osascript -e 'tell application "Microsoft Excel" to get name of every workbook'` の **応答 probe** で状態を見る (= 応答すれば ready、 timeout すれば modal dialog か launch 中)、 (c) 既に開いた workbook への 2 度目の script は数秒で終わる (= 高くつくのは初回 open のみ)。 origin: 2026-08-20 海外出張様式 xlsm fill (90s timeout で kill → 実は launch 遅延、 再実行 1 発成功)。
+
 **検証**: 書き込み後は openpyxl で読み直して値を assert する (= osascript は失敗しても exit 0 で沈黙しがち)。 ⚠️ ただし **merged cell の値は fitz / openpyxl の text 抽出では取れないことがある** (= 結合範囲の左上以外は空に見える / PDF の text 抽出も同様) → 抽出の空振りを「書けていない」 と即断せず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF **画像**で最終確認する。
 
 origin: 2026-06-05 学外者用様式 (= 複数シート + 数式参照 + textbox 標題) の cell 値修正。 killall 直後の 1 osascript (activate→open→set→save→close saving yes→quit) が -609 で全 cell 未書き込み → 上記 4 点で復旧。
@@ -3329,6 +3331,36 @@ print('value 変更:', [k for k in tpl_inkan & edit_inkan if values[k]['TPL'] !=
 - ⚠️ **openpyxl は reload で `img.width/height` を読むと PNG ネイティブ size (= 500) を返す**ので表示 size の verify には使えない (= 誤判定 trap)。 **実表示 size は drawing XML の `<ext cx cy>` (= EMU 単位、 9525 EMU = 1px)** で確認: `zipfile` で `xl/drawings/drawing1.xml` を読み `cx/9525` px 換算。 最終 verify は [`pdf-visual-confirm`](#pdf-visual-confirm) PDF visual で印影の位置・はみ出しを目視 (= 認印が氏名に重なる / 右余白からはみ出していないか)。
 
 ---
+
+## <a id="xlsx-cell-value-zip-surgery"></a>値 cell だけの zip 直編集 (= Excel も openpyxl も使わない第 3 経路)
+
+[`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) 回避のもう 1 つの経路: **worksheet XML の `<c>` 要素だけを regex で書き換え、 他の zip member を byte 同一で書き戻す**。 Excel automation が使えない/不安定な環境 (= CI・throttled マシン・[`excel-osascript-cell-write`](#excel-osascript-cell-write) が flaky な時) で、 drawings / VBA (`vbaProject.bin`) / form control を一切触らずに値だけ直せる。
+
+```python
+import zipfile, re, shutil
+shutil.copy2(src, src + '.bak')
+zin = zipfile.ZipFile(src + '.bak')
+data = zin.read('xl/worksheets/sheet1.xml').decode('utf-8')
+# 数値 cell <c r="C62" s="12"><v>46370</v></c> → 表示文字列 (inlineStr) へ
+pat = re.compile(r'<c r="C62"((?:(?!/?>)[^>])*)>(?:<v>46370(?:\.0)?</v>)</c>')
+m = pat.search(data); attrs = re.sub(r'\s*t="[^"]*"', '', m.group(1))
+data = data[:m.start()] + f'<c r="C62"{attrs} t="inlineStr"><is><t>2026/12/14</t></is></c>' + data[m.end():]
+with zipfile.ZipFile(src, 'w', zipfile.ZIP_DEFLATED) as zout:
+    for item in zin.infolist():
+        raw = zin.read(item.filename)
+        if item.filename == 'xl/worksheets/sheet1.xml': raw = data.encode('utf-8')
+        zout.writestr(item, raw)
+```
+
+勘所:
+
+1. **置換は「見つからなければ fail」 で数える** (= replaced N/N を assert、 [`batch-text-edits`](batch-text-edits.md) と同じ契約)。 `s=` (style) 属性は保持、 既存 `t=` 属性は落としてから `t="inlineStr"` を付ける。
+2. **日付 serial の表示事故が典型の使い所**: General 書式の cell に日付 serial を書くと**印字が生の serial 値 (46370) になる**。 Excel で number format を当て直すより、 **表示文字列を inlineStr で焼く**方が確実 (= 印字目的の様式では日付が text でも実害なし)。 逆に雛形側が日付書式済みの cell (= 記入例 face に datetime が入っている列) は serial のままで正しく表示される — **書式の有無は openpyxl の `cell.number_format` で先に確認**。
+3. shared strings を触らない (= `t="inlineStr"` は `sharedStrings.xml` の count 更新が不要で、 追記型より安全)。
+4. **検証 3 点 set**: openpyxl readback で値 assert + `scripts/check-xlsx-integrity.py` (= zip 直編集の納品前 gate) + [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で label 上書きゼロ確認。
+5. Excel automation との**hybrid が実戦形**: 値の大半は Excel osascript で書き、 **書式起因の後修正だけ本手術**で当てる (= Excel 再起動 round を 1 つ消す。 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 回避にも効く)。
+
+origin: 2026-08-20 海外出張様式 xlsm (= VBA + drawings 持ち) の日程表日付 7 cell。 Excel scripting が -1728/-1708 で不安定な throttled マシン上で、 値は AppleScript・書式は本手術の hybrid で完了。
 
 ## <a id="zip-cp932-filenames"></a>日本語ファイル名 zip の展開 (= cp932 文字化け)
 

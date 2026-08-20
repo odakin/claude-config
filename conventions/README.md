@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 87 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 88 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -185,6 +185,8 @@ layer 1 (public) のドメイン固有規約 87 file をカテゴリ別に列挙
   - 共同 PDF を Dropbox に置いてリポから symlink で参照する規約 (§10 で OneDrive / Google Drive 等の他クラウド + 索引自動生成 launchd gotchas へ応用)
 - **[expensive-intermediate-artifacts.md](expensive-intermediate-artifacts.md)** — 5 分以上かかる生成物の出力先を決めるとき + snapshot artifact を命名するとき
   - `-output /tmp/...` reflex 防止 (= OCR / ML / 数値計算で 5 分以上要する artifact をリポ内永続化、 hooks/expensive-tmp-guard.sh で機械的検出) + snapshot artifact の命名規約 (= 日付〔同日複数なら時分〕+ 入力状態 ID 〔git 由来は commit range〕 を filename に焼く、 snapshot vs view の名前区別、 #snapshot-artifact-naming)
+- **[garoon.md](garoon.md)** — Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを Claude から読む/探すとき
+  - Garoon cloud の browser-MCP 自動化 (= SSO でも logged-in session 越しに読める、 app 別 search URL 直叩き、 download token の期限切れ = login page 化、 file 取得は user gesture 必須)
 - **[github-security-automation.md](github-security-automation.md)** — repo の Dependabot/CodeQL/Semgrep baseline や Dependabot PR を扱うとき
   - 全 repo 横断の Dependabot/CodeQL/Semgrep/auto-merge baseline + Free plan silent rejection + Dependabot PR tier-based merge discipline + ESM migration backwards-compatible normalizer + `gh` CLI gotcha (= users/X/repos public-only / mergeStateStatus UNKNOWN retry) + bash set -e + heredoc + $() interaction fix + monorepo dependabot.yml directories+groups + cascading PR convergence loop
 - **[google-api-direct-access.md](google-api-direct-access.md)** — Google API を Python から直接叩く setup をするとき

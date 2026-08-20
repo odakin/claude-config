@@ -220,3 +220,17 @@ Claude in Chrome MCP は **自分専用の tab group** で動く。 user が手�
 
 - broker UI の domain-level block: §「ロックイン済 web app からのテーブル data 取得は scrape より export を優先」 末尾の「Browser MCP の制約」 参照
 - 個人の母艦ブラウザ選定 (Brave 等) は personal layer (個人 dev-environment) で書く
+
+## <a id="browser-download-automation"></a>ブラウザ MCP からの file download は user gesture 必須 (= scripted download の silent block)
+
+**現象**: browser MCP (Claude in Chrome 等) で page 内 JS から download を発火させても、 **保存が一切実行されない** — blob + `<a download>` の `.click()` も `location.assign(<content-disposition URL>)` も、 browser の download 履歴 (History DB の `downloads` table) に **record すら残らず** 無音で落ちる。 extension/CDP 経由の合成 click も user gesture 扱いにならず、 link click での download も発火しない (= 実測、 Chromium 系)。 `fetch()` 自体は page 内で成功する (= bytes は取れている) が、 **base64 で tool 結果に持ち出すのは MCP 側 filter が block する** — これは data-exfiltration guard なので**回避しない** (chunk 分割等での evasion は禁止)。
+
+**診断**: 「DL したはずが落ちてこない」 時は、 保存先 dir の監視より先に **browser の download 履歴 DB を直接読む** (= 稼働中でも DB copy → sqlite で `downloads` table)。 record が無ければ「保存先違い」 ではなく「発火していない」 が確定する。 併せて download URL が**期限付き token** (`?time=...` 等の signed param) を持つ場合、 stale な page から取った URL の fetch は **200 + login page HTML** を返す (= サイズが数 KB の HTML なら token 切れ。 page を reload してから再試行)。
+
+**How to apply** — fallback ladder (上から順に):
+
+1. **user の手 click** (= 物理的に browser の前にいる人に依頼。 リモート操作中の user は click できないことに注意 — 「どの機械の browser を操作しているか」 と「user がどこにいるか」 は別物)。
+2. **cloud 共有リンク経由**: user が手元マシンで DL → cloud storage の共有リンク (Dropbox folder link は `&dl=1` で zip 一括) を chat に貼ってもらい、 worker 側で `curl -L`。 zip の filename mangling は cp437 → utf-8 re-decode で復元 (= office-automation の `zip-cp932-filenames` と同じ手当)。
+3. **メール添付経由**: user が自分宛に添付送信 → Gmail 系 MCP の attachment download で取得。
+
+**典型パターン**: SSO 保護の社内 groupware (掲示板 / ファイル管理) を logged-in browser session 越しに読むのは成功するが、 file 取得だけが上記 block で落ちる — 読み (get_page_text / find) と取得 (download) は別権限帯だと思って設計する。
