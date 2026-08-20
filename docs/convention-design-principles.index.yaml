@@ -209,6 +209,10 @@ sections:
     legacy: "8.22"
     level: 3
     title: "8.22 失効型期限 — 超過が「遅れ」でなく「義務の消滅」になる deadline class"
+  - id: lapsing-opportunity-intake
+    legacy: "8.23"
+    level: 3
+    title: "8.23 失効型〆切つきの機会 — 義務網と応答網の谷間に落ちる opportunity class"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

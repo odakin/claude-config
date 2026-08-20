@@ -819,6 +819,24 @@ domain 別 instantiation (査読依頼 = 依頼→数日で自動取消・解任
 
 origin: 2026-06、 研究 platform への招待 (返答期限つき) が priority 中で件数 summary に畳まれ 11 日埋もれた RCA (= 失効型 marker + cap 除外 + 救出窓を個人層で tooling 化した契機)。 sibling 観測 (2026-08): 査読依頼が応答期限内に人間に届かず自動取消 (= [`§8.21`](#noise-obligation-signal-sharing) origin と同 incident の deadline 軸)。 2 観察 ([`§9.8`](#single-observation-scope-check) 充足)。 2026-08-18 に個人層 home から本節へ昇格 (= 層 1 doc が層 3 home を参照できない registry 制約の解消)。
 
+### <a id="lapsing-opportunity-intake"></a>8.23 失効型〆切つきの機会 — 義務網と応答網の谷間に落ちる opportunity class
+
+任意参加の機会 (= 研究会・workshop・公募・応募窓) は**義務でも応答でもない**ため、 mail triage の主要な網 — 名指し検出 (= per-person proxy)、 義務 intake ([`§8.17`](#broadcast-obligation-blind-spot))、 既知 thread 追跡、 TODO 化済み期限網 — の**どの trigger も踏まない**。 しかも機会は典型的に**長 lead time + 失効型〆切** ([`§8.22`](#lapsing-deadline)) で届く: 告知は数ヶ月前、 行動〆切は開催日のずっと手前、 超過した瞬間に機会そのものが消える。 event/deadline 系 surfacing の horizon が短窓 (= 数日〜数週) だと「**早く告知されるほど検出不能**」 という逆行が生じる ([`§8.18`](#request-mail-two-date-axes) の変種 = 行動〆切軸が horizon の外に出る)。
+
+failure の解剖 (3 点が独立に効く):
+1. **網の谷間**: 義務網の trigger は「義務を認識した」、 名指し網の trigger は宛先/名前 — 機会 broadcast (= BCC「各位」) はどちらも踏まない。
+2. **「読めば終わり」 規律の追認**: announcement を read 化で discharge してよいとする triage 規律は、 機会 class では intake 経路そのものを閉じる (= 判断が読んだ人の頭にしか残らない)。
+3. **受け皿はしばしば既にある**: 参加 lifecycle ledger (= considering → applied → …) が存在しても、 「案内 mail → 検討 entry」 の変換規律が無ければ ledger には「たまたま気づいた機会」 しか載らない。
+
+対策 pattern:
+- **機会 intake 規律 (= [`§8.17`](#broadcast-obligation-blind-spot) の義務版と対)**: 〆切つきの機会を認識した同 turn で、 lifecycle ledger に検討 entry を立てる **or** 「検討しない」 を明示して閉じる (= declared skip)。 「読めば終わり」 arm から機会 class を明示的に除外する。
+- **〆切抽出器は書式と距離の両方を audit**: (a) 早期告知が horizon 外に落ちないか (= first-seen surface / 窓連動)、 (b) 締切語の**前置/後置**など書式 variance に頑健か ([`§8.8`](#proxy-blind-spot) の書式 proxy 版)、 を test case に含める。
+- **FP は分業で受ける**: 機会案内は高 volume ([`§8.21`](#noise-obligation-signal-sharing) の noise 圧と同源) なので「全案内 surface」 は noise 化する — 〆切を持つ mail だけ機械が surface + 参加検討の判断は人間、 の分業に切る。
+
+reflex: mail triage / surfacing の網を列挙・設計するとき「**義務でも応答でもない、 〆切つきの機会はどの網が拾うか**」 を 1 行問う。 答えが「人間が読めば」 なら、 その class は網の外だと**宣言**する (= silent 死角を declared 死角に)。
+
+origin: 2026-08、 地域研究会の案内 (= 初報 + リマインド計 4 通、 BCC「各位」、 参加登録・発表申込の段階〆切つき) が約 3 ヶ月・4 通全部不可視のまま発表申込〆切が silent 失効。 名指し網 (宛先圏外) / 義務網 (義務でない) / 〆切抽出器 (締切語前置 + 早期告知で horizon 外) / 未認識 backlog 段 (rolling 窓で walk 前に silent 退場) の 4 経路が**独立に**落ち、 最終 catch は主催者の 4 通目 (〆切 2 日前) だった。 本 class 直接観察は 1 + 隣接 class sibling 2 (= [`§8.17`](#broadcast-obligation-blind-spot) 義務 broadcast 1.5 ヶ月 / [`§8.22`](#lapsing-deadline) 査読依頼自動取消) — [`§9.8`](#single-observation-scope-check) は隣接 class 複数観察で充足と判断、 本 class 単独の再発で強化する。 instance (= ledger repo 名・triage 段の具体 arm・検出器実装) は個人層に残置 (= kernel-up / instance-down)。
+
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。
@@ -1572,4 +1590,5 @@ gate: index の legacy 集合が HEAD (= 直前 commit) に対して **append-on
 | 2026-06-30 | §17 新設「階層内の同名 entity 併存 — SoT 表現で context path を明示」 | 大学組織で「学部内 X 専攻」 と「大学院 Y 専攻」 が同 word「専攻」 で並存する fact を 3 回の user 訂正連鎖を経て理解した RCA を一般化。 §2 (= 重複避け) §15 (= 多重記述 consolidation) と直交 (= 重複でなく collision、 各 reference は legitimate に別 entity を指す literal、 重複検出器の射程外)。 1 階層 frame 暗黙仮定 → 別階層誤訂正 → 二度ハマる cycle の prevention に SoT 表現の path 明示 + 階層併存 warning + errata history + context-tagged pointer を要求。 §4 (orient before act) trap (1) の上流、 §2.4 (errata marker) の collision domain 適用。 instance は layer-3 (= 個別 user profile) に sequester (= kernel-up / instance-down)。 user 依頼。 |
 | 2026-07-10 | §8.12 に doc-tier 内 placement 軸 (= grep 着地点) を追記 | 運用 doc (= ID・token 表) を grep 読みする session に、 別 doc の一般則・文末 pointer が retrieval 窓外で発火しない miss 形を 1 事例 (= discord-bot.md UA 要件の再発 → canonical script + 着地点 routing pointer で design-out) から §8.12 item 4 の clarification として追記。 新 section は §9.8 bar (= 2+ 観察) 未満で見送り、 独立 2 例目で axis 昇格を再判定。 提案 kernel の残り (= 「invocation を伴う規則は script 化が最強」) は §14.5/§10.9/§2.5 既存で dedup (= build-nothing)。 cold-eyes handoff 経由、 起票者の一般化案を N=1 で down-scope |
 | 2026-07-03 | §8.17 新設「broadcast で届く個人義務 — per-person addressing proxy の構造的 false negative」 | layer-3 で年次 institutional 義務 (= 受講報告 + 書類提出、 学内締切付き) の BCC 一斉配信 3 通 (宛名「各位」) が name-mention surfacing を全通貫通し、 個別名指しの 4 通目催促で発覚 = 締切 1.5 ヶ月超過の RCA を一般化。 検出層 (= per-person proxy の盲点、 §8.8 の broadcast 形) + intake 層 (= 認識済み義務の prose 記載 ≠ encoding、 §8.11/§8.12) の複合 failure と特定。 対策 = 同 turn encoding (= 判断規律の芯) + obligation-signal surfacing (= proxy-subset と明示) + リマインド反復の escalation 信号化。 sibling 2 件 (= 役員 ML 会議招集 suppress / 学内 ML 会議通知不検出) と合わせ 3+ 観察 (§9.8 充足)。 §8.16 (= 不在主張の channel 軸) の義務検出 direction 対。 user 依頼。 |
+| 2026-08-20 | §8.23 新設「失効型〆切つきの機会 — 義務網と応答網の谷間に落ちる opportunity class」 | layer-3 で地域研究会案内 4 通 (BCC「各位」、 段階〆切つき) が約 3 ヶ月・4 経路 (名指し網 / 義務網 / 〆切抽出器の書式前置+早期告知 / 未認識 backlog の rolling 窓 silent 退場) を独立に貫通し発表申込〆切が silent 失効した RCA を一般化。 §8.17 (義務 broadcast) の機会版・§8.22 (失効型) の intake 前段・§8.18 (二日付軸) の horizon 変種。 対策 = 機会 intake 規律 (検討 entry or declared skip) + 〆切抽出器の書式/距離 audit + FP 分業。 本 class 直接 1 + 隣接 sibling 2 で §9.8 は隣接充足と明示。 user green-light 経由 (worker session 実装)。 |
 | 2026-07-25 | §8.8 頻出 proxy 型に「repo tree / git dirt を変更・副作用の proxy にする」 row 追加 | OAuth credential 書き戻し箇所の一掃 sweep が、 書き込み先だけ repo 外 runtime dir の 1 箇所を見落とし (= dirt にならず発見対象外)、 同日の耐久性 audit も同じ runtime dir の credential 欠落 (1 マシン 45 日不在) を scan 範囲外にしていた = 「repo の外は sweep の外」 の同一構造 2 実例 (§9.8 充足)。 別調査の独立実測が両方を発見。 user 依頼 (「層1 SoT にできることある?」)。 |
