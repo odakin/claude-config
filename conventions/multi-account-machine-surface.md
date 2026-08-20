@@ -56,6 +56,7 @@ summary: アカウント × マシン × 端末 (desktop app / スマホ remote)
 - **desktop app 切替 ≠ CLI 切替の認知乖離**: app で B に切替えても無人ルーチンは A のまま消費 → I5 の drift 検出が surface
 - **古い CLI が PATH 反転で優先解決され RC が死ぬ**: [remote-control-server.md #troubleshooting](remote-control-server.md#troubleshooting) の 3 パターン (version mismatch / API key 混入 / path_helper 反転)
 - **auth の file-copy 誤解**: `.claude.json` を copy してもアカウントは移らない ([remote-control-server.md #account-auth-keychain](remote-control-server.md#account-auth-keychain))
+- **ブラウザ拡張 (Claude in Chrome) のアカウント軸の見落とし (2026-08-20 実測)**: 拡張は Claude アカウントに署名して動き、 MCP 側の domain 許可・接続の観察は**拡張の署名アカウント**に紐づく。 session のアカウントと拡張の署名アカウントが食い違うと、 (a) 片方のアカウントで確認した権限設定が実際に動いている拡張には効いておらず、 (b) tool の失敗が `Permission denied for this action on this domain` / `Navigation to this domain is not allowed` と**ドメイン名指し**で返るため「このドメインはカテゴリ的にブロックされる (政府系 / 金融系)」 という**もっともらしい誤診**に誘導される (実測 = 官公庁系申請システムで誤診)。 第一手 = domain policy を疑う前に**拡張の署名アカウントを確認** (拡張アイコン → アカウント表示、 session 側は userEmail)。 副作用 = 署名切替をまたいで接続し直すと **MCP タブグループが接続ごとに増殖** (旧 group が会話タイトル名で遺物として残る) — 旧 group のタブは閉じて良い。 なお claude.ai web タブのアカウント (= cookie) は拡張の署名とも session とも独立の**第 3 の軸**で、 「どの面がどのアカウントか」 は面ごとに個別確認が要る
 
 ## <a id="honest-limits"></a>正直な限界
 
