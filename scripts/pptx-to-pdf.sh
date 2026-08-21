@@ -68,7 +68,7 @@ if [ -f "$STAGING_LIB" ]; then
   # shellcheck source=lib/office-staging.sh
   . "$STAGING_LIB"
 else
-  office_stage_file() { return 1; }; office_stage_cleanup() { :; }; office_stage_prune() { :; }
+  office_stage_file() { return 1; }; office_stage_cleanup() { :; }; office_stage_prune() { :; }; office_stage_report_fallback() { :; }
 fi
 if [ "$NO_STAGE" = 1 ]; then CLAUDE_OFFICE_STAGING=0; export CLAUDE_OFFICE_STAGING; fi
 
@@ -80,6 +80,8 @@ if [ "$(uname)" = "Darwin" ] && [ -d "/Applications/Microsoft PowerPoint.app" ];
     WSRC="$OFFICE_STAGED"
     WPDF="$OFFICE_STAGE_DIR/$(basename "$PDF")"
     echo "staging: $OFFICE_STAGE_DIR (pre-granted, no sandbox dialog)" >&2
+  else
+    office_stage_report_fallback "$SRC"   # 予期せぬ fallback = ⚠️ stderr + fallback log (意図的 --no-stage は沈黙)
   fi
   if ! osascript - "$WSRC" "$WPDF" <<'AS'; then
 on run argv

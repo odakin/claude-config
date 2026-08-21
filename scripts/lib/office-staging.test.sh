@@ -112,6 +112,42 @@ with Stage(book) as st:
     assert not st.active and st.paths == [book], "in-place fallback"
 EOF
 
+# T9: fallback の可視化 — 予期せぬ理由 (not-writable / mkdir-failed) は stderr ⚠️ + log append、
+#     意図的 (disabled) は沈黙 + log なし。 bash / python で reason と log 契約が一致。
+export CLAUDE_OFFICE_STAGING_LOG="$TMP/state/fallback.log"
+mkdir -p "$TMP/ro-root"; chmod 555 "$TMP/ro-root"
+export CLAUDE_OFFICE_STAGING_DIR="$TMP/ro-root"
+if [ -w "$TMP/ro-root" ]; then
+    echo "SKIP T9 (root で実行中 = chmod 555 でも書ける)"
+else
+    check "$(office_staging_fallback_reason)" "not-writable" "T9 bash reason: 書込不可 root → not-writable"
+    check "$(PYTHONPATH="$HERE" python3 -c 'import office_staging; print(office_staging.fallback_reason())')" "not-writable" "T9 python reason 一致"
+    office_stage_report_fallback "$TMP/案件 form.docx" 2>"$TMP/err9"
+    grep -q "staging: UNAVAILABLE (not-writable" "$TMP/err9" && ok "T9 bash stderr に ⚠️ UNAVAILABLE" || bad "T9 bash stderr に ⚠️ が無い: $(cat "$TMP/err9")"
+    [ -f "$CLAUDE_OFFICE_STAGING_LOG" ] && ok "T9 bash fallback log 生成" || bad "T9 bash fallback log 無し"
+    check "$(awk -F'\t' 'END{print $2"|"$4}' "$CLAUDE_OFFICE_STAGING_LOG")" "not-writable|$TMP/案件 form.docx" "T9 bash log 行 = reason + src"
+    PYTHONPATH="$HERE" python3 -c 'import office_staging; print(office_staging.report_fallback("/x/y.xlsx"))' >"$TMP/py9" 2>"$TMP/pyerr9"
+    check "$(cat "$TMP/py9")" "not-writable" "T9 python report_fallback 戻り値"
+    grep -q "UNAVAILABLE (not-writable" "$TMP/pyerr9" && ok "T9 python stderr に ⚠️" || bad "T9 python stderr に ⚠️ が無い"
+    check "$(wc -l < "$CLAUDE_OFFICE_STAGING_LOG" | tr -d ' ')" "2" "T9 python も同 log に append (2 行)"
+    # Stage context manager も inactive 時に report する
+    PYTHONPATH="$HERE" python3 -c 'import office_staging; s=office_staging.Stage("/x/z.docx"); s.__enter__(); assert not s.active' 2>/dev/null
+    check "$(wc -l < "$CLAUDE_OFFICE_STAGING_LOG" | tr -d ' ')" "3" "T9 python Stage inactive → log 3 行目"
+fi
+chmod 755 "$TMP/ro-root"
+# mkdir-failed: 親が file なら mkdir -p が落ちる
+printf 'x' > "$TMP/notadir"; export CLAUDE_OFFICE_STAGING_DIR="$TMP/notadir/root"
+check "$(office_staging_fallback_reason)" "mkdir-failed" "T9 bash reason: mkdir 不能 → mkdir-failed"
+check "$(PYTHONPATH="$HERE" python3 -c 'import office_staging; print(office_staging.fallback_reason())')" "mkdir-failed" "T9 python mkdir-failed 一致"
+# disabled は沈黙 + log 不変
+n_before="$( [ -f "$CLAUDE_OFFICE_STAGING_LOG" ] && wc -l < "$CLAUDE_OFFICE_STAGING_LOG" | tr -d ' ' || echo 0)"
+CLAUDE_OFFICE_STAGING=0 office_stage_report_fallback "$TMP/x.docx" 2>"$TMP/err9b"
+check "$(cat "$TMP/err9b")" "" "T9 disabled は stderr 沈黙"
+n_after="$( [ -f "$CLAUDE_OFFICE_STAGING_LOG" ] && wc -l < "$CLAUDE_OFFICE_STAGING_LOG" | tr -d ' ' || echo 0)"
+check "$n_after" "$n_before" "T9 disabled は log 不変"
+check "$(CLAUDE_OFFICE_STAGING=0 office_staging_fallback_reason)" "disabled" "T9 reason disabled"
+unset CLAUDE_OFFICE_STAGING_DIR CLAUDE_OFFICE_STAGING_LOG
+
 echo "--- office-staging.test: PASS=$PASS FAIL=$FAIL ---"
 [ "$FAIL" -eq 0 ] || exit 1
 exit 0

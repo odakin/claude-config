@@ -49,6 +49,63 @@ def staging_root() -> str | None:
     return root if os.access(root, os.W_OK) else None
 
 
+def fallback_reason() -> str:
+    """staging_root() が None になる理由を 1 語で (bash 版 office_staging_fallback_reason と同一分岐)。
+
+    disabled / not-darwin / no-office / mkdir-failed / not-writable / ok
+    """
+    if os.environ.get("CLAUDE_OFFICE_STAGING", "1").strip().lower() in ("0", "no", "off", "false"):
+        return "disabled"
+    override = os.environ.get("CLAUDE_OFFICE_STAGING_DIR", "")
+    if override:
+        root = override
+    else:
+        if platform.system() != "Darwin":
+            return "not-darwin"
+        gc = os.path.join(os.environ.get("HOME") or os.path.expanduser("~"), GROUP_CONTAINER)
+        if not os.path.isdir(gc):
+            return "no-office"
+        root = os.path.join(gc, ROOT_NAME)
+    try:
+        os.makedirs(root, exist_ok=True)
+    except OSError:
+        return "mkdir-failed"
+    return "ok" if os.access(root, os.W_OK) else "not-writable"
+
+
+def log_path() -> str:
+    """fallback log の path (bash 版 office_staging_log_path と同一規則)."""
+    return os.environ.get("CLAUDE_OFFICE_STAGING_LOG") or os.path.join(
+        os.environ.get("XDG_STATE_HOME") or os.path.join(os.environ.get("HOME") or os.path.expanduser("~"), ".local", "state"),
+        "claude-office-staging", "fallback.log")
+
+
+def report_fallback(src: str = "") -> str:
+    """予期せぬ fallback (mkdir-failed / not-writable / no-office) を stderr + log に出す。 戻り値 = reason。
+
+    disabled / not-darwin / ok は沈黙 (= 意図的 or 該当なし)。 log 書込失敗は無視 (変換を止めない)。
+    bash 版 office_stage_report_fallback と同契約 — 変えるときは両方。
+    """
+    import sys
+    reason = fallback_reason()
+    if reason in ("ok", "disabled", "not-darwin"):
+        return reason
+    override = os.environ.get("CLAUDE_OFFICE_STAGING_DIR", "")
+    root = override or os.path.join(os.environ.get("HOME") or os.path.expanduser("~"), GROUP_CONTAINER, ROOT_NAME)
+    print(f"⚠️  staging: UNAVAILABLE ({reason}: {root}) → in-place. Office の「ファイル アクセスを許可」 dialog が出うる",
+          file=sys.stderr)
+    print("    対処 = office-automation.md#office-pregranted-staging-dir (TCC 許可 or CLAUDE_OFFICE_STAGING_DIR=<dir> + 1 回 grant)",
+          file=sys.stderr)
+    try:
+        lp = log_path()
+        os.makedirs(os.path.dirname(lp), exist_ok=True)
+        with open(lp, "a", encoding="utf-8") as fh:
+            fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\t{reason}\t{root}\t{src}\n")
+    except OSError:
+        pass
+    return reason
+
+
 def prune(days: int = 7) -> None:
     """root 直下の古い subdir を掃除 (失敗残骸の無限増殖防止)."""
     root = staging_root()
@@ -76,6 +133,7 @@ class Stage:
     def __enter__(self) -> "Stage":
         root = staging_root()
         if not root:
+            report_fallback(self.sources[0] if self.sources else "")  # 予期せぬ fallback は黙らせない
             return self  # in-place fallback
         prune(7)  # bash 版 (各 wrapper が office_stage_prune 7 を呼ぶ) と同じ契約
         self.dir = tempfile.mkdtemp(prefix=f"{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}-", dir=root)

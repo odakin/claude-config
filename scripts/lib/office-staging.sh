@@ -19,8 +19,19 @@
 #                                   OFFICE_STAGE_DIR (= unique subdir) を set、 staging 不可なら rc=1 (変数は空)
 #   office_stage_cleanup          … OFFICE_STAGE_DIR を削除 (= 成功時のみ呼ぶ、 失敗時は残して診断。 root 外は拒否)
 #   office_stage_prune [days]     … root 直下の古い subdir を掃除 (default 7 日、 失敗残骸の無限増殖防止)
+#   office_staging_fallback_reason … root が空になる理由を 1 語で echo:
+#                                   disabled / not-darwin / no-office / mkdir-failed / not-writable / ok
+#   office_stage_report_fallback <src> … staging が効かず in-place に落ちた時に呼ぶ (= wrapper の else 分岐)。
+#                                   「予期せぬ」 理由 (mkdir-failed / not-writable / no-office) なら stderr に
+#                                   ⚠️ + fallback log (下記) に 1 行 append。 disabled / not-darwin は意図的
+#                                   なので沈黙。 ⚠️ 2026-08-22: staging の silent fallback は「dialog 復活」 を
+#                                   黙って起こす = 機構の死が見えない → ここで必ず声を出す + log を残して
+#                                   別 session の検出器 (個人層の check script) が拾えるようにする。
 #
 # 制御 (env)
+#   CLAUDE_OFFICE_STAGING_LOG=FILE … fallback log の path (default
+#                                   ${XDG_STATE_HOME:-$HOME/.local/state}/claude-office-staging/fallback.log、
+#                                   1 行 = <ISO ts>\t<reason>\t<root>\t<src>)
 #   CLAUDE_OFFICE_STAGING=0       … staging を無効化 (= 旧挙動 in-place、 `--no-stage` 相当)
 #   CLAUDE_OFFICE_STAGING_DIR=DIR … root を override (= group container が使えない環境で、 一度だけ手動 grant
 #                                   した固定 dir を指す。 macOS 15+ の App Data 保護で Terminal から
@@ -90,5 +101,48 @@ office_stage_prune() {
     root="$(office_staging_root)"
     [ -n "$root" ] || return 0
     find "$root" -mindepth 1 -maxdepth 1 -type d -mtime +"$days" -exec rm -rf {} + 2>/dev/null || true
+    return 0
+}
+
+office_staging_fallback_reason() {
+    # office_staging_root と同じ分岐を辿り、 空を返す理由を 1 語で echo (root が取れるなら ok)。
+    case "${CLAUDE_OFFICE_STAGING:-1}" in
+        0|no|off|false) echo disabled; return 0 ;;
+    esac
+    local root
+    if [ -n "${CLAUDE_OFFICE_STAGING_DIR:-}" ]; then
+        root="$CLAUDE_OFFICE_STAGING_DIR"
+    else
+        [ "$(uname)" = "Darwin" ] || { echo not-darwin; return 0; }
+        local gc="$HOME/$OFFICE_STAGING_GROUP_CONTAINER"
+        [ -d "$gc" ] || { echo no-office; return 0; }
+        root="$gc/$OFFICE_STAGING_ROOT_NAME"
+    fi
+    mkdir -p "$root" 2>/dev/null || { echo mkdir-failed; return 0; }
+    [ -w "$root" ] || { echo not-writable; return 0; }
+    echo ok
+}
+
+office_staging_log_path() {
+    printf '%s\n' "${CLAUDE_OFFICE_STAGING_LOG:-${XDG_STATE_HOME:-$HOME/.local/state}/claude-office-staging/fallback.log}"
+}
+
+office_stage_report_fallback() {
+    # office_stage_report_fallback <src>
+    # 予期せぬ fallback (= staging を使うつもりだったのに root が作れない) を可視化:
+    #   stderr に ⚠️ (= 呼んだ session が即気づく) + fallback log に append (= 後続 session の検出器が拾う)。
+    # 意図的な無効化 (disabled) / 非 macOS は沈黙。 log 書込失敗は無視 (= 変換自体は止めない)。
+    local src="${1:-}" reason root log
+    reason="$(office_staging_fallback_reason)"
+    case "$reason" in
+        ok|disabled|not-darwin) return 0 ;;
+    esac
+    if [ -n "${CLAUDE_OFFICE_STAGING_DIR:-}" ]; then root="$CLAUDE_OFFICE_STAGING_DIR"
+    else root="$HOME/$OFFICE_STAGING_GROUP_CONTAINER/$OFFICE_STAGING_ROOT_NAME"; fi
+    echo "⚠️  staging: UNAVAILABLE ($reason: $root) → in-place. Office の「ファイル アクセスを許可」 dialog が出うる" >&2
+    echo "    対処 = office-automation.md#office-pregranted-staging-dir (TCC 許可 or CLAUDE_OFFICE_STAGING_DIR=<dir> + 1 回 grant)" >&2
+    log="$(office_staging_log_path)"
+    mkdir -p "$(dirname "$log")" 2>/dev/null || return 0
+    printf '%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$reason" "$root" "$src" >> "$log" 2>/dev/null || true
     return 0
 }
