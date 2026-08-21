@@ -681,6 +681,12 @@ sections:
   - id: pdf-cell-text-patch
     level: 2
     title: "vector PDF の表セル文字を差し替える (= 塗り色 sampling + 罫線保護 + CJK/Latin 分割描画)"
+  - id: pymupdf-builtin-font-print-mojibake
+    level: 2
+    title: "PyMuPDF の組み込み font (`japan` / `helv` 等) で書いた文字は**プリンタで文字化け**する (= 埋め込まれていない)"
+  - id: docx-autofit-grid-overflow
+    level: 2
+    title: "docx 様式の autofit 表は「1 セルの長い値」 で**別の行**が折り返し、 1 頁様式が 2 頁にはみ出す"
   - id: zip-cp932-filenames
     level: 2
     title: "日本語ファイル名 zip の展開 (= cp932 文字化け)"

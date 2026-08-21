@@ -39,6 +39,8 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 
 | 症状 (観察できること) | 真因 | 対処 (→ slug) |
 |---|---|---|
+| PyMuPDF で追記した日本語/数字が**画面では正常・印刷で文字化け / 位置ずれ** | `japan`/`helv` 組み込み font は glyph 非埋め込み = printer に代替 font が無い | 実 font file を `insert_font(fontfile=)` で埋め込む or 印刷用 raster 化 → [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake) |
+| 値を入れた docx 様式が **1 頁→2 頁にはみ出す**、 折り返すのは触っていない行 | autofit 表は 1 セルの長い値で grid 列幅を組み替え、 別行のセルが狭まる (`tblLayout fixed` でも直らず) | 可変長値・○・認印は overlay、 溢れる 1 行だけ 9.5pt、 雛形 render と y 座標突合 → [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow) |
 | Excel がクラッシュ /「作業内容を回復」 dialog | 同 session で osascript の open/save/close/quit を多数 cycle し既存 instance を酷使 | **補正を 1 pass に織り込む単発記入** + 各 op 前に killall reset → [`excel-osascript-cell-write`](#excel-osascript-cell-write) |
 | osascript が `-1712` (AppleEvent timeout) | Excel が固まり / **background 実行で automation 許可 dialog を出せない** | killall+sleep reset / **初回は foreground で許可 dialog に応答** → [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) |
 | osascript が `-609`「接続が無効」 で全 cell が沈黙・未書込 | 同一 tell に `close saving yes`+`quit` を詰めた / app 未 ready | reset + 4 勘所 → [`excel-osascript-cell-write`](#excel-osascript-cell-write) |
@@ -3411,6 +3413,32 @@ Excel / Word を起こさずに様式 PDF のセル値だけ直す手順 (= 日�
 5. **検証は render 画像を見る** (clip 付き `get_pixmap(dpi=120-130)`)。 text 抽出では塗り潰しの取りこぼし・残滓は見えない。
 
 origin: 2026-08-21 日程表 8 行の書き直し (Excel crash 後、 Excel を再起動せずに完了)。
+
+## <a id="pymupdf-builtin-font-print-mojibake"></a>PyMuPDF の組み込み font (`japan` / `helv` 等) で書いた文字は**プリンタで文字化け**する (= 埋め込まれていない)
+
+**症状**: `page.insert_text(..., fontname="japan")` で追記した日本語が **画面 (Preview / fitz raster) では正常**なのに、 `lp` で印刷すると □ や別文字に化ける。 Latin の `helv` (Helvetica) も環境によっては位置ずれ・代替 font になる。
+
+**原因**: PyMuPDF の base-14 / CJK 組み込み font (`helv` `tiro` `japan` `china-s` 等) は **PDF に glyph を埋め込まない** (= `get_fonts()` の "embedded" 表示に惑わされない — 実体は viewer の代替 font 依存)。 MuPDF 系 viewer は自前の font を持つので画面では出るが、 プリンタの PDF 解釈系 (CUPS → Canon UFR 等) は CJK 代替 font を持たない → 化ける。 **「画面で見えた」 は印刷の検証にならない**。
+
+**対処 (どちらか)**:
+1. **実 font file を埋め込む**: `page.insert_font(fontname="hag", fontfile="<HaranoAjiGothic-Regular.otf>")` → `insert_text(..., fontname="hag")`。 TeX Live があれば `kpsewhich HaranoAjiGothic-Regular.otf` で path が取れる (= `.ttc` は避け、 `.otf`/`.ttf` 単体を渡す)。 数字・ASCII も同じ font に寄せると位置ずれも消える。
+2. **印刷用だけ raster 化**: `pix = page.get_pixmap(dpi=600, colorspace=fitz.csGRAY)` → 新 PDF に `insert_image`。 font 問題が原理的に消える (紙提出の様式なら品質十分、 A4 gray 600dpi で ~300 KB)。 vector 版は repo に残し、 印刷物は raster 版から出す。
+
+**規律**: 印刷が目的の PDF は **送信前に `get_fonts()` で組み込み font 名 (`helv`/`japan`) が残っていないか grep** し、 残っていれば 1 か 2 を通す。 origin: 2026-08-21 海外出張願 + 日程表 (= overlay 文字が紙で化け、 user 指摘で発覚、 2 枚とも再印刷)。
+
+## <a id="docx-autofit-grid-overflow"></a>docx 様式の autofit 表は「1 セルの長い値」 で**別の行**が折り返し、 1 頁様式が 2 頁にはみ出す
+
+**症状**: 雛形 docx は Word で 1 頁なのに、 値を埋めた docx を PDF 化すると末尾ブロック (許可欄・承認欄) だけが 2 頁目に落ちる。 しかも折り返しているのは**自分が値を入れた行ではない**行 (= 例: メールアドレスを入れた行は無事で、 遠く離れた「( ) 学科・専攻における研究費」 の末尾 1 字や 緊急連絡先 の**ラベル**が折り返す)。
+
+**原因**: Word の表は既定 autofit。 grid 列幅は表全体の内容から再計算されるので、 あるセルに長い英数字 (`<長いメールアドレス>`、 `Conference Venue (Long Name)`) を入れると**その列が広がり、 同じ grid 列を共有する他の行のセルが狭まる**。 加えて **全角 ○ を「（　）」 の全角スペースに置換する**と、 font 混在 (Century / MS 明朝) で glyph 幅が変わり 1 行が溢れる。 `w:tblLayout type="fixed"` にしても直らない (= 固定幅は `gridCol` 値で決まり、 それは autofit の描画結果と別物 → 別の行が折り返す)。
+
+**対処 (効いた順)**:
+1. **可変長の値は docx に入れず PDF overlay で載せる** (= メールアドレス・電話・○印・認印は [`pdf-prefill-direct`](#pdf-prefill-direct) 流儀で雛形 render 後に描く、 ○ は `rawdict` の glyph bbox で「（」 と「）」 の隙間中心に `draw_oval`)。 docx には表の列幅に影響しない短い値だけ入れる。
+2. それでも溢れる 1 行は **その段落だけ 9.5pt** (10.5pt 既定から 1pt 落とす = 視認差なし、 ~10% 幅節約)。
+3. **検証 = 雛形 docx を同じ経路で PDF 化して page 数と主要ラベルの y 座標を突合** (= `get_text("blocks")` で「承認日」「許可します」 等の y が雛形と同じか)。 page 数一致だけでは行内折り返し (= 見た目の崩れ) を見逃す。
+4. ⚠️ 変換結果が変わらない時は Word の stale in-memory cache ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache)) を疑い、 `get name of every document` が `missing value` なら `pkill -x "Microsoft Word"` してから再変換。
+
+origin: 2026-08-21 海外出張願 (人事課 docx 様式) — 5 回の変換試行で (1)+(2) に収束、 雛形と y 座標一致を確認してから印刷。
 
 ## <a id="zip-cp932-filenames"></a>日本語ファイル名 zip の展開 (= cp932 文字化け)
 
