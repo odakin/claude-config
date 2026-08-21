@@ -58,6 +58,12 @@ sections:
   - id: compilers
     level: 2
     title: "コンパイラ"
+  - id: matplotlib-cjk-figure-embedding
+    level: 2
+    title: "matplotlib の CJK 入り図は PNG で取り込む (PDF は platex+dvipdfmx で描画だけ化ける)"
+  - id: wrapfigure-page-carryover
+    level: 2
+    title: "wrapfigure が頁末に来ると次頁冒頭が短行で続く"
   - id: bibliography-style
     level: 2
     title: "Bibliography スタイル"
