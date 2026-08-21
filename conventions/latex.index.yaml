@@ -163,3 +163,6 @@ sections:
   - id: infographic-print-a4
     level: 3
     title: "print fidelity を A4 強制したい場合"
+  - id: latexdiff-ulem-option-clash
+    level: 2
+    title: "latexdiff: 本文が `ulem` を option なしで読むと差分 markup が silent に壊れる (2026-08-21)"
