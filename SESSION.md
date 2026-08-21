@@ -2,6 +2,12 @@
 
 > 📌 **このファイル = 直近 (当月) の作業 + Open items**。 古い dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)。
 
+## 2026-08-21: machine-route-first.md + dropbox-api-access.md 新設 (f7dd134)
+
+- [`machine-route-first.md`](conventions/machine-route-first.md) (harness-core) = 経路 ladder (dedicated MCP → API 直 → CLI → **build-the-route-first** → user 依頼 → 画面 drive)。 画面 drive の 3 重コスト (unreliable / user のマシン拘束 / 遅い) と許容例外、 「実装した経路は auto-load 面に記録するまでが 1 単位」。 origin = 同日の画面 drive incident (instance は層 3)
+- [`dropbox-api-access.md`](conventions/dropbox-api-access.md) (infra) = Dropbox HTTP API 直叩き recipe — 公式 MCP / CLI 不在ゆえ API 直が機械経路。 scoped app 最小 permission + **authorize 順序罠** (token の scope は consent 時点の有効 permission) / PKCE public client (app secret 無し) / 共有リンク冪等 (create 409 `shared_link_already_exists` → list fallback) / **blast radius** (sharing.write = 全 file への公開リンク発行可 = 漏洩は exfiltration 級)。 loopback hardening は [`google-api-direct-access.md#oauth-loopback-hardening`](conventions/google-api-direct-access.md#oauth-loopback-hardening) の 4 点 set を参照
+- index 3 本再生成 (⚠️ `generate-tree.py` は git-tracked のみ走査 = 新 file は `git add` 後に --write、 2026-07-31 教訓の再確認)。 run-all-checks 44/44。 全 generic (個人値・機関名なし)
+
 ## 2026-08-12: 共著改訂事例の学び 3 点を hoist
 
 - `research-email.md #shrink-the-ask` (確認依頼の縮小) / `rebuttal-letter.md #defensive-revision` (誌替え再投稿の 3 検査) / `physics-notes.md §4` (検証 note は問題・結論・手当のみ、 summary 3→4 規約 + index 再生成)
