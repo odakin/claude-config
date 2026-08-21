@@ -43,6 +43,7 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 | 値を入れた docx 様式が **1 頁→2 頁にはみ出す**、 折り返すのは触っていない行 | autofit 表は 1 セルの長い値で grid 列幅を組み替え、 別行のセルが狭まる (`tblLayout fixed` でも直らず) | 可変長値・○・認印は overlay、 溢れる 1 行だけ 9.5pt、 雛形 render と y 座標突合 → [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow) |
 | Excel がクラッシュ /「作業内容を回復」 dialog | 同 session で osascript の open/save/close/quit を多数 cycle し既存 instance を酷使 | **補正を 1 pass に織り込む単発記入** + 各 op 前に killall reset → [`excel-osascript-cell-write`](#excel-osascript-cell-write) |
 | osascript が `-1712` (AppleEvent timeout) | Excel が固まり / **background 実行で automation 許可 dialog を出せない** | killall+sleep reset / **初回は foreground で許可 dialog に応答** → [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) |
+| Office 独自の**「ファイル アクセスを許可」 dialog が案件 dir ごとに出る** / PDF export の AppleScript が `-1712` で止まる (dialog が裏に出ている) | Word / Excel / PowerPoint は App Sandbox = **folder へ書く瞬間**に folder 単位の grant を要求 (open は通る、 save-as で出る) | 変換 script は **事前 grant 済み staging dir 経由が default** (= Office 自身の group container、 dialog ゼロ)。 手書き osascript も同 dir に copy してから → [`office-pregranted-staging-dir`](#office-pregranted-staging-dir) |
 | osascript が `-609`「接続が無効」 で全 cell が沈黙・未書込 | 同一 tell に `close saving yes`+`quit` を詰めた / app 未 ready | reset + 4 勘所 → [`excel-osascript-cell-write`](#excel-osascript-cell-write) |
 | osascript が `-50` パラメータエラー | **`save workbook as … PDF` (workbook 単位の verb)** / merged cell への number-format 設定 | PDF は **sheet 単位** `save as <sheet>` ([`xlsx-to-pdf.sh`](#xlsx-to-pdf-script)) / 書式強制は apostrophe (下行) |
 | 日付が「46205」 等の serial 数字で印字される | Excel が和文日付文字列を date 値に auto-convert + cell 書式が General | **apostrophe prefix で text 強制** → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
@@ -1721,11 +1722,38 @@ Microsoft Word は **macOS sandbox app** (= App Sandbox + TeamIdentifier `UBF8T3
 
 **規律**: Word.app で `open` / AppleScript 駆動する docx は **input・scratch・round-trip 中間物・preview 抽出・repair 用 copy も全部 `~/<repo>/...` 等の project 配下に置く**。 `/tmp/` を docx の作業場所にしない。 加えて `/tmp` は macOS の定期 purge 対象なので作業中 file 消失リスクもある (= [`docx-pdf-stale-cache`](#docx-pdf-stale-cache) の窓復元ループ 二次災害源)。
 
-**機械化**: [`scripts/docx-to-pdf.sh`](../scripts/docx-to-pdf.sh) は input が `/tmp/` または `/private/tmp/` 配下なら `⚠️ docx-to-pdf: input is under /tmp ...` を stderr に出して project 配下移動を促す (= warn のみで block しない、 user 判断)。 docx を新規生成する script も同様の reflex (= 出力先を project 配下に決める) で書く。
+**機械化**: [`scripts/docx-to-pdf.sh`](../scripts/docx-to-pdf.sh) の Word 経路は 2026-08-21 から **事前 grant 済み staging dir 経由が default** ([`office-pregranted-staging-dir`](#office-pregranted-staging-dir)) なので、 `/tmp` 配下の input も copy されて通る (= 本節の規律は「Word に直接触らせる in-place 経路」 にだけ効く)。 staging が無効 (`--no-stage` / 環境で不可) で input が `/tmp/` または `/private/tmp/` 配下なら `⚠️ docx-to-pdf: input is under /tmp ...` を stderr に出して project 配下移動を促す (= warn のみで block しない、 user 判断)。 docx を新規生成する script も同様の reflex (= 出力先を project 配下に決める) で書く。
 
 **既に `/tmp` で Word が開いてしまった file の救出**: Word で「名前を付けて保存」 → project 配下 (= sandbox grant が永続する path) → 以後は無音。 開いている file を外から `mv` / `rm` しない (= Word の resume queue に死んだパスが残ると、 次の Word 起動で「文書を開くことができません。 アクセス権がありません。」 ダイアログが queue 数だけ連続して出る、 詳細は [`docx-pdf-stale-cache`](#docx-pdf-stale-cache))。
 
 origin: 2026-06 PW 暗号化 docx を `/tmp/<work>/` に展開して round-trip 編集していた session で、 ファイル目視のため Word.app が open ダイアログを出した時に**「アクセス権を付与」 ボタンが disabled で押せない** 状態を観察。 file 自体は disk に存在し ls 等 ですべて読めるが Word の sandbox layer から先には通せない構図。 規律違反は当 session 自身、 機械化反映と layer 1 hoist でこの場で固定。
+
+### <a id="office-pregranted-staging-dir"></a>Office の「ファイル アクセスを許可」 dialog を設計で消す: 事前 grant 済み staging dir (= Office 自身の group container) 経由で変換する
+
+[`docx-tmp-sandbox-deny`](#docx-tmp-sandbox-deny) の「project 配下なら初回 1 回」 は、 **案件ごとに新しい dir を切る運用では「初回 1 回 × 案件数」 が積み上がる**。 しかも dialog は GUI にしか出ないので、 remote から Mac を操作している時は見えも押せもせず、 AppleScript 側には `-1712` (AppleEvent timeout) としてしか現れない。 本節はこれを規律でなく**機構**で消す。
+
+**機構 (2026-08-21 実測、 macOS 13.7 / Office 16.101)**:
+
+- Word / Excel / PowerPoint は全て App Sandbox (`com.apple.security.app-sandbox` + `files.user-selected.read-write` + `files.bookmarks.app-scope`)。 folder 単位の grant は security-scoped bookmark として各 app の container (`~/Library/Containers/com.microsoft.<App>/Data/Library/Preferences/com.microsoft.<App>.securebookmarks.plist`) に溜まる。
+- **dialog が出るのは「folder へ書く」 瞬間** (= PDF export / save-as)。 `open <file>` (LaunchServices) で渡した docx を**読む**だけなら新規 dir でも出ない (= file 単位の sandbox extension が付くため)。 ∴ 「開けたのに export で止まる」 が典型 signature。
+- 3 app は entitlement `com.apple.security.application-groups` で **App Group container `~/Library/Group Containers/UBF8T346G9.Office/` を共有**しており、 その内側は sandbox profile の内側 = **grant 不要**。 実測: 新規 dir の docx を Word で開き PDF save-as → dialog + `-1712` / 同じ docx を group container 配下に copy して同操作 → **0.7 s で成功・dialog ゼロ**。 Excel も同型 (新規 dir → dialog + `-1712` / group container → 2.4 s 成功)。
+
+**実装 (layer 1)**: [`scripts/lib/office-staging.sh`](../scripts/lib/office-staging.sh) (bash、 sourceable) + 鏡像 [`scripts/lib/office_staging.py`](../scripts/lib/office_staging.py)。 root = `<group container>/claude-office-staging/`、 1 実行 = `mktemp -d` の unique subdir (`<timestamp>-<pid>-XXXXXX`) に **basename を保って copy** → Office に開かせる → 出力を呼び出し元へ copy back → 成功時のみ subdir 削除 (失敗時は残す + `.source` に元 path = 診断用 provenance)、 7 日超の残骸は次回実行時に prune。 **呼び出し側 API は不変** — [`docx-to-pdf.sh`](#docx-to-pdf-pages) (Word 経路) / [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) (Excel 経路) / [`pptx-to-pdf.sh`](#pptx-to-pdf-powerpoint) (PowerPoint 経路) / [`affix-image-xlsx.py`](#xlsx-image-via-excel) (workbook + 画像の両方を stage、 post-condition を staged copy で検査してから atomic に書き戻し) が内部で使う。 新しく Office を osascript で駆動する script を書くなら同 lib を source する。 制御: `--no-stage` / `CLAUDE_OFFICE_STAGING=0` で旧 in-place 挙動、 `CLAUDE_OFFICE_STAGING_DIR=<dir>` で root 差し替え。 hermetic test = `scripts/lib/office-staging.test.sh` (bash 版と python 版の root 解決一致も検査)。
+
+**候補の採否**: (a) 自前 container — **採用 (group container)**。 per-app container (`~/Library/Containers/com.microsoft.<App>/Data/`) でも当該 app には効くが、 3 app を 1 root で賄える group container の方が実装が単純。 (b) 固定 dir を一度だけ手動 grant — (a) が通ったので default にしないが、 `CLAUDE_OFFICE_STAGING_DIR` override として**経路は残す** (= 下の macOS 15+ 注意の逃げ道)。 `/tmp` / Dropbox / CloudStorage 配下は候補外 (= grant 不能 / TCC)。
+
+**副次効果 (= 設計上の bonus)**:
+- Excel の export 経路は **開いた workbook を再保存する**ことがある ([`xlsm-macro-export-trap`](#xlsm-macro-export-trap))。 staging では copy が書き換わるだけで **原本は byte 一致のまま** (= `git diff` が汚れない)。
+- unique subdir ゆえ Word の **stale in-memory cache ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache)) が「同じ path の再 open」 で再発しない** (= 既存の full kill 防御はそのまま併用)。
+- `/tmp` 配下の input も copy されて通る (= [`docx-tmp-sandbox-deny`](#docx-tmp-sandbox-deny) の規律は in-place 経路限定に縮む)。
+
+⚠️ **注意**:
+- **macOS 15 (Sequoia) 以降**は他 app の `~/Library/Containers` / `~/Library/Group Containers` への Terminal からのアクセスに App Data 保護 (TCC) が掛かると報告されている (= 当 fleet では未検証、 実測は macOS 13)。 そこでは shell から root を作れず lib は空を返して in-place に fall back する (= 旧挙動 = dialog 復活)。 対処 = 一度だけ TCC を許可するか、 `CLAUDE_OFFICE_STAGING_DIR=~/.office-staging` 等を設定して**その dir を 1 回だけ手動 grant** する (= 候補 (b))。
+- **staging root 自体を消さない**・**Office が開いている最中に subdir を外から消さない** (= Word の resume queue に死んだ path が残り、 次回起動で「文書を開くことができません」 が連発する、 [`docx-tmp-sandbox-deny`](#docx-tmp-sandbox-deny) と同じ機構)。 lib は「close してから cleanup / 失敗時は残す」 の順序でこれを守る。
+- Word / Excel の「最近使ったファイル」 に staging path が並ぶ (= 無害、 驚かないため記載)。
+- 本節は **Office sandbox 側**の dialog。 Claude Code 側の「作業ディレクトリ外の file を読みますか」 prompt は別 layer = [`claude-code-permissions.md`](claude-code-permissions.md) の `additionalDirectories` で扱う。
+
+origin: 2026-08-21 出張書類 session で案件 dir ごとに dialog を踏み、 remote 操作では押せないことが顕在化 → 別 session が実機で (a) を検証して layer 1 に固定。 検証 ledger (= 新規 dir vs group container × Word / Excel の 4 象限 + wrapper e2e) は個人層の results file に保存。
 
 ### <a id="word-applescript-password-open"></a>Word.app の AppleScript で PW 暗号化 docx を開く / select/find が動かない罠
 

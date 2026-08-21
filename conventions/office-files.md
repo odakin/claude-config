@@ -18,7 +18,7 @@ summary: Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入
 | # | 問い | 参照先 (層 1) |
 |---|---|---|
 | ⓪ **考え方** | 初見の様式 / slug の無い罠 / 道具選択に迷う? | [`office-automation-principles.md`](office-automation-principles.md) (= 様式=見た目が契約 / file=地層 / lossy 解釈器連鎖 / 道具選択の梯子 / 検証 3 層モデル / 「記入後は審査員の目で閉じる」 / 人間系原則 〔既知情報 prefill・print-last・記入分担 4 区分・受理側で閉じる〕) |
-| ① **権限** | その file は作業ルート (cwd) の外 (`~/Downloads` / `~/Desktop` / `~/Documents` / `~/Dropbox` 等) か? | [`claude-code-permissions.md`](claude-code-permissions.md) (= `additionalDirectories` の 3 frontend 切り分け 〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕)。 ⚠️ Word の `/tmp` sandbox 許可ダイアログは別系統 → [`docx-tmp-sandbox-deny`](office-automation.md#docx-tmp-sandbox-deny) (docx は必ず project 配下で開く) |
+| ① **権限** | その file は作業ルート (cwd) の外 (`~/Downloads` / `~/Desktop` / `~/Documents` / `~/Dropbox` 等) か? | [`claude-code-permissions.md`](claude-code-permissions.md) (= `additionalDirectories` の 3 frontend 切り分け 〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕)。 ⚠️ Office 自身の「ファイル アクセスを許可」 (folder grant) ダイアログは別系統 → 変換 wrapper は [`office-pregranted-staging-dir`](office-automation.md#office-pregranted-staging-dir) (= Office の group container 経由、 dialog ゼロ) が default、 in-place で Word に触らせる時だけ [`docx-tmp-sandbox-deny`](office-automation.md#docx-tmp-sandbox-deny) (docx は project 配下で開く) |
 | ② **skill か手動か** | 単純な読み書き・整形・形式変換か / 行政学術様式の精密 fill か | [下記 §3](#skill-vs-manual) |
 | ③ **手順・落とし穴** | openpyxl / python-docx / 様式改変防止 / 検証 | **本丸** = [`office-automation.md`](office-automation.md)。 まず [症状 → 対処 早見表 (`#symptom-index`)](office-automation.md#symptom-index) で逆引き (= Excel crash / 日付 serial 印字 / 標題消失 / PDF -50/-1712/-609 等を症状から slug・既存 script に飛べる)。 各 subsection は安定 slug-anchor を持ち、 全 slug ↔ title ↔ related は併設 [`office-automation.index.yaml`](office-automation.index.yaml) (validator で dangling/orphan 0) |
 | ④ **PDF 化** | xlsx / docx / pptx → 提出 PDF | [下記 §2](#pdf-conversion) |
@@ -53,6 +53,8 @@ summary: Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入
 | docx → PDF | [`scripts/docx-to-pdf.sh`](../scripts/docx-to-pdf.sh) (= macOS では Word AppleScript 駆動が default、 `--pages` で明示 Pages、 非 macOS は LibreOffice) | [`office-automation.md#docx-to-pdf-pages`](office-automation.md#docx-to-pdf-pages) + [`docx-pdf-stale-cache`](office-automation.md#docx-pdf-stale-cache) (= stale cache / cold-start 対処) |
 | pptx → PDF | [`scripts/pptx-to-pdf.sh`](../scripts/pptx-to-pdf.sh) (= PowerPoint native export 優先、 LibreOffice fallback) | [`office-automation.md#pptx-to-pdf-powerpoint`](office-automation.md#pptx-to-pdf-powerpoint) (= 網掛け / pattern fill を潰さない要件は native 一択) |
 
+🔑 3 wrapper の macOS Office 経路は **事前 grant 済み staging dir 経由が default** (= Office 3 app が共有する group container に copy → export → copy back、 Office の「ファイル アクセスを許可」 dialog が案件 dir ごとに出るのを design-out、 `--no-stage` で旧 in-place)。 機構・実測・注意は [`office-automation.md#office-pregranted-staging-dir`](office-automation.md#office-pregranted-staging-dir)、 lib = [`scripts/lib/office-staging.sh`](../scripts/lib/office-staging.sh) (+ python 鏡像 `office_staging.py`)。
+
 ⚠️ **docx は「Word 体裁が契約」 の正式書類が大半** ゆえ Pages re-typeset は重なり artifact を生む。 default を Word に倒している (2026-06 反転)。 詳細・新規 docx automation script を書く時の reflex は [`office-automation-principles.md` tool-selection-ladder](office-automation-principles.md#tool-selection-ladder) 参照。
 
 ⚠️ **提出は xlsx/docx 本体、 PDF は確認・印刷・後参照用** ([`pdf-snapshot-xlsx-submission`](office-automation.md#pdf-snapshot-xlsx-submission))。
@@ -74,9 +76,10 @@ summary: Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入
 | [`diff-form-xlsx.py`](../scripts/diff-form-xlsx.py) | 様式 xlsx の label 上書き (= 様式改変) を雛形 diff で検出 (`LABEL_OVERWRITE=exit1`)。 fill 後必ず実行 → [`#diff-form-xlsx-detection`](office-automation.md#diff-form-xlsx-detection) |
 | [`diff-form-docx.py`](../scripts/diff-form-docx.py) | 様式 docx の記入ミスを blank diff で検出 (ラベル欄上書き / 見出し消失 = HARD、 空の箇条書き / 全空 labeled 列 = surface)。 `--selftest` 内蔵 → [`#diff-form-docx-detection`](office-automation.md#diff-form-docx-detection) |
 | [`scan-form-instructions.py`](../scripts/scan-form-instructions.py) | label 内 embedded instruction を category 別抽出 → [`#embedded-instruction-in-label`](office-automation.md#embedded-instruction-in-label) |
-| [`xlsx-to-pdf.sh`](../scripts/xlsx-to-pdf.sh) | xlsx → PDF (soffice → Excel fallback) |
-| [`docx-to-pdf.sh`](../scripts/docx-to-pdf.sh) | docx → PDF (macOS Word 忠実版 default、 `--pages` で Pages、 非 mac LibreOffice) |
-| [`pptx-to-pdf.sh`](../scripts/pptx-to-pdf.sh) | pptx → PDF (PowerPoint native 優先、 LibreOffice fallback) |
+| [`xlsx-to-pdf.sh`](../scripts/xlsx-to-pdf.sh) | xlsx → PDF (soffice → Excel fallback、 Excel 経路は staging 経由) |
+| [`docx-to-pdf.sh`](../scripts/docx-to-pdf.sh) | docx → PDF (macOS Word 忠実版 default、 `--pages` で Pages、 非 mac LibreOffice、 Word 経路は staging 経由) |
+| [`pptx-to-pdf.sh`](../scripts/pptx-to-pdf.sh) | pptx → PDF (PowerPoint native 優先、 LibreOffice fallback、 PowerPoint 経路は staging 経由) |
+| [`lib/office-staging.sh`](../scripts/lib/office-staging.sh) / [`lib/office_staging.py`](../scripts/lib/office_staging.py) | Office 駆動 script 共通の **事前 grant 済み staging dir** helper (= sandbox の folder-grant dialog を design-out、 新規 Office automation script はこれを source) → [`#office-pregranted-staging-dir`](office-automation.md#office-pregranted-staging-dir) |
 | [`close-pdf-form-boxes.py`](../scripts/close-pdf-form-boxes.py) | Excel→PDF で落ちた下罫線 (= 承認/印影欄の box が開く) を全検出して閉じる → [`#excel-pdf-bottom-border-drop`](office-automation.md#excel-pdf-bottom-border-drop) |
 | [`pdf_form_fill.py`](../scripts/pdf_form_fill.py) | 雛形 PDF への直接印字 engine (= anchor 印字 / NFKC 照合 / 600dpi ラスタ化 / 内蔵検証)、 紙単票向け → [`#pdf-prefill-direct`](office-automation.md#pdf-prefill-direct) |
 | [`check-docx-integrity.py`](../scripts/check-docx-integrity.py) | docx の Word「破損」 判定 (Word 不要・決定論) → [`#docx-checkbox-content-control`](office-automation.md#docx-checkbox-content-control) |

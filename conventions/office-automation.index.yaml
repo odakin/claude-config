@@ -291,8 +291,13 @@ sections:
   - id: docx-tmp-sandbox-deny
     level: 3
     title: "Word が触る docx は `/tmp` 配下に置かない (= sandbox grant 不能、 project 配下で扱う)"
-    related: [docx-pdf-stale-cache, docx-password-roundtrip-edit, docx-section-extract-preview, docx-to-pdf-pages]
+    related: [docx-pdf-stale-cache, docx-password-roundtrip-edit, docx-section-extract-preview, docx-to-pdf-pages, office-pregranted-staging-dir]
     origin: "2026-06"
+  - id: office-pregranted-staging-dir
+    level: 3
+    title: "Office の「ファイル アクセスを許可」 dialog を設計で消す: 事前 grant 済み staging dir (= Office 自身の group container) 経由で変換する"
+    related: [docx-tmp-sandbox-deny, docx-pdf-stale-cache, docx-to-pdf-pages, xlsx-to-pdf-script, pptx-to-pdf-powerpoint, xlsx-image-via-excel, xlsm-macro-export-trap]
+    origin: "2026-08-21"
   - id: word-applescript-password-open
     level: 3
     title: "Word.app の AppleScript で PW 暗号化 docx を開く / select/find が動かない罠"

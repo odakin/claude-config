@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pptx-to-pdf.sh — PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、office-automation.md#pptx-to-pdf-powerpoint）
+# pptx-to-pdf.sh — PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、PowerPoint 経路は事前 grant 済み staging dir 経由、office-automation.md#pptx-to-pdf-powerpoint）
 # pptx-to-pdf.sh — convert a PowerPoint deck (pptx/ppt) to PDF, FIDELITY-FIRST.
 #
 # Why this exists:
@@ -26,6 +26,16 @@
 #       ("osascript" wants to control "Microsoft PowerPoint") → Allow. A
 #       background run can't surface it and fails with -1743 / -1712.
 #
+# 🔑 The PowerPoint engine runs through a PRE-GRANTED STAGING DIR (2026-08-21):
+#   PowerPoint is App-Sandboxed like Word / Excel (same "ファイル アクセスを許可"
+#   folder dialog on the first WRITE into a new folder). The deck is copied into the
+#   Office App Group container (~/Library/Group Containers/UBF8T346G9.Office/
+#   claude-office-staging/<unique>/, shared by all three apps' entitlements),
+#   exported there, and the PDF copied back. --no-stage / CLAUDE_OFFICE_STAGING=0
+#   = in-place; CLAUDE_OFFICE_STAGING_DIR=<dir> = override root.
+#   Lib = scripts/lib/office-staging.sh, doc = office-automation.md#office-pregranted-staging-dir.
+#   (Verified on Word + Excel; PowerPoint shares the entitlement — see the doc's ledger.)
+#
 # Safety: opens the deck, exports, and closes ONLY the document it opened
 #   (saving no). It does NOT quit PowerPoint and does NOT touch any other open
 #   document — safe to run while you have other PowerPoint work open.
@@ -38,20 +48,40 @@
 #   See conventions/office-automation.md#pptx-to-pdf-powerpoint.
 #
 # Usage:
-#   pptx-to-pdf.sh <input.pptx> [output.pdf]
+#   pptx-to-pdf.sh [--no-stage] <input.pptx> [output.pdf]
 #     output.pdf  defaults to <input> with a .pdf extension, next to the source.
 set -euo pipefail
 
-SRC="${1:?usage: pptx-to-pdf.sh <input.pptx> [output.pdf]}"
+NO_STAGE=0
+case "${1:-}" in --no-stage) NO_STAGE=1; shift ;; esac
+
+SRC="${1:?usage: pptx-to-pdf.sh [--no-stage] <input.pptx> [output.pdf]}"
 SRC="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")"
 [ -f "$SRC" ] || { echo "❌ not found: $SRC" >&2; exit 1; }
 PDF="${2:-${SRC%.*}.pdf}"
 case "$PDF" in /*) : ;; *) PDF="$(pwd)/$PDF" ;; esac
 rm -f "$PDF"
 
+# staging lib (= 無ければ no-op で in-place 続行)
+STAGING_LIB="$(cd "$(dirname "$0")" && pwd)/lib/office-staging.sh"
+if [ -f "$STAGING_LIB" ]; then
+  # shellcheck source=lib/office-staging.sh
+  . "$STAGING_LIB"
+else
+  office_stage_file() { return 1; }; office_stage_cleanup() { :; }; office_stage_prune() { :; }
+fi
+if [ "$NO_STAGE" = 1 ]; then CLAUDE_OFFICE_STAGING=0; export CLAUDE_OFFICE_STAGING; fi
+
 if [ "$(uname)" = "Darwin" ] && [ -d "/Applications/Microsoft PowerPoint.app" ]; then
   # Engine 1 (preferred): Microsoft PowerPoint native export — highest fidelity.
-  osascript - "$SRC" "$PDF" <<'AS'
+  WSRC="$SRC"; WPDF="$PDF"
+  office_stage_prune 7
+  if office_stage_file "$SRC"; then
+    WSRC="$OFFICE_STAGED"
+    WPDF="$OFFICE_STAGE_DIR/$(basename "$PDF")"
+    echo "staging: $OFFICE_STAGE_DIR (pre-granted, no sandbox dialog)" >&2
+  fi
+  if ! osascript - "$WSRC" "$WPDF" <<'AS'; then
 on run argv
   set srcPath to item 1 of argv
   set outHFS to (POSIX file (item 2 of argv)) as text   -- HFS path: gotcha (a)
@@ -72,6 +102,15 @@ on run argv
   end tell
 end run
 AS
+    echo "❌ PowerPoint AppleScript export failed (see error above)." >&2
+    [ "$WSRC" != "$SRC" ] && echo "   staged copy kept for diagnosis: $OFFICE_STAGE_DIR" >&2
+    exit 1
+  fi
+  if [ "$WPDF" != "$PDF" ]; then
+    [ -f "$WPDF" ] || { echo "❌ PowerPoint reported success but no PDF in staging: $WPDF" >&2; exit 1; }
+    cp -p "$WPDF" "$PDF"
+    office_stage_cleanup
+  fi
 elif command -v soffice >/dev/null 2>&1 || command -v libreoffice >/dev/null 2>&1; then
   # Engine 2 (fallback): LibreOffice. ⚠️ may flatten pattern fills / hatching.
   echo "⚠️  PowerPoint not found — using LibreOffice. Pattern fills / hatching (網掛け) may flatten; verify the result." >&2

@@ -177,7 +177,7 @@ claude-config/
 │   ├── diff-form-docx.py                   # 様式 docx の記入ミスを blank diff で検出（ラベル欄上書き/見出し消失=HARD・空の箇条書き/全空 labeled 列=surface、xlsx 版の docx 対、--selftest 内蔵、office-automation.md#diff-form-docx-detection）
 │   ├── diff-form-xlsx.py                   # 様式 xlsx の label 上書き (= 様式改変) を雛形 diff で検出（office-automation.md#diff-form-xlsx-detection）
 │   ├── discord-post.py                     # canonical Discord Bot API poster (stdlib only).
-│   ├── docx-to-pdf.sh                      # Word docx/doc → PDF 変換（macOS 既定 Pages → --word で Word 忠実版 → 非 macOS LibreOffice、office-automation.md#docx-to-pdf-pages）
+│   ├── docx-to-pdf.sh                      # Word docx/doc → PDF 変換（macOS 既定 Word 忠実版 → --pages で Pages → 非 macOS LibreOffice、Word 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避、office-automation.md#docx-to-pdf-pages）
 │   ├── docx_decl_patch.py                  # python-docx の Document.save() を auto-patch し XML 宣言を Word 形式(double-quote+CRLF)で書く（厳格 Word の「破損」回避、 save 時 source 修正・lazy import hook、 office-automation.md#docx-checkbox-content-control）
 │   ├── dropbox-root.sh                     # Dropbox install root を OS 横断で resolve（dropbox-refs 規約用）
 │   ├── enhance-scan.py                     # 手書き文書の撮影写真の可読化: 紙の切り出し + 照明ムラ除去 + コントラスト伸張 + タイル出力。
@@ -201,7 +201,7 @@ claude-config/
 │   ├── pdf-cleaner.html                    # clipboard-cleaner.py のブラウザ版 fallback（非 macOS / pbcopy なし環境用、整形ロジックの正本は clipboard-cleaner.py で両実装を同期）
 │   ├── pdf_form_fill.py                    # 雛形 PDF への直接印字エンジン（library。anchor 印字 / NFKC 照合 / #+ redact / font subset / 内蔵検証 / 600dpi ラスタ化、office-automation.md#pdf-prefill-direct の汎用実装。単票向け — 派生 sheet 数式導出付き workbook は excel-osascript 経路）
 │   ├── pin-claude-cwd.sh                   # Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
-│   ├── pptx-to-pdf.sh                      # PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、office-automation.md#pptx-to-pdf-powerpoint）
+│   ├── pptx-to-pdf.sh                      # PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、PowerPoint 経路は事前 grant 済み staging dir 経由、office-automation.md#pptx-to-pdf-powerpoint）
 │   ├── pre-commit-bib                      # Git pre-commit hook（上記を呼ぶ）
 │   ├── pty-leak-watch.sh                   # macOS Claude.app pty leak watchdog（LaunchAgent、枯渇前に macOS 通知、conventions/macos-claude-app-pty-leak.md）
 │   ├── public-precommit-runner.sh          # 公開リポ pre-commit gate（Tier A + sensitive-terms.txt ephemeral）
@@ -214,7 +214,7 @@ claude-config/
 │   ├── surface-discord-bot-dm.py           # Discord bot DM channel の未記録 message surface engine（daily fetcher が吐く JSON と user 側 ledger（text/YAML 内 messageId）の diff で「bot DM に返事が来ても誰も読まない」 死角を埋める汎用 CLI、 個別環境への依存ゼロ＝引数で bot ID / json-dir / ledger-dir / counterpart map / title を渡す、 finding 0 件 silent、 --selftest 内蔵。 personal layer に thin wrapper を 1 つ置いて呼ぶ、 conventions/discord-bot.md#bot-dm-surface）
 │   ├── tune-seal-image.py                  # Calibrate a digitized seal PNG against a *printed* reference — stroke width and ink color.
 │   ├── verify-form-guidance.py             # 官製様式の「記入要領 (赤字/青字)」 が提出物に残置していないか検出。
-│   ├── xlsx-to-pdf.sh                      # spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、office-automation.md#xlsx-to-pdf-script）
+│   ├── xlsx-to-pdf.sh                      # spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
 │   └── lib/                            # sourceable helper 群
 │       ├── commit-msg-leak-matcher.sh     # commit message leak matcher (= sensitive-terms.txt + repos.md private list - 8 allowlist の (a)(b)(c) check)、 claude-code hook + git-side runner の両方が source する DRY 実装
 │       ├── find-personal-layer.sh         # `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)

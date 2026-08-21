@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# xlsx-to-pdf.sh — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、office-automation.md#xlsx-to-pdf-script）
+# xlsx-to-pdf.sh — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
 # xlsx-to-pdf.sh — convert a spreadsheet (xlsx/xls/ods) to PDF, cross-platform.
 #
 # Why this exists:
@@ -23,20 +23,46 @@
 #      first time in the FOREGROUND and answer the dialog; once granted it runs
 #      unattended. Change later: System Settings > Privacy & Security > Automation.
 #
+# 🔑 The Excel engine runs through a PRE-GRANTED STAGING DIR (2026-08-21):
+#   Excel is App-Sandboxed and pops its own "ファイル アクセスを許可" dialog the first
+#   time it has to WRITE into a folder (= the PDF export) — once per new folder, and
+#   it blocks the AppleScript (-1712) while nobody can click it remotely. The
+#   workbook is therefore copied into the Office App Group container
+#   (~/Library/Group Containers/UBF8T346G9.Office/claude-office-staging/<unique>/),
+#   exported there (no grant needed inside Excel's sandbox) and the PDF copied back.
+#   Bonus: Excel's export path re-saves the workbook it opened (observed with
+#   macro-bearing forms) — with staging that hits the COPY, the original stays
+#   byte-identical. --no-stage / CLAUDE_OFFICE_STAGING=0 = in-place (old behaviour);
+#   CLAUDE_OFFICE_STAGING_DIR=<dir> = override root. Lib = scripts/lib/office-staging.sh,
+#   doc = office-automation.md#office-pregranted-staging-dir.
+#
 # Usage:
-#   xlsx-to-pdf.sh <input.xlsx> [sheet] [output.pdf]
+#   xlsx-to-pdf.sh [--no-stage] <input.xlsx> [sheet] [output.pdf]
 #     sheet       Excel engine only: export just that worksheet. The LibreOffice
 #                 engine ignores it (with a warning) and exports the whole book.
 #     output.pdf  defaults to <input> with a .pdf extension, next to the source.
 set -euo pipefail
 
-SRC="${1:?usage: xlsx-to-pdf.sh <input.xlsx> [sheet] [output.pdf]}"
+NO_STAGE=0
+case "${1:-}" in --no-stage) NO_STAGE=1; shift ;; esac
+
+SRC="${1:?usage: xlsx-to-pdf.sh [--no-stage] <input.xlsx> [sheet] [output.pdf]}"
 SHEET="${2:-}"
 SRC="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")"
 [ -f "$SRC" ] || { echo "❌ not found: $SRC" >&2; exit 1; }
 PDF="${3:-${SRC%.*}.pdf}"
 case "$PDF" in /*) : ;; *) PDF="$(pwd)/$PDF" ;; esac
 rm -f "$PDF"
+
+# staging lib (= 無ければ no-op で in-place 続行)
+STAGING_LIB="$(cd "$(dirname "$0")" && pwd)/lib/office-staging.sh"
+if [ -f "$STAGING_LIB" ]; then
+  # shellcheck source=lib/office-staging.sh
+  . "$STAGING_LIB"
+else
+  office_stage_file() { return 1; }; office_stage_cleanup() { :; }; office_stage_prune() { :; }
+fi
+if [ "$NO_STAGE" = 1 ]; then CLAUDE_OFFICE_STAGING=0; export CLAUDE_OFFICE_STAGING; fi
 
 # --- pick a rendering engine ------------------------------------------------
 SOFFICE=""
@@ -60,6 +86,16 @@ if [ -n "$SOFFICE" ]; then
   if [ "$GEN" != "$PDF" ]; then mv -f "$GEN" "$PDF"; fi
 elif [ "$(uname)" = "Darwin" ]; then
   # Engine 2: Microsoft Excel via osascript (macOS). Supports single-sheet export.
+  # Staging (office-automation.md#office-pregranted-staging-dir): Excel opens and
+  # exports inside its own App Group container → no folder-grant dialog, and the
+  # export-time re-save hits the copy, not the original.
+  WSRC="$SRC"; WPDF="$PDF"
+  office_stage_prune 7
+  if office_stage_file "$SRC"; then
+    WSRC="$OFFICE_STAGED"
+    WPDF="$OFFICE_STAGE_DIR/$(basename "$PDF")"
+    echo "staging: $OFFICE_STAGE_DIR (pre-granted, no sandbox dialog)" >&2
+  fi
   # Reset stale Excel state first (2026-06-05 RCA): `quit` is ASYNC — it returns
   # before Excel has fully exited, so a leftover process from a prior run in the same
   # session causes AppleEvent no-response (-1712) or parameter errors (-50). The sleep
@@ -70,7 +106,7 @@ elif [ "$(uname)" = "Darwin" ]; then
   #   conventions/office-automation.md#xlsx-to-pdf-script).
   osascript -e 'tell application "Microsoft Excel" to quit' >/dev/null 2>&1 || true
   sleep 3
-  osascript - "$SRC" "$SHEET" "$PDF" <<'AS'
+  if ! osascript - "$WSRC" "$SHEET" "$WPDF" <<'AS'; then
 on run argv
   set srcPath to item 1 of argv
   set sheetName to item 2 of argv
@@ -90,6 +126,15 @@ on run argv
   end timeout
 end run
 AS
+    echo "❌ Excel AppleScript export failed (see error above)." >&2
+    [ "$WSRC" != "$SRC" ] && echo "   staged copy kept for diagnosis: $OFFICE_STAGE_DIR" >&2
+    exit 1
+  fi
+  if [ "$WPDF" != "$PDF" ]; then
+    [ -f "$WPDF" ] || { echo "❌ Excel reported success but no PDF in staging: $WPDF" >&2; exit 1; }
+    cp -p "$WPDF" "$PDF"
+    office_stage_cleanup
+  fi
 else
   echo "❌ No conversion engine found: install LibreOffice (soffice) or run on macOS with Microsoft Excel." >&2
   exit 1
