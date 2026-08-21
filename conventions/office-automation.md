@@ -1202,6 +1202,8 @@ origin: 2026-07-08 自己紹介シート session (= 複数 round の fill → �
 
 ### <a id="xlsx-to-pdf-script"></a>xlsx → PDF: `xlsx-to-pdf.sh` (LibreOffice → Excel fallback)
 
+🔑 Excel 経路は 2026-08-21 から **事前 grant 済み staging dir 経由が default** ([`office-pregranted-staging-dir`](#office-pregranted-staging-dir) = Excel の「ファイル アクセスを許可」 dialog を案件 dir ごとに踏まない + export 時の再保存が原本に触らない)。 `--no-stage` で旧 in-place。
+
 汎用スクリプト [`scripts/xlsx-to-pdf.sh`](../scripts/xlsx-to-pdf.sh) を使う。 openpyxl は cell 値の read/write のみで PDF を **render できない**ため、 実 render engine が要る。 スクリプトは利用可能な engine を自動選択する:
 
 ```bash
@@ -1234,6 +1236,8 @@ xlsx-to-pdf.sh <input.xlsx> [sheet] [output.pdf]
 - 提出本体は xlsx、 PDF は確認 / 添付用 snapshot ([`pdf-snapshot-xlsx-submission`](#pdf-snapshot-xlsx-submission))。 fill 後の見た目崩れ (= merged cell の値潰れ・列幅不足の `###`、 [`bool-cell-hash-overflow`](#bool-cell-hash-overflow) / [`datetime-cell-hash-overflow`](#datetime-cell-hash-overflow)) はこの PDF でのみ可視化される (= [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF visual confirmation 義務)。
 
 ### <a id="pptx-to-pdf-powerpoint"></a>pptx → PDF: `pptx-to-pdf.sh` (PowerPoint native export = fidelity-first)
+
+🔑 PowerPoint 経路は 2026-08-21 から **事前 grant 済み staging dir 経由が default** ([`office-pregranted-staging-dir`](#office-pregranted-staging-dir)、 `--no-stage` で旧 in-place)。
 
 スライド (pptx) を PDF 化するときは、 汎用スクリプト [`scripts/pptx-to-pdf.sh`](../scripts/pptx-to-pdf.sh) を使う。 ⚠️ **xlsx と engine 優先順位が逆**: pptx は **Microsoft PowerPoint の native export を最優先**し、 LibreOffice は fallback に回す。
 
@@ -1628,6 +1632,8 @@ assert fitz.open("p1.pdf").page_count == 1
 **origin**: 2026-07 研究費調書 (15pp) の研究組織表。 plain `get_text()` 出力で隣接する分担者の役割分担 wording が行間に混ざり、 **別の分担者の担当テーマを本人の担当と誤帰属して報告** + 経費・エフォート数値列を「layout 依存で抽出できず」 と早断 → user 訂正 (「読めない、 とかありえんやろ」) → `get_text("words")` + y-sort で全行・全数値を回収 (= 経費値は取れ、 エフォート欄は**真に空欄** = 承諾操作時の本人入力待ち、 という「空欄 vs 抽出不能」 の区別も ladder で初めて確定)。
 
 ### <a id="docx-to-pdf-pages"></a>docx → PDF: Pages.app AppleScript が macOS では最も robust
+
+🔑 Word 経路 (= default) は 2026-08-21 から **事前 grant 済み staging dir 経由** ([`office-pregranted-staging-dir`](#office-pregranted-staging-dir) = Word の「ファイル アクセスを許可」 dialog を案件 dir ごとに踏まない)。 `--no-stage` で旧 in-place。
 
 ⚡ **まず [`scripts/docx-to-pdf.sh`](../scripts/docx-to-pdf.sh) を使う** (= xlsx-to-pdf.sh の docx 版、 engine 自動選択)。 `docx-to-pdf.sh [--pages|--word] <in.docx> [out.pdf]` — **macOS 既定は Word 忠実版** (2026-06-23 反転、 旧 default = Pages)、 `--pages` で明示的に Pages、 `--word` は backward compat の no-op、 非 macOS は LibreOffice。 ⚠️ **`soffice` を直に叩かない** (= mac には未 install のことが多く「command not found」 で詰む。 2026-06-10 RCA: router を読まず soffice を試した参照漏れ)。 ⚠️ **新規 docx automation script を書く時の default engine 選択 reflex は [`office-automation-principles.md` tool-selection-ladder](office-automation-principles.md#tool-selection-ladder)** に集約 (= default Word + `/tmp` warn + cold-start 自動裏 fallback 禁止 + sibling 構造 mirror の 4 点)。 以下は engine 別の中身 (= スクリプトが内部で行うこと、 手組みが要るときの参照)。
 
@@ -3396,7 +3402,7 @@ origin: 2026-08-20 海外出張様式 xlsm (= VBA + drawings 持ち) の日程�
 
 ## <a id="xlsm-macro-export-trap"></a>xlsm (マクロ付き様式) の Excel export は「マクロ実行不可 → 印刷範囲未適用 → 全面 dump → crash」 に落ちる
 
-**症状** (2026-08-21 実測、 海外出張様式 = 「印刷範囲指定」 マクロ入り xlsm): [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の Excel 経路で export すると、 (1) 「マクロを実行できません」 dialog (= 自動化 context のマクロセキュリティで Workbook_Open / 印刷範囲マクロが走れない)、 (2) 印刷範囲が設定されないまま export されて **sheet 全面 + 記入例 face + 他 sheet が 1 ページに縮小 / 計 13 ページ** の役に立たない PDF、 (3) その後 Excel が crash、 (4) **export 過程で workbook が再保存され file が変わる** (git diff が出る = `git checkout -- <file>` で HEAD に戻す。 export は読むだけ、 という前提を置かない)。
+**症状** (2026-08-21 実測、 海外出張様式 = 「印刷範囲指定」 マクロ入り xlsm): [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の Excel 経路で export すると、 (1) 「マクロを実行できません」 dialog (= 自動化 context のマクロセキュリティで Workbook_Open / 印刷範囲マクロが走れない)、 (2) 印刷範囲が設定されないまま export されて **sheet 全面 + 記入例 face + 他 sheet が 1 ページに縮小 / 計 13 ページ** の役に立たない PDF、 (3) その後 Excel が crash、 (4) **export 過程で workbook が再保存され file が変わる** (git diff が出る = `git checkout -- <file>` で HEAD に戻す。 export は読むだけ、 という前提を置かない。 ⚠️ 2026-08-21 以降の [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) は staging 経由 = 再保存は copy に当たり**原本は不変**、 in-place `--no-stage` の時だけ本項が効く)。
 
 **対処の階梯** (= Excel を増やさない方向に倒す):
 1. **値の変更は [`xlsx-cell-value-zip-surgery`](#xlsx-cell-value-zip-surgery)** (Excel 起動ゼロ、 VBA / drawings / form control 無傷)。 `scripts/check-xlsx-integrity.py` を gate に。

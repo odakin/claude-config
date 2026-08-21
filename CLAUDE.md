@@ -220,6 +220,9 @@ claude-config/
 │       ├── find-personal-layer.sh         # `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
 │       ├── merge-hook-event.sh            # settings.json への hook event merge (単一リスト駆動)
 │       ├── merge-hook-event.test.sh       # merge_hook_event の self-test (hermetic、 実 settings.json 不使用)
+│       ├── office-staging.sh              # Office (Word / Excel / PowerPoint) automation の「事前 grant 済み staging dir」 helper (sourceable lib、 macOS App Sandbox の folder-grant dialog を design-out、 office-automation.md#office-pregranted-staging-dir)
+│       ├── office-staging.test.sh         # office-staging.sh + office_staging.py の self-test (hermetic、 Office 不要、 fake HOME)
+│       ├── office_staging.py              # office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
 │       ├── staged-conflict-markers.sh     # merge conflict marker の staged-content gate (sourceable lib)
 │       └── staged-conflict-markers.test.sh # staged-conflict-markers.sh の self-test (hermetic)
 <!-- AUTO-TREE:scripts END -->

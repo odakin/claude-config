@@ -77,6 +77,7 @@ class Stage:
         root = staging_root()
         if not root:
             return self  # in-place fallback
+        prune(7)  # bash 版 (各 wrapper が office_stage_prune 7 を呼ぶ) と同じ契約
         self.dir = tempfile.mkdtemp(prefix=f"{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}-", dir=root)
         staged = []
         for src in self.sources:
