@@ -81,3 +81,13 @@ rebuttal を書かない誌替え再投稿 (= reject 済み原稿を修正して
 3. **査読実績の照合**: 「referee に突かれうる」と主張・対策する前に、過去の report 群を機械照合 (grep) して**実績あり (= 対応必須) と純予防 (= 入れ得だが optional)** を区別し、その label 付きで判断者に提示する。予防コストの妥当性は実績の有無で変わる。
 
 関連: 依頼側の縮小原則 = [`research-email.md #shrink-the-ask`](research-email.md#shrink-the-ask)。
+
+## <a id="manuscript-lineage-verification"></a>改訂に入る前の系譜検証: 「手元の最新」 を疑う 3 検査 (2026-08-21)
+
+reject 後の改訂や 5 誌目の投稿準備で、 **土台にした版が共著者合意済の最新でなかった**事故の再発防止。 共著論文では「最後に自分が受け取った添付」 ≠ 最新 (自分が cc 外だった期間の改訂、 別の共著者が投稿システム向けに変換した版、 など) が普通に起きる。
+
+1. **系譜表を作る** — 投稿ごとに (日付、 投稿者、 source の所在、 語数、 識別 keyword の有無) を 1 行ずつ並べる。 **語数・keyword は単調でなければならない** (改訂を重ねた版が 2,500 語短くなる、 referee が褒めた framing の語が消えている = 土台の取り違えの signal)。 referee report が言及する語句 (「coarse-grained」 等) が原稿に無ければ、 その report が読んだ版を持っていない。
+2. **cc 外期間を列挙する** — 共著者間 thread で自分が外れていた期間の版は「手元に無い」 と仮定し、 投稿者に source を直接要求する (投稿システムの proof PDF だけでは source は復元できない)。
+3. **referee が名指しした文を grep する** — 過去 report の引用句 ("at rest in all stages" 等) が改訂版に原文のまま残っていないか機械照合。 残っていれば「直した」 認識が誤り (= 別の版を直した) か、 修正が取り込まれていない。
+
+**図の再現性** — 数値図は「本文の式 + caption のパラメータ」 から再計算して照合する (= [`scientific-computing.md #figure-vector-extraction`](scientific-computing.md#figure-vector-extraction))。 caption のパラメータで再現できない図は、 作図 code が別の式・別のパラメータを使っていた signal で、 referee に突かれる前に著者間で決着させる。

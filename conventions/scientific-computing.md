@@ -473,3 +473,27 @@ Ward 恒等式・対称性・内部無矛盾性・projector 代数 等の check 
 - 浮動小数点精度起因の silent failure パターン
 - 単位系変換ミス (cgs ↔ SI ↔ 自然単位系)
 - 境界条件・初期条件の scale-dependence
+
+## <a id="figure-vector-extraction"></a>5. 論文 PDF 図のベクトル path から曲線データを復元して数値照合する (2026-08-21)
+
+### 問題
+共著者が描いた図 (code なし) が本文の式から再現できるかを検証したい。 目視比較は「だいたい合う」 で止まり、 z 依存の有無・極の位置といった定量的不整合を見落とす。
+
+### 方法
+matplotlib / Mathematica 出力の PDF はベクトルなので、 PyMuPDF で path を抜いて data 座標に戻せる:
+```python
+import fitz, numpy as np
+p = fitz.open('fig.pdf')[0]
+words = p.get_text('words')          # 目盛りラベルの位置 → 軸の線形/対数写像を決める
+for d in p.get_drawings():           # 曲線 = items が多い path; color/dashes で凡例と対応付け
+    pts = [(it[1].x, it[1].y) for it in d['items'] if it[0] in 'lc']
+```
+軸写像は目盛り word の bbox 中心から最小二乗で決める。 得た (x, y) を本文の式で計算した曲線と**最大偏差**で比較する (rms は tail の 0 に引きずられて過小評価になる)。
+
+### 得られる判定
+- 同一曲線の重なり (= 図中で別 label の 2 本が vector level で一致) → 作図 code にその parameter が入っていない
+- 極・終点の位置 → 規格化定数の逆算 → 本文の定義との比 (z 依存・振幅依存) を検査
+- 候補式 × 規約 (θ = 2Δωt か Δωt か等) の総当たり fit で作図時の式を同定 — **横軸の変数と式の変数の因子 2 を最初に固定する** (取り違えると全候補が外れ、 1 周無駄にする)
+
+### 実例 (2026-08-21、 該当 private paper repo)
+escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 → 定義 χ̃ ∝ (z₀/z)^{9/2} と両立せず、 code は z を変えていないと確定。 72 通りの fit で 1 本は最大偏差 0.03 で再現 (使われた式と積分変数を同定)、 もう 1 本は再現不能と確定し、 図を本文の式からの再計算版に差し替える判断材料になった。

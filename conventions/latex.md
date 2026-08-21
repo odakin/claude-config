@@ -799,3 +799,15 @@ luatexja は `$過去$` (= 裸の kanji) も accept するが、 標準 idiom �
 ```
 
 `[x=1mm, y=1mm]` で TikZ 座標が mm 単位に固定、 `geometry` で page size mm 指定。 printer で「実寸印刷」 設定にすれば狙い通りの mm 単位で印刷される。 screen 表示では browser / viewer の zoom が効く。
+
+## <a id="latexdiff-ulem-option-clash"></a>latexdiff: 本文が `ulem` を option なしで読むと差分 markup が silent に壊れる (2026-08-21)
+
+**症状**: `latexdiff old.tex new.tex > diff.tex` → pdflatex は `! LaTeX Error: Option clash for package ulem.` を吐くが batchmode では PDF が出てしまい、 **追加/削除の下線・取り消し線が欠落した「差分に見えない差分 PDF」** ができる。 原因 = 本文の `\usepackage{...,ulem}` (option なし) と latexdiff preamble の `\RequirePackage[normalem]{ulem}` の衝突。
+
+**対処**: 生成した diff.tex の先頭 (documentclass より前) に `\PassOptionsToPackage{normalem}{ulem}` を入れる。 1 行で済む:
+```bash
+latexdiff old.tex new.tex | sed '1s/^/\\PassOptionsToPackage{normalem}{ulem}\n/' > build/diff.tex
+```
+**検証**: diff.log の `^!` が 0 であること + 変更ページを画像化して markup を目視 (text 抽出は下線 markup で単語が分断されるので信用しない)。
+
+**関連の罠**: 変更ブロック内の `\label {key}` (空白入り) は latexdiff が `\label` と `{key}` の間に markup を挟んで `! Argument of \label has an extra }` になる → 新規に書く label は `\label{key}` (空白なし)。
