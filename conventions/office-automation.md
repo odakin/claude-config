@@ -39,7 +39,7 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 
 | 症状 (観察できること) | 真因 | 対処 (→ slug) |
 |---|---|---|
-| PyMuPDF で追記した日本語/数字が**画面では正常・印刷で文字化け / 位置ずれ** | `japan`/`helv` 組み込み font は glyph 非埋め込み = printer に代替 font が無い | 実 font file を `insert_font(fontfile=)` で埋め込む or 印刷用 raster 化 → [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake) |
+| PyMuPDF で追記した日本語/数字が**画面では正常・印刷で文字化け / 位置ずれ** | `japan`/`helv` 組み込み font は glyph 非埋め込み = printer に代替 font が無い | 印刷用は 600dpi **RGB** raster 版を刷る (font 埋め込みでも同 printer で化けた) → [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake) |
 | 値を入れた docx 様式が **1 頁→2 頁にはみ出す**、 折り返すのは触っていない行 | autofit 表は 1 セルの長い値で grid 列幅を組み替え、 別行のセルが狭まる (`tblLayout fixed` でも直らず) | 可変長値・○・認印は overlay、 溢れる 1 行だけ 9.5pt、 雛形 render と y 座標突合 → [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow) |
 | Excel がクラッシュ /「作業内容を回復」 dialog | 同 session で osascript の open/save/close/quit を多数 cycle し既存 instance を酷使 | **補正を 1 pass に織り込む単発記入** + 各 op 前に killall reset → [`excel-osascript-cell-write`](#excel-osascript-cell-write) |
 | osascript が `-1712` (AppleEvent timeout) | Excel が固まり / **background 実行で automation 許可 dialog を出せない** | killall+sleep reset / **初回は foreground で許可 dialog に応答** → [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) |
@@ -3414,17 +3414,18 @@ Excel / Word を起こさずに様式 PDF のセル値だけ直す手順 (= 日�
 
 origin: 2026-08-21 日程表 8 行の書き直し (Excel crash 後、 Excel を再起動せずに完了)。
 
-## <a id="pymupdf-builtin-font-print-mojibake"></a>PyMuPDF の組み込み font (`japan` / `helv` 等) で書いた文字は**プリンタで文字化け**する (= 埋め込まれていない)
+## <a id="pymupdf-builtin-font-print-mojibake"></a>PyMuPDF で描いた文字 (組み込み `japan` / `helv`、 OTF 埋め込みも) は**プリンタで文字化け**しうる — 印刷用は raster 化
 
 **症状**: `page.insert_text(..., fontname="japan")` で追記した日本語が **画面 (Preview / fitz raster) では正常**なのに、 `lp` で印刷すると □ や別文字に化ける。 Latin の `helv` (Helvetica) も環境によっては位置ずれ・代替 font になる。
 
 **原因**: PyMuPDF の base-14 / CJK 組み込み font (`helv` `tiro` `japan` `china-s` 等) は **PDF に glyph を埋め込まない** (= `get_fonts()` の "embedded" 表示に惑わされない — 実体は viewer の代替 font 依存)。 MuPDF 系 viewer は自前の font を持つので画面では出るが、 プリンタの PDF 解釈系 (CUPS → Canon UFR 等) は CJK 代替 font を持たない → 化ける。 **「画面で見えた」 は印刷の検証にならない**。
 
-**対処 (どちらか)**:
-1. **実 font file を埋め込む**: `page.insert_font(fontname="hag", fontfile="<HaranoAjiGothic-Regular.otf>")` → `insert_text(..., fontname="hag")`。 TeX Live があれば `kpsewhich HaranoAjiGothic-Regular.otf` で path が取れる (= `.ttc` は避け、 `.otf`/`.ttf` 単体を渡す)。 数字・ASCII も同じ font に寄せると位置ずれも消える。
-2. **印刷用だけ raster 化**: `pix = page.get_pixmap(dpi=600, colorspace=fitz.csGRAY)` → 新 PDF に `insert_image`。 font 問題が原理的に消える (紙提出の様式なら品質十分、 A4 gray 600dpi で ~300 KB)。 vector 版は repo に残し、 印刷物は raster 版から出す。
+**対処 = 印刷用は raster 化 (= 唯一 printer 非依存で通った経路)**:
+- `pix = page.get_pixmap(dpi=600, colorspace=fitz.csRGB)` → 新 PDF に `insert_image(page.rect, pixmap=pix)`。 font 問題が原理的に消える (紙提出の様式なら品質十分、 A4 RGB 600dpi で ~1.5 MB)。 ⚠️ **`csGRAY` にすると認印の朱色が黒になる** — 印影入りは必ず RGB。 vector 版は repo に残し (画面用)、 印刷物は `*_print_raster.pdf` から出す。
+- ❌ **実 font file の埋め込みでは直らなかった**: `page.insert_font(fontname="hag", fontfile="<HaranoAjiGothic-Regular.otf>")` で OTF (CFF) を埋め込んでも、 Word 由来の TrueType 部分は正常・**PyMuPDF 追記部だけ同じ printer で化けた** (2026-08-21 実測、 Canon LBP + CUPS)。 PyMuPDF の Type0/CFF subset を解釈できない driver がある = 「埋め込んだから安全」 も成立しない。 画面確認 (fitz raster / Preview) はこの差を**検出できない**。
+- `get_fonts()` に `helv`/`japan` や PyMuPDF 埋め込み font が載っている PDF を**そのまま `lp` に投げない**。 印刷前 gate = 「PyMuPDF で文字を描いた PDF か?」 → yes なら raster 版を刷る。
 
-**規律**: 印刷が目的の PDF は **送信前に `get_fonts()` で組み込み font 名 (`helv`/`japan`) が残っていないか grep** し、 残っていれば 1 か 2 を通す。 origin: 2026-08-21 海外出張願 + 日程表 (= overlay 文字が紙で化け、 user 指摘で発覚、 2 枚とも再印刷)。
+origin: 2026-08-21 海外出張願 + 日程表 = overlay 文字が紙で化け → OTF 埋め込みで再印刷 → **また化け** → raster で解決、 計 3 回刷り直し (user 指摘 3 連)。
 
 ## <a id="docx-autofit-grid-overflow"></a>docx 様式の autofit 表は「1 セルの長い値」 で**別の行**が折り返し、 1 頁様式が 2 頁にはみ出す
 
