@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 88 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 90 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -20,6 +20,8 @@ layer 1 (public) のドメイン固有規約 88 file をカテゴリ別に列挙
   - 常に簡潔を旨とする — 応答は結論先行で支持詳細を削る、deliverable は「読む負担 = 相手が払う価格」とみなし 1 画面を目安に、iteration ごとの肥大 (verbosity creep) を意識的に抑える
 - **[hook-authoring.md](hook-authoring.md)** — Claude Code hook を作成・配信・debug するとき
   - Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕)
+- **[machine-route-first.md](machine-route-first.md)** — 外部 service / アプリを操作・データ取得する経路を選ぶとき (画面 drive を検討し始めた瞬間)
+  - 経路 ladder (dedicated MCP → API 直 → CLI → 経路を実装 → user 依頼 → 画面 drive) — 画面 drive は最終手段で、経路が無いときは「実装するのが先」 (#build-the-route-first = 実装した経路を auto-load 面に記録するまでが 1 単位)。 画面 drive の 3 重コスト (unreliable click / user のマシン拘束 / 対象取り違え) と許容例外
 - **[mcp.md](mcp.md)** — MCP ツールを使うとき (アカウント確認・scope 判定を含む)
   - MCP 固有規約（MCP 使用時に参照）
 - **[memory-file-slimming.md](memory-file-slimming.md)** — CLAUDE.md 等の memory file が肥大して縮退 (slimming) するとき + 完了 entry を archive へ graduate するとき + 長大 bullet / table row を pointer 化するとき
@@ -179,6 +181,8 @@ layer 1 (public) のドメイン固有規約 88 file をカテゴリ別に列挙
   - Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)、 性能修復は measure-first + 出力等価性 + 決定的並列化 (§15)、 機能の回復は調査終了の条件でない = 症状が「余剰」 型だと retry で直った瞬間に原因が再発源に残る + origin 不明の残骸は恒常 noise 化して調査 trigger を失う (§16)
 - **[discord-bot.md](discord-bot.md)** — Discord Bot を運用・実装するとき
   - Discord Bot 運用 (権限ポリシー・private channel 加入・per-channel error non-fatal な fetcher・Token 取扱・組織 NW での API ブロック)
+- **[dropbox-api-access.md](dropbox-api-access.md)** — Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload)
+  - Dropbox HTTP API 直叩きの setup pattern — 公式 MCP / CLI 不在ゆえ API 直が機械経路 (= scoped app 最小 permission + 「authorize 時点の permission が token に焼き込まれる」順序罠 #scoped-app-setup、 PKCE public client = app secret 無し #pkce-no-secret、 共有リンクの冪等取得 = create 409 → list fallback #share-link-idempotent、 path 変換と online-only placeholder でもリンク可 #path-semantics、 sharing.write token の blast radius = 全 file への公開リンク発行が可能 #blast-radius)
 - **[dropbox-placeholder-diagnosis.md](dropbox-placeholder-diagnosis.md)** — Dropbox 配下の file が 0 byte に見えたとき
   - Dropbox の online-only placeholder (0 byte) 診断: xattr `com.dropbox.placeholder` 検出 + OS 別 materialize 方法 + 「0 byte = 配置忘れ」 reflex 防止
 - **[dropbox-refs.md](dropbox-refs.md)** — 共同 PDF を Dropbox に置いてリポから symlink 参照するとき
