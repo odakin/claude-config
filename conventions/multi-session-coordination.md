@@ -210,7 +210,7 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 
 | 軸 | Agent (subagent) | 別 session (spawn_task / 下記 file-handoff) |
 |---|---|---|
-| **ブロッキング (= 並列性)** | **既定で同期 — 呼び元は Agent 完了までブロックし、 その間 idle で待つ** (結果が tool result として返るまで次の作業に進めない。 `run_in_background:true` で非同期化はできるが、 それでも独立 session ではない = 下段) | **非同期 — 委譲した瞬間に呼び元が解放され、 別 session が走る間も自分の作業を続けられる** (真の並列) |
+| **ブロッキング (= 並列性)** | **build 依存 — CLI 2.1.232 (2026-08) 以降の interactive session は background 既定で非同期 (= 呼び元は解放、 完了時に通知)。 それ以前の build / SDK / headless / `run_in_background: false` 明示は同期で、 呼び元は Agent 完了までブロックし idle で待つ** (いずれにせよ独立 session ではない = 下段) | **非同期 — 委譲した瞬間に呼び元が解放され、 別 session が走る間も自分の作業を続けられる** (真の並列) |
 | 独立性 | 呼び元 context を継承する *subagent* で **独立でない** (呼び元 session 終了で消える / user が独立に steer 不可) | **完全に独立** (own worktree〔= 任意、 §8〕 / 呼び元記憶ゼロ / 呼び元終了後も生存 / user が steer 可) |
 | 結果返送 | 結果は *呼び元に自動で返る* | 結果は *自動では返らない* → 下記 token-handshake (push) / file-handoff (pull) で返す |
 
@@ -224,9 +224,9 @@ Claude Code は各 Bash 呼び出しの stdout/stderr を per-session tmp dir (=
 |---|---|---|
 | **長い / 独立 / ユーザーがオーナーの仕事** | **別セッション** (spawn_task / 下記 file-handoff) | 構造上ぜったいに親を止めない (別プロセス・別 context window) |
 | **答えを自分の手元に戻して今の作業に繋ぐ調査** | **background Agent** (`run_in_background: true`) | 非同期 — 委譲した瞬間に呼び元が解放され、 完了時に通知で戻る |
-| 前景 Agent (= `run_in_background` 無し) | **禁止** | 前景 *だけ* が呼び元を同期ブロックして止める。 同ターン内 inline chaining の便宜は失うが、 background + ターンを跨いで結果受領で代替でき (= 結果は呼び元の context に戻る・1 往復遅いだけ)、 親は止まらない |
+| 前景 Agent (= `run_in_background: false` 明示。 2.1.232 より前の build では省略も前景) | **禁止** | 前景 *だけ* が呼び元を同期ブロックして止める。 同ターン内 inline chaining の便宜は失うが、 background + ターンを跨いで結果受領で代替でき (= 結果は呼び元の context に戻る・1 往復遅いだけ)、 親は止まらない |
 
-**∴ Agent は必ず `run_in_background: true` を明示で付ける (= 前景〔background 無し〕は禁止、 「ほぼ」 でなく全面)。** 理由は 2 つ: (i) 前景 *だけ* が親を止める、 (ii) **legibility** = `ask:Agent` の承認ダイアログは生引数を出すだけで前景/background を読み取りにくい (= `run_in_background` を省くと前景なのに dialog に何の印も出ない) → **常に background に固定すれば「dialog に現れた Agent は必ず background (= 止まらない)」 と確定**し、 human は gate で「これは止まるやつか?」 を判定せず済む (= veto は『そもそも立てるべきか・別 session にすべきか』 だけに使える)。 明示 `true` は dialog 引数でも裏取りできる二重化。 ⚠️ **機械 backstop の frontend 別整理** (= 2 段ある):
+**∴ Agent は必ず `run_in_background: true` を明示で付ける (= 前景は禁止、 「ほぼ」 でなく全面)。** ⚠️ **upstream 状況 (2026-08-17)**: この要求を出した [anthropics/claude-code#71768](https://github.com/anthropics/claude-code/issues/71768) が maintainer により「shipped」 で close — CHANGELOG 2.1.232「non-teammate agent spawns in interactive sessions now run in the background by default」 + interactive では foreground option 自体が撤去、 frontmatter `background: true` で per-agent pin 可。 ∴ 最新 CLI では省略しても本規律を満たすが、 **明示は維持する** (= (a) 2.1.232 より前の build / Agent SDK / headless は既定が同期のまま = build 横断の耐性、 (b) 下記 legibility の二重化。 規律の文面は変えない、 「既定がそうなった」 は明示を外す理由にならない)。 理由は 2 つ: (i) 前景 *だけ* が親を止める、 (ii) **legibility** = `ask:Agent` の承認ダイアログは生引数を出すだけで前景/background を読み取りにくい (= `run_in_background` を省くと前景なのに dialog に何の印も出ない) → **常に background に固定すれば「dialog に現れた Agent は必ず background (= 止まらない)」 と確定**し、 human は gate で「これは止まるやつか?」 を判定せず済む (= veto は『そもそも立てるべきか・別 session にすべきか』 だけに使える)。 明示 `true` は dialog 引数でも裏取りできる二重化。 ⚠️ **機械 backstop の frontend 別整理** (= 2 段ある):
 - **(a) 細かい強制** (= 「background 無しの Agent だけ deny して付け直させる」 等、 tool 引数を見る介入型 guard) は **CLI のみ可**。 desktop app は介入型 guard が原理的に不能 ([`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork))。
 - **(b) 粗い pre-launch gate** (= settings.json `permissions.ask` に **`Agent` ツール名を入れる**) は **desktop でも honor される**: Agent 起動の*前*に承認ダイアログが出て human が veto できる (= mail 誤送信 gate と同機構、 `defaultMode: default` 前提、 [`claude-code-permissions.md` desktop-per-tool-gate](claude-code-permissions.md#desktop-per-tool-gate))。 前景/background の自動判別はできない (= 引数を見ないので) が、 human が dialog で「background か別 session で」 と差し戻せる。 tradeoff = 正当な調査 Agent も毎回承認。
 
