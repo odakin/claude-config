@@ -1744,7 +1744,7 @@ origin: 2026-06 PW 暗号化 docx を `/tmp/<work>/` に展開して round-trip 
 
 [`docx-tmp-sandbox-deny`](#docx-tmp-sandbox-deny) の「project 配下なら初回 1 回」 は、 **案件ごとに新しい dir を切る運用では「初回 1 回 × 案件数」 が積み上がる**。 しかも dialog は GUI にしか出ないので、 remote から Mac を操作している時は見えも押せもせず、 AppleScript 側には `-1712` (AppleEvent timeout) としてしか現れない。 本節はこれを規律でなく**機構**で消す。
 
-**機構 (2026-08-21 実測、 macOS 13.7 / Office 16.101)**:
+**機構 (2026-08-21 実測、 macOS 13.7 / Office 16.101。 2026-08-22 に macOS 26.5 / Office 16.112 でも同挙動を確認 = 下の注意 1)**:
 
 - Word / Excel / PowerPoint は全て App Sandbox (`com.apple.security.app-sandbox` + `files.user-selected.read-write` + `files.bookmarks.app-scope`)。 folder 単位の grant は security-scoped bookmark として各 app の container (`~/Library/Containers/com.microsoft.<App>/Data/Library/Preferences/com.microsoft.<App>.securebookmarks.plist`) に溜まる。
 - **dialog が出るのは「folder へ書く」 瞬間** (= PDF export / save-as)。 `open <file>` (LaunchServices) で渡した docx を**読む**だけなら新規 dir でも出ない (= file 単位の sandbox extension が付くため)。 ∴ 「開けたのに export で止まる」 が典型 signature。
@@ -1760,7 +1760,7 @@ origin: 2026-06 PW 暗号化 docx を `/tmp/<work>/` に展開して round-trip 
 - `/tmp` 配下の input も copy されて通る (= [`docx-tmp-sandbox-deny`](#docx-tmp-sandbox-deny) の規律は in-place 経路限定に縮む)。
 
 ⚠️ **注意**:
-- **macOS 15 (Sequoia) 以降**は他 app の `~/Library/Containers` / `~/Library/Group Containers` への Terminal からのアクセスに App Data 保護 (TCC) が掛かると報告されている (= 当 fleet では未検証、 実測は macOS 13)。 そこでは shell から root を作れず lib は空を返して in-place に fall back する (= 旧挙動 = dialog 復活)。 対処 = 一度だけ TCC を許可するか、 `CLAUDE_OFFICE_STAGING_DIR=~/.office-staging` 等を設定して**その dir を 1 回だけ手動 grant** する (= 候補 (b))。
+- **macOS 15 (Sequoia) 以降**は他 app の `~/Library/Containers` / `~/Library/Group Containers` への Terminal からのアクセスに App Data 保護 (TCC) が掛かると報告されている。 **実測 (2026-08-22、 macOS 26.5 / Office 16.112、 Apple Silicon)**: Claude Code desktop 配下の zsh からは `mkdir` + copy + Word / Excel export がすべて dialog ゼロで通った (= この経路では TCC は発火せず、 override 不要。 ただし TCC.db は読めないので「既 grant」 と「対象外」 は未分離、 Terminal.app 直下の zsh は未測)。 もし掛かる環境なら shell から root を作れず lib は空を返して in-place に fall back する (= 旧挙動 = dialog 復活、 signature = stderr に `staging:` 行が出ない)。 対処 = 一度だけ TCC を許可するか、 `CLAUDE_OFFICE_STAGING_DIR=~/.office-staging` 等を設定して**その dir を 1 回だけ手動 grant** する (= 候補 (b))。
 - **staging root 自体を消さない**・**Office が開いている最中に subdir を外から消さない** (= Word の resume queue に死んだ path が残り、 次回起動で「文書を開くことができません」 が連発する、 [`docx-tmp-sandbox-deny`](#docx-tmp-sandbox-deny) と同じ機構)。 lib は「close してから cleanup / 失敗時は残す」 の順序でこれを守る。
 - Word / Excel の「最近使ったファイル」 に staging path が並ぶ (= 無害、 驚かないため記載)。
 - 本節は **Office sandbox 側**の dialog。 Claude Code 側の「作業ディレクトリ外の file を読みますか」 prompt は別 layer = [`claude-code-permissions.md`](claude-code-permissions.md) の `additionalDirectories` で扱う。

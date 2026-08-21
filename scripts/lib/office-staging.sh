@@ -24,7 +24,8 @@
 #   CLAUDE_OFFICE_STAGING=0       … staging を無効化 (= 旧挙動 in-place、 `--no-stage` 相当)
 #   CLAUDE_OFFICE_STAGING_DIR=DIR … root を override (= group container が使えない環境で、 一度だけ手動 grant
 #                                   した固定 dir を指す。 macOS 15+ の App Data 保護で Terminal から
-#                                   Group Containers に書けない場合の逃げ道)
+#                                   Group Containers に書けない場合の逃げ道。 2026-08-22 macOS 26.5 実測では
+#                                   Claude Code 配下の shell から group container がそのまま通り override 不要だった)
 #
 # 設計
 #   * unique subdir = mktemp -d (<timestamp>-<pid>-XXXXXX): 並列 session の同名衝突を隔離し、 Word の
