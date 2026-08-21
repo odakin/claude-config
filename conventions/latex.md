@@ -333,6 +333,32 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 
 ⚠️ **`ptex2pdf` / `platex` の exit code は信用しない**: clean な DVI（`Output written on ....dvi`）が出ていても wrapper が非ゼロ exit を返すことがある。確実な build は **`platex → platex → dvipdfmx` を個別実行**し、(a) log を `grep -iE "^! |Overfull"`、(b) `.pdf` が実際に再生成されたか（timestamp / `dvipdfmx` の `... bytes written`）で判定する。exit code 単独を成功 signal にしない。
 
+## <a id="matplotlib-cjk-figure-embedding"></a>matplotlib の CJK 入り図は PNG で取り込む (PDF は platex+dvipdfmx で描画だけ化ける)
+
+matplotlib が CJK フォント (macOS Hiragino 等の `.ttc`、`pdf.fonttype = 42`) を埋め込んだ PDF を
+`\includegraphics` で platex + dvipdfmx に通すと、**図中の日本語ラベルが描画だけ化ける**
+(2026-08-21 実測)。見落としやすい理由 = **文字抽出 (ToUnicode) は正常**で、viewer によっては
+読めることもある → 「PDF を目視した」だけでは気づかない。fitz / gs の両エンジンで化けたので、
+投稿先・審査側の PDF 変換でも危険と判断する。
+
+- ❌ `pdf.fonttype = 3` — 古い matplotlib では CJK 非対応 (`UnicodeEncodeError`)、しかも失敗時に
+  出力 PDF を壊す (0 byte / 不完全)。
+- ❌ gs `-dNoOutputFonts` で outline 化 — 化けた glyph をそのままパス化するだけで無効
+  (+ gs 既定の PDF 1.7 は dvipdfmx が取り込み拒否し build が silent 失敗する。1.5 を指定しても無意味)。
+- ✅ **Agg レンダリングの PNG (300 dpi) を `\includegraphics` する** — viewer / 変換系に依存しない。
+  モノクロ印刷前提の書類 (科研費調書等) なら品質は十分。
+- 代替 (vector が必要な場合): `.ttc` でない単体 TTF (IPAex 等) を `font_manager` で指定して Type 42
+  埋め込み (未検証)。
+
+検証の作法: 図を含む頁を **fitz 等で raster 化して目視** (PDF viewer の表示を信じない)、
+`page.get_fonts()` で埋め込みフォントの素性も見る。
+
+## <a id="wrapfigure-page-carryover"></a>wrapfigure が頁末に来ると次頁冒頭が短行で続く
+
+`wrapfigure` は図の高さから「短くする行数」を決めるため、図が頁下端に来ると**次頁の冒頭数行も
+狭いまま**になる (白い穴が空く)。対処 = 図を段落のもっと前に置く / 幅を絞る / 行数を明示
+`\begin{wrapfigure}[N]{r}{...}` (N = その頁に残る行数。本文を増減したら要再調整なのでコメントを残す)。
+
 ## <a id="bibliography-style"></a>Bibliography スタイル
 - **JHEP.bst を使う**（個人的好み）。`note` フィールドも表示するバージョンを使用
 - 正本: `~/Claude/claude-config/JHEP.bst`（ver. 2.18 ベース + note 全 entry type で有効化、md5: `0934fe19…`。 2026-07-24 に header comment 内の Unicode curly quotes を LaTeX 式 ``…'' に正規化 = char-fixer 配下 repo へ配布しても md5 が割れない idempotent 化、 機能変更なし）
