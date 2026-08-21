@@ -672,6 +672,15 @@ sections:
   - id: xlsx-cell-value-zip-surgery
     level: 2
     title: "値 cell だけの zip 直編集 (= Excel も openpyxl も使わない第 3 経路)"
+  - id: xlsm-macro-export-trap
+    level: 2
+    title: "xlsm (マクロ付き様式) の Excel export は「マクロ実行不可 → 印刷範囲未適用 → 全面 dump → crash」 に落ちる"
+  - id: vector-pdf-page-rescue
+    level: 2
+    title: "壊れた Excel export から様式ページを vector のまま救出する (= clip + show_pdf_page)"
+  - id: pdf-cell-text-patch
+    level: 2
+    title: "vector PDF の表セル文字を差し替える (= 塗り色 sampling + 罫線保護 + CJK/Latin 分割描画)"
   - id: zip-cp932-filenames
     level: 2
     title: "日本語ファイル名 zip の展開 (= cp932 文字化け)"

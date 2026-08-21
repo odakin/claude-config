@@ -3358,9 +3358,59 @@ with zipfile.ZipFile(src, 'w', zipfile.ZIP_DEFLATED) as zout:
 2. **日付 serial の表示事故が典型の使い所**: General 書式の cell に日付 serial を書くと**印字が生の serial 値 (46370) になる**。 Excel で number format を当て直すより、 **表示文字列を inlineStr で焼く**方が確実 (= 印字目的の様式では日付が text でも実害なし)。 逆に雛形側が日付書式済みの cell (= 記入例 face に datetime が入っている列) は serial のままで正しく表示される — **書式の有無は openpyxl の `cell.number_format` で先に確認**。
 3. shared strings を触らない (= `t="inlineStr"` は `sharedStrings.xml` の count 更新が不要で、 追記型より安全)。
 4. **検証 3 点 set**: openpyxl readback で値 assert + `scripts/check-xlsx-integrity.py` (= zip 直編集の納品前 gate) + [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で label 上書きゼロ確認。
-5. Excel automation との**hybrid が実戦形**: 値の大半は Excel osascript で書き、 **書式起因の後修正だけ本手術**で当てる (= Excel 再起動 round を 1 つ消す。 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 回避にも効く)。
+5. **cell 要素が無い (= 空セルは XML に存在しないことがある) / self-closing `<c r="X" s="n"/>` のとき**: 同じ `<row r="N">` 内に**列順を保って挿入**する (style `s=` は同列の近傍 cell から流用)。 regex は `<c r="REF"(attrs)(/>|>…</c>)` の両形を受ける。 実測 2026-08-21: 日程表 8 行目 (C83/F83/O83) は行は在るが cell 無し → 挿入で対応。
+6. **date 書式済みの cell は serial を書く** (例: 出張予定日 N28 = `46368` → 2026-12-12)。 serial ↔ date の換算は openpyxl readback で確認 (`datetime` が返れば書式が生きている)。
+7. Excel automation との**hybrid が実戦形**: 値の大半は Excel osascript で書き、 **書式起因の後修正だけ本手術**で当てる (= Excel 再起動 round を 1 つ消す。 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 回避にも効く)。
 
 origin: 2026-08-20 海外出張様式 xlsm (= VBA + drawings 持ち) の日程表日付 7 cell。 Excel scripting が -1728/-1708 で不安定な throttled マシン上で、 値は AppleScript・書式は本手術の hybrid で完了。
+
+## <a id="xlsm-macro-export-trap"></a>xlsm (マクロ付き様式) の Excel export は「マクロ実行不可 → 印刷範囲未適用 → 全面 dump → crash」 に落ちる
+
+**症状** (2026-08-21 実測、 海外出張様式 = 「印刷範囲指定」 マクロ入り xlsm): [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の Excel 経路で export すると、 (1) 「マクロを実行できません」 dialog (= 自動化 context のマクロセキュリティで Workbook_Open / 印刷範囲マクロが走れない)、 (2) 印刷範囲が設定されないまま export されて **sheet 全面 + 記入例 face + 他 sheet が 1 ページに縮小 / 計 13 ページ** の役に立たない PDF、 (3) その後 Excel が crash、 (4) **export 過程で workbook が再保存され file が変わる** (git diff が出る = `git checkout -- <file>` で HEAD に戻す。 export は読むだけ、 という前提を置かない)。
+
+**対処の階梯** (= Excel を増やさない方向に倒す):
+1. **値の変更は [`xlsx-cell-value-zip-surgery`](#xlsx-cell-value-zip-surgery)** (Excel 起動ゼロ、 VBA / drawings / form control 無傷)。 `scripts/check-xlsx-integrity.py` を gate に。
+2. **PDF が要るなら、 壊れた export からでも vector を救える** — [`vector-pdf-page-rescue`](#vector-pdf-page-rescue)。 再 export のために Excel を起こし直さない (= [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 と同根)。
+3. どうしても Excel で export するなら、 マクロが要らない場合は **xlsm → xlsx に落とした複製**を export 用に作る (= VBA を捨てた copy、 SoT の xlsm は触らない)。 ただし印刷範囲がマクロ依存の様式ではこれでも全面 dump になる。
+
+**判定 reflex**: 拡張子 `.xlsm` を見た瞬間に「Excel automation は 1 回も叩かない」 を default にする。 実測では **cold-start 90-120 秒 + マクロ dialog + crash** の三重苦で、 同じ成果は zip 手術 + PDF 手術の方が速く確実だった。 origin: 2026-08-21 (= 2_1 海外出張様式、 throttled Intel iMac)。
+
+## <a id="vector-pdf-page-rescue"></a>壊れた Excel export から様式ページを vector のまま救出する (= clip + show_pdf_page)
+
+Excel export が全面 dump (= 1 ページに sheet 全体が縮小) でも、 **中身は vector** なので必要領域だけ切り出して A4 に再スケールすれば印刷品質の様式ページになる:
+
+```python
+import fitz
+src = fitz.open('export.pdf'); p = src[0]
+title = sorted(p.search_for('海外出張日程表'), key=lambda r: r.x0)[0]   # 左 face の見出し (右 face = 記入例)
+right_edge = sorted(p.search_for('滞在日数'), key=lambda r: r.x0)[0].x1 + 6   # 表の右端列 header
+words = [w for w in p.get_text('words') if w[1] > title.y0 - 5 and w[2] < right_edge + 2]
+clip = fitz.Rect(min(w[0] for w in words) - 4, title.y0 - 6, right_edge, max(w[3] for w in words) + 3)
+out = fitz.open(); page = out.new_page(width=595.2, height=841.9)
+m = 40; s = min((595.2 - 2*m)/clip.width, (841.9 - 2*m)/clip.height)
+page.show_pdf_page(fitz.Rect(m, m, m + clip.width*s, m + clip.height*s), src, 0, clip=clip)
+out.save('page_A4.pdf')
+```
+
+勘所:
+1. **clip は text anchor から導く** (見出し + 表の端の header)。 drawings の bbox で広げると隣 face の注意書き box を巻き込む (実測: 記入例 face の赤枠が混入)。
+2. **列境界は「表の高さを貫く縦線」 だけを使う** — `get_drawings()` で `width < 2 and height > (表高の大半)` の rect を選ぶ。 短い縦線片 (height 50-100) を境界と誤認すると、 15pt 幅の偽「列」 に合わせて塗り潰し・書込みして既存文字を削る (実測 1 回、 やり直し)。
+3. 切り出し後の文字修正は [`pdf-cell-text-patch`](#pdf-cell-text-patch)。
+4. **セル幅に入らない値は export 時点で clip されている** (例: 日付 `2026/12/14` 10 文字が 8 文字幅のセルで末尾欠け) — 救出後に patch するか、 元の xlsm 側を短い表示 (`12/14` 等) に直してから export。
+
+origin: 2026-08-21 海外出張日程表 (予定)。
+
+## <a id="pdf-cell-text-patch"></a>vector PDF の表セル文字を差し替える (= 塗り色 sampling + 罫線保護 + CJK/Latin 分割描画)
+
+Excel / Word を起こさずに様式 PDF のセル値だけ直す手順 (= 日付欠け・行追加・文言差替)。
+
+1. **塗り潰し色はその場で sample**: `page.get_drawings()` のうち `fill` を持ち当該点を含む rect の色を使う (白で塗ると着色セルで目立つ)。
+2. **罫線を踏まない**: 塗り rect は罫線から ≥1pt 内側。 旧文字が罫線を越えて overflow していた場合は罫線ごと塗って **`draw_line` で罫線を引き直す** (幅・色は元 drawing から取る)。
+3. **行の y は既存データ行の pitch から外挿** (dashed 罫線は小片の集合で拾いにくい)、 列の x は貫通縦線から (上記 rescue 節 2)。
+4. **CJK と Latin は別フォントで分割描画**: PyMuPDF 内蔵 `fontname="japan"` (Droid Sans Fallback) は **Latin が字間の開いた等幅風**になる (`NuDM-2026` / `13:00` が間延び)。 `re.finditer(r'[\x00-\x7f]+|[^\x00-\x7f]+')` で run を分け、 ASCII は `helv`、 CJK は `japan` で順に `insert_text`、 幅合計で fontsize を fit。
+5. **検証は render 画像を見る** (clip 付き `get_pixmap(dpi=120-130)`)。 text 抽出では塗り潰しの取りこぼし・残滓は見えない。
+
+origin: 2026-08-21 日程表 8 行の書き直し (Excel crash 後、 Excel を再起動せずに完了)。
 
 ## <a id="zip-cp932-filenames"></a>日本語ファイル名 zip の展開 (= cp932 文字化け)
 
