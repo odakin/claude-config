@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき
 category: paper
-summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕)、 投稿 checklist + **投稿後の status 追跡** (= ポータルの role 略語 AE/EIC/ADM の役割分担・status 階梯の読み方・Author Center は corresponding author しか見られないので共著者への共有義務・催促の宛先) 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
+summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕)、 投稿 checklist + **投稿後の status 追跡** (= ポータルの role 略語 AE/EIC/ADM の役割分担・status 階梯の読み方・共著者も自分の account の Co-Authored 欄で閲覧可〔2026-08-21 訂正〕・**著者向け status API は無い** = 中間 status はメールされず Author Center のみ・decision はメール + 定期実読 backstop の 2 重・Claude 操作ブラウザに user が login すれば Claude が直接読める・催促の宛先) 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
 -->
 # Paper Submission Workflow (= 投稿ポータル経由の落とし穴と定型対処)
 
@@ -19,7 +19,7 @@ summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv)
 | 4 | "PDF should embed only Type1 fonts" 警告 | figure PDF に TrueType Courier 混入 が典型。 soft 要求のため実運用では通ることが多い、 blocker になったら figure 再生成 (§[type1-fonts](#type1-fonts)) |
 | 5 | arXiv upload で processing error | **PDF は source tarball に含めない** — arXiv は source から自動ビルド (v1 / replace-file 全 version 共通、§[arxiv-source-only](#arxiv-source-only)) |
 
-投稿が通った後の「音沙汰が無い」 は §[post-submission-status](#post-submission-status) (= role 略語 AE/EIC/ADM と status 階梯、 Author Center は corresponding author しか見られない)。
+投稿が通った後の「音沙汰が無い」 は §[post-submission-status](#post-submission-status) (= role 略語 AE/EIC/ADM と status 階梯、 著者向け API は無いので「decision メール + 定期 Author Center 実読」 の 2 重で追う)。
 
 ## <a id="browser-fallback"></a>1. Portal upload の generic error → 別ブラウザで retry
 
@@ -219,7 +219,7 @@ cp <paper>/Figures/*.pdf submission/arxiv-vN/Figures/  # 本文で参照され�
 
 ## <a id="post-submission-status"></a>6. 投稿後の status 追跡 (= role 略語と status 階梯)
 
-投稿完了後は **ポータルの Author Center (= 著者用 dashboard) が唯一の一次情報**。 受領確認メール以降、 decision が出るまで journal からメールは来ないので、 「音沙汰が無い」 は「何も起きていない」 を意味しない (= 内部では AE 割当 → referee 打診 → 査読が進んでいる)。 進捗を知りたければ **著者側から見に行く**。
+投稿完了後は **ポータルの Author Center (= 著者用 dashboard) が唯一の一次情報**。 受領確認メール以降、 decision が出るまで journal からメールは来ないので、 「音沙汰が無い」 は「何も起きていない」 を意味しない (= 内部では AE 割当 → referee 打診 → 査読が進んでいる)。 進捗を知りたければ **著者側から見に行く**。 自動化の可否は §[status-automation](#status-automation)。
 
 ### role 略語 (ScholarOne Manuscripts の表示)
 
@@ -248,10 +248,21 @@ Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Mana
 
 ### 実務上の含意
 
-- **Author Center は corresponding author のアカウントにしか出ない** — 共著者は Manuscript ID を知っていても status を見られない。 ∴ **status は corresponding author が能動的に共有する義務がある** (= 共著者は「音沙汰が無い」 としか観測できない)
+- **共著者も自分の account から閲覧できる** — ScholarOne の Author dashboard には「Manuscripts I Have Co-Authored」 欄があり、 投稿時に登録された共著者 (= 登録メールが一致する account) は submitting author でなくても status を見られる。 ⚠️ **errata (2026-08-21)**: 旧記載「Author Center は corresponding author のアカウントにしか出ない・共著者は見られない」 は誤り (= 実 dashboard で Co-Authored 欄を確認して訂正)。 ただし **decision メールは submitting author にしか届かない** ので、 decision の共有義務は残る
 - **催促は事務局宛** (= ポータル上の "Contact Journal" リンク or 編集部メール)。 AE / EIC に直接督促しない
 - **status を見るのは「音沙汰が無い」 と思った時** — 受領確認から数週間後に一度見るだけで、 「順調に査読中」 と「AE 未割当で止まっている」 を区別できる。 前者なら待つ、 後者なら照会する、 と対処が分かれる
-- ⚠️ **status を見るにはログインが必要** = Claude からは読めない (= 認証情報の入力は不可)。 著者が画面を開いて内容を渡す経路になる
+- **status を見るにはログインが必要だが、 Claude が読めないわけではない** — Claude は認証情報を入力できない (= 規約上の禁則) が、 **user が Claude 操作ブラウザ (= browser MCP 経由で Claude が読めるブラウザ) で一度 login すれば、 以後 Claude が dashboard を直接読んで記録できる**。 ⚠️ 保存 password は**投稿に使ったブラウザ側**にある (= §[browser-fallback](#browser-fallback) で Safari 等に切り替えて投稿した場合、 Claude 操作ブラウザの autofill には出ない → user は手入力 or password manager 参照)。 ⚠️ 旧記載「Claude からは読めない・著者が画面を開いて内容を渡す経路になる」 は不正確 (2026-08-21 訂正、 user login 後の読取は Claude 側でできる)
+
+### <a id="status-automation"></a>自動追跡の可否 (= 著者向け API は無い)
+
+「API で査読状況を自動取得できないか」 への答え:
+
+- **著者向け API は存在しない**。 ScholarOne Manuscripts には REST の Web Services API と Notification Services (= status 変化の webhook) が**ある**が、 どちらも**出版社 / integrator 向け**で API key はジャーナル側に発行される。 Editorial Manager / Snapp 系も同様。 著者 account では呼べない
+- **メールで来るもの / 来ないもの**: submit 受領と decision (accept / revise / reject) は submitting author にメールされる。 **中間 status (Under Review → Awaiting AE Recommendation → Awaiting EIC Decision) はメールされず、 Author Center にしか出ない**
+- ⚠️ **decision メールすら「絶対」 ではない**: ScholarOne の login 画面自体に「pop-up をブロックすると peer-review 関連メールが送信されないことがある」 と警告がある = エディタ側ブラウザの pop-up 経由で送るため、 **status は decision 済なのにメールが飛ばない**失敗モードが実在する (= 頻度は低い。 実績例: 一著者の過去 4 投稿 〔2020-2025〕 では decision event 全件がメール着信)
+- **推奨 pattern = 2 重化**: 主経路 = decision メールの捕捉 (= 受信側の surface 機構で拾う) + backstop = **Author Center の定期実読** (= 2 週おき程度の確認 TODO を deadline 付きで立て、 decision メール着信で close / 未着なら deadline を延ばす)。 実読は上記の「user login → Claude が読む」 経路で Claude 側が記録まで担う
+- **headless poller (= Playwright 等 + 認証情報保存 + cron) は見送り推奨**: 毎回 login が要る (ScholarOne は remember-me 無し) = 認証情報を無人 script に持たせる必要 + 新デバイス検証 / bot 検知で壊れうる + status は数週間動かないので日次 polling の情報量が薄い。 「referee report が揃った瞬間を知りたい」 等の明確な需要が出てから再検討
+- **account は 1 つに保つ**: 登録メールを変更しても account は同一 (= User ID と登録メールは別 field、 メール変更時に User ID が連動するかはポータル設定依存)。 login で弾かれたら **新旧両方のメールアドレスを User ID として試す** → Reset Password に現メールを入れて到達確認、 の順。 「2 つ作ったかも」 は account-created 通知メールを数えれば分かる (= 1 通なら 1 account)
 
 ## <a id="workflow-checklist"></a>投稿 workflow の定型 checklist
 
@@ -278,9 +289,11 @@ Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Mana
    - Manuscript ID を SESSION.md 系に記録
    - 受領確認メールを共著者に転送
    - arXiv v2 upload zip を投稿担当共著者に配布
-   - **数週間後に Author Center で status を一度確認** し、 AE / EIC の顔ぶれと合わせて共著者に共有 (§[post-submission-status](#post-submission-status)。 共著者は自分では見られない)
+   - **数週間後に Author Center で status を一度確認** し、 AE / EIC の顔ぶれと合わせて共著者に共有 (§[post-submission-status](#post-submission-status)。 共著者も Co-Authored 欄で見られるが decision メールは submitting author にしか来ない)
+   - **定期実読の backstop TODO を立てる** (= 2 週おき、 decision メール着信で close。 §[status-automation](#status-automation))
 
 ## <a id="refine-history"></a>実例と refine 履歴 (= 新例が出たら本 convention を refine)
 
 - **2026-07-08 EPJC 投稿 (neutrino-real-virtual)** = ScholarOne Manuscripts、 Brave で Step 2 failed → Safari 通過 (§[browser-fallback](#browser-fallback))、 revtex4-2 と tikz-feynman が Missing → 追加 zip 同梱 (§[package-bundling](#package-bundling))、 affiliation 修正が LaTeX と form で 2 系統管理 (§[form-vs-source-independence](#form-vs-source-independence))、 figure PDF 由来の TrueType Courier は soft 要求で受理 (§[type1-fonts](#type1-fonts))、 arXiv v2 用 zip は PDF 非同梱で共著者配布 (§[arxiv-source-only](#arxiv-source-only))。 Manuscript ID EPJC-26-07-091。
-- **2026-07-28 同 manuscript の status 確認 (投稿 + 20 日)** = 受領確認以降メールは一切来ていなかったが、 Author Center 上は既に **AE 割当済 + Under Review** (= referee が読んでいる) で正常進行だった。 **cover letter の推薦エディタ 3 名のうち第 2 希望がそのまま AE に割り当てられていた** = 推薦は実際に効く。 「メールが来ない ≠ 止まっている」 と、 status を見て初めて分かる情報 (AE の分野適合・推薦の通過) があることから §[post-submission-status](#post-submission-status) を追加。 共著者は Author Center を見られないため、 この情報は corresponding author が共有しないと誰にも伝わらない。
+- **2026-07-28 同 manuscript の status 確認 (投稿 + 20 日)** = 受領確認以降メールは一切来ていなかったが、 Author Center 上は既に **AE 割当済 + Under Review** (= referee が読んでいる) で正常進行だった。 **cover letter の推薦エディタ 3 名のうち第 2 希望がそのまま AE に割り当てられていた** = 推薦は実際に効く。 「メールが来ない ≠ 止まっている」 と、 status を見て初めて分かる情報 (AE の分野適合・推薦の通過) があることから §[post-submission-status](#post-submission-status) を追加。 (⚠️ 当時「共著者は Author Center を見られない」 と書いたが 2026-08-21 に訂正、 下記)
+- **2026-08-21 同 manuscript の status 確認 (投稿 + 6 週)** = user 問い「API で査読状況を自動確認できないか」 を契機に §[status-automation](#status-automation) を追加。 調査結果 = 著者向け API 無し (ScholarOne Web Services は出版社向け) / 中間 status はメールされない / decision メールは過去 4 投稿で全件着信だが pop-up block による不送信モードが公式警告にある → 「decision メール + 2 週おき Author Center 実読 TODO」 の 2 重化を採用。 **実読は user が Claude 操作ブラウザで login → Claude が dashboard を読んで SESSION に記録** (= 「Claude からは読めない」 旧記載を訂正)。 dashboard に「Manuscripts I Have Co-Authored」 欄があり**共著者も閲覧可**と判明 (= 7/28 記載の訂正)。 副産物 = 「account を 2 つ作ったか?」 の疑問は account-created 通知 1 通 + e-mail address change 通知で「1 account・登録メール変更」 と決着、 保存 password が投稿時ブラウザ (Safari) 側にあって Claude 操作ブラウザ (Brave) の autofill に出なかったのが「出てこない」 の正体。
