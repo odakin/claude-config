@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 90 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 91 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -63,6 +63,8 @@ layer 1 (public) のドメイン固有規約 90 file をカテゴリ別に列挙
   - e-Rad 経由の研究費応募 (JST・科研費・財団等) のフォーム固有制限・書式ルール・つまずきどころ (= 制度横断で効く e-Rad 挙動のみ、 制度個別値 〔費目・字数上限・締切〕 は各公募要領 + 応募管理リポが正)
 - **[hanko-digitization.md](hanko-digitization.md)** — 押印 (ハンコ) のスマホ写真から書類合成用の透過 PNG (シャープな輪郭 + 自然なかすれ + 写真由来の色 + 複数バリアント) を作るとき + 印影・ロゴ等の小さいラスタ素材を高解像度化したいのに補間拡大がボケるとき
   - 実写 1 枚 (印影 ~300px 径) から 3000×3000 透過 PNG 30 変奏を量産した実 session の確定パラメータ付きフル pipeline。核心 = 補間拡大では元画像の情報量を超えられないので potrace でベクトル化してから任意解像度でラスタライズ (エッジ鮮鋭度 実測 13 倍)。2 値化しきい値は redness = R − min(G,B) > 110 を比較シートで user に選ばせる (甘いと文字の窓が潰れる)。かすれは均一に濃い実物からは取れないので合成 — ランダム散布でなく「縁 + 押し圧ムラ + 実写の局所薄部」に寄せ、抜け率 4% が本物のシャチハタに最も近い (9% でデザイン品に見え始める)。色はベタ単色でなく実写インク色を最近傍補完で転写。variant は seed × 抜け率 × 回転のみ変え、色マップ等は cache。検証は目視でなく数値 5 項目 (bbox 内収まり / 隣接ペア差分 >2% / α0 率 / 薄色画素 0 / 文字の穴保存)。下流の派生版正規化 (content fill 一定化) + random picker pattern も併記
+- **[indico-abstract-submission.md](indico-abstract-submission.md)** — Indico (CERN 等) で運営される国際会議に abstract を投稿する・アカウントで詰まったとき
+  - Indico (indico.cern.ch 系) の abstract 投稿で実際に踏んだ機構と落とし穴 (= CERN SSO の login 経路選択 〔guest 登録の確認 mail が来ない / 外部 ID = Google 等で入り既存 profile に紐付ける〕 / 所属は SSO 同期を切らないと編集不可 / 別 mail で profile が二重化したら merge 依頼 / abstract form の Authors 〔= 発表者を含む著者〕 と順序は手動並べ替え 〔alphabetical は自分で〕 / 受理通知 mail に abstract ID / reminder 分単位 〔1 週間 = 10080〕 / 本文は plain text 寄り)。 jps-talk-submission.md / paper-submission.md の sibling (会議 abstract 側)
 - **[jps-talk-submission.md](jps-talk-submission.md)** — 日本物理学会 (JPS) 年次大会の一般講演を申し込むとき
   - 日本物理学会 (JPS) 大会 一般講演申込の form 機構と落とし穴 (= 会員マイページ経由・締切 14:00 型 / 登壇 1人1件 + 領域13 例外 + 2件目参加費免除 / キーワードは code 入力 / ^@^ 登壇者印・^A^ 区分記号・全角カンマ連結 / 受理票は別ドメイン外部運営から = from:jps.or.jp では検索不可 / 登録番号+パスワード durable 保存義務 / 要旨欄は非公開・題目のみ公開 → 集客は題目勝負。 制度個別値は当年の募集要項が正、 erad-submission.md の sibling)
 - **[media-transcription-ledger.md](media-transcription-ledger.md)** — 定期的に届く画像 stream (板書写真・スキャン書類・写真メモ) を SoT 化する仕組みを設計するとき + 手書き画像の読取結果を記録・転記するとき
