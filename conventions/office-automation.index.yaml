@@ -692,6 +692,12 @@ sections:
   - id: docx-autofit-grid-overflow
     level: 2
     title: "docx 様式の autofit 表は「1 セルの長い値」 で**別の行**が折り返し、 1 頁様式が 2 頁にはみ出す"
+  - id: print-preflight
+    level: 2
+    title: "印刷直前の preflight (= 「画面で見えた」 を印刷の保証にしない)"
+  - id: pdf-overlay-anchoring
+    level: 2
+    title: "PDF overlay の値配置は「ラベルの右端」 でなく「セルの罫線」 に anchor する"
   - id: zip-cp932-filenames
     level: 2
     title: "日本語ファイル名 zip の展開 (= cp932 文字化け)"

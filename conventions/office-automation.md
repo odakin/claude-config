@@ -39,6 +39,8 @@ origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計�
 
 | 症状 (観察できること) | 真因 | 対処 (→ slug) |
 |---|---|---|
+| 印刷物を user に見せるたび別の欠陥が出て刷り直しが続く | 各修正後の検証が直前の症状にだけ狭まる + 「画面で見えた」 を印刷の保証にしている | `pdf-print-preflight.py` + crop 目視 + 全頁 PNG を user に → [`print-preflight`](#print-preflight) |
+| overlay した電話番号・メールが罫線に被る / 隣セルにはみ出す / 数字だけ浮いて見える | ラベル右端基準の配置、 CJK と数字の baseline 差 | 縦罫線 (`get_drawings`) を anchor、 数字は行中心 → [`pdf-overlay-anchoring`](#pdf-overlay-anchoring) |
 | PyMuPDF で追記した日本語/数字が**画面では正常・印刷で文字化け / 位置ずれ** | `japan`/`helv` 組み込み font は glyph 非埋め込み = printer に代替 font が無い | 印刷用は 600dpi **RGB** raster 版を刷る (font 埋め込みでも同 printer で化けた) → [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake) |
 | 値を入れた docx 様式が **1 頁→2 頁にはみ出す**、 折り返すのは触っていない行 | autofit 表は 1 セルの長い値で grid 列幅を組み替え、 別行のセルが狭まる (`tblLayout fixed` でも直らず) | 可変長値・○・認印は overlay、 溢れる 1 行だけ 9.5pt、 雛形 render と y 座標突合 → [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow) |
 | Excel がクラッシュ /「作業内容を回復」 dialog | 同 session で osascript の open/save/close/quit を多数 cycle し既存 instance を酷使 | **補正を 1 pass に織り込む単発記入** + 各 op 前に killall reset → [`excel-osascript-cell-write`](#excel-osascript-cell-write) |
@@ -1587,6 +1589,8 @@ np.insert_image(np.rect, filename="r.png"); out.save("print_raster.pdf", deflate
 
 Excel / Word が直接吐いた PDF は素のままで OK (= OS 標準フォントのみで化け実績なし)。 origin: 2026-06-11 ⑭-2 完成版が Canon laser で化けた実害 (画面検証は通過していた)。
 
+⚠️ **2026-08-21 追加観察 (同じ Canon laser)**: `insert_font(fontfile=<OTF>)` で実 font を埋め込んでも**化けた** (= 「埋め込んだから安全」 も不成立)、 `get_pixmap(colorspace=csGRAY)` だと**認印の朱が黒**になる → **raster は RGB**。 機械 gate = [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) (`--rasterize` で RGB 600dpi を生成)、 印刷前 4 点 gate = [`print-preflight`](#print-preflight)。 ⚠️ 本節は 2026-06-11 から存在したが 2026-08-21 の session は読まずに 3 回化けを刷った = 「まず [symptom-index](#symptom-index) を引く」 の実例。
+
 ### <a id="lp-page-ranges-distrust"></a>`lp -o page-ranges` を信用しない (= 印刷は単独ページ PDF を抽出してから)
 
 **症状**: `lp -o page-ranges=1` を指定しても **queue/driver によっては無視されて全ページ出力**される (= xlsx 由来 PDF は隠れ「マスタ」 sheet の日付リスト等で 20-30 ページあることが多く、 ゴミ数十枚が出る実害)。
@@ -1678,6 +1682,8 @@ OSAEOF
 **正しい解法 — 完全 kill → fresh open → export → PDF テキストで検証**:
 
 ```bash
+# kill 前に user の文書が開いていないか probe (= user 環境 app への介入は禁則、 自分が起こした process のみ):
+#   timeout 20 osascript -e 'tell application "Microsoft Word" to get name of every document'  → `missing value` なら文書ゼロで安全
 pkill -x "Microsoft Word"          # ← window close では不十分、 プロセスを完全 kill
 sleep 2
 open "/path/to/form.docx"          # shell open (= file association)。 osascript 内 open より cold start に強い
@@ -3450,6 +3456,8 @@ origin: 2026-08-21 日程表 8 行の書き直し (Excel crash 後、 Excel を�
 
 ## <a id="pymupdf-builtin-font-print-mojibake"></a>PyMuPDF で描いた文字 (組み込み `japan` / `helv`、 OTF 埋め込みも) は**プリンタで文字化け**しうる — 印刷用は raster 化
 
+> **SoT は [`print-raster-pdf`](#print-raster-pdf) (2026-06-11 起源、 subset font 化け → 600dpi raster)。** 本節は 2026-08-21 の追加観察 (組み込み font / OTF 埋め込み / gray raster) の記録で、 規律は同じ「印刷用は raster」。
+
 **症状**: `page.insert_text(..., fontname="japan")` で追記した日本語が **画面 (Preview / fitz raster) では正常**なのに、 `lp` で印刷すると □ や別文字に化ける。 Latin の `helv` (Helvetica) も環境によっては位置ずれ・代替 font になる。
 
 **原因**: PyMuPDF の base-14 / CJK 組み込み font (`helv` `tiro` `japan` `china-s` 等) は **PDF に glyph を埋め込まない** (= `get_fonts()` の "embedded" 表示に惑わされない — 実体は viewer の代替 font 依存)。 MuPDF 系 viewer は自前の font を持つので画面では出るが、 プリンタの PDF 解釈系 (CUPS → Canon UFR 等) は CJK 代替 font を持たない → 化ける。 **「画面で見えた」 は印刷の検証にならない**。
@@ -3457,7 +3465,7 @@ origin: 2026-08-21 日程表 8 行の書き直し (Excel crash 後、 Excel を�
 **対処 = 印刷用は raster 化 (= 唯一 printer 非依存で通った経路)**:
 - `pix = page.get_pixmap(dpi=600, colorspace=fitz.csRGB)` → 新 PDF に `insert_image(page.rect, pixmap=pix)`。 font 問題が原理的に消える (紙提出の様式なら品質十分、 A4 RGB 600dpi で ~1.5 MB)。 ⚠️ **`csGRAY` にすると認印の朱色が黒になる** — 印影入りは必ず RGB。 vector 版は repo に残し (画面用)、 印刷物は `*_print_raster.pdf` から出す。
 - ❌ **実 font file の埋め込みでは直らなかった**: `page.insert_font(fontname="hag", fontfile="<HaranoAjiGothic-Regular.otf>")` で OTF (CFF) を埋め込んでも、 Word 由来の TrueType 部分は正常・**PyMuPDF 追記部だけ同じ printer で化けた** (2026-08-21 実測、 Canon LBP + CUPS)。 PyMuPDF の Type0/CFF subset を解釈できない driver がある = 「埋め込んだから安全」 も成立しない。 画面確認 (fitz raster / Preview) はこの差を**検出できない**。
-- `get_fonts()` に `helv`/`japan` や PyMuPDF 埋め込み font が載っている PDF を**そのまま `lp` に投げない**。 印刷前 gate = 「PyMuPDF で文字を描いた PDF か?」 → yes なら raster 版を刷る。
+- `get_fonts()` に `helv`/`japan` や PyMuPDF 埋め込み font が載っている PDF を**そのまま `lp` に投げない**。 印刷前 gate = 「PyMuPDF で文字を描いた PDF か?」 → yes なら raster 版を刷る。 機械 gate = [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) (`--rasterize` で RGB raster も生成)、 手順全体 = [`print-preflight`](#print-preflight)。
 
 origin: 2026-08-21 海外出張願 + 日程表 = overlay 文字が紙で化け → OTF 埋め込みで再印刷 → **また化け** → raster で解決、 計 3 回刷り直し (user 指摘 3 連)。
 
@@ -3474,6 +3482,29 @@ origin: 2026-08-21 海外出張願 + 日程表 = overlay 文字が紙で化け �
 4. ⚠️ 変換結果が変わらない時は Word の stale in-memory cache ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache)) を疑い、 `get name of every document` が `missing value` なら `pkill -x "Microsoft Word"` してから再変換。
 
 origin: 2026-08-21 海外出張願 (人事課 docx 様式) — 5 回の変換試行で (1)+(2) に収束、 雛形と y 座標一致を確認してから印刷。
+
+## <a id="print-preflight"></a>印刷直前の preflight (= 「画面で見えた」 を印刷の保証にしない)
+
+**起源 (2026-08-21、 同じ 1 枚の様式を 4 回刷り直し)**: ① docx 様式が 2 頁にはみ出し (= [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow)) → ② 直したら PyMuPDF 追記文字が紙で文字化け (= [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake)) → ③ raster を gray で作って認印が黒 → ④ 電話番号が罫線に被る (= [`pdf-overlay-anchoring`](#pdf-overlay-anchoring))。 **4 つとも個別には既知の罠**で、 欠けていたのは「lp に渡す前に機械と目で確認する段」。 user が remote で紙を見られないと、 1 回の失敗 = 1 往復 + 紙 1 枚。
+
+**印刷前 gate (全部通してから `lp`)**:
+
+1. **機械**: [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) `<print.pdf> --template <雛形.pdf>` (or `--expect-pages N`) が PASS (= page 数一致 + PyMuPDF 描画 / 非埋め込み font ゼロ)。 FAIL なら `--rasterize <out.pdf>` で **RGB 600dpi raster** を作り、 そちらを刷る (認印の朱色は RGB でしか残らない)。
+2. **位置**: overlay した値 (電話・メール・氏名・○・認印) の周辺を **150-220 dpi の crop 画像で目視** — 罫線に被っていないか、 セルの中か、 行の縦中心か。 機械 gate では検出できない。
+3. **全体**: 80 dpi の全頁 render を 1 度見る (= 2 頁目の存在・空白・ブロックの落ちを拾う)。 **user が remote なら、 この全頁 PNG を chat に送ってから刷る** (= 紙を見られない人に代わって画面で承認してもらう)。
+4. **1 枚だけ刷って止まる**: 複数 doc を同時投入しない。 1 枚目の結果 (user 報告) を待ってから次。
+
+**なぜ規律でなく gate か**: 今回の 4 失敗は全て「前の修正で安心して次の罠を踏む」 連鎖 (= 修正ごとに検証 scope が前の症状だけに狭まる)。 gate を固定 list にしておけば、 毎回同じ 4 点を通る。 個人層は `lp` を含む Bash に PreToolUse hook を掛けて本 script を強制できる。
+
+## <a id="pdf-overlay-anchoring"></a>PDF overlay の値配置は「ラベルの右端」 でなく「セルの罫線」 に anchor する
+
+雛形 PDF にラベルが描かれている様式へ値を `insert_text` で載せるとき:
+
+- ❌ `x = label.x1 + 12`: ラベルと値の間に**セル境界の縦罫線**がある様式 (= 「携帯電話 | 値」) では、 値が罫線に被る or 隣のセルにはみ出す。 画面では「ほぼ合っている」 ように見えて紙で目立つ。
+- ✅ **罫線を検出して anchor**: `page.get_drawings()` から `rect.width < 2 and rect.height > 6` の縦線を集め、 ラベル行の y 範囲にかかり `x0 > label.x1` の最も近い線を「値セルの左辺」 とし、 `x = border.x1 + 6` から描く。 罫線が無ければ (同セル内) ラベル右端基準に fallback。
+- ✅ **数字の縦位置**: CJK ラベルは em box が baseline 下に沈むので、 数字を同じ baseline に置くと「浮いて」 見える。 `baseline = label_center_y + 0.36 * fontsize` で数字の cap-height 中心をラベルの縦中心に合わせる。 CJK の値はラベルと同じ baseline (`label.y1 - 1.8`) でよい。
+- ✅ **○ 印**: `page.get_text("rawdict")` で「（」 と「）」 の glyph bbox を取り、 その隙間の中心に `draw_oval` (半径 ≤ 行高/2 − 0.6、 上限 4.3pt)。 半角 `( )` は隙間が 2-3pt しか無いので円が括弧に被るが、 読みとしては「○」 で通る。 **docx 側に全角 ○ を打ち込まない** (= 幅が変わり折り返す、 [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow))。
+- ✅ **認印**: 「印」 ラベルの中心に 30pt 角の PNG を `insert_image(overlay=True)`。 gray raster にすると朱が消える。
 
 ## <a id="zip-cp932-filenames"></a>日本語ファイル名 zip の展開 (= cp932 文字化け)
 
