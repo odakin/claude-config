@@ -82,6 +82,8 @@ rebuttal を書かない誌替え再投稿 (= reject 済み原稿を修正して
 
 関連: 依頼側の縮小原則 = [`research-email.md #shrink-the-ask`](research-email.md#shrink-the-ask)。
 
+> **姉妹**: 系譜 (= どの版か) と防御改訂 (= どう書くか) の手前に、 **中心主張がそもそも成立するか**の検算がある — [`paper-audit.md#headline-claim-budget-check`](paper-audit.md#headline-claim-budget-check) (= 模型の形式に依らない収支で 2〜3 行。 4 誌 reject 後の 5 誌目直前に中心主張が収支で不成立と判明した実例)。
+
 ## <a id="manuscript-lineage-verification"></a>改訂に入る前の系譜検証: 「手元の最新」 を疑う 3 検査 (2026-08-21)
 
 reject 後の改訂や 5 誌目の投稿準備で、 **土台にした版が共著者合意済の最新でなかった**事故の再発防止。 共著論文では「最後に自分が受け取った添付」 ≠ 最新 (自分が cc 外だった期間の改訂、 別の共著者が投稿システム向けに変換した版、 など) が普通に起きる。

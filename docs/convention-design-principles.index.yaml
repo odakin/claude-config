@@ -52,6 +52,10 @@ sections:
     legacy: "4.2"
     level: 3
     title: "4.2 自分の失敗を framing する時の severity-minimization — §4.1 の cure-不能な残余クラス"
+  - id: severity-flattening-in-enumeration
+    legacy: "4.3"
+    level: 3
+    title: "4.3 finding を並列 list に入れると severity が消える — 行き先を変える finding は list に入れない"
   - id: memory-positioning
     legacy: "5"
     level: 2

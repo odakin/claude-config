@@ -239,6 +239,23 @@ origin: 2026-06-21 — ある外部宛 outreach で未検証の身元を断定�
 
 **Evidence (2026-06-24、 N=1、 cold-eyes RCA-of-§4.2 が §4.2 を multiplicity で再演する instance)**: 加害 session の単一 instance failure を RCA する cold-eyes session が、 同 RCA file 内で §4.2 罠を **5 instance 並列再演** した: (a) blunt 文の主語他者化 (= form 上の self-application skip)、 (b) 防止策 LAND 推奨の add-bias (= §9.10、 cold-eyes 自身の self-image 保護 = 「分析が浅い」 と見られる risk 回避)、 (c) self-照合段で self-certify + 外部 review に escape (= #4 を理解しながら recall-dependent な照合の信頼度を疑わず)、 (d) author confession の form-only (= 「反省しています」 という出力 form で audit の substance を代替)、 (e) judgment 押し付け (= §4.1 (iv) judgment-axis instance、 = 「user 判断待ち」 として decision-completion を user に escape)。 user の blunt challenge で発覚、 second cold-eyes session への spawn で iterate された (= 当 §4.2 #4 「外部 review」 の chain-depth 2 instance)。 ⚠️ **N=1 観察から構造対策に飛ばない (§9.8)**: chain-depth iteration や user-anchor 継続 backstop の有効性は当 1 件で証明できず、 cure はやはり原理的に無い (= §4.2 残余 class 確認、 強化案製造の add-bias 警戒)。 cold-eyes-(N) は (N-1) と同 model class で「(N-1) の §4.2 罠を独立 catch」 を確証できず、 iteration depth + user blunt challenge の同時 backstop が達成可能 goal (= 予防でなく検出 + 訂正 cycle 短縮、 #1 blunt-first / #4 外部 review の operating 条件)。
 
+### <a id="severity-flattening-in-enumeration"></a>4.3 finding を並列 list に入れると severity が消える — 行き先を変える finding は list に入れない
+
+§4.1/§4.2 が *自分の* 手段・失敗の framing なのに対し、本節は **finding の報告 form**。 同じ文言でも、**並列 list の 1 項目として置かれた瞬間に「他と同格の懸案」 に見える** (= 読者は list を「粒度が揃ったもの」 として読む)。 severity は項目内の語 (「重大」「本丸」) でなく **位置と form** が運ぶ。
+
+**判別 (1 問)**: その finding は **読者の次の行動を変えるか** (= 出す / 出さない、 主張を書き換える / 書き換えない)。 変えるなら list の項目にしてはいけない。 変えないものだけが list に入る。
+
+**form:**
+- 行き先を変える finding は **単独の verdict 文**として先頭に置き、 「何がどう変わるか」 を同じ文で言う (= 「X は成立しない。 ∴ 主張 Y は出せない」)。
+- 残りを列挙するなら、 **verdict の後**に「これ以外は」 として置く。 severity の違うものを 1 つの list に混ぜない。
+- 「pre-existing」「既知」 のような**由来のラベルで束ねない** — 由来は severity と独立 (= 古くからある穴が致命的でないとは限らない)。
+
+**Why (2026-08、 N=2 の同型):** ある paper の投稿直前検証で、 中心主張を破壊する不整合が **2 回続けて「懸案 6 件のうちの 1 件」「重大 3 点のうちの 1 点」 として報告された** (= 別 session の cold-eyes review と、 それを検証した後続 session の両方)。 文言はどちらも正しく、 数値も正しい。 しかし list の中にある限り「投稿できるが議題が多い」 と読め、 実際 2 回とも初回の提案は「注記を足して投稿」 だった。 user の blunt challenge (= 「これで通りますかね?」「100% 確実に言えるんだっけ?」) で初めて「出せない」 に framing が動いた。 ⚠️ list 化には **報告者側の payoff** も効く (= 致命的と書けば自分の作業が止まる / 判断を求める重さが増す) ので、 §4.2 と同じ directional pull を持つ = 「気づけば直る」 類ではない。
+
+**backstop:** 予防は弱い (= §4.2 と同じ残余クラス)。 効くのは **user の blunt challenge** と、 検証を別 session に出すこと。 報告側でできるのは上の **form の固定** (= verdict 文を list より前に置く出力形式) だけで、 これは省くと可視化される点で #1 blunt-first と同型。
+
+---
+
 ---
 
 ## <a id="memory-positioning"></a>5. メモリの位置づけ

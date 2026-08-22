@@ -836,4 +836,6 @@ latexdiff old.tex new.tex | sed '1s/^/\\PassOptionsToPackage{normalem}{ulem}\n/'
 ```
 **検証**: diff.log の `^!` が 0 であること + 変更ページを画像化して markup を目視 (text 抽出は下線 markup で単語が分断されるので信用しない)。
 
+**差分 PDF は 1 頁目に「何と何の差か」 を書く**: 差分を複数種類 (= 投稿版との全差分 / 直近の修正だけ 等) 送ると取り違えが起きる。 生成した diff.tex の `\begin{document}` 直後に表紙 1 頁を挿し込み、 **old / new が相手にとって何の版か**を書く (= 日付と出来事で指す。 内部 version 名・commit hash は書かない = [`physics-notes.md#no-internal-shorthand-in-deliverables`](physics-notes.md#no-internal-shorthand-in-deliverables))。 色の凡例・生成日時は不要 (= 差分 PDF を開けば色は自明、 情報を足すほど表紙が読まれない)。 そもそも**相手にとって意味のある切れ目でない差分は送らない** — 自分の作業日を境にした差分は相手の手元の版と対応しない。
+
 **関連の罠**: 変更ブロック内の `\label {key}` (空白入り) は latexdiff が `\label` と `{key}` の間に markup を挟んで `! Argument of \label has an extra }` になる → 新規に書く label は `\label{key}` (空白なし)。

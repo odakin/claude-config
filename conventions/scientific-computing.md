@@ -476,6 +476,8 @@ Ward 恒等式・対称性・内部無矛盾性・projector 代数 等の check 
 
 ## <a id="figure-vector-extraction"></a>5. 論文 PDF 図のベクトル path から曲線データを復元して数値照合する (2026-08-21)
 
+> **抽出の次**: 再現できなかった時に「式が誤り / code が誤り / caption が不一致 / 別の数値体系」 のどれかを決める分類 = [`paper-audit.md#figure-irreproducible-taxonomy`](paper-audit.md#figure-irreproducible-taxonomy)。
+
 ### 問題
 共著者が描いた図 (code なし) が本文の式から再現できるかを検証したい。 目視比較は「だいたい合う」 で止まり、 z 依存の有無・極の位置といった定量的不整合を見落とす。
 
