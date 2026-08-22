@@ -114,6 +114,8 @@ for i, p in enumerate(d):
 - **matplotlib でオリジナル模式図**(著作権リスクなし): 波束(Gauss 包絡 × 搬送波で「波束サイズ σ ≠ 波長 λ」を可視化)/「予想 vs 観測」曲線(`fill_between` でズレを塗る)/散乱模式(`patches.Circle` + 放射状の `annotate('', arrowprops=...)`)。`transparent=True, bbox_inches='tight'` で保存すると任意の背景に載る。
 - **背景グラデ**: numpy で色を線形補間 → PIL `Image.fromarray`。
 - **matplotlib の日本語ラベル**: `fm.fontManager.addfont(<CJK .otf>)` + `rcParams['font.family']=fm.FontProperties(fname=<otf>).get_name()`。TeX 同梱の Harano Aji OTF が install 不要で便利。`rcParams['axes.unicode_minus']=False`。
+  - ⚠️ **OS 標準の CJK フォントを `font.family` に名前で指定しない**(macOS の Hiragino Sans で実測、2026-08-22)。PDF 出力が **既定 `pdf.fonttype=3` では `UnicodeEncodeError` で保存失敗**(glyph 名が非 ASCII)、**`pdf.fonttype=42` では落ちないまま文字層が丸ごと壊れる**(日本語だけでなく**目盛り数字も消える**。`pdffonts` が CID Type 0C +「Mismatch between font type and embedded font file」)。fonttype の変更は対策にならない — Harano Aji のように **glyph 名が ASCII の OTF を addfont() で登録する**のが対策。
+  - ⚠️ **PNG(Agg)は正常に見えるので目視では気付けない**。CJK ラベル入りの図を PDF で出したら `pdffonts <fig>.pdf` を必ず見る(= §9「compile 成功 ≠ visual 成功」の図版。PNG だけ確認して壊れた PDF を出荷した実例あり)。CJK を図に入れず frame/caption 側に置くのも有効な回避。
 - **厳密な可視スペクトル(波長→色)**: CIE 1931 等色関数 → XYZ → sRGB。CMF は **Wyman–Sapra–Wenzel (2013) の多ローブ・ガウス近似**を使えばデータ表不要。手順: `XYZ=(x̄,ȳ,z̄)(λ)` → `RGB_lin = M_{XYZ→sRGB}·XYZ` → 負値(色域外)をクランプ(境界へデサチュレート)→ 正規化 → sRGB ガンマ。区分線形(Bruton 流)より色相が正確。
 
 ## 11. 論文の図を流用する(文献紹介系)
