@@ -333,6 +333,8 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 
 ⚠️ **`ptex2pdf` / `platex` の exit code は信用しない**: clean な DVI（`Output written on ....dvi`）が出ていても wrapper が非ゼロ exit を返すことがある。確実な build は **`platex → platex → dvipdfmx` を個別実行**し、(a) log を `grep -iE "^! |Overfull"`、(b) `.pdf` が実際に再生成されたか（timestamp / `dvipdfmx` の `... bytes written`）で判定する。exit code 単独を成功 signal にしない。
 
+⚠️ <a id="nonstopmode-hides-undefined-env"></a>**`-interaction=nonstopmode` は undefined environment を握り潰して PDF を出す**: クラスが `amsmath` を読んでいないのに `\begin{equation*}` を書くと `! LaTeX Error: Environment equation* undefined.` が出るが、**nonstopmode では build が続き PDF も生成される** (中身は壊れた組版)。学会・申請書の配布クラスは `amsmath` を仮定できない (2026-08-22 実測: 科研費 LaTeX クラス)。→ **build の度に `grep -c "^!" *.log` が 0 であることを確認する**。素の `\[ ... \]` は amsmath なしで動くので、可搬性が要る文書ではこちらを既定にする。
+
 ## <a id="matplotlib-cjk-figure-embedding"></a>matplotlib の CJK 入り図は PNG で取り込む (PDF は platex+dvipdfmx で描画だけ化ける)
 
 matplotlib が CJK フォント (macOS Hiragino 等の `.ttc`、`pdf.fonttype = 42`) を埋め込んだ PDF を
@@ -352,6 +354,53 @@ matplotlib が CJK フォント (macOS Hiragino 等の `.ttc`、`pdf.fonttype = 
 
 検証の作法: 図を含む頁を **fitz 等で raster 化して目視** (PDF viewer の表示を信じない)、
 `page.get_fonts()` で埋め込みフォントの素性も見る。
+
+## <a id="tall-inline-math-line-collision"></a>キャプションに背の高い行内数式を書かない (行送りを超えて上の行に食い込む)
+
+`\caption{}` は既定で `\small` (= 行送りが本文より狭い) なので、**肩付き・添字・`\int` の上下限**を持つ
+行内数式を入れると行ボックスが行送りを超え、上の行に食い込む。TeX の `\lineskip` が最悪のインク衝突は
+防ぐが、視覚的には「重なっている」と読まれる (2026-08-22 実測: `$e^{-i(E-i\Gamma/2)s}$` を含む caption 行が
+上の行に 2.5 pt 食い込み、著者が「キャプションが本文と被っている」と報告)。
+
+- ✅ **キャプションは語で書く。式は本文が持つ** (= caption は「何を見るか」を言う場所で、定義を置く場所ではない)
+- ✅ 本文の行内でも高さを抑えたいときは、背の高い部分に**名前を与える** —
+  `e^{-(s-\Delta T)^2\sigma_E^2/2}` → `w(s-\Delta T)`（`$w$` は幅 `$1/\sigma_E$` の Gauss 窓）。
+  二重の肩付きが消え、読者にとっても平易になる
+- ❌ `\smash` / `\raisebox` で高さを詐称する — TeX の衝突回避を無効化して**本当に**重なる
+- 別行立てに逃がせるなら逃がす。ただし回り込み中は不可 (→ 次節)
+
+## <a id="wrapfig-no-display-math"></a>wrapfigure の回り込み段落に別行立て数式を入れない (キャプションが本文に重なる)
+
+`wrapfig` は図の高さから「短くする行数」を数えて回り込みを作るため、その段落に `\[...\]` /
+`equation` 等の**別行立てを入れると行数計算が壊れ、本文が全幅に戻った上にキャプションが印字される**
+(= 本文とキャプションが物理的に重なる、2026-08-22 実測)。wrapfig 公式にも「displays を含む段落では
+使うな」とある。
+
+- ✅ 回り込み中の式は**行内**に置く (高さ対策は前節)
+- ✅ どうしても別行立てが要るなら、図を通常 float にするか、式を回り込みが終わった後の段落へ移す
+- ⚠️ 検出は目視より機械 (→ 次節)。「見た目が崩れていないか」は人間の注意力に任せない
+
+## <a id="pdf-line-collision-detection"></a>PDF の行かぶりを機械検出する (PyMuPDF、目視に頼らない)
+
+組版の重なりは**生成 PDF の行 bbox を総当たりで交差判定**すれば決定論的に見つかる。図・回り込み・
+狭い段・詰めた `\vspace` を使った書類 (投稿論文・申請書・様式) では、build の最後に必ず回す。
+
+```python
+import fitz, itertools                      # pip install pymupdf
+for pno, p in enumerate(fitz.open(path), 1):
+    L = [(fitz.Rect(l["bbox"]), "".join(s["text"] for s in l["spans"]).strip())
+         for b in p.get_text("dict")["blocks"] for l in b.get("lines", []) ]
+    L = [(r, t) for r, t in L if t]
+    for (r1, t1), (r2, t2) in itertools.combinations(L, 2):
+        x = r1 & r2
+        if not x.is_empty and x.height > 2.0 and x.width > 3.0:   # 閾値は経験値
+            print(f"p{pno}: {t1[:24]!r} ∩ {t2[:24]!r}")
+```
+
+- **本物の事故**: 別ブロック同士 (= キャプション ∩ 本文、図 ∩ 本文) の交差。必ず直す
+- **許容しうる flag**: 隣接行同士が肩付き・`\int`・`\sqrt`・`\gtrsim` 等で数 pt 重なるもの
+  (= glyph bbox の重なりで、インクは `\lineskip` が守っている)。**必ず raster 化して目視で裁定**する
+- 画像との衝突も同様に `p.get_image_info()` の bbox と突き合わせれば取れる
 
 ## <a id="wrapfigure-page-carryover"></a>wrapfigure が頁末に来ると次頁冒頭が短行で続く
 

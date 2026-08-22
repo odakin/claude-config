@@ -61,6 +61,15 @@ sections:
   - id: matplotlib-cjk-figure-embedding
     level: 2
     title: "matplotlib の CJK 入り図は PNG で取り込む (PDF は platex+dvipdfmx で描画だけ化ける)"
+  - id: tall-inline-math-line-collision
+    level: 2
+    title: "キャプションに背の高い行内数式を書かない (行送りを超えて上の行に食い込む)"
+  - id: wrapfig-no-display-math
+    level: 2
+    title: "wrapfigure の回り込み段落に別行立て数式を入れない (キャプションが本文に重なる)"
+  - id: pdf-line-collision-detection
+    level: 2
+    title: "PDF の行かぶりを機械検出する (PyMuPDF、目視に頼らない)"
   - id: wrapfigure-page-carryover
     level: 2
     title: "wrapfigure が頁末に来ると次頁冒頭が短行で続く"
