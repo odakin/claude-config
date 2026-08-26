@@ -117,6 +117,31 @@ file 名 substring パターンは「file 名に言及するだけの無害コ�
 2. **承認後の文面変更は再提示**: 承認済み draft に 1 字でも手を入れたら (typo 修正・改行調整含む) 再提示 + 再承認。 「良くなる方向の修正だから」 は skip の理由にならない (= user が見た物と違う物を送らない)。
 3. **mail に限らず全外部発信に適用**: Discord 投稿・issue comment・公開 site へ載せる text 等、 「draft 承認 → 送信」 flow を踏む全てで同じ 2 度書き乖離が起きうる (= content-file 経由の送信 tool は全部同型)。
 
+## <a id="inline-image-cid"></a>10. 数式・図を本文中に出すには inline 画像 (cid) — MCP では作れない
+
+**状況:** plain text の mail で数式は読みにくい (`ρ_χ(end) = (3/2) V(x_end)` の羅列)。LaTeX で組版した PNG を**本文の流れの中に**表示させたい (= 添付ファイルとして開かせるのではなく)。
+
+**事実:** MCP の `send_email` も plain-text + flat attachments の送信 script も、これを作れない。必要なのは `multipart/related` + `Content-ID` で、Gmail API 直接で組む:
+
+```
+multipart/mixed
+├─ multipart/alternative
+│   ├─ text/plain          ← 数式を平文で書き下した fallback (HTML 非対応環境用)
+│   └─ multipart/related
+│       ├─ text/html       ← <img src="cid:...">
+│       └─ image/png       ← Content-ID, Content-Disposition: inline
+└─ application/pdf 等      ← 通常の添付
+```
+
+Python の `email.message.EmailMessage` なら `set_content` (plain) → `add_alternative` (html) → html part に `add_related(..., cid=...)` → `add_attachment` の順で自動的にこの木になる。
+
+- **cid は生成してから HTML に埋める** (= HTML に placeholder を置き、`make_msgid()` の値で置換してから build)。別々に書くと参照切れで画像が添付扱いに落ちる。
+- **plain 版にも式を書き下す** (= HTML を表示しない受信環境への fallback。画像 alt では足りない)。
+- 画像は幅 ~1400 px 目安 + `max-width` 指定 (受信側で縮小表示)。PDF を組版 → 余白 crop → PNG が確実 (画面 render と受信表示は概ね一致する — 印刷と違い raster 化の罠はない)。
+- 送信後の構造検証は [#post-send-mime-verify](#post-send-mime-verify) と同じ。
+
+**受信側の表示:** Gmail (web / mobile) と Apple Mail は cid inline を本文位置に表示する。実測 2026-08 (数式検算 note を研究者宛てに送信)。
+
 ## 関連
 
 - MCP の scope / capability (send tool 不在 ≠ 送信不能): [`mcp.md`](mcp.md)
