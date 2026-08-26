@@ -228,6 +228,17 @@ main から消える。 これを防ぐには `git merge -s ours overleaf/master
 
 ⚠️ layer 注意: project ID は**その paper repo (layer 2) に置く**のが正しい。 layer 1 (本 repo = public) に individual project の ID を書かない (= 公開リポ衛生 + 規約は汎用知識のみ)。 layer 3 (個人層) に置くと layer 2 の script が layer 3 を参照する依存違反になる (= collaborator は個人層を読めない)。 自己完結する layer 2 が audience-correct な最上層。
 
+### <a id="push-sweeps-editor-edits"></a>⚠️ push は editor 側の未 commit 編集を巻き込む (= commit author ≠ 中身の author、 2026-08-26 実踏)
+
+Overleaf の git bridge は、 git 側から push を受けた瞬間に **web editor 上の未 commit 編集を同じ commit に畳み込む** (= editor には staging が無く、 bridge が push を契機に「editor の現在状態」 を snapshot する)。 帰結 2 つ:
+
+1. **commit author は push 者だが、 中身は複数人でありうる** (= [`actor-attribution.md`](actor-attribution.md) の carrier-proxy の Overleaf 版)。 `git log --author` で「誰が何をしたか」 を読むと誤帰属する。 中身の帰属は diff の内容指紋で判断する。
+2. **自分が compile・検証した状態と、 実際に push された状態が異なりうる**。 push 前の compile 結果 (頁数 / error / overfull) を push 後の gate として報告すると、 巻き込まれた編集分が未検証のまま「clean」 と報告される。
+
+**規律: push したら必ず `git show HEAD -- <main tex>` で実際に入った diff を確認し、 自分の編集以外が混ざっていたら再 compile して gate を測り直す** (= push 前の測定値を流用しない)。 巻き込みゼロの確認は「diff の行数 = 自分の編集の行数」 の一致で機械的にできる。
+
+関連 forensics 注意: 巻き込み・移動の追跡に `git log -S` を使うと **出現回数が不変の移動は不可視** (= -S は count 差分のみ検知)。 移動を追うときは `git log -G` を使う。
+
 ## なぜこの設計が optimal か
 
 - **bidirectional auto-sync**: linking active 中、 commit が自動 propagate
@@ -249,3 +260,4 @@ main から消える。 これを防ぐには `git merge -s ours overleaf/master
 - 一例目 (2026-05-19): ある private paper repo で GitHub linking + mirror 経路を確立。
 - 二例目 (2026-06-08): 別の物理共著 note repo で **direct nested clone 変種** (= Overleaf が唯一の source、 GitHub linking 無し) が発生 → 上の §「変種: direct nested clone」 を新設。 ID を gitignore 除外 clone 内だけに置いて失われた RCA を反映。
 - 三例目 (2026-06-12): 別の物理共著 paper repo で **direct remote + 手動 merge 変種**の二重事故が発覚。 (a) 過去の merge を実施した clone が消えて **project ID の記録がゼロ** (= 二例目と同型の ID 喪失が、 規約制定後に別 repo で再発 — 規約は「nested clone 変種」 の文脈でしか書かれておらず、 既存 repo への横断適用 sweep がなかった)。 (b) **3 ヶ月間 Overleaf drift が未検出** = user も Claude も「GitHub pull = Already up to date」 を「最新」 と誤読する構造 (= 検証手段そのものが存在しなかった)。 → §「変種: direct remote + 手動 merge」 + §「Sync script 契約」 を新設し、 script 必須化 + `--status` 機械可読契約 + 横断 drift 監視を標準化。 教訓: **連携形態が 1 つ増えるたびに「ID はどこに記録されるか」「drift は誰が検出するか」 の 2 問を通す**。
+- 四例目 (2026-08-26): nested clone 変種の repo で **push が editor 側の未 commit 編集 (共著者 = repo owner 本人の editor 操作) を同一 commit に巻き込む**のを実踏 → §「push は editor 側の未 commit 編集を巻き込む」 を新設 (= push 者の compile 済み状態と pushed 状態が乖離、 gate 再測 + `git show HEAD` 確認を規律化)。
