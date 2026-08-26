@@ -76,7 +76,7 @@ ln -s "$PWD/Figures" "$PWD/ref.bib" "$PWD"/*.bst "$D"/   # 図・bib・bst を�
 | diff のノイズが多すぎる | レビュー markup（色付き注釈コマンド等）まで差分対象になる | diff 前に markup を strip（中身は残し注釈コマンドだけ除去） |
 | `Missing \cr` / `\endgroup` / display math 破壊 | 環境を隠した自作マクロ（例: align を包む `\al{}`）が `\DIFadd` に巻かれる | diff 前に当該マクロを本物の `\begin{align}…\end{align}` へ展開 |
 | tikz error の連鎖 | ネストした tikzpicture/feynman 図が壊れる | 図を placeholder 文字列へ置換 +（下の）`--config PICTUREENV=…` |
-| 3 分かかる / output が無限ループ | CFONT の color markup が page builder と干渉 | `--type=UNDERLINE`（色でなく下線/取消線）+ ソースの `twocolumn`→`onecolumn` |
+| 3 分かかる / output が無限ループ | CFONT の color markup が page builder と干渉 | `--type=UNDERLINE`（色でなく下線/取消線）。**hang の真因は CFONT 単独**で、UNDERLINE なら `twocolumn` のままコンパイルできる（2026-08 実証。旧対処の `onecolumn` 化は不要 = 実紙面レイアウトの diff の方が共著者に優しい） |
 | `Paragraph ended before \align` | latexdiff が変更 align 内に空行（`\par`）を挿入 | 後処理で数式環境内の空行を除去 |
 | natbib citation でハング | citation markup × natbib | `--disable-citation-markup` |
 
@@ -86,7 +86,7 @@ ln -s "$PWD/Figures" "$PWD/ref.bib" "$PWD"/*.bst "$D"/   # 図・bib・bst を�
 latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
   --config "PICTUREENV=(?:picture|tikzpicture|feynman|DIFnomarkup)[\w\d*@]*" \
   "$D/old.tex" "$D/new.tex" > "$D/diff.tex"
-# 後処理（数式環境内の \par 除去 + twocolumn→onecolumn）後に pdflatex を 2 回
+# 後処理（数式環境内の \par 除去）後に pdflatex を 2 回（+ bibtex を挟むと citation が [?] でなく実番号になる）
 ```
 
 - `--math-markup=off`: 式中の add/del は色付けしない（式の変更は新版として出るが色は付かない）。数式の add/del markup はコンパイルを壊しやすいので既定 off にし、文章・構造・コメント削除の差分を確実に出す方を取る。

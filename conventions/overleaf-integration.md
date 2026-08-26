@@ -148,6 +148,29 @@ Overleaf 版と byte 一致のまま保ちたい場合 (= 自分の本文 markup
 **push 前 gate**: behind=0; 本文が `overleaf/master` と byte 同一; scope diff が意図領域のみ;
 live (uncomment) な author markup (`\cl`/`\CL` 等) の leak 無し; compile が通る。
 
+## <a id="revision-proposal-versioned-files"></a>改訂案の in-place 配置 (= 旧版を rename 保存 + 新名で追加) (2026-08)
+
+大きめの改訂案を共著者にレビューしてもらうとき、 mail 添付の往復でなく **Overleaf に直接置く**変種。
+要件 = 共著者が知っている file を silent に書き換えないこと。 [`#scoped-subset-push`](#scoped-subset-push)
+の sibling (= あちらは「一部だけ出す」、 こちらは「全文を別名で並置」)。
+
+**レシピ** (direct remote + 手動 merge 変種で有効):
+1. **behind=0 を確認** (= 先方の未取り込み編集を潰さない)。
+2. `git worktree add <tmp> overleaf/master` で **overleaf/master の上に専用 commit** を作る:
+   `git mv main.tex main_v1.tex` (= byte 不変の rename、 共著者の知っている版がそのまま残る) +
+   改訂版を `main_v2.tex` として追加 + 新規図など必要 file のみ追加。
+   ⚠️ `git push main:master` は repo 全体 (SESSION / CLAUDE / scripts / 内部ノート) を Overleaf に
+   流し込むので使わない。
+3. push (= user 明示 OK 必須、 共著者に直接影響)。
+4. **Overleaf の main document 設定を新名へ切替** (Menu → Settings)。 旧名を指したままだと
+   compile 不能。 web UI 操作 = 人間の 1 click。
+5. local は `--merge` で追随。 **latexdiff は v1/v2 の file-based に切替できる** (= baseline commit の
+   `git show` が不要になり pipeline が単純化する副産物)。
+
+**利点**: 共著者は新旧を並べて読める / 差分は latexdiff 添付で補完 / 承認後の「反映作業」 が既に
+済んでいる (= 承認 = そのまま編集続行)。 **実例**: 2026-08、 該当 private paper repo (= rename + v2 +
+図 1 枚の 3 点 commit を worktree で作成し、 behind=0 とコメント macro 照合の上で push)。
+
 ## full-body push + 管理ファイルの cleanup (= 本文まるごと反映 / 既流出の除去)
 
 subset でなく **現行 paper file をまるごと Overleaf に反映**したい場合 (= 全 finding を共著者に

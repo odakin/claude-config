@@ -171,6 +171,36 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 判別の入口 = 図のベクトル path から曲線を復元して数値照合する ([`scientific-computing.md#figure-vector-extraction`](scientific-computing.md#figure-vector-extraction))。 **4 番目は「図の問題」 に見えて設定の問題**なので、 上の [`#headline-claim-budget-check`](#headline-claim-budget-check) に接続する。
 
+## <a id="claim-strength-three-tests"></a>強い言明の 3 検査 (偽 / generic / tautology) (2026-08)
+
+**ルール:** 「never / only / in practice / effectively」 級の強い副詞・限定を含む物理言明は、 書いた瞬間に 3 検査を通す。 どれか 1 つでも落ちたら、 不変量か対比で書き直す。
+
+1. **偽でないか (= 厳密な読みで反例が無いか)**: 例: 減衰状態の erfc 型 crossover で「漸近形には実質到達しない」 — 遅い時刻では erfc → 2 で必ず漸近形に乗る (振幅が小さいだけ) → 偽。
+2. **generic でないか (= 当該 regime を他と区別するか)**: 例: 「漸近形が有効になる頃には振幅が指数的に抑制されている」 — 漸近形自体が減衰指数関数なら任意の不安定系で真 → 無内容。
+3. **tautology でないか (= 構成上の定義から自動的に従っていないか)**: 例: 「閾値の前は仮想伝播のみが振幅を担う」 — 積分路が極を跨ぐ前に極の寄与が存在しないのは定義そのもの → 内容なし。
+
+**通る形は不変量 + 対比**: 「漸近形が記述するのは振幅の $e^{-n^2/2}$ 以下の裾だけ ($n \ll 1$ では $O(1)$ から全履歴を記述する、 との対比)」 のように、 **regime 間で値が変わる量**で言う。 "in practice" が過重な仕事をしていたら書き直しの合図 (= 数学的読みで偽になる言明を副詞で救おうとしている)。
+
+**実例 (2026-08、 該当 private paper repo):** 同じ 1 文が 3 検査を 3 回連続で落ちて 3 回書き直された (「never attained in practice」 = 偽 → 「becomes valid only after the amplitude is suppressed」 = generic → 「effectively propagates only virtually」 = tautology)。 最終形は上の「裾」 の言明。 3 回とも人間の共著者の指摘で発覚 = 書いた本人には毎回もっともらしく見えた (= 自己検査を機械的に回す理由)。
+
+## <a id="statement-placement-check"></a>言明の配置検査 (その位置の読者の道具だけで読めるか) (2026-08)
+
+**ルール:** 段落を置く / 残す前に 3 つ問う。
+
+1. **記号・概念が導入済みか**: その言明が使う記号・概念は、 その時点までに定義されているか。 根拠が数十頁先の式への forward reference 頼みなら、 言明ごと後方の節へ移す。
+2. **孤児文でないか**: 編集で親段落を削除した後に、 その予告・要約・脚注だけが残っていないか。 親の動機が消えたら子も消す (= 「一部だけ残す」 妥協は往々にして動機を失った孤児を作る)。
+3. **前方 pointer は後方参照と重複していないか**: 後の節が既にこの節を back-reference しているなら、 前方 pointer は導線としても冗長。
+
+**実例 (2026-08、 該当 private paper repo):** 序盤の節に置いた extreme-case 段落が、 未定義記号 1 + 未導入概念 2 + 20 頁先への forward ref の三重で破綻していた。 段落を後方の専門節に合流させ、 残した「予告 1 文」 も後日 検査 3 で削除 (後方の節が既に序盤を back-ref しており冗長)。
+
+## <a id="stale-framing-sweep"></a>理解更新後の旧語彙 sweep (2026-08)
+
+**ルール:** 物理理解が更新されたら (例: binary な「閾値の前後で不連続」 → graded な「crossover の中心と幅」)、 **旧 framing の語彙を原稿と派生文書 (abstract / Summary / cover note / スライド) から sweep** する。 旧語彙の典型 = 「原理的に分解不能」 「痕跡は観測に掛からない」 (= 実在するが隠れている、 の含み)。 語法の基準は**原稿内で既に最良の定式になっている箇所** (例: 「安定極限と区別不能」) に揃える — 新しい基準文を発明するより、 既にある正しい文に他を合わせる方が drift しない。
+
+**なぜ規約にするか:** 理解の更新は通常 1 箇所 (新しい節) に書き込まれ、 Summary・序論・脚注の旧記述は無傷で残る。 旧記述同士は互いに整合しているため節単位の読み直しでは見つからず、 旧語彙の grep + 新旧対比の観点でだけ引っかかる。
+
+**実例 (2026-08、 該当 private paper repo):** 本文の新節は graded 語法で完成していたのに、 Summary は 2 つの時間スケールを混同した旧記述のまま生きており (「この閾値は短すぎて観測困難」)、 共著者向け note の bullet も旧言明を引用していた。 指摘 3 回で Summary・note・bullet を新語法に統一。
+
 ## <a id="second-example-refine"></a>二例目が出たら refine
 
 将来別 paper で同様の audit を実施したら、 script を `claude-config/scripts/` に generic 化、 本 convention を refine。 現状は 該当 private paper repo で完結。
