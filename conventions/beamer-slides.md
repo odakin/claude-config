@@ -111,6 +111,8 @@ for i, p in enumerate(d):
 
 ## 10. 図は「拾う」のでなく「生成する」
 
+- **matplotlib 図のラベルはみ出しは目視でなく機械 gate で落とす**: 正本 =
+  [`matplotlib-figure-qa.md`](matplotlib-figure-qa.md) (`assert_texts_inside` snippet + 限界)。
 - **matplotlib でオリジナル模式図**(著作権リスクなし): 波束(Gauss 包絡 × 搬送波で「波束サイズ σ ≠ 波長 λ」を可視化)/「予想 vs 観測」曲線(`fill_between` でズレを塗る)/散乱模式(`patches.Circle` + 放射状の `annotate('', arrowprops=...)`)。`transparent=True, bbox_inches='tight'` で保存すると任意の背景に載る。
 - **背景グラデ**: numpy で色を線形補間 → PIL `Image.fromarray`。
 - **matplotlib の日本語ラベル**: `fm.fontManager.addfont(<CJK .otf>)` + `rcParams['font.family']=fm.FontProperties(fname=<otf>).get_name()`。TeX 同梱の Harano Aji OTF が install 不要で便利。`rcParams['axes.unicode_minus']=False`。

@@ -407,6 +407,8 @@ for pno, p in enumerate(fitz.open(path), 1):
 - **許容しうる flag**: 隣接行同士が肩付き・`\int`・`\sqrt`・`\gtrsim` 等で数 pt 重なるもの
   (= glyph bbox の重なりで、インクは `\lineskip` が守っている)。**必ず raster 化して目視で裁定**する
 - 画像との衝突も同様に `p.get_image_info()` の bbox と突き合わせれば取れる
+- **図の中身側の同哲学 gate** (= matplotlib ラベルの枠内保証、図 script 側で assert):
+  [`matplotlib-figure-qa.md#assert-texts-inside`](matplotlib-figure-qa.md#assert-texts-inside)
 
 ## <a id="wrapfigure-page-carryover"></a>wrapfigure が頁末に来ると次頁冒頭が短行で続く
 

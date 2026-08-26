@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 91 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 92 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -103,6 +103,8 @@ layer 1 (public) のドメイン固有規約 91 file をカテゴリ別に列挙
   - 講演のしかた (= Robert Geroch "Suggestions For Giving Talks" arXiv:gr-qc/9703019 の own-words ダイジェスト、 主題選択 / 3-4 メッセージ構成 / 導入は全体の 1-5 / 視覚資料は図>言葉>式 / 1h で非自明な式 5 本・スライド 10 枚 / 質問は完全に正直に 等。 セミナー・JC・卒論発表の準備時に読む、 英語本体)
 - **[latex.md](latex.md)** — LaTeX を含むリポで作業するとき
   - LaTeX 固有規約（物理リポで参照）
+- **[matplotlib-figure-qa.md](matplotlib-figure-qa.md)** — matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき
+  - matplotlib 図の「全ラベル枠内」機械 gate (assert_texts_inside = render 済み extent を axes 枠と照合し 1 px 超過で図の生成自体を落とす)・機構 fact・射程の限界
 - **[overleaf-integration.md](overleaf-integration.md)** — Overleaf↔GitHub 連携 repo を設定・sync するとき
   - Overleaf↔GitHub 連携 (= canonical は Overleaf web UI の GitHub linking、 sync script 契約 〔--status が ahead/behind を出す + PROJECT_ID hardcode = ID の SoT〕、 新規連携 checklist + ID 回収 runbook、 drift 検出は scripts/check-overleaf-drift.py)
 - **[paper-audit.md](paper-audit.md)** — 論文 merger 等の構造 issue を体系 audit するとき
