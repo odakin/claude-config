@@ -416,6 +416,22 @@ for pno, p in enumerate(fitz.open(path), 1):
 狭いまま**になる (白い穴が空く)。対処 = 図を段落のもっと前に置く / 幅を絞る / 行数を明示
 `\begin{wrapfigure}[N]{r}{...}` (N = その頁に残る行数。本文を増減したら要再調整なのでコメントを残す)。
 
+## <a id="wrapfig-caption-page-overflow-loss"></a>wrapfigure の箱が頁末を越えると越えた分の caption は黙って消える
+
+`wrapfigure` は頁をまたげないため、図 + caption の箱が頁下端を越えると、**越えた部分の
+caption が error も warning もなく視覚的に切断される** (= 文の途中で「…に置」のように途切れて
+印刷される。PDF の text 層には全文が残ることがあり、`get_text()` 検査では検出できない =
+視覚 render の確認が必須)。周辺本文を増減した時・caption を伸ばした時・幅を広げた時
+(= 幅↑ → 回り込み本文の行数↑ + caption の折り返し行数変化で箱の高さが動く) に発生しやすい。
+
+- 対処: caption を短く保つ (図中ラベルと重複する説明は削る) / caption 末尾の文字列が
+  **頁内に視覚的に在るか** をビルド後に raster 化して確認 (text 層 grep は偽陰性)
+- 幅の trade-off: wrapfigure を広げると図中文字は大きくなるが、回り込み本文の行が
+  短くなって総行数が増え、頁溢れ・箱の頁末超えの両方を誘発する — 広げたら必ず頁数と
+  caption 完結を再検査する
+- sibling: 次頁短行の穴 = [#wrapfigure-page-carryover](#wrapfigure-page-carryover) /
+  別行立て禁止 = [#wrapfig-no-display-math](#wrapfig-no-display-math)
+
 ## <a id="bibliography-style"></a>Bibliography スタイル
 - **JHEP.bst を使う**（個人的好み）。`note` フィールドも表示するバージョンを使用
 - 正本: `~/Claude/claude-config/JHEP.bst`（ver. 2.18 ベース + note 全 entry type で有効化、md5: `0934fe19…`。 2026-07-24 に header comment 内の Unicode curly quotes を LaTeX 式 ``…'' に正規化 = char-fixer 配下 repo へ配布しても md5 が割れない idempotent 化、 機能変更なし）
