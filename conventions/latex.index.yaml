@@ -73,6 +73,9 @@ sections:
   - id: wrapfigure-page-carryover
     level: 2
     title: "wrapfigure が頁末に来ると次頁冒頭が短行で続く"
+  - id: wrapfig-caption-page-overflow-loss
+    level: 2
+    title: "wrapfigure の箱が頁末を越えると越えた分の caption は黙って消える"
   - id: bibliography-style
     level: 2
     title: "Bibliography スタイル"

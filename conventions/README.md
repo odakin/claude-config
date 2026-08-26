@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 92 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 93 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -101,6 +101,8 @@ layer 1 (public) のドメイン固有規約 92 file をカテゴリ別に列挙
   - Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可。giving-talks.md〔中身/作法〕と相補)
 - **[giving-talks.md](giving-talks.md)** — 講演・セミナー・発表の準備をするとき (+ 日本語版: [giving-talks.ja.md](giving-talks.ja.md))
   - 講演のしかた (= Robert Geroch "Suggestions For Giving Talks" arXiv:gr-qc/9703019 の own-words ダイジェスト、 主題選択 / 3-4 メッセージ構成 / 導入は全体の 1-5 / 視覚資料は図>言葉>式 / 1h で非自明な式 5 本・スライド 10 枚 / 質問は完全に正直に 等。 セミナー・JC・卒論発表の準備時に読む、 英語本体)
+- **[kakenhi-proposal.md](kakenhi-proposal.md)** — 科研費の研究計画調書 (基盤・挑戦的研究・若手等) を書く/直す/Web 入力するとき
+  - 科研費調書の機構知見 — 公開の審査基準 (評定要素) を取得して欄構成を正対させる (波及効果の見落とし穴 / 萌芽は「探索的性質・芽生え期」の literal 対応 / 事前選考の評点分布)、紙面設計 (詰めすぎ⇄空きすぎの振り子・独立行見出し・モノクロ審査)、電子申請システムの機構 (毎朝 5:00 再起動で編集消失・応募情報の期限付き削除)
 - **[latex.md](latex.md)** — LaTeX を含むリポで作業するとき
   - LaTeX 固有規約（物理リポで参照）
 - **[matplotlib-figure-qa.md](matplotlib-figure-qa.md)** — matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき
