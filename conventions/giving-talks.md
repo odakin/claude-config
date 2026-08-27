@@ -178,3 +178,19 @@ the structure of your talk.
 The fastest way to get better is critical reflection at two moments: **immediately after you
 speak** (analyze your own organization, clarity, engagement, pacing, and whether the audience
 followed), and **while listening to others** (diagnose what works, what doesn't, and why).
+
+## Practical addenda (field notes, NOT from Geroch)
+
+Two lessons from preparing a 2026 conference talk, kept separate from the digest above:
+
+- **Choose the three messages from the paper's own voice, not from your recent work sessions.**
+  The submitted abstract's sentence order *is* the authors' own considered ranking of what the
+  paper most wants to say; the introduction's problem statement and the summary's paragraph
+  order corroborate it. Weeks of intense work on one correction or detail will try to claim
+  all three message slots ("recency capture") — re-read the abstract/intro/summary and map
+  each sentence to a message slot before committing an organization.
+- **Audit the abstract's promises before building the talk.** For each claim the submitted
+  abstract makes, verify it is a delivered result of *this* paper — not something the paper
+  merely raises and defers to future work. An over-promise discovered at this stage is handled
+  with one honest sentence in the talk plus a prepared Q&A answer; discovered on stage, it is
+  a disaster.

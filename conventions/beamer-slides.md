@@ -60,10 +60,12 @@ metropolis のパレットを上書き:
 
 現在セクションが通常色、他がグレーの「現在地」扉になる。
 
-## 6. フッタ番号
+## 6. フッタ番号・進捗バー
 
 metropolis の `numbering=fraction` は standout/plain/セクション扉が混ざると**誤カウント**(欠番 + 「X/Y」重複)。
 `numbering=none` で消すのが綺麗。通し番号が欲しいなら §7 の PDF ページラベルで持たせる。
+また `progressbar=frametitle` は文書構成によって `! Arithmetic overflow`(calc の `\calc@denominator`)で
+**fatal になる**(2026-08 実測、初回パスで再現・原因未特定)。現在地表示は §5 の扉 TOC が担えるので、落ちたら外すのが早い。
 
 ## 7. PDF ページラベル重複と修正(=「ページ番号振り直し」)
 
@@ -126,8 +128,22 @@ for i, p in enumerate(d):
 - 推奨 = **領域レンダリング**: `page.get_pixmap(matrix=fitz.Matrix(4,4), clip=fitz.Rect(x0,y0,x1,y1))`。`page.get_image_rects(xref)` で図の位置を取り、軸ラベルを含むよう clip を広げ、論文側キャプションは除外(自分のキャプションを付ける)。
 - 紹介対象論文の図を、出典明記で当該論文の発表に使うのは正当な学術利用。装飾目的で web の著作権画像を拾わない(§10 でオリジナル生成 or ライセンス明確な素材)。
 
-## 12. 出力形式の現実
+## 12. 出力形式の現実 — Keynote へ「編集できる」デッキを渡す
 
 - **`.key`(Keynote)はバイナリ package(IWA)で直接編集不可**。Keynote ユーザーへ渡すなら `.pptx`(Keynote が import 可)か、Beamer PDF で投影。
 - **Marp**(Markdown → PDF/PPTX)はデッキをテキスト管理したい時の選択肢。レイアウト自由度は Beamer より低い。
+
+**編集可能な形で渡す実務レシピ**(2026-08 実測。「PDF 各頁を画像で貼った pptx」は 100% 忠実だが編集ベースにならない):
+
+1. python-pptx 等で**ネイティブ text box の pptx を再構築**する(デザイン token = 色・階層・余白を移植)。フォントは TeX 専用書体(Fira/原ノ味)でなく **Mac ネイティブ(例: Hiragino Sans)を明示**。CJK は `a:latin` だけでなく `a:ea`/`a:cs` にも typeface を書く。
+2. **数式だけは画像**にする(standalone LaTeX → pdfcrop → PNG)。**LaTeX ソースを README 等に添える** — Keynote は 挿入 > 方程式 が LaTeX を受けるので、受け手がネイティブ数式に置換できる。
+3. AppleScript で `.key` 化: `open (POSIX file …)` → `save d in POSIX file "….key"` → `export d to … as PDF`(この PDF が「Keynote が実際に描画した姿」= 視覚 QA の対象)。
+
+**Keynote import の落とし穴 3 つ**(いずれも 2026-08 バイセクトで確定):
+
+- **python-pptx の発表者ノートを Keynote は silent 拒否する**。notesSlide/notesMaster part があると、エラーも出さず何も開かない。python-pptx は notesMaster part と rel を作るのに `presentation.xml` へ `<p:notesMasterIdLst>` を登録しない(orphan、PowerPoint は黙認)が、**これを補修しても Keynote は拒否したまま**(根は未特定)。→ Keynote 向け pptx では notes を作らない。数式ソース等は別ファイルへ。
+- **import が一度詰まると以後 silent 失敗が連鎖する**。冷間起動時の「開く」チョーザや timeout 後の残留状態が AppleEvent を塞ぎ、正常なファイルまで documents=0 のまま無反応になる。**Keynote を quit → 再起動してから 1 回だけ試す**のが正しい再試行。バイセクト中はこの flake が「偽の毒」を量産する — 判定はクリーン再起動後の 1 回で。
+- 検証は必ず「documents 数の polling」で(open の戻り値は import 成功でも missing value のことがある)。
+
+QA は 3 の export PDF を頁画像化して §9 と同じ目視ループ。
 </content>
