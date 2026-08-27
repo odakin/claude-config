@@ -111,7 +111,7 @@ for i, p in enumerate(d):
 
 ログ: `grep "^! " deck.log`(エラー)/ `grep Overfull deck.log`(はみ出し)/ `grep -i shrink deck.log`(意図しない縮小)。ただし**最終判定はレンダ画像**。
 
-## 10. 図は「拾う」のでなく「生成する」
+## <a id="generate-figures-not-scavenge"></a>10. 図は「拾う」のでなく「生成する」
 
 - **matplotlib 図のラベルはみ出しは目視でなく機械 gate で落とす**: 正本 =
   [`matplotlib-figure-qa.md`](matplotlib-figure-qa.md) (`assert_texts_inside` snippet + 限界)。
@@ -128,7 +128,7 @@ for i, p in enumerate(d):
 - 推奨 = **領域レンダリング**: `page.get_pixmap(matrix=fitz.Matrix(4,4), clip=fitz.Rect(x0,y0,x1,y1))`。`page.get_image_rects(xref)` で図の位置を取り、軸ラベルを含むよう clip を広げ、論文側キャプションは除外(自分のキャプションを付ける)。
 - 紹介対象論文の図を、出典明記で当該論文の発表に使うのは正当な学術利用。装飾目的で web の著作権画像を拾わない(§10 でオリジナル生成 or ライセンス明確な素材)。
 
-## 12. 出力形式の現実 — Keynote へ「編集できる」デッキを渡す
+## <a id="editable-keynote-handoff"></a>12. 出力形式の現実 — Keynote へ「編集できる」デッキを渡す
 
 - **`.key`(Keynote)はバイナリ package(IWA)で直接編集不可**。Keynote ユーザーへ渡すなら `.pptx`(Keynote が import 可)か、Beamer PDF で投影。
 - **Marp**(Markdown → PDF/PPTX)はデッキをテキスト管理したい時の選択肢。レイアウト自由度は Beamer より低い。

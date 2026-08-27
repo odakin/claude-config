@@ -67,4 +67,4 @@ def assert_texts_inside(fig, *axes, tol=2.0):
   [`latex.md#pdf-line-collision-detection`](latex.md#pdf-line-collision-detection)。
 
 関連: スライド文脈の図生成 (日本語フォント・CJK PDF 罠・オリジナル模式図) は
-[`beamer-slides.md`](beamer-slides.md) §10。
+[`beamer-slides.md#generate-figures-not-scavenge`](beamer-slides.md#generate-figures-not-scavenge)。
