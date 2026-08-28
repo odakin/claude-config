@@ -264,8 +264,17 @@ def main():
 
     any_changed = False
     for path in args:
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read()
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except UnicodeDecodeError as e:
+            # Vendored third-party LaTeX (e.g. lineno.sty is Latin-1) is not
+            # ours to normalize — skip it byte-for-byte instead of crashing
+            # the whole pre-commit hook. Repos can also opt such paths out
+            # explicitly via the `-latex-autofix` git attribute.
+            print(f"  skip (not UTF-8, left byte-for-byte): {path} ({e.reason})",
+                  file=sys.stderr)
+            continue
         fixed, changed, math_dashes = fix_content(content)
         if changed:
             with open(path, "w", encoding="utf-8") as f:

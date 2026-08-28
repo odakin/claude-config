@@ -316,6 +316,8 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
   | `bxjsarticle` 等 (BX/JS series、 engine-agnostic) | class option で切替 |
 
   **診断**: `jsarticle` 等の pTeX class に `pdflatex` を打つと `! LaTeX Error: Unicode character X (U+XXXX) not set up for use with LaTeX` が日本語 1 文字ごとに連発する fingerprint が出る (2026-07-13 観測)。 log にこの pattern を見たら engine 選択ミス確定 → 正しい経路は `platex → platex → dvipdfmx` または `latexmk -latex=platex -pdfdvi <file>`。 `pdflatex` に別 patch を当てる方向は原理的に不可 (= class 側で pLaTeX 前提の macro を使っているため)。
+
+  **同 fingerprint の別原因 (engine は正しい場合)**: 正しい `platex` 経路でも、**丸数字 ①②③ (U+2460 系) 等の JIS X 0208 外文字**は同じ `Unicode character not set up` エラーになる (2026-08 に公募要領の「公募内容③⑤」を調書へ引用して観測)。対処 = `uplatex` へ移行 / `otf` package の `\ajMaru{3}` / 引用文なら番号を落として書き換え (調書等の使い捨て文書は書き換えが最速)。エラー行数が「日本語ほぼ全文字」なら engine ミス、「特定の記号だけ」なら本項。
 - **BibTeX フルビルド**:
   - **lualatex (英語、odakin 標準)**: `lualatex → bibtex → lualatex → lualatex`
   - pdflatex (英語、互換代替): `pdflatex → bibtex → pdflatex → pdflatex`
