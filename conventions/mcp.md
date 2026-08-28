@@ -132,11 +132,14 @@ session の会話 / context / tool 許可は **保たれる**。MCP server だ�
 
 ### <a id="runbook-root-cause-checklist"></a>Chrome MCP (Claude in Chrome) の特殊事情
 
-Chrome MCP は `claude mcp` 配下ではなく **Claude.app の Chrome extension 経由** で別経路。`claude mcp list` には出ない。復旧:
+Chrome MCP は `claude mcp` 配下ではなく **Claude.app の Chrome extension 経由** で別経路。`claude mcp list` には出ない。復旧 (上から順):
 
-1. Chrome で `chrome://extensions/` → Claude 拡張のトグル OFF → ON で reload
-2. または Chrome を quit + 再起動
-3. 上記でダメなら Mac app (Claude.app) も quit + 再起動
+0. **account 一致 gate (2026-08-29)**: 接続は account-scoped の cloud relay 経由で、 **拡張の署名 account == session の実 account** が前提。 desktop session の実 account は app ログイン側 (= harness の userEmail / `.claude.json` oauthAccount は CLI 土台を映す嘘になりうる、 同定手順と軸の整理 = [multi-account-machine-surface.md #failure-modes](multi-account-machine-surface.md#failure-modes))。 claude.ai サイトの login は無関係。 不一致のまま以下の手順を回しても直らない
+1. 拡張サイドパネルを開き署名 account・警告有無を確認 → session 側から `switch_browser` → browser 側 popup の「Connect」 を 2 分以内に click (= 正規の再接続経路)。 broadcast が**待機なしで**「No other browsers available」 を返すなら relay にその account の拡張 instance がゼロ = パネルのチャットが正常でも automation bridge は未登録 (別経路) と判定できる
+2. Chrome で `chrome://extensions/` → Claude 拡張のトグル OFF → ON で reload → 1 を再試行
+3. または Chrome を quit + 再起動
+4. 上記でダメなら Mac app (Claude.app) も quit + 再起動
+5. それでも空なら server-side の browser-discovery 障害でありうる (upstream 既知例 = claude-code#58968 = side panel 正常 + local 構成正常でも discovery が fail)。 深追いせず fallback (user 手動 / 内蔵 browser 等) + 時間を置いて再試行
 
 ### Chrome MCP で 認証 SPA を scrape できないケース
 
