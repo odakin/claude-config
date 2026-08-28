@@ -163,6 +163,17 @@ expect_pass "pass-long-ascii-embed" \
 expect_pass "pass-clean" \
   "just some normal text"
 
+# Tier A email: RFC 2606 予約 doc 用 domain は allowlist (2026-08-28、 selftest
+# fixture の alt@example.com が block された FP を契機に追加)
+expect_pass "pass-email-example-domain" \
+  "fixture user = alt@example.com / cli-base@example.org"
+
+# 実 domain の email は引き続き block (= allowlist 拡張の regression 逆側)。
+# ⚠️ literal を source に書くと本 repo の pre-commit scan 自身に block される
+# (実測) ので shell 連結で組む (= shared-matcher-mock-pattern と同じ理屈)
+expect_block "block-email-real-domain" \
+  "contact someone@gm""ail.com for details"
+
 # ====================================================================
 echo ""
 echo "=== public-precommit-runner self-test ==="

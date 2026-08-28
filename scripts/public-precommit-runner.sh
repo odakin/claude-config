@@ -11,7 +11,8 @@
 #   2. 各ファイルの追加行 (`^+` で始まる、`+++` ヘッダ除く) を抽出
 #   3. Tier A 構造制約 regex を適用:
 #        - email (allowlist: noreply@anthropic.com / noreply@github.com
-#          / support@github.com)
+#          / support@github.com / *@example.{com,org,net,invalid} = RFC 2606
+#          予約 doc 用 domain、 実在人物であり得ないので fixture / 例示に安全)
 #        - /Users/<name> 絶対 path
 #        - IPv4 (RFC1918 / loopback / link-local / broadcast allowlist)
 #        - token prefix (ghp_ / github_pat_ / sk- + 30 文字以上)
@@ -114,7 +115,7 @@ HITS=""
 EMAIL_HITS="$(
   awk -F'\t' '{ print $2 }' "$ADDED_BUF" \
     | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' 2>/dev/null \
-    | grep -vE '^(noreply@anthropic\.com|noreply@github\.com|support@github\.com)$' \
+    | grep -vE '^(noreply@anthropic\.com|noreply@github\.com|support@github\.com|[A-Za-z0-9._%+-]+@example\.(com|org|net|invalid))$' \
     | sort -u \
     || true
 )"

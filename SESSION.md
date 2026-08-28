@@ -2,6 +2,12 @@
 
 > 📌 **このファイル = 直近 (当月) の作業 + Open items**。 古い dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)。
 
+## 2026-08-28: session 自己アカウント同定 — whoami probe hoist + multi-account 破れ 2 種
+
+- [`scripts/claude-session-whoami.py`](scripts/claude-session-whoami.py) 新設 (層3 から同日 hoist、 generic・個人値ゼロ、 selftest 6/6) = session が「どの surface・どの account」 で走っているかの機械 probe。 **desktop app の session に注入される userEmail / `~/.claude.json` は CLI 認証層を映す** (app は `CLAUDE_CODE_OAUTH_TOKEN` しか渡さない) — desktop login ≠ CLI login のマシンでは全 desktop session が誤誘導される (2026-08-28 実測 RCA、 instance は層 3)。 正しい signal = env `CLAUDE_CODE_HOST_SESSION_ID` → app の per-account session registry path
+- [`multi-account-machine-surface.md`](conventions/multi-account-machine-surface.md): §典型的な破れかた に 2 bullet (harness metadata での自己同定の誤り / pinned dir の alias⇄実 auth 乖離 = 名義取り違えの silent 破れ) + I7 stamp を host + account に拡張
+- [`remote-control-server.md #oauth-grabs-browser-account`](conventions/remote-control-server.md#oauth-grabs-browser-account): 既存 ⚠️⚠️ bullet に anchor 付与 + enrich (**OAuth は picker を出さず browser cookie の account で無言で通る** / `--email` は cookie があると効かない / プライベート窓 + URL 手貼り手順) = この fact の正本に一本化 (multi-account 側の重複は pointer 化)
+
 ## 2026-08-21: machine-route-first.md + dropbox-api-access.md 新設 (f7dd134)
 
 - [`machine-route-first.md`](conventions/machine-route-first.md) (harness-core) = 経路 ladder (dedicated MCP → API 直 → CLI → **build-the-route-first** → user 依頼 → 画面 drive)。 画面 drive の 3 重コスト (unreliable / user のマシン拘束 / 遅い) と許容例外、 「実装した経路は auto-load 面に記録するまでが 1 単位」。 origin = 同日の画面 drive incident (instance は層 3)

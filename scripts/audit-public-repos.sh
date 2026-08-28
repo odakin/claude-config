@@ -133,7 +133,7 @@ while IFS= read -r repo; do
 
   # email (with allowlist filter)
   email_raw="$(git -C "$repo" grep -nE "$EMAIL_RE" 2>/dev/null \
-    | grep -vE '(noreply@anthropic\.com|noreply@github\.com|support@github\.com)' \
+    | grep -vE '(noreply@anthropic\.com|noreply@github\.com|support@github\.com|[A-Za-z0-9._%+-]+@example\.(com|org|net|invalid))' \
     || true)"
   if [ -n "$email_raw" ]; then
     repo_hits="${repo_hits}

@@ -174,6 +174,7 @@ claude-config/
 │   ├── check-office-automation-index.py    # Validate office-automation.md against its slug index (office-automation.index.yaml).
 │   ├── check-overleaf-drift.py             # Overleaf 正本 repo の drift / 整備漏れ検出（各 repo の scripts/overleaf-sync.sh --status を並列実行、 ID 未設定=CRITICAL / behind>0=WARN / DEPRECATED=silent / ahead-expected marker で恒常 ahead INFO 抑制、 finding 0 件 silent、 --selftest 内蔵。 個人層 dashboard 末尾から呼ぶ、 conventions/overleaf-integration.md#sync-script-contract）
 │   ├── check-xlsx-integrity.py             # xlsx の Excel「破損」判定源を Excel 不要・決定論で検出（XML well-formed〔unbound prefix〕/ rels 両方向参照整合 / rId 重複 / Content_Types coverage。 zip 直編集 xlsx の納品前 gate、 office-automation.md#openpyxl-destroys-drawings）
+│   ├── claude-session-whoami.py            # session の host / surface (desktop|CLI) / account を機械同定する probe。
 │   ├── clipboard-cleaner.py                # クリップボード一発整形 CLI（PDF コピーの段落内改行除去 + pbcopy 書き戻しで RTF 書式除去、明示発火のみ・常駐なし、--selftest 内蔵、hammerspoon ⌃⌥⌘V から呼ばれる、conventions/clipboard-cleaner.md）
 │   ├── close-pdf-form-boxes.py             # Excel→PDF 出力で落ちたフォームの枠罫線を検出して閉じる。
 │   ├── commit-msg-leak-guard-runner.sh     # 公開リポ commit-msg hook（BLOCK mode、 2026-05-26 追加。 shared matcher library を source。 claude-code 2.1.x harness invoke bug の修復 option B）
