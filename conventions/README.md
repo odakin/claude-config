@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 93 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 94 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -105,6 +105,8 @@ layer 1 (public) のドメイン固有規約 93 file をカテゴリ別に列挙
   - 科研費調書の機構知見 — 公開の審査基準 (評定要素) を取得して欄構成を正対させる (波及効果の見落とし穴 / 萌芽は「探索的性質・芽生え期」の literal 対応 / 事前選考の評点分布)、紙面設計 (詰めすぎ⇄空きすぎの振り子・独立行見出し・モノクロ審査)、電子申請システムの機構 (毎朝 5:00 再起動で編集消失・応募情報の期限付き削除・応募受入状況欄の e-Rad 連携射程と全角 reject)、公募研究 (学術変革) の実務 (別領域 2 件まで・tier 選択・学内〆超過の救済)、研究課題名の衝突検査 (公募文言正対 + 他分野ホットトピックとの同名衝突)
 - **[latex.md](latex.md)** — LaTeX を含むリポで作業するとき
   - LaTeX 固有規約（物理リポで参照）
+- **[matplotlib-3d-illustrations.md](matplotlib-3d-illustrations.md)** — matplotlib の 3D (mplot3d) で半透明の模式イラスト (平面波・波束・濃度場などスライド/論文の概念図) を描くとき
+  - 半透明 3D イラストの実測知見 — 周期構造は視線角で消える (projection averaging)・粗密は alpha でなく点密度で・疑似 volume render はスラブ合成・裾の楕円が生む「下から見てる」錯視の解消・スライド素材の透明背景
 - **[matplotlib-figure-qa.md](matplotlib-figure-qa.md)** — matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき
   - matplotlib 図の「全ラベル枠内」機械 gate (assert_texts_inside = render 済み extent を axes 枠と照合し 1 px 超過で図の生成自体を落とす)・機構 fact・射程の限界
 - **[overleaf-integration.md](overleaf-integration.md)** — Overleaf↔GitHub 連携 repo を設定・sync するとき
