@@ -866,6 +866,11 @@ origin: 2026-08、 地域研究会の案内 (= 初報 + リマインド計 4 通
 
 reflex: surfacing 機構を設計・監査するとき「この表示は**何をもって消えるのか**」 を 1 行問う。 答えが「期限が過ぎたら」 なら、 それは通知ではなく風景である。
 
+対策を実装に落とすときの 2 つの追加 kernel (= 2026-08、 上記 RCA の対策実装で確定):
+
+- **defer は期限付きでなければ mute である**: 「明示 defer」 branch を無期限 flag で実装すると、 それは disposition ではなく恒久消音 spigot になり、 壁紙化と同じ病気を defer 側で再生産する。 defer record は**必ず期日を運び、 期日経過で自動失効して loud 側に復帰**させる (= 永久 mute を構造的に不能にする)。 parse できない defer record も loud 側に倒す。
+- **通知 channel の dedup には 2 class あり、 互いの代替にならない**: (a) 「新規 / 昇格時のみ 1 回」 dedup は速報 channel — 既知のまま放置された item を**構造的に再通知しない**ので、 壁紙化した item には最初から届かない。 (b) 最終盤 channel は「窓内は 1 日 1 回/item 再通知」 class が必要。 (a) の channel が既に稼働していることは (b) の不在を埋めない — 「通知機構はもうある」 という監査結論は、 **その dedup がどちらの class か**を確認するまで下せない。
+
 origin: 2026-08、 研究費公募の応募判断 TODO が 2 つの独立 surface 経路で 30 日間毎日 named 表示 (最終週は最高強度 + 実働中の同〆切案件の 1 行隣) されながら一度も消費されず学内〆を通過した RCA (= 機械 replay で表示履歴を verify 済)。 同月 sibling = 査読依頼が名指し horizon に 6 日 named 表示のまま未消費で自動取消 ([`§8.22`](#lapsing-deadline) origin の consumption 軸)。 対照の成功例 = 明示 disposition を要求する mail triage 段は同環境で機能し続けている。 [`§9.8`](#single-observation-scope-check) は同月 2 観察 + 対照 1 で充足。 instance (= 検出器名・ack field 実装・対策 ledger) は個人層に残置 (= kernel-up / instance-down)。
 
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
