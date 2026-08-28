@@ -43,4 +43,6 @@ OAuth を伴う実装では loopback consent の hardening 4 点 set ([`google-a
 
 2026-08-21: Dropbox 共有リンクの取得を Finder 右クリックの画面 drive で実施 → 対象フォルダの取り違え + user のマシン拘束が同時に起き、 user から経路選択そのものへの否定 feedback。 API 経路 (scoped app + PKCE、 [`dropbox-api-access.md`](dropbox-api-access.md)) の実装は初回 setup 込み ~15 分で、 以後は 1 コマンド ~2 秒になった。 「画面で 1 分 vs 実装で 15 分」 の比較は 1 回分しか見ていない — 経路は残り、 画面は残らない。
 
+2026-08-28: claude.ai の共有会話を Claude Code に渡す経路が無く (WebFetch / curl / headless 全滅)、 スマホでは 1 message ずつの手動コピペしかなかった → **経路を 2 本実装**: ① in-app Browser pane での share URL 直読 (= agent 側の最短経路、 実は既存 tool が素通しだった) ② page-context API fetch のブックマークレット (= user 側 1 click export)。 手動コピペは消え、 経路は全 session の資産になった。 recipe = [`web-tools.md #claude-share-page-access`](web-tools.md#claude-share-page-access)。 注: bot 保護持ちサイトでは「経路を実装する」 と「保護を回避する」 の線引きが要る — 実ブラウザ + user click は前者、 headless 化・無人化は後者 (やらない)。
+
 関連: [`google-api-direct-access.md`](google-api-direct-access.md) (Google の API 直叩き pattern) / [`dropbox-api-access.md`](dropbox-api-access.md) (Dropbox) / [`mcp.md`](mcp.md) (MCP 使い分け)

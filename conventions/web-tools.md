@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき
 category: web
-summary: WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block)
+summary: WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block)
 -->
 # Web ツール (WebSearch / WebFetch) の信頼性 caveat
 
@@ -52,6 +52,30 @@ Client-side rendering の SPA (= JS が描画してから中身が入るサイ�
 ### 典型パターン
 
 CSR SPA のニュース/結果ページの URL を多数検証する場面 (例: fifa.com の試合レポート URL を 40 本) で、`fetch` は実在 URL も故意の偽 URL も同一の空シェル (200・~4.5KB・本文/og:title なし) を返し status からは判別不能だった。実ブラウザで navigate すると、実在ページは本文数千字 + 該当見出しが描画され、不在ページは本文 ~140 字の無関係 fallback に落ちる明確な差が出た。**「200 が返った = ページがある」 と短絡せず描画後 DOM を読む**ことで全件を確定できた。
+
+## <a id="claude-share-page-access"></a>claude.ai の share ページは in-app Browser pane なら読める (= headless / curl は全滅、 page 内 fetch なら API も通る)
+
+`claude.ai/share/<uuid>` (= 会話の公開共有ページ) は前節の CSR SPA + Cloudflare bot 保護の複合で、 経路によって結果が全く違う (2026-08-24/28 実測):
+
+| 経路 | 結果 |
+|---|---|
+| WebFetch / curl (browser UA でも) | 200 だが空シェル (本文なし) |
+| curl で `/api/chat_snapshots/<id>` | 403 Cloudflare チャレンジ |
+| headless ブラウザ (CDP) | 描画後も Cloudflare interstitial (= bot 判定) |
+| **Claude Code 内蔵 Browser pane** | **✅ 完全レンダリング** — `get_page_text` で会話全文が読める |
+| **ページ内 (page context) からの same-origin `fetch`** | **✅ snapshot API も 200** で JSON 全文 |
+
+### How to apply
+
+- **user が share URL を貼ったら、 内蔵 Browser pane で開いて読むのが最短** (`preview_start {url}` → `get_page_text`)。 login 不要。 会話 DOM は全文が実高さで layout される (= 中規模会話で非仮想化を実測、 超長会話は未検証)
+- 構造化 (message 単位・話者付き) が要るなら `javascript_tool` で page context から `fetch('/api/chat_snapshots/<id>?rendering_mode=messages')` — JSON schema の実測 gotcha: `chat_messages[].text` は**空**で、 本文は `content[]` の `type:"text"` block 群 / web 検索を含む会話には placeholder block (「\`\`\`This block is not supported on your current device yet.\`\`\`」 literal) が混入 / 引用は `<cite index="…">` タグが本文に埋まる (タグだけ strip) / message 単位の `truncated` flag あり
+- ログイン済みの通常会話ページ (`/chat/<uuid>`) も同型: `/api/organizations` で org uuid → `/api/organizations/<org>/chat_conversations/<id>?tree=True&rendering_mode=messages` (= share 経路と違い login cookie が要る。 2026-08-28 時点で式のみ・未実測)
+- **user 側の手元 export はブックマークレットが適形** (= 自分のブラウザ・自分のクリック = bot 保護の回避ではない)。 gotcha 3 つ: ① `javascript:` URL はアドレス欄ペーストで prefix が剥がされる → ブックマーク作成後に**編集画面の URL 欄**へ貼る (スマホも同じ、 実行はページを開いた状態でアドレス欄にブックマーク名を打って候補 tap) ② 生成 Blob は **UTF-8 BOM を付ける** — Android の text viewer は charset ヒント無し UTF-8 を Shift_JIS と誤判定して文字化け表示する (中身は健全なので気付きにくい) ③ `#` を含む文字列は `\x23` に escape (= URL fragment 切断対策)
+- **線を守る**: 実ブラウザの画面 / user のクリックで閉じる形は正当。 これを headless 化・無人化・stealth flag で回すのは bot 保護の回避で、 やらない (session の他の操作まで permission guard に落ちる実害も観測済)
+
+### 典型パターン
+
+「claude.ai の会話を Claude Code に渡したい」: share URL を curl / WebFetch / headless で読もうとして全滅し、 bot 保護の回避に向かいそうになる — が、 正解は上の 2 経路 (pane 直読 / page 内 fetch)。 スマホからでも share ページ + ブックマークレット 1 tap で全文 `.md` が落とせる。
 
 ## <a id="cookie-replay-oauth-spa"></a>Browser cookie replay は OAuth-token SPA を認証しない (= member 限定クラウドフォルダは無人 upload 不可)
 
