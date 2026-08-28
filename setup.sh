@@ -248,6 +248,10 @@ POST_TOOL_USE_ENTRIES='[
   {
     "matcher": "mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)",
     "hooks": [{"type": "command", "command": "~/.claude/hooks/mcp-search-zero-result-nudge.sh"}]
+  },
+  {
+    "matcher": "Bash",
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/bash-search-zero-result-nudge.sh"}]
   }
 ]'
 
