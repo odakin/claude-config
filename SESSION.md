@@ -2,6 +2,10 @@
 
 > 📌 **このファイル = 直近 (当月) の作業 + Open items**。 古い dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)。
 
+## 2026-08-29: web-tools に claude.ai share ページ access 経路の § 新設
+
+- [`conventions/web-tools.md #claude-share-page-access`](conventions/web-tools.md#claude-share-page-access) = share ページは in-app Browser pane が素通し / page 内 same-origin fetch で snapshot API 200 (headless・curl 全滅との対比表) + snapshot JSON gotcha + bookmarklet gotcha 3 点 (javascript: 剥がし / UTF-8 BOM / `\x23`) + 回避との線引き + pane download の着地先。 [`machine-route-first.md`](conventions/machine-route-first.md) 実例 2 号も追加。 生成物再生成、 checks 48/48。 instance 記録は層 3 (odakin-prefs plans/2026-08-24-chat-to-code-bridge.md §8)
+
 ## 2026-08-28: session 自己アカウント同定 — whoami probe hoist + multi-account 破れ 2 種
 
 - [`scripts/claude-session-whoami.py`](scripts/claude-session-whoami.py) 新設 (層3 から同日 hoist、 generic・個人値ゼロ、 selftest 6/6) = session が「どの surface・どの account」 で走っているかの機械 probe。 **desktop app の session に注入される userEmail / `~/.claude.json` は CLI 認証層を映す** (app は `CLAUDE_CODE_OAUTH_TOKEN` しか渡さない) — desktop login ≠ CLI login のマシンでは全 desktop session が誤誘導される (2026-08-28 実測 RCA、 instance は層 3)。 正しい signal = env `CLAUDE_CODE_HOST_SESSION_ID` → app の per-account session registry path

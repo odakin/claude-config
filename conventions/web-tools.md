@@ -68,6 +68,7 @@ CSR SPA のニュース/結果ページの URL を多数検証する場面 (例:
 ### How to apply
 
 - **user が share URL を貼ったら、 内蔵 Browser pane で開いて読むのが最短** (`preview_start {url}` → `get_page_text`)。 login 不要。 会話 DOM は全文が実高さで layout される (= 中規模会話で非仮想化を実測、 超長会話は未検証)
+- pane 内で blob download を発火させると macOS では `~/Downloads` に着地する (= agent 自身が export 動作を e2e 検証できる)。 ⚠️ 同名 file の再 download は隠し temp (`.XXXX.com.anthropic.…`) のまま確定しないことがある (n=1 観測) — 検証時は既存 file を先に消す
 - 構造化 (message 単位・話者付き) が要るなら `javascript_tool` で page context から `fetch('/api/chat_snapshots/<id>?rendering_mode=messages')` — JSON schema の実測 gotcha: `chat_messages[].text` は**空**で、 本文は `content[]` の `type:"text"` block 群 / web 検索を含む会話には placeholder block (「\`\`\`This block is not supported on your current device yet.\`\`\`」 literal) が混入 / 引用は `<cite index="…">` タグが本文に埋まる (タグだけ strip) / message 単位の `truncated` flag あり
 - ログイン済みの通常会話ページ (`/chat/<uuid>`) も同型: `/api/organizations` で org uuid → `/api/organizations/<org>/chat_conversations/<id>?tree=True&rendering_mode=messages` (= share 経路と違い login cookie が要る。 2026-08-28 時点で式のみ・未実測)
 - **user 側の手元 export はブックマークレットが適形** (= 自分のブラウザ・自分のクリック = bot 保護の回避ではない)。 gotcha 3 つ: ① `javascript:` URL はアドレス欄ペーストで prefix が剥がされる → ブックマーク作成後に**編集画面の URL 欄**へ貼る (スマホも同じ、 実行はページを開いた状態でアドレス欄にブックマーク名を打って候補 tap) ② 生成 Blob は **UTF-8 BOM を付ける** — Android の text viewer は charset ヒント無し UTF-8 を Shift_JIS と誤判定して文字化け表示する (中身は健全なので気付きにくい) ③ `#` を含む文字列は `\x23` に escape (= URL fragment 切断対策)
