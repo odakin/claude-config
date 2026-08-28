@@ -854,6 +854,20 @@ reflex: mail triage / surfacing の網を列挙・設計するとき「**義務�
 
 origin: 2026-08、 地域研究会の案内 (= 初報 + リマインド計 4 通、 BCC「各位」、 参加登録・発表申込の段階〆切つき) が約 3 ヶ月・4 通全部不可視のまま発表申込〆切が silent 失効。 名指し網 (宛先圏外) / 義務網 (義務でない) / 〆切抽出器 (締切語前置 + 早期告知で horizon 外) / 未認識 backlog 段 (rolling 窓で walk 前に silent 退場) の 4 経路が**独立に**落ち、 最終 catch は主催者の 4 通目 (〆切 2 日前) だった。 本 class 直接観察は 1 + 隣接 class sibling 2 (= [`§8.17`](#broadcast-obligation-blind-spot) 義務 broadcast 1.5 ヶ月 / [`§8.22`](#lapsing-deadline) 査読依頼自動取消) — [`§9.8`](#single-observation-scope-check) は隣接 class 複数観察で充足と判断、 本 class 単独の再発で強化する。 instance (= ledger repo 名・triage 段の具体 arm・検出器実装) は個人層に残置 (= kernel-up / instance-down)。
 
+### <a id="surfaced-not-consumed"></a>8.24 surface されても消費されない — silent 再表示の壁紙化と disposition 終端
+
+[`§8.22`](#lapsing-deadline) は「失効型は期限**前**に named 表示せよ」 と要求するが、 named 表示は**十分条件ではない**。 毎 session 同じ行を silent に再表示する surfacing は、 数週間で**壁紙化**する (= 読者の脳が風景として filter する — alarm fatigue の表示版)。 壁紙化は 3 つの増幅因子で加速する:
+
+1. **隣接遮蔽**: 同種の named crisis が隣の行で actively 進行中だと、 「その分野は今まさに全力でやっている」 という感覚が同〆切の sibling 行を飲み込む (= 表示は見えているのに認知が届かない)。
+2. **表示文言の子守唄**: surface される item 自身の注記に「たぶん不要」 系の priming (= 「見送りの公算が高い」 等) が書いてあると、 全読者が毎回それを読んで次の危機へ移る。 安価な discharge 手 (= 1 問で決着する) が重い動詞 (= 「着手」) の下に埋もれていると特に致命的。
+3. **判断〆切と行動〆切の同値化**: 「やるか判断する」 系 item の deadline を行動の〆切と同じ日に置くと、 表示が最高強度に達した時にはもう「やる」 選択肢が実行不能になっている (= 判断 deadline は行動 lead time 分だけ手前に置く。 [`§8.18`](#request-mail-two-date-axes) の判断版)。
+
+対策 kernel: **surface は silent 再表示で循環させず、 明示 disposition で終端させる** — 失効が近い item は「act / 明示 defer / 明示 decline のどれかが記録されるまで surface を降格させない」 段に昇格させる (= 稼働実績のある同型 = mail triage の「未認識段が空になるまで準備完了としない」 規律)。 最終盤 (= 残数日) は**表示 channel 自体を変える** (= agent の session 注意経路から人間への直接通知へ) — 同じ channel の強度 escalation は壁紙化の続きでしかない。
+
+reflex: surfacing 機構を設計・監査するとき「この表示は**何をもって消えるのか**」 を 1 行問う。 答えが「期限が過ぎたら」 なら、 それは通知ではなく風景である。
+
+origin: 2026-08、 研究費公募の応募判断 TODO が 2 つの独立 surface 経路で 30 日間毎日 named 表示 (最終週は最高強度 + 実働中の同〆切案件の 1 行隣) されながら一度も消費されず学内〆を通過した RCA (= 機械 replay で表示履歴を verify 済)。 同月 sibling = 査読依頼が名指し horizon に 6 日 named 表示のまま未消費で自動取消 ([`§8.22`](#lapsing-deadline) origin の consumption 軸)。 対照の成功例 = 明示 disposition を要求する mail triage 段は同環境で機能し続けている。 [`§9.8`](#single-observation-scope-check) は同月 2 観察 + 対照 1 で充足。 instance (= 検出器名・ack field 実装・対策 ledger) は個人層に残置 (= kernel-up / instance-down)。
+
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。

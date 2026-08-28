@@ -217,6 +217,10 @@ sections:
     legacy: "8.23"
     level: 3
     title: "8.23 失効型〆切つきの機会 — 義務網と応答網の谷間に落ちる opportunity class"
+  - id: surfaced-not-consumed
+    legacy: "8.24"
+    level: 3
+    title: "8.24 surface されても消費されない — silent 再表示の壁紙化と disposition 終端"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
