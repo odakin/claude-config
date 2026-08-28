@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
 category: web
-summary: researchmap 固有の機構と gotcha — write 経路は実質 web UI のみ (公開 API は read-only・write API は利用申請制、#write-paths)、/settings/imports の json/csv/zip 一括インポート (#bulk-import)、論文は ORCID 連携で自動反映・手動登録は非 DOI 系と講演のみ (#orcid-autofeed)、DOI 取り込みボタンと CrossRef metadata の癖 (#doi-import)、類似データ確認画面の 4 択 (#duplicate-screen)、タイトル日本語必須 + 言語ペア validation と「同値焼き」実務解 (#title-validation)、講演の会議種別の選び方 (#presentation-category)、radio は form_input 直接設定 (#radio-quirk)、混雑・公開 API cache lag (#congestion)
+summary: researchmap 固有の機構と gotcha — write 経路は実質 web UI のみ (公開 API は read-only・write API は利用申請制、#write-paths)、/settings/imports の json/csv/zip 一括インポート (#bulk-import)、論文は ORCID 連携で自動反映・手動登録は非 DOI 系と講演のみ (#orcid-autofeed)、DOI 取り込みボタンと CrossRef metadata の癖 (#doi-import)、類似データ確認画面の 4 択 (#duplicate-screen)、タイトル日本語必須 + 言語ペア validation と「同値焼き」実務解 (#title-validation)、講演の会議種別の選び方 (#presentation-category)、radio は form_input 直接設定 (#radio-quirk)、混雑・公開 API cache lag (#congestion)、/mypage は他人の permalink であって自分のポータルではない (#mypage-permalink-trap)
 -->
 # researchmap の機構と gotcha
 
@@ -81,3 +81,7 @@ add の送信内容が既存 entry と類似すると「類似データ確認」
 - 「アクセスが集中しております」ページが頻発する (特に年度の業績調査シーズン = 7 月下旬〜8 月)。**POST 成功後にこのページが返ることがある** → 送信成否は必ず `/{permalink}/published_papers/edit` 等の**編集一覧** (件数 + 「登録: 本人 HH:MM」表示) で確認
 - 公開 API (`api.researchmap.jp`) は cache lag があり、UI 一覧に出ている entry が API に数十分現れないことがある ([`web-form-automation.md#read-api-cache-lag`](web-form-automation.md#read-api-cache-lag))。**API 不在を理由に再送信しない**
 - `/add` への直接 navigate は未認証・混雑時に一覧へ redirect されることがある。フォームが出るまで wait + 再 navigate (10〜60 秒の波)
+
+## <a id="mypage-permalink-trap"></a>10. 「/mypage」は自分のページではない
+
+`researchmap.jp/mypage` は**「mypage」という permalink を取得した一般研究者の公開プロフィール**であって、ログイン中の自分のポータルを指す永続 URL ではない (実測 2026-08-29: 別分野の研究者ページが表示され「別人アカウントでログイン済み」と誤認しかけた)。自分のページ・編集画面へは `researchmap.jp/{自分の permalink}/…` か、トップページのログイン後 UI から入る。**ログイン状態の判定は編集系 URL への navigate で行う** (`/{permalink}/presentations/edit` 等は未ログインならログイン画面へ redirect する = redirect の有無が判定になる)。公開プロフィールの表示はログイン状態について何も語らない。
