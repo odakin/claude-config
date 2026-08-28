@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
 category: web
-summary: researchmap 固有の機構と gotcha — write 経路は実質 web UI のみ (公開 API は read-only・write API は利用申請制、#write-paths)、/settings/imports の json/csv/zip 一括インポート (#bulk-import)、論文は ORCID 連携で自動反映・手動登録は非 DOI 系と講演のみ (#orcid-autofeed)、DOI 取り込みボタンと CrossRef metadata の癖 (#doi-import)、類似データ確認画面の 4 択 (#duplicate-screen)、タイトル日本語必須 + 言語ペア validation と「同値焼き」実務解 (#title-validation)、講演の会議種別の選び方 (#presentation-category)、radio は form_input 直接設定 (#radio-quirk)、混雑・公開 API cache lag (#congestion)、/mypage は他人の permalink であって自分のポータルではない (#mypage-permalink-trap)
+summary: researchmap 固有の機構と gotcha — write 経路は実質 web UI のみ (公開 API は read-only・write API は利用申請制、#write-paths)、/settings/imports の json/csv/zip 一括インポート (#bulk-import)、論文は ORCID 連携で自動反映・手動登録は非 DOI 系と講演のみ (#orcid-autofeed)、DOI 取り込みボタンと CrossRef metadata の癖 (#doi-import)、類似データ確認画面の 4 択 (#duplicate-screen)、タイトル日本語必須 + 言語ペア validation と両方向の実務解 (英題のみ=同値焼き / 和文のみ=英語欄全空、#title-validation)、講演の会議種別の選び方 (#presentation-category)、radio は form_input 直接設定 (#radio-quirk)、混雑・公開 API cache lag (#congestion)、/mypage は他人の permalink であって自分のポータルではない (#mypage-permalink-trap)
 -->
 # researchmap の機構と gotcha
 
@@ -58,6 +58,7 @@ add の送信内容が既存 entry と類似すると「類似データ確認」
 - **「タイトル (日本語)」は必須欄** (アスタリスク付き)
 - さらに「他の (英語) の項目を入力した場合、タイトル (英語) を必ず入力してください」型の**言語ペア validation** がある ([`web-form-automation.md#language-pair-validation`](web-form-automation.md#language-pair-validation) の instance): 講演者 (英語) など英語欄を 1 つでも埋めると英語 title が必須化する
 - **英題しか存在しない業績** (英語 seminar 等) の実務解: **日本語 title 欄にも同じ英題を焼く** (+ 講演者・会議名も日英対称に埋める)。表示は英文のままで、validation を全て通過する
+- **逆側 (和文タイトルのみの業績) の実務解: 英語欄を講演者・会議名含めて全部空に保つ** (= [`web-form-automation.md#language-pair-validation`](web-form-automation.md#language-pair-validation) の「片言語で完結」の instance)。講演者欄に英名 (ローマ字表記) を親切心で足すだけで英語 title が必須化し、和文タイトルの英語欄への同値焼きを強いられる。登録指示・spec が「講演者は日英両方」と過剰指定していても、**既存 entry の編集画面を 1 件開いてどの欄が埋まっているかを観察し、実務をミラーする**のが安全 (実測 2026-08-29: 既存の和文 entry 群はすべて英語欄空だった)
 
 ## <a id="presentation-category"></a>7. 講演・口頭発表等の「会議種別」の選び方
 

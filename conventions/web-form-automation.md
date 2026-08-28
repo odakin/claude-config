@@ -34,6 +34,7 @@ JS が絡む form では、要素への click が **event handler の都合で�
 
 - click で選択したつもりの radio が送信時に未選択でエラー、という形で発覚する。**送信前 screenshot で radio/checkbox の視覚状態を必ず確認**
 - テキスト欄も `form_input` の返り値 (previous 値) で「意図した欄に書いたか」を毎回 verify できる — ラベルが同名の欄 (「(英語)」等) が複数あるページで特に有効
+- **ref がそもそも取れない場合の fallback**: 長大 page では accessibility tree (read_page) が途中で切れ、fold 下の欄に ref が付かないことがある。まず検索系 tool (find) を試す (= 全 page を走査して fold 下でも ref を返す)。多数欄の一括入力なら JS 実行で `el.value = …` + `input`/`change` event dispatch が `form_input` と同等に働く (レガシー form で実測。React 系 SPA では効かない場合あり) — **設定後に全欄の値を read-back して verify し、radio は screenshot 目視も併用**
 
 ## <a id="dynamic-combobox"></a>4. 動的 combobox (select2 系) は値の直接設定が効かない
 
