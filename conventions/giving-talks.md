@@ -181,7 +181,7 @@ followed), and **while listening to others** (diagnose what works, what doesn't,
 
 ## Practical addenda (field notes, NOT from Geroch)
 
-Two lessons from preparing a 2026 conference talk, kept separate from the digest above:
+Lessons from preparing and delivering a 2026 conference talk, kept separate from the digest above:
 
 - **Choose the three messages from the paper's own voice, not from your recent work sessions.**
   The submitted abstract's sentence order *is* the authors' own considered ranking of what the
@@ -194,3 +194,9 @@ Two lessons from preparing a 2026 conference talk, kept separate from the digest
   merely raises and defers to future work. An over-promise discovered at this stage is handled
   with one honest sentence in the talk plus a prepared Q&A answer; discovered on stage, it is
   a disaster.
+- **After the talk, turn recurring Q&A questions into a backup slide for the published deck.**
+  A question asked independently by several audience members maps the deck's weakest
+  load-bearing claim — often an unstated order-of-magnitude assumption. Write the one-page
+  answer (the assumption's provenance, its honest uncertainty band, and why the conclusions
+  survive across that band) and append it to the version of the slides published on the web:
+  the published deck is read for far longer than the talk was heard.

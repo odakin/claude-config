@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき
 category: web
-summary: flaky web form 入力の一般則 — 送信結果はレスポンスページで判断しない (過負荷サイトは POST 成功後にエラーページを返す、重複確認画面 = 前回送信成功の証拠、#submit-truth-is-server-state)、公開 read API の cache による false negative (#read-api-cache-lag)、radio/checkbox は click より form_input 直接設定 (#form-input-over-click)、動的 combobox は form_input 不可、多言語ペア validation の非対称発火と「同値を両欄に焼く」回避 (#language-pair-validation)、metadata 自動取り込みの著者順 verify (#imported-metadata-verify)、リトライ規律 (フォーム状態は保存されない前提で SoT から再入力)
+summary: flaky web form 入力の一般則 — 送信結果はレスポンスページで判断しない (過負荷サイトは POST 成功後にエラーページを返す、重複確認画面 = 前回送信成功の証拠、#submit-truth-is-server-state)、公開 read API の cache による false negative (#read-api-cache-lag)、radio/checkbox は click より form_input 直接設定 (#form-input-over-click)、動的 combobox は form_input 不可、多言語ペア validation の非対称発火と「同値を両欄に焼く」回避 (#language-pair-validation)、metadata 自動取り込みの著者順 verify (#imported-metadata-verify)、リトライ規律 (フォーム状態は保存されない前提で SoT から再入力)、upload POST だけの 503 はサイズ原因と早断定しない (#upload-only-503)
 -->
 # flaky web form への browser-automation 入力の一般則
 
@@ -61,3 +61,11 @@ DOI 入力で CrossRef 等から書誌を自動取り込みできるサイトは
 - 過負荷は波がある。10〜60 秒 wait → reload で回復することが多い。連打はしない
 - ページ再ロード・エラーページ経由で **DOM 参照 (ref) は失効する**。参照は都度取り直し、古い ref への操作が「No element found」を返したら黙って同じ ref を再試行しない
 - 1 entry 完了ごとに §1 の保存確認を挟む。複数 entry の一括入力で最後にまとめて確認、は失敗の切り分けを不能にする
+
+## <a id="upload-only-503"></a>8. upload POST だけの 503 — サイズ原因と早断定しない
+
+file upload だけが 503 (generic な "Service Unavailable"、maintenance / capacity 文言) を返し、同じサイトの GET (閲覧) は正常というとき、仮説は 2 つ: (a) request body のサイズ上限 (reverse proxy)、(b) upload backend の混雑・一時不調。実測例 (2026-08、Indico 系会議サイト): 22.6 MB と 12.9 MB の PDF が連続で 503 → 数時間後に 13 MB がそのまま通った = 混雑が原因で、サイズ削減は不要だった。
+
+- 切り分け順: ① 時間を置いて**同じ file** で再試行 (混雑説) → ② 半分以下のサイズで再試行 (上限説)
+- **品質を落とした縮小版を作り込むのは ② が確定してから**。ただし縮小版を先に用意しておくこと自体は安い保険 (両建て)
+- GET 正常の確認が切り分けの前提 (サイト全体が落ちていれば単に待つ)

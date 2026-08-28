@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Beamer/metropolis で研究スライドを作る・直すとき
 category: paper
-summary: Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可。giving-talks.md〔中身/作法〕と相補)
+summary: Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可・Keynote 混成 deck の PDF 出荷〔ビルド段階展開・微小タイルの圧縮 floor・16:9 letterbox 追補、#keynote-pdf-shipping〕。giving-talks.md〔中身/作法〕と相補)
 -->
 # Beamer (metropolis) 研究スライド — ビルド・図・落とし穴
 
@@ -146,4 +146,17 @@ for i, p in enumerate(d):
 - 検証は必ず「documents 数の polling」で(open の戻り値は import 成功でも missing value のことがある)。
 
 QA は 3 の export PDF を頁画像化して §9 と同じ目視ループ。
+
+## <a id="keynote-pdf-shipping"></a>13. Keynote 混成 deck の PDF 出荷 (web 公開版)
+
+Keynote で仕上げた deck (LaTeX 頁の貼り込み混成を含む) を web 公開用 PDF にする時の実測 gotcha (2026-08):
+
+- **ビルドが各頁に展開されうる**。書き出し設定次第で、ビルド (段階表示) を持つ slide が「各段階 = 別頁」で出て頁数が想定と合わなくなる。連続するほぼ同一頁がその signature。段階を畳んで 1 頁にするなら**各組の最後 = 完成形**を残す (ビルドは累積するので)。
+- **圧縮は数千枚の微小タイル画像が floor を作る**。Keynote 出力はグラデーション・影などを微小画像 tile (実測: 40 頁 deck で 2,313 枚・計 10.6 MB) で持つことがあり、ghostscript の downsample (解像度基準) がほぼ効かない — `/ebook` で 22→13 MB 止まり。それ以下が要るなら全頁ラスタ化 (PyMuPDF で頁→JPEG→再 PDF。テキスト選択は失われる) が唯一のレバーなので、サイズ上限のある投稿先向け fallback としてベクター版と両建てにする。
+- **16:9 の Beamer 頁を 4:3 Keynote deck (1024×768 pt) へ追補**するなら、PyMuPDF `show_pdf_page` で新頁に上下白帯 letterbox で載せる — ベクターのまま、Keynote 内に 16:9 スライドを置いた時と同じ見え方になる:
+
+  ```python
+  page = doc.new_page(width=1024, height=768)          # Keynote 4:3
+  page.show_pdf_page(fitz.Rect(0, y0, 1024, y0 + h), src, 0)  # y0 = (768 - h) / 2
+  ```
 </content>

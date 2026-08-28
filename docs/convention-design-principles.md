@@ -1571,10 +1571,28 @@ gate: index の legacy 集合が HEAD (= 直前 commit) に対して **append-on
 
 ---
 
+## <a id="derived-view-as-recovery"></a>18. 生成 view は正本の意図せぬ時点 backup — 件数 parity で切り詰めを検出する
+
+### <a id="derived-view-as-recovery-observation"></a>18.1 観察 (2026-08)
+
+yaml 正本 (講演 career DB) が「軽微な date 修正」を名乗る commit で実際には **357 行切り詰められ** (直近 2.5 年分の entry 全滅、しかも名乗った修正自体も結果に不在)、**7 日間未検出**だった。発見の糸口は、正本から機械生成された markdown export に旧データが残存していたこと (= export は事故前に生成され、以後再生成されていなかった)。復元は親 commit の checkout で完了 (bad commit 側の挿入行は旧部分の再整形のみと diff で確認してから丸ごと復元)。
+
+### <a id="derived-view-as-recovery-principles"></a>18.2 一般則
+
+1. **生成 view / export は、次の再生成までの間、正本の意図せぬ時点 backup として機能する**。正本の異常を疑ったらまず view と突合する。裏返すと「view を正本へ即追従させる」自動化は、この受動的 backup を消す trade-off を持つ (= 検出猶予との交換)。
+2. **「view にあるのに正本に無い」の向きを決めつけない**。view の先行 (未遡及反映) とも、正本の切り詰めとも整合する — どちらかは git 履歴が裁定する ([§4 (= #orient-before-act)](#orient-before-act))。
+3. **commit message は意図を語り、diff は実態を語る**。大量削除を伴う「軽微 fix」commit は書き戻し事故の signature — レビューは message でなく diffstat を見る。
+4. 安価な機械検出 = 正本の粗い bucket 件数 (年別 entry 数等) を (a) 直前 commit と (b) 生成 view とで突合する **parity 検査**。意味的突合という高価な問題に踏み込まずに切り詰めだけを捕まえる。
+
+関連: [§2.4 (= #errata-on-preserved-records)](#errata-on-preserved-records) (= 削除できない誤り記録の扱い)、[§16 (= #derive-not-summarize)](#derive-not-summarize) (= view 生成の設計)。検出器 instance (実装・retroactive replay) は個人層に sequester (= kernel-up / instance-down)。
+
+---
+
 ## <a id="changelog"></a>変更履歴
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
+| 2026-08-29 | §18 追加 (生成 view = 意図せぬ時点 backup + 件数 parity 検出) | career DB yaml が「軽微修正」を名乗る commit で 357 行切り詰められ 7 日間未検出 → 生成 export の残存データが発見と復元の糸口になった事故から抽出。kernel を §18 に、検出器 instance は個人層に sequester |
 | 2026-04-02 | 初版作成 | 武貞メール対応での8件の不手際を分析し、規約設計の原則を抽出 |
 | 2026-04-03 | §3 の適用事例追加 | push 連鎖障害: 「規約はあるが手順が不明確」→ CONVENTIONS §3 に粒度・障害対応を追加、教訓の詳細は email-office DESIGN.md に記録 |
 | 2026-04-06 | §6 追加: DESIGN.md と EXPLORING.md の分離 | LorentzArena 2+1 の DESIGN.md 肥大化 + スマホ UI 思考メモの記録先問題。3 カテゴリ（決定 / 探索 / メタ決定）の分析を経て、決定と探索を 2 ファイルに分離する convention を導入 |

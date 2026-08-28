@@ -98,7 +98,7 @@ layer 1 (public) のドメイン固有規約 93 file をカテゴリ別に列挙
 ## 論文・発表・研究文書 (`paper`)
 
 - **[beamer-slides.md](beamer-slides.md)** — Beamer/metropolis で研究スライドを作る・直すとき
-  - Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可。giving-talks.md〔中身/作法〕と相補)
+  - Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可・Keynote 混成 deck の PDF 出荷〔ビルド段階展開・微小タイルの圧縮 floor・16:9 letterbox 追補、#keynote-pdf-shipping〕。giving-talks.md〔中身/作法〕と相補)
 - **[giving-talks.md](giving-talks.md)** — 講演・セミナー・発表の準備をするとき (+ 日本語版: [giving-talks.ja.md](giving-talks.ja.md))
   - 講演のしかた (= Robert Geroch "Suggestions For Giving Talks" arXiv:gr-qc/9703019 の own-words ダイジェスト、 主題選択 / 3-4 メッセージ構成 / 導入は全体の 1-5 / 視覚資料は図>言葉>式 / 1h で非自明な式 5 本・スライド 10 枚 / 質問は完全に正直に 等。 セミナー・JC・卒論発表の準備時に読む、 英語本体)
 - **[kakenhi-proposal.md](kakenhi-proposal.md)** — 科研費の研究計画調書 (基盤・挑戦的研究・若手等) を書く/直す/Web 入力するとき
@@ -171,7 +171,7 @@ layer 1 (public) のドメイン固有規約 93 file をカテゴリ別に列挙
 - **[ui-toggle-convention.md](ui-toggle-convention.md)** — UI panel 内の toggle group を設計するとき
   - UI panel 内 toggle group の default 側統一ルール (slider 位置 + bright label を panel scope で揃える)
 - **[web-form-automation.md](web-form-automation.md)** — 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき
-  - flaky web form 入力の一般則 — 送信結果はレスポンスページで判断しない (過負荷サイトは POST 成功後にエラーページを返す、重複確認画面 = 前回送信成功の証拠、#submit-truth-is-server-state)、公開 read API の cache による false negative (#read-api-cache-lag)、radio/checkbox は click より form_input 直接設定 (#form-input-over-click)、動的 combobox は form_input 不可、多言語ペア validation の非対称発火と「同値を両欄に焼く」回避 (#language-pair-validation)、metadata 自動取り込みの著者順 verify (#imported-metadata-verify)、リトライ規律 (フォーム状態は保存されない前提で SoT から再入力)
+  - flaky web form 入力の一般則 — 送信結果はレスポンスページで判断しない (過負荷サイトは POST 成功後にエラーページを返す、重複確認画面 = 前回送信成功の証拠、#submit-truth-is-server-state)、公開 read API の cache による false negative (#read-api-cache-lag)、radio/checkbox は click より form_input 直接設定 (#form-input-over-click)、動的 combobox は form_input 不可、多言語ペア validation の非対称発火と「同値を両欄に焼く」回避 (#language-pair-validation)、metadata 自動取り込みの著者順 verify (#imported-metadata-verify)、リトライ規律 (フォーム状態は保存されない前提で SoT から再入力)、upload POST だけの 503 はサイズ原因と早断定しない (#upload-only-503)
 - **[web-tools.md](web-tools.md)** — WebSearch / WebFetch / browser 自動化の信頼性を判断するとき
   - WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block)
 - **[zenn.md](zenn.md)** — Zenn.dev 記事を執筆・入稿するとき

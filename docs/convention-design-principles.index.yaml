@@ -489,6 +489,18 @@ sections:
     legacy: "17.4"
     level: 3
     title: "17.4 関連"
+  - id: derived-view-as-recovery
+    legacy: "18"
+    level: 2
+    title: "18. 生成 view は正本の意図せぬ時点 backup — 件数 parity で切り詰めを検出する"
+  - id: derived-view-as-recovery-observation
+    legacy: "18.1"
+    level: 3
+    title: "18.1 観察 (2026-08)"
+  - id: derived-view-as-recovery-principles
+    legacy: "18.2"
+    level: 3
+    title: "18.2 一般則"
   - id: changelog
     level: 2
     title: "変更履歴"
