@@ -2,6 +2,11 @@
 
 > 📌 **このファイル = 直近 (当月) の作業 + Open items**。 古い dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)。
 
+## 2026-08-29c: dropbox-refs §13 + dropbox-api-access read-recipe § (= Dropbox 同期エラー RCA の知見 hoist)
+
+- [`dropbox-refs.md #cross-platform-path-hardcode`](conventions/dropbox-refs.md#cross-platform-path-hardcode) (§13 新設) = 共有 script の OS 絶対パス hardcode は POSIX で **literal 名 file** (`C:\...` がそのまま file 名) を silent に生み Dropbox 同期エラー化 / 同期エラー表示の「パスに見える file 名」を他マシン起源と誤読する前に**ローカル 1 find** / de-hardcode は入力側だけ直して出力側 write call を見落とす half-migration trap (同日実測 RCA、 instance は共同研究リポ側 SESSION)
+- [`dropbox-api-access.md #sharing-read-recipes`](conventions/dropbox-api-access.md#sharing-read-recipes) (§新設) = 最小 scope のままで通る read 系 recipe — `sharing/list_folders` は **cursor 完走まで不在断定しない** (実測: 196 folder で目的 folder が 2 ページ目) / `files/get_metadata` の sharing_info 直行 / `list_folder_members` で共同編集者の own-account 検証 (device 整理の前提確認) / `search_v2` は upload 失敗 file に痕跡ゼロ。 tree + index 再生成、 checks 49/49
+
 ## 2026-08-29b: semgrep-ci.md + yaml-hazards.md 新設 + github-security-automation §11 (= fleet security sweep の知見 hoist)
 
 - [`conventions/semgrep-ci.md`](conventions/semgrep-ci.md) 新設 = Semgrep finding の読み書き側 (SARIF は suppress 済みも `suppressions` 付きで残る / nosemgrep は match 開始行のみ有効で Python multi-line call は引数行 anchor / local 再現は同一 pack 必須 + 毒入り fixture で検出能力を検証)。 baseline 配置側の既存 [`github-security-automation.md`](conventions/github-security-automation.md) と相互 pointer で棲み分け

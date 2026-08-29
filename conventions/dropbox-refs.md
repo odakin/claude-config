@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 共同 PDF を Dropbox に置いてリポから symlink 参照するとき
 category: infra
-summary: 共同 PDF を Dropbox に置いてリポから symlink で参照する規約 (§10 で OneDrive / Google Drive 等の他クラウド + 索引自動生成 launchd gotchas へ応用。 §11 同期中 file は「元の状態」の証拠にならない = 時系列主張は immutable スナップショットで #live-sync-no-timeline-evidence、 §12 相手側にも AI がいる並行作業 = zone 分担 + commit された note が交換 channel + 自 commit 除外 monitor + 独立再計算の交差検証 #counterpart-ai-parallel-work)
+summary: 共同 PDF を Dropbox に置いてリポから symlink で参照する規約 (§10 で OneDrive / Google Drive 等の他クラウド + 索引自動生成 launchd gotchas へ応用。 §11 同期中 file は「元の状態」の証拠にならない = 時系列主張は immutable スナップショットで #live-sync-no-timeline-evidence、 §12 相手側にも AI がいる並行作業 = zone 分担 + commit された note が交換 channel + 自 commit 除外 monitor + 独立再計算の交差検証 #counterpart-ai-parallel-work、 §13 共有 script の OS 絶対パス hardcode = POSIX では `C:\...` が literal 名 file として cwd に生まれ同期エラー化 + 同期エラー表示の「パスに見える file 名」を他マシン起源と誤読する前にローカル 1 find + de-hardcode は出力側 write call の grep 完了まで #cross-platform-path-hardcode)
 -->
 # Dropbox 共有 PDF への参照規約
 
@@ -374,3 +374,12 @@ asset folder の索引 (一覧 markdown 等) をリポ内に自動生成 + auto-
 2. **交換 channel は git に commit された note** (レビュー所見・検証結果・文案)。chat やメールでなくリポに置くと、相手の AI が pull して直接消費できる (実例: 査読 note の指摘 6 件を相手側 AI が独立検証つきで全反映し、こちらの追記 §を読んでさらに自己更新した)
 3. **着信検知は自分の commit を author filter で除外した monitor** にする (`git log --format='%an' | grep -v <自分>`) — 素朴な origin/main 監視は自分の push で self-echo する
 4. **数値・主張は互いに独立再計算で交差検証する** — 同じ結論に別実装で到達したら強い保証、食い違ったら環境差 (library バージョン等) の発見機会
+
+## <a id="cross-platform-path-hardcode"></a>13. 共有 code の OS 絶対パス hardcode: literal 名 file 化と「他マシンのパス」誤読
+
+Dropbox で共有する script に片方の OS の絶対パスを hardcode すると、もう片方の OS では**例外でなく silent な別動作**になる (2026-08-29 実測):
+
+- **機構**: `io.open(r"C:\claude\_out.txt", "w")` を macOS / Linux で実行すると、`\` と `:` は POSIX filename の合法文字なので **`C:\claude\_out.txt` という名前の 1 個の file が cwd に生まれる** (エラーは出ない)。cwd が同期フォルダ内なら、Dropbox は `\` `:` 入りの名前を「特殊文字」としてアップロード拒否 → 同期エラーとして表面化する
+- **誤読 trap**: 同期エラー dialog に出るこの file 名は **Windows パスと字面が完全に同一** (`C:\claude\_out.txt`)。「別の Windows マシン上の file の問題」と誤読して device 特定に向かう前に、**まずローカルで literal 名の file を探す** (`ls` / `find . -name 'C:*'`) — 1 コマンドで仮説が分岐する (実例: この確認を後回しにして device 調査に数 step 使い、file は最初から手元の共有フォルダ内にあった)。一般化すると「**パスに見える文字列は file 名かもしれない**」— error 表示の字面解釈を検証せず遠隔起源を結論しない ([`debugging-discipline.md`](debugging-discipline.md) の症状-原因距離の一種)
+- **修復**: file は rename で救済 (中身は正常な出力)。script は `_HERE = os.path.dirname(os.path.abspath(__file__))` 基準の相対化で両 OS 動作 + 出力が共有フォルダに載る副次利点
+- **half-migration trap**: パス portable 化の際、**入力側だけ直して出力側 (`open(..., "w")` / `savefig` / `to_csv` 等) を見落とす**のが実測の落ち方 (入力は即エラーで気付くが、出力 hardcode は silent に literal file を生むため残存する)。de-hardcode は **write 系 call を全部 grep してから完了宣言** (`grep -n 'open(\|savefig\|to_csv\|C:' *.py`)

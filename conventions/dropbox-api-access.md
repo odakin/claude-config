@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload)
 category: infra
-summary: Dropbox HTTP API 直叩きの setup pattern — 公式 MCP / CLI 不在ゆえ API 直が機械経路 (= scoped app 最小 permission + 「authorize 時点の permission が token に焼き込まれる」順序罠 #scoped-app-setup、 PKCE public client = app secret 無し #pkce-no-secret、 共有リンクの冪等取得 = create 409 → list fallback #share-link-idempotent、 path 変換と online-only placeholder でもリンク可 #path-semantics、 sharing.write token の blast radius = 全 file への公開リンク発行が可能 #blast-radius)
+summary: Dropbox HTTP API 直叩きの setup pattern — 公式 MCP / CLI 不在ゆえ API 直が機械経路 (= scoped app 最小 permission + 「authorize 時点の permission が token に焼き込まれる」順序罠 #scoped-app-setup、 PKCE public client = app secret 無し #pkce-no-secret、 共有リンクの冪等取得 = create 409 → list fallback #share-link-idempotent、 path 変換と online-only placeholder でもリンク可 #path-semantics、 共有状態の read recipe = list_folders は cursor 完走まで不在断定しない + get_metadata の sharing_info 直行 + list_folder_members で共同編集者の own-account 検証 + search_v2 は upload 失敗 file に痕跡ゼロ #sharing-read-recipes、 sharing.write token の blast radius = 全 file への公開リンク発行が可能 #blast-radius)
 -->
 # Dropbox API 直アクセス (共有リンク・metadata)
 
@@ -40,6 +40,15 @@ file でも folder でも同じ。 返る URL は `https://www.dropbox.com/scl/�
 
 - API の path は **Dropbox 相対** (`/フォルダ/ファイル`)。 ローカル path から変換するなら realpath で sync root (`~/Dropbox` 等、 symlink 解決後) と照合して相対化する — root 外 path は reject
 - **online-only placeholder (ローカル 0 byte) でもリンク発行は可能** — metadata は server 側に実在する ([`dropbox-placeholder-diagnosis.md`](dropbox-placeholder-diagnosis.md))
+
+## <a id="sharing-read-recipes"></a>共有状態の読み取り recipe (メンバー確認・フォルダ列挙・雲内検索)
+
+共有リンク用の最小 scope set (`sharing.read` + `files.metadata.read`) のままで、以下の read 系がすべて通る (2026-08-29 実測)。「この共同編集者は自分のアカウントで正規アクセスを持っているか」の検証 (device 整理・アカウント棚卸しの前提確認) に使える:
+
+- **共有フォルダ列挙**: `POST /2/sharing/list_folders` `{"limit": 100}` → ⚠️ **cursor を完走するまで不在断定しない** — 続きは `/2/sharing/list_folders/continue` `{"cursor": …}`。実測: 196 folder の account で目的 folder が 2 ページ目にあり、1 ページ目だけ見て「共有されていない」と誤結論しかけた (= 単一ページ null を absence に変換する trap の API 版)
+- **path から直接**: folder 名で列挙を探すより `POST /2/files/get_metadata` `{"path": "/<相対 path>"}` が速い — `sharing_info.shared_folder_id` が返れば共有フォルダ (無ければ非共有)
+- **メンバー確認**: `POST /2/sharing/list_folder_members` `{"shared_folder_id": …}` → `users[].user.email` + `access_type` (owner/editor/viewer)、`invitees[]` は招待未承諾
+- **雲内検索**: `POST /2/files/search_v2` `{"query": …, "options": {"file_status": "active"}}` (`"deleted"` で削除済みも)。⚠️ **同期エラーで upload に失敗した file は雲に痕跡ゼロ** — search でも list でも出ない。「雲に無い」は「どのマシンにも無い」を意味しない (実体は作成元マシンのローカルにだけある)
 
 ## <a id="blast-radius"></a>blast radius (= この token で何が壊せるか)
 
