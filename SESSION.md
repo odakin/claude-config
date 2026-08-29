@@ -2,6 +2,11 @@
 
 > 📌 **このファイル = 直近 (当月) の作業 + Open items**。 古い dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)。
 
+## 2026-08-29: launchd-cron engine に CRON_CONFIG_DIR pin + リモート hand-off 設計の § 新設
+
+- [`scripts/install-launchd-cron.sh`](scripts/install-launchd-cron.sh) `7933501` = **CRON_CONFIG_DIR env** — routine を別 account の認証ストア (CLAUDE_CONFIG_DIR) で走らせる pin を plist に焼く (= 対話 CLI と無人 routine の消費 account 分離。 用途例 = 週間 usage reset window を無人時間帯に揃える)。 `--run` / cli_account / banner も pin-aware。 doc = [`scheduled-tasks.md #launchd-cron-engine`](conventions/scheduled-tasks.md#launchd-cron-engine) (前提 = pin 先の headless 生成可 auth + **MCP 登録 / settings は config dir ごと独立**)
+- [`multi-session-coordination.md #remote-handoff-constraints`](conventions/multi-session-coordination.md#remote-handoff-constraints) (§11 新設) = リモート操縦 session への hand-off は「そのマシンの前でしか完了できない step」 (ブラウザ OAuth localhost-callback / chip click 起票 / 物理操作) を洗い出し、 **probe 先頭配置 + rollback 分岐焼き込み + 委譲禁止** で全分岐を「進む or 安全に戻して待つ」 に着地させる。 permission dialog はリモート UI で承認可 = 詰まるのは上記類型のみ (2026-08-29 実測)。 checks 48/48
+
 ## 2026-08-29: web-tools に claude.ai share ページ access 経路の § 新設
 
 - [`conventions/web-tools.md #claude-share-page-access`](conventions/web-tools.md#claude-share-page-access) = share ページは in-app Browser pane が素通し / page 内 same-origin fetch で snapshot API 200 (headless・curl 全滅との対比表) + snapshot JSON gotcha + bookmarklet gotcha 3 点 (javascript: 剥がし / UTF-8 BOM / `\x23`) + 回避との線引き + pane download の着地先。 [`machine-route-first.md`](conventions/machine-route-first.md) 実例 2 号も追加。 生成物再生成、 checks 48/48。 instance 記録は層 3 (odakin-prefs plans/2026-08-24-chat-to-code-bridge.md §8)

@@ -443,8 +443,39 @@ orientation 直後の silent stall (session は running のまま・活動 times
 
 ---
 
+## <a id="remote-handoff-constraints"></a>11. リモート session への hand-off — 物理不在で完了できない step の全分岐着地設計
+
+user がそのマシンの前に居ない session (= Remote Control 経由でスマホ / 別端末から操縦する session) に
+作業指示を渡すときは、 **「そのマシンの前でしか完了できない step」 を事前に洗い出し、 どの分岐でも
+安全に着地する指示文にする**。 リモートでも permission dialog は操縦側 UI (claude.ai/code) に出て
+承認できるし Bash / tool 実行は全部通る — 詰まるのは以下の類型だけ:
+
+| リモートで完了できない step | なぜ |
+|---|---|
+| ブラウザ対話 OAuth (`claude auth login` 等の localhost-callback 型) | 認可はそのマシンのブラウザで完了する必要がある (callback = localhost)。 操縦者は承認画面に到達できない |
+| chip (spawn_task) の click 起票 | chip の click 面は操縦側 client で制御できない (2026-08-29 user 観測) |
+| 物理操作 (印刷物の回収・USB・電源・紙書類) | 自明だが checklist に 1 つ混ざっているだけで全体が中断する |
+
+設計原則 — **全分岐が「進む or 安全に戻して待つ」 に着地する**:
+
+- **成否が分かる probe を checklist の先頭に置く**: 現地でしか直せない前提 (認証・デバイス) は
+  最初の 1 コマンドで判定し、 途中で発覚して半端状態になるのを防ぐ。
+- **fallback 分岐を指示文に焼き込む**: 「probe 失敗なら <rollback コマンド> で元の構成に戻し
+  (関連 state は触らない)、 『現地で <対処> が必要』 と報告して終了」。 中途半端な状態
+  (半分だけ移行した設定・認証の切れた pin) で session を終わらせることを設計で禁じる。
+- **委譲を禁じる**: 「spawn_task / 別 session への委譲はせず、 全 step をこの session 内で直接実行」
+  と明記する (= chip がリモートで押せない上、 結果の受領面も物理不在)。
+
+実例 (genericized): 無人 launchd routine の消費 account を別 config dir に pin する移行を対象マシンへ
+リモートから指示。 headless 生成の 401 (= 現地 OAuth でしか直らない) を step 1 の probe に置き、
+401 なら「pin 解除 rollback + 台帳は触らず + 現地対処を報告して終了」 の分岐を指示文に焼いた
+(2026-08-29、 実施は成功分岐で完遂)。
+
+---
+
 ## 関連
 
+- リモート操縦 session への hand-off (物理不在で完了できない step の分岐設計): §11 (RC 機構自体は [`remote-control-server.md`](remote-control-server.md))
 - worker task の切り方 (sizing 述語 + orientation 前払い) = spec author 宛の規律: §9 (output 側の死機構は [`output-cap-death-loop.md`](output-cap-death-loop.md))
 - delegate を main と別 model で走らせる選択 (alias 不能 / custom agent / headless CLI): §10 (bug 回避のみを目的にした model 切替は [`tool-call-robustness.md`](tool-call-robustness.md))
 - worktree (隔離) か ローカルか = 並列変更の隔離 vs live 反映のトレードオフ: §8
