@@ -47,6 +47,16 @@
 #     CRON_MODEL   skill routine の `--model` を pin (空なら CLI 既定)。 既定 model が unavailable
 #                  なとき (例: 停止 model) に `CRON_MODEL=sonnet ... --install-one X` で渡す
 #     CRON_EFFORT  skill routine の `--effort` を pin (空なら CLI 既定)。 low/medium/high/xhigh/max
+#     CRON_CONFIG_DIR
+#                  routine を **別 account の認証ストア (CLAUDE_CONFIG_DIR)** で走らせる pin
+#                  (空 = 従来どおり既定 ~/.claude.json の account)。 plist に
+#                  `export CLAUDE_CONFIG_DIR="<dir>"` を焼く (skill/cmd 両 kind、 cmd は claude を
+#                  呼ばなければ無害)。 用途 = 対話 CLI の account を保ったまま無人 routine の消費
+#                  account だけ分離する (例: usage 制限 window を無人時間帯に揃える)。
+#                  ⚠️ dir は事前に `CLAUDE_CONFIG_DIR=<dir> claude auth login` 済 + headless 生成可
+#                  であること (metadata 上 login 済でも headless 401 になりうる — 導入時は --run で probe)。
+#                  ⚠️ MCP 登録 / settings.json は config dir ごとに独立 — routine が MCP (Gmail 等) を
+#                  使うなら pin 先 dir にも同じ登録が必要。
 #     CLAUDE_BIN   claude バイナリ path を上書き (既定 = command -v claude → ~/.local/bin/claude)
 #
 # ⚠️ macOS 限定 (launchd)。 ⚠️ launchd は LANG 空 (C locale) なので skill prompt は ASCII のみ
@@ -65,6 +75,7 @@ LOG_DIR="${LCRON_LOG_DIR:-$HOME/Library/Logs}"
 DOMAIN="gui/$(id -u)"
 CRON_MODEL="${CRON_MODEL:-}"
 CRON_EFFORT="${CRON_EFFORT:-}"
+CRON_CONFIG_DIR="${CRON_CONFIG_DIR:-}"
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")}"
 
 # skill routine の session を保存しない (= 「最近の項目」 を無人 run で汚さない)。 --print 専用 flag。
@@ -147,10 +158,11 @@ write_plist() {
   task_id="$1"; kind="$2"; target="$3"; cron="$4"
   label="$(label_for "$task_id")"; plist="$(plist_path "$task_id")"; logf="$(log_for "$task_id")"
   if [ "$kind" = skill ]; then prompt="$(prompt_for "$target")"; else prompt=""; fi
-  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" "$CRON_EFFORT" <<'PYEOF'
+  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" "$CRON_EFFORT" "$CRON_CONFIG_DIR" <<'PYEOF'
 import sys, plistlib
 label, claude_bin, kind, target, prompt, logf, cron, out, model, workdir, gate, nopersist, rcoff = sys.argv[1:14]
 effort = sys.argv[14] if len(sys.argv) > 14 else ""
+config_dir = sys.argv[15] if len(sys.argv) > 15 else ""
 minute, hour, dom, month, dow = cron.split()
 # minute: '*' / 整数 / '*/N' step (= 毎 N 分。 StartCalendarInterval は step を持たないので
 # Minute 値を列挙して array に展開する。 例: '*/30' → [0, 30])
@@ -178,7 +190,9 @@ for m in minutes:
         entries.append(e)
 sci = entries[0] if len(entries) == 1 else entries
 # CLI 認証で実行。 API key/inference token を unset して必ず claude.ai OAuth を使う。
-prefix = ('unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; '
+# CRON_CONFIG_DIR pin があれば別 account の認証ストアを export (= 消費 account の分離)。
+pin = ('export CLAUDE_CONFIG_DIR="%s"; ' % config_dir) if config_dir else ''
+prefix = ('unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; ' + pin +
           'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; '
           'cd "%s" && ' % workdir)
 # 任意の gate: cd の後・exec の前に挿入。 `cd && <gate> || exit 0;` で gate 非 0 = defer (exit 0)。
@@ -220,13 +234,19 @@ bootstrap_one() {
 }
 
 cli_account() {
-  python3 -c 'import json;print(json.load(open("'"$HOME"'/.claude.json")).get("oauthAccount",{}).get("emailAddress","?"))' 2>/dev/null
+  # routine が実際に消費する account (= CRON_CONFIG_DIR pin 時はその dir の .claude.json、
+  # 既定は ~/.claude.json。 config JSON の場所は default と pinned dir で違う点に注意)。
+  if [ -n "$CRON_CONFIG_DIR" ]; then
+    python3 -c 'import json;print(json.load(open("'"$CRON_CONFIG_DIR"'/.claude.json")).get("oauthAccount",{}).get("emailAddress","?"))' 2>/dev/null
+  else
+    python3 -c 'import json;print(json.load(open("'"$HOME"'/.claude.json")).get("oauthAccount",{}).get("emailAddress","?"))' 2>/dev/null
+  fi
 }
 
 cmd_install() {
   echo "== launchd cron 無人ルーチン install (host: $(hostname -s)) =="
   echo "   CLI bin: $CLAUDE_BIN"
-  echo "   CLI account: $(cli_account)"
+  echo "   CLI account: $(cli_account)${CRON_CONFIG_DIR:+  (config-dir pin: $CRON_CONFIG_DIR)}"
   [ -x "$CLAUDE_BIN" ] || { echo "ERROR: claude が見つからない: $CLAUDE_BIN"; exit 1; }
   mkdir -p "$LA_DIR" "$LOG_DIR"
   printf '%s\n' "$ROUTINES_ACC" | while IFS='|' read -r task_id kind target cron; do
@@ -267,6 +287,8 @@ cmd_run() {  # 手動 1 回実行 (= launchd を介さず、 plist と同じ実�
 $spec
 EOF
   echo "== 手動実行: $task_id ($kind) =="
+  # plist と同じ環境で走らせる (= config-dir pin も再現。 導入時の headless 401 probe はこの経路)
+  [ -n "$CRON_CONFIG_DIR" ] && export CLAUDE_CONFIG_DIR="$CRON_CONFIG_DIR" && echo "   (config-dir pin: $CRON_CONFIG_DIR, account: $(cli_account))"
   if [ "$kind" = skill ]; then
     mflag=""; [ -n "$CRON_MODEL" ] && mflag="--model $CRON_MODEL"
     [ -n "$CRON_EFFORT" ] && mflag="$mflag --effort $CRON_EFFORT"
