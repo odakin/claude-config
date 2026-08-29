@@ -78,6 +78,13 @@ CRON_EFFORT="${CRON_EFFORT:-}"
 CRON_CONFIG_DIR="${CRON_CONFIG_DIR:-}"
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")}"
 
+# node の場所を install 時に解決して plist PATH へ追記する (2026-08-29)。
+# launchd の PATH には nvm 等の node が乗らないため、 stdio MCP server (command: node / npx) を
+# headless routine が spawn できない環境がある (= claude 本体が native binary だと routine 自体は
+# 走るのに MCP だけ silent に欠ける)。 install した shell で node が解決できればその dir を焼く。
+NODE_BIN_DIR="$(command -v node 2>/dev/null || true)"
+[ -n "$NODE_BIN_DIR" ] && NODE_BIN_DIR="$(dirname "$NODE_BIN_DIR")"
+
 # skill routine の session を保存しない (= 「最近の項目」 を無人 run で汚さない)。 --print 専用 flag。
 # 古い CLI は未対応の可能性があるため install/run 時に capability check し、 対応時のみ付与
 # (= 未対応 CLI では従来挙動に degrade、 routine を殺さない)。
@@ -158,11 +165,12 @@ write_plist() {
   task_id="$1"; kind="$2"; target="$3"; cron="$4"
   label="$(label_for "$task_id")"; plist="$(plist_path "$task_id")"; logf="$(log_for "$task_id")"
   if [ "$kind" = skill ]; then prompt="$(prompt_for "$target")"; else prompt=""; fi
-  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" "$CRON_EFFORT" "$CRON_CONFIG_DIR" <<'PYEOF'
+  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" "$CRON_EFFORT" "$CRON_CONFIG_DIR" "$NODE_BIN_DIR" <<'PYEOF'
 import sys, plistlib
 label, claude_bin, kind, target, prompt, logf, cron, out, model, workdir, gate, nopersist, rcoff = sys.argv[1:14]
 effort = sys.argv[14] if len(sys.argv) > 14 else ""
 config_dir = sys.argv[15] if len(sys.argv) > 15 else ""
+node_dir = sys.argv[16] if len(sys.argv) > 16 else ""
 minute, hour, dom, month, dow = cron.split()
 # minute: '*' / 整数 / '*/N' step (= 毎 N 分。 StartCalendarInterval は step を持たないので
 # Minute 値を列挙して array に展開する。 例: '*/30' → [0, 30])
@@ -192,8 +200,12 @@ sci = entries[0] if len(entries) == 1 else entries
 # CLI 認証で実行。 API key/inference token を unset して必ず claude.ai OAuth を使う。
 # CRON_CONFIG_DIR pin があれば別 account の認証ストアを export (= 消費 account の分離)。
 pin = ('export CLAUDE_CONFIG_DIR="%s"; ' % config_dir) if config_dir else ''
+# install 時に解決した node の dir を PATH 末尾に追記 (= nvm 環境で stdio MCP が張れない対策)
+base_path = "$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+if node_dir and node_dir not in base_path.split(":"):
+    base_path += ":" + node_dir
 prefix = ('unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; ' + pin +
-          'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; '
+          'export PATH="%s"; ' % base_path +
           'cd "%s" && ' % workdir)
 # 任意の gate: cd の後・exec の前に挿入。 `cd && <gate> || exit 0;` で gate 非 0 = defer (exit 0)。
 gate_prefix = (gate + ' || exit 0; ') if gate else ''
