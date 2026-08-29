@@ -55,7 +55,10 @@ pipeline 一貫性は正当な選択理由。
 ## <a id="yamllint-hazard-config"></a>yamllint は hazard rule 限定で運用する
 
 stylistic rule (indent / line-length 等) を全部有効にすると既存 file への noise が実害
-検出を埋める。 hazard 3 rule + syntax (= rule 無しでも常時報告) に絞る:
+検出を埋める。 hazard 3 rule + syntax (= rule 無しでも常時報告) に絞る
+(**実装 = 同 repo [`scripts/check-yaml-lint.py`](../scripts/check-yaml-lint.py)** — fleet の
+tracked yaml を横断 lint、 git-crypt lock skip、 毒入り fixture selftest 内蔵。 定期発火面
+〔run-all-checks / CI〕 への配線は各 user の personal layer 側):
 
 ```yaml
 rules:

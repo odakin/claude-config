@@ -8,6 +8,7 @@
 - [`conventions/yaml-hazards.md`](conventions/yaml-hazards.md) 新設 = YAML 脆さ 2 軸 (parser CVE / 意味論) + safe loader + 1.1⇄1.2 差 + hazard 類型表 + 形式選択 gate + hazard rule 限定 yamllint config (⚠️ `extends: null` は crash を clean と誤読させる / directive 行は純粋行)
 - [`github-security-automation.md #supply-chain-hardening`](conventions/github-security-automation.md#supply-chain-hardening) (§11 新設) = Dependabot cooldown + action SHA pin (Dependabot が pin を保守) + dependabot.yml 編集で即時 scan burst
 - [`hook-authoring.md #substitution-fallback-stdout-mixing`](conventions/hook-authoring.md#substitution-fallback-stdout-mixing) に変種追記 = 混入値が crash せず通ると Free blocks 変動で dedup key が不安定化する silent 動作不全。 checks 48/48
+- **追補 (同日)**: [`scripts/check-yaml-lint.py`](scripts/check-yaml-lint.py) = **tool 本体も層1 hoist** (user 指示「作ったツールも層1に」。 fleet-heartbeat / check-overleaf-drift と同型 = 実体は層1・定期発火面への配線は personal layer 側)。 root 不在 / yamllint 未 install は SKIP 契約、 requirements.txt に yamllint 追加 (= CI で selftest が実走)。 checks 49/49
 
 ## 2026-08-29: launchd-cron engine に CRON_CONFIG_DIR pin + リモート hand-off 設計の § 新設
 
