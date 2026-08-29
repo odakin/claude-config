@@ -13,6 +13,10 @@ on:
     branches: [main]
   pull_request:
 
+# 検査は read-only (checkout + script 実行) — GITHUB_TOKEN を最小権限に固定
+permissions:
+  contents: read
+
 jobs:
   checks:
     runs-on: ubuntu-latest
