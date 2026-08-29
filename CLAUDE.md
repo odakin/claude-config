@@ -224,6 +224,7 @@ claude-config/
 │   ├── run-all-checks.sh                   # claude-config の全機械検査を 1 コマンドで回す (検査リストの SoT)
 │   ├── scan-form-instructions.py           # 様式 xlsx の label 内 embedded instruction を category 別に抽出（office-automation.md#embedded-instruction-in-label）
 │   ├── setup-dropbox-refs.sh               # personal layer の dropbox-collabs.yaml を読んで symlink を生成
+│   ├── smoke-googleapis.mjs                # googleapis / google-auth-library の依存 bump 後 read-only smoke test (対象 dir 自身の node_modules を createRequire で load し、 実 API read か token refresh で更新実体を検証。 書き込み API・token 永続化なし。 規約 = conventions/google-api-direct-access.md)
 │   ├── surface-discord-bot-dm.py           # Discord bot DM channel の未記録 message surface engine（daily fetcher が吐く JSON と user 側 ledger（text/YAML 内 messageId）の diff で「bot DM に返事が来ても誰も読まない」 死角を埋める汎用 CLI、 個別環境への依存ゼロ＝引数で bot ID / json-dir / ledger-dir / counterpart map / title を渡す、 finding 0 件 silent、 --selftest 内蔵。 personal layer に thin wrapper を 1 つ置いて呼ぶ、 conventions/discord-bot.md#bot-dm-surface）
 │   ├── tune-seal-image.py                  # Calibrate a digitized seal PNG against a *printed* reference — stroke width and ink color.
 │   ├── verify-form-guidance.py             # 官製様式の「記入要領 (赤字/青字)」 が提出物に残置していないか検出。

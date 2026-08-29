@@ -13,6 +13,7 @@ conventions/README.md (カテゴリ index) を単一 source から自動生成 (
                          README.md (= 本 script の生成物) は対象外。
   * hooks/ scripts/ scripts/lib/ … 各 file header の説明 1 行目
                          (.py = module docstring 1 行目 / .sh 等 = shebang 直後の最初の # comment /
+                          .mjs .js 等 = shebang 直後の最初の // comment /
                           .html = 先頭 3 行内の <!-- --> comment。 いずれも先頭の "<basename> — " prefix は strip)。
 
 生成先 (3 箇所、 いずれも marker で機械管理 — 手編集禁止):
@@ -114,8 +115,9 @@ def extract_header_desc(path: Path):
         s = line.strip()
         if not s:
             continue
-        if s.startswith("#"):
-            return strip_name_prefix(s.lstrip("#").strip(), name) or None
+        if s.startswith("#") or s.startswith("//"):
+            # .sh 等 = "# …" / .mjs .js 等 = "// …" (2026-08-29 追加)
+            return strip_name_prefix(s.lstrip("#/").strip(), name) or None
         break
     return None
 
@@ -475,6 +477,15 @@ def selftest() -> int:
         check(run(tmp, check=True) == 1, "新 script 追加 (tree 未反映) を --check が exit 1")
         run(tmp, check=False)
         check(run(tmp, check=True) == 0, "--write 後は clean")
+
+        # 5b) .mjs の // header 説明も抽出される (2026-08-29)
+        (tmp / "scripts" / "m.mjs").write_text(
+            "#!/usr/bin/env node\n// m.mjs — mjs header 説明\n", encoding="utf-8")
+        check(run(tmp, check=True) == 1, ".mjs (// header) は説明欠落 exit 2 でなく drift exit 1")
+        run(tmp, check=False)
+        check(run(tmp, check=True) == 0, ".mjs 反映後は clean")
+        check("mjs header 説明" in (tmp / "CLAUDE.md").read_text(encoding="utf-8"),
+              ".mjs の // 説明が tree に載る")
 
         # 6) 未知 subdir → exit 2
         (tmp / "scripts" / "mystery").mkdir()

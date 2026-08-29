@@ -9,6 +9,7 @@
 - [`github-security-automation.md #supply-chain-hardening`](conventions/github-security-automation.md#supply-chain-hardening) (§11 新設) = Dependabot cooldown + action SHA pin (Dependabot が pin を保守) + dependabot.yml 編集で即時 scan burst
 - [`hook-authoring.md #substitution-fallback-stdout-mixing`](conventions/hook-authoring.md#substitution-fallback-stdout-mixing) に変種追記 = 混入値が crash せず通ると Free blocks 変動で dedup key が不安定化する silent 動作不全。 checks 48/48
 - **追補 (同日)**: [`scripts/check-yaml-lint.py`](scripts/check-yaml-lint.py) = **tool 本体も層1 hoist** (user 指示「作ったツールも層1に」。 fleet-heartbeat / check-overleaf-drift と同型 = 実体は層1・定期発火面への配線は personal layer 側)。 root 不在 / yamllint 未 install は SKIP 契約、 requirements.txt に yamllint 追加 (= CI で selftest が実走)。 checks 49/49
+- **追補 2 (同日)**: [`scripts/smoke-googleapis.mjs`](scripts/smoke-googleapis.mjs) = googleapis 依存 bump 後の read-only smoke test も genericize して層1 hoist (keys/creds/dir 全部引数化、 対象 dir 自身の node_modules を createRequire で検証)。 前提として [`generate-tree.py`](scripts/generate-tree.py) に **.mjs/.js の `//` header 説明抽出**を追加 (selftest fixture 5b 付き)。 checks 49/49
 
 ## 2026-08-29: launchd-cron engine に CRON_CONFIG_DIR pin + リモート hand-off 設計の § 新設
 
