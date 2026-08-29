@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 94 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 96 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -119,6 +119,8 @@ layer 1 (public) のドメイン固有規約 94 file をカテゴリ別に列挙
   - 他者の paper / 申請書を referee・審査委員として評価する時の規律 (= invitation intake 〔依頼は失効型義務、 noise blocklist に査読 domain を入れない〕・SoT 4 file pattern・引用文献の現物 verify・framework calibration・scoring scale 整合・既送信 score の不可逆性。 paper-audit / rebuttal-letter / erad-submission の sibling で方向違い)
 - **[rebuttal-letter.md](rebuttal-letter.md)** — referee report への point-by-point 返信を書くとき
   - referee report への point-by-point 返信 (= author response) 作成 6 reflex (= 回答は本文 grep 照合・起源でない文献は see e.g.・referee 誤記は静かに正す・自己否定語回避・全 comment フル引用・旧式番号は submission 版基準)、 paper-audit.md と相補
+- **[tenki-submission.md](tenki-submission.md)** — 日本気象学会の機関誌「天気」への投稿を準備するとき
+  - 「天気」投稿の機構 — 種別選択 (調査ノートは 6pp 以内・掲載料無料・和文/英文要旨とも不要 #category-fit)、 LaTeX のまま投稿できる 3 点セット (#tex-submission-set)、 著者要件 = 原則会員を含む + 会員番号発行まで 3-4 週の lead (#membership-early-check)、 提出経路ごとに添付書類が違い電子投稿フォームは原稿 1 ファイル制約で TeX と相性が悪い (#channel-vs-attachments)、 様式の実 URL と文中引用規則
 - **[tikz-pgfplots.md](tikz-pgfplots.md)** — TikZ / pgfplots を含む LaTeX project で図を作るとき
   - TikZ/pgfplots 固有 gotchas（infographic / poster / 1 枚 figure 制作で必読、 latex.md と併読）
 
@@ -194,7 +196,7 @@ layer 1 (public) のドメイン固有規約 94 file をカテゴリ別に列挙
 - **[dropbox-placeholder-diagnosis.md](dropbox-placeholder-diagnosis.md)** — Dropbox 配下の file が 0 byte に見えたとき
   - Dropbox の online-only placeholder (0 byte) 診断: xattr `com.dropbox.placeholder` 検出 + OS 別 materialize 方法 + 「0 byte = 配置忘れ」 reflex 防止
 - **[dropbox-refs.md](dropbox-refs.md)** — 共同 PDF を Dropbox に置いてリポから symlink 参照するとき
-  - 共同 PDF を Dropbox に置いてリポから symlink で参照する規約 (§10 で OneDrive / Google Drive 等の他クラウド + 索引自動生成 launchd gotchas へ応用)
+  - 共同 PDF を Dropbox に置いてリポから symlink で参照する規約 (§10 で OneDrive / Google Drive 等の他クラウド + 索引自動生成 launchd gotchas へ応用。 §11 同期中 file は「元の状態」の証拠にならない = 時系列主張は immutable スナップショットで #live-sync-no-timeline-evidence、 §12 相手側にも AI がいる並行作業 = zone 分担 + commit された note が交換 channel + 自 commit 除外 monitor + 独立再計算の交差検証 #counterpart-ai-parallel-work)
 - **[expensive-intermediate-artifacts.md](expensive-intermediate-artifacts.md)** — 5 分以上かかる生成物の出力先を決めるとき + snapshot artifact を命名するとき
   - `-output /tmp/...` reflex 防止 (= OCR / ML / 数値計算で 5 分以上要する artifact をリポ内永続化、 hooks/expensive-tmp-guard.sh で機械的検出) + snapshot artifact の命名規約 (= 日付〔同日複数なら時分〕+ 入力状態 ID 〔git 由来は commit range〕 を filename に焼く、 snapshot vs view の名前区別、 #snapshot-artifact-naming)
 - **[garoon.md](garoon.md)** — Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを Claude から読む/探すとき
@@ -207,6 +209,8 @@ layer 1 (public) のドメイン固有規約 94 file をカテゴリ別に列挙
   - Identity-in-Config 規約（Discord 等 PII-in-disguise、layer 2 + env var bridge）
 - **[install-failures.md](install-failures.md)** — brew install を試行する前後 + source build 陥落時
   - マシン固有の install 不可 package を layer 4 (machine-local memory) に蓄積する規律 (再試行コスト回避、 frontmatter format + machine-local marker + 試行日/コマンド/原因/代替の必須項目) + source build 陥落時の GitHub Releases prebuilt binary 直置き recipe (#prebuilt-binary-fallback = 配置先は non-interactive PATH 必須〔.zshrc 専用 PATH は Claude Bash から不可視で silent 再発〕+ git-lfs 不在は LFS repo の全 push を diff 内容と無関係に block)
+- **[jma-obsdl-download.md](jma-obsdl-download.md)** — 気象庁の過去観測データ (時別値・日別値等) をスクリプトで一括取得したいとき
+  - 気象庁「過去の気象データ・ダウンロード」(obsdl) の機械取得 recipe — show/table POST の現行フィールド (#show-table-post、 旧 recipe の interAnnualFlag は現行 interAnnualType で 400 になる)、 element/地点 ID の動的発見 (#element-station-discovery)、 44,000 値制限に合わせた block 設計と politeness (#volume-limit-politeness)、 CSV の位相・エンコーディング・品質列 gotcha (#csv-format-gotchas)、 protocol はページ自身の JS から読む一般技法 (#protocol-from-page-js)、 取得物は既知データと突合してから使う (#validate-before-use)
 - **[secret-handoff.md](secret-handoff.md)** — secret を user から受け取る・別マシンへ運ぶとき
   - Secret を clipboard 経由で安全に運ぶ手順 (chat に literal を貼らせない原則と clipboard 1 個競合の回避、 配置先と cross-machine 耐久性、 mode 衛生 〔cp -p / git / open() は 0600 を運ばず dir 755 も露出面 = 生成側で冪等矯正、 #mode-hygiene〕)
 - **[sensitive-data-pass-through.md](sensitive-data-pass-through.md)** — 受信した URL / file を別 recipient に forward する前

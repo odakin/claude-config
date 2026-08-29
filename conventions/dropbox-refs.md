@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 共同 PDF を Dropbox に置いてリポから symlink 参照するとき
 category: infra
-summary: 共同 PDF を Dropbox に置いてリポから symlink で参照する規約 (§10 で OneDrive / Google Drive 等の他クラウド + 索引自動生成 launchd gotchas へ応用)
+summary: 共同 PDF を Dropbox に置いてリポから symlink で参照する規約 (§10 で OneDrive / Google Drive 等の他クラウド + 索引自動生成 launchd gotchas へ応用。 §11 同期中 file は「元の状態」の証拠にならない = 時系列主張は immutable スナップショットで #live-sync-no-timeline-evidence、 §12 相手側にも AI がいる並行作業 = zone 分担 + commit された note が交換 channel + 自 commit 除外 monitor + 独立再計算の交差検証 #counterpart-ai-parallel-work)
 -->
 # Dropbox 共有 PDF への参照規約
 
@@ -357,3 +357,20 @@ asset folder の索引 (一覧 markdown 等) をリポ内に自動生成 + auto-
 - **WatchPaths はディレクトリ直下の変化しか発火しない**。 サブフォルダ内のファイル追加は検出されないので、 StartInterval (例: 1800s) をバックストップに併用する
 - **auto-commit は生成物 file のみ `git add`** する (= 作業中の他 file を巻き込まない)。 「生成日」 行だけの diff を変化とみなすと daily noise commit が積まれるので、 `git diff -I '^<生成日行 pattern>'` で除外し、 その場合は `git checkout -- <file>` で working tree を clean に戻す
 - push 失敗は放置でよい (= 次セッションの git-state-nudge hook が警告する)。 多重起動は mkdir lock で防ぐ
+
+## <a id="live-sync-no-timeline-evidence"></a>11. 同期中の file は「元の状態」の証拠にならない (時系列主張はスナップショットで)
+
+共同編集者が**いままさに** Dropbox 経由で編集している file を読んで、その内容から「元からこうだった / 修正前はこうだった」という時系列主張を組み立ててはいけない。読んだ瞬間の状態は相手の直近の保存が同期した**後**かもしれず、pre/post を取り違える (実例: 相手の数値修正が同期した後の file を読んで「この版は元から正しかった」と誤断定 → 修正前スナップショット PDF の照合で両版とも誤値だったと判明)。
+
+- **時系列を主張するときの根拠は immutable なもの**に限る: git commit / 日付つきスナップショット (`drafts/main-YYYY-MM-DD[-HHMM].pdf` 等) / ビルド成果物の mtime + md5
+- 逆に言えば、**節目ごとのスナップショット保存は「後から時系列を検証できる」ことが価値の半分** — 同日複数版は時分を付す (`expensive-intermediate-artifacts.md#snapshot-artifact-naming`)
+- mtime の並びも Dropbox 同期の到着順で乱れうる (build 成果物より新しい source が後から届く等)。「どちらが新しいか」を mtime 単独で断定しない
+
+## <a id="counterpart-ai-parallel-work"></a>12. 相手側にも AI がいる並行作業 (Pattern B 上の 2 セッション協働)
+
+共同編集者が自分側の AI セッションを走らせて同じ Dropbox/git を触っている場合の実証済み運用 (2026-08-29、双方 Claude で原稿仕上げ〜相互検証まで完走):
+
+1. **相手の active 編集 zone (原稿 dir 等) には書かない** — こちらは読み取り検証・別 dir (解析/notes) への追加のみ。衝突が構造的に起きない分担を先に切る
+2. **交換 channel は git に commit された note** (レビュー所見・検証結果・文案)。chat やメールでなくリポに置くと、相手の AI が pull して直接消費できる (実例: 査読 note の指摘 6 件を相手側 AI が独立検証つきで全反映し、こちらの追記 §を読んでさらに自己更新した)
+3. **着信検知は自分の commit を author filter で除外した monitor** にする (`git log --format='%an' | grep -v <自分>`) — 素朴な origin/main 監視は自分の push で self-echo する
+4. **数値・主張は互いに独立再計算で交差検証する** — 同じ結論に別実装で到達したら強い保証、食い違ったら環境差 (library バージョン等) の発見機会
