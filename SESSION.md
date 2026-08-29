@@ -2,6 +2,13 @@
 
 > 📌 **このファイル = 直近 (当月) の作業 + Open items**。 古い dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)。
 
+## 2026-08-29b: semgrep-ci.md + yaml-hazards.md 新設 + github-security-automation §11 (= fleet security sweep の知見 hoist)
+
+- [`conventions/semgrep-ci.md`](conventions/semgrep-ci.md) 新設 = Semgrep finding の読み書き側 (SARIF は suppress 済みも `suppressions` 付きで残る / nosemgrep は match 開始行のみ有効で Python multi-line call は引数行 anchor / local 再現は同一 pack 必須 + 毒入り fixture で検出能力を検証)。 baseline 配置側の既存 [`github-security-automation.md`](conventions/github-security-automation.md) と相互 pointer で棲み分け
+- [`conventions/yaml-hazards.md`](conventions/yaml-hazards.md) 新設 = YAML 脆さ 2 軸 (parser CVE / 意味論) + safe loader + 1.1⇄1.2 差 + hazard 類型表 + 形式選択 gate + hazard rule 限定 yamllint config (⚠️ `extends: null` は crash を clean と誤読させる / directive 行は純粋行)
+- [`github-security-automation.md #supply-chain-hardening`](conventions/github-security-automation.md#supply-chain-hardening) (§11 新設) = Dependabot cooldown + action SHA pin (Dependabot が pin を保守) + dependabot.yml 編集で即時 scan burst
+- [`hook-authoring.md #substitution-fallback-stdout-mixing`](conventions/hook-authoring.md#substitution-fallback-stdout-mixing) に変種追記 = 混入値が crash せず通ると Free blocks 変動で dedup key が不安定化する silent 動作不全。 checks 48/48
+
 ## 2026-08-29: launchd-cron engine に CRON_CONFIG_DIR pin + リモート hand-off 設計の § 新設
 
 - [`scripts/install-launchd-cron.sh`](scripts/install-launchd-cron.sh) `7933501` = **CRON_CONFIG_DIR env** — routine を別 account の認証ストア (CLAUDE_CONFIG_DIR) で走らせる pin を plist に焼く (= 対話 CLI と無人 routine の消費 account 分離。 用途例 = 週間 usage reset window を無人時間帯に揃える)。 `--run` / cli_account / banner も pin-aware。 doc = [`scheduled-tasks.md #launchd-cron-engine`](conventions/scheduled-tasks.md#launchd-cron-engine) (前提 = pin 先の headless 生成可 auth + **MCP 登録 / settings は config dir ごと独立**)

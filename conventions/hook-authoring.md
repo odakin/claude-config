@@ -63,7 +63,7 @@ repo 内 shell script (hooks/ + scripts/ + setup.sh) の統一方針 (2026-07-10
 
 **罠**: `VAL="$(cmd_bsd 2>/dev/null || cmd_gnu 2>/dev/null || echo default)"` の fallback idiom は、 **cmd_bsd が「失敗しつつ stdout に何か吐く」 場合に壊れる** — command substitution は chain 中の**全 command の stdout を連結**するので、 VAL には「cmd_bsd のゴミ + cmd_gnu の正解」 が混ざる。 `2>/dev/null` は stderr しか殺さない。
 
-**実例 (2026-07-10、 CI 初回走行で検出)**: `stat -f %m <file>` は BSD (macOS) では file mtime を返すが、 **GNU (Linux) では「%m という filesystem」 の照会と解釈され、 exit 1 を返しながら stdout に filesystem 情報数行を dump する**。 `$(stat -f %m F || stat -c %Y F || echo 0)` の結果は Linux で「FS dump + 正しい mtime」 の複数行文字列になり、 後段の `$((NOW - VAL))` が算術エラーで script ごと死ぬ。 この idiom で `stale-read-nudge.sh` と `git-state-nudge.sh` が**全 Linux ユーザー環境で silent 死**していた (macOS では正常なので owner 環境では不可視 = CI が初めて露出させた)。
+**実例 (2026-07-10、 CI 初回走行で検出)**: `stat -f %m <file>` は BSD (macOS) では file mtime を返すが、 **GNU (Linux) では「%m という filesystem」 の照会と解釈され、 exit 1 を返しながら stdout に filesystem 情報数行を dump する**。 `$(stat -f %m F || stat -c %Y F || echo 0)` の結果は Linux で「FS dump + 正しい mtime」 の複数行文字列になり、 後段の `$((NOW - VAL))` が算術エラーで script ごと死ぬ。 この idiom で `stale-read-nudge.sh` と `git-state-nudge.sh` が**全 Linux ユーザー環境で silent 死**していた (macOS では正常なので owner 環境では不可視 = CI が初めて露出させた)。 **変種 (2026-08-29)**: 混入がクラッシュせず**値として通ってしまう**場合はさらに悪い — FS dump には Free blocks 等の**呼ぶたび変わる数値**が含まれるため、 これを dedup key の hash 種に使うと「毎回 key が変わって dedup が一度も効かない」 silent 動作不全になる (crash しない分、 test の n 回数比較まで気付けない)。
 
 **正しい形 = 出力の数値検証で分岐** (exit code を信用しない):
 

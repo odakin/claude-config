@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: repo の Dependabot/CodeQL/Semgrep baseline や Dependabot PR を扱うとき
 category: infra
-summary: 全 repo 横断の Dependabot/CodeQL/Semgrep/auto-merge baseline + Free plan silent rejection + Dependabot PR tier-based merge discipline + ESM migration backwards-compatible normalizer + `gh` CLI gotcha (= users/X/repos public-only / mergeStateStatus UNKNOWN retry) + bash set -e + heredoc + $() interaction fix + monorepo dependabot.yml directories+groups + cascading PR convergence loop
+summary: 全 repo 横断の Dependabot/CodeQL/Semgrep/auto-merge baseline + Free plan silent rejection + Dependabot PR tier-based merge discipline + supply-chain hardening (= cooldown + action SHA pin + dependabot.yml 編集で即時 scan burst #supply-chain-hardening) + ESM migration backwards-compatible normalizer + `gh` CLI gotcha (= users/X/repos public-only / mergeStateStatus UNKNOWN retry) + bash set -e + heredoc + $() interaction fix + monorepo dependabot.yml directories+groups + cascading PR convergence loop。 finding の読み書きは sibling semgrep-ci.md
 -->
 # GitHub Security Automation
 
@@ -276,9 +276,26 @@ done
 
 5 iteration で typically converge。 alert count が一定値以下になったら手動 review に shift。
 
-## <a id="cross-references"></a>11. Cross-references
+## <a id="supply-chain-hardening"></a>11. Supply-chain hardening: Dependabot cooldown + action SHA pinning (2026-08-29)
+
+Semgrep の warning 級定型 finding 2 種 (`dependabot-missing-cooldown` / `github-actions-mutable-action-tag`) は、 annotate して黙らせるより**設定側を直す方が実益がある**:
+
+- **Dependabot cooldown**: dependabot.yml の各 update block に
+
+  ```yaml
+  - package-ecosystem: "npm"
+    cooldown:
+      default-days: 7
+  ```
+
+  を足すと、 release 後 N 日は version-update PR を作らない = **day-0 供給網攻撃 (malicious release / 即 yank) の窓を避ける**。 auto-merge 運用と両立 (N 日過ぎた release は即 PR)。 security update は cooldown の影響を受けない。
+- ⚠️ **dependabot.yml を編集して push すると即時 scan が走り、 溜まっていた outdated 依存の version-update PR が一斉に生える** (= burst)。 cooldown 追加の直後に PR が増えるのは矛盾ではない (既存 release は N 日経過済のため) — 想定して triage 時間を確保する。
+- **action の SHA pin**: `uses: owner/action@v7` の tag は mutable (= 移し替え可能) なので `uses: owner/action@<40hex>  # v7` の commit SHA pin にする。 SHA の解決は `gh api repos/<owner>/<action>/commits/<tag> --jq .sha`。 **Dependabot の github-actions ecosystem は SHA pin を認識して更新し、 `# vN` comment も保守する** = pin しても追従コストは増えない。
+
+## <a id="cross-references"></a>12. Cross-references
 
 - 各 user の repo 集合に対する具体 baseline 適用は **layer 3** (= 個人 prefs) で記録 (= 各自の personal layer に、 例えば security-automation.md のような file を置く)
 - 新 repo onboarding script の template は **layer 3** で保持 (= 各自の personal layer、 例えば scripts/secure-new-repo.sh + scripts/templates/)
 - visibility 判断 framework も **layer 3** (= 各自の personal layer、 例えば repo-visibility-criteria.md)
 - 本 file (= layer 1) は generic pattern + tool-level gotcha のみ
+- **Semgrep finding の読み方・nosemgrep 注記・local 再現** は sibling [`semgrep-ci.md`](semgrep-ci.md) (= 本 file が「配置・merge 運用」、 あちらが「finding の読み書き」)

@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 96 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 98 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -202,7 +202,7 @@ layer 1 (public) のドメイン固有規約 96 file をカテゴリ別に列挙
 - **[garoon.md](garoon.md)** — Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを Claude から読む/探すとき
   - Garoon cloud の browser-MCP 自動化 (= SSO でも logged-in session 越しに読める、 app 別 search URL 直叩き、 download token の期限切れ = login page 化、 file 取得は user gesture 必須)
 - **[github-security-automation.md](github-security-automation.md)** — repo の Dependabot/CodeQL/Semgrep baseline や Dependabot PR を扱うとき
-  - 全 repo 横断の Dependabot/CodeQL/Semgrep/auto-merge baseline + Free plan silent rejection + Dependabot PR tier-based merge discipline + ESM migration backwards-compatible normalizer + `gh` CLI gotcha (= users/X/repos public-only / mergeStateStatus UNKNOWN retry) + bash set -e + heredoc + $() interaction fix + monorepo dependabot.yml directories+groups + cascading PR convergence loop
+  - 全 repo 横断の Dependabot/CodeQL/Semgrep/auto-merge baseline + Free plan silent rejection + Dependabot PR tier-based merge discipline + supply-chain hardening (= cooldown + action SHA pin + dependabot.yml 編集で即時 scan burst #supply-chain-hardening) + ESM migration backwards-compatible normalizer + `gh` CLI gotcha (= users/X/repos public-only / mergeStateStatus UNKNOWN retry) + bash set -e + heredoc + $() interaction fix + monorepo dependabot.yml directories+groups + cascading PR convergence loop。 finding の読み書きは sibling semgrep-ci.md
 - **[google-api-direct-access.md](google-api-direct-access.md)** — Google API を Python から直接叩く setup をするとき
   - Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避、 loopback OAuth consent フローの CSRF/横取り対策 〔state nonce + PKCE S256 + request-loop + 手動貼付の state 検証 + 補償制御 hard-fail + 識別子 charset 検証、 #oauth-loopback-hardening〕)
 - **[identity-in-config.md](identity-in-config.md)** — config file に ID/PII (Discord ID 等) を置く設計をするとき
@@ -213,6 +213,8 @@ layer 1 (public) のドメイン固有規約 96 file をカテゴリ別に列挙
   - 気象庁「過去の気象データ・ダウンロード」(obsdl) の機械取得 recipe — show/table POST の現行フィールド (#show-table-post、 旧 recipe の interAnnualFlag は現行 interAnnualType で 400 になる)、 element/地点 ID の動的発見 (#element-station-discovery)、 44,000 値制限に合わせた block 設計と politeness (#volume-limit-politeness)、 CSV の位相・エンコーディング・品質列 gotcha (#csv-format-gotchas)、 protocol はページ自身の JS から読む一般技法 (#protocol-from-page-js)、 取得物は既知データと突合してから使う (#validate-before-use)
 - **[secret-handoff.md](secret-handoff.md)** — secret を user から受け取る・別マシンへ運ぶとき
   - Secret を clipboard 経由で安全に運ぶ手順 (chat に literal を貼らせない原則と clipboard 1 個競合の回避、 配置先と cross-machine 耐久性、 mode 衛生 〔cp -p / git / open() は 0600 を運ばず dir 755 も露出面 = 生成側で冪等矯正、 #mode-hygiene〕)
+- **[semgrep-ci.md](semgrep-ci.md)** — Semgrep を CI で運用する・finding を読む/消す・false positive を nosemgrep 注記するとき
+  - SARIF は suppress 済み finding も残す (#sarif-suppressions を filter しないと「注記が効かない」と誤読)。 nosemgrep は match 開始行の行末 or 直前の純粋 comment 行のみ有効 — Python の multi-line call は match が引数行に anchor して trailing 注記が届かない (#nosemgrep-placement)。 local 再現は CI と同一 rule pack が必須 + 毒入り fixture で検出能力自体を検証 (#local-repro)
 - **[sensitive-data-pass-through.md](sensitive-data-pass-through.md)** — 受信した URL / file を別 recipient に forward する前
   - 受信した URL / file を別 recipient に forward する前に「依頼の scope」 と「届いた data の scope」 を必ず照合する規律 (= over-share / permission mismatch / scope downscope 機会損失の 3 失敗モード回避)
 - **[shared-repo.md](shared-repo.md)** — 共同編集者がいるリポで作業するとき
@@ -221,3 +223,5 @@ layer 1 (public) のドメイン固有規約 96 file をカテゴリ別に列挙
   - シェルの多バイト UTF-8 切り詰め gotchas (= cut -c/head -c/bash 部分文字列は byte 単位で多バイト文字を割り invalid UTF-8 → osascript 等下流で文字列全体が文字化け、 launchd は LANG 空で C locale ゆえ特に注意、 安全策=python 文字単位 truncate + valid UTF-8 検証 1-liner、 2026-06-24 osascript 通知 RCA)
 - **[windows-msys.md](windows-msys.md)** — Windows (Git Bash / MSYS) 上で本リポの script・hook を動かす / 移植性のある shell・Python を書くとき
   - Windows (MSYS/Git Bash) 固有の silent failure 集 (= native Win32 tool の stdout は text mode ゆえ jq/gh が CRLF を吐き `while read` だけが CR を残す / drive root `C:` は `dirname` の不動点で `!= "/"` 型の上り詰め loop が無限化 / MSYS path `/tmp` と native path `C:/` は同じ dir を指しても文字列一致しない・native library は前者を開けない / Windows Python に `python3.exe` は無く Store の App Execution Alias が「Python」 とだけ印字して成功終了する / console は cp932 で emoji 印字が UnicodeEncodeError / core.autocrlf=true が shell script を壊す / Windows では hook は symlink でなく copy なのでリポ修正が installed hook に伝播しない / mkstemp の fd を捨てると Windows でだけ後続 save が Permission denied)。 共通 kernel = すべて例外を出さず「もっともらしく」 失敗するため症状が原因から遠い。 新規 Windows 機の一括 setup = `scripts/bootstrap-windows.ps1` + 以後の毎 session 自己治癒 = `hooks/session-start-windows-bootstrap.sh` (#bootstrap-one-liner、 実機検証待ち)
+- **[yaml-hazards.md](yaml-hazards.md)** — YAML を読む・書く・新規 data file の形式 (yaml/toml/json) を選ぶ・yamllint を設定するとき
+  - YAML の脆さは parser CVE 軸と意味論軸 (仕様どおりの誤読 = Norway problem / colon 誤読 / dup key silent merge #hazard-classes) の 2 軸。 対処 = safe loader 常用 (#safe-loader) + 形式選択の 1 回の問い (#format-choice) + hazard rule 限定 yamllint (#yamllint-hazard-config、 extends:null crash と directive 純粋行の gotcha 込み)
