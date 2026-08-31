@@ -509,6 +509,22 @@ sections:
     legacy: "18.2"
     level: 3
     title: "18.2 一般則"
+  - id: rollcall-line-marker
+    legacy: "19"
+    level: 2
+    title: "19. 点呼行 (rollcall line) — 散文で書かれた sub-obligation は数え直しで消える"
+  - id: rollcall-line-observation
+    legacy: "19.1"
+    level: 3
+    title: "19.1 観察 pattern"
+  - id: rollcall-line-pattern
+    legacy: "19.2"
+    level: 3
+    title: "19.2 pattern: 機械可読 1 行 marker + 不在も咎める検出器"
+  - id: rollcall-line-when
+    legacy: "19.3"
+    level: 3
+    title: "19.3 適用判断"
   - id: changelog
     level: 2
     title: "変更履歴"
