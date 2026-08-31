@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: auto-tree-autoload-slim
+    legacy: "2026-09-01"
+    level: 2
+    title: "2026-09-01: AUTO-TREE の auto-load 税 縮退 (when 表示 + hooks/scripts README 移設)"
   - id: ci-and-single-list-wiring
     legacy: "2026-07-10"
     level: 2

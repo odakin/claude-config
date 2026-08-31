@@ -2,6 +2,10 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-01c: AUTO-TREE の auto-load 税 縮退 — CLAUDE.md 95→35 KB (生成契約変更)
+
+- `generate-tree.py` の生成契約を変更 (owner 承認、 設計正本 = [`DESIGN.md #auto-tree-autoload-slim`](DESIGN.md#auto-tree-autoload-slim)): ① conventions tree の説明を summary → **when** (trigger) ② hooks/scripts の per-file 列挙を新生成物 [`hooks/README.md`](hooks/README.md) + [`scripts/README.md`](scripts/README.md) へ移設 (件数 + pointer のみ CLAUDE.md に残す)。 生成物 3 → 5 箇所、 `--check` 管轄不変。 summary は `conventions/README.md` に生存 = **情報の削除ゼロ**、 README 2 本は AUTO-GENERATED view で正本ではない。 `--selftest` 新契約 ALL PASS。
+
 ## 2026-09-01b: §8.21 domain 軸 + 定期棚卸し pattern / §4.2 帰責軸 / research-email 2 §
 
 - [`§8.21 #noise-obligation-signal-sharing`](docs/convention-design-principles.md#noise-obligation-signal-sharing) に 2 追記 (`c72336c` + `f3fa41a`): **domain 軸** (= 網の scope 宣言 — 監視系の死角は検出器の穴より先に「張っていない domain」 に開く、 金融 mail は username mask で名指し検出が原理的に無力) + **定期棚卸し** (= 語彙・sender は列挙で収束しない → suppress の誤りを定期検出する meta-detector + 月初 stateless gate + 棚卸し finding の消費規律)。 origin = 個人層 IBKR パスキー督促 16 通 3 ヶ月埋没 RCA。

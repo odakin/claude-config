@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-01: AUTO-TREE の auto-load 税 縮退 (when 表示 + hooks/scripts README 移設)](#auto-tree-autoload-slim)
 - [2026-07-10: 検証の発火面化 — CI + run-all-checks + hook 配線の単一リスト駆動化](#ci-and-single-list-wiring)
 - [2026-07-10: 構造 tree / 列挙 / カテゴリ index の自動生成 (generate-tree.py)](#generated-docs-tree-autogen)
 - [2026-07-10: DESIGN.md の archive-first 再編](#design-reorg-archive-first)
@@ -30,6 +31,17 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="auto-tree-autoload-slim"></a>2026-09-01: AUTO-TREE の auto-load 税 縮退 (when 表示 + hooks/scripts README 移設)
+
+**問題**: CLAUDE.md 95 KB のうち 79% (75.5 KB) が AUTO-TREE 3 block。 conventions block (54.6 KB) は doc-meta の **summary** を表示していたが、 summary は中央値 381 B・最大 1.9 KB のミニ要約に成長しており、 CLAUDE.md は毎 session + headless routine が払う auto-load 税 ([`scheduled-tasks.md #headless-context-budget`](conventions/scheduled-tasks.md#headless-context-budget)) として過大。 一般則は [`memory-file-slimming.md`](conventions/memory-file-slimming.md) の「routing table は trigger 列こそが routing 機能、 rule digest は drift する複製」 — これを生成側に適用した。
+
+**変更 (生成契約、 owner 承認 2026-09-01)**:
+1. conventions tree 行の説明を summary → **when** (= trigger、 合計 9.9 KB)。 summary は生成 index [`conventions/README.md`](conventions/README.md) が引き続き when + summary 両方を表示 = **情報の削除ゼロ、 源 (doc-meta) 不変**。
+2. hooks / scripts の per-file 列挙を新生成物 **`hooks/README.md`** + **`scripts/README.md`** へ移設。 CLAUDE.md 内の当該 block は件数 + README pointer の 1 行になる。 生成物は 3 → **5 箇所**、 いずれも `--check` (CI / pre-commit) 管轄。
+3. ⚠️ 新 README 2 本は AUTO-GENERATED の **view** であり正本ではない (正本 = 各 file header 説明 1 行目 / doc-meta)。 「README に正本を置かない」 規律と整合 — 手編集禁止 header + drift 検査で README の正本化経路は構造的に閉じている。 setup.sh / audit-hooks.sh は `*.sh` / `*.py` glob のみを install/audit 対象にするため hooks/README.md は installer に対して不可視。
+
+**実測**: CLAUDE.md 95 → 35 KB (−63%)。 `--selftest` は新契約 (when 表示 / summary 非表示 / README 生成 / 各 drift 検出) に更新済み ALL PASS。 旧契約の記述は [§2026-07-10 生成 doc](#generated-docs-tree-autogen) — 当時の「3 箇所」 は本 entry で supersede。
 
 ## <a id="ci-and-single-list-wiring"></a>2026-07-10: 検証の発火面化 — CI + run-all-checks (検査リスト単一 SoT) + hook 配線の単一リスト駆動化
 
