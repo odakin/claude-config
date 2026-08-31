@@ -901,6 +901,23 @@ origin: 2026-08、 ある paper 磨き込み incident の cold-eyes RCA。 散�
 
 origin: 2026-08、 運用記録 ledger の「open 状態のまま N 日経過」 検出器。 finding は「未対応 or 状態 field の閉じ忘れ」 の二択を正しく提示していたが、 entry の action log には決着記録 (送信 id 付き) が既に書かれており、 消費側 agent は log を読まずに「未対応」 の枝で user に誤報告 → user が「返事書いたはず」 と catch。 対策 = log/notes の決着語 scan を検出器に追加し finding へ routing を焼き込み (retroactive + FP regression fixture 付き)。 上流因 (= 決着時に状態 field を閉じ忘れた記録者側) は当の検出器が既に backstop していた = ゼロは消費層のみ ([`§8.25`](#detection-zero-location) の分解を適用)。 instance (= 検出器名・regex・fixture) は個人層に残置 (= kernel-up / instance-down)。
 
+### <a id="user-execution-handoff"></a>8.27 user-execution handoff — 最終 leg が人間本人にしかできない義務は「手渡しの機構」を要する
+
+**class 定義**: 義務の最終 step が人間本人にしか実行できない class がある — 認証 web form の提出、 パスワード設定、 本人 login、 署名・押印。 agent はこの class で「自分は代行できない」 を**責任系列の終端** (responsibility sink) として扱いやすい: 「残 = 本人操作」 と記録した時点で仕事が済んだ気配になり、 以後は誰の queue にも載らない。 しかもこの step は価値が 100% 本人・第三者に行き agent のループに何も返さない ([`§4.1`](#motivated-substitution-trap) verification family の user-leg 変種) ため、 相手の催促も硬い期限も無いと**系統的に壁紙化する** ([`§8.24`](#surfaced-not-consumed))。 実測では同 class の成功例と失敗例は綺麗に分かれ、 分水嶺は (α) 相手の active な待ち or 失効型期限の存在 (β) packet の即時実行可能性 — つまり**本人の resistance ではなく carrier の不在**が死因。
+
+**kernel — 手渡しは 4 段の機構である** (どの段も recall に置かない):
+
+1. **readiness 検出**: blocking input (レビュー返信・素材・承認) が届いた**同 turn** で「実行可能」 へ状態遷移させる (= same-turn conversion family: 会議確定→calendar 登録と同型)。 この 1 bit の未記録が下流の全判断を汚染する (= 記録上「まだ待ち」 に見える案件は、 どんな丁寧な棚卸しでも誤処分される)。
+2. **packet 組み立て**: 提示物は「本人がそのまま実行できる 1 行」 (= 動詞 + URL + 完成済み素材 + 所要分数)。 「残 = form 記入」 は packet ではない ([`§8.24`](#surfaced-not-consumed) 増幅因子 2 = 安価な discharge 手を重い動詞の下に埋めるな)。 packet 内の URL・座標は一次資料で verify してから書く (= 推測 URL は手渡しの瞬間に壊れる)。
+3. **提示 channel**: 本人操作は本人在席時に届く必要がある — agent session 向け表示だけでは、 session を開かない期間・読まない row で落ちる。 滞留した本人操作 item は forced-disposition 段 (= act / 期日つき defer / 明示 decline を記録するまで降格しない) + 人間直行 channel (OS 通知等) に載せ、 通知 cadence は 2 class ([`§8.24`](#surfaced-not-consumed) 追加 kernel) — 期限窓内は毎日、 恒常滞留は週次 (= 恒久 daily は通知 channel 側の壁紙化)。
+4. **「代行不可」 の記載規律**: 代行不可と書くには (a) probe 証拠 (= どの経路を・いつ試し・どの層で拒否されたか。 能力の不在主張は検証してから — [`§8.16`](#absence-channel-coverage) の capability 版) と (b) packet の併記を必須にする。 probe すると「不可」 の層は分解される (= platform の domain policy / 認証 / 権限 prompt — SSO だから不可、 のような class 主張はしばしば誤り)。 そして代行可否は crux ではない — 不可逆な外部提出はどのみち本人確認 gate を通るのだから、 **勝負は常に packet と提示にある**。
+
+**close は網も外す**: 追跡 record (open TODO 等) を閉じると、 open-record を走査する全検出器の射程からその案件が同時に消える — 不完全な picture に基づく close は、 **picture を訂正できたはずの機構を自分で切断する**。 対人 loose end (未消化の相手返信・未達の deliverable) を残す close の前に「この close で死ぬ網は何か」 を 1 行問い、 escape hatch を「相手が再連絡したら reopen」 型 (= inbound 依存 = 自分側の網ゼロ) にせず、 期日つき watch record (= 公開日・発火日を anchor に) を残す。 検出器側にも対を置ける: 直近 close した record の loose end を一定窓だけ見張る close-hygiene 検査。
+
+**委任は「見える不作為」 を cover しない**: 包括委任 (「進めておいて」) の下でも、 **不在が第三者に見える形で顕在化する義務** (公開リストに載らない・レビューまで投資した協力者が結果を見る) の見送りは外部発信級の act — 見送り前に named 確認 1 行 (「X を見送ります — Y さんがレビュー済みですが良いですか」) を要する。 判断時の警戒 2 点: (i) **催促強度は stakes の proxy ではない** (= 催促ゼロ = 低 stakes は [`§8.8`](#proxy-blind-spot) の disposition 版。 静かに自分の分を済ませた協力者ほど期待が確定済みで、 二度催促する人ほど目立つ — squeaky-wheel gradient)。 (ii) 見送り判断の前に後ろ向き 3 検査 (誰の期待を破るか / 自分の約束文が thread に無いか / 原依頼文書に可視化イベントが無いか) — いずれも記録から 1 手で読めるのに、 前向き検査 (催促が来ているか) だけで代替されやすい。
+
+origin: 2026-09、 授業評価フィードバックの deep RCA。 draft 起草 + 共担者の朱入れレビューまで完了した提出義務が、 レビュー返信の未記録 (kernel 1 欠落) → SSO form への「代行不可」 記載を終端に carrier 消失 (kernel 2-4 欠落) → 包括委任下で「低 stakes・催促なし」 と見送り close (= 依頼文書には全学公開が明記、 close が thread 監視も切断) → 66 日後に公開リストの不在を共担者が指摘して顕在化。 同 class の生存 sibling 2 件 (学術誌共著者の PW 設定 38 日滞留 / 機関業績調査 8 日超過) + 隣接 (審査依頼の web 回答失効) で [`§9.8`](#single-observation-scope-check) 充足 (close-kills-net は部分納品 close の二重不可視事故 〔2026-06〕 と 2 例)。 instance (= marker field 名・gate/lint script・cadence 実装・checklist 原文) は個人層に残置 (= kernel-up / instance-down)。
+
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。
@@ -1658,6 +1675,7 @@ task 記録 (TODO notes 等) の**散文の中に埋まった sub-obligation** (
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
+| 2026-09-01 | §8.27 新設「user-execution handoff — 最終 leg が人間本人にしかできない義務の手渡し機構」 | layer-3 の授業評価フィードバック deep RCA (= draft + 共担者レビュー完了済みの提出義務が、 レビュー返信未記録 → 「代行不可」 responsibility sink → 委任下の見送り close 〔全学公開の記録を読まず「低 stakes」〕 → close が thread 監視も切断 → 66 日後に第三者指摘で顕在化) を一般化。 4 段 kernel (readiness 同 turn / packet 1 行 / forced-disposition + 人間 channel / 「代行不可」 は probe + packet 併記) + close-kills-the-net + 委任は可視の不作為を cover しない (催促強度 ≠ stakes = §8.8 disposition 版)。 生存 sibling 2 + 隣接 1 + close 事故 2 例で §9.8 充足。 instance (marker field / gate script / cadence 実装) は個人層残置 (kernel-up / instance-down)。 user 依頼 (「すべての知見をなるべく上層に」) |
 | 2026-08-31 | §19 追加 (点呼行 = 散文 sub-obligation の脱落防止 marker pattern) | 宿泊証明書 (取得窓が滞在中に閉じる、 2026-08-08) と 印刷版 (紙の vintage、 2026-08-31 paper-staleness 3 例目) の 2 instance から meta-pattern を抽出。 固定 grammar 1 行 + absence-flagging 検出器 + stock sweep。 instance 実装は個人層 (kernel-up / instance-down) |
 | 2026-08-29 | §18 追加 (生成 view = 意図せぬ時点 backup + 件数 parity 検出) | career DB yaml が「軽微修正」を名乗る commit で 357 行切り詰められ 7 日間未検出 → 生成 export の残存データが発見と復元の糸口になった事故から抽出。kernel を §18 に、検出器 instance は個人層に sequester |
 | 2026-04-02 | 初版作成 | 武貞メール対応での8件の不手際を分析し、規約設計の原則を抽出 |

@@ -229,6 +229,10 @@ sections:
     legacy: "8.26"
     level: 3
     title: "8.26 二択を提示する finding は判別証拠を同梱する — 枝の選択を消費側 recall に残さない"
+  - id: user-execution-handoff
+    legacy: "8.27"
+    level: 3
+    title: "8.27 user-execution handoff — 最終 leg が人間本人にしかできない義務は「手渡しの機構」を要する"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
