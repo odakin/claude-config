@@ -5,7 +5,7 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 -->
 # 物理主張の検証サイクル (verification cycle)
 
-> **位置づけと credit**: 本リポ維持者が自分の物理研究で運用している「主張を検査で守る」体制の一般則。 実 instance (個別 paper の audit script 群・claim ledger) は各 private paper repo に残置 (= kernel-up / instance-down)。 **着想・命名の一部 = 日高義将氏 (京都大学基礎物理学研究所) の公開講演「AI による理論物理研究の自動化」 (PPP2026、 2026-08)**: 4 station cycle の整理・**verify-to-learn** の名と手順 form・**FCIR** (Fibered Claim IR = 原文/読み方/前提/根拠) の読み多義分析・「根拠がない時に止まる」「確かめられなかった項目を分かったことにしない」 の標語・integrity ≠ efficacy の評価 form は同講演由来。 一方、 機械 anchor・foil・検証 tier・claim 3 状態は当方の運用が講演に先行して独立に発達したもので、 講演は収斂の確認と命名を与えた。 本 doc は自前運用で incident-backed になった kernel のみを書く (借り物の未検証手法は書かない — 例: FCIR の台帳 form 自体は氏の実演でも効果判定不能と報告されており、 採らない)。
+> **位置づけと credit**: 本リポ維持者が自分の物理研究で運用している「主張を検査で守る」体制の一般則。 実 instance (個別 paper の audit script 群・claim ledger) は各 private paper repo に残置 (= kernel-up / instance-down)。 **命名・提示 form の一部 = 日高義将氏 (京都大学基礎物理学研究所) の公開講演「AI による理論物理研究の自動化」 (PPP2026、 2026-08)**: **verify-to-learn** の名と scratch 隔離の detail・**FCIR** (Fibered Claim IR = 原文/読み方/前提/根拠) の読み多義分析・「根拠がない時に止まる」「確かめられなかった項目を分かったことにしない」 の標語・integrity ≠ efficacy の評価 form・4 station の compact な図式化は同講演由来。 一方、 **実践の大半は当方の運用が講演に先行して独立に発達した収斂** (git 記録で確認済): 機械 anchor と各 station の実践 (2026-05 月〜)・foil (初出 2026-07-01)・外部論文の抽出 → 分類 → 1 件ずつ機械検査 → ledger の手順 (2026-08-08 の検証読みで運用)・検証 tier (同日)・claim 3 状態 (refuted 追跡 + 未検証 marker、 2026-06 月〜) — 講演はこれらに収斂の確認と一部の命名を与えた。 過剰帰属も過小帰属もしない (= credit も主張であり、 検証してから書く)。 本 doc は自前運用で incident-backed になった kernel のみを書く (借り物の未検証手法は書かない — 例: FCIR の台帳 form 自体は氏の実演でも効果判定不能と報告されており、 採らない)。
 
 ## <a id="cycle-shape"></a>1. サイクルの形 — 4 station + 「1 つでも fail したら進めない」
 
@@ -50,7 +50,7 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 
 **成果物の拡張 — 「確かめ直せる材料」も研究成果**: 論文と並んで、 検証 record (audit script・check 結果・出典・**失敗と未解決**・人が判断した理由) を「次の人 / AI が確かめ直して続きを始められる形」 で repo に残す。 判断理由の残し方 = [`convention-design-principles.md#design-snapshot-operation`](../docs/convention-design-principles.md#design-snapshot-operation) (DESIGN.md snapshot 運用)。
 
-## <a id="verify-to-learn"></a>6. Verify-to-learn — 外部論文の検証読み (名と手順 form = 日高氏講演)
+## <a id="verify-to-learn"></a>6. Verify-to-learn — 外部論文の検証読み (名 = 日高氏講演。 手順自体は当方の検証読み運用が先行)
 
 **ルール:** 外部論文を「使う」前提で読むときは、(1) 式・主張を item 化して抽出 → (2) 機械検査可能 (式・極限・数値・コード) と根拠追加が要る (散文主張) に分類 → (3) 機械検査可能分を 1 item ずつ独立導出で check → (4) 3 状態 ledger に記録、の順で読む。初回 run は**隔離した scratch ledger** で行い、本番の知識ベースへは verified のみ昇格させる。
 
