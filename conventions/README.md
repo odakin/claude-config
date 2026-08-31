@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 99 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 100 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -34,6 +34,8 @@ layer 1 (public) のドメイン固有規約 99 file をカテゴリ別に列挙
   - 複数マシンで同じ Claude Code セットアップを使うときの規律 (audit scope 明示・実機検証・idempotent setup.sh)
 - **[multi-session-coordination.md](multi-session-coordination.md)** — 並列 Claude session と同じ repo を触るとき + spawn/handoff を設計するとき
   - 同 user の並列 Claude session が同 file path を race する防御 (= session 開始 git fetch + log + plan read、 Write 前 ls/find、 Edit 前 Read 強制、 commit 時は git add -A でなく明示 add 〔= 並行 session の未 commit WIP 巻き込み防止〕、 plan checkbox [x] は実装済のみ semantics、 prev session の commit を「他人 commit」 として cold-read)
+- **[name-rendering.md](name-rendering.md)** — 人名を記録・文面・印字物に書く瞬間で、手元にある表記が機械 field (メールヘッダ / git author / CSV・LDAP export / 登録システム) 由来のとき
+  - transliteration・正規化された人名 field は不可逆な投影 — 手元に無い表記形 (native script / 濁点・記号 / 漢字) を推測で復元しない。3 択 (権威 source から取る / 本人に聞く / その表記を使わない) + 高 stakes 印字物の照合 + 確定後の SoT 化と errata
 - **[output-cap-death-loop.md](output-cap-death-loop.md)** — worker session (spawn_task / headless claude -p / Agent subagent) に長い導出・生成 task を渡す spec を書くとき・spawn した worker が「isRunning なのに成果ゼロ」 のとき
   - 1 応答の出力上限 (Claude Code 既定 64,000 output token、 thinking 込み) を超える巨大 turn を worker が試みると、 API error → 同じ turn を retry → また超過、 の決定的 loop で session が silent 死する (= output-cap 死 loop)。 診断 signature = 実作業ゼロ + 空 thinking block が ~10-15 分間隔で規則的に並ぶ (rate-limit backoff と誤診しやすい)。 復旧 = 粘らず捨てる + **spec を分割してから** 再spawn (同 spec の再spawn は同じ死に方をする、 実測 2 連死)。 予防の宛先は worker でなく **spec author (親)**: 1 worker = 1 bounded stage / 開放的判断問題には「未解決と書いて閉じてよい」 permission / turn 分割規律 (1 応答で完結させない・小節ごと commit) / 1 Write ≤~150 行・定型は shell 複製 / 部分結果 = 成功 mode。 2026-07-10/11 に独立 2 project で計 3 worker 同型死 + bounded な sibling 2 worker は完走の実測から。
 - **[personal-skills.md](personal-skills.md)** — personal skill (~/.claude/skills/) を規律の発火面として使うとき

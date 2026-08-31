@@ -41,3 +41,4 @@ summary: carrier proxy (= commit author / push 者 / 送信者 / 記録の書き
 - **実行経路・原因の帰属 (機械 domain)** = [debugging-discipline.md #execution-path-attribution](debugging-discipline.md#execution-path-attribution) (= 内容指紋で経路を確定 / control case で discriminate)。 対象が人でなく機構。
 - **アウトリーチ宛先の身元 verify** = [research-email.md](research-email.md) §アウトリーチ前の身元確認 (= 宛先が論文著者本人かの corroboration)。 「これから接触する相手は誰か」であって「この記録は誰の行為か」ではない。
 - **文献の著者名 verify** (= citation authorship の誤同定・hallucination) は帰属 family だが kernel は「未検証 identity の断定」 — 検証原則は規律 5 と同じ (複数 proxy / 一次資料 verify)。
+- **人名の表記** = [name-rendering.md](name-rendering.md) (= ローマ字化・記号平坦化された name field から native 表記を推測で復元しない)。**同じ lossy-encoding family** で、本 doc が「その記録は誰の行為か」、あちらが「その人の名前はどう書くか」。

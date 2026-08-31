@@ -81,7 +81,7 @@ odakin の 4 層アーキテクチャ (`docs/personal-layer.md`) に従って、
 - **Telegram / LINE chat ID**: 数値のみで regex 識別不能。field 名ベースで検出するには lint 層が必要、overengineering につき見送り
 - **GitHub user ID (数値)**: 公開情報、PII 扱いしない
 
-## Homonym 注意: author ID (INSPIRE BAI 等) の取り違え
+## <a id="homonym-author-id"></a>Homonym 注意: author ID (INSPIRE BAI 等) の取り違え
 
 INSPIRE BAI (`T.Kono.1`, `H.Otsu.4` のような形式の author ID。 例は架空) は **同姓同名の別著者を別 ID として管理する**が、setup 時に検索結果から **同姓の誰か別人**を選んでしまうと、「subscriber は実際 A さんなのに INSPIRE profile は A' さんのもの」という状態になる。公開リポに BAI を書くことで:
 
