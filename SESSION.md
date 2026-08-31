@@ -2,6 +2,14 @@
 
 > 📌 **このファイル = 直近 (当月) の作業 + Open items**。 古い dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)。
 
+## 2026-08-31c: photographed-document-transcription に引用抽出 § 追加 (= 画像から起こした引用は生成物)
+
+- [`photographed-document-transcription.md #quotation-extraction`](conventions/photographed-document-transcription.md#quotation-extraction) 新設 = 既存 doc は**手書きの一括転記**が主題だったが、 **印刷資料を撮って引用を起こす**場合も同じく「転記でなく生成」。 実測された逸脱を軽い順に表化 (語の置換 / 文体の平準化 / 圧縮・要約 / **原文に存在しない鉤括弧つき一文の創作** / 典拠の年・頁の創作)。 いずれも「読めませんでした」 と申告されず**もっともらしい形で出力される** = §pipeline の既存警告と同構造だが、 活字ゆえ「読めているはず」 の油断が加わる
+- 規律 4 点 = ① load-bearing に使う前に全引用を原本と 1 対 1 照合 ② 照合済/未照合を表で残す ③ **解像度は 1 コマ 1 頁 + 寄り** (見開き 1 枚では散文は読めても仮名 1 文字・数字 1 桁を誤る、 実測で表の「15」 を「18」 と読み違え拡大して撤回) ④ **主張の土台が引用なら引用の逸脱 = 主張の逸脱** (「創設当初から」 の根拠が表の年だったなら、 年を 1 つ創作した時点で主張が崩れる)
+- [#correction-baseline](conventions/photographed-document-transcription.md#correction-baseline) (sibling) = **差分の基準点を「直前の版」 に置くと、 他人の訂正が「改変」 に見える** — その版が未検証の生成物なら基準点が汚染されている。 訂正が来たらまず自分の出力を疑う / 手元に原本 (写真・PDF) があるなら指摘を書く前に開く / それでも食い違うなら断定せず「こちらの読みではこう、 現物ではどうか」 で出す
+- 配線: [`paper-audit.md #quotation-provenance`](conventions/paper-audit.md#quotation-provenance) 新設 (= 引用の出所を生成/転記で区別、 孫引きは本文側にも経路を書く、 手順は上記 doc が正本) / [`research-email.md #version-arrives-off-thread`](conventions/research-email.md#version-arrives-off-thread) 新設 (= 共同執筆の相手の最新版は 1 対 1 スレッド末尾とは限らず、 会議案内等の別スレッドに添付で来る → `from:<相手>` で期間検索・版の台帳・thread 単位の検出器は構造的射程外・返信の宛先は内容で決める)
+- origin = 個人層の記事共同執筆で、 書影から AI が起こした引用が上記 5 型すべてを含んでいた実例と、 それを原本で直してきた相手を「引用の改変」 と誤読して指摘リスト最上位に置いた二次過誤 (= 原本の写真は手元にあり開けば 1 回で分かった)。 instance は個人層に残置、 kernel のみ hoist。 doc-meta の when/summary 更新 + tree 再生成、 checks 49/49
+
 ## 2026-08-31b: name-rendering.md 新設 (= 人名の表記を transliteration から復元しない)
 
 - [`conventions/name-rendering.md`](conventions/name-rendering.md) 新設 (user 指示「これ層１でよさそう / ヘッダの英字から日本語表記を推測しない、 という一般則」) = **機械 field の人名は正規化された不可逆な投影**。 ローマ字化 (同じ読みに多数の native 表記) / 記号平坦化 (`Jose` ← José) / 字系転写 (Dmitry/Dmitri/Dmitrii) / 全大文字姓 (`Hanako YAMADA` が示すのは**どちらが姓か**だけで字系は言っていない) のいずれも情報を捨てる方向で、 逆変換は一意でない。 ⚠️ **逆方向 (native → ローマ字) も同様に不可逆**

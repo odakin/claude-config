@@ -224,6 +224,18 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 **機械化の境界と defer:** 真理判定は機械化不能 (LLM / 人間 verify)。候補列挙 (checklist 語彙を含む文の enumeration) は grep 可能だが helper script 化は defer — un-defer trigger: 規律のみで 1 手術 event を回して列挙漏れが出たら。verbatim 移動の機械 gate (宣言済み例外 list 方式) も defer — un-defer trigger: 規律下でも move+rewrite 複合 commit が再出現したら。standing の常駐散文検出器は作らない (柔軟束縛語は正当使用が圧倒的多数で、真理判定なしの常駐 flag は FP 洪水になる — 列挙は sweep 時 on-demand に限る)。
 
+## <a id="quotation-provenance"></a>引用の出所を「生成」と「転記」で区別する (2026-08)
+
+原稿の引用が **画像 (書影・スキャン・写真) からモデルが起こしたもの**なら、 それは転記ではなく
+生成で、 語の置換・要約・**原文に存在しない引用の創作**・典拠の年の創作が申告なしに混じる。
+主張の土台が引用や典拠の年である限り、 これは文体でなく**主張の検査**の対象。
+
+- load-bearing に使う前に全引用を原本と 1 対 1 照合し、 照合済み / 未照合を表で残す
+- 孫引き (= 一次資料を二次文献経由で引く) は本文側にも経路を書く。 後で原典に当たれないと
+  分かったときに傷が浅い
+- 手順・失敗の型・解像度規律・「原典を持つ人が直してきたら自分の生成物を先に疑う」 は
+  [`photographed-document-transcription.md#quotation-extraction`](photographed-document-transcription.md#quotation-extraction) が正本
+
 ## <a id="second-example-refine"></a>二例目が出たら refine
 
 将来別 paper で同様の audit を実施したら、 script を `claude-config/scripts/` に generic 化、 本 convention を refine。 現状は 該当 private paper repo で完結。
