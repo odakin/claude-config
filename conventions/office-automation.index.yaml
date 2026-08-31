@@ -695,6 +695,10 @@ sections:
   - id: print-preflight
     level: 2
     title: "印刷直前の preflight (= 「画面で見えた」 を印刷の保証にしない)"
+  - id: printed-artifact-staleness
+    level: 2
+    title: "印刷した紙は digital SoT の fork — 印刷後の修正は「物理伝播 event」"
+    related: [print-preflight]
   - id: pdf-overlay-anchoring
     level: 2
     title: "PDF overlay の値配置は「ラベルの右端」 でなく「セルの罫線」 に anchor する"
