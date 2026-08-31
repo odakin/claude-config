@@ -2,6 +2,11 @@
 
 > 📌 **このファイル = 直近 (当月) の作業 + Open items**。 古い dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)。
 
+## 2026-08-31: paper-audit #relocation-rebinding-sweep 新設 + principles §8.25 (= prose-claim error RCA の知見 hoist)
+
+- [`paper-audit.md #relocation-rebinding-sweep`](conventions/paper-audit.md#relocation-rebinding-sweep) (新 anchor、 既存 3 兄弟 claim-strength / statement-placement / stale-framing の 4 人目) = 散文の文脈依存束縛 (照応 / 方向語 / 対語 / 接続詞係り先 / 次数限定 / cite 帰属) は文脈手術 (移設・圧縮・文分割/合成) で **silent に再解決される** → ① 移設は verbatim-first 2 commit 分解 ② 手術 turn は自発で named-class sweep (a)-(f) + swept/not-swept 出力契約 ③ exactness 動詞は display anchor 必須 (= prose は隠す、 式と機械は暴く)。 helper script 2 種は un-defer trigger 付き defer、 常駐散文検出器は by design 不採用。 同 file Phase 2 に cite 束縛検査 1 行。 origin = 該当 private paper repo の 2026-08-31 磨き込み日 (エラー 11 件、 cold-eyes RCA 経由、 instance は個人層 plans に残置 = kernel-up / instance-down)
+- [`convention-design-principles.md §8.25 (= #detection-zero-location)`](docs/convention-design-principles.md#detection-zero-location) (新設) = 検出失敗 RCA は対策設計の前に「ゼロの位置」 を分離 (standing 検査 / 自発起動 / 命令起動) — 命令起動が正なら能力は在り、 対策は新機構でなく trigger 配線。 捕捉統計の過圧縮 (「人間 N/N・機械 0/N」) も起動者 / 実行 agent / born vs 発掘の 3 軸に分解 (= §4.2 の鏡像)。 index 再生成 (129 sections)、 checks 実施
+
 ## 2026-08-29c: dropbox-refs §13 + dropbox-api-access read-recipe § (= Dropbox 同期エラー RCA の知見 hoist)
 
 - [`dropbox-refs.md #cross-platform-path-hardcode`](conventions/dropbox-refs.md#cross-platform-path-hardcode) (§13 新設) = 共有 script の OS 絶対パス hardcode は POSIX で **literal 名 file** (`C:\...` がそのまま file 名) を silent に生み Dropbox 同期エラー化 / 同期エラー表示の「パスに見える file 名」を他マシン起源と誤読する前に**ローカル 1 find** / de-hardcode は入力側だけ直して出力側 write call を見落とす half-migration trap (同日実測 RCA、 instance は共同研究リポ側 SESSION)

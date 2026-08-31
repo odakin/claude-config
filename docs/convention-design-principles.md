@@ -873,6 +873,20 @@ reflex: surfacing 機構を設計・監査するとき「この表示は**何を
 
 origin: 2026-08、 研究費公募の応募判断 TODO が 2 つの独立 surface 経路で 30 日間毎日 named 表示 (最終週は最高強度 + 実働中の同〆切案件の 1 行隣) されながら一度も消費されず学内〆を通過した RCA (= 機械 replay で表示履歴を verify 済)。 同月 sibling = 査読依頼が名指し horizon に 6 日 named 表示のまま未消費で自動取消 ([`§8.22`](#lapsing-deadline) origin の consumption 軸)。 対照の成功例 = 明示 disposition を要求する mail triage 段は同環境で機能し続けている。 [`§9.8`](#single-observation-scope-check) は同月 2 観察 + 対照 1 で充足。 instance (= 検出器名・ack field 実装・対策 ledger) は個人層に残置 (= kernel-up / instance-down)。
 
+### <a id="detection-zero-location"></a>8.25 検出失敗の RCA は「ゼロの位置」を先に特定する — 能力の不在と trigger の不在を分離する
+
+**rule**: 「検査が捕らえなかった」 incident の RCA では、 対策 (新機構・新台帳) を設計する**前に**、 捕捉ゼロがどの層のゼロかを分離する:
+
+1. **standing 検査のゼロ** — 常駐機構が事前に捕らえた数
+2. **自発起動のゼロ** — agent が該当 event の後に検査を**命令なしで**起動した回数
+3. **命令起動の成績** — 人間が命令したとき、 同じ agent / 機構が捕捉したか
+
+3 が正 (>0) なら**能力は在る** — 欠けているのは trigger 配線で、 対策は新機構でなく「event → 検査」 の配線 ([`§8.12`](#firing-surface-hierarchy) の発火面選定に接続)。 1 のゼロだけを見て「この領域は機械化不能」 「能力が無い」 と結論するのは誤診で、 重い対策 (新 ledger / 新検出器 / 新 platform) を作らせ、 軽い正解 (trigger 1 本) を見落とさせる。 逆に 3 もゼロなら能力問題が本物で、 trigger 配線だけでは閉じない — **どちらの処方かは分解するまで決められない**。
+
+**捕捉統計の過圧縮も同時に分解する**: 「人間 N/N、 機械 0/N」 型の集計は (a) 検出 loop の**起動者** (b) 発見の**実行 agent** (c) **当該 event で発生した** vs **既存 latent を発掘した**、 の 3 軸を潰した lossy encoding。 born と発掘の混在は対策 scope を誤らせる (発掘は検査の**成功**であって失敗ではない — 「N 件も発生」 という alarm の過半が実は成功だったりする)。 起動者と実行 agent の混在は「機械側能力ゼロ」 の誤診を作る。 [`§4.2`](#self-rca-framing-minimization) の鏡像 (= あちらは圧縮が severity を過小に、 こちらは過大にも過小にも歪める — どちらも治療は同じで、 一次資料への分解)。
+
+origin: 2026-08、 ある paper 磨き込み incident の cold-eyes RCA。 散文主張エラー 11 件が「人間 11/11・機械 0/11」 と自己申告されたが、 一次資料 (session transcript + commit 系列) の分解で 7 born + 3 latent 発掘 + 1 規約往復と判明し、 かつ人間が命令した directed sweep は 2 回とも実捕捉 (計 6 件)・agent の自発起動は 0 回 — 対策は主張台帳の新設から「手術 event → sweep」 の trigger 配線 1 本に縮んだ ([`paper-audit.md#relocation-rebinding-sweep`](../conventions/paper-audit.md#relocation-rebinding-sweep))。 sibling 系譜 = 検出器群が健全で signal を産出していたのに消費境界で落ちた RCA ([`§8.24`](#surfaced-not-consumed) / 産出≠消費) / gate が健全なのに frontend が honor しない ([`§8.15`](#enforcement-surface-frontend-survival)) — いずれも第一問が「機構を作れるか」 でなく「どのゼロか」 だった (3 incident 系譜、 [`§9.8`](#single-observation-scope-check) 充足)。
+
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。

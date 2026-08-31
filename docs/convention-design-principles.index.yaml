@@ -221,6 +221,10 @@ sections:
     legacy: "8.24"
     level: 3
     title: "8.24 surface されても消費されない — silent 再表示の壁紙化と disposition 終端"
+  - id: detection-zero-location
+    legacy: "8.25"
+    level: 3
+    title: "8.25 検出失敗の RCA は「ゼロの位置」を先に特定する — 能力の不在と trigger の不在を分離する"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
