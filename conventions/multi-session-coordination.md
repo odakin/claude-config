@@ -345,6 +345,22 @@ honest な天井: **「起動した」 を *live 親に自動 push* する経路
 
 ---
 
+### <a id="green-light-carrier"></a>green-light は同 turn で「運搬体 (carrier)」 を持たねばならない — 「別 session 待ち」 は carrier ではない
+
+**失敗 mode**: handoff spec (plan file) を書き、 実装 OK (= green-light) も取れているのに、 状態表記が「別 session 待ち」 のまま**誰にも push されず眠る**。 待ち行列に (a) **時計が無い** (= deadline を持たない義務は deadline 系の surfacing 全部の圏外)、 (b) **owner が無い** (= 「どこかの将来 session」 は全 session にとって他人の仕事 = 責任の拡散)。 ambient に置かれた doc は cold で発火しない (= 各 session は fresh instance) ため、 これは「いつか拾われる」 のではなく**構造的に拾われない**。 実事例: ある再発防止 plan が green-light 済みのまま 2 ヶ月滞留し、 その間に防ぐはずだった同型 incident の 3 例目が発生した (= 対策の設計は正しかったのに、 queue の力学で負けた)。
+
+**ルール**: **決定 (green-light) が生まれた同 turn で、 機械に push される運搬体へ変換する**。 運搬体は次のどれか:
+
+1. **spawn_task chip** (harness にあれば) — user の可視 queue に入り、 1 click で worker session が立つ
+2. **deadline つき TODO** (task ledger に mint、 `cross_ref` = plan file path、 self-imposed deadline 〔例 +14d〕 + 適切な priority) — deadline-horizon 系の毎 session push + 強制 disposition (= act / 明示 defer / 見送り決着) の管轄に入る
+3. **即時実装** (= 小さければその場でやる — queue に入れない のが最強の queue 管理)
+
+「plan header に green-light 済みと書く」 「project list に 🟡 で載せる」 は**どれも carrier ではない** (= push されない記録)。 これは same-turn conversion family の一員: 会議確定メール → 同 turn calendar 登録 / 依頼メール → 同 turn TODO / 印刷 → 同 turn 点呼行、 と同じ「生まれた瞬間に機械の管轄へ」。
+
+**user 判断待ちの plan も同型に眠る**: blocked-on-user は「正しく idle」 に見えるが、 **その質問自体が carrier を持たなければ二度と user に提示されない** (= 「OK 待ち」 のまま数ヶ月、 誰も聞き直さない)。 → 「disposition を取る」 という TODO (deadline つき) を mint するか、 複数溜まっているなら 1 本の棚卸し TODO に束ねる。
+
+**限界の宣言**: mint の瞬間の recall (= 「green-light が出た、 carrier を作らねば」 と気づくこと) は規律依存で残る。 plan file の散文から green-light を機械検出する案は棄却 (= 表現が freeform で fragile、 検出器肥大)。 構造的利得は「ambient (push ゼロ) → deadline-horizon pipeline (毎 session push + 強制 disposition)」 への移動であり、 保証ではない — 床は human-steering。
+
 ## <a id="worktree-vs-shared-checkout"></a>8. worktree (隔離) か shared checkout (ローカル) か — 並列変更の隔離 vs live 反映
 
 独立 session / subagent を起こすとき (= §7 の spawn_task hand-off、 Agent tool の `isolation: "worktree"` オプション 等)、 その作業を **隔離 worktree** (= 同じリポの別フォルダ checkout、 履歴は共有・作業中の中身は独立) でやるか **本物の checkout (ローカル、 共有作業ツリー)** でやるかを選ぶ。 これは §1「同 file path を別 session が並列上書きする race」 の構造的な解 (= 隔離) と、 その**適用限界**の節。
