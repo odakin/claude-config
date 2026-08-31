@@ -183,6 +183,8 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 **実例 (2026-08、 該当 private paper repo):** 同じ 1 文が 3 検査を 3 回連続で落ちて 3 回書き直された (「never attained in practice」 = 偽 → 「becomes valid only after the amplitude is suppressed」 = generic → 「effectively propagates only virtually」 = tautology)。 最終形は上の「裾」 の言明。 3 回とも人間の共著者の指摘で発覚 = 書いた本人には毎回もっともらしく見えた (= 自己検査を機械的に回す理由)。
 
+**追補 (2026-08-31): 誇示 (flourish) と strawman 参照も同じ検査に掛ける.** 「〜すら消せる / 任意に〜できる」 型の誇示は tautology 検査の頻出客 — 帳簿の付け替えが 1 点の値を任意化できるのは恒等式の自明な帰結で、 主張の強さを運ばない。 また**比較で主張を膨らませるときは、 比較相手が実際に使われている referent であること** — 誰も採らない参照 (非因果極限や、 目的に合わせて調整した定数など) との開きを headline 数字に混ぜると、 数字ごと strawman になる。 実例 (2026-08、 別 draft): 「定数をうまく選べば任意に選んだ 1 点で当該項を消せる」 という誇示を人間の共著者の指摘 (「1 点だけ消せて何の意味が?」) で撤去し、 実使用の参照間の開きだけを headline に残した。
+
 ## <a id="statement-placement-check"></a>言明の配置検査 (その位置の読者の道具だけで読めるか) (2026-08)
 
 **ルール:** 段落を置く / 残す前に 3 つ問う。
