@@ -17,6 +17,11 @@
 - 配線: [`paper-audit.md #quotation-provenance`](conventions/paper-audit.md#quotation-provenance) 新設 (= 引用の出所を生成/転記で区別、 孫引きは本文側にも経路を書く、 手順は上記 doc が正本) / [`research-email.md #version-arrives-off-thread`](conventions/research-email.md#version-arrives-off-thread) 新設 (= 共同執筆の相手の最新版は 1 対 1 スレッド末尾とは限らず、 会議案内等の別スレッドに添付で来る → `from:<相手>` で期間検索・版の台帳・thread 単位の検出器は構造的射程外・返信の宛先は内容で決める)
 - origin = 個人層の記事共同執筆で、 書影から AI が起こした引用が上記 5 型すべてを含んでいた実例と、 それを原本で直してきた相手を「引用の改変」 と誤読して指摘リスト最上位に置いた二次過誤 (= 原本の写真は手元にあり開けば 1 回で分かった)。 instance は個人層に残置、 kernel のみ hoist。 doc-meta の when/summary 更新 + tree 再生成、 checks 49/49
 
+## 2026-08-31d: garoon.md に fts scope 限界 + 施設予約 URL を追記
+
+- [`garoon.md`](conventions/garoon.md) URL 表に **施設予約** (`/g/schedule/facility_index.csp`) を追加 + 注意 2 点: ① **全文検索 (`/g/fts/search.csp`) の scope = 掲示板 + ファイル管理のみ** — 施設予約・スケジュール・ワークフローは hit しない (結果ページ自身が明記)。 fts の 0 件を施設の absence 証明にしない (= scope 違いの null、 inline §3 系) ② **敷地内でも運営主体が別法人 (同窓会・生協等) の施設は Garoon 施設リストに載らない**ことがある — 「リスト不在 = 予約不能」 でなく別系統 (当該法人の事務局) を疑う
+- origin = 同日、 構内の別法人運営会場の予約経路探し (= user の fts 検索 0 件 → 施設予約リスト実査 → 不在 → 公式 web で別法人の事務局窓口と確定した実測 flow)。 instance (施設名・窓口) は個人層。 leak grep 0 hit
+
 ## 2026-08-31c: principles §8.26 新設 (= 二択 finding は判別証拠を同梱する)
 
 - [`convention-design-principles.md §8.26 (= #disjunctive-finding-self-routing)`](docs/convention-design-principles.md#disjunctive-finding-self-routing) 新設 = 検出器の finding が選言 (「X か Y」) を提示するとき、 枝を判別する安価な検査 (1 grep / 1 field read) は**検出器自身が実行して finding 文面に焼き込む** — 判別を消費側に委ねると選言は目についた片枝に潰される (= §8.24「消費されない」 の続きの層 = 「消費されたが誤読される」)。 heuristic でも routing として焼く価値あり (verdict にせず severity 不変 + honest 限界を docstring 明記)。 reflex = 「この二択、 機械が 1 手で先に検査すべき枝を教えられないか」

@@ -17,8 +17,11 @@ summary: Garoon cloud の browser-MCP 自動化 (= SSO でも logged-in session 
 | ファイル管理 | `/g/cabinet/index.csp` | 各種申請書・様式の配布場所 |
 | **ファイル管理 検索** | `/g/cabinet/search.csp?text=<urlencoded>` | file 名 + **file 内文**を検索 (= doc/pdf の中身も hit) |
 | file download | `/g/cabinet/download.csp/-/<name>?fid=<N>&time=<token>` | ⚠️ 下記 token 期限 |
+| **施設予約** (スケジュール内) | `/g/schedule/facility_index.csp` | 施設のグループ週表示。 施設の存在確認は左上の施設グループ dropdown か「ユーザー/施設」検索 box |
 
 - ページ内検索 box への type は UI 状態依存で空振りしやすい — **search.csp への直 navigate が確実**。
+- ⚠️ **全文検索 (`/g/fts/search.csp`) の scope は掲示板 + ファイル管理のみ** — 施設予約・スケジュール・ワークフローは hit しない (結果ページ自身が「その他のアプリケーションは各アプリケーション内から検索」 と明記)。 fts の 0 件を「施設が存在しない」 等の absence 証明にしない (= scope 違いの null)。 施設の不在を言うには施設予約画面の施設リスト側で確認する。
+- ⚠️ **組織の敷地内にある建物でも、 運営主体が別法人 (同窓会・生協・組合会館 等) の施設は Garoon の施設リストに載らない**ことがある — 「リストに無い = 予約不能」 でなく、 別系統 (当該法人の事務局への電話等) を疑う。
 - 検索結果は掲示/file の **snippet 込み**で返るので、 get_page_text だけで内容の大半が取れることが多い。
 
 ## Download token の期限切れ (= 200 + login page)
