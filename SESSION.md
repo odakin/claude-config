@@ -2,6 +2,12 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-01b: §8.21 domain 軸 + 定期棚卸し pattern / §4.2 帰責軸 / research-email 2 §
+
+- [`§8.21 #noise-obligation-signal-sharing`](docs/convention-design-principles.md#noise-obligation-signal-sharing) に 2 追記 (`c72336c` + `f3fa41a`): **domain 軸** (= 網の scope 宣言 — 監視系の死角は検出器の穴より先に「張っていない domain」 に開く、 金融 mail は username mask で名指し検出が原理的に無力) + **定期棚卸し** (= 語彙・sender は列挙で収束しない → suppress の誤りを定期検出する meta-detector + 月初 stateless gate + 棚卸し finding の消費規律)。 origin = 個人層 IBKR パスキー督促 16 通 3 ヶ月埋没 RCA。
+- [`§4.2`](docs/convention-design-principles.md#self-rca-framing-minimization) に**帰責軸** (attribution drift) 追記 (`301bd93`) = self-serving generator の第三軸 (§4.1 成果物 / §4.2 severity / 帰責)。 mail domain 形 = 同日の [`research-email.md#apology-cause-attribution`](conventions/research-email.md#apology-cause-attribution) (`8aebd34`)。
+- [`research-email.md#publisher-solicitation-triage`](conventions/research-email.md#publisher-solicitation-triage) 新設 (`f3fa41a`) = 有名出版社勧誘の 4 判定軸 (送信部門 / 分野一致 / series tier / 労働実体)。 instance (config 語彙・検出器・declared-skip 実例) は個人層 (kernel-up / instance-down)。 run-all-checks 49/49。
+
 ## 2026-09-01: convention-design-principles §8.27 新設 (user-execution handoff)
 
 - [`§8.27 #user-execution-handoff`](docs/convention-design-principles.md#user-execution-handoff) (`67d670a`) = 最終 leg が人間本人にしかできない義務 (認証 form 提出・PW 設定・本人 login) の手渡し 4 段 kernel (readiness 同 turn / packet 1 行 / forced-disposition + 人間 channel / 「代行不可」 は probe + packet 併記) + **close-kills-the-net** (open-record 走査検出器は close で射程を失う) + **委任は可視の不作為を cover しない** (催促強度 ≠ stakes = §8.8 disposition 版)
