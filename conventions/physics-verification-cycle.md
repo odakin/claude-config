@@ -5,18 +5,18 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 -->
 # 物理主張の検証サイクル (verification cycle)
 
-> **位置づけ**: 本リポ維持者が自分の物理研究で運用している「主張を検査で守る」体制の一般則。 実 instance (個別 paper の audit script 群・claim ledger) は各 private paper repo に残置 (= kernel-up / instance-down)。 着想の一部 = 日高義将氏の公開講演「AI による理論物理研究の自動化」 (PPP2026、 2026-08。 FCIR = Fibered Claim IR / verify-to-learn の概念もそこから) — ただし本 doc は自前運用で incident-backed になった kernel のみを書く (借り物の未検証手法は書かない)。
+> **位置づけと credit**: 本リポ維持者が自分の物理研究で運用している「主張を検査で守る」体制の一般則。 実 instance (個別 paper の audit script 群・claim ledger) は各 private paper repo に残置 (= kernel-up / instance-down)。 **着想・命名の一部 = 日高義将氏 (京都大学基礎物理学研究所) の公開講演「AI による理論物理研究の自動化」 (PPP2026、 2026-08)**: 4 station cycle の整理・**verify-to-learn** の名と手順 form・**FCIR** (Fibered Claim IR = 原文/読み方/前提/根拠) の読み多義分析・「根拠がない時に止まる」「確かめられなかった項目を分かったことにしない」 の標語・integrity ≠ efficacy の評価 form は同講演由来。 一方、 機械 anchor・foil・検証 tier・claim 3 状態は当方の運用が講演に先行して独立に発達したもので、 講演は収斂の確認と命名を与えた。 本 doc は自前運用で incident-backed になった kernel のみを書く (借り物の未検証手法は書かない — 例: FCIR の台帳 form 自体は氏の実演でも効果判定不能と報告されており、 採らない)。
 
 ## <a id="cycle-shape"></a>1. サイクルの形 — 4 station + 「1 つでも fail したら進めない」
 
 ```
-生成 (計算・導出・散文)
+調べる・生成 (文献の選定と検証読み・計算・導出・散文)
   → 機械検査 (standing audit: 式・係数・引用・数値を決めた方法で確かめる)
   → 独立した第二の目 (別 pass / 別 session の AI が疑う: 抜け・飛躍・偽主張)
   → 人間の判断 (意味・価値・公表可否 — ここだけは人間が引き受ける)
 ```
 
-- **gate**: 用意した検査に 1 つでも fail したら自動では先へ進まない (fix → 再測 ALL PASS が前提)。
+- **gate**: 用意した検査に 1 つでも fail したら自動では先へ進まない (fix → 再測 ALL PASS が前提)。 検査を持たない対象を通すときは **「検査なしで通した」 を記録に残して**通す — 検査の不在が沈黙と区別できない状態を作らない ([`convention-design-principles.md#conditional-firing-visibility`](../docs/convention-design-principles.md#conditional-firing-visibility))。
 - **構造的な非対称を知って配る**: standing 機械検査は「登録済みの主張」しか守れない — 新規に書かれた主張は、書かれてから anchor 化されるまで**構造的に無防備** (= latency 窓)。この窓を受け持つのが第二の目と手術時 sweep ([`paper-audit.md#relocation-rebinding-sweep`](paper-audit.md#relocation-rebinding-sweep))。「機械が 0 件捕捉」を能力欠如と誤診しない ([`convention-design-principles.md#detection-zero-location`](../docs/convention-design-principles.md#detection-zero-location))。
 
 ## <a id="machine-anchor-per-claim"></a>2. 主張ごとの機械 anchor — 安定した主張は audit script に固定する
@@ -48,7 +48,9 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 
 **なぜ**: 「検査した」の暗黙 scope 拡大が、単一情報源 null の結論飛躍と同型の事故を作る。 refuted の記録も消さない (= 何が落ちたかは検査資産。 [`convention-design-principles.md#errata-on-preserved-records`](../docs/convention-design-principles.md#errata-on-preserved-records))。
 
-## <a id="verify-to-learn"></a>6. Verify-to-learn — 外部論文の検証読み
+**成果物の拡張 — 「確かめ直せる材料」も研究成果**: 論文と並んで、 検証 record (audit script・check 結果・出典・**失敗と未解決**・人が判断した理由) を「次の人 / AI が確かめ直して続きを始められる形」 で repo に残す。 判断理由の残し方 = [`convention-design-principles.md#design-snapshot-operation`](../docs/convention-design-principles.md#design-snapshot-operation) (DESIGN.md snapshot 運用)。
+
+## <a id="verify-to-learn"></a>6. Verify-to-learn — 外部論文の検証読み (名と手順 form = 日高氏講演)
 
 **ルール:** 外部論文を「使う」前提で読むときは、(1) 式・主張を item 化して抽出 → (2) 機械検査可能 (式・極限・数値・コード) と根拠追加が要る (散文主張) に分類 → (3) 機械検査可能分を 1 item ずつ独立導出で check → (4) 3 状態 ledger に記録、の順で読む。初回 run は**隔離した scratch ledger** で行い、本番の知識ベースへは verified のみ昇格させる。
 
@@ -63,13 +65,13 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 
 ## <a id="rubric-before-run"></a>8. 評価基準は走らせる前に決める — 判定不能は判定不能と言う
 
-**ルール:** 手法・対策の効果を主張したいなら、**評価基準 (指標・成功条件・判定不能条件) を実行前に事前登録**する。走らせた後に基準を選ぶと、どんな結果でも「効いた」ことにできる。基準を満たすデータが集まらない場合は「判定不能」と記録する — 記録の integrity (再現・保存一致) と手法の efficacy は別物で、前者の PASS を後者の証拠にしない。
+**ルール:** 手法・対策の効果を主張したいなら、**評価基準 (指標・成功条件・判定不能条件) を実行前に事前登録**する。走らせた後に基準を選ぶと、どんな結果でも「効いた」ことにできる。基準を満たすデータが集まらない場合は「判定不能」と記録する — 記録の integrity (再現・保存一致) と手法の efficacy は別物で、前者の PASS を後者の証拠にしない (この峻別の評価 form = 日高氏講演の実演 2)。**成果物の存在も正しさの証拠にしない** — PDF ができたこと・審査を通ったことは物理・引用・新規性・再現性の証拠でない ([`convention-design-principles.md#acceptance-is-not-specification`](../docs/convention-design-principles.md#acceptance-is-not-specification))。改善が効くのは **AI 本体でなく手順と検査** — session を越えて persist するのはシステム改変のみ ([`convention-design-principles.md#agent-learning-illusion`](../docs/convention-design-principles.md#agent-learning-illusion))。
 
 **なぜ**: 対策の多くは event が稀で統計が立たない (= 判定不能で終わる公算をあらかじめ書くのが誠実)。実例: 散文エラー対策の効果判定を「次の手術 event ≥2 回で捕捉半減、6 ヶ月で event <2 なら判定不能と記録」と事前登録した。
 
-## <a id="stop-when-no-grounds"></a>9. 止まる規律 — 根拠がない時は進めず人間に渡す
+## <a id="stop-when-no-grounds"></a>9. 止まる規律 — 根拠がない時は進めず人間に渡す (標語 = 日高氏講演)
 
-検証で根拠が足りない・読みが複数残る・仮説が決めきれない時は、**分かったことにして進めず、判定不能のまま人間の判断に送って止まる**。自動化の価値は走り続けることでなく、止まるべき所で止まること。散文の不確実性は「不確実性を expose する操作 (display 化・機械 probe・1 query 検証) を先に回す」が第一手。
+検証で根拠が足りない・読みが複数残る・仮説が決めきれない時は、**分かったことにして進めず、判定不能のまま人間の判断に送って止まる**。自動化の価値は走り続けることでなく、止まるべき所で止まること (= 「根拠がない時に止まる」)。散文の不確実性は「不確実性を expose する操作 (display 化・機械 probe・1 query 検証) を先に回す」が第一手。
 
 ## <a id="sibling-routing"></a>10. 隣接 doc への routing
 
