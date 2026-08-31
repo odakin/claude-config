@@ -35,15 +35,16 @@ Claude Code のコンテキストウィンドウは有限で、長い会話は�
 
 それは出発点にすぎない。その上に積み上がったのは運用レイヤー一式である: 実際の事故の根本原因分析 (RCA) を再利用可能なルールに蒸留した **100+ のドメイン規約 doc**（事務様式の自動記入、多アカウント Gmail MCP、macOS 自動化の袋小路、複数マシン fleet 運用、leak 防止、…）、**60+ の運用 script**、**30+ の hook**。`bash scripts/run-all-checks.sh` 1 コマンドで全 suite をローカル検証でき、CI も同じ検査を走らせる。
 
-## 具体例: autocompact 復帰
+## 日々の運用ループ
 
-長いセッションのあと Claude Code は会話を圧縮する。構造化された復帰パスがなければ「今どこにいたか」が失われる。このセットアップでは:
+セットアップは一度きり。このリポの本体は、その後の毎セッションで回るループにある:
 
-1. `CLAUDE.md` は常にコンテキストに載っている。末尾の **How to Resume** が「SESSION.md を読め」と指示する。
-2. `SESSION.md` に現在のタスク・進捗・未決事項がある（作業中は継続的に更新）。
-3. Claude は説明し直さずに中断点から再開できる。
-
-生命線は `SESSION.md` を陳腐化させないこと。`git push` 前の 4 軸レビュー（整合性・無矛盾性・効率性・安全性）がドリフトを出荷前に捕まえる — 実運用ではほぼ毎回何かが見つかる。
+- **セッション開始** — SessionStart hooks が今日の日付を anchor し、Claude アカウントの切替を検出し、MCP の account scope を注意喚起し、Windows ではツールチェーンを自己修復する。`CLAUDE.md` は常にコンテキストに載っていて `SESSION.md` を指すので、Claude はコールドスタートせず状況把握済みで始まる。
+- **作業中** — nudge hooks が実際にミスの起きる継ぎ目を見張る: remote より遅れた repo での編集（`git-state-nudge`, `stale-read-nudge`）、部分的な検索結果からの「存在しない」断定（`*-zero-result-nudge`）、書いても失われる先への事実の記録（`memory-guard`）、不安定な Google URL の貼り付け（`google-url-guard`）。ドメイン規約は trigger が合致したときだけロードされる — 知識はオンデマンドで、コンテキスト税にしない。
+- **commit 時** — pre-commit hooks が LaTeX ソースの Unicode を自動修正し、merge conflict マーカーの残置を block し、公開リポでは file 本文 + commit message にわたる 2-layer leak gate が走る。
+- **push 前** — 4 軸レビュー（整合性・無矛盾性・効率性・安全性）。実運用ではほぼ毎回何かが見つかる。
+- **コンテキストが尽きたら** — autocompact 復帰: `CLAUDE.md` の **How to Resume** が「`SESSION.md` を読め」と指示し、`SESSION.md` には現在のタスク・進捗・未決事項が継続的に更新されているので、Claude は説明し直させずに中断点から再開する。生命線は `SESSION.md` を陳腐化させないこと — 上の各 gate はそれを安価に保つためにある。
+- **マシンをまたいで** — `git pull` + post-merge hook が hooks と規約を全マシンで再同期する。どのマシンも同じルールで動き、どのセッションが残した状態も別マシンの次セッションから再開できる。
 
 ## クイックスタート
 

@@ -35,15 +35,16 @@ This repo solves that with a single authoritative set of rules ([`CONVENTIONS.md
 
 That was the starting point. What has accumulated on top is a full operating layer: **100+ domain convention docs** distilled from real incidents — each one a root-cause analysis turned into a reusable rule, covering office-form automation, multi-account Gmail MCP, macOS automation dead ends, multi-machine fleet operation, leak prevention, and more — **60+ operational scripts**, and **30+ hooks**. One command (`bash scripts/run-all-checks.sh`) verifies the whole suite locally; CI runs the same checks.
 
-## Example: autocompact recovery
+## The daily loop
 
-After a long session Claude Code compresses the conversation. Without a recovery path, the assistant loses "where we were." With this setup:
+Setup runs once. What the repo is really for is every session after that:
 
-1. `CLAUDE.md` is always in context. Its **How to Resume** section says "read SESSION.md."
-2. `SESSION.md` holds the current task, progress, and open decisions — updated continuously during work.
-3. Claude picks up exactly where it left off, no re-explanation needed.
-
-The critical habit is keeping `SESSION.md` honest. A 4-axis push-before-check protocol (consistency, non-contradiction, efficiency, safety) catches drift before it ships — in practice it finds something almost every time.
+- **Session start** — SessionStart hooks anchor today's date, detect Claude-account switches, surface MCP account-scope reminders, and (on Windows) self-heal the toolchain. `CLAUDE.md` is always in context and points at `SESSION.md`, so Claude starts oriented instead of cold.
+- **During work** — nudge hooks watch the seams where real mistakes happen: editing files in a repo that is behind its remote (`git-state-nudge`, `stale-read-nudge`), declaring something absent after a partial search (`*-zero-result-nudge`), writing facts to a destination where they would be lost (`memory-guard`), pasting unstable Google URLs (`google-url-guard`). Domain conventions load only when their trigger matches — knowledge on demand, not a context tax.
+- **At commit** — pre-commit hooks auto-fix Unicode in LaTeX sources, block leftover merge-conflict markers, and on public repos run the 2-layer leak gate over file bodies and commit messages.
+- **Before push** — the 4-axis review protocol (consistency, non-contradiction, efficiency, safety). In practice it finds something almost every time.
+- **When context runs out** — autocompact recovery: `CLAUDE.md`'s **How to Resume** section says "read `SESSION.md`"; `SESSION.md` holds the current task, progress, and open decisions, updated continuously during work; Claude picks up exactly where it left off, no re-explanation needed. The critical habit is keeping `SESSION.md` honest — and the gates above exist to keep that cheap.
+- **Across machines** — `git pull` plus the post-merge hook resyncs hooks and conventions everywhere. Each machine runs the same rules, and each session leaves state any other machine's next session can resume from.
 
 ## Quick start
 
