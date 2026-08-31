@@ -63,6 +63,8 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 
 **なぜ**: 実測で、生成 pass が見落とした同 class エラーを、同じ model の directed sweep pass が同日 6 件捕捉した — 独立性は model を替えることより **pass を分けて検査対象を named にする**ことから先に効く。handoff の機構 (spawn / token / 返送 spine) は [`multi-session-coordination.md`](multi-session-coordination.md)。
 
+<a id="cross-vendor-red-team"></a>**Cross-vendor red-team (2026-08 実測)**: 「pass 分離が先」には上限もある — ある共同研究で、同 model の生成 + self-check を通過して配布 PDF まで達した致命的誤り 2 件 (不公平な量子/古典比較・位相基準の取り違え 〔= 主観測量の 49% 変化が artifact〕) を、**別ベンダーの独立運用 AI に repo 一式を渡した敵役 pass** が 2 回とも捕捉した (2/2、 いずれも撤回の直接契機。 当事者の教訓記録 = 「外部 red-team は 2 回とも効いた。 自力では見つけられなかった」)。 機能した protocol: (i) 散文の主張でなく **repo 一式を渡す** — 機械 anchor (#machine-anchor-per-claim) があるから敵役は「完全再現 → それから壊す」 の順に入れる / (ii) 敵役 memo は暫定 verdict + scope 限定 (「効果そのものの否定ではない」) + 人間による数式再確認の推奨を明記 / (iii) **受け手は敵役の code を走らせず一から独立再実装して確認** (= 一致合わせは検証でない、 #verification-tier) / (iv) 受け入れ後、 自分の返信・代替案にもう 1 周敵役を回す (= 実測でここから自己訂正が 1 件出た)。 位置づけ: 別ベンダー pass は同 model 盲点の安価な decorrelation であって、 機械検査と人間の代替ではない (n=2 の観察で、 fresh-eyes・反証 framing との交絡は分離できていない)。
+
 ## <a id="rubric-before-run"></a>8. 評価基準は走らせる前に決める — 判定不能は判定不能と言う
 
 **ルール:** 手法・対策の効果を主張したいなら、**評価基準 (指標・成功条件・判定不能条件) を実行前に事前登録**する。走らせた後に基準を選ぶと、どんな結果でも「効いた」ことにできる。基準を満たすデータが集まらない場合は「判定不能」と記録する — 記録の integrity (再現・保存一致) と手法の efficacy は別物で、前者の PASS を後者の証拠にしない (この峻別の評価 form = 日高氏講演の実演 2)。**成果物の存在も正しさの証拠にしない** — PDF ができたこと・審査を通ったことは物理・引用・新規性・再現性の証拠でない ([`convention-design-principles.md#acceptance-is-not-specification`](../docs/convention-design-principles.md#acceptance-is-not-specification))。改善が効くのは **AI 本体でなく手順と検査** — session を越えて persist するのはシステム改変のみ ([`convention-design-principles.md#agent-learning-illusion`](../docs/convention-design-principles.md#agent-learning-illusion))。
