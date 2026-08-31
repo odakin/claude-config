@@ -2,6 +2,11 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-01: convention-design-principles §8.27 新設 (user-execution handoff)
+
+- [`§8.27 #user-execution-handoff`](docs/convention-design-principles.md#user-execution-handoff) (`67d670a`) = 最終 leg が人間本人にしかできない義務 (認証 form 提出・PW 設定・本人 login) の手渡し 4 段 kernel (readiness 同 turn / packet 1 行 / forced-disposition + 人間 channel / 「代行不可」 は probe + packet 併記) + **close-kills-the-net** (open-record 走査検出器は close で射程を失う) + **委任は可視の不作為を cover しない** (催促強度 ≠ stakes = §8.8 disposition 版)
+- origin = 個人層の授業評価フィードバック deep RCA (draft + 共担者レビュー完了済みの提出義務が「代行不可」 responsibility sink → 委任下見送り close → 66 日後に第三者指摘で顕在化)。 生存 sibling 2 + 隣接 1 + close 事故 2 例で §9.8 充足。 instance (gate script / marker field / cadence 実装) は個人層 (kernel-up / instance-down)。 index 再生成済、 run-all-checks 49/49
+
 ## 2026-08-31d: research-email に「返信をどのスレッドに置くか」 § 追加
 
 - [`research-email.md #reply-thread-follows-counterpart`](conventions/research-email.md#reply-thread-follows-counterpart) 新設 (`9549303`) = 同日追加した [#version-arrives-off-thread](conventions/research-email.md#version-arrives-off-thread) の**鏡像**。 相手が毎回新規スレッドで送ってくるなら、 こちらの返信も新規で立てる — 古いスレッドへの `In-Reply-To` 返信は相手の一覧では**スレッド最初の件名**で表示され、 相手がその送信者なら「自分の古い送信」 に見えて素通りされる
