@@ -3506,7 +3506,18 @@ origin: 2026-08-21 海外出張願 (人事課 docx 様式) — 5 回の変換試
 2. **印刷後の digital 修正 = 物理伝播点呼**: 印刷済みの様式の xlsx/PDF を修正したら、 その修正で無効になる**印刷済みの紙を列挙**して各々「刷り直す / 廃棄 / 訂正印」 を決める。 ⚠️ **数式参照で連動する別ページも点呼対象** — 1 sheet の修正が複数の印刷済みページ (予定表と報告表 等) を同時に無効化するのに、 目前の提出に近い 1 枚だけ刷り直して残りを取りこぼす partial re-print が実事例。
 3. **提出直前に版を照合**: 紙を窓口に出す直前、 点呼行の印刷日 vs 当該 file の最終修正 (git log / mtime) を突き合わせ、 修正が後なら刷り直してから出す。
 
-**機械 backstop**: 点呼行 + git log があれば「印刷日以降に source が変わった open task」 は機械検出できる (dashboard 統合の検出器を推奨)。 ただし検出器は点呼行に依存する = 規律 1 と機械は相補。 印刷 preflight (= [`print-preflight`](#print-preflight)) が「刷る紙の品質」 gate なのに対し、 本節は「刷った紙の鮮度」 gate — 直交する別の関門。
+**機械 backstop**: 点呼行 + git log があれば「印刷日以降に source が変わった open task」 は機械検出できる (dashboard 統合の検出器を推奨)。 ただし検出器は点呼行に依存する = 規律 1 と機械は相補 (点呼行 pattern の一般則 = [`convention-design-principles.md §19 (= #rollcall-line-marker)`](../docs/convention-design-principles.md#rollcall-line-marker))。 印刷 preflight (= [`print-preflight`](#print-preflight)) が「刷る紙の品質」 gate なのに対し、 本節は「刷った紙の鮮度」 gate — 直交する別の関門。
+
+**検出器設計の実測知見 (= 偽陽性 2 class、 2026-08 live 検証)**: ① **同日 print↔fix は判定不能** — 「夕方に xlsx を再構築 → 直後に最終版を刷って提出」 が実運用の常態で、 commit 日 granularity の inclusive 比較は偽陽性の洪水になる → **strictly-after (翌日以降の修正のみ) に倒し、 同日の伝播は規律 2 (修正 turn の点呼) を床にする**。 ② **新規ファイル追加は印刷済みの紙を無効化しない** — 案件 dir には後から別書類の PDF が増える (宿泊証明書の事前印字等) → `git log --diff-filter=M` で**修正のみ**を見る (= source xlsx は常に in-place 修正されるので取りこぼさない)。
+
+## <a id="unsealed-page-mail-submission"></a>押印の無いページは紙にしなくてよい — 提出・差し替えの経路は「押印の有無」 で分岐
+
+紙提出が慣習の窓口 (事務・経理) でも、 **物理押印を持たないページ (日程表・依頼書・請求書の押印欄なし版 等) は PDF メール添付での提出・差し替えを受けることが多い** — 押印だけが「紙でなければ運べない」 要素で、 それ以外のページを紙にするのは慣習であって要件ではない。 特に**差し戻し対応の差し替え 1 枚**はメール経路が最短 (= 印刷・出校・窓口往復が全部消える)。
+
+- **確定のさせ方**: 窓口が受けるかは 1 回試せば分かる — 初回は差し替え等の低 stakes な 1 枚で送り、 受理されたらその窓口の default 経路として記録する (以後は迷わない)。 窓口から「紙で」 と指定が来たら従う (= default であって指定を override しない)。
+- 🚫 **メール提出の本文に「紙が必要な場合は印刷して持参します」 型の fallback 文言を足さない** — メールで完結する提出にこの一文は冗長で、 相手に重い経路 (紙) を選ばせる誘い水になる。 紙が要るなら相手から言ってくる。 draft 完成時に「印刷して」「持参」「紙で」 を grep して検出。
+- ⚠️ **押印済みページを画像印影でデジタル送付するのとは別問題** — 印影を持つ書類の媒体判断 (紙で渡るか file で渡るか) は各運用の印影ルールが正本 ([`physical-seal-required`](#physical-seal-required) 参照)。 本節は「押印がそもそも無いページ」 の経路の話。
+- 印刷する場合の直交 gate: 品質 = [`print-preflight`](#print-preflight) / 鮮度 = [`printed-artifact-staleness`](#printed-artifact-staleness)。 そもそも紙にしなければ両 gate とも消える — **「刷らない」 が最強の staleness 対策**。
 
 ## <a id="pdf-overlay-anchoring"></a>PDF overlay の値配置は「ラベルの右端」 でなく「セルの罫線」 に anchor する
 

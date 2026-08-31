@@ -699,6 +699,10 @@ sections:
     level: 2
     title: "印刷した紙は digital SoT の fork — 印刷後の修正は「物理伝播 event」"
     related: [print-preflight]
+  - id: unsealed-page-mail-submission
+    level: 2
+    title: "押印の無いページは紙にしなくてよい — 提出・差し替えの経路は「押印の有無」 で分岐"
+    related: [printed-artifact-staleness, physical-seal-required]
   - id: pdf-overlay-anchoring
     level: 2
     title: "PDF overlay の値配置は「ラベルの右端」 でなく「セルの罫線」 に anchor する"

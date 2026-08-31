@@ -1621,10 +1621,30 @@ yaml 正本 (講演 career DB) が「軽微な date 修正」を名乗る commit
 
 ---
 
+## <a id="rollcall-line-marker"></a>19. 点呼行 (rollcall line) — 散文で書かれた sub-obligation は数え直しで消える
+
+### <a id="rollcall-line-observation"></a>19.1 観察 pattern
+
+task 記録 (TODO notes 等) の**散文の中に埋まった sub-obligation** (= 「宿泊証明書も要る」「7/27 に印刷した」 型の 1 fact) は、 後の session が残 leg を**数え直す**ときに構造的に脱落する: 散文は要約されながら運ばれ、 要約は「主目的に対する残り」 だけを保存して付帯的な fact (取得窓・版・日付) を落とす。 落ちた fact が「窓が閉じる」 型 (取得は滞在中のみ / 紙は印刷時点の版で凍結) だと、 脱落 = 回収不能の実害になる。 実事例 2 系: 宿泊証明書 (残 leg の数え直しで「出張後」 バケツに畳まれ消えた → 窓 5 日前に人力 catch) / 印刷版 (印刷日が散文にしか無く staleness 判定不能のまま旧紙提出 → 差し戻し)。
+
+### <a id="rollcall-line-pattern"></a>19.2 pattern: 機械可読 1 行 marker + 不在も咎める検出器
+
+1. **固定 grammar の 1 行 marker** を task 記録に置く: `<名詞>: <値>` 形式で、 値は少数の enum + 括弧内自由文 (例: `宿泊証明書: 要(未取得) / 要(取得済 YYYY-MM-DD) / 不要(理由) / 不明(要確認)`、 `印刷版: YYYY-MM-DD (対象) / なし(理由) / 不明(要確認)`)。 散文と違い、 要約・数え直しを**素通りして生き残る** (= 行単位で copy され、 regex で機械照合できる)。
+2. **検出器は marker の不在自体を咎める** (= absence-flagging): 対象 class の open task に点呼行が無ければそれを flag する。 これが無いと「書いた task だけ守られる」 = 規律の浸透度が不可視。 `不明(要確認)` を enum に含め、 「分からない」 を silent 放置でなく可視の状態にする。
+3. **規律と機械は相補**: 検出器は点呼行が書かれて初めて中身 (窓・鮮度) を判定できる。 marker を書く reflex は規律側 (= 「event が起きた同 turn で書く」、 [`multi-session-coordination.md #green-light-carrier`](../conventions/multi-session-coordination.md#green-light-carrier) と同じ same-turn conversion family)。
+4. **導入時に一度 stock sweep**: 既存の open task に点呼行を追記してから運用開始する (= 導入直後の absence-flag 洪水を実 triage に変える。 このとき「実は分からない」 が `不明(要確認)` として正しく可視化される)。
+
+### <a id="rollcall-line-when"></a>19.3 適用判断
+
+点呼行に昇格させる基準 = **散文のまま落ちると回収不能 or 高価な fact** (= 取得窓が閉じる / 版が凍結する / 期限が失効する)。 何でも marker 化すると notes が台帳化して可読性を失う (= [§2 (= #no-duplicate-rules)](#no-duplicate-rules) の運用台帳 SoT 重複問題と相似) — 「痛い脱落が 1 回起きた fact 種」 から event-driven に導入する。
+
+---
+
 ## <a id="changelog"></a>変更履歴
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
+| 2026-08-31 | §19 追加 (点呼行 = 散文 sub-obligation の脱落防止 marker pattern) | 宿泊証明書 (取得窓が滞在中に閉じる、 2026-08-08) と 印刷版 (紙の vintage、 2026-08-31 paper-staleness 3 例目) の 2 instance から meta-pattern を抽出。 固定 grammar 1 行 + absence-flagging 検出器 + stock sweep。 instance 実装は個人層 (kernel-up / instance-down) |
 | 2026-08-29 | §18 追加 (生成 view = 意図せぬ時点 backup + 件数 parity 検出) | career DB yaml が「軽微修正」を名乗る commit で 357 行切り詰められ 7 日間未検出 → 生成 export の残存データが発見と復元の糸口になった事故から抽出。kernel を §18 に、検出器 instance は個人層に sequester |
 | 2026-04-02 | 初版作成 | 武貞メール対応での8件の不手際を分析し、規約設計の原則を抽出 |
 | 2026-04-03 | §3 の適用事例追加 | push 連鎖障害: 「規約はあるが手順が不明確」→ CONVENTIONS §3 に粒度・障害対応を追加、教訓の詳細は email-office DESIGN.md に記録 |
