@@ -2,6 +2,11 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-01d: README を実態整合 + 運用ループ主軸に組み替え、知見を §README の流儀へ hoist
+
+- README.md / README.ja.md 増強 2 段 (`6767dec` + `84d8ff4`): ① tagline・概数 (100+ 規約 doc / 60+ script / 30+ hook)・8 カテゴリ index link で understatement 解消 + 「For English-speaking users」を「一次読者は Claude ゆえ翻訳は optional」へ書き換え ② 「Example: autocompact recovery」節を「The daily loop」節に置換 (= セッション開始 → 作業中 nudge → commit gate → push 前 4 軸 → autocompact 復帰 → 多マシン再同期、 **層 1 が実 ship する hook のみに ground** = 層 3 機能は書かない)。 GitHub repo description も同期 (= 4 軸 sweep で drift 検出 → `gh repo edit`)
+- 知見 3 点を [`CONVENTIONS.md §README の流儀`](CONVENTIONS.md#readme-style) へ hoist: [#readme-reality-parity](CONVENTIONS.md#readme-reality-parity) (= understatement 監査 — 概数の数字 / 看板具体例の現在性 / repo description drift 面) + [#rule-text-language](CONVENTIONS.md#rule-text-language) (= 規約本文の一次読者は Claude、 fork 採用に翻訳は前提でない) + 推奨構成 3 を「運用系リポは 1 場面でなく運用ループ全体を walkthrough に」 へ更新。 origin = user 指摘 2 連 (「understatement になっとらんかね」 「主眼が setup になっちゃってた、 肝は日々の運用」)
+
 ## 2026-09-01c: AUTO-TREE の auto-load 税 縮退 — CLAUDE.md 95→35 KB (生成契約変更)
 
 - `generate-tree.py` の生成契約を変更 (owner 承認、 設計正本 = [`DESIGN.md #auto-tree-autoload-slim`](DESIGN.md#auto-tree-autoload-slim)): ① conventions tree の説明を summary → **when** (trigger) ② hooks/scripts の per-file 列挙を新生成物 [`hooks/README.md`](hooks/README.md) + [`scripts/README.md`](scripts/README.md) へ移設 (件数 + pointer のみ CLAUDE.md に残す)。 生成物 3 → 5 箇所、 `--check` 管轄不変。 summary は `conventions/README.md` に生存 = **情報の削除ゼロ**、 README 2 本は AUTO-GENERATED view で正本ではない。 `--selftest` 新契約 ALL PASS。

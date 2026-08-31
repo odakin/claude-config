@@ -75,7 +75,7 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
 **推奨セクション構成** (public リポ):
 1. 1 行 tagline + 他言語版があれば相互リンク (上記の命名規則で)
 2. **Why this exists** — 動機・解く問題
-3. **具体例を 1 つ** — 抽象説明ではなく、このリポが何を起こすかを示す short walkthrough (例: autocompact 復帰の 3 ステップ、典型ワークフロー の before/after)
+3. **具体例を 1 つ** — 抽象説明ではなく、このリポが何を起こすかを示す short walkthrough。**リポの価値が繰り返しの運用にあるなら、1 場面の具体例でなく運用ループ全体を 1 節で書く**（例: 本 repo README の「The daily loop」= セッション開始 → 作業中 nudge → commit gate → push 前レビュー → autocompact 復帰 → 多マシン再同期。setup は一度きりで、訪問者が買うのはその後毎日回るループの方。単発 tool なら典型ワークフローの before/after で可）
 4. **Quick start / Build** — 非公開リポ (a) は 1 コマンドだけ + 詳細は CLAUDE.md へリンク。公開リポ (b) は build/test/deploy の実コマンドを README に置く（= README-only 読者の入口なので CLAUDE.md へ追い出さない。ただし maintainer 専用 toolchain は CLAUDE.md 可）
 5. **What's where / どこに何があるか** — 正本ファイルと主要ディレクトリへの bullet リスト (各 1–2 行)。構造ツリーは張らず CLAUDE.md を参照
 6. **Core concepts** (必要なら) — 核となる設計の 2–4 項目を 1 行ずつ要約、詳細は CONVENTIONS.md / DESIGN.md へのリンク
@@ -96,6 +96,10 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
 - **build / quickstart / deploy 手順** の home は **上の判別軸で決まる**: 非公開リポ (a) は CLAUDE.md が home → README 側を削る。公開リポ (b) は README が home → **CLAUDE.md 側を削って README に pointer**（README の build は剥がさない。ただし maintainer 専用 toolchain は CLAUDE.md 残置可）。
 
 例外は「具体例を 1 つ」のセクションで、これは訪問者の判断のために意図的に短い再構成を置いてよい。
+
+**<a id="readme-reality-parity"></a>実態との整合（understatement 監査）**: README を薄く保つ規律（上の禁忌）だけでは**過小申告**に滑る — リポが成長すると tagline と「Why this exists」が初期の動機のまま止まり、実態を伝えなくなる（実例: 本 repo が「conventions + bootstrap tooling」の看板のまま 100+ 規約 doc / 60+ script / 30+ hook の運用レイヤーに育っていた、2026-09-01 是正）。README の scope 記述は定期的に実物と照合する: (1) **規模は概数の数字で言う**（「100+ docs / 60+ scripts / 30+ hooks」— 数字は最も安価に実態を伝え、概数なら count drift も吸収する）(2) 看板の具体例・walkthrough が**現在の**価値の中心を指しているか（推奨構成 3 参照）(3) **GitHub の repo description も同じ tagline の drift 面** — README の tagline を書き換えたら `gh repo view <repo> --json description` で照合し `gh repo edit --description` で同期する（訪問者が最初に見る面がここで、README より古いまま残りやすい）。
+
+**<a id="rule-text-language"></a>規約本文の言語**: 規約 rule text の一次読者は Claude であり、Claude は主要言語を native に読む。∴ **fork 採用に翻訳は前提でない** — README に「翻訳・置換してから使う」framing を書かない（翻訳は規約本文を自分で監査・大改編したい人向けの optional と明記する）。人間向けの玄関（README・guide 類）は bilingual にする価値があるが、規約本体は書き手が最も精密に書ける言語でよい — 精度が言語障壁に勝る。
 
 **他リポ整備時**: 既存リポが claude-config 準拠になったとき、README を上のパターンで整える。まず判別軸で (a)/(b) を確定してから整える（公開リポなら README の build を残す）。CLAUDE.md / SESSION.md / DESIGN.md の整備と並行で行い、重複が見つかれば **home でない側を削る**（build/quickstart の home は判別軸で決定、それ以外は常に dynamic docs が home）。
 
