@@ -2,6 +2,13 @@
 
 > 📌 **このファイル = 直近 (当月) の作業 + Open items**。 古い dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)。
 
+## 2026-08-31d: research-email に「返信をどのスレッドに置くか」 § 追加
+
+- [`research-email.md #reply-thread-follows-counterpart`](conventions/research-email.md#reply-thread-follows-counterpart) 新設 (`9549303`) = 同日追加した [#version-arrives-off-thread](conventions/research-email.md#version-arrives-off-thread) の**鏡像**。 相手が毎回新規スレッドで送ってくるなら、 こちらの返信も新規で立てる — 古いスレッドへの `In-Reply-To` 返信は相手の一覧では**スレッド最初の件名**で表示され、 相手がその送信者なら「自分の古い送信」 に見えて素通りされる
+- 判定材料 = **過去の往復** (前回の返信がスレッド内か新規か)。 「1 対 1 スレッドに返すのが筋」 はこちらの整理都合であって届く保証ではない
+- ⚠️ **「届いていない」 と言われたら、 まず送信側の機械事実を確認** (= 送信済ラベル / 宛先が相手の送信元と一致 / bounce の有無 / Message-Id 発番)。 揃っていれば配送は成立しており原因は**可視性**の側 — そこから先 (相手の受信箱・迷惑メール・組織のフィルタ) は自分から見えないので、 再送の形を変えるのが唯一の手
+- origin = 個人層で、 3 回とも新規スレッドで送ってくる共著者に 1 対 1 の旧スレッドで返信し、 配送は成立していたのに受け取っていないと言われた実例 (新規スレッドで再送して着信確認)。 個々の相手の運用は instance = 個人層の連絡先 doc が home (kernel-up / instance-down)
+
 ## 2026-08-31c: photographed-document-transcription に引用抽出 § 追加 (= 画像から起こした引用は生成物)
 
 - [`photographed-document-transcription.md #quotation-extraction`](conventions/photographed-document-transcription.md#quotation-extraction) 新設 = 既存 doc は**手書きの一括転記**が主題だったが、 **印刷資料を撮って引用を起こす**場合も同じく「転記でなく生成」。 実測された逸脱を軽い順に表化 (語の置換 / 文体の平準化 / 圧縮・要約 / **原文に存在しない鉤括弧つき一文の創作** / 典拠の年・頁の創作)。 いずれも「読めませんでした」 と申告されず**もっともらしい形で出力される** = §pipeline の既存警告と同構造だが、 活字ゆえ「読めているはず」 の油断が加わる
