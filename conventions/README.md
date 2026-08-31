@@ -59,8 +59,8 @@ layer 1 (public) のドメイン固有規約 101 file をカテゴリ別に列�
 
 ## Office 様式・事務書類 (`office`)
 
-- **[audio-transcription.md](audio-transcription.md)** — 会議・インタビュー・収録の録音を機械 (whisper 等) で文字起こしして、その結果を引用・記録に使うとき + 転写した語が聞き取れない・機械が割れるとき
-  - 機械の音声転写も「転記」ではなく「生成」で、聞き取れない語はもっともらしい別の語として出てくる — 候補が割れたら推測で埋めず該当区間を切り出して人に聞く (多数決は当たらない実測あり)。語頭欠落は会議ツールのノイズ抑制が源で、転写して初めて可視化され、デコード側の工夫では戻らない (直すのは収録側)。「設定を変えた」と「効いた」は別なのでノイズフロアで測る
+- **[audio-transcription.md](audio-transcription.md)** — 会議・インタビュー・収録の録音を機械 (whisper 等) で文字起こしして、その結果を引用・記録に使うとき + 転写した語が聞き取れない・機械が割れるとき + 長い録音を配信・共有用に分割するとき
+  - 機械の音声転写も「転記」ではなく「生成」で、聞き取れない語はもっともらしい別の語として出てくる — 候補が割れたら推測で埋めず該当区間を切り出して人に聞く (多数決は当たらない実測あり)。語頭欠落は会議ツールのノイズ抑制が源で、転写して初めて可視化され、デコード側の工夫では戻らない (直すのは収録側)。「設定を変えた」と「効いた」は別なのでノイズフロアで測る。分割の切れ目は「音の切れ目」と「話の切れ目」の両方を満たす所に置き、無劣化 copy + 尺の合計一致 + 両側の再転写で検証する
 - **[chalkboard-close-up-merge.md](chalkboard-close-up-merge.md)** — 板書写真 PDF に close-up annotation を統合するとき
   - 板書写真 PDF で「広域 + close-up annotation」 2 枚を 1 page に統合する手順 (= Keynote 手作業経路 〔黒板 theme + 透過 chalk PNG overlay〕 を推奨、 PIL inline composite は anchor 明確時のみ。 free-form 配置は user が掴んでドラッグ、 AppleScript で .key auto 生成 + slide PNG export までを台本化、 chalk-only RGBA mask threshold 100-140 + Gaussian blur 1.5 px の標準値、 lectures 板書 reflex の延長)
 - **[erad-submission.md](erad-submission.md)** — e-Rad 経由で研究費 (JST・科研費・財団等) に応募するとき
