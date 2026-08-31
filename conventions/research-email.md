@@ -196,3 +196,16 @@ origin: 2026-06-29 学内事務向け詫び返信の作成 session。 共同署�
 **How to apply**: 原因段 = 「メール管理のフィルタが◯◯を誤って通知対象外に分類していたため、気づくことができないまま〜」 + 再発防止 1 文 (「フィルタの誤分類は修正しました」)。結果への責任 (ご迷惑をおかけした) は本人として引き受けつつ、機構の記述は事実どおりに保つ。この 2 つは独立に成立する — 責任を引き受けることと原因をぼかすことを混同しない。
 
 **Why**: 詫び文面はインシデントの対外的な一次記録になる。真因を曖昧化すると (a) 相手が誤った再発防止を期待する (b) 自分側の記録も汚染される (c) 「怠慢」 と読まれて信頼コストが上がる。draft を書く AI 自身の機構が原因である場合、記述が自分から遠ざかる方向に歪む圧が働くことを前提に、送信前に「この原因記述は機構の事実と一致しているか」を 1 問通す。
+
+## <a id="publisher-solicitation-triage"></a>出版社発の就任・寄稿勧誘 (Guest Editor / Special Issue / mass 査読 invite) の triage 軸
+
+有名出版社の実名 domain から届く勧誘は、 **送信元の正当性と依頼の学術的実体が独立** — 「本物の大手からだ」 は受諾理由にも精査省略の理由にもならない。 件名と送信者名だけで「mass だろう」 と捨てるのも逆向きの同じ誤り (= 判定は本文 1 読の上で)。 判定軸 4 つ:
+
+1. **送信部門**: 署名の所属が editorial board / 学術編集者か、 commissioning・publishing-performance・growth 系部門か。 後者は出版数 KPI の営業であって学術的招聘ではない。
+2. **分野一致**: 勧誘対象の誌・collection の scope が受信者の研究分野と一致するか。 分野違いへの Guest Editor 依頼 = 業績を読まない名簿ベースの spray 送信の確定 signal。
+3. **誌の tier**: 大手出版社は高 tier 誌と大量創刊の低 tier OA series を同じ brand 下に併存させる — series 名で tier を判定し、 出版社名で判定しない。
+4. **依頼の労働実体**: 「テーマ提案 + 著者集め + 宣伝 + 投稿管理」 を依頼側が丸ごと求める形は、 collection 増産のための無償労働の外注。 editorial 実績としての価値は tier に従う。
+
+処置: 軸 2-4 が揃って negative なら**失効するものは無い** (応答期限・義務なし) — 無視でよいが、 判断理由つきの declared-skip を記録に残す (= 将来の同種勧誘の前例になる + 監査系 sweep への再出現を止める)。 既定 decline にしたい発信 platform は [`convention-design-principles.md §8.21`](../docs/convention-design-principles.md#noise-obligation-signal-sharing) の記録付き opt-out へ。 ⚠️ 逆に、 editorial office 発の**査読依頼**は義務 class (放置 = 事故) — 勧誘と依頼を送信 domain で混同しない (同 §8.21 の bucket 混在)。
+
+origin: 2026-09-01、 大手出版社の commissioning 部門から分野違いの低 tier OA collection への Guest Editor 勧誘 (依頼 + 週次リマインド 3 通) を suppressed-mail 棚卸しで発掘した triage。 初回報告が件名のみの判定で user 押し返し後に本文精読した経緯ごと記録 (= 「本文 1 読」 規律の実例)。

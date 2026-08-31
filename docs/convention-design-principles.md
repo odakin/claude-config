@@ -820,6 +820,7 @@ noise 抑制 rule は **identity signal** (= sender domain / ML bracket / mail c
 - **登録時 gate (= 判断規律)**: noise entry を足す瞬間に「この signal を共有する義務 mail は何か?」 を 1 問挟む。 義務密度が高い sender class (= editorial office / 事務局 / 委員会 system) はそもそも登録しない。
 - **obligation-class override (= 機械層)**: 義務 lifecycle の class pattern (= 依頼・督促・accept/decline 要求・取消) を、 抑制の**全軸より優先**して貫通させる例外レイヤーとして持つ (= allowlist-over-blocklist)。 抑制 entry の増減と独立に義務が守られる。
 - **記録付き opt-out (= 例外の例外)**: 「義務 class だが既定 decline とする」 sender は、 抑制 list へ戻すのでなく override 側の**明示 opt-out** に置く (= 判断の日付・理由を併記)。 silent な再 suppress と、 監査可能な意思決定を区別する。
+- **定期棚卸し (= meta-detector、 2026-09-01 追記)**: override の語彙・sender は**列挙で収束しない** (= 同一発信主体の文面変種にすら追随できない実測)。 残余は「suppress を正しくする」 でなく「**suppress の誤りを定期検出する側の網**」 で受ける — suppress 済 ∧ 未認識 ∧ 高 stakes 語彙 (依頼/期限/必須化/urgent 等の recall 優先の粗い網) を月次で列挙し人間が walk する。 実測で 2 回連続の生きた真陽性 (= 審査督促の変種 / 別 domain の必須化督促と失効型 2 件)。 発火は state file を持たない月初 N 日 gate が簡潔で、 数日の反復表示は壁紙化でなく消費補助 (= 月 1 回きり表示だと無人 runner が人間に届かないまま消費する事故がある)。 **棚卸し finding の消費規律**: scope 外 domain の高 stakes 行も同 turn で本文 1 読 + 影響・期限 1 行評価 + clock つき carrier 起票までが棚卸し — 「1 行 report で手放す」 は [`§8.24`](#surfaced-not-consumed) の audit 版 (= 本 doc §8.21 domain 軸の origin incident はまさにこの手放しで 2 段の偶然に依存した)。
 
 reflex: noise blocklist / 抑制 filter に entry を足す瞬間に「この signal から義務も届くか?」 を問う。 義務 mail の miss を RCA するとき、 検出器の感度でなく**抑制 list との交差**を第一容疑にする (= 同型 incident の axis が bracket / domain / category と違っても generator は同一)。
 
