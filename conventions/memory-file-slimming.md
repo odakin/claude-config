@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: CLAUDE.md 等の memory file が肥大して縮退 (slimming) するとき + 完了 entry を archive へ graduate するとき + 長大 bullet / table row を pointer 化するとき
 category: harness-core
-summary: memory file のサイズは毎 session + 毎 headless routine が払う税 — 縮退は「MOVE + pointer 化、 DELETE 禁止」 が大原則で、 SoT 照合 → 不足 MOVE → trim の順を 1 unit ずつ守れば義務を落とさず 25% 級の削減ができる (検証済手順 + gates + 一意 prefix 行置換 helper)
+summary: memory file のサイズは毎 session + 毎 headless routine が払う税 — 縮退は「MOVE + pointer 化、 DELETE 禁止」 が大原則で、 SoT 照合 → 不足 MOVE → trim の順を 1 unit ずつ守れば義務を落とさず 25% 級の削減ができる (検証済手順 + gates + 一意 prefix 行置換 helper)。 追補 (2026-09-01、 6 repo −64% 実測): fleet 並列縮退 / 旧全文 verbatim 退避 / 義務 carrier 付き graduation 判定 / archive の検出器除外 glob 両形 / 並行 session 干渉 / 生成 block への適用
 -->
 # Memory file の縮退 (slimming) — MOVE + pointer 化の手順
 
@@ -82,6 +82,72 @@ home file を pull しただけで両方消えた — registry は正しく、 �
 移動済み section への stale 引用が見つかることがある。 見つけたら **SoT 側を先に直してから**
 pointer 化する (= stale な正本への pointer は縮退の意味を毀損する)。
 実測 1 pass で docstring 自己矛盾 2 件 + 移動済 § への stale 引用 2 箇所を発見・修復した。
+
+## <a id="fleet-parallel-slimming"></a>fleet 並列縮退 (= 複数 repo を delegate で一斉に)
+
+肥大は repo 単位で独立なので、 縮退は **1 repo = 1 delegate** で並列化できる
+(実測 2026-09-01: 6 repo / 9 file を親 1 + delegate 4 で一斉、 1.37 MB → 0.49 MB 〔−64%〕、 義務喪失ゼロ)。 規律:
+
+- spec には本 doc を「最初に全文読む」 と明記し、 大原則 (MOVE + pointer 化 / DELETE 禁止 /
+  義務保全 > サイズ目標) と repo 固有の live 制約 (触ってはいけない表・改変禁止 file) を焼き込む。
+- gates は repo ごとに完結させる: 各 delegate が自 repo の検査 runner / drift 検査 / greppability /
+  構造 invariant を回し、 **1 repo 1 commit + push まで完遂**してから報告する。
+- **逐語 coverage の機械照合が最強の gate**: 「旧 file の全行が new + archive のどちらかに literal
+  存在する」 を script で assert すると DELETE ゼロが証明になる (見出し level 変更等の意図的差分のみ
+  個別 assert)。 byte 収支 (new + moved ≥ 旧) の照合はその軽量版。
+- delegate の out-of-scope findings (= 縮退 commit に混ぜない引き継ぎ) は親が集約し、
+  修復するか carrier (SESSION entry / TODO) に載せるまでが 1 単位。
+
+## <a id="verbatim-retreat"></a>pointer 化の安価な安全化 = 旧全文の verbatim 退避
+
+[#pointer-conversion](#pointer-conversion) step 3 (payload の SoT 実在照合) は unit 数が多いと高くつく。
+代替: **pointer 化する unit の旧全文を archive の専用節 (例: 「pointer 化退避」) へ verbatim MOVE
+してから trim する**。 fact ごとの照合を省いても、 home の無い fact が archive に生き残る
+(= archive が catch-all home になる) ので fact-loss ゼロが構造で保証される。
+pointer 行には「旧全文 = <archive>」 を 1 語添える (= 読み手が退避の存在を知る経路)。
+SoT 照合を丁寧にやる余裕があるときは本則 (= SoT 側へ寄せる方が home が 1 つで済む)、
+live entry を大量に薄くするときはこの variant。
+
+## <a id="obligation-carrier-graduation"></a>義務 marker 付き entry の graduate 判定
+
+「残 action / user 判断待ちを運ぶ entry は graduate しない」 の運用形: graduate 前に移動候補
+全体を義務語彙 (残 / 未実装 / 未着手 / 判断待ち / green-light 待ち / 次 session / 保留 …) で
+機械 grep し、 hit した entry ごとに **義務の carrier が別に立っているか** を確認する —
+plan 内の un-defer trigger 記録 / TODO / 機械 surface (SessionStart hook 等) / 後続 session で
+超越済、 のどれかがあれば MOVE 可。 無ければ (a) entry を hot に残す か
+(b) 義務行だけ hot に lift して本体を MOVE (= lift 先は Open items 等の常設節)。
+判定の要旨は archive header か commit message に 1 行残す (= 後から「なぜ移せた」 が追える)。
+
+## <a id="archive-detector-exemption"></a>archive file と検出器の除外 glob
+
+archive は「正本の重複」 を意図的に抱える (= verbatim 退避) ので、 SoT drift 系検出器の scan からは
+除外するのが正しい。 ⚠️ 除外 glob は **file 形 (`*/SESSION-archive.md`) と dir 形
+(`*/SESSION-archive/*`) の両方**を張る — 片方だけだと命名差で false positive が出る
+(実測 2026-09-01: dir 形のみ登録済みの環境で file 形 archive を新設し FP 1 件)。
+archive を新設したら検出器の除外 registry を同 commit で更新する。
+
+## <a id="parallel-session-interference"></a>並行 session 干渉 (= stale checkout の姉妹)
+
+縮退中の working tree は、 並行 session の `git add` に巻き込まれて**途中状態のまま commit され得る**
+(実測 2026-09-01: SESSION 分割中に別 worker の無関係 commit へ同梱された)。 防御:
+
+1. 分割の write は「新 archive + 縮んだ本体」 を**同一 script 実行内で連続 write** する
+   (= どの瞬間に commit されても対で入り、 transient に片割れだけが history に残らない)。
+2. 着手時の実測サイズと直前 read のサイズがずれたら、 続行前に diff で出所を特定する
+   (= 並行編集の混入は「読んだ内容を保存し直す」 操作で無言に取り込まれる)。
+3. 自分の途中状態が他者 commit に入っていたら、 当該 commit に対の file が揃っているかを
+   commit 単位で機械確認する (揃っていれば欠損なし、 巻き込みの旨を自 commit message に記載)。
+
+## <a id="generated-block-slimming"></a>生成 block への適用 (= 手書き file だけが税ではない)
+
+auto-load される file の肥大が AUTO-GENERATED block 由来なら、 縮退の対象は**生成契約そのもの**:
+表示を digest (summary) から **trigger (when)** に切替え、 digest は auto-load されない生成 view
+(README 等) へ移す。 [#pointer-conversion](#pointer-conversion) step 4 の
+「routing table は trigger 列こそが routing 機能」 の生成側適用で、 源 data は不変なので
+情報の削除ゼロで済む。 移し先の README は AUTO-GENERATED の view であり正本ではない
+(= 「README に正本を置かない」 規律と両立する)。 実例 = 本 repo `generate-tree.py` の
+2026-09-01 契約変更 (設計記録 = [`DESIGN.md #auto-tree-autoload-slim`](../DESIGN.md#auto-tree-autoload-slim)、
+CLAUDE.md 95 → 35 KB)。
 
 ## 実測 evidence (2026-07-29/30)
 
