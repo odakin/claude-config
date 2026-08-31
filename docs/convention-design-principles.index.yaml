@@ -225,6 +225,10 @@ sections:
     legacy: "8.25"
     level: 3
     title: "8.25 検出失敗の RCA は「ゼロの位置」を先に特定する — 能力の不在と trigger の不在を分離する"
+  - id: disjunctive-finding-self-routing
+    legacy: "8.26"
+    level: 3
+    title: "8.26 二択を提示する finding は判別証拠を同梱する — 枝の選択を消費側 recall に残さない"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

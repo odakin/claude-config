@@ -887,6 +887,16 @@ origin: 2026-08、 研究費公募の応募判断 TODO が 2 つの独立 surfac
 
 origin: 2026-08、 ある paper 磨き込み incident の cold-eyes RCA。 散文主張エラー 11 件が「人間 11/11・機械 0/11」 と自己申告されたが、 一次資料 (session transcript + commit 系列) の分解で 7 born + 3 latent 発掘 + 1 規約往復と判明し、 かつ人間が命令した directed sweep は 2 回とも実捕捉 (計 6 件)・agent の自発起動は 0 回 — 対策は主張台帳の新設から「手術 event → sweep」 の trigger 配線 1 本に縮んだ ([`paper-audit.md#relocation-rebinding-sweep`](../conventions/paper-audit.md#relocation-rebinding-sweep))。 sibling 系譜 = 検出器群が健全で signal を産出していたのに消費境界で落ちた RCA ([`§8.24`](#surfaced-not-consumed) / 産出≠消費) / gate が健全なのに frontend が honor しない ([`§8.15`](#enforcement-surface-frontend-survival)) — いずれも第一問が「機構を作れるか」 でなく「どのゼロか」 だった (3 incident 系譜、 [`§9.8`](#single-observation-scope-check) 充足)。
 
+### <a id="disjunctive-finding-self-routing"></a>8.26 二択を提示する finding は判別証拠を同梱する — 枝の選択を消費側 recall に残さない
+
+**rule**: 検出器の finding が「X か Y のどちらか」 という**選言** (= 例: 「対応が要るなら TODO 化、 決着済なら状態 field を migrate」) を提示するとき、 **どちらの枝が本命かを判別する安価な検査 (= 1 grep / 1 field read) が存在するなら、 その検査は検出器自身が実行して結果を finding 文面に焼き込む**。 判別を消費側 (= finding を読んで報告・対処する agent) に委ねると、 消費側は選言を**目についた片枝に潰して**報告する — 二択の存在自体は finding に書いてあっても、 「もう一方の枝を検査してから断定する」 は recall 依存の最弱発火面 ([`§8.12`](#firing-surface-hierarchy)) に落ちる。
+
+- [`§8.24`](#surfaced-not-consumed) の続きの層: あちらは「finding が消費されない」、 こちらは「消費されたが**誤読される**」。 表示が届いても、 文面が判別労働を読者に残していれば誤消費は起きる。
+- **判別検査が heuristic (= FP を含む) でも同梱する価値はある** — その場合は verdict でなく **検査順路の routing** として焼く (= 「証拠あり → まず閉じ忘れを検査、 裏取り前に『未対応』 と断定しない」 / 「証拠なし → 真の未対応が第一仮説」)。 severity は変えない。 最終の意味判定が人間側 floor に残ることを docstring に honest 明記する。
+- reflex: 選言を含む finding 文面を書く (or 監査する) とき「**この二択、 読者はどちらの枝を先に検査すべきか — それを機械が 1 手で教えられないか**」 を 1 行問う。 教えられるのに文面に無いなら、 それは検出器の設計穴であって消費側の注意力問題ではない。
+
+origin: 2026-08、 運用記録 ledger の「open 状態のまま N 日経過」 検出器。 finding は「未対応 or 状態 field の閉じ忘れ」 の二択を正しく提示していたが、 entry の action log には決着記録 (送信 id 付き) が既に書かれており、 消費側 agent は log を読まずに「未対応」 の枝で user に誤報告 → user が「返事書いたはず」 と catch。 対策 = log/notes の決着語 scan を検出器に追加し finding へ routing を焼き込み (retroactive + FP regression fixture 付き)。 上流因 (= 決着時に状態 field を閉じ忘れた記録者側) は当の検出器が既に backstop していた = ゼロは消費層のみ ([`§8.25`](#detection-zero-location) の分解を適用)。 instance (= 検出器名・regex・fixture) は個人層に残置 (= kernel-up / instance-down)。
+
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。

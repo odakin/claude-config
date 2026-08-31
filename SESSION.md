@@ -17,6 +17,11 @@
 - 配線: [`paper-audit.md #quotation-provenance`](conventions/paper-audit.md#quotation-provenance) 新設 (= 引用の出所を生成/転記で区別、 孫引きは本文側にも経路を書く、 手順は上記 doc が正本) / [`research-email.md #version-arrives-off-thread`](conventions/research-email.md#version-arrives-off-thread) 新設 (= 共同執筆の相手の最新版は 1 対 1 スレッド末尾とは限らず、 会議案内等の別スレッドに添付で来る → `from:<相手>` で期間検索・版の台帳・thread 単位の検出器は構造的射程外・返信の宛先は内容で決める)
 - origin = 個人層の記事共同執筆で、 書影から AI が起こした引用が上記 5 型すべてを含んでいた実例と、 それを原本で直してきた相手を「引用の改変」 と誤読して指摘リスト最上位に置いた二次過誤 (= 原本の写真は手元にあり開けば 1 回で分かった)。 instance は個人層に残置、 kernel のみ hoist。 doc-meta の when/summary 更新 + tree 再生成、 checks 49/49
 
+## 2026-08-31c: principles §8.26 新設 (= 二択 finding は判別証拠を同梱する)
+
+- [`convention-design-principles.md §8.26 (= #disjunctive-finding-self-routing)`](docs/convention-design-principles.md#disjunctive-finding-self-routing) 新設 = 検出器の finding が選言 (「X か Y」) を提示するとき、 枝を判別する安価な検査 (1 grep / 1 field read) は**検出器自身が実行して finding 文面に焼き込む** — 判別を消費側に委ねると選言は目についた片枝に潰される (= §8.24「消費されない」 の続きの層 = 「消費されたが誤読される」)。 heuristic でも routing として焼く価値あり (verdict にせず severity 不変 + honest 限界を docstring 明記)。 reflex = 「この二択、 機械が 1 手で先に検査すべき枝を教えられないか」
+- origin = 同日の運用記録 ledger 検出器の finding 誤消費 RCA (= log に決着記録があるのに消費側が「未対応」 の枝で誤報告 → user catch。 上流の閉じ忘れは当の検出器が既に backstop = ゼロは消費層のみ、 §8.25 の分解を適用)。 instance (検出器実装 + fixture) は個人層。 index 再生成 (130 sections)、 leak grep 0 hit。 sot-registry は §8.25 と同判断で非登録 (= 方法論散文、 重複 risk 低)
+
 ## 2026-08-31b: name-rendering.md 新設 (= 人名の表記を transliteration から復元しない)
 
 - [`conventions/name-rendering.md`](conventions/name-rendering.md) 新設 (user 指示「これ層１でよさそう / ヘッダの英字から日本語表記を推測しない、 という一般則」) = **機械 field の人名は正規化された不可逆な投影**。 ローマ字化 (同じ読みに多数の native 表記) / 記号平坦化 (`Jose` ← José) / 字系転写 (Dmitry/Dmitri/Dmitrii) / 全大文字姓 (`Hanako YAMADA` が示すのは**どちらが姓か**だけで字系は言っていない) のいずれも情報を捨てる方向で、 逆変換は一意でない。 ⚠️ **逆方向 (native → ローマ字) も同様に不可逆**
