@@ -2,7 +2,7 @@
 
 [![checks](https://github.com/odakin/claude-config/actions/workflows/checks.yml/badge.svg)](https://github.com/odakin/claude-config/actions/workflows/checks.yml)
 
-Shared conventions and bootstrap tooling for managing multiple projects with [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+Shared conventions, mechanical enforcement, and an operational knowledge base for running many projects — across many machines and parallel sessions — with [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 
 > **Japanese version**: [README.ja.md](README.ja.md)
 
@@ -32,6 +32,8 @@ If a later instruction or reflex conflicts with this section, **this section win
 Claude Code's context window is finite. Long sessions get compressed (autocompact), and without a structured recovery path, in-flight state is lost. Across many projects the problem multiplies: each one needs the same discipline, but maintaining it by hand drifts fast.
 
 This repo solves that with a single authoritative set of rules ([`CONVENTIONS.md`](CONVENTIONS.md)), symlinked into your workspace, plus hooks that enforce the rules mechanically. Every project follows the same protocol without duplication.
+
+That was the starting point. What has accumulated on top is a full operating layer: **100+ domain convention docs** distilled from real incidents — each one a root-cause analysis turned into a reusable rule, covering office-form automation, multi-account Gmail MCP, macOS automation dead ends, multi-machine fleet operation, leak prevention, and more — **60+ operational scripts**, and **30+ hooks**. One command (`bash scripts/run-all-checks.sh`) verifies the whole suite locally; CI runs the same checks.
 
 ## Example: autocompact recovery
 
@@ -82,9 +84,9 @@ Everything else (hooks, permissions, mass repo cloning, launchd agents) stays op
 - **[CONVENTIONS.md](CONVENTIONS.md)** — the rule set. Where to write what, safety guardrails, push protocol, information-destination table.
 - **[CLAUDE.md](CLAUDE.md)** — this project's ops doc: directory tree, full `setup.sh` step list, how to resume.
 - **[DESIGN.md](DESIGN.md)** — why the rules are shaped this way; design decisions, alternatives, trade-offs.
-- **[conventions/](conventions/)** — domain-specific rules (LaTeX, MCP, shared repos, Substack, scheduled tasks, shell env, Dropbox refs, …). Each file's header states when to load it.
+- **[conventions/](conventions/)** — the operational knowledge base: 100+ domain-specific rule docs in 8 categories (Claude Code / harness operation, office-form automation, email, papers & talks, macOS, research domains, web platforms, general engineering). Each file's header states when to load it; the categorized index with one-line summaries is [conventions/README.md](conventions/README.md). Most entries are distilled from real failures — the kind of operational detail (which API silently no-ops, which form field eats your text, which TCC grant a launchd agent actually needs) that rarely gets written down anywhere public.
 - **[docs/](docs/)** — usage tips, git-crypt guide, sensitive-repo patterns, convention design principles. Start with [English tips](docs/usage-tips.md) or [Japanese tips](docs/usage-tips.ja.md).
-- **[hooks/](hooks/) and [scripts/](scripts/)** — mechanical enforcement (verify everything locally with one command: `bash scripts/run-all-checks.sh`, the same suite CI runs): memory-guard, git-state-nudge, public-leak-guard, LaTeX Unicode auto-fix, public-repo audit. Public repos additionally get a **2-layer leak gate** at commit time: `public-precommit-runner.sh` (= file body Tier A regex + ephemeral Tier B literal) and `commit-msg-leak-guard-runner.sh` (= commit message scan via shared matcher library, BLOCK mode); both gated by `.claude/public-repo.marker` and bundled by `setup.sh` Step 8.
+- **[hooks/](hooks/) and [scripts/](scripts/)** — mechanical enforcement and ops tooling: 30+ hooks and 60+ scripts, from memory-guard, git-state-nudge, public-leak-guard, LaTeX Unicode auto-fix and public-repo audit to a PDF/xlsx/docx form-fill engine with diff-based verification, Overleaf sync, fleet heartbeat for multi-machine monitoring, and the Windows bootstrap. Annotated lists: [hooks/README.md](hooks/README.md), [scripts/README.md](scripts/README.md); verify everything locally with one command (`bash scripts/run-all-checks.sh`, the same suite CI runs). Public repos additionally get a **2-layer leak gate** at commit time: `public-precommit-runner.sh` (= file body Tier A regex + ephemeral Tier B literal) and `commit-msg-leak-guard-runner.sh` (= commit message scan via shared matcher library, BLOCK mode); both gated by `.claude/public-repo.marker` and bundled by `setup.sh` Step 8.
 
 ## Core concepts
 
@@ -107,7 +109,7 @@ If autocompact fires more than you expect, check per-file byte density (§10.7) 
 
 ## For English-speaking users
 
-The rule text in `CONVENTIONS.md` and most files under `conventions/` is written in Japanese, but the structure is language-agnostic. Fork the repo and translate or replace the rule text to match your workflow — `setup.sh` uses `gh auth` to detect your GitHub user and works as-is. READMEs, the git-crypt guide, and most script comments are bilingual.
+The rule text in `CONVENTIONS.md` and most files under `conventions/` is written in Japanese — but the primary reader of these files is Claude, which reads Japanese natively. Fork the repo and use it as-is: Claude applies the rules and talks to you in your language. Translation is optional, not a prerequisite — worth doing only if you want to audit or heavily rewrite the rule text yourself (Claude can do the translating). The structure, scripts, and setup are language-agnostic: `setup.sh` uses `gh auth` to detect your GitHub user and works unchanged. READMEs, the git-crypt guide, and most script comments are bilingual.
 
 ## Customization
 

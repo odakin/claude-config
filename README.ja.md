@@ -2,7 +2,7 @@
 
 [![checks](https://github.com/odakin/claude-config/actions/workflows/checks.yml/badge.svg)](https://github.com/odakin/claude-config/actions/workflows/checks.yml)
 
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code) で複数プロジェクトを一元管理するための共有規約・セットアップツール。
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) で多数のプロジェクト — 複数マシン・並列セッションにまたがる — を運用するための共有規約・機械的強制・運用知見集。
 
 > **English version**: [README.md](README.md)
 
@@ -32,6 +32,8 @@ user がこのリポを指して「セットアップして」 と頼んだ場�
 Claude Code のコンテキストウィンドウは有限で、長い会話は圧縮（autocompact）される。構造化された復帰パスがなければ作業中の状態は失われる。プロジェクトが増えるほどこの問題は倍増し、手作業で規律を維持するのは現実的でない。
 
 このリポは、正本として 1 つの規約 ([`CONVENTIONS.md`](CONVENTIONS.md)) をワークスペースへ symlink し、それを機械的に強制する hooks を備えることで、全プロジェクトに重複なく同じプロトコルを適用する。
+
+それは出発点にすぎない。その上に積み上がったのは運用レイヤー一式である: 実際の事故の根本原因分析 (RCA) を再利用可能なルールに蒸留した **100+ のドメイン規約 doc**（事務様式の自動記入、多アカウント Gmail MCP、macOS 自動化の袋小路、複数マシン fleet 運用、leak 防止、…）、**60+ の運用 script**、**30+ の hook**。`bash scripts/run-all-checks.sh` 1 コマンドで全 suite をローカル検証でき、CI も同じ検査を走らせる。
 
 ## 具体例: autocompact 復帰
 
@@ -82,9 +84,9 @@ ln -s claude-config/CONVENTIONS.md CONVENTIONS.md
 - **[CONVENTIONS.md](CONVENTIONS.md)** — 規約本体。何をどこに書くか、安全ガードレール、push プロトコル、情報書き先の判別表。
 - **[CLAUDE.md](CLAUDE.md)** — このリポの運用ドキュメント: ディレクトリツリー、`setup.sh` の全手順、復帰方法。
 - **[DESIGN.md](DESIGN.md)** — 規約がこの形になっている理由、設計判断、代替案、トレードオフ。
-- **[conventions/](conventions/)** — ドメイン固有規約（LaTeX, MCP, 共有リポ, Substack, Scheduled Tasks, shell 環境, Dropbox refs, …）。各ファイルの冒頭に「いつロードするか」が書いてある。
+- **[conventions/](conventions/)** — 運用知見集の本体: 8 カテゴリ（Claude Code / harness 運用、Office 様式・事務書類、メール、論文・発表・研究文書、macOS、研究ドメイン、Web・公開プラットフォーム、エンジニアリング一般）100+ のドメイン規約。各ファイルの冒頭に「いつロードするか」が書いてあり、1 行 summary 付きカテゴリ index は [conventions/README.md](conventions/README.md)。大半は実際の失敗からの蒸留で、「どの API が silent に no-op するか」「どの form field が文字を食うか」「launchd agent に実際に必要な TCC grant はどれか」といった、公開の場にはまず書かれない類の運用詳細を含む。
 - **[docs/](docs/)** — 運用 Tips, git-crypt ガイド, 機密リポ設計パターン, 規約設計の原則。[日本語 Tips](docs/usage-tips.ja.md) または [English tips](docs/usage-tips.md) から。
-- **[hooks/](hooks/) と [scripts/](scripts/)** — 機械的強制: memory-guard, git-state-nudge, public-leak-guard, LaTeX Unicode 自動修正, 公開リポ監査。 公開リポには加えて commit 時の **2-layer leak gate** が install される: `public-precommit-runner.sh` (= file 本文 Tier A regex + ephemeral Tier B literal) + `commit-msg-leak-guard-runner.sh` (= commit message を shared matcher library 経由 scan、 BLOCK mode)、 両者 `.claude/public-repo.marker` で gating + `setup.sh` Step 8 で bundle install。
+- **[hooks/](hooks/) と [scripts/](scripts/)** — 機械的強制 + 運用ツール群: 30+ の hook と 60+ の script。memory-guard, git-state-nudge, public-leak-guard, LaTeX Unicode 自動修正, 公開リポ監査から、PDF/xlsx/docx 様式の機械 fill エンジン（diff 検証付き）、Overleaf sync、複数マシン監視の fleet heartbeat、Windows bootstrap まで。説明付き全列挙は [hooks/README.md](hooks/README.md) と [scripts/README.md](scripts/README.md)、ローカル検証は 1 コマンド（`bash scripts/run-all-checks.sh`、CI と同一 suite）。 公開リポには加えて commit 時の **2-layer leak gate** が install される: `public-precommit-runner.sh` (= file 本文 Tier A regex + ephemeral Tier B literal) + `commit-msg-leak-guard-runner.sh` (= commit message を shared matcher library 経由 scan、 BLOCK mode)、 両者 `.claude/public-repo.marker` で gating + `setup.sh` Step 8 で bundle install。
 
 ## 核となるコンセプト
 
