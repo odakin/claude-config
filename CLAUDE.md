@@ -97,6 +97,7 @@ claude-config/
 │   ├── personal-skills.md                  # personal skill (= ~/.claude/skills/、 全 session 常時可視の auto-discover) を規律の発火面として使う規約 — 機構 fact 〔symlink 可・session 開始時 discovery〕 + description の書き方 + 多 machine 配線 〔explicit allowlist registry〕 + 検証作法 〔trigger test → discovery test の汚染回避順序、 headless claude -p の制約〕
 │   ├── photographed-document-transcription.md # 撮影写真の一括転記は「前処理 → 帰属確定 → 分担転記 → 統合 → 導出」 の 5 段。前処理を省くと薄い筆跡を読み違え、タイルをモデル入力上限より大きくすると解像度が却って落ちる。帰属は 2 つの独立集合の一致で裏付け、転記は誤記も含む verbatim + 判読不能 marker、分担は part file 経由で統合し SoT 重複を残さない
 │   ├── physics-notes.md                    # 物理・数理ノートの 4 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側 / 検証 note は問題・結論・手当のみ) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
+│   ├── physics-verification-cycle.md       # 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) の 8 kernel — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA からの hoist
 │   ├── preview.md                          # preview / dev server 動作中はユーザー確認依頼ターンに URL を毎回明示する出力ルール
 │   ├── prompt-injection.md                 # Tool result 内の prompt injection を flag する規律 (適用範囲・同ターン flag・literal 原文併示・確度二段・注入指示は従わない)
 │   ├── rebuttal-letter.md                  # referee report への point-by-point 返信 (= author response) 作成 6 reflex (= 回答は本文 grep 照合・起源でない文献は see e.g.・referee 誤記は静かに正す・自己否定語回避・全 comment フル引用・旧式番号は submission 版基準)、 paper-audit.md と相補
