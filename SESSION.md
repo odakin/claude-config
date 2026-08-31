@@ -2,6 +2,10 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-01e: memory-file-slimming.md に #regrowth-backstop 追補
+
+- [`#regrowth-backstop`](conventions/memory-file-slimming.md#regrowth-backstop) 新設 = 縮退後は再肥大の機械 backstop を常設する (根本欠陥「肥大を誰も見ていなかった」 の規約化) + 閾値設計 2 点 (**warn は達成可能な健康 floor の上** = 慢性点灯は healthy=silent を壊す / **設計値は live 実走で即校正** = 出荷 gate に「実 fleet で silent」)。 一般形の上層 hoist は 2 例目で判断 (実例 1 件)。 instance (検出器実装・閾値実値) は個人層 (kernel-up / instance-down)。 run-all-checks 49/49。
+
 ## 2026-09-01d: README を実態整合 + 運用ループ主軸に組み替え、知見を §README の流儀へ hoist
 
 - README.md / README.ja.md 増強 2 段 (`6767dec` + `84d8ff4`): ① tagline・概数 (100+ 規約 doc / 60+ script / 30+ hook)・8 カテゴリ index link で understatement 解消 + 「For English-speaking users」を「一次読者は Claude ゆえ翻訳は optional」へ書き換え ② 「Example: autocompact recovery」節を「The daily loop」節に置換 (= セッション開始 → 作業中 nudge → commit gate → push 前 4 軸 → autocompact 復帰 → 多マシン再同期、 **層 1 が実 ship する hook のみに ground** = 層 3 機能は書かない)。 GitHub repo description も同期 (= 4 軸 sweep で drift 検出 → `gh repo edit`)

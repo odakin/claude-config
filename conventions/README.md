@@ -25,7 +25,7 @@ layer 1 (public) のドメイン固有規約 101 file をカテゴリ別に列�
 - **[mcp.md](mcp.md)** — MCP ツールを使うとき (アカウント確認・scope 判定を含む)
   - MCP 固有規約（MCP 使用時に参照）
 - **[memory-file-slimming.md](memory-file-slimming.md)** — CLAUDE.md 等の memory file が肥大して縮退 (slimming) するとき + 完了 entry を archive へ graduate するとき + 長大 bullet / table row を pointer 化するとき
-  - memory file のサイズは毎 session + 毎 headless routine が払う税 — 縮退は「MOVE + pointer 化、 DELETE 禁止」 が大原則で、 SoT 照合 → 不足 MOVE → trim の順を 1 unit ずつ守れば義務を落とさず 25% 級の削減ができる (検証済手順 + gates + 一意 prefix 行置換 helper)。 追補 (2026-09-01、 6 repo −64% 実測): fleet 並列縮退 / 旧全文 verbatim 退避 / 義務 carrier 付き graduation 判定 / archive の検出器除外 glob 両形 / 並行 session 干渉 / 生成 block への適用
+  - memory file のサイズは毎 session + 毎 headless routine が払う税 — 縮退は「MOVE + pointer 化、 DELETE 禁止」 が大原則で、 SoT 照合 → 不足 MOVE → trim の順を 1 unit ずつ守れば義務を落とさず 25% 級の削減ができる (検証済手順 + gates + 一意 prefix 行置換 helper)。 追補 (2026-09-01、 6 repo −64% 実測): fleet 並列縮退 / 旧全文 verbatim 退避 / 義務 carrier 付き graduation 判定 / archive の検出器除外 glob 両形 / 並行 session 干渉 / 生成 block への適用 / 再肥大 backstop の常設 (warn 閾値 = 健康 floor の上 + live 校正)
 - **[mid-turn-text-visibility.md](mid-turn-text-visibility.md)** — ツール呼び出しを含むターンで user に見せる文面・結論・訂正を出すとき
   - user に見える提示面はターン最終テキストメッセージ (+ 明示的な file 提示) だけ — mid-turn テキストは表示されないことがあり (Claude Code desktop で実測、同一 session 内 2 連発)、tool 入力 (Bash heredoc / Edit content) や書き込んだ file はそもそも提示面でない (2026-08-29 再発で確定した変種)。文面 deliverable・結論・訂正は必ずターン最終メッセージに全文置く。「上の文面」「先ほどの訂正」と自ターン内を指す行為自体が事故 signal
 - **[multi-account-machine-surface.md](multi-account-machine-surface.md)** — アカウント × マシン × 端末の複数セル運用を設計・診断するとき

@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: CLAUDE.md 等の memory file が肥大して縮退 (slimming) するとき + 完了 entry を archive へ graduate するとき + 長大 bullet / table row を pointer 化するとき
 category: harness-core
-summary: memory file のサイズは毎 session + 毎 headless routine が払う税 — 縮退は「MOVE + pointer 化、 DELETE 禁止」 が大原則で、 SoT 照合 → 不足 MOVE → trim の順を 1 unit ずつ守れば義務を落とさず 25% 級の削減ができる (検証済手順 + gates + 一意 prefix 行置換 helper)。 追補 (2026-09-01、 6 repo −64% 実測): fleet 並列縮退 / 旧全文 verbatim 退避 / 義務 carrier 付き graduation 判定 / archive の検出器除外 glob 両形 / 並行 session 干渉 / 生成 block への適用
+summary: memory file のサイズは毎 session + 毎 headless routine が払う税 — 縮退は「MOVE + pointer 化、 DELETE 禁止」 が大原則で、 SoT 照合 → 不足 MOVE → trim の順を 1 unit ずつ守れば義務を落とさず 25% 級の削減ができる (検証済手順 + gates + 一意 prefix 行置換 helper)。 追補 (2026-09-01、 6 repo −64% 実測): fleet 並列縮退 / 旧全文 verbatim 退避 / 義務 carrier 付き graduation 判定 / archive の検出器除外 glob 両形 / 並行 session 干渉 / 生成 block への適用 / 再肥大 backstop の常設 (warn 閾値 = 健康 floor の上 + live 校正)
 -->
 # Memory file の縮退 (slimming) — MOVE + pointer 化の手順
 
@@ -148,6 +148,27 @@ auto-load される file の肥大が AUTO-GENERATED block 由来なら、 縮�
 (= 「README に正本を置かない」 規律と両立する)。 実例 = 本 repo `generate-tree.py` の
 2026-09-01 契約変更 (設計記録 = [`DESIGN.md #auto-tree-autoload-slim`](../DESIGN.md#auto-tree-autoload-slim)、
 CLAUDE.md 95 → 35 KB)。
+
+## <a id="regrowth-backstop"></a>縮退後は再肥大の機械 backstop を常設する
+
+縮退 campaign が繰り返し露呈した根本欠陥は「**肥大を誰も機械で見ていなかった**」 こと
+(276 KB cron 全滅も 2026-09-01 の fleet 肥大も、 発見の trigger は owner の手動質問だった)。
+縮退したら同じ流れで、 auto-load file のサイズを定期実測して**閾値超過だけを surface する
+検出器**を dashboard 等の常設面に置く (finding は本 doc へ routing = 手順まで導線を繋ぐ)。
+閾値設計の 2 点:
+
+- **warn は「達成可能な健康 floor」 の上に置く**。 縮退直後の実測 max (= それ以上薄くすると
+  義務を落とす床) より下に warn を置くと慢性点灯になり、 「healthy = silent」 が壊れて
+  真の finding が noise に沈む。 floor は設計でなく実測で決まる
+  (2026-09-01 実測: 縮退後 fleet max ~140 KB → warn 150 KB)。
+- **机上の設計値は live 実走で即校正する**。 初版 warn (120 KB) は実走で just-slimmed fleet が
+  即点灯 → 同 turn で調整した。 閾値付き検出器は「現状の実 fleet で silent になるか」 を
+  出荷 gate に含める。
+- archive (= 退避先) は閾値の対象外にする (= 入れると縮退が「移すほど焼ける」 self-defeating、
+  [#archive-detector-exemption](#archive-detector-exemption) の閾値版)。
+
+(閾値 2 点は任意の常設検出器に通じる一般形だが、 実例 1 件のため本 doc 留め —
+2 例目で上層 doc への hoist を判断する。)
 
 ## 実測 evidence (2026-07-29/30)
 
