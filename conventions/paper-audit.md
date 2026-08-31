@@ -30,7 +30,7 @@ template script で以下を抽出:
 
 ### Phase 2: Section-by-section reader simulation
 
-各 section を「初見 reader が Sec.1 から順に読む」 を simulate、 各文で「ここまでに未定義の symbol / 用語 / 概念」 を flag。 Phase 1 候補を AI 精読で確定 / 棄却 + 概念レベル forward を AI 精読で新規発見。
+各 section を「初見 reader が Sec.1 から順に読む」 を simulate、 各文で「ここまでに未定義の symbol / 用語 / 概念」 を flag。 Phase 1 候補を AI 精読で確定 / 棄却 + 概念レベル forward を AI 精読で新規発見。 併せて **cite の束縛検査**: 各引用がその文の主張を実際に支持するか (帰属が怪しければ abstract を一次確認 — 誤帰属 cite は隣の主張と束ね違えても文法的に読めてしまうため、 grep では出ない。 移設・書き換えを経た text は [`#relocation-rebinding-sweep`](#relocation-rebinding-sweep) class (f) と同じ検査)。
 
 Pass 単位の分割 (= context window 内で扱える size + 中断耐性):
 - Pass 1: 主要 section (= 機械的検出が集中する場所)
@@ -200,6 +200,29 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 **なぜ規約にするか:** 理解の更新は通常 1 箇所 (新しい節) に書き込まれ、 Summary・序論・脚注の旧記述は無傷で残る。 旧記述同士は互いに整合しているため節単位の読み直しでは見つからず、 旧語彙の grep + 新旧対比の観点でだけ引っかかる。
 
 **実例 (2026-08、 該当 private paper repo):** 本文の新節は graded 語法で完成していたのに、 Summary は 2 つの時間スケールを混同した旧記述のまま生きており (「この閾値は短すぎて観測困難」)、 共著者向け note の bullet も旧言明を引用していた。 指摘 3 回で Summary・note・bullet を新語法に統一。
+
+## <a id="relocation-rebinding-sweep"></a>文脈手術後の束縛再解決 sweep + 移設は verbatim-first (2026-08)
+
+**問題の機構:** 論文散文の 1 文は、真理値の一部を文の外が解決する束縛に預けている — 指示語・代名詞の先行詞、方向語 (below / in the main text)、対語 (counterpart / former / latter)、接続詞・分詞の係り先、次数限定 (exact / to all orders)、引用の帰属。**文脈手術 (移設・圧縮・文分割/合成・fix の連鎖) は文面を変えずに解決環境を変えるため、束縛は silent に再解決され、文単位の review では見えない。** 数式の `\cref` は rigid (壊れれば ?? で loud) だが、散文束縛は壊れても文法的に読めてしまう。特に危険なのは「先頭次数では真」な圧縮 — 書き手の頭の検算は先頭次数しか sample しないため、exact 文脈に置かれた瞬間に偽になる主張がもっともらしく見える。
+
+**ルール 1 (移設は verbatim-first):** appendix ↔ 本文の昇格/降格・節跨ぎの移動 (>1 段落) は、(a) verbatim 移動 → (b) 新文脈への適応編集、の 2 commit に分解する。移動しながらの再圧縮・言い換えを 1 commit に混ぜない。verbatim 移動なら束縛破れは不在か loud になり (例: "used in the main text" が本文中に来れば自己言及で即座に異様)、(b) の diff は純粋な編集として新文脈で review できる。
+
+**ルール 2 (手術 event → 同 turn で named-class sweep):** 文脈手術 (移設・>3 文の圧縮/展開・文分割/合成・同一段落への fix 3 連以上) を行った turn では、**指示を待たず** touched region に対して以下の checklist で sweep を宣言して回す:
+
+- (a) **指示語・代名詞**: 先行詞が同一文・直前文・明示 label のいずれかに在るか
+- (b) **方向語・位置語**: below / above / in the main text / in this appendix が移動後も真か
+- (c) **対語・関係語**: counterpart / former / latter / both / respectively の対が新文脈でも意図した対か (同一 object の別変数表示を「対」と呼んで二物を示唆していないか)
+- (d) **文頭接続詞・分詞の糊**: Instead / However / since / -ing 分詞の係り先が真の論理関係か。**直前に文の分割・合成をした場合は必ず** (= 局所的に正しい fix 2 つの合成が係り先を孤児化する実例あり)
+- (e) **exactness 動詞**: terminates / vanishes / is exact / to all orders / unique / collapses は全次数の主張 — 同文か直後に display (`\labelcref`) を持つか。無ければ display を新設するか主張を弱める (= prose は隠す、式と機械は暴く。display 化した主張は機械 audit の anchor にもなる)
+- (f) **移動 text 内の cite**: 引用が新文脈でも同じ主張に束縛されているか
+
+出力は「sweep した class と範囲 / NOT した範囲 / 確信境界」を明示し、「✓ pass」で終わらせない。
+
+**なぜ規約にするか:** 手術後の再点検は書き手の delivery loop に何も返さない (文面は完成して見える) ため構造的に落ちる ([`convention-design-principles.md#motivated-substitution-trap`](../docs/convention-design-principles.md#motivated-substitution-trap) の verification family)。**実例 (2026-08、該当 private paper repo):** appendix→本文の大型昇格 + 1 文単位 rework の 1 日で本 class のエラーが 7 件 born (偽 counterpart 主張・先行詞なし指示語・方向語の残骸・偽の二物・接続詞の孤児化・偽因果分詞・根拠二役)。standing の数式 audit fleet の事前捕捉は 0。一方、人間の指示で回した directed sweep は 2 回とも実捕捉 (計 6 件) = **欠けていたのは能力でなく自発 trigger**。うち最重の 1 件は物理的に偽の主張で、線形次で縮退する 2 量の取り違えが「counterpart」圧縮で生まれ、(e) の display 化 → 実計算で露呈した。台帳の質は予防にならない (同日の commit message は原文/読みの問題/根拠を 1 件ずつ記録する品質だったが、全て修復時の記録で生成時には効かなかった) — 効くのは**書いた pass と別の pass** による列挙・照合であり、その最小形が本 sweep。
+
+**隣接 anchor との分担:** [`#statement-placement-check`](#statement-placement-check) の孤児文検査と class (a) は部分重複する (あちらは配置時 trigger、こちらは手術時 trigger — どちらが先に発火しても同じ検査に落ちる)。強副詞 (never / only) は [`#claim-strength-three-tests`](#claim-strength-three-tests)、裸の exactness 動詞は本 anchor (e) が受け持つ。理解更新起因の旧語彙は [`#stale-framing-sweep`](#stale-framing-sweep)。
+
+**機械化の境界と defer:** 真理判定は機械化不能 (LLM / 人間 verify)。候補列挙 (checklist 語彙を含む文の enumeration) は grep 可能だが helper script 化は defer — un-defer trigger: 規律のみで 1 手術 event を回して列挙漏れが出たら。verbatim 移動の機械 gate (宣言済み例外 list 方式) も defer — un-defer trigger: 規律下でも move+rewrite 複合 commit が再出現したら。standing の常駐散文検出器は作らない (柔軟束縛語は正当使用が圧倒的多数で、真理判定なしの常駐 flag は FP 洪水になる — 列挙は sweep 時 on-demand に限る)。
 
 ## <a id="second-example-refine"></a>二例目が出たら refine
 
