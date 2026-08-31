@@ -2,6 +2,14 @@
 
 > 📌 **このファイル = 直近 (当月) の作業 + Open items**。 古い dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)。
 
+## 2026-08-31b: name-rendering.md 新設 (= 人名の表記を transliteration から復元しない)
+
+- [`conventions/name-rendering.md`](conventions/name-rendering.md) 新設 (user 指示「これ層１でよさそう / ヘッダの英字から日本語表記を推測しない、 という一般則」) = **機械 field の人名は正規化された不可逆な投影**。 ローマ字化 (同じ読みに多数の native 表記) / 記号平坦化 (`Jose` ← José) / 字系転写 (Dmitry/Dmitri/Dmitrii) / 全大文字姓 (`Hanako YAMADA` が示すのは**どちらが姓か**だけで字系は言っていない) のいずれも情報を捨てる方向で、 逆変換は一意でない。 ⚠️ **逆方向 (native → ローマ字) も同様に不可逆**
+- 規律 = 手元に無い表記形を推測で作らず 3 択 ([#no-name-reconstruction](conventions/name-rendering.md#no-name-reconstruction)): ① 権威 source ladder (本人の署名 > 公式サイト > 本人の出版物 > 第三者言及) ② 本人に聞く ③ **その表記を使わない** (=「分からないので書かない」 は正当な選択肢であって埋めるべき空欄ではない)。 高 stakes ([#name-printing-stakes](conventions/name-rendering.md#name-printing-stakes)) = 招待状・賞状・名札・credit 等の不可逆な印字は直前照合 (= print-preflight / paper-audit と同じ位置)。 確定後 ([#name-sot-once](conventions/name-rendering.md#name-sot-once)) = SoT 1 箇所化 + **全 record grep 掃討** + errata 残置
+- 機械化不能を honest に記載 (= 推測か観測かは semantic)。 実効対策は SoT 1 箇所化と**確定時の grep 掃討**の 2 つのみ (= 誤形は判明した時点で検索可能な literal になるので、 そこだけ機械が効く)
+- 配線: [`actor-attribution.md`](conventions/actor-attribution.md) 隣接 kernel に相互 link (= **同じ lossy-encoding family**、 あちらが「誰の行為か」・こちらが「名前をどう書くか」) / [`identity-in-config.md #homonym-author-id`](conventions/identity-in-config.md#homonym-author-id) に anchor 付与 (被参照側整備)。 tree 3 生成物再生成 (⚠️ generator は git-tracked のみ列挙 = 新 file は `git add` 後に `--write`)
+- origin = 個人層の運用記録で、 mail header のローマ字表記から人名の native 表記を漢字で補い約 4 週間誤形が生存した incident (= instance は個人層、 kernel のみ hoist)。 evidence 節は genericize (人名・機関名なし)。 checks 49/49
+
 ## 2026-08-31: paper-audit #relocation-rebinding-sweep 新設 + principles §8.25 (= prose-claim error RCA の知見 hoist)
 
 - [`paper-audit.md #relocation-rebinding-sweep`](conventions/paper-audit.md#relocation-rebinding-sweep) (新 anchor、 既存 3 兄弟 claim-strength / statement-placement / stale-framing の 4 人目) = 散文の文脈依存束縛 (照応 / 方向語 / 対語 / 接続詞係り先 / 次数限定 / cite 帰属) は文脈手術 (移設・圧縮・文分割/合成) で **silent に再解決される** → ① 移設は verbatim-first 2 commit 分解 ② 手術 turn は自発で named-class sweep (a)-(f) + swept/not-swept 出力契約 ③ exactness 動詞は display anchor 必須 (= prose は隠す、 式と機械は暴く)。 helper script 2 種は un-defer trigger 付き defer、 常駐散文検出器は by design 不採用。 同 file Phase 2 に cite 束縛検査 1 行。 origin = 該当 private paper repo の 2026-08-31 磨き込み日 (エラー 11 件、 cold-eyes RCA 経由、 instance は個人層 plans に残置 = kernel-up / instance-down)
