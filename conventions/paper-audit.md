@@ -238,6 +238,18 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 - 手順・失敗の型・解像度規律・「原典を持つ人が直してきたら自分の生成物を先に疑う」 は
   [`photographed-document-transcription.md#quotation-extraction`](photographed-document-transcription.md#quotation-extraction) が正本
 
+## <a id="assumption-dependent-claim-framing"></a>未証明の仮定に主張が依存する時の framing (3 層勾配 + 無仮定 floor + 不確実性→要求仕様) (2026-09)
+
+paper の中心機構が「未証明の仮定」 (例: あるコヒーレンス・対称性・スケーリングが維持されること) に依存すると判明した時、 主張の書き方を修辞でなく構造で決める:
+
+1. **主張を 3 層の強度勾配に分類する**: ① 無条件に守れる定量結果 (条件を明示して) / ② 仮定を明示した上での条件つき結果 (「we show X」 でなく 「X, provided that ⟨仮定⟩」 の様相) / ③ 仮定の成立条件そのものの画定を **結果として** 提示 (= 弱点の告白でなく「問題を初めて正しく定式化した」 という寄与)。 referee に発見させると致命傷になる緊張関係は、 ③ として自分の言葉で書けば domain of validity の宣言になる。
+2. **無仮定 floor を先に確保する**: 仮定が倒れてもシナリオ / 模型が生き残る fallback (例: 劇的な機構が働かなくても素過程だけで最低限が成立する) が存在するなら、 それを条件つき主張より**前**に置く。 これで「仮定 1 枚に全体重」 の all-or-nothing 構造が「安全な床 + 上振れ」 に変わり、 仮定への攻撃が paper 全体に波及しなくなる。 floor の数値は仮定側とは独立に検算しておく。
+3. **不確実性は防御にならない — 要求仕様に変換する**: 「見積もりには N 桁の不確実性があるからどちらもあり得る」 は paper の言葉にすると「機構は未定量化」 という自白。 正しい変換は「成立条件は ⟨定量条件⟩、 すなわち仮定は ⟨具体量⟩ を届けなければならない」 という**要求仕様**の陳述。 その際 knob の**非対称性**を必ず検査する: (a) 動かせる knob が係争中の仮定そのものなら、 それを回して gap を閉じるのは circular / (b) 敵対側のレート (仮定と独立に決まる量) は knob で動かない / (c) 時間発展で条件が改善・悪化する trend があれば両側 fair に書く。
+4. **前身 paper から輸入した増幅率・レートは、 その前提を自分が撤回した瞬間に失効する**: 自分たちの先行論文の「機構 A で増幅された率」 を、 本 paper で機構 A を無効と示した後にそのまま引き継ぐと自家撞着。 裸の率から組み直す (= [#stale-framing-sweep](#stale-framing-sweep) の系譜間版)。
+5. **絶対形の不在主張 (「X は起きない」) は定義争いを招く**: 定義に幅がある現象 (共鳴・相転移等) は 「機構として効かない (ineffective)」 + 冒頭で定義 + 適用条件、 の 3 点セットで書く (= [#claim-strength-three-tests](#claim-strength-three-tests) の変種)。
+
+起源 (2026-09): 集団増幅機構を扱う private paper で、 中心機構がコヒーレンス維持の仮定に依存 + 素朴な桁見積もりで分が悪いと判明した際の 5 誌目投稿 framing 決定。 3 層勾配 + 摂動 floor + 「V_coh ≳ X λ³」 型の要求仕様変換で、 4 誌で反復された批判を条件の画定に転換した。
+
 ## <a id="second-example-refine"></a>二例目が出たら refine
 
 将来別 paper で同様の audit を実施したら、 script を `claude-config/scripts/` に generic 化、 本 convention を refine。 現状は 該当 private paper repo で完結。
