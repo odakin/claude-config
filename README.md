@@ -56,6 +56,24 @@ cd claude-config && ./setup.sh
 
 `setup.sh` handles symlinks, global gitignore, Claude Code hooks and permissions, a `post-merge` hook for auto-sync, LaTeX pre-commit hooks, git-crypt auto-unlock, and (on macOS) a PATH snapshot fix, a Claude desktop folder-picker pin (default-on, opt-out — see [conventions/claude-app-cwd-pin.md](conventions/claude-app-cwd-pin.md)), plus optional Hammerspoon config. **Full step list and exactly what it touches**: [CLAUDE.md](CLAUDE.md).
 
+### Use with Codex
+
+To install the shared conventions for Codex without changing the Claude Code
+setup, run after cloning:
+
+```bash
+./scripts/setup-codex.sh --replace --set-default-effort high --configure-safe-local
+```
+
+The dedicated installer creates only symlinks for
+`~/Documents/Codex/AGENTS.md` and
+`~/.codex/skills/claude-config-conventions`, and updates only Codex's
+`config.toml` when an option requests it. It never changes `~/.claude/`, Claude
+Code hooks, or `setup.sh`. `--replace` first makes a timestamped backup of an
+existing Codex-side target. Codex does not have Claude Code's equivalent
+per-tool event-hook mechanism, so the integration uses AGENTS instructions, a
+Codex skill, and applicable Git-side gates instead.
+
 ### Windows: start here (fresh machine)
 
 If the Claude app refuses to start Code sessions ("Install Git, Git for Windows is required..." — this is about the *git tool*, **not** GitHub; no GitHub account is needed), or the machine has none of the prerequisites yet, paste this one line into PowerShell and everything below becomes possible:

@@ -2,6 +2,19 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-01g: Codex integration を Claude 非干渉の独立レイヤーとして追加
+
+- codex/AGENTS.md + codex/skills/claude-config-conventions/ を正本に、scripts/setup-codex.sh が
+  ~/Documents/Codex/AGENTS.md と ~/.codex/skills/ へ symlink 導入する形で追加。~/.claude/・
+  Claude Code Hook・既存 setup.sh には一切触れない。既存 Codex target は default refuse、
+  --replace 時だけ timestamp backup を残す。
+- --set-default-effort high と --configure-safe-local は Codex の config.toml だけを更新。
+  後者は approval_policy="on-request" + sandbox_mode="workspace-write" で、workspace 内の
+  安全なローカル作業を自律化しつつ、外部・破壊的・scope 外の action は user 承認を保つ。
+- test: isolated installer test (= symlink / idempotence / user-managed target refusal / ~/.claude/
+  non-creation / top-level TOML placement)、Skill validator、Codex strict config、run-all-checks
+  50/50 PASS。README 英日へ導入手順を追記。
+
 ## 2026-09-01f: kakenhi-proposal に凍結後差し替え改訂 § + 協力者実名 §、latex.md に行頭禁則 scan §
 
 - kakenhi-proposal.md 2 § 新設: [`#frozen-revision-geometry`](conventions/kakenhi-proposal.md#frozen-revision-geometry)

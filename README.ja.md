@@ -56,6 +56,21 @@ cd claude-config && ./setup.sh
 
 `setup.sh` は symlink・グローバル gitignore・Claude Code hooks とパーミッション・`post-merge` による自動同期・LaTeX pre-commit hooks・git-crypt 自動 unlock、macOS では PATH スナップショット修正・Claude デスクトップの folder picker 固定（default-ON・opt-out 可、 [conventions/claude-app-cwd-pin.md](conventions/claude-app-cwd-pin.md)）・Hammerspoon 設定（オプション）までを一括で処理する。**全ステップの列挙と副作用の範囲**は [CLAUDE.md](CLAUDE.md) を参照。
 
+### Codex を併用する
+
+Claude Code の設定を変えずに同じ共有規約を Codex にも導入するには、clone 後に次を実行する:
+
+```bash
+./scripts/setup-codex.sh --replace --set-default-effort high --configure-safe-local
+```
+
+この専用インストーラは `~/Documents/Codex/AGENTS.md` と
+`~/.codex/skills/claude-config-conventions` をこのリポへの symlink として設置し、
+指定時だけ Codex の `config.toml` を更新する。`~/.claude/`、Claude Code の Hook、既存の
+`setup.sh` は変更しない。`--replace` は既存の Codex 側 target を timestamp 付き backup に
+退避してから置換する。Claude の event Hook は Codex に同等の実行ポイントがないため、Codex
+では AGENTS 指示・Skill・Git 側の gate で意図を再現する。
+
 ### Windows の人はまずこれ (まっさらな機)
 
 Claude アプリが Code を始めさせてくれない場合（「Install Git, Git for Windows is required...」— これは *git というツール* の話で **GitHub とは無関係**、GitHub アカウントは一切不要）、または前提ツールが何も入っていない場合、PowerShell にこの 1 行を貼れば以降が全部可能になる:
