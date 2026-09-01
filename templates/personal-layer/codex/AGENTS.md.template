@@ -1,0 +1,19 @@
+# Personal Codex overlay
+
+This short file is the owner-private, Codex-specific entry point for this
+personal layer. It is selected only by an explicit local
+`setup-codex.sh --personal-layer <this-layer>` invocation, which builds an
+untracked layer-4 global-instruction composite. Do not copy its contents into a
+shared project or public repository.
+
+## Personal-source routing
+
+When a task requires owner-specific preferences, identity, account handling,
+cross-repository state, or a personal operational rule, locate this personal
+layer from the generated global-instruction header. Read its `CLAUDE.md` as
+the private index, then open only the relevant linked source; do not preload a
+large personal corpus into every task.
+
+Keep durable private rules in their owning personal-layer files and current
+work state in the relevant repository's `SESSION.md`. Keep the overlay short:
+it should route Codex to the private source of truth, not duplicate it.

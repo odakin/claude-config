@@ -78,6 +78,43 @@ awk '
 ' "$TEST_CODEX_DIR/config.toml"
 [ ! -e "$TEST_HOME/.claude" ]
 
+PERSONAL_LAYER="$TEMP_ROOT/personal-layer"
+mkdir -p "$PERSONAL_LAYER/codex" "$PERSONAL_LAYER/.git/hooks"
+: > "$PERSONAL_LAYER/.claude-personal-layer"
+printf '%s\n' '# private Codex fixture' 'INITIAL_PERSONAL_OVERLAY' > "$PERSONAL_LAYER/codex/AGENTS.md"
+cat > "$PERSONAL_LAYER/.git/hooks/post-merge" <<'EOF'
+#!/usr/bin/env bash
+# managed-by: claude-config setup-dropbox-refs
+true
+EOF
+chmod +x "$PERSONAL_LAYER/.git/hooks/post-merge"
+PERSONAL_LAYER="$(cd "$PERSONAL_LAYER" && pwd -P)"
+
+run_setup --personal-layer "$PERSONAL_LAYER"
+
+[ ! -L "$TEST_CODEX_DIR/AGENTS.md" ]
+grep -qx '<!-- claude-config-codex: global-personal-composite -->' "$TEST_CODEX_DIR/AGENTS.md"
+grep -qx "<!-- personal-source: $PERSONAL_LAYER -->" "$TEST_CODEX_DIR/AGENTS.md"
+grep -qx 'INITIAL_PERSONAL_OVERLAY' "$TEST_CODEX_DIR/AGENTS.md"
+grep -q '^# Global Codex conventions$' "$TEST_CODEX_DIR/AGENTS.md"
+[ "$(stat -f '%Lp' "$TEST_CODEX_DIR/AGENTS.md")" = "600" ]
+grep -qF '# claude-config post-merge extensions' "$PERSONAL_LAYER/.git/hooks/post-merge"
+PERSONAL_REFRESH="$PERSONAL_LAYER/.git/hooks/post-merge.d/claude-config-codex-personal-layer.sh"
+[ -x "$PERSONAL_REFRESH" ]
+grep -qF -- '--refresh-personal-layer' "$PERSONAL_REFRESH"
+
+printf '%s\n' 'UPDATED_PERSONAL_OVERLAY' >> "$PERSONAL_LAYER/codex/AGENTS.md"
+"$PERSONAL_LAYER/.git/hooks/post-merge" 0 0 0 >/dev/null
+grep -qx 'UPDATED_PERSONAL_OVERLAY' "$TEST_CODEX_DIR/AGENTS.md"
+
+HOME="$TEST_HOME" \
+CODEX_USER_DIR="$TEST_CODEX_DIR" \
+CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
+  "$SCRIPT_DIR/audit-codex-integration.sh" >/dev/null
+
+run_setup --replace
+[ "$(readlink "$TEST_CODEX_DIR/AGENTS.md")" = "$CONFIG_ROOT/codex/HOME-AGENTS.md" ]
+
 CONFLICT_HOME="$TEMP_ROOT/conflict-home"
 CONFLICT_CODEX_DIR="$CONFLICT_HOME/.codex"
 CONFLICT_WORKSPACE="$CONFLICT_HOME/Documents/Codex"
@@ -125,8 +162,13 @@ grep -qx 'user instruction' "$TEST_CODEX_DIR/AGENTS.md"
 
 run_setup --replace
 [ "$(readlink "$TEST_CODEX_DIR/AGENTS.md")" = "$CONFIG_ROOT/codex/HOME-AGENTS.md" ]
-backup="$(find "$TEST_CODEX_DIR" -maxdepth 1 -type f -name 'AGENTS.md.bak-*' -print -quit)"
+backup=""
+for candidate in "$TEST_CODEX_DIR"/AGENTS.md.bak-*; do
+  if grep -qx 'user instruction' "$candidate"; then
+    backup="$candidate"
+    break
+  fi
+done
 [ -n "$backup" ]
-grep -qx 'user instruction' "$backup"
 
 echo "setup-codex tests passed"

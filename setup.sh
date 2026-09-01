@@ -717,6 +717,14 @@ if [ "$(uname -s)" = "Darwin" ] && [ -x "$SNAPSHOT_FIX" ]; then
     "$SNAPSHOT_FIX" >/dev/null 2>&1 && \
         echo "[claude-config] Re-applied shell-snapshot PATH patches."
 fi
+
+# --- Explicit Codex personal-layer composite refresh (if opted in) ---
+# This is a no-op unless setup-codex.sh has already created a managed L4
+# composition. It never discovers a personal layer or writes below ~/.claude.
+CODEX_SETUP="$REPO_DIR/scripts/setup-codex.sh"
+if [ -x "$CODEX_SETUP" ]; then
+    "$CODEX_SETUP" --refresh-personal-layer >/dev/null 2>&1 || true
+fi
 POST_MERGE_EOF
     chmod +x "$POST_MERGE"
     echo "  Installed: .git/hooks/post-merge"
@@ -935,6 +943,15 @@ $HOOK_TAG
 # (re)installed by claude-config/setup.sh — re-running setup.sh refreshes
 # the absolute paths below. Do not edit by hand.
 "$DROPBOX_REFS_SCRIPT" "$LAYER/dropbox-collabs.yaml" "$CLAUDE_DIR" || true
+
+# claude-config post-merge extensions
+# Local extension scripts are optional and must never make git pull fail.
+POST_MERGE_EXTENSION_DIR="$(dirname "$0")/post-merge.d"
+for POST_MERGE_EXTENSION in "$POST_MERGE_EXTENSION_DIR"/*.sh; do
+  [ -x "$POST_MERGE_EXTENSION" ] || continue
+  "$POST_MERGE_EXTENSION" "$@" || \
+    echo "[claude-config] WARNING: post-merge extension failed: $POST_MERGE_EXTENSION" >&2
+done
 HOOK_EOF
             chmod +x "$LAYER_POST_MERGE"
             echo "  $ACTION: $LAYER_POST_MERGE"

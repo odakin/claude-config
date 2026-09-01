@@ -53,10 +53,73 @@ check_link() {
   return 1
 }
 
+personal_source_from_global_agents() {
+  local target="$CODEX_USER_DIR/AGENTS.md"
+  sed -n 's/^<!-- personal-source: \(.*\) -->$/\1/p' "$target" | sed -n '1p'
+}
+
+public_source_from_global_agents() {
+  local target="$CODEX_USER_DIR/AGENTS.md"
+  sed -n 's/^<!-- public-source: \(.*\) -->$/\1/p' "$target" | sed -n '1p'
+}
+
+check_personal_global_agents() {
+  local target="$CODEX_USER_DIR/AGENTS.md"
+  local public_source personal_layer personal_source hooks post_merge extension
+  local expected_file
+  [ -f "$target" ] && [ ! -L "$target" ] \
+    && grep -qxF '<!-- claude-config-codex: global-personal-composite -->' "$target" || return 1
+
+  public_source="$(public_source_from_global_agents)"
+  personal_layer="$(personal_source_from_global_agents)"
+  personal_source="$personal_layer/codex/AGENTS.md"
+  if [ "$public_source" != "$CONFIG_ROOT/codex/HOME-AGENTS.md" ] \
+    || [ ! -f "$personal_layer/.claude-personal-layer" ] \
+    || [ ! -s "$personal_source" ]; then
+    echo "MISSING: managed personal global AGENTS.md sources are no longer valid" >&2
+    ISSUES=$((ISSUES + 1))
+    return 0
+  fi
+
+  expected_file="$(mktemp "${TMPDIR:-/tmp}/audit-codex-personal.XXXXXX")"
+  {
+    printf '%s\n' '<!-- claude-config-codex: global-personal-composite -->'
+    printf '<!-- public-source: %s -->\n' "$public_source"
+    printf '<!-- personal-source: %s -->\n' "$personal_layer"
+    printf '%s\n\n' '<!-- Generated local state. Re-run setup-codex.sh; do not edit. -->'
+    cat "$public_source"
+    printf '\n\n<!-- owner-private Codex overlay follows; source remains layer 3 -->\n\n'
+    cat "$personal_source"
+  } > "$expected_file"
+  if cmp -s "$expected_file" "$target"; then
+    echo "OK: local L1 + explicit L3 global instruction composite"
+  else
+    echo "MISSING: managed personal global AGENTS.md is stale or edited; rerun setup-codex.sh --personal-layer" >&2
+    ISSUES=$((ISSUES + 1))
+  fi
+  rm -f "$expected_file"
+
+  hooks="$personal_layer/.git/hooks"
+  post_merge="$hooks/post-merge"
+  extension="$hooks/post-merge.d/claude-config-codex-personal-layer.sh"
+  if [ -x "$extension" ] \
+    && grep -qF -- '--refresh-personal-layer' "$extension" 2>/dev/null \
+    && [ -f "$post_merge" ] \
+    && grep -qF '# claude-config post-merge extensions' "$post_merge" 2>/dev/null; then
+    echo "OK: personal-layer pull refresh"
+  else
+    echo "MISSING: automatic personal-layer pull refresh" >&2
+    ISSUES=$((ISSUES + 1))
+  fi
+  return 0
+}
+
 echo "=== Codex layer-4 integration ==="
-check_link "local global AGENTS.md entry point" \
-  "$CONFIG_ROOT/codex/HOME-AGENTS.md" \
-  "$CODEX_USER_DIR/AGENTS.md" || true
+if ! check_personal_global_agents; then
+  check_link "local global AGENTS.md entry point" \
+    "$CONFIG_ROOT/codex/HOME-AGENTS.md" \
+    "$CODEX_USER_DIR/AGENTS.md" || true
+fi
 check_link "local Codex-workspace AGENTS.md entry point" \
   "$CONFIG_ROOT/codex/AGENTS.md" \
   "$CODEX_WORKSPACE_ROOT/AGENTS.md" || true
@@ -98,7 +161,7 @@ else
   echo "NOTE: Codex config not found: $CONFIG_FILE"
 fi
 
-echo "NOTE: These are layer-4 links to public layer-1 source. A fresh clone has no effect until this installer runs on that machine."
+echo "NOTE: These are layer-4 links to public layer-1 source, or an explicitly selected L1+L3 local composite. A fresh clone has no effect until this installer runs on that machine."
 echo "NOTE: Codex requires a one-time trust review before user-level hooks run; inspect it in the Codex client."
 
 if [ "$REPO_COUNT" -gt 0 ]; then

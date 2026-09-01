@@ -37,7 +37,7 @@ Keep each Codex fact in the one home that owns its lifecycle:
 | --- | --- |
 | Clone-user command and the minimum replacement warning | `README.md` / `README.ja.md` |
 | Durable architecture, autonomy boundary, layer placement, platform scope, and verification contract | This document |
-| Owner-specific cross-machine bootstrap choice | The owner's private layer-3 record; the public personal-layer template only explains the boundary |
+| Owner-specific cross-machine bootstrap choice and concise Codex overlay | The owner's private layer-3 record; the public personal-layer template only explains the boundary and required source shape |
 | Current, short-lived work state | `SESSION.md`, as a pointer here rather than a second technical record |
 | Actual links, configuration, and requested project Git guards on one machine | `scripts/audit-codex-integration.sh` |
 | Hook client trust decision | The Codex client on that machine |
@@ -57,8 +57,8 @@ shared [SESSION snapshot rule](../CONVENTIONS.md#session-no-durable-record),
 
 The public source lives in this layer-1 repository: `codex/HOME-AGENTS.md`,
 `codex/AGENTS.md`, both skills, the hook implementation, and `hooks.json`.
-`scripts/setup-codex.sh` is an explicit **layer-4 installer**. On one machine
-it creates six managed links below the user's Codex locations:
+`scripts/setup-codex.sh` is an explicit **layer-4 installer**. Its default
+mode creates six managed links below the user's Codex locations:
 
 - `~/.codex/AGENTS.md` — the local global-instruction entry point;
 - `~/Documents/Codex/AGENTS.md` — a local Codex-workspace entry point;
@@ -70,6 +70,24 @@ The links make the layer-4 installation consume versioned layer-1 source.
 That lower-to-upper dependency is valid; the paths, trust decisions, and
 whether the links exist are still machine-local layer-4 facts.
 
+An owner who explicitly passes `--personal-layer <path>` may replace only the
+global `~/.codex/AGENTS.md` link with a mode-`0600`, generated layer-4
+composite. It concatenates the public `codex/HOME-AGENTS.md` with the
+selected layer-3 `<path>/codex/AGENTS.md`; the latter is deliberately a short
+Codex-specific overlay, not the owner's full `CLAUDE.md`. The other five
+managed links stay unchanged. The marker `.claude-personal-layer` and
+non-empty overlay are required, but the installer never searches for a
+personal layer: choosing its path is an explicit owner action.
+
+The generated file is local state, not a tracked copy. The installer writes a
+personal-layer `post-merge.d` refresh extension only when it can safely use
+the existing managed dispatcher, so personal-layer `git pull` refreshes an
+already selected composite. A public-layer pull does the same once the
+current `setup.sh`-generated post-merge hook is installed. If a user-managed
+`post-merge` cannot be chained safely, installation still preserves it and
+the audit reports the unavailable automatic refresh. The refresh command
+never creates a new binding or discovers a layer.
+
 Before mutating anything, the default installer mode preflights every managed
 target. A user-managed conflict therefore leaves no partial links, migration,
 or configuration update behind; `--replace` is the explicit opt-in that backs
@@ -77,8 +95,10 @@ up and replaces conflicts.
 
 A fresh clone does **not** write to the cloner's `~/.codex`. To enable the
 integration on that machine, the cloner explicitly runs the installer. Later
-`git pull` updates the layer-1 sources already selected by those links. This
-installer does not create or alter a consuming project's layer-2 settings.
+`git pull` updates the layer-1 sources selected by ordinary links; an opted-in
+composite refreshes after personal-layer pulls, and after public pulls once the
+current `setup.sh` post-merge hook is installed. This installer does
+not create or alter a consuming project's layer-2 settings.
 
 The installer can also set Codex's top-level `model_reasoning_effort`,
 `approval_policy = "on-request"`, and `sandbox_mode = "workspace-write"`.
@@ -104,7 +124,7 @@ Codex follows the same audience order as the shared configuration:
 | --- | --- | --- |
 | 1. Common conventions | public/shared | This repository's generic instructions, skills, hook code, templates, and runbooks. |
 | 2. Shared project | project collaborators | That project's own committed instructions and artifacts. It may use layer-1 material, but must be self-contained and must not depend on a personal or machine-local path. |
-| 3. Personal layer | owner across machines | The owner's private, cross-machine preferences and bootstrap record. Codex does not discover, copy, or inject it automatically. |
+| 3. Personal layer | owner across machines | The owner's private, cross-machine preferences, concise Codex overlay, and bootstrap record. Codex never discovers it. Only an explicit owner-selected installer invocation can materialize its short overlay in layer 4. |
 | 4. Local state | one machine | `~/.codex` configuration, links, Hook trust, local session state, and machine facts. It is not committed to a shared project. |
 
 Layers are defined by **audience**, not by distribution mechanism: layer 2 is
@@ -120,9 +140,10 @@ bootstrap procedure in layer 3, but the actual `~/.codex` links and trust stay
 in layer 4. No layer-2 project is made to depend on this local installation.
 
 This prevents a private personal layer from silently entering a
-collaborator-visible project context. An explicit, user-scoped task may use
-layer-3 data, but must preserve the boundary when it writes to a layer-2 or
-layer-1 repository.
+collaborator-visible project context. The selected global composite is local
+to the owner's Codex home and never makes a layer-2 project depend on layer 3.
+An explicit, user-scoped task may use layer-3 data, but must preserve the
+boundary when it writes to a layer-2 or layer-1 repository.
 
 Run `scripts/audit-codex-integration.sh` to inspect this installation. Add one
 or more `--repo <path>` arguments to inspect the applicable Git-side gates in

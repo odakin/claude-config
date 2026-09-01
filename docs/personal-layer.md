@@ -119,6 +119,25 @@ See [`conventions/dropbox-refs.md`](../conventions/dropbox-refs.md) for the sche
 
 The **marker file** `.claude-personal-layer` is the canonical signal that this directory is a personal layer. claude-config's `setup.sh` looks for it under `~/Claude/*/` (or whichever base directory you use) and, if it finds exactly one match, links `~/Claude/CLAUDE.md` to that directory's `CLAUDE.md`.
 
+### Explicit Codex overlay
+
+Codex does not use the marker for discovery. An owner who wants private
+cross-machine preferences in Codex creates a concise
+`codex/AGENTS.md` alongside the personal layer and explicitly runs
+`scripts/setup-codex.sh --personal-layer <path>`. The installer validates the
+marker and overlay, then creates an untracked, mode-`0600` layer-4 composite
+from the public global Codex instructions plus that overlay.
+
+The overlay is a routing index, not a second copy of the personal `CLAUDE.md`:
+it tells Codex when to read the detailed private sources on demand. This keeps
+the startup instruction chain below Codex's project-document size budget and
+avoids a private/public duplicate source of truth. The selected composite
+refreshes after managed personal-layer pulls; public-layer pulls refresh it
+after `setup.sh` has installed its current post-merge hook. It never makes a
+shared project depend on the personal layer. The technical
+contract and audit are in
+[`codex/PARITY.md`](../codex/PARITY.md#codex-integration-sot).
+
 ## <a id="creating-personal-layer"></a>Creating your own personal layer
 
 1. Make a directory next to claude-config:

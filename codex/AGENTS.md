@@ -47,10 +47,12 @@ addressed to the owner's machines. Installer, symlink, and marker machinery
 only *materializes* a layer on a machine — that wiring is a layer-4 local
 fact, not a layer itself.
 
-Do not automatically read, copy, or expose personal-layer files, credentials,
-or local agent history. Use them only when the user explicitly puts the data in
-scope. Keep secrets and owner-specific data out of public repositories,
-generated examples, commit messages, and external services.
+Do not discover or expose personal-layer files, credentials, or local agent
+history. An owner may explicitly select a short private Codex overlay through
+the layer-4 installer; that local composition is not a public dependency and
+does not authorize disclosure. Keep secrets and owner-specific data out of
+public repositories, generated examples, commit messages, and external
+services.
 
 ## Safety and scope
 

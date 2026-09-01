@@ -42,5 +42,6 @@ configuration, logic, and Hook trust as separate checks.
 
 Do not confuse a shared project (layer 2) with an owner-private personal
 layer (layer 3): the former is for collaborators, the latter is cross-machine
-only for one owner. Neither may be silently created or populated by this
-layer-4 installer.
+only for one owner. The installer never creates, discovers, or populates
+either. An owner may explicitly select a short layer-3 `codex/AGENTS.md`
+overlay; only the generated local layer-4 composite consumes it.

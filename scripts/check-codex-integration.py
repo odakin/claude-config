@@ -70,6 +70,26 @@ WIRING_REQUIREMENTS = {
     ".github/workflows/checks.yml": ("bash scripts/run-all-checks.sh",),
     ".claude/pre-commit-extra.sh": ("check-codex-integration.py --check",),
 }
+PERSONAL_OVERLAY_REQUIREMENTS = {
+    "codex/PARITY.md": (
+        "--personal-layer <path>",
+        "<path>/codex/AGENTS.md",
+        "post-merge.d",
+    ),
+    "scripts/setup-codex.sh": (
+        "--personal-layer",
+        "--refresh-personal-layer",
+        "global-personal-composite",
+    ),
+    "scripts/audit-codex-integration.sh": (
+        "global-personal-composite",
+        "personal-layer pull refresh",
+    ),
+    "templates/personal-layer/codex/AGENTS.md.template": (
+        "Personal Codex overlay",
+        "Personal-source routing",
+    ),
+}
 
 
 def text(path: Path) -> str:
@@ -164,6 +184,16 @@ def check(root: Path) -> list[str]:
         for fragment in fragments:
             if fragment not in content:
                 errors.append(f"{relative}: missing Codex integration wiring: {fragment}")
+    for relative, fragments in PERSONAL_OVERLAY_REQUIREMENTS.items():
+        path = root / relative
+        try:
+            content = text(path)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        for fragment in fragments:
+            if fragment not in content:
+                errors.append(f"{relative}: missing personal-overlay contract: {fragment}")
     return errors
 
 
@@ -195,6 +225,11 @@ def fixture(root: Path) -> None:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("\n".join(fragments) + "\n", encoding="utf-8")
+    for relative, fragments in PERSONAL_OVERLAY_REQUIREMENTS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
 
 
 def selftest() -> int:
@@ -275,6 +310,16 @@ def selftest() -> int:
         errors = check(root)
         if not any(error.startswith(".github/workflows/checks.yml: missing Codex integration wiring") for error in errors):
             print("FAIL: missing CI wiring was not detected")
+            return 1
+
+        fixture(root)
+        (root / "scripts/setup-codex.sh").write_text(
+            "\n".join(PERSONAL_OVERLAY_REQUIREMENTS["scripts/setup-codex.sh"][:-1]) + "\n",
+            encoding="utf-8",
+        )
+        errors = check(root)
+        if not any(error.startswith("scripts/setup-codex.sh: missing personal-overlay") for error in errors):
+            print("FAIL: missing personal-overlay wiring was not detected")
             return 1
 
     print("check-codex-integration selftest: PASS")

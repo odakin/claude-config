@@ -73,8 +73,21 @@ user-managed conflict without leaving a partial installation. Review such a
 conflict first; only then use `--replace`, which preserves a timestamped
 backup before replacement.
 
-Cloning alone never writes into a user's home directory: run the installer once
-per machine, then `git pull` updates the source selected by the existing links.
+If you own a marked private personal layer, first create its short
+`codex/AGENTS.md` overlay from the supplied template, then opt in explicitly:
+
+```bash
+./scripts/setup-codex.sh --configure-safe-local --personal-layer ~/Claude/my-prefs
+```
+
+This produces a mode-`0600` local global-instruction composite from public
+layer 1 and that selected layer-3 overlay. It never searches for, commits, or
+exposes personal content; the full private `CLAUDE.md` remains on-demand
+source material. Cloning alone never writes into a user's home directory: run
+the installer once per machine. Ordinary links update through `git pull`; an
+explicit personal composite is refreshed after personal-layer pulls, and after
+public pulls once `setup.sh` has installed its current post-merge hook.
+
 Codex requires a one-time Hook trust review, so install alone does not assert
 that Hooks are active. The [Codex capability map](codex/PARITY.md#codex-integration-sot)
 is the source of truth for the architecture, layer boundaries, Hook coverage,

@@ -71,8 +71,20 @@ user-managed conflict があれば partial install を残さず拒否する。co
 明示的に `--replace` を指定した時だけ、既存の Codex 側 target を timestamp 付き backup に
 退避してから置換する。
 
-公開リポを clone しただけで clone 者の home directory は書き換えない。各マシンで一度
-installer を実行し、その後の `git pull` は既存 link が選ぶ source を更新する。Codex の user
+marker 付きの private personal layer を所有している場合は、template から短い
+`codex/AGENTS.md` overlay を作ってから、明示的に opt-in する:
+
+```bash
+./scripts/setup-codex.sh --configure-safe-local --personal-layer ~/Claude/my-prefs
+```
+
+これは public layer 1 と指定した layer 3 overlay を mode `0600` の local global-instruction
+composite にする。personal layer を検索・commit・外部露出することはなく、詳細な private
+`CLAUDE.md` は必要時だけ読む source のまま残る。公開リポを clone しただけで clone 者の
+home directory は書き換えない。各マシンで一度 installer を実行する。通常 link は `git pull`
+で source を更新し、explicit personal composite は personal layer の pull 後に refresh され、
+public layer の pull 後も current の `setup.sh` post-merge hook が install 済みなら refresh
+される。Codex の user
 Hook は一度 trust review が必要なので、install 完了だけで active 化までを主張しない。
 architecture・layer 境界・Hook coverage・platform scope・検証の正本は
 [Codex capability map](codex/PARITY.md#codex-integration-sot)。

@@ -30,8 +30,10 @@ depend on a personal-layer file, owner-specific path, credential, or local
 agent state.
 
 The Codex integration installs machine-local layer-4 links to public layer-1
-source. It does not create a layer-2 project configuration or discover, copy,
-or load a Claude personal layer. If a task needs owner-private data, require
+source. It does not create a layer-2 project configuration or discover a
+personal layer. An explicit owner-selected installation may generate an L4
+composite from a concise layer-3 `codex/AGENTS.md` overlay; it never imports
+the full Claude personal corpus. If a task needs owner-private data, require
 the user to place that specific data in scope and keep it out of layer-1/2
 outputs.
 
