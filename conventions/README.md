@@ -8,8 +8,8 @@ layer 1 (public) のドメイン固有規約 101 file をカテゴリ別に列�
 
 ## Claude Code / harness 運用 (`harness-core`)
 
-- **[actor-attribution.md](actor-attribution.md)** — 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間)
-  - carrier proxy (= commit author / push 者 / 送信者 / 記録の書き手) を内容の判断主体・発言主体と等値しない — 帰属 5 規律 (proxy 種類の明示 / collaborative default = group product / inline marker = 宛先 tag / 発言者 ≠ 記録者 / load-bearing 帰属は複数 proxy verify) + 機械化不能の honest 限界
+- **[actor-attribution.md](actor-attribution.md)** — 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸)
+  - carrier proxy (= commit author / push 者 / 送信者 / 記録の書き手) を内容の判断主体・発言主体と等値しない — 帰属 5 規律 (proxy 種類の明示 / collaborative default = group product / inline marker = 宛先 tag / 発言者 ≠ 記録者 / load-bearing 帰属は複数 proxy verify) + claim-target 軸 (= 主張は誰についてのものか — 自己生成した名指しの無検証断定・内部略称の衝突展開) + 機械化不能の honest 限界
 - **[ask-user-question.md](ask-user-question.md)** — AskUserQuestion (選択肢 UI) の使用可否・使い所を判断するとき
   - AskUserQuestion (選択肢 UI) の使い所 — turn 同期 block + user 入力中 text との UI 競合という機構 fact と、 平文質問との使い分け表 (使用頻度の選好は個人層 override)
 - **[claude-ai-routines.md](claude-ai-routines.md)** — claude.ai routines (RemoteTrigger / cloud cron) を作成・管理するとき

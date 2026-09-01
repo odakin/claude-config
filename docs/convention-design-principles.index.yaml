@@ -233,6 +233,10 @@ sections:
     legacy: "8.27"
     level: 3
     title: "8.27 user-execution handoff — 最終 leg が人間本人にしかできない義務は「手渡しの機構」を要する"
+  - id: confirmation-question-aim
+    legacy: "8.28"
+    level: 3
+    title: "8.28 確認設問は照準した軸しか検証しない — 事実主張を運ぶ文の user 確認は真偽を第一問に"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
