@@ -631,6 +631,8 @@ origin: 2026-06 官製様式の docx 記入要領削除。 run 直接色だけ�
 
 origin: 2026-06 「実在する X が SoT 一覧に未登録か」 を検出する detector で、 naive 差分が『別管理の参照 clone』『別環境に未取得の項目』 を false positive にした。 self-owned ∧ 環境非依存 ∧ 非例外 の filter で真の違反 (= 1 件) のみに絞った。
 
+**共有語彙 token の変種 (2026-09-01 追記)**: substring/token 照合の drift detector で、 anchor 語彙が**他の正当な topic と共有される** (例: 特定 tool の実装詳細を表す語が、 別 tool の同種機構の作業記録でも普通に使われる) 場合、 file 全体 scan は無関係な正当記述を将来 false-block する時限 FP になる — token を**当該 topic に言及する文脈 region に scope** する。 かつ scope の粒度は **doc の構造単位に合わせる** (= dated-entry 単位。 段落単位だと「topic 名は見出しにだけあり本文が語を繰り返さない」 正当構造で false negative に転じる)。 正負両方の fixture (= topic 文脈内の token → flag / topic 外の同 token → pass) を selftest に焼く。 origin instance: 2026-09-01 Codex integration checker の SESSION durable-token scan (検収で発見 → entry-scope 化)。
+
 ### <a id="fail-loud-not-fail-empty"></a>8.10 mechanism は parse/load 失敗を fail-empty で飲み込まず fail-loud に + 不変条件は編集時 gate で守る
 
 §8.8/§8.9 は detector の見落とし/誤検出だった。 本節は mechanism の別の失敗モード: **構造化データ (yaml/json/csv) を consume する script が parse/load 失敗を黙って「空」 扱い (= fail-empty) すると、 1 ファイルの局所的破損が下流の wrong/破壊的 action に化ける**。 fail-empty は「データが無い」 と「データが読めない」 を同一視するのが根本誤り — 後者は異常であって空ではない。

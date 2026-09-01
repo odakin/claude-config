@@ -2,6 +2,19 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-01i: Codex integration 検収 + durable 化 (別 session による受け入れ検査)
+
+- 検収 verdict = 合格 (机上 + 実機 audit + 両 repo 全 suite green + pull 起点 refresh の live 観測)。 技術詳細は
+  [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot) が正本 (本 entry は snapshot のみ)。
+- 検収で landed した hardening = `68cfe86` (誤検知地雷 3 件: SESSION scan の文脈 scope 化 / state 自動 prune /
+  effort 値を製品受理集合に一致) + `ca5d1bc` (scope 粒度を entry 単位へ) + `c8b1b47` (public-layer pull refresh の
+  配信 gap audit + writer path 間 marker 統一)。 4 層定義の明確化 (観客 vs 配布機構) = `f1bbb93`。
+- 一般知見の hoist 先 = [`conventions/hook-authoring.md`](conventions/hook-authoring.md) §2「配信 drift の根本因」実装例
+  (template≠配信 / marker 統一 / audit test の hermetic 化) + [`docs/convention-design-principles.md #set-diff-false-positive`](docs/convention-design-principles.md#set-diff-false-positive)
+  共有語彙 token 変種。
+- 実機: iMac は setup.sh 再実行 + composite refresh 済で audit 全 green。 **MacBook は未 bootstrap** (= 手順は
+  owner 個人層の codex/README.md、 audit が gap を名指しする)。
+
 ## 2026-09-01h: Karananas 誤帰属 深層 RCA の層1 hoist 5 本 (claim-target 帰属軸ほか)
 
 KARRCA-20260901-BPU205 worker session (深層 RCA = `odakin-prefs/plans/2026-09-01-karananas-misattribution-deep-rca-results.md` が正本、 実装 = 同 §6):

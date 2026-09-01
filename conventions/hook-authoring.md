@@ -201,6 +201,11 @@ cat /tmp/hook-trace.log       # 起動時 cwd / pid も同時 audit
 
 setup.sh 自体は idempotent design なので (i) は実装コスト低。 但し `git pull` のたびに走るとうるさい場合あり、 trade-off は user 判断。
 
+**実装例 (2026-09-01、 Codex integration の生成 composite で (i)+(ii) 型を landing)**: local に生成される合成 instruction file が上流 source の pull で stale になる同型問題に対し、 (i) 型 = 関係 repo の post-merge から refresh script を呼ぶ + (ii) 型 = audit script (`audit-codex-integration.sh`) が **配信済み instance** (= 各マシンの `.git/hooks/` の実体) に refresh 呼び出しが在るかを検査し、 不在なら「setup.sh を再実行」 と remediation を名指しする。 核心の教訓 3 つ:
+- **template 更新 ≠ 配信**: 修正を installer の hook template に入れても、 各マシンには installer 再実行まで届かない。 audit は source (template) でなく **installed instance** を見る。
+- **同一 managed 生成物に writer path が複数あるなら、 機械可読 marker を全 path で統一 + 各 path を fixture で test**: 新規作成 path と既存 hook への追記 path が別々の heredoc を持ち、 audit が grep する marker literal が片方に欠けていた (= 新規作成 path 経由のマシンだけ audit が偽 MISSING を出す潜在 bug。 検収時に足した composite fixture が発掘)。
+- **実マシン状態を読む audit の test は env override で hermetic に**: audit が実 repo の hook file を読む検査は、 test 側で path override (`CLAUDE_CONFIG_POST_MERGE` 型) を渡さないとマシンの導入状態に依存して flake する。
+
 ### <a id="tool-matcher-coverage-boundary"></a>§2 補足: tool-matcher の coverage boundary — Bash/script write は Edit/Write guard を素通りする
 
 配信が健全 (= (a)(b)(c) 全 green) でも、 PreToolUse hook は **登録した matcher の tool にしか fire しない**。 `PreToolUse(Edit|Write|MultiEdit)` guard は **Bash / script (`python ... open(w)` / `cat > f` 等) で書いた file を一切見ない** (= それらは Edit/Write tool call でないため)。 bug ではなく matcher の設計境界 (§2 (d) の harness-invoke-bug 〔Bash matcher が bug で fire しない〕 とは別軸)。 guard を分類すると塞ぎ方が決まる:
