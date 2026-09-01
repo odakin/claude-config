@@ -149,11 +149,16 @@ ls "$TEMP_ROOT/state"/*.repos >/dev/null
 printf '%s' '{"hook_event_name":"SessionStart"}' | python3 "$SCRIPT_DIR/resume_context.py" > "$TEMP_ROOT/resume.json"
 python3 - "$TEMP_ROOT/resume.json" <<'PY'
 import json
+import socket
 import sys
 
 payload = json.load(open(sys.argv[1], encoding="utf-8"))
 assert payload["hookSpecificOutput"]["hookEventName"] == "SessionStart"
-assert "do not request step-by-step confirmation" in payload["hookSpecificOutput"]["additionalContext"]
+context = payload["hookSpecificOutput"]["additionalContext"]
+host = socket.gethostname().split(".")[0]
+assert f"The worker host for this session is {host}." in context
+assert "verify it on this host with hostname" in context
+assert "do not request step-by-step confirmation" in context
 PY
 
 echo "Codex hook tests passed"

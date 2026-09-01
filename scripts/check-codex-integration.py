@@ -103,6 +103,18 @@ CONTEXT_BUDGET_REQUIREMENTS = {
         "on-demand sources",
     ),
 }
+MACHINE_PROVENANCE_REQUIREMENTS = {
+    "codex/PARITY.md": (
+        'id="machine-local-provenance"',
+        "A session title, a prior message, or an audit/report from another\nhost is an observation",
+        "verify it locally with `hostname`",
+    ),
+    "codex/HOME-AGENTS.md": (
+        "## Machine-local truth",
+        "A title, prior message, or report from another host is only an observation",
+        "verify it locally (`hostname` and the relevant audit)",
+    ),
+}
 
 
 def text(path: Path) -> str:
@@ -217,6 +229,16 @@ def check(root: Path) -> list[str]:
         for fragment in fragments:
             if fragment not in content:
                 errors.append(f"{relative}: missing context-budget contract: {fragment}")
+    for relative, fragments in MACHINE_PROVENANCE_REQUIREMENTS.items():
+        path = root / relative
+        try:
+            content = text(path)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        for fragment in fragments:
+            if fragment not in content:
+                errors.append(f"{relative}: missing machine-provenance contract: {fragment}")
     return errors
 
 
@@ -254,6 +276,11 @@ def fixture(root: Path) -> None:
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
         path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
     for relative, fragments in CONTEXT_BUDGET_REQUIREMENTS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
+    for relative, fragments in MACHINE_PROVENANCE_REQUIREMENTS.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -357,6 +384,15 @@ def selftest() -> int:
         errors = check(root)
         if not any(error.startswith("codex/HOME-AGENTS.md: missing context-budget") for error in errors):
             print("FAIL: missing context-budget contract was not detected")
+            return 1
+
+        fixture(root)
+        (root / "codex/HOME-AGENTS.md").write_text(
+            CANONICAL_POINTER + chr(10), encoding="utf-8"
+        )
+        errors = check(root)
+        if not any(error.startswith("codex/HOME-AGENTS.md: missing machine-provenance") for error in errors):
+            print("FAIL: missing machine-provenance contract was not detected")
             return 1
 
     print("check-codex-integration selftest: PASS")

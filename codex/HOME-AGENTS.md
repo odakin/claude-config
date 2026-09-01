@@ -26,6 +26,14 @@ Do not depend on undocumented local configuration to control automatic context
 compaction; the integration boundary is recorded in
 `codex/PARITY.md#codex-integration-sot`.
 
+## Machine-local truth
+
+A title, prior message, or report from another host is only an observation,
+not this machine's state. Before claiming or acting on a machine-local fact,
+verify it locally (`hostname` and the relevant audit) and state the checked
+host, time, and scope. The detailed Codex mechanism is
+`codex/PARITY.md#machine-local-provenance`.
+
 ## Four-layer boundary
 
 Respect the audience order: common conventions (layer 1), shared project

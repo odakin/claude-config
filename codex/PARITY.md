@@ -189,8 +189,18 @@ This integration maps only the high-signal, product-neutral subset:
 | Codex event | Managed behavior | Boundary |
 | --- | --- | --- |
 | `PreToolUse(apply_patch)` | Blocks Tier-A structural leak patterns while editing a repository marked public. | Git pre-commit and commit-message gates remain authoritative for all write paths. |
-| `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`. | It does not discover personal data or session history. |
+| `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`, and identifies the local hook process's worker host. | It reads only that local runtime fact; it does not discover personal-layer data or session history. |
 | `PostToolUse(apply_patch)` + `Stop` | Tracks a touched Git repository in machine-local Codex state and reports unintended dirty worktree state at turn end. | It does not commit or push automatically. |
+
+## <a id="machine-local-provenance"></a>Machine-local provenance
+
+The SessionStart reminder obtains the short hostname only from the current
+hook process. A session title, a prior message, or an audit/report from another
+host is an observation, not proof of this machine's state. Before claiming or
+acting on a machine-local fact, verify it locally with `hostname` and the
+relevant audit; state the checked host, time, and scope in the conclusion.
+This is a runtime guard, not durable session state and not a source of
+personal-layer discovery.
 
 The executable tests cover each supported public-leak category, allowlisted and
 removed patch text, private-repository pass-through, default-refuse installer
