@@ -21,6 +21,13 @@ machine-local volatile state (layer 4). A layer may depend only on the same or
 a wider-audience layer. In particular, a shared project must be self-contained
 and must not depend on a private personal layer or a machine-local path.
 
+Layers are defined by **audience**, not by distribution mechanism. Layer 2 is
+the shared project's own content (conventions, data, manuscripts) addressed to
+its collaborators; layer 3 is the owner's private preference and rule content
+addressed to the owner's machines. Installer, symlink, and marker machinery
+only *materializes* a layer on a machine — that wiring is a layer-4 local
+fact, not a layer itself.
+
 Do not automatically read, copy, or expose personal-layer files, credentials,
 or local agent history. Use them only when the user explicitly puts the data in
 scope. Keep secrets and owner-specific data out of public repositories,

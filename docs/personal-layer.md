@@ -16,6 +16,8 @@ Claude Code conventions live in **four layers**, numbered by **audience size** (
 
 The numbering follows audience containment: `public ⊃ collaborator set ⊃ owner-cross-machine ⊃ this-machine-only`, so a smaller layer number always means a wider audience. This makes the dependency rule directional and intuitive — a layer can only depend on layers with **smaller or equal** numbers.
 
+Layers are defined by **audience**, not by distribution mechanism. Layer 2 is the shared project's own *content* (conventions, data, manuscripts) addressed to collaborators, and layer 3 is the owner's private preference and rule *content* — not a "mechanical install/sync layer". The setup/symlink/marker machinery described later in this doc only *materializes* layers on a machine; that wiring is a machine-local (layer-4) fact, not a layer itself.
+
 > **History note**: as of **2026-05-01** the numbering was changed to align with audience size (layers 2 and 3 were swapped — old `2 = personal / 3 = shared` became new `2 = shared / 3 = personal`). Commit messages and docs from before that date may use the old numbering; if you see "layer 2 = personal layer" in older commit logs, that's the old scheme. See `claude-config/DESIGN-archive.md §「4 層モデルの renumber: layer 2 ↔ 3 swap (2026-05-01)」` (moved there in the 2026-07-10 DESIGN archive split) for the rationale and full impact map.
 
 **Core rule**: each layer may only depend on layers whose audience contains its own. So a shared-project layer (layer 2) can reference claude-config (layer 1, public) but **must not depend on** your personal layer (layer 3, only you), because your collaborators cannot see your personal layer.

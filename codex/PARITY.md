@@ -42,6 +42,12 @@ Codex follows the same audience order as the shared configuration:
 | 3. Personal layer | owner across machines | The owner's private, cross-machine preferences and bootstrap record. Codex does not discover, copy, or inject it automatically. |
 | 4. Local state | one machine | `~/.codex` configuration, links, Hook trust, local session state, and machine facts. It is not committed to a shared project. |
 
+Layers are defined by **audience**, not by distribution mechanism: layer 2 is
+the shared project's own content (conventions, data, manuscripts), and layer 3
+is the owner's private preference and rule content — not a "mechanical
+install/sync layer". The installer and symlink machinery only materializes a
+layer on a machine; that wiring is a layer-4 local fact, not a layer itself.
+
 Layer 2 and layer 3 are intentionally different audiences: layer 2 is shared
 with the project's collaborators; layer 3 is private to one owner but synced
 across that owner's machines. An owner may record the per-machine Codex
