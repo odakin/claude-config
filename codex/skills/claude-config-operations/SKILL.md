@@ -29,10 +29,11 @@ wider-audience layer. In particular, never make a shared-project artifact
 depend on a personal-layer file, owner-specific path, credential, or local
 agent state.
 
-The Codex integration intentionally installs only layer-1 instructions. Do not
-discover, copy, or load a Claude personal layer automatically. If a task needs
-owner-private data, require the user to place that specific data in scope and
-keep it out of layer-1/2 outputs.
+The Codex integration installs machine-local layer-4 links to public layer-1
+source. It does not create a layer-2 project configuration or discover, copy,
+or load a Claude personal layer. If a task needs owner-private data, require
+the user to place that specific data in scope and keep it out of layer-1/2
+outputs.
 
 ## Common routes
 
@@ -51,11 +52,13 @@ keep it out of layer-1/2 outputs.
   configuration into Codex; request an explicitly scoped Codex connection when
   one is needed.
 - **Recurring work:** use Codex task automation when it fits the requested
-  workflow. Claude-specific hook or routine mechanisms do not carry over.
+  workflow. Codex lifecycle hooks can cover local tool events, but Claude
+  routines and account-bound automation do not carry over.
 
 ## Boundaries
 
-Claude Code event hooks do not have a Codex equivalent. Apply their intent via
-project instructions, explicit checks, and Git-side gates; do not claim a
-background Hook was installed. Do not run `setup.sh` or write to `~/.claude/`
-as part of Codex setup or task execution.
+Codex has native lifecycle hooks, but use the Codex schema and verify their
+trust state; never reuse Claude hook configuration or scripts directly.
+Hooks are a guardrail, not complete coverage of hosted or specialised tool
+paths, so keep project instructions and Git-side gates in force. Do not run
+`setup.sh` or write to `~/.claude/` as part of Codex setup or task execution.

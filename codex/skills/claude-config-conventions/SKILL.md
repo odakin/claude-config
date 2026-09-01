@@ -21,13 +21,15 @@ the relevant document.
 
 ## Installation and updates
 
-Use `scripts/setup-codex.sh` from the repository root. It installs four
-symlinks: minimal global instructions at `~/AGENTS.md`, workspace-root
-`AGENTS.md`, this skill, and the operations-router skill under
-`~/.codex/skills`. It refuses to overwrite a user-managed target unless
-`--replace` is explicit. It can optionally set Codex's default reasoning effort
-and safe-local approval policy, preserving a timestamped backup of `config.toml`
-first.
+Use `scripts/setup-codex.sh` from the repository root. The repository's
+instructions, skills, and hook code are public layer-1 source; the installer
+creates layer-4 links at `~/.codex/AGENTS.md`, the local Codex workspace root,
+two skills, and the hook bundle (`~/.codex/claude-config-hooks` plus
+`~/.codex/hooks.json`). A clone does not affect another user's home directory
+until they run this installer. It refuses to overwrite a user-managed target
+unless `--replace` is explicit. It can optionally set Codex's default reasoning
+effort and safe-local approval policy, preserving a timestamped backup of
+`config.toml` first.
 
 Validate with `scripts/setup-codex.test.sh`,
 `scripts/audit-codex-integration.sh`, and the repository's standard checks.
@@ -36,7 +38,14 @@ normal repository review and the user's authorization.
 
 ## Scope boundaries
 
-Codex does not expose Claude Code's per-tool event-hook system. Preserve the
-shared Git-side protections where applicable, but do not claim an equivalent
-automatic Hook was installed when it was not. Keep the Codex instructions
-short and route detailed behavior to the existing on-demand conventions.
+Codex hooks are native but not interchangeable with Claude hooks. Use only the
+Codex hook schema and the selected, product-neutral policies in
+`codex/hooks/`; do not point Codex at Claude hook scripts or configuration.
+Keep Git-side protections authoritative for committed public content. A newly
+installed or changed user hook needs Codex trust review before it runs; verify
+configuration, logic, and trust separately.
+
+Do not confuse a shared project (layer 2) with an owner-private personal
+layer (layer 3): the former is for collaborators, the latter is cross-machine
+only for one owner. Neither may be silently created or populated by this
+layer-4 installer.

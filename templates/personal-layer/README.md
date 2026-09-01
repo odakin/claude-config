@@ -40,6 +40,16 @@ See [`docs/personal-layer.md`](../../docs/personal-layer.md) for the conceptual 
    ~/Claude/claude-config/setup.sh
    ```
 
+7. If you use Codex, repeat its local bootstrap on every machine after cloning
+   `claude-config`:
+   ```bash
+   ~/Claude/claude-config/scripts/setup-codex.sh --configure-safe-local
+   ```
+   This creates only that machine's layer-4 `~/.codex` links and Hook trust
+   state. Keep the cross-machine bootstrap rule or command in this personal
+   layer (layer 3), but never commit or link the actual `~/.codex` directory
+   into it.
+
 ## What goes in which file
 
 - **CLAUDE.md** — your personal home instruction file. Lists which other files in this directory Claude should read and when.

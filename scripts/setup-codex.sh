@@ -7,7 +7,8 @@
 # Usage:
 #   scripts/setup-codex.sh [--replace] [--set-default-effort <level>] [--configure-safe-local]
 #
-# Installs global and workspace instruction files plus two claude-config skills.
+# Installs layer-4 Codex entry points that link to public layer-1 instructions,
+# two skills, and the Codex-native hook bundle.
 # Existing user-managed targets are refused unless --replace is supplied;
 # replacement preserves a timestamped backup.
 
@@ -26,7 +27,8 @@ usage() {
   cat <<'EOF'
 Usage: setup-codex.sh [--replace] [--set-default-effort <level>] [--configure-safe-local]
 
-Install claude-config's Codex instructions and skills as symlinks.
+Install local Codex entry points that consume claude-config's public
+instructions, skills, and hook bundle through symlinks.
 
   --replace                     Back up and replace an existing non-managed target.
   --set-default-effort <level>  Set model_reasoning_effort in Codex config.toml.
@@ -87,6 +89,15 @@ install_link() {
   echo "Installed: $target -> $source"
 }
 
+remove_legacy_managed_home_agents() {
+  local legacy_target="$USER_HOME/AGENTS.md"
+  local managed_source="$CONFIG_ROOT/codex/HOME-AGENTS.md"
+  if [ -L "$legacy_target" ] && [ "$(readlink "$legacy_target")" = "$managed_source" ]; then
+    rm "$legacy_target"
+    echo "Migrated: removed legacy managed home instruction link: $legacy_target"
+  fi
+}
+
 update_codex_config() {
   local config="$CODEX_USER_DIR/config.toml"
   mkdir -p "$CODEX_USER_DIR"
@@ -128,7 +139,8 @@ path.write_text(text, encoding="utf-8")
 PY
 }
 
-install_link "$CONFIG_ROOT/codex/HOME-AGENTS.md" "$USER_HOME/AGENTS.md"
+remove_legacy_managed_home_agents
+install_link "$CONFIG_ROOT/codex/HOME-AGENTS.md" "$CODEX_USER_DIR/AGENTS.md"
 install_link "$CONFIG_ROOT/codex/AGENTS.md" "$CODEX_WORKSPACE_ROOT/AGENTS.md"
 install_link \
   "$CONFIG_ROOT/codex/skills/claude-config-conventions" \
@@ -136,6 +148,12 @@ install_link \
 install_link \
   "$CONFIG_ROOT/codex/skills/claude-config-operations" \
   "$CODEX_USER_DIR/skills/claude-config-operations"
+install_link \
+  "$CONFIG_ROOT/codex/hooks" \
+  "$CODEX_USER_DIR/claude-config-hooks"
+install_link \
+  "$CONFIG_ROOT/codex/hooks/hooks.json" \
+  "$CODEX_USER_DIR/hooks.json"
 
 if [ -n "$EFFORT" ] || [ "$CONFIGURE_SAFE_LOCAL" -eq 1 ]; then
   update_codex_config
@@ -143,4 +161,4 @@ if [ -n "$EFFORT" ] || [ "$CONFIGURE_SAFE_LOCAL" -eq 1 ]; then
   [ "$CONFIGURE_SAFE_LOCAL" -eq 0 ] || echo "Configured safe local autonomy."
 fi
 
-echo "Codex integration installed. Claude Code files were not modified."
+echo "Codex layer-4 integration installed. Claude Code files were not modified."

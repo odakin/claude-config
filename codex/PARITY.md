@@ -6,16 +6,25 @@ two different products expose identical internals.
 
 ## Active Codex integration
 
-`scripts/setup-codex.sh` installs the following managed symlinks:
+The public source lives in this layer-1 repository: `codex/HOME-AGENTS.md`,
+`codex/AGENTS.md`, both skills, the hook implementation, and `hooks.json`.
+`scripts/setup-codex.sh` is an explicit **layer-4 installer**. On one machine
+it creates six managed links below the user's Codex locations:
 
-- `~/AGENTS.md` — minimal, public layer-1 instructions for Codex work outside
-  the default Codex workspace.
-- `~/Documents/Codex/AGENTS.md` — shared project lifecycle, safety, and
-  verification instructions.
-- `~/.codex/skills/claude-config-conventions` — maintenance instructions for
-  this integration.
-- `~/.codex/skills/claude-config-operations` — an on-demand router to the
-  shared operational runbooks and scripts.
+- `~/.codex/AGENTS.md` — the local global-instruction entry point;
+- `~/Documents/Codex/AGENTS.md` — a local Codex-workspace entry point;
+- the two skills below `~/.codex/skills/`;
+- `~/.codex/claude-config-hooks` — the local link to the public hook code;
+- `~/.codex/hooks.json` — the local Hook configuration link.
+
+The links make the layer-4 installation consume versioned layer-1 source.
+That lower-to-upper dependency is valid; the paths, trust decisions, and
+whether the links exist are still machine-local layer-4 facts.
+
+A fresh clone does **not** write to the cloner's `~/.codex`. To enable the
+integration on that machine, the cloner explicitly runs the installer. Later
+`git pull` updates the layer-1 sources already selected by those links. This
+installer does not create or alter a consuming project's layer-2 settings.
 
 The installer can also set Codex's top-level `model_reasoning_effort`,
 `approval_policy = "on-request"`, and `sandbox_mode = "workspace-write"`.
@@ -28,15 +37,21 @@ Codex follows the same audience order as the shared configuration:
 
 | Layer | Audience | Codex handling |
 | --- | --- | --- |
-| 1. Common conventions | public/shared | The global and Codex-workspace `AGENTS.md` files, the shared skills, and public runbooks. |
-| 2. Shared project | project collaborators | The project's own instructions and committed artifacts; it may depend on layer 1 only. |
-| 3. Personal layer | owner across machines | Owner-private preferences and mappings. Codex does not discover, copy, or inject these automatically. |
-| 4. Local state | one machine | Codex configuration, local session state, and machine facts. It is not committed to a shared project. |
+| 1. Common conventions | public/shared | This repository's generic instructions, skills, hook code, templates, and runbooks. |
+| 2. Shared project | project collaborators | That project's own committed instructions and artifacts. It may use layer-1 material, but must be self-contained and must not depend on a personal or machine-local path. |
+| 3. Personal layer | owner across machines | The owner's private, cross-machine preferences and bootstrap record. Codex does not discover, copy, or inject it automatically. |
+| 4. Local state | one machine | `~/.codex` configuration, links, Hook trust, local session state, and machine facts. It is not committed to a shared project. |
 
-The only automatic Codex instructions are layer 1. This prevents a private
-personal layer from silently entering a collaborator-visible project context.
-An explicit, user-scoped task may use layer-3 data, but must preserve the
-boundary when it writes to a layer-2 or layer-1 repository.
+Layer 2 and layer 3 are intentionally different audiences: layer 2 is shared
+with the project's collaborators; layer 3 is private to one owner but synced
+across that owner's machines. An owner may record the per-machine Codex
+bootstrap procedure in layer 3, but the actual `~/.codex` links and trust stay
+in layer 4. No layer-2 project is made to depend on this local installation.
+
+This prevents a private personal layer from silently entering a
+collaborator-visible project context. An explicit, user-scoped task may use
+layer-3 data, but must preserve the boundary when it writes to a layer-2 or
+layer-1 repository.
 
 Run `scripts/audit-codex-integration.sh` to inspect this installation. Add one
 or more `--repo <path>` arguments to inspect the applicable Git-side gates in
@@ -58,15 +73,28 @@ the operations skill; they are not copied into a second, drifting source tree.
   convention still applies; its execution mechanism is Codex automation rather
   than a Claude-specific routine trigger.
 
+## Native lifecycle hooks
+
+Codex provides `PreToolUse`, `PostToolUse`, `SessionStart`, and `Stop` hooks.
+This integration maps only the high-signal, product-neutral subset:
+
+| Codex event | Managed behavior | Boundary |
+| --- | --- | --- |
+| `PreToolUse(apply_patch)` | Blocks Tier-A structural leak patterns while editing a repository marked public. | Git pre-commit and commit-message gates remain authoritative for all write paths. |
+| `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`. | It does not discover personal data or session history. |
+| `PostToolUse(apply_patch)` + `Stop` | Tracks a touched Git repository in machine-local Codex state and reports unintended dirty worktree state at turn end. | It does not commit or push automatically. |
+
+Codex requires review and trust for changed user hooks. Treat an installed
+`hooks.json` as configured, not as verified active, until the client has
+accepted that trust review. The audit reports installation state only.
+
 ## Deliberate non-equivalences
 
-Codex currently has no supported equivalent to Claude Code's per-tool
-`PreToolUse`, `PostToolUse`, `SessionStart`, or `Stop` hooks. Accordingly, the
-following Claude-only mechanisms are not installed or emulated as hidden
-background processes:
+The following Claude-only mechanisms are intentionally not copied or emulated
+as hidden background processes:
 
-- tool-event guards and nudges, including the Claude memory guard and
-  Claude-specific session reminders;
+- Claude-specific memory guards and account/session reminders, because their
+  target paths and account state belong to Claude rather than Codex;
 - Claude Desktop shell-snapshot repair, folder-picker pinning, and the
   Claude.app PTY workaround;
 - Claude settings, MCP server definitions, credentials, account state, and
@@ -75,6 +103,10 @@ background processes:
 Do not copy credentials or private personal-layer data from Claude into Codex.
 Connect an equivalent Codex integration only when the user explicitly scopes
 the account and data that it may access.
+
+Hooks are a guardrail rather than a complete enforcement boundary: hosted tools
+and some specialised tool paths are not observable. This is why the
+agent-independent Git-side protections remain in place.
 
 Keeping these boundaries explicit protects existing Claude users: the Codex
 installer never runs `setup.sh` and never writes below `~/.claude/`.

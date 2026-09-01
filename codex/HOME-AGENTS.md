@@ -1,8 +1,10 @@
 # Global Codex conventions
 
-Apply the shared `claude-config` conventions to work in this home directory.
-This is a public, layer-1 instruction: it must remain useful without access to
-any owner-private data.
+Apply the shared `claude-config` conventions in every local Codex session.
+This file is public layer-1 content. `scripts/setup-codex.sh` may link it into
+`~/.codex/AGENTS.md`, but that installed path and its trust state are
+machine-local layer-4 wiring. This content must remain useful without access
+to owner-private data.
 
 For Git work, fetch first when a remote exists, inspect the project
 instructions and `SESSION.md`, and preserve the project's own instructions.
@@ -37,3 +39,7 @@ destructive action, a purchase or other costly action, or a material expansion
 of scope. An execution environment may still enforce a technical permission
 gate; treat that as a boundary, not as a reason to add conversational
 confirmation for safe local work.
+
+Native Codex hooks provide a second safety layer for selected high-signal
+events. They do not replace project Git hooks or the boundaries above, and
+they must never cause Claude Code configuration to be read or changed.

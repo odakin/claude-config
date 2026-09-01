@@ -59,7 +59,7 @@ for py in scripts/*.py; do
 done
 
 # 4. bash test 群
-for t in hooks/*.test.sh scripts/*.test.sh scripts/lib/*.test.sh; do
+for t in hooks/*.test.sh scripts/*.test.sh scripts/lib/*.test.sh codex/hooks/*.test.sh; do
     [ -f "$t" ] || continue
     run "test: $(basename "$t")" bash "$t"
 done

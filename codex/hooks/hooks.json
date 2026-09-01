@@ -1,0 +1,54 @@
+{
+  "description": "claude-config's narrow, product-neutral Codex lifecycle hooks.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/resume_context.py\"",
+            "timeout": 3,
+            "statusMessage": "Restoring shared work context"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/pre_tool_policy.py\"",
+            "timeout": 3,
+            "statusMessage": "Checking public-repository edit"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/session_touch.py\" track",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/session_touch.py\" nudge",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

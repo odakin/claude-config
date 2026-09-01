@@ -12,24 +12,29 @@ KARRCA-20260901-BPU205 worker session (深層 RCA = `odakin-prefs/plans/2026-09-
 - `kakenhi-proposal.md` #mock-review-and-claims 🔴 rule に kernel pointer 追記。
 - 機械面 (層3) = `odakin-prefs/scripts/check-source-project-parity.py` (D) named-claim audit (同 repo `be52dc3`)。
 
-## 2026-09-01g: Codex integration を Claude 非干渉の独立レイヤーとして追加
+## 2026-09-01g: Codex integration を Claude 非干渉の独立レイヤーとして追加・正規 global/Hook 層を補完
 
-- codex/HOME-AGENTS.md・codex/AGENTS.md・2 本の Codex skill を正本に、
-  scripts/setup-codex.sh が ~/AGENTS.md・~/Documents/Codex/AGENTS.md・~/.codex/skills/ へ
-  Codex 専用 symlink を導入する形で追加。4 層は「共有 → shared project → owner-private →
-  machine-local」の依存方向だけを許し、layer-1/2 から personal layer・credential・local history
-  を自動探索しない。~/.claude/・Claude Code Hook・既存 setup.sh には一切触れない。既存 Codex
-  target は default refuse、--replace 時だけ timestamp backup を残す。
-- --set-default-effort high と --configure-safe-local は Codex の config.toml だけを更新。
-  後者は approval_policy="on-request" + sandbox_mode="workspace-write" で、workspace 内の
+- Codex の public source は本 layer-1 repo 内に置き、公式配置の `~/.codex/AGENTS.md` は
+  それを選ぶ layer-4 の local entry point とする。旧版の `~/AGENTS.md` がこの integration
+  自身の symlink なら installer が安全に除去して重複 load を防ぐ。workspace
+  `~/Documents/Codex/AGENTS.md`、2 本の Codex skill、version 管理された
+  `~/.codex/claude-config-hooks` と `~/.codex/hooks.json` を含む 6 link を、default-refuse /
+  `--replace` 時 timestamp backup の契約で導入する。fresh clone は home を変更しないので
+  machine ごとに installer 実行が必要。L2 shared project と L3 personal layer は作成・注入せず、
+  L3 は owner の cross-machine bootstrap 記録だけを担う。
+- Codex native Hook の高信号・product-neutral subset を実装: `PreToolUse(apply_patch)` は
+  `.claude/public-repo.marker` を持つ public repo の Tier-A 構造 leak を deny、`SessionStart`
+  は startup/resume/compact で source-of-truth reminder、`PostToolUse(apply_patch)` + `Stop` は
+  touched repo の machine-local state を使い unintended dirty worktree を nudge する。Git-side
+  public leak gate が authoritative、Hook は hosted/specialised tool path を完全には cover しない。
+  user Hook は Codex client の one-time trust review 後に初めて active と扱う。
+- `--set-default-effort high` と `--configure-safe-local` は Codex の `config.toml` だけを更新。
+  後者は `approval_policy="on-request"` + `sandbox_mode="workspace-write"` で、workspace 内の
   安全なローカル作業を自律化しつつ、外部・破壊的・scope 外の action は user 承認を保つ。
-- scripts/audit-codex-integration.sh は managed link と optional --repo の既存 Git-side gate を
-  read-only で確認する。test は isolated installer (= 4 symlink / idempotence / user-managed target
-  refusal + backup / ~/.claude/ non-creation / top-level TOML placement)、audit fixture (= required link
-  と public Git gate)、Codex skill metadata validator、Codex strict config、run-all-checks。README 英日と
-  codex/PARITY.md が導入対象・4層境界・Claude 非干渉を説明する。両 AGENTS は「依頼範囲の
-  safe local work は逐次確認なし」を明示し、environment が出す技術的 permission gate と追加の
-  conversational confirmation を混同しない。
+- installer/audit fixture・Hook adapter test・skill validator・strict config・run-all-checks で検証し、
+  README 英日・codex/PARITY.md・2 Skill の古い「Codex に Hook は無い」記述を是正する。
+  `~/.claude/`・Claude Code Hook・既存 setup.sh・Claude account/MCP/credential/personal memory
+  には一切触れない。
 
 ## 2026-09-01f: kakenhi-proposal に凍結後差し替え改訂 § + 協力者実名 §、latex.md に行頭禁則 scan §
 

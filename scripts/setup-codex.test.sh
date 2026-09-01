@@ -34,12 +34,14 @@ run_setup() {
 
 run_setup --set-default-effort high --configure-safe-local
 
-[ "$(readlink "$TEST_HOME/AGENTS.md")" = "$CONFIG_ROOT/codex/HOME-AGENTS.md" ]
+[ "$(readlink "$TEST_CODEX_DIR/AGENTS.md")" = "$CONFIG_ROOT/codex/HOME-AGENTS.md" ]
 [ "$(readlink "$TEST_WORKSPACE/AGENTS.md")" = "$CONFIG_ROOT/codex/AGENTS.md" ]
 [ "$(readlink "$TEST_CODEX_DIR/skills/claude-config-conventions")" = "$CONFIG_ROOT/codex/skills/claude-config-conventions" ]
 [ "$(readlink "$TEST_CODEX_DIR/skills/claude-config-operations")" = "$CONFIG_ROOT/codex/skills/claude-config-operations" ]
-grep -q '^## Four-layer boundary$' "$TEST_HOME/AGENTS.md"
-grep -q '^## Autonomous in-scope work$' "$TEST_HOME/AGENTS.md"
+[ "$(readlink "$TEST_CODEX_DIR/claude-config-hooks")" = "$CONFIG_ROOT/codex/hooks" ]
+[ "$(readlink "$TEST_CODEX_DIR/hooks.json")" = "$CONFIG_ROOT/codex/hooks/hooks.json" ]
+grep -q '^## Four-layer boundary$' "$TEST_CODEX_DIR/AGENTS.md"
+grep -q '^## Autonomous in-scope work$' "$TEST_CODEX_DIR/AGENTS.md"
 grep -qx 'model_reasoning_effort = "high"' "$TEST_CODEX_DIR/config.toml"
 grep -qx 'approval_policy = "on-request"' "$TEST_CODEX_DIR/config.toml"
 grep -qx 'sandbox_mode = "workspace-write"' "$TEST_CODEX_DIR/config.toml"
@@ -65,24 +67,28 @@ awk '
 ' "$TEST_CODEX_DIR/config.toml"
 [ ! -e "$TEST_HOME/.claude" ]
 
+ln -s "$CONFIG_ROOT/codex/HOME-AGENTS.md" "$TEST_HOME/AGENTS.md"
+
 run_setup --set-default-effort high --configure-safe-local
+
+[ ! -e "$TEST_HOME/AGENTS.md" ]
 
 HOME="$TEST_HOME" \
 CODEX_USER_DIR="$TEST_CODEX_DIR" \
 CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
   "$SCRIPT_DIR/audit-codex-integration.sh" >/dev/null
 
-rm "$TEST_WORKSPACE/AGENTS.md"
-printf 'user instruction\n' > "$TEST_WORKSPACE/AGENTS.md"
+rm "$TEST_CODEX_DIR/AGENTS.md"
+printf 'user instruction\n' > "$TEST_CODEX_DIR/AGENTS.md"
 if run_setup >/dev/null 2>&1; then
-  echo "expected setup to refuse a user-managed AGENTS.md" >&2
+  echo "expected setup to refuse a user-managed global AGENTS.md" >&2
   exit 1
 fi
-grep -qx 'user instruction' "$TEST_WORKSPACE/AGENTS.md"
+grep -qx 'user instruction' "$TEST_CODEX_DIR/AGENTS.md"
 
 run_setup --replace
-[ "$(readlink "$TEST_WORKSPACE/AGENTS.md")" = "$CONFIG_ROOT/codex/AGENTS.md" ]
-backup="$(find "$TEST_WORKSPACE" -maxdepth 1 -type f -name 'AGENTS.md.bak-*' -print -quit)"
+[ "$(readlink "$TEST_CODEX_DIR/AGENTS.md")" = "$CONFIG_ROOT/codex/HOME-AGENTS.md" ]
+backup="$(find "$TEST_CODEX_DIR" -maxdepth 1 -type f -name 'AGENTS.md.bak-*' -print -quit)"
 [ -n "$backup" ]
 grep -qx 'user instruction' "$backup"
 

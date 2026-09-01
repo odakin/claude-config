@@ -1,9 +1,10 @@
 # Codex workspace conventions
 
 This workspace uses the shared operational conventions in this repository.
-This file is installed at the root of the user's Codex workspace by
-`scripts/setup-codex.sh`; it intentionally does not change Claude Code's
-configuration or behavior.
+This file is public layer-1 content. It may be installed at the root of a
+user's Codex workspace by `scripts/setup-codex.sh`; that local link is
+layer-4 wiring and intentionally does not change Claude Code's configuration
+or behavior.
 
 ## Start and resume work
 
@@ -67,9 +68,14 @@ confirmation for safe local work.
 
 ## Codex-specific mapping
 
-Claude Code event hooks are not available as equivalent Codex event hooks.
-Apply their intent through these instructions, project Git hooks, and explicit
-checks. Do not run `setup.sh` or modify `~/.claude/` while configuring Codex.
+Codex lifecycle hooks supplement these instructions with three narrowly scoped
+protections: a public-repository structural leak guard before `apply_patch`, a
+resume/compaction reminder, and a session-end nudge for repositories edited in
+that session but still dirty. The hooks are deliberately not a substitute for
+Git-side leak gates or project instructions; hosted tools and some specialised
+paths are outside their coverage.
+
+Do not run `setup.sh` or modify `~/.claude/` while configuring Codex.
 
 Use the `claude-config-conventions` skill when installing, updating, auditing,
 or extending this shared Codex integration.

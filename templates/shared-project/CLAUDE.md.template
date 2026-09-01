@@ -11,6 +11,9 @@
 - claude-config ([github.com/<owner>/claude-config](https://github.com/<owner>/claude-config)) を clone することを推奨（共通規約と Claude Code 流儀のため）
 - 自分の個人層（[personal-layer 規約](https://github.com/<owner>/claude-config/blob/main/docs/personal-layer.md)）があればそれが cascade で適用される
 - 個人層を持っていない場合も本リポは standalone で動作する
+- Codex の `~/.codex` 設定は各 collaborator の layer 4 の選択であり、本リポはそれにも
+  その人の personal layer にも依存しない。project file から `~/.codex` や個人層の path を
+  参照しない
 
 ## (オプション) git-crypt
 

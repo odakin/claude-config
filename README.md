@@ -65,18 +65,28 @@ setup, run after cloning:
 ./scripts/setup-codex.sh --replace --set-default-effort high --configure-safe-local
 ```
 
-The dedicated installer creates four Codex-only symlinks: the minimal global
-layer-1 instructions at `~/AGENTS.md`, the workspace instructions at
-`~/Documents/Codex/AGENTS.md`, and the `claude-config-conventions` plus
-`claude-config-operations` skills under `~/.codex/skills/`. It updates only
-Codex's `config.toml` when an option requests it. It never changes `~/.claude/`,
-Claude Code hooks, or `setup.sh`. `--replace` first makes a timestamped backup
-of an existing Codex-side target. The [Codex capability map](codex/PARITY.md)
-documents the four-layer boundary and the deliberately unsupported Claude-only
-hook mechanisms. Run `./scripts/audit-codex-integration.sh` for a read-only
-installation check. Codex does not have Claude Code's equivalent per-tool
-event-hook mechanism, so the integration uses AGENTS instructions, on-demand
-skills, and applicable Git-side gates instead.
+The dedicated installer creates six **layer-4, user-local** Codex symlinks
+that select the public layer-1 source in this repository: `~/.codex/AGENTS.md`,
+`~/Documents/Codex/AGENTS.md`, two skills under `~/.codex/skills/`, and the
+versioned Hook implementation plus its configuration at
+`~/.codex/claude-config-hooks` and `~/.codex/hooks.json`. It updates only
+Codex's `config.toml` when an option requests it. It never changes
+`~/.claude/`, Claude Code hooks, or `setup.sh`. `--replace` first makes a
+timestamped backup of an existing Codex-side target.
+
+This distinction is intentional: cloning a public repository must not write
+into a cloner's home directory. A new user enables these all-session Codex
+conventions by running the installer once on each machine; later `git pull`
+updates the public sources selected by their existing links. This does not add
+settings to their shared-project layer (layer 2), and an owner's cross-machine
+bootstrap record belongs in their private personal layer (layer 3), not here.
+
+The Hook bundle adds a narrow public-repository leak guard, a
+resume/compaction context reminder, and a dirty-worktree nudge. Codex requires
+a one-time trust review for user hooks, so installation alone does not assert
+that they are active. The [Codex capability map](codex/PARITY.md) documents
+coverage, boundaries, and intentionally unported Claude-only mechanisms. Run
+`./scripts/audit-codex-integration.sh` for a read-only installation check.
 
 ### Windows: start here (fresh machine)
 

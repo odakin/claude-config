@@ -12,12 +12,14 @@ TEST_HOME="$TEMP_ROOT/home"
 TEST_CODEX_DIR="$TEST_HOME/.codex"
 TEST_WORKSPACE="$TEST_HOME/Documents/Codex"
 mkdir -p "$TEST_CODEX_DIR/skills" "$TEST_WORKSPACE"
-ln -s "$CONFIG_ROOT/codex/HOME-AGENTS.md" "$TEST_HOME/AGENTS.md"
+ln -s "$CONFIG_ROOT/codex/HOME-AGENTS.md" "$TEST_CODEX_DIR/AGENTS.md"
 ln -s "$CONFIG_ROOT/codex/AGENTS.md" "$TEST_WORKSPACE/AGENTS.md"
 ln -s "$CONFIG_ROOT/codex/skills/claude-config-conventions" \
   "$TEST_CODEX_DIR/skills/claude-config-conventions"
 ln -s "$CONFIG_ROOT/codex/skills/claude-config-operations" \
   "$TEST_CODEX_DIR/skills/claude-config-operations"
+ln -s "$CONFIG_ROOT/codex/hooks" "$TEST_CODEX_DIR/claude-config-hooks"
+ln -s "$CONFIG_ROOT/codex/hooks/hooks.json" "$TEST_CODEX_DIR/hooks.json"
 printf 'approval_policy = "on-request"\nsandbox_mode = "workspace-write"\n' \
   > "$TEST_CODEX_DIR/config.toml"
 

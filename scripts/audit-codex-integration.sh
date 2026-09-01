@@ -53,19 +53,32 @@ check_link() {
   return 1
 }
 
-echo "=== Codex integration ==="
-check_link "home AGENTS.md" \
+echo "=== Codex layer-4 integration ==="
+check_link "local global AGENTS.md entry point" \
   "$CONFIG_ROOT/codex/HOME-AGENTS.md" \
-  "$USER_HOME/AGENTS.md" || true
-check_link "workspace AGENTS.md" \
+  "$CODEX_USER_DIR/AGENTS.md" || true
+check_link "local Codex-workspace AGENTS.md entry point" \
   "$CONFIG_ROOT/codex/AGENTS.md" \
   "$CODEX_WORKSPACE_ROOT/AGENTS.md" || true
-check_link "claude-config-conventions skill" \
+check_link "local claude-config-conventions skill" \
   "$CONFIG_ROOT/codex/skills/claude-config-conventions" \
   "$CODEX_USER_DIR/skills/claude-config-conventions" || true
-check_link "claude-config-operations skill" \
+check_link "local claude-config-operations skill" \
   "$CONFIG_ROOT/codex/skills/claude-config-operations" \
   "$CODEX_USER_DIR/skills/claude-config-operations" || true
+check_link "local claude-config hook implementation" \
+  "$CONFIG_ROOT/codex/hooks" \
+  "$CODEX_USER_DIR/claude-config-hooks" || true
+check_link "local Codex hook configuration" \
+  "$CONFIG_ROOT/codex/hooks/hooks.json" \
+  "$CODEX_USER_DIR/hooks.json" || true
+
+LEGACY_HOME_AGENTS="$USER_HOME/AGENTS.md"
+if [ -L "$LEGACY_HOME_AGENTS" ] \
+  && [ "$(readlink "$LEGACY_HOME_AGENTS")" = "$CONFIG_ROOT/codex/HOME-AGENTS.md" ]; then
+  echo "MIGRATION REQUIRED: legacy managed home AGENTS.md link remains: $LEGACY_HOME_AGENTS" >&2
+  ISSUES=$((ISSUES + 1))
+fi
 
 CONFIG_FILE="$CODEX_USER_DIR/config.toml"
 if [ -f "$CONFIG_FILE" ]; then
@@ -84,6 +97,9 @@ PY
 else
   echo "NOTE: Codex config not found: $CONFIG_FILE"
 fi
+
+echo "NOTE: These are layer-4 links to public layer-1 source. A fresh clone has no effect until this installer runs on that machine."
+echo "NOTE: Codex requires a one-time trust review before user-level hooks run; inspect it in the Codex client."
 
 if [ "$REPO_COUNT" -gt 0 ]; then
 for requested_repo in "${REPOS[@]}"; do
