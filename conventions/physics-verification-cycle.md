@@ -76,6 +76,28 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 
 検証で根拠が足りない・読みが複数残る・仮説が決めきれない時は、**分かったことにして進めず、判定不能のまま人間の判断に送って止まる**。自動化の価値は走り続けることでなく、止まるべき所で止まること (= 「根拠がない時に止まる」)。散文の不確実性は「不確実性を expose する操作 (display 化・機械 probe・1 query 検証) を先に回す」が第一手。
 
-## <a id="sibling-routing"></a>10. 隣接 doc への routing
+## <a id="cross-vendor-blind-verification"></a>10. Cross-vendor 盲検 — 同系統 AI の N 実装一致は独立性が本物でない (2026-09)
+
+同一系統の AI (同 vendor の別 session・別 model tier) による複数実装の一致は、 系統的な共通バイアス (同じ学習分布・同じ公式の癖) を排除しない。 決定的にしたい数値主張には**別 vendor の AI に盲検で第 3 実装**をさせる。 recipe:
+
+1. **盲検 spec を書く**: 物理の問題設定 (模型・規約・入力・観測値) だけを渡し、 **自分たちの実装も答えの数表も見せない** (clean directory で実行させ、 repo を読めなくする)。
+2. **最も不定性の大きい要素は指定せず自選させる**: 例 = horizon-matching 公式。 「標準公式を自分で選び、 出典と固有不定性を明記せよ」 と課すと、 公式選択の regime まで独立検証になる。
+3. **一様 offset は物理でなく規約差の signature**: 突き合わせで全 scenario に共通の一定 offset が出たら、 差の値から規約の流儀差を同定する (例: (1/12)ln g_* = 0.39 の g_* 正規化差)。 同定できない offset だけが本物の不一致。
+4. 検証者の「定式化への懸念」 も成果物として回収する — 盲検の第三者は依頼側の暗黙の前提 (例: 質量と potential の独立入力化) を独立に言い当てることがある。
+
+§7 (独立した第二の目) の cross-vendor 深化。 起源 = 2026-09 private paper repo の e-folds 逆結合 finding (Claude 系 3 実装一致 → Codex 盲検で第 4 実装、 全点一致 + 規約差同定 + 暗黙前提の独立指摘)。
+
+## <a id="approximation-tier-closure"></a>11. 近似階層の妥当性は判断でなく計算 — N 実装一致は「同じ理想化の中の一致」でしかない (2026-09)
+
+複数の独立実装が一致しても、 全実装が**同じ近似階層** (leading order・同型の理想化・同じパッケージ公式) を共有していれば、 一致が保証するのは「その階層の中で正しい」 ことまで。 階層自体の誤差を「±N の係数不定性」 と仮置きして人間の判断に送る前に、 **理想化を 1 枚ずつ外した実装を 1 本作って誤差を計算に置換する**:
+
+- 接続規約 (どこで phase を切り替えるか) → 系を通しで積分して規約自体を消す (物理連鎖から中間点が相殺する形に書く)
+- 平均化仮定 (w̄ = const 等) → 平均前の系を解いて実効値を出力させる (仮定 → 計算値)
+- パッケージ公式 → 保存則 (エントロピー等) の素の連鎖に展開する
+- 摂動公式 → 高次項 + 少数点での exact 解 (mode 積分等) spot-check
+
+仮置きの ±N が計算後に 1 桁小さい値に潰れることは珍しくない (起源事例: ±1–2 e-folds の仮置き → 計算値 +0.2)。 その場合、 残る softness は理論誤差から**入力の選択** (観測輪郭・データセット) に移動し、 人間 (共著者) の検証は「再導出」 から「物理設定の妥当性確認 + spot-check」 に軽量化される — これが検証依頼の縮小 ([`research-email.md #shrink-the-ask`](research-email.md#shrink-the-ask)) の計算版。
+
+## <a id="sibling-routing"></a>12. 隣接 doc への routing
 
 自著の投稿前検査 = [`paper-audit.md`](paper-audit.md) / ノートの書き方 = [`physics-notes.md`](physics-notes.md) / 数値検証 kernel = [`scientific-computing.md`](scientific-computing.md) / 審査側 = [`peer-review-workflow.md`](peer-review-workflow.md) / 文脈手術時の散文 sweep = [`paper-audit.md#relocation-rebinding-sweep`](paper-audit.md#relocation-rebinding-sweep) / 検出失敗 RCA の方法論 = [`convention-design-principles.md#detection-zero-location`](../docs/convention-design-principles.md#detection-zero-location) / 委譲・cold-eyes の機構 = [`multi-session-coordination.md`](multi-session-coordination.md)。

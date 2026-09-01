@@ -2,6 +2,12 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-01j: 検証方法論 4 § hoist (private paper の framing/検算 campaign から)
+
+- [`conventions/paper-audit.md`](conventions/paper-audit.md) に `#assumption-dependent-claim-framing` (3 層勾配 / 無仮定 floor / 不確実性→要求仕様) + `#moving-observational-baseline` (係争中の観測許容域: 複数 region + 不変量抽出 + baseline は著者判断)。
+- [`conventions/physics-verification-cycle.md`](conventions/physics-verification-cycle.md) に `#cross-vendor-blind-verification` (別 vendor AI への盲検 spec、 公式自選、 一様 offset = 規約差 signature) + `#approximation-tier-closure` (N 実装一致は同一理想化階層内の一致 — 階層を計算で外す。 §番号 10-11 挿入で routing は §12 へ)。
+- [`conventions/scientific-computing.md`](conventions/scientific-computing.md) に `#evolve-constraints-algebraically` (拘束量を独立積分すると drift→符号反転→反減衰爆発、 代数評価で単調性を構造保証 + validation 3 点セット)。
+
 ## 2026-09-01i: Codex integration 検収 + durable 化 (別 session による受け入れ検査)
 
 - 検収 verdict = 合格 (机上 + 実機 audit + 両 repo 全 suite green + pull 起点 refresh の live 観測)。 技術詳細は
