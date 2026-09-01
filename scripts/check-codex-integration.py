@@ -8,6 +8,8 @@ This checker deliberately verifies only objective invariants:
 * SESSION.md does not reintroduce durable implementation details;
 * known superseded capability claims do not return;
 * the shipped Hooks configuration names the expected local adapters.
+* the aggregate runner, CI, and pre-commit warning keep the contract and
+  adapter tests wired to an automatic trigger.
 
 It cannot decide whether arbitrary prose expresses the same idea as the
 source of truth. That remains a review concern; keeping secondary documents
@@ -55,6 +57,14 @@ HOOK_ADAPTERS = {
     "PreToolUse": "pre_tool_policy.py",
     "PostToolUse": "session_touch.py",
     "Stop": "session_touch.py",
+}
+WIRING_REQUIREMENTS = {
+    "scripts/run-all-checks.sh": (
+        "check-codex-integration.py --check",
+        "codex/hooks/*.test.sh",
+    ),
+    ".github/workflows/checks.yml": ("bash scripts/run-all-checks.sh",),
+    ".claude/pre-commit-extra.sh": ("check-codex-integration.py --check",),
 }
 
 
@@ -131,6 +141,17 @@ def check(root: Path) -> list[str]:
         for event_name, adapter in HOOK_ADAPTERS.items():
             if not any(adapter in command for command in hook_commands(hook_config, event_name)):
                 errors.append(f"codex/hooks/hooks.json: {event_name} does not invoke {adapter}")
+
+    for relative, fragments in WIRING_REQUIREMENTS.items():
+        path = root / relative
+        try:
+            content = text(path)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        for fragment in fragments:
+            if fragment not in content:
+                errors.append(f"{relative}: missing Codex integration wiring: {fragment}")
     return errors
 
 
@@ -158,6 +179,10 @@ def fixture(root: Path) -> None:
         for name, adapter in HOOK_ADAPTERS.items()
     }
     hook_config.write_text(json.dumps({"hooks": hooks}), encoding="utf-8")
+    for relative, fragments in WIRING_REQUIREMENTS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(fragments) + "\n", encoding="utf-8")
 
 
 def selftest() -> int:
@@ -201,6 +226,13 @@ def selftest() -> int:
         errors = check(root)
         if not any("SessionStart does not invoke" in error for error in errors):
             print("FAIL: missing Hook adapter was not detected")
+            return 1
+
+        fixture(root)
+        (root / ".github/workflows/checks.yml").write_text("name: checks\n", encoding="utf-8")
+        errors = check(root)
+        if not any(error.startswith(".github/workflows/checks.yml: missing Codex integration wiring") for error in errors):
+            print("FAIL: missing CI wiring was not detected")
             return 1
 
     print("check-codex-integration selftest: PASS")

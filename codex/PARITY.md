@@ -23,11 +23,11 @@ recording them in this repository.
 `scripts/check-codex-integration.py --check` enforces the mechanically
 verifiable part of this arrangement in local checks and CI: canonical pointers,
 the absence of durable Codex implementation detail in `SESSION.md`, known
-superseded capability claims, and the Hook adapter contract. It intentionally
-does not claim to detect arbitrary semantic restatements; the thin secondary
-documents and ordinary review cover that remaining judgment. The repository's
-pre-commit hook runs the same check as an early warning; CI remains the
-blocking layer.
+superseded capability claims, the Hook adapter contract, and the aggregate
+runner/CI/pre-commit trigger wiring. It intentionally does not claim to detect
+arbitrary semantic restatements; the thin secondary documents and ordinary
+review cover that remaining judgment. The repository's pre-commit hook runs
+the same check as an early warning; CI remains the blocking layer.
 
 ## Active Codex integration
 
@@ -45,6 +45,11 @@ it creates six managed links below the user's Codex locations:
 The links make the layer-4 installation consume versioned layer-1 source.
 That lower-to-upper dependency is valid; the paths, trust decisions, and
 whether the links exist are still machine-local layer-4 facts.
+
+Before mutating anything, the default installer mode preflights every managed
+target. A user-managed conflict therefore leaves no partial links, migration,
+or configuration update behind; `--replace` is the explicit opt-in that backs
+up and replaces conflicts.
 
 A fresh clone does **not** write to the cloner's `~/.codex`. To enable the
 integration on that machine, the cloner explicitly runs the installer. Later
@@ -125,6 +130,11 @@ This integration maps only the high-signal, product-neutral subset:
 | `PreToolUse(apply_patch)` | Blocks Tier-A structural leak patterns while editing a repository marked public. | Git pre-commit and commit-message gates remain authoritative for all write paths. |
 | `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`. | It does not discover personal data or session history. |
 | `PostToolUse(apply_patch)` + `Stop` | Tracks a touched Git repository in machine-local Codex state and reports unintended dirty worktree state at turn end. | It does not commit or push automatically. |
+
+The executable tests cover each supported public-leak category, allowlisted and
+removed patch text, private-repository pass-through, default-refuse installer
+atomicity, and dirty-worktree nudge de-duplication/reset. They run through the
+repository's aggregate local checks and CI.
 
 Codex requires review and trust for changed user hooks. Treat an installed
 `hooks.json` as configured, not as verified active, until the client has

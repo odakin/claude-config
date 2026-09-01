@@ -32,6 +32,17 @@ run_setup() {
   "$SCRIPT_DIR/setup-codex.sh" "$@"
 }
 
+run_setup_for() {
+  local home="$1"
+  local codex_dir="$2"
+  local workspace="$3"
+  shift 3
+  HOME="$home" \
+  CODEX_USER_DIR="$codex_dir" \
+  CODEX_WORKSPACE_ROOT="$workspace" \
+  "$SCRIPT_DIR/setup-codex.sh" "$@"
+}
+
 run_setup --set-default-effort high --configure-safe-local
 
 [ "$(readlink "$TEST_CODEX_DIR/AGENTS.md")" = "$CONFIG_ROOT/codex/HOME-AGENTS.md" ]
@@ -66,6 +77,32 @@ awk '
   }
 ' "$TEST_CODEX_DIR/config.toml"
 [ ! -e "$TEST_HOME/.claude" ]
+
+CONFLICT_HOME="$TEMP_ROOT/conflict-home"
+CONFLICT_CODEX_DIR="$CONFLICT_HOME/.codex"
+CONFLICT_WORKSPACE="$CONFLICT_HOME/Documents/Codex"
+mkdir -p "$CONFLICT_CODEX_DIR"
+printf 'user hook configuration\n' > "$CONFLICT_CODEX_DIR/hooks.json"
+
+if run_setup_for "$CONFLICT_HOME" "$CONFLICT_CODEX_DIR" "$CONFLICT_WORKSPACE" \
+  --set-default-effort high --configure-safe-local >/dev/null 2>&1; then
+  echo "expected setup to refuse a user-managed hooks.json" >&2
+  exit 1
+fi
+
+grep -qx 'user hook configuration' "$CONFLICT_CODEX_DIR/hooks.json"
+[ ! -e "$CONFLICT_CODEX_DIR/AGENTS.md" ]
+[ ! -e "$CONFLICT_WORKSPACE/AGENTS.md" ]
+[ ! -e "$CONFLICT_CODEX_DIR/skills/claude-config-conventions" ]
+[ ! -e "$CONFLICT_CODEX_DIR/skills/claude-config-operations" ]
+[ ! -e "$CONFLICT_CODEX_DIR/claude-config-hooks" ]
+[ ! -e "$CONFLICT_CODEX_DIR/config.toml" ]
+
+run_setup_for "$CONFLICT_HOME" "$CONFLICT_CODEX_DIR" "$CONFLICT_WORKSPACE" --replace
+[ "$(readlink "$CONFLICT_CODEX_DIR/hooks.json")" = "$CONFIG_ROOT/codex/hooks/hooks.json" ]
+hook_backup="$(find "$CONFLICT_CODEX_DIR" -maxdepth 1 -type f -name 'hooks.json.bak-*' -print -quit)"
+[ -n "$hook_backup" ]
+grep -qx 'user hook configuration' "$hook_backup"
 
 ln -s "$CONFIG_ROOT/codex/HOME-AGENTS.md" "$TEST_HOME/AGENTS.md"
 

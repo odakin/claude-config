@@ -9,7 +9,8 @@
 #
 # Installs layer-4 Codex entry points that link to public layer-1 instructions,
 # two skills, and the Codex-native hook bundle.
-# Existing user-managed targets are refused unless --replace is supplied;
+# Existing user-managed targets are refused unless --replace is supplied.
+# The default refusal mode preflights every target before making any change;
 # replacement preserves a timestamped backup.
 
 set -euo pipefail
@@ -89,6 +90,27 @@ install_link() {
   echo "Installed: $target -> $source"
 }
 
+preflight_link() {
+  local source="$1"
+  local target="$2"
+
+  if [ ! -e "$source" ]; then
+    echo "missing managed source: $source" >&2
+    return 1
+  fi
+
+  if [ -L "$target" ] && [ "$(readlink "$target")" = "$source" ]; then
+    return 0
+  fi
+
+  if [ -e "$target" ] || [ -L "$target" ]; then
+    if [ "$REPLACE" -ne 1 ]; then
+      echo "refusing to replace existing target: $target (rerun with --replace)" >&2
+      return 1
+    fi
+  fi
+}
+
 remove_legacy_managed_home_agents() {
   local legacy_target="$USER_HOME/AGENTS.md"
   local managed_source="$CONFIG_ROOT/codex/HOME-AGENTS.md"
@@ -138,6 +160,21 @@ if configure_safe_local:
 path.write_text(text, encoding="utf-8")
 PY
 }
+
+preflight_link "$CONFIG_ROOT/codex/HOME-AGENTS.md" "$CODEX_USER_DIR/AGENTS.md"
+preflight_link "$CONFIG_ROOT/codex/AGENTS.md" "$CODEX_WORKSPACE_ROOT/AGENTS.md"
+preflight_link \
+  "$CONFIG_ROOT/codex/skills/claude-config-conventions" \
+  "$CODEX_USER_DIR/skills/claude-config-conventions"
+preflight_link \
+  "$CONFIG_ROOT/codex/skills/claude-config-operations" \
+  "$CODEX_USER_DIR/skills/claude-config-operations"
+preflight_link \
+  "$CONFIG_ROOT/codex/hooks" \
+  "$CODEX_USER_DIR/claude-config-hooks"
+preflight_link \
+  "$CONFIG_ROOT/codex/hooks/hooks.json" \
+  "$CODEX_USER_DIR/hooks.json"
 
 remove_legacy_managed_home_agents
 install_link "$CONFIG_ROOT/codex/HOME-AGENTS.md" "$CODEX_USER_DIR/AGENTS.md"

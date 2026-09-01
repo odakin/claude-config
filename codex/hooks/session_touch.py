@@ -107,6 +107,10 @@ def nudge(event: dict[str, Any]) -> int:
     except OSError:
         pass
     if not dirty:
+        try:
+            marker.unlink(missing_ok=True)
+        except OSError:
+            pass
         emit_stop({})
         return 0
     listing = "; ".join(f"{root} ({count} dirty file(s))" for root, count in dirty)
