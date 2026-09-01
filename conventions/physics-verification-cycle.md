@@ -98,6 +98,16 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 
 仮置きの ±N が計算後に 1 桁小さい値に潰れることは珍しくない (起源事例: ±1–2 e-folds の仮置き → 計算値 +0.2)。 その場合、 残る softness は理論誤差から**入力の選択** (観測輪郭・データセット) に移動し、 人間 (共著者) の検証は「再導出」 から「物理設定の妥当性確認 + spot-check」 に軽量化される — これが検証依頼の縮小 ([`research-email.md #shrink-the-ask`](research-email.md#shrink-the-ask)) の計算版。
 
-## <a id="sibling-routing"></a>12. 隣接 doc への routing
+## <a id="external-ai-referee-premise-verification"></a>12. 外部 AI 査読レポートの前提検証 pass — 鵜呑みも防衛反射もしない (2026-09)
+
+別 AI (別 vendor 可) に blind の cold review を書かせるのは §10 の実装として有効だが、 **受け取った report をそのまま改稿計画にしない**。 findings は改稿前に author 側で 1 回**前提検証 pass** を通す。 起源事例 (2026-09-01、 private paper repo): 15 findings の検証で、 本物の新規 catch 2 件 (パラメータ化の符号タイポ = 出版版まで遡る erratum 候補 / 候補項分類の反例 = audit fleet の coverage hole) と同時に、 過剰判定 4 件 (既存の qualifier を割り引かない refuted 判定) と blind ゆえの誤 unverified 2 件を検出した。
+
+1. **Blind 査読の構造的盲点を知って読む**: 外部査読は原稿単体を読むため、 「紙面に根拠が無い」 (unverified) と 「主張が偽」 は正しく区別できても、 **author 側の機械 anchor (in-house で検証済みの事実) を知らない**。 unverified 判定の finding は 「主張を撤回する」 前に in-house anchor を確認する — 検証済みなら解は 「削除」 でなく 「掲載」 (起源事例: 対称性恒等式の全成分機械検証が in-house に既在し、 abstract の主張は真・紙面の提示だけが欠けていた)。
+2. **診断カテゴリを混同しない**: 「枠組み・方程式の矛盾」 と 「叙述の過剰主張」 は別の病気で、 前者と誤診すると論文の再構成 (中心主張の変更) へ誘導される — 修正コストが桁で違う。 判定の問い = **「方程式を変えずに文だけ直して真になるか」**。 起源事例: bare action に許容項が残ることを受けた 「構造的不整合」 診断が、 著者の一言 (= その項が残ることこそ postulate の帰結) で 「叙述精密化」 に降格した。 検証 AI 自身もこの誤診をする (した) — 前提検証 pass は査読だけでなく**検証者の診断カテゴリ**も再判定の対象にする。
+3. **前提検証は fan-out + verbatim 引用強制 + severity 再判定**: 1 finding = 1 agent で並列に、 (a) 原稿の該当箇所を **verbatim 引用**させる (report の行番号・要約を trust しない — 引用強制が 「premise が原稿に実在するか」 の機械的 gate になる) (b) 関連する in-house 機械 anchor・一次文献を読ませて counter-evidence を供給する (c) severity を fair / overstated / understated で**独立に再判定**させる。 disposition (受諾 / 部分受諾 / 却下) は検証結果を見て人間が決め、 finding ID で ledger に記録する (finding 本文の複製はしない)。
+
+report 側の hygiene (hash-pinned reviewed_source / 行番号の有効範囲宣言 / findings の 3 状態 + 理由 tag / decision ledger の分離) は受け取る価値のある形式なので、 自分が review を書く側に回るときも踏襲する (§10 の記録規律と同じ)。
+
+## <a id="sibling-routing"></a>13. 隣接 doc への routing
 
 自著の投稿前検査 = [`paper-audit.md`](paper-audit.md) / ノートの書き方 = [`physics-notes.md`](physics-notes.md) / 数値検証 kernel = [`scientific-computing.md`](scientific-computing.md) / 審査側 = [`peer-review-workflow.md`](peer-review-workflow.md) / 文脈手術時の散文 sweep = [`paper-audit.md#relocation-rebinding-sweep`](paper-audit.md#relocation-rebinding-sweep) / 検出失敗 RCA の方法論 = [`convention-design-principles.md#detection-zero-location`](../docs/convention-design-principles.md#detection-zero-location) / 委譲・cold-eyes の機構 = [`multi-session-coordination.md`](multi-session-coordination.md)。
