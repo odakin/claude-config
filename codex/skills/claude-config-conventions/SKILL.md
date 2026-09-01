@@ -17,19 +17,16 @@ This installed skill is a symlink to
 repository from this file's path; the repository root is three directories
 above it. Read `CONVENTIONS.md` before changing the integration. For a
 task-specific convention, route through `conventions/README.md` and load only
-the relevant document.
+the relevant document. Then read
+`codex/PARITY.md#codex-integration-sot`: it is the single durable source for
+the Codex architecture, layer boundaries, platform scope, and Hook contract.
 
 ## Installation and updates
 
-Use `scripts/setup-codex.sh` from the repository root. The repository's
-instructions, skills, and hook code are public layer-1 source; the installer
-creates layer-4 links at `~/.codex/AGENTS.md`, the local Codex workspace root,
-two skills, and the hook bundle (`~/.codex/claude-config-hooks` plus
-`~/.codex/hooks.json`). A clone does not affect another user's home directory
-until they run this installer. It refuses to overwrite a user-managed target
-unless `--replace` is explicit. It can optionally set Codex's default reasoning
-effort and safe-local approval policy, preserving a timestamped backup of
-`config.toml` first.
+Use `scripts/setup-codex.sh` from the repository root. A clone has no effect
+on another user's home directory until that user runs the installer. Follow the
+installer contract in `codex/PARITY.md#codex-integration-sot` rather than
+copying its technical details into this skill.
 
 Validate with `scripts/setup-codex.test.sh`,
 `scripts/audit-codex-integration.sh`, and the repository's standard checks.
@@ -38,12 +35,10 @@ normal repository review and the user's authorization.
 
 ## Scope boundaries
 
-Codex hooks are native but not interchangeable with Claude hooks. Use only the
-Codex hook schema and the selected, product-neutral policies in
+Use only the Codex hook schema and the selected, product-neutral policies in
 `codex/hooks/`; do not point Codex at Claude hook scripts or configuration.
-Keep Git-side protections authoritative for committed public content. A newly
-installed or changed user hook needs Codex trust review before it runs; verify
-configuration, logic, and trust separately.
+Keep Git-side protections authoritative for committed public content. Treat
+configuration, logic, and Hook trust as separate checks.
 
 Do not confuse a shared project (layer 2) with an owner-private personal
 layer (layer 3): the former is for collaborators, the latter is cross-machine

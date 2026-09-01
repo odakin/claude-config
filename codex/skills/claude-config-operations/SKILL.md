@@ -35,6 +35,10 @@ or load a Claude personal layer. If a task needs owner-private data, require
 the user to place that specific data in scope and keep it out of layer-1/2
 outputs.
 
+For Codex-specific layer placement, Hook coverage, platform scope, or
+installation behavior, read `codex/PARITY.md#codex-integration-sot` rather
+than relying on a secondary summary.
+
 ## Common routes
 
 - **Current work, resuming, Git, reviews, or public safety:** `CONVENTIONS.md`,

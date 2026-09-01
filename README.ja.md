@@ -64,35 +64,23 @@ Claude Code の設定を変えずに同じ共有規約を Codex にも導入す�
 ./scripts/setup-codex.sh --replace --set-default-effort high --configure-safe-local
 ```
 
-この専用インストーラは、この公開リポの layer-1 source を選ぶ **layer-4（user-local）**
-の Codex symlink を 6 本設置する: `~/.codex/AGENTS.md`、workspace 指示
-`~/Documents/Codex/AGENTS.md`、`~/.codex/skills/` 配下の 2 Skill、version 管理された
-Hook 実装 `~/.codex/claude-config-hooks` と設定 `~/.codex/hooks.json` である。指定時だけ
-Codex の `config.toml` を更新し、`~/.claude/`、Claude Code の Hook、既存の
+この installer は本公開リポの layer-1 source を選ぶ user-local layer-4 entry point を作る。
+指定時だけ Codex の `config.toml` を更新し、`~/.claude/`、Claude Code の Hook、既存の
 `setup.sh` は変更しない。`--replace` は既存の Codex 側 target を timestamp 付き backup に
 退避してから置換する。
 
-この分離は意図的である。公開リポを clone しただけで clone 者の home directory を書き換えては
-ならない。新規 user は各マシンで一度 installer を実行して全 session 向け Codex 規約を有効にし、
-その後の `git pull` は既存 link が選ぶ公開 source を更新する。これは shared-project layer
-(layer 2) に設定を追加するものではなく、owner の cross-machine bootstrap 記録は private な
-personal layer (layer 3) に置く。
-
-Hook bundle は、公開リポへの構造的 leak 防止、resume/compaction 時の context reminder、
-この session で編集した repo の未 commit nudge を追加する。ただし Codex は user Hook ごとに
-一度 trust review を要求するため、install 完了だけで Hook の active 化までを主張しない。
-coverage・境界・意図的に未移植の Claude 専用機構は
-[Codex capability map](codex/PARITY.md) が正本。
-`./scripts/audit-codex-integration.sh` は導入状態を read-only で確認する。
+公開リポを clone しただけで clone 者の home directory は書き換えない。各マシンで一度
+installer を実行し、その後の `git pull` は既存 link が選ぶ source を更新する。Codex の user
+Hook は一度 trust review が必要なので、install 完了だけで active 化までを主張しない。
+architecture・layer 境界・Hook coverage・platform scope・検証の正本は
+[Codex capability map](codex/PARITY.md#codex-integration-sot)。
+`./scripts/audit-codex-integration.sh` はこのマシンの導入状態を read-only で確認する。
 
 ### Windows 対応状況
 
-この Codex installer の Windows は現在 unsupported である。POSIX shell・Python・symlink を
-意図的に使っており、native Windows 環境では検証していない。Windows 対応が必要な人は、
-platform に適した installer と test を実装し、default-refuse・`~/.claude` を書き換えない契約を
-保ったうえで pull request を出してほしい。
-この制限は **`scripts/setup-codex.sh` だけ** に適用される。下記の既存 Claude Code 向け
-Windows bootstrap は対応済みであり、影響を受けない。
+native Windows で unsupported なのは `scripts/setup-codex.sh` だけであり、下記の既存
+Claude Code 向け Windows bootstrap は対応済みである。Codex の Windows 対応に必要な契約は
+[Codex capability map](codex/PARITY.md#platform-scope) を参照。
 
 ### Windows の Claude Code はまずこれ (まっさらな機)
 

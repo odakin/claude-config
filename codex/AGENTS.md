@@ -75,12 +75,11 @@ confirmation for safe local work.
 
 ## Codex-specific mapping
 
-Codex lifecycle hooks supplement these instructions with three narrowly scoped
-protections: a public-repository structural leak guard before `apply_patch`, a
-resume/compaction reminder, and a session-end nudge for repositories edited in
-that session but still dirty. The hooks are deliberately not a substitute for
-Git-side leak gates or project instructions; hosted tools and some specialised
-paths are outside their coverage.
+For Codex integration architecture, lifecycle-Hook coverage, platform scope,
+and verification, use the `claude-config-conventions` skill. Its canonical
+technical source is `codex/PARITY.md`; do not reconstruct the contract from
+old session notes. Git-side gates and project instructions remain authoritative
+for committed public content.
 
 Do not run `setup.sh` or modify `~/.claude/` while configuring Codex.
 

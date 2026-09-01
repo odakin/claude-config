@@ -12,29 +12,14 @@ KARRCA-20260901-BPU205 worker session (深層 RCA = `odakin-prefs/plans/2026-09-
 - `kakenhi-proposal.md` #mock-review-and-claims 🔴 rule に kernel pointer 追記。
 - 機械面 (層3) = `odakin-prefs/scripts/check-source-project-parity.py` (D) named-claim audit (同 repo `be52dc3`)。
 
-## 2026-09-01g: Codex integration を Claude 非干渉の独立レイヤーとして追加・正規 global/Hook 層を補完
+## 2026-09-01g: Codex integration — shipped
 
-- Codex の public source は本 layer-1 repo 内に置き、公式配置の `~/.codex/AGENTS.md` は
-  それを選ぶ layer-4 の local entry point とする。旧版の `~/AGENTS.md` がこの integration
-  自身の symlink なら installer が安全に除去して重複 load を防ぐ。workspace
-  `~/Documents/Codex/AGENTS.md`、2 本の Codex skill、version 管理された
-  `~/.codex/claude-config-hooks` と `~/.codex/hooks.json` を含む 6 link を、default-refuse /
-  `--replace` 時 timestamp backup の契約で導入する。fresh clone は home を変更しないので
-  machine ごとに installer 実行が必要。L2 shared project と L3 personal layer は作成・注入せず、
-  L3 は owner の cross-machine bootstrap 記録だけを担う。
-- Codex native Hook の高信号・product-neutral subset を実装: `PreToolUse(apply_patch)` は
-  `.claude/public-repo.marker` を持つ public repo の Tier-A 構造 leak を deny、`SessionStart`
-  は startup/resume/compact で source-of-truth reminder、`PostToolUse(apply_patch)` + `Stop` は
-  touched repo の machine-local state を使い unintended dirty worktree を nudge する。Git-side
-  public leak gate が authoritative、Hook は hosted/specialised tool path を完全には cover しない。
-  user Hook は Codex client の one-time trust review 後に初めて active と扱う。
-- `--set-default-effort high` と `--configure-safe-local` は Codex の `config.toml` だけを更新。
-  後者は `approval_policy="on-request"` + `sandbox_mode="workspace-write"` で、workspace 内の
-  安全なローカル作業を自律化しつつ、外部・破壊的・scope 外の action は user 承認を保つ。
-- installer/audit fixture・Hook adapter test・skill validator・strict config・run-all-checks で検証し、
-  README 英日・codex/PARITY.md・2 Skill の古い「Codex に Hook は無い」記述を是正する。
-  `~/.claude/`・Claude Code Hook・既存 setup.sh・Claude account/MCP/credential/personal memory
-  には一切触れない。
+- Architecture, installer/Hook contract, platform scope, and verification are
+  now canonical in [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot).
+  This entry intentionally carries no duplicate technical record.
+- No layer-1 implementation task remains. Each machine's installation and Hook
+  trust are layer-4 state; inspect them with `scripts/audit-codex-integration.sh`
+  rather than tracking them here.
 
 ## 2026-09-01f: kakenhi-proposal に凍結後差し替え改訂 § + 協力者実名 §、latex.md に行頭禁則 scan §
 

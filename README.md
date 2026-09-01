@@ -65,38 +65,25 @@ setup, run after cloning:
 ./scripts/setup-codex.sh --replace --set-default-effort high --configure-safe-local
 ```
 
-The dedicated installer creates six **layer-4, user-local** Codex symlinks
-that select the public layer-1 source in this repository: `~/.codex/AGENTS.md`,
-`~/Documents/Codex/AGENTS.md`, two skills under `~/.codex/skills/`, and the
-versioned Hook implementation plus its configuration at
-`~/.codex/claude-config-hooks` and `~/.codex/hooks.json`. It updates only
-Codex's `config.toml` when an option requests it. It never changes
-`~/.claude/`, Claude Code hooks, or `setup.sh`. `--replace` first makes a
-timestamped backup of an existing Codex-side target.
+The installer creates user-local layer-4 entry points to this repository's
+public layer-1 source. It updates only Codex's `config.toml` when requested,
+never changes `~/.claude/`, Claude Code hooks, or `setup.sh`, and backs up an
+existing Codex-side target before `--replace` changes it.
 
-This distinction is intentional: cloning a public repository must not write
-into a cloner's home directory. A new user enables these all-session Codex
-conventions by running the installer once on each machine; later `git pull`
-updates the public sources selected by their existing links. This does not add
-settings to their shared-project layer (layer 2), and an owner's cross-machine
-bootstrap record belongs in their private personal layer (layer 3), not here.
-
-The Hook bundle adds a narrow public-repository leak guard, a
-resume/compaction context reminder, and a dirty-worktree nudge. Codex requires
-a one-time trust review for user hooks, so installation alone does not assert
-that they are active. The [Codex capability map](codex/PARITY.md) documents
-coverage, boundaries, and intentionally unported Claude-only mechanisms. Run
-`./scripts/audit-codex-integration.sh` for a read-only installation check.
+Cloning alone never writes into a user's home directory: run the installer once
+per machine, then `git pull` updates the source selected by the existing links.
+Codex requires a one-time Hook trust review, so install alone does not assert
+that Hooks are active. The [Codex capability map](codex/PARITY.md#codex-integration-sot)
+is the source of truth for the architecture, layer boundaries, Hook coverage,
+platform scope, and verification. Run `./scripts/audit-codex-integration.sh`
+for a read-only check of this machine.
 
 ### Windows status
 
-Windows is currently unsupported for this Codex installer. It intentionally
-uses POSIX shell, Python, and symlinks, and has not been validated in a native
-Windows environment. If Windows support matters to you, implement the
-platform-appropriate installer and tests, preserve the default-refuse and
-no-`~/.claude`-writes guarantees, and submit the result as a pull request.
-This limitation applies **only** to `scripts/setup-codex.sh`. The existing
-Windows bootstrap for Claude Code below remains supported and unaffected.
+Native Windows is unsupported only for `scripts/setup-codex.sh`. The existing
+Claude Code Windows bootstrap below remains supported. Requirements for a
+Codex Windows contribution are in the
+[Codex capability map](codex/PARITY.md#platform-scope).
 
 ### Windows: Claude Code start here (fresh machine)
 

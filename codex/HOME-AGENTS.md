@@ -13,6 +13,9 @@ or extending this Codex integration.
 Use the `claude-config-operations` skill when a task may be covered by the
 shared operational runbooks or scripts.
 
+When maintaining the Codex integration, treat `codex/PARITY.md` as the
+durable technical source of truth; do not infer it from old session notes.
+
 ## Four-layer boundary
 
 Respect the audience order: common conventions (layer 1), shared project

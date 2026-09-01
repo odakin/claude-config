@@ -4,6 +4,22 @@ This document records the deliberate boundary between the shared
 `claude-config` layer and Codex. It is an implementation map, not a claim that
 two different products expose identical internals.
 
+## <a id="codex-integration-sot"></a>Source of truth and maintenance
+
+This is the durable layer-1 source of truth for the Codex integration:
+architecture, layer placement, installer contract, Hook coverage and limits,
+platform scope, and verification. Keep product-specific implementation facts
+here rather than restating them in `SESSION.md`, skills, or project
+instructions.
+
+The public quickstart command belongs in [README.md](../README.md#use-with-codex)
+because a clone user needs it before reading project instructions. The README
+is otherwise an entry point to this document. `SESSION.md` holds only the
+current implementation state and a pointer here; commit history is `git log`.
+Machine-specific install, configuration, and Hook-trust state are layer-4
+facts: inspect them with `scripts/audit-codex-integration.sh` instead of
+recording them in this repository.
+
 ## Active Codex integration
 
 The public source lives in this layer-1 repository: `codex/HOME-AGENTS.md`,
@@ -30,6 +46,17 @@ The installer can also set Codex's top-level `model_reasoning_effort`,
 `approval_policy = "on-request"`, and `sandbox_mode = "workspace-write"`.
 That enables ordinary, in-scope local work without weakening safeguards for
 external, destructive, costly, or out-of-scope actions.
+
+## Platform scope
+
+The Codex installer is intentionally POSIX-oriented: it uses Bash, Python, and
+symlinks. Native Windows support for `scripts/setup-codex.sh` is currently
+unsupported and unvalidated. A contribution adding it must provide a
+platform-appropriate installer and tests, retain default-refuse behavior, and
+preserve the no-`~/.claude`-writes boundary.
+
+This limitation applies only to the Codex installer. The repository's existing
+Windows bootstrap for Claude Code remains supported and unaffected.
 
 ## Four-layer architecture
 
