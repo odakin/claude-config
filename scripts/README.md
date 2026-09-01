@@ -14,6 +14,7 @@
 - **[bootstrap-stdio-mcps.sh](bootstrap-stdio-mcps.sh)** — generic auto-bootstrap library for self-hosted stdio MCPs.
 - **[bootstrap-stdio-mcps.test.sh](bootstrap-stdio-mcps.test.sh)** — self-test for the generic stdio MCP bootstrap library.
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入
+- **[check-codex-integration.py](check-codex-integration.py)** — Codex SoT pointers, session drift, and Hook contract gate.
 - **[check-docx-integrity.py](check-docx-integrity.py)** — docx の Word「破損」判定源を Word 不要・決定論で検出（single-quote 宣言 / checkbox 状態↔グリフ / bookmark / table grid / dangling r:id 等、 office-automation.md#docx-checkbox-content-control）
 - **[check-fleet-status.py](check-fleet-status.py)** — fleet heartbeat の reader（全マシン分の beat を読み role 別に異常 surface = always-on の heartbeat 停止 🔴 / best-effort のスリープは仕様で silent / beat が新鮮な時の server auth/version error 🔴。finding 0 件 silent、fetch しない = 呼び出し側が鮮度担保、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
 - **[check-form-clipping.py](check-form-clipping.py)** — 生成 form PDF で「記入値が描画時に clip された」のを機械検出。

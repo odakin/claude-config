@@ -1,15 +1,14 @@
 #!/bin/bash
-# .claude/pre-commit-extra.sh — claude-config 固有の pre-commit 規律 (検査 1-2 = 警告のみ / 検査 3 legacy gate = BLOCK)
+# .claude/pre-commit-extra.sh — claude-config 固有の pre-commit 規律 (検査 1-3 = 警告のみ / 検査 4 legacy gate = BLOCK)
 #
 # public-precommit-runner.sh が leak gate を pass 後に chain で呼ぶ (= 既存 channel への
 # 相乗り。 新規 standalone 検出器 / dashboard 項目を増やさない)。 exit code は親に透過するが、
 # 本 hook は **warning のみで常に exit 0** にして commit を止めない (= drift は annoyance 級で、
 # convention-design-principles.md §9.1 〔= #blast-radius-triage〕 の triage に従い catastrophic 級の block を当てない)。
 #
-# 検査: 生成 doc (CLAUDE.md 構造 tree / CONVENTIONS.md 冒頭列挙 / conventions/README.md) が
-#       源 (conventions/*.md 冒頭 doc-meta + scripts/hooks の header 1 行目) と同期しているか
-#       (scripts/generate-tree.py --check)。 不一致なら「その commit の瞬間・その本人」に
-#       warning を出す (= doc 記載の recall 依存 trigger 〔§8.12 最弱発火面〕 を機械発火に格上げ)。
+# 検査: (1) 生成 doc、(2) 自動生成 index、(3) Codex integration contract をその commit の
+#       瞬間・その本人へ warning で surface する。CI は同じ検査を BLOCK として実行する
+#       (= doc 記載の recall 依存 trigger を機械発火に格上げ)。
 #
 # 由来: DESIGN.md 2026-06-13「CONVENTIONS.md 冒頭の conventions/ 列挙」 の格上げ trigger の実体
 #       (35→56 file の列挙 drift が ~2.5 ヶ月 silent 累積した RCA)。 2026-07-10 に comm ベースの
@@ -36,11 +35,7 @@ if [ -f "$GEN" ] && command -v python3 >/dev/null 2>&1; then
   fi
 fi
 
-if [ "$warned" -eq 1 ]; then
-  echo "    (警告のみ・commit は継続)" >&2
-fi
-
-# --- 検査 2.5: 自動生成 index の同期 (warn のみ) ---
+# --- 検査 2: 自動生成 index の同期 (warn のみ) ---
 # md に section を足して index 再生成を忘れる drift (実例: 2026-06-30 の §17/§8.16/§8.17 が
 # principles index から ~10 日欠落) を commit の瞬間に surface する。 CI (checks.yml ->
 # run-all-checks.sh) が push 後の block 層、 ここは commit 時の早期 warn 層 (二層は意図的)。
@@ -54,7 +49,24 @@ if [ -f "$IDXGEN" ] && command -v python3 >/dev/null 2>&1; then
   fi
 fi
 
-# --- 検査 3: legacy append-only (= 上の warn-only 群と違い BLOCK する例外) ---
+# --- 検査 3: Codex integration contract (warn のみ) ---
+# 正本 pointer・SESSION の durable detail・旧 capability claim・Hook adapter contract を
+# 軽量に照合する。詳細な判定は script に一本化し、ここへ再実装しない。
+CODEX_GATE="$REPO_ROOT/scripts/check-codex-integration.py"
+if [ -f "$CODEX_GATE" ] && command -v python3 >/dev/null 2>&1; then
+  if ! python3 "$CODEX_GATE" --check >/dev/null 2>&1; then
+    echo "  ⚠️ [pre-commit-extra] Codex integration contract が OUT OF SYNC:" >&2
+    python3 "$CODEX_GATE" --check 2>&1 | sed 's/^/    /' >&2
+    echo "    → python3 scripts/check-codex-integration.py --check で確認 (警告のみ・CI では BLOCK)" >&2
+    warned=1
+  fi
+fi
+
+if [ "$warned" -eq 1 ]; then
+  echo "    (警告のみ・commit は継続)" >&2
+fi
+
+# --- 検査 4: legacy append-only (= 上の warn-only 群と違い BLOCK する例外) ---
 # catastrophic 級: published §-number の転送先 (slug index の legacy 値) を黙って落とすと、
 # 下層 repo / 他ユーザ / 過去メモの §-ref が永久に解決不能になる (= 回収不可)。 §9.1 triage で
 # block。 staged の *.index.yaml を HEAD と比較し、 legacy が縮んでいたら commit を止める。 意図的な

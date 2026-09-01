@@ -77,9 +77,9 @@ confirmation for safe local work.
 
 For Codex integration architecture, lifecycle-Hook coverage, platform scope,
 and verification, use the `claude-config-conventions` skill. Its canonical
-technical source is `codex/PARITY.md`; do not reconstruct the contract from
-old session notes. Git-side gates and project instructions remain authoritative
-for committed public content.
+technical source is `codex/PARITY.md#codex-integration-sot`; do not reconstruct
+the contract from old session notes. Git-side gates and project instructions
+remain authoritative for committed public content.
 
 Do not run `setup.sh` or modify `~/.claude/` while configuring Codex.
 

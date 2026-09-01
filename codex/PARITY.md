@@ -20,6 +20,15 @@ Machine-specific install, configuration, and Hook-trust state are layer-4
 facts: inspect them with `scripts/audit-codex-integration.sh` instead of
 recording them in this repository.
 
+`scripts/check-codex-integration.py --check` enforces the mechanically
+verifiable part of this arrangement in local checks and CI: canonical pointers,
+the absence of durable Codex implementation detail in `SESSION.md`, known
+superseded capability claims, and the Hook adapter contract. It intentionally
+does not claim to detect arbitrary semantic restatements; the thin secondary
+documents and ordinary review cover that remaining judgment. The repository's
+pre-commit hook runs the same check as an early warning; CI remains the
+blocking layer.
+
 ## Active Codex integration
 
 The public source lives in this layer-1 repository: `codex/HOME-AGENTS.md`,
