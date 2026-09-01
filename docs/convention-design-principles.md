@@ -919,6 +919,18 @@ origin: 2026-08、 運用記録 ledger の「open 状態のまま N 日経過」
 
 origin: 2026-09、 授業評価フィードバックの deep RCA。 draft 起草 + 共担者の朱入れレビューまで完了した提出義務が、 レビュー返信の未記録 (kernel 1 欠落) → SSO form への「代行不可」 記載を終端に carrier 消失 (kernel 2-4 欠落) → 包括委任下で「低 stakes・催促なし」 と見送り close (= 依頼文書には全学公開が明記、 close が thread 監視も切断) → 66 日後に公開リストの不在を共担者が指摘して顕在化。 同 class の生存 sibling 2 件 (学術誌共著者の PW 設定 38 日滞留 / 機関業績調査 8 日超過) + 隣接 (審査依頼の web 回答失効) で [`§9.8`](#single-observation-scope-check) 充足 (close-kills-net は部分納品 close の二重不可視事故 〔2026-06〕 と 2 例)。 instance (= marker field 名・gate/lint script・cadence 実装・checklist 原文) は個人層に残置 (= kernel-up / instance-down)。
 
+### <a id="confirmation-question-aim"></a>8.28 確認設問は照準した軸しか検証しない — 事実主張を運ぶ文の user 確認は真偽を第一問に
+
+**class 定義**: user 確認 (確認 marker・draft OK・(a)/(b) 選択肢) を検証面として設計する時、 **設問は照準した軸しか検証しない**。 事実主張を含む文に「書き方」 の選択肢だけ (このまま / 匿名化 / 軟化) を出すと、 主張の真偽は両選択肢の共通前提に埋め込まれて user の目を素通りする — user は提示された決定空間の中で決める (frame acceptance)。 これは [`§8.8`](#proxy-blind-spot) の確認面版: 「user 確認を経由した」 という proxy が「主張は検証された」 の証拠として振る舞い、 postmortem でも「検証面はあった」 と読めてしまう分、 検証面ゼロより診断しにくい。
+
+**kernel**:
+
+1. **事実主張 (帰属・固有名・数値・優先権) を運ぶ文の確認は、 真偽 evidence を第一問に置く**: 「この主張の根拠 = X (verify 済 / 未検証)」 を選択肢より先に提示する。 未検証の主張に style 選択肢を出す資格はない — 先に検証するか、 主張ごと落とす。
+2. **選択肢を書く瞬間の self-check**: 「(a) と (b) のどちらを選んでも残る前提は何か」 — その共通前提こそ、 この確認が本来検証すべきだったものである可能性が高い。
+3. **draft 提示 + user OK は事実検証に対して null protection** (mail domain で確立済みの rule の一般形)。 user は文面の質・トーン・戦略を見る — 埋め込まれた事実の再導出はしない。 確認を「検証済み」 に数えられるのは、 設問がその軸を明示的に向いていた時だけ。
+
+**origin**: 2026-09、 研究費調書。 生成時に混入した誤帰属 (= グループ内略称の著名研究者名への衝突展開、 [actor-attribution.md #claim-target-attribution](../conventions/actor-attribution.md#claim-target-attribution)) を運ぶ文に、 user 確認 marker が「名指しのまま (a) / 匿名化 (b)」 の趣味だけを問い、 帰属の真偽は前提として素通りして提出に至った。 同じ marker 表の 2 行上には当の略称の正式名を問う設問があり user 回答も得ていた (= 衝突解消 data は同一 session 内に存在) が、 設問が真偽を向いていないため誰も接続しなかった。 marker の括弧書きは「名指しされた当人が審査員にいる確率」 まで評価していた — **P(読まれる) を評価して P(真) を評価しない、 照準ずれの純型**。
+
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。
