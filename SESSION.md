@@ -2,6 +2,19 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-01f: kakenhi-proposal に凍結後差し替え改訂 § + 協力者実名 §、latex.md に行頭禁則 scan §
+
+- kakenhi-proposal.md 2 § 新設: [`#frozen-revision-geometry`](conventions/kakenhi-proposal.md#frozen-revision-geometry)
+  (= 提出後凍結中の差し戻し改訂: Web 入力不変原則 / 挿入⇄トリムの字数収支ペアリング / PyMuPDF 頁末 y 座標比較 +
+  vbox + 行頭句読点の機械検証 / snapshot 不変 + carrier TODO 集約) + [`#collaborator-naming`](conventions/kakenhi-proposal.md#collaborator-naming)
+  (= 実名×役割 > 匿名分野列挙、所属・身分は書かなければ見えない、学生協力者の身分開示は下方リスクのみ)。
+  既存 § へ 3 bullet 追補 (= #mock-review-and-claims: 「未解決」框付けの先行結論検査 + 同一量の別表式 chain /
+  #track-record-section: 年数 self-claim の検証可能形)。
+- latex.md [`#line-initial-punct-scan`](conventions/latex.md#line-initial-punct-scan) 新設 (= `\textbf{…}。` の bold 境界で
+  prebreakpenalty 不発 → 行頭「。」印字。修正 = 句読点を bold 内へ、検出 = PyMuPDF 行頭 scan)。
+- origin = 挑戦的調書の批判的査読 → 差し戻し待機改訂 (同日の 09-01 hoist 〔#mock-review-and-claims ほか〕 の
+  sibling instance、個別実例は個人層側の当該 status.md が正本)。
+
 ## 2026-09-01e: memory-file-slimming.md に #regrowth-backstop 追補
 
 - [`#regrowth-backstop`](conventions/memory-file-slimming.md#regrowth-backstop) 新設 = 縮退後は再肥大の機械 backstop を常設する (根本欠陥「肥大を誰も見ていなかった」 の規約化) + 閾値設計 2 点 (**warn は達成可能な健康 floor の上** = 慢性点灯は healthy=silent を壊す / **設計値は live 実走で即校正** = 出荷 gate に「実 fleet で silent」)。 一般形の上層 hoist は 2 例目で判断 (実例 1 件)。 instance (検出器実装・閾値実値) は個人層 (kernel-up / instance-down)。 run-all-checks 49/49。

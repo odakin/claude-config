@@ -434,6 +434,29 @@ caption が error も warning もなく視覚的に切断される** (= 文の�
 - sibling: 次頁短行の穴 = [#wrapfigure-page-carryover](#wrapfigure-page-carryover) /
   別行立て禁止 = [#wrapfig-no-display-math](#wrapfig-no-display-math)
 
+## <a id="line-initial-punct-scan"></a>行頭の句読点 (禁則違反) を機械 scan する — bold 境界で prebreakpenalty が不発になる
+
+pLaTeX の禁則処理は通常 `。、` の行頭落ちを防ぐが、**`\textbf{…（…）}。` のように bold group の閉じ直後に
+句読点が来ると、フォント境界で prebreakpenalty が効かず「。」が行頭に印字される**ことがある
+(2026-08 実測: run-in 見出し `\textbf{(1) …（初年度）}。本文…` の見出しが行幅ちょうどで終わり、
+直後の「。」が次行頭に落ちた。提出後の第三者査読で発覚)。
+
+- **修正**: 句読点を bold の内側に含める (`\textbf{…（…）。}` — 太字の句点は視覚上ほぼ区別されず、
+  同一 JFM run 内なので禁則が正常に効く)。`\nobreak` 挿入でも防げるが、内側に含める方が自己文書化される。
+- **検出を機械化する**: 生成 PDF を PyMuPDF で行走査し、行頭が `。、）」` の行を flag する:
+
+  ```python
+  import fitz
+  for i, page in enumerate(fitz.open("out.pdf")):
+      for line in page.get_text().split("\n"):
+          s = line.strip()
+          if s and s[0] in "。、）」":
+              print(f"p{i+1} 行頭禁則: {s[:30]!r}")
+  ```
+
+  0 件 = silent でビルド毎に回せる。⚠️ 様式が独自 wrap するセル内文字列 (電子申請システムの経費明細等、
+  自分の組版でない部分) は偽陽性として除外してよい。sibling の PDF 検品 = [#pdf-line-collision-detection](#pdf-line-collision-detection)。
+
 ## <a id="bibliography-style"></a>Bibliography スタイル
 - **JHEP.bst を使う**（個人的好み）。`note` フィールドも表示するバージョンを使用
 - 正本: `~/Claude/claude-config/JHEP.bst`（ver. 2.18 ベース + note 全 entry type で有効化、md5: `0934fe19…`。 2026-07-24 に header comment 内の Unicode curly quotes を LaTeX 式 ``…'' に正規化 = char-fixer 配下 repo へ配布しても md5 が割れない idempotent 化、 機能変更なし）
