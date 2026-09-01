@@ -21,15 +21,18 @@ the relevant document.
 
 ## Installation and updates
 
-Use `scripts/setup-codex.sh` from the repository root. It installs only two
-symlinks: a workspace-root `AGENTS.md` and this skill under `~/.codex/skills`.
-It refuses to overwrite a user-managed target unless `--replace` is explicit.
-It can optionally set Codex's default reasoning effort and safe-local approval
-policy, preserving a timestamped backup of `config.toml` first.
+Use `scripts/setup-codex.sh` from the repository root. It installs four
+symlinks: minimal global instructions at `~/AGENTS.md`, workspace-root
+`AGENTS.md`, this skill, and the operations-router skill under
+`~/.codex/skills`. It refuses to overwrite a user-managed target unless
+`--replace` is explicit. It can optionally set Codex's default reasoning effort
+and safe-local approval policy, preserving a timestamped backup of `config.toml`
+first.
 
-Validate with `scripts/setup-codex.test.sh` and the repository's standard
-checks. Confirm that no file below `~/.claude/` changed. Commit and push only
-after normal repository review and the user's authorization.
+Validate with `scripts/setup-codex.test.sh`,
+`scripts/audit-codex-integration.sh`, and the repository's standard checks.
+Confirm that no file below `~/.claude/` changed. Commit and push only after
+normal repository review and the user's authorization.
 
 ## Scope boundaries
 

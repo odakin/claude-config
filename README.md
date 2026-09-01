@@ -65,14 +65,18 @@ setup, run after cloning:
 ./scripts/setup-codex.sh --replace --set-default-effort high --configure-safe-local
 ```
 
-The dedicated installer creates only symlinks for
-`~/Documents/Codex/AGENTS.md` and
-`~/.codex/skills/claude-config-conventions`, and updates only Codex's
-`config.toml` when an option requests it. It never changes `~/.claude/`, Claude
-Code hooks, or `setup.sh`. `--replace` first makes a timestamped backup of an
-existing Codex-side target. Codex does not have Claude Code's equivalent
-per-tool event-hook mechanism, so the integration uses AGENTS instructions, a
-Codex skill, and applicable Git-side gates instead.
+The dedicated installer creates four Codex-only symlinks: the minimal global
+layer-1 instructions at `~/AGENTS.md`, the workspace instructions at
+`~/Documents/Codex/AGENTS.md`, and the `claude-config-conventions` plus
+`claude-config-operations` skills under `~/.codex/skills/`. It updates only
+Codex's `config.toml` when an option requests it. It never changes `~/.claude/`,
+Claude Code hooks, or `setup.sh`. `--replace` first makes a timestamped backup
+of an existing Codex-side target. The [Codex capability map](codex/PARITY.md)
+documents the four-layer boundary and the deliberately unsupported Claude-only
+hook mechanisms. Run `./scripts/audit-codex-integration.sh` for a read-only
+installation check. Codex does not have Claude Code's equivalent per-tool
+event-hook mechanism, so the integration uses AGENTS instructions, on-demand
+skills, and applicable Git-side gates instead.
 
 ### Windows: start here (fresh machine)
 

@@ -64,12 +64,16 @@ Claude Code の設定を変えずに同じ共有規約を Codex にも導入す�
 ./scripts/setup-codex.sh --replace --set-default-effort high --configure-safe-local
 ```
 
-この専用インストーラは `~/Documents/Codex/AGENTS.md` と
-`~/.codex/skills/claude-config-conventions` をこのリポへの symlink として設置し、
-指定時だけ Codex の `config.toml` を更新する。`~/.claude/`、Claude Code の Hook、既存の
-`setup.sh` は変更しない。`--replace` は既存の Codex 側 target を timestamp 付き backup に
-退避してから置換する。Claude の event Hook は Codex に同等の実行ポイントがないため、Codex
-では AGENTS 指示・Skill・Git 側の gate で意図を再現する。
+この専用インストーラは Codex 専用の symlink を 4 本設置する: 最小の layer-1 指示
+`~/AGENTS.md`、workspace 指示 `~/Documents/Codex/AGENTS.md`、および
+`~/.codex/skills/` 配下の `claude-config-conventions` と
+`claude-config-operations` Skill である。指定時だけ Codex の `config.toml` を更新し、
+`~/.claude/`、Claude Code の Hook、既存の `setup.sh` は変更しない。`--replace` は既存の
+Codex 側 target を timestamp 付き backup に退避してから置換する。4 層の境界と意図的に
+非対応とする Claude 専用 Hook は [Codex capability map](codex/PARITY.md) が正本。
+`./scripts/audit-codex-integration.sh` は導入状態を read-only で確認する。Claude の event Hook
+は Codex に同等の実行ポイントがないため、Codex では AGENTS 指示・on-demand Skill・Git 側の
+gate で意図を適用する。
 
 ### Windows の人はまずこれ (まっさらな機)
 

@@ -34,8 +34,12 @@ run_setup() {
 
 run_setup --set-default-effort high --configure-safe-local
 
+[ "$(readlink "$TEST_HOME/AGENTS.md")" = "$CONFIG_ROOT/codex/HOME-AGENTS.md" ]
 [ "$(readlink "$TEST_WORKSPACE/AGENTS.md")" = "$CONFIG_ROOT/codex/AGENTS.md" ]
 [ "$(readlink "$TEST_CODEX_DIR/skills/claude-config-conventions")" = "$CONFIG_ROOT/codex/skills/claude-config-conventions" ]
+[ "$(readlink "$TEST_CODEX_DIR/skills/claude-config-operations")" = "$CONFIG_ROOT/codex/skills/claude-config-operations" ]
+grep -q '^## Four-layer boundary$' "$TEST_HOME/AGENTS.md"
+grep -q '^## Autonomous in-scope work$' "$TEST_HOME/AGENTS.md"
 grep -qx 'model_reasoning_effort = "high"' "$TEST_CODEX_DIR/config.toml"
 grep -qx 'approval_policy = "on-request"' "$TEST_CODEX_DIR/config.toml"
 grep -qx 'sandbox_mode = "workspace-write"' "$TEST_CODEX_DIR/config.toml"
@@ -63,6 +67,11 @@ awk '
 
 run_setup --set-default-effort high --configure-safe-local
 
+HOME="$TEST_HOME" \
+CODEX_USER_DIR="$TEST_CODEX_DIR" \
+CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
+  "$SCRIPT_DIR/audit-codex-integration.sh" >/dev/null
+
 rm "$TEST_WORKSPACE/AGENTS.md"
 printf 'user instruction\n' > "$TEST_WORKSPACE/AGENTS.md"
 if run_setup >/dev/null 2>&1; then
@@ -70,5 +79,11 @@ if run_setup >/dev/null 2>&1; then
   exit 1
 fi
 grep -qx 'user instruction' "$TEST_WORKSPACE/AGENTS.md"
+
+run_setup --replace
+[ "$(readlink "$TEST_WORKSPACE/AGENTS.md")" = "$CONFIG_ROOT/codex/AGENTS.md" ]
+backup="$(find "$TEST_WORKSPACE" -maxdepth 1 -type f -name 'AGENTS.md.bak-*' -print -quit)"
+[ -n "$backup" ]
+grep -qx 'user instruction' "$backup"
 
 echo "setup-codex tests passed"

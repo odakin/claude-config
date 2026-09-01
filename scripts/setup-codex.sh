@@ -7,9 +7,9 @@
 # Usage:
 #   scripts/setup-codex.sh [--replace] [--set-default-effort <level>] [--configure-safe-local]
 #
-# Installs symlinks for the Codex workspace instruction file and the
-# claude-config-conventions skill. Existing user-managed targets are refused
-# unless --replace is supplied; replacement preserves a timestamped backup.
+# Installs global and workspace instruction files plus two claude-config skills.
+# Existing user-managed targets are refused unless --replace is supplied;
+# replacement preserves a timestamped backup.
 
 set -euo pipefail
 
@@ -26,7 +26,7 @@ usage() {
   cat <<'EOF'
 Usage: setup-codex.sh [--replace] [--set-default-effort <level>] [--configure-safe-local]
 
-Install claude-config's Codex workspace instructions and skill as symlinks.
+Install claude-config's Codex instructions and skills as symlinks.
 
   --replace                     Back up and replace an existing non-managed target.
   --set-default-effort <level>  Set model_reasoning_effort in Codex config.toml.
@@ -128,10 +128,14 @@ path.write_text(text, encoding="utf-8")
 PY
 }
 
+install_link "$CONFIG_ROOT/codex/HOME-AGENTS.md" "$USER_HOME/AGENTS.md"
 install_link "$CONFIG_ROOT/codex/AGENTS.md" "$CODEX_WORKSPACE_ROOT/AGENTS.md"
 install_link \
   "$CONFIG_ROOT/codex/skills/claude-config-conventions" \
   "$CODEX_USER_DIR/skills/claude-config-conventions"
+install_link \
+  "$CONFIG_ROOT/codex/skills/claude-config-operations" \
+  "$CODEX_USER_DIR/skills/claude-config-operations"
 
 if [ -n "$EFFORT" ] || [ "$CONFIGURE_SAFE_LOCAL" -eq 1 ]; then
   update_codex_config

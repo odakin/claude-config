@@ -4,16 +4,22 @@
 
 ## 2026-09-01g: Codex integration を Claude 非干渉の独立レイヤーとして追加
 
-- codex/AGENTS.md + codex/skills/claude-config-conventions/ を正本に、scripts/setup-codex.sh が
-  ~/Documents/Codex/AGENTS.md と ~/.codex/skills/ へ symlink 導入する形で追加。~/.claude/・
-  Claude Code Hook・既存 setup.sh には一切触れない。既存 Codex target は default refuse、
-  --replace 時だけ timestamp backup を残す。
+- codex/HOME-AGENTS.md・codex/AGENTS.md・2 本の Codex skill を正本に、
+  scripts/setup-codex.sh が ~/AGENTS.md・~/Documents/Codex/AGENTS.md・~/.codex/skills/ へ
+  Codex 専用 symlink を導入する形で追加。4 層は「共有 → shared project → owner-private →
+  machine-local」の依存方向だけを許し、layer-1/2 から personal layer・credential・local history
+  を自動探索しない。~/.claude/・Claude Code Hook・既存 setup.sh には一切触れない。既存 Codex
+  target は default refuse、--replace 時だけ timestamp backup を残す。
 - --set-default-effort high と --configure-safe-local は Codex の config.toml だけを更新。
   後者は approval_policy="on-request" + sandbox_mode="workspace-write" で、workspace 内の
   安全なローカル作業を自律化しつつ、外部・破壊的・scope 外の action は user 承認を保つ。
-- test: isolated installer test (= symlink / idempotence / user-managed target refusal / ~/.claude/
-  non-creation / top-level TOML placement)、Skill validator、Codex strict config、run-all-checks
-  50/50 PASS。README 英日へ導入手順を追記。
+- scripts/audit-codex-integration.sh は managed link と optional --repo の既存 Git-side gate を
+  read-only で確認する。test は isolated installer (= 4 symlink / idempotence / user-managed target
+  refusal + backup / ~/.claude/ non-creation / top-level TOML placement)、audit fixture (= required link
+  と public Git gate)、Codex skill metadata validator、Codex strict config、run-all-checks。README 英日と
+  codex/PARITY.md が導入対象・4層境界・Claude 非干渉を説明する。両 AGENTS は「依頼範囲の
+  safe local work は逐次確認なし」を明示し、environment が出す技術的 permission gate と追加の
+  conversational confirmation を混同しない。
 
 ## 2026-09-01f: kakenhi-proposal に凍結後差し替え改訂 § + 協力者実名 §、latex.md に行頭禁則 scan §
 
