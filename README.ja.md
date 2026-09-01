@@ -91,6 +91,8 @@ coverage・境界・意図的に未移植の Claude 専用機構は
 意図的に使っており、native Windows 環境では検証していない。Windows 対応が必要な人は、
 platform に適した installer と test を実装し、default-refuse・`~/.claude` を書き換えない契約を
 保ったうえで pull request を出してほしい。
+この制限は **`scripts/setup-codex.sh` だけ** に適用される。下記の既存 Claude Code 向け
+Windows bootstrap は対応済みであり、影響を受けない。
 
 ### Windows の Claude Code はまずこれ (まっさらな機)
 

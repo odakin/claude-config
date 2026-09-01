@@ -95,6 +95,8 @@ uses POSIX shell, Python, and symlinks, and has not been validated in a native
 Windows environment. If Windows support matters to you, implement the
 platform-appropriate installer and tests, preserve the default-refuse and
 no-`~/.claude`-writes guarantees, and submit the result as a pull request.
+This limitation applies **only** to `scripts/setup-codex.sh`. The existing
+Windows bootstrap for Claude Code below remains supported and unaffected.
 
 ### Windows: Claude Code start here (fresh machine)
 
