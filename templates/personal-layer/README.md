@@ -48,7 +48,11 @@ See [`docs/personal-layer.md`](../../docs/personal-layer.md) for the conceptual 
    This creates only that machine's layer-4 `~/.codex` links and Hook trust
    state. Keep the cross-machine bootstrap rule or command in this personal
    layer (layer 3), but never commit or link the actual `~/.codex` directory
-   into it.
+   into it. The installer refuses a user-managed conflict before changing
+   anything; review it before opting into `--replace`. The durable Codex
+   contract, including the autonomy and verification boundaries, is
+   [codex/PARITY.md](../../codex/PARITY.md#codex-integration-sot); keep this
+   template as a routing note rather than a second technical source.
 
 ## What goes in which file
 

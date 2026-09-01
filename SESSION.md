@@ -12,14 +12,14 @@ KARRCA-20260901-BPU205 worker session (深層 RCA = `odakin-prefs/plans/2026-09-
 - `kakenhi-proposal.md` #mock-review-and-claims 🔴 rule に kernel pointer 追記。
 - 機械面 (層3) = `odakin-prefs/scripts/check-source-project-parity.py` (D) named-claim audit (同 repo `be52dc3`)。
 
-## 2026-09-01g: Codex integration — shipped
+## 2026-09-01g: Codex integration — L1 contract and routes consolidated
 
-- Architecture, installer/Hook contract, platform scope, and verification are
-  now canonical in [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot).
-  This entry intentionally carries no duplicate technical record.
-- No layer-1 implementation task remains. Each machine's installation and Hook
-  trust are layer-4 state; inspect them with `scripts/audit-codex-integration.sh`
-  rather than tracking them here.
+- The durable result of this session is canonical in
+  [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot).
+  README, installed instructions, skills, and the personal-layer template
+  route there; this entry intentionally carries no second technical record.
+- No layer-1 implementation task remains. Per-machine evidence belongs to the
+  prescribed audit and client review, not to this session snapshot.
 
 ## 2026-09-01f: kakenhi-proposal に凍結後差し替え改訂 § + 協力者実名 §、latex.md に行頭禁則 scan §
 

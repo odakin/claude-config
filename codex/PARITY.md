@@ -29,6 +29,30 @@ arbitrary semantic restatements; the thin secondary documents and ordinary
 review cover that remaining judgment. The repository's pre-commit hook runs
 the same check as an early warning; CI remains the blocking layer.
 
+### Fact placement and evidence
+
+Keep each Codex fact in the one home that owns its lifecycle:
+
+| Need | Home |
+| --- | --- |
+| Clone-user command and the minimum replacement warning | `README.md` / `README.ja.md` |
+| Durable architecture, autonomy boundary, layer placement, platform scope, and verification contract | This document |
+| Owner-specific cross-machine bootstrap choice | The owner's private layer-3 record; the public personal-layer template only explains the boundary |
+| Current, short-lived work state | `SESSION.md`, as a pointer here rather than a second technical record |
+| Actual links, configuration, and requested project Git guards on one machine | `scripts/audit-codex-integration.sh` |
+| Hook client trust decision | The Codex client on that machine |
+
+“Installed” is not a single claim. The contract checker verifies source and
+trigger wiring; fixture and hook tests verify behavior; the aggregate runner
+and CI make those tests fire; the audit verifies layer-4 wiring; and the
+client trust review is the remaining product-controlled step. Do not collapse
+one green layer into evidence for another.
+
+This Codex-specific map applies, without copying Claude implementation, the
+shared [SESSION snapshot rule](../CONVENTIONS.md#session-no-durable-record),
+[layer-3 boundary](../docs/personal-layer.md), and
+[hook-delivery evidence model](../conventions/hook-authoring.md#delivery-audit-method).
+
 ## Active Codex integration
 
 The public source lives in this layer-1 repository: `codex/HOME-AGENTS.md`,

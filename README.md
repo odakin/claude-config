@@ -62,13 +62,16 @@ To install the shared conventions for Codex without changing the Claude Code
 setup, run after cloning:
 
 ```bash
-./scripts/setup-codex.sh --replace --set-default-effort high --configure-safe-local
+./scripts/setup-codex.sh --set-default-effort high --configure-safe-local
 ```
 
 The installer creates user-local layer-4 entry points to this repository's
 public layer-1 source. It updates only Codex's `config.toml` when requested,
-never changes `~/.claude/`, Claude Code hooks, or `setup.sh`, and backs up an
-existing Codex-side target before `--replace` changes it.
+never changes `~/.claude/`, Claude Code hooks, or `setup.sh`. Before changing
+anything, its default mode preflights every managed target and refuses a
+user-managed conflict without leaving a partial installation. Review such a
+conflict first; only then use `--replace`, which preserves a timestamped
+backup before replacement.
 
 Cloning alone never writes into a user's home directory: run the installer once
 per machine, then `git pull` updates the source selected by the existing links.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check-codex-integration.py — Codex SoT pointers, session drift, and Hook contract gate.
+"""check-codex-integration.py — Codex SoT, session drift, Hook, and trigger-wiring gate.
 
 The durable technical source of truth is codex/PARITY.md#codex-integration-sot.
 This checker deliberately verifies only objective invariants:
@@ -34,10 +34,12 @@ ENTRY_POINTS = (
     "README.md",
     "README.ja.md",
     "SESSION.md",
+    "DESIGN.md",
     "codex/HOME-AGENTS.md",
     "codex/AGENTS.md",
     "codex/skills/claude-config-conventions/SKILL.md",
     "codex/skills/claude-config-operations/SKILL.md",
+    "templates/personal-layer/README.md",
 )
 SESSION_DURABLE_TOKENS = (
     "~/.codex",

@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: codex-layered-integration
+    legacy: "2026-09-01"
+    level: 2
+    title: "2026-09-01: Codex integration — L1 正本 + 明示 L4 wiring + 多層検証"
   - id: auto-tree-autoload-slim
     legacy: "2026-09-01"
     level: 2

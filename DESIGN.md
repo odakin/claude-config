@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-01: Codex integration — L1 正本 + 明示 L4 wiring + 多層検証](#codex-layered-integration)
 - [2026-09-01: AUTO-TREE の auto-load 税 縮退 (when 表示 + hooks/scripts README 移設)](#auto-tree-autoload-slim)
 - [2026-07-10: 検証の発火面化 — CI + run-all-checks + hook 配線の単一リスト駆動化](#ci-and-single-list-wiring)
 - [2026-07-10: 構造 tree / 列挙 / カテゴリ index の自動生成 (generate-tree.py)](#generated-docs-tree-autogen)
@@ -31,6 +32,25 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="codex-layered-integration"></a>2026-09-01: Codex integration — L1 正本 + 明示 L4 wiring + 多層検証
+
+**問題**: 共有規約を Codex でも使えるようにするには、通常の安全なローカル作業を逐次確認なしで進められる必要がある。一方で、公開リポを clone しただけで clone 者の home directory・個人設定・Claude 設定を変えてはならず、共有 project (layer 2) を個人 layer (layer 3) やマシン状態 (layer 4) に依存させてもならない。Codex 固有の説明を README・SESSION・skills にそれぞれ増やすと、製品仕様や検証範囲の変更が一箇所だけに残る。
+
+**採用**:
+
+1. **source は public layer 1、導入は明示的な layer 4**: versioned instructions・skills・hook code とその capability map を本リポに置き、各 clone 者が各マシンで installer を実行して初めて local wiring を作る。layer 3 は owner が cross-machine bootstrap 方針を記録する場所であって、installer が発見・生成・同期する対象ではない。layer 2 はこの導入に依存しない。
+2. **安全な local autonomy と安全境界を分離**: installer の opt-in は workspace 内の通常作業を止めない設定だけを行う。外部 write・破壊的操作・コスト発生・scope 拡張と、execution environment が課す技術的 permission gate は残す。これにより「安全な local step ごとの会話確認」と「本当に必要な境界」を混同しない。
+3. **Claude の実装を copy せず、Codex の観測可能な lifecycle subset と Git gate を組み合わせる**: native hook は高 signal な local event に限定し、committed public content は agent に依存しない Git-side protection を authority に残す。client の trust review や観測不能な tool path を installer で越えたと主張しない。
+4. **散文正本 + executable regression を対にする**: durable technical record は [Codex capability map](codex/PARITY.md#codex-integration-sot) に一本化し、entry document は pointer に縮退する。contract checker は pointer・SESSION の重複禁止・hook adapter・runner/CI/pre-commit wiring を、fixture / behavior test は installer の default-refuse preflight と hook behavior を検証する。default installer は全 target を mutation 前に preflight し、user-managed conflict では partial state を残さない。
+
+**採らないもの**:
+
+- Codex setup のために `~/.claude`、Claude の設定・hook・credential を変更または流用すること。
+- clone や shared-project setup が owner の private layer を暗黙に取得・配布すること。
+- native Windows installer、client trust、または hosted / specialised tool path まで既に同等だと宣言すること。Claude Code の既存 Windows bootstrap は別の supported surface であり、この不在理由に使わない。
+
+**検証の読み方**: source/trigger wiring、behavior、layer-4 wiring、client trust は別の evidence である。どれか一つの green を「完全導入」の根拠に昇格しない。日常の authoritative map と実行コマンドは [Codex capability map](codex/PARITY.md#codex-integration-sot) に置き、current state は SESSION の短い pointer に留める。
 
 ## <a id="auto-tree-autoload-slim"></a>2026-09-01: AUTO-TREE の auto-load 税 縮退 (when 表示 + hooks/scripts README 移設)
 

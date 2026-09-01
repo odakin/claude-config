@@ -61,12 +61,14 @@ cd claude-config && ./setup.sh
 Claude Code の設定を変えずに同じ共有規約を Codex にも導入するには、clone 後に次を実行する:
 
 ```bash
-./scripts/setup-codex.sh --replace --set-default-effort high --configure-safe-local
+./scripts/setup-codex.sh --set-default-effort high --configure-safe-local
 ```
 
 この installer は本公開リポの layer-1 source を選ぶ user-local layer-4 entry point を作る。
 指定時だけ Codex の `config.toml` を更新し、`~/.claude/`、Claude Code の Hook、既存の
-`setup.sh` は変更しない。`--replace` は既存の Codex 側 target を timestamp 付き backup に
+`setup.sh` は変更しない。default mode は変更前に全 managed target を preflight し、
+user-managed conflict があれば partial install を残さず拒否する。conflict を確認したうえで
+明示的に `--replace` を指定した時だけ、既存の Codex 側 target を timestamp 付き backup に
 退避してから置換する。
 
 公開リポを clone しただけで clone 者の home directory は書き換えない。各マシンで一度
