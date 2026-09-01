@@ -51,6 +51,8 @@ SESSION_DURABLE_TOKENS = (
     "approval_policy",
     "sandbox_mode",
     "hooks.json",
+    "auto_compact_token_limit",
+    "compaction threshold",
 )
 SUPERSEDED_CLAIMS = (
     "Codex currently has no supported equivalent to Claude Code's per-tool",
@@ -88,6 +90,17 @@ PERSONAL_OVERLAY_REQUIREMENTS = {
     "templates/personal-layer/codex/AGENTS.md.template": (
         "Personal Codex overlay",
         "Personal-source routing",
+    ),
+}
+CONTEXT_BUDGET_REQUIREMENTS = {
+    "codex/PARITY.md": (
+        "## Context-budget discipline",
+        "does not set\na compaction threshold",
+        "Runtime diagnostics are layer-4 observations",
+    ),
+    "codex/HOME-AGENTS.md": (
+        "Keep global startup context compact.",
+        "on-demand sources",
     ),
 }
 
@@ -194,6 +207,16 @@ def check(root: Path) -> list[str]:
         for fragment in fragments:
             if fragment not in content:
                 errors.append(f"{relative}: missing personal-overlay contract: {fragment}")
+    for relative, fragments in CONTEXT_BUDGET_REQUIREMENTS.items():
+        path = root / relative
+        try:
+            content = text(path)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        for fragment in fragments:
+            if fragment not in content:
+                errors.append(f"{relative}: missing context-budget contract: {fragment}")
     return errors
 
 
@@ -226,6 +249,11 @@ def fixture(root: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("\n".join(fragments) + "\n", encoding="utf-8")
     for relative, fragments in PERSONAL_OVERLAY_REQUIREMENTS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
+    for relative, fragments in CONTEXT_BUDGET_REQUIREMENTS.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -320,6 +348,15 @@ def selftest() -> int:
         errors = check(root)
         if not any(error.startswith("scripts/setup-codex.sh: missing personal-overlay") for error in errors):
             print("FAIL: missing personal-overlay wiring was not detected")
+            return 1
+
+        fixture(root)
+        (root / "codex/HOME-AGENTS.md").write_text(
+            CANONICAL_POINTER + chr(10), encoding="utf-8"
+        )
+        errors = check(root)
+        if not any(error.startswith("codex/HOME-AGENTS.md: missing context-budget") for error in errors):
+            print("FAIL: missing context-budget contract was not detected")
             return 1
 
     print("check-codex-integration selftest: PASS")

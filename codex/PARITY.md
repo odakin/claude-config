@@ -53,6 +53,22 @@ shared [SESSION snapshot rule](../CONVENTIONS.md#session-no-durable-record),
 [layer-3 boundary](../docs/personal-layer.md), and
 [hook-delivery evidence model](../conventions/hook-authoring.md#delivery-audit-method).
 
+### Context-budget discipline
+
+The global instruction entry points stay compact. Detailed public runbooks and
+the owner-private corpus are task-specific, on-demand sources: inspect only
+the relevant source, using targeted searches and bounded excerpts rather than
+loading broad document trees or verbose command output into a session.
+
+Automatic context compaction is product-controlled. The installer does not set
+a compaction threshold or any undocumented setting intended to control one.
+Do not infer such a control from local runtime files or from API-specific
+features; record a supported product control here only after it is documented
+and verified. Runtime diagnostics are layer-4 observations, not evidence that
+they caused a particular compaction pattern. Their diagnosis and repair belong
+in the applicable private task ledger as a layer-4 maintenance record, never
+in a public `SESSION.md`.
+
 ## Active Codex integration
 
 The public source lives in this layer-1 repository: `codex/HOME-AGENTS.md`,

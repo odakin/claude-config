@@ -17,6 +17,15 @@ When maintaining the Codex integration, treat
 `codex/PARITY.md#codex-integration-sot` as the durable technical source of
 truth; do not infer it from old session notes.
 
+## Context-budget discipline
+
+Keep global startup context compact. Treat detailed runbooks and private
+records as task-specific, on-demand sources; use targeted searches and bounded
+excerpts rather than preloading broad document trees or verbose command output.
+Do not depend on undocumented local configuration to control automatic context
+compaction; the integration boundary is recorded in
+`codex/PARITY.md#codex-integration-sot`.
+
 ## Four-layer boundary
 
 Respect the audience order: common conventions (layer 1), shared project
