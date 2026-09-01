@@ -12,8 +12,11 @@
 - 一般知見の hoist 先 = [`conventions/hook-authoring.md`](conventions/hook-authoring.md) §2「配信 drift の根本因」実装例
   (template≠配信 / marker 統一 / audit test の hermetic 化) + [`docs/convention-design-principles.md #set-diff-false-positive`](docs/convention-design-principles.md#set-diff-false-positive)
   共有語彙 token 変種。
-- 実機: iMac は setup.sh 再実行 + composite refresh 済で audit 全 green。 **MacBook は未 bootstrap** (= 手順は
-  owner 個人層の codex/README.md、 audit が gap を名指しする)。
+- 実機 (⚠️ 2026-09-01 訂正: 検収 session の host は **MacBook 側** と `hostname -s` 実測で判明 〔具体 hostname は owner 個人層に記録〕 —
+  初報の「iMac 側で作業」 は host 未検証の思い込みで **逆**だった。 まさに同日 landing の worker-host
+  provenance 規律が塞ぐ同族 error の実例): **MacBook = setup.sh 再実行 + composite refresh 済で audit
+  全 green (checked 2026-09-01)。 iMac = 未検証** (= bootstrap 状態不明、 そちらで audit を回して判定。
+  手順は owner 個人層の codex/README.md)。
 
 ## 2026-09-01h: Karananas 誤帰属 深層 RCA の層1 hoist 5 本 (claim-target 帰属軸ほか)
 
