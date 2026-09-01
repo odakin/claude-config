@@ -66,7 +66,7 @@ public_source_from_global_agents() {
 check_personal_global_agents() {
   local target="$CODEX_USER_DIR/AGENTS.md"
   local public_source personal_layer personal_source hooks post_merge extension
-  local expected_file
+  local expected_file public_post_merge
   [ -f "$target" ] && [ ! -L "$target" ] \
     && grep -qxF '<!-- claude-config-codex: global-personal-composite -->' "$target" || return 1
 
@@ -109,6 +109,20 @@ check_personal_global_agents() {
     echo "OK: personal-layer pull refresh"
   else
     echo "MISSING: automatic personal-layer pull refresh" >&2
+    ISSUES=$((ISSUES + 1))
+  fi
+
+  # The composite also goes stale when the *public* layer is pulled. The refresh
+  # call ships inside setup.sh's post-merge template, which reaches a machine
+  # only when setup.sh is re-run there — surface that gap instead of letting
+  # public pulls silently stop refreshing. (CLAUDE_CONFIG_POST_MERGE overrides
+  # the hook path for tests.)
+  public_post_merge="${CLAUDE_CONFIG_POST_MERGE:-$CONFIG_ROOT/.git/hooks/post-merge}"
+  if [ -f "$public_post_merge" ] \
+    && grep -qF -- '--refresh-personal-layer' "$public_post_merge" 2>/dev/null; then
+    echo "OK: public-layer pull refresh"
+  else
+    echo "MISSING: public-layer pull refresh (claude-config's post-merge hook lacks --refresh-personal-layer; re-run setup.sh on this machine)" >&2
     ISSUES=$((ISSUES + 1))
   fi
   return 0

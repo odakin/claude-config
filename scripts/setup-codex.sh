@@ -236,6 +236,9 @@ write_post_merge_dispatcher() {
 #!/usr/bin/env bash
 # managed-by: claude-config setup-codex-personal-dispatch
 # Dispatch optional local post-merge extensions without failing git pull.
+
+# claude-config post-merge extensions
+# Local extension scripts are optional and must never make git pull fail.
 POST_MERGE_EXTENSION_DIR="$(dirname "$0")/post-merge.d"
 for POST_MERGE_EXTENSION in "$POST_MERGE_EXTENSION_DIR"/*.sh; do
   [ -x "$POST_MERGE_EXTENSION" ] || continue

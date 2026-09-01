@@ -8,6 +8,11 @@ CONFIG_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 
+# The audit's public-layer pull-refresh check reads the real repo's post-merge
+# hook by default (machine state); pin it to a fixture so the test is hermetic.
+PUBLIC_POST_MERGE_FIXTURE="$TEMP_ROOT/public-post-merge"
+printf '%s\n' 'setup-codex.sh --refresh-personal-layer' > "$PUBLIC_POST_MERGE_FIXTURE"
+
 TEST_HOME="$TEMP_ROOT/home"
 TEST_CODEX_DIR="$TEST_HOME/.codex"
 TEST_WORKSPACE="$TEST_HOME/Documents/Codex"
@@ -110,6 +115,7 @@ grep -qx 'UPDATED_PERSONAL_OVERLAY' "$TEST_CODEX_DIR/AGENTS.md"
 HOME="$TEST_HOME" \
 CODEX_USER_DIR="$TEST_CODEX_DIR" \
 CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
+CLAUDE_CONFIG_POST_MERGE="$PUBLIC_POST_MERGE_FIXTURE" \
   "$SCRIPT_DIR/audit-codex-integration.sh" >/dev/null
 
 run_setup --replace
@@ -150,6 +156,7 @@ run_setup --set-default-effort high --configure-safe-local
 HOME="$TEST_HOME" \
 CODEX_USER_DIR="$TEST_CODEX_DIR" \
 CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
+CLAUDE_CONFIG_POST_MERGE="$PUBLIC_POST_MERGE_FIXTURE" \
   "$SCRIPT_DIR/audit-codex-integration.sh" >/dev/null
 
 rm "$TEST_CODEX_DIR/AGENTS.md"

@@ -59,4 +59,40 @@ if HOME="$TEST_HOME" \
   exit 1
 fi
 
+# --- composite mode: public-layer pull refresh coverage ---
+PERSONAL_LAYER="$TEMP_ROOT/personal-layer"
+mkdir -p "$PERSONAL_LAYER/codex"
+: > "$PERSONAL_LAYER/.claude-personal-layer"
+printf '# test overlay\n' > "$PERSONAL_LAYER/codex/AGENTS.md"
+git -C "$PERSONAL_LAYER" init -q
+COMPOSITE_HOME="$TEMP_ROOT/home-composite"
+COMPOSITE_CODEX="$COMPOSITE_HOME/.codex"
+COMPOSITE_WS="$COMPOSITE_HOME/Documents/Codex"
+mkdir -p "$COMPOSITE_HOME"
+HOME="$COMPOSITE_HOME" \
+CODEX_USER_DIR="$COMPOSITE_CODEX" \
+CODEX_WORKSPACE_ROOT="$COMPOSITE_WS" \
+  "$SCRIPT_DIR/setup-codex.sh" --personal-layer "$PERSONAL_LAYER" >/dev/null
+
+GOOD_POST_MERGE="$TEMP_ROOT/post-merge-with-refresh"
+printf '%s\n' 'setup-codex.sh --refresh-personal-layer' > "$GOOD_POST_MERGE"
+BAD_POST_MERGE="$TEMP_ROOT/post-merge-without-refresh"
+printf '#!/bin/sh\n' > "$BAD_POST_MERGE"
+
+HOME="$COMPOSITE_HOME" \
+CODEX_USER_DIR="$COMPOSITE_CODEX" \
+CODEX_WORKSPACE_ROOT="$COMPOSITE_WS" \
+CLAUDE_CONFIG_POST_MERGE="$GOOD_POST_MERGE" \
+  "$SCRIPT_DIR/audit-codex-integration.sh" >/dev/null
+
+if HOME="$COMPOSITE_HOME" \
+  CODEX_USER_DIR="$COMPOSITE_CODEX" \
+  CODEX_WORKSPACE_ROOT="$COMPOSITE_WS" \
+  CLAUDE_CONFIG_POST_MERGE="$BAD_POST_MERGE" \
+  "$SCRIPT_DIR/audit-codex-integration.sh" > "$TEMP_ROOT/audit-stale.out" 2>&1; then
+  echo "expected audit to fail when the public-layer post-merge lacks the refresh" >&2
+  exit 1
+fi
+grep -q "public-layer pull refresh" "$TEMP_ROOT/audit-stale.out"
+
 echo "audit-codex-integration tests passed"
