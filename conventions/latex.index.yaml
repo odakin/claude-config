@@ -76,6 +76,9 @@ sections:
   - id: wrapfig-caption-page-overflow-loss
     level: 2
     title: "wrapfigure の箱が頁末を越えると越えた分の caption は黙って消える"
+  - id: line-initial-punct-scan
+    level: 2
+    title: "行頭の句読点 (禁則違反) を機械 scan する — bold 境界で prebreakpenalty が不発になる"
   - id: bibliography-style
     level: 2
     title: "Bibliography スタイル"
