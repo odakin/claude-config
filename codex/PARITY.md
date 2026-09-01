@@ -202,6 +202,11 @@ relevant audit; state the checked host, time, and scope in the conclusion.
 This is a runtime guard, not durable session state and not a source of
 personal-layer discovery.
 
+When that conclusion lands on a public surface (a public repo's file,
+commit message, or issue), write the host as an attribute ("the laptop",
+"the MacBook-side machine"), not the hostname literal — machine names often
+embed personal names, and the literal belongs in the owner's private layer.
+
 The executable tests cover each supported public-leak category, allowlisted and
 removed patch text, private-repository pass-through, default-refuse installer
 atomicity, and dirty-worktree nudge de-duplication/reset. They run through the
