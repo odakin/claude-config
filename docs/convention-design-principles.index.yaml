@@ -20,6 +20,10 @@ sections:
     legacy: "2.2"
     level: 3
     title: "2.2 正本の宣言・引っ越しは「衝突宣言 sweep」とワンセット"
+  - id: harmonization-amplification
+    legacy: "2.2b"
+    level: 3
+    title: "2.2b 派生文書間の不一致は SoT に対して解決する — 調和による増幅 (harmonization amplification)"
   - id: sot-read-side
     legacy: "2.3"
     level: 3
@@ -237,6 +241,10 @@ sections:
     legacy: "8.28"
     level: 3
     title: "8.28 確認設問は照準した軸しか検証しない — 事実主張を運ぶ文の user 確認は真偽を第一問に"
+  - id: generation-error-trigger-gap
+    legacy: "8.29"
+    level: 3
+    title: "8.29 操作を trigger にする gate は、操作を伴わない生成 error を素通しする"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

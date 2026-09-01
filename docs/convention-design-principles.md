@@ -76,6 +76,14 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 
 **use-site の stub 規律（= 宣言の双対）:** fact の正本を宣言したら、それを*言及するだけ*の他の use-site は「最小安定警告 + pointer の stub」にする — volatile な詳細（係数・出典・erratum・手順）を copy せず正本だけに置く（詳細を copy した瞬間に新たな重複が born する）。point-of-use marker は (a) 発火に要る最小・安定・行動可能な警告 + pointer と、(b) 発火に不要で drift する詳細 payload に分解でき、use-site が要るのは (a) だけ。これは §16「正本本体は source の逐語」の反転 dual =「derived な use-site は最小要約 + pointer であれ」で、詳細の home を 1 つに保ったまま fact を point-of-use で発火させられる（= 発火と SoT 単一性は両立する、「自己完結 marker が詳細 copy を強制する」は false dilemma）。最高 leverage の発火面は宣言が born する commit 時点（= 機械化できるなら commit-time の declaration warn）。
 
+### <a id="harmonization-amplification"></a>2.2b 派生文書間の不一致は SoT に対して解決する — 調和による増幅 (harmonization amplification)
+
+整合性 sweep が derived 文書間の不一致 (匿名 vs 名指し、 旧値 vs 新値) を発見した時、 「不一致の解消」自体を成果と数えて解消方向を**相互調和**に取ると、 sweep は誤りを**発見した上でそれを正しい方に上書きする** — 誤りの検出器が誤りの裏付け文書を製造する。 暗黙の裁定規則になりやすいのが **specificity bias** (= 具体度が高い方が情報量が多く見え「正しい」と扱われる) だが、 具体性は生成の産物でもある (= 最も具体的な版が最も新しい confabulation でありうる)。
+
+**Reflex:** derived 間の不一致を見つけたら、 解決方向は「互いに合わせる」でなく「**SoT に対して検証**」 — どちらが正しいかを外部 anchor (正本 repo・一次資料・機械検査) に問う 1 手を、 調和の 1 手より先に置く。 整合性軸の検査は**内部無矛盾しか見えない** — coherent な誤りは整合性軸の不動点であり、 整合性 sweep を重ねるほど強くなる。 誤りを割るのは常に外部 anchor だけ。
+
+実例 (2026-09 RCA): 派生文書 A (調書 tex、 誤った名指し) と B (状態 doc、 匿名でほぼ正しい) の不一致を整合性 sweep が発見し、 B を A に合わせて「特定」 と commit — 合成された gloss は一次資料 (当該 arXiv の著者 list) と 1 手で矛盾する文で、 その矛盾が後日の検出 trigger にもなった (= 増幅は事故を悪化させると同時に自己矛盾を焼き込む)。 claim-target 帰属の domain 版 = [`actor-attribution.md#claim-target-attribution`](../conventions/actor-attribution.md#claim-target-attribution) 規律 9。
+
 ### <a id="sot-read-side"></a>2.3 SoT の read 側 — entity を「言及するだけの store」を SoT と取り違えない
 
 §2.1/§2.2/§15 は **write 側**（正本を二重に*作る*な・宣言の衝突を sweep せよ・多重記述を是正せよ）。SoT には **read 側の双対**がある: ある案件の status を答えるとき **その案件の SoT を読む** — その entity を*言及するだけ*の別 store（受信メール・領収書・通知・log）を SoT と取り違えてはならない。
@@ -930,6 +938,14 @@ origin: 2026-09、 授業評価フィードバックの deep RCA。 draft 起草
 3. **draft 提示 + user OK は事実検証に対して null protection** (mail domain で確立済みの rule の一般形)。 user は文面の質・トーン・戦略を見る — 埋め込まれた事実の再導出はしない。 確認を「検証済み」 に数えられるのは、 設問がその軸を明示的に向いていた時だけ。
 
 **origin**: 2026-09、 研究費調書。 生成時に混入した誤帰属 (= グループ内略称の著名研究者名への衝突展開、 [actor-attribution.md #claim-target-attribution](../conventions/actor-attribution.md#claim-target-attribution)) を運ぶ文に、 user 確認 marker が「名指しのまま (a) / 匿名化 (b)」 の趣味だけを問い、 帰属の真偽は前提として素通りして提出に至った。 同じ marker 表の 2 行上には当の略称の正式名を問う設問があり user 回答も得ていた (= 衝突解消 data は同一 session 内に存在) が、 設問が真偽を向いていないため誰も接続しなかった。 marker の括弧書きは「名指しされた当人が審査員にいる確率」 まで評価していた — **P(読まれる) を評価して P(真) を評価しない、 照準ずれの純型**。
+
+### <a id="generation-error-trigger-gap"></a>8.29 操作を trigger にする gate は、操作を伴わない生成 error を素通しする
+
+**class 定義**: 検証 reflex・nudge・hook の多くは**操作** (外部 search の null、 tool の fail、 特定 file の Read/Edit) を発火 trigger にする。 しかし**自分がいま生成している文の中の誤り** (未検証の固有名・数値・帰属が流暢に埋まる confabulation class) には対応する操作イベントが無い — 生成は lookup ではないから null も fail も出ない。 結果、 操作 trigger の gate 網がどれだけ厚くても、 生成時混入は構造的に素通しする ([`§8.8`](#proxy-blind-spot) の生成版: gate の proxy = 操作イベント、 その盲点 = 無操作の error)。
+
+**Reflex (gate 設計時):** 生成 error class を受け持つ gate は、 trigger を操作でなく**内容**に張る — (a) 成果物 text への pattern 検査 (例: 名指し × 誤り語彙の共起 regex を提出前 audit で回す)、 (b) 提出・送信という **stage boundary** での一括 audit (= 操作 trigger が無くても必ず通過する点)、 (c) 規律 wording は「書いた瞬間 = gate」 と生成の瞬間そのものに焼く (機械化不能な残余、 [`§8.12`](#firing-surface-hierarchy) の最弱面であることを承知で置く)。 生成物の fluency は provenance の証拠にならない — retrieval 由来と生成由来は書いている本人にも区別が付かない、 が設計の前提。
+
+origin: 2026-09 研究費調書の名指し誤帰属 RCA (= [`actor-attribution.md#claim-target-attribution`](../conventions/actor-attribution.md#claim-target-attribution))。 検証 reflex 群 (外部 null・mail 事実・PDF read) は全て操作 trigger で、 生成された固有名はどの reflex の射程にも入らず提出まで素通しした。 対策の機械面 = (a)(b) 型の提出前 named-claim audit。
 
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 

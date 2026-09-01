@@ -2,6 +2,16 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-01h: Karananas 誤帰属 深層 RCA の層1 hoist 5 本 (claim-target 帰属軸ほか)
+
+KARRCA-20260901-BPU205 worker session (深層 RCA = `odakin-prefs/plans/2026-09-01-karananas-misattribution-deep-rca-results.md` が正本、 実装 = 同 §6):
+
+- `actor-attribution.md` に **#claim-target-attribution 新節** (= 第二の帰属軸「主張は誰についてか」。 自己生成した名指しの無検証断定 / 内部略称の著名人名への衝突展開 / 框のすり替えが名前より上流、 規律 6-9 追加。 doc-meta when/summary も更新)。
+- `convention-design-principles.md` に 3 §: **§2.2b #harmonization-amplification** (= 派生間不一致は調和でなく SoT 検証で解決 — 整合性軸は coherent な誤りの不動点) / **§8.28 #confirmation-question-aim** (= 確認設問は照準した軸しか検証しない — 事実主張の user 確認は真偽を第一問に) / **§8.29 #generation-error-trigger-gap** (= 操作 trigger の gate は無操作の生成 error を素通しする — 内容 trigger / stage-boundary audit に張れ)。
+- `physics-verification-cycle.md` §2 に **#identifier-anchor-coverage** bullet (= anchor は式・数値だけでなく identifier 〔人名・引用 ID・記号〕 にも — un-anchored の 3 class でちょうど 1 件ずつ事故った実測)。
+- `kakenhi-proposal.md` #mock-review-and-claims 🔴 rule に kernel pointer 追記。
+- 機械面 (層3) = `odakin-prefs/scripts/check-source-project-parity.py` (D) named-claim audit (同 repo `be52dc3`)。
+
 ## 2026-09-01g: Codex integration を Claude 非干渉の独立レイヤーとして追加
 
 - codex/HOME-AGENTS.md・codex/AGENTS.md・2 本の Codex skill を正本に、
