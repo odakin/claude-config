@@ -33,7 +33,7 @@ instructions, skills, and hook bundle through symlinks.
 
   --replace                     Back up and replace an existing non-managed target.
   --set-default-effort <level>  Set model_reasoning_effort in Codex config.toml.
-                                Allowed: low, medium, high, xhigh, max, ultra.
+                                Allowed: minimal, low, medium, high, xhigh.
   --configure-safe-local        Let Codex autonomously perform safe local work in
                                 the workspace, while preserving approvals for
                                 external or out-of-scope actions.
@@ -59,9 +59,11 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
+# Codex config reference の実在値のみ (2026-09 時点 verify 済)。 無効値を config.toml に
+# 書くと Codex 側の起動 error になるため、 whitelist は製品の受理集合に一致させる。
 case "$EFFORT" in
-  ""|low|medium|high|xhigh|max|ultra) ;;
-  *) echo "invalid effort: $EFFORT" >&2; exit 2 ;;
+  ""|minimal|low|medium|high|xhigh) ;;
+  *) echo "invalid effort: $EFFORT (allowed: minimal, low, medium, high, xhigh)" >&2; exit 2 ;;
 esac
 
 install_link() {

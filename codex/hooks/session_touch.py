@@ -8,8 +8,14 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
+
+# A session that ended never gets another event, so its state files are dead
+# after the session; prune anything old enough that no live session plausibly
+# owns it, to keep the state directory from accreting forever.
+PRUNE_AGE_SECONDS = 30 * 24 * 60 * 60
 
 
 def read_event() -> dict[str, Any]:
@@ -48,6 +54,20 @@ def emit_stop(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, ensure_ascii=False))
 
 
+def prune_stale_state(directory: Path) -> None:
+    cutoff = time.time() - PRUNE_AGE_SECONDS
+    try:
+        entries = list(directory.iterdir())
+    except OSError:
+        return
+    for path in entries:
+        try:
+            if path.is_file() and path.stat().st_mtime < cutoff:
+                path.unlink()
+        except OSError:
+            continue
+
+
 def track(event: dict[str, Any]) -> int:
     if event.get("hook_event_name") != "PostToolUse" or event.get("tool_name") != "apply_patch":
         return 0
@@ -57,6 +77,7 @@ def track(event: dict[str, Any]) -> int:
     directory = state_dir()
     try:
         directory.mkdir(parents=True, exist_ok=True)
+        prune_stale_state(directory)
         touched = directory / f"{state_key(event)}.repos"
         existing = set(touched.read_text(encoding="utf-8").splitlines()) if touched.exists() else set()
         if root not in existing:

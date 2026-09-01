@@ -137,6 +137,15 @@ payload = json.load(open(sys.argv[1], encoding="utf-8"))
 assert "still dirty" in payload["systemMessage"]
 PY
 
+# stale-state prune: a >30-day-old file is removed on the next track, a fresh one survives
+STALE_FILE="$TEMP_ROOT/state/stale-session.repos"
+printf '/nonexistent\n' > "$STALE_FILE"
+touch -t 202601010000 "$STALE_FILE"
+printf '%s' "$TOUCH_INPUT" | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" \
+  python3 "$SCRIPT_DIR/session_touch.py" track
+[ ! -e "$STALE_FILE" ]
+ls "$TEMP_ROOT/state"/*.repos >/dev/null
+
 printf '%s' '{"hook_event_name":"SessionStart"}' | python3 "$SCRIPT_DIR/resume_context.py" > "$TEMP_ROOT/resume.json"
 python3 - "$TEMP_ROOT/resume.json" <<'PY'
 import json

@@ -5,7 +5,9 @@ The durable technical source of truth is codex/PARITY.md#codex-integration-sot.
 This checker deliberately verifies only objective invariants:
 
 * every Codex-facing entry point routes to that source;
-* SESSION.md does not reintroduce durable implementation details;
+* SESSION.md does not reintroduce durable implementation details
+  (scoped to paragraphs that mention Codex — the token vocabulary
+  overlaps Claude-side hook work, which is legitimate in SESSION.md);
 * known superseded capability claims do not return;
 * the shipped Hooks configuration names the expected local adapters.
 * the aggregate runner, CI, and pre-commit warning keep the contract and
@@ -130,8 +132,14 @@ def check(root: Path) -> list[str]:
         session = text(root / "SESSION.md")
     except RuntimeError:
         session = ""
+    # Scope the durable-detail scan to paragraphs that mention Codex: the token
+    # vocabulary (PreToolUse, SessionStart, ...) is shared with Claude Code's
+    # own hook system, and Claude-side hook work is a legitimate SESSION topic.
+    codex_paragraphs = [
+        paragraph for paragraph in session.split("\n\n") if "codex" in paragraph.lower()
+    ]
     for token in SESSION_DURABLE_TOKENS:
-        if token in session:
+        if any(token in paragraph for paragraph in codex_paragraphs):
             errors.append(f"SESSION.md: durable Codex implementation detail must live in {CANONICAL_POINTER}: {token}")
 
     config = root / "codex/hooks/hooks.json"
@@ -210,6 +218,19 @@ def selftest() -> int:
         errors = check(root)
         if not any(error.startswith("SESSION.md: durable") for error in errors):
             print("FAIL: durable SESSION detail was not detected")
+            return 1
+
+        fixture(root)
+        (root / "SESSION.md").write_text(
+            CANONICAL_POINTER
+            + chr(10) * 2
+            + "Claude-side hook work: refined the PreToolUse nudge and hooks.json-free settings merge."
+            + chr(10),
+            encoding="utf-8",
+        )
+        errors = check(root)
+        if any(error.startswith("SESSION.md: durable") for error in errors):
+            print("FAIL: Claude-side hook vocabulary outside a Codex paragraph was flagged")
             return 1
 
         fixture(root)

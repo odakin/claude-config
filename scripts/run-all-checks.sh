@@ -49,6 +49,8 @@ run "generated docs sync (generate-tree.py --check)" python3 scripts/generate-tr
 # 2. 手動保守 index (office-automation ほか、 validator が対象を自分で解決)
 run "office-automation index" python3 scripts/check-office-automation-index.py
 run "Codex integration contract" python3 scripts/check-codex-integration.py --check
+# ↓ 中身の検査 (generate-tree / index / codex contract) は上と重複するが、 hook script 自体が
+#   実行可能で exit 0 する smoke test として意図的に残す (重複削除で hook の壊れが盲点化する)
 run "claude-config pre-commit extra" bash .claude/pre-commit-extra.sh
 
 # 3. --selftest を持つ python script を自動発見して全実行
