@@ -132,14 +132,16 @@ def check(root: Path) -> list[str]:
         session = text(root / "SESSION.md")
     except RuntimeError:
         session = ""
-    # Scope the durable-detail scan to paragraphs that mention Codex: the token
-    # vocabulary (PreToolUse, SessionStart, ...) is shared with Claude Code's
-    # own hook system, and Claude-side hook work is a legitimate SESSION topic.
-    codex_paragraphs = [
-        paragraph for paragraph in session.split("\n\n") if "codex" in paragraph.lower()
+    # Scope the durable-detail scan to "## " entries that mention Codex: the
+    # token vocabulary (PreToolUse, SessionStart, ...) is shared with Claude
+    # Code's own hook system, and Claude-side hook work is a legitimate SESSION
+    # topic. Entry granularity (not paragraph) so a Codex heading covers its
+    # whole body even when the body itself doesn't repeat the word.
+    codex_sections = [
+        section for section in ("\n" + session).split("\n## ") if "codex" in section.lower()
     ]
     for token in SESSION_DURABLE_TOKENS:
-        if any(token in paragraph for paragraph in codex_paragraphs):
+        if any(token in section for section in codex_sections):
             errors.append(f"SESSION.md: durable Codex implementation detail must live in {CANONICAL_POINTER}: {token}")
 
     config = root / "codex/hooks/hooks.json"
@@ -224,13 +226,30 @@ def selftest() -> int:
         (root / "SESSION.md").write_text(
             CANONICAL_POINTER
             + chr(10) * 2
-            + "Claude-side hook work: refined the PreToolUse nudge and hooks.json-free settings merge."
+            + "## Claude hook maintenance"
+            + chr(10) * 2
+            + "Refined the PreToolUse nudge and the hooks.json-free settings merge."
             + chr(10),
             encoding="utf-8",
         )
         errors = check(root)
         if any(error.startswith("SESSION.md: durable") for error in errors):
-            print("FAIL: Claude-side hook vocabulary outside a Codex paragraph was flagged")
+            print("FAIL: Claude-side hook vocabulary outside a Codex entry was flagged")
+            return 1
+
+        fixture(root)
+        (root / "SESSION.md").write_text(
+            CANONICAL_POINTER
+            + chr(10) * 2
+            + "## Codex integration status"
+            + chr(10) * 2
+            + "Set approval_policy in the local config."
+            + chr(10),
+            encoding="utf-8",
+        )
+        errors = check(root)
+        if not any(error.startswith("SESSION.md: durable") for error in errors):
+            print("FAIL: durable detail in a Codex entry body was not detected")
             return 1
 
         fixture(root)
