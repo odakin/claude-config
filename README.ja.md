@@ -85,7 +85,14 @@ coverage・境界・意図的に未移植の Claude 専用機構は
 [Codex capability map](codex/PARITY.md) が正本。
 `./scripts/audit-codex-integration.sh` は導入状態を read-only で確認する。
 
-### Windows の人はまずこれ (まっさらな機)
+### Windows 対応状況
+
+この Codex installer の Windows は現在 unsupported である。POSIX shell・Python・symlink を
+意図的に使っており、native Windows 環境では検証していない。Windows 対応が必要な人は、
+platform に適した installer と test を実装し、default-refuse・`~/.claude` を書き換えない契約を
+保ったうえで pull request を出してほしい。
+
+### Windows の Claude Code はまずこれ (まっさらな機)
 
 Claude アプリが Code を始めさせてくれない場合（「Install Git, Git for Windows is required...」— これは *git というツール* の話で **GitHub とは無関係**、GitHub アカウントは一切不要）、または前提ツールが何も入っていない場合、PowerShell にこの 1 行を貼れば以降が全部可能になる:
 

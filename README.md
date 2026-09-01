@@ -88,7 +88,15 @@ that they are active. The [Codex capability map](codex/PARITY.md) documents
 coverage, boundaries, and intentionally unported Claude-only mechanisms. Run
 `./scripts/audit-codex-integration.sh` for a read-only installation check.
 
-### Windows: start here (fresh machine)
+### Windows status
+
+Windows is currently unsupported for this Codex installer. It intentionally
+uses POSIX shell, Python, and symlinks, and has not been validated in a native
+Windows environment. If Windows support matters to you, implement the
+platform-appropriate installer and tests, preserve the default-refuse and
+no-`~/.claude`-writes guarantees, and submit the result as a pull request.
+
+### Windows: Claude Code start here (fresh machine)
 
 If the Claude app refuses to start Code sessions ("Install Git, Git for Windows is required..." — this is about the *git tool*, **not** GitHub; no GitHub account is needed), or the machine has none of the prerequisites yet, paste this one line into PowerShell and everything below becomes possible:
 
