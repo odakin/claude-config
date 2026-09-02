@@ -338,7 +338,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 ## <a id="abstract-geroch-compression"></a>Abstract = 文脈降下 + 3 message + 持ち帰る 1 文 (Geroch の introduction と conclusion の圧縮) (2026-09)
 
-**Pattern**: 技術的言明を結果の順に並べた abstract (次元 5 演算子・coupling scale・信用水準 99.9x% …) は、 読者に文脈も持ち帰る 1 文も残さない。 abstract は論文の introduction (文脈降下 + 結論の先出し) と conclusion (束ねる 1 文) の圧縮版として組む ([`giving-talks.md`](giving-talks.md) §3・§5)。
+**Pattern**: 技術的言明を結果の順に並べた abstract (次元 5 演算子・coupling scale・信用水準 99.9x% …) は、 読者に文脈も持ち帰る 1 文も残さない。 abstract は論文の introduction (文脈降下 + 結論の先出し) と conclusion (束ねる 1 文) の圧縮版として組む ([`giving-talks.md`](giving-talks.md) の introduction 節と conclusion 節)。
 
 **Form** (12 文前後): ① 文脈降下 2 文 (なぜこの量が観測に効くか → この模型ではそれが何で決まるか) ② 問い 1 文 ③ 3 message を各 1–2 文の非技術的な言い方で (道具立ての語は落とす、 恒等式は本文へ) ④ 持ち帰る 1 文 = **試験であって判決ではない** (「data は模型より速い再加熱を求める」 は論文の価値を殺す。 「spectral index がこの模型の速さを試験し、 次の測定が決着させる」) ⑤ 現状の data との比較は**付加情報として末尾** ⑥ 副産物は最後の 1 文。 **禁止**: 同格の挿入句 (「the only collective effect, a narrow parametric resonance, loses …」)、 絶対的な有意度 (「2025 data が 3σ で排除」 = 中心値が動けば死ぬ、 [#moving-observational-baseline](#moving-observational-baseline))、 細かい百分率 (99.7% → 3σ → 不要なら削除)、 自分の旧提案を受け身で書くこと (「proposed for this model」 → 「that we proposed earlier」)、 先行詞の無い複数形 (「the central values will move」 → 「wherever the measured values move」)、 対象の長い言い換え (「the coherent condensate left by inflation」 → 「the inflaton condensate」)。
 
