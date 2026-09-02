@@ -565,6 +565,14 @@ sections:
     legacy: "20.5"
     level: 3
     title: "20.5 supersede は「新しい正本を書く」 では完了しない"
+  - id: provisional-value-freeze
+    legacy: "20.5.2"
+    level: 3
+    title: "20.5.2 暫定値は「確定した瞬間」 に置換されないと、書類に嘘として残る"
+  - id: enumeration-staleness
+    legacy: "20.5.3"
+    level: 3
+    title: "20.5.3 散文に焼いた「個数」 は、本文が伸びた瞬間に嘘になる"
   - id: premise-expiry-scope
     legacy: "20.4"
     level: 3

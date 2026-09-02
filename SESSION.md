@@ -2,6 +2,17 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-02b: supersede 掃討 campaign — 4 監査 / 約 50 finding / §20.5 系 3 節を hoist
+
+user 指示「他にも同じような supersede 済みルール残ってないか全部見て」 → 4 範囲 (層1 conventions 99 file + docs 8 / 事務書類の手順書群 / 研究費 / 層3) を全文監査し、 確定 finding を修正。 **本 session だけで約 50 件**。
+
+- **§20.5.2 暫定値の凍結** (新設): 上限値が実額欄に居座る / 暫定額ベースの派生値が更新されない。 実害 = 補助金の費目間流用枠が応募額ベースのまま (= 過大枠で流用すると事前承認漏れ) + 受給額欄に公募上限 (= 過大申告)。 ⚠️ どちらも doc 自身が「確定後に再計算」 と書いていたのに実行されなかった。
+- **§20.5.3 列挙の凍結** (新設): summary の「8 kernel」「3 つのルール」「回避 2 択」「現状 空」 が本文の伸びに追随しない。 **1 日で 5 件**。 害は数の誤りでなく **読者が列挙を閉じたものとして扱う**こと (= routing index の「8 kernel」 を見た session が §10-12 を規約外と判断する)。 → 数を書かないか生成する。
+- **§20.5 に掃討面を追記**: 散文 doc だけでなく **code-as-SoT の docstring / skeleton の default 値 / 機械照合 spec** も規則面 (= 3 件実発生。 driver は正しいのに docstring が旧手順、 skeleton が旧定数を hard-code)。
+- **[`multi-session-coordination.md#fanout-audit-resilience`](conventions/multi-session-coordination.md#fanout-audit-resilience)** (新設): fan-out 監査の親が停止しても子が起票元に直接返す設計なら中身は失われない (= 実際に起きて実証)。
+
+**layer-1 側の修正** = docx-to-pdf の default 反転未追随 / `make new picture` 不成立の旧結論 / paste 用 doc の model pin / 存在しない tool 名 / Tahoe で silent fail する壁紙 recipe 2 件 / overleaf の leak 楽観 / memory 行 (= §20.5 を書いた doc 自身) / 規律節の二重生存 / 列挙 3 件。 詳細は個人層の監査レポート 4 本。
+
 ## 2026-09-02: 規則の前提失効 (§20) + variant drift (§21) + 出力直結 field (data-pipeline §14)
 
 layer-3 の事務運用 session (= 承認者・様式定数・依頼 template・押印) から 4 件を kernel-up。 instance は個人層・共有 project に残置。
