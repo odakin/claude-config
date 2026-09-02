@@ -8,7 +8,7 @@
 #   scripts/setup-codex.sh [--replace] [--set-default-effort <level>] [--configure-safe-local] [--personal-layer <path>]
 #
 # Installs layer-4 Codex entry points that link to public layer-1 instructions,
-# two skills, and the Codex-native hook bundle. When an owner explicitly opts
+# three skills, and the Codex-native hook bundle. When an owner explicitly opts
 # in with --personal-layer, it instead renders an L4-only global instruction
 # composite from the public source and that layer's short Codex overlay.
 # Existing user-managed targets are refused unless --replace is supplied.
@@ -413,6 +413,9 @@ preflight_link \
   "$CONFIG_ROOT/codex/skills/claude-config-operations" \
   "$CODEX_USER_DIR/skills/claude-config-operations"
 preflight_link \
+  "$CONFIG_ROOT/codex/skills/codex-automation-routing" \
+  "$CODEX_USER_DIR/skills/codex-automation-routing"
+preflight_link \
   "$CONFIG_ROOT/codex/hooks" \
   "$CODEX_USER_DIR/claude-config-hooks"
 preflight_link \
@@ -428,6 +431,9 @@ install_link \
 install_link \
   "$CONFIG_ROOT/codex/skills/claude-config-operations" \
   "$CODEX_USER_DIR/skills/claude-config-operations"
+install_link \
+  "$CONFIG_ROOT/codex/skills/codex-automation-routing" \
+  "$CODEX_USER_DIR/skills/codex-automation-routing"
 install_link \
   "$CONFIG_ROOT/codex/hooks" \
   "$CODEX_USER_DIR/claude-config-hooks"

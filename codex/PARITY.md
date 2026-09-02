@@ -72,13 +72,13 @@ in a public `SESSION.md`.
 ## Active Codex integration
 
 The public source lives in this layer-1 repository: `codex/HOME-AGENTS.md`,
-`codex/AGENTS.md`, both skills, the hook implementation, and `hooks.json`.
+`codex/AGENTS.md`, the three skills, the hook implementation, and `hooks.json`.
 `scripts/setup-codex.sh` is an explicit **layer-4 installer**. Its default
-mode creates six managed links below the user's Codex locations:
+mode creates seven managed links below the user's Codex locations:
 
 - `~/.codex/AGENTS.md` — the local global-instruction entry point;
 - `~/Documents/Codex/AGENTS.md` — a local Codex-workspace entry point;
-- the two skills below `~/.codex/skills/`;
+- the three skills below `~/.codex/skills/`;
 - `~/.codex/claude-config-hooks` — the local link to the public hook code;
 - `~/.codex/hooks.json` — the local Hook configuration link.
 
@@ -180,6 +180,53 @@ the operations skill; they are not copied into a second, drifting source tree.
 - Scheduled or recurring work where Codex offers its own task automation. The
   convention still applies; its execution mechanism is Codex automation rather
   than a Claude-specific routine trigger.
+
+## <a id="native-automation-routing"></a>Native automation routing
+
+Codex automation is not one mechanism. Select the firing surface by the event
+that must wake the work and by the execution locus it needs:
+
+| Need | Native route | Context and locus |
+| --- | --- | --- |
+| Remind, re-check, monitor, or follow up in this task | **Heartbeat attached to the current task** | Returns to the same task and can use its existing context. This is the default for conversational follow-ups. |
+| Independent repeated project work | **Standalone cron automation** | Starts a separate run against one saved project. Use a worktree for Git repositories by default and local execution for non-Git projects. |
+| Deterministic local script with no model judgment | **launchd / cron / platform scheduler** | Runs on the selected machine without model tokens. The generic locus rule remains [`scheduled-tasks.md#execution-locus-selection`](../conventions/scheduled-tasks.md#execution-locus-selection). |
+| Deterministic Codex tool or session event | **Codex lifecycle Hook** | Fires on the supported lifecycle event; it is not a clock or an inbox watcher. |
+| Gmail, Slack, or GitHub activity | **ChatGPT Web/Mobile event trigger**, where available | Event triggers are configured on Web/Mobile, not Desktop/CLI/IDE, and cannot be combined with a time schedule. Periodic polling is a distinct, explicitly chosen fallback. |
+
+The current official product guide is
+[Scheduled tasks in Codex](https://learn.chatgpt.com/docs/automations). Verify
+it before relying on a product-availability fact: supported surfaces and
+trigger types can change independently of this repository.
+
+### Automation construction contract
+
+1. **Deduplicate first.** Inspect the existing local automation definitions,
+   identify a match by purpose and target, and update it rather than creating a
+   second scheduler for the same obligation. Preserve fields outside the
+   user's requested change.
+2. **Use the native management surface.** Create, view, update, pause, or delete
+   automations through the Codex app automation tool. Do not hand-edit its
+   machine-local files, invent a cron workaround for a same-task heartbeat, or
+   present raw recurrence syntax to the user.
+3. **Write a replayable prompt.** Name the scope and evidence sources, the
+   success/report condition, the unchanged-state behavior, the stop condition,
+   and the conditions that require user input. A standalone run must not depend
+   on an unstated earlier conversation.
+4. **Keep authority explicit.** Read-only checks and drafts may run unattended.
+   Sending, publishing, deleting, purchasing, or another consequential
+   external write requires the applicable authority at execution time unless
+   the user explicitly authorized that exact recurring action.
+5. **Make inactivity visible.** Report the human-readable schedule, target,
+   notification policy, and stop behavior after creation. If the requested
+   trigger is unavailable on the current surface, say that it was not installed
+   and point to the supported surface; do not let an inert configuration look
+   active.
+
+For local projects, the selected computer and Codex app must be available when
+the task runs. A task that only needs a hosted service should not be made
+machine-dependent without reason. Keep notification policy in automation
+metadata rather than in the replayed prompt.
 
 ## Native lifecycle hooks
 

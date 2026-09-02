@@ -90,3 +90,6 @@ or extending this shared Codex integration.
 
 Use the `claude-config-operations` skill when a task may benefit from the
 shared runbooks or reusable scripts in this repository.
+
+Use the `codex-automation-routing` skill for reminders, recurring checks,
+monitors, follow-ups, scheduled work, and Codex/Claude-routine comparisons.

@@ -41,6 +41,7 @@ ENTRY_POINTS = (
     "codex/AGENTS.md",
     "codex/skills/claude-config-conventions/SKILL.md",
     "codex/skills/claude-config-operations/SKILL.md",
+    "codex/skills/codex-automation-routing/SKILL.md",
     "templates/personal-layer/README.md",
 )
 SESSION_DURABLE_TOKENS = (
@@ -114,6 +115,23 @@ MACHINE_PROVENANCE_REQUIREMENTS = {
         "A title, prior message, or report from another host is only an observation",
         "verify it locally (`hostname` and the relevant audit)",
     ),
+}
+AUTOMATION_ROUTING_REQUIREMENTS = {
+    "codex/PARITY.md": (
+        'id="native-automation-routing"',
+        "Heartbeat attached to the current task",
+        "Standalone cron automation",
+        "ChatGPT Web/Mobile event trigger",
+        "Deduplicate first.",
+    ),
+    "codex/skills/codex-automation-routing/SKILL.md": (
+        "#native-automation-routing",
+        "same-task heartbeat",
+        "automation definitions before creating one",
+        "do not expose raw recurrence syntax",
+    ),
+    "scripts/setup-codex.sh": ("codex-automation-routing",),
+    "scripts/audit-codex-integration.sh": ("codex-automation-routing",),
 }
 
 
@@ -239,6 +257,16 @@ def check(root: Path) -> list[str]:
         for fragment in fragments:
             if fragment not in content:
                 errors.append(f"{relative}: missing machine-provenance contract: {fragment}")
+    for relative, fragments in AUTOMATION_ROUTING_REQUIREMENTS.items():
+        path = root / relative
+        try:
+            content = text(path)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        for fragment in fragments:
+            if fragment not in content:
+                errors.append(f"{relative}: missing automation-routing contract: {fragment}")
     return errors
 
 
@@ -281,6 +309,11 @@ def fixture(root: Path) -> None:
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
         path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
     for relative, fragments in MACHINE_PROVENANCE_REQUIREMENTS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
+    for relative, fragments in AUTOMATION_ROUTING_REQUIREMENTS.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -393,6 +426,15 @@ def selftest() -> int:
         errors = check(root)
         if not any(error.startswith("codex/HOME-AGENTS.md: missing machine-provenance") for error in errors):
             print("FAIL: missing machine-provenance contract was not detected")
+            return 1
+
+        fixture(root)
+        (root / "codex/skills/codex-automation-routing/SKILL.md").write_text(
+            CANONICAL_POINTER + chr(10), encoding="utf-8"
+        )
+        errors = check(root)
+        if not any(error.startswith("codex/skills/codex-automation-routing/SKILL.md: missing automation-routing") for error in errors):
+            print("FAIL: missing automation-routing contract was not detected")
             return 1
 
     print("check-codex-integration selftest: PASS")

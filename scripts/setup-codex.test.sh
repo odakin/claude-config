@@ -54,6 +54,7 @@ run_setup --set-default-effort high --configure-safe-local
 [ "$(readlink "$TEST_WORKSPACE/AGENTS.md")" = "$CONFIG_ROOT/codex/AGENTS.md" ]
 [ "$(readlink "$TEST_CODEX_DIR/skills/claude-config-conventions")" = "$CONFIG_ROOT/codex/skills/claude-config-conventions" ]
 [ "$(readlink "$TEST_CODEX_DIR/skills/claude-config-operations")" = "$CONFIG_ROOT/codex/skills/claude-config-operations" ]
+[ "$(readlink "$TEST_CODEX_DIR/skills/codex-automation-routing")" = "$CONFIG_ROOT/codex/skills/codex-automation-routing" ]
 [ "$(readlink "$TEST_CODEX_DIR/claude-config-hooks")" = "$CONFIG_ROOT/codex/hooks" ]
 [ "$(readlink "$TEST_CODEX_DIR/hooks.json")" = "$CONFIG_ROOT/codex/hooks/hooks.json" ]
 grep -q '^## Four-layer boundary$' "$TEST_CODEX_DIR/AGENTS.md"
@@ -138,6 +139,7 @@ grep -qx 'user hook configuration' "$CONFLICT_CODEX_DIR/hooks.json"
 [ ! -e "$CONFLICT_WORKSPACE/AGENTS.md" ]
 [ ! -e "$CONFLICT_CODEX_DIR/skills/claude-config-conventions" ]
 [ ! -e "$CONFLICT_CODEX_DIR/skills/claude-config-operations" ]
+[ ! -e "$CONFLICT_CODEX_DIR/skills/codex-automation-routing" ]
 [ ! -e "$CONFLICT_CODEX_DIR/claude-config-hooks" ]
 [ ! -e "$CONFLICT_CODEX_DIR/config.toml" ]
 

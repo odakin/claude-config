@@ -18,6 +18,8 @@ ln -s "$CONFIG_ROOT/codex/skills/claude-config-conventions" \
   "$TEST_CODEX_DIR/skills/claude-config-conventions"
 ln -s "$CONFIG_ROOT/codex/skills/claude-config-operations" \
   "$TEST_CODEX_DIR/skills/claude-config-operations"
+ln -s "$CONFIG_ROOT/codex/skills/codex-automation-routing" \
+  "$TEST_CODEX_DIR/skills/codex-automation-routing"
 ln -s "$CONFIG_ROOT/codex/hooks" "$TEST_CODEX_DIR/claude-config-hooks"
 ln -s "$CONFIG_ROOT/codex/hooks/hooks.json" "$TEST_CODEX_DIR/hooks.json"
 printf 'approval_policy = "on-request"\nsandbox_mode = "workspace-write"\n' \
@@ -50,7 +52,7 @@ if HOME="$TEST_HOME" \
   exit 1
 fi
 
-rm "$TEST_CODEX_DIR/skills/claude-config-operations"
+rm "$TEST_CODEX_DIR/skills/codex-automation-routing"
 if HOME="$TEST_HOME" \
   CODEX_USER_DIR="$TEST_CODEX_DIR" \
   CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \

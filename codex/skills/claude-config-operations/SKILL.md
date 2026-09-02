@@ -57,9 +57,10 @@ than relying on a secondary summary.
   the relevant runbook first. Never copy Claude MCP credentials or account
   configuration into Codex; request an explicitly scoped Codex connection when
   one is needed.
-- **Recurring work:** use Codex task automation when it fits the requested
-  workflow. Codex lifecycle hooks can cover local tool events, but Claude
-  routines and account-bound automation do not carry over.
+- **Recurring work:** invoke the `codex-automation-routing` skill. It owns the
+  choice among same-task heartbeats, standalone project schedules,
+  deterministic local schedulers, lifecycle Hooks, and Web/Mobile app-event
+  triggers. Claude routines and account-bound automation do not carry over.
 
 ## Boundaries
 

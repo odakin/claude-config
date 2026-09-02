@@ -12,6 +12,8 @@ Use the `claude-config-conventions` skill when installing, updating, auditing,
 or extending this Codex integration.
 Use the `claude-config-operations` skill when a task may be covered by the
 shared operational runbooks or scripts.
+Use the `codex-automation-routing` skill for reminders, recurring checks,
+monitors, follow-ups, scheduled work, and Codex/Claude-routine comparisons.
 
 When maintaining the Codex integration, treat
 `codex/PARITY.md#codex-integration-sot` as the durable technical source of

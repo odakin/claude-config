@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Automation Routing"
+  short_description: "Route reminders, monitors, and scheduled work"
+  default_prompt: "Use $codex-automation-routing to choose and create the right Codex trigger for this task."
+policy:
+  allow_implicit_invocation: true

@@ -143,6 +143,9 @@ check_link "local claude-config-conventions skill" \
 check_link "local claude-config-operations skill" \
   "$CONFIG_ROOT/codex/skills/claude-config-operations" \
   "$CODEX_USER_DIR/skills/claude-config-operations" || true
+check_link "local codex-automation-routing skill" \
+  "$CONFIG_ROOT/codex/skills/codex-automation-routing" \
+  "$CODEX_USER_DIR/skills/codex-automation-routing" || true
 check_link "local claude-config hook implementation" \
   "$CONFIG_ROOT/codex/hooks" \
   "$CODEX_USER_DIR/claude-config-hooks" || true

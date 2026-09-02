@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_DIR="$(cd "$SCRIPT_DIR/../codex/skills" && pwd)"
-EXPECTED_COUNT=2
+EXPECTED_COUNT=3
 FOUND=0
 
 for skill_file in "$SKILLS_DIR"/*/SKILL.md; do
