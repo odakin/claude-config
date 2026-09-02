@@ -561,6 +561,10 @@ sections:
     legacy: "20.3"
     level: 3
     title: "20.3 pattern"
+  - id: supersede-completion
+    legacy: "20.5"
+    level: 3
+    title: "20.5 supersede は「新しい正本を書く」 では完了しない"
   - id: premise-expiry-scope
     legacy: "20.4"
     level: 3
