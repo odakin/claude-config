@@ -64,7 +64,7 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 
 **ルール:** 重要な検証 (RCA・投稿前・誤り疑い) は**書いた pass と別の pass** に出す — 別 session の cold-eyes AI に、named error class + 反証 framing (「この主張を落とせ」) で渡す。書いた本人の self-check は同じ盲点を継ぐ (= 偽主張は書いた本人には毎回もっともらしく見える)。**相関した agent 同士の一致も独立検証ではない** (同 model class の 2 pass は誤りの相関を持ち得る — 独立性の最終保証は機械検査と人間)。
 
-**なぜ**: 実測で、生成 pass が見落とした同 class エラーを、同じ model の directed sweep pass が同日 6 件捕捉した — 独立性は model を替えることより **pass を分けて検査対象を named にする**ことから先に効く。handoff の機構 (spawn / token / 返送 spine) は [`multi-session-coordination.md`](multi-session-coordination.md)。
+**なぜ**: 実測で、生成 pass が見落とした同 class エラーを、同じ model の directed sweep pass が同日 6 件捕捉した — 独立性は model を替えることより **pass を分けて検査対象を named にする**ことから先に効く。handoff の機構 (spawn / token / 返送 spine) は [`multi-session-coordination.md`](multi-session-coordination.md)。 **別 session を立てただけでは目は冷えない** — 起票側の結論が cwd 祖先の CLAUDE.md・hook 注入・spec・原稿内の注記・repo 記録から流れ込む。 隔離の recipe = [`cold-eyes-isolation.md`](cold-eyes-isolation.md) (2026-09-02)。
 
 <a id="cross-vendor-red-team"></a>**Cross-vendor red-team (2026-08 実測)**: 「pass 分離が先」には上限もある — ある共同研究で、同 model の生成 + self-check を通過して配布 PDF まで達した致命的誤り 2 件 (不公平な量子/古典比較・位相基準の取り違え 〔= 主観測量の 49% 変化が artifact〕) を、**別ベンダーの独立運用 AI に repo 一式を渡した敵役 pass** が 2 回とも捕捉した (2/2、 いずれも撤回の直接契機。 当事者の教訓記録 = 「外部 red-team は 2 回とも効いた。 自力では見つけられなかった」)。 機能した protocol: (i) 散文の主張でなく **repo 一式を渡す** — 機械 anchor (#machine-anchor-per-claim) があるから敵役は「完全再現 → それから壊す」 の順に入れる / (ii) 敵役 memo は暫定 verdict + scope 限定 (「効果そのものの否定ではない」) + 人間による数式再確認の推奨を明記 / (iii) **受け手は敵役の code を走らせず一から独立再実装して確認** (= 一致合わせは検証でない、 #verification-tier) / (iv) 受け入れ後、 自分の返信・代替案にもう 1 周敵役を回す (= 実測でここから自己訂正が 1 件出た)。 位置づけ: 別ベンダー pass は同 model 盲点の安価な decorrelation であって、 機械検査と人間の代替ではない (n=2 の観察で、 fresh-eyes・反証 framing との交絡は分離できていない)。
 
@@ -82,7 +82,7 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 
 同一系統の AI (同 vendor の別 session・別 model tier) による複数実装の一致は、 系統的な共通バイアス (同じ学習分布・同じ公式の癖) を排除しない。 決定的にしたい数値主張には**別 vendor の AI に盲検で第 3 実装**をさせる。 recipe:
 
-1. **盲検 spec を書く**: 物理の問題設定 (模型・規約・入力・観測値) だけを渡し、 **自分たちの実装も答えの数表も見せない** (clean directory で実行させ、 repo を読めなくする)。
+1. **盲検 spec を書く**: 物理の問題設定 (模型・規約・入力・観測値) だけを渡し、 **自分たちの実装も答えの数表も見せない** (clean directory で実行させ、 repo を読めなくする)。 同 vendor の別 session でも同じ隔離が要り、 その流入口 6 つと sandbox の切り方は [`cold-eyes-isolation.md`](cold-eyes-isolation.md)。
 2. **最も不定性の大きい要素は指定せず自選させる**: 例 = horizon-matching 公式。 「標準公式を自分で選び、 出典と固有不定性を明記せよ」 と課すと、 公式選択の regime まで独立検証になる。
 3. **一様 offset は物理でなく規約差の signature**: 突き合わせで全 scenario に共通の一定 offset が出たら、 差の値から規約の流儀差を同定する (例: (1/12)ln g_* = 0.39 の g_* 正規化差)。 同定できない offset だけが本物の不一致。
 4. 検証者の「定式化への懸念」 も成果物として回収する — 盲検の第三者は依頼側の暗黙の前提 (例: 質量と potential の独立入力化) を独立に言い当てることがある。
