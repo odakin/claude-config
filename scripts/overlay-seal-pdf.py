@@ -27,6 +27,12 @@ Usage
         --place 'page=1,anchor=尾田 欣也,occurrence=1,size=22,dx=6,dy=0' --image seal1.png \\
         --place 'page=3,anchor=尾田 欣也,size=26,dx=10' --image seal2.png
 
+* ``size`` is the **ink diameter on paper, in points** — the engine compensates for the
+  PNG's content fill ratio, so what you pass is what gets measured on the printed sheet.
+  Derive it from the physical stamp (e.g. a 9.5 mm Shachihata face ≈ 27 pt), not by
+  eyeballing the rendered PDF: sizing by eye is what produced five rounds of drift in
+  2026-07 (the intermediate values 28 / 31 / 33 pt from that loop are obsolete). The
+  owner-specific confirmed value lives in the operator's personal layer, not here.
 * ``--place`` and ``--image`` are paired in order (Nth place uses Nth image).
 * ``anchor`` is searched with ``page.search_for``; ``occurrence`` picks the
   Nth hit (1-based, default 1).
