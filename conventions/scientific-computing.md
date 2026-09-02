@@ -509,3 +509,11 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 **Fix**: 拘束量は代数的に評価する — H = √((½χ̇² + V)/3) を右辺で毎回計算する定式化にすると、 ρ̇ = −3Hχ̇² ≤ 0 (単調減少) が**構造的に保証**され、 爆発経路が design-out される。 一般則: 「保存則・拘束・正定値性は積分で維持するのでなく、 定式化に焼き込む」。
 
 **Validation layer** (同事例で有効だった 3 点セット): ① 不変量の bool 監視 (ρ 単調減少) ② 恒等式の全桁照合 (ρ 比 = e^{−3ΔN(1+w̄)}、 w̄ は計算値) ③ 独立の高次手法との spot-check (mode 方程式の直接積分 vs 2 次摂動公式、 4 桁一致)。 §8 (第一原理 cross-check) の具体形。
+
+## <a id="namespace-override-verification"></a>11. 別 script の関数を差し替える wrapper は、 差し替えが効いたことを sentinel で検証する (2026-09)
+
+**Pattern**: 正本 script の 1 関数 (例: 崩壊率の規格化) だけ差し替えて表を再計算する wrapper で、 `runpy.run_path()` の戻り値 dict に代入して差し替えたつもりになる。 `run_path` は module globals の**コピー**を返すので、 正本の関数群が参照する globals は変わらず、 **差し替えは silent no-op**。 wrapper 自身は正常終了し、 出力は旧規格化のまま。 実害 (2026-09、 private paper repo) = 論文の表 2 枚が旧規格化の値で 1 版流通。 wrapper が自前で計算していた 1 列 (T_rh) だけ正しかったので、 表を見ても気づかなかった。
+
+**Fix**: `g = {"__name__": "not_main"}; exec(open(f).read(), g); g["func"] = new_func` — exec に渡した dict が module globals そのものになるので差し替えが効く (importlib は macOS system python の stale .pyc 問題で別途避ける)。
+
+**Validation**: 差し替えた関数に sentinel (print / 戻り値に印) を入れ、 **再計算の出力に sentinel が現れること**を 1 回確認してから表を採用する。 最も安価なのは「変わるはずの数字が実際に変わったか」 の diff (例: N_* が +0.2 動くはず、 動いていなければ差し替えは効いていない)。 「override したから新しい値」 は検証でない ([#verify-independent-derivation](#verify-independent-derivation) の道具版)。

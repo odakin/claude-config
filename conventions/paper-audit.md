@@ -258,6 +258,7 @@ paper の中心機構が「未証明の仮定」 (例: あるコヒーレンス�
 2. **複数 region で計算し、 region 非依存の不変量を抽出する** — 例: 「排除/許容」 は region で反転しても「緊張が制御パラメータの単調関数」 は全 region で成立する、 という形の主張に組み替えると、 観測論争の決着を待たずに書ける。
    ⚠️ 派生 trap: 「データが機構 A を機構 B より favor する」 は、 パラメータ空間の測度 (窓幅 = 事前体積、 Occam 因子) を実際に計算していない限り書けない — 両機構に許容点が残るなら頻度論的には無差別で、 referee に一撃で返される。 defensible な形 = 「観測は遅い機構を fine-tuned な corner に confine し、 速い機構は窓を reopen する」 という**彫刻の記述** + 未確立の機構には条件法 (would)。
 3. **baseline の採用は物理でなく著者判断** — 採用理由 (先行自著との連続性・係争の両側の存在) を明文化し、 不利な region での帰結 (模型全体の緊張を含む) を**自分の言葉で先に書く**。 直近の観測更新は referee が最初に引く文献であり、 沈黙は一撃で見つかる。
+4. **「係争中」 と書くなら中身と出典を 1 文で書く** (2026-09-02 追記) — 「still debated」 だけでは referee に「誰が何を」 と返される。 形 = 「その組合せは標準模型を仮定するが、 同じ測定は CMB と合わせると ⟨代替模型⟩ を ⟨Nσ⟩ で好む [測定 collaboration 自身の結果]」 + 「よって baseline はそれ抜き、 込みは completeness のために併記」 の 2 文。 user の順で出た問い = 「BAO も入れるとどうなる？」 → 「係争中ならまぁええ」 → 「係争中と書いてある？」 → 「どう係争中なのかは必要では」。 沈黙 → 無根拠の一言 → 出典つき 1 文、 の 3 段を最初から最後の形で書く。
 
 起源 (2026-09): private cosmology paper で、 4 実装 (leading 3 + exact 1) が全て 2018 baseline を継いでいたことが user の一言 (「allowed region は新しいやつにした?」) で発覚。 2025 更新群 (上方に引く実験と下方に引く実験が併存) の 3 region で引き直した結果、 baseline では「一部シナリオの排除」 だった結論が、 最新複合 region では「模型全体の ~2σ 緊張」 まで動いた — 不変量 (緊張の単調性) だけが全 region で生存した。
 
@@ -294,6 +295,28 @@ referee に「その量は決まらないのでは」 と突かれた時、 縮�
 **なぜ**: 撤退は安全だが、 論文から情報が消える。 定義は 1 句で済み、 主張は残り、 referee の懸念も閉じる。 曖昧さの指摘を「主張が弱すぎた」 でなく「名指しが足りなかった」 と読む余地を、 常に一度は検査する。
 
 起源 (2026-09): 上と同じ arc。 「local 項と nonlocal 残りへの分離は prescription 依存」 という正しい指摘に対し、 「零運動量での form factor の値」 と量を名指すことで caveat 節を削除できた。
+
+## <a id="title-claim-check"></a>題・副題の 4 検査 (読者語彙 / 非自明 / caveat 生存 / 統計 register) (2026-09)
+
+giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙断定か疑問文) を paper に当てるとき、 再構成後の題で特に踏む 4 つ:
+
+1. **名詞句ごとに「読者は本文なしで parse できるか」** — 著者の造語・内部略号は落とす。 典型 = 演算子の尺度と無次元結合の混同 (「Planckian coupling」 = 尺度 Λ ~ M_P の意味で書いたが、 結合自体は無次元 → 「conformal parameter of order unity」)。
+2. **副題は非自明な情報を運ぶときだけ付ける** — 読者が本文を読まなくても知っていること (Planck 抑制の loop 結合は遅い、 reheating の速さは N_* を動かす) は副題にしない。 副題候補ごとに「これは読者に自明か」 を問い、 自明なら削るか、 観測が要求する量に置換する。
+3. **題の主張は paper 自身が列挙した caveat が倒れても生き残る形にする** — 機構が実際に働くことを断定する題 (「X が宇宙を reheat する」) は、 その regime の整合性が open なら書けない。 「観測は A と B を見分ける」 型は caveat の帰趨に依らず成立する (= [#assumption-dependent-claim-framing](#assumption-dependent-claim-framing) の題版)。
+4. **2σ の主張を題・abstract で「requires」 にしない** — 忠実な形は「within two standard deviations the data leave only X」。 別 baseline で対抗シナリオが生きているなら「requires」 は偽 (= [#claim-strength-three-tests](#claim-strength-three-tests) の偽検査。 user 「ただの perturbative decay シナリオも残ってんじゃないの」 で発覚)。
+
+起源 (2026-09): 5 誌目再構成の private paper で題を 6 回転して確定した session。 却下理由は順に「無次元量に Planckian」 / 「副題が自明」 / 「requires は 2σ の過大表現」 / 「機構の断定は inflation 中の整合性が未解決」。 確定形 = 「A vs B in ⟨model⟩: The ⟨observable⟩ can tell」 (疑問の形をした平叙断定、 "can tell" が現状 1σ の分離に忠実)。 却下案は原稿 header に理由つきで温存する。
+
+## <a id="uniqueness-claim-exhaustion"></a>「X だけが届く」 型の唯一性主張は列挙表 + 前提 + regime 整合で支える (2026-09)
+
+題や abstract が「この機構 / channel だけが条件を満たす」 と言う瞬間、 それは定理でなく**列挙の主張**になる。 user の一言「本当に確実に確認されてるの？」 に答えられる形を先に用意する:
+
+1. **前提を列挙する** (場の内容 / 背景場の値 / 線形化 / パラメータ範囲)。 「他に無い」 はこの前提の下でしか言えない。
+2. **候補を全部表にする** — 各 channel に「条件に届くための要求値」 と「届かない理由」 を 1 行ずつ。 理由は数値 (要求値が模型の妥当領域の外) か構造 (保存流への微分結合は位相回転で消える / fermion は Pauli で指数成長しない / 重力は (m/M_P)² 抑制) のどちらかで書く。
+3. **唯一の候補が要求される regime を、 模型の他の場所で整合させる** — 例: 結合 O(1) が必要と出たら、 その値が inflation 中の別 sector (Higgs の有効 quartic 等) をどう変えるかを検査。 未解決なら共著者への問いとして note + 原稿の著者注に残し、 題はその帰趨に依らない形 ([#title-claim-check](#title-claim-check) 3) に落とす。
+4. **閾値の精度を書く** — 線形化で出た閾値には 2 次項 (例: 場の再定義で現れる (∂ln f)² の 2ω 変調) が O(1) で効くことがある。 「≳ 0.8」 は桁の主張であって小数 1 桁の主張ではない。
+
+起源 (2026-09): 同 private paper。 5 block の conformal 因子を走査して Higgs 運動項だけが共鳴領域に届くと結論した後、 user の確認質問で「前提 4 / 弱点 3 (閾値精度・inflation 中の Higgs quartic・場の内容)」 の監査 note を切り、 題を「Higgs が reheat する」 から「観測が摂動と共鳴を見分ける」 に降ろした。
 
 ## <a id="second-example-refine"></a>二例目が出たら refine
 
