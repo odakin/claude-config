@@ -33,7 +33,7 @@ layer 1 (public) のドメイン固有規約 102 file をカテゴリ別に列�
 - **[multi-machine-state.md](multi-machine-state.md)** — 複数マシンで同じ Claude Code setup を運用・audit するとき
   - 複数マシンで同じ Claude Code セットアップを使うときの規律 (audit scope 明示・実機検証・idempotent setup.sh)
 - **[multi-session-coordination.md](multi-session-coordination.md)** — 並列 Claude session と同じ repo を触るとき + spawn/handoff を設計するとき
-  - 同 user の並列 Claude session が同 file path を race する防御 (= session 開始 git fetch + log + plan read、 Write 前 ls/find、 Edit 前 Read 強制、 commit 時は git add -A でなく明示 add 〔= 並行 session の未 commit WIP 巻き込み防止〕、 plan checkbox [x] は実装済のみ semantics、 prev session の commit を「他人 commit」 として cold-read)
+  - 同 user の並列 AI session を安全に協調させる規律 (= session 開始 git fetch + log + plan read、同 path race 防御、明示 add、handoff、必要時の Git immutable-event board は operational state に限定し project SoT へ昇格)
 - **[name-rendering.md](name-rendering.md)** — 人名を記録・文面・印字物に書く瞬間で、手元にある表記が機械 field (メールヘッダ / git author / CSV・LDAP export / 登録システム) 由来のとき
   - transliteration・正規化された人名 field は不可逆な投影 — 手元に無い表記形 (native script / 濁点・記号 / 漢字) を推測で復元しない。3 択 (権威 source から取る / 本人に聞く / その表記を使わない) + 高 stakes 印字物の照合 + 確定後の SoT 化と errata
 - **[output-cap-death-loop.md](output-cap-death-loop.md)** — worker session (spawn_task / headless claude -p / Agent subagent) に長い導出・生成 task を渡す spec を書くとき・spawn した worker が「isRunning なのに成果ゼロ」 のとき

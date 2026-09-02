@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 並列 Claude session と同じ repo を触るとき + spawn/handoff を設計するとき
 category: harness-core
-summary: 同 user の並列 Claude session が同 file path を race する防御 (= session 開始 git fetch + log + plan read、 Write 前 ls/find、 Edit 前 Read 強制、 commit 時は git add -A でなく明示 add 〔= 並行 session の未 commit WIP 巻き込み防止〕、 plan checkbox [x] は実装済のみ semantics、 prev session の commit を「他人 commit」 として cold-read)
+summary: 同 user の並列 AI session を安全に協調させる規律 (= session 開始 git fetch + log + plan read、同 path race 防御、明示 add、handoff、必要時の Git immutable-event board は operational state に限定し project SoT へ昇格)
 -->
 # Multi-session coordination — 同 user の並列 Claude session が race する
 
@@ -516,9 +516,72 @@ user がそのマシンの前に居ない session (= Remote Control 経由でス
 
 ⚠️ **子が親にしか返さない設計は避ける** (= 親が落ちると子の成果が到達しない)。 [`#spawn-handoff-token-return`](#spawn-handoff-token-return) の「機械が人間に自動で届ける」 と同じ思想を、 agent 階層の**内側**にも適用する。
 
+---
+
+## <a id="git-immutable-event-board"></a>13. Git immutable-event board — session 間の operational state を共有する
+
+複数の AI session が project と machine をまたいで継続的に動き、各 project の `SESSION.md`
+だけでは「誰が何を claim し、どの finding が未昇格か」を横断して見渡せない場合、専用の Git
+board を置ける。ただし board は**研究・project 判断の正本ではない**。用途は claim、material
+update、blocker、完了 pointer という短命な operational state に限る。
+
+### 発火条件と layer
+
+- 単一 project / 単一 session で足りる間は作らない。実際に cross-project / cross-machine の重複
+  作業や handoff loss が起きる、または常時発生することが trigger。
+- audience が owner だけなら layer 3。project collaborator も読む必要があるなら、その project の
+  audience ごとに別の layer-2 companion repo を作る。1 repo 内の branch / thread ごとの ACL を
+  擬似実装しない。Git の read boundary は repository membership である。
+- layer-2 project は owner-private board に依存しない。board を消しても project の durable knowledge
+  が失われないことを invariant にする。
+
+### データモデルと正本境界
+
+- 1 post = 1 uniquely named immutable event file = 1 commit。共有 mutable `BOARD.md` は置かない。
+  correction は旧 event の編集でなく、旧 ID を `supersedes` する新 event。
+- thread の authoritative order は `main` の commit order。wall-clock timestamp は表示・診断用で、
+  machine 間 clock drift を含むため conflict resolver にしない。
+- `claim` は hard lock でなく期限付き advisory lease。heartbeat を push せず、他 session の判断を
+  変える transition だけを書く。
+- event の actor field が「誰の reasoning / task か」を表し、Git author は transport account を表す。
+  両者を同一視しない。
+- provisional finding は board に閉じ込めない。検証後に owning project の code / data / DESIGN / case
+  note へ書き、board には昇格先 pointer を新 event として残す。project-side artifact の無い `done`
+  は避ける。
+
+### concurrency
+
+同じ checkout の index は immutable event でも競合する。writer は post ごとに isolated temporary
+checkout を作り、latest `main` を fetch → event 1 件を schema validate → その path だけ stage / commit
+→ push する。non-fast-forward は fetch/rebase して少回数だけ retry し、失敗時は event を失わず停止する。
+
+### privacy と source-classification gate
+
+private visibility は encryption ではない。機密を扱う board は default-encrypt を優先し、新規 file
+の暗号化指定漏れを構造的に防ぐ。`git-crypt` が守るのは file body だけで、repo / branch / path /
+commit subject / author / timestamp / size は metadata surface に残る
+([`sensitive-repo-patterns.ja.md`](../docs/sensitive-repo-patterns.ja.md) 参照)。post を組み立てる**前**に source を分類する:
+
+| source | board treatment |
+|---|---|
+| metadata を公開面に出してよい ordinary source | encrypted event body。意味のある project / thread path は metadata として安全な場合だけ可 |
+| encrypted / unpublished / sensitive source | opaque path + neutral commit subject + coarse event。識別 mapping が必要なら encrypted index 内にだけ置く |
+| local-only / remote-prohibited / credential・secret management | **no-post**。opaque event の存在自体も作らない |
+
+source scope と board audience が一致しない内容を forward しない
+([`sensitive-data-pass-through.md`](sensitive-data-pass-through.md))。password、token、cookie、private key、
+raw transcript、未公表本文の転載は encryption の有無にかかわらず board の data model から除外する。
+
+### 実装境界
+
+schema、暗号鍵の選択、actual repo、owner 固有 registry は各 layer-2/3 instantiation が持つ。本節は
+generic pattern の SoT であり、個別 board の `DESIGN.md` は採用理由・audience・defer 判断だけを持ち、
+本節を複製しない。自動 writer / generated view / CI は manual event で必要性を確認してから作る。
+
 
 ## 関連
 
+- cross-session operational board の generic pattern: §13
 - リモート操縦 session への hand-off (物理不在で完了できない step の分岐設計): §11 (RC 機構自体は [`remote-control-server.md`](remote-control-server.md))
 - worker task の切り方 (sizing 述語 + orientation 前払い) = spec author 宛の規律: §9 (output 側の死機構は [`output-cap-death-loop.md`](output-cap-death-loop.md))
 - delegate を main と別 model で走らせる選択 (alias 不能 / custom agent / headless CLI): §10 (bug 回避のみを目的にした model 切替は [`tool-call-robustness.md`](tool-call-robustness.md))
