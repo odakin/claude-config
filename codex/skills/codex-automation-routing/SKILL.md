@@ -37,6 +37,8 @@ this file and read that section before creating or changing an automation.
    Update the matching automation instead of adding a duplicate.
 2. Use the app's automation tool. Do not write automation files or raw schedule
    directives by hand, and do not expose raw recurrence syntax to the user.
+   Treat a suggestion card as proposed, not active. Claim registration only
+   after the native result returns an automation identifier and active status.
 3. Preserve fields the user did not ask to change. Do not override model or
    reasoning settings unless requested or required by the native schema.
 4. Make the replayed prompt self-contained: state the scope, evidence to

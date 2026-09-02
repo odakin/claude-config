@@ -119,6 +119,7 @@ one-time の場合は `cron_expression` を `run_once_at` (= RFC3339 UTC) に置
 
 ## 関連 doc
 
+- `~/Claude/claude-config/docs/convention-design-principles.md#automation-trigger-routing` — 「自動化」 intent から routine を直結せず、 wake event / judgment / context continuity / locus / authority で発火経路を選ぶ製品横断原則
 - ~/Claude/claude-config/conventions/scheduled-tasks.md — **別 mechanism** (= Claude Code 内蔵 scheduled task / launchd 等の実行 locus)、 本 file とは別 system で **互いに置換不可・どちらも現行** (⚠️ 2026-09-02 訂正: 旧記述「旧 mechanism」 は誤り — 本 file 冒頭が「両者は別 mechanism。 互いに置換不可」 と書いており、 実行 locus の選択は `scheduled-tasks.md#execution-locus-selection` が現行の正本)
 - `~/Claude/claude-config/conventions/multi-session-coordination.md` — cross-session 一般則
 - `~/Claude/claude-config/conventions/mcp.md` — MCP / connectors 全般

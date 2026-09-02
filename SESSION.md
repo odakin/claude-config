@@ -2,6 +2,12 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-02c: Codex automation routing — 正本・発火 skill・上層原則へ結晶
+
+- 製品固有の durable contract は [`codex/PARITY.md#native-automation-routing`](codex/PARITY.md#native-automation-routing)、常時発火面は [`codex-automation-routing`](codex/skills/codex-automation-routing/SKILL.md)。本 entry は snapshot pointer のみ。
+- 横断知見は [`#automation-trigger-routing`](docs/convention-design-principles.md#automation-trigger-routing)（自動化 intent を wake event / judgment / context continuity / locus / authority の 5 軸で route）と [`#activation-evidence-ladder`](docs/convention-design-principles.md#activation-evidence-ladder)（proposed / configured / registered-active / observed-run を混同しない）へ hoist。
+- context 耐久力の一般診断は [`#context-capacity-evidence-layers`](docs/convention-design-principles.md#context-capacity-evidence-layers) と [`codex/PARITY.md#context-capacity-diagnosis`](codex/PARITY.md#context-capacity-diagnosis) へ hoist。実測値・掲示板状況・質問 draft は owner-private case ledger が正本で、本 public snapshot には複製しない。
+
 ## 2026-09-02b: supersede 掃討 campaign — 4 監査 / 約 50 finding / §20.5 系 3 節を hoist
 
 user 指示「他にも同じような supersede 済みルール残ってないか全部見て」 → 4 範囲 (層1 conventions 99 file + docs 8 / 事務書類の手順書群 / 研究費 / 層3) を全文監査し、 確定 finding を修正。 **本 session だけで約 50 件**。

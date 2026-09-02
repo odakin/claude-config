@@ -69,6 +69,23 @@ they caused a particular compaction pattern. Their diagnosis and repair belong
 in the applicable private task ledger as a layer-4 maintenance record, never
 in a public `SESSION.md`.
 
+### <a id="context-capacity-diagnosis"></a>Context-capacity diagnosis
+
+Do not collapse advertised model/API capacity, the product/client-selected
+window, a run's reported usable window, the observed compaction trigger, and
+post-compaction recovery quality into one number. The general measurement and
+matched-run comparison protocol is canonical in
+[context-capacity evidence layers](../docs/convention-design-principles.md#context-capacity-evidence-layers).
+
+For Codex investigations, prefer official product documentation over live
+runtime or server reports, and prefer those reports over bundled client
+catalog metadata. A clean numerical ratio is a hypothesis, not a supported
+backend contract. Record the surface, authentication route, client version,
+model, instruction/tool prefix, usage events, and recovery result in the
+private case ledger. Until a configuration field's product semantics are
+documented and verified, keep them as an unresolved question rather than
+turning local metadata into a durable prescription.
+
 ## Active Codex integration
 
 The public source lives in this layer-1 repository: `codex/HOME-AGENTS.md`,
@@ -222,6 +239,28 @@ trigger types can change independently of this repository.
    trigger is unavailable on the current surface, say that it was not installed
    and point to the supported surface; do not let an inert configuration look
    active.
+
+### Creation-state and schedule semantics
+
+The management surface distinguishes **proposal** from **activation**.
+`suggested_create` renders a user-facing proposal card; that card alone is not
+evidence that an automation is registered. Claim activation only after the
+native create/update result supplies an automation identifier and active
+status. Later health is a separate claim established by a run record or
+heartbeat. This is the product-specific application of
+[`activation-evidence-ladder`](../docs/convention-design-principles.md#activation-evidence-ladder).
+
+An immediate heartbeat create may reject an explicit timezone-anchored start
+date because the app owns local-wall-clock conversion. When that happens,
+either use the supported suggestion flow and report it as awaiting acceptance,
+or express an equivalent unambiguous native schedule without the rejected
+anchor. Never silently shift the requested wall-clock time. One-shot follow-up
+semantics must be visible in both the human-readable report and the replayed
+prompt's stop condition.
+
+The route selection itself follows the product-neutral five-axis rule in
+[`automation-trigger-routing`](../docs/convention-design-principles.md#automation-trigger-routing):
+wake event, model judgment, context continuity, execution locus, and authority.
 
 For local projects, the selected computer and Codex app must be available when
 the task runs. A task that only needs a hosted service should not be made

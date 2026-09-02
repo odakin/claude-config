@@ -86,8 +86,11 @@ home directory は書き換えない。各マシンで一度 installer を実行
 public layer の pull 後も current の `setup.sh` post-merge hook が install 済みなら refresh
 される。Codex の user
 Hook は一度 trust review が必要なので、install 完了だけで active 化までを主張しない。
-architecture・layer 境界・Hook coverage・platform scope・検証の正本は
-[Codex capability map](codex/PARITY.md#codex-integration-sot)。
+architecture・layer 境界・Hook coverage・platform scope・automation routing・検証の正本は
+[Codex capability map](codex/PARITY.md#codex-integration-sot)。install される
+`codex-automation-routing` skill は、同一 task の follow-up、独立 project schedule、
+deterministic local job、lifecycle Hook、対応する Web/Mobile event trigger を
+[正本の matrix](codex/PARITY.md#native-automation-routing) に従って選ぶ。
 `./scripts/audit-codex-integration.sh` はこのマシンの導入状態を read-only で確認する。
 
 ### Windows 対応状況
@@ -147,6 +150,9 @@ claude-config 自体の auto-load はほぼ空: デフォルトの `<base>/CLAUD
 - **1M コンテキストモデル**: 同じ目標は実質無料だが、chain-load の規律はセッション立ち上げ速度の観点で依然有効。
 
 autocompact が想定より多く発火する場合、content を削る前にまず 1 行あたりの byte 密度 (§10.7) と サブプロジェクト `CLAUDE.md` チェーン (§10.10–10.11) を確認する。
+製品・model 間を比較するときは、公称 capacity、製品が選ぶ window、live run
+の usable window、観測した compaction trigger、圧縮後の復帰品質を分けて測る。
+診断手順の正本は [`context-capacity evidence layers`](docs/convention-design-principles.md#context-capacity-evidence-layers)。
 
 ## カスタマイズ
 

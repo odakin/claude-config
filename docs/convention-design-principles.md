@@ -674,6 +674,35 @@ origin: ある追跡システムで「期限つき義務」 が複数回見落�
 3. **scheduled task** = 無人定期 + Claude judgment ([`conventions/scheduled-tasks.md §0`](../conventions/scheduled-tasks.md#execution-locus-selection))
 4. **doc 記載** = 最弱と自覚して使い、 後日 1-3 への格上げ trigger 条件を書き残す
 
+### <a id="automation-trigger-routing"></a>8.12a 「自動化」は mechanism 名ではない — 5 軸で発火経路を先に route する
+
+「自動化して」「あとで見て」「監視して」は mechanism の指定ではなく、**将来の
+obligation を登録せよ**という intent である。これを即座に cron / scheduled task へ
+写像すると、同一会話へ戻るべき follow-up が別 session に散る、deterministic script に
+LLM token を払い続ける、local file が必要なのに cloud に置く、event trigger があるのに
+polling する、といった locus mismatch が生じる。
+
+実装前に次の 5 軸を決める:
+
+1. **wake event** — 時刻、間隔、外部 event、tool/session lifecycle のどれか。
+2. **judgment** — run-time に model の判断・要約・draft が要るか。不要なら OS scheduler
+   / CI / event handler の deterministic path を優先する。
+3. **context continuity** — 現会話の文脈へ戻るのか、self-contained な独立 run か。
+4. **execution locus** — local file / credential / network が必要か、hosted で完結するか。
+5. **authority** — read/check/draft までか、送信・公開・削除等の外部 action まで無人化を
+   許可されているか。
+
+この 5 軸の答えから hook / skill / heartbeat / standalone schedule / OS scheduler /
+service event trigger を選ぶ。製品が requested trigger を持たない時は「近い mechanism を
+黙って代用」せず、未実装を明示して polling 等を別 option として user に選ばせる。
+point-of-use の製品別 dispatcher はこの原則への薄い pointer とし、surface 名や schema は
+製品別 SoT に隔離する。
+
+origin: 同じ「定期・あとで」要求が、同一会話 heartbeat / 独立 project run /
+deterministic local job / lifecycle Hook / hosted app event の 5 系統へ分かれる Codex
+automation routing の実装。既存の Claude local scheduled task / cloud routine / launchd の
+locus 分岐と合わせ、2 vendor・複数 mechanism で同じ mismatch を観測した一般化。
+
 doc-tier 内にも placement 軸がある (= grep 着地点): **運用 doc (= ID・token・座標等の実務値の表) への到達はしばしば linear read でなく grep** で、 着地した session は hit 周辺の値だけ抽出して離脱する。 別 doc に住む一般則も、 同 file 文末の「関連」 pointer も、 その retrieval 窓に入らなければ発火しない (= doc は開かれたのに規則が context に入らない — 「想起されない」 〔本節冒頭〕 とも「in-context なのに不適用」 〔[§4.1](#motivated-substitution-trap) Evidence〕 とも別の miss 形)。 ∴ doc-tier に留まる規則が実務値と別の場所に住むなら、 **値の隣 (= grep 着地点) に canonical recipe / script への routing pointer を置く** ([§2](#no-duplicate-rules) の pointer 原則は「pointer にせよ」 と言うが置き場所を規定しない — 発火面としては placement が load-bearing。 手順そのものは [§14.5](#mechanical-script-extraction) の script 化が上位互換)。 origin: 運用 doc を grep 読みした session が、 別 doc に完備だった API header 要件 ([`discord-bot.md` UA 節](../conventions/discord-bot.md#discord-api-user-agent)) を素通りして再発させた 1 事例 (2026-07-10、 cure = canonical script + 着地点 routing pointer)。 ⚠️ 1 事例からの clarification につき新 section / 新 axis にしない ([§9.8](#single-observation-scope-check) bar 未満、 独立 2 例目で axis 昇格を再判定)。
 
 reflex: 規律を doc に書く瞬間 + doc 記載規律の不発 RCA を書く瞬間に「これは 1-3 のどれかに乗らないか?」 を問う。 「reflex の徹底」 を再発防止策として書きそうになったら、 それは発火面の選択を skip した signal。 併せて、 新機構を増やす前に既存 enforcement channel (installer / `--check` / SessionStart surface 等) への相乗りを先に検討する (= 機構増殖の抑制、 §9.6 subtraction と同方向)。
@@ -694,6 +723,29 @@ origin: 横断 lookup script が規律表の機械補強 column に**記載済�
 reflex: 自動化を「設計 + SKILL/doc を書いた」 で完了と思った瞬間に「これは活性化に手動 step を要するか? 要するなら、 抜けたことを誰が surface するか?」 を問う。 doc に「新 machine では再登録」 と書くだけ (= recall 依存、 §8.12 最弱面) では再演する。
 
 origin: 朝の自動登録 scheduled task が「設計・SKILL 記述済」 なのに backend 登録 step が一度も実行されず長期 silent dead だった事例 (= 出力の不在を「該当なし」 と誤認、 真因の発覚に user の「自動で動いてないんだっけ?」 を要した)。 同型: 週次自動公開ジョブの machine setup drift (install-check 先行実装) / hook 配線 drift (installer の --check) / **新規 secret の cross-machine 耐久化 step (= canonical への暗号化 commit) が skip され単一マシン地雷化** (= 作成したマシンでは動作確認が通り絶対に不可視、 別マシンで初めて露見。 self-check = 各マシンの secret 配置を耐久性分類して非耐久を surface)。 4 事例からの一般化 (§9.8 充足)。
+
+### <a id="activation-evidence-ladder"></a>8.13a 提案・設定・活性化・実走は別状態 — UI card を activation evidence にしない
+
+条件付き mechanism には少なくとも次の証拠段階がある:
+
+| 段階 | 証拠 | まだ主張できないこと |
+|---|---|---|
+| proposed | draft / suggestion card / plan が表示された | 登録済・有効 |
+| configured | file / prompt / link が存在する | runtime が読む・発火する |
+| registered-active | backend/runtime が identifier + active status を返す | 時刻到来時に実走した |
+| observed-run | run record / heartbeat / side effect を直接観測した | 次回以降も恒久に健全 |
+
+「カードが出た」「設定を書いた」を「有効化した」と報告すると、§8.13 の silent dead を
+success として閉じる。作成直後の完了条件は最低でも **identifier + active status**、運用健全性は
+別途 heartbeat / run history で判定する。suggestion しか作れない surface なら「提案済・承認待ち」
+と状態名をそのまま報告し、active と言い換えない。逆に active response が取れたなら、同じ目的の
+proposal card が一時的に見えても active automation の重複とは数えず、backend/runtime の登録集合を
+ground truth にする。
+
+origin: timezone anchor を含む automation の immediate create が product validation で拒否され、
+`suggested_create` は UI card を描画したが active 登録の証拠を返さなかった。続く native create が
+automation identifier + `ACTIVE` を返して初めて登録を確定。同じ段階差は hook trust review、
+installer link、scheduled-task backend 登録にも既存観測があり、§8.13 の証拠 ladder として一般化。
 
 ### <a id="single-field-identity-corroboration"></a>8.14 単一 field の一致で record を同定すると偶然一致が「同一」 と誤主張される — 行動を伴う同定には corroboration を要求
 
@@ -1158,6 +1210,22 @@ Tier 切り分けと並行で、**T0+T1 の byte 総量**を測定する。LLM c
 **事例** (2026-04-18 LorentzArena 2+1): SESSION.md 94 行 / 23.8 KB (line density ~253 bytes) → 75 行 / 6.6 KB (line density ~88 bytes) へ圧縮。inline 実装詳細 (migration / ghost 物理統合 / worldLine 二分探索 etc.) を DESIGN.md 各節の pointer に delegate した結果、行数は -20% だが byte は -72%。CLAUDE.md も同系の dense 部 (ネットワーク migration detail、アーキ表 long cell、主要機能 bullets) を pointer 化して 371 → 357 行 / ~45 → ~36 KB。**line count threshold を守っていても byte で見ると context-heavy** という観測が §7.7 diagnostic の新 row を動機付けた。
 
 **運用**: SESSION.md を書き足す時は `wc -c` で byte を即確認。8 KB 超過が見えたら dense row を pointer に差し戻す ( retroactive reorg ほど大掛かりでなく、その場で逆流を止める習慣で充分)。
+
+### <a id="context-capacity-evidence-layers"></a>10.7a headline context と実効耐久力を同一視しない — capacity の 5 層を別々に測る
+
+「モデルは N token 対応」と「この製品のこの session が N token まで圧縮なしで耐える」は別の主張である。context 耐久力を比較・診断するときは、少なくとも次の 5 層を分離する。
+
+| 層 | 問うこと | 主な証拠 |
+|---|---|---|
+| model / API advertised capacity | モデル/API が公称する最大容量は何か | 公式 model/API documentation |
+| product / client selected capacity | 製品・認証経路・client が選ぶ default / maximum は何か | 公式 product docs、supported config、client contract |
+| per-run usable window | 実行中に server/client が報告する usable window は何か | live usage event、server response、diagnostic log |
+| compaction trigger | 実際にどの input 量・状態で compaction したか | 複数 run の event timestamp と token counter |
+| retained useful context | compaction 後に task state・制約・根拠がどれだけ保持されたか | recovery probe、同一 task の品質評価 |
+
+証拠の優先順位は **公式の製品契約 > live runtime / server report > bundled client catalog > clean ratio や単発観測からの推測**。例えば「報告 window が catalog 値の一定比率」は safety margin 仮説を生むが、backend contract の証明にはならない。API の headline capacity だけで product surface の usable window を断定するのも同じ誤りである。
+
+vendor 間比較は、repository、instruction chain、tool schema、task、認証経路を揃え、surface / client version / model / startup bytes / prefix size / per-turn input / compaction event / recovery quality を記録する。大きな `SESSION.md` や instruction file は budget を消費する一因として測れるが、製品限界や vendor 差の単独原因とは扱わない。実測値・hostname・account state・未公開問い合わせ文は layer-4 / private case ledger に置き、この一般則へ instance を持ち込まない。
 
 ### <a id="deletion-delegation-trap"></a>10.8 削除・委譲判断の trap
 

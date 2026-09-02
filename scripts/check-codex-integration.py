@@ -98,11 +98,21 @@ CONTEXT_BUDGET_REQUIREMENTS = {
         "## Context-budget discipline",
         "does not set\na compaction threshold",
         "Runtime diagnostics are layer-4 observations",
+        'id="context-capacity-diagnosis"',
+        "advertised model/API capacity",
+        "A clean numerical ratio is a hypothesis",
     ),
     "codex/HOME-AGENTS.md": (
         "Keep global startup context compact.",
         "on-demand sources",
     ),
+    "docs/convention-design-principles.md": (
+        'id="context-capacity-evidence-layers"',
+        "model / API advertised capacity",
+        "retained useful context",
+    ),
+    "README.md": ("context-capacity-evidence-layers",),
+    "README.ja.md": ("context-capacity-evidence-layers",),
 }
 MACHINE_PROVENANCE_REQUIREMENTS = {
     "codex/PARITY.md": (
@@ -123,13 +133,22 @@ AUTOMATION_ROUTING_REQUIREMENTS = {
         "Standalone cron automation",
         "ChatGPT Web/Mobile event trigger",
         "Deduplicate first.",
+        "Creation-state and schedule semantics",
+        "automation identifier and active",
     ),
     "codex/skills/codex-automation-routing/SKILL.md": (
         "#native-automation-routing",
         "same-task heartbeat",
         "automation definitions before creating one",
         "do not expose raw recurrence syntax",
+        "suggestion card as proposed, not active",
     ),
+    "docs/convention-design-principles.md": (
+        'id="automation-trigger-routing"',
+        'id="activation-evidence-ladder"',
+    ),
+    "README.md": ("codex/PARITY.md#native-automation-routing",),
+    "README.ja.md": ("codex/PARITY.md#native-automation-routing",),
     "scripts/setup-codex.sh": ("codex-automation-routing",),
     "scripts/audit-codex-integration.sh": ("codex-automation-routing",),
 }

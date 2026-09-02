@@ -91,8 +91,12 @@ public pulls once `setup.sh` has installed its current post-merge hook.
 Codex requires a one-time Hook trust review, so install alone does not assert
 that Hooks are active. The [Codex capability map](codex/PARITY.md#codex-integration-sot)
 is the source of truth for the architecture, layer boundaries, Hook coverage,
-platform scope, and verification. Run `./scripts/audit-codex-integration.sh`
-for a read-only check of this machine.
+platform scope, automation routing, and verification. The installed
+`codex-automation-routing` skill selects among same-task follow-ups,
+standalone project schedules, deterministic local jobs, lifecycle Hooks, and
+supported Web/Mobile event triggers; the canonical matrix is
+[Native automation routing](codex/PARITY.md#native-automation-routing). Run
+`./scripts/audit-codex-integration.sh` for a read-only check of this machine.
 
 ### Windows status
 
@@ -152,6 +156,10 @@ Rough targets (from [`docs/convention-design-principles.md` §10.7](docs/convent
 - **1M-context model**: the same target is effectively free, but the chain-load discipline still keeps session startup snappy.
 
 If autocompact fires more than you expect, check per-file byte density (§10.7) and the sub-project `CLAUDE.md` chain (§10.10–10.11) before cutting actual content.
+When comparing products or models, also separate advertised capacity, the
+product-selected window, the live per-run window, the observed compaction
+trigger, and recovery quality; the canonical diagnostic protocol is
+[`context-capacity evidence layers`](docs/convention-design-principles.md#context-capacity-evidence-layers).
 
 ## For English-speaking users
 

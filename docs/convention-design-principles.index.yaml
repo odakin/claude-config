@@ -177,10 +177,18 @@ sections:
     legacy: "8.12"
     level: 3
     title: "8.12 規律の発火面 hierarchy — doc 記載 (recall 依存) は最弱、 書く前に発火面を選ぶ"
+  - id: automation-trigger-routing
+    legacy: "8.12a"
+    level: 3
+    title: "8.12a 「自動化」は mechanism 名ではない — 5 軸で発火経路を先に route する"
   - id: conditional-firing-visibility
     legacy: "8.13"
     level: 3
     title: "8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる"
+  - id: activation-evidence-ladder
+    legacy: "8.13a"
+    level: 3
+    title: "8.13a 提案・設定・活性化・実走は別状態 — UI card を activation evidence にしない"
   - id: single-field-identity-corroboration
     legacy: "8.14"
     level: 3
@@ -321,6 +329,10 @@ sections:
     legacy: "10.7"
     level: 3
     title: "10.7 auto-context byte budget (行数 proxy からの脱却)"
+  - id: context-capacity-evidence-layers
+    legacy: "10.7a"
+    level: 3
+    title: "10.7a headline context と実効耐久力を同一視しない — capacity の 5 層を別々に測る"
   - id: deletion-delegation-trap
     legacy: "10.8"
     level: 3

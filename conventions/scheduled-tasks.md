@@ -9,7 +9,7 @@ Claude Code scheduled tasks を使うリポで適用。CLAUDE.md から参照: `
 
 ## <a id="execution-locus-selection"></a>0. 実行 locus で機構を選ぶ (= scheduled task が正しい道具か先に問う)
 
-定期/自動ジョブを組む前に、 **(1) run-time に Claude の judgment が要るか** + **(2) 何にアクセスするか** で実行機構を選ぶ。 「定期 = scheduled task」 と reflex で選ぶと、 deterministic job に Claude を毎回起こす過剰や、 cloud routine の local-access 不在に後で衝突する。
+定期/自動ジョブを組む前に、 **(1) run-time に Claude の judgment が要るか** + **(2) 何にアクセスするか** で実行機構を選ぶ。 「定期 = scheduled task」 と reflex で選ぶと、 deterministic job に Claude を毎回起こす過剰や、 cloud routine の local-access 不在に後で衝突する。製品横断の完全な判別軸 (= wake event / judgment / context continuity / locus / authority) は [`docs/convention-design-principles.md#automation-trigger-routing`](../docs/convention-design-principles.md#automation-trigger-routing) が正本。
 
 | ジョブの要件 | 機構 | 理由 |
 |---|---|---|
