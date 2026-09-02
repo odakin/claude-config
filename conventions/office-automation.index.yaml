@@ -79,6 +79,9 @@ sections:
     level: 3
     title: "⚠️ Excel→PDF はフォーム最下部の結合セル下罫線を落とす (= 承認欄ボックス等が下に開く)"
     related: [fitz-pdf-toolkit, xlsx-to-pdf-script, excel-osascript-cell-write, symptom-index]
+  - id: numeric-string-becomes-number
+    level: 3
+    title: "ID 的な数字列は書式を text に固定してから書く (= Excel が数値化して機械照合が落ちる)"
   - id: merged-cell-text-clipping
     level: 3
     title: "⚠️ 結合セルの長文 clipping は shrink_to_fit が効かない → font size を下げる"

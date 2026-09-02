@@ -605,6 +605,23 @@ Excel 側で結合セル border を再設定する手もあるが merged-cell bo
 
 origin: 2026-06-16 様式⑭-1 の承認欄ボックス (`AC48:AG51`/`AH49:AJ51`) 下罫線が複数件とも未描画 → user 指摘 → 当初 1 箇所を座標手描きで閉じたが、 user「他も全部チェックする system を作れ」 で [`scripts/close-pdf-form-boxes.py`](../scripts/close-pdf-form-boxes.py) に格上げ (= 全枠を検査して閉じる、 selftest 付)。
 
+### <a id="numeric-string-becomes-number"></a>ID 的な数字列は書式を text に固定してから書く (= Excel が数値化して機械照合が落ちる)
+
+**症状**: 課題番号・整理番号・学籍番号・電話番号のような **「数字だが数値ではない」 値**を Excel osascript で書き込むと、 Excel が**数値として解釈**してセルに入る。 見た目は同じでも、 後段で `openpyxl` が読むと `26279286`  (int) であって `'26279286'` (str) ではないため、 **spec の文字列比較 gate が FAIL する** (= 2026-09-02 実測: 様式⑭-1 の課題番号で発生、 「'26279286' でなければならない (現在 26279286)」 という一見わけの分からない失敗表示になる)。
+
+**対処**: **値を書く前に number format を `"@"` (= 文字列) に固定する**。
+
+```applescript
+set number format of range "V11" of ws to "@"
+set value of range "V11" of ws to "26279286"
+```
+
+- 日付欄でも同じ対処が要る (= 素で書くと date serial `46198` が印字される。 幅不足で `###` になる系は [`datetime-cell-hash-overflow`](#datetime-cell-hash-overflow))。 ∴ **「数字に見えるが計算しない値」 は全部この扱い**。
+- 先頭ゼロが落ちる系 (= `007` → `7`) も同じ根。
+- ⚠️ apostrophe prefix (`'26279286`) でも文字列化できるが、 **書式固定の方が確実** (= apostrophe は Excel の版と入力経路で扱いが割れる)。
+
+origin: 2026-09-02 セミナー謝金 様式⑭-1 (= SPReAD 財源で課題番号が新しくなった回)。 fill 自体は成功していたのに機械照合だけが落ち、 原因特定に 1 往復かかった。
+
 ### <a id="merged-cell-text-clipping"></a>⚠️ 結合セルの長文 clipping は shrink_to_fit が効かない → font size を下げる
 
 **症状**: 氏名・所属など長い文字列を**結合セル** (例 `G13:M13`) に固定 font で書くと、 セル幅を超えた分が PDF 描画で **両端 clip** (center 配置なら左右、 left 配置なら右) される。 セル値そのものは完全なので値 diff (diff-form-xlsx) や read-back では出ず、 視覚確認も所属行を凝視しないと気づかない。 2026-06 謝金様式⑭-1 で長い研究機関名 (= 16 字相当) が中央付近だけ表示され目視で発覚 (= 値は完全)。 短い所属 (= 11 字程度) は収まるので **長い値でだけ顕在化する silent failure**。
