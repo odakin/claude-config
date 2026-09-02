@@ -100,3 +100,26 @@ session-start step    -> 該当業務リポの CLAUDE.md §「セッション開
 過去事例 (= 2026-05): 重要部署からのメール 1 通を「あとで対応」 して数日見落とし、 同テーマの ML 議論が並行して走っていることにも気付かず、 user 指摘で発覚。 規律 (= 「重要部署メールはすぐ対応」) は守っていたつもりでも、 humanly 5 日も経つと埋没する。
 
 導入後: filter + dashboard surface で session 開始毎に「重要部署未読 N 件 / ML 重要トピック未読 M 件」 が画面に出るようになり、 構造的に reflex 化される。 規律負担を下げ、 同時に過去の埋没メールも retroactive labeling で一斉発見できる。
+
+## <a id="raw-sweep-declared-skip"></a>surface を迂回した raw sweep は「決着済み」 を知らない
+
+surface 機構 (= filter / label / dashboard) は **既に「見送り」 と決めた class を抑制する**のが仕事。
+∴ user の質問に答えるために **mailbox を直接 query した** (= 「最近の ○○ 関係のメール」 型の
+ad-hoc sweep) とき、 その結果には **決着済みの案件が普通に混ざる** — surface されていないのは
+「見落としている」 からではなく「意図して黙らせている」 からである。
+
+これを知らずに報告すると、 **user が数日前に自分で決めた見送りを、 未対応として突き返す**
+ことになる (= 決定の巻き戻しを迫る形になり、 user の時間を二度使わせる)。 定期的に届く
+reminder は declared skip の**予定された自然減衰**であって、 新しい signal ではない。
+
+**規律**: raw sweep の結果を「未対応」「要判断」 として報告する前に、 各件について
+**task 台帳と受信記録に決着 (= 完了 / declared skip / class opt-out) が無いか grep する**。
+外部検索の null を内部確認なしに「不在」 と結論しない規律の **positive 版** (= 外部の hit を
+内部確認なしに「未処理」 と結論しない)。 grep 先は task 台帳の status と、 surface 設定の
+opt-out list の両方 — 後者にしか痕跡が無い決着もある (= class 単位の opt-out は個別 task を
+作らずに終わることがある)。
+
+初出: 2026-09。 査読招待 2 件を「未応答、 受ける/断るを決めた方がよい」 と報告したが、
+1 件は前日に user が「無視でいい」 と declared skip 済 (= task 台帳に status 完了で記録)、
+もう 1 件は 3 週間前に class ごと opt-out 済 (= surface 設定の opt_out_senders に登録) だった。
+どちらも直前の session で自分が関与した決定ではなく、 台帳を引けば 1 grep で分かった。
