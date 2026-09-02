@@ -246,7 +246,13 @@ Claude in Chrome MCP は **自分専用の tab group** で動く。 user が手�
 - broker UI の domain-level block: §「ロックイン済 web app からのテーブル data 取得は scrape より export を優先」 末尾の「Browser MCP の制約」 参照
 - 個人の母艦ブラウザ選定 (Brave 等) は personal layer (個人 dev-environment) で書く
 
-## <a id="browser-download-automation"></a>ブラウザ MCP からの file download は user gesture 必須 (= scripted download の silent block)
+## <a id="browser-download-automation"></a>**Chrome 拡張**からの file download は user gesture 必須 (= scripted download の silent block)
+
+> ⚠️ **scope (2026-09-02 実測で確定)**: 本 § の silent block は **Claude in Chrome (= 拡張経由の実ブラウザ)** の話。
+> **Claude Code 内蔵の Browser pane は別 surface で、 script 発火の blob download が `~/Downloads` に着地する**
+> — 実測 = pane 内で `javascript_tool` から `Blob` + `<a download>.click()` を撃ち、 2 秒後に `~/Downloads/` に
+> 実体 file を確認 (26 byte、 中身一致)。 ∴ **「ブラウザからは落とせない」 と一般化して下の fallback ladder に
+> 逃げる前に、 内蔵 pane で試す**。 内蔵 pane の読み取り能力は [`#claude-share-page-access`](#claude-share-page-access) の比較表側 (= 完全レンダリング / `get_page_text` / `javascript_tool`)。
 
 **現象**: browser MCP (Claude in Chrome 等) で page 内 JS から download を発火させても、 **保存が一切実行されない** — blob + `<a download>` の `.click()` も `location.assign(<content-disposition URL>)` も、 browser の download 履歴 (History DB の `downloads` table) に **record すら残らず** 無音で落ちる。 extension/CDP 経由の合成 click も user gesture 扱いにならず、 link click での download も発火しない (= 実測、 Chromium 系)。 `fetch()` 自体は page 内で成功する (= bytes は取れている) が、 **base64 で tool 結果に持ち出すのは MCP 側 filter が block する** — これは data-exfiltration guard なので**回避しない** (chunk 分割等での evasion は禁止)。
 

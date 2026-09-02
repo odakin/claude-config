@@ -209,7 +209,7 @@ unzip -l form.xlsx | grep -iE 'drawing|media|ctrlProp'
 #   xl/media/imageN.png               → 埋め込み画像
 ```
 
-**回避 (2 択)**:
+**回避 (3 択 + 特殊 1)**: ⚠️ 2026-09-02 訂正 — 旧記述は「2 択」 だったが実際は 3 経路 (= 下の 1./0./2.) + zip 直編集の第 4 経路がある (= §入口の routing 行と一致させた)
 1. **Excel osascript で値を直接書く** (= drawing を一切触らず cell value だけ変更、 最も確実)。 osascript の組み立ては [`excel-osascript-cell-write`](#excel-osascript-cell-write) の堅牢パターンに従う。
 0. **(紙提出だけなら最速)** 雛形を Excel で PDF 化 → PDF に fitz で直接印字 ([`pdf-prefill-direct`](#pdf-prefill-direct))。 xlsx 成果物が要らない当日運用向け。
 2. **drawing XML を migration** (= openpyxl save 後の xlsx に、 元 xlsx の `xl/drawings/` + 関連 `_rels` part を zip レベルでコピーし直す)。 値編集と drawing 保護を両立したいが Excel を起動できない (CI 等) とき。 ⚠️ **別 file (= 標題を持つ blank テンプレ) から注入して復元するときは注入前に 4 点を確認** (= いずれか欠くと標題ずれ / 破損): ① 両 file の **merged 範囲が一致** (= drawing の anchor cell がずれず標題が正位置に乗る保証)、 ② テンプレ側 drawing が **standalone** (= `xl/media` 画像を参照しない。 参照ありなら media と rels も連れて行かないと dangling rel になる。 連れて行く場合は `[Content_Types].xml` に拡張子 Default 〔例: emf〕 も追加)、 ③ 注入先に **drawing が皆無で `rId` が衝突しない** (= 既に drawing を持つ file に重ねると rId 重複で Excel が破損判定)、 ④ **`<drawing r:id="…"/>` を挿す worksheet root に `xmlns:r` が宣言されているか確認** (= 一部の生成 tool 産 xlsx は root が `xmlns` のみで **`xmlns:r` 無し** 〔その file の `<legacyDrawing>` が inline `xmlns:r` を持っているのが signal〕。 そのまま挿すと unbound prefix = invalid XML で Excel が「壊れている」 ダイアログを出す。 inline で `<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="…"/>` と書けば安全)。 **注入後の機械 gate**: `scripts/check-xlsx-integrity.py FILE.xlsx` (= `check-docx-integrity.py` の xlsx 版。 全 XML well-formedness 〔unbound prefix = ④〕 + rels 両方向参照整合 〔dangling Target / 未定義 rId = ③ の検出面 / rId 重複〕 + [Content_Types] coverage を Excel 不要・決定論で検出、 exit 1 で fail)。 **zip 直編集した xlsx は納品前に必ず通す** — ③④ は実害 2 件とも本 gate で捕捉できた class (= 規約 prose の注意書きだけでは 2 回とも素通りした、 2026-06-10 RCA)。 pass 後 [`pdf-visual-confirm`](#pdf-visual-confirm) で標題の有無・位置を目視。 最終 ground truth は実機 open (= docx の教訓と同じ、 validator は必要条件。 ⚠️ AppleScript `open` の戻り値 "opened" は修復ダイアログの有無を検出できない = open 成功を健全性の根拠にしない)。
@@ -1817,7 +1817,7 @@ new.save('preview_butsuri.docx')
 
 **注意**:
 - **preview docx は提出に使わない** (= 機密性 / 体裁 / 完全性が落ちる)。 必ず `提出用` と `preview` を明確に別名 (例: `*_記入済.docx` vs `preview_*.docx`) で保存
-- preview は **平文** なので、 leak risk のある場所 (= 共有 cloud / 公開リポ) に置かない。 一時 work dir (= `/tmp/` 配下 or 元の private repo 配下) で完結させる
+- preview は **平文** なので、 leak risk のある場所 (= 共有 cloud / 公開リポ) に置かない。 一時 work dir で完結させる (⚠️ 2026-09-02 訂正: 旧記述は「`/tmp/` 配下 or 元の private repo 配下」 だったが、 **docx を Word.app に開かせる経路では `/tmp` を作業場所にしない** = [`docx-tmp-sandbox-deny`](#docx-tmp-sandbox-deny) が preview 抽出も名指しで禁じている。 project 配下 or 事前 grant 済み staging dir を使う)
 - Word.app で open する時は `open <file>` (shell) で十分 (= AppleScript の cold-start trap を回避)
 - 既存 cell の paragraph 構造を deepcopy で持っていくので、 fill した値 (= 改行・font・spacing) も忠実に再現される
 
@@ -2734,6 +2734,10 @@ xlsx fill 完了直前に必ず **PDF preview 生成 + 視認**:
 
 ```bash
 # AppleScript で Excel に PDF として保存命令 (= macOS、 Excel 起動必要)
+# ⚠️ 2026-09-02 訂正: 下は **hand-roll の anti-pattern** — `save as active workbook … PDF` は -50、
+#    `active workbook` の取り出しは -1728 になる (= 本 file 冒頭の symptom-index 参照)。
+#    **`scripts/xlsx-to-pdf.sh` を使う** (= sheet 単位 `save as <worksheet>` を実装済)。
+#    以下は「何が起きるか」 の説明用に残す歴史的 snippet であって recipe ではない。
 osascript -e 'tell application "Microsoft Excel"
     open POSIX file "/path/to/form.xlsx"
     save as active workbook filename "/path/to/form.pdf" file format PDF file format

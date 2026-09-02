@@ -95,7 +95,7 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 - **session 開始時、context window はその案件について空の cache**。会話に流れてきた情報や直前に fetch した 1 store を「知っている＝真実」と扱わない。SoT は disk 上にあり、取りに行くのは option でなく前提。
 - source document を読んで見つからない時の第一仮説は「案件が無い」でなく **「SoT を未読／読む store を間違えた」**。null は世界の事実でなく「探す場所が違う」証拠。
 
-write 側「one fact, one home」（[`personal-layer.md`](personal-layer.md) §publish-boundary の partition / MOVE-not-copy）と対で、read 側は「one matter → read its single SoT」。**二重 SoT を*作らない*のと source document を SoT と*読み違えない*のは同一原則の両面。**
+write 側「one fact, one home」（[`personal-layer.md#owner-automation-shared-project`](personal-layer.md#owner-automation-shared-project) の partition / MOVE-not-copy。 ⚠️ 2026-09-02 修正: 旧 ref `§publish-boundary` は実在しない anchor だった = §14.7 の HARD dangling）と対で、read 側は「one matter → read its single SoT」。**二重 SoT を*作らない*のと source document を SoT と*読み違えない*のは同一原則の両面。**
 
 origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問われ、会話冒頭で見ていた source document（個人アカウントのメール通知）を SoT と取り違え、その null から「未対応／記録なし」と結論 + 不在を説明する誤った root cause を作話。実際は別 SoT（業務台帳）に完全記録済で 1 grep の距離にあった。write path（記録）は完璧、read path（SoT を読む）が崩れた型。同日 sibling = 横断 lookup を要する案件で SoT 直読より手近 store を先に見た失敗（§8.11 / §8.12 と同根）。layer-3 機械対策 = source store を業務 query で検索したら正しい SoT へ routing する guard + matter-status を SoT-read に乗せる dispatch（instance は layer 3 archive 残置 = kernel-up / instance-down）。
 

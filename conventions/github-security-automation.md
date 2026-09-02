@@ -110,6 +110,8 @@ upload-artifact は contents 権限と独立 (= 必要なら `actions: write` �
 
 ```yaml
 version: 2
+# ⚠️ 各 update block に `cooldown:` を足す (= 2026-09-02 追記、 §Semgrep 定型 finding 参照。
+#    無いと dependabot-missing-cooldown が毎回鳴る)
 updates:
   - package-ecosystem: "npm"
     directories:
