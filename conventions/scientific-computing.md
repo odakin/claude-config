@@ -500,6 +500,8 @@ for d in p.get_drawings():           # 曲線 = items が多い path; color/dash
 ### 実例 (2026-08-21、 該当 private paper repo)
 escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 → 定義 χ̃ ∝ (z₀/z)^{9/2} と両立せず、 code は z を変えていないと確定。 72 通りの fit で 1 本は最大偏差 0.03 で再現 (使われた式と積分変数を同定)、 もう 1 本は再現不能と確定し、 図を本文の式からの再計算版に差し替える判断材料になった。
 
+**先に著者 repo を探す (2026-09 追補)**: 観測論文は `contour_lines/` `chains/` を GitHub で公開していることがある (例: $r$–$n_s$ の 2025 総合)。 点列があれば図の抽出は cross-check に降格し (2026-09 実測: 95% 外周が抽出と点列で $10^{-4}$ 一致)、 引用条件 (README の cite 要請) を caption で満たす。 chain があれば信用水準そのものを計算できる ([`paper-audit.md#box-test-vs-joint-posterior`](paper-audit.md#box-test-vs-joint-posterior))。
+
 ## <a id="evolve-constraints-algebraically"></a>10. 拘束量は独立変数として積分しない — drift → 符号反転 → 反減衰爆発 (2026-09)
 
 **Pattern**: 拘束 (constraint) で決まる量 (宇宙論の H = √(ρ/3M²)、 エネルギー、 正定値であるべき量) を独立の ODE 変数として積分すると、 拘束からの数値 drift が蓄積する。 量が小さくなる regime で drift が符号を反転させると、 **散逸項が反転して反減衰**になり、 解は指数的に爆発する (= silent ではなく派手に壊れるが、 出力だけ見ると「別の物理」 に見える)。
@@ -517,3 +519,27 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 **Fix**: `g = {"__name__": "not_main"}; exec(open(f).read(), g); g["func"] = new_func` — exec に渡した dict が module globals そのものになるので差し替えが効く (importlib は macOS system python の stale .pyc 問題で別途避ける)。
 
 **Validation**: 差し替えた関数に sentinel (print / 戻り値に印) を入れ、 **再計算の出力に sentinel が現れること**を 1 回確認してから表を採用する。 最も安価なのは「変わるはずの数字が実際に変わったか」 の diff (例: N_* が +0.2 動くはず、 動いていなければ差し替えは効いていない)。 「override したから新しい値」 は検証でない ([#verify-independent-derivation](#verify-independent-derivation) の道具版)。
+
+## <a id="declared-self-consistency-audit"></a>「self consistent に解いた」 と書く前に、 loop の全変数が code で戻っているか列挙する (2026-09)
+
+**Pattern**: 「$V_0$ は $A_s$ から、 $m$ は $V_0$ から、 rate は $m$ から、 $N_*$ は rate から」 という自己整合の連鎖を本文で謳いながら、 code は $m$ を定数に固定していた ($V_0\to m$ の 1 本だけ戻していない)。 影響は小さかった ($N_*$ +0.02–0.05、 $T_\text{rh}$ +7–16%、 観測量 $<10^{-4}$) が、 本文の主張が code より強い状態が数版続いた。 別 AI session の独立反復で検出 (2026-09、 private paper repo)。
+
+**Fix**: 「self consistent」 の文を書く時点で fixed point に入る量を列挙し (入力 → 導出 → 戻し先)、 code の loop 内で各量が再計算されている行を指す。 固定するなら本文にそう書く (「$m=2\times10^{13}$ で固定」)。 検証は「戻すはずの量を戻したら数字が動く」 の diff ([#namespace-override-verification](#namespace-override-verification) と同型)。
+
+## <a id="floquet-exact-background"></a>Floquet 指数は厳密な周期解の上で取る — 調和近似の背景は偽の不安定性を作る (2026-09)
+
+**Pattern**: 振動する背景 $\chi(t)$ の上で mode の Floquet 指数を出す時、 背景を $\chi=\Phi\cos mt$ で代用すると、 厳密には marginal な mode (例: 運動項の conformal factor から来る $k=0$ mode、 厳密解 $H_c\propto e^{-\gamma\chi/2}$ で有界) に有限の指数が出る。 質量項が背景の運動方程式を使って導かれている場合、 その相殺は**真の解の上でしか成り立たない**。
+
+**Fix**: 背景は非調和ポテンシャルの周期解を数値で取り ($\chi(0)=\Phi$、 $\dot\chi=0$ から $\dot\chi=0$ への戻りを event で捕まえて周期 $T$ を得る、 event の direction は戻り側の符号)、 monodromy を 1 周期で取る。 検算 = 解析的に marginal と分かる mode の指数が 0 になること (同事例: 調和背景で +0.2〜+1.3 だった $k=0$ の指数が厳密背景で 0.000、 最速成長は $k\simeq0.5$–$0.75\,m$ に移動)。
+
+## <a id="first-step-skips-initial-heuristic"></a>SciPy `solve_ivp` の初期 step 推定 overflow は `first_step` で消す (2026-09)
+
+**Pattern**: `solve_ivp(..., atol=1e-300)` で初期値の一成分が $10^{-290}$ のような極小値だと、 初期 step 推定 (`d1 = norm(f0/scale)`) が overflow / invalid の warning を出す。 結果は正しいが、 warning-clean でないと再現者が「何かおかしい」 で止まる。
+
+**Fix**: `first_step=<小さな値>` を渡す (推定を skip、 適応刻みはそのまま)。 出力が文字単位で同一であることを diff で確認してから採用する (同事例: 表の不変行 5 本が IDENTICAL)。
+
+## <a id="contour-distance-axis"></a>等高線への「距離」 は物理的に意味のある軸に沿って測る (2026-09)
+
+**Pattern**: 模型の軌跡と 95% 等高線の関係を $(\Delta n_s,\,0.1\,\Delta r)$ の scaled Euclid 距離で報告すると、 縁に接するように見えて実際は固定 $r$ で $\Delta n_s=+0.002$–$0.003$ 外だった (Euclid 0.0009)。 scaled 距離は等高線の傾き方向に最短を取るので、 読者が問う「同じ $r$ でどれだけ外か」 とは別の量。 盲検 reviewer との数値不一致で発覚 (2026-09)。
+
+**Fix**: 点内判定は多角形で厳密に、 「どれだけ外か」 は物理軸 1 本 (固定 $r$ での $n_s$ の隙間) で報告する。 別実装と数値が合わない時は、 まず距離の定義を突き合わせる。

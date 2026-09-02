@@ -40,9 +40,13 @@ cold-eyes とは「書いた本人と別の目」 で検品させることだが
 
 境界の判定: **式 label を列挙するのは「どこを見るか」 の指定であって「何が出るか」 ではない**ので可。 逆に「Eq. 10 の 16π を確認せよ」 は答えを含むので不可 (= 「Eq. 10 の係数を独立に導出せよ」 まで)。
 
+**追補 (2026-09、 第 2 回実装)**: 返送 command の `--task` 名や results の見出しに version 番号 (「v3.3」) を入れると、 reviewer の report に来歴語が残る (第 2 回の汚染 grep の唯一の hit)。 無害だが避けられる: task 名は「blind referee review of manuscript.pdf」 のように来歴を含めない。 §2 の「読んでよいもの」 には**引用文献の公開 data product** (著者 repo の chain・等高線) を明示的に含める (= reviewer が観測側の数値を独立再計算できる)。
+
 ## <a id="post-check"></a>4. 受領後の汚染 check
 
 結果 file を受け取ったら、 禁止 source にしか無い情報 (SESSION の用語・却下した旧題・internal な note 名・起票 session だけが知る数値) が現れていないか grep する。 現れていれば汚染として記録し、 該当 finding の独立性を割り引く (= 汚染していない finding と分けて扱う)。 現れていなければ「独立した第二の目」 として採用できる。
+
+**実例 (2026-09、 第 2 回)**: 禁止語 grep 0、 唯一の hit は spec の task 名由来の version 番号。 finding 3 件は著者側の from-scratch 再計算 (膨張背景での mode 成長、 厳密背景の Floquet、 固定 $r$ の $\Delta n_s$) で確認してから採用した ([`physics-verification-cycle.md#external-ai-referee-premise-verification`](physics-verification-cycle.md#external-ai-referee-premise-verification) item 8)。 reviewer の scratch script は results と一緒に repo へコピーするが、 著者側の検証は**別に書いた script** で行う (同一 script の再実行は独立検証にならない)。
 
 ## 5. 起源
 

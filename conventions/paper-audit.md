@@ -262,6 +262,8 @@ paper の中心機構が「未証明の仮定」 (例: あるコヒーレンス�
 
 起源 (2026-09): private cosmology paper で、 4 実装 (leading 3 + exact 1) が全て 2018 baseline を継いでいたことが user の一言 (「allowed region は新しいやつにした?」) で発覚。 2025 更新群 (上方に引く実験と下方に引く実験が併存) の 3 region で引き直した結果、 baseline では「一部シナリオの排除」 だった結論が、 最新複合 region では「模型全体の ~2σ 緊張」 まで動いた — 不変量 (緊張の単調性) だけが全 region で生存した。
 
+**追補 (2026-09、 動く基線の下での主張の型)**: ① baseline は 1 つに固定せず「現行 CMB-only を主、 legacy を比較、 BAO 込みは注記」 と列挙する ② 絶対文 (「dataset X は模型を 2σ で排除」) は中心値が 1σ 動けば死ぬ。 相対文 (「緊張は $T_\text{rh}$ の単調減少関数」「floor と最速の差は $\Delta\chi^2\approx7$–$12$」) と data 非依存の予言 (固定 $r$ での $\Delta n_s$、 固定 $n_s$ での $r$ の比、 到達可能な最小 $r$) で書く ③ 現状の data との比較は付加情報として節末・abstract 末尾に置く。 起源事例 (2026-09、 private paper repo): 「2σ 内に残るのは共鳴側のみ」 を joint 2D で検査したら共鳴側も外だった → 主張の型ごと差し替え。
+
 ## <a id="scope-vs-epistemic-state"></a>「この論文の計算」 と「著者の認識状態」 を混同しない (2026-09)
 
 referee に「その量は決まらないのでは」 と突かれた時、 縮退させた文が **著者が実際に知っていること**まで否定してしまうことがある。 典型形:
@@ -321,3 +323,27 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 ## <a id="second-example-refine"></a>二例目が出たら refine
 
 将来別 paper で同様の audit を実施したら、 script を `claude-config/scripts/` に generic 化、 本 convention を refine。 現状は 該当 private paper repo で完結。
+
+## <a id="box-test-vs-joint-posterior"></a>「$n_s$ が ±2σ 内 ∧ $r$ < 上限」 型の 1D box test は joint 領域を過大評価する — 縁に居る模型は公開 chain で 2D 判定 (2026-09)
+
+**Pattern**: 2 つの観測量への制約を「各 1D の ±2σ / 95% 上限を独立に満たす」 で判定すると、 模型が片方の上限の縁 (例: $r$ の 95% 上限付近) に居るとき許容域を過大評価する。 joint posterior の 95% 等高線は角で切れており、 1D box の角は 2D では外。 起源事例 (2026-09、 private paper repo): 1D box で開いていた γ 窓 3 つのうち 2 つが joint 2D で閉じ、 「最速の history が 2σ 内に残る」 という中心主張が消えた。
+
+**Fix**: (1) 公開 chain / 等高線点列 (観測論文の著者 repo に `contour_lines/` `chains/` があることが多い) で各模型点の信用水準 $C$ (= その点を通る HPD 等高線) を計算し、 軌跡上の最小値で判定する。 (2) **基線を混ぜない**: $n_s$ を dataset A (BAO 無し) から、 $r$ の上限を dataset B (BAO 込み chain 由来) から取ると、 存在しない組合せで判定している。 (3) tail の信用水準 (99.9x%) を 0.01% 刻みで引用しない — 65k sample の KDE は手法で 0.05–0.13% 動く。 2 自由度の $\Delta\chi^2$ か「$\gtrsim99.7\%$」 に丸める。 (4) 等高線への「距離」 は物理的に意味のある軸に沿って測る ([`scientific-computing.md#contour-distance-axis`](scientific-computing.md#contour-distance-axis))。 (5) 図から起こした等高線の精度は線幅 (~0.001) なので、 それ以下の「接触」 判定はしない。
+
+## <a id="threshold-is-not-regime-onset"></a>近似が破れる閾値は、 反対 regime の始点ではない (2026-09)
+
+**Pattern**: 「パラメータ $X\gtrsim x_0$ で narrow-resonance の式が使えなくなる」 を「$X\gtrsim x_0$ で broad / tachyonic 共鳴が起きて速く終わる」 と読み替える。 前者は記述の限界、 後者は別の力学の主張で、 後者には独自の根拠 (成長が完了する条件、 膨張との競争) が要る。 起源事例 (2026-09、 private paper repo): 閾値の上を「瞬時再加熱」 と同一視して観測の結論の核にしていたが、 盲検査読 + 著者側の再計算で、 振動開始時に $H\sim m$ の模型では $q\propto a^{-3/2}$ が 1 振動で 1/7 に落ち、 線形成長は完了に 20 桁足りないと判明。 引用していた lattice 論文は $q=20$–$100$ の結果だった。
+
+**Check**: 閾値の上について書く前に (a) その regime で「完了」 に必要な量 (占有数・エネルギー移送率) を書き下し、 (b) 膨張・振幅減衰・非線形の各競争相手と時間 scale を比べ、 (c) 引用先が同じ regime (同じ $q$、 同じ $H/m$) を扱っているか確認する。 閾値の上は「記述できる regime の終わり」 と書き、 到達不能な参照点 (瞬時値) は「模型外の参照」 と明記する。
+
+## <a id="abstract-geroch-compression"></a>Abstract = 文脈降下 + 3 message + 持ち帰る 1 文 (Geroch の introduction と conclusion の圧縮) (2026-09)
+
+**Pattern**: 技術的言明を結果の順に並べた abstract (次元 5 演算子・coupling scale・信用水準 99.9x% …) は、 読者に文脈も持ち帰る 1 文も残さない。 abstract は論文の introduction (文脈降下 + 結論の先出し) と conclusion (束ねる 1 文) の圧縮版として組む ([`giving-talks.md`](giving-talks.md) §3・§5)。
+
+**Form** (12 文前後): ① 文脈降下 2 文 (なぜこの量が観測に効くか → この模型ではそれが何で決まるか) ② 問い 1 文 ③ 3 message を各 1–2 文の非技術的な言い方で (道具立ての語は落とす、 恒等式は本文へ) ④ 持ち帰る 1 文 = **試験であって判決ではない** (「data は模型より速い再加熱を求める」 は論文の価値を殺す。 「spectral index がこの模型の速さを試験し、 次の測定が決着させる」) ⑤ 現状の data との比較は**付加情報として末尾** ⑥ 副産物は最後の 1 文。 **禁止**: 同格の挿入句 (「the only collective effect, a narrow parametric resonance, loses …」)、 絶対的な有意度 (「2025 data が 3σ で排除」 = 中心値が動けば死ぬ、 [#moving-observational-baseline](#moving-observational-baseline))、 細かい百分率 (99.7% → 3σ → 不要なら削除)、 自分の旧提案を受け身で書くこと (「proposed for this model」 → 「that we proposed earlier」)、 先行詞の無い複数形 (「the central values will move」 → 「wherever the measured values move」)、 対象の長い言い換え (「the coherent condensate left by inflation」 → 「the inflaton condensate」)。
+
+## <a id="sentence-length-audit"></a>文の長さの機械 sweep — 40 語超は分割候補 (2026-09)
+
+**Pattern**: 1 文 1 行の source では、 tex の各行を文として語数を数えるだけで冗長の分布が出る。 40 語超の文はほぼ例外なく 2–3 主張を接続詞で繋いだもので、 分割しても情報は落ちない。 起源事例 (2026-09): 主張を運ぶ節 (abstract / intro / 結果節 / summary) の 40 語超 36 文を全て分割し (36 → 0、 30 語超 82 → 56)、 反復していた修飾句 (同じ限定を節内で 4 回) を各節 1 回に減らした。
+
+**How**: `$…$` を 1 token に潰して語数を数える script を回し、 長い順に読む。 分割は主張の切れ目で切り、 接続詞 (so / and / while) を period に替える。 圧縮した文は読み直して、 落ちた load-bearing 語と**その節で裁定済みの主張の型** (相対 / 予言 / 試験) が残っているかを数える (同事例: 短縮の反復で絶対文に戻った)。
