@@ -54,7 +54,7 @@ sections:
     origin: "2026-06"
   - id: xlsx-image-insert-excel-paste
     level: 3
-    title: "計算式を持つ xlsx への画像挿入は Excel clipboard paste 一択 (= openpyxl add_image は cache 復元と両立しない)"
+    title: "計算式を持つ xlsx への画像挿入は Excel 経由 (= openpyxl add_image は cache 復元と両立しない)"
     related: [openpyxl-clears-formula-cache, openpyxl-destroys-drawings, excel-osascript-cell-write, xlsx-rich-text-underline]
     origin: "2026-07-02"
   - id: excel-osascript-cell-write

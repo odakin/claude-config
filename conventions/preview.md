@@ -14,6 +14,8 @@ summary: preview / dev server 動作中はユーザー確認依頼ターンに U
 - staging / production / preview deployment へのリンク (Vercel, Netlify, GitHub Pages 等)
 - ローカルファイル直接 (`file:///path/to/index.html`) を開かせる場合もパスを書く
 
+> ⚠️ **tool 名は時点依存** (2026-09-02 更新): 現行の内蔵 Browser pane は `preview_start` / `computer` / `read_page` / `get_page_text` / `javascript_tool` (= `preview_screenshot` / `preview_eval` / `preview_inspect` は現行 harness に存在しない)。 実際に呼べる名前が 最終 ground truth なので、 本 doc の tool 名が通らなければ session の tool list を見る。
+
 ## ルール
 
 - 「テストしてください」「ハードリロードしてください」「動作確認お願いします」「見え方どうですか?」など、ユーザーが評価アクションを取る依頼を含む応答では、**そのターン内で URL を毎回明示**する
@@ -40,7 +42,7 @@ summary: preview / dev server 動作中はユーザー確認依頼ターンに U
 
 ## Deploy 前のユーザー確認を省かない
 
-視覚的・動作的に観察可能な変更 (UI, レンダリング, ゲーム挙動, 画面遷移等) は、Claude が `preview_screenshot` や snapshot で自己確認しただけで **そのまま push・deploy に進まない**。**ユーザーにローカル URL を提示して OK を得てから deploy すること**。
+視覚的・動作的に観察可能な変更 (UI, レンダリング, ゲーム挙動, 画面遷移等) は、Claude が screenshot (= `computer {action:"screenshot"}`) や `read_page` で自己確認しただけで **そのまま push・deploy に進まない**。**ユーザーにローカル URL を提示して OK を得てから deploy すること**。
 
 **Why:** Claude が見た screenshot (headless browser の 1 枚) とユーザーが自分のブラウザで見た実際の表示は別物。ジグザグ・色調・動きの違和感は screenshot では拾えず、ユーザーが実機で見て初めて分かる。deploy まで行ってしまうと public キャッシュ反映待ちが挟まり、修正サイクルが大幅に遅くなる (GitHub Pages・Cloudflare Pages 等)。
 
@@ -85,14 +87,14 @@ Claude Preview (MCP `preview_*` ツール) の headless Chrome には、アニ�
 - WebSocket / WebRTC の長時間 keep-alive (timer throttle で ping/pong が遅延)
 - `setTimeout(...)` / `setInterval(...)` を使う debounce や timeout の挙動検証
 
-`preview_screenshot` を撮っても「止まった時空」が映るだけで、FPS 0 / 動的状態の初期値が残った静止画になる。
+screenshot を撮っても「止まった時空」が映るだけで、FPS 0 / 動的状態の初期値が残った静止画になる。
 
 ### 回避策
 
 | 対象 | 手段 |
 |---|---|
-| Pure 関数 (stateless、決定論的入出力) | `preview_eval` + `await import('.../pure-module.ts')` で unit-test 相当 |
-| Single-tab の静的 UI 確認 (初期レンダのみ) | `preview_screenshot` + `preview_inspect` で初期状態は撮れる |
+| Pure 関数 (stateless、決定論的入出力) | `javascript_tool` + `await import('.../pure-module.ts')` で unit-test 相当 |
+| Single-tab の静的 UI 確認 (初期レンダのみ) | `computer {action:"screenshot"}` + `read_page` / `get_page_text` で初期状態は撮れる |
 | Stateful な動的挙動全般 | **実ブラウザ検証を odakin に依頼** — localhost URL (`pnpm dev` background) か staging/prod URL を毎ターン明示 (本ファイル上部「ルール」節) |
 | マルチ client 必須 (peer-to-peer、multi-tab race) | 実ブラウザ 2 tab 以上を odakin に依頼。Claude 側の 1 tab を Claude Preview で補完する手も throttle で動かないので不可 |
 

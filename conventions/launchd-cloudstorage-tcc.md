@@ -88,6 +88,11 @@ if [[ -z "$IMAGE" ]]; then
   exit 1
 fi
 
+# ⚠️ **この 1 行は「pattern の骨格を示す例」 であって wallpaper の現行 recipe ではない**
+#    (2026-09-02 訂正): macOS 26 (Tahoe) では **この呼び出しは rc=0 のまま display が変わらない**
+#    (= silent fail、 実測は macos-tahoe-wallpaper.md)。 ∴ 下の「rc=0 = 成功」 判定も Tahoe では
+#    嘘になる。 wallpaper を実際に変えたいなら macos-tahoe-wallpaper.md の完成 recipe を使い、
+#    本 § からは **launchd + CloudStorage 読取 + TCC の骨格**だけを取ること。
 /usr/bin/osascript -e \
   "tell application \"System Events\" to tell every desktop to set picture to \"$IMAGE\"" 2>>"$LOG"
 RC=$?
@@ -131,6 +136,11 @@ osacompile -o ~/Applications/WallpaperRotator.app \
     <string>-a</string>
     <string>/Users/<you>/Applications/WallpaperRotator.app</string>
   </array>
+  <!-- ⚠️ 2026-09-02 訂正: `~/Library/Application Support/<app>/` へ書く script では
+       **StartInterval を使わない** (= 60 秒ごとに new process spawn → Tahoe の
+       kTCCServiceSystemPolicyAppData prompt が毎回出る)。 その場合は下の
+       #tahoe-app-data-per-process-gotcha の常駐形 (KeepAlive=true + RunAtLoad=true) に置換。
+       CloudStorage 読取だけで app data を書かない script なら本 template のままでよい -->
   <key>StartInterval</key>
   <integer>60</integer>
   <key>RunAtLoad</key>

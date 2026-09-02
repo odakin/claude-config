@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき
 category: research-domain
-summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) の 8 kernel — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA からの hoist
+summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) の 12 kernel — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律 / cross-vendor 盲検 (= 同系統 AI の N 実装一致は独立でない) / 近似階層の妥当性は判断でなく計算 / 外部 AI 査読レポートの前提検証 pass。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA からの hoist
 -->
 # 物理主張の検証サイクル (verification cycle)
 

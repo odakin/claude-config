@@ -136,8 +136,12 @@ Overleaf 版と byte 一致のまま保ちたい場合 (= 自分の本文 markup
 1. 編集分を含む `main` 側 file と `overleaf/master` 側 file を、 **clean な section-marker 行**
    (= `\section`/`\begin{abstract}` 等、 両版で確実に同一な行) で splice する: marker までは
    main 側 (= 自分の編集を含む)、 marker 以降は `overleaf/master` 側 (= 共著者版 byte 同一)。
-2. `git worktree add <tmp> overleaf/master` (= この tree には paper file のみ、 SESSION/CLAUDE/
-   scripts 等の管理 file が無い = Overleaf に管理 file を漏らさない経路)。
+2. `git worktree add <tmp> overleaf/master`。 ⚠️ **2026-09-02 訂正 — 旧記述「この tree には
+   paper file のみ = Overleaf に管理 file を漏らさない経路」 は楽観だった**: worktree は
+   `overleaf/master` の tree をそのまま持つので、 **過去の naive な直 push で `CLAUDE.md` /
+   `SESSION.md` が混入していれば worktree にも出る** (= 後節の ⚠️ が本 step を名指しで訂正
+   している)。 ∴ **`git ls-tree overleaf/master` で paper file のみかを毎回確認する**
+   (= この経路は leak を防ぐのではなく、 leak を持ち込まないだけ)。
 3. splice した file を worktree に置く。
 4. `git commit --no-verify` で commit (= pre-commit char-normalizer hook が **共著者版の本文を
    書換えない**ようにする。 hook を通すと byte-pristine でなくなる)。

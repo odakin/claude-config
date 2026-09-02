@@ -147,7 +147,7 @@ rm -rf ~/Library/Application\ Support/com.apple.wallpaper
 killall WallpaperAgent Dock 2>/dev/null
 ```
 
-or CLI で強制設定 (= GUI がフリーズしても動く):
+or CLI で強制設定 — ⚠️ **macOS 26 (Tahoe) では効果なし** (2026-09-02 訂正: `defaults write com.apple.wallpaper SystemWallpaperURL` は値が stuck するだけで display は変わらない = [`macos-tahoe-wallpaper.md`](macos-tahoe-wallpaper.md) の実測表。 Tahoe で実際に壁紙を替えるなら同 doc の完成 recipe を使う)。 **26 未満の macOS でのみ**下記が有効 (= GUI がフリーズしても動く):
 
 ```bash
 defaults write com.apple.wallpaper SystemWallpaperURL -string \

@@ -422,7 +422,9 @@ def build_tmp():
 
 origin: 2026-06 連続発生した「openpyxl save 後に gen-pdf で空欄/`#REF!` が出る」 事故。 cell value 一致検証では検出できず、 sentinel guard pattern + PDF visual confirm で気づく。 [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の sibling (= 両方 openpyxl save の構造的損失、 drawing は `xl/drawings/` part、 cache は cell の cached value)。
 
-### <a id="xlsx-image-insert-excel-paste"></a>計算式を持つ xlsx への画像挿入は Excel clipboard paste 一択 (= openpyxl add_image は cache 復元と両立しない)
+### <a id="xlsx-image-insert-excel-paste"></a>計算式を持つ xlsx への画像挿入は Excel 経由 (= openpyxl add_image は cache 復元と両立しない)
+
+⚠️ **2026-09-02 訂正 — 旧題は「Excel clipboard paste **一択**」 だった**: 2026-07-02 時点では `make new picture` が -2710 で不成立と記録したが、 **2026-07-27 に `tell worksheet … set r to range "…" / make new picture at it with properties {file name: …}` の形で成立を実測**し [`affix-image-xlsx.py`](../scripts/affix-image-xlsx.py) として script 化した ([`xlsx-image-via-excel`](#xlsx-image-via-excel) が現行の正本)。 ∴ **経路は 2 つ** = ① `make new picture at it` (= 推奨、 script 済) ② clipboard paste (= ①が通らない環境の fallback)。 なお印影のように**色を保つ必要がある画像は xlsx でなく PDF 化後に overlay** する ([`seal-color-pdf-overlay`](#seal-color-pdf-overlay))。
 
 様式の「図の貼付」 欄等に画像を入れる task。 **openpyxl `add_image` は使うな** — 板挟みが実測されている:
 
@@ -451,7 +453,7 @@ end tell
 
 - **表示サイズは PNG の DPI metadata で制御**する: 貼り付け時のサイズ指定 API が無いので、 生成側 (matplotlib 等) で `dpi=200` 等を焼き込む → Excel が DPI を尊重して縮小表示 (例: 1342×840px @200dpi → 483×302pt ≈ 644×403px 表示)。 貼り付け先の空き寸法 (行高合計 × 列幅合計) を先に測ってから DPI を逆算する。
 - 検証: `unzip -l form.xlsx | grep media` (画像存在) + anchor/サイズは `xl/drawings/drawing1.xml` の `<xdr:from>`/`ext cx cy` (EMU、 ÷9525=px) + cache sentinel + (rich text があれば) runs assert。
-- ❌ 不成立の経路 (試行済): `make new picture ... with properties {file name:...}` = **-2710** (class 作成不可、 新しめ Excel for Mac の AppleScript 制限) / System Events `keystroke "v"` = **TCC 1002** (osascript にキー送信権限なし、 権限付与すれば通るが不要) / `save as ws file format PDF file format` = **-1712** AppleEvent timeout (PDF export も AppleScript 経由は不安定)。
+- ⚠️ **2026-07-02 に「不成立」 と記録した経路** (= 2026-09-02 訂正): `make new picture ... with properties {file name:...}` を worksheet 直下で叩くと **-2710** (class 作成不可) になったが、 **range を取ってから `make new picture at it …` とすると通る** (2026-07-27 実測、 [`xlsx-image-via-excel`](#xlsx-image-via-excel))。 ∴ 「AppleScript では画像を作れない」 ではなく **anchor の取り方の問題**だった / System Events `keystroke "v"` = **TCC 1002** (osascript にキー送信権限なし、 権限付与すれば通るが不要) / `save as ws file format PDF file format` = **-1712** AppleEvent timeout (PDF export も AppleScript 経由は不安定)。
 - LibreOffice `soffice` 変換 PDF で図がページ分割されて見えても、 それは**変換器が印刷スケールを無視する現象** — xlsx 内の図は 1 枚。 実機確認は Excel で開く。
 
 origin: 2026-07-02 研究費様式の「図の貼付」 欄対応。 openpyxl↔Excel の堂々巡りを 1 往復実測した後、 clipboard paste 経路で画像・cache・下線 (rich text) 全部無傷を機械検証 17 項で確認。
@@ -1724,7 +1726,7 @@ docx を検証して「正しい」 と確認しても、 export が stale な�
 2. **Pages export ([`docx-to-pdf-pages`](#docx-to-pdf-pages)) を automation fallback に**。 動くが **layout が Word と一致しない** (= 組版し直し)。 ⚠️ よくある懸念「Pages はデータを壊す」 は **PDF 書き出し用途では誤解** — **内容は保持され、 崩れるのは体裁だけ** (= re-typeset、 文字落ちではない、 docx 本体は read-only)。 だが官製様式では体裁差が問題になるので最終版には使わない。 ⚠️ **ただし PDF 書き出し限定**: Pages で開いて **docx として保存し直すと** content control / field code / コメント等の Word 固有機能が失われうる (= [`docx-checkbox-content-control`](#docx-checkbox-content-control) の checkbox 等) → **docx round-trip には使わない**。
 3. 中身の machine 検証 (= 上記 PDF テキスト照合) は automation の成否と独立 → automation が死んでも検証は止めない。
 
-⚡ **context-first reflex — 用件が「官公署様式の visual confirm」 なら最初から Pages 不可** (= 上記 reflex の前段、 2026-06 RCA で補強): [`docx-to-pdf.sh`](#docx-to-pdf-pages) の mac default は Pages なので**無思考で叩くと文脈に反する** — 官公署様式・決裁書類は体裁が契約 → Pages の re-typeset で「見出し/表の重なり」 artifact が出る可能性 + そもそも reviewer は Word 体裁を見るので Pages 出力は提出にも目視確認にも不向き。 ① script を打つ前に「これは正式書類か?」 を 1 秒問う ② 正式書類なら `--word` を最初から付ける or fallback 1 (user の Word 書き出し / Word.app 目視) に直行 ③ docx が PW 暗号化なら automation はそもそも PW 入力 prompt にハマる → fallback 1 一択 (= [`docx-password-roundtrip-edit`](#docx-password-roundtrip-edit) からの誘導)。 origin = 2026-06 PW 暗号化 docx の visual confirm 場面で、 中身は python-docx readback + [`check-docx-integrity.py`](#docx-checkbox-content-control) で完全検証済なのに「画面で見たい」 欲求で default Pages を叩き、 cold-start を 3 回連続踏んだ後やっと fallback 1 (= 平文抽出 preview docx を Word.app open) に降りた RCA。 reflex を再活性化させたのは **「画面で見たい = PDF 化必須」 の誤等式** で、 実は user 目視確認は **Word.app で docx を直接開く方が早い** (= PDF 中継不要)。
+⚡ **context-first reflex — 用件が「官公署様式の visual confirm」 なら最初から Pages 不可** (= 上記 reflex の前段、 2026-06 RCA で補強): ⚠️ **2026-09-02 訂正**: 旧記述は「mac default は Pages なので無思考で叩くと文脈に反する」 だったが、 **default は 2026-06-23 に Word 忠実版へ反転済** (= §入口の `docx-to-pdf.sh` 行が正本、 `--word` は現在 no-op)。 ∴ 引数なしで叩けば正式書類向けの経路に乗る — それでも **Pages を明示 (`--pages`) しないこと**が官公署様式での要点で、 以下の理由は有効 — 官公署様式・決裁書類は体裁が契約 → Pages の re-typeset で「見出し/表の重なり」 artifact が出る可能性 + そもそも reviewer は Word 体裁を見るので Pages 出力は提出にも目視確認にも不向き。 ① script を打つ前に「これは正式書類か?」 を 1 秒問う ② 正式書類なら `--word` を最初から付ける or fallback 1 (user の Word 書き出し / Word.app 目視) に直行 ③ docx が PW 暗号化なら automation はそもそも PW 入力 prompt にハマる → fallback 1 一択 (= [`docx-password-roundtrip-edit`](#docx-password-roundtrip-edit) からの誘導)。 origin = 2026-06 PW 暗号化 docx の visual confirm 場面で、 中身は python-docx readback + [`check-docx-integrity.py`](#docx-checkbox-content-control) で完全検証済なのに「画面で見たい」 欲求で default Pages を叩き、 cold-start を 3 回連続踏んだ後やっと fallback 1 (= 平文抽出 preview docx を Word.app open) に降りた RCA。 reflex を再活性化させたのは **「画面で見たい = PDF 化必須」 の誤等式** で、 実は user 目視確認は **Word.app で docx を直接開く方が早い** (= PDF 中継不要)。
 
 origin: 2026-06 ある官製様式 (JST 系) の docx 修正。 docx を直しても PDF が古いまま (= stale) → quit 不十分が真因 → `pkill` + fresh open で解消。 さらに Word が cold-start で `missing value` / 空ドキュメント複数の状態に陥り automation 不能 → Pages で代替 → 最終は user の Word 書き出しに委ねた。
 
@@ -1925,7 +1927,7 @@ for idx, line in enumerate(lines):
 **step 4 (verify) は print-blocker**: roundtrip readback で「自分が書いた内容と一致」 を確認し、 加えて [`check-docx-integrity.py`](#docx-checkbox-content-control) を pass させる。 暗号化済 docx は zip 直 grep が効かないため、 verify は **必ず再 decrypt 経由**。 失敗時に step 1 の `form_orig.docx` から再開できる (= backup 規律)。
 
 **visual confirm の注意 (= 上の §[`docx-pdf-stale-cache`] context-first reflex を遵守)**:
-- PW 暗号化 docx を `docx-to-pdf.sh` の mac default (= Pages) に投げると cold-start + PW prompt の両罠に当たる → 最初から不可
+- PW 暗号化 docx を `docx-to-pdf.sh` の **Pages 経路 (`--pages`)** に投げると cold-start + PW prompt の両罠に当たる → 最初から不可 (⚠️ 2026-09-02 訂正: 旧記述は「mac default (= Pages)」 だったが default は 2026-06-23 に Word へ反転済)
 - 平文 [`docx-section-extract-preview`](#docx-section-extract-preview) を生成して Word.app で open する fallback 1 が確実
 - final (= encrypted) を user に手渡したい時は [`word-applescript-password-open`](#word-applescript-password-open) で PW 付き open
 
