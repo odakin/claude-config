@@ -110,6 +110,10 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 
 4. **自分が書いた handoff / spec も検証対象に入れる**: 前提検証 pass は「相手の主張」 を検証するよう設計されるので、 **検証者自身が実装者に渡した指示**が盲点になる。 実装者はそれを与件として読むため、 spec 内の誤りは原稿に直行する。 起源事例では handoff の「精密化 3 原則」 の 1 つが物理的に誤っており (既に bare action に対応項があるものを「ループ初生成」 と分類していた)、 実装者が一次資料と自前 note から気付いて訂正した — つまり**検証の向きが偶然逆流したから助かった**。 spec を渡す前に、 spec 中の物理主張を自前の機械 anchor に 1 度当てる。
 
+5. **Blind report を freeze してから履歴を開く**: 同じ検証者に過去査読・author response・内部 TODO を最初から渡すと、再発検出と既知事項の追認が混ざる。第一 pass は対象原稿と一次資料だけで report を書き切り、hash と finding ID を固定する。第二 pass で raw の過去査読を照合して反復クラスターを作り、その後に内部 ledger を開いて provenance を分類する。起動規約などで先に内部情報が見えた場合は汚染を明記し、重要判定を fresh context で再現する。
+6. **処置・確度・provenance を直交軸で持つ**: 一つの ✅/❌ に潰さず、(a) manuscript disposition = answered / partial / unanswered / withdrawn、(b) epistemic state = verified / refuted / unverified、(c) review provenance = strict-new payload / known / decisive extension、を別列にする。**withdrawn は answered ではない**。また in-house anchor で verified だが本文に証拠がない状態は、命題の refutation でなく manuscript-closure の欠落である。
+7. **後日覆った finding は erratum で閉じる**: blind report の集計後に前提の飛躍や反例が見つかったら、元 report と上位 decision record の双方へ日付つき訂正を置く。監査証跡の番号や当時の件数を黙って書き換えず、「何を撤回し、どの finding に吸収し、何がなお残るか」を記録する。これで保存記録の再現性と current disposition を両立できる。
+
 report 側の hygiene (hash-pinned reviewed_source / 行番号の有効範囲宣言 / findings の 3 状態 + 理由 tag / decision ledger の分離) は受け取る価値のある形式なので、 自分が review を書く側に回るときも踏襲する (§10 の記録規律と同じ)。
 
 ## <a id="sibling-routing"></a>13. 隣接 doc への routing
