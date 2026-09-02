@@ -2,6 +2,17 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-02: 規則の前提失効 (§20) + variant drift (§21) + 出力直結 field (data-pipeline §14)
+
+layer-3 の事務運用 session (= 承認者・様式定数・依頼 template・押印) から 4 件を kernel-up。 instance は個人層・共有 project に残置。
+
+- **§20 規則は前提より長生きする** — 上流属性 (費用の出所 / 制度 / 責任者 / 運用の版) が切り替わっても規則と定数だけが無条件の手順の顔で生き残る機序 + 5 pattern。 「これ何で要るんだっけ?」 を premise-expiry の高信号 detector として明記。
+- **§20.5 supersede は「新しい正本を書く」 では完了しない** (+ §20.5.1 検出器の非対称) — 転換は上流 1 箇所に landing し、 旧規則を書いた下流手順書は知らないまま生き残って**次に読んだ者が正しく適用する**。 SoT drift 検出は「現行規則の重複」 を見るので旧規則の生存は原理的に映らない → 旧 literal も登録して「規則が書かれる面」 だけ scan する設計を提示 (= layer-3 で実装、 登録当日に真陽性 1 件)。
+- **§21 rule variant の silent stale 化** — 言語別・媒体別 variant は**正当な重複**ゆえ §2 の削除方針では解けない。 3 択 (持たない / 生成する / parity gate)。
+- **[`conventions/data-pipeline-automation.md#display-bound-field-purity`](conventions/data-pipeline-automation.md#display-bound-field-purity)** — 人物 DB の 1 field が生成物に印字される構造で運用注記が対外表示に漏れた事例の一般化。 新 consumer を足す瞬間が検査点、 直すのは生成物側でなく SoT field 側。
+
+⚠️ 4 件とも **同 session 内で自分が踏んだ**失敗の一般化 (= §20 を書いた当日に §20 の failure mode を踏み、 §20.5 の必要性が判明した)。
+
 ## 2026-09-01j: 検証方法論 4 § hoist (private paper の framing/検算 campaign から)
 
 - [`conventions/paper-audit.md`](conventions/paper-audit.md) に `#assumption-dependent-claim-framing` (3 層勾配 / 無仮定 floor / 不確実性→要求仕様) + `#moving-observational-baseline` (係争中の観測許容域: 複数 region + 不変量抽出 + baseline は著者判断)。
