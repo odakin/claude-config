@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 101 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 102 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -153,12 +153,13 @@ layer 1 (public) のドメイン固有規約 101 file をカテゴリ別に列�
 
 ## 研究ドメイン (`research-domain`)
 
+- **[cold-eyes-isolation.md](cold-eyes-isolation.md)** — cold-eyes / 盲検 review を別 session (同 vendor) に投げる前 / referee 版の原稿を用意する時 / review 結果を受け取って独立性を判定する時
+  - 別 session を立てただけでは目は冷えない — reviewer に起票側の結論が流れ込む 6 つの口 (cwd 祖先の CLAUDE.md・SessionStart hook 注入・spec 自体の漏洩・原稿内の著者注・repo 文脈と著者 script・同 vendor バイアス) と、 封じた sandbox の recipe (CLAUDE.md 祖先の無い dir + referee copy + 結論ゼロの spec + 注入無視の明示 + 受領後の汚染 grep)。 physics-verification-cycle §7/§10 の運用側 sibling
 - **[collaborators.md](collaborators.md)** — 共同研究者 DB (collaborators.yaml) を作成・更新するとき
   - 共同研究者DB規約
 - **[physics-notes.md](physics-notes.md)** — 物理・数理ノートを書くとき
   - 物理・数理ノートの 4 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側 / 検証 note は問題・結論・手当のみ) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
 - **[physics-verification-cycle.md](physics-verification-cycle.md)** — 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき
-- **[cold-eyes-isolation.md](cold-eyes-isolation.md)** — cold-eyes / 盲検 review を別 session に投げる前 (= reviewer に起票側の結論が流れ込む 6 つの口 〔cwd 祖先の CLAUDE.md・hook 注入・spec 漏洩・原稿内の著者注・repo 文脈と script・同 vendor〕 と、 CLAUDE.md 祖先の無い sandbox + referee copy + 結論ゼロ spec の recipe)
   - 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) の 8 kernel — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA からの hoist
 - **[scientific-computing.md](scientific-computing.md)** — 数値解析・科学計算 code を書くとき
   - 数値解析 gotchas (scale-dependent default 等、科学計算リポ共通)

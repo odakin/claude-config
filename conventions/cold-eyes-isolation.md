@@ -1,8 +1,8 @@
----
-name: cold-eyes-isolation
-summary: cold-eyes / 盲検 review を別 session に投げる時の汚染隔離 (= reviewer に「著者の結論」が流れ込む 6 つの口 〔cwd 祖先の CLAUDE.md・SessionStart hook 注入・spec 自体の漏洩・原稿内の著者注・repo 文脈と script・同 vendor バイアス〕 と、 封じた sandbox の recipe 〔CLAUDE.md 祖先の無い dir + referee copy + 結論ゼロの spec + 注入無視の明示 + 受領後の汚染 check〕。 物理主張の検証サイクル §7/§10 の運用側 sibling)
----
-
+<!-- doc-meta
+when: cold-eyes / 盲検 review を別 session (同 vendor) に投げる前 / referee 版の原稿を用意する時 / review 結果を受け取って独立性を判定する時
+category: research-domain
+summary: 別 session を立てただけでは目は冷えない — reviewer に起票側の結論が流れ込む 6 つの口 (cwd 祖先の CLAUDE.md・SessionStart hook 注入・spec 自体の漏洩・原稿内の著者注・repo 文脈と著者 script・同 vendor バイアス) と、 封じた sandbox の recipe (CLAUDE.md 祖先の無い dir + referee copy + 結論ゼロの spec + 注入無視の明示 + 受領後の汚染 grep)。 physics-verification-cycle §7/§10 の運用側 sibling
+-->
 # Cold-eyes 検品の汚染隔離 (cold-eyes isolation)
 
 cold-eyes とは「書いた本人と別の目」 で検品させることだが、 AI session を別に立てるだけでは目は冷えない。 起票 session の結論は、 指示 file の自動 load・hook の注入・spec の書き方・原稿内の注記・repo の記録を通じて reviewer に流れ込み、 reviewer は「言われた所に言われた物を見つける」 検品になる。 本 doc はその流入口の一覧と、 封じ方の recipe。 検証の中身 (rubric・止まる規律・cross-vendor) は [`physics-verification-cycle.md`](physics-verification-cycle.md) が正本で、 本 doc はその**運用側** (= session をどう隔離するか) を担う。

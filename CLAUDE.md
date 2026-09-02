@@ -38,6 +38,7 @@ claude-config/
 │   ├── claude-app-cwd-pin.md               # Claude.app の folder picker 起点固定 (launchd) を設定・解除するとき
 │   ├── claude-code-permissions.md          # Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき
 │   ├── clipboard-cleaner.md                # PDF コピー由来の段落内改行・RTF 書式をクリップボードで整形したいとき
+│   ├── cold-eyes-isolation.md              # cold-eyes / 盲検 review を別 session (同 vendor) に投げる前 / referee 版の原稿を用意する時 / review 結果を受け取って独立性を判定する時
 │   ├── collaborators.md                    # 共同研究者 DB (collaborators.yaml) を作成・更新するとき
 │   ├── concise-output.md                   # user への応答・報告・deliverable (README / 案内 doc / PDF) を書くとき常時
 │   ├── data-pipeline-automation.md         # 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
