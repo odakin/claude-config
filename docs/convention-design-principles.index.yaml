@@ -545,6 +545,42 @@ sections:
     legacy: "19.3"
     level: 3
     title: "19.3 適用判断"
+  - id: premise-bound-rule-expiry
+    legacy: "20"
+    level: 2
+    title: "20. 規則は前提より長生きする — 上流属性の切替は下流定数の一括再判定を要求する"
+  - id: premise-expiry-observation
+    legacy: "20.1"
+    level: 3
+    title: "20.1 観察 pattern"
+  - id: premise-expiry-mechanism
+    legacy: "20.2"
+    level: 3
+    title: "20.2 なぜ規則だけが生き残るか"
+  - id: premise-expiry-pattern
+    legacy: "20.3"
+    level: 3
+    title: "20.3 pattern"
+  - id: premise-expiry-scope
+    legacy: "20.4"
+    level: 3
+    title: "20.4 適用範囲・関連"
+  - id: rule-variant-drift
+    legacy: "21"
+    level: 2
+    title: "21. 同一 rule の variant (言語別・媒体別) は片方だけ更新され silent に stale 化する"
+  - id: variant-drift-observation
+    legacy: "21.1"
+    level: 3
+    title: "21.1 観察 pattern"
+  - id: variant-drift-remedies
+    legacy: "21.2"
+    level: 3
+    title: "21.2 3 択 (強い順)"
+  - id: variant-drift-when
+    legacy: "21.3"
+    level: 3
+    title: "21.3 判別と由来"
   - id: changelog
     level: 2
     title: "変更履歴"
