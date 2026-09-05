@@ -31,8 +31,20 @@ Legacy foils without the marker are classified by phrase (`expected for a foil` 
 check_*.py (expect exit 0) and foil_*.py under this contract with a per-script timeout and
 records the result in the AUTO block, so the receiver never hand-rolls the loop again.
 
+State machine (derived, never recorded — conventions/verification-cycle-ops.md):
+  spec      spec.md only, no ledger items           → worker not started
+  running   ledger has items, no results.md
+  done      results.md exists but receipt incomplete (refuted without novel_to_requester,
+            or no AUTO block)                        → 未受領 (requester action)
+  received  receipt complete, but no retro lists it   → retro 未記入
+  retro'd   listed in campaigns/retros/*.md front matter `campaigns:`
+`improvements.yaml` (repo root) is the fate ledger of retro proposals: status deferred items
+with review_by ≤ today (or none) are surfaced; implemented items are inert.
+
 Usage
   verification-campaign-report.py <campaign-dir> [--write] [--run [--timeout SEC]]   stats (+ run checks/foils, + write AUTO block)
+  verification-campaign-report.py --index [--write] [--root R]    derived state + efficacy dataset → campaigns/INDEX.md
+  verification-campaign-report.py --surface [--root R]            findings only (dashboard / SessionStart), silent when none
   verification-campaign-report.py --carryover [--write] [--root R]
   verification-campaign-report.py --selftest
 """
@@ -285,6 +297,122 @@ def carryover(root: Path, write: bool) -> list[dict]:
     return rows
 
 
+def _front_matter(text: str) -> dict:
+    if not text.startswith("---"):
+        return {}
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}
+    try:
+        fm = yaml.safe_load(parts[1]) or {}
+    except Exception:
+        return {}
+    return fm if isinstance(fm, dict) else {}
+
+
+def load_retros(root: Path) -> list[dict]:
+    out = []
+    for f in sorted((root / "campaigns" / "retros").glob("*.md")):
+        fm = _front_matter(f.read_text(encoding="utf-8"))
+        fm["_file"] = f.name
+        out.append(fm)
+    return out
+
+
+def load_improvements(root: Path) -> list[dict]:
+    f = root / "improvements.yaml"
+    if not f.exists():
+        return []
+    data = yaml.safe_load(f.read_text(encoding="utf-8")) or []
+    return [x for x in data if isinstance(x, dict) and "id" in x]
+
+
+def campaign_state(camp: Path, repo: Path, retros: list[dict]) -> dict:
+    ledger = load_ledger(camp) if (camp / "ledger.yaml").exists() else []
+    results = camp / "results.md"
+    has_results = results.exists()
+    text = results.read_text(encoding="utf-8") if has_results else ""
+    has_auto = AUTO_BEGIN in text or LEGACY_BEGIN in text
+    unrated = [x["id"] for x in ledger if x.get("status") == "refuted" and "novel_to_requester" not in x]
+    in_retro = [r["_file"] for r in retros if camp.name in (r.get("campaigns") or [])]
+    if not ledger and not has_results:
+        state = "spec"
+    elif not has_results:
+        state = "running"
+    elif unrated or not has_auto:
+        state = "done"
+    elif not in_retro:
+        state = "received"
+    else:
+        state = "retro'd"
+    st = stats(camp, repo) if ledger else {"items": 0, "status": {}, "tier": {}, "novel_to_requester": [], "second_eye_open": [], "checks": 0, "foils": 0, "git": git_timeline(camp, repo)}
+    contamination = 0
+    for r in retros:
+        c = r.get("contamination") or {}
+        if isinstance(c, dict):
+            contamination += int(c.get(camp.name, 0) or 0)
+    return {"campaign": camp.name, "state": state, "unrated": unrated, "retro": in_retro, "contamination": contamination, **{k: st[k] for k in ("items", "status", "tier", "novel_to_requester", "second_eye_open", "checks", "foils", "git")}}
+
+
+def index(root: Path) -> dict:
+    retros = load_retros(root)
+    camps = [c for c in sorted((root / "campaigns").glob("*/")) if (c / "spec.md").exists() and c.name != "retros"]
+    rows = [campaign_state(c, root, retros) for c in camps]
+    return {"campaigns": rows, "retros": retros, "improvements": load_improvements(root),
+            "carryover": len(yaml.safe_load((root / "carryover.yaml").read_text(encoding="utf-8")) or []) if (root / "carryover.yaml").exists() else None}
+
+
+def render_index(ix: dict) -> str:
+    L = ["# campaigns/INDEX.md — 導出 state と efficacy dataset (verification-campaign-report.py --index --write が再生成、手編集しない)", "",
+         f"生成 {_dt.date.today()}。state は file から導出 (spec / running / done=未受領 / received=retro 未記入 / retro'd)。数字は ledger + git 由来。", "",
+         "| campaign | state | items | verified / refuted / unverified | 👁 | novel (受領側) | checks / foils | 所要 (分) | items/commit max | 汚染 hit | retro |",
+         "|---|---|---|---|---|---|---|---|---|---|---|"]
+    tot = {"items": 0, "novel": 0, "refuted": 0}
+    for r in ix["campaigns"]:
+        stt = r["status"]; g = r["git"]
+        L.append(f"| `{r['campaign']}` | **{r['state']}** | {r['items']} | {stt.get('verified',0)} / {stt.get('refuted',0)} / {stt.get('unverified',0)} | {r['tier'].get('👁',0)} | {len(r['novel_to_requester'])} | {r['checks']} / {r['foils']} | {g.get('duration_min','—')} | {g.get('max_items_per_commit','—')} | {r['contamination']} | {', '.join(r['retro']) or '—'} |")
+        tot["items"] += r["items"]; tot["novel"] += len(r["novel_to_requester"]); tot["refuted"] += stt.get("refuted", 0)
+    L += ["", f"**累計**: campaigns {len(ix['campaigns'])} / items {tot['items']} / refuted {tot['refuted']} / novel_to_requester {tot['novel']} / carryover open {ix['carryover'] if ix['carryover'] is not None else '—'}", ""]
+    imps = ix["improvements"]
+    if imps:
+        L += ["## improvements.yaml (retro 提案の fate 台帳)", "", "| id | origin | status | mechanism / where | trigger / review_by |", "|---|---|---|---|---|"]
+        for i in imps:
+            L.append(f"| {i['id']} | {i.get('origin','')} | **{i.get('status','')}** | {i.get('where') or i.get('mechanism','')} | {i.get('trigger') or ''} {('(review_by ' + str(i['review_by']) + ')') if i.get('review_by') else ''} |")
+    return "\n".join(L) + "\n"
+
+
+def surface(ix: dict, today: "_dt.date | None" = None) -> list[str]:
+    today = today or _dt.date.today()
+    out = []
+    for r in ix["campaigns"]:
+        if r["state"] == "done":
+            out.append(f"📥 未受領: `{r['campaign']}` に results.md あり、受領未完 (refuted の novel_to_requester 未記入: {', '.join(r['unrated']) or '—'} / AUTO block) → 汚染 grep → 独立再実装 → ledger 記入 → --run --write → marker consume")
+        elif r["state"] == "received":
+            out.append(f"📝 retro 未記入: `{r['campaign']}` は受領済だが campaigns/retros/*.md の front matter `campaigns:` に無い → TEMPLATE-retro.md から書く (提案は gate / rule+trigger / rejected の 3 択 + improvements.yaml)")
+        elif r["state"] == "spec":
+            fi = r["git"].get("first")
+            if fi:
+                age = (today - _dt.datetime.fromisoformat(fi).date()).days
+                if age >= 3:
+                    out.append(f"⏳ 起票のみ {age} 日: `{r['campaign']}` に ledger item も results も無い → worker が走っていない (chip 未クリック / 死亡) → spawn し直すか abandon を DESIGN に")
+    for i in ix["improvements"]:
+        if i.get("status") == "deferred":
+            rb = i.get("review_by")
+            if rb is None:
+                out.append(f"🕰 deferred に時計なし: improvements `{i['id']}` — review_by を入れる (時計の無い deferred は拾われない)")
+            else:
+                try:
+                    d = rb if isinstance(rb, _dt.date) else _dt.date.fromisoformat(str(rb))
+                except Exception:
+                    d = None
+                if d and d <= today:
+                    out.append(f"🕰 deferred の見直し期日: improvements `{i['id']}` (review_by {d}) — trigger『{i.get('trigger','')}』は立ったか判断 → implemented / rejected / review_by 延長")
+    co = ix.get("carryover")
+    if co is not None and co >= 12:
+        out.append(f"🧾 carryover {co} item — 次 campaign の C 群へ (教科書に効く item を優先、閾値 12)")
+    return out
+
+
 def selftest() -> int:
     import tempfile
     with tempfile.TemporaryDirectory() as td:
@@ -368,7 +496,37 @@ def selftest() -> int:
         assert f["foil_std.py"] == ("teeth", "standard") and f["foil_broken.py"] == ("BROKEN", "standard") and f["foil_legacy.py"] == ("teeth", "legacy"), f
         row = render_run(r)
         assert "checks 1/2 PASS" in row and "foils 2/3 teeth" in row and "foil_broken.py:BROKEN" in row, row
-    print("selftest OK (13 checks)")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td); (root / "campaigns" / "retros").mkdir(parents=True)
+        def mk(name, ledger=None, results=None):
+            c = root / "campaigns" / name; c.mkdir(); (c / "spec.md").write_text("spec\n", encoding="utf-8")
+            if ledger is not None:
+                (c / "ledger.yaml").write_text(yaml.safe_dump(ledger, allow_unicode=True), encoding="utf-8")
+            if results is not None:
+                (c / "results.md").write_text(results, encoding="utf-8")
+            return c
+        mk("a-spec")
+        mk("b-running", [{"id": "X", "status": "verified", "tier": "🔧"}])
+        mk("c-done", [{"id": "X", "status": "refuted", "tier": "🔧"}], "# r\n" + AUTO_BEGIN + "\nx\n" + AUTO_END + "\n")
+        mk("d-received", [{"id": "X", "status": "refuted", "tier": "🔧", "novel_to_requester": True}], "# r\n" + AUTO_BEGIN + "\nx\n" + AUTO_END + "\n")
+        mk("e-retrod", [{"id": "X", "status": "verified", "tier": "👁"}], "# r\n" + AUTO_BEGIN + "\nx\n" + AUTO_END + "\n")
+        (root / "campaigns" / "retros" / "r1.md").write_text("---\nround: 1\ncampaigns: [e-retrod]\ncontamination: {e-retrod: 2}\n---\n# retro\n", encoding="utf-8")
+        (root / "improvements.yaml").write_text(yaml.safe_dump([
+            {"id": "I-1", "status": "implemented", "origin": "r1"},
+            {"id": "I-2", "status": "deferred", "origin": "r1", "trigger": "n>=2", "review_by": "2020-01-01"},
+            {"id": "I-3", "status": "deferred", "origin": "r1", "trigger": "x"},
+        ]), encoding="utf-8")
+        ix = index(root)
+        states = {r["campaign"]: r["state"] for r in ix["campaigns"]}
+        assert states == {"a-spec": "spec", "b-running": "running", "c-done": "done", "d-received": "received", "e-retrod": "retro'd"}, states
+        assert [r for r in ix["campaigns"] if r["campaign"] == "e-retrod"][0]["contamination"] == 2
+        lines = surface(ix, today=_dt.date(2026, 9, 6))
+        joined = "\n".join(lines)
+        assert "未受領: `c-done`" in joined and "retro 未記入: `d-received`" in joined, joined
+        assert "I-2" in joined and "見直し期日" in joined and "I-3" in joined and "時計なし" in joined and "I-1" not in joined, joined
+        assert "a-spec" not in joined  # no git history in tempdir → no age → silent
+        txt = render_index(ix); assert "| `c-done` | **done** |" in txt and "I-2" in txt
+    print("selftest OK (19 checks)")
     return 0
 
 
@@ -377,6 +535,19 @@ def main(argv: list[str]) -> int:
         return selftest()
     write = "--write" in argv
     root_arg = argv[argv.index("--root") + 1] if "--root" in argv else None
+    if "--index" in argv or "--surface" in argv:
+        root = Path(root_arg).resolve() if root_arg else repo_root(Path.cwd())
+        ix = index(root)
+        if "--surface" in argv:
+            for line in surface(ix):
+                print(line)
+            return 0
+        text = render_index(ix)
+        print(text)
+        if write:
+            (root / "campaigns" / "INDEX.md").write_text(text, encoding="utf-8")
+            print(f"→ {root / 'campaigns' / 'INDEX.md'} written")
+        return 0
     if "--carryover" in argv:
         root = Path(root_arg).resolve() if root_arg else repo_root(Path.cwd())
         rows = carryover(root, write)

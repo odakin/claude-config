@@ -2,6 +2,11 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-06: verification-cycle-ops.md 新設 (回し続ける構造) + campaign-report --index/--surface + round-2 retro tooling
+
+- [`conventions/verification-cycle-ops.md`](conventions/verification-cycle-ops.md) 新設 = 「何を検査するか」 (physics-verification-cycle) の隣の「どう回し続けるか」: 6 原則 / 導出 state 機械 (spec → running → done → received → retro'd) / 台帳 3 種 / retro / 無人層 (日高 #17 の部分採用、 人間 gate を越えない契約) / fresh session の手順 / 壊れ方と検出 / 限界。
+- scripts: `verification-campaign-report.py` に `--index [--write]` (INDEX.md = efficacy dataset) + `--surface` (finding のみ) + `--run` (foil 契約) / `ledger-commit-cadence-gate.py --worker-scope-env` / `make-review-sandbox.py` 新規。 physics-verification-cycle §15 I-K + G′、 §16 routing に ops pointer。 instance (台帳・retro・QUEUE・hook・launchd tick) は private layer。
+
 ## 2026-09-05d: verify-to-learn campaign の運用 kernel + 道具 2 本を hoist (初回 campaign + retro から)
 
 - [`physics-verification-cycle.md`](conventions/physics-verification-cycle.md): **§14 `#campaign-tooling`** 新設 (ledger schema / 👁 繰り越し台帳 / 新結果の 2 段階第二の目 / deny list 隔離 + 並走 dir 分離 / cadence の機械 gate / git 由来 stats / 受領手順、 全部 n=1 と明記)、 §8 に `#efficacy-proxy-receiver-side` (受領側記入 + 所要は git から、 同日先行)、 doc-meta 更新。 [`cold-eyes-isolation.md`](conventions/cold-eyes-isolation.md) §4.5 `#external-paper-variant` / [`output-cap-death-loop.md`](conventions/output-cap-death-loop.md) 予防 3 に機械 gate pointer + 同日先行の `#context-compaction-loss` (Codex 等の小さい context 窓)。

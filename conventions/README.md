@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 103 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 104 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -163,6 +163,8 @@ layer 1 (public) のドメイン固有規約 103 file をカテゴリ別に列�
   - 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律 / cross-vendor 盲検 (= 同系統 AI の N 実装一致は独立でない) / campaign 運用 (ledger schema・2 段階第二の目・👁 繰り越し・cadence gate・git 由来 stats・efficacy proxy) / 近似階層の妥当性は判断でなく計算 / 外部 AI 査読レポートの前提検証 pass / verify-to-learn campaign の実測 kernel (certificate ベース定性判定・正規化検査・無限次元 supp→range・問いと主張の refuted 分離・foil の前提・WLOG 分岐・連続 rank-one POVM の極値性→joint 一意性)。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA + 2026-09 campaign からの hoist
 - **[scientific-computing.md](scientific-computing.md)** — 数値解析・科学計算 code を書くとき
   - 数値解析 gotchas (scale-dependent default 等、科学計算リポ共通)
+- **[verification-cycle-ops.md](verification-cycle-ops.md)** — 検証サイクル (verify-to-learn campaign / 第二の目 / retro) を session を越えて回し続ける仕組みを設計・運用・診断するとき / 「受領・retro・deferred 見直し・次の起票」 が止まっていないか確かめるとき / 無人 routine に検証 campaign を載せるか判断するとき
+  - physics-verification-cycle.md (何を検査するか) の隣の「どう回し続けるか」 の正本 = 6 原則 (状態は file から導出し記録しない / 人間側 station は毎 session 自動 surface / retro 提案は gate・rule+trigger・rejected の 3 択で台帳化 / 数字は機械から / deferred には時計 / 人間の判断点を名指しで残す) + campaign の導出 state 機械 (spec → running → done=未受領 → received=retro 未記入 → retro'd) + 台帳 3 種 (ledger / carryover / improvements) + 無人層 (queue + kill switch + 人間 gate を越えない tick) + fresh session の手順。 2026-09-05/06 の 2 round (4 campaign、 retro 2 回) から。
 - **[wolfram-scripting.md](wolfram-scripting.md)** — wolframscript を書く・debug するとき
   - wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用、 #plotlegends-export = PlotLegends は Graphics でなく Legended を返すため GUI 保存で凡例が落ち (対処 = 変数に入れて Export)、 位置調整で LineLegend を挟むと PlotStyle の色継承が切れて凡例だけ黒くなる (対処 = Placed にラベルだけ渡す) (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
 
