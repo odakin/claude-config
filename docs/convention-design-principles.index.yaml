@@ -253,6 +253,18 @@ sections:
     legacy: "8.29"
     level: 3
     title: "8.29 操作を trigger にする gate は、操作を伴わない生成 error を素通しする"
+  - id: expected-inbound-tripwire
+    legacy: "8.30"
+    level: 3
+    title: "8.30 予告された inbound 依頼には時計を — 「来るはず」 は tracked object になるまで網に乗らない"
+  - id: principle-birth-stock-audit
+    legacy: "8.31"
+    level: 3
+    title: "8.31 原則が生まれた turn で既存 config を棚卸しする — 登録時 gate は flow にしか効かない"
+  - id: rca-as-labeling
+    legacy: "8.32"
+    level: 3
+    title: "8.32 「〜型」 と分類した瞬間が機械層を足す最安の瞬間 — label は対処ではない"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
