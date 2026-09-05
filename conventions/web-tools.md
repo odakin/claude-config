@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき
 category: web
-summary: WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block)
+summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block)
 -->
 # Web ツール (WebSearch / WebFetch) の信頼性 caveat
 
@@ -190,7 +190,7 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 
 ---
 
-## Claude in Chrome MCP の domain permission モデル
+## <a id="chrome-domain-permission-model"></a>Claude in Chrome MCP の domain permission モデル
 
 Claude in Chrome 拡張 (Chrome / Brave / 他 Chromium で動く Anthropic 公式拡張、 `mcp__Claude_in_Chrome__*` の MCP tools を提供) は **2 層の permission モデル** で動く。 設定間違いと混同しやすいので構造を理解しておく。
 

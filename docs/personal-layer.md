@@ -211,6 +211,18 @@ But "the code lives at layer 3" must not become "the mechanism is invisible at l
 
 This is the forward-direction analog of key-mapping: keep the private bit private, but never let the shared audience hit a wall they can neither see nor reason about — and never let the same fact have two homes.
 
+## <a id="owner-only-data-repo"></a>Owner-only *data* repos: keep them separate from the prefs repo
+
+The personal layer tends to start as one prefs repo (instructions for the agent). Personal **data** — ledgers that grow (finances, health, correspondence) — should not accrete there: prefs files are auto-loaded into every session and every headless run, so growth there is a tax paid everywhere, and a ledger's audience question ("who may read this row?") is stricter than the prefs repo's.
+
+Pattern that has worked (instances: an asset ledger since 2026-03, a medical ledger since 2026-09):
+
+- **One private repo per domain**, git-crypt **default-encrypt** with an explicit **plaintext allow-list** (`CLAUDE.md`, `DESIGN.md`, `.gitignore`, `.gitattributes`, `tools/**`, `.github/**`). Enumerating what to *encrypt* fails on the first forgotten file; enumerating what may be *plain* fails safe.
+- **Plaintext files carry structure and judgment, never values**: no names, dates, amounts, diagnoses in `CLAUDE.md`/`DESIGN.md`; tools read identifiers (aliases, ids) from the encrypted data files at runtime instead of hard-coding them, so tools stay publishable.
+- The prefs repo keeps only a **pointer row** (when to open the data repo) and, if it once held the data, a one-line stub at the old path (MOVE, not DELETE, so old links resolve).
+- Cross-domain facts join by reference, not by copy (see `conventions/data-pipeline-automation.md#cross-ledger-join`).
+- The personal key is the same for all owner-only repos; the setup script auto-unlocks any repo whose `.gitattributes` mentions git-crypt, so a new data repo needs no extra machine setup — verify with a fresh clone + unlock once at creation.
+
 ## <a id="faq"></a>FAQ
 
 **Q. Is the personal layer required?**

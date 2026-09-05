@@ -39,6 +39,9 @@ sections:
     level: 2
     title: "Owner automation acting on a shared project"
     related: [shared-project-key-mapping]
+  - id: owner-only-data-repo
+    level: 2
+    title: "Owner-only *data* repos: keep them separate from the prefs repo"
   - id: faq
     level: 2
     title: "FAQ"

@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
 category: infra
-summary: データ単一ソース化・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script)・#targeted-dirty-gate = 無人 engine の dirty gate は SoT source repo では read/write path に絞る (blanket は無関係 dirt で publish を silent block、 path 限定 commit + 多層 gate 整合とセット)・埋め込み import の fail-open guard は SystemExit も吸収 (= 子の import-時 sys.exit が except Exception を素通りして監視 script が silent 死する罠) を bundle
+summary: データ単一ソース化・#cross-ledger-join (= 金額の正本と「何の支払いか」 の正本を分け read-only join で突合、 判定は category でなく相手先 alias = 外部 service の自動分類誤りが浮く)・forward-only schema migration・judgment-required placeholder pattern・script input validation・自動化機構の validity 検証 (= reproduce by script)・#targeted-dirty-gate = 無人 engine の dirty gate は SoT source repo では read/write path に絞る (blanket は無関係 dirt で publish を silent block、 path 限定 commit + 多層 gate 整合とセット)・埋め込み import の fail-open guard は SystemExit も吸収 (= 子の import-時 sys.exit が except Exception を素通りして監視 script が silent 死する罠) を bundle
 -->
 # データ pipeline と半自動化の設計規律
 
@@ -527,3 +527,15 @@ DB / yaml の 1 field が **生成物にそのまま印字される** (= 掲示�
 初出: 2026-09。 人物 DB の所属欄に書かれた滞在期間が、 そこから自動生成される掲示物に
 そのまま印字されていた (= 対外に出す情報ではない)。 同じ field は告知メールの
 「所属 + 役職」 組み立てにも使われており、 生成物側で消しても別経路に残る構造だった。
+
+## <a id="cross-ledger-join"></a>15. 金額の正本と「何の支払いか」 の正本を分け、 read-only の join で突合する
+
+金額 (取引 ledger = 家計簿 / 銀行明細 / 会計 export) と、 その取引が**何であったか** (domain の fact ledger = 受診記録 / 出張記録 / 備品台帳) は SoT を別に持つ。 金額側を domain ledger に転記すると二重 SoT になり、 domain 側を金額 ledger の category 欄に押し込むと外部 service の自動分類 (= 誤る) に fact が従属する。
+
+pattern:
+- **金額の正本 = 取引 ledger、 結びつきの正本 = domain ledger** (domain 側は取引 row への参照 `cost_ref` と写し `cost_jpy` を持つ。 写しは突合で常に検算される値として持つ)
+- **突合 tool は read-only** で 4 面を出す: (a) 突合済 (b) 金額側にあって domain 側に無い = intake 候補 (c) domain 側にあって金額側に無い = 現金払い or 未取込 (d) 年次合計 (税務等の下流入力)
+- **判定は category に頼らず、 domain 側の相手先 alias (店名・機関名の別表記 = 半角カナ等) で照合する** — 外部 service の自動分類の誤りが (a) の warning としてそのまま浮く (実例: 病院支払いが「食費」 に分類されていたのを alias 一致で検出 → 元 service 側を修正)
+- alias は domain ledger の相手先 entry に持たせ、 tool に hard-code しない (tool は平文で公開可、 PII は暗号化側)
+
+実例 2026-09-05: 医療記録 repo の `visits.yaml` ⇄ 家計簿 CSV の join tool を初回実行 → 年次医療費が即出る + 自動分類誤り 2 件 + 記録漏れ受診 8 件 + 未取込 7 件が一度に見えた。 関連: [`#single-source-of-truth`](#single-source-of-truth) (soft duplication の一般則)、 [`machine-route-first.md #internal-endpoint-replay`](machine-route-first.md#internal-endpoint-replay) (検出した誤分類を元 service 側で直す経路)。

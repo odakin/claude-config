@@ -2,6 +2,13 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-05b: 公開 API の無い web app の機械経路 / desktop 自己同定 / 拡張 stale 接続 / data repo pattern を hoist
+
+- [`machine-route-first.md #internal-endpoint-replay`](conventions/machine-route-first.md#internal-endpoint-replay) 新設 = ladder 4 の一形態 (XHR hook で UI 操作 1 回を捕捉 → 同 endpoint を page context から叩く → rules / dry-run / apply → reload で確認、 6 点 + 線引き) + 実例 (家計簿 SaaS のカテゴリ一括修正、 業種語 regex の巻き込み)。 [`web-tools.md #javascript-tool-gotchas`](conventions/web-tools.md#javascript-tool-gotchas) (async IIFE → `{}` / 出力 filter / 内部 endpoint) + permission 節に「再インストール前に `list_connected_browsers`」。
+- `scripts/claude-session-whoami.py`: Remote Control 配下を `rc/<label>` と同定 (プロセス祖先 cmdline probe、 fail-open)。 ⚠️ macOS `ps` は `command` 列を最後の `-o` に置かないと 16 文字で切れる (fix 済、 fake process で direct / parent 両 case 実測)。 **実 RC session での表示は未確認** = 次にスマホから入った session の冒頭 stamp で確認。
+- [`multi-account-machine-surface.md`](conventions/multi-account-machine-surface.md): I7 を `hostname -s` → whoami `--stamp` (account 軸必須、 2 回の誤同定) に更新 / §典型的な破れかた に「拡張署名 ≠ session でも MCP は繋がる (denied + prompt 不可視で現れる) + 再ログイン後の stale 接続」 を追加。 [`hook-authoring.md §9.3`](conventions/hook-authoring.md#frontend-dependent-cowork) に 2.1.260 再測定 (不変)。
+- [`data-pipeline-automation.md #cross-ledger-join`](conventions/data-pipeline-automation.md#cross-ledger-join) (金額 SoT / domain fact SoT の分離 + read-only join 4 面) / [`docs/personal-layer.md #owner-only-data-repo`](docs/personal-layer.md#owner-only-data-repo) (data repo は prefs から分離、 default-encrypt + 平文 allow-list、 tools は PII を実行時に読む)。 instance = 個人層の医療記録 repo (同日新設)。
+
 ## 2026-09-05: 地図図法ビューアの知見を層1 に hoist — `conventions/web-map-projections.md` 新設
 
 - 起点 = `equal-earth-viewer` (odakin の公開教材、同日 1 日で初版→国境・国名・拡大・南を上まで)。 project 固有の判断史は同 repo DESIGN.md、 再利用できる一般則だけを本 doc に。
