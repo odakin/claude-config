@@ -19,6 +19,8 @@ the requester did not know beforehand; the worker must not fill it (integrity �
 The displayed campaign-work commit count excludes commits that only refresh this AUTO block and,
 when substantive campaign changes are dirty, projects their next commit.  Otherwise `--write`
 would make its own count stale by one as soon as the generated results.md was committed.
+The AUTO heading deliberately has no wall-clock generation date: rerunning an unchanged campaign
+on a later day must be byte-stable rather than manufacture a report-only commit.
 
 Usage
   verification-campaign-report.py <campaign-dir> [--write]      stats (+ write AUTO block)
@@ -175,7 +177,7 @@ def open_eye_ids(L: list[dict]) -> list[str]:
 
 def render(s: dict) -> str:
     g = s["git"]
-    lines = [AUTO_BEGIN, f"**campaign stats (git-derived, {_dt.date.today()})**", "", "| 指標 | 値 |", "|---|---|"]
+    lines = [AUTO_BEGIN, "**campaign stats (git-derived)**", "", "| 指標 | 値 |", "|---|---|"]
     lines.append(f"| item | {s['items']} = " + " / ".join(f"{k} {v}" for k, v in sorted(s['status'].items())) + " |")
     lines.append("| tier | " + " / ".join(f"{k} {v}" for k, v in sorted(s['tier'].items())) + f" (readings 列挙 {s['readings']}) |")
     lines.append(f"| checks / foils | {s['checks']} / {s['foils']} |")
@@ -242,6 +244,9 @@ def selftest() -> int:
         assert collections.Counter(x["status"] for x in L) == {"verified": 2, "refuted": 2, "unverified": 1}
         assert open_eye_ids(L) == ["X-3"]
         assert [x["id"] for x in L if x.get("novel_to_requester") is True] == ["X-2"]
+        rendered = render(stats(camp, Path(td)))
+        assert "**campaign stats (git-derived)**" in rendered
+        assert str(_dt.date.today()) not in rendered
         (camp / "results.md").write_text("# r\n\nintro\n\n## 1. x\n", encoding="utf-8")
         write_block(camp, AUTO_BEGIN + "\nB1\n" + AUTO_END)
         write_block(camp, AUTO_BEGIN + "\nB2\n" + AUTO_END)
