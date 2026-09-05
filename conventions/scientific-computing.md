@@ -543,3 +543,15 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 **Pattern**: 模型の軌跡と 95% 等高線の関係を $(\Delta n_s,\,0.1\,\Delta r)$ の scaled Euclid 距離で報告すると、 縁に接するように見えて実際は固定 $r$ で $\Delta n_s=+0.002$–$0.003$ 外だった (Euclid 0.0009)。 scaled 距離は等高線の傾き方向に最短を取るので、 読者が問う「同じ $r$ でどれだけ外か」 とは別の量。 盲検 reviewer との数値不一致で発覚 (2026-09)。
 
 **Fix**: 点内判定は多角形で厳密に、 「どれだけ外か」 は物理軸 1 本 (固定 $r$ での $n_s$ の隙間) で報告する。 別実装と数値が合わない時は、 まず距離の定義を突き合わせる。
+
+## <a id="small-sdp-without-solver"></a>小さな SDP を solver 無しで回す — SLSQP + explicit dual certificate の sandwich (2026-09)
+
+**Pattern**: 検証 worker の環境に SDP solver (cvxpy / SCS / MOSEK) が無く、 install も spec で避けたい (再現環境の最小化) が、 qubit〜qutrit 規模の半正定値計画 (共通下界 max Tr c s.t. 0 ≤ c ≤ a, b / joint measurement の最適化) が要る。 scipy の SLSQP で固有値制約を扱うと動くが、 局所 solver の答えは**それ自体では証明にならない**。
+
+**Fix (= `scripts/gpt_measurements.py` に固定した recipe)**:
+1. **primal + dual を別々に解いて sandwich する**: 弱双対性で primal ≤ dual が常に成り立つので、 両方の feasible point を出して [primal, dual] を報告すれば、 solver がどう動いたかによらず float 精度で厳密な区間になる。 dual の feasibility 違反は identity 方向へ shift して repair (例: Y, Z を violation/2 だけ持ち上げ)。
+2. **定性判定 (存在 / 非存在) は solver に頼らない**: 「非零共通下界が無い」 は supp 射影から作る explicit certificate (Y = tP_ker a, Z = tP_ker b、 Y+Z ≥ I、 Tr(aY+bZ) = 0) で証明、 「有る」 は具体的な c と witness を構成して検証。 solver は量的値 (α の数値) にだけ使う。
+3. **gotcha 群** (全て実測): (a) 2×2 の PSD を滑らかな形 (対角 ≥ 0 ∧ det ≥ 0) で書くと SLSQP が凸問題で stall する (det の線形化が悪い) — 固有値制約 + random restart の方が良く動く、 best feasible iterate を保持し全滅時は feasible な x0 に fallback。 (b) 等式制約 (周辺条件) は冗長で QP が rank 落ちする — null-space parametrization で消去する。 (c) c = 0 や canonical joint は制約の退化点 (勾配 0) で動かない — parallel sum a:b = (a⁻¹+b⁻¹)⁻¹ ≤ a, b を内点の出発点にする。 (d) 凹関数の最小化 (α_IS = min_B λ_min(Σb_xx)) は凸計画でない — 純粋状態の scan × 内側凸計画に分解し、 外側 scan は evidence であって certificate でないと明記する。
+4. **run hygiene**: 長い check を background で回す時、 **同じ出力 file に 2 プロセスが同時書き込みしない** (旧 run を kill せず relaunch すると PASS 行と旧 run の OVERALL: FAIL 行が混ざり、 grep で FAIL 行が見つからないのに OVERALL が FAIL という説明不能な出力になる。 2026-09-05 実測)。 relaunch は `pgrep -fl <script>` で旧 run の不在を確認してから、 出力 file は run ごとに別名。
+
+**関連**: [`physics-verification-cycle.md#definition-level-judge`](physics-verification-cycle.md#definition-level-judge) (証明書ベースの定性判定を検証 item の既定にする理由) / [#verify-independent-derivation](#verify-independent-derivation)。

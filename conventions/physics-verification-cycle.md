@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき
 category: research-domain
-summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) の 12 kernel — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律 / cross-vendor 盲検 (= 同系統 AI の N 実装一致は独立でない) / 近似階層の妥当性は判断でなく計算 / 外部 AI 査読レポートの前提検証 pass。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA からの hoist
+summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) の 12 kernel — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律 / cross-vendor 盲検 (= 同系統 AI の N 実装一致は独立でない) / 近似階層の妥当性は判断でなく計算 / 外部 AI 査読レポートの前提検証 pass / verify-to-learn 41 item campaign (2026-09) の実測 kernel (certificate ベース定性判定・正規化検査・無限次元 supp→range・問いと主張の refuted 分離・foil の前提・WLOG 分岐)。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA + 2026-09 campaign からの hoist
 -->
 # 物理主張の検証サイクル (verification cycle)
 
@@ -116,6 +116,19 @@ summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立
 8. **決定的 finding は from-scratch の著者側 script で再導出してから採用する** (2026-09 実例): reviewer の script を再実行しても独立検証にならない。 別の近似 (matter-dominated envelope + 線形化質量項) で同じ結論 (線形成長 ≤ 数 e-fold vs 完了に必要な 20 超) が出た時点で採用し、 その script が書き直した主張の機械 anchor になる ([`scientific-computing.md#floquet-exact-background`](scientific-computing.md#floquet-exact-background))。 採用後の書き換えは「閾値 = regime の終わり」 の型 ([`paper-audit.md#threshold-is-not-regime-onset`](paper-audit.md#threshold-is-not-regime-onset))。
 
 report 側の hygiene (hash-pinned reviewed_source / 行番号の有効範囲宣言 / findings の 3 状態 + 理由 tag / decision ledger の分離) は受け取る価値のある形式なので、 自分が review を書く側に回るときも踏襲する (§10 の記録規律と同じ)。
+
+## <a id="definition-level-judge"></a>14. verify-to-learn の実測 kernel 追補 — 41 item campaign (2026-09) からの一般則
+
+初回の本格 verify-to-learn (外部 2 論文 + 教科書応用の問い、 41 item = verified 31 / refuted 6 / unverified 4、 check 15 + foil 15。 実 instance は個人層の private 検証 repo) で、 §1-§9 に無かった kernel が 6 つ出た:
+
+1. **定性判定は certificate、 量的値だけ solver** — 「間主観的か」 「極値か」 のような yes/no は、 局所 solver の最適値でなく、 **witness (非存在側は explicit dual certificate、 存在側は具体的構成) で判定**する。 solver に頼る量 (α の数値) と分け、 後者の外側 scan (状態 / 方向の格子) は evidence として confidence 境界に書く。 道具 = [`scripts/gpt_measurements.py`](../scripts/gpt_measurements.py)、 数値の recipe = [`scientific-computing.md#small-sdp-without-solver`](scientific-computing.md#small-sdp-without-solver)。
+2. **恒等式検査が見えない typo を正規化検査が拾う** — 定理の構成式に符号 typo があっても、 その定理が主張する恒等式 (domain 上の確率再現) は両符号で成立することがある (余分な項が domain 上で期待値 0)。 「構成が測定であること (Σ = 1、 PSD)」 を恒等式とは**別 item** で必ず検査する。 実測: 統計だけ検査していたら見逃していた符号 typo を Σ = 1 の sympy 検査が捕捉。
+3. **有限次元の直観は無限次元で「supp → range」 に変わる** — 「共通下界なし ⇔ supp の交わり自明」 は有限次元では正しく、 無限次元では ran(a^{1/2}) の交わりに置き換わる (Douglas)。 supp は閉包なので稠密な operator range の対 (von Neumann の dom T ∩ dom U*TU = {0}) で破れる。 無限次元版の item は有限次元 item と**別 tier**で扱い、 打ち切り (truncation) の数値を無限次元の evidence に使わない (compression の共通下界は元作用素の共通下界でない)。
+4. **「問い」 の refuted と「論文の主張」 の refuted を集計で分ける** — 教科書側の問い (「この POVM は完全間主観的か」) が No に決着した item も ledger では refuted になる。 集計表と results の見出しで「論文の誤り N 件 / 問いの否定的決着 M 件」 と分けないと、 受け手が論文の誤り件数を誤読する。
+5. **foil の前提も定理でなければならない** — 「decomposable な effect を使えば非 IS になるはず」 のような foil が、 実は定理でない前提に基づいていて UNEXPECTED PASS した (= foil が検査に歯が無いのではなく foil 自体が間違い)。 foil を書く時も「この壊し方で必ず落ちる」 の根拠を 1 行書く。 §3 の membership check の双子。
+6. **証明の WLOG 分岐は機械で踏む** — LP が退化解 (λ, µ) = (1, 0) を返した瞬間に、 証明の「otherwise take λ = µ = ½」 が必要な分岐だと分かり、 その正当性 (max = 1 なら (½,½) も最大化点) を別 report 行で検査した。 「WLOG」 「明らかに」 の文は item 化して機械が通る経路にする。
+
+spec 側の教訓 (= 起票者向け): 環境の道具の欠落 (SDP solver 不在) と代替 (linprog / 手計算) を spec に書いておくと worker が最初の 1 時間を tooling に溶かさない (実測は約 1.5 時間 = 全体の 1/4)。 起票者の仮説を deny list で隔離した結果、 worker は問い C-01(a) に論文にない証明 (Husimi POVM の間主観性) を出した — 独立性は verdict だけでなく **新規結果**も生む。
 
 ## <a id="sibling-routing"></a>13. 隣接 doc への routing
 
