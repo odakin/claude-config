@@ -218,6 +218,18 @@ sections:
   - id: parallel-hooks-no-ordering
     level: 2
     title: "§11. 同一 event の hook 群は並列に走る — 他 hook の副作用 (pull / 生成 file) を前提にした hook は stale data を読む"
+  - id: parallel-hooks-problem
+    level: 3
+    title: "問題"
+  - id: parallel-hooks-example
+    level: 3
+    title: "実例 (2026-09-05)"
+  - id: parallel-hooks-prevention
+    level: 3
+    title: "防止策"
+  - id: parallel-hooks-related
+    level: 3
+    title: "関連"
   - id: related-docs
     level: 2
     title: "関連"

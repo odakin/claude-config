@@ -547,21 +547,21 @@ personal skill (description dispatch) に切替。 skill 名を含まない自�
 
 ## <a id="parallel-hooks-no-ordering"></a>§11. 同一 event の hook 群は並列に走る — 他 hook の副作用 (pull / 生成 file) を前提にした hook は stale data を読む
 
-### 問題
+### <a id="parallel-hooks-problem"></a>問題
 
 Claude Code は同じ event (= SessionStart 等) に登録された hook を **並列**に起動する (= settings.json の配列順は実行順ではない)。 「A hook が repo を pull → B hook がその repo の file を読んで surface する」 という暗黙の順序依存は成立せず、 **B は A の pull 前の working tree を読みうる**。 fleet が大きくなるほど (= A が全 repo を順に fetch/pull して数分かかる) B が stale を読む確率は上がる。 stale の読みは silent (= 古い data で「該当なし」 が出るだけ) なので、 検出器が「見落とした」 事実は user が別経路で気づくまで露出しない。
 
-### 実例 (2026-09-05)
+### <a id="parallel-hooks-example"></a>実例 (2026-09-05)
 
 SessionStart で sync-sweep (全 repo auto-pull) と Discord 未転記 surfacer が並列起動。 surfacer は 13:39 に working tree の json (最終 pull 9/2) を読み 9/3 の投稿を「存在しない」 と判定、 sync-sweep の該当 repo pull は 13:45 に着地。 検出器の述語は正しかったが、 **data 鮮度が他 hook の副作用に依存していた**。 user が Discord を直接見て発覚。
 
-### 防止策
+### <a id="parallel-hooks-prevention"></a>防止策
 
 1. **hook は自分が読む data の鮮度を自分で担保する**: repo data なら hook 自身が `git fetch` して **remote-tracking ref から読む** (`git show origin/HEAD:<path>`、 git-crypt file なら `| git-crypt smudge` を pipe。 = working tree の pull 状態から独立、 並列 fetch と lock 競合しても相手の fetch が ref を更新するので fresh)。 生成 file なら自分で生成するか、 mtime を見て古ければ「未チェック」 と明示する。
 2. **順序依存を書きたくなったら 1 hook に束ねる** (= A→B を 1 script の sequential step にする)。 hook 間の順序制御は harness に無いものとして設計する。
 3. **「前回 pull で fresh」 は時点情報**: session 冒頭に clean/fresh を確認しても、 並列に走る他 hook や他 session が状態を変える。 hook 内で読み直す。
 
-### 関連
+### <a id="parallel-hooks-related"></a>関連
 
 - `#chain-hook-early-exit` (§8) = 同一 hook 内の順序依存の別 failure mode (early-exit で chain が silent skip)。 本 § は hook **間**の順序依存。
 - 検出器 fleet の一般則 = `convention-design-principles.md#surfaced-not-consumed` (産出と消費の境界)。 本 § は**産出**側の stale。
