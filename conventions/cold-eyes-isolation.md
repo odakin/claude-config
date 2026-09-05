@@ -48,6 +48,10 @@ cold-eyes とは「書いた本人と別の目」 で検品させることだが
 
 **実例 (2026-09、 第 2 回)**: 禁止語 grep 0、 唯一の hit は spec の task 名由来の version 番号。 finding 3 件は著者側の from-scratch 再計算 (膨張背景での mode 成長、 厳密背景の Floquet、 固定 $r$ の $\Delta n_s$) で確認してから採用した ([`physics-verification-cycle.md#external-ai-referee-premise-verification`](physics-verification-cycle.md#external-ai-referee-premise-verification) item 8)。 reviewer の scratch script は results と一緒に repo へコピーするが、 著者側の検証は**別に書いた script** で行う (同一 script の再実行は独立検証にならない)。
 
+## <a id="external-paper-variant"></a>4.5 変種: 外部論文の検証読み (verify-to-learn) は sandbox でなく deny list (2026-09)
+
+自著の盲検と違い、 外部論文の検証読みで隔離すべきは「**起票者の仮説・解釈**」 だけ (著者注・来歴・却下案は無い)。 sandbox を切らず repo 内の campaign dir で走らせ、 (a) spec に期待 verdict を書かない (§3 と同じ) + (b) 起票者の note / 教科書 dir を deny list に列挙 + (c) 受領後に汚染 grep、 で足りた (初回: 0 hit、 worker は起票者の知らない結果を出した)。 repo の道具 (ledger / check / refs) を worker に触らせる利点が上回る。 再訪 trigger = 汚染 grep で hit → sandbox 方式へ。 検証 pass が産んだ**新結果**の第二の目は 2 段階 (盲検 → 攻撃) = [`physics-verification-cycle.md#campaign-tooling`](physics-verification-cycle.md#campaign-tooling) C。
+
 ## 5. 起源
 
 2026-09-02、 共著論文 draft の cold-eyes 起票時に user 指摘 2 連 (「ちゃんと冷目になるように余計なもん見ないように制限して」 → 「SESSION, CLAUDE とか見ちゃうと汚染されるのでそれも注意」)。 同型の汚染は以前にもあったとの user 報告 (= 本 doc 新設の直接動機)。 初回実装 = sandbox `~/paper-review-sandbox/<paper>/` + referee copy (注 7 件・header 除去) + spec (rubric 6 群) + cwd pin の spawn。 残余 risk として global SessionStart hook の注入を明示した。

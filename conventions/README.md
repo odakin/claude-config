@@ -159,8 +159,8 @@ layer 1 (public) のドメイン固有規約 103 file をカテゴリ別に列�
   - 共同研究者DB規約
 - **[physics-notes.md](physics-notes.md)** — 物理・数理ノートを書くとき
   - 物理・数理ノートの 5 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側 / 検証 note は問題・結論・手当のみ / 配布物に内部記号を出さない) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
-- **[physics-verification-cycle.md](physics-verification-cycle.md)** — 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき
-  - 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) の 12 kernel — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律 / cross-vendor 盲検 (= 同系統 AI の N 実装一致は独立でない) / 近似階層の妥当性は判断でなく計算 / 外部 AI 査読レポートの前提検証 pass / verify-to-learn 41 item campaign (2026-09) の実測 kernel (certificate ベース定性判定・正規化検査・無限次元 supp→range・問いと主張の refuted 分離・foil の前提・WLOG 分岐)。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA + 2026-09 campaign からの hoist
+- **[physics-verification-cycle.md](physics-verification-cycle.md)** — 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき / 検証 campaign の repo・ledger・spec・第二の目・繰り越しを整備するとき
+  - 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) の 12 kernel — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律 / cross-vendor 盲検 (= 同系統 AI の N 実装一致は独立でない) / campaign 運用 (ledger schema・2 段階第二の目・👁 繰り越し・cadence gate・git 由来 stats・efficacy proxy) / 近似階層の妥当性は判断でなく計算 / 外部 AI 査読レポートの前提検証 pass / verify-to-learn 41 item campaign (2026-09) の実測 kernel (certificate ベース定性判定・正規化検査・無限次元 supp→range・問いと主張の refuted 分離・foil の前提・WLOG 分岐)。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA + 2026-09 campaign からの hoist
 - **[scientific-computing.md](scientific-computing.md)** — 数値解析・科学計算 code を書くとき
   - 数値解析 gotchas (scale-dependent default 等、科学計算リポ共通)
 - **[wolfram-scripting.md](wolfram-scripting.md)** — wolframscript を書く・debug するとき

@@ -46,7 +46,7 @@ worker は cold session で、 ambient な規約 doc は発火しない — **sp
 
 1. **1 worker = 1 bounded stage**。 機械的に閉じる仕事 (転記・検算・積分・table 生成) 単位に分割し、 逐次依存は「A 完了後に B を spawn」 の直列 stage にする (mega-spec 1 本にしない)。 **機械 stage を先・判断 stage を最後** に置き、 判断 stage は機械 stage の成果物を食う
 2. **開放的な判断問題には explicit permission を書く**: 「決められなければ『何が決まれば決まるか』 を書いて未解決で閉じてよい」。 これが無いと worker は決まるまで考え続けて thinking で死ぬ
-3. **turn 分割規律を spec に明記**: 1 応答で完結させようとするな (最低 4-6 turn) / 導出は小節ごとに file append → build/test → commit / 詰まったら部分結果を書いて turn を切る
+3. **turn 分割規律を spec に明記**: 1 応答で完結させようとするな (最低 4-6 turn) / 導出は小節ごとに file append → build/test → commit / 詰まったら部分結果を書いて turn を切る — ledger 型の deliverable なら「小節ごと commit」 は **pre-commit gate で機械化**できる ([`../scripts/ledger-commit-cadence-gate.py`](../scripts/ledger-commit-cadence-gate.py)、 散文規律が 41 item / 2 commit で空振りした実測から。 [`physics-verification-cycle.md#campaign-tooling`](physics-verification-cycle.md#campaign-tooling) E)
 4. **1 回の Write は ≤ ~150 行**。 大きな定型 (preamble・boilerplate) は生成させず **shell で複製** (`sed` / `cp`) — 出力 token は有限資源として扱う
 5. **部分結果を成功 mode にする**: 「未完でも部分結果を commit + marker (`--status partial`) で閉じてよい」 を spec の成功条件に含める (all-or-nothing framing が巨大 turn を誘発する)
 6. deliverable に **サイズ目標** (≤ N ページ / 行) を書く

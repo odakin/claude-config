@@ -2,6 +2,12 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-05d: verify-to-learn campaign の運用 kernel + 道具 2 本を hoist (初回 campaign + retro から)
+
+- [`physics-verification-cycle.md`](conventions/physics-verification-cycle.md): **§14 `#campaign-tooling`** 新設 (ledger schema / 👁 繰り越し台帳 / 新結果の 2 段階第二の目 / deny list 隔離 + 並走 dir 分離 / cadence の機械 gate / git 由来 stats / 受領手順、 全部 n=1 と明記)、 §8 に `#efficacy-proxy-receiver-side` (受領側記入 + 所要は git から、 同日先行)、 doc-meta 更新。 [`cold-eyes-isolation.md`](conventions/cold-eyes-isolation.md) §4.5 `#external-paper-variant` / [`output-cap-death-loop.md`](conventions/output-cap-death-loop.md) 予防 3 に機械 gate pointer + 同日先行の `#context-compaction-loss` (Codex 等の小さい context 窓)。
+- scripts: **`ledger-commit-cadence-gate.py`** (pre-commit、 1 commit の追加 entry ≤ N、 escape env → hygiene log) + **`verification-campaign-report.py`** (git 由来 stats を results.md の AUTO block に / carryover.yaml 生成)、 両方 `--selftest`。 private repo 側は shim。 数学 library `gpt_measurements.py` は同日別 session が hoist 済。
+- README tree 再生成。 instance と finding (外部論文 2 本の誤り疑い 3 件 = 非公開) は private repo に残置。
+
 ## 2026-09-05c: ML broadcast 義務の見落とし RCA と GUI 記入事故から 6 anchor を hoist
 
 - [`docs/convention-design-principles.md`](docs/convention-design-principles.md): **§8.30 `#expected-inbound-tripwire`** (予告された inbound 依頼に時計 = 待ち entry + 予測日 + slack) / **§8.31 `#principle-birth-stock-audit`** (登録時 gate は flow にしか効かない → 原則 hoist の turn で既存 config を 1 周) / **§8.32 `#rca-as-labeling`** (「〜型」 と分類した瞬間が機械層を足す最安の瞬間、 label 単独禁止) / §8.17 に「同僚の返信数」「役職自己紹介 = 弱い passthrough」 の 2 signal / §8.21 に stock audit + root-only + 構造 signal の追記。 origin = 学科/専攻 ML 依頼 23 日見落とし (5 網全部が構造的に不通過、 個人層 RCA `odakin-prefs/plans/2026-09-05-ml-broadcast-obligation-miss-rca.md`)。 index 再生成済。

@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき
+when: 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき / 検証 campaign の repo・ledger・spec・第二の目・繰り越しを整備するとき
 category: research-domain
-summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) の 12 kernel — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律 / cross-vendor 盲検 (= 同系統 AI の N 実装一致は独立でない) / 近似階層の妥当性は判断でなく計算 / 外部 AI 査読レポートの前提検証 pass / verify-to-learn 41 item campaign (2026-09) の実測 kernel (certificate ベース定性判定・正規化検査・無限次元 supp→range・問いと主張の refuted 分離・foil の前提・WLOG 分岐)。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA + 2026-09 campaign からの hoist
+summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) の 12 kernel — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律 / cross-vendor 盲検 (= 同系統 AI の N 実装一致は独立でない) / campaign 運用 (ledger schema・2 段階第二の目・👁 繰り越し・cadence gate・git 由来 stats・efficacy proxy) / 近似階層の妥当性は判断でなく計算 / 外部 AI 査読レポートの前提検証 pass / verify-to-learn 41 item campaign (2026-09) の実測 kernel (certificate ベース定性判定・正規化検査・無限次元 supp→range・問いと主張の refuted 分離・foil の前提・WLOG 分岐)。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA + 2026-09 campaign からの hoist
 -->
 # 物理主張の検証サイクル (verification cycle)
 
@@ -132,6 +132,26 @@ report 側の hygiene (hash-pinned reviewed_source / 行番号の有効範囲宣
 
 spec 側の教訓 (= 起票者向け): 環境の道具の欠落 (SDP solver 不在) と代替 (linprog / 手計算) を spec に書いておくと worker が最初の 1 時間を tooling に溶かさない (実測は約 1.5 時間 = 全体の 1/4)。 起票者の仮説を deny list で隔離した結果、 worker は問い C-01(a) に論文にない証明 (Husimi POVM の間主観性) を出した — 独立性は verdict だけでなく **新規結果**も生む。
 
-## <a id="sibling-routing"></a>13. 隣接 doc への routing
+## <a id="campaign-tooling"></a>14. Verify-to-learn campaign の運用 kernel — ledger・2 段階第二の目・繰り越し・機械 gate (2026-09)
 
-自著の投稿前検査 = [`paper-audit.md`](paper-audit.md) / ノートの書き方 = [`physics-notes.md`](physics-notes.md) / 数値検証 kernel = [`scientific-computing.md`](scientific-computing.md) / 審査側 = [`peer-review-workflow.md`](peer-review-workflow.md) / 文脈手術時の散文 sweep = [`paper-audit.md#relocation-rebinding-sweep`](paper-audit.md#relocation-rebinding-sweep) / 検出失敗 RCA の方法論 = [`convention-design-principles.md#detection-zero-location`](../docs/convention-design-principles.md#detection-zero-location) / 委譲・cold-eyes の機構 = [`multi-session-coordination.md`](multi-session-coordination.md)。
+初回 campaign (外部論文 2 本、41 item、64 分、別 session worker) とその retro から。 **一般則はここ、 instance (campaign dir・check script・finding) は private repo に残置**。 道具の実体は層1 `scripts/`。
+
+**A. ledger schema (1 item 1 entry、 3 状態)**: `id` / `source` (bibtex key + 論文内 label) / `statement` / `class` (machine | prose) / `tier` (🔧 | 👁 | 📄、 [§4](#verification-tier)) / `status` (verified | refuted | unverified、 [§5](#claim-states)) / `check` + foil の path / `readings` (読み多義の列挙、 [§6](#verify-to-learn)) / `note` / **`novel_to_requester`** (受領側記入、 [§8](#efficacy-proxy-receiver-side)) / **`second_eye`** (👁 が別 pass で閉じたら `"done <date> <where>"`)。 YAML の list で、 `- id:` を entry 先頭 key に (= 物理行数と parse 数を突合する gate に掛かる)。 状態の集計は機械 (`grep -c "status: unverified"`) で入口にする。
+
+**B. 検証サイクルは未検証主張を生産する — 繰り越し台帳で「消えない・溜まらない」**: 自前導出 (👁) は machine anchor を持たないので、 campaign は verified と同時に「次に検証すべき主張」 を産む (初回: 13/41 が 👁、 うち 1 件は論文にない新結果)。 同 campaign 内で閉じようとすると再帰し、 放置すると消える。 → **`carryover.yaml` (生成物) = 全 campaign の 👁 ∧ 未 refuted ∧ `second_eye` 無し を集約し、 次 campaign の spec の C 群はここから引く**。 閉じたら元 ledger に `second_eye` を書いて消灯 (台帳は再生成)。 道具 = `scripts/verification-campaign-report.py --carryover --write`。
+
+**C. 新結果の第二の目は 2 段階 (盲検 → 攻撃)**: 検証 pass 自身が出した新結果 (= 論文にない主張) を検証するとき、 第二の目に元の証明を先に読ませると同じ盲点を継ぐ ([§7](#independent-second-eye))。 → **stage 1 = statement だけ渡して自力導出、 commit してから stage 2 = 元の証明を開いて「落とせ」**。 stage 1 の commit が stage 2 より前にあることを rubric に入れる (= 盲検の証拠は git にある)。 spec には期待 verdict も「要注意 step」 も書かない ([`cold-eyes-isolation.md#spec-leakage`](cold-eyes-isolation.md#spec-leakage))。 cross-vendor pass ([§7 cross-vendor](#cross-vendor-red-team)) は同じ statement を別ベンダーに並走させ、 受領側が突合する。
+
+**D. 外部論文の検証読みでは sandbox でなく deny list で隔離が足りる**: 自著の盲検 ([`cold-eyes-isolation.md`](cold-eyes-isolation.md)) と違い、 汚染源は「起票者の仮説」 だけ。 spec に verdict を書かない + 起票者の note を deny list に入れる、 で実測は汚染 grep 0 hit、 worker は起票者の知らない結果を出した (n=1)。 再訪 trigger = 受領後の汚染 grep で hit。 **並走 worker は campaign dir を分ける** (= 同 repo の ledger / results の file race、 [`multi-session-coordination.md#file-path-race`](multi-session-coordination.md#file-path-race))。
+
+**E. 「item ごとに commit」 は機械 gate にする**: 散文規律は cold worker に効かず (41 item / 2 commit)、 desktop client は hook 出力を model に渡さない — **git の exit code だけが全 surface で効く**。 → pre-commit で「1 commit の追加 entry ≤ N」 を refuse、 escape は env + 台帳隣の hygiene log に記録 (隠れない)。 道具 = `scripts/ledger-commit-cadence-gate.py` (repo 側は hooks/pre-commit から呼ぶ shim)。 output-cap 死 ([`output-cap-death-loop.md`](output-cap-death-loop.md) 予防 3) の機械化。
+
+**F. stats は git から、 efficacy proxy は受領側から** ([§8](#efficacy-proxy-receiver-side)): 所要 = 最初の commit → results.md 初出、 entries/commit、 👁 残、 novel_to_requester 数を `scripts/verification-campaign-report.py <dir> --write` が results.md の AUTO block に焼く。 自己申告の数字を results に書かせない。
+
+**G. 受領手順 (起票側)**: 汚染 grep → 主要 finding の独立再実装 (受け手は worker の script を走らせない、 [§7](#independent-second-eye)) → refuted / 新結果に `novel_to_requester` 記入 → stats + carryover 再生成 → 完了 marker consume → 下流 (教科書 / 論文 note) へ verdict 反映。 他者論文の誤り finding は default 非公開のまま ([§6](#verify-to-learn))、 著者報告は人間の判断。
+
+**正直な限界**: 全部 n=1 (初回 campaign + retro)。 efficacy proxy は傾向指標。 cadence gate は「entries per commit」 しか見ない (時間・token は git に無い)。
+
+## <a id="sibling-routing"></a>15. 隣接 doc への routing
+
+自著の投稿前検査 = [`paper-audit.md`](paper-audit.md) / ノートの書き方 = [`physics-notes.md`](physics-notes.md) / 数値検証 kernel = [`scientific-computing.md`](scientific-computing.md) / 審査側 = [`peer-review-workflow.md`](peer-review-workflow.md) / 文脈手術時の散文 sweep = [`paper-audit.md#relocation-rebinding-sweep`](paper-audit.md#relocation-rebinding-sweep) / 検出失敗 RCA の方法論 = [`convention-design-principles.md#detection-zero-location`](../docs/convention-design-principles.md#detection-zero-location) / 委譲・cold-eyes の機構 = [`multi-session-coordination.md`](multi-session-coordination.md)。 campaign の道具 = 層1 [`scripts/ledger-commit-cadence-gate.py`](../scripts/ledger-commit-cadence-gate.py) + [`scripts/verification-campaign-report.py`](../scripts/verification-campaign-report.py) + [`scripts/gpt_measurements.py`](../scripts/gpt_measurements.py) (数学 library、 [§定義 level 判定](#definition-level-judge))。

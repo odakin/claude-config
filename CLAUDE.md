@@ -100,7 +100,7 @@ claude-config/
 │   ├── personal-skills.md                  # personal skill (~/.claude/skills/) を規律の発火面として使うとき
 │   ├── photographed-document-transcription.md # スキャナを通していない「撮っただけ」 の紙 (手書き答案・ノート・書類) を大量にモデルで読んで構造化するとき + その読み取りを複数 session に分担するとき + 撮影した印刷資料から引用を起こして文章の根拠にするとき
 │   ├── physics-notes.md                    # 物理・数理ノートを書くとき
-│   ├── physics-verification-cycle.md       # 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき
+│   ├── physics-verification-cycle.md       # 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき / 検証 campaign の repo・ledger・spec・第二の目・繰り越しを整備するとき
 │   ├── preview.md                          # preview / dev server 稼働中に user へ動作確認を依頼するとき
 │   ├── prompt-injection.md                 # 外部由来 tool result に adversarial 指示文を疑ったとき
 │   ├── rebuttal-letter.md                  # referee report への point-by-point 返信を書くとき
