@@ -16,6 +16,9 @@ Why the numbers come from git and not from the worker: a session self-reported "
 campaign whose commits span 64 min.  Duration = first commit touching the campaign dir → the
 commit that first *added* results.md (worker completion).  Efficacy proxy = number of findings
 the requester did not know beforehand; the worker must not fill it (integrity ≠ efficacy).
+The displayed campaign-work commit count excludes commits that only refresh this AUTO block and,
+when substantive campaign changes are dirty, projects their next commit.  Otherwise `--write`
+would make its own count stale by one as soon as the generated results.md was committed.
 
 Usage
   verification-campaign-report.py <campaign-dir> [--write]      stats (+ write AUTO block)
@@ -52,6 +55,68 @@ def load_ledger(camp: Path) -> list[dict]:
     return [x for x in data if isinstance(x, dict) and "id" in x]
 
 
+def _git_file(repo: Path, spec: str) -> str | None:
+    proc = subprocess.run(
+        ["git", "-C", str(repo), "show", spec],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _without_auto_block(text: str) -> str:
+    """Remove the owned stats block while preserving all human-authored text."""
+    outside = text
+    for begin in (AUTO_BEGIN, LEGACY_BEGIN):
+        if begin in text and AUTO_END in text:
+            pre, rest = text.split(begin, 1)
+            _, post = rest.split(AUTO_END, 1)
+            outside = pre + post
+            break
+    # Inserting/removing a block necessarily changes separator blank lines;
+    # those are part of the generated boundary, not substantive result prose.
+    return re.sub(r"\n{3,}", "\n\n", outside).strip()
+
+
+def _commit_is_auto_refresh_only(repo: Path, sha: str, rel: str) -> bool:
+    """True iff a commit changes only the generated AUTO block in results.md."""
+    result_path = f"{rel}/results.md"
+    changed = _git(
+        repo,
+        "diff-tree",
+        "--root",
+        "--no-commit-id",
+        "--name-only",
+        "-r",
+        sha,
+        "--",
+        rel,
+    ).splitlines()
+    if changed != [result_path]:
+        return False
+    before = _git_file(repo, f"{sha}^:{result_path}") or ""
+    after = _git_file(repo, f"{sha}:{result_path}")
+    return after is not None and _without_auto_block(before) == _without_auto_block(after)
+
+
+def _has_pending_campaign_work(camp: Path, repo: Path) -> bool:
+    """Detect dirty campaign content other than a generated AUTO-block refresh."""
+    rel = str(camp.relative_to(repo))
+    result_path = f"{rel}/results.md"
+    changed = set(_git(repo, "diff", "--name-only", "HEAD", "--", rel).splitlines())
+    changed.update(
+        _git(repo, "ls-files", "--others", "--exclude-standard", "--", rel).splitlines()
+    )
+    if any(path != result_path for path in changed):
+        return True
+    if result_path not in changed:
+        return False
+    before = _git_file(repo, f"HEAD:{result_path}") or ""
+    after = (camp / "results.md").read_text(encoding="utf-8") if (camp / "results.md").exists() else ""
+    return _without_auto_block(before) != _without_auto_block(after)
+
+
 def git_timeline(camp: Path, repo: Path) -> dict:
     rel = str(camp.relative_to(repo))
     log = _git(repo, "log", "--format=%H|%aI|%s", "--", rel)
@@ -59,6 +124,10 @@ def git_timeline(camp: Path, repo: Path) -> dict:
     if not commits:
         return {"commits": 0}
     first_iso = commits[-1][1]
+    work_commits = [
+        row for row in commits if not _commit_is_auto_refresh_only(repo, row[0], rel)
+    ]
+    pending_work = _has_pending_campaign_work(camp, repo)
     added = _git(repo, "log", "--diff-filter=A", "--format=%aI", "--", f"{rel}/results.md").splitlines()
     last_iso = added[-1] if added else commits[0][1]
     per_commit = []
@@ -71,7 +140,11 @@ def git_timeline(camp: Path, repo: Path) -> dict:
     first = _dt.datetime.fromisoformat(first_iso)
     last = _dt.datetime.fromisoformat(last_iso)
     return {
-        "commits": len(commits), "first": first_iso, "last": last_iso,
+        "commits": len(work_commits) + int(pending_work),
+        "committed_work_commits": len(work_commits),
+        "raw_commits": len(commits),
+        "pending_work": pending_work,
+        "first": first_iso, "last": last_iso,
         "duration_min": round((last - first).total_seconds() / 60),
         "ledger_commits": per_commit,
         "max_items_per_commit": max((n for _, _, n, _ in per_commit), default=0),
@@ -107,7 +180,7 @@ def render(s: dict) -> str:
     lines.append("| tier | " + " / ".join(f"{k} {v}" for k, v in sorted(s['tier'].items())) + f" (readings 列挙 {s['readings']}) |")
     lines.append(f"| checks / foils | {s['checks']} / {s['foils']} |")
     if g.get("commits"):
-        lines.append(f"| 所要 (git: 最初の commit → results.md 初出) | {g['first'][:16]} → {g['last'][:16]} = **{g['duration_min']} 分**, campaign dir の commits {g['commits']} |")
+        lines.append(f"| 所要 (git: 最初の commit → results.md 初出) | {g['first'][:16]} → {g['last'][:16]} = **{g['duration_min']} 分**, campaign work commits {g['commits']} (AUTO-only refresh 除外) |")
         lines.append(f"| ledger items / commit | max {g['max_items_per_commit']} (規律 = ≤ 3; " + ("違反あり" if g['max_items_per_commit'] > 3 else "OK") + ") |")
         if g["hygiene_log"]:
             lines.append(f"| hygiene.txt | {len(g['hygiene_log'])} 件の batch 許可 |")
@@ -180,7 +253,46 @@ def selftest() -> int:
         assert LEGACY_BEGIN not in t and "NEW" in t and "OLD" not in t
         rows = carryover(Path(td), write=True)
         assert [r["id"] for r in rows] == ["X-3"] and (Path(td) / "carryover.yaml").read_text(encoding="utf-8").count("\n- id:") == 1
-    print("selftest OK (7 checks)")
+    # Git-backed regression: an AUTO-only commit must not increment its own
+    # displayed count, while dirty substantive work must be projected once.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        camp = root / "campaigns" / "c"
+        (camp / "checks").mkdir(parents=True)
+
+        def git(*args: str) -> None:
+            subprocess.run(
+                ["git", "-C", str(root), *args],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        git("init")
+        git("config", "user.email", "selftest@example.invalid")
+        git("config", "user.name", "selftest")
+        (camp / "ledger.yaml").write_text(
+            yaml.safe_dump([{"id": "X-1", "status": "verified", "tier": "🔧"}], allow_unicode=True),
+            encoding="utf-8",
+        )
+        (camp / "results.md").write_text("# r\n\n## result\n", encoding="utf-8")
+        git("add", ".")
+        git("commit", "-m", "campaign work")
+        assert stats(camp, root)["git"]["commits"] == 1
+
+        write_block(camp, render(stats(camp, root)))
+        git("add", ".")
+        git("commit", "-m", "refresh report")
+        assert stats(camp, root)["git"]["commits"] == 1
+
+        (camp / "notes.md").write_text("substantive\n", encoding="utf-8")
+        projected = render(stats(camp, root))
+        assert "campaign work commits 2" in projected
+        write_block(camp, projected)
+        git("add", ".")
+        git("commit", "-m", "more campaign work")
+        assert render(stats(camp, root)) == projected
+    print("selftest OK (10 checks)")
     return 0
 
 
