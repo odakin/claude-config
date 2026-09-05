@@ -884,7 +884,7 @@ noise 抑制 rule は **identity signal** (= sender domain / ML bracket / mail c
 - **記録付き opt-out (= 例外の例外)**: 「義務 class だが既定 decline とする」 sender は、 抑制 list へ戻すのでなく override 側の**明示 opt-out** に置く (= 判断の日付・理由を併記)。 silent な再 suppress と、 監査可能な意思決定を区別する。
 - **定期棚卸し (= meta-detector、 2026-09-01 追記)**: override の語彙・sender は**列挙で収束しない** (= 同一発信主体の文面変種にすら追随できない実測)。 残余は「suppress を正しくする」 でなく「**suppress の誤りを定期検出する側の網**」 で受ける — suppress 済 ∧ 未認識 ∧ 高 stakes 語彙 (依頼/期限/必須化/urgent 等の recall 優先の粗い網) を月次で列挙し人間が walk する。 実測で 2 回連続の生きた真陽性 (= 審査督促の変種 / 別 domain の必須化督促と失効型 2 件)。 発火は state file を持たない月初 N 日 gate が簡潔で、 数日の反復表示は壁紙化でなく消費補助 (= 月 1 回きり表示だと無人 runner が人間に届かないまま消費する事故がある)。 **棚卸し finding の消費規律**: scope 外 domain の高 stakes 行も同 turn で本文 1 読 + 影響・期限 1 行評価 + clock つき carrier 起票までが棚卸し — 「1 行 report で手放す」 は [`§8.24`](#surfaced-not-consumed) の audit 版 (= 本 doc §8.21 domain 軸の origin incident はまさにこの手放しで 2 段の偶然に依存した)。
 
-reflex: noise blocklist / 抑制 filter に entry を足す瞬間に「この signal から義務も届くか?」 を問う。 義務 mail の miss を RCA するとき、 検出器の感度でなく**抑制 list との交差**を第一容疑にする (= 同型 incident の axis が bracket / domain / category と違っても generator は同一)。
+reflex: noise blocklist / 抑制 filter に entry を足す瞬間に「この signal から義務も届くか?」 を問う。 ⚠️ この gate は flow にしか効かない — 原則を hoist した turn で既存 entry を 1 周する ([`§8.31`](#principle-birth-stock-audit))。 root-only / per-account の語彙 override と、 語彙に依らない構造 signal (= 同僚の返信数、 送信者の役職自己紹介) を併用すると、 語彙列挙が収束しない残余を受けられる (2026-09 追記)。 義務 mail の miss を RCA するとき、 検出器の感度でなく**抑制 list との交差**を第一容疑にする (= 同型 incident の axis が bracket / domain / category と違っても generator は同一)。
 
 origin: 2026-08、 出版社 domain の noise 登録 (= 出版勧誘 spam が着信の大半) が同一 domain から来る査読依頼 + 督促を全 surface 段で suppress し、 未応答のまま依頼引き上げに至った RCA。 retroactive sweep で同型 3 件 (= 別誌の改訂 round 再依頼が督促多数の末に referee 解任 等)、 うち 2 件の抑制 entry は「義務を surface する名指し検出を tuning した同じ commit」 で登録されていた。 [`§8.17`](#broadcast-obligation-blind-spot) origin の sibling 観測 (= 2026-06 の ML bracket 軸 3 件) と合わせ、 axis と detector が違っても generator が同一 ([`§9.8`](#single-observation-scope-check) 充足)。 instance (= override 実装・pattern / sender 具体値) は個人層 config に残置 (= kernel-up / instance-down)。 domain 別 instantiation (査読依頼) = [`peer-review-workflow.md#invitation-intake`](../conventions/peer-review-workflow.md#invitation-intake)。
 
@@ -1000,6 +1000,36 @@ origin: 2026-09、 授業評価フィードバックの deep RCA。 draft 起草
 **Reflex (gate 設計時):** 生成 error class を受け持つ gate は、 trigger を操作でなく**内容**に張る — (a) 成果物 text への pattern 検査 (例: 名指し × 誤り語彙の共起 regex を提出前 audit で回す)、 (b) 提出・送信という **stage boundary** での一括 audit (= 操作 trigger が無くても必ず通過する点)、 (c) 規律 wording は「書いた瞬間 = gate」 と生成の瞬間そのものに焼く (機械化不能な残余、 [`§8.12`](#firing-surface-hierarchy) の最弱面であることを承知で置く)。 生成物の fluency は provenance の証拠にならない — retrieval 由来と生成由来は書いている本人にも区別が付かない、 が設計の前提。
 
 origin: 2026-09 研究費調書の名指し誤帰属 RCA (= [`actor-attribution.md#claim-target-attribution`](../conventions/actor-attribution.md#claim-target-attribution))。 検証 reflex 群 (外部 null・mail 事実・PDF read) は全て操作 trigger で、 生成された固有名はどの reflex の射程にも入らず提出まで素通しした。 対策の機械面 = (a)(b) 型の提出前 named-claim audit。
+
+### <a id="expected-inbound-tripwire"></a>8.30 予告された inbound 依頼には時計を — 「来るはず」 は tracked object になるまで網に乗らない
+
+会議資料・学年暦・前年の ledger は、 **依頼が来る前に「M 月に X の依頼が来る」 と教えてくれる**ことがある。 この予告は義務そのものではないが、 義務の**到着を検知する最後の網**になり得る — 依頼 mail が検出網を素通りしても (= [`§8.17`](#broadcast-obligation-blind-spot) / [`§8.21`](#noise-obligation-signal-sharing))、 「来ているはずなのに見ていない」 を問う時計があれば拾える。 逆に予告を prose (= 会議資料の summary、 session 記録) に書くだけでは、 deadline 網は open な tracked object しか読まないので、 予告は書いた瞬間に死ぬ ([`§8.11`](#downstream-net-intake-leverage) の instance)。
+
+**pattern**: 予告を認識した turn で、 `status: 待ち` + `deadline: 予測到着日 + slack` + task「未着なら送信元 ML / sender を grep」 の tracked entry を立てる (= **expected-inbound tripwire**)。 依頼が実際に届いたらその entry を本物の義務 entry に変換する (= 二重にならない)。 年次の依頼は前年の完了時に翌年 entry を機械生成する (= yearly-recurring template) と、 予告を読む必要すらなくなる。
+
+reflex: 「〜が来る予定」「〜月に依頼あり」 を summary に書いた瞬間に「この予告に時計はあるか」 を問う。 [`multi-session-coordination.md #green-light-carrier`](../conventions/multi-session-coordination.md#green-light-carrier) (= 時計も owner も無い queue は拾われない) の inbound 版。
+
+origin: 2026-09、 7 月の会議資料に「翌年度の授業計画案 = 10 月〆、 7 月中に依頼が来る」 と正しく summary したが tracked entry を立てず、 8 月に届いた依頼は ML noise filter に沈み、 23 日後に user の記憶で発覚。 予告は 3 週間前から手元にあった。
+
+### <a id="principle-birth-stock-audit"></a>8.31 原則が生まれた turn で既存 config を棚卸しする — 登録時 gate は flow にしか効かない
+
+「entry を足す瞬間に X を問う」 型の判断規律 (= 登録時 gate、 [`§8.21`](#noise-obligation-signal-sharing) の第 1 対策) は、 **原則が生まれた後の flow** にしか効かない。 原則より前に登録された stock (= 数十〜数百の既存 entry) は、 原則の存在を知らずに登録されたまま、 原則が禁じる状態で生き続ける。 原則を書いた session は「これで防げる」 と感じるが、 事故の generator は stock 側にあることが多い。
+
+**pattern**: 新しい判断規律を hoist する turn で、 その規律を既存 stock に**1 周適用**する (= 「この既存 entry は新規なら登録を許すか」 を全 entry に問う)。 stock が大きければ機械で候補を列挙し (= 例: 抑制 entry ごとに「この signal から義務 mail が来た実績」 を過去 N 日の受信で計測)、 finding は同 turn で修正するか carrier を残す。 棚卸し済みの印を stock 側に残す (= 監査日)。
+
+reflex: 原則の origin 節を書き終えた瞬間に「この原則で今の config を通したら何件 flag されるか」 を実測する。 0 件でないなら、 原則の本文より先にその件数を直す。
+
+origin: 2026-09、 noise 抑制と義務 mail の signal 共有 ([`§8.21`](#noise-obligation-signal-sharing)) を 8 月に hoist した後も、 5 月に登録済みの学科・専攻 ML の bracket 抑制 (= 職務上いちばん義務密度の高い経路) は再監査されず、 9 月に同 generator で 3 件 (うち 1 件は〆切超過) を落とした。 hoist 時に既存 63 pattern を 1 周していれば、 その場で flag された entry だった。
+
+### <a id="rca-as-labeling"></a>8.32 「〜型」 と分類した瞬間が機械層を足す最安の瞬間 — label は対処ではない
+
+事故を既知 principle の instance だと**正しく分類**できた時、 その turn は「型が分かった = 対処済み」 と感じやすい。 だが分類は認識であって変更ではない。 principle 側には既に対策 pattern (= 機械層 / carrier) が書いてあり、 instance を認識した turn はそれを**適用する最も安い瞬間** (= 文脈が全部手元にある) なのに、 label を書いて次の作業に移ると、 同じ generator が次の instance を作る。
+
+**pattern**: 記録 (inbox / incident / SESSION) に「〜型 (= 既知 principle の instance)」 と書く turn は、 同じ turn で (a) principle の機械対策を当該 config に適用する、 または (b) 適用の carrier (= 期限つき task) を残す、 のどちらかを**併記しないと書けない**とする (= label 単独を禁じる)。 「(a)(b) いずれも不要」 と判断するなら、 その理由を label の隣に書く。
+
+reflex: 「〜型」「同型」「blind-spot 型」 と打った瞬間に、 手が config / script / TODO に伸びているかを見る。 伸びていなければ label は未完成。
+
+origin: 2026-09、 7 月に ML 経由の依頼を 9 日遅れで遡及 triage し「broadcast-obligation blind-spot 型」 と正しく分類した記録が、 filter も carrier も変えずに終わり、 翌月の同 ML で 23 日の見落としを生んだ。 分類は合っていた。
 
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
