@@ -2,6 +2,12 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-06b: 検証サイクルの規約 3 本 + script 4 本を新 layer-1 repo `ai-collaboration` へ分離 (stub + forwarder 残置)
+
+- user 決定「ai-collaboration で public でいこう」 (rename / rebrand は却下)。 移設 = `conventions/{physics-verification-cycle,verification-cycle-ops,cold-eyes-isolation}.md` + `scripts/{verification-campaign-report,ledger-commit-cadence-gate,make-review-sandbox,gpt_measurements}.py`、 git 履歴は `git format-patch --root` → `git am` で持ち込み (30 commit)。 本 repo は **Claude Code harness** (setup / hooks / domain 規約) に戻り、 あちらは **AI 協働 platform** (vendor 中立)。
+- 本 repo 側: 3 doc は **旧 anchor を全部保つ stub** (= 33 anchor の対応表、 `#slug` link は壊れない) / 4 script は **forwarder** (同 argv で正本を exec、 `gpt_measurements` は import 時に symbol を re-export)。 generate-tree 再生成。 外部からの literal path (`claude-config/scripts/<name>`、 `#anchor`) は当面そのまま動く = 呼び元は急いで直さなくてよい (owner 側は同日切替済)。
+- Phase 2 (`multi-session-coordination.md` + `codex/` の移設) は trigger 付き = `ai-collaboration/DESIGN.md`。 判断の記録 = 下 DESIGN §2026-09-06。
+
 ## 2026-09-06: verification-cycle-ops.md 新設 (回し続ける構造) + campaign-report --index/--surface + round-2 retro tooling
 
 - [`conventions/verification-cycle-ops.md`](conventions/verification-cycle-ops.md) 新設 = 「何を検査するか」 (physics-verification-cycle) の隣の「どう回し続けるか」: 6 原則 / 導出 state 機械 (spec → running → done → received → retro'd) / 台帳 3 種 / retro / 無人層 (日高 #17 の部分採用、 人間 gate を越えない契約) / fresh session の手順 / 壊れ方と検出 / 限界。

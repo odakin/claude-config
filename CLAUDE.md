@@ -38,7 +38,7 @@ claude-config/
 │   ├── claude-app-cwd-pin.md               # Claude.app の folder picker 起点固定 (launchd) を設定・解除するとき
 │   ├── claude-code-permissions.md          # Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき
 │   ├── clipboard-cleaner.md                # PDF コピー由来の段落内改行・RTF 書式をクリップボードで整形したいとき
-│   ├── cold-eyes-isolation.md              # cold-eyes / 盲検 review を別 session (同 vendor) に投げる前 / referee 版の原稿を用意する時 / review 結果を受け取って独立性を判定する時
+│   ├── cold-eyes-isolation.md              # cold-eyes / 盲検 review を別 session に投げる前 / referee 版の原稿を用意する時 / review 結果の独立性を判定する時
 │   ├── collaborators.md                    # 共同研究者 DB (collaborators.yaml) を作成・更新するとき
 │   ├── concise-output.md                   # user への応答・報告・deliverable (README / 案内 doc / PDF) を書くとき常時
 │   ├── data-pipeline-automation.md         # 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
@@ -100,7 +100,7 @@ claude-config/
 │   ├── personal-skills.md                  # personal skill (~/.claude/skills/) を規律の発火面として使うとき
 │   ├── photographed-document-transcription.md # スキャナを通していない「撮っただけ」 の紙 (手書き答案・ノート・書類) を大量にモデルで読んで構造化するとき + その読み取りを複数 session に分担するとき + 撮影した印刷資料から引用を起こして文章の根拠にするとき
 │   ├── physics-notes.md                    # 物理・数理ノートを書くとき
-│   ├── physics-verification-cycle.md       # 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき / 検証 campaign の repo・ledger・spec・第二の目・繰り越しを整備するとき / 連続 outcome の rank-one POVM の極値性・joint 一意性を検証するとき
+│   ├── physics-verification-cycle.md       # 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
 │   ├── preview.md                          # preview / dev server 稼働中に user へ動作確認を依頼するとき
 │   ├── prompt-injection.md                 # 外部由来 tool result に adversarial 指示文を疑ったとき
 │   ├── rebuttal-letter.md                  # referee report への point-by-point 返信を書くとき
@@ -124,7 +124,7 @@ claude-config/
 │   ├── tool-call-robustness.md             # tool call が malformed で壊れたとき・その予防を設計するとき
 │   ├── tts-review.md                       # 長文ドキュメント (提案書・原稿・メール draft 等) を音声読み上げで校正したいとき
 │   ├── ui-toggle-convention.md             # UI panel 内の toggle group を設計するとき
-│   ├── verification-cycle-ops.md           # 検証サイクル (verify-to-learn campaign / 第二の目 / retro) を session を越えて回し続ける仕組みを設計・運用・診断するとき / 「受領・retro・deferred 見直し・次の起票」 が止まっていないか確かめるとき / 無人 routine に検証 campaign を載せるか判断するとき
+│   ├── verification-cycle-ops.md           # 検証サイクルを session を越えて回し続ける仕組みを設計・運用・診断するとき
 │   ├── web-form-automation.md              # 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき
 │   ├── web-map-projections.md              # d3-geo / Natural Earth で世界地図ビューア (図法切替・中央経線回転・国境・国名・拡大) を作る・直すとき
 │   ├── web-tools.md                        # WebSearch / WebFetch / browser 自動化の信頼性を判断するとき

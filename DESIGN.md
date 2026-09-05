@@ -1157,3 +1157,22 @@ jq '.hooks.PostToolUse[] | select(.hooks[]?.command | contains("pdf-read-fallbac
 
 - 2026-05-18 朝 arXiv preprint attribution 誤同定 RCA: 個人層 research repo の関連 plan + 個人層 work-discipline.md §「PDF Read tool error を別経路への lazy substitution で覆い隠さない」 + 個人層 CLAUDE.md の PDF-read-fallback 規律
 - 2026-05-18 同日後続 Wolfram lazy substitution (= 第二事例): 同 plan の対応 sub-section + メタ層 RCA (= 規律を書く Claude も §16「context 構築での単一情報源 null 結論飛躍」 を起こす)
+
+## 2026-09-06: 検証サイクルを `ai-collaboration` (新 layer-1 repo) へ分離 — stub + forwarder で旧 path を生かす
+
+**判断**: 本 repo の名前 (`claude-config`) と実態 (Claude Code の設定 + 100 本超の domain 規約 + AI 協働の運用 kernel) の乖離を、 rename (A) / 中身を変えず README を書き換える rebrand (C) ではなく、 **AI 協働 platform を別 repo に切り出す (B)** で解く。 user 決定 (2026-09-06)。 新 repo = `odakin/ai-collaboration` (public、 vendor 中立 = Claude Code / Codex / 別ベンダーの pass を同じ規律で扱う)。
+
+**なぜ rename でないか**: `claude-config/` の literal path は owner の全 repo に約 500 件、 hooks / setup.sh / launchd routine / 他マシンの clone 先まで焼き込まれている。 rename は全部が同時に壊れる 1 点、 分離は「動く部分を残して新しい箱を隣に置く」 で段階可能。
+
+**なぜ rebrand でないか**: user 曰く「ありえん」。 名前と中身の不一致は書き換えで消えない — 箱を分けるのが実態に合う。
+
+**分離の方法 (from scratch + 履歴 import)**: clone して削る (= 数百 file の削除 commit と Claude Code 固有の設定が新 repo の履歴に残る) ではなく、 `git init` した空 repo に **移設 7 file の履歴だけ** を `git format-patch --root -- <files>` → `git am` で持ち込む (30 commit)。 履歴が要る理由 = 「実践が講演 (2026-08 PPP2026) に先行した」 等の credit 主張の一次証拠が commit 日付。
+
+**本 repo 側の残し方**:
+- doc 3 本 = **anchor 保持 stub**: doc-meta は残し、 本文を「正本はあちら + 旧 `<a id>` 全部の対応表」 に置換。 `#slug` を含む既存 link (層 3 に多数) は壊れず、 `check-slug-ref-compliance.py` の DANGLING にも落ちない。
+- script 4 本 = **forwarder**: 同 argv で `~/Claude/ai-collaboration/scripts/<same>` を exec。 library (`gpt_measurements.py`) は `import` 経路も要るので、 module として読まれた時は正本を importlib で load して symbol を re-export。 正本 clone が無い machine では明示 error (silent fallback しない)。
+- 移設先の doc 内の相対 link は `../../claude-config/...` に書き換え (同層の相互参照 = 4 層モデルは同層参照を許す)。 GitHub 上では repo 外 link として render されないが、 `~/Claude/` 配下の layout では解決する (odakin-prefs → claude-config の既存 pattern と同じ)。
+
+**Phase 2 (未実施、 trigger 付き)**: `conventions/multi-session-coordination.md` (委譲 / 返送 spine / cross-vendor board) と `codex/` (AGENTS / PARITY / setup-codex) は「AI 協働」 の一部だが Claude Code 固有の hook 配線と絡む。 移設 trigger = Codex Pilot A (常駐 runner の別ベンダー化) 開始時。 正本 = `ai-collaboration/DESIGN.md`。
+
+**stub の寿命**: 削除しない (= 外部 fork / 他マシンの古い clone からの literal 参照を切らない)。 forwarder は正本 clone を前提にするので、 `setup.sh` が ai-collaboration も clone するようにするかは Phase 2 で判断 (現状 = owner 全マシンに手動 clone、 無ければ明示 error)。
