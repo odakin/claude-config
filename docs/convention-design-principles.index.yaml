@@ -573,6 +573,10 @@ sections:
     legacy: "20.3"
     level: 3
     title: "20.3 pattern"
+  - id: premise-change-stakeholder-lag
+    legacy: "20.4"
+    level: 3
+    title: "20.4 前提の切替は、 自分の代わりに規則を当てる人にも届いていない — 他者の規則引用は「どの前提の文書か」 を正本で照合してから従う"
   - id: supersede-completion
     legacy: "20.5"
     level: 3
