@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Google API を Python から直接叩く setup をするとき
 category: infra
-summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避、 loopback OAuth consent フローの CSRF/横取り対策 〔state nonce + PKCE S256 + request-loop + 手動貼付の state 検証 + 補償制御 hard-fail + 識別子 charset 検証、 #oauth-loopback-hardening〕)
+summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避、 loopback OAuth consent フローの CSRF/横取り対策 〔state nonce + PKCE S256 + request-loop + 手動貼付の state 検証 + 補償制御 hard-fail + 識別子 charset 検証、 #oauth-loopback-hardening〕) + #drive-xlsx-inplace-update (= 他人 owner の共有 xlsx に書く: full drive 別 token / revisions.get_media が truth / openpyxl round-trip の損失 / files.update 同 ID / 再 download literal verify)
 -->
 # Google API を Python から直接アクセスする setup
 
@@ -141,6 +141,19 @@ elif mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     wb = openpyxl.load_workbook(buf, data_only=True)
     # wb.sheetnames + wb[name].iter_rows(values_only=True)
 ```
+
+## <a id="drive-xlsx-inplace-update"></a>共有 xlsx の in-place 更新 (= 他人 owner の Office file に自分の行を書く)
+
+主任 / 委員会が「各自記入してください」 と Drive に置く sheet は、 xlsx のまま (= `rtpof=true`) のことが多い。 Sheets API は使えず (上表)、 画面で書くと他人の記入を壊す ([`machine-route-first.md #shared-document-write`](machine-route-first.md#shared-document-write))。 経路は **Drive API の media round-trip** 一択:
+
+1. **scope**: `drive.file` は app が作った file にしか効かない → 他人 owner の file には **full `drive`** が要る。 既存の最小権限 token に混ぜず、 **別 directory / 別 token file** で発行 (上 §「既存 client + 別 scope token」)。 consent は 1 回、 click は user
+2. **保存済 truth は `revisions.list` → 最新 revision の `revisions.get_media`** で読む。 `files.get_media` は Office 編集 mode の autosave 直後に**数分 stale な content を返す**ことがある (2026-09-05 実測: 画面で undo 済なのに旧内容が返り、 revisions は新しかった)。 verify・diff・restore の基準は常に revision
+3. **編集前 snapshot を残す** (= 復元用。 Drive 側にも revision 履歴が残るが、 手元にも 1 枚)
+4. **openpyxl で cell を書く** — round-trip で落ちるもの: 画像 / chart / 一部の条件付き書式。 残るもの: cell comment (legacy note)、 merged、 基本書式。 事前に `load_workbook` で `_images` / `_charts` / comment を列挙し、 単純な記入 sheet であることを確認してから使う。 数値は `8.0` → `8` に正規化されうる (無害)、 複数行は `\n`
+5. **`files().update(fileId, media_body=MediaIoBaseUpload(..., mimetype=xlsx))`** で**同じ file ID** に書く (= URL 不変、 revision に積まれる、 owner も共有設定も不変)。 `files.create` で別 file を作ってはいけない
+6. **再 download (revision) して指定 cell を literal 比較**、 不一致は exit 1。 「upload が 200 だった」 は verify ではない
+
+他人の file を書き換える操作なので、 実行は user 明示 OK 経由 (= 対外 side effect と同格)。 実装例 = 個人層の `drive-xlsx-set-cells.py` (download → snapshot → set → update → verify を 1 コマンド化、 `--inspect` / `--dry-run` 付き)。 native Sheets なら同じ位置づけの経路は Sheets API `values.update` で、 こちらは round-trip の損失が無い。
 
 ## <a id="drive-folder-bulk-download"></a>Drive folder の一括 download (= list + native-export map + 再帰)
 

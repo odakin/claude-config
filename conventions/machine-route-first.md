@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 外部 service / アプリを操作・データ取得する経路を選ぶとき (画面 drive を検討し始めた瞬間)
 category: harness-core
-summary: 経路 ladder (dedicated MCP → API 直 → CLI → 経路を実装 → user 依頼 → 画面 drive) — 画面 drive は最終手段で、経路が無いときは「実装するのが先」 (#build-the-route-first = 実装した経路を auto-load 面に記録するまでが 1 単位)。 画面 drive の 3 重コスト (unreliable click / user のマシン拘束 / 対象取り違え) と許容例外。 公開 API の無い web app は #internal-endpoint-replay (= XHR hook で UI 操作 1 回を捕捉 → 同 endpoint を page context から叩く → rules/dry-run/apply → reload で確認)
+summary: 経路 ladder (dedicated MCP → API 直 → CLI → 経路を実装 → user 依頼 → 画面 drive) — 画面 drive は最終手段で、経路が無いときは「実装するのが先」 (#build-the-route-first = 実装した経路を auto-load 面に記録するまでが 1 単位)。 画面 drive の 3 重コスト (unreliable click / user のマシン拘束 / 対象取り違え) と許容例外。 **他人 owner の共有 document (sheet / form / doc) への書込は画面 drive 禁止級** (#shared-document-write = blast radius が自分の外、 xlsx は API in-place update、 native Sheets は Sheets API、 経路が無ければ user 依頼が先)。 公開 API の無い web app は #internal-endpoint-replay (= XHR hook で UI 操作 1 回を捕捉 → 同 endpoint を page context から叩く → rules/dry-run/apply → reload で確認)
 -->
 # 機械経路 first (画面 drive は最終手段)
 
@@ -39,6 +39,24 @@ MCP / API / CLI の経路が**存在しない**と分かった時、 それは�
 
 OAuth を伴う実装では loopback consent の hardening 4 点 set ([`google-api-direct-access.md` oauth-loopback-hardening](google-api-direct-access.md#oauth-loopback-hardening)) を最初から適用する。
 
+## <a id="shared-document-write"></a>他人 owner の共有 document への書込は画面 drive しない (= blast radius が自分の外)
+
+ladder 6 (画面 drive) の中でも、 **他人が owner の共有 document** (= 主任が配る「各自記入」 sheet、 committee の集計表、 共同編集 doc / form の回答欄) に**値を書く**操作は別格に扱う。 自分の file なら画面 drive の失敗は自分の損で済むが、 共有 document では **1 回の誤 click が他人の記入・見出し・注記を上書きし、 気づかれないまま集計に流れる**。 read-only の画面確認 (screenshot で状態を見る) は従来どおり許容、 **書込だけは画面でやらない**。
+
+画面 drive の書込が壊れる機構 (2026-09-05 実測、 Google Sheets の Office 編集 mode):
+
+- **focus の取り違え**: name box / 数式 bar への click が cell 選択に化け、 続く `type` が active cell (= 注記行・見出し行) を上書きする。 range 選択 (cmd+a) が sheet 全体に効く等、 keyboard shortcut の効き先も画面状態で変わる
+- **先頭 keystroke の欠落**: cell 選択直後の type は edit mode 遷移中に先頭数文字が食われ、 **部分的に正しい値** (= 一見それらしい) が保存される。 名前 cell が空・規則文の先頭欠け、 の形で残った
+- **画面が保存済 truth を映さない**: screenshot は scroll 前の stale 画像を返し、 autosave は数十秒遅れ、 undo が「保存済か」 は画面から分からない。 verify は API で保存済 revision を読む以外に無い
+- 救えたのは **undo (= revision に残る)** と、 API 側の revision 履歴 — つまり回復手段は最初から API 側にあった
+
+正しい順序 (ladder をこの class に特化):
+
+1. **対象の形式を先に判定** — native Sheets → Sheets API (`values.update`)、 xlsx を Drive に置いたもの → [`google-api-direct-access.md #drive-xlsx-inplace-update`](google-api-direct-access.md#drive-xlsx-inplace-update) (= revision download → 編集 → `files.update` → 再 download verify)、 Form → Forms API か user 依頼
+2. **token の scope が足りなければそこで止まって #build-the-route-first** (= `drive.file` は他人 owner の file に無力、 full `drive` を**別 token** に分離して 1 回 consent)。 「認証は user、 操作は agent」 の分業で、 consent click だけ user に渡す
+3. 経路が作れない (= API が無い / 権限が出ない) なら **ladder 5 (user 依頼) を画面 drive より先に**提案する — 所有者本人の 1 分の操作は、 agent の画面 drive より速くて安全
+4. 画面 drive に降りるのは user が「画面でやって」 と**この対象について**明示した時だけ。 その場合も 1 cell ずつ・書く前に name box を zoom で verify・書いた後は API で保存済 revision を読む
+
 ## <a id="internal-endpoint-replay"></a>公開 API の無い web app: 内部 endpoint 再現 (= ladder 4 の一形態)
 
 公式 API も CLI も無い web app (家計簿 SaaS 等の消費者向け web app に多い) でも、 **UI が裏で叩いている内部 endpoint を、 ログイン済み page の context から同じ形で叩く**経路は大抵作れる。 画面 drive (座標 click・dropdown 開閉・スクロール) より速く、 行数・レイアウトに依存せず、 dry-run が自然に組める。 認証は browser session (cookie) をそのまま使うので token 整備が不要 = 「ログインだけ user、 操作は agent」 の分業がそのまま成立する。
@@ -61,5 +79,7 @@ recipe (2026-09-05 家計簿カテゴリ一括修正で確立):
 2026-08-28: claude.ai の共有会話を Claude Code に渡す経路が無く (WebFetch / curl / headless 全滅)、 スマホでは 1 message ずつの手動コピペしかなかった → **経路を 2 本実装**: ① in-app Browser pane での share URL 直読 (= agent 側の最短経路、 実は既存 tool が素通しだった) ② page-context API fetch のブックマークレット (= user 側 1 click export)。 手動コピペは消え、 経路は全 session の資産になった。 recipe = [`web-tools.md #claude-share-page-access`](web-tools.md#claude-share-page-access)。 注: bot 保護持ちサイトでは「経路を実装する」 と「保護を回避する」 の線引きが要る — 実ブラウザ + user click は前者、 headless 化・無人化は後者 (やらない)。
 
 2026-09-05: 家計簿 SaaS (公開 API 無し) の明細カテゴリ誤分類を、 まず画面 drive で 2 件直した (dropdown 開閉 × 2 段 × 2 件 + 誤 click 1 回、 ~10 round-trip) → user 「GUI のダサいやり方じゃなくて API 的に」 → XHR hook で UI 操作 1 回を捕捉し `PUT /cf/update` (urlencoded + CSRF) と判明、 rules-driven の dry-run/apply tool を実装。 以後は 4 手 (rules 読む → dry-run → 目視 → apply + reload 確認) で月をまたいで一括、 click ゼロ。 同時に業種語 regex の巻き込み (3 件) を経験し recipe 3 に焼いた。 recipe = #internal-endpoint-replay。
+
+2026-09-05 (同日 2 例目): 専攻主任が Drive に置いた「各自記入」 xlsx (他人 owner、 6 名記入済) に自分の行を書く作業を claude-in-chrome の cell click + type で実施 → name box click が cell 選択に化けて**注記行と見出し行を自分の値で上書き** (undo で救出)、 再試行では先頭 keystroke が食われ名前 cell 空 + 規則文の先頭欠けが保存された。 screenshot は stale で保存状態が読めず、 API の revision download でしか truth が分からなかった。 user 「ダサい GUI 的なやり方でなく自動化で」 → full `drive` scope の別 token を 1 consent で発行し、 revision download → openpyxl → `files.update` → 再 download verify の経路を実装 (~20 分)。 以後は 1 コマンド。 recipe = [`google-api-direct-access.md #drive-xlsx-inplace-update`](google-api-direct-access.md#drive-xlsx-inplace-update)、 規律 = #shared-document-write。
 
 関連: [`google-api-direct-access.md`](google-api-direct-access.md) (Google の API 直叩き pattern) / [`dropbox-api-access.md`](dropbox-api-access.md) (Dropbox) / [`mcp.md`](mcp.md) (MCP 使い分け)
