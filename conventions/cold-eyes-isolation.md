@@ -50,7 +50,7 @@ cold-eyes とは「書いた本人と別の目」 で検品させることだが
 
 ## <a id="external-paper-variant"></a>4.5 変種: 外部論文の検証読み (verify-to-learn) は sandbox でなく deny list (2026-09)
 
-自著の盲検と違い、 外部論文の検証読みで隔離すべきは「**起票者の仮説・解釈**」 だけ (著者注・来歴・却下案は無い)。 sandbox を切らず repo 内の campaign dir で走らせ、 (a) spec に期待 verdict を書かない (§3 と同じ) + (b) 起票者の note / 教科書 dir を deny list に列挙 + (c) 受領後に汚染 grep、 で足りた (初回: 0 hit、 worker は起票者の知らない結果を出した)。 repo の道具 (ledger / check / refs) を worker に触らせる利点が上回る。 再訪 trigger = 汚染 grep で hit → sandbox 方式へ。 検証 pass が産んだ**新結果**の第二の目は 2 段階 (盲検 → 攻撃) = [`physics-verification-cycle.md#campaign-tooling`](physics-verification-cycle.md#campaign-tooling) C。
+自著の盲検と違い、 外部論文の検証読みで隔離すべきは「**起票者の仮説・解釈**」 だけ (著者注・来歴・却下案は無い)。 sandbox を切らず repo 内の campaign dir で走らせ、 (a) spec に期待 verdict を書かない (§3 と同じ) + (b) 起票者の note / 教科書 dir を deny list に列挙 + (c) 受領後に汚染 grep、 で足りた (初回: 0 hit、 worker は起票者の知らない結果を出した)。 repo の道具 (ledger / check / refs) を worker に触らせる利点が上回る。 再訪 trigger = 汚染 grep で hit → sandbox 方式へ (**同日 n=1 で発火**: 検証 pass が産んだ新結果の第二の目では、 auto-load の projects 一覧に書かれた verdict の方向が worker に見えていた = 汚染経路 1 は deny list で塞げない。 ∴ 新結果の第二の目は §2 の sandbox、 deny list 方式は「verdict が事前に存在しない一次検証読み」 限定)。 検証 pass が産んだ**新結果**の第二の目は 2 段階 (盲検 → 攻撃) = [`physics-verification-cycle.md#campaign-tooling`](physics-verification-cycle.md#campaign-tooling) C。
 
 ## 5. 起源
 
