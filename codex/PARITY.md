@@ -106,6 +106,16 @@ product-selected context window. Treat any inaccessible product prefix as an
 explicit comparison confounder rather than assigning its cost to `SESSION.md`
 or an instruction file by elimination.
 
+**Hand-off specs from Claude to Codex.** When a Claude session hands a long
+derivation or generation task to a Codex session, the spec must assume the
+smaller effective window and its automatic compaction: minimise the read set
+and require step-wise durable commits, per
+[`conventions/output-cap-death-loop.md#context-compaction-loss`](../conventions/output-cap-death-loop.md#context-compaction-loss).
+A cross-vendor worker also tends to promote its findings into shared sources of
+truth by default; say "no promotion, proposals go in results" explicitly and let
+the requester promote after receipt
+([`conventions/physics-verification-cycle.md#campaign-tooling`](../conventions/physics-verification-cycle.md#campaign-tooling) H).
+
 ## Active Codex integration
 
 The public source lives in this layer-1 repository: `codex/HOME-AGENTS.md`,
