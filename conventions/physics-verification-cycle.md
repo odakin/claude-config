@@ -132,7 +132,7 @@ report 側の hygiene (hash-pinned reviewed_source / 行番号の有効範囲宣
 
 spec 側の教訓 (= 起票者向け): 環境の道具の欠落 (SDP solver 不在) と代替 (linprog / 手計算) を spec に書いておくと worker が最初の 1 時間を tooling に溶かさない (実測は約 1.5 時間 = 全体の 1/4)。 起票者の仮説を deny list で隔離した結果、 worker は問い C-01(a) に論文にない証明 (Husimi POVM の間主観性) を出した — 独立性は verdict だけでなく **新規結果**も生む。
 
-## <a id="campaign-tooling"></a>14. Verify-to-learn campaign の運用 kernel — ledger・2 段階第二の目・繰り越し・機械 gate (2026-09)
+## <a id="campaign-tooling"></a>15. Verify-to-learn campaign の運用 kernel — ledger・2 段階第二の目・繰り越し・機械 gate (2026-09)
 
 初回 campaign (外部論文 2 本、41 item、64 分、別 session worker) とその retro から。 **一般則はここ、 instance (campaign dir・check script・finding) は private repo に残置**。 道具の実体は層1 `scripts/`。
 
@@ -152,6 +152,6 @@ spec 側の教訓 (= 起票者向け): 環境の道具の欠落 (SDP solver 不�
 
 **正直な限界**: 全部 n=1 (初回 campaign + retro)。 efficacy proxy は傾向指標。 cadence gate は「entries per commit」 しか見ない (時間・token は git に無い)。
 
-## <a id="sibling-routing"></a>15. 隣接 doc への routing
+## <a id="sibling-routing"></a>16. 隣接 doc への routing
 
 自著の投稿前検査 = [`paper-audit.md`](paper-audit.md) / ノートの書き方 = [`physics-notes.md`](physics-notes.md) / 数値検証 kernel = [`scientific-computing.md`](scientific-computing.md) / 審査側 = [`peer-review-workflow.md`](peer-review-workflow.md) / 文脈手術時の散文 sweep = [`paper-audit.md#relocation-rebinding-sweep`](paper-audit.md#relocation-rebinding-sweep) / 検出失敗 RCA の方法論 = [`convention-design-principles.md#detection-zero-location`](../docs/convention-design-principles.md#detection-zero-location) / 委譲・cold-eyes の機構 = [`multi-session-coordination.md`](multi-session-coordination.md)。 campaign の道具 = 層1 [`scripts/ledger-commit-cadence-gate.py`](../scripts/ledger-commit-cadence-gate.py) + [`scripts/verification-campaign-report.py`](../scripts/verification-campaign-report.py) + [`scripts/gpt_measurements.py`](../scripts/gpt_measurements.py) (数学 library、 [§定義 level 判定](#definition-level-judge))。
