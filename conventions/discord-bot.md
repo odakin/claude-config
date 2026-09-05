@@ -30,6 +30,23 @@ Bot に付ける channel-level / server-level 権限は「Token が漏れた時�
 - スレッド: Create Public Threads, Create Private Threads, Send Messages in Threads
 - メンバーシップ: Create Invite (任意)
 
+### <a id="guild-role-vs-overwrite"></a>Guild-level role 権限は overwrite の無い channel 全部に効く (= 「overwrite 1 件だけ」 は被害範囲の見積もりにならない)
+
+invite URL の `permissions=` bitfield は **bot 専用 role の guild-level 権限**として付与される。 その後 1 つの private channel にだけ overwrite を足しても、 **overwrite の無い public channel には guild-level 権限がそのまま効く** (= View / Send / Read History 等)。 「この bot は overwrite が 1 channel 分しか無いので他 channel は touch 不可」 という見積もりは誤り — Token 漏洩時の被害範囲は **guild-level 権限が届く全 channel** で数える。
+
+確認は API 1 発: `GET /users/@me/guilds` の該当 guild `permissions` (= 実効 guild-level bitfield。 `1<<10` VIEW_CHANNEL / `1<<11` SEND_MESSAGES / `1<<16` READ_MESSAGE_HISTORY) + `GET /channels/{id}` の `permission_overwrites` が空なら guild-level がそのまま効く。 被害範囲を本当に 1 channel に絞りたいなら **guild-level 権限を 0 で招待し、 channel overwrite だけで allow する** (= 上の「中立がデフォ」 を guild-level にも適用)。
+
+(観測 2026-09-05: 個人運用 bot を 3 者 private channel 用に招待した際、 規約に「他 channel は touch 不可」 と書いていたが、 別用途で public channel への `--check` が通って誤りが判明。 見積もりが甘い方向に外れていた = 被害範囲の過小評価)
+
+### <a id="bot-identity-persona"></a>Bot identity = 発言主体 (= 組織名義と個人名義を bot で分ける)
+
+同じ server に**組織・自動系の名義** (= fetcher / 告知 / リマインダー / 集計) と**個人の一人称発言** (= 事務職員・メンバーへの返信 / 相談) が混在するとき、 1 つの bot で両方を出すと読者は「誰が言っているか」 を本文から推測させられる (= 組織 bot が「私は〜」 と書くと、 組織の公式見解か個人の判断か区別できない)。 bot の表示名は読者に発言主体を伝える最も安い signal なので、 **投稿の主語が組織か個人かで bot を分ける**:
+
+- 主語 = 組織 / system (「研究室セミナーのお知らせ」 「明日のリマインダー」) → 組織名義 bot (= fetcher と同居してよい)
+- 主語 = 個人 (「〜と考えております」 「〜については私から照会済です」) → 個人名義 bot (= 名前に個人を示す語を含める、 例 `<handle>-secretary`)
+
+判別は投稿ごとでなく「この投稿の一人称は誰か」 の 1 問。 迷う例: 事務職員への回答 = 個人 (組織 bot で出すと組織回答に見える) / 会場変更の周知 = 組織。 trade-off: 個人名義 bot を同 server に足すと Token surface が 1 つ増える (= 上の権限ポリシーで被害範囲を見積もる、 前節の guild-level 注意も込み)。 過去に組織 bot で出した個人名義投稿は遡及修正しない (= 履歴は履歴、 以後の routing を変えるだけ)。
+
 ## Private channel への Bot 追加手順
 
 `@everyone` の View Channel が deny された private channel では、server-level role による View Channel allow も override される。Bot を入れる手順:
