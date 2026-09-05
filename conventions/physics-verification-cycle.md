@@ -164,6 +164,8 @@ spec 側の教訓 (= 起票者向け): 環境の道具の欠落 (SDP solver 不�
 
 **G. 受領手順 (起票側)**: 汚染 grep → 主要 finding の独立再実装 (受け手は worker の script を走らせない、 [§7](#independent-second-eye)) → refuted / 新結果に `novel_to_requester` 記入 → stats + carryover 再生成 → 完了 marker consume → 下流 (教科書 / 論文 note) へ verdict 反映。 他者論文の誤り finding は default 非公開のまま ([§6](#verify-to-learn))、 著者報告は人間の判断。
 
+**H. 別ベンダー pass の scope は spec だけでは縛れない (n=1)**: 「書くのは自分の campaign dir だけ、 promote は受領側」 と spec に書いても、 受け手の AGENTS 既定 (= 確定知見は owning project へ昇格) が勝ち、 別ベンダー worker が層1 library・規約・文献 SoT・repo の DESIGN へ直接 commit した。 中身は review で健全と判明し採用したが、 (i) 受領側が突合する前に SoT が動く (ii) 別 campaign の決着で即 stale になる (実測: 文献 note の「unverified」 が同夜 refuted に)。 → cross-vendor spec には **「promote 禁止、 提案は results.md に書く」 を AGENTS 既定より強い language で明記** し、 board の claim event を受領側が監視、 昇格は受領・突合の後に受領側が行う (C′ の「hoist は受領後」 と同じ時間順)。
+
 **正直な限界**: 全部 n=1 (初回 campaign + retro)。 efficacy proxy は傾向指標。 cadence gate は「entries per commit」 しか見ない (時間・token は git に無い)。
 
 ## <a id="sibling-routing"></a>16. 隣接 doc への routing
