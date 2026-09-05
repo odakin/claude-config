@@ -17,6 +17,10 @@ userEmail を**自分の config (= `~/.claude.json` の `oauthAccount` = CLI log
 ## 同定 logic
 
 surface 判定 = env CLAUDE_CODE_ENTRYPOINT ('claude-desktop' = desktop app / それ以外 = CLI 系)。
+CLI 系のうち **Remote Control server 配下** (= スマホ / 別マシンから bridge で入っている session) は
+CLAUDE_PID とその祖先 process (3 段) の cmdline に `remote-control` が居れば `rc/<label>` と出す
+(2026-09-05 追加、 user 要望「リモートかどうかも頭に表示」。 ps 経路が失敗したら `cli/<label>` に
+fail-open = リモート性を捏造しない。 ⚠️ RC 実機での検証は未実施 = 初回 RC session の stamp で確認)。
 
 desktop の account:
   1. env CLAUDE_CODE_HOST_SESSION_ID (= app が bundled CLI に渡す host session id) を key に
@@ -106,6 +110,35 @@ def desktop_account_uuid(host_sid, sessions_dir=APP_SESSIONS_DIR, claude_pid=Non
     return None, None
 
 
+def _is_remote_control(env, max_depth=3):
+    """CLAUDE_PID とその祖先 (max_depth 段) の cmdline に `remote-control` が居るか。
+    ps 失敗・pid 不明は False (= fail-open で cli 表記に落ちる)。"""
+    pid = env.get("CLAUDE_PID")
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    for _ in range(max_depth):
+        if pid <= 1:
+            return False
+        try:
+            out = subprocess.run(["ps", "-o", "command=", "-o", "ppid=", "-p", str(pid)],
+                                 capture_output=True, text=True, timeout=5).stdout.strip()
+        except Exception:
+            return False
+        if not out:
+            return False
+        parts = out.rsplit(None, 1)
+        cmd, ppid = (parts[0], parts[1]) if len(parts) == 2 else (out, "0")
+        if re.search(r"\bremote-control\b", cmd):
+            return True
+        try:
+            pid = int(ppid)
+        except ValueError:
+            return False
+    return False
+
+
 def identify(env=None, home=None, sessions_dir=APP_SESSIONS_DIR):
     """dict: host / surface / email / uuid / source / sid8 / warn"""
     env = env if env is not None else os.environ
@@ -132,7 +165,8 @@ def identify(env=None, home=None, sessions_dir=APP_SESSIONS_DIR):
     else:
         cfg = env.get("CLAUDE_CONFIG_DIR") or os.path.join(home, ".claude")
         label = os.path.basename(cfg).removeprefix(".claude").removeprefix("-") or "base"
-        r["surface"] = f"cli/{label}"
+        kind = "rc" if _is_remote_control(env) else "cli"
+        r["surface"] = f"{kind}/{label}"
         pair = _read_oauth(os.path.join(cfg, ".claude.json"))
         if pair:
             r["uuid"], r["email"] = pair
