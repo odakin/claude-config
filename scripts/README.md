@@ -54,6 +54,7 @@
 - **[install-public-precommit.sh](install-public-precommit.sh)** — 各 public repo に pre-commit stub を冪等配置
 - **[install-remote-control-server.sh](install-remote-control-server.sh)** — Remote Control サーバーモードを launchd 常駐化（--dir / --replace-agent / --status / --uninstall、KeepAlive 60s 自動復帰、preflight で auth/同意の欠落を案内、idempotent、macOS 限定、conventions/remote-control-server.md）
 - **[latexdiff-review-snapshot.sh](latexdiff-review-snapshot.sh)** — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex 最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
+- **[ledger-commit-cadence-gate.py](ledger-commit-cadence-gate.py)** — YAML ledger の commit cadence gate (pre-commit): 1 commit で追加される list entry (`- id:`) が N 個を超えたら refuse、escape env は hygiene log に記録 (= 「item ごとに commit」 の散文規律を git exit code で機械化。--selftest 内蔵、conventions/physics-verification-cycle.md#campaign-tooling)
 - **[normalize-docx-decl.py](normalize-docx-decl.py)** — 既存 docx の XML 宣言を Word 形式へ後追い正規化する CLI（docx_decl_patch の path-based 版、 office-automation.md#docx-checkbox-content-control）
 - **[overlay-seal-pdf.py](overlay-seal-pdf.py)** — Overlay a seal / signature image onto a generated PDF — keeping its color.
 - **[pdf-cleaner.html](pdf-cleaner.html)** — clipboard-cleaner.py のブラウザ版 fallback（非 macOS / pbcopy なし環境用、整形ロジックの正本は clipboard-cleaner.py で両実装を同期）
@@ -76,6 +77,7 @@
 - **[surface-discord-bot-dm.py](surface-discord-bot-dm.py)** — Discord bot DM channel の未記録 message surface engine（daily fetcher が吐く JSON と user 側 ledger（text/YAML 内 messageId）の diff で「bot DM に返事が来ても誰も読まない」 死角を埋める汎用 CLI、 個別環境への依存ゼロ＝引数で bot ID / json-dir / ledger-dir / counterpart map / title を渡す、 finding 0 件 silent、 --selftest 内蔵。 personal layer に thin wrapper を 1 つ置いて呼ぶ、 conventions/discord-bot.md#bot-dm-surface）
 - **[tune-seal-image.py](tune-seal-image.py)** — Calibrate a digitized seal PNG against a *printed* reference — stroke width and ink color.
 - **[validate-codex-skills.test.sh](validate-codex-skills.test.sh)** — shipped Codex skills の discovery metadata を検証する
+- **[verification-campaign-report.py](verification-campaign-report.py)** — verify-to-learn campaign の集計: ledger.yaml (3 状態 / tier / readings) + git 由来の所要・entries per commit + efficacy proxy (受領側記入 novel_to_requester) を results.md の AUTO block に焼き、👁 未了 item を carryover.yaml に集約 (--selftest 内蔵、conventions/physics-verification-cycle.md#campaign-tooling)
 - **[verify-form-guidance.py](verify-form-guidance.py)** — 官製様式の「記入要領 (赤字/青字)」 が提出物に残置していないか検出。
 - **[xlsx-to-pdf.sh](xlsx-to-pdf.sh)** — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
 
