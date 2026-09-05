@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 102 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 103 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -184,6 +184,8 @@ layer 1 (public) のドメイン固有規約 102 file をカテゴリ別に列�
   - UI panel 内 toggle group の default 側統一ルール (slider 位置 + bright label を panel scope で揃える)
 - **[web-form-automation.md](web-form-automation.md)** — 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき
   - flaky web form 入力の一般則 — 送信結果はレスポンスページで判断しない (過負荷サイトは POST 成功後にエラーページを返す、重複確認画面 = 前回送信成功の証拠、#submit-truth-is-server-state)、公開 read API の cache による false negative (#read-api-cache-lag)、radio/checkbox は click より form_input 直接設定 (#form-input-over-click)、動的 combobox は form_input 不可、多言語ペア validation の非対称発火と「同値を両欄に焼く」回避 (#language-pair-validation)、metadata 自動取り込みの著者順 verify (#imported-metadata-verify)、リトライ規律 (フォーム状態は保存されない前提で SoT から再入力)、upload POST だけの 503 はサイズ原因と早断定しない (#upload-only-503)
+- **[web-map-projections.md](web-map-projections.md)** — d3-geo / Natural Earth で世界地図ビューア (図法切替・中央経線回転・国境・国名・拡大) を作る・直すとき
+  - 単一 HTML 配布の地図図法ビューアの知見集 — 図法の性質 (正積・極・断裂) は自称でなく d3 で実測して守る、経度回転で外郭不変な図法だけ fit をキャッシュ、拡大は viewBox 切り出し + 動作中 110m / 静止時 50m の 2 段、国名は「文字が国の幅 + 倍率比例のはみ出し許容に収まる」 だけ描く、配色は Natural Earth MAPCOLOR9 をデータのまま (国ごとの手直しはしない)、南を上 = 鏡像でなく 180° 回転。web 一般の罠 (hidden 属性 vs display、Number(null)=0、色 literal の同形異字、headless で高さ 0) も同梱
 - **[web-tools.md](web-tools.md)** — WebSearch / WebFetch / browser 自動化の信頼性を判断するとき
   - WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block)
 - **[zenn.md](zenn.md)** — Zenn.dev 記事を執筆・入稿するとき

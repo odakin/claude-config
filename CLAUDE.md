@@ -125,6 +125,7 @@ claude-config/
 │   ├── tts-review.md                       # 長文ドキュメント (提案書・原稿・メール draft 等) を音声読み上げで校正したいとき
 │   ├── ui-toggle-convention.md             # UI panel 内の toggle group を設計するとき
 │   ├── web-form-automation.md              # 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき
+│   ├── web-map-projections.md              # d3-geo / Natural Earth で世界地図ビューア (図法切替・中央経線回転・国境・国名・拡大) を作る・直すとき
 │   ├── web-tools.md                        # WebSearch / WebFetch / browser 自動化の信頼性を判断するとき
 │   ├── windows-msys.md                     # Windows (Git Bash / MSYS) 上で本リポの script・hook を動かす / 移植性のある shell・Python を書くとき
 │   ├── wolfram-scripting.md                # wolframscript を書く・debug するとき

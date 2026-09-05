@@ -2,6 +2,12 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-05: 地図図法ビューアの知見を層1 に hoist — `conventions/web-map-projections.md` 新設
+
+- 起点 = `equal-earth-viewer` (odakin の公開教材、同日 1 日で初版→国境・国名・拡大・南を上まで)。 project 固有の判断史は同 repo DESIGN.md、 再利用できる一般則だけを本 doc に。
+- 中身 = §1 図法の性質 (正積・極・断裂) は自称でなく d3 で実測して守る (同日に手書き metadata 2 件が誤り) / §2 経度回転で外郭不変な図法だけ fit をキャッシュ、断裂図法は回せない / §3 拡大 = viewBox 切り出し + 動作中 110m・静止時 50m の 2 段 / §4 Natural Earth の国データ (key は name、 name_ja、 MAPCOLOR9 をデータのまま、 国名描き込みの fit 規則) / §5 UI 判断 (user 指摘で確定) / §6 web 一般の罠 (hidden vs display、 Number(null)、 色 literal の同形異字、 headless 高さ 0)。
+- 個人層側 = odakin-prefs `work-discipline.md` §A/§B に 2 bullet (実測で守る / 「本当に?」 質問 = audit trigger + 個別手直しの連鎖) + archive に当日の訂正一覧。
+
 ## 2026-09-02c: Codex automation routing — 正本・発火 skill・上層原則へ結晶
 
 - 製品固有の durable contract は [`codex/PARITY.md#native-automation-routing`](codex/PARITY.md#native-automation-routing)、常時発火面は [`codex-automation-routing`](codex/skills/codex-automation-routing/SKILL.md)。本 entry は snapshot pointer のみ。
