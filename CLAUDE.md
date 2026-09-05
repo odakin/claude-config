@@ -91,7 +91,7 @@ claude-config/
 │   ├── office-automation-principles.md     # 新しい様式・slug の無い罠に当たったとき (考え方の原則編)
 │   ├── office-automation.md                # 研究費/教務/学術様式の xlsx/docx を機械で fill するとき (罠の症例集)
 │   ├── office-files.md                     # Office file (Excel/Word/PDF/PowerPoint) 仕事に入るとき最初に開く入口
-│   ├── output-cap-death-loop.md            # worker session (spawn_task / headless claude -p / Agent subagent) に長い導出・生成 task を渡す spec を書くとき・spawn した worker が「isRunning なのに成果ゼロ」 のとき
+│   ├── output-cap-death-loop.md            # worker session (spawn_task / headless claude -p / Agent subagent / 別ベンダー CLI 〔Codex 等〕) に長い導出・生成 task を渡す spec を書くとき・spawn した worker が「isRunning なのに成果ゼロ」 のとき・受け手の context 窓が小さい (自動圧縮が早い) と分かっているとき
 │   ├── overleaf-integration.md             # Overleaf↔GitHub 連携 repo を設定・sync するとき
 │   ├── paper-audit.md                      # 論文 merger 等の構造 issue を体系 audit するとき
 │   ├── paper-submission.md                 # 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき

@@ -278,7 +278,7 @@ identity は similarity でなく content corroboration でしか establish で�
 - **deliverable を決定的 path に commit** (= 結果の実体、 push が無くても残る)。
 - **完了 marker を決定的な "results inbox" に 1 個落とす** (= status / result_path / 1 行要約)。 これを **surfacing 機構** (= session 開始時の surface・dashboard・OS 通知) が拾い、 人間が次に居る *どの session でも* 「結果が届いた・場所はここ」 と自動表示する。 surfacing は file を読む script 操作なので機械化可能 (= model の chat 出力にも親の findability 仕込みにも依存しない)。 ⚠️ marker は **子自身の完了 action** なので live-push より reliable。 ⚠️ inbox / surfacing 機構の実体は各 user の private layer に置く (= 本 public doc は *形* のみ規定、 具体 path は書かない)。
 
-**task sizing (= worker を殺さない)**: 長い導出・生成 task を 1 spec に mega 盛りしない — worker は 1 応答の出力上限 (thinking 込み) を超える巨大 turn を試みると **決定的 retry loop で silent 死する**。 spec に焼き込む分割・turn 規律・部分結果 permission の正本 = [`output-cap-death-loop.md`](output-cap-death-loop.md#prevention-spec-rules)。 **どの大きさに切るか** (= sizing 述語) と **orientation cost の spec 前払い** は [§9](#worker-task-sizing)。
+**task sizing (= worker を殺さない)**: 長い導出・生成 task を 1 spec に mega 盛りしない — worker は 1 応答の出力上限 (thinking 込み) を超える巨大 turn を試みると **決定的 retry loop で silent 死する**。 spec に焼き込む分割・turn 規律・部分結果 permission の正本 = [`output-cap-death-loop.md`](output-cap-death-loop.md#prevention-spec-rules)。 **どの大きさに切るか** (= sizing 述語) と **orientation cost の spec 前払い** は [§9](#worker-task-sizing)。 **受け手が別ベンダー CLI (Codex 等) で context 窓が小さい**なら、 圧縮で途中経過が消える前提で allow/deny list + step ごと commit を焼く ([`output-cap-death-loop.md#context-compaction-loss`](output-cap-death-loop.md#context-compaction-loss))。
 
 **optional (= live-push の bonus。 効けば即時 push、 落ちても上の auto-surface が拾うので人間は何もしない)**:
 

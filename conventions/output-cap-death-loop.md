@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: worker session (spawn_task / headless claude -p / Agent subagent) に長い導出・生成 task を渡す spec を書くとき・spawn した worker が「isRunning なのに成果ゼロ」 のとき
+when: worker session (spawn_task / headless claude -p / Agent subagent / 別ベンダー CLI 〔Codex 等〕) に長い導出・生成 task を渡す spec を書くとき・spawn した worker が「isRunning なのに成果ゼロ」 のとき・受け手の context 窓が小さい (自動圧縮が早い) と分かっているとき
 category: harness-core
-summary: 1 応答の出力上限 (Claude Code 既定 64,000 output token、 thinking 込み) を超える巨大 turn を worker が試みると、 API error → 同じ turn を retry → また超過、 の決定的 loop で session が silent 死する (= output-cap 死 loop)。 診断 signature = 実作業ゼロ + 空 thinking block が ~10-15 分間隔で規則的に並ぶ (rate-limit backoff と誤診しやすい)。 復旧 = 粘らず捨てる + **spec を分割してから** 再spawn (同 spec の再spawn は同じ死に方をする、 実測 2 連死)。 予防の宛先は worker でなく **spec author (親)**: 1 worker = 1 bounded stage / 開放的判断問題には「未解決と書いて閉じてよい」 permission / turn 分割規律 (1 応答で完結させない・小節ごと commit) / 1 Write ≤~150 行・定型は shell 複製 / 部分結果 = 成功 mode。 2026-07-10/11 に独立 2 project で計 3 worker 同型死 + bounded な sibling 2 worker は完走の実測から。
+summary: 1 応答の出力上限 (Claude Code 既定 64,000 output token、 thinking 込み) を超える巨大 turn を worker が試みると、 API error → 同じ turn を retry → また超過、 の決定的 loop で session が silent 死する (= output-cap 死 loop)。 診断 signature = 実作業ゼロ + 空 thinking block が ~10-15 分間隔で規則的に並ぶ (rate-limit backoff と誤診しやすい)。 復旧 = 粘らず捨てる + **spec を分割してから** 再spawn (同 spec の再spawn は同じ死に方をする、 実測 2 連死)。 予防の宛先は worker でなく **spec author (親)**: 1 worker = 1 bounded stage / 開放的判断問題には「未解決と書いて閉じてよい」 permission / turn 分割規律 (1 応答で完結させない・小節ごと commit) / 1 Write ≤~150 行・定型は shell 複製 / 部分結果 = 成功 mode。 2026-07-10/11 に独立 2 project で計 3 worker 同型死 + bounded な sibling 2 worker は完走の実測から。 姉妹機構 = **context 圧縮による途中経過の消失** (#context-compaction-loss、 別ベンダー worker で context 窓が ~250K 級の場合): 予防は同じ = step ごとに file に書いて commit + 読ませる文書を最小化。
 -->
 # Output-cap 死 loop — worker が 1 応答の出力上限で silent 死し続ける
 
@@ -62,9 +62,24 @@ spec 規律は wording レベルの誘導であって保証ではない (worker 
 - project A: monolithic spec の worker が ~50 分 silent 死 (空 thinking ~14 分周期 ×4) → **同 spec で再spawn した worker も同型死** (= spec 決定性の実測) → bounded stage に分割後の worker は健全完走
 - project B: 開放的な図式導出の worker が **6 時間 stall・空 thinking ×26・成果ゼロ** → 親 session が独立に同じ治療 (physics-free の bounded library stage を先頭に置く A0-A4 直列分割) に到達。 同環境の bounded/mechanical な sibling worker 2 体 (ledger 計算・転記+検算) は完走 = **生死を分けたのは task の形**
 
+## <a id="context-compaction-loss"></a>姉妹機構: context 自動圧縮で途中の導出が消える (別ベンダー / 小さい context 窓の worker、 2026-09)
+
+**機構**: output-cap 死は「1 応答が大きすぎて API が拒む」 が、 こちらは「**会話全体が受け手の context 窓を超えて自動圧縮 (compaction) され、 file に書いていない途中の導出・判断が要約に潰れる**」。 session は死なず走り続けるので silent。 影響が大きいのは context 窓が Claude Code より小さい受け手 — 実測例: Codex CLI + GPT-5.6 Sol は 2026-07 以降 effective window ≈ 258K (カタログ 272K の 95%)、 自動圧縮は ≈ 215-243K で観測 (web 二次情報: [OpenAI community](https://community.openai.com/t/why-does-codex-report-a-258-400-token-context-window-for-gpt-5-6-sol/1394346) / [openai/codex#32806](https://github.com/openai/codex/issues/32806) / [解説](https://codex.danielvaughan.com/2026/07/20/context-window-gap-codex-cli-gpt56-advertised-vs-effective-budget-compaction-strategy/)、 1M へ override する手順の存在も同記事群。 数値は client version で動く = 一次資料優先の規律は [`../codex/PARITY.md#context-capacity-diagnosis`](../codex/PARITY.md#context-capacity-diagnosis))。 owner の観測 (2026-09-05): 「Codex は 0.25M くらいで会話圧縮になる」。
+
+**予防 (spec author 向け、 上の 1-6 と同じ精神)**:
+
+1. **読ませる文書を最小化する** — allow / deny list を spec に書く (対象論文 1 本 + spec + repo の CLAUDE/DESIGN 程度)。 起票側の巨大 instruction file は別ベンダーには読ませない (入口は `AGENTS.md`)。 隔離 (= 独立性) と context 節約は同じ手段で両立する
+2. **step ごとに file へ書いて commit させる** — 「導出は step が 1 つ閉じるごとに notes に追記して git commit (圧縮で途中経過が消えても file に残る)」 を spec に 1 行焼く。 output-cap 予防 3 と同文で足りる
+3. **単一の逐次仕事には推論並列 mode を使わない** (例: Codex の ultra は subagent 分割 = context を増やし独立性も薄める、 深い 1 本の証明は xhigh)
+4. 崩れたら **粘らず閉じる** — board に `abandoned`、 部分結果の commit があればそれを受領。 cross-vendor pass は bonus (第二の目は同ベンダー別 session が担う) なので失敗しても台帳は汚れない
+5. **圧縮閾値の設定は vendor の一次資料で確認してから** (= `codex/PARITY.md` の規律。 未検証の設定値を規約に書かない)
+
+**Evidence**: 2026-09-05 時点で実測 0 件 (owner の経験則から予防先行)。 初回 instance = 外部論文の検証読み campaign で Codex に 1 本の証明を cross-vendor red-team させる spec (private repo)。 結果が出たら本節に n を書く。
+
 ## 関連
 
 - spawn handoff の spec template・token-handshake・返送 spine: [`multi-session-coordination.md` §7](multi-session-coordination.md#spawn-handoff-token-return) (spec を書く時に本 doc の予防規律を焼き込む)
 - task をどの大きさに切るか (sizing 述語 = 新規概念を数える) + input 側 = orientation cost の spec 前払い: [`multi-session-coordination.md` §9](multi-session-coordination.md#worker-task-sizing) (= 本 doc の prevention rule 1 の上流補完)
 - 別 root の session 死 (malformed tool call、 model 切替が本命): [`tool-call-robustness.md`](tool-call-robustness.md) — 「粘らず root に近い一手」 の精神は共通、 機構と対処は別
 - 並列 worker が共有 tmpdir を埋めて Bash 出力が消える別症状: [`multi-session-coordination.md` §5](multi-session-coordination.md#shared-tmpdir-enospc)
+- 別ベンダー worker の context 容量の測り方 (advertised / client 窓 / 圧縮 trigger を混ぜない): [`../codex/PARITY.md#context-capacity-diagnosis`](../codex/PARITY.md#context-capacity-diagnosis) + [`../docs/convention-design-principles.md#context-capacity-evidence-layers`](../docs/convention-design-principles.md#context-capacity-evidence-layers)
