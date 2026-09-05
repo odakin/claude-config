@@ -228,11 +228,11 @@ Claude in Chrome MCP は **自分専用の tab group** で動く。 user が手�
 
 これは tab group ごとに permission state が独立する設計の帰結。 user が手動でタブを操作している間に MCP が裏で別ドメインに勝手に navigate するのを防ぐ。
 
-### `javascript_tool` の 3 つの gotcha (2026-09-05 実測)
+### <a id="javascript-tool-gotchas"></a>`javascript_tool` の 3 つの gotcha (2026-09-05 実測)
 
 - **async IIFE の戻りは `{}` に潰れる**: `(async () => {...})()` を最後の式に置くと Promise が serialize されて `{}` が返る。 top-level `await` が使えるので `await (async () => {...})()` で結果の文字列/JSON を最後の式にする。
 - **出力 filter**: tool 結果に cookie / query string に見える文字列 (`=` `&` `;` を含む urlencoded 風の並び、 HTML の `href` 群など) が含まれると結果全体が `[BLOCKED: Cookie/query string data]` に置換される。 DOM を調べる時は `outerHTML` を返さず、 属性名・テキスト・長さだけを組み立てて返す (記号は `->` `|` `:` 等に置換)。 body を捕捉した時も同じ。
-- **「公開 API が無い web app」 の機械経路**: ログイン済みページの page context から、 UI が叩いている内部 endpoint を同じ method / encoding / header で `fetch` する (= XHR を一時 hook して実 UI 操作 1 回分を捕捉すれば method・field 名が全部分かる。 method 違い〔POST vs PUT〕・encoding 違い〔multipart vs urlencoded〕で 404 になるので推測で組まない)。 GUI click の自動化より速く・行数に依らず・座標に依らない。 instance 例 = 個人リポの MF 家計簿カテゴリ修正 tool。
+- **「公開 API が無い web app」 の機械経路**: ログイン済みページの page context から、 UI が叩いている内部 endpoint を同じ method / encoding / header で `fetch` する (= XHR を一時 hook して実 UI 操作 1 回分を捕捉すれば method・field 名が全部分かる。 method 違い〔POST vs PUT〕・encoding 違い〔multipart vs urlencoded〕で 404 になるので推測で組まない)。 GUI click の自動化より速く・行数に依らず・座標に依らない。 recipe 全文 = [`machine-route-first.md #internal-endpoint-replay`](machine-route-first.md#internal-endpoint-replay)。
 
 ### 公式ドキュメント
 
