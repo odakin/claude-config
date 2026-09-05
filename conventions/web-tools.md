@@ -237,7 +237,8 @@ Claude in Chrome MCP は **自分専用の tab group** で動く。 user が手�
 
 - `permission_required: <domain>` を踏んだら、 まず sidepanel を user に見てもらい prompt の有無を確認 (= 既知バグかどうかの切り分け)
 - prompt があれば「Always allow actions on this site」 を user に click してもらう
-- prompt がなければ既知バグの可能性 → 拡張再インストール / 別 profile / スクショ共有 fallback を提案
+- prompt がなければ、 **再インストールの前に `list_connected_browsers` を見る** (2026-09-05 実測): 拡張のアカウント再ログイン / 再接続の後は**旧接続と新接続が 2 本並び、 session は旧接続を掴んだまま**になる。 この状態では navigate だけ通り、 read / screenshot / click が全部 `Permission denied for this action on this domain` になり、 Claude が開いたタブは user のブラウザに見えず、 prompt も (旧接続側に飛ぶので) 出ない = 「render バグ」 と区別がつかない。 `connectedAt` が最新の browser を `select_browser` すると新 tab group が user の窓に開き、 prompt も正常に出る。 ⚠️ 拡張の署名 account と session の account が食い違っていないかも同時に確認する (session 側は harness の userEmail でなく実 probe で同定する = 別規約)
+- それでも prompt がなければ既知バグの可能性 → 拡張再インストール / 別 profile / スクショ共有 fallback を提案
 - 「Chrome 標準の host_permissions が「すべてのサイト」 になっているのに動かない」 は誤解、 (1)(2) が独立であることを最初に user に説明する
 - 既存 web ツール (`mcp__Claude_in_Chrome__*`) を新規ドメインで使う前に、 「permission prompt が出る前提」 で workflow を組む (= 1 回 prompt がかかる前提で批准点を設計)
 
