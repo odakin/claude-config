@@ -48,6 +48,69 @@ Continuous-outcome addendum (standard countably additive POVMs on the Borel spac
   quadrature rank, or finite moment family proves the infinite-dimensional extremality
   statement; that load-bearing step is the analytic Gaussian/Fourier argument above.
 
+Infinite-dimensional addendum (second-eye campaign on the finite-outcome criterion, 2026-09):
+  * Exact criterion (dimension-free, proof needs only Cauchy–Schwarz and the easy half of Douglas'
+    lemma):  a nonzero c with 0 <= c <= a, c <= b exists  <=>  ran(a^{1/2}) ∩ ran(b^{1/2}) != {0}.
+    In finite dimension ran = supp (closed), so this is the support criterion; in infinite dimension
+    the two differ whenever a range is not closed.  Explicit pair on L^2(S^1) with p_supp(a) ∧ p_supp(b) != 0
+    but no common lower bound:  a = sum_n e^{-2|n|}|e_n><e_n| (ran a^{1/2} = real-analytic class R),
+    b = P_I = multiplication by 1_I for a proper arc I (ran = L^2(I));  R ∩ L^2(I) = {0} by the identity
+    theorem.  The step "e_{a,eps} ∧ e_{b,eps} -> p_a ∧ p_b strongly" is FALSE for this pair: e_{a,eps} is the
+    projector onto trig polynomials of degree <= N(eps), and e_N ∧ P_I = 0 for every N (`fourier_arc_gram`
+    positive definite) while 1 ∧ P_I = P_I.  The projection lattice meet does not commute with increasing
+    strong limits.
+  * The distinction is visible at the POVM level with 3 outcomes:  a_1 = a/2, d = 1 - a_1 (invertible),
+    a_2 = d^{1/2} P_I d^{1/2}, a_3 = d^{1/2} (1 - P_I) d^{1/2}.  Pairwise ran(a_x^{1/2}) intersect trivially
+    (so the POVM is IS by the criterion above) although the closed supports of a_1 (= H) and a_2 overlap.
+    With 2 outcomes this cannot happen (a and 1-a commute; a^{1/2}(1-a)^{1/2} != 0 unless a is a
+    projection).  `analytic_class_arc_povm` gives Fourier truncations of this family; truncations cannot
+    show the infinite-dimensional statement (finite dimension always has the support criterion) — they
+    only anchor that the construction behaves as the proof says.
+  * Solver-free bracket for the largest common lower bound:  a:b <= c-max <= 2 (a:b) in the sense
+    ||a:b|| <= max ||c|| <= 2||a:b||  (`common_lower_bound_sandwich`).  Proof: a:b is itself a common lower
+    bound; and for any common lower bound c, <xi,c xi> = <x+y,c(x+y)> <= 2(<x,cx>+<y,cy>) <= 2(<x,ax>+<y,by>),
+    inf over x+y = xi gives c <= 2 a:b.
+  * Certifying "e_N ∧ P_I = 0" numerically: lambda_min of the arc Gram matrix decays super-exponentially
+    (prolate-type, ~1e-19 at N = 8, ~1e-38 at N = 16), far below double precision — use mpmath at
+    ~100 digits, never a 1e-12 tolerance on a float eigenvalue.
+  * Compressing a projection to a truncation gives a NON-projection whose complement shares a large common
+    lower bound with it (P_N(1-P_N) != 0); truncate the *decomposition* instead (spectral cut of the
+    compression at 1/2), otherwise the truncated pair (a_2, a_3) shows a spurious O(1) common lower bound.
+  * Husimi coarse-graining onto cells U_k: ran(A(U)^{1/2}) = V*(L^2(U)) and |psi><psi|/||f||^2 <= A(U) for
+    psi = V*f, f in L^2(U).  For two cells that alone fill a disc D up to null sets (0 < |D ∩ U_k| < |D|),
+    h = e^{|z|^2/2} dbar(phi) with phi in C_c^inf(D) has V*h = 0 (Stokes against entire functions), so
+    psi = V*(1_{U_k} h) = -V*(1_{U_l} h) is a common element of both ranges, nonzero for some phi because an
+    indicator cannot be antiholomorphic on D (dbar hypoellipticity).  Fock components need no Gaussian:
+    psi_n = (1/pi) ∫_{U_k} dbar(phi) z^n/sqrt(n!) d^2z  (`husimi_dbar_witness`, half-plane cells; the half-plane
+    Husimi matrix elements are closed form, `husimi_halfplane_matrix`).  Distance between cells is NOT the
+    criterion: a bounded cell always has a common lower bound with any cell containing an annulus around it
+    (subharmonicity of |F|^2 + Poisson bound gives A(U_k) <= C A(U_j)).
+
+Two model families:
+  * quantum (finite dim d): Hermitian effects 0 <= a <= I.  Small convex programs are solved with
+    scipy SLSQP on eigenvalue constraints and, where load-bearing, sandwiched by an explicit dual
+    certificate (weak duality), so the interval [primal, dual] is rigorous up to float tolerance
+    whatever the local solver did.  Qualitative verdicts (IS / CIS / extremal) never trust the
+    solver: non-IS is shown by an explicit witness joint, IS by the support-projector dual
+    certificate Y = t P_ker(a), Z = t P_ker(b) (see `max_common_lower_bound`, `support_projector`).
+  * polytope GPTs (state space = convex hull of a vertex list, effects = affine functionals with
+    values in [0,1] on the vertices; coordinates include a normalisation coordinate): every quantity
+    is an exact LP (`Polytope.is_degree`, `.max_common_lower_bound_norm`, `.is_extremal`,
+    `.is_indecomposable`).  Vertex enumeration for small H-polytopes: `polytope_vertices_from_halfspaces`.
+
+Numerical gotchas learned on this code (conventions/scientific-computing.md#small-sdp-without-solver):
+  * SLSQP with the smooth 2x2 PSD form (diag >= 0, det >= 0) STALLS on convex instances (det's
+    linearisation is poor) — eigenvalue constraints + random restarts work; keep the best feasible
+    iterate and fall back to a feasible x0.
+  * equality constraints (joint-measurement marginals) make SLSQP's QP rank-deficient — eliminate
+    them by a null-space parametrisation of the affine space (`_joint_nullspace`).
+  * start strictly inside the cone: c = 0 and the canonical joint are degenerate points of the PSD
+    constraints (zero gradient) — use the parallel sum a:b = (a^-1 + b^-1)^-1 <= a, b as interior
+    start (`parallel_sum`, `interior_joint`).
+  * alpha_IS is a MIN of a concave function (lambda_min) over a convex set: it is NOT a convex
+    program.  Decompose as min over pure states v of a convex inner program, scan v (Bloch grid +
+    Nelder–Mead refine for qubits) — the outer scan is evidence, not a certificate; say so.
+
 Two model families:
   * quantum (finite dim d): Hermitian effects 0 <= a <= I.  Small convex programs are solved with
     scipy SLSQP on eigenvalue constraints and, where load-bearing, sandwiched by an explicit dual
@@ -579,6 +642,127 @@ def coherent_bounded_moment_map(
 # with e·v in [0,1] for all vertices v.  (Coordinates include the normalisation
 # coordinate, so linear functionals e·x exhaust the affine functionals.)
 # ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# Infinite-dimensional anchors (see docstring "Infinite-dimensional addendum")
+# ----------------------------------------------------------------------------
+def common_lower_bound_sandwich(a, b, delta=1e-14, dps=None):
+    """Solver-free bracket [lo, hi] = [||a:b||, 2||a:b||] for max{||c|| : 0 <= c <= a, c <= b}.
+    a:b = ((a+δ)^{-1} + (b+δ)^{-1})^{-1} (regularised parallel sum, δ >= input noise so a+δ, b+δ are PD).
+    With dps set, the inverses are formed in mpmath at that many digits (needed when a has eigenvalues
+    below ~1e-8: the float inverse loses them).  Asserts that a:b is a common lower bound up to 1e-12."""
+    if dps is None:
+        c = parallel_sum(a, b, delta=delta)
+        assert is_psd(a - c, tol=1e-12 + delta) and is_psd(b - c, tol=1e-12 + delta)
+        v = eigmax(c)
+        return v, 2 * v
+    import mpmath as mp
+    with mp.workdps(dps):                     # never leave the global precision changed (other callers compare floats)
+        A = mp.matrix([[mp.mpc(complex(a[i, j])) for j in range(a.shape[1])] for i in range(a.shape[0])])
+        B = mp.matrix([[mp.mpc(complex(b[i, j])) for j in range(b.shape[1])] for i in range(b.shape[0])])
+        I = mp.eye(A.rows)
+        C = mp.inverse(mp.inverse(A + delta * I) + mp.inverse(B + delta * I))
+        C = (C + C.H) / 2
+        for M in (A - C, B - C):
+            assert min(mp.eighe(M)[0]) > -mp.mpf(1e-12), "parallel sum is not a common lower bound (numerics)"
+        v = float(max(mp.eighe(C)[0]))
+    return v, 2 * v
+
+
+def fourier_arc_gram(N, alpha, beta, dps=100):
+    """Gram matrix G_{mn} = (1/2pi) ∫_alpha^beta e^{i(n-m)theta} dtheta, |m|,|n| <= N, in mpmath at `dps` digits.
+    G positive definite  <=>  no nonzero trig polynomial of degree <= N vanishes a.e. on the arc (alpha, beta)
+    <=>  e_N ∧ P_{S^1 \\ arc} = 0.  lambda_min decays super-exponentially with N (~1e-38 at N = 16), so the
+    positivity certificate needs high precision.  Returns (G, lambda_min)."""
+    import mpmath as mp
+    with mp.workdps(dps):
+        idx = list(range(-N, N + 1))
+        G = mp.matrix(len(idx), len(idx))
+        alpha, beta = mp.mpf(alpha), mp.mpf(beta)
+        for i, m in enumerate(idx):
+            for j, n in enumerate(idx):
+                k = n - m
+                G[i, j] = (beta - alpha) / (2 * mp.pi) if k == 0 else (mp.expj(k * beta) - mp.expj(k * alpha)) / (2 * mp.pi * 1j * k)
+        E, _ = mp.eighe(G)
+        lam = min(E)
+    return G, lam
+
+
+def analytic_class_arc_povm(N, alpha=0.0, beta=2.0, decay=2.0):
+    """Fourier truncation (|n| <= N) of the 3-outcome family a_1 = ½ diag(e^{-decay|n|}), d = 1 - a_1,
+    a_2 = d^{1/2} P_N d^{1/2}, a_3 = d^{1/2} (1-P_N) d^{1/2}, where P_N is the spectral projection (eigenvalues
+    > 1/2) of the compression of P_I, I = S^1 \\ (alpha, beta).  In the limit the square-root ranges intersect
+    pairwise trivially while the closed supports of a_1 and a_2 overlap (docstring).  Returns [a_1, a_2, a_3]
+    as numpy arrays (double precision; P_N from the double-precision Gram)."""
+    idx = np.arange(-N, N + 1)
+    lam = 0.5 * np.exp(-decay * np.abs(idx))
+    a1 = np.diag(lam).astype(complex)
+    d12 = np.sqrt(np.diag(1.0 - lam)).astype(complex)
+    G, _ = fourier_arc_gram(N, alpha, beta, dps=30)
+    Gd = np.array([[complex(G[i, j]) for j in range(G.cols)] for i in range(G.rows)])
+    GI = np.eye(len(idx)) - (Gd + Gd.conj().T) / 2          # compression of 1_I
+    w, U = np.linalg.eigh(GI)
+    V = U[:, w > 0.5]
+    PN = V @ V.conj().T
+    a2 = d12 @ PN @ d12
+    a3 = d12 @ (np.eye(len(idx)) - PN) @ d12
+    return [a1, (a2 + a2.conj().T) / 2, (a3 + a3.conj().T) / 2]
+
+
+def husimi_halfplane_matrix(N, right=True):
+    """<m|A(U)|n>, m,n <= N, for U = right (Re z > 0) or left half-plane of the Husimi POVM
+    A(U) = (1/pi) ∫_U |z><z| d^2z, closed form: angular ∫ e^{i(n-m)theta} over the half circle × Γ((m+n+2)/2)/2."""
+    lo, hi = (-math.pi / 2, math.pi / 2) if right else (math.pi / 2, 3 * math.pi / 2)
+
+    def ang(k):
+        return hi - lo if k == 0 else (np.exp(1j * k * hi) - np.exp(1j * k * lo)) / (1j * k)
+    M = np.zeros((N + 1, N + 1), dtype=complex)
+    for m in range(N + 1):
+        for n in range(N + 1):
+            M[m, n] = ang(n - m) * math.gamma((m + n + 2) / 2) / 2 / math.pi / math.sqrt(float(math.factorial(m)) * float(math.factorial(n)))
+    return (M + M.conj().T) / 2
+
+
+def husimi_dbar_witness(N, right=True, z0=0.0):
+    """Common-element witness for the two half-plane cells: psi_n = (1/pi) ∫_U dbar(phi) z^n/sqrt(n!) d^2z with
+    phi(z) = exp(-1/(1-|z-z0|^2)) on |z-z0| < 1 (z0 real).  Returns (psi, ||1_U h||^2), h = e^{|z|^2/2} dbar(phi),
+    so that |psi><psi| / ||1_U h||^2 <= A(U).  For z0 = 0 the disc straddles both cells and psi != 0 (psi_0 =
+    -∫_0^1 r^2 e^{-1/(1-r^2)} (1-r^2)^{-2} dr < 0); for |z0| >= 1 the bump lies in one cell and psi = 0 (Stokes) —
+    the built-in foil."""
+    from scipy.integrate import quad
+    psi = np.zeros(N + 1, dtype=complex)
+    dphi = lambda r: -np.exp(-1.0 / (1 - r * r)) / (1 - r * r) ** 2 if r < 1 else 0.0
+
+    def theta_range(r):
+        c = (-z0 / r) if right else (z0 / r)
+        if c <= -1:
+            return [(-math.pi, math.pi)]
+        if c >= 1:
+            return []
+        t = math.acos(c)
+        return [(-t, t)] if right else [(math.pi - t, math.pi + t)]
+
+    def ang(k, lo, hi):
+        return hi - lo if k == 0 else (np.exp(1j * k * hi) - np.exp(1j * k * lo)) / (1j * k)
+
+    for n in range(N + 1):
+        def integrand(r):
+            tot = 0.0 + 0.0j
+            for (lo, hi) in theta_range(r):
+                for j in range(n + 1):
+                    coef = math.comb(n, j) * z0 ** (n - j) * r ** j
+                    tot += coef * r * ang(j + 1, lo, hi)
+            return dphi(r) * r * tot / math.sqrt(float(math.factorial(n))) / math.pi
+        psi[n] = quad(lambda r: integrand(r).real, 0, 1, limit=200)[0] + 1j * quad(lambda r: integrand(r).imag, 0, 1, limit=200)[0]
+
+    def nrm(r):
+        tot = 0.0
+        for (lo, hi) in theta_range(r):
+            tot += quad(lambda th: np.exp(abs(z0 + r * np.exp(1j * th)) ** 2), lo, hi)[0]
+        return dphi(r) ** 2 * r ** 3 * tot / math.pi
+    f2 = quad(nrm, 0, 1, limit=200)[0]
+    return psi, f2
+
+
 class Polytope:
     def __init__(self, V):
         self.V = np.asarray(V, dtype=float)
@@ -788,6 +972,28 @@ def _selftest():
     # Internal foil: exp(-|z|^2/4) gives vacuum normalization 2 rather than 1.
     broken = coherent_resolution_matrix(amplitude_exponent=0.25)
     okk &= abs(float(broken[0, 0].real) - 1.0) > 0.9
+    # Infinite-dimensional anchors.  (i) sandwich: a:a = a/2, so identical projections -> [1/2, 1]
+    # (true max ||c|| = 1 sits at the upper end), orthogonal projections -> 0.
+    lo, hi = common_lower_bound_sandwich(P0, P0); okk &= abs(lo - 0.5) < 1e-6 and abs(hi - 1) < 1e-6
+    lo, hi = common_lower_bound_sandwich(P0, P1); okk &= hi < 1e-9
+    lo_mp, _ = common_lower_bound_sandwich(P0, P0, dps=30); okk &= abs(lo_mp - 0.5) < 1e-9
+    # (ii) arc Gram positive definite and lambda_min decreasing (meet e_N ∧ P_I = 0 for every N).
+    l4 = fourier_arc_gram(4, 0.0, 2.0)[1]; l8 = fourier_arc_gram(8, 0.0, 2.0)[1]
+    okk &= l4 > 0 and l8 > 0 and l8 < l4 / 1e6
+    okk &= fourier_arc_gram(3, 0.0, 0.0)[1] == 0          # foil: empty arc -> G = 0
+    # (iii) 3-outcome family: POVM on V_N, pair (2,3) has no common lower bound, a_1 injective, a_2 singular.
+    A3 = analytic_class_arc_povm(6)
+    okk &= is_measurement(A3, tol=1e-9)
+    okk &= common_lower_bound_sandwich(A3[1], A3[2], dps=40)[1] < 1e-9
+    okk &= np.min(np.diag(A3[0]).real) > 0 and np.linalg.matrix_rank(A3[1], tol=1e-10) < A3[1].shape[0]
+    # (iv) Husimi half-planes: A(right) + A(left) = 1; dbar witness nonzero and a common lower bound; foil z0 = 3.
+    AR, AL = husimi_halfplane_matrix(6, True), husimi_halfplane_matrix(6, False)
+    okk &= np.allclose(AR + AL, np.eye(7), atol=1e-12)
+    psi, f2 = husimi_dbar_witness(6, True); psiL, f2L = husimi_dbar_witness(6, False)
+    okk &= np.linalg.norm(psi) > 1e-3 and np.allclose(psiL, -psi, atol=1e-9)
+    cw = np.outer(psi, psi.conj())          # (name kept distinct from the later 2α-block variable c)
+    okk &= eigmin(AR - cw / f2) > -1e-10 and eigmin(AL - cw / f2L) > -1e-10
+    okk &= np.linalg.norm(husimi_dbar_witness(4, True, z0=3.0)[0]) < 1e-12
     print("gpt_measurements selftest:", "PASS" if okk else "FAIL")
     return 0 if okk else 1
 
