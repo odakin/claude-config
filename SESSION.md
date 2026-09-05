@@ -2,6 +2,13 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-05c: ML broadcast 義務の見落とし RCA と GUI 記入事故から 6 anchor を hoist
+
+- [`docs/convention-design-principles.md`](docs/convention-design-principles.md): **§8.30 `#expected-inbound-tripwire`** (予告された inbound 依頼に時計 = 待ち entry + 予測日 + slack) / **§8.31 `#principle-birth-stock-audit`** (登録時 gate は flow にしか効かない → 原則 hoist の turn で既存 config を 1 周) / **§8.32 `#rca-as-labeling`** (「〜型」 と分類した瞬間が機械層を足す最安の瞬間、 label 単独禁止) / §8.17 に「同僚の返信数」「役職自己紹介 = 弱い passthrough」 の 2 signal / §8.21 に stock audit + root-only + 構造 signal の追記。 origin = 学科/専攻 ML 依頼 23 日見落とし (5 網全部が構造的に不通過、 個人層 RCA `odakin-prefs/plans/2026-09-05-ml-broadcast-obligation-miss-rca.md`)。 index 再生成済。
+- [`machine-route-first.md #shared-document-write`](conventions/machine-route-first.md#shared-document-write) 新設 = 他人 owner の共有 document への書込は画面 drive しない (blast radius が自分の外、 focus 取り違え / 先頭 keystroke 欠落 / stale 画面の 3 機構を実測)。 ladder 6 の例外を「対象を指した画面指示のみ」 に締め、 「見て / やって / 任せる」 は GUI 許可でないと明記。 実例 ledger に 2026-09-05 xlsx 事故 (= 同日 2 例目)。
+- [`google-api-direct-access.md #drive-xlsx-inplace-update`](conventions/google-api-direct-access.md#drive-xlsx-inplace-update) 新設 = 他人 owner の xlsx を `files.update` で同 ID 更新する recipe (full drive を別 token / **revisions.get_media が truth、 files.get_media は数分 stale を実測** / openpyxl round-trip の損失 / 再 download literal verify)。 個人層 instance = `odakin-prefs/scripts/drive-xlsx-set-cells.py`。
+- README tree 再生成 (summary 更新 2 本)。
+
 ## 2026-09-05b: 公開 API の無い web app の機械経路 / desktop 自己同定 / 拡張 stale 接続 / data repo pattern を hoist
 
 - [`machine-route-first.md #internal-endpoint-replay`](conventions/machine-route-first.md#internal-endpoint-replay) 新設 = ladder 4 の一形態 (XHR hook で UI 操作 1 回を捕捉 → 同 endpoint を page context から叩く → rules / dry-run / apply → reload で確認、 6 点 + 線引き) + 実例 (家計簿 SaaS のカテゴリ一括修正、 業種語 regex の巻き込み)。 [`web-tools.md #javascript-tool-gotchas`](conventions/web-tools.md#javascript-tool-gotchas) (async IIFE → `{}` / 出力 filter / 内部 endpoint) + permission 節に「再インストール前に `list_connected_browsers`」。

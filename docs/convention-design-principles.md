@@ -815,6 +815,8 @@ origin: 2026-06-29 ある institutional 締切超過の指摘を受け、 person
 - **同 turn encoding (= 判断規律、 機械化不能な芯)**: 義務を認識した瞬間に tracked object 化する。 「認識して prose に書いた」 は encoding ではない。 後回しにする場合こそ、 先に最低限の tracked entry (= 締切 + 出典) を立ててから後回しする。
 - **obligation-signal surfacing (= 機械層、 proxy-subset)**: institutional sender × 義務 keyword (= 「〆」「期限」「要提出」「受講依頼」「リマインド」 等) の組合せで broadcast も surface する層を、 per-person 検出と**独立に**持つ。 これ自体 keyword whitelist (= [`§8.8`](#proxy-blind-spot) の list-based audit) なので盲点を明示し、 「broadcast は全部 catch できている」 と読ませない。
 - **リマインド反復を escalation 信号に**: 同 subject の (再) リマインド ≥2 通は「未 discharge 義務」 の高信号 — 個別 mail か broadcast かに関わらず surface を上げる。 institution がリマインドを重ねる行為自体が「あなたの網から漏れている」 という外部観測になっている。
+- **同僚の返信数を escalation 信号に (2026-09 追記)**: ML thread で同僚 ≥N 名が返信し自分の送信が 0、 かつ root から数日経過 — これは語彙に一切依らない「あなただけ未 discharge」 の外部観測 (= リマインドの ML 版)。 依頼 class は語彙で閉じない (実測: 各 RCA が自分の事故の語彙を足しても次の依頼は別語彙で来る) ので、 語彙 override の**残余を受ける第 2 の網**として thread 構造を読む検出を別に持つ。 root だけを surface し返信は既知 thread 段に流す (= 返信 20 通を全部 🔴 にすると壁紙化する)。
+- **送信者の役職自己紹介を弱い passthrough に**: 「〜@学科主任です」 型の本文冒頭は institutional 義務の送信主体の signal だが FYI も混じる (実測 ~2/3) ので、 🔴 でなく「noise から外して通常行に出す」 中間 tier に置く。 signal の強さに応じて tier を分けないと、 強い tier に全部入れて壁紙化するか、 何も入れず沈黙するかの二択になる。
 
 reflex: mail surfacing / triage 系の検出を設計・評価する時、 「個人義務が broadcast で届く経路」 を test case に含める (= per-person proxy の盲点を設計時に名指しする)。 逆に broadcast mail を noise として suppress する filter を書く時は「この経路で個人拘束の義務も届くか?」 を問う (= 会議招集・受講依頼・投票依頼は ML/BCC で届くのが典型)。
 
