@@ -72,19 +72,39 @@ in a public `SESSION.md`.
 ### <a id="context-capacity-diagnosis"></a>Context-capacity diagnosis
 
 Do not collapse advertised model/API capacity, the product/client-selected
-window, a run's reported usable window, the observed compaction trigger, and
-post-compaction recovery quality into one number. The general measurement and
-matched-run comparison protocol is canonical in
+window, billing or credit policy, a run's reported usable window, the observed
+compaction trigger, and post-compaction recovery quality into one number. The
+general measurement and matched-run comparison protocol is canonical in
 [context-capacity evidence layers](../docs/convention-design-principles.md#context-capacity-evidence-layers).
 
 For Codex investigations, prefer official product documentation over live
 runtime or server reports, and prefer those reports over bundled client
 catalog metadata. A clean numerical ratio is a hypothesis, not a supported
-backend contract. Record the surface, authentication route, client version,
-model, instruction/tool prefix, usage events, and recovery result in the
-private case ledger. Until a configuration field's product semantics are
-documented and verified, keep them as an unresolved question rather than
-turning local metadata into a durable prescription.
+backend contract. An API pricing cutoff does not by itself document the
+ChatGPT-authenticated Codex default window or Codex credit policy. Record the
+surface, authentication and billing route, client version, model,
+instruction/tool prefix, usage events, and recovery result in the private case
+ledger. Until a configuration field's product semantics are documented and
+verified, keep them as an unresolved question rather than turning local
+metadata into a durable prescription.
+
+The official
+[Codex configuration reference](https://learn.chatgpt.com/ja-JP/docs/config-file/config-reference)
+defines `total` as counting the full active context and `body_after_prefix` as
+counting only growth after the carried-over compaction-window prefix. This
+resolves the scope definition; it does not establish the first-compaction
+default, make the original startup prefix free, or prove that a larger manual
+window is supported by the selected backend.
+
+When diagnosing early compaction, inventory the active context by ownership:
+product-owned system/developer and built-in-tool prefix, user-controlled global
+and project instructions, optional tool/MCP schemas, and accumulated turn/tool
+output. Reduce the controllable always-on inputs through pointers, task-specific
+reads, scoped tools, and bounded output, then remeasure with marginal A/B runs.
+This can recover usable budget; it does not establish or change the
+product-selected context window. Treat any inaccessible product prefix as an
+explicit comparison confounder rather than assigning its cost to `SESSION.md`
+or an instruction file by elimination.
 
 ## Active Codex integration
 

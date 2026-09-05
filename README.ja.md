@@ -147,11 +147,11 @@ claude-config 自体の auto-load はほぼ空: デフォルトの `<base>/CLAUD
 目安 ([`docs/convention-design-principles.md` §10.7](docs/convention-design-principles.md#auto-context-byte-budget) 参照):
 
 - **200K コンテキストモデル** (autocompact 発火 ≈ 167K): 長いセッション中の autocompact を稀に保ちたいなら、合計 auto-load を ~50 KB 以下に抑える。
-- **1M コンテキストモデル**: 同じ目標は実質無料だが、chain-load の規律はセッション立ち上げ速度の観点で依然有効。
+- **1M 公称コンテキストモデル**: 同じ目標は headline に対しては小さいが、製品が選ぶ window と live run の usable window を確認するまで「実質無料」と扱わない。chain-load の規律はセッション立ち上げ速度の観点でも有効。
 
 autocompact が想定より多く発火する場合、content を削る前にまず 1 行あたりの byte 密度 (§10.7) と サブプロジェクト `CLAUDE.md` チェーン (§10.10–10.11) を確認する。
-製品・model 間を比較するときは、公称 capacity、製品が選ぶ window、live run
-の usable window、観測した compaction trigger、圧縮後の復帰品質を分けて測る。
+製品・model 間を比較するときは、公称 capacity、製品が選ぶ window、課金・credit
+policy、live run の usable window、観測した compaction trigger、圧縮後の復帰品質を分けて測る。
 診断手順の正本は [`context-capacity evidence layers`](docs/convention-design-principles.md#context-capacity-evidence-layers)。
 
 ## カスタマイズ

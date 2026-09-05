@@ -153,12 +153,12 @@ Once you add a personal layer or sub-project `CLAUDE.md`s, watch the **combined 
 Rough targets (from [`docs/convention-design-principles.md` §10.7](docs/convention-design-principles.md#auto-context-byte-budget)):
 
 - **200K-context model** (autocompact fires ≈ 167K): keep the combined auto-load under ~50 KB to keep autocompact rare during long sessions.
-- **1M-context model**: the same target is effectively free, but the chain-load discipline still keeps session startup snappy.
+- **1M advertised-context model**: the same target is small relative to the headline, but do not call it free until the selected product and live run expose a comparable usable window. Chain-load discipline still keeps startup lean.
 
 If autocompact fires more than you expect, check per-file byte density (§10.7) and the sub-project `CLAUDE.md` chain (§10.10–10.11) before cutting actual content.
 When comparing products or models, also separate advertised capacity, the
-product-selected window, the live per-run window, the observed compaction
-trigger, and recovery quality; the canonical diagnostic protocol is
+product-selected window, billing or credit policy, the live per-run window,
+the observed compaction trigger, and recovery quality; the canonical diagnostic protocol is
 [`context-capacity evidence layers`](docs/convention-design-principles.md#context-capacity-evidence-layers).
 
 ## For English-speaking users

@@ -1251,21 +1251,24 @@ Tier 切り分けと並行で、**T0+T1 の byte 総量**を測定する。LLM c
 
 **運用**: SESSION.md を書き足す時は `wc -c` で byte を即確認。8 KB 超過が見えたら dense row を pointer に差し戻す ( retroactive reorg ほど大掛かりでなく、その場で逆流を止める習慣で充分)。
 
-### <a id="context-capacity-evidence-layers"></a>10.7a headline context と実効耐久力を同一視しない — capacity の 5 層を別々に測る
+### <a id="context-capacity-evidence-layers"></a>10.7a headline context と実効耐久力を同一視しない — capacity / cost / durability の 6 軸を別々に測る
 
-「モデルは N token 対応」と「この製品のこの session が N token まで圧縮なしで耐える」は別の主張である。context 耐久力を比較・診断するときは、少なくとも次の 5 層を分離する。
+「モデルは N token 対応」と「この製品のこの session が N token まで圧縮なしで耐える」は別の主張である。context 耐久力を比較・診断するときは、少なくとも次の 6 軸を分離する。
 
-| 層 | 問うこと | 主な証拠 |
+| 軸 | 問うこと | 主な証拠 |
 |---|---|---|
 | model / API advertised capacity | モデル/API が公称する最大容量は何か | 公式 model/API documentation |
 | product / client selected capacity | 製品・認証経路・client が選ぶ default / maximum は何か | 公式 product docs、supported config、client contract |
+| billing / credit policy | 長文入力で価格・credit・quota の境界が変わるか | **同じ製品 surface / 認証経路**の公式 pricing / usage documentation |
 | per-run usable window | 実行中に server/client が報告する usable window は何か | live usage event、server response、diagnostic log |
 | compaction trigger | 実際にどの input 量・状態で compaction したか | 複数 run の event timestamp と token counter |
 | retained useful context | compaction 後に task state・制約・根拠がどれだけ保持されたか | recovery probe、同一 task の品質評価 |
 
-証拠の優先順位は **公式の製品契約 > live runtime / server report > bundled client catalog > clean ratio や単発観測からの推測**。例えば「報告 window が catalog 値の一定比率」は safety margin 仮説を生むが、backend contract の証明にはならない。API の headline capacity だけで product surface の usable window を断定するのも同じ誤りである。
+証拠の優先順位は **公式の製品契約 > live runtime / server report > bundled client catalog > clean ratio や単発観測からの推測**。例えば「報告 window が catalog 値の一定比率」は safety margin 仮説を生むが、backend contract の証明にはならない。API の headline capacity だけで product surface の usable window を断定するのも同じ誤りである。さらに、同じ token 数が capacity metadata と API の pricing discontinuity に現れても同義とは限らない。API の価格境界から subscription 製品の default window や credit 消費を推定せず、billing 軸は同じ surface の契約で別に立証する。
 
-vendor 間比較は、repository、instruction chain、tool schema、task、認証経路を揃え、surface / client version / model / startup bytes / prefix size / per-turn input / compaction event / recovery quality を記録する。大きな `SESSION.md` や instruction file は budget を消費する一因として測れるが、製品限界や vendor 差の単独原因とは扱わない。実測値・hostname・account state・未公開問い合わせ文は layer-4 / private case ledger に置き、この一般則へ instance を持ち込まない。
+vendor 間比較は、repository、instruction chain、tool schema、task、認証経路を揃え、surface / client version / model / startup bytes / prefix size / per-turn input / compaction event / recovery quality を記録する。入力は少なくとも **product-owned prefix** (system / developer / built-in tools)、user-controlled always-on instructions、tool / MCP schema、turn history / tool output に所有者分解する。同じ repository を開いただけでは hidden prefix まで揃わないため、観測不能部分は unmatched confounder と明記する。
+
+大きな `SESSION.md` や instruction file は budget を消費する一因として測れるが、製品限界や vendor 差の単独原因とは扱わない。削除前に byte inventory と with/without の marginal A/B を行い、まず user-controlled always-on 面を pointer + on-demand read に縮め、tool output を bounded にして再測定する。実測値・hostname・account state・公開先の個別 object は layer-4 / private case ledger に置き、この一般則へ instance を持ち込まない。
 
 ### <a id="deletion-delegation-trap"></a>10.8 削除・委譲判断の trap
 

@@ -58,6 +58,8 @@ SESSION_DURABLE_TOKENS = (
 SUPERSEDED_CLAIMS = (
     "Codex currently has no supported equivalent to Claude Code's per-tool",
     "Codex does not have Claude Code's equivalent per-tool event-hook mechanism",
+    "same target is effectively free",
+    "同じ目標は実質無料",
 )
 HOOK_ADAPTERS = {
     "SessionStart": "resume_context.py",
@@ -100,6 +102,10 @@ CONTEXT_BUDGET_REQUIREMENTS = {
         "Runtime diagnostics are layer-4 observations",
         'id="context-capacity-diagnosis"',
         "advertised model/API capacity",
+        "billing or credit policy",
+        "An API pricing cutoff",
+        "carried-over compaction-window prefix",
+        "marginal A/B runs",
         "A clean numerical ratio is a hypothesis",
     ),
     "codex/HOME-AGENTS.md": (
@@ -109,10 +115,12 @@ CONTEXT_BUDGET_REQUIREMENTS = {
     "docs/convention-design-principles.md": (
         'id="context-capacity-evidence-layers"',
         "model / API advertised capacity",
+        "billing / credit policy",
+        "product-owned prefix",
         "retained useful context",
     ),
-    "README.md": ("context-capacity-evidence-layers",),
-    "README.ja.md": ("context-capacity-evidence-layers",),
+    "README.md": ("context-capacity-evidence-layers", "billing or credit policy"),
+    "README.ja.md": ("context-capacity-evidence-layers", "課金・credit"),
 }
 MACHINE_PROVENANCE_REQUIREMENTS = {
     "codex/PARITY.md": (

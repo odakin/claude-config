@@ -32,7 +32,7 @@
 
 - 製品固有の durable contract は [`codex/PARITY.md#native-automation-routing`](codex/PARITY.md#native-automation-routing)、常時発火面は [`codex-automation-routing`](codex/skills/codex-automation-routing/SKILL.md)。本 entry は snapshot pointer のみ。
 - 横断知見は [`#automation-trigger-routing`](docs/convention-design-principles.md#automation-trigger-routing)（自動化 intent を wake event / judgment / context continuity / locus / authority の 5 軸で route）と [`#activation-evidence-ladder`](docs/convention-design-principles.md#activation-evidence-ladder)（proposed / configured / registered-active / observed-run を混同しない）へ hoist。
-- context 耐久力の一般診断は [`#context-capacity-evidence-layers`](docs/convention-design-principles.md#context-capacity-evidence-layers) と [`codex/PARITY.md#context-capacity-diagnosis`](codex/PARITY.md#context-capacity-diagnosis) へ hoist。実測値・掲示板状況・質問 draft は owner-private case ledger が正本で、本 public snapshot には複製しない。
+- context 耐久力の一般診断は [`#context-capacity-evidence-layers`](docs/convention-design-principles.md#context-capacity-evidence-layers) と [`codex/PARITY.md#context-capacity-diagnosis`](codex/PARITY.md#context-capacity-diagnosis) へ hoist。実測値・外部問い合わせの object / response state は owner-private case ledger が正本で、本 public snapshot には複製しない。
 
 ## 2026-09-02b: supersede 掃討 campaign — 4 監査 / 約 50 finding / §20.5 系 3 節を hoist
 

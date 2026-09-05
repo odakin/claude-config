@@ -344,7 +344,7 @@ sections:
   - id: context-capacity-evidence-layers
     legacy: "10.7a"
     level: 3
-    title: "10.7a headline context と実効耐久力を同一視しない — capacity の 5 層を別々に測る"
+    title: "10.7a headline context と実効耐久力を同一視しない — capacity / cost / durability の 6 軸を別々に測る"
   - id: deletion-delegation-trap
     legacy: "10.8"
     level: 3
