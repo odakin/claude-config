@@ -21,7 +21,7 @@ layer 1 (public) のドメイン固有規約 103 file をカテゴリ別に列�
 - **[hook-authoring.md](hook-authoring.md)** — Claude Code hook を作成・配信・debug するとき
   - Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕)
 - **[machine-route-first.md](machine-route-first.md)** — 外部 service / アプリを操作・データ取得する経路を選ぶとき (画面 drive を検討し始めた瞬間)
-  - 経路 ladder (dedicated MCP → API 直 → CLI → 経路を実装 → user 依頼 → 画面 drive) — 画面 drive は最終手段で、経路が無いときは「実装するのが先」 (#build-the-route-first = 実装した経路を auto-load 面に記録するまでが 1 単位)。 画面 drive の 3 重コスト (unreliable click / user のマシン拘束 / 対象取り違え) と許容例外
+  - 経路 ladder (dedicated MCP → API 直 → CLI → 経路を実装 → user 依頼 → 画面 drive) — 画面 drive は最終手段で、経路が無いときは「実装するのが先」 (#build-the-route-first = 実装した経路を auto-load 面に記録するまでが 1 単位)。 画面 drive の 3 重コスト (unreliable click / user のマシン拘束 / 対象取り違え) と許容例外。 公開 API の無い web app は #internal-endpoint-replay (= XHR hook で UI 操作 1 回を捕捉 → 同 endpoint を page context から叩く → rules/dry-run/apply → reload で確認)
 - **[mcp.md](mcp.md)** — MCP ツールを使うとき (アカウント確認・scope 判定を含む)
   - MCP 固有規約（MCP 使用時に参照）
 - **[memory-file-slimming.md](memory-file-slimming.md)** — CLAUDE.md 等の memory file が肥大して縮退 (slimming) するとき + 完了 entry を archive へ graduate するとき + 長大 bullet / table row を pointer 化するとき
