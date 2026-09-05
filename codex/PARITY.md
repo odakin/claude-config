@@ -250,6 +250,13 @@ status. Later health is a separate claim established by a run record or
 heartbeat. This is the product-specific application of
 [`activation-evidence-ladder`](../docs/convention-design-principles.md#activation-evidence-ladder).
 
+For a heartbeat that resumes an external create/send workflow, inspect both
+the automation state and the destination-side object or receipt. Composer
+availability proves that the product permits creation; it does not prove that
+the object was never created. Search for the existing topic, message, or
+record before asking to create a duplicate, and use its URL or identifier plus
+read-back content as completion evidence.
+
 An immediate heartbeat create may reject an explicit timezone-anchored start
 date because the app owns local-wall-clock conversion. When that happens,
 either use the supported suggestion flow and report it as awaiting acceptance,

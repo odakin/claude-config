@@ -35,6 +35,10 @@ this file and read that section before creating or changing an automation.
 
 1. Inspect the existing local automation definitions before creating one.
    Update the matching automation instead of adding a duplicate.
+   For a follow-up that may lead to an external creation or message, also
+   inspect the destination-side object or receipt before presenting that
+   action as pending. An available composer proves permission, not absence of
+   an already-created object.
 2. Use the app's automation tool. Do not write automation files or raw schedule
    directives by hand, and do not expose raw recurrence syntax to the user.
    Treat a suggestion card as proposed, not active. Claim registration only

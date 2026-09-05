@@ -742,10 +742,18 @@ success として閉じる。作成直後の完了条件は最低でも **identi
 proposal card が一時的に見えても active automation の重複とは数えず、backend/runtime の登録集合を
 ground truth にする。
 
+外部への作成・送信では、**操作可能性と対象の存在状態を分ける**。composer / form が開くことは
+権限・hold 解除の証拠でしかなく、「まだ投稿されていない」の証拠ではない。conversation memory や
+空の composer を receipt の代用にせず、作成前に destination-side search / object identifier / sent
+record を確認する。既存 object があれば新規作成せず、更新・返信へ route する。送信後は URL / ID と
+read-back 本文を `observed-run` の証拠にする。
+
 origin: timezone anchor を含む automation の immediate create が product validation で拒否され、
 `suggested_create` は UI card を描画したが active 登録の証拠を返さなかった。続く native create が
 automation identifier + `ACTIVE` を返して初めて登録を確定。同じ段階差は hook trust review、
 installer link、scheduled-task backend 登録にも既存観測があり、§8.13 の証拠 ladder として一般化。
+外部 action 側の補強は、公開済 topic が存在するのに空の create composer を見て「未投稿・確認待ち」
+と誤分類した事例から追加。destination 検索で topic ID を得て初めて状態を訂正した。
 
 ### <a id="single-field-identity-corroboration"></a>8.14 単一 field の一致で record を同定すると偶然一致が「同一」 と誤主張される — 行動を伴う同定には corroboration を要求
 

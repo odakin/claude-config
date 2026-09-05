@@ -135,6 +135,7 @@ AUTOMATION_ROUTING_REQUIREMENTS = {
         "Deduplicate first.",
         "Creation-state and schedule semantics",
         "automation identifier and active",
+        "Composer\navailability proves",
     ),
     "codex/skills/codex-automation-routing/SKILL.md": (
         "#native-automation-routing",
@@ -142,10 +143,12 @@ AUTOMATION_ROUTING_REQUIREMENTS = {
         "automation definitions before creating one",
         "do not expose raw recurrence syntax",
         "suggestion card as proposed, not active",
+        "destination-side object or receipt",
     ),
     "docs/convention-design-principles.md": (
         'id="automation-trigger-routing"',
         'id="activation-evidence-ladder"',
+        "操作可能性と対象の存在状態を分ける",
     ),
     "README.md": ("codex/PARITY.md#native-automation-routing",),
     "README.ja.md": ("codex/PARITY.md#native-automation-routing",),
