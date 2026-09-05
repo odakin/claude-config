@@ -16,7 +16,7 @@ summary: 経路 ladder (dedicated MCP → API 直 → CLI → 経路を実装 �
 3. **CLI** — 公式 / 定番 CLI tool
 4. **経路を実装する** (= #build-the-route-first) — 1〜3 が存在しないなら、 画面に進む前に**経路を作る**
 5. **user 依頼** — one-off で実装が割に合わない時のみ。 平文手順を渡して user に操作してもらう (実 UI の確認・操作は所有者が最速)
-6. **画面 drive** — user が明示的に「やって」 と言った時、 または 1〜5 が全滅の時のみ
+6. **画面 drive** — user が**その対象について「画面でやって」** と言った時、 または 1〜5 が全滅の時のみ。 ⚠️ user の「見て」「やって」「任せる」 は経路の指定ではない (= 上位で実行せよの意) — それを GUI 許可と読むのが最頻の滑り方 (実例 2026-08-21 / 2026-09-05)
 
 ## <a id="screen-drive-costs"></a>画面 drive が最下位である理由
 
@@ -24,7 +24,7 @@ summary: 経路 ladder (dedicated MCP → API 直 → CLI → 経路を実装 �
 - **user のマシンを拘束する**: drive 中 user は自分の環境を使えない。 この拘束コストは操作が成功しても常に発生する
 - **遅い**: screenshot round-trip の積み重ねは API call の数十倍かかる
 
-許容される例外は **read-only の screenshot で状態を確認するだけ**の場合と、 user の明示指示。 GUI の見え方確認はそもそも user に依頼する方が速い ([`office-automation.md` visual-check-by-user](office-automation.md#visual-check-by-user))。
+許容される例外は **read-only の screenshot で状態を確認するだけ**の場合 (それも API / export で読めるなら API) と、 user が対象を指して画面操作を明示した時。 GUI の見え方確認はそもそも user に依頼する方が速い ([`office-automation.md` visual-check-by-user](office-automation.md#visual-check-by-user))。
 
 ## <a id="build-the-route-first"></a>build-the-route-first (経路が無ければ実装が先)
 
