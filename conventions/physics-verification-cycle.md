@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき / 検証 campaign の repo・ledger・spec・第二の目・繰り越しを整備するとき
+when: 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass) を設計するとき / 検証 campaign の repo・ledger・spec・第二の目・繰り越しを整備するとき / 連続 outcome の rank-one POVM の極値性・joint 一意性を検証するとき
 category: research-domain
-summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) の 12 kernel — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律 / cross-vendor 盲検 (= 同系統 AI の N 実装一致は独立でない) / campaign 運用 (ledger schema・2 段階第二の目・👁 繰り越し・cadence gate・git 由来 stats・efficacy proxy) / 近似階層の妥当性は判断でなく計算 / 外部 AI 査読レポートの前提検証 pass / verify-to-learn 41 item campaign (2026-09) の実測 kernel (certificate ベース定性判定・正規化検査・無限次元 supp→range・問いと主張の refuted 分離・foil の前提・WLOG 分岐)。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA + 2026-09 campaign からの hoist
+summary: 物理主張の検証サイクル (= 生成 → 機械検査 → 独立した第二の目 → 人間の判断) — 主張ごとの機械 anchor / foil (negative control) / 検証 tier 宣言 / claim 3 状態 / verify-to-learn / 第二の目の独立性 / rubric 事前登録 / 止まる規律 / cross-vendor 盲検 (= 同系統 AI の N 実装一致は独立でない) / campaign 運用 (ledger schema・2 段階第二の目・👁 繰り越し・cadence gate・git 由来 stats・efficacy proxy) / 近似階層の妥当性は判断でなく計算 / 外部 AI 査読レポートの前提検証 pass / verify-to-learn campaign の実測 kernel (certificate ベース定性判定・正規化検査・無限次元 supp→range・問いと主張の refuted 分離・foil の前提・WLOG 分岐・連続 rank-one POVM の極値性→joint 一意性)。 数ヶ月の paper-anchored audit fleet 運用 + 2026-08 の散文主張 RCA + 2026-09 campaign からの hoist
 -->
 # 物理主張の検証サイクル (verification cycle)
 
@@ -131,6 +131,18 @@ report 側の hygiene (hash-pinned reviewed_source / 行番号の有効範囲宣
 6. **証明の WLOG 分岐は機械で踏む** — LP が退化解 (λ, µ) = (1, 0) を返した瞬間に、 証明の「otherwise take λ = µ = ½」 が必要な分岐だと分かり、 その正当性 (max = 1 なら (½,½) も最大化点) を別 report 行で検査した。 「WLOG」 「明らかに」 の文は item 化して機械が通る経路にする。
 
 spec 側の教訓 (= 起票者向け): 環境の道具の欠落 (SDP solver 不在) と代替 (linprog / 手計算) を spec に書いておくと worker が最初の 1 時間を tooling に溶かさない (実測は約 1.5 時間 = 全体の 1/4)。 起票者の仮説を deny list で隔離した結果、 worker は問い C-01(a) に論文にない証明 (Husimi POVM の間主観性) を出した — 独立性は verdict だけでなく **新規結果**も生む。
+
+### <a id="continuous-rank-one-povm-extremality"></a>連続 rank-one POVM の「極値性 → self-joint 一意性」を閉じる recipe (campaign 2 cross-vendor pass から)
+
+連続 outcome では有限 outcome の support-intersection 判定をそのまま持ち込まない。標準 Borel POVM の self-joint 一意性を示す再利用可能な順序は次の通り。
+
+1. **存在を先に閉じる**: 対角写像 \(\Delta:x\mapsto(x,x)\) による像測度 \(B_0=A\circ\Delta^{-1}\) を作る。rectangle 上では \(B_0(U\times V)=A(U\cap V)\)。
+2. **極値性を minimal dilation の injectivity に落とす**: \(A(U)=V^*P(U)V\) の最小 Naimark dilation を具体的に与え、\(D\in P'\), \(V^*DV=0\Rightarrow D=0\) を示す。multiplicity-one の場合 \(D=M_h\) なので、有界密度 \(h\) の積分変換の injectivity に帰着する。Husimi POVM では Fock matrix elements が \(h(z)e^{-|z|^2}d^2z/\pi\) の全 mixed moments を消し、Gaussian exponential integrability で冪級数と積分を交換し、Fourier--Stieltjes 一意性から \(h=0\) a.e. が従う。一般 moment problem の決定性を black box にする必要はない。
+3. **専門的な operator-valued RN に一本依存させない**: rank-one density の場合は、凸分解の各 matrix-element measure に scalar/complex Radon--Nikodym を適用し、可算稠密部分空間上で null set を一つに揃える。rank-one domination で density を scalar 倍に因数分解し、同じ injectivity で極値性を直接再証明できる。非可算個の vector-dependent null set を無造作に共通化しない。
+4. **joint の一意性を product \(\sigma\)-algebraまで運ぶ**: 極値 POVM と両立する self-joint は rectangle 上で一意になる。そこで止めず、各 vector-state の有限 scalar measure に \(\pi\)-\(\lambda\) 一意性を適用し、polarization で作用素等式へ戻す。standard Borel/second-countable の仮定と \(\mathcal B(X^2)=\mathcal B(X)\otimes\mathcal B(X)\) を明記する。
+5. **読みと tier を分ける**: statewise / weak / strong / ultraweak の可算加法性は正の有界単調部分和では同じ結論を与える。一方、有限加法的 charge への拡張は別問題。有限 Fock 切断・quadrature・有限 test family の full rank は規格化と実装の 🔧 anchor に過ぎず、無限次元 injectivity の証拠に数えない。共通 anchor は [`scripts/gpt_measurements.py`](../scripts/gpt_measurements.py) の `coherent_resolution_matrix` / `coherent_bounded_moment_map` と内蔵 foil。
+
+**使用定理 / 出典候補の置き方**: load-bearing な theorem 名を ledger に書く (minimal-Naimark extremality criterion / scalar または POVM Radon--Nikodym / multiplication spectral measure の commutant / dominated convergence または Fubini--Tonelli / Fourier--Stieltjes uniqueness / \(\pi\)-\(\lambda\) uniqueness / polarization)。極値性 criterion の候補は Pellonpää, *J. Phys. A* **44** (2011) 085304、測度論は Folland, *Real Analysis* または Bogachev, *Measure Theory*、積測度一意性は Folland または Kallenberg。候補を挙げただけなら定理番号・適用条件を照合済みと書かない。
 
 ## <a id="campaign-tooling"></a>15. Verify-to-learn campaign の運用 kernel — ledger・2 段階第二の目・繰り越し・機械 gate (2026-09)
 

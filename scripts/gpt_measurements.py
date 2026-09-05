@@ -1,4 +1,4 @@
-"""GPT / POVM 測定の間主観性 (intersubjectivity)・sharpness・極値性を定義から機械検査する library (solver 無し: SLSQP + explicit dual certificate、多面体 GPT は LP exact、--selftest 内蔵、conventions/physics-verification-cycle.md#definition-level-judge)
+"""GPT / POVM の間主観性・sharpness・極値性を定義から検査する library (有限 outcome の certificate/LP、連続 Husimi POVM の有限 anchor + foil、--selftest; 無限次元の証明境界は physics-verification-cycle.md#continuous-rank-one-povm-extremality)
 
 Layer-1 hoist (2026-09-05) of a helper first written for a verify-to-learn reading of
 Umekawa–Ono–Arai, arXiv:2603.01575 (intersubjectivity in generalized probabilistic theories; the
@@ -28,6 +28,26 @@ Definitions (finite outcome set X; "1" = unit effect):
       measurements; quantum: <=> {delta_x = P_x delta_x P_x Hermitian, sum delta_x = 0} = {0}
       (lemma: a ± eps delta >= 0 for some eps > 0  <=>  supp delta ⊆ supp a).
 
+Continuous-outcome addendum (standard countably additive POVMs on the Borel space C):
+  The single-mode Husimi observable is A(U)=∫_U |z><z| d^2z/pi.  Its minimal Naimark
+  dilation is (V psi)(z)=<z|psi> in L^2(C,d^2z/pi), P(U)=M_{1_U}; minimality follows
+  already from the vacuum wavefunction, which is nowhere zero.  The extremality criterion
+  therefore asks whether V* M_h V=0 for bounded measurable h forces h=0 a.e.  Matrix
+  elements in the Fock basis say that every mixed moment of the finite signed measure
+  h(z) exp(-|z|^2)d^2z/pi vanishes.  Gaussian exponential integrability plus uniqueness
+  of the Fourier--Stieltjes transform gives h=0 a.e.; hence the Husimi POVM is extremal.
+  For a self-joint B, the commuting dilation effects for its second marginal have the same
+  compression as P(U); extremality makes them equal to P(U).  Thus B is uniquely the
+  diagonal pushforward B(U1 x U2)=A(U1 ∩ U2), first on rectangles and then on all Borel
+  sets by scalar pi-lambda uniqueness and polarization.  Statewise, weak, strong, and
+  ultraweak countable-additivity formulations give the same result.  A merely finitely
+  additive extension is outside this conclusion.
+
+  `coherent_resolution_matrix` and `coherent_bounded_moment_map` below are deliberately
+  finite machine anchors for normalization and a bounded test family.  No Fock truncation,
+  quadrature rank, or finite moment family proves the infinite-dimensional extremality
+  statement; that load-bearing step is the analytic Gaussian/Fourier argument above.
+
 Two model families:
   * quantum (finite dim d): Hermitian effects 0 <= a <= I.  Small convex programs are solved with
     scipy SLSQP on eigenvalue constraints and, where load-bearing, sandwiched by an explicit dual
@@ -56,7 +76,9 @@ Numerical gotchas learned on this code (conventions/scientific-computing.md#smal
 from __future__ import annotations
 
 import itertools
+import math
 import numpy as np
+from numpy.polynomial.hermite import hermgauss
 from scipy.optimize import minimize, linprog
 
 TOL = 1e-7
@@ -483,6 +505,76 @@ def check_joint(A, B, tol=1e-7):
 
 
 # ----------------------------------------------------------------------------
+# coherent-state POVM: finite numerical anchors for the continuous outcome case
+# ----------------------------------------------------------------------------
+def coherent_resolution_matrix(
+    n_fock=8,
+    quadrature_order=24,
+    amplitude_exponent=0.5,
+):
+    """Truncated integral of |z><z| d^2z/pi by product Gauss--Hermite quadrature.
+
+    ``amplitude_exponent`` is ``a`` in the coherent amplitude
+    exp(-a |z|^2).  The physical value is a=1/2.  Hermite weights already
+    contain exp(-x^2-y^2), so only exp((1-2a)(x^2+y^2)) remains.
+
+    This checks a finite normalization identity only; it is not an
+    extremality or joint-uniqueness proof.
+    """
+    nodes, weights = hermgauss(quadrature_order)
+    factorials = np.sqrt(np.array([math.factorial(n) for n in range(n_fock)]))
+    out = np.zeros((n_fock, n_fock), dtype=np.complex128)
+    for x, wx in zip(nodes, weights):
+        for y, wy in zip(nodes, weights):
+            z = x + 1j * y
+            r2 = x * x + y * y
+            monomials = np.array([z**n for n in range(n_fock)]) / factorials
+            residual_weight = math.exp((1.0 - 2.0 * amplitude_exponent) * r2)
+            out += (wx * wy / math.pi) * residual_weight * np.outer(
+                monomials, monomials.conjugate()
+            )
+    return out
+
+
+def coherent_bounded_moment_map(
+    n_fock=6,
+    polynomial_degree=3,
+    beta=0.35,
+    quadrature_order=28,
+):
+    """Finite matrix for h -> integral h(z)|z><z| d^2z/pi.
+
+    Columns use the bounded real test functions
+    h_ab(x,y)=x^a y^b exp(-beta |z|^2), a+b<=polynomial_degree.  Operator
+    entries are flattened into real coordinates.  Full numerical column rank
+    excludes a kernel only in this displayed finite family, not in L-infinity.
+    """
+    labels = [
+        (a, total - a)
+        for total in range(polynomial_degree + 1)
+        for a in range(total + 1)
+    ]
+    nodes, weights = hermgauss(quadrature_order)
+    factorials = np.sqrt(np.array([math.factorial(n) for n in range(n_fock)]))
+    operators = [np.zeros((n_fock, n_fock), dtype=np.complex128) for _ in labels]
+    for x, wx in zip(nodes, weights):
+        for y, wy in zip(nodes, weights):
+            z = x + 1j * y
+            r2 = x * x + y * y
+            monomials = np.array([z**n for n in range(n_fock)]) / factorials
+            projector_without_gaussian = np.outer(monomials, monomials.conjugate())
+            common = (wx * wy / math.pi) * math.exp(-beta * r2)
+            for operator, (a, b) in zip(operators, labels):
+                operator += common * (x**a) * (y**b) * projector_without_gaussian
+
+    columns = [
+        np.concatenate([operator.real.ravel(), operator.imag.ravel()])
+        for operator in operators
+    ]
+    return np.column_stack(columns), labels
+
+
+# ----------------------------------------------------------------------------
 # polytope GPTs: state space conv(V), V = array (k, m); effects = vectors e in R^m
 # with e·v in [0,1] for all vertices v.  (Coordinates include the normalisation
 # coordinate, so linear functionals e·x exhaust the affine functionals.)
@@ -688,6 +780,14 @@ def _selftest():
     # support criterion vs witness: rank-1 distinct directions -> trivial intersection
     a = np.outer([1, 0], [1, 0]).astype(complex); b = 0.5 * np.array([[1, 1], [1, 1]], complex)
     okk &= supports_intersect_trivially(a, b) and not supports_intersect_trivially(a, a)
+    # Husimi anchors: correct normalization and finite bounded-family injectivity.
+    resolution = coherent_resolution_matrix()
+    okk &= np.linalg.norm(resolution - np.eye(resolution.shape[0]), ord=2) < 5e-12
+    moment_map, labels = coherent_bounded_moment_map()
+    okk &= np.linalg.matrix_rank(moment_map, tol=1e-10) == len(labels)
+    # Internal foil: exp(-|z|^2/4) gives vacuum normalization 2 rather than 1.
+    broken = coherent_resolution_matrix(amplitude_exponent=0.25)
+    okk &= abs(float(broken[0, 0].real) - 1.0) > 0.9
     print("gpt_measurements selftest:", "PASS" if okk else "FAIL")
     return 0 if okk else 1
 
