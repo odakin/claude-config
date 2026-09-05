@@ -10,7 +10,7 @@ summary: 単一 HTML 配布の地図図法ビューアの知見集 — 図法の
 Natural Earth のデータ構造、UI の操作設計、web 一般の罠に分けて書く。個別 project の判断史は
 その repo の DESIGN.md が正本で、ここは他 project でも再利用できる一般則だけ。
 
-## 1. 図法の性質は「自称」でなく実測で守る {#measure-not-assert}
+## <a id="measure-not-assert"></a>1. 図法の性質は「自称」でなく実測で守る
 
 図法の定義一覧に `poleLine: false` (極は点) や 「正積」 の注記を**手で書いた**ら、その日のうちに
 2 件が誤りだった (Equal Earth の極は点でなく赤道の 0.59 倍の**線**、Gall–Peters の歪みは
@@ -30,7 +30,7 @@ Natural Earth のデータ構造、UI の操作設計、web 一般の罠に分�
 「本当に全部代表的?」 で 4 つ (エケルト第6・ワグナー第4・ボッグス・グード) を落とした。
 ライブラリにあることは代表性の根拠にならない。教科書・地図帳・ソフトの既定に出るかで選ぶ。
 
-## 2. 中央経線の回転と fit キャッシュ {#rotate-and-fit-cache}
+## <a id="rotate-and-fit-cache"></a>2. 中央経線の回転と fit キャッシュ
 
 - 中央経線は `projection.rotate([-lon, 0, 0])` だけで表す。反子午線での切断は d3-geo の標準
   クリップに任せ、ポリゴンを自前で分割しない。
@@ -44,7 +44,7 @@ Natural Earth のデータ構造、UI の操作設計、web 一般の罠に分�
   割れた側の極が反対側へ来て外郭が枠外へ出る。任意の中央経線の Goode は well-defined でない
   (実物の地図も中央経線ごとに断裂を設計し直す)。「中央経線を動かす」 ビューアには入れない。
 
-## 3. 拡大は viewBox の切り出し + 詳細度 2 段 {#zoom-viewbox-lod}
+## <a id="zoom-viewbox-lod"></a>3. 拡大は viewBox の切り出し + 詳細度 2 段
 
 - 投影の scale を変えず、`viewBox` を `W/z × H/z` に切り出す。描画は不変で書き出し (同じ
   render 関数) も見えている範囲がそのまま出る。横は常に中央 (経度は回転で見る)、縦だけ `panY`。
@@ -58,7 +58,7 @@ Natural Earth のデータ構造、UI の操作設計、web 一般の罠に分�
   「動かすと少し粗く、止まると精細」、ドラッグ中 20 ms/frame、静止時の描き直し 1 回 176 ms。
   単一 HTML は 110m のみ 175 KB → 50m + 110m 950 KB (gzip 305 KB)。
 
-## 4. 国データ (Natural Earth admin_0、world-atlas 同梱) {#natural-earth-countries}
+## <a id="natural-earth-countries"></a>4. 国データ (Natural Earth admin_0、world-atlas 同梱)
 
 - **陸塊は国の merge で作る** (`topojson.merge`)。land-*.json と面積が 1e-3 以内で一致するので
   二重に持たない。国境は `topojson.mesh(topo, obj, (a, b) => a !== b)` (2 単位が接する弧のみ)。
@@ -87,7 +87,7 @@ Natural Earth のデータ構造、UI の操作設計、web 一般の罠に分�
 - hover / tap の国名は、塗り分けの path 自体を当たり判定にする (ティソー円と外郭は fill 無しで
   pointer を通す)。タップは 「4 px 未満で離した」 をドラッグ側で判定して発火する。
 
-## 5. UI の判断 (user 指摘で確定したもの) {#ui-decisions}
+## <a id="ui-decisions"></a>5. UI の判断 (user 指摘で確定したもの)
 
 - 地図が主役: 見出し → 地図 → 操作の順、リード文は置かない。
 - ドラッグが PC でも効くなら **スライダーは二重化**なので置かない (数値入力 + プリセット + ドラッグ)。
@@ -103,7 +103,7 @@ Natural Earth のデータ構造、UI の操作設計、web 一般の罠に分�
   ファイル内の辞書 (`navigator.language` で初期判定、`?lang=` と切替ボタンで上書き、自動判定と
   同じ言語なら URL に書かない)。
 
-## 6. web 一般の罠 (この project で踏んだもの) {#web-pitfalls}
+## <a id="web-pitfalls"></a>6. web 一般の罠 (この project で踏んだもの)
 
 - **`hidden` 属性は author の `display` に負ける**。`display: inline-flex` を当てた要素に
   `el.hidden = true` しても見える。`[hidden] { display: none !important; }` を reset に入れる。
