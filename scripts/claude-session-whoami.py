@@ -121,15 +121,17 @@ def _is_remote_control(env, max_depth=3):
     for _ in range(max_depth):
         if pid <= 1:
             return False
+        # ⚠️ macOS ps: `command` 列は**最後の -o に置かないと 16 文字に切られる** (2026-09-05 実測、
+        #    -ww でも同じ) → ppid を先、 command を最後に並べて split(None, 1) で分ける
         try:
-            out = subprocess.run(["ps", "-o", "command=", "-o", "ppid=", "-p", str(pid)],
+            out = subprocess.run(["ps", "-ww", "-o", "ppid=", "-o", "command=", "-p", str(pid)],
                                  capture_output=True, text=True, timeout=5).stdout.strip()
         except Exception:
             return False
         if not out:
             return False
-        parts = out.rsplit(None, 1)
-        cmd, ppid = (parts[0], parts[1]) if len(parts) == 2 else (out, "0")
+        parts = out.split(None, 1)
+        ppid, cmd = (parts[0], parts[1]) if len(parts) == 2 else ("0", out)
         if re.search(r"\bremote-control\b", cmd):
             return True
         try:
