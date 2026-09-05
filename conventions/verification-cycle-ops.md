@@ -42,8 +42,8 @@ summary: physics-verification-cycle.md (何を検査するか) の隣の「ど�
 
 | 台帳 | 粒度 | 誰が書く | 生成物か |
 |---|---|---|---|
-| `campaigns/<c>/ledger.yaml` | 1 item (主張) | worker (status / tier / readings) + **受領側** (`novel_to_requester` / `second_eye`) | 手書き |
-| `carryover.yaml` | 👁 で未了の item | 機械 (`--carryover --write`) | **生成物**、 手編集しない。 次 campaign の C 群の入口 |
+| `campaigns/<c>/ledger.yaml` | 1 item (主張) | worker (status / tier / readings) + **受領側** (`novel_to_requester` / `second_eye`、 field の意味は [`physics-verification-cycle.md#campaign-tooling`](physics-verification-cycle.md#campaign-tooling) A が正本) | 手書き |
+| `carryover.yaml` | 👁 で未了の item | 機械 (`--carryover --write`、 同 B) | **生成物**、 手編集しない。 次 campaign の C 群の入口 |
 | `improvements.yaml` | retro の提案 1 件 | 受領側 (retro を書く人) | 手書き。 status ∈ {implemented, deferred (+review_by), rejected} |
 
 **retro** = round ごとに `campaigns/retros/<date>-round<N>.md`、 front matter に `campaigns:` (この retro が閉じる campaign) / `contamination:` / `gate_violations:` を機械可読で持つ (INDEX.md に汚染 hit として出る)。 本文は「数字 (AUTO block から写す) / 効いたこと (観測事実で) / 壊れたこと / まだ言えないこと / 提案 → fate 表 / 持ち越す問い」 の 6 節 (雛形 = owner repo の `TEMPLATE-retro.md`)。 **retro を書かないと state が `received` で止まり、 毎 session surface される** = 書く carrier はここ。
