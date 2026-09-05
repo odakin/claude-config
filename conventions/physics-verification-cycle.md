@@ -185,7 +185,15 @@ spec 側の教訓 (= 起票者向け): 環境の道具の欠落 (SDP solver 不�
 
 **H. 別ベンダー pass の scope は spec だけでは縛れない (n=1)**: 「書くのは自分の campaign dir だけ、 promote は受領側」 と spec に書いても、 受け手の AGENTS 既定 (= 確定知見は owning project へ昇格) が勝ち、 別ベンダー worker が層1 library・規約・文献 SoT・repo の DESIGN へ直接 commit した。 中身は review で健全と判明し採用したが、 (i) 受領側が突合する前に SoT が動く (ii) 別 campaign の決着で即 stale になる (実測: 文献 note の「unverified」 が同夜 refuted に)。 → cross-vendor spec には **「promote 禁止、 提案は results.md に書く」 を AGENTS 既定より強い language で明記** し、 board の claim event を受領側が監視、 昇格は受領・突合の後に受領側が行う (C′ の「hoist は受領後」 と同じ時間順)。
 
-**正直な限界**: 全部 n=1 (初回 campaign + retro)。 efficacy proxy は傾向指標。 cadence gate は「entries per commit」 しか見ない (時間・token は git に無い)。
+**I. 新結果の第二の目は sandbox を 1 コマンドで切る**: [`cold-eyes-isolation.md#sealed-sandbox`](cold-eyes-isolation.md#sealed-sandbox) の recipe を層1 [`scripts/make-review-sandbox.py`](../scripts/make-review-sandbox.py) (`create <slug> --spec … --include …` / 受領 `collect <slug> --into <campaign dir>`) にした。 `~/Claude` 配下を root にすると refuse (= 祖先 CLAUDE.md の auto-load を構造で断つ)。 C′ の n=2 が動機: 「安い方の選択肢が隔離されている」 状態にしないと deny list に流れる。
+
+**J. hoist は受領側 1 session が直列に、 worker の書込みは自 dir に閉じる (機械 gate)**: 2 周目で 3 session (worker 2 + 別ベンダー) が同じ層1 file へ同時に hoist し、 受領側自身の file 単位 `git add` が他 session の未 commit hunk を 3 回巻き込んだ (HEAD に番号重複、 作業ツリーで selftest FAIL、 解消に cross-session 4 往復)。 → **worker spec に `export CAMPAIGN_WORKER_DIR=campaigns/<dir>` を必須行**とし、 [`scripts/ledger-commit-cadence-gate.py`](../scripts/ledger-commit-cadence-gate.py) `--worker-scope-env` がその dir 外の staged path を refuse。 受領側は `-a` / `-A` を使わず path 指定で add。 層1・文献 SoT・DESIGN への昇格は受領・突合後に**受領側 1 session だけ**が行う (H の別ベンダー、 C′ の時間順と同じ結論を機械で)。
+
+**K. foil の exit 契約 + runner**: 4 campaign で foil の exit 規約が 3 通りに割れ (「検出したら exit 1」 / 「検出したら exit 0」 / assert で落とす)、 受領側の手書き loop の `$?` 取り違えが「foil に歯が無い」 の偽 finding を出した (再走で救済)。 → 契約 = **foil は check のテスト**: 壊した入力を check が弾いたら `FOIL-TEETH` を出力して exit 0、 弾かなければ `FOIL-BROKEN` で exit 1。 受領・完了時は [`scripts/verification-campaign-report.py`](../scripts/verification-campaign-report.py) `<dir> --run --write` が check (exit 0 期待) と foil (契約) を timeout 付きで走らせて AUTO block に焼く (legacy foil は語句で分類し `legacy` と表示)。 検査する側の道具も selftest を持つ (= 計測器の foil)。
+
+**G′. worker の repo 状態の自己報告は信じない**: 「あなたの hunk が残っている」 「私の 1 文があなたの commit に入った」 はどちらも事実と違った (2 周目)。 受領側は `git status` / `git show --stat` / `--run` で見る。 自己報告が正しいのは finding の中身 (数学) で、 それも独立再実装で確かめる ([§7](#independent-second-eye))。
+
+**正直な限界**: A-H は n=1〜2 (2 campaign + retro 2 回)。 I-K は 2 周目の事故からの機械化で、 効果は 3 周目で見る。 efficacy proxy は傾向指標。 cadence gate は「entries per commit」 しか見ない (時間・token は git に無い)。
 
 ## <a id="sibling-routing"></a>16. 隣接 doc への routing
 

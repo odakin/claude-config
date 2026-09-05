@@ -22,8 +22,17 @@ would make its own count stale by one as soon as the generated results.md was co
 The AUTO heading deliberately has no wall-clock generation date: rerunning an unchanged campaign
 on a later day must be byte-stable rather than manufacture a report-only commit.
 
+Foil exit contract (2026-09-06, after four campaigns used three different conventions and a
+requester-side `$?` bug produced a false "foils have no teeth"): a foil is a *test of the
+check*.  It must print a line starting with `FOIL-TEETH` when the check correctly rejects
+the broken input (and exit 0), or `FOIL-BROKEN` when the check let it through (exit 1).
+Legacy foils without the marker are classified by phrase (`expected for a foil` /
+`FAIL as expected` / `EXPECTED FAIL` ⇒ teeth) and reported as `legacy`.  `--run` executes
+check_*.py (expect exit 0) and foil_*.py under this contract with a per-script timeout and
+records the result in the AUTO block, so the receiver never hand-rolls the loop again.
+
 Usage
-  verification-campaign-report.py <campaign-dir> [--write]      stats (+ write AUTO block)
+  verification-campaign-report.py <campaign-dir> [--write] [--run [--timeout SEC]]   stats (+ run checks/foils, + write AUTO block)
   verification-campaign-report.py --carryover [--write] [--root R]
   verification-campaign-report.py --selftest
 """
@@ -175,6 +184,50 @@ def open_eye_ids(L: list[dict]) -> list[str]:
     return [x["id"] for x in L if x.get("tier") == "👁" and x.get("status") != "refuted" and not x.get("second_eye")]
 
 
+FOIL_LEGACY_TEETH = ("expected for a foil", "FAIL as expected", "EXPECTED FAIL")
+
+
+def run_checks(camp: Path, timeout: int = 600) -> dict:
+    """Run check_*.py (expect exit 0) and foil_*.py (foil exit contract). Exit codes captured directly."""
+    checks_dir = camp / "checks"
+    out = {"checks": [], "foils": []}
+    if not checks_dir.exists():
+        return out
+    for f in sorted(checks_dir.glob("check_*.py")):
+        try:
+            pr = subprocess.run([sys.executable, str(f)], cwd=str(checks_dir), capture_output=True, text=True, timeout=timeout)
+            out["checks"].append((f.name, "PASS" if pr.returncode == 0 else f"FAIL(exit {pr.returncode})"))
+        except subprocess.TimeoutExpired:
+            out["checks"].append((f.name, f"TIMEOUT({timeout}s)"))
+    for f in sorted(checks_dir.glob("foil_*.py")):
+        try:
+            pr = subprocess.run([sys.executable, str(f)], cwd=str(checks_dir), capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            out["foils"].append((f.name, f"TIMEOUT({timeout}s)", "-")); continue
+        text = (pr.stdout or "") + (pr.stderr or "")
+        if "FOIL-TEETH" in text:
+            verdict, conv = ("teeth" if pr.returncode == 0 else "teeth(marker, but exit≠0)"), "standard"
+        elif "FOIL-BROKEN" in text:
+            verdict, conv = "BROKEN", "standard"
+        elif any(k in text for k in FOIL_LEGACY_TEETH):
+            verdict, conv = "teeth", "legacy"
+        else:
+            verdict, conv = ("teeth?" if pr.returncode != 0 else "BROKEN?"), "legacy-exit-only"
+        out["foils"].append((f.name, verdict, conv))
+    return out
+
+
+def render_run(r: dict) -> str:
+    if not r["checks"] and not r["foils"]:
+        return ""
+    c_pass = sum(1 for _, v in r["checks"] if v == "PASS")
+    f_teeth = sum(1 for _, v, _ in r["foils"] if v.startswith("teeth"))
+    convs = sorted({c for _, _, c in r["foils"]})
+    bad = [f"{n}:{v}" for n, v in r["checks"] if v != "PASS"] + [f"{n}:{v}" for n, v, _ in r["foils"] if not v.startswith("teeth")]
+    return (f"| **実走 (--run)** | checks {c_pass}/{len(r['checks'])} PASS, foils {f_teeth}/{len(r['foils'])} teeth "
+            f"(contract: {', '.join(convs) or '—'})" + (f" ⚠️ {'; '.join(bad)}" if bad else "") + " |")
+
+
 def render(s: dict) -> str:
     g = s["git"]
     lines = [AUTO_BEGIN, "**campaign stats (git-derived)**", "", "| 指標 | 値 |", "|---|---|"]
@@ -191,6 +244,10 @@ def render(s: dict) -> str:
     if s["novel_unrated_refuted"]:
         lines.append(f"| ⚠️ refuted で novel_to_requester 未記入 | {', '.join(s['novel_unrated_refuted'])} (受領側が埋める) |")
     lines.append(f"| 👁 で第二の目待ち (carryover) | {len(s['second_eye_open'])} ({', '.join(s['second_eye_open']) or '—'}) |")
+    if s.get('run'):
+        row = render_run(s['run'])
+        if row:
+            lines.append(row)
     lines.append(AUTO_END)
     return "\n".join(lines)
 
@@ -297,7 +354,21 @@ def selftest() -> int:
         git("add", ".")
         git("commit", "-m", "more campaign work")
         assert render(stats(camp, root)) == projected
-    print("selftest OK (10 checks)")
+    with tempfile.TemporaryDirectory() as td:
+        camp = Path(td) / "campaigns" / "r"
+        (camp / "checks").mkdir(parents=True)
+        (camp / "checks" / "check_ok.py").write_text("import sys; print('PASS'); sys.exit(0)\n", encoding="utf-8")
+        (camp / "checks" / "check_bad.py").write_text("import sys; sys.exit(3)\n", encoding="utf-8")
+        (camp / "checks" / "foil_std.py").write_text("print('FOIL-TEETH: rejected')\n", encoding="utf-8")
+        (camp / "checks" / "foil_broken.py").write_text("import sys; print('FOIL-BROKEN'); sys.exit(1)\n", encoding="utf-8")
+        (camp / "checks" / "foil_legacy.py").write_text("import sys; print('OVERALL: FAIL (expected for a foil)'); sys.exit(1)\n", encoding="utf-8")
+        r = run_checks(camp, timeout=30)
+        assert dict(r["checks"]) == {"check_ok.py": "PASS", "check_bad.py": "FAIL(exit 3)"}, r["checks"]
+        f = {n: (v, c) for n, v, c in r["foils"]}
+        assert f["foil_std.py"] == ("teeth", "standard") and f["foil_broken.py"] == ("BROKEN", "standard") and f["foil_legacy.py"] == ("teeth", "legacy"), f
+        row = render_run(r)
+        assert "checks 1/2 PASS" in row and "foils 2/3 teeth" in row and "foil_broken.py:BROKEN" in row, row
+    print("selftest OK (13 checks)")
     return 0
 
 
@@ -317,9 +388,18 @@ def main(argv: list[str]) -> int:
     if not args:
         print(__doc__)
         return 2
+    timeout_arg = int(argv[argv.index("--timeout") + 1]) if "--timeout" in argv else 600
+    args = [a for a in args if a != (argv[argv.index("--timeout") + 1] if "--timeout" in argv else None)]
     camp = Path(args[0]).resolve()
     repo = Path(root_arg).resolve() if root_arg else repo_root(camp)
-    block = render(stats(camp, repo))
+    st = stats(camp, repo)
+    if "--run" in argv:
+        st["run"] = run_checks(camp, timeout_arg)
+        for n, v in st["run"]["checks"]:
+            print(f"  check {n}: {v}")
+        for n, v, c in st["run"]["foils"]:
+            print(f"  foil  {n}: {v} [{c}]")
+    block = render(st)
     print(block)
     if write:
         write_block(camp, block)

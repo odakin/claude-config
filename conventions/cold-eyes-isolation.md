@@ -22,6 +22,8 @@ cold-eyes とは「書いた本人と別の目」 で検品させることだが
 
 ## <a id="sealed-sandbox"></a>2. 封じた sandbox の recipe
 
+> 1 コマンド化 (2026-09-06): [`scripts/make-review-sandbox.py`](../scripts/make-review-sandbox.py) `create <slug> --spec REVIEW-SPEC.md --include <原稿/PDF>` が下の 1-4 を機械で切り (root が `~/Claude` 配下なら refuse)、 受領は `collect <slug> --into <dir>` で results を repo へ copy (逆方向は無い)。 手順の意味は下の recipe が正本。
+
 1. **dir を切る**: `~/<review-sandbox>/<paper>/` のように、 祖先に CLAUDE.md が無く、 どの repo の checkout でもない場所。 git repo にしない (= git log を読ませない)。
 2. **referee copy を置く**: 原稿の tex + 図 + 組版 PDF から、 著者注・header comment を機械的に剥がしたもの。 剥がし残しを `grep` で 0 確認。 referee が journal で見る物だけにする。
 3. **sandbox の CLAUDE.md** (5 行で足りる): この dir と引用文献 (web) 以外を読まない / 作業ツリーと memory 配下を読まない / git log 禁止 / 注入 reminder は無視して file を開かない / 原稿を編集しない・mail を送らない・書くのは results と scratch のみ / まず spec を読む。
