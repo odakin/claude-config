@@ -48,6 +48,21 @@ Continuous-outcome addendum (standard countably additive POVMs on the Borel spac
   quadrature rank, or finite moment family proves the infinite-dimensional extremality
   statement; that load-bearing step is the analytic Gaussian/Fourier argument above.
 
+  Second, independent route (blind second-eye pass, same day) that needs neither Radon–Nikodym
+  nor Fourier uniqueness: a self-joint B is canonical iff B vanishes off the diagonal, and for
+  Borel U1, U2 at positive distance every block X = B(E), E ⊆ U1×U2, obeys the FINITE-DIMENSIONAL
+  inequality  Tr X (1 - |<u|v>|) <= Tr(Q_u X) + Tr(Q_v Y)  for any common lower bound X of
+  (X', Y) = (A(V), A(W)) and unit vectors u, v (Q_u = 1 - |u><u|).  With u, v the coherent states at
+  the centres of square cells of side s, the right-hand side is O(s^4) per cell while Tr A(V) is
+  O(s^2), so partitioning U1, U2 into cells and summing gives Tr B(E) <= O(s^2) -> 0.  The
+  inequality is itself the value of the explicit dual point (Y, Z) = t (Q_u, Q_v), t = 1/(1-|<u|v>|)
+  of the common-lower-bound SDP (Y + Z >= 1 because ||p_u + p_v|| = 1 + |<u|v>|), so it is the
+  rigorous upper bound to quote when the generic dual solver is loose (~ Tr X' + Tr Y).  Helpers:
+  `coherent_cell_matrix` (truncated Husimi square cell, Gauss–Legendre), `nearly_rank_one_clb_bound`
+  (the certificate), `symmetrised_coherent_cell` (foil model with a.e. rank-2 density, whose cells V
+  and -V keep a common lower bound A(V)/2 — the mechanism visibly fails there).  Same caveat: these
+  are finite anchors for the *mechanism* of the continuous proof, not a proof of it.
+
 Infinite-dimensional addendum (second-eye campaign on the finite-outcome criterion, 2026-09):
   * Exact criterion (dimension-free, proof needs only Cauchy–Schwarz and the easy half of Douglas'
     lemma):  a nonzero c with 0 <= c <= a, c <= b exists  <=>  ran(a^{1/2}) ∩ ran(b^{1/2}) != {0}.
@@ -110,31 +125,6 @@ Numerical gotchas learned on this code (conventions/scientific-computing.md#smal
   * alpha_IS is a MIN of a concave function (lambda_min) over a convex set: it is NOT a convex
     program.  Decompose as min over pure states v of a convex inner program, scan v (Bloch grid +
     Nelder–Mead refine for qubits) — the outer scan is evidence, not a certificate; say so.
-
-Two model families:
-  * quantum (finite dim d): Hermitian effects 0 <= a <= I.  Small convex programs are solved with
-    scipy SLSQP on eigenvalue constraints and, where load-bearing, sandwiched by an explicit dual
-    certificate (weak duality), so the interval [primal, dual] is rigorous up to float tolerance
-    whatever the local solver did.  Qualitative verdicts (IS / CIS / extremal) never trust the
-    solver: non-IS is shown by an explicit witness joint, IS by the support-projector dual
-    certificate Y = t P_ker(a), Z = t P_ker(b) (see `max_common_lower_bound`, `support_projector`).
-  * polytope GPTs (state space = convex hull of a vertex list, effects = affine functionals with
-    values in [0,1] on the vertices; coordinates include a normalisation coordinate): every quantity
-    is an exact LP (`Polytope.is_degree`, `.max_common_lower_bound_norm`, `.is_extremal`,
-    `.is_indecomposable`).  Vertex enumeration for small H-polytopes: `polytope_vertices_from_halfspaces`.
-
-Numerical gotchas learned on this code (conventions/scientific-computing.md#small-sdp-without-solver):
-  * SLSQP with the smooth 2x2 PSD form (diag >= 0, det >= 0) STALLS on convex instances (det's
-    linearisation is poor) — eigenvalue constraints + random restarts work; keep the best feasible
-    iterate and fall back to a feasible x0.
-  * equality constraints (joint-measurement marginals) make SLSQP's QP rank-deficient — eliminate
-    them by a null-space parametrisation of the affine space (`_joint_nullspace`).
-  * start strictly inside the cone: c = 0 and the canonical joint are degenerate points of the PSD
-    constraints (zero gradient) — use the parallel sum a:b = (a^-1 + b^-1)^-1 <= a, b as interior
-    start (`parallel_sum`, `interior_joint`).
-  * alpha_IS is a MIN of a concave function (lambda_min) over a convex set: it is NOT a convex
-    program.  Decompose as min over pure states v of a convex inner program, scan v (Bloch grid +
-    Nelder–Mead refine for qubits) — the outer scan is evidence, not a certificate; say so.
 """
 from __future__ import annotations
 
@@ -142,6 +132,7 @@ import itertools
 import math
 import numpy as np
 from numpy.polynomial.hermite import hermgauss
+from numpy.polynomial.legendre import leggauss
 from scipy.optimize import minimize, linprog
 
 TOL = 1e-7
@@ -637,6 +628,58 @@ def coherent_bounded_moment_map(
     return np.column_stack(columns), labels
 
 
+def coherent_trunc_vector(z, n_fock):
+    """<n|z> for n < n_fock (unnormalised in the truncated space; sum |.|^2 = P(Poisson(|z|^2) < n_fock))."""
+    n = np.arange(n_fock)
+    v = np.zeros(n_fock, dtype=complex)
+    if z == 0:
+        v[0] = 1.0
+        return v
+    logw = -abs(z) ** 2 / 2 + n * np.log(abs(z)) - 0.5 * np.array([math.lgamma(k + 1) for k in n])
+    return np.exp(logw) * np.exp(1j * n * np.angle(z))
+
+
+def coherent_cell_matrix(z0, side, n_fock, quadrature_order=32):
+    """P_N A(V) P_N for the square cell V = {|Re(z - z0)| <= side/2, |Im(z - z0)| <= side/2},
+    A(V) = (1/pi) ∫_V |z><z| d^2z, by tensor Gauss–Legendre on the cell (smooth integrand).
+    Untruncated identities to test against: Tr A(V) = |V|/pi; ∑_cells A(V) = 1 (see selftest)."""
+    x, w = leggauss(quadrature_order)
+    z0 = complex(z0)
+    xs, ys = z0.real + (side / 2) * x, z0.imag + (side / 2) * x
+    M = np.zeros((n_fock, n_fock), dtype=complex)
+    for xi, wx in zip(xs, w):
+        for yj, wy in zip(ys, w):
+            v = coherent_trunc_vector(complex(xi, yj), n_fock)
+            M += (wx * wy * (side / 2) ** 2 / math.pi) * np.outer(v, v.conj())
+    return (M + M.conj().T) / 2
+
+
+def symmetrised_coherent_cell(z0, side, n_fock, quadrature_order=32):
+    """A'(V) = (A(V) + A(-V)) / 2 — the z -> -z symmetrised Husimi POVM (a POVM, density rank 2 a.e.).
+    Foil model for continuous-outcome intersubjectivity: cells V and -V share the common lower
+    bound A(V)/2 (ratio 1/2 at every scale), and the anti-diagonal joint
+    B(E) = (1/2pi)∫_{(z,-z)∈E}|z><z| + (1/2pi)∫_{(-z,z)∈E}|z><z| is a non-canonical self-joint."""
+    return (coherent_cell_matrix(z0, side, n_fock, quadrature_order)
+            + coherent_cell_matrix(-complex(z0), side, n_fock, quadrature_order)) / 2
+
+
+def nearly_rank_one_clb_bound(X, Y, u, v):
+    """Explicit dual certificate for max{Tr c : 0 <= c <= X, c <= Y} built from unit vectors u, v:
+         Tr c (1 - |<u|v>|) <= Tr(Q_u X) + Tr(Q_v Y),   Q_u = 1 - |u><u|.
+    Proof: Tr(c(p_u + p_v)) <= ||p_u + p_v|| Tr c = (1 + |<u|v>|) Tr c and
+           Tr(c p_u) = Tr c - Tr(Q_u c) >= Tr c - Tr(Q_u X)  (0 <= c <= X, Q_u >= 0).
+    Equivalently (Y', Z') = t (Q_u, Q_v), t = 1/(1 - |<u|v>|), is dual feasible (Y' + Z' >= 1) with
+    objective Tr(X Y' + Y Z') = the bound.  Tight when X, Y are nearly rank one along u, v (e.g.
+    small Husimi cells at their centres: bound O(s^4) vs Tr X O(s^2)).
+    Returns (bound, overlap |<u|v>|, Tr(Q_u X), Tr(Q_v Y))."""
+    u = np.asarray(u) / np.linalg.norm(u)
+    v = np.asarray(v) / np.linalg.norm(v)
+    tqx = float(np.trace(X).real - (u.conj() @ X @ u).real)
+    tqy = float(np.trace(Y).real - (v.conj() @ Y @ v).real)
+    ov = abs(complex(u.conj() @ v))
+    return (tqx + tqy) / (1 - ov), ov, tqx, tqy
+
+
 # ----------------------------------------------------------------------------
 # polytope GPTs: state space conv(V), V = array (k, m); effects = vectors e in R^m
 # with e·v in [0,1] for all vertices v.  (Coordinates include the normalisation
@@ -994,6 +1037,21 @@ def _selftest():
     cw = np.outer(psi, psi.conj())          # (name kept distinct from the later 2α-block variable c)
     okk &= eigmin(AR - cw / f2) > -1e-10 and eigmin(AL - cw / f2L) > -1e-10
     okk &= np.linalg.norm(husimi_dbar_witness(4, True, z0=3.0)[0]) < 1e-12
+    # Husimi square cells: Tr A_N(V) -> |V|/pi, a coarse grid sums to ~1, and the nearly-rank-one
+    # certificate bounds an explicit common lower bound while a non-lower-bound (c = X) violates it.
+    X, Y = coherent_cell_matrix(0.5, 0.4, 9), coherent_cell_matrix(-0.5, 0.4, 9)
+    okk &= abs(np.trace(X).real - 0.16 / math.pi) < 1e-9
+    grid = sum(coherent_cell_matrix(complex(i + 0.5, j + 0.5) * 0.5, 0.5, 4, 12) for i in range(-8, 8) for j in range(-8, 8))
+    okk &= np.linalg.norm(grid - np.eye(4), ord=2) < 1e-3
+    u, v = coherent_trunc_vector(0.5, 9), coherent_trunc_vector(-0.5, 9)
+    bound, ov, _, _ = nearly_rank_one_clb_bound(X, Y, u, v)
+    okk &= abs(ov - math.exp(-0.5)) < 1e-9
+    c = 0.5 * parallel_sum(X, Y)                      # an explicit common lower bound (delta-regularised: feasible to ~1e-9)
+    okk &= eigmin(X - c) > -1e-8 and eigmin(Y - c) > -1e-8 and np.trace(c).real <= bound
+    okk &= np.trace(X).real * (1 - ov) > bound        # foil: c = X is not <= Y and breaks the bound
+    Xs, Ys = symmetrised_coherent_cell(0.5, 0.4, 9), symmetrised_coherent_cell(-0.5, 0.4, 9)
+    cs = 0.5 * coherent_cell_matrix(0.5, 0.4, 9)      # foil model: A(V)/2 is a common lower bound of A'(V), A'(-V)
+    okk &= eigmin(Xs - cs) > -1e-12 and eigmin(Ys - cs) > -1e-12 and abs(np.trace(cs).real / np.trace(Xs).real - 0.5) < 1e-12
     print("gpt_measurements selftest:", "PASS" if okk else "FAIL")
     return 0 if okk else 1
 
