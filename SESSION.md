@@ -4,7 +4,7 @@
 
 ## 2026-09-06: Codex context の一次資料と参照を更新
 
-- 製品案内と検証境界を [PARITY の正本](codex/PARITY.md#long-context-opt-in) に集約し、圧縮対策側の数値・二次情報の重複を参照へ置換。
+- 製品案内と検証境界を [PARITY の正本](codex/PARITY.md#long-context-opt-in) に集約し、圧縮対策側の数値・二次情報の重複を参照へ置換。実行時イベントと診断ログで設定値・実効窓・圧縮しきい値を区別する確認経路も同正本へ追記。
 
 ## 2026-09-06: Session 宛て board の一般則と参照を整理
 

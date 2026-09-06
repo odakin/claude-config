@@ -129,7 +129,16 @@ A requested budget, an accepted client/backend ceiling, the reported effective
 window, and the actual compaction point remain separate measurements. A `1M`
 setting is not proof that a run receives one million usable input tokens.
 Verify the new task's reported window and actual behavior after an authorized
-configuration change. Do not copy API long-context price multipliers into a
+configuration change. When available, compare the same task's usage event
+`token_count.info.model_context_window` with its session-turn diagnostics
+`full_context_window_limit`, `auto_compact_scope_limit`, and
+`auto_compact_limit_scope`. These distinguish the runtime-reported window and
+resolved compaction threshold from the requested configuration. A reported
+threshold is not an observed compaction event, and a numerical match with model
+metadata does not by itself prove the internal capping algorithm. Keep exact
+host/task observations in the owner's investigation record.
+
+Do not copy API long-context price multipliers into a
 ChatGPT Codex credit claim: the exact credit conversion remains unestablished
 by these sources. Larger context also does not guarantee better recovery or
 output quality. This source check did not run a long-context experiment.
