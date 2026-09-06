@@ -24,6 +24,7 @@
 - **[check-overleaf-drift.py](check-overleaf-drift.py)** — Overleaf 正本 repo の drift / 整備漏れ検出（各 repo の scripts/overleaf-sync.sh --status を並列実行、 ID 未設定=CRITICAL / behind>0=WARN / DEPRECATED=silent / ahead-expected marker で恒常 ahead INFO 抑制、 finding 0 件 silent、 --selftest 内蔵。 個人層 dashboard 末尾から呼ぶ、 conventions/overleaf-integration.md#sync-script-contract）
 - **[check-xlsx-integrity.py](check-xlsx-integrity.py)** — xlsx の Excel「破損」判定源を Excel 不要・決定論で検出（XML well-formed〔unbound prefix〕/ rels 両方向参照整合 / rId 重複 / Content_Types coverage。 zip 直編集 xlsx の納品前 gate、 office-automation.md#openpyxl-destroys-drawings）
 - **[check-yaml-lint.py](check-yaml-lint.py)** — fleet 横断 YAML hazard lint (yamllint を危険 rule 限定で全 repo の tracked yaml に回す。 truthy / dup-key / implicit-octal / syntax、 git-crypt lock file skip、 yamllint 未 install や root 不在は SKIP、 --selftest は毒入り fixture で検出能力自体を検証。 規約 = conventions/yaml-hazards.md#yamllint-hazard-config)
+- **[chromium-cookies.py](chromium-cookies.py)** — macOS の Chromium 系 browser (Brave / Chrome) の cookie を復号して取り出す。
 - **[claude-session-whoami.py](claude-session-whoami.py)** — session の host / surface (desktop|CLI) / account を機械同定する probe。
 - **[clipboard-cleaner.py](clipboard-cleaner.py)** — クリップボード一発整形 CLI（PDF コピーの段落内改行除去 + pbcopy 書き戻しで RTF 書式除去、明示発火のみ・常駐なし、--selftest 内蔵、hammerspoon ⌃⌥⌘V から呼ばれる、conventions/clipboard-cleaner.md）
 - **[close-pdf-form-boxes.py](close-pdf-form-boxes.py)** — Excel→PDF 出力で落ちたフォームの枠罫線を検出して閉じる。
@@ -40,6 +41,7 @@
 - **[enhance-scan.py](enhance-scan.py)** — 手書き文書の撮影写真の可読化: 紙の切り出し + 照明ムラ除去 + コントラスト伸張 + タイル出力。
 - **[fix-bib-unicode.py](fix-bib-unicode.py)** — Unicode→LaTeX 変換スクリプト
 - **[fleet-heartbeat.py](fleet-heartbeat.py)** — per-machine heartbeat writer（毎時 launchd cron から自マシンの RC server 群〔launchd loaded + server ログ末尾 marker parse = Connected/auth error/version error〕 + config-dir auth metadata を <repo>/<subdir>/<host>.json に commit+push。**claude を一切呼ばない** = auth 失効でも監視が生き残る、state-change-or-age commit policy で git history を汚さない、fail-open、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
+- **[garoon-client.py](garoon-client.py)** — Cybozu Garoon (cloud) を **browser session cookie で script から読む** (画面 drive 不要)。
 - **[generate-doc-index.py](generate-doc-index.py)** — regenerate a slug index FROM its markdown, so Claude writes
 - **[generate-tree.py](generate-tree.py)** — CLAUDE.md 構造 tree (conventions/hooks/scripts) + CONVENTIONS.md 冒頭列挙 +
 - **[gmail-mcp-engines.test.sh](gmail-mcp-engines.test.sh)** — gmail MCP engine 2 本 (reauth / install-runtime-links) の hermetic self-test
