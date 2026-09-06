@@ -151,9 +151,9 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
 
 SESSION.md:
 - **更新タイミング:** タスク完了・重要な判断・ファイル作成/大幅変更・エラー発生時。出力テキストは揮発する。
-- **認識の転換点:** 方針変更・ユーザー決定・前提の修正では **その場で** SESSION.md に書く（後回しにすると autocompact で消失）。決定事項には **What**（具体的手順）・**Why**（代替案と棄却理由）・**How**（実装方法）を含める。
+- **認識の転換点:** 方針変更・ユーザー決定・前提の修正は **その場で正本を更新**し、SESSION.md には現在の作業段階・停止点・次の一手と正本への直接リンクを反映する。恒久的な What/Why/How は決定を所有する正本に置き、SESSION へ複製しない。
 - **棚卸し（目安80行以内）:** 完了 `[x]` を除去、実装詳細は git log に委任、重複を排除、**恒久的決定・セッションをまたいで効くルール/規約/編集流儀は CLAUDE.md（or 該当 convention file）に移動**（= SESSION.md は揮発的 state 専用、durable rule を SESSION に置かない。置くと状態 file を読まない者・別セッションに発火しない＝役割表 §2 違反）。
-- **新セッションテスト:** セッション終了前に SESSION.md だけで What/Why/How が復元できるか検証。
+- **新セッションテスト:** SESSION.md を読むだけで「今何を扱い、どこで止め、次に何を確認・実行するか」が分かり、必要な正本へ直接辿れるか検証する。リンク一覧だけでも、案件状態の写しでも不足。終了報告・別の再開案内を中継点にしない。詳細の What/Why/How と最新の handled-state はリンク先の正本で読む（[#session-no-durable-record](#session-no-durable-record)）。
 
 MEMORY.md（index-only、[`docs/convention-design-principles.md` §8.7](docs/convention-design-principles.md#mechanism-application-example)）: マシンローカル事実への pointer のみ置く。2 週間以上未使用プロジェクトを除去、解決済み案件を除去。feedback 形式の残留があれば削除（[§8.3](docs/convention-design-principles.md#precedent-as-training-data) で `memory-guard.sh` が deny する対象）。
 
