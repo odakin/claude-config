@@ -2,6 +2,10 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-06: Session 宛て board の一般則と参照を整理
+
+- 主体・提出と受領・明示引継ぎ・受領経路の正本は [multi-session coordination §13](conventions/multi-session-coordination.md#git-immutable-event-board)。移設せず、検証サイクル側から参照する。
+
 ## 2026-09-06: 地図UIの知見を既存規約へ統合
 
 - [web-map-projections.md](conventions/web-map-projections.md): 国名の候補／衝突判定、自転と中央経線の符号、操作欄の状態表現を更新。適用先の DESIGN は節参照へ整理。

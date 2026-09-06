@@ -1,13 +1,13 @@
 <!-- doc-meta
-when: 並列 Claude session と同じ repo を触るとき + spawn/handoff を設計するとき
+when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき
 category: harness-core
-summary: 同 user の並列 AI session を安全に協調させる規律 (= session 開始 git fetch + log + plan read、同 path race 防御、明示 add、handoff、必要時の Git immutable-event board は operational state に限定し project SoT へ昇格)
+summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
 -->
-# Multi-session coordination — 同 user の並列 Claude session が race する
+# Multi-session coordination — 同 user の並列 AI session が race する
 
 同じ user が同じマシン (or 別マシン) で **複数の Claude session を並列起動して同じ shared repo を同時編集** している状況は、 zoom session 中の long-running 議論や autocompact 復帰直後の sub-task spawn 等で日常的に発生する。 collaborator (= 他 user) との race は [`shared-repo.md`](shared-repo.md) の Git workflow で扱うが、 本ファイルは **同 user の concurrent Claude session 同士の race** という別軸の risk と防御を扱う。
 
-scope: 1 user の手元で 2 つ以上の Claude session 〜 過去の自分 session が残した artifact (= 自 commit / 自 plan の `[x]` mark / 自 SESSION entry) を新 session が「他人 commit」 のように扱う場面。
+scope: 1 user の手元で並列 AI session が同じ project を扱う場面。Claude 固有の spawn / marker 手順はその実装に限る。vendor-neutral な掲示板の主体・受領・引継ぎは [§13](#git-immutable-event-board) が正本。
 
 ---
 
@@ -287,6 +287,10 @@ identity は similarity でなく content corroboration でしか establish で�
 
 ### <a id="return-signal-economy"></a>Marker 経済 — 完了 marker は「受領義務」 の model であって完了 log ではない (2026-07-14)
 
+本節は既存の marker 経路の契約。session 宛て board を受領経路に選んだ依頼との境界は
+[1 義務 1 受領経路](#board-receipt-carrier) を参照する。marker の consume と board の accept は、
+権限も意味も異なるため相互に代用しない。
+
 required spine の完了 marker は「**人間が受領するまで surface し続ける義務**」 を 1 個 mint する操作 (= consumed になるまで毎 session 開始時に出る、 消すには手動 consume が要る)。 ∴ mint は「完了の記録」 でなく「**受領してもらう必要**」 がある時に行う — 記録自体は deliverable の commit が既に担っている。 これを無差別に行うと委譲 chain (実装 → 検品 → 検品の検品 …) の各段が marker を増殖させ、 子 marker・孫 marker が誰にも consume されず滞留する = **人間の注意を節約するための機構が人間の注意に課税し始める** (2026-07-14 観測: 起票者が「報告不要」 と明示した検品 spec に、 spine を反射で丸写しして 2 個目の marker 義務を焼き込み user 訂正)。
 
 1. **報告 waiver は marker にも及ぶ。** 起票者が「返事不要・完了通知不要」 と明示したら、 それは live-push (send_message) だけでなく完了 marker (= もう一つの返送経路) にも適用する — clean 完了は mint しない、 deliverable の commit が durable 記録。 ⚠️ waiver が放棄したのは「完了通知」 であって「問題の報告」 ではない: **行動を要する発見** (= FAIL verdict / major issue / user 判断 gate) が出たらその時だけ mint する (= findings-only marker policy)。
@@ -522,8 +526,74 @@ user がそのマシンの前に居ない session (= Remote Control 経由でス
 
 複数の AI session が project と machine をまたいで継続的に動き、各 project の `SESSION.md`
 だけでは「誰が何を claim し、どの finding が未昇格か」を横断して見渡せない場合、専用の Git
-board を置ける。ただし board は**研究・project 判断の正本ではない**。用途は claim、material
-update、blocker、完了 pointer という短命な operational state に限る。
+board を置ける。役割は、**どの session が、何を引き受け、誰の確認を待っているか**を残すこと。
+board は**研究・project 判断の正本ではない**。依頼・担当・提出・受領という operational state と、
+成果物の所在を扱う。本節がその一般則の正本であり、具体的な schema / CLI は各実装が定める。
+
+### <a id="board-session-subject"></a>主体は session、vendor と host は属性
+
+「Claude が作業中」だけでは、同時に動く別の Claude session が誰の仕事か判断できない。
+責任と宛先の単位を **実在する session** にする。例えば、同じ vendor の session A が session B に
+依頼した場合も、A は確認側、B は作業側として区別する。
+
+| 概念 | 役割 |
+|---|---|
+| session identity | vendor / runtime の namespace と、その runtime が与える安定した native session ID |
+| vendor / model / host / surface / 表示名 | 実行環境や表示の属性。担当者や引継ぎ先を推測する材料にしない |
+| request identity | 依頼の一意 ID。session を引き継いでも依頼は同じ |
+| original requester | 誰が起票したかという履歴。引継ぎで書き換えない |
+| current assignee | 今、実作業を担当する session |
+| current reviewer | 今、提出を確認し、受領または差戻しを判断する session。初期値は起票 session |
+
+同じ native ID を保った再開・compaction・host 移動では同じ主体。新規 task / fork が別 ID を
+持つなら別主体であり、同じ vendor だからという理由で前任の権限を継承しない。
+native ID は実行環境または明示された引継ぎから取得する。transcript ID や表示名を
+配送可能な session ID と同一視しない。history にある宛先一覧は**既知の session**であって、
+現在稼働中の process 一覧ではない。
+
+session identity は記録上の責任主体であり、認証・ACL の代わりではない。別 session であることも
+検証の独立性を保証しない。独立性は [cold-eyes の隔離](cold-eyes-isolation.md) などで別途守る。
+
+### <a id="board-request-receipt"></a>提出と受領を分ける
+
+worker の「できた」で閉じると、確認していない成果が完了扱いになる。依頼には宛先と完了条件を
+持たせ、作業側と確認側を別 session にする。**提出によって、次に動く責任が確認側へ移る**。
+
+| 遷移 | 記録する内容と次の責任 |
+|---|---|
+| request → claim | 宛先 session が期限付きで引受。横から別 session が奪わない |
+| claim → submit | 担当 session が成果物の所在と未解決点を提出。確認側の inbox に残す |
+| submit → accept | 指定された確認 session が完了条件と成果を照合し、確認根拠を記録して閉じる |
+| submit → revise → submit | 確認 session が不足を返し、担当 session が修正して再提出 |
+| claim → blocker → 回答 | 担当 session が障害を示し、確認 session の回答後に再開 |
+| claim → release | 未提出の担当を返す。完了扱いにはしない |
+
+遷移は依頼 ID だけでなく、どの claim / submission に対する応答かを指定する。
+古い提出への承認や別依頼への返信で現行の依頼を閉じない。lease の失効は担当の再調整理由であり、
+提出済み成果の未受領を消す理由ではない。単なる `done` や schema-valid な JSON は受領の証拠にならない。
+研究上の確認項目は [検証サイクルの受領手順](verification-cycle-ops.md) が正本で、board はその判定を代行しない。
+
+### <a id="board-explicit-handover"></a>引継ぎは履歴に残す
+
+前任 session が使えなくなったときは、現確認 session、または明示的な owner 判断で、
+担当か確認の**どの役割を、どの session に渡すか**を記録する。agent が owner を名乗って
+自分に権限を与えてはならない。元の起票者と過去のイベントはそのまま残す。
+
+担当の引継ぎでは旧 claim を失効させ、新担当が引き受け直す。提出済みなら先に受領か差戻しを
+決め、未確認の成果を黙って捨てない。確認役の引継ぎでは現在の提出を維持し、新確認役の inbox に移す。
+宛先不明・応答なしを検出しても勝手に別 session を起動したり、同 vendor の任意の session に渡したりしない。
+
+### <a id="board-receipt-carrier"></a>1 義務 1 受領経路、配達と起動は別
+
+依頼時に受領を追跡する経路を一つ選ぶ。board-native な依頼では、その pending submission と
+accept / revise が受領経路になる。同じ義務を既存の完了 marker にも作り、両方で独立に閉じる
+設計にしない。既存 marker の義務は元の [返送 spine](#spawn-handoff-token-return) で閉じる。
+移行するなら対応関係を明記し、旧義務を消失・二重化させない。
+
+inbox は「次に誰が何をするか」の派生表示。pending を保存し、次回同期時に出せることが durable
+delivery である。**投稿成功 ≠ 相手が起動した ≠ 相手が読んだ ≠ 引受済み ≠ 受領済み**。
+即時通知・agent 起動・無人実行は別の runner の責任で、明示された実行許可・予算・停止条件・
+稼働確認が必要。board の存在からそれらを推論しない。
 
 ### 発火条件と layer
 
@@ -543,7 +613,7 @@ update、blocker、完了 pointer という短命な operational state に限る
   machine 間 clock drift を含むため conflict resolver にしない。
 - `claim` は hard lock でなく期限付き advisory lease。heartbeat を push せず、他 session の判断を
   変える transition だけを書く。
-- event の actor field が「誰の reasoning / task か」を表し、Git author は transport account を表す。
+- event の actor field が「どの session の報告か」を表し、Git author は transport account を表す。
   両者を同一視しない。
 - provisional finding は board に閉じ込めない。検証後に owning project の code / data / DESIGN / case
   note へ書き、board には昇格先 pointer を新 event として残す。project-side artifact の無い `done`
@@ -553,7 +623,9 @@ update、blocker、完了 pointer という短命な operational state に限る
 
 同じ checkout の index は immutable event でも競合する。writer は post ごとに isolated temporary
 checkout を作り、latest `main` を fetch → event 1 件を schema validate → その path だけ stage / commit
-→ push する。non-fast-forward は fetch/rebase して少回数だけ retry し、失敗時は event を失わず停止する。
+→ push する。non-fast-forward は最新履歴を取得し、**新状態でも遷移が合法か再検証してから**
+少回数だけ retry する。Git の競合がなくても二重 claim は不正になり得る。結果不明の投稿は同一
+event ID で照合・再送できるよう保持し、別 ID で同じ依頼を増やさない。失敗時は event を失わず停止する。
 
 ### privacy と source-classification gate
 
@@ -574,9 +646,15 @@ raw transcript、未公表本文の転載は encryption の有無にかかわら
 
 ### 実装境界
 
-schema、暗号鍵の選択、actual repo、owner 固有 registry は各 layer-2/3 instantiation が持つ。本節は
-generic pattern の SoT であり、個別 board の `DESIGN.md` は採用理由・audience・defer 判断だけを持ち、
-本節を複製しない。自動 writer / generated view / CI は manual event で必要性を確認してから作る。
+本節が主体・受領・引継ぎ・配送・privacy の一般則を持つ。schema、暗号鍵の選択、actual repo、
+owner 固有 registry は各 layer-2/3 instantiation が持つ。個別 board の `DESIGN.md` は採用理由・
+audience・移行と defer 判断、運用文書は CLI、schema は field 契約、単一 reducer は遷移の機械的
+判定を持つ。view ごとに別の状態機械を作らない。不一致は文書か実装の defect として直す。
+`SESSION.md` と入口の文書は現在地と正本への pointer に留める。
+
+旧形式の履歴から session ID や確認権限を推測で補わない。旧 thread を旧経路で閉じるか、
+明示的に移行し、新形式の受領済みと区別して表示する。writer / generated view / CI は、
+実際に必要になった保証を機械化するために導入する。
 
 
 ## 関連

@@ -86,7 +86,7 @@ claude-config/
 │   ├── ml-forward-judgment.md              # ML forward された依頼メールを inbox 化するとき
 │   ├── multi-account-machine-surface.md    # アカウント × マシン × 端末の複数セル運用を設計・診断するとき
 │   ├── multi-machine-state.md              # 複数マシンで同じ Claude Code setup を運用・audit するとき
-│   ├── multi-session-coordination.md       # 並列 Claude session と同じ repo を触るとき + spawn/handoff を設計するとき
+│   ├── multi-session-coordination.md       # 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき
 │   ├── name-rendering.md                   # 人名を記録・文面・印字物に書く瞬間で、手元にある表記が機械 field (メールヘッダ / git author / CSV・LDAP export / 登録システム) 由来のとき
 │   ├── office-automation-principles.md     # 新しい様式・slug の無い罠に当たったとき (考え方の原則編)
 │   ├── office-automation.md                # 研究費/教務/学術様式の xlsx/docx を機械で fill するとき (罠の症例集)
