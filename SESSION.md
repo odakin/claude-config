@@ -2,6 +2,10 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-06: 地図UIの知見を既存規約へ統合
+
+- [web-map-projections.md](conventions/web-map-projections.md): 国名の候補／衝突判定、自転と中央経線の符号、操作欄の状態表現を更新。適用先の DESIGN は節参照へ整理。
+
 ## 2026-09-06b: 検証サイクルの規約 3 本 + script 4 本を新 layer-1 repo `ai-collaboration` へ分離 (stub + forwarder 残置)
 
 - user 決定「ai-collaboration で public でいこう」 (rename / rebrand は却下)。 移設 = `conventions/{physics-verification-cycle,verification-cycle-ops,cold-eyes-isolation}.md` + `scripts/{verification-campaign-report,ledger-commit-cadence-gate,make-review-sandbox,gpt_measurements}.py`、 git 履歴は `git format-patch --root` → `git am` で持ち込み (30 commit)。 本 repo は **Claude Code harness** (setup / hooks / domain 規約) に戻り、 あちらは **AI 協働 platform** (vendor 中立)。
