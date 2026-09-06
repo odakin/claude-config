@@ -2,6 +2,11 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-06: 研究連絡・会議登録の運用知見
+
+- 意思と手続きの分離、受信と未処理の区別は [research-email](conventions/research-email.md#commitment-vs-logistics)。
+- 会議の状態分離・登録欄の制限・実績検証・同条件の旅費比較は [Indico runbook](conventions/indico-abstract-submission.md#registration-payment-separation)。個別情報は各案件のowning layerに残す。
+
 ## 2026-09-06: Reviewed mail workflow
 
 - 実送信で provider による RFC Message-ID 置換を確認。POST 応答の Gmail ID を照合の基準にし、要求IDと実IDを併記。意味と不明結果時の制限は [sending contract](conventions/gmail-sending.md#reviewed-reply-bundle)。

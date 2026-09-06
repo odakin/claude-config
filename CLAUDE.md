@@ -62,7 +62,7 @@ claude-config/
 │   ├── hanko-digitization.md               # 押印 (ハンコ) のスマホ写真から書類合成用の透過 PNG (シャープな輪郭 + 自然なかすれ + 写真由来の色 + 複数バリアント) を作るとき + 印影・ロゴ等の小さいラスタ素材を高解像度化したいのに補間拡大がボケるとき
 │   ├── hook-authoring.md                   # Claude Code hook を作成・配信・debug するとき
 │   ├── identity-in-config.md               # config file に ID/PII (Discord ID 等) を置く設計をするとき
-│   ├── indico-abstract-submission.md       # Indico (CERN 等) で運営される国際会議に abstract を投稿する・アカウントで詰まったとき
+│   ├── indico-abstract-submission.md       # Indico (CERN 等) の会議に abstract 投稿・参加登録・支払いを進めるとき、会議の実績やアカウント重複を確認するとき
 │   ├── install-failures.md                 # brew install を試行する前後 + source build 陥落時
 │   ├── japanese-email-honorifics.md        # 日本語メールで敬称 (様 / 皆様 / さん) を書くとき + 相手の文面を引用・要約して「ご/お」付き名詞を自分の文に持ち込むとき
 │   ├── jma-obsdl-download.md               # 気象庁の過去観測データ (時別値・日別値等) をスクリプトで一括取得したいとき

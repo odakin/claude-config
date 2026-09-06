@@ -52,6 +52,9 @@ unread state, or confuse received mail with already processed mail.
 1. Write the reply alone to a UTF-8 local file. Apply the rule checklist and
    verify factual claims against the original mail or project SoT. Do not add
    commitments or imply scientific findings that the user did not authorize.
+   Check [commitment versus logistics](../../../../conventions/research-email.md#commitment-vs-logistics):
+   state settled intent explicitly, keep timing requests separate, and do not
+   turn the user's frustration into an unrequested tone or ambiguity.
 2. Pick the **existing project ledger** that owns this correspondence. Prepare:
 
    ```
