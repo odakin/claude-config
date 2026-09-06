@@ -2,6 +2,10 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-06: Codex context の一次資料と参照を更新
+
+- 製品案内と検証境界を [PARITY の正本](codex/PARITY.md#long-context-opt-in) に集約し、圧縮対策側の数値・二次情報の重複を参照へ置換。
+
 ## 2026-09-06: Session 宛て board の一般則と参照を整理
 
 - 主体・提出と受領・明示引継ぎ・受領経路の正本は [multi-session coordination §13](conventions/multi-session-coordination.md#git-immutable-event-board)。移設せず、検証サイクル側から参照する。

@@ -64,7 +64,7 @@ spec 規律は wording レベルの誘導であって保証ではない (worker 
 
 ## <a id="context-compaction-loss"></a>姉妹機構: context 自動圧縮で途中の導出が消える (別ベンダー / 小さい context 窓の worker、 2026-09)
 
-**機構**: output-cap 死は「1 応答が大きすぎて API が拒む」 が、 こちらは「**会話全体が受け手の context 窓を超えて自動圧縮 (compaction) され、 file に書いていない途中の導出・判断が要約に潰れる**」。 session は死なず走り続けるので silent。 影響が大きいのは context 窓が Claude Code より小さい受け手 — 実測例: Codex CLI + GPT-5.6 Sol は 2026-07 以降 effective window ≈ 258K (カタログ 272K の 95%)、 自動圧縮は ≈ 215-243K で観測 (web 二次情報: [OpenAI community](https://community.openai.com/t/why-does-codex-report-a-258-400-token-context-window-for-gpt-5-6-sol/1394346) / [openai/codex#32806](https://github.com/openai/codex/issues/32806) / [解説](https://codex.danielvaughan.com/2026/07/20/context-window-gap-codex-cli-gpt56-advertised-vs-effective-budget-compaction-strategy/)、 1M へ override する手順の存在も同記事群。 数値は client version で動く = 一次資料優先の規律は [`../codex/PARITY.md#context-capacity-diagnosis`](../codex/PARITY.md#context-capacity-diagnosis))。 owner の観測 (2026-09-05): 「Codex は 0.25M くらいで会話圧縮になる」。
+**機構**: output-cap 死は「1 応答が大きすぎて API が拒む」 が、 こちらは「**会話全体が受け手の context 窓を超えて自動圧縮 (compaction) され、 file に書いていない途中の導出・判断が要約に潰れる**」。 session は死なず走り続けるので silent。 影響は受け手の実効窓・圧縮時点・復元品質で判断する。Codex の製品固有の診断と長文脈 opt-in の一次資料・設定手順・検証境界は [`codex/PARITY.md#long-context-opt-in`](../codex/PARITY.md#long-context-opt-in) に集約する。既定窓の観測を全モデル・全設定の恒久上限と扱わない。
 
 **予防 (spec author 向け、 上の 1-6 と同じ精神)**:
 

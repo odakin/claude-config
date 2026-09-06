@@ -96,6 +96,44 @@ resolves the scope definition; it does not establish the first-compaction
 default, make the original startup prefix free, or prove that a larger manual
 window is supported by the selected backend.
 
+#### <a id="long-context-opt-in"></a>Long-context opt-in: published guidance and verification boundary
+
+Source check: 2026-09-06. The [official model documentation](https://learn.chatgpt.com/docs/models#configure-your-default-local-model)
+states that the ChatGPT desktop app, Codex CLI, and IDE extension use the same
+`config.toml`. Switching from macOS desktop to CLI is not a prerequisite in the
+published configuration procedure.
+
+Tibo (@thsottiaux) published a [GPT-5.6 Sol configuration recipe](https://x.com/thsottiaux/status/2089082893804896524)
+and a [follow-up announcing ChatGPT-account support](https://x.com/thsottiaux/status/2089143488696705077)
+on 2026-08-16/17 (timezone-dependent). Both original posts were read directly
+in a browser. The follow-up says the feature previously required API keys and
+was enabled for ChatGPT accounts too. This is first-party announcement evidence,
+not a backend-capacity measurement or a per-account credit specification.
+
+The published recipe puts these keys at the top level of `~/.codex/config.toml`,
+before section headers, then restarts the client and starts a new task:
+
+```toml
+model = "gpt-5.6-sol"
+model_context_window = 1000000
+model_auto_compact_token_limit = 900000
+```
+
+The [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+defines the selected window and compaction threshold separately. The announcement
+explains the smaller default as a performance/cost choice. Keep this recipe
+scoped to the named model and recheck the sources before applying it to another
+model, client version, or authentication route. The installer does not enable it.
+
+A requested budget, an accepted client/backend ceiling, the reported effective
+window, and the actual compaction point remain separate measurements. A `1M`
+setting is not proof that a run receives one million usable input tokens.
+Verify the new task's reported window and actual behavior after an authorized
+configuration change. Do not copy API long-context price multipliers into a
+ChatGPT Codex credit claim: the exact credit conversion remains unestablished
+by these sources. Larger context also does not guarantee better recovery or
+output quality. This source check did not run a long-context experiment.
+
 When diagnosing early compaction, inventory the active context by ownership:
 product-owned system/developer and built-in-tool prefix, user-controlled global
 and project instructions, optional tool/MCP schemas, and accumulated turn/tool
@@ -107,8 +145,8 @@ explicit comparison confounder rather than assigning its cost to `SESSION.md`
 or an instruction file by elimination.
 
 **Hand-off specs from Claude to Codex.** When a Claude session hands a long
-derivation or generation task to a Codex session, the spec must assume the
-smaller effective window and its automatic compaction: minimise the read set
+derivation or generation task to a Codex session, the spec must use the receiver's verified
+effective window (conservatively the default if untested) and allow for automatic compaction: minimise the read set
 and require step-wise durable commits, per
 [`conventions/output-cap-death-loop.md#context-compaction-loss`](../conventions/output-cap-death-loop.md#context-compaction-loss).
 A cross-vendor worker also tends to promote its findings into shared sources of
