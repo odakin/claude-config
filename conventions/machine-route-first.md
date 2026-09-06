@@ -84,6 +84,21 @@ recipe (2026-09-05 家計簿カテゴリ一括修正で確立):
 
 線引き: これは **user 本人の session で user が UI からできる操作を、 同じ endpoint で機械化するだけ** (= 所有者権限の範囲内)。 bot 保護の回避・無人化・他人のデータ・利用規約が禁じる自動取得には使わない (#実例 2026-08-28 の注と同じ線)。
 
+## <a id="session-cookie-reuse"></a>credential を発行できない web app: browser session cookie の再利用 (= ladder 4 のもう 1 形態)
+
+#internal-endpoint-replay は「ログイン済み page の context から叩く」 = browser MCP がまだ要る。 もう一段上が **browser の session cookie を script 側に持ち出して、 browser も拡張も無しに HTTP を撃つ**経路。 SAML/SSO-only の groupware・学内 portal のように「API の password 認証は admin 限定 / OAuth client は admin 登録要 / user が発行できる token が無い」 環境で、 残る唯一の機械経路になる。
+
+recipe (2026-09-07 Cybozu Garoon で確立、 部品 = [`scripts/chromium-cookies.py`](../scripts/chromium-cookies.py) + [`scripts/garoon-client.py`](../scripts/garoon-client.py)):
+
+1. **cookie は browser の暗号化 DB から復号する** (macOS Chromium 系 = sqlite `Cookies` を copy → Keychain "<Browser> Safe Storage" → PBKDF2 → AES-128-CBC、 Chromium 130+ は host_key SHA-256 prefix)。 **Keychain 読み出しの初回 dialog だけが user 段** (= 「常に許可」 で以後 silent)。 password も token も新たに発行しない = 認証境界を増やさない。
+2. **API の形は JS を読んで復元する** — search box が叩く endpoint (`fts/api/search` 等) は HTML には無く、 minified JS の `makeSearchParam` に param 名が全部ある。 必須 param が欠けると 5xx で沈黙する (= cabinet に `cabinetFolderId` + `fileOnly` が要る等) ので、 推測せず JS を grep する。 csrf ticket は page の inline `__PRELOADED_DATA__` から。
+3. **HTML を grep して「0 件」 と言わない** — 検索結果 page は template に「該当なし」 文言を常在させ、 結果は JS が後から描画する。 browser MCP の `get_page_text` も描画前に読めば同じ罠 (= 実測: 3 query 連続で偽の no-data)。 API の JSON を正とする。
+4. **login 切れの判定を script に持たせる** (302 → IdP / 200 + login page HTML) → 「browser で 1 回 login して」 と言って止まる。 script が login を代行しない (= SSO の credential は user 専権)。
+5. **別 host の Basic 認証 (規程集の類) は射程外** — cookie は host 単位、 ID/PW 入力は agent 禁則 → user 依頼 (ladder 5) に戻す。 「cookie で全部読める」 と過信しない。
+6. **auto-load 面に「第一選択 = script 経路」 と書くまでが 1 単位** (#build-the-route-first と同じ)。 browser MCP 経路は fallback として残す。
+
+線引きは #internal-endpoint-replay と同じ (= user 本人の session で user が UI からできる read を機械化するだけ、 無人化・他人の session・bot 保護回避には使わない)。 cookie 値は secret (= session hijack 可能) — chat / log / commit に出さない。
+
 ## 実例
 
 2026-08-21: Dropbox 共有リンクの取得を Finder 右クリックの画面 drive で実施 → 対象フォルダの取り違え + user のマシン拘束が同時に起き、 user から経路選択そのものへの否定 feedback。 API 経路 (scoped app + PKCE、 [`dropbox-api-access.md`](dropbox-api-access.md)) の実装は初回 setup 込み ~15 分で、 以後は 1 コマンド ~2 秒になった。 「画面で 1 分 vs 実装で 15 分」 の比較は 1 回分しか見ていない — 経路は残り、 画面は残らない。

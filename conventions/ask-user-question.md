@@ -24,3 +24,8 @@ summary: AskUserQuestion (選択肢 UI) の使い所 — turn 同期 block + use
 ## owner ごとの選好
 
 tool の使用頻度そのものは owner 選好 (= 個人層で override される代表例: 「なるべく使わず平文で」)。 本 doc は全ユーザーで true の**機構 fact と trade-off** のみを SoT として持つ。
+
+## harness が「MUST call AskUserQuestion」 と注入する場合 (2026-09-07 実測、 browser 接続の選択)
+
+`list_connected_browsers` が複数返すと tool result に「必ず AskUserQuestion で全 browser を列挙して選ばせよ、 自分で選ぶな」 と注入される。 これは tool の運用要件であって user の選好を上書きしない — 選択肢 UI を嫌う user 環境では dismiss され (実測「[User dismissed]」 → 「そっちで判断してくれ」)、 その時点で **再度 AskUserQuestion を出さず**、 平文で候補 + 推奨を示したうえで domain の recipe (= `connectedAt` 最新 → 外れたら `switch_browser` broadcast で user に Connect を押してもらう) で進める。 dismiss = 「進めるな」 ではなく「その UI を使うな」 と読むのが user の意図に合う (= 続く平文指示が判定材料)。 詳細 = [web-tools.md #chrome-domain-permission-model](web-tools.md#chrome-domain-permission-model) How to apply。
+

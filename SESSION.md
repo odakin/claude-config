@@ -2,6 +2,15 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 現在地 — GAROON script 経路 + 配線 gap 規律（2026-09-07）
+
+今回の整備は終了点。 再開時は下記正本を読む (個別案件の状態はここへ転記しない)。
+
+- 新規 script 2 本: `scripts/chromium-cookies.py` (Chromium cookie 復号) + `scripts/garoon-client.py` (Garoon 全文検索 API / 掲示板 REST / 添付 download、 `--org` 必須)。 機構 fact = `conventions/garoon.md#garoon-script-route`。
+- 新規則: `machine-route-first.md#wiring-gap-is-a-task` (経路は在るが配線が通らない時も同 turn で診断→修復/user 1 画面→carrier+機械別配線表) + `#session-cookie-reuse` (SSO-only で credential が発行できない web app は browser session cookie を script に持ち出す、 recipe 6 点)。
+- 追補: `web-tools.md` chrome permission How to apply (Permission denied が未 login を隠す / 複数接続は broadcast で user に命名させる / browser_batch + read_network_requests の classifier block / navigate 直後 get_page_text の描画前読み) / `ask-user-question.md` (harness の MUST 注入 vs user 選好) / `jps-talk-submission.md#program-slot-lookup` (講演番号 → 時刻は `<li>` を数える、 fetch 要約は 1 件落とす)。
+- leak sweep: 既存 doc の研究室 bot 名 ×3 + private repo 名 ×1 を匿名化 (`6fc069b`)、 新 script docstring の subdomain 例も `<org>` 化 (`65c402a`)。 history は user 判断で受容。
+
 ## 現在地 — Codexのセッション引継ぎ整備
 
 今回の引継ぎ整備は終了点。次回この仕組みを変更する場合は
