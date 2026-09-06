@@ -7,7 +7,22 @@ summary: Garoon cloud の browser-MCP 自動化 (= SSO でも logged-in session 
 
 日本の組織で広く使われる groupware **Cybozu Garoon** (cloud 版 = `https://<org>.cybozu.com/g/`) を Claude から扱うときの機構 fact 集。 SSO (Shibboleth 等) 保護でも、 **user が logged-in している browser を browser MCP (Claude in Chrome 等) で駆動すれば読み取りは全部できる** — 「SSO だから Claude 経路無し」 と pre-conclude しない。 書き込み・file 取得だけが別権限帯 ([web-tools.md#browser-download-automation](web-tools.md#browser-download-automation))。
 
-## App 別 URL (= UI を click で辿るより直 navigate が速い)
+## <a id="garoon-script-route"></a>第一選択 = script 経路 (browser session cookie 再利用、 画面 drive 不要)
+
+SAML-only 組織では REST の password auth が admin 限定・OAuth client も admin 登録要 = user 側で発行できる credential が無い。 残る機械経路 = **user が browser で login 済みの session cookie を script が再利用する**: [`scripts/chromium-cookies.py`](../scripts/chromium-cookies.py) (macOS Keychain "Brave Safe Storage" → AES-128-CBC 復号、 Chromium 130+ の SHA-256 prefix 対応) + [`scripts/garoon-client.py`](../scripts/garoon-client.py) (全文検索 / 掲示板 REST / 添付 download / 任意 GET)。 2026-09-07 実測 (Garoon 6.31 cloud):
+
+| 操作 | 機構 |
+|---|---|
+| 全文検索 (= UI の検索 box と同じ) | `POST /g/fts/api/search?csrf_ticket=<t>` + JSON `{"keyword","apps":["bulletin"\|"cabinet"],"start"}`、 cabinet は `cabinetFolderId:"1"` + `fileOnly:true` 必須 (無いと `GRN_FTS_00001` 520)。 応答 `result.docs[]` = title / url / snippet / modifiedTime / file{title,downloadUrl,size} |
+| csrf ticket | `/g/cabinet/search.csp` 等の inline `grn.__PRELOADED_DATA__.csrfTicket` (portal は 302 なので注意) |
+| 掲示板 REST | `GET /g/api/v1/bulletin/categories` 等、 cookie + `X-Requested-With: XMLHttpRequest` で session auth |
+| 添付 download | `GET /g/bulletin/file_download.csp/-/<name>?fid=F` は session 内 GET で 200 (application/pdf)。 cabinet の `download.csp` は time= token 要の可能性 (未実測) |
+| login 切れ | 302 → `<org>.ex-tic.com` (SSO) / login page HTML → user が browser で 1 回 login、 script は代行しない |
+
+⚠️ **`search.csp` の HTML 自体は結果を含まない** (JS が上の API を叩いて描画、 no-data 文言は template に常在) — HTML を grep して「0 件」 と結論しない。 browser MCP の `get_page_text` も描画前に読むと同じ罠。
+⚠️ 「規程集」 のような**外部 site への link** (= Basic 認証の別 host) は cookie 再利用の射程外 = ID/PW は user 専権 (script も agent も入力しない)。
+
+## App 別 URL (= browser MCP で読むときの入口。 script 経路が使えない環境向け)
 
 | app | URL | 備考 |
 |---|---|---|
