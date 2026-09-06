@@ -28,6 +28,10 @@ summary: Garoon cloud の browser-MCP 自動化 (= SSO でも logged-in session 
 
 `download.csp` の URL は **`time=` 署名 token 付きで短時間で失効**する。 失効後の fetch は error でなく **HTTP 200 + login page HTML** (数 KB) を返す = サイズと `<title>ログイン</title>` で判別。 検索結果ページを reload して fresh な token を取り直してから扱う。 file の実取得自体は scripted download が silent block されるため [web-tools.md#browser-download-automation](web-tools.md#browser-download-automation) の fallback ladder (user click / cloud 共有リンク / メール添付) で運ぶ。
 
+## <a id="garoon-wiring-gap"></a>接続が通らない時 (= 配線 gap、 「読めない」 で終えない)
+
+`navigate` は通るのに `get_page_text` / screenshot が `Permission denied for reading page content on this domain` を返すのは **Garoon 側の制限ではなく browser 拡張側の配線** (= [web-tools.md #chrome-domain-permission-model](web-tools.md#chrome-domain-permission-model) の 2 層目 = AI-driven domain allow-list、 または stale 接続)。 切り分け順 = ① `list_connected_browsers` が 2 本以上なら `connectedAt` 最新を `select_browser` ② それでも denied なら user のサイドパネルに出ている「Permission required: <org>.cybozu.com」 で **Always allow** を押してもらう ③ prompt が出なければ既知 render バグ → 同 doc の workaround。 **配線状態は機械 × account ごとに違う** (= 片方のマシンで実証済でも他方では未許可) ので、 通した機械を personal 層の環境 doc に表で残す。 一般則 = [machine-route-first.md #wiring-gap-is-a-task](machine-route-first.md#wiring-gap-is-a-task)。
+
 ## 運用上の含意
 
 - **「掲示板にしか出ない告知」 は mail 監視の構造的圏外** — 制度の募集 (期限付き機会) や全社通知は Garoon 掲示板が一次 channel のことがある。 不在主張 (「告知されていない」) の前に掲示板検索を回す。

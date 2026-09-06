@@ -39,6 +39,18 @@ MCP / API / CLI の経路が**存在しない**と分かった時、 それは�
 
 OAuth を伴う実装では loopback consent の hardening 4 点 set ([`google-api-direct-access.md` oauth-loopback-hardening](google-api-direct-access.md#oauth-loopback-hardening)) を最初から適用する。
 
+## <a id="wiring-gap-is-a-task"></a>配線 gap は task の一部 (= 経路が「あるはずなのに通らない」 時も、 諦めて scope 外にしない)
+
+#build-the-route-first の姉妹。 あちらは**経路が存在しない**時の話、 こちらは**経路は存在するがこの機械・この account・この domain で配線が通っていない**時の話 (= MCP 未登録 / 拡張の domain allow-list 未許可 / stale 接続 / token 失効 / credential が別マシンにしか無い)。 どちらも「画面 drive に降りる」「未 verify と書いて終わる」 の理由にならない。
+
+**規律**: 配線 gap を踏んだ turn で、 次の 3 つを同 turn 内に済ませるまで「未確認」 報告に降りない:
+
+1. **診断**: どの層で落ちたかを既存 runbook で切り分ける (= browser 拡張なら [web-tools.md #chrome-domain-permission-model](web-tools.md#chrome-domain-permission-model) の 2 層 + stale 接続 / MCP なら [mcp.md #runbook-root-cause-checklist](mcp.md#runbook-root-cause-checklist))。 「Permission denied」 1 行で scope 外宣言しない。
+2. **修復 or 最小 user 手順**: agent 側で直せる段 (= `select_browser` で最新接続を掴む / 拡張 toggle / token 再取得 / MCP 再登録) は自分で回す。 user にしか押せない段 (= allow-list の「Always allow」 click / OAuth consent / 拡張の再ログイン) は **番号付き 1 画面**で渡し、 押されたら同 turn で続きを引き取る。
+3. **carrier + 記録**: 同 turn で閉じなければ、 配線完成を運ぶ TODO (user_action 付き) を立て、 **機械別の配線状態を personal 層の環境 doc に表で残す** (= 「iMac は通る / MacBook は allow-list 未許可」 のように。 どの機械で通るかは次の session が最初に見る事実)。 配線が通ったら同 doc を更新するまでが 1 単位。
+
+**なぜ**: 配線 gap は再発する (= 機械 × account × domain の組合せごとに 1 回ずつ踏む)。 1 回目に「未 verify」 で流すと、 次の session も同じ gap で同じ scope 外宣言をし、 経路は永久に通らない。 gap を踏んだ瞬間が最も安く直せる (= 症状が目の前にある)。 これは努力目標であって強制 gate ではない — ただし「未確認」 と書く前に 1-3 を回したかを自問する floor。
+
 ## <a id="shared-document-write"></a>他人 owner の共有 document への書込は画面 drive しない (= blast radius が自分の外)
 
 ladder 6 (画面 drive) の中でも、 **他人が owner の共有 document** (= 主任が配る「各自記入」 sheet、 committee の集計表、 共同編集 doc / form の回答欄) に**値を書く**操作は別格に扱う。 自分の file なら画面 drive の失敗は自分の損で済むが、 共有 document では **1 回の誤 click が他人の記入・見出し・注記を上書きし、 気づかれないまま集計に流れる**。 read-only の画面確認 (screenshot で状態を見る) は従来どおり許容、 **書込だけは画面でやらない**。
@@ -81,5 +93,7 @@ recipe (2026-09-05 家計簿カテゴリ一括修正で確立):
 2026-09-05: 家計簿 SaaS (公開 API 無し) の明細カテゴリ誤分類を、 まず画面 drive で 2 件直した (dropdown 開閉 × 2 段 × 2 件 + 誤 click 1 回、 ~10 round-trip) → user 「GUI のダサいやり方じゃなくて API 的に」 → XHR hook で UI 操作 1 回を捕捉し `PUT /cf/update` (urlencoded + CSRF) と判明、 rules-driven の dry-run/apply tool を実装。 以後は 4 手 (rules 読む → dry-run → 目視 → apply + reload 確認) で月をまたいで一括、 click ゼロ。 同時に業種語 regex の巻き込み (3 件) を経験し recipe 3 に焼いた。 recipe = #internal-endpoint-replay。
 
 2026-09-05 (同日 2 例目): 専攻主任が Drive に置いた「各自記入」 xlsx (他人 owner、 6 名記入済) に自分の行を書く作業を claude-in-chrome の cell click + type で実施 → name box click が cell 選択に化けて**注記行と見出し行を自分の値で上書き** (undo で救出)、 再試行では先頭 keystroke が食われ名前 cell 空 + 規則文の先頭欠けが保存された。 screenshot は stale で保存状態が読めず、 API の revision download でしか truth が分からなかった。 user 「ダサい GUI 的なやり方でなく自動化で」 → full `drive` scope の別 token を 1 consent で発行し、 revision download → openpyxl → `files.update` → 再 download verify の経路を実装 (~20 分)。 以後は 1 コマンド。 recipe = [`google-api-direct-access.md #drive-xlsx-inplace-update`](google-api-direct-access.md#drive-xlsx-inplace-update)、 規律 = #shared-document-write。
+
+2026-09-07: groupware (Cybozu Garoon) の規程集を読む経路は既に在り (= [`garoon.md`](garoon.md)、 別マシンで実証済) だったが、 この機械の browser 拡張では `Permission denied for reading page content on this domain` → 最初の turn は「規程集は未読 = 未 verify」 と scope 外宣言して終えた。 user 「接続できないと今後も困るからしっかり整備して (配線がないときは配線を作る、 という努力目標も正本と参照を)」 → 診断 (`list_connected_browsers` 2 本 = stale 接続 → 最新を `select_browser` → それでも denied = domain allow-list 層) → user 段 (Always allow click) を 1 画面で依頼 + 機械別配線状態を personal 層に表で記録 + carrier TODO。 規律 = #wiring-gap-is-a-task (本例が起点)。
 
 関連: [`google-api-direct-access.md`](google-api-direct-access.md) (Google の API 直叩き pattern) / [`dropbox-api-access.md`](dropbox-api-access.md) (Dropbox) / [`mcp.md`](mcp.md) (MCP 使い分け)
