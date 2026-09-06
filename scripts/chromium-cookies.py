@@ -21,7 +21,7 @@ API password auth が admin 限定、 OAuth client も admin 登録要) で、 b
   python3 chromium-cookies.py --browser brave --domain cybozu.com            # name=value 一覧 (値は表示)
   python3 chromium-cookies.py --browser brave --domain cybozu.com --format header   # "Cookie:" header 1 行
   python3 chromium-cookies.py --browser brave --domain cybozu.com --format json
-  --domain は suffix match (host_key が ".cybozu.com" / "twcu.cybozu.com" 両方 hit)。 複数指定可。
+  --domain は suffix match (host_key が ".cybozu.com" / "<org>.cybozu.com" 両方 hit)。 複数指定可。
   --names JSESSIONID,CB_LOCALE で絞り込み。
 
 Python から:
