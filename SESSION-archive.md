@@ -236,7 +236,7 @@ public layer 1 リポ規律として 例示コードに実名・所属・メア�
 
 **2026-04-29 (続)**: `conventions/japanese-email-honorifics.md` を新規作成。「身内に対して『様』『皆様』を使わない」という universal な日本語敬語ルールを公開規約として成文化。由来は同日のある研究セミナー業務セッションで、外部宛メール draft で身内側 (同僚と自分・研究室メンバー) に「皆様」を付けてしまい user から「身内に皆様は敬語おかしいやろ」と訂正されたケース。内 vs 外の区別、「様」「皆様」を身内に使わない原則、「先生」「さん」も同様、同姓内外の切り分け方を含む。
 
-**2026-04-29**: `conventions/research-email.md` に §「研究者連絡先 (email) の取得手順」を追加 (commit `2627468`)。論文 PDF 1 ページ目を最優先、所属機関の公式メンバーページ・OpenReview・Semantic Scholar は mask されることが多いため後回し、という lookup priority を明文化。失敗例 (twcu-seminar 2026-04-28 セッションで小島武さん依頼時に発生 — メンバーページ mask を見て user に尋ねたが arXiv PDF を見ればすぐ取れた case) と、取得経路を `researchers.yaml` notes に記録する規律も追加。
+**2026-04-29**: `conventions/research-email.md` に §「研究者連絡先 (email) の取得手順」を追加 (commit `2627468`)。論文 PDF 1 ページ目を最優先、所属機関の公式メンバーページ・OpenReview・Semantic Scholar は mask されることが多いため後回し、という lookup priority を明文化。失敗例 (セミナー係 repo の 2026-04-28 セッションで外部講演者依頼時に発生 — メンバーページ mask を見て user に尋ねたが arXiv PDF を見ればすぐ取れた case) と、取得経路を `researchers.yaml` notes に記録する規律も追加。
 
 **2026-04-28**: `public-precommit-runner.sh` に optional な repo-local extension hook chain (`.claude/pre-commit-extra.sh`) を追加。stub の冪等性を保ったまま repo 固有の commit 規律 (placeholder 検出 / docs↔SESSION.md 同期警告等) を chain できる。mhlw-ec-pharmacy-finder で動作確認 (旧 inline hook の guard を extension に移設、外側 stub と差し替え)。5 commit (`590ab9f` chain + DESIGN §2026-04-28 追補 / `8efeaac` gitignore_global で `!.claude/pre-commit-extra.sh` / `25412e7` 作成 guide 5 項追記 / `7b6a112` exec→call で trap leak 修復 / 本 commit runner header doc を call+exit に同期 + 本 SESSION 記載)。詳細は DESIGN.md §2026-04-28 追補。
 
