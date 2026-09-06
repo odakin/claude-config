@@ -36,7 +36,7 @@ description は英語。リポ一覧の正本は個人層の `repos.md`（未設
 | ファイル | 役割 |
 |---------|------|
 | `CLAUDE.md` | 永続的な構造・実行方法・復帰手順の**記述** (「こうなっている」の事実、判断理由は DESIGN.md へ)。構造変更時のみ更新 |
-| `SESSION.md` | 揮発的な現在状態（作業中タスク・直近の決定）。進行に応じて更新 |
+| `SESSION.md` | 揮発的な現在地（作業段階・停止点・次の一手）と正本への直接参照。進行に応じて更新 |
 | `DESIGN.md` | 現在採用されている設計**判断**・Defer 判断・横断原則 (LESSON) の snapshot。Why / 代替案 / tradeoff を記録。判断が生じたら即記録、超越されたら [`docs/convention-design-principles.md` §7](docs/convention-design-principles.md#design-snapshot-operation) の lifecycle で処理 (pedagogy 抽出後に旧本体削除、履歴は git log)。構造の記述は CLAUDE.md へ。未決定の探索は `EXPLORING.md`（任意）へ |
 | `README.md` / `README.ja.md` | **外部訪問者向けの玄関** (public リポで必須、private リポでは任意)。30 秒で「何か / 使うか」を判断させる index。構造ツリー・規約本体・設計根拠は **正本 (CLAUDE.md / CONVENTIONS.md / DESIGN.md / conventions/ / docs/ / SETUP.md) へリンクするだけ** で、README 内に転載しない。**例外 = 公開リポ（README-only 読者あり）の build/quickstart/deploy は README が正本**（下の「README の流儀」の判別軸）。詳細は下の「README の流儀」 |
 | `SETUP.md` | **共同編集者向けセットアップ walkthrough** (任意、private collaborative repo で git-crypt 等 onboarding が複雑な場合に新設)。CLAUDE.md は auto-load コストがあるため full walkthrough を入れず、SETUP.md に分離して薄いポインタ + 反パターン警告のみ持たせる。配置はリポ root (`docs/` を git-crypt 暗号化していると未 unlock の collaborator が読めない catch-22)。テンプレ: `templates/shared-project/SETUP.md.template`、設計理由は `conventions/shared-repo.md` §「共同編集者向けの SETUP.md」|
@@ -56,6 +56,8 @@ CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「な�
 **why (= 単なる整理でなく drift 源)**: handled-state を SESSION narrative に複製すると task ledger の status と二重管理になり、**両者が食い違っても機械検出に掛からない**。cross-ref 検査は「明示的に link された対」しか見ず、SESSION が prose で抱えた state は射程外だから — つまり SESSION に書いた瞬間、その fact は**自動検出のない場所**へ移る。書き手は「記録した」つもりで、実際には検出網の外に置いている。
 
 **how**: 案件の状態を SESSION に書きたくなったら、代わりに **case-SoT の識別子への pointer 1 行**にする (= 「案件 X の状態は `<ledger>#<id>` が SoT」)。narrative を溜めない — 古い節は上の [`graduation-identifier-verify`](#graduation-identifier-verify) で識別子の destination 実在を機械照合してから除去する。
+
+更新・終了時の具体的な確認は [§3 自動更新プロトコル](#auto-update-protocol) が正本。Codexへの導入・発火・検査の配線は [Codex引継ぎ仕様](codex/PARITY.md#session-handoff-contract) を参照。
 
 ⚠️ この規則は**リポ種別を問わない**。個別 project リポの SESSION も同じで、「このリポの案件だから状態もここに」は誤り (= case-SoT が別リポにあるなら pointer にする)。
 

@@ -45,6 +45,10 @@ ENTRY_POINTS = (
     "templates/personal-layer/README.md",
 )
 SESSION_HANDOFF_REQUIREMENTS = {
+    "CONVENTIONS.md": ("codex/PARITY.md#session-handoff-contract",),
+    "codex/AGENTS.md": ("CONVENTIONS.md#auto-update-protocol", "CONVENTIONS.md#session-no-durable-record"),
+    "codex/skills/claude-config-operations/SKILL.md": ("CONVENTIONS.md#auto-update-protocol", "codex/PARITY.md#session-handoff-contract"),
+    "codex/skills/claude-config-conventions/SKILL.md": ("CONVENTIONS.md#auto-update-protocol", "codex/PARITY.md#session-handoff-contract"),
     "codex/HOME-AGENTS.md": ("CONVENTIONS.md#auto-update-protocol", "CONVENTIONS.md#session-no-durable-record"),
     "codex/hooks/resume_context.py": ("CONVENTIONS.md#auto-update-protocol",),
     "codex/hooks/session_touch.py": ("CONVENTIONS.md#auto-update-protocol",),

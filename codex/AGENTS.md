@@ -12,10 +12,11 @@ For work inside a Git repository, begin by fetching its remote when one
 exists, checking status, and reading the repository's `AGENTS.md` or
 `CLAUDE.md`. Read `SESSION.md`, when present, before editing.
 
-Use `SESSION.md` for current task state, decisions, blockers, and next steps.
-Keep durable project instructions in the repository instruction file and
-design rationale in `DESIGN.md`. Do not create those files for a trivial,
-one-off request.
+For SESSION updates and handoff, follow
+`CONVENTIONS.md#auto-update-protocol` and
+`CONVENTIONS.md#session-no-durable-record`: describe the current work, stopping
+point, next action, and direct pointers to owning records. Decisions and task
+status belong in those records. Do not create files for a trivial, one-off request.
 
 ## Shared conventions
 

@@ -45,3 +45,11 @@ layer (layer 3): the former is for collaborators, the latter is cross-machine
 only for one owner. The installer never creates, discovers, or populates
 either. An owner may explicitly select a short layer-3 `codex/AGENTS.md`
 overlay; only the generated local layer-4 composite consumes it.
+
+## Session handoff
+
+For session closure, knowledge placement, or resume preparation, follow
+`CONVENTIONS.md#auto-update-protocol` and
+`CONVENTIONS.md#session-no-durable-record` in the containing repository.
+Codex entry points and their regression checks are owned by
+`codex/PARITY.md#session-handoff-contract`; do not restate the procedure here.

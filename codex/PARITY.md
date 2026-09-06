@@ -58,7 +58,10 @@ shared [SESSION snapshot rule](../CONVENTIONS.md#session-no-durable-record),
 The semantic procedure is owned by
 [the shared update protocol](../CONVENTIONS.md#auto-update-protocol), with
 [the no-durable-record boundary](../CONVENTIONS.md#session-no-durable-record).
-`HOME-AGENTS.md` makes it a standing instruction for every installed Codex;
+[Global instructions](HOME-AGENTS.md), [workspace instructions](AGENTS.md),
+and the [operations](skills/claude-config-operations/SKILL.md) /
+[integration](skills/claude-config-conventions/SKILL.md) skills route to that
+same procedure. The global instructions make it a standing instruction for every installed Codex;
 `resume_context.py` restores its compact reminder at a SessionStart boundary.
 The existing dirty-worktree Stop nudge also points to it. This does not add a
 new Stop blocker or classify arbitrary SESSION prose as a factual ledger.

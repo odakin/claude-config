@@ -73,3 +73,11 @@ trust state; never reuse Claude hook configuration or scripts directly.
 Hooks are a guardrail, not complete coverage of hosted or specialised tool
 paths, so keep project instructions and Git-side gates in force. Do not run
 `setup.sh` or write to `~/.claude/` as part of Codex setup or task execution.
+
+## Session handoff
+
+For session closure, knowledge placement, or resume preparation, follow
+`CONVENTIONS.md#auto-update-protocol` and
+`CONVENTIONS.md#session-no-durable-record` in the containing repository.
+Codex entry points and their regression checks are owned by
+`codex/PARITY.md#session-handoff-contract`; do not restate the procedure here.
