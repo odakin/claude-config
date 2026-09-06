@@ -220,12 +220,15 @@ def verify(directory, gateway):
     if ("SENT" not in actual["labels"] or actual["thread_id"] != e["thread_id"]
             or addresses(actual["from"]) != [e["sender"]]
             or addresses(actual["to"]) != e["to"] or addresses(actual.get("cc", "")) != e["cc"]
-            or actual["subject"] != e["subject"] or actual["message_id"] != e["message_id"]
+            # Gmail may replace the client-supplied RFC Message-ID. The
+            # messages.send response's immutable Gmail ID anchors this read.
+            or actual["subject"] != e["subject"] or not actual.get("message_id")
             or actual["in_reply_to"] != e["in_reply_to"]
             or " ".join(actual.get("references", "").split()) != " ".join(e["references"].split())
             or normalize(actual["body"]) != normalize(content["body"]) or actual.get("attachments")):
         raise ValueError("Sent message mismatch. Do not resend; inspect sent.json")
     receipt = dict(message_id=sent["id"], thread_id=e["thread_id"], account=e["account"],
+                   requested_rfc_message_id=e["message_id"], actual_rfc_message_id=actual["message_id"],
                    date=actual["date"], sha256=attempt["sha256"], record_target=e["record_target"],
                    verified=True, recorded=False)
     if (directory / "receipt.json").exists():

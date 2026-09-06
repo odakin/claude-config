@@ -194,6 +194,20 @@ class WorkflowTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(ValueError): mail.preview(self.directory)
         p.write_text(original)
 
+    def test_provider_rewrites_rfc_id_but_delivery_id_anchors_verification(self):
+        original_send = self.gateway.send
+        def rewritten(raw, thread):
+            result = original_send(raw, thread)
+            self.gateway.messages[result["id"]]["message_id"] = "<provider-id>"
+            return result
+        self.gateway.send = rewritten
+        receipt = mail.send(self.directory, self.gateway, self.sha, True)
+        self.assertTrue(receipt["verified"])
+        self.assertEqual(receipt["actual_rfc_message_id"], "<provider-id>")
+        self.assertNotEqual(receipt["actual_rfc_message_id"], receipt["requested_rfc_message_id"])
+        self.gateway.messages["sent-id"]["body"] += "different body"
+        with self.assertRaises(ValueError): mail.verify(self.directory, self.gateway)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -149,6 +149,11 @@ Owner skills supply only identity/style/ledger paths and the chosen launcher.
   `verify` reconciles by RFC Message-ID and checks the delivered headers, complete
   body, sent label, and thread. An ambiguous result stays unresolved; never
   delete evidence or create a replacement bundle to retry.
+  Gmail may replace the supplied RFC Message-ID. When the POST response is
+  saved, its Gmail message ID anchors verification; record both RFC IDs and
+  still compare the full delivered content and envelope. If that response was
+  lost and lookup by the requested RFC ID finds nothing, keep the outcome
+  uncertain: ID rewriting makes a negative lookup insufficient to authorize retry.
 - Delivery is saved before verification. The verified receipt stays pending
   until the owning ledger contains both message and thread IDs. Receipts are
   recovery evidence, not the correspondence SoT. The caller still owns accurate

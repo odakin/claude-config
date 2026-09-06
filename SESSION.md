@@ -4,6 +4,8 @@
 
 ## 2026-09-06: Reviewed mail workflow
 
+- 実送信で provider による RFC Message-ID 置換を確認。POST 応答の Gmail ID を照合の基準にし、要求IDと実IDを併記。意味と不明結果時の制限は [sending contract](conventions/gmail-sending.md#reviewed-reply-bundle)。
+
 - 汎用 transaction に加え、Gmail gateway/CLI・導入処理・共通手順・全テストを共有層へ集約。
   個人層は薄い binding と実測のみ。手順と適用範囲は
   [Gmail sending](conventions/gmail-sending.md#reviewed-reply-bundle)、Codex の製品境界は
