@@ -117,6 +117,38 @@ file 名 substring パターンは「file 名に言及するだけの無害コ�
 2. **承認後の文面変更は再提示**: 承認済み draft に 1 字でも手を入れたら (typo 修正・改行調整含む) 再提示 + 再承認。 「良くなる方向の修正だから」 は skip の理由にならない (= user が見た物と違う物を送らない)。
 3. **mail に限らず全外部発信に適用**: Discord 投稿・issue comment・公開 site へ載せる text 等、 「draft 承認 → 送信」 flow を踏む全てで同じ 2 度書き乖離が起きうる (= content-file 経由の送信 tool は全部同型)。
 
+## <a id="reviewed-reply-bundle"></a>Reviewed reply bundle: preview, one send attempt, receipt
+
+For repeated plain-text replies, use a dependency-free transaction rather than
+rebuilding MIME and verification in each conversation. The generic implementation
+is [`scripts/reviewed_mail.py`](../scripts/reviewed_mail.py); the account owner
+supplies a gateway with `profile`, `get`, `send`, and `find` methods. The library
+does not discover credentials, accounts, private rules, or agent history.
+
+- `prepare` records the incoming parent, original quote, recipients, threading,
+  selected signature, and existing project ledger path. Reply-all retains peers;
+  a direct reply is an explicit caller decision.
+- `preview` generates the exact body and envelope/body fingerprint. Show that
+  artifact to the user. Style and fact checks still require the applicable SoT
+  before drafting; a hash cannot perform them.
+- `send` requires an explicit send flag and the current preview fingerprint.
+  This checks equality, **not human consent**: the caller still needs explicit
+  approval of the final text. Changed content invalidates the earlier review.
+- An exclusive attempt file precedes the sole POST. After timeout or crash,
+  `verify` reconciles by RFC Message-ID and checks the delivered headers, complete
+  body, sent label, and thread. An ambiguous result stays unresolved; never
+  delete evidence or create a replacement bundle to retry.
+- Delivery is saved before verification. The verified receipt stays pending
+  until the owning ledger contains both message and thread IDs. Receipts are
+  recovery evidence, not the correspondence SoT. The caller still owns accurate
+  summaries, action status, encrypted persistence, and Git review.
+
+Bundles are private runtime data (0700 directories / 0600 files), not public
+fixtures. Synthetic tests run through `reviewed-mail.test.sh` in the aggregate
+runner. Scope: plain-text replies with no outgoing attachments. The helper does
+not control other mail clients or prevent an authorized local operator altering
+its files. Use the relevant runbook for new mail, attachments, or inline images.
+
 ## <a id="inline-image-cid"></a>10. 数式・図を本文中に出すには inline 画像 (cid) — MCP では作れない
 
 **状況:** plain text の mail で数式は読みにくい (`ρ_χ(end) = (3/2) V(x_end)` の羅列)。LaTeX で組版した PNG を**本文の流れの中に**表示させたい (= 添付ファイルとして開かせるのではなく)。

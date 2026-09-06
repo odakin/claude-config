@@ -2,6 +2,12 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-06: Reviewed mail workflow
+
+- 汎用の返信確認・送信試行・照合 transaction を追加。手順と適用範囲は
+  [Gmail sending](conventions/gmail-sending.md#reviewed-reply-bundle)、Codex の製品境界は
+  [PARITY](codex/PARITY.md#mail-approval-boundary)。アカウント情報と個人の文体は外部の owning layer に残す。
+
 ## 2026-09-06: Codex context の一次資料と参照を更新
 
 - 製品案内と検証境界を [PARITY の正本](codex/PARITY.md#long-context-opt-in) に集約し、圧縮対策側の数値・二次情報の重複を参照へ置換。実行時イベントと診断ログで設定値・実効窓・圧縮しきい値を区別する確認経路も同正本へ追記。

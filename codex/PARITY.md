@@ -353,6 +353,30 @@ metadata rather than in the replayed prompt.
 
 ## Native lifecycle hooks
 
+### <a id="mail-approval-boundary"></a>Mail approval and runtime boundary
+
+An owner-selected mail skill may route Codex to an existing account gateway and
+the generic [reviewed reply transaction](../conventions/gmail-sending.md#reviewed-reply-bundle).
+Keep account paths, style guides, and receipts in their owning private/local
+layers. No copied Claude settings or credentials are needed.
+
+A distinct `send` subcommand lets a locally installed Codex
+[`prefix_rule` with `decision = "prompt"`](https://learn.chatgpt.com/docs/agent-configuration/rules)
+cover the canonical command prefix without matching read/preview commands.
+Rules load at startup; file installation does not prove live loading or a
+visible approval dialog. They govern matching commands outside the sandbox,
+not arbitrary Python code or every tool path. Verify with `codex execpolicy
+check`; never grant broad allow rules or bypass sandbox permissions for mail.
+
+The [official Hook contract](https://learn.chatgpt.com/ja-JP/docs/hooks)
+(checked 2026-09-06) does **not** support `PreToolUse`'s
+`permissionDecision: "ask"`: it reports a failed hook and continues the tool.
+Do not transplant that Claude mechanism into Codex. Explicit send approval
+remains primary; fingerprints check integrity and execution rules provide a
+product-controlled backstop. Neither proves human intent.
+
+### Managed lifecycle subset
+
 Codex provides `PreToolUse`, `PostToolUse`, `SessionStart`, and `Stop` hooks.
 This integration maps only the high-signal, product-neutral subset:
 
