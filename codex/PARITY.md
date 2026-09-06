@@ -53,6 +53,28 @@ shared [SESSION snapshot rule](../CONVENTIONS.md#session-no-durable-record),
 [layer-3 boundary](../docs/personal-layer.md), and
 [hook-delivery evidence model](../conventions/hook-authoring.md#delivery-audit-method).
 
+### <a id="session-handoff-contract"></a>Session handoff contract
+
+The semantic procedure is owned by
+[the shared update protocol](../CONVENTIONS.md#auto-update-protocol), with
+[the no-durable-record boundary](../CONVENTIONS.md#session-no-durable-record).
+`HOME-AGENTS.md` makes it a standing instruction for every installed Codex;
+`resume_context.py` restores its compact reminder at a SessionStart boundary.
+The existing dirty-worktree Stop nudge also points to it. This does not add a
+new Stop blocker or classify arbitrary SESSION prose as a factual ledger.
+
+`check-codex-integration.py` requires these entry points to retain the protocol
+pointer; hook fixtures verify the emitted reminder. These checks protect the
+wiring, not the semantic correctness of a handoff. The agent must read the
+result as a fresh session before declaring completion. A clean worktree alone
+is not evidence of a usable handoff. Hooks remain supplementary: the global
+instruction applies to shell edits and clean commits too.
+
+Use the installer to refresh a managed personal composite after changing the
+public entry point; updating the source alone does not refresh an already
+rendered composite. The local audit verifies installation, not that another
+running session has reread instructions or that a client delivered a hook.
+
 ### Context-budget discipline
 
 The global instruction entry points stay compact. Detailed public runbooks and

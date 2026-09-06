@@ -19,6 +19,18 @@ When maintaining the Codex integration, treat
 `codex/PARITY.md#codex-integration-sot` as the durable technical source of
 truth; do not infer it from old session notes.
 
+## Session handoff
+
+At task completion or handoff, update the owning records first, then make
+`SESSION.md` explain the current work, stopping point, next action, and direct
+pointers to those records. A pointer list alone does not establish current
+context. Do not duplicate durable decisions, correspondence, identifiers, or
+task status; do not create a separate closure report as the resume entry point.
+Read `CONVENTIONS.md#auto-update-protocol` and
+`CONVENTIONS.md#session-no-durable-record` for the canonical procedure.
+Before finishing, read the affected SESSION section as a new Codex would:
+can it resume without this conversation, and is each fact owned elsewhere?
+
 ## Context-budget discipline
 
 Keep global startup context compact. Treat detailed runbooks and private

@@ -140,7 +140,10 @@ def nudge(event: dict[str, Any]) -> int:
             "systemMessage": (
                 "[claude-config] This session edited a repository that is still dirty: "
                 f"{listing}. Review it and commit only when that is within the requested workflow; "
-                "do not leave unintended worktree state for another session to pick up."
+                "do not leave unintended worktree state for another session to pick up. "
+                "Before handoff, update owning records first and review SESSION.md for the "
+                "current work, stopping point, next action, and direct pointers; "
+                "follow CONVENTIONS.md#auto-update-protocol."
             )
         }
     )

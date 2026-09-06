@@ -44,6 +44,13 @@ ENTRY_POINTS = (
     "codex/skills/codex-automation-routing/SKILL.md",
     "templates/personal-layer/README.md",
 )
+SESSION_HANDOFF_REQUIREMENTS = {
+    "codex/HOME-AGENTS.md": ("CONVENTIONS.md#auto-update-protocol", "CONVENTIONS.md#session-no-durable-record"),
+    "codex/hooks/resume_context.py": ("CONVENTIONS.md#auto-update-protocol",),
+    "codex/hooks/session_touch.py": ("CONVENTIONS.md#auto-update-protocol",),
+    "codex/PARITY.md": ('id="session-handoff-contract"',),
+}
+
 SESSION_DURABLE_TOKENS = (
     "~/.codex",
     "PreToolUse",
@@ -247,6 +254,16 @@ def check(root: Path) -> list[str]:
             if not any(adapter in command for command in hook_commands(hook_config, event_name)):
                 errors.append(f"codex/hooks/hooks.json: {event_name} does not invoke {adapter}")
 
+    for relative, fragments in SESSION_HANDOFF_REQUIREMENTS.items():
+        try:
+            content = text(root / relative)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        for fragment in fragments:
+            if fragment not in content:
+                errors.append(f"{relative}: missing session handoff wiring: {fragment}")
+
     for relative, fragments in WIRING_REQUIREMENTS.items():
         path = root / relative
         try:
@@ -350,6 +367,13 @@ def fixture(root: Path) -> None:
         path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
 
 
+    for relative, fragments in SESSION_HANDOFF_REQUIREMENTS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
+
+
 def selftest() -> int:
     with tempfile.TemporaryDirectory(prefix="check-codex-integration-") as temporary:
         root = Path(temporary)
@@ -358,6 +382,16 @@ def selftest() -> int:
         if clean_errors:
             print("FAIL: clean fixture", clean_errors)
             return 1
+
+        for relative in SESSION_HANDOFF_REQUIREMENTS:
+            fixture(root)
+            path = root / relative
+            fragment = SESSION_HANDOFF_REQUIREMENTS[relative][0]
+            path.write_text(path.read_text().replace(fragment, "removed-handoff-pointer"))
+            if not any("missing session handoff wiring" in error for error in check(root)):
+                print("FAIL: missing handoff wiring was not detected", relative)
+                return 1
+        fixture(root)
 
         (root / "README.md").write_text("missing pointer" + chr(10), encoding="utf-8")
         errors = check(root)

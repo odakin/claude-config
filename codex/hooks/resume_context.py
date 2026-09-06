@@ -34,6 +34,9 @@ def main() -> int:
                 "report from another host is only an observation: before claiming or acting "
                 "on a machine-local fact, verify it on this host with hostname and the "
                 "relevant audit, then state the checked host, time, and scope. "
+                "At handoff, SESSION.md must show the current work, stopping point, next action, "
+                "and direct pointers to owning records; no durable records or separate closure report. "
+                "Follow CONVENTIONS.md#auto-update-protocol before finishing. "
                 "Keep durable facts in their source-of-truth files, perform ordinary "
                 "safe local work autonomously, and do not request step-by-step confirmation."
             ),

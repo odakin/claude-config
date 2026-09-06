@@ -105,6 +105,7 @@ import sys
 
 payload = json.load(open(sys.argv[1], encoding="utf-8"))
 assert "still dirty" in payload["systemMessage"]
+assert "CONVENTIONS.md#auto-update-protocol" in payload["systemMessage"]
 PY
 
 printf '%s' "$STOP_INPUT" | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" \
@@ -135,6 +136,7 @@ import sys
 
 payload = json.load(open(sys.argv[1], encoding="utf-8"))
 assert "still dirty" in payload["systemMessage"]
+assert "CONVENTIONS.md#auto-update-protocol" in payload["systemMessage"]
 PY
 
 # stale-state prune: a >30-day-old file is removed on the next track, a fresh one survives
@@ -159,6 +161,9 @@ host = socket.gethostname().split(".")[0]
 assert f"The worker host for this session is {host}." in context
 assert "verify it on this host with hostname" in context
 assert "do not request step-by-step confirmation" in context
+assert "stopping point, next action" in context
+assert "no durable records or separate closure report" in context
+assert "CONVENTIONS.md#auto-update-protocol" in context
 PY
 
 echo "Codex hook tests passed"

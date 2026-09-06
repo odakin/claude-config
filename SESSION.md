@@ -2,6 +2,12 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 現在地 — Codexのセッション引継ぎ整備
+
+今回の引継ぎ整備は終了点。次回この仕組みを変更する場合は
+[引継ぎの技術正本](codex/PARITY.md#session-handoff-contract)を読み、参照配線検査と
+hook fixtureを実行する。個別案件の状態はここへ転記しない。
+
 ## 現在地 — メール運用の整備（2026-09-06）
 
 今回のメール運用整備は終了点。再開時は新しい依頼の対象に応じて下記正本を読む。
