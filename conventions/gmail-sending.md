@@ -124,6 +124,17 @@ rebuilding MIME and verification in each conversation. The generic implementatio
 is [`scripts/reviewed_mail.py`](../scripts/reviewed_mail.py); the account owner
 supplies a gateway with `profile`, `get`, `send`, and `find` methods. The library
 does not discover credentials, accounts, private rules, or agent history.
+The shared [CLI and Gmail gateway](../scripts/reviewed_mail_cli.py) accept an
+injected account factory; account aliases and authentication stay in the owner's
+binding. The [Codex installer](../scripts/codex_mail_install.py) takes explicit
+skill/helper paths. Both their tests live in this shared repository and run in
+the same `reviewed-mail.test.sh` suite. Compatibility wrappers may remain in
+downstream repositories, but must not retain a second implementation.
+
+The agent-facing sequence (including first-draft rule loading, scoped search,
+final preview, approval and same-turn recording) is the
+[shared mail procedure](../codex/skills/claude-config-operations/references/mail-workflow.md).
+Owner skills supply only identity/style/ledger paths and the chosen launcher.
 
 - `prepare` records the incoming parent, original quote, recipients, threading,
   selected signature, and existing project ledger path. Reply-all retains peers;

@@ -198,3 +198,25 @@ l="pre(post)"; print -r -- "${l##*\(}"   # zsh でも通る (= ( を escape)
 `##` の pattern 内の `(` を zsh は glob 構文として厳しく parse する (= bash は literal 扱い)。 兄弟 2 節と同じ非対称 (bash で書いて zsh で壊れる) だが、 **貼り付けを経由せず Claude 自身の 1 コマンドが失敗するだけ**なので事故 mode が違う (= 即 error・実害なし。 上記 1 件は同 turn に python で書き直して完了)。
 
 ⚠️ **n=1 なので規約化していない** (= 「incident 無しで規約を書かない」)。 **un-defer trigger = 同 class の 2 件目** — Claude 自身が発行した shell コマンドが zsh 固有 semantics で壊れる事例を再度観測したら、 本 family の scope を「貼り付け用」 から「Claude が発行する全 shell コマンド」 へ広げる判断に入る (= 現状は「pattern を含む 1-liner は python で書く」 が実務上の回避策で、 規律化する価値があるかは 2 件目まで保留)。 症状 token: `bad pattern:` (= 観測済)、 近縁で未観測 = `no matches found` / `unmatched`。 この記録自体が trigger の成立条件 (= 記録しなければ次の観測者は 1 件目を知らず永遠に n=1 のまま = [debugging-discipline.md #recovery-ends-investigation](debugging-discipline.md#recovery-ends-investigation) の「記録されない残骸は trigger を持たない」 と同型)。
+## <a id="bound-command-runtime"></a>Bind reusable command runtimes at installation
+
+A successful `python3` invocation in one shell does not establish the runtime
+used from another working directory, login mode, task surface, or PATH. For a
+repeated account operation, select and probe a supported interpreter once in
+the explicit installer, then generate a launcher with its absolute executable
+path and a shell-quoted script path. Do not depend on opportunistically finding
+another interpreter's site-packages every time the operation runs.
+
+Audit the executable already bound in the launcher, not a fresh PATH-based
+selection. Otherwise the audit can declare a valid installation stale merely
+because the caller's PATH changed. Rebinding belongs to explicit installation,
+not a read-only check. Test installation idempotency, conflicting user files,
+symlink paths, and audit with interpreter discovery disabled.
+
+Use a distinct irreversible subcommand so command-policy rules can target the
+stable launcher plus that verb without also matching read or preview. Runtime
+availability, policy matching, client loading, and remote delivery are separate
+claims. The generic Codex mail installer and its isolated fixtures are
+`scripts/codex_mail_install.py` and `scripts/test_codex_mail_install.py`.
+The mail transaction contract remains in
+[Gmail sending](gmail-sending.md#reviewed-reply-bundle).

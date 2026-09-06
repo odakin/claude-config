@@ -55,8 +55,8 @@ than relying on a secondary summary.
   validation workflow.
 - **Email:** load the sending and research-mail runbooks as applicable, and
   the owner's explicitly selected style rules before drafting. Follow the
-  selected account workflow for read, preview, explicit send approval,
-  delivery verification, and same-turn recording. A preview is not a send.
+  [shared mail procedure](references/mail-workflow.md) with the selected account
+  binding. A preview is not a send.
 - **Web, browser, Dropbox, Discord, GitHub, or other accounts:** load
   the relevant runbook first. Never copy Claude MCP credentials or account
   configuration into Codex; request an explicitly scoped Codex connection when

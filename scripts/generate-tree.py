@@ -32,6 +32,8 @@ conventions/README.md (カテゴリ index) を単一 source から自動生成 (
 新規 file を足すとき: conventions/*.md なら doc-meta を書く / scripts・hooks なら header 1 行目に説明を
 書く → `git add` → `--write` で 5 箇所へ同時反映。 忘れても `--check` (CI = run-all-checks.sh /
 pre-commit = .claude/pre-commit-extra.sh) が drift を検出する。
+⚠️ 新規 file を追加する turn は、対象 file を明示的に stage してから --write / --check。
+stage 前の成功は「新規 file を含めて同期済み」の証拠にならない。
 ⚠️ 源は **git-tracked (cached/staged) file のみ** (git 不在時は disk fallback): untracked file
 (= 並列 session の未 commit 作業・一時 file) を tree に載せると、 committed checkout で --check を
 回す CI と結果が割れるため。 新 file が tree に出ないときはまず `git add`。

@@ -360,6 +360,12 @@ the generic [reviewed reply transaction](../conventions/gmail-sending.md#reviewe
 Keep account paths, style guides, and receipts in their owning private/local
 layers. No copied Claude settings or credentials are needed.
 
+The reusable installer is `scripts/codex_mail_install.py`, with explicit
+`--skill` and `--helper` paths; private installers are thin bindings. Its scope
+is the mail skill link, launcher, send rule and receipt directory, separate from
+the global integration installer's managed targets. Runtime selection/audit
+semantics belong to [bound command runtimes](../conventions/shell-env.md#bound-command-runtime).
+
 A distinct `send` subcommand lets a locally installed Codex
 [`prefix_rule` with `decision = "prompt"`](https://learn.chatgpt.com/docs/agent-configuration/rules)
 cover the canonical command prefix without matching read/preview commands.

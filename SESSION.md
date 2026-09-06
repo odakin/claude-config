@@ -4,7 +4,8 @@
 
 ## 2026-09-06: Reviewed mail workflow
 
-- 汎用の返信確認・送信試行・照合 transaction を追加。手順と適用範囲は
+- 汎用 transaction に加え、Gmail gateway/CLI・導入処理・共通手順・全テストを共有層へ集約。
+  個人層は薄い binding と実測のみ。手順と適用範囲は
   [Gmail sending](conventions/gmail-sending.md#reviewed-reply-bundle)、Codex の製品境界は
   [PARITY](codex/PARITY.md#mail-approval-boundary)。アカウント情報と個人の文体は外部の owning layer に残す。
 
