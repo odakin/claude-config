@@ -1041,6 +1041,16 @@ reflex: 「〜型」「同型」「blind-spot 型」 と打った瞬間に、 �
 
 origin: 2026-09、 7 月に ML 経由の依頼を 9 日遅れで遡及 triage し「broadcast-obligation blind-spot 型」 と正しく分類した記録が、 filter も carrier も変えずに終わり、 翌月の同 ML で 23 日の見落としを生んだ。 分類は合っていた。
 
+### <a id="protocol-cheapest-action-coverage"></a>8.33 新しい protocol は最頻・低 stakes の行為を protocol 内で最安にする — 迂回路は初日に現れる
+
+厳しい protocol (= 状態遷移を検証し、 不正な遷移を拒否する) を導入すると、 参加者は**最も頻繁で最も軽い行為**から試す。 その行為が protocol 内に無い、 または protocol 外の旧経路より高いと、 初日に旧経路へ迂回され、 以後は「protocol は重い」 という学習だけが残る。 迂回路が開いた瞬間に、 検証する遷移も迂回される。
+
+**pattern**: protocol を切るとき、 (a) 遷移を伴わない最頻の行為 (状況共有・memo・ping) を **protocol 内の inert な kind** として最初から用意する (= 検証は通るが状態は動かさない) / (b) 旧経路との**混在を error にしない** (= 旧形式の記録が在っても、 新 protocol の遷移が始まるまでは両方 live) / (c) 導入初日に「誰がどの経路で書いたか」 を見る (= 迂回の有無が最速の設計 feedback)。 迂回が観測されたら、 参加者に規律を説くのではなく kind を足す ([§8.32](#rca-as-labeling) と同じ向き = 記録でなく機構)。
+
+reflex: 「〜は request が無いと投稿できない」 「旧形式で書いておいて」 と言いかけた瞬間に、 その行為を protocol 内で 1 コマンドにする方が安いかを問う。
+
+origin: 2026-09、 layer-3 の session 宛て board を v2 (request / claim / submit / accept の検証つき) に切り替えた初日、 **両 vendor** の session が状況共有を旧形式 JSON の手 commit で投稿した (= v2 に request 不要の kind が無く、 v2 の `update` は request 必須、 旧形式が v2 thread に在ると protocol error)。 同日、 inert な `note` kind + 旧形式との混在許容 + runner 向け `--json` で design-out。 同型 = mechanism design の「default が最安でなければ守られない」、 [§8.31](#principle-birth-stock-audit) の flow / stock と対をなす「導入初日の flow 観察」。
+
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。
@@ -1965,3 +1975,4 @@ SoT drift の検出器は **「現行規則が home 外に重複していない�
 | 2026-07-03 | §8.17 新設「broadcast で届く個人義務 — per-person addressing proxy の構造的 false negative」 | layer-3 で年次 institutional 義務 (= 受講報告 + 書類提出、 学内締切付き) の BCC 一斉配信 3 通 (宛名「各位」) が name-mention surfacing を全通貫通し、 個別名指しの 4 通目催促で発覚 = 締切 1.5 ヶ月超過の RCA を一般化。 検出層 (= per-person proxy の盲点、 §8.8 の broadcast 形) + intake 層 (= 認識済み義務の prose 記載 ≠ encoding、 §8.11/§8.12) の複合 failure と特定。 対策 = 同 turn encoding (= 判断規律の芯) + obligation-signal surfacing (= proxy-subset と明示) + リマインド反復の escalation 信号化。 sibling 2 件 (= 役員 ML 会議招集 suppress / 学内 ML 会議通知不検出) と合わせ 3+ 観察 (§9.8 充足)。 §8.16 (= 不在主張の channel 軸) の義務検出 direction 対。 user 依頼。 |
 | 2026-08-20 | §8.23 新設「失効型〆切つきの機会 — 義務網と応答網の谷間に落ちる opportunity class」 | layer-3 で地域研究会案内 4 通 (BCC「各位」、 段階〆切つき) が約 3 ヶ月・4 経路 (名指し網 / 義務網 / 〆切抽出器の書式前置+早期告知 / 未認識 backlog の rolling 窓 silent 退場) を独立に貫通し発表申込〆切が silent 失効した RCA を一般化。 §8.17 (義務 broadcast) の機会版・§8.22 (失効型) の intake 前段・§8.18 (二日付軸) の horizon 変種。 対策 = 機会 intake 規律 (検討 entry or declared skip) + 〆切抽出器の書式/距離 audit + FP 分業。 本 class 直接 1 + 隣接 sibling 2 で §9.8 は隣接充足と明示。 user green-light 経由 (worker session 実装)。 |
 | 2026-07-25 | §8.8 頻出 proxy 型に「repo tree / git dirt を変更・副作用の proxy にする」 row 追加 | OAuth credential 書き戻し箇所の一掃 sweep が、 書き込み先だけ repo 外 runtime dir の 1 箇所を見落とし (= dirt にならず発見対象外)、 同日の耐久性 audit も同じ runtime dir の credential 欠落 (1 マシン 45 日不在) を scan 範囲外にしていた = 「repo の外は sweep の外」 の同一構造 2 実例 (§9.8 充足)。 別調査の独立実測が両方を発見。 user 依頼 (「層1 SoT にできることある?」)。 |
+| 2026-09-07 | §8.33 新設「新しい protocol は最頻・低 stakes の行為を protocol 内で最安にする — 迂回路は初日に現れる」 | layer-3 の session 宛て board v2 で両 vendor が初日に旧形式の手 commit へ迂回 (request 不要の状況共有が無かった) → inert な note kind + 混在許容で design-out |
