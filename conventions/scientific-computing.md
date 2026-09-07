@@ -502,6 +502,14 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 
 **先に著者 repo を探す (2026-09 追補)**: 観測論文は `contour_lines/` `chains/` を GitHub で公開していることがある (例: $r$–$n_s$ の 2025 総合)。 点列があれば図の抽出は cross-check に降格し (2026-09 実測: 95% 外周が抽出と点列で $10^{-4}$ 一致)、 引用条件 (README の cite 要請) を caption で満たす。 chain があれば信用水準そのものを計算できる ([`paper-audit.md#box-test-vs-joint-posterior`](paper-audit.md#box-test-vs-joint-posterior))。
 
+### <a id="svg-contour-self-calibration"></a>変種 (2026-09): `pdftocairo -svg` 経由 + 同図内の公開等高線で自己較正
+
+観測論文の図から chain 非公開の等高線 (例: Planck 2018 + BK18 の 95%) を起こす場合の recipe (盲検 reviewer 側の実測、 別実装で受領側と一致):
+
+- `pdftocairo -svg -f N -l N paper.pdf page.svg` → path を色 (`stroke=` / `fill=`) で選ぶ。 pdftocairo は stroke path に `transform="matrix(0.975,…)"` を付け、 fill は `<g>` の入れ子で座標系が違う — **transform を合成しないと 2–3% ずれる** (bbox が食い違うことで気付ける)。
+- 較正は目盛り読みより、 **同じ図に公開 data の等高線があればその bbox で affine を決め、 2 本目で残差を出す** (実測: 公開 68% 等高線で $10^{-4}$、 stroke 版 95% で $n_s\in[0.9604,0.9757]$, $r_{\max}=0.0411$ を再現)。 塗り領域は axes の clip で切れるので、 端が軸境界に一致したら「そこで切れている」 と読み、 その側の判定はしない。
+- 道具 = ai-collaboration [`scripts/svg-contour-extract.py`](../../ai-collaboration/scripts/svg-contour-extract.py) (`--list` → `--calib-bbox` → `--extract` / `--contains` / 固定 $y$ の隙間)。 精度の上限は線幅 ≈ 0.001 ([`paper-audit.md#box-test-vs-joint-posterior`](paper-audit.md#box-test-vs-joint-posterior) (5))、 「どれだけ外か」 は [#contour-distance-axis](#contour-distance-axis) の物理軸で。
+
 ## <a id="evolve-constraints-algebraically"></a>10. 拘束量は独立変数として積分しない — drift → 符号反転 → 反減衰爆発 (2026-09)
 
 **Pattern**: 拘束 (constraint) で決まる量 (宇宙論の H = √(ρ/3M²)、 エネルギー、 正定値であるべき量) を独立の ODE 変数として積分すると、 拘束からの数値 drift が蓄積する。 量が小さくなる regime で drift が符号を反転させると、 **散逸項が反転して反減衰**になり、 解は指数的に爆発する (= silent ではなく派手に壊れるが、 出力だけ見ると「別の物理」 に見える)。
@@ -530,7 +538,7 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 
 **Pattern**: 振動する背景 $\chi(t)$ の上で mode の Floquet 指数を出す時、 背景を $\chi=\Phi\cos mt$ で代用すると、 厳密には marginal な mode (例: 運動項の conformal factor から来る $k=0$ mode、 厳密解 $H_c\propto e^{-\gamma\chi/2}$ で有界) に有限の指数が出る。 質量項が背景の運動方程式を使って導かれている場合、 その相殺は**真の解の上でしか成り立たない**。
 
-**Fix**: 背景は非調和ポテンシャルの周期解を数値で取り ($\chi(0)=\Phi$、 $\dot\chi=0$ から $\dot\chi=0$ への戻りを event で捕まえて周期 $T$ を得る、 event の direction は戻り側の符号)、 monodromy を 1 周期で取る。 検算 = 解析的に marginal と分かる mode の指数が 0 になること (同事例: 調和背景で +0.2〜+1.3 だった $k=0$ の指数が厳密背景で 0.000、 最速成長は $k\simeq0.5$–$0.75\,m$ に移動)。
+**Fix**: 背景は非調和ポテンシャルの周期解を数値で取り ($\chi(0)=\Phi$、 $\dot\chi=0$ から $\dot\chi=0$ への戻りを event で捕まえて周期 $T$ を得る、 event の direction は戻り側の符号)、 monodromy を 1 周期で取る。 検算 = 解析的に marginal と分かる mode の指数が 0 になること (同事例: 調和背景で +0.2〜+1.3 だった $k=0$ の指数が厳密背景で 0.000、 最速成長は $k\simeq0.5$–$0.75\,m$ に移動)。 道具 = ai-collaboration [`scripts/floquet-monodromy.py`](../../ai-collaboration/scripts/floquet-monodromy.py) (`conformal` = 厳密背景 + 正確な質量項、 `--linearised` で偽成長を再現; selftest が $k=0$ marginal と Mathieu $\mu=q/2$ を固定)。
 
 ## <a id="first-step-skips-initial-heuristic"></a>SciPy `solve_ivp` の初期 step 推定 overflow は `first_step` で消す (2026-09)
 

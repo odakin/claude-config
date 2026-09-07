@@ -181,6 +181,8 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 | ADS (`ui.adsabs.harvard.edu/abs/...`) | abstract 取得可 | 引用関係・要旨確認に有効 |
 | arXiv (`arxiv.org/abs/...`) | フルテキスト OK | 物理・数学・CS 系の第一選択 |
 | CiNii (`ci.nii.ac.jp/naid/...`) | 旧 `naid` URL は `cir.nii.ac.jp/crid/...` に 301 redirect | redirect 先で再 WebFetch |
+| arXiv **PDF** (`arxiv.org/pdf/<id>`) | WebFetch は PDF stream を summarizer に渡し「binary で読めない」 と返す (abs page は OK)。 取得物は harness の tool-results dir に落ちる (= sealed review では deny path) | `curl -sL -o x.pdf https://arxiv.org/pdf/<id> && pdftotext -layout x.pdf x.txt` を作業 dir で、 `grep -n` で該当箇所を引く (2026-09 実測: 7 本 + 41 pp まで問題なし) |
+| TLS 証明書の切れた data release site (例: 実験 collaboration の release page) | WebFetch: `certificate has expired` | `curl -skL` (http 経路) で取得し file 名と hash を記録。 中身は公開 data product なので改竄 risk は低いが、 hash を review の note に残す |
 
 ### How to apply
 
