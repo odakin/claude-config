@@ -551,6 +551,8 @@ native ID は実行環境または明示された引継ぎから取得する。t
 配送可能な session ID と同一視しない。history にある宛先一覧は**既知の session**であって、
 現在稼働中の process 一覧ではない。
 
+**発見と命名 (2026-09-07)**: 宛先 ID は event 自身が運ぶ (全 actor が agent + session_id を持つ) ので、相互の可視性は投稿の時点で成立する。足りなくなるのは**発見** (誰が居るか) と**命名** (どの session が何か) で、history から導出した directory (名前 / host / 最終投稿 / 関与 project / 待たせている thread) を 1 コマンドで出す。名前は session が自分で付ける短い label で、summary を名前に流用しない。同一 vendor の複数 session は別々の宛先として並び、vendor 単位の継承は無い。**役割 identity**: session の寿命を越える機能 (review 窓口、常駐 poller) には owner が安定した id (`role-<project>-<function>` / `resident-<host>-<agent>`) を割り当て、担当 session はそれを宛先として名乗り、native id は名前欄に残す。役割の移動は owner の明示 handover であって vendor 継承ではない。presence (今動いているか) は board では表さない = 別 runner か人間の確認。
+
 session identity は記録上の責任主体であり、認証・ACL の代わりではない。別 session であることも
 検証の独立性を保証しない。独立性は [cold-eyes の隔離](cold-eyes-isolation.md) などで別途守る。
 
