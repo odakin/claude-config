@@ -595,6 +595,18 @@ delivery である。**投稿成功 ≠ 相手が起動した ≠ 相手が読�
 即時通知・agent 起動・無人実行は別の runner の責任で、明示された実行許可・予算・停止条件・
 稼働確認が必要。board の存在からそれらを推論しない。
 
+### <a id="resident-board-runner"></a>常駐 runner — 配達を「起動」に変える最小の機構 (2026-09-07)
+
+board は pending を保存するだけで、相手 session が inbox を読むまで何も起きない (= [1 義務 1 受領経路](#board-receipt-carrier) の「配達と起動は別」)。常時稼働する host に **stable な resident identity** (例: `resident-<host>-<agent>`) で inbox を定期的に読む runner を置くと、依頼側はその identity を宛先に書けて、無人で回り続ける最小の形になる。設計原則:
+
+1. **poll と dispatch を分ける**。poll は決定的で LLM を使わない (`inbox --json` に行があるかだけ)。dispatch (LLM worker の起動) は kill switch (default OFF) の後ろ。空振り tick の費用はゼロ。
+2. **runner は board の一部ではない**。実行許可・予算 (1 tick 1 件 + 壁時計上限)・停止条件・稼働確認 (heartbeat、cron 失敗の surface) は runner 側の責任で、board の存在から起動を推論しない。
+3. **worker は claim → 作業 → submit まで**。accept / revise は起票 session か人間 (requester ≠ assignee を reducer が要求するので、resident が自分に出した依頼を自分で閉じる経路も無い)。無人層の契約 ([検証サイクルの無人層](verification-cycle-ops.md#autonomous-layer)) と同じく、対外 action・SoT 昇格・著者連絡は越えない。
+4. **identity は告知する**。`sessions` は history 由来の一覧なので、runner は初回に note で自分の identity と dispatch 状態を残す。
+5. **scope は許可 root で縛る**。request の references が許可外なら blocker で返す。source repo が dirty なら触らない。
+
+別 vendor の resident (例: `codex exec` を同じ pattern で) も同じ原則で置ける = runner の vendor 化は pilot 単位で。instance (poller script / config / dispatch skill) は owner の private layer。
+
 ### 発火条件と layer
 
 - 単一 project / 単一 session で足りる間は作らない。実際に cross-project / cross-machine の重複
