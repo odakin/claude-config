@@ -265,6 +265,10 @@ sections:
     legacy: "8.32"
     level: 3
     title: "8.32 「〜型」 と分類した瞬間が機械層を足す最安の瞬間 — label は対処ではない"
+  - id: protocol-cheapest-action-coverage
+    legacy: "8.33"
+    level: 3
+    title: "8.33 新しい protocol は最頻・低 stakes の行為を protocol 内で最安にする — 迂回路は初日に現れる"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
