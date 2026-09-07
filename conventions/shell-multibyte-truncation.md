@@ -43,3 +43,12 @@ except UnicodeDecodeError as e: print('INVALID', e)"
 - shell で非 ASCII を切る時は `cut -c` / `head -c` / byte slice を**使わない** → python の文字単位 truncate。
 - 切った結果を別プロセスに渡す前に valid UTF-8 を検証。
 - daemon (launchd/cron) は `LANG` 空 = C locale 前提で組む。
+
+## <a id="prose-args-quoting"></a>自然文を CLI 引数で渡すときの quoting — backtick は double quote の中で消える (2026-09)
+
+長い自然文 (投稿の summary・commit message・issue 本文) を shell 経由で渡すとき、**double quote の中では `` `…` `` と `$…` と (対話 shell の) `!` が展開される**。`` `2026-09-07-foo` `` のような ID を強調のつもりで書くと、shell がそれを command として実行し (「command not found」)、引数からは**空文字**になって届く。届いた側では「thread 名が消えている」以外に痕跡が無い。
+
+- **規律**: 自然文の引数は **single quote** で囲む (single quote の中は一切展開されない)。文中に `'` が要るなら heredoc (`<<'EOF'`) か file 経由で渡す。
+- **痕跡**: 消えた token の場所には空の backtick 対 ` `` ` が残る。受け側の tool は**この指紋を拒否**して「引用符を直して再送」と言える (= 記録が immutable な board で事故を止めた実例、agent-board の writer gate)。
+- 関連: 文面を user が貼る側の規律は [`paste-destined-plain-text.md`](paste-destined-plain-text.md)、tool 入力に書いた文は user に見えていない = [`mid-turn-text-visibility.md`](mid-turn-text-visibility.md)。
+

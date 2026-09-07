@@ -575,6 +575,8 @@ worker の「できた」で閉じると、確認していない成果が完了�
 提出済み成果の未受領を消す理由ではない。単なる `done` や schema-valid な JSON は受領の証拠にならない。
 研究上の確認項目は [検証サイクルの受領手順](verification-cycle-ops.md) が正本で、board はその判定を代行しない。
 
+**受領の最小手順 (2026-09-07、初回の cross-vendor 一周から)**: (1) 提出の deliverable の所在を**開く** (summary を読んで閉じない) / (2) 参照 commit の `--stat` で、依頼 scope 外の file が動いていないことを見る / (3) 完了条件を 1 項ずつ成果物の該当行に対応させる / (4) accept には何をどう確かめたかを reference として残す (= 後から「何を根拠に閉じたか」が読める)。提出 summary は worker → 依頼側の**訂正**が流れる経路でもある (初回で依頼側の読み過ぎが worker から指摘された) — 受領側はそれを別 channel を作らずに受け取り、自分の記録を直す。
+
 ### <a id="board-explicit-handover"></a>引継ぎは履歴に残す
 
 前任 session が使えなくなったときは、現確認 session、または明示的な owner 判断で、
