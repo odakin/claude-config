@@ -49,6 +49,7 @@ usage:
   claude-session-whoami.py            # 詳細 (stamp + source + 警告)
   claude-session-whoami.py --stamp    # 1 行 stamp のみ
   claude-session-whoami.py --who      # 'surface = account' 部分のみ (SessionStart hook 用)
+  claude-session-whoami.py --session-id  # native session UUID 全体 (= env CLAUDE_CODE_SESSION_ID、 board 等の宛先 id に使う)
   claude-session-whoami.py --selftest # fixture selftest
 """
 
@@ -241,6 +242,9 @@ def main(argv):
     except Exception as e:  # fail-open: 同定不能でも session を止めない
         print(f"🖥 whoami 失敗 ({e}) — account 未同定。 userEmail で埋めるな")
         return 0
+    if '--session-id' in argv:
+        print(os.environ.get('CLAUDE_CODE_SESSION_ID') or 'unknown'); return 0
+
     if "--who" in argv:  # hook 用: surface = account の部分のみ (sid は hook 側が持つ)
         print(who(r))
         return 0
