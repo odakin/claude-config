@@ -353,3 +353,15 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 **Pattern**: 1 文 1 行の source では、 tex の各行を文として語数を数えるだけで冗長の分布が出る。 40 語超の文はほぼ例外なく 2–3 主張を接続詞で繋いだもので、 分割しても情報は落ちない。 起源事例 (2026-09): 主張を運ぶ節 (abstract / intro / 結果節 / summary) の 40 語超 36 文を全て分割し (36 → 0、 30 語超 82 → 56)、 反復していた修飾句 (同じ限定を節内で 4 回) を各節 1 回に減らした。
 
 **How**: `$…$` を 1 token に潰して語数を数える script を回し、 長い順に読む。 分割は主張の切れ目で切り、 接続詞 (so / and / while) を period に替える。 圧縮した文は読み直して、 落ちた load-bearing 語と**その節で裁定済みの主張の型** (相対 / 予言 / 試験) が残っているかを数える (同事例: 短縮の反復で絶対文に戻った)。
+
+## <a id="advocate-pass-after-retraction"></a>撤回を採用したら advocate pass を 1 回回す — 誤り探しの査読の反復は最小の防御可能な主張に収束する (2026-09)
+
+**Pattern**: 盲検・cold-eyes を「主張は証明されているか」 の向きで反復すると、 各 round は主張を削ることしかできない (退けた主張が実は正しいかは誰も問わない) ので、 生き残りは「最も守りやすい主張」 に収束する。 その過程で、 **計算で退けた regime と定義で退けた regime が同じ顔をする**。 起源事例 (2026-09、 private paper repo): 共鳴 regime を 2 round の盲検で「閾値の上は完了しない」 → 「瞬時行は模型外の参照」 と書き換え、 題の二分法だけが残った。 著者の「もとの話が全部消えたが本当に良いのか」 の一言で段ごとに棚卸しすると、 定理 1 段・数値 2 段は耐え、 「結合 ≳ 10 は模型外・lattice 案件」 の 1 段だけが計算でなく判断だった。 著者側 anchor script の scan 範囲を 1 行伸ばすと、 線形成長はその regime で 2–3 振動以内に完了し、 しかも引用していた lattice 研究の結合 scale と一致した — regime は在ったのに定義で消していた。
+
+**Check** (撤回を本文に入れる turn で): (a) 撤回が覆う parameter 領域と覆わない領域を書き分ける (「8 まで完了しない」 は「10 で完了しない」 を含意しない)。 (b) 覆わない領域を**同じ anchor script で**走査してから「模型外 / beyond scope / we do not follow」 と書く — 安価な scan があるのに scope 宣言で閉じるのは cell 埋め。 (c) 生き残った regime は消さずに置き、 その regime が模型の他の部分に課す条件 (値札) を数字で付ける ([#odd-coupling-sign-before-pricing](#odd-coupling-sign-before-pricing))。 (d) reviewer の finding 採用 = 前提検証 pass ([`physics-verification-cycle.md`](../../ai-collaboration/conventions/physics-verification-cycle.md#external-ai-referee-premise-verification)) の対として、 採用後に advocate pass「退けた主張はどこなら生きるか」 を**1 回だけ**、 数字で回す (advocate の反復は逆向きの ratchet)。
+
+## <a id="odd-coupling-sign-before-pricing"></a>regime に値札を付ける前に、 結合の符号に奇な量と偶な量を仕分ける (2026-09)
+
+**Pattern**: regime を定める効果 (共鳴の成長 ∝ γ²) は結合の符号に偶、 その regime の値札 (inflation 中の質量項 ∝ γ) は奇、 という組合せで、 片方の符号だけで値札を書くと、 反対符号では売りになるものを「代償」 と報告する。 起源事例 (2026-09、 同上): 結合 ≳ 10 の共鳴 regime の値札を「Hubble 級 tachyonic Higgs」 と書いたが、 質量項は γ に奇で、 負符号では同じ大きさの**正**質量 = 高 scale inflation で電弱真空を守る標準機構そのもの。 原稿は符号を固定していなかった。 さらに「Higgs 4 点結合が 10¹⁴ GeV で負」 は top 質量の誤差内で決まらない (絶対安定は 1–2σ 先) ので、 値札の 2 軸目も判決でなく依存関係として書く。
+
+**Check**: (a) 各 parameter について、 主張のどれがその符号に偶でどれが奇かを列挙する。 (b) 符号が模型で固定されていなければ両枝を事実として書き、 符号の決定を模型の構成 (共著者・原典) に routing する。 (c) 外部入力 (top 質量・α_s・結合の running) に依存する verdict は「中心値では X、 誤差内で Y」 の形で書き、 中心値の verdict を事実にしない。 (d) anchor script は両符号を走らせる (偶なら一致が検算、 奇なら両枝の数字が本文に要る)。
