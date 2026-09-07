@@ -48,6 +48,18 @@ summary: 日本物理学会 (JPS) 大会 一般講演申込の form 機構と落
 2. **session の `<ol>` 内 `<li>` を先頭から数える** (各 `（15分）` を積算、 `<div class="roundframe spaces">休憩 (hh:mm〜hh:mm)</div>` で時刻を jump)。 順番 -N = N 番目の `<li>`。 ⚠️ WebFetch の要約は **講演を 1 件落として番号をずらす**ことがある (2026 実測: 1 件欠落で 16:00 と誤報、 実 16:15) — 要約の時刻を採らず `curl` + 自分で数える。 持ち時間の規則 (講演 10 分 + 討論 5 分) と会場→建物の対応は前付け PDF (`jps.or.jp/activities/meetings/files/<yyyy>a_mae.pdf`、 p.9 前後 / 会場配置図)。
 3. 確定したら **talks.yaml の date を会期初日から講演日に更新** + calendar に講演 slot の event (15 分) + events.yaml の talks 行に番号・時刻・event id — の 3 点を同 turn で。 同日の学内会議との重なりは calendar を並べた瞬間に見えるので、 その場で出欠を user に問う。 ⚠️ 番号通知の turn で「program 確定後に絞る」 と書いて止めない (program 公開は通知の翌日)。
 
+**道具**: 上記 1-2 (日程表 → session → `<li>` 数え) は [`scripts/jps-program-talks.py`](../scripts/jps-program-talks.py) に固めてある — `slot 16pE532-11` (番号 → 日時・会場・題目)、 `sessions --day 15 --slot p` (当日午後の全 session)、 `talks j15aG721` (session の講演 + 計算した開始時刻)、 `grep '<regex>'` (全領域の題目を横断検索)。 program の構造 fact (anchor / `<li>` / 休憩 div / 領域 file code / 概要集は login 越し) は script docstring が正本。
+
+## <a id="program-triage-by-interest-profile"></a>聴講計画: 関心プロファイルで program を triage する
+
+会期の全日程に出る場合、 3,000-4,000 件の題目から自分向けを拾う作業は「keyword を思いつく」 だけでは漏れる。 手順 (2026 秋で確立):
+
+1. **関心プロファイルを外部化して持つ** — arXiv digest を運用しているなら、 その profile (最優先テーマ / コアトピック / arXiv category) と直近の高スコア論文の題目がそのまま照合基準になる (= 「何を面白いと思っているか」 の機械可読な記録。 頭で思い出すより網羅的)。 無ければ INSPIRE の自分の publication list から主要 keyword を起こす。
+2. **program を全領域で dump して keyword 横断検索** (`jps-program-talks.py grep`)。 keyword は profile の語 + 日本語表記ゆれ (波束/wave packet、 捩率/torsion/テレパラレル) を OR で束ねる。 自分の領域だけ見ない — 波束・測定論は領域 1 (量子情報) / 領域 11 (統計力学) に、 重力は宇宙線・宇宙物理領域 (相対論 session) に散らばっている。
+3. **hit を「直撃 / 隣接 / 関心圏」 の 3 段で並べ、 user に番号で選ばせる**。 各候補に日時・会場 (建物)・競合を添える。 「全部入れて」 と言われたら bulk 登録 (calendar は API 直接、 会議 ledger に id を残す)。
+4. **calendar は 3 層**: 会期 all-day (参加確定・参加票等の実務) / 自講演 (別 event) / 聴講 (🎧 prefix、 候補は「（候補）」 prefix、 description に session の前後・移動経路・競合を書く)。 競合は description に「当日選択」 と明記して残す (= 消さない、 現地で選ぶ材料)。
+5. **推薦の出所を残す** (= 「X さんの DM で推薦」 「digest profile 照合」) — 後で「なぜ入れたか」 が分かる。 Discord DM 等の機械射程外で来た推薦は user に転記してもらい、 その旨を書く。
+
 ## 発表内容の選定 (制度が形を決める部分)
 
 - 「1 人 1 件 + 領域 13 例外」 により、 専門の演題を 2 本持っていても**同一領域では 1 本しか話せない**。 2 本目は (a) 領域 13 (教材・教育ネタがあれば) / (b) 別の研究会 (基研研究会等) に振り分ける、 が定石。
