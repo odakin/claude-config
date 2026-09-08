@@ -540,12 +540,6 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 
 **Fix**: 背景は非調和ポテンシャルの周期解を数値で取り ($\chi(0)=\Phi$、 $\dot\chi=0$ から $\dot\chi=0$ への戻りを event で捕まえて周期 $T$ を得る、 event の direction は戻り側の符号)、 monodromy を 1 周期で取る。 検算 = 解析的に marginal と分かる mode の指数が 0 になること (同事例: 調和背景で +0.2〜+1.3 だった $k=0$ の指数が厳密背景で 0.000、 最速成長は $k\simeq0.5$–$0.75\,m$ に移動)。 道具 = ai-collaboration [`scripts/floquet-monodromy.py`](../../ai-collaboration/scripts/floquet-monodromy.py) (`conformal` = 厳密背景 + 正確な質量項、 `--linearised` で偽成長を再現; selftest が $k=0$ marginal と Mathieu $\mu=q/2$ を固定)。
 
-## <a id="oscillation-onset-definition"></a>「振動開始時」 の $H$・振幅・$q$ は定義を書いてから引用する — $\epsilon_V=1$ の外挿は厳密な終点と因子 2 違う (2026-09)
-
-**Pattern**: 「onset of oscillation で $H\simeq0.6m$、 $\Phi\simeq1.5M_\text{P}$、 $q\simeq15$」 のような数字を、 $\epsilon_V=1$ の点の $\rho_\text{end}=\tfrac32V(\chi_\text{end})$ から出す。 厳密な背景では $\epsilon_H=1$ はもっと先 ($x^2e^{-0.13x}$ 型で $x=1.30\to0.91$、 $\rho_\text{end}$ が 1.9 倍小さい、 $H$ と $\Phi$ が 1.4 倍小さい)、 最初の零点通過ではさらに小さい ($H=0.18m$、 $\Phi=0.43M_\text{P}$)。 $q=g\Phi$ は定義で 3.5 倍、 共鳴の完了閾値 (結合の値) は $\pm20$ % 動く。 線形成長を「真空から」 数える計算は、 真空をどの時刻に置くかでさらに動く (末期の tachyonic 相を含めると +10 e-fold)。
-
-**Fix**: (a) 「onset」 を 1 つに定義して書く ($\epsilon_H=1$ を推奨、 $\epsilon_V=1$ なら「外挿」 と明記)。 (b) 閾値の数値は定義を変えた幅で書く。 (c) 真空を置く時刻を引数にした計算を 1 回は走らせる。 道具 = ai-collaboration [`scripts/expanding-mode-growth.py`](../../ai-collaboration/scripts/expanding-mode-growth.py) (`--start end|eps_V=1|x=<v>`、 sub-horizon 条件 `--kmin`)、 $N_*$ 側の同じ chain (fixed point・厳密背景の 2 次 HFF・固定 $r$ の分離幅) = [`scripts/nstar-fixed-point.py`](../../ai-collaboration/scripts/nstar-fixed-point.py)。 $N_*$ への影響は $\tfrac14\ln\rho_\text{end}$ の 0.1 e-fold で無視できるが、 共鳴側の数字には効く。
-
 ## <a id="first-step-skips-initial-heuristic"></a>SciPy `solve_ivp` の初期 step 推定 overflow は `first_step` で消す (2026-09)
 
 **Pattern**: `solve_ivp(..., atol=1e-300)` で初期値の一成分が $10^{-290}$ のような極小値だと、 初期 step 推定 (`d1 = norm(f0/scale)`) が overflow / invalid の warning を出す。 結果は正しいが、 warning-clean でないと再現者が「何かおかしい」 で止まる。
@@ -569,6 +563,8 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 **Pattern**: inflation の終点を $\epsilon_V=1$ (potential の slow-roll parameter) で取り、 そこで $\rho_\text{end}=\tfrac32V$ とすると、 実際の終点 ($\epsilon_H=\dot\chi^2/2H^2M_P^2=1$) はさらに転がった先で、 $\rho_\text{end}$ が 1.9 倍、 $H_\text{end}$ が 1.4 倍過大になる (plateau 型 potential の実測)。 この「onset」 の数値は Mathieu の $q$、 KLS 条件、 共鳴の完了 e-fold 数にそのまま伝播し、 共鳴の境界を ±20 % 動かす。
 
 **Fix**: 背景を厳密に積分して $\epsilon_H=1$ を event で取り、 $x_\text{end}$・$\rho_\text{end}$・$H_\text{end}$・振幅をそこで定義する。 $\epsilon_V=1$ は初期条件の目安にしか使わない。 「onset」 という語を使うなら定義を 1 文で書く (最初の零点通過なら $H$ はさらに半分以下)。
+
+**reviewer 側の追補 (同事例、 2026-09-08)**: 数値の幅 = $x^2e^{-0.13x}$ 型で $\epsilon_V=1$ ($x=1.30$、 $H=0.55m$、 $\Phi=1.34M_\text{P}$) / $\epsilon_H=1$ ($x=0.91$、 $0.43m$、 $1.05M_\text{P}$) / 最初の零点通過 ($0.18m$、 $0.43M_\text{P}$)、 $q=g\Phi$ は定義で 3.5 倍。 線形成長を「真空から」 数える計算は**真空を置く時刻**にも依存する (末期の tachyonic 相を含めて sub-horizon mode から積分すると +10 e-fold、 完了閾値の結合が 10 → 6–7)。 (c) 真空を置く時刻を引数にした計算を 1 回は走らせ、 閾値は幅で書く。 道具 = ai-collaboration [`scripts/expanding-mode-growth.py`](../../ai-collaboration/scripts/expanding-mode-growth.py) (`--start end|eps_V=1|x=<v>`、 sub-horizon 条件 `--kmin`)、 $N_*$ 側の同じ chain (fixed point・厳密背景の 2 次 HFF・固定 $r$ の分離幅) = [`scripts/nstar-fixed-point.py`](../../ai-collaboration/scripts/nstar-fixed-point.py)。 $N_*$ への影響は $\tfrac14\ln\rho_\text{end}$ の 0.1 e-fold で無視できるが、 共鳴側の数字には効く。
 
 ## <a id="small-sdp-without-solver"></a>小さな SDP を solver 無しで回す — SLSQP + explicit dual certificate の sandwich (2026-09)
 
