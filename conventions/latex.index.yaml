@@ -55,6 +55,9 @@ sections:
   - id: fixed-framing-macro
     level: 2
     title: "新規 macro に fixed framing text を含める前に source-render asymmetry の罠を抑える"
+  - id: maketitle-handset-author-block
+    level: 2
+    title: "手組み author block と `\\maketitle` を併用したら題扉の余白を詰める"
   - id: compilers
     level: 2
     title: "コンパイラ"
