@@ -459,7 +459,7 @@ orientation 直後の silent stall (session は running のまま・活動 times
 | **(b) custom agent 定義** (`.claude/agents/*.md` の frontmatter `model:` + `effort:`) | **full model ID** (例: `claude-opus-5[1m]`)+`effort:` | ○ pin 可、 durable | delegate の既定を version 単位で固定・毎回 CLI 引数を書きたくない (⚠️ registry は session 開始時 load = mid-session 追加した定義は次 session から) |
 | **(c) headless CLI** (`claude --model <full-id> --effort <level> -p …`) | **full model ID** + effort | ○ pin 可、 起動時即時反映 | scheduled / cron / launchd から model を明示的に pin して走らせる・(b) との組合せ可 |
 
-- ⚠️ **`spawn_task` (chip → 別 session) には model 引数が無い** (= chip はアプリ既定 model で開く)。 起票側から見て model は成り行きになる。 chip を通した独立 session に version pin したい needs が生じたら、 現状は upstream 依存 (= harness 側で model 引数を追加してもらう) しかない。
+- ⚠️ **`spawn_task` (chip → 別 session) には model 引数が無い** (= chip はアプリ既定 model で開く)。 ⚠️ さらに **desktop app の model 選択は session 単位でなくアプリ全体** (2026-09-08 user 実測): chip を別 model で開こうとしてアプリの model を切り替えると、 起票元の session も同じ model に変わり、 context を読み直す (= 起票元が Fable で走行中に chip 用に Opus へ切り替えると、 親が Opus になって cache が捨てられる)。 ∴ chip の推奨 model は**起票元と同じ**を既定にし、 別 model にしたい chip は起票元の区切り (session 終了直前・長い待ちの前) で起動する。 起票文面の model tag はこの制約を前提に書く。 起票側から見て model は成り行きになる。 chip を通した独立 session に version pin したい needs が生じたら、 現状は upstream 依存 (= harness 側で model 引数を追加してもらう) しかない。
 - 既知 bug のある最新 model を alias が掴む事故は (a) では構造的に避けられない (= alias は最新解決)。 bug 回避目的の delegate は必ず (b) / (c) で pin する。
 
 ### 使い分け litmus
