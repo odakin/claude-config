@@ -342,6 +342,8 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Check**: 閾値の上について書く前に (a) その regime で「完了」 に必要な量 (占有数・エネルギー移送率) を書き下し、 (b) 膨張・振幅減衰・非線形の各競争相手と時間 scale を比べ、 (c) 引用先が同じ regime (同じ $q$、 同じ $H/m$) を扱っているか確認する。 閾値の上は「記述できる regime の終わり」 と書き、 到達不能な参照点 (瞬時値) は「模型外の参照」 と明記する。
 
+**2026-09-08 追補 (同事例、 第 3 回盲検)**: 閾値が 2 つあると (「式が使えなくなる」 $x_0$ と「膨張が成長を止めなくなる」 $x_1\gg x_0$)、 本文が両方を「the threshold」 と呼び、 表は $x_0$ 未満の history だけを載せ、 abstract の分離幅 (「$0.005$ in $n_s$、 factor 2 in $r$」) は $x_0$ 未満だけから取られる、 という型になる。 $x_0<x<x_1$ の history は本文の定義では摂動的なのに表に無く、 載せると分離幅が縮む (同事例: 0.004–0.007 → ≥0.003、 1.5–2 → ≥1.4)。 → **(d) 2 つの閾値に別の名前を付け、 その間の history を表・図に 1 行以上載せてから分離幅を書く**。 (e) 閾値の数値は「onset」 の定義 (振動開始を $\epsilon_V=1$ / $\epsilon_H=1$ / 最初の零点通過のどれで取るか) に $\pm20$ % 依存するので、 定義を書かずに 2 桁で書かない ([`scientific-computing.md#oscillation-onset-definition`](scientific-computing.md#oscillation-onset-definition))。
+
 ## <a id="abstract-geroch-compression"></a>Abstract = 文脈降下 + 3 message + 持ち帰る 1 文 (Geroch の introduction と conclusion の圧縮) (2026-09)
 
 **Pattern**: 技術的言明を結果の順に並べた abstract (次元 5 演算子・coupling scale・信用水準 99.9x% …) は、 読者に文脈も持ち帰る 1 文も残さない。 abstract は論文の introduction (文脈降下 + 結論の先出し) と conclusion (束ねる 1 文) の圧縮版として組む ([`giving-talks.md`](giving-talks.md) の introduction 節と conclusion 節)。
