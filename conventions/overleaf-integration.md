@@ -186,6 +186,11 @@ live (uncomment) な author markup (`\cl`/`\CL` 等) の leak 無し; compile �
 `Misplaced alignment tab` になり、 `off` (= 削除式が消える) へ落とす羽目になる。 実例 = 該当 private paper repo
 2026-09-08 (付録の一式の符号反転 `J_1+J_2` → `-(J_1+J_2)` が Overleaf 2 commit 間の diff で無印、
 同 repo の `scripts/expand-display-math.py` + `regen-clean-latexdiff.sh` で両側展開 → coarse で色付き・error 0)。
+**同根の第 3 機構**: 引数付き自作 macro (`\pn{…}` / `\Paren{…}` 等) は latexdiff の safe-command list に無いので、
+その中だけの変更も無印になる → preamble の macro 名を原稿から導出して `--append-safecmd` に渡す。
+**設計原則 = 「色が出ない」 は error を出さないので、 diff 出力を機械で走査して無印の数式変更を数え、
+0 でなければ再生成を fail させる** (前処理を足すだけでは次の macro で再発する。 gate は「preamble の
+引数付き macro 全部に合成変更を通して色が付くこと」 を assert する selftest と、 実 diff の走査の 2 段)。
 症状別の表は [`latex.md`](latex.md) の「plain latexdiff がそのままコンパイルできない時の定石」。
 
 ## full-body push + 管理ファイルの cleanup (= 本文まるごと反映 / 既流出の除去)
