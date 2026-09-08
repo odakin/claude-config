@@ -61,6 +61,22 @@ JSPS は種目別の**書面審査における評定基準等** (審査委員に
   (崩れ・文字化け確認は公募要領上の義務)。
 - ログイン ID/パスワードは e-Rad と共通 (e-Rad 側で変更すると反映に 30 分〜1 時間)。
 
+### <a id="ai-read-route"></a>AI がログイン後の画面を読む経路 (2026-09-08 実測)
+
+科研費電子申請システムには API も CLI も無いので、AI の読み書きは browser 経由になる。実測で分かった構造:
+
+- **Claude in Chrome 拡張は本体ドメイン `www-kaken.jsps.go.jp` への navigate を prompt なしで拒否する**
+  (トップ `www-shinsei.jsps.go.jp` は許可 prompt が出て通る)。**Claude アプリ内蔵の Browser pane は通る**ので、driver は pane。
+  ログイン (e-Rad ID/PW) は pane を表示して人間が打つ。
+- ログイン後は **frameset** (frames[0] = `tmp`、frames[1] = `main`)。`get_page_text` / `read_page` は frameset を見て空を返すので、
+  読みは JS で `window.frames[1].document.body.innerText`、遷移は `frames[1].location = '/kaken1/shinsei/<画面>.do'`。
+  主な画面: `showMainMenu.do` (メニュー) / `processStatusList.do` (処理状況一覧 = 提出済み調書 + systemNo) / 各種 `searchList*.do` (応募開始)。
+- **popup で開く画面 (応募情報参照「参照」等) は `window.open('', name)` + hidden form の `target=name` で開く**。pane では popup が潰れて
+  「Error-99021 権限なし」になるが、同じ form を **`target='_self'` にして submit すれば同 frame に出る** (= 権限エラーは popup 不成立の副作用で、
+  データ権限の問題ではない)。読み終えたら `frames[1].history.back()`。
+- 応募情報参照のテキストは入力時の確認画面と同じ構造 (期間の空白の有無だけ違う) なので、確認画面用の parser がそのまま使える。
+- 合成 click は page script の copy handler を発火させて OS clipboard を書き換えることがある (pane が警告する) — 読み取りは JS の innerText で済ませ、click を減らす。
+
 ### <a id="keihi-csv-import"></a>経費明細の CSV 一括取込 (2026-08 実測)
 
 「研究経費とその必要性」画面の明細 (費目×年度×事項×金額の行群) は CSV 取込で一括投入できる。
