@@ -93,3 +93,11 @@ reject 後の改訂や 5 誌目の投稿準備で、 **土台にした版が共�
 3. **referee が名指しした文を grep する** — 過去 report の引用句 ("at rest in all stages" 等) が改訂版に原文のまま残っていないか機械照合。 残っていれば「直した」 認識が誤り (= 別の版を直した) か、 修正が取り込まれていない。
 
 **図の再現性** — 数値図は「本文の式 + caption のパラメータ」 から再計算して照合する (= [`scientific-computing.md #figure-vector-extraction`](scientific-computing.md#figure-vector-extraction))。 caption のパラメータで再現できない図は、 作図 code が別の式・別のパラメータを使っていた signal で、 referee に突かれる前に著者間で決着させる。
+
+## <a id="deferred-check-reserve"></a>「検証済みだが companion 送り」 の cross-check は本稿に断片を印字せず、 response letter の予備として持つ (2026-09-08)
+
+**Pattern**: 本稿の主張を支える cross-check (例: 別 sector の Ward–Takahashi 恒等式を 96 成分で機械検証) を、 その閉形式ごと companion に送って本文は「検証した、 詳細は Ref. [x]」 だけにすると、 referee は「検査可能な式が本稿に無い」 と突く。 このとき 4 手がある: (i) companion を先に (同時に) 公開して引用を checkable にする / (ii) 本稿は現状の正直な scope のままにし、 恒等式と検証 artifact を response letter の予備として手持ちにする (求められた時だけ付録化) / (iii) 主張を検証済み sector に絞る (真の主張を弱める) / (iv) 恒等式のうち印字済みの量だけで閉じる部分 (例: q = 0 の接触項) を印字する。
+
+**Rule**: (iv) は罠。 印字済み量だけで閉じる部分は多くの場合、 既に本文で示した別の結果の言い換え (例: q = 0 の LL 恒等式 = 誘導 potential が |e| であることの 2 階微分版 = matching が済んだ時点で自動) で、 referee には「自明部だけ印字して非自明部は次の論文」 が目立ち、 かえって「残りも出せ」 を誘う。 既定は (ii)、 companion が近ければ (i) を重ねる。 (ii) の条件 = 本文の文が「係数決定には使わない cross-check」 のように主張の重さを既に限定していること、 材料 (note + 機械検証 script) が即座に出せる状態にあること。
+
+起源 = 2026-09-08 private paper repo の第 2 ラウンド AI 査読 (F03/R02 = LL Ward–Takahashi identity)、 著者裁定「(ii) でいこう」。 sibling = [`paper-audit.md#claim-strength-three-tests`](paper-audit.md#claim-strength-three-tests) (言明の強さ)、 [`#defensive-revision`](#defensive-revision) (断言 → test framing)。
