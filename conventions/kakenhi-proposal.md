@@ -77,6 +77,30 @@ JSPS は種目別の**書面審査における評定基準等** (審査委員に
 - 応募情報参照のテキストは入力時の確認画面と同じ構造 (期間の空白の有無だけ違う) なので、確認画面用の parser がそのまま使える。
 - 合成 click は page script の copy handler を発火させて OS clipboard を書き換えることがある (pane が警告する) — 読み取りは JS の innerText で済ませ、click を減らす。
 
+### <a id="ai-write-route"></a>AI が応募情報を書く経路 (2026-09-08 実測、sandbox 調書で 3 画面の往復 + 参照読み戻し + 削除まで)
+
+読み経路 (上) の上に、**JS で frame 内 form に値を代入 → 画面の保存関数を呼ぶ** だけで入力が通る。`form_input` は frameset で ref が取れないので使わない。
+構造 (基盤研究(C) で実測、他種目は field 名が一部違う):
+
+- **新規 = 受付中種目一覧 `searchListKiban.do` → `onInputApplication('<事業ID>')` → 重複応募注意 → `checkMaking.do`** (= 研究計画調書管理、ここで systemNo が採番される)。
+  **再開 = `processStatusList.do` → `onUpdate(systemNo,'1',jigyoCd)`**。管理画面から各画面は `onInputApplication('01'|'03'|'04'|'06')`。
+- **入力 = `frames[1].document.shinsei_form.elements[name].value = v`**。select も value 代入で可。役割→種目のような連動 select は
+  `dispatchEvent(new Event('change'))` で **client-side に選択肢が入る** (種目リストは page script 内蔵、option の value = label 文字列。
+  SoT の表記と括弧の全角/半角が違うので、正規化して一致する option を選ぶ)。
+- **保存 = 画面の `onTransientSaveWithUpload()`** (一部の画面は引数付き = link の href をそのまま eval する)。中は `lockButton` + `setTimeout(500ms)` で submit
+  するので、**呼んだら 4 秒待ってから次の JS**。成功は本文の「一時保存が完了しました」で判定し、エラー語 (バイト以内 / 文字以内 / できません) も同時に grep。
+- **行の追加はすべてサーバ往復** (経費明細 `addMeisaiA()`〜`F()`、応募状況 `onAddOuboJokyo` / `onAddUkeireJokyo` / `onAddERadSonotaJokyo` / `onAddSonotaJokyo`)。
+  1 回ごとに待つ (連続呼びは lockButton で 2 回目以降が捨てられる)。入力済みの値は往復で保たれる。CSV 取込 (file input) と添付 upload は
+  **JS から file を置けない** = 明細は行追加 + 代入で代替 (行数分の往復、50 行で 3 分程度)、添付だけ人間の 1 操作。
+- 値の意味 (応募状況): `[0]` は本応募行 (期間全体額のみ入力、経費とエフォートは研究課題情報の研究組織から来る)、期間全体額 = `zentaigaku`、
+  相違点欄の「総額」= `ukeiregaku`、2027 年度経費 = `keihi`、相違点 = `riyu1`、所属役職 = `kikanYakusyoku`。e-Rad 外は 契約種類 0-4 / 国コード
+  (JPN → 「日本」に解決) / 通貨 JPY / 年月分離。合計 (再計算・エフォート合計) はサーバが埋めるので、保存後に読み戻して SoT の期待値と突合する。
+- **検証は sandbox で**: 提出済み調書はロックされるので、テストは別種目 (基盤研究(C) 等) の新規調書を作り → 入れて → 参照で読み戻し → parser →
+  `onDeleteConfirm(systemNo,'')` → `onDelete(systemNo)` で削除。本番の調書に試し書きしない。
+- 分担: **人間 = ログイン / 添付 upload / 分担者の追加 (検索 popup + 承諾) / 送信**、AI = それ以外の全画面 + 読み戻し照合。
+  driver は「値の正本 → 画面ごとの JS step 列」を決定的に出す script にし、AI は step を順に流すだけにする (= 値を頭から出さない)。
+  odakin の instance = `grant-applications/applications/2027-kakenhi-r9/sashimodoshi-2026-09-07/web-driver.py` (docstring が field 名の実測 ledger)。
+
 ### <a id="keihi-csv-import"></a>経費明細の CSV 一括取込 (2026-08 実測)
 
 「研究経費とその必要性」画面の明細 (費目×年度×事項×金額の行群) は CSV 取込で一括投入できる。
