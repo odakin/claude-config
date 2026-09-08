@@ -181,7 +181,9 @@ live (uncomment) な author markup (`\cl`/`\CL` 等) の leak 無し; compile �
 「引数付き command の差し替え」 として処理し、 旧式を `%DIFDELCMD` で comment out、 新式を無印で挿入する
 = **diff PDF が error 0 で組めるのに数式の変更が一切色で出ない** (silent miss、 文章の差分だけ見て
 「数式は変わっていない」 と誤読する)。 対処 = 基準版・現在版の **両側**で diff 前に wrapper を本物の環境へ
-展開する (balanced brace / `%` コメント / `\{` escape を扱う小さな展開器、 定義行は残して無害)。
+展開する (balanced brace / `%` コメント / `\{` escape を扱う小さな展開器、 定義行は残して無害。
+展開する macro 名も preamble から導出する = `\newcommand{\X}[1]{\begin{ENV}#1\end{ENV}}` 型と `\\` を含む
+0 引数 macro、 hardcode すると次の wrapper で再発する)。
 行区切りを包む macro (`\nn` = `\nonumber\\`) も同時に展開しないと coarse / whole markup で
 `Misplaced alignment tab` になり、 `off` (= 削除式が消える) へ落とす羽目になる。 実例 = 該当 private paper repo
 2026-09-08 (付録の一式の符号反転 `J_1+J_2` → `-(J_1+J_2)` が Overleaf 2 commit 間の diff で無印、
