@@ -622,7 +622,9 @@ resident runner は board に載った request しか起こさない。人間が
 5. **履歴は取り込まない**。cursor 初期化は「今」から。過去 message を request 化すると同じ依頼が二重に立つ。
 6. **「AI 社員」は bot (token) の数ではなく、宛先と persona の数**。役割は組織図 (部 = category、課 = channel、係 = persona) と board の宛先 identity (resident) × source project で表し、返事の名義は webhook の username で切り替える (課長が受け、係長が進捗、課長が受領)。bot = token は 1 体のまま増やさない。役割ごとに本物の bot を立てるのは、それが要る理由 (@mention / DM / 別 token の被害分離) が出た時で、組織図はそのまま出口だけ差し替える。人間側の入口は「役割の部屋に書く」だけで、`[project]` タグは上書き手段に退く。
 
-runner と bridge は独立に ON/OFF できる (bridge だけ ON = request が board に溜まり surface される、害なし)。instance は owner の private layer (poller script / config / cron wrapper)。
+runner と bridge は独立に ON/OFF できる (bridge だけ ON = request が board に溜まり surface される、害なし)。
+
+**実装 (層1 engine、config 駆動)**: [`scripts/discord-board-bridge.py`](../scripts/discord-board-bridge.py) (Discord ⇄ board の決定的 tick = cursor 取り込み / 課長 ack / 係長 進捗 / ✅ → accept、`--dry` / `--backfill-minutes` / `--setup-webhooks` / `--selftest`) + [`scripts/discord-org-build.py`](../scripts/discord-org-build.py) (組織図 YAML → category / channel / webhook)。Discord 側の機構 fact = [`discord-bot.md#webhook-personas`](discord-bot.md#webhook-personas) / [`#guild-creation-user-only`](discord-bot.md#guild-creation-user-only)。instance (config / 組織図 / ids / cron wrapper / shim) は owner の private layer。初回 live で踏んだ 2 点: (i) 初回 tick より前の投稿は「履歴」として捨てられる → `--backfill-minutes` で直近だけ拾う (ii) board schema は accept にも `references ≥ 1` を要求 → ✅ を付けた message の jump link を証跡に添える。
 
 ### 発火条件と layer
 

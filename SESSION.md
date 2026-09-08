@@ -2,6 +2,15 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 現在地 — Discord ⇄ board bridge engine + 組織図 builder（2026-09-08）
+
+今回の整備は終了点。 再開時は下記正本を読む (owner の instance / 経緯は private layer)。
+
+- 新規 script 2 本 (config 駆動、 stdlib + PyYAML、 `--selftest` 内蔵): `scripts/discord-board-bridge.py` (chat message → board request、 課長 ack / 係長 進捗 / ✅ → accept、 `--dry` / `--backfill-minutes` / `--setup-webhooks`) + `scripts/discord-org-build.py` (組織図 YAML → category / channel / webhook を冪等生成)。 `scripts/README.md` は generate-tree で再生成。
+- 一般則: `multi-session-coordination.md#chat-board-bridge` = 6 原則 + 実装 pointer + 初回 live で踏んだ 2 点 (初回 tick 前の投稿は履歴扱い / accept にも references ≥ 1)。 原則 6 を「bot (token) は 1、 役割は組織図 + persona」 に改訂。
+- Discord 機構 fact: `discord-bot.md#webhook-personas` (username 切替 / Manage Webhooks は標準セット外 / reply 不可・reaction 可 / topic 禁止語 filter) + `#guild-creation-user-only` (`POST /guilds` は bot 不可 20001、 器は人間が作る = ladder で user 依頼 > 画面 drive の実例)。
+- 起点は private layer の記事議論 (川辺健太郎氏の「Discord 上の会社」、 朝日 2026-09-08)。 instance (組織図・人名・ids・config) は公開しない。
+
 ## 現在地 — GAROON script 経路 + 配線 gap 規律（2026-09-07）
 
 今回の整備は終了点。 再開時は下記正本を読む (個別案件の状態はここへ転記しない)。

@@ -34,6 +34,8 @@
 - **[count-malformed-tool-call-events.py](count-malformed-tool-call-events.py)** — local transcript から malformed-tool-call bug の genuine event を集計（synthetic 文言の user entry のみ = doc/議論 echo を除外〔naive substring は 19x overcount〕、 month×model×client-version 内訳 + model 別 rate、 upstream issue への occurrence 報告用 data point 生成、 read-only、 --selftest 内蔵、 conventions/tool-call-robustness.md#root-cause）
 - **[diff-form-docx.py](diff-form-docx.py)** — 様式 docx の記入ミスを blank diff で検出（ラベル欄上書き/見出し消失=HARD・空の箇条書き/全空 labeled 列=surface、xlsx 版の docx 対、--selftest 内蔵、office-automation.md#diff-form-docx-detection）
 - **[diff-form-xlsx.py](diff-form-xlsx.py)** — 様式 xlsx の label 上書き (= 様式改変) を雛形 diff で検出（office-automation.md#diff-form-xlsx-detection）
+- **[discord-board-bridge.py](discord-board-bridge.py)** — Discord ⇄ agent-board bridge engine (決定的 tick、 LLM 不使用、 config 駆動)。
+- **[discord-org-build.py](discord-org-build.py)** — 組織図 YAML (部 → 課 → 係 + persona 名) から Discord server の器を冪等に作る (stdlib + PyYAML)。
 - **[discord-post.py](discord-post.py)** — canonical Discord Bot API poster (stdlib only).
 - **[docx-to-pdf.sh](docx-to-pdf.sh)** — Word docx/doc → PDF 変換（macOS 既定 Word 忠実版 → --pages で Pages → 非 macOS LibreOffice、Word 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避、office-automation.md#docx-to-pdf-pages）
 - **[docx_decl_patch.py](docx_decl_patch.py)** — python-docx の Document.save() を auto-patch し XML 宣言を Word 形式(double-quote+CRLF)で書く（厳格 Word の「破損」回避、 save 時 source 修正・lazy import hook、 office-automation.md#docx-checkbox-content-control）

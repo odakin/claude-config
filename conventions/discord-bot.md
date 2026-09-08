@@ -323,6 +323,23 @@ sys.exit(subprocess.call(args))
 - ledger に何を書くかは personal layer own preference (= ledger format は text/YAML どれでも snowflake が grep できれば OK)
 - 「intake で encode する原則」 (= 「読んだ」 を text に書く discipline) は inbox / email surface 全般に共通する設計指針
 
+## <a id="webhook-personas"></a>Webhook persona: bot 1 体で複数の「社員」 を演じる (2026-09-08)
+
+役割ごとに bot (application + token) を立てると、 token・招待・権限が役割数だけ増える。 **channel に webhook を 1 本作り、 execute 時に `username` (と `avatar_url`) を message ごとに切り替える**と、 読み手には別々の名前の社員が返事しているように見える。 組織図 (部 = category、 課 = channel、 係 = persona) を YAML に書き、 [`scripts/discord-org-build.py`](../scripts/discord-org-build.py) が category / channel / webhook を冪等に生成する。 使い分けと限界:
+
+- **要る権限**: webhook 作成は `MANAGE_WEBHOOKS` (0x20000000)。 標準の posting セット (invite `permissions=2248473465835089`) には**含まれない** → その server だけ Manage Webhooks を足して再認証 (`2248474002706001`)。 401/403 `Missing Permissions` (50013) はこれ。
+- **webhook message は reply (`message_reference`) が使えない** → 本文だけで文脈が分かる形 (題・伝票 id を含める) にする。 逆に webhook message への **reaction は bot が読める** (`GET /channels/{c}/messages/{m}/reactions/{emoji}`) ので、 ✅ を人間の受領信号に使える。
+- persona はメンバーではない (= @mention 不可、 DM 不可、 メンバー一覧に出ない)。 それが要る役割だけ本物の bot に昇格する (組織図はそのまま、 出口の token を差し替える)。
+- 上限: webhook は channel あたり 15 本。 1 channel 1 webhook + username 切替なら実質無制限。
+- webhook token = その channel への投稿権そのもの。 bot token と同じ扱い (git-crypt 経路、 chat / 平文 repo に貼らない、 file は 0600)。
+- channel topic には**禁止語 filter** がある (`50035 CHANNEL_TOPIC_INVALID: Field contains at least one word that is not allowed`)。 どの語かは返らない → 短く言い換える。
+
+instance (組織図 YAML / ids / 人名) は owner の private layer。 一般則の側 = [`multi-session-coordination.md#chat-board-bridge`](multi-session-coordination.md#chat-board-bridge) 原則 6。
+
+## <a id="guild-creation-user-only"></a>Bot は server (guild) を作れない = 器は人間が作る
+
+`POST /guilds` は bot token では **`20001 Bots cannot use this endpoint`** (2026-09-08 実測、 在席 5 guild の bot でも不可 = 「10 guild 未満なら可」 は効かない)。 手順は **user が UI で server を作る → invite URL で bot を入れる**。 その後は invite 時の `MANAGE_CHANNELS` で category / channel / webhook (要 Manage Webhooks) を bot が全部作れる。 screen drive (browser 拡張 / computer-use) で代行しようとしない = user の 1 分の手作業が最短 (machine-route-first.md の ladder で「user 依頼」 が「画面 drive」 の上にある実例)。
+
 ## 関連
 
 - `identity-in-config.md`: Discord user ID 等を config に書くときの PII レイヤ判定
