@@ -620,7 +620,7 @@ resident runner は board に載った request しか起こさない。人間が
 3. **起票できる source は列挙**。bridge の config に owner が ordinary と分類した project だけを書く (= source-classification gate を config で先払い)。未登録 project は起票せず、その旨だけ返す。restricted source は bridge 経由で起票しない。
 4. **返信先も列挙**。chat への書込は外部発信なので、config に列挙した channel (自分宛て DM が最小) 以外へは書かない。列挙 = owner の standing OK。
 5. **履歴は取り込まない**。cursor 初期化は「今」から。過去 message を request 化すると同じ依頼が二重に立つ。
-6. **「AI 社員」は bot の数ではなく宛先の数**。役割ごとの bot を増やさず、board の宛先 identity (resident) × source project で表す。bot 1 体・channel 1 本で足りる。
+6. **「AI 社員」は bot (token) の数ではなく、宛先と persona の数**。役割は組織図 (部 = category、課 = channel、係 = persona) と board の宛先 identity (resident) × source project で表し、返事の名義は webhook の username で切り替える (課長が受け、係長が進捗、課長が受領)。bot = token は 1 体のまま増やさない。役割ごとに本物の bot を立てるのは、それが要る理由 (@mention / DM / 別 token の被害分離) が出た時で、組織図はそのまま出口だけ差し替える。人間側の入口は「役割の部屋に書く」だけで、`[project]` タグは上書き手段に退く。
 
 runner と bridge は独立に ON/OFF できる (bridge だけ ON = request が board に溜まり surface される、害なし)。instance は owner の private layer (poller script / config / cron wrapper)。
 
