@@ -92,6 +92,12 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 - `--math-markup=off`: 式中の add/del は色付けしない（式の変更は新版として出るが色は付かない）。数式の add/del markup はコンパイルを壊しやすいので既定 off にし、文章・構造・コメント削除の差分を確実に出す方を取る。
 - **「投稿用でなく差分レビュー用」と割り切る**: markup 除去・図 placeholder・数式色なしは*意図的な簡略化*。
 
+**共著 review 中の原稿は「清掃版どうし」で diff する**: 着色 (`\red{...}`) と著者間問答が残っていると、 latexdiff では **着色の差が実質の差を埋める**。
+`ai-collaboration/scripts/review-markup-clean.py` を **基準版と現在版の両方に当ててから** latexdiff を回すと、 実質の変更だけが見える
+(投稿前清掃と同じ script を使うので「読み合わせで見えていたもの」 と「投稿するもの」 がずれない)。
+基準版の選び方 = 信用できない改稿 pass の**直前の commit** (= 著者と共著者の最後の合意点)。 再生成は 1 コマンドの script にして live を変えるたびに回す。
+正本 = [`edit-intent-record.md#cleaned-base-diff`](../../ai-collaboration/conventions/edit-intent-record.md#cleaned-base-diff)。
+
 **別解（latexdiff のコンパイル問題を完全回避）**: Overleaf 連携の原稿なら **Overleaf の History 比較**（baseline 版 ↔ 現在）が確実で、pre/post 処理が要らず数式まで色分けされる。
 
 > **標準ケースは engine script で機械化済**: [`scripts/latexdiff-review-snapshot.sh`](../scripts/latexdiff-review-snapshot.sh) が「baseline 取り出し → markup unwrap (`--strip-cmd`/`--strip-color`) → latexdiff → compile cycle → snapshot 命名 ([`expensive-intermediate-artifacts.md#snapshot-artifact-naming`](expensive-intermediate-artifacts.md#snapshot-artifact-naming) 準拠、 head 側は main tex を最後に触った commit に pin) → 同 baseline 旧版の supersede 削除 → commit+push+open」 を 1 コマンドで回す (= 共著レビュー中に相手の push を取り込んで diff を更新する loop 用。 behind / dirty guard 内蔵、 手順詳細 = script docstring が SoT)。 ⚠️ **「既定」の使い分け**: engine の既定 (`--math-markup=1` + `VERBATIMENV=comment` + lualatex) は**単一 main file・comment 環境・tikz 図なしの素直な原稿**で実証した組合せ。 上の症状表に当たる複雑原稿 (tikz / natbib / 自作数式環境マクロ) では**本節の保守的既定** (`--math-markup=off` / `--disable-citation-markup` / `PICTUREENV` 等) を `--latexdiff-args` で注入する — 2 つの既定は矛盾でなく原稿クラス別。 **原稿固有値 (= baseline commit・strip 対象 markup・engine) は各 repo の CLAUDE.md に呼び出し 1 行として置き、 手法の正本 (本節 + engine) を参照する** (= SoT は上層 1 つ、下層から参照)。 engine で吸収できない exotic な pre/post 処理 (マクロ展開・図 placeholder 等) が要る原稿のみ、 従来通り repo の `latexdiff/` 配下に固有スクリプトを置く。
@@ -298,6 +304,35 @@ grep -B1 -A2 "your-marker-keyword" /tmp/render.txt
 複数 instance がある場合は **全部** 読む (= 1 instance だけ verify して OK と結論する trap も同 class)。
 
 **一般化 (= 同 class の bug が出やすい構造)**: figure caption macro / table header macro / footnote wrapper macro / theorem environment / itemize/enumerate label customization / hyperref anchor macro 等、 「macro 側で fixed prose を author し、 argument で variable 部分のみ受ける」 全ての構造に同警戒。 source 静的解析 (grep / lint) では基本的に expose 不能、 render が唯一の検証手段。
+
+## <a id="maketitle-handset-author-block"></a>手組み author block と `\maketitle` を併用したら題扉の余白を詰める
+
+物理原稿では、 所属・ORCID・脚注 email を細かく組むために `\author` を使わず **`\maketitle` の後ろに `center` 環境で著者ブロックを手組み**することがある。
+このとき標準 `article` の `\@maketitle` は **空の author / date 枠のぶんだけ余白を出す** (`1.5em` + 空 tabular + `1em` + 空 date + `1.5em`)。
+題扉が 1 頁に収まらない、 abstract が脚注に押し付けられる、 という症状の第一容疑者。
+
+```latex
+\makeatletter
+\def\@maketitle{%
+  \newpage \null
+  \vskip -1em%            (標準は 2em)
+  {\centering \LARGE \@title \par}%
+  \vskip 1em}%            (標準は 1.5em + 空 author + 1em + 空 date + 1.5em)
+\makeatother
+```
+
+- ⚠️ **`center` 環境でなく `\centering`**。 `center` は前後に `\addvspace` を出すので、 直前の負の `\vskip` が打ち消される (`-1em` も `-3em` も同じ位置になり「効かない」 と誤診する)。
+- 自動日付を消すのは `\date{}` を `\maketitle` の前に置くだけ (投稿原稿の清書項目。 `\maketitle` 自体は動かさない)。
+- **効果は目視でなく座標で測る** — PyMuPDF で 1 頁目の text block の上端・下端を出し、 本文頁の text top と比べる:
+
+```python
+import fitz
+p = fitz.open("paper.pdf")[0]
+for y0, y1, s in sorted((b[1], b[3], b[4][:40]) for b in p.get_text("blocks") if b[4].strip()):
+    print(round(y0), round(y1), s)
+```
+
+  題名の上端が本文頁の text top (例: 109 pt) より上に出たら詰めすぎ。 詰めた結果 1 頁目に本文が流れ込むのが嫌なら abstract の後に `\newpage` (目次を挟むなら `\newpage\tableofcontents\newpage`)。
 
 ## <a id="compilers"></a>コンパイラ
 
