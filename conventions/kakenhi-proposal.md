@@ -433,9 +433,10 @@ Web 入力のテキスト欄 (経費の必要性等) に**波ダッシュ「〜�
 公募研究の確認用 PDF に明細行が無い [#confirmation-pdf-detail-rows](#confirmation-pdf-detail-rows) /
 相違点欄の prefix 照合は画面の現行文を SoT に写してからでないと偽 ✗ になる (SoT に推測 prefix を書かない)。
 
-**次の段階 = AI が打つ**: ログイン (SSO / パスワード) だけ人間、以降の画面操作は browser 自動化
-(claude-in-chrome の `form_input` / `find` + 転記シートの値) で AI が入力し、確認画面テキストを
-自分で読んで SoT と突合する。人間の役割は「ログインして席を外す → 送信ボタン」の 2 点に縮む。
+**次の段階 = AI が打つ** (同日夜に sandbox で実証済): ログインだけ人間、以降の画面は Browser pane + JS で AI が
+入力し ([#ai-write-route](#ai-write-route))、参照画面を自分で読んで SoT と突合する ([#ai-read-route](#ai-read-route))。
+人間の役割は「ログイン → 添付 upload → (分担者追加) → 送信ボタン」に縮む。claude-in-chrome の `form_input` は
+frameset で ref が取れず、本体ドメインも拒否されるので使わない ([web-tools.md#browser-pane-frameset-popups](web-tools.md#browser-pane-frameset-popups))。
 
 ## <a id="koubo-kenkyu-mechanics"></a>公募研究 (学術変革領域研究) の実務
 

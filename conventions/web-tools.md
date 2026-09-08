@@ -221,6 +221,14 @@ backend が `permission_required` を return しても、 **sidepanel の prompt
 - profile を変える / Chrome / Brave / Chromium を切り替える
 - バグ報告 (上記 GitHub issue にコメントで repro 情報を添える)
 
+### prompt すら出ずに拒否される domain がある (= 拡張では詰み、 Browser pane に切替)
+
+`navigate` が **"Navigation to this domain is not allowed"** を即返し、 sidepanel に Permission required dialog が出ない domain がある
+(2026-09-08 実測: 科研費電子申請システムの本体 `www-kaken.jsps.go.jp`。 トップの `www-shinsei.jsps.go.jp` は prompt が出て通る)。
+拡張の設定でサイト許可を足す経路もあるが、 **Claude Code 内蔵の Browser pane は別 surface で allow-list も別** なので、 そちらで通るなら
+切替が最短 (login は pane を表示して user が打つ)。 frameset / popup 型の古い web app は pane + JS の方が扱いやすい
+([#browser-pane-frameset-popups](#browser-pane-frameset-popups))。
+
 ### MCP tab group は user の手動タブと別
 
 Claude in Chrome MCP は **自分専用の tab group** で動く。 user が手動で開いたタブと MCP が操作するタブは別管理:
@@ -257,6 +265,26 @@ Claude in Chrome MCP は **自分専用の tab group** で動く。 user が手�
 
 - broker UI の domain-level block: §「ロックイン済 web app からのテーブル data 取得は scrape より export を優先」 末尾の「Browser MCP の制約」 参照
 - 個人の母艦ブラウザ選定 (Brave 等) は personal layer (個人 dev-environment) で書く
+
+## <a id="browser-pane-frameset-popups"></a>Claude Code 内蔵 Browser pane で古い web app (frameset / popup / 連動 select) を読み書きする (2026-09-08 実測)
+
+`mcp__Claude_Browser__*` の `get_page_text` / `read_page` / `find` / `form_input` は **frameset の外側の document しか見ない** ので、
+frameset の app では空文字と ref 無しが返る。 読み書きは `javascript_tool` で frame の document を直接触る:
+
+- **読む** = `window.frames[i].document.body.innerText` (i は frameset の順、 main は大抵 1)。 遷移 = `frames[i].location.href = '/path'`。
+- **書く** = `frames[i].document.<form>.elements[name].value = v` (select も value 代入で可) → 画面が持つ保存関数 (`frames[i].onXxx()`) を呼ぶ。
+  page script の関数は frame の window に生えている (`Object.keys(frames[i]).filter(k=>typeof frames[i][k]==='function')` で一覧)。
+- **連動 select** (親の change で子の選択肢が入る) は `e.dispatchEvent(new frames[i].Event('change',{bubbles:true}))` — **Event は frame の window のもの**を使う。
+- **popup** (`window.open('',name)` + hidden form `target=name` で開く画面) は pane で潰れて権限エラー等の副作用が出る →
+  同じ form を **`target='_self'` にして submit** すれば同 frame に出る (権限エラーは popup 不成立の副作用で、 データ権限の問題ではない)。
+- **lockButton + setTimeout 型の submit** (古い業務 app に多い) は、 関数を呼んだ後 **3〜4 秒待ってから次の JS**。 連続呼びは 2 回目以降が捨てられる。
+  行追加・再計算がサーバ往復なら 1 回ごとに待つ。
+- **file input は JS から置けない** (CSV 取込 / 添付 upload) → 人間の 1 操作。 行追加 + 代入で代替できるなら AI 側で済ませる。
+- **認証情報は user が pane を表示して打つ** (Claude は打たない)。 pane が hidden だと user は打てないので「表示して」 と頼む。
+- **合成 click は page の copy handler を発火させて OS clipboard を書き換える**ことがある (pane が警告する) — 読みは innerText、 遷移は location / 関数呼びで済ませ click を減らす。
+- **本番 record に試し書きしない** = 検証は sandbox (別種目の新規 draft 等) で往復 → 読み戻し → 削除まで通してから本番。
+
+実例 (科研費電子申請システムの読み・書き経路 + driver 設計) = [kakenhi-proposal.md#ai-read-route](kakenhi-proposal.md#ai-read-route) / [#ai-write-route](kakenhi-proposal.md#ai-write-route)。
 
 ## <a id="browser-download-automation"></a>**Chrome 拡張**からの file download は user gesture 必須 (= scripted download の silent block)
 
