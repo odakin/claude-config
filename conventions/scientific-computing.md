@@ -556,7 +556,7 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 
 **Pattern**: 場 $\phi$ が inflaton $\chi$ に $e^{-\gamma\chi/M_P}(\partial\phi)^2$ 型 (dilaton / conformal 因子) で結合するとき、 正準場 $\tilde\phi=e^{-\gamma\chi/2M_P}\phi$ の有効質量は $m^2=-(\gamma/2M_P)\Box\chi-(\gamma^2/4M_P^2)(\partial\chi)^2$ で、 slow roll の pivot では $-0.1\gamma H^2$ と小さいが、 $\chi$ が転がるほど大きくなり (末期は $-(2\gamma+0.5\gamma^2)H_\text{end}^2$)、 零モードは roll 全体で **Weyl 因子 $e^{\gamma\Delta\chi/2M_P}$** だけ伸びる ($\Delta\chi\simeq9M_P$ なら $e^{4.4\gamma}$: $\gamma=0.3$ で ×4、 0.7 で ×27、 1 で ×100)。 pivot の値だけ見て「軽い spectator、 揺らぎは数倍」 と書くと $\gamma\gtrsim0.5$ で誤る (起源事例 2026-09、 private paper repo: 表の最速 benchmark 行が spectator でなかったことを盲検が指摘、 著者側 script で零モードを積分すると Weyl 因子と 1 % で一致)。
 
-**Check**: (a) 有効質量を pivot と末期の両方で書く。 (b) 零モードを horizon exit から末期まで積分するか、 Weyl 因子で見積もる。 (c) 伸びた先の場の値を、 自己結合の符号 (running 込み) ごとに極小 / runaway で分類し、 末期の励起の質量を daughter 崩壊の運動学と比べる。 (d) 「spectator」 と呼べる結合の範囲を符号込みで明記する (質量項の conformal 因子は奇なので負側は別の上限: [`paper-audit.md#odd-coupling-sign-before-pricing`](paper-audit.md#odd-coupling-sign-before-pricing))。
+**Check**: (a) 有効質量を pivot と末期の両方で書く。 (b) 零モードを horizon exit から末期まで積分するか、 Weyl 因子で見積もる (道具 = ai-collaboration [`scripts/dilaton-spectator-growth.py`](../../ai-collaboration/scripts/dilaton-spectator-growth.py): 厳密背景 + 零モード積分 + Weyl 因子 + 末期の質量 + λ の符号別の落ち着き先、 `--selftest` = 成長 ≈ Weyl 因子)。 (c) 伸びた先の場の値を、 自己結合の符号 (running 込み) ごとに極小 / runaway で分類し、 末期の励起の質量を daughter 崩壊の運動学と比べる。 (d) 「spectator」 と呼べる結合の範囲を符号込みで明記する (質量項の conformal 因子は奇なので負側は別の上限: [`paper-audit.md#odd-coupling-sign-before-pricing`](paper-audit.md#odd-coupling-sign-before-pricing))。
 
 ## <a id="onset-is-eps-H-one"></a>「振動開始」 は $\epsilon_H=1$ の厳密背景で定義する — $\epsilon_V=1$ の外挿は $\rho_\text{end}$ を 2 倍過大に見積もる (2026-09)
 

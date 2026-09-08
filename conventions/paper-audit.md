@@ -362,6 +362,14 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Check** (撤回を本文に入れる turn で): (a) 撤回が覆う parameter 領域と覆わない領域を書き分ける (「8 まで完了しない」 は「10 で完了しない」 を含意しない)。 (b) 覆わない領域を**同じ anchor script で**走査してから「模型外 / beyond scope / we do not follow」 と書く — 安価な scan があるのに scope 宣言で閉じるのは cell 埋め。 (c) 生き残った regime は消さずに置き、 その regime が模型の他の部分に課す条件 (値札) を数字で付ける ([#odd-coupling-sign-before-pricing](#odd-coupling-sign-before-pricing))。 (d) reviewer の finding 採用 = 前提検証 pass ([`physics-verification-cycle.md`](../../ai-collaboration/conventions/physics-verification-cycle.md#external-ai-referee-premise-verification)) の対として、 採用後に advocate pass「退けた主張はどこなら生きるか」 を**1 回だけ**、 数字で回す (advocate の反復は逆向きの ratchet)。
 
+## <a id="nested-assumption-levels"></a>「A か B か」 の構成論争は入れ子にする — 一般 parametrization で走査し、 仮定を 1 つ足すごとに決まる関係と予言点を示す (2026-09)
+
+**Pattern**: 模型の「構成」 に複数の読み (例: potential の指数因子が Weyl 因子由来か、 手で入れた指数か) があり、 どちらを採るかで自由 parameter の数が変わるとき、 「A に決めろ」 と共著者に迫るか、 曖昧なまま独立 parameter として走査するかの二択になりがち。 前者は系譜 (前作の思想) とぶつかり、 後者は模型が持つ**予言点**を捨てる。 起源事例 (2026-09、 private paper repo): 前作 3 本が構成を決めていなかった (1 本は構造的に A、 1 本は現象論的に B、 1 本は単一 parameter で A 寄り) ため、 現行稿は「言葉は A、 表は B」 の混在で、 盲検が「どちらか書け」 と指摘した。
+
+**Fix**: 入れ子で書く。 (1) **一般レベル** = 前作と同じ現象論 (parameter は独立、 表・図の走査はここ) → (2) **構成レベル** = 1 つの仮定 (例: Jordan potential は多項式 → 指数因子は Weyl 因子 F^{-2}) で 1 つの関係 (例: γ_J = γ_χ/2) が決まる → (3) **最も制約された特別な場合** (例: universal coupling = 元の理論の Lagrangian そのもの) で残りも決まり、 parameter が消えて**予言点**になる。 各段で「仮定 1 つにつき関係 1 つ」 を明示し、 予言点は表・図に 1 行 / 1 点として**主役**に置く。 前作の自由さを否定せず、 「この scenario ならここまで決まる」 と読める。 共著者への問いは「A に決めてよいか」 でなく「この入れ子でよいか」 になり、 軽くなる。
+
+**Check**: (a) 各レベルの仮定と、 それが決める関係を 1 対 1 で書けるか (書けないなら段が混ざっている)。 (b) 一般レベルの「独立 parameter」 が暗に何を許しているかを 1 文で言う (例: 「Jordan potential が自前の χ 依存を持つことを許す」 = Weyl 因子自体は外せない)。 (c) 予言点の数値は同じ fixed-point 機械で出し、 表の他の行と同じ精度で置く。 (d) 参照行 (瞬時再加熱など、 どの history も超えない値) は「上限」 と呼び、 未計算の regime の代表にしない ([#threshold-is-not-regime-onset](#threshold-is-not-regime-onset) (c))。 (e) 別機構 (例: 1-loop で指数を生成する appendix) が同じ関係に落ちる条件 (質量が Weyl 因子で走る) と落ちない条件を 1 文で添える。
+
 ## <a id="odd-coupling-sign-before-pricing"></a>regime に値札を付ける前に、 結合の符号に奇な量と偶な量を仕分ける (2026-09)
 
 **Pattern**: regime を定める効果 (共鳴の成長 ∝ γ²) は結合の符号に偶、 その regime の値札 (inflation 中の質量項 ∝ γ) は奇、 という組合せで、 片方の符号だけで値札を書くと、 反対符号では売りになるものを「代償」 と報告する。 起源事例 (2026-09、 同上): 結合 ≳ 10 の共鳴 regime の値札を「Hubble 級 tachyonic Higgs」 と書いたが、 質量項は γ に奇で、 負符号では同じ大きさの**正**質量 = 高 scale inflation で電弱真空を守る標準機構そのもの。 原稿は符号を固定していなかった。 さらに「Higgs 4 点結合が 10¹⁴ GeV で負」 は top 質量の誤差内で決まらない (絶対安定は 1–2σ 先) ので、 値札の 2 軸目も判決でなく依存関係として書く。
