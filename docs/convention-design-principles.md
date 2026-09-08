@@ -64,7 +64,7 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 - **write-time discipline**: 新しい fact を文書に書く瞬間に「どの行の正本に属するか」を先に決める。audit-time の後片付けに回すと、片付く前に重複が複製される。
 - scan 可能 format（md/yaml）の fact には従来どおり registry + 検出器が有効。序列表は**検出器の射程外を埋める手動宣言層**であり、置き換えではない（表の脚注に「この表が防御の本体」と射程を明記する）。
 
-適用事例: 物理研究リポ einstein-cartan — 規約 fact（Fourier 規約・loop 符号則・1PI↔amplitude 写像など）が複数の tex note に必然的に再掲される構造に対し、リポ CLAUDE.md に 5 行の序列表を宣言（2026-06-12）。導入動機は、誤推定 1 個が 3 つの note に伝搬した事故。
+適用事例: 物理研究リポ (研究 LaTeX project) — 規約 fact（Fourier 規約・loop 符号則・1PI↔amplitude 写像など）が複数の tex note に必然的に再掲される構造に対し、リポ CLAUDE.md に 5 行の序列表を宣言（2026-06-12）。導入動機は、誤推定 1 個が 3 つの note に伝搬した事故。
 
 ### <a id="sot-declaration-collision-sweep"></a>2.2 正本の宣言・引っ越しは「衝突宣言 sweep」とワンセット
 

@@ -10,7 +10,7 @@
 #
 #   2026-05-26 私 (Claude) session が NHWG43 一連の作業で:
 #     - 3 mail 送信、 ~10 file 編集 across 3 repos (email-office /
-#       research-collab / einstein-cartan) を 1 session で実施
+#       research-collab / 研究 LaTeX project) を 1 session で実施
 #     - **commit を 1 回も打たなかった**。 user の「送って記録」 指示で
 #       「記録 = yaml file 編集」 と等式化、 commit + push まで拡張せず
 #     - user の別 session が WT dirty を発見 → 親切に commit + push
