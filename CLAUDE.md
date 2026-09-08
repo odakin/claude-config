@@ -67,7 +67,7 @@ claude-config/
 │   ├── japanese-email-honorifics.md        # 日本語メールで敬称 (様 / 皆様 / さん) を書くとき + 相手の文面を引用・要約して「ご/お」付き名詞を自分の文に持ち込むとき
 │   ├── jma-obsdl-download.md               # 気象庁の過去観測データ (時別値・日別値等) をスクリプトで一括取得したいとき
 │   ├── jps-talk-submission.md              # 日本物理学会 (JPS) 年次大会の一般講演を申し込むとき
-│   ├── kakenhi-proposal.md                 # 科研費の研究計画調書 (基盤・挑戦的研究・若手等) を書く/直す/Web 入力するとき
+│   ├── kakenhi-proposal.md                 # 科研費の研究計画調書 (基盤・挑戦的研究・若手等) を書く/直す/Web 入力するとき + 機関事務から差し戻しを受けたとき + 複数種目を同時期に出すとき
 │   ├── latex.md                            # LaTeX を含むリポで作業するとき
 │   ├── launchd-cloudstorage-tcc.md         # launchd agent が ~/Library/CloudStorage/ 配下を読む script を書く前
 │   ├── machine-route-first.md              # 外部 service / アプリを操作・データ取得する経路を選ぶとき (画面 drive を検討し始めた瞬間)
@@ -98,7 +98,7 @@ claude-config/
 │   ├── paste-destined-plain-text.md        # Claude が書いた文面 / コマンドを user が手で貼り付けて実行・投稿する workflow を設計・実行するとき (= 貼り先が plain text 入力欄でも terminal でも)
 │   ├── peer-review-workflow.md             # referee・審査委員として他者の paper / 申請書を評価するとき
 │   ├── personal-skills.md                  # personal skill (~/.claude/skills/) を規律の発火面として使うとき
-│   ├── photographed-document-transcription.md # スキャナを通していない「撮っただけ」 の紙 (手書き答案・ノート・書類) を大量にモデルで読んで構造化するとき + その読み取りを複数 session に分担するとき + 撮影した印刷資料から引用を起こして文章の根拠にするとき
+│   ├── photographed-document-transcription.md # スキャナを通していない「撮っただけ」 の紙 (手書き答案・ノート・書類) を大量にモデルで読んで構造化するとき + その読み取りを複数 session に分担するとき + 撮影した印刷資料から引用を起こして文章の根拠にするとき + 自分の文書に他人が手書きで朱を入れて返してきた PDF (差し戻し・添削・紙の査読票) を読むとき
 │   ├── physics-notes.md                    # 物理・数理ノートを書くとき
 │   ├── physics-verification-cycle.md       # 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
 │   ├── preview.md                          # preview / dev server 稼働中に user へ動作確認を依頼するとき
