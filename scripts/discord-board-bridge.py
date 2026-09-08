@@ -489,14 +489,14 @@ def setup_webhooks(args) -> int:
 # ---------- selftest ----------
 
 def selftest() -> int:
-    projects = {"odakin-prefs": "odakin/odakin-prefs", "quantum-mechanics-textbook": None}
+    projects = {"proj-a": "owner/proj-a", "proj-b": None}
     # message parsing
-    r = parse_request("<@123> [quantum-mechanics-textbook] 図 1.1 候補を 3 案\n各案 1 段落で。", "123", projects, "odakin-prefs")
-    assert r == {"project": "quantum-mechanics-textbook", "title": "図 1.1 候補を 3 案", "acceptance": "各案 1 段落で。"}, r
-    r = parse_request("README の誤字を直す", "123", projects, "odakin-prefs")
-    assert r["project"] == "odakin-prefs" and r["acceptance"] == "README の誤字を直す", r   # body 無し → 題 = 完了条件
-    assert parse_request("[nope] x", "123", projects, "odakin-prefs") is None            # 未登録 project = 起票しない
-    assert parse_request("<@123>", "123", projects, "odakin-prefs") is None              # mention だけ
+    r = parse_request("<@123> [proj-b] 図 1.1 候補を 3 案\n各案 1 段落で。", "123", projects, "proj-a")
+    assert r == {"project": "proj-b", "title": "図 1.1 候補を 3 案", "acceptance": "各案 1 段落で。"}, r
+    r = parse_request("README の誤字を直す", "123", projects, "proj-a")
+    assert r["project"] == "proj-a" and r["acceptance"] == "README の誤字を直す", r   # body 無し → 題 = 完了条件
+    assert parse_request("[nope] x", "123", projects, "proj-a") is None            # 未登録 project = 起票しない
+    assert parse_request("<@123>", "123", projects, "proj-a") is None              # mention だけ
     # candidate filter
     me = {"author": {"id": "1", "bot": False}, "content": "<@123> hi"}
     assert is_candidate(me, ["1"], "123", True) and not is_candidate(me, ["2"], "123", True)
@@ -510,15 +510,15 @@ def selftest() -> int:
     ch = {}; assert init_cursor(ch, "400", floor="500") and ch["cursor"] == "400"      # latest の方が古ければ latest (= 何も取り込まない)
     assert snowflake_at(dt.datetime(2015, 1, 1, tzinfo=dt.timezone.utc)) == "0" and int(snowflake_at(dt.datetime(2026, 9, 8, tzinfo=dt.timezone.utc))) > 1546000000000000000
     # status replies
-    row = {"status": "submitted", "request_id": "r1", "submission": {"event_id": "s1", "summary": "done", "deliverables": ["odakin-prefs/x.md"]}}
+    row = {"status": "submitted", "request_id": "r1", "submission": {"event_id": "s1", "summary": "done", "deliverables": ["proj-a/x.md"]}}
     t = status_reply(row, "working")
-    assert t and "📤" in t and "done" in t and "odakin-prefs/x.md" in t and "r1" in t, t
+    assert t and "📤" in t and "done" in t and "proj-a/x.md" in t and "r1" in t, t
     assert status_reply(row, "submitted") is None                                       # 変化なし = 沈黙
     assert status_reply({"status": "requested"}, None) is None                            # 起票直後は ack が担う
     assert "⛔" in status_reply({"status": "blocked", "request_id": "r", "question": {"summary": "q?"}}, "working")
     assert thread_id("1234567890", dt.date(2026, 9, 8)) == "2026-09-08-discord-567890"
-    assert channel_project({"project": "lectures"}, "odakin-prefs") == "lectures" and channel_project({}, "odakin-prefs") == "odakin-prefs"
-    assert parse_request("成績の集計", "123", {**projects, "lectures": None}, channel_project({"project": "lectures"}, "odakin-prefs"))["project"] == "lectures"
+    assert channel_project({"project": "proj-c"}, "proj-a") == "proj-c" and channel_project({}, "proj-a") == "proj-a"
+    assert parse_request("成績の集計", "123", {**projects, "proj-c": None}, channel_project({"project": "proj-c"}, "proj-a"))["project"] == "proj-c"
     org = {"guild_id": "1", "departments": [
         {"key": "a", "name": "甲部", "project": "p", "boss": "甲 長", "sections": [
             {"key": "a1", "name": "甲一課", "boss": "一 課長", "project": "pp",
