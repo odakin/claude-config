@@ -51,6 +51,23 @@ install-launchd-cron.sh --label-prefix PREFIX [--workdir DIR] \
 
 **止め方の違い (= launchd cron 版 vs scheduled-task MCP 版)**: 同じ「定期ジョブ」 でも停止操作が機構で異なる。 launchd cron 版は `--uninstall-one <task-id>` (= `launchctl bootout` + plist 削除)、 scheduled-task MCP 版は `scheduled-tasks` MCP の delete。 期間限定ジョブ (= 大会期間だけ等) の自己停止 runbook を書くときは、 **どちらの機構で登録したか**に応じた停止コマンドを記す (= 機構を取り違えると停止できない)。
 
+### <a id="launchd-python-with-deps"></a>cmd routine の `python3` は「依存 module を import できる個体」 で選ぶ (2026-09-08)
+
+launchd の cmd wrapper は `PATH` を自前で組む (= `/opt/homebrew/bin` を先頭に置くのが定石)。 その結果 `python3` が **homebrew の python (site-packages 空)** に解決し、 対話 shell では通っていた `import yaml` が `ModuleNotFoundError: No module named 'yaml'` で落ちる機械がある (Apple Silicon MacBook 実測。 system `/usr/bin/python3` は PyYAML 同梱)。 対話 shell の `python3` と launchd の `python3` は別個体になり得る = 「手元で動いた」 は routine の証明にならない。
+
+wrapper 側の定石 (= 名前でなく能力で選ぶ):
+
+```bash
+PY=""
+for c in /usr/bin/python3 "$(command -v python3 2>/dev/null)" /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+  [ -n "$c" ] && [ -x "$c" ] && "$c" -c 'import yaml' >/dev/null 2>&1 && { PY="$c"; break; }
+done
+[ -n "$PY" ] || { echo "<routine>: no python3 with PyYAML" >&2; exit 1; }
+exec "$PY" "<engine>.py" "$@"
+```
+
+`import yaml` の部分は engine の実依存に合わせる (numpy 等)。 Python の shim が `sys.executable` で engine を exec する構造でも、 shim 自身を起動する python がこの選択を通っていれば engine に引き継がれる。 検証は wrapper 経由で `--dry` / `--selftest` を 1 回 (= launchd の exit≠0 監視 〔[headless-context-budget の監視](#headless-context-budget) と同じ層〕 が後段の backstop)。
+
 ### <a id="headless-session-persistence"></a>無人 run の session 痕跡 (= 「最近の項目」 noise と `--no-session-persistence`)
 
 定期 routine は **1 run = 1 session** を作る。 これがどの surface に痕跡を残すかは機構で違い、 daily × 複数本を数週間回すと session 一覧 (= desktop app の「最近の項目」) が routine session で埋まる実害になる (2026-07 実測: 3 本/日 × 数週間 ≈ 数十 entry を手で消す羽目)。
