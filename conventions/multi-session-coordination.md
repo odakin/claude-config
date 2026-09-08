@@ -611,6 +611,19 @@ board は pending を保存するだけで、相手 session が inbox を読む�
 
 別 vendor の resident (例: `codex exec` を同じ pattern で) も同じ原則で置ける = runner の vendor 化は pilot 単位で。instance (poller script / config / dispatch skill) は owner の private layer。
 
+### <a id="chat-board-bridge"></a>chat bridge — 人間の入口を chat に置く (2026-09-08)
+
+resident runner は board に載った request しか起こさない。人間が依頼を出す面が「端末を開いて CLI で request を打つ」だけだと、常駐の意味 (人間が離れていても回る) が入口で切れる。chat tool (Discord / Slack 等) の message を board request に変換し、board の状態変化を chat に返す **bridge** を置くと、人間はスマホの一言で依頼でき、受領も chat 上の操作で済む。設計原則 (runner の 5 原則に足す形):
+
+1. **bridge は transport、判断しない**。message → request の写像は構文だけ (1 行目 = 題、以降 = 完了条件、`[project]` で source を選ぶ)。要約・翻訳・優先付け・worker の起動はしない (= poll/dispatch 分離をここでも守る、bridge が LLM を呼ばない)。
+2. **依頼者 identity は人間**。request の actor は `human / <chat>:<user id>` で、bridge 自身は identity を持たない。requester = reviewer なので、受領 (accept) も同じ人間 identity で post する。chat 上の ✅ reaction を accept に転記するのはこのため (= 「配達と起動は別」の受領側版: 受領の判断は人間、指を動かすのは機械)。
+3. **起票できる source は列挙**。bridge の config に owner が ordinary と分類した project だけを書く (= source-classification gate を config で先払い)。未登録 project は起票せず、その旨だけ返す。restricted source は bridge 経由で起票しない。
+4. **返信先も列挙**。chat への書込は外部発信なので、config に列挙した channel (自分宛て DM が最小) 以外へは書かない。列挙 = owner の standing OK。
+5. **履歴は取り込まない**。cursor 初期化は「今」から。過去 message を request 化すると同じ依頼が二重に立つ。
+6. **「AI 社員」は bot の数ではなく宛先の数**。役割ごとの bot を増やさず、board の宛先 identity (resident) × source project で表す。bot 1 体・channel 1 本で足りる。
+
+runner と bridge は独立に ON/OFF できる (bridge だけ ON = request が board に溜まり surface される、害なし)。instance は owner の private layer (poller script / config / cron wrapper)。
+
 ### 発火条件と layer
 
 - 単一 project / 単一 session で足りる間は作らない。実際に cross-project / cross-machine の重複
