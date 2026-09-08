@@ -175,6 +175,19 @@ live (uncomment) な author markup (`\cl`/`\CL` 等) の leak 無し; compile �
 済んでいる (= 承認 = そのまま編集続行)。 **実例**: 2026-08、 該当 private paper repo (= rename + v2 +
 図 1 枚の 3 点 commit を worktree で作成し、 behind=0 とコメント macro 照合の上で push)。
 
+<a id="latexdiff-wrapper-macro-expansion"></a>
+⚠️ **自前の display-math wrapper macro は latexdiff から数式の変更を隠す**: `\newcommand{\al}[1]{\begin{align}#1\end{align}}`
+のような wrapper で書かれた原稿では、 latexdiff (環境名で数式を認識) が `\al{…}` の中身の変更を
+「引数付き command の差し替え」 として処理し、 旧式を `%DIFDELCMD` で comment out、 新式を無印で挿入する
+= **diff PDF が error 0 で組めるのに数式の変更が一切色で出ない** (silent miss、 文章の差分だけ見て
+「数式は変わっていない」 と誤読する)。 対処 = 基準版・現在版の **両側**で diff 前に wrapper を本物の環境へ
+展開する (balanced brace / `%` コメント / `\{` escape を扱う小さな展開器、 定義行は残して無害)。
+行区切りを包む macro (`\nn` = `\nonumber\\`) も同時に展開しないと coarse / whole markup で
+`Misplaced alignment tab` になり、 `off` (= 削除式が消える) へ落とす羽目になる。 実例 = 該当 private paper repo
+2026-09-08 (付録の一式の符号反転 `J_1+J_2` → `-(J_1+J_2)` が Overleaf 2 commit 間の diff で無印、
+同 repo の `scripts/expand-display-math.py` + `regen-clean-latexdiff.sh` で両側展開 → coarse で色付き・error 0)。
+症状別の表は [`latex.md`](latex.md) の「plain latexdiff がそのままコンパイルできない時の定石」。
+
 ## full-body push + 管理ファイルの cleanup (= 本文まるごと反映 / 既流出の除去)
 
 subset でなく **現行 paper file をまるごと Overleaf に反映**したい場合 (= 全 finding を共著者に
