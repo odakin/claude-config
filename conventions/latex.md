@@ -107,6 +107,30 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 >
 > ⚠️ markup unwrap が必要な理由: `\DIFadd{\cl{長文}}` のように **group を丸ごと下線 markup に包むと ulem が改行不能 box 化してページ外に溢れる** (= 描画はされるが 1 行で切れる)。 review 注釈系コマンドは diff 前に unwrap するのが根治 (= diff 内で draft 色は冗長でもある)。 両版に同一適用すれば未変更 markup が spurious diff にならない。
 
+## <a id="latexdiff-deleted-blank-lines"></a>latexdiff は削除された空行を comment out できない — diff PDF と live で段落の切れ方が違ったら削除空行の残留を疑う (2026-09-08)
+
+**症状**: diff PDF ではある文から新段落が始まるのに、 live の原稿では前の段落に繋がっている (またはその逆)。
+
+**原因**: latexdiff は削除行を `%DIFDELCMD <` で comment out するが、 空行 (= `\par`) は comment out すると意味が変わるのでそのまま残す。 旧版にあって新版で消えた空行は diff source に生き残り、 diff PDF には旧版の段落切れが出る。
+
+**事故検出器として使う**: 「diff の方が段落が切れている」 は、 改稿 pass で空行が事故で落ちた (= 段落併合が決定でなく実装事故) 印になりうる。 2026-09-08 の研究 LaTeX project では序論と §4.4 の 2 箇所がこれで見つかった (どちらも記録に併合の決定が無い)。 sweep = diff source で「削除ブロック内でない削除空行」 を数え、 各々を live と突き合わせる (削除ブロック内の空行と、 新版でも段落切れがある箇所は無害)。 逆方向 (新版で増えた段落切れ) は事故の型ではない。
+
+## <a id="latexdiff-move-artifacts"></a>block の MOVE は latexdiff に「削除 + 挿入」 と見える — label 重複の良性 error と無印 token (2026-09-08)
+
+**症状**: 付録や節を verbatim で移動した diff を組版すると、 amsmath の `Multiple \label's` error が移動 block の式の数だけ出る (PDF は出る、 当該 label への cref だけ不定)。 加えて math-markup の gate が移動 block 内の数式 token を「無印」 と数える。
+
+**原因**: 移動元 (DIFdel 側) と移動先 (挿入側) の両方に同じ `\label{}` が残る。 `--math-markup=off` なら error 0 だが削除側の式そのものが消える。
+
+**扱い**: coarse のまま、 error と無印 token の件数を「MOVE 由来」 として ledger に記録する (原稿の問題ではない)。 恒久手当の候補 = regen script の後処理で DIFdel 区間内の `\label{X}` を `X-del` に付け替える。
+
+## <a id="float-drift-after-insert"></a>display を 1 本足したら `[t]` の表が次頁 = References に流れた — float の source 位置を前へ (2026-09-08)
+
+**症状**: 付録末尾の `\begin{table}[t]` が、 本文が数行伸びただけで次頁の上 = References の中に置かれる。
+
+**原因**: `[t]` float は source 位置以降の最初の「上」 に置かれる。 付録の最終頁で source が頁の下半分にあると、 次頁 (References) の上に行く。
+
+**対処**: float の source を、 参照する段落より前 (頁の前半に来る位置) へ移す。 参照文 (`\cref{tab:…} collects …`) は末尾のままでよい。 `[h]` / `[H]` より安定で、 組版後に「Table 1 の頁 < References の頁」 を PDF text で機械確認する。
+
 ## <a id="stash-roundtrip-build-artifacts"></a>baseline 比較に git stash round-trip を使わない (tracked 生成物と衝突する)
 
 **ルール:** 「この overfull / warning / 挙動は自分の編集**前**からあったか?」 という baseline 比較のために、 compile が上書きする tracked 生成物 (committed PDF 等) を持つ tree で `git stash` → 再 build → `git stash pop` の round-trip をしない。 baseline は tree を動かさない read-only 経路で取る:

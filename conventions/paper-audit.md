@@ -377,3 +377,38 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 **Check**: (a) 各 parameter について、 主張のどれがその符号に偶でどれが奇かを列挙する。 (b) 符号が模型で固定されていなければ両枝を事実として書き、 符号の決定を模型の構成 (共著者・原典) に routing する。 (c) 外部入力 (top 質量・α_s・結合の running) に依存する verdict は「中心値では X、 誤差内で Y」 の形で書き、 中心値の verdict を事実にしない。 (d) anchor script は両符号を走らせる (偶なら一致が検算、 奇なら両枝の数字が本文に要る)。
 
 **2026-09-08 訂正 (同事例)**: 上の仕分けは不完全だった。 奇な項を 1 つ (微分由来の質量項 ∝ γ) 見つけて反対符号を「安定化」 と報告したが、 小結合で「無視できる」 として落としていた電弱質量項の conformal 因子 $e^{-\gamma\chi/M_\text{P}}$ も奇で、 結合 ~10 × 場の excursion ~10 $M_\text{P}$ では $e^{\pm100}$ になり verdict を反転させた (負符号は電弱 scale を Planck 超に持ち上げて除外)。 → **(e) 仕分けは全項で行う。 小結合で落とした項は、 regime の結合 × 場の excursion の指数を入れ直してから落とす** (negligible × $e^{100}$ は negligible ではない。 dilaton 型結合では質量次元を持つ parameter は必ず走られる = 4 点結合を不変にする関係は質量項を不変にしない)。 原典の convention 確認 (共著者への問い) より、 自分の Lagrangian の全項を再評価する方が安価で決定的だった。 訂正は元の判断記録と本 anchor の双方に日付つきで置く ([`physics-verification-cycle.md`](../../ai-collaboration/conventions/physics-verification-cycle.md#external-ai-referee-premise-verification) item 7 の型)。
+
+
+## <a id="appendix-order-by-first-reference"></a>付録は本文での初参照順に並べる — 「展望は最後」 は本当に展望のときだけ (2026-09-08)
+
+**Pattern**: 付録を足す・移す pass のたびに順序が場当たりになり、 本文で先に参照される付録が後ろに来る。 「outlook だから最後」 の例外を作ると、 その付録が実は方法の説明 (レビュー) だったとき例外の根拠が消える (2026-09-08 の研究 LaTeX project の fRG 付録 = 題は私が付けた "Outlook"、 中身は Wetterich 方程式と pole 条件の段取り)。
+
+**Rule**: 序論の案内文を除いた本文での初参照位置で並べる。 案内文も同順に書き直す。 移動は verbatim の MOVE (label 不変で cref は追従)、 位置依存の語 (previous / next appendix、 above / below) を grep 0 にする。 例外は「本当に展望しか書いていない付録」 だけで、 題でなく中身を読んで判断する。
+
+**Cost**: 共著者への連絡で付録の letter が変わる → [`research-email.md#appendix-letters-unstable`](research-email.md#appendix-letters-unstable)。 diff PDF には MOVE の artifact が出る → [`latex.md#latexdiff-move-artifacts`](latex.md#latexdiff-move-artifacts)。
+
+## <a id="new-symbol-convention-consistency"></a>文献との対照のために導入する記号は、 まず本稿の規約で定義する — 文献の正規化は辞書 1 文で吸収する (2026-09-08)
+
+**Pattern**: heat-kernel の付録で axial vector を Shapiro の定義 (1/3! なし) のまま導入し、 本稿の ε 縮約が階乗の重み付き (1/(k!(4−k)!)) であることと衝突した。 「文献に合わせた、 意図的」 と答えたが、 同類 sweep の grep 出力にその階乗行が出ていたのを読み落としていた (著者訂正)。
+
+**Rule**: 新記号を定義する前に、 本稿の同種の縮約・添字型・分数の書き方を grep して型を決める (ε の重み、 frame / spacetime 添字、 display の `\frac`)。 文献との換算は「文献の量 = 本稿の量 × 定数」 の辞書 1 文で書き、 結合定数は本稿の正規化で印字する (例: 文献の εT = 12S、 η_min = −1/8 ↔ η² = c_A²/144)。 数値が変わる (c_A² = 1/16 → 9/4 等) なら、 機械 anchor と living note に同じ turn で換算行を足す (CONVENTIONS「規約を変えたら同じ作業で」)。
+
+**Check**: 定義 display の直後に、 本稿の既存の同型の式 (ε ε の縮約、 反対称化の重み) を 1 つ並べて読み、 重みが揃うか見る。 「文献がそう定義している」 は本稿内の不整合の言い訳にならない。
+
+## <a id="euclidean-check-in-lorentzian-paper"></a>Lorentzian の論文に Euclidean の cross-check を載せるときは、 signature の写像と全体符号の anchor を 1 文で書く (2026-09-08)
+
+**Pattern**: heat kernel は Euclidean の手法なので Euclidean で計算するのは標準だが、 「その pole が本稿の Lorentzian の式と同じ符号規約か」 を言わないと referee は比べられない。 著者の問い「ユークリッドでやって大丈夫か」 がその 1 文の不在を突いた。
+
+**Rule**: (a) mostly-plus なら Wick 回転 x⁰ = −ix⁴ は座標変換で、 parity-even なスカラー密度は共通因子だけで写る (相対係数は signature 非依存)、 parity-odd (ε 1 個) は i を拾う、 と 1 文。 mostly-minus なら g → −g の (−1)ⁿ 則 (n = 逆計量の縮約数) が項ごとに入るので「共通符号」 は言えない。 (b) 全体符号は 1 項で anchor する (m⁴ 項 = Euclidean 有効作用 −ln det(D̸+m) の +m⁴ と、 本稿の規約 δ²Γ = −(J₁+J₂) から出る +m⁴|e| が一致、 等。 表の第 1 行に委ねてもよい)。 (c) 機械 anchor = 同じ入力を δ と η の両方で解いて係数を比べる script (「Wick dictionary」 が恒等になることを実測)。
+
+**Wording**: 自動詞の "continues with one common sign" は慣用でない (数学の "f continues analytically to" は別物)。 他動詞受動 "is analytically continued to" か、 動詞を避けて「座標変換だから不変」 で言う。
+
+## <a id="cross-check-appendix-shape"></a>cross-check 付録の形 — 教科書でなく論文の密度: 目的 → 規約 → 写像 → 入力 → 結果 → 表 → 射程 (2026-09-08)
+
+**Pattern**: 検算の付録を書くと、 「一意な接続と関数があって」 型の前置き、 逐次代入の再掲 (「これを代入すると m⁴ + … で、 これは Eq. (41) の最初の 3 項」)、 中心電荷などの注、 本文中の文献引用、 定義の教科書的説明が積もり、 散文が式の 2 倍になる (著者「死ぬほど冗長」、 645 → 387 語)。
+
+**Shape**: (1) 目的と独立性 1 文 (何を再現するか、 何に依らないか) → (2) 規約 (signature、 符号 anchor) 2 文 → (3) 写像 (pole map) display 1 本 → (4) 入力 (係数の一般式) display 1 本、 短い一般式は inline → (5) sector ごとに「入力 → 係数の値」 display 1 本 → (6) 文献辞書 1 文 (換算定数のみ) → (7) 表 (項 / 係数 / 入力 / 文献) → (8) 「写像を通せば表の係数」 + 射程 1 文。 落とすもの = 逐次代入の再掲 (表が担う)、 本文中の文献引用 (表の列が担う)、 標準恒等式の陽な形 (名前だけ)、 結果に効かない規約 (γ₅ の定義など)。
+
+**Symbol audit (同 pass)**: display に出る記号を列挙し、 各々に定義文があるか確認する (E、 接続、 曲率)。 「Laplace 型」 のような名前は定義の代わりにならない (著者「E が無定義では」)。 本稿の既存記号 (ω = LL gauge field) と衝突する文献記号は別字 (ϖ 等) にするか肩付きで区別し、 その理由を ledger に残す。
+
+**Floor**: 定義・display・表・射程 1 文が残れば床。 そこから先は「何を読者に検算させないか」 の判断であって、 削減ではない。 家風の機械 backstop = [`scripts/check-display-math-style.py`](../scripts/check-display-math-style.py) (display 内の `\tfrac` と `\qquad` 並列)。

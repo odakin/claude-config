@@ -246,3 +246,14 @@ origin: 2026-06-29 学内事務向け詫び返信の作成 session。 共同署�
 処置: 軸 2-4 が揃って negative なら**失効するものは無い** (応答期限・義務なし) — 無視でよいが、 判断理由つきの declared-skip を記録に残す (= 将来の同種勧誘の前例になる + 監査系 sweep への再出現を止める)。 既定 decline にしたい発信 platform は [`convention-design-principles.md §8.21`](../docs/convention-design-principles.md#noise-obligation-signal-sharing) の記録付き opt-out へ。 ⚠️ 逆に、 editorial office 発の**査読依頼**は義務 class (放置 = 事故) — 勧誘と依頼を送信 domain で混同しない (同 §8.21 の bucket 混在)。
 
 origin: 2026-09-01、 大手出版社の commissioning 部門から分野違いの低 tier OA collection への Guest Editor 勧誘 (依頼 + 週次リマインド 3 通) を suppressed-mail 棚卸しで発掘した triage。 初回報告が件名のみの判定で user 押し返し後に本文精読した経緯ごと記録 (= 「本文 1 読」 規律の実例)。
+
+
+## <a id="diff-page-attachment"></a>共著者への変更連絡は該当頁の latexdiff を添付する — 「Overleaf の履歴で見えます」 は機械にしか通じない (2026-09-08)
+
+**Rule**: 数行の変更を共著者に伝えるとき、 「Overleaf の履歴で見えます」 「git log にあります」 は人間には無理 (user 訂正)。 該当頁だけの latexdiff (1–2 頁の PDF) を添付し、 本文では式番号・段落を名指しする。 数式内の変更は latexdiff が色を付けないことがあるので、 その場合は本文で「式 (129) の符号」 と書く。 新設の付録は当該頁の組版 PDF を添付する。 添付の copy は repo の review 記録に残す。
+
+**Why**: 相手に履歴 UI を開かせるのは受け手の作業を増やす。 添付 1 枚なら返信の障壁が下がる。
+
+## <a id="appendix-letters-unstable"></a>改稿中の付録の letter は識別子として不安定 — 連絡は題で呼び、 並べ替えたら letter の変更を一言 (2026-09-08)
+
+**Rule**: 付録を足す・並べ替える改訂中は「付録 E」 が翌日 B になる。 共著者便では付録を題 (「fRG の節」「heat-kernel の付録」) で呼び、 letter は括弧で添える。 並べ替えた後の便で、 前便の letter がどう変わったかを 1 行で訂正する。 和文で "letter" と書くと通じない (著者指摘「letter って分からん」) — 「付録 E → 付録 B」 と具体に書く。 一般則 = [`paper-audit.md#appendix-order-by-first-reference`](paper-audit.md#appendix-order-by-first-reference)。
