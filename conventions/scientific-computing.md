@@ -552,6 +552,18 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 
 **Fix**: 点内判定は多角形で厳密に、 「どれだけ外か」 は物理軸 1 本 (固定 $r$ での $n_s$ の隙間) で報告する。 別実装と数値が合わない時は、 まず距離の定義を突き合わせる。
 
+## <a id="spectator-check-over-the-roll"></a>dilaton 型結合の spectator 判定は pivot でなく roll 全体で — 正準場は Weyl 因子で伸びる (2026-09)
+
+**Pattern**: 場 $\phi$ が inflaton $\chi$ に $e^{-\gamma\chi/M_P}(\partial\phi)^2$ 型 (dilaton / conformal 因子) で結合するとき、 正準場 $\tilde\phi=e^{-\gamma\chi/2M_P}\phi$ の有効質量は $m^2=-(\gamma/2M_P)\Box\chi-(\gamma^2/4M_P^2)(\partial\chi)^2$ で、 slow roll の pivot では $-0.1\gamma H^2$ と小さいが、 $\chi$ が転がるほど大きくなり (末期は $-(2\gamma+0.5\gamma^2)H_\text{end}^2$)、 零モードは roll 全体で **Weyl 因子 $e^{\gamma\Delta\chi/2M_P}$** だけ伸びる ($\Delta\chi\simeq9M_P$ なら $e^{4.4\gamma}$: $\gamma=0.3$ で ×4、 0.7 で ×27、 1 で ×100)。 pivot の値だけ見て「軽い spectator、 揺らぎは数倍」 と書くと $\gamma\gtrsim0.5$ で誤る (起源事例 2026-09、 private paper repo: 表の最速 benchmark 行が spectator でなかったことを盲検が指摘、 著者側 script で零モードを積分すると Weyl 因子と 1 % で一致)。
+
+**Check**: (a) 有効質量を pivot と末期の両方で書く。 (b) 零モードを horizon exit から末期まで積分するか、 Weyl 因子で見積もる。 (c) 伸びた先の場の値を、 自己結合の符号 (running 込み) ごとに極小 / runaway で分類し、 末期の励起の質量を daughter 崩壊の運動学と比べる。 (d) 「spectator」 と呼べる結合の範囲を符号込みで明記する (質量項の conformal 因子は奇なので負側は別の上限: [`paper-audit.md#odd-coupling-sign-before-pricing`](paper-audit.md#odd-coupling-sign-before-pricing))。
+
+## <a id="onset-is-eps-H-one"></a>「振動開始」 は $\epsilon_H=1$ の厳密背景で定義する — $\epsilon_V=1$ の外挿は $\rho_\text{end}$ を 2 倍過大に見積もる (2026-09)
+
+**Pattern**: inflation の終点を $\epsilon_V=1$ (potential の slow-roll parameter) で取り、 そこで $\rho_\text{end}=\tfrac32V$ とすると、 実際の終点 ($\epsilon_H=\dot\chi^2/2H^2M_P^2=1$) はさらに転がった先で、 $\rho_\text{end}$ が 1.9 倍、 $H_\text{end}$ が 1.4 倍過大になる (plateau 型 potential の実測)。 この「onset」 の数値は Mathieu の $q$、 KLS 条件、 共鳴の完了 e-fold 数にそのまま伝播し、 共鳴の境界を ±20 % 動かす。
+
+**Fix**: 背景を厳密に積分して $\epsilon_H=1$ を event で取り、 $x_\text{end}$・$\rho_\text{end}$・$H_\text{end}$・振幅をそこで定義する。 $\epsilon_V=1$ は初期条件の目安にしか使わない。 「onset」 という語を使うなら定義を 1 文で書く (最初の零点通過なら $H$ はさらに半分以下)。
+
 ## <a id="small-sdp-without-solver"></a>小さな SDP を solver 無しで回す — SLSQP + explicit dual certificate の sandwich (2026-09)
 
 **Pattern**: 検証 worker の環境に SDP solver (cvxpy / SCS / MOSEK) が無く、 install も spec で避けたい (再現環境の最小化) が、 qubit〜qutrit 規模の半正定値計画 (共通下界 max Tr c s.t. 0 ≤ c ≤ a, b / joint measurement の最適化) が要る。 scipy の SLSQP で固有値制約を扱うと動くが、 局所 solver の答えは**それ自体では証明にならない**。
