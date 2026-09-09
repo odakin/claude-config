@@ -267,6 +267,9 @@ POST_TOOL_USE_ENTRIES='[
 STOP_ENTRIES='[
   {
     "hooks": [{"type": "command", "command": "~/.claude/hooks/session-commit-nudge.sh nudge"}]
+  },
+  {
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/pasted-command-comment-guard.sh"}]
   }
 ]'
 

@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: secret を user から受け取る・別マシンへ運ぶとき
+when: secret を user から受け取る・別マシンへ運ぶとき + **token を rotate するとき** (= 分業と主体照合、 #rotation-labor-split) + **暗号化 backup を作る/パスフレーズを失ったとき** (#backup-round-trip / #passphrase-loss-is-recoverable)
 category: infra
-summary: Secret を clipboard 経由で安全に運ぶ手順 (chat に literal を貼らせない原則と clipboard 1 個競合の回避、 配置先と cross-machine 耐久性、 mode 衛生 〔cp -p / git / open() は 0600 を運ばず dir 755 も露出面 = 生成側で冪等矯正、 #mode-hygiene〕)
+summary: Secret を clipboard 経由で安全に運ぶ手順 (chat に literal を貼らせない原則と clipboard 1 個競合の回避、 配置先と cross-machine 耐久性、 mode 衛生 〔cp -p / git / open() は 0600 を運ばず dir 755 も露出面 = 生成側で冪等矯正、 #mode-hygiene〕、 shell rc に複製しない 〔perm 644 + 全 audit の射程外 + os.environ 優先で正本を上書きし rotate が silent に効かなくなる、 #no-shell-rc-copies〕、 backup は往復検証してから差し替える 〔#backup-round-trip〕、 パスフレーズ喪失は平文が 1 台に残っていれば全件再暗号化で復旧 〔#passphrase-loss-is-recoverable〕、 rotate の分業 = 人間は再発行のみ・残りは script で値を AI context に載せない + 主体照合必須 〔#rotation-labor-split〕)
 -->
 # secret-handoff: Secret をユーザーの clipboard 経由で安全に運ぶ手順
 
@@ -167,3 +167,74 @@ secret を git-crypt / openssl で **暗号化したことの確認** (= leak ga
 の手がかりになる。 partial = 安全という reflex は誤り。
 
 これは「安価な操作で expensive な操作を bypass する」 trait family の secret 取扱 domain での現れ。 `xxd` は「token 確認」 という目的に対して **安価すぎる手段** で、 「partial だから OK」 という illusion で leak risk を覆い隠す。
+
+## <a id="no-shell-rc-copies"></a>secret を shell rc に複製しない
+
+`~/.zshrc` / `~/.zshenv` / `~/.zprofile` に `export SECRET=...` を置くと、 正本が別にあっても
+3 つの理由で壊れる。 3 つ目が最も見えにくい:
+
+1. **perm が弱い** — rc file の既定は 644 (world-readable)。 secret 置き場の 600 より緩い
+2. **どの網にも掛からない** — gitignore・暗号化 backup・`~/.secrets` を走査する durability
+   audit のいずれの射程にも入らない (= 「安全」 と報告されている間に平文が別の場所で腐る)
+3. 🔴 **正本を上書きして rotate が silent に効かなくなる** — `.env` loader の多くは
+   「`os.environ` に**無い** key だけ埋める」 実装なので、 shell の export が**勝つ**。
+   ∴ 正本を rotate しても、 対話 shell から走らせる限り古い値が使われ続ける
+   (= 「rotate したのに直らない」 の典型原因。 しかも成功したように見える)
+
+**点検** (値を出さず件数のみ、 各マシンで。 期待 = すべて 0):
+
+```sh
+grep -c -E '^export [A-Z_]*(TOKEN|SECRET|KEY|PASSWORD)=' ~/.zshrc ~/.zshenv ~/.zprofile
+```
+
+実例 (2026-09-09): 5 ヶ月間 rc file に平文 token が置かれ、 正本の `.env` を上書きしていた。
+発見は無関係な作業 (rc file の別行を編集) の副産物 = **専用の検出器はどれも見ていなかった**。
+
+## <a id="backup-round-trip"></a>暗号化 backup は「往復検証」 してから差し替える
+
+`openssl enc` で backup を作ったら、 **その場で復号し直して元と byte 一致するか確かめてから**
+既存 backup を置き換える。 一致しなければ新 backup を破棄して古い方を残す。
+
+理由: backup の失敗は**次に必要になる日まで発覚しない** (= 平時は誰も復号しない)。
+「作った」 と「開ける」 は別の主張で、 前者だけ確認して後者を確認しない運用は、
+**開けない backup を安全だと信じて持ち続ける**状態を生む。
+
+## <a id="passphrase-loss-is-recoverable"></a>パスフレーズを忘れても、平文が手元にあれば詰みではない
+
+パスフレーズで暗号化した backup 群のパスフレーズを失っても、 **平文の実体がどれか 1 台に
+残っていれば、 新しいパスフレーズで全部作り直せる** (= 思い出す必要はない)。 復旧手順:
+
+1. 全 backup の「平文 source → `.enc` target」 の対応表を作る (= 既存の restore script が
+   あればその登録簿が正本)
+2. 新パスフレーズを 1 回だけ不可視入力し、 全件を再暗号化 (+ 上記の往復検証)
+3. **backup が 1 つも無かった secret をこの機会に洗い出して同時に追加する**
+   (= 棚卸しの好機。 durability audit の 🔴 がそのまま作業リストになる)
+4. 新パスフレーズの保管先を記録する — ⚠️ **値でなく場所だけ**を、 secret 置き場の doc に
+
+⚠️ **保管先は「その機械が壊れたとき」 に読めるか**で選ぶ。 このパスフレーズが要るのは
+まさに機械を失ったときなので、 **その機械の中だけに置くと必ず間に合わない**
+(= CLI で OS の keychain に入れる方式は同期しないことがある。 同期する保管先 + 紙 の
+2 系統が堅い)。
+
+## <a id="rotation-labor-split"></a>token rotate の分業 — 人間は「再発行」 だけ、 残りは script
+
+多くの token rotate は次の leg に分解できる:
+
+| leg | 誰がやるか |
+|---|---|
+| service にログインして再発行ボタンを押す | **人間のみ** (= 認証・アカウント設定変更) |
+| 新 token の有効性と**主体**の検証 (API) | 機械 |
+| 正本 (`.env` 等) の atomic 置換 + mode 矯正 | 機械 |
+| 暗号化 backup の再作成 | 機械 |
+| CI/Actions の secret 更新 | 機械 |
+| 旧 token の失効確認 | 機械 |
+
+→ **「認証が要るから全部人間」 と丸めない** (= 機械にできる 8 割まで押し付けることになる)。
+逆に AI が新 token を手で扱うと、 **値が AI の context と transcript に載る**。
+∴ 最適解は「人間が再発行 → script が不可視入力 (`read -rs`) で受けて残り全部」 で、
+これは**手作業より漏れる面が少ない** (= [machine-route-first.md](machine-route-first.md#route-ladder)
+「経路を先に作る」 の instantiation)。
+
+⚠️ script 側に **投稿主体 / 所有者の照合**を必ず入れる (= 別アカウントで発行した token を
+気づかず投入すると、 認証は通るのに**別名義で動く**。 API の `verify_credentials` 相当で
+期待する主体と一致しなければ書き込み前に中止する)。

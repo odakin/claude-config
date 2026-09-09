@@ -40,7 +40,7 @@ claude-config/
 │   ├── clipboard-cleaner.md                # PDF コピー由来の段落内改行・RTF 書式をクリップボードで整形したいとき
 │   ├── cold-eyes-isolation.md              # cold-eyes / 盲検 review を別 session に投げる前 / referee 版の原稿を用意する時 / review 結果の独立性を判定する時
 │   ├── collaborators.md                    # 共同研究者 DB (collaborators.yaml) を作成・更新するとき
-│   ├── concise-output.md                   # user への応答・報告・deliverable (README / 案内 doc / PDF) を書くとき常時
+│   ├── concise-output.md                   # user への応答・報告・deliverable (README / 案内 doc / PDF) を書くとき常時 + **user 自身に操作してもらう手順を書くとき** (= #user-facing-steps)
 │   ├── data-pipeline-automation.md         # 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
 │   ├── debugging-discipline.md             # bug fix を提案する前・audit verdict を出す前 (検証規律)
 │   ├── discord-bot.md                      # Discord Bot を運用・実装するとき
@@ -109,7 +109,7 @@ claude-config/
 │   ├── researchmap.md                      # researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
 │   ├── scheduled-tasks.md                  # scheduled task / launchd routine を作成・管理するとき
 │   ├── scientific-computing.md             # 数値解析・科学計算 code を書くとき
-│   ├── secret-handoff.md                   # secret を user から受け取る・別マシンへ運ぶとき
+│   ├── secret-handoff.md                   # secret を user から受け取る・別マシンへ運ぶとき + **token を rotate するとき** (= 分業と主体照合、 #rotation-labor-split) + **暗号化 backup を作る/パスフレーズを失ったとき** (#backup-round-trip / #passphrase-loss-is-recoverable)
 │   ├── semgrep-ci.md                       # Semgrep を CI で運用する・finding を読む/消す・false positive を nosemgrep 注記するとき
 │   ├── sensitive-data-pass-through.md      # 受信した URL / file を別 recipient に forward する前
 │   ├── shared-repo.md                      # 共同編集者がいるリポで作業するとき

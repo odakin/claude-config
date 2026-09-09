@@ -203,7 +203,7 @@ setopt interactive_comments
 
 ∴ 保険は「事故の最後の 1 枚」 であって、 第一選択は依然 §「実測 (3) 第一選択は script 経路」。
 
-機械 backstop (owner 個人層、 日本語 chat 前提): Stop hook `pasted-command-comment-guard.sh` が「貼り付け指示語 ∧ fence 内の実行系コマンド行に `#`」 で block する (= 2026-07-22..09-09 の 49 日 transcript で校正、 真陽性 3 / FP 0)。 ⚠️ Claude Code desktop は hook の model 向け出力を honor しない ([hook-authoring.md](hook-authoring.md#frontend-dependent-cowork)) ので desktop では死ぬ — desktop 側の floor は本規約と script 経路の既定化。
+機械 backstop: Stop hook [`hooks/pasted-command-comment-guard.sh`](../hooks/pasted-command-comment-guard.sh) が「貼り付け指示語 ∧ fence 内の実行系コマンド行に `#`」 で block する (= `setup.sh` が Stop に登録、 selftest 12 件)。 日本語 cue は 2026-07-22..09-09 の 49 日 transcript で校正済 (真陽性 3 / FP 0)、 **英語 cue は推定なので FP 監視対象**。 ⚠️ Claude Code desktop は hook の model 向け出力を honor しない ([hook-authoring.md](hook-authoring.md#frontend-dependent-cowork)) ので desktop では死ぬ — desktop 側の floor は本規約と script 経路の既定化。
 
 ## <a id="no-tilde-in-pasted-commands"></a>ユーザーに渡すコマンドに `~` を書かない (zsh は `env` 前置で展開しない)
 
