@@ -15,6 +15,26 @@ def install(path, enabled=False):
     shared.apply(path, source, helper, enabled)
 
 
+def _installer_runtime_available():
+    """The installer binds a 3.10+ launcher and raises without one, so on such a
+    machine there is nothing here to exercise. Ask `desired()` itself rather than
+    re-implementing its search, which would drift. Skipping (not failing) keeps a
+    permanent red out of the suite, where it would mask a real regression.
+
+    The skip cannot go silent-permanent: CI pins Python 3.12 (.github/workflows/
+    checks.yml), so these cases still run there. This gate only spares machines
+    that could not run the installer at all."""
+    try:
+        shared.desired(Path("/nonexistent"), Path("/nonexistent/helper.py"))
+    except ValueError:
+        return False
+    except Exception:
+        return True  # A different failure is the suite's business, not this gate's.
+    return True
+
+
+@unittest.skipUnless(_installer_runtime_available(),
+                     "no Python 3.10+ interpreter on this machine (the installer binds one)")
 class InstallTests(unittest.TestCase):
     def test_idempotency(self):
         with tempfile.TemporaryDirectory() as d:
