@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: PATH 消失・shell 環境変数まわりを触るとき
+when: PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
 category: macos
 summary: シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール） + ユーザーに貼り付けさせるコマンドの zsh 固有罠 2 件 (= 行内 # はコメントにならない / `env VAR=~/x` は tilde 展開されず literal `~` dir が cwd 配下に生える、 どちらも bash では踏まない非対称。 framework は paste-destined-plain-text.md)
 -->
@@ -163,6 +163,29 @@ CLAUDE_CONFIG_DIR="$HOME/.claude-alt" claude auth login   # alt にサインイ�
 ```
 
 例外: **script ファイル内**の `#` は常にコメント (= 非対話 parse なので問題ない)。 本ルールは「ユーザーが対話プロンプトに貼り付ける用に提示するコマンド」 にのみ適用。 ユーザーが `setopt interactive_comments` を `.zshrc` に入れていれば行内 # も通るが、 提示側は「既定 OFF + 環境差」 を前提にできないので、 常に行内 # なしで出す。
+
+### 実測 (2026-09-09、 pty 上の対話 zsh で再現) — 3 つの補強
+
+**(1) 決定的であって確率的でない。** 「短い注釈なら」 「ASCII だけなら」 「1 行だけなら」 は全部誤り。 貼れば必ず argv に化ける:
+
+| 提示した行 | 対話 zsh が実際に渡す argv |
+|---|---|
+| `git status <SP><SP>#<SP>"rebase in progress"` | `[status, #, rebase in progress]` |
+| `git rebase --continue<SP><SP>#<SP>todo 残り 0 なので完了` | `[rebase, --continue, #, todo, 残り, 0, なので完了]` |
+
+2 行目は `git rebase` が余計な引数で **usage error** になって停止し、 続く `git push` が detached HEAD のまま走って `fatal: You are not currently on a branch.` を出した (= 注釈が原因で 2 段の失敗になる典型)。
+
+**(2) 行頭 `#` の単独行でも壊れる。** 「注釈を独立行に逃がせば安全」 は成り立たない — 対話 zsh は `#` をコマンド名として探し `zsh: command not found: #` を出す。 実害は小さい (= その行が失敗するだけ) が、 **エラー出力が増えて本物の失敗を覆い隠す**。 ∴ 貼り付け用ブロックは **`#` を 1 文字も含めない**。
+
+**(3) 第一選択は「注釈を消す」 でなく「script 経路にする」。** 説明を書きたい欲求と貼り付け安全性は**両立できる** — script ファイル内の `#` は正しくコメントになるので、 2 行以上 or quote/glob を含むなら **script を書いて起動 1 行だけを渡す**。 注釈を捨てずに済み、 quote 崩れ・行の取りこぼし・部分実行も同時に消える (= [machine-route-first.md](machine-route-first.md#route-ladder)「経路を先に作る」 の最小 instance)。
+
+```sh
+sh "$HOME/Claude/<repo>/scripts/fix-rebase.sh"
+```
+
+⚠️ **この失敗は Claude 自身の道具では原理的に観測できない**: Claude の Bash tool は**非対話** zsh なので `#` が正しくコメントとして効く。 Claude は日常的に「`#` は動く」 という体験だけを蓄積し、 壊れる場面は「user の対話プロンプト」 = 自分が一度も立ち会えない場所にしかない。 ∴ **自分の実行経験を根拠にしてはならない**規約 class (= 経験的反証が構造的に得られない)。 とくに **Claude が Bash を失っていて user に手打ちを頼む状況**でこそ発火すべきなのに、 その状況は認知負荷が高く規律が緩む — 発火条件と緩み条件が一致する悪い形をしている。
+
+機械 backstop (owner 個人層、 日本語 chat 前提): Stop hook `pasted-command-comment-guard.sh` が「貼り付け指示語 ∧ fence 内の実行系コマンド行に `#`」 で block する (= 2026-07-22..09-09 の 49 日 transcript で校正、 真陽性 3 / FP 0)。 ⚠️ Claude Code desktop は hook の model 向け出力を honor しない ([hook-authoring.md](hook-authoring.md#frontend-dependent-cowork)) ので desktop では死ぬ — desktop 側の floor は本規約と script 経路の既定化。
 
 ## <a id="no-tilde-in-pasted-commands"></a>ユーザーに渡すコマンドに `~` を書かない (zsh は `env` 前置で展開しない)
 

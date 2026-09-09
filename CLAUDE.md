@@ -113,7 +113,7 @@ claude-config/
 │   ├── semgrep-ci.md                       # Semgrep を CI で運用する・finding を読む/消す・false positive を nosemgrep 注記するとき
 │   ├── sensitive-data-pass-through.md      # 受信した URL / file を別 recipient に forward する前
 │   ├── shared-repo.md                      # 共同編集者がいるリポで作業するとき
-│   ├── shell-env.md                        # PATH 消失・shell 環境変数まわりを触るとき
+│   ├── shell-env.md                        # PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
 │   ├── shell-multibyte-truncation.md       # shell で多バイト文字列を truncate・加工するとき
 │   ├── slack-mcp.md                        # Slack workspace を MCP で wire するとき
 │   ├── substack.md                         # Substack 記事の入稿・notes/コメント回収をするとき

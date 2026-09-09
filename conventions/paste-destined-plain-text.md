@@ -57,7 +57,16 @@ user が「投稿した」 と言ったら、 **同 turn で** 投稿先の read
 | plain text 入力欄 (web UI) | markdown 装飾ゼロ (= 上記 ①) | **span 消失** (= 文ごと消える) |
 | 対話 zsh (terminal) | 行内 `#` を付けない + `~` でなく `"$HOME/…"` ([shell-env.md](shell-env.md#no-inline-comments-in-pasted-commands) / [同](shell-env.md#no-tilde-in-pasted-commands)) | **silent 成功** (= error が出ず、 別の場所に「正しく見える」 結果ができる) |
 
-⚠️ terminal 側の最上位 mode が **silent 成功**である点が web UI 側より悪い: span 消失は「消えた」 が最終的には目に入るが、 silent 成功は「別の場所に出来た」 なので、 やり直して機能が回復した後も誰も気付かない (= 実測で発覚まで 4 週間)。 この「機能回復が調査を終わらせる」 構造は [debugging-discipline.md #recovery-ends-investigation](debugging-discipline.md#recovery-ends-investigation)。
+⚠️ terminal 側は**同じ行に 2 つの mode が同居する**ので、 症状から原因を引くときに取り違えない:
+
+| 罠 | 症状 | 気付きやすさ |
+|---|---|---|
+| 行内 / 行頭 `#` | **loud 即死** — `#` 以降が argv に化けてコマンドが usage error。 貼れば**必ず**壊れる (決定的) | error は出るが、 原因が注釈だと分からず「quote が壊れた」 等の別仮説に流れやすい (2026-09-09 実例) |
+| `~` (env 前置) | **silent 成功** — error 無しで別の場所に「正しく見える」 結果ができる | 最悪 (発覚まで 4 週間の実測) |
+
+∴ 「terminal の事故 = silent」 と一般化しない。 **loud に落ちたときも第一容疑は貼り付け文面**であり、 shell の parse semantics (`#` / `~` / glob) を先に疑う。
+
+⚠️ silent 成功が web UI 側より悪い理由: span 消失は「消えた」 が最終的には目に入るが、 silent 成功は「別の場所に出来た」 なので、 やり直して機能が回復した後も誰も気付かない (= 実測で発覚まで 4 週間)。 この「機能回復が調査を終わらせる」 構造は [debugging-discipline.md #recovery-ends-investigation](debugging-discipline.md#recovery-ends-investigation)。
 
 **共通 kernel**: **機械が生成した artifact (= script の出力・API の raw export) を、 人間貼り付け用に Claude が書き直した瞬間、 元の保証は消える**。 script が絶対パスを印字していても、 chat で `~` 表記に書き直せばそこで壊れる ∴ **提示する文面それ自体が検査対象の surface**。 → 書き直さず機械の出力をそのまま渡す (= ② delivery の思想) が常に第一選択。 同 kernel の data 版 = [web-tools.md](web-tools.md#raw-export-snapshot-3set) (= manual transcribe を避けて raw export を保存)。
 
