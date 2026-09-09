@@ -858,7 +858,7 @@ LaTeX edit 後、 `pdflatex` が完走しても visual の overflow / misalignme
    - ⚠️ **`grep undefined` だけで済ませない**: `^!` (TeX error) は `Double subscript`・`Missing $` 等で出るが、TeX は recover して PDF を出すため「undefined 参照ゼロ」だけ見ると error を見逃す（例: `\newcommand{\X}{Y_{\rm z}}` を `\X_{...}` と使う double-subscript は PDF が出ても下付きが壊れる）。**必ず `^!` を grep** し、`error 0` を確認する。
 2. `python3 -c "import fitz; doc=fitz.open('FILE.pdf'); pix=doc[N].get_pixmap(dpi=200); pix.save('/tmp/check.png')"` — 該当 page を PNG 化
 3. `/tmp/check.png` を Read tool で開いて **視覚確認** (= 「compile OK」 だけで完了としない)
-4. `Overfull \hbox (N pt too wide)` warning が出たら必ず該当 page を render して overflow が visual に問題ないか確認
+4. `Overfull \hbox (N pt too wide)` warning が出たら必ず該当 page を render して overflow が visual に問題ないか確認。 ⚠️ ただし共著原稿の改稿 pass の**途中**では overfull を語順変更で消さない — 改行位置は後続の編集で動くので、 掃除は投稿直前の final pass で 1 回 (正本 = ai-collaboration [`edit-intent-record.md#overfull-not-a-gate`](../../ai-collaboration/conventions/edit-intent-record.md#overfull-not-a-gate)、 2026-09-09 著者裁定)
 
 ### <a id="pdf-visual-verification-traps"></a>典型 trap (= 2026-05-18 EC erratum note 編集で連続再発)
 
