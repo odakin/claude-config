@@ -645,6 +645,22 @@ sections:
     legacy: "22.4"
     level: 3
     title: "22.4 判別と由来"
+  - id: required-field-fabrication
+    legacy: "23"
+    level: 2
+    title: "23. 必須にした field は、 値が無いとき捏造される — 「無い」 を機械可読にする第三の状態を用意する"
+  - id: fabrication-observation
+    level: 3
+    title: "観察"
+  - id: fabrication-why-bad
+    level: 3
+    title: "なぜ悪いか"
+  - id: fabrication-remedy
+    level: 3
+    title: "対策: 出自を宣言する第三の状態"
+  - id: fabrication-detection
+    level: 3
+    title: "適用の見分け方"
   - id: changelog
     level: 2
     title: "変更履歴"
