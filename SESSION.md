@@ -11,6 +11,39 @@
 - **`conventions/multi-session-coordination.md#staging-window-race`**: 既存の「`git add -A` を使わず明示列挙」 は**相手が別 file に居るとき**しか効かない — 同一 file なら staging は file 単位で hunk の作者を区別せず、 検証に空けた数分で相手の commit に自分の hunk が吸われる。 防御 = **編集と commit の間を空けない** (検証は commit 後)。 public repo では**相手の未検査変更が leak gate を素通りする**のが最も危険。 同 session 内で双方向に 1 回ずつ発生。
 - registry 登録 = 前 2 者 (= layer-3 の drift 検出に配線)。
 
+## 2026-09-09 (別 session) — 貼り付けコマンドの `#` 事故を層1 へ (hook 1 + 規律 5 節)
+
+owner の対話 session で「rebase 手順を貼らせたら壊れた」 の RCA を回し、 成果を層1 に集約した。
+
+- **`conventions/shell-env.md#no-inline-comments-in-pasted-commands`**: 既存節に実測を追加。
+  対話 zsh は `interactive_comments` 既定 OFF で `#` が **argv に化ける** (pty で再現、
+  `git rebase --continue  # 注釈` → `[rebase,--continue,#,todo,…]` で usage error)。
+  **決定的**であって確率的でない / **行頭 `#` 単独行も壊れる** (= 独立行へ逃がす案は不成立) /
+  **第一選択は「注釈を消す」 でなく script 経路** (script 内の `#` は効くので説明を捨てずに済む)。
+  ⚠️ doc-meta の `when:` が「PATH 消失…」 だけで、 `when` のみ表示する生成索引から
+  「コマンドを渡す瞬間」 に到達できなかった = **routing 欠陥**。 trigger を追記して根治。
+- **`hooks/pasted-command-comment-guard.sh` (新設、 層3 から移設)**: Stop hook。
+  貼り付け指示語 ∧ fence 内の実行系コマンド行の `#` で block。 `setup.sh` STOP_ENTRIES に登録。
+  日本語 cue は 49 日 transcript で校正 (真陽性 3 / FP 0)、 英語 cue は推定 = FP 監視対象。 selftest 12。
+- **`setup.sh` Step 6d (新設)**: `~/.zshrc` に `setopt interactive_comments` を追記
+  (odakin 自動 / 他ユーザーは tip 表示のみ、 冪等)。 ⚠️ 受け手側の保険であって出し手の規律の
+  代替ではない (提示先の環境は選べない) を doc に明記。
+- **`conventions/paste-destined-plain-text.md`**: terminal 側を「最上位 mode = silent 成功」 と
+  だけ書いていたため **loud な失敗の診断をミスリード**していた。 loud (`#`) / silent (`~`) の
+  2 mode 併記に修正。
+- **`conventions/concise-output.md#user-facing-steps` (新設)**: user 自身にやってもらう操作は
+  「冒頭に・番号付きで・それだけ」 6 則。 ⚠️「散文で直る保証は無い」 も明記 (= 本節を書いた
+  直後に同じ規律を破っている)。
+- **`conventions/secret-handoff.md` 4 節 (新設)**: `#no-shell-rc-copies` (rc への複製は
+  **os.environ 優先で正本を上書きし rotate が silent に効かなくなる**) / `#backup-round-trip` /
+  `#passphrase-loss-is-recoverable` / `#rotation-labor-split` (人間は再発行のみ・残りは script、
+  AI が値を手で扱うと context/transcript に載る + 主体照合必須)。
+
+⚠️ desktop は hook の model 向け出力を honor しないので、 本件の事故 (= desktop) は hook では
+止まらない。 desktop の floor は上記 doc と script 経路の既定化。
+深層 RCA = `odakin-prefs/plans/2026-09-09-paste-comment-contamination-rca-results.md`。
+
+
 ## 現在地 — Discord ⇄ board bridge engine + 組織図 builder（2026-09-08）
 
 今回の整備は終了点。 再開時は下記正本を読む (owner の instance / 経緯は private layer)。
