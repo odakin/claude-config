@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
 category: macos
-summary: シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール） + ユーザーに貼り付けさせるコマンドの zsh 固有罠 2 件 (= 行内 # はコメントにならない / `env VAR=~/x` は tilde 展開されず literal `~` dir が cwd 配下に生える、 どちらも bash では踏まない非対称。 framework は paste-destined-plain-text.md)
+summary: シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール） + ユーザーに貼り付けさせるコマンドの zsh 固有罠 2 件 (= 行内 # はコメントにならない / `env VAR=~/x` は tilde 展開されず literal `~` dir が cwd 配下に生える、 どちらも bash では踏まない非対称。 framework は paste-destined-plain-text.md) + 受け手側の保険 = `.zshrc` に `setopt interactive_comments` (= 1 行で行内/行頭 # とも直るが、 提示先の環境を選べない以上 出し手の規律の代替にはならない)
 -->
 # シェル環境（Claude Code + macOS）
 
@@ -184,6 +184,24 @@ sh "$HOME/Claude/<repo>/scripts/fix-rebase.sh"
 ```
 
 ⚠️ **この失敗は Claude 自身の道具では原理的に観測できない**: Claude の Bash tool は**非対話** zsh なので `#` が正しくコメントとして効く。 Claude は日常的に「`#` は動く」 という体験だけを蓄積し、 壊れる場面は「user の対話プロンプト」 = 自分が一度も立ち会えない場所にしかない。 ∴ **自分の実行経験を根拠にしてはならない**規約 class (= 経験的反証が構造的に得られない)。 とくに **Claude が Bash を失っていて user に手打ちを頼む状況**でこそ発火すべきなのに、 その状況は認知負荷が高く規律が緩む — 発火条件と緩み条件が一致する悪い形をしている。
+
+### 受け手側の保険 — `.zshrc` に `setopt interactive_comments` を 1 行
+
+上は**出し手 (= コマンドを提示する側) の authoring 規律**だが、 **受け手 (= 貼る側) にも 1 行で効く保険**がある。 zsh を対話で使う人は `~/.zshrc` に入れておくとよい:
+
+```sh
+setopt interactive_comments
+```
+
+実測 (2026-09-09、 pty 対話 zsh): これで**行内 `#` も行頭 `#` も正しくコメントになる** (= 事故行 `git rebase --continue  <SP><SP>#<SP>…` が argv `[rebase, --continue]` に復帰、 行頭 `#` の `command not found: #` も消える)。 bash の既定挙動に揃うので、 bash から来た人の直感とも一致する。
+
+⚠️ **保険が入っても出し手の規律は緩めない** (= 二重防御であって代替ではない)。 理由:
+
+1. **提示したコマンドは提示先の環境を選べない** — 別マシン・別ユーザー・同僚への転送・issue への貼り付け・CI の再現手順に流れる。 `.zshrc` は**その 1 台の 1 ユーザーにしか効かない**
+2. **sibling の `~` 罠は直らない** (= `magicequalsubst` は別オプション、 次節)。 「貼り付けコマンドの罠」 は `#` だけではない
+3. **script 経路の利点は `#` 以外にもある** — quote 崩れ・glob 展開・行の取りこぼし・部分実行は `interactive_comments` では 1 つも直らない
+
+∴ 保険は「事故の最後の 1 枚」 であって、 第一選択は依然 §「実測 (3) 第一選択は script 経路」。
 
 機械 backstop (owner 個人層、 日本語 chat 前提): Stop hook `pasted-command-comment-guard.sh` が「貼り付け指示語 ∧ fence 内の実行系コマンド行に `#`」 で block する (= 2026-07-22..09-09 の 49 日 transcript で校正、 真陽性 3 / FP 0)。 ⚠️ Claude Code desktop は hook の model 向け出力を honor しない ([hook-authoring.md](hook-authoring.md#frontend-dependent-cowork)) ので desktop では死ぬ — desktop 側の floor は本規約と script 経路の既定化。
 
