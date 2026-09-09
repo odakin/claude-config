@@ -8,6 +8,8 @@ summary: Claude の tool call が「malformed and could not be parsed」 で壊�
 > 適用対象: Claude が **任意の tool call (特に Bash / Edit)** を生成する全ての場面。 hook 作成に限らない。
 > hook script を書くときの bash 3.2 parser bug は **別 layer** の話 (= [`hook-authoring.md` bash32-heredoc-parser-bug](hook-authoring.md#bash32-heredoc-parser-bug) 参照)。
 > 無人 worker session が「実作業ゼロ + **空 thinking block の規則的周期**」 で死に続けるのは**別 root** (= 1 応答の出力上限超過の retry loop、 [`output-cap-death-loop.md`](output-cap-death-loop.md) 参照) — malformed は壊れた tool call が transcript に残るが、 あちらは**何も残らない**。 「粘らず root に近い一手」 の精神は共通。
+>
+> <a id="classifier-session-block"></a>**permission classifier による session-wide ブロック**は**さらに別 layer**: tool call の形式は正しく、 permission rule にも触れていないのに `Permission for this action was denied by the Claude Code auto mode classifier` + 「blocked ... **because of earlier conversation content** — it isn't about the action itself」 で拒否され続ける状態。 **一度この状態に入ると当該 session では回復しない** — 複合 Bash を単一コマンドに割っても、 別 tool に替えても、 **`Agent` の起動そのものが同じ理由で拒否される**ため subagent 委譲の逃げ道も塞がる。 ⚠️ **model 切替では解けない** (= 原因は model 出力でなく会話 context 側にあるので、 malformed の Reflex を持ち込んで Fable に替えても Agent 起動ごと拒否される。 2026-09-05 実測: `gh repo create` 拒否 → 単一コマンド化 → Agent (default model) → Agent (`model: fable`) の 4 段すべて同一理由で拒否)。 **唯一の回復は新 session** で、 malformed の §副次緩和 7 と同じ結論に別 root から到達する。 → 実務上の要点は 2 つ: ① **「コマンドが悪い」 と誤診して書き換えを繰り返さない** (= 拒否文が「it isn't about the action itself」 と明言している。 回避を試み続けるのは denial の意図に反する行為でもある) ② **残作業を file に落として新 session へ渡す** (= 該当 repo の `SESSION.md` に手順ごと残すのが最短。 [`multi-session-coordination.md#spawn-handoff-token-return`](multi-session-coordination.md#spawn-handoff-token-return) の file-handoff)。 ⚠️ この state でも **Read / Write / Edit は通る**ことがある (= 2026-09-05 実測) ので、 手順書を残す作業自体は腐った session 内で完了できる。
 
 ---
 

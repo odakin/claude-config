@@ -218,6 +218,8 @@ setup.sh が自動で行うこと:
 - 他ユーザーのユーザー名
   - **例外 (2026-07-10、 user 承認)**: **公開 OSS repository の attribution** (= `<owner>/<repo>` 形式で実在の *public* repo を例・前例・依存として参照する場合) は owner handle を書いてよい。 その handle は当該 repo の公開 page で既に世界に可視であり、 mention は増分 leak を生まない (= 例外 criterion と同じ「public profile から得られる範囲を増やさない」 判定)。 ⚠️ 書く前に repo が実際に public であることを確認する (private repo の owner/名は従来通り禁止)。 適用例: `sogebu/LorentzArena` (= README 流儀・scientific-computing 等の実例参照)
 
+⚠️ **`git -c user.name=… -c user.email=…` で author を明示指定しない** (2026-09-05 追加): author / committer は **global config に委ねる** — setup.sh Step 9b が noreply (`<id>+<login>@users.noreply.github.com`) を確立しており、 `-c` での明示指定は**その防御を silent に迂回する**。 「config が未設定かもしれない」 と先回りして値を埋めるのが典型 failure (= 実際には設定済みで、 推測した実 email が public history に焼き付く)。 config が本当に未設定なら**推測せず user に聞く**。 ⚠️ commit-msg-leak-guard は message body を見るので **author field は検出圏外** = この経路に機械 gate は無い。 実例 (= 新規 public repo の初回 commit で実 email を指定、 push 前に self-catch) は owner private layer の leak 記録にあり。
+
 変更前に「公開リポに載せて問題ないか」を必ず確認すること。
 
 ### 例外 list と criterion

@@ -40,6 +40,23 @@ QR (space キー) は使えないが、接続先は ① claude.ai/code のセッ
 
 この managed-key 非対応は upstream の既知制約 (= anthropics/claude-code #50977〔API key / setup-token OAuth サポート要望〕・#50642〔Bedrock 認証〕の feature request、いずれも未対応)。ユーザ側のミスではないので `subscriptionType: null` を見たら迷わず `claude auth login`。
 
+### <a id="update-needs-restart"></a>⚠️ `claude update` は**走っている server を更新しない** (= 版依存 model が使えない時の第一容疑)
+
+新しい model が「この版では非対応」 と弾かれた時 (= 例 `Claude Code 2.1.195 does not support this model; version 2.1.251 or newer is required. Run 'claude update', ...`)、 **`claude update` を実行しただけでは直らない**。 update が差し替えるのは**ディスク上の binary** で、 launchd 常駐の RC server は**起動時の版のまま動き続ける** (= `ps` で `.../versions/<old>` が見える)。 スマホ側は「更新したのに同じエラー」 に見える。
+
+```sh
+# 実際に走っている版を確認 (= --version はディスク上の版で、server の版ではない)
+ps aux | grep '[c]laude remote-control'          # server プロセス
+ps aux | grep '[v]ersions/'                      # 実行中 binary の版が path に出る
+
+# server を新版で再起動 (KeepAlive があるので kickstart で足りる)
+launchctl kickstart -k gui/$(id -u)/<RC server の label>
+```
+
+⚠️ **再起動すると接続中のセッションは切れる**。 スマホの一覧に残る旧セッション行は開かない (= 「死んだセッションの残骸」、 下記「運用知見」 参照) — 新規セッションを作って入り直す。 ∴ **update は「切れてよいタイミング」 に user 自身が実行する**のが基本で、 Claude が会話中の接続を自分の判断で落とさない (= その会話の経路そのものを切る操作になる)。
+
+同じ罠は **CLI session 自身**にもある: 実行中の session は古い binary のままなので、 update 後に新 model を使うには**新しい session を開く**必要がある (2026-09-05 実測、 2.1.195 → 2.1.261)。
+
 ## CLI フラグ早見 (= `claude remote-control --help`、2026-06-12 実測)
 
 | フラグ | 効果 |
