@@ -2,6 +2,15 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 現在地 — 偽の締切 / 自己報告値 / 同一 file staging の 3 原則（2026-09-09）
+
+今回の整備は終了点。 instance (marker field の実装・個別 item への付与) は private layer に残置 (kernel-up / instance-down)。
+
+- **`docs/convention-design-principles.md#required-field-fabrication` (§23 新設)**: 監視機構が拾う条件に必須 field を置くと、 値が無い item に対して**捏造される**。 実例 = 期限 surface が deadline 持ちしか拾わない設計 + 「本人操作が要る item には必ず添える (自己設定で可)」 という規約 → 該当 6 件中 3 件が捏造で、 **本物の失効型期限 1 件がその中に並んで最上位 group に居た**。 kernel = 出自を宣言する第三の状態 + 設計要件 4 (無記載 = 従来の意味で移行不要 / loud 側 default / 「静かにする」 であって「消す」 ではない / 判別が自然言語なら機械化不能と declared) + 見分ける問い「値が無い item に書き手は何を書くか」。 §8.28 壁紙化の**上流** (= cadence でなく severity の出自)。 index.yaml 再生成済。
+- **`conventions/debugging-discipline.md` §15.5 [#tool-self-report-is-not-measurement](conventions/debugging-discipline.md#tool-self-report-is-not-measurement) + §15.6 [#stale-base-measurement](conventions/debugging-discipline.md#stale-base-measurement)**: bundler が build ごとに印字する `gzip:` を配布サイズとして読み、 依存の major 更新を「圧縮後が 9 kB 太る」 と評価して見送った → `gzip -9` 実測では**逆に 1.6 kB 減っていた**。 姉妹罠 = bot の更新 branch は作成時点の古い base 由来なので、 そこで build すると現在存在しない構成を測る。
+- **`conventions/multi-session-coordination.md#staging-window-race`**: 既存の「`git add -A` を使わず明示列挙」 は**相手が別 file に居るとき**しか効かない — 同一 file なら staging は file 単位で hunk の作者を区別せず、 検証に空けた数分で相手の commit に自分の hunk が吸われる。 防御 = **編集と commit の間を空けない** (検証は commit 後)。 public repo では**相手の未検査変更が leak gate を素通りする**のが最も危険。 同 session 内で双方向に 1 回ずつ発生。
+- registry 登録 = 前 2 者 (= layer-3 の drift 検出に配線)。
+
 ## 現在地 — Discord ⇄ board bridge engine + 組織図 builder（2026-09-08）
 
 今回の整備は終了点。 再開時は下記正本を読む (owner の instance / 経緯は private layer)。
