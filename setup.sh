@@ -28,6 +28,9 @@
 #        marker の警告。 commit-msg layer は 2026-05-26 追加 (= claude-code
 #        2.1.x harness invoke bug 修復 option B、 詳細は
 #        conventions/hook-authoring.md#delivery-audit-4-axes (d))
+#   6d. zsh の interactive_comments を有効化（貼り付けたコマンドの行内 `#` が
+#        argv に化けて壊れるのを防ぐ保険。conventions/shell-env.md
+#        #no-inline-comments-in-pasted-commands。odakin は自動 / 他は tip 表示のみ）
 #   9.  python-docx XML 宣言 auto-patch をインストール（Word「破損」回避）
 #   10. (macOS) pty-leak mitigation の opt-in ヒント表示（自動 install しない、
 #        conventions/macos-claude-app-pty-leak.md）
@@ -1349,6 +1352,38 @@ case "$CUR_EMAIL" in
                 echo "  あなたの commit author email ($CUR_EMAIL) は公開 commit に焼き付きます。"
                 echo "  GitHub の noreply を使うには (privacy 推奨):"
                 echo "    git config --global user.email \"$NOREPLY\""
+            fi
+        fi
+        ;;
+esac
+
+# --- 6d. zsh: interactive_comments (貼り付けコマンドの行内 `#` 保険) ---
+# macOS 既定の interactive zsh は interactive_comments が既定 OFF なので、
+# 貼り付けた行の `#` はコメントにならず argv に化けてコマンドが壊れる
+# (bash の interactive は既定 ON = zsh 固有の非対称)。
+# 詳細と「保険で出し手の規律を緩めない」理由は
+# conventions/shell-env.md#no-inline-comments-in-pasted-commands。
+# odakin: 自動追記 (idempotent) / 他ユーザー: 推奨 tip を表示のみ (非破壊)。
+case "${SHELL:-}" in
+    *zsh*)
+        if [ -f "$HOME/.zshrc" ] && grep -q 'interactive_comments' "$HOME/.zshrc" 2>/dev/null; then
+            : # 既に設定済 → no-op (冪等)
+        else
+            echo ""
+            echo "=== Step 6d: zsh interactive_comments ==="
+            if [ "$GH_USER" = "odakin" ]; then
+                {
+                    printf '\n'
+                    printf '%s\n' '# 貼り付けたコマンドの行内 # をコメントとして扱う (zsh 既定は OFF = 引数に化ける)'
+                    printf '%s\n' '# 正本 = claude-config/conventions/shell-env.md#no-inline-comments-in-pasted-commands'
+                    printf '%s\n' 'setopt interactive_comments'
+                } >> "$HOME/.zshrc"
+                echo "  ~/.zshrc に setopt interactive_comments を追記しました。"
+                echo "  (既存のタブに効かせるには source ~/.zshrc)"
+            else
+                echo "  interactive zsh は貼り付けた行の # をコメントとして扱いません"
+                echo "  (# 以降が余計な引数になりコマンドが壊れます)。bash と同じ挙動にするには:"
+                echo "    echo 'setopt interactive_comments' >> ~/.zshrc"
             fi
         fi
         ;;
