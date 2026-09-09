@@ -490,9 +490,31 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 
 **メタ規律**: hook 挙動を docs だけで assert せず、 ① logic は stdin で unit-test、 ② live 発火・新 field は **実測** (= throwaway hook / 実 tool call / 新 session)、 ③ 不確実な feature は **古い build でも動く path** を選ぶ (= stderr narrative / deny / new-session verify)。
 
-### <a id="frontend-dependent-cowork"></a>9.3 frontend 依存 — **Claude Code desktop app は hook を実行はするが、 その出力をモデルに honor しない**
+### <a id="frontend-dependent-cowork"></a>9.3 frontend 依存 — desktop app の hook 出力 honor は **build/時期で反転する。 前提にせず session ごとに測れ**
 
-hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 / desktop app)** にも依存する。 **実測 (2026-06-13、 desktop 埋込 build 2.1.170。 初回 session = PreToolUse 非効きを発見、 同日の cold-eyes 再検証 session で機構を精緻化)**:
+hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 / desktop app)** にも依存する。 **ただしこの依存は固定の性質ではなく、 同じ version 文字列のまま反転した実績がある** — 下の 2026-09-09 実測を参照。
+
+> 🔄 <a id="desktop-hook-honor-remeasure"></a>**2026-09-09 実測 (desktop 埋込 build 2.1.260、 `entrypoint=claude-desktop`) — 3 面すべて honor された** (= 2026-06-13 / 2026-09-05 の観測と**逆**):
+>
+> | 面 | 2026-06-13 / 09-05 の観測 | 2026-09-09 の実測 | 証拠 |
+> |---|---|---|---|
+> | SessionStart の context injection | 届かない | **届く** | 当 session が SessionStart hook 16 本の `<system-reminder>` を実受領。 別 desktop session でも 15 本受領し、 **whoami probe を走らせる前に** hook 由来の自己同定 stamp を出力した (= 注入を読んでいなければ書けない文字列) |
+> | PreToolUse の `permissionDecision: deny` | 素通し | **enforce される** | marker 無しの memory 書込みを Bash で試行 → guard の deny 文言で tool が実行前に停止、 probe file も生成されず |
+> | PostToolUse の `hookSpecificOutput.additionalContext` | (未測定) | **届く** | 検索 null nudge が tool_result 末尾に付与され、 両 session の transcript に literal で残存 |
+>
+> **原因は未特定** (= version 文字列は両日とも 2.1.260。 harness 側の変更か、 09-05 測定の交絡か、 いずれとも決められない。 断定しない)。
+>
+> **設計上の帰結 (重要)**: 「desktop だから hook は効かない」 を**対策見送りの根拠にしない**。 この前提は
+> ① 実際に反転した ② 反転しても誰も気づかない (= 前提が doc に焼かれると再測定の trigger が消える) の 2 点で危険。
+> hook 前提の対策を採否判定する turn では、 **その session で 1 回測る** (下の判別) — 測定コストは数秒で、
+> 誤った前提で数ヶ月 backlog を凍らせるコストより桁で安い。
+>
+> **1 session 分の判別レシピ** (= 3 面それぞれ独立):
+> - SessionStart 注入 = session 冒頭に hook 由来の `<system-reminder>` を受領しているか (= 受領していれば注入は生きている)。 transcript 側の裏取りは `attachment.type == "hook_success"` かつ `hookEvent == "SessionStart"` の record
+> - PreToolUse deny = 既知の deny 対象 (= 無害・可逆なもの) を 1 回叩いて block されるか
+> - PostToolUse additionalContext = 既知の nudge を 1 回発火させ、 tool_result 末尾に文言が付くか
+
+**旧観測 (2026-06-13、 desktop 埋込 build 2.1.170。 初回 session = PreToolUse 非効きを発見、 同日の cold-eyes 再検証 session で機構を精緻化)** — **上記のとおり 2026-09-09 には再現しない**。 build/時期依存の記録として残す:
 
 - **SessionStart hook**: desktop でも **プロセスとして実行される** (= 撤去前提の trace hook 〔stdin + 親プロセス path を記録〕 を SessionStart に仕込み、 desktop が `source:startup` の session を生成するたびに発火するのを確認。 親プロセス = 埋込 build 2.1.170)。 **だがその出力 (stdout / `additionalContext`) はモデルの文脈に注入されない** (= 同 hook に unique marker を載せ、 fresh な desktop session に「marker が見えるか」 と問うと「ない」。 加えて検証 session 自身が session 開始時に currentdate-anchor 〔無条件出力〕 や horizon の reminder を一切受領していない)。 ∴ **副作用 (file 書込等) は起きるが、 context injection は捨てられる**。
 - **PreToolUse hook**: その **permissionDecision (deny/ask) が honor されない** (= session 開始時から snapshot に在る memory-guard 〔marker 無し memory write を hard-deny するはず〕 が desktop で素通り。 deny 型ゆえ `bypassPermissions` でも隠れない零交絡で確定)。 execution 自体の有無は未分離 (= 初回 session の §2(d) trace 不在は **mid-session 追加による §9.1 snapshot 交絡**の可能性があり、 「実行されない」 と断定しない。 確実なのは「効果が届かない」)。
@@ -504,7 +526,7 @@ hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 
 - **有効化する手段は無い** (2026-06-13 確認): hook を desktop で on にする setting / CLI flag / env var は存在しない (`--output-format` は出力形式の制御で hook 実行とは無関係)。 desktop-native で最も近い機構は MCP server の `toolPolicy` (= 許可 tool の gating のみ、 PreToolUse のように **script を走らせる pre-tool-call は不可**)。 managed `allowManagedHooksOnly` は enterprise の管理制御で execution 保証ではない。
 - **判別**: `echo $CLAUDE_CODE_ENTRYPOINT` が `claude-desktop` なら **hook 出力はモデルに届かない** (= SessionStart injection も PreToolUse 判定も無効。 SessionStart は実行自体は起きるが出力が捨てられる)。 親プロセスが `Claude.app` 配下か、 embedded build が PATH の CLI build と別番かでも判る。
 
-**設計含意 (重要)**: hook は「Claude が滑った時に機械的に捕まえる第二視点」 (§5)。 desktop ではそれが消え、 guard は「Claude が規律を自力で守る」 単一視点 (§5.1) に degrade する。 ∴ **不可逆な事故を防ぐ guard ほど frontend 非依存の層に置く**:
+**設計含意 (重要)**: hook は「Claude が滑った時に機械的に捕まえる第二視点」 (§5)。 desktop で**その第二視点が消える期間がある**と、 guard は「Claude が規律を自力で守る」 単一視点 (§5.1) に degrade する (⚠️ 2026-09-09 実測では消えていない = [上の再測定](#desktop-hook-honor-remeasure)。 「消えている」 を既定にせずその session で測る)。 degrade しうること自体は変わらないので、 ∴ **不可逆な事故を防ぐ guard ほど frontend 非依存の層に置く**:
 - **public leak 防止** = commit-time の **git native hook** (`.git/hooks/pre-commit` + `commit-msg`) に置く (= frontend を経由せず `git commit` で必ず発火。 §2 補足「真の層は commit-time git hook」 と同じ理由 + §2(d) Bash harness-bug も同時に回避)。 ← desktop でも生きる class。
 - **無人定期の surfacing** = launchd / scheduled task + OS 通知 (= frontend 非依存)。 **補足 (2026-06-13)**: SessionStart hook は desktop でも実行される (出力注入は捨てられるが副作用は走る) ので、 「SessionStart hook が surface を file に書く → Claude が起動時にそれを読む 〔CLAUDE.md / skill description は desktop でも読まれる〕」 という橋渡しも成立 (= launchd と並ぶ生成側の選択肢。 死んでいるのは注入だけで、 file 経由なら通常の tool call で読めるため)。
   - <a id="surface-file-cleanup-ordering"></a>⚠️ **surface file は「最新 findings の写像」 契約 — write-or-delete を空 early-exit より先に置く**: この橋渡しの surface file は「今の findings」 として読まれるため、 findings が空になった beat では **file を削除する** (= 書くか消すか、 必ずどちらかが毎回走る)。 hook の典型形 `[ -z "$out" ] && exit 0` を surface 書込みより**前**に置くと、 findings 解消後に cleanup が dead code 化し、 **解消済みの古い 🔴 finding が file に残留** → 後続 session がそれを現在の障害として誤読する (実 incident 2026-07-17: fleet-heartbeat の解消済み finding が 9 日間残留、 sibling hook 群は write-first で正しく、 1 本だけ ordering が逆だった)。 検査 reflex = surface 書込みを持つ hook を新設 / review する時、 「空 finding の実行で file が消えるか」 を 1 回実走して確認する (`echo '{"hook_event_name":"SessionStart"}' | bash <hook> && ls <surface-file>`)。
