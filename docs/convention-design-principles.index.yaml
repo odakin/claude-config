@@ -625,6 +625,26 @@ sections:
     legacy: "21.3"
     level: 3
     title: "21.3 判別と由来"
+  - id: silent-probe-false-healthy
+    legacy: "22"
+    level: 2
+    title: "22. 安全網が自分で使う probe の失敗は、健全と同じ姿の答えに化ける"
+  - id: false-healthy-observation
+    legacy: "22.1"
+    level: 3
+    title: "22.1 観察 pattern"
+  - id: false-healthy-why
+    legacy: "22.2"
+    level: 3
+    title: "22.2 なぜ安全網の内側で起きるか"
+  - id: false-healthy-pattern
+    legacy: "22.3"
+    level: 3
+    title: "22.3 pattern"
+  - id: false-healthy-when
+    legacy: "22.4"
+    level: 3
+    title: "22.4 判別と由来"
   - id: changelog
     level: 2
     title: "変更履歴"
