@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pasted-command-comment-guard.sh
+# pasted-command-comment-guard.sh — user に貼らせるコマンドに `#` コメントが混ざっていたら Stop で書き直させる (対話 zsh は # をコメントにしない)
 #
 # Stop hook: 「user に貼って実行してもらうコマンド」 を chat の fenced code block で
 # 出したターンで、 その block 内に `#` コメント (行内・行頭とも) が混ざっていたら

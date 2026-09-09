@@ -24,6 +24,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[memory-guard-bash.test.sh](memory-guard-bash.test.sh)** — memory-guard-bash.sh (Bash 用) の self-test (hermetic)
 - **[memory-guard.sh](memory-guard.sh)** — メモリ書き込みガード — Edit/Write 用（§8 feedback deny + escape hatch: machine-local marker）
 - **[memory-guard.test.sh](memory-guard.test.sh)** — memory-guard.sh (Edit/Write 用) の self-test (hermetic)
+- **[pasted-command-comment-guard.sh](pasted-command-comment-guard.sh)** — user に貼らせるコマンドに `#` コメントが混ざっていたら Stop で書き直させる (対話 zsh は # をコメントにしない)
+- **[pasted-command-comment-guard.test.sh](pasted-command-comment-guard.test.sh)** — logic + incident-replay selftest
 - **[pdf-read-fallback-nudge.sh](pdf-read-fallback-nudge.sh)** — PostToolUse(Read): Read tool が .pdf を `pdftoppm is not installed` で fail した時に PyMuPDF 1-liner を system reminder で injection (= 2026-05-18 RCA、 規律 wording に依存しない機械的 enforcement layer)
 - **[public-leak-guard.sh](public-leak-guard.sh)** — 公開リポ leak 防止 — PreToolUse(Edit|Write|MultiEdit) Tier A 構造制約 regex
 - **[public-leak-guard.test.sh](public-leak-guard.test.sh)** — public-leak-guard.sh の self-test (hermetic)
