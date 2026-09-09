@@ -374,7 +374,8 @@ Web 入力のテキスト欄 (経費の必要性等) に**波ダッシュ「〜�
 ## <a id="submission-artifact-staging"></a>差し替え物の版を取り違えないための staging 機構
 
 差し戻し改訂の最大の事故は物理的な取り違え — 同名の調書 PDF が複数系統 (提出済 snapshot /
-自己改訂版 / 事務対応版 / 盲検レビュー用 referee copy / 次版) 並存し、人間がファイル選択
+自己改訂版 / 事務対応版 / 盲検レビュー用 referee copy 〔= 作り方と隔離の作法は
+`ai-collaboration/conventions/cold-eyes-isolation.md`〕 / 次版) 並存し、人間がファイル選択
 ダイアログで拾い間違える。**「どれが最新か」を人間の記憶に置かない**設計にする:
 
 1. **build stamp** — ビルド script が `source の sha256` と `出力 PDF の sha256` を stamp file に
