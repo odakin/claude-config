@@ -121,7 +121,7 @@ claude-config/
 │   ├── tikz-pgfplots.md                    # TikZ / pgfplots を含む LaTeX project で図を作るとき
 │   ├── time-context.md                     # multi-day session で「今日・明日・今夜」等の時刻 deictic を解釈するとき
 │   ├── tool-call-malformed-paste.md        # malformed tool call バグを別 session に説明するとき (貼り付け用短縮版)
-│   ├── tool-call-robustness.md             # tool call が malformed で壊れたとき・その予防を設計するとき
+│   ├── tool-call-robustness.md             # tool call が malformed で壊れたとき・permission classifier に session ごとブロックされたとき (= `denied by the Claude Code auto mode classifier` / `because of earlier conversation content`)・その予防を設計するとき
 │   ├── tts-review.md                       # 長文ドキュメント (提案書・原稿・メール draft 等) を音声読み上げで校正したいとき
 │   ├── ui-toggle-convention.md             # UI panel 内の toggle group を設計するとき
 │   ├── verification-cycle-ops.md           # 検証サイクルを session を越えて回し続ける仕組みを設計・運用・診断するとき
