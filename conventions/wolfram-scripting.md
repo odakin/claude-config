@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: wolframscript を書く・debug するとき
+when: wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき
 category: research-domain
-summary: wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用、 #plotlegends-export = PlotLegends は Graphics でなく Legended を返すため GUI 保存で凡例が落ち (対処 = 変数に入れて Export)、 位置調整で LineLegend を挟むと PlotStyle の色継承が切れて凡例だけ黒くなる (対処 = Placed にラベルだけ渡す) (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
+summary: wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用、 #plotlegends-export = PlotLegends は Graphics でなく Legended を返すため GUI 保存で凡例が落ち (対処 = 変数に入れて Export)、 位置調整で LineLegend を挟むと PlotStyle の色継承が切れて凡例だけ黒くなる (対処 = Placed にラベルだけ渡す)、 #logplot-ticks = LogLogPlot の目盛は user 指定が「データ座標」 で読み出し (ScaledTicks / AbsoluteOptions) が「自然対数座標」 という非対称があり Log を掛けて渡すとラベルが黙って全消失、 自動生成器は 6〜8 decade を境に decade 内の細目盛を落とす (実測表あり、 密度引数は効かない) (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
 -->
 # Wolfram / wolframscript scripting conventions
 
@@ -224,6 +224,80 @@ PlotLegends -> Placed[
 ### 検証のしかた
 
 「凡例が入ったか」は目視でなく生成 PDF から機械的に確認できる。テキスト抽出でラベル文字列の有無を、ラベル文字の**直左**のピクセル彩度で色見本の有無を判定する (凡例の裏を曲線が横切ると誤検出しうるので、複数ラベルで照合する)。
+
+---
+
+## <a id="logplot-ticks"></a>5. `LogLogPlot` の目盛 — user 指定は**データ座標**、 自動生成は decade 数で様式が切り替わる
+
+### 問題
+
+`LogLogPlot` で「横軸には decade 内の細かい目盛 (2,3,…,9) が入るのに、 縦軸には入らない」 という非対称が起きる。 縦軸が対数になっていないように見えるが、 **両軸とも対数**であり、 差は軸が何 decade 走るかだけで決まる。
+
+### 事実 1: 自動生成器は decade 数で様式を切り替える (実測)
+
+既定の目盛は `Charting`ScaledTicks[{Log, Exp}]` が作る。 軸幅を変えて食わせた実測:
+
+| 軸幅 | tick 総数 | ラベル付き | decade 内の細目盛 |
+|---|---|---|---|
+| 3 decade | 42 | 7 | 37 |
+| 4 decade | 55 | 5 | 48 |
+| 6 decade | 64 | 7 | 56 |
+| **8 decade** | 9 | 4 | **0** |
+| 20 decade | 21 | 5 | 0 |
+| 43 decade | 44 | 5 | 0 |
+
+**閾値は 6〜8 decade の間。** それを超えると decade 内の細目盛が落ち、 ラベルも 5〜10 decade おきに間引かれる。 「対数目盛かどうか」 ではなく **解像できるかどうか**の判断なので、 強制しても紙の上では潰れる (下記)。
+
+なお `Charting`ScaledTicks[{Log,Exp}][lo, hi, {n, n}]` の第 3 引数 (既定 `{6,6}`) を上げても、 広い範囲では結果が変わらない (実測: `{6,6}` / `{12,12}` / `{20,20}` すべて同一)。
+
+### 事実 2: 読む座標と書く座標が違う
+
+- **`Charting`ScaledTicks` が返す位置・`AbsoluteOptions` で見える位置 = 自然対数**座標 (`10^-42` が `-96.71`)
+- **user が `Ticks` / `FrameTicks` に渡す位置 = データ座標** (`10.^k` をそのまま渡す)
+
+**この非対称が罠。** 読み出した座標系に合わせて `Log[10.^k]` を渡すと、 `LogLogPlot` が更に `Log` を掛けるので位置が壊れ、 **その軸のラベルが全部黙って消える** (error も warning も出ない)。
+
+### 罠: 同一位置に「ラベル付き」 と「空ラベル」 を重ねると片方が消える
+
+major と minor の `Table` を単純に `Join` すると、 重複位置で後勝ちして major のラベルが飛ぶ。 minor 側から major の位置を除く。
+
+### 動作確認済みの recipe
+
+```mathematica
+(* ⚠️ 位置は Log を掛けずにデータ座標で渡す *)
+majY = Table[{10.^k, Superscript[10, k], {0.02, 0}}, {k, -40, 0, 5}];
+minY = Table[{10.^k, "", {0.01, 0}},
+             {k, Select[Range[-42, 0], Mod[#, 5] != 0 &]}];   (* major の位置を除く *)
+rightY = Table[{10.^k, "", {0.01, 0}}, {k, -42, 0}];
+
+LogLogPlot[curves, {x, 10^-5, 10^1}, Frame -> True,
+  FrameTicks -> {{Join[majY, minY], rightY}, {Automatic, Automatic}},
+  GridLines -> {Automatic, Table[10.^k, {k, -40, 0, 5}]},
+  GridLinesStyle -> Directive[GrayLevel[0.85]]]
+```
+
+`GridLines` も同じデータ座標。 **広い軸では細目盛の代わりに GridLines が対数構造を目に伝える**ので、 こちらの方が実用的。
+
+### 強制する前に実寸で割る
+
+「横軸と同じ様式」 が可能かは印刷実寸の割り算で決まる。 論文の `0.6\textwidth` (≈ 4.3 in 幅、 既定 aspect で高さ 2.7 in) に 42.6 decade を載せると:
+
+```
+1 decade = 4.5 pt = 1.6 mm   →   decade 内 8 本の細目盛は平均 0.5 pt = 178 µm
+```
+
+= 目盛でなく黒い櫛になる。 **軸幅が閾値を超えているなら、 様式を揃えるのではなく (a) 縦軸の範囲を切る (b) ラベル間隔を粗くして GridLines を足す のどちらかを選ぶ**。
+
+### 検証のしかた (headless)
+
+`AbsoluteOptions[plot, FrameTicks]` は **front end を要求する** (`FrontEndObject::notavail`) ので wolframscript から目盛を読み出せない。 §4 と同じ手で **`Export` した PDF から text 抽出**し、 軸ラベルの個数と文字列を機械的に照合する (左端 20% 程度に落ちる word を拾えば縦軸ラベルが取れる)。 目盛が黙って消える罠 (上記) は、 この照合でしか気づけない。
+
+軸幅そのものは front end 不要で読める:
+
+```mathematica
+pr = PlotRange /. AbsoluteOptions[p, PlotRange];   (* 自然対数座標 *)
+(pr[[2,2]] - pr[[2,1]])/Log[10]                    (* 縦軸が何 decade か *)
+```
 
 ---
 

@@ -2,6 +2,28 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-09 (別 session) — 規格化係数の記法乗り換え事故 + 対数プロットの目盛 (規約 2 本)
+
+owner の物理 repo で `2π factor` フラグを監査したところ、 フラグの射程内は正しく、 代わりに **published 論文由来の前係数が 4 倍低い**ことが判明した。 一般則を 2 本 hoist。
+
+- **`conventions/paper-audit.md#composite-quantity-notation-migration` (新設)**: 合成量には「和」 系
+  ($\sigma+\sigma'$) と「平均」 系 ($(\sigma+\sigma')/2$) の 2 流儀があり、 **記法を乗り換えるとき括弧の形
+  だけ写すと前係数が定数倍ずれる**。 指数部は合うので読んでも気づかない。 実例 = 分子と分母で
+  2 倍ずつ同じ向きに効いて括弧の中で 4 倍が落ち、 published 論文 + 引用先の進行中原稿 9 式に伝播。
+  **決定打は自明極限の 1 行検算** (規格化された状態の自己重なり = 1 / 等幅 / 距離ゼロ) — 導出の再演より
+  安く結論が二値。 併せて (2) 正しい形は自然な不等式に載る (相加相乗) (3) **同一文書の別節に独立導出の
+  正しい形が同居しうる** ので記法の全出現を grep (4) 引用の係数は写す前に自分の規約で 1 回導出。
+  downstream = 影響を「全体定数か力学変数依存か」 で仕分け、 定数でも **abstract が「全体確率は X で
+  決まる」 型なら直撃**する。
+- **`conventions/wolfram-scripting.md#logplot-ticks` (§5 新設)**: `LogLogPlot` の目盛。 (a) **user が渡す
+  `Ticks`/`FrameTicks` はデータ座標、 読み出し (`ScaledTicks` / `AbsoluteOptions`) は自然対数座標** という
+  非対称があり、 読み出し側に合わせて `Log[10^k]` を渡すと **その軸のラベルが黙って全消失**する
+  (error も warning も無い)。 (b) 自動生成器は **6〜8 decade を境に decade 内の細目盛を落とす** (実測表)、
+  密度引数は効かない。 (c) 同一位置に labeled と `""` を重ねると後勝ちで消える。 (d) 強制の可否は実寸で
+  割って決める (42.6 decade を 2.7 in に載せると細目盛は 178 µm = 黒い櫛)。 (e) `AbsoluteOptions` は
+  front end 必須なので、 検証は §4 と同じく **Export した PDF から text 抽出**。
+  doc-meta の `when` に「対数プロットの目盛」 を追記 (= 生成索引からの routing)。
+
 ## 現在地 — 偽の締切 / 自己報告値 / 同一 file staging の 3 原則（2026-09-09）
 
 今回の整備は終了点。 instance (marker field の実装・個別 item への付与) は private layer に残置 (kernel-up / instance-down)。

@@ -129,7 +129,7 @@ claude-config/
 │   ├── web-map-projections.md              # d3-geo / Natural Earth で世界地図ビューア (図法切替・中央経線回転・国境・国名・拡大) を作る・直すとき
 │   ├── web-tools.md                        # WebSearch / WebFetch / browser 自動化の信頼性を判断するとき
 │   ├── windows-msys.md                     # Windows (Git Bash / MSYS) 上で本リポの script・hook を動かす / 移植性のある shell・Python を書くとき
-│   ├── wolfram-scripting.md                # wolframscript を書く・debug するとき
+│   ├── wolfram-scripting.md                # wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき
 │   ├── yaml-hazards.md                     # YAML を読む・書く・新規 data file の形式 (yaml/toml/json) を選ぶ・yamllint を設定するとき
 │   └── zenn.md                             # Zenn.dev 記事を執筆・入稿するとき
 <!-- AUTO-TREE:conventions END -->

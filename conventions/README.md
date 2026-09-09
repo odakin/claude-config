@@ -165,8 +165,8 @@ layer 1 (public) のドメイン固有規約 104 file をカテゴリ別に列�
   - 数値解析 gotchas (scale-dependent default 等、科学計算リポ共通)
 - **[verification-cycle-ops.md](verification-cycle-ops.md)** — 検証サイクルを session を越えて回し続ける仕組みを設計・運用・診断するとき
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/verification-cycle-ops.md (6 原則 / 導出 state / 台帳 3 種 + retro / 無人層 / fresh session の手順)。 本 file は旧 anchor を保つ stub
-- **[wolfram-scripting.md](wolfram-scripting.md)** — wolframscript を書く・debug するとき
-  - wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用、 #plotlegends-export = PlotLegends は Graphics でなく Legended を返すため GUI 保存で凡例が落ち (対処 = 変数に入れて Export)、 位置調整で LineLegend を挟むと PlotStyle の色継承が切れて凡例だけ黒くなる (対処 = Placed にラベルだけ渡す) (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
+- **[wolfram-scripting.md](wolfram-scripting.md)** — wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき
+  - wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用、 #plotlegends-export = PlotLegends は Graphics でなく Legended を返すため GUI 保存で凡例が落ち (対処 = 変数に入れて Export)、 位置調整で LineLegend を挟むと PlotStyle の色継承が切れて凡例だけ黒くなる (対処 = Placed にラベルだけ渡す)、 #logplot-ticks = LogLogPlot の目盛は user 指定が「データ座標」 で読み出し (ScaledTicks / AbsoluteOptions) が「自然対数座標」 という非対称があり Log を掛けて渡すとラベルが黙って全消失、 自動生成器は 6〜8 decade を境に decade 内の細目盛を落とす (実測表あり、 密度引数は効かない) (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
 
 ## Web・公開プラットフォーム (`web`)
 
