@@ -2,6 +2,25 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-10 — commit に session id の trailer を焼く (並列 session の事後追跡)
+
+owner の質問「コミットやプッシュのとき、 どのセッションがしたかも書いとくといいことある?」 から。
+**予防ではなく forensics** と位置づけて実装した (= 巻き込みを防ぐのは既存の `git commit -- <path>`
+規律の仕事で、 本件はその防御が破れた後に読み解く手段)。
+
+- `prepare-commit-msg` hook が `Claude-Session: <CLAUDE_CODE_SESSION_ID>` を 1 行足す。 読みは
+  `git log --format='%h %(trailers:key=Claude-Session,valueonly)'`。 session id は transcript の
+  file 名でもあるので **commit → その commit を書いた会話**の逆引きも通る。
+- **host / account は書かない**判断で、 当初案の public / private 出し分けを設計から消した
+  (= 出し分けの設定漏れで機器名が公開 history に焼き付く経路ごと除去)。 却下した案と理由は
+  [DESIGN §2026-09-10](DESIGN.md#session-provenance-trailer-design)。
+- 実装 = `scripts/prepare-commit-msg-session.sh` (正本・設計理由も header) +
+  `scripts/install-session-trailer.sh` + `setup.sh` Step 8b (marker 不要 = 全 repo)、 規約 =
+  [`#session-provenance-trailer`](conventions/multi-session-coordination.md#session-provenance-trailer)。
+- selftest 10 件 (冪等 / injection 拒否 / comment 行保持 / 既存 Co-Authored-By と同 block /
+  e2e commit + amend)。 owner の手元では 67 repo に配布済 (既存 prepare-commit-msg の上書きは 0 件)。
+  この commit 自身に trailer が付いていることで dogfood 済。
+
 ## 2026-09-10 (別 session) — 画面 drive の harness を層1 化 + 並列 session / gate hook の 2 規約
 
 owner の質問「e-Rad 以外のサイトでも GUI 抜きにできるか」 から。 **汎用化すべきは driver でなく「降り方」** と判定し、

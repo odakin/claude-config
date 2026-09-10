@@ -1526,7 +1526,7 @@ if [ ! -x "$INSTALLER_SESSION" ]; then
 else
     SESSION_COUNT=0
     for d in "$CLAUDE_DIR"/*/; do
-        [ -d "$d.git" ] || continue
+        [ -e "$d.git" ] || continue   # -e = worktree (.git が file) も拾う
         if "$INSTALLER_SESSION" "${d%/}" >/dev/null 2>&1; then
             SESSION_COUNT=$((SESSION_COUNT + 1))
         fi

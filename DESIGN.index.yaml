@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: session-provenance-trailer-design
+    legacy: "2026-09-10"
+    level: 2
+    title: "2026-09-10: commit に session id trailer (host/account は焼かない)"
   - id: codex-layered-integration
     legacy: "2026-09-01"
     level: 2

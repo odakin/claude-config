@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-10: commit に session id trailer (host/account は焼かない)](#session-provenance-trailer-design)
 - [2026-09-01: Codex integration — L1 正本 + 明示 L4 wiring + 多層検証](#codex-layered-integration)
 - [2026-09-01: AUTO-TREE の auto-load 税 縮退 (when 表示 + hooks/scripts README 移設)](#auto-tree-autoload-slim)
 - [2026-07-10: 検証の発火面化 — CI + run-all-checks + hook 配線の単一リスト駆動化](#ci-and-single-list-wiring)
@@ -32,6 +33,36 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="session-provenance-trailer-design"></a>2026-09-10: commit に session id trailer (host/account は焼かない)
+
+並列 session が同じ working tree を触ると commit author が全部同じ人間に潰れ、 「どの commit が
+どの session か」 が git から復元できない (= staging window race の事後追跡が transcript 漁りと
+記憶になる)。 `prepare-commit-msg` hook で `Claude-Session: <id>` を trailer に 1 行足して機械抽出
+可能にした。 規約 = [`multi-session-coordination.md#session-provenance-trailer`](conventions/multi-session-coordination.md#session-provenance-trailer)、
+実装の正本 = `scripts/prepare-commit-msg-session.sh` の header。
+
+**判断 1: host / account / surface は書かない。** 当初案は「public repo = session id のみ / private
+repo = host と surface まで」 の出し分けだった。 却下の理由: (a) session id から transcript を引けば
+冒頭の自己同定 stamp に host も account も載っており冗長 (b) 出し分けは `.claude/public-repo.marker`
+の有無に依存するため、 **marker 付け忘れの public repo で機器名が公開 history に焼き付く** — 不可逆な
+leak が「設定漏れ」 という最も起きやすい原因で起きる。 id だけにすると分岐そのものが消え、 全 repo で
+同一挙動になる (= 事故の型が設計から消える)。 方向としては [§公開リポ leak 防止](#public-repo-leak-prevention)
+の「機器名は具体値でなく属性で書く」 と同じ。
+
+**判断 2: marker を条件にせず全 repo に配る** (setup.sh Step 8b)。 sibling の
+`install-public-commit-msg.sh` は public repo 限定だが、 本 hook は private repo (= 並列 session が
+同じ tree を触る作業場) でこそ効く。 判断 1 で public / private の挙動差が消えたので、 marker を
+条件にする理由も無くなった。
+
+**判断 3: 既存 trailer があれば追記しない** (`git interpret-trailers --if-exists doNothing`)。
+「今の session」 を足し続ける設計にすると、 interactive rebase 1 回で無関係な全 commit に現 session が
+混入する。 最初に書いた session を保存する側を採った。 帰結として **rebase / amend で書き換えた
+session は記録されない** (= 書き換えの追跡が要るなら reflog と transcript 側の仕事)。
+
+**fail-open (= 何が起きても exit 0)**: commit を止める価値のある検査ではない。 並列 session の作業が
+hook 起因で詰まる方が、 trailer が 1 個欠けるより高くつく。 env `CLAUDE_CODE_SESSION_ID` が無ければ
+no-op なので、 **trailer の無い commit = AI session を経由していない**と読めるのは副産物の利点。
 
 ## <a id="codex-layered-integration"></a>2026-09-01: Codex integration — L1 正本 + 明示 L4 wiring + 多層検証
 
