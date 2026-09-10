@@ -122,20 +122,31 @@ class Ctx:
         """page 内の関数を呼ぶ。 expr は frame 起点の literal (例 ``onInputApplication('01')``)。"""
         return "(()=>{" + self.frame + "." + expr + ";return " + J(ret) + "})()"
 
-    def js_call_href(self, fn_pattern: str, ret: str = "call-href") -> str:
+    def js_call_href(self, fn_pattern: str, ret: str = "call-href", literal: bool = False) -> str:
         """``<a href="javascript:onFoo('x')">`` を探して href をそのまま eval する (引数付き保存関数の定石)。
 
+        literal=True … pattern を **部分文字列** として照合する。 特定行の handler を狙うとき
+        (``onUpdate('20260908231617499'`` 等) は引数に ``(`` ``'`` が入って正規表現として壊れるので必須。
         ⚠️ 見つからない時は throw せず ``{missing: <pattern>}`` を返す。
         """
+        if literal:
+            find = "e=>(e.getAttribute('href')||'').includes(" + J(fn_pattern) + ")"
+        else:
+            find = "e=>new RegExp(" + J(fn_pattern) + ").test(e.getAttribute('href')||'')"
         return ("(()=>{const f=" + self.frame + ";const a=Array.from(f.document.querySelectorAll('a'))"
-                ".find(e=>new RegExp(" + J(fn_pattern) + ").test(e.getAttribute('href')||''));"
+                ".find(" + find + ");"
                 "if(!a)return {missing:" + J(fn_pattern) + "};"
                 "f.eval(a.getAttribute('href').replace(/^javascript:/,''));return " + J(ret) + "})()")
 
-    def js_click(self, fn_pattern: str, ret: str = "click") -> str:
-        """onclick / href が pattern に一致する ``<a>`` を click (行追加ボタン等)。"""
+    def js_click(self, fn_pattern: str, ret: str = "click", literal: bool = False) -> str:
+        """onclick / href が pattern に一致する ``<a>`` を click (行追加ボタン等)。
+
+        literal=True … 部分文字列で照合 (引数付き handler を狙うとき。 js_call_href と同じ理由)。
+        """
+        test = ("h.includes(" + J(fn_pattern) + ")" if literal
+                else "new RegExp(" + J(fn_pattern) + ").test(h)")
         return ("(()=>{const d=" + self.frame + ".document;const a=Array.from(d.querySelectorAll('a'))"
-                ".find(e=>new RegExp(" + J(fn_pattern) + ").test(e.getAttribute('onclick')||e.getAttribute('href')||''));"
+                ".find(e=>{const h=e.getAttribute('onclick')||e.getAttribute('href')||'';return " + test + ";});"
                 "if(!a)return {missing:" + J(fn_pattern) + "};a.click();return " + J(ret) + "})()")
 
     # ---------------------------------------------------------------- 入力
@@ -361,6 +372,11 @@ def _selftest() -> int:
                      ("select", frameset.js_select_by_label("n", "l"))):
         chk("missing" in js, f"{name} は missing を返す")
 
+    # 3b. literal 一致 = 引数付き handler (正規表現メタ文字を含む) を狙う経路
+    lit = frameset.js_call_href("onUpdate('2026090823161'", ret="resume", literal=True)
+    chk(".includes(" in lit and "new RegExp" not in lit, "call_href(literal) は includes で照合")
+    chk("h.includes(" in frameset.js_click("onEdit('r7'", literal=True), "click(literal) は includes で照合")
+
     # 4. readback は保存文言・hit・エラー語を 1 回で取る
     rb = frameset.js_readback("合計 \\d+", saved="保存が完了しました")
     chk(all(k in rb for k in ("saved:", "hit:", "errs:")), "readback は saved/hit/errs を同時に返す")
@@ -377,7 +393,10 @@ def _selftest() -> int:
     allj = [frameset.js_fill({"a": "1"}), frameset.js_select_by_label("n", "l"), frameset.js_readback("x", saved="y"),
             frameset.js_nav("/a.do"), frameset.js_call("f('1')"), frameset.js_call_href("onSave"), frameset.js_click("onAdd"),
             frameset.js_text(), frameset.js_field_dump(), frameset.js_handler_dump(), plain.js_fill({"a": "1"}),
-            plain.js_select_by_label("n", "l"), plain.js_field_dump(), js_capture_xhr(), js_capture_xhr_read()]
+            plain.js_select_by_label("n", "l"), plain.js_field_dump(), js_capture_xhr(), js_capture_xhr_read(),
+            frameset.js_call_href("onUpdate('X','1','00061'", ret="resume", literal=True),
+            frameset.js_click("onEdit('r7',2", ret="edit", literal=True),
+            plain.js_call_href("onSave"), plain.js_click("onAdd"), plain.js_readback("x", saved="y")]
     res = js_syntax_check(allj)
     chk(not res, f"生成した {len(allj)} 本の JS が構文的に妥当" + (f" — {res}" if res else ""))
     chk(find_node() is not None, "node を発見 (PATH / nvm / homebrew)")
