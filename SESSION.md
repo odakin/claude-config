@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-研究の検証方法とスクリプトの配置・索引を整備している段階。[研究スクリプトの正本と全数索引](conventions/scientific-computing.md#research-script-homes) と [索引検出器](scripts/check-script-index.py) から再開する。次に変更するときは自己検査と実 project の索引を照合し、生成索引の同期を確認する。閉形式の主張と基底不変検査の死角は同じ科学計算規約、並行ビルドは [生成物の混入防止](conventions/multi-session-coordination.md#generated-file-contamination) が正本。LaTeX の検査は [括弧参照](conventions/latex.md#bare-parenthetical-crossrefs)、[PDF検査](conventions/latex.md#latex-pdf-audit)、[成果物別の視覚検査強度](conventions/latex.md#visual-verification-intensity) を参照する。
+研究用スクリプトの全数索引と知見の配置を再点検し、通常の論文編集へ画像確認を一律適用していた手順を修正したところ。検査要否は [LaTeX 規約](conventions/latex.md#visual-verification-intensity)、ツール出力の意味は [PDF 検査器](scripts/latex-pdf-audit.py)、時間依存する演算子・初期状態・拘束を課した場の検証は [科学計算規約](conventions/scientific-computing.md#operator-time-state-order) が正本。次は各項目を使う作業で必要な検査だけを実施し、新しい研究スクリプトは [索引検出器](scripts/check-script-index.py) で照合する。具体的な物理の導出は各研究 project に置き、共有規約には再利用できる方法を残す。
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
