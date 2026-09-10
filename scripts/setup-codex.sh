@@ -156,7 +156,7 @@ add_git_repo() {
 }
 
 resolve_git_repos() {
-  local requested root candidate candidate_physical
+  local requested root candidate candidate_physical candidate_repo
   for requested in "${REQUESTED_REPOS[@]+"${REQUESTED_REPOS[@]}"}"; do
     add_git_repo "$requested"
   done
@@ -172,7 +172,15 @@ resolve_git_repos() {
       [ -e "$candidate/.git" ] || [ -L "$candidate/.git" ] || continue
       candidate_physical="$(canonical_directory "$candidate")"
       case "$candidate_physical/" in
-        "$root"/*/) add_git_repo "$candidate_physical" ;;
+        "$root"/*/)
+          candidate_repo="$(git -C "$candidate_physical" rev-parse --show-toplevel 2>/dev/null || true)"
+          [ -n "$candidate_repo" ] || continue
+          candidate_repo="$(canonical_directory "$candidate_repo")"
+          case "$candidate_repo/" in
+            "$root"/*/) add_git_repo "$candidate_repo" ;;
+            *) echo "NOTE: skipping Git root outside --repo-root: $candidate" ;;
+          esac
+          ;;
         *) echo "NOTE: skipping repo symlink outside --repo-root: $candidate" ;;
       esac
     done

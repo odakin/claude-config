@@ -276,9 +276,9 @@ the configured default must not be presented as the run's effective value.
 `scripts/setup-codex.sh --repo <path>` installs the Git hook in exact,
 repeatable repositories. `--repo-root <path>` explicitly selects that
 directory plus its immediate child repositories; it does not recurse or scan
-the user's machine. A child symlink whose physical repository is outside the
-selected root is skipped; select it explicitly with `--repo` if intended. All
-selected hooks are preflighted before any mutation. A
+the user's machine. A child symlink or child whose resolved Git top-level lies
+outside the selected root is skipped; select it explicitly with `--repo` if
+intended. All selected hooks are preflighted before any mutation. A
 user-managed `prepare-commit-msg` makes default mode refuse the whole install;
 `--replace` preserves a timestamped backup. Cloning alone still changes
 nothing. `scripts/audit-codex-integration.sh --repo <path>` checks the installed
