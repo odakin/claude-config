@@ -1,0 +1,99 @@
+# Stable slug index -- AUTO-GENERATED from the doc by scripts/generate-doc-index.py.
+# id/level/title are DERIVED from the markdown (edit the md + re-run, do NOT hand-edit
+# them here). legacy (a section's original §-number = a permanent forwarding address),
+# related, and any other hand field are PRESERVED. See convention-design-principles §14.7 (= #inbound-ref-robustness).
+# Validated by scripts/check-office-automation-index.py (dangling=0 / orphan=0).
+sections:
+  - id: scale-dependent-default
+    legacy: "1"
+    level: 2
+    title: "1. Scale-dependent default は unit system 変更で silently 壊れる"
+  - id: explicit-integrator-instability
+    legacy: "2"
+    level: 2
+    title: "2. Explicit integrator は dτ 安定境界を超えると silently 発散、 implicit Euler / 解析解で根治"
+  - id: nintegrate-workingprecision
+    legacy: "3"
+    level: 2
+    title: "3. NIntegrate WorkingPrecision propagation: 入力配列の precision を inherit させないと `NIntegrate::precw` 大量発火"
+  - id: porting-metric-divergence
+    legacy: "4"
+    level: 2
+    title: "4. 言語移植 verification: 副次 metric vs main metric の divergence は edge-of-stability boundary として documented で済む"
+  - id: archive-cutover-precondition
+    legacy: "5"
+    level: 2
+    title: "5. archive / cutover の precondition: smoke (= exit 0) ではなく sample assertion (= 1 件以上 byte exact verify)"
+  - id: sympy-verify-transcript
+    legacy: "6"
+    level: 2
+    title: "6. Visual source (= 写真 / scan / PDF) からの数式 transcript の hallucination は sympy symbolic verify で expose する"
+  - id: verify-independent-derivation
+    legacy: "7"
+    level: 2
+    title: "7. 検証は source からの独立導出 — 一致合わせは検証でない; 公表式の係数も数値 verify"
+  - id: first-principles-crosscheck
+    legacy: "8"
+    level: 2
+    title: "8. 数値結果は第一原理 (次元解析・対称性・Ward 恒等式・既知極限) で cross-check; 自前の数値がバグり得る"
+  - id: calibrate-magnitude-sign
+    legacy: "9"
+    level: 2
+    title: "9. Ratio/構造 check は overall scale を fix しない; 既知量で calibrate し、 magnitude と sign を分ける"
+  - id: basis-invariant-check-blind-spot
+    level: 3
+    title: "基底不変な検査は固定ラベルの規約を検証しない"
+  - id: figure-vector-extraction
+    legacy: "5"
+    level: 2
+    title: "5. 論文 PDF 図のベクトル path から曲線データを復元して数値照合する (2026-08-21)"
+  - id: svg-contour-self-calibration
+    level: 3
+    title: "変種 (2026-09): `pdftocairo -svg` 経由 + 同図内の公開等高線で自己較正"
+  - id: evolve-constraints-algebraically
+    legacy: "10"
+    level: 2
+    title: "10. 拘束量は独立変数として積分しない — drift → 符号反転 → 反減衰爆発 (2026-09)"
+  - id: namespace-override-verification
+    legacy: "11"
+    level: 2
+    title: "11. 別 script の関数を差し替える wrapper は、 差し替えが効いたことを sentinel で検証する (2026-09)"
+  - id: declared-self-consistency-audit
+    level: 2
+    title: "「self consistent に解いた」 と書く前に、 loop の全変数が code で戻っているか列挙する (2026-09)"
+  - id: floquet-exact-background
+    level: 2
+    title: "Floquet 指数は厳密な周期解の上で取る — 調和近似の背景は偽の不安定性を作る (2026-09)"
+  - id: first-step-skips-initial-heuristic
+    level: 2
+    title: "SciPy `solve_ivp` の初期 step 推定 overflow は `first_step` で消す (2026-09)"
+  - id: contour-distance-axis
+    level: 2
+    title: "等高線への「距離」 は物理的に意味のある軸に沿って測る (2026-09)"
+  - id: spectator-check-over-the-roll
+    level: 2
+    title: "dilaton 型結合の spectator 判定は pivot でなく roll 全体で — 正準場は Weyl 因子で伸びる (2026-09)"
+  - id: small-sdp-without-solver
+    level: 2
+    title: "小さな SDP を solver 無しで回す — SLSQP + explicit dual certificate の sandwich (2026-09)"
+  - id: analytic-kernel-checks
+    level: 2
+    title: "解析接続した積分核の検証"
+  - id: complex-null-is-not-zero
+    level: 3
+    title: "複素双線形の零は零ベクトルを意味しない"
+  - id: partial-derivative-held-variables
+    level: 3
+    title: "微分の固定変数を変数変換後も明示する"
+  - id: precision-through-final-comparison
+    level: 3
+    title: "精度は入力から最終比較まで追跡する"
+  - id: differentiate-integrands-before-quadrature
+    level: 3
+    title: "有限微分は可能なら被積分関数に作用させる"
+  - id: closed-form-function-class
+    level: 3
+    title: "閉形式は関数クラスと残る操作を明記する"
+  - id: research-script-homes
+    level: 2
+    title: "研究スクリプトと知見の配置・全数索引"

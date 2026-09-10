@@ -1,0 +1,102 @@
+# Stable slug index -- AUTO-GENERATED from the doc by scripts/generate-doc-index.py.
+# id/level/title are DERIVED from the markdown (edit the md + re-run, do NOT hand-edit
+# them here). legacy (a section's original §-number = a permanent forwarding address),
+# related, and any other hand field are PRESERVED. See convention-design-principles §14.7 (= #inbound-ref-robustness).
+# Validated by scripts/check-office-automation-index.py (dangling=0 / orphan=0).
+sections:
+  - id: file-path-race
+    legacy: "1"
+    level: 2
+    title: "1. 同 file path を別 session が独立に書く race"
+  - id: plan-checkbox-semantics
+    legacy: "2"
+    level: 2
+    title: "2. Plan / SESSION の `[x]` mark を「実装済」 と reflex 解釈する race"
+  - id: prev-commit-as-foreign
+    legacy: "3"
+    level: 2
+    title: "3. 自 session の prev commit を「他人 commit」 と扱う"
+  - id: realtime-coediting
+    legacy: "4"
+    level: 2
+    title: "4. zoom 中の real-time co-editing"
+  - id: shared-tmpdir-enospc
+    legacy: "5"
+    level: 2
+    title: "5. 並列 session が共有 tmpdir を埋め、 Bash 出力が ENOSPC で消える"
+  - id: delegate-output-inspection
+    legacy: "12"
+    level: 3
+    title: "12. 委譲先の成果を検品する — 差分の正しさより「既決事項の生存」"
+  - id: pilot-single-brain
+    legacy: "6"
+    level: 2
+    title: "6. Pilot single-brain — 並列 session に同型の構造/規約タスクを渡す時"
+  - id: spawn-handoff-token-return
+    legacy: "7"
+    level: 2
+    title: "7. 別 session への hand-off と結果の返送 — spawn_task + send_message (token-handshake で宛先解決)"
+  - id: return-signal-economy
+    level: 3
+    title: "Marker 経済 — 完了 marker は「受領義務」 の model であって完了 log ではない (2026-07-14)"
+  - id: receiver-side-recognition
+    level: 3
+    title: "受け取った側 = 「自分が worker か」 の判定 (2026-07-07 試験 rule)"
+  - id: green-light-carrier
+    level: 3
+    title: "green-light は同 turn で「運搬体 (carrier)」 を持たねばならない — 「別 session 待ち」 は carrier ではない"
+  - id: worktree-vs-shared-checkout
+    legacy: "8"
+    level: 2
+    title: "8. worktree (隔離) か shared checkout (ローカル) か — 並列変更の隔離 vs live 反映"
+  - id: worker-task-sizing
+    legacy: "9"
+    level: 2
+    title: "9. worker task の適正サイズと orientation の spec 前払い — 委譲 spec の切り方 (宛先は spec author)"
+  - id: sizing-predicate
+    level: 3
+    title: "sizing 述語: 新規概念 1 個 + 既存部品の合成まで"
+  - id: orientation-prepay
+    level: 3
+    title: "orientation cost は spec 側で先払いする"
+  - id: junction-fanin
+    level: 3
+    title: "sizing 述語の追加軸: 合流点の入力 fan-in (2026-07-11 追記)"
+  - id: stall-rescue
+    level: 3
+    title: "stalled worker の rescue: message 注入 (2026-07-11 追記)"
+  - id: delegate-model-routing
+    legacy: "10"
+    level: 2
+    title: "10. delegate の model 選択と routing — main と別 model で走らせる"
+  - id: remote-handoff-constraints
+    legacy: "11"
+    level: 2
+    title: "11. リモート session への hand-off — 物理不在で完了できない step の全分岐着地設計"
+  - id: fanout-audit-resilience
+    legacy: "12"
+    level: 2
+    title: "12. fan-out した調査は「子が直接返す」 形にすると親の事故に強い"
+  - id: git-immutable-event-board
+    legacy: "13"
+    level: 2
+    title: "13. Git immutable-event board — session 間の operational state を共有する"
+  - id: board-session-subject
+    level: 3
+    title: "主体は session、vendor と host は属性"
+  - id: board-request-receipt
+    level: 3
+    title: "提出と受領を分ける"
+  - id: board-explicit-handover
+    level: 3
+    title: "引継ぎは履歴に残す"
+  - id: board-receipt-carrier
+    legacy: "1"
+    level: 3
+    title: "1 義務 1 受領経路、配達と起動は別"
+  - id: resident-board-runner
+    level: 3
+    title: "常駐 runner — 配達を「起動」に変える最小の機構 (2026-09-07)"
+  - id: chat-board-bridge
+    level: 3
+    title: "chat bridge — 人間の入口を chat に置く (2026-09-08)"

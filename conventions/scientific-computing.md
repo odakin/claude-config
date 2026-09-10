@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: 数値解析・科学計算 code を書くとき
+when: 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき
 category: research-domain
-summary: 数値解析 gotchas (scale-dependent default、複素 null ベクトル、偏微分の固定変数、最終比較までの精度、被積分関数の解析微分等、科学計算リポ共通)
+summary: 数値解析 gotchas (scale-dependent default、複素 null、固定変数、比較精度、基底不変検査の死角、閉形式の関数クラス、研究スクリプト索引等、科学計算リポ共通)
 -->
 # Scientific computing conventions
 
@@ -449,6 +449,12 @@ Ward 恒等式・対称性・内部無矛盾性・projector 代数 等の check 
 3. **doc の数値 claim には実 check を紐付ける**: 「~を 1e-16 で満たす」 等と書いたら、 それを実際に検証する script が存在するか確認。 無ければ claim は未検証 — check を足す (= 「cell 埋めでなく error expose」 の claim-vs-check 版)。
 4. **calibration は『その既知量が exercise した構造的特徴』 の scale しか fix しない** (= calibration の scope 限界): 防止策 1 の QED calibration (= 単一添字 γ^μ 頂点) は、 target が持つ richer な構造 (= 多添字の縮約 / index-mixing) を cover しない。 単純構造の calibration pass を「pipeline 全体が absolute に正しい」 と一般化すると、 target の未 calibrate な構造を **crude な射影のまま信じる**死角になる (= §8 防止策 4「特殊値縮退」 の構造版 = **特殊構造縮退**)。 汚染されうる量は crude な index-trace/sum でなく、 **汚染構造が恒等的に消える clean probe** (= 関心量に直交する添字・配置を選ぶ) で直接抽出して cross-check する (= calibration が validation した「構造的特徴」 が target の構造を網羅しているかを問う、 一般則は [`convention-design-principles.md §8.8`](../docs/convention-design-principles.md#proxy-blind-spot) list-audit implicit-scope の数値 calibration 版)。
 
+### <a id="basis-invariant-check-blind-spot"></a>基底不変な検査は固定ラベルの規約を検証しない
+
+数値行列の列を基底ベクトルとしたとき、ユニタリ行列による列の混合は完全性関係を保つ。したがってスピン和・projector・trace が一致しても、固定したスピンラベルや位相まで一致した証拠にはならない。基底の対応が主張に必要なら、各列の変換則と固定ラベルの双線形も独立に検査する。反例 fixture として列の交換・位相変更を入れ、完全性は通るがラベル照合は落ちることを確認する。
+
+Fock 空間の演算子と、その展開係数である数値スピノルも区別する。各量の添字の範囲・行列の shape・どの空間に作用するかを先に宣言する。数値列を横に並べる操作に転置を足したり、スピンラベルを Dirac 成分添字として扱ったりしてはならない。具体的な荷電共役行列・基底・規格化は各 project の規約と回帰検査が所有する。
+
 ### 実例 (2026-06、 場の理論の 1-loop 2 点関数)
 
 - 内部 check (diff WI / LL WI / projector 代数 / massless 極限) は全て ratio で overall normalization を constrain せず。 外部 conformal-anomaly 照合 (= form factor vs central charge c) が初の絶対 anchor だったが、 それ自体「自分の値が標準単位」 前提に**循環依存**していた。 → QED vacuum polarization を同機構で計算し |Π|=4/3 (textbook 一致) で scale を独立 calibrate、 magnitude match が solid 化。
@@ -611,3 +617,17 @@ $$
 ### <a id="differentiate-integrands-before-quadrature"></a>有限微分は可能なら被積分関数に作用させる
 
 積分値への高階数値微分を入れ子にすると、高精度求積が何重にも走り実行時間が増える。収束の一様支配などで微分と積分の交換を正当化できるときは、被積分関数を解析的に微分し、係数漸化式で単一の求積に保つ。その導出の自己照合に加え、元の積分や異なる変数での求積を検証経路に残す。交換の正当化を省略して高速化しない。
+
+### <a id="closed-form-function-class"></a>閉形式は関数クラスと残る操作を明記する
+
+有限和・有限階の微分表示・標準特殊関数による表示は同じ主張ではない。closed form と報告するときは、初等関数／一変数特殊関数／多変数特殊関数のどれか、未評価の微分・積分・漸化計算が残るかを明記する。元の積分を新しい関数名で呼ぶだけでは既存の関数クラスへの帰着にならない。
+
+一般の整数次数の式は有限個の次数での記号照合だけで済ませず、係数漸化式・端点を含む帰納法などで全次数を証明する。特殊なパラメータ面の簡約、全解析領域の恒等式、数値的に安定な評価領域を区別する。特定の変換や微分方程式の構造が不適合でも、他の関数表示すべての不可能性までは従わない。
+
+## <a id="research-script-homes"></a>研究スクリプトと知見の配置・全数索引
+
+模型固有の式・入力・閾値・検証器は同じ研究 project に置き、汎用の検証原理・模型に依存しない道具だけを共有層に置く。「上層化」はファイルを物理的に浅く移すことでも、未公開の研究内容を公開することでもない。導出と適用範囲は topic note、数値の入力と判定は code、実行結果は生成物、採用判断は DESIGN、再開時の現在地は SESSION が所有する。索引はそれらを結び、導出や数値表を複製しない。
+
+研究 project の解析入口には現行検証・特殊条件のみ・旧近似・独立 review scratch・図生成を区別して載せる。scratch は証拠を保ったまま、採用した知見と再利用する検査を live note/code へ昇格する。旧 scratch を現行主張の正本として使わない。各コードの CLI・依存・作業 directory・生成先を辿れるようにする。
+
+「すべて掲載」を主張する前に、対象 directory と拡張子を宣言し、[check-script-index.py](../scripts/check-script-index.py) で Git 管理対象と非無視の新規ファイルを索引の直接リンクに突き合わせる。索引だけにある名前や、索引から辿れない新規スクリプトを検出できる。使い方・構文上の限界は script の `--help` が正本。網羅性の検査は、各記載の意味の正しさや研究結果の検証を代替しない。

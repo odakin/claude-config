@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-LaTeX の裸の括弧参照を、記法の違いと除外条件を含めて検出する入口を整備した段階。[bare-parenthetical-crossrefs](conventions/latex.md#bare-parenthetical-crossrefs) と [検出器](scripts/check-latex-crossrefs.py) から再開し、変更時は自己検査・参照先と保護領域の保持検査・生成索引の同期を確認する。解析接続の検証と PDF 検査の既存手順は、それぞれ [analytic-kernel-checks](conventions/scientific-computing.md#analytic-kernel-checks) と [latex-pdf-audit](conventions/latex.md#latex-pdf-audit) を参照する。
+研究の検証方法とスクリプトの配置・索引を整備している段階。[研究スクリプトの正本と全数索引](conventions/scientific-computing.md#research-script-homes) と [索引検出器](scripts/check-script-index.py) から再開する。次に変更するときは自己検査と実 project の索引を照合し、生成索引の同期を確認する。閉形式の主張と基底不変検査の死角は同じ科学計算規約、並行ビルドは [生成物の混入防止](conventions/multi-session-coordination.md#generated-file-contamination) が正本。LaTeX の既存検査は [括弧参照](conventions/latex.md#bare-parenthetical-crossrefs) と [PDF検査](conventions/latex.md#latex-pdf-audit) を参照する。
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 

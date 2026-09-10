@@ -108,7 +108,7 @@ claude-config/
 │   ├── research-email.md                   # 研究メールのスレッド記録・分類・アウトリーチをするとき
 │   ├── researchmap.md                      # researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
 │   ├── scheduled-tasks.md                  # scheduled task / launchd routine を作成・管理するとき
-│   ├── scientific-computing.md             # 数値解析・科学計算 code を書くとき
+│   ├── scientific-computing.md             # 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき
 │   ├── secret-handoff.md                   # secret を user から受け取る・別マシンへ運ぶとき + **token を rotate するとき** (= 分業と主体照合、 #rotation-labor-split) + **暗号化 backup を作る/パスフレーズを失ったとき** (#backup-round-trip / #passphrase-loss-is-recoverable)
 │   ├── semgrep-ci.md                       # Semgrep を CI で運用する・finding を読む/消す・false positive を nosemgrep 注記するとき
 │   ├── sensitive-data-pass-through.md      # 受信した URL / file を別 recipient に forward する前
@@ -140,7 +140,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (96 file + lib/ 10 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (97 file + lib/ 10 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)

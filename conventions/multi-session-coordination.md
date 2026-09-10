@@ -69,6 +69,9 @@ Read it again before attempting to write it.
   - **検査 = 生成物を commit する前に `git diff <生成物>` を読み、 自分が変えた source 由来の行だけかを確認する** (= 生成物は「再生成したから正しい」 ではない。 1 行ずつ読める規模でないなら、 先に相手の作業が落ち着くまで待つか、 source 側の commit だけ先に出す)。
   - 実例 2026-09-10: 層1 convention に 1 節足して index 生成 script を `--write` した際、 同 repo に別 session の未 commit 変更 (= `setup.sh` +24 行 + 未 tracked script 3 本) が居た。 生成物の diff を読んで自分の 1 行だけと確認できたので実害は無かったが、 相手が同じ生成物の source を触っていれば黙って混ざっていた。
 
+  - **原稿と PDF の並行作業**: 主ファイルと最終ビルドは同じ担当が書き、独立な追加内容は別の include file に分ける。各担当が自分の範囲を進められるようにし、追加依頼のたびに相手の作業全体を止めない。ビルド終了前の PDF・log を監査結果として確定せず、最終 source・log・PDF の組を確認してから生成レポートを作る。hash や mtime は観測した組の識別であり、それだけでは同一ビルドの証明にならない。
+  - **古い研究ブランチからの統合**: 最新の受入先の定義・訂正・差分を先に読み、独立な成果と共有ファイルへの必要な変更を区別する。成果の輸送のために古い本文を丸ごと戻さない。作業場所や担当に関する最新の owner 指示は引継ぎ記録へ反映し、古い委譲時の制約を現在の指示として再発火させない。
+
 - <a id="session-provenance-trailer"></a>**事後追跡 = commit message の trailer に session id を焼く** (2026-09-10 追加) — 上の防御は「巻き込みを起こさない」 側で、 **起きてしまった後に読み解く**手段が別に要る。 並列 session の commit は author が全部同じ人間に潰れる (= git は「誰の hunk か」 を保持しない) ため、 事故の再構成が transcript 漁りと記憶になる。 `prepare-commit-msg` hook で 1 行足すと機械的に読める:
 
       Claude-Session: <CLAUDE_CODE_SESSION_ID>

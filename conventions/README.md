@@ -161,8 +161,8 @@ layer 1 (public) のドメイン固有規約 104 file をカテゴリ別に列�
   - 物理・数理ノートの 5 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側 / 検証 note は問題・結論・手当のみ / 配布物に内部記号を出さない) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
 - **[physics-verification-cycle.md](physics-verification-cycle.md)** — 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/physics-verification-cycle.md (何を検査するか: 4 station / 機械 anchor / foil / tier / 3 状態 / verify-to-learn / 第二の目 / rubric / 止まる規律 / cross-vendor / campaign 運用 A-K)。 本 file は旧 anchor を保つ stub
-- **[scientific-computing.md](scientific-computing.md)** — 数値解析・科学計算 code を書くとき
-  - 数値解析 gotchas (scale-dependent default、複素 null ベクトル、偏微分の固定変数、最終比較までの精度、被積分関数の解析微分等、科学計算リポ共通)
+- **[scientific-computing.md](scientific-computing.md)** — 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき
+  - 数値解析 gotchas (scale-dependent default、複素 null、固定変数、比較精度、基底不変検査の死角、閉形式の関数クラス、研究スクリプト索引等、科学計算リポ共通)
 - **[verification-cycle-ops.md](verification-cycle-ops.md)** — 検証サイクルを session を越えて回し続ける仕組みを設計・運用・診断するとき
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/verification-cycle-ops.md (6 原則 / 導出 state / 台帳 3 種 + retro / 無人層 / fresh session の手順)。 本 file は旧 anchor を保つ stub
 - **[wolfram-scripting.md](wolfram-scripting.md)** — wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき
