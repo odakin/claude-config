@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: CLAUDE.md 等の memory file が肥大して縮退 (slimming) するとき + 完了 entry を archive へ graduate するとき + 長大 bullet / table row を pointer 化するとき
 category: harness-core
-summary: memory file のサイズは毎 session + 毎 headless routine が払う税 — 縮退は「MOVE + pointer 化、 DELETE 禁止」 が大原則で、 SoT 照合 → 不足 MOVE → trim の順を 1 unit ずつ守れば義務を落とさず 25% 級の削減ができる (検証済手順 + gates + 一意 prefix 行置換 helper)。 追補 (2026-09-01、 6 repo −64% 実測): fleet 並列縮退 / 旧全文 verbatim 退避 / 義務 carrier 付き graduation 判定 / archive の検出器除外 glob 両形 / 並行 session 干渉 / 生成 block への適用 / 再肥大 backstop の常設 (warn 閾値 = 健康 floor の上 + live 校正)
+summary: memory file のサイズは毎 session + 毎 headless routine が払う税 — 縮退は「MOVE + pointer 化、 DELETE 禁止」 が大原則で、 SoT 照合 → 不足 MOVE → trim の順を 1 unit ずつ守れば義務を落とさず 25% 級の削減ができる (検証済手順 + gates + 一意 prefix 行置換 helper)。 追補 (2026-09-01、 6 repo −64% 実測): fleet 並列縮退 / 旧全文 verbatim 退避 / 義務 carrier 付き graduation 判定 / archive の検出器除外 glob 両形 / 並行 session 干渉 / 生成 block への適用 / 再肥大 backstop の常設 (warn 閾値 = 健康 floor の上 + live 校正) / **肥大がどこに溜まるか (graduation の空振り診断 + 状態名の節の accretion、 #where-bloat-hides)**
 -->
 # Memory file の縮退 (slimming) — MOVE + pointer 化の手順
 
@@ -25,6 +25,23 @@ CLAUDE.md 連鎖 (= session 開始時に丸ごとロードされる memory file)
 2. **pointer 化**: 生き残る bullet / table row が抱える payload (= RCA 経緯・実装史・
    述語詳細・severity 表) を SoT 側 (script docstring / 専用 doc / archive / plan) へ寄せ、
    memory file 側は routing に必要な最小だけ残す。 手順は下記。
+
+## <a id="where-bloat-hides"></a>肥大がどこに溜まるか — graduation の空振りと「状態名の節」
+
+着手したらまず **graduation を試して yield を測る**。 その数字自体が診断になる。
+
+- **graduation の yield が ~0 (= 移せる完了 entry がほとんど無い) なら、 その file は「死んだ記録」
+  ではなく「生きた義務」 で膨れている**。 粘っても取れないので lever を pointer 化 (= 義務は残して
+  payload だけ SoT へ寄せる) に切り替える。 実測 2026-09-10: 個人層 CLAUDE.md の作業 project
+  67 entry のうち graduate 可は 0、 SESSION.md の状態節 12 entry のうち 3 — 削減はほぼ全て
+  pointer 化から出た。 ⚠️ この状態の file に対して「もっと graduate しろ」 と圧をかけると、
+  義務を運ぶ entry を移す方向にしか進めなくなる (= サイズ目標が義務保全を侵食する)。
+- **見出しが状態名の節 (「現在の状態」「Open items」 等) は、 日付ベースの graduation rhythm の
+  外に落ちて silently accrete する**。 dated 見出しは「古い順に archive」 の対象として目に入るが、
+  状態名の節は中身が dated entry でも「現在」 と名乗るので誰も古さを疑わない。 実測 2026-09-10:
+  `## 現在の状態` の中に 10〜13 日前の dated entry が 12 本溜まる一方、 同 file の dated `##` 節は
+  3 日遅れで archive 済みだった (= 1 つの file に 2 つの rhythm が併存)。 **縮退のたびに
+  「状態名の節の中身は本当に現在か」 を 1 回問う。**
 
 ## <a id="pointer-conversion"></a>pointer 化の手順 (= 1 unit ずつ、 batch 一括置換しない)
 
@@ -118,6 +135,12 @@ plan 内の un-defer trigger 記録 / TODO / 機械 surface (SessionStart hook �
 (b) 義務行だけ hot に lift して本体を MOVE (= lift 先は Open items 等の常設節)。
 判定の要旨は archive header か commit message に 1 行残す (= 後から「なぜ移せた」 が追える)。
 
+⚠️ **義務語彙は「語」 で引く — 記号を足して narrow しない。 そして grep が clean と言った候補も
+MOVE 直前に本文の末尾数行を読む。** 実測 2026-09-10: 上の語彙のうち「残」 を `残 =` (= 語 + 記号)
+として grep したため、 本文中の「⚠️ 残 verify = 実 terminal での live 発火」 を clean と誤判定
+しかけた (MOVE 直前に読んで気づき除外)。 義務の書き方は開かれている (残 verify / watch /
+目視で完了 / 次の該当 session で …) ので、 **grep は候補を絞る道具であって判定器ではない**。
+
 ## <a id="archive-detector-exemption"></a>archive file と検出器の除外 glob
 
 archive は「正本の重複」 を意図的に抱える (= verbatim 退避) ので、 SoT drift 系検出器の scan からは
@@ -177,3 +200,12 @@ graduation 37 entry で 176 KiB → pointer 化 (38 bullet + 16 table row) で *
 落とした義務・行動制約ゼロ (= gates 全 pass、 機械検査 74/74、 greppability 5/5、
 構造 invariant 不変)。 うち bullet 平均は「wiring + 1-2 文 + ⚠️ + pointer」 で ~700-800 B
 (CJK) に収束した — これ以下は routing 価値と衝突するので床として扱う。
+
+**2 例目 (2026-09-10、 同 file の再肥大 → 再縮退)**: 154 KiB → **149 KiB**。 pointer 化 17 unit
+(bullet 15 + table row 2) で −5 KiB = **1 unit あたり ~0.3 KiB**。 trim 後の bullet は 800-1000 B
+に着地し、 上記の床 (~700-800 B) とほぼ一致した (= 床の再現性が 2 例で確認できた)。
+**計画の目安**: 床に達していない unit しか原資にならないので、 削減見込み ≒ (未 trim unit 数)
+× 0.3 KiB。 これで目標に届かないなら pointer 化ではなく構造変更 (= 列挙の生成 file 移設等) の
+判断が要る — ただし移設は auto-load 面から降ろすことなので
+[`convention-design-principles.md #symptom-keyed-entry-point`](../docs/convention-design-principles.md#symptom-keyed-entry-point)
+の発火面判断とセットで決める。

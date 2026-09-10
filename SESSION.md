@@ -54,6 +54,22 @@ owner の質問「コミットやプッシュのとき、 どのセッション�
   (= manual pointer が scale しない問題は不変。 同 entry に追記済、 un-defer trigger は据え置き = **near-miss ゆえ 1 件目に数えない**)。
 - 参照整備 = `CONVENTIONS.md` Git 規約に入口 / convention ⇄ DESIGN ⇄ §8.34 の双方向 pointer /
   層3 `sot-registry.yaml` に topic 登録 (登録直後の drift 検査で FP 0)。
+- **縮退作業そのものから出た知見も層1 へ** (= 個人層 CLAUDE.md を 154 → 149 KB に縮退した副産物):
+  [`memory-file-slimming.md#where-bloat-hides`](conventions/memory-file-slimming.md#where-bloat-hides) を新設 —
+  ① **graduation の yield が ~0 なら、 その file は「死んだ記録」 でなく「生きた義務」 で膨れている**ので
+  lever を pointer 化へ切り替える (実測: 作業 project 67 entry のうち graduate 可 0)。 この状態で
+  「もっと graduate しろ」 と圧をかけると義務を運ぶ entry を移す方向にしか進めない ②
+  **見出しが状態名の節 (「現在の状態」「Open items」) は日付ベースの graduation rhythm の外に落ちて
+  silently accrete する** (実測: `## 現在の状態` に 10〜13 日前の dated entry 12 本、 同 file の
+  dated 節は 3 日遅れで archive 済 = 1 file に 2 rhythm)。
+- 同 doc の `#obligation-carrier-graduation` に refinement = **義務語彙は「語」 で引き、 記号を足して
+  narrow しない。 grep が clean と言った候補も MOVE 直前に本文末尾を読む** (「残」 を `残 =` と narrow
+  して本文の「残 verify」 を clean と誤判定しかけた実例。 grep は候補を絞る道具で判定器ではない)。
+  実測 evidence に 2 例目 (pointer 化 1 unit ≒ 0.3 KiB、 **bullet の床 ~700-800 B が 2 例で再現**、
+  床に達していない unit 数から削減見込みを見積もる式)。
+- `check-yaml-lint.py` の SKIP メッセージを**実際に効く install 形** (`pip3 install --user yamllint`) に更新。
+  `pip install` 案内だと PATH に該当 dir が無い環境で「入れたのに SKIP のまま」 になる
+  (find_yamllint() は `~/.local/bin` と `~/Library/Python/<ver>/bin` を probe するので `--user` で足りる)。
 
 ## 2026-09-10 (別 session) — 画面 drive の harness を層1 化 + 並列 session / gate hook の 2 規約
 
