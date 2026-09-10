@@ -99,6 +99,10 @@ INSTRUCTION_PATTERNS = [
     ("下線", "書式", "指定された下線 (本人・代表者・分担者) を全 entry に機械付与"),
     ("掲載が確定しているものに限", "業績", "未掲載を業績として並べない (引用文献として掲載状態ラベルを付ける)"),
     ("同定するに十分な情報", "業績", "誌名・巻号・頁・発表年まで書く (arXiv 番号だけにしない)"),
+    ("の順で記載", "業績", "書誌情報の**並び順**が様式で指定されている (例: 著者名→題名→誌名→巻号→開始頁-最終頁→発行年)"),
+    ("開始頁", "業績", "開始頁−最終頁まで書く (article number だけにしない)"),
+    ("とは異なります", "ID", "似た別 ID との取り違え注意が様式に印字されている (機関番号 ⇄ 機関コード等)"),
+    ("スペース", "書式", "氏名等の区切り文字が指定されている (半角 1 スペース等)"),
     ("具体的かつ明確に記述", "内容", "指示された小項目 (1)(2)… を漏れなく立てる"),
     ("役割を記述", "内容", "研究代表者・研究分担者の具体的な役割を書く"),
     ("その旨記述", "内容", "該当しない場合も「該当しない」と書く (無言で空けない)"),
@@ -132,10 +136,13 @@ CATEGORY_RULES = [
     (re.compile(r"業者委託|委託|校閲|校正|英文校閲"), "F", "業者委託 (英文校閲等) は「その他」"),
     (re.compile(r"謝金|RA|アルバイト|人件費|研究員|補助者"), "E", "謝金・人件費は「人件費・謝金」"),
     (re.compile(r"投稿料|掲載料|出版"), "F", "論文投稿料・掲載料は「その他」"),
+    (re.compile(r"登録料|参加費|参加登録"), "F", "学会・国際会議の参加登録料は「その他」 (旅費に混ぜない)"),
     (re.compile(r"専門書|文献|図書|消耗品|文具"), "B", "書籍・消耗品は「消耗品費」"),
 ]
 # 「その他」に旅費相当が紛れる = 旅費との二重計上 (2026-09 に「滞在費は外国旅費に含まれるため削除」)
 DOUBLE_COUNT_RE = re.compile(r"滞在費|宿泊費|渡航費|航空券|交通費|旅費")
+# 逆向き: 旅費の行に「その他」費目のものが混ざる (2026-07 に「登録料はその他の費用に計上して下さい」)
+TRAVEL_MISFIT_RE = re.compile(r"登録料|参加費|参加登録|投稿料|掲載料")
 # 旅費の事項に必要な粒度
 TRAVEL_DETAIL_RE = re.compile(r"\d+\s*回|\d+\s*泊|\d+\s*日間|\d+\s*名|年\d+|各\d+")
 # 設備の品名・仕様に型番・仕様が入っている印
@@ -548,6 +555,10 @@ def check_keihi(path: Path) -> list[tuple]:
         if cat in ("C", "D") and item and not TRAVEL_DETAIL_RE.search(item):
             out.append(("🟠", "KEIHI_TRAVEL_DETAIL",
                         f"{where}: 旅費の事項に場所・回数・日数・人数が無い 「{item}」"))
+        if cat in ("C", "D") and item and TRAVEL_MISFIT_RE.search(item):
+            out.append(("🟠", "KEIHI_CATEGORY",
+                        f"{where}: 旅費の行に旅費でないもの 「{item}」 "
+                        f"(= 参加登録料・投稿料は「その他」へ)"))
         if cat == "F" and item and DOUBLE_COUNT_RE.search(item):
             out.append(("🟠", "KEIHI_DOUBLE_COUNT",
                         f"{where}: 「その他」に旅費相当 「{item}」 (旅費との二重計上)"))
@@ -813,6 +824,17 @@ def selftest() -> int:
                                          "研究種目名 課題番号 研究期間")
         expect("骨格: 全部あれば clean", [c for _, c, _ in kept], [],
                forbid=["SKELETON_LOST", "SKELETON_MISSING"])
+
+        # 2026-07 の実例: 旅費の行に参加登録料が混ざっていた
+        mis = td / "misfit.csv"
+        mis.write_text(
+            "費目区分,年度,品名・仕様,設置機関,事項,数量,単価,金額\n"
+            "D,2027,,,国際会議発表 1 件（登録料・渡航・滞在、7日間、1名）,,,450\n"
+            "F,2027,,,参加登録料,,,50\n", encoding="utf-8")
+        codes = [c for _, c, _ in check_keihi(mis)]
+        expect("経費: 旅費行の参加登録料を拾う", codes, ["KEIHI_CATEGORY"])
+        ok_f = "KEIHI_CATEGORY" not in [c for _, c, m in check_keihi(mis) if "行2" in m]
+        expect("経費: 「その他」の参加登録料は正当", ["ok"] if ok_f else [], ["ok"])
 
         # --- identity: 2026 年度に 2 度起きた ID 取り違えの回帰 ---
         IDENT = dict(current={"e-Rad 所属機関コード": "1234567890",
