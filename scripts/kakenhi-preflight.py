@@ -29,6 +29,9 @@
   🔴 ENTITY            HTML 実体参照の残置 (&#12316; 等)
   🟠 ABBREV            官公庁・機関名の略称 (文科省 → 文部科学省 等)
   🟠 BARE_NUMBER       裸の括弧数字 (「（160）」= 被引用数の単位落ち)
+[ID]    --identity <identity.yaml>   (値は呼ぶ側が持つ — 下の「層」を参照)
+  🔴 IDENTITY_STALE     誤りと確定した旧 ID (機関コード等) が提出物の中身か file 名に残っている
+  🔴 IDENTITY_FILENAME  提出 file 名に埋まったコードが宣言値と違う (別の ID を書いた / 旧値のまま)
 [CSV]   --keihi <経費明細.csv>   (cp932 / utf-8 どちらも可)
   🔴 KEIHI_FIELD_BYTES  「事項」が 72 バイト超 (一時保存で全画面が保存されない)
   🔴 KEIHI_WAVEDASH     波ダッシュ (確認用 PDF に実体参照が焼かれる)
@@ -51,6 +54,11 @@
 
 終了コード: 0 = 🔴 なし (🟠 は残っていてもよい) / 1 = 🔴 あり / 2 = 実行エラー。
 🟠 は「事務が突く可能性が高い」であって誤検出もある — 潰すか、理由を書いて残すかを人が決める。
+
+層: 本 script は **ID の値を持たない**。「誰の機関コードが何番か」は本 script の観客
+(= 全ユーザー) にとって true でないため。判定ロジックと形式規則だけを持ち、値は
+`--identity` で受ける (呼ぶ側が自分の層で正本を持つ)。値自体は公開情報だが、
+層の判定は audience であって機密性ではない。
 
 正本: claude-config/conventions/kakenhi-proposal.md
   #office-review-loop (指摘の類型) / #form-template-integrity (様式骨格) /
@@ -418,6 +426,79 @@ def _is_symbol_label(text: str, idx: int) -> bool:
     return c.isalpha() or unicodedata.category(c).startswith("S")
 
 
+def load_identity(path: Path) -> dict:
+    """ID 値の宣言を読む (schema は docstring の [ID] 節)。
+
+    現行値・旧値 (誤りと確定したもの)・提出 file 名に埋めるコードを受け取る。
+    ⚠️ 旧値を**消さずに宣言し続ける**のが要点 — 消すと「提出物に旧値が残っていないか」を
+    機械が見られなくなる (捨てた情報は検査できない)。
+    """
+    if not path.exists():
+        die(f"identity file が見つからない: {path}")
+    try:
+        import yaml
+    except ImportError:
+        die("identity file を読むには PyYAML が要る (pip install pyyaml)")
+    data = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("identity") or {}
+    if not data.get("current") and not data.get("superseded"):
+        die(f"{path.name}: identity.current も identity.superseded も無い")
+    return data
+
+
+# 提出 file 名に埋め込まれたコード (例 「様式1_研究計画調書_<機関コード>_<氏名>.xlsx」)。
+# 区切りは全角アンダースコアもある。
+# ⚠️ **桁数では判定しない** — staging の file 名には日付 (`_20260908_`) や hash が入るので、
+#    「N 桁の数字」を ID とみなすと 🔴 の偽陽性で提出が止まる (実測)。
+#    判定は **宣言された ID 値と一致するか** で行う (= 値駆動、形式駆動にしない)。
+_FNAME_TOKEN_RE = re.compile(r"[_＿]([0-9A-Za-z]{4,12})[_＿]")
+
+
+def check_identity(ident: dict, pdf_texts: list[tuple], csv_paths: list[Path],
+                   all_paths: list[Path]) -> list[tuple]:
+    """誤りと確定した ID が提出物に残っていないか / file 名のコードが宣言値か。
+
+    2026 年度に 2 度起きた: ① 科研費の機関番号 (5 桁) を e-Rad 機関コード欄と file 名に書いた
+    ② 口頭指示から推定した 10 桁が誤りで、そのまま提出・受理された。どちらも「値を突き合わせれば
+    機械で分かる」類。
+    """
+    out = []
+    stale = ident.get("superseded") or []
+    haystacks = [(name, nfkc(text)) for name, text in pdf_texts]
+    for c in csv_paths:
+        try:
+            haystacks.append((c.name, nfkc(_decode_csv(c))))
+        except SystemExit:
+            continue
+    for sp in stale:
+        val = str(sp.get("value", "")).strip()
+        if not val:
+            continue
+        label = sp.get("label") or "旧 ID"
+        for name, hay in haystacks:
+            if nfkc(val) in hay:
+                out.append(("🔴", "IDENTITY_STALE",
+                            f"{name}: 誤りと確定した{label} 「{val}」 が中身に残っている"))
+        for path in all_paths:
+            if val in path.name:
+                out.append(("🔴", "IDENTITY_STALE",
+                            f"{path.name}: file 名に誤りと確定した{label} 「{val}」"))
+
+    want = ident.get("filename_code")
+    if want:
+        # 「宣言された別の ID」が file 名のコード位置に入っている = 種類の取り違え。
+        # superseded は上で IDENTITY_STALE として報告済なのでここでは扱わない (二重報告の回避)。
+        others = {str(v): k for k, v in (ident.get("current") or {}).items()
+                  if str(v) != str(want)}
+        for path in all_paths:
+            for m in _FNAME_TOKEN_RE.finditer(path.name):
+                tok = m.group(1)
+                if tok in others:
+                    out.append(("🔴", "IDENTITY_FILENAME",
+                                f"{path.name}: file 名のコード位置に 「{tok}」 "
+                                f"(= {others[tok]}) が入っている — ここは 「{want}」"))
+    return out
+
+
 def _decode_csv(path: Path) -> str:
     if not path.exists():
         die(f"経費明細 CSV が見つからない: {path}")
@@ -733,6 +814,49 @@ def selftest() -> int:
         expect("骨格: 全部あれば clean", [c for _, c, _ in kept], [],
                forbid=["SKELETON_LOST", "SKELETON_MISSING"])
 
+        # --- identity: 2026 年度に 2 度起きた ID 取り違えの回帰 ---
+        IDENT = dict(current={"e-Rad 所属機関コード": "1234567890",
+                              "機関番号 (科研費)": "55555"},
+                     filename_code="1234567890",
+                     superseded=[dict(value="9876543210", label="旧 e-Rad 所属機関コード",
+                                      note="後に誤りと確定")])
+
+        def ident(pdfs=(), files=()):
+            return [c for _, c, _ in check_identity(
+                IDENT, list(pdfs), [], [Path(f) for f in files])]
+
+        # ① 推定した 10 桁が誤りで、そのまま提出・受理された
+        expect("ID: 旧値が中身に残る → 🔴",
+               ident(pdfs=[("chosho.pdf", "機関コード 9876543210 ○○大学")]),
+               ["IDENTITY_STALE"])
+        expect("ID: 旧値が file 名に残る → 🔴",
+               ident(files=["様式1_研究計画調書_9876543210_Name.xlsx"]),
+               ["IDENTITY_STALE"])
+        # ② 科研費の機関番号を e-Rad 機関コードの位置 (file 名) に書いた
+        expect("ID: file 名に別 ID を書いた → 🔴",
+               ident(files=["様式1_研究計画調書_55555_Name.xlsx"]),
+               ["IDENTITY_FILENAME"])
+        expect("ID: 全角アンダースコアの file 名も見る",
+               ident(files=["様式0＿申請様式チェックリスト＿55555＿Name.docx"]),
+               ["IDENTITY_FILENAME"])
+        # 🔴 の偽陽性は提出を止めるので、桁数では判定しない (staging の日付・hash)
+        expect("ID: file 名の日付・hash を ID と誤認しない",
+               ident(files=["S-13_kiban_b_20260908_fc1f7257.pdf",
+                            "S-74_gakuhen_26A204_20260908_69a992c6.pdf"]),
+               [], forbid=["IDENTITY_FILENAME", "IDENTITY_STALE"])
+        expect("ID: 旧値は STALE のみ (FILENAME と二重に出さない)",
+               ident(files=["様式1_研究計画調書_9876543210_Name.xlsx"]),
+               ["IDENTITY_STALE"], forbid=["IDENTITY_FILENAME"])
+        # 正しい形
+        expect("ID: 正しい値なら clean",
+               ident(pdfs=[("chosho.pdf", "機関コード 1234567890")],
+                     files=["様式1_研究計画調書_1234567890_Name.xlsx"]),
+               [], forbid=["IDENTITY_STALE", "IDENTITY_FILENAME"])
+        # 機関番号 32652 は本文中では正当 (= 素の出現を叩かない)
+        expect("ID: 現行の別 ID が本文にあるのは正当",
+               ident(pdfs=[("chosho.pdf", "科研費 機関番号 55555 の○○大学")]),
+               [], forbid=["IDENTITY_STALE", "IDENTITY_FILENAME"])
+
         # --- ack / strict: 「🟠 を素通りさせない」機構の回帰 ---
         import io as _io, contextlib as _ctx
 
@@ -792,6 +916,8 @@ def main() -> int:
     ap.add_argument("--pdf", type=Path, action="append", default=[],
                     help="組み上がった調書 PDF。様式が複数なら対応する PDF を全部渡す")
     ap.add_argument("--keihi", type=Path, action="append", default=[], help="経費明細 CSV (複数可)")
+    ap.add_argument("--identity", type=Path,
+                    help="ID 値の宣言 (yaml)。値は呼ぶ側の層が持つ — 本 script は持たない")
     ap.add_argument("--ack", type=Path,
                     help="🟠 を理由つきで受理した記録 (yaml)。🔴 は ack できない")
     ap.add_argument("--strict", action="store_true",
@@ -826,6 +952,9 @@ def main() -> int:
     findings += check_colored_text(a.pdf)
     for c in a.keihi:
         findings += check_keihi(c)
+    if a.identity:
+        findings += check_identity(load_identity(a.identity), pdf_texts, a.keihi,
+                                   list(a.pdf) + list(a.keihi))
     acks = load_acks(a.ack) if a.ack else (
         [] if a.strict else None)      # --strict のみ = 空の ack file と同じ扱い
     return report(findings, instructions, acks, a.strict)
