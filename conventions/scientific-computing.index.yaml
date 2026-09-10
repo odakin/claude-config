@@ -97,6 +97,9 @@ sections:
   - id: operator-time-state-order
     level: 2
     title: "一般時刻の演算子と初期状態の依存順を分ける"
+  - id: observable-projectors-and-symmetry
+    level: 2
+    title: "部分空間の和・電荷・保存則の対象を固定する"
   - id: research-script-homes
     level: 2
     title: "研究スクリプトと知見の配置・全数索引"

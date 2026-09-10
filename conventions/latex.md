@@ -861,6 +861,8 @@ editorial typography で「機械改行を許容しない」 のは標準。 mag
 
 ## <a id="latex-pdf-audit"></a>LaTeX log と PDF の検査を再利用する
 
+LuaLaTeX が sandbox 内で `no writeable cache path` を報告し、その後に大量の `nullfont` / missing-character 警告を出す場合は、まず最初の fontloader エラーを調べる。書込み可能な TeX キャッシュを指定するか、必要なキャッシュへの限定された実行権限で再ビルドする。後続の文字欠落を一文字ずつ原稿側で直さない。失敗時に PDF ファイルが生成されても正常な成果物とは扱わず、再ビルド後に log と PDF を同じ組で検査する。
+
 反復する log 集計、PDF 全フォント検査、確認頁のレンダリングには [latex-pdf-audit.py](../scripts/latex-pdf-audit.py) を使う。既存の [印刷 preflight](../scripts/pdf-print-preflight.py) はプリンタ向けの別契約であり、この検査は印刷忠実度を判定しない。
 
 ```sh

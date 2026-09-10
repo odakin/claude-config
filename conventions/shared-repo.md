@@ -178,6 +178,8 @@ collaborator 本人の連絡先（メールアドレス等）や PII を layer 2
 
 なお、記法（notation）の project 固有 convention は各 repo の DESIGN.md 等が担う別問題で、本 pattern の対象は「project をまたいで所有者が一貫させたい執筆スタイル」の側。両者の役割分担（どちらが正本か）を digest 節の近くに 1 行明記しておくと衝突しない。
 
+配布器は source の公開範囲・必須項目と、選択された全 target の生成 marker を**書込み前に**検査する。エラーを数えて終了コードを失敗にするだけでは、途中で不正な本文を配布できてしまう。検査と書込みを分け、後段の target が不正でも先行 target を変更しないことを fixture で検査する。配布先を限定する場合は registry の既存 target を明示選択し、未知の名前を無視しない。部分同期の成功を digest 全体の一致と報告せず、残る差分と次の完全同期の入口を区別する。
+
 ## macOS LaunchAgent / launchd plist の literal-path trap
 
 macOS の **LaunchAgent / LaunchDaemon plist は `~` も `$HOME` も自然展開しない** (= `ProgramArguments` / `WatchPaths` 等の path は literal でなければ launchd に loaded されない)。共有リポに plist をそのまま commit すると、所有者の絶対パス (`/Users/<owner>/…`) が file に焼き付き、上記 §「公開前の Audit」 の grep に hit する layer-2 違反になる。

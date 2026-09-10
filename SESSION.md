@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-LaTeX の物理レビューで「提案」を PDF の印字・着色と取り違える規約を修正したところ。依頼された本文修正と未確定の提案の扱いは [式の安全規則](conventions/latex.md#equation-safety) に集約した。次の論文編集ではこの節から適用範囲を確認する。以下の Codex 配線の検証再開点は保っている。
+研究レビューで得た再利用可能な手順を、[部分空間・電荷・保存則](conventions/scientific-computing.md#observable-projectors-and-symmetry)、[比較表の配置](conventions/paper-audit.md#comparison-before-derivation)、[配布前検査](conventions/shared-repo.md#l2-style-digest) に整理したところ。注記の表示とフォントキャッシュの失敗時の扱いは [LaTeX 手順](conventions/latex.md#equation-safety)、スクリプトとノートの全数索引は [研究成果の配置](conventions/scientific-computing.md#research-script-homes) から再開する。模型固有の計算は各研究 project が所有する。以下の Codex 配線の検証再開点は保っている。
 
 Codex の自己同定とprovenance整備は、技術契約・実装所有表・設計理由・一般運用規約・上層原則の参照を揃え、このMacの生成済み配線まで更新したところ。現在の仕様と全スクリプトのhomeは [Codex/Git provenance](codex/PARITY.md#git-session-provenance) と [実装・検査の所有表](codex/PARITY.md#session-provenance-implementation)、判断理由は [DESIGN](DESIGN.md#session-provenance-trailer-design)、横断運用は [multi-session coordination](conventions/multi-session-coordination.md#session-provenance-trailer) が正本。残る確認は次の新規taskでliveなprompt-time cacheをend-to-end観測することだけ。
 
