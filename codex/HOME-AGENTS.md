@@ -51,8 +51,9 @@ compaction; the integration boundary is recorded in
 
 At the first user-visible reply after session startup, resume, or clear, begin
 with the exact one-line identity stamp injected by the SessionStart hook. Keep
-all fields, including literal `unknown`; never infer an account or surface from
-a title, CLI login, or configured default. If the injected stamp is absent,
+the literal product identity `Codex` in every stamp and keep all remaining
+fields, including literal `unknown`; never infer an account or surface from a
+title, CLI login, or configured default. If the injected stamp is absent,
 make the first tool call `python3 "$HOME/.codex/claude-config-hooks/session_stamp.py"`
 and place its output unchanged at the start of that reply. Do not restamp after
 compaction alone. The source and limits are

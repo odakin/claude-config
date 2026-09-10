@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-論文セッションの最終棚卸しから、[本文・付録の記法照合](conventions/paper-audit.md#notation-continuity-across-sections) と [導出前の比較](conventions/paper-audit.md#comparison-before-derivation) を共有手順に追加したところ。次の論文編集ではこの入口と [演算子・初期状態の検証](conventions/scientific-computing.md#operator-time-state-order) を必要な範囲で使う。画像確認の要否は [LaTeX 規約](conventions/latex.md#visual-verification-intensity)、機械検査の契約は [PDF 検査器](scripts/latex-pdf-audit.py) と [全数索引検査器](scripts/check-script-index.py) が正本。研究固有の式と検証コードは各 project に保ち、ここには検証・整理の方法を置く。
+Codex の会話開始 stamp で製品名が欠落していたため、固定の製品識別子を runtime metadata から分離し、正本・hook・起動指示・回帰検査を揃えたところ。契約と取得境界は [conversation-start stamp の正本](codex/PARITY.md#conversation-start-stamp)、実装と挙動検査は [session stamp](codex/hooks/session_stamp.py) と [Codex hook tests](codex/hooks/codex-hooks.test.sh) が所有する。この Mac の生成済み global instruction composite は更新済みで、次の新規 task の最初の返信が `Codex` を含むことを end-to-end で観測する。
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 

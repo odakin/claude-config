@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a best-effort Codex conversation-start identity stamp."""
+"""Render a Codex conversation-start stamp with explicit product identity."""
 
 from __future__ import annotations
 
@@ -83,7 +83,7 @@ def build_stamp(
 
     session_short = session_id[:8] if session_id else "unknown"
     return (
-        f"🖥 {worker_host()} · {runtime_surface(environment)} = account unknown "
+        f"🖥 {worker_host()} · Codex {runtime_surface(environment)} · account unknown "
         f"· session {session_short} · model {model} · effort {effort}"
     )
 

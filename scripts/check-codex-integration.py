@@ -141,6 +141,7 @@ MACHINE_PROVENANCE_REQUIREMENTS = {
     "codex/PARITY.md": (
         'id="machine-local-provenance"',
         'id="conversation-start-stamp"',
+        "Codex <surface|surface unknown>",
         "account unknown",
         "session_stamp.py",
         "A session title, a prior message, or an audit/report from another\nhost is an observation",
@@ -149,6 +150,7 @@ MACHINE_PROVENANCE_REQUIREMENTS = {
     "codex/HOME-AGENTS.md": (
         "## Machine-local truth",
         "### Session identity stamp",
+        "literal product identity `Codex`",
         "session_stamp.py",
         "A title, prior message, or report from another host is only an observation",
         "verify it locally (`hostname` and the relevant audit)",
@@ -199,7 +201,7 @@ SESSION_PROVENANCE_REQUIREMENTS = {
     "scripts/audit-codex-integration.sh": ("Agent-Session prepare-commit-msg hook",),
     "scripts/prepare-commit-msg-session.sh": ("CODEX_SESSION_ID", "Agent-Model", "Agent-Effort"),
     "codex/hooks/resume_context.py": ("build_stamp", "first user-visible reply"),
-    "codex/hooks/session_stamp.py": ("account unknown", "surface unknown", "CODEX_SESSION_ID"),
+    "codex/hooks/session_stamp.py": ("Codex", "account unknown", "surface unknown", "CODEX_SESSION_ID"),
     "setup.sh": ("session-start-provenance.py",),
 }
 

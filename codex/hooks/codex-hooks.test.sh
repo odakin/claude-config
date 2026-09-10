@@ -186,7 +186,7 @@ import sys
 
 host = socket.gethostname().split(".")[0]
 assert sys.argv[1] == (
-    f"🖥 {host} · desktop = account unknown · session codex-te "
+    f"🖥 {host} · Codex desktop · account unknown · session codex-te "
     "· model gpt-test-2 · effort xhigh"
 )
 PY
@@ -194,7 +194,7 @@ PY
 STAMP_UNKNOWN="$(env -u CODEX_APP_TOOLS_PIPE_PATH -u CODEX_SESSION_ID -u CODEX_THREAD_ID \
   CODEX_HOME="$TEMP_ROOT/no-codex-home" python3 "$SCRIPT_DIR/session_stamp.py")"
 case "$STAMP_UNKNOWN" in
-  *'surface unknown = account unknown · session unknown · model unknown · effort unknown') ;;
+  *'Codex surface unknown · account unknown · session unknown · model unknown · effort unknown') ;;
   *) echo "unexpected unknown stamp: $STAMP_UNKNOWN" >&2; exit 1 ;;
 esac
 
@@ -212,7 +212,7 @@ context = payload["hookSpecificOutput"]["additionalContext"]
 host = socket.gethostname().split(".")[0]
 assert f"The worker host for this session is {host}." in context
 assert (
-    f"🖥 {host} · desktop = account unknown · session codex-te "
+    f"🖥 {host} · Codex desktop · account unknown · session codex-te "
     "· model gpt-test · effort high"
 ) in context
 assert "first user-visible reply" in context

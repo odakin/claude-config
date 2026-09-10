@@ -499,12 +499,17 @@ The first user-visible reply after `startup`, `resume`, or `clear` begins with
 one exact, single-line, best-effort stamp:
 
 ```text
-🖥 <host> · <surface|surface unknown> = account unknown · session <id8|unknown> · model <slug|unknown> · effort <level|unknown>
+🖥 <host> · Codex <surface|surface unknown> · account unknown · session <id8|unknown> · model <slug|unknown> · effort <level|unknown>
 ```
 
-The SessionStart adapter builds this from the local hook process hostname and
-the official Hook `session_id` / `model` fields. Effective effort is used only
-when supplied at runtime or recovered from the session provenance cache.
+`Codex` is the fixed product identity of this integration, not best-effort
+runtime metadata. It is always printed literally. An unavailable runtime field
+may become `unknown`, but the product identity must not disappear with it.
+
+The SessionStart adapter builds the remaining fields from the local hook
+process hostname and the official Hook `session_id` / `model` fields. Effective
+effort is used only when supplied at runtime or recovered from the session
+provenance cache.
 Surface is `desktop` only when the current process exposes the observed Codex
 app-tools pipe; that variable is not a stable public contract, so its absence
 is `surface unknown`, not an inference of CLI. The official Hook schema has no
