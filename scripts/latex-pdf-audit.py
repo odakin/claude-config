@@ -13,8 +13,9 @@ resource. Missing inputs, unreadable PDFs or unavailable dependencies fail
 explicitly. --source is repeatable and checks mtime only, not build provenance.
 Record hashes identify the inspected bytes; they do not prove correspondence.
 
-Exit 0: no blocking finding in the inspected scope; visual_review is still
-"required". Exit 1: TeX error, undefined reference/citation, missing glyph,
+Exit 0: no blocking finding in the inspected scope. visual_review is
+"not_assessed"; the artifact workflow decides whether it is required.
+Exit 1: TeX error, undefined reference/citation, missing glyph,
 incomplete log, pending rerun, stale PDF, unexpected page count or Type 3 font.
 Overfull boxes are reported but block only with --strict-overfull.
 Exit 2: invalid arguments or unavailable/unreadable input.
@@ -119,7 +120,7 @@ def inspect_pdf(pdf, log, sources=(), expected_pages=None, strict_overfull=False
         "log_findings": findings,
         "sources_newer_than_pdf": stale,
         "blocking_findings": failures,
-        "visual_review": "required",
+        "visual_review": "not_assessed",
         "limits": (
             "Log diagnostics and all PDF font resources only. A successful scan "
             "does not verify clipping, overlaps, scientific correctness or build provenance. "
@@ -176,7 +177,7 @@ def selftest():
             document.save(pdf)
         log.write_text("Output written on paper.pdf (1 page, 100 bytes).\n", encoding="utf-8")
         report = inspect_pdf(pdf, log, expected_pages=1)
-        assert not report["blocking_findings"] and report["visual_review"] == "required"
+        assert not report["blocking_findings"] and report["visual_review"] == "not_assessed"
         assert inspect_pdf(pdf, log, expected_pages=2)["blocking_findings"] == ["unexpected_page_count"]
         source = root / "paper.tex"
         source.write_text("Synthetic source", encoding="utf-8")
@@ -241,7 +242,7 @@ def main():
             for key in ("tex_errors", "undefined", "missing_glyphs", "overfull"):
                 print(f"{key}: {len(report['log_findings'][key])}")
             print("Blocking findings: " + (", ".join(report["blocking_findings"]) or "none in inspected scope"))
-            print("Visual review: required")
+            print("Visual review: not assessed; requirement belongs to the artifact workflow")
             for path in report.get("rendered_pages", []):
                 print(path)
         return int(bool(report["blocking_findings"]))

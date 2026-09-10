@@ -869,26 +869,26 @@ python3 scripts/latex-pdf-audit.py paper.pdf --log paper.log --render-dir review
 
 検査項目・exit code・CLI の正本は script の docstring と `--help`。入力不在を成功扱いせず、従来の `!` error と `-file-line-error` 形式を確認する。参照未解決、missing glyph、Type 3、未完了 log、rerun 要求を検出し、overfull は既定で報告のみとする。`--source` の鮮度判定は明示された file の mtime 比較であり、正しい source から生成された証明ではない。
 
-出力の `visual_review: required` は機械検査後も残る。生成された PNG を開き、変更箇所と周辺の切れ・重なり・改頁を確認してから報告する。既存 PNG を上書きしないため、再検査時は新しい出力 directory を指定する。
+出力の `visual_review: not_assessed` は画像を検査したという意味ではなく、画像確認の要否も判定しない。要否は下記の成果物別の範囲で決める。画像確認を行う場合は生成された PNG を開いて確認する。既存 PNG を上書きしないため、再検査時は新しい出力 directory を指定する。
 
 ### <a id="visual-verification-intensity"></a>成果物の種類で視覚検査の強度を分ける
 
-**論文・ノートの通常編集**では、ビルドと log・font 検査に加え、変更箇所と改頁の影響を受けたページを目視すればよい。全ページの画像 hash や pixel-by-pixel 一致は既定にしない。本文が変われば一致しないのが当然で、無関係な全ページ比較は検査コストだけを増やす。
+**論文・ノートの通常編集**では、ビルド、参照、変更した数式・論理を検査し、必要に応じて font を確認する。ページ画像化・目視照合・pixel 比較は既定の完了条件にしない。図や組版自体を変更するとき、レイアウト不具合が疑われるとき、または著者が求めたときだけ必要なページを画像で確認する。固定様式向けの検査を一律適用しない。
 
 **既存様式への記入**（申請書、Word/Excel/PDF template、帳票、overlay）では、欄・罫線・改頁・既存文字を動かしていないこと自体が受入条件なので、基準版との pixel 比較を使う。論文でも renderer・font・生成経路の移行後に版面同値性を証明する場合、または並行生成で PDF の出所が不明になり同じ source の二つの出力を照合する場合に限り、全ページ比較を追加してよい。通常の source/PDF 対応は隔離ビルド、入力 hash、完了した log で確立し、全ページ画像比較を代用にしない。
 
 origin: 2026-09-11、論文の通常改稿で固定様式向けの全ページ画像照合を流用し、検査が過剰になった事例から区別を明文化。
 
 
-## <a id="pdf-visual-verification"></a>PDF 視覚検証 reflex: compile success + log no-error だけで完了としない
+## <a id="pdf-visual-verification"></a>図・組版を対象とする PDF 視覚検証
 
-LaTeX edit 後、 `pdflatex` が完走しても visual の overflow / misalignment / text 切れは普通に起きる。 「compile 成功」 を成功 signal にすると見落とす。 edit のたびに以下を回す:
+図・組版の修正ではコンパイル成功だけで配置の正しさは分からない。[成果物別の範囲](#visual-verification-intensity)で画像確認が必要な場合に以下を使う。通常の本文・数式編集に毎回適用しない:
 
 1. `pdflatex -interaction=nonstopmode FILE.tex 2>&1 | grep -iE "^! |Overfull"` — fatal error + overflow warning を確認（platex DVI workflow なら `platex ... ; dvipdfmx ...` の各段で同 grep）
    - ⚠️ **`grep undefined` だけで済ませない**: `^!` (TeX error) は `Double subscript`・`Missing $` 等で出るが、TeX は recover して PDF を出すため「undefined 参照ゼロ」だけ見ると error を見逃す（例: `\newcommand{\X}{Y_{\rm z}}` を `\X_{...}` と使う double-subscript は PDF が出ても下付きが壊れる）。**必ず `^!` を grep** し、`error 0` を確認する。
 2. `python3 -c "import fitz; doc=fitz.open('FILE.pdf'); pix=doc[N].get_pixmap(dpi=200); pix.save('/tmp/check.png')"` — 該当 page を PNG 化
 3. `/tmp/check.png` を Read tool で開いて **視覚確認** (= 「compile OK」 だけで完了としない)
-4. `Overfull \hbox (N pt too wide)` warning が出たら必ず該当 page を render して overflow が visual に問題ないか確認。 ⚠️ ただし共著原稿の改稿 pass の**途中**では overfull を語順変更で消さない — 改行位置は後続の編集で動くので、 掃除は投稿直前の final pass で 1 回 (正本 = ai-collaboration [`edit-intent-record.md#overfull-not-a-gate`](../../ai-collaboration/conventions/edit-intent-record.md#overfull-not-a-gate)、 2026-09-09 著者裁定)
+4. 図・組版の確認対象に `Overfull \hbox (N pt too wide)` warning が出たら、該当 page で切れを確認。 ⚠️ ただし共著原稿の改稿 pass の**途中**では overfull を語順変更で消さない — 改行位置は後続の編集で動くので、 掃除は投稿直前の final pass で 1 回 (正本 = ai-collaboration [`edit-intent-record.md#overfull-not-a-gate`](../../ai-collaboration/conventions/edit-intent-record.md#overfull-not-a-gate)、 2026-09-09 著者裁定)
 
 ### <a id="pdf-visual-verification-traps"></a>典型 trap (= 2026-05-18 EC erratum note 編集で連続再発)
 
