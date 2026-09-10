@@ -78,6 +78,7 @@ SUPERSEDED_CLAIMS = (
 )
 HOOK_ADAPTERS = {
     "SessionStart": ("resume_context.py", "session_provenance.py"),
+    "UserPromptSubmit": ("session_provenance.py",),
     "PreToolUse": ("pre_tool_policy.py", "session_provenance.py"),
     "PostToolUse": ("session_touch.py",),
     "Stop": ("session_touch.py",),
@@ -199,7 +200,13 @@ SESSION_PROVENANCE_REQUIREMENTS = {
     "codex/HOME-AGENTS.md": ("Agent-Session", "codex/PARITY.md#git-session-provenance"),
     "scripts/setup-codex.sh": ("--repo-root", "install-session-trailer.sh"),
     "scripts/audit-codex-integration.sh": ("Agent-Session prepare-commit-msg hook",),
-    "scripts/prepare-commit-msg-session.sh": ("CODEX_SESSION_ID", "Agent-Model", "Agent-Effort"),
+    "scripts/prepare-commit-msg-session.sh": (
+        "CODEX_SESSION_ID",
+        "Agent-Model",
+        "Agent-Effort",
+        "refusing to create Agent-Model: unknown",
+    ),
+    "scripts/session_provenance_cache.py": ("codex_thread_metadata", "PRAGMA query_only"),
     "codex/hooks/resume_context.py": ("build_stamp", "first user-visible reply"),
     "codex/hooks/session_stamp.py": ("Codex", "account unknown", "surface unknown", "CODEX_SESSION_ID"),
     "setup.sh": ("session-start-provenance.py",),

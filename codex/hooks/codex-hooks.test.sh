@@ -27,6 +27,10 @@ assert any(
     any("session_provenance.py" in hook.get("command", "") for hook in group.get("hooks", []))
     for group in hooks["SessionStart"]
 )
+assert any(
+    any("session_provenance.py" in hook.get("command", "") for hook in group.get("hooks", []))
+    for group in hooks["UserPromptSubmit"]
+)
 PY
 
 PUBLIC_REPO="$TEMP_ROOT/public"
@@ -170,6 +174,10 @@ printf '%s' '{"hook_event_name":"SessionStart","session_id":"codex-test-session"
   | CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR="$PROVENANCE_STATE" \
     python3 "$SCRIPT_DIR/session_provenance.py"
 grep -qx 'model=gpt-test' "$PROVENANCE_STATE/codex-test-session.env"
+printf '%s' '{"hook_event_name":"UserPromptSubmit","session_id":"codex-test-session","model":"gpt-test-prompt"}' \
+  | CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR="$PROVENANCE_STATE" \
+    python3 "$SCRIPT_DIR/session_provenance.py"
+grep -qx 'model=gpt-test-prompt' "$PROVENANCE_STATE/codex-test-session.env"
 printf '%s' '{"hook_event_name":"PreToolUse","session_id":"codex-test-session","model":"gpt-test-2","effort":{"level":"xhigh"}}' \
   | CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR="$PROVENANCE_STATE" \
     python3 "$SCRIPT_DIR/session_provenance.py"
@@ -191,7 +199,40 @@ assert sys.argv[1] == (
 )
 PY
 
+THREAD_STATE="$TEMP_ROOT/thread-state"
+mkdir -p "$THREAD_STATE"
+python3 - "$THREAD_STATE/state_9.sqlite" <<'PY'
+import sqlite3
+import sys
+
+connection = sqlite3.connect(sys.argv[1])
+connection.execute(
+    "CREATE TABLE threads (id TEXT PRIMARY KEY, model TEXT, reasoning_effort TEXT)"
+)
+connection.execute(
+    "INSERT INTO threads VALUES (?, ?, ?)",
+    ("sqlite-test-session", "gpt-thread-state", "medium"),
+)
+connection.commit()
+connection.close()
+PY
+STAMP_THREAD_STATE="$(env -u CODEX_APP_TOOLS_PIPE_PATH -u CODEX_SQLITE_HOME \
+  CODEX_HOME="$THREAD_STATE" CODEX_SESSION_ID="sqlite-test-session" \
+  CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR="$TEMP_ROOT/no-provenance-cache" \
+  python3 "$SCRIPT_DIR/session_stamp.py")"
+python3 - "$STAMP_THREAD_STATE" <<'PY'
+import socket
+import sys
+
+host = socket.gethostname().split(".")[0]
+assert sys.argv[1] == (
+    f"🖥 {host} · Codex surface unknown · account unknown · session sqlite-t "
+    "· model gpt-thread-state · effort medium"
+)
+PY
+
 STAMP_UNKNOWN="$(env -u CODEX_APP_TOOLS_PIPE_PATH -u CODEX_SESSION_ID -u CODEX_THREAD_ID \
+  -u CODEX_SQLITE_HOME \
   CODEX_HOME="$TEMP_ROOT/no-codex-home" python3 "$SCRIPT_DIR/session_stamp.py")"
 case "$STAMP_UNKNOWN" in
   *'Codex surface unknown · account unknown · session unknown · model unknown · effort unknown') ;;

@@ -7,6 +7,13 @@ import os
 from pathlib import Path
 import re
 import socket
+import sys
+
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from session_provenance_cache import codex_thread_metadata  # noqa: E402
 
 
 SAFE_SESSION = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -69,15 +76,30 @@ def build_stamp(
         session_value = environment.get("CODEX_SESSION_ID") or environment.get("CODEX_THREAD_ID") or ""
     session_id = session_value if SAFE_SESSION.fullmatch(session_value) else ""
     cache = cached_metadata(session_id, environment) if session_id else {}
+    thread_metadata = codex_thread_metadata(session_id, environment) if session_id else {}
 
     model_value = event.get("model")
     model = model_value if isinstance(model_value, str) else ""
-    model = model or environment.get("CLAUDE_CONFIG_AGENT_MODEL", "") or cache.get("model", "")
+    if model == "unknown":
+        model = ""
+    model = (
+        model
+        or environment.get("CLAUDE_CONFIG_AGENT_MODEL", "")
+        or cache.get("model", "")
+        or thread_metadata.get("model", "")
+    )
     if not SAFE_MODEL.fullmatch(model):
         model = "unknown"
 
     effort = event_effort(event)
-    effort = effort or environment.get("CLAUDE_CONFIG_AGENT_EFFORT", "") or cache.get("effort", "")
+    if effort == "unknown":
+        effort = ""
+    effort = (
+        effort
+        or environment.get("CLAUDE_CONFIG_AGENT_EFFORT", "")
+        or cache.get("effort", "")
+        or thread_metadata.get("effort", "")
+    )
     if not SAFE_EFFORT.fullmatch(effort):
         effort = "unknown"
 

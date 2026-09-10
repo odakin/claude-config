@@ -246,7 +246,7 @@ New AI-origin commits use one vendor-neutral trailer block:
 
 ```text
 Agent-Session: codex:<native-session-id>
-Agent-Model: <runtime-model-id>
+Agent-Model: <active-runtime-model-id>
 Agent-Effort: <effective-effort-or-unknown>
 ```
 
@@ -265,15 +265,25 @@ The [official Codex Hook contract](https://learn.chatgpt.com/docs/hooks)
 hooks. It does not document an effective reasoning-effort field. The stable
 public [Codex environment-variable list](https://learn.chatgpt.com/docs/config-file/environment-variables)
 (checked 2026-09-11) does not include `CODEX_SESSION_ID` or `CODEX_THREAD_ID`.
-Accordingly, the lifecycle adapter caches hook-supplied model metadata in
-machine-local Codex state; the Git hook accepts an explicit
+Accordingly, the lifecycle adapter caches hook-supplied model metadata at
+`SessionStart`, `UserPromptSubmit`, and `PreToolUse(Bash)` in machine-local
+Codex state; the Git hook accepts an explicit
 `CLAUDE_CONFIG_AGENT_SESSION`, `CLAUDE_CONFIG_AGENT_MODEL`, and
 `CLAUDE_CONFIG_AGENT_EFFORT`, and treats the observed
 `CODEX_SESSION_ID` / `CODEX_THREAD_ID` shell variables only as fail-open
-compatibility probes. An unavailable value is written as literal `unknown`;
-the configured default must not be presented as the run's effective value.
-This is field-wise: one unavailable field does not suppress the known fields
-in the same provenance record. The general record-design rule is
+compatibility probes. If the hook cache is absent, the Git hook reads only the
+local Codex `threads` row whose id exactly matches the current session and
+schema-probes the metadata columns before use. This read-only compatibility path
+does not inspect transcript content and fails safely if the local state schema
+changes.
+
+The active model is a required Codex value because the official hook contract
+supplies it. A new Codex-origin commit stops instead of creating
+`Agent-Model: unknown` when neither source resolves it. Other genuinely
+unavailable values remain literal `unknown`; in particular, a configured
+default must not be presented as the run's effective value. This is
+field-wise: one unavailable field does not suppress the known fields in the
+same provenance record. The general record-design rule is
 [`required-field-fabrication`](../docs/convention-design-principles.md#required-field-fabrication).
 
 `scripts/setup-codex.sh --repo <path>` installs the Git hook in exact,
@@ -288,22 +298,26 @@ All selected hooks are preflighted before any mutation. A
 user-managed `prepare-commit-msg` makes default mode refuse the whole install;
 `--replace` preserves a timestamped backup. Cloning alone still changes
 nothing. `scripts/audit-codex-integration.sh --repo <path>` checks the installed
-stub separately from lifecycle-Hook trust. Trust is required for automatic
-model caching, while the Git hook remains the commit-path mechanism.
+stub separately from lifecycle-Hook trust. Trust is required for the primary
+automatic model cache, while the Git hook and exact-session local-state
+fallback remain the commit-path mechanism.
 
-Live dogfood on 2026-09-11 separated those layers: an already-running Codex
-task committed after the repository-hook rollout and received its
-`Agent-Session` through the compatibility probe, while model and effort were
-honestly `unknown` because that task had started before the new lifecycle
-adapter was loaded and trusted. A new task after trust review is required to
-verify the cache-backed fields; the Git result alone cannot establish that
-lifecycle layer.
+Live dogfood on 2026-09-11 produced commit `08f0f6d` with a valid Codex session
+but `Agent-Model: unknown`. The same task's exact local thread row contained
+the active model, and the official hook contract also guaranteed that field.
+This proved that model `unknown` was a transport failure, not an honest runtime
+state, and motivated the prompt-time cache, local-state fallback, and blocking
+postcondition above. A fresh task is still required to verify live
+`UserPromptSubmit` delivery; direct fixtures verify the logic in the current
+task.
 
 The repository opt-out is `git config agent.sessionTrailer false`; the legacy
 `claude.sessionTrailer` and `codex.sessionTrailer` keys are also honored. The
-hook is fail-open. Therefore a missing trailer is not proof of a human-only
-commit: it can also mean absent repository wiring or an unsupported runtime,
-which the audit must distinguish.
+hook remains fail-open for absent session identity and genuinely optional
+fields, but fails closed for a missing active model on a new Codex-origin
+commit. Therefore a missing trailer is not proof of a human-only commit: it can
+also mean absent repository wiring or an unsupported runtime, which the audit
+must distinguish.
 
 ## Platform scope
 
@@ -480,6 +494,7 @@ This integration maps only the high-signal, product-neutral subset:
 | --- | --- | --- |
 | `PreToolUse(apply_patch)` | Blocks Tier-A structural leak patterns while editing a repository marked public. | Git pre-commit and commit-message gates remain authoritative for all write paths. |
 | `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`, constructs the conversation-start identity stamp, and caches hook-supplied session/model provenance. | It reads only current hook input and local runtime facts; it does not discover personal-layer data or session history. |
+| `UserPromptSubmit` | Refreshes the active model cache before every user turn, including after a model change. | It emits no output and stores only validated session/model metadata. |
 | `PreToolUse(Bash)` | Refreshes the machine-local session/model provenance cache from current hook input. | It emits no decision and neither authorizes nor rewrites the command; the Git hook remains the commit-path mechanism. |
 | `PostToolUse(apply_patch)` + `Stop` | Tracks a touched Git repository in machine-local Codex state and reports unintended dirty worktree state at turn end. | It does not commit or push automatically. |
 
@@ -520,12 +535,15 @@ exists. Claude CLI authentication or a configured default must never fill it.
 Known host, surface, session, or model fields remain visible when another
 field is unknown; the stamp is not an all-or-nothing record.
 
-[`codex/hooks/session_stamp.py`](hooks/session_stamp.py) is the deterministic fallback when lifecycle
-context was not delivered. Global instructions require it as the first tool
-call and require its output to lead the first reply unchanged. A compaction
-boundary restores work context but does not restamp. Hook installation and
-model-visible delivery remain separate evidence; a new task after trust review
-is the end-to-end activation test.
+[`codex/hooks/session_stamp.py`](hooks/session_stamp.py) is the deterministic
+fallback when lifecycle context was not delivered. It uses the same
+exact-session, read-only local-state resolver after the primary hook cache, so
+a valid local Codex task does not lose its active model merely because context
+injection was missed. Global instructions require it as the first tool call
+and require its output to lead the first reply unchanged. A compaction boundary
+restores work context but does not restamp. Hook installation and model-visible
+delivery remain separate evidence; a new task after trust review is the
+end-to-end activation test.
 
 The SessionStart reminder obtains the short hostname only from the current
 hook process. A session title, a prior message, or an audit/report from another

@@ -132,6 +132,19 @@ else
 fi
 git config --unset agent.sessionTrailer
 
+f="$WORK/m6-codex"; printf 'subject line\n' > "$f"
+git config agent.sessionTrailer false
+if ( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CONFIG_AGENT_MODEL CLAUDE_CONFIG_AGENT_EFFORT \
+      CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID CODEX_SQLITE_HOME \
+      CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR; \
+     CODEX_HOME="$WORK/no-codex-home" CODEX_SESSION_ID="$SID" bash "$RUNNER" "$f" ) \
+   && ! grep -q '^Agent-Session:' "$f"; then
+    ok "8b. Codex opt-out → model 不在でも block しない"
+else
+    ng "8b. Codex opt-out → model 不在でも block しない" "$(cat "$f")"
+fi
+git config --unset agent.sessionTrailer
+
 git config claude.sessionTrailer false
 CLAUDE_CODE_SESSION_ID="$SID" bash "$RUNNER" "$f"
 if ! grep -q '^Agent-Session:' "$f"; then
@@ -157,14 +170,57 @@ else
     ng "10. 不正な session 値 → 付かない (injection 拒否)" "leaked:$inj_fail"
 fi
 
+CODEX_STATE="$WORK/codex-state"
+mkdir -p "$CODEX_STATE"
+python3 - "$CODEX_STATE/state_5.sqlite" "$SID" <<'PY'
+import sqlite3
+import sys
+
+connection = sqlite3.connect(sys.argv[1])
+connection.execute(
+    "CREATE TABLE threads (id TEXT PRIMARY KEY, model TEXT, reasoning_effort TEXT)"
+)
+connection.execute("INSERT INTO threads VALUES (?, ?, ?)", (sys.argv[2], "gpt-local-state", "high"))
+connection.commit()
+connection.close()
+PY
 f="$WORK/m8"; printf 'subject line\n' > "$f"
 ( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CONFIG_AGENT_MODEL CLAUDE_CONFIG_AGENT_EFFORT \
-  CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR; \
-  CODEX_HOME="$WORK/no-codex-home" CODEX_SESSION_ID="$SID" bash "$RUNNER" "$f" )
-if grep -qx 'Agent-Model: unknown' "$f" && grep -qx 'Agent-Effort: unknown' "$f"; then
-    ok "11. metadata 不明 → 捏造せず unknown"
+  CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID CODEX_SQLITE_HOME \
+  CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR; \
+  CODEX_HOME="$CODEX_STATE" CODEX_SESSION_ID="$SID" bash "$RUNNER" "$f" )
+if grep -qx 'Agent-Model: gpt-local-state' "$f" && grep -qx 'Agent-Effort: high' "$f"; then
+    ok "11a. Codex hook cache 不在 → current-thread metadata で補完"
 else
-    ng "11. metadata 不明 → 捏造せず unknown" "$(cat "$f")"
+    ng "11a. Codex hook cache 不在 → current-thread metadata で補完" "$(cat "$f")"
+fi
+
+f="$WORK/m8-missing"; printf 'subject line\n' > "$f"
+if ( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CONFIG_AGENT_MODEL CLAUDE_CONFIG_AGENT_EFFORT \
+      CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID CODEX_SQLITE_HOME \
+      CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR; \
+     CODEX_HOME="$WORK/no-codex-home" CODEX_SESSION_ID="$SID" bash "$RUNNER" "$f" \
+       2> "$WORK/m8-missing.err" ); then
+    rc=0
+else
+    rc=$?
+fi
+if [ "$rc" -ne 0 ] && [ "$(cat "$f")" = "subject line" ] \
+   && grep -q 'active Codex model metadata is missing' "$WORK/m8-missing.err"; then
+    ok "11b. Codex model 不明 → Agent-Model: unknown を作らず block"
+else
+    ng "11b. Codex model 不明 → Agent-Model: unknown を作らず block" \
+      "rc=$rc message=$(cat "$f") error=$(cat "$WORK/m8-missing.err")"
+fi
+
+f="$WORK/m8-claude"; printf 'subject line\n' > "$f"
+( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CONFIG_AGENT_MODEL CLAUDE_CONFIG_AGENT_EFFORT \
+  CODEX_SESSION_ID CODEX_THREAD_ID CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR CLAUDE_EFFORT; \
+  CLAUDE_CONFIG_DIR="$WORK/no-claude-home" CLAUDE_CODE_SESSION_ID="$SID" bash "$RUNNER" "$f" )
+if grep -qx 'Agent-Model: unknown' "$f" && grep -qx 'Agent-Effort: unknown' "$f"; then
+    ok "11c. Claude metadata 不明 → 従来どおり field-wise unknown"
+else
+    ng "11c. Claude metadata 不明 → 従来どおり field-wise unknown" "$(cat "$f")"
 fi
 
 f="$WORK/m9"

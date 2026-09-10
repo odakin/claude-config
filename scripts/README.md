@@ -90,7 +90,7 @@
 - **[routine-host-gate.py](routine-host-gate.py)** — 汎用 active-routine-host gate（無人ルーチンを複数マシンに install しつつ「今の本番ホスト」を台帳1ファイルで決める。台帳の host が自分でなければ defer〔exit 1〕、台帳不在/破損は fail-open〔exit 0〕、最新 committed 台帳を fetch して読む、--selftest 内蔵。install-launchd-cron.sh --gate から呼ぶ、conventions/multi-machine-state.md#account-host-failover）
 - **[run-all-checks.sh](run-all-checks.sh)** — claude-config の全機械検査を 1 コマンドで回す (検査リストの SoT)
 - **[scan-form-instructions.py](scan-form-instructions.py)** — 様式 xlsx の label 内 embedded instruction を category 別に抽出（office-automation.md#embedded-instruction-in-label）
-- **[session_provenance_cache.py](session_provenance_cache.py)** — Cache hook-supplied session model/effort metadata for the Git provenance trailer.
+- **[session_provenance_cache.py](session_provenance_cache.py)** — Cache hook metadata and resolve current Codex thread provenance read-only.
 - **[setup-codex.sh](setup-codex.sh)** — claude-config の共有規約を Codex に安全に導入する
 - **[setup-codex.test.sh](setup-codex.test.sh)** — setup-codex.sh の隔離・冪等・非上書き性を検証する
 - **[setup-dropbox-refs.sh](setup-dropbox-refs.sh)** — personal layer の dropbox-collabs.yaml を読んで symlink を生成

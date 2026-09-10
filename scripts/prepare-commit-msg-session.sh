@@ -61,16 +61,19 @@
 # CODEX_* は現行 local runtime での自動経路を保つ fail-open compatibility probe。
 # model / effort は CLAUDE_CONFIG_AGENT_MODEL / CLAUDE_CONFIG_AGENT_EFFORT の明示値を
 # 最優先し、SessionStart/PreToolUse adapter の machine-local cache を次に読む。Claude
-# effort は公式の Bash env CLAUDE_EFFORT から effective 値を取得する。取得不能時は
-# 捏造せず literal `unknown` を書く (= 欠落を健全値と同じ沈黙に畳まない)。
+# effort は公式の Bash env CLAUDE_EFFORT から effective 値を取得する。Codex model
+# は公式 hook cache、次に session id と完全一致する local thread metadata を読む。
+# 両方で取れなければ新規 Codex commit を中止し、誤った `unknown` を焼かない。
+# その他の取得不能値は捏造せず literal `unknown` を書く。
 #
-# fail-open: 何が起きても exit 0。 commit を止める価値のある検査ではない (= 止まると
-#   並列 session の作業が詰まる方が高くつく)。
+# fail-open の例外: 新規 Codex provenance の active model だけは公式に供給される必須値
+#   なので、cache と local thread metadata の両方から欠けた時は明示的に exit 1。
 #
 # selftest: prepare-commit-msg-session.test.sh (run-all-checks.sh が自動発見)
 
 set -u
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MSG_FILE="${1:-}"
 [ -n "$MSG_FILE" ] || exit 0
 [ -f "$MSG_FILE" ] || exit 0
@@ -145,6 +148,12 @@ case "$SESSION_ID" in
     ""|*[!A-Za-z0-9_-]*) exit 0 ;;
 esac
 
+# repo 単位の opt-out は metadata gate より先に判定する。opt-out した repo を
+# provenance 不足で止めてはならない。
+for OPT_OUT_KEY in agent.sessionTrailer claude.sessionTrailer codex.sessionTrailer; do
+    [ "$(git config --get "$OPT_OUT_KEY" 2>/dev/null || true)" != "false" ] || exit 0
+done
+
 if [ -n "$ORIGINAL_AGENT_SESSION" ]; then
     MODEL="${ORIGINAL_MODEL:-unknown}"
     EFFORT="${ORIGINAL_EFFORT:-unknown}"
@@ -165,6 +174,15 @@ if [ -n "$STATE_FILE" ] && [ -f "$STATE_FILE" ]; then
     [ -n "$MODEL" ] || MODEL="$(sed -n 's/^model=//p' "$STATE_FILE" 2>/dev/null | sed -n '1p')"
     [ -n "$EFFORT" ] || EFFORT="$(sed -n 's/^effort=//p' "$STATE_FILE" 2>/dev/null | sed -n '1p')"
 fi
+if [ -z "$ORIGINAL_AGENT_SESSION" ] && [ "$AGENT" = "codex" ] \
+        && { [ -z "$MODEL" ] || [ "$MODEL" = "unknown" ]; }; then
+    LOCAL_METADATA="$(python3 "$SCRIPT_DIR/session_provenance_cache.py" \
+        --resolve-codex "$SESSION_ID" 2>/dev/null || true)"
+    MODEL="$(printf '%s\n' "$LOCAL_METADATA" | sed -n 's/^model=//p' | sed -n '1p')"
+    if [ -z "$EFFORT" ] || [ "$EFFORT" = "unknown" ]; then
+        EFFORT="$(printf '%s\n' "$LOCAL_METADATA" | sed -n 's/^effort=//p' | sed -n '1p')"
+    fi
+fi
 if [ -z "$EFFORT" ] && [ "$AGENT" = "claude" ]; then
     EFFORT="${CLAUDE_EFFORT:-}"
 fi
@@ -175,11 +193,11 @@ fi
 if ! printf '%s\n' "$EFFORT" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
     EFFORT="unknown"
 fi
-
-# repo 単位の opt-out
-for OPT_OUT_KEY in agent.sessionTrailer claude.sessionTrailer codex.sessionTrailer; do
-    [ "$(git config --get "$OPT_OUT_KEY" 2>/dev/null || true)" != "false" ] || exit 0
-done
+if [ -z "$ORIGINAL_AGENT_SESSION" ] && [ "$AGENT" = "codex" ] && [ "$MODEL" = "unknown" ]; then
+    echo "prepare-commit-msg: active Codex model metadata is missing for session $SESSION_ID; refusing to create Agent-Model: unknown" >&2
+    echo "Restart or trust the Codex hooks, or pass the verified active slug through CLAUDE_CONFIG_AGENT_MODEL." >&2
+    exit 1
+fi
 
 # --if-exists doNothing = 同 key の trailer が既にあれば git 側で no-op。
 # git は comment 行 (core.commentChar) を認識して trailer block の位置を決めるので、
