@@ -20,6 +20,10 @@
 [FORM]  --form <様式.docx> [--pdf <調書.pdf>]
   🔴 SKELETON_LOST     様式が「削除することなく」等で明示保護した欄の label が PDF に無い
   🟠 SKELETON_MISSING  その他の pre-printed 見出し・表ラベルが PDF に無い
+  🔴 INSTRUCTION_RESIDUE 様式が「提出時に削除せよ」と言った注意書きが提出版に残っている
+  🟠 COLORED_TEXT      提出版 PDF に有彩色の文字 (記入要領の色字 / 著者注の消し忘れ)
+                       ⚠️ --pdf に渡してよいのは **提出物そのもの** だけ。公募要領・論文・見積書
+                       等の参考資料に当てても意味がない (色は最初から意味を持っている)。
   ℹ️ INSTRUCTION       様式に埋め込まれた指示文の一覧 (category 別、1 つずつ適用を verify する)
 [PDF]   --pdf <調書.pdf>
   🔴 ENTITY            HTML 実体参照の残置 (&#12316; 等)
@@ -67,8 +71,11 @@ from pathlib import Path
 # ── 様式 docx から骨格を拾うための規則 ────────────────────────────────────────
 # 「この欄を消すな」と様式自身が書いている印。ここに掛かる見出しは 🔴 扱いにする。
 PROTECTED_MARKERS = ("削除することなく", "削除しないこと", "動かさないこと", "削除せず")
-# 様式の注意書きテキストボックス (作成時に消す前提のもの) は骨格ではない。
+# 様式の注意書きブロック (作成時に消す前提のもの) は骨格ではない。
+# ⚠️ 骨格から外すだけでなく、**提出版に残っていないか**の検出源でもある
+# (2026-06 LOTUS: 事務が削除を求めた記入要領が提出版に残り、2 度の検証をすり抜けた)。
 DROP_MARKERS = ("このテキストボックスごと削除", "本留意事項の内容を十分に確認")
+DELETE_MARKERS = ("削除すること", "削除の上", "提出時に削除", "削除してください", "を削除")
 # 番号付き大見出し: 「２　応募者の研究遂行能力及び研究環境」「４ 研究計画最終年度前年度応募…」
 HEADING_RE = re.compile(r"^[0-9０-９]{1,2}[\s　]+\S")
 
@@ -92,6 +99,9 @@ INSTRUCTION_PATTERNS = [
 
 # ── 表記 lint ────────────────────────────────────────────────────────────────
 # 官公庁・機関の略称。調書は正式名称で書く (2026-09 に「文科省」を全件赤字指摘)。
+# ⚠️ 略称が正式名称の**部分文字列**になる組があるので、位置で除外する
+# (「振興会」を素の entry にすると正しい「日本学術振興会」を毎回叩く = 2026 年度の
+#  申請書で実測した偽陽性。正式名称の一部でしかない断片は entry にしない)。
 ABBREV_MAP = {
     "文科省": "文部科学省",
     "厚労省": "厚生労働省",
@@ -99,7 +109,6 @@ ABBREV_MAP = {
     "農水省": "農林水産省",
     "国交省": "国土交通省",
     "学振": "日本学術振興会",
-    "振興会": None,  # 文脈依存 — 報告のみ
 }
 ENTITY_RE = re.compile(r"&#\d+;|&[a-zA-Z]{2,8};")
 # 「（160）」型の裸の数字 = 単位・意味が落ちた数 (2026-09 に被引用数を「(160)」と書いて赤字)。
@@ -174,6 +183,19 @@ def read_form(path: Path) -> dict:
     body = _TXBX.sub("", xml)          # 骨格判定からテキストボックスを外す
     all_text = _runs(xml)              # 指示文の抽出はテキストボックスも含めて拾う
 
+    # 「提出時に消す」ブロックの中の文 = 提出版に残っていたら差し戻し事由。
+    # ⚠️ 色 (青字等) では拾わない — docx の run 色は style 継承で嘘をつくので、
+    #    色の判定は提出 PDF の render span を ground truth にする (check_colored_text)。
+    delete_sigs: list[str] = []
+    for m in _TXBX.finditer(xml):
+        blk = _runs(m.group(0))
+        if not any(k in blk for k in DELETE_MARKERS):
+            continue
+        for sent in re.split(r"(?<=。)|(?<=：)", blk):
+            sent = sent.strip()
+            if len(sent) >= 10 and not any(k in sent for k in DROP_MARKERS):
+                delete_sigs.append(sent)
+
     # 文書順のノード列 (段落 / 表セル) を作る
     nodes = []
     for m in re.finditer(r"<w:p(?:\s[^>]*)?>.*?</w:p>|<w:tc(?:\s[^>]*)?>.*?</w:tc>", body, re.S):
@@ -216,7 +238,7 @@ def read_form(path: Path) -> dict:
                 instructions.append((cat, hint, sent[:120]))
                 break
     return dict(headings=headings, cells=cells, protected=sorted(protected_labels),
-                instructions=instructions)
+                instructions=instructions, delete_sigs=sorted(set(delete_sigs)))
 
 
 def read_pdf_text(path: Path) -> str:
@@ -267,6 +289,69 @@ def check_form_skeleton(form: dict, pdf_text: str) -> list[tuple]:
     return out
 
 
+def check_instruction_residue(form: dict, pdf_text: str) -> list[tuple]:
+    """様式が「提出時に削除せよ」と言っているブロックが、提出版に残っていないか。
+
+    [#form-template-integrity](kakenhi-proposal.md) の裏返し — 骨格は消してはいけないが、
+    注意書き・記入要領は**消さなければいけない**。組み直し運用では前者が、様式を埋める
+    運用では後者が起きる。2026-06 の実例では、事務が削除を求めた記入要領が提出版に残り、
+    phrase list ベースの検証を 2 度すり抜けた (list に無い文言は見えない)。
+    """
+    out = []
+    if not pdf_text or not form.get("delete_sigs"):
+        return out
+    hay = nfkc(pdf_text)
+    for sig in form["delete_sigs"]:
+        if nfkc(sig) in hay:
+            out.append(("🔴", "INSTRUCTION_RESIDUE",
+                        f"様式が削除を求めた注意書きが提出版に残っている: 「{sig[:60]}」"))
+    return out
+
+
+def _is_chromatic(color: int, min_chroma: int = 40) -> bool:
+    """「意味を持つ色」だけを拾う (= 無彩色を捨てる)。
+
+    黒だけを除くと本文まで拾ってしまう — markdown 由来 PDF の本文は #111111、
+    スキャン誌面は #231f20、arXiv の stamp は #7f807f、白抜きは #ffffff。
+    どれも「色で意味を持つ要素」ではないので、彩度 (max-min) で切る。
+    赤 #ff0000 = 255 / 青 #0070c0 = 192 は通り、上記の無彩色は落ちる。
+    """
+    r, g, b = (color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF
+    return max(r, g, b) - min(r, g, b) >= min_chroma
+
+
+def check_colored_text(paths: list[Path]) -> list[tuple]:
+    """提出版 PDF に非黒の文字が無いか (= 記入要領の色字・著者注・消し忘れ)。
+
+    色で意味を持つ要素の検証は **PDF render の span 色を ground truth** にする。
+    docx 側の run 属性は style 継承で嘘をつく (2026-06 実例: 段落 style が色を定義し
+    run には `w:color` が無いため、run 色だけを見る判定が 10 段落を見落とした)。
+    審査はモノクロ配布なので、色を残す利得はそもそも無い。
+
+    ⚠️ 対象は **提出物** に限る。公募要領・受領論文・見積書に当てると当然すべて発火する
+    (それらは色で意味を持つのが正常)。呼ぶ側が渡す PDF を提出物に絞ること。
+    """
+    out = []
+    try:
+        import fitz
+    except ImportError:
+        return out
+    for path in paths:
+        buckets: dict[int, list[str]] = {}
+        for page in fitz.open(path):
+            for blk in page.get_text("dict")["blocks"]:
+                for line in blk.get("lines", []):
+                    for sp in line.get("spans", []):
+                        if sp["text"].strip() and _is_chromatic(sp["color"]):
+                            buckets.setdefault(sp["color"], []).append(sp["text"].strip())
+        for color, texts in buckets.items():
+            uniq = list(dict.fromkeys(texts))
+            out.append(("🟠", "COLORED_TEXT",
+                        f"{path.name}: 有彩色の文字 #{color:06x} × {len(uniq)} 種 "
+                        f"(例「{uniq[0][:30]}」) — 記入要領の色字 / 著者注の消し忘れでないか"))
+    return out
+
+
 def check_pdf_text(pdf_text: str, label: str = "") -> list[tuple]:
     """表記 lint。label = どの PDF 由来かを message 頭に出す (--pdf は複数取れるため)。"""
     out = []
@@ -277,9 +362,20 @@ def check_pdf_text(pdf_text: str, label: str = "") -> list[tuple]:
     for m in ENTITY_RE.finditer(pdf_text):
         out.append(("🔴", "ENTITY", f"{tag}HTML 実体参照の残置: {m.group(0)}"))
     for ab, full in ABBREV_MAP.items():
-        if ab in flat:
-            hint = f" → 「{full}」" if full else " (文脈確認)"
-            out.append(("🟠", "ABBREV", f"{tag}略称「{ab}」が本文にある{hint}"))
+        # 正式名称の内側に現れた分は略称ではない (= 位置で除外)
+        covered = []
+        if full and ab in full:
+            start = 0
+            while (i := flat.find(full, start)) != -1:
+                covered.append((i, i + len(full)))
+                start = i + 1
+        start = 0
+        while (i := flat.find(ab, start)) != -1:
+            start = i + 1
+            if any(lo <= i and i + len(ab) <= hi for lo, hi in covered):
+                continue
+            out.append(("🟠", "ABBREV", f"{tag}略称「{ab}」が本文にある → 「{full}」"))
+            break
     for m in BARE_NUMBER_RE.finditer(pdf_text):
         n = int(m.group(1))
         if 1900 <= n <= 2100 or len(m.group(1)) < 3:
@@ -566,6 +662,11 @@ def selftest() -> int:
         expect("表記: 裸の括弧数字", codes, ["BARE_NUMBER"])
         codes = [c for _, c, _ in check_pdf_text("文部科学省の事業。被引用 160。(2027) 年度。")]
         expect("表記: 正しい形は clean", codes, [], forbid=["ABBREV", "BARE_NUMBER"])
+        # 略称が正式名称の部分文字列になる組 (2026 年度の申請書で踏んだ偽陽性)
+        codes = [c for _, c, _ in check_pdf_text("独立行政法人日本学術振興会の特別研究員制度。")]
+        expect("表記: 正式名称の内側は略称でない", codes, [], forbid=["ABBREV"])
+        codes = [c for _, c, _ in check_pdf_text("学振の特別研究員を受け入れる。")]
+        expect("表記: 素の略称は拾う", codes, ["ABBREV"])
         # 粒子名の質量ラベルは裸の数字ではない (物理の調書で必ず出る偽陽性)
         codes = [c for _, c, _ in check_pdf_text(
             "Δ(1232) 等のハドロン共鳴、N(1440)、∆(1232) も同様。")]
@@ -583,6 +684,30 @@ def selftest() -> int:
         lost = check_form_skeleton(form, "２ 応募者の研究遂行能力及び研究環境\n本文……")
         expect("骨格: 保護欄の消失は 🔴", [c for _, c, _ in lost], ["SKELETON_LOST"])
         expect("骨格: 表ラベルの消失", [c for _, c, _ in lost], ["SKELETON_MISSING"])
+        # 色の判定: 無彩色 (本文の #111111 / スキャンの #231f20 / 白 / 灰) を拾わない
+        for c, want in [(0x000000, False), (0x111111, False), (0x231f20, False),
+                        (0x7f807f, False), (0xffffff, False),
+                        (0xff0000, True), (0x0070c0, True)]:
+            got = _is_chromatic(c)
+            expect(f"色: #{c:06x} は {'拾う' if want else 'skip'}",
+                   ["ok"] if got == want else [], ["ok"])
+
+        # 記入要領の消し忘れ (2026-06 LOTUS 型): 様式が削除を求めた文が提出版に残る
+        form_del = dict(headings=[], cells=[], protected=[], instructions=[],
+                        delete_sigs=["以下の内容を熟読・理解の上、研究計画調書を作成すること。",
+                                     "本文は11ポイント以上の大きさの文字等を使用すること。"])
+        res = check_instruction_residue(
+            form_del, "……概要……\n以下の内容を熟読・理解の上、研究計画調書を作成すること。\n……")
+        expect("消し忘れ: 残存を 🔴 で検出", [c for _, c, _ in res], ["INSTRUCTION_RESIDUE"])
+        expect("消し忘れ: 1 文だけ残っていたら 1 件", ["n%d" % len(res)], ["n1"])
+        res = check_instruction_residue(form_del, "……概要……本文は 12 ポイントで組んだ……")
+        expect("消し忘れ: 消してあれば clean", [c for _, c, _ in res], [],
+               forbid=["INSTRUCTION_RESIDUE"])
+        expect("消し忘れ: 空白の揺れを吸収する",
+               [c for _, c, _ in check_instruction_residue(
+                   form_del, "本文は 11 ポイント 以上 の 大きさ の 文字等 を 使用すること。")],
+               ["INSTRUCTION_RESIDUE"])
+
         kept = check_form_skeleton(form, "４ 研究計画最終年度前年度応募を行う場合の記述事項\n"
                                          "２ 応募者の研究遂行能力及び研究環境\n"
                                          "研究種目名 課題番号 研究期間")
@@ -673,10 +798,13 @@ def main() -> int:
                       cells=[c for f in forms for c in f["cells"]],
                       protected=[p for f in forms for p in f["protected"]],
                       instructions=[i for f in forms for i in f["instructions"]])
+        merged["delete_sigs"] = sorted({d for f in forms for d in f["delete_sigs"]})
         instructions = merged["instructions"]
         findings += check_form_skeleton(merged, pdf_text)
+        findings += check_instruction_residue(merged, pdf_text)
     for name, t in pdf_texts:
         findings += check_pdf_text(t, name)   # 常に由来を付ける (ack を種目に縛れるように)
+    findings += check_colored_text(a.pdf)
     for c in a.keihi:
         findings += check_keihi(c)
     acks = load_acks(a.ack) if a.ack else (
