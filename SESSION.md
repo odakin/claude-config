@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-解析接続した積分核の検証と LaTeX/PDF の反復検査を、再利用できる入口に整理した段階。再開時は [科学計算の検証節](conventions/scientific-computing.md#analytic-kernel-checks) と [PDF 検査の手順](conventions/latex.md#latex-pdf-audit) を読み、CLI の変更は [検査スクリプト](scripts/latex-pdf-audit.py) の自己検査と生成索引の同期確認から進める。
+LaTeX の裸の括弧参照を、記法の違いと除外条件を含めて検出する入口を整備した段階。[bare-parenthetical-crossrefs](conventions/latex.md#bare-parenthetical-crossrefs) と [検出器](scripts/check-latex-crossrefs.py) から再開し、変更時は自己検査・参照先と保護領域の保持検査・生成索引の同期を確認する。解析接続の検証と PDF 検査の既存手順は、それぞれ [analytic-kernel-checks](conventions/scientific-computing.md#analytic-kernel-checks) と [latex-pdf-audit](conventions/latex.md#latex-pdf-audit) を参照する。
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 

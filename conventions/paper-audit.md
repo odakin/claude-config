@@ -411,7 +411,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Symbol audit (同 pass)**: display に出る記号を列挙し、 各々に定義文があるか確認する (E、 接続、 曲率)。 「Laplace 型」 のような名前は定義の代わりにならない (著者「E が無定義では」)。 本稿の既存記号 (ω = LL gauge field) と衝突する文献記号は別字 (ϖ 等) にするか肩付きで区別し、 その理由を ledger に残す。
 
-**Display は 1 目的** (2026-09-09 追記): 定義 (記号・ノルム関係) と物理の恒等式を 1 つの display に並べない。定義は本文の 1 文に、display は恒等式と係数の値だけ (著者「これは S^μ の定義がメインで他 3 つは補足なの？」)。射程の but 書き (「matching の代替ではない」 等) が同段落や本文に既出なら付録で繰り返さない。文末の裸の括弧参照「(Sec. X)」 は関係を動詞で言う (as shown in / as described in)。
+**Display は 1 目的** (2026-09-09 追記): 定義 (記号・ノルム関係) と物理の恒等式を 1 つの display に並べない。定義は本文の 1 文に、display は恒等式と係数の値だけ (著者「これは S^μ の定義がメインで他 3 つは補足なの？」)。射程の but 書き (「matching の代替ではない」 等) が同段落や本文に既出なら付録で繰り返さない。裸の括弧参照「(Sec. X)」 は関係を動詞で言う (as shown in / as described in)。 記法をまたぐ候補列挙と参照先の保持検査には [bare-parenthetical-crossrefs](latex.md#bare-parenthetical-crossrefs) の手順を使う。
 
 **Floor**: 定義・display・表・射程 1 文が残れば床。 そこから先は「何を読者に検算させないか」 の判断であって、 削減ではない。 家風の機械 backstop = [`scripts/check-display-math-style.py`](../scripts/check-display-math-style.py) (display 内の `\tfrac` と `\qquad` 並列)。
 

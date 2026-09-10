@@ -7,6 +7,9 @@ sections:
   - id: equation-safety
     level: 2
     title: "式の安全規則"
+  - id: bare-parenthetical-crossrefs
+    level: 2
+    title: "裸の括弧参照の検出と保持検査"
   - id: mathbb-digits
     level: 2
     title: "`\\mathbb{数字}` は黙って化ける — 単位行列は `\\mathbbm{1}` (bbm)"
