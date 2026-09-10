@@ -162,7 +162,7 @@ layer 1 (public) のドメイン固有規約 104 file をカテゴリ別に列�
 - **[physics-verification-cycle.md](physics-verification-cycle.md)** — 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/physics-verification-cycle.md (何を検査するか: 4 station / 機械 anchor / foil / tier / 3 状態 / verify-to-learn / 第二の目 / rubric / 止まる規律 / cross-vendor / campaign 運用 A-K)。 本 file は旧 anchor を保つ stub
 - **[scientific-computing.md](scientific-computing.md)** — 数値解析・科学計算 code を書くとき
-  - 数値解析 gotchas (scale-dependent default 等、科学計算リポ共通)
+  - 数値解析 gotchas (scale-dependent default、複素 null ベクトル、偏微分の固定変数、最終比較までの精度、被積分関数の解析微分等、科学計算リポ共通)
 - **[verification-cycle-ops.md](verification-cycle-ops.md)** — 検証サイクルを session を越えて回し続ける仕組みを設計・運用・診断するとき
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/verification-cycle-ops.md (6 原則 / 導出 state / 台帳 3 種 + retro / 無人層 / fresh session の手順)。 本 file は旧 anchor を保つ stub
 - **[wolfram-scripting.md](wolfram-scripting.md)** — wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき

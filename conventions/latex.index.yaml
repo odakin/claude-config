@@ -166,6 +166,9 @@ sections:
   - id: title-wrap-why
     level: 3
     title: "Why"
+  - id: latex-pdf-audit
+    level: 2
+    title: "LaTeX log と PDF の検査を再利用する"
   - id: pdf-visual-verification
     level: 2
     title: "PDF 視覚検証 reflex: compile success + log no-error だけで完了としない"

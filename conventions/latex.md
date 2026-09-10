@@ -850,6 +850,20 @@ PDF 上で段落区切りが visible (= LaTeX default `\parskip` で 1 行分の
 
 editorial typography で「機械改行を許容しない」 のは標準。 magazine cover / book cover / 学会ポスター等の display title は **文節境界改行**が defacto standard で、 auto-wrap 結果は visual quality を下げる。 yaml で行配列を持つ pattern は (a) wrap が text 編集の一部として扱える (b) display と web (= wrap なし) で同じ source から両方 generate できる、 2 つの利点がある。
 
+## <a id="latex-pdf-audit"></a>LaTeX log と PDF の検査を再利用する
+
+反復する log 集計、PDF 全フォント検査、確認頁のレンダリングには [latex-pdf-audit.py](../scripts/latex-pdf-audit.py) を使う。既存の [印刷 preflight](../scripts/pdf-print-preflight.py) はプリンタ向けの別契約であり、この検査は印刷忠実度を判定しない。
+
+```sh
+python3 scripts/latex-pdf-audit.py paper.pdf --log paper.log --source paper.tex --json
+python3 scripts/latex-pdf-audit.py paper.pdf --log paper.log --render-dir review-pages --pages 2,4-6
+```
+
+検査項目・exit code・CLI の正本は script の docstring と `--help`。入力不在を成功扱いせず、従来の `!` error と `-file-line-error` 形式を確認する。参照未解決、missing glyph、Type 3、未完了 log、rerun 要求を検出し、overfull は既定で報告のみとする。`--source` の鮮度判定は明示された file の mtime 比較であり、正しい source から生成された証明ではない。
+
+出力の `visual_review: required` は機械検査後も残る。生成された PNG を開き、変更箇所と周辺の切れ・重なり・改頁を確認してから報告する。既存 PNG を上書きしないため、再検査時は新しい出力 directory を指定する。
+
+
 ## <a id="pdf-visual-verification"></a>PDF 視覚検証 reflex: compile success + log no-error だけで完了としない
 
 LaTeX edit 後、 `pdflatex` が完走しても visual の overflow / misalignment / text 切れは普通に起きる。 「compile 成功」 を成功 signal にすると見落とす。 edit のたびに以下を回す:

@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 数値解析・科学計算 code を書くとき
 category: research-domain
-summary: 数値解析 gotchas (scale-dependent default 等、科学計算リポ共通)
+summary: 数値解析 gotchas (scale-dependent default、複素 null ベクトル、偏微分の固定変数、最終比較までの精度、被積分関数の解析微分等、科学計算リポ共通)
 -->
 # Scientific computing conventions
 
@@ -580,3 +580,34 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 8. **汎用 dual が緩い時は問題の構造から明示 dual を組む** (2026-09-05 実測): 共通下界 SDP の dual を SLSQP に解かせると identity 近傍で止まり dual ≈ Tr a + Tr b (primal の 50 倍) で sandwich が無意味になった。 a, b が単位 vector u, v 方向にほぼ rank-one なら (Y, Z) = t(Q_u, Q_v)、 t = 1/(1−|⟨u|v⟩|) が dual 実行可能 (‖p_u + p_v‖ = 1 + |⟨u|v⟩| ⇒ Y + Z ≥ I) で、 値 t[Tr(Q_u a) + Tr(Q_v b)] は証明で使う不等式そのもの = **証明の核心不等式 = 明示 dual certificate** という一致が起きる。 solver の dual は「出せたら報告」、 上界として引用するのは構造から作った方 (`gpt_measurements.py` の `nearly_rank_one_clb_bound`、 一般則 = [`physics-verification-cycle.md#definition-level-judge`](physics-verification-cycle.md#definition-level-judge) kernel 14)。
 
 **関連**: [`physics-verification-cycle.md#definition-level-judge`](physics-verification-cycle.md#definition-level-judge) (証明書ベースの定性判定を検証 item の既定にする理由) / [#verify-independent-derivation](#verify-independent-derivation)。
+
+
+## <a id="analytic-kernel-checks"></a>解析接続した積分核の検証
+
+実変数で得た積分表示を複素変数へ延長し、成分微分・角度積分・次元漸化式で再構成するときの注意。以下は数学と数値計算の共通事項で、特定の模型の導出や検証データは各 project が持つ。
+
+### <a id="complex-null-is-not-zero"></a>複素双線形の零は零ベクトルを意味しない
+
+複素ベクトル $z$ では $z^Tz=0$ から $z=0$ は従わない。例えば $z=(1,i)$ は $z^Tz=0$ だが $z^\dagger z=2$。正定値のエルミートノルムと解析接続用の双線形を区別する。
+
+角度積分の式に $\sqrt{z^Tz}$ による除算が出たら、値が0の分岐でベクトル項を消すのでなく、整関数表示または極限を使う。$F(z^Tz)$ の成分微分は $2z_iF'(z^Tz)$ なので、$z^Tz=0$ 上でも非零になりうる。fixture は零ベクトルと非零の複素 null ベクトルを別々に持ち、疑わしい角度縮約を使わない直接求積と照合する。
+
+### <a id="partial-derivative-held-variables"></a>微分の固定変数を変数変換後も明示する
+
+成分から不変量・半径などへ変数を変えた場合、同じ名前の偏微分でも固定する量が違えば別の演算子になる。一般に $F(t,s(t,x))$ に対し
+$$
+\left.\partial_t\right|_x F
+=\left.\partial_t\right|_s F+
+\left.\partial_t s\right|_x\,\partial_sF.
+$$
+導出と API の両方に固定変数を明記し、元の独立成分を動かす差分か記号計算で検証する。拘束面への代入は必要な微分の後に行う。次元漸化式などで別の変数を固定する操作とは混同しない。
+
+### <a id="precision-through-final-comparison"></a>精度は入力から最終比較まで追跡する
+
+高精度積分の設定桁数は、最終的な検証桁数を保証しない。入力を通常の float で作る、途中で Python complex や NumPy complex128 に変換する、行列積だけを倍精度で行う、といった段階が精度の上限になる。設定桁数、実際の dtype、比較した残差の定義を一緒に記録する。
+
+最大成分差を行列全体の最大成分で割る誤差は、各成分の相対誤差ではない。微小成分の検査には別の尺度または絶対誤差を用いる。少数点で機械精度まで合うことは、領域全体の一様誤差や積分打切り誤差の証明にならない。
+
+### <a id="differentiate-integrands-before-quadrature"></a>有限微分は可能なら被積分関数に作用させる
+
+積分値への高階数値微分を入れ子にすると、高精度求積が何重にも走り実行時間が増える。収束の一様支配などで微分と積分の交換を正当化できるときは、被積分関数を解析的に微分し、係数漸化式で単一の求積に保つ。その導出の自己照合に加え、元の積分や異なる変数での求積を検証経路に残す。交換の正当化を省略して高速化しない。
