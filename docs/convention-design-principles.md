@@ -711,6 +711,15 @@ origin: 横断 lookup script が規律表の機械補強 column に**記載済�
 
 ⚠️ **検証資産 (selftest / \*.test.sh / index `--check`) も同じ hierarchy に従う** — 存在するが CI / pre-commit に未配線の test は doc-tier (= 誰かが思い出して回した時だけ効く recall 依存)。 実例 (2026-07-10): test 資産 20 本超を持つ repo に CI を初導入した**初日**に、 owner 環境では不可視だった別 OS 全滅 bug と自動生成 index の 10 日 drift が露出した — 資産の存在と発火面は別物。
 
+### <a id="symptom-keyed-entry-point"></a>8.12b doc tier の中にも強弱がある — home は topic 側、 入口は「症状の瞬間」 側に置く
+
+§8.12 の hierarchy 4 位 (= doc 記載) を選んだ後に、 もう一段の設計判断がある: **どの doc から指すか**。 規律を正しい層・正しい topic の doc に置いても、 その doc の `when` (= いつ読むか) が **topic 分類**で書かれていると、 実際に規律が要る瞬間 (= **症状**が出た瞬間) と鍵が合わず不発する。 「層も内容も正しいのに読まれない」 はこの形で起きる。
+
+- **実例 (2026-09-10)**: 並列 session の commit を事後に区別する読み方を `conventions/multi-session-coordination.md` に置いた。 層も topic も正しい。 だがその doc の `when` は「並列 AI session と同じ repo を触るとき + spawn/handoff を設計するとき」 = **設計する瞬間**。 一方その読み方が要るのは「commit が消えた / この行はいつ入ったのか」 という **git 考古学の瞬間**で、 その時に人は並列 session の設計 doc を開かない。 修正 = 全 repo が読む `CONVENTIONS.md` の Git 規約節に**入口 (= 数行の pointer)** を置き、 本文は元の home に残した。
+- **一般形**: **home (= SoT、 1 箇所) と入口 (= 発火面、 N 箇所) を分けて設計する**。 home は topic taxonomy 上の正しい場所に、 入口は「その規律が要る瞬間に人が既に開いている doc」 に。 入口は最小 (= 症状 → pointer) に留めて payload を複製しない ([§2](#no-duplicate-rules))。
+- **判定の問い**: 「この規律が要る**瞬間**に、 人は何を読んでいるか?」 — 「この規律は**何の話題**か?」 ではない。 前者で入口を決め、 後者で home を決める。 両者が一致する規律もあるが、 一致を既定と思い込むと上の型で不発する。
+- 入口を足すのは **実際に不発を観測した症状**に対してだけにする (= 予防的に全 doc へ撒くと [§9](#triage-and-subtraction) subtraction の対象が増えるだけ)。
+
 ### <a id="conditional-firing-visibility"></a>8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる
 
 §8.12 は発火面の強弱だった。 本節はその前提条件: **出力の不在は ambiguous** — 「動いて該当なし (= 正常な沈黙)」 と「そもそも動いていない (= 未配線・未登録・未 install)」 を外から区別できない。 per-machine wiring / scheduled task 登録 / opt-in install のように **活性化に手動 step を要する mechanism** は、 その step が抜けても何も言わない (= silent dead) ので、 設計者は「動いている」 と誤認し続ける。
@@ -1050,6 +1059,15 @@ origin: 2026-09、 7 月に ML 経由の依頼を 9 日遅れで遡及 triage �
 reflex: 「〜は request が無いと投稿できない」 「旧形式で書いておいて」 と言いかけた瞬間に、 その行為を protocol 内で 1 コマンドにする方が安いかを問う。
 
 origin: 2026-09、 layer-3 の session 宛て board を v2 (request / claim / submit / accept の検証つき) に切り替えた初日、 **両 vendor** の session が状況共有を旧形式 JSON の手 commit で投稿した (= v2 に request 不要の kind が無く、 v2 の `update` は request 必須、 旧形式が v2 thread に在ると protocol error)。 同日、 inert な `note` kind + 旧形式との混在許容 + runner 向け `--json` で design-out。 同型 = mechanism design の「default が最安でなければ守られない」、 [§8.31](#principle-birth-stock-audit) の flow / stock と対をなす「導入初日の flow 観察」。
+
+### <a id="context-branch-as-leak-path"></a>8.34 安全側の出力が context 判定に依存するとき、 判定の設定漏れが唯一の穴になる — 分岐を消せないか先に問う
+
+「公開面なら控えめに / 非公開面なら詳しく」 のように **出力の内容を context で分岐**させる設計は、 分岐条件 (= marker file / config flag / 環境判定) が常に正しいことに安全性を賭けている。 marker は**付け忘れる**、 flag は**新しい対象に伝播しない**、 判定は**想定外の経路で外れる** — そして外れ方は不可逆な側 (= 晒す側) に倒れる。 分岐を持つ限り、 事故の原因は「機構の欠陥」 ではなく最も起きやすい「設定漏れ」 になる。
+
+- **先に問うべきこと**: 出力を減らして**分岐そのものを消せないか**。 消せれば「設定漏れ」 という事故クラスが構造的に消える (= [§2.5](#sot-duplication-trichotomy) の design-out を、 SoT 重複でなく*条件付き出力*に適用した形)。
+- **実例 (2026-09-10)**: commit の trailer に session の出自を記録する設計で、 当初案は「公開 repo は id のみ / 非公開 repo は host と surface も」 の出し分けだった。 分岐は repo 側の marker file の有無に依存する = **marker 付け忘れの公開 repo で機器名が公開 history に焼き付く**。 採った解 = **id だけを書く**。 host は id から transcript を辿れば分かる (= 情報は失われていない) ので、 分岐を消しても機能が減らない。 結果、 全 repo で同一挙動になり marker 運用への依存がゼロになった。
+- **分岐を消せる条件** = richer 側の情報が safe 側から**導出可能**なとき。 導出経路があるなら「両方に書く」 は冗長で、 冗長は leak 面だけを増やす。 導出できないなら分岐は本質的 — その時は分岐条件を fail-safe (= 判定不能なら safe 側) に倒した上で、 [§8.13](#conditional-firing-visibility) に従って「今どちらで動いているか」 を可視信号にする。
+- 副次効果として、 分岐が消えると**説明も 1 本になる** (= 「public では〜、 private では〜」 という条件文を doc・test・review の全てで維持しなくてよい)。 条件分岐の維持コストは実装より doc 側に厚く乗る。
 
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 

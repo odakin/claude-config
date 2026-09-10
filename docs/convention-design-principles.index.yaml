@@ -181,6 +181,10 @@ sections:
     legacy: "8.12a"
     level: 3
     title: "8.12a 「自動化」は mechanism 名ではない — 5 軸で発火経路を先に route する"
+  - id: symptom-keyed-entry-point
+    legacy: "8.12b"
+    level: 3
+    title: "8.12b doc tier の中にも強弱がある — home は topic 側、 入口は「症状の瞬間」 側に置く"
   - id: conditional-firing-visibility
     legacy: "8.13"
     level: 3
@@ -269,6 +273,10 @@ sections:
     legacy: "8.33"
     level: 3
     title: "8.33 新しい protocol は最頻・低 stakes の行為を protocol 内で最安にする — 迂回路は初日に現れる"
+  - id: context-branch-as-leak-path
+    legacy: "8.34"
+    level: 3
+    title: "8.34 安全側の出力が context 判定に依存するとき、 判定の設定漏れが唯一の穴になる — 分岐を消せないか先に問う"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

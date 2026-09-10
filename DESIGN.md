@@ -48,7 +48,7 @@ repo = host と surface まで」 の出し分けだった。 却下の理由: (
 の有無に依存するため、 **marker 付け忘れの public repo で機器名が公開 history に焼き付く** — 不可逆な
 leak が「設定漏れ」 という最も起きやすい原因で起きる。 id だけにすると分岐そのものが消え、 全 repo で
 同一挙動になる (= 事故の型が設計から消える)。 方向としては [§公開リポ leak 防止](#public-repo-leak-prevention)
-の「機器名は具体値でなく属性で書く」 と同じ。
+の「機器名は具体値でなく属性で書く」 と同じ。 **一般則として層1 へ hoist 済** = [`convention-design-principles.md §8.34`](docs/convention-design-principles.md#context-branch-as-leak-path) (= 安全側の出力が context 判定に依存するなら、 分岐を消せないか先に問う)。
 
 **判断 2: marker を条件にせず全 repo に配る** (setup.sh Step 8b)。 sibling の
 `install-public-commit-msg.sh` は public repo 限定だが、 本 hook は private repo (= 並列 session が
@@ -200,6 +200,19 @@ manual な per-rule pointer は (a) scale しない (b) 「pointer を張るの�
 - §3 の「規約を読まない」 問題 + routing を「declared → consulted at topic detection」 へ強化 (= topic 検出時に required-reading を能動 surface)
 - dashboard / SessionStart の hint surface への相乗り (= §8.12「新機構を増やす前に既存 channel への相乗りを先に検討」)
 - 個人層「読み込み必須」 table の trigger column に該当 convention を登録する運用 (= 既存 channel)
+
+### 追記 (2026-09-10): 入口の *置き場所* の基準は言語化した (= open の解決ではない)
+
+上の暫定 mitigation「下層から pointer を張る」 の **どこに張るか** に基準を与えた =
+[§8.12b](docs/convention-design-principles.md#symptom-keyed-entry-point) (= **home は topic 側 / 入口は「症状の瞬間」 側**)。
+契機は、 layer-1 に正しく置いた規律の `when` が **それが要る瞬間**と鍵が合っていないと気付いた事例
+(= [§session-provenance-trailer 設計](#session-provenance-trailer-design) の読み方を並列 session 設計 doc に置いたが、
+要るのは「commit が消えた」 という git 考古学の瞬間だった)。 ⚠️ **未発火のまま見落とされた incident ではなく、
+owner の「上層には要らないのか」 という問いで設計 review 中に捕まえた near-miss** — 下の un-defer trigger 1 件目には
+数えない。
+
+⚠️ **上の open は未解決のまま**: 基準が明確になっても「pointer を張る」 行為自体は依然 recall 依存で、
+manual per-rule pointer が scale しない問題は動いていない。 un-defer trigger は据え置き。
 
 ### un-defer trigger (= signal / 機械判定)
 

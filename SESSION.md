@@ -20,6 +20,16 @@ owner の質問「コミットやプッシュのとき、 どのセッション�
 - selftest 10 件 (冪等 / injection 拒否 / comment 行保持 / 既存 Co-Authored-By と同 block /
   e2e commit + amend)。 owner の手元では 67 repo に配布済 (既存 prepare-commit-msg の上書きは 0 件)。
   この commit 自身に trailer が付いていることで dogfood 済。
+- **一般知見を層1 へ hoist** (= 本件固有でなく再利用可能な形):
+  [`§8.34`](docs/convention-design-principles.md#context-branch-as-leak-path) = 安全側の出力が context 判定に依存するなら
+  **分岐を消せないか先に問う** (marker 付け忘れが唯一の穴になる。 消せる条件 = richer 側が safe 側から導出可能なとき) +
+  [`§8.12b`](docs/convention-design-principles.md#symptom-keyed-entry-point) = **home は topic 側 / 入口は「症状の瞬間」 側**
+  (契機 = 読み方を層1 の正しい topic doc に置いたのに、 その `when` が「並列 session を設計するとき」 で、
+  実際に要る「commit が消えた」 瞬間と鍵が合っていなかった)。
+- 後者は [§layer-1 発火面 tension](DESIGN.md#layer1-firing-surface-tension) の open に対する **基準の言語化であって解決ではない**
+  (= manual pointer が scale しない問題は不変。 同 entry に追記済、 un-defer trigger は据え置き = **near-miss ゆえ 1 件目に数えない**)。
+- 参照整備 = `CONVENTIONS.md` Git 規約に入口 / convention ⇄ DESIGN ⇄ §8.34 の双方向 pointer /
+  層3 `sot-registry.yaml` に topic 登録 (登録直後の drift 検査で FP 0)。
 
 ## 2026-09-10 (別 session) — 画面 drive の harness を層1 化 + 並列 session / gate hook の 2 規約
 
