@@ -40,6 +40,9 @@ sections:
     level: 3
     title: "回避策"
     related: [bash32-problem, bash32-reproducer]
+  - id: bash32-vs-runtime-backtick-expansion
+    level: 3
+    title: "bash 3.2 parser bug と runtime backtick 展開を同じ事故にしない"
   - id: bash32-debug-difficulty
     level: 3
     title: "Debug が困難な理由 / メタ規律"

@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude Code hook を作成・配信・debug するとき
 category: harness-core
-summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)**)
+summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)**)
 -->
 # Claude Code hooks の作成 + 配信規律
 <!-- slug index: hook-authoring.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
@@ -145,6 +145,17 @@ pat = re.compile(r"<<-?\s*[\x22\x27]?([A-Z]+)[\x22\x27]?\s*")
 `\x22` = `"`、 `\x27` = `'`。 Python (および大半の regex engine) は同 escape を理解するので semantics 不変。 bash 3.2 parser は body 内 quote を見ないので heredoc 終端 (`PYEOF`) で正しく停止できる。
 
 別解: 中間 file に書き出す (= `python3 -c '...'` への移行は引用問題が増えるので非推奨、 heredoc を `>/tmp/script.py` で先に書いて `python3 /tmp/script.py` で呼ぶのは clean だが手数が増える)。
+
+### <a id="bash32-vs-runtime-backtick-expansion"></a>bash 3.2 parser bug と runtime backtick 展開を同じ事故にしない
+
+どちらも「backtickを含む文面が壊れた」と見えるが、発生時点・症状・修復先が異なる。
+
+| class | 何が起きるか | signature | 修復 |
+|---|---|---|---|
+| **bash 3.2 parser bug** | `$(...)` 内のquoted heredoc bodyを外側parserが誤走査し、literal quote/backtickで構文解析が壊れる | commandは開始前にsyntax error。報告行は真因より数十行後になり得る。`/bin/bash -n`で再現 | heredoc bodyのliteralをhex/`chr(...)`等へ置換、またはcommand substitution外へ分離 |
+| **runtime command substitution** | double-quoted CLI argument内の `` `token` `` / `$()` をshellが正しく実行し、そのstdoutで元文字列を置換する | command自体は成功し得るが、引数・投稿・記録から文字が消える。empty backticks等がfingerprint | user-authored値はsingle quote、argv配列、またはfile/stdinで渡し、送信前validatorで欠落fingerprintを拒否 |
+
+前者はshell実装のparser limitation、後者はshell仕様どおりの評価である。前者を「掲示板や送信先の不具合」と報告したり、後者をbash更新で直そうとしない。最初の分岐は **`bash -n` が実行前に落ちるか / commandは走ってpayloadだけ欠けたか**。
 
 ### <a id="bash32-debug-difficulty"></a>Debug が困難な理由 / メタ規律
 

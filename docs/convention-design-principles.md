@@ -1069,6 +1069,26 @@ origin: 2026-09、 layer-3 の session 宛て board を v2 (request / claim / su
 - **分岐を消せる条件** = richer 側の情報が safe 側から**導出可能**なとき。 導出経路があるなら「両方に書く」 は冗長で、 冗長は leak 面だけを増やす。 導出できないなら分岐は本質的 — その時は分岐条件を fail-safe (= 判定不能なら safe 側) に倒した上で、 [§8.13](#conditional-firing-visibility) に従って「今どちらで動いているか」 を可視信号にする。
 - 副次効果として、 分岐が消えると**説明も 1 本になる** (= 「public では〜、 private では〜」 という条件文を doc・test・review の全てで維持しなくてよい)。 条件分岐の維持コストは実装より doc 側に厚く乗る。
 
+### <a id="post-resolution-scope-revalidation"></a>8.35 resolver の出力は新しい trust boundary — 最終 action target で scope を再検証する
+
+入力 path が許可 root 内でも、その後に呼ぶ resolver が別の path を返すと、最終的な read/write target は入力 scope を離れ得る。典型 resolver は `realpath`、symlink、Git の `rev-parse --show-toplevel` / `--git-path`、workspace manifest、cloud mount。**入力を一度検査した事実は、resolver の出力へ継承されない。**
+
+同じ session で二つの向きが実測された:
+
+- **scope escape**: bulk installer が許可 root 直下の candidate を列挙した後、Git top-level を解決すると root 外の checkout になった。candidate path の containment だけを見ていた初版は、その外側へ hook を書いた。
+- **wrong anchor**: audit が `git rev-parse --git-path hooks` の relative result を caller の cwd 基準で読んだため、別 repo の正しい hook を `MISSING` と誤報した。relative path は resolver の所有 object (= 対象 repo) を anchor にしなければならない。
+
+**pattern**:
+
+1. 入力 path を構文・存在・許可 scope で検査する。
+2. resolver を呼ぶ。
+3. result が relative なら、shell の現在地でなく resolver contract が定める owner object に anchor する。
+4. symlink を含む physical/canonical path に解決する。
+5. **その最終 target で containment / audience / write authority をもう一度判定する。** 外なら skip/refuseし、必要なら exact target を明示指定させる。
+6. test は「入力も出力も内側」だけでなく、(a) relative result、(b) symlink escape、(c) resolver が外側 absolute path を返す fixture を持つ。
+
+これは path traversal 対策だけでなく、**認可判断を別表現へ運ぶ時の非継承**という一般形である。ID→record、alias→account、project→checkout等でも、resolve後のentityに対してscopeを再判定する。
+
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。
@@ -2023,6 +2043,8 @@ field を optional に戻すと item が radar から消える (= 機構が必�
 3. **「静かにする」 であって「消す」 ではない**。 named 表示は残す。 消すと「radar から消える」 という元の問題に戻る (= 目的は緊急の顔をやめさせることであって、 item を隠すことではない)
 4. 本物と捏造の判別が自然言語判断なら **機械化不能と declared** して自己申告に留める。 marker の正しさを検査する機構を作ろうとしない
 
+**複合 record は field ごとに第三状態を持つ**: identity stamp や provenance のように複数 field を束ねる record で、1 field が取れないことを理由に record 全体を省略しない。既知の field はそのまま出し、未知の field だけを `unknown` 等の機械可読値にする。全-or-nothing にすると「account が取れないから host/session も出ない」という別の false-empty を作り、既知情報まで失う。
+
 ### <a id="fabrication-detection"></a>適用の見分け方
 
 新しい必須 field を設計するとき、 あるいは既存機構の noise を疑うときに問う:
@@ -2040,6 +2062,7 @@ field を optional に戻すと item が radar から消える (= 機構が必�
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
+| 2026-09-11 | §8.35 新設「resolver 出力は新しい trust boundary」+ §23 に複合 record の field-wise `unknown` を追記 | Codex Git-hook rollout で同じ session に二方向の resolver defect を観測: (a) `--repo-root` 内 candidate が symlink/Git解決後に root 外 checkout となりbulk write scopeを脱出、(b) `git rev-parse --git-path hooks` のrelative resultをcaller cwdへ誤anchorし、別repoのhookをMISSINGと誤報。入力検査→resolve→owner基準anchor→canonicalize→最終targetで再認可、を一般化。併せてCodex冒頭stampでaccount/effortが取れないため全stampを消すのでなく、host/surface/session/modelの既知fieldを残して未知fieldだけ`unknown`にする形を§23へ昇格。instanceはCodex技術正本とinstaller/testに残置。user依頼「すべてのスクリプトと知見をなるべく上層に」 |
 | 2026-09-09 | §23 新設「必須にした field は、値が無いとき捏造される — 『無い』を機械可読にする第三の状態」 | layer-3 の TODO surface 機構で、「本人操作が要る item には deadline を必ず添える (自己設定で可)」という規約が、本来いつやってもよい作業に**拾わせるためだけの日付**を書かせていた。実測すると該当 6 件中 3 件が捏造で、本物の失効型期限 1 件がその中に並んで最上位 group に置かれていた (= 捏造が本物の信号を薄める狼少年)。owner が「なんで期限とかあるの?」と問うて初めて表面化 — 機構の内側からは捏造も本物も同じ「日付を持つ item」にしか見えない。kernel = 出自を宣言する第三の状態 + 設計要件 4 つ (無記載 = 従来の意味で移行不要 / loud 側 default / 「静かにする」であって「消す」ではない / 判別が自然言語なら機械化不能と declared) + 見分ける問い「値が無い item に書き手は何を書くか」。§8.28 壁紙化の上流にある別型 (cadence でなく severity の出自)。instance (marker field / 表示 tier / 除外する 3 経路) は個人層に残置 (kernel-up / instance-down)。user 依頼 (「すべての知見をなるべく上層に」) |
 | 2026-09-09 | §22 新設「安全網が自分で使う probe の失敗は、健全と同じ姿の答えに化ける」 | layer-3 の session 開始 hook で、3 つの repo が 39 / 119 / 238 commits 遅れたまま放置され、別目的の検査がその古い手元を読んで落ちたことで偶然発覚。3 つとも「clean なら自動同期」の条件を満たしており、機構は在ったが手前の probe (並列 fetch) が per-item timeout / watchdog で打ち切られ、失敗を `\|\| true` が潰していた → 手元が更新されないまま「差分 0 = 同期済み」に化けていた (= silent failure ではなく **false healthy**)。しかも差分が溜まるほど probe が重くなり打ち切られやすくなる正のフィードバック付き。kernel = 失敗値が健全値と同じ形になる class の識別 + 4 pattern (成功を marker に記録して不在で検出 / 測れなかったことを測った結果と同型にしない / fail-open は報告付き / 閾値調整は観測後)。併発した第 2 の穴 (「手当てが要る」一覧が一部 frontend で honor されない経路にしかない) は §12 暗黙 scope の表示版。事故構造を再現する test を置き旧実装で FAIL することを確認済。instance は個人層に残置 (kernel-up / instance-down)。user 依頼 (「すべての知見をなるべく上層に」) |
 | 2026-09-02 | §20 新設「規則は前提より長生きする — 上流属性の切替は下流定数の一括再判定を要求する」 + §21 新設「同一 rule の variant は片方だけ更新され silent に stale 化する」 | layer-3 の事務運用 session で独立 2 件を観測: (a) 費用の出所が別制度へ移った後も旧出所の承認者を要求する規則と、 それに紐づく様式定数群 (制度名 / 番号 / 責任者 / 押印欄) が default 表に残存 — user の「これ何で要るんだっけ?」 で初めて出典を遡り前提失効が判明 (b) 手順書が新運用に全面改訂された際、 別言語 section の文面 sample だけが旧運用の値のまま残置。 §20 = 出典に「どの前提の下で」 が落ちる → 規則だけ生き残る機序 + 5 pattern (premise 併記 / 切替 doc に再判定欄 / 期間は終端を焼く / 「なぜ要る?」 を detector 扱い / 前提に紐づく定数を 1 表に束ねる)。 §21 = 同 session で「英語版 template 不在ゆえ規約で足した項目が個別起草に依存して落ちた」 実害から、 variant は正当な重複ゆえ §2 の削除方針で解けないことを明示し 3 択 (持たない / 生成する / parity gate) を整理 — remedy 3 は同 owner の別軸 (正本 doc の全 § に配布判断を強制する gate) で実証済。 instance は個人層・共有 project に残置 (kernel-up / instance-down)。 user 依頼 (「すべての知見をなるべく上層に」) |

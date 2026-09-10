@@ -8,7 +8,7 @@
 # 検査内容:
 #   1. 自動生成 index の同期   (generate-doc-index.py --check-all)
 #   1b. 生成 doc の同期        (generate-tree.py --check: CLAUDE.md tree / CONVENTIONS.md 列挙 / conventions/README.md)
-#   2. 手動保守 index / Codex integration contract の整合
+#   2. 手動保守 index / script inventory / Codex integration contract の整合
 #   3. python validator selftest 群 (--selftest を持つ全 script を自動発見)
 #   4. bash test 群            (hooks/*.test.sh + scripts/**/*.test.sh)
 #   5. bash 構文検査           (setup.sh + hooks/*.sh + scripts/*.sh の bash -n)
@@ -48,6 +48,9 @@ run "generated docs sync (generate-tree.py --check)" python3 scripts/generate-tr
 
 # 2. 手動保守 index (office-automation ほか、 validator が対象を自分で解決)
 run "office-automation index" python3 scripts/check-office-automation-index.py
+run "scripts inventory" python3 scripts/check-script-index.py . --index scripts/README.md --scan scripts
+run "hooks inventory" python3 scripts/check-script-index.py . --index hooks/README.md --scan hooks
+run "Codex hook inventory" python3 scripts/check-script-index.py . --index codex/PARITY.md --scan codex/hooks
 run "Codex integration contract" python3 scripts/check-codex-integration.py --check
 # ↓ 中身の検査 (generate-tree / index / codex contract) は上と重複するが、 hook script 自体が
 #   実行可能で exit 0 する smoke test として意図的に残す (重複削除で hook の壊れが盲点化する)

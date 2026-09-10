@@ -57,7 +57,9 @@ leak が「設定漏れ」 という最も起きやすい原因で起きる。 i
 `install-public-commit-msg.sh` は public repo 限定だが、 本 hook は private repo (= 並列 session が
 同じ tree を触る作業場) でこそ効く。 判断 1 で public / private の挙動差が消えたので、 marker を
 条件にする理由も無くなった。Codex installer は user-managed `prepare-commit-msg` を全 target の
-変更前に preflight し、`--replace` が無ければ partial install を残さず拒否する。
+変更前に preflight し、`--replace` が無ければ partial install を残さず拒否する。さらに入力 root 内の
+candidate でも Git 解決後の top-level が外へ出れば bulk 対象から除外する。入力判定を resolver 出力へ
+引き継がない一般則は [`§8.35`](docs/convention-design-principles.md#post-resolution-scope-revalidation) へ hoist した。
 
 **判断 3: message に運ばれた既存 session trailer があれば追記しない** (`git interpret-trailers --if-exists doNothing` +
 legacy key の事前検出)。

@@ -277,6 +277,10 @@ sections:
     legacy: "8.34"
     level: 3
     title: "8.34 安全側の出力が context 判定に依存するとき、 判定の設定漏れが唯一の穴になる — 分岐を消せないか先に問う"
+  - id: post-resolution-scope-revalidation
+    legacy: "8.35"
+    level: 3
+    title: "8.35 resolver の出力は新しい trust boundary — 最終 action target で scope を再検証する"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

@@ -190,6 +190,8 @@ SESSION_PROVENANCE_REQUIREMENTS = {
         "Agent-Model",
         "Agent-Effort",
         "--repo-root",
+        "post-resolution-scope-revalidation",
+        "required-field-fabrication",
         "https://learn.chatgpt.com/docs/hooks",
     ),
     "codex/HOME-AGENTS.md": ("Agent-Session", "codex/PARITY.md#git-session-provenance"),

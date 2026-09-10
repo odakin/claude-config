@@ -36,9 +36,17 @@ owner の質問から始まった commit forensics。現在の agent/session/mod
 [DESIGN](DESIGN.md#session-provenance-trailer-design)、運用規約は
 [`multi-session-coordination`](conventions/multi-session-coordination.md#session-provenance-trailer) を読む。
 
-Codexの会話冒頭自己同定は
-[conversation-start stampの正本](codex/PARITY.md#conversation-start-stamp)へ追加済み。次の新規taskで
-Hook trust後の実表示を確認し、届かなければ同正本のfallback経路を使う。
+現在地: Git trailer と会話冒頭自己同定の実装・同 session 検査は済んだ。残る end-to-end 確認は、
+次の新規 Codex task で Hook trust 後の冒頭表示を観測すること。期待値と fallback は
+[conversation-start stampの正本](codex/PARITY.md#conversation-start-stamp)を直接読む。
+
+- **今回の最終 hoist**: resolver の入力 scope は解決結果に継承されないため、owner基準でanchor・canonicalizeした
+  最終targetを再認可する一般則を [`§8.35`](docs/convention-design-principles.md#post-resolution-scope-revalidation)へ置いた。
+  bulk discoveryの解決後scope escapeと、relative resultのcaller-cwd誤anchorが同じ核の両向きの実例。
+- **記録の欠測はfield単位**: account/effortが取れなくてもstamp全体を消さず、既知のhost/session/model等を残し、
+  未知fieldだけ`unknown`にする原則を [`§23`](docs/convention-design-principles.md#required-field-fabrication)へ統合した。
+- **backtick事故の切り分け**: 実行前に`bash -n`で落ちるBash 3.2 heredoc parser bugと、commandは成功してpayloadだけ
+  欠けるruntime command substitutionを [`hook-authoring`](conventions/hook-authoring.md#bash32-vs-runtime-backtick-expansion)で比較した。
 - **一般知見を層1 へ hoist** (= 本件固有でなく再利用可能な形):
   [`§8.34`](docs/convention-design-principles.md#context-branch-as-leak-path) = 安全側の出力が context 判定に依存するなら
   **分岐を消せないか先に問う** (marker 付け忘れが唯一の穴になる。 消せる条件 = richer 側が safe 側から導出可能なとき) +

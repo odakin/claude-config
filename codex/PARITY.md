@@ -272,13 +272,19 @@ machine-local Codex state; the Git hook accepts an explicit
 `CODEX_SESSION_ID` / `CODEX_THREAD_ID` shell variables only as fail-open
 compatibility probes. An unavailable value is written as literal `unknown`;
 the configured default must not be presented as the run's effective value.
+This is field-wise: one unavailable field does not suppress the known fields
+in the same provenance record. The general record-design rule is
+[`required-field-fabrication`](../docs/convention-design-principles.md#required-field-fabrication).
 
 `scripts/setup-codex.sh --repo <path>` installs the Git hook in exact,
 repeatable repositories. `--repo-root <path>` explicitly selects that
 directory plus its immediate child repositories; it does not recurse or scan
 the user's machine. A child symlink or child whose resolved Git top-level lies
 outside the selected root is skipped; select it explicitly with `--repo` if
-intended. All selected hooks are preflighted before any mutation. A
+intended. The input path and the resolved Git top-level are separate trust
+boundaries; the general rule is
+[`post-resolution-scope-revalidation`](../docs/convention-design-principles.md#post-resolution-scope-revalidation).
+All selected hooks are preflighted before any mutation. A
 user-managed `prepare-commit-msg` makes default mode refuse the whole install;
 `--replace` preserves a timestamped backup. Cloning alone still changes
 nothing. `scripts/audit-codex-integration.sh --repo <path>` checks the installed
@@ -477,6 +483,14 @@ This integration maps only the high-signal, product-neutral subset:
 | `PreToolUse(Bash)` | Refreshes the machine-local session/model provenance cache from current hook input. | It emits no decision and neither authorizes nor rewrites the command; the Git hook remains the commit-path mechanism. |
 | `PostToolUse(apply_patch)` + `Stop` | Tracks a touched Git repository in machine-local Codex state and reports unintended dirty worktree state at turn end. | It does not commit or push automatically. |
 
+The managed hook-code inventory is
+[`pre_tool_policy.py`](hooks/pre_tool_policy.py),
+[`resume_context.py`](hooks/resume_context.py),
+[`session_provenance.py`](hooks/session_provenance.py),
+[`session_stamp.py`](hooks/session_stamp.py), and
+[`session_touch.py`](hooks/session_touch.py); its regression suite is
+[`codex-hooks.test.sh`](hooks/codex-hooks.test.sh).
+
 ## <a id="machine-local-provenance"></a>Machine-local provenance
 
 ### <a id="conversation-start-stamp"></a>Conversation-start identity stamp
@@ -498,8 +512,10 @@ account or surface field, and the stable public environment-variable list has
 no current-account identity field. Therefore account remains literal
 `account unknown` until a separately verified Codex-native account probe
 exists. Claude CLI authentication or a configured default must never fill it.
+Known host, surface, session, or model fields remain visible when another
+field is unknown; the stamp is not an all-or-nothing record.
 
-`codex/hooks/session_stamp.py` is the deterministic fallback when lifecycle
+[`codex/hooks/session_stamp.py`](hooks/session_stamp.py) is the deterministic fallback when lifecycle
 context was not delivered. Global instructions require it as the first tool
 call and require its output to lead the first reply unchanged. A compaction
 boundary restores work context but does not restamp. Hook installation and
