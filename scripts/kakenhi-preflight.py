@@ -419,22 +419,34 @@ def check_colored_text(paths: list[Path]) -> list[tuple]:
 def _section_residue(form: dict, pdf_text: str) -> dict:
     """見出しごとに「様式に無い文字」だけを残した領域を返す (空欄判定の共通土台)。"""
     hay = nfkc(pdf_text)
+    # ⚠️ 種目が複数様式を持つと PDF も複数で、連結すると**同じ見出しが何度も現れる**
+    #    (概要版と本文の両方に「１ 研究目的…」)。最初の 1 つだけ見ると、短い方に当たって
+    #    「空」と誤判定する (実測)。全出現を拾い、後段で「どこかが埋まっていれば埋まっている」
+    #    と判定する。
     positions = []
     for h in form.get("headings", []):
-        i = hay.find(nfkc(h))
-        if i >= 0:
-            positions.append((i, nfkc(h), h))
+        n = nfkc(h)
+        start = 0
+        while (i := hay.find(n, start)) >= 0:
+            positions.append((i, n, h))
+            start = i + 1
     positions.sort()
     known = sorted({nfkc(t) for t in form.get("form_texts", [])}
                    | {nfkc(c) for c in form.get("cells", [])}, key=len, reverse=True)
-    out = {}
+    out: dict = {}
     for idx, (start, norm, orig) in enumerate(positions):
         end = positions[idx + 1][0] if idx + 1 < len(positions) else len(hay)
         region = hay[start + len(norm):end]
         for kn in known:
             if len(kn) >= 4:
                 region = region.replace(kn, "")
-        out[orig] = re.sub(r"[\s　0-9０-９年度令和～~\-・.,、。()（）「」【】：:]+", "", region)
+        residue = re.sub(r"[\s　0-9０-９年度令和～~\-・.,、。()（）「」【】：:]+", "", region)
+        # 同じ見出しが複数回出るとき = **最も埋まっている出現**を採る。
+        # ⚠️ setdefault を先に置く — 空 (len 0) の欄が dict に載らないと「空の欄」を
+        #    検出できなくなる (実測: これで MUST_FILL_EMPTY が黙った)。
+        out.setdefault(orig, "")
+        if len(residue) > len(out[orig]):
+            out[orig] = residue
     return out
 
 
