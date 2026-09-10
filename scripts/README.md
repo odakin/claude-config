@@ -22,6 +22,7 @@
 - **[check-form-clipping.py](check-form-clipping.py)** — 生成 form PDF で「記入値が描画時に clip された」のを機械検出。
 - **[check-inbound-refs.py](check-inbound-refs.py)** — safety net for restructuring claude-config (layer 1).
 - **[check-legacy-append-only.py](check-legacy-append-only.py)** — the `legacy` forwarding map in a slug index must be
+- **[check-markup-artifacts.py](check-markup-artifacts.py)** — 赤入れ・校正済み現物の台帳漏れ / 未読 / 書き起こし消失を surface（config 駆動、スキャンは grep に掛からないので file 単位で持つ）
 - **[check-office-automation-index.py](check-office-automation-index.py)** — Validate office-automation.md against its slug index (office-automation.index.yaml).
 - **[check-overleaf-drift.py](check-overleaf-drift.py)** — Overleaf 正本 repo の drift / 整備漏れ検出（各 repo の scripts/overleaf-sync.sh --status を並列実行、 ID 未設定=CRITICAL / behind>0=WARN / DEPRECATED=silent / ahead-expected marker で恒常 ahead INFO 抑制、 finding 0 件 silent、 --selftest 内蔵。 個人層 dashboard 末尾から呼ぶ、 conventions/overleaf-integration.md#sync-script-contract）
 - **[check-xlsx-integrity.py](check-xlsx-integrity.py)** — xlsx の Excel「破損」判定源を Excel 不要・決定論で検出（XML well-formed〔unbound prefix〕/ rels 両方向参照整合 / rId 重複 / Content_Types coverage。 zip 直編集 xlsx の納品前 gate、 office-automation.md#openpyxl-destroys-drawings）
