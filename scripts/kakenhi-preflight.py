@@ -22,6 +22,7 @@
   🟠 SKELETON_MISSING  その他の pre-printed 見出し・表ラベルが PDF に無い
   🔴 INSTRUCTION_RESIDUE 様式が「提出時に削除せよ」と言った注意書きが提出版に残っている
   🟠 BLANK_SECTION_FILLED 様式が「空欄のまま提出」と指定した欄に書いてしまっている
+  🟠 MUST_FILL_EMPTY   逆に、様式が記述を求めた欄が空のまま (欄ごとに指示が逆なので両方見る)
   🟠 COLORED_TEXT      提出版 PDF に有彩色の文字 (記入要領の色字 / 著者注の消し忘れ)
                        ⚠️ --pdf に渡してよいのは **提出物そのもの** だけ。公募要領・論文・見積書
                        等の参考資料に当てても意味がない (色は最初から意味を持っている)。
@@ -91,6 +92,9 @@ DELETE_MARKERS = ("削除すること", "削除の上", "提出時に削除", "�
 # と言うので、欄ごとに読む必要がある (2024 実測: 空欄指定の欄に「該当しない。」と書いて
 # 「トル / 空欄のまま提出するため」と赤字)。
 BLANK_MARKERS = ("空欄のまま提出", "空欄で提出", "空欄のまま")
+# 逆に「必ず書け」と様式が言っている印。空欄で出すと「記載して下さい」と赤字が入る
+# (2022 実測、相手機関の欄と所在地欄が空だった)。BLANK_MARKERS と排他 (空欄指定が優先)。
+MUST_FILL_MARKERS = ("必ず記述", "必ず記載", "必ず記入", "記述すること", "記載すること", "記入すること")
 # 番号付き大見出し: 「２　応募者の研究遂行能力及び研究環境」「４ 研究計画最終年度前年度応募…」
 HEADING_RE = re.compile(r"^[0-9０-９]{1,2}[\s　]+\S")
 
@@ -274,6 +278,7 @@ def read_form(path: Path) -> dict:
     # 「削除することなく」 だけに当たり、「空欄のまま提出」 の hint が死にコードになっていた)。
     instructions: list[tuple] = []
     blank_sections: list[str] = []
+    must_fill_sections: list[str] = []
     section = ""
     for kind, t in nodes:
         if kind == "para" and HEADING_RE.match(t):
@@ -285,15 +290,19 @@ def read_form(path: Path) -> dict:
             for kw, cat, hint in INSTRUCTION_PATTERNS:
                 if kw in sent:
                     instructions.append((section, cat, hint, sent[:120]))
-            if any(k in sent for k in BLANK_MARKERS) and section:
-                blank_sections.append(section)
+            if section:
+                if any(k in sent for k in BLANK_MARKERS):
+                    blank_sections.append(section)
+                elif any(k in sent for k in MUST_FILL_MARKERS):
+                    must_fill_sections.append(section)
 
     # 空の様式に印字されている全 text node (= これが「在って正常」な文字の全体)。
     # 空欄判定は「様式に在る文字を引いた残りがあるか」で行う (欄名を焼き込まない)。
     form_texts = sorted({t for _k, t in nodes if len(t) >= 4}, key=len, reverse=True)
     return dict(headings=headings, cells=cells, protected=sorted(protected_labels),
                 instructions=instructions, delete_sigs=sorted(set(delete_sigs)),
-                blank_sections=sorted(set(blank_sections)), form_texts=form_texts)
+                blank_sections=sorted(set(blank_sections)), form_texts=form_texts,
+                must_fill_sections=sorted(set(must_fill_sections) - set(blank_sections)))
 
 
 def read_pdf_text(path: Path) -> str:
@@ -404,6 +413,48 @@ def check_colored_text(paths: list[Path]) -> list[tuple]:
             out.append(("🟠", "COLORED_TEXT",
                         f"{path.name}: 有彩色の文字 #{color:06x} × {len(uniq)} 種 "
                         f"(例「{uniq[0][:30]}」) — 記入要領の色字 / 著者注の消し忘れでないか"))
+    return out
+
+
+def _section_residue(form: dict, pdf_text: str) -> dict:
+    """見出しごとに「様式に無い文字」だけを残した領域を返す (空欄判定の共通土台)。"""
+    hay = nfkc(pdf_text)
+    positions = []
+    for h in form.get("headings", []):
+        i = hay.find(nfkc(h))
+        if i >= 0:
+            positions.append((i, nfkc(h), h))
+    positions.sort()
+    known = sorted({nfkc(t) for t in form.get("form_texts", [])}
+                   | {nfkc(c) for c in form.get("cells", [])}, key=len, reverse=True)
+    out = {}
+    for idx, (start, norm, orig) in enumerate(positions):
+        end = positions[idx + 1][0] if idx + 1 < len(positions) else len(hay)
+        region = hay[start + len(norm):end]
+        for kn in known:
+            if len(kn) >= 4:
+                region = region.replace(kn, "")
+        out[orig] = re.sub(r"[\s　0-9０-９年度令和～~\-・.,、。()（）「」【】：:]+", "", region)
+    return out
+
+
+def check_must_fill_sections(form: dict, pdf_text: str) -> list[tuple]:
+    """様式が「必ず記述せよ」と言っている欄が空のまま出ていないか。
+
+    `check_blank_sections` の裏返し。様式には「空欄で出す欄」と「必ず書く欄」が両方あり、
+    片方だけ見ても事故は防げない (2022 実測: 空欄で出して「記載して下さい」と赤字)。
+    """
+    out = []
+    if not pdf_text or not form.get("must_fill_sections"):
+        return out
+    residue = _section_residue(form, pdf_text)
+    for sec in form["must_fill_sections"]:
+        if sec not in residue:
+            continue                              # 見出しが PDF に無い = SKELETON 側の話
+        if len(residue[sec]) < 4:
+            out.append(("🟠", "MUST_FILL_EMPTY",
+                        f"様式が記述を求めた欄が空のまま: 「{sec[:40]}」 "
+                        f"(⚠️ 別の欄では逆に空欄が正解なので、欄ごとに様式の文言を読む)"))
     return out
 
 
@@ -964,6 +1015,26 @@ def selftest() -> int:
         expect("空欄欄: 別の欄 (その旨記述) は対象外",
                [m for _, _, m in check_blank_sections(form_blank, bad_pdf) if "人権" in m], [])
 
+        # 裏返し: 様式が記述を求めた欄が空のまま (2022 実測「記載して下さい」)
+        form_mf = dict(form_blank, must_fill_sections=["３　人権の保護"])
+        expect("必須欄: 書いてあれば clean",
+               [c for _, c, _ in check_must_fill_sections(form_mf, clean_pdf)], [],
+               forbid=["MUST_FILL_EMPTY"])
+        empty_pdf = clean_pdf.replace("該当しない。\n", "")
+        expect("必須欄: 空なら 🟠",
+               [c for _, c, _ in check_must_fill_sections(form_mf, empty_pdf)],
+               ["MUST_FILL_EMPTY"])
+        # 排他: 実様式を読んで、空欄指定の欄が must_fill 側に混ざらないこと
+        real_form = Path(__file__).resolve().parent.parent.parent / (
+            "grant-applications/applications/2027-kakenhi-kiban-b/forms/s-13.docx")
+        if real_form.exists():
+            rf = read_form(real_form)
+            overlap = set(rf["blank_sections"]) & set(rf["must_fill_sections"])
+            expect("必須欄: 空欄指定と must_fill は排他 (実様式)",
+                   ["ok"] if not overlap else [], ["ok"])
+            expect("必須欄: 実様式から両方が取れる",
+                   ["ok"] if rf["blank_sections"] and rf["must_fill_sections"] else [], ["ok"])
+
         # 記入要領の消し忘れ (2026-06 LOTUS 型): 様式が削除を求めた文が提出版に残る
         form_del = dict(headings=[], cells=[], protected=[], instructions=[],
                         delete_sigs=["以下の内容を熟読・理解の上、研究計画調書を作成すること。",
@@ -1146,12 +1217,15 @@ def main() -> int:
                       instructions=[i for f in forms for i in f["instructions"]])
         merged["delete_sigs"] = sorted({d for f in forms for d in f["delete_sigs"]})
         merged["blank_sections"] = sorted({b for f in forms for b in f["blank_sections"]})
+        merged["must_fill_sections"] = sorted({b for f in forms for b in f["must_fill_sections"]}
+                                              - set(merged["blank_sections"]))
         merged["form_texts"] = sorted({t for f in forms for t in f["form_texts"]},
                                       key=len, reverse=True)
         instructions = merged["instructions"]
         findings += check_form_skeleton(merged, pdf_text)
         findings += check_instruction_residue(merged, pdf_text)
         findings += check_blank_sections(merged, pdf_text)
+        findings += check_must_fill_sections(merged, pdf_text)
     for name, t in pdf_texts:
         findings += check_pdf_text(t, name)   # 常に由来を付ける (ack を種目に縛れるように)
         findings += check_term_drift(t, name)
