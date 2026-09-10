@@ -44,9 +44,18 @@ LaTeX 紙面の罠 = [latex.md](latex.md) / 図の機械 QA = [matplotlib-figure
 ### 組み上がったら
 
 `kakenhi-preflight.py --form … --pdf … --keihi … --strict` を提出手順の script から呼ぶ
-([#submission-artifact-staging](#submission-artifact-staging) 6)。⚠️ **呼ばなければ何も起きない** —
-検査器は staging から呼ばれる 1 経路しか持たないので、年が替わって kit を作り直すときは
-**その staging script に呼び出しを入れるところまでが移行作業**。
+([#submission-artifact-staging](#submission-artifact-staging) 6)。⚠️ **呼ばなければ何も起きない**ので、
+年が替わって kit を作り直すときは**その staging script に呼び出しを入れるところまでが移行作業**。
+
+🔴 **呼び出し口は 2 つ以上持つ**。提出手順の script だけだと、(a) 年が替わって呼び出しが
+失われる (b) staging を回さずに触っている間は誰も見ない、の 2 経路で静かに無効化する。
+2 つ目は**常設の検査 (dashboard 等) から kit を自動発見して通す**形がよい:
+`forms/*.docx` と組み上がり PDF の**両方を持つ応募 dir** を kit とみなせば、対象を手で
+列挙し続けなくて済む。あわせて「kit があるのに repo 内のどの script も preflight を
+呼んでいない」= **配線切れ**も見る (= (a) の直接の検出)。
+⚠️ **経費 CSV は kit から構造的に決まらない** (作業室に在り、`submitted/` には訂正前の凍結版が
+居る)。推測で渡すと過去の snapshot を現物として叩くので、常設側は form + PDF だけを見て、
+CSV は対応を知っている提出手順の script に任せる。
 
 ## <a id="review-criteria-alignment"></a>審査基準 (評定要素) を取得して欄構成を正対させる
 
