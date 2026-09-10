@@ -267,24 +267,26 @@ def check_form_skeleton(form: dict, pdf_text: str) -> list[tuple]:
     return out
 
 
-def check_pdf_text(pdf_text: str) -> list[tuple]:
+def check_pdf_text(pdf_text: str, label: str = "") -> list[tuple]:
+    """表記 lint。label = どの PDF 由来かを message 頭に出す (--pdf は複数取れるため)。"""
     out = []
     if not pdf_text:
         return out
+    tag = f"{label}: " if label else ""
     flat = nfkc(pdf_text)
     for m in ENTITY_RE.finditer(pdf_text):
-        out.append(("🔴", "ENTITY", f"HTML 実体参照の残置: {m.group(0)}"))
+        out.append(("🔴", "ENTITY", f"{tag}HTML 実体参照の残置: {m.group(0)}"))
     for ab, full in ABBREV_MAP.items():
         if ab in flat:
             hint = f" → 「{full}」" if full else " (文脈確認)"
-            out.append(("🟠", "ABBREV", f"略称「{ab}」が本文にある{hint}"))
+            out.append(("🟠", "ABBREV", f"{tag}略称「{ab}」が本文にある{hint}"))
     for m in BARE_NUMBER_RE.finditer(pdf_text):
         n = int(m.group(1))
         if 1900 <= n <= 2100 or len(m.group(1)) < 3:
             continue          # 年号・2 桁は対象外
         if _is_symbol_label(pdf_text, m.start()):
             continue          # 粒子名の質量ラベル Δ(1232) / N(1440) / f(500) 等
-        out.append(("🟠", "BARE_NUMBER", f"裸の括弧数字「{m.group(0)}」= 何の数か書く (例: 被引用 {n})"))
+        out.append(("🟠", "BARE_NUMBER", f"{tag}裸の括弧数字「{m.group(0)}」= 何の数か書く (例: 被引用 {n})"))
     return out
 
 
@@ -375,7 +377,61 @@ def check_keihi(path: Path) -> list[tuple]:
 
 
 # ── 出力 ─────────────────────────────────────────────────────────────────────
-def report(findings: list[tuple], instructions: list[tuple] | None) -> int:
+def load_acks(path: Path) -> list[dict]:
+    """🟠 を明示的に受理した記録を読む。
+
+    schema (yaml):
+        acks:
+          - code: ABBREV                 # finding の code (必須)
+            match: 略称「文科省」          # message の部分一致 (必須、空文字は不可)
+            reason: YYYY-MM-DD ...        # なぜ直さないか (必須)
+            until: 'YYYY-MM-DD'           # 任意。この日を過ぎたら ack 失効 = 再び fail
+    🔴 は ack できない (= 様式違反・保存不能・実体参照は必ず直す)。
+    """
+    if not path.exists():
+        die(f"ack file が見つからない: {path}")
+    try:
+        import yaml
+    except ImportError:
+        die("ack file を読むには PyYAML が要る (pip install pyyaml)")
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    acks = data.get("acks") or []
+    for i, a in enumerate(acks, 1):
+        for k in ("code", "match", "reason"):
+            if not str(a.get(k, "")).strip():
+                die(f"{path.name}: acks[{i}] に `{k}` が無い "
+                    f"(理由の書かれていない ack は受け付けない)")
+    return acks
+
+
+def apply_acks(findings: list[tuple], acks: list[dict], today: str) -> tuple[list, list, list]:
+    """findings を (未 ack, ack 済, 使われなかった ack) に分ける。
+
+    ⚠️ ack 済も出力からは消さない (= 見えなくなったら「直した」と区別がつかない)。
+    """
+    live, acked = [], []
+    used = set()
+    for sev, code, msg in findings:
+        hit = None
+        for j, a in enumerate(acks):
+            if a["code"] != code or a["match"] not in msg:
+                continue
+            if a.get("until") and str(a["until"]) < today:
+                continue                      # 期限切れ ack = 効かない
+            hit = (j, a)
+            break
+        if hit and sev != "🔴":               # 🔴 は ack 不可
+            used.add(hit[0])
+            acked.append((sev, code, msg, hit[1]))
+        else:
+            live.append((sev, code, msg))
+    stale = [a for j, a in enumerate(acks) if j not in used]
+    return live, acked, stale
+
+
+def report(findings: list[tuple], instructions: list[tuple] | None,
+           acks: list[dict] | None = None, strict: bool = False,
+           today: str | None = None) -> int:
     if instructions:
         print("── 様式に埋め込まれた指示 (1 つずつ適用を verify する) " + "─" * 20)
         seen = set()
@@ -387,14 +443,36 @@ def report(findings: list[tuple], instructions: list[tuple] | None) -> int:
             print(f"  ℹ️ [{cat}] {hint}")
             print(f"     └ 様式: {sent}")
         print()
+    today = today or __import__("datetime").date.today().isoformat()
+    acked, stale = [], []
+    if acks is not None:
+        findings, acked, stale = apply_acks(findings, acks, today)
+
+    if acked:
+        print("── 受理済 (ack file に理由つきで記録された 🟠) " + "─" * 16)
+        for sev, code, msg, a in acked:
+            print(f"  🤝 {code}: {msg}")
+            print(f"     └ {a['reason']}" + (f" [期限 {a['until']}]" if a.get("until") else ""))
+        print()
+    if stale:
+        print("── 使われなかった ack (= 直ったのに記録が残っている / match が古い) " + "─" * 4)
+        for a in stale:
+            print(f"  🧹 {a['code']}: 「{a['match']}」 — {a['reason']}")
+        print("  → 直ったなら ack file から消す (残すと次の本物を隠す)\n")
+
     if not findings:
-        print("✅ 検出なし")
+        print("✅ 未処理の検出なし" + (" (受理済を除く)" if acked else ""))
         return 0
     hard = [f for f in findings if f[0] == "🔴"]
+    soft = len(findings) - len(hard)
     print("── 検出 " + "─" * 52)
     for sev, code, msg in sorted(findings, key=lambda f: (f[0] != "🔴", f[1])):
         print(f"  {sev} {code}: {msg}")
-    print(f"\n🔴 {len(hard)} 件 / 🟠 {len(findings) - len(hard)} 件")
+    print(f"\n🔴 {len(hard)} 件 / 🟠 {soft} 件")
+    if strict:
+        print("⛔ --strict: 🟠 も「直す」か「ack file に理由つきで記録する」まで提出しない "
+              "(= 2026-09 に 🟠 相当の指摘を種目間で横展開し損ねた再発防止)")
+        return 1 if findings else 0
     print("🟠 は誤検出もある — 潰すか、理由を書いて残すかを人が決める "
           "(正本: kakenhi-proposal.md#office-review-loop)")
     return 1 if hard else 0
@@ -488,6 +566,39 @@ def selftest() -> int:
         expect("骨格: 全部あれば clean", [c for _, c, _ in kept], [],
                forbid=["SKELETON_LOST", "SKELETON_MISSING"])
 
+        # --- ack / strict: 「🟠 を素通りさせない」機構の回帰 ---
+        import io as _io, contextlib as _ctx
+
+        def run_report(fs, acks, strict, today="2026-09-10"):
+            buf = _io.StringIO()
+            with _ctx.redirect_stdout(buf):
+                rc = report(list(fs), None, acks, strict, today)
+            return rc, buf.getvalue()
+
+        F_SOFT = [("🟠", "ABBREV", "略称「文科省」が本文にある → 「文部科学省」")]
+        F_HARD = [("🔴", "SKELETON_LOST", "様式が削除を禁じた欄が PDF に無い: 「研究期間」")]
+        ACK_OK = [dict(code="ABBREV", match="略称「文科省」", reason="2026-09-10 user 判断")]
+
+        rc, _ = run_report(F_SOFT, None, False)
+        expect("ack: 🟠 のみ + 非 strict → 0", ["rc%d" % rc], ["rc0"])
+        rc, out = run_report(F_SOFT, [], True)
+        expect("ack: 🟠 + strict + ack 無し → 1", ["rc%d" % rc], ["rc1"])
+        ok_strict = "⛔" in out
+        expect("ack: strict は理由を表示", ["msg"] if ok_strict else [], ["msg"])
+        rc, out = run_report(F_SOFT, ACK_OK, True)
+        expect("ack: 受理済なら strict でも 0", ["rc%d" % rc], ["rc0"])
+        expect("ack: 受理済も出力に残る (消さない)",
+               ["shown"] if "🤝" in out else [], ["shown"])
+        rc, out = run_report(F_HARD, [dict(code="SKELETON_LOST", match="研究期間",
+                                           reason="ごまかし")], True)
+        expect("ack: 🔴 は ack できない", ["rc%d" % rc], ["rc1"])
+        rc, out = run_report(F_SOFT, [dict(code="ABBREV", match="略称「文科省」",
+                                           reason="期限切れ", until="2026-09-01")], True)
+        expect("ack: until を過ぎた ack は失効", ["rc%d" % rc], ["rc1"])
+        rc, out = run_report([], ACK_OK, True)
+        expect("ack: 直ったのに残る ack は 🧹 で報告",
+               ["stale"] if "🧹" in out else [], ["stale"])
+
     print("\n" + ("✅ selftest PASS" if ok else "❌ selftest FAIL"))
     return 0 if ok else 1
 
@@ -500,6 +611,10 @@ def main() -> int:
     ap.add_argument("--pdf", type=Path, action="append", default=[],
                     help="組み上がった調書 PDF。様式が複数なら対応する PDF を全部渡す")
     ap.add_argument("--keihi", type=Path, action="append", default=[], help="経費明細 CSV (複数可)")
+    ap.add_argument("--ack", type=Path,
+                    help="🟠 を理由つきで受理した記録 (yaml)。🔴 は ack できない")
+    ap.add_argument("--strict", action="store_true",
+                    help="未 ack の 🟠 が 1 件でも残っていたら exit 1 (= 提出手順に挟む形)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
 
@@ -513,7 +628,8 @@ def main() -> int:
     # 種目によって様式は複数ある (挑戦的研究の S-42-1 概要版 + S-42-2 本文 等)。
     # 骨格も PDF text も **和集合**で突き合わせる — 概要版の見出しを本文 PDF に探すと
     # 偽の SKELETON_MISSING が出るため、片側だけ渡す運用にしない。
-    pdf_text = "\n".join(read_pdf_text(q) for q in a.pdf)
+    pdf_texts = [(q.name, read_pdf_text(q)) for q in a.pdf]
+    pdf_text = "\n".join(t for _, t in pdf_texts)
     if a.form:
         forms = [read_form(q) for q in a.form]
         merged = dict(headings=[h for f in forms for h in f["headings"]],
@@ -522,10 +638,14 @@ def main() -> int:
                       instructions=[i for f in forms for i in f["instructions"]])
         instructions = merged["instructions"]
         findings += check_form_skeleton(merged, pdf_text)
-    findings += check_pdf_text(pdf_text)
+    multi = len(pdf_texts) > 1
+    for name, t in pdf_texts:
+        findings += check_pdf_text(t, name if multi else "")
     for c in a.keihi:
         findings += check_keihi(c)
-    return report(findings, instructions)
+    acks = load_acks(a.ack) if a.ack else (
+        [] if a.strict else None)      # --strict のみ = 空の ack file と同じ扱い
+    return report(findings, instructions, acks, a.strict)
 
 
 if __name__ == "__main__":
