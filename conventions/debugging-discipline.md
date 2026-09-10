@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: bug fix を提案する前・audit verdict を出す前 (検証規律)
 category: infra
-summary: Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)、 性能修復は measure-first + 出力等価性 + 決定的並列化 (§15)、 機能の回復は調査終了の条件でない = 症状が「余剰」 型だと retry で直った瞬間に原因が再発源に残る + origin 不明の残骸は恒常 noise 化して調査 trigger を失う (§16)
+summary: Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)、 性能修復は measure-first + 出力等価性 (= 受け入れ diff の前に noise floor を測る) + 決定的並列化 + #run-scoped-cache = 鮮度が価値の検出器 fleet の cache は TTL でなく run に閉じる 〔TTL は新着を silent に隠す〕 (§15)、 機能の回復は調査終了の条件でない = 症状が「余剰」 型だと retry で直った瞬間に原因が再発源に残る + origin 不明の残骸は恒常 noise 化して調査 trigger を失う (§16)
 -->
 # Debugging discipline
 
@@ -478,14 +478,24 @@ origin: 2026-07-04 「最近の項目に routine session が数十件」 調査�
 「遅い」 の修復は debugging の一種として同じ規律に従う: 症状から原因を推測で断定せず実測し、 fix の正しさを挙動保存で検証する。
 
 1. **measure-first**: 「遅い = network だろう」 等の直感で並列化・cache 化に着手しない。 まず (a) 構成要素ごとの実測 (= per-stage timer を先に仕込む) で犯人を分布として見る、 (b) 最大犯人は profiler (`cProfile` 等) で関数レベルまで落とす。 実例 (2026-07): 多数の network 検査を束ねる dashboard の最大単一犯人は network でなく **local の YAML re-parse ループ** (`yaml.safe_load` 524 回 = 52s CPU) だった — 直感だけで並列化していたら 52s が wall にそのまま残った (= §9 の「単一情報源で結論しない」 の performance domain 形態)。
-2. **出力等価性が受け入れ条件**: 性能 fix の検証は「速くなった」 でなく「**同じ結果のまま**速くなった」。 検証の強い順: (a) 修正前後の出力 byte 一致 (diff) → (b) 出力構造の完全性 (= 全 section / 全 finding 種の存在) + 失敗・timeout ゼロ → (c) 件数の目視。 触った component は (a) を要求、 触っていない component は (b) で足りる。 実例: 逐次 API 呼びの batch 化 (2026-06) と parse cache 化 (2026-07) はいずれも「逐次版と出力一致」 を明示の受け入れ条件にして landed。
+2. **出力等価性が受け入れ条件**: 性能 fix の検証は「速くなった」 でなく「**同じ結果のまま**速くなった」。 検証の強い順: (a) 修正前後の出力 byte 一致 (diff) → (b) 出力構造の完全性 (= 全 section / 全 finding 種の存在) + 失敗・timeout ゼロ → (c) 件数の目視。 触った component は (a) を要求、 触っていない component は (b) で足りる。 実例: 逐次 API 呼びの batch 化 (2026-06) と parse cache 化 (2026-07) はいずれも「逐次版と出力一致」 を明示の受け入れ条件にして landed。 ⚠️ **出力が外部世界に依存するなら、 (a) を使う前に noise floor を測る** (= **何も変えずに 2 回走らせた diff**)。 これを先に取っていないと、 世界の変化 (= 新着 mail / 他 session の commit / 経過時間の表示) を自分の regression と取り違える — 逆に本物の regression を「どうせ noise」 と流す方向にも同じだけ壊れる。 noise floor に出た行の種類だけが、 受け入れ diff で「除いてよい」 行。
 3. **並列化は決定性・可視性とセットで**: 独立 subscript 群を並列化するときの 4 点 set — (a) **出力は宣言順 buffer flush で決定的に** (= diff 可能性が (2) の検証と将来の regression 検出の基盤)、 (b) **外部 API は resource lane の semaphore で絞る** (= rate-limit 429 → fail-open silent skip で **finding が黙って減る** のが並列化の典型的な機能退行。 backoff/retry 保証の無い呼び出しが混在する lane は保守的 cap)、 (c) **`stdin=DEVNULL`** (= 子 process の対話 prompt 待ちで全体が無限 hang する経路を閉じる)、 (d) **per-unit timeout + 失敗 marker** (= 1 本の hang が全体を止めない + 「検査が走らなかった」 と 「finding 0 件」 を区別可能に保つ)。
 4. **cache は所有権を明示**: parse cache が返す object は共有 (= caller の mutate が別 caller に漏れる)。 read-only 前提を docstring に焼き、 可能なら mutate しない設計 (= audit / render 用途) に限定する。 具体 recipe (yaml 系検査 script の定番): run 内 dict cache (`{path: parsed}`) + `yaml.load(f, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))` (= libyaml C loader、 pure-Python 比 ~10×) の 2 段で、 「entry ごとに referent file を re-parse する loop」 は桁 2 つ消える。
 
 5. <a id="tool-self-report-is-not-measurement"></a>**tool の自己報告は測定値ではない** — build tool / bundler / linter / profiler が出力する数値は、 その tool 独自の定義と実装による**推定**であって、 判断材料にする量の実測ではない。 実例 (2026-09-09): bundler が build ごとに `gzip:` として印字する値を配布サイズとして読み、 依存の major version 更新を「圧縮後が 9 kB 太る」 と評価して見送った。 **`gzip -9 -c <out> | wc -c` で実測すると逆に 1.6 kB 減っていた** (= 印字値 315 kB / 実測 301 kB)。 存在しないコストで更新を止めかけた形。 → **数値を判断や報告に載せる瞬間に「これは誰が測ったか」 を問う**。 tool の印字は方向の目安 (= 同一 tool 内での相対比較) には使えるが、 **絶対値・他 tool との比較・意思決定の根拠には独立測定を要求する**。 (= §9「単一情報源で結論しない」 の計測 domain 形態。 自己申告を discriminator にしない §14.2 と同根)
 6. <a id="stale-base-measurement"></a>**古い base の branch で測った値は現在の値ではない** — 依存更新 PR (bot 生成含む) の branch は**作成時点の base から分岐**しており、 その間に本体が変わっていれば branch 上の build 結果は現在の構成を表さない。 実例 (同上): 依存更新 branch で build すると出力が 100 kB、 本体は 947 kB — branch の base が data 追加前だったため。 そのまま比較すれば「この更新は出力を 1/10 にする」 という無意味な結論になる。 → **現在の HEAD に依存だけを当てて測る** (= worktree を切って `npm install <pkg>@<ver>` 等)。 merge 後に何が起きるかを知りたいなら、 測る対象は merge 後の構成であって branch ではない。
 
-reflex: 性能修復に入る瞬間に「実測したか (per-unit timer → profiler)」、 fix を宣言する瞬間に「何と何の出力が等価だと **どの操作で** 確認したか」、 **数値を報告に載せる瞬間に「この数字は誰が測ったか / どの構成で測ったか」**。
+7. <a id="run-scoped-cache"></a>**鮮度が価値である検出器 fleet の cache は、 TTL でなく run に閉じる** — 独立プロセスの検査 script 群が同じ外部 source (mail / API / DB) を重複して引いているとき、 素朴な高速化は TTL 付き disk cache だが、 **検出器ではこれが速度でなく正しさの問題になる**。 検出器の出力の価値は鮮度に全部乗っており (= 「未読 12 件」 の 12 が 10 分前の数字なら、 遅い答えでなく**誤った答え**)、 TTL cache は新着を TTL 分だけ隠したうえで **画面上は「変化なし」 に見せる** = silent failure。 さらに TTL cache は置き場が固定になるので、 同じ source を読む**別経路** (= session 開始時の surfacer 等) まで巻き込み、 「見落とさないための機構」 同士が互いの stale を再生し始める。
+
+   → **cache の寿命は時計でなく実行境界で切る**: 親が run ごとに一時 dir を作り env で子に渡し、 run 終了で消す (`TemporaryDirectory` = 異常終了でも消える)。 捨てているのは「同じ run の中の重複」 であって鮮度ではない (= 各 run は必ず取りに行く)。 副産物として **全 stage が同一 snapshot を見る**ので、 stage ごとに数十秒ずれた source を見ていた以前より run 内の整合性はむしろ上がる。
+
+   実装の 4 点: (a) **env が無ければ cache しない** (= 単体実行・hook 経路・他の呼び出し元は挙動不変。 cache を後から足せる・剥がせるものに保つ安全弁) (b) key に**呼び出しを決める要素を全部**入れ、 key 化できない引数が来たら cache しない側に倒す (= key の取りこぼしは silent な誤り) (c) cache 層の例外は飲んで素の取得に fallback し、 **取得側の例外は呼び出し側へ透過** (= 各 script の fail-open を壊さない) (d) **本体 (= 本文・添付など大きく機微なもの) は置かない** — 同 run に第二の消費者が居ないなら書くだけ損で、 temp に平文を残す分だけ危険 (= 消費者の有無は「誰がこの format で引くか」 を数えれば決まる)。
+
+   ⚠️ §15.4 (= run 内 dict cache) との違いは**共有面の広さだけ**: 多プロセスでは in-process memo が stage 境界を越えないので、 共有面を env + 一時 dir に外出しする。 鮮度が価値でない参照データ (= 名前 ↔ id の対応表等) は TTL でも壊れないが、 置き場を分けると判断が 1 つ増えるので run-scoped に揃える方が単純。
+
+   実例 2026-09-10: ~65 本の検査を subprocess で並列実行する dashboard で、 複数の検出器が同じ inbox × 30 日窓を各自 fetch していた。 run-scoped 化 + 逐次 get の batch 化で mail lane の実行秒合計 188s → 128s / 壁時計 平均 108s → 81s、 出力 diff は時刻表示のみ。 ⚠️ **同 turn の 4 軸 sweep で (d) 違反を自分の実装から発見している** (= 本文つき fetch まで cache しており、 消費者ゼロなのに temp に本文が落ちていた)。
+
+reflex: 性能修復に入る瞬間に「実測したか (per-unit timer → profiler)」、 fix を宣言する瞬間に「何と何の出力が等価だと **どの操作で** 確認したか」 + 「その diff の noise floor を測ったか」、 **数値を報告に載せる瞬間に「この数字は誰が測ったか / どの構成で測ったか」**。
 
 origin: 2026-06-03 Gmail 逐次 fetch の batch 化 (= 540s timeout RCA、 「逐次版と出力一致」 要件で landed) + 2026-07-24 dashboard 検査 fleet の並列 stage runner 化 (= 数分 → ~1 分、 cProfile が直感と違う最大犯人を特定、 byte 一致 + section 完全性で受け入れ)。 いずれも owner の personal layer に実装・設計史 (= 機構の正本は各 script docstring)。
 
