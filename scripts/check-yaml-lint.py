@@ -150,7 +150,11 @@ def selftest(yl: str) -> int:
 def main() -> int:
     yl = find_yamllint()
     if yl is None:
-        print("SKIP: yamllint 未 install (pip install yamllint) — YAML hazard lint を飛ばす")
+        # ⚠️ install 形は `--user` を明示する: PATH に ~/.local/bin や
+        # ~/Library/Python/<ver>/bin が無い環境でも find_yamllint() が両方を probe
+        # するので、 「入れたのに SKIP のまま」 にならない (2026-09-10 実測)。
+        print("SKIP: yamllint 未 install — `pip3 install --user yamllint` で入る "
+              "(PATH 外でも find_yamllint() が拾う)。 YAML hazard lint を飛ばす")
         return 0
     if "--selftest" in sys.argv:
         return selftest(yl)
