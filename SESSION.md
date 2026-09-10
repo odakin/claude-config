@@ -2,6 +2,28 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-10 (別 session) — 画面 drive の harness を層1 化 + 並列 session / gate hook の 2 規約
+
+owner の質問「e-Rad 以外のサイトでも GUI 抜きにできるか」 から。 **汎用化すべきは driver でなく「降り方」** と判定し、
+科研費 driver の汎用部分をここへ上げた (instance = 個人層 / 科研費 repo に残置)。
+
+- **[`scripts/lib/web_driver.py`](scripts/lib/web_driver.py)** (新規) — 「値の正本 → 画面に打つ操作列」 を決定的に出す
+  site 非依存 harness。 frameset と素の page / SPA の両対応、 element 不在は throw せず `{missing}`、
+  `audit_steps()` が site 非依存の不変条件 (JS 構文 / server 往復の wait / 生 HTML 返し / async IIFE / JSON 化) を検査。
+  `--probe` = 新サイト着手の 1 コマンド (7 段: login → frame 構造 → 画面 API → field 名 → 内部 endpoint 捕捉 → 語彙)。
+  ⚠️ **⑤⑥ で内部 endpoint が見えたら段 4 へ昇格して画面 driver は書かない** = 降りすぎの防止を機構に埋めた。
+  selftest = 26 項目 + **node の stub DOM 上で生成 JS を実際に走らせる挙動テスト 16 項目**
+  (= 「構文が通る」 と「意図どおり動く」 は別。 不在時に throw しない契約は実行しないと確かめられない)。
+- 規約 = [`web-form-automation.md#step-driver-harness`](conventions/web-form-automation.md#step-driver-harness) (§9)。
+  route ladder の rung 6 と `kakenhi-proposal.md#ai-write-route` から道を通した。
+- 移設は**出力同値性を 281 step で証明してから**行った (完全一致 173 / 既知 5 種の書き換えで説明可 108 / 未説明 0)。
+  副産物の実バグ 3 件 = ① 保存 link 不在で throw していた ② node が PATH に無く **JS 構文検査が silent SKIP していた**
+  ③ 後から足した分岐が構文検査の対象 list に入っていなかった。
+- 併走で 2 規約を hoist: [`#staging-window-race`](conventions/multi-session-coordination.md#staging-window-race) に
+  **`git commit -- <path>`** (index を経由しない = 実験で 4 点確認) を防御 1 として追加 (従来の「唯一の現実的な defense」 を更新)、
+  [`hook-authoring.md#gate-hook-unreadable-input`](conventions/hook-authoring.md#gate-hook-unreadable-input) (§0 補足 4) を新設、
+  原則 [`§22`](docs/convention-design-principles.md#silent-probe-false-healthy) に同型の第 2 例を追記。
+
 ## 2026-09-09 (別 session) — 規格化係数の記法乗り換え事故 + 対数プロットの目盛 (規約 2 本)
 
 owner の物理 repo で `2π factor` フラグを監査したところ、 フラグの射程内は正しく、 代わりに **published 論文由来の前係数が 4 倍低い**ことが判明した。 一般則を 2 本 hoist。
