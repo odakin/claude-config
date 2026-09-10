@@ -21,6 +21,9 @@ sections:
   - id: err-trap-inline-conditional-substitution
     level: 3
     title: "§0 補足 3: `trap 'exit 0' ERR` × 条件付き inline 置換 = 値が空の環境でだけ hook が silent 死"
+  - id: gate-hook-unreadable-input
+    level: 3
+    title: "§0 補足 4: gate hook は「読めない入力」 で死んではいけない — 1 file の異常が repo 全体の commit を止める"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2
