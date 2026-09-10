@@ -177,7 +177,7 @@ sections:
     title: "成果物の種類で視覚検査の強度を分ける"
   - id: pdf-visual-verification
     level: 2
-    title: "PDF 視覚検証 reflex: compile success + log no-error だけで完了としない"
+    title: "図・組版を対象とする PDF 視覚検証"
   - id: pdf-visual-verification-traps
     level: 3
     title: "典型 trap (= 2026-05-18 EC erratum note 編集で連続再発)"

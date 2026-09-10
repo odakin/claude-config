@@ -94,6 +94,9 @@ sections:
   - id: closed-form-function-class
     level: 3
     title: "閉形式は関数クラスと残る操作を明記する"
+  - id: operator-time-state-order
+    level: 2
+    title: "一般時刻の演算子と初期状態の依存順を分ける"
   - id: research-script-homes
     level: 2
     title: "研究スクリプトと知見の配置・全数索引"
