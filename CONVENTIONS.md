@@ -299,6 +299,12 @@ SESSION.md の content を別 file に抽出する判断軸 (= 棚卸し時の�
 - **コミット後は常に push。** 複数リモートがあれば全リモートに push。`git-state-nudge.sh` hook (§3) が直近 60 秒以内の未 push commit を機械的に検出して警告するため、Claude はこの警告を見たら次の Bash で push を実行すること
 - セッション終了時は未コミット変更があれば commit + push
 - ファイル名にバージョン番号をつけない
+- **commit には発生元 Claude session の trailer が自動で付く** (`Claude-Session: <id>`、 setup.sh Step 8b が全 repo に配線、 env が無ければ no-op = 人手 commit には付かない)。 これは **carrier の記録であって帰属ではない** — 内容を決めたのは通常 human で、 commit author を判断主体と等値しない規律 ([conventions/actor-attribution.md](conventions/actor-attribution.md)) がそのまま効く。 並列 session の巻き込みを事後に読み解くときの入口:
+  ```bash
+  git log --format='%h %s → %(trailers:key=Claude-Session,valueonly)'   # commit ⇄ session
+  git log -S '<消えた文字列>' --format='%h %(trailers:key=Claude-Session,valueonly)'
+  ```
+  機構・設計理由・opt-out = [conventions/multi-session-coordination.md#session-provenance-trailer](conventions/multi-session-coordination.md#session-provenance-trailer)
 
 ---
 
