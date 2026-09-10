@@ -172,6 +172,9 @@ sections:
   - id: latex-pdf-audit
     level: 2
     title: "LaTeX log と PDF の検査を再利用する"
+  - id: visual-verification-intensity
+    level: 3
+    title: "成果物の種類で視覚検査の強度を分ける"
   - id: pdf-visual-verification
     level: 2
     title: "PDF 視覚検証 reflex: compile success + log no-error だけで完了としない"
