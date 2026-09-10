@@ -38,7 +38,11 @@
 ------
     kakenhi-preflight.py --form forms/s-13.docx --pdf build/chosho.pdf --keihi KEIHIMEISAI.csv
     kakenhi-preflight.py --keihi KEIHIMEISAI.csv          # 経費だけ
-    kakenhi-preflight.py --form forms/s-74.docx           # 骨格 + 指示の一覧だけ
+    kakenhi-preflight.py --form forms/s-74.docx           # 骨格 + 指示の一覧だけ (起草前に 1 回)
+    # 種目が複数様式を持つとき (挑戦的研究 = 概要版 + 本文) は --form / --pdf を繰り返す。
+    # 骨格と PDF text は和集合で突き合わせるので、片方だけ渡すと偽の SKELETON_MISSING が出る。
+    kakenhi-preflight.py --form forms/s-42-1.docx --form forms/s-42-2.docx \
+                         --pdf gaiyou.pdf --pdf honbun.pdf
     kakenhi-preflight.py --selftest
 
 終了コード: 0 = 🔴 なし (🟠 は残っていてもよい) / 1 = 🔴 あり / 2 = 実行エラー。
@@ -124,6 +128,11 @@ WAVEDASH_RE = re.compile(r"[〜～]")
 SPLIT_RE = re.compile(r"[、,・]")
 
 
+def die(msg: str) -> "NoReturn":          # noqa: F821 — docstring の終了コード契約 (2 = 実行エラー)
+    print(f"❌ {msg}", file=sys.stderr)
+    sys.exit(2)
+
+
 def nfkc(s: str) -> str:
     """比較用の正規化: NFKC + 空白全除去 (全角/半角・和欧間空白の揺れを吸収)。"""
     return re.sub(r"\s+", "", unicodedata.normalize("NFKC", s))
@@ -155,8 +164,13 @@ def read_form(path: Path) -> dict:
     次の見出しが来るまで) に効く。マーカーと見出しは別ノードなので、文書順に走査して
     欄 scope で紐付ける (同一ノードの文字列一致で判定すると 2026-09 の実例を取り逃す)。
     """
-    with zipfile.ZipFile(path) as z:
-        xml = z.read("word/document.xml").decode("utf-8")
+    try:
+        with zipfile.ZipFile(path) as z:
+            xml = z.read("word/document.xml").decode("utf-8")
+    except FileNotFoundError:
+        die(f"様式が見つからない: {path}")
+    except (zipfile.BadZipFile, KeyError):
+        die(f"docx として読めない (.doc 形式 / 破損 / 別 file?): {path}")
     body = _TXBX.sub("", xml)          # 骨格判定からテキストボックスを外す
     all_text = _runs(xml)              # 指示文の抽出はテキストボックスも含めて拾う
 
@@ -211,7 +225,12 @@ def read_pdf_text(path: Path) -> str:
     except ImportError:
         print("⚠️  PyMuPDF 未導入のため PDF 検査を skip (pip install pymupdf)", file=sys.stderr)
         return ""
-    doc = fitz.open(path)
+    if not path.exists():
+        die(f"PDF が見つからない: {path}")
+    try:
+        doc = fitz.open(path)
+    except Exception as e:                      # noqa: BLE001 — fitz は多様な例外を投げる
+        die(f"PDF として読めない: {path} ({e})")
     return "".join(page.get_text() for page in doc)
 
 
@@ -287,13 +306,15 @@ def _is_symbol_label(text: str, idx: int) -> bool:
 
 
 def _decode_csv(path: Path) -> str:
+    if not path.exists():
+        die(f"経費明細 CSV が見つからない: {path}")
     raw = path.read_bytes()
     for enc in ("cp932", "utf-8-sig", "utf-8"):
         try:
             return raw.decode(enc)
         except UnicodeDecodeError:
             continue
-    raise SystemExit(f"CSV のエンコーディングを判定できない: {path}")
+    die(f"CSV のエンコーディングを判定できない: {path}")
 
 
 def check_keihi(path: Path) -> list[tuple]:
@@ -307,6 +328,10 @@ def check_keihi(path: Path) -> list[tuple]:
     if not rows:
         return [("🔴", "KEIHI_EMPTY", f"{path.name}: 行が無い")]
     body = rows[1:] if rows[0] and "費目" in rows[0][0] else rows
+    if not any(len(r) >= 8 and r[0].strip() for r in body):
+        return [("🔴", "KEIHI_SCHEMA",
+                 f"{path.name}: 取込フォーマット (8 列: 費目区分/年度/品名・仕様/設置機関/"
+                 f"事項/数量/単価/金額) の行が 1 つも無い — 別 file か、列がずれている")]
     for i, r in enumerate(body, start=1):
         if len(r) < 8 or not r[0].strip():
             continue
@@ -470,8 +495,10 @@ def selftest() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--form", type=Path, help="様式 docx (骨格・埋め込み指示の source)")
-    ap.add_argument("--pdf", type=Path, help="組み上がった調書 PDF")
+    ap.add_argument("--form", type=Path, action="append", default=[],
+                    help="様式 docx (骨格・埋め込み指示の source)。種目が複数様式を持つなら繰り返す")
+    ap.add_argument("--pdf", type=Path, action="append", default=[],
+                    help="組み上がった調書 PDF。様式が複数なら対応する PDF を全部渡す")
     ap.add_argument("--keihi", type=Path, action="append", default=[], help="経費明細 CSV (複数可)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
@@ -483,11 +510,18 @@ def main() -> int:
         return 2
 
     findings, instructions = [], None
-    pdf_text = read_pdf_text(a.pdf) if a.pdf else ""
+    # 種目によって様式は複数ある (挑戦的研究の S-42-1 概要版 + S-42-2 本文 等)。
+    # 骨格も PDF text も **和集合**で突き合わせる — 概要版の見出しを本文 PDF に探すと
+    # 偽の SKELETON_MISSING が出るため、片側だけ渡す運用にしない。
+    pdf_text = "\n".join(read_pdf_text(q) for q in a.pdf)
     if a.form:
-        form = read_form(a.form)
-        instructions = form["instructions"]
-        findings += check_form_skeleton(form, pdf_text)
+        forms = [read_form(q) for q in a.form]
+        merged = dict(headings=[h for f in forms for h in f["headings"]],
+                      cells=[c for f in forms for c in f["cells"]],
+                      protected=[p for f in forms for p in f["protected"]],
+                      instructions=[i for f in forms for i in f["instructions"]])
+        instructions = merged["instructions"]
+        findings += check_form_skeleton(merged, pdf_text)
     findings += check_pdf_text(pdf_text)
     for c in a.keihi:
         findings += check_keihi(c)
