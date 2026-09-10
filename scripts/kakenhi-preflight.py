@@ -385,8 +385,11 @@ def load_acks(path: Path) -> list[dict]:
           - code: ABBREV                 # finding の code (必須)
             match: 略称「文科省」          # message の部分一致 (必須、空文字は不可)
             reason: YYYY-MM-DD ...        # なぜ直さないか (必須)
+            scope: kiban_b.pdf            # 任意。message に含まれること (= 種目に縛る)
             until: 'YYYY-MM-DD'           # 任意。この日を過ぎたら ack 失効 = 再び fail
     🔴 は ack できない (= 様式違反・保存不能・実体参照は必ず直す)。
+    ⚠️ scope を書かないと **別種目の同じ指摘まで黙る** — PDF 由来の finding は常に由来 file 名を
+       持つので、種目ごとに直すつもりなら scope に file 名を書く (over-broad は下で警告する)。
     """
     if not path.exists():
         die(f"ack file が見つからない: {path}")
@@ -416,6 +419,8 @@ def apply_acks(findings: list[tuple], acks: list[dict], today: str) -> tuple[lis
         for j, a in enumerate(acks):
             if a["code"] != code or a["match"] not in msg:
                 continue
+            if a.get("scope") and str(a["scope"]) not in msg:
+                continue
             if a.get("until") and str(a["until"]) < today:
                 continue                      # 期限切れ ack = 効かない
             hit = (j, a)
@@ -427,6 +432,21 @@ def apply_acks(findings: list[tuple], acks: list[dict], today: str) -> tuple[lis
             live.append((sev, code, msg))
     stale = [a for j, a in enumerate(acks) if j not in used]
     return live, acked, stale
+
+
+def overbroad_acks(acked: list[tuple]) -> list[tuple]:
+    """1 つの ack が複数の対象 (= 別 PDF 由来) を黙らせていないか。
+
+    「この種目は見送る」つもりの ack が、scope 未指定のせいで別種目の同じ指摘まで
+    受理してしまう事故を検出する (= 種目間の横展開漏れを ack 自身が作る)。
+    """
+    by_reason: dict[str, set] = {}
+    for _sev, _code, msg, a in acked:
+        if a.get("scope"):
+            continue
+        src = msg.split(":", 1)[0] if ":" in msg else ""
+        by_reason.setdefault(a["match"] + "|" + a["reason"], set()).add(src)
+    return [(k.split("|")[0], srcs) for k, srcs in by_reason.items() if len(srcs) > 1]
 
 
 def report(findings: list[tuple], instructions: list[tuple] | None,
@@ -454,6 +474,9 @@ def report(findings: list[tuple], instructions: list[tuple] | None,
             print(f"  🤝 {code}: {msg}")
             print(f"     └ {a['reason']}" + (f" [期限 {a['until']}]" if a.get("until") else ""))
         print()
+    for match, srcs in overbroad_acks(acked):
+        print(f"  🧨 ack 「{match}」 が複数の対象を黙らせている: {', '.join(sorted(srcs))}")
+        print("     → 種目ごとに直すなら ack に `scope: <PDF file 名>` を足して分ける\n")
     if stale:
         print("── 使われなかった ack (= 直ったのに記録が残っている / match が古い) " + "─" * 4)
         for a in stale:
@@ -598,6 +621,20 @@ def selftest() -> int:
         rc, out = run_report([], ACK_OK, True)
         expect("ack: 直ったのに残る ack は 🧹 で報告",
                ["stale"] if "🧹" in out else [], ["stale"])
+        # scope: 種目を跨いで黙らせる ack を検出できるか
+        F_TWO = [("🟠", "ABBREV", "kiban_b.pdf: 略称「文科省」が本文にある → 「文部科学省」"),
+                 ("🟠", "ABBREV", "houga.pdf: 略称「文科省」が本文にある → 「文部科学省」")]
+        rc, out = run_report(F_TWO, ACK_OK, True)
+        expect("ack: scope 無しで 2 種目を黙らせたら 🧨",
+               ["broad"] if "🧨" in out else [], ["broad"])
+        ACK_SCOPED = [dict(code="ABBREV", match="略称「文科省」", scope="kiban_b.pdf",
+                           reason="2026-09-10 基盤B のみ見送り")]
+        rc, out = run_report(F_TWO, ACK_SCOPED, True)
+        expect("ack: scope 付きなら他種目は残る (rc=1)", ["rc%d" % rc], ["rc1"])
+        expect("ack: scope 付きは 🧨 を出さない",
+               [] if "🧨" not in out else ["broad"], [], forbid=["broad"])
+        expect("ack: scope 外の種目が検出に残る",
+               ["kept"] if "houga.pdf" in out.split("── 検出")[-1] else [], ["kept"])
 
     print("\n" + ("✅ selftest PASS" if ok else "❌ selftest FAIL"))
     return 0 if ok else 1
@@ -638,9 +675,8 @@ def main() -> int:
                       instructions=[i for f in forms for i in f["instructions"]])
         instructions = merged["instructions"]
         findings += check_form_skeleton(merged, pdf_text)
-    multi = len(pdf_texts) > 1
     for name, t in pdf_texts:
-        findings += check_pdf_text(t, name if multi else "")
+        findings += check_pdf_text(t, name)   # 常に由来を付ける (ack を種目に縛れるように)
     for c in a.keihi:
         findings += check_keihi(c)
     acks = load_acks(a.ack) if a.ack else (
