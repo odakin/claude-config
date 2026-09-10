@@ -96,9 +96,15 @@ C を省くと A と B の意味が消える。 送信可否の判断は「差�
 ### サイトごとに要るもの = 実測台帳 1 枚
 
 field 名 / 保存関数名 / 画面遷移 / 行追加関数 を **1 回実測して literal で残す** (script の docstring が定位置)。
-採取は `ctx.js_field_dump()` (form の全 element を `name:TAG/type[選択肢数]` で列挙) と
-`ctx.js_handler_dump()` (page 内の handler 関数名だけ抽出)、 SPA 寄りなら `js_capture_xhr()`
-([#internal-endpoint-replay](machine-route-first.md#internal-endpoint-replay) の step 1)。
+採取は **1 コマンドで定形が出る**:
+
+    python3 claude-config/scripts/lib/web_driver.py --probe --url <URL>
+
+7 段 = ① login (人間) ② frame 構造 (`js_frame_probe`、 frameset なら main の index が決まる)
+③ 画面 API (`js_handler_dump`) ④ field 名 (`js_field_dump`) ⑤⑥ 内部 endpoint の捕捉と読み
+(`js_capture_xhr`、 [#internal-endpoint-replay](machine-route-first.md#internal-endpoint-replay) の step 1)
+⑦ 語彙 (保存成功文言とエラー語)。 **⑤⑥ で endpoint が見えたら段 4 へ昇格でき、 画面 driver を書かずに済む**
+(= 降りすぎの防止。 probe を先に流す一番の理由がこれ)。
 **どの probe も値は返さない** — 個人情報と browser tool の出力 filter の両方を避けるため。
 
 ### どのサイトでも効く 4 つの契約

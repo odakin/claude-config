@@ -33,7 +33,8 @@ GUI click ではなく機械で駆動するための土台。 **上位段が使�
     ]
 
 field 名・保存関数名・画面遷移は **サイトごとに 1 回実測して literal で docstring に残す**。
-採取用の probe = ``ctx.js_field_dump()`` / ``ctx.js_handler_dump()`` / ``js_capture_xhr()``。
+採取用の probe = ``ctx.js_frame_probe()`` / ``ctx.js_field_dump()`` / ``ctx.js_handler_dump()`` / ``js_capture_xhr()``
+(まとめて出すなら ``python3 web_driver.py --probe --url <URL>`` = 新サイト着手の 1 コマンド)。
 
 ## どのサイトでも効く罠 (実測由来)
 
@@ -208,6 +209,21 @@ class Ctx:
                 "(e.tagName==='SELECT'?'['+e.options.length+']':''));}"
                 "return {n:out.length,names:out.slice(0," + str(limit) + ")};})()")
 
+    def js_frame_probe(self) -> str:
+        """frameset か否かと、 各 frame の path / 本文長 / form 名を返す (= main frame の同定)。
+
+        レガシー web app で最初にぶつかる壁がこれ — frameset だと `get_page_text` が空を返し、
+        「読めないサイト」 に見える。 本 probe で main の index が分かれば Ctx(frame=...) が決まる。
+        """
+        return ("(()=>{const W=window;const out=[];const n=W.frames.length;"
+                "for(let i=0;i<n;i++){try{const d=W.frames[i].document;"
+                "out.push({i,path:d.location.pathname,len:(d.body?d.body.innerText.length:0),"
+                "forms:Array.from(d.forms||[]).map(f=>String(f.name||f.id||'?')).slice(0,8)});}"
+                "catch(e){out.push({i,err:'cross-origin'});}}"
+                "let top={};try{top={path:W.document.location.pathname,"
+                "len:(W.document.body?W.document.body.innerText.length:0)};}catch(e){top={err:String(e.name)};}"
+                "return {frameset:n>0,n,frames:out,top};})()")
+
     def js_handler_dump(self, limit: int = 120) -> str:
         """page 内の ``a[onclick|href=javascript:]`` から **関数名だけ** を重複なく抜く (= 画面 API の採取)。
 
@@ -362,6 +378,8 @@ const anchors = [
   anchor({onclick: "onAddRow(this,0)"}, 'add'),
   anchor({href: "javascript:onUpdate('20260908231617499','1','00061')"}, 'update')];
 const doc = {
+  location: {pathname: '/app/menu.do'},
+  forms: [{name: 'shinsei_form'}],
   shinsei_form: {elements: elems},
   body: {innerText: '一時保存が完了しました\n 合計 21％ \n 入力できません（桁数） '},
   querySelectorAll: sel => (sel.charAt(0) === 'a' ? anchors : (sel.indexOf('input') === 0 ? elems : [])),
@@ -372,7 +390,8 @@ const F = {document: doc, eval: src => { rec.evaled.push(src); },
   onCalculateWithUpload() { rec.called.push('calc'); },
   location: {pathname: '/app/menu.do', set href(v) { rec.nav = v; }, get href() { return rec.nav; }},
   Event: function (t) { this.type = t; }};
-globalThis.window = {frames: [null, F], document: doc,
+const F0 = {document: {location: {pathname: '/tmp.do'}, body: {innerText: ''}, forms: []}};
+globalThis.window = {frames: [F0, F], document: doc,
   location: F.location, XMLHttpRequest: function () {}, fetch: function () {}};
 globalThis.window.XMLHttpRequest.prototype = {open() {}, send() {}};
 const R = {};
@@ -404,6 +423,7 @@ def _behavior_test() -> list[str]:
         "call":        c.js_call("onInputApplication('01')", ret="01"),
         "fields":      c.js_field_dump(),
         "handlers":    c.js_handler_dump(),
+        "frames":      c.js_frame_probe(),
     }
     src = _STUB + "".join("R[%s]=%s;\n" % (J(k), v) for k, v in cases.items())
     src += "R.__rec=rec;console.log(JSON.stringify(R));"
@@ -415,7 +435,10 @@ def _behavior_test() -> list[str]:
     finally:
         os.unlink(path)
     if r.returncode:
-        return ["挙動テストが落ちた: " + (r.stderr.strip().splitlines() or ["?"])[-1]]
+        lines = r.stderr.strip().splitlines()
+        err = next((ln.strip() for ln in lines if "Error" in ln and "node:" not in ln), None)
+        where = next((ln.strip() for ln in lines if ".js:" in ln and "at " in ln), "")
+        return ["挙動テストが落ちた: " + (err or (lines[0] if lines else "?")) + ("  @ " + where if where else "")]
     R = json.loads(r.stdout)
     rec = R["__rec"]
     want = [
@@ -438,8 +461,37 @@ def _behavior_test() -> list[str]:
         (R["call"] == "01" and "onInputApplication:01" in rec["called"], "call: page 関数を呼んで ret を返す"),
         (R["fields"]["n"] == 3 and "kubun:SELECT[2]" in R["fields"]["names"], "field_dump: name:TAG[選択肢数]"),
         (sorted(R["handlers"]["fns"]) == ["onAddRow", "onSave", "onUpdate"], "handler_dump: 関数名だけを重複なく"),
+        (R["frames"]["n"] == 2 and R["frames"]["frames"][1]["forms"] == ["shinsei_form"]
+         and R["frames"]["frames"][1]["len"] > 0, "frame_probe: frame 数 / 本文長 / form 名で main を同定できる"),
     ]
     return [msg for ok, msg in want if not ok]
+
+
+# ------------------------------------------------------------------ 新サイト着手 (採取)
+def probe_steps(url: str = "", frame: str = "window", form: str | None = None) -> list[dict]:
+    """**新しいサイトに降りるときの採取 step 列** — 台帳 1 枚を 1 往復で埋めるための定形。
+
+    ladder ([`machine-route-first.md#route-ladder`]) を降りて「画面しか無い」 と確定した後、
+    いきなり操作を書き始めるのではなく、 まずこれを流して **frame 構造 / 画面 API / field 名 /
+    内部 endpoint / 語彙** を採る。 ⑤⑥ で endpoint が見えたら段 4 (replay) へ昇格でき、
+    画面 driver を書かずに済むことがある (= 降りすぎの防止)。
+    """
+    c = Ctx(frame=frame, form=form)
+    return [
+        step("① ログイン", human=f"pane で {url or '対象 URL'} を開き、 **user が** ID/PW を打つ (agent は打たない)"),
+        step("② frame 構造", js=c.js_frame_probe(),
+             human="frameset なら本文のある frame の index を控える → 以後 Ctx(frame='window.frames[<i>]')"),
+        step("③ 画面 API", js=c.js_handler_dump(),
+             human="保存 / 行追加 / 遷移らしき関数名を台帳へ。 引数付きなら literal 一致で狙う"),
+        step("④ field 名", js=c.js_field_dump(),
+             human="`name:TAG/type[選択肢数]` をそのまま台帳へ (値は出ない = 個人情報を持ち出さない)"),
+        step("⑤ 内部 endpoint の捕捉", js=js_capture_xhr(),
+             human="この後 **UI で対象操作を 1 回だけ・冪等な値で** 実行する (推測で endpoint を組まない)"),
+        step("⑥ 捕捉結果", js=js_capture_xhr_read(),
+             human="method / URL / body の key 名が出れば段 4 (endpoint replay) へ昇格 = 画面 driver 不要"),
+        step("⑦ 語彙", js=c.js_readback("", saved=""),
+             human="保存成功の文言とエラー語を実物で確認し、 readback の saved= / words= を決める"),
+    ]
 
 
 # ------------------------------------------------------------------ selftest
@@ -489,7 +541,8 @@ def _selftest() -> int:
     # 6. JS 構文検査が実際に走る (node が見つからないなら理由を返す = 黙って通さない)
     allj = [frameset.js_fill({"a": "1"}), frameset.js_select_by_label("n", "l"), frameset.js_readback("x", saved="y"),
             frameset.js_nav("/a.do"), frameset.js_call("f('1')"), frameset.js_call_href("onSave"), frameset.js_click("onAdd"),
-            frameset.js_text(), frameset.js_field_dump(), frameset.js_handler_dump(), plain.js_fill({"a": "1"}),
+            frameset.js_text(), frameset.js_field_dump(), frameset.js_handler_dump(), frameset.js_frame_probe(),
+            plain.js_fill({"a": "1"}),
             plain.js_select_by_label("n", "l"), plain.js_field_dump(), js_capture_xhr(), js_capture_xhr_read(),
             frameset.js_call_href("onUpdate('X','1','00061'", ret="resume", literal=True),
             frameset.js_click("onEdit('r7',2", ret="edit", literal=True),
@@ -513,6 +566,11 @@ def _selftest() -> int:
     md = render_md("t", [step("a", js="1", wait=2), step("b", human="人間")])
     chk("⏱2s" in md and "🙋 人間" in md, "render_md")
 
+    # 9b. 採取 step 列そのものが不変条件を満たす
+    pst = probe_steps("https://example.invalid/app", frame="window.frames[1]", form="f")
+    chk(len(pst) == 7 and all(x.get("human") for x in pst), "probe_steps: 7 段すべてに人間向けの指示がある")
+    chk(not audit_steps(pst), "probe_steps: audit を通る")
+
     # 10. 生成した JS を stub DOM 上で実際に走らせる (構文が通る ≠ 意図どおり動く)
     fails = _behavior_test()
     for msg in fails:
@@ -523,6 +581,30 @@ def _selftest() -> int:
     return 1 if bad else 0
 
 
+def _main() -> int:
+    import argparse
+    ap = argparse.ArgumentParser(description="site 非依存の web driver harness")
+    ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--probe", action="store_true", help="新サイト採取の step 列を出す")
+    ap.add_argument("--url", default="", help="--probe: 対象 URL (表示用)")
+    ap.add_argument("--frame", default="window", help="--probe: 対象 window の JS 式")
+    ap.add_argument("--form", default=None, help="--probe: document.<form> の name (無ければ name/id 検索)")
+    ap.add_argument("--out", help="--probe: steps.json の出力先")
+    a = ap.parse_args()
+    if a.selftest:
+        return _selftest()
+    if a.probe:
+        steps = probe_steps(a.url, a.frame, a.form)
+        probs = audit_steps(steps)
+        if a.out:
+            Path(a.out).write_text(json.dumps({"probe": a.url, "steps": steps}, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(render_md("probe " + (a.url or "(新サイト)"), steps, probs or None))
+        print("→ ② の結果で frame を決め、 ③④ を台帳に写し、 ⑤⑥ が実れば段 4 へ。")
+        print("   規約 = claude-config/conventions/web-form-automation.md#step-driver-harness")
+        return 1 if probs else 0
+    print(__doc__.split("\n\n")[0])
+    return 0
+
+
 if __name__ == "__main__":
-    sys.exit(_selftest() if "--selftest" in sys.argv else
-             (print(__doc__.split("\n\n")[0]) or 0))
+    sys.exit(_main())
