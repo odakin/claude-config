@@ -1511,6 +1511,30 @@ else
     fi
 fi
 
+# --- 8b. Install prepare-commit-msg stub (Claude-Session trailer) on all repos ---
+echo ""
+echo "=== Step 8b: Installing prepare-commit-msg stubs (Claude-Session trailer) ==="
+# 並列 Claude session が同じ working tree を触ると commit author が全 commit で同一人物に
+# 潰れ、 「どの commit がどの session か」 が git から復元できない (= staging window race の
+# 事後追跡が transcript 漁りと記憶になる)。 commit message の trailer に session id を 1 行
+# 足して機械抽出可能にする。 host / account は書かない (= 公開面に機器名を晒す経路を増やさ
+# ないため。 設計理由は scripts/prepare-commit-msg-session.sh の header が正本)。
+# Step 8 と違い marker を要求しない = 全 repo 対象 (private repo でこそ効く)。
+INSTALLER_SESSION="$SCRIPT_DIR/scripts/install-session-trailer.sh"
+if [ ! -x "$INSTALLER_SESSION" ]; then
+    echo "  WARNING: session-trailer installer not found or not executable: $INSTALLER_SESSION"
+else
+    SESSION_COUNT=0
+    for d in "$CLAUDE_DIR"/*/; do
+        [ -d "$d.git" ] || continue
+        if "$INSTALLER_SESSION" "${d%/}" >/dev/null 2>&1; then
+            SESSION_COUNT=$((SESSION_COUNT + 1))
+        fi
+    done
+    echo "  Installed prepare-commit-msg stubs in $SESSION_COUNT repo(s)."
+    echo "  Opt-out per repo: git config claude.sessionTrailer false"
+fi
+
 # --- 9. Install python-docx XML declaration auto-patch (Word「破損」回避) ---
 echo ""
 echo "=== Step 9: Installing python-docx declaration auto-patch ==="

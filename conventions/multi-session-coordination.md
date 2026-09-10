@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき
 category: harness-core
-summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
+summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**起きた後の追跡は commit の `Claude-Session:` trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
 -->
 # Multi-session coordination — 同 user の並列 AI session が race する
 
@@ -64,6 +64,16 @@ Read it again before attempting to write it.
   - **防御 1 (最強) = `git commit -- <path>...` で index を経由しない** (2026-09-10 追加、 scratch repo の実験で確認)。 partial commit は **HEAD + 指定 path の working tree** から commit を作り、 index に居る他 file を巻き込まない。 実測 4 点: ① 相手が `git add B` 済でも `git commit -- A` は **A だけ**を commit ② **pre-commit hook が見る `git diff --cached` も A だけ** (= 一時 index が使われる。 相手の壊れた / 書き込み途中の file で自分の gate が落ちる事故も同時に消える) ③ B は staged のまま、 working tree も無傷 (= 相手に害が無い) ④ 対照の通常 `git commit` は B を巻き込む (= race の再現)。 ⚠️ **untracked (新規) file は指定できない** (`did not match any file(s) known to git`) — 新規は `git add <file> && git commit -m ... -- <paths>` と**同じコマンド行**に置く。
   - **防御 2 = 編集と commit の間に時間を空けない**。 検証 (test / 出力確認 / lint) は **commit の後**に回す — 壊れていたら追加 commit で直せるが、 空けた時間は取り返せない。 防御 1 が使えない場合 (= 新規 file が多い / repo 全体を 1 commit にしたい) はこれが残る唯一の手。 `git add -p` の hunk 単位 staging は巨大 file や git-crypt file では実用にならない。
   - **巻き込んだ側の事後責務**は上の 2026-07-25 と同じ (= 通知 + 明示)。 ⚠️ **push 済みなら history を書き換えない** — 相手が同じ branch で作業中の force push は、 濁った attribution より高くつく。
+
+- <a id="session-provenance-trailer"></a>**事後追跡 = commit message の trailer に session id を焼く** (2026-09-10 追加) — 上の防御は「巻き込みを起こさない」 側で、 **起きてしまった後に読み解く**手段が別に要る。 並列 session の commit は author が全部同じ人間に潰れる (= git は「誰の hunk か」 を保持しない) ため、 事故の再構成が transcript 漁りと記憶になる。 `prepare-commit-msg` hook で 1 行足すと機械的に読める:
+
+      Claude-Session: <CLAUDE_CODE_SESSION_ID>
+
+  - **読み方**: `git log --format='%h %(trailers:key=Claude-Session,valueonly)'` で commit ⇄ session の対応表。 巻き込みが疑われる commit を `git log -S '<消えた文字列>'` で特定したら、 その commit の session id が「吸った側」 で、 自分の id と違えば race が確定する。 session id は transcript の file 名でもある (`~/.claude*/projects/<slug>/<session-id>.jsonl`) ので、 **commit → その commit を書いた会話**の逆引きも通る (= commit message が薄くても意図を復元できる)。
+  - **host / account / surface は書かない**。 session id から transcript を引けば冒頭の自己同定 stamp に載っており、 commit に焼くと公開 repo で機器名 (しばしば人名を含む) を晒す経路が 1 本増えるだけ ([multi-account-machine-surface.md](multi-account-machine-surface.md) I7 = 公開面には具体値でなく属性で書く)。 この判断の副産物として public / private の出し分けが不要になり、 **出し分けの設定ミスで漏れるという事故の型そのものが消える** (= 全 repo で同一挙動)。
+  - **これは carrier の記録であって帰属ではない**。 trailer が言うのは「どの経路を通って commit されたか」 だけで、 内容を決めたのは通常 human である。 commit author を判断主体と等値しない規律をそのまま適用する ([actor-attribution.md](actor-attribution.md))。
+  - **no-op になる条件が有用な signal**: env `CLAUDE_CODE_SESSION_ID` が無ければ何も足さないので、 **trailer の無い commit = AI session を経由していない**と読める。 既に同 key があれば追記しない (= amend / rebase / cherry-pick で増殖せず、 最初に書いた session が残る)。
+  - 実装 = [`scripts/prepare-commit-msg-session.sh`](../scripts/prepare-commit-msg-session.sh) (正本・設計理由も header) + `scripts/install-session-trailer.sh` (全 repo に stub 配置) + `setup.sh` Step 8b。 repo 単位の opt-out = `git config claude.sessionTrailer false`。 fail-open (= 何が起きても commit を止めない)。
 
 ### Anti-pattern
 
