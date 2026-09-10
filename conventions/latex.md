@@ -871,6 +871,14 @@ python3 scripts/latex-pdf-audit.py paper.pdf --log paper.log --render-dir review
 
 出力の `visual_review: required` は機械検査後も残る。生成された PNG を開き、変更箇所と周辺の切れ・重なり・改頁を確認してから報告する。既存 PNG を上書きしないため、再検査時は新しい出力 directory を指定する。
 
+### <a id="visual-verification-intensity"></a>成果物の種類で視覚検査の強度を分ける
+
+**論文・ノートの通常編集**では、ビルドと log・font 検査に加え、変更箇所と改頁の影響を受けたページを目視すればよい。全ページの画像 hash や pixel-by-pixel 一致は既定にしない。本文が変われば一致しないのが当然で、無関係な全ページ比較は検査コストだけを増やす。
+
+**既存様式への記入**（申請書、Word/Excel/PDF template、帳票、overlay）では、欄・罫線・改頁・既存文字を動かしていないこと自体が受入条件なので、基準版との pixel 比較を使う。論文でも renderer・font・生成経路の移行後に版面同値性を証明する場合、または並行生成で PDF の出所が不明になり同じ source の二つの出力を照合する場合に限り、全ページ比較を追加してよい。通常の source/PDF 対応は隔離ビルド、入力 hash、完了した log で確立し、全ページ画像比較を代用にしない。
+
+origin: 2026-09-11、論文の通常改稿で固定様式向けの全ページ画像照合を流用し、検査が過剰になった事例から区別を明文化。
+
 
 ## <a id="pdf-visual-verification"></a>PDF 視覚検証 reflex: compile success + log no-error だけで完了としない
 
