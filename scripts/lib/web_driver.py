@@ -345,6 +345,103 @@ def diff_readback(expected: dict, actual: dict, path: str = "") -> list[str]:
     return out
 
 
+# ------------------------------------------------------------------ 挙動テスト (node + stub DOM)
+_STUB = r"""
+const rec = {clicked: [], evaled: [], changed: [], called: [], nav: null};
+const mk = (name, tag, extra) => Object.assign(
+  {name, tagName: tag, type: tag === 'INPUT' ? 'text' : undefined, value: '',
+   dispatchEvent(e) { rec.changed.push(this.name + ':' + e.type); return true; }}, extra || {});
+const elems = [mk('a.b', 'INPUT'), mk('kubun', 'SELECT', {options: [
+  {value: '1', text: '基盤研究（Ｃ）'}, {value: '2', text: 'その他'}]}), mk('memo', 'TEXTAREA')];
+elems.forEach(e => { elems[e.name] = e; });
+const anchor = (attrs, tag) => ({
+  getAttribute: k => (k in attrs ? attrs[k] : null),
+  click() { rec.clicked.push(tag); }});
+const anchors = [
+  anchor({href: "javascript:onSave('a','1')"}, 'save'),
+  anchor({onclick: "onAddRow(this,0)"}, 'add'),
+  anchor({href: "javascript:onUpdate('20260908231617499','1','00061')"}, 'update')];
+const doc = {
+  shinsei_form: {elements: elems},
+  body: {innerText: '一時保存が完了しました\n 合計 21％ \n 入力できません（桁数） '},
+  querySelectorAll: sel => (sel.charAt(0) === 'a' ? anchors : (sel.indexOf('input') === 0 ? elems : [])),
+  getElementById: () => null};
+const F = {document: doc, eval: src => { rec.evaled.push(src); },
+  onInputApplication(c) { rec.called.push('onInputApplication:' + c); },
+  onTransientSaveWithUpload() { rec.called.push('save'); },
+  onCalculateWithUpload() { rec.called.push('calc'); },
+  location: {pathname: '/app/menu.do', set href(v) { rec.nav = v; }, get href() { return rec.nav; }},
+  Event: function (t) { this.type = t; }};
+globalThis.window = {frames: [null, F], document: doc,
+  location: F.location, XMLHttpRequest: function () {}, fetch: function () {}};
+globalThis.window.XMLHttpRequest.prototype = {open() {}, send() {}};
+const R = {};
+"""
+
+
+def _behavior_test() -> list[str]:
+    """生成した JS を stub DOM 上で実際に走らせ、 返り値と副作用を検査する。
+
+    「構文が通る」 と「意図どおり動く」 は別 — 特に element 不在時に throw しない契約は
+    実行しないと確かめられない。 node が無ければ理由を返す (黙って通さない)。
+    """
+    node = find_node()
+    if not node:
+        return ["SKIP: node が無いので挙動テスト未実施"]
+    c = Ctx(frame="window.frames[1]", form="shinsei_form")
+    cases = {
+        "fill":        c.js_fill({"a.b": "X", "kubun": "1", "nope": "1"}, dispatch=["kubun"]),
+        "select_ok":   c.js_select_by_label("kubun", "基盤研究(Ｃ)"),   # 半角括弧の SoT 表記でも当たる
+        "select_ng":   c.js_select_by_label("kubun", "存在しない種目"),
+        "select_miss": c.js_select_by_label("unknown", "x"),
+        "click_ok":    c.js_click("onAddRow", ret="add"),
+        "click_miss":  c.js_click("onNothing", ret="add"),
+        "href_ok":     c.js_call_href("onSave", ret="save"),
+        "href_lit":    c.js_call_href("onUpdate('20260908231617499'", ret="resume", literal=True),
+        "href_miss":   c.js_call_href("onAbsent"),
+        "readback":    c.js_readback(r"合計 \d+％", saved="一時保存が完了しました"),
+        "nav":         c.js_nav("/app/next.do"),
+        "call":        c.js_call("onInputApplication('01')", ret="01"),
+        "fields":      c.js_field_dump(),
+        "handlers":    c.js_handler_dump(),
+    }
+    src = _STUB + "".join("R[%s]=%s;\n" % (J(k), v) for k, v in cases.items())
+    src += "R.__rec=rec;console.log(JSON.stringify(R));"
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+        fh.write(src)
+        path = fh.name
+    try:
+        r = subprocess.run([node, path], capture_output=True, text=True, timeout=60)
+    finally:
+        os.unlink(path)
+    if r.returncode:
+        return ["挙動テストが落ちた: " + (r.stderr.strip().splitlines() or ["?"])[-1]]
+    R = json.loads(r.stdout)
+    rec = R["__rec"]
+    want = [
+        (R["fill"] == {"set": 2, "missing": ["nope"]}, "fill: 2 件 set / 不在 1 件は missing (throw しない)"),
+        (rec["changed"] == ["kubun:change"], "fill: dispatch 指定の field だけ change が飛ぶ"),
+        (R["select_ok"] == {"ok": "1"}, "select: 全角/半角括弧の差を吸収して当てる"),
+        (R["select_ng"].get("nomatch") == "存在しない種目" and len(R["select_ng"].get("options", [])) == 2,
+         "select: 不一致は nomatch + 実際の選択肢を返す (台帳を直す材料)"),
+        (R["select_miss"] == {"missing": "unknown"}, "select: field 不在は missing"),
+        (R["click_ok"] == "add" and "add" in rec["clicked"], "click: onclick 一致で click される"),
+        (R["click_miss"] == {"missing": "onNothing"}, "click: 不在は missing (throw しない)"),
+        (R["href_ok"] == "save" and any("onSave" in e for e in rec["evaled"]), "call_href: href を eval する"),
+        (R["href_lit"] == "resume" and any("20260908231617499" in e for e in rec["evaled"]),
+         "call_href(literal): 引数付き handler を部分一致で狙える"),
+        (R["href_miss"] == {"missing": "onAbsent"}, "call_href: 不在は missing (旧実装は throw していた)"),
+        (R["readback"]["saved"] is True and R["readback"]["hit"] == "合計 21％"
+         and len(R["readback"]["errs"]) == 1 and R["readback"]["errs"][0].startswith("できません"),
+         "readback: saved / hit / errs を同時に取る (errs はエラー語を先頭に切り出す)"),
+        (rec["nav"] == "/app/next.do", "nav: location.href に代入される"),
+        (R["call"] == "01" and "onInputApplication:01" in rec["called"], "call: page 関数を呼んで ret を返す"),
+        (R["fields"]["n"] == 3 and "kubun:SELECT[2]" in R["fields"]["names"], "field_dump: name:TAG[選択肢数]"),
+        (sorted(R["handlers"]["fns"]) == ["onAddRow", "onSave", "onUpdate"], "handler_dump: 関数名だけを重複なく"),
+    ]
+    return [msg for ok, msg in want if not ok]
+
+
 # ------------------------------------------------------------------ selftest
 def _selftest() -> int:
     bad = 0
@@ -415,6 +512,12 @@ def _selftest() -> int:
     # 9. render_md
     md = render_md("t", [step("a", js="1", wait=2), step("b", human="人間")])
     chk("⏱2s" in md and "🙋 人間" in md, "render_md")
+
+    # 10. 生成した JS を stub DOM 上で実際に走らせる (構文が通る ≠ 意図どおり動く)
+    fails = _behavior_test()
+    for msg in fails:
+        chk(False, "挙動: " + msg)
+    chk(not fails, f"挙動テスト (node + stub DOM): {'全項目 pass' if not fails else str(len(fails)) + ' 件 fail'}")
 
     print("selftest", "OK" if not bad else f"FAIL ({bad})")
     return 1 if bad else 0
