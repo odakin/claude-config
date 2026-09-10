@@ -2,6 +2,30 @@
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-10 — 事務の赤入れを機械で先回りする 3 script + 「黙って消える」削除への防御
+
+owner の科研費 session (別 repo が主戦場) から、層1 に上がった分。過去 4 年の赤入れ 16 件を
+読んだら**同じ指摘を毎年受けていた**ので、年に依らない部分を機械化した。
+
+- **`kakenhi-preflight.py`** — 様式 docx と組み上がり PDF を突き合わせ、機関事務の指摘類型を
+  提出前に拾う。⚠️ **値を持たない** (「誰の機関コードが何番か」は本 script の観客にとって
+  true でない) ので `--identity` で受ける。公開情報かどうかは層の判定に無関係。
+  `--strict` + `--ack` = 🟠 も「直す」か「理由を書く」まで通さない (実害はどちらも 🟠 相当だった)。
+- **`check-doc-truncation.py`** — 台帳 doc の切り詰めを git 高水位で検出。閾値は比例
+  (固定値だと大きい doc で誤検出)、git-crypt は `cat-file --filters`、cache で 41s→1.1s。
+  初手柄 = **自分が pointer 化のついでに消した表**を、手作業の復元より正確に検出した。
+- **`check-markup-artifacts.py`** — 他人が紙に書き込んで返す物 (事務の赤入れ / 査読の校正 /
+  契約書) は**スキャンで text 層を持たず grep に掛からない**。file 単位の台帳を正本にし、
+  現物の側から台帳の穴を突く。⚠️ 1 頁目だけ見ない (後半にしか書き込みが無い物を実際に取り逃した)。
+- **`conventions/kakenhi-proposal.md`** — `#drafting-entry-point` (起草の入口) を新設。
+  ⚠️ 実務規律の多くが「差し戻しループ」節に埋まっていて**書くときに届いていなかった**。
+  他に `#form-template-integrity` / `#keihi-meisai-expense-category` / `#identity-code-verification`、
+  指摘類型を 5 → 12 に。🔴 **呼び出し口は 2 つ以上持つ** (1 経路だと年が替わって静かに失効する)。
+
+一般則として効いたもの: **前年の指摘を読み返すのが最も安い予防策** (対処法まで書いてもらって
+いたのに翌年また同じ箇所を落としていた) / **要求項目は年ごとに増える**ので「去年と同じでよい」
+は成り立たない / **捨てた情報は検査できない** (誤りと確定した旧値も消さずに残す)。
+
 ## 2026-09-10 — commit に session id の trailer を焼く (並列 session の事後追跡)
 
 owner の質問「コミットやプッシュのとき、 どのセッションがしたかも書いとくといいことある?」 から。
