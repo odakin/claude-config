@@ -142,9 +142,24 @@ def die(msg: str) -> "NoReturn":          # noqa: F821 — docstring の終了�
     sys.exit(2)
 
 
+# PDF テキスト抽出は約物を字形の近い別コードに落とすことがある (埋め込み font 依存)。
+# NFKC はこれらを同一視しないので、比較の前に代表字へ畳む。
+# 実測: 中黒「・」(U+30FB) が「·」(U+00B7) として抽出され、様式の文と一致しなかった。
+_PUNCT_FOLD = str.maketrans({
+    "·": "・", "•": "・", "･": "・", "‧": "・",          # 中黒の変種
+    "〜": "~", "～": "~",                                  # 波ダッシュ
+    "－": "-", "−": "-", "–": "-", "—": "-", "‐": "-", "―": "-",   # ダッシュ/ハイフン
+    "’": "'", "‘": "'", "“": '"', "”": '"',
+})
+
+
 def nfkc(s: str) -> str:
-    """比較用の正規化: NFKC + 空白全除去 (全角/半角・和欧間空白の揺れを吸収)。"""
-    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", s))
+    """比較用の正規化: NFKC + 約物の畳み込み + 空白全除去。
+
+    全角/半角・和欧間空白の揺れに加え、PDF 抽出で起きる約物の字形置換も吸収する
+    (両側に同じ変換を掛けるので、畳み込みで偽一致が増える心配はほぼ無い)。
+    """
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", s).translate(_PUNCT_FOLD))
 
 
 def nbytes(s: str) -> int:
@@ -703,6 +718,10 @@ def selftest() -> int:
         res = check_instruction_residue(form_del, "……概要……本文は 12 ポイントで組んだ……")
         expect("消し忘れ: 消してあれば clean", [c for _, c, _ in res], [],
                forbid=["INSTRUCTION_RESIDUE"])
+        expect("消し忘れ: 約物の字形置換を吸収する (・ → ·)",
+               [c for _, c, _ in check_instruction_residue(
+                   form_del, "以下の内容を熟読·理解の上、研究計画調書を作成すること。")],
+               ["INSTRUCTION_RESIDUE"])
         expect("消し忘れ: 空白の揺れを吸収する",
                [c for _, c, _ in check_instruction_residue(
                    form_del, "本文は 11 ポイント 以上 の 大きさ の 文字等 を 使用すること。")],
