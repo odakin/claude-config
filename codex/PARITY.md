@@ -277,13 +277,14 @@ schema-probes the metadata columns before use. This read-only compatibility path
 does not inspect transcript content and fails safely if the local state schema
 changes.
 
-The active model is a required Codex value because the official hook contract
-supplies it. A new Codex-origin commit stops instead of creating
-`Agent-Model: unknown` when neither source resolves it. Other genuinely
-unavailable values remain literal `unknown`; in particular, a configured
-default must not be presented as the run's effective value. This is
-field-wise: one unavailable field does not suppress the known fields in the
-same provenance record. The general record-design rule is
+The active model is expected because the official hook contract supplies it,
+but hook delivery and local state can still both be unavailable. If neither
+source resolves the model, the Git hook writes `Agent-Model: unknown`, emits a
+warning, and allows the commit to continue. A configured default must not be
+presented as the run's effective value. This is field-wise: one unavailable
+field does not suppress the known fields in the same provenance record, and a
+degraded provenance annotation does not invalidate the underlying commit. The
+general record-design rule is
 [`required-field-fabrication`](../docs/convention-design-principles.md#required-field-fabrication).
 
 `scripts/setup-codex.sh --repo <path>` installs the Git hook in exact,
@@ -305,19 +306,20 @@ fallback remain the commit-path mechanism.
 Live dogfood on 2026-09-11 produced commit `08f0f6d` with a valid Codex session
 but `Agent-Model: unknown`. The same task's exact local thread row contained
 the active model, and the official hook contract also guaranteed that field.
-This proved that model `unknown` was a transport failure, not an honest runtime
-state, and motivated the prompt-time cache, local-state fallback, and blocking
-postcondition above. A fresh task is still required to verify live
+This proved that model `unknown` was usually a transport failure rather than
+the expected healthy state, and motivated the prompt-time cache, local-state
+fallback, and explicit warning above. It did not prove that transport failure
+is impossible, so the warning does not block the commit. A fresh task is still
+required to verify live
 `UserPromptSubmit` delivery; direct fixtures verify the logic in the current
 task.
 
 The repository opt-out is `git config agent.sessionTrailer false`; the legacy
 `claude.sessionTrailer` and `codex.sessionTrailer` keys are also honored. The
-hook remains fail-open for absent session identity and genuinely optional
-fields, but fails closed for a missing active model on a new Codex-origin
-commit. Therefore a missing trailer is not proof of a human-only commit: it can
-also mean absent repository wiring or an unsupported runtime, which the audit
-must distinguish.
+hook remains fail-open. Missing active-model metadata becomes an explicit
+`unknown` plus warning rather than a commit blocker. Therefore a missing
+trailer is not proof of a human-only commit: it can also mean absent repository
+wiring or an unsupported runtime, which the audit must distinguish.
 
 ## Platform scope
 

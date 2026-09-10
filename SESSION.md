@@ -2,7 +2,7 @@
 
 LaTeX の物理レビューで「提案」を PDF の印字・着色と取り違える規約を修正したところ。依頼された本文修正と未確定の提案の扱いは [式の安全規則](conventions/latex.md#equation-safety) に集約した。次の論文編集ではこの節から適用範囲を確認する。以下の Codex 配線の検証再開点は保っている。
 
-Codex の会話開始 stamp と Git trailer で製品名・active model を正常系から落とさないよう、prompt-time cache、exact-session local fallback、Codex model 欠測 block を実装したところ。契約と取得境界は [Git provenance の正本](codex/PARITY.md#git-session-provenance) と [conversation-start stamp の正本](codex/PARITY.md#conversation-start-stamp)、実装と挙動検査は [session provenance](scripts/session_provenance_cache.py)、[Git hook](scripts/prepare-commit-msg-session.sh)、[Codex hook tests](codex/hooks/codex-hooks.test.sh) が所有する。この Mac の生成済み hook 配線を更新し、次の新規 task で live `UserPromptSubmit` cache を end-to-end 観測する。
+Codex の会話開始 stamp と Git trailer で製品名・active model を正常系から落とさないよう、prompt-time cache と exact-session local fallback を実装し、全経路で欠測した場合もwarning付きの縮退記録でcommitを続行するところまで調整した。契約と取得境界は [Git provenance の正本](codex/PARITY.md#git-session-provenance) と [conversation-start stamp の正本](codex/PARITY.md#conversation-start-stamp)、実装と挙動検査は [session provenance](scripts/session_provenance_cache.py)、[Git hook](scripts/prepare-commit-msg-session.sh)、[Codex hook tests](codex/hooks/codex-hooks.test.sh) が所有する。この Mac の生成済み hook 配線を更新し、次の新規 task で live `UserPromptSubmit` cache を end-to-end 観測する。
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 

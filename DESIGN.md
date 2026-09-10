@@ -74,15 +74,14 @@ Bash env `CLAUDE_EFFORT` から取る。Codex の公式 Hook contract は全 com
 `model` を渡すが effort は渡さない。Codex adapter は SessionStart、UserPromptSubmit、PreToolUse でその値を
 machine-local cache に保存し、Git hook は現行 runtime の `CODEX_SESSION_ID` / `CODEX_THREAD_ID`
 compatibility probe または明示 `CLAUDE_CONFIG_AGENT_*` を読む。cache 不在時だけ、同じ session id の
-local thread row を read-only で schema-probe する。config default は actual と偽らない。Codex active model は
-公式に供給される必須値なので、2 経路とも欠ければ `unknown` を捏造せず commit を止める。Codex effort、
-Claude の mid-session model switch 等で actual を確定できない値は、引き続き `unknown` と書く。
+local thread row を read-only で schema-probe する。config default は actual と偽らない。2 経路とも欠けた
+Codex active model は warning 付きの `unknown` として記録し、provenance の縮退だけでは commit を止めない。
+Codex effort、Claude の mid-session model switch 等で actual を確定できない値も同じく `unknown` と書く。
 
-**fail-open の境界**: supported session id が無ければ no-op で、effort 等の optional field は `unknown` を
-残す。例外は新規 Codex provenance の active model で、公式保証・cache・exact-session fallback が全て
-外れた状態を valid record として固定しないため明示的に block する。repo opt-out はこの gate より先に効く。
-trailer 不在は人手 commit だけでなく未導入/未対応 runtime も表し得るため、agent 経由でないことの
-単独証拠には使わない。
+**fail-open を維持する**: supported session id が無ければ no-op で、model/effort が取れなければ `unknown` を
+残す。active model は健康な現行経路なら取得できるため欠測をwarningするが、hook無効化・未対応経路・local
+state schema drift まで不可能とは言えず、provenance annotation の欠測はcommit本体の不正を意味しない。
+trailer 不在は人手 commit だけでなく未導入/未対応 runtime も表し得るため、agent経由でないことの単独証拠には使わない。
 
 ## <a id="codex-layered-integration"></a>2026-09-01: Codex integration — L1 正本 + 明示 L4 wiring + 多層検証
 

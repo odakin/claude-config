@@ -63,11 +63,8 @@
 # 最優先し、SessionStart/PreToolUse adapter の machine-local cache を次に読む。Claude
 # effort は公式の Bash env CLAUDE_EFFORT から effective 値を取得する。Codex model
 # は公式 hook cache、次に session id と完全一致する local thread metadata を読む。
-# 両方で取れなければ新規 Codex commit を中止し、誤った `unknown` を焼かない。
-# その他の取得不能値は捏造せず literal `unknown` を書く。
-#
-# fail-open の例外: 新規 Codex provenance の active model だけは公式に供給される必須値
-#   なので、cache と local thread metadata の両方から欠けた時は明示的に exit 1。
+# 両方で取れなければ警告した上で literal `unknown` を書く。config default で
+# 穴埋めせず、provenance の縮退をcommit停止と同一視しない。
 #
 # selftest: prepare-commit-msg-session.test.sh (run-all-checks.sh が自動発見)
 
@@ -194,9 +191,8 @@ if ! printf '%s\n' "$EFFORT" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
     EFFORT="unknown"
 fi
 if [ -z "$ORIGINAL_AGENT_SESSION" ] && [ "$AGENT" = "codex" ] && [ "$MODEL" = "unknown" ]; then
-    echo "prepare-commit-msg: active Codex model metadata is missing for session $SESSION_ID; refusing to create Agent-Model: unknown" >&2
-    echo "Restart or trust the Codex hooks, or pass the verified active slug through CLAUDE_CONFIG_AGENT_MODEL." >&2
-    exit 1
+    echo "prepare-commit-msg: warning: active Codex model metadata is unavailable for session $SESSION_ID; writing Agent-Model: unknown" >&2
+    echo "Check Codex hook trust/state when practical; do not substitute a configured default for the active model." >&2
 fi
 
 # --if-exists doNothing = 同 key の trailer が既にあれば git 側で no-op。

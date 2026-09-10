@@ -17,9 +17,9 @@ the literal product identity `Codex` and preserve `unknown` fields rather than
 guessing account or surface.
 Before a Codex-origin commit, verify the managed provenance hook described in
 `codex/PARITY.md#git-session-provenance`; the commit must record
-`Agent-Session`, `Agent-Model`, and `Agent-Effort`. The active Codex model must
-not be `unknown`; repair a blocked metadata path instead of bypassing it. Other
-values the runtime cannot establish remain `unknown`. Push after the commit.
+`Agent-Session`, `Agent-Model`, and `Agent-Effort`. Use the active model when a
+verified runtime path supplies it; otherwise retain literal `unknown` and the
+warning rather than guessing or blocking the commit. Push after the commit.
 
 For SESSION updates and handoff, follow
 `CONVENTIONS.md#auto-update-protocol` and

@@ -204,7 +204,7 @@ SESSION_PROVENANCE_REQUIREMENTS = {
         "CODEX_SESSION_ID",
         "Agent-Model",
         "Agent-Effort",
-        "refusing to create Agent-Model: unknown",
+        "writing Agent-Model: unknown",
     ),
     "scripts/session_provenance_cache.py": ("codex_thread_metadata", "PRAGMA query_only"),
     "codex/hooks/resume_context.py": ("build_stamp", "first user-visible reply"),

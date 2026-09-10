@@ -10,10 +10,10 @@ For Git work, fetch first when a remote exists, inspect the project
 instructions and `SESSION.md`, and preserve the project's own instructions.
 Before a Codex-origin commit, verify the repository's managed provenance hook;
 the commit must carry `Agent-Session`, `Agent-Model`, and `Agent-Effort`.
-`Agent-Model` must be the active Codex model and must not be `unknown` on a new
-Codex commit; repair the metadata path if the hook blocks it. Other unavailable
-fields use literal `unknown` rather than a guessed value. Install or audit the
-hook through the `claude-config-conventions` route and
+Use the active Codex model when available. If all verified runtime paths fail,
+keep literal `unknown` and the hook warning rather than guessing from a default
+or blocking the commit. Install or audit the hook through the
+`claude-config-conventions` route and
 `codex/PARITY.md#git-session-provenance`, then push after the commit.
 Use the `claude-config-conventions` skill when installing, updating, auditing,
 or extending this Codex integration.

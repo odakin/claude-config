@@ -205,11 +205,11 @@ if ( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CONFIG_AGENT_MODEL CLAUDE_CONFIG_A
 else
     rc=$?
 fi
-if [ "$rc" -ne 0 ] && [ "$(cat "$f")" = "subject line" ] \
-   && grep -q 'active Codex model metadata is missing' "$WORK/m8-missing.err"; then
-    ok "11b. Codex model 不明 → Agent-Model: unknown を作らず block"
+if [ "$rc" -eq 0 ] && grep -qx 'Agent-Model: unknown' "$f" \
+   && grep -q 'active Codex model metadata is unavailable' "$WORK/m8-missing.err"; then
+    ok "11b. Codex model 不明 → warning + Agent-Model: unknown で続行"
 else
-    ng "11b. Codex model 不明 → Agent-Model: unknown を作らず block" \
+    ng "11b. Codex model 不明 → warning + Agent-Model: unknown で続行" \
       "rc=$rc message=$(cat "$f") error=$(cat "$WORK/m8-missing.err")"
 fi
 
