@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき
 category: harness-core
-summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**起きた後の追跡は commit の `Claude-Session:` trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
+summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**生成物の再生成はその防御を貫通する (#generated-file-contamination)**、**起きた後の追跡は commit の `Claude-Session:` trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
 -->
 # Multi-session coordination — 同 user の並列 AI session が race する
 
@@ -64,6 +64,10 @@ Read it again before attempting to write it.
   - **防御 1 (最強) = `git commit -- <path>...` で index を経由しない** (2026-09-10 追加、 scratch repo の実験で確認)。 partial commit は **HEAD + 指定 path の working tree** から commit を作り、 index に居る他 file を巻き込まない。 実測 4 点: ① 相手が `git add B` 済でも `git commit -- A` は **A だけ**を commit ② **pre-commit hook が見る `git diff --cached` も A だけ** (= 一時 index が使われる。 相手の壊れた / 書き込み途中の file で自分の gate が落ちる事故も同時に消える) ③ B は staged のまま、 working tree も無傷 (= 相手に害が無い) ④ 対照の通常 `git commit` は B を巻き込む (= race の再現)。 ⚠️ **untracked (新規) file は指定できない** (`did not match any file(s) known to git`) — 新規は `git add <file> && git commit -m ... -- <paths>` と**同じコマンド行**に置く。
   - **防御 2 = 編集と commit の間に時間を空けない**。 検証 (test / 出力確認 / lint) は **commit の後**に回す — 壊れていたら追加 commit で直せるが、 空けた時間は取り返せない。 防御 1 が使えない場合 (= 新規 file が多い / repo 全体を 1 commit にしたい) はこれが残る唯一の手。 `git add -p` の hunk 単位 staging は巨大 file や git-crypt file では実用にならない。
   - **巻き込んだ側の事後責務**は上の 2026-07-25 と同じ (= 通知 + 明示)。 ⚠️ **push 済みなら history を書き換えない** — 相手が同じ branch で作業中の force push は、 濁った attribution より高くつく。
+
+- <a id="generated-file-contamination"></a>**生成物の再生成は、 防御 1 を貫通して相手の未 commit 変更を自分の commit に混ぜる** (2026-09-10 追加) — index を経由しない `git commit -- <path>` (= 防御 1) が守るのは「自分が触っていない **file**」 まで。 ところが `<generator> --write` 型の再生成は **source 群を全部読んで生成物を作り直す**ので、 相手が source (= doc の front-matter / data yaml / template) を未 commit で編集していると、 **その内容が生成物に入り、 自分の path として commit される**。 混入は自分の path の中で起きるので防御 1 の射程外。
+  - **検査 = 生成物を commit する前に `git diff <生成物>` を読み、 自分が変えた source 由来の行だけかを確認する** (= 生成物は「再生成したから正しい」 ではない。 1 行ずつ読める規模でないなら、 先に相手の作業が落ち着くまで待つか、 source 側の commit だけ先に出す)。
+  - 実例 2026-09-10: 層1 convention に 1 節足して index 生成 script を `--write` した際、 同 repo に別 session の未 commit 変更 (= `setup.sh` +24 行 + 未 tracked script 3 本) が居た。 生成物の diff を読んで自分の 1 行だけと確認できたので実害は無かったが、 相手が同じ生成物の source を触っていれば黙って混ざっていた。
 
 - <a id="session-provenance-trailer"></a>**事後追跡 = commit message の trailer に session id を焼く** (2026-09-10 追加) — 上の防御は「巻き込みを起こさない」 側で、 **起きてしまった後に読み解く**手段が別に要る。 並列 session の commit は author が全部同じ人間に潰れる (= git は「誰の hunk か」 を保持しない) ため、 事故の再構成が transcript 漁りと記憶になる。 `prepare-commit-msg` hook で 1 行足すと機械的に読める:
 
