@@ -21,6 +21,7 @@
   🔴 SKELETON_LOST     様式が「削除することなく」等で明示保護した欄の label が PDF に無い
   🟠 SKELETON_MISSING  その他の pre-printed 見出し・表ラベルが PDF に無い
   🔴 INSTRUCTION_RESIDUE 様式が「提出時に削除せよ」と言った注意書きが提出版に残っている
+  🟠 BLANK_SECTION_FILLED 様式が「空欄のまま提出」と指定した欄に書いてしまっている
   🟠 COLORED_TEXT      提出版 PDF に有彩色の文字 (記入要領の色字 / 著者注の消し忘れ)
                        ⚠️ --pdf に渡してよいのは **提出物そのもの** だけ。公募要領・論文・見積書
                        等の参考資料に当てても意味がない (色は最初から意味を持っている)。
@@ -85,6 +86,10 @@ PROTECTED_MARKERS = ("削除することなく", "削除しないこと", "動�
 # (2026-06 LOTUS: 事務が削除を求めた記入要領が提出版に残り、2 度の検証をすり抜けた)。
 DROP_MARKERS = ("このテキストボックスごと削除", "本留意事項の内容を十分に確認")
 DELETE_MARKERS = ("削除すること", "削除の上", "提出時に削除", "削除してください", "を削除")
+# 様式が「該当しなければ**空欄で出せ**」と言っている印。⚠️ 別の欄では逆に「その旨記述せよ」
+# と言うので、欄ごとに読む必要がある (2024 実測: 空欄指定の欄に「該当しない。」と書いて
+# 「トル / 空欄のまま提出するため」と赤字)。
+BLANK_MARKERS = ("空欄のまま提出", "空欄で提出", "空欄のまま")
 # 番号付き大見出し: 「２　応募者の研究遂行能力及び研究環境」「４ 研究計画最終年度前年度応募…」
 HEADING_RE = re.compile(r"^[0-9０-９]{1,2}[\s　]+\S")
 
@@ -263,17 +268,31 @@ def read_form(path: Path) -> dict:
             section_labels.append(t)
     flush()
 
-    instructions = []
-    for sent in re.split(r"(?<=。)", all_text):
-        sent = sent.strip()
-        if not sent:
-            continue
-        for kw, cat, hint in INSTRUCTION_PATTERNS:
-            if kw in sent:
-                instructions.append((cat, hint, sent[:120]))
-                break
+    # 指示文は **どの欄のものか** を付けて拾う。1 文が複数の義務を負うことがあるので
+    # 先勝ちで break しない (⚠️ 実測: 「削除することなく、空欄のまま提出すること」が
+    # 「削除することなく」 だけに当たり、「空欄のまま提出」 の hint が死にコードになっていた)。
+    instructions: list[tuple] = []
+    blank_sections: list[str] = []
+    section = ""
+    for kind, t in nodes:
+        if kind == "para" and HEADING_RE.match(t):
+            section = t
+        for sent in re.split(r"(?<=。)", t):
+            sent = sent.strip()
+            if not sent:
+                continue
+            for kw, cat, hint in INSTRUCTION_PATTERNS:
+                if kw in sent:
+                    instructions.append((section, cat, hint, sent[:120]))
+            if any(k in sent for k in BLANK_MARKERS) and section:
+                blank_sections.append(section)
+
+    # 空の様式に印字されている全 text node (= これが「在って正常」な文字の全体)。
+    # 空欄判定は「様式に在る文字を引いた残りがあるか」で行う (欄名を焼き込まない)。
+    form_texts = sorted({t for _k, t in nodes if len(t) >= 4}, key=len, reverse=True)
     return dict(headings=headings, cells=cells, protected=sorted(protected_labels),
-                instructions=instructions, delete_sigs=sorted(set(delete_sigs)))
+                instructions=instructions, delete_sigs=sorted(set(delete_sigs)),
+                blank_sections=sorted(set(blank_sections)), form_texts=form_texts)
 
 
 def read_pdf_text(path: Path) -> str:
@@ -384,6 +403,52 @@ def check_colored_text(paths: list[Path]) -> list[tuple]:
             out.append(("🟠", "COLORED_TEXT",
                         f"{path.name}: 有彩色の文字 #{color:06x} × {len(uniq)} 種 "
                         f"(例「{uniq[0][:30]}」) — 記入要領の色字 / 著者注の消し忘れでないか"))
+    return out
+
+
+def check_blank_sections(form: dict, pdf_text: str) -> list[tuple]:
+    """様式が「空欄のまま提出」と指定した欄に、書いてしまっていないか。
+
+    ⚠️ 「該当しない場合」の扱いは**欄ごとに逆**。人権の欄は「その旨記述」= 書く、
+    最終年度前年度応募の欄は「空欄のまま提出」= 書かない。**丁寧に埋めたことが誤りになる**
+    欄があるので、様式のどの文がどの欄を支配しているかを見て判定する
+    (欄名を焼き込まない = 様式が変わっても効く)。
+
+    判定: 当該見出しから次の見出しまでを PDF から切り出し、**様式自身が持つラベル**
+    (研究種目名 / 課題番号 等) を除いた残りに実質的な文字が残っていれば flag。
+    """
+    out = []
+    if not pdf_text or not form.get("blank_sections"):
+        return out
+    hay = nfkc(pdf_text)
+    heads = [(nfkc(h), h) for h in form["headings"]]
+    positions = []
+    for norm, orig in heads:
+        i = hay.find(norm)
+        if i >= 0:
+            positions.append((i, norm, orig))
+    positions.sort()
+
+    # 「在って正常」= 空の様式に印字されている文字すべて (見出し・ラベル・指示書き)。
+    # ⚠️ 短いラベルだけを引くと、様式自身の**指示書き**が残って偽陽性になる (実測)。
+    known = sorted({nfkc(t) for t in form.get("form_texts", [])}
+                   | {nfkc(c) for c in form.get("cells", [])},
+                   key=len, reverse=True)
+    for idx, (start, norm, orig) in enumerate(positions):
+        if orig not in form["blank_sections"]:
+            continue
+        end = positions[idx + 1][0] if idx + 1 < len(positions) else len(hay)
+        region = hay[start + len(norm):end]
+        for kn in known:                      # 様式に在る文字は引く (長い順)
+            if len(kn) >= 4:
+                region = region.replace(kn, "")
+        # 残った断片から、様式の記入枠が持つ定型 (年度表記・記号) を落とす
+        region = re.sub(r"[\s　0-9０-９年度令和～~\-・.,、。()（）「」【】：:]+", "", region)
+        if len(region) >= 4:
+            out.append(("🟠", "BLANK_SECTION_FILLED",
+                        f"様式が「空欄のまま提出」と指定した欄に記述がある: "
+                        f"「{orig[:40]}」 → 「{region[:40]}」 "
+                        f"(⚠️「該当しない」と書くのも誤り。別の欄では逆に書くのが正解)"))
     return out
 
 
@@ -691,12 +756,13 @@ def report(findings: list[tuple], instructions: list[tuple] | None,
     if instructions:
         print("── 様式に埋め込まれた指示 (1 つずつ適用を verify する) " + "─" * 20)
         seen = set()
-        for cat, hint, sent in instructions:
-            key = (cat, hint)
+        for section, cat, hint, sent in instructions:
+            key = (section, cat, hint)
             if key in seen:
                 continue
             seen.add(key)
-            print(f"  ℹ️ [{cat}] {hint}")
+            where = f"{section[:28]} / " if section else ""
+            print(f"  ℹ️ [{where}{cat}] {hint}")
             print(f"     └ 様式: {sent}")
         print()
     today = today or __import__("datetime").date.today().isoformat()
@@ -831,6 +897,28 @@ def selftest() -> int:
             got = _is_chromatic(c)
             expect(f"色: #{c:06x} は {'拾う' if want else 'skip'}",
                    ["ok"] if got == want else [], ["ok"])
+
+        # 「空欄のまま提出」欄に書いてしまう (2024 実測: 「該当しない。」→「トル」)
+        # ⚠️ 欄名は焼き込まない。様式のどの文がどの欄を支配しているかで判定する。
+        form_blank = dict(
+            headings=["３　人権の保護", "４　最終年度前年度応募を行う場合の記述事項", "５　次の欄"],
+            cells=["研究種目名", "課題番号"], protected=[], instructions=[], delete_sigs=[],
+            blank_sections=["４　最終年度前年度応募を行う場合の記述事項"],
+            form_texts=["該当しない場合は記述欄を削除することなく、空欄のまま提出すること。",
+                        "本研究の研究代表者が行っている継続研究課題について記述すること。"])
+        clean_pdf = ("３ 人権の保護\n該当しない。\n"
+                     "４ 最終年度前年度応募を行う場合の記述事項\n"
+                     "本研究の研究代表者が行っている継続研究課題について記述すること。\n"
+                     "研究種目名 課題番号\n５ 次の欄\n")
+        expect("空欄欄: 空のままなら clean",
+               [c for _, c, _ in check_blank_sections(form_blank, clean_pdf)], [],
+               forbid=["BLANK_SECTION_FILLED"])
+        bad_pdf = clean_pdf.replace("研究種目名 課題番号", "研究種目名 課題番号\n該当しない。")
+        expect("空欄欄: 「該当しない」と書いたら 🟠",
+               [c for _, c, _ in check_blank_sections(form_blank, bad_pdf)],
+               ["BLANK_SECTION_FILLED"])
+        expect("空欄欄: 別の欄 (その旨記述) は対象外",
+               [m for _, _, m in check_blank_sections(form_blank, bad_pdf) if "人権" in m], [])
 
         # 記入要領の消し忘れ (2026-06 LOTUS 型): 様式が削除を求めた文が提出版に残る
         form_del = dict(headings=[], cells=[], protected=[], instructions=[],
@@ -1013,9 +1101,13 @@ def main() -> int:
                       protected=[p for f in forms for p in f["protected"]],
                       instructions=[i for f in forms for i in f["instructions"]])
         merged["delete_sigs"] = sorted({d for f in forms for d in f["delete_sigs"]})
+        merged["blank_sections"] = sorted({b for f in forms for b in f["blank_sections"]})
+        merged["form_texts"] = sorted({t for f in forms for t in f["form_texts"]},
+                                      key=len, reverse=True)
         instructions = merged["instructions"]
         findings += check_form_skeleton(merged, pdf_text)
         findings += check_instruction_residue(merged, pdf_text)
+        findings += check_blank_sections(merged, pdf_text)
     for name, t in pdf_texts:
         findings += check_pdf_text(t, name)   # 常に由来を付ける (ack を種目に縛れるように)
     findings += check_colored_text(a.pdf)
