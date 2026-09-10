@@ -11,6 +11,9 @@ or behavior.
 For work inside a Git repository, begin by fetching its remote when one
 exists, checking status, and reading the repository's `AGENTS.md` or
 `CLAUDE.md`. Read `SESSION.md`, when present, before editing.
+At the first reply after startup, resume, or clear, emit the exact best-effort
+identity line specified by `codex/PARITY.md#conversation-start-stamp`; preserve
+`unknown` fields rather than guessing account or surface.
 Before a Codex-origin commit, verify the managed provenance hook described in
 `codex/PARITY.md#git-session-provenance`; the commit must record
 `Agent-Session`, `Agent-Model`, and `Agent-Effort`, with `unknown` for a value

@@ -35,6 +35,10 @@ owner の質問から始まった commit forensics。現在の agent/session/mod
 [Codex/Git provenance の正本](codex/PARITY.md#git-session-provenance)、判断理由は
 [DESIGN](DESIGN.md#session-provenance-trailer-design)、運用規約は
 [`multi-session-coordination`](conventions/multi-session-coordination.md#session-provenance-trailer) を読む。
+
+Codexの会話冒頭自己同定は
+[conversation-start stampの正本](codex/PARITY.md#conversation-start-stamp)へ追加済み。次の新規taskで
+Hook trust後の実表示を確認し、届かなければ同正本のfallback経路を使う。
 - **一般知見を層1 へ hoist** (= 本件固有でなく再利用可能な形):
   [`§8.34`](docs/convention-design-principles.md#context-branch-as-leak-path) = 安全側の出力が context 判定に依存するなら
   **分岐を消せないか先に問う** (marker 付け忘れが唯一の穴になる。 消せる条件 = richer 側が safe 側から導出可能なとき) +

@@ -47,6 +47,17 @@ compaction; the integration boundary is recorded in
 
 ## Machine-local truth
 
+### Session identity stamp
+
+At the first user-visible reply after session startup, resume, or clear, begin
+with the exact one-line identity stamp injected by the SessionStart hook. Keep
+all fields, including literal `unknown`; never infer an account or surface from
+a title, CLI login, or configured default. If the injected stamp is absent,
+make the first tool call `python3 "$HOME/.codex/claude-config-hooks/session_stamp.py"`
+and place its output unchanged at the start of that reply. Do not restamp after
+compaction alone. The source and limits are
+`codex/PARITY.md#conversation-start-stamp`.
+
 A title, prior message, or report from another host is only an observation,
 not this machine's state. Before claiming or acting on a machine-local fact,
 verify it locally (`hostname` and the relevant audit) and state the checked

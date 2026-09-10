@@ -473,11 +473,38 @@ This integration maps only the high-signal, product-neutral subset:
 | Codex event | Managed behavior | Boundary |
 | --- | --- | --- |
 | `PreToolUse(apply_patch)` | Blocks Tier-A structural leak patterns while editing a repository marked public. | Git pre-commit and commit-message gates remain authoritative for all write paths. |
-| `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`, identifies the local hook process's worker host, and caches hook-supplied session/model provenance. | It reads only current hook input and local runtime facts; it does not discover personal-layer data or session history. |
+| `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`, constructs the conversation-start identity stamp, and caches hook-supplied session/model provenance. | It reads only current hook input and local runtime facts; it does not discover personal-layer data or session history. |
 | `PreToolUse(Bash)` | Refreshes the machine-local session/model provenance cache from current hook input. | It emits no decision and neither authorizes nor rewrites the command; the Git hook remains the commit-path mechanism. |
 | `PostToolUse(apply_patch)` + `Stop` | Tracks a touched Git repository in machine-local Codex state and reports unintended dirty worktree state at turn end. | It does not commit or push automatically. |
 
 ## <a id="machine-local-provenance"></a>Machine-local provenance
+
+### <a id="conversation-start-stamp"></a>Conversation-start identity stamp
+
+The first user-visible reply after `startup`, `resume`, or `clear` begins with
+one exact, single-line, best-effort stamp:
+
+```text
+🖥 <host> · <surface|surface unknown> = account unknown · session <id8|unknown> · model <slug|unknown> · effort <level|unknown>
+```
+
+The SessionStart adapter builds this from the local hook process hostname and
+the official Hook `session_id` / `model` fields. Effective effort is used only
+when supplied at runtime or recovered from the session provenance cache.
+Surface is `desktop` only when the current process exposes the observed Codex
+app-tools pipe; that variable is not a stable public contract, so its absence
+is `surface unknown`, not an inference of CLI. The official Hook schema has no
+account or surface field, and the stable public environment-variable list has
+no current-account identity field. Therefore account remains literal
+`account unknown` until a separately verified Codex-native account probe
+exists. Claude CLI authentication or a configured default must never fill it.
+
+`codex/hooks/session_stamp.py` is the deterministic fallback when lifecycle
+context was not delivered. Global instructions require it as the first tool
+call and require its output to lead the first reply unchanged. A compaction
+boundary restores work context but does not restamp. Hook installation and
+model-visible delivery remain separate evidence; a new task after trust review
+is the end-to-end activation test.
 
 The SessionStart reminder obtains the short hostname only from the current
 hook process. A session title, a prior message, or an audit/report from another
@@ -507,8 +534,10 @@ accepted that trust review. The audit reports installation state only.
 The following Claude-only mechanisms are intentionally not copied or emulated
 as hidden background processes:
 
-- Claude-specific memory guards and account/session reminders, because their
-  target paths and account state belong to Claude rather than Codex;
+- Claude-specific memory guards and its account-discovery mechanism, because
+  their target paths and account state belong to Claude rather than Codex.
+  Codex has the narrower best-effort conversation stamp above and reports its
+  missing account honestly;
 - Claude Desktop shell-snapshot repair, folder-picker pinning, and the
   Claude.app PTY workaround;
 - Claude settings, MCP server definitions, credentials, account state, and

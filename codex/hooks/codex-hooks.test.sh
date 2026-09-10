@@ -11,6 +11,7 @@ python3 -m json.tool "$SCRIPT_DIR/hooks.json" >/dev/null
 grep -q 'pre_tool_policy.py' "$SCRIPT_DIR/hooks.json"
 grep -q 'resume_context.py' "$SCRIPT_DIR/hooks.json"
 grep -q 'session_provenance.py' "$SCRIPT_DIR/hooks.json"
+test -f "$SCRIPT_DIR/session_stamp.py"
 grep -q 'session_touch.py' "$SCRIPT_DIR/hooks.json"
 python3 - "$SCRIPT_DIR/hooks.json" <<'PY'
 import json
@@ -175,8 +176,31 @@ printf '%s' '{"hook_event_name":"PreToolUse","session_id":"codex-test-session","
 grep -qx 'model=gpt-test-2' "$PROVENANCE_STATE/codex-test-session.env"
 grep -qx 'effort=xhigh' "$PROVENANCE_STATE/codex-test-session.env"
 
-printf '%s' '{"hook_event_name":"SessionStart","session_id":"codex-test-session","model":"gpt-test","effort":{"level":"high"}}' \
-  | python3 "$SCRIPT_DIR/resume_context.py" > "$TEMP_ROOT/resume.json"
+STAMP="$(CODEX_APP_TOOLS_PIPE_PATH="$TEMP_ROOT/fake-app-pipe" \
+  CODEX_SESSION_ID="codex-test-session" \
+  CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR="$PROVENANCE_STATE" \
+  python3 "$SCRIPT_DIR/session_stamp.py")"
+python3 - "$STAMP" <<'PY'
+import socket
+import sys
+
+host = socket.gethostname().split(".")[0]
+assert sys.argv[1] == (
+    f"🖥 {host} · desktop = account unknown · session codex-te "
+    "· model gpt-test-2 · effort xhigh"
+)
+PY
+
+STAMP_UNKNOWN="$(env -u CODEX_APP_TOOLS_PIPE_PATH -u CODEX_SESSION_ID -u CODEX_THREAD_ID \
+  CODEX_HOME="$TEMP_ROOT/no-codex-home" python3 "$SCRIPT_DIR/session_stamp.py")"
+case "$STAMP_UNKNOWN" in
+  *'surface unknown = account unknown · session unknown · model unknown · effort unknown') ;;
+  *) echo "unexpected unknown stamp: $STAMP_UNKNOWN" >&2; exit 1 ;;
+esac
+
+printf '%s' '{"hook_event_name":"SessionStart","source":"startup","session_id":"codex-test-session","model":"gpt-test","effort":{"level":"high"}}' \
+  | CODEX_APP_TOOLS_PIPE_PATH="$TEMP_ROOT/fake-app-pipe" \
+    python3 "$SCRIPT_DIR/resume_context.py" > "$TEMP_ROOT/resume.json"
 python3 - "$TEMP_ROOT/resume.json" <<'PY'
 import json
 import socket
@@ -187,6 +211,11 @@ assert payload["hookSpecificOutput"]["hookEventName"] == "SessionStart"
 context = payload["hookSpecificOutput"]["additionalContext"]
 host = socket.gethostname().split(".")[0]
 assert f"The worker host for this session is {host}." in context
+assert (
+    f"🖥 {host} · desktop = account unknown · session codex-te "
+    "· model gpt-test · effort high"
+) in context
+assert "first user-visible reply" in context
 assert "codex:codex-test-session, model=gpt-test, effort=high" in context
 assert "CLAUDE_CONFIG_AGENT_MODEL=gpt-test" in context
 assert "verify it on this host with hostname" in context
@@ -194,6 +223,18 @@ assert "do not request step-by-step confirmation" in context
 assert "stopping point, next action" in context
 assert "no durable records or separate closure report" in context
 assert "CONVENTIONS.md#auto-update-protocol" in context
+PY
+
+printf '%s' '{"hook_event_name":"SessionStart","source":"compact","session_id":"codex-test-session","model":"gpt-test"}' \
+  | CODEX_APP_TOOLS_PIPE_PATH="$TEMP_ROOT/fake-app-pipe" \
+    python3 "$SCRIPT_DIR/resume_context.py" > "$TEMP_ROOT/compact.json"
+python3 - "$TEMP_ROOT/compact.json" <<'PY'
+import json
+import sys
+
+context = json.load(open(sys.argv[1], encoding="utf-8"))["hookSpecificOutput"]["additionalContext"]
+assert "first user-visible reply" not in context
+assert "account unknown" not in context
 PY
 
 echo "Codex hook tests passed"

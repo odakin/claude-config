@@ -5,16 +5,9 @@ from __future__ import annotations
 
 import json
 import re
-import socket
 import sys
 
-
-def worker_host() -> str:
-    """Return the local hook process's short hostname without failing a start hook."""
-    try:
-        return socket.gethostname().split(".")[0] or "unknown-host"
-    except OSError:
-        return "unknown-host"
+from session_stamp import build_stamp, worker_host
 
 
 def main() -> int:
@@ -24,6 +17,7 @@ def main() -> int:
         return 0
     if not isinstance(event, dict) or event.get("hook_event_name") != "SessionStart":
         return 0
+    source = str(event.get("source", "startup"))
     host = worker_host()
     session_id = str(event.get("session_id", ""))
     model = str(event.get("model", ""))
@@ -50,12 +44,24 @@ def main() -> int:
             "prepare-commit-msg hook is installed; no valid session id was supplied to "
             "this SessionStart hook, so do not fabricate one. "
         )
+    if source in {"startup", "resume", "clear"}:
+        stamp_context = (
+            "The first user-visible reply after this session boundary must begin, before "
+            "any other text, with the exact one-line identity stamp between these newline "
+            "boundaries:\n"
+            f"{build_stamp(event)}\n"
+            "Keep every field, including unknown; never replace an "
+            "unknown account or surface with a guess. "
+        )
+    else:
+        stamp_context = ""
     payload = {
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": (
                 "This is a session or compaction boundary. Before acting, re-read the "
                 "nearest project AGENTS.md or CLAUDE.md and SESSION.md when present. "
+                f"{stamp_context}"
                 f"{provenance_context}"
                 f"The worker host for this session is {host}. A title, prior message, or "
                 "report from another host is only an observation: before claiming or acting "
