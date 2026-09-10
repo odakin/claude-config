@@ -209,7 +209,7 @@ An owner who explicitly passes `--personal-layer <path>` may replace only the
 global `~/.codex/AGENTS.md` link with a mode-`0600`, generated layer-4
 composite. It concatenates the public `codex/HOME-AGENTS.md` with the
 selected layer-3 `<path>/codex/AGENTS.md`; the latter is deliberately a short
-Codex-specific overlay, not the owner's full `CLAUDE.md`. The other five
+Codex-specific overlay, not the owner's full `CLAUDE.md`. The other six
 managed links stay unchanged. The marker `.claude-personal-layer` and
 non-empty overlay are required, but the installer never searches for a
 personal layer: choosing its path is an explicit owner action.
@@ -286,6 +286,9 @@ field does not suppress the known fields in the same provenance record, and a
 degraded provenance annotation does not invalidate the underlying commit. The
 general record-design rule is
 [`required-field-fabrication`](../docs/convention-design-principles.md#required-field-fabrication).
+The placement of resolution precedence in one shared owner follows the
+[`shared-field-resolver`](../docs/convention-design-principles.md#shared-field-resolver)
+rule.
 
 `scripts/setup-codex.sh --repo <path>` installs the Git hook in exact,
 repeatable repositories. `--repo-root <path>` explicitly selects that
@@ -320,6 +323,19 @@ hook remains fail-open. Missing active-model metadata becomes an explicit
 `unknown` plus warning rather than a commit blocker. Therefore a missing
 trailer is not proof of a human-only commit: it can also mean absent repository
 wiring or an unsupported runtime, which the audit must distinguish.
+
+### <a id="session-provenance-implementation"></a>Implementation and verification map
+
+| Responsibility | Owning source |
+| --- | --- |
+| Hook event wiring | [`codex/hooks/hooks.json`](hooks/hooks.json) |
+| Shared validation, precedence, cache, and exact-session fallback | [`scripts/session_provenance_cache.py`](../scripts/session_provenance_cache.py) |
+| Thin lifecycle cache adapter | [`codex/hooks/session_provenance.py`](hooks/session_provenance.py) |
+| Conversation stamp and SessionStart context | [`codex/hooks/session_stamp.py`](hooks/session_stamp.py), [`codex/hooks/resume_context.py`](hooks/resume_context.py) |
+| Git trailer transaction | [`scripts/prepare-commit-msg-session.sh`](../scripts/prepare-commit-msg-session.sh) |
+| Repository and machine-local wiring | [`scripts/install-session-trailer.sh`](../scripts/install-session-trailer.sh), [`scripts/setup-codex.sh`](../scripts/setup-codex.sh) |
+| Installed-state and source-contract audits | [`scripts/audit-codex-integration.sh`](../scripts/audit-codex-integration.sh), [`scripts/check-codex-integration.py`](../scripts/check-codex-integration.py) |
+| Behavioral regression | [`codex/hooks/codex-hooks.test.sh`](hooks/codex-hooks.test.sh), [`scripts/prepare-commit-msg-session.test.sh`](../scripts/prepare-commit-msg-session.test.sh), [`scripts/setup-codex.test.sh`](../scripts/setup-codex.test.sh), [`scripts/run-all-checks.sh`](../scripts/run-all-checks.sh) |
 
 ## Platform scope
 
@@ -489,8 +505,9 @@ product-controlled backstop. Neither proves human intent.
 
 ### Managed lifecycle subset
 
-Codex provides `PreToolUse`, `PostToolUse`, `SessionStart`, and `Stop` hooks.
-This integration maps only the high-signal, product-neutral subset:
+Codex provides `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`,
+and `Stop` hooks among its lifecycle events. This integration maps only the
+high-signal, product-neutral subset:
 
 | Codex event | Managed behavior | Boundary |
 | --- | --- | --- |

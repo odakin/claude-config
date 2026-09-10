@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cache hook metadata and resolve current Codex thread provenance read-only."""
+"""Own shared Codex model/effort resolution and the hook metadata cache."""
 
 from __future__ import annotations
 
@@ -30,14 +30,20 @@ def effort_from_event(event: dict[str, object]) -> str:
     return value if isinstance(value, str) and SAFE_EFFORT.fullmatch(value) else ""
 
 
-def state_directory(agent: str) -> Path:
-    override = os.environ.get("CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR")
+def state_directory(
+    agent: str,
+    environment: dict[str, str] | None = None,
+) -> Path:
+    if environment is None:
+        environment = dict(os.environ)
+    override = environment.get("CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR")
     if override:
         return Path(override)
+    home = Path(environment.get("HOME", str(Path.home())))
     if agent == "codex":
-        root = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+        root = Path(environment.get("CODEX_HOME", str(home / ".codex")))
     else:
-        root = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
+        root = Path(environment.get("CLAUDE_CONFIG_DIR", str(home / ".claude")))
     return root / "state" / "session-provenance"
 
 
@@ -53,10 +59,22 @@ def read_existing(path: Path) -> dict[str, str]:
     return values
 
 
+def cached_metadata(
+    agent: str,
+    session_id: str,
+    environment: dict[str, str] | None = None,
+) -> dict[str, str]:
+    if not SAFE_SESSION.fullmatch(session_id):
+        return {}
+    return read_existing(state_directory(agent, environment) / f"{session_id}.env")
+
+
 def codex_state_databases(environment: dict[str, str] | None = None) -> list[Path]:
-    environment = environment or dict(os.environ)
+    if environment is None:
+        environment = dict(os.environ)
     configured_root = environment.get("CODEX_SQLITE_HOME") or environment.get("CODEX_HOME")
-    root = Path(configured_root) if configured_root else Path.home() / ".codex"
+    home = Path(environment.get("HOME", str(Path.home())))
+    root = Path(configured_root) if configured_root else home / ".codex"
     if root.is_file():
         return [root]
     try:
@@ -120,6 +138,58 @@ def codex_thread_metadata(
     return {}
 
 
+def first_valid(
+    candidates: tuple[object, ...],
+    pattern: re.Pattern[str],
+) -> str:
+    for candidate in candidates:
+        if (
+            isinstance(candidate, str)
+            and candidate != "unknown"
+            and pattern.fullmatch(candidate)
+        ):
+            return candidate
+    return ""
+
+
+def resolve_codex_metadata(
+    session_id: str,
+    event: dict[str, object] | None = None,
+    environment: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Resolve one Codex session with one shared, validated precedence order."""
+    if not SAFE_SESSION.fullmatch(session_id):
+        return {}
+    event = event or {}
+    if environment is None:
+        environment = dict(os.environ)
+    cache = cached_metadata("codex", session_id, environment)
+    thread = codex_thread_metadata(session_id, environment)
+    model = first_valid(
+        (
+            event.get("model"),
+            environment.get("CLAUDE_CONFIG_AGENT_MODEL"),
+            cache.get("model"),
+            thread.get("model"),
+        ),
+        SAFE_MODEL,
+    )
+    effort = first_valid(
+        (
+            effort_from_event(event),
+            environment.get("CLAUDE_CONFIG_AGENT_EFFORT"),
+            cache.get("effort"),
+            thread.get("effort"),
+        ),
+        SAFE_EFFORT,
+    )
+    return {
+        key: value
+        for key, value in (("model", model), ("effort", effort))
+        if value
+    }
+
+
 def main(agent: str) -> int:
     try:
         event = json.load(sys.stdin)
@@ -129,22 +199,21 @@ def main(agent: str) -> int:
         if not isinstance(session_id, str) or not SAFE_SESSION.fullmatch(session_id):
             return 0
 
-        state_dir = state_directory(agent)
+        environment = dict(os.environ)
+        state_dir = state_directory(agent, environment)
         state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
         target = state_dir / f"{session_id}.env"
         existing = read_existing(target)
-        values = dict(existing)
-
-        model = event.get("model")
-        if isinstance(model, str) and model != "unknown" and SAFE_MODEL.fullmatch(model):
-            values["model"] = model
-        effort = effort_from_event(event)
-        if effort:
-            values["effort"] = effort
         if agent == "codex":
-            for key, value in codex_thread_metadata(session_id).items():
-                if not values.get(key) or values[key] == "unknown":
-                    values[key] = value
+            values = resolve_codex_metadata(session_id, event, environment)
+        else:
+            values = dict(existing)
+            model = event.get("model")
+            if isinstance(model, str) and model != "unknown" and SAFE_MODEL.fullmatch(model):
+                values["model"] = model
+            effort = effort_from_event(event)
+            if effort and effort != "unknown":
+                values["effort"] = effort
         if not values or values == existing:
             return 0
 
@@ -171,7 +240,7 @@ def cli_main(arguments: list[str] | None = None) -> int:
     if len(arguments) != 2 or arguments[0] != "--resolve-codex":
         print("usage: session_provenance_cache.py --resolve-codex <session-id>", file=sys.stderr)
         return 2
-    for key, value in codex_thread_metadata(arguments[1]).items():
+    for key, value in resolve_codex_metadata(arguments[1]).items():
         print(f"{key}={value}")
     return 0
 

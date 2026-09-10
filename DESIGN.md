@@ -42,7 +42,7 @@
 `Agent-Effort:` を trailer block に足して機械抽出可能にした。agent namespace は Claude / Codex /
 将来 runtime を一つの key で区別し、model/effort は「どの推論設定が carrier だったか」を残す。
 旧 `Claude-Session:` は履歴互換として読み残し、新規 commit だけ generic key へ移行する。規約 = [`multi-session-coordination.md#session-provenance-trailer`](conventions/multi-session-coordination.md#session-provenance-trailer)、
-実装の正本 = `scripts/prepare-commit-msg-session.sh` の header。
+実装・配線・検査の所有表 = [`codex/PARITY.md#session-provenance-implementation`](codex/PARITY.md#session-provenance-implementation)。
 
 **判断 1: host / account / surface は書かない。** 当初案は「public repo = session id のみ / private
 repo = host と surface まで」 の出し分けだった。 却下の理由: (a) session id から transcript を引けば

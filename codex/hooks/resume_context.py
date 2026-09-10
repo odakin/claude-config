@@ -4,10 +4,15 @@
 from __future__ import annotations
 
 import json
-import re
+from pathlib import Path
 import sys
 
-from session_stamp import build_stamp, worker_host
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from session_provenance_cache import SAFE_SESSION, resolve_codex_metadata  # noqa: E402
+from session_stamp import build_stamp, worker_host  # noqa: E402
 
 
 def main() -> int:
@@ -20,16 +25,10 @@ def main() -> int:
     source = str(event.get("source", "startup"))
     host = worker_host()
     session_id = str(event.get("session_id", ""))
-    model = str(event.get("model", ""))
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/@+\[\]-]*", model):
-        model = "unknown"
-    effort_value = event.get("effort")
-    if isinstance(effort_value, dict):
-        effort_value = effort_value.get("level")
-    effort = str(effort_value) if isinstance(effort_value, str) else "unknown"
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", effort):
-        effort = "unknown"
-    if re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
+    metadata = resolve_codex_metadata(session_id, event)
+    model = metadata.get("model", "unknown")
+    effort = metadata.get("effort", "unknown")
+    if SAFE_SESSION.fullmatch(session_id):
         provenance_context = (
             "For a Codex-origin Git commit, ensure the managed prepare-commit-msg hook "
             f"is installed; this task's provenance is codex:{session_id}, model={model}, "

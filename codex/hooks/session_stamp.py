@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import re
 import socket
 import sys
 
@@ -13,12 +12,7 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from session_provenance_cache import codex_thread_metadata  # noqa: E402
-
-
-SAFE_SESSION = re.compile(r"^[A-Za-z0-9_-]+$")
-SAFE_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@+\[\]-]*$")
-SAFE_EFFORT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+from session_provenance_cache import SAFE_SESSION, resolve_codex_metadata  # noqa: E402
 
 
 def worker_host() -> str:
@@ -35,35 +29,6 @@ def runtime_surface(environment: dict[str, str]) -> str:
     return "desktop" if environment.get("CODEX_APP_TOOLS_PIPE_PATH") else "surface unknown"
 
 
-def event_effort(event: dict[str, object]) -> str:
-    value = event.get("effort")
-    if isinstance(value, dict):
-        value = value.get("level")
-    if not isinstance(value, str):
-        for key in ("reasoning_effort", "model_reasoning_effort"):
-            candidate = event.get(key)
-            if isinstance(candidate, str):
-                value = candidate
-                break
-    return value if isinstance(value, str) and SAFE_EFFORT.fullmatch(value) else ""
-
-
-def cached_metadata(session_id: str, environment: dict[str, str]) -> dict[str, str]:
-    override = environment.get("CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR")
-    root = Path(override) if override else Path(
-        environment.get("CODEX_HOME", str(Path.home() / ".codex"))
-    ) / "state" / "session-provenance"
-    values: dict[str, str] = {}
-    try:
-        for line in (root / f"{session_id}.env").read_text(encoding="utf-8").splitlines():
-            key, separator, value = line.partition("=")
-            if separator and key in {"model", "effort"}:
-                values[key] = value
-    except OSError:
-        pass
-    return values
-
-
 def build_stamp(
     event: dict[str, object] | None = None,
     environment: dict[str, str] | None = None,
@@ -75,33 +40,9 @@ def build_stamp(
     if not isinstance(session_value, str) or not SAFE_SESSION.fullmatch(session_value):
         session_value = environment.get("CODEX_SESSION_ID") or environment.get("CODEX_THREAD_ID") or ""
     session_id = session_value if SAFE_SESSION.fullmatch(session_value) else ""
-    cache = cached_metadata(session_id, environment) if session_id else {}
-    thread_metadata = codex_thread_metadata(session_id, environment) if session_id else {}
-
-    model_value = event.get("model")
-    model = model_value if isinstance(model_value, str) else ""
-    if model == "unknown":
-        model = ""
-    model = (
-        model
-        or environment.get("CLAUDE_CONFIG_AGENT_MODEL", "")
-        or cache.get("model", "")
-        or thread_metadata.get("model", "")
-    )
-    if not SAFE_MODEL.fullmatch(model):
-        model = "unknown"
-
-    effort = event_effort(event)
-    if effort == "unknown":
-        effort = ""
-    effort = (
-        effort
-        or environment.get("CLAUDE_CONFIG_AGENT_EFFORT", "")
-        or cache.get("effort", "")
-        or thread_metadata.get("effort", "")
-    )
-    if not SAFE_EFFORT.fullmatch(effort):
-        effort = "unknown"
+    metadata = resolve_codex_metadata(session_id, event, environment) if session_id else {}
+    model = metadata.get("model", "unknown")
+    effort = metadata.get("effort", "unknown")
 
     session_short = session_id[:8] if session_id else "unknown"
     return (

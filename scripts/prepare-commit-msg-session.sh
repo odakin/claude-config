@@ -60,9 +60,9 @@
 # model context に渡し、必要時に 1 の明示値を git commit command へ付けられるようにする。
 # CODEX_* は現行 local runtime での自動経路を保つ fail-open compatibility probe。
 # model / effort は CLAUDE_CONFIG_AGENT_MODEL / CLAUDE_CONFIG_AGENT_EFFORT の明示値を
-# 最優先し、SessionStart/PreToolUse adapter の machine-local cache を次に読む。Claude
-# effort は公式の Bash env CLAUDE_EFFORT から effective 値を取得する。Codex model
-# は公式 hook cache、次に session id と完全一致する local thread metadata を読む。
+# 最優先し、Claude は machine-local cache を次に読む。Codex の優先順位・validation・
+# cache・exact-session local fallback は session_provenance_cache.py が一括所有する。
+# Claude effort は公式の Bash env CLAUDE_EFFORT から effective 値を取得する。
 # 両方で取れなければ警告した上で literal `unknown` を書く。config default で
 # 穴埋めせず、provenance の縮退をcommit停止と同一視しない。
 #
@@ -158,26 +158,23 @@ else
     MODEL="${CLAUDE_CONFIG_AGENT_MODEL:-}"
     EFFORT="${CLAUDE_CONFIG_AGENT_EFFORT:-}"
 fi
-STATE_FILE=""
-if [ -n "${CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR:-}" ]; then
-    STATE_FILE="$CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR/$SESSION_ID.env"
-elif [ -n "${HOME:-}" ]; then
-    case "$AGENT" in
-        codex) STATE_FILE="${CODEX_HOME:-$HOME/.codex}/state/session-provenance/$SESSION_ID.env" ;;
-        claude) STATE_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/session-provenance/$SESSION_ID.env" ;;
-    esac
-fi
-if [ -n "$STATE_FILE" ] && [ -f "$STATE_FILE" ]; then
-    [ -n "$MODEL" ] || MODEL="$(sed -n 's/^model=//p' "$STATE_FILE" 2>/dev/null | sed -n '1p')"
-    [ -n "$EFFORT" ] || EFFORT="$(sed -n 's/^effort=//p' "$STATE_FILE" 2>/dev/null | sed -n '1p')"
-fi
-if [ -z "$ORIGINAL_AGENT_SESSION" ] && [ "$AGENT" = "codex" ] \
-        && { [ -z "$MODEL" ] || [ "$MODEL" = "unknown" ]; }; then
-    LOCAL_METADATA="$(python3 "$SCRIPT_DIR/session_provenance_cache.py" \
+if [ -z "$ORIGINAL_AGENT_SESSION" ] && [ "$AGENT" = "codex" ]; then
+    RESOLVED_METADATA="$(python3 "$SCRIPT_DIR/session_provenance_cache.py" \
         --resolve-codex "$SESSION_ID" 2>/dev/null || true)"
-    MODEL="$(printf '%s\n' "$LOCAL_METADATA" | sed -n 's/^model=//p' | sed -n '1p')"
-    if [ -z "$EFFORT" ] || [ "$EFFORT" = "unknown" ]; then
-        EFFORT="$(printf '%s\n' "$LOCAL_METADATA" | sed -n 's/^effort=//p' | sed -n '1p')"
+    RESOLVED_MODEL="$(printf '%s\n' "$RESOLVED_METADATA" | sed -n 's/^model=//p' | sed -n '1p')"
+    RESOLVED_EFFORT="$(printf '%s\n' "$RESOLVED_METADATA" | sed -n 's/^effort=//p' | sed -n '1p')"
+    [ -z "$RESOLVED_MODEL" ] || MODEL="$RESOLVED_MODEL"
+    [ -z "$RESOLVED_EFFORT" ] || EFFORT="$RESOLVED_EFFORT"
+else
+    STATE_FILE=""
+    if [ -n "${CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR:-}" ]; then
+        STATE_FILE="$CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR/$SESSION_ID.env"
+    elif [ -n "${HOME:-}" ] && [ "$AGENT" = "claude" ]; then
+        STATE_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/session-provenance/$SESSION_ID.env"
+    fi
+    if [ -n "$STATE_FILE" ] && [ -f "$STATE_FILE" ]; then
+        [ -n "$MODEL" ] || MODEL="$(sed -n 's/^model=//p' "$STATE_FILE" 2>/dev/null | sed -n '1p')"
+        [ -n "$EFFORT" ] || EFFORT="$(sed -n 's/^effort=//p' "$STATE_FILE" 2>/dev/null | sed -n '1p')"
     fi
 fi
 if [ -z "$EFFORT" ] && [ "$AGENT" = "claude" ]; then
