@@ -30,6 +30,7 @@
   🔴 ENTITY            HTML 実体参照の残置 (&#12316; 等)
   🟠 ABBREV            官公庁・機関名の略称 (文科省 → 文部科学省 等)
   🟠 BARE_NUMBER       裸の括弧数字 (「（160）」= 被引用数の単位落ち)
+  🟠 TERM_DRIFT        同じものを指す語が本文内で揺れている (研究補助員 ⇄ 研究補助者)
 [ID]    --identity <identity.yaml>   (値は呼ぶ側が持つ — 下の「層」を参照)
   🔴 IDENTITY_STALE     誤りと確定した旧 ID (機関コード等) が提出物の中身か file 名に残っている
   🔴 IDENTITY_FILENAME  提出 file 名に埋まったコードが宣言値と違う (別の ID を書いた / 旧値のまま)
@@ -449,6 +450,39 @@ def check_blank_sections(form: dict, pdf_text: str) -> list[tuple]:
                         f"様式が「空欄のまま提出」と指定した欄に記述がある: "
                         f"「{orig[:40]}」 → 「{region[:40]}」 "
                         f"(⚠️「該当しない」と書くのも誤り。別の欄では逆に書くのが正解)"))
+    return out
+
+
+# 表記のゆれ: 語幹が同じで**末尾 1 文字だけ違う**漢字語の共存。
+# 事務は「者？ 後述と表記のゆれ」と必ず突く (2024 実測、同一頁で 3 箇所)。
+# 語幹を 3 文字以上に限るのが要点 — 2 文字だと「研究者 ⇄ 研究費」のような
+# 別物の対を拾ってしまう (研究補助員 ⇄ 研究補助者 は語幹 4 文字で残る)。
+_KANJI_RUN = re.compile(r"[\u4e00-\u9fff]{4,10}")
+_TERM_STEM_MIN = 3
+
+
+def check_term_drift(pdf_text: str, label: str = "") -> list[tuple]:
+    """同じものを指す語が本文内で揺れていないか (語幹一致 × 末尾 1 文字違い)。"""
+    out = []
+    if not pdf_text:
+        return out
+    tag = f"{label}: " if label else ""
+    counts: dict[str, int] = {}
+    for m in _KANJI_RUN.finditer(pdf_text):
+        w = m.group(0)
+        counts[w] = counts.get(w, 0) + 1
+    by_stem: dict[str, set] = {}
+    for w in counts:
+        stem = w[:-1]
+        if len(stem) >= _TERM_STEM_MIN:
+            by_stem.setdefault(stem, set()).add(w)
+    for stem, words in sorted(by_stem.items()):
+        if len(words) < 2:
+            continue
+        shown = sorted(words, key=lambda w: -counts[w])
+        detail = " ⇄ ".join(f"{w}({counts[w]})" for w in shown)
+        out.append(("🟠", "TERM_DRIFT",
+                    f"{tag}同じ語幹で末尾だけ違う語が共存: {detail} — 表記のゆれでないか"))
     return out
 
 
@@ -880,6 +914,16 @@ def selftest() -> int:
         codes = [c for _, c, _ in check_pdf_text("経費は 1&#12316;2 万円")]
         expect("表記: 実体参照", codes, ["ENTITY"])
 
+        # 表記のゆれ (2024 実測「者？ 後述と表記のゆれ」を同一頁で 3 箇所)
+        codes = [c for _, c, _ in check_term_drift(
+            "研究補助員が議論し、研究補助者が文献調査を行う。研究補助員は継続する。")]
+        expect("ゆれ: 語幹一致 × 末尾違いを拾う", codes, ["TERM_DRIFT"])
+        # 語幹 2 文字だと別物の対を拾ってしまうので除外する
+        codes = [c for _, c, _ in check_term_drift("研究者が研究費を使う。研究者は3名。")]
+        expect("ゆれ: 語幹 2 文字の別物は拾わない", codes, [], forbid=["TERM_DRIFT"])
+        codes = [c for _, c, _ in check_term_drift("研究補助員が議論し、研究補助員が調査する。")]
+        expect("ゆれ: 統一されていれば clean", codes, [], forbid=["TERM_DRIFT"])
+
         # --- 様式骨格: 欄が消えた PDF を検出できるか ---
         form = dict(
             headings=["４　研究計画最終年度前年度応募を行う場合の記述事項",
@@ -1110,6 +1154,7 @@ def main() -> int:
         findings += check_blank_sections(merged, pdf_text)
     for name, t in pdf_texts:
         findings += check_pdf_text(t, name)   # 常に由来を付ける (ack を種目に縛れるように)
+        findings += check_term_drift(t, name)
     findings += check_colored_text(a.pdf)
     for c in a.keihi:
         findings += check_keihi(c)
