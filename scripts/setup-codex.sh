@@ -5,12 +5,15 @@
 # settings、LaunchAgent には一切触れない。
 #
 # Usage:
-#   scripts/setup-codex.sh [--replace] [--set-default-effort <level>] [--configure-safe-local] [--personal-layer <path>]
+#   scripts/setup-codex.sh [--replace] [--set-default-effort <level>] [--configure-safe-local]
+#                          [--personal-layer <path>] [--repo <path>]... [--repo-root <path>]...
 #
 # Installs layer-4 Codex entry points that link to public layer-1 instructions,
-# three skills, and the Codex-native hook bundle. When an owner explicitly opts
-# in with --personal-layer, it instead renders an L4-only global instruction
-# composite from the public source and that layer's short Codex overlay.
+# three skills, and the Codex-native hook bundle. Explicit --repo/--repo-root
+# targets also receive the agent/session/model/effort Git provenance hook. When
+# an owner explicitly opts in with --personal-layer, it instead renders an
+# L4-only global instruction composite from the public source and that layer's
+# short Codex overlay.
 # Existing user-managed targets are refused unless --replace is supplied.
 # The default refusal mode preflights every target before making any change;
 # replacement preserves a timestamped backup.
@@ -28,10 +31,17 @@ CONFIGURE_SAFE_LOCAL=0
 PERSONAL_LAYER=""
 PERSONAL_AGENTS=""
 REFRESH_PERSONAL_LAYER=0
+REQUESTED_REPOS=()
+REPO_ROOTS=()
+GIT_REPOS=()
+REQUESTED_REPO_COUNT=0
+REPO_ROOT_COUNT=0
+GIT_REPO_COUNT=0
 
 usage() {
   cat <<'EOF'
-Usage: setup-codex.sh [--replace] [--set-default-effort <level>] [--configure-safe-local] [--personal-layer <path>]
+Usage: setup-codex.sh [--replace] [--set-default-effort <level>] [--configure-safe-local]
+                      [--personal-layer <path>] [--repo <path>]... [--repo-root <path>]...
 
 Install local Codex entry points that consume claude-config's public
 instructions, skills, and hook bundle through symlinks. An explicitly selected
@@ -48,6 +58,11 @@ composite; its contents never enter this repository.
                                 Requires <path>/codex/AGENTS.md, a concise
                                 Codex-specific private overlay. A local
                                 post-merge refresh is installed when safe.
+  --repo <path>                 Install the Agent-Session Git trailer hook in
+                                exactly this repository. Repeatable.
+  --repo-root <path>            Install that hook in this directory when it is
+                                a repository and in its immediate child repos.
+                                Repeatable; no recursive discovery.
   --refresh-personal-layer [path]
                                 Refresh an existing managed personal composite.
                                 Internal post-merge entry point; it never
@@ -72,6 +87,18 @@ while [ "$#" -gt 0 ]; do
       shift
       [ "$#" -gt 0 ] || { echo "--personal-layer requires a directory" >&2; exit 2; }
       PERSONAL_LAYER="$1"
+      ;;
+    --repo)
+      shift
+      [ "$#" -gt 0 ] || { echo "--repo requires a path" >&2; exit 2; }
+      REQUESTED_REPOS+=("$1")
+      REQUESTED_REPO_COUNT=$((REQUESTED_REPO_COUNT + 1))
+      ;;
+    --repo-root)
+      shift
+      [ "$#" -gt 0 ] || { echo "--repo-root requires a path" >&2; exit 2; }
+      REPO_ROOTS+=("$1")
+      REPO_ROOT_COUNT=$((REPO_ROOT_COUNT + 1))
       ;;
     --refresh-personal-layer)
       REFRESH_PERSONAL_LAYER=1
@@ -103,8 +130,78 @@ if [ "$REFRESH_PERSONAL_LAYER" -eq 1 ] && [ "$REPLACE" -eq 1 ]; then
   exit 2
 fi
 
+if [ "$REFRESH_PERSONAL_LAYER" -eq 1 ] \
+  && { [ "$REQUESTED_REPO_COUNT" -gt 0 ] || [ "$REPO_ROOT_COUNT" -gt 0 ]; }; then
+  echo "--refresh-personal-layer cannot install repository hooks" >&2
+  exit 2
+fi
+
 canonical_directory() {
   (cd "$1" && pwd -P)
+}
+
+add_git_repo() {
+  local requested="$1"
+  local repo existing
+  if ! repo="$(git -C "$requested" rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "not a git repo: $requested" >&2
+    return 1
+  fi
+  repo="$(canonical_directory "$repo")"
+  for existing in "${GIT_REPOS[@]+"${GIT_REPOS[@]}"}"; do
+    [ "$existing" != "$repo" ] || return 0
+  done
+  GIT_REPOS+=("$repo")
+  GIT_REPO_COUNT=$((GIT_REPO_COUNT + 1))
+}
+
+resolve_git_repos() {
+  local requested root candidate candidate_physical
+  for requested in "${REQUESTED_REPOS[@]+"${REQUESTED_REPOS[@]}"}"; do
+    add_git_repo "$requested"
+  done
+  for requested in "${REPO_ROOTS[@]+"${REPO_ROOTS[@]}"}"; do
+    if ! root="$(canonical_directory "$requested" 2>/dev/null)"; then
+      echo "repo root is not a directory: $requested" >&2
+      return 1
+    fi
+    if [ -e "$root/.git" ] || [ -L "$root/.git" ]; then
+      add_git_repo "$root"
+    fi
+    for candidate in "$root"/*/; do
+      [ -e "$candidate/.git" ] || [ -L "$candidate/.git" ] || continue
+      candidate_physical="$(canonical_directory "$candidate")"
+      case "$candidate_physical/" in
+        "$root"/*/) add_git_repo "$candidate_physical" ;;
+        *) echo "NOTE: skipping repo symlink outside --repo-root: $candidate" ;;
+      esac
+    done
+  done
+}
+
+session_hook_path() {
+  local repo="$1"
+  local hooks_dir
+  hooks_dir="$(git -C "$repo" config --get core.hooksPath 2>/dev/null || true)"
+  if [ -z "$hooks_dir" ]; then
+    hooks_dir="$(git -C "$repo" rev-parse --git-path hooks 2>/dev/null)"
+  fi
+  if [ "${hooks_dir#/}" = "$hooks_dir" ]; then
+    hooks_dir="$repo/$hooks_dir"
+  fi
+  printf '%s/prepare-commit-msg\n' "$hooks_dir"
+}
+
+preflight_session_hook() {
+  local repo="$1"
+  local hook
+  hook="$(session_hook_path "$repo")"
+  if { [ -e "$hook" ] || [ -L "$hook" ]; } \
+    && ! grep -qF 'prepare-commit-msg-session.sh' "$hook" 2>/dev/null \
+    && [ "$REPLACE" -ne 1 ]; then
+    echo "refusing to replace existing prepare-commit-msg hook: $hook (rerun with --replace)" >&2
+    return 1
+  fi
 }
 
 configure_personal_layer() {
@@ -288,6 +385,7 @@ install_personal_refresh_hook() {
 }
 
 configure_personal_layer
+resolve_git_repos
 
 if [ "$REFRESH_PERSONAL_LAYER" -eq 1 ]; then
   if [ -z "$PERSONAL_LAYER" ]; then
@@ -421,6 +519,9 @@ preflight_link \
 preflight_link \
   "$CONFIG_ROOT/codex/hooks/hooks.json" \
   "$CODEX_USER_DIR/hooks.json"
+for repo in "${GIT_REPOS[@]+"${GIT_REPOS[@]}"}"; do
+  preflight_session_hook "$repo"
+done
 
 remove_legacy_managed_home_agents
 install_global_agents
@@ -440,6 +541,15 @@ install_link \
 install_link \
   "$CONFIG_ROOT/codex/hooks/hooks.json" \
   "$CODEX_USER_DIR/hooks.json"
+
+for repo in "${GIT_REPOS[@]+"${GIT_REPOS[@]}"}"; do
+  if [ "$REPLACE" -eq 1 ]; then
+    "$SCRIPT_DIR/install-session-trailer.sh" "$repo"
+  else
+    "$SCRIPT_DIR/install-session-trailer.sh" --refuse-existing "$repo"
+  fi
+done
+[ "$GIT_REPO_COUNT" -eq 0 ] || echo "Installed Agent-Session hooks in $GIT_REPO_COUNT repo(s)."
 
 if [ -n "$EFFORT" ] || [ "$CONFIGURE_SAFE_LOCAL" -eq 1 ]; then
   update_codex_config

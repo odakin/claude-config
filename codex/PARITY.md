@@ -240,6 +240,65 @@ The installer can also set Codex's top-level `model_reasoning_effort`,
 That enables ordinary, in-scope local work without weakening safeguards for
 external, destructive, costly, or out-of-scope actions.
 
+## <a id="git-session-provenance"></a>Git session provenance
+
+New AI-origin commits use one vendor-neutral trailer block:
+
+```text
+Agent-Session: codex:<native-session-id>
+Agent-Model: <runtime-model-id>
+Agent-Effort: <effective-effort-or-unknown>
+```
+
+Claude uses the same keys with the `claude:` namespace. Existing
+`Claude-Session:` commits remain valid legacy history; the hook preserves them
+when the old message is carried through amend, rebase, or cherry-pick, and does
+not add a second carrier. `git commit --amend -m` replaces the whole message;
+when Git does not pass the original commit id to the hook, the amending session
+becomes the new carrier. These
+fields identify the transport session and inference configuration, not the
+human or machine that made a judgment. Host, account, project content, and
+transcript text never enter the trailer.
+
+The [official Codex Hook contract](https://learn.chatgpt.com/docs/hooks)
+(checked 2026-09-11) supplies `session_id` and the active `model` to command
+hooks. It does not document an effective reasoning-effort field. The stable
+public [Codex environment-variable list](https://learn.chatgpt.com/docs/config-file/environment-variables)
+(checked 2026-09-11) does not include `CODEX_SESSION_ID` or `CODEX_THREAD_ID`.
+Accordingly, the lifecycle adapter caches hook-supplied model metadata in
+machine-local Codex state; the Git hook accepts an explicit
+`CLAUDE_CONFIG_AGENT_SESSION`, `CLAUDE_CONFIG_AGENT_MODEL`, and
+`CLAUDE_CONFIG_AGENT_EFFORT`, and treats the observed
+`CODEX_SESSION_ID` / `CODEX_THREAD_ID` shell variables only as fail-open
+compatibility probes. An unavailable value is written as literal `unknown`;
+the configured default must not be presented as the run's effective value.
+
+`scripts/setup-codex.sh --repo <path>` installs the Git hook in exact,
+repeatable repositories. `--repo-root <path>` explicitly selects that
+directory plus its immediate child repositories; it does not recurse or scan
+the user's machine. A child symlink whose physical repository is outside the
+selected root is skipped; select it explicitly with `--repo` if intended. All
+selected hooks are preflighted before any mutation. A
+user-managed `prepare-commit-msg` makes default mode refuse the whole install;
+`--replace` preserves a timestamped backup. Cloning alone still changes
+nothing. `scripts/audit-codex-integration.sh --repo <path>` checks the installed
+stub separately from lifecycle-Hook trust. Trust is required for automatic
+model caching, while the Git hook remains the commit-path mechanism.
+
+Live dogfood on 2026-09-11 separated those layers: an already-running Codex
+task committed after the repository-hook rollout and received its
+`Agent-Session` through the compatibility probe, while model and effort were
+honestly `unknown` because that task had started before the new lifecycle
+adapter was loaded and trusted. A new task after trust review is required to
+verify the cache-backed fields; the Git result alone cannot establish that
+lifecycle layer.
+
+The repository opt-out is `git config agent.sessionTrailer false`; the legacy
+`claude.sessionTrailer` and `codex.sessionTrailer` keys are also honored. The
+hook is fail-open. Therefore a missing trailer is not proof of a human-only
+commit: it can also mean absent repository wiring or an unsupported runtime,
+which the audit must distinguish.
+
 ## Platform scope
 
 The Codex installer is intentionally POSIX-oriented: it uses Bash, Python, and
@@ -414,7 +473,8 @@ This integration maps only the high-signal, product-neutral subset:
 | Codex event | Managed behavior | Boundary |
 | --- | --- | --- |
 | `PreToolUse(apply_patch)` | Blocks Tier-A structural leak patterns while editing a repository marked public. | Git pre-commit and commit-message gates remain authoritative for all write paths. |
-| `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`, and identifies the local hook process's worker host. | It reads only that local runtime fact; it does not discover personal-layer data or session history. |
+| `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`, identifies the local hook process's worker host, and caches hook-supplied session/model provenance. | It reads only current hook input and local runtime facts; it does not discover personal-layer data or session history. |
+| `PreToolUse(Bash)` | Refreshes the machine-local session/model provenance cache from current hook input. | It emits no decision and neither authorizes nor rewrites the command; the Git hook remains the commit-path mechanism. |
 | `PostToolUse(apply_patch)` + `Stop` | Tracks a touched Git repository in machine-local Codex state and reports unintended dirty worktree state at turn end. | It does not commit or push automatically. |
 
 ## <a id="machine-local-provenance"></a>Machine-local provenance
@@ -434,7 +494,8 @@ embed personal names, and the literal belongs in the owner's private layer.
 
 The executable tests cover each supported public-leak category, allowlisted and
 removed patch text, private-repository pass-through, default-refuse installer
-atomicity, and dirty-worktree nudge de-duplication/reset. They run through the
+atomicity, session/model cache behavior, Claude/Codex/unknown Git trailer
+paths, and dirty-worktree nudge de-duplication/reset. They run through the
 repository's aggregate local checks and CI.
 
 Codex requires review and trust for changed user hooks. Treat an installed

@@ -4,7 +4,7 @@
 
 ## <a id="toc"></a>目次
 
-- [2026-09-10: commit に session id trailer (host/account は焼かない)](#session-provenance-trailer-design)
+- [2026-09-10/11: commit に agent/session/model/effort trailer (host/account は焼かない)](#session-provenance-trailer-design)
 - [2026-09-01: Codex integration — L1 正本 + 明示 L4 wiring + 多層検証](#codex-layered-integration)
 - [2026-09-01: AUTO-TREE の auto-load 税 縮退 (when 表示 + hooks/scripts README 移設)](#auto-tree-autoload-slim)
 - [2026-07-10: 検証の発火面化 — CI + run-all-checks + hook 配線の単一リスト駆動化](#ci-and-single-list-wiring)
@@ -34,12 +34,14 @@
 
 ---
 
-## <a id="session-provenance-trailer-design"></a>2026-09-10: commit に session id trailer (host/account は焼かない)
+## <a id="session-provenance-trailer-design"></a>2026-09-10/11: commit に agent/session/model/effort trailer (host/account は焼かない)
 
 並列 session が同じ working tree を触ると commit author が全部同じ人間に潰れ、 「どの commit が
 どの session か」 が git から復元できない (= staging window race の事後追跡が transcript 漁りと
-記憶になる)。 `prepare-commit-msg` hook で `Claude-Session: <id>` を trailer に 1 行足して機械抽出
-可能にした。 規約 = [`multi-session-coordination.md#session-provenance-trailer`](conventions/multi-session-coordination.md#session-provenance-trailer)、
+記憶になる)。 `prepare-commit-msg` hook で `Agent-Session: <agent>:<id>` + `Agent-Model:` +
+`Agent-Effort:` を trailer block に足して機械抽出可能にした。agent namespace は Claude / Codex /
+将来 runtime を一つの key で区別し、model/effort は「どの推論設定が carrier だったか」を残す。
+旧 `Claude-Session:` は履歴互換として読み残し、新規 commit だけ generic key へ移行する。規約 = [`multi-session-coordination.md#session-provenance-trailer`](conventions/multi-session-coordination.md#session-provenance-trailer)、
 実装の正本 = `scripts/prepare-commit-msg-session.sh` の header。
 
 **判断 1: host / account / surface は書かない。** 当初案は「public repo = session id のみ / private
@@ -50,19 +52,32 @@ leak が「設定漏れ」 という最も起きやすい原因で起きる。 i
 同一挙動になる (= 事故の型が設計から消える)。 方向としては [§公開リポ leak 防止](#public-repo-leak-prevention)
 の「機器名は具体値でなく属性で書く」 と同じ。 **一般則として層1 へ hoist 済** = [`convention-design-principles.md §8.34`](docs/convention-design-principles.md#context-branch-as-leak-path) (= 安全側の出力が context 判定に依存するなら、 分岐を消せないか先に問う)。
 
-**判断 2: marker を条件にせず全 repo に配る** (setup.sh Step 8b)。 sibling の
+**判断 2: marker を条件にせず全 repo に配る**。Claude は `setup.sh` Step 8b、Codex は明示 scope の
+`scripts/setup-codex.sh --repo/--repo-root` を使う。sibling の
 `install-public-commit-msg.sh` は public repo 限定だが、 本 hook は private repo (= 並列 session が
 同じ tree を触る作業場) でこそ効く。 判断 1 で public / private の挙動差が消えたので、 marker を
-条件にする理由も無くなった。
+条件にする理由も無くなった。Codex installer は user-managed `prepare-commit-msg` を全 target の
+変更前に preflight し、`--replace` が無ければ partial install を残さず拒否する。
 
-**判断 3: 既存 trailer があれば追記しない** (`git interpret-trailers --if-exists doNothing`)。
+**判断 3: message に運ばれた既存 session trailer があれば追記しない** (`git interpret-trailers --if-exists doNothing` +
+legacy key の事前検出)。
 「今の session」 を足し続ける設計にすると、 interactive rebase 1 回で無関係な全 commit に現 session が
 混入する。 最初に書いた session を保存する側を採った。 帰結として **rebase / amend で書き換えた
-session は記録されない** (= 書き換えの追跡が要るなら reflog と transcript 側の仕事)。
+session は記録されない**。ただし `git commit --amend -m` は message 全体を置換し、Git が元 commit id を
+hook に渡さない経路では旧 trailer 自体が入力から消えるため、amending session の新 block になる。
 
-**fail-open (= 何が起きても exit 0)**: commit を止める価値のある検査ではない。 並列 session の作業が
-hook 起因で詰まる方が、 trailer が 1 個欠けるより高くつく。 env `CLAUDE_CODE_SESSION_ID` が無ければ
-no-op なので、 **trailer の無い commit = AI session を経由していない**と読めるのは副産物の利点。
+**判断 4: runtime fact と設定既定を混ぜない。** Claude は session id を
+`CLAUDE_CODE_SESSION_ID`、起動時 model を SessionStart input、commit 時の effective effort を公式
+Bash env `CLAUDE_EFFORT` から取る。Codex の公式 Hook contract は全 command hook に `session_id` と
+`model` を渡すが effort は渡さない。Codex adapter はその値を machine-local cache に保存し、Git hook
+は現行 runtime の `CODEX_SESSION_ID` / `CODEX_THREAD_ID` compatibility probe または明示
+`CLAUDE_CONFIG_AGENT_*` を読む。Codex effort、Claude の mid-session model switch 等で actual を確定
+できない値は、config default を actual と偽らず `unknown` と書く。明示値で補えるが、捏造してはならない。
+
+**fail-open (= 何が起きても exit 0)**: commit を止める価値のある検査ではない。並列 session の作業が
+hook 起因で詰まる方が trailer が欠けるより高くつく。supported session id が無ければ no-op、id は
+あるが model/effort が無ければ `unknown` を残す。したがって trailer 不在は人手 commit だけでなく
+未導入/未対応 runtime も表し得るため、agent 経由でないことの単独証拠には使わない。
 
 ## <a id="codex-layered-integration"></a>2026-09-01: Codex integration — L1 正本 + 明示 L4 wiring + 多層検証
 

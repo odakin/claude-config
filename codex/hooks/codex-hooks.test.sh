@@ -10,7 +10,23 @@ trap 'rm -rf "$TEMP_ROOT"' EXIT
 python3 -m json.tool "$SCRIPT_DIR/hooks.json" >/dev/null
 grep -q 'pre_tool_policy.py' "$SCRIPT_DIR/hooks.json"
 grep -q 'resume_context.py' "$SCRIPT_DIR/hooks.json"
+grep -q 'session_provenance.py' "$SCRIPT_DIR/hooks.json"
 grep -q 'session_touch.py' "$SCRIPT_DIR/hooks.json"
+python3 - "$SCRIPT_DIR/hooks.json" <<'PY'
+import json
+import sys
+
+hooks = json.load(open(sys.argv[1], encoding="utf-8"))["hooks"]
+assert any(
+    group.get("matcher") == "Bash"
+    and any("session_provenance.py" in hook.get("command", "") for hook in group.get("hooks", []))
+    for group in hooks["PreToolUse"]
+)
+assert any(
+    any("session_provenance.py" in hook.get("command", "") for hook in group.get("hooks", []))
+    for group in hooks["SessionStart"]
+)
+PY
 
 PUBLIC_REPO="$TEMP_ROOT/public"
 mkdir -p "$PUBLIC_REPO/.git" "$PUBLIC_REPO/.claude"
@@ -148,7 +164,19 @@ printf '%s' "$TOUCH_INPUT" | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" \
 [ ! -e "$STALE_FILE" ]
 ls "$TEMP_ROOT/state"/*.repos >/dev/null
 
-printf '%s' '{"hook_event_name":"SessionStart"}' | python3 "$SCRIPT_DIR/resume_context.py" > "$TEMP_ROOT/resume.json"
+PROVENANCE_STATE="$TEMP_ROOT/provenance-state"
+printf '%s' '{"hook_event_name":"SessionStart","session_id":"codex-test-session","model":"gpt-test"}' \
+  | CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR="$PROVENANCE_STATE" \
+    python3 "$SCRIPT_DIR/session_provenance.py"
+grep -qx 'model=gpt-test' "$PROVENANCE_STATE/codex-test-session.env"
+printf '%s' '{"hook_event_name":"PreToolUse","session_id":"codex-test-session","model":"gpt-test-2","effort":{"level":"xhigh"}}' \
+  | CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR="$PROVENANCE_STATE" \
+    python3 "$SCRIPT_DIR/session_provenance.py"
+grep -qx 'model=gpt-test-2' "$PROVENANCE_STATE/codex-test-session.env"
+grep -qx 'effort=xhigh' "$PROVENANCE_STATE/codex-test-session.env"
+
+printf '%s' '{"hook_event_name":"SessionStart","session_id":"codex-test-session","model":"gpt-test","effort":{"level":"high"}}' \
+  | python3 "$SCRIPT_DIR/resume_context.py" > "$TEMP_ROOT/resume.json"
 python3 - "$TEMP_ROOT/resume.json" <<'PY'
 import json
 import socket
@@ -159,6 +187,8 @@ assert payload["hookSpecificOutput"]["hookEventName"] == "SessionStart"
 context = payload["hookSpecificOutput"]["additionalContext"]
 host = socket.gethostname().split(".")[0]
 assert f"The worker host for this session is {host}." in context
+assert "codex:codex-test-session, model=gpt-test, effort=high" in context
+assert "CLAUDE_CONFIG_AGENT_MODEL=gpt-test" in context
 assert "verify it on this host with hostname" in context
 assert "do not request step-by-step confirmation" in context
 assert "stopping point, next action" in context

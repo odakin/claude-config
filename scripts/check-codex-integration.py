@@ -63,6 +63,10 @@ SESSION_DURABLE_TOKENS = (
     "approval_policy",
     "sandbox_mode",
     "hooks.json",
+    "Agent-Session",
+    "Agent-Model",
+    "Agent-Effort",
+    "--repo-root",
     "auto_compact_token_limit",
     "compaction threshold",
 )
@@ -73,10 +77,10 @@ SUPERSEDED_CLAIMS = (
     "同じ目標は実質無料",
 )
 HOOK_ADAPTERS = {
-    "SessionStart": "resume_context.py",
-    "PreToolUse": "pre_tool_policy.py",
-    "PostToolUse": "session_touch.py",
-    "Stop": "session_touch.py",
+    "SessionStart": ("resume_context.py", "session_provenance.py"),
+    "PreToolUse": ("pre_tool_policy.py", "session_provenance.py"),
+    "PostToolUse": ("session_touch.py",),
+    "Stop": ("session_touch.py",),
 }
 WIRING_REQUIREMENTS = {
     "scripts/run-all-checks.sh": (
@@ -174,6 +178,21 @@ AUTOMATION_ROUTING_REQUIREMENTS = {
     "scripts/setup-codex.sh": ("codex-automation-routing",),
     "scripts/audit-codex-integration.sh": ("codex-automation-routing",),
 }
+SESSION_PROVENANCE_REQUIREMENTS = {
+    "codex/PARITY.md": (
+        'id="git-session-provenance"',
+        "Agent-Session",
+        "Agent-Model",
+        "Agent-Effort",
+        "--repo-root",
+        "https://learn.chatgpt.com/docs/hooks",
+    ),
+    "codex/HOME-AGENTS.md": ("Agent-Session", "codex/PARITY.md#git-session-provenance"),
+    "scripts/setup-codex.sh": ("--repo-root", "install-session-trailer.sh"),
+    "scripts/audit-codex-integration.sh": ("Agent-Session prepare-commit-msg hook",),
+    "scripts/prepare-commit-msg-session.sh": ("CODEX_SESSION_ID", "Agent-Model", "Agent-Effort"),
+    "setup.sh": ("session-start-provenance.py",),
+}
 
 
 def text(path: Path) -> str:
@@ -254,9 +273,11 @@ def check(root: Path) -> list[str]:
     except (RuntimeError, json.JSONDecodeError) as exc:
         errors.append(f"{config.relative_to(root)}: invalid JSON: {exc}")
     else:
-        for event_name, adapter in HOOK_ADAPTERS.items():
-            if not any(adapter in command for command in hook_commands(hook_config, event_name)):
-                errors.append(f"codex/hooks/hooks.json: {event_name} does not invoke {adapter}")
+        for event_name, adapters in HOOK_ADAPTERS.items():
+            commands = hook_commands(hook_config, event_name)
+            for adapter in adapters:
+                if not any(adapter in command for command in commands):
+                    errors.append(f"codex/hooks/hooks.json: {event_name} does not invoke {adapter}")
 
     for relative, fragments in SESSION_HANDOFF_REQUIREMENTS.items():
         try:
@@ -318,6 +339,16 @@ def check(root: Path) -> list[str]:
         for fragment in fragments:
             if fragment not in content:
                 errors.append(f"{relative}: missing automation-routing contract: {fragment}")
+    for relative, fragments in SESSION_PROVENANCE_REQUIREMENTS.items():
+        path = root / relative
+        try:
+            content = text(path)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        for fragment in fragments:
+            if fragment not in content:
+                errors.append(f"{relative}: missing session-provenance contract: {fragment}")
     return errors
 
 
@@ -341,8 +372,8 @@ def fixture(root: Path) -> None:
     hook_config = root / "codex/hooks/hooks.json"
     hook_config.parent.mkdir(parents=True, exist_ok=True)
     hooks = {
-        name: [{"hooks": [{"command": f"python3 {adapter}"}]}]
-        for name, adapter in HOOK_ADAPTERS.items()
+        name: [{"hooks": [{"command": f"python3 {adapter}"} for adapter in adapters]}]
+        for name, adapters in HOOK_ADAPTERS.items()
     }
     hook_config.write_text(json.dumps({"hooks": hooks}), encoding="utf-8")
     for relative, fragments in WIRING_REQUIREMENTS.items():
@@ -365,6 +396,11 @@ def fixture(root: Path) -> None:
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
         path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
     for relative, fragments in AUTOMATION_ROUTING_REQUIREMENTS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
+    for relative, fragments in SESSION_PROVENANCE_REQUIREMENTS.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         existing = path.read_text(encoding="utf-8") if path.exists() else ""

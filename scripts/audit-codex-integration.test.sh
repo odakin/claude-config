@@ -37,6 +37,7 @@ git -C "$TEST_REPO" config core.hooksPath .hooks
 touch "$TEST_REPO/.claude/public-repo.marker"
 printf '%s\n' 'public-precommit-runner.sh' > "$TEST_REPO/.hooks/pre-commit"
 printf '%s\n' 'commit-msg-leak-guard-runner.sh' > "$TEST_REPO/.hooks/commit-msg"
+printf '%s\n' 'prepare-commit-msg-session.sh' > "$TEST_REPO/.hooks/prepare-commit-msg"
 
 HOME="$TEST_HOME" \
 CODEX_USER_DIR="$TEST_CODEX_DIR" \
@@ -51,6 +52,17 @@ if HOME="$TEST_HOME" \
   echo "expected audit to fail for a missing public Git-side gate" >&2
   exit 1
 fi
+
+printf '%s\n' 'commit-msg-leak-guard-runner.sh' > "$TEST_REPO/.hooks/commit-msg"
+rm "$TEST_REPO/.hooks/prepare-commit-msg"
+if HOME="$TEST_HOME" \
+  CODEX_USER_DIR="$TEST_CODEX_DIR" \
+  CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
+  "$SCRIPT_DIR/audit-codex-integration.sh" --repo "$TEST_REPO" >/dev/null 2>&1; then
+  echo "expected audit to fail for a missing Agent-Session hook" >&2
+  exit 1
+fi
+printf '%s\n' 'prepare-commit-msg-session.sh' > "$TEST_REPO/.hooks/prepare-commit-msg"
 
 rm "$TEST_CODEX_DIR/skills/codex-automation-routing"
 if HOME="$TEST_HOME" \

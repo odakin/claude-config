@@ -41,7 +41,7 @@ Claude Code のコンテキストウィンドウは有限で、長い会話は�
 
 - **セッション開始** — SessionStart hooks が今日の日付を anchor し、Claude アカウントの切替を検出し、MCP の account scope を注意喚起し、Windows ではツールチェーンを自己修復する。`CLAUDE.md` は常にコンテキストに載っていて `SESSION.md` を指すので、Claude はコールドスタートせず状況把握済みで始まる。
 - **作業中** — nudge hooks が実際にミスの起きる継ぎ目を見張る: remote より遅れた repo での編集（`git-state-nudge`, `stale-read-nudge`）、部分的な検索結果からの「存在しない」断定（`*-zero-result-nudge`）、書いても失われる先への事実の記録（`memory-guard`）、不安定な Google URL の貼り付け（`google-url-guard`）。ドメイン規約は trigger が合致したときだけロードされる — 知識はオンデマンドで、コンテキスト税にしない。
-- **commit 時** — pre-commit hooks が LaTeX ソースの Unicode を自動修正し、merge conflict マーカーの残置を block し、公開リポでは file 本文 + commit message にわたる 2-layer leak gate が走る。
+- **commit 時** — pre-commit hooks が LaTeX ソースの Unicode を自動修正し、merge conflict マーカーの残置を block し、公開リポでは file 本文 + commit message にわたる 2-layer leak gate が走る。別の provenance hook が、host/account は書かず発生元 agent/session と model/effort を記録する。
 - **push 前** — 4 軸レビュー（整合性・無矛盾性・効率性・安全性）。実運用ではほぼ毎回何かが見つかる。
 - **コンテキストが尽きたら** — autocompact 復帰: `CLAUDE.md` の **How to Resume** が「`SESSION.md` を読め」と指示し、`SESSION.md` には現在のタスク・進捗・未決事項が継続的に更新されているので、Claude は説明し直させずに中断点から再開する。生命線は `SESSION.md` を陳腐化させないこと — 上の各 gate はそれを安価に保つためにある。
 - **マシンをまたいで** — `git pull` + post-merge hook が hooks と規約を全マシンで再同期する。どのマシンも同じルールで動き、どのセッションが残した状態も別マシンの次セッションから再開できる。
@@ -61,7 +61,7 @@ cd claude-config && ./setup.sh
 Claude Code の設定を変えずに同じ共有規約を Codex にも導入するには、clone 後に次を実行する:
 
 ```bash
-./scripts/setup-codex.sh --set-default-effort high --configure-safe-local
+./scripts/setup-codex.sh --repo-root .. --set-default-effort high --configure-safe-local
 ```
 
 この installer は本公開リポの layer-1 source を選ぶ user-local layer-4 entry point を作る。
@@ -71,11 +71,16 @@ user-managed conflict があれば partial install を残さず拒否する。co
 明示的に `--replace` を指定した時だけ、既存の Codex 側 target を timestamp 付き backup に
 退避してから置換する。
 
+`--repo-root ..` は clone の親 directory とその直下の Git repo を明示対象にして provenance
+hook を配線する。別の場所にある repo は repeatable な `--repo <path>` で指定する。新しい
+AI-origin commit は `Agent-Session` / `Agent-Model` / `Agent-Effort` を記録し、runtime から
+確定できない値は設定既定で推測せず `unknown` と書く。
+
 marker 付きの private personal layer を所有している場合は、template から短い
 `codex/AGENTS.md` overlay を作ってから、明示的に opt-in する:
 
 ```bash
-./scripts/setup-codex.sh --configure-safe-local --personal-layer ~/Claude/my-prefs
+./scripts/setup-codex.sh --repo-root .. --configure-safe-local --personal-layer ~/Claude/my-prefs
 ```
 
 これは public layer 1 と指定した layer 3 overlay を mode `0600` の local global-instruction

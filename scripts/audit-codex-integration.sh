@@ -2,7 +2,7 @@
 # audit-codex-integration.sh — claude-config の Codex 導入を read-only で確認する
 #
 # Claude 側には一切書き込まない。managed symlink と Codex config の概況を表示し、
-# --repo を渡した場合だけ既存 Git-side gate も確認する。
+# --repo を渡した場合だけ Agent-Session trailer hook と既存 Git-side gate も確認する。
 
 set -u
 
@@ -21,7 +21,8 @@ Usage: audit-codex-integration.sh [--repo <path>]...
 
 Read-only audit of the claude-config Codex integration.
 
-  --repo <path>  Also inspect the existing Git-side guards in this repository.
+  --repo <path>  Also inspect the Agent-Session hook and existing Git-side
+                 guards in this repository.
   -h, --help     Show this help.
 EOF
 }
@@ -192,11 +193,19 @@ for requested_repo in "${REPOS[@]}"; do
   hooks_dir="$(git -C "$repo_root" config --get core.hooksPath 2>/dev/null || true)"
   if [ -z "$hooks_dir" ]; then
     hooks_dir="$(git -C "$repo_root" rev-parse --git-path hooks 2>/dev/null)"
-  elif [ "${hooks_dir#/}" = "$hooks_dir" ]; then
+  fi
+  if [ "${hooks_dir#/}" = "$hooks_dir" ]; then
     hooks_dir="$repo_root/$hooks_dir"
   fi
 
   echo "=== Git-side guards: $repo_root ==="
+  if [ -f "$hooks_dir/prepare-commit-msg" ] \
+    && grep -qF 'prepare-commit-msg-session.sh' "$hooks_dir/prepare-commit-msg" 2>/dev/null; then
+    echo "OK: Agent-Session prepare-commit-msg hook"
+  else
+    echo "MISSING: Agent-Session prepare-commit-msg hook" >&2
+    ISSUES=$((ISSUES + 1))
+  fi
   if [ -f "$repo_root/.claude/public-repo.marker" ]; then
     for guard in \
       "pre-commit:public-precommit-runner.sh" \

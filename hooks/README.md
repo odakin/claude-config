@@ -35,6 +35,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[session-start-claude-account-change.test.sh](session-start-claude-account-change.test.sh)** — self-test for the layer-1 SessionStart hook.
 - **[session-start-mcp-scope-nudge.sh](session-start-mcp-scope-nudge.sh)** — SessionStart hook (layer 1)
 - **[session-start-mcp-scope-nudge.test.sh](session-start-mcp-scope-nudge.test.sh)** — session-start-mcp-scope-nudge.test.sh
+- **[session-start-provenance.py](session-start-provenance.py)** — Cache Claude SessionStart model metadata for Agent-Session Git trailers.
+- **[session-start-provenance.test.sh](session-start-provenance.test.sh)** — Claude session model cache の fixture test
 - **[session-start-windows-bootstrap.sh](session-start-windows-bootstrap.sh)** — SessionStart hook (layer 1): Windows 環境の毎 session 自動自己修復
 - **[session-start-windows-bootstrap.test.sh](session-start-windows-bootstrap.test.sh)** — self-tests for session-start-windows-bootstrap.sh
 - **[stale-read-nudge.sh](stale-read-nudge.sh)** — PostToolUse(Read) hook (layer 1)

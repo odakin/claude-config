@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき
 category: harness-core
-summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**生成物の再生成はその防御を貫通する (#generated-file-contamination)**、**起きた後の追跡は commit の `Claude-Session:` trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
+summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**生成物の再生成はその防御を貫通する (#generated-file-contamination)**、**起きた後の追跡は commit の `Agent-Session:` + model/effort trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
 -->
 # Multi-session coordination — 同 user の並列 AI session が race する
 
@@ -74,13 +74,15 @@ Read it again before attempting to write it.
 
 - <a id="session-provenance-trailer"></a>**事後追跡 = commit message の trailer に session id を焼く** (2026-09-10 追加) — 上の防御は「巻き込みを起こさない」 側で、 **起きてしまった後に読み解く**手段が別に要る。 並列 session の commit は author が全部同じ人間に潰れる (= git は「誰の hunk か」 を保持しない) ため、 事故の再構成が transcript 漁りと記憶になる。 `prepare-commit-msg` hook で 1 行足すと機械的に読める:
 
-      Claude-Session: <CLAUDE_CODE_SESSION_ID>
+      Agent-Session: claude:<native-session-id>
+      Agent-Model: claude-opus-<version>
+      Agent-Effort: xhigh
 
-  - **読み方**: `git log --format='%h %(trailers:key=Claude-Session,valueonly)'` で commit ⇄ session の対応表。 巻き込みが疑われる commit を `git log -S '<消えた文字列>'` で特定したら、 その commit の session id が「吸った側」 で、 自分の id と違えば race が確定する。 session id は transcript の file 名でもある (`~/.claude*/projects/<slug>/<session-id>.jsonl`) ので、 **commit → その commit を書いた会話**の逆引きも通る (= commit message が薄くても意図を復元できる)。
+  - **読み方**: `git log --format='%h %(trailers:key=Agent-Session,valueonly) %(trailers:key=Agent-Model,valueonly) %(trailers:key=Agent-Effort,valueonly)'` で commit ⇄ agent/session/model/effort の対応表。巻き込みが疑われる commit を `git log -S '<消えた文字列>'` で特定したら、その commit の agent namespace + native session id が「吸った側」で、自分の値と違えば race が確定する。Claude では native id が transcript の file 名でもあり、Codex では task/session の native id として逆引きの入口になる。**model と effort は provenance の一部**だが判断主体ではない。値を runtime から確定できない場合は設定既定を actual と偽らず `unknown` を焼く。
   - **host / account / surface は書かない**。 session id から transcript を引けば冒頭の自己同定 stamp に載っており、 commit に焼くと公開 repo で機器名 (しばしば人名を含む) を晒す経路が 1 本増えるだけ ([multi-account-machine-surface.md](multi-account-machine-surface.md) I7 = 公開面には具体値でなく属性で書く)。 この判断の副産物として public / private の出し分けが不要になり、 **出し分けの設定ミスで漏れるという事故の型そのものが消える** (= 全 repo で同一挙動)。 一般則 = [`convention-design-principles.md §8.34`](../docs/convention-design-principles.md#context-branch-as-leak-path)。
   - **これは carrier の記録であって帰属ではない**。 trailer が言うのは「どの経路を通って commit されたか」 だけで、 内容を決めたのは通常 human である。 commit author を判断主体と等値しない規律をそのまま適用する ([actor-attribution.md](actor-attribution.md))。
-  - **no-op になる条件が有用な signal**: env `CLAUDE_CODE_SESSION_ID` が無ければ何も足さないので、 **trailer の無い commit = AI session を経由していない**と読める。 既に同 key があれば追記しない (= amend / rebase / cherry-pick で増殖せず、 最初に書いた session が残る)。
-  - 実装 = [`scripts/prepare-commit-msg-session.sh`](../scripts/prepare-commit-msg-session.sh) (正本・設計理由も header) + `scripts/install-session-trailer.sh` (全 repo に stub 配置) + `setup.sh` Step 8b。 repo 単位の opt-out = `git config claude.sessionTrailer false`。 fail-open (= 何が起きても commit を止めない)。 **判断の経緯 (= 却下した案とその理由。 特に「host / account を書かない」 の決め方) = [`DESIGN.md#session-provenance-trailer-design`](../DESIGN.md#session-provenance-trailer-design)**。
+  - **no-op / unknown の読み方**: supported session id が無ければ trailer 自体を足さない。session id はあるが model/effort を確定できなければ `unknown` を書き、欠落を「人手 commit」や既定値へ silent に畳まない。message に既に `Agent-Session:` または legacy `Claude-Session:` / `Codex-Session:` があれば追記しない (= rebase/cherry-pick/通常 amend で増殖せず、運ばれた最初の session が残る)。`git commit --amend -m` は message 全体を置換するため、元 trailer が hook input に来ない Git 経路では amending session の新 block になる。したがって **trailer 無しだけでは、人手 commit と未導入/未対応 runtime を区別できない** — audit で hook 配線を別に確認する。
+  - 実装 = [`scripts/prepare-commit-msg-session.sh`](../scripts/prepare-commit-msg-session.sh) (正本・設計理由も header) + `scripts/install-session-trailer.sh` (全 repo に stub 配置)。Claude は `setup.sh` Step 8b、Codex は `scripts/setup-codex.sh --repo <path>` / `--repo-root <path>` で配線する。repo 単位の opt-out = `git config agent.sessionTrailer false` (legacy の `claude.sessionTrailer` / `codex.sessionTrailer` も尊重)。fail-open (= 何が起きても commit を止めない)。**判断の経緯 (= 却下した案とその理由。特に「host / account を書かない」 の決め方) = [`DESIGN.md#session-provenance-trailer-design`](../DESIGN.md#session-provenance-trailer-design)**。
 
 ### Anti-pattern
 

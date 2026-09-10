@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import socket
 import sys
 
@@ -24,12 +25,38 @@ def main() -> int:
     if not isinstance(event, dict) or event.get("hook_event_name") != "SessionStart":
         return 0
     host = worker_host()
+    session_id = str(event.get("session_id", ""))
+    model = str(event.get("model", ""))
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/@+\[\]-]*", model):
+        model = "unknown"
+    effort_value = event.get("effort")
+    if isinstance(effort_value, dict):
+        effort_value = effort_value.get("level")
+    effort = str(effort_value) if isinstance(effort_value, str) else "unknown"
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", effort):
+        effort = "unknown"
+    if re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
+        provenance_context = (
+            "For a Codex-origin Git commit, ensure the managed prepare-commit-msg hook "
+            f"is installed; this task's provenance is codex:{session_id}, model={model}, "
+            f"effort={effort}. If the shell does not propagate these values to Git, prefix "
+            f"that commit with CLAUDE_CONFIG_AGENT_SESSION=codex:{session_id}, "
+            f"CLAUDE_CONFIG_AGENT_MODEL={model}, and CLAUDE_CONFIG_AGENT_EFFORT={effort}; "
+            "keep unknown literal rather than inventing a value. "
+        )
+    else:
+        provenance_context = (
+            "Before a Codex-origin Git commit, ensure the managed Agent-Session "
+            "prepare-commit-msg hook is installed; no valid session id was supplied to "
+            "this SessionStart hook, so do not fabricate one. "
+        )
     payload = {
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": (
                 "This is a session or compaction boundary. Before acting, re-read the "
                 "nearest project AGENTS.md or CLAUDE.md and SESSION.md when present. "
+                f"{provenance_context}"
                 f"The worker host for this session is {host}. A title, prior message, or "
                 "report from another host is only an observation: before claiming or acting "
                 "on a machine-local fact, verify it on this host with hostname and the "

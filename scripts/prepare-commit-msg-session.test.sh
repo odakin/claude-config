@@ -5,16 +5,11 @@
 # 依存 = git のみ。
 #
 # 検査:
-#   1. session 未設定 → 変化なし (= 人手 commit を汚さない)
-#   2. session 設定 → trailer 付与
-#   3. 二重実行 → 1 行のまま (冪等)
-#   4. 別 session で再実行 → やはり 1 行のまま (= amend / rebase で増殖しない)
-#   5. opt-out (claude.sessionTrailer=false) → 付かない
-#   6. 不正な session 値 (改行 / 空白 / コロン) → 付かない (injection 拒否)
-#   7. 既存 Co-Authored-By と同一 trailer block に入る
-#   8. comment 行が保たれ、 trailer は comment より前に入る
-#   9. e2e: 実 commit から %(trailers:key=...) で機械抽出できる
-#  10. e2e: --amend で増えない
+#   - session 未設定 → 変化なし (= 人手 commit を汚さない)
+#   - Claude / Codex / 明示 vendor-neutral source → Agent-Session trailer
+#   - 別 session / 別 vendor / legacy trailer / amend でも最初の carrier を保存
+#   - generic + legacy opt-out、message injection 拒否、comment/trailer 構造
+#   - e2e commit から %(trailers:key=...) で機械抽出できる
 
 set -u
 
@@ -55,7 +50,7 @@ cd "$REPO" || { echo "SKIP: cannot cd to test repo"; exit 0; }
 # ---- 単体 (runner を直接呼ぶ) ----
 
 f="$WORK/m1"; printf 'subject only\n' > "$f"
-( unset CLAUDE_CODE_SESSION_ID; bash "$RUNNER" "$f" )
+( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID CODEX_THREAD_ID; bash "$RUNNER" "$f" )
 if [ "$(cat "$f")" = "subject only" ]; then
     ok "1. session 未設定 → 変化なし"
 else
@@ -63,74 +58,144 @@ else
 fi
 
 f="$WORK/m2"; printf 'subject line\n' > "$f"
-CLAUDE_CODE_SESSION_ID="$SID" bash "$RUNNER" "$f"
-if grep -qx "Claude-Session: $SID" "$f"; then
-    ok "2. session 設定 → trailer 付与"
+CLAUDE_CODE_SESSION_ID="$SID" CLAUDE_CONFIG_AGENT_MODEL="claude-opus-test" \
+  CLAUDE_EFFORT="high" bash "$RUNNER" "$f"
+if grep -qx "Agent-Session: claude:$SID" "$f" \
+   && grep -qx "Agent-Model: claude-opus-test" "$f" \
+   && grep -qx "Agent-Effort: high" "$f"; then
+    ok "2. Claude session → agent/model/effective-effort trailer"
 else
-    ng "2. session 設定 → trailer 付与" "$(cat "$f")"
+    ng "2. Claude session → agent/model/effective-effort trailer" "$(cat "$f")"
 fi
 
 CLAUDE_CODE_SESSION_ID="$SID" bash "$RUNNER" "$f"
-n="$(grep -c '^Claude-Session:' "$f")"
+n="$(grep -c '^Agent-Session:' "$f")"
 if [ "$n" -eq 1 ]; then
     ok "3. 二重実行 → 1 行のまま (冪等)"
 else
     ng "3. 二重実行 → 1 行のまま (冪等)" "count=$n"$'\n'"$(cat "$f")"
 fi
 
-CLAUDE_CODE_SESSION_ID="$SID2" bash "$RUNNER" "$f"
-n="$(grep -c '^Claude-Session:' "$f")"
-if [ "$n" -eq 1 ] && grep -qx "Claude-Session: $SID" "$f"; then
-    ok "4. 別 session で再実行 → 増殖せず最初の session を保存"
+f="$WORK/m3"; printf 'subject line\n' > "$f"
+( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID; \
+  CODEX_SESSION_ID="$SID" CLAUDE_CONFIG_AGENT_MODEL="gpt-test" \
+  CLAUDE_CONFIG_AGENT_EFFORT="xhigh" bash "$RUNNER" "$f" )
+if grep -qx "Agent-Session: codex:$SID" "$f" \
+   && grep -qx "Agent-Model: gpt-test" "$f" \
+   && grep -qx "Agent-Effort: xhigh" "$f"; then
+    ok "4. Codex session env → agent/model/effort trailer"
 else
-    ng "4. 別 session で再実行 → 増殖せず最初の session を保存" "count=$n"$'\n'"$(cat "$f")"
+    ng "4. Codex session env → agent/model/effort trailer" "$(cat "$f")"
 fi
 
-f="$WORK/m3"; printf 'subject line\n' > "$f"
+f="$WORK/m4"; printf 'subject line\n' > "$f"
+STATE_DIR="$WORK/state"
+mkdir -p "$STATE_DIR"
+printf 'model=gpt-cached\neffort=medium\n' > "$STATE_DIR/$SID2.env"
+( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID; \
+  CODEX_THREAD_ID="$SID2" CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR="$STATE_DIR" \
+  bash "$RUNNER" "$f" )
+if grep -qx "Agent-Session: codex:$SID2" "$f" \
+   && grep -qx "Agent-Model: gpt-cached" "$f" \
+   && grep -qx "Agent-Effort: medium" "$f"; then
+    ok "5. Codex thread fallback + hook metadata cache → trailer"
+else
+    ng "5. Codex thread fallback + hook metadata cache → trailer" "$(cat "$f")"
+fi
+
+f="$WORK/m5"; printf 'subject line\n' > "$f"
+CLAUDE_CONFIG_AGENT_SESSION="worker:$SID" CLAUDE_CONFIG_AGENT_MODEL="model-v1" \
+  CLAUDE_CONFIG_AGENT_EFFORT="low" bash "$RUNNER" "$f"
+if grep -qx "Agent-Session: worker:$SID" "$f" \
+   && grep -qx "Agent-Model: model-v1" "$f" \
+   && grep -qx "Agent-Effort: low" "$f"; then
+    ok "6. 明示 vendor-neutral metadata → trailer"
+else
+    ng "6. 明示 vendor-neutral metadata → trailer" "$(cat "$f")"
+fi
+
+( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID; CODEX_SESSION_ID="$SID2" bash "$RUNNER" "$f" )
+n="$(grep -c '^Agent-Session:' "$f")"
+if [ "$n" -eq 1 ] && grep -qx "Agent-Session: worker:$SID" "$f"; then
+    ok "7. 別 vendor で再実行 → 最初の session を保存"
+else
+    ng "7. 別 vendor で再実行 → 最初の session を保存" "count=$n"$'\n'"$(cat "$f")"
+fi
+
+f="$WORK/m6"; printf 'subject line\n' > "$f"
+git config agent.sessionTrailer false
+CLAUDE_CODE_SESSION_ID="$SID" bash "$RUNNER" "$f"
+if ! grep -q '^Agent-Session:' "$f"; then
+    ok "8. opt-out (agent.sessionTrailer=false) → 付かない"
+else
+    ng "8. opt-out (agent.sessionTrailer=false) → 付かない" "$(cat "$f")"
+fi
+git config --unset agent.sessionTrailer
+
 git config claude.sessionTrailer false
 CLAUDE_CODE_SESSION_ID="$SID" bash "$RUNNER" "$f"
-if ! grep -q '^Claude-Session:' "$f"; then
-    ok "5. opt-out (claude.sessionTrailer=false) → 付かない"
+if ! grep -q '^Agent-Session:' "$f"; then
+    ok "9. legacy opt-out (claude.sessionTrailer=false) → 付かない"
 else
-    ng "5. opt-out (claude.sessionTrailer=false) → 付かない" "$(cat "$f")"
+    ng "9. legacy opt-out (claude.sessionTrailer=false) → 付かない" "$(cat "$f")"
 fi
 git config --unset claude.sessionTrailer
 
 inj_fail=""
-for bad in "abc def" "abc:def" "abc
-def" "" "abc/../def"; do
-    f="$WORK/m4"; printf 'subject line\n' > "$f"
-    CLAUDE_CODE_SESSION_ID="$bad" bash "$RUNNER" "$f"
-    if grep -q '^Claude-Session:' "$f"; then
+for bad in "codex:abc def" "codex:abc:def" "codex:abc
+def" "" "codex:abc/../def" ":abc"; do
+    f="$WORK/m7"; printf 'subject line\n' > "$f"
+    ( unset CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID CODEX_THREAD_ID; \
+      CLAUDE_CONFIG_AGENT_SESSION="$bad" bash "$RUNNER" "$f" )
+    if grep -q '^Agent-Session:' "$f"; then
         inj_fail="$inj_fail [$bad]"
     fi
 done
 if [ -z "$inj_fail" ]; then
-    ok "6. 不正な session 値 → 付かない (injection 拒否)"
+    ok "10. 不正な session 値 → 付かない (injection 拒否)"
 else
-    ng "6. 不正な session 値 → 付かない (injection 拒否)" "leaked:$inj_fail"
+    ng "10. 不正な session 値 → 付かない (injection 拒否)" "leaked:$inj_fail"
 fi
 
-f="$WORK/m5"
+f="$WORK/m8"; printf 'subject line\n' > "$f"
+( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CONFIG_AGENT_MODEL CLAUDE_CONFIG_AGENT_EFFORT \
+  CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR; \
+  CODEX_HOME="$WORK/no-codex-home" CODEX_SESSION_ID="$SID" bash "$RUNNER" "$f" )
+if grep -qx 'Agent-Model: unknown' "$f" && grep -qx 'Agent-Effort: unknown' "$f"; then
+    ok "11. metadata 不明 → 捏造せず unknown"
+else
+    ng "11. metadata 不明 → 捏造せず unknown" "$(cat "$f")"
+fi
+
+f="$WORK/m9"
 printf 'subject line\n\nbody paragraph.\n\nCo-Authored-By: Someone <s@example.invalid>\n' > "$f"
 CLAUDE_CODE_SESSION_ID="$SID" bash "$RUNNER" "$f"
-# 同一 trailer block = Co-Authored-By 行と Claude-Session 行の間に空行が無い
-if grep -qx "Claude-Session: $SID" "$f" \
-   && awk '/^Co-Authored-By:/{co=NR} /^Claude-Session:/{cs=NR} END{exit !(cs==co+1)}' "$f"; then
-    ok "7. 既存 Co-Authored-By と同一 trailer block に入る"
+# 同一 trailer block = Co-Authored-By 行と Agent-Session 行の間に空行が無い
+if grep -qx "Agent-Session: claude:$SID" "$f" \
+   && awk '/^Co-Authored-By:/{co=NR} /^Agent-Session:/{as=NR} /^Agent-Model:/{am=NR} /^Agent-Effort:/{ae=NR} END{exit !(as==co+1 && am==as+1 && ae==am+1)}' "$f"; then
+    ok "12. 既存 Co-Authored-By と同一 trailer block に入る"
 else
-    ng "7. 既存 Co-Authored-By と同一 trailer block に入る" "$(cat "$f")"
+    ng "12. 既存 Co-Authored-By と同一 trailer block に入る" "$(cat "$f")"
 fi
 
-f="$WORK/m6"
+f="$WORK/m10"
 printf 'subject line\n\n# comment kept by git\n# another comment\n' > "$f"
 CLAUDE_CODE_SESSION_ID="$SID" bash "$RUNNER" "$f"
-trailer_ln="$(grep -n '^Claude-Session:' "$f" | head -1 | cut -d: -f1)"
+trailer_ln="$(grep -n '^Agent-Session:' "$f" | head -1 | cut -d: -f1)"
 comment_ln="$(grep -n '^# comment kept by git' "$f" | head -1 | cut -d: -f1)"
 if [ -n "$trailer_ln" ] && [ -n "$comment_ln" ] && [ "$trailer_ln" -lt "$comment_ln" ]; then
-    ok "8. comment 行が保たれ、 trailer は comment より前"
+    ok "13. comment 行が保たれ、 trailer は comment より前"
 else
-    ng "8. comment 行が保たれ、 trailer は comment より前" "trailer=$trailer_ln comment=$comment_ln"$'\n'"$(cat "$f")"
+    ng "13. comment 行が保たれ、 trailer は comment より前" "trailer=$trailer_ln comment=$comment_ln"$'\n'"$(cat "$f")"
+fi
+
+f="$WORK/m11"
+printf 'subject line\n\nClaude-Session: %s\n' "$SID" > "$f"
+( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID; CODEX_SESSION_ID="$SID2" bash "$RUNNER" "$f" )
+if grep -qx "Claude-Session: $SID" "$f" && ! grep -q '^Agent-Session:' "$f"; then
+    ok "14. legacy trailer → 新 key を増殖させず最初の session を保存"
+else
+    ng "14. legacy trailer → 新 key を増殖させず最初の session を保存" "$(cat "$f")"
 fi
 
 # ---- e2e (stub を .git/hooks に置いて実 commit) ----
@@ -141,26 +206,30 @@ chmod +x "$REPO/.git/hooks/prepare-commit-msg"
 
 echo hello > "$REPO/a.txt"
 git add a.txt 2>/dev/null
-if CLAUDE_CODE_SESSION_ID="$SID" git commit -q -m "e2e subject" 2>/dev/null; then
-    got="$(git log -1 --format='%(trailers:key=Claude-Session,valueonly)' | tr -d '\n')"
-    if [ "$got" = "$SID" ]; then
-        ok "9. e2e: 実 commit から trailer を機械抽出できる"
+if CLAUDE_CONFIG_AGENT_SESSION="codex:$SID" CLAUDE_CONFIG_AGENT_MODEL="gpt-test" \
+  CLAUDE_CONFIG_AGENT_EFFORT="xhigh" git commit -q -m "e2e subject" 2>/dev/null; then
+    got="$(git log -1 --format='%(trailers:key=Agent-Session,valueonly)' | tr -d '\n')"
+    if [ "$got" = "codex:$SID" ]; then
+        ok "15. e2e: 実 commit から trailer を機械抽出できる"
     else
-        ng "9. e2e: 実 commit から trailer を機械抽出できる" "got='$got' want='$SID'"
+        ng "15. e2e: 実 commit から trailer を機械抽出できる" "got='$got' want='codex:$SID'"
     fi
 
-    if CLAUDE_CODE_SESSION_ID="$SID2" git commit -q --amend -m "e2e subject amended" 2>/dev/null; then
-        n="$(git log -1 --format='%B' | grep -c '^Claude-Session:')"
-        if [ "$n" -eq 1 ]; then
-            ok "10. e2e: --amend で増えない"
+    if CLAUDE_CONFIG_AGENT_SESSION="claude:$SID2" CLAUDE_CONFIG_AGENT_MODEL="claude-test" \
+      CLAUDE_CONFIG_AGENT_EFFORT="high" git commit -q --amend -m "e2e subject amended" 2>/dev/null; then
+        n="$(git log -1 --format='%B' | grep -c '^Agent-Session:')"
+        if [ "$n" -eq 1 ] \
+          && [ "$(git log -1 --format='%(trailers:key=Agent-Session,valueonly)' | tr -d '\n')" = "claude:$SID2" ] \
+          && [ "$(git log -1 --format='%(trailers:key=Agent-Model,valueonly)' | tr -d '\n')" = "claude-test" ]; then
+            ok "16. e2e: --amend -m は 1 block のまま amending session を記録"
         else
-            ng "10. e2e: --amend で増えない" "count=$n"$'\n'"$(git log -1 --format='%B')"
+            ng "16. e2e: --amend -m は 1 block のまま amending session を記録" "count=$n"$'\n'"$(git log -1 --format='%B')"
         fi
     else
-        echo "  ~ 10. SKIP: git commit --amend failed in sandbox"
+        echo "  ~ 16. SKIP: git commit --amend failed in sandbox"
     fi
 else
-    echo "  ~ 9/10. SKIP: git commit failed in sandbox (identity/signing?)"
+    echo "  ~ 15/16. SKIP: git commit failed in sandbox (identity/signing?)"
 fi
 
 echo ""

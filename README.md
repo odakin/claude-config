@@ -41,7 +41,7 @@ Setup runs once. What the repo is really for is every session after that:
 
 - **Session start** — SessionStart hooks anchor today's date, detect Claude-account switches, surface MCP account-scope reminders, and (on Windows) self-heal the toolchain. `CLAUDE.md` is always in context and points at `SESSION.md`, so Claude starts oriented instead of cold.
 - **During work** — nudge hooks watch the seams where real mistakes happen: editing files in a repo that is behind its remote (`git-state-nudge`, `stale-read-nudge`), declaring something absent after a partial search (`*-zero-result-nudge`), writing facts to a destination where they would be lost (`memory-guard`), pasting unstable Google URLs (`google-url-guard`). Domain conventions load only when their trigger matches — knowledge on demand, not a context tax.
-- **At commit** — pre-commit hooks auto-fix Unicode in LaTeX sources, block leftover merge-conflict markers, and on public repos run the 2-layer leak gate over file bodies and commit messages.
+- **At commit** — pre-commit hooks auto-fix Unicode in LaTeX sources, block leftover merge-conflict markers, and on public repos run the 2-layer leak gate over file bodies and commit messages. A separate provenance hook records the originating agent/session plus model and effort without recording host or account.
 - **Before push** — the 4-axis review protocol (consistency, non-contradiction, efficiency, safety). In practice it finds something almost every time.
 - **When context runs out** — autocompact recovery: `CLAUDE.md`'s **How to Resume** section says "read `SESSION.md`"; `SESSION.md` holds the current task, progress, and open decisions, updated continuously during work; Claude picks up exactly where it left off, no re-explanation needed. The critical habit is keeping `SESSION.md` honest — and the gates above exist to keep that cheap.
 - **Across machines** — `git pull` plus the post-merge hook resyncs hooks and conventions everywhere. Each machine runs the same rules, and each session leaves state any other machine's next session can resume from.
@@ -62,7 +62,7 @@ To install the shared conventions for Codex without changing the Claude Code
 setup, run after cloning:
 
 ```bash
-./scripts/setup-codex.sh --set-default-effort high --configure-safe-local
+./scripts/setup-codex.sh --repo-root .. --set-default-effort high --configure-safe-local
 ```
 
 The installer creates user-local layer-4 entry points to this repository's
@@ -73,11 +73,17 @@ user-managed conflict without leaving a partial installation. Review such a
 conflict first; only then use `--replace`, which preserves a timestamped
 backup before replacement.
 
+`--repo-root ..` explicitly installs the Git provenance hook in the clone's
+parent directory and its immediate child repositories. Use repeatable
+`--repo <path>` for repositories elsewhere. New AI-origin commits record
+`Agent-Session`, `Agent-Model`, and `Agent-Effort`; unavailable runtime metadata
+is written as `unknown`, never inferred from a configured default.
+
 If you own a marked private personal layer, first create its short
 `codex/AGENTS.md` overlay from the supplied template, then opt in explicitly:
 
 ```bash
-./scripts/setup-codex.sh --configure-safe-local --personal-layer ~/Claude/my-prefs
+./scripts/setup-codex.sh --repo-root .. --configure-safe-local --personal-layer ~/Claude/my-prefs
 ```
 
 This produces a mode-`0600` local global-instruction composite from public

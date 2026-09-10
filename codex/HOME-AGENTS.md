@@ -8,6 +8,11 @@ to owner-private data.
 
 For Git work, fetch first when a remote exists, inspect the project
 instructions and `SESSION.md`, and preserve the project's own instructions.
+Before a Codex-origin commit, verify the repository's managed provenance hook;
+the commit must carry `Agent-Session`, `Agent-Model`, and `Agent-Effort`, using
+literal `unknown` rather than a guessed value. Install or audit it through the
+`claude-config-conventions` route and
+`codex/PARITY.md#git-session-provenance`, then push after the commit.
 Use the `claude-config-conventions` skill when installing, updating, auditing,
 or extending this Codex integration.
 Use the `claude-config-operations` skill when a task may be covered by the

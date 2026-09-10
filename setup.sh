@@ -276,11 +276,16 @@ STOP_ENTRIES='[
 # SessionStart hooks: run on session start (= 起動時 1 回のみ fire)。
 # currentdate-anchor.py: currentDate + 曜日 を inject (= multi-day session の
 # day change を early notice、 私 (Claude) の reflex anchor refresh)。
+# session-start-provenance.py: session id → 起動時 model の machine-local cache。
+# commit 時の effective effort は Bash env CLAUDE_EFFORT を Git hook が直接読む。
 # 詳細: conventions/time-context.md#design-history 参照。 UserPromptSubmit hook
 # は 2026-05-20 試行 → user UI 汚染で同日中に退役、 SessionStart のみ復活。
 SESSION_START_ENTRIES='[
   {
     "hooks": [{"type": "command", "command": "~/.claude/hooks/currentdate-anchor.py"}]
+  },
+  {
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-provenance.py"}]
   },
   {
     "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-mcp-scope-nudge.sh"}]
@@ -1511,13 +1516,13 @@ else
     fi
 fi
 
-# --- 8b. Install prepare-commit-msg stub (Claude-Session trailer) on all repos ---
+# --- 8b. Install prepare-commit-msg stub (Agent-Session/model/effort trailers) on all repos ---
 echo ""
-echo "=== Step 8b: Installing prepare-commit-msg stubs (Claude-Session trailer) ==="
+echo "=== Step 8b: Installing prepare-commit-msg stubs (Agent session/model/effort trailers) ==="
 # 並列 Claude session が同じ working tree を触ると commit author が全 commit で同一人物に
 # 潰れ、 「どの commit がどの session か」 が git から復元できない (= staging window race の
-# 事後追跡が transcript 漁りと記憶になる)。 commit message の trailer に session id を 1 行
-# 足して機械抽出可能にする。 host / account は書かない (= 公開面に機器名を晒す経路を増やさ
+# 事後追跡が transcript 漁りと記憶になる)。 commit message の trailer に agent/session と
+# runtime model/effort を足して機械抽出可能にする。 host / account は書かない (= 公開面に機器名を晒す経路を増やさ
 # ないため。 設計理由は scripts/prepare-commit-msg-session.sh の header が正本)。
 # Step 8 と違い marker を要求しない = 全 repo 対象 (private repo でこそ効く)。
 INSTALLER_SESSION="$SCRIPT_DIR/scripts/install-session-trailer.sh"
@@ -1532,7 +1537,7 @@ else
         fi
     done
     echo "  Installed prepare-commit-msg stubs in $SESSION_COUNT repo(s)."
-    echo "  Opt-out per repo: git config claude.sessionTrailer false"
+    echo "  Opt-out per repo: git config agent.sessionTrailer false"
 fi
 
 # --- 9. Install python-docx XML declaration auto-patch (Word「破損」回避) ---

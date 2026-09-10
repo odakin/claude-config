@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# install-session-trailer.sh — 各 repo に prepare-commit-msg stub を冪等配置 (Claude-Session trailer)
+# install-session-trailer.sh — 各 repo に prepare-commit-msg stub を冪等配置 (agent/session/model/effort trailer)
 #
 # 使い方:
-#   install-session-trailer.sh [<repo_path>]
+#   install-session-trailer.sh [--refuse-existing] [<repo_path>]
 #   repo_path 省略時は cwd。
 #
 # 動作:
 #   1. 対象が git repo かを check
 #   2. hooks dir を解決 (core.hooksPath 対応)
-#   3. 既存 prepare-commit-msg があれば backup (.bak-<timestamp>)
+#   3. 既存 prepare-commit-msg があれば backup (.bak-<timestamp>)。
+#      --refuse-existing なら user-managed hook を変更せず失敗する
 #   4. 1 行 exec stub を書いて chmod +x
 #   5. 冪等: 本 script が置いた stub なら backup せず上書き更新のみ
 #
@@ -17,17 +18,29 @@
 #   absolute path。 runner を編集すれば全 repo に波及する)。
 #
 # ⚠️ sibling installer との違い: 本 script は `.claude/public-repo.marker` を要求しない
-#   (= 全 repo が対象)。 trailer は session id しか書かず public / private で挙動が
-#   変わらないため、 marker による出し分けが不要 — 理由は runner の header を参照。
+#   (= 全 repo が対象)。 trailer は agent/session + model/effort だけを書き、host / account
+#   や project 内容を持たないため、public / private で挙動が変わらず marker による
+#   出し分けが不要 — 理由は runner の header を参照。
 #   むしろ private repo (= 並列 session が同じ tree を触る作業場) でこそ効く。
 #
-# opt-out: 対象 repo で `git config claude.sessionTrailer false`
+# opt-out: 対象 repo で `git config agent.sessionTrailer false`
+#   legacy の `claude.sessionTrailer false` / `codex.sessionTrailer false` も有効。
 #   (= hook は置かれたまま no-op になる。 uninstall は .git/hooks/prepare-commit-msg を消す)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNNER="$SCRIPT_DIR/prepare-commit-msg-session.sh"
+REFUSE_EXISTING=0
+
+if [ "${1:-}" = "--refuse-existing" ]; then
+  REFUSE_EXISTING=1
+  shift
+fi
+if [ "$#" -gt 1 ]; then
+  echo "usage: install-session-trailer.sh [--refuse-existing] [<repo_path>]" >&2
+  exit 2
+fi
 
 if [ ! -f "$RUNNER" ]; then
   echo "runner not found: $RUNNER" >&2
@@ -64,13 +77,17 @@ exec \"$RUNNER\" \"\$@\"
 "
 
 # --- 既存 hook の扱い ---
-if [ -f "$HOOK" ]; then
+if [ -e "$HOOK" ] || [ -L "$HOOK" ]; then
   if grep -q "$STUB_MARKER" "$HOOK" 2>/dev/null; then
     printf '%s' "$STUB_CONTENT" > "$HOOK"
     chmod +x "$HOOK"
     echo "prepare-commit-msg stub refreshed: $HOOK"
     exit 0
   else
+    if [ "$REFUSE_EXISTING" -eq 1 ]; then
+      echo "refusing to replace existing prepare-commit-msg hook: $HOOK" >&2
+      exit 1
+    fi
     TS="$(date +%Y%m%d-%H%M%S)"
     BAK="$HOOK.bak-$TS"
     mv "$HOOK" "$BAK"

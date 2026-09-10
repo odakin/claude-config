@@ -23,10 +23,12 @@ the Codex architecture, layer boundaries, platform scope, and Hook contract.
 
 ## Installation and updates
 
-Use `scripts/setup-codex.sh` from the repository root. A clone has no effect
-on another user's home directory until that user runs the installer. Follow the
-installer contract in `codex/PARITY.md#codex-integration-sot` rather than
-copying its technical details into this skill.
+Use `scripts/setup-codex.sh` from the repository root. Select Git provenance
+targets explicitly with repeatable `--repo` or `--repo-root`; a clone has no
+effect on another user's home directory or repositories until that user runs
+the installer. Follow the installer contract in
+`codex/PARITY.md#codex-integration-sot` rather than copying its technical
+details into this skill.
 
 Validate with `scripts/setup-codex.test.sh`,
 `scripts/audit-codex-integration.sh`, and the repository's standard checks.

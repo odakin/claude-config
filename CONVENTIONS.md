@@ -299,10 +299,10 @@ SESSION.md の content を別 file に抽出する判断軸 (= 棚卸し時の�
 - **コミット後は常に push。** 複数リモートがあれば全リモートに push。`git-state-nudge.sh` hook (§3) が直近 60 秒以内の未 push commit を機械的に検出して警告するため、Claude はこの警告を見たら次の Bash で push を実行すること
 - セッション終了時は未コミット変更があれば commit + push
 - ファイル名にバージョン番号をつけない
-- **commit には発生元 Claude session の trailer が自動で付く** (`Claude-Session: <id>`、 setup.sh Step 8b が全 repo に配線、 env が無ければ no-op = 人手 commit には付かない)。 これは **carrier の記録であって帰属ではない** — 内容を決めたのは通常 human で、 commit author を判断主体と等値しない規律 ([conventions/actor-attribution.md](conventions/actor-attribution.md)) がそのまま効く。 並列 session の巻き込みを事後に読み解くときの入口:
+- **commit には発生元 AI session の provenance trailer が自動で付く** (`Agent-Session: <agent>:<id>` + `Agent-Model:` + `Agent-Effort:`)。agent namespace は Claude / Codex 等を区別し、model は runtime の model id、effort は commit 時の effective 値を記録する。取得不能な値は捏造・設定既定値で穴埋めせず `unknown` と明示する。Claude の setup.sh Step 8b、Codex の `setup-codex.sh --repo/--repo-root` が Git hook を配線し、session id が無ければ no-op = 人手 commit には付かない。これは **carrier の記録であって帰属ではない** — 内容を決めたのは通常 human で、commit author を判断主体と等値しない規律 ([conventions/actor-attribution.md](conventions/actor-attribution.md)) がそのまま効く。旧 commit の `Claude-Session:` は legacy として保持し、message に運ばれた既存 key へ amend/rebase で新 key を足さない（`--amend -m` は message 全置換なので例外）。並列 session の巻き込みを事後に読み解くときの入口:
   ```bash
-  git log --format='%h %s → %(trailers:key=Claude-Session,valueonly)'   # commit ⇄ session
-  git log -S '<消えた文字列>' --format='%h %(trailers:key=Claude-Session,valueonly)'
+  git log --format='%h %s → %(trailers:key=Agent-Session,valueonly) model=%(trailers:key=Agent-Model,valueonly) effort=%(trailers:key=Agent-Effort,valueonly)'
+  git log -S '<消えた文字列>' --format='%h %(trailers:key=Agent-Session,valueonly)'
   ```
   機構・設計理由・opt-out = [conventions/multi-session-coordination.md#session-provenance-trailer](conventions/multi-session-coordination.md#session-provenance-trailer)
 

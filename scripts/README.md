@@ -63,7 +63,7 @@
 - **[install-public-commit-msg.sh](install-public-commit-msg.sh)** — 各 public repo に commit-msg stub を冪等配置（marker check + core.hooksPath cascade）
 - **[install-public-precommit.sh](install-public-precommit.sh)** — 各 public repo に pre-commit stub を冪等配置
 - **[install-remote-control-server.sh](install-remote-control-server.sh)** — Remote Control サーバーモードを launchd 常駐化（--dir / --replace-agent / --status / --uninstall、KeepAlive 60s 自動復帰、preflight で auth/同意の欠落を案内、idempotent、macOS 限定、conventions/remote-control-server.md）
-- **[install-session-trailer.sh](install-session-trailer.sh)** — 各 repo に prepare-commit-msg stub を冪等配置 (Claude-Session trailer)
+- **[install-session-trailer.sh](install-session-trailer.sh)** — 各 repo に prepare-commit-msg stub を冪等配置 (agent/session/model/effort trailer)
 - **[jps-program-talks.py](jps-program-talks.py)** — 日本物理学会 (JPS) 年次大会 / 春季大会の Web program を機械で読む。
 - **[kakenhi-preflight.py](kakenhi-preflight.py)** — 科研費 研究計画調書の「機関事務が必ず突く点」を提出前に機械検出（様式骨格の生存 / 埋め込み指示の抽出 / 表記 lint / 経費明細の粒度・費目帰属、kakenhi-proposal.md#office-review-loop）
 - **[latex-pdf-audit.py](latex-pdf-audit.py)** — Audit a LaTeX log and PDF, and optionally render numbered pages for visual review.
@@ -78,7 +78,7 @@
 - **[pin-claude-cwd.sh](pin-claude-cwd.sh)** — Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
 - **[pptx-to-pdf.sh](pptx-to-pdf.sh)** — PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、PowerPoint 経路は事前 grant 済み staging dir 経由、office-automation.md#pptx-to-pdf-powerpoint）
 - **[pre-commit-bib](pre-commit-bib)** — Git pre-commit hook（上記を呼ぶ）
-- **[prepare-commit-msg-session.sh](prepare-commit-msg-session.sh)** — commit に発生元 Claude session の trailer を 1 行付ける (並列 session の事後追跡)
+- **[prepare-commit-msg-session.sh](prepare-commit-msg-session.sh)** — commit に発生元 agent/session/model/effort の trailer block を付ける (並列 session の事後追跡)
 - **[prepare-commit-msg-session.test.sh](prepare-commit-msg-session.test.sh)** — prepare-commit-msg-session.sh の selftest
 - **[pty-leak-watch.sh](pty-leak-watch.sh)** — macOS Claude.app pty leak watchdog（LaunchAgent、枯渇前に macOS 通知、conventions/macos-claude-app-pty-leak.md）
 - **[public-precommit-runner.sh](public-precommit-runner.sh)** — 公開リポ pre-commit gate（Tier A + sensitive-terms.txt ephemeral）
@@ -90,6 +90,7 @@
 - **[routine-host-gate.py](routine-host-gate.py)** — 汎用 active-routine-host gate（無人ルーチンを複数マシンに install しつつ「今の本番ホスト」を台帳1ファイルで決める。台帳の host が自分でなければ defer〔exit 1〕、台帳不在/破損は fail-open〔exit 0〕、最新 committed 台帳を fetch して読む、--selftest 内蔵。install-launchd-cron.sh --gate から呼ぶ、conventions/multi-machine-state.md#account-host-failover）
 - **[run-all-checks.sh](run-all-checks.sh)** — claude-config の全機械検査を 1 コマンドで回す (検査リストの SoT)
 - **[scan-form-instructions.py](scan-form-instructions.py)** — 様式 xlsx の label 内 embedded instruction を category 別に抽出（office-automation.md#embedded-instruction-in-label）
+- **[session_provenance_cache.py](session_provenance_cache.py)** — Cache hook-supplied session model/effort metadata for the Git provenance trailer.
 - **[setup-codex.sh](setup-codex.sh)** — claude-config の共有規約を Codex に安全に導入する
 - **[setup-codex.test.sh](setup-codex.test.sh)** — setup-codex.sh の隔離・冪等・非上書き性を検証する
 - **[setup-dropbox-refs.sh](setup-dropbox-refs.sh)** — personal layer の dropbox-collabs.yaml を読んで symlink を生成

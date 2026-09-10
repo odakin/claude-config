@@ -28,24 +28,13 @@ owner の科研費 session (別 repo が主戦場) から、層1 に上がった
 いたのに翌年また同じ箇所を落としていた) / **要求項目は年ごとに増える**ので「去年と同じでよい」
 は成り立たない / **捨てた情報は検査できない** (誤りと確定した旧値も消さずに残す)。
 
-## 2026-09-10 — commit に session id の trailer を焼く (並列 session の事後追跡)
+## 2026-09-10/11 — commit provenance trailer (Claude + Codex)
 
-owner の質問「コミットやプッシュのとき、 どのセッションがしたかも書いとくといいことある?」 から。
-**予防ではなく forensics** と位置づけて実装した (= 巻き込みを防ぐのは既存の `git commit -- <path>`
-規律の仕事で、 本件はその防御が破れた後に読み解く手段)。
-
-- `prepare-commit-msg` hook が `Claude-Session: <CLAUDE_CODE_SESSION_ID>` を 1 行足す。 読みは
-  `git log --format='%h %(trailers:key=Claude-Session,valueonly)'`。 session id は transcript の
-  file 名でもあるので **commit → その commit を書いた会話**の逆引きも通る。
-- **host / account は書かない**判断で、 当初案の public / private 出し分けを設計から消した
-  (= 出し分けの設定漏れで機器名が公開 history に焼き付く経路ごと除去)。 却下した案と理由は
-  [DESIGN §2026-09-10](DESIGN.md#session-provenance-trailer-design)。
-- 実装 = `scripts/prepare-commit-msg-session.sh` (正本・設計理由も header) +
-  `scripts/install-session-trailer.sh` + `setup.sh` Step 8b (marker 不要 = 全 repo)、 規約 =
-  [`#session-provenance-trailer`](conventions/multi-session-coordination.md#session-provenance-trailer)。
-- selftest 10 件 (冪等 / injection 拒否 / comment 行保持 / 既存 Co-Authored-By と同 block /
-  e2e commit + amend)。 owner の手元では 67 repo に配布済 (既存 prepare-commit-msg の上書きは 0 件)。
-  この commit 自身に trailer が付いていることで dogfood 済。
+owner の質問から始まった commit forensics。現在の agent/session/model/effort 契約、取得不能値の
+扱い、Claude/Codex の配線・監査境界は
+[Codex/Git provenance の正本](codex/PARITY.md#git-session-provenance)、判断理由は
+[DESIGN](DESIGN.md#session-provenance-trailer-design)、運用規約は
+[`multi-session-coordination`](conventions/multi-session-coordination.md#session-provenance-trailer) を読む。
 - **一般知見を層1 へ hoist** (= 本件固有でなく再利用可能な形):
   [`§8.34`](docs/convention-design-principles.md#context-branch-as-leak-path) = 安全側の出力が context 判定に依存するなら
   **分岐を消せないか先に問う** (marker 付け忘れが唯一の穴になる。 消せる条件 = richer 側が safe 側から導出可能なとき) +

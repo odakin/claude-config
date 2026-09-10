@@ -11,6 +11,10 @@ or behavior.
 For work inside a Git repository, begin by fetching its remote when one
 exists, checking status, and reading the repository's `AGENTS.md` or
 `CLAUDE.md`. Read `SESSION.md`, when present, before editing.
+Before a Codex-origin commit, verify the managed provenance hook described in
+`codex/PARITY.md#git-session-provenance`; the commit must record
+`Agent-Session`, `Agent-Model`, and `Agent-Effort`, with `unknown` for a value
+the runtime cannot establish. Push after the commit.
 
 For SESSION updates and handoff, follow
 `CONVENTIONS.md#auto-update-protocol` and

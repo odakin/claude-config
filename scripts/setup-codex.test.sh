@@ -17,6 +17,15 @@ TEST_HOME="$TEMP_ROOT/home"
 TEST_CODEX_DIR="$TEST_HOME/.codex"
 TEST_WORKSPACE="$TEST_HOME/Documents/Codex"
 mkdir -p "$TEST_CODEX_DIR" "$TEST_HOME"
+TEST_REPOS_ROOT="$TEMP_ROOT/repos"
+TRAILER_REPO="$TEST_REPOS_ROOT/direct"
+ROOT_DISCOVERED_REPO="$TEST_REPOS_ROOT/discovered"
+OUTSIDE_REPO="$TEMP_ROOT/outside-repo"
+mkdir -p "$TRAILER_REPO" "$ROOT_DISCOVERED_REPO" "$OUTSIDE_REPO"
+git -C "$TRAILER_REPO" init -q
+git -C "$ROOT_DISCOVERED_REPO" init -q
+git -C "$OUTSIDE_REPO" init -q
+ln -s "$OUTSIDE_REPO" "$TEST_REPOS_ROOT/outside-link"
 python3 - "$TEST_CODEX_DIR/config.toml" <<'PY'
 from pathlib import Path
 import sys
@@ -48,7 +57,8 @@ run_setup_for() {
   "$SCRIPT_DIR/setup-codex.sh" "$@"
 }
 
-run_setup --set-default-effort high --configure-safe-local
+run_setup --set-default-effort high --configure-safe-local \
+  --repo "$TRAILER_REPO" --repo-root "$TEST_REPOS_ROOT"
 
 [ "$(readlink "$TEST_CODEX_DIR/AGENTS.md")" = "$CONFIG_ROOT/codex/HOME-AGENTS.md" ]
 [ "$(readlink "$TEST_WORKSPACE/AGENTS.md")" = "$CONFIG_ROOT/codex/AGENTS.md" ]
@@ -83,6 +93,9 @@ awk '
   }
 ' "$TEST_CODEX_DIR/config.toml"
 [ ! -e "$TEST_HOME/.claude" ]
+grep -qF 'prepare-commit-msg-session.sh' "$TRAILER_REPO/.git/hooks/prepare-commit-msg"
+grep -qF 'prepare-commit-msg-session.sh' "$ROOT_DISCOVERED_REPO/.git/hooks/prepare-commit-msg"
+[ ! -e "$OUTSIDE_REPO/.git/hooks/prepare-commit-msg" ]
 
 PERSONAL_LAYER="$TEMP_ROOT/personal-layer"
 mkdir -p "$PERSONAL_LAYER/codex" "$PERSONAL_LAYER/.git/hooks"
@@ -117,7 +130,8 @@ HOME="$TEST_HOME" \
 CODEX_USER_DIR="$TEST_CODEX_DIR" \
 CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
 CLAUDE_CONFIG_POST_MERGE="$PUBLIC_POST_MERGE_FIXTURE" \
-  "$SCRIPT_DIR/audit-codex-integration.sh" >/dev/null
+  "$SCRIPT_DIR/audit-codex-integration.sh" --repo "$TRAILER_REPO" \
+  --repo "$ROOT_DISCOVERED_REPO" >/dev/null
 
 run_setup --replace
 [ "$(readlink "$TEST_CODEX_DIR/AGENTS.md")" = "$CONFIG_ROOT/codex/HOME-AGENTS.md" ]
@@ -148,6 +162,29 @@ run_setup_for "$CONFLICT_HOME" "$CONFLICT_CODEX_DIR" "$CONFLICT_WORKSPACE" --rep
 hook_backup="$(find "$CONFLICT_CODEX_DIR" -maxdepth 1 -type f -name 'hooks.json.bak-*' -print -quit)"
 [ -n "$hook_backup" ]
 grep -qx 'user hook configuration' "$hook_backup"
+
+HOOK_CONFLICT_HOME="$TEMP_ROOT/hook-conflict-home"
+HOOK_CONFLICT_CODEX="$HOOK_CONFLICT_HOME/.codex"
+HOOK_CONFLICT_WORKSPACE="$HOOK_CONFLICT_HOME/Documents/Codex"
+HOOK_CONFLICT_REPO="$TEMP_ROOT/hook-conflict-repo"
+mkdir -p "$HOOK_CONFLICT_CODEX" "$HOOK_CONFLICT_REPO"
+git -C "$HOOK_CONFLICT_REPO" init -q
+printf '%s\n' '#!/bin/sh' 'echo user hook' > "$HOOK_CONFLICT_REPO/.git/hooks/prepare-commit-msg"
+if run_setup_for "$HOOK_CONFLICT_HOME" "$HOOK_CONFLICT_CODEX" "$HOOK_CONFLICT_WORKSPACE" \
+  --repo "$HOOK_CONFLICT_REPO" >/dev/null 2>&1; then
+  echo "expected setup to refuse a user-managed prepare-commit-msg hook" >&2
+  exit 1
+fi
+grep -qx 'echo user hook' "$HOOK_CONFLICT_REPO/.git/hooks/prepare-commit-msg"
+[ ! -e "$HOOK_CONFLICT_CODEX/AGENTS.md" ]
+[ ! -e "$HOOK_CONFLICT_WORKSPACE/AGENTS.md" ]
+run_setup_for "$HOOK_CONFLICT_HOME" "$HOOK_CONFLICT_CODEX" "$HOOK_CONFLICT_WORKSPACE" \
+  --replace --repo "$HOOK_CONFLICT_REPO" >/dev/null
+grep -qF 'prepare-commit-msg-session.sh' "$HOOK_CONFLICT_REPO/.git/hooks/prepare-commit-msg"
+hook_conflict_backup="$(find "$HOOK_CONFLICT_REPO/.git/hooks" -maxdepth 1 -type f \
+  -name 'prepare-commit-msg.bak-*' -print -quit)"
+[ -n "$hook_conflict_backup" ]
+grep -qx 'echo user hook' "$hook_conflict_backup"
 
 ln -s "$CONFIG_ROOT/codex/HOME-AGENTS.md" "$TEST_HOME/AGENTS.md"
 
