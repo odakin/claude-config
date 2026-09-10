@@ -77,7 +77,8 @@ CMD = (r"git|cd|npm|npx|launchctl|python3?|bash|zsh|sh|grep|ls|rm|mv|cp|mkdir|op
 CMD_RE = re.compile(r"^\s*(?:%s)\b" % CMD)
 INLINE_HASH_RE = re.compile(r"\S\s+#(?!!)")        # 行内 # (shebang は除外)
 FULLLINE_HASH_RE = re.compile(r"^\s*#(?!!)")       # 行頭 # 単独行
-FENCE_RE = re.compile(r"^\s*```")
+# bash 3.2 parses heredoc bodies inside $(...) incorrectly; avoid literal backticks here.
+FENCE_RE = re.compile(r"^\s*" + chr(96) * 3)
 PASTE_CUE = re.compile(
     # 日本語 (2026-09-09 に transcript 49 日で校正、 真陽性 3 / FP 0)
     r"実行して|打って|貼って|貼り付け|ターミナル|コピペ|流して|叩いて|"
