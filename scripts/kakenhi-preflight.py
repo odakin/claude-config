@@ -40,6 +40,7 @@
   🟠 KEIHI_SPEC_MISSING 設備備品費の「品名・仕様」に型番・仕様が無い
   🟠 KEIHI_TRAVEL_DETAIL 旅費の「事項」に場所・回数・日数・人数が無い
   🟠 KEIHI_MULTI_ITEM   1 行に異種の事項 (「論文投稿料、クラウド計算資源」等)
+  🟠 KEIHI_AMOUNT_VARY  同じ事項が年度によって違う金額 (理由を必要性欄に書いていないと必ず突かれる)
 
 使い方
 ------
@@ -533,10 +534,12 @@ def check_keihi(path: Path) -> list[tuple]:
         return [("🔴", "KEIHI_SCHEMA",
                  f"{path.name}: 取込フォーマット (8 列: 費目区分/年度/品名・仕様/設置機関/"
                  f"事項/数量/単価/金額) の行が 1 つも無い — 別 file か、列がずれている")]
+    amount_rows: list[tuple] = []
     for i, r in enumerate(body, start=1):
         if len(r) < 8 or not r[0].strip():
             continue
         cat, fy, spec, _inst, item = r[0].strip(), r[1].strip(), r[2].strip(), r[3].strip(), r[4].strip()
+        amount_rows.append((cat, fy, item, r[7].strip()))
         where = f"{path.name} {fy} {CAT_NAMES.get(cat, cat)} 行{i}"
         text = spec or item
 
@@ -576,6 +579,32 @@ def check_keihi(path: Path) -> list[tuple]:
                 if len(hits) >= 2:
                     out.append(("🟠", "KEIHI_MULTI_ITEM",
                                 f"{where}: 1 行に異種の事項 「{item}」 (行を分ける)"))
+    out += check_keihi_amount_consistency(amount_rows, path)
+    return out
+
+
+def check_keihi_amount_consistency(rows: list[tuple], path: Path) -> list[tuple]:
+    """同じ事項なのに年度で金額が違う行を拾う。
+
+    事務は必ず「同一日数ですが旅費が異なりますが、よろしいでしょうか。**異なる理由は
+    必要性の欄に**ご記入ください」「前年までと異なりますが、最終年度のためでしょうか」と聞く
+    (2025-09 実測)。金額が合っていても説明が無ければ差し戻し事由になる。
+
+    ⚠️ 「違うのが誤り」ではない — **理由が書いてあるか**が論点なので 🟠 に留める。
+    """
+    out = []
+    by_item: dict[tuple, dict[str, set]] = {}
+    for cat, fy, item, amt in rows:
+        if not item or not amt:
+            continue
+        by_item.setdefault((cat, nfkc(item)), {}).setdefault("amts", set()).add(amt)
+        by_item[(cat, nfkc(item))].setdefault("fys", set()).add(fy)
+    for (cat, item), d in sorted(by_item.items()):
+        if len(d["amts"]) > 1 and len(d["fys"]) > 1:
+            amts = ", ".join(sorted(d["amts"], key=lambda x: int(x) if x.isdigit() else 0))
+            out.append(("🟠", "KEIHI_AMOUNT_VARY",
+                        f"{path.name} {CAT_NAMES.get(cat, cat)}: 同じ事項が年度で違う金額 "
+                        f"({amts}) 「{item[:34]}」 — 異なる理由を必要性欄に書いたか"))
     return out
 
 
@@ -824,6 +853,20 @@ def selftest() -> int:
                                          "研究種目名 課題番号 研究期間")
         expect("骨格: 全部あれば clean", [c for _, c, _ in kept], [],
                forbid=["SKELETON_LOST", "SKELETON_MISSING"])
+
+        # 2025-09 の実例: 同じ事項が年度で違う金額 (旅費 240/430、OA 250→200) を
+        # 「異なる理由は必要性の欄に」と問われた
+        vary = td / "vary.csv"
+        vary.write_text(
+            "費目区分,年度,品名・仕様,設置機関,事項,数量,単価,金額\n"
+            "D,2027,,,国際会議での成果発表（欧州、7日間、1名）,,,240\n"
+            "D,2028,,,国際会議での成果発表（欧州、7日間、1名）,,,430\n"
+            "C,2027,,,学会発表（年2回、各2泊3日、1名）,,,250\n"
+            "C,2028,,,学会発表（年2回、各2泊3日、1名）,,,250\n", encoding="utf-8")
+        codes = [c for _, c, _ in check_keihi(vary)]
+        expect("経費: 同じ事項が年度で違う金額を拾う", codes, ["KEIHI_AMOUNT_VARY"])
+        n = len([1 for _, c, _ in check_keihi(vary) if c == "KEIHI_AMOUNT_VARY"])
+        expect("経費: 金額が同じ年度違いは拾わない", ["n%d" % n], ["n1"])
 
         # 2026-07 の実例: 旅費の行に参加登録料が混ざっていた
         mis = td / "misfit.csv"
