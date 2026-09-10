@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude Code hook を作成・配信・debug するとき
 category: harness-core
-summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕)
+summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)**)
 -->
 # Claude Code hooks の作成 + 配信規律
 <!-- slug index: hook-authoring.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
@@ -92,6 +92,21 @@ msg="prefix${x_part} suffix"
 ```
 
 **一般則**: `trap ... ERR` 下では「**空でありうる値**を条件付きで整形する command substitution」 が全て地雷 — 値が空の環境でだけ発火し、 author の環境では再現しない。 grep 検査: trap ERR 持ち hook に対して `grep -n '\$(\[ ' hooks/*.sh`。
+
+---
+
+### <a id="gate-hook-unreadable-input"></a>§0 補足 4: gate hook は「読めない入力」 で死んではいけない — 1 file の異常が repo 全体の commit を止める
+
+commit gate (pre-commit) が staged file を舐めて検査する形は定石だが、 **検査対象が「読める」 前提で書かれていると、 1 file の異常が repo 全体の commit を止める**。 しかも止まり方が生の traceback なので、 呼び出し元 (人間 / agent) には「自分の変更のどこが悪いのか」 が見えない。
+
+**実例 (2026-09-10)**: yaml corruption scanner が `open(path)` を encoding 指定なしで開き `yaml.YAMLError` だけを捕まえていた。 **並列 session が書き込み途中の yaml** を掴んで `UnicodeDecodeError` が素通りし、 hook が異常終了 → **その repo の commit が全部通らなくなった**。 自分の staged file は全て健全だったので原因特定に数往復かかった (= **検査対象は自分の file とは限らない**、 が盲点)。
+
+規律:
+
+- **encoding を明示する** (`open(path, encoding="utf-8")`)。 locale 依存にすると環境で挙動が変わる
+- **「読めない」 は検査結果ではなく検査不能** — 例外を捕まえて専用の状態 (`READ_SKIP` 等) で返し、 **1 行報告して続行**する (= 黙って通さない / 落ちもしない。 [`convention-design-principles.md#silent-probe-false-healthy`](../docs/convention-design-principles.md#silent-probe-false-healthy) の pattern 3 と同じ形)
+- **それを corruption に数えない** — 他 session の書き込み途中で自分の commit を止めるのは gate の役目ではない
+- 呼び出し側で [`multi-session-coordination.md#staging-window-race`](multi-session-coordination.md#staging-window-race) の `git commit -- <path>` を使うと **hook が見る範囲が自分の path だけになり**、 この巻き込み自体が起きない (= 上流での design-out)
 
 ---
 
