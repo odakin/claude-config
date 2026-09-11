@@ -63,6 +63,14 @@ run_setup_for() {
   "$SCRIPT_DIR/setup-codex.sh" "$@"
 }
 
+file_mode() {
+  if stat -f '%Lp' "$1" >/dev/null 2>&1; then
+    stat -f '%Lp' "$1"
+  else
+    stat -c '%a' "$1"
+  fi
+}
+
 run_setup --set-default-effort high --configure-safe-local \
   --repo "$TRAILER_REPO" --repo-root "$TEST_REPOS_ROOT"
 
@@ -122,7 +130,7 @@ grep -qx '<!-- claude-config-codex: global-personal-composite -->' "$TEST_CODEX_
 grep -qx "<!-- personal-source: $PERSONAL_LAYER -->" "$TEST_CODEX_DIR/AGENTS.md"
 grep -qx 'INITIAL_PERSONAL_OVERLAY' "$TEST_CODEX_DIR/AGENTS.md"
 grep -q '^# Global Codex conventions$' "$TEST_CODEX_DIR/AGENTS.md"
-[ "$(stat -f '%Lp' "$TEST_CODEX_DIR/AGENTS.md")" = "600" ]
+[ "$(file_mode "$TEST_CODEX_DIR/AGENTS.md")" = "600" ]
 grep -qF '# claude-config post-merge extensions' "$PERSONAL_LAYER/.git/hooks/post-merge"
 PERSONAL_REFRESH="$PERSONAL_LAYER/.git/hooks/post-merge.d/claude-config-codex-personal-layer.sh"
 [ -x "$PERSONAL_REFRESH" ]
