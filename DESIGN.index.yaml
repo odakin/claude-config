@@ -39,6 +39,9 @@ sections:
     legacy: "2026-06-17"
     level: 2
     title: "2026-06-17: layer-1 convention の発火面 — 「正しい層配置」 と「発火確率」 の tension (= future work)"
+  - id: completion-gate-firing-resolution
+    level: 3
+    title: "部分 resolution (2026-09-11): completion boundary は global entry + blocking Stop へ"
   - id: conventions-listing-regeneration
     legacy: "2026-06-13"
     level: 2
