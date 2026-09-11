@@ -569,6 +569,8 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 
 ### <a id="new-hook-session-snapshot"></a>9.1 新規 hook は同 session で live 発火しない (= session 開始時 snapshot)
 
+> 🔄 **build 依存 (2026-09-12 追記)**: 本項の snapshot 挙動は 2026-06 の build の実測。 desktop 埋込 2.1.266 では mid-session に足した Stop hook が同じ session で発火した (= 本項末の 🔄)。 「新 session / app 再起動が要る」 と決め打ちせず、 足した直後に下の discriminator で測る。
+
 **実測 (2026-06-10、 Opus 4.8 1M harness)**: settings.json に hook を **mid-session で追加しても、 その session 中は発火しない**。 = この build は hook 設定を **session 開始時に snapshot** する。
 
 **discriminator** (= 「snapshot build か hot-reload build か」 を実測): throwaway hook (= `echo fired >> /tmp/x`) を **`Read` (または `Write`/`Edit`) matcher** で mid-session 登録 → 該当 tool を 1 回叩いて `/tmp/x` を確認 → **不在 = 未発火 = snapshot build**。 ⚠️ **discriminator に `Bash` matcher を使わない**: §2(d) の harness-invoke bug で Bash hook は snapshot と無関係に発火しないことがあり結果が交絡する (= 2026-06-10 に最初 Bash で試して confound に気付き、 `Read` matcher で取り直して snapshot を clean に確定した)。
@@ -585,11 +587,13 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 
 ⚠️ **settings の変更がすべて snapshot に縛られるわけではない** (2026-09-11、 desktop 埋込 2.1.260 で実測): `disableAllHooks` の除去と `permissions.allow` への追加は、 **同じ session の次の tool call から**有効になった。 snapshot されるのは hook の一覧で、 kill switch や permission rule は都度読まれている可能性がある (機構は未確認)。 どの変更が即時でどれが snapshot かは、 変更の種類ごとに 1 回測る。
 
+🔄 **hook の一覧も読み直す build がある** (2026-09-12、 desktop 埋込 2.1.266 で実測): installer で `settings.json` に Stop hook を足した直後の turn 終了 (約 40 秒後) に、 その hook が発火して block した。 transcript 上、 最後の SessionStart (resume) は足す 1 時間以上前で、 間に SessionStart は無い (= app の再起動も session の再開も挟んでいない)。 上の 2026-06-10 (CLI、 session 開始時 snapshot) と 2026-06-27 (desktop、 app 起動時 snapshot) はそれぞれの build についての事実で、 この build には当てはまらない。 観測は Stop 1 本なので、 他 event の即時性は未確認。 → 足した直後に discriminator で測り、 発火すれば live verify (上の ③) も同じ session で済む。
+
 ### <a id="build-dependent-docs-drift"></a>9.2 同種の「docs と乖離」 build 依存 feature
 
 | feature | 最新 docs | 実測された乖離 | robust な cross-build 選択 |
 |---|---|---|---|
-| settings.json hook の hot-reload | する | 2026-06-10 build は snapshot (§9.1) | 新 session で live-verify |
+| settings.json hook の hot-reload | する | 2026-06-10 build は snapshot / 2026-09-12 desktop 2.1.266 は Stop hook を hot-reload (§9.1) | 同 session で discriminator、 だめなら新 session で live-verify |
 | PreToolUse の `permissionDecisionReason` field | 支持 | 2026-05-29 build は JSON に含めると **hook 出力ごと silent skip** (= mail-send-guard RCA) | narrative → stderr、 stdout は minimal JSON (= `permissionDecision` のみ)。 既存 convention |
 | PreToolUse `updatedInput` で tool 引数 rewrite (= default 注入) | 支持 (= allow/ask + 全 field 含め replace) | 古い build での support 未確認 | deny + 再発行 のほうが古い build でも確実 (= `<personal-layer>/hooks/calendar-reminder-guard.sh` が deny を選んだ理由) |
 
@@ -707,6 +711,18 @@ SessionStart で sync-sweep (全 repo auto-pull) と Discord 未転記 surfacer 
 
 - `#chain-hook-early-exit` (§8) = 同一 hook 内の順序依存の別 failure mode (early-exit で chain が silent skip)。 本 § は hook **間**の順序依存。
 - 検出器 fleet の一般則 = `convention-design-principles.md#surfaced-not-consumed` (産出と消費の境界)。 本 § は**産出**側の stale。
+
+---
+
+## <a id="text-pattern-stop-hook"></a>§12. 発話を見る Stop hook — 句で当てる前に過去の発話で校正し、 引用の例示を除く
+
+turn 終了時 (Stop) に最終 assistant 発話を読み、 決まった句 (例: 同じ turn の中を指す「上の◯◯」、 人に後でやらせる「あとで 1 回実行して」) が出たら 1 回だけ block して見直させる hook は、 散文の規律 (= 発火面の最弱層、 [`convention-design-principles.md#firing-surface-hierarchy`](../docs/convention-design-principles.md#firing-surface-hierarchy)) を安く機械で支える。 ただし句の一致は意図を識別しない ([§10](#hook-no-go-judgment)) ので、 次を踏む:
+
+1. **導入前に過去の transcript で校正する** — 直近 N session の各 turn の最終発話に句を当て、 検出を目で読んで誤検出を数える。 道具 = [`scripts/calibrate-final-message-pattern.py`](../scripts/calibrate-final-message-pattern.py) (`--pattern` / `--skip-quoted` / `--exclude-sentence-with`)。 turn の境界と最終発話の取り出しは hook と同じ部品 [`scripts/lib/transcript_turns.py`](../scripts/lib/transcript_turns.py) を使い、 校正と本番で述語がずれないようにする。 ⚠️ transcript は local の private data なので、 校正の出力 (文脈の抜粋) を公開の場所に貼らない。
+2. **自分を説明する文で一度は誤検出する** — hook を入れたことを報告する文は、 検出する句を例として引く。 match が 「」 / 『』 の中に丸ごと収まるなら除外し、 その文を regression test に固定する。 括弧の中で始まって外まで続く match は除外しない (= 過剰除外の防止も test に置く)。 実例 2026-09-12: 導入前の校正 (約 2000 turn) では誤検出 0 だったが、 導入直後に同じ session で hook を説明した返信が自分の例示句で止まった → 除外を足し、 同じ道具で再校正して誤検出 0 (検出 5 → 4)。
+3. **block は 1 回だけ** — `stop_hook_active` が true なら即 exit 0。 reason には「条件を満たしているなら同じ内容で終了してよい」 を書き、 誤検出のコストを 1 turn に抑える。
+4. **fail-open** — transcript 不在・parse 失敗・部品の import 失敗は沈黙する。 部品を別 repo から読む hook は、 その repo を CI でも clone してから test する (= 手元だけで通る test にしない)。
+5. **導入直後に同じ session で実発火を確かめる** — 足した hook が走行中の session に効くかは build 依存 ([§9.1](#new-hook-session-snapshot))。
 
 ---
 

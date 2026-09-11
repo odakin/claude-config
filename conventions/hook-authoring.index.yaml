@@ -248,6 +248,9 @@ sections:
   - id: parallel-hooks-related
     level: 3
     title: "関連"
+  - id: text-pattern-stop-hook
+    level: 2
+    title: "§12. 発話を見る Stop hook — 句で当てる前に過去の発話で校正し、 引用の例示を除く"
   - id: related-docs
     level: 2
     title: "関連"

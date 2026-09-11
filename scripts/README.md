@@ -14,6 +14,7 @@
 - **[bootstrap-stdio-mcps.sh](bootstrap-stdio-mcps.sh)** — generic auto-bootstrap library for self-hosted stdio MCPs.
 - **[bootstrap-stdio-mcps.test.sh](bootstrap-stdio-mcps.test.sh)** — self-test for the generic stdio MCP bootstrap library.
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入
+- **[calibrate-final-message-pattern.py](calibrate-final-message-pattern.py)** — 発話を見る Stop hook の句を、 過去の transcript の各 turn の最終 assistant 発話に当てて検出数と例を出す（導入前の誤検出の見積もり用。 turn の境界は hook と同じ scripts/lib/transcript_turns.py、 --skip-quoted / --exclude-sentence-with で hook の除外を再現、 --selftest。 conventions/hook-authoring.md#text-pattern-stop-hook）
 - **[check-abbreviations.py](check-abbreviations.py)** — Abbreviation hygiene for LaTeX manuscripts: each abbreviation is defined once, at the FIRST body
 - **[check-american-spelling.py](check-american-spelling.py)** — Reject curated British spellings in live LaTeX prose and figure text.
 - **[check-ci-red.py](check-ci-red.py)** — GitHub Actions の red 検出器（repo 横断で「default branch の最新 completed run が失敗中の workflow」 を列挙し、 連続失敗 run 数・継続時間・最後の success を印字、 長期 red を 🚨 で強調。 取得失敗は「検査不能」 行で明示 = 黙って緑にしない、 finding 0 件 silent、 --as-of で過去時点を再現、 --selftest 内蔵。 対象 = --repo / --owner / 個人層の repo 一覧 (--from-repos-md、 未 clone・remote 未設定も検査不能行に)、 呼び出し側 = 個人層 dashboard / session 開始 hook）
@@ -139,4 +140,5 @@
 - **[lib/staged-conflict-markers.test.sh](lib/staged-conflict-markers.test.sh)** — staged-conflict-markers.sh の self-test (hermetic)
 - **[lib/test-err-trap.sh](lib/test-err-trap.sh)** — set -e の bash test で落ちた assertion の行とコマンドを stderr に出す ERR trap (sourceable lib)
 - **[lib/test-err-trap.test.sh](lib/test-err-trap.test.sh)** — test-err-trap.sh の self-test (hermetic、 走らせた bash で fixture を実行)
+- **[lib/transcript_turns.py](lib/transcript_turns.py)** — Claude Code の transcript (jsonl) を turn に分けて最終 assistant 発話を取り出す共通部品（Stop hook の「今の turn の最終発話」 と、 過去 transcript で句を校正する calibrate-final-message-pattern.py が同じ境界で読む。 引用の中かの判定 inside_quote と、 match を含む 1 文を返す sentence_around も持つ）
 - **[lib/web_driver.py](lib/web_driver.py)** — 「値の正本 → 画面に打つ操作列」 を決定的に生成する site 非依存 harness
