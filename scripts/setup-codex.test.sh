@@ -65,12 +65,17 @@ run_setup_for() {
   "$SCRIPT_DIR/setup-codex.sh" "$@"
 }
 
+# GNU の `stat -c` を先に試し、 出力が mode の形でなければ BSD の `stat -f` に落ちる。 exit code では
+# 分岐しない (GNU の `stat -f '%Lp' F` は cwd に `%Lp` という file があると exit 0 で FS 情報を返す。
+# conventions/hook-authoring.md#substitution-fallback-stdout-mixing)
 file_mode() {
-  if stat -f '%Lp' "$1" >/dev/null 2>&1; then
-    stat -f '%Lp' "$1"
-  else
-    stat -c '%a' "$1"
-  fi
+  local mode
+  mode="$(stat -c '%a' "$1" 2>/dev/null || true)"
+  case "$mode" in
+    [0-7][0-7][0-7] | [0-7][0-7][0-7][0-7]) ;;
+    *) mode="$(stat -f '%Lp' "$1")" ;;
+  esac
+  printf '%s\n' "$mode"
 }
 
 run_setup --set-default-effort high --configure-safe-local \
