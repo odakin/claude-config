@@ -137,7 +137,8 @@ def stop_log(days: int) -> list[dict]:
     return out
 
 
-def summarize(rows: list[dict], logs: list[dict], threshold: float, min_sessions: int) -> dict:
+def summarize(rows: list[dict], logs: list[dict], threshold: float, min_sessions: int,
+              fix_date: str = WAIT_FIX_DATE) -> dict:
     by = {}
     for flavor in ("claude", "codex"):
         sub = [r for r in rows if r["flavor"] == flavor]
@@ -146,7 +147,7 @@ def summarize(rows: list[dict], logs: list[dict], threshold: float, min_sessions
         misses = [r for r in sub if not r["s2"]]
         by[flavor] = {"n": len(sub), "s1": sum(r["s1"] for r in sub), "s2": len(sub) - len(misses),
                       "misses": misses[-8:], "miss_rate": len(misses) / len(sub)}
-    unresolved = [r for r in rows if r["unresolved"] and r["date"] >= WAIT_FIX_DATE]
+    unresolved = [r for r in rows if r["unresolved"] and r["date"] >= fix_date]
     findings = []
     for flavor, s in by.items():
         if s["n"] >= min_sessions and s["miss_rate"] > threshold:
@@ -154,7 +155,7 @@ def summarize(rows: list[dict], logs: list[dict], threshold: float, min_sessions
                             f"{s['n'] - s['s2']}/{s['n']} (閾値 {threshold:.0%})")
     if unresolved:
         findings.append(f"🟡 claude: 注入 stamp が「account 未同定」 の session が {len(unresolved)} 件 "
-                        f"({WAIT_FIX_DATE} 以降) = whoami --wait が効いていない")
+                        f"({fix_date} 以降) = whoami --wait が効いていない")
     info = []
     if logs:
         modes = sorted({str(e.get('mode')) for e in logs})
@@ -235,7 +236,7 @@ def selftest() -> int:
         rows = collect(14, with_codex=True)
         claude = [r for r in rows if r["flavor"] == "claude"]
         check("範囲: sandbox と headless を除いて claude 3 件", len(claude) == 3)
-        s = summarize(rows, stop_log(14), threshold=0.10, min_sessions=1)
+        s = summarize(rows, stop_log(14), threshold=0.10, min_sessions=1, fix_date="2000-01-01")
         c = s["by_flavor"]["claude"]
         check("S1 = 1/3 (最初の返信の 1 行目)", c["s1"] == 1)
         check("S2 = 2/3 (後の返信の 1 行目も数える)", c["s2"] == 2)
