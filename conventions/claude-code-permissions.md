@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき
 category: harness-core
-summary: Claude Code CLI の permission プロンプト削減 (= cwd 外 file 〔`~/Downloads` 等〕の Read/Edit/Write が毎回確認される症状を `additionalDirectories` で cwd 同様に無確認化、 bare tool allow は cwd 外を素通ししない observed〔docs 解釈と食い違い〕、 deny > ask > allow で機密は `deny` 優先、 setup.sh `configure_permissions` は `allow` のみ触る = additionalDirectories/deny は直書き永続、 settings 反映は安全側に次セッション〔allow 追加と disableAllHooks 除去は desktop 2.1.260 で同 session 即時を実測〕、 #chat-link-rendering-scope = chat 応答内の markdown link `[label](path)` を click した右パネル rendering も同 scope〔session cwd + additionalDirectories〕に従い scope 外は「読み取れませんでした / 作業ディレクトリの外」 表示〔#rc-chat-panel-no-render = Remote Control 閲覧では scope 通過でも同一 error で render 不可 = file が worker host 側にのみ在る、 唯一 RC で完結する対処 = 内容を chat 本文に出させる、 observed n=1〕、 frontend 3 系統切り分け〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕、 §always-approve-tools = permission 設定で抑止できない always-prompt tool class〔`ccd_session_mgmt__search_session_transcripts` 等 cross-session tool は `allow` 登録でも承認チップが出る = 経路を外す以外に消せない、 token-handshake 返送への含意込み〕、 #ask-pattern-action-anchor = 高 stakes Bash gate の ask パターンは file 名 substring でなく不可逆 action の実行形〔`--send` 等の explicit flag〕に anchor〔ask > allow ゆえ allow で例外を彫れない = パターン絞りが唯一の手段・tool 側は fail-safe 既定・gate 対象 invocation は chain 禁止〕、 #desktop-permission-dialog-log = desktop の承認 dialog は app log に 1 件 2 行 〔Emitted / Received〕 で残る → scripts/permission-dialog-audit.py で tool 別集計と main / sub-agent 振り分け、 #monitor-needs-own-allow = Monitor は Bash の allow にも内容 ask rule にも掛からない独立 tool、 #agent-launch-no-prompt = Agent 起動は allow 済なら dialog 無し 〔「背景作業で聞かれる」 = Monitor / spawn chip / Workflow / 中身の ask gate〕、 #protected-settings-edit = Claude による .claude/settings*.json 等 protected path の編集は default mode では毎回 dialog 〔allow rule で消せない = 公式 docs、 auto は classifier 判定〕・Bash で迂回しない・「毎回」 と言われたら先に dialog 内訳を実測)
+summary: Claude Code CLI の permission プロンプト削減 (= cwd 外 file 〔`~/Downloads` 等〕の Read/Edit/Write が毎回確認される症状を `additionalDirectories` で cwd 同様に無確認化、 bare tool allow は cwd 外を素通ししない observed〔docs 解釈と食い違い〕、 deny > ask > allow で機密は `deny` 優先、 setup.sh `configure_permissions` は `allow` のみ触る = additionalDirectories/deny は直書き永続、 settings 反映は安全側に次セッション〔allow 追加と disableAllHooks 除去は desktop 2.1.260 で同 session 即時を実測〕、 #chat-link-rendering-scope = chat 応答内の markdown link `[label](path)` を click した右パネル rendering も同 scope〔session cwd + additionalDirectories〕に従い scope 外は「読み取れませんでした / 作業ディレクトリの外」 表示〔#rc-chat-panel-no-render = Remote Control 閲覧では scope 通過でも同一 error で render 不可 = file が worker host 側にのみ在る、 唯一 RC で完結する対処 = 内容を chat 本文に出させる、 observed n=1〕、 frontend 3 系統切り分け〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕、 §always-approve-tools = permission 設定で抑止できない always-prompt tool class〔`ccd_session_mgmt__search_session_transcripts` 等 cross-session tool は `allow` 登録でも承認チップが出る = 経路を外す以外に消せない、 token-handshake 返送への含意込み〕、 #ask-pattern-action-anchor = 高 stakes Bash gate の ask パターンは file 名 substring でなく不可逆 action の実行形〔`--send` 等の explicit flag〕に anchor〔ask > allow ゆえ allow で例外を彫れない = パターン絞りが唯一の手段・tool 側は fail-safe 既定・gate 対象 invocation は chain 禁止〕、 #desktop-permission-dialog-log = desktop の承認 dialog は app log に 1 件 2 行 〔Emitted / Received〕 で残る → scripts/permission-dialog-audit.py で tool 別集計と main / sub-agent 振り分け、 #monitor-needs-own-allow = Monitor は Bash の allow にも内容 ask rule にも掛からない独立 tool、 #agent-launch-no-prompt = Agent 起動は allow 済なら dialog 無し 〔「背景作業で聞かれる」 = Monitor / spawn chip / Workflow / 中身の ask gate〕、 #protected-settings-edit = Claude による .claude/settings*.json 等 protected path の編集は default mode では毎回 dialog 〔allow rule で消せない = 公式 docs、 auto は classifier 判定〕・Bash で迂回しない・「毎回」 と言われたら先に dialog 内訳を実測・desktop のモード選択はフォルダごとに defaultMode より優先、 #symlink-both-paths = symlink の path と実体 path の両方を登録、 #file-rule-tools = path rule を見るのは Read/Edit だけ 〔Write/Glob の rule は参照されない、 名指ししない間接読みは塞げない = sandbox〕、 #always-allow-persists-literal = 「常に許可」 は command 文字列を settings.local.json に保存 → secret を command に書かない)
 -->
 # Claude Code の permission プロンプトを減らす (additionalDirectories と working directory 境界)
 
@@ -32,13 +32,13 @@ cwd 配下のファイルは確認なしで編集できるのに、cwd の**外*
 ```
 
 - `/add-dir` コマンドは **runtime の動的追加** (その session 内のみ)。永続させたいなら settings.json の `additionalDirectories`。
-- macOS で `~/Dropbox` 等が **symlink** の場合は **実体パス**を登録する (symlink だと解決されず効かないことがある)。`ls -ld` で実体を確認。
+- <a id="symlink-both-paths"></a>macOS で `~/Dropbox` 等が **symlink** の場合は、 **symlink の path と実体 path の両方**を登録する (`ls -ld` で実体を確認)。 Claude は同じ file を symlink 経由でも実体 path でも指すので、 片方だけだと、 もう片方の形で開いた file が scope 外として毎回 dialog になる (2026-09-12 実測: `~/Dropbox` だけ登録していて、 `~/Library/CloudStorage/Dropbox/...` の形で開いた file の編集が dialog になった)。 allow / ask / deny の path rule も両方の形で書く (公式 docs: allow rule は symlink の path と実体の両方が一致したときだけ効く)。
 
 ## 機密は deny で守る (deny > ask > allow)
 
 - rule の評価順は **deny → ask → allow**。最初に match した rule が勝つので、**deny が最強**。
 - `additionalDirectories` で広いディレクトリ (例: home の `Documents` や `Dropbox` 全体) を開けても、その中の機密サブフォルダは `permissions.deny` で個別 block できる。deny の方が優先されるので、「広く開けて一部だけ塞ぐ」が成立する。
-- deny は対象ツール各形を列挙する必要がある (`Read(/abs/secret/**)` / `Edit(...)` / `Write(...)` / `Glob(...)` / `Grep(...)` と、Bash 経由の `Bash(*/abs/secret*)`)。
+- <a id="file-rule-tools"></a>file の path rule を見るのは **`Read(path)` と `Edit(path)` だけ** (公式 docs `permissions`、 Claude Code v2.1.210 以降)。 `Write(...)` / `NotebookEdit(...)` / `Glob(...)` の path rule は受け付けられるが**参照されない** (起動時に警告が出る) — 書き込みは `Edit(...)` で、 Glob は `Read(...)` で塞ぐ。 `Read` / `Edit` の deny rule は、 Claude Code が Bash の中で認識する file コマンド (`cat` / `head` / `tail` / `sed`) と redirect 先 (`> file` / `< file`) にも効く。 ただし **file を名指ししない読み方** (その dir での `grep -r pattern .`、 script が中で file を開く) には効かない。 全 process を止める OS レベルの遮断は sandbox (公式 docs `sandboxing`)。 `Bash(*/abs/secret*)` のような内容 rule は、 path を直接書いたコマンドだけを捕まえる歯止め。
 
 ## 反映タイミング
 
@@ -191,8 +191,17 @@ Claude Code は `.claude/` (= `~/.claude/settings.json` / `<root>/.claude/settin
 - ∴ `default` mode のまま、 この dialog だけを消す設定は無い。 消すには mode を変えるしかない: `auto` は ask rule (送信 gate 等) を残したまま settings 編集を classifier 判定に回せるが、 他の操作も classifier 判定になる (= [`tool-call-robustness.md#classifier-session-block`](tool-call-robustness.md#classifier-session-block) のリスクを負う)。 `bypassPermissions` は ask gate ごと消えるので不可 ([§desktop で特定 tool に確認を課す](#desktop-per-tool-gate))。
 - `auto` mode では、 Claude による settings 編集は dialog でなく classifier 判定になる。 **自分の権限を広げる編集 (`defaultMode` の変更 + `additionalDirectories` の追加) は block された** (2026-09-11 observed、 n=1)。 ∴ auto で運用するなら、 権限を広げる設定変更は user が手で行う (Claude が Bash で書き換えるのは block の迂回になるのでやらない)。
 - 「毎回聞かれる」 と言われたら、 対処を選ぶ前に `scripts/permission-dialog-audit.py --attribute` で dialog の内訳を測る。 体感の「毎回」 には、 意図して置いた ask gate や、 cwd / additionalDirectories 外の path への dialog が混ざっていることが多い (2026-09-11 実測: 40 日間の Edit / Write dialog 91 件のうち、 settings file 宛ては 4 件)。
+- desktop のモード選択は**フォルダごとに記憶**され、 そのフォルダでは `defaultMode` より優先される (公式 docs `permission-modes`、 Plan は例外)。 `defaultMode` を変えたのに効かないフォルダがあれば、 そこのモード選択を疑う。
 - 設定変更を頼まれたら、 **変更する file の数だけ dialog が出る**ことを先に伝え、 1 file の変更は 1 回の Edit にまとめる。
-- **session 中に Bash (sed / python / jq) で書き換えて dialog を迂回しない**。 保護は「設定変更を人間が 1 回見る」 ための仕組みで、 迂回するとその意味が消える (= 自分の権限を自分で広げる経路になる)。 git に載って人間が review した bootstrap script が、 owner が明示した値を他マシンへ伝播するのは別扱い。
+- **session 中に Bash (sed / python / jq) で書き換えて dialog を迂回しない**。 保護は「設定変更を人間が 1 回見る」 ための仕組みで、 迂回するとその意味が消える (= 自分の権限を自分で広げる経路になる)。 git に載って人間が review した bootstrap script が、 owner が明示した値を他マシンへ伝播するのは別扱い (= [`multi-machine-state.md#one-shot-settings-propagation`](multi-machine-state.md#one-shot-settings-propagation))。
+
+## <a id="always-allow-persists-literal"></a>「常に許可」 は command をそのまま settings.local.json に保存する — secret を command に書かない (2026-09-11)
+
+Bash の承認 dialog で「Yes, and don't ask again」 (desktop では「常に許可」) を選ぶと、 その command の文字列が allow rule として repo root の `.claude/settings.local.json` に保存される (公式 docs `permissions`)。 token や password を command に直接書いた Bash を常に許可すると、 **secret が平文の allow rule として残る** (実例: 外部 service の API token を含む curl / export の行が 11 行、 数ヶ月残っていた。 file からは消せても、 その command を実行した session の transcript には残る)。
+
+- secret は command に書かず、 file か環境変数から読ませる (例 `curl -H "Authorization: Bearer $(cat ~/.secrets/x)"` = 保存される文字列に値が現れない)。 受け渡しの一般則 = [`secret-handoff.md`](secret-handoff.md)。
+- 見つけたら allow の該当行を消す (protected path なので dialog 1 回)。 値は漏れた前提で扱い、 必要なら rotate する ([`secret-handoff.md#rotation-labor-split`](secret-handoff.md#rotation-labor-split))。
+- 棚卸しは `settings.local.json` の長い allow 行を見るのが早い (secret は長い英数字列として出る)。
 
 ## 個人ごとの適用
 
