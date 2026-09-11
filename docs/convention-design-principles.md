@@ -736,6 +736,24 @@ gate の入力は「どの command を実行したか」という履歴より、
 
 origin: 長い変更 task で既存の commit/push 規則と dirty nudge が在ったのに、local build 成功が終端として解釈された事例。規則の不在ではなく、直接入口の不在、完了 event の曖昧さ、通知のみで block しない発火面、clean-but-unpublished を見ない proxy が重なった。処方は規則追加でなく、既存正本への入口と completion-state gate の追加だった。
 
+### <a id="human-memory-not-a-carrier"></a>8.12d 人の記憶も carrier ではない — 「あとで 1 回やって」 を人に渡さない
+
+§8.12 は agent 側の規律が recall に頼ると不発する話だった。 同じことが**人に渡す手順**でも起きる: 「別マシンで次を 1 回実行」 「次に◯◯するとき△△して」 「落ち着いたら確認して」 を chat に書いて終えると、 その手順を正しい瞬間に思い出す責任が人の記憶に移る。 人は覚えていられないし、 chat は流れて二度と表示されない = **push されない記録** ([`multi-session-coordination.md#green-light-carrier`](../conventions/multi-session-coordination.md#green-light-carrier) の人向け版)。
+
+手順を人に渡す前に、 上から順に当てる:
+
+0. **今この turn で自分でやれるなら、 やる** (= 手順にしない。 [`concise-output.md#user-facing-steps`](../conventions/concise-output.md#user-facing-steps) の 4)
+1. **既配線の自動適用に載っていないか確かめる** — 例: git pull 後の session 開始で冪等に再走する installer。 載っていれば手順は書かず「次の session 開始で自動」 とだけ言う (= 確かめずに手順を書くと、 不要な作業と覚える負担だけを渡す)
+2. **載っていなければ自動適用に足す** (冪等・fail-open・完了で沈黙)
+3. **人手が本当に要る** (認証・物理操作・人の判断・外部への送信) なら、 **条件付きで出続ける carrier** に載せる: 期限つき TODO、 または特定マシン・特定状態でだけ session 開始時に出る発火 ([`multi-machine-state.md#machine-gated-pending-action`](../conventions/multi-machine-state.md#machine-gated-pending-action))。 完了を機械的に判定して自然に止める
+4. chat に書く手順は carrier の**中身の写し**として添え、 その carrier を名指しする。 chat だけで渡さない
+
+判別: 最終メッセージに「1 回実行」 「次に〜するとき」 「あとで」 「忘れずに」 と依頼の語尾が並んでいたら、 それが 1〜3 のどれに載ったかを同じメッセージで名指しできるか。 名指しできなければ carrier が無い。
+
+発火面: 散文の規律は §8.12 の最弱層なので、 owner は turn 終了時の hook で最終メッセージの依頼句を検出して 1 回だけ見直させている (日本語の句に依存するので instance は個人層。 導入時の実測 = 直近 120 session・2030 turn の最終メッセージで検出 4・誤検出 0)。
+
+origin: 2026-09-12、 新しい hook を足した直後に「別マシンで installer を 1 回実行」 と書いた。 その installer は既に毎 session 冪等に再走していて、 手順自体が不要だった。 user の返答 = 「次を 1 回実行、 とか覚えてられるわけなくない？」。 同じ session で「次に別マシンを使うとき、 そこの Claude に◯◯と頼めば済む」 とも書いており、 こちらは自動で出る carrier を作ったのが次の turn だった。
+
 ### <a id="conditional-firing-visibility"></a>8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる
 
 §8.12 は発火面の強弱だった。 本節はその前提条件: **出力の不在は ambiguous** — 「動いて該当なし (= 正常な沈黙)」 と「そもそも動いていない (= 未配線・未登録・未 install)」 を外から区別できない。 per-machine wiring / scheduled task 登録 / opt-in install のように **活性化に手動 step を要する mechanism** は、 その step が抜けても何も言わない (= silent dead) ので、 設計者は「動いている」 と誤認し続ける。
