@@ -67,6 +67,9 @@ sections:
     level: 3
     title: "防止策 / audit method"
     related: [delivery-audit-example, tool-matcher-coverage-boundary]
+  - id: installer-tracked-stub
+    level: 3
+    title: "installer は git が track している file を書き換えない (2026-09-12)"
   - id: tool-matcher-coverage-boundary
     legacy: "2-supplement"
     level: 3
