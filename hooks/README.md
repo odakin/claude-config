@@ -47,3 +47,5 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[settings-entries.json](settings-entries.json)** — 層1 hook の settings.json 配線の唯一の list (event → entries)。
 - **[stale-read-nudge.sh](stale-read-nudge.sh)** — PostToolUse(Read) hook (layer 1)
 - **[stale-read-nudge.test.sh](stale-read-nudge.test.sh)** — logic selftest (= 決定的 mock git repo ベース)
+- **[turn-complete-sound-nudge.sh](turn-complete-sound-nudge.sh)** — 応答が終わるたびに音を鳴らす Stop hook (opt-in、 既定は無音。 conventions/macos-claude-app-notifications.md#turn-complete-sound-hook)
+- **[turn-complete-sound-nudge.test.sh](turn-complete-sound-nudge.test.sh)** — opt-in marker / entrypoint gate / stop_hook_active / 音声 path の selftest (実際には鳴らさない)

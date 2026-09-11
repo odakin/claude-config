@@ -196,6 +196,14 @@
           "command": "~/.claude/hooks/first-turn-stamp-check.py"
         }
       ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/turn-complete-sound-nudge.sh"
+        }
+      ]
     }
   ]
 }

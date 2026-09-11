@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude for Mac (desktop / Code タブ) の通知音が鳴らない・通知が来ないとき + macOS の通知が全般に鳴らない原因を調べるとき + 集中モード (おやすみモード) の設定画面を user に案内する前
 category: macos
-summary: Claude for Mac の通知が鳴らない原因を 5 層で切り分ける (アプリ仕様 = 完了通知は常に無音・表示中の session は通知なし / アプリ設定 notificationSound / macOS 通知許可 / 音量 / 集中モード)。 集中モードの実状態は unified log で読める (設定 DB は TCC で読めない、 zsh では /usr/bin/log と書く)。 「デバイス間で共有」 + 使わなくなった iPhone でおやすみモードが終わらない罠と、 macOS 26 の集中モード設定画面の読み方。 一発診断 = scripts/claude-app-notify-diagnose.py
+summary: Claude for Mac の通知が鳴らない原因を 5 層で切り分ける (アプリ仕様 = 完了通知は常に無音・表示中の session は通知なし / アプリ設定 notificationSound / macOS 通知許可 / 音量 / 集中モード)。 集中モードの実状態は unified log で読める (設定 DB は TCC で読めない、 zsh では /usr/bin/log と書く)。 「デバイス間で共有」 + 使わなくなった iPhone でおやすみモードが終わらない罠と、 macOS 26 の集中モード設定画面の読み方。 一発診断 = scripts/claude-app-notify-diagnose.py、 完了時にも鳴らすなら opt-in の Stop hook = hooks/turn-complete-sound-nudge.sh
 -->
 # Claude for Mac の通知音 — 鳴らないときの切り分け
 
@@ -56,7 +56,7 @@ summary: Claude for Mac の通知が鳴らない原因を 5 層で切り分け�
 
 直し方 (システム設定の変更 = user が操作する):
 1. **Claude だけ通す**: システム設定 → 集中モード → おやすみモード →「通知を許可」 の「通知されるアプリ」 に Claude を追加。 おやすみモードはオンのままで、 Claude の通知は `interruptionSuppression: none` になる。
-2. **共有を切る**: 集中モードの画面の「デバイス間で共有」 をオフ。 これで使っていない端末の状態に引きずられない。
+2. **(任意) 共有を切る**: 集中モードの画面の「デバイス間で共有」 をオフ。 使っていない端末の状態に引きずられないための保険。 3 で Mac 側をオフにすればそれが最新の状態になり、 1 で Claude を許可してあれば戻っても Claude は通るので、 必須ではない (2026-09 の実例では切らずに済ませた)。
 3. **Mac でオフにする**: 機種によってはファンクションキー列の 🌙 キー (例: 2021 年以降の MacBook Pro の F6)、 またはコントロールセンター。 どちらも環境差があるので、 案内する前に実物を確かめる ([#ui-guidance-look-first](#ui-guidance-look-first))。
 
 効いたかは unified log の `reason: user action` → `activeModeIdentifier: (null)` か、 設定画面の表示で確かめる ([#macos26-focus-settings-ui](#macos26-focus-settings-ui))。
@@ -73,11 +73,14 @@ summary: Claude for Mac の通知が鳴らない原因を 5 層で切り分け�
 
 本件では、 記憶に頼った UI 案内が 2 回外れた (「メニューバーのコントロールセンターから」 → 無かった / 「行の右端にオンかオフが出る」 → オフは空欄)。 OS の設定画面の手順を user に書く前に、 computer-use の screenshot (読むだけ) か user の screenshot で該当画面を確かめる。 設定を変える操作そのものは user に任せる (システム設定の変更は agent がやらない)。
 
-## <a id="turn-complete-sound-hook"></a>タスク完了でも鳴らしたい場合 (選択肢)
+## <a id="turn-complete-sound-hook"></a>タスク完了でも鳴らす (Stop hook、 opt-in)
 
-完了通知はアプリの仕様で無音なので、 設定では鳴らせない。 Claude Code の Stop hook で `afplay /System/Library/Sounds/Glass.aiff` を鳴らす方法がある。 入れるなら:
-- headless 実行 (launchd の `claude -p` 等) で夜中に鳴らないよう、 `CLAUDE_CODE_ENTRYPOINT=claude-desktop` のときだけ鳴らす。
-- 並列 session が多いとそのぶん鳴る。 アプリの「表示中の session は通知しない」 抑制は効かない (見ていても鳴る)。
+完了通知はアプリの仕様で無音なので、 設定では鳴らせない。 代わりに Stop hook [`hooks/turn-complete-sound-nudge.sh`](../hooks/turn-complete-sound-nudge.sh) が応答の終わりごとに音を鳴らす。 層1 の配線 list に入っているが、 **既定は無音**。
+- **有効化**: `touch ~/.claude/turn-complete-sound.on` (machine-local)。 止めるときは `touch ~/.claude/turn-complete-sound.off` (off が優先)。 `.on` の 1 行目に音声 file の path を書くとその音 (既定 `/System/Library/Sounds/Glass.aiff`)。
+- **鳴らない条件**: `CLAUDE_CODE_ENTRYPOINT` が許可 list (既定 = `claude-desktop` だけ) に無い = headless の `claude -p` で夜中に鳴らない。 対話 CLI も鳴らしたいなら env `CLAUDE_TURN_SOUND_ENTRYPOINTS="claude-desktop cli"` のように足す (headless の値は足さない) / 別の Stop hook が block して turn が続いた後の 2 回目 (`stop_hook_active`) / macOS 以外 (afplay が無い)。
+- 並列 session が多いとそのぶん鳴る。 アプリの「表示中の session は通知しない」 抑制も集中モードも効かない (afplay は通知ではない)。 アプリ自身の入力待ち通知と重なって 2 回鳴ることがある。
+- 同じ turn で別の Stop hook が block すると、 鳴るのは最初の Stop (= 実際の終わりより少し早い) の 1 回。
+- 最後に鳴らした時刻 = `~/.claude/state/turn-complete-sound.last` (効いているかの確認用)。
 - hook が desktop で効くかの前提は [`hook-authoring.md#desktop-hook-honor-remeasure`](hook-authoring.md#desktop-hook-honor-remeasure)。
 
 ## 関連
