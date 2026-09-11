@@ -49,6 +49,18 @@ install-launchd-cron.sh --label-prefix PREFIX [--workdir DIR] \
 - **plist PATH への node 追記** (2026-08-29): launchd の PATH には nvm 等の node が乗らないため、 stdio MCP server (`command: node` / `npx`) を headless routine が spawn できない環境がある (= claude 本体が native binary だと **routine 自体は走るのに MCP だけ silent に欠ける**)。 engine は install 時に `command -v node` を解決してその dir を plist PATH 末尾に焼く — ∴ **installer は node が解決できる shell から実行する** (nvm なら初期化済の shell)。 既存 plist への反映は再 install 要。
 - **`--gate "<snippet>"`** (任意): wrapper に `cd WORKDIR && <snippet> || exit 0; exec <routine>` の形で gate を挿入する。 snippet が非 0 で終わると routine は実行されず exit 0 (= defer)。 複数マシンで「今どのマシンが本番か」 を台帳で切り替える **active-routine-host failover** ([`multi-machine-state.md` account-host-failover](multi-machine-state.md#account-host-failover)) に使う (gate 実体 = `scripts/routine-host-gate.py`)。
 
+### <a id="per-recipient-notification-locus"></a>人間向け通知は recipient ごとの locus で動かす
+
+active-host gate は**共有 state を一度だけ更新する singleton job**のための機構であり、すべての routine に一律適用するものではない。local OS notification の成果物は「共有 file」ではなく**その端末の利用者へ届く表示**なので、通知を受ける各端末に別 label / 別 wrapper で ungated install する。standby 端末を gate で止めると、job 自体は正常終了しても recipient への delivery はゼロになる。
+
+| 成果物 | 配備 | gate |
+|---|---|---|
+| 共有 repo / ledger / 外部 endpoint を更新 | 本番 host 候補すべて | active-host gate で singleton |
+| 各端末の OS 通知・端末状態 heartbeat | recipient / 観測対象の各端末 | **ungated**。別 label prefix で singleton 監視の対象外にする |
+| device-independent push service へ 1 回送信 | producer 1 台 | singleton 可。ただし全 recipient への配信を service 側で検証 |
+
+導入・移行時は wrapper source だけでなく、各対象端末の生成 plist `ProgramArguments` を読み、(a) 期待する label、(b) schedule、(c) gate snippet の有無を確認する。旧 gated 登録は同じ routine id でも別 label の独立 state なので、全端末で bootout + plist 削除まで行う ([#mechanism-migration-kill-all-registrations](#mechanism-migration-kill-all-registrations))。
+
 **止め方の違い (= launchd cron 版 vs scheduled-task MCP 版)**: 同じ「定期ジョブ」 でも停止操作が機構で異なる。 launchd cron 版は `--uninstall-one <task-id>` (= `launchctl bootout` + plist 削除)、 scheduled-task MCP 版は `scheduled-tasks` MCP の delete。 期間限定ジョブ (= 大会期間だけ等) の自己停止 runbook を書くときは、 **どちらの機構で登録したか**に応じた停止コマンドを記す (= 機構を取り違えると停止できない)。
 
 ### <a id="launchd-python-with-deps"></a>cmd routine の `python3` は「依存 module を import できる個体」 で選ぶ (2026-09-08)

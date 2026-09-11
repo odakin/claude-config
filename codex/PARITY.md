@@ -526,6 +526,15 @@ high-signal, product-neutral subset:
 | `PreToolUse(Bash)` | Refreshes the machine-local session/model provenance cache from current hook input. | It emits no decision and neither authorizes nor rewrites the command; the Git hook remains the commit-path mechanism. |
 | `PostToolUse(apply_patch)` + `Stop` | Tracks a touched Git repository in machine-local Codex state and reports unintended dirty worktree state at turn end. | It does not commit or push automatically. |
 
+This subset intentionally does **not** import owner-private deadline ledgers or
+their SessionStart horizon output. Therefore, a reminder being visible in
+Claude hooks does not establish reminder coverage in Codex. Time-based human
+delivery must use a native Codex automation when judgment or thread continuity
+is required, or a product-independent OS scheduler when the check is
+deterministic and local. For local OS notifications, select the execution locus
+per recipient rather than placing the job behind a shared singleton host gate
+([scheduled-tasks.md#per-recipient-notification-locus](../conventions/scheduled-tasks.md#per-recipient-notification-locus)).
+
 The managed hook-code inventory is
 [`pre_tool_policy.py`](hooks/pre_tool_policy.py),
 [`resume_context.py`](hooks/resume_context.py),

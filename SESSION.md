@@ -1,5 +1,9 @@
 # SESSION — claude-config
 
+## Current — deadline intake and notification locus (2026-09-11)
+
+The durable rules are [`#derived-external-deadline`](docs/convention-design-principles.md#derived-external-deadline) (an official relative deadline remains external/hard), [`scheduled-tasks.md#per-recipient-notification-locus`](conventions/scheduled-tasks.md#per-recipient-notification-locus) (local human notifications run once per recipient device), and the [Codex lifecycle boundary](codex/PARITY.md#managed-lifecycle-subset). Product-specific fields, schedulers, and incident evidence belong to their lower-layer repositories; resume from those records rather than this note.
+
 Codex の project instruction discovery を root `AGENTS.md` の必須契約として層1化し、意味上の正本を [agent instruction entrypoint](CONVENTIONS.md#agent-instruction-entrypoints)、Codex 固有の discovery と検証境界を [project instruction discovery](codex/PARITY.md#project-instruction-discovery) に置いた。shared-project template と `audit-codex-integration.sh --repo` が同じ契約を実体化する。American spelling の再利用可能な検査 engine は [`scripts/check-american-spelling.py`](scripts/check-american-spelling.py) へ上げ、layer 2 project には [style checker mirror契約](conventions/shared-repo.md#style-checker-mirror) に従うstandalone生成mirrorだけを残した。最初の既存 shared repo `time-energy-head-on` はentrypoint・style digest・checker mirror・hook/CIをlocalとCIの両方で検証済み。他の既存 repoは次に触る通常の整備単位でauditが不足を顕在化する。
 
 研究レビューで得た再利用可能な手順を、[部分空間・電荷・保存則](conventions/scientific-computing.md#observable-projectors-and-symmetry)、[比較表の配置](conventions/paper-audit.md#comparison-before-derivation)、[配布前検査](conventions/shared-repo.md#l2-style-digest) に整理したところ。注記の表示とフォントキャッシュの失敗時の扱いは [LaTeX 手順](conventions/latex.md#equation-safety)、スクリプトとノートの全数索引は [研究成果の配置](conventions/scientific-computing.md#research-script-homes) から再開する。模型固有の計算は各研究 project が所有する。以下の Codex 配線の検証再開点は保っている。

@@ -660,6 +660,8 @@ reflex: 見落とし failure に downstream の検出器/通知を足す前に�
 
 origin: ある追跡システムで「期限つき義務」 が複数回見落とされた事例の連鎖。 毎回 downstream の網 (= 到着 trigger / 締切 surface / 返信 handback 検出) を 1 つずつ足したが、 各々「前回の正確な形」 を塞いだだけで次が隣の死角に落ちた。 根は intake で義務が下位ロジ (= 調整作業) として mis-encode され、 本物の締切が一度も登録されなかったこと = どの網も「存在しない fact」 を掴めなかった。 §8.8 (網が proxy を見る) の **上流版** (= 網が見る対象自体が intake で歪む)。 3+ 事例の連鎖からの一般化 (§9.8 充足)。
 
+<a id="derived-external-deadline"></a>変種 (2026-09 追記) — **公式規則から逆算した期限も外部 hard deadline**: 規程が「出発・開催・提出の N 日前まで」と定める期限は、台帳に入れる暦日を起票者が計算していても**自己設定の目安ではない**。起票時に (a) 基準日、(b) lead time、(c) 根拠資料、(d) 算出日を同じ record に残し、失効性があるなら hard / elevated として encode する。`source: derived` や算出作業を理由に soft へ落としてはならない。期限後に謝罪を伴って受理された実績は例外処理の証拠であって、通常期限を書き換える precedent ではない。
+
 <a id="receiverless-handoff"></a>変種 (2026-07 追記) — **受信者不在 handoff / documented false coverage**: mechanism A が case を「それは mechanism B の領分」 という routing 根拠で除外・suppress する時、 **B がその case を実際に受け取る channel を持つか**を verify する。 B の coverage が intake 前提 (= 人間判断による tracked object 化を待つ) なら、 その除外は誰も受け取らない handoff になり、 しかも code comment / doc に routing 根拠が明記されているせいで**意図された設計に見える** (= gap が最も発見されにくい形 — 網の不在でなく「網があるという文書化された誤信」)。 観測 (2026-07、 同一 incident 内で独立に 2 機構): ① 日付抽出器が締切文脈の日付を「期限 mechanism の領分」 として除外 — 先方は登録済み対象しか読めず、 無人窓では登録する主体が不在 / ② mail 検出器が特定 label を「専用表示段が cover」 として日次 push から除外 — 専用段は pull 専用で無人経路ゼロ = 除外が silent な配信降格になっていた。 evidence base は 1 incident 2 機構 (= §9.8 の 2+ は機構数で充足、 incident 数では N=1 と正直に注記)。
 
 <a id="recall-dependent-firing"></a><!-- legacy alias: 旧 anchor 名 (rename 前) への外部参照を生かす後方互換 -->
@@ -956,6 +958,7 @@ reflex: surfacing 機構を設計・監査するとき「この表示は**何を
 
 - **defer は期限付きでなければ mute である**: 「明示 defer」 branch を無期限 flag で実装すると、 それは disposition ではなく恒久消音 spigot になり、 壁紙化と同じ病気を defer 側で再生産する。 defer record は**必ず期日を運び、 期日経過で自動失効して loud 側に復帰**させる (= 永久 mute を構造的に不能にする)。 parse できない defer record も loud 側に倒す。
 - **通知 channel の dedup には 2 class あり、 互いの代替にならない**: (a) 「新規 / 昇格時のみ 1 回」 dedup は速報 channel — 既知のまま放置された item を**構造的に再通知しない**ので、 壁紙化した item には最初から届かない。 (b) 最終盤 channel は「窓内は 1 日 1 回/item 再通知」 class が必要。 (a) の channel が既に稼働していることは (b) の不在を埋めない — 「通知機構はもうある」 という監査結論は、 **その dedup がどちらの class か**を確認するまで下せない。
+- **通知 job の実行 locus は受け手で決める**: 人間への local OS 通知は、共有 state を更新する singleton job と違って、**通知を受ける各端末**で動かなければ配信にならない。active-host gate の背後に置くと standby 端末では正しく defer している顔のまま人間への channel が消える。一般の配備・検証契約は [`scheduled-tasks.md#per-recipient-notification-locus`](../conventions/scheduled-tasks.md#per-recipient-notification-locus)。
 
 origin: 2026-08、 研究費公募の応募判断 TODO が 2 つの独立 surface 経路で 30 日間毎日 named 表示 (最終週は最高強度 + 実働中の同〆切案件の 1 行隣) されながら一度も消費されず学内〆を通過した RCA (= 機械 replay で表示履歴を verify 済)。 同月 sibling = 査読依頼が名指し horizon に 6 日 named 表示のまま未消費で自動取消 ([`§8.22`](#lapsing-deadline) origin の consumption 軸)。 対照の成功例 = 明示 disposition を要求する mail triage 段は同環境で機能し続けている。 [`§9.8`](#single-observation-scope-check) は同月 2 観察 + 対照 1 で充足。 instance (= 検出器名・ack field 実装・対策 ledger) は個人層に残置 (= kernel-up / instance-down)。
 
