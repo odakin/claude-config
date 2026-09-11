@@ -481,6 +481,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 - 符号と規約: [`absolute-sign-external-anchor`](#absolute-sign-external-anchor) / [`convention-difference-closure`](#convention-difference-closure) / [`euclidean-check-in-lorentzian-paper`](#euclidean-check-in-lorentzian-paper)
 - 配置と語彙: [`statement-placement-check`](#statement-placement-check) / [`stale-framing-sweep`](#stale-framing-sweep) / [`abstract-geroch-compression`](#abstract-geroch-compression) / [`sentence-length-audit`](#sentence-length-audit) / 略語の 2 条件 = [`latex.md#abbreviation-first-occurrence`](latex.md#abbreviation-first-occurrence) (機械 = `check-abbreviations.py`)
 - 記号と付録: [`new-symbol-convention-consistency`](#new-symbol-convention-consistency) / [`notation-continuity-across-sections`](#notation-continuity-across-sections) / [`cross-check-appendix-shape`](#cross-check-appendix-shape) / [`appendix-order-by-first-reference`](#appendix-order-by-first-reference)
+- 文献同定: HEP 系の `refs.bib` は [`inspire-bib-audit.py`](../scripts/inspire-bib-audit.py) で title・著者・journal・volume・初頁・DOI・eprint を照合する。ローカルの説明的 texkey が INSPIRE の canonical texkey でなくても、arXiv ID、次に DOI へ fallback して SKIP と誤認しない。引用が本文の主張を実際に支えるかは別の原文確認であり、metadata PASS で代替しない。
 
 符号を持つ印字量の登録簿がある repo では、 gate record に `check-sign-anchors.py --run --deferrals` の結果 (fleet を変えた後なら `--fleet-scan` の表も) を載せる。 gate の worker には「規約文書は検算対象」 ([#absolute-sign-external-anchor](#absolute-sign-external-anchor) の Rule 4) を spec で明示する。 起源 = 2026-09 の gate spec が `headline-claim-budget-check` を含み、 中心主張の検算を worker 自身にさせたことで全体符号の誤りが出た (= 偶然だった手順を標準にする)。
 

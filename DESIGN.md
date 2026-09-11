@@ -5,6 +5,7 @@
 ## <a id="toc"></a>目次
 
 - [2026-09-11: 既存図の情報を inventory 後に置換する](#figure-replacement-information-design)
+- [2026-09-11: INSPIRE 監査は texkey から安定 identifier へ fallback](#inspire-stable-id-fallback)
 - [2026-09-10/11: commit に agent/session/model/effort trailer (host/account は焼かない)](#session-provenance-trailer-design)
 - [2026-09-01: Codex integration — L1 正本 + 明示 L4 wiring + 多層検証](#codex-layered-integration)
 - [2026-09-01: AUTO-TREE の auto-load 税 縮退 (when 表示 + hooks/scripts README 移設)](#auto-tree-autoload-slim)
@@ -1250,3 +1251,9 @@ jq '.hooks.PostToolUse[] | select(.hooks[]?.command | contains("pdf-read-fallbac
 **判断**: collaborator や過去稿の図を生成図へ置き換える場合、旧図の各 semantic item を先に inventory 化し、新図へ一旦 hoist してから、混雑や重複を理由に item 単位で prune する。一般手順の正本は [`matplotlib-figure-qa.md#figure-replacement-information-audit`](conventions/matplotlib-figure-qa.md#figure-replacement-information-audit)。図の generator、parameter、caption、採否、復元 snapshot は owning project に残す。
 
 **Why**: source の artist と z-order が意図通りでも、実際の render では arrowhead が同色曲線に埋もれる。また、見た目を簡潔にする編集では旧図が運んでいた時間窓・方向・readout・記号対応が暗黙に消える。一旦 hoist は最終図を過密にする方針でなく、削除を明示判断へ変える review 順序である。bbox の機械 gate は文字の枠外だけを扱い、semantic 欠落と同色重なりには actual-render review が必要。
+
+## <a id="inspire-stable-id-fallback"></a>2026-09-11: INSPIRE 監査は texkey から安定 identifier へ fallback
+
+**判断**: `inspire-bib-audit.py` は local BibTeX key を最初に検索し、hit が無ければ entry の arXiv eprint、次に DOI で INSPIRE record を同定する。local key は原稿内の参照 label であり、INSPIRE canonical texkey と一致しないこと自体を未収録や metadata PASS とみなさない。record 同定後の field 比較は従来どおりで、引用内容の適切さは原文確認が所有する。
+
+**起点と検査**: private paper campaign で、arXiv ID と INSPIRE record が確認済みの2 entry が説明的 local key のため両方 SKIP した。query 順と fallback を offline selftest に固定し、同じ2 entryを live API で再実行して arXiv match、mismatch 0、skip 0 を確認した。一般化した script とその docstring が実装の正本で、paper 側は entry と確認記録だけを持つ。

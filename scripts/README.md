@@ -14,7 +14,7 @@
 - **[bootstrap-stdio-mcps.sh](bootstrap-stdio-mcps.sh)** — generic auto-bootstrap library for self-hosted stdio MCPs.
 - **[bootstrap-stdio-mcps.test.sh](bootstrap-stdio-mcps.test.sh)** — self-test for the generic stdio MCP bootstrap library.
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入
-- **[check-abbreviations.py](check-abbreviations.py)** — Abbreviation hygiene for LaTeX manuscripts: definition at the first body occurrence of the long form, no use before it, no long form after it, no sentence space after "et al." / "Ref." (2026-09-11).
+- **[check-abbreviations.py](check-abbreviations.py)** — Abbreviation hygiene for LaTeX manuscripts: each abbreviation is defined once, at the FIRST body
 - **[check-american-spelling.py](check-american-spelling.py)** — Reject curated British spellings in live LaTeX prose and figure text.
 - **[check-codex-integration.py](check-codex-integration.py)** — Codex SoT, session drift, Hook, and trigger-wiring gate.
 - **[check-display-math-style.py](check-display-math-style.py)** — Display-math house-style gate for LaTeX manuscripts (2026-09-09).
@@ -57,7 +57,7 @@
 - **[gmail-mcp-install-runtime-links.sh](gmail-mcp-install-runtime-links.sh)** — ~/.gmail-mcp/ の runtime credential を config repo canonical への symlink に張り替える冪等エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 - **[gmail-mcp-reauth.sh](gmail-mcp-reauth.sh)** — 多アカウント Gmail MCP の OAuth (再)認証エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 - **[gpt_measurements.py](gpt_measurements.py)** — [forwarder → ai-collaboration/scripts/gpt_measurements.py]
-- **[inspire-bib-audit.py](inspire-bib-audit.py)** — refs.bib の entry を INSPIRE-HEP と照合する gate（texkey ごとに title / 第一著者 / 誌名 / 巻 / 初頁 / DOI / eprint を突合し、捏造 DOI・DOI typo・content swap・非正規 texkey を検出。TeX 記法 ↔ Unicode・誌名の略記ゆれ・巻の系列文字・再録は正規化して偽陽性にしない、INSPIRE 未収録は SKIP、network 失敗は exit 2、--selftest 内蔵、conventions/paper-audit.md）
+- **[inspire-bib-audit.py](inspire-bib-audit.py)** — refs.bib を INSPIRE-HEP と texkey → arXiv ID → DOI の順で同定し、title / 第一著者 / 誌名 / 巻 / 初頁 / DOI / eprint を突合する gate（TeX 記法 ↔ Unicode・誌名の略記ゆれ・巻の系列文字・再録は正規化、INSPIRE 未収録は SKIP、network 失敗は exit 2、--selftest）
 - **[install-docx-decl-patch.sh](install-docx-decl-patch.sh)** — 上記 patch を user site-packages に `.pth`+symlink で install（setup.sh Step 9、 全 python3 起動で auto-load、 idempotent）
 - **[install-launchd-cron.sh](install-launchd-cron.sh)** — 汎用 launchd cron 登録エンジン（無人ルーチンを launchd cron で回す plist 生成・登録・状態確認・解除。--label-prefix / --workdir / --routine "id\|type\|target\|cron" を呼び出し側が渡す＝ROUTINES 焼かず汎用、cron は */N step + N-M 曜日範囲を StartCalendarInterval へ展開、skill=claude -p indirection / cmd=直接実行、CLI 認証で Claude Code (desktop) 切替非依存、--status/--run/--install-one/--uninstall-one/--uninstall/--ensure（未install のみ install=新ホスト自動配備、SessionStart から呼ぶ）、idempotent、macOS 限定、conventions/scheduled-tasks.md#launchd-cron-engine）
 - **[install-overleaf-sync.sh](install-overleaf-sync.sh)** — Overleaf 連携 repo に sync script を 1 コマンド設置（template 展開 + URL から ID 抽出・焼き込み + --merge-opts / --ahead-expected + token があれば --status smoke、 冪等・別 ID は --force、 conventions/overleaf-integration.md#new-integration-checklist）

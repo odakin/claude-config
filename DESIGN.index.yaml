@@ -109,3 +109,7 @@ sections:
     legacy: "2026-09-11"
     level: 2
     title: "2026-09-11: 既存図の情報を inventory 後に置換する"
+  - id: inspire-stable-id-fallback
+    legacy: "2026-09-11"
+    level: 2
+    title: "2026-09-11: INSPIRE 監査は texkey から安定 identifier へ fallback"

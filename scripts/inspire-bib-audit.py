@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""inspire-bib-audit.py — refs.bib の entry を INSPIRE-HEP と照合する gate（texkey ごとに title / 第一著者 / 誌名 / 巻 / 初頁 / DOI / eprint を突合し、捏造 DOI・DOI typo・content swap・非正規 texkey を検出。TeX 記法 ↔ Unicode・誌名の略記ゆれ・巻の系列文字・再録は正規化して偽陽性にしない、INSPIRE 未収録は SKIP、network 失敗は exit 2、--selftest 内蔵、conventions/paper-audit.md）
+r"""inspire-bib-audit.py — refs.bib を INSPIRE-HEP と texkey → arXiv ID → DOI の順で同定し、title / 第一著者 / 誌名 / 巻 / 初頁 / DOI / eprint を突合する gate（TeX 記法 ↔ Unicode・誌名の略記ゆれ・巻の系列文字・再録は正規化、INSPIRE 未収録は SKIP、network 失敗は exit 2、--selftest）
 
 Audit a BibTeX file against INSPIRE-HEP.
 
@@ -13,12 +13,13 @@ classes at once:
     fabricated DOI      a DOI that resolves to nothing, or to another paper
     DOI typo            one character off, so it silently resolves elsewhere
     content swap        right texkey, wrong title/journal/volume attached
-    non-canonical key   a key INSPIRE does not use, so cross-file cites drift
+    local texkey        a descriptive key that needs arXiv/DOI fallback
 
-This script turns that manual recipe into a gate.  For every entry carrying a
-texkey that INSPIRE recognizes, it fetches the INSPIRE record and compares the
+This script turns that manual recipe into a gate.  It first tries the BibTeX
+key, then an arXiv eprint, then a DOI.  Once a record is found, it compares the
 fields that identify the work: title, first author surname, journal, volume,
-first page, DOI, and arXiv eprint.
+first page, DOI, and arXiv eprint.  A local descriptive key can therefore be
+checked without being mistaken for an absent INSPIRE record.
 
 WHAT IT DOES NOT DO
 -------------------
@@ -136,14 +137,37 @@ def parse_bib(path):
     return entries
 
 
-def fetch(key):
-    """Return the INSPIRE metadata dict for a texkey, or None if unknown."""
-    q = urllib.parse.quote(f'texkeys:"{key}"')
+def lookup_queries(entry):
+    """Return ordered (kind, INSPIRE query) fallbacks for one parsed entry."""
+    fields = entry["fields"]
+    queries = [("texkey", f'texkeys:"{entry["key"]}"')]
+    eprint = fields.get("eprint", "").strip()
+    if eprint:
+        eprint = re.sub(r"^arxiv:\s*", "", eprint, flags=re.I)
+        queries.append(("arXiv", f'arxiv:"{eprint}"'))
+    doi = fields.get("doi", "").strip()
+    if doi:
+        queries.append(("DOI", f'doi:"{doi}"'))
+    return queries
+
+
+def fetch_query(query):
+    """Return INSPIRE metadata for one query, or None when it has no hit."""
+    q = urllib.parse.quote(query)
     url = f"{INSPIRE}?q={q}&fields={FIELDS}&size=1"
     with urllib.request.urlopen(url, timeout=TIMEOUT) as fh:
         data = json.load(fh)
     hits = data.get("hits", {}).get("hits", [])
     return hits[0]["metadata"] if hits else None
+
+
+def fetch(entry, fetcher=fetch_query):
+    """Return (metadata, matched kind), trying texkey, arXiv, then DOI."""
+    for kind, query in lookup_queries(entry):
+        meta = fetcher(query)
+        if meta is not None:
+            return meta, kind
+    return None, None
 
 
 def first_page(pages):
@@ -233,17 +257,18 @@ def audit(path, only=None):
     for entry in entries:
         key = entry["key"]
         try:
-            meta = fetch(key)
+            meta, matched_by = fetch(entry)
         except Exception as exc:                      # network / API failure
             print(f"[ERROR] {key}: {exc}")
             return 2
         if meta is None:
-            print(f"[SKIP ] {key}: no INSPIRE record for this texkey")
+            print(f"[SKIP ] {key}: no INSPIRE record for texkey, arXiv ID, or DOI")
             skipped += 1
             continue
         diffs = list(compare(entry, meta))
         if not diffs:
-            print(f"[OK   ] {key}")
+            suffix = "" if matched_by == "texkey" else f" (matched by {matched_by})"
+            print(f"[OK   ] {key}{suffix}")
             continue
         findings += 1
         print(f"[MISMATCH] {key}")
@@ -298,6 +323,23 @@ def selftest():
 
     chk("parser reads all three entries", len(entries) == 3)
     chk("parser keeps the entry type", entries["Swap:2018xdo"]["type"] == "inbook")
+    fallback_entry = {"key": "LocalKey", "fields": {
+        "eprint": "arXiv:quant-ph/0103144", "doi": "10.1000/example"
+    }}
+    chk("lookup order is texkey, arXiv, DOI",
+        lookup_queries(fallback_entry) == [
+            ("texkey", 'texkeys:"LocalKey"'),
+            ("arXiv", 'arxiv:"quant-ph/0103144"'),
+            ("DOI", 'doi:"10.1000/example"'),
+        ])
+    seen = []
+    def fake_fetcher(query):
+        seen.append(query)
+        return meta if query.startswith("arxiv:") else None
+    fallback_meta, fallback_kind = fetch(fallback_entry, fake_fetcher)
+    chk("fetch falls through a missing texkey to arXiv",
+        fallback_meta is meta and fallback_kind == "arXiv"
+        and seen == ['texkeys:"LocalKey"', 'arxiv:"quant-ph/0103144"'])
     chk("clean entry has no diff", not list(compare(entries["Good:1975im"], meta)))
     chk("journal abbreviation difference is not a finding",   # 'Phys. Rev. D' vs 'Phys.Rev.D'
         not any(d[0] == "journal" for d in compare(entries["Good:1975im"], meta)))
