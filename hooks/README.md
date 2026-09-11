@@ -11,6 +11,9 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[currentdate-anchor.py](currentdate-anchor.py)** — session start temporal anchor
 - **[expensive-tmp-guard.sh](expensive-tmp-guard.sh)** — PreToolUse(Bash): Audiveris / oemer / ML training 系の -output /tmp/ パターンを検出して `permissionDecision: ask`
 - **[expensive-tmp-guard.test.sh](expensive-tmp-guard.test.sh)** — expensive-tmp-guard.sh の self-test (hermetic)
+- **[first-prompt-stamp.py](first-prompt-stamp.py)** — UserPromptSubmit: session の最初の prompt に限り、 完全な自己同定 stamp を再注入 (I7)
+- **[first-reply-stamp.test.sh](first-reply-stamp.test.sh)** — 自己同定 stamp の UserPromptSubmit / Stop 入口 test
+- **[first-turn-stamp-check.py](first-turn-stamp-check.py)** — Stop: 最初の turn のどの返信の 1 行目にも自己同定 stamp が無ければ記録 (observe) / 1 回だけ差し戻す (block)
 - **[fix-snapshot-path-patch.sh](fix-snapshot-path-patch.sh)** — PATH スナップショット自動パッチ（REQUIRED_PATHS 方式、launchd WatchPaths から呼ばれる）
 - **[git-state-nudge.sh](git-state-nudge.sh)** — PostToolUse(Bash): 直近 commit の未 push 検出 + first-sighting で fetch+stale 検出
 - **[git-state-nudge.test.sh](git-state-nudge.test.sh)** — git-state-nudge.sh の self-test (決定的 mock git repo ベース)
@@ -33,6 +36,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[session-commit-nudge.test.sh](session-commit-nudge.test.sh)** — self-tests for session-commit-nudge.sh
 - **[session-start-claude-account-change.sh](session-start-claude-account-change.sh)** — SessionStart hook (layer 1, claude-config)
 - **[session-start-claude-account-change.test.sh](session-start-claude-account-change.test.sh)** — self-test for the layer-1 SessionStart hook.
+- **[session-start-host-stamp.sh](session-start-host-stamp.sh)** — SessionStart: 自己同定 stamp (host · surface = account · session) を注入 (I7)
+- **[session-start-host-stamp.test.sh](session-start-host-stamp.test.sh)** — SessionStart stamp hook の入口 test
 - **[session-start-mcp-scope-nudge.sh](session-start-mcp-scope-nudge.sh)** — SessionStart hook (layer 1)
 - **[session-start-mcp-scope-nudge.test.sh](session-start-mcp-scope-nudge.test.sh)** — session-start-mcp-scope-nudge.test.sh
 - **[session-start-provenance.py](session-start-provenance.py)** — Cache Claude SessionStart model metadata for Agent-Session Git trailers.

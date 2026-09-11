@@ -570,9 +570,9 @@ high-signal, product-neutral subset:
 | --- | --- | --- |
 | `PreToolUse(apply_patch)` | Blocks Tier-A structural leak patterns while editing a repository marked public, and records the completion-gate baseline for resolved patch targets. | Git pre-commit and commit-message gates remain authoritative for all write paths; completion behavior is owned by [`#completion-git-gate-hook`](#completion-git-gate-hook). |
 | `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`, constructs the conversation-start identity stamp, and caches hook-supplied session/model provenance. | It reads only current hook input and local runtime facts; it does not discover personal-layer data or session history. |
-| `UserPromptSubmit` | Refreshes the active model cache before every user turn, including after a model change. | It emits no output and stores only validated session/model metadata. |
+| `UserPromptSubmit` | Refreshes the active model cache before every user turn, including after a model change. On the first prompt of a session only, re-injects the identity stamp as `additionalContext` (see [`#conversation-start-stamp`](#conversation-start-stamp)). | The cache step emits no output and stores only validated session/model metadata; the stamp step fires once per session and stays silent outside the workspace root. |
 | `PreToolUse(Bash)` | Refreshes the machine-local session/model provenance cache and records a Git baseline for completion-gate targets. | It neither authorizes nor rewrites the command; the detailed state predicate is owned by [`#completion-git-gate-hook`](#completion-git-gate-hook). |
-| `PostToolUse(apply_patch)` + `Stop` | Provides a conservative tracking fallback, then blocks one turn-end continuation when task-created dirt or local/live-remote head drift remains. | It never commits or pushes automatically; `stop_hook_active`, client trust, path resolution, and specialized execution paths bound enforcement as documented in [`#completion-git-gate-hook`](#completion-git-gate-hook). |
+| `PostToolUse(apply_patch)` + `Stop` | Provides a conservative tracking fallback, then blocks one turn-end continuation when task-created dirt or local/live-remote head drift remains. At the first `Stop` of a session, also records (observe) or sends back once (block) a first turn whose replies never led with the identity stamp. | It never commits or pushes automatically; `stop_hook_active`, client trust, path resolution, and specialized execution paths bound enforcement as documented in [`#completion-git-gate-hook`](#completion-git-gate-hook). The stamp check reads only the current session's rollout and is evaluated once per session. |
 
 This subset intentionally does **not** import owner-private deadline ledgers or
 their SessionStart horizon output. Therefore, a reminder being visible in
@@ -587,7 +587,9 @@ The managed hook-code inventory is
 [`pre_tool_policy.py`](hooks/pre_tool_policy.py),
 [`resume_context.py`](hooks/resume_context.py),
 [`session_provenance.py`](hooks/session_provenance.py),
-[`session_stamp.py`](hooks/session_stamp.py), and
+[`session_stamp.py`](hooks/session_stamp.py),
+[`first_prompt_stamp.py`](hooks/first_prompt_stamp.py),
+[`first_turn_stamp_check.py`](hooks/first_turn_stamp_check.py), and
 [`session_touch.py`](hooks/session_touch.py); its regression suite is
 [`codex-hooks.test.sh`](hooks/codex-hooks.test.sh).
 
@@ -629,6 +631,22 @@ and require its output to lead the first reply unchanged. A compaction boundary
 restores work context but does not restamp. Hook installation and model-visible
 delivery remain separate evidence; a new task after trust review is the
 end-to-end activation test.
+
+Two more adapters reuse the Claude-side logic in
+[`scripts/first_reply_stamp.py`](../scripts/first_reply_stamp.py), so both
+products apply one predicate. [`first_prompt_stamp.py`](hooks/first_prompt_stamp.py)
+re-injects the same stamp right after the first user prompt, where it is closer
+to the first reply than the SessionStart context. [`first_turn_stamp_check.py`](hooks/first_turn_stamp_check.py)
+runs at the first `Stop` and checks whether any reply in that turn led with the
+stamp, reading the event's `transcript_path` when supplied, otherwise the
+session's own rollout located by session id; `last_assistant_message` is also
+counted when supplied. Sub-agent rollouts are skipped. Its mode (`observe`
+records only, `block` sends one continuation) is shared with Claude through
+`DEFAULT_STOP_MODE` and `FIRST_REPLY_STAMP_STOP`. The workspace-root scope, the
+opt-out, and the measured failure pattern that motivated both steps are in
+[`multi-account-machine-surface.md#first-reply-stamp-mechanism`](../conventions/multi-account-machine-surface.md#first-reply-stamp-mechanism).
+Their behavior is fixture-tested; live Codex delivery of the UserPromptSubmit
+context still awaits a fresh task after trust review.
 
 The SessionStart reminder obtains the short hostname only from the current
 hook process. A session title, a prior message, or an audit/report from another

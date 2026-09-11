@@ -26,6 +26,11 @@
             "type": "command",
             "command": "python3 \"$HOME/.codex/claude-config-hooks/session_provenance.py\"",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/first_prompt_stamp.py\"",
+            "timeout": 8
           }
         ]
       }
@@ -82,6 +87,11 @@
             "type": "command",
             "command": "python3 \"$HOME/.codex/claude-config-hooks/session_touch.py\" nudge",
             "timeout": 12
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/first_turn_stamp_check.py\"",
+            "timeout": 8
           }
         ]
       }

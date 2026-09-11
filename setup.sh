@@ -270,6 +270,9 @@ STOP_ENTRIES='[
   },
   {
     "hooks": [{"type": "command", "command": "~/.claude/hooks/pasted-command-comment-guard.sh"}]
+  },
+  {
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/first-turn-stamp-check.py"}]
   }
 ]'
 
@@ -295,6 +298,20 @@ SESSION_START_ENTRIES='[
   },
   {
     "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-windows-bootstrap.sh"}]
+  },
+  {
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-host-stamp.sh"}]
+  }
+]'
+
+# UserPromptSubmit hooks: run when the user submits a prompt.
+# first-prompt-stamp.py: session の最初の prompt に限り自己同定 stamp を additionalContext で
+# 再注入する (= model にだけ届き画面には出ない、 session に 1 回)。 2026-05-20 に退役した
+# currentdate-anchor の UPS 版は「毎 prompt・画面に出る」 ことが問題だった = 本 hook はどちらも
+# 当たらない。 設計 = conventions/multi-account-machine-surface.md#first-reply-stamp-mechanism
+USER_PROMPT_SUBMIT_ENTRIES='[
+  {
+    "hooks": [{"type": "command", "command": "~/.claude/hooks/first-prompt-stamp.py"}]
   }
 ]'
 
@@ -374,7 +391,8 @@ install_hooks() {
               --argjson post "$POST_TOOL_USE_ENTRIES" \
               --argjson ss "$SESSION_START_ENTRIES" \
               --argjson stop "$STOP_ENTRIES" \
-            '{hooks: {PreToolUse: $pre, PostToolUse: $post, SessionStart: $ss, Stop: $stop}}' > "$SETTINGS"
+              --argjson ups "$USER_PROMPT_SUBMIT_ENTRIES" \
+            '{hooks: {PreToolUse: $pre, PostToolUse: $post, SessionStart: $ss, Stop: $stop, UserPromptSubmit: $ups}}' > "$SETTINGS"
         echo "  Created: $SETTINGS"
         return 0
     fi
@@ -387,7 +405,8 @@ install_hooks() {
            --argjson post "$POST_TOOL_USE_ENTRIES" \
            --argjson ss "$SESSION_START_ENTRIES" \
            --argjson stop "$STOP_ENTRIES" \
-            '. + {hooks: {PreToolUse: $pre, PostToolUse: $post, SessionStart: $ss, Stop: $stop}}' \
+           --argjson ups "$USER_PROMPT_SUBMIT_ENTRIES" \
+            '. + {hooks: {PreToolUse: $pre, PostToolUse: $post, SessionStart: $ss, Stop: $stop, UserPromptSubmit: $ups}}' \
             "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
         echo "  Done."
     else
@@ -430,6 +449,10 @@ install_hooks() {
         # を install。 layer 3 hooks/install.sh が別 entry (= pdf-open-enforce.sh
         # 等) を append する、 両者は同 array 内で共存する)
         merge_hook_event "Stop" "$STOP_ENTRIES" "$SETTINGS"
+
+        # UserPromptSubmit 処理 (= 2026-09-12 first-prompt-stamp.py で再開。 上の cleanup が
+        # 消すのは退役済の currentdate-anchor.py だけ)
+        merge_hook_event "UserPromptSubmit" "$USER_PROMPT_SUBMIT_ENTRIES" "$SETTINGS"
 
         echo "  Hooks check complete."
     fi

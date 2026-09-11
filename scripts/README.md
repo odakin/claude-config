@@ -21,6 +21,7 @@
 - **[check-display-math-style.py](check-display-math-style.py)** — Display-math house-style gate for LaTeX manuscripts (2026-09-09).
 - **[check-doc-truncation.py](check-doc-truncation.py)** — 台帳 doc の「黙って消える」削除を git 高水位で検出（表の行/list/見出し/entry の大幅減、[truncation-ok] で baseline reset、config 駆動）
 - **[check-docx-integrity.py](check-docx-integrity.py)** — docx の Word「破損」判定源を Word 不要・決定論で検出（single-quote 宣言 / checkbox 状態↔グリフ / bookmark / table grid / dangling r:id 等、 office-automation.md#docx-checkbox-content-control）
+- **[check-first-reply-stamp.py](check-first-reply-stamp.py)** — 最初の返信に自己同定 stamp (I7) が出たかを transcript から数える事後 audit
 - **[check-fleet-status.py](check-fleet-status.py)** — fleet heartbeat の reader（全マシン分の beat を読み role 別に異常 surface = always-on の heartbeat 停止 🔴 / best-effort のスリープは仕様で silent / beat が新鮮な時の server auth/version error 🔴。finding 0 件 silent、fetch しない = 呼び出し側が鮮度担保、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
 - **[check-form-clipping.py](check-form-clipping.py)** — 生成 form PDF で「記入値が描画時に clip された」のを機械検出。
 - **[check-inbound-refs.py](check-inbound-refs.py)** — safety net for restructuring claude-config (layer 1).
@@ -54,6 +55,7 @@
 - **[docx_decl_patch.py](docx_decl_patch.py)** — python-docx の Document.save() を auto-patch し XML 宣言を Word 形式(double-quote+CRLF)で書く（厳格 Word の「破損」回避、 save 時 source 修正・lazy import hook、 office-automation.md#docx-checkbox-content-control）
 - **[dropbox-root.sh](dropbox-root.sh)** — Dropbox install root を OS 横断で resolve（dropbox-refs 規約用）
 - **[enhance-scan.py](enhance-scan.py)** — 手書き文書の撮影写真の可読化: 紙の切り出し + 照明ムラ除去 + コントラスト伸張 + タイル出力。
+- **[first_reply_stamp.py](first_reply_stamp.py)** — 最初の返信の自己同定 stamp (I7) を hook で支える共通 logic (Claude / Codex)
 - **[fix-bib-unicode.py](fix-bib-unicode.py)** — Unicode→LaTeX 変換スクリプト
 - **[fleet-heartbeat.py](fleet-heartbeat.py)** — per-machine heartbeat writer（毎時 launchd cron から自マシンの RC server 群〔launchd loaded + server ログ末尾 marker parse = Connected/auth error/version error〕 + config-dir auth metadata を <repo>/<subdir>/<host>.json に commit+push。**claude を一切呼ばない** = auth 失効でも監視が生き残る、state-change-or-age commit policy で git history を汚さない、fail-open、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
 - **[garoon-client.py](garoon-client.py)** — Cybozu Garoon (cloud) を **browser session cookie で script から読む** (画面 drive 不要)。

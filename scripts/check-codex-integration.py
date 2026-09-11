@@ -151,10 +151,10 @@ SUPERSEDED_CLAIMS = (
 )
 HOOK_ADAPTERS = {
     "SessionStart": ("resume_context.py", "session_provenance.py"),
-    "UserPromptSubmit": ("session_provenance.py",),
+    "UserPromptSubmit": ("session_provenance.py", "first_prompt_stamp.py"),
     "PreToolUse": ("pre_tool_policy.py", "session_provenance.py", "session_touch.py"),
     "PostToolUse": ("session_touch.py",),
-    "Stop": ("session_touch.py",),
+    "Stop": ("session_touch.py", "first_turn_stamp_check.py"),
 }
 WIRING_REQUIREMENTS = {
     "scripts/run-all-checks.sh": (

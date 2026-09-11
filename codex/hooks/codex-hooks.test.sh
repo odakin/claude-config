@@ -14,6 +14,8 @@ grep -q 'pre_tool_policy.py' "$SCRIPT_DIR/hooks.json"
 grep -q 'resume_context.py' "$SCRIPT_DIR/hooks.json"
 grep -q 'session_provenance.py' "$SCRIPT_DIR/hooks.json"
 test -f "$SCRIPT_DIR/session_stamp.py"
+test -f "$SCRIPT_DIR/first_prompt_stamp.py"
+test -f "$SCRIPT_DIR/first_turn_stamp_check.py"
 grep -q 'session_touch.py' "$SCRIPT_DIR/hooks.json"
 python3 - "$SCRIPT_DIR/hooks.json" <<'PY'
 import json
@@ -42,6 +44,14 @@ assert any(
 assert any(
     any("session_provenance.py" in hook.get("command", "") for hook in group.get("hooks", []))
     for group in hooks["UserPromptSubmit"]
+)
+assert any(
+    any("first_prompt_stamp.py" in hook.get("command", "") for hook in group.get("hooks", []))
+    for group in hooks["UserPromptSubmit"]
+)
+assert any(
+    any("first_turn_stamp_check.py" in hook.get("command", "") for hook in group.get("hooks", []))
+    for group in hooks["Stop"]
 )
 PY
 
