@@ -8,6 +8,10 @@ Codex の自己同定とprovenance整備は、技術契約・実装所有表・�
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-11 — 事実入力・規程判断・将来確約の責任境界
+
+学内事務への返信推敲から、相手の規程適用に必要な事実を答えたことを、当方の判断・当日の行動確約・追加資料収集へ膨らませない一般則を hoist。概念の正本は [`#input-does-not-transfer-decision-ownership`](docs/convention-design-principles.md#input-does-not-transfer-decision-ownership)、対外メールの適用は [`research-email.md#mail-fact-policy-boundary`](conventions/research-email.md#mail-fact-policy-boundary)。mail workflow からも事務・policy-owner 返信時に必ず読む参照を追加した。実名・個別案件は private/project 層に残した。
+
 ## 2026-09-11 — 記号計算 pipeline の無音 bug 3 型 (`#exact-rational-pipelines`)
 
 自著の盲検査読で 1-loop の極を独立に再計算した session から層1 に上がった分。`nsimplify` が厳密有理数を代数的数に「同定」する / propagator の routing が展開式と逆 / 印字式の添字を下げずに比較、の 3 つが重なって「恒等式が成り立たない」という偽の物理結論に見えた。規律 = [`scientific-computing.md#exact-rational-pipelines`](conventions/scientific-computing.md#exact-rational-pipelines)、道具 (Float 拒否 + 単項式 selftest) = `ai-collaboration/scripts/one_loop_pole.py`。instance は owner の private repo 側。

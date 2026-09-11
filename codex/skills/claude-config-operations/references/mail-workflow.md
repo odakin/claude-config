@@ -13,6 +13,11 @@ entries, not a whole personal corpus. Current user instructions override style
 defaults, but a one-off choice does not become a global preference.
 For research correspondence also use the [research-mail rules](../../../../conventions/research-email.md)
 and the matter's own ledger. Other domains use their respective project SoT.
+For an institutional or policy-owner reply that asks for facts, evidence, or a
+local-rule determination, also read
+[fact input versus policy decision](../../../../conventions/research-email.md#mail-fact-policy-boundary)
+before drafting. A factual answer must not silently become a policy decision,
+future itinerary commitment, or offer to collect more personal data.
 
 ## One dependency-free command
 

@@ -96,8 +96,8 @@ layer 1 (public) のドメイン固有規約 104 file をカテゴリ別に列�
   - 日本語メールの敬称規約 (内 vs 外、身内に「様」「皆様」を使わない、引用・要約時の「ご/お」帰属反転)
 - **[ml-forward-judgment.md](ml-forward-judgment.md)** — ML forward された依頼メールを inbox 化するとき
   - ML forward された依頼メールの inbox 化時の reflex 判定 trap 防止 (= 元 TO に名前なし = action なし、 ではない / 過去 ML の分野割当を遡る規律)
-- **[research-email.md](research-email.md)** — 研究メールのスレッド記録・分類・アウトリーチをするとき
-  - 研究メール分類・記録規約
+- **[research-email.md](research-email.md)** — 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき
+  - 研究メールの分類・記録と、事実提供・規程判断・将来確約を分ける対外文面規約
 
 ## 論文・発表・研究文書 (`paper`)
 

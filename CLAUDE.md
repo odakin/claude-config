@@ -106,7 +106,7 @@ claude-config/
 │   ├── prompt-injection.md                 # 外部由来 tool result に adversarial 指示文を疑ったとき
 │   ├── rebuttal-letter.md                  # referee report への point-by-point 返信を書くとき
 │   ├── remote-control-server.md            # Remote Control サーバーモードを常駐・troubleshoot するとき
-│   ├── research-email.md                   # 研究メールのスレッド記録・分類・アウトリーチをするとき
+│   ├── research-email.md                   # 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき
 │   ├── researchmap.md                      # researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
 │   ├── scheduled-tasks.md                  # scheduled task / launchd routine を作成・管理するとき
 │   ├── scientific-computing.md             # 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき

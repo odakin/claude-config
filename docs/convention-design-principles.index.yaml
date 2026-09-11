@@ -281,6 +281,10 @@ sections:
     legacy: "8.35"
     level: 3
     title: "8.35 resolver の出力は新しい trust boundary — 最終 action target で scope を再検証する"
+  - id: input-does-not-transfer-decision-ownership
+    legacy: "8.36"
+    level: 3
+    title: "8.36 入力の提供は判断責任を移さない — 事実・規程適用・将来確約を分離する"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
