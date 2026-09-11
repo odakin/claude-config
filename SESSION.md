@@ -2,6 +2,8 @@
 
 ## Current — deadline intake and notification locus (2026-09-11)
 
+2026-09-11 (論文の推敲 session から): 略語の検査 [`scripts/check-abbreviations.py`](scripts/check-abbreviations.py) を新設した (定義が本文で長形の初出にあること、 定義前に略語が出ないこと、 定義後に長形が戻らないこと、 「et al.」 「Ref.」 の後の文末スペース)。 規約 = [`conventions/latex.md#abbreviation-first-occurrence`](conventions/latex.md#abbreviation-first-occurrence) (投稿前 gate の list にも追加)。 最終 pass の一覧運用 = [`conventions/paper-audit.md#final-pass-open-items`](conventions/paper-audit.md#final-pass-open-items)。 分解の display・記号の置き場所・μ^{2ε} の出どころ = [`conventions/physics-notes.md#display-decomposition-and-symbol-scope`](conventions/physics-notes.md#display-decomposition-and-symbol-scope)。
+
 The durable rules are [`#derived-external-deadline`](docs/convention-design-principles.md#derived-external-deadline) (an official relative deadline remains external/hard), [`scheduled-tasks.md#per-recipient-notification-locus`](conventions/scheduled-tasks.md#per-recipient-notification-locus) (local human notifications run once per recipient device), and the [Codex lifecycle boundary](codex/PARITY.md#managed-lifecycle-subset). Product-specific fields, schedulers, and incident evidence belong to their lower-layer repositories; resume from those records rather than this note.
 
 既存の研究図を生成図へ置換した session から、旧図の情報 inventory、比較版への一旦 hoist、項目ごとの明示 prune、generator/output/caption snapshot、actual-render での同色重なり確認を [matplotlib figure replacement audit](conventions/matplotlib-figure-qa.md#figure-replacement-information-audit) へ昇格した。論文固有の図・parameter・採否判断・snapshot は owning project に残す。
