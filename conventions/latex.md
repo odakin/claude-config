@@ -1032,3 +1032,11 @@ latexdiff old.tex new.tex | sed '1s/^/\\PassOptionsToPackage{normalem}{ulem}\n/'
 **差分 PDF は 1 頁目に「何と何の差か」 を書く**: 差分を複数種類 (= 投稿版との全差分 / 直近の修正だけ 等) 送ると取り違えが起きる。 生成した diff.tex の `\begin{document}` 直後に表紙 1 頁を挿し込み、 **old / new が相手にとって何の版か**を書く (= 日付と出来事で指す。 内部 version 名・commit hash は書かない = [`physics-notes.md#no-internal-shorthand-in-deliverables`](physics-notes.md#no-internal-shorthand-in-deliverables))。 色の凡例・生成日時は不要 (= 差分 PDF を開けば色は自明、 情報を足すほど表紙が読まれない)。 そもそも**相手にとって意味のある切れ目でない差分は送らない** — 自分の作業日を境にした差分は相手の手元の版と対応しない。
 
 **関連の罠**: 変更ブロック内の `\label {key}` (空白入り) は latexdiff が `\label` と `{key}` の間に markup を挟んで `! Argument of \label has an extra }` になる → 新規に書く label は `\label{key}` (空白なし)。
+
+## <a id="abbreviation-first-occurrence"></a>略語は本文で長形が初めて出る箇所で定義する (2026-09-11)
+
+**ルール**: 略語は、本文 (abstract の外) で長形が**初めて**出る箇所に「長形 (略語)」 の形で 1 回だけ定義する。 それより前では略語も長形も使わず、 定義の後は略語で通す。 abstract は自己完結なので別扱いで、 abstract の中の長形や定義は本文の定義を免除しない。 節題と、 長形を含む固有名は例外。
+
+**検査は 2 条件**: (1) 略語が定義より前に出ない、 (2) 定義が長形の初出に付いている。 (1) だけでは、 後から前の節に書き足した段落が長形を使っていても通ってしまう。 2026-09-11 に同じ原稿を 2 回独立に走査し、 2 回とも (1) だけを見て取りこぼした (序論に書き足した段落が、 後ろの節にある定義より前で長形を使っていた)。
+
+**道具**: [`scripts/check-abbreviations.py`](../scripts/check-abbreviations.py) — D1 重複定義 / D2 定義前の使用 / D3 定義より前の長形 / D4 定義後の長形 / S1 「et al.」 「Ref.」 などの後の文末スペース / U (情報) 定義の無い大文字 token。 長形は「(ABBR)」 の直前の語の頭文字から推定し、 推定できないものは `--long ABBR='…'`、 固有名は `--allow`、 独自の display wrapper は `--display-macro` で渡す。 project 固有の allow / long は project 側の shim に置く。 投稿前 gate の spec に並べる (`paper-audit.md#gate-spec-anchor-list`)。

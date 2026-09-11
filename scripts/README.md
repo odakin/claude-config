@@ -14,6 +14,7 @@
 - **[bootstrap-stdio-mcps.sh](bootstrap-stdio-mcps.sh)** — generic auto-bootstrap library for self-hosted stdio MCPs.
 - **[bootstrap-stdio-mcps.test.sh](bootstrap-stdio-mcps.test.sh)** — self-test for the generic stdio MCP bootstrap library.
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入
+- **[check-abbreviations.py](check-abbreviations.py)** — Abbreviation hygiene for LaTeX manuscripts: definition at the first body occurrence of the long form, no use before it, no long form after it, no sentence space after "et al." / "Ref." (2026-09-11).
 - **[check-american-spelling.py](check-american-spelling.py)** — Reject curated British spellings in live LaTeX prose and figure text.
 - **[check-codex-integration.py](check-codex-integration.py)** — Codex SoT, session drift, Hook, and trigger-wiring gate.
 - **[check-display-math-style.py](check-display-math-style.py)** — Display-math house-style gate for LaTeX manuscripts (2026-09-09).

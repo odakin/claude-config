@@ -479,7 +479,16 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 - 主張の収支と強さ: [`headline-claim-budget-check`](#headline-claim-budget-check) (**係数の符号を含む**) / [`claim-strength-three-tests`](#claim-strength-three-tests) / [`uniqueness-claim-exhaustion`](#uniqueness-claim-exhaustion) / [`title-claim-check`](#title-claim-check)
 - 符号と規約: [`absolute-sign-external-anchor`](#absolute-sign-external-anchor) / [`convention-difference-closure`](#convention-difference-closure) / [`euclidean-check-in-lorentzian-paper`](#euclidean-check-in-lorentzian-paper)
-- 配置と語彙: [`statement-placement-check`](#statement-placement-check) / [`stale-framing-sweep`](#stale-framing-sweep) / [`abstract-geroch-compression`](#abstract-geroch-compression) / [`sentence-length-audit`](#sentence-length-audit)
+- 配置と語彙: [`statement-placement-check`](#statement-placement-check) / [`stale-framing-sweep`](#stale-framing-sweep) / [`abstract-geroch-compression`](#abstract-geroch-compression) / [`sentence-length-audit`](#sentence-length-audit) / 略語の 2 条件 = [`latex.md#abbreviation-first-occurrence`](latex.md#abbreviation-first-occurrence) (機械 = `check-abbreviations.py`)
 - 記号と付録: [`new-symbol-convention-consistency`](#new-symbol-convention-consistency) / [`notation-continuity-across-sections`](#notation-continuity-across-sections) / [`cross-check-appendix-shape`](#cross-check-appendix-shape) / [`appendix-order-by-first-reference`](#appendix-order-by-first-reference)
 
 符号を持つ印字量の登録簿がある repo では、 gate record に `check-sign-anchors.py --run --deferrals` の結果 (fleet を変えた後なら `--fleet-scan` の表も) を載せる。 gate の worker には「規約文書は検算対象」 ([#absolute-sign-external-anchor](#absolute-sign-external-anchor) の Rule 4) を spec で明示する。 起源 = 2026-09 の gate spec が `headline-claim-budget-check` を含み、 中心主張の検算を worker 自身にさせたことで全体符号の誤りが出た (= 偶然だった手順を標準にする)。
+
+## <a id="final-pass-open-items"></a>最終 pass の未手当は 1 表に畳み、 著者が 1 件ずつ決める (2026-09-11)
+
+投稿前の最終 pass では、 機械 gate の残り (readiness record の open items) と盲検 referee の findings (ledger の refuted / unverified を含む) を **1 つの表**に畳む。
+
+- 列は 出典 / 場所 / 内容 / 見立て / 決定。 **AI の見立てと著者の決定を別の列に**置き、 見立てで決定を埋めない。
+- 同じ問題を gate と referee が別の言葉で指摘していたら 1 行に畳み、 出典に両方を書く。 閉じたものは「済み」 節へ移し、 どの commit / 決定で閉じたかを書く。
+- 著者は 1 件ずつ決める。 AI は表を出したら、 上から順に 1 件ずつ選択肢と見立てを示して聞く (勝手に決めない)。
+- 途中で届いた別 worker の結果 (再発防止の実装・hoist など) も、 同じ表の行として足す。 受領側の汚染 grep の結果は「済み」 節に 1 行で残す。
