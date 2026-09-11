@@ -10,6 +10,7 @@ This checker deliberately verifies only objective invariants:
   overlaps Claude-side hook work, which is legitimate in SESSION.md);
 * known superseded capability claims do not return;
 * the shipped Hooks configuration names the expected local adapters.
+* repository/template entry points retain the root AGENTS.md discovery contract;
 * the aggregate runner, CI, and pre-commit warning keep the contract and
   adapter tests wired to an automatic trigger.
 
@@ -33,6 +34,7 @@ from typing import Iterable
 
 CANONICAL_POINTER = "codex/PARITY.md#codex-integration-sot"
 ENTRY_POINTS = (
+    "AGENTS.md",
     "README.md",
     "README.ja.md",
     "SESSION.md",
@@ -90,6 +92,59 @@ WIRING_REQUIREMENTS = {
     ),
     ".github/workflows/checks.yml": ("bash scripts/run-all-checks.sh",),
     ".claude/pre-commit-extra.sh": ("check-codex-integration.py --check",),
+}
+PROJECT_ENTRYPOINT_REQUIREMENTS = {
+    "AGENTS.md": (
+        "CLAUDE.md",
+        "SESSION.md",
+        "CONVENTIONS.md#agent-instruction-entrypoints",
+    ),
+    "CONVENTIONS.md": (
+        'id="agent-instruction-entrypoints"',
+        "templates/shared-project/AGENTS.md.template",
+        "audit-codex-integration.sh --repo",
+    ),
+    "conventions/shared-repo.md": (
+        'id="agent-entrypoint"',
+        "CONVENTIONS.md#agent-instruction-entrypoints",
+        "codex/PARITY.md#project-instruction-discovery",
+    ),
+    "codex/PARITY.md": (
+        'id="project-instruction-discovery"',
+        "https://learn.chatgpt.com/docs/agent-configuration/agents-md",
+        "project_doc_fallback_filenames",
+        "once per run",
+    ),
+    "codex/HOME-AGENTS.md": (
+        "repository-root",
+        "CONVENTIONS.md#agent-instruction-entrypoints",
+        "codex/PARITY.md#project-instruction-discovery",
+        "nested root `AGENTS.md` manually",
+    ),
+    "codex/AGENTS.md": (
+        "repository-root `AGENTS.md` first",
+        "CONVENTIONS.md#agent-instruction-entrypoints",
+        "codex/PARITY.md#project-instruction-discovery",
+    ),
+    "codex/hooks/resume_context.py": (
+        "repository-root AGENTS.md first",
+        "nested root",
+        "startup chain",
+    ),
+    "templates/shared-project/AGENTS.md.template": (
+        "CLAUDE.md",
+        "SESSION.md",
+        "CONVENTIONS.md#agent-instruction-entrypoints",
+    ),
+    "templates/shared-project/README.md": ("AGENTS.md.template",),
+    "templates/shared-project/AUDIT.md.template": (
+        "root `AGENTS.md`",
+        "`CLAUDE.md` と `SESSION.md`",
+    ),
+    "scripts/audit-codex-integration.sh": (
+        "tracked root AGENTS.md",
+        "CONVENTIONS.md#agent-instruction-entrypoints",
+    ),
 }
 PERSONAL_OVERLAY_REQUIREMENTS = {
     "codex/PARITY.md": (
@@ -348,6 +403,16 @@ def check(root: Path) -> list[str]:
         for fragment in fragments:
             if fragment not in content:
                 errors.append(f"{relative}: missing Codex integration wiring: {fragment}")
+    for relative, fragments in PROJECT_ENTRYPOINT_REQUIREMENTS.items():
+        path = root / relative
+        try:
+            content = text(path)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        for fragment in fragments:
+            if fragment not in content:
+                errors.append(f"{relative}: missing project-entrypoint contract: {fragment}")
     for relative, fragments in PERSONAL_OVERLAY_REQUIREMENTS.items():
         path = root / relative
         try:
@@ -429,6 +494,11 @@ def fixture(root: Path) -> None:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("\n".join(fragments) + "\n", encoding="utf-8")
+    for relative, fragments in PROJECT_ENTRYPOINT_REQUIREMENTS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
     for relative, fragments in PERSONAL_OVERLAY_REQUIREMENTS.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -480,6 +550,16 @@ def selftest() -> int:
             if not any("missing session handoff wiring" in error for error in check(root)):
                 print("FAIL: missing handoff wiring was not detected", relative)
                 return 1
+        fixture(root)
+
+        (root / "templates/shared-project/AGENTS.md.template").write_text(
+            "CLAUDE.md\nSESSION.md\n", encoding="utf-8"
+        )
+        errors = check(root)
+        if not any("missing project-entrypoint contract" in error for error in errors):
+            print("FAIL: missing project-entrypoint wiring was not detected")
+            return 1
+
         fixture(root)
 
         (root / "README.md").write_text("missing pointer" + chr(10), encoding="utf-8")

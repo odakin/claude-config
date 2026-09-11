@@ -25,6 +25,12 @@ mkdir -p "$TRAILER_REPO" "$ROOT_DISCOVERED_REPO" "$OUTSIDE_REPO"
 git -C "$TRAILER_REPO" init -q
 git -C "$ROOT_DISCOVERED_REPO" init -q
 git -C "$OUTSIDE_REPO" init -q
+for repo in "$TRAILER_REPO" "$ROOT_DISCOVERED_REPO"; do
+  printf '%s\n' '# Agent instructions' 'Read CLAUDE.md and SESSION.md before work.' > "$repo/AGENTS.md"
+  printf '# project instructions\n' > "$repo/CLAUDE.md"
+  printf '# current state\n' > "$repo/SESSION.md"
+  git -C "$repo" add AGENTS.md CLAUDE.md SESSION.md
+done
 ln -s "$OUTSIDE_REPO" "$TEST_REPOS_ROOT/outside-link"
 python3 - "$TEST_CODEX_DIR/config.toml" <<'PY'
 from pathlib import Path

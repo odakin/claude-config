@@ -6,8 +6,14 @@ This file is public layer-1 content. `scripts/setup-codex.sh` may link it into
 machine-local layer-4 wiring. This content must remain useful without access
 to owner-private data.
 
-For Git work, fetch first when a remote exists, inspect the project
-instructions and `SESSION.md`, and preserve the project's own instructions.
+For Git work, fetch first when a remote exists, read the repository-root
+`AGENTS.md` first, then read `CLAUDE.md`, `SESSION.md`, and the task-relevant
+sources they point to. Preserve the project's own instructions. If the task
+started in a parent workspace and enters a nested repository later, read that
+nested root `AGENTS.md` manually before acting; a shell `cd` does not prove that
+the task-start instruction chain included it. The semantic contract is
+`CONVENTIONS.md#agent-instruction-entrypoints`, and Codex discovery details are
+`codex/PARITY.md#project-instruction-discovery`.
 Before a Codex-origin commit, verify the repository's managed provenance hook;
 the commit must carry `Agent-Session`, `Agent-Model`, and `Agent-Effort`.
 Use the active Codex model when available. If all verified runtime paths fail,

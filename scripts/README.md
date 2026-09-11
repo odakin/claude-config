@@ -7,7 +7,7 @@
 リポ全体の構造 tree = [CLAUDE.md](../CLAUDE.md)。
 
 - **[affix-image-xlsx.py](affix-image-xlsx.py)** — Place an image (seal / signature) into an .xlsx via Excel.app — without destroying the file.
-- **[audit-codex-integration.sh](audit-codex-integration.sh)** — claude-config の Codex 導入を read-only で確認する
+- **[audit-codex-integration.sh](audit-codex-integration.sh)** — Codex 導入と指定 repo の root AGENTS.md / Git gate を read-only で確認する
 - **[audit-codex-integration.test.sh](audit-codex-integration.test.sh)** — Codex integration audit の fixture test
 - **[audit-hooks.sh](audit-hooks.sh)** — 3 軸 hook 配信 audit (= silent malfunction の構造的検出)
 - **[audit-public-repos.sh](audit-public-repos.sh)** — 全 public repo の leak 定期監査（週次 scheduled-task 対象）

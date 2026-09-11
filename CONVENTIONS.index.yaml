@@ -13,6 +13,9 @@ sections:
     level: 2
     title: "2. 必須ファイル"
     related: [readme-style, optional-files]
+  - id: agent-instruction-entrypoints
+    level: 3
+    title: "Agent instruction entrypoint — root `AGENTS.md` を全リポに置く"
   - id: readme-style
     level: 3
     title: "README の流儀"

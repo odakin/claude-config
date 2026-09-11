@@ -34,6 +34,10 @@ TEST_REPO="$TEMP_ROOT/repo"
 mkdir -p "$TEST_REPO/.claude" "$TEST_REPO/.hooks"
 git -C "$TEST_REPO" init -q
 git -C "$TEST_REPO" config core.hooksPath .hooks
+printf '%s\n' '# Agent instructions' 'Read CLAUDE.md and SESSION.md before work.' > "$TEST_REPO/AGENTS.md"
+printf '# project instructions\n' > "$TEST_REPO/CLAUDE.md"
+printf '# current state\n' > "$TEST_REPO/SESSION.md"
+git -C "$TEST_REPO" add AGENTS.md CLAUDE.md SESSION.md
 touch "$TEST_REPO/.claude/public-repo.marker"
 printf '%s\n' 'public-precommit-runner.sh' > "$TEST_REPO/.hooks/pre-commit"
 printf '%s\n' 'commit-msg-leak-guard-runner.sh' > "$TEST_REPO/.hooks/commit-msg"
@@ -43,6 +47,16 @@ HOME="$TEST_HOME" \
 CODEX_USER_DIR="$TEST_CODEX_DIR" \
 CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
   "$SCRIPT_DIR/audit-codex-integration.sh" --repo "$TEST_REPO" >/dev/null
+
+git -C "$TEST_REPO" rm -q --cached AGENTS.md
+if HOME="$TEST_HOME" \
+  CODEX_USER_DIR="$TEST_CODEX_DIR" \
+  CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
+  "$SCRIPT_DIR/audit-codex-integration.sh" --repo "$TEST_REPO" >/dev/null 2>&1; then
+  echo "expected audit to fail for an untracked root AGENTS.md" >&2
+  exit 1
+fi
+git -C "$TEST_REPO" add AGENTS.md
 
 rm "$TEST_REPO/.hooks/commit-msg"
 if HOME="$TEST_HOME" \

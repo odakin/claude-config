@@ -43,6 +43,7 @@ SETUP.md (= `templates/shared-project/SETUP.md.template` を埋めて生成し�
 
 ```
 <project-name>/
+├── AGENTS.md            # Codex が自動発見する薄い入口 → CLAUDE.md / SESSION.md
 ├── CLAUDE.md            # このファイル
 ├── README.md            # 公開向け説明（最小限。public 化 / CLAUDE.md を読まない読者がいるなら build/quickstart もここ: CONVENTIONS §README の流儀）
 ├── SESSION.md           # 現在の作業状態

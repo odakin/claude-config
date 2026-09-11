@@ -74,6 +74,12 @@ LaTeX リポの場合は [conventions/latex.md](latex.md) の .gitignore セク�
 ## パスの記述
 CLAUDE.md・SESSION.md 等でローカルパスを書くときは `~` 表記を使う（`/Users/<user>/` は共同編集者の環境で壊れる）。
 
+## <a id="agent-entrypoint"></a>AI agent の root entrypoint
+
+共有リポは root に tracked・非空の通常 file `AGENTS.md` を置く。これは Codex が task 開始時に自動発見する layer 2 entrypoint であり、`CLAUDE.md` と `SESSION.md` を作業前に読み、そこから task-relevant な正本へ辿るよう命じる**薄い dispatcher**である。規約本文・現在地・設計判断を `AGENTS.md` に複製しない。一般契約の正本は [`CONVENTIONS.md#agent-instruction-entrypoints`](../CONVENTIONS.md#agent-instruction-entrypoints)、Codex discovery の技術的正本は [`codex/PARITY.md#project-instruction-discovery`](../codex/PARITY.md#project-instruction-discovery)。
+
+shared repo の `AGENTS.md` は共同編集者全員が解決できる内容だけで自己完結させる。layer 3 file/path、所有者固有の絶対 path、machine-local config を書かない。`~/.codex/config.toml` の fallback 設定や所有者側 installer に依存させず、[`templates/shared-project/AGENTS.md.template`](../templates/shared-project/AGENTS.md.template) から通常 file として作る（symlink は Windows collaborator と archive/export で壊れうるため不可）。新しい collaborator を加える前と Codex-origin commit 前の audit は `scripts/audit-codex-integration.sh --repo <path>` で行う。
+
 ## 4 層モデルの依存ルール
 
 claude-config の 4 層モデル (audience の広さ順に numbering、`public ⊃ collaborator set ⊃ owner ⊃ machine-local`):
@@ -171,7 +177,7 @@ collaborator 本人の連絡先（メールアドレス等）や PII を layer 2
 
 運用の要点 4 つ:
 
-1. **配置は CLAUDE.md**（= 唯一 auto-load される発火面）。別 file に置いて pointer で誘導する形は recall 依存で弱い。digest は rule 本文と適用法だけに絞って tight に保つ（CLAUDE.md のサイズは毎 session が払う税 = [`scheduled-tasks.md #headless-context-budget`](scheduled-tasks.md#headless-context-budget)）。
+1. **rule 本文の配置は CLAUDE.md**。Claude Code はこれを project instruction として読み、Codex は root `AGENTS.md` の mandatory read から同じ本文へ入る。`AGENTS.md` 側へ digest を複製しない。別の cold file に置いて任意 pointer だけで誘導する形は recall 依存で弱い。digest は rule 本文と適用法だけに絞って tight に保つ（project instruction のサイズは毎 session が払う税 = [`scheduled-tasks.md #headless-context-budget`](scheduled-tasks.md#headless-context-budget)）。
 2. **drift は生成で design-out**: 所有者側の単一配布 source から script で各共有リポの AUTO block（`<!-- AUTO-* BEGIN/END -->` marker 間の idempotent 置換）へ配布する。手動コピー × N repo は必ず drift する。marker 行に「自動生成・手編集禁止・恒久変更は所有者へ」を明記する（= [`personal-layer.md` §Owner automation acting on a shared project](../docs/personal-layer.md#owner-automation-shared-project) の announce 義務）。
 3. **layer-2-safe filter**: 配布内容に PII・機関名・layer 3 の file 名 / path・私的文脈（規約成立の経緯・発言引用・他 private repo 名）を含めない。rule 本文と適用法だけを出す。一次防御は配布 source 側の記述規律、機械 backstop は配布 script の leak gate と、「正本に § を足したら配布判断（export / skip）を必ず記録する」parity gate。
 4. **layer 1 に既にある一般則は public URL で引く**: claude-config は public なので、共有リポからは所有者マシンの local path でなく GitHub URL（`https://github.com/<owner>/claude-config/blob/main/...`）を併記すれば collaborator と collaborator 側 AI も読める。CLAUDE.md の「規約参照」節も dual-form（local path + public URL）にすると collaborator 環境で dead link にならない。

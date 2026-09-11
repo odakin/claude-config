@@ -15,6 +15,7 @@ user が「このリポを setup して」 と頼んだ場合、 cautious-mode d
 ## 構造
 ```
 claude-config/
+├── AGENTS.md                # Codex が自動発見する薄い project 入口 → CLAUDE.md / SESSION.md
 ├── CLAUDE.md               # このファイル（リポ固有の指示書）
 ├── SESSION.md              # 現在の作業状態・残タスク（当月 + Open items、hot/cold 分離）
 ├── SESSION-archive.md      # SESSION.md から分離した 2026-05 以前の dated entry（grep 専用）

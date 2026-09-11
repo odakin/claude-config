@@ -97,6 +97,8 @@ architecture・layer 境界・Hook coverage・platform scope・automation routin
 deterministic local job、lifecycle Hook、対応する Web/Mobile event trigger を
 [正本の matrix](codex/PARITY.md#native-automation-routing) に従って選ぶ。
 `./scripts/audit-codex-integration.sh` はこのマシンの導入状態を read-only で確認する。
+`--repo <path>` を渡すと、そのリポに必須の tracked root `AGENTS.md` entrypoint と
+Git-side guard も検査する。
 
 ### Windows 対応状況
 

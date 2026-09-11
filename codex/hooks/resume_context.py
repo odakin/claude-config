@@ -59,7 +59,10 @@ def main() -> int:
             "hookEventName": "SessionStart",
             "additionalContext": (
                 "This is a session or compaction boundary. Before acting, re-read the "
-                "nearest project AGENTS.md or CLAUDE.md and SESSION.md when present. "
+                "repository-root AGENTS.md first, then CLAUDE.md, SESSION.md, and their "
+                "task-relevant source-of-truth pointers. If work entered a nested "
+                "repository below the task-start workspace, read that nested root "
+                "AGENTS.md manually; shell cd does not prove it was in the startup chain. "
                 f"{stamp_context}"
                 f"{provenance_context}"
                 f"The worker host for this session is {host}. A title, prior message, or "

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# audit-codex-integration.sh — claude-config の Codex 導入を read-only で確認する
+# audit-codex-integration.sh — Codex 導入と指定 repo の root AGENTS.md / Git gate を read-only で確認する
 #
 # Claude 側には一切書き込まない。managed symlink と Codex config の概況を表示し、
-# --repo を渡した場合だけ Agent-Session trailer hook と既存 Git-side gate も確認する。
+# --repo を渡した場合だけ root AGENTS.md、Agent-Session trailer hook、既存 Git-side
+# gate も確認する。
 
 set -u
 
@@ -21,8 +22,8 @@ Usage: audit-codex-integration.sh [--repo <path>]...
 
 Read-only audit of the claude-config Codex integration.
 
-  --repo <path>  Also inspect the Agent-Session hook and existing Git-side
-                 guards in this repository.
+  --repo <path>  Also inspect the tracked root AGENTS.md, Agent-Session hook,
+                 and existing Git-side guards in this repository.
   -h, --help     Show this help.
 EOF
 }
@@ -198,7 +199,18 @@ for requested_repo in "${REPOS[@]}"; do
     hooks_dir="$repo_root/$hooks_dir"
   fi
 
-  echo "=== Git-side guards: $repo_root ==="
+  echo "=== Project entry point and Git-side guards: $repo_root ==="
+  agents_file="$repo_root/AGENTS.md"
+  if [ -f "$agents_file" ] && [ ! -L "$agents_file" ] && [ -s "$agents_file" ] \
+    && git -C "$repo_root" ls-files --error-unmatch -- AGENTS.md >/dev/null 2>&1 \
+    && grep -qF 'CLAUDE.md' "$agents_file" \
+    && grep -qF 'SESSION.md' "$agents_file"; then
+    echo "OK: tracked root AGENTS.md dispatches to CLAUDE.md and SESSION.md"
+  else
+    echo "MISSING: tracked, non-empty, regular root AGENTS.md with CLAUDE.md and SESSION.md pointers" >&2
+    echo "  contract: CONVENTIONS.md#agent-instruction-entrypoints" >&2
+    ISSUES=$((ISSUES + 1))
+  fi
   if [ -f "$hooks_dir/prepare-commit-msg" ] \
     && grep -qF 'prepare-commit-msg-session.sh' "$hooks_dir/prepare-commit-msg" 2>/dev/null; then
     echo "OK: Agent-Session prepare-commit-msg hook"

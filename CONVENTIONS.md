@@ -24,6 +24,7 @@ git add . && git commit -m "Initial commit: <概要>" && git push -u origin main
 ```
 
 description は英語。リポ一覧の正本は個人層の `repos.md`（未設定なら MEMORY.md）。新規作成前に既存リポを確認。
+最初の commit 前に root `AGENTS.md` を作る。shared repo は [`templates/shared-project/AGENTS.md.template`](templates/shared-project/AGENTS.md.template) を使い、全リポ共通の所有関係と検査は [§Agent instruction entrypoint](#agent-instruction-entrypoints) に従う。
 
 ---
 
@@ -35,6 +36,7 @@ description は英語。リポ一覧の正本は個人層の `repos.md`（未設
 
 | ファイル | 役割 |
 |---------|------|
+| `AGENTS.md` | **Codex が自動発見するリポ root の薄い入口（全リポ必須）**。`CLAUDE.md` と `SESSION.md` を作業前に読み、そこから task-relevant な正本へ辿ることだけを命じる。規約・状態・設計判断を複製しない |
 | `CLAUDE.md` | 永続的な構造・実行方法・復帰手順の**記述** (「こうなっている」の事実、判断理由は DESIGN.md へ)。構造変更時のみ更新 |
 | `SESSION.md` | 揮発的な現在地（作業段階・停止点・次の一手）と正本への直接参照。進行に応じて更新 |
 | `DESIGN.md` | 現在採用されている設計**判断**・Defer 判断・横断原則 (LESSON) の snapshot。Why / 代替案 / tradeoff を記録。判断が生じたら即記録、超越されたら [`docs/convention-design-principles.md` §7](docs/convention-design-principles.md#design-snapshot-operation) の lifecycle で処理 (pedagogy 抽出後に旧本体削除、履歴は git log)。構造の記述は CLAUDE.md へ。未決定の探索は `EXPLORING.md`（任意）へ |
@@ -42,7 +44,21 @@ description は英語。リポ一覧の正本は個人層の `repos.md`（未設
 | `SETUP.md` | **共同編集者向けセットアップ walkthrough** (任意、private collaborative repo で git-crypt 等 onboarding が複雑な場合に新設)。CLAUDE.md は auto-load コストがあるため full walkthrough を入れず、SETUP.md に分離して薄いポインタ + 反パターン警告のみ持たせる。配置はリポ root (`docs/` を git-crypt 暗号化していると未 unlock の collaborator が読めない catch-22)。テンプレ: `templates/shared-project/SETUP.md.template`、設計理由は `conventions/shared-repo.md` §「共同編集者向けの SETUP.md」|
 | `.gitignore` | ビルド成果物・OS/エディタファイル・機密情報の除外。共有リポでは全パターン明記 |
 
-CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「なぜそうしたか」(judgmental)、SESSION.md は「今どこにいるか」(揮発的)、README は「外の人が 30 秒で判断するための玄関」。
+AGENTS.md は「どの正本を最初に読むか」だけを運ぶ入口、CLAUDE.md は「どうなっているか」(descriptive)、DESIGN.md は「なぜそうしたか」(judgmental)、SESSION.md は「今どこにいるか」(揮発的)、README は「外の人が 30 秒で判断するための玄関」。
+
+### <a id="agent-instruction-entrypoints"></a>Agent instruction entrypoint — root `AGENTS.md` を全リポに置く
+
+**契約:** 本規約に従う Git リポは、tracked・非空・通常 file の `AGENTS.md` をリポ root に置く。Codex は task 開始時に `AGENTS.md` chain を自動発見する一方、`CLAUDE.md` は machine-local な fallback 設定が無ければ自動発見しない。また instruction chain は task 開始時に組み立てられるため、親 workspace で始めた task が後から nested repo へ `cd` しても、その repo の入口が自動追加されたとは扱わない。Codex の技術的 discovery 契約と公式根拠は [`codex/PARITY.md#project-instruction-discovery`](codex/PARITY.md#project-instruction-discovery) が正本。
+
+`AGENTS.md` は**薄い dispatcher**であり、第二の規約正本ではない。本文は次の責務だけに絞る:
+
+1. 作業前に root の `CLAUDE.md` と `SESSION.md` を読む。
+2. `CLAUDE.md` 内の task-relevant な pointer を実行前に辿る。
+3. 規約・構造・現在地・判断理由の home がそれぞれ `CLAUDE.md` / `SESSION.md` / `DESIGN.md` 等にあり、`AGENTS.md` へ複製しないと明記する。
+
+新規 shared repo は [`templates/shared-project/AGENTS.md.template`](templates/shared-project/AGENTS.md.template) から作る。既存 repo は次に触る通常の整備単位で追加し、`scripts/audit-codex-integration.sh --repo <path>` で root 配置・tracking・上記 pointer を検査する。installer が layer 2 project file を勝手に生成してはならない。`project_doc_fallback_filenames` 等の個人設定は layer 4 の補助にすぎず、共同編集者・別ホストで解決できる committed `AGENTS.md` の代替にしない。
+
+nested directory に `AGENTS.md` / `AGENTS.override.md` を足すのは、その subtree に本当に別の規則がある場合だけ。root の入口を nested file で置き換えたり、temporary override を project の恒久正本にしたりしない。shared repo での layer 2 境界は [`conventions/shared-repo.md#agent-entrypoint`](conventions/shared-repo.md#agent-entrypoint) を参照。
 
 <a id="session-no-durable-record"></a>**SESSION に durable record を書かない (= snapshot 原理の SESSION 版、全リポ共通)**: SESSION が持つのは **揮発的な現在地 + case-SoT への pointer** だけ。以下は SESSION でなく、それぞれの正本 (= task ledger / 受信記録 / 連絡先 / 設計 doc) に置く:
 

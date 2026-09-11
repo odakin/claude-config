@@ -54,6 +54,8 @@ git-crypt status
 ## 監査が通ったら
 
 - [ ] 上記 1-6 すべてクリア
+- [ ] root `AGENTS.md` が tracked・非空・通常 file で、`CLAUDE.md` と `SESSION.md` を作業前に読むよう明記している
+- [ ] `AGENTS.md` は規約・状態・判断を複製せず、collaborator 環境で解決不能な path を含まない
 - [ ] CLAUDE.md が collaborator 環境（個人層なし）で読んで意味が通るか目視確認
 - [ ] README.md にこのリポが何のためのリポか分かる説明がある
 - [ ] git-crypt を使う場合、新規 collaborator が鍵を取得する手順が（口頭でもよいので）明確

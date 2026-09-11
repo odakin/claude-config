@@ -102,7 +102,9 @@ platform scope, automation routing, and verification. The installed
 standalone project schedules, deterministic local jobs, lifecycle Hooks, and
 supported Web/Mobile event triggers; the canonical matrix is
 [Native automation routing](codex/PARITY.md#native-automation-routing). Run
-`./scripts/audit-codex-integration.sh` for a read-only check of this machine.
+`./scripts/audit-codex-integration.sh` for a read-only check of this machine,
+and pass `--repo <path>` to verify that a repository has the required tracked
+root `AGENTS.md` entry point and Git-side guards.
 
 ### Windows status
 

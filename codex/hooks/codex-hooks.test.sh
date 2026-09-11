@@ -264,6 +264,9 @@ assert "do not request step-by-step confirmation" in context
 assert "stopping point, next action" in context
 assert "no durable records or separate closure report" in context
 assert "CONVENTIONS.md#auto-update-protocol" in context
+assert "repository-root AGENTS.md first" in context
+assert "nested root AGENTS.md manually" in context
+assert "shell cd does not prove it was in the startup chain" in context
 PY
 
 printf '%s' '{"hook_event_name":"SessionStart","source":"compact","session_id":"codex-test-session","model":"gpt-test"}' \

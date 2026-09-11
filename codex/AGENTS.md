@@ -9,8 +9,13 @@ or behavior.
 ## Start and resume work
 
 For work inside a Git repository, begin by fetching its remote when one
-exists, checking status, and reading the repository's `AGENTS.md` or
-`CLAUDE.md`. Read `SESSION.md`, when present, before editing.
+exists, checking status, and reading the repository-root `AGENTS.md` first.
+Then read `CLAUDE.md`, `SESSION.md`, and the task-relevant sources they point
+to before editing. If this task started in a parent workspace and enters a
+nested repository later, read that nested root `AGENTS.md` manually before
+acting; a shell `cd` does not rebuild Codex's task-start instruction chain.
+The semantic contract is `CONVENTIONS.md#agent-instruction-entrypoints`, and
+the Codex discovery contract is `codex/PARITY.md#project-instruction-discovery`.
 At the first reply after startup, resume, or clear, emit the exact best-effort
 identity line specified by `codex/PARITY.md#conversation-start-stamp`; retain
 the literal product identity `Codex` and preserve `unknown` fields rather than

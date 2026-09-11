@@ -1,6 +1,6 @@
 # 共同編集者向けセットアップ — <project-name>
 
-新マシンで本リポを使うときの手順。Claude Code に「このリポでセットアップして」と頼めば、CLAUDE.md → 本ファイルの順で読んで自動で進めます。
+新マシンで本リポを使うときの手順。AI agent に「このリポでセットアップして」と頼めば、root `AGENTS.md` → `CLAUDE.md` → 本ファイルの順で読んで進めます。
 
 > このファイルは [claude-config の shared-project テンプレ](https://github.com/<owner>/claude-config/tree/main/templates/shared-project) から生成。新規 collaborator が詰まらない流れを担保するため、項目を削らず内容だけ埋めること (特に「反パターン警告」「Step 0 事前確認」「Step 2 事後確認」は安全装置として必須)。
 

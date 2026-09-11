@@ -37,6 +37,7 @@ Keep each Codex fact in the one home that owns its lifecycle:
 | --- | --- |
 | Clone-user command and the minimum replacement warning | `README.md` / `README.ja.md` |
 | Durable architecture, autonomy boundary, layer placement, platform scope, and verification contract | This document |
+| Product-neutral requirement that every repository expose a thin root `AGENTS.md` | `CONVENTIONS.md#agent-instruction-entrypoints`; this document owns only Codex discovery mechanics |
 | Owner-specific cross-machine bootstrap choice and concise Codex overlay | The owner's private layer-3 record; the public personal-layer template only explains the boundary and required source shape |
 | Current, short-lived work state | `SESSION.md`, as a pointer here rather than a second technical record |
 | Actual links, configuration, and requested project Git guards on one machine | `scripts/audit-codex-integration.sh` |
@@ -52,6 +53,14 @@ This Codex-specific map applies, without copying Claude implementation, the
 shared [SESSION snapshot rule](../CONVENTIONS.md#session-no-durable-record),
 [layer-3 boundary](../docs/personal-layer.md), and
 [hook-delivery evidence model](../conventions/hook-authoring.md#delivery-audit-method).
+
+### <a id="project-instruction-discovery"></a>Project instruction discovery and the root `AGENTS.md`
+
+Source check: 2026-09-11. The official [Codex `AGENTS.md` documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) says Codex builds an instruction chain once per run: global `AGENTS.override.md` or `AGENTS.md`, then at most one instruction file per directory from the project root down to the starting working directory. The default project names are `AGENTS.override.md` and `AGENTS.md`; another name such as `CLAUDE.md` is considered only when that machine's `project_doc_fallback_filenames` lists it. A later shell `cd` into a nested repository does not establish that its instructions were added to the already-built chain.
+
+Therefore every repository governed by these conventions carries a tracked, non-empty, ordinary root `AGENTS.md`. The product-neutral semantic contract and file ownership are canonical in [`CONVENTIONS.md#agent-instruction-entrypoints`](../CONVENTIONS.md#agent-instruction-entrypoints); shared-project instantiation is in [`conventions/shared-repo.md#agent-entrypoint`](../conventions/shared-repo.md#agent-entrypoint). The file is a thin dispatcher: it requires the agent to read root `CLAUDE.md`, `SESSION.md`, and their task-relevant source-of-truth pointers, while leaving project rules, current state, and decisions in their existing homes. This avoids a second hand-maintained rule corpus while giving Codex a deterministic entry point.
+
+If a task starts in a parent workspace and only later selects a nested repository, the agent must read that repository's root `AGENTS.md` before acting; for sustained work, the task should start with that repository as its project root so native discovery covers it. A machine-local fallback filename is optional convenience, not cross-machine or collaborator evidence. `scripts/setup-codex.sh` must not create or edit layer-2 project files: templates create the entry point during project setup, and `scripts/audit-codex-integration.sh --repo <path>` reports a missing, untracked, symlinked, or incomplete root entry point.
 
 ### <a id="session-handoff-contract"></a>Session handoff contract
 

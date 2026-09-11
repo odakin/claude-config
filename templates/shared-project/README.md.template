@@ -22,7 +22,7 @@
 - `<主要ディレクトリ 2>` — <1 行の説明>
 - `<主要ファイル>` — <1 行の説明>
 
-正本: [`CLAUDE.md`](CLAUDE.md) (構造・運用) / [`DESIGN.md`](DESIGN.md) (判断理由) / [`SESSION.md`](SESSION.md) (現状)。
+Agent の入口: [`AGENTS.md`](AGENTS.md)。正本: [`CLAUDE.md`](CLAUDE.md) (構造・運用) / [`DESIGN.md`](DESIGN.md) (判断理由) / [`SESSION.md`](SESSION.md) (現状)。
 
 ## 関連リポ
 

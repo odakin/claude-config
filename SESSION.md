@@ -1,5 +1,7 @@
 # SESSION — claude-config
 
+Codex の project instruction discovery を root `AGENTS.md` の必須契約として層1化し、意味上の正本を [agent instruction entrypoint](CONVENTIONS.md#agent-instruction-entrypoints)、Codex 固有の discovery と検証境界を [project instruction discovery](codex/PARITY.md#project-instruction-discovery) に置いた。shared-project template と `audit-codex-integration.sh --repo` が同じ契約を実体化する。次は並行中の原稿編集 turn が止まった後、`time-energy-head-on` を最初の既存 shared repo として entrypoint・style visibility・綴り gate まで適用する。他の既存 repo は次に触る通常の整備単位で audit が不足を顕在化する。
+
 研究レビューで得た再利用可能な手順を、[部分空間・電荷・保存則](conventions/scientific-computing.md#observable-projectors-and-symmetry)、[比較表の配置](conventions/paper-audit.md#comparison-before-derivation)、[配布前検査](conventions/shared-repo.md#l2-style-digest) に整理したところ。注記の表示とフォントキャッシュの失敗時の扱いは [LaTeX 手順](conventions/latex.md#equation-safety)、スクリプトとノートの全数索引は [研究成果の配置](conventions/scientific-computing.md#research-script-homes) から再開する。模型固有の計算は各研究 project が所有する。以下の Codex 配線の検証再開点は保っている。
 
 Codex の自己同定とprovenance整備は、技術契約・実装所有表・設計理由・一般運用規約・上層原則の参照を揃え、このMacの生成済み配線まで更新したところ。現在の仕様と全スクリプトのhomeは [Codex/Git provenance](codex/PARITY.md#git-session-provenance) と [実装・検査の所有表](codex/PARITY.md#session-provenance-implementation)、判断理由は [DESIGN](DESIGN.md#session-provenance-trailer-design)、横断運用は [multi-session coordination](conventions/multi-session-coordination.md#session-provenance-trailer) が正本。残る確認は次の新規taskでliveなprompt-time cacheをend-to-end観測することだけ。
