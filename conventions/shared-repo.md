@@ -186,6 +186,12 @@ collaborator 本人の連絡先（メールアドレス等）や PII を layer 2
 
 配布器は source の公開範囲・必須項目と、選択された全 target の生成 marker を**書込み前に**検査する。エラーを数えて終了コードを失敗にするだけでは、途中で不正な本文を配布できてしまう。検査と書込みを分け、後段の target が不正でも先行 target を変更しないことを fixture で検査する。配布先を限定する場合は registry の既存 target を明示選択し、未知の名前を無視しない。部分同期の成功を digest 全体の一致と報告せず、残る差分と次の完全同期の入口を区別する。
 
+### <a id="style-checker-mirror"></a>機械化できる style subset は layer 1 engine + layer 2 mirror にする
+
+American spelling のように複数 project で再利用できる検査アルゴリズムは layer 1 に正本を置く。project がその style を採用したという意味上の規則は layer 2 の CLAUDE.md digest が所有し、layer 1 script は選好そのものを全 project へ強制しない。標準 engine は [`scripts/check-american-spelling.py`](../scripts/check-american-spelling.py) で、curated word list、TeX comment / identifier masking、Python figure-string scan、`brit-ok` 例外、positive / negative / scope selftest を所有する。
+
+shared repo の hook と CI は owner の clone path や network に依存できないため、engine は project 内へ**生成 mirror**として配布する。mirror は canonical public URL を内包し、配布 registry が byte-for-byte staleness を検査する。project 固有 scope が標準 discovery で表せない場合だけ、小さな manifest / wrapper を layer 2 に置く。検査語彙や parser を project ごとに fork しない。target mirror はoffline実行のartifactであって判断の正本ではなく、source変更→registry全target check/write→各project commit/push の順で更新する。
+
 ## macOS LaunchAgent / launchd plist の literal-path trap
 
 macOS の **LaunchAgent / LaunchDaemon plist は `~` も `$HOME` も自然展開しない** (= `ProgramArguments` / `WatchPaths` 等の path は literal でなければ launchd に loaded されない)。共有リポに plist をそのまま commit すると、所有者の絶対パス (`/Users/<owner>/…`) が file に焼き付き、上記 §「公開前の Audit」 の grep に hit する layer-2 違反になる。
