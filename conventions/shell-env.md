@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
+when: PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** + **Claude が Bash tool で複数の対象を loop で走査する 1-liner を書く瞬間** (= zsh は未 quote の変数を単語分割しない、 `#claude-issued-shell-commands`) (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
 category: macos
-summary: シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール） + ユーザーに貼り付けさせるコマンドの zsh 固有罠 2 件 (= 行内 # はコメントにならない / `env VAR=~/x` は tilde 展開されず literal `~` dir が cwd 配下に生える、 どちらも bash では踏まない非対称。 framework は paste-destined-plain-text.md) + 受け手側の保険 = `.zshrc` に `setopt interactive_comments` (= 1 行で行内/行頭 # とも直るが、 提示先の環境を選べない以上 出し手の規律の代替にはならない)
+summary: シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール） + ユーザーに貼り付けさせるコマンドの zsh 固有罠 2 件 (= 行内 # はコメントにならない / `env VAR=~/x` は tilde 展開されず literal `~` dir が cwd 配下に生える、 どちらも bash では踏まない非対称。 framework は paste-destined-plain-text.md) + 受け手側の保険 = `.zshrc` に `setopt interactive_comments` (= 1 行で行内/行頭 # とも直るが、 提示先の環境を選べない以上 出し手の規律の代替にはならない) + Claude が発行するコマンドも zsh (= 未 quote の変数は単語分割されず、 cd 失敗後も loop が別の対象を走査して結果を返した 2026-09-11 の 2 件目で規約化。 対象の解決に失敗したら止め、 何を走査したかを印字する)
 -->
 # シェル環境（Claude Code + macOS）
 
@@ -227,9 +227,9 @@ env -u ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR=~/.claude-alt claude auth login
 
 **背景 (2026-07-02)**: alt アカウント用 config dir の初回 auth 手順で、 script 自身は絶対パスを印字していた (= script は正しかった) のに、 chat に手順を書き直す段で `~` 表記へ置き換え + `env -u ANTHROPIC_API_KEY` 前置を併記した。 ユーザーがそれを貼って 3 コマンド実行 → `$HOME/~/` と `<base>/~/` の 2 箇所に literal `~` dir が生成され、 6 MB の空 config dir が 4 週間残置した (= 本物の dir は別途正しい手順で auth し直して復旧)。 **script が正しくても chat での書き直しで壊れる** = 提示する文面そのものが検査対象 (= 共通 kernel と他 domain の instance は [paste-destined-plain-text.md #same-framework-other-paste-targets](paste-destined-plain-text.md#same-framework-other-paste-targets)、 4 週間気付かれなかった構造は [debugging-discipline.md #recovery-ends-investigation](debugging-discipline.md#recovery-ends-investigation))。 検出は `find "$HOME" -maxdepth 4 -name '~' -type d`。
 
-### scope の観測境界 — 「貼り付け用」 の外側 (= n=1、 未規約化)
+### <a id="claude-issued-shell-commands"></a>scope の拡張 — Claude が Bash tool で発行するコマンドも zsh (2026-07-30 に 1 件目、 2026-09-11 の 2 件目で規約化)
 
-本節と兄弟節の scope は意図的に「**user に貼り付けさせる**コマンド」 に限定してある。 だが同じ「**zsh の pattern/parse semantics が bash 前提の想定と違う**」 class は、 **Claude 自身が Bash tool で発行するコマンド**にも及ぶ。 観測 1 件 (2026-07-30、 上記 incident の検証中):
+本節と兄弟節の scope は当初「**user に貼り付けさせる**コマンド」 に限定していた。 だが同じ「**zsh の pattern/parse semantics が bash 前提の想定と違う**」 class は、 **Claude 自身が Bash tool で発行するコマンド**にも及ぶ。 1 件目 (2026-07-30、 上記 incident の検証中):
 
 ```sh
 l="pre(post)"; print -r -- "${l##*(}"    # zsh: bad pattern: *(  /  bash: post)
@@ -238,7 +238,17 @@ l="pre(post)"; print -r -- "${l##*\(}"   # zsh でも通る (= ( を escape)
 
 `##` の pattern 内の `(` を zsh は glob 構文として厳しく parse する (= bash は literal 扱い)。 兄弟 2 節と同じ非対称 (bash で書いて zsh で壊れる) だが、 **貼り付けを経由せず Claude 自身の 1 コマンドが失敗するだけ**なので事故 mode が違う (= 即 error・実害なし。 上記 1 件は同 turn に python で書き直して完了)。
 
-⚠️ **n=1 なので規約化していない** (= 「incident 無しで規約を書かない」)。 **un-defer trigger = 同 class の 2 件目** — Claude 自身が発行した shell コマンドが zsh 固有 semantics で壊れる事例を再度観測したら、 本 family の scope を「貼り付け用」 から「Claude が発行する全 shell コマンド」 へ広げる判断に入る (= 現状は「pattern を含む 1-liner は python で書く」 が実務上の回避策で、 規律化する価値があるかは 2 件目まで保留)。 症状 token: `bad pattern:` (= 観測済)、 近縁で未観測 = `no matches found` / `unmatched`。 この記録自体が trigger の成立条件 (= 記録しなければ次の観測者は 1 件目を知らず永遠に n=1 のまま = [debugging-discipline.md #recovery-ends-investigation](debugging-discipline.md#recovery-ends-investigation) の「記録されない残骸は trigger を持たない」 と同型)。
+**当初 (n=1) は規約化しなかった** (= 「incident 無しで規約を書かない」)。 **un-defer trigger = 同 class の 2 件目** — Claude 自身が発行した shell コマンドが zsh 固有 semantics で壊れる事例を再度観測したら、 本 family の scope を「貼り付け用」 から「Claude が発行する全 shell コマンド」 へ広げる判断に入る (= 現状は「pattern を含む 1-liner は python で書く」 が実務上の回避策で、 規律化する価値があるかは 2 件目まで保留)。 症状 token: `bad pattern:` (= 観測済)、 近縁で未観測 = `no matches found` / `unmatched`。 この記録自体が trigger の成立条件 (= 記録しなければ次の観測者は 1 件目を知らず永遠に n=1 のまま = [debugging-discipline.md #recovery-ends-investigation](debugging-discipline.md#recovery-ends-investigation) の「記録されない残骸は trigger を持たない」 と同型)。
+
+**2 件目 (2026-09-11) で trigger 成立 → Claude が発行する全 shell コマンドへ scope を広げる**。 公開 commit 3 本の追加行を私的な名前で走査する 1-liner を `for spec in "repo hash" …; do set -- $spec; cd ~/Claude/$1; git show … $2 | grep …; done` と書いた。 zsh は未 quote の `$spec` を単語分割しない (bash は分割する) ので `$1` が `"repo hash"` 全体になり、 `cd` は失敗したが loop は続き、 `git show` は直前の cwd にある別 repo の HEAD を走査した。 出力は「168 行、 hit N 件」 というもっともらしい形で、 取り違えは cd の error 行と、 3 対象の行数が同じだったことからしか分からなかった。 1 件目 (即 error) と違い、 **検査が別の対象を検査して結果を返す** = 気付かなければ誤った 0 件や誤った hit が報告に載る mode。
+
+→ **規則**:
+1. 複数語を 1 変数に入れて分割に頼らない。 zsh で分割するなら `${=var}`、 そうでなければ配列にする。 対象を列挙して走査する検査は python (`subprocess.run(["git", "-C", path, …])`) で書く。
+2. 対象を解決する段 (`cd`、 path・commit の存在) が失敗したら止める。 `cd` せず `git -C <path>` を使い、 解決できなければ `exit 1`。 結果には**何を走査したか** (repo・commit・行数) を印字し、 対象ごとの行数が同じなどの不自然さを見る。
+3. pattern を含む 1-liner は python で書く (1 件目の回避策)。
+
+兄弟 = 「Bash tool は bash script ではない」 の別の現れ: [`edit-intent-record.md#apply-then-record`](../../ai-collaboration/conventions/edit-intent-record.md#apply-then-record) の shell 注 (Bash tool の最上位では `set -e` が効かない、 gate を pipe の後ろに置かない、 2026-09-11)。 1 件目を記録していたので 2 件目で規約化できた (上の「記録されない残骸は trigger を持たない」 が機能した例)。
+
 ## <a id="bound-command-runtime"></a>Bind reusable command runtimes at installation
 
 A successful `python3` invocation in one shell does not establish the runtime

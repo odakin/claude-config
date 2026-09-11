@@ -40,6 +40,8 @@ Garoon の施設予約を実申請した経験から、read 用 cookie script �
 
 自著の盲検査読で 1-loop の極を独立に再計算した session から層1 に上がった分。`nsimplify` が厳密有理数を代数的数に「同定」する / propagator の routing が展開式と逆 / 印字式の添字を下げずに比較、の 3 つが重なって「恒等式が成り立たない」という偽の物理結論に見えた。規律 = [`scientific-computing.md#exact-rational-pipelines`](conventions/scientific-computing.md#exact-rational-pipelines)、道具 (Float 拒否 + 単項式 selftest) = `ai-collaboration/scripts/one_loop_pole.py`。instance は owner の private repo 側。
 
+同じ session の後半で、 zsh が未 quote の変数を単語分割しないために走査 loop が別 repo の HEAD を検査した件が、 `shell-env.md` の「Claude が発行するコマンド」 節の 2 件目になったので規則にした ([`#claude-issued-shell-commands`](conventions/shell-env.md#claude-issued-shell-commands))。
+
 ## 2026-09-10 — 事務の赤入れを機械で先回りする 3 script + 「黙って消える」削除への防御
 
 owner の科研費 session (別 repo が主戦場) から、層1 に上がった分。過去 4 年の赤入れ 16 件を
