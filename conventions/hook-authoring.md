@@ -1,12 +1,12 @@
 <!-- doc-meta
 when: Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき
 category: harness-core
-summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)** + **§2 補足 2 #disableallhooks-kill-switch = root 限定の disableAllHooks が「frontend 差」 に化ける 〔自 session では検出不能 = 外側から scripts/hook-liveness-audit.py、 audit-hooks.sh の (d) 自動部分〕**)
+summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)** + **§2 補足 2 #disableallhooks-kill-switch = root 限定の disableAllHooks が「frontend 差」 に化ける 〔自 session では検出不能 = 外側から scripts/hook-liveness-audit.py、 audit-hooks.sh の (d) 自動部分〕** + **test-root-not-parent-dir = test は自分の repo を checkout の親 dir 経由で指さない 〔worktree で落ち・live を検査・python shim は CI でも空振り = 一時 root に symlink 1 本 + 兄弟 repo は正規 layout + 不在は SKIP + mutation で確かめる〕**)
 -->
 # Claude Code hooks の作成 + 配信規律
 <!-- slug index: hook-authoring.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
 
-> 適用対象: `claude-config/hooks/` (= layer 1) + 個人層の `<personal-layer>/hooks/` (= layer 3) の hook script 全般。 hook 作成・配信・audit の **3 種類の構造的 trap** を扱う。 §0 の補足群 (shebang / set・BSD/GNU 差・ERR trap・test の失敗自己申告) は hook に限らず repo 内の bash script / `.test.sh` 全般に適用する。
+> 適用対象: `claude-config/hooks/` (= layer 1) + 個人層の `<personal-layer>/hooks/` (= layer 3) の hook script 全般。 hook 作成・配信・audit の **3 種類の構造的 trap** を扱う。 §0 の補足群 (shebang / set・BSD/GNU 差・ERR trap・test の失敗自己申告・test の root の決め方) は hook に限らず repo 内の bash script / `.test.sh` 全般に適用する。
 >
 > 関連 hook: `claude-config/hooks/*.sh` (= 既存 8 hooks)、 hook 配信機構の正本は `claude-config/setup.sh` Step 2 (= `install_hooks()` 関数)
 
@@ -139,6 +139,21 @@ commit gate (pre-commit) が staged file を舐めて検査する形は定石だ
 | trap の後の exit status | 元の値のまま | 同左 | — |
 
 **一般則**: 集計する側が名前しか出さないなら、 **失敗の中身を名指すのは test 自身の責務** (= `run-all-checks.sh` header の「SKIP 理由は test 自身が出力する」 と同じ契約の失敗版)。 無言の失敗は「どこかが赤い」 以上の情報を運ばないので、 直す人が原因を掘り直すことになる。
+
+### <a id="test-root-not-parent-dir"></a>§0 補足 6: test は自分の repo を「checkout の親 dir」 経由で指さない — worktree で落ち、 live を検査する
+
+**罠**: hook / script が `$ROOT/<repo>/...` を組み立てる設計 (ROOT = 正規 layout の base、 既定 `~/Claude`) で、 test が ROOT に「test を含む checkout の親」 (`$(dirname "$0")/../..`) を渡す。 checkout の dir 名が repo 名と違う所 (= `git worktree add <tmp>` の置き場所) では payload が見つからず、 fail-open の hook が黙って exit 0 → 出力が空で test が落ちる。 **dir 名が一致しても**、 その親に別の checkout (= live tree) が居れば test は live の script を検査し、 変更中の copy を検査しない。 ROOT を渡さず `$HOME/<base>` に fallback させる test も同じく live を読む。
+
+python の shim が兄弟 repo (層1 engine 等) を `Path(__file__).resolve().parents[N]` で探すのも同型で、 こちらは**落ちずに空振りする**: `resolve()` 後の親は worktree でも CI (`/home/runner/work/<repo>`) でも base ではないので、 engine 不在の fail-open で selftest が**何も検査せずに PASS** する。
+
+**規律**:
+
+- test は一時 dir に `<repo 名> -> <この checkout の実 path>` の symlink を 1 本置き、 それを ROOT に渡す (helper 1 本にまとめる。 例 = odakin-prefs `hooks/lib-test-root.sh` の `make_test_root`)。 兄弟 repo が要る test は fixture をその root の下に作る
+- 兄弟 repo は正規 layout (`Path.home() / "<base>"`) か明示の `--root` で引く。 CI は正規 layout を再現してから検査を回す (base dir に自 repo を symlink + 依存 repo を clone)
+- 依存が無くて検査できないなら selftest は `SKIP: <理由>` を出して exit 0 (= §0 補足 5 と同じく黙って通らない)。 通常実行 (dashboard 等の消費側) の fail-open は沈黙のままでよい
+- **test が変更中の copy を見ているかは mutation で確かめる**: worktree 側だけ payload を退避する / lib に偽の関数を足す → 落ちれば変更中の copy を検査している。 「worktree で PASS」 だけでは証明にならない (live を読んで通っている可能性が残る)
+
+**実例 (2026-09-12)**: odakin-prefs の SessionStart hook test 6 本が使い捨て worktree でだけ落ちた (payload 不在)。 同じ前提の test がさらに 4 本、 worktree でも通っていたが live の `lib-surface.sh` を source していた。 python の shim 2 本は worktree だけでなく **CI でも**空振りしていた。 並列 session を避ける worktree 運用 ([multi-session-coordination.md#foreign-wip-scratch-worktree](multi-session-coordination.md#foreign-wip-scratch-worktree)) を使って初めて露出した class。
 
 ---
 

@@ -28,7 +28,9 @@ working tree の「数えられる要素」数を、当該 file を触った直�
   - 復元すれば finding は自然に消える (truncated snapshot は max に寄与しない = self-heal)
   - 意図的な大量削除は commit message に `[truncation-ok]` を含めると、それより古い snapshot を
     baseline から外す
-  - marker 規約より前の正当な削減は config の `acks:` で個別に許す (理由必須)
+  - marker 規約より前の正当な削減は config の `acks:` で個別に許す (理由必須)。
+    push 済みで marker を後付けできない削減は `commit:` 付きの ack にする = その commit までの
+    削減だけを許し、以後の削減は再び検出する (`commit:` の無い ack はその doc の監視を恒久に止める)
 
 ⚠️ **無差別に全 doc へ当てない**。memory file の縮退 (MOVE + pointer 化) のように、
 **意図的に縮めるのが正しい運用**の doc がある。対象は config で明示する。
@@ -45,6 +47,7 @@ config (yaml):
     acks:
       - path: <部分一致>
         reason: <なぜ減ってよいか。必須>
+        commit: <sha>     # 任意 (7 桁以上)。この commit 以前を baseline から外す = marker の後付け
 
 使い方: check-doc-truncation.py --config <config.yaml> [--root DIR] [--json] [--selftest]
 終了コード 0 固定 (= surface のみ、呼び出し元を殺さない)。
@@ -107,21 +110,25 @@ def _blob(repo: Path, sha: str, rel: str) -> str:
     return "" if out.startswith(_GITCRYPT) else out
 
 
-def high_water(repo: Path, rel: str, kind: str, window: int) -> tuple[int, str]:
+def high_water(repo: Path, rel: str, kind: str, window: int,
+               reset_sha: str = "") -> tuple[int, str]:
+    """reset_sha = commit 付き ack の sha。[truncation-ok] と同じく、その commit 以前を baseline から外す。"""
     log = git(repo, "log", f"-{window}", "--format=%H%x1f%s", "--", rel)
     best, best_sha = 0, ""
     for line in log.splitlines():
         if "\x1f" not in line:
             continue
         sha, subject = line.split("\x1f", 1)
-        if RESET_MARKER in subject:
-            break                                # これより古い snapshot は見ない
         blob = _blob(repo, sha, rel)
-        if not blob:
-            continue
-        c = count(blob, kind)
-        if c > best:
-            best, best_sha = c, sha[:8]
+        if blob:
+            c = count(blob, kind)
+            if c > best:
+                best, best_sha = c, sha[:8]
+        # marker / ack の commit は「新しい baseline」 として数え、それより古い snapshot で打ち切る。
+        # 旧実装は数える前に break していたので、marker commit が HEAD の間は何と比べても
+        # base=0 = その doc が監視外になっていた (2026-09-12、commit 付き ack の selftest で発覚)
+        if RESET_MARKER in subject or (reset_sha and sha.startswith(reset_sha)):
+            break
     return best, best_sha
 
 
@@ -144,7 +151,7 @@ def audit(root: Path, config: dict, use_cache: bool = True) -> list[tuple]:
     window = int(config.get("window", 20))
     drop_min = int(config.get("drop_min", 4))
     drop_frac = float(config.get("drop_frac", 0.05))
-    acks = [(str(a.get("path", "")), str(a.get("reason", "")))
+    acks = [(str(a.get("path", "")), str(a.get("reason", "")), str(a.get("commit") or ""))
             for a in (config.get("acks") or []) if a.get("path") and a.get("reason")]
     out = []
     cache = _cache_load() if use_cache else {}
@@ -159,19 +166,22 @@ def audit(root: Path, config: dict, use_cache: bool = True) -> list[tuple]:
             continue                             # fail-open (未 clone の機械)
         cur = count(f.read_text(encoding="utf-8", errors="replace"), kind)
         repo_path = root / repo_name
+        full = f"{repo_name}/{rel}"
+        # commit 付き ack = その commit までの削減だけを許す (baseline をそこで切る、監視は続く)
+        ack_sha = next((c for p, _, c in acks if len(c) >= 7 and p in full), "")
         if repo_name not in heads:
             heads[repo_name] = git(repo_path, "rev-parse", "HEAD").strip()[:12]
         key = None
         if use_cache:
             try:
                 st = f.stat()
-                key = f"{repo_name}|{rel}|{heads[repo_name]}|{st.st_size}|{int(st.st_mtime)}|{window}"
+                key = f"{repo_name}|{rel}|{heads[repo_name]}|{st.st_size}|{int(st.st_mtime)}|{window}|{ack_sha}"
             except OSError:
                 key = None
         if key and key in cache:
             base, sha = cache[key]
         else:
-            base, sha = high_water(repo_path, rel, kind, window)
+            base, sha = high_water(repo_path, rel, kind, window, ack_sha)
             if key:
                 cache[key] = [base, sha]
         if not base:
@@ -179,15 +189,14 @@ def audit(root: Path, config: dict, use_cache: bool = True) -> list[tuple]:
         thresh = max(drop_min, int(base * drop_frac))
         if cur > base - thresh:
             continue
-        full = f"{repo_name}/{rel}"
-        ack = next((r for p, r in acks if p and p in full), None)
+        ack = next((r for p, r, c in acks if not c and p in full), None)
         if ack:
-            continue                             # 理由つきで許した削減
+            continue                             # 理由つきで許した削減 (commit 無し = 恒久)
         out.append(("🔴", "DOC_TRUNCATED",
                     f"{full}{f' ({label})' if label else ''}: 要素 {cur} 件 — 直近 {window} "
                     f"commit の最大 {base} 件 ({sha}) より {base - cur} 件少ない "
                     f"(閾値 {thresh})。意図的なら commit message に {RESET_MARKER}、"
-                    f"過去分なら config の acks に理由つきで"))
+                    f"過去分なら config の acks に理由と commit つきで"))
     if use_cache and len(cache) != n0:
         _cache_save(cache)
     return out
@@ -236,6 +245,31 @@ def selftest() -> int:
         subprocess.run(["git", "-C", str(repo), "commit", "-qm",
                         f"slim {RESET_MARKER}"], check=False)
         check("git: [truncation-ok] 以降が baseline", audit(root, cfg, use_cache=False) == [])
+        doc.write_text("\n".join(f"| r{i} | x |" for i in range(10)) + "\n", encoding="utf-8")
+        check("git: marker commit が HEAD でも、その後の削減は 🔴 (= marker 自身が baseline)",
+              [c for _, c, _ in audit(root, cfg, use_cache=False)] == ["DOC_TRUNCATED"])
+        subprocess.run(["git", "-C", str(repo), "checkout", "-q", "--", "led.md"], check=False)
+        # commit 付き ack: push 済みの削減 commit に marker を後付けする (= 監視は止めない)
+        repo2 = root / "r2"
+        repo2.mkdir()
+        for args in (["init", "-q"], ["config", "user.email", "t@e"], ["config", "user.name", "t"]):
+            subprocess.run(["git", "-C", str(repo2), *args], check=False)
+        doc2 = repo2 / "led.md"
+        for n_rows, msg in ((30, "full"), (20, "restructure")):
+            doc2.write_text("\n".join(f"| r{i} | x |" for i in range(n_rows)) + "\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo2), "add", "led.md"], check=False)
+            subprocess.run(["git", "-C", str(repo2), "commit", "-qm", msg], check=False)
+        cut = git(repo2, "rev-parse", "HEAD").strip()
+        cfg2 = {"targets": [{"repo": "r2", "path": "led.md", "kind": "md"}]}
+        codes2 = lambda c: [x for _, x, _ in audit(root, c, use_cache=False)]
+        check("git: marker 無しで commit 済みの削減も 🔴", codes2(cfg2) == ["DOC_TRUNCATED"])
+        cfg2a = dict(cfg2, acks=[{"path": "r2/led.md", "reason": "移設", "commit": cut[:8]}])
+        check("git: commit 付き ack はその commit までの削減を許す", codes2(cfg2a) == [])
+        doc2.write_text("\n".join(f"| r{i} | x |" for i in range(10)) + "\n", encoding="utf-8")
+        check("git: commit 付き ack の後の削減は再び 🔴", codes2(cfg2a) == ["DOC_TRUNCATED"])
+        check("git: 短すぎる sha (7 桁未満) は ack として効かない",
+              codes2(dict(cfg2, acks=[{"path": "r2/led.md", "reason": "x", "commit": cut[:3]}]))
+              == ["DOC_TRUNCATED"])
         check("git: repo 不在は fail-open",
               audit(root, {"targets": [{"repo": "nope", "path": "x.md"}]},
                     use_cache=False) == [])

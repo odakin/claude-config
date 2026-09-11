@@ -27,6 +27,9 @@ sections:
   - id: set-e-test-failure-report
     level: 3
     title: "§0 補足 5: `set -e` の test は落ちた行を自己申告させる — 無言の exit 1 は CI log に test 名しか残さない"
+  - id: test-root-not-parent-dir
+    level: 3
+    title: "§0 補足 6: test は自分の repo を「checkout の親 dir」 経由で指さない — worktree で落ち、 live を検査する"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2
