@@ -7,8 +7,8 @@
 #   書き換えると worktree が汚れ続け、 SessionStart の自動 pull (stash → ff → pop) と衝突する
 #   (2026-09-12、 "$HOME/..." 形で track された stub を installer が毎回 absolute path で上書きしていた)。
 #
-#   - track 済み stub: 内容は書かない。 過去の installer が書き換えた差分 (= installer の header を持ち、
-#     track 版が有効な runner を指す) なら track 版に戻す。 それ以外は触らず、 必要なら警告だけ出す。
+#   - track 済み stub: 内容は書かない。 過去の installer が書き換えた差分 (= worktree 側が installer の書く
+#     4 行そのままで、 track 版の exec 先が実在する) なら track 版に戻す。 それ以外は触らず、 必要なら警告だけ出す。
 #   - untrack の stub: 同じ runner を指していれば書かない (mtime も動かさない)。 違えば最新化。
 #     repo の worktree 内に置いた untrack stub は .git/info/exclude に載せる (clone ごとの設定)。
 #
@@ -48,13 +48,25 @@ hook_stub_is_tracked() {  # $1 = repo, $2 = hook
   git -C "$1" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1
 }
 
+# file が installer の書く 4 行そのままの stub か (= shebang / header / Do not edit / exec の 4 行だけ)。
+# 1 行でも手で足してあれば偽 = 自動で戻す対象にしない。
+hook_stub_is_pristine() {  # $1 = file
+  awk '
+    NR == 1 { ok = ($0 == "#!/bin/bash") }
+    NR == 2 { ok = ok && ($0 ~ /^# Stub installed by claude-config\//) }
+    NR == 3 { ok = ok && ($0 ~ /^# Do not edit/) }
+    NR == 4 { ok = ok && ($0 ~ /^exec ".*" "\$@"$/) }
+    END     { exit !(ok && NR == 4) }
+  ' "$1" 2>/dev/null
+}
+
 # 過去の installer が track 済み stub に書いた差分を track 版に戻す。 戻したら 0。
 hook_stub_restore_drift() {  # $1 = repo, $2 = hook, $3 = runner (省略可)
   local repo="$1" hook="$2" runner="${3:-}" rel tmp
   hook_stub_is_tracked "$repo" "$hook" || return 1
   rel="$(hook_stub_rel "$repo" "$hook")" || return 1
   git -C "$repo" diff --quiet -- "$rel" 2>/dev/null && return 1
-  grep -q '^# Stub installed by claude-config/' "$hook" 2>/dev/null || return 1
+  hook_stub_is_pristine "$hook" || return 1
   tmp="$(mktemp)" || return 1
   if git -C "$repo" show "HEAD:$rel" > "$tmp" 2>/dev/null && hook_stub_points_to "$tmp" "$runner"; then
     rm -f "$tmp"

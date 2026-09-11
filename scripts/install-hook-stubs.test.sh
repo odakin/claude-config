@@ -110,6 +110,14 @@ bash "$HERE/install-public-precommit.sh" "$R8" >/dev/null 2>&1
 clean "$R8" .githooks && ok "custom hook untouched" || ng "custom hook changed: $(git -C "$R8" status --porcelain)"
 ls "$R8/.githooks" | grep -q '\.bak-' && ng "backup created" || ok "no backup created"
 
+echo "=== T9: installer-style stub with a hand-added line is not reverted ==="
+mk_tracked_repo "$H/c"
+{ stub "$HERE/public-precommit-runner.sh"; echo "# extra line added by hand"; } > "$H/c/scripts/hooks/pre-commit"
+bash "$HERE/heal-hook-stubs.sh" "$H" >/dev/null 2>&1
+bash "$HERE/install-public-precommit.sh" "$H/c" >/dev/null 2>&1
+clean "$H/c" scripts/hooks && ng "hand-edited stub was reverted" || ok "hand-edited stub left alone"
+grep -q "extra line added by hand" "$H/c/scripts/hooks/pre-commit" && ok "hand-added line survives" || ng "hand-added line lost"
+
 echo
 echo "=== Result: $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ] && exit 0 || exit 1

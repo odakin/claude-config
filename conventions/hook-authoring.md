@@ -270,7 +270,7 @@ setup.sh 自体は idempotent design なので (i) は実装コスト低。 但�
 
 - **同じ runner を指す stub は書かない** (`$HOME` を展開して `-ef` で比較。 mtime も動かさない)。
 - **track 済み file の内容は書かない**: 別の場所を指していても警告だけ出す (直すのは repo 側の commit)。 stub でない自前の hook も、 退避・上書きしない。
-- **過去の installer が書いた差分は戻す**: track 済み stub の worktree 差分が installer の header を持ち、 track 版の exec 先が実在するときだけ `git checkout --` で track 版に戻す (user の手直しには触らない)。 installer は setup.sh 実行時にしか走らないので、 既に汚れた他マシンの worktree は `scripts/heal-hook-stubs.sh <base>` を SessionStart から呼んで直す。
+- **過去の installer が書いた差分は戻す**: track 済み stub の worktree 側が installer の書く 4 行 (shebang / header / Do not edit / exec) そのままで、 track 版の exec 先が実在するときだけ `git checkout --` で track 版に戻す (1 行でも手で足してあれば触らない)。 installer は setup.sh 実行時にしか走らないので、 既に汚れた他マシンの worktree は `scripts/heal-hook-stubs.sh <base>` を SessionStart から呼んで直す。
 - **repo 内 hooksPath に置く untrack の stub は `.git/info/exclude` に載せる** (clone ごとの設定。 共有 repo の status に `??` を出し続けず、 他人の clone に無い stub を commit させない)。
 - test = `scripts/install-hook-stubs.test.sh`。
 
