@@ -36,7 +36,9 @@ touch "$PUB/.claude/public-repo.marker"
 
 # ---- Tier A fixture 値 (連結合成、 冒頭コメント参照) ----
 AT="@"
-EMAIL="leak.tester${AT}example.com"
+# ⚠️ 例示 domain (@example.com 等) は allowlist (= commit gate と同じ) なので、 ask 側の fixture は
+#    予約されていない domain で組む (2026-09-12 に allowlist を揃えた時の更新)
+EMAIL="leak.tester${AT}corp-mail.jp"
 ABS_PATH="/Use""rs/leaktester"
 PUB_IP="203.0.""113.7"                    # TEST-NET-3 (非 allowlist)
 PRIV_IP="192.168.""1.1"                   # RFC1918 (allowlist)
@@ -87,6 +89,7 @@ assert "P2: allowlist email"          pass "$(mk_write "$PUB/doc.md" "noreply${A
 assert "P3: RFC1918 IPv4"             pass "$(mk_write "$PUB/doc.md" "lan: $PRIV_IP")"
 assert "P4: token 例示 (30 字未満)"    pass "$(mk_write "$PUB/doc.md" "e.g. ghp_shortexample")"
 assert "P5: marker 無し repo は素通し" pass "$(mk_write "$PRIV/doc.md" "contact: $EMAIL")"
+assert "P9: RFC 2606 例示 domain"     pass "$(mk_write "$PUB/doc.md" "fixture: someone${AT}example.invalid / alt${AT}example.com")"
 assert "P6: 非 git path は素通し"      pass "$(mk_write "$BASE/norepo/doc.md" "contact: $EMAIL")"
 assert "P7: file_path 無し input"      pass "$(jq -nc '{tool_name:"Write",tool_input:{}}')"
 assert "P8: 空 stdin"                  pass ""
