@@ -101,7 +101,7 @@ Claude Code (desktop app / VS Code 拡張の chat panel) は、応答本文内�
 
 PreToolUse hook (mail 誤送信 guard 等) は desktop で出力 honor されず inert と観測されていた (= §frontend 切り分け 2 / [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork)。 ⚠️ 2026-09-11: その少なくとも一部は root 限定の `disableAllHooks` が原因 = [`hook-authoring.md#disableallhooks-kill-switch`](hook-authoring.md#disableallhooks-kill-switch)。 hook が効く surface でも、 本 recipe の declarative ask は hook と独立に効く第二の層として有効)。 desktop で「特定の高 stakes tool だけ実行前に人間が一拍」 を機械的に課す working recipe は **settings.json の permission のみ** (= hook 不要、 2026-06-13 実証):
 
-1. `permissions.defaultMode` を `bypassPermissions` → **`default`** に (= bypass は ask を void するので外す)。
+1. `permissions.defaultMode` を `bypassPermissions` → **`default`** か **`auto`** に (= bypass は ask を void するので外す)。 `auto` でも ask rule は dialog を強制する (公式 docs `permission-modes`)。 ただし auto に入ると bare `Bash` 等の広い allow は外れ、 allow 外の操作は classifier 判定になる。 `auto` は `~/.claude/settings.json` (user scope) に書かないと効かない (project の `.claude/settings*.json` では無視される)。
 2. `permissions.ask` に確認したい tool を列挙 (例: `mcp__gmail-personal__send_email` 等)。 → 呼出のたび **引数 (to/subject/body) を全表示する承認 dialog** が出て、 拒否で実行ブロック (= 内容確認つきの一拍)。
 3. `permissions.allow` に **日常 tool を server-level で列挙** (= `mcp__gmail-personal` 等の MCP server 名、 + bare `Bash`/`Read`/`Edit`/`Write` 等)。 default mode は allow リスト外を prompt するので、 これが無いと全 MCP が毎回確認になる。 precedence **deny > ask > allow** なので server-level allow があっても `ask` の特定 tool だけは確認が残る (= 「mail だけ確認・他は素通り」)。
 
@@ -188,6 +188,7 @@ Claude Code は `.claude/` (= `~/.claude/settings.json` / `<root>/.claude/settin
 
 - CLI の dialog には「この session 中は settings の編集を許可」 の選択肢があるが、 **desktop の dialog は「拒否 / 一度だけ許可」 だけ**で、 Edit 1 回ごとに出る (2026-09-11、 desktop で観測)。
 - ∴ `default` mode のまま、 この dialog だけを消す設定は無い。 消すには mode を変えるしかない: `auto` は ask rule (送信 gate 等) を残したまま settings 編集を classifier 判定に回せるが、 他の操作も classifier 判定になる (= [`tool-call-robustness.md#classifier-session-block`](tool-call-robustness.md#classifier-session-block) のリスクを負う)。 `bypassPermissions` は ask gate ごと消えるので不可 ([§desktop で特定 tool に確認を課す](#desktop-per-tool-gate))。
+- `auto` mode では、 Claude による settings 編集は dialog でなく classifier 判定になる。 **自分の権限を広げる編集 (`defaultMode` の変更 + `additionalDirectories` の追加) は block された** (2026-09-11 observed、 n=1)。 ∴ auto で運用するなら、 権限を広げる設定変更は user が手で行う (Claude が Bash で書き換えるのは block の迂回になるのでやらない)。
 - 「毎回聞かれる」 と言われたら、 対処を選ぶ前に `scripts/permission-dialog-audit.py --attribute` で dialog の内訳を測る。 体感の「毎回」 には、 意図して置いた ask gate や、 cwd / additionalDirectories 外の path への dialog が混ざっていることが多い (2026-09-11 実測: 40 日間の Edit / Write dialog 91 件のうち、 settings file 宛ては 4 件)。
 - 設定変更を頼まれたら、 **変更する file の数だけ dialog が出る**ことを先に伝え、 1 file の変更は 1 回の Edit にまとめる。
 - **session 中に Bash (sed / python / jq) で書き換えて dialog を迂回しない**。 保護は「設定変更を人間が 1 回見る」 ための仕組みで、 迂回するとその意味が消える (= 自分の権限を自分で広げる経路になる)。 git に載って人間が review した bootstrap script が、 owner が明示した値を他マシンへ伝播するのは別扱い。
