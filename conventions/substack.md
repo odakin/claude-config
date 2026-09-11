@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: Substack 記事の入稿・notes/コメント回収をするとき
+when: Substack 記事の入稿・notes/コメント回収をするとき + 購読している publication の記事を一覧・本文・有料全文・購読メールから取り込むとき
 category: web
-summary: Substack 規約（入稿: Markdown→リッチテキスト変換手順 / 取得: notes・コメントの Gmail MCP + WebFetch 経由回収）
+summary: Substack 規約（入稿: Markdown→リッチテキスト変換手順 / 取得: notes・コメントの Gmail MCP + WebFetch 経由回収 / 購読記事の取り込み: 公開一覧 API の途中切れ・全文判定は CJK を字で数える・有料全文は browser session 再利用・購読メールの整形と抜粋配信、 道具 = scripts/substack-fetch.py）
 -->
 # Substack 規約
 
@@ -130,3 +130,31 @@ Substack 通知メール本文に含まれる記事・コメント URL は、**�
 ## Gmail MCP との併用
 
 `gmail_read_email` の出力は HTML-heavy なメールで 70〜200 KB に達し、Claude のメインコンテキスト token limit を超える。自動的にファイルに dump される挙動と、subagent 経由の chunked 処理パターンは → `mcp.md` の Gmail MCP セクション参照
+
+---
+
+# 購読記事の取り込み（公開一覧・本文・有料全文・購読メール）
+
+購読している publication の記事を研究用に原文保存するときの経路と罠。道具 = [`scripts/substack-fetch.py`](../scripts/substack-fetch.py)（`archive` = 公開一覧 / `posts` = 本文 JSON / `markdown` = body_html → markdown / `clean-mail` = 購読メール整形）。本文を 1 本ずつ手で書き写さない（書き写しは言い換え・脱落が入る = 原文保存にならない）。
+
+## <a id="archive-pagination"></a>公開一覧 API は初回ページが途中で切れる
+
+`https://<host>/api/v1/archive?sort=new&offset=N&limit=50` は、**初回ページが limit より少ない件数（実測 23 件前後）しか返さないことがある**。offset を limit 固定で進めると 24〜50 件目を丸ごと読み飛ばし、数え間違いがそのまま「全 N 本を網羅した」という誤った記録になる（実測: 実際は 27 本・42 本の publication を、どちらも「全 23 本」と記録した例が 2 件）。**offset は返却件数で進め、空ページで止める。** 独自ドメインへ移った publication は `<name>.substack.com` が 301 を返すので、host には移転先を渡す。
+
+## <a id="fulltext-check"></a>全文か抜粋かの判定（CJK は字で数える）
+
+本文 = `/api/v1/posts/<slug>` の `body_html`。未ログイン・購読前の有料記事は抜粋しか返らないので、保存前に `body_html` の語数と API の `wordcount` を比べる。**空白区切りで数えると日本語はほぼ 0 になり、全文を抜粋と誤判定する。** 英数字は単語、CJK は 1 字 = 1 語で数えると、英語の全文は比 ≈ 1.0、日本語の全文は ≈ 1.7（Substack の日本語 wordcount は字数より少ない）、抜粋は ≈ 0.05 になり、閾値 0.9 で分かれる。比が 1 を少し超えるのは図の見出し・キャプションの分。**抜粋は全文として保存しない**（後で全文を取ったときの差し替え漏れと、途中までの文章からの誤読の元）。
+
+## <a id="paid-full-text"></a>有料記事の全文は browser session の再利用で取る
+
+有料購読中なら、ブラウザでログインしている Substack の session cookie を script に持ち出して同じ API を叩けば全文が返る（経路 = [`machine-route-first.md#session-cookie-reuse`](machine-route-first.md#session-cookie-reuse)、復号 = [`scripts/chromium-cookies.py`](../scripts/chromium-cookies.py)、`substack-fetch.py posts <host> <slug>... --cookie brave`）。cookie 値は表示・保存しない。最初の 1 本が抜粋のままなら、未ログインか購読していない session なので止まる。
+
+- **メールのログインリンク (magic link) を agent が開いて session を作るのはやらない**（[`academic-program-verification.md#magic-link-handoff`](academic-program-verification.md#magic-link-handoff)）。login はブラウザで人間が 1 回。
+- browser の cookie DB 読み取りは Claude Code の自動許可判定で止まることがある。回避策を探さず、user に自分のターミナルで 1 回実行してもらうか、明示の許可をもらう。
+
+## <a id="subscription-mail"></a>購読メールから本文を取るとき
+
+- **text/plain パートが原文に最も近い。** 除去するのは 冒頭の `View this post on the web at <URL>` 行 / 末尾の `Unsubscribe https://…` 行以降 / `Thanks for reading! …` 行 / `<pub> is a reader-supported publication. …` 行 / CRLF→LF（= `substack-fetch.py clean-mail`）。整形規則を変える前に、既存の保存物の元メールで再生成して diff 0 を確かめる。
+- **有料記事のメールは、有料購読の前・返金期間中に届いたものは冒頭抜粋だけ**（末尾が `...` で切れる／語数が wordcount の数割）。購読の中断などでメール自体が届かない期間もある。メールの有無と全文性を公開一覧と突き合わせ、欠けは API（有料なら session 再利用）で埋める。
+- 本文中のリンクは `substack.com/redirect/…?j=<token>` の形で、**token には購読者の識別子が入る**。公開 repo に原文を置くなら除去を検討する。
+- archive から外された（改題・非公開化された）記事のプレビュー配信は slug が引けず API で取れない。題の類似と配信日で現行記事に対応づけ、取れないものは未取得として記録する。

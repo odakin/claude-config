@@ -186,8 +186,8 @@ layer 1 (public) のドメイン固有規約 107 file をカテゴリ別に列�
   - 外部プロトタイプへのフィードバックを、原資料 evidence・案件状態 record・返却本文 feedback の3正本に分離する手順。QR復号は遷移許可と分け、実画面で観察範囲と未検証範囲を記録し、表示名から身元を復元せず、clipboard準備と送付確認を別状態として扱う。UI試用は中心価値・主要導線・失敗回復・永続性・アクセシビリティ・配布信頼性を点検する
 - **[researchmap.md](researchmap.md)** — researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
   - researchmap 固有の機構と gotcha — write 経路は実質 web UI のみ (公開 API は read-only・write API は利用申請制、#write-paths)、/settings/imports の json/csv/zip 一括インポート (#bulk-import)、論文は ORCID 連携で自動反映・手動登録は非 DOI 系と講演のみ (#orcid-autofeed)、DOI 取り込みボタンと CrossRef metadata の癖 (#doi-import)、類似データ確認画面の 4 択 (#duplicate-screen)、タイトル日本語必須 + 言語ペア validation と両方向の実務解 (英題のみ=同値焼き / 和文のみ=英語欄全空、#title-validation)、講演の会議種別の選び方 (#presentation-category)、radio は form_input 直接設定 (#radio-quirk)、混雑・公開 API cache lag (#congestion)、/mypage は他人の permalink であって自分のポータルではない (#mypage-permalink-trap)
-- **[substack.md](substack.md)** — Substack 記事の入稿・notes/コメント回収をするとき
-  - Substack 規約（入稿: Markdown→リッチテキスト変換手順 / 取得: notes・コメントの Gmail MCP + WebFetch 経由回収）
+- **[substack.md](substack.md)** — Substack 記事の入稿・notes/コメント回収をするとき + 購読している publication の記事を一覧・本文・有料全文・購読メールから取り込むとき
+  - Substack 規約（入稿: Markdown→リッチテキスト変換手順 / 取得: notes・コメントの Gmail MCP + WebFetch 経由回収 / 購読記事の取り込み: 公開一覧 API の途中切れ・全文判定は CJK を字で数える・有料全文は browser session 再利用・購読メールの整形と抜粋配信、 道具 = scripts/substack-fetch.py）
 - **[ui-toggle-convention.md](ui-toggle-convention.md)** — UI panel 内の toggle group を設計するとき
   - UI panel 内 toggle group の default 側統一ルール (slider 位置 + bright label を panel scope で揃える)
 - **[web-form-automation.md](web-form-automation.md)** — 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき

@@ -120,7 +120,7 @@ claude-config/
 │   ├── shell-env.md                        # PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** + **Claude が Bash tool で複数の対象を loop で走査する 1-liner を書く瞬間** (= zsh は未 quote の変数を単語分割しない、 `#claude-issued-shell-commands`) + **変数の直後に `:` を書く瞬間** (= `"$c:path"` は zsh の修飾子になる) (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
 │   ├── shell-multibyte-truncation.md       # shell で多バイト文字列を truncate・加工するとき
 │   ├── slack-mcp.md                        # Slack workspace を MCP で wire するとき
-│   ├── substack.md                         # Substack 記事の入稿・notes/コメント回収をするとき
+│   ├── substack.md                         # Substack 記事の入稿・notes/コメント回収をするとき + 購読している publication の記事を一覧・本文・有料全文・購読メールから取り込むとき
 │   ├── tenki-submission.md                 # 日本気象学会の機関誌「天気」への投稿を準備するとき
 │   ├── tikz-pgfplots.md                    # TikZ / pgfplots を含む LaTeX project で図を作るとき
 │   ├── time-context.md                     # multi-day session で「今日・明日・今夜」等の時刻 deictic を解釈するとき
@@ -144,7 +144,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (122 file + lib/ 14 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (123 file + lib/ 14 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)

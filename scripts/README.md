@@ -114,6 +114,7 @@
 - **[setup-codex.test.sh](setup-codex.test.sh)** — setup-codex.sh の隔離・冪等・非上書き性を検証する
 - **[setup-dropbox-refs.sh](setup-dropbox-refs.sh)** — personal layer の dropbox-collabs.yaml を読んで symlink を生成
 - **[smoke-googleapis.mjs](smoke-googleapis.mjs)** — googleapis / google-auth-library の依存 bump 後 read-only smoke test (対象 dir 自身の node_modules を createRequire で load し、 実 API read か token refresh で更新実体を検証。 書き込み API・token 永続化なし。 規約 = conventions/google-api-direct-access.md)
+- **[substack-fetch.py](substack-fetch.py)** — Substack の公開一覧・記事本文・有料全文 (browser session 再利用)・購読メール整形を CLI で取る。
 - **[surface-discord-bot-dm.py](surface-discord-bot-dm.py)** — Discord bot DM channel の未記録 message surface engine（daily fetcher が吐く JSON と user 側 ledger（text/YAML 内 messageId）の diff で「bot DM に返事が来ても誰も読まない」 死角を埋める汎用 CLI、 個別環境への依存ゼロ＝引数で bot ID / json-dir / ledger-dir / counterpart map / title を渡す、 finding 0 件 silent、 --selftest 内蔵。 personal layer に thin wrapper を 1 つ置いて呼ぶ、 conventions/discord-bot.md#bot-dm-surface）
 - **[sync-hook-settings.sh](sync-hook-settings.sh)** — 層1 hook の配線 (symlink + settings.json の entry) を hooks/settings-entries.json に揃える (無いものを足すだけ・冪等)
 - **[sync-hook-settings.test.sh](sync-hook-settings.test.sh)** — 層1 hook の配線 (symlink + settings の entry) を揃える script の test
