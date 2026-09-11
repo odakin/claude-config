@@ -104,6 +104,7 @@ claude-config/
 │   ├── physics-verification-cycle.md       # 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
 │   ├── preview.md                          # preview / dev server 稼働中に user へ動作確認を依頼するとき
 │   ├── prompt-injection.md                 # 外部由来 tool result に adversarial 指示文を疑ったとき
+│   ├── prototype-feedback.md               # 外部からウェブアプリ・制作物・企画等の試用とコメントを頼まれ、スクリーンショット・QR・一時URLから実物を確認して返却文面を作るとき
 │   ├── rebuttal-letter.md                  # referee report への point-by-point 返信を書くとき
 │   ├── remote-control-server.md            # Remote Control サーバーモードを常駐・troubleshoot するとき
 │   ├── research-email.md                   # 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき
@@ -141,7 +142,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (100 file + lib/ 12 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (102 file + lib/ 12 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)

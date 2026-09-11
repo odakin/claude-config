@@ -1,5 +1,13 @@
 # SESSION — claude-config
 
+## Current — external prototype feedback packet (2026-09-11)
+
+スクリーンショット・QR・一時URLから外部プロトタイプを試用して返却文面を作る一般手順は
+[`conventions/prototype-feedback.md`](conventions/prototype-feedback.md)、QR文字列のローカル復号は
+[`scripts/decode-qr.py`](scripts/decode-qr.py)、packetの参照・hash・plain-text・送付状態検査は
+[`scripts/verify-prototype-feedback.py`](scripts/verify-prototype-feedback.py)が所有する。個別人物、限定URL、
+観察結果、送付状態はowning projectのprivate case recordへ残し、本SESSIONへ複製しない。
+
 ## Current — deadline intake and notification locus (2026-09-11)
 
 2026-09-11 (論文の推敲 session から): 略語の検査 [`scripts/check-abbreviations.py`](scripts/check-abbreviations.py) を新設した (定義が本文で長形の初出にあること、 定義前に略語が出ないこと、 定義後に長形が戻らないこと、 「et al.」 「Ref.」 の後の文末スペース)。 規約 = [`conventions/latex.md#abbreviation-first-occurrence`](conventions/latex.md#abbreviation-first-occurrence) (投稿前 gate の list にも追加)。 最終 pass の一覧運用 = [`conventions/paper-audit.md#final-pass-open-items`](conventions/paper-audit.md#final-pass-open-items)。 分解の display・記号の置き場所・μ^{2ε} の出どころ = [`conventions/physics-notes.md#display-decomposition-and-symbol-scope`](conventions/physics-notes.md#display-decomposition-and-symbol-scope)。

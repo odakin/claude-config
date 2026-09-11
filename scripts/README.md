@@ -39,6 +39,7 @@
 - **[commit-msg-leak-guard-runner.sh](commit-msg-leak-guard-runner.sh)** — 公開リポ commit-msg hook（BLOCK mode、 2026-05-26 追加。 shared matcher library を source。 claude-code 2.1.x harness invoke bug の修復 option B）
 - **[commit-msg-leak-guard-runner.test.sh](commit-msg-leak-guard-runner.test.sh)** — 上記 runner の self-test（15 case、 BLOCK / PASS / merge skip 等）
 - **[count-malformed-tool-call-events.py](count-malformed-tool-call-events.py)** — local transcript から malformed-tool-call bug の genuine event を集計（synthetic 文言の user entry のみ = doc/議論 echo を除外〔naive substring は 19x overcount〕、 month×model×client-version 内訳 + model 別 rate、 upstream issue への occurrence 報告用 data point 生成、 read-only、 --selftest 内蔵、 conventions/tool-call-robustness.md#root-cause）
+- **[decode-qr.py](decode-qr.py)** — Decode QR payloads from screenshots without opening them.
 - **[diff-form-docx.py](diff-form-docx.py)** — 様式 docx の記入ミスを blank diff で検出（ラベル欄上書き/見出し消失=HARD・空の箇条書き/全空 labeled 列=surface、xlsx 版の docx 対、--selftest 内蔵、office-automation.md#diff-form-docx-detection）
 - **[diff-form-xlsx.py](diff-form-xlsx.py)** — 様式 xlsx の label 上書き (= 様式改変) を雛形 diff で検出（office-automation.md#diff-form-xlsx-detection）
 - **[discord-board-bridge.py](discord-board-bridge.py)** — Discord ⇄ agent-board bridge engine (決定的 tick、 LLM 不使用、 config 駆動)。
@@ -105,6 +106,7 @@
 - **[validate-codex-skills.test.sh](validate-codex-skills.test.sh)** — shipped Codex skills の discovery metadata を検証する
 - **[verification-campaign-report.py](verification-campaign-report.py)** — [forwarder → ai-collaboration/scripts/verification-campaign-report.py] verify-to-learn campaign の集計: ledger.yaml (3 状態 / tier / readings) + git 由来の所要・entries per commit + efficacy proxy (受領側記入 novel_to_requester) を results.md の AUTO block に焼き、👁 未了 ite
 - **[verify-form-guidance.py](verify-form-guidance.py)** — 官製様式の「記入要領 (赤字/青字)」 が提出物に残置していないか検出。
+- **[verify-prototype-feedback.py](verify-prototype-feedback.py)** — Verify a prototype-feedback record and its local packet.
 - **[xlsx-to-pdf.sh](xlsx-to-pdf.sh)** — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
 
 ## lib/ — sourceable helper 群

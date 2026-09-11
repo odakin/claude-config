@@ -38,7 +38,7 @@ WebFetch は HTML → markdown 変換 + 内部要約モデル処理を経るた�
 
 WebFetch に「`<head>` 内の meta タグを抽出して」 と prompt しても「<head> セクションは提供されていません」 と返答するケースがある。post-processing で削られているため。代わりに `curl + sed` で head を取得して verification meta / Open Graph / JSON-LD を直接確認する。SEO 検証 (Search Console verification token / OG image / Event JSON-LD 等の live 確認) で典型的に発生する。
 
-## CSR な SPA は WebFetch / fetch に空シェルしか返さない (= 200 ≠ ページ実在)
+## <a id="csr-spa"></a>CSR な SPA は WebFetch / fetch に空シェルしか返さない (= 200 ≠ ページ実在)
 
 Client-side rendering の SPA (= JS が描画してから中身が入るサイト) は、**WebFetch も同一オリジンの `fetch()` も、実在 route と存在しない route に対して同一の空アプリシェル (HTTP 200・ほぼ同一バイト数・本文テキストなし) を返す**。サーバーが routing を JS に委ねており unknown route でも 404 を返さず shell を返すため。つまり **HTTP status 200 や fetch 成功は「その URL が実在し、その内容である」 ことの保証にならない** (= `mcp.md` / inline §3「tool の signal を guarantee と取り違えない」 の false-positive 版 — null を不在と短絡する裏返しで、 200 を実在と短絡する形)。
 
