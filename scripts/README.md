@@ -9,7 +9,7 @@
 - **[affix-image-xlsx.py](affix-image-xlsx.py)** — Place an image (seal / signature) into an .xlsx via Excel.app — without destroying the file.
 - **[audit-codex-integration.sh](audit-codex-integration.sh)** — Codex 導入と指定 repo の root AGENTS.md / Git gate を read-only で確認する
 - **[audit-codex-integration.test.sh](audit-codex-integration.test.sh)** — Codex integration audit の fixture test
-- **[audit-hooks.sh](audit-hooks.sh)** — 3 軸 hook 配信 audit (= silent malfunction の構造的検出)
+- **[audit-hooks.sh](audit-hooks.sh)** — 4 軸 hook 配信 audit (= silent malfunction の構造的検出、 (d) は自動部分のみ)
 - **[audit-public-repos.sh](audit-public-repos.sh)** — 全 public repo の leak 定期監査（週次 scheduled-task 対象）
 - **[bootstrap-stdio-mcps.sh](bootstrap-stdio-mcps.sh)** — generic auto-bootstrap library for self-hosted stdio MCPs.
 - **[bootstrap-stdio-mcps.test.sh](bootstrap-stdio-mcps.test.sh)** — self-test for the generic stdio MCP bootstrap library.
@@ -58,6 +58,7 @@
 - **[gmail-mcp-install-runtime-links.sh](gmail-mcp-install-runtime-links.sh)** — ~/.gmail-mcp/ の runtime credential を config repo canonical への symlink に張り替える冪等エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 - **[gmail-mcp-reauth.sh](gmail-mcp-reauth.sh)** — 多アカウント Gmail MCP の OAuth (再)認証エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 - **[gpt_measurements.py](gpt_measurements.py)** — [forwarder → ai-collaboration/scripts/gpt_measurements.py]
+- **[hook-liveness-audit.py](hook-liveness-audit.py)** — user hook が「そもそも走っていない」 root を検出 (disableAllHooks kill switch の settings 全 tier 走査 + transcript 上の SessionStart 発火証拠)
 - **[inspire-bib-audit.py](inspire-bib-audit.py)** — refs.bib を INSPIRE-HEP と texkey → arXiv ID → DOI の順で同定し、title / 第一著者 / 誌名 / 巻 / 初頁 / DOI / eprint を突合する gate（TeX 記法 ↔ Unicode・誌名の略記ゆれ・巻の系列文字・再録は正規化、INSPIRE 未収録は SKIP、network 失敗は exit 2、--selftest）
 - **[install-docx-decl-patch.sh](install-docx-decl-patch.sh)** — 上記 patch を user site-packages に `.pth`+symlink で install（setup.sh Step 9、 全 python3 起動で auto-load、 idempotent）
 - **[install-launchd-cron.sh](install-launchd-cron.sh)** — 汎用 launchd cron 登録エンジン（無人ルーチンを launchd cron で回す plist 生成・登録・状態確認・解除。--label-prefix / --workdir / --routine "id\|type\|target\|cron" を呼び出し側が渡す＝ROUTINES 焼かず汎用、cron は */N step + N-M 曜日範囲を StartCalendarInterval へ展開、skill=claude -p indirection / cmd=直接実行、CLI 認証で Claude Code (desktop) 切替非依存、--status/--run/--install-one/--uninstall-one/--uninstall/--ensure（未install のみ install=新ホスト自動配備、SessionStart から呼ぶ）、idempotent、macOS 限定、conventions/scheduled-tasks.md#launchd-cron-engine）
@@ -78,6 +79,7 @@
 - **[pdf-cleaner.html](pdf-cleaner.html)** — clipboard-cleaner.py のブラウザ版 fallback（非 macOS / pbcopy なし環境用、整形ロジックの正本は clipboard-cleaner.py で両実装を同期）
 - **[pdf-print-preflight.py](pdf-print-preflight.py)** — 印刷直前の PDF preflight — 「画面で見えた」 を印刷の保証にしない機械 gate (office-automation.md#print-preflight)。
 - **[pdf_form_fill.py](pdf_form_fill.py)** — 雛形 PDF への直接印字エンジン（library。anchor 印字 / NFKC 照合 / #+ redact / font subset / 内蔵検証 / 600dpi ラスタ化、office-automation.md#pdf-prefill-direct の汎用実装。単票向け — 派生 sheet 数式導出付き workbook は excel-osascript 経路）
+- **[permission-dialog-audit.py](permission-dialog-audit.py)** — Claude desktop の承認 dialog を app log から tool 別に集計し、 transcript と時刻突合して main / sub-agent / 不明に振り分ける
 - **[pin-claude-cwd.sh](pin-claude-cwd.sh)** — Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
 - **[pptx-to-pdf.sh](pptx-to-pdf.sh)** — PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、PowerPoint 経路は事前 grant 済み staging dir 経由、office-automation.md#pptx-to-pdf-powerpoint）
 - **[pre-commit-bib](pre-commit-bib)** — Git pre-commit hook（上記を呼ぶ）

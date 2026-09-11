@@ -122,7 +122,7 @@ fi
 if [ -n "$FIXES" ]; then
   MSG="[windows-bootstrap] Windows 環境を自動修復した (詳細 = claude-config/conventions/windows-msys.md):
 $FIXES"
-  SURFACE_DIR="$HOME/.claude/surface"
+  SURFACE_DIR="${CLAUDE_SURFACE_DIR:-$HOME/.claude/surface}"
   mkdir -p "$SURFACE_DIR" 2>/dev/null || true
   printf '%s\n' "$MSG" > "$SURFACE_DIR/windows-bootstrap.txt" 2>/dev/null || true
   printf '<system-reminder>\n%s</system-reminder>\n' "$MSG"

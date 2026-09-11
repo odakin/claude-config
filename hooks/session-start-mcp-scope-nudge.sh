@@ -180,7 +180,7 @@ REMINDER="${REMINDER}
 全文 RCA + 設計: ~/Claude/odakin-prefs/plans/2026-06-20-mcp-scope-guard-hooks.md"
 
 # ---------- 5. surface file (= desktop fallback、 hook-authoring.md#frontend-dependent-cowork) ----------
-SURFACE_DIR="$HOME/.claude/surface"
+SURFACE_DIR="${CLAUDE_SURFACE_DIR:-$HOME/.claude/surface}"
 mkdir -p "$SURFACE_DIR" 2>/dev/null || true
 { printf '%s\n' "$REMINDER"; } > "$SURFACE_DIR/mcp-scope.txt" 2>/dev/null || true
 

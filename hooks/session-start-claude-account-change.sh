@@ -142,7 +142,7 @@ out="$out
 stash 更新済 → 同 switch では 2 回目以降 surface しません。"
 
 # ---------- desktop surface bridge (= inline、 layer 1 は layer 3 lib に依存しない) ----------
-SURF_DIR="$HOME/.claude/surface"
+SURF_DIR="${CLAUDE_SURFACE_DIR:-$HOME/.claude/surface}"
 mkdir -p "$SURF_DIR" 2>/dev/null || true
 { printf '# 🔀 Claude account 切替検知\n\n'; printf '%s\n' "$out"; } > "$SURF_DIR/claude-account-change.txt" 2>/dev/null || true
 

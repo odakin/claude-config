@@ -6,6 +6,12 @@
 
 set -uo pipefail
 
+# surface file は隔離 dir に書かせる (= 本物の ~/.claude/surface/ を fixture で汚さない。
+# hook 側は CLAUDE_SURFACE_DIR を尊重する。 2026-09-11 汚染 RCA)
+SURFACE_TMP="$(mktemp -d)"
+trap 'rm -rf "$SURFACE_TMP"' EXIT
+export CLAUDE_SURFACE_DIR="$SURFACE_TMP/surface"
+
 HOOK="$(cd "$(dirname "$0")" && pwd)/session-start-mcp-scope-nudge.sh"
 [ -x "$HOOK" ] || { echo "FAIL: hook not executable: $HOOK"; exit 1; }
 
@@ -47,7 +53,7 @@ else
 fi
 
 # A4. surface file が書かれる
-SURFACE_FILE="$HOME/.claude/surface/mcp-scope.txt"
+SURFACE_FILE="$CLAUDE_SURFACE_DIR/mcp-scope.txt"
 rm -f "$SURFACE_FILE" 2>/dev/null || true
 printf '%s' '{"hook_event_name":"SessionStart","source":"startup"}' | "$HOOK" >/dev/null 2>&1 || true
 if [ -f "$SURFACE_FILE" ] && grep -q 'MCP scope reminder' "$SURFACE_FILE"; then

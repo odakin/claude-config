@@ -140,7 +140,7 @@ scope を埋められないなら、 結論を保留して以下のいずれか�
 # ---------- surface file (= Claude Code desktop session の SessionStart 読込 path) ----------
 # hook-authoring.md#frontend-dependent-cowork: desktop frontend は PreToolUse 出力をモデルに honor しない
 # が file 副作用は走る。 surface 経由で次 session に持ち越し可能。
-SURFACE_DIR="$HOME/.claude/surface"
+SURFACE_DIR="${CLAUDE_SURFACE_DIR:-$HOME/.claude/surface}"
 mkdir -p "$SURFACE_DIR" 2>/dev/null || true
 { printf '# 🔌 MCP search scope reminder (= 直近の search tool 呼び出し、 universal claim 前に scope 確認)\n\n'
   printf '%s\n' "$REMINDER"; } > "$SURFACE_DIR/mcp-search-reminder.txt" 2>/dev/null || true

@@ -9,6 +9,8 @@ ng()  { FAIL=$((FAIL+1)); echo "  FAIL: $1"; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# surface file は隔離 dir に書かせる (= 本物の ~/.claude/surface/ に fixture を残さない。 2026-09-11 汚染 RCA)
+export CLAUDE_SURFACE_DIR="$TMP/surface"
 
 make_claude_json() {  # $1 = userID
   printf '{"userID":"%s","numStartups":1,"projects":{}}' "$1" > "$TMP/claude.json"
@@ -99,11 +101,9 @@ printf '{"numStartups":1}' > "$TMP/claude.json"
 out="$(run_hook)"
 [ -z "$out" ] && ok "missing userID silent" || ng "should silent (got: $out)"
 
-# ---------- T9: desktop surface bridge (~/.claude/surface/) ----------
-echo "=== T9: surface bridge writes ~/.claude/surface/ ==="
-SURF="$HOME/.claude/surface/claude-account-change.txt"
-SURF_BAK=""
-[ -f "$SURF" ] && SURF_BAK="$(mktemp)" && cp "$SURF" "$SURF_BAK"
+# ---------- T9: desktop surface bridge (surface dir = CLAUDE_SURFACE_DIR で隔離) ----------
+echo "=== T9: surface bridge writes the surface dir ==="
+SURF="$CLAUDE_SURFACE_DIR/claude-account-change.txt"
 rm -f "$SURF"
 make_claude_json "useridD22222"
 rm -f "$TMP/last-uid"
@@ -113,8 +113,8 @@ if [ -f "$SURF" ] && grep -q "切替検知\|初回検知" "$SURF"; then
 else
   ng "surface file not written"
 fi
-# 復元
-if [ -n "$SURF_BAK" ]; then mv "$SURF_BAK" "$SURF"; else rm -f "$SURF"; fi
+# 旧版は本物の file を backup/restore していたが、 T3/T7 が先に汚染した版を backup して戻すので
+# fixture が残った (2026-09-11)。 隔離 dir 方式にして real path には一切触れない。
 
 echo
 echo "=== Result: $PASS passed, $FAIL failed ==="

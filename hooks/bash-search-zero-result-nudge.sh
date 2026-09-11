@@ -184,7 +184,7 @@ command: $CMD_SHOW
   scope 宣言が floor。 詳細 = odakin-prefs/plans/2026-08-24-chat-to-code-bridge.md §4"
 
 # ---------- surface file (= desktop fallback) ----------
-SURFACE_DIR="$HOME/.claude/surface"
+SURFACE_DIR="${CLAUDE_SURFACE_DIR:-$HOME/.claude/surface}"
 mkdir -p "$SURFACE_DIR" 2>/dev/null || true
 { printf '# 🛑 ローカル検索 null (= 直前の Bash 検索、 universal claim 禁止)\n\n'
   printf '%s\n' "$REMINDER"; } > "$SURFACE_DIR/bash-search-zero.txt" 2>/dev/null || true

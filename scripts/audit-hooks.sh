@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# audit-hooks.sh — 3 軸 hook 配信 audit (= silent malfunction の構造的検出)
+# audit-hooks.sh — 4 軸 hook 配信 audit (= silent malfunction の構造的検出、 (d) は自動部分のみ)
 # 付随: 本番 hooks dir に残置された *.test.sh は「未登録」 でなく掃除対象 (🧹) として分類する (2026-07-10)
 #
-# 設計動機: conventions/hook-authoring.md#delivery-audit-4-axes の 3 軸 audit 規律を script 化。
+# 設計動機: conventions/hook-authoring.md#delivery-audit-4-axes の audit 規律を script 化。
 # 単発 (P1) check + dashboard 統合 (= unified-dashboard.py 経由の P2 continuous
 # monitoring) の dual purpose。
 #
@@ -11,6 +11,10 @@
 #   (b) settings.json entry — 該当 hook が PreToolUse / PostToolUse / SessionStart
 #                              等 event の hooks list に登録済
 #   (c) syntax 健全性 — bash -n (.sh) / py_compile (.py) が通る
+#   (d) harness invoke 経路の生死 (自動部分) — hook-liveness-audit.py --findings-only
+#       = disableAllHooks kill switch の settings 全 tier 走査 + transcript 上の SessionStart
+#       発火証拠 (hook-authoring.md#disableallhooks-kill-switch)。 個別 hook の trace による
+#       invoke 確認は manual のまま (hook-authoring.md#delivery-audit-method)。 python3 不在なら skip
 #
 # 出力:
 #   - 全 green: silent skip (= dashboard noise 抑制)
@@ -136,6 +140,15 @@ for reg in "${registered_files[@]}"; do
     fi
 done
 
+# (d) 自動部分: kill switch + transcript 上の発火証拠。 (a)-(c) が全部 green でも hook が
+#     1 本も走っていない状態 (= root 限定の disableAllHooks 等) はここでしか見えない。
+LIVENESS="$(cd "$(dirname "$0")" && pwd)/hook-liveness-audit.py"
+if command -v python3 >/dev/null 2>&1 && [ -f "$LIVENESS" ]; then
+    while IFS= read -r line; do
+        [ -n "$line" ] && issues+=("$line")
+    done < <(python3 "$LIVENESS" --findings-only 2>/dev/null)
+fi
+
 # Output
 if [ ${#issues[@]} -eq 0 ]; then
     exit 0  # silent if all green
@@ -147,6 +160,6 @@ for issue in "${issues[@]}"; do
     echo "  $issue"
 done
 echo ""
-echo "  → 3 軸 (symlink + settings.json + syntax) で expose"
+echo "  → 4 軸 (symlink + settings.json + syntax + 発火証拠 / kill switch) で expose"
 echo "  → 規律: ~/Claude/claude-config/conventions/hook-authoring.md#delivery-audit-4-axes"
 exit 0

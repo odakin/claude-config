@@ -12,6 +12,12 @@
 
 set -uo pipefail
 
+# surface file は隔離 dir に書かせる (= 本物の ~/.claude/surface/ を fixture で汚さない。
+# hook 側は CLAUDE_SURFACE_DIR を尊重する。 2026-09-11 汚染 RCA)
+SURFACE_TMP="$(mktemp -d)"
+trap 'rm -rf "$SURFACE_TMP"' EXIT
+export CLAUDE_SURFACE_DIR="$SURFACE_TMP/surface"
+
 HOOK="$(cd "$(dirname "$0")" && pwd)/bash-search-zero-result-nudge.sh"
 [ -x "$HOOK" ] || { echo "FAIL: hook not executable: $HOOK"; exit 1; }
 
@@ -114,7 +120,7 @@ else
 fi
 
 # === surface file ===
-SURFACE_FILE="$HOME/.claude/surface/bash-search-zero.txt"
+SURFACE_FILE="$CLAUDE_SURFACE_DIR/bash-search-zero.txt"
 rm -f "$SURFACE_FILE" 2>/dev/null || true
 sdir="$(mktemp -d)"
 printf '%s' "$in_a" | BASH_SEARCH_NUDGE_STATE_DIR="$sdir" BASH_SEARCH_NUDGE_WINDOW=0 "$HOOK" >/dev/null 2>&1 || true

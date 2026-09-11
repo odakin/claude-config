@@ -9,6 +9,12 @@
 
 set -uo pipefail
 
+# surface file は隔離 dir に書かせる (= 本物の ~/.claude/surface/ を fixture で汚さない。
+# hook 側は CLAUDE_SURFACE_DIR を尊重する。 2026-09-11 汚染 RCA)
+SURFACE_TMP="$(mktemp -d)"
+trap 'rm -rf "$SURFACE_TMP"' EXIT
+export CLAUDE_SURFACE_DIR="$SURFACE_TMP/surface"
+
 HOOK="$(cd "$(dirname "$0")" && pwd)/mcp-search-zero-result-nudge.sh"
 [ -x "$HOOK" ] || { echo "FAIL: hook not executable: $HOOK"; exit 1; }
 
@@ -82,7 +88,7 @@ else
 fi
 
 # === surface file ===
-SURFACE_FILE="$HOME/.claude/surface/mcp-zero-result.txt"
+SURFACE_FILE="$CLAUDE_SURFACE_DIR/mcp-zero-result.txt"
 rm -f "$SURFACE_FILE" 2>/dev/null || true
 echo '{"tool_name":"mcp__gmail-alias-a__search_emails","tool_response":"Found 0 messages"}' | "$HOOK" >/dev/null 2>&1 || true
 if [ -f "$SURFACE_FILE" ] && grep -q 'MCP search 0' "$SURFACE_FILE"; then
