@@ -22,13 +22,16 @@
 #   behind>0 ∧ ahead==0 ∧ tracked-clean  → merge --ff-only @{u}
 #   behind>0 ∧ ahead==0 ∧ tracked-dirty  → stash → merge --ff-only → pop。 merge 失敗なら pop して戻す /
 #                                           pop conflict は自動解決せず所在と手順を出す / merge・rebase
-#                                           進行中は触らない / CLAUDE_SYNC_AUTOSTASH=0 で A 行のみに戻す
+#                                           進行中は触らない / CLAUDE_SYNC_AUTOSTASH=0 で A 行のみに戻す /
+#                                           未 commit の変更と upstream の変更が同じ file に当たるなら
+#                                           stash せず A 行 (= 持ち主の commit 待ち)
 #   behind>0 ∧ ahead>0 (diverged)       → A 行のみ (勝手な merge commit は作らない)
 #   behind==0 ∧ ahead>0                  → U 行のみ
 #   fetch が終わらなかった repo         → A 行 (behind 判定が古い ref 由来で当てにならない)
 #
 # 並列に起動されたときの安全 (規約の正本 = conventions/hook-authoring.md#cross-session-hook-concurrency、
-# conventions/multi-session-coordination.md#stash-push-noop / #concurrent-fetch-ref-lock / #pull-fetch-head-race):
+# conventions/multi-session-coordination.md#stash-push-noop / #concurrent-fetch-ref-lock / #pull-fetch-head-race /
+# #autostash-foreign-wip):
 #   - HEAD / tree を書き換える区間だけを repo 単位の mkdir lock (<git common dir>/claude-sync-sweep.lock)
 #     の内側で行い、 取った後に状態を読み直す。 lock 中の repo は待たずに skip して L 行
 #   - 古い lock (holder の pid 死亡 / 取得から LOCK_STALE 秒超) は rename で除去して取り直し、 L 行
@@ -44,6 +47,7 @@
 #   CLAUDE_SYNC_SWEEP_LOCK_STALE   lock を古いとみなす秒数 (既定 300)
 #   CLAUDE_SYNC_SWEEP_TEST=1 の時だけ効く (test で並走の窓を決定的に開ける):
 #     CLAUDE_SYNC_SWEEP_TEST_HOLD_PRE / _POST  stash push の直前 / 直後に lock を持ったまま止まる秒数
+#     CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP=1     同じ file に当たる検査を外す (pop conflict の経路を test するため)
 
 # fail-open 最優先のため set -e は使わない (= 途中の error で呼び出し側を止めない)。
 
@@ -322,6 +326,22 @@ _pull_locked() {
      || [ -d "$(git rev-parse --git-dir 2>/dev/null)/rebase-apply" ]; then
     printf 'A\t%s: behind=%s だが merge/rebase 進行中 (= 触らない、 手動解決)\n' "$name" "$behind"
     return 0
+  fi
+  # 未 commit の変更と upstream の変更が同じ file に当たるなら stash しない
+  # (multi-session-coordination.md#autostash-foreign-wip): pop の conflict は変更の持ち主 (別 session
+  # のことが多い) が作業中の file の中で起き、 index も unmerged になる。 持ち主の commit を待つ。
+  if [ "${CLAUDE_SYNC_SWEEP_TEST:-0}" != "1" ] || [ "${CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP:-0}" != "1" ]; then
+    local overlap ov3 ovn
+    overlap="$(comm -12 <(git diff --name-only HEAD..@{u} 2>/dev/null | sort -u) \
+                        <({ git diff --name-only; git diff --cached --name-only; } 2>/dev/null | sort -u))"
+    if [ -n "$overlap" ]; then
+      ov3="$(printf '%s\n' "$overlap" | head -3 | tr '\n' ' ')"
+      ovn="$(printf '%s\n' "$overlap" | wc -l | tr -d ' ')"
+      [ "$ovn" -gt 3 ] && ov3="${ov3}他 $((ovn - 3)) 件 "
+      printf 'A\t%s: behind=%s だが未 commit の変更が upstream の変更と同じ file に当たる (%s) → stash しない (pop の conflict が作業中の file に入る)。 変更の持ち主が commit してから最新化する (確認 = git -C %s/%s status -sb)\n' \
+        "$name" "$behind" "${ov3% }" "$_DISP" "$name"
+      return 0
+    fi
   fi
   tag="sync-sweep auto $(date +%Y-%m-%dT%H:%M:%S) pid=$$ r=$RANDOM"
   _test_hold "${CLAUDE_SYNC_SWEEP_TEST_HOLD_PRE:-}"

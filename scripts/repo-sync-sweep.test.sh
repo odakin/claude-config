@@ -111,11 +111,19 @@ b="$(cd "$ROOT/repoF" && git rev-list --count HEAD..@{u})"
 [ -f "$ROOT/repoF/untracked-only.txt" ] && ok "untracked file はそのまま" || ng "untracked file が消えた"
 [ -z "$(cd "$ROOT/repoF" && git stash list)" ] && ok "untracked のみでは stash しない" || ng "不要な stash が作られた"
 
-echo "=== T7: pop conflict → 自動解決せず、 stash list で確かめて「残っている」 と出す ==="
+echo "=== T7a: 未 commit の変更と upstream が同じ file → stash せず A 行 (#autostash-foreign-wip) ==="
 RG="$(mk_remote g)"; git_quiet clone -q "$RG" "$ROOT/repoG"
 advance_remote "$RG" g
 echo "conflicting-local" >> "$ROOT/repoG/f.txt"
 out="$(run)"
+line_of "$out" A repoG | grep -q "同じ file に当たる (f.txt)" \
+  && ok "重なりを A 行で出し、 file 名を添えた" || ng "expected A repoG 同じ file (got: $out)"
+[ "$(cd "$ROOT/repoG" && git rev-list --count HEAD..@{u})" -gt 0 ] && grep -q "conflicting-local" "$ROOT/repoG/f.txt" \
+  && [ -z "$(cd "$ROOT/repoG" && git stash list)" ] \
+  && ok "重なる repo には触らない (behind のまま・変更そのまま・stash なし)" || ng "重なる repo に触った"
+
+echo "=== T7: (重なり検査を外して) pop conflict → 自動解決せず、 stash list で確かめて「残っている」 と出す ==="
+out="$(CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP=1 run)"
 line_of "$out" A repoG | grep -q "stash pop が conflict" && ok "pop conflict が A 行" || ng "expected A repoG conflict (got: $out)"
 [ -n "$(cd "$ROOT/repoG" && git stash list)" ] && ok "stash entry が残っている (= 変更は失われていない)" || ng "stash が消えた"
 line_of "$out" A repoG | grep -q "stash に残っている (確認済: stash@{0}" \
