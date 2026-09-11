@@ -153,7 +153,7 @@ python の shim が兄弟 repo (層1 engine 等) を `Path(__file__).resolve().p
 - 依存が無くて検査できないなら selftest は `SKIP: <理由>` を出して exit 0 (= §0 補足 5 と同じく黙って通らない)。 通常実行 (dashboard 等の消費側) の fail-open は沈黙のままでよい
 - **test が変更中の copy を見ているかは mutation で確かめる**: worktree 側だけ payload を退避する / lib に偽の関数を足す → 落ちれば変更中の copy を検査している。 「worktree で PASS」 だけでは証明にならない (live を読んで通っている可能性が残る)
 
-**実例 (2026-09-12)**: odakin-prefs の SessionStart hook test 6 本が使い捨て worktree でだけ落ちた (payload 不在)。 同じ前提の test がさらに 4 本、 worktree でも通っていたが live の `lib-surface.sh` を source していた。 python の shim 2 本は worktree だけでなく **CI でも**空振りしていた。 並列 session を避ける worktree 運用 ([multi-session-coordination.md#foreign-wip-scratch-worktree](multi-session-coordination.md#foreign-wip-scratch-worktree)) を使って初めて露出した class。
+**実例 (2026-09-12)**: odakin-prefs の SessionStart hook test 6 本が使い捨て worktree でだけ落ちた (payload 不在)。 同じ前提の test がさらに 4 本、 worktree でも通っていたが live の `lib-surface.sh` を source していた。 python の shim 2 本は worktree だけでなく **CI でも**空振りしていた。 層1 でも、 stub installer の test が `$HOME` の外に置いた worktree でだけ落ちた (`"$HOME/..."` 形と絶対 path 形が同じ文字列になり、 fixture が差分を作れない) — 置き場所への依存は root の導き方以外からも入る。 並列 session を避ける worktree 運用 ([multi-session-coordination.md#foreign-wip-scratch-worktree](multi-session-coordination.md#foreign-wip-scratch-worktree)) を使って初めて露出した class。
 
 ---
 

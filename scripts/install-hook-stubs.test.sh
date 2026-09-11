@@ -13,6 +13,14 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# checkout が $HOME の外 (= /private/tmp の使い捨て worktree 等) だと "$HOME/..." 形の stub が作れず、
+# $HOME 形と絶対 path 形が同じ文字列になって T6/T7 の fixture が dirty にならない (2026-09-12)。
+# その時だけ checkout の最上位 dir を HOME とみなす = 置き場所に依らず 2 つの形を区別する。
+# fixture の git は mkrepo が repo-local に設定するので、 HOME の差し替えは結果に効かない。
+case "$HERE/" in
+  "$HOME"/*) : ;;
+  *) _top="${HERE#/}"; HOME="/${_top%%/*}"; export HOME ;;
+esac
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
