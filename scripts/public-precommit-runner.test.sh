@@ -174,6 +174,16 @@ expect_pass "pass-email-example-domain" \
 expect_block "block-email-real-domain" \
   "contact someone@gm""ail.com for details"
 
+# ssh remote の user 部 (git@<host>:owner/repo) は email でない = allowlist (2026-09-12、
+# CI 検出器の selftest fixture の ssh URL が block された FP を契機に追加)。 literal は
+# 旧 allowlist の runner に block されるので連結で組む
+expect_pass "pass-ssh-remote-user" \
+  "origin = git""@github.com:o/a.git / git""@gitlab.com:o/b.git / git""@bitbucket.org:o/c.git"
+
+# 同じ git@ でも code host 以外の domain は block のまま (= allowlist 拡張の regression 逆側)
+expect_block "block-git-at-other-domain" \
+  "mail git""@gm""ail.com please"
+
 # 編集時の hook (hooks/public-leak-guard.sh) と本 runner は同じ email allowlist を持つ。
 # 2026-09-12: runner だけ 2026-08-28 に例示 domain を足し、 hook は古いまま test fixture の
 # Write ごとに確認 dialog を出していた → 片側だけの修正が再発しないよう一致を固定する。

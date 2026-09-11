@@ -106,10 +106,12 @@ HITS=""
 # .invalid) は実在 address になり得ないので leak ではない。 2026-09-12 まで本 hook だけ
 # 例示 domain を拾い、 test fixture の Write ごとに確認 dialog を出していた (commit gate は通すのに)。
 # 両者の一致は scripts/public-precommit-runner.test.sh が検査する。
+# ssh remote の user 部 (git@<code host>:owner/repo の github.com・gitlab.com・bitbucket.org) も
+# remote URL の一部であって個人の address ではないので allowlist (2026-09-12)。
 EMAIL_HITS="$(
   printf '%s' "$CONTENT" \
     | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' 2>/dev/null \
-    | grep -vE '^(noreply@anthropic\.com|noreply@github\.com|support@github\.com|[A-Za-z0-9._%+-]+@example\.(com|org|net|invalid))$' \
+    | grep -vE '^(noreply@anthropic\.com|noreply@github\.com|support@github\.com|git@(github\.com|gitlab\.com|bitbucket\.org)|[A-Za-z0-9._%+-]+@example\.(com|org|net|invalid))$' \
     || true
 )"
 if [ -n "$EMAIL_HITS" ]; then
