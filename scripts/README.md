@@ -16,6 +16,7 @@
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入
 - **[check-abbreviations.py](check-abbreviations.py)** — Abbreviation hygiene for LaTeX manuscripts: each abbreviation is defined once, at the FIRST body
 - **[check-american-spelling.py](check-american-spelling.py)** — Reject curated British spellings in live LaTeX prose and figure text.
+- **[check-ci-red.py](check-ci-red.py)** — GitHub Actions の red 検出器（repo 横断で「default branch の最新 completed run が失敗中の workflow」 を列挙し、 連続失敗 run 数・継続時間・最後の success を印字、 長期 red を 🚨 で強調。 取得失敗は「検査不能」 行で明示 = 黙って緑にしない、 finding 0 件 silent、 --as-of で過去時点を再現、 --selftest 内蔵。 呼び出し側 = 個人層 dashboard / session 開始 hook）
 - **[check-codex-integration.py](check-codex-integration.py)** — Codex SoT, session drift, Hook, and trigger-wiring gate.
 - **[check-display-math-style.py](check-display-math-style.py)** — Display-math house-style gate for LaTeX manuscripts (2026-09-09).
 - **[check-doc-truncation.py](check-doc-truncation.py)** — 台帳 doc の「黙って消える」削除を git 高水位で検出（表の行/list/見出し/entry の大幅減、[truncation-ok] で baseline reset、config 駆動）
