@@ -648,7 +648,7 @@ $$
 
 **Pattern**: 1-loop の極や tensor 係数を sympy の厳密有理数で出す pipeline で、途中の `sympy.nsimplify` (入力行列の整形のつもり) が分母の大きい `Rational` を float と見なし、代数的数に「同定」した (実測: 有理数の代わりに $5\cdot2^{307/522}3^{5/29}\cdots$ が混入)。 256 成分のうち数成分が $10^{-14}$ だけ、別の量では $O(1)$ で狂い、数値誤差に見えて原因が隠れた。 同じ pipeline で、2 本目の propagator を展開式 $(p+q)$ と逆向き $(p-q)$ に流した誤りと、印字式の上下添字を下げずに成分で比べた誤りが重なり、3 つとも「恒等式が成り立たない」という物理の結論に見えた。
 
-**Rule**: (1) 厳密 pipeline では `nsimplify` を使わない (float を有理化したい入口だけ、`rational=True` と許容誤差を明示する)。 入口で Float を拒否する (`expr.atoms(Float)` が空であることを assert)。 (2) 極・積分の抽出器は、物理の量に使う前に**単項式の閉形式** (Feynman parameter の rank 0–3) と既知量 1 つ (QED 真空偏極の $\tfrac43(q^2\eta^{\mu\nu}-q^\mu q^\nu)$) で単体検査する。 上の 2 つの誤りは単項式検査で数秒で出る。 (3) routing は展開式に合わせて 1 か所で決め、逆向きは $q\to-q$ で読み替える。 (4) 印字式どうしは、全添字を計量で下げてから比べる。 道具 = 層1 [`one_loop_pole.py`](../../ai-collaboration/scripts/one_loop_pole.py) (Float 拒否と単項式 selftest を内蔵)。
+**Rule**: (1) 厳密 pipeline では `nsimplify` を使わない (float を有理化したい入口だけ、`rational=True` と許容誤差を明示する)。 入口で Float を拒否する (`expr.atoms(Float)` が空であることを assert)。 (2) 極・積分の抽出器は、物理の量に使う前に**単項式の閉形式** (Feynman parameter の rank 0–3) と既知量 1 つ (QED 真空偏極の $\tfrac43(q^2\eta^{\mu\nu}-q^\mu q^\nu)$) で単体検査する。 上の 2 つの誤りは単項式検査で数秒で出る。 (3) routing は展開式に合わせて 1 か所で決め、逆向きは $q\to-q$ で読み替える。 (4) 印字式どうしは、全添字を計量で下げてから比べる。 (5) 劣決定の線形拘束を `sympy.solve` で解いた結果はそのまま使わない。 退化した branch が返ったことがある (実測: Ward 恒等式の拘束)。 期待する構造を直接代入して残差 0 を確かめる。 道具 = 層1 [`one_loop_pole.py`](../../ai-collaboration/scripts/one_loop_pole.py) (Float 拒否と単項式 selftest を内蔵)。
 
 **Why**: 検算が落ちたとき、物理の失敗と読む前に道具の失敗を安く排除する順序にする ([#verify-independent-derivation](#verify-independent-derivation) の道具側)。 「恒等式が成り立たない」が出たら、まず単項式検査を回す。
 
