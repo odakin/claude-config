@@ -100,6 +100,9 @@ sections:
   - id: observable-projectors-and-symmetry
     level: 2
     title: "部分空間の和・電荷・保存則の対象を固定する"
+  - id: exact-rational-pipelines
+    level: 2
+    title: "厳密有理数の記号計算 pipeline に `nsimplify` を通さない — 抽出器は単項式の閉形式で先に叩く (2026-09)"
   - id: research-script-homes
     level: 2
     title: "研究スクリプトと知見の配置・全数索引"
