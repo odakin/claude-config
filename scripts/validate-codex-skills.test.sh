@@ -4,6 +4,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Report the failing line and command instead of a silent exit 1.
+. "$SCRIPT_DIR/lib/test-err-trap.sh"
 SKILLS_DIR="$(cd "$SCRIPT_DIR/../codex/skills" && pwd)"
 EXPECTED_COUNT=3
 FOUND=0

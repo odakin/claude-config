@@ -18,6 +18,10 @@
 # owner transcript) が無い時に SKIP を出して exit 0 する責務を持つ (silent skip 禁止、
 # skip 理由は test 自身が出力する)。 本 runner は集計のみ。
 #
+# 失敗の自己申告: set -e の test で bare `[ ... ]` / `grep -q` を assertion にするなら
+# scripts/lib/test-err-trap.sh を source して、 落ちた行と command を stderr に出す
+# (無言の exit 1 だと CI log には下の "✗ test: <name>" しか残らない)。
+#
 # bash 3.2 compatible。 exit 1 = いずれかの検査が fail。
 set -u
 

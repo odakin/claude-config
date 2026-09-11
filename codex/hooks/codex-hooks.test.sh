@@ -4,6 +4,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Report the failing line and command instead of a silent exit 1.
+. "$SCRIPT_DIR/../../scripts/lib/test-err-trap.sh"
 TEMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 

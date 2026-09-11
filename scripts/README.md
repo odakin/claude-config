@@ -117,4 +117,6 @@
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
 - **[lib/staged-conflict-markers.sh](lib/staged-conflict-markers.sh)** — merge conflict marker の staged-content gate (sourceable lib)
 - **[lib/staged-conflict-markers.test.sh](lib/staged-conflict-markers.test.sh)** — staged-conflict-markers.sh の self-test (hermetic)
+- **[lib/test-err-trap.sh](lib/test-err-trap.sh)** — set -e の bash test で落ちた assertion の行とコマンドを stderr に出す ERR trap (sourceable lib)
+- **[lib/test-err-trap.test.sh](lib/test-err-trap.test.sh)** — test-err-trap.sh の self-test (hermetic、 走らせた bash で fixture を実行)
 - **[lib/web_driver.py](lib/web_driver.py)** — 「値の正本 → 画面に打つ操作列」 を決定的に生成する site 非依存 harness
