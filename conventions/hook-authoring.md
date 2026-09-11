@@ -264,6 +264,16 @@ setup.sh 自体は idempotent design なので (i) は実装コスト低。 但�
 - **同一 managed 生成物に writer path が複数あるなら、 機械可読 marker を全 path で統一 + 各 path を fixture で test**: 新規作成 path と既存 hook への追記 path が別々の heredoc を持ち、 audit が grep する marker literal が片方に欠けていた (= 新規作成 path 経由のマシンだけ audit が偽 MISSING を出す潜在 bug。 検収時に足した composite fixture が発掘)。
 - **実マシン状態を読む audit の test は env override で hermetic に**: audit が実 repo の hook file を読む検査は、 test 側で path override (`CLAUDE_CONFIG_POST_MERGE` 型) を渡さないとマシンの導入状態に依存して flake する。
 
+### <a id="installer-tracked-stub"></a>installer は git が track している file を書き換えない (2026-09-12)
+
+`core.hooksPath` を repo 内 (例: `scripts/hooks`) に向けた repo では、 hook stub が **repo の中身** (track 済み file) になる。 そこへ installer が「自分の形式」 で上書きすると、 意味が同じでも worktree が汚れ続け、 SessionStart の自動 pull (stash → ff → pop) と繰り返し衝突する (実例: repo は `"$HOME/..."` 形の stub を track、 installer は解決済みの absolute path で毎回上書き → stash pop conflict)。 規則 (実装 = `scripts/lib/hook-stub.sh`、 stub installer 3 本が共有):
+
+- **同じ runner を指す stub は書かない** (`$HOME` を展開して `-ef` で比較。 mtime も動かさない)。
+- **track 済み file の内容は書かない**: 別の場所を指していても警告だけ出す (直すのは repo 側の commit)。 stub でない自前の hook も、 退避・上書きしない。
+- **過去の installer が書いた差分は戻す**: track 済み stub の worktree 差分が installer の header を持ち、 track 版の exec 先が実在するときだけ `git checkout --` で track 版に戻す (user の手直しには触らない)。 installer は setup.sh 実行時にしか走らないので、 既に汚れた他マシンの worktree は `scripts/heal-hook-stubs.sh <base>` を SessionStart から呼んで直す。
+- **repo 内 hooksPath に置く untrack の stub は `.git/info/exclude` に載せる** (clone ごとの設定。 共有 repo の status に `??` を出し続けず、 他人の clone に無い stub を commit させない)。
+- test = `scripts/install-hook-stubs.test.sh`。
+
 ### <a id="tool-matcher-coverage-boundary"></a>§2 補足: tool-matcher の coverage boundary — Bash/script write は Edit/Write guard を素通りする
 
 配信が健全 (= (a)(b)(c) 全 green) でも、 PreToolUse hook は **登録した matcher の tool にしか fire しない**。 `PreToolUse(Edit|Write|MultiEdit)` guard は **Bash / script (`python ... open(w)` / `cat > f` 等) で書いた file を一切見ない** (= それらは Edit/Write tool call でないため)。 bug ではなく matcher の設計境界 (§2 (d) の harness-invoke-bug 〔Bash matcher が bug で fire しない〕 とは別軸)。 guard を分類すると塞ぎ方が決まる:

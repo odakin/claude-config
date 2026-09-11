@@ -11,7 +11,8 @@
 #   3. 既存 prepare-commit-msg があれば backup (.bak-<timestamp>)。
 #      --refuse-existing なら user-managed hook を変更せず失敗する
 #   4. 1 行 exec stub を書いて chmod +x
-#   5. 冪等: 本 script が置いた stub なら backup せず上書き更新のみ
+#   5. 冪等: 本 script が置いた stub は、 同じ runner を指していれば触らない (backup なし)。
+#      git が track している file は書き換えない (lib/hook-stub.sh = conventions/hook-authoring.md#installer-tracked-stub)
 #
 # 設計: install-public-commit-msg.sh / install-public-precommit.sh と同 pattern
 #   (= stub は 1 行 exec のみ、 本体は scripts/prepare-commit-msg-session.sh の
@@ -31,6 +32,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNNER="$SCRIPT_DIR/prepare-commit-msg-session.sh"
+# shellcheck source=lib/hook-stub.sh
+. "$SCRIPT_DIR/lib/hook-stub.sh"
 REFUSE_EXISTING=0
 
 if [ "${1:-}" = "--refuse-existing" ]; then
@@ -76,38 +79,18 @@ STUB_CONTENT="#!/bin/bash
 exec \"$RUNNER\" \"\$@\"
 "
 
-# core.hooksPath が repo の worktree 内を指し、 そこに stub が untracked で置かれる場合は
-# .git/info/exclude に載せる (= clone ごとの設定。 共有 repo の status に `??` を出し続けない、
-# かつ他人の clone では存在しない stub を commit させない、 2026-09-12)。 track 済みなら repo の判断に任せる。
-exclude_if_untracked_in_worktree() {
-  case "$HOOK" in "$REPO"/*) ;; *) return 0 ;; esac
-  local rel="${HOOK#"$REPO"/}"
-  case "$rel" in .git/*) return 0 ;; esac
-  git -C "$REPO" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1 && return 0
-  local ex
-  ex="$(git -C "$REPO" rev-parse --git-path info/exclude 2>/dev/null)" || return 0
-  case "$ex" in /*) ;; *) ex="$REPO/$ex" ;; esac
-  mkdir -p "$(dirname "$ex")" 2>/dev/null || return 0
-  grep -qxF "/$rel" "$ex" 2>/dev/null || printf '/%s\n' "$rel" >> "$ex"
-}
-
 # --- 既存 hook の扱い ---
+# 規約: installer は git が track している file を書き換えない (lib/hook-stub.sh、
+# conventions/hook-authoring.md#installer-tracked-stub)。 repo 内 hooksPath に置く untrack stub は
+# .git/info/exclude に載せる (= 共有 repo の status に ?? を出さず、 他人の clone に無い stub を commit させない)。
 if [ -e "$HOOK" ] || [ -L "$HOOK" ]; then
   if grep -q "$STUB_MARKER" "$HOOK" 2>/dev/null; then
-    # 既存 stub が同じ runner を指していれば書き換えない (理由 = install-public-precommit.sh の同所)
-    cur="$(sed -n 's/^exec "\(.*\)" "\$@"$/\1/p' "$HOOK" | head -n 1)"
-    cur="${cur/#\$HOME/$HOME}"
-    if [ -n "$cur" ] && [ "$cur" -ef "$RUNNER" ]; then
-      [ -x "$HOOK" ] || chmod +x "$HOOK"
-      exclude_if_untracked_in_worktree
-      echo "prepare-commit-msg stub up to date: $HOOK"
-      exit 0
-    fi
-    printf '%s' "$STUB_CONTENT" > "$HOOK"
-    chmod +x "$HOOK"
-    exclude_if_untracked_in_worktree
-    echo "prepare-commit-msg stub refreshed: $HOOK"
+    hook_stub_refresh "$REPO" "$HOOK" "$RUNNER" "$STUB_CONTENT" "prepare-commit-msg"
     exit 0
+  elif hook_stub_is_tracked "$REPO" "$HOOK"; then
+    # repo が track している自前の prepare-commit-msg (= 本 script の stub でない) → 退避も上書きもしない
+    echo "refusing to replace git-tracked prepare-commit-msg hook: $HOOK" >&2
+    exit 1
   else
     if [ "$REFUSE_EXISTING" -eq 1 ]; then
       echo "refusing to replace existing prepare-commit-msg hook: $HOOK" >&2
@@ -120,6 +103,4 @@ if [ -e "$HOOK" ] || [ -L "$HOOK" ]; then
   fi
 fi
 
-printf '%s' "$STUB_CONTENT" > "$HOOK"
-chmod +x "$HOOK"
-echo "prepare-commit-msg stub installed: $HOOK"
+hook_stub_write "$REPO" "$HOOK" "$STUB_CONTENT" "prepare-commit-msg"

@@ -66,10 +66,11 @@
 - **[gmail-mcp-install-runtime-links.sh](gmail-mcp-install-runtime-links.sh)** — ~/.gmail-mcp/ の runtime credential を config repo canonical への symlink に張り替える冪等エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 - **[gmail-mcp-reauth.sh](gmail-mcp-reauth.sh)** — 多アカウント Gmail MCP の OAuth (再)認証エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 - **[gpt_measurements.py](gpt_measurements.py)** — [forwarder → ai-collaboration/scripts/gpt_measurements.py]
+- **[heal-hook-stubs.sh](heal-hook-stubs.sh)** — 過去の installer が書き換えた「git 管理下の hook stub」 を track 版に戻す (冪等・差分なしは無音)
 - **[hook-liveness-audit.py](hook-liveness-audit.py)** — user hook が「そもそも走っていない」 root を検出 (disableAllHooks kill switch の settings 全 tier 走査 + transcript 上の SessionStart 発火証拠)
 - **[inspire-bib-audit.py](inspire-bib-audit.py)** — refs.bib を INSPIRE-HEP と texkey → arXiv ID → DOI の順で同定し、title / 第一著者 / 誌名 / 巻 / 初頁 / DOI / eprint を突合する gate（TeX 記法 ↔ Unicode・誌名の略記ゆれ・巻の系列文字・再録は正規化、INSPIRE 未収録は SKIP、network 失敗は exit 2、--selftest）
 - **[install-docx-decl-patch.sh](install-docx-decl-patch.sh)** — 上記 patch を user site-packages に `.pth`+symlink で install（setup.sh Step 9、 全 python3 起動で auto-load、 idempotent）
-- **[install-hook-stubs.test.sh](install-hook-stubs.test.sh)** — install-public-precommit / install-public-commit-msg / install-session-trailer の冪等性 test
+- **[install-hook-stubs.test.sh](install-hook-stubs.test.sh)** — hook stub installer 3 本 + heal-hook-stubs.sh の test (lib/hook-stub.sh の規約)
 - **[install-launchd-cron.sh](install-launchd-cron.sh)** — 汎用 launchd cron 登録エンジン（無人ルーチンを launchd cron で回す plist 生成・登録・状態確認・解除。--label-prefix / --workdir / --routine "id\|type\|target\|cron" を呼び出し側が渡す＝ROUTINES 焼かず汎用、cron は */N step + N-M 曜日範囲を StartCalendarInterval へ展開、skill=claude -p indirection / cmd=直接実行、CLI 認証で Claude Code (desktop) 切替非依存、--status/--run/--install-one/--uninstall-one/--uninstall/--ensure（未install のみ install=新ホスト自動配備、SessionStart から呼ぶ）、idempotent、macOS 限定、conventions/scheduled-tasks.md#launchd-cron-engine）
 - **[install-overleaf-sync.sh](install-overleaf-sync.sh)** — Overleaf 連携 repo に sync script を 1 コマンド設置（template 展開 + URL から ID 抽出・焼き込み + --merge-opts / --ahead-expected + token があれば --status smoke、 冪等・別 ID は --force、 conventions/overleaf-integration.md#new-integration-checklist）
 - **[install-pty-leak-mitigation.sh](install-pty-leak-mitigation.sh)** — pty-leak-watch.sh watchdog + persistent bump LaunchDaemon を現ユーザに 1 コマンド install（--persist / --replace-agent / --replace-daemon、idempotent、macOS 限定）
@@ -126,6 +127,7 @@
 
 - **[lib/commit-msg-leak-matcher.sh](lib/commit-msg-leak-matcher.sh)** — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 8 allowlist の (a)(b)(c) check)、 claude-code hook + git-side runner の両方が source する DRY 実装
 - **[lib/find-personal-layer.sh](lib/find-personal-layer.sh)** — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
+- **[lib/hook-stub.sh](lib/hook-stub.sh)** — lib/hook-stub.sh — hook stub installer 共通の「既存 stub の扱い」 (source して使う、 単体実行しない)
 - **[lib/merge-hook-event.sh](lib/merge-hook-event.sh)** — settings.json への hook event merge (単一リスト駆動)
 - **[lib/merge-hook-event.test.sh](lib/merge-hook-event.test.sh)** — merge_hook_event の self-test (hermetic、 実 settings.json 不使用)
 - **[lib/office-staging.sh](lib/office-staging.sh)** — Office (Word / Excel / PowerPoint) automation の「事前 grant 済み staging dir」 helper (sourceable lib、 macOS App Sandbox の folder-grant dialog を design-out、 office-automation.md#office-pregranted-staging-dir)

@@ -12,7 +12,8 @@
 #   2. `.claude/public-repo.marker` が存在するかを check (なければ refuse)
 #   3. 既存 `.git/hooks/commit-msg` があれば backup (`.bak-<timestamp>`)
 #   4. 新しい stub を書き、 chmod +x
-#   5. 冪等性: 既に本 script が設置した stub があれば上書きのみ (backup なし)
+#   5. 冪等性: 既に本 script が設置した stub は、 同じ runner を指していれば触らない (backup なし)。
+#      git が track している file は書き換えない (lib/hook-stub.sh = conventions/hook-authoring.md#installer-tracked-stub)
 #
 # 設計: install-public-precommit.sh と同 pattern (= stub は 1 行 exec
 #   のみ、 本体は claude-config/scripts/commit-msg-leak-guard-runner.sh
@@ -33,6 +34,8 @@ set -euo pipefail
 # lived anywhere other than ~/Claude (e.g. Windows clones directly under ~).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNNER="$SCRIPT_DIR/commit-msg-leak-guard-runner.sh"
+# shellcheck source=lib/hook-stub.sh
+. "$SCRIPT_DIR/lib/hook-stub.sh"
 
 REPO="${1:-$(pwd)}"
 REPO="$(cd "$REPO" 2>/dev/null && pwd)" || { echo "not a directory: ${1:-$(pwd)}" >&2; exit 1; }
@@ -73,23 +76,20 @@ exec \"$RUNNER\" \"\$@\"
 "
 
 # --- 既存 hook の扱い ---
+# 規約: installer は git が track している file を書き換えない (lib/hook-stub.sh、
+# conventions/hook-authoring.md#installer-tracked-stub)
 if [ -f "$HOOK" ]; then
   if grep -q "$STUB_MARKER" "$HOOK" 2>/dev/null; then
-    # 既存 stub が同じ runner を指していれば書き換えない (理由 = install-public-precommit.sh の同所)
-    cur="$(sed -n 's/^exec "\(.*\)" "\$@"$/\1/p' "$HOOK" | head -n 1)"
-    cur="${cur/#\$HOME/$HOME}"
-    if [ -n "$cur" ] && [ "$cur" -ef "$RUNNER" ]; then
-      [ -x "$HOOK" ] || chmod +x "$HOOK"
-      echo "commit-msg stub up to date: $HOOK"
-      exit 0
-    fi
-    # 別の runner を指す古い stub。 上書きで最新化 (冪等)
-    printf '%s' "$STUB_CONTENT" > "$HOOK"
-    chmod +x "$HOOK"
-    echo "commit-msg stub refreshed: $HOOK"
+    # 既に本 script が設置した stub → 冪等に最新化 (track 済みなら書かない)
+    hook_stub_refresh "$REPO" "$HOOK" "$RUNNER" "$STUB_CONTENT" "commit-msg"
+    exit 0
+  elif hook_stub_is_tracked "$REPO" "$HOOK"; then
+    # repo が track している自前の commit-msg (= 本 script の stub でない) → 退避も上書きもしない
+    echo "WARNING: $HOOK is a git-tracked commit-msg that is not our stub; leaving it alone" >&2
+    echo "  (to use this gate, have that hook call: $RUNNER)" >&2
     exit 0
   else
-    # 他の commit-msg hook が既にある → backup
+    # 他の commit-msg が既にある → backup
     TS="$(date +%Y%m%d-%H%M%S)"
     BAK="$HOOK.bak-$TS"
     mv "$HOOK" "$BAK"
@@ -97,6 +97,4 @@ if [ -f "$HOOK" ]; then
   fi
 fi
 
-printf '%s' "$STUB_CONTENT" > "$HOOK"
-chmod +x "$HOOK"
-echo "commit-msg stub installed: $HOOK"
+hook_stub_write "$REPO" "$HOOK" "$STUB_CONTENT" "commit-msg"
