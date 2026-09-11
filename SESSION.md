@@ -4,6 +4,7 @@
 
 ## 直近 (2026-09-05〜09-12) の索引 — 本文は SESSION-archive.md、 規則は各正本
 
+- **09-12 Claude for Mac の通知音**: [`conventions/macos-claude-app-notifications.md`](conventions/macos-claude-app-notifications.md) (5 層の切り分け / 完了通知はアプリ仕様で無音 / 集中モードは unified log で状態を読む / 共有 + 使わない端末で集中モードが終わらない / macOS 26 の設定画面の読み方 / UI 案内は実画面を見てから) + 診断 [`scripts/claude-app-notify-diagnose.py`](scripts/claude-app-notify-diagnose.py) (read-only、 `--selftest`)。
 - **09-12 並列 session の同じ hook / stash の空振り / 同時 fetch**: [`hook-authoring.md#cross-session-hook-concurrency`](conventions/hook-authoring.md#cross-session-hook-concurrency) (§13、 資源単位の lock・skip を出す・古い lock の除去・test で窓を開ける) + [`multi-session-coordination.md#stash-push-noop`](conventions/multi-session-coordination.md#stash-push-noop) / [`#concurrent-fetch-ref-lock`](conventions/multi-session-coordination.md#concurrent-fetch-ref-lock)。 参照実装 = [`scripts/repo-sync-sweep.sh`](scripts/repo-sync-sweep.sh) (個人層の session 開始 hook と一括 pull の engine、 test 同梱)。
 
 - **09-12 発話を見る Stop hook の校正**: [`hook-authoring.md#text-pattern-stop-hook`](conventions/hook-authoring.md#text-pattern-stop-hook) (過去の最終発話で校正・引用の例示を除く・block は 1 回) + [`scripts/calibrate-final-message-pattern.py`](scripts/calibrate-final-message-pattern.py) / 共通部品 [`scripts/lib/transcript_turns.py`](scripts/lib/transcript_turns.py)。 §9.1 に hot-reload の実測 (desktop 2.1.266 で mid-session に足した Stop hook が同じ session で発火)。

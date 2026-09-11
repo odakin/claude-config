@@ -39,6 +39,7 @@
 - **[ci-local-repro.sh](ci-local-repro.sh)** — Linux CI だけで落ちる command を commit ごとに手元で再現する (使い捨て clone × native/GNU userland × 空の HOME の行列)
 - **[ci-local-repro.test.sh](ci-local-repro.test.sh)** — ci-local-repro.sh の fixture test (commit 行列の rc・空 HOME・元 repo 無変更・hook 非複製・使い方の誤り・GNU shim)
 - **[ci-red-streak.py](ci-red-streak.py)** — GitHub Actions の red streak を起点まで遡る (現状・最後の green・最初の red run・失敗行・原因 commit)。
+- **[claude-app-notify-diagnose.py](claude-app-notify-diagnose.py)** — Claude for Mac の通知が鳴らない・来ない原因を層ごとに read-only 診断する (conventions/macos-claude-app-notifications.md)。
 - **[claude-session-whoami.py](claude-session-whoami.py)** — session の host / surface (desktop|CLI) / account を機械同定する probe。
 - **[clipboard-cleaner.py](clipboard-cleaner.py)** — クリップボード一発整形 CLI（PDF コピーの段落内改行除去 + pbcopy 書き戻しで RTF 書式除去、明示発火のみ・常駐なし、--selftest 内蔵、hammerspoon ⌃⌥⌘V から呼ばれる、conventions/clipboard-cleaner.md）
 - **[close-pdf-form-boxes.py](close-pdf-form-boxes.py)** — Excel→PDF 出力で落ちたフォームの枠罫線を検出して閉じる。
