@@ -779,13 +779,11 @@ def selftest() -> int:
     rows = parse_repos_md(md)
     ck("repo 一覧: dir と最終列を読む (見出し行は対象外)",
        [d for d, _ in rows][:2] == ["alpha", "beta"] and dict(rows)["local"] == "**remote なし**")
-    # ssh remote の user 部は分けて書く (email 形の literal は公開 repo の leak 検出に掛かる)
-    ssh = "git" + "@"
     ck("origin URL → owner/name (ssh / https / .git / 末尾 / / GitHub 以外は None)",
-       github_name(ssh + "github.com:o/a.git") == "o/a"
+       github_name("git@github.com:o/a.git") == "o/a"
        and github_name("https://github.com/o/a") == "o/a"
        and github_name("https://github.com/o/a.git/") == "o/a"
-       and github_name(ssh + "gitlab.com:o/a.git") is None)
+       and github_name("git@gitlab.com:o/a.git") is None)
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
 
@@ -795,10 +793,10 @@ def selftest() -> int:
                 subprocess.run(["git", "-C", str(root / name), "remote", "add", "origin", url],
                                check=True)
 
-        mk("alpha", ssh + "github.com:o/alpha.git")
+        mk("alpha", "git@github.com:o/alpha.git")
         mk("beta", "https://github.com/other/beta")
         mk("plain")
-        mk("lab", ssh + "gitlab.com:o/lab.git")
+        mk("lab", "git@gitlab.com:o/lab.git")
         mk("alpha-mirror", "https://github.com/o/alpha.git")
         tg, un = derive_from_repos_md(md, root)
         ck("repo 一覧 → owner/name (同じ remote は 1 回)", tg == ["o/alpha", "other/beta"])
