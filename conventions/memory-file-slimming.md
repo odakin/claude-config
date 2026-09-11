@@ -178,7 +178,7 @@ CLAUDE.md 95 → 35 KB)。
 (276 KB cron 全滅も 2026-09-01 の fleet 肥大も、 発見の trigger は owner の手動質問だった)。
 縮退したら同じ流れで、 auto-load file のサイズを定期実測して**閾値超過だけを surface する
 検出器**を dashboard 等の常設面に置く (finding は本 doc へ routing = 手順まで導線を繋ぐ)。
-閾値設計の 2 点:
+閾値の置き方:
 
 - **warn は「達成可能な健康 floor」 の上に置く**。 縮退直後の実測 max (= それ以上薄くすると
   義務を落とす床) より下に warn を置くと慢性点灯になり、 「healthy = silent」 が壊れて
@@ -189,8 +189,13 @@ CLAUDE.md 95 → 35 KB)。
   出荷 gate に含める。
 - archive (= 退避先) は閾値の対象外にする (= 入れると縮退が「移すほど焼ける」 self-defeating、
   [#archive-detector-exemption](#archive-detector-exemption) の閾値版)。
+- **byte の閾値は auto-load されない file の再肥大を拾わない**。 SESSION.md は resume のときに読まれるだけで
+  auto-load 税が小さく、 2026-09-11 の claude-config の SESSION.md は 506 行でも 91 KB (per-file warn 150 KB の
+  遥か下) のまま誰も気付かなかった。 縮退した file には**行数の閾値**も登録し (warn = 目安 + slack、 同じく実 fleet で
+  silent を確認)、 **追記した本人に届く面** (= commit 時の warn) にも置く。 実例 = claude-config の
+  `.claude/pre-commit-extra.sh` 検査 5 (100 行)。
 
-(閾値 2 点は任意の常設検出器に通じる一般形だが、 実例 1 件のため本 doc 留め —
+(以上の置き方は任意の常設検出器に通じる一般形だが、 実例 1 件のため本 doc 留め —
 2 例目で上層 doc への hoist を判断する。)
 
 ## 実測 evidence (2026-07-29/30)
