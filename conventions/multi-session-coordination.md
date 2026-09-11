@@ -69,6 +69,10 @@ Read it again before attempting to write it.
   - **検査 = 生成物を commit する前に `git diff <生成物>` を読み、 自分が変えた source 由来の行だけかを確認する** (= 生成物は「再生成したから正しい」 ではない。 1 行ずつ読める規模でないなら、 先に相手の作業が落ち着くまで待つか、 source 側の commit だけ先に出す)。
   - 実例 2026-09-10: 層1 convention に 1 節足して index 生成 script を `--write` した際、 同 repo に別 session の未 commit 変更 (= `setup.sh` +24 行 + 未 tracked script 3 本) が居た。 生成物の diff を読んで自分の 1 行だけと確認できたので実害は無かったが、 相手が同じ生成物の source を触っていれば黙って混ざっていた。
 
+- <a id="autostash-foreign-wip"></a>**相手の未 commit 変更が居る tree で、 交差を見ずに `pull --rebase --autostash` しない** (2026-09-11 追加) — autostash は相手の未 commit 変更ごと stash して pop する。 upstream の新 commit が**相手の触っている file** を変えていると、 pop の conflict は相手の file の中で起きる (作業中の file に conflict marker が入り、 index も unmerged になる)。 自分の commit を `git commit -- <path>` で済ませていても、 push の前の pull で相手を巻き込む。
+  - **検査 = `git fetch` の後、 `git diff --name-only HEAD..@{u}` (upstream が変えた file) と `git diff --name-only` (tree の未 commit 変更) の交差を見る。** 空なら pop は conflict しない。 空でなければ pull しない: 相手に通知して、 相手の commit を待ってから pull する。 相手の file の conflict を自分で解くのは最後の手段で、 解いたら内容を相手に通知し、 autostash の stash は drop しない (相手の元の作業の控え)。
+  - 実例 2026-09-11: guard の書き損じ ([`shell-env.md#guard-condition-and-chain`](shell-env.md#guard-condition-and-chain)) で自分の commit が走らないまま、 同じ行の `pull --rebase --autostash` だけが走った。 upstream の 3 commit が、 別 session が作業中の hook 規約を変えていて、 pop が front matter の summary 1 行とその生成物 (conventions の README) で conflict した。 両側の追記を合わせた 1 行に解き、 index を reset して相手の変更を unstaged に戻し、 stash は残して相手 session に通知した。
+
   - **原稿と PDF の並行作業**: 主ファイルと最終ビルドは同じ担当が書き、独立な追加内容は別の include file に分ける。各担当が自分の範囲を進められるようにし、追加依頼のたびに相手の作業全体を止めない。ビルド終了前の PDF・log を監査結果として確定せず、最終 source・log・PDF の組を確認してから生成レポートを作る。hash や mtime は観測した組の識別であり、それだけでは同一ビルドの証明にならない。
   - **古い研究ブランチからの統合**: 最新の受入先の定義・訂正・差分を先に読み、独立な成果と共有ファイルへの必要な変更を区別する。成果の輸送のために古い本文を丸ごと戻さない。作業場所や担当に関する最新の owner 指示は引継ぎ記録へ反映し、古い委譲時の制約を現在の指示として再発火させない。
 
