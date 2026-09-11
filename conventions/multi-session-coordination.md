@@ -417,6 +417,8 @@ honest な天井: **「起動した」 を *live 親に自動 push* する経路
 
 **user 判断待ちの plan も同型に眠る**: blocked-on-user は「正しく idle」 に見えるが、 **その質問自体が carrier を持たなければ二度と user に提示されない** (= 「OK 待ち」 のまま数ヶ月、 誰も聞き直さない)。 → 「disposition を取る」 という TODO (deadline つき) を mint するか、 複数溜まっているなら 1 本の棚卸し TODO に束ねる。
 
+**人に渡す手順も同型**: 「あとで 1 回やって」 を chat に書いて終えると、 その手順は人の記憶という push されない場所に置かれる → [`convention-design-principles.md#human-memory-not-a-carrier`](../docs/convention-design-principles.md#human-memory-not-a-carrier)。
+
 **限界の宣言**: mint の瞬間の recall (= 「green-light が出た、 carrier を作らねば」 と気づくこと) は規律依存で残る。 plan file の散文から green-light を機械検出する案は棄却 (= 表現が freeform で fragile、 検出器肥大)。 構造的利得は「ambient (push ゼロ) → deadline-horizon pipeline (毎 session push + 強制 disposition)」 への移動であり、 保証ではない — 床は human-steering。
 
 ## <a id="worktree-vs-shared-checkout"></a>8. worktree (隔離) か shared checkout (ローカル) か — 並列変更の隔離 vs live 反映

@@ -189,6 +189,10 @@ sections:
     legacy: "8.12c"
     level: 3
     title: "8.12c 複数段 workflow は中間 command でなく完了境界の状態を gate する"
+  - id: human-memory-not-a-carrier
+    legacy: "8.12d"
+    level: 3
+    title: "8.12d 人の記憶も carrier ではない — 「あとで 1 回やって」 を人に渡さない"
   - id: conditional-firing-visibility
     legacy: "8.13"
     level: 3

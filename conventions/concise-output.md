@@ -41,6 +41,9 @@ summary: 常に簡潔を旨とする — 応答は結論先行で支持詳細を
 5. **手順を出す前に、それが既に済んでいないか状態を引く** — 自分の to-do を「残っている」 と
    言わない。 mtime・API の timestamp・ledger など**機械で見える証跡**を先に確認する。
 6. **操作がゼロなら「操作は不要です」 と明記** (= 無いことを explicit に。 探させない)。
+7. **あとでやる手順を chat に置いて終えない** — 「別マシンで 1 回」 「次に〜するとき」 は人の記憶に頼る。
+   自動適用に載っているか確かめ、 無ければ載せるか、 条件付きで出続ける carrier に載せてから、
+   その carrier を名指しする ([`convention-design-principles.md#human-memory-not-a-carrier`](../docs/convention-design-principles.md#human-memory-not-a-carrier))。
 
 判断を仰ぐときも同じ: 選択肢を並べて終わらず、 **推奨を 1 つ名指し**してから他を出す。
 
