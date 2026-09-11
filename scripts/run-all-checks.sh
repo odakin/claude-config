@@ -20,7 +20,9 @@
 #
 # 失敗の自己申告: set -e の test で bare `[ ... ]` / `grep -q` を assertion にするなら
 # scripts/lib/test-err-trap.sh を source して、 落ちた行と command を stderr に出す
-# (無言の exit 1 だと CI log には下の "✗ test: <name>" しか残らない)。
+# (無言の exit 1 だと CI log には下の "✗ test: <name>" しか残らない)。 BSD/GNU 差は
+# push 前に scripts/with-gnu-userland.sh で手元再現できる。
+# 正本 = conventions/hook-authoring.md#set-e-test-failure-report
 #
 # bash 3.2 compatible。 exit 1 = いずれかの検査が fail。
 set -u

@@ -1,12 +1,12 @@
 <!-- doc-meta
-when: Claude Code hook を作成・配信・debug するとき
+when: Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき
 category: harness-core
-summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)**)
+summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)**)
 -->
 # Claude Code hooks の作成 + 配信規律
 <!-- slug index: hook-authoring.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
 
-> 適用対象: `claude-config/hooks/` (= layer 1) + 個人層の `<personal-layer>/hooks/` (= layer 3) の hook script 全般。 hook 作成・配信・audit の **3 種類の構造的 trap** を扱う。
+> 適用対象: `claude-config/hooks/` (= layer 1) + 個人層の `<personal-layer>/hooks/` (= layer 3) の hook script 全般。 hook 作成・配信・audit の **3 種類の構造的 trap** を扱う。 §0 の補足群 (shebang / set・BSD/GNU 差・ERR trap・test の失敗自己申告) は hook に限らず repo 内の bash script / `.test.sh` 全般に適用する。
 >
 > 関連 hook: `claude-config/hooks/*.sh` (= 既存 8 hooks)、 hook 配信機構の正本は `claude-config/setup.sh` Step 2 (= `install_hooks()` 関数)
 
@@ -107,6 +107,36 @@ commit gate (pre-commit) が staged file を舐めて検査する形は定石だ
 - **「読めない」 は検査結果ではなく検査不能** — 例外を捕まえて専用の状態 (`READ_SKIP` 等) で返し、 **1 行報告して続行**する (= 黙って通さない / 落ちもしない。 [`convention-design-principles.md#silent-probe-false-healthy`](../docs/convention-design-principles.md#silent-probe-false-healthy) の pattern 3 と同じ形)
 - **それを corruption に数えない** — 他 session の書き込み途中で自分の commit を止めるのは gate の役目ではない
 - 呼び出し側で [`multi-session-coordination.md#staging-window-race`](multi-session-coordination.md#staging-window-race) の `git commit -- <path>` を使うと **hook が見る範囲が自分の path だけになり**、 この巻き込み自体が起きない (= 上流での design-out)
+
+### <a id="set-e-test-failure-report"></a>§0 補足 5: `set -e` の test は落ちた行を自己申告させる — 無言の exit 1 は CI log に test 名しか残さない
+
+**罠**: `set -euo pipefail` の test で bare な `[ ... ]` / `grep -q` を assertion にすると、 落ちた瞬間に**何も言わずに exit 1** する。 集計 runner (`scripts/run-all-checks.sh`) は test 名しか出さないので、 CI log には `✗ test: <name>` だけが残り、 どの assertion が落ちたか読めない。
+
+**実例 (2026-09-01〜09-11)**: `setup-codex.test.sh` に足された BSD 専用の `[ "$(stat -f '%Lp' F)" = "600" ]` が ubuntu runner で落ちた (GNU では `-f` = filesystem 照会で、 `%Lp` は file 名として扱われる)。 red は初回の push から CI に出ていたが、 main の checks は **push 225 回連続で red** のまま 10 日続いた。 macOS では通るので owner の手元は緑 (= §0 補足 2 / 3 と同じく CI だけが露出させる class)、 しかも log に行が出ないので原因の特定が遅れた。
+
+**規律**:
+
+- bare assertion を書く `set -e` の test は [`scripts/lib/test-err-trap.sh`](../scripts/lib/test-err-trap.sh) を source する (`set -euo pipefail` の後、 最初の assertion より前)。 落ちると stderr に 1 行 — `<test>: FAIL at line <N>: <command の 1 行目>`、 関数の中なら `FAIL at line <呼び出し行> (in run_setup): <command>`。 exit status は変えない。 挙動は `test-err-trap.test.sh` が CI の bash で固定している
+- 自前の `assert` 関数や PASS/FAIL 集計で失敗を名指す test (hooks/*.test.sh の大半) は対象外 — 既に自己申告している
+- 期待どおりの失敗は `if cmd; then echo "expected ..." >&2; exit 1; fi` の形で書く (if 条件の中は trap の対象外なので誤報しない)
+- **BSD/GNU 差は push 前に手元で潰す**: [`scripts/with-gnu-userland.sh`](../scripts/with-gnu-userland.sh) `bash scripts/<name>.test.sh` (`--clean-env` で HOME を空にし、 git の system config も読ませない)。 `--clean-env` は pip `--user` の site-packages も隠すので、 python の selftest を含む一式ではなく shell test 単体に使う。 Homebrew の GNU 版 (`<prefix>/opt/<pkg>/libexec/gnubin`) だけを PATH 先頭に差し、 python3 などは動かさない ([`debugging-discipline.md#one-variable-per-arm`](debugging-discipline.md#one-variable-per-arm))。 `uname` で BSD/GNU を選ぶ script は macOS 上では BSD 側を選ぶので、 この wrapper では GNU 側の分岐を試せない — そこは CI が唯一の検証
+- **test で作る git repo は branch 名を明示する** (`git init -b main`、 または clone 直後に `git symbolic-ref HEAD refs/heads/main`)。 macOS の Apple Git (2.39.5 で実測) は system config で `init.defaultBranch=main` を持ち、 HOME を空にしても `main` になるが、 CI の ubuntu の git は `master` になる。 手元で CI 側の既定を再現するなら `GIT_CONFIG_NOSYSTEM=1` (`--clean-env` は付ける)。 実例 (2026-09-11): `codex-hooks.test.sh` の `git branch --set-upstream-to=origin/main main` が CI でだけ落ちて main が 13 push 連続 red — 本 helper が CI log で初めて名指した失敗 (`codex-hooks.test.sh: FAIL at line 136: ...`)。 `--clean-env` は当初 system config を読んでいたので、 この test を手元で緑と誤判定していた
+
+**ERR trap の実測** (bash 3.2.57 = macOS の `/bin/bash`、 5.3.9 = Homebrew。 CI の 5.2.21 では self-test が通ることを確認):
+
+| 状況 | bash 3.2 | bash 5.x | helper の扱い |
+|---|---|---|---|
+| 関数の中で失敗 (`set -E` なし) | trap が動かず無言で exit | 同左 | `set -E` を立てる |
+| `[ "$(cmd)" = x ]` の cmd が失敗 (`set -E` あり) | command により 1〜2 回 | subshell 側と外側で 2 回 | `BASH_SUBSHELL > 0` では出さない |
+| 関数の中の失敗の `$LINENO` | **関数定義の行** | 失敗した行 | 行は出さず、 呼び出し行 (`BASH_LINENO`) と関数名を出す |
+| top-level の `if` / `while` / `for` の本体で失敗 | その複合 command の末尾行 (`for` は先頭行) | 失敗した行 | command 文字列で特定できる |
+| 複数行の command (継続行・heredoc) | 末尾の行 | 先頭の行 | 1 行目だけ出して ` ...` を付ける |
+| top-level の `( ... )` の中で失敗 | **親の trap が動かず無言** | 親で出る | 既知の穴 (該当する test は無い) |
+| if 条件・`&&` `\|\|`・`!` の中 (そこから呼んだ関数の中も) | 動かない | 動かない | — (期待どおりの失敗を誤報しない) |
+| pipeline の失敗 (`pipefail`) | `$BASH_COMMAND` は最後の要素 | 同左 | 行番号は正しい |
+| trap の後の exit status | 元の値のまま | 同左 | — |
+
+**一般則**: 集計する側が名前しか出さないなら、 **失敗の中身を名指すのは test 自身の責務** (= `run-all-checks.sh` header の「SKIP 理由は test 自身が出力する」 と同じ契約の失敗版)。 無言の失敗は「どこかが赤い」 以上の情報を運ばないので、 直す人が原因を掘り直すことになる。
 
 ---
 

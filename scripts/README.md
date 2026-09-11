@@ -107,6 +107,8 @@
 - **[verification-campaign-report.py](verification-campaign-report.py)** — [forwarder → ai-collaboration/scripts/verification-campaign-report.py] verify-to-learn campaign の集計: ledger.yaml (3 状態 / tier / readings) + git 由来の所要・entries per commit + efficacy proxy (受領側記入 novel_to_requester) を results.md の AUTO block に焼き、👁 未了 ite
 - **[verify-form-guidance.py](verify-form-guidance.py)** — 官製様式の「記入要領 (赤字/青字)」 が提出物に残置していないか検出。
 - **[verify-prototype-feedback.py](verify-prototype-feedback.py)** — Verify a prototype-feedback record and its local packet.
+- **[with-gnu-userland.sh](with-gnu-userland.sh)** — macOS で Homebrew の GNU coreutils / sed / grep / findutils を PATH 先頭に差して command を走らせる (CI の ubuntu と同じ BSD/GNU 差を push 前に再現)
+- **[with-gnu-userland.test.sh](with-gnu-userland.test.sh)** — with-gnu-userland.sh の self-test (Homebrew の GNU userland が無い環境 = CI の ubuntu は SKIP)
 - **[xlsx-to-pdf.sh](xlsx-to-pdf.sh)** — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
 
 ## lib/ — sourceable helper 群

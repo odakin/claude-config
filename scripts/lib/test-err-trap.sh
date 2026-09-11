@@ -2,13 +2,9 @@
 # test-err-trap.sh — set -e の bash test で落ちた assertion の行とコマンドを stderr に出す ERR trap (sourceable lib)
 #
 # 正本: claude-config/scripts/lib/test-err-trap.sh
+# 規約: conventions/hook-authoring.md#set-e-test-failure-report (いつ使うか・経緯・ERR trap の bash 3.2 / 5 実測表)
 # 呼び元: bare `[ ... ]` / `grep -q` を assertion にする set -euo pipefail の test 群
 #         (`grep -l test-err-trap.sh` で列挙)。 自身の検査 = test-err-trap.test.sh
-#
-# 背景: set -e の test は assertion が落ちると無言で exit 1 し、 CI log には
-#   run-all-checks.sh の "✗ test: <name>" しか残らない。 2026-09-01〜09-11 に main の
-#   checks が push 225 回連続で red だった原因は setup-codex.test.sh の BSD 専用
-#   `stat -f '%Lp'` 1 行だったが、 log に行が出ないため特定が遅れた。
 #
 # 使い方 (set -euo pipefail の後、 最初の assertion より前。 caller の shell で set -E が有効になる):
 #   . "$SCRIPT_DIR/lib/test-err-trap.sh"

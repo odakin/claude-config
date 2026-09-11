@@ -28,6 +28,16 @@ Codex の自己同定とprovenance整備は、技術契約・実装所有表・�
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-11 — set -e test の失敗自己申告 + GNU userland の手元再現
+
+main の checks が push 225 回連続で red (09-01〜09-11) だったのに、 原因の行が log に出なかった件の整備。 規約の正本 = [`hook-authoring.md#set-e-test-failure-report`](conventions/hook-authoring.md#set-e-test-failure-report) (いつ使うか + ERR trap の bash 3.2 / 5 実測表)、 helper = [`scripts/lib/test-err-trap.sh`](scripts/lib/test-err-trap.sh) (set -e の bare-assertion test 5 本が source)、 手元の GNU 実行 = [`scripts/with-gnu-userland.sh`](scripts/with-gnu-userland.sh)、 比較実験の交絡 = [`debugging-discipline.md#one-variable-per-arm`](conventions/debugging-discipline.md#one-variable-per-arm)。
+
+helper の初の実戦: 同日 12:08Z (8f17c20) から main が再び red になり、 CI log に `codex-hooks.test.sh: FAIL at line 136` と出た。 原因は CI の git の既定 branch が `master` で、 test が `main` を仮定していたこと (Apple Git は system config で `main`)。 test の branch 名を明示して修正し、 `with-gnu-userland.sh --clean-env` に `GIT_CONFIG_NOSYSTEM=1` を足した (規約の同節に追記)。
+
+Open:
+- **main の CI red を人に届ける経路が無い** — red は初回の push から CI に出ていたのに 10 日間誰も見なかった。 owner の dashboard (`odakin-prefs` の `security-dashboard.py`) が見るのは Semgrep workflow の run だけ。 surfacer は別 task に切り出した。
+- **Claude desktop session の commit trailer で model が unknown になった** (2d5cc14 / session f7ca7877) — `~/.claude/state/session-provenance/` にこの session の cache が無かった (他の 2 session 分はある)。 desktop の起動時入力に model が無いのか、 cache を書く hook が走っていないのかは未切り分け (仕様と検証境界の正本 = [provenance](codex/PARITY.md#git-session-provenance))。
+
 ## 2026-09-11 — Garoon workflow write の一般化
 
 Garoon の施設予約を実申請した経験から、read 用 cookie script と workflow write の射程を分離した。汎用機構の正本は [`garoon.md#garoon-workflow-write`](conventions/garoon.md#garoon-workflow-write): 画面外の値 SoT → 承認済み同 form 再利用 → 内容/経路/確認の3段読戻し → owner 明示 OK → 送信一覧で申請番号・状態・処理者検証。操作列の汎用部品は既存 [`scripts/lib/web_driver.py`](scripts/lib/web_driver.py) を再利用し、組織固有の field 名・値・申請 ID は project/private 層に残した。

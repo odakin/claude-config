@@ -24,6 +24,9 @@ sections:
   - id: gate-hook-unreadable-input
     level: 3
     title: "§0 補足 4: gate hook は「読めない入力」 で死んではいけない — 1 file の異常が repo 全体の commit を止める"
+  - id: set-e-test-failure-report
+    level: 3
+    title: "§0 補足 5: `set -e` の test は落ちた行を自己申告させる — 無言の exit 1 は CI log に test 名しか残さない"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2
