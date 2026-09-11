@@ -1,5 +1,9 @@
 # SESSION — claude-config
 
+## Current — CI red streak forensics の層1化 (2026-09-11)
+
+main の `checks` が 07866f1 (2026-09-01) から push 225 回連続で red だった件 (原因 = test の BSD 専用 `stat -f '%Lp'`、 修正 bbc1b62、 失敗行の自己申告化 2d5cc14) から、 手順と道具を上げた。 手順の正本 = [`debugging-discipline.md#ci-red-streak-forensics`](conventions/debugging-discipline.md#ci-red-streak-forensics)。 道具 = [`scripts/ci-red-streak.py`](scripts/ci-red-streak.py) (run 履歴から streak の起点・失敗行・pickaxe の導入 commit を出す、 `--brief` は red のときだけ 1 行) と [`scripts/ci-local-repro.sh`](scripts/ci-local-repro.sh) (使い捨て clone × native/GNU userland × 空 HOME の行列)。 周辺の正本: BSD/GNU 分岐の実例 2 と helper の出力検証化 = [`hook-authoring.md#substitution-fallback-stdout-mixing`](conventions/hook-authoring.md#substitution-fallback-stdout-mixing)、 zsh の `"$var:…"` 修飾子 = [`shell-env.md#claude-issued-shell-commands`](conventions/shell-env.md#claude-issued-shell-commands) の 3 件目、 spec の state 主張は snapshot・root と task の食い違い = [`multi-session-coordination.md#receiver-premise-snapshot`](conventions/multi-session-coordination.md#receiver-premise-snapshot)、 完了報告に CI の状態 = [`CONVENTIONS.md#completion-git-gate`](CONVENTIONS.md#completion-git-gate) の 6、 sandbox に無関係な task が届いたとき = ai-collaboration の [`cold-eyes-isolation.md#sealed-sandbox`](../ai-collaboration/conventions/cold-eyes-isolation.md#sealed-sandbox) の 8。 同日の 2 本目の red streak (8f17c20 から、 git の既定 branch 名) と、 `set -e` test の自己申告・GNU userland wrapper は、 並行 session の下の entry「2026-09-11 — set -e test の失敗自己申告 + GNU userland の手元再現」 と 2f242c6 / 4ffec7f が正本 (本 entry の doc はそこへ link し、 重複させない)。 `ci-local-repro.sh` の GNU 側は同 entry の `with-gnu-userland.sh` を通す。 同 entry の Open「main の CI red を人に届ける経路が無い」 の reader には `ci-red-streak.py --brief` (red のときだけ 1 行、 exit 1) が使える。 配線は未決 (owner 判断)。
+
 ## Current — external prototype feedback packet (2026-09-11)
 
 スクリーンショット・QR・一時URLから外部プロトタイプを試用して返却文面を作る一般手順は

@@ -75,6 +75,8 @@ case "$VAL" in ''|*[!0-9]*) VAL=0 ;; esac
 
 **一般則**: 出力を後段で使う fallback chain は、 「前段が失敗した」 の判定を **exit code でなく出力の形 (数値・非空・pattern) の検証**で行う。 exit code 分岐が安全なのは「失敗時に stdout が確実に空」 と分かっている command のみ — 他人の実装 (特に GNU/BSD 両生類の coreutils) にその保証を仮定しない。 適用実例: `hooks/stale-read-nudge.sh` (cache TTL) / `hooks/git-state-nudge.sh` (marker mtime ×2)。
 
+**実例 2 (2026-09-11、 test の helper)**: 225 push 連続 red の原因 (`stat -f '%Lp'` の assertion、 経緯は [§0 補足 5](#set-e-test-failure-report)) を直した bbc1b62 の helper は `if stat -f '%Lp' F >/dev/null 2>&1; then stat -f '%Lp' F; else stat -c '%a' F; fi` = **exit code 分岐**だった。 GNU 側が exit 1 になるのは `%Lp` という名前の file が cwd に無いからにすぎず、 在れば GNU でも exit 0 で FS 情報を返す (GNU coreutils 9.10 で実測。 `ci-local-repro.sh --userland both -- sh -c 'touch %Lp && bash scripts/setup-codex.test.sh'` で GNU 側だけが落ちた)。 本節の一般則どおり、 GNU 形を先に試して出力が mode の形 (3-4 桁の 8 進) でなければ BSD 形に落ちる分岐に直した。 CI の遡り方 = [`debugging-discipline.md#ci-red-streak-forensics`](debugging-discipline.md#ci-red-streak-forensics)。
+
 **兄弟形 = pipe 越しの成否判定** (同 kernel「見かけの exit code を信用しない」): `if cmd | sed 's/^/  /'; then` は **sed の exit code** を test している — cmd が失敗しても sed が成功すれば偽 success。 表示整形の pipe を挟むなら判定は `{ cmd 2>&1 | sed 's/^/  /'; exit "${PIPESTATUS[0]}"; }` の subshell 形で **PIPESTATUS[0]** に anchor する (`set -o pipefail` は「どれかが失敗した」 しか言えず「どれが」 を区別しない点に注意)。 実例: setup.sh の git-crypt unlock 判定が sed の exit code を見て失敗を success 計上していた (2026-07-10 修正)。
 
 ### <a id="err-trap-inline-conditional-substitution"></a>§0 補足 3: `trap 'exit 0' ERR` × 条件付き inline 置換 = 値が空の環境でだけ hook が silent 死

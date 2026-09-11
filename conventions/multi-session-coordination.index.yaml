@@ -42,6 +42,9 @@ sections:
   - id: receiver-side-recognition
     level: 3
     title: "受け取った側 = 「自分が worker か」 の判定 (2026-07-07 試験 rule)"
+  - id: receiver-premise-snapshot
+    level: 3
+    title: "受け取った側の着手前確認 — spec の state 主張は起票時点の snapshot、 root が task と食い違ったら表に出す (2026-09-11)"
   - id: green-light-carrier
     level: 3
     title: "green-light は同 turn で「運搬体 (carrier)」 を持たねばならない — 「別 session 待ち」 は carrier ではない"

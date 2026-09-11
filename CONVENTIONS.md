@@ -201,6 +201,7 @@ git の状態管理は 1 本の `PostToolUse` hook で機械的に支援する: 
 3. `dirty` / `ahead` / `behind` / divergence を区別し、通常経路ではすべて解消する。
 4. local `HEAD` と push 先 remote branch head が同じ object id である。
 5. commit が許可された作業では、`git add <明示 path> && git commit ... && git push` を**同じ command chain**に置く。commit 成功後の push を「次の tool call」に残さない。
+6. repo に CI があるなら、push した head の run の結果を照会する (`gh run list --branch <branch> --limit 3` 等)。完了報告の時点で終わっていなければ「CI 未確認」と書き、red なら自分の変更で red になったのか、元から red だったのかを分けて報告に明記する。元から red の CI に黙って push を積まない (2026-09-11: main の `checks` が push 225 回連続 red のまま、各 session の完了 gate を通過し続けた。遡り方 = [`conventions/debugging-discipline.md#ci-red-streak-forensics`](conventions/debugging-discipline.md#ci-red-streak-forensics))。
 
 **commit / push しない正当な例外:** (a) read-only の質問・診断・review で repo を変更していない、(b) user が明示的に commit / push を止めた、または external write の authorization がまだない、(c) remote / upstream が存在しない、(d) dirty が着手前からある無関係な user / 別 session の変更だけで、自分の変更は残していない、(e) task が中断・blocked で partial work を意図的に引き継ぐ。この場合は完了と呼ばず、最終報告に repo、残状態、理由、次 action を明示する。例外は silent bypass ではない。
 

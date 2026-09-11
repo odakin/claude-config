@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** + **Claude が Bash tool で複数の対象を loop で走査する 1-liner を書く瞬間** (= zsh は未 quote の変数を単語分割しない、 `#claude-issued-shell-commands`) (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
+when: PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** + **Claude が Bash tool で複数の対象を loop で走査する 1-liner を書く瞬間** (= zsh は未 quote の変数を単語分割しない、 `#claude-issued-shell-commands`) + **変数の直後に `:` を書く瞬間** (= `"$c:path"` は zsh の修飾子になる) (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
 category: macos
-summary: シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール） + ユーザーに貼り付けさせるコマンドの zsh 固有罠 2 件 (= 行内 # はコメントにならない / `env VAR=~/x` は tilde 展開されず literal `~` dir が cwd 配下に生える、 どちらも bash では踏まない非対称。 framework は paste-destined-plain-text.md) + 受け手側の保険 = `.zshrc` に `setopt interactive_comments` (= 1 行で行内/行頭 # とも直るが、 提示先の環境を選べない以上 出し手の規律の代替にはならない) + Claude が発行するコマンドも zsh (= 未 quote の変数は単語分割されず、 cd 失敗後も loop が別の対象を走査して結果を返した 2026-09-11 の 2 件目で規約化。 対象の解決に失敗したら止め、 何を走査したかを印字する)
+summary: シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール） + ユーザーに貼り付けさせるコマンドの zsh 固有罠 2 件 (= 行内 # はコメントにならない / `env VAR=~/x` は tilde 展開されず literal `~` dir が cwd 配下に生える、 どちらも bash では踏まない非対称。 framework は paste-destined-plain-text.md) + 受け手側の保険 = `.zshrc` に `setopt interactive_comments` (= 1 行で行内/行頭 # とも直るが、 提示先の環境を選べない以上 出し手の規律の代替にはならない) + Claude が発行するコマンドも zsh (= 未 quote の変数は単語分割されず、 cd 失敗後も loop が別の対象を走査して結果を返した 2026-09-11 の 2 件目で規約化。 対象の解決に失敗したら止め、 何を走査したかを印字する。 3 件目 = `"$c:path"` の `:s` が置換修飾子として残りを飲み込み別の object を表示した、 `${c}:path` と書く)
 -->
 # シェル環境（Claude Code + macOS）
 
@@ -246,6 +246,9 @@ l="pre(post)"; print -r -- "${l##*\(}"   # zsh でも通る (= ( を escape)
 1. 複数語を 1 変数に入れて分割に頼らない。 zsh で分割するなら `${=var}`、 そうでなければ配列にする。 対象を列挙して走査する検査は python (`subprocess.run(["git", "-C", path, …])`) で書く。
 2. 対象を解決する段 (`cd`、 path・commit の存在) が失敗したら止める。 `cd` せず `git -C <path>` を使い、 解決できなければ `exit 1`。 結果には**何を走査したか** (repo・commit・行数) を印字し、 対象ごとの行数が同じなどの不自然さを見る。
 3. pattern を含む 1-liner は python で書く (1 件目の回避策)。
+4. 変数の直後に `:` を続けるときは `${var}:` と書く (3 件目、 下記)。
+
+**3 件目 (2026-09-11) — `"$var:…"` は zsh の修飾子になる**。 run 履歴の commit ごとに `git show "$c:scripts/x.test.sh"` (= その commit の file を表示) と書いた。 zsh は `$c` の直後の `:s…` を置換修飾子 (`:s/old/new/`、 区切り文字は `s` の次の 1 文字 = ここでは `c`) と読んで残りの文字列を飲み込み、 `git show 07866f1` (= commit 全体の diff) を実行した。 後段の grep は diff の行を拾って「行番号」 を返し、 別の commit では 0 件になった。 error は出ず、 別の対象を検査した結果がそれらしい形で返る = 2 件目と同じ mode。 zsh 5.9 の実測: `c=07866f1; print -r -- "[$c:scripts/x]"` → `[07866f1` (閉じ括弧まで消える)、 `x=v1; print -r -- "$x:a"` → cwd を前置した絶対 path、 `d=/a/b.c` で `"$d:t" "$d:h" "$d:r" "$d:e"` → `b.c` `/a` `/a/b` `c`。 bash ではどれも literal。 `"${c}:scripts/x"` と波括弧で閉じれば zsh でも literal になる。 `:` の次が修飾子の文字 (`a` `A` `c` `e` `h` `l` `q` `Q` `r` `s` `t` `u` 等) のときだけ壊れるので、 `rev:path`・`host:port`・`$remote:$branch` のどれが壊れるかは見た目では分からない。 常に波括弧で閉じる。
 
 兄弟 = 「Bash tool は bash script ではない」 の別の現れ: [`edit-intent-record.md#apply-then-record`](../../ai-collaboration/conventions/edit-intent-record.md#apply-then-record) の shell 注 (Bash tool の最上位では `set -e` が効かない、 gate を pipe の後ろに置かない、 2026-09-11)。 1 件目を記録していたので 2 件目で規約化できた (上の「記録されない残骸は trigger を持たない」 が機能した例)。
 
