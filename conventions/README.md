@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 105 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 106 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -170,6 +170,8 @@ layer 1 (public) のドメイン固有規約 105 file をカテゴリ別に列�
 
 ## Web・公開プラットフォーム (`web`)
 
+- **[academic-program-verification.md](academic-program-verification.md)** — 研究者向けの割引・無償プログラム (AI ベンダーの academic plan 等) に申請するとき + 所属確認フォームの「研究室ページ」「機関メール」 欄を埋めるとき + 審査で即時不合格になったとき
+  - ベンダーの研究者向けプログラム申請の所属確認 — 数秒で不合格は自動 gate・「手動審査へ」 は gate 通過 (#flow-shape) / 研究室ページは機関ドメイン上かつ申請名と同じ文字体系、 非英語圏は機関ドメイン上の英語ページを先に探す (#lab-page-requirements) / 手動審査の自由記述欄で役割・名前の対応・個人の公式ページを橋渡し、 字数は機械で数える (#evidence-field-bridge) / サインイン用 magic link は agent が開かず到着・失効時刻つきで user へ (#magic-link-handoff) / 回答予定日 +14d の待ち TODO (#after-submission)
 - **[android-chromium-remote-debug.md](android-chromium-remote-debug.md)** — Android 実機の Brave/Chrome を remote debug (WiFi ADB + CDP) するとき
   - Android Brave/Chrome の remote debugging (WiFi ADB + CDP、 reload 前の live state capture procedure)
 - **[google-forms-automation.md](google-forms-automation.md)** — Google Forms の自動化・prefill・回答提出を扱うとき
