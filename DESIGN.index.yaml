@@ -102,3 +102,7 @@ sections:
     legacy: "2026-05-18"
     level: 2
     title: "2026-05-18: PDF Read tool fallback hook 設計判断"
+  - id: figure-replacement-information-design
+    legacy: "2026-09-11"
+    level: 2
+    title: "2026-09-11: 既存図の情報を inventory 後に置換する"

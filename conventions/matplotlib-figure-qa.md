@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき
 category: paper
-summary: matplotlib 図の「全ラベル枠内」機械 gate (assert_texts_inside = render 済み extent を axes 枠と照合し 1 px 超過で図の生成自体を落とす)・機構 fact・射程の限界
+summary: matplotlib 図の「全ラベル枠内」機械 gate (assert_texts_inside = render 済み extent を axes 枠と照合し 1 px 超過で図の生成自体を落とす)・既存図を置換するときの情報 inventory / snapshot / actual-render layering review・機構 fact・射程の限界
 -->
 # matplotlib 図の QA — ラベルはみ出しは目視でなく機械 gate で落とす
 
@@ -65,6 +65,24 @@ def assert_texts_inside(fig, *axes, tol=2.0):
   (導入当日にも「枠内だが領域外」の残余 1 件が実際に出た。gate を過信しない)。
 - 図の外側 (caption との衝突・本文との行かぶり) は文書 layer の担当 =
   [`latex.md#pdf-line-collision-detection`](latex.md#pdf-line-collision-detection)。
+
+## <a id="figure-replacement-information-audit"></a>既存図の置換は情報 inventory → 一旦 hoist → 明示的に prune
+
+共同著者や過去の自分が作った図を描き直すとき、見た目の改善だけで置換すると、旧図が担っていた情報が黙って消える。着手前に旧図と caption から、少なくとも配置・座標と向き・時間窓・物体や検出器の範囲・重なりや因果関係・代表値と readout・記号対応・極限や適用条件を列挙する。新図の各項目に `preserved`、`translated`、`omitted by explicit author decision` のいずれかを付ける。判断不能を「不要」として落とさない。
+
+最初の比較版では、移せる情報を一度すべて新図へ載せて欠落を可視化する。その後の簡略化は、重複・混雑・本文や caption への移管を一項目ずつ判断して行う。この「一旦 hoist」は最終図を情報過多にする指示ではなく、暗黙の削除を防ぐ review 順序である。採否の判断は project の DESIGN、現行 generator と出力は project の図 source、比較表は project の review note が所有する。
+
+広い変更の直前には、generator、PDF/PNG、caption を日付と入力状態 ID を持つ snapshot に保存する。snapshot は復元用で、現行の表記・綴り・後続修正の正本にしない。どの file と figure environment だけを戻すかを書き、原稿全体を古い snapshot で上書きしない。一般の snapshot 命名は [`expensive-intermediate-artifacts.md#snapshot-artifact-naming`](expensive-intermediate-artifacts.md#snapshot-artifact-naming) に従う。
+
+artist の source と z-order が正しく見えても、最終 render では線・塗り・arrowhead・label が同色や近い色で重なって消える。変更ごとに実際の PDF または原寸 PNG を確認し、次を別々に見る。
+
+- arrow の shaft と head が背景・曲線・塗りの上で両方読めるか
+- 軸線と通常の axis arrow、tick、平均や閾値の guide が同じ役割に見えるか
+- label が指す対象と同色・同 z-order に埋もれていないか
+- 片方の panel の意味を変えたとき、panel title、軸、caption の名詞も同時に変わったか
+- caption に残した時間窓・正規化・parameter が、図で実際に計算したものと一致するか
+
+自動 bbox gate は文字の枠外だけを検出し、同色重なりや semantic な欠落を検出しない。情報 inventory と actual-render review は `assert_texts_inside` の代替でなく補完である。
 
 関連: スライド文脈の図生成 (日本語フォント・CJK PDF 罠・オリジナル模式図) は
 [`beamer-slides.md#generate-figures-not-scavenge`](beamer-slides.md#generate-figures-not-scavenge)。

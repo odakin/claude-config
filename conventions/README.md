@@ -112,7 +112,7 @@ layer 1 (public) のドメイン固有規約 104 file をカテゴリ別に列�
 - **[matplotlib-3d-illustrations.md](matplotlib-3d-illustrations.md)** — matplotlib の 3D (mplot3d) で半透明の模式イラスト (平面波・波束・濃度場などスライド/論文の概念図) を描くとき
   - 半透明 3D イラストの実測知見 — 周期構造は視線角で消える (projection averaging)・粗密は alpha でなく点密度で・疑似 volume render はスラブ合成・裾の楕円が生む「下から見てる」錯視の解消・スライド素材の透明背景
 - **[matplotlib-figure-qa.md](matplotlib-figure-qa.md)** — matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき
-  - matplotlib 図の「全ラベル枠内」機械 gate (assert_texts_inside = render 済み extent を axes 枠と照合し 1 px 超過で図の生成自体を落とす)・機構 fact・射程の限界
+  - matplotlib 図の「全ラベル枠内」機械 gate (assert_texts_inside = render 済み extent を axes 枠と照合し 1 px 超過で図の生成自体を落とす)・既存図を置換するときの情報 inventory / snapshot / actual-render layering review・機構 fact・射程の限界
 - **[overleaf-integration.md](overleaf-integration.md)** — Overleaf↔GitHub 連携 repo を設定・sync するとき
   - Overleaf↔GitHub 連携 (= canonical は Overleaf web UI の GitHub linking、 sync script 契約 〔--status が ahead/behind を出す + PROJECT_ID hardcode = ID の SoT〕、 新規連携 checklist + ID 回収 runbook、 drift 検出は scripts/check-overleaf-drift.py)
 - **[paper-audit.md](paper-audit.md)** — 論文 merger 等の構造 issue を体系 audit するとき

@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-11: 既存図の情報を inventory 後に置換する](#figure-replacement-information-design)
 - [2026-09-10/11: commit に agent/session/model/effort trailer (host/account は焼かない)](#session-provenance-trailer-design)
 - [2026-09-01: Codex integration — L1 正本 + 明示 L4 wiring + 多層検証](#codex-layered-integration)
 - [2026-09-01: AUTO-TREE の auto-load 税 縮退 (when 表示 + hooks/scripts README 移設)](#auto-tree-autoload-slim)
@@ -1239,3 +1240,9 @@ jq '.hooks.PostToolUse[] | select(.hooks[]?.command | contains("pdf-read-fallbac
 **Phase 2 (未実施、 trigger 付き)**: `conventions/multi-session-coordination.md` (委譲 / 返送 spine / cross-vendor board) と `codex/` (AGENTS / PARITY / setup-codex) は「AI 協働」 の一部だが Claude Code 固有の hook 配線と絡む。 移設 trigger = Codex Pilot A (常駐 runner の別ベンダー化) 開始時。 正本 = `ai-collaboration/DESIGN.md`。
 
 **stub の寿命**: 削除しない (= 外部 fork / 他マシンの古い clone からの literal 参照を切らない)。 forwarder は正本 clone を前提にするので、 `setup.sh` が ai-collaboration も clone するようにするかは Phase 2 で判断 (現状 = owner 全マシンに手動 clone、 無ければ明示 error)。
+
+## <a id="figure-replacement-information-design"></a>2026-09-11: 既存図の情報を inventory 後に置換する
+
+**判断**: collaborator や過去稿の図を生成図へ置き換える場合、旧図の各 semantic item を先に inventory 化し、新図へ一旦 hoist してから、混雑や重複を理由に item 単位で prune する。一般手順の正本は [`matplotlib-figure-qa.md#figure-replacement-information-audit`](conventions/matplotlib-figure-qa.md#figure-replacement-information-audit)。図の generator、parameter、caption、採否、復元 snapshot は owning project に残す。
+
+**Why**: source の artist と z-order が意図通りでも、実際の render では arrowhead が同色曲線に埋もれる。また、見た目を簡潔にする編集では旧図が運んでいた時間窓・方向・readout・記号対応が暗黙に消える。一旦 hoist は最終図を過密にする方針でなく、削除を明示判断へ変える review 順序である。bbox の機械 gate は文字の枠外だけを扱い、semantic 欠落と同色重なりには actual-render review が必要。
