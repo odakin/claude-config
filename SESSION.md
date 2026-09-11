@@ -8,6 +8,10 @@
 [`scripts/verify-prototype-feedback.py`](scripts/verify-prototype-feedback.py)が所有する。個別人物、限定URL、
 観察結果、送付状態はowning projectのprivate case recordへ残し、本SESSIONへ複製しない。
 
+## Current — paper prose gates and absolute-sign anchors (2026-09-11)
+
+論文の投稿前 gate の session から 2 点。 (1) [`scripts/check-paper-prose.py`](scripts/check-paper-prose.py) を新設: 付録が本文での初参照順に並ぶか (A1–A3 = finding、 除くのは序論の案内文の段落だけ)、 40 語超の文 (脚注は本体と別に数える)・位置語・強い語 (読む list)。 gate のたびに使い捨て script を書いていたのを置き換える。 (2) [`paper-audit.md`](conventions/paper-audit.md) の `#absolute-sign-external-anchor` / `#convention-difference-closure` / `#gate-spec-anchor-list` (`2f65574`) に機械への pointer (ai-collaboration `check-sign-anchors.py`、 `--readers` = 原稿を実行時に開く検査の数) と prose 機械を足し、 `#appendix-order-by-first-reference` に「除くのは案内文の段落だけ」 を明記した (同日の gate record が結果段落の先行参照を除外して付録順を ○ にしていた)。
+
 ## Current — deadline intake and notification locus (2026-09-11)
 
 2026-09-11 (論文の推敲 session から): 略語の検査 [`scripts/check-abbreviations.py`](scripts/check-abbreviations.py) を新設した (定義が本文で長形の初出にあること、 定義前に略語が出ないこと、 定義後に長形が戻らないこと、 「et al.」 「Ref.」 の後の文末スペース)。 規約 = [`conventions/latex.md#abbreviation-first-occurrence`](conventions/latex.md#abbreviation-first-occurrence) (投稿前 gate の list にも追加)。 最終 pass の一覧運用 = [`conventions/paper-audit.md#final-pass-open-items`](conventions/paper-audit.md#final-pass-open-items)。 分解の display・記号の置き場所・μ^{2ε} の出どころ = [`conventions/physics-notes.md#display-decomposition-and-symbol-scope`](conventions/physics-notes.md#display-decomposition-and-symbol-scope)。

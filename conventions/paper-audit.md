@@ -356,7 +356,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Pattern**: 1 文 1 行の source では、 tex の各行を文として語数を数えるだけで冗長の分布が出る。 40 語超の文はほぼ例外なく 2–3 主張を接続詞で繋いだもので、 分割しても情報は落ちない。 起源事例 (2026-09): 主張を運ぶ節 (abstract / intro / 結果節 / summary) の 40 語超 36 文を全て分割し (36 → 0、 30 語超 82 → 56)、 反復していた修飾句 (同じ限定を節内で 4 回) を各節 1 回に減らした。
 
-**How**: `$…$` を 1 token に潰して語数を数える script を回し、 長い順に読む。 分割は主張の切れ目で切り、 接続詞 (so / and / while) を period に替える。 圧縮した文は読み直して、 落ちた load-bearing 語と**その節で裁定済みの主張の型** (相対 / 予言 / 試験) が残っているかを数える (同事例: 短縮の反復で絶対文に戻った)。
+**How**: `$…$` を 1 token に潰して語数を数える script ([`check-paper-prose.py`](../scripts/check-paper-prose.py) の L = 文単位、 脚注は本体と別に数える) を回し、 長い順に読む。 分割は主張の切れ目で切り、 接続詞 (so / and / while) を period に替える。 圧縮した文は読み直して、 落ちた load-bearing 語と**その節で裁定済みの主張の型** (相対 / 予言 / 試験) が残っているかを数える (同事例: 短縮の反復で絶対文に戻った)。
 
 ## <a id="advocate-pass-after-retraction"></a>撤回を採用したら advocate pass を 1 回回す — 誤り探しの査読の反復は最小の防御可能な主張に収束する (2026-09)
 
@@ -385,7 +385,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Pattern**: 付録を足す・移す pass のたびに順序が場当たりになり、 本文で先に参照される付録が後ろに来る。 「outlook だから最後」 の例外を作ると、 その付録が実は方法の説明 (レビュー) だったとき例外の根拠が消える (2026-09-08 の研究 LaTeX project の fRG 付録 = 題は私が付けた "Outlook"、 中身は Wetterich 方程式と pole 条件の段取り)。
 
-**Rule**: 序論の案内文を除いた本文での初参照位置で並べる。 案内文も同順に書き直す。 移動は verbatim の MOVE (label 不変で cref は追従)、 位置依存の語 (previous / next appendix、 above / below) を grep 0 にする。 例外は「本当に展望しか書いていない付録」 だけで、 題でなく中身を読んで判断する。
+**Rule**: 序論の案内文を除いた本文での初参照位置で並べる。 除くのは案内文の段落だけで、 序論の他の段落 (例: 結果の要約が「derived in App. X」 と付録を指す) からの参照は数える (2026-09-11 の gate record は、 結果段落の先行参照を「規則は案内文を除く」 として除外し付録順を ○ にした = 誤適用)。 案内文も同順に書き直す。 機械 = [`check-paper-prose.py`](../scripts/check-paper-prose.py) (A1 = 初参照順と file 順の食い違い / A2 = 本文から参照されない付録 / A3 = 案内文の中の順、 除いた行は毎回印字)。 移動は verbatim の MOVE (label 不変で cref は追従)、 位置依存の語 (previous / next appendix、 above / below) を grep 0 にする。 例外は「本当に展望しか書いていない付録」 だけで、 題でなく中身を読んで判断する。
 
 **Cost**: 共著者への連絡で付録の letter が変わる → [`research-email.md#appendix-letters-unstable`](research-email.md#appendix-letters-unstable)。 diff PDF には MOVE の artifact が出る → [`latex.md#latexdiff-move-artifacts`](latex.md#latexdiff-move-artifacts)。
 
@@ -432,7 +432,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 3. **振幅 ↔ 有効作用の辞書は定義から置く**: 他の文書・別 signature の計算・数値の一致から写さない。 e^{iS} では amputated 1PI 図の和 = i × Γ⁽ⁿ⁾、 e^{−S} では = −Γ_E⁽ⁿ⁾ で、 両者は Wick の符号だけ異なる。 数値の一致から辞書を「同定」 したら、 比べた二つが同じ signature かを必ず書く (起源事例では、 Euclidean の Γ と Lorentzian の振幅の比較で出た −1 が、 signature の注記なしに Lorentzian 原稿の辞書になった)。
 4. **gate の worker は project の規約文書を前提でなく検算対象として扱う**: 規約文書に書かれた符号の同定こそ、 定義から導き直す。 起源事例で誤りを見つけたのは、 規約文書より先に辞書を白紙で導いた pass だった。
 
-**Check**: (a) 符号を持つ印字量を列挙し、 各々の外部 anchor と global-flip foil を表 (登録簿) にする。 (b) foil は**入力 (原稿) を反転して** end-to-end で当てる — parse した変数を script 内で反転する foil は parse の取り違えを見ない。 (c) 例外 (traceback) で落ちたのは歯ではない (assertion で落ちること)。 (d) 同型の不変量 = 全体規格化 (kernel-level と action-level の因子 2)、 因子 i、 Levi-Civita の向き、 D = 4 − ε と 4 − 2ε の違い。 比と恒等式に不変な量は全部同じ扱い (起源事例の repo は因子 2 でも同型の事故歴があり、 物理観測量の直接計算で決着した)。 機械 backstop = ai-collaboration の [`scripts/check-sign-anchors.py`](../../ai-collaboration/scripts/check-sign-anchors.py) (登録簿の coverage / `--run` = foil の歯を end-to-end で / `--fleet-scan` = fleet のどの検査が変換を見分けるか / `--deferrals` = 下の carrier 無し「規約差」 の ratchet)。
+**Check**: (a) 符号を持つ印字量を列挙し、 各々の外部 anchor と global-flip foil を表 (登録簿) にする。 (b) foil は**入力 (原稿) を反転して** end-to-end で当てる — parse した変数を script 内で反転する foil は parse の取り違えを見ない。 (c) 例外 (traceback) で落ちたのは歯ではない (assertion で落ちること)。 (d) 同型の不変量 = 全体規格化 (kernel-level と action-level の因子 2)、 因子 i、 Levi-Civita の向き、 D = 4 − ε と 4 − 2ε の違い。 比と恒等式に不変な量は全部同じ扱い (起源事例の repo は因子 2 でも同型の事故歴があり、 物理観測量の直接計算で決着した)。 機械 backstop = ai-collaboration の [`scripts/check-sign-anchors.py`](../../ai-collaboration/scripts/check-sign-anchors.py) (登録簿の coverage / `--run` = foil の歯を end-to-end で / `--fleet-scan` = fleet のどの検査が変換を見分けるか / `--readers` = どの検査が原稿 file をそもそも開くか / `--deferrals` = 下の carrier 無し「規約差」 の ratchet)。 (e) 「原稿を開く検査は何本か」 は実行時に数える (`--readers` = audit hook)。 source を file 名で grep すると docstring・コメントの言及まで拾って過大になる (起源事例で grep 16 本、 実行時 1 本)。
 
 ## <a id="convention-difference-closure"></a>「規約差」 は写像を書いて閉じる — 語で済ませた符号の食い違いは unverified として carrier に載せる (2026-09-11)
 
@@ -479,8 +479,8 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 - 主張の収支と強さ: [`headline-claim-budget-check`](#headline-claim-budget-check) (**係数の符号を含む**) / [`claim-strength-three-tests`](#claim-strength-three-tests) / [`uniqueness-claim-exhaustion`](#uniqueness-claim-exhaustion) / [`title-claim-check`](#title-claim-check)
 - 符号と規約: [`absolute-sign-external-anchor`](#absolute-sign-external-anchor) / [`convention-difference-closure`](#convention-difference-closure) / [`euclidean-check-in-lorentzian-paper`](#euclidean-check-in-lorentzian-paper)
-- 配置と語彙: [`statement-placement-check`](#statement-placement-check) / [`stale-framing-sweep`](#stale-framing-sweep) / [`abstract-geroch-compression`](#abstract-geroch-compression) / [`sentence-length-audit`](#sentence-length-audit) / 略語の 2 条件 = [`latex.md#abbreviation-first-occurrence`](latex.md#abbreviation-first-occurrence) (機械 = `check-abbreviations.py`)
-- 記号と付録: [`new-symbol-convention-consistency`](#new-symbol-convention-consistency) / [`notation-continuity-across-sections`](#notation-continuity-across-sections) / [`cross-check-appendix-shape`](#cross-check-appendix-shape) / [`appendix-order-by-first-reference`](#appendix-order-by-first-reference)
+- 配置と語彙: [`statement-placement-check`](#statement-placement-check) / [`stale-framing-sweep`](#stale-framing-sweep) / [`abstract-geroch-compression`](#abstract-geroch-compression) / [`sentence-length-audit`](#sentence-length-audit) (機械 = [`check-paper-prose.py`](../scripts/check-paper-prose.py) の L・位置語 P・強い語 W) / 略語の 2 条件 = [`latex.md#abbreviation-first-occurrence`](latex.md#abbreviation-first-occurrence) (機械 = `check-abbreviations.py`)
+- 記号と付録: [`new-symbol-convention-consistency`](#new-symbol-convention-consistency) / [`notation-continuity-across-sections`](#notation-continuity-across-sections) / [`cross-check-appendix-shape`](#cross-check-appendix-shape) / [`appendix-order-by-first-reference`](#appendix-order-by-first-reference) (機械 = `check-paper-prose.py` の A1–A3)
 - 文献同定: HEP 系の `refs.bib` は [`inspire-bib-audit.py`](../scripts/inspire-bib-audit.py) で title・著者・journal・volume・初頁・DOI・eprint を照合する。ローカルの説明的 texkey が INSPIRE の canonical texkey でなくても、arXiv ID、次に DOI へ fallback して SKIP と誤認しない。引用が本文の主張を実際に支えるかは別の原文確認であり、metadata PASS で代替しない。
 
 符号を持つ印字量の登録簿がある repo では、 gate record に `check-sign-anchors.py --run --deferrals` の結果 (fleet を変えた後なら `--fleet-scan` の表も) を載せる。 gate の worker には「規約文書は検算対象」 ([#absolute-sign-external-anchor](#absolute-sign-external-anchor) の Rule 4) を spec で明示する。 起源 = 2026-09 の gate spec が `headline-claim-budget-check` を含み、 中心主張の検算を worker 自身にさせたことで全体符号の誤りが出た (= 偶然だった手順を標準にする)。
