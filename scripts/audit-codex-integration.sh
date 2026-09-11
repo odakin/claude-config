@@ -231,7 +231,8 @@ for requested_repo in "${REPOS[@]}"; do
         ISSUES=$((ISSUES + 1))
       fi
     done
-  elif [ -e "$hooks_dir/pre-commit" ] && grep -q "fix-bib-unicode" "$hooks_dir/pre-commit" 2>/dev/null; then
+  elif [ -e "$hooks_dir/pre-commit" ] \
+    && grep -Eq "fix-bib-unicode|pre-commit-bib" "$hooks_dir/pre-commit" 2>/dev/null; then
     echo "OK: shared LaTeX/conflict pre-commit gate"
   else
     echo "NOTE: no managed pre-commit gate detected (this may be intentional)."

@@ -43,10 +43,28 @@ printf '%s\n' 'public-precommit-runner.sh' > "$TEST_REPO/.hooks/pre-commit"
 printf '%s\n' 'commit-msg-leak-guard-runner.sh' > "$TEST_REPO/.hooks/commit-msg"
 printf '%s\n' 'prepare-commit-msg-session.sh' > "$TEST_REPO/.hooks/prepare-commit-msg"
 
+SHARED_REPO="$TEMP_ROOT/shared-repo"
+mkdir -p "$SHARED_REPO/.hooks"
+git -C "$SHARED_REPO" init -q
+git -C "$SHARED_REPO" config core.hooksPath .hooks
+printf '%s\n' '# Agent instructions' 'Read CLAUDE.md and SESSION.md before work.' > "$SHARED_REPO/AGENTS.md"
+printf '# project instructions\n' > "$SHARED_REPO/CLAUDE.md"
+printf '# current state\n' > "$SHARED_REPO/SESSION.md"
+git -C "$SHARED_REPO" add AGENTS.md CLAUDE.md SESSION.md
+printf '%s\n' 'pre-commit-bib' > "$SHARED_REPO/.hooks/pre-commit"
+printf '%s\n' 'prepare-commit-msg-session.sh' > "$SHARED_REPO/.hooks/prepare-commit-msg"
+
 HOME="$TEST_HOME" \
 CODEX_USER_DIR="$TEST_CODEX_DIR" \
 CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
   "$SCRIPT_DIR/audit-codex-integration.sh" --repo "$TEST_REPO" >/dev/null
+
+HOME="$TEST_HOME" \
+CODEX_USER_DIR="$TEST_CODEX_DIR" \
+CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
+  "$SCRIPT_DIR/audit-codex-integration.sh" --repo "$SHARED_REPO" \
+  > "$TEMP_ROOT/shared-audit.out"
+grep -q "OK: shared LaTeX/conflict pre-commit gate" "$TEMP_ROOT/shared-audit.out"
 
 git -C "$TEST_REPO" rm -q --cached AGENTS.md
 if HOME="$TEST_HOME" \
