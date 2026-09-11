@@ -127,6 +127,8 @@ TOUCH_REMOTE="$TEMP_ROOT/touch-remote.git"
 TOUCH_REPO="$TEMP_ROOT/touch"
 git init -q --bare "$TOUCH_REMOTE"
 git clone -q "$TOUCH_REMOTE" "$TOUCH_REPO"
+# Name the branch: CI's git defaults to master, Apple Git's system config to main.
+git -C "$TOUCH_REPO" symbolic-ref HEAD refs/heads/main
 git -C "$TOUCH_REPO" config user.name Test
 git -C "$TOUCH_REPO" config user.email "test""@""example.invalid"
 printf 'base\n' > "$TOUCH_REPO/edited.txt"
