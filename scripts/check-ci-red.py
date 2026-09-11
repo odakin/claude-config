@@ -6,6 +6,8 @@ session や無人 job が打つ運用では、 red が「誰かが見るだろ�
 (実例: ある public repo の検査 workflow が、 BSD 専用コマンド 1 行のせいで 10 日・225 push
 連続 red だったのに誰も気付かなかった)。 本 script は「今 red の workflow」 を呼び出し側に
 届ける engine。 何を対象 repo とするか (= repo 一覧の正本) は呼び出し側が決める。
+red を見つけた後の原因追跡 (streak の起点・最初の失敗行・導入 commit の pickaxe) は
+scripts/ci-red-streak.py (red / green の述語は同じ)。 手順 = conventions/debugging-discipline.md#ci-red-streak-forensics。
 
 述語 (= code-as-SoT、 変更時はここが正):
   - 対象 workflow = state が active のもの (disabled は走らないので対象外)
