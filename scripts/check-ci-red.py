@@ -39,8 +39,8 @@ cache は持たない (= 毎回取りに行く。 鮮度が価値の検出器 =
   検査不能があるとき exit 1。 Dependabot 枠は --dependabot detail (repo 別の行、 既定) /
   summary (1 行 = repo 数と ecosystem 別の数。 毎 session 出る面向け) / off。
 過去時点の再現: --as-of 2026-09-01T05:00:00Z → その時刻までに完了した run だけで判定
-  (= 検出器が当時あったら何を出したかの backtest。 workflow の active/disabled と repo の
-  archived は現在の値を使う = 過去の state は API で引けない)。
+  (= 検出器が当時あったら何を出したかの backtest。 workflow の active/disabled、 repo の
+  archived、 Dependabot alert の open/closed は現在の値を使う = 過去の state は API で引けない)。
 依存: gh CLI (認証済)。 API call 数 ≈ repo 数 × 2 + active workflow 数 (+ 長い red の遡り)。
 """
 from __future__ import annotations
@@ -64,6 +64,7 @@ PR_EVENTS = frozenset({"pull_request", "pull_request_target"})
 # success / failure が交互に並ぶので workflow 単位の streak は意味を持たない → 別枠で job 単位に
 # 最新 run を読む (= CI red ではなく「依存更新が止まっている」 signal として出す)。
 DEPENDABOT_PREFIX = "dynamic/dependabot/"
+DEPENDABOT_CFG = ".github/dependabot.yml"
 _DEP_TITLE_RE = re.compile(r"^(.*?) - Update #\d+$")
 # job の最新 run が workflow の最新 run よりこれ以上古ければ、 config から消えた job とみなす
 # (= monthly 間隔までは cover。 quarterly 等の長い間隔を他と混ぜた job は run の合間に消える)
@@ -225,7 +226,15 @@ def dependabot_failures(repo, wf, branch, as_of):
     """Dependabot Updates の job (ecosystem × dir) ごとに最新 decisive run を読む
     → ([(job, 最新の失敗 run)], None) か (None, 理由)。 読むのは最初の page だけ
     (= job 単位の streak 長は数えない)。 config から消えた job の古い失敗は page 内に残り
-    うるので、 最新 run が workflow の最新 run より STALE_JOB_DAYS 以上古い job は出さない。"""
+    うるので、 次のどちらかに当たる job は出さない:
+      - 最新 run が workflow の最新 run より STALE_JOB_DAYS 以上古い
+      - version update の job (= title に " for <pkg>" が無い) で、 最新 run が dependabot.yml の
+        最終 commit より前 (= config を直した後に一度も走っていない。 Dependabot は config の push
+        直後に version update の全 job を走らせるので、 残っている job なら新しい run がある)。
+        security update の job ("... for <pkg>") は alert 起点で走り config の push では走り直さない
+        ので、 この間引きの対象外。 commit 時刻が取れなければ間引かない (= 隠す側に倒さない)
+      - security update の job で、 repo に open な Dependabot alert が 1 件も無い (= 直す対象が
+        既に無い。 alert API が失敗したら間引かない)"""
     data, err = gh_api(runs_path(repo, wf["id"], branch, FIRST_PAGE, 1, as_of))
     if err:
         return None, err
@@ -243,10 +252,35 @@ def dependabot_failures(repo, wf, branch, as_of):
         st = walk(runs)
         if st["state"] != "red":
             continue
-        if newest - parse_ts(runs[0]["created_at"]) > timedelta(days=STALE_JOB_DAYS):
+        last = parse_ts(runs[0]["created_at"])
+        if newest - last > timedelta(days=STALE_JOB_DAYS):
             continue  # config から消えた job の古い失敗
-        out.append((job, st["latest_red"]))
-    return out, None
+        out.append((job, st["latest_red"], last))
+    if out:
+        changed = config_changed_at(repo, branch, as_of)
+        if changed is not None:
+            out = [x for x in out if " for " in x[0] or x[2] >= changed]
+    if any(" for " in x[0] for x in out):
+        alerts, err = gh_api(f"repos/{repo}/dependabot/alerts?state=open&per_page=1")
+        if not err and alerts == []:
+            out = [x for x in out if " for " not in x[0]]  # open alert が無い = 直す対象が無い
+    return [(job, run) for job, run, _ in out], None
+
+
+def config_changed_at(repo, branch, as_of):
+    """dependabot.yml の最終 commit 時刻。 取れなければ None (= 呼び出し側は間引かない)。"""
+    q = (f"repos/{repo}/commits?path={quote(DEPENDABOT_CFG, safe='/')}"
+         f"&sha={quote(branch, safe='')}&per_page=1")
+    if as_of is not None:
+        q += "&until=" + quote(as_of.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                               safe="")
+    data, err = gh_api(q)
+    if err or not data:
+        return None
+    try:
+        return parse_ts(data[0]["commit"]["committer"]["date"])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
 
 
 def check_repo(repo, as_of=None):
@@ -488,6 +522,10 @@ def selftest() -> int:
         "dep": [R("failure", 60, rid=606, title="pip in /. - Update #6"),
                 R("success", 60, rid=605, title="github_actions in /. - Update #5"),
                 R("failure", 60, rid=604, title="npm_and_yarn in /. - Update #4"),
+                # config (h=50 に commit) より前が最後の run = config で消した job → 出さない
+                R("failure", 45, rid=607, title="cargo in /. - Update #7"),
+                # security update (alert 起点) は config の commit より古くても出す
+                R("failure", 44, rid=608, title="npm_and_yarn in /. for lodash - Update #8"),
                 R("failure", 40, rid=603, title="github_actions in /. - Update #3"),
                 R("success", 40, rid=602, title="npm_and_yarn in /. - Update #2"),
                 R("failure", 40, rid=601, title="pip in /. - Update #1"),
@@ -497,10 +535,21 @@ def selftest() -> int:
     wf_ids = {1: "red150", 2: "red1200", 3: "green", 4: "short", 5: "red150", 6: "dep"}
     calls = []
 
+    cfg_changed = {"o/r": (base + timedelta(hours=50)).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    open_alerts = {"o/r": [{"number": 1}]}
+
     def fake_api(path):
         calls.append(path)
         if path == "rate_limit":
             return {"resources": {}}, None
+        if "/dependabot/alerts?" in path:
+            a = open_alerts.get(path[len("repos/"):].split("/dependabot")[0], "error")
+            return (None, "HTTP 403") if a == "error" else (a, None)
+        if "/commits?path=" in path:
+            t = cfg_changed.get(path[len("repos/"):].split("/commits")[0])
+            if t == "error":
+                return None, "Server Error (HTTP 500)"
+            return ([{"commit": {"committer": {"date": t}}}] if t else []), None
         if path == "repos/o/missing":
             return None, "Not Found (HTTP 404)"
         if path == "repos/o/old":
@@ -534,9 +583,27 @@ def selftest() -> int:
     reds, deps, why = check_repo("o/r")
     byname = {x["workflow"]: x for x in reds}
     ck("Dependabot Updates は CI red に混ぜない", "Dependabot Updates" not in byname)
+    ck("commits API path に dependabot.yml と branch を渡す",
+       any("/commits?path=.github/dependabot.yml&sha=main&per_page=1" in c for c in calls))
+    cfg_changed["o/r"] = "error"
+    jobs_err = [j for j, _ in dependabot_failures("o/r", {"id": 6}, "main", None)[0]]
+    cfg_changed["o/r"] = None
+    jobs_none = [j for j, _ in dependabot_failures("o/r", {"id": 6}, "main", None)[0]]
+    ck("config の commit 時刻が取れなければ間引かない (失敗 / 空応答とも)",
+       "cargo in /." in jobs_err and "cargo in /." in jobs_none)
+    open_alerts["o/r"] = []
+    jobs_closed = [j for j, _ in dependabot_failures("o/r", {"id": 6}, "main", None)[0]]
+    open_alerts["o/r"] = "error"
+    jobs_alert_err = [j for j, _ in dependabot_failures("o/r", {"id": 6}, "main", None)[0]]
+    open_alerts["o/r"] = [{"number": 1}]
+    ck("open alert が無ければ security update の失敗は出さない",
+       "npm_and_yarn in /. for lodash" not in jobs_closed and "pip in /." in jobs_closed)
+    ck("alert API が失敗したら security update の失敗を出す (隠さない)",
+       "npm_and_yarn in /. for lodash" in jobs_alert_err)
     ck("Dependabot は job 単位で red を読む (交互に並んでも) + 消えた job は出さない",
        len(deps) == 1 and [(j, r["id"]) for j, r in deps[0]["jobs"]]
-       == [("npm_and_yarn in /.", 604), ("pip in /.", 606)])
+       == [("npm_and_yarn in /.", 604), ("npm_and_yarn in /. for lodash", 608),
+           ("pip in /.", 606)])
     ck("disabled workflow は対象外", "off" not in byname)
     ck("green workflow は finding にしない", "ok" not in byname)
     ck("150 連続 red を page を跨いで数える",
@@ -566,7 +633,8 @@ def selftest() -> int:
     ck("render: 長期が先頭", lines[1].startswith("  🚨 長期"))
     ck("render: Dependabot は別枠 (件数に数えない)",
        "🟡 Dependabot update job の失敗 1 repo" in text
-       and "o/r: npm_and_yarn in /. (09-03)、 pip in /. (09-03)" in text)
+       and "o/r: npm_and_yarn in /. (09-03)、 npm_and_yarn in /. for lodash (09-02)、 "
+           "pip in /. (09-03)" in text)
     t5 = "\n".join(render([], deps, [], now, 1))
     ck("render: Dependabot だけでも出す", "(0 件 / 1 repo 検査)" in t5 and "🟡" in t5
        and "失敗行の確認" not in t5)

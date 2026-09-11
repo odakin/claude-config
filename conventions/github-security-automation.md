@@ -292,6 +292,7 @@ Semgrep の warning 級定型 finding 2 種 (`dependabot-missing-cooldown` / `gi
 
   を足すと、 release 後 N 日は version-update PR を作らない = **day-0 供給網攻撃 (malicious release / 即 yank) の窓を避ける**。 auto-merge 運用と両立 (N 日過ぎた release は即 PR)。 security update は cooldown の影響を受けない。
 - ⚠️ **dependabot.yml を編集して push すると即時 scan が走り、 溜まっていた outdated 依存の version-update PR が一斉に生える** (= burst)。 cooldown 追加の直後に PR が増えるのは矛盾ではない (既存 release は N 日経過済のため) — 想定して triage 時間を確保する。
+- ⚠️ <a id="dependabot-ecosystem-must-exist"></a>**dependabot.yml にはその repo に manifest がある ecosystem だけを書く** — 無い ecosystem (例: `package.json` の無い repo の `npm`) の update job は毎回 `Error during file fetching; aborting: ... not found` で失敗し、 Dependabot Updates が恒常 red になる。 manifest を git-crypt で暗号化している repo も同じ (Dependabot は平文を読めない)。 全 repo に同じ template を配る baseline はここで壊れる — 配置時に repo の tree を見て entry を選び、 後から manifest を足した repo は逆向きに拾う。 恒常 red を拾う検出器 = [`scripts/check-ci-red.py`](../scripts/check-ci-red.py) の Dependabot 枠 (2026-09-11 に owner の約 20 repo でこの形の常時失敗を発見して解消)。
 - **action の SHA pin**: `uses: owner/action@v7` の tag は mutable (= 移し替え可能) なので `uses: owner/action@<40hex>  # v7` の commit SHA pin にする。 SHA の解決は `gh api repos/<owner>/<action>/commits/<tag> --jq .sha`。 **Dependabot の github-actions ecosystem は SHA pin を認識して更新し、 `# vN` comment も保守する** = pin しても追従コストは増えない。
 
 ## <a id="cross-references"></a>12. Cross-references
