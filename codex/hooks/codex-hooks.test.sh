@@ -26,6 +26,16 @@ assert any(
     for group in hooks["PreToolUse"]
 )
 assert any(
+    group.get("matcher") == "Bash"
+    and any("session_touch.py" in hook.get("command", "") for hook in group.get("hooks", []))
+    for group in hooks["PreToolUse"]
+)
+assert any(
+    group.get("matcher") == "apply_patch"
+    and any("session_touch.py" in hook.get("command", "") for hook in group.get("hooks", []))
+    for group in hooks["PreToolUse"]
+)
+assert any(
     any("session_provenance.py" in hook.get("command", "") for hook in group.get("hooks", []))
     for group in hooks["SessionStart"]
 )
@@ -113,36 +123,90 @@ PRIVATE_REPO="$TEMP_ROOT/private"
 mkdir -p "$PRIVATE_REPO/.git"
 assert_silent "$PRIVATE_REPO" email
 
+TOUCH_REMOTE="$TEMP_ROOT/touch-remote.git"
 TOUCH_REPO="$TEMP_ROOT/touch"
-git -C "$TEMP_ROOT" init -q touch
-TOUCH_INPUT="$(TEST_REPO="$TOUCH_REPO" python3 -c 'import json, os; print(json.dumps({"hook_event_name":"PostToolUse","tool_name":"apply_patch","session_id":"test-session","cwd":os.environ["TEST_REPO"]}))')"
-printf '%s' "$TOUCH_INPUT" | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" \
-  python3 "$SCRIPT_DIR/session_touch.py" track
-printf 'uncommitted\n' > "$TOUCH_REPO/edited.txt"
-STOP_INPUT="$(TEST_REPO="$TOUCH_REPO" python3 -c 'import json, os; print(json.dumps({"hook_event_name":"Stop","session_id":"test-session","cwd":os.environ["TEST_REPO"],"stop_hook_active":False}))')"
-printf '%s' "$STOP_INPUT" | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" \
-  python3 "$SCRIPT_DIR/session_touch.py" nudge > "$TEMP_ROOT/nudge.json"
-python3 - "$TEMP_ROOT/nudge.json" <<'PY'
+git init -q --bare "$TOUCH_REMOTE"
+git clone -q "$TOUCH_REMOTE" "$TOUCH_REPO"
+git -C "$TOUCH_REPO" config user.name Test
+git -C "$TOUCH_REPO" config user.email "test""@""example.invalid"
+printf 'base\n' > "$TOUCH_REPO/edited.txt"
+git -C "$TOUCH_REPO" add edited.txt
+git -C "$TOUCH_REPO" commit -qm 'Initial fixture'
+git -C "$TOUCH_REPO" push -qu origin HEAD:main
+git -C "$TOUCH_REPO" branch --set-upstream-to=origin/main main >/dev/null
+
+make_touch_input() {
+  TEST_REPO="$1" TEST_SESSION="$2" TEST_EVENT="$3" TEST_TOOL="$4" TEST_COMMAND="$5" \
+    python3 - <<'PY'
+import json
+import os
+
+print(json.dumps({
+    "hook_event_name": os.environ["TEST_EVENT"],
+    "tool_name": os.environ["TEST_TOOL"],
+    "session_id": os.environ["TEST_SESSION"],
+    "cwd": os.environ["TEST_REPO"],
+    "tool_input": {
+        "command": os.environ["TEST_COMMAND"],
+        "workdir": os.environ["TEST_REPO"],
+    },
+}))
+PY
+}
+
+make_stop_input() {
+  TEST_REPO="$1" TEST_SESSION="$2" TEST_ACTIVE="$3" python3 - <<'PY'
+import json
+import os
+
+print(json.dumps({
+    "hook_event_name": "Stop",
+    "session_id": os.environ["TEST_SESSION"],
+    "cwd": os.environ["TEST_REPO"],
+    "stop_hook_active": os.environ["TEST_ACTIVE"] == "true",
+}))
+PY
+}
+
+# Dirty after an apply_patch baseline blocks completion, including when the task
+# starts in a parent workspace and the patch path identifies the nested repo.
+DIRTY_PATCH="*** Begin Patch
+*** Update File: $TOUCH_REPO/edited.txt
+*** End Patch"
+make_touch_input "$TEMP_ROOT" dirty-session PreToolUse apply_patch "$DIRTY_PATCH" \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" track
+printf 'uncommitted\n' >> "$TOUCH_REPO/edited.txt"
+make_stop_input "$TOUCH_REPO" dirty-session false \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" nudge \
+  > "$TEMP_ROOT/nudge-dirty.json"
+python3 - "$TEMP_ROOT/nudge-dirty.json" <<'PY'
 import json
 import sys
 
 payload = json.load(open(sys.argv[1], encoding="utf-8"))
-assert "still dirty" in payload["systemMessage"]
-assert "CONVENTIONS.md#auto-update-protocol" in payload["systemMessage"]
+assert payload["decision"] == "block"
+assert "dirty" in payload["reason"]
+assert "CONVENTIONS.md#completion-git-gate" in payload["reason"]
 PY
 
-printf '%s' "$STOP_INPUT" | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" \
-  python3 "$SCRIPT_DIR/session_touch.py" nudge > "$TEMP_ROOT/nudge-repeat.json"
-python3 - "$TEMP_ROOT/nudge-repeat.json" <<'PY'
+# Codex's stop_hook_active recursion guard permits only one continuation. The
+# second pass stays loud but does not create an infinite continuation loop.
+make_stop_input "$TOUCH_REPO" dirty-session true \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" nudge \
+  > "$TEMP_ROOT/nudge-active.json"
+python3 - "$TEMP_ROOT/nudge-active.json" <<'PY'
 import json
 import sys
 
-assert json.load(open(sys.argv[1], encoding="utf-8")) == {}
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+assert "decision" not in payload
+assert "unresolved state remains" in payload["systemMessage"]
 PY
 
-rm "$TOUCH_REPO/edited.txt"
-printf '%s' "$STOP_INPUT" | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" \
-  python3 "$SCRIPT_DIR/session_touch.py" nudge > "$TEMP_ROOT/nudge-clean.json"
+git -C "$TOUCH_REPO" restore edited.txt
+make_stop_input "$TOUCH_REPO" dirty-session false \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" nudge \
+  > "$TEMP_ROOT/nudge-clean.json"
 python3 - "$TEMP_ROOT/nudge-clean.json" <<'PY'
 import json
 import sys
@@ -150,26 +214,116 @@ import sys
 assert json.load(open(sys.argv[1], encoding="utf-8")) == {}
 PY
 
-printf 'uncommitted again\n' > "$TOUCH_REPO/edited.txt"
-printf '%s' "$STOP_INPUT" | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" \
-  python3 "$SCRIPT_DIR/session_touch.py" nudge > "$TEMP_ROOT/nudge-renewed.json"
-python3 - "$TEMP_ROOT/nudge-renewed.json" <<'PY'
+# A not-yet-existing nested directory still resolves through its nearest
+# existing ancestor to the enclosing repository.
+NESTED_PATCH="*** Begin Patch
+*** Add File: $TOUCH_REPO/new/deep/file.txt
+*** End Patch"
+make_touch_input "$TEMP_ROOT" nested-session PreToolUse apply_patch "$NESTED_PATCH" \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" track
+NESTED_STATE="$(TEST_SESSION=nested-session python3 - <<'PY'
+import hashlib
+import os
+print(hashlib.sha256(os.environ["TEST_SESSION"].encode()).hexdigest() + ".json")
+PY
+)"
+python3 - "$TEMP_ROOT/state/$NESTED_STATE" "$TOUCH_REPO" <<'PY'
+import json
+import os
+import sys
+
+repos = json.load(open(sys.argv[1], encoding="utf-8"))["repos"]
+assert os.path.realpath(sys.argv[2]) in repos
+PY
+
+# A commit-only call is remembered and the resulting ahead state blocks Stop.
+make_touch_input "$TOUCH_REPO" ahead-session PreToolUse Bash 'git commit -m split' \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" track
+printf 'ahead\n' > "$TOUCH_REPO/ahead.txt"
+git -C "$TOUCH_REPO" add ahead.txt
+git -C "$TOUCH_REPO" commit -qm 'Ahead fixture'
+make_stop_input "$TOUCH_REPO" ahead-session false \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" nudge \
+  > "$TEMP_ROOT/nudge-ahead.json"
+python3 - "$TEMP_ROOT/nudge-ahead.json" <<'PY'
 import json
 import sys
 
 payload = json.load(open(sys.argv[1], encoding="utf-8"))
-assert "still dirty" in payload["systemMessage"]
-assert "CONVENTIONS.md#auto-update-protocol" in payload["systemMessage"]
+assert payload["decision"] == "block"
+reason = payload["reason"]
+assert "commit and push were split into separate calls" in reason
+assert "ahead=1, behind=0" in reason
+PY
+
+# The later push resolves the gate; this proves the previous Stop, not a vague
+# reminder, detects the unsafe gap between commit and a separate push call.
+git -C "$TOUCH_REPO" push -qu origin HEAD:main
+make_stop_input "$TOUCH_REPO" ahead-session false \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" nudge \
+  > "$TEMP_ROOT/nudge-pushed.json"
+python3 - "$TEMP_ROOT/nudge-pushed.json" <<'PY'
+import json
+import sys
+
+assert json.load(open(sys.argv[1], encoding="utf-8")) == {}
+PY
+
+# An unchanged pre-existing dirty path is not attributed to this task. A
+# separate explicit-path commit can be pushed while that baseline dirt remains.
+printf 'pre-existing user work\n' >> "$TOUCH_REPO/edited.txt"
+make_touch_input "$TOUCH_REPO" baseline-dirty-session PreToolUse Bash 'git commit -m owned -- owned.txt' \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" track
+printf 'owned\n' > "$TOUCH_REPO/owned.txt"
+git -C "$TOUCH_REPO" add owned.txt
+git -C "$TOUCH_REPO" commit -qm 'Owned fixture' -- owned.txt
+git -C "$TOUCH_REPO" push -qu origin HEAD:main
+make_stop_input "$TOUCH_REPO" baseline-dirty-session false \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" nudge \
+  > "$TEMP_ROOT/nudge-baseline-dirty.json"
+python3 - "$TEMP_ROOT/nudge-baseline-dirty.json" <<'PY'
+import json
+import sys
+
+assert json.load(open(sys.argv[1], encoding="utf-8")) == {}
+PY
+git -C "$TOUCH_REPO" restore edited.txt
+
+# A fetched upstream advance is classified as behind, while ls-remote verifies
+# that the comparison uses the live remote branch head.
+OTHER_REPO="$TEMP_ROOT/other"
+git clone -q "$TOUCH_REMOTE" "$OTHER_REPO"
+git -C "$OTHER_REPO" config user.name Test
+git -C "$OTHER_REPO" config user.email "test""@""example.invalid"
+git -C "$OTHER_REPO" checkout -q main
+make_touch_input "$TOUCH_REPO" behind-session PreToolUse apply_patch "$DIRTY_PATCH" \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" track
+printf 'local work\n' >> "$TOUCH_REPO/edited.txt"
+printf 'remote work\n' > "$OTHER_REPO/remote.txt"
+git -C "$OTHER_REPO" add remote.txt
+git -C "$OTHER_REPO" commit -qm 'Remote fixture'
+git -C "$OTHER_REPO" push -qu origin HEAD:main
+git -C "$TOUCH_REPO" fetch -q origin
+make_stop_input "$TOUCH_REPO" behind-session false \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" nudge \
+  > "$TEMP_ROOT/nudge-behind.json"
+python3 - "$TEMP_ROOT/nudge-behind.json" <<'PY'
+import json
+import sys
+
+reason = json.load(open(sys.argv[1], encoding="utf-8"))["reason"]
+assert "behind=1" in reason
+assert "local HEAD" in reason
 PY
 
 # stale-state prune: a >30-day-old file is removed on the next track, a fresh one survives
-STALE_FILE="$TEMP_ROOT/state/stale-session.repos"
+STALE_FILE="$TEMP_ROOT/state/stale-session.json"
 printf '/nonexistent\n' > "$STALE_FILE"
 touch -t 202601010000 "$STALE_FILE"
-printf '%s' "$TOUCH_INPUT" | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" \
-  python3 "$SCRIPT_DIR/session_touch.py" track
+make_touch_input "$TOUCH_REPO" prune-session PreToolUse Bash 'git status' \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" track
 [ ! -e "$STALE_FILE" ]
-ls "$TEMP_ROOT/state"/*.repos >/dev/null
+ls "$TEMP_ROOT/state"/*.json >/dev/null
 
 PROVENANCE_STATE="$TEMP_ROOT/provenance-state"
 printf '%s' '{"hook_event_name":"SessionStart","session_id":"codex-test-session","model":"gpt-test"}' \

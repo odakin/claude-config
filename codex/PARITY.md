@@ -72,8 +72,9 @@ and the [operations](skills/claude-config-operations/SKILL.md) /
 [integration](skills/claude-config-conventions/SKILL.md) skills route to that
 same procedure. The global instructions make it a standing instruction for every installed Codex;
 `resume_context.py` restores its compact reminder at a SessionStart boundary.
-The existing dirty-worktree Stop nudge also points to it. This does not add a
-new Stop blocker or classify arbitrary SESSION prose as a factual ledger.
+The completion Git gate below also points to it when unresolved repository
+state makes a handoff incomplete; it does not classify arbitrary SESSION prose
+as a factual ledger.
 
 `check-codex-integration.py` requires these entry points to retain the protocol
 pointer; hook fixtures verify the emitted reminder. These checks protect the
@@ -86,6 +87,50 @@ Use the installer to refresh a managed personal composite after changing the
 public entry point; updating the source alone does not refresh an already
 rendered composite. The local audit verifies installation, not that another
 running session has reread instructions or that a client delivered a hook.
+
+### <a id="completion-git-gate-hook"></a>Completion Git gate and Stop forcing function
+
+The product-neutral semantic rule is
+[`CONVENTIONS.md#completion-git-gate`](../CONVENTIONS.md#completion-git-gate).
+The global and workspace Codex instructions plus the operations and integration
+skills are short firing stubs to that one home; they do not become competing
+sources of truth.
+
+`codex/hooks/session_touch.py` is the Codex-specific forcing function. On
+`PreToolUse` for `apply_patch` and `Bash`, it records the pre-work Git signature
+of repositories resolved from the event cwd, tool workdir, patch targets, and
+explicit `cd` / `git -C` paths. It also records a `git commit` command that does
+not contain `git push`. At `Stop`, a changed repository is checked for:
+
+- task-created dirty state relative to the recorded baseline;
+- fetched-upstream ahead/behind counts;
+- a configured upstream when remotes exist; and
+- exact equality between local `HEAD` and the branch head returned by live
+  `git ls-remote`.
+
+An unresolved state returns the [official Codex Hook](https://learn.chatgpt.com/docs/hooks) Stop output
+`{"decision":"block","reason":"..."}`. Codex then receives one automatic
+continuation prompt to commit/push/verify or to report a legitimate exception.
+`stop_hook_active` prevents an infinite continuation loop; if state is still
+unresolved on that second Stop, the hook remains loud but cannot force a second
+continuation in the same turn. This is the product contract, not a claim of
+absolute enforcement.
+
+Coverage has four honest limits. Tool hooks can miss specialized execution
+paths; a user must trust the current hook definition in the client; arbitrary
+shell syntax cannot be resolved perfectly; and a task that mutates a repository
+without any matched `PreToolUse` event has no reliable pre-work baseline. The
+PostToolUse fallback treats such an observation conservatively. Pre-existing,
+unchanged dirty state is not attributed to this task, and repositories with no
+remote are left to the documented exception path. Git-side content gates and
+the instruction entry points therefore remain authoritative alongside this
+turn-end guard.
+
+`codex-hooks.test.sh` supplies negative controls for dirty completion,
+commit-only/ahead completion, a later separate push, and behind state. The
+integration checker preserves the firing stubs and Hook wiring; the machine
+audit verifies the installed links and completion-gate implementation. These
+tests prove adapter behavior, not client delivery or trust on every frontend.
 
 ### Context-budget discipline
 

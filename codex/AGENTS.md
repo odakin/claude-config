@@ -25,6 +25,10 @@ Before a Codex-origin commit, verify the managed provenance hook described in
 `Agent-Session`, `Agent-Model`, and `Agent-Effort`. Use the active model when a
 verified runtime path supplies it; otherwise retain literal `unknown` and the
 warning rather than guessing or blocking the commit. Push after the commit.
+Before reporting an authorized change task complete, run the canonical
+`CONVENTIONS.md#completion-git-gate`: check dirty/ahead/behind state and the
+live remote head for every touched repository, and do not leave push as a
+later tool call after commit. Report any documented exception explicitly.
 
 For SESSION updates and handoff, follow
 `CONVENTIONS.md#auto-update-protocol` and

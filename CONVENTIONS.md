@@ -190,6 +190,22 @@ git の状態管理は 1 本の `PostToolUse` hook で機械的に支援する: 
 - **作業単位ごとの push を推奨。** まとまった単位 (1 件の処理完了、1 つの構造変更など) が終わるごとに commit + push すると、後で他の作業者と衝突したときの解決が楽になる。バッチ push する流儀の人は各自の判断で。ただし §4 の「コミット後は常に push」は必須で、その強制は hook が担う。
 - **push 障害は即座に解決する。** rebase コンフリクト・認証エラー等を放置しない。大規模な diverge が判明した場合は、破壊的な `reset --hard` を実行する前に必ず `/tmp` などに現状をバックアップ。
 
+#### <a id="completion-git-gate"></a>変更タスクの完了報告直前 Git gate
+
+**発火点:** agent が Git リポ内の変更を実装し、対象の build / lint / test / render 等の検証を終え、user へ「完了」「実装済み」と報告する直前。変更 task では **実装 + 検証 + commit + push + remote 照合**が delivery unit であり、local 保存や build 成功だけでは完了でない。project / owner 規約が作業単位ごとの commit + push を要求する場合は、そのより厳しい粒度に従う。
+
+完了報告の前に、今回触った各 repo について次を直接確認する:
+
+1. `git status --porcelain` で今回由来の未 commit 変更がない。
+2. upstream を fetch するか live remote ref を照会し、local tracking ref の `ahead` / `behind` だけで remote の現在値を代用しない。
+3. `dirty` / `ahead` / `behind` / divergence を区別し、通常経路ではすべて解消する。
+4. local `HEAD` と push 先 remote branch head が同じ object id である。
+5. commit が許可された作業では、`git add <明示 path> && git commit ... && git push` を**同じ command chain**に置く。commit 成功後の push を「次の tool call」に残さない。
+
+**commit / push しない正当な例外:** (a) read-only の質問・診断・review で repo を変更していない、(b) user が明示的に commit / push を止めた、または external write の authorization がまだない、(c) remote / upstream が存在しない、(d) dirty が着手前からある無関係な user / 別 session の変更だけで、自分の変更は残していない、(e) task が中断・blocked で partial work を意図的に引き継ぐ。この場合は完了と呼ばず、最終報告に repo、残状態、理由、次 action を明示する。例外は silent bypass ではない。
+
+Codex の lifecycle forcing function と coverage 限界は [`codex/PARITY.md#completion-git-gate-hook`](codex/PARITY.md#completion-git-gate-hook)。Git hook は commit 内容の gate にはできても「agent が完了を言う瞬間」は見えないため、instruction entry point と turn-end hook の両方を残す。
+
 ### <a id="pre-push-check"></a>push 前チェック
 
 1. SESSION.md 更新（長ければ棚卸し） 2. CLAUDE.md 更新（構造変更時のみ） 3. 4軸レビュー → commit → **[subject-content 点呼](#commit-subject-content-parity)** → push。軽微な変更では 2-3 スキップ可。

@@ -38,6 +38,11 @@
             "type": "command",
             "command": "python3 \"$HOME/.codex/claude-config-hooks/session_provenance.py\"",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/session_touch.py\" track",
+            "timeout": 3
           }
         ]
       },
@@ -49,6 +54,11 @@
             "command": "python3 \"$HOME/.codex/claude-config-hooks/pre_tool_policy.py\"",
             "timeout": 3,
             "statusMessage": "Checking public-repository edit"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/session_touch.py\" track",
+            "timeout": 3
           }
         ]
       }
@@ -71,7 +81,7 @@
           {
             "type": "command",
             "command": "python3 \"$HOME/.codex/claude-config-hooks/session_touch.py\" nudge",
-            "timeout": 3
+            "timeout": 12
           }
         ]
       }

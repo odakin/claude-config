@@ -154,6 +154,35 @@ check_link "local claude-config hook implementation" \
 check_link "local Codex hook configuration" \
   "$CONFIG_ROOT/codex/hooks/hooks.json" \
   "$CODEX_USER_DIR/hooks.json" || true
+if python3 - "$CONFIG_ROOT/codex/hooks/hooks.json" "$CONFIG_ROOT/codex/hooks/session_touch.py" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+hooks = payload.get("hooks", {})
+
+def invokes(event, adapter, matcher=None):
+    for group in hooks.get(event, []):
+        if matcher is not None and group.get("matcher") != matcher:
+            continue
+        if any(adapter in item.get("command", "") for item in group.get("hooks", [])):
+            return True
+    return False
+
+source = Path(sys.argv[2]).read_text(encoding="utf-8")
+assert invokes("PreToolUse", "session_touch.py", "Bash")
+assert invokes("PreToolUse", "session_touch.py", "apply_patch")
+assert invokes("Stop", "session_touch.py")
+assert '"decision": "block"' in source
+assert '"ls-remote"' in source
+PY
+then
+  echo "OK: Codex completion Git gate (PreToolUse baseline + blocking Stop + live remote head)"
+else
+  echo "MISSING: Codex completion Git gate wiring or implementation" >&2
+  ISSUES=$((ISSUES + 1))
+fi
 
 LEGACY_HOME_AGENTS="$USER_HOME/AGENTS.md"
 if [ -L "$LEGACY_HOME_AGENTS" ] \

@@ -21,6 +21,13 @@ keep literal `unknown` and the hook warning rather than guessing from a default
 or blocking the commit. Install or audit the hook through the
 `claude-config-conventions` route and
 `codex/PARITY.md#git-session-provenance`, then push after the commit.
+For an authorized change task, do not report completion after local save or
+validation alone. Immediately before the completion report, apply
+`CONVENTIONS.md#completion-git-gate`: inspect task-touched repositories for
+dirty/ahead/behind state, keep commit and push in the same command chain, and
+verify local `HEAD` equals the live remote branch head. If an enumerated
+exception applies, state the repository, residual state, reason, and next
+action instead of silently calling the task complete.
 Use the `claude-config-conventions` skill when installing, updating, auditing,
 or extending this Codex integration.
 Use the `claude-config-operations` skill when a task may be covered by the
@@ -43,6 +50,8 @@ Read `CONVENTIONS.md#auto-update-protocol` and
 `CONVENTIONS.md#session-no-durable-record` for the canonical procedure.
 Before finishing, read the affected SESSION section as a new Codex would:
 can it resume without this conversation, and is each fact owned elsewhere?
+The same boundary is also the completion Git gate above; handoff prose does not
+substitute for committing and pushing authorized repository changes.
 
 ## Context-budget discipline
 

@@ -46,7 +46,10 @@ than relying on a secondary summary.
 - **Current work, resuming, Git, reviews, or public safety:** `CONVENTIONS.md`,
   the repository instruction file, `SESSION.md`, and the relevant Git scripts.
   Use `scripts/audit-codex-integration.sh --repo <path>` to inspect existing
-  agent-independent Git guards without changing them.
+  agent-independent Git guards without changing them. For an authorized change
+  task, `CONVENTIONS.md#completion-git-gate` fires after validation and before
+  the completion report; it requires explicit dirty/ahead/behind and live
+  remote-head verification.
 - **PDF, DOCX, XLSX, PPTX, forms, or print artifacts:** the office and PDF
   runbooks indexed in `conventions/README.md`, plus Codex's corresponding
   document, spreadsheet, presentation, or PDF capabilities.

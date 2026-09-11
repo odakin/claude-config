@@ -33,7 +33,11 @@ details into this skill.
 Validate with `scripts/setup-codex.test.sh`,
 `scripts/audit-codex-integration.sh`, and the repository's standard checks.
 Confirm that no file below `~/.claude/` changed. Commit and push only after
-normal repository review and the user's authorization.
+normal repository review and the user's authorization. Immediately before
+reporting the integration change complete, apply
+`CONVENTIONS.md#completion-git-gate`; use the Codex forcing-function contract
+at `codex/PARITY.md#completion-git-gate-hook` rather than treating a clean
+local build as delivery.
 
 ## Scope boundaries
 

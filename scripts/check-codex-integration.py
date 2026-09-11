@@ -53,8 +53,54 @@ SESSION_HANDOFF_REQUIREMENTS = {
     "codex/skills/claude-config-conventions/SKILL.md": ("CONVENTIONS.md#auto-update-protocol", "codex/PARITY.md#session-handoff-contract"),
     "codex/HOME-AGENTS.md": ("CONVENTIONS.md#auto-update-protocol", "CONVENTIONS.md#session-no-durable-record"),
     "codex/hooks/resume_context.py": ("CONVENTIONS.md#auto-update-protocol",),
-    "codex/hooks/session_touch.py": ("CONVENTIONS.md#auto-update-protocol",),
     "codex/PARITY.md": ('id="session-handoff-contract"',),
+}
+COMPLETION_GATE_REQUIREMENTS = {
+    "CONVENTIONS.md": (
+        'id="completion-git-gate"',
+        "実装 + 検証 + commit + push + remote 照合",
+        "git status --porcelain",
+        "live remote ref",
+        "同じ command chain",
+        "commit / push しない正当な例外",
+        "codex/PARITY.md#completion-git-gate-hook",
+    ),
+    "codex/HOME-AGENTS.md": (
+        "CONVENTIONS.md#completion-git-gate",
+        "dirty/ahead/behind",
+        "live remote branch head",
+    ),
+    "codex/AGENTS.md": (
+        "CONVENTIONS.md#completion-git-gate",
+        "dirty/ahead/behind",
+        "later tool call after commit",
+    ),
+    "codex/skills/claude-config-conventions/SKILL.md": (
+        "CONVENTIONS.md#completion-git-gate",
+        "codex/PARITY.md#completion-git-gate-hook",
+    ),
+    "codex/skills/claude-config-operations/SKILL.md": (
+        "CONVENTIONS.md#completion-git-gate",
+        "dirty/ahead/behind",
+    ),
+    "codex/PARITY.md": (
+        'id="completion-git-gate-hook"',
+        "git ls-remote",
+        '`{"decision":"block","reason":"..."}`',
+        "stop_hook_active",
+        "commit-only/ahead completion",
+        "https://learn.chatgpt.com/docs/hooks",
+    ),
+    "codex/hooks/session_touch.py": (
+        "CONVENTIONS.md#completion-git-gate",
+        '"ls-remote"',
+        '"decision": "block"',
+        "commit_without_push",
+    ),
+    "scripts/audit-codex-integration.sh": (
+        "Codex completion Git gate",
+        "PreToolUse baseline + blocking Stop + live remote head",
+    ),
 }
 
 SESSION_DURABLE_TOKENS = (
@@ -81,7 +127,7 @@ SUPERSEDED_CLAIMS = (
 HOOK_ADAPTERS = {
     "SessionStart": ("resume_context.py", "session_provenance.py"),
     "UserPromptSubmit": ("session_provenance.py",),
-    "PreToolUse": ("pre_tool_policy.py", "session_provenance.py"),
+    "PreToolUse": ("pre_tool_policy.py", "session_provenance.py", "session_touch.py"),
     "PostToolUse": ("session_touch.py",),
     "Stop": ("session_touch.py",),
 }
@@ -393,6 +439,16 @@ def check(root: Path) -> list[str]:
             if fragment not in content:
                 errors.append(f"{relative}: missing session handoff wiring: {fragment}")
 
+    for relative, fragments in COMPLETION_GATE_REQUIREMENTS.items():
+        try:
+            content = text(root / relative)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        for fragment in fragments:
+            if fragment not in content:
+                errors.append(f"{relative}: missing completion-gate wiring: {fragment}")
+
     for relative, fragments in WIRING_REQUIREMENTS.items():
         path = root / relative
         try:
@@ -532,6 +588,12 @@ def fixture(root: Path) -> None:
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
         path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
 
+    for relative, fragments in COMPLETION_GATE_REQUIREMENTS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
+
 
 def selftest() -> int:
     with tempfile.TemporaryDirectory(prefix="check-codex-integration-") as temporary:
@@ -550,6 +612,16 @@ def selftest() -> int:
             if not any("missing session handoff wiring" in error for error in check(root)):
                 print("FAIL: missing handoff wiring was not detected", relative)
                 return 1
+        fixture(root)
+
+        completion_path = root / "codex/HOME-AGENTS.md"
+        completion_fragment = COMPLETION_GATE_REQUIREMENTS["codex/HOME-AGENTS.md"][0]
+        completion_path.write_text(
+            completion_path.read_text().replace(completion_fragment, "removed-completion-gate-pointer")
+        )
+        if not any("missing completion-gate wiring" in error for error in check(root)):
+            print("FAIL: missing completion-gate wiring was not detected")
+            return 1
         fixture(root)
 
         (root / "templates/shared-project/AGENTS.md.template").write_text(
