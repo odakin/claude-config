@@ -51,7 +51,7 @@ claude-config/
 │   ├── email-surface-pattern.md            # 重要送信者・ML topic の見落とし防止 surface を設計するとき
 │   ├── erad-submission.md                  # e-Rad 経由で研究費 (JST・科研費・財団等) に応募するとき
 │   ├── expensive-intermediate-artifacts.md # 5 分以上かかる生成物の出力先を決めるとき + snapshot artifact を命名するとき
-│   ├── garoon.md                           # Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを Claude から読む/探すとき
+│   ├── garoon.md                           # Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを読む/探すとき + ワークフローを再利用・作成・申請するとき
 │   ├── github-security-automation.md       # repo の Dependabot/CodeQL/Semgrep baseline や Dependabot PR を扱うとき
 │   ├── giving-talks.md                     # 講演・セミナー・発表の準備をするとき
 │   ├── giving-talks.ja.md                  # giving-talks.md の日本語版

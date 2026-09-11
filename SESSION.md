@@ -8,6 +8,10 @@ Codex の自己同定とprovenance整備は、技術契約・実装所有表・�
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-11 — Garoon workflow write の一般化
+
+Garoon の施設予約を実申請した経験から、read 用 cookie script と workflow write の射程を分離した。汎用機構の正本は [`garoon.md#garoon-workflow-write`](conventions/garoon.md#garoon-workflow-write): 画面外の値 SoT → 承認済み同 form 再利用 → 内容/経路/確認の3段読戻し → owner 明示 OK → 送信一覧で申請番号・状態・処理者検証。操作列の汎用部品は既存 [`scripts/lib/web_driver.py`](scripts/lib/web_driver.py) を再利用し、組織固有の field 名・値・申請 ID は project/private 層に残した。
+
 ## 2026-09-11 — 事実入力・規程判断・将来確約の責任境界
 
 学内事務への返信推敲から、相手の規程適用に必要な事実を答えたことを、当方の判断・当日の行動確約・追加資料収集へ膨らませない一般則を hoist。概念の正本は [`#input-does-not-transfer-decision-ownership`](docs/convention-design-principles.md#input-does-not-transfer-decision-ownership)、対外メールの適用は [`research-email.md#mail-fact-policy-boundary`](conventions/research-email.md#mail-fact-policy-boundary)。mail workflow からも事務・policy-owner 返信時に必ず読む参照を追加した。実名・個別案件は private/project 層に残した。

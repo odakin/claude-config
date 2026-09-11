@@ -1,11 +1,11 @@
 <!-- doc-meta
-when: Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを Claude から読む/探すとき
+when: Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを読む/探すとき + ワークフローを再利用・作成・申請するとき
 category: infra
-summary: Garoon cloud の browser-MCP 自動化 (= SSO でも logged-in session 越しに読める、 app 別 search URL 直叩き、 download token の期限切れ = login page 化、 file 取得は user gesture 必須)
+summary: Garoon cloud の自動化 (= SSO でも logged-in session 越しに読める、 read は cookie 再利用 script が第一選択、 workflow write は承認済み申請再利用 → 値の全読み戻し → 経路確認 → owner 明示 OK → 送信一覧検証、 download token の期限切れ = login page 化)
 -->
-# Cybozu Garoon の browser-MCP 自動化
+# Cybozu Garoon の自動化
 
-日本の組織で広く使われる groupware **Cybozu Garoon** (cloud 版 = `https://<org>.cybozu.com/g/`) を Claude から扱うときの機構 fact 集。 SSO (Shibboleth 等) 保護でも、 **user が logged-in している browser を browser MCP (Claude in Chrome 等) で駆動すれば読み取りは全部できる** — 「SSO だから Claude 経路無し」 と pre-conclude しない。 書き込み・file 取得だけが別権限帯 ([web-tools.md#browser-download-automation](web-tools.md#browser-download-automation))。
+日本の組織で広く使われる groupware **Cybozu Garoon** (cloud 版 = `https://<org>.cybozu.com/g/`) を AI から扱うときの機構 fact 集。SSO (Shibboleth 等) 保護でも、user の logged-in browser session を介して read/write 経路は作れる — 「SSO だから AI 経路無し」と pre-conclude しない。**read は cookie 再利用 script が第一選択**、**workflow write は現時点でログイン済み browser + site driver**。file 取得は別権限帯 ([web-tools.md#browser-download-automation](web-tools.md#browser-download-automation))。
 
 ## <a id="garoon-script-route"></a>第一選択 = script 経路 (browser session cookie 再利用、 画面 drive 不要)
 
@@ -22,6 +22,24 @@ SAML-only 組織では REST の password auth が admin 限定・OAuth client �
 ⚠️ **`search.csp` の HTML 自体は結果を含まない** (JS が上の API を叩いて描画、 no-data 文言は template に常在) — HTML を grep して「0 件」 と結論しない。 browser MCP の `get_page_text` も描画前に読むと同じ罠。
 ⚠️ 「規程集」 のような**外部 site への link** (= Basic 認証の別 host) は cookie 再利用の射程外 = ID/PW は user 専権 (script も agent も入力しない)。
 
+## <a id="garoon-workflow-write"></a>Workflow write = 承認済み申請の再利用 + 3 段照合 + 送信一覧検証
+
+`garoon-client.py` の現行射程は **read / search / download / 任意 GET** で、workflow の作成・送信は持たない。
+近い将来の write を「GET があるから script で送れる」と拡張解釈せず、公開 API / 内部 endpoint replay を実測で構築するまでは
+**ログイン済み browser の form 経路**を使う。同じフォームを反復するなら、クリック手順を毎回再現せず
+[`web-form-automation.md#step-driver-harness`](web-form-automation.md#step-driver-harness) の site-specific driver にする。
+
+**安全な再利用手順**:
+
+1. **値の SoT を画面の外に持つ**: 日付・金額・会場・備考・人数等を project/case 側 YAML に置く。画面の一時状態と SESSION は正本にしない。
+2. **同フォームの直近承認済み申請を開く**: 詳細画面の「再利用して申請する」は、新規申請画面へ正しい form / path を持ち越す最短経路。ただし「過去に承認された」は現在値の正しさの証拠ではない ([`#acceptance-is-not-specification`](../docs/convention-design-principles.md#acceptance-is-not-specification))。
+3. **内容入力 → 経路設定 → 内容確認を3段として扱う**: 再利用値は SoT で全て上書き、radio/checkbox は click でなく値を直接設定。経路画面で step 名と処理者を読み、確認画面で全項目を SoT と diff する。
+4. **最終送信は owner の明示 OK 後に 1 回だけ**: 提示は少なくとも申請者・標題・日時・主要値・備考・添付の有無・処理経路を含む。承認前に「申請する」を押さない。
+5. **成功画面で閉じない**: 申請後は「送信一覧」を開き、新しい行の **申請番号 / フォーム名 / 標題 / 状況 / 現在の処理者 / 申請時刻**を確認する。レスポンス画面でなく server-side list が成否の正 ([`web-form-automation.md#submit-truth-is-server-state`](web-form-automation.md#submit-truth-is-server-state))。
+6. **ID と現在地を case SoT に回収する**: 申請番号・内部 pid・送信時状態・URL を案件側に保存。workflow は申請時点で閉じず、承認 / 差し戻し / 取り消しの終端まで追う。
+
+**接続の実務**: 自動選択が未 login の in-app browser を開く一方、同じマシンの external Chromium に SSO session が残っていることがある。その場合は再 login の前に接続済み browser 一覧を取り、最新のログイン済み tab を claim する。画面 title/URL の一時的な「ログイン」表示で判定せず、DOM 内の user 名 / portal / workflow を読んで session 実状態を判定する。
+
 ## App 別 URL (= browser MCP で読むときの入口。 script 経路が使えない環境向け)
 
 | app | URL | 備考 |
@@ -33,6 +51,7 @@ SAML-only 組織では REST の password auth が admin 限定・OAuth client �
 | **ファイル管理 検索** | `/g/cabinet/search.csp?text=<urlencoded>` | file 名 + **file 内文**を検索 (= doc/pdf の中身も hit) |
 | file download | `/g/cabinet/download.csp/-/<name>?fid=<N>&time=<token>` | ⚠️ 下記 token 期限 |
 | **施設予約** (スケジュール内) | `/g/schedule/facility_index.csp` | 施設のグループ週表示。 施設の存在確認は左上の施設グループ dropdown か「ユーザー/施設」検索 box |
+| **ワークフロー** | `/g/workflow/index.csp` | 申請・送信一覧・受信一覧・下書き。write は [#garoon-workflow-write](#garoon-workflow-write) |
 
 - ページ内検索 box への type は UI 状態依存で空振りしやすい — **search.csp への直 navigate が確実**。
 - ⚠️ **全文検索 (`/g/fts/search.csp`) の scope は掲示板 + ファイル管理のみ** — 施設予約・スケジュール・ワークフローは hit しない (結果ページ自身が「その他のアプリケーションは各アプリケーション内から検索」 と明記)。 fts の 0 件を「施設が存在しない」 等の absence 証明にしない (= scope 違いの null)。 施設の不在を言うには施設予約画面の施設リスト側で確認する。
