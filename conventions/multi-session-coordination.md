@@ -74,11 +74,19 @@ Read it again before attempting to write it.
   - **検査 = `git fetch` の後、 `git diff --name-only HEAD..@{u}` (upstream が変えた file) と `git diff --name-only` (tree の未 commit 変更) の交差を見る。** 空なら pop は conflict しない。 空でなければ pull しない: 相手に通知して、 相手の commit を待ってから pull する。 相手の file の conflict を自分で解くのは最後の手段で、 解いたら内容を相手に通知し、 autostash の stash は drop しない (相手の元の作業の控え)。
 - <a id="pull-fetch-head-race"></a>**並列 session が居る repo では `git pull --ff-only` より `git fetch && git merge --ff-only @{u}`** (2026-09-12 追加) — `git pull` は fetch 結果を `.git/FETCH_HEAD` 経由で読むが、 同じ repo で別 session が同時に fetch するとこの file が書き換わりうる。 実例: `git pull -q --ff-only` が `fatal: Cannot fast-forward to multiple branches.` で落ちた (branch の merge 設定は 1 本だけ = FETCH_HEAD の同時書換えと推定、 再現は未確認)。 `merge --ff-only @{u}` は remote-tracking ref を直接読むので FETCH_HEAD に依存しない。 pull が落ちても tree は変わっていないので、 そのまま `merge --ff-only @{u}` で続けてよい。
   - 実例 2026-09-11: guard の書き損じ ([`shell-env.md#guard-condition-and-chain`](shell-env.md#guard-condition-and-chain)) で自分の commit が走らないまま、 同じ行の `pull --rebase --autostash` だけが走った。 upstream の 3 commit が、 別 session が作業中の hook 規約を変えていて、 pop が front matter の summary 1 行とその生成物 (conventions の README) で conflict した。 両側の追記を合わせた 1 行に解き、 index を reset して相手の変更を unstaged に戻し、 stash は残して相手 session に通知した。
-- <a id="foreign-wip-scratch-worktree"></a>**live checkout に相手の未 commit 変更や未 push commit が居るときは、 自分の変更を origin から切った使い捨て worktree で commit・push する** (2026-09-12 追加) — `git fetch && git worktree add --detach <tmp> origin/<branch>` → 変更 → 検査 → commit → push 直前に再 fetch して rebase → `git push origin HEAD:<branch>` → `git worktree remove <tmp>`。 live の tree には触らない (= pull も autostash も起きない、 [#autostash-foreign-wip](#autostash-foreign-wip) の迂回路)。 4 点:
+- <a id="foreign-wip-scratch-worktree"></a>**live checkout に相手の未 commit 変更や未 push commit が居るときは、 自分の変更を origin から切った使い捨て worktree で commit・push する** (2026-09-12 追加) — `git fetch && git worktree add --detach <tmp> origin/<branch>` → 変更 → 検査 → commit → push 直前に再 fetch して rebase → `git push origin HEAD:<branch>` → `git worktree remove <tmp>`。 live の tree には触らない (= pull も autostash も起きない、 [#autostash-foreign-wip](#autostash-foreign-wip) の迂回路)。 5 点:
   - live の tree に自分が置いた untracked copy は、 push 後に `git show origin/<branch>:<path> | cmp - <path>` で一致を確かめてから消す (残すと相手の pull が「untracked working tree files would be overwritten」 で止まる)。
   - 生成物 (tree の件数・索引) は worktree 側で再生成する。 rebase で衝突したら upstream 側を取って再生成し直す (手で混ぜない)。
   - 同じ file に相手の hunk が混ざっていて `git commit -- <path>` が使えないときは、 `git show HEAD:<path>` に自分の hunk だけを足した版を `git hash-object -w` → `git update-index --cacheinfo 100644,<blob>,<path>` で index に入れて commit する (= 相手の hunk は working tree に残る)。 index 経由なので [#staging-window-race](#staging-window-race) の窓を 1 コマンド行に閉じ込める。
   - worktree で検査すると、 checkout の dir 名・置き場所に依存する test が**落ちる / 空振りで通る**ことがある。 手順の不備ではなく test 側の欠陥なので、 そちらを直す ([hook-authoring.md#test-root-not-parent-dir](hook-authoring.md#test-root-not-parent-dir))。 直るまでは、 worktree と live の FAIL の**差**だけを自分の変更の影響として読む。
+  - **git-crypt の repo では `git worktree add` が smudge で落ちる** (key は本体の `$GIT_DIR/git-crypt` にあり、 worktree 自身の git-dir からは見えない)。 `--no-checkout` で作り、 key の dir を symlink してから checkout すると復号済みの worktree になる (2026-09-12 実測、 `git status` も clean):
+
+        git worktree add --no-checkout --detach <tmp> origin/<branch>
+        ln -s "$(git rev-parse --path-format=absolute --git-common-dir)/git-crypt" \
+              "$(git -C <tmp> rev-parse --path-format=absolute --git-dir)/git-crypt"
+        git -C <tmp> checkout
+
+    `-c filter.git-crypt.smudge=cat` で迂回する手もあるが、 暗号のまま checkout されるので、 `status` / `commit` / `rebase` のたびに clean 側の `-c` も付け続ける必要がある (付け忘れると clean filter で落ちる)。
 
   - **原稿と PDF の並行作業**: 主ファイルと最終ビルドは同じ担当が書き、独立な追加内容は別の include file に分ける。各担当が自分の範囲を進められるようにし、追加依頼のたびに相手の作業全体を止めない。ビルド終了前の PDF・log を監査結果として確定せず、最終 source・log・PDF の組を確認してから生成レポートを作る。hash や mtime は観測した組の識別であり、それだけでは同一ビルドの証明にならない。
   - **古い研究ブランチからの統合**: 最新の受入先の定義・訂正・差分を先に読み、独立な成果と共有ファイルへの必要な変更を区別する。成果の輸送のために古い本文を丸ごと戻さない。作業場所や担当に関する最新の owner 指示は引継ぎ記録へ反映し、古い委譲時の制約を現在の指示として再発火させない。
