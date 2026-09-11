@@ -727,6 +727,33 @@ turn 終了時 (Stop) に最終 assistant 発話を読み、 決まった句 (�
 
 ---
 
+## <a id="cross-session-hook-concurrency"></a>§13. 並列 session の同じ hook は同時に走る — 状態を書き換える hook は資源ごとの lock を取り、 取れなければ skip と言う
+
+### <a id="cross-session-hook-problem"></a>問題
+
+[§11](#parallel-hooks-no-ordering) は 1 session の中の hook 同士の話。 別の軸として、 **session を複数同時に始めると (desktop の resume と新規、 複数 window) 同じ hook が session の数だけ同時に走る**。 読むだけの hook なら害は無いが、 repo の HEAD / tree / stash、 生成 file、 共有の surface file を書き換える hook は互いの途中状態を読んで壊す。 一方の失敗は他方の成功の後始末として現れるので、 出力が実態と食い違い、 原因の見当が付かない。
+
+### <a id="cross-session-hook-example"></a>実例 (2026-09-12)
+
+session 開始時の auto-pull hook (全 repo を fetch → behind なら ff、 tracked-dirty なら stash → ff → pop) が 2 session で同時に走り、 後発の空振り stash の後の pop が先発の stash を pop、 先発は「stash に残っている」 と誤報した (機構 = [multi-session-coordination.md#stash-push-noop](multi-session-coordination.md#stash-push-noop))。 同じ起動で同時 fetch の ref lock 衝突 ([#concurrent-fetch-ref-lock](multi-session-coordination.md#concurrent-fetch-ref-lock)) も起き、 「fetch 未完了 (timeout)」 と原因を誤って報告していた。
+
+### <a id="cross-session-hook-prevention"></a>防止策
+
+1. **書き換える区間だけを資源単位の lock の内側で行う**。 macOS 標準で動く原子的な操作 = `mkdir <lockdir>` (repo なら `<git common dir>/<name>.lock`。 stash は worktree 間で共有なので common dir)。 lock を取ったら状態を**読み直す** (取るまでの間に相手が済ませているかもしれない)。
+2. **取れなければ待たずに skip し、 skip したと出す** (holder の pid と経過秒 + 確認コマンド)。 相手の hook が同じ仕事をしているので session 開始を待たせない。 黙って落とすと「その repo は見た」 と誤読される。
+3. **古い lock を拾う**: owner file に `<pid> <epoch> <乱数>` を書き、 pid が死んでいる (`kill -0` 失敗) か取得から一定秒を超えたら古いとみなす。 除去は rename で原子的に行い、 動かした中身が判定時の owner と一致した時だけ消す (不一致なら戻して譲る = 判定から除去までの間に取り直された lock を消さない)。 除去したことも出す。
+4. **解放は EXIT trap で**。 lock を `$(...)` / `( )` の subshell で取ると subshell には EXIT trap が継がれないので、 取った path を一時 file に書き、 親の EXIT / TERM / INT trap で「owner の pid が自分」 のものだけ消す。 SIGKILL で残った分は 3. で拾う。
+5. **lock だけに頼らない**: 同じ資源を hook 以外の process (人手の git、 別 tool) も触る。 自分の成果物を自分で特定する検査 (stash なら固有 tag + sha で pop) を lock と独立に置く。 実測で、 lock を外しても stash 側の検査だけで最終状態は守られた (二重の防御)。
+6. **test は窓を決定的に開ける**: test mode の時だけ効く env (例: 書き換え区間の直前 / 直後で lock を持ったまま N 秒止まる) を足し、 「先発が止まっている間に後発を起動」「途中で外部の actor が状態を変える」 を再現する。 完全同時起動 ×数回の不変条件 test も併置する (同時 fetch のような確率的な事故を拾う)。 test が空振りしていないことは、 旧実装と、 検査を 1 つずつ外した mutation で落ちることで確かめる。
+7. **共有 file (surface / cache) は後に書いた側が残る**。 合成が要るなら file 単位の lock、 要らないなら「相手の結果は相手の出力に出る」 と skip 行に書く。
+
+### <a id="cross-session-hook-related"></a>関連
+
+- [§11 #parallel-hooks-no-ordering](#parallel-hooks-no-ordering) (1 session 内の hook 間の順序) / [multi-session-coordination.md#pull-fetch-head-race](multi-session-coordination.md#pull-fetch-head-race) (FETCH_HEAD の並列書換え)。
+- 参照実装 = [`scripts/repo-sync-sweep.sh`](../scripts/repo-sync-sweep.sh) + [`scripts/repo-sync-sweep.test.sh`](../scripts/repo-sync-sweep.test.sh)。
+
+---
+
 ## <a id="related-docs"></a>関連
 
 - `claude-config/setup.sh §Step 2 install_hooks()` — 配信機構の正本 (= delivery 軸 (a) symlink + (b) settings.json を atomic 化する reference implementation。 (c) logic は hook script 側、 (d) invoke 経路は claude-code harness 側で別 layer)

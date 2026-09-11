@@ -100,6 +100,8 @@
 - **[public-precommit-runner.sh](public-precommit-runner.sh)** — 公開リポ pre-commit gate（Tier A + sensitive-terms.txt ephemeral）
 - **[public-precommit-runner.test.sh](public-precommit-runner.test.sh)** — self-tests for the file-body pre-commit gate
 - **[replace-line.py](replace-line.py)** — 一意 prefix assert 付きの 1 行置換 (= 「検証してから書く」 の機械化)。
+- **[repo-sync-sweep.sh](repo-sync-sweep.sh)** — <root>/*/ の git repo を並列 fetch し behind-only は自動で最新化する engine (tracked-dirty は stash→ff-merge→pop、 並列起動は repo 単位の lock で排他、 手当ての要る repo は 1 行ずつ返す)
+- **[repo-sync-sweep.test.sh](repo-sync-sweep.test.sh)** — repo-sync-sweep.sh の test (一時 dir の bare remote + clone で各状態・並列起動・lock・stash の空振りを検証)
 - **[reviewed-mail.test.sh](reviewed-mail.test.sh)** — Exercise reviewed replies without credentials, network, or agent state.
 - **[reviewed_mail.py](reviewed_mail.py)** — Reviewed plain-text replies, independent of credentials and agent products.
 - **[reviewed_mail_cli.py](reviewed_mail_cli.py)** — Shared mail CLI/Gmail gateway with injected account factory; stdlib only.

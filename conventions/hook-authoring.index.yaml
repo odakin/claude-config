@@ -251,6 +251,21 @@ sections:
   - id: text-pattern-stop-hook
     level: 2
     title: "§12. 発話を見る Stop hook — 句で当てる前に過去の発話で校正し、 引用の例示を除く"
+  - id: cross-session-hook-concurrency
+    level: 2
+    title: "§13. 並列 session の同じ hook は同時に走る — 状態を書き換える hook は資源ごとの lock を取り、 取れなければ skip と言う"
+  - id: cross-session-hook-problem
+    level: 3
+    title: "問題"
+  - id: cross-session-hook-example
+    level: 3
+    title: "実例 (2026-09-12)"
+  - id: cross-session-hook-prevention
+    level: 3
+    title: "防止策"
+  - id: cross-session-hook-related
+    level: 3
+    title: "関連"
   - id: related-docs
     level: 2
     title: "関連"
