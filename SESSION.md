@@ -36,6 +36,10 @@ Codex の自己同定とprovenance整備は、技術契約・実装所有表・�
 
 > 📌 **このファイル = 直近 (概ね直近 1 ヶ月) の作業 + Open items**。 それ以前の dated entry は [`SESSION-archive.md`](SESSION-archive.md) に分離 (grep 用)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md` (= 本 dated entries は resume 用 highlights であって網羅的 changelog ではない)。 hot/cold 分離: 2026-06-10 (accretion 対策)、 第 2 回縮退: 2026-09-01 (2026-06-01〜07-31 の 29 entry を archive へ MOVE)。
 
+## 2026-09-11 — hook kill switch (`disableAllHooks`) と承認 dialog の計測
+
+主作業 root の project-local に入っていた `disableAllHooks: true` が、 その root で開いた session の user hook を全部止めていた (「desktop は hook を honor しない」 という誤診の一部原因)。 一般則 = [`hook-authoring.md#disableallhooks-kill-switch`](conventions/hook-authoring.md#disableallhooks-kill-switch)、 道具 = [`scripts/hook-liveness-audit.py`](scripts/hook-liveness-audit.py) (`audit-hooks.sh` の (d) 自動部分として dashboard から毎 session 回る)。 承認 dialog を数える経路 = [`claude-code-permissions.md#desktop-permission-dialog-log`](conventions/claude-code-permissions.md#desktop-permission-dialog-log) + [`scripts/permission-dialog-audit.py`](scripts/permission-dialog-audit.py)、 Monitor の allow の含意 = [`#monitor-needs-own-allow`](conventions/claude-code-permissions.md#monitor-needs-own-allow)。 surface dir に書く hook は `CLAUDE_SURFACE_DIR` を尊重し、 その test は temp dir を使う (fixture が本物の surface dir に残っていた)。 経緯と machine 別の状態は owner の private layer が持つ。
+
 ## 2026-09-11 — set -e test の失敗自己申告 + GNU userland の手元再現
 
 main の checks が push 225 回連続で red (09-01〜09-11) だったのに、 原因の行が log に出なかった件の整備。 規約の正本 = [`hook-authoring.md#set-e-test-failure-report`](conventions/hook-authoring.md#set-e-test-failure-report) (いつ使うか + ERR trap の bash 3.2 / 5 実測表)、 helper = [`scripts/lib/test-err-trap.sh`](scripts/lib/test-err-trap.sh) (set -e の bare-assertion test 5 本が source)、 手元の GNU 実行 = [`scripts/with-gnu-userland.sh`](scripts/with-gnu-userland.sh)、 比較実験の交絡 = [`debugging-discipline.md#one-variable-per-arm`](conventions/debugging-discipline.md#one-variable-per-arm)。

@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき
 category: harness-core
-summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)**)
+summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook は同 session 非発火=session 開始時 snapshot、 docs の hot-reload 記述は build 依存 / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)** + **§2 補足 2 #disableallhooks-kill-switch = root 限定の disableAllHooks が「frontend 差」 に化ける 〔自 session では検出不能 = 外側から scripts/hook-liveness-audit.py、 audit-hooks.sh の (d) 自動部分〕**)
 -->
 # Claude Code hooks の作成 + 配信規律
 <!-- slug index: hook-authoring.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
@@ -209,7 +209,7 @@ claude-code が hook を起動するには **4 軸全てが揃う必要**:
 | (a) **symlink target 健全性** | `~/.claude/hooks/<name>.sh` が存在し target も存在 (= `[ -e <path> ]` が true) | hook spawn 即 fail。 claude-code は exit code を log するが user 通常見ない |
 | (b) **settings.json entry** | `~/.claude/settings.json` の `hooks.PreToolUse[]` (または PostToolUse) に該当 command path が登録 | claude-code が hook を invoke しない。 stderr 不在で気付かない |
 | (c) **logic 健全性** | realistic JSON stdin で hook 起動 + 期待出力 (= ask JSON / warn 出力 / silent) 確認 | (a)(b) OK でも logic bug で空振り、 false negative |
-| (d) **harness invoke 経路の生死** | hook 先頭に trace block 投入 → 実 tool call → trace log 作成確認 | (a)(b)(c) 全 OK でも claude-code 側の bug で hook が起動しない silent failure。 既存 audit-hooks.sh script は (a)(b)(c) のみ check するので green でも (d) は fail し得る |
+| (d) **harness invoke 経路の生死** | hook 先頭に trace block 投入 → 実 tool call → trace log 作成確認 | (a)(b)(c) 全 OK でも hook が起動しない silent failure (= claude-code 側の bug / settings の kill switch)。 audit-hooks.sh は (d) の自動部分 (= kill switch の settings 走査 + transcript 上の SessionStart 発火証拠、 `hook-liveness-audit.py`) まで回す。 個別 hook の trace は manual |
 
 4 軸全て silent failure mode を持つ。 「symlink 作った」 「settings.json 直した」 「テスト書いた」 「invoke 経路も確認した」 のどれか 1〜3 つで「fix 完了」 と claim するのは error。
 
@@ -225,7 +225,7 @@ claude-code が hook を起動するには **4 軸全てが揃う必要**:
 ### <a id="delivery-audit-method"></a>防止策 / audit method
 
 **ゲート質問** (= hook 配信を「fix した」 と claim する前):
-0. **`echo $CLAUDE_CODE_ENTRYPOINT` を確認** — `claude-desktop` なら **hook 出力がモデルに反映されない** (= hook は実行されるが harness が出力を honor しない、 §9.3)。 desktop session での「効かない / 非発火に見える」 は配線の問題ではないので、 1-4 を audit する前にここを見る (= 誤帰責の最頻原因)。
+0. **まず kill switch を疑う** ([#disableallhooks-kill-switch](#disableallhooks-kill-switch)) — `python3 scripts/hook-liveness-audit.py` (= settings 全 tier の `disableAllHooks` + root ごとの発火記録)。 root 限定の kill switch は「この frontend では効かない」 に見える (= 2026-06〜09 の「desktop は hook を honor しない」 診断の少なくとも一部はこれだった)。 frontend 差 ([§9.3](#frontend-dependent-cowork)) を疑うのはその後で、 それも前提にせずその session で測る。
 1. `[ -e ~/.claude/hooks/<name>.sh ]` (= symlink target 健全?)
 2. `jq -e --arg c "<name>.sh" '.hooks.PreToolUse[] | select(.hooks[]?.command | contains($c))' ~/.claude/settings.json` (= entry 存在?)
 3. realistic JSON stdin で hook 起動 → 期待出力 確認 (= logic 健全?)
@@ -250,7 +250,7 @@ cat /tmp/hook-trace.log       # 起動時 cwd / pid も同時 audit
 
 **必須 cleanup**: trace block を必ず revert (= 残置すると将来の session で /tmp に蓄積、 noise + log file 蓄積)。 manual edit を 2 段 (= 投入 → tool call → 確認 → revert) で扱う protocol が必要なので、 単発 script に閉じない。 atomic 化 (= 投入 + revert を 1 unit) する script の design plan あり (= odakin-prefs 側 plan、 layer 1 への将来 contribution として議論中、 Anthropic fix 完了後に implementation trigger)。
 
-**audit script の現状**: `claude-config/scripts/audit-hooks.sh` は (a)(b)(c) 3 軸の sweep を実装済 (= `setup.sh` Step 3 後の delivery 検証 + dashboard 統合)。 (d) 軸 は trace 投入 / revert の atomic 化が必要なので別段の implementation が要、 本 file (2026-05-21) では未実装で manual protocol のみ documented。
+**audit script の現状**: `claude-config/scripts/audit-hooks.sh` は (a)(b)(c) 3 軸 + **(d) の自動部分**を回す (= `setup.sh` Step 3 後の delivery 検証 + dashboard 統合)。 (d) の自動部分 = `scripts/hook-liveness-audit.py --findings-only` (settings 全 tier の `disableAllHooks` / `allowManagedHooksOnly` + transcript 上で直近 N session 連続して SessionStart hook の発火記録が無い root、 2026-09-11 追加)。 個別 hook の invoke を確かめる上記 trace は、 投入 / revert の atomic 化が要るので manual protocol のまま。
 
 **hook 配信 drift の根本因**: setup.sh が periodic 実行されないと、 claude-config に新 hook を commit / 既存 hook の symlink target を変更しても、 各マシンの `~/.claude/hooks/` への配信は遅延する。 対処の候補:
 - (i) setup.sh を post-merge git hook で auto-run (= 既存 Step 6 で claude-config 自身の post-merge は導入済、 hook install step もここで毎回 idempotent 再実行する余地)
@@ -273,6 +273,26 @@ setup.sh 自体は idempotent design なので (i) は実装コスト低。 但�
 - 実例 (2026-06-10): SESSION.md を python script で hot/cold split した際、 PreToolUse leak-guard は不発火、 commit-time gate + 手動 grep で安全確認した。
 
 → guard を設計するとき「守りたい write は Edit/Write だけか、 Bash も含むか」 を明示する。 path-based なら Bash matcher を追加、 content-based なら commit-time gate に backstop を置く (= PreToolUse 単独で content leak を完全には塞げない)。
+
+### <a id="disableallhooks-kill-switch"></a>§2 補足 2: `disableAllHooks` kill switch — root 限定で入ると「frontend 差」 に化ける
+
+**症状**: ある場所で開いた session では hook が 1 本も効かず (SessionStart の注入なし・PreToolUse の ask / deny 素通り・PostToolUse の nudge なし)、 別の場所で開いた session では普通に効く。 (a)(b)(c) の配信 audit は全部 green。
+
+**機構**: settings の `disableAllHooks: true` は、 その settings file が効く範囲の **command hook を全部止める** (user tier なら全 session、 managed なら machine 全体、 project / project-local なら **その root を開いた session だけ**)。 host が SDK 経由で登録する callback hook (desktop app の案内文等) は止まらないので、 transcript に hook 由来らしい記録が少し残り「hook は動いている」 と錯覚しやすい。 CLI の内部文言は "Policy disableAllHooks: skipping configured hooks … (SDK callback hooks still run)"、 `/hooks` 画面にも "To re-enable hooks, remove "disableAllHooks" from settings.json" と出る。 同じ見え方をする他の候補 = managed の `allowManagedHooksOnly` / workspace trust 未承認 (後者は未検証の候補)。
+
+**潜む場所**: 主作業 root の `.claude/settings.local.json` (= git 非同期・machine-local・普段開かない file)。 同じ file には desktop app の「常に許可」 が allow rule を書き足すので mtime は頻繁に動き、 mtime から「いつ入ったか」 は分からない。
+
+**なぜ誤診されるか**: 主に使う frontend と主に開く root が重なっていると、 root の差がそのまま frontend の差に見える。 実例 (2026-09-11 判明): owner の主作業 root の project-local に kill switch が**少なくとも 2.5 ヶ月**入っており、 その root で開いた session では user hook 約 60 本 (SessionStart / PreToolUse / PostToolUse / UserPromptSubmit / Stop) が 1 本も走っていなかった。 この間の「desktop app は hook 出力を honor しない」 という観測 ([§9.3](#frontend-dependent-cowork)) の少なくとも一部はこの root で測ったもので、 frontend の性質の証拠にならない。 いつ誰が入れたかは記録が残っていない。
+
+**自分では検出できない**: kill switch 下の session は SessionStart hook も止まるので、 「hook が止まっている」 と知らせる hook 自体が走らない。 検出は外側に置く — dashboard (別 process)、 別 root の session、 定期実行。
+
+**判別 (transcript)**:
+- user の command hook が走った session には `attachment.hookEvent == "SessionStart"` かつ `attachment.command` が hook の path である record (hookName `SessionStart:startup|resume|compact`) が残り、 `system/stop_hook_summary` の `hookInfos[].command` に hook の path が並ぶ
+- kill switch 下は stop summary の command が `callback` だけ。 desktop の callback が出す `hook_additional_context` は command を持たないので user hook の証拠に数えない
+
+**道具**: [`scripts/hook-liveness-audit.py`](../scripts/hook-liveness-audit.py) — settings 全 tier (user / managed / 各 root の project と project-local) の `disableAllHooks` と `allowManagedHooksOnly` を見て、 transcript を root ごとに集計し「SessionStart hook が設定されているのに直近 N session 連続で発火記録が無い root」 を出す (連続で見るので、 除去後に 1 本でも発火すれば消える)。 `audit-hooks.sh` が `--findings-only` を回すので dashboard から毎 session 見える。
+
+**除去**: 該当行を消せば**同じ session の次の tool call から** hook が走る (desktop 埋込 2.1.260 で実測。 [§9.1](#new-hook-session-snapshot) の snapshot 規則はこの変更には当てはまらなかった)。 ただし理由があって入れた可能性があるので、 検出しても自動では消さず owner に判断を渡す。 除去すると ask / deny を返す guard 群も一斉に復活して確認 dialog が増えるので、 それを先に伝える。
 
 ---
 
@@ -538,6 +558,8 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 
 ⚠️ **frontend で snapshot 粒度が違う — desktop app は *app 起動時* snapshot (2026-06-27 実測)**: 上記 ③「次 session で確認」 は CLI (= session 単位 snapshot) の作法。 **Claude Code の desktop app (`CLAUDE_CODE_ENTRYPOINT=claude-desktop`、 = Claude for Mac の Code) は hook list を *app 起動時* に snapshot する** ので、 既に起動している app の中で「新しい session を開く」 だけでは、 後から settings.json に足した hook は **発火しない**。 → desktop で新規 hook を活かす・live verify するには **app を quit + 再起動**してから新 session を開く (= ③ は desktop では「app 再起動 → 次 session」)。 実測 (2026-06-27 probe): 13:03 に追加した SessionStart hook が、 13:25 に *起動済 app 内で* 開いた fresh session で**非発火** — 一方、 同じ fresh session で *app 起動前から settings.json に在った* 他 ~10 個の SessionStart hook は全て発火 (= それぞれの surface file が当該時刻に新規書込)。 ∴ 非発火は hook 不良でなく **app-launch snapshot 未収載**が原因 (logic は手動実行で健全確認済)。 これは §9.3 (= 出力が honor されない) とは**別軸の desktop 制約** (= §9.3「載った hook の出力が届くか」 / 本項「そもそも snapshot に載るか」)。
 
+⚠️ **settings の変更がすべて snapshot に縛られるわけではない** (2026-09-11、 desktop 埋込 2.1.260 で実測): `disableAllHooks` の除去と `permissions.allow` への追加は、 **同じ session の次の tool call から**有効になった。 snapshot されるのは hook の一覧で、 kill switch や permission rule は都度読まれている可能性がある (機構は未確認)。 どの変更が即時でどれが snapshot かは、 変更の種類ごとに 1 回測る。
+
 ### <a id="build-dependent-docs-drift"></a>9.2 同種の「docs と乖離」 build 依存 feature
 
 | feature | 最新 docs | 実測された乖離 | robust な cross-build 選択 |
@@ -548,9 +570,9 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 
 **メタ規律**: hook 挙動を docs だけで assert せず、 ① logic は stdin で unit-test、 ② live 発火・新 field は **実測** (= throwaway hook / 実 tool call / 新 session)、 ③ 不確実な feature は **古い build でも動く path** を選ぶ (= stderr narrative / deny / new-session verify)。
 
-### <a id="frontend-dependent-cowork"></a>9.3 frontend 依存 — desktop app の hook 出力 honor は **build/時期で反転する。 前提にせず session ごとに測れ**
+### <a id="frontend-dependent-cowork"></a>9.3 frontend 依存 — desktop app の hook 出力 honor は**反転して見えた (主因は root 限定の kill switch)。 前提にせず session ごとに測れ**
 
-hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 / desktop app)** にも依存する。 **ただしこの依存は固定の性質ではなく、 同じ version 文字列のまま反転した実績がある** — 下の 2026-09-09 実測を参照。
+hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 / desktop app)** にも依存する。 **ただしこの依存は固定の性質ではなく、 同じ version 文字列のまま反転した実績がある** — 下の 2026-09-09 実測を参照。 ⚠️ **2026-09-11**: 反転に見えたものの大部分は、 作業 root に入っていた `disableAllHooks` だった ([#disableallhooks-kill-switch](#disableallhooks-kill-switch))。
 
 > 🔄 <a id="desktop-hook-honor-remeasure"></a>**2026-09-09 実測 (desktop 埋込 build 2.1.260、 `entrypoint=claude-desktop`) — 3 面すべて honor された** (= 2026-06-13 / 2026-09-05 の観測と**逆**):
 >
@@ -560,7 +582,7 @@ hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 
 > | PreToolUse の `permissionDecision: deny` | 素通し | **enforce される** | marker 無しの memory 書込みを Bash で試行 → guard の deny 文言で tool が実行前に停止、 probe file も生成されず |
 > | PostToolUse の `hookSpecificOutput.additionalContext` | (未測定) | **届く** | 検索 null nudge が tool_result 末尾に付与され、 両 session の transcript に literal で残存 |
 >
-> **原因は未特定** (= version 文字列は両日とも 2.1.260。 harness 側の変更か、 09-05 測定の交絡か、 いずれとも決められない。 断定しない)。
+> **原因の大部分は kill switch と判明 (2026-09-11)**: owner の主作業 root の project-local に `disableAllHooks: true` が入っていた ([#disableallhooks-kill-switch](#disableallhooks-kill-switch))。 その root で開いた desktop session は 9/1 以降すべて SessionStart の発火記録 0、 同期間に別 root で開いた session は発火していた。 09-05 の再測定もその root の session だった**可能性が高い** (同日の同 root の session はすべて発火記録 0)。 09-09 の測定 session の root は記録から特定できていないが、 同 root の session はすべて 0 なので別 root だったと**推論**できる (推論であって確認ではない)。 決め手 = 同じ desktop session で、 除去前は PreToolUse の ask が出ず (jq はあり fail-open ではない)、 除去直後は PostToolUse の additionalContext が届いた = frontend でなく設定の差。 06-13 の観測がこれで説明できるかは記録が無く未確定 (06-13 には SessionStart hook がプロセスとして走った trace があり、 全停止とは完全には合わない)。
 >
 > **設計上の帰結 (重要)**: 「desktop だから hook は効かない」 を**対策見送りの根拠にしない**。 この前提は
 > ① 実際に反転した ② 反転しても誰も気づかない (= 前提が doc に焼かれると再測定の trigger が消える) の 2 点で危険。
@@ -577,9 +599,10 @@ hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 
 - **SessionStart hook**: desktop でも **プロセスとして実行される** (= 撤去前提の trace hook 〔stdin + 親プロセス path を記録〕 を SessionStart に仕込み、 desktop が `source:startup` の session を生成するたびに発火するのを確認。 親プロセス = 埋込 build 2.1.170)。 **だがその出力 (stdout / `additionalContext`) はモデルの文脈に注入されない** (= 同 hook に unique marker を載せ、 fresh な desktop session に「marker が見えるか」 と問うと「ない」。 加えて検証 session 自身が session 開始時に currentdate-anchor 〔無条件出力〕 や horizon の reminder を一切受領していない)。 ∴ **副作用 (file 書込等) は起きるが、 context injection は捨てられる**。
 - **PreToolUse hook**: その **permissionDecision (deny/ask) が honor されない** (= session 開始時から snapshot に在る memory-guard 〔marker 無し memory write を hard-deny するはず〕 が desktop で素通り。 deny 型ゆえ `bypassPermissions` でも隠れない零交絡で確定)。 execution 自体の有無は未分離 (= 初回 session の §2(d) trace 不在は **mid-session 追加による §9.1 snapshot 交絡**の可能性があり、 「実行されない」 と断定しない。 確実なのは「効果が届かない」)。
 - **正確な像** = **「desktop は hook を実行はするが、 モデルに向かう出力 (SessionStart の context injection / PreToolUse の permission 判定) を harness が honor しない」**。 旧版の「hook を一切実行しない」 / 「SessionStart も発火しない兆候 (cache stale)」 は **不正確** (= cache stale は SessionStart hook が呼ぶ calendar 取得補助 〔EventKit 経由の外部 binary〕 側の失敗 〔Terminal の TCC 不足等〕 が原因で、 hook 非実行の証拠ではなかった)。
-- **再測定 (2026-09-05、 desktop 埋込 build 2.1.260)**: 状況は不変 — SessionStart の stamp 注入は session に届かず (= 自己同定 hook が走っているのに冒頭 stamp が無い)、 PreToolUse deny (memory-guard) は marker 無し write を素通し (probe file を作って即削除で実測)。 ∴ 「desktop では hook 出力はモデルに届かない」 は 3 ヶ月後も有効な前提として設計する。 desktop で頼れる自己同定は**最初の tool call で probe を実行して結果を冒頭に出す** discipline のみ ([multi-account-machine-surface.md I7](multi-account-machine-surface.md#seamless-invariants))。
+- **再測定 (2026-09-05、 desktop 埋込 build 2.1.260)**: 状況は不変 — SessionStart の stamp 注入は session に届かず (= 自己同定 hook が走っているのに冒頭 stamp が無い)、 PreToolUse deny (memory-guard) は marker 無し write を素通し (probe file を作って即削除で実測)。 ∴ 「desktop では hook 出力はモデルに届かない」 は 3 ヶ月後も有効な前提として設計する。 desktop で頼れる自己同定は**最初の tool call で probe を実行して結果を冒頭に出す** discipline のみ ([multi-account-machine-surface.md I7](multi-account-machine-surface.md#seamless-invariants))。 ⚠️ **2026-09-11 注**: この再測定は kill switch が入った root の session だった可能性が高く ([上](#desktop-hook-honor-remeasure))、 frontend の性質の証拠としては使えない。 probe discipline 自体は、 注入が届いても害が無いので維持してよい。
 - **declarative permission との非対称**: 同じ desktop でも `~/.claude/settings.json` の `permissions.deny` は **honor される** (= 無害な deny 対象コマンドを叩いて block を実測)。 honor されないのは hook 出力と承認フロー (ask)。 詳細は [`claude-code-permissions.md` frontend-split](claude-code-permissions.md#frontend-split)。
 
+- ⚠️ **以下 3 項 (docs 乖離 / 有効化する手段 / 判別) は superseded (2026-09-11)**: 「desktop では hook の効果がモデルに届かない」 は kill switch を見落とした測定に基づく ([#disableallhooks-kill-switch](#disableallhooks-kill-switch))。 kill switch を除いた desktop (埋込 2.1.260) では SessionStart 注入・PreToolUse の ask / deny・PostToolUse の additionalContext が届いた。 記録として残すが、 判別に使うのは[上の 1 session 分の判別レシピ](#desktop-hook-honor-remeasure)と kill switch の確認だけにする。
 - ⚠️ **公式 docs の「Hooks … apply to both 〔CLI and Desktop〕」 は実機と乖離** (= desktop では hook の効果がモデルに届かない。 hook は走るが出力が honor されないため実質「効かない」)。 docs を根拠に「desktop でも hook が効く」 と assume しない (= §9 冒頭「docs を鵜呑みにしない」 の frontend instance)。
 - **有効化する手段は無い** (2026-06-13 確認): hook を desktop で on にする setting / CLI flag / env var は存在しない (`--output-format` は出力形式の制御で hook 実行とは無関係)。 desktop-native で最も近い機構は MCP server の `toolPolicy` (= 許可 tool の gating のみ、 PreToolUse のように **script を走らせる pre-tool-call は不可**)。 managed `allowManagedHooksOnly` は enterprise の管理制御で execution 保証ではない。
 - **判別**: `echo $CLAUDE_CODE_ENTRYPOINT` が `claude-desktop` なら **hook 出力はモデルに届かない** (= SessionStart injection も PreToolUse 判定も無効。 SessionStart は実行自体は起きるが出力が捨てられる)。 親プロセスが `Claude.app` 配下か、 embedded build が PATH の CLI build と別番かでも判る。
@@ -588,7 +611,7 @@ hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 
 - **public leak 防止** = commit-time の **git native hook** (`.git/hooks/pre-commit` + `commit-msg`) に置く (= frontend を経由せず `git commit` で必ず発火。 §2 補足「真の層は commit-time git hook」 と同じ理由 + §2(d) Bash harness-bug も同時に回避)。 ← desktop でも生きる class。
 - **無人定期の surfacing** = launchd / scheduled task + OS 通知 (= frontend 非依存)。 **補足 (2026-06-13)**: SessionStart hook は desktop でも実行される (出力注入は捨てられるが副作用は走る) ので、 「SessionStart hook が surface を file に書く → Claude が起動時にそれを読む 〔CLAUDE.md / skill description は desktop でも読まれる〕」 という橋渡しも成立 (= launchd と並ぶ生成側の選択肢。 死んでいるのは注入だけで、 file 経由なら通常の tool call で読めるため)。
   - <a id="surface-file-cleanup-ordering"></a>⚠️ **surface file は「最新 findings の写像」 契約 — write-or-delete を空 early-exit より先に置く**: この橋渡しの surface file は「今の findings」 として読まれるため、 findings が空になった beat では **file を削除する** (= 書くか消すか、 必ずどちらかが毎回走る)。 hook の典型形 `[ -z "$out" ] && exit 0` を surface 書込みより**前**に置くと、 findings 解消後に cleanup が dead code 化し、 **解消済みの古い 🔴 finding が file に残留** → 後続 session がそれを現在の障害として誤読する (実 incident 2026-07-17: fleet-heartbeat の解消済み finding が 9 日間残留、 sibling hook 群は write-first で正しく、 1 本だけ ordering が逆だった)。 検査 reflex = surface 書込みを持つ hook を新設 / review する時、 「空 finding の実行で file が消えるか」 を 1 回実走して確認する (`echo '{"hook_event_name":"SessionStart"}' | bash <hook> && ls <surface-file>`)。
-- **介入型 guard** (= tool 引数を見て deny / rewrite。 mail 誤送信確認・calendar reminder 強制・memory 誤書き込み防止 等) は tool-call 境界が必須で git native 化できない → **desktop では原理的に不能**。 該当操作は CLI で行うか、 規律運用に割り切る。
+- **介入型 guard** (= tool 引数を見て deny / rewrite。 mail 誤送信確認・calendar reminder 強制・memory 誤書き込み防止 等) は tool-call 境界が必須で git native 化できない → desktop では不能と考えていた (⚠️ 2026-09-11 注: kill switch を除いた desktop では PreToolUse の deny / ask が効いた = 「原理的」 ではなかった。 それでも hook が効くかは前提にせず測り、 frontend 非依存の層に置けるものは置く)。
 
 ---
 

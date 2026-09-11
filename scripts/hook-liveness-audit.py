@@ -18,8 +18,10 @@ session だけで hook が 1 本も走らず、 別 root で開いた session �
    `/etc/claude-code/managed-settings.json`) / 各 root の `.claude/settings.json` と
    `.claude/settings.local.json`。 `disableAllHooks: true` → 🔴、
    `allowManagedHooksOnly: true` → 🟠 (= user / project hook が走らない)。
-2. transcript 証拠 (`--settings-only` で skip): `~/.claude/projects/*/*.jsonl` (mtime が
-   `--days` 以内) を session の root (= 最初の record の `cwd`) ごとに集計。
+   検査する root = transcript (`~/.claude/projects/*/*.jsonl`、 mtime が `--days` 以内) の最初の
+   `cwd` の集合 + `--root`。 `--settings-only` でも root の発見には transcript 冒頭だけを読む
+   (= 最近開いた root の project-local kill switch を、 別 root の session からでも拾うため)。
+2. transcript 証拠 (`--settings-only` で skip): 同じ transcript を session の root ごとに集計。
    - SessionStart 発火 = `attachment.hookEvent == "SessionStart"` かつ `attachment.command`
      が在り `callback` でない record (= user の command hook が走った証拠。 host の SDK
      callback hook は kill switch 下でも走り続けるので数えない。 `hook_additional_context`
@@ -41,7 +43,7 @@ transcript で回帰検査。
 ------
   hook-liveness-audit.py                       # 表 (過去 30 日)
   hook-liveness-audit.py --findings-only       # finding だけ (clean なら無出力)
-  hook-liveness-audit.py --settings-only       # settings tier だけ (transcript を読まない)
+  hook-liveness-audit.py --settings-only       # settings tier だけ (root の発見に transcript 冒頭だけ読む)
   hook-liveness-audit.py --root <dir> ...      # transcript に無い root も settings を検査
   hook-liveness-audit.py --selftest
 """
@@ -184,6 +186,37 @@ def scan_transcript(path, deep):
     return root, ss, stop_cmd, stop_total
 
 
+def discover_roots(projects_dir, days):
+    """transcript 冒頭の最初の cwd だけを読んで root 集合を返す (--settings-only 用、 高速)。"""
+    cutoff = time.time() - days * 86400
+    roots = set()
+    if not projects_dir.is_dir():
+        return roots
+    for pdir in projects_dir.iterdir():
+        if not pdir.is_dir():
+            continue
+        for t in pdir.glob("*.jsonl"):
+            try:
+                if t.stat().st_mtime < cutoff:
+                    continue
+                with open(t, encoding="utf-8", errors="replace") as f:
+                    for i, line in enumerate(f):
+                        if i >= 50:
+                            break
+                        if '"cwd"' not in line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                        except ValueError:
+                            continue
+                        if isinstance(rec, dict) and rec.get("cwd"):
+                            roots.add(rec["cwd"])
+                            break
+            except OSError:
+                continue
+    return roots
+
+
 def scan_projects(projects_dir, days, deep):
     """root → list of session dict (mtime 降順)。"""
     cutoff = time.time() - days * 86400
@@ -215,8 +248,13 @@ def scan_projects(projects_dir, days, deep):
 
 
 def audit(home, projects_dir, managed_path, extra_roots, days, min_sessions, settings_only, deep):
-    by_root = {} if settings_only else scan_projects(projects_dir, days, deep)
-    roots = set(by_root) | {str(Path(r).expanduser()) for r in extra_roots}
+    extra = {str(Path(r).expanduser()) for r in extra_roots}
+    if settings_only:
+        by_root = {}
+        roots = discover_roots(projects_dir, days) | extra
+    else:
+        by_root = scan_projects(projects_dir, days, deep)
+        roots = set(by_root) | extra
     findings = audit_settings(home, roots, managed_path)
 
     user_settings = load_json(home / ".claude" / "settings.json")
@@ -376,6 +414,9 @@ def selftest():
         # settings-only: transcript を読まずに --root の kill switch を拾う
         f3, rows3 = audit(home, projects, str(managed), [str(root_a)], 30, 3, True, False)
         check(len(f3) == 1 and f3[0].startswith("🔴") and rows3 == [], "--settings-only + --root で kill switch だけ")
+        f3b, _ = audit(home, projects, str(managed), [], 30, 3, True, False)
+        check(len(f3b) == 1 and "settings.local.json" in f3b[0],
+              "--settings-only でも transcript 冒頭の cwd から root を発見して kill switch を拾う")
 
         # 除去 → 最新 session が発火 → clean
         (root_a / ".claude" / "settings.local.json").write_text(json.dumps({"permissions": {}}), encoding="utf-8")
@@ -412,7 +453,8 @@ def main():
     ap.add_argument("--days", type=int, default=30, help="transcript の対象期間 (日、 既定 30)")
     ap.add_argument("--root", action="append", default=[], help="settings を検査する root を追加 (複数可)")
     ap.add_argument("--min-sessions", type=int, default=3, help="🟠 にする連続証拠なし session 数 (既定 3)")
-    ap.add_argument("--settings-only", action="store_true", help="transcript を読まず settings tier だけ検査")
+    ap.add_argument("--settings-only", action="store_true",
+                    help="発火証拠は見ず settings tier だけ検査 (root の発見には transcript 冒頭の cwd を使う)")
     ap.add_argument("--findings-only", action="store_true", help="finding 行だけ出す (clean なら無出力、 head だけ読む)")
     ap.add_argument("--strict", action="store_true", help="finding があれば exit 1")
     ap.add_argument("--home", default=None, help=argparse.SUPPRESS)

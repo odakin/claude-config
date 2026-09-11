@@ -72,6 +72,9 @@ sections:
     level: 3
     title: "§2 補足: tool-matcher の coverage boundary — Bash/script write は Edit/Write guard を素通りする"
     related: [delivery-audit-method]
+  - id: disableallhooks-kill-switch
+    level: 3
+    title: "§2 補足 2: `disableAllHooks` kill switch — root 限定で入ると「frontend 差」 に化ける"
   - id: warn-mode-spec-uncertainty
     legacy: "3"
     level: 2
@@ -205,7 +208,7 @@ sections:
   - id: frontend-dependent-cowork
     legacy: "9.3"
     level: 3
-    title: "9.3 frontend 依存 — desktop app の hook 出力 honor は **build/時期で反転する。 前提にせず session ごとに測れ**"
+    title: "9.3 frontend 依存 — desktop app の hook 出力 honor は**反転して見えた (主因は root 限定の kill switch)。 前提にせず session ごとに測れ**"
     related: [build-dependent-behavior]
   - id: hook-no-go-judgment
     legacy: "10"

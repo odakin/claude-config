@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき
 category: harness-core
-summary: Claude Code CLI の permission プロンプト削減 (= cwd 外 file 〔`~/Downloads` 等〕の Read/Edit/Write が毎回確認される症状を `additionalDirectories` で cwd 同様に無確認化、 bare tool allow は cwd 外を素通ししない observed〔docs 解釈と食い違い〕、 deny > ask > allow で機密は `deny` 優先、 setup.sh `configure_permissions` は `allow` のみ触る = additionalDirectories/deny は直書き永続、 settings 反映は次セッション、 #chat-link-rendering-scope = chat 応答内の markdown link `[label](path)` を click した右パネル rendering も同 scope〔session cwd + additionalDirectories〕に従い scope 外は「読み取れませんでした / 作業ディレクトリの外」 表示〔#rc-chat-panel-no-render = Remote Control 閲覧では scope 通過でも同一 error で render 不可 = file が worker host 側にのみ在る、 唯一 RC で完結する対処 = 内容を chat 本文に出させる、 observed n=1〕、 frontend 3 系統切り分け〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕、 §always-approve-tools = permission 設定で抑止できない always-prompt tool class〔`ccd_session_mgmt__search_session_transcripts` 等 cross-session tool は `allow` 登録でも承認チップが出る = 経路を外す以外に消せない、 token-handshake 返送への含意込み〕、 #ask-pattern-action-anchor = 高 stakes Bash gate の ask パターンは file 名 substring でなく不可逆 action の実行形〔`--send` 等の explicit flag〕に anchor〔ask > allow ゆえ allow で例外を彫れない = パターン絞りが唯一の手段・tool 側は fail-safe 既定・gate 対象 invocation は chain 禁止〕)
+summary: Claude Code CLI の permission プロンプト削減 (= cwd 外 file 〔`~/Downloads` 等〕の Read/Edit/Write が毎回確認される症状を `additionalDirectories` で cwd 同様に無確認化、 bare tool allow は cwd 外を素通ししない observed〔docs 解釈と食い違い〕、 deny > ask > allow で機密は `deny` 優先、 setup.sh `configure_permissions` は `allow` のみ触る = additionalDirectories/deny は直書き永続、 settings 反映は安全側に次セッション〔allow 追加と disableAllHooks 除去は desktop 2.1.260 で同 session 即時を実測〕、 #chat-link-rendering-scope = chat 応答内の markdown link `[label](path)` を click した右パネル rendering も同 scope〔session cwd + additionalDirectories〕に従い scope 外は「読み取れませんでした / 作業ディレクトリの外」 表示〔#rc-chat-panel-no-render = Remote Control 閲覧では scope 通過でも同一 error で render 不可 = file が worker host 側にのみ在る、 唯一 RC で完結する対処 = 内容を chat 本文に出させる、 observed n=1〕、 frontend 3 系統切り分け〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕、 §always-approve-tools = permission 設定で抑止できない always-prompt tool class〔`ccd_session_mgmt__search_session_transcripts` 等 cross-session tool は `allow` 登録でも承認チップが出る = 経路を外す以外に消せない、 token-handshake 返送への含意込み〕、 #ask-pattern-action-anchor = 高 stakes Bash gate の ask パターンは file 名 substring でなく不可逆 action の実行形〔`--send` 等の explicit flag〕に anchor〔ask > allow ゆえ allow で例外を彫れない = パターン絞りが唯一の手段・tool 側は fail-safe 既定・gate 対象 invocation は chain 禁止〕、 #desktop-permission-dialog-log = desktop の承認 dialog は app log に 1 件 2 行 〔Emitted / Received〕 で残る → scripts/permission-dialog-audit.py で tool 別集計と main / sub-agent 振り分け、 #monitor-needs-own-allow = Monitor は Bash の allow にも内容 ask rule にも掛からない独立 tool、 #agent-launch-no-prompt = Agent 起動は allow 済なら dialog 無し 〔「背景作業で聞かれる」 = Monitor / spawn chip / Workflow / 中身の ask gate〕、 #protected-settings-edit = Claude による .claude/settings*.json の編集は毎回 dialog・Bash で迂回しない)
 -->
 # Claude Code の permission プロンプトを減らす (additionalDirectories と working directory 境界)
 
@@ -43,6 +43,8 @@ cwd 配下のファイルは確認なしで編集できるのに、cwd の**外*
 ## 反映タイミング
 
 settings.json はセッション開始時に読まれる。**途中変更が即反映されるかは docs に明記が無い**ので、安全側に「**次セッションから有効**」と考える。書き換え後は次の実作業で「もう聞かれない」ことを確認する。
+
+**実測 (2026-09-11、 desktop 埋込 2.1.260)**: `permissions.allow` への追加 (例 `Monitor`) と `disableAllHooks` の除去は、 **同じ session の次の tool call から**有効になった (allow 追加直後の Monitor 呼び出しで dialog が出ず、 app log にも承認要求が記録されなかった)。 ∴ 少なくともこの 2 種は「次セッションから」 ではない。 他の key (deny / ask / additionalDirectories / defaultMode) は未測定なので、 安全側の既定は変えず、 変えたら次の実作業で 1 回確かめる。
 
 ## このリポ (claude-config) の setup.sh との関係
 
@@ -92,12 +94,12 @@ Claude Code (desktop app / VS Code 拡張の chat panel) は、応答本文内�
 2. **Claude デスクトップアプリ (local agent mode)** — アプリ内の**別設定系統**。settings.json をいじっても変わらない。減らすには: 承認ダイアログ `Allow Claude to use {toolName}?` で「常に許可」を選ぶ / 設定の `Tool policy`・`Lock the approval state for specific tools` で事前承認 / `Allowed workspace folders` に作業フォルダ登録 / (最終手段) `bypass permissions mode`。skill 本体は `~/Library/Application Support/Claude/local-agent-mode-sessions/.../skills/<name>/SKILL.md` に展開されるので、ここに skill があれば「デスクトップアプリ経由」のサイン。
    - **設定 / UI 仕様の調べ方**: 設定キーは `~/Library/Application Support/Claude/config.json` / `claude_desktop_config.json` (例: `coworkUserFilesPath` = Claude Code (desktop) の作業ルート)。 UI ダイアログ文言は `strings /Applications/Claude.app/Contents/Resources/app.asar | grep -oE 'defaultMessage:"[^"]+"'` で抽出できる (= 上記の `Allow Claude to use {toolName}?` 等はこの方法で確認した)。
    - ⚠️ **誤診注意**: `config.json` の `dxt:allowlistEnabled` は **組織レベルの desktop 拡張 (DXT / MCP) のインストール許可管理** (`is_desktop_extension_allowlist_enabled`) であって、 **ツール実行の承認プロンプトとは無関係**。 これを「毎回聞かれる原因」と単一手がかりで推測しないこと (= 実際に一度そう誤推測 → app.asar 精読で別物と判明し訂正した。 inline §3「単一情報源で結論に飛躍しない」の Claude Code (desktop) domain 事例)。
-   - ⚠️ **「settings.json をいじっても変わらない」 の例外 = `deny` (2026-06-13 実測)**: desktop でも `~/.claude/settings.json` の `permissions.deny` は **honor される** (= 無害な deny 対象コマンドを叩くと block された)。 desktop で効かないのは **hook 出力** (= [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork)) と **`defaultMode: bypassPermissions` 下の ask** (= bypass は全 tool auto-approve なので ask が void)。 **だが `defaultMode: default` なら settings.json の `permissions.ask` は desktop でも効く** (= 2026-06-13 実証: send_email を ask にすると内容表示つき承認 dialog が出て拒否で送信ブロック。 下記「desktop で特定 tool に確認を課す」)。 ∴ desktop UI の「バイパス権限モードを許可」 トグルは lever ではなく、 **settings.json の `defaultMode` が実効モードを支配**する (= トグル OFF だけでは gate されない)。
+   - ⚠️ **「settings.json をいじっても変わらない」 の例外 = `deny` (2026-06-13 実測)**: desktop でも `~/.claude/settings.json` の `permissions.deny` は **honor される** (= 無害な deny 対象コマンドを叩くと block された)。 desktop で効かないのは **hook 出力** (= [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork)) と **`defaultMode: bypassPermissions` 下の ask** (= bypass は全 tool auto-approve なので ask が void)。 **だが `defaultMode: default` なら settings.json の `permissions.ask` は desktop でも効く** (= 2026-06-13 実証: send_email を ask にすると内容表示つき承認 dialog が出て拒否で送信ブロック。 下記「desktop で特定 tool に確認を課す」)。 ∴ desktop UI の「バイパス権限モードを許可」 トグルは lever ではなく、 **settings.json の `defaultMode` が実効モードを支配**する (= トグル OFF だけでは gate されない)。 ⚠️ **2026-09-11 注**: 「desktop で hook 出力が効かない」 の観測の少なくとも一部は、 作業 root の project-local に入っていた `disableAllHooks: true` が原因だった ([`hook-authoring.md#disableallhooks-kill-switch`](hook-authoring.md#disableallhooks-kill-switch))。 除去後の desktop では PreToolUse の ask / PostToolUse の additionalContext が効いた。
 3. **macOS TCC** (OS のフォルダアクセス許可、Desktop/Documents/Downloads 等の保護) — macOS システムダイアログで、Claude 側の設定では消えない。Claude.app が versioned path に置かれる影響で再 prompt される構造的症状は [`macos-claude-code-tcc-recurring-prompt.md`](macos-claude-code-tcc-recurring-prompt.md) 参照。
 
 ## <a id="desktop-per-tool-gate"></a>desktop で特定 tool に確認を課す (= hook 不可な frontend での per-tool gate、 2026-06-13)
 
-PreToolUse hook (mail 誤送信 guard 等) は desktop で出力 honor されず inert (= §frontend 切り分け 2 / [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork))。 desktop で「特定の高 stakes tool だけ実行前に人間が一拍」 を機械的に課す working recipe は **settings.json の permission のみ** (= hook 不要、 2026-06-13 実証):
+PreToolUse hook (mail 誤送信 guard 等) は desktop で出力 honor されず inert と観測されていた (= §frontend 切り分け 2 / [`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork)。 ⚠️ 2026-09-11: その少なくとも一部は root 限定の `disableAllHooks` が原因 = [`hook-authoring.md#disableallhooks-kill-switch`](hook-authoring.md#disableallhooks-kill-switch)。 hook が効く surface でも、 本 recipe の declarative ask は hook と独立に効く第二の層として有効)。 desktop で「特定の高 stakes tool だけ実行前に人間が一拍」 を機械的に課す working recipe は **settings.json の permission のみ** (= hook 不要、 2026-06-13 実証):
 
 1. `permissions.defaultMode` を `bypassPermissions` → **`default`** に (= bypass は ask を void するので外す)。
 2. `permissions.ask` に確認したい tool を列挙 (例: `mcp__gmail-personal__send_email` 等)。 → 呼出のたび **引数 (to/subject/body) を全表示する承認 dialog** が出て、 拒否で実行ブロック (= 内容確認つきの一拍)。
@@ -143,6 +145,42 @@ PreToolUse hook (mail 誤送信 guard 等) は desktop で出力 honor されず
 - **該当が確認できている tool**: `ccd_session_mgmt__search_session_transcripts` (= 直接観測のみ)。 同 server の cross-session 系 (`send_message` / `archive_session` 等) も同機構で同挙動と**推定**されるが直接観測は search のみ。 `list_sessions` も allow 済だが挙動は未観測 (= 過度に一般化しない、 inline §3「単一観測を universal に飛躍させない」)。
 
 **token-handshake 返送への含意** ([`multi-session-coordination.md §7`](multi-session-coordination.md#spawn-handoff-token-return)): 返送の **optional live-push** (`search_session_transcripts(<token>)` → `send_message`) はこの always-prompt class を必ず通るので、 **起票元へ返すたびにチップが出る** (= allow-list で消せない)。 チップを踏まずに結果を届けたいなら、 §7 の **required spine = "results inbox" marker** (= 子の完了 action で marker を 1 個落とし、 surfacing 機構が拾う) に寄せる。 marker 経路は cross-session tool を呼ばないのでチップが出ない。
+
+## <a id="desktop-permission-dialog-log"></a>desktop の承認 dialog は app log に残る — 体感でなく数える (2026-09-11)
+
+「いちいち聞かれる」 の対処は、 **どの tool の dialog が何件か**を数えてから決める (= allow に足すのか、 仕様で消せない class か、 gate として残すべきか)。 desktop app は dialog ごとに `~/Library/Logs/Claude/main*.log` へ次の 2 行を書く (同じ行が 2 回ずつ出ることがあるので request id で数える):
+
+```text
+<YYYY-MM-DD HH:MM:SS> [info] Emitted tool permission request <id> for <tool> in session <local_id>
+<YYYY-MM-DD HH:MM:SS> [info] Received permission response for <id>: once|always|deny (tool: <tool>)
+```
+
+- 時刻は local time。 Emitted → Received の差がそのまま user の応答待ち時間 (= 席を外していた間、 作業が止まっていた時間)。
+- **道具**: [`scripts/permission-dialog-audit.py`](../scripts/permission-dialog-audit.py) — tool 別件数・decision 内訳・待ち時間。 `--attribute` で transcript の tool_use と時刻突合して **main session / sub-agent / 不明**に振り分け、 Edit/Read/Write は path の上位 2 階層、 Bash は先頭語で束ねる (= どの folder の ask gate が鳴っているかが見える)。 log の無い環境 (CLI) は `--from-transcripts` で「通常すぐ返る tool が長く止まった」 箇所を候補として出す。
+- **実例 (2026-09-11)**: 6 週間分 約 280 件を数えたところ、 sub-agent の tool call 由来と Agent 起動そのものは **0 件**。 「背景作業を立ち上げるたびに聞かれる」 の正体は allow に入っていなかった `Monitor` (5 件、 うち 1 件は 40 分待ち) で、 残りの大半は意図して置いた ask gate (特定 folder への Edit/Read・メール送信) と browser 系の初回許可だった。
+
+## <a id="monitor-needs-own-allow"></a>Monitor は独立した tool — Bash の allow も ask も掛からない
+
+`Monitor` (背景で command を走らせて出力を監視する tool) はシェルを実行するが、 **permission rule は tool 名単位で照合される**ので:
+
+- bare `Bash` を allow していても Monitor は allow されない → 起動のたびに dialog が出る (背景作業のつもりで席を外すと、 そこで止まったまま待つ)。 使うなら `permissions.allow` に `"Monitor"` を足す。
+- 逆に Monitor を allow すると、 `Bash(*send_mail.py*--send*)` のような **Bash の内容 rule による ask gate は、 Monitor 経由の実行には掛からない** ([#ask-pattern-action-anchor](#ask-pattern-action-anchor) の gate が素通り)。 高 stakes の action を Bash の ask で守っているなら、 それを Monitor で実行しない規律にするか、 tool 側の gate (MCP tool への ask 等) に寄せる。 MCP tool への ask は tool 呼び出しそのものなので、 Monitor の allow とは無関係に残る。
+
+## <a id="agent-launch-no-prompt"></a>Agent (sub-agent) の起動は allow 済みなら dialog を出さない
+
+`Agent` / `Task` の起動そのものは、 allow に入っていれば承認を求めない (2026-09-11、 6 週間分の app log で起動由来の dialog 0 件)。 sub-agent の中の tool call も main と同じ permission 設定で判定され、 同期間に sub-agent 由来の dialog は 0 件だった。 「背景作業を始めると聞かれる」 ときに疑うのは:
+
+1. **Monitor** (上節) — allow に無ければ毎回 dialog
+2. **spawn_task の chip** — 別 session の起動は user のクリックが仕様 (自動で起動する設定は無い)
+3. **Workflow** — 起動時に確認が出る
+4. その背景作業が触る **ask gate** (特定 folder・送信系) — 起動でなく中身の tool call が鳴っている
+
+## <a id="protected-settings-edit"></a>Claude が `.claude/settings*.json` を編集すると毎回 dialog が出る (保護 file)
+
+Claude Code は自分の設定 file (`~/.claude/settings.json` / `<root>/.claude/settings.json` / `settings.local.json`) への Edit / Write に、 permission mode や allow に関係なく確認 dialog を出す。 選べるのは「一度だけ許可」 だけで、 Edit 1 回ごとに出る (2026-09-11、 desktop で観測)。
+
+- 設定変更を頼まれたら、 **変更する file の数だけ dialog が出る**ことを先に伝え、 1 file の変更は 1 回の Edit にまとめる。
+- **session 中に Bash (sed / python / jq) で書き換えて dialog を迂回しない**。 保護は「設定変更を人間が 1 回見る」 ための仕組みで、 迂回するとその意味が消える (= 自分の権限を自分で広げる経路になる)。 git に載って人間が review した bootstrap script が、 owner が明示した値を他マシンへ伝播するのは別扱い。
 
 ## 個人ごとの適用
 
