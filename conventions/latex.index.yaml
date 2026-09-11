@@ -208,3 +208,6 @@ sections:
   - id: latexdiff-ulem-option-clash
     level: 2
     title: "latexdiff: 本文が `ulem` を option なしで読むと差分 markup が silent に壊れる (2026-08-21)"
+  - id: abbreviation-first-occurrence
+    level: 2
+    title: "略語は本文で長形が初めて出る箇所で定義する (2026-09-11)"
