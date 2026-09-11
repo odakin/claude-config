@@ -17,8 +17,8 @@ user が「このリポを setup して」 と頼んだ場合、 cautious-mode d
 claude-config/
 ├── AGENTS.md                # Codex が自動発見する薄い project 入口 → CLAUDE.md / SESSION.md
 ├── CLAUDE.md               # このファイル（リポ固有の指示書）
-├── SESSION.md              # 現在の作業状態・残タスク（当月 + Open items、hot/cold 分離）
-├── SESSION-archive.md      # SESSION.md から分離した 2026-05 以前の dated entry（grep 専用）
+├── SESSION.md              # 直近の作業の索引 + Open items（目安 ~80 行、本文は SESSION-archive.md）
+├── SESSION-archive.md      # SESSION.md から移した entry 本文（grep 専用、2026-09-11 まで）
 ├── DESIGN.md               # 設計判断とその理由（live な判断のみ、冒頭 TOC + slug anchor + DESIGN.index.yaml）
 ├── DESIGN-archive.md       # DESIGN.md から分離した完了・超越済みの dated entry（grep 専用、2026-07-10 分離）
 ├── CONVENTIONS.md          # 全リポ共通規約（正本）
