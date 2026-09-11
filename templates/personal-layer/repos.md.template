@@ -10,6 +10,8 @@
 | `<repo-2>/` | <用途を1行で> | private |
 | <繰り返し> | | |
 
+公開列に `ローカルのみ` (または `remote なし`) と書いた行は「remote を持たない」 宣言。 一覧と GitHub の突合 (`claude-config/scripts/check-ci-red.py --from-repos-md`) はその行を対象外にし、 それ以外の行で clone に origin が無ければ「push されていない」 として出す。 新規リポは remote を作って push してからここに書く (= CONVENTIONS.md §1)。
+
 ## 用途別インデックス
 
 タスクの種類ごとに、どのリポで作業すべきかをここに書いておくと迷いがなくなる。

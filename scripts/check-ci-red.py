@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check-ci-red.py — GitHub Actions の red 検出器（repo 横断で「default branch の最新 completed run が失敗中の workflow」 を列挙し、 連続失敗 run 数・継続時間・最後の success を印字、 長期 red を 🚨 で強調。 取得失敗は「検査不能」 行で明示 = 黙って緑にしない、 finding 0 件 silent、 --as-of で過去時点を再現、 --selftest 内蔵。 呼び出し側 = 個人層 dashboard / session 開始 hook）
+"""check-ci-red.py — GitHub Actions の red 検出器（repo 横断で「default branch の最新 completed run が失敗中の workflow」 を列挙し、 連続失敗 run 数・継続時間・最後の success を印字、 長期 red を 🚨 で強調。 取得失敗は「検査不能」 行で明示 = 黙って緑にしない、 finding 0 件 silent、 --as-of で過去時点を再現、 --selftest 内蔵。 対象 = --repo / --owner / 個人層の repo 一覧 (--from-repos-md、 未 clone・remote 未設定も検査不能行に)、 呼び出し側 = 個人層 dashboard / session 開始 hook）
 
 背景 (= 汎用化した事故形): CI の結果は push した人の画面にしか出ない。 push を多数の
 session や無人 job が打つ運用では、 red が「誰かが見るだろう」 のまま何日も続く
@@ -32,8 +32,18 @@ cache は持たない (= 毎回取りに行く。 鮮度が価値の検出器 =
   --repo OWNER/NAME          繰り返し可
   --repos-file PATH|-        1 行 1 repo、 # 以降は comment
   --owner OWNER              gh repo list OWNER --no-archived で列挙
+  --from-repos-md PATH       個人層の repo 一覧 (templates/personal-layer/repos.md.template の表)
+                             の各行 → <root>/<dir> の clone の origin から owner/name を引く
+                             (--root 既定 = この script の 2 つ上の親 = claude-config を置いた <base>)。
+                             述語: 最終列 (公開) に「remote なし」 か「ローカルのみ」 と書いた行は
+                             対象外 / dir が無い → 検査不能「未 clone」 / dir はあるが origin が無い
+                             → 検査不能「remote 未設定」 (= 一覧に載っているのに push されていない。
+                             一覧だけが push されて repo 本体が GitHub に無い事故をここで拾う) /
+                             origin が GitHub 以外 → 対象外
   どれも無ければ認証 user 自身の repo (gh repo list、 archived 除外)
   --note-unprobed NAME=理由   呼び出し側で名前解決できなかった repo を検査不能行に合流させる
+  --print-targets            検査せず、 導出した owner/name と検査不能の行 (# 始まり) だけを出す
+                             (= 同じ対象集合を他の検査 script に pipe する口)
 
 出力: red も検査不能も無ければ無出力。 exit 0 (fail-open)。 --strict なら red または
   検査不能があるとき exit 1。 Dependabot 枠は --dependabot detail (repo 別の行、 既定) /
@@ -48,10 +58,12 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import re
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
@@ -80,6 +92,11 @@ API_TIMEOUT = 20
 DISPLAY_TZ = None  # None = system local。 selftest は UTC に固定する
 
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+# repo 一覧 (--from-repos-md): 最終列にこの語がある行は「remote を持たない」 宣言
+LOCAL_ONLY_MARKERS = ("remote なし", "ローカルのみ")
+_ROW_RE = re.compile(r"^\| `([^`]+)/`(.*)$", re.M)
+_GH_RE = re.compile(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")
+DEFAULT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def gh_api(path: str):
@@ -141,6 +158,54 @@ def parse_repo_lines(text: str):
             continue
         (ok if _REPO_RE.match(s) else bad).append(s)
     return ok, [(b, "形式不正 (OWNER/NAME でない)") for b in bad]
+
+
+def parse_repos_md(text: str):
+    """repo 一覧の表 → [(dir, 最終列)]。 最終列 = 公開 (remote を持たない宣言の置き場)。"""
+    rows = []
+    for m in _ROW_RE.finditer(text):
+        cells = [c.strip() for c in m.group(2).split("|")]
+        cells = [c for c in cells if c]
+        rows.append((m.group(1), cells[-1] if cells else ""))
+    return rows
+
+
+def github_name(url: str):
+    m = _GH_RE.search(url.strip())
+    return f"{m.group(1)}/{m.group(2)}" if m else None
+
+
+def resolve_dir(dirname: str, root: Path):
+    """→ ("ok", owner/name) / ("missing", None) / ("no-remote", None) / ("non-github", None)"""
+    p = Path(os.path.expanduser(dirname)) if dirname.startswith(("~", "/")) else root / dirname
+    if not p.exists():
+        return "missing", None
+    try:
+        url = subprocess.run(["git", "-C", str(p), "remote", "get-url", "origin"],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        url = ""
+    if not url:
+        return "no-remote", None
+    name = github_name(url)
+    return ("ok", name) if name else ("non-github", None)
+
+
+def derive_from_repos_md(text: str, root: Path):
+    """repo 一覧 → (targets, unprobed)。 述語は module docstring の --from-repos-md。"""
+    targets, unprobed = [], []
+    for d, pub in parse_repos_md(text):
+        if any(mk in pub for mk in LOCAL_ONLY_MARKERS):
+            continue
+        kind, name = resolve_dir(d, root)
+        if kind == "ok":
+            if name not in targets:
+                targets.append(name)
+        elif kind == "missing":
+            unprobed.append((d, "未 clone (この machine では owner/name 不明)"))
+        elif kind == "no-remote":
+            unprobed.append((d, "remote 未設定 (一覧にあるのに push されていない?)"))
+    return targets, unprobed
 
 
 def usable_runs(runs, as_of=None):
@@ -397,8 +462,17 @@ def collect_targets(args):
         ok, bad = parse_repo_lines(text)
         targets += ok
         unprobed += bad
+    if args.from_repos_md:
+        try:
+            text = open(args.from_repos_md, encoding="utf-8").read()
+        except OSError as e:
+            unprobed.append((args.from_repos_md, f"repo 一覧を読めない: {e}"))
+        else:
+            ok, bad = derive_from_repos_md(text, Path(args.root) if args.root else DEFAULT_ROOT)
+            targets += ok
+            unprobed += bad
     owners = list(args.owner or [])
-    if not (args.repo or args.repos_file or owners):
+    if not (args.repo or args.repos_file or owners or args.from_repos_md):
         owners = [None]  # 認証 user 自身
     for owner in owners:
         names, err = gh_repo_list(owner)
@@ -420,6 +494,10 @@ def main(argv=None) -> int:
     ap.add_argument("--repos-file", metavar="PATH|-")
     ap.add_argument("--owner", action="append")
     ap.add_argument("--note-unprobed", action="append", metavar="NAME=理由")
+    ap.add_argument("--from-repos-md", metavar="PATH", help="個人層の repo 一覧から対象を導出")
+    ap.add_argument("--root", metavar="DIR", help="repo 一覧の dir の基点 (既定 = <base>)")
+    ap.add_argument("--print-targets", action="store_true",
+                    help="検査せず対象と検査不能の行だけを出す")
     ap.add_argument("--as-of", metavar="ISO8601")
     ap.add_argument("--strict", action="store_true", help="red / 検査不能があれば exit 1")
     ap.add_argument("--dependabot", choices=("detail", "summary", "off"), default="detail",
@@ -431,6 +509,14 @@ def main(argv=None) -> int:
 
     as_of = parse_as_of(args.as_of) if args.as_of else None
     now = as_of or datetime.now(timezone.utc)
+
+    if args.print_targets:
+        targets, unprobed = collect_targets(args)
+        for t in targets:
+            print(t)
+        for name, why in unprobed:
+            print(f"# 検査不能: {name} ({why})")
+        return 0
 
     # gh 自体が使えない (未認証 / network) なら repo ごとに並べず 1 行で言う
     _, err = gh_api("rate_limit")
@@ -675,6 +761,59 @@ def selftest() -> int:
     ck("repo 名の重複 (大小文字違い) は 1 回だけ検査", "1 repo 検査" in t4)
     ck("note-unprobed / owner 列挙失敗 / 404 が 1 行に合流",
        "検査不能 3 repo" in t4 and "local-dir (未 clone)" in t4 and "ghost (repo 列挙: HTTP 404)" in t4)
+
+    # --from-repos-md (一時 dir に git repo を作って導出)
+    import tempfile
+    md = "\n".join([
+        "| ディレクトリ | 用途 | 公開 |",
+        "|---|---|---|",
+        "| `alpha/` | a | public |",
+        "| `beta/` | b | private |",
+        "| `gone/` | 未 clone | private |",
+        "| `local/` | local-only | **remote なし** |",
+        "| `solo/` | 手元だけ | ローカルのみ |",
+        "| `plain/` | origin 無し | private |",
+        "| `lab/` | GitHub 以外 | private |",
+        "| `alpha-mirror/` | 同じ remote | public |",
+    ])
+    rows = parse_repos_md(md)
+    ck("repo 一覧: dir と最終列を読む (見出し行は対象外)",
+       [d for d, _ in rows][:2] == ["alpha", "beta"] and dict(rows)["local"] == "**remote なし**")
+    # ssh remote の user 部は分けて書く (email 形の literal は公開 repo の leak 検出に掛かる)
+    ssh = "git" + "@"
+    ck("origin URL → owner/name (ssh / https / .git / 末尾 / / GitHub 以外は None)",
+       github_name(ssh + "github.com:o/a.git") == "o/a"
+       and github_name("https://github.com/o/a") == "o/a"
+       and github_name("https://github.com/o/a.git/") == "o/a"
+       and github_name(ssh + "gitlab.com:o/a.git") is None)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+
+        def mk(name, url=None):
+            subprocess.run(["git", "init", "-q", str(root / name)], check=True)
+            if url:
+                subprocess.run(["git", "-C", str(root / name), "remote", "add", "origin", url],
+                               check=True)
+
+        mk("alpha", ssh + "github.com:o/alpha.git")
+        mk("beta", "https://github.com/other/beta")
+        mk("plain")
+        mk("lab", ssh + "gitlab.com:o/lab.git")
+        mk("alpha-mirror", "https://github.com/o/alpha.git")
+        tg, un = derive_from_repos_md(md, root)
+        ck("repo 一覧 → owner/name (同じ remote は 1 回)", tg == ["o/alpha", "other/beta"])
+        ck("未 clone と remote 未設定は検査不能、 宣言行と GitHub 以外は対象外",
+           [d for d, _ in un] == ["gone", "plain"]
+           and "未 clone" in un[0][1] and "remote 未設定" in un[1][1])
+        mdp = root / "repos.md"
+        mdp.write_text(md, encoding="utf-8")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = main(["--from-repos-md", str(mdp), "--root", str(root), "--print-targets"])
+        pt = buf.getvalue().splitlines()
+        ck("--print-targets: 対象と検査不能 (# 行) を出して exit 0",
+           rc == 0 and pt[:2] == ["o/alpha", "other/beta"]
+           and any(l.startswith("# 検査不能: plain") for l in pt))
 
     fails = [n for n, ok in checks if not ok]
     for n, ok in checks:

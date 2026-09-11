@@ -16,7 +16,7 @@
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入
 - **[check-abbreviations.py](check-abbreviations.py)** — Abbreviation hygiene for LaTeX manuscripts: each abbreviation is defined once, at the FIRST body
 - **[check-american-spelling.py](check-american-spelling.py)** — Reject curated British spellings in live LaTeX prose and figure text.
-- **[check-ci-red.py](check-ci-red.py)** — GitHub Actions の red 検出器（repo 横断で「default branch の最新 completed run が失敗中の workflow」 を列挙し、 連続失敗 run 数・継続時間・最後の success を印字、 長期 red を 🚨 で強調。 取得失敗は「検査不能」 行で明示 = 黙って緑にしない、 finding 0 件 silent、 --as-of で過去時点を再現、 --selftest 内蔵。 呼び出し側 = 個人層 dashboard / session 開始 hook）
+- **[check-ci-red.py](check-ci-red.py)** — GitHub Actions の red 検出器（repo 横断で「default branch の最新 completed run が失敗中の workflow」 を列挙し、 連続失敗 run 数・継続時間・最後の success を印字、 長期 red を 🚨 で強調。 取得失敗は「検査不能」 行で明示 = 黙って緑にしない、 finding 0 件 silent、 --as-of で過去時点を再現、 --selftest 内蔵。 対象 = --repo / --owner / 個人層の repo 一覧 (--from-repos-md、 未 clone・remote 未設定も検査不能行に)、 呼び出し側 = 個人層 dashboard / session 開始 hook）
 - **[check-codex-integration.py](check-codex-integration.py)** — Codex SoT, session drift, Hook, and trigger-wiring gate.
 - **[check-display-math-style.py](check-display-math-style.py)** — Display-math house-style gate for LaTeX manuscripts (2026-09-09).
 - **[check-doc-truncation.py](check-doc-truncation.py)** — 台帳 doc の「黙って消える」削除を git 高水位で検出（表の行/list/見出し/entry の大幅減、[truncation-ok] で baseline reset、config 駆動）
@@ -46,6 +46,7 @@
 - **[commit-msg-leak-guard-runner.test.sh](commit-msg-leak-guard-runner.test.sh)** — 上記 runner の self-test（15 case、 BLOCK / PASS / merge skip 等）
 - **[count-malformed-tool-call-events.py](count-malformed-tool-call-events.py)** — local transcript から malformed-tool-call bug の genuine event を集計（synthetic 文言の user entry のみ = doc/議論 echo を除外〔naive substring は 19x overcount〕、 month×model×client-version 内訳 + model 別 rate、 upstream issue への occurrence 報告用 data point 生成、 read-only、 --selftest 内蔵、 conventions/tool-call-robustness.md#root-cause）
 - **[decode-qr.py](decode-qr.py)** — Decode QR payloads from screenshots without opening them.
+- **[dependabot-ecosystems.py](dependabot-ecosystems.py)** — dependabot.yml の ecosystem を repo の実体に合わせる（manifest の無い / git-crypt で暗号化された npm・pip・github-actions の entry を検出、 --apply で contents API 経由で削る (全部消えるなら file ごと削除)、 manifest があるのに未設定は ℹ️、 --render で配置時に template から選ぶ、 --selftest。 conventions/github-security-automation.md#dependabot-ecosystem-must-exist）
 - **[diff-form-docx.py](diff-form-docx.py)** — 様式 docx の記入ミスを blank diff で検出（ラベル欄上書き/見出し消失=HARD・空の箇条書き/全空 labeled 列=surface、xlsx 版の docx 対、--selftest 内蔵、office-automation.md#diff-form-docx-detection）
 - **[diff-form-xlsx.py](diff-form-xlsx.py)** — 様式 xlsx の label 上書き (= 様式改変) を雛形 diff で検出（office-automation.md#diff-form-xlsx-detection）
 - **[discord-board-bridge.py](discord-board-bridge.py)** — Discord ⇄ agent-board bridge engine (決定的 tick、 LLM 不使用、 config 駆動)。

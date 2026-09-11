@@ -24,6 +24,7 @@ git add . && git commit -m "Initial commit: <概要>" && git push -u origin main
 ```
 
 description は英語。リポ一覧の正本は個人層の `repos.md`（未設定なら MEMORY.md）。新規作成前に既存リポを確認。
+新規リポは **remote の作成と初回 push までが 1 単位**。リポ一覧への登録はその後にし、`gh api repos/<owner>/<name>` で remote が在ることを確かめる（手元で init しただけのリポを一覧に載せると、別マシンからは存在しないリポになる。2026-09-10 実例: 一覧への登録だけが push され、GitHub にリポが無かった）。一覧と実在の突合 = [`scripts/check-ci-red.py`](scripts/check-ci-red.py) `--from-repos-md` の検査不能行（未 clone / remote 未設定）。
 最初の commit 前に root `AGENTS.md` を作る。shared repo は [`templates/shared-project/AGENTS.md.template`](templates/shared-project/AGENTS.md.template) を使い、全リポ共通の所有関係と検査は [§Agent instruction entrypoint](#agent-instruction-entrypoints) に従う。
 
 ---
