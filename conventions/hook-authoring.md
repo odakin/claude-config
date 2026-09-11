@@ -613,6 +613,9 @@ hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 
 > - SessionStart 注入 = session 冒頭に hook 由来の `<system-reminder>` を受領しているか (= 受領していれば注入は生きている)。 transcript 側の裏取りは `attachment.type == "hook_success"` かつ `hookEvent == "SessionStart"` の record
 > - PreToolUse deny = 既知の deny 対象 (= 無害・可逆なもの) を 1 回叩いて block されるか
 > - PostToolUse additionalContext = 既知の nudge を 1 回発火させ、 tool_result 末尾に文言が付くか
+> - UserPromptSubmit additionalContext = prompt の直後に hook の文面を受領しているか (transcript 側は `attachment.type == "hook_additional_context"` かつ `hookEvent == "UserPromptSubmit"`)
+> - Stop の `decision: block` = 既存の Stop hook の発火条件を最終 message でわざと満たして終わる (配線不要)。 transcript に meta の user 行 `Stop hook feedback: …` と `hook_blocking_error` (Stop) が残り、 同じ turn が続けば効いている。 続かなければ turn がそこで終わるので、 試すのは作業をすべて終えた後の最終 message で
+> - `systemMessage` (user 向けの表示) = 出した session の画面に行が出たかを user に 1 回見てもらう。 transcript の `hook_system_message` は記録であって表示の証拠ではない
 
 **旧観測 (2026-06-13、 desktop 埋込 build 2.1.170。 初回 session = PreToolUse 非効きを発見、 同日の cold-eyes 再検証 session で機構を精緻化)** — **上記のとおり 2026-09-09 には再現しない**。 build/時期依存の記録として残す:
 

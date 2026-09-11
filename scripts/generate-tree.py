@@ -47,6 +47,7 @@ public-safe / stdlib only / macOS・Linux 両対応 (CI から呼ばれる)。
 """
 import ast
 import difflib
+import json
 import re
 import sys
 from pathlib import Path
@@ -118,6 +119,18 @@ def extract_header_desc(path: Path):
     if name.endswith(".html"):
         m = re.search(r"<!--\s*(.*?)\s*-->", "\n".join(text.splitlines()[:3]))
         return strip_name_prefix(m.group(1), name) if m else None
+    if name.endswith(".json"):
+        # JSON は comment を持てないので、 top-level の "_comment" の最初の文を説明にする
+        # (例: hooks/settings-entries.json、 2026-09-12 追加)
+        try:
+            data = json.loads(text)
+        except ValueError:
+            return None
+        comment = data.get("_comment") if isinstance(data, dict) else None
+        if isinstance(comment, str) and comment.strip():
+            first = re.split(r"(?<=。)", comment.strip(), maxsplit=1)[0].strip()
+            return strip_name_prefix(first, name) or None
+        return None
     for i, line in enumerate(text.splitlines()):
         if i == 0 and line.startswith("#!"):
             continue

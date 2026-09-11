@@ -14,6 +14,7 @@ trust 未承認) transcript は残るので、 ここは劣化を検出できる
 usage:
   check-first-reply-stamp.py [--days 14] [--since YYYY-MM-DD] [--threshold 0.10] [--min-sessions 5] [--no-codex]
   check-first-reply-stamp.py --findings-only     # dashboard 用 (所見が無ければ無出力)
+  check-first-reply-stamp.py --breakdown       # 要因別の表 (2026-09-11 の測定と同じ切り口)
   check-first-reply-stamp.py --json
   check-first-reply-stamp.py --selftest
 env (test 用): FIRST_REPLY_STAMP_CLAUDE_GLOB / FIRST_REPLY_STAMP_CODEX_ROOT / FIRST_REPLY_STAMP_BASE /
@@ -54,6 +55,34 @@ def _head(path: Path, limit: int = 400):
         yield entry
 
 
+def first_text_context(path: Path) -> dict:
+    """最初の turn の、 最初の返信 (assistant text) より前に何が起きたか。
+    reminder = harness の状況報告促し (attachment type silent_turn_reminder) が先に来たか /
+    tool = tool call が先に走ったか。 2026-09-11 の測定で S1 を大きく左右した 2 要因。"""
+    started = False
+    ctx = {"reminder": False, "tool": False}
+    for entry in frs._iter_jsonl(path):
+        if entry.get("isSidechain"):
+            continue
+        if frs._claude_user_text(entry) is not None:
+            if started:
+                break
+            started = True
+            continue
+        if not started:
+            continue
+        attachment = entry.get("attachment") if entry.get("type") == "attachment" else None
+        if isinstance(attachment, dict) and attachment.get("type") == "silent_turn_reminder":
+            ctx["reminder"] = True
+        if entry.get("type") == "assistant":
+            blocks = [b for b in (entry.get("message") or {}).get("content") or [] if isinstance(b, dict)]
+            if any(b.get("type") == "text" and str(b.get("text", "")).strip() for b in blocks):
+                break
+            if any(b.get("type") == "tool_use" for b in blocks):
+                ctx["tool"] = True
+    return ctx
+
+
 def claude_session(path: Path) -> dict | None:
     cwd = entry_point = started = None
     injected = ""
@@ -71,9 +100,12 @@ def claude_session(path: Path) -> dict | None:
     prompts, texts = frs.claude_first_turn(path)
     if prompts < 1 or not texts:
         return None
+    ctx = first_text_context(path)
     return {"flavor": "claude", "session": path.stem[:8], "date": started, "cwd": cwd,
             "s1": frs.has_top_stamp(texts[0]), "s2": any(frs.has_top_stamp(t) for t in texts),
             "injected": bool(injected), "unresolved": "未同定" in injected,
+            "injection": ("未同定" if "未同定" in injected else "完全") if injected else "なし",
+            **{"reminder_first": ctx["reminder"], "tool_first": ctx["tool"]},
             "head": frs.top_line(texts[0])[:50]}
 
 
@@ -176,6 +208,28 @@ def render(summary: dict, days: int) -> str:
     return "\n".join(lines)
 
 
+def breakdown(rows: list[dict]) -> str:
+    """要因別の S1 / S2 (Claude のみ)。 2026-09-11 の測定 (1 マシン 60 日) では、 注入 stamp の account が
+    埋まっていれば S1 7/8・未同定なら 9/15、 促しが先に来ると S1 1/7 だった。 対策が効いているかを
+    同じ切り口で追うための表。"""
+    sub = [r for r in rows if r["flavor"] == "claude"]
+    if not sub:
+        return "  (Claude の対象 session なし)"
+    axes = [("注入 stamp", lambda r: r.get("injection", "なし")),
+            ("最初の返信より先に状況報告促し", lambda r: "あり" if r.get("reminder_first") else "なし"),
+            ("最初の返信より先に tool call", lambda r: "あり" if r.get("tool_first") else "なし")]
+    lines = []
+    for title, key in axes:
+        lines.append(f"  {title}:")
+        groups: dict = {}
+        for r in sub:
+            groups.setdefault(key(r), []).append(r)
+        for k in sorted(groups):
+            v = groups[k]
+            lines.append(f"    {k:6} n={len(v):3}  S1 {sum(r['s1'] for r in v)}/{len(v)}  S2 {sum(r['s2'] for r in v)}/{len(v)}")
+    return "\n".join(lines)
+
+
 def selftest() -> int:
     import tempfile
     ok = True
@@ -247,6 +301,15 @@ def selftest() -> int:
         check("render に見落とし session が並ぶ", "cccccccc" in render(s, 14))
         quiet = summarize([r for r in rows if r["s2"]], [], threshold=0.10, min_sessions=1)
         check("全部出ていれば所見なし", not quiet["findings"] and not quiet["info"])
+        (proj / "gggggggg-7.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in [
+            {"type": "user", "cwd": cwd, "entrypoint": "claude-desktop", "timestamp": today, "message": {"content": "やって"}},
+            {"type": "attachment", "attachment": {"type": "silent_turn_reminder"}},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "確認中です"}]}},
+        ]), encoding="utf-8")
+        g = claude_session(proj / "gggggggg-7.jsonl") or {}
+        check("breakdown: 促しが最初の返信より先に来たことを拾う", g.get("reminder_first") is True and g.get("tool_first") is False)
+        table = breakdown(collect(14, with_codex=False))
+        check("breakdown: 表に 3 軸が出る", all(t in table for t in ("注入 stamp:", "状況報告促し:", "tool call:")))
     for key, value in saved.items():
         if value is None:
             os.environ.pop(key, None)
@@ -265,6 +328,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--since", default="", help="この日 (YYYY-MM-DD) 以降に始まった session だけ数える (= 機構の導入日で切る)")
     ap.add_argument("--findings-only", action="store_true")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--breakdown", action="store_true", help="要因別 (注入 stamp / 状況報告促し / tool 先行) の S1・S2")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
     if args.selftest:
@@ -278,6 +342,8 @@ def main(argv: list[str]) -> int:
             print(render(summary, args.days))
     else:
         print(render(summary, args.days))
+        if args.breakdown:
+            print(breakdown(rows))
     return 0
 
 

@@ -194,126 +194,24 @@ HOOKS_SRC="$SCRIPT_DIR/hooks"
 HOOKS_DST="$HOME/.claude/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 
-# 期待する hook 定義（settings.json にマージする内容）
-# hook の追加・削除はこの JSON だけを更新すればよい (単一リスト駆動):
-# merge 側の期待リストは scripts/lib/merge-hook-event.sh が JSON から jq で導出する
-# (旧: JSON + for ループの二重管理 -> stale-read-nudge.sh の同期漏れ silent dead RCA、 2026-07-10)
-HOOK_ENTRIES='[
-  {
-    "matcher": "Edit|Write",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/memory-guard.sh"}]
-  },
-  {
-    "matcher": "Edit|Write|MultiEdit",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/public-leak-guard.sh"}]
-  },
-  {
-    "matcher": "Bash",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/memory-guard-bash.sh"}]
-  },
-  {
-    "matcher": "Edit|Write|MultiEdit|Bash",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/google-url-guard.sh"}]
-  },
-  {
-    "matcher": "Bash",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/expensive-tmp-guard.sh"}]
-  },
-  {
-    "matcher": "mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/mcp-search-scope-reminder-nudge.sh"}]
-  }
-]'
-
-# PostToolUse hooks: run after each tool call. Used for git state nudges.
-# (Note: a former SessionStart hook `session-git-check.sh` was removed in
-# favour of letting `git-state-nudge.sh` do a one-time `git fetch` on
-# first-sighting. The reason: the SessionStart UI notification fired on
-# every session, which became noise. The PostToolUse hook is only loud
-# when something actually needs attention.)
-POST_TOOL_USE_ENTRIES='[
-  {
-    "matcher": "Bash",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/git-state-nudge.sh"}]
-  },
-  {
-    "matcher": "Read",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/pdf-read-fallback-nudge.sh"}]
-  },
-  {
-    "matcher": "Read",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/stale-read-nudge.sh"}]
-  },
-  {
-    "matcher": "Edit|Write|MultiEdit",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-commit-nudge.sh track"}]
-  },
-  {
-    "matcher": "mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/mcp-search-zero-result-nudge.sh"}]
-  },
-  {
-    "matcher": "Bash",
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/bash-search-zero-result-nudge.sh"}]
-  }
-]'
-
-# Stop hooks: run when Claude finishes a turn (= turn boundary)。
-# session-commit-nudge.sh nudge: 同 session で編集した repo に未 commit
-# 残がある場合に Stop で nudge を inject (= 並行 session 干渉防止、
-# CLAUDE.md §17 圧力 (4) の mechanical 強化、 2026-05-26 NHWG43 RCA から
-# 追加)。 他の Stop hook (= layer 3 の pdf-open-enforce.sh 等) は別 install
-# 経路 (= odakin-prefs/hooks/install.sh) で追加され併存する。
-STOP_ENTRIES='[
-  {
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-commit-nudge.sh nudge"}]
-  },
-  {
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/pasted-command-comment-guard.sh"}]
-  },
-  {
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/first-turn-stamp-check.py"}]
-  }
-]'
-
-# SessionStart hooks: run on session start (= 起動時 1 回のみ fire)。
-# currentdate-anchor.py: currentDate + 曜日 を inject (= multi-day session の
-# day change を early notice、 私 (Claude) の reflex anchor refresh)。
-# session-start-provenance.py: session id → 起動時 model の machine-local cache。
-# commit 時の effective effort は Bash env CLAUDE_EFFORT を Git hook が直接読む。
-# 詳細: conventions/time-context.md#design-history 参照。 UserPromptSubmit hook
-# は 2026-05-20 試行 → user UI 汚染で同日中に退役、 SessionStart のみ復活。
-SESSION_START_ENTRIES='[
-  {
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/currentdate-anchor.py"}]
-  },
-  {
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-provenance.py"}]
-  },
-  {
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-mcp-scope-nudge.sh"}]
-  },
-  {
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-claude-account-change.sh"}]
-  },
-  {
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-windows-bootstrap.sh"}]
-  },
-  {
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/session-start-host-stamp.sh"}]
-  }
-]'
-
-# UserPromptSubmit hooks: run when the user submits a prompt.
-# first-prompt-stamp.py: session の最初の prompt に限り自己同定 stamp を additionalContext で
-# 再注入する (= model にだけ届き画面には出ない、 session に 1 回)。 2026-05-20 に退役した
-# currentdate-anchor の UPS 版は「毎 prompt・画面に出る」 ことが問題だった = 本 hook はどちらも
-# 当たらない。 設計 = conventions/multi-account-machine-surface.md#first-reply-stamp-mechanism
-USER_PROMPT_SUBMIT_ENTRIES='[
-  {
-    "hooks": [{"type": "command", "command": "~/.claude/hooks/first-prompt-stamp.py"}]
-  }
-]'
+# 期待する hook 定義 (settings.json にマージする内容) の唯一の list = hooks/settings-entries.json
+# (event → entries)。 hook の追加・削除はその JSON だけを更新する。 symlink と settings への配線は
+# scripts/sync-hook-settings.sh が行い、 本 Step / setup.sh が生成する post-merge hook / 個人層の
+# bootstrap が同じ script を呼ぶ。
+#   2026-07-10: JSON 文字列 + for ループの二重管理を解消 (stale-read-nudge.sh の同期漏れ silent dead RCA)
+#   2026-09-12: list を setup.sh の文字列から file へ出した — setup.sh を再実行しない machine でも
+#     pull で新しい hook が配線されるように (DESIGN.md#ci-and-single-list-wiring)
+# event ごとの経緯 (list 本体は JSON 側):
+#   PostToolUse: 旧 SessionStart hook session-git-check.sh は退役し git-state-nudge.sh の初回 fetch に
+#     寄せた (毎 session の UI 通知が noise だった。 PostToolUse は必要な時だけ鳴る)
+#   Stop: session-commit-nudge.sh nudge = 同 session で編集した repo の未 commit 残を turn 境界で nudge
+#     (2026-05-26)。 層3 の Stop hook は別の install 経路で同じ array に併存する
+#   SessionStart: currentdate-anchor.py = 日付の anchor (conventions/time-context.md#design-history)、
+#     session-start-provenance.py = session id → 起動時 model の machine-local cache
+#   UserPromptSubmit: first-prompt-stamp.py = session の最初の prompt に限り自己同定 stamp を
+#     additionalContext で再注入 (画面に出ず session に 1 回)。 2026-05-20 に退役した currentdate-anchor の
+#     UPS 版は「毎 prompt・画面に出る」 が問題だった (= 本 hook はどちらも当たらない)
+SYNC_HOOK_SETTINGS="$SCRIPT_DIR/scripts/sync-hook-settings.sh"
 
 install_hooks() {
     if [ ! -d "$HOOKS_SRC" ]; then
@@ -380,82 +278,30 @@ install_hooks() {
         return 0
     fi
 
-    # 単一リスト駆動 merge 関数 (期待 hook リストを JSON から導出、 二重管理を排除)
-    # shellcheck source=scripts/lib/merge-hook-event.sh
-    . "$SCRIPT_DIR/scripts/lib/merge-hook-event.sh"
-
-    if [ ! -f "$SETTINGS" ]; then
-        echo "  Creating settings.json with hooks config."
-        mkdir -p "$(dirname "$SETTINGS")"
-        jq -n --argjson pre "$HOOK_ENTRIES" \
-              --argjson post "$POST_TOOL_USE_ENTRIES" \
-              --argjson ss "$SESSION_START_ENTRIES" \
-              --argjson stop "$STOP_ENTRIES" \
-              --argjson ups "$USER_PROMPT_SUBMIT_ENTRIES" \
-            '{hooks: {PreToolUse: $pre, PostToolUse: $post, SessionStart: $ss, Stop: $stop, UserPromptSubmit: $ups}}' > "$SETTINGS"
-        echo "  Created: $SETTINGS"
-        return 0
-    fi
-
-    # 既存 settings.json にマージ
-    # hooks キーがない → 追加
-    if ! jq -e '.hooks' "$SETTINGS" > /dev/null 2>&1; then
-        echo "  Adding hooks config to settings.json ..."
-        jq --argjson pre "$HOOK_ENTRIES" \
-           --argjson post "$POST_TOOL_USE_ENTRIES" \
-           --argjson ss "$SESSION_START_ENTRIES" \
-           --argjson stop "$STOP_ENTRIES" \
-           --argjson ups "$USER_PROMPT_SUBMIT_ENTRIES" \
-            '. + {hooks: {PreToolUse: $pre, PostToolUse: $post, SessionStart: $ss, Stop: $stop, UserPromptSubmit: $ups}}' \
-            "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-        echo "  Done."
-    else
-        # PreToolUse 処理 (期待リストは JSON から導出 = scripts/lib/merge-hook-event.sh)
-        merge_hook_event "PreToolUse" "$HOOK_ENTRIES" "$SETTINGS"
-
-        # Cleanup: remove obsolete SessionStart session-git-check hook if present
-        # (it was retired in favour of git-state-nudge's first-sighting fetch).
-        if jq -e '.hooks.SessionStart' "$SETTINGS" > /dev/null 2>&1; then
-            if jq -e '.hooks.SessionStart[] | select(.hooks[]?.command | contains("session-git-check.sh"))' \
-               "$SETTINGS" > /dev/null 2>&1; then
-                echo "  Removing obsolete SessionStart hook (session-git-check.sh)..."
-                jq '.hooks.SessionStart |= map(select(.hooks[]?.command | contains("session-git-check.sh") | not))
-                    | if .hooks.SessionStart == [] then del(.hooks.SessionStart) else . end' \
-                    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-            fi
+    # 退役した hook の entry の掃除 (sync は足すだけで消さないので、 掃除は setup.sh が持つ)
+    if [ -f "$SETTINGS" ]; then
+        # session-git-check.sh: git-state-nudge の初回 fetch に置き換えて退役
+        if jq -e '.hooks.SessionStart[]? | select(.hooks[]?.command | contains("session-git-check.sh"))' \
+           "$SETTINGS" > /dev/null 2>&1; then
+            echo "  Removing obsolete SessionStart hook (session-git-check.sh)..."
+            jq '.hooks.SessionStart |= map(select(.hooks[]?.command | contains("session-git-check.sh") | not))
+                | if .hooks.SessionStart == [] then del(.hooks.SessionStart) else . end' \
+                "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
         fi
-
-        # Cleanup: remove obsolete UserPromptSubmit currentdate-anchor.py hook
-        # (= 2026-05-20 試行 → 同日中に退役。 SessionStart は別途 install logic で
-        # keep、 SessionStart は session 起動時 1 回のみ fire = user UI 汚染問題なし)
+        # UserPromptSubmit の currentdate-anchor.py: 2026-05-20 試行 → 同日退役 (UI 汚染)。
         # 詳細: conventions/time-context.md#design-history
-        if jq -e '.hooks.UserPromptSubmit' "$SETTINGS" > /dev/null 2>&1; then
-            if jq -e '.hooks.UserPromptSubmit[] | select(.hooks[]?.command | contains("currentdate-anchor.py"))' \
-               "$SETTINGS" > /dev/null 2>&1; then
-                echo "  Removing obsolete UserPromptSubmit hook (currentdate-anchor.py)..."
-                jq '.hooks.UserPromptSubmit |= map(select(.hooks[]?.command | contains("currentdate-anchor.py") | not))
-                    | if .hooks.UserPromptSubmit == [] then del(.hooks.UserPromptSubmit) else . end' \
-                    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-            fi
+        if jq -e '.hooks.UserPromptSubmit[]? | select(.hooks[]?.command | contains("currentdate-anchor.py"))' \
+           "$SETTINGS" > /dev/null 2>&1; then
+            echo "  Removing obsolete UserPromptSubmit hook (currentdate-anchor.py)..."
+            jq '.hooks.UserPromptSubmit |= map(select(.hooks[]?.command | contains("currentdate-anchor.py") | not))
+                | if .hooks.UserPromptSubmit == [] then del(.hooks.UserPromptSubmit) else . end' \
+                "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
         fi
-
-        # SessionStart 処理 (= 2026-05-20 SessionStart のみ復活)
-        merge_hook_event "SessionStart" "$SESSION_START_ENTRIES" "$SETTINGS"
-
-        # PostToolUse 処理
-        merge_hook_event "PostToolUse" "$POST_TOOL_USE_ENTRIES" "$SETTINGS"
-
-        # Stop 処理 (= 2026-05-26 layer 1 統合、 session-commit-nudge.sh nudge
-        # を install。 layer 3 hooks/install.sh が別 entry (= pdf-open-enforce.sh
-        # 等) を append する、 両者は同 array 内で共存する)
-        merge_hook_event "Stop" "$STOP_ENTRIES" "$SETTINGS"
-
-        # UserPromptSubmit 処理 (= 2026-09-12 first-prompt-stamp.py で再開。 上の cleanup が
-        # 消すのは退役済の currentdate-anchor.py だけ)
-        merge_hook_event "UserPromptSubmit" "$USER_PROMPT_SUBMIT_ENTRIES" "$SETTINGS"
-
-        echo "  Hooks check complete."
     fi
+
+    # 配線 (hooks/settings-entries.json の無い entry を足すだけ・冪等。 symlink は上の loop で張り済み)
+    bash "$SYNC_HOOK_SETTINGS" --no-link "$SETTINGS"
+    echo "  Hooks check complete."
 }
 
 # hook インストールの失敗は警告のみ（Step 3-4 を止めない）
@@ -713,6 +559,13 @@ if [ -d "$HOOKS_SRC" ] && [ -d "$HOOKS_DST" ]; then
             echo "[claude-config] Updated hook: $HOOK_NAME"
         fi
     done
+fi
+
+# --- hook の配線 (= 新しい層1 hook を pull だけで効かせる、 2026-09-12) ---
+# 無い symlink と settings.json の無い entry だけ足す (冪等)。 実体 = scripts/sync-hook-settings.sh
+SYNC_HOOKS="$REPO_DIR/scripts/sync-hook-settings.sh"
+if [ -f "$SYNC_HOOKS" ] && [ -f "$HOME/.claude/settings.json" ] && command -v jq >/dev/null 2>&1; then
+    bash "$SYNC_HOOKS" "$HOME/.claude/settings.json" 2>/dev/null | sed 's/^ */[claude-config] /'
 fi
 
 # --- CONVENTIONS.md の同期（コピーの場合のみ）---

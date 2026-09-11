@@ -126,6 +126,7 @@ trailer 不在は人手 commit だけでなく未導入/未対応 runtime も表
 - **検査リストの SoT = `scripts/run-all-checks.sh`** に一元化し、 CI (`.github/workflows/checks.yml`) は**それを呼ぶだけ** (= CI yml と local 実行の drift を design-out)。 検査対象は自動発見 (= `--selftest` を持つ python script の grep / `*.test.sh` glob) で hardcode リストを持たない。
 - **環境依存 test の SKIP 契約**: 前提 (jq / macOS 固有 tool / owner 環境) が無い test は SKIP を出力して exit 0 (= silent skip 禁止、 skip 理由は test 自身が出す)。 runner は集計のみ。
 - **hook 配線は entries JSON から jq で期待リストを導出** (`scripts/lib/merge-hook-event.sh`) — 「JSON と loop を同時に更新せよ」 という人力同期を構造的に不可能化。
+  - **2026-09-12 追記**: list を setup.sh 内の文字列から [`hooks/settings-entries.json`](hooks/settings-entries.json) へ出し、 配線の入口を [`scripts/sync-hook-settings.sh`](scripts/sync-hook-settings.sh) (無い symlink と entry を足すだけ・冪等・`--check`) に一本化した。 setup.sh / setup.sh が生成する post-merge hook / 個人層の bootstrap が同じ script を呼ぶ。 理由 = 新しい層1 hook (自己同定 stamp の UserPromptSubmit / Stop) を足した時、 setup.sh を再実行しない machine では settings に entry が入らず hook が走らなかった (post-merge は既存 symlink の更新しかしていなかった)。 退役 hook の掃除は引き続き setup.sh が持つ (sync は削除しない)。 setup.sh に list を文字列で戻すと `scripts/sync-hook-settings.test.sh` が落ちる。
 - **check-inbound-refs の偽陽性 3 クラスを informational 降格**: code file (.py/.sh) 由来 = selftest fixture / path 直後の「新規・未作成・却下」 marker = 構想言及 / 参照元 repo に同名 doc = local 解決が自然 (= §17 hierarchical-name-collision の機械対処)。 HARD = 真の壊れ参照のみに純化。
 - runner は ubuntu (public repo = Actions 無料)。 macOS 固有検査は SKIP 契約で吸収。
 
