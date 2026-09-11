@@ -41,13 +41,15 @@ follows", "the rest / remainder of this paper", "this paper is organized / struc
 --roadmap-lines A-B names it explicitly.  The excluded lines are printed, so a wrong guess shows.
 Only that paragraph is excluded: a reference from any other paragraph of the introduction (say, a
 results summary that points to an appendix) counts, because the rule excludes the roadmap, not
-the introduction.  Excluding more is an author's reading, so it is an explicit --roadmap-lines
-range, never a default.
+the introduction.  Excluding more is an author's reading, so it is explicit, never a default:
+--exclude-section REGEX drops whole sections from the first-reference count (e.g. an
+introduction whose results summary points to appendices, when the author treats it like the
+roadmap), and the excluded line ranges are printed.
 
 Usage:
   check-paper-prose.py paper.tex [--display-macro al,als] [--max-words 40] [--only A,L,P,W]
-                       [--roadmap REGEX]... [--roadmap-lines A-B] [--allow-unreferenced LABEL]...
-                       [--strict]
+                       [--roadmap REGEX]... [--roadmap-lines A-B] [--exclude-section REGEX]...
+                       [--allow-unreferenced LABEL]... [--strict]
   check-paper-prose.py --selftest
 Exit 0 = no finding, 1 = findings, 2 = input error.
 """
@@ -286,7 +288,7 @@ def appendices(c, a_off, end_off):
 
 
 def check(tex, display_macros=(), max_words=40, only="ALPW", roadmap=ROADMAP_DEFAULT, roadmap_lines=None,
-          allow_unreferenced=(), strict=False):
+          allow_unreferenced=(), strict=False, exclude_sections=()):
     """Returns (findings, infos, review) with entries (line, code, message); review is a dict of lists."""
     c = strip_comments(tex)
     lo, app, hi, s_off, e_off = body_bounds(c)
@@ -318,6 +320,18 @@ def check(tex, display_macros=(), max_words=40, only="ALPW", roadmap=ROADMAP_DEF
             a_off = offs[app - 1]
             apps = appendices(c, a_off, e_off)
             owner = {lab: k for k, a in enumerate(apps) for lab in a["labels"]}
+            excl = set()
+            if exclude_sections:
+                pats_x = [re.compile(p) for p in exclude_sections]
+                heads = [(m.start(), " ".join(c[m.end():_balanced_end(c, m.end()) - 1].split()))
+                         for m in SEC_RE.finditer(c, s_off, a_off)]
+                for i, (h0, title) in enumerate(heads):
+                    if any(p.search(title) for p in pats_x):
+                        h1 = heads[i + 1][0] if i + 1 < len(heads) else a_off
+                        x0, x1 = line_of(c, h0), line_of(c, h1) - 1
+                        excl |= set(range(x0, x1 + 1))
+                        infos.append((x0, "excluded", f"section {title!r} (lines {x0}-{x1}) is excluded from "
+                                                      f"first references (--exclude-section)"))
             roadmap_seq = []
             for m in REF_RE.finditer(c, s_off, a_off):
                 ln = line_of(c, m.start())
@@ -328,7 +342,7 @@ def check(tex, display_macros=(), max_words=40, only="ALPW", roadmap=ROADMAP_DEF
                     if ln in road:
                         if k not in roadmap_seq:
                             roadmap_seq.append(k)
-                    elif apps[k]["first"] is None:
+                    elif ln not in excl and apps[k]["first"] is None:
                         apps[k]["first"], apps[k]["via"] = ln, key
 
             def name(k):
@@ -393,6 +407,8 @@ def main(argv):
     ap.add_argument("--only", default="A,L,P,W", help="subset of A,L,P,W")
     ap.add_argument("--roadmap", action="append", default=None, help="regex for the roadmap paragraph (repeatable)")
     ap.add_argument("--roadmap-lines", default=None, help="A-B: the roadmap paragraph's line range")
+    ap.add_argument("--exclude-section", action="append", default=[],
+                    help="regex on a \\section title whose references do not count as first references (repeatable)")
     ap.add_argument("--allow-unreferenced", action="append", default=[], help="appendix label exempt from A2")
     ap.add_argument("--strict", action="store_true", help="L and P items fail the run too")
     ap.add_argument("--selftest", action="store_true")
@@ -417,7 +433,7 @@ def main(argv):
     only = "".join(x.strip().upper() for x in a.only.split(","))
     findings, infos, review = check(tex, [m for m in a.display_macro.split(",") if m], a.max_words, only,
                                     tuple(a.roadmap) if a.roadmap else ROADMAP_DEFAULT, rl,
-                                    a.allow_unreferenced, a.strict)
+                                    a.allow_unreferenced, a.strict, a.exclude_section)
     for ln, code, msg in findings:
         print(f"{a.tex}:{ln}: [{code}] {msg}")
     for ln, code, msg in infos:
@@ -522,6 +538,12 @@ def selftest():
     expect("reordered appendices and roadmap, every appendix referenced: no finding", f2 == [], f2)
     f3, _, _ = check(BAD, allow_unreferenced=["app:c"])
     expect("--allow-unreferenced exempts an outlook appendix from A2", "A2" not in [c for _, c, _ in f3])
+    f6, inf6, _ = check(good, exclude_sections=["^Introduction$"])
+    a2x = sorted(m.split("<")[1].split(">")[0] for _, c, m in f6 if c == "A2")
+    expect("--exclude-section: references inside the excluded section do not count (app:a, app:b become A2; "
+           "app:c, referenced in Main, does not); the roadmap inside it still feeds A3",
+           a2x == ["app:a", "app:b"] and {c for _, c, _ in f6} == {"A2"}
+           and any(c == "excluded" and "lines 4-" in m for _, c, m in inf6), (a2x, f6))
     f4, _, _ = check(good, strict=True)
     expect("--strict turns the L and P review items into findings", {c for _, c, _ in f4} == {"L", "P"},
            {c for _, c, _ in f4})

@@ -385,7 +385,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Pattern**: 付録を足す・移す pass のたびに順序が場当たりになり、 本文で先に参照される付録が後ろに来る。 「outlook だから最後」 の例外を作ると、 その付録が実は方法の説明 (レビュー) だったとき例外の根拠が消える (2026-09-08 の研究 LaTeX project の fRG 付録 = 題は私が付けた "Outlook"、 中身は Wetterich 方程式と pole 条件の段取り)。
 
-**Rule**: 序論の案内文を除いた本文での初参照位置で並べる。 除くのは案内文の段落だけで、 序論の他の段落 (例: 結果の要約が「derived in App. X」 と付録を指す) からの参照は数える (2026-09-11 の gate record は、 結果段落の先行参照を「規則は案内文を除く」 として除外し付録順を ○ にした = 誤適用)。 案内文も同順に書き直す。 機械 = [`check-paper-prose.py`](../scripts/check-paper-prose.py) (A1 = 初参照順と file 順の食い違い / A2 = 本文から参照されない付録 / A3 = 案内文の中の順、 除いた行は毎回印字)。 移動は verbatim の MOVE (label 不変で cref は追従)、 位置依存の語 (previous / next appendix、 above / below) を grep 0 にする。 例外は「本当に展望しか書いていない付録」 だけで、 題でなく中身を読んで判断する。
+**Rule**: 序論の案内文を除いた本文での初参照位置で並べる。 除くのは案内文の段落だけで、 序論の他の段落 (例: 結果の要約が「derived in App. X」 と付録を指す) からの参照は数える (2026-09-11 の gate record は、 結果段落の先行参照を「規則は案内文を除く」 として除外し付録順を ○ にした = 誤適用)。 序論の結果段落まで案内扱いにするかは原稿ごとの著者判断で、 そうするなら判断を記録に残し、 検査の設定 (`--exclude-section`) に書く。 案内文も同順に書き直す。 機械 = [`check-paper-prose.py`](../scripts/check-paper-prose.py) (A1 = 初参照順と file 順の食い違い / A2 = 本文から参照されない付録 / A3 = 案内文の中の順、 除いた行は毎回印字)。 移動は verbatim の MOVE (label 不変で cref は追従)、 位置依存の語 (previous / next appendix、 above / below) を grep 0 にする。 例外は「本当に展望しか書いていない付録」 だけで、 題でなく中身を読んで判断する。
 
 **Cost**: 共著者への連絡で付録の letter が変わる → [`research-email.md#appendix-letters-unstable`](research-email.md#appendix-letters-unstable)。 diff PDF には MOVE の artifact が出る → [`latex.md#latexdiff-move-artifacts`](latex.md#latexdiff-move-artifacts)。
 
