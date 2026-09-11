@@ -81,6 +81,12 @@ COMPLETION_GATE_REQUIREMENTS = {
         "CONVENTIONS.md#completion-git-gate",
         "codex/PARITY.md#completion-git-gate-hook",
     ),
+    "DESIGN.md": (
+        'id="completion-gate-firing-resolution"',
+        "entry / event / blocking surface / state predicate",
+        "docs/convention-design-principles.md#completion-boundary-state-gate",
+        "codex/PARITY.md#completion-git-gate-hook",
+    ),
     "codex/HOME-AGENTS.md": (
         "CONVENTIONS.md#completion-git-gate",
         "dirty/ahead/behind",
@@ -105,6 +111,8 @@ COMPLETION_GATE_REQUIREMENTS = {
         '`{"decision":"block","reason":"..."}`',
         "stop_hook_active",
         "commit-only/ahead completion",
+        "Completion-state baseline, live-remote comparison",
+        "blocks one turn-end continuation",
         "https://learn.chatgpt.com/docs/hooks",
     ),
     "codex/hooks/session_touch.py": (
