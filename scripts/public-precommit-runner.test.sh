@@ -174,6 +174,31 @@ expect_pass "pass-email-example-domain" \
 expect_block "block-email-real-domain" \
   "contact someone@gm""ail.com for details"
 
+# 編集時の hook (hooks/public-leak-guard.sh) と本 runner は同じ email allowlist を持つ。
+# 2026-09-12: runner だけ 2026-08-28 に例示 domain を足し、 hook は古いまま test fixture の
+# Write ごとに確認 dialog を出していた → 片側だけの修正が再発しないよう一致を固定する。
+GUARD="$(cd "$(dirname "$RUNNER")/.." && pwd)/hooks/public-leak-guard.sh"
+allowlist_of() { grep -oE "grep -vE '\^\(noreply@anthropic[^']*'" "$1" | head -1; }
+if [ -f "$GUARD" ] && [ -n "$(allowlist_of "$RUNNER")" ] \
+   && [ "$(allowlist_of "$RUNNER")" = "$(allowlist_of "$GUARD")" ]; then
+  PASS=$((PASS+1))
+else
+  FAIL=$((FAIL+1))
+  FAILED_CASES="${FAILED_CASES}  - parity-email-allowlist: hook と runner の email allowlist が不一致\n"
+fi
+# hook 側の実挙動: 例示 domain の Write は確認なしで通る
+if [ -f "$GUARD" ] && command -v jq >/dev/null 2>&1; then
+  guard_out="$(jq -n --arg p "$MOCK_REPO/fixture.md" \
+    '{tool_name:"Write",tool_input:{file_path:$p,content:"fixture user = someone@example.invalid"}}' \
+    | bash "$GUARD" 2>/dev/null)"
+  if [ -z "$guard_out" ]; then
+    PASS=$((PASS+1))
+  else
+    FAIL=$((FAIL+1))
+    FAILED_CASES="${FAILED_CASES}  - guard-email-example-domain: hook が例示 domain で確認を求めた\n"
+  fi
+fi
+
 # ====================================================================
 echo ""
 echo "=== public-precommit-runner self-test ==="

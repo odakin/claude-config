@@ -101,11 +101,15 @@ HITS=""
 
 # --- 1. email ---
 # GNU grep 拡張に依存しないため `grep -oE` を使う。
-# allowlist: grep -v で除外。
+# allowlist: grep -v で除外。 ⚠️ commit 時の gate (scripts/public-precommit-runner.sh の
+# Tier A-1) と同じ allowlist にする — RFC 2606 の例示 domain (@example.com / .org / .net /
+# .invalid) は実在 address になり得ないので leak ではない。 2026-09-12 まで本 hook だけ
+# 例示 domain を拾い、 test fixture の Write ごとに確認 dialog を出していた (commit gate は通すのに)。
+# 両者の一致は scripts/public-precommit-runner.test.sh が検査する。
 EMAIL_HITS="$(
   printf '%s' "$CONTENT" \
     | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' 2>/dev/null \
-    | grep -vE '^(noreply@anthropic\.com|noreply@github\.com|support@github\.com)$' \
+    | grep -vE '^(noreply@anthropic\.com|noreply@github\.com|support@github\.com|[A-Za-z0-9._%+-]+@example\.(com|org|net|invalid))$' \
     || true
 )"
 if [ -n "$EMAIL_HITS" ]; then
