@@ -75,7 +75,15 @@ exec \"$RUNNER\" \"\$@\"
 # --- 既存 hook の扱い ---
 if [ -f "$HOOK" ]; then
   if grep -q "$STUB_MARKER" "$HOOK" 2>/dev/null; then
-    # 既に本 script が設置した stub。 上書きで最新化 (冪等)
+    # 既存 stub が同じ runner を指していれば書き換えない (理由 = install-public-precommit.sh の同所)
+    cur="$(sed -n 's/^exec "\(.*\)" "\$@"$/\1/p' "$HOOK" | head -n 1)"
+    cur="${cur/#\$HOME/$HOME}"
+    if [ -n "$cur" ] && [ "$cur" -ef "$RUNNER" ]; then
+      [ -x "$HOOK" ] || chmod +x "$HOOK"
+      echo "commit-msg stub up to date: $HOOK"
+      exit 0
+    fi
+    # 別の runner を指す古い stub。 上書きで最新化 (冪等)
     printf '%s' "$STUB_CONTENT" > "$HOOK"
     chmod +x "$HOOK"
     echo "commit-msg stub refreshed: $HOOK"

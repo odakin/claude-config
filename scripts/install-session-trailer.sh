@@ -76,11 +76,36 @@ STUB_CONTENT="#!/bin/bash
 exec \"$RUNNER\" \"\$@\"
 "
 
+# core.hooksPath が repo の worktree 内を指し、 そこに stub が untracked で置かれる場合は
+# .git/info/exclude に載せる (= clone ごとの設定。 共有 repo の status に `??` を出し続けない、
+# かつ他人の clone では存在しない stub を commit させない、 2026-09-12)。 track 済みなら repo の判断に任せる。
+exclude_if_untracked_in_worktree() {
+  case "$HOOK" in "$REPO"/*) ;; *) return 0 ;; esac
+  local rel="${HOOK#"$REPO"/}"
+  case "$rel" in .git/*) return 0 ;; esac
+  git -C "$REPO" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1 && return 0
+  local ex
+  ex="$(git -C "$REPO" rev-parse --git-path info/exclude 2>/dev/null)" || return 0
+  case "$ex" in /*) ;; *) ex="$REPO/$ex" ;; esac
+  mkdir -p "$(dirname "$ex")" 2>/dev/null || return 0
+  grep -qxF "/$rel" "$ex" 2>/dev/null || printf '/%s\n' "$rel" >> "$ex"
+}
+
 # --- 既存 hook の扱い ---
 if [ -e "$HOOK" ] || [ -L "$HOOK" ]; then
   if grep -q "$STUB_MARKER" "$HOOK" 2>/dev/null; then
+    # 既存 stub が同じ runner を指していれば書き換えない (理由 = install-public-precommit.sh の同所)
+    cur="$(sed -n 's/^exec "\(.*\)" "\$@"$/\1/p' "$HOOK" | head -n 1)"
+    cur="${cur/#\$HOME/$HOME}"
+    if [ -n "$cur" ] && [ "$cur" -ef "$RUNNER" ]; then
+      [ -x "$HOOK" ] || chmod +x "$HOOK"
+      exclude_if_untracked_in_worktree
+      echo "prepare-commit-msg stub up to date: $HOOK"
+      exit 0
+    fi
     printf '%s' "$STUB_CONTENT" > "$HOOK"
     chmod +x "$HOOK"
+    exclude_if_untracked_in_worktree
     echo "prepare-commit-msg stub refreshed: $HOOK"
     exit 0
   else

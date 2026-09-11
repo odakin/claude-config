@@ -82,7 +82,17 @@ exec \"$RUNNER\" \"\$@\"
 # --- 既存 hook の扱い ---
 if [ -f "$HOOK" ]; then
   if grep -q "$STUB_MARKER" "$HOOK" 2>/dev/null; then
-    # 既に本 script が設置した stub。上書きで最新化 (冪等)
+    # 既存 stub が同じ runner を指していれば書き換えない。 repo が "$HOME/..." 形の stub を
+    # track している場合 (core.hooksPath が repo 内)、 absolute path で上書きすると毎回
+    # worktree が汚れ、 SessionStart の自動 pull の stash と衝突した (2026-09-12)。
+    cur="$(sed -n 's/^exec "\(.*\)" "\$@"$/\1/p' "$HOOK" | head -n 1)"
+    cur="${cur/#\$HOME/$HOME}"
+    if [ -n "$cur" ] && [ "$cur" -ef "$RUNNER" ]; then
+      [ -x "$HOOK" ] || chmod +x "$HOOK"
+      echo "pre-commit stub up to date: $HOOK"
+      exit 0
+    fi
+    # 別の runner を指す古い stub。上書きで最新化 (冪等)
     printf '%s' "$STUB_CONTENT" > "$HOOK"
     chmod +x "$HOOK"
     echo "pre-commit stub refreshed: $HOOK"
