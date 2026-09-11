@@ -357,7 +357,7 @@ create + UI で開く検証で associatedWithDeveloper 永続フラグによる 
 ### 機械化の射程 (= honest、effective な層だけに置く)
 
 - **読み側**は body extractor のコードで根治できる (= 自作 helper を text/html fallback にする)。これは tool が返す値そのものを直すので **hook 不要・どの frontend でも効く** (= Claude Code desktop でも有効)。最も leverage が高い。
-- **書き側は本質的に機械化が難しい**。PreToolUse hook で send body を scan する手はあるが、**Claude Code desktop では hook 出力が honor されない** ([`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork))ため、まさに事故が起きる環境で無効 = 足しても「対策済」の false confidence にしかならない。送信が Bash script (= 直叩き wrapper) 経由なら script 内に entity の事前 scan を仕込めば**その経路では**機械的に止まる (frontend 非依存)。だが **MCP send 経路 (`mcp__gmail-*__send_email`) は介入できない**。∴ MCP-send-in-desktop の `&gt;` は **prose 規律 + human review が最後の floor**。欠陥自体は cosmetic (引用が崩れて見えるだけで趣旨は伝わる) なので、効かない機械層を積むより honest にそう書く。
+- **書き側は本質的に機械化が難しい**。PreToolUse hook で send body を scan する手はあるが、**Claude Code desktop では hook 出力が honor されないと観測されていた** ([`hook-authoring.md` frontend-dependent-cowork](hook-authoring.md#frontend-dependent-cowork)。 ⚠️ 2026-09-11: 少なくとも一部は root 限定の `disableAllHooks` が原因 = [#disableallhooks-kill-switch](hook-authoring.md#disableallhooks-kill-switch))ため、まさに事故が起きる環境で効くと保証できない = 足しても「対策済」の false confidence にしかならない。送信が Bash script (= 直叩き wrapper) 経由なら script 内に entity の事前 scan を仕込めば**その経路では**機械的に止まる (frontend 非依存)。だが **MCP send 経路 (`mcp__gmail-*__send_email`) は介入できない**。∴ MCP-send-in-desktop の `&gt;` は **prose 規律 + human review が最後の floor**。欠陥自体は cosmetic (引用が崩れて見えるだけで趣旨は伝わる) なので、効かない機械層を積むより honest にそう書く。
 
 ## Gmail send: 添付ファイルは明示 MIME が要る
 
