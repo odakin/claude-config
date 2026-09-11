@@ -722,6 +722,20 @@ origin: 横断 lookup script が規律表の機械補強 column に**記載済�
 - **判定の問い**: 「この規律が要る**瞬間**に、 人は何を読んでいるか?」 — 「この規律は**何の話題**か?」 ではない。 前者で入口を決め、 後者で home を決める。 両者が一致する規律もあるが、 一致を既定と思い込むと上の型で不発する。
 - 入口を足すのは **実際に不発を観測した症状**に対してだけにする (= 予防的に全 doc へ撒くと [§9](#triage-and-subtraction) subtraction の対象が増えるだけ)。
 
+### <a id="completion-boundary-state-gate"></a>8.12c 複数段 workflow は中間 command でなく完了境界の状態を gate する
+
+変更 → 検証 → 永続化 → 配信 → 読み戻し、のように価値が複数段を完走して初めて届く workflow では、各段の成功がそれぞれ「終わった」感を作る。build 成功、worktree clean、commit 成功は中間状態であり、delivery の postcondition ではない。**完了報告の直前を独立した stage boundary として定義し、そこで最終状態を直接観測する**。
+
+gate の入力は「どの command を実行したか」という履歴より、workflow が要求する**状態ベクトル**を優先する。Git delivery なら task 由来 dirt、local `HEAD`、tracking ref の ahead/behind、live remote branch head。外部送信なら送信済み receipt と読み戻し、生成 mirror なら source/target digest、という形である。状態を見れば、command 自体の未実行、途中失敗、別 call へ残した最終 leg のいずれも同じ未充足として扱える。具体的な Git 契約は [`CONVENTIONS.md#completion-git-gate`](../CONVENTIONS.md#completion-git-gate)。
+
+既存 state を task の失敗に誤帰属しないため、可能なら最初の mutation 前に baseline を取る。完了時の状態が baseline と同じなら、着手前からの無関係 dirt を agent の変更として stage しない。一方、baseline 取得後に変化した state、local/remote head の不一致、live state の照会不能は silent pass にせず、解消または明示例外へ送る。
+
+発火面は**最後の安全な境界**へ置く。PostToolUse の nudge は特定の中間操作に結び付き、後続操作で状態が変わるうえ、agent が読まずに終了できる。commit hook は commit 内容を止められるが、agent の完了発話は見えない。製品が turn-end の blocking continuation を持つならそこへ state gate を置き、直接の instruction pointer と併用する。Codex での適用と一回継続の限界は [`codex/PARITY.md#completion-git-gate-hook`](../codex/PARITY.md#completion-git-gate-hook)。
+
+回帰 test は happy path だけでなく、最終 leg を1本ずつ抜いた negative control を持つ。少なくとも未永続化、永続化済みだが未配信、remote 先行、live state 読取不能、後続の正規操作で gate が解除されることを別 fixture にする。「gate script が起動した」だけでは delivery property を検証していない。
+
+origin: 長い変更 task で既存の commit/push 規則と dirty nudge が在ったのに、local build 成功が終端として解釈された事例。規則の不在ではなく、直接入口の不在、完了 event の曖昧さ、通知のみで block しない発火面、clean-but-unpublished を見ない proxy が重なった。処方は規則追加でなく、既存正本への入口と completion-state gate の追加だった。
+
 ### <a id="conditional-firing-visibility"></a>8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる
 
 §8.12 は発火面の強弱だった。 本節はその前提条件: **出力の不在は ambiguous** — 「動いて該当なし (= 正常な沈黙)」 と「そもそも動いていない (= 未配線・未登録・未 install)」 を外から区別できない。 per-machine wiring / scheduled task 登録 / opt-in install のように **活性化に手動 step を要する mechanism** は、 その step が抜けても何も言わない (= silent dead) ので、 設計者は「動いている」 と誤認し続ける。

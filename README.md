@@ -106,6 +106,12 @@ supported Web/Mobile event triggers; the canonical matrix is
 and pass `--repo <path>` to verify that a repository has the required tracked
 root `AGENTS.md` entry point and Git-side guards.
 
+For authorized repository changes, the shared
+[completion Git gate](CONVENTIONS.md#completion-git-gate) defines delivery as
+validation, commit, push, and live remote-head verification. The installed
+Codex Stop adapter provides a bounded forcing function; its coverage and trust
+limits are documented in the [capability map](codex/PARITY.md#completion-git-gate-hook).
+
 ### Windows status
 
 Native Windows is unsupported only for `scripts/setup-codex.sh`. The existing

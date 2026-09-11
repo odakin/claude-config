@@ -231,12 +231,16 @@ manual な per-rule pointer は (a) scale しない (b) 「pointer を張るの�
 owner の「上層には要らないのか」 という問いで設計 review 中に捕まえた near-miss** — 下の un-defer trigger 1 件目には
 数えない。
 
-⚠️ **上の open は未解決のまま**: 基準が明確になっても「pointer を張る」 行為自体は依然 recall 依存で、
-manual per-rule pointer が scale しない問題は動いていない。 un-defer trigger は据え置き。
+### <a id="completion-gate-firing-resolution"></a>部分 resolution (2026-09-11): completion boundary は global entry + blocking Stop へ
 
-### un-defer trigger (= signal / 機械判定)
+上の第1 un-defer trigger (= layer-1 に記録済みの規律が実際に不発) が到来した。Git の変更 task で commit/push 規律は既に存在したが、Codex の直接入口は「commit 後 push」までしか運ばず、build 成功後かつ完了報告前という event が未定義だった。旧 Stop hook も dirty の一度通知だけで、clean-but-ahead と live remote drift を見なかった。規則の内容でなく **entry / event / blocking surface / state predicate** の4点が failure path だった。
 
-- layer-1 に記録済の規律が**発火せず見落とされた incident** が 1 件発生 (= 「L1 に書いたのに効かなかった」 の再演)
+この class は manual pointer の追加だけで閉じず、(a) product-neutral な完了 gate を [`CONVENTIONS.md#completion-git-gate`](CONVENTIONS.md#completion-git-gate)、(b) 複数段 workflow の一般原則を [`#completion-boundary-state-gate`](docs/convention-design-principles.md#completion-boundary-state-gate)、(c) Codex 固有の state baseline + blocking Stop を [`codex/PARITY.md#completion-git-gate-hook`](codex/PARITY.md#completion-git-gate-hook) に置いた。global/workspace AGENTS と該当 skills は短い入口だけを持ち、fixture / integration checker / layer-4 audit を既存 run-all channel に相乗りさせた。owner 固有の各作業単位 strictness は layer 3 に残る。
+
+これは「全 layer-1 rule を自動 surface する」一般解ではない。機械判定でき、全 Git 変更 task に効き、完了という既存 lifecycle event がある高頻度 invariant だから global entry + Stop が正当化された。judgment 系 rule の manual pointer scale 問題は残る。
+
+### 残る un-defer trigger (= signal / 機械判定)
+
 - L1-rule-surfacing のための manual 下層 pointer を **3 件目**張ろうとした時 (= DRY 圧 → 系統化、 §9.6 機構増殖抑制と両睨み)
 - convention の発火面を別件で再設計する時 (= personal-skills 拡張等に相乗り)
 

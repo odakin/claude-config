@@ -64,6 +64,22 @@ COMPLETION_GATE_REQUIREMENTS = {
         "同じ command chain",
         "commit / push しない正当な例外",
         "codex/PARITY.md#completion-git-gate-hook",
+        "docs/convention-design-principles.md#completion-boundary-state-gate",
+    ),
+    "docs/convention-design-principles.md": (
+        'id="completion-boundary-state-gate"',
+        "完了報告の直前を独立した stage boundary",
+        "状態ベクトル",
+        "CONVENTIONS.md#completion-git-gate",
+        "codex/PARITY.md#completion-git-gate-hook",
+    ),
+    "README.md": (
+        "CONVENTIONS.md#completion-git-gate",
+        "codex/PARITY.md#completion-git-gate-hook",
+    ),
+    "README.ja.md": (
+        "CONVENTIONS.md#completion-git-gate",
+        "codex/PARITY.md#completion-git-gate-hook",
     ),
     "codex/HOME-AGENTS.md": (
         "CONVENTIONS.md#completion-git-gate",
@@ -123,6 +139,7 @@ SUPERSEDED_CLAIMS = (
     "Codex does not have Claude Code's equivalent per-tool event-hook mechanism",
     "same target is effectively free",
     "同じ目標は実質無料",
+    "reports unintended dirty worktree state at turn end",
 )
 HOOK_ADAPTERS = {
     "SessionStart": ("resume_context.py", "session_provenance.py"),

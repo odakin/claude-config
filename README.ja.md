@@ -100,6 +100,12 @@ deterministic local job、lifecycle Hook、対応する Web/Mobile event trigger
 `--repo <path>` を渡すと、そのリポに必須の tracked root `AGENTS.md` entrypoint と
 Git-side guard も検査する。
 
+変更を許可された Git task では、共通の
+[completion Git gate](CONVENTIONS.md#completion-git-gate) が delivery を
+検証・commit・push・live remote head 照合までと定義する。install される Codex Stop adapter は
+bounded な forcing function を提供し、その coverage と trust の限界は
+[capability map](codex/PARITY.md#completion-git-gate-hook) が正本。
+
 ### Windows 対応状況
 
 native Windows で unsupported なのは `scripts/setup-codex.sh` だけであり、下記の既存

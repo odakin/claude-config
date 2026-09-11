@@ -205,6 +205,7 @@ git の状態管理は 1 本の `PostToolUse` hook で機械的に支援する: 
 **commit / push しない正当な例外:** (a) read-only の質問・診断・review で repo を変更していない、(b) user が明示的に commit / push を止めた、または external write の authorization がまだない、(c) remote / upstream が存在しない、(d) dirty が着手前からある無関係な user / 別 session の変更だけで、自分の変更は残していない、(e) task が中断・blocked で partial work を意図的に引き継ぐ。この場合は完了と呼ばず、最終報告に repo、残状態、理由、次 action を明示する。例外は silent bypass ではない。
 
 Codex の lifecycle forcing function と coverage 限界は [`codex/PARITY.md#completion-git-gate-hook`](codex/PARITY.md#completion-git-gate-hook)。Git hook は commit 内容の gate にはできても「agent が完了を言う瞬間」は見えないため、instruction entry point と turn-end hook の両方を残す。
+複数段 workflow で中間 command 成功と delivery postcondition を分ける一般設計は [`docs/convention-design-principles.md#completion-boundary-state-gate`](docs/convention-design-principles.md#completion-boundary-state-gate)。
 
 ### <a id="pre-push-check"></a>push 前チェック
 

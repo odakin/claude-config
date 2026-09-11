@@ -185,6 +185,10 @@ sections:
     legacy: "8.12b"
     level: 3
     title: "8.12b doc tier の中にも強弱がある — home は topic 側、 入口は「症状の瞬間」 側に置く"
+  - id: completion-boundary-state-gate
+    legacy: "8.12c"
+    level: 3
+    title: "8.12c 複数段 workflow は中間 command でなく完了境界の状態を gate する"
   - id: conditional-firing-visibility
     legacy: "8.13"
     level: 3

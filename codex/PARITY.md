@@ -92,6 +92,8 @@ running session has reread instructions or that a client delivered a hook.
 
 The product-neutral semantic rule is
 [`CONVENTIONS.md#completion-git-gate`](../CONVENTIONS.md#completion-git-gate).
+Its general mechanism-design basis is
+[`completion-boundary-state-gate`](../docs/convention-design-principles.md#completion-boundary-state-gate).
 The global and workspace Codex instructions plus the operations and integration
 skills are short firing stubs to that one home; they do not become competing
 sources of truth.
@@ -389,6 +391,7 @@ wiring or an unsupported runtime, which the audit must distinguish.
 | Git trailer transaction | [`scripts/prepare-commit-msg-session.sh`](../scripts/prepare-commit-msg-session.sh) |
 | Repository and machine-local wiring | [`scripts/install-session-trailer.sh`](../scripts/install-session-trailer.sh), [`scripts/setup-codex.sh`](../scripts/setup-codex.sh) |
 | Installed-state and source-contract audits | [`scripts/audit-codex-integration.sh`](../scripts/audit-codex-integration.sh), [`scripts/check-codex-integration.py`](../scripts/check-codex-integration.py) |
+| Completion-state baseline, live-remote comparison, and turn-end continuation | [`codex/hooks/session_touch.py`](hooks/session_touch.py), wired by [`codex/hooks/hooks.json`](hooks/hooks.json) |
 | Behavioral regression | [`codex/hooks/codex-hooks.test.sh`](hooks/codex-hooks.test.sh), [`scripts/prepare-commit-msg-session.test.sh`](../scripts/prepare-commit-msg-session.test.sh), [`scripts/setup-codex.test.sh`](../scripts/setup-codex.test.sh), [`scripts/run-all-checks.sh`](../scripts/run-all-checks.sh) |
 
 ## Platform scope
@@ -565,11 +568,11 @@ high-signal, product-neutral subset:
 
 | Codex event | Managed behavior | Boundary |
 | --- | --- | --- |
-| `PreToolUse(apply_patch)` | Blocks Tier-A structural leak patterns while editing a repository marked public. | Git pre-commit and commit-message gates remain authoritative for all write paths. |
+| `PreToolUse(apply_patch)` | Blocks Tier-A structural leak patterns while editing a repository marked public, and records the completion-gate baseline for resolved patch targets. | Git pre-commit and commit-message gates remain authoritative for all write paths; completion behavior is owned by [`#completion-git-gate-hook`](#completion-git-gate-hook). |
 | `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`, constructs the conversation-start identity stamp, and caches hook-supplied session/model provenance. | It reads only current hook input and local runtime facts; it does not discover personal-layer data or session history. |
 | `UserPromptSubmit` | Refreshes the active model cache before every user turn, including after a model change. | It emits no output and stores only validated session/model metadata. |
-| `PreToolUse(Bash)` | Refreshes the machine-local session/model provenance cache from current hook input. | It emits no decision and neither authorizes nor rewrites the command; the Git hook remains the commit-path mechanism. |
-| `PostToolUse(apply_patch)` + `Stop` | Tracks a touched Git repository in machine-local Codex state and reports unintended dirty worktree state at turn end. | It does not commit or push automatically. |
+| `PreToolUse(Bash)` | Refreshes the machine-local session/model provenance cache and records a Git baseline for completion-gate targets. | It neither authorizes nor rewrites the command; the detailed state predicate is owned by [`#completion-git-gate-hook`](#completion-git-gate-hook). |
+| `PostToolUse(apply_patch)` + `Stop` | Provides a conservative tracking fallback, then blocks one turn-end continuation when task-created dirt or local/live-remote head drift remains. | It never commits or pushes automatically; `stop_hook_active`, client trust, path resolution, and specialized execution paths bound enforcement as documented in [`#completion-git-gate-hook`](#completion-git-gate-hook). |
 
 This subset intentionally does **not** import owner-private deadline ledgers or
 their SessionStart horizon output. Therefore, a reminder being visible in
