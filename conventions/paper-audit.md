@@ -158,6 +158,8 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 **実例 (2026-08、 該当 private paper repo):** 4 誌 reject 後の 5 誌目投稿直前に、 式の再導出と図の再計算は完了していたが、 中心主張 (= 場が障壁を越える) は収支で不成立と判明した。 使えるエネルギーが障壁の 6 %、 媒質は当の場の崩壊産物なので差を埋められない。 formalism の数値が主張を支えていたのは、 振動開始時の密度を Planck 密度と置く別 letter 由来の規格化が式の係数に埋まっていたためで、 その節と inflation 側の設定は両立していなかった。 referee 1 名がこの継ぎ目を「energy scale の接続が不明」 と表現していた (= 突かれる側から見れば既知の穴)。 → 主張を成立する範囲に絞る組み替えへ。
 
+**符号も収支の対象 (2026-09-11 追補)**: 係数の**符号**が物理を運ぶとき (真空エネルギーの向き、 運動項・質量二乗の符号、 running の向き)、 それも formalism と独立な 2〜3 行で検算する — 振幅と有効作用の辞書を定義から導き直し、 教科書の絶対量 (1 loop 真空エネルギー、 真空偏極の遮蔽の向き) と比べる。 起源事例 (2026-09、 private paper repo): 投稿前 gate の worker がこの anchor に従って辞書 (amputated 1PI 図の和 = i × Γ) を白紙から導き、 tadpole を Dirac fermion の真空エネルギーの pole と比べたことで、 30 本を超える検査が全 PASS のまま見逃していた有効作用の全体符号の反転が見つかった → [#absolute-sign-external-anchor](#absolute-sign-external-anchor)。
+
 ## <a id="figure-irreproducible-taxonomy"></a>図が本文の式から再現できない時の 4 分類 (2026-08)
 
 図を caption の定義どおりに再実装しても合わない時、 原因は 4 つに分かれる。 **どれかを決めないと処置 (式を直す / 図を差し替える / caption を直す / 設定を直す) が決まらない**ので、 「再現不能」 で止めない。
@@ -413,9 +415,37 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Pattern**: heat kernel は Euclidean の手法なので Euclidean で計算するのは標準だが、 「その pole が本稿の Lorentzian の式と同じ符号規約か」 を言わないと referee は比べられない。 著者の問い「ユークリッドでやって大丈夫か」 がその 1 文の不在を突いた。
 
-**Rule**: (a) mostly-plus なら Wick 回転 x⁰ = −ix⁴ は座標変換で、 parity-even なスカラー密度は共通因子だけで写る (相対係数は signature 非依存)、 parity-odd (ε 1 個) は i を拾う、 と 1 文。 mostly-minus なら g → −g の (−1)ⁿ 則 (n = 逆計量の縮約数) が項ごとに入るので「共通符号」 は言えない。 (b) 全体符号は 1 項で anchor する (m⁴ 項 = Euclidean 有効作用 −ln det(D̸+m) の +m⁴ と、 本稿の規約 δ²Γ = −(J₁+J₂) から出る +m⁴|e| が一致、 等。 表の第 1 行に委ねてもよい)。 (c) 機械 anchor = 同じ入力を δ と η の両方で解いて係数を比べる script (「Wick dictionary」 が恒等になることを実測)。
+**Rule**: (a) mostly-plus なら Wick 回転 x⁰ = −ix⁴ は座標変換で、 parity-even なスカラー密度の**相対係数**は signature に依らない (parity-odd = ε 1 個は i を拾う)。 ただし**作用密度の全体符号は反転する** (iS_M = −S_E、 すなわち Euclidean の作用密度 = −Lorentzian の Lagrangian 密度。 有効作用も同じ)。 よって「Euclidean の pole は Lorentzian の有効作用の −1 倍で、 比べるのは括弧 (相対係数) どうし」 と 1 文で書く。 mostly-minus なら更に g → −g の (−1)ⁿ 則 (n = 逆計量の縮約数) が項ごとに入る。 (b) 全体符号は、 Euclidean の結果と「同符号」 と確かめても anchor にならない (その比較自体が Wick の符号を渡る)。 本稿の signature の中で振幅 ↔ 有効作用の辞書を定義から置き (e^{iS}: amputated 1PI 図の和 = i × Γ⁽ⁿ⁾、 e^{−S}: = −Γ_E⁽ⁿ⁾)、 外部の絶対量に結ぶ → [#absolute-sign-external-anchor](#absolute-sign-external-anchor)。 (c) 同じ入力を δ と η で解いて係数を比べる script は**相対係数**の signature 非依存性の検査で、 同じ辞書を両 signature に使う限り全体符号については恒等式 (必ず一致する)。 辞書の符号は signature ごとに置き、 script には「Lorentzian の括弧 = −1 × Euclidean の括弧」 を assert させる。
+
+**2026-09-11 訂正**: 本 anchor の初版 (2026-09-08) は (a) で「共通因子は測度だけ」、 (b) で「m⁴ 項が Euclidean 有効作用 −ln det(D̸+m) の +m⁴ と、 本稿の規約 δ²Γ = −(J₁+J₂) から出る +m⁴|e| で一致」、 (c) で「δ と η の両方で解いて Wick dictionary が恒等になることを実測」 としていた。 3 点とも Wick の全体符号を落としており、 起源事例の原稿は有効作用の全体符号が逆のまま「確認済み」 と記録された (3 日後、 別 session の投稿前 gate が [#headline-claim-budget-check](#headline-claim-budget-check) の検算で発見)。 初版の文言は git history にある。
 
 **Wording**: 自動詞の "continues with one common sign" は慣用でない (数学の "f continues analytically to" は別物)。 他動詞受動 "is analytically continued to" か、 動詞を避けて「座標変換だから不変」 で言う。
+
+## <a id="absolute-sign-external-anchor"></a>符号を持つ印字係数は外部の絶対量に「全体反転で落ちる」 機械検査で結ぶ — 整合性検査の全 PASS は全体符号について何も言わない (2026-09-11)
+
+**Pattern**: loop で誘導される有効作用の係数を印字する paper で、 30 本を超える検査が全 PASS のまま**有効作用の全体符号が逆**だった (起源事例 2026-09、 private paper repo)。 検査はどれも次のいずれかで、 全体反転 Γ → −Γ に不変だった: (i) Ward–Takahashi 型の恒等式 (Γ⁽¹⁾, Γ⁽²⁾ に同次線形 — 両方反転しても成立)、 (ii) 比・相対係数・spin-parity channel への分解、 (iii) 振幅 ↔ 有効作用の同じ辞書を両辺に使う照合・校正、 (iv) 別 frame (Euclidean) の絶対値との比較で、 frame 間の橋 (Wick の符号) を未検証のまま渡したもの、 (v) 振幅の印字を Feynman 則と照合する regression (振幅の符号は見るが、 振幅 ↔ 有効作用の辞書は見ない)。 誤った版と正しい版の原稿に既存の 37 本を当てると、 全部が二つの版で同じ結果だった。 原稿 file を実際に開くのは 1 本 (頂点の表示を parse する audit で、 辞書は読まない) だけで、 残り 36 本は印字を script 内へ転記した検査か note 側の計算だった (= 印字が変わっても結果が変わらない構造)。 見分けたのは後から足した外部 anchor (原稿を parse し、 tadpole を Dirac fermion の 1 loop 真空エネルギーの pole と比べる audit) だけだった。
+
+**Rule**:
+
+1. **物理的な意味を持つ符号** (有効作用の全体符号、 真空エネルギー・運動項・質量二乗の符号、 running の向き) を印字したら、 **外部の絶対量に結ぶ機械検査を 1 本以上**置く。 外部の絶対量 = 教科書の値 (1 loop 真空エネルギー〔Coleman–Weinberg〕、 真空偏極の遮蔽の向き・β 関数の符号、 共形 anomaly の係数) か、 正定値性・unitarity。 その検査は**全体反転で FAIL しなければならない** — 原稿の辞書と係数を一斉に反転した版、 または誤っていた過去版に当てて落ちることを PASS 条件に含める (global-flip foil)。
+2. **整合性検査は数えない**: 恒等式・比・channel 分解・同一辞書の校正・別 frame の値との「同符号」 は、 何本積んでも全体符号の証拠にならない。 fleet を「ALL PASS」 と報告するときは、 fleet が不変な変換 (全体符号 / 全体規格化 / 因子 i / Levi-Civita の向き / ε の規約) を列挙し、 それぞれを破る anchor の有無を並べて書く (fleet invariance の申告)。
+3. **振幅 ↔ 有効作用の辞書は定義から置く**: 他の文書・別 signature の計算・数値の一致から写さない。 e^{iS} では amputated 1PI 図の和 = i × Γ⁽ⁿ⁾、 e^{−S} では = −Γ_E⁽ⁿ⁾ で、 両者は Wick の符号だけ異なる。 数値の一致から辞書を「同定」 したら、 比べた二つが同じ signature かを必ず書く (起源事例では、 Euclidean の Γ と Lorentzian の振幅の比較で出た −1 が、 signature の注記なしに Lorentzian 原稿の辞書になった)。
+4. **gate の worker は project の規約文書を前提でなく検算対象として扱う**: 規約文書に書かれた符号の同定こそ、 定義から導き直す。 起源事例で誤りを見つけたのは、 規約文書より先に辞書を白紙で導いた pass だった。
+
+**Check**: (a) 符号を持つ印字量を列挙し、 各々の外部 anchor と global-flip foil を表 (登録簿) にする。 (b) foil は**入力 (原稿) を反転して** end-to-end で当てる — parse した変数を script 内で反転する foil は parse の取り違えを見ない。 (c) 例外 (traceback) で落ちたのは歯ではない (assertion で落ちること)。 (d) 同型の不変量 = 全体規格化 (kernel-level と action-level の因子 2)、 因子 i、 Levi-Civita の向き、 D = 4 − ε と 4 − 2ε の違い。 比と恒等式に不変な量は全部同じ扱い (起源事例の repo は因子 2 でも同型の事故歴があり、 物理観測量の直接計算で決着した)。 機械 backstop = ai-collaboration の [`scripts/check-sign-anchors.py`](../../ai-collaboration/scripts/check-sign-anchors.py) (登録簿の coverage / `--run` = foil の歯を end-to-end で / `--fleet-scan` = fleet のどの検査が変換を見分けるか / `--deferrals` = 下の carrier 無し「規約差」 の ratchet)。
+
+## <a id="convention-difference-closure"></a>「規約差」 は写像を書いて閉じる — 語で済ませた符号の食い違いは unverified として carrier に載せる (2026-09-11)
+
+**Pattern**: 外部の値と符号が逆に出た食い違いを「Euclidean と Minkowski の規約差」 と書いて閉じる。 起源事例 (2026-09、 private paper repo) では、 同じ Wick の符号が 3 か月で 3 回「規約」 として処理された。 ① 光子の真空偏極を自前の loop 機構で計算して教科書と逆符号 → 設計記録に「規約差、 絶対符号は規約の追跡が要る」 と書き、 大きさの一致だけを採った。 ② 二つの独立計算 (Euclidean の有効作用と Lorentzian の図の振幅) の全体 −1 を「自己エネルギーが逆 propagator に入る向きの −1 で、 signature に共通」 と同定した。 裏付けに使った「空間成分・q₀ = 0 に限って比べる」 検査は添字の signature を消すが、 作用密度の全体符号 (Wick の −1) は添字に依らないので消さない — 残った −1 は Wick の符号だった。 同定の第一原理導出は「整合が閉じているので実害なし」 として残された。 ③ その −1 が signature の注記なしに Lorentzian 原稿の辞書として印字され、 付録の Euclidean 検算と「同符号」 と確認された。 どの記録にも carrier (担当・期日・写像が書かれるまで落ち続ける検査) は無く、 「規約」 の語が open の食い違いを closed に見せた。 ① の時点で写像 (Euclidean の有効作用密度 = −Lorentzian の有効作用密度) を 1 行書いていれば、 ② の数値一致と合わせて正しい辞書がその場で決まっていた。
+
+**Rule**:
+
+1. 符号・規格化の食い違いを規約で説明するなら、 **写像を式で書いて計算で閉じる**: 両側の定義 (e^{iS} か e^{−S} か、 計量の signature、 曲率の符号、 場の規格化、 i の配置、 ε の規約) を並べ、 片側の値を写像で送って他方と一致することを計算で示す。 語 (「規約差」 「convention tracking」 「up to conventions」) だけで閉じない。
+2. 写像を計算するまでは **unverified** ([`physics-verification-cycle.md#claim-states`](../../ai-collaboration/conventions/physics-verification-cycle.md#claim-states)) のまま **carrier** に載せる = 担当と期日のある TODO、 decision ledger の未決項目、 または写像が書かれるまで落ち続ける検査。 設計記録の散文に書いた open は carrier ではない。 同じ行に carrier を書く習慣 (例: `carrier: <ledger 項目 / TODO / audit 名>`) にすれば grep で機械検査できる。
+3. **Wick 回転は二つの効果を持つ**: (a) 座標・添字の signature (mostly-plus なら座標変換で、 相対係数は不変)、 (b) 作用密度の全体符号 (iS_M = −S_E)。 (a) だけを消す検査 (空間成分に限る比較、 parity-even スカラーの不変性、 δ と η で同じ辞書を使う解き比べ) は (b) を見ない。
+4. 「二つの計算が違ったらまず規約差を疑う」 は初手の仮説として正しいが、 仮説は写像の計算で閉じるまで仮説のまま。 数値が「全成分でクリーンに全体 −1」 で合うことは写像の証明ではない (fit であって導出ではない)。
+
+**Check**: 設計記録・living note・原稿を「規約差 / convention tracking / up to … conventions / absolute sign / at the level of magnitude / not done here」 で grep し、 各 hit に写像の計算か carrier があるかを見る。 機械 = [`check-sign-anchors.py --deferrals`](../../ai-collaboration/scripts/check-sign-anchors.py) (carrier の無い新規 hit を finding にし、 既知の open は baseline に理由つきで載せて毎回表示する)。
 
 ## <a id="cross-check-appendix-shape"></a>cross-check 付録の形 — 教科書でなく論文の密度: 目的 → 規約 → 写像 → 入力 → 結果 → 表 → 射程 (2026-09-08)
 
@@ -442,3 +472,14 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 **Check 4 (引用の係数は写す前に導出する)**: 先行研究から係数を持ってくるときは、 **自分の規約で 1 回導出してから**写す。 起源事例では 2 経路 (運動量空間の $\int\!d^dp$ と位置空間の $\int\!d^dx$) が独立に一致し、 引用元との差が確定した。 導出コストは Gauss 積分 1 本で、 published error を継承するコストより遥かに安い。
 
 **Downstream (誤りが published だったとき)**: 影響を「全体定数か、 力学変数 ($L$, $T$, 運動量移行) に依存するか」 で仕分ける。 全体定数なら物理的結論 (コヒーレンス長・位相・局在・保存則因子) は無傷なので erratum は規格化に限定できる。 ⚠️ ただし **abstract が「全体確率は X で決まる」 型の主張をしていればそこが直撃する** — 起源事例の abstract 最終文が正にその一文だった。 誤りの伝播先 (自分の他稿・引用した進行中原稿) を同じ turn で grep し、 carrier (TODO・erratum) に落とすまでを 1 単位にする。
+
+## <a id="gate-spec-anchor-list"></a>投稿前 gate の spec に並べる anchor の最小 list (2026-09-11)
+
+投稿前の readiness gate (別 session・別 vendor に渡す機械 gate + claim sweep) の spec は、 claim sweep の対象として少なくとも次の anchor を名指す (anchor 名は安定 — spec からそのまま引く):
+
+- 主張の収支と強さ: [`headline-claim-budget-check`](#headline-claim-budget-check) (**係数の符号を含む**) / [`claim-strength-three-tests`](#claim-strength-three-tests) / [`uniqueness-claim-exhaustion`](#uniqueness-claim-exhaustion) / [`title-claim-check`](#title-claim-check)
+- 符号と規約: [`absolute-sign-external-anchor`](#absolute-sign-external-anchor) / [`convention-difference-closure`](#convention-difference-closure) / [`euclidean-check-in-lorentzian-paper`](#euclidean-check-in-lorentzian-paper)
+- 配置と語彙: [`statement-placement-check`](#statement-placement-check) / [`stale-framing-sweep`](#stale-framing-sweep) / [`abstract-geroch-compression`](#abstract-geroch-compression) / [`sentence-length-audit`](#sentence-length-audit)
+- 記号と付録: [`new-symbol-convention-consistency`](#new-symbol-convention-consistency) / [`notation-continuity-across-sections`](#notation-continuity-across-sections) / [`cross-check-appendix-shape`](#cross-check-appendix-shape) / [`appendix-order-by-first-reference`](#appendix-order-by-first-reference)
+
+符号を持つ印字量の登録簿がある repo では、 gate record に `check-sign-anchors.py --run --deferrals` の結果 (fleet を変えた後なら `--fleet-scan` の表も) を載せる。 gate の worker には「規約文書は検算対象」 ([#absolute-sign-external-anchor](#absolute-sign-external-anchor) の Rule 4) を spec で明示する。 起源 = 2026-09 の gate spec が `headline-claim-budget-check` を含み、 中心主張の検算を worker 自身にさせたことで全体符号の誤りが出た (= 偶然だった手順を標準にする)。
