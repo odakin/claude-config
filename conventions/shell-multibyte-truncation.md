@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: shell で多バイト文字列を truncate・加工するとき
+when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき**
 category: infra
 summary: シェルの多バイト UTF-8 切り詰め gotchas (= cut -c/head -c/bash 部分文字列は byte 単位で多バイト文字を割り invalid UTF-8 → osascript 等下流で文字列全体が文字化け、 launchd は LANG 空で C locale ゆえ特に注意、 安全策=python 文字単位 truncate + valid UTF-8 検証 1-liner、 2026-06-24 osascript 通知 RCA)
 -->
@@ -38,11 +38,19 @@ try: sys.stdin.buffer.read().decode('utf-8'); print('VALID')
 except UnicodeDecodeError as e: print('INVALID', e)"
 ```
 
+## <a id="bracket-expression-c-locale"></a>`grep` / `sed` の角括弧に非 ASCII を入れると、C locale では byte の集合になる (2026-09-13)
+
+`LANG` と `LC_ALL` が空の shell では、`[^。]` は「。」という 1 文字の否定ではなく、その UTF-8 表現の 3 byte (`E3 80 82`) それぞれの否定になる。ひらがな・カタカナの UTF-8 はどれも `E3` で始まるので、`[^。]*。` は最初の「。」に届く前の仮名で止まり、**一致しないのに error も出さない**。Claude Code の Bash tool も `LANG` と `LC_ALL` が空だった (desktop app、2026-09-13 実測)。
+
+- 実例: 挿入した一文を `/usr/bin/grep -o '…[^。]*。'` で表示してから commit する `&&` chain を書いた。表示が 0 件で exit 1 になって commit は走らず、`;` の後ろに置いた検査の出力だけが出た。同じ pattern は先頭に `LC_ALL=en_US.UTF-8` を付けると一致した。
+- 書き方: 非 ASCII を含む pattern は python で書くか、`LC_ALL=en_US.UTF-8` を明示する。表示のための grep を gate の chain に入れない ([shell-env.md#test-gate-no-pipe](shell-env.md#test-gate-no-pipe))。
+
 ## まとめ (reflex)
 
 - shell で非 ASCII を切る時は `cut -c` / `head -c` / byte slice を**使わない** → python の文字単位 truncate。
 - 切った結果を別プロセスに渡す前に valid UTF-8 を検証。
 - daemon (launchd/cron) は `LANG` 空 = C locale 前提で組む。
+- `grep` / `sed` の `[...]` に非 ASCII を入れない (C locale では byte の集合)。Claude Code の Bash tool も `LANG` 空の前提で書く。
 
 ## <a id="prose-args-quoting"></a>自然文を CLI 引数で渡すときの quoting — backtick は double quote の中で消える (2026-09)
 

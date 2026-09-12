@@ -118,8 +118,8 @@ claude-config/
 │   ├── semgrep-ci.md                       # Semgrep を CI で運用する・finding を読む/消す・false positive を nosemgrep 注記するとき
 │   ├── sensitive-data-pass-through.md      # 受信した URL / file を別 recipient に forward する前
 │   ├── shared-repo.md                      # 共同編集者がいるリポで作業するとき
-│   ├── shell-env.md                        # PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** + **Claude が Bash tool で複数の対象を loop で走査する 1-liner を書く瞬間** (= zsh は未 quote の変数を単語分割しない、 `#claude-issued-shell-commands`) + **変数の直後に `:` を書く瞬間** (= `"$c:path"` は zsh の修飾子になる) (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
-│   ├── shell-multibyte-truncation.md       # shell で多バイト文字列を truncate・加工するとき
+│   ├── shell-env.md                        # PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** + **Claude が Bash tool で複数の対象を loop で走査する 1-liner を書く瞬間** (= zsh は未 quote の変数を単語分割しない、 `#claude-issued-shell-commands`) + **Bash tool の `grep -r` で網羅を主張する瞬間** (= ugrep として `.gitignore` を読む、 `#bash-tool-grep-ignores-gitignore`) + **変数の直後に `:` を書く瞬間** (= `"$c:path"` は zsh の修飾子になる) (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
+│   ├── shell-multibyte-truncation.md       # shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき**
 │   ├── slack-mcp.md                        # Slack workspace を MCP で wire するとき
 │   ├── substack.md                         # Substack 記事の入稿・notes/コメント回収をするとき + 購読している publication の記事を一覧・本文・有料全文・購読メールから取り込むとき
 │   ├── tenki-submission.md                 # 日本気象学会の機関誌「天気」への投稿を準備するとき
