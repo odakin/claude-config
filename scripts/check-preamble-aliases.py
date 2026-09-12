@@ -64,6 +64,17 @@ everywhere it is mirrored:
                      "suggest": "\\Tr\\fnl{"}],
      "extra_soft": [{"pattern": "\\\\red\\{", "label": "\\red{...} (drafting marker?)"}]}
 
+``--fix`` rewrites the raw forms in place *through the same matcher that found
+them*, which is the only reason a sweep of this size is safe to run at all: the
+replacement comes from the token span the matcher consumed, not from a regex
+written by hand a second time.  It writes the alias that the manuscript already
+uses when several share a body, keeps the argument text verbatim, inserts a space
+when the alias would otherwise run into a following letter (``\Ah`` + ``B``), and
+re-runs to a fixed point so a finding nested inside another's argument is not
+undone by the outer rewrite.  Config-declared ``extra_hard`` regexes are reported
+but never auto-fixed (a regex has no argument structure to carry over).  It is a
+source rewrite: read the diff and rebuild the PDF before committing.
+
 Exit 0 = clean or soft-only, 1 = hard violations, 2 = a target could not be read.
 
 Usage:
@@ -72,6 +83,7 @@ Usage:
   check-preamble-aliases.py --preamble preamble.tex fragment.tex
   check-preamble-aliases.py --list paper.tex     # show the derived patterns
   check-preamble-aliases.py --json paper.tex
+  check-preamble-aliases.py --fix paper.tex      # rewrite raw -> alias in place
   check-preamble-aliases.py --strict paper.tex   # exploratory, noisier
   check-preamble-aliases.py --selftest
 """
@@ -111,25 +123,38 @@ ARG = Arg()
 
 
 class Tok:
-    __slots__ = ("text", "line")
+    __slots__ = ("text", "line", "start", "end")
 
-    def __init__(self, text, line):
+    def __init__(self, text, line, start, end):
         self.text = text
         self.line = line
+        self.start = start                            # char offset into the scanned text
+        self.end = end
 
 
 # --------------------------------------------------------------------------- #
 # source preparation
 # --------------------------------------------------------------------------- #
+def mask(line, keep=0):
+    """Replace everything from `keep` on with spaces, preserving the line's length."""
+    return line[:keep] + " " * (len(line) - keep)
+
+
 def strip_comment(line):
-    """Drop from the first unescaped % to end of line (keeps the line's length semantics)."""
+    r"""Blank out from the first unescaped % to end of line.
+
+    Masked with spaces rather than truncated so the scanned text keeps the file's
+    exact geometry: every token's character offset is also its offset in the file,
+    which is what lets ``--fix`` rewrite the original bytes, and what keeps line
+    numbers honest.
+    """
     i = 0
     while i < len(line):
         if line[i] == "\\" and i + 1 < len(line):
             i += 2
             continue
         if line[i] == "%":
-            return line[:i]
+            return mask(line, i)
         i += 1
     return line
 
@@ -143,36 +168,35 @@ def blank_verbatim(lines):
             m = re.search(r"\\begin\{(" + "|".join(VERBATIM_ENVS) + r")\*?\}", line)
             if m:
                 open_env = m.group(1)
-                out.append("")
+                out.append(mask(line))
                 continue
             out.append(line)
         else:
             if re.search(r"\\end\{" + re.escape(open_env) + r"\*?\}", line):
                 open_env = None
-            out.append("")
+            out.append(mask(line))
     return out
 
 
 def prepare(path):
-    r"""Read a tex file -> (lines, body_start_index or None), comments stripped.
+    r"""Read a tex file -> (lines, body_start_index or None, original text).
 
-    Lines carry no newline, and every later join puts exactly one back, so blanking
-    a line (comment, verbatim, definition) keeps the line *numbering* intact — drop
-    the newline with the content and every line number after the first comment is
-    reported short.
+    Lines are masked, never shortened, and every join puts exactly one newline back,
+    so ``"\n".join(lines)`` is the original text with comments and verbatim turned
+    into spaces — same length, same offsets, same line numbers.
     """
     with open(path, encoding="utf-8", errors="replace") as f:
-        raw = f.read().split("\n")
-    lines = [strip_comment(l) for l in raw]
+        original = f.read()
+    lines = [strip_comment(l) for l in original.split("\n")]
     body_start = None
     for i, line in enumerate(lines):
         if r"\begin{document}" in line:
             body_start = i
             break
-    return lines, body_start
+    return lines, body_start, original
 
 
-def tokenize(text, first_line):
+def tokenize(text, first_line, first_offset=0):
     toks = []
     line = first_line
     for m in TOKEN_RE.finditer(text):
@@ -180,7 +204,7 @@ def tokenize(text, first_line):
         if s[0] in " \t\r\n":
             line += s.count("\n")
             continue
-        toks.append(Tok(s, line))
+        toks.append(Tok(s, line, first_offset + m.start(), first_offset + m.end()))
         line += s.count("\n")
     return toks
 
@@ -195,7 +219,13 @@ def collapse(items, text_of):
         while i < n:
             if (text_of(items[i]) == "{" and i + 2 < n and text_of(items[i + 2]) == "}"
                     and text_of(items[i + 1]) not in ("{", "}")):
-                out.append(items[i + 1])
+                inner = items[i + 1]
+                if isinstance(inner, Tok):
+                    # The surviving token stands for the whole "{X}" in the source, so
+                    # --fix replaces the braces too instead of leaving a stray "}".
+                    inner.start = items[i].start
+                    inner.end = items[i + 2].end
+                out.append(inner)
                 i += 3
                 changed = True
                 continue
@@ -461,7 +491,7 @@ def scan(hay, patterns):
         if any(p in claimed for p in own):
             continue
         claimed.update(own)
-        kept.append((pat, start, end))
+        kept.append((pat, start, end, arg_spans))
     return kept
 
 
@@ -483,9 +513,9 @@ def is_definition_line(line):
 # one file
 # --------------------------------------------------------------------------- #
 def check_file(tex_path, cfg, strict, preamble_override):
-    lines, body_start = prepare(tex_path)
+    lines, body_start, original = prepare(tex_path)
     if preamble_override:
-        pre_lines, _ = prepare(preamble_override)
+        pre_lines, _, _ = prepare(preamble_override)
         preamble_text = "\n".join(pre_lines)
         first_body_line = 0
     else:
@@ -500,11 +530,14 @@ def check_file(tex_path, cfg, strict, preamble_override):
     patterns = derive_patterns(defs, ignore, soft_macros, strict)
 
     body_lines = blank_verbatim(lines[first_body_line:])
-    body_lines = ["" if is_definition_line(l) else l for l in body_lines]
-    hay = collapse(tokenize("\n".join(body_lines), first_body_line + 1), lambda t: t.text)
+    body_lines = [mask(l) if is_definition_line(l) else l for l in body_lines]
+    body_offset = sum(len(l) + 1 for l in lines[:first_body_line])
+    hay = collapse(tokenize("\n".join(body_lines), first_body_line + 1, body_offset),
+                   lambda t: t.text)
 
     hard, soft = {}, {}
-    for pat, start, _end in scan(hay, patterns):
+    found = scan(hay, patterns)
+    for pat, start, _end, _args in found:
         bucket = soft if pat.soft else hard
         bucket.setdefault(pat.suggest, (pat, []))[1].append(hay[start].line)
 
@@ -524,7 +557,88 @@ def check_file(tex_path, cfg, strict, preamble_override):
         "patterns": len(patterns),
         "hard": _as_rows(hard, used),
         "soft": _as_rows(soft, used),
+        "_found": found,
+        "_hay": hay,
+        "_original": original,
+        "_used": used,
     }
+
+
+# --------------------------------------------------------------------------- #
+# --fix: rewrite raw forms through the same matcher that found them
+# --------------------------------------------------------------------------- #
+def strip_outer_braces(s):
+    """'{a+b}' -> 'a+b', but leave '{a}+{b}' alone (its braces do not pair)."""
+    s = s.strip()
+    if not (s.startswith("{") and s.endswith("}")):
+        return s
+    depth = 0
+    for i, c in enumerate(s):
+        if c == "\\":
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return s[1:-1] if i == len(s) - 1 else s
+    return s
+
+
+def pick_alias(pat, used):
+    """Which alias to write when several macros share one body: the one in use."""
+    return sorted(pat.macros, key=lambda m: (-used.get(m, 0), len(m), m))[0]
+
+
+def build_replacement(pat, hay, start, end, arg_spans, text, used):
+    repl = pick_alias(pat, used)
+    for a, b in arg_spans:
+        inner = text[hay[a].start:hay[b - 1].end] if b > a else ""
+        repl += "{" + strip_outer_braces(inner) + "}"
+    return repl
+
+
+def fix_text(text, hay, found, used):
+    r"""Apply one pass of non-overlapping replacements, right to left.
+
+    Findings nested inside another finding's argument are left for the next pass:
+    splicing an outer span would otherwise reinstate the argument's original bytes
+    and silently undo the inner fix.
+    """
+    spans = []
+    taken = []
+    for pat, start, end, arg_spans in sorted(found, key=lambda f: f[1]):
+        if pat.soft:
+            continue
+        lo, hi = hay[start].start, hay[end - 1].end
+        if any(lo < b and a < hi for a, b in taken):
+            continue                                   # overlaps a chosen span
+        taken.append((lo, hi))
+        spans.append((lo, hi, build_replacement(pat, hay, start, end, arg_spans, text, used)))
+    out = text
+    for lo, hi, repl in sorted(spans, reverse=True):
+        tail = out[hi:hi + 1]
+        if repl[-1:].isalpha() and tail.isalpha():
+            repl += " "                                # \rh + X must not become \rhX
+        out = out[:lo] + repl + out[hi:]
+    return out, len(spans)
+
+
+def fix_file(tex_path, cfg, strict, preamble_override, max_passes=8):
+    """Rewrite raw forms in place. -> (replacements, remaining hard findings) or None."""
+    total = 0
+    for _ in range(max_passes):
+        res = check_file(tex_path, cfg, strict, preamble_override)
+        if res is None:
+            return None
+        new_text, n = fix_text(res["_original"], res["_hay"], res["_found"], res["_used"])
+        if not n or new_text == res["_original"]:
+            break
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(new_text)
+        total += n
+    res = check_file(tex_path, cfg, strict, preamble_override)
+    return total, sum(r["count"] for r in res["hard"]), res
 
 
 def _apply_extra(rule, body_lines, first_body_line, bucket):
@@ -615,6 +729,8 @@ def main(argv=None):
     ap.add_argument("--strict", action="store_true", help="exploratory: also unanchored / alias-of-alias")
     ap.add_argument("--list", action="store_true", help="print the derived patterns and stop")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--fix", action="store_true",
+                    help="rewrite the raw forms in place (derived findings only)")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
 
@@ -628,12 +744,31 @@ def main(argv=None):
         print("ERROR: no .tex target given and none found", file=sys.stderr)
         return 2
 
+    if args.fix:
+        rc = 0
+        for t in targets:
+            if not os.path.isfile(t):
+                print(f"ERROR: {t}: not found", file=sys.stderr)
+                rc = 2
+                continue
+            got = fix_file(t, cfg, args.strict, preamble)
+            if got is None:
+                print(rf"ERROR: {t}: \begin{{document}} not found (use --preamble)", file=sys.stderr)
+                rc = 2
+                continue
+            applied, remaining, res = got
+            print(f"{t}: {applied} replacement(s) written, {remaining} hard finding(s) left")
+            if remaining:
+                print_rows(res["hard"], "❌")
+        print("\n⚠️ --fix is a source rewrite: read the diff and rebuild the PDF before committing.")
+        return rc
+
     if args.list:
         for t in targets:
-            lines, body_start = prepare(t)
+            lines, body_start, _ = prepare(t)
             text = "\n".join(lines[:body_start]) if body_start is not None else "\n".join(lines)
             if preamble:
-                pl, _ = prepare(preamble)
+                pl, _, _ = prepare(preamble)
                 text = "\n".join(pl)
             defs = parse_definitions(text)
             pats = derive_patterns(defs, set(cfg.get("ignore_macros", [])),
@@ -657,6 +792,7 @@ def main(argv=None):
     hard_total = sum(sum(r["count"] for r in x["hard"]) for x in results)
     soft_total = sum(sum(r["count"] for r in x["soft"]) for x in results)
 
+    results = [{k: v for k, v in r.items() if not k.startswith("_")} for r in results]
     if args.json:
         print(json.dumps({"results": results, "errors": unreadable,
                           "hard_total": hard_total, "soft_total": soft_total}, indent=2))
@@ -778,6 +914,36 @@ def selftest():
     hard, _ = _run(r"$\Ih$", strict=True)
     if hard.get("\\cond") != 1:
         fails.append(f"--strict should surface alias-of-alias: {hard}")
+
+    # --- --fix -------------------------------------------------------------- #
+    def want_fix(body, expected, note, **kw):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "t.tex")
+            head = PREAMBLE + kw.pop("extra_pre", "") + "\\begin{document}\n"
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(head + body + "\n\\end{document}\n")
+            got = fix_file(p, kw.get("cfg", {}), False, None)
+            with open(p, encoding="utf-8") as f:
+                out = f.read()
+            got_body = out[len(head):].rsplit("\\end{document}", 1)[0].rstrip("\n")
+        if got_body != expected:
+            fails.append(f"--fix {note}: got {got_body!r}, want {expected!r}")
+        elif got[1]:
+            fails.append(f"--fix {note}: {got[1]} finding(s) left")
+
+    want_fix(r"$\hat \rho$ and $\hat{\rho}$", r"$\rh$ and $\rh$", "space and brace variants")
+    want_fix(r"$\widehat{A+B}$", r"$\wh{A+B}$", "argument is carried over")
+    want_fix(r"$\widehat{X}$", r"$\wh{X}$", "single-token argument keeps its braces")
+    want_fix(r"$\left( a+b \right)$", r"$\pn{a+b}$",
+             "of two macros sharing a body, the one in use is written")
+    want_fix(r"$\hat\rho_\S$", r"$\rhS$", "the compound, not the atom")
+    want_fix(r"$\hat{A}B$", r"$\Ah B$", "a space is inserted so \\Ah B does not become \\AhB",
+             extra_pre="\\newcommand{\\Ah}{\\hat A}\n")
+    want_fix("{\\color{Orange}x $\\hat A$}", r"\orange{x $\h A$}",
+             "a nested finding inside an argument survives the outer rewrite",
+             extra_pre="\\newcommand{\\orange}[1]{{\\color{Orange}#1}}\n")
+    want_fix("% keep $\\hat\\rho$ here\n$\\hat\\rho$", "% keep $\\hat\\rho$ here\n$\\rh$",
+             "comments are not rewritten")
 
     # --- exit codes ------------------------------------------------------- #
     with tempfile.TemporaryDirectory() as d:
