@@ -184,6 +184,27 @@ expect_pass "pass-ssh-remote-user" \
 expect_block "block-git-at-other-domain" \
   "mail git""@gm""ail.com please"
 
+# --------------------------------------------------------------------
+# Tier C: file 本文の非例外 private repo 名 (2026-09-12 追加)
+# 2026-09-12 まで repo 名を見るのは commit message 側だけで、 本文に書いた名前は
+# 素通りしていた (実害あり = 公開 repo の SESSION.md へ push)。 mock repos.md の
+# `mockpriv-foo` を使う (= 実 private repo 名を test file に literal で書かない、
+# CLAUDE.md §Test file の private repo 名 literal 禁止)。
+# --------------------------------------------------------------------
+expect_block "block-tier-c-private-repo-name-in-body" \
+  "2026-09-12 mockpriv-foo で踏んだ罠を層1 に上げた"
+
+expect_block "block-tier-c-claude-path" \
+  "cd ~/Claude/mockpriv-foo/ && make"
+
+# word boundary: 名前の一部として現れるだけなら block しない (= FP 側の固定)
+expect_pass "pass-tier-c-substring-not-word" \
+  "mockpriv-foobar is a different token"
+
+# 例外 list の repo 名は本文に書いてよい (= allowlist が body 側でも効く)
+expect_pass "pass-tier-c-allowlisted-repo-name" \
+  "詳細は odakin-prefs の該当 doc を参照 (email-office も同様)"
+
 # 編集時の hook (hooks/public-leak-guard.sh) と本 runner は同じ email allowlist を持つ。
 # 2026-09-12: runner だけ 2026-08-28 に例示 domain を足し、 hook は古いまま test fixture の
 # Write ごとに確認 dialog を出していた → 片側だけの修正が再発しないよう一致を固定する。

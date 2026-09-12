@@ -47,9 +47,10 @@
 #   mitigation option B、 詳細 conventions/hook-authoring.md#delivery-audit-4-axes (d) + DESIGN.md
 #   §2026-05-26)。 install は `install-public-precommit.sh` (= 本 stub) +
 #   `install-public-commit-msg.sh` (= sibling stub) で setup.sh Step 8 内 1 loop
-#   で同時 install。 2 hook の matcher logic は分離 (= Tier A regex vs commit-msg
-#   shared library)、 cover 範囲も file body vs commit message で disjoint で
-#   相補的 (= 過去 leak の 「file 本文 OK + commit message に leak」 死角を埋める)。
+#   で同時 install。 Tier A regex は本 file 固有、 **Tier C は commit-msg gate と
+#   同じ shared library を file 本文にも当てる** (= 2026-09-12 まで private repo 名の
+#   検査は commit message 側だけで、 逆向き 〔message OK + 本文に repo 名〕 が開いて
+#   いた。 実害あり = Tier C の block comment 参照)。
 
 set -uo pipefail
 
@@ -254,6 +255,33 @@ else
 fi
 
 # ----------------------------------------------------------------------
+# Tier C: 非例外 private repo 名 (= commit message gate と同じ matcher を file 本文にも当てる)
+#
+# 2026-09-12 まで repo 名の検査は commit message 側にしか無く、 **file 本文に書いた
+# private repo 名は素通り**していた (= 本 file 冒頭が「cover 範囲は disjoint で相補的」
+# と書いていた前提の穴。 塞いだのは「本文 OK + message に leak」 の向きだけで、 逆向きが
+# 開いていた)。 実害 = 2026-09-12 に公開 repo の SESSION.md へ private repo 名 4 つを
+# 書いて push (既出名だったので増分 leak ではなかったが、 止まらなかったこと自体が穴)。
+#
+# **staged 追加行だけ**を見る (= ADDED_BUF)。 既存の記述は grandfather し、 新規の混入
+# だけ止める — 全文検査にすると過去分で常時 block して gate ごと無視されるため。
+# matcher は (a) sensitive-terms も見るが、 それは Tier B と重複するので repo 名由来の
+# hit 行だけを取り出す。
+# ----------------------------------------------------------------------
+REPO_NAME_MATCHER="$(dirname "$0")/lib/commit-msg-leak-matcher.sh"
+if [ -f "$REPO_NAME_MATCHER" ] && [ -s "$ADDED_BUF" ]; then
+  . "$REPO_NAME_MATCHER"
+  ADDED_TEXT="$(awk -F'\t' '{ print $2 }' "$ADDED_BUF")"
+  run_leak_matcher "$ADDED_TEXT"
+  REPO_NAME_HITS="$(printf '%s\n' "${LEAK_MATCHER_HITS:-}" \
+    | grep -E '^[[:space:]]*\[(repo-name|claude-path)\]' || true)"
+  if [ -n "$REPO_NAME_HITS" ]; then
+    HITS="${HITS}
+[tier-c]${REPO_NAME_HITS#*]}"
+  fi
+fi
+
+# ----------------------------------------------------------------------
 # 判定
 # ----------------------------------------------------------------------
 if [ -z "$HITS" ]; then
@@ -288,6 +316,10 @@ staged hits:$HITS
   - tier-a/token_prefix → 即 revoke + secret manager へ移動
   - tier-b/literal     → 個人層の sensitive-terms.txt にある term を
                           本文から除去 or 一般化
+  - tier-c             → 非例外 private repo 名。「或る paper repo」 等の
+                          一般名に置換するか、 その fact 自体を層 3 へ移す
+                          (= どの repo かは層 3 の関心事)。 例外 list への
+                          追加は user 判断 (claude-config/CLAUDE.md §安全規則)
 
 意図的に commit したい場合は \`git commit --no-verify\` で bypass 可能
 (escape hatch)。bypass 事例は個人層の leak-incidents.md (あれば) に

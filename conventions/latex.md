@@ -204,7 +204,7 @@ comm -23 <(grep -o '^\\bibitem{[^}]*}' paper.bbl | sed 's/.*{\(.*\)}/\1/' | sort
 - 意味段落の切り方: (a) topic sentence が変わる、(b) 主語 / 論点が移る、(c) 例示 → 一般化 の遷移、(d) 逆接 (「しかし」「一方」) の直前 — いずれかで段落を切る候補。1 段落が 15 行を超えたら 2 段落以上に割れないかを疑う。
 - edit 判断のとき **段落の重さは source 行数でなく rendered 分量で見る** (= 下の「§長さ・段落構造の判断にコメントアウト行を数えない」の kernel を継承)。
 
-**事例 (2026-07-04 研究 LaTeX project の LIVE note family 統一)**: `induced-action` / `induced-action-per-term` / `verified-results` / `docs/ec_one_loop_notes` / `convention-conversion` / `handcheck-final` + 小物 8 note で run-in `\paragraph` を top-level heading として使っていた計 ~150 本を、既存 §番号を保ったまま `\subsubsection` (subsection ありの大物) または `\subsection` (subsection なしの小物) に一斉昇格 (Chip H/I/J/K/L)。詳細 = `einstein-cartan/CLAUDE.md §「見出しの論文型規律 (2026-07-04 確立)」`。
+**事例 (2026-07-04 研究 LaTeX project の LIVE note family 統一)**: `induced-action` / `induced-action-per-term` / `verified-results` / `docs/ec_one_loop_notes` / `convention-conversion` / `handcheck-final` + 小物 8 note で run-in `\paragraph` を top-level heading として使っていた計 ~150 本を、既存 §番号を保ったまま `\subsubsection` (subsection ありの大物) または `\subsection` (subsection なしの小物) に一斉昇格 (Chip H/I/J/K/L)。詳細 = 当該 repo の `CLAUDE.md §「見出しの論文型規律 (2026-07-04 確立)」`。
 
 ## <a id="exclude-comments-from-length"></a>長さ・段落構造の判断にコメントアウト行を数えない
 
@@ -236,7 +236,7 @@ display math・図は行数でなく rendered での専有量で別途見積も�
 - **edit 後 must build**: tex 編集後は必ず `make` / `ptex2pdf` で build を確認、 「Missing $ inserted」 エラーが出たら該当行を grep で見つけて修正
 - 検出 grep (大まかに): `grep -nE '[^\$\\\\\{]a\^|[^\$\\\\\{]α_|[^\$\\\\\{]c_n' file.tex` 等
 
-**事例 (2026-05-10 quantum-mechanics-textbook 第 1 部最終章 draft restructure)**: 7 commit に渡る章書き直しの過程で、 Claude が地の文に「a^† と a の代数構造」 「α_n の積」 「a^†|n⟩ ∝ |n+1⟩」 等を裸で書いて 3 箇所で build を破壊。 1 commit 内で 3 回 build retry が必要だった。 edit 直後の build verify で発覚 → 該当箇所を `$\hat{a}^\dagger$` 等で囲って修正。
+**事例 (2026-05-10 或る教科書 project の第 1 部最終章 draft restructure)**: 7 commit に渡る章書き直しの過程で、 Claude が地の文に「a^† と a の代数構造」 「α_n の積」 「a^†|n⟩ ∝ |n+1⟩」 等を裸で書いて 3 箇所で build を破壊。 1 commit 内で 3 回 build retry が必要だった。 edit 直後の build verify で発覚 → 該当箇所を `$\hat{a}^\dagger$` 等で囲って修正。
 
 ## <a id="preamble-macros-first"></a>プリアンブル定義のマクロを優先する (絶対則)
 
@@ -905,7 +905,7 @@ cp "$SRC/paper.tex" "$BUILD/"
 
 gate が上のような error を出したら、原稿を疑う前に **同じ組版をもう一度走らせる**。1 回で消えるなら競合、消えなければ原稿。
 
-origin: 2026-09-12 einstein-cartan、著者が TeXShop で編集中の Overleaf clone を組版 dir から symlink し、`paper.aux` / `paper.pdf` を上書きしていた。競合した 1 回だけ gate が `errors: 1` と未定義参照 474 件を報告した (原稿は無傷)。
+origin: 2026-09-12 或る paper repo、著者が TeXShop で編集中の Overleaf clone を組版 dir から symlink し、`paper.aux` / `paper.pdf` を上書きしていた。競合した 1 回だけ gate が `errors: 1` と未定義参照 474 件を報告した (原稿は無傷)。
 
 
 ## <a id="pdf-visual-verification"></a>図・組版を対象とする PDF 視覚検証

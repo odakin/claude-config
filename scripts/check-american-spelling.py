@@ -278,7 +278,7 @@ def selftest() -> int:
         (root / "fig").mkdir()
         (root / "notes").mkdir()
         (root / "archive-old").mkdir()
-        (root / "time-energy-head-on.tex").write_text(
+        (root / "main.tex").write_text(
             "A clean center.\n"
             "A source title says centre. % brit-ok\n"
             "\\label{normalisation-anchor}\n",
