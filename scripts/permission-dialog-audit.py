@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""permission-dialog-audit.py — Claude desktop の承認 dialog を app log から集計し、 transcript と突合して main / sub-agent に振り分け、 1 件ごとに原因 (hook / 長さ / rule) を切り分ける
+"""permission-dialog-audit.py — Claude desktop の承認 dialog を app log から集計し、 transcript と突合して main / sub-agent に振り分け、 1 件ごとに原因を切り分ける
 
 なぜ要るか
 ----------
@@ -30,7 +30,9 @@ mode
                       当時の tool 入力を復元し、 settings の PreToolUse hook (matcher が当たる
                       ものだけ) に流し直す。 種別 = hook (今も ask を返す) / fixed (今は exit 2 で
                       block = dialog は出ない) / length (hook 無反応 + Bash が --long-limit 超) /
-                      rule (hook 無反応 = allow・cwd scope・protected path 側) / unmatched。
+                      rule (hook 無反応 = allow・cwd scope・protected path 側) /
+                      rule_unique (command に per-call 一意な token = 「常に許可」 が永久に効かない) /
+                      unmatched。
                       `--latest N` と併用で直近 N 件だけ。 ⚠️ hook を**実際に実行する**ので、
                       副作用のある PreToolUse hook を書いているなら `--no-run-hooks`。
                       ⚠️ 判定は「今の設定に当時の入力を流した結果」 であって、 当時の原因の
@@ -646,7 +648,7 @@ def main():
     ap.add_argument("--wait", type=float, default=15.0, help="--from-transcripts の閾値秒 (既定 15)")
     ap.add_argument("--tools", default=",".join(FAST_TOOLS), help="--from-transcripts の対象 tool (カンマ区切り)")
     ap.add_argument("--diagnose", action="store_true",
-                    help="dialog 1 件ごとに原因 (hook / 長さ / rule) を切り分けて消し方を出す")
+                    help="dialog 1 件ごとに原因を切り分けて消し方を出す")
     ap.add_argument("--no-run-hooks", action="store_true",
                     help="--diagnose で hook を実際に実行しない (= 副作用のある PreToolUse hook を書いている場合)")
     ap.add_argument("--long-limit", type=int, default=3000,
