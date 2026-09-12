@@ -142,15 +142,17 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 
 **対処**: float の source を、 参照する段落より前 (頁の前半に来る位置) へ移す。 参照文 (`\cref{tab:…} collects …`) は末尾のままでよい。 `[h]` / `[H]` より安定で、 組版後に「Table 1 の頁 < References の頁」 を PDF text で機械確認する。
 
-## <a id="align-split-tag-orphan"></a>幅が溢れた display を `\nn` で 2 行に割ると式番号が 3 行目に単独で落ちる (log は無警告) (2026-09-12)
+## <a id="align-split-tag-orphan"></a>長い display の式番号が下の行に回るのは amsmath の標準 — 欠陥として報告しない (2026-09-12、 著者裁定)
 
-**症状**: `align` の 1 本の式が本文幅を越えたので `\nn` (= `\nonumber\\`) で 2 行に割った。 compile は error 0・警告 0 で通るが、 PDF では**式番号 (tag) だけが 3 行目に単独で置かれる**。
+**何が起きるか**: 式が本文幅に収まらないと、 amsmath は式番号 (tag) を式の**下の行**に置く。 `align` を `\nn` で 2 行に割った場合も、 第 1 行に `&` が無く第 2 行が右端まで届けば同じになる。 overfull ではないので log には何も出ない。
 
-**原因**: `align` は `&` で左右の欄に割る。 第 1 行に `&` が無いと第 1 行は左欄に置かれ、 第 2 行の `&= …` が右欄に来る。 右欄の行が本文幅の右端まで伸びると tag の居場所が無くなり、 `amsmath` は tag を次の行へ落とす。 **これは overfull にならない**ので log に何も出ない。
+**判断**: これは amsmath の設計どおりの配置で、 組版の欠陥ではない。 著者裁定 (2026-09-12): 「番号が下に行くのは完全にカノニカル」。
 
-**対処**: 第 1 行にも `&` を置いて両行を同じ欄構造にするか、 第 2 行を `\nn &\qquad = …` のように字下げして右端に余白を残す。 1 本の長い式を折るだけなら `align` でなく `multline` が素直。
+- 査読・盲検 review でこれを **should-fix にしない**。 報告するなら位置の事実だけにする (overfull と同じ扱い = [`edit-intent-record.md#overfull-not-a-gate`](../../ai-collaboration/conventions/edit-intent-record.md#overfull-not-a-gate)、 検査 spec の書き方 = [`cold-eyes-isolation.md#spec-leakage`](../../ai-collaboration/conventions/cold-eyes-isolation.md#spec-leakage) の表)。
+- 改稿 pass で、 番号を最終行に戻すために式の割り方や語順を**変えない**。
+- 触るのは投稿先の style が明示的に禁じている場合だけで、 そのときの正本は投稿先の指示。 手段は第 1 行にも `&` を置いて欄を揃える、 または 1 本の長い式なら `multline`。
 
-**検出**: log では出ないので、 **割った display の頁を 1 枚だけ画像にして見る**。 これは「改稿 pass ごとの目視はしない」 ([`#visual-verification-intensity`](#visual-verification-intensity)、 [`edit-intent-record.md#overfull-not-a-gate`](../../ai-collaboration/conventions/edit-intent-record.md#overfull-not-a-gate)) の例外で、 **display の構造 (行数・欄) を変えた pass に限る** — 語順や語句の推敲では発生しない。 一般則 = compile 成功 ≠ visual 成功 ([`CONVENTIONS.md`](../CONVENTIONS.md#pre-push-check) の visual artifact 節)。
+**起源**: 2026-09-12 の盲検 review がこの配置を「式番号が 3 行目に単独で落ちる」 と should-fix で報告し、 本節も一度その前提で書かれた。 著者が据え置き、 同じ日のうちに「欠陥ではない」 へ訂正した (= reviewer 側の誤判定の記録、 見慣れない配置は欠陥の証拠ではない)。
 
 ## <a id="symbol-width-repagination"></a>記号幅の変わる一括置換は、 総頁数が同じまま頁割りだけ動かす — `.aux` の label→頁 で見る (2026-09-12)
 

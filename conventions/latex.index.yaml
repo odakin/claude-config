@@ -33,7 +33,7 @@ sections:
     title: "display を 1 本足したら `[t]` の表が次頁 = References に流れた — float の source 位置を前へ (2026-09-08)"
   - id: align-split-tag-orphan
     level: 2
-    title: "幅が溢れた display を `\\nn` で 2 行に割ると式番号が 3 行目に単独で落ちる (log は無警告) (2026-09-12)"
+    title: "長い display の式番号が下の行に回るのは amsmath の標準 — 欠陥として報告しない (2026-09-12、 著者裁定)"
   - id: symbol-width-repagination
     level: 2
     title: "記号幅の変わる一括置換は、 総頁数が同じまま頁割りだけ動かす — `.aux` の label→頁 で見る (2026-09-12)"
