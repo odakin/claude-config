@@ -1195,6 +1195,13 @@ origin: 2026-09、非会員の著者本人から編集事務局へ出した照�
 dismiss されやすいが、対立値の提示は解釈の余地を残さない。検出器は可能なら自分で
 ✅ / 🔴 真陽性 / ⃠ 未検証 を判別する (材料: 前回値との差分 / 同 run の control / 表の見出し等の構造痕跡)。
 
+**参照実装** (= 本 kernel を gate に落とした形): 検査 script に `--ack <対象> --ack-control <根拠>` を置き、
+① 根拠の無い ack は拒否 (exit≠0) ② **同じ run の別対象で同じ検査が ✓ なら ack を棄却**
+③ 通った ack は `⃠ 未検証` として出力と証跡 file に残す、の 3 つを機械側で強制する。
+無効化を**思考から artifact へ**移すのが要点 — 思考は痕跡を残さないので、残るのは結論だけになり、
+その結論が事実の書式を着てしまう ([#measured-vs-inferred-provenance](#measured-vs-inferred-provenance))。
+証跡 file の helper は層1 `scripts/lib/run_log.py`。
+
 **scope 規律**: 免罪を convention / docstring に昇格させるときは、**観察した scope をそのまま書く**
 (= 「測った」 と「説明した」 を書式で分ける規律は [#measured-vs-inferred-provenance](#measured-vs-inferred-provenance))
 (「1 件で観察」 を「2 件とも実測」 と書かない)。§9.8 は「単一観察から構造**対策**に飛ばない」 を言うが、
@@ -1232,6 +1239,7 @@ copy し、ledger に「提出済」 と書き、task を close する。**こ�
 - 記録を書く操作そのものを gate にする (= 一致しないなら `submitted/` を作らせず、
   `…-MISMATCH/` に検査出力ごと落として carrier を起票する)。
   [#completion-boundary-state-gate](#completion-boundary-state-gate) の外部システム版。
+- 半端な着地が**そもそもなぜ起きるか**の側は [#batch-generation-hides-per-target-application](#batch-generation-hides-per-target-application)。
 - **送信前 gate は override されうるが、送信後 gate は override できない** (= もう送ってしまっており、
   ✗ は「差し戻しを依頼する」 という行動に直結する)。完了判定は**送信後**に置く。
 
@@ -2053,6 +2061,34 @@ task 記録 (TODO notes 等) の**散文の中に埋まった sub-obligation** (
 
 点呼行に昇格させる基準 = **散文のまま落ちると回収不能 or 高価な fact** (= 取得窓が閉じる / 版が凍結する / 期限が失効する)。 何でも marker 化すると notes が台帳化して可読性を失う (= [§2 (= #no-duplicate-rules)](#no-duplicate-rules) の運用台帳 SoT 重複問題と相似) — 「痛い脱落が 1 回起きた fact 種」 から event-driven に導入する。
 
+### <a id="batch-generation-hides-per-target-application"></a>19.4 第 2 の消失経路 — 一括生成の完了イベントが、個別適用の未了を隠す
+
+§19.1 は「**書かれたが散文に埋もれて消える**」 経路。もう 1 つ、**そもそも別個に表現されないまま消える**
+経路がある: **1 つの変更を N 個の対象に適用する**作業で、変更の**生成**が 1 回の操作にまとまり、
+**適用**が N 回に分かれるとき。
+
+- 生成は 1 個の完了イベントを残す (「設定を N 本生成」「鍵を rotate」「規約を直した」「CSV 4 本再生成」)。
+  この記録は**真**である — 生成は確かに終わっている。
+- 適用は N 個の未了を作るが、**それを数える表現がどこにも無い**。完了イベントの側に吸われて見えなくなる。
+- 結果、N 個のうち 1 個だけ適用されないという**半端な状態**が、記録上は「完了」 と区別できない。
+
+**見分け方**: 完了報告・commit message に「**まとめて / 一括 / N 本 / 全部**」 が出たら、
+「**では、これから何回適用するのか**」 を数える。数が 1 でないなら、その数だけの点呼が要る。
+
+**remedy は §19.2 と同じ** (= 固定 grammar の点呼行 + 不在を咎める検出器) だが、**置き場が違う**:
+点呼行は生成物の側ではなく **適用先ごとの作業記録**に置く (= 生成物は 1 つしかないので、
+そこに書くと再び 1 個の完了イベントに畳まれる)。消込の ground truth は実行者の記憶ではなく
+**適用先が返すもの**に置く ([#completion-record-from-counterparty](#completion-record-from-counterparty))。
+
+⚠️ **語彙を分ける**: 「生成した」 と「適用した」 を同じ完了語 (「対応済」「done」「✅」) で書かない。
+分けないと、後から読む人には**どちらの完了か判別できない**。
+
+origin: 2026-09、外部システムへの提出作業で、4 対象ぶんの明細 data を generator が一括再生成し、
+その復旧が「N 本再生成」 という 1 個の完了イベントとして記録された。必要な行動は**対象ごとに
+4 回の取込**だったが、その 4 個を数える表現は手順書にも記録にも無く、**1 対象ぶんの取込だけが
+落ちた**まま送信され、相手から同じ指摘を 2 度受けた。落ちなかった項目は、いずれも
+**対象ごとに個別編集したもの**だった (= 個別編集は per-target のしるしを残すが、一括生成は残さない)。
+
 ## <a id="premise-bound-rule-expiry"></a>20. 規則は前提より長生きする — 上流属性の切替は下流定数の一括再判定を要求する
 
 ### <a id="premise-expiry-observation"></a>20.1 観察 pattern
@@ -2261,6 +2297,7 @@ field を optional に戻すと item が radar から消える (= 機構が必�
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
+| 2026-09-12 | §19.4 追補「一括生成の完了イベントが個別適用の未了を隠す」 (= §19 の第 2 の消失経路。新設せず既存 kernel への追補にした = remedy が同じ点呼行なので §2 の重複回避) + §8.38 に参照実装 (`--ack` / `--ack-control`) の pointer + §8.39 から §19.4 へ相互 link | 同 incident の掘り下げで、落ちた 1 手と落ちなかった 3 手の差が「一括生成か個別編集か」 だったと判明。生成の完了イベントは真なので記録上は「完了」 と区別できず、適用の未了を数える表現がどこにも無かった。remedy の置き場だけが §19 と違う (= 点呼行は生成物側でなく適用先ごとの記録に置く、でないと再び 1 個に畳まれる) ので、その差分を追補として明記。user 依頼「すべてのスクリプトと知見をなるべく上層に」 |
 | 2026-09-12 | §8.40 新設「doc の一文は『測った』 と『説明した』 を書式で分ける — 説明は観察の権威を借りる」 | §8.38 と同じ incident の第 3 面。検査が 1 対象に出した ✗ の**説明**として立てた仮説が、同じ turn のうちに script の docstring へ「(実測、2 件とも)」 という形で焼かれ、同日 layer 1 にも landed した (実際には測っていない)。4 日後、その一文は別 session の診断の前提になり、**user への助言 (「画面を目視するしか検証手段が無い」) にまで伝播**して、独立の再実測で初めて覆った。伝播経路のどこにも「これは仮説だ」 と読める手がかりが無かったのが本体。kernel = 観察文と説明文を分ける / 「実測」 の scope は走らせた対象と一致させる / **検出器を黙らせる根拠になる主張は実測でなければ書かない** (= 失敗が沈黙になる class なので敷居を上げる) / 下流は書式で信じる。§2.6 が「いつ真だったか」 を要求するのに対し本節は「どうやって知ったか」 を要求する。forensics で確定した事実: 反証 (= 同じ様式の別対象が ✓) が同じ dir に置かれてから誤った一般化が docstring に 書かれるまで **2 分 20 秒**、かつその一般化は**書かれた時点で既に、当時の script 自身によって偽**だった (当時版を当時の artifact に当てて再現済)。user の問い「前回もダウンロードして検収したよな? なんで見落としたんだ?」 が起点 |
 | 2026-09-12 | §8.38 新設「『偽陽性だ』 の宣言は主張である — positive control を出せないなら未検証」 + §8.39 新設「完了の記録は相手が返したものから作る」 + §8.9 / §8.32 から相互 link | layer-3 の申請 session で、入力後の突合 script が出した 9 件の ✗ を「この様式では印字されないから偽陽性」 という**確かめていない構造説明**で全部無効化して送信し、機関事務から**同じ指摘を 2 度**受けた。反証 (= 同じ様式の別対象が全行 ✓) は宣言の 1〜2 分前から同じ dir に在り、免罪は 16 分後に layer 1 へ「2 件とも実測」 として landed (= していない測定が実測として記録された)。§8.38 kernel = 免罪は自己隠蔽・class 全体に効く・寿命が長い、ゆえに (a) positive control (b) 別経路での直接観測 (c) どちらも不能なら「未検証」 の第三状態、+ 機械側は「不在」 でなく**対立値**を出す。§8.9 (detector の filter) との違いは「run 出力のその場の無効化は code にも doc にも残らない」 点。§8.32 の双対。同じ事故の 2 件目として、完了記録が**上げるはずだった artifact** から作られ、システムが返した反証と同じ dir に同居していた (+ 手順が要求する 8 個中 4 個しか集まっていないのに検査が「✓ 全項目一致 — 送信してよい」 を出す) ことを §8.39 に。evidence base は 1 事例だが blast radius (= 層 1 の誤りは毎年効く) で landing を判断。instance (verifier / 手順書 / 台帳) は個人層・project 側に残置 (kernel-up / instance-down)。user 依頼「完璧にしてくれ」 |
 | 2026-09-11 | §8.35 新設「resolver 出力は新しい trust boundary」+ §23 に field-wise `unknown`、保証値欠測のwarning、shared resolver所有を追記 | Codex Git-hook rollout で同じ session に二方向の resolver defect を観測: (a) `--repo-root` 内 candidate が symlink/Git解決後に root 外 checkout となりbulk write scopeを脱出、(b) `git rev-parse --git-path hooks` のrelative resultをcaller cwdへ誤anchorし、別repoのhookをMISSINGと誤報。入力検査→resolve→owner基準anchor→canonicalize→最終targetで再認可、を一般化。併せてCodex冒頭stampでaccount/effortが取れないため全stampを消すのでなく、host/surface/session/modelの既知fieldを残して未知fieldだけ`unknown`にする形を§23へ昇格。follow-up でactive modelのfallbackとwarningを追加し、一度はhard blockへ振ったが、「通常は取れる」と「絶対に欠測しない」は別でありprovenance縮退はcommit本体を不正にしない、というowner指摘でfail-openへ戻した。さらにstamp/cache/Gitの3 consumerに重複していた解決順をshared resolverへ集約した。instanceはCodex技術正本とinstaller/testに残置。user依頼「すべてのスクリプトと知見をなるべく上層に」 |

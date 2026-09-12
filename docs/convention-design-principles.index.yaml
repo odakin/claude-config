@@ -617,6 +617,10 @@ sections:
     legacy: "19.3"
     level: 3
     title: "19.3 適用判断"
+  - id: batch-generation-hides-per-target-application
+    legacy: "19.4"
+    level: 3
+    title: "19.4 第 2 の消失経路 — 一括生成の完了イベントが、個別適用の未了を隠す"
   - id: premise-bound-rule-expiry
     legacy: "20"
     level: 2
