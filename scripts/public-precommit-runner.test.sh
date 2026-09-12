@@ -238,6 +238,31 @@ if [ -f "$GUARD" ] && command -v jq >/dev/null 2>&1; then
   fi
 fi
 
+# markdown link guard (2026-09-13): a file moved one level down keeps `DOC.md` and must be
+# stopped; the fixed link passes; an ignore-marked example passes; the escape env passes.
+md_case() {   # md_case <name> <expect_rc> <content> [ENV=VAL]
+  local name="$1" want="$2" content="$3" envkv="${4:-}" rc
+  (
+    cd "$MOCK_REPO"
+    mkdir -p sub && printf 'target\n' > DOC.md && git add DOC.md >/dev/null 2>&1
+    printf '%s\n' "$content" > sub/moved.md
+    git add sub/moved.md >/dev/null 2>&1
+    if [ -n "$envkv" ]; then env "$envkv" "$RUNNER" >/dev/null 2>&1; else "$RUNNER" >/dev/null 2>&1; fi
+    echo "$?"
+    git reset -q HEAD sub/moved.md DOC.md >/dev/null 2>&1
+    rm -rf sub DOC.md
+  ) > "$TMPDIR_TEST/_rc.txt"
+  rc="$(cat "$TMPDIR_TEST/_rc.txt")"
+  if [ "$rc" = "$want" ]; then PASS=$((PASS+1)); else
+    FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [exit=$rc want=$want] $name\n"; fi
+}
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/fix-md-links.py" ]; then
+  md_case "block-md-link-depth-after-move" 1 "see [doc](DOC.md)"
+  md_case "pass-md-link-fixed-depth" 0 "see [doc](../DOC.md)"
+  md_case "pass-md-link-ignore-marked-example" 0 "chat-rooted [doc](DOC.md) <!-- md-links:ignore -->"
+  md_case "pass-md-link-escape-env" 0 "see [doc](DOC.md)" "CLAUDE_MD_LINKS_GUARD=0"
+fi
+
 # ====================================================================
 echo ""
 echo "=== public-precommit-runner self-test ==="

@@ -285,13 +285,14 @@ grep -rn '<target-repo>/SESSION.md §' --include='*.md' --include='*.yaml' ~/Cla
 # 各 hit に対し anchor が現在の SESSION.md に substring 存在するか目視確認
 ```
 
-**3 種の broken ref pattern** (= 2026-05-26 SESSION 棚卸し sweep で全 expose、 fix 例 = 個人層 + 物理研究 project + 学内事務 repo の各 commit で同 turn 修正 〔commit は各 owner 管理 private repo、 public link は付さない〕):
+**4 種の broken ref pattern** (= 2026-05-26 SESSION 棚卸し sweep で全 expose、 fix 例 = 個人層 + 物理研究 project + 学内事務 repo の各 commit で同 turn 修正 〔commit は各 owner 管理 private repo、 public link は付さない〕):
 
 | pattern | 例 | fix |
 |---|---|---|
 | **archive 移動 path drift** | ref = `<repo>/SESSION.md §SPReAD` だが section は `SESSION-archive/2026-05-pre-20.md` に移動済 | path を archive に update + 「YYYY-MM-DD archive split で移動済」 marker を inline 付加 |
 | **wording rename drift** | ref = `<repo>/SESSION.md §「YYYY-MM-DD X ツール追加」` だが新 heading は `§「直近の変更 (YYYY-MM-DD) — X」` | ref を新 wording に揃える |
 | **duplicate header dedup 漏れ** | ref = `<repo>/SESSION.md §「2026-05-20 (cross_ref...)」` だが私が duplicate header dedup で「2026-05-20 (cross_ref...)」 (no evening) 版を削除 + 「evening」 版のみ保持 | ref に「evening」 を付加 (= 残った版に合わせる) |
+| **移した側の相対 link の段数ずれ** (2026-09-13 追加) | 棚卸しで `SESSION.md` の entry を `SESSION-archive/2026-09.md` へ MOVE すると、 entry 内の `[x](notes/y.md)` や `[z](../other-repo/w.md)` は **1 段深い場所から解決される**ので全部死ぬ (外向きの ref ではなく、 移した本文の中の link。 fleet で 219 箇所溜まっていた) | MOVE の直後に `python3 claude-config/scripts/fix-md-links.py --files <移し先> --fix` (着地先が一意に決まる段数だけ書き換え、 差が link target の中だけであることを自己検証)。 忘れても **pre-commit が止めて同じコマンドを出す** (個人層 chain と公開 repo runner の両方、 escape = `CLAUDE_MD_LINKS_GUARD=0`、 規律 = [`#link-target-rot`](docs/convention-design-principles.md#link-target-rot)) |
 
 **duplicate header dedup の事前 grep 義務**: SESSION.md 内に同 wording (or 近接 wording) の duplicate header が見つかった場合、 dedup する **前に**「どちらの wording が外部 ref に使われているか」 cross-repo grep。 ref が多い版を残す。 grep なしで「より informative な版」 を直感で選ぶと wording drift を量産する。
 

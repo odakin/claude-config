@@ -49,7 +49,9 @@ SKIP_DIRS = {".git", "node_modules", "_site", "build", "dist", ".venv", "venv",
              ".next", "out", "__pycache__", ".cache", "worktrees", "PackageCache"}
 LINK = re.compile(r"\[[^\]]*\]\((?!https?:|mailto:|#?$)([^)\s]+)\)")
 EXPLICIT = re.compile(r"""id=["']([^"']+)["']""")
-FENCE = re.compile(r"^(```|~~~)[^\n]*\n.*?^\1[ \t]*$", re.M | re.S)
+# A fence may be indented (inside a list item it usually is); GitHub still renders it as code.
+# 2026-09-13: a column-0-only pattern read the example inside an indented fence as a live link.
+FENCE = re.compile(r"^[ \t]*(```|~~~)[^\n]*\n.*?^[ \t]*\1[ \t]*$", re.M | re.S)
 CODE_SPAN = re.compile(r"`[^`\n]*`")
 # GitHub math: `$$...$$`, or `$x$` with no space just inside either dollar and no digit after the
 # closing one (so prose like "$ROOT と $HOME" or "$5 and $10" is NOT masked as math).
@@ -251,6 +253,7 @@ def selftest() -> int:
             "rel from real dir [a](t%20a.md#real)\n"
             "broken via encoded path [b](t%20a.md#nope)\n"
             "formula $[x](#in-math)$ is not a link\n"
+            "- a list item with an indented fence:\n\n  ```\n  [y](#in-indented-fence)\n  ```\n"
             "prose $ROOT と $HOME [c](#prose-dollar-missing) is still checked\n", encoding="utf-8")
         os.symlink(base / "repo" / "docs" / "doc.md", base / "LINK.md")   # symlinked copy at top
         broken, _ = scan(base, [])
@@ -262,6 +265,8 @@ def selftest() -> int:
         check("the symlinked copy is not scanned twice", len(broken.get(
             next((k for k in keys if k.endswith("#nope")), ""), [])) == 1)
         check("a link inside $math$ is not checked", not any("in-math" in k for k in keys))
+        check("a link inside an INDENTED fence (list item) is not checked  [foil: column-0 fences only]",
+              not any("in-indented-fence" in k for k in keys))
         # repo-local run: a symlink inside repo/ that points OUTSIDE repo/ is another repo's file
         (base / "other").mkdir()
         (base / "other" / "foreign.md").write_text("[f](#foreign-missing)\n", encoding="utf-8")

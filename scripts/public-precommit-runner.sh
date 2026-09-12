@@ -291,6 +291,24 @@ fi
 # 判定
 # ----------------------------------------------------------------------
 if [ -z "$HITS" ]; then
+  # markdown 相対 link guard (= leak ではないので leak 判定を通った後で走らせる)。
+  # file を sub-dir や archive へ MOVE すると ../ の段数がずれて link が黙って死ぬ。
+  # engine = 同 dir の fix-md-links.py --staged (staged .md の index の中身、 0.1 秒)。
+  # exit 1 = 直せる壊れ link を commit しようとしている → 止める / exit 3 = engine 内部エラー
+  # → 止めない (全 commit を巻き添えにしない)。 escape hatch: CLAUDE_MD_LINKS_GUARD=0。
+  # 規律 = docs/convention-design-principles.md#link-target-rot
+  MDL_ENGINE="$(dirname "$0")/fix-md-links.py"
+  if [ "${CLAUDE_MD_LINKS_GUARD:-1}" != "0" ] && [ -f "$MDL_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+    mdl_rc=0
+    mdl_out="$(python3 "$MDL_ENGINE" --staged 2>&1)" || mdl_rc=$?
+    [ -n "$mdl_out" ] && printf '%s\n' "$mdl_out" >&2
+    # block only on "exit 1 AND the finding header": a syntax/import error in the engine also
+    # exits 1, and must not stop every commit in every public repo
+    if [ "$mdl_rc" -eq 1 ] && printf '%s' "$mdl_out" | grep -q 'point nowhere at their'; then
+      echo "[public-precommit-runner] commit rejected by the markdown link guard (run the fix above; bypass: CLAUDE_MD_LINKS_GUARD=0)" >&2
+      exit 1
+    fi
+  fi
   # Tier A/B leak gate を pass。
   # repo-local extension があれば chain (exit code 透過)。
   # 注: exec ではなく call + exit にしているのは、bash の exec は EXIT

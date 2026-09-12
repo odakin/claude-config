@@ -568,6 +568,19 @@ pre-commit hook A (= LaTeX Unicode fixer) が「対象 file (LaTeX) が staged �
 - chain hook を呼ぶ primary は **自身の no-op 条件で early-exit しない**。 primary の処理を `if [[ 条件 ]]; then ...; fi` で囲み、 chain は無条件に末尾で呼ぶ (= chain は primary の関心事と独立に走るべき)。
 - **chain reachability を実 e2e で verify** (= §2 の 4 軸 audit に加える 5 軸目)。 chain B が catch すべき violation を実際に仕込み、 primary A の no-op path (= A が何もしない commit) でも B が発火するか確認する。 logic / syntax / シミュレートでは expose できない (= 本 RCA がまさにそれらを通過していた)。
 
+
+### <a id="engine-failure-must-not-block"></a>§8.1 engine を呼ぶ BLOCK は exit code だけで止めない — 壊れた engine が全 repo の commit を止める (2026-09-13)
+
+全 repo に連鎖する pre-commit が検査 engine (python 等) を呼び `python3 engine || exit 1` で BLOCK すると、 **engine 自身の構文エラー・import 失敗・未捕捉例外も exit 1** になり、 finding と区別がつかない。 engine を 1 行壊しただけで、 連鎖している全 repo の全 commit が止まる (実測: 構文エラーの python は exit 1)。
+
+- 止める条件は **「exit 1 かつ engine が finding の見出し行を出した」** にする。 見出しは engine 側で固定の文言にし、 hook はその文言を照合する。
+- engine 内部の失敗は別の exit code (例: 3) で返し、 hook は WARN を出して通す。 未捕捉例外や読み込み失敗まで engine 側で拾い切れないので、 **見出し照合が最後の防壁**になる。
+- engine が無いマシン (他端末・CI の単独 checkout) は素通りにする。
+- test には「構文エラーの engine では止めない」「engine 不在では止めない」 を foil として入れる。 exit code だけの実装だと前者で落ちる。
+- 例外は「止め損ねの害が誤って止める害より大きい」 gate (機密 leak 等) で、 fail-closed を**選んだと明記**する。
+
+実装例 = 個人層 chain の markdown link BLOCK と公開 repo runner の同 guard (engine = [`scripts/fix-md-links.py`](../scripts/fix-md-links.py) `--staged`、 test = `scripts/public-precommit-runner.test.sh` の md_case)。
+
 ---
 
 ## <a id="build-dependent-behavior"></a>§9. hook の挙動は build 依存 — 同 session snapshot + feature 差 (= upstream docs を鵜呑みにしない)

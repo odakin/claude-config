@@ -199,6 +199,9 @@ sections:
   - id: chain-hook-prevention
     level: 3
     title: "防止策"
+  - id: engine-failure-must-not-block
+    level: 3
+    title: "§8.1 engine を呼ぶ BLOCK は exit code だけで止めない — 壊れた engine が全 repo の commit を止める (2026-09-13)"
   - id: build-dependent-behavior
     legacy: "9"
     level: 2

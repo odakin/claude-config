@@ -66,7 +66,10 @@ def _exists(p: Path) -> bool:
 class Git:
     """Per-repo rename maps from `git log -z` (NUL-separated: no path quoting)."""
 
-    def __init__(self):
+    def __init__(self, enabled: bool = True):
+        # disabled = no `git log` walk: the pre-commit path must be fast, and a rename of the
+        # TARGET is not what a commit of the REFERRING file introduces (moves are; see --staged)
+        self.enabled = enabled
         self.roots: dict[Path, Path | None] = {}
         self.maps: dict[Path, dict[str, str]] = {}
 
@@ -78,6 +81,8 @@ class Git:
         return self.roots[d]
 
     def renames(self, root: Path) -> dict[str, str]:
+        if not self.enabled:
+            return {}
         if root not in self.maps:
             out = subprocess.run(["git", "-C", str(root), "log", "--all", "--diff-filter=R", "-M",
                                   "--name-status", "-z", "--format="], capture_output=True).stdout
@@ -134,30 +139,77 @@ def classify(src: Path, path_part: str, git: Git) -> tuple[str, str | None]:
     return "gone", None
 
 
-def scan(base: Path, repos: list[str], excludes: list[str], include_verbatim: bool):
-    git = Git()
+IGNORE_MARK = "<!-- md-links:ignore -->"   # on a line: its links are examples written for another base
+
+
+def ignored_line_mask(text: str) -> list[bool]:
+    """True for every char on a line that carries IGNORE_MARK. The intent travels with the file
+    (an example of a chat link rooted elsewhere, say), so no gate needs a separate exclude list."""
+    out = [False] * len(text)
+    pos = 0
+    for line in text.split("\n"):
+        if IGNORE_MARK in line:
+            for i in range(pos, pos + len(line)):
+                out[i] = True
+        pos += len(line) + 1
+    return out
+
+
+def scan_text(src: Path, text: str, rel: str, git: "Git", excludes: list[str],
+              include_verbatim: bool, rows: list) -> None:
+    mask = protected_mask(text)
+    ign = ignored_line_mask(text)
+    for m in LINK.finditer(text):
+        if mask[m.start()] or ign[m.start()]:
+            continue
+        path_part, _suffix, _frag = split_target(m.group(1))
+        if not path_part or "<" in path_part or "{" in path_part:
+            continue
+        cls, new = classify(src, path_part, git)
+        if cls == "ok":
+            continue
+        if cls in FIXABLE and not include_verbatim and VERBATIM.search("/" + rel):
+            cls, new = "verbatim", None
+        if cls in FIXABLE and any(fnmatch.fnmatch(rel, g) for g in excludes):
+            cls, new = "excluded", None
+        rows.append((src, rel, m.group(1), cls, new))
+
+
+def scan(base: Path, repos: list[str], excludes: list[str], include_verbatim: bool,
+         git: "Git | None" = None):
+    git = git or Git()
     rows = []            # (src, rel, raw_target, class, new_path_part)
     for src in iter_markdown_sources(base, repos):
         try:
             text = src.read_text(encoding="utf-8", errors="replace")
         except Exception:
             continue
-        rel = rel_to(base, src)
-        mask = protected_mask(text)
-        for m in LINK.finditer(text):
-            if mask[m.start()]:
-                continue
-            path_part, _suffix, _frag = split_target(m.group(1))
-            if not path_part or "<" in path_part or "{" in path_part:
-                continue
-            cls, new = classify(src, path_part, git)
-            if cls == "ok":
-                continue
-            if cls in FIXABLE and not include_verbatim and VERBATIM.search("/" + rel):
-                cls, new = "verbatim", None
-            if cls in FIXABLE and any(fnmatch.fnmatch(rel, g) for g in excludes):
-                cls, new = "excluded", None
-            rows.append((src, rel, m.group(1), cls, new))
+        scan_text(src, text, rel_to(base, src), git, excludes, include_verbatim, rows)
+    return rows
+
+
+def scan_files(files: list[Path], excludes: list[str], include_verbatim: bool, git: "Git"):
+    rows = []
+    for f in files:
+        try:
+            text = f.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        scan_text(f, text, os.path.relpath(f.resolve(), Path.cwd()), git, excludes, include_verbatim, rows)
+    return rows
+
+
+def scan_staged(repo: Path, excludes: list[str], include_verbatim: bool, git: "Git"):
+    """Check what is about to be COMMITTED: the index blob of every added/copied/modified/renamed
+    .md, resolved against the working tree. Paths come from `-z` (no octal quoting)."""
+    out = subprocess.run(["git", "-C", str(repo), "diff", "--cached", "-z", "--name-only",
+                          "--diff-filter=ACMR"], capture_output=True).stdout
+    rows = []
+    for name in out.decode("utf-8", "surrogateescape").split("\0"):
+        if not name.endswith(".md"):
+            continue
+        blob = subprocess.run(["git", "-C", str(repo), "show", f":{name}"], capture_output=True).stdout
+        scan_text(repo / name, blob.decode("utf-8", "replace"), name, git, excludes, include_verbatim, rows)
     return rows
 
 
@@ -166,9 +218,10 @@ def rewrite(text: str, fixes: dict[str, str]) -> tuple[str, int]:
     Matching is per parsed link, never a substring replace: fixing `notes/a` must not touch
     `](notes/a-b.md)` (the prefix-collision bug of a `str.replace("](" + key)` fixer)."""
     mask = protected_mask(text)
+    ign = ignored_line_mask(text)
     out, last, n = [], 0, 0
     for m in LINK.finditer(text):
-        if mask[m.start()]:
+        if mask[m.start()] or ign[m.start()]:
             continue
         path_part, suffix, frag = split_target(m.group(1))
         if path_part not in fixes:
@@ -325,6 +378,39 @@ def selftest() -> int:
         check("verify rejects an unresolvable new target  [foil]",
               verify(arch, "[a](x.md)\n", "[a](../missing.md)\n") != [])
 
+        # ignore marker: an example written for another base is neither reported nor rewritten
+        ex = repo / "SESSION-archive" / "example.md"
+        ex_body = f"chat-rooted example [c](DESIGN.md) {IGNORE_MARK}\nreal one [d](DESIGN.md)\n"
+        ex.write_text(ex_body, encoding="utf-8")
+        exrows = [r for r in scan(base, ["repo"], [], False) if r[1].endswith("example.md")]
+        check("a line with the ignore marker is not reported", len(exrows) == 1)
+        new_ex, n_ex = rewrite(ex_body, {"DESIGN.md": "../DESIGN.md"})
+        check("the ignore-marked line is not rewritten, the real one is",
+              f"[c](DESIGN.md) {IGNORE_MARK}" in new_ex and "real one [d](../DESIGN.md)" in new_ex and n_ex == 1)
+        ex.unlink()
+
+        # --staged reads the INDEX: a working-tree fix that was not re-added must still fail
+        me = str(Path(__file__).resolve())
+        st = repo / "SESSION-archive" / "staged.md"
+        st.write_text("[s](DESIGN.md)\n", encoding="utf-8")
+        g("add", "SESSION-archive/staged.md")
+        r1 = subprocess.run([sys.executable, me, "--staged"], cwd=repo, capture_output=True, text=True)
+        check("--staged exits 1 on a staged depth error and prints the fix command",
+              r1.returncode == 1 and "--fix" in r1.stdout)
+        st.write_text("[s](../DESIGN.md)\n", encoding="utf-8")            # fixed, NOT re-added
+        r2 = subprocess.run([sys.executable, me, "--staged"], cwd=repo, capture_output=True, text=True)
+        check("--staged still fails while only the working tree is fixed  [foil: index vs worktree]",
+              r2.returncode == 1)
+        g("add", "SESSION-archive/staged.md")
+        r3 = subprocess.run([sys.executable, me, "--staged"], cwd=repo, capture_output=True, text=True)
+        check("--staged passes once the fix is staged", r3.returncode == 0 and r3.stdout == "")
+        # --files --fix on exactly the reported file
+        st.write_text("[s](DESIGN.md)\n", encoding="utf-8")
+        r4 = subprocess.run([sys.executable, me, "--files", str(st), "--fix"], cwd=repo,
+                            capture_output=True, text=True)
+        check("--files --fix rewrites only that file", st.read_text() == "[s](../DESIGN.md)\n"
+              and "CHANGED" in r4.stdout)
+
     print("\nALL PASS" if ok else "\nFAILED")
     return 0 if ok else 1
 
@@ -338,13 +424,49 @@ def main() -> int:
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--fix", action="store_true")
     ap.add_argument("--strict", action="store_true", help="exit 1 if any depth/renamed link remains")
+    ap.add_argument("--files", nargs="+", type=Path, help="only these working-tree files")
+    ap.add_argument("--staged", action="store_true",
+                    help="pre-commit: check the index blobs of staged .md in the current repo; "
+                         "exit 1 with the fix command if a fixable link is about to be committed")
+    ap.add_argument("--renames", action="store_true",
+                    help="with --files/--staged: also follow git renames (slower)")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
 
-    rows = scan(a.base, a.repo, a.exclude, a.include_verbatim)
+    if a.staged:
+        # exit 1 = a fixable link is about to be committed (block); exit 3 = the guard itself
+        # failed (the hook must NOT block every commit in every repo because of that — it warns).
+        # A plain uncaught exception would also exit 1 and be indistinguishable from a finding.
+        try:
+            repo = Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True,
+                                       text=True).stdout.strip() or ".")
+            rows = [r for r in scan_staged(repo, a.exclude, a.include_verbatim, Git(a.renames))
+                    if r[3] in FIXABLE]
+        except Exception as e:                                   # noqa: BLE001
+            print(f"[fix-md-links] WARN: link guard failed internally, commit NOT blocked: {e!r}")
+            return 3
+        if not rows:
+            return 0
+        paths = sorted({r[1] for r in rows})
+        print(f"[fix-md-links] {len(rows)} link(s) in staged markdown point nowhere at their "
+              f"current depth / name (typical after moving a file into a sub-dir or archive):")
+        for _src, rel, target, cls, new in rows:
+            print(f"  {cls:8s} {rel}  ::  {target}  ->  {new}")
+        me = Path(__file__).resolve()
+        quoted = " ".join("'" + p.replace("'", "'\\''") + "'" for p in paths)
+        print(f"fix (rewrites link targets only, self-verified):\n"
+              f"  python3 {me} --files {quoted} --fix && git add {quoted}\n"
+              f"a line that is an example written for another base: append {IGNORE_MARK}")
+        return 1
+
+    git = Git(enabled=(a.renames or not a.files))
+    if a.files:
+        rows = scan_files(a.files, a.exclude, a.include_verbatim, git)
+    else:
+        rows = scan(a.base, a.repo, a.exclude, a.include_verbatim, git)
     counts = Counter(r[3] for r in rows)
     if a.fix:
         changed, errors = run_fix(rows)
@@ -352,7 +474,8 @@ def main() -> int:
             print(f"CHANGED\t{c}")
         for e in errors:
             print(f"[SELF-CHECK FAIL, file not written] {e}")
-        rows = scan(a.base, a.repo, a.exclude, a.include_verbatim)
+        rows = (scan_files(a.files, a.exclude, a.include_verbatim, git) if a.files
+                else scan(a.base, a.repo, a.exclude, a.include_verbatim, git))
         counts = Counter(r[3] for r in rows)
         if errors:
             return 1
