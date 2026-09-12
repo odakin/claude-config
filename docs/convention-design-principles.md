@@ -678,6 +678,14 @@ origin: ある追跡システムで「期限つき義務」 が複数回見落�
 3. **scheduled task** = 無人定期 + Claude judgment ([`conventions/scheduled-tasks.md §0`](../conventions/scheduled-tasks.md#execution-locus-selection))
 4. **doc 記載** = 最弱と自覚して使い、 後日 1-3 への格上げ trigger 条件を書き残す
 
+### <a id="documented-not-wired"></a>8.12a′ 症状表に「対処」 を書いても、共有 engine に入っていなければ効いていない (2026-09-12)
+
+規約の症状表・落とし穴表に *対処* を書くと、それは「分かっている」 の記録であって「効いている」 の記録ではない。**その対処を誰か 1 つの project が自分の script で実装し、共有 engine は適用しないまま**、という状態が最も見つかりにくい: 規約を読む人は対処が書かれているので安心し、engine を呼ぶ人は engine が存在するので安心する。どちらも「自分の側では済んでいる」 と読む。
+
+実測 (2026-09-12): ある共有 engine の正本規約に、同じ出力の silent な壊れ方 3 行とその対処 (前処理・引数追加・出力検査) が 2 週間前から書かれていた。対処の実装は或る paper repo の中だけに在り、engine は 1 つも適用していなかった。engine を呼ぶ別 project は、その壊れ方が起こる条件 (当該 macro 定義) を満たしていた = **規約上は既知、運用上は無防備**。
+
+reflex: 症状表に対処を書く / 読むときに **「この対処は誰が実行するのか」** を 1 行で言えるようにする — 答えが「読んだ人が思い出して手で」 なら発火面は最弱 ([§8.12](#firing-surface-hierarchy) の 4) であり、共有 engine があるなら**そこに入れるまでが 1 単位**。逆向きの点検も安い: **project 側に在る script が、上層の engine に無い機能を持っていないか** (= 下層が上層を追い越している箇所は、他の呼び元が丸ごと取りこぼしている)。実装したら表の行に道具への link を張り、engine の既定に入れる。
+
 ### <a id="automation-trigger-routing"></a>8.12a 「自動化」は mechanism 名ではない — 5 軸で発火経路を先に route する
 
 「自動化して」「あとで見て」「監視して」は mechanism の指定ではなく、**将来の
