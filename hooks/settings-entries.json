@@ -107,6 +107,15 @@
       ]
     },
     {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/zsh-word-split-guard.py"
+        }
+      ]
+    },
+    {
       "matcher": "mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)",
       "hooks": [
         {

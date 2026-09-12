@@ -49,3 +49,5 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[stale-read-nudge.test.sh](stale-read-nudge.test.sh)** — logic selftest (= 決定的 mock git repo ベース)
 - **[turn-complete-sound-nudge.sh](turn-complete-sound-nudge.sh)** — 応答が終わるたびに音を鳴らす Stop hook (opt-in、 既定は無音。 conventions/macos-claude-app-notifications.md#turn-complete-sound-hook)
 - **[turn-complete-sound-nudge.test.sh](turn-complete-sound-nudge.test.sh)** — opt-in marker / entrypoint gate / stop_hook_active / 音声 path の selftest (実際には鳴らさない)
+- **[zsh-word-split-guard.py](zsh-word-split-guard.py)** — zsh で未 quote の複数語変数を for / set -- / -- / git の引数に渡す Bash を実行前に止める (conventions/shell-env.md#claude-issued-shell-commands)。
+- **[zsh-word-split-guard.test.sh](zsh-word-split-guard.test.sh)** — 述語の selftest + hook 入出力 (deny の JSON / zsh 以外は無音 / opt-out / Bash 以外は無音)
