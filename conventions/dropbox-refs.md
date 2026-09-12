@@ -265,6 +265,7 @@ CLAUDE.md セクションのテンプレート:
 - canonical 名は **共有リポのディレクトリ名** に合わせる (例: `<base>/foo/` というリポなら canonical 名も `foo`)
 - subpath は user ごとに異なる可能性がある。共有リポの CLAUDE.md には「Dropbox 上で `<subpath>` を探してね」というヒントを書いておくと、registry を持たない collaborator もたどり着ける
 - 共有 Dropbox folder の invite (Dropbox UI 上の操作) は機構の対象外。各 user が手動で accept する必要がある
+- <a id="not-a-sharing-mechanism"></a>**この機構は「共有」 ではなく「path の綴りの統一」** — setup していない collaborator の手元では `./dropbox-refs/` は**壊れた symlink** になる (= 想定動作)。 中身が相手に届くかを決めるのは上の invite だけなので、 「registry に登録すれば相手も見える」 と読める書き方を共有リポの doc に置かない。 相手に渡す手順は「Dropbox の共有を accept → 各自 setup すれば同じ path で開ける」 の 2 段で書く
 
 ---
 

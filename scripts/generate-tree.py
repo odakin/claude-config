@@ -28,6 +28,8 @@ conventions/README.md (カテゴリ index) を単一 source から自動生成 (
   3. conventions/README.md … file 全体を生成 (カテゴリ別 index、 when + summary)
   4. hooks/README.md    … file 全体を生成 (hook 全列挙 + 説明 1 行目)
   5. scripts/README.md  … file 全体を生成 (script + lib 全列挙 + 説明 1 行目)
+     ⚠️ 列挙は **git 管理下の file** から作る — 新規 script を `git add` する前に --write すると
+        その script だけ黙って落ち、 --check は「index に無い」 とだけ言う (2026-09-12 実測)。
 
 新規 file を足すとき: conventions/*.md なら doc-meta を書く / scripts・hooks なら header 1 行目に説明を
 書く → `git add` → `--write` で 5 箇所へ同時反映。 忘れても `--check` (CI = run-all-checks.sh /
