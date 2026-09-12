@@ -17,7 +17,9 @@
   read-plot-axes.py --image fig.png --xlog --xmap 430:1e-4,1148.5:1e4 --ylog --ymap 118:1e2,784.5:1e-2 --dots
 
 出力 = 枠 / 目盛り / 点 / 網掛け帯の上下端 (data 座標) / 境界線の傾きと不変量。
---json で機械可読。 --selftest は既知の図を matplotlib で作って往復検査 (foil つき)。
+--json で機械可読。 --selftest は既知の図を **numpy だけで合成**して往復検査 (描画 library 不要)。
+合成図には副目盛り・目盛りラベルの文字・枠の角の目盛りを混ぜてあり、 これらが無い図では
+誤検出 2 種 (副目盛りと文字を主目盛りと読む) が再現しない = foil として効かない。
 
 ⚠️ **検出数は下限として読む**。 点は円形度で選ぶので、 矢印や線に接した marker は円形でなくなり落ちる
 (実測: 同じ図で 2 点取れた版と 1 点落ちた版があった)。 返った数が図の見た目と合うか必ず目で確認する。
@@ -120,7 +122,7 @@ def detect_ticks(dark: np.ndarray, frame: dict, axis: str, depth: int = 12,
 
 
 def detect_dots(img: np.ndarray, frame: dict, threshold: int, min_area: int, max_area: int,
-                max_extent: int, min_fill: float = 0.72,
+                max_extent: int, min_fill: float = 0.80,
                 max_aspect: float = 1.25) -> list[tuple[float, float]]:
     """枠内の塗り潰し marker (連結成分) の重心 pixel。
 
@@ -141,7 +143,11 @@ def detect_dots(img: np.ndarray, frame: dict, threshold: int, min_area: int, max
             continue
         if max(w, h) / min(w, h) > max_aspect:      # 円盤は正方の bbox
             continue
-        if ys.size / (w * h) < min_fill:            # 塗り潰しか (文字は筆画なので低い)
+        # 円形度 = 面積 / (その bbox に内接する円の面積)。 完全な円盤で 1 に近づく。
+        # ⚠️ 素の充填率 (面積/bbox) で測ると、 離散化のせいで**どんな円盤でも 0.75 前後**にしか
+        # ならず (πr²/(2r+1)² → π/4 を下から漸近)、 0.75 を閾値にすると本物の marker が境界に乗る。
+        # π/4 で割って正規化すると大きさに依らない量になる。
+        if ys.size / (math.pi / 4 * w * h) < min_fill:
             continue
         out.append((float(xs.mean() + frame["left"]), float(ys.mean() + frame["top"])))
     return sorted(out, key=lambda p: (p[1], p[0]))
@@ -368,17 +374,13 @@ def render_text(out: dict) -> str:
 # ------------------------------------------------------------------ selftest
 
 def selftest() -> int:
-    """既知の図を作って往復で読み戻す。 foil = 点を 1 つ消したら検出数が減ることまで見る。"""
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-    except ImportError:
-        print("SKIP: matplotlib が無い (selftest は図の生成に要る)")
-        return 0
-    import tempfile
-    import os
+    """既知の図を numpy だけで合成して往復で読み戻す。
 
+    描画 library に依存しない (= CI に図の依存を持ち込まない)。 合成図には検出器を騙しに来る物を
+    **わざと入れる**: 副目盛り (主目盛りより短い) / 目盛りラベルの文字 (軸から離れて始まる) /
+    枠の角の目盛り (走査幅の端)。 これらが無い図では、 今日見つけた誤検出 2 種は再現しない。
+    foil = 点を 1 つ消したら検出数が減ることまで見る。
+    """
     ok = True
 
     def check(name, got, want, tol):
@@ -394,41 +396,64 @@ def selftest() -> int:
 
     band_true = (1e-1, 1e1)    # 網掛け帯の真値 (log10 で -1 .. 1)
 
-    def build(path, with_second_dot=True):
-        fig, ax = plt.subplots(figsize=(5, 4), dpi=120)
-        ax.set_xscale("log")
-        ax.set_yscale("log")
-        ax.set_xlim(*xlim)
-        ax.set_ylim(*ylim)
-        ax.axhspan(band_true[0], band_true[1], color="0.75", zorder=0)
-        gx = np.logspace(math.log10(xlim[0]), math.log10(xlim[1]), 400)
-        ax.plot(gx, 10 ** (C - np.log10(gx)), color="black", lw=1.6)
-        pts = dots_true if with_second_dot else dots_true[:1]
-        ax.plot([p[0] for p in pts], [p[1] for p in pts], "o", color="black", ms=7, ls="none")
-        ax.set_xticks([1e-4, 1e0, 1e4])
-        ax.set_yticks([1e2, 1e0, 1e-2])
-        fig.savefig(path, facecolor="white")
-        plt.close(fig)
+    H, W = 900, 1200
+    top, bottom, left, right = 100, 800, 150, 1100
+    xlo, xhi = math.log10(xlim[0]), math.log10(xlim[1])
+    ylo, yhi = math.log10(ylim[0]), math.log10(ylim[1])
+    PX = lambda lx: int(round(left + (lx - xlo) / (xhi - xlo) * (right - left)))
+    PY = lambda ly: int(round(bottom - (ly - ylo) / (yhi - ylo) * (bottom - top)))
+    xmaj, xmin_ = [-6.0, -4.0, 0.0, 4.0], [-2.0, 2.0, 6.0]   # -6 は枠の角 (走査幅の端)
+    ymaj, ymin_ = [2.0, 0.0, -2.0], [3.0, 1.0, -1.0, -3.0]
 
-    with tempfile.TemporaryDirectory() as td:
-        p1 = os.path.join(td, "a.png")
-        build(p1)
-        img = load_gray(p1)
+    def build(with_second_dot=True) -> np.ndarray:
+        img = np.full((H, W), 255, dtype=np.uint8)
+        img[PY(math.log10(band_true[1])):PY(math.log10(band_true[0])), left + 1:right] = 219
+        img[top, left:right + 1] = 0
+        img[bottom, left:right + 1] = 0
+        img[top:bottom + 1, left] = 0
+        img[top:bottom + 1, right] = 0
+        for lx in xmaj:                                   # 主目盛り = 長い
+            img[bottom + 1:bottom + 21, PX(lx) - 1:PX(lx) + 2] = 0
+        for lx in xmin_:                                  # 副目盛り = 短い (落とされるべき)
+            img[bottom + 1:bottom + 8, PX(lx):PX(lx) + 1] = 0
+        for ly in ymaj:
+            img[PY(ly) - 1:PY(ly) + 2, left - 20:left] = 0
+        for ly in ymin_:
+            img[PY(ly):PY(ly) + 1, left - 7:left] = 0
+        # 目盛りラベルの文字 = 軸から離れて始まる。 目盛りと同じ列/行に置くと連結して
+        # 「長い目盛り」 になってしまうので、 目盛りの無い位置に置く (fixture 自身の罠)。
+        for lx in (-5.0, -1.0, 3.0):
+            img[bottom + 6:bottom + 13, PX(lx) - 12:PX(lx) + 12] = 0
+        for ly in (3.5, -3.5):
+            img[PY(ly) - 5:PY(ly) + 5, left - 12:left - 6] = 0
+        for lx in np.linspace(-2.5, 5.5, 4000):           # 境界線 log10 y = -log10 x + C
+            X, Y = PX(lx), PY(C - lx)
+            img[Y - 1:Y + 2, X - 1:X + 2] = 0
+        yy, xx = np.ogrid[:H, :W]
+        for tx, ty in (dots_true if with_second_dot else dots_true[:1]):
+            cx, cy = PX(math.log10(tx)), PY(math.log10(ty))
+            img[(yy - cy) ** 2 + (xx - cx) ** 2 <= 49] = 0
+        return img.astype(int)
+
+    if True:
+        img = build()
         dark = img < 100
         frame = detect_frame(dark)
-        print(f"  frame = {frame}")
+        print(f"  frame = {frame}  (真値 l={left} r={right} t={top} b={bottom})")
+        check("frame left", frame["left"], left, 0)
+        check("frame right", frame["right"], right, 0)
 
         xt = detect_ticks(dark, frame, "x")
         yt = detect_ticks(dark, frame, "y")
         print(f"  ticks x={['%.1f' % v for v in xt]} y={['%.1f' % v for v in yt]}")
-        check("x tick count", len(xt), 3, 0)
-        check("y tick count", len(yt), 3, 0)
-        if len(xt) != 3 or len(yt) != 3:
-            print("FAIL: 目盛り検出が 3 本にならない")
+        check("x 主目盛り数 (副目盛り 3 + ラベル 3 を除外)", len(xt), len(xmaj), 0)
+        check("y 主目盛り数 (副目盛り 4 + ラベル 2 を除外)", len(yt), len(ymaj), 0)
+        if len(xt) != len(xmaj) or len(yt) != len(ymaj):
+            print("FAIL: 主目盛りの本数が合わない")
             return 1
 
-        ax_ = Axis(xt, [1e-4, 1e0, 1e4], True)
-        ay_ = Axis(yt, [1e2, 1e0, 1e-2], True)
+        ax_ = Axis(xt, [10 ** v for v in xmaj], True)
+        ay_ = Axis(yt, [10 ** v for v in ymaj], True)
         # 目盛り重心は ±0.5 px でしか決まらないので、 残差の許容は 1 pixel 相当の dex で測る
         print(f"  1 pixel = {ax_.per_px:.3f} dex (x) / {ay_.per_px:.3f} dex (y)")
         check("x calib residual", ax_.residual, 0.0, ax_.per_px)
@@ -457,9 +482,7 @@ def selftest() -> int:
         check("line intercept (C)", float(intercept), C, 0.3)
 
         # foil: 点を 1 つ消したら検出数が 1 に落ちること (= 検出器が定数を返していない)
-        p2 = os.path.join(td, "b.png")
-        build(p2, with_second_dot=False)
-        foil = detect_dots(load_gray(p2), frame, 100, 15, 4000, 40)
+        foil = detect_dots(build(with_second_dot=False), frame, 100, 15, 4000, 40)
         check("foil dot count", len(foil), 1, 0)
 
     print("ALL PASS" if ok else "FAILED")
@@ -494,8 +517,8 @@ def main() -> int:
     ap.add_argument("--band-range", default="120,240", help="帯とみなす明度域 lo,hi (既定 120,240)")
     ap.add_argument("--band-min-rows", type=int, default=None,
                     help="帯とみなす最小行数 (既定 = 枠高の 1%%、最低 3。 文字の行を拾うなら上げる)")
-    ap.add_argument("--min-fill", type=float, default=0.75,
-                    help="marker とみなす bounding box 充填率の下限 (円盤 = 0.785。 0.6 では文字を拾う)")
+    ap.add_argument("--min-fill", type=float, default=0.80,
+                    help="marker とみなす円形度の下限 (面積/内接円の面積。 円盤 = 0.84-0.95、文字 = 0.76 以下)")
     ap.add_argument("--max-aspect", type=float, default=1.25, help="marker の縦横比の上限")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
