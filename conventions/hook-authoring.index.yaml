@@ -202,6 +202,9 @@ sections:
   - id: engine-failure-must-not-block
     level: 3
     title: "§8.1 engine を呼ぶ BLOCK は exit code だけで止めない — 壊れた engine が全 repo の commit を止める (2026-09-13)"
+  - id: engine-edit-is-deploy
+    level: 3
+    title: "§8.2 git hook の engine は作業ツリーから呼ばれる — 保存した瞬間が配布、 commit は配布 gate ではない (2026-09-13)"
   - id: build-dependent-behavior
     legacy: "9"
     level: 2

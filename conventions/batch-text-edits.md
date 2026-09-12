@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき)
 category: infra
-summary: plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 4 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる)
+summary: plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 5 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる / 1 回一致は prefix 形の key (path・識別子) を守らない = 長い別物の先頭に 1 回だけ一致して誤置換、 終端の区切りまで含めるか構文解析した単位で置換)
 -->
 # Batch text surgery — 一括置換 script の契約と失敗モード
 
@@ -28,7 +28,7 @@ open(path, "w", encoding="utf-8").write(txt)
 | 1-2 箇所 | Edit tool | 差分がそのまま可視になり人間 review が効く |
 | 3 箇所以上 / 長い string / 系統的 sweep | 本 pattern | 手数と転記ミスが線形に増えるのを止める |
 
-## <a id="batch-text-failure-modes"></a>4 つの失敗モード
+## <a id="batch-text-failure-modes"></a>5 つの失敗モード
 
 ### <a id="assert-does-not-gate-downstream"></a>1. assert の verdict は下流に伝わらない
 
@@ -75,6 +75,14 @@ open(path, "w", encoding="utf-8").write(txt)
 🚫 **anti-pattern**: fail を「緩めて」通すこと (`replace(old, new, 1)` に変える / 全置換に切り替える / regex を広げる)。 **loud failure を silent な誤置換に変換する**のが最悪の手で、 モード 2 の残骸もこの経路で生まれる。
 
 **対策**: fail したら機械的に retry せず、 まず grep で現物を確認する。 並行編集がありうる環境 (= 人間が同じ file を開いている / 並列 session) では適用直前に `git fetch` と working tree の確認を挟む。
+
+### <a id="prefix-shaped-key"></a>5. 「正確に 1 回」 は prefix 形の key を守らない (2026-09-13)
+
+**症状**: link の path を直す一括置換で `old = "](DESIGN.md"` とした。 本物の `](DESIGN.md)` は file に無く、 別の正しい link `](DESIGN.md.local)` だけが在った。 count は 1 なので契約の assert を**通り**、 正しい link を壊した。 count ≥ 1 で走らせていた版では、 短い key の置換が長い key の link まで書き換え、 後続の assert が 0 件で落ちた (= 途中の file だけ書かれていた)。
+
+**なぜ起きるか**: 契約が数えるのは部分文字列の出現で、 `old` が**トークンの終わり**まで含むことは保証しない。 path・識別子・URL のように「長い別物の先頭」 になりうる key では、 1 回一致が正しい 1 回とは限らない。
+
+**対処**: `old` に**終端の区切り**まで含める (`](DESIGN.md)` / `](DESIGN.md#`)、 正規表現なら先読みで終端を要求する (`\]\(DESIGN\.md(?=[)#])`)。 構造を持つ対象 (markdown の link、 LaTeX の命令) は、 文字列置換でなく**構文解析した単位が完全一致した時だけ**書き換える道具を使う (link なら [`scripts/fix-md-links.py`](../scripts/fix-md-links.py)、 selftest に「素朴な `str.replace` が正しい sibling link を壊す」 foil)。
 
 ## <a id="batch-text-verification"></a>適用後の検証
 

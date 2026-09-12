@@ -581,6 +581,14 @@ pre-commit hook A (= LaTeX Unicode fixer) が「対象 file (LaTeX) が staged �
 
 実装例 = 個人層 chain の markdown link BLOCK と公開 repo runner の同 guard (engine = [`scripts/fix-md-links.py`](../scripts/fix-md-links.py) `--staged`、 test = `scripts/public-precommit-runner.test.sh` の md_case)。
 
+### <a id="engine-edit-is-deploy"></a>§8.2 git hook の engine は作業ツリーから呼ばれる — 保存した瞬間が配布、 commit は配布 gate ではない (2026-09-13)
+
+各 repo の `.git/hooks/pre-commit` は stub で、 実体は `~/Claude/<層>/scripts/` の**作業ツリーの file** を path で呼ぶ。 したがって engine や chain script を**保存した瞬間**に、 その machine の全 repo と、 そこで動いている**他の session の次の commit** にまで効く。 commit や push は「配布」 ではなく記録でしかない (実測: 新しい BLOCK を chain に足した直後、 commit 前の段階で、 別 session が作業中の repo の commit がもう新しい guard を通っていた)。
+
+- engine を直すときは、 **保存する前に** selftest を scratch の copy で回すか、 まず fail-open 側 (WARN / 内部失敗は止めない = [#engine-failure-must-not-block](#engine-failure-must-not-block)) で入れてから BLOCK にする。
+- 途中の壊れた版を保存しない。 大きな書き換えは別名 file で作って test を通し、 最後に 1 回で置き換える。
+- 配線した直後に、 **他 session が今 stage している内容**が新しい guard に止められないかを読み取りだけで確かめる (`python3 <engine> --staged` を相手の repo で実行、 書き込みはしない)。
+
 ---
 
 ## <a id="build-dependent-behavior"></a>§9. hook の挙動は build 依存 — 同 session snapshot + feature 差 (= upstream docs を鵜呑みにしない)
