@@ -735,6 +735,11 @@ turn 終了時 (Stop) に最終 assistant 発話を読み、 決まった句 (�
 - **過去の Bash command で校正する** = [`scripts/calibrate-bash-command-pattern.py`](../scripts/calibrate-bash-command-pattern.py) `--hook <file>` (hook の `find_issues(command)` をそのまま当てる。 同じ command 文字列は 1 回だけ数える)。 hit を全部読み、 本当の誤用と誤検出を数える。
 - **誤検出の型を見て述語を狭める** — 例: `$(…)` の出力を「複数語」 の根拠にするのは分割が目的の文脈 (`for` / `set --`) だけにした (1 行の値を git に渡す誤検出が消えた)。 残る誤検出の型 (同名変数の再利用など) は hook の docstring と規約に書いておく。
 - **deny の reason に直し方を入れる** — 誤検出のコストを書き直し 1 回に抑える。
+
+<a id="content-gate-calibration"></a>**file 本文を見る gate も同じ 3 手順** (2026-09-12、公開 repo の commit 本文を検査する gate で実施):
+- **go-forward にする (= staged の追加行だけを見る)** — 全文検査にすると過去分で常時 block して gate ごと無視される。既存の記述は grandfather され、新規の混入だけ止まる。副作用として**誤検出も自然に減る**: 誤検出しやすい語 (= 検査 list に普通の英単語と同綴りの項目がある場合) は古い本文には在っても追加行には滅多に現れない。
+- **git history の追加行に replay して較正する** — `git log --format=%h -n N` → 各 commit の `git show --unified=0 | grep '^+'` に matcher を当て、**発火数と発火率 (= 何日に 1 回 block されるか)** を出す。頻度は commit/日 に換算して初めて判断材料になる。
+- **発火数でなく発火行の性質を数える** — 「N 件発火」 では足りない。1 件ずつ読んで**真陽性 / 誤検出**に仕分ける。仕分けた結果が「全部誤検出の語」 と「全部真陽性の語」 に割れたら、gate を弱めるのでなく **list 側を語ごとに直す** (= 前者は除外、後者は出現側を一般化)。実測例: 600 commit の replay で発火 5 = 5 件とも真陽性、除外候補 4 語のうち 1 語だけが 100% 誤検出だった。
 - **配線した直後に、 わざと該当する無害な command を打つ** — deny が返れば、 配線と「足した hook が同じ session で効くか」 ([§9.1](#new-hook-session-snapshot)) を同時に確かめられる。
 
 ---

@@ -1879,6 +1879,8 @@ multi-maintainer の場合、 順序保証よりも graceful skip の方が defe
 
 reference convention 内の「反復実行・検証用の手順」 は illustrative な code 片のまま貯めず script に抽出し、 prose は薄い why/when + script pointer に寄せる (= §10.9 code-as-canonical の reference-convention 版)。 validator 自体もこの一例 (= 整合性検証を prose の「手で sweep せよ」 規律から決定論 script に移す)。
 
+⚠️ **検出と修正を 1 つの script に入れるなら、修正は「検出した match そのもの」 から作る** — 規則を 2 度書くと、片方だけ直った時に **検査は緑なのに修正が壊れている**状態になり、しかも修正側は人が diff を読むまで沈黙する。実装形は「matcher が消費した token span / 捕捉群をそのまま置換に使う」 (= regex を書き直さない)。副作用として、置換の安全性 (境界・入れ子・引数の持ち越し) が検出側の test で同時に守られる。⚠️ 1 事例からの clarification につき新 axis にしない ([§9.8](#single-observation-scope-check))。origin: 2026-09-12、preamble alias 検査に `--fix` を足した時 (100 件級の一括置換を手 regex でやると事故る、が動機)。
+
 ### <a id="intrafile-origin-example"></a>14.6 由来 + worked example
 
 2 つの観察から一般化 (= §9.8 「単一観察から飛ばない」 を満たす、 観察は 2 件):
