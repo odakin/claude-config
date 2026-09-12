@@ -214,7 +214,7 @@ Bash の承認 dialog で「Yes, and don't ask again」 (desktop では「常に
 | 1,917 / 2,104 / 2,111 (heredoc 含む) | 通過 |
 | 4,272 / 8,916 (heredoc 含む) | **dialog** |
 
-同 session の Bash 56 回のうち dialog が出たのはこの長大 2 回だけで、 hook 由来ではない (= 当該 command を全 PreToolUse(Bash) hook に流し直して無反応を確認済み)。 ∴ 閾値は 2,100〜4,200 文字のどこか。
+同 session の Bash 56 回のうち dialog が出たのはこの長大 2 回だけで、 hook 由来ではない (= 当該 command を全 PreToolUse(Bash) hook に流し直して無反応を確認済み)。 ∴ 閾値は 2,100〜4,200 文字のどこか。 **真の境界は測っていない** — 下の backstop の既定 3,000 は安全側に寄せた値なので、 2,100〜3,000 の command は「通るはずなのに書き直させている」 可能性がある (= 過剰な制止。 うるさければ `CLAUDE_LONG_BASH_LIMIT` で上げる)。
 
 **切り分け**: 長さ以外の要因 (hook・cwd・mode) と混ざりやすい。 同 session の Bash 呼び出しを transcript から長さつきで一覧し、 dialog の時刻 ([#desktop-permission-dialog-log](#desktop-permission-dialog-log)) と突合すると、 「長いものだけが鳴っている」 かが 1 目で分かる。 hook 由来との区別は当該 tool_input を hook に流し直すのが確実 (= [#desktop-permission-dialog-log](#desktop-permission-dialog-log) の「mode を疑う前に hook を疑う」)。
 
