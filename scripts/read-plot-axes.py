@@ -8,13 +8,13 @@
 前提 = 直交 1 枠の 2D plot (log / linear)、 枠線が図中で最も長い直線。 対数軸なら --xlog / --ylog。
 較正は「目盛り pixel ↔ 目盛り値」 の 2 点以上。 目盛り pixel は --xticks auto で検出するか明示する。
 
-  # PDF の 2 頁目の図を 400 dpi で描画し、 x 目盛り 3 本を自動検出して 1e-60,1e-30,1e0 に対応づける
+  # PDF の 2 頁目の図を 400 dpi で描画し、 x 目盛り 3 本を自動検出して 1e-4,1e0,1e4 に対応づける
   read-plot-axes.py --pdf paper.pdf --page 2 --dpi 400 --clip 60,55,300,260 \\
-      --xlog --xticks auto --xvalues 1e-60,1e-30,1e0 \\
-      --ylog --yticks auto --yvalues 1e0,1e-10,1e-20 --dots --line right
+      --xlog --xticks auto --xvalues 1e-4,1e0,1e4 \\
+      --ylog --yticks auto --yvalues 1e2,1e0,1e-2 --dots --bands --line right
 
   # pixel ↔ 値を直接与える (目盛り検出が効かない図)
-  read-plot-axes.py --image fig.png --xlog --xmap 430:1e-60,1148.5:1e0 --ylog --ymap 118:1e0,784.5:1e-20 --dots
+  read-plot-axes.py --image fig.png --xlog --xmap 430:1e-4,1148.5:1e4 --ylog --ymap 118:1e2,784.5:1e-2 --dots
 
 出力 = 枠 / 目盛り / 点 / 網掛け帯の上下端 (data 座標) / 境界線の傾きと不変量。
 --json で機械可読。 --selftest は既知の図を matplotlib で作って往復検査 (foil つき)。
@@ -90,13 +90,33 @@ def _clusters(idx: np.ndarray, gap: int = 2) -> list[float]:
 
 
 def detect_ticks(dark: np.ndarray, frame: dict, axis: str, depth: int = 12,
-                 min_len: int = 3) -> list[float]:
-    """枠の外側の帯にある目盛りの中心 pixel。 axis='x' は下辺の下、 'y' は左辺の左。"""
+                 min_len: int = 3, major_frac: float = 0.7) -> list[float]:
+    """枠の外側の帯にある**主目盛り**の中心 pixel。 axis='x' は下辺の下、 'y' は左辺の左。
+
+    ⚠️ 対数軸は副目盛り (minor tick) を伴うことが多く、 素朴に「枠外の暗 pixel」 を数えると
+    主目盛りの隣に副目盛りが並んで検出数が合わなくなる。 副目盛りは**主目盛りより短い**ので、
+    各目盛りの張り出し長さを測り、 最長の major_frac 倍以上のものだけ残す。
+    """
     if axis == "x":
-        band = dark[frame["bottom"] + 2: frame["bottom"] + 2 + depth, :].sum(axis=0)
+        band = dark[frame["bottom"] + 1: frame["bottom"] + 1 + depth, :]
     else:
-        band = dark[:, max(frame["left"] - 2 - depth, 0): max(frame["left"] - 2, 1)].sum(axis=1)
-    return _clusters(np.where(band >= min_len)[0])
+        band = dark[:, max(frame["left"] - depth, 0): max(frame["left"], 1)][:, ::-1].T
+    # 軸線から**連続して**伸びている長さだけを数える。 目盛りは軸に接しているが、 目盛りラベルの
+    # 文字は軸から離れて始まるので、 この数え方なら帯に文字の上端が入り込んでも 0 になる。
+    lengths = np.zeros(band.shape[1], dtype=int)
+    alive = np.ones(band.shape[1], dtype=bool)
+    for row in band:
+        alive &= row
+        lengths += alive
+    idx = np.where(lengths >= min_len)[0]
+    if idx.size == 0:
+        return []
+    groups, out = _runs(idx, gap=2), []
+    span = max(float(lengths[g].max()) for g in groups)
+    for g in groups:
+        if float(lengths[g].max()) >= major_frac * span:
+            out.append(float(np.mean(g)))
+    return out
 
 
 def detect_dots(img: np.ndarray, frame: dict, threshold: int, min_area: int, max_area: int,
@@ -367,12 +387,12 @@ def selftest() -> int:
         ok &= good
         print(f"  {'OK ' if good else 'FAIL'} {name}: got {got:.4g} want {want:.4g} (tol {tol:g})")
 
-    # 既知の真値: log-log、 境界線 log10 y = -1*log10 x + C、 点 2 つ
-    C = -14.8
-    dots_true = [(1e-67, 1e-4), (1e-67, 1e-18)]
-    xlim, ylim = (1e-70, 1e10), (1e-25, 1e2)
+    # 既知の真値: log-log、 境界線 log10 y = -1*log10 x + C、 点 2 つ (値は合成、 実案件由来でない)
+    C = 1.5
+    dots_true = [(1e-4, 1e2), (1e-4, 1e-2)]
+    xlim, ylim = (1e-6, 1e6), (1e-4, 1e4)
 
-    band_true = (1e-8, 1e-2)   # 網掛け帯の真値 (log10 で -8 .. -2)
+    band_true = (1e-1, 1e1)    # 網掛け帯の真値 (log10 で -1 .. 1)
 
     def build(path, with_second_dot=True):
         fig, ax = plt.subplots(figsize=(5, 4), dpi=120)
@@ -385,8 +405,8 @@ def selftest() -> int:
         ax.plot(gx, 10 ** (C - np.log10(gx)), color="black", lw=1.6)
         pts = dots_true if with_second_dot else dots_true[:1]
         ax.plot([p[0] for p in pts], [p[1] for p in pts], "o", color="black", ms=7, ls="none")
-        ax.set_xticks([1e-60, 1e-30, 1e0])
-        ax.set_yticks([1e0, 1e-10, 1e-20])
+        ax.set_xticks([1e-4, 1e0, 1e4])
+        ax.set_yticks([1e2, 1e0, 1e-2])
         fig.savefig(path, facecolor="white")
         plt.close(fig)
 
@@ -407,8 +427,8 @@ def selftest() -> int:
             print("FAIL: 目盛り検出が 3 本にならない")
             return 1
 
-        ax_ = Axis(xt, [1e-60, 1e-30, 1e0], True)
-        ay_ = Axis(yt, [1e0, 1e-10, 1e-20], True)
+        ax_ = Axis(xt, [1e-4, 1e0, 1e4], True)
+        ay_ = Axis(yt, [1e2, 1e0, 1e-2], True)
         # 目盛り重心は ±0.5 px でしか決まらないので、 残差の許容は 1 pixel 相当の dex で測る
         print(f"  1 pixel = {ax_.per_px:.3f} dex (x) / {ay_.per_px:.3f} dex (y)")
         check("x calib residual", ax_.residual, 0.0, ax_.per_px)
