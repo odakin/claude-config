@@ -359,7 +359,7 @@ claude-code hook は warn mode (= MVP 仕様で「dry-run 観察期間」 を経
 
 ### 起点
 
-twcu-phys-web (L2) の責務境界 section で odakin の career DB upstream を記述するとき、 既存 wording は「odakin が別管理」 という abstract paraphrase 一本だった (= [shared-repo.md 旧版](conventions/shared-repo.md) §「公開前の Audit」 の grep が L3 repo 名 hit を 0 件要求していたため)。 しかし abstract paraphrase は collaborator にとって「upstream に何があるか」 を見えにくくし、 system 構造の理解を阻害する failure mode の方が強かった (= 何があるか分からない方が「何を訊くべきか」 も判断できない)。
+或る学科 web repo (L2) の責務境界 section で odakin の career DB upstream を記述するとき、 既存 wording は「odakin が別管理」 という abstract paraphrase 一本だった (= [shared-repo.md 旧版](conventions/shared-repo.md) §「公開前の Audit」 の grep が L3 repo 名 hit を 0 件要求していたため)。 しかし abstract paraphrase は collaborator にとって「upstream に何があるか」 を見えにくくし、 system 構造の理解を阻害する failure mode の方が強かった (= 何があるか分からない方が「何を訊くべきか」 も判断できない)。
 
 ### 概念整理
 
@@ -386,7 +386,7 @@ twcu-phys-web (L2) の責務境界 section で odakin の career DB upstream を
 
 ### 影響範囲
 
-- 既存 L2 リポ (= twcu-phys-web 等) の CLAUDE.md / DESIGN.md / README.md で「odakin が別管理」 paraphrase が残っていれば、 新規定に従って named + boundary 明示に書き直し可能。 break 互換性なし (= 旧 wording も依然 valid な「名指しの abstract 化形」 として読める)
+- 既存 L2 リポの CLAUDE.md / DESIGN.md / README.md で「odakin が別管理」 paraphrase が残っていれば、 新規定に従って named + boundary 明示に書き直し可能。 break 互換性なし (= 旧 wording も依然 valid な「名指しの abstract 化形」 として読める)
 - audit grep の severity 二分: (a) repo 名 hit = warning (= boundary 文の有無を目視)、 (b) `<repo>/[a-z]` (= path 形) / 絶対 path / identifier hit = block (= 即修正)
 - `hooks/public-leak-guard.sh` / `scripts/public-precommit-runner.sh` は L1 (claude-config 自身、 public scope) 対象で本変更とは別軸 (= L1 では実名・mail・所属機関名等の private data leak 防止が主、 L3 repo 名は安全規則の例外 list で扱う)
 
