@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Google サービスの URL をチャットや文書に書くとき
 category: web
-summary: Google サービス URL 書式 (`/u/N/` 禁止 + `?authuser=<email>` 必須、 hooks/google-url-guard.sh で機械的強制、 GCP project 管理 URL もカバー)
+summary: Google サービス URL 書式 (`/u/N/` 禁止 + `?authuser=<email>` 必須、 hooks/google-url-guard.sh で機械的強制、 GCP project 管理 URL もカバー、 #shared-link-usp = 受け取った共有リンク 〔`usp=sharing` 等〕 には authuser を足さない = §(d) 「他人に渡す URL からは削る」 の裏面で guard も対象外にしている、 ただし `/u/N/` は共有リンクでも flag)
 -->
 # Google 系サービスの URL 書式
 
