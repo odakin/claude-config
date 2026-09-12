@@ -374,7 +374,10 @@ required to verify live
 task.
 
 The repository opt-out is `git config agent.sessionTrailer false`; the legacy
-`claude.sessionTrailer` and `codex.sessionTrailer` keys are also honored. The
+`claude.sessionTrailer` and `codex.sessionTrailer` keys are also honored (the
+trailer's own contract lives in
+[`multi-session-coordination.md#session-provenance-trailer`](../conventions/multi-session-coordination.md#session-provenance-trailer);
+this section only records the Codex side). The
 hook remains fail-open. Missing active-model metadata becomes an explicit
 `unknown` plus warning rather than a commit blocker. Therefore a missing
 trailer is not proof of a human-only commit: it can also mean absent repository
