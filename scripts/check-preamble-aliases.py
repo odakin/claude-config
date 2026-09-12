@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 r"""check-preamble-aliases.py — flag raw notation where the preamble defines an alias.
 
+Canonical layer-1 source:
+https://github.com/odakin/claude-config/blob/main/scripts/check-preamble-aliases.py
+Distribution contract:
+https://github.com/odakin/claude-config/blob/main/conventions/shared-repo.md#style-checker-mirror
+Project copies are generated mirrors so collaborators and CI can run the gate
+offline without an owner-specific repository or machine path — do not edit a
+copy. Everything project-specific belongs in that project's
+``.claude/preamble-aliases.json``, never in this file.
+
 Enforces the rule in ``conventions/latex.md#macro-alias-forcing-function``: if the
 preamble defines a macro for a concept, the body must not spell that concept out
 in raw primitive notation.  Nothing about any one manuscript is hard-coded — the
