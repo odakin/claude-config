@@ -205,6 +205,14 @@ expect_pass "pass-tier-c-substring-not-word" \
 expect_pass "pass-tier-c-allowlisted-repo-name" \
   "詳細は odakin-prefs の該当 doc を参照 (email-office も同様)"
 
+# 2026-09-12 追加の 2 名。health は普通の英単語としての出現が block されないこと、
+# agent-board は layer-1 script の identity として書けることを固定する
+# (= 追加理由は CLAUDE.md §例外 list の該当行。list を縮めたらここが落ちる)。
+expect_pass "pass-tier-c-allowlist-health-as-english" \
+  "run a health check on every repo and observe its health"
+expect_pass "pass-tier-c-allowlist-agent-board" \
+  "Discord to agent-board bridge engine"
+
 # 編集時の hook (hooks/public-leak-guard.sh) と本 runner は同じ email allowlist を持つ。
 # 2026-09-12: runner だけ 2026-08-28 に例示 domain を足し、 hook は古いまま test fixture の
 # Write ごとに確認 dialog を出していた → 片側だけの修正が再発しないよう一致を固定する。

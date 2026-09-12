@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# commit-msg-leak-matcher.sh — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 8 allowlist の (a)(b)(c) check + 審査中の申請を識別する種目語×評価語の共起 (d))、 claude-code hook + git-side runner の両方が source する DRY 実装
+# commit-msg-leak-matcher.sh — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 10 allowlist の (a)(b)(c) check + 審査中の申請を識別する種目語×評価語の共起 (d))、 claude-code hook + git-side runner の両方が source する DRY 実装
 # commit-msg-leak-matcher.sh — sourceable matcher library
 #
 # 正本: claude-config/scripts/lib/commit-msg-leak-matcher.sh
@@ -15,7 +15,7 @@
 #       (.git/COMMIT_EDITMSG path) から読む)
 #
 # 2 caller で matcher logic を duplicate すると drift する (= sensitive-terms.txt
-# 参照方式 + allowlist 7 件 + repo 名抽出 regex の同期保証が破綻)、 そのため
+# 参照方式 + allowlist + repo 名抽出 regex の同期保証が破綻)、 そのため
 # library 化して同じ logic を両方が source する DRY design。
 #
 # Layer placement: 本 file は layer 1 (claude-config public)。 algorithm 自体
@@ -41,10 +41,11 @@
 # は本 library と同 dir (lib/) に存在 (= source 済前提)。
 #
 # 設計 notes:
-#   - 8 allowlist 名 (= gmail-mcp-config / research-collab / email-office /
-#     odakin-prefs / secrets-config / physics-research / conferences / 推薦書) は本 file
-#     に literal embed。 これらは既に claude-config/CLAUDE.md §例外 list で public、
-#     leak 軸の問題なし。 list 変更時は両方を sync (= §10 4 軸 sweep 義務)
+#   - 10 allowlist 名 (= gmail-mcp-config / research-collab / email-office /
+#     odakin-prefs / secrets-config / physics-research / conferences / 推薦書 /
+#     health / agent-board) は本 file に literal embed。 これらは既に
+#     claude-config/CLAUDE.md §例外 list で public、 leak 軸の問題なし。
+#     list 変更時は両方を sync (= §10 4 軸 sweep 義務)
 #   - repos.md 内 format: `| \`<repo>/\` | <desc> | private[ (...)] |` の
 #     table 行を grep。 future schema 変更時に regex 適用範囲が壊れる
 #     可能性、 grep 結果 0 件なら matcher (b) は skip (= fail-open)
@@ -52,7 +53,7 @@
 # ====================================================================
 # allowlist: claude-config/CLAUDE.md §例外 list と sync
 # ====================================================================
-LEAK_MATCHER_ALLOWLIST="gmail-mcp-config research-collab email-office odakin-prefs secrets-config physics-research conferences 推薦書"
+LEAK_MATCHER_ALLOWLIST="gmail-mcp-config research-collab email-office odakin-prefs secrets-config physics-research conferences 推薦書 health agent-board"
 
 # ====================================================================
 # main entry point

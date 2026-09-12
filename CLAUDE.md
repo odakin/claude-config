@@ -242,8 +242,12 @@ setup.sh が自動で行うこと:
 | `physics-research` | 物理研究 career DB | category 名、 odakin が物理学者であることは INSPIRE 等から公知 |
 | `conferences` | 研究会・workshop 参加 lifecycle ledger | 一般語、 研究者が学会に参加・発表することは public profile (= CV / talks list) から既知 |
 | `推薦書` | 学生・共同研究者向け推薦書 (recommendation letter) ledger | 日本語の共通名詞「推薦書」 = generic category name、 大学教員が student / collaborator の推薦書を書くことは public profile (= 教員業務) から既知。 2026-06-28 追加 (= 既 layer 1 history に 9 mention 在 + commit-msg-leak-guard が BLOCK する body/commit-msg 挙動非対称を解消、 追加判断は user delegation 経由) |
+| `health` | 本人の健康・医療記録 | 完全な一般語。 **live tree での出現は 1 件残らず普通の英単語** ("health check" / "observe its health" / "(finances, health, correspondence)") で repo 参照は 0 件 = 検出は 100% 誤検出、 かつ英語をやめる以外に一般化する対象が無い。 名前だけで中身は何も分からず、 粒度は既存の `secrets-config` / `推薦書` と同程度。 2026-09-12 追加 (user 判断、 実測 = 600 commit で 2 回発火・2 回とも英語) |
+| `agent-board` | AI session 間の operational board | function-level 一般語。 **名前が layer 1 script の identity そのもの** (`discord-board-bridge.py` = 「Discord ⇄ agent-board bridge engine」) で、 消すと script の用途が読めなくなる。 multi-session coordination の仕組み自体は layer 1 で既に公開文書化済なので増分 leak 無し。 2026-09-12 追加 (user 判断、 実測 = 600 commit で 2 回発火・2 回とも repo 参照) |
 
 **criterion**: 名前が (1) category-level / function-level の一般語であり、 (2) 名前から推察される specifics が **既に public profile から得られる範囲を増やさない** なら例外 OK。 NG 例: `<institution-code>-<topic>` (= 所属 institution が public でも、 そこに紐付く具体 topic の組合せは更なる leak)、 `<project-codename-specific>` (= 個別 project codename)、 `<collaborator-name>-collab` (= 共著者名 leak)、 `<unpublished-result>-analysis` (= 未公開研究 leak)。
+
+⚠️ **例外 list は最後の手段**: 名前の出現が test fixture / doc の例 / path 例のように**一般化できる**なら、list に足すのでなく**出現の側を一般化する** (= 名前が public に残らないので、 判断そのものが要らなくなる)。 list に足す価値があるのは (a) 普通の英単語と同綴りで検出が誤検出にしかならない (b) 名前が層1 の成果物の identity で消すと意味が壊れる、 のどちらか。 2026-09-12 に 4 名を検討し、 (a) で `health` / (b) で `agent-board` を追加、 残り 2 名は fixture 側を一般化して list に足さずに解決した。 名前が leak 防止機構そのものの隠し先になっている repo は**発火 0 でも足さない** (= 機械の網を外すだけで得るものが無い)。
 
 新規リポを例外 list に追加する判断は user が行う (= Claude が独断で追加しない)。 また「既に commit history に名前が出てしまった repo」 を追跡的に追加するのも user 判断 (= 過去 leak の追認 vs 「list に入れず history 内残置は許容」 の判断は user の risk 評価による、 Claude は自動 list 化しない)。
 
