@@ -10,7 +10,7 @@ trailer は [`#session-provenance-trailer`](../conventions/multi-session-coordin
 
 使い方:
 
-    python3 audit-push-provenance.py --session 980534ed               # ~/Claude 配下の全 repo、 既定 = 直近 7 日
+    python3 audit-push-provenance.py --session <id-prefix>            # ~/Claude 配下の全 repo、 既定 = 直近 7 日
     python3 audit-push-provenance.py --session <id> --since '2026-09-12 00:00' --base ~/Claude
 
 判定: push 1 回 = reflog の隣り合う 2 値の範囲 `prev..new`。 その範囲に `--session` の commit が 1 つでもあり、

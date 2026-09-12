@@ -13,7 +13,7 @@
 
     python3 commit-from-origin-worktree.py --repo ~/Claude/claude-config -m msg.txt \\
         --copy /path/to/edited.md:conventions/edited.md \\
-        --check 'python3 scripts/run-all-checks.sh'
+        --check 'bash scripts/run-all-checks.sh'
     python3 commit-from-origin-worktree.py --repo R -m msg.txt --apply 'python3 "$LIVE/../x.py" conventions/a.md'
     python3 commit-from-origin-worktree.py --selftest
 
