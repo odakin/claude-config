@@ -688,6 +688,11 @@ hook 起案時に 1 問: **「この trigger 条件は、 介入すべき呼び�
 - skill は発火が確率的 (model 判断) なので、 **不発の実害が再発したら hook へ格上げ**する
   escalation trigger を導入時に書き残す (= evidence-driven の双方向切替)
 
+⚠️ trigger が識別できても、 **signal が literal 文字列なら検出器は自分の保守で鳴く** (= source /
+test / doc を読んだ出力に signal が載る)。 走査型なら自分の file を path 除外、 tool 出力を見る型は
+signal の**構造** (= 発行元 prefix まで含めた形) に anchor する。 正本 =
+[`convention-design-principles.md#detector-fires-on-its-own-signal`](../docs/convention-design-principles.md#detector-fires-on-its-own-signal)。
+
 ### <a id="no-go-example"></a>実例 (2026-06-13)
 
 「内部 context 検索の前に横断 lookup script を回す」 規律の機械化で、 記録系 yaml への

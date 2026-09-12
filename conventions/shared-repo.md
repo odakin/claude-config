@@ -52,6 +52,17 @@ echo "default=$DEFAULT, ahead from default=$AHEAD_FROM_DEFAULT"
 
 非 default branch で `AHEAD_FROM_DEFAULT >= 5` または最古 commit から **24 時間以上経過** していたら、**merge を最優先タスクに格上げ**する。Phase 進行・レビュー gate を branch 維持の justification に流用しない (レビューは main 上で進めればよい — 「merge 前に review 完了」 は branch 必須化の根拠にならない)。
 
+#### <a id="superseded-branch"></a>書き直して取り込んだ試行ブランチ
+
+大改造を別 branch で試し、 **中身を別の記法・構成で書き直して default に入れた**場合、 その試行
+branch は `git log` からは ahead に見えるが**マージしてはいけない** (= 同じ内容が二重に入る)。
+消すと commit が到達不能になるので履歴として残すなら、 **なぜ残っているか + default 側の現物が
+どこか**を repo の設計 doc に 1 行ずつ書く。 書かないと、 次に見た人 (や AI) が「マージ漏れ」 と読んで
+作業を二重化する — 上の watchdog は ahead を数えるだけで、 ahead の**理由**は見ないため。
+
+逆に **default に対して 0 ahead の branch は消す**。 commit は default の履歴に在るので何も失われず、
+共著者から見える branch 一覧が「まだ生きているもの」 だけになる。
+
 #### artifact 配信経路の依存
 
 PDF / 成果物を Dropbox 等で**別経路配信**している共有リポでは、**共著者側の sync が未セットアップだと git pull が唯一の経路**になる。この依存関係を CLAUDE.md / SESSION.md で明示し、未セットアップの共著者がいる間は `main` が最新であることを死守する責任が生じる (= branching policy の原則「main = collaborator's truth」 と直結)。共著者の sync 状況は CLAUDE.md / SESSION.md に明記しておくのが安全 (例: 「Windows side 未セットアップ」 等)。
