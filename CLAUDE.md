@@ -263,6 +263,15 @@ layer 1 (= 本 repo) の **test file source code に実 private repo 名を lite
 
 ⚠️ **2026-06-16 拡張 — test file に限らず「規約本文の例」 と「script の docstring / `--selftest` fixture」 も同じ**: layer 1 の convention 本文に書く**例**や script の selftest data も public surface。 trigger となった実 incident の **実人名・所属・固有値をそのまま例に使わず**、 架空データ (= 「甲野 太郎」 「架空大学」 等) に置換する。 2026-06-16 near-miss: office-automation の文字 clipping を整備中、 検出器 script の selftest と convention 本文の症状例へ **実セミナー講演者の氏名・所属 (= まさに結合セルで clip した当の値)** を literal で書き込み、 commit 直前の leak grep で検出して匿名化した。 = **incident を正確に記録しようとするほど実 PII を例に焼き込む引力が強い** (= 上記「過去事例の reproduce が目的化」 の PII 版)。 → commit 前に **変更 diff を実名 list で grep する** のを最終 gate にする (= 2026-06-16 はこれで救われた)。
 
+⚠️ <a id="non-identifier-content-leak"></a>**2026-09-12 拡張 — 禁止対象は識別子だけではない。「まだ公開されていない他人の文書の中身」 も同じ**: 上の禁止 list は識別子 (実名・email・repo 名・所属) を並べているが、 **識別子を 1 つも含まない文章でも leak は成立する**。 審査・査読の途中にある文書、 未公開の原稿、 未実施の配布物などから **文言をほぼ verbatim で引く / 図から読んだ実測値を写す / その値を `--selftest` fixture や docstring の例に使う** のがその形。
+
+- **同定可能性**: 当人が公開している別の文書と突き合わせれば文言から案件が特定でき、 しかも書かれる中身は**その文書の弱点**であることが多い (= 評価・査読の文脈で引くため)。 「公開してよい一般則」 と「公開してはいけない個別評価」 が同じ段落に同居する
+- **既存の gate は構造的に素通りする**: 識別子でないので commit-msg-leak-guard も pre-commit の regex も掛からない。 **機械に頼れない class** と認識する
+- **対策**: 実例は**一般形で書き、数値は伏せる** (「X の理論は A の枠組みで論じられてきたが B には届かなかった」 型)。 一般則の説得力は落ちない。 `--selftest` / docstring の例示値は**合成値**で書く (2026-06-16 拡張と同じ規律を、 PII でない content にも広げたもの)
+- **hoist する turn の leak grep に「その案件に固有の term list」 を足す**: repo 名や実名の grep では掛からないので、 対象文書の固有の術語・数値・図の軸の値を list 化して追加 diff を走査する
+- **なぜ引力が働くか**: 規約は実例があるほど良くなるので、 **正確に書こうとするほど本物を写す**。 2026-06-16 の PII 版と同じ引力の、 content 版
+
+
 ### Layer 軸 vs Leak 軸の関係 (= 混同しないための table)
 
 | | layer dependency 軸 | leak prevention 軸 (本節) |
