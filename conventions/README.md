@@ -26,8 +26,8 @@ layer 1 (public) のドメイン固有規約 107 file をカテゴリ別に列�
   - MCP 固有規約（MCP 使用時に参照）
 - **[memory-file-slimming.md](memory-file-slimming.md)** — CLAUDE.md 等の memory file が肥大して縮退 (slimming) するとき + 完了 entry を archive へ graduate するとき + 長大 bullet / table row を pointer 化するとき
   - memory file のサイズは毎 session + 毎 headless routine が払う税 — 縮退は「MOVE + pointer 化、 DELETE 禁止」 が大原則で、 SoT 照合 → 不足 MOVE → trim の順を 1 unit ずつ守れば義務を落とさず 25% 級の削減ができる (検証済手順 + gates + 一意 prefix 行置換 helper)。 追補 (2026-09-01、 6 repo −64% 実測): fleet 並列縮退 / 旧全文 verbatim 退避 / 義務 carrier 付き graduation 判定 / archive の検出器除外 glob 両形 / 並行 session 干渉 / 生成 block への適用 / 再肥大 backstop の常設 (warn 閾値 = 健康 floor の上 + live 校正) / **肥大がどこに溜まるか (graduation の空振り診断 + 状態名の節の accretion、 #where-bloat-hides)**
-- **[mid-turn-text-visibility.md](mid-turn-text-visibility.md)** — ツール呼び出しを含むターンで user に見せる文面・結論・訂正を出すとき
-  - user に見える提示面はターン最終テキストメッセージ (+ 明示的な file 提示) だけ — mid-turn テキストは表示されないことがあり (Claude Code desktop で実測、同一 session 内 2 連発)、tool 入力 (Bash heredoc / Edit content) や書き込んだ file はそもそも提示面でない (2026-08-29 再発で確定した変種)。文面 deliverable・結論・訂正は必ずターン最終メッセージに全文置く。「上の文面」「先ほどの訂正」と自ターン内を指す行為自体が事故 signal
+- **[mid-turn-text-visibility.md](mid-turn-text-visibility.md)** — ツール呼び出しを含むターンで user に見せる文面・結論・訂正を出すとき / 応答に機械向けの marker・sentinel を埋め込もうとするとき
+  - user に見える提示面はターン最終テキストメッセージ (+ 明示的な file 提示) だけ — mid-turn テキストは表示されないことがあり (Claude Code desktop で実測、同一 session 内 2 連発)、tool 入力 (Bash heredoc / Edit content) や書き込んだ file はそもそも提示面でない (2026-08-29 再発で確定した変種)。文面 deliverable・結論・訂正は必ずターン最終メッセージに全文置く。「上の文面」「先ほどの訂正」と自ターン内を指す行為自体が事故 signal。逆向きの取り違えとして、最終メッセージの HTML comment は隠れず literal 表示される (2026-09-12 desktop 実測) ため、hook 用 marker 等の機械向け signal は提示面でなく tool 入力に置く
 - **[multi-account-machine-surface.md](multi-account-machine-surface.md)** — アカウント × マシン × 端末の複数セル運用を設計・診断するとき
   - アカウント × マシン × 端末 (desktop app / スマホ remote) の 2×2×2 を全部シームレスにする設計原理 (= 3 軸の本質差・切替 mechanics・seamless invariant I1-I9・破れの検出・cross-machine 不可視の正直な限界。 RC server / multi-machine-state / scheduled-tasks の全体像 doc)
 - **[multi-machine-state.md](multi-machine-state.md)** — 複数マシンで同じ Claude Code setup を運用・audit するとき

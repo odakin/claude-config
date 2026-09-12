@@ -85,7 +85,7 @@ claude-config/
 │   ├── mcp.md                              # MCP ツールを使うとき (アカウント確認・scope 判定を含む)
 │   ├── media-transcription-ledger.md       # 定期的に届く画像 stream (板書写真・スキャン書類・写真メモ) を SoT 化する仕組みを設計するとき + 手書き画像の読取結果を記録・転記するとき
 │   ├── memory-file-slimming.md             # CLAUDE.md 等の memory file が肥大して縮退 (slimming) するとき + 完了 entry を archive へ graduate するとき + 長大 bullet / table row を pointer 化するとき
-│   ├── mid-turn-text-visibility.md         # ツール呼び出しを含むターンで user に見せる文面・結論・訂正を出すとき
+│   ├── mid-turn-text-visibility.md         # ツール呼び出しを含むターンで user に見せる文面・結論・訂正を出すとき / 応答に機械向けの marker・sentinel を埋め込もうとするとき
 │   ├── ml-forward-judgment.md              # ML forward された依頼メールを inbox 化するとき
 │   ├── multi-account-machine-surface.md    # アカウント × マシン × 端末の複数セル運用を設計・診断するとき
 │   ├── multi-machine-state.md              # 複数マシンで同じ Claude Code setup を運用・audit するとき
