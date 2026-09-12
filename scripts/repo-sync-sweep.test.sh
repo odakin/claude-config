@@ -282,6 +282,46 @@ line_of "$out" A repoO | grep -q "何も作らなかった" && ok "自分の sta
   && ok "他人の stash は pop されずに残っている" || ng "他人の stash を pop した"
 [ "$(behind_of "$ROOT/repoO")" -gt 0 ] && ok "中止したので最新化していない" || ng "中止したはずが最新化した"
 
+# ---------- _bg_fetch: timeout した repo を裏で完走させる (2026-09-12) ----------
+# engine 本体は 8s timeout を強制的に起こせないので、 関数だけ取り出して単体で回す。
+# 守る性質: ① 裏 fetch が実際に remote ref を進める ② 完走後に lock を外す
+# ③ lock 保持中は二重起動しない ④ kill switch で投げない
+echo "== _bg_fetch (裏 fetch で ratchet を断つ) =="
+BGF="$(sed -n '/^_bg_fetch() {/,/^}/p' "$ENGINE")"
+bgr="$(mk_remote bgf)"
+bgc="$TMP/bgf"
+git_quiet clone -q "$bgr" "$bgc"
+advance_remote "$bgr" bgf
+mkdir -p "$TMP/fok"
+
+(
+  eval "$BGF"
+  _FETCHOK="$TMP/fok"
+  _TIMEOUT_BIN="$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)"
+  _bg_fetch "$bgc"
+  i=0
+  while [ -d "$bgc/.git/claude-bg-fetch.lock" ] && [ "$i" -lt 100 ]; do sleep 0.2; i=$((i+1)); done
+)
+
+if [ -e "$TMP/fok/.bg-bgf" ]; then ok "_bg_fetch: 報告用 marker を書く"; else ng "_bg_fetch: marker が無い"; fi
+if [ -d "$bgc/.git/claude-bg-fetch.lock" ]; then ng "_bg_fetch: 完走後も lock が残る"; else ok "_bg_fetch: 完走後に lock を外す"; fi
+if [ "$( cd "$bgc" && git rev-list --count HEAD..@{u} 2>/dev/null )" -ge 1 ]; then
+  ok "_bg_fetch: 裏 fetch が remote ref を進めた"
+else
+  ng "_bg_fetch: remote ref が進んでいない (= 裏 fetch が走っていない)"
+fi
+
+# ③ lock 保持中は起動しない
+mkdir -p "$bgc/.git/claude-bg-fetch.lock"
+rm -f "$TMP/fok/.bg-bgf"
+( eval "$BGF"; _FETCHOK="$TMP/fok"; _TIMEOUT_BIN=""; _bg_fetch "$bgc" )
+if [ -e "$TMP/fok/.bg-bgf" ]; then ng "_bg_fetch: lock 保持中に二重起動した"; else ok "_bg_fetch: lock 保持中は起動しない"; fi
+
+# ④ kill switch
+rm -rf "$bgc/.git/claude-bg-fetch.lock"
+( eval "$BGF"; _FETCHOK="$TMP/fok"; _TIMEOUT_BIN=""; CLAUDE_SYNC_SWEEP_BG=0 _bg_fetch "$bgc" )
+if [ -e "$TMP/fok/.bg-bgf" ]; then ng "_bg_fetch: CLAUDE_SYNC_SWEEP_BG=0 でも起動した"; else ok "_bg_fetch: kill switch で投げない"; fi
+
 echo
 echo "==== RESULT: PASS=$PASS FAIL=$FAIL ===="
 [ "$FAIL" -eq 0 ]

@@ -40,11 +40,14 @@
 #   - 同時 fetch の ref lock 衝突 (timeout 以外の失敗) は 1 秒おいて 1 回再試行
 #   - fetch の成功を marker に残して不在で検出 (= 打ち切りを「同期済み」 に化けさせない)
 #   - GIT_TERMINAL_PROMPT=0 + ssh BatchMode + fetch 8 秒 + 全体 25 秒の watchdog で hang しない
+#   - 8 秒で timeout した repo は detach した fetch を裏で投げて完走させる (= 次 session で
+#     解消。 打ち切りのままだと delta が育って二度と追いつけない ratchet になる。 _bg_fetch)
 #
 # env:
 #   CLAUDE_SYNC_SWEEP_ROOT         --root の既定
 #   CLAUDE_SYNC_AUTOSTASH=0        tracked-dirty を stash しない (A 行のみ)
 #   CLAUDE_SYNC_SWEEP_LOCK_STALE   lock を古いとみなす秒数 (既定 300)
+#   CLAUDE_SYNC_SWEEP_BG=0         timeout した repo の裏 fetch を投げない (kill switch)
 #   CLAUDE_SYNC_SWEEP_TEST=1 の時だけ効く (test で並走の窓を決定的に開ける):
 #     CLAUDE_SYNC_SWEEP_TEST_HOLD_PRE / _POST  stash push の直前 / 直後に lock を持ったまま止まる秒数
 #     CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP=1     同じ file に当たる検査を外す (pop conflict の経路を test するため)
@@ -85,6 +88,35 @@ _t() {  # _t <seconds> <cmd...>
   if [ -n "$_TIMEOUT_BIN" ]; then "$_TIMEOUT_BIN" "$d" "$@"; else "$@"; fi
 }
 
+# ---------- timeout した repo を裏で完走させる (= ratchet 断ち) ----------
+# 8s で kill された fetch は部分 pack を残さない (= 進捗ゼロ)。 delta が 8s 分を超えた
+# repo は次 session も同じだけ失敗し、 待つ間に delta が育つので **二度と追いつけない**
+# (= 人が手で fetch するまで解けない ratchet)。 2026-09-12 に実測: 論文 PDF を commit
+# している或る共同研究 repo で 4 日分 137 commits / PDF 234 MB が溜まり、 毎 session の
+# sweep が進捗 0 のまま、 手動 fetch に 32 秒かかる状態になっていた。
+# そこで **timeout したときだけ** detach した fetch を投げる。 session は待たない
+# (= 開始レイテンシは不変)、 裏で完走するので次の session は差分ゼロで終わる。
+#   - lock dir で二重起動を防ぐ (= session ごとに積み上がらない)
+#   - 30 分以上古い lock は stale (kill / panic の置き去り) とみなして奪う
+#   - macOS に setsid は無いので nohup + & で detach。 暴走しないよう自身も 900s で bound
+_bg_fetch() {
+  [ "${CLAUDE_SYNC_SWEEP_BG:-1}" = "1" ] || return 0
+  _bgrepo="$1"
+  _bglock="$_bgrepo/.git/claude-bg-fetch.lock"
+  if ! mkdir "$_bglock" 2>/dev/null; then
+    [ -n "$(find "$_bglock" -maxdepth 0 -mmin +30 2>/dev/null)" ] || return 0
+    rm -rf "$_bglock" 2>/dev/null
+    mkdir "$_bglock" 2>/dev/null || return 0
+  fi
+  [ -n "$_FETCHOK" ] && : > "$_FETCHOK/.bg-$(basename "$_bgrepo")" 2>/dev/null
+  nohup sh -c '
+    cd "$1" 2>/dev/null || { rmdir "$2" 2>/dev/null; exit 0; }
+    if [ -n "$3" ]; then "$3" 900 git fetch -q 2>/dev/null; else git fetch -q 2>/dev/null; fi
+    rmdir "$2" 2>/dev/null
+  ' _ "$_bgrepo" "$_bglock" "$_TIMEOUT_BIN" >/dev/null 2>&1 &
+  return 0
+}
+
 # ---------- 1. 並列 fetch (= 全体 watchdog で hang を防ぐ) ----------
 # fetch の成功だけを marker file に残す。 per-fetch timeout と全体 watchdog の kill を黙って
 # 潰すと、 fetch が終わらなかった repo は remote ref が古いまま分類に渡り behind=0 = 「同期済み」
@@ -119,8 +151,11 @@ for gd in "$ROOT"/*/.git; do
     if _t 8 git fetch -q 2>/dev/null; then _ok=1
     else
       case "$?" in
-        124|137|143) : ;;
-        *) sleep 1; _t 8 git fetch -q 2>/dev/null && _ok=1 ;;
+        124|137|143) _bg_fetch "$repo" ;;
+        *) sleep 1
+           if _t 8 git fetch -q 2>/dev/null; then _ok=1
+           else case "$?" in 124|137|143) _bg_fetch "$repo" ;; esac
+           fi ;;
       esac
     fi
     [ "$_ok" = 1 ] && [ -n "$_FETCHOK" ] && : > "$_FETCHOK/$(basename "$repo")" 2>/dev/null
@@ -243,8 +278,13 @@ classify() {
   # fetch が完了しなかった repo は behind 判定そのものが古い ref 由来で当てにならない。
   # 「同期済み」 と誤読させないため専用行で報告する (= §1 の marker の消費側)。
   if [ -n "$_FETCHOK" ] && [ ! -e "$_FETCHOK/$name" ]; then
-    printf 'A\t%s: fetch 未完了 (8s timeout / 全体 watchdog で打ち切り、 または再試行しても失敗) — behind 判定は当てにならない → cd %s/%s && git fetch && git merge --ff-only @{u}\n' \
-      "$name" "$_DISP" "$name"
+    if [ -e "$_FETCHOK/.bg-$name" ]; then
+      printf 'A\t%s: fetch が 8s で終わらなかった (= delta が大きい) — 裏で fetch を継続中、 次 session で解消する見込み。 behind 判定は当てにならない。 今すぐ要るなら cd %s/%s && git fetch && git merge --ff-only @{u}\n' \
+        "$name" "$_DISP" "$name"
+    else
+      printf 'A\t%s: fetch 未完了 (全体 watchdog で打ち切り、 または再試行しても失敗) — behind 判定は当てにならない → cd %s/%s && git fetch && git merge --ff-only @{u}\n' \
+        "$name" "$_DISP" "$name"
+    fi
     return 0
   fi
   behind="$(git rev-list --count HEAD..@{u} 2>/dev/null)"; behind="${behind:-0}"
