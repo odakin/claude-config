@@ -49,6 +49,11 @@ esac
 INPUT="$(cat)"
 [ -z "$INPUT" ] && exit 0
 
+# 早期脱出 (= 大多数の Bash 呼び出しで jq を起動しない): command は JSON 全体の部分文字列なので
+# `JSON の長さ <= 閾値` なら command も必ず閾値以下。 shell の ${#} が byte を返す locale でも
+# byte 数 >= codepoint 数なので、 この向きの不等式は壊れない。
+[ "${#INPUT}" -le "$LIMIT" ] && exit 0
+
 LEN="$(printf '%s' "$INPUT" | jq -r '(.tool_input.command // "") | length' 2>/dev/null || true)"
 case "$LEN" in
   ''|*[!0-9]*) exit 0 ;;

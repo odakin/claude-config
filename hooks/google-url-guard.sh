@@ -53,9 +53,11 @@ INPUT="$(cat)"
 # pattern を説明・検証するために違反 URL を literal で持つ必要がある。 除外しないと
 # 「guard を直そうとするたびに guard に止められる」 (= 実際に発生)。
 # 同型の一般則 = conventions/hook-authoring.md (test fixture の誤発火)。
+# ⚠️ 除外は「この guard を説明・検証している file」 だけに絞る (= `*/hooks/*.sh` のように広げると、
+#    将来 Google URL を出力する別 hook の検査が silent に効かなくなる)。
 SELF_PATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""' 2>/dev/null || true)"
 case "$SELF_PATH" in
-  */hooks/*.sh|*/hooks/*.py|*/conventions/google-url.md) exit 0 ;;
+  */google-url-guard.sh|*/google-url-guard.test.sh|*/conventions/google-url.md) exit 0 ;;
 esac
 
 CONTENT="$(printf '%s' "$INPUT" | jq -r '.tool_input | tostring' 2>/dev/null || true)"

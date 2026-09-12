@@ -71,9 +71,18 @@ fi
 json="$(jq -nc '{tool_name:"Edit",tool_input:{file_path:"/x/claude-config/hooks/google-url-guard.test.sh",new_string:"assert ask https://drive.google.com/u/1/drive/folders/FAKE01"}}')"
 got="$(decision "$json")"
 if [ -z "$got" ] || [ "$got" = "pass" ]; then
-  pass=$((pass+1)); results+=("✅ P10: hooks/*.sh への Edit は自己参照として skip")
+  pass=$((pass+1)); results+=("✅ P10: 自分の test への Edit は自己参照として skip")
 else
-  fail=$((fail+1)); results+=("❌ P10: hooks/*.sh への Edit が ask された (got=$got)")
+  fail=$((fail+1)); results+=("❌ P10: 自分の test への Edit が ask された (got=$got)")
+fi
+
+# ⚠️ 除外は自分自身に限る: 別 hook の source は従来どおり検査対象
+json="$(jq -nc '{tool_name:"Edit",tool_input:{file_path:"/x/claude-config/hooks/other-guard.sh",new_string:"url=https://drive.google.com/u/1/drive/folders/FAKE01"}}')"
+got="$(decision "$json")"
+if [ "$got" = "ask" ]; then
+  pass=$((pass+1)); results+=("✅ A9: 別 hook の source は検査対象のまま")
+else
+  fail=$((fail+1)); results+=("❌ A9: hooks/ 配下を広く除外してしまっている (got=${got:-pass})")
 fi
 
 # 非退行: 普通の file への Edit は従来どおり ask

@@ -226,7 +226,7 @@ Bash の承認 dialog で「Yes, and don't ask again」 (desktop では「常に
 
 **機械 backstop**: [`hooks/long-bash-command-guard.sh`](../hooks/long-bash-command-guard.sh) — PreToolUse(Bash) で閾値 (既定 3,000 文字、 `CLAUDE_LONG_BASH_LIMIT` で上書き / `0` で無効) を超えた command を **exit 2 で block** し、 上の 3 つを stderr で案内する。 block は Claude にしか見えないので、 user には dialog も待ちも発生しない (= 「聞かれる」 が「Claude が短く書き直す」 に置き換わる)。 長さは byte でなく codepoint で測る (= 日本語の command で閾値が 1/3 になるのを避ける)。
 
-⚠️ **guard の自己参照**: この種の guard を書く / 直すときは、 guard 自身の source・test・規約 doc が検出対象の pattern を literal で持つため、 **guard を直そうとするたびに guard に止められる**。 実例 (2026-09-12): URL guard の test fixture に意図的な違反 URL を 1 行足す Edit が、 その URL guard 自身に ask された。 → guard 側に自己参照の除外を持たせる (`*/hooks/*.sh` / `*/hooks/*.py` / 当該規約 doc の path を skip)。 test fixture の誤発火一般は [`hook-authoring.md`](hook-authoring.md)。
+⚠️ **guard の自己参照**: この種の guard を書く / 直すときは、 guard 自身の source・test・規約 doc が検出対象の pattern を literal で持つため、 **guard を直そうとするたびに guard に止められる**。 実例 (2026-09-12): URL guard の test fixture に意図的な違反 URL を 1 行足す Edit が、 その URL guard 自身に ask された。 → guard 側に自己参照の除外を持たせる。 ⚠️ 除外は **その guard を説明・検証している file だけ**に絞る (= 自分の source・自分の test・自分の規約 doc)。 `*/hooks/*.sh` のように dir 単位へ広げると、 将来 同じ pattern を出力する別 hook の検査が **silent に効かなくなる** (= 除外は穴で、 穴は検出されない)。 「別 hook の source は検査対象のまま」 を test に固定しておく。 test fixture の誤発火一般は [`hook-authoring.md`](hook-authoring.md)。
 
 ## 個人ごとの適用
 
