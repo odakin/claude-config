@@ -13,7 +13,7 @@ openpyxl>=3.1.5
 python-docx>=1.2.0
 
 # YAML hazard lint (check-yaml-lint.py — conventions/yaml-hazards.md#yamllint-hazard-config)
-yamllint>=1.37
+yamllint>=1.38.0
 
 # 図の読み戻し (read-plot-axes.py — conventions/matplotlib-figure-qa.md#read-back-published-figure)
 # numpy = 必須 (無いと script 自体が起動しない)。 Pillow = --image 経路のみ (--pdf は PyMuPDF)。
