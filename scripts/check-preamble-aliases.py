@@ -52,9 +52,13 @@ wrappers make it unreliable); a body that uses ``\text`` outside math is reporte
 like any other use.
 
 Repo-specific values that cannot be derived — a compound whose raw spelling has no
-single preamble body, a macro to exempt, a soft-only warning — go in a JSON config
-next to the script (or ``--config``), so the engine itself stays identical
-everywhere it is mirrored:
+single preamble body, a macro to exempt, a soft-only warning — go in
+``.claude/preamble-aliases.json`` at the repo root (found by walking up from the
+target; ``--config`` overrides, and a file next to the script is the last resort),
+so the engine itself stays identical everywhere it is mirrored.  That file is also
+the **opt-in switch**: the personal-layer pre-commit chain gates a repo exactly
+when it exists, so no repo starts failing commits until someone has decided what
+its findings mean.
 
     {"targets": ["main.tex", "part2/main.tex"],
      "preamble": "preamble.tex",
@@ -673,15 +677,43 @@ def _as_rows(bucket, used):
 # --------------------------------------------------------------------------- #
 # config / targets
 # --------------------------------------------------------------------------- #
-def load_config(explicit):
-    if explicit:
-        with open(explicit, encoding="utf-8") as f:
-            return json.load(f), os.path.dirname(os.path.abspath(explicit))
-    here = os.path.dirname(os.path.abspath(__file__))
-    candidate = os.path.join(here, "check-preamble-aliases.config.json")
-    if os.path.isfile(candidate):
-        with open(candidate, encoding="utf-8") as f:
-            return json.load(f), here
+REPO_CONFIG = os.path.join(".claude", "preamble-aliases.json")
+
+
+def find_repo_config(start):
+    r"""Walk up from `start` looking for `.claude/preamble-aliases.json`.
+
+    Its presence is how a repo opts in: the personal-layer pre-commit chain gates
+    a repo exactly when this file exists, so adding the config *is* the wiring —
+    no per-repo hook script, and no repo is gated by surprise.
+    """
+    d = os.path.abspath(start)
+    while True:
+        candidate = os.path.join(d, REPO_CONFIG)
+        if os.path.isfile(candidate):
+            return candidate
+        if os.path.isdir(os.path.join(d, ".git")):
+            return None
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
+
+
+def load_config(explicit, target_hint=None):
+    path = explicit
+    if not path:
+        start = target_hint or os.getcwd()
+        path = find_repo_config(start if os.path.isdir(start) else os.path.dirname(start) or ".")
+    if not path:
+        here = os.path.dirname(os.path.abspath(__file__))
+        candidate = os.path.join(here, "check-preamble-aliases.config.json")
+        path = candidate if os.path.isfile(candidate) else None
+    if path:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f), os.path.dirname(os.path.dirname(os.path.abspath(path))) \
+                if os.path.basename(os.path.dirname(path)) == ".claude" \
+                else os.path.dirname(os.path.abspath(path))
     return {}, os.getcwd()
 
 
@@ -737,7 +769,7 @@ def main(argv=None):
     if args.selftest:
         return selftest()
 
-    cfg, cfg_dir = load_config(args.config)
+    cfg, cfg_dir = load_config(args.config, args.targets[0] if args.targets else None)
     targets = args.targets or default_targets(cfg, cfg_dir)
     preamble = args.preamble or (os.path.join(cfg_dir, cfg["preamble"]) if cfg.get("preamble") else None)
     if not targets:
@@ -914,6 +946,27 @@ def selftest():
     hard, _ = _run(r"$\Ih$", strict=True)
     if hard.get("\\cond") != 1:
         fails.append(f"--strict should surface alias-of-alias: {hard}")
+
+    # --- repo config discovery (= the opt-in switch) ------------------------ #
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, ".git"))
+        os.makedirs(os.path.join(d, ".claude"))
+        os.makedirs(os.path.join(d, "src"))
+        with open(os.path.join(d, ".claude", "preamble-aliases.json"), "w", encoding="utf-8") as f:
+            json.dump({"ignore_macros": ["\\para"], "targets": ["src/main.tex"]}, f)
+        tex = os.path.join(d, "src", "main.tex")
+        with open(tex, "w", encoding="utf-8") as f:
+            f.write(PREAMBLE + "\\begin{document}\n$\\hat A$\n\\end{document}\n")
+        cfg, cfg_dir = load_config(None, tex)
+        if cfg.get("ignore_macros") != ["\\para"]:
+            fails.append(f"repo config not discovered from a target path: {cfg}")
+        if os.path.realpath(cfg_dir) != os.path.realpath(d):
+            fails.append("repo config dir should be the repo root, not .claude/")
+        if [os.path.relpath(p, d) for p in default_targets(cfg, cfg_dir)] != ["src/main.tex"]:
+            fails.append("config targets should resolve against the repo root")
+        os.makedirs(os.path.join(d, "sub", ".git"))
+        if find_repo_config(os.path.join(d, "sub")) is not None:
+            fails.append("discovery must stop at a .git boundary, not leak from a parent repo")
 
     # --- --fix -------------------------------------------------------------- #
     def want_fix(body, expected, note, **kw):
