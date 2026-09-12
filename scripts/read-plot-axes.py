@@ -16,8 +16,15 @@
   # pixel ↔ 値を直接与える (目盛り検出が効かない図)
   read-plot-axes.py --image fig.png --xlog --xmap 430:1e-60,1148.5:1e0 --ylog --ymap 118:1e0,784.5:1e-20 --dots
 
-出力 = 枠 / 目盛り / 点 (data 座標) / 境界線の傾きと不変量 (log-log なら log x + a log y = const)。
+出力 = 枠 / 目盛り / 点 / 網掛け帯の上下端 (data 座標) / 境界線の傾きと不変量。
 --json で機械可読。 --selftest は既知の図を matplotlib で作って往復検査 (foil つき)。
+
+⚠️ **検出数は下限として読む**。 点は円形度で選ぶので、 矢印や線に接した marker は円形でなくなり落ちる
+(実測: 同じ図で 2 点取れた版と 1 点落ちた版があった)。 返った数が図の見た目と合うか必ず目で確認する。
+
+姉妹 = vector 経路の `ai-collaboration/scripts/svg-contour-extract.py` (published figure の path から
+輪郭を復元)。 本 script は raster 経路 (目盛りから較正して読み戻す) なので、 PDF が vector でも図が
+外部 tool 由来の raster でも効く。 元が SVG / vector path で輪郭そのものが要るなら vector 版を使う。
 """
 from __future__ import annotations
 
@@ -147,6 +154,42 @@ def _label(mask: np.ndarray) -> tuple[np.ndarray, int]:
     return lab, cur
 
 
+def detect_bands(img: np.ndarray, frame: dict, lo: int, hi: int,
+                 min_rows: int | None = None) -> list[tuple[float, float]]:
+    """網掛け帯 (中間調で塗った水平帯) の上端・下端の pixel 行。
+
+    各行で**枠内の中央 30% 幅の median** を取る。 単一列を sampling すると回転ラベルや矢印が
+    その列を横切って汚染される (実測でそれを踏んだ)。 median なら局所的な線は効かない。
+    lo/hi = 帯の明度域 (白 255 と線 0 の間。 既定 120-240 は灰の網掛け)。
+
+    min_rows を省くと**枠高の 1%** (最低 3 行) を使う。 枠内の文字が並ぶ行も median が灰に入って
+    数行の run を作るので、 固定の 3 行では拾ってしまう (実測 400 dpi の図で偽の帯 2 本)。
+    1% にすると同じ図で本物の帯だけが残った。
+    """
+    t, b = frame["top"] + 2, frame["bottom"] - 1
+    if min_rows is None:
+        min_rows = max(3, int(0.01 * (frame["bottom"] - frame["top"])))
+    x0 = int(frame["left"] + 0.35 * (frame["right"] - frame["left"]))
+    x1 = int(frame["left"] + 0.65 * (frame["right"] - frame["left"]))
+    med = np.median(img[t:b, x0:x1], axis=1)
+    rows = np.where((med > lo) & (med < hi))[0] + t
+    out = []
+    for run in _runs(rows):
+        if len(run) > min_rows:
+            out.append((float(run[0]), float(run[-1])))
+    return out
+
+
+def _runs(idx: np.ndarray, gap: int = 1) -> list[list[int]]:
+    out: list[list[int]] = []
+    for i in idx:
+        if out and i - out[-1][-1] <= gap:
+            out[-1].append(int(i))
+        else:
+            out.append([int(i)])
+    return out
+
+
 def boundary_points(dark: np.ndarray, frame: dict, side: str, inset: int = 3) -> np.ndarray:
     """各行 (または列) で枠の内側にある最も端の暗 pixel = 境界線の軌跡。"""
     pts = []
@@ -241,6 +284,15 @@ def analyse(img: np.ndarray, args) -> dict:
                         "x": ax.fmt(px), "y": ay.fmt(py),
                         "x_data": ax.to_data(px), "y_data": ay.to_data(py)} for px, py in dots]
 
+    if args.bands:
+        lo, hi = (int(v) for v in args.band_range.split(","))
+        out["bands"] = []
+        for p0, p1 in detect_bands(img, frame, lo, hi, args.band_min_rows):
+            d0, d1 = ay.to_data(p0), ay.to_data(p1)
+            out["bands"].append({"px": [p0, p1], "y_lo": min(d0, d1), "y_hi": max(d0, d1),
+                                 "y_lo_str": ay.fmt(p0 if d0 < d1 else p1),
+                                 "y_hi_str": ay.fmt(p0 if d0 > d1 else p1)})
+
     if args.line:
         pts = boundary_points(dark, frame, args.line)
         if pts.size:
@@ -248,13 +300,15 @@ def analyse(img: np.ndarray, args) -> dict:
             ys = np.array([ay.to_data(p) for p in pts[:, 1]])
             keep = slice(len(xs) // 10, len(xs) - len(xs) // 10)  # 端は枠・ラベルを拾う
             slope, intercept = np.polyfit(xs[keep], ys[keep], 1)
-            resid = float(np.max(np.abs(ys[keep] - (slope * xs[keep] + intercept))))
+            err = ys[keep] - (slope * xs[keep] + intercept)
+            resid = float(np.max(np.abs(err)))
+            rms = float(np.sqrt(np.mean(err ** 2)))
             span = float(np.ptp(ys[keep])) or 1.0
             out["line"] = {
                 "side": args.line, "n_points": int(len(xs)),
                 "slope": float(slope), "intercept": float(intercept),
-                "max_residual": resid,
-                "trustworthy": bool(resid < 0.05 * span),
+                "max_residual": resid, "rms_residual": rms,
+                "trustworthy": bool(resid < 0.05 * span and rms < 0.1),
                 "invariant": (f"log10(y) {'-' if slope < 0 else '+'} "
                               f"{abs(slope):.3g}*log10(x) = {intercept:.3f}"),
             }
@@ -272,8 +326,13 @@ def render_text(out: dict) -> str:
              f"1px={c['x']['per_px']:.3f} | y: log={c['y']['log']} "
              f"residual={c['y']['residual']:.3f} 1px={c['y']['per_px']:.3f}")
     L.append("       ⚠ 読み取り精度の下限 = 上の 1px 値 (log 軸なら dex)。 これより細かい桁を主張しない")
+    for b in out.get("bands", []):
+        L.append(f"band   px={b['px']}  y {b['y_lo_str']} .. {b['y_hi_str']}  "
+                 f"(log {b['y_lo']:.2f} .. {b['y_hi']:.2f})")
     for d in out.get("dots", []):
         L.append(f"dot    px={d['px']}  x={d['x']}  y={d['y']}")
+    if out.get("dots") is not None:
+        L.append("       ⚠ 点の数は下限 (矢印・線に接した marker は円形でなくなり落ちる)")
     if "line" in out:
         ln = out["line"]
         L.append(f"line   side={ln['side']} n={ln['n_points']} slope={ln['slope']:.3f} "
@@ -313,12 +372,15 @@ def selftest() -> int:
     dots_true = [(1e-67, 1e-4), (1e-67, 1e-18)]
     xlim, ylim = (1e-70, 1e10), (1e-25, 1e2)
 
+    band_true = (1e-8, 1e-2)   # 網掛け帯の真値 (log10 で -8 .. -2)
+
     def build(path, with_second_dot=True):
         fig, ax = plt.subplots(figsize=(5, 4), dpi=120)
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlim(*xlim)
         ax.set_ylim(*ylim)
+        ax.axhspan(band_true[0], band_true[1], color="0.75", zorder=0)
         gx = np.logspace(math.log10(xlim[0]), math.log10(xlim[1]), 400)
         ax.plot(gx, 10 ** (C - np.log10(gx)), color="black", lw=1.6)
         pts = dots_true if with_second_dot else dots_true[:1]
@@ -357,6 +419,14 @@ def selftest() -> int:
         for (px, py), (tx, ty) in zip(dots, sorted(dots_true, key=lambda t: -t[1])):
             check(f"dot x (1e{math.log10(tx):.0f})", ax_.to_data(px), math.log10(tx), 0.8)
             check(f"dot y (1e{math.log10(ty):.0f})", ay_.to_data(py), math.log10(ty), 0.5)
+
+        bands = detect_bands(img, frame, 120, 240)
+        check("band count", len(bands), 1, 0)
+        if bands:
+            lo_px, hi_px = bands[0]
+            got = sorted([ay_.to_data(lo_px), ay_.to_data(hi_px)])
+            check("band lower edge", got[0], math.log10(band_true[0]), 3 * ay_.per_px)
+            check("band upper edge", got[1], math.log10(band_true[1]), 3 * ay_.per_px)
 
         pts = boundary_points(dark, frame, "right")
         xs = np.array([ax_.to_data(p) for p in pts[:, 0]])
@@ -400,8 +470,12 @@ def main() -> int:
     ap.add_argument("--min-area", type=int, default=20)
     ap.add_argument("--max-area", type=int, default=6000)
     ap.add_argument("--max-extent", type=int, default=60)
-    ap.add_argument("--min-fill", type=float, default=0.72,
-                    help="marker とみなす bounding box 充填率の下限 (円盤 = 0.785)")
+    ap.add_argument("--bands", action="store_true", help="網掛け帯の上下端を読む")
+    ap.add_argument("--band-range", default="120,240", help="帯とみなす明度域 lo,hi (既定 120,240)")
+    ap.add_argument("--band-min-rows", type=int, default=None,
+                    help="帯とみなす最小行数 (既定 = 枠高の 1%%、最低 3。 文字の行を拾うなら上げる)")
+    ap.add_argument("--min-fill", type=float, default=0.75,
+                    help="marker とみなす bounding box 充填率の下限 (円盤 = 0.785。 0.6 では文字を拾う)")
     ap.add_argument("--max-aspect", type=float, default=1.25, help="marker の縦横比の上限")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
