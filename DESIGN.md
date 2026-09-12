@@ -454,7 +454,7 @@ done
 - `setup.sh` Step 6 の検出 logic 削除、 全 repo install に変更
 - `claude-config/CLAUDE.md` Step 8 説明を更新
 - `conventions/latex.md#pre-commit-hook` 節を全 repo install 方式 + Claude 規律の明示 + 旧設計失敗の経緯記述に拡張
-- 既存 36 repos に retroactive install + 1 repo update (= network-notes の旧 hook `../../scripts/pre-commit.sh` を上書き、 git history で復元可) + 13 repos で既存 hook を `.bak` backup して上書き
+- 既存 36 repos に retroactive install + 1 repo update (= 旧 hook `../../scripts/pre-commit.sh` を上書き、 git history で復元可) + 13 repos で既存 hook を `.bak` backup して上書き
 
 ### Claude 側の reflex 失敗 (sub-RCA)
 
@@ -847,7 +847,7 @@ drafting 中にも push 前にも catch しておらず、既存の指示層
 3. **audit** (`audit-public-repos.sh`) — 週次で全 public repo を sweep、
    Tier A + sensitive-terms.txt の両方を適用して retroactive 検出
 4. **情報配置の分離 (段階 1)** — `個人層の work-network.md` の
-   組織名 literal を `sensitive-terms.txt` (gitignore + network-notes
+   組織名 literal を `sensitive-terms.txt` (gitignore + `<sensitive-repo>`
    git-crypt symlink) に分離、本文は placeholder 化。odakin-prefs が万一 leak
    しても sensitive literal が git に乗っていない状態にする
 
@@ -885,7 +885,7 @@ Tier A を完璧にしても、現実の事例類型に対する防御が致命�
 - hook **本体** には literal を埋め込まない (script source は
   claude-config の public に置いても literal leak しない)
 - literal **data** は `個人層の sensitive-terms.txt` (gitignore +
-  network-notes git-crypt symlink)、hook 実行時に読んで終了時に unload
+  `<sensitive-repo>` git-crypt symlink)、hook 実行時に読んで終了時に unload
 - PreToolUse 層には literal を持ち込まない (3-3 純粋を維持)
 - pre-commit 層に限って ephemeral load を許す (stage 済み diff のみ
   scan、`--no-verify` で bypass 可能)
@@ -978,7 +978,7 @@ source から data file の中身が推測できないこと、の 2 条件を�
 | `gitignore_global` (修正) | claude-config | `.claude/*` + `!.claude/public-repo.marker` exception |
 | `setup.sh` Step 2 (修正) | claude-config | hook symlink + settings.json merge に leak guard 追加 |
 | `setup.sh` Step 8 (新規) | claude-config | marker 持ち repo に pre-commit install + missing marker 警告 |
-| `sensitive-terms.txt` | odakin-prefs (gitignore, network-notes git-crypt symlink) | literal 正本 (9 entries: 組織名 3 + 間接 context 4 + 部門名 1 + collaborator 名 1。TWCU は研究略称として公開使用 OK と判断し 2026-04-10 に除外) |
+| `sensitive-terms.txt` | odakin-prefs (gitignore, `<sensitive-repo>` git-crypt symlink) | literal 正本 (entry 数と内訳・除外判断は個人層 `work-network.md` 側 = denylist の構成は公開 layer に書かない) |
 | `work-network.md` (修正) | odakin-prefs | 組織名 literal → `<workplace>` placeholder 化 |
 | `leak-incidents.md` | odakin-prefs | 事例記録 (α/β/γ/δ/ε 類型 + 3 回ルール counter) |
 | `next-steps.md` | odakin-prefs | 段階 2-3 の情報配置分離 defer + un-defer トリガー |
