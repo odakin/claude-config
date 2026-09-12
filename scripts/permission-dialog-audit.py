@@ -328,6 +328,10 @@ FIXES = {
     "rule": "permissions.allow に足す。 ⚠️ 先に path を見る — cwd / additionalDirectories の外なら"
             " allow ではなく scope の問題 (worktree session は本体 repo が cwd 外)。"
             " protected path (.claude/ 等) と always-prompt class は allow で消せない",
+    "rule_unique": "⚠️ command に per-call 一意な部分 (乱数 file 名 / session UUID) がある ="
+                   " 「常に許可」 は literal 保存なので**二度と一致しない**。 押しても減らない。"
+                   " → Bash でなく Read tool で読み、 glob の path rule を 1 本置く"
+                   " (claude-code-permissions.md#always-allow-never-matches-again)",
     "unmatched": "transcript に該当 tool 呼び出しが無い (別 session / 窓の外)。 --before/--after を広げる",
 }
 
@@ -435,8 +439,30 @@ def diagnose(reqs_list, uses, before, after, hooks, long_limit, run_hooks=True, 
             n = len(str(inp.get("command", "")))
             rows.append((r, "length", f"command が {n:,} 文字 (閾値 {long_limit:,} 超)", detail))
             continue
+        uniq = per_call_unique_reason(inp)
+        if uniq:
+            rows.append((r, "rule_unique", f"hook は無反応 + {uniq}", detail))
+            continue
         rows.append((r, "rule", "hook は無反応 = permission rule 側", detail))
     return rows
+
+
+# 呼び出しごとに変わる token = 「常に許可」 の literal 保存が二度と一致しない印
+# (claude-code-permissions.md#always-allow-never-matches-again)
+_UNIQ_PATTERNS = (
+    (re.compile(r"/tool-results/"), "tool 出力の spill file (乱数 file 名)"),
+    (re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"),
+     "path に session UUID"),
+)
+
+
+def per_call_unique_reason(inp):
+    """tool 入力に per-call 一意な token があれば理由を返す (無ければ None)。"""
+    text = " ".join(
+        str(inp.get(k, "")) for k in ("command", "file_path", "path", "pattern")
+    )
+    hits = [why for pat, why in _UNIQ_PATTERNS if pat.search(text)]
+    return " + ".join(hits) if hits else None
 
 
 def print_diagnosis(rows, run_hooks, hooks_n):
@@ -577,6 +603,22 @@ def selftest():
         check(rows[2][3] == "理由の 1 行目", "hook の理由を詳細に載せる")
         rows_nb = diagnose([req("Write", 3000.0)], du, 8.0, 2.0, hooks, 3000, run_hooks=False, cwd=tmp)
         check(rows_nb[0][1] == "rule", "--no-run-hooks では hook 由来も rule に落ちる (= 表示で断る)")
+
+        # per-call 一意な path は rule でなく rule_unique (= 「常に許可」 が効かない class)
+        check(per_call_unique_reason({"command": "ls"}) is None,
+              "普通の command は per-call 一意でない")
+        spill = ("sed -n '/x/p' ~/.claude/projects/-p/"
+                 "0a76b26b-4d95-42a6-a37d-7472326951ee/tool-results/b7cz1bf2n.txt")
+        why = per_call_unique_reason({"command": spill})
+        check(why and "spill" in why and "UUID" in why,
+              f"spill file path は乱数 file 名と session UUID の両方を挙げる (got {why})")
+        du_u = [{"t": 4000.0, "name": "Bash", "input": {"command": spill},
+                 "id": "9", "sub": False, "path": tmp}]
+        rows_u = diagnose([req("Bash", 4000.0)], du_u, 8.0, 2.0, [], 3000,
+                          run_hooks=False, cwd=tmp)
+        check(rows_u[0][1] == "rule_unique",
+              f"spill file を読む Bash は rule_unique に分類 (got {rows_u[0][1]})")
+        check("rule_unique" in FIXES, "rule_unique に消し方の文言がある")
 
         st2 = tmp / "settings2.json"
         st2.write_text(json.dumps({"hooks": {"PreToolUse": [
