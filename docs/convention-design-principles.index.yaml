@@ -313,6 +313,10 @@ sections:
     legacy: "8.40"
     level: 3
     title: "8.40 doc の一文は「測った」 と「説明した」 を書式で分ける — 説明は観察の権威を借りる"
+  - id: unique-token-kills-the-carrier
+    legacy: "8.41"
+    level: 3
+    title: "8.41 保存する rule の key に per-call 一意な値が混ざると、その rule は二度と発火しない"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
