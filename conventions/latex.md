@@ -410,6 +410,8 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 
 ⚠️ **`ptex2pdf` / `platex` の exit code は信用しない**: clean な DVI（`Output written on ....dvi`）が出ていても wrapper が非ゼロ exit を返すことがある。確実な build は **`platex → platex → dvipdfmx` を個別実行**し、(a) log を `grep -iE "^! |Overfull"`、(b) `.pdf` が実際に再生成されたか（timestamp / `dvipdfmx` の `... bytes written`）で判定する。exit code 単独を成功 signal にしない。
 
+⚠️ <a id="latexmk-pdf-overrides-rc"></a>**`latexmk -pdf` は `.latexmkrc` の engine 指定を上書きする** — repo が `.latexmkrc` で `$pdf_mode = 4` (lualatex) を宣言していても、コマンドラインの `-pdf` は `$pdf_mode = 1` (pdflatex) を意味するので、**error 0・警告なしで別 engine の PDF が出る**。壊れないので気付かない: 変わるのは合字・アクセント・分数まわりの組で、抽出テキストでは `Poincaré` → `Poincar´e`、`spin-1/2` の分数が潰れる形で出る (2026-09-12 実測)。→ **`.latexmkrc` を持つ repo では `latexmk` を素で叩く** (engine を明示したいときは `-pdf` でなく `-lualatex` / `-pdflatex`)。焼き直した PDF を比較検証に使うなら、まず `metadata['producer']` が旧版と一致するかを見る (= 中身の diff を読む前に engine の同一性を確かめる)。
+
 ⚠️ <a id="nonstopmode-hides-undefined-env"></a>**`-interaction=nonstopmode` は undefined environment を握り潰して PDF を出す**: クラスが `amsmath` を読んでいないのに `\begin{equation*}` を書くと `! LaTeX Error: Environment equation* undefined.` が出るが、**nonstopmode では build が続き PDF も生成される** (中身は壊れた組版)。学会・申請書の配布クラスは `amsmath` を仮定できない (2026-08-22 実測: 科研費 LaTeX クラス)。→ **build の度に `grep -c "^!" *.log` が 0 であることを確認する**。素の `\[ ... \]` は amsmath なしで動くので、可搬性が要る文書ではこちらを既定にする。
 
 ## <a id="matplotlib-cjk-figure-embedding"></a>matplotlib の CJK 入り図は PNG で取り込む (PDF は platex+dvipdfmx で描画だけ化ける)
