@@ -142,6 +142,24 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 
 **対処**: float の source を、 参照する段落より前 (頁の前半に来る位置) へ移す。 参照文 (`\cref{tab:…} collects …`) は末尾のままでよい。 `[h]` / `[H]` より安定で、 組版後に「Table 1 の頁 < References の頁」 を PDF text で機械確認する。
 
+## <a id="align-split-tag-orphan"></a>幅が溢れた display を `\nn` で 2 行に割ると式番号が 3 行目に単独で落ちる (log は無警告) (2026-09-12)
+
+**症状**: `align` の 1 本の式が本文幅を越えたので `\nn` (= `\nonumber\\`) で 2 行に割った。 compile は error 0・警告 0 で通るが、 PDF では**式番号 (tag) だけが 3 行目に単独で置かれる**。
+
+**原因**: `align` は `&` で左右の欄に割る。 第 1 行に `&` が無いと第 1 行は左欄に置かれ、 第 2 行の `&= …` が右欄に来る。 右欄の行が本文幅の右端まで伸びると tag の居場所が無くなり、 `amsmath` は tag を次の行へ落とす。 **これは overfull にならない**ので log に何も出ない。
+
+**対処**: 第 1 行にも `&` を置いて両行を同じ欄構造にするか、 第 2 行を `\nn &\qquad = …` のように字下げして右端に余白を残す。 1 本の長い式を折るだけなら `align` でなく `multline` が素直。
+
+**検出**: log では出ないので、 **割った display の頁を 1 枚だけ画像にして見る**。 これは「改稿 pass ごとの目視はしない」 ([`#visual-verification-intensity`](#visual-verification-intensity)、 [`edit-intent-record.md#overfull-not-a-gate`](../../ai-collaboration/conventions/edit-intent-record.md#overfull-not-a-gate)) の例外で、 **display の構造 (行数・欄) を変えた pass に限る** — 語順や語句の推敲では発生しない。 一般則 = compile 成功 ≠ visual 成功 ([`CONVENTIONS.md`](../CONVENTIONS.md#pre-push-check) の visual artifact 節)。
+
+## <a id="symbol-width-repagination"></a>記号幅の変わる一括置換は、 総頁数が同じまま頁割りだけ動かす — `.aux` の label→頁 で見る (2026-09-12)
+
+**症状**: 記法の一括置換 (下付き添字を縦棒つきの label に替える等) で本文の文字列長が変わると、 総頁数は不変でも**付録の開始頁・表・図の頁**が動く。 目次の頁番号も変わる。
+
+**なぜ頁数比較では足りない**: 組版 gate の「頁数・未定義参照・error」 ([`edit-intent-record.md#build-gate`](../../ai-collaboration/conventions/edit-intent-record.md#build-gate)) のうち頁数は**総和**なので、 前半が 1 頁縮んで後半が 1 頁伸びると相殺して気付かない。
+
+**対処**: `.aux` の `\newlabel` から label→(番号, 頁) を取り、 版間で比べる。 頁が動いた label と**番号が動いた** label (= 参照の意味が変わる) を分けて出す。 道具 = [`ai-collaboration/scripts/compare-tex-builds.py`](../../ai-collaboration/scripts/compare-tex-builds.py) (`--before-aux/--after-aux`)。 同 script の `--before-log/--after-log` は log の**折返しを復元**してから overfull を数える (79 桁で折れた警告は素の grep が落とす)。 規律 = [`physics-verification-cycle.md#page-count-is-not-pagination`](../../ai-collaboration/conventions/physics-verification-cycle.md#page-count-is-not-pagination)。
+
 ## <a id="stash-roundtrip-build-artifacts"></a>baseline 比較に git stash round-trip を使わない (tracked 生成物と衝突する)
 
 **ルール:** 「この overfull / warning / 挙動は自分の編集**前**からあったか?」 という baseline 比較のために、 compile が上書きする tracked 生成物 (committed PDF 等) を持つ tree で `git stash` → 再 build → `git stash pop` の round-trip をしない。 baseline は tree を動かさない read-only 経路で取る:
