@@ -20,6 +20,7 @@
     python3 check-md-anchors.py --base ~/Claude --repo claude-config --repo ai-collaboration
     python3 check-md-anchors.py --list              # 壊れている参照元を全部出す
     python3 check-md-anchors.py --quiet             # 緑のときは何も言わない
+    python3 check-md-anchors.py --suggest           # 壊れた anchor ごとに近い実在 anchor と、 その anchor を持つ別 file を出す
 
 anchor は 明示の `<a id="...">` / `id='...'` と、 見出しから作る GitHub 風 slug の和で判定する
 (slug の計算は `check-inbound-refs.py` の `gh_slug` + `rendered_heading_text` を import して共有 = 2 実装にしない)。
@@ -129,6 +130,15 @@ def is_checkable_fragment(frag: str) -> bool:
     return not LINE_ANCHOR.match(frag) and "<" not in frag and ">" not in frag
 
 
+def anchors_in_text(body: str) -> set:
+    """Explicit ids plus GitHub heading slugs of a markdown text (a file on disk or a git blob)."""
+    body = FENCE.sub("", body)        # a `# comment` inside a bash fence is not a heading
+    ids = set(EXPLICIT.findall(body))
+    for h in re.findall(r"^#{1,6}\s+(.*)$", body, re.M):
+        ids.add(gh_slug(rendered_heading_text(h)))
+    return ids
+
+
 def anchors_of(p: Path) -> set:
     if p in _cache:
         return _cache[p]
@@ -137,12 +147,8 @@ def anchors_of(p: Path) -> set:
     except Exception:
         _cache[p] = set()
         return _cache[p]
-    body = FENCE.sub("", body)        # a `# comment` inside a bash fence is not a heading
-    ids = set(EXPLICIT.findall(body))
-    for h in re.findall(r"^#{1,6}\s+(.*)$", body, re.M):
-        ids.add(gh_slug(rendered_heading_text(h)))
-    _cache[p] = ids
-    return ids
+    _cache[p] = anchors_in_text(body)
+    return _cache[p]
 
 
 def rel_to(base: Path, p: Path) -> str:
@@ -175,6 +181,39 @@ def scan(base: Path, repos: list[str]) -> tuple[dict[str, list[str]], int]:
             if frag not in anchors_of(dest):
                 broken.setdefault(f"{rel_to(base, dest)}#{frag}", []).append(rel_to(base, src))
     return broken, checked
+
+
+def anchor_index(base: Path) -> dict[str, list[Path]]:
+    """anchor -> every real .md file under base that defines it (for "the section lives elsewhere")."""
+    idx: dict[str, list[Path]] = {}
+    for src in iter_markdown_sources(base, []):
+        real = src.resolve()
+        for a in anchors_of(real):
+            idx.setdefault(a, []).append(real)
+    return idx
+
+
+def suggest(base: Path, key: str, srcs: list[str], idx: dict[str, list[Path]]) -> list[str]:
+    """Where a broken anchor probably meant to land: the closest real anchors in the landing file,
+    and other files that define exactly that anchor (the usual shape after a split or when a plan
+    points `#` at a section of another doc). Candidates only; a person picks."""
+    import difflib
+    destrel, _, frag = key.rpartition("#")
+    dest = (base / destrel).resolve()
+    out = []
+    near = difflib.get_close_matches(frag, sorted(anchors_of(dest)), n=3, cutoff=0.5)
+    if near:
+        out.append("closest in that file: " + ", ".join(f"#{n}" for n in near))
+    homes = [h for h in idx.get(frag, []) if h != dest]
+    for h in homes[:3]:
+        src = (base / srcs[0]).resolve()
+        rel = os.path.relpath(h, src.parent).replace(" ", "%20")
+        out.append(f"defined in {rel_to(base, h)} -> from {srcs[0]}: ({rel}#{frag})")
+    if len(homes) > 3:
+        out.append(f"... defined in {len(homes) - 3} more file(s)")
+    if not out:
+        out.append("no candidate: the section may be gone; read the landing file's git log")
+    return out
 
 
 def selftest() -> int:
@@ -215,6 +254,19 @@ def selftest() -> int:
         # 7 links in the fixture; the external one and the fragment-less one are not counted
         check("external and fragment-less links are ignored", checked == 5)
         check("exactly 2 broken", len(broken) == 2)
+        idx = anchor_index(base)
+        key_missing = next(k for k in keys if k.endswith("doc.md#missing"))
+        check("--suggest with no candidate says so instead of guessing",
+              any("no candidate" in s for s in suggest(base, key_missing, broken[key_missing], idx)))
+        (base / "r1" / "src2.md").write_text("[w](doc.md#real)\n[h](../r2/doc.md#some-headng)\n", encoding="utf-8")
+        broken2, _ = scan(base, ["r1"])
+        k_stub = next(k for k in broken2 if k.endswith("r1/doc.md#real"))
+        s_stub = suggest(base, k_stub, broken2[k_stub], idx)
+        check("--suggest points a stub-landing link at the file that defines the anchor",
+              any("(../r2/doc.md#real)" in s for s in s_stub))
+        k_typo = next(k for k in broken2 if k.endswith("#some-headng"))
+        check("--suggest offers the closest real anchor in the landing file",
+              any("#some-heading" in s for s in suggest(base, k_typo, broken2[k_typo], idx)))
 
     # GitHub slugs, code spans, fences, line refs (2026-09-13 false-positive fixes)
     with tempfile.TemporaryDirectory() as td:
@@ -297,6 +349,8 @@ def main() -> int:
     p.add_argument("--base", type=Path, default=Path.home() / "Claude")
     p.add_argument("--repo", action="append", default=[])
     p.add_argument("--list", action="store_true", help="print every source of every break")
+    p.add_argument("--suggest", action="store_true",
+                   help="under each break, print the closest real anchors and files that define it")
     p.add_argument("--quiet", action="store_true")
     p.add_argument("--selftest", action="store_true")
     a = p.parse_args()
@@ -311,12 +365,16 @@ def main() -> int:
     total = sum(len(v) for v in broken.values())
     print(f"[check-md-anchors] {total} ref(s) to {len(broken)} anchor(s) that do not exist "
           f"in the file the path lands on (of {checked} checked)")
+    idx = anchor_index(a.base) if a.suggest else {}
     for key, srcs in sorted(broken.items(), key=lambda kv: -len(kv[1])):
         print(f"  {key}   <- {len(srcs)} ref(s)")
         for s in (srcs if a.list else srcs[:2]):
             print(f"      {s}")
         if not a.list and len(srcs) > 2:
             print(f"      ... +{len(srcs) - 2} (--list for all)")
+        if a.suggest:
+            for line in suggest(a.base, key, srcs, idx):
+                print(f"      ? {line}")
     return 1
 
 

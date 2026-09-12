@@ -18,6 +18,18 @@
     python3 fix-md-links.py --base ~/Claude --list            # 全件
     python3 fix-md-links.py --base . --strict                 # depth / renamed が 1 件でもあれば exit 1 (suite 用)
     python3 fix-md-links.py --base ~/Claude --fix --exclude 'repo/path/example-doc.md'
+    python3 fix-md-links.py --base ~/Claude --list --suggest  # gone の行に移動先の候補 (同名の追跡 file が repo に 1 つだけの時)
+    cd <repo> && python3 fix-md-links.py --verify-diff        # 未 commit の差が link target の中だけか (commit 前の gate)
+    cd <repo> && python3 fix-md-links.py --verify-diff origin/main..HEAD   # push 前に commit 群を検証し直す
+
+`--verify-diff [REV]` は、 link を直した変更 (本 script の `--fix` でも手作業でも) が **link target の中だけの差**
+かを git の差分そのものから確かめる gate。 REV 省略 = 作業ツリー (staged を含む) と HEAD の差、 `A..B` = 範囲、
+commit 1 つ = その commit の差。 見るもの: path は `-z` で取る / hunk ごとに削除行数と追加行数が等しい / 対の行は
+target の外が同一 / 新しい target は**変更後の状態** (作業ツリー、 または B やその commit の tree = disk にだけ在る
+file では通さない) で実在し、 `.md` の `#anchor` も定義されている / 変更一覧に在るのに差の行が読めない file は
+空振りとして FAIL / markdown 以外の file が混ざれば FAIL (`--files` で絞る)。 種類別の件数 (depth /
+rename-or-move / fragment / permalink) を出す。 gate なので内部 error は exit 1 に倒す (= commit を止める側。
+全 repo の pre-commit に繋ぐ `--staged` が内部 error を exit 3 で素通しにするのとは逆)。
 
 `--fix` は書き換えた file を `CHANGED<TAB>path` で出すだけで commit はしない。 commit する側は
 **`git diff -z --name-only` で path を取る** (非 ASCII の file 名は `-z` 無しだと 8 進 escape 付きで
@@ -72,6 +84,7 @@ class Git:
         self.enabled = enabled
         self.roots: dict[Path, Path | None] = {}
         self.maps: dict[Path, dict[str, str]] = {}
+        self.names: dict[Path, dict[str, list[str]]] = {}
 
     def root(self, d: Path) -> Path | None:
         if d not in self.roots:
@@ -98,6 +111,31 @@ class Git:
                     i += 1
             self.maps[root] = mp
         return self.maps[root]
+
+
+    def by_name(self, root: Path) -> dict[str, list[str]]:
+        """file name -> tracked paths (`git ls-files -z`), for the moved-file candidate of a gone link."""
+        if root not in self.names:
+            out = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True).stdout
+            idx: dict[str, list[str]] = {}
+            for rel in out.decode("utf-8", "surrogateescape").split("\0"):
+                if rel:
+                    idx.setdefault(os.path.basename(rel), []).append(rel)
+            self.names[root] = idx
+        return self.names[root]
+
+
+def moved_candidate(src: Path, path_part: str, git: Git) -> str | None:
+    """For a gone link: the ONE tracked file in the same repo with that file name, as a path from the
+    source. Same name is not proof of a move (two READMEs are different files), so this is printed as
+    a candidate and never applied by --fix."""
+    real_dir = src.resolve().parent
+    name = os.path.basename(unquote(path_part).rstrip("/"))
+    root = git.root(real_dir)
+    if root is None or not name:
+        return None
+    hits = git.by_name(root).get(name, [])
+    return os.path.relpath(root / hits[0], real_dir).replace(" ", "%20") if len(hits) == 1 else None
 
 
 def classify(src: Path, path_part: str, git: Git) -> tuple[str, str | None]:
@@ -261,6 +299,125 @@ def verify(path: Path, old: str, new: str) -> list[str]:
     return errs
 
 
+def diff_pairs(diff_text: str) -> tuple[list[tuple[str, str]], list[str]]:
+    """(removed, added) line pairs of a `-U0` diff of ONE file, read hunk by hunk. The file header is
+    skipped by position (before the first `@@`), not by prefix: a removed content line that itself
+    starts with `--` arrives as `---...` and is a content line."""
+    pairs: list[tuple[str, str]] = []
+    problems: list[str] = []
+    minus: list[str] = []
+    plus: list[str] = []
+    in_hunk = False
+    for line in diff_text.split("\n") + ["@@ end"]:
+        if line.startswith("@@"):
+            if in_hunk:
+                if len(minus) != len(plus):
+                    problems.append(f"a hunk replaces {len(minus)} line(s) by {len(plus)} (not line-for-line)")
+                else:
+                    pairs.extend(zip(minus, plus))
+            minus, plus, in_hunk = [], [], True
+        elif in_hunk and line.startswith("-"):
+            minus.append(line[1:])
+        elif in_hunk and line.startswith("+"):
+            plus.append(line[1:])
+    return pairs, problems
+
+
+def link_change_kind(old: str, new: str) -> str:
+    if new.startswith(("http:", "https:")):
+        return "permalink"
+    op, np_ = split_target(old)[0], split_target(new)[0]
+    core = lambda s: re.sub(r"^(?:\.\./|\./)+", "", s)
+    if op == np_:
+        return "fragment"
+    return "depth" if core(op) == core(np_) else "rename-or-move"
+
+
+def _git(repo: Path, *args: str) -> bytes:
+    r = subprocess.run(["git", "--literal-pathspecs", "-C", str(repo), *args], capture_output=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)}: {r.stderr.decode('utf-8', 'replace').strip()}")
+    return r.stdout
+
+
+def target_problem(repo: Path, f: str, target: str, after: str | None) -> str:
+    """'' if `target` (written in repo file `f`) lands in the AFTER state: the working tree when after
+    is None, else that commit's tree. A path that leaves the repo is checked on disk."""
+    if target.startswith(("http:", "https:", "mailto:")):
+        return ""
+    pp, _suffix, frag = split_target(target)
+    dest_rel = os.path.normpath(os.path.join(os.path.dirname(f), unquote(pp))) if pp else f
+    inside = not (dest_rel == ".." or dest_rel.startswith("../") or os.path.isabs(dest_rel))
+    checkable = bool(frag) and _cma.is_checkable_fragment(frag) and dest_rel.endswith(".md")
+    if after is None or not inside:
+        dest = ((repo / f).resolve().parent / unquote(pp)) if pp else (repo / f)
+        if not _exists(dest):
+            return "does not resolve"
+        if checkable and frag not in _cma.anchors_of(dest.resolve()):
+            return f"lands on {dest.name} but #{frag} is not defined there"
+        return ""
+    if dest_rel == ".":
+        return ""
+    if subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{after}:{dest_rel}"],
+                      capture_output=True).returncode != 0:
+        return f"does not exist in {after}"
+    if checkable:
+        body = _git(repo, "show", f"{after}:{dest_rel}").decode("utf-8", "replace")
+        if frag not in _cma.anchors_in_text(body):
+            return f"lands on {dest_rel} but #{frag} is not defined there in {after}"
+    return ""
+
+
+def verify_diff(repo: Path, rev: str, only: list[str]) -> tuple[list[str], dict]:
+    """Gate for a change set that claims to touch link targets only. Returns (problems, stats)."""
+    if "..." in rev:
+        raise RuntimeError("use A..B (two dots): the gate verifies the diff between two trees")
+    if rev == "WORKTREE":
+        diff_args, after = ["diff", "HEAD"], None
+    elif ".." in rev:
+        a_, b_ = rev.split("..", 1)
+        diff_args, after = ["diff", a_ or "HEAD", b_ or "HEAD"], (b_ or "HEAD")
+    else:
+        ids = _git(repo, "rev-list", "--parents", "-n", "1", rev).decode().split()
+        if len(ids) != 2:
+            raise RuntimeError(f"{rev} is a root or merge commit: pass a range A..B")
+        diff_args, after = ["diff", ids[1], ids[0]], ids[0]
+    spec = ["--", *only] if only else []
+    names = [n for n in _git(repo, *diff_args, "--no-renames", "-z", "--name-only", *spec)
+             .decode("utf-8", "surrogateescape").split("\0") if n]
+    stats: dict = {"files": 0, "pairs": 0, "kinds": Counter()}
+    if not names:
+        return ["nothing changed in that diff (vacuous: there is nothing to verify)"], stats
+    problems: list[str] = []
+    for f in names:
+        if not f.endswith(".md"):
+            problems.append(f"{f}: not markdown (this gate verifies link edits; narrow with --files)")
+            continue
+        stats["files"] += 1
+        pairs, probs = diff_pairs(_git(repo, *diff_args, "--no-renames", "-U0", "--", f)
+                                  .decode("utf-8", "replace"))
+        problems += [f"{f}: {p}" for p in probs]
+        if not pairs and not probs:
+            problems.append(f"{f}: listed as changed but no changed line was read (vacuous: mode or binary?)")
+        for la, lb in pairs:
+            stats["pairs"] += 1
+            if la == lb:
+                problems.append(f"{f}: a changed line with identical text (end-of-file newline?)")
+                continue
+            if TGT.sub("](T)", la) != TGT.sub("](T)", lb):
+                problems.append(f"{f}: change outside a link target: {lb[:100]}")
+                continue
+            olds, news = TGT.findall(la), TGT.findall(lb)
+            for o, n in zip(olds, news):
+                if o != n:
+                    stats["kinds"][link_change_kind(o, n)] += 1
+            for tgt in sorted(set(news) - set(olds)):
+                why = target_problem(repo, f, tgt, after)
+                if why:
+                    problems.append(f"{f}: new target ({tgt}) {why}")
+    return problems, stats
+
+
 def run_fix(rows) -> tuple[list[str], list[str]]:
     per_file: dict[Path, dict[str, str]] = defaultdict(dict)
     for src, _rel, target, cls, new in rows:
@@ -411,8 +568,75 @@ def selftest() -> int:
         check("--files --fix rewrites only that file", st.read_text() == "[s](../DESIGN.md)\n"
               and "CHANGED" in r4.stdout)
 
+    selftest_verify_diff(check)
     print("\nALL PASS" if ok else "\nFAILED")
     return 0 if ok else 1
+
+
+def selftest_verify_diff(check) -> None:
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        repo = Path(td).resolve() / "r"
+        (repo / "docs" / "sub").mkdir(parents=True)
+        g = lambda *c: subprocess.run(["git", "-C", str(repo), *c], capture_output=True, check=True)
+        g("init", "-q"); g("config", "user.email", "t@t"); g("config", "user.name", "t")
+        (repo / "DOC.md").write_text("## Real Section\n", encoding="utf-8")
+        (repo / "notes.txt").write_text("x\n", encoding="utf-8")
+        moved = repo / "docs" / "sub" / "moved.md"
+        na = repo / "docs" / "§ 記録.md"
+        before_m = "see [a](DOC.md) here\n-- dashed [b](DOC.md)\nplain line\n"
+        good_m = "see [a](../../DOC.md) here\n-- dashed [b](../../DOC.md)\nplain line\n"
+        moved.write_text(before_m, encoding="utf-8")
+        na.write_text("[c](DOC.md#real-section)\n", encoding="utf-8")
+        g("add", "-A"); g("commit", "-q", "-m", "base")
+        vd = lambda rev="WORKTREE", only=(): verify_diff(repo, rev, list(only))
+
+        check("verify-diff: an empty change set fails  [foil: vacuous pass]", vd()[0] != [])
+        moved.write_text(good_m, encoding="utf-8")
+        na.write_text("[c](../DOC.md#real-section)\n", encoding="utf-8")
+        probs, st = vd()
+        check("verify-diff: link-only depth fixes pass, a line starting with `--` included  [foil: header by prefix]",
+              probs == [] and st["pairs"] == 3 and st["kinds"]["depth"] == 3)
+        check("verify-diff: the file with a non-ASCII name is read  [foil: quoted path]", st["files"] == 2)
+        moved.write_text(good_m.replace("see", "SEE"), encoding="utf-8")
+        check("verify-diff: a word changed outside a link target fails",
+              any("outside a link target" in p for p in vd()[0]))
+        moved.write_text(good_m.replace("](../../DOC.md) here", "](../DOC.md) here"), encoding="utf-8")
+        check("verify-diff: a new target that does not resolve fails", any("does not resolve" in p for p in vd()[0]))
+        moved.write_text(good_m, encoding="utf-8")
+        na.write_text("[c](../DOC.md#no-such)\n", encoding="utf-8")
+        check("verify-diff: a new #anchor that the landing file does not define fails",
+              any("#no-such is not defined" in p for p in vd()[0]))
+        na.write_text("[c](../DOC.md#real-section)\n", encoding="utf-8")
+        moved.write_text(good_m.replace("plain line\n", ""), encoding="utf-8")
+        check("verify-diff: a deleted line fails (not line-for-line)", any("line-for-line" in p for p in vd()[0]))
+        moved.write_text(good_m, encoding="utf-8")
+        (repo / "notes.txt").write_text("y\n", encoding="utf-8")
+        check("verify-diff: a non-markdown change in the set fails", any("not markdown" in p for p in vd()[0]))
+        check("verify-diff: --files narrows the set to the link edits",
+              vd(only=["DOC.md", "docs/sub/moved.md", "docs/§ 記録.md"])[0] == [])
+        (repo / "notes.txt").write_text("x\n", encoding="utf-8")
+        g("commit", "-q", "-am", "fix depth")
+        probs, st = vd("HEAD")
+        check("verify-diff REV: a committed link-only fix passes", probs == [] and st["kinds"]["depth"] == 3)
+        check("verify-diff A..B: the same range passes", vd("HEAD~1..HEAD")[0] == [])
+        (repo / "only-on-disk.md").write_text("x\n", encoding="utf-8")
+        moved.write_text(good_m.replace("](../../DOC.md) here", "](../../only-on-disk.md) here"), encoding="utf-8")
+        g("commit", "-q", "-am", "points at an uncommitted file")
+        check("verify-diff REV: resolves in that commit's tree, not on disk  [foil: file only on disk]",
+              any("does not exist in" in p for p in vd("HEAD")[0]))
+        check("verify-diff: the same edit uncommitted would have passed (the foil has teeth)",
+              target_problem(repo, "docs/sub/moved.md", "../../only-on-disk.md", None) == "")
+        (repo / "docs" / "unique-name.md").write_text("x\n", encoding="utf-8")
+        (repo / "docs" / "README.md").write_text("x\n", encoding="utf-8")
+        (repo / "README.md").write_text("x\n", encoding="utf-8")
+        g("add", "-A"); g("commit", "-q", "-m", "names")
+        gs = repo / "docs" / "sub" / "gone.md"
+        gg = Git(enabled=False)
+        check("--suggest: a gone link gets the one tracked file with that name",
+              moved_candidate(gs, "old/unique-name.md", gg) == "../unique-name.md")
+        check("--suggest: a name tracked twice gets no candidate  [foil: README.md]",
+              moved_candidate(gs, "old/README.md", gg) is None)
 
 
 def main() -> int:
@@ -430,11 +654,26 @@ def main() -> int:
                          "exit 1 with the fix command if a fixable link is about to be committed")
     ap.add_argument("--renames", action="store_true",
                     help="with --files/--staged: also follow git renames (slower)")
+    ap.add_argument("--suggest", action="store_true",
+                    help="for gone links, print the one tracked file with the same name as a candidate")
+    ap.add_argument("--verify-diff", nargs="?", const="WORKTREE", metavar="REV",
+                    help="gate: the change set (worktree vs HEAD, a commit, or A..B) touches link targets only")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+
+    if a.verify_diff:
+        repo = Path(_git(Path.cwd(), "rev-parse", "--show-toplevel").decode().strip())
+        only = [os.path.relpath(Path(f).absolute().parent.resolve() / Path(f).name, repo) for f in (a.files or [])]
+        problems, st = verify_diff(repo, a.verify_diff, only)
+        kinds = "  ".join(f"{k}={v}" for k, v in st["kinds"].most_common())
+        for p in problems:
+            print(f"[FAIL] {p}")
+        print(f"[verify-diff] {a.verify_diff}: files={st['files']} line-pairs={st['pairs']} "
+              f"link-changes={sum(st['kinds'].values())} ({kinds}) failures={len(problems)}")
+        return 1 if problems else 0
 
     if a.staged:
         # exit 1 = a fixable link is about to be committed (block); exit 3 = the guard itself
@@ -486,7 +725,15 @@ def main() -> int:
     if a.list:
         for _src, rel, target, cls, new in sorted(rows, key=lambda r: (r[3], r[1])):
             print(f"  {cls:10s} {rel}  ::  {target}" + (f"  ->  {new}" if new else ""))
-    elif fixable and not a.quiet:
+            cand = moved_candidate(_src, split_target(target)[0], git) if a.suggest and cls == "gone" else None
+            if cand:
+                print(f"  {'':10s} ? moved? the one tracked file with that name: {cand}")
+    elif a.suggest:
+        for _src, rel, target, cls, _new in rows:
+            cand = moved_candidate(_src, split_target(target)[0], git) if cls == "gone" else None
+            if cand:
+                print(f"  gone     {rel}  ::  {target}  ? moved? {cand}")
+    if fixable and not a.quiet and not a.list:
         for _src, rel, target, cls, new in rows:
             if cls in FIXABLE:
                 print(f"  {cls:8s} {rel}  ::  {target}  ->  {new}")

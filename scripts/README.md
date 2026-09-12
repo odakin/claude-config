@@ -7,10 +7,12 @@
 リポ全体の構造 tree = [CLAUDE.md](../CLAUDE.md)。
 
 - **[affix-image-xlsx.py](affix-image-xlsx.py)** — Place an image (seal / signature) into an .xlsx via Excel.app — without destroying the file.
+- **[apply-text-pairs.py](apply-text-pairs.py)** — (old, new) の置換 pair 列を 1 file に当てる前に、 契約 (各 old は正確に 1 回 / 全検査が通るまで書かない) に加えて「再実行で二重に入る」「old が長い別物の先頭」 を拒否し、 必要なら patch 後の写しで test を回してから、 原子的に書く。--selftest 内蔵。
 - **[audit-codex-integration.sh](audit-codex-integration.sh)** — Codex 導入と指定 repo の root AGENTS.md / Git gate を read-only で確認する
 - **[audit-codex-integration.test.sh](audit-codex-integration.test.sh)** — Codex integration audit の fixture test
 - **[audit-hooks.sh](audit-hooks.sh)** — 4 軸 hook 配信 audit (= silent malfunction の構造的検出、 (d) は自動部分のみ)
 - **[audit-public-repos.sh](audit-public-repos.sh)** — 全 public repo の leak 定期監査（週次 scheduled-task 対象）
+- **[audit-push-provenance.py](audit-push-provenance.py)** — ある session の commit を載せた push が、 他 session の (または trailer の無い) commit も一緒に公開していないかを、 各 repo の remote-tracking ref の reflog (`update by push`) と commit の `Agent-Session` trailer から事後に監査する。--selftest 内蔵。
 - **[bootstrap-stdio-mcps.sh](bootstrap-stdio-mcps.sh)** — generic auto-bootstrap library for self-hosted stdio MCPs.
 - **[bootstrap-stdio-mcps.test.sh](bootstrap-stdio-mcps.test.sh)** — self-test for the generic stdio MCP bootstrap library.
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入
@@ -52,6 +54,7 @@
 - **[clipboard-cleaner.py](clipboard-cleaner.py)** — クリップボード一発整形 CLI（PDF コピーの段落内改行除去 + pbcopy 書き戻しで RTF 書式除去、明示発火のみ・常駐なし、--selftest 内蔵、hammerspoon ⌃⌥⌘V から呼ばれる、conventions/clipboard-cleaner.md）
 - **[close-pdf-form-boxes.py](close-pdf-form-boxes.py)** — Excel→PDF 出力で落ちたフォームの枠罫線を検出して閉じる。
 - **[codex_mail_install.py](codex_mail_install.py)** — Install/audit only the owner-selected Codex mail skill and narrow prompt rule.
+- **[commit-from-origin-worktree.py](commit-from-origin-worktree.py)** — 自分の変更を origin/<branch> から切った使い捨て worktree で commit・push する (live checkout の未 commit 変更・未 push commit・index に一切触れず、 相手の未 push commit を巻き込んで公開しない)。 git-crypt repo も復号済みで扱い、 push 直前の再 fetch + rebase、 衝突時は push せず worktree を残す。--selftest 内蔵。
 - **[commit-msg-leak-guard-runner.sh](commit-msg-leak-guard-runner.sh)** — 公開リポ commit-msg hook（BLOCK mode、 2026-05-26 追加。 shared matcher library を source。 claude-code 2.1.x harness invoke bug の修復 option B）
 - **[commit-msg-leak-guard-runner.test.sh](commit-msg-leak-guard-runner.test.sh)** — 上記 runner の self-test（15 case、 BLOCK / PASS / merge skip 等）
 - **[count-malformed-tool-call-events.py](count-malformed-tool-call-events.py)** — local transcript から malformed-tool-call bug の genuine event を集計（synthetic 文言の user entry のみ = doc/議論 echo を除外〔naive substring は 19x overcount〕、 month×model×client-version 内訳 + model 別 rate、 upstream issue への occurrence 報告用 data point 生成、 read-only、 --selftest 内蔵、 conventions/tool-call-robustness.md#root-cause）

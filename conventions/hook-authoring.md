@@ -587,6 +587,7 @@ pre-commit hook A (= LaTeX Unicode fixer) が「対象 file (LaTeX) が staged �
 
 - engine を直すときは、 **保存する前に** selftest を scratch の copy で回すか、 まず fail-open 側 (WARN / 内部失敗は止めない = [#engine-failure-must-not-block](#engine-failure-must-not-block)) で入れてから BLOCK にする。
 - 途中の壊れた版を保存しない。 大きな書き換えは別名 file で作って test を通し、 最後に 1 回で置き換える。
+- 機械化 = [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) `TARGET PAIRS.py --test 'python3 {} --selftest'` (親 dir ごと一時 dir に写した版で test を通し、 通った時だけ一時 file + `os.replace` で置き換える)。 2026-09-13 の実例: engine の patch script を写しに当てるつもりで再実行し、 target の引数を付け忘れて本物に二重に入った ([batch-text-edits.md#insertion-pair-rerun](batch-text-edits.md#insertion-pair-rerun))。 module として import する pre-commit 経路は動き続け、 CLI として呼ぶ suite 側だけが約 1 分落ちていた = 壊れ方が経路で分かれるので、 片方の経路が緑でも安全の証拠にならない。
 - 配線した直後に、 **他 session が今 stage している内容**が新しい guard に止められないかを読み取りだけで確かめる (`python3 <engine> --staged` を相手の repo で実行、 書き込みはしない)。
 
 ---

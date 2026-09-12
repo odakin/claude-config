@@ -113,3 +113,7 @@ sections:
     legacy: "2026-09-11"
     level: 2
     title: "2026-09-11: INSPIRE 監査は texkey から安定 identifier へ fallback"
+  - id: link-guard-and-safe-edit-tools
+    legacy: "2026-09-13"
+    level: 2
+    title: "2026-09-13: link の壊れ方を止める guard と、安全に書き換え・commit する道具 — 極性と既定値の判断"

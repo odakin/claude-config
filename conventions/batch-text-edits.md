@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき)
 category: infra
-summary: plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 5 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる / 1 回一致は prefix 形の key (path・識別子) を守らない = 長い別物の先頭に 1 回だけ一致して誤置換、 終端の区切りまで含めるか構文解析した単位で置換)
+summary: plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 6 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる / 1 回一致は prefix 形の key (path・識別子) を守らない = 長い別物の先頭に 1 回だけ一致して誤置換、 終端の区切りまで含めるか構文解析した単位で置換 / 挿入型の pair (new が old を含む) は再実行しても count==1 のまま通って二重に入る = 適用済み検査を足す。 機械化 = scripts/apply-text-pairs.py)
 -->
 # Batch text surgery — 一括置換 script の契約と失敗モード
 
@@ -18,8 +18,9 @@ for old, new in pairs:
 open(path, "w", encoding="utf-8").write(txt)
 ```
 
-- **契約**: 各 `old` は file 中に**正確に 1 回** match する。 0 件 (= typo / 既適用 / 別 file) も 2 件以上 (= 誤爆) も abort。 これは Edit tool の「唯一 match 保証」を N 件へ拡張したもの。
+- **契約**: 各 `old` は file 中に**正確に 1 回** match する。 0 件 (= typo / 既適用 / 別 file) も 2 件以上 (= 誤爆) も abort。 これは Edit tool の「唯一 match 保証」を N 件へ拡張したもの。 ⚠️ 「既適用なら 0 件」 は置換型の pair でしか成り立たない (挿入型 = [モード 6](#insertion-pair-rerun))。
 - **順序が本質**: read → **全 assert** → 全 replace → **単一 write**。 loop 内で write したり `sed -i` を逐次実行すると、 途中で失敗したとき「半分だけ当たった file」が disk に残る。
+- **機械化** = [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) `TARGET PAIRS.py`: 本契約 + [モード 5](#prefix-shaped-key) (old の端が長い token の途中) + [モード 6](#insertion-pair-rerun) (挿入型 pair の再実行) を検査し、 `--test CMD` なら patch 後の写しで test を通してから原子的に書く。 TARGET は必須引数 (既定の path を持たない)。
 
 **使い分け**:
 
@@ -28,7 +29,7 @@ open(path, "w", encoding="utf-8").write(txt)
 | 1-2 箇所 | Edit tool | 差分がそのまま可視になり人間 review が効く |
 | 3 箇所以上 / 長い string / 系統的 sweep | 本 pattern | 手数と転記ミスが線形に増えるのを止める |
 
-## <a id="batch-text-failure-modes"></a>5 つの失敗モード
+## <a id="batch-text-failure-modes"></a>6 つの失敗モード
 
 ### <a id="assert-does-not-gate-downstream"></a>1. assert の verdict は下流に伝わらない
 
@@ -82,7 +83,15 @@ open(path, "w", encoding="utf-8").write(txt)
 
 **なぜ起きるか**: 契約が数えるのは部分文字列の出現で、 `old` が**トークンの終わり**まで含むことは保証しない。 path・識別子・URL のように「長い別物の先頭」 になりうる key では、 1 回一致が正しい 1 回とは限らない。
 
-**対処**: `old` に**終端の区切り**まで含める (`](DESIGN.md)` / `](DESIGN.md#`)、 正規表現なら先読みで終端を要求する (`\]\(DESIGN\.md(?=[)#])`)。 構造を持つ対象 (markdown の link、 LaTeX の命令) は、 文字列置換でなく**構文解析した単位が完全一致した時だけ**書き換える道具を使う (link なら [`scripts/fix-md-links.py`](../scripts/fix-md-links.py)、 selftest に「素朴な `str.replace` が正しい sibling link を壊す」 foil)。
+**対処**: `old` に**終端の区切り**まで含める (`](DESIGN.md)` / `](DESIGN.md#`)、 正規表現なら先読みで終端を要求する (`\]\(DESIGN\.md(?=[)#])`)。 構造を持つ対象 (markdown の link、 LaTeX の命令) は、 文字列置換でなく**構文解析した単位が完全一致した時だけ**書き換える道具を使う (link なら [`scripts/fix-md-links.py`](../scripts/fix-md-links.py)、 selftest に「素朴な `str.replace` が正しい sibling link を壊す」 foil)。 文字列置換のまま進めるなら、 old の両端が識別子・path の途中でないことを検査する ([`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) は既定で拒否)。
+
+### <a id="insertion-pair-rerun"></a>6. 挿入型の pair は再実行しても「正確に 1 回」 を通る (2026-09-13)
+
+**症状**: 関数を足す patch を `old = "def selftest() -> int:\n"`、 `new = <足す関数> + old` の形で書いた。 同じ patch script を写しに当てるつもりで再実行し、 target の引数を付け忘れて本物の file に当てた。 **全 assert を通って 2 回目が入り**、 argparse の option が二重登録になって、 その CLI は起動時に落ちた。 同じ file を module として import する側は動き続けたので、 CLI を叩くまで気づけない形だった (約 1 分で写しから戻した)。
+
+**なぜ起きるか**: 置換型の pair は適用後に `old` が消えるので、 再実行は count==0 で止まる (契約の「0 件 = 既適用」)。 挿入型の pair は `new` の中に `old` が残るので、 適用後も count==1 のまま。 契約は 2 回目を区別できない。 さらに patch script が live な file を**既定の target** にしていると、 引数の付け忘れがそのまま本物への再適用になる。
+
+**対処**: (1) `old` が `new` に含まれる pair は、 **`new` が既に在れば拒否**する (適用済み検査)。 (2) patch script は target を必須引数にし、 既定値を持たせない。 (3) 書く前に patch 後の写しで test を通す ([hook-authoring.md#engine-edit-is-deploy](hook-authoring.md#engine-edit-is-deploy))。 3 つとも [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) が実装し、 selftest に「素朴な契約は再実行を通す」 foil がある。
 
 ## <a id="batch-text-verification"></a>適用後の検証
 
@@ -97,4 +106,4 @@ open(path, "w", encoding="utf-8").write(txt)
 - **byte 単位の文字列切り詰め** = [shell-multibyte-truncation.md](shell-multibyte-truncation.md)。 同じ「byte で見ろ」でも kernel は truncation であって matching ではない。
 - **docx / xlsx の中身を XML 文字列で置換する場合** = [office-automation.md#docx-fill-xml-edit](office-automation.md#docx-fill-xml-edit)。 binary container 固有の罠 (run 分割・宣言・rels 整合) が別途あるので、 本 doc の契約だけでは足りない。
 
-origin: 2026-07 の LaTeX 原稿改訂 session で本 pattern を約 10 回実戦投入 (最大 66 箇所を 1 pass) し、 上記 4 モードすべてを同日中に実測した。
+origin: 2026-07 の LaTeX 原稿改訂 session で本 pattern を約 10 回実戦投入 (最大 66 箇所を 1 pass) し、 上記 4 モードすべてを同日中に実測した。 モード 5・6 は 2026-09-13 (fleet の link 修正と script の hoist) で実測して追加。
