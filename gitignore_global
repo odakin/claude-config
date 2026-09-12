@@ -22,11 +22,15 @@ Thumbs.db
 # - launch.json: VS Code dev server 設定
 # - pre-commit-extra.sh: public-precommit-runner の repo-local extension
 #   (詳細: claude-config/DESIGN.md §2026-04-28 追補)
+# - preamble-aliases.json: LaTeX の preamble alias 検査の対象・例外、
+#   かつ「この repo を gate する」 opt-in switch。repo と一緒に travel する
+#   必要がある (詳細: conventions/latex.md#macro-alias-forcing-function)
 .claude/*
 !.claude/public-repo.marker
 !.claude/git-crypt-backup
 !.claude/launch.json
 !.claude/pre-commit-extra.sh
+!.claude/preamble-aliases.json
 
 # === LaTeX intermediates (NOT pdf — PDFs are tracked) ===
 *.aux
