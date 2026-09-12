@@ -261,6 +261,11 @@ line_of "$out" A repoN | grep -q "stash に残っている" \
 s7="$(printf '%s\n' "$out" | sed -n 's/.*stash した変更 (\([0-9a-f]*\)).*/\1/p' | head -1)"
 [ -n "$s7" ] && [ -z "$(cd "$ROOT/repoN" && git diff "$s7" -- $(git stash show --name-only "$s7"))" ] \
   && ok "案内した比較手順 (git diff <sha> -- <stash の file>) で worktree との一致を確かめられた" || ng "比較手順が使えない (sha='$s7')"
+# ⚠️ 案内の sha は full でなければならない: `git stash show|apply <N>` は数字だけの引数を stash@{N}
+#    と解釈するので、 short sha が全桁数字だと (7 桁で約 3.7%) 案内どおり打つと壊れる。
+#    上の比較手順 assert だけでは、 その 3.7% を引いたときにしか落ちない (= CI の flaky になる)。
+[ "${#s7}" -eq 40 ] && ok "案内の sha は full (= 全桁数字の short sha が stash@{N} と誤解される穴を塞いだ)" \
+  || ng "案内の sha が ${#s7} 桁 ('$s7') — full でないと全桁数字のとき git stash show/apply が stash@{N} と解釈する"
 grep -q local-wip "$ROOT/repoN/g.txt" && ok "変更は worktree に在る" || ng "変更が消えた"
 
 echo "=== T17: stash push が何も作らなかった (直前に別 process が stash) → 他人の stash を pop せず中止 ==="

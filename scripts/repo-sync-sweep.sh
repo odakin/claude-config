@@ -210,14 +210,19 @@ _stash_ref_of() {  # stash の sha → stash@{N} (stash list に無ければ空)
   git stash list --format='%gd %H' 2>/dev/null | awk -v s="$1" '$2==s{print $1; exit}'
 }
 _stash_whereabouts() {  # $1 = repo 名, $2 = stash の sha → stash list で確かめた所在と次の手順 (1 行)
-  local r s7
+  local r s7 sf
   r="$(_stash_ref_of "$2")"; s7="$(git rev-parse --short "$2" 2>/dev/null)"
+  # ⚠️ 案内する command に short sha を埋めない: `git stash show|apply <N>` は数字だけの引数を
+  #    stash@{N} と解釈するので、 short sha がたまたま全桁数字だと (7 桁なら約 3.7%) 案内どおり
+  #    打った user が "refs/stash@{...} is not a valid reference" で詰まる。 stash list に在る間は
+  #    stash@{N} を、 無ければ full sha を渡す (40 桁が全桁数字になる確率は無視できる)。
+  sf="$(git rev-parse "$2" 2>/dev/null)"; [ -n "$sf" ] || sf="$2"
   if [ -n "$r" ]; then
     printf '**未 commit の変更は stash に残っている (確認済: %s = %s)** → cd %s/%s && git status  (解消したら git stash drop %s。 unmerged path があると git checkout -- . は効かない — 作業前に戻すなら git reset --hard、 変更の中身は git stash show -p %s)' \
-      "$r" "$s7" "$_DISP" "$1" "$r" "$s7"
+      "$r" "$s7" "$_DISP" "$1" "$r" "$r"
   else
     printf 'stash した変更 (%s) は **stash list に無い = stash には残っていない** (別 process が pop / drop した可能性) → 中身 = git -C %s/%s stash show -p %s / worktree に在るか = cd %s/%s && git diff %s -- $(git stash show --name-only %s)  (空なら同じ変更が在る。 upstream も同じ file を変えていれば差分が出る) / 戻すなら git stash apply %s / sha を見失ったら git fsck --unreachable --no-reflogs の commit を git log -1 --format=%%s で見て "sync-sweep auto" を探す' \
-      "$s7" "$_DISP" "$1" "$s7" "$_DISP" "$1" "$s7" "$s7" "$s7"
+      "$sf" "$_DISP" "$1" "$sf" "$_DISP" "$1" "$sf" "$sf" "$sf"
   fi
 }
 _test_hold() {  # test 専用: 並走の窓を決定的に開ける (CLAUDE_SYNC_SWEEP_TEST=1 の時だけ効く)
