@@ -264,6 +264,8 @@ s7="$(printf '%s\n' "$out" | sed -n 's/.*stash した変更 (\([0-9a-f]*\)).*/\1
 # ⚠️ 案内の sha は full でなければならない: `git stash show|apply <N>` は数字だけの引数を stash@{N}
 #    と解釈するので、 short sha が全桁数字だと (7 桁で約 3.7%) 案内どおり打つと壊れる。
 #    上の比較手順 assert だけでは、 その 3.7% を引いたときにしか落ちない (= CI の flaky になる)。
+#    一般則 = conventions/shell-env.md#ambiguous-identifier-in-issued-commands
+#            + conventions/debugging-discipline.md#flaky-is-a-symptom
 [ "${#s7}" -eq 40 ] && ok "案内の sha は full (= 全桁数字の short sha が stash@{N} と誤解される穴を塞いだ)" \
   || ng "案内の sha が ${#s7} 桁 ('$s7') — full でないと全桁数字のとき git stash show/apply が stash@{N} と解釈する"
 grep -q local-wip "$ROOT/repoN/g.txt" && ok "変更は worktree に在る" || ng "変更が消えた"

@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** + **Claude が Bash tool で複数の対象を loop で走査する 1-liner を書く瞬間** (= zsh は未 quote の変数を単語分割しない、 `#claude-issued-shell-commands`) + **変数の直後に `:` を書く瞬間** (= `"$c:path"` は zsh の修飾子になる) (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
 category: macos
-summary: シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール） + ユーザーに貼り付けさせるコマンドの zsh 固有罠 2 件 (= 行内 # はコメントにならない / `env VAR=~/x` は tilde 展開されず literal `~` dir が cwd 配下に生える、 どちらも bash では踏まない非対称。 framework は paste-destined-plain-text.md) + 受け手側の保険 = `.zshrc` に `setopt interactive_comments` (= 1 行で行内/行頭 # とも直るが、 提示先の環境を選べない以上 出し手の規律の代替にはならない) + Claude が発行するコマンドも zsh (= 未 quote の変数は単語分割されず、 cd 失敗後も loop が別の対象を走査して結果を返した 2026-09-11 の 2 件目で規約化。 対象の解決に失敗したら止め、 何を走査したかを印字する。 3 件目 = `"$c:path"` の `:s` が置換修飾子として残りを飲み込み別の object を表示した、 `${c}:path` と書く)
+summary: シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール） + ユーザーに貼り付けさせるコマンドの zsh 固有罠 2 件 (= 行内 # はコメントにならない / `env VAR=~/x` は tilde 展開されず literal `~` dir が cwd 配下に生える、 どちらも bash では踏まない非対称。 framework は paste-destined-plain-text.md) + 受け手側の保険 = `.zshrc` に `setopt interactive_comments` (= 1 行で行内/行頭 # とも直るが、 提示先の環境を選べない以上 出し手の規律の代替にはならない) + Claude が発行するコマンドも zsh (= 未 quote の変数は単語分割されず、 cd 失敗後も loop が別の対象を走査して結果を返した 2026-09-11 の 2 件目で規約化。 対象の解決に失敗したら止め、 何を走査したかを印字する。 3 件目 = `"$c:path"` の `:s` が置換修飾子として残りを飲み込み別の object を表示した、 `${c}:path` と書く) + `#ambiguous-identifier-in-issued-commands` = 受け手は shell とは限らない — コマンドに埋める識別子が**受け手の別構文と一致**すると違う対象を指す (= short sha が全桁数字だと `git stash show <N>` が stash index と解釈。 確率的にしか落ちないので CI の flaky に化ける → test には性質そのものを固定する)
 -->
 # シェル環境（Claude Code + macOS）
 
@@ -254,6 +254,27 @@ l="pre(post)"; print -r -- "${l##*\(}"   # zsh でも通る (= ( を escape)
 **3 件目 (2026-09-11) — `"$var:…"` は zsh の修飾子になる**。 run 履歴の commit ごとに `git show "$c:scripts/x.test.sh"` (= その commit の file を表示) と書いた。 zsh は `$c` の直後の `:s…` を置換修飾子 (`:s/old/new/`、 区切り文字は `s` の次の 1 文字 = ここでは `c`) と読んで残りの文字列を飲み込み、 `git show 07866f1` (= commit 全体の diff) を実行した。 後段の grep は diff の行を拾って「行番号」 を返し、 別の commit では 0 件になった。 error は出ず、 別の対象を検査した結果がそれらしい形で返る = 2 件目と同じ mode。 zsh 5.9 の実測: `c=07866f1; print -r -- "[$c:scripts/x]"` → `[07866f1` (閉じ括弧まで消える)、 `x=v1; print -r -- "$x:a"` → cwd を前置した絶対 path、 `d=/a/b.c` で `"$d:t" "$d:h" "$d:r" "$d:e"` → `b.c` `/a` `/a/b` `c`。 bash ではどれも literal。 `"${c}:scripts/x"` と波括弧で閉じれば zsh でも literal になる。 `:` の次が修飾子の文字 (`a` `A` `c` `e` `h` `l` `q` `Q` `r` `s` `t` `u` 等) のときだけ壊れるので、 `rev:path`・`host:port`・`$remote:$branch` のどれが壊れるかは見た目では分からない。 常に波括弧で閉じる。
 
 兄弟 = 「Bash tool は bash script ではない」 の別の現れ: [`edit-intent-record.md#apply-then-record`](../../ai-collaboration/conventions/edit-intent-record.md#apply-then-record) の shell 注 (Bash tool の最上位では `set -e` が効かない、 gate を pipe の後ろに置かない、 2026-09-11)。 1 件目を記録していたので 2 件目で規約化できた (上の「記録されない残骸は trigger を持たない」 が機能した例)。
+
+## <a id="ambiguous-identifier-in-issued-commands"></a>渡すコマンドに埋める識別子は、 受け手が別の意味に取れない形にする (2026-09-12)
+
+兄弟 2 節 (`#` と `~`) は **shell** が値を再解釈する罠だったが、 同じ族は **コマンド自身の引数パーサ**でも起きる。 値そのものは正しいのに、 埋めた文字列がたまたま別の構文と一致すると、 受け手が違う対象を指す。
+
+実例: `git stash show|apply|drop <N>` は **数字だけの引数を `stash@{N}` (= stash list の N 番目) と解釈する**。 ∴ 案内に **short sha** を埋めると、 その sha がたまたま全桁数字のとき (7 桁なら (10/16)^7 ≈ **3.7%**) 別物を指して壊れる:
+
+```sh
+git stash show --name-only 1234567   # fatal: log for 'refs/stash' only has 1 entries  ← stash index 扱い
+git stash show --name-only 123456a   # error: 123456a is not a valid reference         ← revision 扱い (期待どおり)
+```
+
+→ **曖昧でない形を選ぶ**。 上の例なら stash list に在る間は `stash@{N}`、 無ければ **full sha** (40 桁が全桁数字になる確率は無視できる)。 一般には:
+
+- 識別子を埋める前に「この文字列は受け手の別構文と一致しうるか」 を 1 回問う (数字だけ / `-` 始まり / `@{…}` / path や glob に見える)
+- 曖昧なら**明示構文**に寄せる (`stash@{N}` / `<sha>^{commit}` / option 終端の `--` / `./<file>`)
+- 短縮形は**人が読む欄**にだけ置き、 **実行される欄には曖昧でない形**を書く (= 表示と実行を分ける)
+
+⚠️ この class は**確率的にしか発火しない**ので、 当たりを引くまで通り続け、 引いた回だけ落ちる = CI の flaky に化ける ([`debugging-discipline.md#flaky-is-a-symptom`](debugging-discipline.md#flaky-is-a-symptom))。 ∴ test には**性質そのもの**を固定する (例:「案内の sha は full である」)。 結果だけを見る assert は 3.7% でしか落ちない。
+
+**背景 (2026-09-12)**: [`scripts/repo-sync-sweep.sh`](../scripts/repo-sync-sweep.sh) の「stash が別 process に pop された」 案内が short sha を埋めており、 CI で 1 回だけ `FAIL: 比較手順が使えない (sha='1168850')`。 再実行で緑になるので flaky に見えたが、 実体は **3.7% で user に壊れた手順を渡していた**バグだった。
 
 ## <a id="bound-command-runtime"></a>Bind reusable command runtimes at installation
 

@@ -216,6 +216,7 @@ _stash_whereabouts() {  # $1 = repo 名, $2 = stash の sha → stash list で�
   #    stash@{N} と解釈するので、 short sha がたまたま全桁数字だと (7 桁なら約 3.7%) 案内どおり
   #    打った user が "refs/stash@{...} is not a valid reference" で詰まる。 stash list に在る間は
   #    stash@{N} を、 無ければ full sha を渡す (40 桁が全桁数字になる確率は無視できる)。
+  #    一般則 = conventions/shell-env.md#ambiguous-identifier-in-issued-commands
   sf="$(git rev-parse "$2" 2>/dev/null)"; [ -n "$sf" ] || sf="$2"
   if [ -n "$r" ]; then
     printf '**未 commit の変更は stash に残っている (確認済: %s = %s)** → cd %s/%s && git status  (解消したら git stash drop %s。 unmerged path があると git checkout -- . は効かない — 作業前に戻すなら git reset --hard、 変更の中身は git stash show -p %s)' \
