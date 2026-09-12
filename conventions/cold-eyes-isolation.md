@@ -16,3 +16,4 @@ summary: → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/
 | <a id="spec-leakage"></a>`#spec-leakage` — 3. spec に書いてよいこと・書いてはいけないこと | [`cold-eyes-isolation.md#spec-leakage`](../../ai-collaboration/conventions/cold-eyes-isolation.md#spec-leakage) |
 | <a id="post-check"></a>`#post-check` — 4. 受領後の汚染 check | [`cold-eyes-isolation.md#post-check`](../../ai-collaboration/conventions/cold-eyes-isolation.md#post-check) |
 | <a id="external-paper-variant"></a>`#external-paper-variant` — 4.5 変種: 外部論文の検証読み (verify-to-learn) は sandbox でなく deny list  | [`cold-eyes-isolation.md#external-paper-variant`](../../ai-collaboration/conventions/cold-eyes-isolation.md#external-paper-variant) |
+| <a id="staged-blind"></a>`#staged-blind` — 段数は「審査 process の段数」 に合わせる (移設後に新設 2026-09; 転送のみ) | [`cold-eyes-isolation.md#staged-blind`](../../ai-collaboration/conventions/cold-eyes-isolation.md#staged-blind) |

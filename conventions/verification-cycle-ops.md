@@ -19,3 +19,4 @@ summary: → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/
 | <a id="fresh-session"></a>`#fresh-session` — 5. fresh な session が最初にやること (= 手順の全部) | [`verification-cycle-ops.md#fresh-session`](../../ai-collaboration/conventions/verification-cycle-ops.md#fresh-session) |
 | <a id="failure-modes"></a>`#failure-modes` — 6. 想定する壊れ方と検出 | [`verification-cycle-ops.md#failure-modes`](../../ai-collaboration/conventions/verification-cycle-ops.md#failure-modes) |
 | <a id="limits"></a>`#limits` — 7. 正直な限界 | [`verification-cycle-ops.md#limits`](../../ai-collaboration/conventions/verification-cycle-ops.md#limits) |
+| <a id="hoist-station"></a>`#hoist-station` — 3.5 昇格 station (移設後に新設 2026-09-06; 転送のみ) | [`verification-cycle-ops.md#hoist-station`](../../ai-collaboration/conventions/verification-cycle-ops.md#hoist-station) |

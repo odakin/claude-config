@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""markdown の `#anchor` 付き link を PATH で解決し、着地先の file にその anchor が実在するかを検査する (repo 内の自己参照も対象、 basename 一致でなく path 解決なので同名 file が複数 repo にあっても取り違えない)。--selftest 内蔵。
+
+[`check-inbound-refs.py`](check-inbound-refs.py) との分担:
+
+- `check-inbound-refs.py` = 「**この repo を restructure したら下流が壊れるか**」。 target repo への
+  参照を **basename** で索引し、 target の外にある source を走査する。 target repo の内部参照は
+  「その repo の自分の問題」 として意図的に除外している。
+- 本 script = 「**書いた link は、 その path が指す file でちゃんと解決するか**」。 全 file の全 link を
+  path で解決するので、 **同じ file の中の自己参照**も、 **repo をまたぐ相対 path**も見る。
+
+2026-09-06 の layer-1 分割 (5 doc が claude-config → ai-collaboration、 claude-config には転送 stub が
+残る) 以降、 同じ basename が 2 repo に在る。 basename 索引はこれを取り違えるので、 path 解決の目が
+別に要る (2026-09-12: 取り違えで 29 件の偽陽性、 同時に**既存の検査がどれも見ていなかった壊れた
+自己参照**が 20 件以上見つかった)。
+
+使い方:
+
+    python3 check-md-anchors.py                     # ~/Claude 配下を全部
+    python3 check-md-anchors.py --base ~/Claude --repo claude-config --repo ai-collaboration
+    python3 check-md-anchors.py --list              # 壊れている参照元を全部出す
+    python3 check-md-anchors.py --quiet             # 緑のときは何も言わない
+
+anchor は 明示の `<a id="...">` / `id='...'` と、 見出しから作る GitHub 風 slug の和で判定する
+(slug の計算は `check-inbound-refs.py` の `gh_slug` を import して共有 = 2 実装にしない)。
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from importlib import import_module
+    gh_slug = import_module("check-inbound-refs".replace("-", "_")).gh_slug  # type: ignore
+except Exception:                                     # module name has dashes; load by path
+    import importlib.util
+    _p = Path(__file__).with_name("check-inbound-refs.py")
+    _spec = importlib.util.spec_from_file_location("_cir", _p)
+    _m = importlib.util.module_from_spec(_spec)        # type: ignore
+    _spec.loader.exec_module(_m)                       # type: ignore
+    gh_slug = _m.gh_slug
+
+SKIP_DIRS = {".git", "node_modules", "_site", "build", "dist", ".venv", "venv",
+             ".next", "out", "__pycache__", ".cache", "worktrees", "PackageCache"}
+LINK = re.compile(r"\[[^\]]*\]\((?!https?:|mailto:|#?$)([^)\s]+)\)")
+EXPLICIT = re.compile(r"""id=["']([^"']+)["']""")
+_cache: dict[Path, set] = {}
+
+
+def anchors_of(p: Path) -> set:
+    if p in _cache:
+        return _cache[p]
+    try:
+        body = p.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        _cache[p] = set()
+        return _cache[p]
+    ids = set(EXPLICIT.findall(body))
+    for h in re.findall(r"^#{1,6}\s+(.*)$", body, re.M):
+        ids.add(gh_slug(re.sub(r"<a id=[\"'][^\"']+[\"']></a>", "", h)))
+    _cache[p] = ids
+    return ids
+
+
+def scan(base: Path, repos: list[str]) -> tuple[dict[str, list[str]], int]:
+    broken: dict[str, list[str]] = {}
+    checked = 0
+    roots = [base / r for r in repos] if repos else [base]
+    for root in roots:
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            for fn in filenames:
+                if not fn.endswith(".md"):
+                    continue
+                src = Path(dirpath) / fn
+                try:
+                    text = src.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    continue
+                for m in LINK.finditer(text):
+                    path_part, sep, frag = m.group(1).partition("#")
+                    if not sep or not frag:
+                        continue
+                    dest = (src.parent / path_part).resolve() if path_part else src
+                    checked += 1
+                    if not dest.exists() or dest.suffix != ".md":
+                        continue          # missing paths are check-inbound-refs' business
+                    if frag not in anchors_of(dest):
+                        try:
+                            key = f"{dest.relative_to(base)}#{frag}"
+                        except ValueError:
+                            key = f"{dest}#{frag}"
+                        broken.setdefault(key, []).append(str(src.relative_to(base)))
+    return broken, checked
+
+
+def selftest() -> int:
+    import tempfile
+    ok = True
+
+    def check(label: str, cond: bool) -> None:
+        nonlocal ok
+        print(f"[{'PASS' if cond else 'FAIL'}] {label}")
+        ok = ok and cond
+
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        (base / "r1").mkdir()
+        (base / "r2").mkdir()
+        # r2/doc.md holds the real anchor; r1/doc.md is a stub WITHOUT it (the split shape)
+        (base / "r2" / "doc.md").write_text(
+            '<a id="real"></a>\n## Some Heading\n', encoding="utf-8")
+        (base / "r1" / "doc.md").write_text("stub, no anchors\n", encoding="utf-8")
+        (base / "r1" / "src.md").write_text(
+            "ok cross-repo [x](../r2/doc.md#real)\n"
+            "ok heading slug [y](../r2/doc.md#some-heading)\n"
+            "broken [z](../r2/doc.md#missing)\n"
+            "self ok [s](#here)\n<a id=\"here\"></a>\n"
+            "self broken [t](#nowhere)\n"
+            "no fragment [u](../r2/doc.md)\n"
+            "external [v](https://example.com/a#b)\n", encoding="utf-8")
+        broken, checked = scan(base, [])
+        keys = set(broken)
+        check("cross-repo link to the real anchor resolves (not matched against the stub)",
+              not any("#real" in k for k in keys))
+        check("heading slug resolves", not any("some-heading" in k for k in keys))
+        check("broken cross-repo anchor is reported", any(k.endswith("doc.md#missing")
+                                                          for k in keys))
+        check("broken SAME-FILE anchor is reported  [check-inbound-refs does not look here]",
+              any(k.endswith("src.md#nowhere") for k in keys))
+        check("working same-file anchor is not reported", not any("#here" in k for k in keys))
+        # 7 links in the fixture; the external one and the fragment-less one are not counted
+        check("external and fragment-less links are ignored", checked == 5)
+        check("exactly 2 broken", len(broken) == 2)
+
+    print("\nALL PASS" if ok else "\nFAILED")
+    return 0 if ok else 1
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    p.add_argument("--base", type=Path, default=Path.home() / "Claude")
+    p.add_argument("--repo", action="append", default=[])
+    p.add_argument("--list", action="store_true", help="print every source of every break")
+    p.add_argument("--quiet", action="store_true")
+    p.add_argument("--selftest", action="store_true")
+    a = p.parse_args()
+    if a.selftest:
+        return selftest()
+
+    broken, checked = scan(a.base, a.repo)
+    if not broken:
+        if not a.quiet:
+            print(f"[check-md-anchors] {checked} anchored link(s): all resolve")
+        return 0
+    total = sum(len(v) for v in broken.values())
+    print(f"[check-md-anchors] {total} ref(s) to {len(broken)} anchor(s) that do not exist "
+          f"in the file the path lands on (of {checked} checked)")
+    for key, srcs in sorted(broken.items(), key=lambda kv: -len(kv[1])):
+        print(f"  {key}   <- {len(srcs)} ref(s)")
+        for s in (srcs if a.list else srcs[:2]):
+            print(f"      {s}")
+        if not a.list and len(srcs) > 2:
+            print(f"      ... +{len(srcs) - 2} (--list for all)")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

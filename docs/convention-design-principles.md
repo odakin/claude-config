@@ -1942,6 +1942,12 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 3. **relocate したら旧 path を redirect** (= thin pointer file) するか、 同 commit で下流 fix (§15 step3 の「外部が指す path を dangle させない」)。
 4. **cross-repo sweep を同梱** (= §2.2「衝突宣言 sweep」 の cross-repo 版): restructure commit の前後で `scripts/check-inbound-refs.py` を回し、 HARD dangling (= 消えた file / anchor) を baseline に保つ。
 
+**(E) 分割 (split) は、 検出器と転送 stub の両方に固有の腐り方を持ち込む (2026-09-12 実測、 layer-1 分割の 6 日後)**:
+
+1. <a id="basename-index-collides-after-split"></a>**basename 索引は分割後に取り違える** — (C) の検出器は target repo の `*.md` を **basename** で索引する。 分割で同じ名前の doc が 2 repo に在る (新 home + 転送 stub) と、 **新 home へ path で正しく指している ref** が stub の anchor 集合と照合されて dangling と報告される。 実測 29 件の偽陽性で、 そのうち 2 件は同日に書かれたばかりの正しい ref だった。 ∴ ref が明示 path を持つなら **path で解決してから** basename 判定に落とす (修正済。 偽陽性 29 → 1、 残る 1 は本当に間違っていた path)。 偽陽性を放置した検出器は読まれなくなるので、 これは精度でなく**生存**の問題 ([`#firing-surface-hierarchy`](#firing-surface-hierarchy) と同じ理由)。
+2. <a id="forwarding-stub-is-a-snapshot"></a>**転送 stub は分割時点の snapshot** — stub の anchor 表は移設の瞬間に存在した anchor だけを持つ。 **移設後に新 home へ足した節には転送先が無い**ので、 それを名前で指す ref (= `doc.md#new-anchor` と地の文で書く形) は最初から壊れている。 しかも壊れ方が**単調増加**する (新 home に節を足すたびに増える)。 実測: 分割 6 日で 4 anchor が転送先を持たず、 19 件の ref が届かなくなっていた。 ∴ **移設済 doc に節を足したら、 同じ turn で stub に転送行を足す** (既存 stub には「移設後に新設; 転送のみ」 と注記された前例がある = 規律は在ったが毎回は守られていなかった型 = [`#documented-not-wired`](#documented-not-wired))。
+3. <a id="self-reference-is-nobodys-business"></a>**「その repo の内部参照はその repo の自分の問題」 が誰の問題でもなくなる** — (C) の検出器は設計上 target repo の内部 ref を除外する。 各 repo 側にそれを見る検査が無いと、 **同じ file の中の壊れた `#anchor`** (見出しを書き換えた・複数形の typo) は誰にも見られない。 実測: config 3 repo の 2487 link に 21 件 (単数複数の取り違え・消えた見出し・TOC の自己 link)。 ∴ path 解決で全 link を見る目を別に置く = [`scripts/check-md-anchors.py`](../scripts/check-md-anchors.py) (basename でなく path で解決するので 1 の取り違えも起きない。 (C) の検出器とは問いが違う = あちらは「restructure で下流が壊れるか」、 こちらは「書いた link がその path で解決するか」)。
+
 **(C) 検出器とその限界 (= 正直に明示)**: `scripts/check-inbound-refs.py` は **anchor 存在 / path 存在**という mechanically-checkable な HARD dangling のみ検出する。 **positional `§N.M` が renumber 後も同じ意味を指すか (= silent mis-resolve) は検出できない** (= §8.8 の semantic blind spot)。 ∴ §-ref を anchor に migrate するのが唯一の真の fix で、 検出器はその補完にすぎない (= fragile 件数を INFO で出すだけ、 「全部見た」 と読ませない §8.8 (3))。
 
 由来: 2026-06-16、 inbound ref を実測 (= ~1000 行が layer-1 doc を名指し、 robust な anchor 形は ~20、 fragile な positional は ~440) し、 「restructure すると下流が黙って壊れる」 構造を確認。 帰結として **slug 化の優先順位は内部 sub-section 数でなく inbound ref 数で決める** (= 最も参照される doc から slug-first)。 incident/設計史は個人層 plan に残置 (= kernel-up / instance-down)。
@@ -2196,7 +2202,7 @@ origin: 2026-09、外部システムへの提出作業で、4 対象ぶんの明
 
 1. **規則は premise を落として運ばれる** (= [§16 (= #derive-not-summarize)](#derive-not-summarize) の規則ドメイン版)。 「A さんの印が要る」 は運びやすく、 「A さんが当時の資金の責任者だったから」 は運搬の途中で落ちる。
 2. **切替は上流 1 箇所の event、 影響は下流 N 箇所**。 切替を記録した doc (= 差分 section) は誠実に書かれても、 「この切替で無効になる既存規則の list」 は書かれないことが多い。 差分 doc は **新しく増えること**を列挙する形式に自然と偏る。
-3. **失効した規則は動作する** — 誰かが余計な承認を取りに行くだけで手続きは通ってしまうので、 誤りが露出しない (= [§8.8 (= #proxy-blind-spots)](#proxy-blind-spots) の silent 側)。 露出するのは「その承認者が不在で詰む」 等の別事情が重なった時だけ。
+3. **失効した規則は動作する** — 誰かが余計な承認を取りに行くだけで手続きは通ってしまうので、 誤りが露出しない (= [§8.8 (= #proxy-blind-spot)](#proxy-blind-spot) の silent 側)。 露出するのは「その承認者が不在で詰む」 等の別事情が重なった時だけ。
 
 ### <a id="premise-expiry-pattern"></a>20.3 pattern
 

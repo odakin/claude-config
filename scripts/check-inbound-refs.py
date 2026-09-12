@@ -114,6 +114,7 @@ def build_target_index(target_dir):
 def scan(base, target_name, docs, relpaths):
     target_dir = os.path.join(base, target_name)
     anchor_re = re.compile(r'([A-Za-z0-9_.\-]+\.md)#([A-Za-z0-9_\-]+)')
+    md_link_re = re.compile(r'\]\(([^)\s]+)\)')   # markdown link target, for path resolution
     # `\.md` may carry a scaffold suffix (`X.md.template`, `X.md.example`); capture it so
     # a ref to `templates/.../SETUP.md.template` checks the real file, not a phantom `SETUP.md`
     # (2026-06-23: false-positive fix — bare `\.md` stopped at the wrong extension boundary).
@@ -147,8 +148,26 @@ def scan(base, target_name, docs, relpaths):
             sink = code_soft if f.endswith(('.py', '.sh')) else hard
             for ln, line in enumerate(txt.splitlines(), 1):
                 src_repo = relfp.split(os.sep, 1)[0]
+                # A bare-basename index collides when the SAME doc name lives in more than one
+                # repo. The 2026-09-06 split moved 5 docs claude-config -> ai-collaboration and
+                # left forwarding stubs behind, so every ref that PATHS into the new home was
+                # being matched against the stub's anchor set (29 false positives, 2026-09-12).
+                # An occurrence whose own relative path resolves to a file outside the target
+                # repo is not a reference into the target repo at all.
+                resolved_elsewhere = set()
+                for lm in md_link_re.finditer(line):
+                    tgt = lm.group(1)
+                    p, sep, slug_e = tgt.partition('#')
+                    if not sep or not p:
+                        continue
+                    cand = os.path.normpath(os.path.join(os.path.dirname(fp), p))
+                    if os.path.exists(cand) and not (
+                            cand == target_dir or cand.startswith(target_dir + os.sep)):
+                        resolved_elsewhere.add((os.path.basename(p), slug_e))
                 for m in anchor_re.finditer(line):
                     bn, slug = m.group(1), m.group(2)
+                    if (bn, slug) in resolved_elsewhere:
+                        continue  # explicit path lands in another repo
                     if bn in docs and slug not in docs[bn]:
                         if src_repo not in local_md_cache:
                             names = set()
