@@ -1196,6 +1196,7 @@ dismiss されやすいが、対立値の提示は解釈の余地を残さない
 ✅ / 🔴 真陽性 / ⃠ 未検証 を判別する (材料: 前回値との差分 / 同 run の control / 表の見出し等の構造痕跡)。
 
 **scope 規律**: 免罪を convention / docstring に昇格させるときは、**観察した scope をそのまま書く**
+(= 「測った」 と「説明した」 を書式で分ける規律は [#measured-vs-inferred-provenance](#measured-vs-inferred-provenance))
 (「1 件で観察」 を「2 件とも実測」 と書かない)。§9.8 は「単一観察から構造**対策**に飛ばない」 を言うが、
 本節はその**鏡像で、鏡像の方が危険**である (上の性質 1)。
 関連: [#set-diff-false-positive](#set-diff-false-positive) は**検出器に作り込む filter** の話で、
@@ -1248,6 +1249,39 @@ origin: 2026-09、申請の再提出で、`submitted/<日付>/` に「上げる�
 検査はそれを黙ったまま「✓ 全項目一致 — 送信してよい」 を出していた
 (= 1 個だけ置いた dir でも同じ文言が出ることを実測)。その画面側の指摘 5 件は一度も機械照合されず、
 人手の目視だけが最後の砦だった。
+
+### <a id="measured-vs-inferred-provenance"></a>8.40 doc の一文は「測った」 と「説明した」 を書式で分ける — 説明は観察の権威を借りる
+
+検査や観察を記録するとき、散文は **2 つの別種のもの**を同じ姿で書ける:
+
+- **観察**: 検査が何を出したか (= 再現できる)
+- **説明**: なぜそう出たのか (= 多くは仮説)
+
+このとき説明の側に日付と「実測」 を付けると、**説明が観察の権威を借りる**。読む側 (数日後の自分・
+別の session・user) には両者が区別できないので、仮説が「確かめられた事実」 として下流を縛る。
+
+**特に危険なのは、その主張が検出器を黙らせる根拠になるとき** ([#false-positive-declaration-needs-control](#false-positive-declaration-needs-control))。
+普通の誤った fact は、それに基づいて何かをすれば破綻が見える。**検出器を黙らせる fact の失敗は沈黙**なので、
+誤りのまま何年でも生き延びる。
+
+**pattern**:
+
+1. **観察の文と説明の文を分けて書く**。同じ文に混ぜない。
+2. **「実測」 の scope は実際に走らせた対象と一致させる**。1 件で観察したことを「2 件とも実測」 と書かない
+   (= 複数形は測定の主張であって、見込みの表明ではない)。
+3. **検出器を黙らせる根拠になる主張は、実測でなければ書かない**。推定しか無いなら「未検証」 と書き、
+   検出器側にも ⃠ (= 第三の状態) を出させる ([#required-field-fabrication](#required-field-fabrication) と同じ
+   「無いを機械可読にする」)。
+4. 下流は**書式で信じる**。doc の一文は次の session にも user への助言にも等しく効く、と想定して書く。
+
+§2.6 [#time-decaying-fact-authoring](#time-decaying-fact-authoring) が「いつ真だったか」 を要求するのに対し、
+本節は「**どうやって知ったか**」 を要求する。両方とも undated/unsourced な断定を禁じる規律。
+
+origin: 2026-09、申請の入力後検収で、検査が 1 対象に出した ✗ の**説明**として立てた仮説
+(「この様式では明細行が印字されない」) が、同じ turn のうちに script の docstring へ
+「(実測、2 件とも)」 という形で焼かれ、同日 layer 1 にも landed した。実際には測っていない。
+4 日後、その一文は (a) 別 session の診断の前提になり (b) **user への助言 (「画面を目視するしか検証手段が無い」)
+にまで伝播**し、独立の再実測で初めて覆った。伝播経路のどこにも「これは仮説だ」 と読める手がかりは無かった。
 
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
@@ -2227,6 +2261,7 @@ field を optional に戻すと item が radar から消える (= 機構が必�
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
+| 2026-09-12 | §8.40 新設「doc の一文は『測った』 と『説明した』 を書式で分ける — 説明は観察の権威を借りる」 | §8.38 と同じ incident の第 3 面。検査が 1 対象に出した ✗ の**説明**として立てた仮説が、同じ turn のうちに script の docstring へ「(実測、2 件とも)」 という形で焼かれ、同日 layer 1 にも landed した (実際には測っていない)。4 日後、その一文は別 session の診断の前提になり、**user への助言 (「画面を目視するしか検証手段が無い」) にまで伝播**して、独立の再実測で初めて覆った。伝播経路のどこにも「これは仮説だ」 と読める手がかりが無かったのが本体。kernel = 観察文と説明文を分ける / 「実測」 の scope は走らせた対象と一致させる / **検出器を黙らせる根拠になる主張は実測でなければ書かない** (= 失敗が沈黙になる class なので敷居を上げる) / 下流は書式で信じる。§2.6 が「いつ真だったか」 を要求するのに対し本節は「どうやって知ったか」 を要求する。forensics で確定した事実: 反証 (= 同じ様式の別対象が ✓) が同じ dir に置かれてから誤った一般化が docstring に 書かれるまで **2 分 20 秒**、かつその一般化は**書かれた時点で既に、当時の script 自身によって偽**だった (当時版を当時の artifact に当てて再現済)。user の問い「前回もダウンロードして検収したよな? なんで見落としたんだ?」 が起点 |
 | 2026-09-12 | §8.38 新設「『偽陽性だ』 の宣言は主張である — positive control を出せないなら未検証」 + §8.39 新設「完了の記録は相手が返したものから作る」 + §8.9 / §8.32 から相互 link | layer-3 の申請 session で、入力後の突合 script が出した 9 件の ✗ を「この様式では印字されないから偽陽性」 という**確かめていない構造説明**で全部無効化して送信し、機関事務から**同じ指摘を 2 度**受けた。反証 (= 同じ様式の別対象が全行 ✓) は宣言の 1〜2 分前から同じ dir に在り、免罪は 16 分後に layer 1 へ「2 件とも実測」 として landed (= していない測定が実測として記録された)。§8.38 kernel = 免罪は自己隠蔽・class 全体に効く・寿命が長い、ゆえに (a) positive control (b) 別経路での直接観測 (c) どちらも不能なら「未検証」 の第三状態、+ 機械側は「不在」 でなく**対立値**を出す。§8.9 (detector の filter) との違いは「run 出力のその場の無効化は code にも doc にも残らない」 点。§8.32 の双対。同じ事故の 2 件目として、完了記録が**上げるはずだった artifact** から作られ、システムが返した反証と同じ dir に同居していた (+ 手順が要求する 8 個中 4 個しか集まっていないのに検査が「✓ 全項目一致 — 送信してよい」 を出す) ことを §8.39 に。evidence base は 1 事例だが blast radius (= 層 1 の誤りは毎年効く) で landing を判断。instance (verifier / 手順書 / 台帳) は個人層・project 側に残置 (kernel-up / instance-down)。user 依頼「完璧にしてくれ」 |
 | 2026-09-11 | §8.35 新設「resolver 出力は新しい trust boundary」+ §23 に field-wise `unknown`、保証値欠測のwarning、shared resolver所有を追記 | Codex Git-hook rollout で同じ session に二方向の resolver defect を観測: (a) `--repo-root` 内 candidate が symlink/Git解決後に root 外 checkout となりbulk write scopeを脱出、(b) `git rev-parse --git-path hooks` のrelative resultをcaller cwdへ誤anchorし、別repoのhookをMISSINGと誤報。入力検査→resolve→owner基準anchor→canonicalize→最終targetで再認可、を一般化。併せてCodex冒頭stampでaccount/effortが取れないため全stampを消すのでなく、host/surface/session/modelの既知fieldを残して未知fieldだけ`unknown`にする形を§23へ昇格。follow-up でactive modelのfallbackとwarningを追加し、一度はhard blockへ振ったが、「通常は取れる」と「絶対に欠測しない」は別でありprovenance縮退はcommit本体を不正にしない、というowner指摘でfail-openへ戻した。さらにstamp/cache/Gitの3 consumerに重複していた解決順をshared resolverへ集約した。instanceはCodex技術正本とinstaller/testに残置。user依頼「すべてのスクリプトと知見をなるべく上層に」 |
 | 2026-09-09 | §23 新設「必須にした field は、値が無いとき捏造される — 『無い』を機械可読にする第三の状態」 | layer-3 の TODO surface 機構で、「本人操作が要る item には deadline を必ず添える (自己設定で可)」という規約が、本来いつやってもよい作業に**拾わせるためだけの日付**を書かせていた。実測すると該当 6 件中 3 件が捏造で、本物の失効型期限 1 件がその中に並んで最上位 group に置かれていた (= 捏造が本物の信号を薄める狼少年)。owner が「なんで期限とかあるの?」と問うて初めて表面化 — 機構の内側からは捏造も本物も同じ「日付を持つ item」にしか見えない。kernel = 出自を宣言する第三の状態 + 設計要件 4 つ (無記載 = 従来の意味で移行不要 / loud 側 default / 「静かにする」であって「消す」ではない / 判別が自然言語なら機械化不能と declared) + 見分ける問い「値が無い item に書き手は何を書くか」。§8.28 壁紙化の上流にある別型 (cadence でなく severity の出自)。instance (marker field / 表示 tier / 除外する 3 経路) は個人層に残置 (kernel-up / instance-down)。user 依頼 (「すべての知見をなるべく上層に」) |

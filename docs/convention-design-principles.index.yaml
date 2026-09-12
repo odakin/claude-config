@@ -309,6 +309,10 @@ sections:
     legacy: "8.39"
     level: 3
     title: "8.39 完了の記録は「送ったもの」 でなく「相手が返したもの」 から作る"
+  - id: measured-vs-inferred-provenance
+    legacy: "8.40"
+    level: 3
+    title: "8.40 doc の一文は「測った」 と「説明した」 を書式で分ける — 説明は観察の権威を借りる"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
