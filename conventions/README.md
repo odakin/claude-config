@@ -156,7 +156,7 @@ layer 1 (public) のドメイン固有規約 107 file をカテゴリ別に列�
 ## 研究ドメイン (`research-domain`)
 
 - **[cold-eyes-isolation.md](cold-eyes-isolation.md)** — cold-eyes / 盲検 review を別 session に投げる前 / referee 版の原稿を用意する時 / review 結果の独立性を判定する時
-  - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/cold-eyes-isolation.md (汚染経路 6 口 / 封じた sandbox / spec に書いてよいこと / 受領後の汚染 grep)。 本 file は旧 anchor を保つ stub
+  - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/cold-eyes-isolation.md (汚染経路 7 口 / 封じた sandbox / spec に書いてよいこと / 審査文書の変種 / 受領後の汚染 grep)。 本 file は旧 anchor を保つ stub
 - **[collaborators.md](collaborators.md)** — 共同研究者 DB (collaborators.yaml) を作成・更新するとき
   - 共同研究者DB規約
 - **[physics-notes.md](physics-notes.md)** — 物理・数理ノートを書くとき

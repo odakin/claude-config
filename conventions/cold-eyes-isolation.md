@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: cold-eyes / 盲検 review を別 session に投げる前 / referee 版の原稿を用意する時 / review 結果の独立性を判定する時
 category: research-domain
-summary: → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/cold-eyes-isolation.md (汚染経路 6 口 / 封じた sandbox / spec に書いてよいこと / 受領後の汚染 grep)。 本 file は旧 anchor を保つ stub
+summary: → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/cold-eyes-isolation.md (汚染経路 7 口 / 封じた sandbox / spec に書いてよいこと / 審査文書の変種 / 受領後の汚染 grep)。 本 file は旧 anchor を保つ stub
 -->
 # cold-eyes-isolation.md — 移設済 stub (2026-09-06)
 
@@ -11,7 +11,7 @@ summary: → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/
 
 | 旧 anchor (この file) | 移設先 |
 |---|---|
-| <a id="contamination-channels"></a>`#contamination-channels` — 1. 汚染経路 — reviewer session に著者の結論が流れ込む 6 つの口 | [`cold-eyes-isolation.md#contamination-channels`](../../ai-collaboration/conventions/cold-eyes-isolation.md#contamination-channels) |
+| <a id="contamination-channels"></a>`#contamination-channels` — 1. 汚染経路 — reviewer session に著者の結論が流れ込む 7 つの口 | [`cold-eyes-isolation.md#contamination-channels`](../../ai-collaboration/conventions/cold-eyes-isolation.md#contamination-channels) |
 | <a id="sealed-sandbox"></a>`#sealed-sandbox` — 2. 封じた sandbox の recipe | [`cold-eyes-isolation.md#sealed-sandbox`](../../ai-collaboration/conventions/cold-eyes-isolation.md#sealed-sandbox) |
 | <a id="spec-leakage"></a>`#spec-leakage` — 3. spec に書いてよいこと・書いてはいけないこと | [`cold-eyes-isolation.md#spec-leakage`](../../ai-collaboration/conventions/cold-eyes-isolation.md#spec-leakage) |
 | <a id="post-check"></a>`#post-check` — 4. 受領後の汚染 check | [`cold-eyes-isolation.md#post-check`](../../ai-collaboration/conventions/cold-eyes-isolation.md#post-check) |
