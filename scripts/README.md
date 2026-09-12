@@ -28,6 +28,7 @@
 - **[check-form-clipping.py](check-form-clipping.py)** — 生成 form PDF で「記入値が描画時に clip された」のを機械検出。
 - **[check-inbound-refs.py](check-inbound-refs.py)** — safety net for restructuring claude-config (layer 1).
 - **[check-latex-crossrefs.py](check-latex-crossrefs.py)** — Find bare parenthetical cross-references in manuscripts adopting that style.
+- **[check-latexdiff-math-markup.py](check-latexdiff-math-markup.py)** — Gate against latexdiff silently dropping equation changes (2026-09-08).
 - **[check-legacy-append-only.py](check-legacy-append-only.py)** — the `legacy` forwarding map in a slug index must be
 - **[check-markup-artifacts.py](check-markup-artifacts.py)** — 赤入れ・校正済み現物の台帳漏れ / 未読 / 書き起こし消失を surface（config 駆動、スキャンは grep に掛からないので file 単位で持つ）
 - **[check-office-automation-index.py](check-office-automation-index.py)** — Validate office-automation.md against its slug index (office-automation.index.yaml).
@@ -59,6 +60,7 @@
 - **[docx_decl_patch.py](docx_decl_patch.py)** — python-docx の Document.save() を auto-patch し XML 宣言を Word 形式(double-quote+CRLF)で書く（厳格 Word の「破損」回避、 save 時 source 修正・lazy import hook、 office-automation.md#docx-checkbox-content-control）
 - **[dropbox-root.sh](dropbox-root.sh)** — Dropbox install root を OS 横断で resolve（dropbox-refs 規約用）
 - **[enhance-scan.py](enhance-scan.py)** — 手書き文書の撮影写真の可読化: 紙の切り出し + 照明ムラ除去 + コントラスト伸張 + タイル出力。
+- **[expand-display-math.py](expand-display-math.py)** — Expand the manuscript's display-math wrapper macros into real environments.
 - **[first_reply_stamp.py](first_reply_stamp.py)** — 最初の返信の自己同定 stamp (I7) を hook で支える共通 logic (Claude / Codex)
 - **[fix-bib-unicode.py](fix-bib-unicode.py)** — Unicode→LaTeX 変換スクリプト
 - **[fleet-heartbeat.py](fleet-heartbeat.py)** — per-machine heartbeat writer（毎時 launchd cron から自マシンの RC server 群〔launchd loaded + server ログ末尾 marker parse = Connected/auth error/version error〕 + config-dir auth metadata を <repo>/<subdir>/<host>.json に commit+push。**claude を一切呼ばない** = auth 失効でも監視が生き残る、state-change-or-age commit policy で git history を汚さない、fail-open、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
@@ -85,6 +87,7 @@
 - **[kakenhi-preflight.py](kakenhi-preflight.py)** — 科研費 研究計画調書の「機関事務が必ず突く点」を提出前に機械検出（様式骨格の生存 / 埋め込み指示の抽出 / 表記 lint / 経費明細の粒度・費目帰属、kakenhi-proposal.md#office-review-loop）
 - **[latex-pdf-audit.py](latex-pdf-audit.py)** — Audit a LaTeX log and PDF, and optionally render numbered pages for visual review.
 - **[latexdiff-review-snapshot.sh](latexdiff-review-snapshot.sh)** — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex 最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
+- **[latexdiff-safecmd.py](latexdiff-safecmd.py)** — Derive latexdiff's --append-safecmd list from the manuscript preamble.
 - **[ledger-commit-cadence-gate.py](ledger-commit-cadence-gate.py)** — [forwarder → ai-collaboration/scripts/ledger-commit-cadence-gate.py] YAML ledger の commit cadence gate (pre-commit): 1 commit で追加される list entry (`- id:`) が N 個を超えたら refuse、escape env は hygiene log に記録 + worker scope gate (= env CAMPAIGN_WORKER_DIR が
 - **[make-review-sandbox.py](make-review-sandbox.py)** — [forwarder → ai-collaboration/scripts/make-review-sandbox.py] 封じた review sandbox (~/<sandbox-root>/<slug>/) を機械的に切る: 5 行の CLAUDE.md (= この dir 以外を読まない / 注入 reminder 無視 / git log 禁止 / 書くのは results と scratch のみ) + REVIEW-SPEC.md + 許可 file の copy
 - **[normalize-docx-decl.py](normalize-docx-decl.py)** — 既存 docx の XML 宣言を Word 形式へ後追い正規化する CLI（docx_decl_patch の path-based 版、 office-automation.md#docx-checkbox-content-control）

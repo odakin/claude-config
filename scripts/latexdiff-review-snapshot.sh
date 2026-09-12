@@ -13,9 +13,15 @@
 #   2. (option) レビュー markup コマンド (\cl 等) を両版から unwrap (= 中身は残し wrapper だけ除去。
 #      理由: latexdiff の \DIFadd{\cl{...}} は ulem 下線が {...} group を改行不能 box 化して
 #      行がページ外へ溢れる + diff 内で draft 色は冗長)
-#   3. latexdiff (既定: 標準 UNDERLINE style + --math-markup=1 + VERBATIMENV=comment)
-#   4. compile cycle (engine ×1 → bibtex → engine ×2)、error 検出 + page 数報告
-#   5. (--no-deploy でなければ) snapshot 命名規則で repo に配備:
+#   3. 数式の silent miss 対策 (既定 ON、--no-math-guard で無効):
+#      両版の display-math wrapper macro を本物の環境へ展開 (expand-display-math.py) +
+#      preamble の全 macro を latexdiff の safe-command list へ (latexdiff-safecmd.py)。
+#      どちらも「compile は通るのに式の変更が無色」になる経路 (latex.md の症状表 2 行)
+#   4. latexdiff (既定: 標準 UNDERLINE style + --math-markup=1 + VERBATIMENV=comment)
+#      → 出力を check-latexdiff-math-markup.py --scan で検査し、display math 内に
+#        無印の変更が残っていれば deploy 前に停止 (--allow-unmarked-math で続行)
+#   5. compile cycle (engine ×1 → bibtex → engine ×2)、error 検出 + page 数報告
+#   6. (--no-deploy でなければ) snapshot 命名規則で repo に配備:
 #        <prefix>-YYYY-MM-DD-HHMM-<base7>-to-<head7>.pdf
 #      同 baseline の旧 snapshot は superseded として git rm (--keep-superseded で抑止)、
 #      commit + push (+ macOS なら open)
@@ -48,14 +54,20 @@
 #   --keep-superseded     同 baseline の旧 snapshot を git rm しない
 #   --no-push / --no-open
 #   --allow-dirty / --allow-behind
-#   --selftest            strip logic + 命名 format の内蔵テスト (TeX 不要)
+#   --no-math-guard       wrapper 展開 + safecmd + 無印検査を行わない (= 2026-09-12 以前の挙動)
+#   --allow-unmarked-math 無印の数式変更を検出しても停止しない (警告のみ)
+#   --selftest            strip logic + 命名 format + 同梱 3 script の selftest
 
 set -uo pipefail
 
 BASE="" REPO="$PWD" TEX="" ENGINE="lualatex" BIB="bibtex" MATHMARKUP="1"
 EXTRA_ARGS="" PREFIX="latexdiff" DEPLOY=1 SUPERSEDE=1 PUSH=1 OPEN=1
-ALLOW_DIRTY=0 ALLOW_BEHIND=0
+ALLOW_DIRTY=0 ALLOW_BEHIND=0 MATH_GUARD=1 ALLOW_UNMARKED=0
 STRIP_CMDS=() STRIP_COLORS=()
+SCRIPTDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+EXPANDER="$SCRIPTDIR/expand-display-math.py"
+SAFECMD_GEN="$SCRIPTDIR/latexdiff-safecmd.py"
+MARKUP_CHECK="$SCRIPTDIR/check-latexdiff-math-markup.py"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -120,6 +132,15 @@ run_selftest() {
         || die "naming format regex failed"
     echo "naming format OK"
     rm -rf "$d"
+    local s
+    for s in "$EXPANDER" "$SAFECMD_GEN" "$MARKUP_CHECK"; do
+        if [[ -f "$s" ]]; then
+            python3 "$s" --selftest >/dev/null || die "$(basename "$s") selftest failed"
+            echo "$(basename "$s") selftest OK"
+        else
+            echo "WARN: $s 不在 — 数式 guard は未検査"
+        fi
+    done
     echo "ALL SELFTESTS PASS"
     exit 0
 }
@@ -143,6 +164,8 @@ while [[ $# -gt 0 ]]; do
         --no-open) OPEN=0; shift;;
         --allow-dirty) ALLOW_DIRTY=1; shift;;
         --allow-behind) ALLOW_BEHIND=1; shift;;
+        --no-math-guard) MATH_GUARD=0; shift;;
+        --allow-unmarked-math) ALLOW_UNMARKED=1; shift;;
         --selftest) run_selftest;;
         *) die "unknown option: $1";;
     esac
@@ -203,10 +226,42 @@ if [[ ${#STRIP_CMDS[@]} -gt 0 || ${#STRIP_COLORS[@]} -gt 0 ]]; then
     echo "stripped: cmds=[$CMDS] colors=[$COLORS]"
 fi
 
+# ---- 数式 silent miss 対策 (両版に同一適用 = LaTeX 的には no-op) ----
+SAFE_ARG=""
+if [[ "$MATH_GUARD" -eq 1 ]]; then
+    if [[ -f "$EXPANDER" && -f "$SAFECMD_GEN" ]]; then
+        python3 "$EXPANDER" "$D/base.tex" "$D/base.tex" || die "display-math wrapper 展開 (base) 失敗"
+        python3 "$EXPANDER" "$D/new.tex"  "$D/new.tex"  || die "display-math wrapper 展開 (new) 失敗"
+        SAFE=$(python3 "$SAFECMD_GEN" "$D/new.tex") || die "safe-command list の生成に失敗"
+        if [[ -n "$SAFE" ]]; then
+            SAFE_ARG="--append-safecmd=$SAFE"
+            echo "math guard: wrapper 展開 + safecmd $(awk -F, '{print NF}' <<< "$SAFE") macros"
+        else
+            echo "math guard: wrapper 展開 (preamble に自作 macro なし)"
+        fi
+    else
+        echo "WARN: $EXPANDER / $SAFECMD_GEN が無い — 数式の silent miss guard なしで続行"
+        MATH_GUARD=0
+    fi
+fi
+
 # ---- latexdiff + compile ----
 # shellcheck disable=SC2086
-latexdiff --math-markup="$MATHMARKUP" --config VERBATIMENV=comment $EXTRA_ARGS \
+latexdiff --math-markup="$MATHMARKUP" --config VERBATIMENV=comment $SAFE_ARG $EXTRA_ARGS \
     "$D/base.tex" "$D/new.tex" > "$D/diff.tex" 2>"$D/latexdiff.err" || die "latexdiff 失敗: $(tail -3 "$D/latexdiff.err")"
+
+# ---- guard: display math 内に無印の変更が残っていないか (= 色の出ない差分 PDF) ----
+if [[ "$MATH_GUARD" -eq 1 && -f "$MARKUP_CHECK" ]]; then
+    UNMARKED=$(python3 "$MARKUP_CHECK" --scan "$D/diff.tex" | tail -1)
+    if [[ "${UNMARKED:-0}" -gt 0 ]]; then
+        python3 "$MARKUP_CHECK" --scan "$D/diff.tex" --verbose | head -20
+        [[ "$ALLOW_UNMARKED" -eq 1 ]] \
+            || die "display math 内に無印の変更 ${UNMARKED} 件 — この PDF は式の変更を色なしで落とす (共著者には「変えていない」に見える)。preamble に新しい構造 macro があるなら LATEXDIFF_BENIGN_EXTRA=名前,名前 で宣言、意図的に無視するなら --allow-unmarked-math。詳細 = conventions/latex.md#latexdiff-review-snapshot"
+        echo "WARN: 無印の数式変更 ${UNMARKED} 件 — --allow-unmarked-math 指定のため続行"
+    else
+        echo "math guard: 無印の数式変更 0 件"
+    fi
+fi
 
 ( cd "$D" && "$ENGINE" -interaction=nonstopmode diff.tex >/dev/null 2>&1
   [[ "$BIB" == "bibtex" ]] && bibtex diff >/dev/null 2>&1
