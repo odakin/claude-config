@@ -322,6 +322,12 @@ setup.sh 自体は idempotent design なので (i) は実装コスト低。 但�
 
 ---
 
+### <a id="marker-detection-scan-whole-turn"></a>§2 補足 3: 抑止 marker は turn の転写全体から拾う — assistant text だけを見ると呼ぶ側が可視面を汚す
+
+hook に「この turn は見逃せ」 と伝える escape-hatch marker を設計するとき、 検出を **assistant の text block だけ**に限ると、 呼ぶ側は marker を最終メッセージに書くほかなくなる。 ところが **Claude Code の chat renderer は HTML comment を literal 表示する** (2026-09-12 実測) ので、 「不可視 marker」 のつもりが毎 turn user の画面に出る (= 呼ぶ側からは観測できないまま蓄積する)。
+
+∴ 検出は turn の転写全体 (assistant text + `tool_use` の `.input.command` + `tool_result`) を走査する形にし、 呼ぶ側が Bash command の comment 等、 **提示面でない場所**に marker を置けるようにする。 併せて hook の発火条件を狭く保つ (= marker が要る turn を最小化する)。 正本 = [`mid-turn-text-visibility.md#machine-marker-in-tool-input`](mid-turn-text-visibility.md#machine-marker-in-tool-input)。
+
 ## <a id="warn-mode-spec-uncertainty"></a>§3. PreToolUse warn mode 出力の spec uncertainty
 
 ### <a id="warn-mode-problem"></a>問題

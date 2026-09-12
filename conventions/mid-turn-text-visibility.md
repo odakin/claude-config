@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: ツール呼び出しを含むターンで user に見せる文面・結論・訂正を出すとき
+when: ツール呼び出しを含むターンで user に見せる文面・結論・訂正を出すとき / 応答に機械向けの marker・sentinel を埋め込もうとするとき
 category: harness-core
-summary: user に見える提示面はターン最終テキストメッセージ (+ 明示的な file 提示) だけ — mid-turn テキストは表示されないことがあり (Claude Code desktop で実測、同一 session 内 2 連発)、tool 入力 (Bash heredoc / Edit content) や書き込んだ file はそもそも提示面でない (2026-08-29 再発で確定した変種)。文面 deliverable・結論・訂正は必ずターン最終メッセージに全文置く。「上の文面」「先ほどの訂正」と自ターン内を指す行為自体が事故 signal
+summary: user に見える提示面はターン最終テキストメッセージ (+ 明示的な file 提示) だけ — mid-turn テキストは表示されないことがあり (Claude Code desktop で実測、同一 session 内 2 連発)、tool 入力 (Bash heredoc / Edit content) や書き込んだ file はそもそも提示面でない (2026-08-29 再発で確定した変種)。文面 deliverable・結論・訂正は必ずターン最終メッセージに全文置く。「上の文面」「先ほどの訂正」と自ターン内を指す行為自体が事故 signal。逆向きの取り違えとして、最終メッセージの HTML comment は隠れず literal 表示される (2026-09-12 desktop 実測) ため、hook 用 marker 等の機械向け signal は提示面でなく tool 入力に置く
 -->
 # ツール呼び出しターンのテキスト可視性 — deliverable は最終メッセージに全文
 
@@ -36,6 +36,25 @@ text) が context に鮮明に在るため参照が自然に感じられるが�
 (link / render) だけ**である。terminal への text dump を「見せた」に数えない
 規律 (chat の file 提示規約) も同じ核の別 instance。
 
+## <a id="html-comment-not-hidden"></a>逆向きの取り違え: 提示面は raw で出る — 「user に見えない印」 を最終メッセージに埋め込めない (2026-09-12)
+
+上の 2 節は「context に在るのに提示されない」 側だが、 同じ境界には逆向きの取り違えがある: **最終メッセージに置いた HTML comment (`<!-- ... -->`) は、 Claude Code の chat renderer では literal に表示される** (2026-09-12 desktop 実測 = user が応答末尾の marker を指して「こういうのが表示されるんのはなんで？」)。 GitHub 等の web markdown renderer で消えることを根拠に、 「user には不可視の印」 として最終メッセージに埋め込む設計は成立しない。 frontend 依存の可能性はあるが、 **消えることを前提にしてはならない**: 消えなかったときに user の画面が毎ターン汚れ、 しかも**それを Claude 側から観測できない** (= 表示落ちと同じ非対称で、 user の指摘まで分からない)。
+
+一般化すると: **提示面に置けるのは人間向けの出力だけ**。 機械向けの signal (hook が grep する marker、 machine-readable tag、 自動処理用の sentinel) を最終メッセージに混ぜると、 そのまま user のノイズになる。
+
+### <a id="machine-marker-in-tool-input"></a>機械向け marker は tool 入力に置く
+
+置き場所は上の §変種 の裏返しで決まる。 **tool 入力は提示面ではないが転写には残る** — ∴ 検出側が turn の転写を grep する形であれば、 **Bash command の comment に marker を書けば機械には届き、 user には見えない**:
+
+```
+<実際のコマンド>   # <marker>
+```
+
+hook を書く側の含意が 2 つある。
+
+1. **marker の検出は turn の転写全体を走査する形にする** (= assistant text + `tool_use` の `.input.command` + `tool_result`)。 assistant text だけを見る検出にすると、 呼ぶ側には「可視面を汚す」 以外に marker を出す手段が無くなる。
+2. **marker が必要な turn を最小化する**。 hook の発火条件が狭ければ marker が要る turn も狭い。 呼ぶ側が毎 turn reflex で marker を出しているなら、 発火条件を満たさない turn では純粋な noise であり、 規律側の bug (実例: 「生成した ∧ 応答本文がその名前に触れた」 の両方が成った turn だけ発火する hook に対し、 無関係な turn まで marker を出していた)。
+
 ## 規律
 
 1. **user が受け取るべきもの (文面 deliverable・結論・判断材料・訂正) は、
@@ -51,6 +70,11 @@ text) が context に鮮明に在るため参照が自然に感じられるが�
 5. **SoT 記録・commit は提示の代替にならない**。「正本 file に書いて link を
    貼った」はコピペ用 deliverable の提示ではない (user に file を開かせて
    該当箇所を発掘させる = 機械が手間を消す方向の逆)。記録と提示は両方やる。
+6. **機械向けの signal を最終メッセージに書かない**。HTML comment も
+   raw 表示されうる — hook 用 marker 等は tool 入力側に置く
+   ([#machine-marker-in-tool-input](#machine-marker-in-tool-input))。
+7. **「この印は user には見えない」と doc に書くなら、実際にその frontend で
+   確認してから書く**。未確認の不可視前提は、破れても Claude 側から観測できない。
 
 ## なぜ滑りやすいか
 
