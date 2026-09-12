@@ -19,14 +19,16 @@ It also checks where each \\labelcref stands, for the two-tier style in which
 from "noun~\\labelcref" sits in apposition right after a noun:
   comma-apposition      the number floats between commas after a noun.
   independent-position  after a preposition, conjunction, article, copula, or
-                        listed verb ("from", "nor", "in~"), or at the start of
-                        a sentence, group, footnote, or line after display math.
+                        listed verb ("from", "nor", "in~"), at the start of a
+                        sentence, paragraph, footnote, or caption, or right
+                        after a heading or display math.
                         A "~" does not make this position appositive.
   missing-tie           after a noun, inline math, or macro argument, but with a
                         breakable space instead of "~". A second item joined by
                         "and"/"or"/"to" to a preceding reference also needs "~".
 A range end "--\\labelcref" and a comma-separated item after a reference are
-accepted. Inline wrappers such as \\blue{...} are looked through. Words
+accepted. Inline wrappers such as \\blue{...} and bare {...} groups are
+looked through. Words
 outside the closed function-word list count as nouns, so an unlisted verb
 before "~\\labelcref" is not reported. A \\labelcref already reported as a
 bare parenthetical is not reported again. --no-labelcref-form skips this check
@@ -267,6 +269,8 @@ def labelcref_role(text, ends, s):
     breakable space stands between that token and the command.
     """
     p = skip_back(text, ends, s)
+    if re.search(r"\n[ \t]*\n", text[p:s]):
+        return "independent", False  # a blank line starts a new paragraph
     tied = bool(TEX_INVISIBLE.fullmatch(text[p:s]))
     if p > 0 and text[p-1] == "~" and not escaped(text, p-1):
         p = skip_back(text, ends, p-1)
@@ -309,8 +313,10 @@ def labelcref_role(text, ends, s):
         if wrapper.group(1) not in BLOCK_GROUPS:
             return labelcref_role(text, ends, p-len(wrapper.group(0)))
         return "independent", tied
-    if char == "}" and re.search(r"\\(?:begin|end)\s*\{[^{}]*\}$", head):
-        return "independent", tied
+    if char == "}":
+        closing = re.search(r"\\([A-Za-z]+)\*?(?:\s*\[[^\]]*\])?\s*\{[^{}]*\}$", head)
+        if closing and closing.group(1) in BLOCK_GROUPS | {"begin", "end"}:
+            return "independent", tied
     if char == "\\" and p > 1 and text[p-2] == "\\" and not escaped(text, p-2):
         return "independent", tied  # after a \\ line break
     if char in ":;!?(\u2014":
@@ -441,6 +447,9 @@ def selftest():
         (r"This holds.\footnote{\labelcref{eq:a} is exact.}", ["independent-position"], 0),
         ("\\begin{equation}x\\end{equation}\n\\labelcref{eq:a} holds.", ["independent-position"], 0),
         (r"Combining \labelcref{eq:a}--\labelcref{eq:b} gives the bound.", ["independent-position"], 1),
+        ("Some text\n\n\\labelcref{eq:a} holds.", ["independent-position"], 0),
+        ("\\section{Results}\n\\labelcref{eq:a} holds.", ["independent-position"], 0),
+        (r"The rule {\labelcref{eq:a}} holds.", ["missing-tie"], 0),
         (r"The constraint \labelcref{eq:a} holds.", ["missing-tie"], 0),
         ("The constraint\n\\labelcref{eq:a} holds.", ["missing-tie"], 0),
         (r"The bounds~\labelcref{eq:a} and \labelcref{eq:b} agree.", ["missing-tie"], 0),
