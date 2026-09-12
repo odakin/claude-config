@@ -175,6 +175,9 @@ sections:
   - id: visual-verification-intensity
     level: 3
     title: "成果物の種類で視覚検査の強度を分ける"
+  - id: scratch-build-dir
+    level: 2
+    title: "別 dir で組版するとき、生成物を原稿 dir へ symlink しない"
   - id: pdf-visual-verification
     level: 2
     title: "図・組版を対象とする PDF 視覚検証"

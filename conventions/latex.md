@@ -885,6 +885,25 @@ python3 scripts/latex-pdf-audit.py paper.pdf --log paper.log --render-dir review
 origin: 2026-09-11、論文の通常改稿で固定様式向けの全ページ画像照合を流用し、検査が過剰になった事例から区別を明文化。
 
 
+## <a id="scratch-build-dir"></a>別 dir で組版するとき、生成物を原稿 dir へ symlink しない
+
+原稿を触らずに組版だけ別 dir でやる定型は「原稿 dir の中身を symlink して `.tex` だけ copy する」だが、**symlink の対象から build 生成物 (`.aux` `.log` `.pdf` `.bbl` `.blg` `.out` `.toc` `.synctex.gz` `.fls` `.fdb_latexmk`) を必ず除く**。除かないと `pdflatex` が symlink 越しに書き戻し、原稿 dir の生成物を毎回上書きする。図・bst・bib・画像だけを symlink する。
+
+被害は 2 つある。① 著者が editor (TeXShop / Overleaf のローカル clone 等) で見ている PDF が、こちらの組版のたびに差し替わる。② 著者の typeset と組版が重なると、書きかけの `.aux` を読んで**自分の gate が偽の error を報告する** (`! File ended while scanning use of \@newl@bel.` + 未定義参照が全件並ぶ)。この error は原稿ではなく競合の像なので、原稿を直しても消えない。
+
+```sh
+for f in "$SRC"/*; do bn=$(basename "$f")
+  case "$bn" in paper.tex|*.aux|*.log|*.pdf|*.bbl|*.blg|*.out|*.toc|*.synctex.gz|*.fls|*.fdb_latexmk) continue;; esac
+  ln -s "$f" "$BUILD/$bn"
+done
+cp "$SRC/paper.tex" "$BUILD/"
+```
+
+gate が上のような error を出したら、原稿を疑う前に **同じ組版をもう一度走らせる**。1 回で消えるなら競合、消えなければ原稿。
+
+origin: 2026-09-12 einstein-cartan、著者が TeXShop で編集中の Overleaf clone を組版 dir から symlink し、`paper.aux` / `paper.pdf` を上書きしていた。競合した 1 回だけ gate が `errors: 1` と未定義参照 474 件を報告した (原稿は無傷)。
+
+
 ## <a id="pdf-visual-verification"></a>図・組版を対象とする PDF 視覚検証
 
 図・組版の修正ではコンパイル成功だけで配置の正しさは分からない。[成果物別の範囲](#visual-verification-intensity)で画像確認が必要な場合に以下を使う。通常の本文・数式編集に毎回適用しない:
