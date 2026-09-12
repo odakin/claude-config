@@ -15,8 +15,10 @@
 # detector:
 #   A (tree-search null): 再帰 / tree 検索 (= grep -r/-R/--recursive、 git grep、
 #     find <dir> -name/-iname/-path/-regex) の出力が完全空、 または zsh glob
-#     不成立 ("no matches found")。 tree 検索は discovery-shaped = null を
-#     universal absence に変換する誘惑が強い。
+#     不成立 (= shell の error 行 "<ctx>: no matches found: <pattern>" を行頭
+#     anchor で検出。 phrase の素の substring では拾わない — 下の FP 設計参照)。
+#     tree 検索は discovery-shaped = null を universal absence に変換する誘惑が
+#     強い。 glob 不成立は更に「コマンド自体が走っていない」 ので null ですらない。
 #   B (truncate-before-grep): pipeline で head / tail / sed -n (= 窓切り詰め) が
 #     grep 系より **前** の segment にある = grep は切り詰めた窓の上しか見ていない。
 #     正常 idiom は grep→head の順なので、 逆順は構造自体が signal (hit 有無に
@@ -26,6 +28,9 @@
 #   - 単一 file への grep / pipe 入力の grep は対象外 (= leak check の
 #     「0 hit = clean」 は bounded 検証で正当、 鳴らさない)
 #   - 出力が 1 byte でもあれば A は沈黙 (= `|| echo` fallback 付きも沈黙 = miss 側)
+#   - glob 不成立は shell error 行の形 (行頭 anchor + 直後のコロン) でだけ拾う
+#     (= 2026-09-12: 本 hook の source を grep した出力に phrase が載って自己発火。
+#     自分の検出文字列は検索対象になる = 素の substring match は自己言及で壊れる)
 #   - rate limit (default 180s、 state = ~/.claude/state/bash-search-nudge/)
 #   - 既知の miss (= 射程外、 意図的): 単一 path の存在 probe (ls -d X / test -e)、
 #     Read tool の offset/limit 部分読み、 `grep -c` の "0" 出力、 rg (未使用)。
@@ -118,13 +123,19 @@ if [ -z "$FIRED" ]; then
       A_STRUCT=1
     fi
   fi
+  # zsh nomatch は **shell の error 行** の形でしか来ない (= 行頭の短い context
+  # prefix + "no matches found: <pattern>"。 実測 3 形: "(eval):1: " = Bash tool の
+  # 実行 context / "zsh:1: " = zsh -c / "zsh: " = interactive)。 素の substring
+  # match だと、 この phrase を含む file を grep しただけで発火する (= 本 hook 自身の
+  # source / doc / test / log を読む度に FP。 2026-09-12 に実発生) ので、 行頭 anchor
+  # と phrase 直後のコロンまで要求して error 行だけを拾う。
   GLOB_NULL=0
-  if printf '%s' "$RESPONSE" | grep -q 'no matches found'; then
+  if printf '%s' "$RESPONSE" | grep -qE '^[^[:space:]]*:[[:space:]]?no matches found: '; then
     GLOB_NULL=1
   fi
   if [ "$GLOB_NULL" = 1 ]; then
     FIRED="A"
-    DETECTOR_DESC="glob 不成立 (= 'no matches found'、 pattern discovery の null)"
+    DETECTOR_DESC="glob 不成立 (= zsh nomatch。 ⚠️ コマンド自体が実行されていない — glob を quote して再実行)"
   elif [ "$A_STRUCT" = 1 ]; then
     trimmed="$(printf '%s' "$RESPONSE" | tr -d '[:space:]')"
     if [ -z "$trimmed" ]; then

@@ -54,6 +54,20 @@ assert_fire "A2: find <dir> -name 空出力 → fire" 1 \
 assert_fire "A3: zsh glob 不成立 (no matches found) → fire" 1 \
   '{"tool_name":"Bash","tool_input":{"command":"ls -1 /tmp/demo-hooks/mcp-search-*.sh"},"tool_response":{"stdout":"","stderr":"(eval):1: no matches found: /tmp/demo-hooks/mcp-search-*.sh"}}'
 
+assert_fire "A3b: zsh -c 形式の nomatch (zsh:1: prefix) → fire" 1 \
+  '{"tool_name":"Bash","tool_input":{"command":"zsh -c ls *.zzz"},"tool_response":{"stdout":"","stderr":"zsh:1: no matches found: *.zzz"}}'
+
+assert_fire "A3c: interactive 形式の nomatch (zsh: prefix) → fire" 1 \
+  '{"tool_name":"Bash","tool_input":{"command":"ls *.zzz"},"tool_response":{"stdout":"","stderr":"zsh: no matches found: *.zzz"}}'
+
+# ⚠️ 自己言及 FP (2026-09-12 実発生): 検出文字列そのものを含む file を grep すると
+#    出力に phrase が載る。 行頭 anchor 導入前は これで発火していた。
+assert_fire "A3d: 本 hook の source を grep して phrase が出力に載る → silent" 0 \
+  '{"tool_name":"Bash","tool_input":{"command":"grep -n matches hooks/bash-search-zero-result-nudge.sh"},"tool_response":{"stdout":"122:  if printf %s | grep -q no matches found; then","stderr":""}}'
+
+assert_fire "A3e: 散文中に phrase (行頭 anchor 不成立) → silent" 0 \
+  '{"tool_name":"Bash","tool_input":{"command":"cat notes.md"},"tool_response":{"stdout":"zsh said no matches found when the glob failed","stderr":""}}'
+
 assert_fire "A4: git grep 空出力 → fire" 1 \
   '{"tool_name":"Bash","tool_input":{"command":"git grep needle -- docs/"},"tool_response":{"stdout":"","stderr":""}}'
 
