@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき
 category: harness-core
-summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook の同 session 発火も build 依存 = 2026-06 は session / app 起動時 snapshot、 desktop 2.1.266 は Stop hook を hot-reload → 足した直後に discriminator で測る / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)** + **§2 補足 2 #disableallhooks-kill-switch = root 限定の disableAllHooks が「frontend 差」 に化ける 〔自 session では検出不能 = 外側から scripts/hook-liveness-audit.py、 audit-hooks.sh の (d) 自動部分〕** + **test-root-not-parent-dir = test は自分の repo を checkout の親 dir 経由で指さない 〔worktree で落ち・live を検査・python shim は CI でも空振り = 一時 root に symlink 1 本 + 兄弟 repo は正規 layout + 不在は SKIP + mutation で確かめる〕** + **§12 #text-pattern-stop-hook = 最終発話の句で当てる Stop hook は過去の最終発話で校正してから入れる 〔scripts/calibrate-final-message-pattern.py + 共通部品 scripts/lib/transcript_turns.py〕・引用の例示を除く・block は 1 回・fail-open**)
+summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook の同 session 発火も build 依存 = 2026-06 は session / app 起動時 snapshot、 desktop 2.1.266 は Stop hook を hot-reload → 足した直後に discriminator で測る / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)** + **§2 補足 2 #disableallhooks-kill-switch = root 限定の disableAllHooks が「frontend 差」 に化ける 〔自 session では検出不能 = 外側から scripts/hook-liveness-audit.py、 audit-hooks.sh の (d) 自動部分〕** + **test-root-not-parent-dir = test は自分の repo を checkout の親 dir 経由で指さない 〔worktree で落ち・live を検査・python shim は CI でも空振り = 一時 root に symlink 1 本 + 兄弟 repo は正規 layout + 不在は SKIP + mutation で確かめる〕** + **§12 #text-pattern-stop-hook = 最終発話の句で当てる Stop hook は過去の最終発話で校正してから入れる 〔scripts/calibrate-final-message-pattern.py + 共通部品 scripts/lib/transcript_turns.py〕・引用の例示を除く・block は 1 回・fail-open** + **§14 #opt-in-side-effect-hook = 人に向けた副作用だけの hook (音・通知) は層1 に既定 off で置き marker で opt-in、 surface の許可 list は実測値だけ、 実行の証拠を state file に残す**)
 -->
 # Claude Code hooks の作成 + 配信規律
 <!-- slug index: hook-authoring.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
@@ -588,7 +588,7 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 
 ⚠️ **settings の変更がすべて snapshot に縛られるわけではない** (2026-09-11、 desktop 埋込 2.1.260 で実測): `disableAllHooks` の除去と `permissions.allow` への追加は、 **同じ session の次の tool call から**有効になった。 snapshot されるのは hook の一覧で、 kill switch や permission rule は都度読まれている可能性がある (機構は未確認)。 どの変更が即時でどれが snapshot かは、 変更の種類ごとに 1 回測る。
 
-🔄 **hook の一覧も読み直す build がある** (2026-09-12、 desktop 埋込 2.1.266 で実測): installer で `settings.json` に Stop hook を足した直後の turn 終了 (約 40 秒後) に、 その hook が発火して block した。 transcript 上、 最後の SessionStart (resume) は足す 1 時間以上前で、 間に SessionStart は無い (= app の再起動も session の再開も挟んでいない)。 上の 2026-06-10 (CLI、 session 開始時 snapshot) と 2026-06-27 (desktop、 app 起動時 snapshot) はそれぞれの build についての事実で、 この build には当てはまらない。 観測は Stop 1 本なので、 他 event の即時性は未確認。 → 足した直後に discriminator で測り、 発火すれば live verify (上の ③) も同じ session で済む。
+🔄 **hook の一覧も読み直す build がある** (2026-09-12、 desktop 埋込 2.1.266 で実測): installer で `settings.json` に Stop hook を足した直後の turn 終了 (約 40 秒後) に、 その hook が発火して block した。 transcript 上、 最後の SessionStart (resume) は足す 1 時間以上前で、 間に SessionStart は無い (= app の再起動も session の再開も挟んでいない)。 上の 2026-06-10 (CLI、 session 開始時 snapshot) と 2026-06-27 (desktop、 app 起動時 snapshot) はそれぞれの build についての事実で、 この build には当てはまらない。 2 例目 (同日・同 build・別 session): 配線 list に足した副作用だけの Stop hook を `scripts/sync-hook-settings.sh` で `settings.json` に入れた turn の終了時に発火した (hook 自身が書く state file の時刻 = その turn の終了時刻、 [§14](#opt-in-side-effect-hook))。 観測は Stop 2 本なので、 他 event の即時性は未確認。 → 足した直後に discriminator で測り、 発火すれば live verify (上の ③) も同じ session で済む。
 
 ### <a id="build-dependent-docs-drift"></a>9.2 同種の「docs と乖離」 build 依存 feature
 
@@ -751,6 +751,21 @@ session 開始時の auto-pull hook (全 repo を fetch → behind なら ff、 
 
 - [§11 #parallel-hooks-no-ordering](#parallel-hooks-no-ordering) (1 session 内の hook 間の順序) / [multi-session-coordination.md#pull-fetch-head-race](multi-session-coordination.md#pull-fetch-head-race) (FETCH_HEAD の並列書換え)。
 - 参照実装 = [`scripts/repo-sync-sweep.sh`](../scripts/repo-sync-sweep.sh) + [`scripts/repo-sync-sweep.test.sh`](../scripts/repo-sync-sweep.test.sh)。
+
+---
+
+## <a id="opt-in-side-effect-hook"></a>§14. 人に向けた副作用だけの hook (音・通知) は層1 に既定 off で置き、 marker で opt-in
+
+block も model 向け出力もせず、 人に向けた副作用 (音を鳴らす・OS 通知を出す) だけをする hook。 好みが分かれるので**既定では何もしない**形で層1 に置き、 使う machine だけが有効にする。 参照実装 = [`hooks/turn-complete-sound-nudge.sh`](../hooks/turn-complete-sound-nudge.sh) (応答の終わりに音、 [`macos-claude-app-notifications.md#turn-complete-sound-hook`](macos-claude-app-notifications.md#turn-complete-sound-hook))。
+
+- **opt-in は machine-local の marker file**: `~/.claude/<name>.on` で有効、 `.off` が在れば無効 (off が優先)。 配線 list (`hooks/settings-entries.json`) には全員分入れてよい (marker が無ければ即 exit 0)。 env (`<NAME>=1|0`) は marker より優先 (test と一時的な切替用)。
+- **owner の全 machine に配るのは個人層の session 開始 bootstrap**: 「`.on` も `.off` も無ければ `.on` を置く」 だけで冪等になる (done marker が要らない。 user が `.off` を置けば二度と触らない) = [`multi-machine-state.md#one-shot-settings-propagation`](multi-machine-state.md#one-shot-settings-propagation) の「user の変更を上書きしない」 を marker の 2 値で満たす形。
+- **surface で gate する** (`CLAUDE_CODE_ENTRYPOINT`) — headless (`claude -p` の routine) で夜中に鳴らさないため。 **許可 list の既定は実測で確かめた値だけ**にする: 2026-09-12 に手元の transcript 196 本を数えたら全部 `claude-desktop` で、 CLI / headless の値は手元に標本が無かった → 既定 = `claude-desktop` だけ、 他は env で足す。 推測した値を既定に入れると、 外れたとき夜中に鳴る向きに倒れる。
+- **`stop_hook_active` なら何もしない** (別の Stop hook が block して turn が続いた後の 2 回目)。 その結果、 同じ turn に block する hook が居ると、 副作用は最初の Stop (実際の終わりより少し早い) で 1 回だけ出る。
+- **副作用の process は前景で待つ** (上限つき、 例 `afplay -t 3`)。 background に投げると hook の終了とともに切られる可能性がある (検証していない用心。 数秒で終わる副作用なら前景で困らない)。
+- **動いた証拠を自分で残す**: 実行したら時刻を `~/.claude/state/<name>.last` に書く。 live 確認と、 他 machine の確認 TODO の完了判定 ([`multi-machine-state.md#machine-gated-pending-action`](multi-machine-state.md#machine-gated-pending-action) の (6)) がこれを読む。
+- 命名: block しないので [§0](#naming-convention) の `-nudge` (§0 の表は model 向け出力を想定しているが、 副作用だけの hook も「block しない」 側に入れる)。
+- test は副作用の実体を差し替える (再生コマンドを引数を書き出すだけの偽物に、 `$HOME` を一時 dir に) = CI (Linux、 再生コマンドが無い) でも回る。
 
 ---
 

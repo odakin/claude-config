@@ -81,7 +81,7 @@ summary: Claude for Mac の通知が鳴らない原因を 5 層で切り分け�
 - 並列 session が多いとそのぶん鳴る。 アプリの「表示中の session は通知しない」 抑制も集中モードも効かない (afplay は通知ではない)。 アプリ自身の入力待ち通知と重なって 2 回鳴ることがある。
 - 同じ turn で別の Stop hook が block すると、 鳴るのは最初の Stop (= 実際の終わりより少し早い) の 1 回。
 - 最後に鳴らした時刻 = `~/.claude/state/turn-complete-sound.last` (効いているかの確認用)。
-- hook が desktop で効くかの前提は [`hook-authoring.md#desktop-hook-honor-remeasure`](hook-authoring.md#desktop-hook-honor-remeasure)。
+- hook が desktop で効くかの前提は [`hook-authoring.md#desktop-hook-honor-remeasure`](hook-authoring.md#desktop-hook-honor-remeasure)。 この形 (既定 off + marker で opt-in + surface の gate) の一般則 = [`hook-authoring.md#opt-in-side-effect-hook`](hook-authoring.md#opt-in-side-effect-hook)。
 
 ## 関連
 

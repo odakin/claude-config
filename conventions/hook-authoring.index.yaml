@@ -266,6 +266,9 @@ sections:
   - id: cross-session-hook-related
     level: 3
     title: "関連"
+  - id: opt-in-side-effect-hook
+    level: 2
+    title: "§14. 人に向けた副作用だけの hook (音・通知) は層1 に既定 off で置き、 marker で opt-in"
   - id: related-docs
     level: 2
     title: "関連"
