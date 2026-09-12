@@ -114,6 +114,7 @@
 - **[pre-commit-bib](pre-commit-bib)** — Git pre-commit hook（上記を呼ぶ）
 - **[prepare-commit-msg-session.sh](prepare-commit-msg-session.sh)** — commit に発生元 agent/session/model/effort の trailer block を付ける (並列 session の事後追跡)
 - **[prepare-commit-msg-session.test.sh](prepare-commit-msg-session.test.sh)** — prepare-commit-msg-session.sh の selftest
+- **[probe-python-nonascii-line.py](probe-python-nonascii-line.py)** — python が非 ASCII を含む長い 1 行を coding cookie 無しで読めなくなる境界 (file 実行と stdin = heredoc 実行の両方) を二分探索で測り、 cookie を置けば通るかも確かめる。 python を更新したら再測定する道具。--selftest 内蔵。
 - **[pty-leak-watch.sh](pty-leak-watch.sh)** — macOS Claude.app pty leak watchdog（LaunchAgent、枯渇前に macOS 通知、conventions/macos-claude-app-pty-leak.md）
 - **[public-precommit-runner.sh](public-precommit-runner.sh)** — 公開リポ pre-commit gate（Tier A + sensitive-terms.txt ephemeral）
 - **[public-precommit-runner.test.sh](public-precommit-runner.test.sh)** — self-tests for the file-body pre-commit gate
