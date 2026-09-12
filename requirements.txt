@@ -14,3 +14,10 @@ python-docx>=1.2.0
 
 # YAML hazard lint (check-yaml-lint.py — conventions/yaml-hazards.md#yamllint-hazard-config)
 yamllint>=1.37
+
+# 図の読み戻し (read-plot-axes.py — conventions/matplotlib-figure-qa.md#read-back-published-figure)
+# numpy = 必須 (無いと script 自体が起動しない)。 Pillow = --image 経路のみ (--pdf は PyMuPDF)。
+# selftest は合成図を numpy だけで作るので描画 library は要らない。 scipy は在れば使う (無ければ
+# 純 Python の連結成分に fallback、 selftest の実測差は 0.2 秒未満)。
+numpy>=1.26
+Pillow>=10.0
