@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""permission-dialog-audit.py — Claude desktop の承認 dialog を app log から tool 別に集計し、 transcript と時刻突合して main / sub-agent / 不明に振り分ける
+"""permission-dialog-audit.py — Claude desktop の承認 dialog を app log から集計し、 transcript と突合して main / sub-agent に振り分け、 1 件ごとに原因 (hook / 長さ / rule) を切り分ける
 
 なぜ要るか
 ----------
@@ -26,6 +26,15 @@ mode
   --from-transcripts  desktop log が無い環境 (CLI 等) 向け。 通常すぐ返る tool (Read/Edit/Write/Glob/
                       Grep/Monitor 等) の tool_use → tool_result が --wait 秒 (既定 15) 超かかった
                       ものを「dialog 候補」 として列挙 (= 承認待ちで止まった可能性。 断定はしない)
+  --diagnose          dialog 1 件ごとに**なぜ出たか**を切り分けて消し方を出す。 transcript から
+                      当時の tool 入力を復元し、 settings の PreToolUse hook (matcher が当たる
+                      ものだけ) に流し直す。 種別 = hook (今も ask を返す) / fixed (今は exit 2 で
+                      block = dialog は出ない) / length (hook 無反応 + Bash が --long-limit 超) /
+                      rule (hook 無反応 = allow・cwd scope・protected path 側) / unmatched。
+                      `--latest N` と併用で直近 N 件だけ。 ⚠️ hook を**実際に実行する**ので、
+                      副作用のある PreToolUse hook を書いているなら `--no-run-hooks`。
+                      ⚠️ 判定は「今の設定に当時の入力を流した結果」 であって、 当時の原因の
+                      再生ではない (= hook を直した後は「もう出ない」 と読む)
   --since YYYY-MM-DD  対象期間の開始日 (log / transcript 共通)
   --selftest
 
@@ -33,6 +42,7 @@ mode
 ------
   permission-dialog-audit.py --since 2026-07-25
   permission-dialog-audit.py --attribute --since 2026-09-01
+  permission-dialog-audit.py --diagnose --latest 10     # 「また聞かれた」 → まずこれ
   permission-dialog-audit.py --latest 20
   permission-dialog-audit.py --from-transcripts --since 2026-09-01
 """
@@ -42,6 +52,7 @@ import os
 import re
 import shutil
 import statistics
+import subprocess
 import sys
 import tempfile
 import time
@@ -303,6 +314,151 @@ def print_from_transcripts(cands, home, wait):
 
 # ---------------------------------------------------------------- selftest
 
+# ---------- --diagnose: dialog 1 件ごとに「なぜ出たか」 を切り分ける ----------
+# 手順は毎回同じ (dialog → transcript から tool 入力を復元 → PreToolUse hook に流し直す →
+# 無反応なら長さ / rule) なので、 手でやらずここに置く。 正本 =
+# conventions/claude-code-permissions.md#desktop-permission-dialog-log の「mode を疑う前に hook を疑う」
+
+HOOK_TIMEOUT = 10.0
+DEFAULT_SETTINGS = "~/.claude/settings.json,~/Claude/.claude/settings.json"
+FIXES = {
+    "hook": "その hook を直す (除外を足す / 判定を緩める)。 hook が意図どおりなら残す",
+    "fixed": "今は hook が先に block する = この形で dialog はもう出ない (対処済み)",
+    "length": "分割 / scratchpad の file 経由 / Edit tool (= hooks/long-bash-command-guard.sh が誘導)",
+    "rule": "permissions.allow に足す。 ⚠️ 先に path を見る — cwd / additionalDirectories の外なら"
+            " allow ではなく scope の問題 (worktree session は本体 repo が cwd 外)。"
+            " protected path (.claude/ 等) と always-prompt class は allow で消せない",
+    "unmatched": "transcript に該当 tool 呼び出しが無い (別 session / 窓の外)。 --before/--after を広げる",
+}
+
+
+def first_line(s, limit=160):
+    for ln in (s or "").splitlines():
+        ln = ln.strip()
+        if ln:
+            return ln[:limit]
+    return ""
+
+
+def load_pretooluse_hooks(paths):
+    """settings*.json の hooks.PreToolUse → [(matcher, command)] (登録順、 重複は除く)。"""
+    out = []
+    seen = set()
+    for p in paths:
+        try:
+            d = json.loads(Path(p).expanduser().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(d, dict):
+            continue
+        for entry in (d.get("hooks") or {}).get("PreToolUse") or []:
+            if not isinstance(entry, dict):
+                continue
+            m = entry.get("matcher") or ".*"
+            for h in entry.get("hooks") or []:
+                c = (h or {}).get("command") if isinstance(h, dict) else None
+                if c and (m, c) not in seen:
+                    seen.add((m, c))
+                    out.append((m, c))
+    return out
+
+
+def matcher_hits(matcher, tool):
+    """PreToolUse の matcher (正規表現・完全一致) が tool 名に当たるか。"""
+    try:
+        return bool(re.fullmatch(matcher, tool))
+    except re.error:
+        return matcher == tool
+
+
+def run_hook(cmd, payload, timeout=HOOK_TIMEOUT):
+    """hook を実行 → (verdict, 説明)。 verdict = 'ask'|'deny'|'block'|'error'|None。"""
+    try:
+        pr = subprocess.run(os.path.expanduser(cmd), shell=True, input=json.dumps(payload),
+                            capture_output=True, text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return ("error", f"hook を実行できない: {e}")
+    if pr.returncode == 2:
+        return ("block", first_line(pr.stderr))
+    try:
+        obj = json.loads((pr.stdout or "").strip() or "{}")
+        dec = (obj.get("hookSpecificOutput") or {}).get("permissionDecision")
+    except (ValueError, AttributeError):
+        dec = None
+    if dec in ("ask", "deny"):
+        return (dec, first_line(pr.stderr) or first_line(pr.stdout))
+    return (None, "")
+
+
+def brief_input(tool, inp):
+    if tool == "Bash":
+        cmd = str(inp.get("command", "")).strip()
+        return first_line(cmd, 110)
+    for k in ("file_path", "notebook_path", "url", "path", "pattern"):
+        if inp.get(k):
+            return str(inp[k])[:120]
+    return ""
+
+
+def diagnose(reqs_list, uses, before, after, hooks, long_limit, run_hooks=True, cwd=None):
+    """dialog ごとに (req, 種別, 理由, 詳細) を返す。 種別 = hook / length / rule / unmatched。"""
+    rows = []
+    for r in reqs_list:
+        lo, hi = r["emit"] - before, r["emit"] + after
+        cands = [u for u in uses if lo <= u["t"] <= hi and names_match(r["tool"], u["name"])]
+        if not cands:
+            rows.append((r, "unmatched", "対応する tool 呼び出しを transcript で見つけられない", ""))
+            continue
+        u = min(cands, key=lambda x: abs(x["t"] - r["emit"]))
+        tool = u["name"]
+        inp = u["input"] if isinstance(u["input"], dict) else {}
+        detail = brief_input(tool, inp)
+        hit = None
+        if run_hooks:
+            payload = {"session_id": "permission-dialog-audit", "transcript_path": "/dev/null",
+                       "cwd": str(cwd or Path.home()), "hook_event_name": "PreToolUse",
+                       "tool_name": tool, "tool_input": inp}
+            for matcher, cmd in hooks:
+                if not matcher_hits(matcher, tool):
+                    continue
+                v, msg = run_hook(cmd, payload)
+                if v:
+                    hit = (os.path.basename(cmd.split()[0]), v, msg)
+                    break
+        if hit:
+            # block (exit 2) は Claude にしか返らない = dialog は出ない。 ∴ 当時 dialog が出た
+            # この形も、 今は hook が先に止める (= 対処済み) と読める。 ask/deny は今も出る。
+            rows.append((r, "fixed" if hit[1] == "block" else "hook",
+                         f"{hit[0]} が {hit[1]}", hit[2] or detail))
+            continue
+        if tool == "Bash" and len(str(inp.get("command", ""))) > long_limit:
+            n = len(str(inp.get("command", "")))
+            rows.append((r, "length", f"command が {n:,} 文字 (閾値 {long_limit:,} 超)", detail))
+            continue
+        rows.append((r, "rule", "hook は無反応 = permission rule 側", detail))
+    return rows
+
+
+def print_diagnosis(rows, run_hooks, hooks_n):
+    if not rows:
+        print("対象の dialog なし")
+        return
+    by = {}
+    for _r, kind, _why, _d in rows:
+        by[kind] = by.get(kind, 0) + 1
+    print(f"permission dialog {len(rows)} 件 — 原因: " + ", ".join(f"{k} {v}" for k, v in sorted(by.items())))
+    print(f"  (PreToolUse hook {hooks_n} 本を実際に流し直して判定)" if run_hooks
+          else "  (--no-run-hooks: hook を実行していないので hook 由来も rule に混ざる)")
+    print("  ⚠️ 判定は「**今の**設定に当時の入力を流した結果」。 その後 hook を直していれば、"
+          " 当時 hook 由来だった dialog も今は rule / fixed と出る (= もう出ない、 と読む)")
+    print("")
+    for r, kind, why, detail in rows:
+        print(f"{fmt_t(r['emit'])}  {r['tool']}  [{kind}] {why}")
+        if detail:
+            print(f"      {detail}")
+        print(f"      → {FIXES.get(kind, '')}")
+
+
 def selftest():
     fails = []
 
@@ -375,6 +531,59 @@ def selftest():
         check(len(c) == 1 and c[0][0]["name"] == "Read" and c[0][1] >= 59,
               "--from-transcripts: 60 秒止まった Read だけが候補 (Bash は対象外)")
         check(names_match("computer:request_access", "mcp__computer-use__request_access"), "tool 名の接頭辞差を吸収")
+
+        # --- --diagnose ---
+        check(matcher_hits("Edit|Write|Bash", "Edit") and not matcher_hits("Edit|Write|Bash", "Read"),
+              "matcher は完全一致 (Edit|Write|Bash に Read は当たらない)")
+        check(matcher_hits("mcp__.*__(search_emails|list_events)", "mcp__gmail-lab__search_emails"),
+              "matcher の正規表現 (mcp__.*__…) が当たる")
+        check(not matcher_hits("Bash", "BashOutput"), "前方一致で誤爆しない (Bash は BashOutput に当たらない)")
+
+        hd = tmp / "hooks"
+        hd.mkdir()
+        (hd / "ask.sh").write_text(
+            '#!/bin/sh\necho "理由の 1 行目" >&2\n'
+            'printf \'{"hookSpecificOutput":{"permissionDecision":"ask"}}\'\n', encoding="utf-8")
+        (hd / "block.sh").write_text('#!/bin/sh\necho "長すぎる" >&2\nexit 2\n', encoding="utf-8")
+        (hd / "quiet.sh").write_text('#!/bin/sh\nexit 0\n', encoding="utf-8")
+        for f in ("ask.sh", "block.sh", "quiet.sh"):
+            os.chmod(hd / f, 0o755)
+        check(run_hook(f"sh {hd}/ask.sh", {})[0] == "ask", "hook の permissionDecision:ask を読む")
+        check(run_hook(f"sh {hd}/ask.sh", {})[1] == "理由の 1 行目", "hook の stderr 先頭行を理由に使う")
+        check(run_hook(f"sh {hd}/block.sh", {})[0] == "block", "hook の exit 2 を block と判定")
+        check(run_hook(f"sh {hd}/quiet.sh", {})[0] is None, "無反応の hook は verdict なし")
+        check(run_hook(f"{hd}/does-not-exist.sh", {})[0] in (None, "error"), "存在しない hook で落ちない")
+
+        st = tmp / "settings.json"
+        st.write_text(json.dumps({"hooks": {"PreToolUse": [
+            {"matcher": "Bash", "hooks": [{"type": "command", "command": f"sh {hd}/quiet.sh"}]},
+            {"matcher": "Write", "hooks": [{"type": "command", "command": f"sh {hd}/ask.sh"}]},
+        ]}}), encoding="utf-8")
+        hooks = load_pretooluse_hooks([str(st), str(tmp / "missing.json")])
+        check(len(hooks) == 2, "settings から PreToolUse hook を読む (無い file は無視)")
+
+        def req(tool, t):
+            return {"emit": t, "resp": None, "tool": tool, "decision": "once", "session": "s"}
+
+        du = [{"t": 1000.0, "name": "Bash", "input": {"command": "x" * 5000}, "id": "1", "sub": False, "path": tmp},
+              {"t": 2000.0, "name": "Bash", "input": {"command": "ls"}, "id": "2", "sub": False, "path": tmp},
+              {"t": 3000.0, "name": "Write", "input": {"file_path": "/x/y.md"}, "id": "3", "sub": False, "path": tmp}]
+        rows = diagnose([req("Bash", 1000.0), req("Bash", 2000.0), req("Write", 3000.0), req("Edit", 9000.0)],
+                        du, 8.0, 2.0, hooks, 3000, run_hooks=True, cwd=tmp)
+        kinds = [k for _r, k, _w, _d in rows]
+        check(kinds == ["length", "rule", "hook", "unmatched"],
+              f"分類: 長い Bash=length / 短い Bash=rule / ask 返す hook=hook / 突合不能=unmatched (got {kinds})")
+        check("5,000 文字" in rows[0][2], "length の理由に実際の文字数が出る")
+        check(rows[2][3] == "理由の 1 行目", "hook の理由を詳細に載せる")
+        rows_nb = diagnose([req("Write", 3000.0)], du, 8.0, 2.0, hooks, 3000, run_hooks=False, cwd=tmp)
+        check(rows_nb[0][1] == "rule", "--no-run-hooks では hook 由来も rule に落ちる (= 表示で断る)")
+
+        st2 = tmp / "settings2.json"
+        st2.write_text(json.dumps({"hooks": {"PreToolUse": [
+            {"matcher": "Bash", "hooks": [{"type": "command", "command": f"sh {hd}/block.sh"}]}]}}), encoding="utf-8")
+        rows_b = diagnose([req("Bash", 2000.0)], du, 8.0, 2.0,
+                          load_pretooluse_hooks([str(st2)]), 3000, run_hooks=True, cwd=tmp)
+        check(rows_b[0][1] == "fixed", "block を返す hook は fixed (= 今はもう dialog が出ない) と分類")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("")
@@ -394,6 +603,14 @@ def main():
     ap.add_argument("--from-transcripts", action="store_true", help="desktop log 無しで待ち時間から dialog 候補を推定")
     ap.add_argument("--wait", type=float, default=15.0, help="--from-transcripts の閾値秒 (既定 15)")
     ap.add_argument("--tools", default=",".join(FAST_TOOLS), help="--from-transcripts の対象 tool (カンマ区切り)")
+    ap.add_argument("--diagnose", action="store_true",
+                    help="dialog 1 件ごとに原因 (hook / 長さ / rule) を切り分けて消し方を出す")
+    ap.add_argument("--no-run-hooks", action="store_true",
+                    help="--diagnose で hook を実際に実行しない (= 副作用のある PreToolUse hook を書いている場合)")
+    ap.add_argument("--long-limit", type=int, default=3000,
+                    help="--diagnose で「長すぎる Bash」 とみなす文字数 (既定 3000)")
+    ap.add_argument("--settings", default=DEFAULT_SETTINGS,
+                    help="hook 定義を読む settings (カンマ区切り)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -410,6 +627,16 @@ def main():
         print(f"desktop log dir が無い: {log_dir} — CLI 等なら --from-transcripts を使う", file=sys.stderr)
         return 2
     reqs = parse_logs(log_dir, a.since)
+    if a.diagnose:
+        sel = sorted(reqs.values(), key=lambda x: x["emit"])
+        if a.latest:
+            sel = sel[-a.latest:]
+        uses, _ = load_tool_events(projects, a.since)
+        hooks = load_pretooluse_hooks([s.strip() for s in a.settings.split(",") if s.strip()])
+        rows = diagnose(sel, uses, a.before, a.after, hooks, a.long_limit,
+                        run_hooks=not a.no_run_hooks, cwd=home / "Claude")
+        print_diagnosis(rows, not a.no_run_hooks, len(hooks))
+        return 0
     if a.latest:
         print_latest(reqs, a.latest)
         return 0

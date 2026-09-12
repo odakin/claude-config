@@ -92,7 +92,7 @@
 - **[pdf-cleaner.html](pdf-cleaner.html)** — clipboard-cleaner.py のブラウザ版 fallback（非 macOS / pbcopy なし環境用、整形ロジックの正本は clipboard-cleaner.py で両実装を同期）
 - **[pdf-print-preflight.py](pdf-print-preflight.py)** — 印刷直前の PDF preflight — 「画面で見えた」 を印刷の保証にしない機械 gate (office-automation.md#print-preflight)。
 - **[pdf_form_fill.py](pdf_form_fill.py)** — 雛形 PDF への直接印字エンジン（library。anchor 印字 / NFKC 照合 / #+ redact / font subset / 内蔵検証 / 600dpi ラスタ化、office-automation.md#pdf-prefill-direct の汎用実装。単票向け — 派生 sheet 数式導出付き workbook は excel-osascript 経路）
-- **[permission-dialog-audit.py](permission-dialog-audit.py)** — Claude desktop の承認 dialog を app log から tool 別に集計し、 transcript と時刻突合して main / sub-agent / 不明に振り分ける
+- **[permission-dialog-audit.py](permission-dialog-audit.py)** — Claude desktop の承認 dialog を app log から集計し、 transcript と突合して main / sub-agent に振り分け、 1 件ごとに原因 (hook / 長さ / rule) を切り分ける
 - **[pin-claude-cwd.sh](pin-claude-cwd.sh)** — Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
 - **[pptx-to-pdf.sh](pptx-to-pdf.sh)** — PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、PowerPoint 経路は事前 grant 済み staging dir 経由、office-automation.md#pptx-to-pdf-powerpoint）
 - **[pre-commit-bib](pre-commit-bib)** — Git pre-commit hook（上記を呼ぶ）
