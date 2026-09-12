@@ -298,6 +298,8 @@ grep -nE '\\(newcommand|renewcommand|providecommand|nc|def|NewDocumentCommand|De
 
 ⚠️ **mechanize の限界を明示する**: 微分の `d` のように「regex で raw と正用を判別できない」 category は lint 不能 → discipline に残す（noisy rule を足すと false positive で linter の信頼を失う）。mechanize できる subset とできない subset を分け、後者は doc に明記する。
 
+⚠️ **未採用の alias を drift と読み違えない**: 導出は「preamble に定義がある」しか見ないので、**定義だけして誰も使っていない alias**（昔の名残・別概念の semantic alias）も raw 形を大量に告発する。gate に入れる前に engine の `[alias N×]` 表示で仕分ける — alias 側が 0 回なら drift ではなく「採用されなかった macro」なので、**採る（sweep する）か `ignore_macros` に入れるかを 1 度決める**。既存原稿に初めて当てる時はこれが finding の大半を占める（実測: 手入れ済みの 3 原稿で adopted 174 / unused 628）。
+
 各 repo の `CLAUDE.md §LaTeX rules` から本節を参照し、session 開始時に `git config core.hooksPath` が `.githooks` を指すか確認 → 空なら install を促す手順を repo 側に書く。
 
 ## <a id="fixed-framing-macro"></a>新規 macro に fixed framing text を含める前に source-render asymmetry の罠を抑える
