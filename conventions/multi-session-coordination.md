@@ -71,7 +71,7 @@ Read it again before attempting to write it.
   - 実例 2026-09-10: 層1 convention に 1 節足して index 生成 script を `--write` した際、 同 repo に別 session の未 commit 変更 (= `setup.sh` +24 行 + 未 tracked script 3 本) が居た。 生成物の diff を読んで自分の 1 行だけと確認できたので実害は無かったが、 相手が同じ生成物の source を触っていれば黙って混ざっていた。
 
 - <a id="measured-record-race"></a>**書き込み時に HEAD や hash を実測して書く記録道具は、並列 session が HEAD を進めると、相手の commit を自分の pass として記録する** (2026-09-13 追加) — 原稿の live identity (HEAD の短縮 hash と file の SHA-256) を ledger と SESSION に書く道具を、dry-run と本実行に分けて走らせた。その間に並列 session が同じ clone に commit を積み、本実行は相手の commit を、自分の pass の説明付きで書いた。dry-run が表示したのは自分の commit だったので、本実行の出力を読むまで気づけない。
-  - **検査 = 本実行の出力に出た hash を、自分が作った commit と突き合わせる。** 道具側で塞ぐなら、期待する commit を引数で受け取り、実測値と違えば何も書かずに止める。
+  - **検査 = 本実行の出力に出た hash を、自分が作った commit と突き合わせる。** 道具側で塞ぐなら、期待する commit を引数で受け取り、実測値と違えば何も書かずに止める。対象 file に未 commit の変更があるときも止める (実測した hash がどの commit も表さない。同じ回の dry-run は、相手の未 commit の編集を含む file を hash していた)。
   - **起きたら**: 書いた identity を commit 前に戻し、自分の pass の記録 (決定と意図) だけを commit する。identity は HEAD を進めた側が、自分の記録 pass で「相手の commit、その前が自分の commit」 の履歴として書く。同じ記録 file を 2 session が書く順番は、path 指定 commit でも相手の hunk を吸うのでメッセージで決める (片方が commit と push を終えてから、もう片方が次の番号で積む)。
 
 - <a id="autostash-foreign-wip"></a>**相手の未 commit 変更が居る tree で、 交差を見ずに `pull --rebase --autostash` しない** (2026-09-11 追加) — autostash は相手の未 commit 変更ごと stash して pop する。 upstream の新 commit が**相手の触っている file** を変えていると、 pop の conflict は相手の file の中で起きる (作業中の file に conflict marker が入り、 index も unmerged になる)。 自分の commit を `git commit -- <path>` で済ませていても、 push の前の pull で相手を巻き込む。
