@@ -29,7 +29,7 @@
 - **[check-form-clipping.py](check-form-clipping.py)** — 生成 form PDF で「記入値が描画時に clip された」のを機械検出。
 - **[check-gitcrypt-readable.py](check-gitcrypt-readable.py)** — 暗号化 file が「このマシンで実際に読めるか」を必ず可視に報告する。
 - **[check-inbound-refs.py](check-inbound-refs.py)** — safety net for restructuring claude-config (layer 1).
-- **[check-latex-crossrefs.py](check-latex-crossrefs.py)** — Find bare parenthetical cross-references in manuscripts adopting that style.
+- **[check-latex-crossrefs.py](check-latex-crossrefs.py)** — Find bare parenthetical cross-references and misplaced \labelcref numbers.
 - **[check-latexdiff-math-markup.py](check-latexdiff-math-markup.py)** — Gate against latexdiff silently dropping equation changes (2026-09-08).
 - **[check-legacy-append-only.py](check-legacy-append-only.py)** — the `legacy` forwarding map in a slug index must be
 - **[check-markup-artifacts.py](check-markup-artifacts.py)** — 赤入れ・校正済み現物の台帳漏れ / 未読 / 書き起こし消失を surface（config 駆動、スキャンは grep に掛からないので file 単位で持つ）
