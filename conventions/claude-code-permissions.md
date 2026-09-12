@@ -212,7 +212,9 @@ Bash の承認 dialog で「Yes, and don't ask again」 (desktop では「常に
 1. **tool 出力の spill file** = 長すぎる tool 出力が `~/.claude/projects/<project>/<session-uuid>/tool-results/<乱数>.txt` に退避され、 それを `sed` / `grep` で読み返す形。 session UUID も file 名も毎回変わるので、 共通部分は `sed -n` 程度しか残らない (実測 2026-09-05 と 09-12 の 2 件: sed 式・project dir・session UUID・file 名の 4 つすべてが相違)。
 2. **scratchpad** = `/private/tmp/claude-501/<project>/<session-uuid>/scratchpad/…`。 session ごとに path が変わるので、 ここへの Edit / Bash が dialog になる環境 (worktree session で本体 repo が cwd 外、 等) では毎 session 聞かれ続ける。
 
-⚠️ **「毎回変わる部分」 は目視で見落としやすい** (UUID は path の途中に埋まっていて、 一見ふつうの絶対 path に見える)。 `scripts/permission-dialog-audit.py --diagnose` が `rule_unique` として自動で切り分ける (実測 2026-08-20〜09-12 の 219 件中 21 件 = 約 1 割がこの class だった)。
+⚠️ **「毎回変わる部分」 は目視で見落としやすい** (UUID は path の途中に埋まっていて、 一見ふつうの絶対 path に見える)。 `scripts/permission-dialog-audit.py --diagnose` が `rule_unique` として自動で切り分ける。
+
+⚠️ **件数を読むときは `--no-run-hooks` を使わない**。 実測 2026-08-20〜09-12 の dialog 219 件で、 hook を流すと `rule_unique` は **3 件** (spill file 2 + worktree の scratchpad 1) だが、 `--no-run-hooks` だと **21 件**に膨らむ。 差の 18 件は mail-send-guard 等の**意図した hook gate** が `rule` 側に落ちて拾われたもの (= script 自身が冒頭で断っている通り)。 この class は「頻度は低いが、 押しても永久に減らないので体感が悪い」 種類であって、 dialog 総数の主因ではない。
 
 - **Bash には path rule が無い** ([#file-rule-tools](#file-rule-tools)) ので、 Bash 側で塞ぐには `Bash(sed -n:*)` のような粗い prefix しか書けない。 ∴ **spill file は Bash でなく Read tool で読み、 path rule を glob で 1 本置く**のが正解 (`Read(~/.claude/projects/**)` + [#symlink-both-paths](#symlink-both-paths) に倣い絶対 path 形も)。
 - ⚠️ `~/.claude` は `additionalDirectories` に入れていない限り scope 外で、 **bare `Read` allow では素通りしない** (= 本 doc 冒頭の observed)。 明示 path rule が要る。
