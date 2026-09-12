@@ -39,7 +39,7 @@
 
 ## Open items（forward-looking）
 
-- [ ] **zsh の未 quote 変数で loop・pathspec が割れない件の機械化を決める** (owner 判断待ち) — [`shell-env.md#claude-issued-shell-commands`](conventions/shell-env.md#claude-issued-shell-commands) の規則 1・5 を足した後も 2026-09-12 に 3 回再発 (`git … -- $P` / `set -- $pair` / `for id in $ids`)。 案 = PreToolUse Bash の nudge で `for x in $v`・`set -- $v`・`-- $v` (未 quote・非配列) を警告。 規則 5 の un-defer trigger (次の `git … -- $VAR`) を待つか、 class 全体で入れるかを決める。
+- [ ] **zsh の未 quote 変数で loop・pathspec が割れない件の機械化を決める** (owner 判断待ち) — [`shell-env.md#claude-issued-shell-commands`](conventions/shell-env.md#claude-issued-shell-commands) の規則 1・5 を足した後も 2026-09-12 に 3 回再発 (`git … -- $P` / `set -- $pair` / `for id in $ids`)。 案 = Bash tool の実行前に走る nudge hook で `for x in $v`・`set -- $v`・`-- $v` (未 quote・非配列) を警告。 規則 5 の un-defer trigger (次の `git … -- $VAR`) を待つか、 class 全体で入れるかを決める。
 - [ ] **auto mode で Read / Edit の ask rule が実際に dialog を出すか実地未確認** (公式 docs 由来のみ = [`#protected-settings-edit`](conventions/claude-code-permissions.md#protected-settings-edit))。 次に ask rule の対象を触る auto session で確かめる。
 - [ ] **Codex の会話冒頭表示と prompt-time cache を end-to-end で 1 回観測する** — 次の新規 Codex task で (期待値 = [conversation-start stamp](codex/PARITY.md#conversation-start-stamp) / [provenance](codex/PARITY.md#git-session-provenance))。 lift 元 = archive の 2026-09-10/11 provenance entry と 09-11 の Codex provenance 段落。
 - [ ] **Claude desktop session の commit trailer で model 欄が unknown** (2d5cc14 / session f7ca7877) — その session の provenance cache が無かった原因 (起動時入力に model が無いのか、 cache を書く hook が走らないのか) は未切り分け。 lift 元 = archive の 09-11 set -e entry。
