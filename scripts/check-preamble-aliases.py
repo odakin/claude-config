@@ -770,6 +770,8 @@ def main(argv=None):
     ap.add_argument("--strict", action="store_true", help="exploratory: also unanchored / alias-of-alias")
     ap.add_argument("--list", action="store_true", help="print the derived patterns and stop")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--quiet", action="store_true",
+                    help="print nothing when clean (for pre-commit gates)")
     ap.add_argument("--fix", action="store_true",
                     help="rewrite the raw forms in place (derived findings only)")
     ap.add_argument("--selftest", action="store_true")
@@ -834,6 +836,8 @@ def main(argv=None):
     soft_total = sum(sum(r["count"] for r in x["soft"]) for x in results)
 
     results = [{k: v for k, v in r.items() if not k.startswith("_")} for r in results]
+    if args.quiet and not unreadable and hard_total == 0 and soft_total == 0:
+        return 0
     if args.json:
         print(json.dumps({"results": results, "errors": unreadable,
                           "hard_total": hard_total, "soft_total": soft_total}, indent=2))
@@ -1031,12 +1035,20 @@ def selftest():
             (["--preamble", pre, frag], 1, "--preamble derives from another file"),
             (["--json", dirty], 1, "--json keeps the exit code"),
             (["--list", dirty], 0, "--list exits 0"),
+            (["--quiet", clean], 0, "--quiet clean exits 0"),
+            (["--quiet", dirty], 1, "--quiet still reports and fails when dirty"),
         ):
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
                 rc = main(argv)
             if rc != expected:
                 fails.append(f"{note}: rc={rc} want {expected}")
+            if argv[:1] == ["--quiet"]:
+                quiet_out = buf.getvalue().strip()
+                if expected == 0 and quiet_out:
+                    fails.append(f"--quiet should print nothing when clean: {quiet_out[:80]!r}")
+                if expected == 1 and "❌" not in quiet_out:
+                    fails.append("--quiet must still print the findings when dirty")
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             main(["--json", dirty])
