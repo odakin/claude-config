@@ -627,6 +627,8 @@ origin: 2026-06 官製様式の docx 記入要領削除。 run 直接色だけ�
 - **環境差**: マシン / 環境ごとに存在が違う要素 (例: ある環境に未取得の項目を「欠落」 と誤検出)。 検出は **環境非依存な軸** (= 全環境で true な属性) でのみ行う。
 - **意図的例外**: 既知の例外 list (= 規約上 SoT に載せないと決めたもの、 fork 等)。
 
+⚠️ 本節は **detector に作り込む filter** の設計。 **走らせた run の出力をその場で「偽陽性」 と宣言する行為**は別物で、 そちらの証拠要件は [#false-positive-declaration-needs-control](#false-positive-declaration-needs-control) (= positive control を出せないなら「未検証」)。
+
 → reflex: set 差分 detector を書く時「差分の各要素は本当に違反か、 正当な乖離か?」 を問い、 (b) を除外する filter を **明示的に設計** する (= 除外理由を code comment + doc に書く = §8.8-3 の no silent caps と同じく「何を・なぜ落としたか」 を可視化)。 naive な全差分 flag は false positive 源。 ⚠️ 逆に filter を効かせすぎると真の違反まで黙殺する (= §8.8 に戻る) ので、 filter は「正当性が確証できる category」 のみに限定する。
 
 origin: 2026-06 「実在する X が SoT 一覧に未登録か」 を検出する detector で、 naive 差分が『別管理の参照 clone』『別環境に未取得の項目』 を false positive にした。 self-owned ∧ 環境非依存 ∧ 非例外 の filter で真の違反 (= 1 件) のみに絞った。
@@ -1083,6 +1085,8 @@ origin: 2026-09、 noise 抑制と義務 mail の signal 共有 ([`§8.21`](#noi
 
 reflex: 「〜型」「同型」「blind-spot 型」 と打った瞬間に、 手が config / script / TODO に伸びているかを見る。 伸びていなければ label は未完成。
 
+双対 = [#false-positive-declaration-needs-control](#false-positive-declaration-needs-control)。 「〜型」 が**対策を足す最安の瞬間**なら、「偽陽性」 は**検査を殺す最安の瞬間**である。
+
 origin: 2026-09、 7 月に ML 経由の依頼を 9 日遅れで遡及 triage し「broadcast-obligation blind-spot 型」 と正しく分類した記録が、 filter も carrier も変えずに終わり、 翌月の同 ML で 23 日の見落としを生んだ。 分類は合っていた。
 
 ### <a id="protocol-cheapest-action-coverage"></a>8.33 新しい protocol は最頻・低 stakes の行為を protocol 内で最安にする — 迂回路は初日に現れる
@@ -1156,6 +1160,86 @@ domain 適用: 対外メールの書き方は [`research-email.md#mail-fact-poli
 reflex: 「自分を Cc に入れてもらった」 で追跡が済んだ気になった瞬間に、「**返事はどの受信箱に届くか**」 を 1 度問う。Cc が答えるのは「何を送ったか」 だけで、「何が返ってきたか」 ではない。
 
 origin: 2026-09、非会員の著者本人から編集事務局へ出した照会 (起草は第三者、第三者は Cc)。送信文面は Cc で正本化できたが、返信は reply-all されなければ届かず、手元の返信待ち検出器は category が違うため構造的に射程外だった。検出器を騙すより、時計と「本人に訊く」 を carrier にする方を採った。
+
+### <a id="false-positive-declaration-needs-control"></a>8.38 「偽陽性だ」 の宣言は主張である — positive control を出せないなら、それは偽陽性でなく「未検証」
+
+検出器が ✗ を出したとき、人はその場で「これは偽陽性だ」 と判定して先へ進むことがある。
+この判定は**行動ではなく主張**であり、しかも普通の主張と違って **3 つの性質**を持つ:
+
+1. **自己隠蔽する**。誤った「対策」 は動くので破綻が見えるが、誤った**免罪**は検査を黙らせるだけなので
+   何も起きない。失敗したことが分からない形の失敗になる。
+2. **class 全体に効く**。「この**様式**では印字されない」「この **kit** ではこの検査は無効」 のように、
+   観察した 1 instance でなく**構造**に帰属させた瞬間、同じ class の他の instance を見る動機が消える。
+3. **寿命が長い**。convention / docstring に書かれると、翌年・翌 project でも効き続ける。
+
+∴ **宣言には証拠要件を課す**。「偽陽性」 と書いてよいのは次のいずれかを満たすときだけ:
+
+- **(a) positive control を 1 つ挙げられる** — 同じ検査が**同じ条件で通る**対象を示す。
+  ⚠️ **control は同じ run の中に居ることが多い** (= 同じ様式の別 kit / 同じ検査の別対象 / 隣の file)。
+  免罪を書く前に「この class で ✓ になるものは手元にあるか」 を 1 度だけ探す。
+- **(b) 検査が見ている次元そのものを別経路で観測**し、期待値と一致することを確かめた。
+- **(c) どちらも不可能** → それは偽陽性ではなく **「未検証」**。第三の状態として**出力に残し**
+  ([#required-field-fabrication](#required-field-fabrication) と同じ「無いを機械可読にする」)、
+  その次元を見る別経路を用意するまでを 1 単位とする。
+
+**機械側の最小の直し** = **✗ を「期待値が無い」 だけで報告しない**。同じ場所に
+**「代わりに何が在るか」 (= 対立値)** を出す。不在の報告は「見えてないだけでは?」 と解釈できるので
+dismiss されやすいが、対立値の提示は解釈の余地を残さない。検出器は可能なら自分で
+✅ / 🔴 真陽性 / ⃠ 未検証 を判別する (材料: 前回値との差分 / 同 run の control / 表の見出し等の構造痕跡)。
+
+**scope 規律**: 免罪を convention / docstring に昇格させるときは、**観察した scope をそのまま書く**
+(「1 件で観察」 を「2 件とも実測」 と書かない)。§9.8 は「単一観察から構造**対策**に飛ばない」 を言うが、
+本節はその**鏡像で、鏡像の方が危険**である (上の性質 1)。
+関連: [#set-diff-false-positive](#set-diff-false-positive) は**検出器に作り込む filter** の話で、
+「正当性が確証できる category のみ」 と正しく言っているが、(i) **走らせた run の出力をその場で
+無効と宣言する行為**を射程に入れておらず (= その判断は code にも doc にも残らないので
+「除外理由を書く」 規律が発火しない) (ii) 「確証」 の**操作的な test** を与えていない。本節が (a)(b)(c) を足す。
+[#rca-as-labeling](#rca-as-labeling) の双対 — あちらは「『〜型』 と言った瞬間が対策の最安時」、
+こちらは「『偽陽性』 と言った瞬間が**検査を殺す最安時**」。
+
+origin: 2026-09、機関事務への申請で、入力後の突合 script が 9 件の ✗ を出した。これを
+「この様式では明細行が印字されないから偽陽性」 という**確かめていない構造説明**で全部無効化して送信し、
+事務から**同じ指摘を 2 度**受けた。反証 (= 同じ様式の別件が全行 ✓) は宣言の 1〜2 分前から同じ dir に
+置かれており、免罪は 16 分後に layer 1 へ「2 件とも実測」 として landed していた。
+事後に「✗ のとき対立値を併記する」 検査を書いて当時の artifact に当てると、当該 1 件だけが
+🔴 になり旧値が並ぶ (= 反実仮想を回帰テストとして固定できた)。evidence base は 1 事例だが、
+blast radius (= 誤った免罪が層 1 に残り毎年効く) で landing を判断した。
+
+### <a id="completion-record-from-counterparty"></a>8.39 完了の記録は「送ったもの」 でなく「相手が返したもの」 から作る
+
+外部システム (申請 portal / 投稿 system / Web フォーム / workflow) へ提出する作業では、
+完了の記録が**自分の意図した成果物**から作られやすい: 上げるはずだった file を `submitted/<日付>/` に
+copy し、ledger に「提出済」 と書き、task を close する。**これらは全部「送信した」 という事実だけで立つ**。
+
+問題は、提出が**部分的に着地する**ことがある点である (= 複数の欄・複数の artifact にまたがる更新で、
+一部だけが届く)。このとき上の記録は**偽証**になる。しかも典型的には、
+**主張 (= 上げるはずだった file) とその反証 (= 相手が返した確認用 PDF / 受理画面) が同じ dir に
+同居していて、誰も突き合わせていない**。後から読む人には両者の区別がつかない。
+
+**pattern**:
+
+- 完了記録の一次資料は**相手が返した artifact** (確認用 PDF / 受理番号 / 公開ページ / API の echo) にする。
+- 意図した artifact を併置してもよいが、**両者の一致を機械で assert してからでないと同じ dir に置かない**。
+- 記録を書く操作そのものを gate にする (= 一致しないなら `submitted/` を作らせず、
+  `…-MISMATCH/` に検査出力ごと落として carrier を起票する)。
+  [#completion-boundary-state-gate](#completion-boundary-state-gate) の外部システム版。
+- **送信前 gate は override されうるが、送信後 gate は override できない** (= もう送ってしまっており、
+  ✗ は「差し戻しを依頼する」 という行動に直結する)。完了判定は**送信後**に置く。
+
+⚠️ 併発しやすい第 2 の穴: **検査が「集まっていないもの」 を言わない**。手順が N 種類の artifact を
+集めろと言っていても、検査は**在るものだけを照合して緑を出す**ことが多い
+(= [#fail-loud-not-fail-empty](#fail-loud-not-fail-empty) の**入力欠落版** — あちらは parse/load の
+失敗を空で飲み込む話、こちらは**そもそも入力が来ていないことを言わない**話)。
+「✗ が 0」 は「全部見た」 ではない。**期待する (対象 × 種類) の収集マトリクスを出し、
+欠けていれば緑を出さない**。
+
+origin: 2026-09、申請の再提出で、`submitted/<日付>/` に「上げるはずだった明細 CSV」 と
+「システムが返した確認用 PDF (= 旧い明細が写っている)」 が同居していた。ledger・状態表・task close の
+4 つとも「送信した」 だけで成立しており、中身が旧いまま完了扱いになった。同じ提出で、手順が要求していた
+2 種類 × 4 対象 = 8 個の検証 artifact のうち 4 個 (= 別画面の印刷) が 1 つも集まっておらず、
+検査はそれを黙ったまま「✓ 全項目一致 — 送信してよい」 を出していた
+(= 1 個だけ置いた dir でも同じ文言が出ることを実測)。その画面側の指摘 5 件は一度も機械照合されず、
+人手の目視だけが最後の砦だった。
 
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
@@ -2135,6 +2219,7 @@ field を optional に戻すと item が radar から消える (= 機構が必�
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
+| 2026-09-12 | §8.38 新設「『偽陽性だ』 の宣言は主張である — positive control を出せないなら未検証」 + §8.39 新設「完了の記録は相手が返したものから作る」 + §8.9 / §8.32 から相互 link | layer-3 の申請 session で、入力後の突合 script が出した 9 件の ✗ を「この様式では印字されないから偽陽性」 という**確かめていない構造説明**で全部無効化して送信し、機関事務から**同じ指摘を 2 度**受けた。反証 (= 同じ様式の別対象が全行 ✓) は宣言の 1〜2 分前から同じ dir に在り、免罪は 16 分後に layer 1 へ「2 件とも実測」 として landed (= していない測定が実測として記録された)。§8.38 kernel = 免罪は自己隠蔽・class 全体に効く・寿命が長い、ゆえに (a) positive control (b) 別経路での直接観測 (c) どちらも不能なら「未検証」 の第三状態、+ 機械側は「不在」 でなく**対立値**を出す。§8.9 (detector の filter) との違いは「run 出力のその場の無効化は code にも doc にも残らない」 点。§8.32 の双対。同じ事故の 2 件目として、完了記録が**上げるはずだった artifact** から作られ、システムが返した反証と同じ dir に同居していた (+ 手順が要求する 8 個中 4 個しか集まっていないのに検査が「✓ 全項目一致 — 送信してよい」 を出す) ことを §8.39 に。evidence base は 1 事例だが blast radius (= 層 1 の誤りは毎年効く) で landing を判断。instance (verifier / 手順書 / 台帳) は個人層・project 側に残置 (kernel-up / instance-down)。user 依頼「完璧にしてくれ」 |
 | 2026-09-11 | §8.35 新設「resolver 出力は新しい trust boundary」+ §23 に field-wise `unknown`、保証値欠測のwarning、shared resolver所有を追記 | Codex Git-hook rollout で同じ session に二方向の resolver defect を観測: (a) `--repo-root` 内 candidate が symlink/Git解決後に root 外 checkout となりbulk write scopeを脱出、(b) `git rev-parse --git-path hooks` のrelative resultをcaller cwdへ誤anchorし、別repoのhookをMISSINGと誤報。入力検査→resolve→owner基準anchor→canonicalize→最終targetで再認可、を一般化。併せてCodex冒頭stampでaccount/effortが取れないため全stampを消すのでなく、host/surface/session/modelの既知fieldを残して未知fieldだけ`unknown`にする形を§23へ昇格。follow-up でactive modelのfallbackとwarningを追加し、一度はhard blockへ振ったが、「通常は取れる」と「絶対に欠測しない」は別でありprovenance縮退はcommit本体を不正にしない、というowner指摘でfail-openへ戻した。さらにstamp/cache/Gitの3 consumerに重複していた解決順をshared resolverへ集約した。instanceはCodex技術正本とinstaller/testに残置。user依頼「すべてのスクリプトと知見をなるべく上層に」 |
 | 2026-09-09 | §23 新設「必須にした field は、値が無いとき捏造される — 『無い』を機械可読にする第三の状態」 | layer-3 の TODO surface 機構で、「本人操作が要る item には deadline を必ず添える (自己設定で可)」という規約が、本来いつやってもよい作業に**拾わせるためだけの日付**を書かせていた。実測すると該当 6 件中 3 件が捏造で、本物の失効型期限 1 件がその中に並んで最上位 group に置かれていた (= 捏造が本物の信号を薄める狼少年)。owner が「なんで期限とかあるの?」と問うて初めて表面化 — 機構の内側からは捏造も本物も同じ「日付を持つ item」にしか見えない。kernel = 出自を宣言する第三の状態 + 設計要件 4 つ (無記載 = 従来の意味で移行不要 / loud 側 default / 「静かにする」であって「消す」ではない / 判別が自然言語なら機械化不能と declared) + 見分ける問い「値が無い item に書き手は何を書くか」。§8.28 壁紙化の上流にある別型 (cadence でなく severity の出自)。instance (marker field / 表示 tier / 除外する 3 経路) は個人層に残置 (kernel-up / instance-down)。user 依頼 (「すべての知見をなるべく上層に」) |
 | 2026-09-09 | §22 新設「安全網が自分で使う probe の失敗は、健全と同じ姿の答えに化ける」 | layer-3 の session 開始 hook で、3 つの repo が 39 / 119 / 238 commits 遅れたまま放置され、別目的の検査がその古い手元を読んで落ちたことで偶然発覚。3 つとも「clean なら自動同期」の条件を満たしており、機構は在ったが手前の probe (並列 fetch) が per-item timeout / watchdog で打ち切られ、失敗を `\|\| true` が潰していた → 手元が更新されないまま「差分 0 = 同期済み」に化けていた (= silent failure ではなく **false healthy**)。しかも差分が溜まるほど probe が重くなり打ち切られやすくなる正のフィードバック付き。kernel = 失敗値が健全値と同じ形になる class の識別 + 4 pattern (成功を marker に記録して不在で検出 / 測れなかったことを測った結果と同型にしない / fail-open は報告付き / 閾値調整は観測後)。併発した第 2 の穴 (「手当てが要る」一覧が一部 frontend で honor されない経路にしかない) は §12 暗黙 scope の表示版。事故構造を再現する test を置き旧実装で FAIL することを確認済。instance は個人層に残置 (kernel-up / instance-down)。user 依頼 (「すべての知見をなるべく上層に」) |

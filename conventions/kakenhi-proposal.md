@@ -255,15 +255,25 @@ JSPS は種目別の**書面審査における評定基準等** (審査委員に
 (「〜への参加と〜との研究打合せ」→「〜・〜との打合せ」、「対面研究打合せ」→「研究打合せ」)。
 「場所・日数・人数」は落とさない (= 粒度の指摘の方が再差し戻しに直結する)。
 
-### <a id="confirmation-pdf-detail-rows"></a>提出確認用 PDF に経費明細の行が印字されるかは種目で違う
+### <a id="confirmation-pdf-detail-rows"></a>提出確認用 PDF には経費明細の行が印字される — 「出ない種目がある」は誤診だった
 
-基盤研究・挑戦的研究の提出確認用 PDF には「各経費の明細」の全行 (事項・金額) が印字されるが、
-**学術変革領域研究(A) 公募研究 (S-74) の確認用 PDF には費目ごとの年度合計 (設備 / 消耗品 / 旅費 /
-人件費・謝金 / その他) しか出ない** (2026-09-08 実測、2 件とも)。入力後の機械突合を「明細の各行が
-PDF に在るか」で組むと、公募研究では全行 ✗ になって verifier が壊れる。突合は種目に応じて
-(a) 明細行の literal (印字される種目) / (b) 費目 × 年度の合計 (印字されない種目) の 2 段で書く。
-「研究費の応募・受入等の状況」は全種目とも確認用 PDF に含まれないので別途 (画面印刷 or 確認画面の
-全行照合) — [#submission-artifact-staging](#submission-artifact-staging) 3 参照。
+提出確認用 PDF には「各経費の明細」の全行 (事項・品名/仕様・金額) が印字される。**基盤研究・
+挑戦的研究だけでなく、学術変革領域研究(A) 公募研究 (S-74) でも印字される** (2026-09-12 に
+2026-09-08 提出の 4 本 = 基盤B / 萌芽 / 公募 24A205 / 公募 26A204 で実測)。∴ **入力後の突合は
+「明細の各行が確認用 PDF に在るか」で組んでよい**。
+
+- 明細を分割してもしなくても**費目 × 年度の合計は不変**なので、合計だけの照合では取込漏れを
+  検出できない。照合は必ず**行の literal** で行う。
+- 「研究費の応募・受入等の状況」は全種目とも確認用 PDF に含まれないので別途 (画面印刷 or
+  確認画面の全行照合) — [#submission-artifact-staging](#submission-artifact-staging) 3 参照。
+
+⚠️ **2026-09-08 に本節は逆の内容 (「公募研究では費目合計しか出ない」) で書かれていた。それは誤りで、
+実害を出した**: 26A204 で経費明細 CSV の取込が実行されず旧行のままだったのに、verifier の全行 ✗ を
+「この様式では印字されないから偽陽性」と解釈して送信し、機関事務から**同じ指摘を 2 度**受けた。
+反証は同じ run の中に既に在った (= 同じ S-74 の 24A205 が全行 ✓)。しかも層 1 には
+「2 件とも実測」と、**していない測定**が実測として記録されていた。一般則 =
+[convention-design-principles.md#false-positive-declaration-needs-control](../docs/convention-design-principles.md#false-positive-declaration-needs-control)
+(= 検査の出力を「偽陽性」と宣言するには positive control が要る)。
 
 ### <a id="textfield-wavedash-entity"></a>テキスト欄の波ダッシュは PDF に「&amp;#12316;」と焼かれる
 
@@ -568,6 +578,13 @@ kakenhi-preflight.py --form 様式.docx --pdf 組上がり.pdf [--keihi 明細.c
   | ⑪ | **ID の取り違え** (機関番号 ⇄ 機関コード / 旧値の残存)、本文と file 名の両方 | [#identity-code-verification](#identity-code-verification) |
   | ⑫ | **本文内の用語のゆれ** (同じものを「研究補助員」と「研究補助者」で書く) | 本節 |
 
+- 🔴 **同じ指摘を 2 度受けたら、原稿ではなく「前回の対応が着地したか」を最初に疑う**。事務は
+  **システム上の現物**を見ている。こちらの手元には「直した」記録があるが、それは**リポに着地した**
+  記録であって**システムに着地した**記録ではない。最初の 1 手 = 前回の提出確認用 PDF と手元の期待値を
+  機械で突合する (数分)。原稿を開くのはその後。実例: 2026-09-11 に受けた指摘 3 点は 9/7 の指摘と
+  **逐語で同一**で、原因は原稿ではなく経費明細 CSV の取込漏れだった (= 原稿を書き直す方向に時間を
+  使いかけた)。差し戻し対応の完了判定も「送信した」ではなく**「送信後の確認用 PDF に前回の指摘が
+  反映されている」**に置く ([#confirmation-pdf-detail-rows](#confirmation-pdf-detail-rows))。
 - 🔴 **赤字は、指摘された箇所だけでなく全種目・全欄に横展開する**。事務は種目ごとに別々の人が
   別々の深さで読むので、**同じ瑕疵が「指摘された種目」と「されなかった種目」に同時に在る**のが常態。
   1 件直したら同じ語・同じ型を全 kit に grep する (= [convention-design-principles.md](../docs/convention-design-principles.md) の同類問題 sweep の
@@ -753,8 +770,13 @@ kakenhi-preflight.py --form 様式.docx --pdf 組上がり.pdf [--keihi 明細.c
    4 種目を 1 晩で回した順は 基盤B → 萌芽 → 公募 2 件 (期限順、 かつ鏡像の親から)。
 
 罠 (同日実測): 「事項」72 バイト上限 [#keihi-meisai-field-limits](#keihi-meisai-field-limits) /
-公募研究の確認用 PDF に明細行が無い [#confirmation-pdf-detail-rows](#confirmation-pdf-detail-rows) /
 相違点欄の prefix 照合は画面の現行文を SoT に写してからでないと偽 ✗ になる (SoT に推測 prefix を書かない)。
+🔴 **この 4 種目 1 晩の運用で「公募研究の確認用 PDF に明細行が無い」と結論したが、それは誤りだった**
+(= 実際は取込漏れ。[#confirmation-pdf-detail-rows](#confirmation-pdf-detail-rows))。
+**送信可の判定を「✗ が 0」だけに置かない** — 期待する artifact (種目 × {確認用 PDF, 応募状況の印刷})
+が**全部揃っているか**も同時に見る。2026-09-08 は 8 個中 4 個 (応募状況は 0 本) しか集めていないのに
+verifier が「✓ 全項目一致 — 送信してよい」を出せる状態で、応募状況側の指摘 5 件は一度も機械照合されなかった
+([convention-design-principles.md#fail-loud-not-fail-empty](../docs/convention-design-principles.md#fail-loud-not-fail-empty) の入力欠落版)。
 
 **次の段階 = AI が打つ** (同日夜に sandbox で実証済): ログインだけ人間、以降の画面は Browser pane + JS で AI が
 入力し ([#ai-write-route](#ai-write-route))、参照画面を自分で読んで SoT と突合する ([#ai-read-route](#ai-read-route))。
