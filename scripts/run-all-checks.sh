@@ -63,6 +63,10 @@ run "Codex integration contract" python3 scripts/check-codex-integration.py --ch
 #     --base . = 本 repo だけを走査 (CI に兄弟 repo が無くても、着地先の無い cross-repo link は skip)。
 #     起源 = 2026-09-13、分割 6 日後に壊れた自己参照 21 件 (convention-design-principles #self-reference-is-nobodys-business)
 run "markdown anchors resolve (check-md-anchors)" python3 scripts/check-md-anchors.py --base "$ROOT" --quiet
+#     相対 link の着地先 file の実在。直せる型 (../ の段数ずれ・git が記録した改名) が 1 件でもあれば FAIL、
+#     後継の無い削除や数式・散文の誤認は報告のみ。起源 = 2026-09-13 fleet で段数ずれ 91 + 改名 20 を修正
+#     (convention-design-principles #link-target-rot)
+run "markdown link targets exist (fix-md-links --strict)" python3 scripts/fix-md-links.py --base "$ROOT" --strict --quiet
 # ↓ 中身の検査 (generate-tree / index / codex contract) は上と重複するが、 hook script 自体が
 #   実行可能で exit 0 する smoke test として意図的に残す (重複削除で hook の壊れが盲点化する)
 run "claude-config pre-commit extra" bash .claude/pre-commit-extra.sh

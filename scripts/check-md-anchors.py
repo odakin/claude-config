@@ -51,15 +51,76 @@ LINK = re.compile(r"\[[^\]]*\]\((?!https?:|mailto:|#?$)([^)\s]+)\)")
 EXPLICIT = re.compile(r"""id=["']([^"']+)["']""")
 FENCE = re.compile(r"^(```|~~~)[^\n]*\n.*?^\1[ \t]*$", re.M | re.S)
 CODE_SPAN = re.compile(r"`[^`\n]*`")
+# GitHub math: `$$...$$`, or `$x$` with no space just inside either dollar and no digit after the
+# closing one (so prose like "$ROOT と $HOME" or "$5 and $10" is NOT masked as math).
+MATH = re.compile(r"\$\$.*?\$\$|\$(?=\S)[^$\n]*?(?<=\S)\$(?!\d)", re.S)
+LINE_SUFFIX = re.compile(r":\d+(?::\d+)?(?:-\d+)?$")   # editor-style `file.py:12` / `:12:3`
 LINE_ANCHOR = re.compile(r"^L\d+(?:-L?\d+)?$")   # GitHub / editor line refs, not headings
 _cache: dict[Path, set] = {}
 
 
+def protected_mask(text: str) -> list[bool]:
+    """True for every char inside a fence, an inline code span or math. Links whose `](` starts
+    in a protected char are examples/formulas, not links. A mask (not deletion) keeps offsets,
+    so a fixer can rewrite links in place without touching the protected regions."""
+    mask = [False] * len(text)
+    for rx in (FENCE, CODE_SPAN, MATH):
+        for m in rx.finditer(text):
+            if not mask[m.start()]:
+                for i in range(m.start(), m.end()):
+                    mask[i] = True
+    return mask
+
+
 def live_markdown(text: str) -> str:
-    """Drop fenced blocks and inline code spans: a link shown AS SYNTAX (`[x](#slug)`) is an
-    example, not a link. Link text that merely contains code (`` [`name`](#a) ``) survives as
-    `[](#a)`, so real links with backticked labels are still checked."""
-    return CODE_SPAN.sub("", FENCE.sub("", text))
+    """Blank out fences, code spans and math with spaces (same length): a link shown AS SYNTAX
+    (`[x](#slug)`) or a formula like `$[a,b](2)$` is not a link, while a real link whose label is
+    code (`` [`name`](#a) ``) keeps its `](#a)` and is still checked."""
+    mask = protected_mask(text)
+    return "".join(" " if (mk and ch != "\n") else ch for ch, mk in zip(text, mask))
+
+
+def split_target(target: str) -> tuple[str, str, str]:
+    """`dir/x.md:12#frag` -> ('dir/x.md', ':12', 'frag'). Path part is still %XX-encoded."""
+    path_part, _, frag = target.partition("#")
+    m = LINE_SUFFIX.search(path_part)
+    suffix = m.group(0) if m else ""
+    return (path_part[: m.start()] if m else path_part), suffix, frag
+
+
+def resolve(src: Path, path_part: str) -> Path:
+    """Resolve a link path the way a renderer does: from the source's REAL directory (a
+    symlinked copy does not move the base), with %XX decoded."""
+    from urllib.parse import unquote
+    return (src.resolve().parent / unquote(path_part)) if path_part else src.resolve()
+
+
+def iter_markdown_sources(base: Path, repos: list[str]):
+    """Every .md under the roots, once per REAL file (a symlink to a file that is also reached
+    through its own repo is skipped, so it is neither scanned twice nor resolved from the
+    symlink's directory)."""
+    seen: set[Path] = set()
+    base_real = base.resolve()
+    roots = [base / r for r in repos] if repos else [base]
+    for root in roots:
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            for fn in filenames:
+                if not fn.endswith(".md"):
+                    continue
+                p = Path(dirpath) / fn
+                try:
+                    real = p.resolve()
+                except OSError:
+                    continue
+                if real in seen or (p.is_symlink() and not real.exists()):
+                    continue
+                # a symlink whose target lives OUTSIDE the base belongs to another repo: a repo-local
+                # gate (`--base "$ROOT"`) must not fail for that repo's links
+                if p.is_symlink() and base_real not in real.parents:
+                    continue
+                seen.add(real)
+                yield p
 
 
 def is_checkable_fragment(frag: str) -> bool:
@@ -82,35 +143,35 @@ def anchors_of(p: Path) -> set:
     return ids
 
 
+def rel_to(base: Path, p: Path) -> str:
+    try:
+        return str(p.resolve().relative_to(base.resolve()))
+    except ValueError:
+        return str(p.resolve())
+
+
 def scan(base: Path, repos: list[str]) -> tuple[dict[str, list[str]], int]:
     broken: dict[str, list[str]] = {}
     checked = 0
-    roots = [base / r for r in repos] if repos else [base]
-    for root in roots:
-        for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
-            for fn in filenames:
-                if not fn.endswith(".md"):
-                    continue
-                src = Path(dirpath) / fn
-                try:
-                    text = src.read_text(encoding="utf-8", errors="replace")
-                except Exception:
-                    continue
-                for m in LINK.finditer(live_markdown(text)):
-                    path_part, sep, frag = m.group(1).partition("#")
-                    if not sep or not frag or not is_checkable_fragment(frag):
-                        continue
-                    dest = (src.parent / path_part).resolve() if path_part else src
-                    checked += 1
-                    if not dest.exists() or dest.suffix != ".md":
-                        continue          # missing paths are check-inbound-refs' business
-                    if frag not in anchors_of(dest):
-                        try:
-                            key = f"{dest.relative_to(base)}#{frag}"
-                        except ValueError:
-                            key = f"{dest}#{frag}"
-                        broken.setdefault(key, []).append(str(src.relative_to(base)))
+    for src in iter_markdown_sources(base, repos):
+        try:
+            text = src.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        for m in LINK.finditer(live_markdown(text)):
+            path_part, _suffix, frag = split_target(m.group(1))
+            if not frag or not is_checkable_fragment(frag):
+                continue
+            try:
+                dest = resolve(src, path_part).resolve()
+                ok = dest.exists()
+            except OSError:
+                continue
+            checked += 1
+            if not ok or dest.suffix != ".md":
+                continue          # missing paths are fix-md-links.py's business
+            if frag not in anchors_of(dest):
+                broken.setdefault(f"{rel_to(base, dest)}#{frag}", []).append(rel_to(base, src))
     return broken, checked
 
 
@@ -181,6 +242,38 @@ def selftest() -> int:
               "really-missing" in keys)
         check("a `# comment` inside a fence does not create an anchor",
               "not-a-heading" in keys)
+    # renderer-faithful resolution (2026-09-13): symlinks, %XX, math, prose with dollars
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        (base / "repo" / "docs").mkdir(parents=True)
+        (base / "repo" / "docs" / "t a.md").write_text("## Real\n", encoding="utf-8")
+        (base / "repo" / "docs" / "doc.md").write_text(
+            "rel from real dir [a](t%20a.md#real)\n"
+            "broken via encoded path [b](t%20a.md#nope)\n"
+            "formula $[x](#in-math)$ is not a link\n"
+            "prose $ROOT と $HOME [c](#prose-dollar-missing) is still checked\n", encoding="utf-8")
+        os.symlink(base / "repo" / "docs" / "doc.md", base / "LINK.md")   # symlinked copy at top
+        broken, _ = scan(base, [])
+        keys = set(broken)
+        check("%20 path resolves and its anchor is checked",
+              not any(k.endswith("#real") for k in keys) and any(k.endswith("#nope") for k in keys))
+        check("a symlinked copy resolves from the REAL directory (no false break from LINK.md)",
+              not any("t%20a" in k or k.startswith("t a") for k in keys if "nope" not in k))
+        check("the symlinked copy is not scanned twice", len(broken.get(
+            next((k for k in keys if k.endswith("#nope")), ""), [])) == 1)
+        check("a link inside $math$ is not checked", not any("in-math" in k for k in keys))
+        # repo-local run: a symlink inside repo/ that points OUTSIDE repo/ is another repo's file
+        (base / "other").mkdir()
+        (base / "other" / "foreign.md").write_text("[f](#foreign-missing)\n", encoding="utf-8")
+        os.symlink(base / "other" / "foreign.md", base / "repo" / "FOREIGN.md")
+        local, _ = scan(base / "repo", [])
+        check("repo-local scan does not follow a symlink out of the repo  [foil]",
+              not any("foreign-missing" in k for k in local))
+        check("prose with two dollars does not hide a real link  [foil for over-masking]",
+              any("prose-dollar-missing" in k for k in keys))
+    check("split_target keeps the editor line suffix apart",
+          split_target("dir/x.md:12#frag") == ("dir/x.md", ":12", "frag"))
+
     check("a link inside a heading contributes only its label to the slug",
           gh_slug(rendered_heading_text("1.2 the artifact [anchor.py](scripts/anchor.py)"))
           == "12-the-artifact-anchorpy")

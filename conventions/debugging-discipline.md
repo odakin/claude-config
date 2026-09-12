@@ -239,6 +239,7 @@ introspection が **存在しない / 信頼できない** ケース:
 |---|---|---|
 | `grep "X"` | 入力に NUL が含まれると binary 扱いになり、 **一致しても報告しない**ことがある | byte 比較する (`head -c N \| xxd -p` と期待値を突き合わせる) |
 | `git ls-files` | 非 ASCII の path を **引用符 + 8 進エスケープ**で返す (`"docs/\346\227\245..."`) | `-z` で NUL 区切り、 `surrogateescape` で decode |
+| `git diff --name-only` / `git status --short` / `git log --name-status` | 同じ quote。 ⚠️ **帰結が誤検知より悪い** (2026-09-13): quote 付きの path を下流の検証に渡すと、 その path には差分が「無い」 ので検証は**空振りして PASS** する。 実測で `§` を含む 2 file が未検証のまま「検証済」 になり、 別の分類 (末尾が `.md"` = 「md 以外の変更」) で commit も黙って skip された | `-z` で取る。 **検証は対象ごとに「入力が在った」 ことを要件にする** (差分 0 行・対象 0 件は PASS でなく FAIL) |
 | `git diff --cached` を `text=True` で読む | staged に binary (画像 / tar) があると `UnicodeDecodeError` で **落ちる** | `errors="replace"` で decode する |
 | `$0` | 相対で渡されうる。 別 dir に `cd` してから再帰呼び出しすると壊れる | 冒頭で絶対化する |
 | 一括処理 script 内の `grep -c` / 存在 probe | 「0 件」 が「無い」 と「調べられなかった」 を区別しない | 判定不能を第 3 の状態として出す |
