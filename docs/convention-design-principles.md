@@ -1138,6 +1138,25 @@ origin: 2026-09、 layer-3 の session 宛て board を v2 (request / claim / su
 
 domain 適用: 対外メールの書き方は [`research-email.md#mail-fact-policy-boundary`](../conventions/research-email.md#mail-fact-policy-boundary)。
 
+### <a id="proxy-outbound-reply-blindspot"></a>8.37 他人名義で出した依頼の返信は、自分の受信箱に来ない — Cc は送信の証拠であって返信の網ではない
+
+自分が起草し、**別人が自分の account から送る**依頼 (= 学生・共同研究者・家族の名義で出す照会、代理の申込) がある。自分を Cc に入れてもらうと、**送信された実文面**が手元に残る — ★ で空けた欄に本人が何を書いたかまで確定でき、記録の正本にできる。これは代理起草の返却経路として安い。
+
+⚠️ **ところが Cc は返信の網にはならない**。相手が reply-all しなければ、回答は送信者ひとりに届く。ここで 2 つの失敗が重なる:
+
+1. **検出器の入力面から落ちる**。「返信待ちの outbound」 を追う検出器は、たいてい *自分が送った* mail (= 送信済 category) を母集団にする。他人名義の依頼は自分の送信ではないので、書式上その母集団に入らない。⚠️ **入るように category を偽ると、検出器は鳴るが done_evidence が嘘になる** — 機械を騙して安心を買う取引で、[`§22`](#silent-probe-false-healthy) の自作版になる。
+2. **probe の沈黙が両義になる**。その thread を引く probe は「送信 1 通のまま」 を返すが、これは「まだ返事が無い」 とも「返事は来たが相手にだけ届いた」 とも読める。**健全と失敗が同じ姿**をしている ([`§22`](#silent-probe-false-healthy))。
+
+**pattern**: 代理送信を記録する turn で、追跡を**受信箱 probe でなく時計と人**に載せる。
+
+- carrier は「期日までに動きが無ければ **送信者本人に訊く**」 という自己設定の時計にする ([`#expected-inbound-tripwire`](#expected-inbound-tripwire) の変種 — 来るはずの inbound が、そもそも自分宛でない場合)
+- probe を書くなら **「この probe では未回答を判定できない」 を probe の隣に書く**。書かないと、次に読む人 (数週間後の自分を含む) が沈黙を「未回答」 と読む
+- 送信前に決められるなら、**返信先を設計に入れる** — 重要な照会なら「返信は全員へ」 と本文で頼む、第三者を To に入れる、あるいは第三者名義で送る
+
+reflex: 「自分を Cc に入れてもらった」 で追跡が済んだ気になった瞬間に、「**返事はどの受信箱に届くか**」 を 1 度問う。Cc が答えるのは「何を送ったか」 だけで、「何が返ってきたか」 ではない。
+
+origin: 2026-09、非会員の著者本人から編集事務局へ出した照会 (起草は第三者、第三者は Cc)。送信文面は Cc で正本化できたが、返信は reply-all されなければ届かず、手元の返信待ち検出器は category が違うため構造的に射程外だった。検出器を騙すより、時計と「本人に訊く」 を carrier にする方を採った。
+
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
 規約・hook を失敗毎に追加する運用は、時間と共に規約 load が肥大化し、古い規約が crowd out されて新違反を招く loop に陥る。2026-04-17 session で抽出した 3 つの対処原則。
@@ -2158,3 +2177,4 @@ field を optional に戻すと item が radar から消える (= 機構が必�
 | 2026-08-20 | §8.23 新設「失効型〆切つきの機会 — 義務網と応答網の谷間に落ちる opportunity class」 | layer-3 で地域研究会案内 4 通 (BCC「各位」、 段階〆切つき) が約 3 ヶ月・4 経路 (名指し網 / 義務網 / 〆切抽出器の書式前置+早期告知 / 未認識 backlog の rolling 窓 silent 退場) を独立に貫通し発表申込〆切が silent 失効した RCA を一般化。 §8.17 (義務 broadcast) の機会版・§8.22 (失効型) の intake 前段・§8.18 (二日付軸) の horizon 変種。 対策 = 機会 intake 規律 (検討 entry or declared skip) + 〆切抽出器の書式/距離 audit + FP 分業。 本 class 直接 1 + 隣接 sibling 2 で §9.8 は隣接充足と明示。 user green-light 経由 (worker session 実装)。 |
 | 2026-07-25 | §8.8 頻出 proxy 型に「repo tree / git dirt を変更・副作用の proxy にする」 row 追加 | OAuth credential 書き戻し箇所の一掃 sweep が、 書き込み先だけ repo 外 runtime dir の 1 箇所を見落とし (= dirt にならず発見対象外)、 同日の耐久性 audit も同じ runtime dir の credential 欠落 (1 マシン 45 日不在) を scan 範囲外にしていた = 「repo の外は sweep の外」 の同一構造 2 実例 (§9.8 充足)。 別調査の独立実測が両方を発見。 user 依頼 (「層1 SoT にできることある?」)。 |
 | 2026-09-07 | §8.33 新設「新しい protocol は最頻・低 stakes の行為を protocol 内で最安にする — 迂回路は初日に現れる」 | layer-3 の session 宛て board v2 で両 vendor が初日に旧形式の手 commit へ迂回 (request 不要の状況共有が無かった) → inert な note kind + 混在許容で design-out |
+| 2026-09-12 | §8.37 新設「他人名義で出した依頼の返信は、自分の受信箱に来ない — Cc は送信の証拠であって返信の網ではない」 | layer-3 で第三者が起草し本人名義で出した対外照会 (起草者は Cc) について、送信文面は Cc で正本化できる一方、返信は reply-all されなければ届かず、「返信待ちの outbound」 検出器は母集団が *自分の* 送信済 mail なので構造的に射程外、と判明。thread probe の沈黙が「未回答」 と「相手にだけ届いた」 の両義になる点で §22 (probe の失敗が健全と同じ姿) の入力面版、来るはずの inbound がそもそも自分宛でない点で §8.30 (expected-inbound tripwire) の変種。対策 = 検出器を通すために category を偽らない (= done_evidence が嘘になる) / carrier を時計 + 「送信者本人に訊く」 に載せる / probe の隣に「これでは未回答を判定できない」 を書く / 送信前に返信先を設計する。user 依頼 (session close の層1 hoist)。 |
