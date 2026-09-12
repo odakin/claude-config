@@ -177,6 +177,10 @@ sections:
     legacy: "8.12"
     level: 3
     title: "8.12 規律の発火面 hierarchy — doc 記載 (recall 依存) は最弱、 書く前に発火面を選ぶ"
+  - id: documented-not-wired
+    legacy: "8.12a"
+    level: 3
+    title: "8.12a′ 症状表に「対処」 を書いても、共有 engine に入っていなければ効いていない (2026-09-12)"
   - id: automation-trigger-routing
     legacy: "8.12a"
     level: 3
