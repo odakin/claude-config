@@ -14,6 +14,7 @@
 - **[bootstrap-stdio-mcps.sh](bootstrap-stdio-mcps.sh)** — generic auto-bootstrap library for self-hosted stdio MCPs.
 - **[bootstrap-stdio-mcps.test.sh](bootstrap-stdio-mcps.test.sh)** — self-test for the generic stdio MCP bootstrap library.
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入
+- **[calibrate-bash-command-pattern.py](calibrate-bash-command-pattern.py)** — Bash の command を見る PreToolUse guard の述語を、 過去の transcript の Bash tool 呼び出しに当てて検出数と例を出す（導入前の誤検出の見積もり用。 --hook で hook file の find_issues(command) をそのまま使う、 --selftest。 conventions/hook-authoring.md#command-guard-calibration）
 - **[calibrate-final-message-pattern.py](calibrate-final-message-pattern.py)** — 発話を見る Stop hook の句を、 過去の transcript の各 turn の最終 assistant 発話に当てて検出数と例を出す（導入前の誤検出の見積もり用。 turn の境界は hook と同じ scripts/lib/transcript_turns.py、 --skip-quoted / --exclude-sentence-with で hook の除外を再現、 --selftest。 conventions/hook-authoring.md#text-pattern-stop-hook）
 - **[check-abbreviations.py](check-abbreviations.py)** — Abbreviation hygiene for LaTeX manuscripts: each abbreviation is defined once, at the FIRST body
 - **[check-american-spelling.py](check-american-spelling.py)** — Reject curated British spellings in live LaTeX prose and figure text.

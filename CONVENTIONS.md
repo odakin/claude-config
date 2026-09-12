@@ -69,6 +69,7 @@ nested directory に `AGENTS.md` / `AGENTS.override.md` を足すのは、その
 | **識別子** (= messageId / チケット番号 / commit hash 等、後から引くための key) | 案件ごとの case-SoT |
 | **決定・合意の内容** | 案件の case-SoT (判断理由なら DESIGN.md) |
 | **規約・手順** | 該当の規約 file |
+| **Codex 実装の語** (一覧 = [`scripts/check-codex-integration.py`](scripts/check-codex-integration.py) の `SESSION_DURABLE_TOKENS`。 「Codex」 を含む `## ` 節の中に書くと、 pre-commit は警告だけで通り、 CI の同じ検査が落ちる = 2026-09-12 に 1 回) | [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot) |
 
 **why (= 単なる整理でなく drift 源)**: handled-state を SESSION narrative に複製すると task ledger の status と二重管理になり、**両者が食い違っても機械検出に掛からない**。cross-ref 検査は「明示的に link された対」しか見ず、SESSION が prose で抱えた state は射程外だから — つまり SESSION に書いた瞬間、その fact は**自動検出のない場所**へ移る。書き手は「記録した」つもりで、実際には検出網の外に置いている。
 
