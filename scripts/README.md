@@ -33,6 +33,7 @@
 - **[check-latexdiff-math-markup.py](check-latexdiff-math-markup.py)** — Gate against latexdiff silently dropping equation changes (2026-09-08).
 - **[check-legacy-append-only.py](check-legacy-append-only.py)** — the `legacy` forwarding map in a slug index must be
 - **[check-markup-artifacts.py](check-markup-artifacts.py)** — 赤入れ・校正済み現物の台帳漏れ / 未読 / 書き起こし消失を surface（config 駆動、スキャンは grep に掛からないので file 単位で持つ）
+- **[check-md-anchors.py](check-md-anchors.py)** — markdown の `#anchor` 付き link を PATH で解決し、着地先の file にその anchor が実在するかを検査する (repo 内の自己参照も対象、 basename 一致でなく path 解決なので同名 file が複数 repo にあっても取り違えない)。--selftest 内蔵。
 - **[check-memory-file-bloat.py](check-memory-file-bloat.py)** — memory file (CLAUDE.md / SESSION.md) の肥大 surface。
 - **[check-office-automation-index.py](check-office-automation-index.py)** — Validate office-automation.md against its slug index (office-automation.index.yaml).
 - **[check-overleaf-drift.py](check-overleaf-drift.py)** — Overleaf 正本 repo の drift / 整備漏れ検出（各 repo の scripts/overleaf-sync.sh --status を並列実行、 ID 未設定=CRITICAL / behind>0=WARN / DEPRECATED=silent / ahead-expected marker で恒常 ahead INFO 抑制、 finding 0 件 silent、 --selftest 内蔵。 個人層 dashboard 末尾から呼ぶ、 conventions/overleaf-integration.md#sync-script-contract）
@@ -101,6 +102,7 @@
 - **[pack-pii-dirs.sh](pack-pii-dirs.sh)** — 個人情報が file 名に出る dir を、1 個の暗号化 tar に畳む (汎用)。
 - **[pdf-cleaner.html](pdf-cleaner.html)** — clipboard-cleaner.py のブラウザ版 fallback（非 macOS / pbcopy なし環境用、整形ロジックの正本は clipboard-cleaner.py で両実装を同期）
 - **[pdf-print-preflight.py](pdf-print-preflight.py)** — 印刷直前の PDF preflight — 「画面で見えた」 を印刷の保証にしない機械 gate (office-automation.md#print-preflight)。
+- **[pdf-side-by-side.py](pdf-side-by-side.py)** — 2 つの PDF の同じ箇所を左右に並べた比較頁を作る: 案を決めるのは source でなく組版された姿。
 - **[pdf_form_fill.py](pdf_form_fill.py)** — 雛形 PDF への直接印字エンジン（library。anchor 印字 / NFKC 照合 / #+ redact / font subset / 内蔵検証 / 600dpi ラスタ化、office-automation.md#pdf-prefill-direct の汎用実装。単票向け — 派生 sheet 数式導出付き workbook は excel-osascript 経路）
 - **[permission-dialog-audit.py](permission-dialog-audit.py)** — Claude desktop の承認 dialog を app log から集計し、 transcript と突合して main / sub-agent に振り分け、 1 件ごとに原因を切り分ける
 - **[pin-claude-cwd.sh](pin-claude-cwd.sh)** — Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
