@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# commit-msg-leak-matcher.sh — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 8 allowlist の (a)(b)(c) check)、 claude-code hook + git-side runner の両方が source する DRY 実装
+# commit-msg-leak-matcher.sh — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 8 allowlist の (a)(b)(c) check + 審査中の申請を識別する種目語×評価語の共起 (d))、 claude-code hook + git-side runner の両方が source する DRY 実装
 # commit-msg-leak-matcher.sh — sourceable matcher library
 #
 # 正本: claude-config/scripts/lib/commit-msg-leak-matcher.sh
@@ -207,6 +207,51 @@ run_leak_matcher() {
     if [ -n "$path_hits" ]; then
       LEAK_MATCHER_HITS="${LEAK_MATCHER_HITS}
   [repo-path] $path_hits"
+    fi
+  fi
+
+  # ----------------------------------------------------------------
+  # (d) 審査軸 — 審査中の申請の「種目 × 評価」 共起 (2026-09-12)
+  #
+  # (a) の sensitive-terms.txt は個人情報と infra の語が対象で、 **審査を受けて
+  # いる申請を識別する語は射程外**だった。 実害: 公開 repo の commit message に
+  # 種目名と模擬審査の評点の実数が入り、 本文を一般形に直しても message 経由で
+  # 相殺される状態で push 済になった (2026-09-12、 履歴は owner 判断で据え置き)。
+  #
+  # 判定は **共起** で行う。 単独語では切れないため:
+  #   - 種目名だけ → 規約 doc が制度一般を論じる正当な文で頻出 (FP 過多)
+  #   - 評価語だけ → 審査 process の方法論を書く文で頻出 (同上)
+  #   - 近接 (評価語 → 数字) → 「Stage 1 の評点」 のような段階番号で FP
+  #     (実測: 実際の sanitize 後 message がこれで落ちた)
+  # 種目名と評価語が同じ message に同居して初めて「特定の申請への評価」 になる。
+  #
+  # 層: **種目名は値なので個人層** ($personal_layer/review-instance-terms.txt、
+  # 無ければ本 check は skip)。 評価語は制度に依らない一般語なので本 file が持つ。
+  # ----------------------------------------------------------------
+  local review_terms subject_hit ra_terms rn_terms
+  review_terms="$personal_layer/review-instance-terms.txt"
+  if [ -s "$review_terms" ]; then
+    ra_terms="$(mktemp)"; rn_terms="$(mktemp)"
+    awk -v a="$ra_terms" -v n="$rn_terms" '
+      /^[[:space:]]*$/ { next }
+      /^[[:space:]]*#/ { next }
+      /^[ -~]+$/      { print > a; next }
+                      { print > n }
+    ' "$review_terms"
+    subject_hit=""
+    if [ -s "$ra_terms" ]; then
+      subject_hit="$(printf '%s' "$message" | grep -owFf "$ra_terms" 2>/dev/null | sort -u | head -3 || true)"
+    fi
+    if [ -z "$subject_hit" ] && [ -s "$rn_terms" ]; then
+      subject_hit="$(printf '%s' "$message" | grep -owFf "$rn_terms" 2>/dev/null | sort -u | head -3 || true)"
+      [ -n "$subject_hit" ] || subject_hit="$(printf '%s' "$message" | grep -oFf "$rn_terms" 2>/dev/null | sort -u | head -3 || true)"
+    fi
+    rm -f "$ra_terms" "$rn_terms"
+    if [ -n "$subject_hit" ] \
+        && printf '%s' "$message" \
+             | grep -qE '評点|評定|採点|点数|スコア|score|採否|採択可否|不採択' 2>/dev/null; then
+      LEAK_MATCHER_HITS="${LEAK_MATCHER_HITS}
+  [review-instance] 種目名 × 評価語の共起 ($(printf '%s' "$subject_hit" | tr '\n' ' '))— 公開面に特定の申請への評価が出る"
     fi
   fi
 }

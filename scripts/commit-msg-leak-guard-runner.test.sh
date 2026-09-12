@@ -19,12 +19,15 @@
 
 set -uo pipefail
 
-RUNNER="$(dirname "$0")/commit-msg-leak-guard-runner.sh"
+# cwd 非依存にする: 本 test は途中で claude-config へ cd するので、 相対 path のままだと
+# cd 後に $RUNNER が解決できず全 case が exit 127 になる (2026-09-12 実測、 ~/Claude から実行)。
+RUNNER="$(cd "$(dirname "$0")" && pwd)/commit-msg-leak-guard-runner.sh"
 [ -x "$RUNNER" ] || { echo "ERROR: $RUNNER not executable"; exit 1; }
 
 PASS=0
 FAIL=0
 FAILED_CASES=""
+
 
 TMPDIR_TEST="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
@@ -65,6 +68,15 @@ mock-confidential-keyword
 NXYZ
 モック秘語
 TERMS_EOF
+
+# 偽 review-instance-terms.txt (= matcher (d) 審査軸 が読む種目名の list)
+# 実在の種目名は embed しない (= 本 file は layer 1 public。 実語の責任は
+# odakin-prefs 側 test)。 判定は **種目語 × 評価語の共起** なので、 片方だけの
+# case が pass することを下の 3 case で verify する。
+cat > "$MOCK_LAYER/review-instance-terms.txt" << 'REVIEW_EOF'
+モック種目(甲)
+MOCKGRANT
+REVIEW_EOF
 
 export CLAUDE_PERSONAL_LAYER="$MOCK_LAYER"
 
@@ -131,6 +143,19 @@ cd "$(dirname "$RUNNER")/.." || exit 1
   echo "ERROR: test expects to run from claude-config (marker not found)"
   exit 1
 }
+
+
+# 自己 lint: expect_* の呼び出し名が全部定義済か (= case 名の typo で case が
+# silent に消えるのを防ぐ)。 bash 3.2 には command_not_found_handle が無く
+# (macOS 既定 = 3.2.57、 実測で未発火)、 未定義 command は stderr へ流れて次へ進むため、
+# case が 1 つも実行されないまま suite が緑になる (2026-09-12 実測: expect_no_hit で 2 case 消失)。
+# 一般則 = claude-config/docs/convention-design-principles.md#fail-loud-not-fail-empty
+for _h in $(grep -oE '^ *expect_[a-z_]+' "$0" | tr -d ' ' | sort -u); do
+  type "$_h" >/dev/null 2>&1 || {
+    echo "ERROR: 未定義 helper を呼んでいる: $_h (= case 名の typo、 その case は実行されない)"
+    exit 1
+  }
+done
 
 # ====================================================================
 # BLOCK cases (= 偽 private repo 名 / 偽 sensitive term / path pattern)
@@ -237,6 +262,29 @@ expect_pass "skip-short-ascii-embed-alnum" \
 # underscore は grep -w で word char ゆえ、 NXYZ_FOO の embed も match しない
 expect_pass "skip-short-ascii-embed-underscore" \
   "audit NXYZ_FOO component"
+
+# --------------------------------------------------------------------
+# (d) 審査軸 — 種目語 × 評価語の **共起** でのみ発火 (2026-09-12)
+# 起源の実害は「公開 repo の message に種目名と模擬評点が入って push 済」。
+# 片方だけで発火させると規約 doc の正当な文が全部落ちるので、共起を要求する。
+# --------------------------------------------------------------------
+expect_block "block-review-instance-cooccurrence" \
+  "モック種目(甲) の模擬審査: 段で評点が割れた (前段 4 / 後段 2)"
+
+expect_block "block-review-instance-ascii-term" \
+  "MOCKGRANT review: score split across stages"
+
+# 種目語だけ = 制度一般を論じる正当な文 (規約 doc で頻出)
+expect_pass "pass-review-subject-only" \
+  "モック種目(甲) の様式は頁数制限が種目ごとに違う"
+
+# 評価語だけ = 審査 process の方法論 (同上)
+expect_pass "pass-review-verb-only" \
+  "評点は相対評価なので母集団を宣言させる。絶対評価と分けて出させる"
+
+# 段階番号は評点ではない (= 近接判定だと落ちる実測 case の回帰 fixture)
+expect_pass "pass-review-stage-number-not-score" \
+  "Stage 1 の評点と所見を専用 file に書き切らせ、Stage 2 では書き換え禁止"
 
 # ====================================================================
 echo ""
