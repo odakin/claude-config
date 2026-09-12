@@ -44,6 +44,8 @@
   🟠 KEIHI_TRAVEL_DETAIL 旅費の「事項」に場所・回数・日数・人数が無い
   🟠 KEIHI_MULTI_ITEM   1 行に異種の事項 (「論文投稿料、クラウド計算資源」等)
   🟠 KEIHI_AMOUNT_VARY  同じ事項が年度によって違う金額 (理由を必要性欄に書いていないと必ず突かれる)
+  🟠 KEIHI_NINETY_PERCENT 設備備品費 / 旅費 / 人件費・謝金 のどれかが総額の 90% 超 (評定基準が名指しで見る費目構成)
+  🟠 KEIHI_PAY_BASIS    人件費の「月額×月数×人数」と計上額が合わない
 
 使い方
 ------
@@ -685,17 +687,56 @@ def _decode_csv(path: Path) -> str:
     die(f"CSV のエンコーディングを判定できない: {path}")
 
 
+NAME_TO_CAT = {v: k for k, v in CAT_NAMES.items()}
+
+
+def _keihi_body_from_markdown(text: str) -> list[list[str]]:
+    """markdown の明細表を取込 CSV と同じ 8 列に正規化する。
+
+    起草中の明細は CSV になる前に markdown の表で持っていることがある (budget.md 等)。
+    CSV 生成を待たずに同じ検査へ掛けられるようにする。費目は日本語名でも A〜F でも可。
+    """
+    body = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 8 or not cells[0]:
+            continue
+        if "費目" in cells[0] or set(cells[0]) <= set("-: "):
+            continue                                  # 見出し行・区切り行
+        cells[0] = NAME_TO_CAT.get(cells[0], cells[0])
+        body.append(cells[:8])
+    return body
+
+
 def check_keihi(path: Path) -> list[tuple]:
-    """経費明細 CSV の粒度・費目帰属・byte 上限。
+    """経費明細の粒度・費目帰属・byte 上限・費目構成。
 
     列は電子申請システムの取込フォーマット:
       費目区分 / 年度 / 品名・仕様 / 設置機関 / 事項 / 数量 / 単価 / 金額
+    `.md` / `.markdown` を渡すと同じ 8 列の markdown 表として読む (起草中の明細)。
     """
-    out = []
+    if path.suffix.lower() in (".md", ".markdown"):
+        if not path.exists():
+            die(f"経費明細が見つからない: {path}")
+        body = _keihi_body_from_markdown(path.read_text(encoding="utf-8"))
+        if not body:
+            return [("🔴", "KEIHI_SCHEMA",
+                     f"{path.name}: 8 列の markdown 表 (費目/年度/品名・仕様/設置機関/"
+                     f"事項/数量/単価/金額) が 1 行も無い")]
+        return _check_keihi_body(body, path)
     rows = list(csv.reader(io.StringIO(_decode_csv(path))))
     if not rows:
         return [("🔴", "KEIHI_EMPTY", f"{path.name}: 行が無い")]
     body = rows[1:] if rows[0] and "費目" in rows[0][0] else rows
+    return _check_keihi_body(body, path)
+
+
+def _check_keihi_body(body: list[list[str]], path: Path) -> list[tuple]:
+    """正規化済みの 8 列 body への検査 (CSV / markdown 共通)。"""
+    out: list[tuple] = []
     if not any(len(r) >= 8 and r[0].strip() for r in body):
         return [("🔴", "KEIHI_SCHEMA",
                  f"{path.name}: 取込フォーマット (8 列: 費目区分/年度/品名・仕様/設置機関/"
@@ -746,6 +787,76 @@ def check_keihi(path: Path) -> list[tuple]:
                     out.append(("🟠", "KEIHI_MULTI_ITEM",
                                 f"{where}: 1 行に異種の事項 「{item}」 (行を分ける)"))
     out += check_keihi_amount_consistency(amount_rows, path)
+    out += check_keihi_totals(amount_rows, path)
+    return out
+
+
+# 「月額 35 万円」「12 か月」「1 名」型の積算根拠 ([#keihi-meisai-expense-category])
+PAY_MONTHLY_RE = re.compile(r"月額\s*([0-9０-９]+(?:\.[0-9]+)?)\s*(万円|千円)")
+PAY_MONTHS_RE = re.compile(r"([0-9０-９]+)\s*(?:か月|ヶ月|ケ月|カ月|箇月)")
+PAY_HEADS_RE = re.compile(r"([0-9０-９]+)\s*名")
+
+
+def check_keihi_totals(rows: list[tuple], path: Path) -> list[tuple]:
+    """費目構成と人件費の積算 — 審査委員が「研究経費の妥当性」で見る側の検査。
+
+    (a) KEIHI_NINETY_PERCENT — 評定基準の「その他の評価項目 研究経費の妥当性」は
+        **「研究設備の購入経費、旅費又は人件費・謝金のいずれかの経費が 90% を超えて
+        計上されている場合には、研究計画遂行上有効に使用されることが見込まれるか」**を
+        明示的な考慮点に挙げている (基盤 B・C の書面審査における評定基準等)。事務の
+        差し戻しは行の書き方を見るが、**審査委員は構成比を見る**ので、起草側の
+        自己点検にこの軸が無いと「×」の materialisation まで誰も気づかない。
+        超えていること自体は誤りではない — 本文に有効性の説明が要る、が論点なので 🟠。
+    (b) KEIHI_PAY_BASIS — 人件費・謝金の事項に「月額 N 万円 … M か月 … K 名」と
+        積算根拠を書いたのに ([#keihi-meisai-expense-category] の規律)、金額がその
+        積算と合わない行。基本給を下回る (= 法定福利費どころか給与に足りない) か、
+        上振れが大きすぎる (= 人数・月数の書き漏れ) かを拾う。
+
+    ⚠️ 年度計・総額と Web 入力値の一致は**本 script の担当ではない** — 期待値は調書 kit 側の
+    SoT が持つので、[#submission-artifact-staging] 5 の gate ⑥ (経費 CSV との年度計一致) で見る。
+    本 script は値を持たない層なので、CSV 単独で閉じる規則だけを検査する。
+    """
+    out: list[tuple] = []
+    tot = 0
+    by_cat: dict[str, int] = {}
+    for cat, _fy, _item, amt in rows:
+        try:
+            v = int(str(amt).replace(",", "").strip())
+        except (ValueError, AttributeError):
+            continue
+        tot += v
+        by_cat[cat] = by_cat.get(cat, 0) + v
+    if tot > 0:
+        buckets = {"設備備品費": by_cat.get("A", 0),
+                   "旅費": by_cat.get("C", 0) + by_cat.get("D", 0),
+                   "人件費・謝金": by_cat.get("E", 0)}
+        for name, v in buckets.items():
+            if v > 0.9 * tot:
+                out.append(("🟠", "KEIHI_NINETY_PERCENT",
+                            f"{path.name}: {name} が総額の {100 * v / tot:.1f}% "
+                            f"({v:,}/{tot:,}) — 評定基準「研究経費の妥当性」が 90% 超を名指しで"
+                            f"見る費目。本文に有効に使用される根拠を書いたか"))
+    for cat, fy, item, amt in rows:
+        if cat != "E" or not item:
+            continue
+        m_pay, m_mon = PAY_MONTHLY_RE.search(item), PAY_MONTHS_RE.search(item)
+        if not (m_pay and m_mon):
+            continue
+        try:
+            v = int(str(amt).replace(",", "").strip())
+        except (ValueError, AttributeError):
+            continue
+        unit = float(nfkc(m_pay.group(1))) * (10 if m_pay.group(2) == "万円" else 1)  # 千円
+        heads = int(nfkc(PAY_HEADS_RE.search(item).group(1))) if PAY_HEADS_RE.search(item) else 1
+        base = unit * int(nfkc(m_mon.group(1))) * heads
+        if base <= 0:
+            continue
+        ratio = v / base
+        if ratio < 0.95 or ratio > 1.6:
+            out.append(("🟠", "KEIHI_PAY_BASIS",
+                        f"{path.name} {fy} 人件費・謝金: 積算 {base:,.0f} 千円 "
+                        f"(月額×月数×人数) に対し計上 {v:,} 千円 = {ratio:.2f} 倍 "
+                        f"「{item[:34]}」 — 月数・人数・法定福利費のどれかが本文と食い違う"))
     return out
 
 
@@ -1097,6 +1208,45 @@ def selftest() -> int:
         expect("経費: 旅費行の参加登録料を拾う", codes, ["KEIHI_CATEGORY"])
         ok_f = "KEIHI_CATEGORY" not in [c for _, c, m in check_keihi(mis) if "行2" in m]
         expect("経費: 「その他」の参加登録料は正当", ["ok"] if ok_f else [], ["ok"])
+
+        # --- 費目構成 (評定基準「研究経費の妥当性」の 90% 規則) と人件費の積算 ---
+        heavy = td / "heavy.csv"
+        heavy.write_text(
+            "費目区分,年度,品名・仕様,設置機関,事項,数量,単価,金額\n"
+            "E,2027,,,博士研究員1名（月額35万円＋法定福利費、12か月）,,,4860\n"
+            "B,2027,,,専門書・文献,,,100\n", encoding="utf-8")
+        codes = [c for _, c, _ in check_keihi(heavy)]
+        expect("経費: 人件費が 90% 超を拾う", codes, ["KEIHI_NINETY_PERCENT"])
+        expect("経費: 積算の合う人件費は PAY_BASIS を出さない", codes, [],
+               forbid=["KEIHI_PAY_BASIS"])
+
+        balanced = td / "balanced.csv"
+        balanced.write_text(
+            "費目区分,年度,品名・仕様,設置機関,事項,数量,単価,金額\n"
+            "E,2027,,,博士研究員1名（月額35万円＋法定福利費、12か月）,,,4860\n"
+            "D,2027,,,国際会議での成果発表（欧州、7日間、1名）,,,3000\n"
+            "A,2027,ワークステーション・〈製品名/メモリ〉相当,本学,,1,3000,3000\n",
+            encoding="utf-8")
+        expect("経費: 構成が割れていれば 90% は出ない",
+               [c for _, c, _ in check_keihi(balanced)], [], forbid=["KEIHI_NINETY_PERCENT"])
+
+        badpay = td / "badpay.csv"
+        badpay.write_text(
+            "費目区分,年度,品名・仕様,設置機関,事項,数量,単価,金額\n"
+            "E,2027,,,博士研究員1名（月額35万円＋法定福利費、12か月）,,,2430\n"
+            "D,2027,,,国際会議での成果発表（欧州、7日間、1名）,,,3000\n", encoding="utf-8")
+        expect("経費: 月数と金額が合わない人件費を拾う (半年分の額に 12 か月と書いた)",
+               [c for _, c, _ in check_keihi(badpay)], ["KEIHI_PAY_BASIS"])
+
+        # markdown の明細表 (起草中) を同じ検査へ通す
+        md = td / "budget.md"
+        md.write_text(
+            "| 費目 | 年度 | 品名・仕様 | 設置機関 | 用途 | 数量 | 単価 | 金額 |\n"
+            "|---|---|---|---|---|---|---|---|\n"
+            "| 人件費・謝金 | 2027 |  |  | 博士研究員1名（月額35万円＋法定福利費、12か月） |  |  | 4860 |\n"
+            "| 消耗品費 | 2027 |  |  | 専門書・文献 |  |  | 100 |\n", encoding="utf-8")
+        expect("経費: markdown 表でも同じ検査が効く",
+               [c for _, c, _ in check_keihi(md)], ["KEIHI_NINETY_PERCENT"])
 
         # --- identity: 2026 年度に 2 度起きた ID 取り違えの回帰 ---
         IDENT = dict(current={"e-Rad 所属機関コード": "1234567890",

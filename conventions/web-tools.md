@@ -189,6 +189,13 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 - arXiv ID があれば arXiv → なければ ADS abstract → 後継論文の citation 経由、の順で確認する
 - 古い和文論文は本文 PDF が画像形式なら諦めて、引用している後継論文の本文中要約を信用する
 - 商用 publisher の paywall ページは内容が取れないので時間を浪費しない
+- ⚠️ **`pdftotext -layout` は 2 段組の論文で左右の段を同じ行に混ぜる**。物理・数学の論文 (REVTeX 等) の
+  本文を読むなら **`-layout` を付けない** (= 段ごとに読み順で出る)。`-layout` が要るのは表・調書・帳票など
+  **1 段組で桁位置に意味がある** PDF。実測 (2026-09、41 pp の 2 段組 preprint): `-layout` 版は脚注と本文が
+  交互に並んで grep の前後関係が信用できず、無指定版で読み直した。1 本の PDF から両方作って使い分けてよい
+  (`pdftotext -layout x.pdf x-layout.txt; pdftotext x.pdf x-flow.txt`)。
+- 長い `grep` の出力は harness が tool-results dir に退避することがある (= 封じた review では読めない path)。
+  文献照合の grep は `| head -40` で切って本文に残す。
 
 ---
 

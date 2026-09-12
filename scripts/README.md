@@ -34,6 +34,7 @@
 - **[check-office-automation-index.py](check-office-automation-index.py)** — Validate office-automation.md against its slug index (office-automation.index.yaml).
 - **[check-overleaf-drift.py](check-overleaf-drift.py)** — Overleaf 正本 repo の drift / 整備漏れ検出（各 repo の scripts/overleaf-sync.sh --status を並列実行、 ID 未設定=CRITICAL / behind>0=WARN / DEPRECATED=silent / ahead-expected marker で恒常 ahead INFO 抑制、 finding 0 件 silent、 --selftest 内蔵。 個人層 dashboard 末尾から呼ぶ、 conventions/overleaf-integration.md#sync-script-contract）
 - **[check-paper-prose.py](check-paper-prose.py)** — Prose gates for LaTeX manuscripts: appendix order by first main-text reference, sentence length, position words, strong-word inventory.
+- **[check-preamble-aliases.py](check-preamble-aliases.py)** — flag raw notation where the preamble defines an alias.
 - **[check-script-index.py](check-script-index.py)** — Check that a Git repository's script inventory has direct Markdown links.
 - **[check-xlsx-integrity.py](check-xlsx-integrity.py)** — xlsx の Excel「破損」判定源を Excel 不要・決定論で検出（XML well-formed〔unbound prefix〕/ rels 両方向参照整合 / rId 重複 / Content_Types coverage。 zip 直編集 xlsx の納品前 gate、 office-automation.md#openpyxl-destroys-drawings）
 - **[check-yaml-lint.py](check-yaml-lint.py)** — fleet 横断 YAML hazard lint (yamllint を危険 rule 限定で全 repo の tracked yaml に回す。 truthy / dup-key / implicit-octal / syntax、 git-crypt lock file skip、 yamllint 未 install や root 不在は SKIP、 --selftest は毒入り fixture で検出能力自体を検証。 規約 = conventions/yaml-hazards.md#yamllint-hazard-config)
@@ -104,6 +105,7 @@
 - **[pty-leak-watch.sh](pty-leak-watch.sh)** — macOS Claude.app pty leak watchdog（LaunchAgent、枯渇前に macOS 通知、conventions/macos-claude-app-pty-leak.md）
 - **[public-precommit-runner.sh](public-precommit-runner.sh)** — 公開リポ pre-commit gate（Tier A + sensitive-terms.txt ephemeral）
 - **[public-precommit-runner.test.sh](public-precommit-runner.test.sh)** — self-tests for the file-body pre-commit gate
+- **[read-plot-axes.py](read-plot-axes.py)** — 公開図 (PDF / PNG) を pixel から数値に読み戻す — 枠・目盛りを検出して軸を較正し、点と境界線を data 座標で返す。
 - **[replace-line.py](replace-line.py)** — 一意 prefix assert 付きの 1 行置換 (= 「検証してから書く」 の機械化)。
 - **[repo-sync-sweep.sh](repo-sync-sweep.sh)** — <root>/*/ の git repo を並列 fetch し behind-only は自動で最新化する engine (tracked-dirty は stash→ff-merge→pop、 並列起動は repo 単位の lock で排他、 手当ての要る repo は 1 行ずつ返す)
 - **[repo-sync-sweep.test.sh](repo-sync-sweep.test.sh)** — repo-sync-sweep.sh の test (一時 dir の bare remote + clone で各状態・並列起動・lock・stash の空振りを検証)
@@ -145,6 +147,7 @@
 - **[lib/office-staging.sh](lib/office-staging.sh)** — Office (Word / Excel / PowerPoint) automation の「事前 grant 済み staging dir」 helper (sourceable lib、 macOS App Sandbox の folder-grant dialog を design-out、 office-automation.md#office-pregranted-staging-dir)
 - **[lib/office-staging.test.sh](lib/office-staging.test.sh)** — office-staging.sh + office_staging.py の self-test (hermetic、 Office 不要、 fake HOME)
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
+- **[lib/run_log.py](lib/run_log.py)** — 検査 script の出力を「証跡 file」 として残す helper (= 後から「いつ何を出したか」 を再構成できるようにする)。
 - **[lib/staged-conflict-markers.sh](lib/staged-conflict-markers.sh)** — merge conflict marker の staged-content gate (sourceable lib)
 - **[lib/staged-conflict-markers.test.sh](lib/staged-conflict-markers.test.sh)** — staged-conflict-markers.sh の self-test (hermetic)
 - **[lib/test-err-trap.sh](lib/test-err-trap.sh)** — set -e の bash test で落ちた assertion の行とコマンドを stderr に出す ERR trap (sourceable lib)
