@@ -414,6 +414,65 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 
 ⚠️ <a id="nonstopmode-hides-undefined-env"></a>**`-interaction=nonstopmode` は undefined environment を握り潰して PDF を出す**: クラスが `amsmath` を読んでいないのに `\begin{equation*}` を書くと `! LaTeX Error: Environment equation* undefined.` が出るが、**nonstopmode では build が続き PDF も生成される** (中身は壊れた組版)。学会・申請書の配布クラスは `amsmath` を仮定できない (2026-08-22 実測: 科研費 LaTeX クラス)。→ **build の度に `grep -c "^!" *.log` が 0 であることを確認する**。素の `\[ ... \]` は amsmath なしで動くので、可搬性が要る文書ではこちらを既定にする。
 
+## <a id="silent-typesetting-traps"></a>silent に効かない組版指定 — 書いたのに無視される 5 型 (2026-09-12)
+
+いずれも **error も warning も出ず、出力だけが指定と違う**。目視では気づけないので、疑ったら**出力 PDF を測る** ([`scripts/measure-pdf-layout.py`](../scripts/measure-pdf-layout.py))。
+
+### <a id="dvipdfmx-papersize"></a>documentclass の用紙指定は PDF の用紙に届かない (dvipdfmx)
+
+`\documentclass[a4paper]{...}` と書いても、PDF の MediaBox は **dvipdfmx の既定**で決まる。既定は環境依存なので、**同じ tex が機械によって A4 になったり Letter になったりする**。版面は指定どおりの寸法のまま別サイズの紙に載るので、**上下の余白だけが非対称に詰まる**という出方をする。
+
+- 診断: `python3 -c "import fitz; print(fitz.open('x.pdf')[0].rect)"` → A4 = 595.28 × 841.89 pt / Letter = 612 × 792 pt
+- 対策 (環境非依存、preamble に 1 行):
+  ```latex
+  \AtBeginDvi{\special{papersize=210mm,297mm}}
+  ```
+- `dvipdfmx -p a4` でも直るが、**誰がどこで組んでも同じにしたいなら tex 側に書く**
+- ⚠️ `geometry` を読み込むと papersize special が出るため A4 になる。∴ **同じ repo でも `geometry` を使う file だけ A4、使わない file が Letter**、という分岐が起きる (両方を並べて刷って初めて気づく)
+
+### <a id="tabular-cell-trailing-hspace"></a>tabular セル末尾の裸 `\hspace` は `\unskip` に消される
+
+列幅を作るつもりで `\multicolumn{n}{|l|}{\hspace{<幅>}}` と書いても効かない (array がセル末尾の glue を `\unskip` で削る)。`\mbox{}` で挟む。
+
+```latex
+\multicolumn{3}{|l|}{\mbox{}\hspace{<幅>}\mbox{}}   % 効く
+```
+
+症状は「幅指定が黙って無視され、表幅が中身の最大幅で決まる」。**同じ書き方をした別の表と並べて幅が揃わないまで気づかない**ので、複数の表で同じ幅指定をしている文書では全部の実測幅を比べる。
+
+### <a id="filldraw-without-shape"></a>形を書かない `\filldraw` は何も描かない
+
+```latex
+\filldraw[black] (0,0);                  % 出力ゼロ
+\filldraw[black] (0,0) circle (0.4mm);   % 点が出る
+```
+
+「点を打ったつもりで打っていない」が起きる。逆向きの事故もある — **テンプレートを複製するとき、この no-op 行を「点がある」と読んで再現すると、元には無かった点を足してしまう**。複製元の意図は source でなく**出力**で確かめる。
+
+### <a id="tikz-grid-rect-vs-lines"></a>TikZ の grid は「線の位置」と「切り取り矩形」が独立
+
+`\draw[step=1] (a,b) grid (c,d)` の格子線は **step の整数倍**に置かれ、`(a,b)-(c,d)` は**切り取り範囲**でしかない。∴ 矩形の角を整数にすると一番外の線が縁と一致して窮屈に見え、**半 step だけ外に取ると線の位置は変わらないまま外周に余白が付く** (マニュアルの定型)。
+
+```latex
+\draw[step=1,dotted] (-3,-3) grid (3,3);        % 外周の線が縁と一致
+\draw[step=1,dotted] (-3.5,-3.5) grid (3.5,3.5); % 線は -3..3 のまま、外に半マス
+```
+
+矩形を半 step 広げると bounding box も広がるので、**高さに余裕のない配置では行が伸びる**。広げたら出力を測り直す。
+
+### <a id="multirow-vs-raisebox-centering"></a>縦中央に置くのは `\multirow` だけ、`\raisebox` は持ち上げるだけ
+
+背の高い行 (図を入れたセル等) のラベルを枠の縦中央に置きたいとき:
+
+- `\multirow{N}{*}{...}` は**自動で中央**に来る
+- `\raisebox{...}{...}` は**指定した分だけ持ち上げる**だけ
+
+両方を使っている表では**ラベルの高さが揃わない**。図のセルは multirow が使えないことが多いので、`\raisebox{\dimexpr<基準>+<実測>pt\relax}` のように実測で合わせることになる。その場合:
+
+1. **実測値は図の寸法に連動する**。図の縦幅を変えたら再調整が要る → tex にその旨をコメントで残す
+2. 調整は「枠の上下罫線の中点」と「ラベルの中心」の差を測って足し引きする (1 回で ±0.5 pt に入る)
+3. 罫線を拾うときは**図の座標軸を罫線と誤認しない** — 軸も水平で細長い。幅で閾値を切る (罫線は表幅、軸は図幅)
+
 ## <a id="matplotlib-cjk-figure-embedding"></a>matplotlib の CJK 入り図は PNG で取り込む (PDF は platex+dvipdfmx で描画だけ化ける)
 
 matplotlib が CJK フォント (macOS Hiragino 等の `.ttc`、`pdf.fonttype = 42`) を埋め込んだ PDF を

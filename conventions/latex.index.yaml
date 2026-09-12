@@ -73,6 +73,24 @@ sections:
   - id: compilers
     level: 2
     title: "コンパイラ"
+  - id: silent-typesetting-traps
+    level: 2
+    title: "silent に効かない組版指定 — 書いたのに無視される 5 型 (2026-09-12)"
+  - id: dvipdfmx-papersize
+    level: 3
+    title: "documentclass の用紙指定は PDF の用紙に届かない (dvipdfmx)"
+  - id: tabular-cell-trailing-hspace
+    level: 3
+    title: "tabular セル末尾の裸 `\\hspace` は `\\unskip` に消される"
+  - id: filldraw-without-shape
+    level: 3
+    title: "形を書かない `\\filldraw` は何も描かない"
+  - id: tikz-grid-rect-vs-lines
+    level: 3
+    title: "TikZ の grid は「線の位置」と「切り取り矩形」が独立"
+  - id: multirow-vs-raisebox-centering
+    level: 3
+    title: "縦中央に置くのは `\\multirow` だけ、`\\raisebox` は持ち上げるだけ"
   - id: matplotlib-cjk-figure-embedding
     level: 2
     title: "matplotlib の CJK 入り図は PNG で取り込む (PDF は platex+dvipdfmx で描画だけ化ける)"
