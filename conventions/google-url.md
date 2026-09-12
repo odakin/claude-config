@@ -148,6 +148,17 @@ https://drive.google.com/drive/folders/{folderId}
 
 機械 guard の扱い: `hooks/google-url-guard.sh` は最初から **ID を持つ account-sensitive service path のみ**を case whitelist で対象にしており (= mail/classroom/drive/docs/calendar/photos/meet)、 公開 surface は元々 flag しない。 broad regex (= domain 一致) で downstream に別実装 (commit-time warn 等) を作る場合は、 published Sites `/view/` 等の公開 path を例外にして chronic false positive を避ける (= 2026-07-02: 研究者 DB に公開ホームページ URL を記録するたび warn が出た事例)。
 
+### <a id="shared-link-usp"></a>(f) 受け取った共有リンク (`usp=sharing` 等) は `authuser=` を足さない (2026-09-12)
+
+`?usp=sharing` / `?usp=drive_link` / `?usp=share_link` が付いた Drive・Docs の URL は、 **「リンクを知っている人」 向けに配布された共有 URL** — 誰かが「リンクをコピー」 で発行し、 メールや掲示で回ってきたもの。 これは §(d) (= 他人に渡す URL では `authuser=` を削除) の裏面で、 **受け取った側も `authuser=` を足さない**:
+
+- 共有リンクは link 保有者なら誰でも開ける前提で発行されている (= 開く account を指定する性質のものではない)
+- 記録側で `authuser=<自分>` を足すと、 その URL が**相手の view を自分の account に読み替えた別物**になる (転記・転送されると壊れる)
+
+∴ 依頼メールの Drive リンクを TODO・議事・inbox に literal で記録するのは正しい。 `hooks/google-url-guard.sh` は `usp=` 付き URL を (B) の対象外にしている (= 2026-09-12 以前は、 受領リンクを記録するたびに確認 dialog が出ていた)。
+
+⚠️ `usp=` は**受領 / 自作を区別しない**近似。 自分が発行して自分で開き直す URL なら、 stable ID + `authuser=` の形 (§(a)) に直すのが本筋。 また `/u/N/` を含む URL は共有リンクでも従来どおり flag される (= slot index は誰の環境でも壊れるので例外なし)。
+
 ## 例
 
 **NG** (account-dependent、 壊れる):

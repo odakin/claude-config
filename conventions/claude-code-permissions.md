@@ -203,6 +203,31 @@ Bash の承認 dialog で「Yes, and don't ask again」 (desktop では「常に
 - 見つけたら allow の該当行を消す (protected path なので dialog 1 回)。 値は漏れた前提で扱い、 必要なら rotate する ([`secret-handoff.md#rotation-labor-split`](secret-handoff.md#rotation-labor-split))。
 - 棚卸しは `settings.local.json` の長い allow 行を見るのが早い (secret は長い英数字列として出る)。
 
+## <a id="long-command-falls-back-to-ask"></a>長すぎる Bash command は自動承認から外れて dialog になる (2026-09-12)
+
+`auto` mode の Bash 自動承認は classifier 判定だが、 **command が長くなると判定から外れて user への確認 dialog にフォールバックする**。 しかも長大 command は pattern 化できないため dialog に「常に許可」 が出ず ([#always-allow-persists-literal](#always-allow-persists-literal) の保存が効かない)、 同じ形を打つたびに毎回止まる。 user 側の体感は「同じ作業で毎回・何度も聞かれる」。
+
+**実測** (desktop app の dialog log × transcript 突合、 同一 session・同一 cwd・同一 settings):
+
+| command 長 (文字) | 結果 |
+|---|---|
+| 1,917 / 2,104 / 2,111 (heredoc 含む) | 通過 |
+| 4,272 / 8,916 (heredoc 含む) | **dialog** |
+
+同 session の Bash 56 回のうち dialog が出たのはこの長大 2 回だけで、 hook 由来ではない (= 当該 command を全 PreToolUse(Bash) hook に流し直して無反応を確認済み)。 ∴ 閾値は 2,100〜4,200 文字のどこか。
+
+**切り分け**: 長さ以外の要因 (hook・cwd・mode) と混ざりやすい。 同 session の Bash 呼び出しを transcript から長さつきで一覧し、 dialog の時刻 ([#desktop-permission-dialog-log](#desktop-permission-dialog-log)) と突合すると、 「長いものだけが鳴っている」 かが 1 目で分かる。 hook 由来との区別は当該 tool_input を hook に流し直すのが確実 (= [#desktop-permission-dialog-log](#desktop-permission-dialog-log) の「mode を疑う前に hook を疑う」)。
+
+**対処 (書く側)**: これは危険だから止まっているのではなく、 **同じ結果をより短く書けば dialog 自体が発生しない**。
+
+1. 単位で分割する (= N 件の追記を数回に割る)
+2. 本文を scratchpad の file に書いてから、 短い command で流す (`cat <scratchpad>/chunk >> <target>`)
+3. file 編集が目的なら Edit / Write tool を使う (= path 単位の判定になり command 長は関係しない)
+
+**機械 backstop**: [`hooks/long-bash-command-guard.sh`](../hooks/long-bash-command-guard.sh) — PreToolUse(Bash) で閾値 (既定 3,000 文字、 `CLAUDE_LONG_BASH_LIMIT` で上書き / `0` で無効) を超えた command を **exit 2 で block** し、 上の 3 つを stderr で案内する。 block は Claude にしか見えないので、 user には dialog も待ちも発生しない (= 「聞かれる」 が「Claude が短く書き直す」 に置き換わる)。 長さは byte でなく codepoint で測る (= 日本語の command で閾値が 1/3 になるのを避ける)。
+
+⚠️ **guard の自己参照**: この種の guard を書く / 直すときは、 guard 自身の source・test・規約 doc が検出対象の pattern を literal で持つため、 **guard を直そうとするたびに guard に止められる**。 実例 (2026-09-12): URL guard の test fixture に意図的な違反 URL を 1 行足す Edit が、 その URL guard 自身に ask された。 → guard 側に自己参照の除外を持たせる (`*/hooks/*.sh` / `*/hooks/*.py` / 当該規約 doc の path を skip)。 test fixture の誤発火一般は [`hook-authoring.md`](hook-authoring.md)。
+
 ## 個人ごとの適用
 
 「どのフォルダを additionalDirectories に登録するか」は各ユーザー / 各マシンの選好なので、本 public 規約には書かず、各自の personal config (machine-local の `~/.claude/settings.json`) に置く。`~/.claude/settings.json` は git 同期されないため、複数マシンで揃えたい場合は各マシンで設定するか、各自の setup 機構に組み込む。

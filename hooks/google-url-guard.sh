@@ -49,6 +49,15 @@ fi
 INPUT="$(cat)"
 [ -z "$INPUT" ] && exit 0
 
+# 自己参照の除外 (2026-09-12): この guard 自身の source / test / 規約 doc は、 検出対象の
+# pattern を説明・検証するために違反 URL を literal で持つ必要がある。 除外しないと
+# 「guard を直そうとするたびに guard に止められる」 (= 実際に発生)。
+# 同型の一般則 = conventions/hook-authoring.md (test fixture の誤発火)。
+SELF_PATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""' 2>/dev/null || true)"
+case "$SELF_PATH" in
+  */hooks/*.sh|*/hooks/*.py|*/conventions/google-url.md) exit 0 ;;
+esac
+
 CONTENT="$(printf '%s' "$INPUT" | jq -r '.tool_input | tostring' 2>/dev/null || true)"
 [ -z "$CONTENT" ] && exit 0
 
@@ -96,8 +105,13 @@ while IFS= read -r url; do
   esac
 
   # authuser= があれば OK
+  # 共有リンク (usp=sharing 等) は対象外 (2026-09-12): 「リンクを知っている人」 向けに
+  # 配布された URL で、 開く account を指定する性質のものではない (受け取った側が
+  # authuser= を足すと、 相手の view を自分の account に読み替えることになる)。
+  # ⚠️ usp= は受領 / 自作を区別しないので近似。 /u/N/ は (A) で引き続き ask。
   case "$url" in
     *authuser=*) ;;
+    *usp=sharing*|*usp=drive_link*|*usp=share_link*|*usp=sharing_eip*) ;;
     *)
       ACCOUNT_SENSITIVE_HITS="$ACCOUNT_SENSITIVE_HITS$url
 "

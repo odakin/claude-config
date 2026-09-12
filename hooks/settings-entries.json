@@ -116,6 +116,15 @@
       ]
     },
     {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/long-bash-command-guard.sh"
+        }
+      ]
+    },
+    {
       "matcher": "mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)",
       "hooks": [
         {

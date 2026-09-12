@@ -19,6 +19,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[git-state-nudge.test.sh](git-state-nudge.test.sh)** — git-state-nudge.sh の self-test (決定的 mock git repo ベース)
 - **[google-url-guard.sh](google-url-guard.sh)** — Google URL 安定性ガード — PreToolUse(Edit|Write|MultiEdit|Bash): /u/N/ 禁止 + `?authuser=<email>` 必須
 - **[google-url-guard.test.sh](google-url-guard.test.sh)** — google-url-guard.sh の self-test (hermetic)
+- **[long-bash-command-guard.sh](long-bash-command-guard.sh)** — 長すぎる Bash command を block — PreToolUse(Bash): 閾値超は分割 / file 経由に誘導
+- **[long-bash-command-guard.test.sh](long-bash-command-guard.test.sh)** — long-bash-command-guard.sh の self-test (配信対象外)
 - **[mcp-search-scope-reminder-nudge.sh](mcp-search-scope-reminder-nudge.sh)** — PreToolUse hook (layer 1)
 - **[mcp-search-scope-reminder-nudge.test.sh](mcp-search-scope-reminder-nudge.test.sh)** — logic + retroactive selftest
 - **[mcp-search-zero-result-nudge.sh](mcp-search-zero-result-nudge.sh)** — PostToolUse hook (layer 1)

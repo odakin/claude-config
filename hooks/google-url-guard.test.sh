@@ -53,6 +53,10 @@ assert "P4: 非 account-sensitive root URL"     pass "echo https://classroom.goo
 assert "P5: google.com を含まない command"      pass "echo https://example.com/u/1/page"
 assert "P6: 一般 google.com URL (非対象 path)" pass "echo https://www.google.com/search?q=test"
 assert "P7: 空 stdin"                          pass ""
+assert "P8: drive 共有リンク (usp=sharing)"     pass "echo 'https://drive.google.com/drive/folders/FAKEfolder01?usp=sharing'"
+assert "P9: docs 共有リンク (usp=drive_link)"   pass "echo 'https://docs.google.com/document/d/FAKEdoc01/edit?usp=drive_link'"
+# 共有リンクでも /u/N/ は (A) で ask のまま (= 例外は authuser 軸だけに効く)
+assert "A7: 共有リンクでも /u/N/ は ask"        ask  "echo 'https://drive.google.com/u/1/drive/folders/FAKEfolder01?usp=sharing'"
 
 # Edit tool の content 経由でも同じ scan が効くこと (tostring 経路)
 json="$(jq -nc '{tool_name:"Edit",tool_input:{file_path:"/tmp/x.md",new_string:"link: https://docs.google.com/u/2/document/d/FAKEID/edit"}}')"
@@ -61,6 +65,24 @@ if [ "$got" = "ask" ]; then
   pass=$((pass+1)); results+=("✅ A6: Edit new_string 内の /u/N/ も検出")
 else
   fail=$((fail+1)); results+=("❌ A6: Edit new_string 内の /u/N/ (got=${got:-pass})")
+fi
+
+# 自己参照の除外: guard 自身の source / test は違反 URL を literal で持つ必要がある
+json="$(jq -nc '{tool_name:"Edit",tool_input:{file_path:"/x/claude-config/hooks/google-url-guard.test.sh",new_string:"assert ask https://drive.google.com/u/1/drive/folders/FAKE01"}}')"
+got="$(decision "$json")"
+if [ -z "$got" ] || [ "$got" = "pass" ]; then
+  pass=$((pass+1)); results+=("✅ P10: hooks/*.sh への Edit は自己参照として skip")
+else
+  fail=$((fail+1)); results+=("❌ P10: hooks/*.sh への Edit が ask された (got=$got)")
+fi
+
+# 非退行: 普通の file への Edit は従来どおり ask
+json="$(jq -nc '{tool_name:"Edit",tool_input:{file_path:"/x/notes/memo.md",new_string:"see https://drive.google.com/u/1/drive/folders/FAKE01"}}')"
+got="$(decision "$json")"
+if [ "$got" = "ask" ]; then
+  pass=$((pass+1)); results+=("✅ A8: 通常 file への Edit は ask のまま")
+else
+  fail=$((fail+1)); results+=("❌ A8: 通常 file への Edit が素通り (got=${got:-pass})")
 fi
 
 echo ""
