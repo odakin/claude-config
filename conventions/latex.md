@@ -160,6 +160,28 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 
 **対処**: `.aux` の `\newlabel` から label→(番号, 頁) を取り、 版間で比べる。 頁が動いた label と**番号が動いた** label (= 参照の意味が変わる) を分けて出す。 道具 = [`ai-collaboration/scripts/compare-tex-builds.py`](../../ai-collaboration/scripts/compare-tex-builds.py) (`--before-aux/--after-aux`)。 同 script の `--before-log/--after-log` は log の**折返しを復元**してから overfull を数える (79 桁で折れた警告は素の grep が落とす)。 規律 = [`physics-verification-cycle.md#page-count-is-not-pagination`](../../ai-collaboration/conventions/physics-verification-cycle.md#page-count-is-not-pagination)。
 
+## <a id="variant-comparison-images"></a>記法・体裁の案は、 組版した姿を左右に並べて決める (source の diff では決められない) (2026-09-12)
+
+**規則**: 記法・語順・体裁に複数案があり著者が選ぶとき、 **案ごとに別に組んで、 決定点の左右比較画像を出してから聞く**。
+source の断片や置換規則を提示して「どちらにしますか」 と聞かない。 幅・添字の高さ・式番号の位置・隣の記号との衝突は、
+組版して初めて見える (著者 2026-09-12「ソースだけじゃ分からん。 実際に見ないと。 一瞬ブランチ切る？」)。
+
+**手順**: (1) 変換を規則ベースの script にして案を切り替えられるようにする (= 手で打ち直さない。 案が 3 つに増えても再実行だけ)。
+(2) 案ごとに live を汚さず組む (ローカル branch か scratch の .tex)。 (3) 決定点の語句を anchor に左右 zoom を作り、 画像で渡す。
+(4) 採否が決まってから live に当てる。 **案の生成・組版・比較は使い捨てでよいが、 採用した変換規則は sidecar と決定 ledger に残す**。
+
+**道具**: [`claude-config/scripts/pdf-side-by-side.py`](../scripts/pdf-side-by-side.py) — 2 つの PDF の同じ語句の周りを
+左右に並べた比較頁 (`compare.pdf` + `cmp-NN.png`) を作る。 anchor は両版で変わらない語句を選ぶ (案で語句自体が変わる箇所は
+その直前の文を anchor に)。 `--diff-pages` で本文が違う頁を頁ごと並べる。
+組版が壊れていないかの機械比較 (error / 未定義参照 / overfull / label→頁 の drift) は別の道具 =
+[`ai-collaboration/scripts/compare-tex-builds.py`](../../ai-collaboration/scripts/compare-tex-builds.py)。
+一括置換の純粋性は [`check-rename-purity.py`](../../ai-collaboration/scripts/check-rename-purity.py)。
+
+**実例 (2026-09-12)**: 1PI 頂点関数の記法で 4 案 (縦棒 + hat 有無 / 下付き / 肩・次数なし / 肩・次数つき) を同じ変換 script の
+mode 切替で作り、 各案を組んで 7〜10 箇所の左右比較を渡した。 決め手は紙の上にしか無かった = 下付きは同じ論文の
+`J^{e\omega}` と label の位置が割れる、 次数なしの肩は 1 点関数に見えない、 縦棒は制限の用法と衝突する
+([`paper-audit.md#notation-rename-sweep`](paper-audit.md#notation-rename-sweep) の 3 番)。
+
 ## <a id="stash-roundtrip-build-artifacts"></a>baseline 比較に git stash round-trip を使わない (tracked 生成物と衝突する)
 
 **ルール:** 「この overfull / warning / 挙動は自分の編集**前**からあったか?」 という baseline 比較のために、 compile が上書きする tracked 生成物 (committed PDF 等) を持つ tree で `git stash` → 再 build → `git stash pop` の round-trip をしない。 baseline は tree を動かさない read-only 経路で取る:
