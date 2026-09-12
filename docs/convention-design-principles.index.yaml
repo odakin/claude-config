@@ -293,6 +293,10 @@ sections:
     legacy: "8.36"
     level: 3
     title: "8.36 入力の提供は判断責任を移さない — 事実・規程適用・将来確約を分離する"
+  - id: proxy-outbound-reply-blindspot
+    legacy: "8.37"
+    level: 3
+    title: "8.37 他人名義で出した依頼の返信は、自分の受信箱に来ない — Cc は送信の証拠であって返信の網ではない"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

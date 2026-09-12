@@ -124,7 +124,7 @@ layer 1 (public) のドメイン固有規約 107 file をカテゴリ別に列�
 - **[rebuttal-letter.md](rebuttal-letter.md)** — referee report への point-by-point 返信を書くとき
   - referee report への point-by-point 返信 (= author response) 作成 6 reflex (= 回答は本文 grep 照合・起源でない文献は see e.g.・referee 誤記は静かに正す・自己否定語回避・全 comment フル引用・旧式番号は submission 版基準)、 paper-audit.md と相補
 - **[tenki-submission.md](tenki-submission.md)** — 日本気象学会の機関誌「天気」への投稿を準備するとき
-  - 「天気」投稿の機構 — 種別選択 (調査ノートは 6pp 以内・掲載料無料・和文/英文要旨とも不要 #category-fit)、 LaTeX のまま投稿できる 3 点セット (#tex-submission-set)、 著者要件 = 原則会員を含む + 会員番号発行まで 3-4 週の lead (#membership-early-check)、 提出経路ごとに添付書類が違い電子投稿フォームは原稿 1 ファイル制約で TeX と相性が悪い (#channel-vs-attachments)、 様式の実 URL と文中引用規則
+  - 「天気」投稿の機構 — 種別選択 (調査ノートは 6pp 以内・掲載料無料・和文/英文要旨とも不要 #category-fit)、 掲載料は種別で不連続で格上げは課金を伴い免除条項は課金区分にしか効かない (#page-charge-by-category)、 LaTeX のまま投稿できる 3 点セット (#tex-submission-set)、 著者要件 = 原則会員を含む + 種別非依存 + 会員番号発行まで 3-4 週の lead + 学生のうちに入るのが最安 (#membership-early-check)、 非会員のみの著者構成なら例外を打診する作法 (#non-member-inquiry)、 提出経路ごとに添付書類が違い電子投稿フォームは原稿 1 ファイル制約で TeX と相性が悪い (#channel-vs-attachments)、 様式の実 URL と文中引用規則
 - **[tikz-pgfplots.md](tikz-pgfplots.md)** — TikZ / pgfplots を含む LaTeX project で図を作るとき
   - TikZ/pgfplots 固有 gotchas（infographic / poster / 1 枚 figure 制作で必読、 latex.md と併読）
 
