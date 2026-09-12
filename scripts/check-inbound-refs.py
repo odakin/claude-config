@@ -75,11 +75,29 @@ EXT = ('.md', '.yaml', '.yml', '.py', '.sh', '.txt')
 
 
 def gh_slug(text):
-    """Approximate GitHub-style heading anchor slug (keeps unicode word chars)."""
-    s = text.strip().lower().replace('`', '')
-    s = re.sub(r'[^\w\s\-]', '', s, flags=re.UNICODE)
-    s = re.sub(r'\s+', '-', s)
-    return s.strip('-')
+    """GitHub heading anchor slug, as github-slugger computes it: lowercase, drop every char
+    that is not a unicode word char / '-' / ASCII space, then turn EACH space into '-'.
+
+    Runs of spaces are NOT collapsed and dashes are NOT trimmed: `foo.py — bar` -> `foopy--bar`
+    (the em dash goes, the two spaces around it stay as two dashes). The earlier `\\s+` collapse
+    produced `foopy-bar`, so every GitHub-correct link to such a heading was reported broken
+    (2026-09-13: 3 false positives in check-md-anchors, headings of the form `x.py — y`).
+    """
+    s = text.strip().lower()
+    s = re.sub(r'[^\w\- ]', '', s, flags=re.UNICODE)
+    return s.replace(' ', '-')
+
+
+def rendered_heading_text(h):
+    """GitHub slugs the heading's RENDERED text: `[label](url)` contributes only `label`,
+    `![alt](src)` only `alt`, and HTML tags (`<a id="..."></a>`, `<br>`) contribute nothing.
+    Slugging the raw markdown folds the URL into the slug (2026-09-13: a heading ending in
+    `[x.py](dir/x.py)` was slugged as `...xpydirxpy`, and the GitHub-correct link was
+    reported broken)."""
+    h = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", h)
+    h = re.sub(r"<[^>]+>", "", h)
+    h = re.sub(r"\s#+\s*$", "", h)        # optional closing hashes: `## Title ##`
+    return h
 
 
 def build_target_index(target_dir):
@@ -105,7 +123,7 @@ def build_target_index(target_dir):
         for line in txt.splitlines():
             hm = re.match(r'#{1,6}\s+(.*)', line)
             if hm:
-                anchors.add(gh_slug(hm.group(1)))
+                anchors.add(gh_slug(rendered_heading_text(hm.group(1))))
         d = docs.setdefault(base, set())
         d |= anchors
     return docs, relpaths
@@ -120,7 +138,10 @@ def scan(base, target_name, docs, relpaths):
     # (2026-06-23: false-positive fix — bare `\.md` stopped at the wrong extension boundary).
     path_re = re.compile(r'(?:\.\./)*' + re.escape(target_name) + r'/([\w./\-]+\.md(?:\.template|\.example|\.default)?)')
     blob_re = re.compile(r'^(?:blob|tree)/[^/]+/')
-    placeholder_re = re.compile(r'^[A-Z]\.md$')
+    # `X.md` and the conventional dummy stems used in selftest fixtures (`foo.md`, `file.md`).
+    # 2026-09-13: all 12 "code-file refs dangling" were such fixtures in one selftest; a line
+    # that always says 12 teaches the reader to skip it.
+    placeholder_re = re.compile(r'^(?:[A-Z]|foo|bar|baz|qux|file|example|dummy|xxx)\.md$')
     sec_re = re.compile(r'§\s*\d+(?:[.\-]\d+)*[a-z]?')
     hard = []          # (relfile, lineno, kind, ref)
     local_md_cache = {}  # source-repo top dir -> set of .md basenames in that repo

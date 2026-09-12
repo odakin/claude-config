@@ -18,7 +18,7 @@ user がこのリポを指して「セットアップして」 と頼んだ場�
 
 **Flow** (フル step list は [CLAUDE.md](CLAUDE.md)):
 
-0. Windows で `git` や実体の `python3` が無い場合 (もしくは Claude アプリ自体が Git gate で止まっている場合)、先に bootstrap 1 行を実行する — [クイックスタート → Windows](#windows-の人はまずこれ-まっさらな機) 参照。 `setup.sh` 自体が Git Bash 前提。
+0. Windows で `git` や実体の `python3` が無い場合 (もしくは Claude アプリ自体が Git gate で止まっている場合)、先に bootstrap 1 行を実行する — [クイックスタート → Windows](#windows-の-claude-code-はまずこれ-まっさらな機) 参照。 `setup.sh` 自体が Git Bash 前提。
 1. `./setup.sh` を end-to-end で実行。 idempotent なので re-run 安全。
 2. Personal-layer 検出は automatic (= user に既に `*-prefs` リポ + `.claude-personal-layer` marker があれば script が auto-detect)。 なければ user に**一度だけ**「start するか」 を聞く ([`templates/personal-layer/`](templates/personal-layer/) が skeleton) — step ごとに聞かない、 一度きり。
 3. 完了したら報告: 何が land したか / 何を skip したか (理由付き) / 次に検討しうる optional capabilities (MCP servers / scheduled tasks / 追加の `conventions/` / …)。

@@ -1947,6 +1947,7 @@ reference convention 内の「反復実行・検証用の手順」 は illustrat
 1. <a id="basename-index-collides-after-split"></a>**basename 索引は分割後に取り違える** — (C) の検出器は target repo の `*.md` を **basename** で索引する。 分割で同じ名前の doc が 2 repo に在る (新 home + 転送 stub) と、 **新 home へ path で正しく指している ref** が stub の anchor 集合と照合されて dangling と報告される。 実測 29 件の偽陽性で、 そのうち 2 件は同日に書かれたばかりの正しい ref だった。 ∴ ref が明示 path を持つなら **path で解決してから** basename 判定に落とす (修正済。 偽陽性 29 → 1、 残る 1 は本当に間違っていた path)。 偽陽性を放置した検出器は読まれなくなるので、 これは精度でなく**生存**の問題 ([`#firing-surface-hierarchy`](#firing-surface-hierarchy) と同じ理由)。
 2. <a id="forwarding-stub-is-a-snapshot"></a>**転送 stub は分割時点の snapshot** — stub の anchor 表は移設の瞬間に存在した anchor だけを持つ。 **移設後に新 home へ足した節には転送先が無い**ので、 それを名前で指す ref (= `doc.md#new-anchor` と地の文で書く形) は最初から壊れている。 しかも壊れ方が**単調増加**する (新 home に節を足すたびに増える)。 実測: 分割 6 日で 4 anchor が転送先を持たず、 19 件の ref が届かなくなっていた。 ∴ **移設済 doc に節を足したら、 同じ turn で stub に転送行を足す** (既存 stub には「移設後に新設; 転送のみ」 と注記された前例がある = 規律は在ったが毎回は守られていなかった型 = [`#documented-not-wired`](#documented-not-wired))。
 3. <a id="self-reference-is-nobodys-business"></a>**「その repo の内部参照はその repo の自分の問題」 が誰の問題でもなくなる** — (C) の検出器は設計上 target repo の内部 ref を除外する。 各 repo 側にそれを見る検査が無いと、 **同じ file の中の壊れた `#anchor`** (見出しを書き換えた・複数形の typo) は誰にも見られない。 実測: config 3 repo の 2487 link に 21 件 (単数複数の取り違え・消えた見出し・TOC の自己 link)。 ∴ path 解決で全 link を見る目を別に置く = [`scripts/check-md-anchors.py`](../scripts/check-md-anchors.py) (basename でなく path で解決するので 1 の取り違えも起きない。 (C) の検出器とは問いが違う = あちらは「restructure で下流が壊れるか」、 こちらは「書いた link がその path で解決するか」)。
+4. <a id="slug-detector-pinned-to-renderer"></a>**renderer の動作を近似した検出器は、 renderer の実装に fixture で固定するまで信じない** — 3 の検出器を fleet 全体に当てた初回、 報告 33 件のうち **19 件が検出器側の誤り**だった。 内訳は 3 型: (a) slug の近似が空白の連続を `-` 1 本に潰していた (GitHub = github-slugger は空白 1 文字ごとに `-` 1 本、 `x.py — y` → `xpy--y`) / (b) 見出し中の `[label](url)` の URL まで slug に混ぜていた (GitHub は描画後の文字列 = label だけ) / (c) inline code や fence の中に**構文の例として書かれた** `[x](#slug)` を link と数えていた (+ `#L53` の行参照と `<slug>` の placeholder)。 どれも「GitHub で踏めば正しく飛ぶ link を壊れていると言う」 側の誤りで、 放置すれば読み手は検出器を信じなくなり、 **本物の 13 件も一緒に無視される**。 ∴ 近似した検出器には、 renderer が実際に出す値を**名指しの fixture** (em dash の見出し、 link 入りの見出し、 code span 内の例、 backtick 入り label の本物の link = 過剰除外の foil) として selftest に入れてから fleet に当てる。 slug 計算は 2 つの検出器で**共有する 1 実装** (`check-inbound-refs.py` の `gh_slug` + `rendered_heading_text`) に置き、 片方だけ直る drift を作らない。 修正後の fleet = 3001 link / 未解決 0、 本物 13 件は全て path 修正・転送先の補正・明示 id で解消した。
 
 **(C) 検出器とその限界 (= 正直に明示)**: `scripts/check-inbound-refs.py` は **anchor 存在 / path 存在**という mechanically-checkable な HARD dangling のみ検出する。 **positional `§N.M` が renumber 後も同じ意味を指すか (= silent mis-resolve) は検出できない** (= §8.8 の semantic blind spot)。 ∴ §-ref を anchor に migrate するのが唯一の真の fix で、 検出器はその補完にすぎない (= fragile 件数を INFO で出すだけ、 「全部見た」 と読ませない §8.8 (3))。
 
@@ -2269,7 +2270,7 @@ SoT drift の検出器は **「現行規則が home 外に重複していない�
 
 - 適用が濃い領域 = **費用・所属・役職・制度・版**が規則の前提になっている運用 doc (= 事務手続き / 承認フロー / 様式の定数 / 対外文面の定型)。 技術 doc でも「この設定は依存ライブラリ v1 系での話」 型で同型。
 - [§8.22 (= 失効型〆切)](#lapsing-deadline) が **義務の期限切れ**を扱うのに対し、 本 § は **規則の前提切れ** — 期限は書かれているが前提は書かれていない、 という非対称が本 § の核。
-- [§2.4 (= errata marker)](#errata-marker) は「誤りだった記述」 の扱い、 本 § は「当時は正しかったが前提が消えた記述」 の扱い (= 訂正でなく失効)。
+- [§2.4 (= errata marker)](#errata-on-preserved-records) は「誤りだった記述」 の扱い、 本 § は「当時は正しかったが前提が消えた記述」 の扱い (= 訂正でなく失効)。
 
 ---
 

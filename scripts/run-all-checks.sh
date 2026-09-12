@@ -58,6 +58,11 @@ run "scripts inventory" python3 scripts/check-script-index.py . --index scripts/
 run "hooks inventory" python3 scripts/check-script-index.py . --index hooks/README.md --scan hooks
 run "Codex hook inventory" python3 scripts/check-script-index.py . --index codex/PARITY.md --scan codex/hooks
 run "Codex integration contract" python3 scripts/check-codex-integration.py --check
+# 2b. markdown の #anchor を PATH で解決して着地先に実在するか (本 repo 内の自己参照を含む)。
+#     check-inbound-refs は設計上 target repo の内部 ref を見ないので、その穴を塞ぐ別の目。
+#     --base . = 本 repo だけを走査 (CI に兄弟 repo が無くても、着地先の無い cross-repo link は skip)。
+#     起源 = 2026-09-13、分割 6 日後に壊れた自己参照 21 件 (convention-design-principles #self-reference-is-nobodys-business)
+run "markdown anchors resolve (check-md-anchors)" python3 scripts/check-md-anchors.py --base "$ROOT" --quiet
 # ↓ 中身の検査 (generate-tree / index / codex contract) は上と重複するが、 hook script 自体が
 #   実行可能で exit 0 する smoke test として意図的に残す (重複削除で hook の壊れが盲点化する)
 run "claude-config pre-commit extra" bash .claude/pre-commit-extra.sh

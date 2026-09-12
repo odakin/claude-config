@@ -22,7 +22,7 @@
     python3 check-md-anchors.py --quiet             # 緑のときは何も言わない
 
 anchor は 明示の `<a id="...">` / `id='...'` と、 見出しから作る GitHub 風 slug の和で判定する
-(slug の計算は `check-inbound-refs.py` の `gh_slug` を import して共有 = 2 実装にしない)。
+(slug の計算は `check-inbound-refs.py` の `gh_slug` + `rendered_heading_text` を import して共有 = 2 実装にしない)。
 """
 from __future__ import annotations
 
@@ -35,20 +35,35 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from importlib import import_module
-    gh_slug = import_module("check-inbound-refs".replace("-", "_")).gh_slug  # type: ignore
+    _cir = import_module("check-inbound-refs".replace("-", "_"))  # type: ignore
+    gh_slug, rendered_heading_text = _cir.gh_slug, _cir.rendered_heading_text
 except Exception:                                     # module name has dashes; load by path
     import importlib.util
     _p = Path(__file__).with_name("check-inbound-refs.py")
     _spec = importlib.util.spec_from_file_location("_cir", _p)
     _m = importlib.util.module_from_spec(_spec)        # type: ignore
     _spec.loader.exec_module(_m)                       # type: ignore
-    gh_slug = _m.gh_slug
+    gh_slug, rendered_heading_text = _m.gh_slug, _m.rendered_heading_text
 
 SKIP_DIRS = {".git", "node_modules", "_site", "build", "dist", ".venv", "venv",
              ".next", "out", "__pycache__", ".cache", "worktrees", "PackageCache"}
 LINK = re.compile(r"\[[^\]]*\]\((?!https?:|mailto:|#?$)([^)\s]+)\)")
 EXPLICIT = re.compile(r"""id=["']([^"']+)["']""")
+FENCE = re.compile(r"^(```|~~~)[^\n]*\n.*?^\1[ \t]*$", re.M | re.S)
+CODE_SPAN = re.compile(r"`[^`\n]*`")
+LINE_ANCHOR = re.compile(r"^L\d+(?:-L?\d+)?$")   # GitHub / editor line refs, not headings
 _cache: dict[Path, set] = {}
+
+
+def live_markdown(text: str) -> str:
+    """Drop fenced blocks and inline code spans: a link shown AS SYNTAX (`[x](#slug)`) is an
+    example, not a link. Link text that merely contains code (`` [`name`](#a) ``) survives as
+    `[](#a)`, so real links with backticked labels are still checked."""
+    return CODE_SPAN.sub("", FENCE.sub("", text))
+
+
+def is_checkable_fragment(frag: str) -> bool:
+    return not LINE_ANCHOR.match(frag) and "<" not in frag and ">" not in frag
 
 
 def anchors_of(p: Path) -> set:
@@ -59,9 +74,10 @@ def anchors_of(p: Path) -> set:
     except Exception:
         _cache[p] = set()
         return _cache[p]
+    body = FENCE.sub("", body)        # a `# comment` inside a bash fence is not a heading
     ids = set(EXPLICIT.findall(body))
     for h in re.findall(r"^#{1,6}\s+(.*)$", body, re.M):
-        ids.add(gh_slug(re.sub(r"<a id=[\"'][^\"']+[\"']></a>", "", h)))
+        ids.add(gh_slug(rendered_heading_text(h)))
     _cache[p] = ids
     return ids
 
@@ -81,9 +97,9 @@ def scan(base: Path, repos: list[str]) -> tuple[dict[str, list[str]], int]:
                     text = src.read_text(encoding="utf-8", errors="replace")
                 except Exception:
                     continue
-                for m in LINK.finditer(text):
+                for m in LINK.finditer(live_markdown(text)):
                     path_part, sep, frag = m.group(1).partition("#")
-                    if not sep or not frag:
+                    if not sep or not frag or not is_checkable_fragment(frag):
                         continue
                     dest = (src.parent / path_part).resolve() if path_part else src
                     checked += 1
@@ -136,6 +152,43 @@ def selftest() -> int:
         # 7 links in the fixture; the external one and the fragment-less one are not counted
         check("external and fragment-less links are ignored", checked == 5)
         check("exactly 2 broken", len(broken) == 2)
+
+    # GitHub slugs, code spans, fences, line refs (2026-09-13 false-positive fixes)
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        (base / "d.md").write_text(
+            "## foo.py — bar.yaml → baz\n"
+            "```bash\n# not-a-heading\n```\n"
+            "ok github double dash [a](#foopy--baryaml--baz)\n"
+            "collapsed form is NOT github's [b](#foopy-baryaml-baz)\n"
+            "syntax example `[x](#shown-as-code)` is not a link\n"
+            "```md\n[y](#inside-fence)\n```\n"
+            "line ref [c](#L53) and range [d](#L10-L20)\n"
+            "placeholder [e](#<slug>)\n"
+            "backticked label is still a link [`name`](#really-missing)\n"
+            "fence heading must not count [f](#not-a-heading)\n", encoding="utf-8")
+        broken, _ = scan(base, [])
+        keys = {k.split("#", 1)[1] for k in broken}
+        check("GitHub double-dash slug resolves (spaces are not collapsed)",
+              "foopy--baryaml--baz" not in keys)
+        check("the collapsed slug is reported  [foil for the old \\s+ collapse]",
+              "foopy-baryaml-baz" in keys)
+        check("link shown inside an inline code span is not checked", "shown-as-code" not in keys)
+        check("link inside a fenced block is not checked", "inside-fence" not in keys)
+        check("#L53 / #L10-L20 line refs are not checked", not ({"L53", "L10-L20"} & keys))
+        check("<slug> placeholder is not checked", "<slug>" not in keys)
+        check("a real link whose label is backticked is still checked  [foil for over-stripping]",
+              "really-missing" in keys)
+        check("a `# comment` inside a fence does not create an anchor",
+              "not-a-heading" in keys)
+    check("a link inside a heading contributes only its label to the slug",
+          gh_slug(rendered_heading_text("1.2 the artifact [anchor.py](scripts/anchor.py)"))
+          == "12-the-artifact-anchorpy")
+    check("an explicit <a id> tag contributes nothing to the heading slug",
+          gh_slug(rendered_heading_text('<a id="x"></a>2.4 Errata marker')) == "24-errata-marker")
+    check("gh_slug matches github-slugger on the em-dash case",
+          gh_slug("sync-shared-style.py — shared-style-targets.yaml → paper-style-l2.md")
+          == "sync-shared-stylepy--shared-style-targetsyaml--paper-style-l2md")
 
     print("\nALL PASS" if ok else "\nFAILED")
     return 0 if ok else 1
