@@ -220,10 +220,10 @@ def selftest() -> int:
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        app = root / "grant-applications" / "applications" / "x"
+        app = root / "proposals" / "applications" / "x"
         app.mkdir(parents=True)
-        (root / "grant-applications" / "shared").mkdir(parents=True)
-        (root / "grant-applications" / "shared" / "office-review-artifacts.yaml").write_text(
+        (root / "proposals" / "shared").mkdir(parents=True)
+        (root / "proposals" / "shared" / "office-review-artifacts.yaml").write_text(
             "artifacts:\n"
             "  - id: gone\n    path: applications/x/missing.pdf\n    read: true\n"
             "  - id: todo\n    path: applications/x/present.pdf\n    date: '2026-01-01'\n"
@@ -234,10 +234,10 @@ def selftest() -> int:
             d = fitz.open(); d.new_page(); d.save(app / "present.pdf")
         except ImportError:
             (app / "present.pdf").write_bytes(b"%PDF-1.4\n")
-        cfg = dict(registry="grant-applications/shared/office-review-artifacts.yaml",
-                   registry_base="grant-applications",
-                   scan=[{"root": "grant-applications/applications",
-                          "rel_base": str(root / "grant-applications")}])
+        cfg = dict(registry="proposals/shared/office-review-artifacts.yaml",
+                   registry_base="proposals",
+                   scan=[{"root": "proposals/applications",
+                          "rel_base": str(root / "proposals")}])
         codes = [c for _, c, _ in audit(root, cfg)]
         check("実在しない登録を 🔴 MISSING", "MISSING" in codes)
         check("read: false を 🟠 UNREAD", "UNREAD" in codes)
@@ -246,7 +246,7 @@ def selftest() -> int:
         check("registry 不在なら silent", audit(root / "nowhere", cfg) == [])
 
         # transcript の実在検査も config なしで効く
-        (root / "grant-applications" / "shared" / "office-review-artifacts.yaml").write_text(
+        (root / "proposals" / "shared" / "office-review-artifacts.yaml").write_text(
             "artifacts:\n"
             "  - id: t\n    path: applications/x/present.pdf\n    read: true\n"
             "    transcript: shared/gone.md\n"

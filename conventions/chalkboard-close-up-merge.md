@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 板書写真 PDF に close-up annotation を統合するとき
 category: office
-summary: 板書写真 PDF で「広域 + close-up annotation」 2 枚を 1 page に統合する手順 (= Keynote 手作業経路 〔黒板 theme + 透過 chalk PNG overlay〕 を推奨、 PIL inline composite は anchor 明確時のみ。 free-form 配置は user が掴んでドラッグ、 AppleScript で .key auto 生成 + slide PNG export までを台本化、 chalk-only RGBA mask threshold 100-140 + Gaussian blur 1.5 px の標準値、 lectures 板書 reflex の延長)
+summary: 板書写真 PDF で「広域 + close-up annotation」 2 枚を 1 page に統合する手順 (= Keynote 手作業経路 〔黒板 theme + 透過 chalk PNG overlay〕 を推奨、 PIL inline composite は anchor 明確時のみ。 free-form 配置は user が掴んでドラッグ、 AppleScript で .key auto 生成 + slide PNG export までを台本化、 chalk-only RGBA mask threshold 100-140 + Gaussian blur 1.5 px の標準値、 板書 reflex の延長)
 -->
 # Chalkboard close-up merge — 板書写真の close-up annotation を広域写真に統合
 
@@ -11,7 +11,7 @@ summary: 板書写真 PDF で「広域 + close-up annotation」 2 枚を 1 page 
 
 これを「広域 1 枚に close-up 注を merge した 1 page」 に統合し、 close-up page を落として PDF を圧縮するための **decision flow + 実装 recipe** を以下に置く。
 
-初出: 2026-06-19 量子力学 (発展) 第10回、 ∫ℏ dk の ℏ が dk の Jacobian であることを示す「係数」 注を p4 close-up から p3 広域に merge ([lectures @ f9d27fe](https://github.com/odakin/lectures/commit/f9d27fe))。
+初出: 2026-06-19 量子力学 (発展) 第10回、 ∫ℏ dk の ℏ が dk の Jacobian であることを示す「係数」 注を p4 close-up から p3 広域に merge。
 
 ---
 
@@ -209,6 +209,6 @@ Image.fromarray(wide_arr).save('merged.png')
 
 ## 関連
 
-- 板書 PDF の自動取り込み手順 (Picker API → Dropbox 配置) は project 側 doc を参照 (例: `lectures/CLAUDE.md §「Google Photos からの自動取り込み」`)
+- 板書 PDF の自動取り込み手順 (Picker API → Dropbox 配置) は project 側 doc を参照 (例: 講義 project の `CLAUDE.md §「Google Photos からの自動取り込み」`)
 - AppleScript 全般の制約 (theme ローカライズ等) は OS 言語設定依存。 macOS 日本語環境前提
 - 板書写真 PDF → notes.md transcript 時の sympy verify reflex は [`scientific-computing.md` sympy-verify-transcript](scientific-computing.md#sympy-verify-transcript)

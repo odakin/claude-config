@@ -1147,10 +1147,16 @@ def selftest() -> int:
         expect("必須欄: 空なら 🟠",
                [c for _, c, _ in check_must_fill_sections(form_mf, empty_pdf)],
                ["MUST_FILL_EMPTY"])
-        # 排他: 実様式を読んで、空欄指定の欄が must_fill 側に混ざらないこと
-        real_form = Path(__file__).resolve().parent.parent.parent / (
-            "grant-applications/applications/2027-kakenhi-kiban-b/forms/s-13.docx")
-        if real_form.exists():
+        # 排他: 実様式を読んで、空欄指定の欄が must_fill 側に混ざらないこと。
+        # 手元に応募 kit があるときだけ走る optional check なので、置き場を literal で
+        # 書かず sibling repo から glob 探索する (= public layer に private repo 名を
+        # 焼かない。見つからない環境では単に skip)。
+        real_form = next(
+            (p for p in sorted(
+                Path(__file__).resolve().parent.parent.parent.glob(
+                    "*/applications/*/forms/s-13.docx"))),
+            None)
+        if real_form is not None and real_form.exists():
             rf = read_form(real_form)
             overlap = set(rf["blank_sections"]) & set(rf["must_fill_sections"])
             expect("必須欄: 空欄指定と must_fill は排他 (実様式)",

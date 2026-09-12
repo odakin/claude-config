@@ -238,7 +238,7 @@ JSPS「挑戦的研究（開拓・萌芽）の書面審査における評定基�
   `onDeleteConfirm(systemNo,'')` → `onDelete(systemNo)` で削除。本番の調書に試し書きしない。
 - 分担: **人間 = ログイン / 添付 upload / 分担者の追加 (検索 popup + 承諾) / 送信**、AI = それ以外の全画面 + 読み戻し照合。
   driver は「値の正本 → 画面ごとの JS step 列」を決定的に出す script にし、AI は step を順に流すだけにする (= 値を頭から出さない)。
-  odakin の instance = `grant-applications/applications/2027-kakenhi-r9/sashimodoshi-2026-09-07/web-driver.py` (docstring が field 名の実測 ledger)。
+  odakin の instance は個人層の応募 project 側にある `web-driver.py` (= その docstring が field 名の実測 ledger。所在は層 3)。
   **汎用 harness は層1 [`web-form-automation.md#step-driver-harness`](web-form-automation.md#step-driver-harness)**
   (実体 `scripts/lib/web_driver.py`) — 本節は「科研費という 1 サイトの台帳」 側で、 step schema・JS 生成・
   読み戻し・不変条件の検査はそちらが正本 (2026-09-10 に分離)。
