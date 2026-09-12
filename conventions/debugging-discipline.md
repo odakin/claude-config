@@ -229,7 +229,34 @@ introspection が **存在しない / 信頼できない** ケース:
 
 これらは V1 (= scenario trace) + V2 (= code coverage) の伝統的 path に戻る。 但し introspection を **試す前に grep に戻る** のは効率損失。
 
-### 関連事故 / 検証例
+### <a id="tooling-that-lies-on-binary-and-non-ascii"></a>19. 検査を書くときの前提 — 標準 tool は binary と非 ASCII で静かに嘘をつく
+
+検査 script (= 何かの不在・健全性を主張する道具) は、 素の shell/git の既定挙動を信じると
+**黙って誤答する**。 実測で踏んだもの (2026-09-12、 いずれも「検査が全 repo を誤判定」 or
+「hook が全 commit を止める」 という形で顕在化):
+
+| 道具 | 既定の挙動 | 正しい書き方 |
+|---|---|---|
+| `grep "X"` | 入力に NUL が含まれると binary 扱いになり、 **一致しても報告しない**ことがある | byte 比較する (`head -c N \| xxd -p` と期待値を突き合わせる) |
+| `git ls-files` | 非 ASCII の path を **引用符 + 8 進エスケープ**で返す (`"docs/\346\227\245..."`) | `-z` で NUL 区切り、 `surrogateescape` で decode |
+| `git diff --cached` を `text=True` で読む | staged に binary (画像 / tar) があると `UnicodeDecodeError` で **落ちる** | `errors="replace"` で decode する |
+| `$0` | 相対で渡されうる。 別 dir に `cd` してから再帰呼び出しすると壊れる | 冒頭で絶対化する |
+| 一括処理 script 内の `grep -c` / 存在 probe | 「0 件」 が「無い」 と「調べられなかった」 を区別しない | 判定不能を第 3 の状態として出す |
+
+共通するのは **「検査が誤答しても誰も気づかない」** こと — 検査の出力は普段 OK なので読まれない。
+∴ 検査には必ず **その検査自身の回帰 test** を付ける。 とくに:
+
+- **非 ASCII の file 名を含む fixture** (= 上の 2 行目で 6 repo が一斉に誤検知になった)
+- **binary を staged に置いた fixture** (= 上の 3 行目で、 その repo の commit が全部できなくなった)
+
+⚠️ **「誤検知の原因」 をサンプル数件で決めない。** 6,800 件の誤検知のうち最初に見た 12 件が
+すべて同じ原因だったため区切り線が原因と判断したが、 実際はその 1/3 で、 残りは別の 2 原因だった。
+**出どころ別に全件集計**して初めて分かる。 → [§18](#moving-baseline-comparison) の姉妹。
+
+関連: [`shell-multibyte-truncation.md`](shell-multibyte-truncation.md) (= 多バイトの切り詰め) /
+[`confidential-repo-boundary.md`](confidential-repo-boundary.md) (= これらを踏んだ検査群の設計)
+
+## 関連事故 / 検証例
 
 - **2026-05-12 calendar event 2 限消失** (個人 layer 内 private repo の SESSION.md に詳細記録): shift-worship-period.py が 2 限相関で容疑かかったが、 `--dry-run --force` で touch 対象が 4 件のみ (= religious_week の特定日付の event 4 件) と判明、 4-5 月 events は range 外 → 冤罪確定。 code review 30 分 vs dry-run 30 秒、 後者が決定的。 真犯人候補は Apple Calendar sync。
 
