@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき)
 category: infra
-summary: plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 6 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる / 1 回一致は prefix 形の key (path・識別子) を守らない = 長い別物の先頭に 1 回だけ一致して誤置換、 終端の区切りまで含めるか構文解析した単位で置換 / 挿入型の pair (new が old を含む) は再実行しても count==1 のまま通って二重に入る = 適用済み検査を足す。 機械化 = scripts/apply-text-pairs.py)
+summary: plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 7 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる / 1 回一致は prefix 形の key (path・識別子) を守らない = 長い別物の先頭に 1 回だけ一致して誤置換、 終端の区切りまで含めるか構文解析した単位で置換 / 挿入型の pair (new が old を含む) は再実行しても count==1 のまま通って二重に入る = 適用済み検査を足す / TARGET が symlink だと test 用の写しは link 越しに実体へ書き、 一時 file + os.replace は link を普通の file に置き換える = 先に実体の path へ解決する。 機械化 = scripts/apply-text-pairs.py)
 -->
 # Batch text surgery — 一括置換 script の契約と失敗モード
 
@@ -20,7 +20,7 @@ open(path, "w", encoding="utf-8").write(txt)
 
 - **契約**: 各 `old` は file 中に**正確に 1 回** match する。 0 件 (= typo / 既適用 / 別 file) も 2 件以上 (= 誤爆) も abort。 これは Edit tool の「唯一 match 保証」を N 件へ拡張したもの。 ⚠️ 「既適用なら 0 件」 は置換型の pair でしか成り立たない (挿入型 = [モード 6](#insertion-pair-rerun))。
 - **順序が本質**: read → **全 assert** → 全 replace → **単一 write**。 loop 内で write したり `sed -i` を逐次実行すると、 途中で失敗したとき「半分だけ当たった file」が disk に残る。
-- **機械化** = [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) `TARGET PAIRS.py`: 本契約 + [モード 5](#prefix-shaped-key) (old の端が長い token の途中) + [モード 6](#insertion-pair-rerun) (挿入型 pair の再実行) を検査し、 `--test CMD` なら patch 後の写しで test を通してから原子的に書く。 TARGET は必須引数 (既定の path を持たない)。
+- **機械化** = [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) `TARGET PAIRS.py`: 本契約 + [モード 5](#prefix-shaped-key) (old の端が長い token の途中) + [モード 6](#insertion-pair-rerun) (挿入型 pair の再実行) を検査し、 `--test CMD` なら patch 後の写しで test を通してから原子的に書く。 TARGET は必須引数 (既定の path を持たない) で、 最初に実体の path へ解決する ([モード 7](#symlink-target))。
 
 **使い分け**:
 
@@ -29,7 +29,7 @@ open(path, "w", encoding="utf-8").write(txt)
 | 1-2 箇所 | Edit tool | 差分がそのまま可視になり人間 review が効く |
 | 3 箇所以上 / 長い string / 系統的 sweep | 本 pattern | 手数と転記ミスが線形に増えるのを止める |
 
-## <a id="batch-text-failure-modes"></a>6 つの失敗モード
+## <a id="batch-text-failure-modes"></a>7 つの失敗モード
 
 ### <a id="assert-does-not-gate-downstream"></a>1. assert の verdict は下流に伝わらない
 
@@ -93,6 +93,14 @@ open(path, "w", encoding="utf-8").write(txt)
 
 **対処**: (1) `old` が `new` に含まれる pair は、 **`new` が既に在れば拒否**する (適用済み検査)。 (2) patch script は target を必須引数にし、 既定値を持たせない。 (3) 書く前に patch 後の写しで test を通す ([hook-authoring.md#engine-edit-is-deploy](hook-authoring.md#engine-edit-is-deploy))。 3 つとも [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) が実装し、 selftest に「素朴な契約は再実行を通す」 foil がある。
 
+### <a id="symlink-target"></a>7. TARGET が symlink だと、 test 用の写しも原子的な書込みも実体を外す (2026-09-14)
+
+**症状**: 絶対 path の symlink を TARGET にして、 構文を壊す patch を「写しで test を通してから書く」 道具で当てた。 道具は test の失敗を検出して「何も書いていない」 と表示したが、 **link 先の実体には壊れた版が入っていた**。 test が通る patch では逆に、 link が普通の file に置き換わり、 実体は変わらなかった。 どちらも error は出ない。
+
+**なぜ起きるか**: 2 つの操作が link を別々に扱う。 (1) test 用に dir を写すとき link を link のまま写す (`shutil.copytree(..., symlinks=True)` など) と、 絶対 path の link は写しの中でも元の実体を指すので、 「写しの TARGET」 への書込みがそのまま実体に届く。 (2) 一時 file + `os.replace(tmp, target)` の原子的な書込みは、 target の path に在る**link そのもの**を置き換え、 link 先には書かない。 使う側の path が symlink で実体は repo の中、 という配置 (install 済みの hook など) で踏む。
+
+**対処**: 読む・写す・書く前に TARGET を 1 回だけ実体の path へ解決する (`os.path.realpath`)。 写しの dir の中の他の link は link のまま写してよい (辿って写すと、 repo root に在る共有 folder への dir link まで丸ごと複製する)。 ただしその場合に守られるのは TARGET だけで、 test command が絶対 link や絶対 path を通して書く副作用は写しでは隔離されない。 [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) が実装し、 selftest に「絶対 link 越しの壊れた patch が実体に届かない」「link 越しに書いても link が残る」 foil がある。 **道具の「書いていない」 という報告は、 書き先の実体を読むまで証拠にならない** (この事例は実体を読み直して初めて見えた)。
+
 ## <a id="batch-text-verification"></a>適用後の検証
 
 1. **再 build が通る** (LaTeX なら error 0 + 頁数が期待どおり)
@@ -106,4 +114,4 @@ open(path, "w", encoding="utf-8").write(txt)
 - **byte 単位の文字列切り詰め** = [shell-multibyte-truncation.md](shell-multibyte-truncation.md)。 同じ「byte で見ろ」でも kernel は truncation であって matching ではない。
 - **docx / xlsx の中身を XML 文字列で置換する場合** = [office-automation.md#docx-fill-xml-edit](office-automation.md#docx-fill-xml-edit)。 binary container 固有の罠 (run 分割・宣言・rels 整合) が別途あるので、 本 doc の契約だけでは足りない。
 
-origin: 2026-07 の LaTeX 原稿改訂 session で本 pattern を約 10 回実戦投入 (最大 66 箇所を 1 pass) し、 上記 4 モードすべてを同日中に実測した。 モード 5・6 は 2026-09-13 (fleet の link 修正と script の hoist) で実測して追加。
+origin: 2026-07 の LaTeX 原稿改訂 session で本 pattern を約 10 回実戦投入 (最大 66 箇所を 1 pass) し、 上記 4 モードすべてを同日中に実測した。 モード 5・6 は 2026-09-13 (fleet の link 修正と script の hoist) で実測して追加。 モード 7 は 2026-09-14 (相対 path の不具合を直す途中で symlink の TARGET を試して) 実測して追加。

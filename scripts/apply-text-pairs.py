@@ -36,6 +36,9 @@
 `--test` の制約: 写すのは親 dir **だけ** で `.git` も除く。 repo root を前提にする test
 (`git rev-parse --show-toplevel` で root を得る / `$(dirname "$0")/../..` で上の dir を読む `*.test.sh` など) は
 写しの中で root を見つけられないので `--test` では回せない。 その場合は `--dry-run` で確かめてから書き、 書いた後に test を走らせる。
+写しが隔離するのは TARGET だけ: dir の中の他の symlink は link のまま写す (辿ると共有 folder への dir link まで複製する) ので、
+test command が絶対 link や絶対 path を通して書けば元の file に届く
+(一般形 = [`conventions/batch-text-edits.md#symlink-target`](../conventions/batch-text-edits.md#symlink-target))。
 """
 from __future__ import annotations
 
