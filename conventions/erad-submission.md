@@ -151,7 +151,7 @@ Excel/docx の fill・docx→PDF・署名合成の **一般技法は `office-aut
 - **応募内容提案書プレビュー**（e-Rad が吐く `E0204R01_*.pdf` 等）= **添付した様式PDF の連結**。様式1（xlsx）と e-Rad 入力欄（課題名・研究目的・経費）は含まれない＝それらはタブ側で別途確認。
 
 ### 様式 xlsx の入力セル特定
-gov-form xlsx 共通の経験則（LEN 式の先 = 入力 / Y入力は data validation / 業績は 1 件 1 セル / 必要性はラベル 1 つ下の merged / サマリは触らない）は [`gov-form-input-cell-heuristics`](office-automation.md#gov-form-input-cell-heuristics)（観測元: 学振 DC2 + SPReAD 第2回）。 e-Rad 経由 SPReAD の例: 課題名 / 活用方法 = `N列=LEN(C列)` → C列入力。
+gov-form xlsx 共通の経験則（LEN 式の先 = 入力 / Y入力は data validation / 業績は 1 件 1 セル / 必要性はラベル 1 つ下の merged / サマリは触らない）は [`gov-form-input-cell-heuristics`](office-automation.md#gov-form-input-cell-heuristics)（観測元: 複数の官製様式）。 e-Rad 経由の公募の例: 課題名 / 活用方法 = `N列=LEN(C列)` → C列入力。
 
 ### docx 同意確認書の記入
 - ＿＿ blank → 値 / ☐→☒ / run 分割の対処は [`docx-fill-xml-edit`](office-automation.md#docx-fill-xml-edit)（zip+XML 直編集が runtime 軽量 + run 分割 dump 必須）+ [`docx-checkbox-content-control`](office-automation.md#docx-checkbox-content-control)（content control checkbox は toggle 困難 → PDF 化前提なら `☐→☒` 文字置換で視覚チェック）。

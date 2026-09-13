@@ -2456,7 +2456,7 @@ def no_grid(p):                                         # 解法A(推奨): 本�
 
 上の 3 段階 (margin / line_spacing / 末尾空段落) は doc 直下の段落向け。 表組み様式ではさらに:
 
-- **行の明示 min-height (`<w:trHeight>`) + 行分割禁止 flag (`<w:cantSplit>`) の 2 属性は必ず**セット**で除去**: 雛形が回答欄行に空行ぶんの大きな min-height (例 224pt = ~7.9cm) を焼いている + cantSplit で「行境界で page split 不可」 を宣言していることがある。 min-height だけ除去しても cantSplit が残ると「現 page に fit しなければ行全体が次 page 頭に強制移動」 の判定が働き、 内容を圧縮しても overflow が消えない (= 2026-07-16 若手賞推薦書 A4 1 枚 fit で実測: page 1 残 ~6cm < 行 min-height 7.9cm ゆえ全内容が page 2 に移動、 min-height 除去だけでは cantSplit が同判定を維持したため両方除去でようやく fit)。 **書式属性の変更**ゆえ「書式変更禁止」 制約と競合するが、 「A4 1 枚以内」 が hard 制約なら後者を優先 (= レンダリング上のフォント・段落 spacing・文字数・余白は不変、 ページ分割属性のみの除去で制約 trade-off が localized)。
+- **行の明示 min-height (`<w:trHeight>`) + 行分割禁止 flag (`<w:cantSplit>`) の 2 属性は必ず**セット**で除去**: 雛形が回答欄行に空行ぶんの大きな min-height (例 224pt = ~7.9cm) を焼いている + cantSplit で「行境界で page split 不可」 を宣言していることがある。 min-height だけ除去しても cantSplit が残ると「現 page に fit しなければ行全体が次 page 頭に強制移動」 の判定が働き、 内容を圧縮しても overflow が消えない (= 推薦書の A4 1 枚 fit で実測: page 1 残 ~6cm < 行 min-height 7.9cm ゆえ全内容が page 2 に移動、 min-height 除去だけでは cantSplit が同判定を維持したため両方除去でようやく fit)。 **書式属性の変更**ゆえ「書式変更禁止」 制約と競合するが、 「A4 1 枚以内」 が hard 制約なら後者を優先 (= レンダリング上のフォント・段落 spacing・文字数・余白は不変、 ページ分割属性のみの除去で制約 trade-off が localized)。
   ```python
   from docx.oxml.ns import qn
   for row in table.rows:
