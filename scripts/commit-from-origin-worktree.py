@@ -162,11 +162,20 @@ def commit_from_origin_worktree(live: Path, message: str, copies=(), apply_cmd: 
             if git(wt, "merge-base", "--is-ancestor", f"origin/{branch}", "HEAD", check=False).returncode != 0:
                 rb = git(wt, "rebase", "-q", f"origin/{branch}", check=False)
                 if rb.returncode != 0:
+                    conflicted = names_z(wt, "diff", "-z", "--name-only", "--diff-filter=U")
                     git(wt, "rebase", "--abort", check=False)
                     keep = True
                     log(rb.stdout + rb.stderr)
                     log(f"[conflict] origin/{branch} moved and the rebase conflicts; NOT pushed. worktree kept at {wt}\n"
-                        f"  generated files: take upstream, regenerate there, commit, then push HEAD:{branch}")
+                        f"  conflicted: {'  '.join(conflicted) or '(not listed)'}\n"
+                        f"  the rebase was aborted, so the worktree holds your commit on the old base. To finish:\n"
+                        f"    cd {shlex.quote(str(wt))} && git rebase origin/{branch}\n"
+                        f"    generated files: git checkout --ours -- <file> (during a rebase, --ours is upstream), regenerate, git add\n"
+                        f"    other files: resolve by content, git add\n"
+                        f"    GIT_EDITOR=true git rebase --continue, re-run the --check command, git push origin HEAD:{branch}\n"
+                        f"    git -C {shlex.quote(str(live))} worktree remove {shlex.quote(str(wt))}"
+                        + ("  (--remove-live-copies does not run on this path: compare and remove the live copies after the push)"
+                           if remove_live_copies else ""))
                     return 2
             p = git(wt, "push", "-q", "origin", f"HEAD:refs/heads/{branch}", check=False)
             if p.returncode == 0:
@@ -288,6 +297,8 @@ def selftest() -> int:
         kept = next((m.split("worktree kept at ")[1].split("\n")[0] for m in msgs if "worktree kept at" in m), "")
         check("a rebase conflict stops before the push and keeps the worktree",
               rc == 2 and "theirs" in sh(remote, "show", "main:a.md").stdout and kept and Path(kept).is_dir())
+        check("the conflict message names the conflicted file and gives the --ours (= upstream) recipe",
+              any("conflicted: a.md" in m and "--ours is upstream" in m and "rebase --continue" in m for m in msgs))
         if kept:
             subprocess.run(["git", "-C", str(live), "worktree", "remove", "--force", kept], capture_output=True)
             shutil.rmtree(Path(kept).parent, ignore_errors=True)
