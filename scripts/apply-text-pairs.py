@@ -29,6 +29,13 @@
 `--test` は TARGET の親 dir を丸ごと一時 dir に写し (同じ dir の module を path で import する script のため)、
 写しの TARGET に patch 後の text を置いて command を走らせる。 `{}` は写しの TARGET の path、 cwd は写しの dir。
 書込みは同じ dir の一時 file → `os.replace` (途中まで書かれた file を hook が読む瞬間を作らない)、 file mode は保つ。
+`TARGET` は cwd からの相対 path (`tool.py` / `../tool.py`) でも symlink でもよい。 最初に `os.path.realpath` で実体に解決し、
+写し・書込みとも実体に対して行う (symlink のまま扱うと、 写しの link が絶対 path なら patch が test 前に実体へ届き、
+書込みは link を普通の file に置き換えて実体を変えない = 2026-09-14 実測)。
+
+`--test` の制約: 写すのは親 dir **だけ** で `.git` も除く。 repo root を前提にする test
+(`git rev-parse --show-toplevel` で root を得る / `$(dirname "$0")/../..` で上の dir を読む `*.test.sh` など) は
+写しの中で root を見つけられないので `--test` では回せない。 その場合は `--dry-run` で確かめてから書き、 書いた後に test を走らせる。
 """
 from __future__ import annotations
 
@@ -92,7 +99,7 @@ def plan(text: str, pairs: list[tuple[str, str]], allow_prefix: bool = False) ->
 
 def run_test(target: Path, patched: str, cmd: str) -> tuple[bool, str]:
     with tempfile.TemporaryDirectory() as td:
-        dst_dir = Path(td) / target.parent.name
+        dst_dir = Path(td) / (target.parent.name or "root")
         shutil.copytree(target.parent, dst_dir, symlinks=True,
                         ignore=shutil.ignore_patterns(".git", "__pycache__", "node_modules"))
         copy = dst_dir / target.name
@@ -117,6 +124,8 @@ def write_atomic(target: Path, text: str) -> None:
 
 def apply(target: Path, pairs: list[tuple[str, str]], dry_run: bool = False, test: str | None = None,
           allow_prefix: bool = False, quiet: bool = False) -> int:
+    # 相対 path の親は name が '' / '..' で写し先を一時 dir の中に作れず、 symlink は写しと書込みが実体に届かない
+    target = Path(os.path.realpath(target))
     old_text = target.read_text(encoding="utf-8")
     new_text, problems = plan(old_text, pairs, allow_prefix)
     for p in problems:
@@ -210,6 +219,31 @@ def selftest() -> int:
         pf.write_text('PAIRS = [("* 5", """* 7""")]\n', encoding="utf-8")
         r = subprocess.run([sys.executable, __file__, str(tgt), str(pf)], capture_output=True, text=True)
         check("CLI: TARGET + PAIRS.py applies", r.returncode == 0 and "* 7" in tgt.read_text())
+        me, seven = os.path.abspath(__file__), tgt.read_text()
+        pf.write_text('PAIRS = [("* 7", "* 8")]\n', encoding="utf-8")
+        r = subprocess.run([sys.executable, me, "tool.py", str(pf), "--test", "python3 {}"],
+                           cwd=d, capture_output=True, text=True)
+        check("CLI: --test with a bare relative TARGET copies its dir and writes  [foil: parent.name == '']",
+              r.returncode == 0 and "* 8" in tgt.read_text())
+        (d / "sub").mkdir()
+        tgt.write_text(seven, encoding="utf-8")
+        pf.write_text('PAIRS = [("* 7", "* 9")]\n', encoding="utf-8")
+        r = subprocess.run([sys.executable, me, "../tool.py", str(pf), "--test", "python3 {}"],
+                           cwd=d / "sub", capture_output=True, text=True)
+        check("CLI: --test with a ../ TARGET copies its dir, not the temp dir's parent  [foil: parent.name == '..']",
+              r.returncode == 0 and "* 9" in tgt.read_text())
+
+        links = Path(td) / "links"
+        links.mkdir()
+        via = links / "tool.py"
+        via.symlink_to(tgt)  # absolute link, as an installed hook's symlink is
+        before = tgt.read_text()
+        check("--test through an absolute symlink does not reach the real file before the test  "
+              "[foil: 2026-09-14 broken patch landed while printing 'nothing written']",
+              apply(via, broken, test="python3 {}", **q) == 1 and tgt.read_text() == before)
+        check("writing through a symlink changes the real file and keeps the link",
+              apply(via, [("* 9", "* 10")], test="python3 {}", **q) == 0
+              and "* 10" in tgt.read_text() and via.is_symlink())
         r = subprocess.run([sys.executable, __file__, str(pf)], capture_output=True, text=True)
         check("CLI: there is no default target (one path alone is an error)", r.returncode != 0)
     print("\nALL PASS" if ok else "\nFAILED")
