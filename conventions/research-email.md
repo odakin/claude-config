@@ -268,4 +268,4 @@ origin: 2026-09-01、 大手出版社の commissioning 部門から分野違い�
 
 ## <a id="appendix-letters-unstable"></a>改稿中の付録の letter は識別子として不安定 — 連絡は題で呼び、 並べ替えたら letter の変更を一言 (2026-09-08)
 
-**Rule**: 付録を足す・並べ替える改訂中は「付録 E」 が翌日 B になる。 共著者便では付録を題 (「fRG の節」「heat-kernel の付録」) で呼び、 letter は括弧で添える。 並べ替えた後の便で、 前便の letter がどう変わったかを 1 行で訂正する。 和文で "letter" と書くと通じない (著者指摘「letter って分からん」) — 「付録 E → 付録 B」 と具体に書く。 一般則 = [`paper-audit.md#appendix-order-by-first-reference`](paper-audit.md#appendix-order-by-first-reference)。
+**Rule**: 付録を足す・並べ替える改訂中は「付録 E」 が翌日 B になる。 共著者便では付録を題 (「〇〇の節」「△△の付録」) で呼び、 letter は括弧で添える。 並べ替えた後の便で、 前便の letter がどう変わったかを 1 行で訂正する。 和文で "letter" と書くと通じない (著者指摘「letter って分からん」) — 「付録 E → 付録 B」 と具体に書く。 一般則 = [`paper-audit.md#appendix-order-by-first-reference`](paper-audit.md#appendix-order-by-first-reference)。

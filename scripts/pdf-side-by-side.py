@@ -10,7 +10,7 @@ ai-collaboration `scripts/compare-tex-builds.py`。 本 script は「人が見�
 
     python3 pdf-side-by-side.py --left a.pdf --right b.pdf \\
         --label-left 'subscript' --label-right 'superscript' \\
-        --anchor 'The sum of the amputated' --anchor 'we obtain the LL WT identity' \\
+        --anchor 'first phrase to align' --anchor 'second phrase to align' \\
         --out compare/
 
     python3 pdf-side-by-side.py --left a.pdf --right b.pdf --diff-pages   # 本文が違う頁を全部、頁ごと
