@@ -187,9 +187,9 @@ source の断片や置換規則を提示して「どちらにしますか」 と
 [`ai-collaboration/scripts/compare-tex-builds.py`](../../ai-collaboration/scripts/compare-tex-builds.py)。
 一括置換の純粋性は [`check-rename-purity.py`](../../ai-collaboration/scripts/check-rename-purity.py)。
 
-**実例 (2026-09-12)**: 1PI 頂点関数の記法で 4 案 (縦棒 + hat 有無 / 下付き / 肩・次数なし / 肩・次数つき) を同じ変換 script の
-mode 切替で作り、 各案を組んで 7〜10 箇所の左右比較を渡した。 決め手は紙の上にしか無かった = 下付きは同じ論文の
-`J^{e\omega}` と label の位置が割れる、 次数なしの肩は 1 点関数に見えない、 縦棒は制限の用法と衝突する
+**実例 (2026-09-12)**: ある量の記法で 4 案 (縦棒 + hat 有無 / 下付き / 肩・次数なし / 肩・次数つき) を同じ変換 script の
+mode 切替で作り、 各案を組んで数箇所ずつの左右比較を渡した。 決め手は紙の上にしか無かった = 下付きは同じ論文の
+別の量の添字と label の位置が割れる、 次数なしの肩は別の次数の量に見える、 縦棒は制限の用法と衝突する
 ([`paper-audit.md#notation-rename-sweep`](paper-audit.md#notation-rename-sweep) の 3 番)。
 
 ## <a id="stash-roundtrip-build-artifacts"></a>baseline 比較に git stash round-trip を使わない (tracked 生成物と衝突する)
@@ -254,7 +254,7 @@ comm -23 <(grep -o '^\\bibitem{[^}]*}' paper.bbl | sed 's/.*{\(.*\)}/\1/' | sort
 - 意味段落の切り方: (a) topic sentence が変わる、(b) 主語 / 論点が移る、(c) 例示 → 一般化 の遷移、(d) 逆接 (「しかし」「一方」) の直前 — いずれかで段落を切る候補。1 段落が 15 行を超えたら 2 段落以上に割れないかを疑う。
 - edit 判断のとき **段落の重さは source 行数でなく rendered 分量で見る** (= 下の「§長さ・段落構造の判断にコメントアウト行を数えない」の kernel を継承)。
 
-**事例 (2026-07-04 研究 LaTeX project の LIVE note family 統一)**: `induced-action` / `induced-action-per-term` / `verified-results` / `docs/ec_one_loop_notes` / `convention-conversion` / `handcheck-final` + 小物 8 note で run-in `\paragraph` を top-level heading として使っていた計 ~150 本を、既存 §番号を保ったまま `\subsubsection` (subsection ありの大物) または `\subsection` (subsection なしの小物) に一斉昇格 (Chip H/I/J/K/L)。詳細 = 当該 repo の `CLAUDE.md §「見出しの論文型規律 (2026-07-04 確立)」`。
+**事例 (2026-07-04 研究 LaTeX project の LIVE note family 統一)**: 大物 note 数本 + 小物 8 note で run-in `\paragraph` を top-level heading として使っていた計 ~150 本を、既存 §番号を保ったまま `\subsubsection` (subsection ありの大物) または `\subsection` (subsection なしの小物) に一斉昇格 (Chip H/I/J/K/L)。詳細 = 当該 repo の `CLAUDE.md §「見出しの論文型規律 (2026-07-04 確立)」`。
 
 ## <a id="exclude-comments-from-length"></a>長さ・段落構造の判断にコメントアウト行を数えない
 
@@ -1042,7 +1042,7 @@ origin: 2026-09-12 或る paper repo、著者が TeXShop で編集中の Overlea
 3. `/tmp/check.png` を Read tool で開いて **視覚確認** (= 「compile OK」 だけで完了としない)
 4. 図・組版の確認対象に `Overfull \hbox (N pt too wide)` warning が出たら、該当 page で切れを確認。 ⚠️ ただし共著原稿の改稿 pass の**途中**では overfull を語順変更で消さない — 改行位置は後続の編集で動くので、 掃除は投稿直前の final pass で 1 回 (正本 = ai-collaboration [`edit-intent-record.md#overfull-not-a-gate`](../../ai-collaboration/conventions/edit-intent-record.md#overfull-not-a-gate)、 2026-09-09 著者裁定)
 
-### <a id="pdf-visual-verification-traps"></a>典型 trap (= 2026-05-18 EC erratum note 編集で連続再発)
+### <a id="pdf-visual-verification-traps"></a>典型 trap (= 2026-05-18 研究ノート編集で連続再発)
 
 | Symptom | Cause | Fix |
 |---|---|---|

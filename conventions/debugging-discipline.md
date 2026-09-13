@@ -123,7 +123,7 @@ structural rule の違反は同 codebase / 同型コード設計で **再生産�
 
 **Why**: 「flagged された 1 件を fix」 だけで止まると、 同 trait family の sibling default / sibling pattern が **未 flagged のまま残存** し、 別 unit system / 別 context で symptom が顕在化する遅延発見 cycle になる。
 
-**実例 (2026-04-20 → 2026-05-25 の 13 ヶ月遅延発見)**: [`scientific-computing.md` scale-dependent-default](scientific-computing.md#scale-dependent-default) の `TauSqMax` scale-blind default fix を 2026-04-20 に commit。 同 fix で `TauSqMax` を scale-adaptive 化したが、 **同 file 同 function の `MuRange` default (= `{Min[xs]-10, Max[xs]+10}` = 同形式 scale-blind)** を sweep しなかった。 13 ヶ月後 (2026-05-25) 別 unit system (= dimensionless S₈ tension) で S₈ scale で margin 10 が data spread の 110× 過大 → posterior peak under-resolved → SE が 30-50% inflated として symptom 顕在化。 fix-time に同 file の sibling default を grep していれば同 commit で防げた。
+**実例 (2026-04-20 → 2026-05-25 の 13 ヶ月遅延発見)**: [`scientific-computing.md` scale-dependent-default](scientific-computing.md#scale-dependent-default) の `TauSqMax` scale-blind default fix を 2026-04-20 に commit。 同 fix で `TauSqMax` を scale-adaptive 化したが、 **同 file 同 function の `MuRange` default (= `{Min[xs]-10, Max[xs]+10}` = 同形式 scale-blind)** を sweep しなかった。 13 ヶ月後 (2026-05-25) 別 unit system (= 無次元の量) で margin 10 が data spread の 100 倍以上過大 → posterior peak under-resolved → SE が数十 % inflated として symptom 顕在化。 fix-time に同 file の sibling default を grep していれば同 commit で防げた。
 
 **How to apply (= 通常 fix workflow に追加)**:
 

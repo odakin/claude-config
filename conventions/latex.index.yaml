@@ -213,7 +213,7 @@ sections:
     title: "図・組版を対象とする PDF 視覚検証"
   - id: pdf-visual-verification-traps
     level: 3
-    title: "典型 trap (= 2026-05-18 EC erratum note 編集で連続再発)"
+    title: "典型 trap (= 2026-05-18 研究ノート編集で連続再発)"
   - id: pdf-visual-verification-why
     level: 3
     title: "Why"

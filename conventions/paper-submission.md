@@ -50,7 +50,7 @@ Editorial Manager 系ポータル (ScholarOne / Elsevier EM / EJP) のファイ�
 
 ### 実例
 
-- 2026-07-08 EPJC (ScholarOne Manuscripts) Step 2 File Upload = Brave で generic error 連発、 Safari で 同ファイル 一発通過。 files はそれぞれ 1.14 MB (session 上限 488 MB の 0.5%)、 Type1 warning は blocker でなかった。
+- 2026-07 のある投稿 (ScholarOne Manuscripts の物理誌) の Step 2 File Upload = Brave で generic error 連発、 Safari で 同ファイル 一発通過。 files はそれぞれ約 1 MB (session 上限の 1% 未満)、 Type1 warning は blocker でなかった。
 
 ## <a id="package-bundling"></a>2. "Missing resources" → 非標準パッケージを zip に同梱
 
@@ -107,7 +107,7 @@ cp /usr/local/texlive/2025/texmf-dist/tex/latex/tikz-feynman/*.{sty,tex,lua} <su
 
 ### 実例
 
-- 2026-07-08 EPJC = revtex4-2 と tikz-feynman が Missing 判定、 上記手順で 19 files を追加 zip (150 KB) として upload、 Step 2 通過
+- 2026-07 の同じ投稿 = revtex4-2 と tikz-feynman が Missing 判定、 上記手順で追加 zip として upload、 Step 2 通過
 
 ## <a id="form-vs-source-independence"></a>3. Cover page metadata は LaTeX と独立
 
@@ -132,7 +132,7 @@ cp /usr/local/texlive/2025/texmf-dist/tex/latex/tikz-feynman/*.{sty,tex,lua} <su
 
 ### 実例
 
-- 2026-07-08 EPJC = 責任著者の `\affiliation{}` 内 department name を旧名から現行名に修正 + source zip 差し替え、 しかし ScholarOne cover page が旧 form 値のまま → Step 3 form で 別途更新 → proof 再生成 で cover page も正しい表記に。 form 修正時に一時的に語順ミス (単語順を反転してしまう typo) を経て 3 回目で確定 = form 修正時も丁寧に (LaTeX source の literal 値と form 入力の literal 値が **両方合致** して初めて proof も cover page も正しくなる)。
+- 2026-07 の同じ投稿 = 責任著者の `\affiliation{}` 内 department name を旧名から現行名に修正 + source zip 差し替え、 しかし ScholarOne cover page が旧 form 値のまま → Step 3 form で 別途更新 → proof 再生成 で cover page も正しい表記に。 form 修正時に一時的に語順ミス (単語順を反転してしまう typo) を経て 3 回目で確定 = form 修正時も丁寧に (LaTeX source の literal 値と form 入力の literal 値が **両方合致** して初めて proof も cover page も正しくなる)。
 
 ## <a id="type1-fonts"></a>4. PDF Type1 font 要求
 
@@ -165,7 +165,7 @@ print(f"Non-Type1: {non_type1}")
 
 ### 実例
 
-- 2026-07-08 EPJC = 5 figure PDF 全てに TrueType Courier が MacRomanEncoding で埋め込み、 hyperref の URL 経由 Courier も 1 個。 `\urlstyle{rm}` 追加は無関係 (原因は figure)。 arXiv v1 が同 font 構成で受理済のため EPJC 投稿でも blocker にならなかった。
+- 2026-07 の同じ投稿 = figure PDF 全てに TrueType Courier が MacRomanEncoding で埋め込み、 hyperref の URL 経由 Courier も 1 個。 `\urlstyle{rm}` 追加は無関係 (原因は figure)。 arXiv v1 が同 font 構成で受理済のため投稿でも blocker にならなかった。
 
 ## <a id="arxiv-source-only"></a>5. arXiv は最終 PDF を受け付けない (source-only、v1 / v2 共通)
 
@@ -215,7 +215,7 @@ cp <paper>/Figures/*.pdf submission/arxiv-vN/Figures/  # 本文で参照され�
 
 ### 実例
 
-- 2026-07-08 arXiv 2606.19548 v2 replace = v1 と同構成 (draft_A.tex + ref.bib + utphysmod.bst + Figures 2 枚、 6 files 142 KB、 PDF 非同梱) で共著者に配布
+- 2026-07 のある arXiv v2 replace = v1 と同構成 (本文 tex + ref.bib + 非標準 bst + 図、 PDF 非同梱) で共著者に配布
 
 ## <a id="post-submission-status"></a>6. 投稿後の status 追跡 (= role 略語と status 階梯)
 
@@ -294,6 +294,6 @@ Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Mana
 
 ## <a id="refine-history"></a>実例と refine 履歴 (= 新例が出たら本 convention を refine)
 
-- **2026-07-08 EPJC 投稿 (或る論文 repo)** = ScholarOne Manuscripts、 Brave で Step 2 failed → Safari 通過 (§[browser-fallback](#browser-fallback))、 revtex4-2 と tikz-feynman が Missing → 追加 zip 同梱 (§[package-bundling](#package-bundling))、 affiliation 修正が LaTeX と form で 2 系統管理 (§[form-vs-source-independence](#form-vs-source-independence))、 figure PDF 由来の TrueType Courier は soft 要求で受理 (§[type1-fonts](#type1-fonts))、 arXiv v2 用 zip は PDF 非同梱で共著者配布 (§[arxiv-source-only](#arxiv-source-only))。 Manuscript ID EPJC-26-07-091。
-- **2026-07-28 同 manuscript の status 確認 (投稿 + 20 日)** = 受領確認以降メールは一切来ていなかったが、 Author Center 上は既に **AE 割当済 + Under Review** (= referee が読んでいる) で正常進行だった。 **cover letter の推薦エディタ 3 名のうち第 2 希望がそのまま AE に割り当てられていた** = 推薦は実際に効く。 「メールが来ない ≠ 止まっている」 と、 status を見て初めて分かる情報 (AE の分野適合・推薦の通過) があることから §[post-submission-status](#post-submission-status) を追加。 (⚠️ 当時「共著者は Author Center を見られない」 と書いたが 2026-08-21 に訂正、 下記)
-- **2026-08-21 同 manuscript の status 確認 (投稿 + 6 週)** = user 問い「API で査読状況を自動確認できないか」 を契機に §[status-automation](#status-automation) を追加。 調査結果 = 著者向け API 無し (ScholarOne Web Services は出版社向け) / 中間 status はメールされない / decision メールは過去 4 投稿で全件着信だが pop-up block による不送信モードが公式警告にある → 「decision メール + 2 週おき Author Center 実読 TODO」 の 2 重化を採用。 **実読は user が Claude 操作ブラウザで login → Claude が dashboard を読んで SESSION に記録** (= 「Claude からは読めない」 旧記載を訂正)。 dashboard に「Manuscripts I Have Co-Authored」 欄があり**共著者も閲覧可**と判明 (= 7/28 記載の訂正)。 副産物 = 「account を 2 つ作ったか?」 の疑問は account-created 通知 1 通 + e-mail address change 通知で「1 account・登録メール変更」 と決着、 保存 password が投稿時ブラウザ (Safari) 側にあって Claude 操作ブラウザ (Brave) の autofill に出なかったのが「出てこない」 の正体。
+- **2026-07 のある投稿 (或る論文 repo、 ScholarOne 系の物理誌)** = ScholarOne Manuscripts、 Brave で Step 2 failed → Safari 通過 (§[browser-fallback](#browser-fallback))、 revtex4-2 と tikz-feynman が Missing → 追加 zip 同梱 (§[package-bundling](#package-bundling))、 affiliation 修正が LaTeX と form で 2 系統管理 (§[form-vs-source-independence](#form-vs-source-independence))、 figure PDF 由来の TrueType Courier は soft 要求で受理 (§[type1-fonts](#type1-fonts))、 arXiv v2 用 zip は PDF 非同梱で共著者配布 (§[arxiv-source-only](#arxiv-source-only))。
+- **同 manuscript の status 確認 (投稿 + 20 日)** = 受領確認以降メールは一切来ていなかったが、 Author Center 上は既に **AE 割当済 + Under Review** (= referee が読んでいる) で正常進行だった。 **cover letter で推薦したエディタの 1 人がそのまま AE に割り当てられていた** = 推薦は実際に効く。 「メールが来ない ≠ 止まっている」 と、 status を見て初めて分かる情報 (AE の分野適合・推薦の通過) があることから §[post-submission-status](#post-submission-status) を追加。 (⚠️ 当時「共著者は Author Center を見られない」 と書いたが後日訂正、 下記)
+- **同 manuscript の status 確認 (投稿 + 6 週)** = user 問い「API で査読状況を自動確認できないか」 を契機に §[status-automation](#status-automation) を追加。 調査結果 = 著者向け API 無し (ScholarOne Web Services は出版社向け) / 中間 status はメールされない / decision メールは過去の投稿で全件着信だが pop-up block による不送信モードが公式警告にある → 「decision メール + 2 週おき Author Center 実読 TODO」 の 2 重化を採用。 **実読は user が Claude 操作ブラウザで login → Claude が dashboard を読んで SESSION に記録** (= 「Claude からは読めない」 旧記載を訂正)。 dashboard に「Manuscripts I Have Co-Authored」 欄があり**共著者も閲覧可**と判明 (= 前回記載の訂正)。 副産物 = 「account を 2 つ作ったか?」 の疑問は account-created 通知 1 通 + e-mail address change 通知で「1 account・登録メール変更」 と決着、 保存 password が投稿時ブラウザ (Safari) 側にあって Claude 操作ブラウザ (Brave) の autofill に出なかったのが「出てこない」 の正体。

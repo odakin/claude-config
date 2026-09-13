@@ -19,17 +19,17 @@ summary: 数値解析 gotchas (scale-dependent default、複素 null、固定変
 
 ### 実例 (2026-04-20、 Hierarchical Bayes mean estimation pipeline)
 
-ある Bayesian fit pipeline の `HierarchicalBayesMean` 関数で、 `TauSqMax` (= τ² の積分上端) の default が固定値 `1000` (= 中性子寿命系の s² 単位を想定)。同じコードを W boson mass の解析 (GeV² 単位) に port した際、 10 万倍オーバーで τ² grid 50 点がほぼ全域で integrand ≈ 0 になり、 HB(α=0) が 80.371 と報告され PDG official 80.369 と「一致」したように見えた。実際の正しい値は 80.386。 詳細 RCA は該当リポの `DESIGN.md` に記載。
+ある Bayesian fit pipeline の `HierarchicalBayesMean` 関数で、 `TauSqMax` (= τ² の積分上端) の default が固定値 `1000` (= 中性子寿命系の s² 単位を想定)。同じコードを単位が桁で違う量 (GeV² 単位) の解析に port した際、 10 万倍オーバーで τ² grid 50 点がほぼ全域で integrand ≈ 0 になり、 HB(α=0) の値が既存の公式値と小数第 3 位まで「一致」したように見えた。実際の正しい値は誤差を超えてずれていた。 詳細 RCA は該当リポの `DESIGN.md` に記載。
 
 ### 実例 (2026-05-25、 同 pipeline で MuRange propagation case = sibling defect 13 ヶ月遅延発見)
 
-同じ `HierarchicalBayesMean` 関数で **別の scale-blind default** `MuRange` (= μ 積分の bracket) の default が固定 `{Min[xs] - 10, Max[xs] + 10}` (= 中性子寿命系の s 単位、 spread ~5 を想定した margin 10)。 dimensionless 量 (= S₈ tension、 data spread ~0.09) に port した際、 margin 10 が data spread の **110× 過大** → μ grid 400 点で posterior peak (~0.06 wide) を 1-2 点しか拾えず Trapz discretization で HB SE が **30-50% inflated** + NIntegrate::precw 多発。 13 ヶ月 (2026-04-20 → 2026-05-25) 文書化された値が under-resolved な wrong value のまま使われていた。
+同じ `HierarchicalBayesMean` 関数で **別の scale-blind default** `MuRange` (= μ 積分の bracket) の default が固定 `{Min[xs] - 10, Max[xs] + 10}` (= 中性子寿命系の s 単位、 spread ~5 を想定した margin 10)。 無次元の量 (data spread が 0.1 程度) に port した際、 margin 10 が data spread の **100 倍以上過大** → μ grid 400 点で posterior peak を 1-2 点しか拾えず Trapz discretization で HB SE が **数十 % inflated** + NIntegrate::precw 多発。 13 ヶ月 (2026-04-20 → 2026-05-25) 文書化された値が under-resolved な wrong value のまま使われていた。
 
-**根本因 (= 2026-04-20 fix の narrow scope)**: 2026-04-20 の §1 fix は flagged された `TauSqMax` のみ scale-adaptive 化したが、 同 file 同 function の **同形式 default (= `MuRange`)** を sweep しなかった。 同 trait family の sibling defect を残置 → 13 ヶ月後に別 unit system (= S₈ dimensionless) で symptom 顕在化。
+**根本因 (= 2026-04-20 fix の narrow scope)**: 2026-04-20 の §1 fix は flagged された `TauSqMax` のみ scale-adaptive 化したが、 同 file 同 function の **同形式 default (= `MuRange`)** を sweep しなかった。 同 trait family の sibling defect を残置 → 13 ヶ月後に別 unit system (= 無次元の量) で symptom 顕在化。
 
 ### 実例 (2026-06-01、 scale-adaptive default 自体が「非 robust 統計量 + outlier」で破綻 = 3 例目、 §1 framing を 2 方向に拡張)
 
-2026-04-20 fix で `TauSqMax` (= τ² 積分上端) は **scale-adaptive 化されていた** (= `Max[(10·maxσ)², (5·data spread)²]`) のに、 ある heterogeneous dataset (= 同 unit 内、 49 点、 σ range 0.94〜**50.5**、 σ=50.5 の outlier 1 点を含む) でまた silently 破綻。 `10·maxσ = 505 → TauSqMax ≈ 2.5×10⁵` と真の τ² integrand peak (~5) の **5 万倍**に膨張、 各 μ 点の τ² 積分の peak-finder coarse grid (= **linear** 50 点、 spacing ~5100) が幅 ~10 の真の peak を踏み越え、 quad が peak を盲目積分で取り逃して `res≈0 → density = -∞ → 0` に truncate → posterior の片側が完全欠落 (= 共著者が「右側が突然 0 に落ちる」と発見、 修正前は wrong な単峰として report されていた)。
+2026-04-20 fix で `TauSqMax` (= τ² 積分上端) は **scale-adaptive 化されていた** (= `Max[(10·maxσ)², (5·data spread)²]`) のに、 ある heterogeneous dataset (= 同 unit 内、 数十点、 σ の range が 2 桁近く、 他より 1 桁以上大きい σ の outlier 1 点を含む) でまた silently 破綻。 `10·maxσ` から決まる `TauSqMax` が真の τ² integrand peak の **数万倍**に膨張、 各 μ 点の τ² 積分の peak-finder coarse grid (= **linear** 50 点) の spacing が真の peak 幅を大きく踏み越え、 quad が peak を盲目積分で取り逃して `res≈0 → density = -∞ → 0` に truncate → posterior の片側が完全欠落 (= 共著者が分布の片側の不自然な途切れに気付いて発見、 修正前は wrong な単峰として report されていた)。
 
 この 3 例目は §1 の従来 framing (= 「unit system 変更で破綻」) を **2 方向に拡張**する:
 
@@ -53,7 +53,7 @@ summary: 数値解析 gotchas (scale-dependent default、複素 null、固定変
 
 同じ data、同じ likelihood、同じ α=0 の周辺化なので μ/SE は一致すべき。不一致 = grid / range / default が data scale に合っていない。修正するまで downstream の解析 (density plot、ロバスト性比較等) を信じない。
 
-**check.wl と alpha_scan.wl の MuRange convention** (= 2026-05-25 追加): 同 quantity の 2 script が **異なる integration grid** を使うと SE が drift する (= 上 MuRange propagation case)。 narrow posterior (= bottle/S₈ のような tight 分布) では integration grid resolution が Trapz error を dominate、 default muRange は不十分。 解決策: check.wl の HB call にも alpha_scan.wl と同じ explicit `MuRange` + `GridPoints` (= 600 以上) を pass する (= 2 script が同 grid で同 SE を produce する設計)。 「check は quick simple eval、 alpha_scan は accurate scan」 という責務分離は **数値 accuracy には適用できない** (= 同じ HB call は同じ value を返すべき)。
+**check.wl と alpha_scan.wl の MuRange convention** (= 2026-05-25 追加): 同 quantity の 2 script が **異なる integration grid** を使うと SE が drift する (= 上 MuRange propagation case)。 narrow posterior (= spread の小さい tight 分布) では integration grid resolution が Trapz error を dominate、 default muRange は不十分。 解決策: check.wl の HB call にも alpha_scan.wl と同じ explicit `MuRange` + `GridPoints` (= 600 以上) を pass する (= 2 script が同 grid で同 SE を produce する設計)。 「check は quick simple eval、 alpha_scan は accurate scan」 という責務分離は **数値 accuracy には適用できない** (= 同じ HB call は同じ value を返すべき)。
 
 ### Anti-pattern
 
@@ -382,9 +382,9 @@ disputed な量 (vertex 係数・規格化・符号) を「相手の結果に一
 
 ### 実例 (= 場の理論の vertex 係数が disputed なケース、 2026-06)
 
-- ある vertex の係数 (= mass:kinetic weight) が co-author 間で disputed。 初手で「相手の値に一致するよう自分の parameter を tune」 して相手の値を得た = **循環論法** (user 指摘で発覚)。
+- ある vertex の係数が co-author 間で disputed。 初手で「相手の値に一致するよう自分の parameter を tune」 して相手の値を得た = **循環論法** (user 指摘で発覚)。
 - 正しい検証 = 作用からの汎関数微分 (= finite-difference、 inverse は行列 inverse で厳密) で独立導出 → 自分の元の値が正しいと確定。 **4 経路独立確認** (手導出 / finite-diff / 記号 CAS / 先行文献の正しい恒等式) で cross-check。
-- 相手の値の source = 公表論文 (peer-reviewed) の densitised-tensor 恒等式の **係数 misprint** (= 反対称化の 1/k! 欠落、 例: 1/2 vs 正 1/(2!·2!)=1/4)。 同 group の先行論文には正しく載っていた → 公表式でも独立に数値 verify (= 恒等式に成分代入して LHS=RHS check) すべきだった (= peer-reviewed でも misprint はある)。 〔詳細 narrative は当該 private research project の RETRACTIONS.md に記録〕
+- 相手の値の source = 公表論文 (peer-reviewed) の恒等式の **係数 misprint** (= 反対称化の階乗因子の欠落)。 同じ系列の先行論文には正しく載っていた → 公表式でも独立に数値 verify (= 恒等式に成分代入して LHS=RHS check) すべきだった (= peer-reviewed でも misprint はある)。 〔詳細 narrative は当該 private research project の RETRACTIONS.md に記録〕
 
 ### 防止策
 
@@ -419,7 +419,7 @@ disputed な量 (vertex 係数・規格化・符号) を「相手の結果に一
 
 1. **数値出力を第一原理で必ず cross-check**: (a) 次元解析 (= 同次性)、 (b) 対称性 (= Bose / 離散対称)、 (c) ゲージ/Ward 恒等式 (= 数値結果が満たすべき identity)、 (d) 既知極限 (= 質量ゼロ・運動量ゼロ・共形点)、 (e) 文献値。
 2. **数値が第一原理と矛盾したら数値を疑え** (= 数値はバグり得るが第一原理は不変)。 「数値が出たから正しい」 は「cell 埋め」 trait の数値 domain 形態。
-3. **verify は疑わしい機構を共有しない独立な方法で**: バグった関数を使った再計算は同じバグを継承する。 独立経路 (= 別定義・別積分法・解析的手計算・第一原理) で。 実例では seagull を頂点 Feynman 則から独立に再構成して確認。
+3. **verify は疑わしい機構を共有しない独立な方法で**: バグった関数を使った再計算は同じバグを継承する。 独立経路 (= 別定義・別積分法・解析的手計算・第一原理) で。 実例では問題の寄与を頂点 Feynman 則から独立に再構成して確認。
 4. **特殊値 (m=1 等) だけで検証しない** (= バグが特殊値で縮退して隠れる)。 一般値 (= 一般 m, 一般運動量) で sweep。
 5. **verify 方法それ自体もバグり得る (= 隠れた仮定)**: reconstruction / back-solve が既検証 (= established) record と矛盾したら、 即「record が誤り」 と結論せず、 まず reconstruction の隠れた仮定を疑い ground truth (= 実コード・実データ) で確認。 防止策 3「独立な方法で verify」 の**独立性も暗黙の仮定に依存すれば誤る** (= 例: 係数を m 非依存と仮定した back-solve が m 依存の真値を見逃す)。 ground truth は reconstruction でなく source 自身。
 
@@ -457,7 +457,7 @@ Fock 空間の演算子と、その展開係数である数値スピノルも区
 
 ### 実例 (2026-06、 場の理論の 1-loop 2 点関数)
 
-- 内部 check (diff WI / LL WI / projector 代数 / massless 極限) は全て ratio で overall normalization を constrain せず。 外部 conformal-anomaly 照合 (= form factor vs central charge c) が初の絶対 anchor だったが、 それ自体「自分の値が標準単位」 前提に**循環依存**していた。 → QED vacuum polarization を同機構で計算し |Π|=4/3 (textbook 一致) で scale を独立 calibrate、 magnitude match が solid 化。
+- 内部 check (2 種の Ward 恒等式 / projector 代数 / massless 極限) は全て ratio で overall normalization を constrain せず。 外部 conformal-anomaly 照合 (= form factor vs central charge c) が初の絶対 anchor だったが、 それ自体「自分の値が標準単位」 前提に**循環依存**していた。 → QED vacuum polarization を同機構で計算し |Π|=4/3 (textbook 一致) で scale を独立 calibrate、 magnitude match が solid 化。
 - 一方 QED は +4/3 (textbook −4/3) で **符号が規約依存** と判明 → 「magnitude 一致 + sign 規約依存」 と分けて記載 (= 当初 sign 込みで一括 match を主張していたのを訂正)。
 - projector 代数を「note は 1e-16 で満たすと主張」 していたが regression が未検証だった → 検証 script を追加 (= 防止策 3)。
 
@@ -504,7 +504,7 @@ for d in p.get_drawings():           # 曲線 = items が多い path; color/dash
 - 候補式 × 規約 (θ = 2Δωt か Δωt か等) の総当たり fit で作図時の式を同定 — **横軸の変数と式の変数の因子 2 を最初に固定する** (取り違えると全候補が外れ、 1 周無駄にする)
 
 ### 実例 (2026-08-21、 該当 private paper repo)
-escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 → 定義 χ̃ ∝ (z₀/z)^{9/2} と両立せず、 code は z を変えていないと確定。 72 通りの fit で 1 本は最大偏差 0.03 で再現 (使われた式と積分変数を同定)、 もう 1 本は再現不能と確定し、 図を本文の式からの再計算版に差し替える判断材料になった。
+ある確率の図 4 本のうち label の異なる 2 本ずつが完全一致 → 定義上その parameter に依存するはずなので、 code はその parameter を変えていないと確定。 候補式の総当たり fit で 1 本は小さい最大偏差で再現 (使われた式と積分変数を同定)、 もう 1 本は再現不能と確定し、 図を本文の式からの再計算版に差し替える判断材料になった。
 
 **先に著者 repo を探す (2026-09 追補)**: 観測論文は `contour_lines/` `chains/` を GitHub で公開していることがある (例: $r$–$n_s$ の 2025 総合)。 点列があれば図の抽出は cross-check に降格し (2026-09 実測: 95% 外周が抽出と点列で $10^{-4}$ 一致)、 引用条件 (README の cite 要請) を caption で満たす。 chain があれば信用水準そのものを計算できる ([`paper-audit.md#box-test-vs-joint-posterior`](paper-audit.md#box-test-vs-joint-posterior))。
 
@@ -528,23 +528,23 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 
 ## <a id="namespace-override-verification"></a>11. 別 script の関数を差し替える wrapper は、 差し替えが効いたことを sentinel で検証する (2026-09)
 
-**Pattern**: 正本 script の 1 関数 (例: 崩壊率の規格化) だけ差し替えて表を再計算する wrapper で、 `runpy.run_path()` の戻り値 dict に代入して差し替えたつもりになる。 `run_path` は module globals の**コピー**を返すので、 正本の関数群が参照する globals は変わらず、 **差し替えは silent no-op**。 wrapper 自身は正常終了し、 出力は旧規格化のまま。 実害 (2026-09、 private paper repo) = 論文の表 2 枚が旧規格化の値で 1 版流通。 wrapper が自前で計算していた 1 列 (T_rh) だけ正しかったので、 表を見ても気づかなかった。
+**Pattern**: 正本 script の 1 関数 (例: 崩壊率の規格化) だけ差し替えて表を再計算する wrapper で、 `runpy.run_path()` の戻り値 dict に代入して差し替えたつもりになる。 `run_path` は module globals の**コピー**を返すので、 正本の関数群が参照する globals は変わらず、 **差し替えは silent no-op**。 wrapper 自身は正常終了し、 出力は旧規格化のまま。 実害 (2026-09、 private paper repo) = 論文の表が旧規格化の値のまま 1 版流通。 wrapper が自前で計算していた列だけ正しかったので、 表を見ても気づかなかった。
 
 **Fix**: `g = {"__name__": "not_main"}; exec(open(f).read(), g); g["func"] = new_func` — exec に渡した dict が module globals そのものになるので差し替えが効く (importlib は macOS system python の stale .pyc 問題で別途避ける)。
 
-**Validation**: 差し替えた関数に sentinel (print / 戻り値に印) を入れ、 **再計算の出力に sentinel が現れること**を 1 回確認してから表を採用する。 最も安価なのは「変わるはずの数字が実際に変わったか」 の diff (例: N_* が +0.2 動くはず、 動いていなければ差し替えは効いていない)。 「override したから新しい値」 は検証でない ([#verify-independent-derivation](#verify-independent-derivation) の道具版)。
+**Validation**: 差し替えた関数に sentinel (print / 戻り値に印) を入れ、 **再計算の出力に sentinel が現れること**を 1 回確認してから表を採用する。 最も安価なのは「変わるはずの数字が実際に変わったか」 の diff (動くはずの量が動いていなければ差し替えは効いていない)。 「override したから新しい値」 は検証でない ([#verify-independent-derivation](#verify-independent-derivation) の道具版)。
 
 ## <a id="declared-self-consistency-audit"></a>「self consistent に解いた」 と書く前に、 loop の全変数が code で戻っているか列挙する (2026-09)
 
-**Pattern**: 「$V_0$ は $A_s$ から、 $m$ は $V_0$ から、 rate は $m$ から、 $N_*$ は rate から」 という自己整合の連鎖を本文で謳いながら、 code は $m$ を定数に固定していた ($V_0\to m$ の 1 本だけ戻していない)。 影響は小さかった ($N_*$ +0.02–0.05、 $T_\text{rh}$ +7–16%、 観測量 $<10^{-4}$) が、 本文の主張が code より強い状態が数版続いた。 別 AI session の独立反復で検出 (2026-09、 private paper repo)。
+**Pattern**: 「$V_0$ は $A_s$ から、 $m$ は $V_0$ から、 rate は $m$ から、 $N_*$ は rate から」 という自己整合の連鎖を本文で謳いながら、 code は $m$ を定数に固定していた ($V_0\to m$ の 1 本だけ戻していない)。 影響は小さかった (観測量の変化は検出精度より桁で小さい) が、 本文の主張が code より強い状態が数版続いた。 別 AI session の独立反復で検出 (2026-09、 private paper repo)。
 
-**Fix**: 「self consistent」 の文を書く時点で fixed point に入る量を列挙し (入力 → 導出 → 戻し先)、 code の loop 内で各量が再計算されている行を指す。 固定するなら本文にそう書く (「$m=2\times10^{13}$ で固定」)。 検証は「戻すはずの量を戻したら数字が動く」 の diff ([#namespace-override-verification](#namespace-override-verification) と同型)。
+**Fix**: 「self consistent」 の文を書く時点で fixed point に入る量を列挙し (入力 → 導出 → 戻し先)、 code の loop 内で各量が再計算されている行を指す。 固定するなら本文にそう書く (「$m$ は固定値」)。 検証は「戻すはずの量を戻したら数字が動く」 の diff ([#namespace-override-verification](#namespace-override-verification) と同型)。
 
 ## <a id="floquet-exact-background"></a>Floquet 指数は厳密な周期解の上で取る — 調和近似の背景は偽の不安定性を作る (2026-09)
 
 **Pattern**: 振動する背景 $\chi(t)$ の上で mode の Floquet 指数を出す時、 背景を $\chi=\Phi\cos mt$ で代用すると、 厳密には marginal な mode (例: 運動項の conformal factor から来る $k=0$ mode、 厳密解 $H_c\propto e^{-\gamma\chi/2}$ で有界) に有限の指数が出る。 質量項が背景の運動方程式を使って導かれている場合、 その相殺は**真の解の上でしか成り立たない**。
 
-**Fix**: 背景は非調和ポテンシャルの周期解を数値で取り ($\chi(0)=\Phi$、 $\dot\chi=0$ から $\dot\chi=0$ への戻りを event で捕まえて周期 $T$ を得る、 event の direction は戻り側の符号)、 monodromy を 1 周期で取る。 検算 = 解析的に marginal と分かる mode の指数が 0 になること (同事例: 調和背景で +0.2〜+1.3 だった $k=0$ の指数が厳密背景で 0.000、 最速成長は $k\simeq0.5$–$0.75\,m$ に移動)。 道具 = ai-collaboration [`scripts/floquet-monodromy.py`](../../ai-collaboration/scripts/floquet-monodromy.py) (`conformal` = 厳密背景 + 正確な質量項、 `--linearised` で偽成長を再現; selftest が $k=0$ marginal と Mathieu $\mu=q/2$ を固定)。
+**Fix**: 背景は非調和ポテンシャルの周期解を数値で取り ($\chi(0)=\Phi$、 $\dot\chi=0$ から $\dot\chi=0$ への戻りを event で捕まえて周期 $T$ を得る、 event の direction は戻り側の符号)、 monodromy を 1 周期で取る。 検算 = 解析的に marginal と分かる mode の指数が 0 になること (同事例: 調和背景で有限だった $k=0$ の指数が厳密背景で 0 になり、 最速成長の $k$ も移動した)。 道具 = ai-collaboration [`scripts/floquet-monodromy.py`](../../ai-collaboration/scripts/floquet-monodromy.py) (`conformal` = 厳密背景 + 正確な質量項、 `--linearised` で偽成長を再現; selftest が $k=0$ marginal と Mathieu $\mu=q/2$ を固定)。
 
 ## <a id="first-step-skips-initial-heuristic"></a>SciPy `solve_ivp` の初期 step 推定 overflow は `first_step` で消す (2026-09)
 
@@ -554,23 +554,23 @@ escape 確率図 4 本のうち label の異なる 2 本ずつが完全一致 �
 
 ## <a id="contour-distance-axis"></a>等高線への「距離」 は物理的に意味のある軸に沿って測る (2026-09)
 
-**Pattern**: 模型の軌跡と 95% 等高線の関係を $(\Delta n_s,\,0.1\,\Delta r)$ の scaled Euclid 距離で報告すると、 縁に接するように見えて実際は固定 $r$ で $\Delta n_s=+0.002$–$0.003$ 外だった (Euclid 0.0009)。 scaled 距離は等高線の傾き方向に最短を取るので、 読者が問う「同じ $r$ でどれだけ外か」 とは別の量。 盲検 reviewer との数値不一致で発覚 (2026-09)。
+**Pattern**: 模型の軌跡と 95% 等高線の関係を $(\Delta n_s,\,c\,\Delta r)$ の scaled Euclid 距離で報告すると、 縁に接するように見えて実際は固定 $r$ で等高線の外だった (scaled 距離のほうは線幅程度)。 scaled 距離は等高線の傾き方向に最短を取るので、 読者が問う「同じ $r$ でどれだけ外か」 とは別の量。 盲検 reviewer との数値不一致で発覚 (2026-09)。
 
 **Fix**: 点内判定は多角形で厳密に、 「どれだけ外か」 は物理軸 1 本 (固定 $r$ での $n_s$ の隙間) で報告する。 別実装と数値が合わない時は、 まず距離の定義を突き合わせる。
 
 ## <a id="spectator-check-over-the-roll"></a>dilaton 型結合の spectator 判定は pivot でなく roll 全体で — 正準場は Weyl 因子で伸びる (2026-09)
 
-**Pattern**: 場 $\phi$ が inflaton $\chi$ に $e^{-\gamma\chi/M_P}(\partial\phi)^2$ 型 (dilaton / conformal 因子) で結合するとき、 正準場 $\tilde\phi=e^{-\gamma\chi/2M_P}\phi$ の有効質量は $m^2=-(\gamma/2M_P)\Box\chi-(\gamma^2/4M_P^2)(\partial\chi)^2$ で、 slow roll の pivot では $-0.1\gamma H^2$ と小さいが、 $\chi$ が転がるほど大きくなり (末期は $-(2\gamma+0.5\gamma^2)H_\text{end}^2$)、 零モードは roll 全体で **Weyl 因子 $e^{\gamma\Delta\chi/2M_P}$** だけ伸びる ($\Delta\chi\simeq9M_P$ なら $e^{4.4\gamma}$: $\gamma=0.3$ で ×4、 0.7 で ×27、 1 で ×100)。 pivot の値だけ見て「軽い spectator、 揺らぎは数倍」 と書くと $\gamma\gtrsim0.5$ で誤る (起源事例 2026-09、 private paper repo: 表の最速 benchmark 行が spectator でなかったことを盲検が指摘、 著者側 script で零モードを積分すると Weyl 因子と 1 % で一致)。
+**Pattern**: 場 $\phi$ が inflaton $\chi$ に $e^{-\gamma\chi/M_P}(\partial\phi)^2$ 型 (dilaton / conformal 因子) で結合するとき、 正準場 $\tilde\phi=e^{-\gamma\chi/2M_P}\phi$ の有効質量は $m^2=-(\gamma/2M_P)\Box\chi-(\gamma^2/4M_P^2)(\partial\chi)^2$ で、 slow roll の pivot では $\gamma H^2$ の小さな割合だが、 $\chi$ が転がるほど大きくなり (末期は $O(\gamma)\,H_\text{end}^2$)、 零モードは roll 全体で **Weyl 因子 $e^{\gamma\Delta\chi/2M_P}$** だけ伸びる (excursion $\Delta\chi$ が数 $M_P$ あれば、 $\gamma=O(1)$ で数十倍)。 pivot の値だけ見て「軽い spectator、 揺らぎは数倍」 と書くと $\gamma=O(1)$ で誤る (起源事例 2026-09、 private paper repo: 表の benchmark の 1 つが spectator でなかったことを盲検が指摘、 著者側 script で零モードを積分すると Weyl 因子と一致)。
 
 **Check**: (a) 有効質量を pivot と末期の両方で書く。 (b) 零モードを horizon exit から末期まで積分するか、 Weyl 因子で見積もる (道具 = ai-collaboration [`scripts/dilaton-spectator-growth.py`](../../ai-collaboration/scripts/dilaton-spectator-growth.py): 厳密背景 + 零モード積分 + Weyl 因子 + 末期の質量 + λ の符号別の落ち着き先、 `--selftest` = 成長 ≈ Weyl 因子)。 (c) 伸びた先の場の値を、 自己結合の符号 (running 込み) ごとに極小 / runaway で分類し、 末期の励起の質量を daughter 崩壊の運動学と比べる。 (d) 「spectator」 と呼べる結合の範囲を符号込みで明記する (質量項の conformal 因子は奇なので負側は別の上限: [`paper-audit.md#odd-coupling-sign-before-pricing`](paper-audit.md#odd-coupling-sign-before-pricing))。
 
 ## <a id="onset-is-eps-H-one"></a>「振動開始」 は $\epsilon_H=1$ の厳密背景で定義する — $\epsilon_V=1$ の外挿は $\rho_\text{end}$ を 2 倍過大に見積もる (2026-09)
 
-**Pattern**: inflation の終点を $\epsilon_V=1$ (potential の slow-roll parameter) で取り、 そこで $\rho_\text{end}=\tfrac32V$ とすると、 実際の終点 ($\epsilon_H=\dot\chi^2/2H^2M_P^2=1$) はさらに転がった先で、 $\rho_\text{end}$ が 1.9 倍、 $H_\text{end}$ が 1.4 倍過大になる (plateau 型 potential の実測)。 この「onset」 の数値は Mathieu の $q$、 KLS 条件、 共鳴の完了 e-fold 数にそのまま伝播し、 共鳴の境界を ±20 % 動かす。
+**Pattern**: inflation の終点を $\epsilon_V=1$ (potential の slow-roll parameter) で取り、 そこで $\rho_\text{end}=\tfrac32V$ とすると、 実際の終点 ($\epsilon_H=\dot\chi^2/2H^2M_P^2=1$) はさらに転がった先で、 $\rho_\text{end}$ と $H_\text{end}$ が O(1) の因子で過大になる (plateau 型 potential の実測で $\rho_\text{end}$ が約 2 倍)。 この「onset」 の数値は Mathieu の $q$、 KLS 条件、 共鳴の完了 e-fold 数にそのまま伝播し、 共鳴の境界を有意に動かす。
 
 **Fix**: 背景を厳密に積分して $\epsilon_H=1$ を event で取り、 $x_\text{end}$・$\rho_\text{end}$・$H_\text{end}$・振幅をそこで定義する。 $\epsilon_V=1$ は初期条件の目安にしか使わない。 「onset」 という語を使うなら定義を 1 文で書く (最初の零点通過なら $H$ はさらに半分以下)。
 
-**reviewer 側の追補 (同事例、 2026-09-08)**: 数値の幅 = $x^2e^{-0.13x}$ 型で $\epsilon_V=1$ ($x=1.30$、 $H=0.55m$、 $\Phi=1.34M_\text{P}$) / $\epsilon_H=1$ ($x=0.91$、 $0.43m$、 $1.05M_\text{P}$) / 最初の零点通過 ($0.18m$、 $0.43M_\text{P}$)、 $q=g\Phi$ は定義で 3.5 倍。 線形成長を「真空から」 数える計算は**真空を置く時刻**にも依存する (末期の tachyonic 相を含めて sub-horizon mode から積分すると +10 e-fold、 完了閾値の結合が 10 → 6–7)。 (c) 真空を置く時刻を引数にした計算を 1 回は走らせ、 閾値は幅で書く。 道具 = ai-collaboration [`scripts/expanding-mode-growth.py`](../../ai-collaboration/scripts/expanding-mode-growth.py) (`--start end|eps_V=1|x=<v>`、 sub-horizon 条件 `--kmin`)、 $N_*$ 側の同じ chain (fixed point・厳密背景の 2 次 HFF・固定 $r$ の分離幅) = [`scripts/nstar-fixed-point.py`](../../ai-collaboration/scripts/nstar-fixed-point.py)。 $N_*$ への影響は $\tfrac14\ln\rho_\text{end}$ の 0.1 e-fold で無視できるが、 共鳴側の数字には効く。
+**reviewer 側の追補 (同事例、 2026-09-08)**: 数値の幅 = 同じ plateau 型 potential で、 $\epsilon_V=1$ / $\epsilon_H=1$ / 最初の零点通過の 3 定義は $H$ と振幅をそれぞれ数十 % ずつ変え、 $q=g\Phi$ は定義次第で数倍変わる。 線形成長を「真空から」 数える計算は**真空を置く時刻**にも依存する (末期の tachyonic 相を含めて sub-horizon mode から積分すると e-fold 数が大きく増え、 完了閾値の結合が有意に下がる)。 (c) 真空を置く時刻を引数にした計算を 1 回は走らせ、 閾値は幅で書く。 道具 = ai-collaboration [`scripts/expanding-mode-growth.py`](../../ai-collaboration/scripts/expanding-mode-growth.py) (`--start end|eps_V=1|x=<v>`、 sub-horizon 条件 `--kmin`)、 $N_*$ 側の同じ chain (fixed point・厳密背景の 2 次 HFF・固定 $r$ の分離幅) = [`scripts/nstar-fixed-point.py`](../../ai-collaboration/scripts/nstar-fixed-point.py)。 $N_*$ への影響は $\tfrac14\ln\rho_\text{end}$ の 0.1 e-fold で無視できるが、 共鳴側の数字には効く。
 
 ## <a id="small-sdp-without-solver"></a>小さな SDP を solver 無しで回す — SLSQP + explicit dual certificate の sandwich (2026-09)
 

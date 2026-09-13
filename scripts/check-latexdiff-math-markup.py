@@ -110,15 +110,15 @@ def _strip_groups(seg, cmd):
 def scan(path, verbose=False):
     """Count places inside display math where latexdiff changed something WITHOUT colouring it.
 
-    Two signatures (both were observed in this manuscript on 2026-09-08):
+    Two signatures (both were observed in a real manuscript diff on 2026-09-08):
       (d) a "%DIFDELCMD < <payload>" comment inside math whose payload is a real
           command (not just \\label / \\begin / \\end / \\nonumber / \\\\): the old
           form of a token was commented out instead of struck through;
       (a) a \\DIFaddbegin ... \\DIFaddend span inside math that still contains
           non-benign material outside every \\DIFadd{..} group: a new token was
-          inserted without underline/colour (e.g. \\DIFadd{-}\\pn{J_1+J_2} where
+          inserted without underline/colour (e.g. \\DIFadd{-}\\pn{A_1+A_2} where
           the whole \\pn{..} is new).  This one leaves no comment trace, so (d)
-          alone misses the eq. (129) pattern.
+          alone misses the overall-sign-flip pattern.
     Math depth is measured on the code text (comments blanked), so the
     "%DIFDELCMD < \\begin{align}" comment-outs of a deleted equation do not
     open environments that never close.
@@ -263,8 +263,8 @@ def _selftest(tex_path=None):
              "%sa = \\%s{\\%s{x}+y}%s" % (wo, ARG1, ARG1, wc),
              "%sa = \\%s{\\%s{z}+y}%s" % (wo, ARG1, ARG1, wc)),
             ("sign flip in front of \\%s (uncoloured-insertion pattern)" % ARG1,
-             "%sG = J_1 + J_2 ,%s" % (wo, wc),
-             "%sG = -\\%s{J_1 + J_2} ,%s" % (wo, ARG1, wc)),
+             "%sG = A_1 + A_2 ,%s" % (wo, wc),
+             "%sG = -\\%s{A_1 + A_2} ,%s" % (wo, ARG1, wc)),
         ]
         if STAR:
             cases.append(("starred wrapper",
@@ -286,8 +286,8 @@ def _selftest(tex_path=None):
         #     and whole-equation add/delete with structural commands must not be flagged.
         for label, sc, base, live, want in (
             ("scan flags unsafe macro (del+add)", "zzzunused", "\\al{a = \\pn{x}}", "\\al{a = \\pn{z}}", (1, 2)),  # noqa: E501
-            ("scan flags unmarked add, eq. 129 pattern", "zzzunused",
-             "\\al{G = J_1 + J_2 ,}", "\\al{G = -\\pn{J_1 + J_2} ,}", (1, 1)),
+            ("scan flags unmarked add, overall-sign-flip pattern", "zzzunused",
+             "\\al{G = A_1 + A_2 ,}", "\\al{G = -\\pn{A_1 + A_2} ,}", (1, 1)),
             ("scan clean with safe macro", safecmd, "\\al{a = \\pn{x}}", "\\al{a = \\pn{z}}", (0, 0)),
             ("scan ignores deleted equation", safecmd,
              "t\n\\al{a = \\pn{x} \\label{eq:x}}\nu", "t\nu", (0, 0)),

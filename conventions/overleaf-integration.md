@@ -186,7 +186,7 @@ live (uncomment) な author markup (`\cl`/`\CL` 等) の leak 無し; compile �
 0 引数 macro、 hardcode すると次の wrapper で再発する)。
 行区切りを包む macro (`\nn` = `\nonumber\\`) も同時に展開しないと coarse / whole markup で
 `Misplaced alignment tab` になり、 `off` (= 削除式が消える) へ落とす羽目になる。 実例 = 該当 private paper repo
-2026-09-08 (付録の一式の符号反転 `J_1+J_2` → `-(J_1+J_2)` が Overleaf 2 commit 間の diff で無印、
+2026-09-08 (付録の一式の全体符号の反転が Overleaf 2 commit 間の diff で無印、
 同 repo の `scripts/expand-display-math.py` + `regen-clean-latexdiff.sh` で両側展開 → coarse で色付き・error 0)。
 **同根の第 3 機構**: 引数付き自作 macro (`\pn{…}` / `\Paren{…}` 等) は latexdiff の safe-command list に無いので、
 その中だけの変更も無印になる → preamble の macro 名を原稿から導出して `--append-safecmd` に渡す。

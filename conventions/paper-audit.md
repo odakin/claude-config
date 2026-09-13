@@ -125,21 +125,21 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 ## <a id="worked-example"></a>実例: (該当 private paper repo) (2026-05-19、 1 day で完了)
 
-- paper 39p → **37p** (-119 行)、 **13 findings** (= 12 implemented + 1 rejected)
+- 頁数が数頁減り、 findings は十数件 (大半を implemented、 1 件 rejected)
 - Phase 1 script: `(該当 private paper repo の scripts/audit-forward-refs.py)`
 - findings DB: `(該当 private paper repo の plans/<date>-findings.yaml)`
 - plan: `(該当 private paper repo の plans/<date>-forward-ref-audit.md)`
 - 詳細: `(該当 private paper repo の DESIGN.md)`
 
-主要発見 (= critical 7 件):
-- F1: Sec.3.2 ↔ App C `Field strength` で **subsection 全体 70+ 行 重複** (= F^{0i}/F^{ij} closed form + matrix F + Lorentz transformation すべて word-for-word identical)
-- F8: Sec.2.4-2.5 ↔ App B `Point charges` で **60 行重複** (= 基本概念 definitions、 self-containment 維持 vs parsimonious で user 判断)
-- F9: Sec.3 / App C opening で **散文 word-for-word identical**
-- F10: Sec.3.1 / App C で **同名 subsection** `Modified gamma factor and chargeward vector` + 内容大幅重複
-- F11: App F (`Implementation details`) が `\end{document}` 後にあって **disabled** (= LaTeX 上 paper PDF に含まれない、 文書記述と不一致)
-- F13: App D.3 (`Choice of Green's function: retarded vs Feynman`) が `\begin{comment}` で **disabled** (= referee F2 anchor として SESSION.md に記録されていたが paper PDF に含まれない)
+主要発見の型 (= critical):
+- 本文の節 ↔ 付録の節で **subsection 全体が数十行 word-for-word 重複** (式・行列・変換則まで一致)
+- 基本概念の定義の節どうしの重複 (self-containment 維持 vs parsimonious で user 判断)
+- 本文の節と付録の冒頭で **散文が word-for-word identical**
+- 本文の節と付録で **同名 subsection** + 内容の大幅重複
+- 付録の 1 つが `\end{document}` 後にあって **disabled** (= paper PDF に含まれない、 文書記述と不一致)
+- 付録の小節が `\begin{comment}` で **disabled** (= 査読対応の anchor として記録されていたのに paper PDF に含まれない)
 
-「2 個 1 フランケンシュタイン」 の核心 = P2 (= `formalism_v1`) の主要 content が App B/C に embedded、 P1 (= `implementation_v1`) と並走 → paper 全体で ~170 行重複。
+「2 個 1 フランケンシュタイン」 の核心 = 片方の原稿の主要 content が付録に embedded、 もう片方と並走 → paper 全体で百数十行の重複。
 
 ## <a id="headline-claim-budget-check"></a>中心主張は「模型の形式に依らない収支」で検算する (2026-08)
 
@@ -156,7 +156,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 **なぜ規約にするか:** formalism 内部の検算 (= 式の再導出・数値の再現) をどれだけ厳密にやっても、 **前提が別世界なら全部通ってしまう**。 独立な収支は前提そのものを試す唯一の安価な手段で、 かつ referee 側は 2 行でやる。
 
-**実例 (2026-08、 該当 private paper repo):** 4 誌 reject 後の 5 誌目投稿直前に、 式の再導出と図の再計算は完了していたが、 中心主張 (= 場が障壁を越える) は収支で不成立と判明した。 使えるエネルギーが障壁の 6 %、 媒質は当の場の崩壊産物なので差を埋められない。 formalism の数値が主張を支えていたのは、 振動開始時の密度を Planck 密度と置く別 letter 由来の規格化が式の係数に埋まっていたためで、 その節と inflation 側の設定は両立していなかった。 referee 1 名がこの継ぎ目を「energy scale の接続が不明」 と表現していた (= 突かれる側から見れば既知の穴)。 → 主張を成立する範囲に絞る組み替えへ。
+**実例 (2026-08、 該当 private paper repo):** 再投稿の直前に、 式の再導出と図の再計算は完了していたが、 「起きる」 型の中心主張は収支で不成立と判明した。 使える資源が必要量に遠く届かず、 媒質は当の過程の生成物なので差を埋められない。 formalism の数値が主張を支えていたのは、 別の論文由来の規格化 (初期条件の置き方) が式の係数に埋まっていたためで、 その節と他の節の設定は両立していなかった。 過去の査読所見もこの継ぎ目を指していた (= 突かれる側から見れば既知の穴)。 → 主張を成立する範囲に絞る組み替えへ。
 
 **符号も収支の対象 (2026-09-11 追補)**: 係数の**符号**が物理を運ぶとき (真空エネルギーの向き、 運動項・質量二乗の符号、 running の向き)、 それも formalism と独立な 2〜3 行で検算する — 振幅と有効作用の辞書を定義から導き直し、 教科書の絶対量 (1 loop 真空エネルギー、 真空偏極の遮蔽の向き) と比べる。 起源事例 (2026-09): 投稿前 gate の worker がこの anchor に従って辞書を白紙から導き、 1 つの項を教科書の 1 loop の絶対量と比べたことで、 多数の検査が全 PASS のまま見逃していた有効作用の全体符号の反転が見つかった → [#absolute-sign-external-anchor](#absolute-sign-external-anchor)。
 
@@ -183,9 +183,9 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 **通る形は不変量 + 対比**: 「漸近形が記述するのは振幅の $e^{-n^2/2}$ 以下の裾だけ ($n \ll 1$ では $O(1)$ から全履歴を記述する、 との対比)」 のように、 **regime 間で値が変わる量**で言う。 "in practice" が過重な仕事をしていたら書き直しの合図 (= 数学的読みで偽になる言明を副詞で救おうとしている)。
 
-**実例 (2026-08、 該当 private paper repo):** 同じ 1 文が 3 検査を 3 回連続で落ちて 3 回書き直された (「never attained in practice」 = 偽 → 「becomes valid only after the amplitude is suppressed」 = generic → 「effectively propagates only virtually」 = tautology)。 最終形は上の「裾」 の言明。 3 回とも人間の共著者の指摘で発覚 = 書いた本人には毎回もっともらしく見えた (= 自己検査を機械的に回す理由)。
+**実例 (2026-08、 該当 private paper repo):** 同じ 1 文が 3 検査を 3 回連続で落ちて 3 回書き直された (「never … in practice」 型 = 偽 → 「only after …」 型 = generic → 「effectively only …」 型 = tautology)。 最終形は上の「裾」 と同じ型の言明。 3 回とも人間の共著者の指摘で発覚 = 書いた本人には毎回もっともらしく見えた (= 自己検査を機械的に回す理由)。
 
-**追補 (2026-08-31): 誇示 (flourish) と strawman 参照も同じ検査に掛ける.** 「〜すら消せる / 任意に〜できる」 型の誇示は tautology 検査の頻出客 — 帳簿の付け替えが 1 点の値を任意化できるのは恒等式の自明な帰結で、 主張の強さを運ばない。 また**比較で主張を膨らませるときは、 比較相手が実際に使われている referent であること** — 誰も採らない参照 (非因果極限や、 目的に合わせて調整した定数など) との開きを headline 数字に混ぜると、 数字ごと strawman になる。 実例 (2026-08、 別 draft): 「定数をうまく選べば任意に選んだ 1 点で当該項を消せる」 という誇示を人間の共著者の指摘 (「1 点だけ消せて何の意味が?」) で撤去し、 実使用の参照間の開きだけを headline に残した。
+**追補 (2026-08-31): 誇示 (flourish) と strawman 参照も同じ検査に掛ける.** 「〜すら消せる / 任意に〜できる」 型の誇示は tautology 検査の頻出客 — 帳簿の付け替えが 1 点の値を任意化できるのは恒等式の自明な帰結で、 主張の強さを運ばない。 また**比較で主張を膨らませるときは、 比較相手が実際に使われている referent であること** — 誰も採らない参照 (非因果極限や、 目的に合わせて調整した定数など) との開きを headline 数字に混ぜると、 数字ごと strawman になる。 実例 (2026-08、 別 draft): 「定数をうまく選べば任意に選んだ 1 点で当該項を消せる」 型の誇示を、 1 点で消せることの意味を問う人間の共著者の指摘で撤去し、 実使用の参照間の開きだけを headline に残した。
 
 ## <a id="statement-placement-check"></a>言明の配置検査 (その位置の読者の道具だけで読めるか) (2026-08)
 
@@ -195,7 +195,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 2. **孤児文でないか**: 編集で親段落を削除した後に、 その予告・要約・脚注だけが残っていないか。 親の動機が消えたら子も消す (= 「一部だけ残す」 妥協は往々にして動機を失った孤児を作る)。
 3. **前方 pointer は後方参照と重複していないか**: 後の節が既にこの節を back-reference しているなら、 前方 pointer は導線としても冗長。
 
-**実例 (2026-08、 該当 private paper repo):** 序盤の節に置いた extreme-case 段落が、 未定義記号 1 + 未導入概念 2 + 20 頁先への forward ref の三重で破綻していた。 段落を後方の専門節に合流させ、 残した「予告 1 文」 も後日 検査 3 で削除 (後方の節が既に序盤を back-ref しており冗長)。
+**実例 (2026-08、 該当 private paper repo):** 序盤の節に置いた extreme-case 段落が、 未定義の記号・未導入の概念・遠く先の頁への forward ref の三重で破綻していた。 段落を後方の専門節に合流させ、 残した「予告 1 文」 も後日 検査 3 で削除 (後方の節が既に序盤を back-ref しており冗長)。
 
 ## <a id="stale-framing-sweep"></a>理解更新後の旧語彙 sweep (2026-08)
 
@@ -203,7 +203,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 **なぜ規約にするか:** 理解の更新は通常 1 箇所 (新しい節) に書き込まれ、 Summary・序論・脚注の旧記述は無傷で残る。 旧記述同士は互いに整合しているため節単位の読み直しでは見つからず、 旧語彙の grep + 新旧対比の観点でだけ引っかかる。
 
-**実例 (2026-08、 該当 private paper repo):** 本文の新節は graded 語法で完成していたのに、 Summary は 2 つの時間スケールを混同した旧記述のまま生きており (「この閾値は短すぎて観測困難」)、 共著者向け note の bullet も旧言明を引用していた。 指摘 3 回で Summary・note・bullet を新語法に統一。
+**実例 (2026-08、 該当 private paper repo):** 本文の新節は graded 語法で完成していたのに、 Summary は 2 つの時間スケールを混同した旧記述のまま生きており、 共著者向け note の bullet も旧言明を引用していた。 指摘 3 回で Summary・note・bullet を新語法に統一。
 
 ## <a id="relocation-rebinding-sweep"></a>文脈手術後の束縛再解決 sweep + 移設は verbatim-first (2026-08)
 
@@ -222,7 +222,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 出力は「sweep した class と範囲 / NOT した範囲 / 確信境界」を明示し、「✓ pass」で終わらせない。
 
-**なぜ規約にするか:** 手術後の再点検は書き手の delivery loop に何も返さない (文面は完成して見える) ため構造的に落ちる ([`convention-design-principles.md#motivated-substitution-trap`](../docs/convention-design-principles.md#motivated-substitution-trap) の verification family)。**実例 (2026-08、該当 private paper repo):** appendix→本文の大型昇格 + 1 文単位 rework の 1 日で本 class のエラーが 7 件 born (偽 counterpart 主張・先行詞なし指示語・方向語の残骸・偽の二物・接続詞の孤児化・偽因果分詞・根拠二役)。standing の数式 audit fleet の事前捕捉は 0。一方、人間の指示で回した directed sweep は 2 回とも実捕捉 (計 6 件) = **欠けていたのは能力でなく自発 trigger**。うち最重の 1 件は物理的に偽の主張で、線形次で縮退する 2 量の取り違えが「counterpart」圧縮で生まれ、(e) の display 化 → 実計算で露呈した。台帳の質は予防にならない (同日の commit message は原文/読みの問題/根拠を 1 件ずつ記録する品質だったが、全て修復時の記録で生成時には効かなかった) — 効くのは**書いた pass と別の pass** による列挙・照合であり、その最小形が本 sweep。
+**なぜ規約にするか:** 手術後の再点検は書き手の delivery loop に何も返さない (文面は完成して見える) ため構造的に落ちる ([`convention-design-principles.md#motivated-substitution-trap`](../docs/convention-design-principles.md#motivated-substitution-trap) の verification family)。**実例 (2026-08、該当 private paper repo):** appendix→本文の大型昇格 + 1 文単位 rework の 1 日で本 class のエラーが複数 born (偽 counterpart 主張・先行詞なし指示語・方向語の残骸・偽の二物・接続詞の孤児化・偽因果分詞・根拠二役)。standing の数式 audit fleet の事前捕捉は 0。一方、人間の指示で回した directed sweep は 2 回とも実捕捉 = **欠けていたのは能力でなく自発 trigger**。うち最重の 1 件は物理的に偽の主張で、近似の最低次では区別されない 2 量の取り違えが「counterpart」圧縮で生まれ、(e) の display 化 → 実計算で露呈した。台帳の質は予防にならない (同日の commit message は原文/読みの問題/根拠を 1 件ずつ記録する品質だったが、全て修復時の記録で生成時には効かなかった) — 効くのは**書いた pass と別の pass** による列挙・照合であり、その最小形が本 sweep。
 
 **隣接 anchor との分担:** [`#statement-placement-check`](#statement-placement-check) の孤児文検査と class (a) は部分重複する (あちらは配置時 trigger、こちらは手術時 trigger — どちらが先に発火しても同じ検査に落ちる)。強副詞 (never / only) は [`#claim-strength-three-tests`](#claim-strength-three-tests)、裸の exactness 動詞は本 anchor (e) が受け持つ。理解更新起因の旧語彙は [`#stale-framing-sweep`](#stale-framing-sweep)。
 
@@ -268,21 +268,21 @@ paper の中心機構が「未証明の仮定」 (例: あるコヒーレンス�
 4. **前身 paper から輸入した増幅率・レートは、 その前提を自分が撤回した瞬間に失効する**: 自分たちの先行論文の「機構 A で増幅された率」 を、 本 paper で機構 A を無効と示した後にそのまま引き継ぐと自家撞着。 裸の率から組み直す (= [#stale-framing-sweep](#stale-framing-sweep) の系譜間版)。
 5. **絶対形の不在主張 (「X は起きない」) は定義争いを招く**: 定義に幅がある現象 (共鳴・相転移等) は 「機構として効かない (ineffective)」 + 冒頭で定義 + 適用条件、 の 3 点セットで書く (= [#claim-strength-three-tests](#claim-strength-three-tests) の変種)。
 
-起源 (2026-09): 集団増幅機構を扱う private paper で、 中心機構がコヒーレンス維持の仮定に依存 + 素朴な桁見積もりで分が悪いと判明した際の 5 誌目投稿 framing 決定。 3 層勾配 + 摂動 floor + 「V_coh ≳ X λ³」 型の要求仕様変換で、 4 誌で反復された批判を条件の画定に転換した。
+起源 (2026-09): ある private paper で、 中心機構が未証明の仮定に依存 + 素朴な桁見積もりで分が悪いと判明した際の再投稿 framing 決定。 3 層勾配 + 摂動 floor + 「⟨量⟩ ≳ ⟨閾値⟩」 型の要求仕様変換で、 過去の査読で反復された批判を条件の画定に転換した。
 
 ## <a id="moving-observational-baseline"></a>観測制約が動いている・係争中のときの baseline 規律 (2026-09)
 
 観測の許容域 (例: CMB の n_s–r 面) が実験間で係争中 / 直近に更新された分野では、 「どの region を使ったか」 自体が結論を変える入力になる。 投稿前に:
 
-1. **使っている許容域の鮮度を明示的に問う** — 原稿・先行自著から継いだ数値は数年前の legacy であることが多い。 「4 実装が一致」 しても全実装が同じ古い region を仮定していれば region 依存性は未検査 (= 実装独立性と入力独立性は別物)。
+1. **使っている許容域の鮮度を明示的に問う** — 原稿・先行自著から継いだ数値は数年前の legacy であることが多い。 「複数実装が一致」 しても全実装が同じ古い region を仮定していれば region 依存性は未検査 (= 実装独立性と入力独立性は別物)。
 2. **複数 region で計算し、 region 非依存の不変量を抽出する** — 例: 「排除/許容」 は region で反転しても「緊張が制御パラメータの単調関数」 は全 region で成立する、 という形の主張に組み替えると、 観測論争の決着を待たずに書ける。
    ⚠️ 派生 trap: 「データが機構 A を機構 B より favor する」 は、 パラメータ空間の測度 (窓幅 = 事前体積、 Occam 因子) を実際に計算していない限り書けない — 両機構に許容点が残るなら頻度論的には無差別で、 referee に一撃で返される。 defensible な形 = 「観測は遅い機構を fine-tuned な corner に confine し、 速い機構は窓を reopen する」 という**彫刻の記述** + 未確立の機構には条件法 (would)。
 3. **baseline の採用は物理でなく著者判断** — 採用理由 (先行自著との連続性・係争の両側の存在) を明文化し、 不利な region での帰結 (模型全体の緊張を含む) を**自分の言葉で先に書く**。 直近の観測更新は referee が最初に引く文献であり、 沈黙は一撃で見つかる。
-4. **「係争中」 と書くなら中身と出典を 1 文で書く** (2026-09-02 追記) — 「still debated」 だけでは referee に「誰が何を」 と返される。 形 = 「その組合せは標準模型を仮定するが、 同じ測定は CMB と合わせると ⟨代替模型⟩ を ⟨Nσ⟩ で好む [測定 collaboration 自身の結果]」 + 「よって baseline はそれ抜き、 込みは completeness のために併記」 の 2 文。 user の順で出た問い = 「BAO も入れるとどうなる？」 → 「係争中ならまぁええ」 → 「係争中と書いてある？」 → 「どう係争中なのかは必要では」。 沈黙 → 無根拠の一言 → 出典つき 1 文、 の 3 段を最初から最後の形で書く。
+4. **「係争中」 と書くなら中身と出典を 1 文で書く** (2026-09-02 追記) — 「still debated」 だけでは referee に「誰が何を」 と返される。 形 = 「その組合せは標準模型を仮定するが、 同じ測定は CMB と合わせると ⟨代替模型⟩ を ⟨Nσ⟩ で好む [測定 collaboration 自身の結果]」 + 「よって baseline はそれ抜き、 込みは completeness のために併記」 の 2 文。 user の問いは 4 段で進んだ (追加の data を入れるとどうなるか → 係争中なら許容 → 本文にそう書いてあるか → どう係争中かの中身が要る)。 沈黙 → 無根拠の一言 → 出典つき 1 文、 の 3 段を最初から最後の形で書く。
 
-起源 (2026-09): private cosmology paper で、 4 実装 (leading 3 + exact 1) が全て 2018 baseline を継いでいたことが user の一言 (「allowed region は新しいやつにした?」) で発覚。 2025 更新群 (上方に引く実験と下方に引く実験が併存) の 3 region で引き直した結果、 baseline では「一部シナリオの排除」 だった結論が、 最新複合 region では「模型全体の ~2σ 緊張」 まで動いた — 不変量 (緊張の単調性) だけが全 region で生存した。
+起源 (2026-09): ある private paper で、 独立に書いた複数の実装が全て数年前の baseline を継いでいたことが、 許容域の鮮度を問う user の一言で発覚。 直近の更新群 (逆向きに引く実験が併存) の複数 region で引き直した結果、 baseline での結論が region によって定性的に動いた — 不変量 (緊張の単調性) だけが全 region で生存した。
 
-**追補 (2026-09、 動く基線の下での主張の型)**: ① baseline は 1 つに固定せず「現行 CMB-only を主、 legacy を比較、 BAO 込みは注記」 と列挙する ② 絶対文 (「dataset X は模型を 2σ で排除」) は中心値が 1σ 動けば死ぬ。 相対文 (「緊張は $T_\text{rh}$ の単調減少関数」「floor と最速の差は $\Delta\chi^2\approx7$–$12$」) と data 非依存の予言 (固定 $r$ での $\Delta n_s$、 固定 $n_s$ での $r$ の比、 到達可能な最小 $r$) で書く ③ 現状の data との比較は付加情報として節末・abstract 末尾に置く。 起源事例 (2026-09、 private paper repo): 「2σ 内に残るのは共鳴側のみ」 を joint 2D で検査したら共鳴側も外だった → 主張の型ごと差し替え。
+**追補 (2026-09、 動く基線の下での主張の型)**: ① baseline は 1 つに固定せず「現行の主 data set を主、 旧 data set を比較、 係争中の拡張 data set 込みは注記」 と列挙する ② 絶対文 (「dataset X は模型を Nσ で排除」) は中心値が 1σ 動けば死ぬ。 相対文 (「緊張は制御 parameter の単調関数」「2 つの history の差は $\Delta\chi^2$ でこの範囲」) と data 非依存の予言 (一方の観測量を固定したときの他方の差・比、 到達可能な下限) で書く ③ 現状の data との比較は付加情報として節末・abstract 末尾に置く。 起源事例 (2026-09、 private paper repo): 「Nσ 内に残るのは片側のシナリオのみ」 を joint 2D で検査したらその側も外だった → 主張の型ごと差し替え。
 
 ## <a id="scope-vs-epistemic-state"></a>「この論文の計算」 と「著者の認識状態」 を混同しない (2026-09)
 
@@ -303,7 +303,7 @@ referee に「その量は決まらないのでは」 と突かれた時、 縮�
 
 **なぜ**: 論文の主張は将来の自分の論文とも整合しなければならない。 本稿で「決まらない」 と書いた量を companion で「これが値です」 と出せば、 referee が両方読んだ時に矛盾になる。 縮退は安全側に見えて、 系譜全体では新しい負債を作る。
 
-起源 (2026-09): 委譲先が referee の scheme 依存性指摘に応えて脚注を pole-only へ縮退させたが、 その有限部は手元で第一原理導出 + 独立 cross-check 済みで companion の中身だった。 著者判断で「零運動量での値は非零・値は次稿」 に差し戻し。
+起源 (2026-09): 委譲先が referee の指摘に応えて脚注を「本稿では決めない」 へ縮退させたが、 その量は手元で第一原理導出 + 独立 cross-check 済みで companion の中身だった。 著者判断で「値は存在し、 次稿で報告する」 型に差し戻し。
 
 ## <a id="dissolve-by-definition"></a>「その量は scheme / 規約に依る」 には撤退でなく定義で答える (2026-09)
 
@@ -317,18 +317,18 @@ referee に「その量は決まらないのでは」 と突かれた時、 縮�
 
 **なぜ**: 撤退は安全だが、 論文から情報が消える。 定義は 1 句で済み、 主張は残り、 referee の懸念も閉じる。 曖昧さの指摘を「主張が弱すぎた」 でなく「名指しが足りなかった」 と読む余地を、 常に一度は検査する。
 
-起源 (2026-09): 上と同じ arc。 「local 項と nonlocal 残りへの分離は prescription 依存」 という正しい指摘に対し、 「零運動量での form factor の値」 と量を名指すことで caveat 節を削除できた。
+起源 (2026-09): 上と同じ arc。 「その分離は prescription 依存」 という正しい指摘に対し、 量を物理的に指させる定義で名指すことで caveat 節を削除できた。
 
 ## <a id="title-claim-check"></a>題・副題の 4 検査 (読者語彙 / 非自明 / caveat 生存 / 統計 register) (2026-09)
 
 giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙断定か疑問文) を paper に当てるとき、 再構成後の題で特に踏む 4 つ:
 
-1. **名詞句ごとに「読者は本文なしで parse できるか」** — 著者の造語・内部略号は落とす。 典型 = 演算子の尺度と無次元結合の混同 (「Planckian coupling」 = 尺度 Λ ~ M_P の意味で書いたが、 結合自体は無次元 → 「conformal parameter of order unity」)。
-2. **副題は非自明な情報を運ぶときだけ付ける** — 読者が本文を読まなくても知っていること (Planck 抑制の loop 結合は遅い、 reheating の速さは N_* を動かす) は副題にしない。 副題候補ごとに「これは読者に自明か」 を問い、 自明なら削るか、 観測が要求する量に置換する。
+1. **名詞句ごとに「読者は本文なしで parse できるか」** — 著者の造語・内部略号は落とす。 典型 = 演算子の尺度と無次元結合の混同 (尺度の意味で「⟨尺度名⟩ coupling」 と書いたが、 結合自体は無次元 → 「⟨無次元の parameter⟩ of order unity」)。
+2. **副題は非自明な情報を運ぶときだけ付ける** — 読者が本文を読まなくても知っていること (分野の標準的な定性事実) は副題にしない。 副題候補ごとに「これは読者に自明か」 を問い、 自明なら削るか、 観測が要求する量に置換する。
 3. **題の主張は paper 自身が列挙した caveat が倒れても生き残る形にする** — 機構が実際に働くことを断定する題 (「X が宇宙を reheat する」) は、 その regime の整合性が open なら書けない。 「観測は A と B を見分ける」 型は caveat の帰趨に依らず成立する (= [#assumption-dependent-claim-framing](#assumption-dependent-claim-framing) の題版)。
-4. **2σ の主張を題・abstract で「requires」 にしない** — 忠実な形は「within two standard deviations the data leave only X」。 別 baseline で対抗シナリオが生きているなら「requires」 は偽 (= [#claim-strength-three-tests](#claim-strength-three-tests) の偽検査。 user 「ただの perturbative decay シナリオも残ってんじゃないの」 で発覚)。
+4. **2σ の主張を題・abstract で「requires」 にしない** — 忠実な形は「within two standard deviations the data leave only X」。 別 baseline で対抗シナリオが生きているなら「requires」 は偽 (= [#claim-strength-three-tests](#claim-strength-three-tests) の偽検査。 対抗シナリオが残っていないかを問う user の一言で発覚)。
 
-起源 (2026-09): 5 誌目再構成の private paper で題を 6 回転して確定した session。 却下理由は順に「無次元量に Planckian」 / 「副題が自明」 / 「requires は 2σ の過大表現」 / 「機構の断定は inflation 中の整合性が未解決」。 確定形 = 「A vs B in ⟨model⟩: The ⟨observable⟩ can tell」 (疑問の形をした平叙断定、 "can tell" が現状 1σ の分離に忠実)。 却下案は原稿 header に理由つきで温存する。
+起源 (2026-09): 再構成中の private paper で題を何度も回して確定した session。 却下理由は上の 4 検査にそのまま対応した (無次元量に尺度の語 / 副題が自明 / 「requires」 は統計的な過大表現 / 機構の断定は整合性が未解決)。 確定形 = 「A vs B in ⟨model⟩: The ⟨observable⟩ can tell」 (疑問の形をした平叙断定、 "can tell" が現状の分離の強さに忠実)。 却下案は原稿 header に理由つきで温存する。
 
 ## <a id="characterization-vs-derivation"></a>「導出」 と「特徴づけ」 を混同しない + 表現 (座標) を定義や公理の位置に書かない (2026-09)
 
@@ -342,10 +342,10 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 1. **前提を列挙する** (場の内容 / 背景場の値 / 線形化 / パラメータ範囲)。 「他に無い」 はこの前提の下でしか言えない。
 2. **候補を全部表にする** — 各 channel に「条件に届くための要求値」 と「届かない理由」 を 1 行ずつ。 理由は数値 (要求値が模型の妥当領域の外) か構造 (保存流への微分結合は位相回転で消える / fermion は Pauli で指数成長しない / 重力は (m/M_P)² 抑制) のどちらかで書く。
-3. **唯一の候補が要求される regime を、 模型の他の場所で整合させる** — 例: 結合 O(1) が必要と出たら、 その値が inflation 中の別 sector (Higgs の有効 quartic 等) をどう変えるかを検査。 未解決なら共著者への問いとして note + 原稿の著者注に残し、 題はその帰趨に依らない形 ([#title-claim-check](#title-claim-check) 3) に落とす。
-4. **閾値の精度を書く** — 線形化で出た閾値には 2 次項 (例: 場の再定義で現れる (∂ln f)² の 2ω 変調) が O(1) で効くことがある。 「≳ 0.8」 は桁の主張であって小数 1 桁の主張ではない。
+3. **唯一の候補が要求される regime を、 模型の他の場所で整合させる** — 例: 結合 O(1) が必要と出たら、 その値が模型の別の時期・別 sector (有効結合の値等) をどう変えるかを検査。 未解決なら共著者への問いとして note + 原稿の著者注に残し、 題はその帰趨に依らない形 ([#title-claim-check](#title-claim-check) 3) に落とす。
+4. **閾値の精度を書く** — 線形化で出た閾値には 2 次項 (例: 場の再定義で現れる項の変調) が O(1) で効くことがある。 「≳ O(1) の閾値」 は桁の主張であって小数 1 桁の主張ではない。
 
-起源 (2026-09): 同 private paper。 5 block の conformal 因子を走査して Higgs 運動項だけが共鳴領域に届くと結論した後、 user の確認質問で「前提 4 / 弱点 3 (閾値精度・inflation 中の Higgs quartic・場の内容)」 の監査 note を切り、 題を「Higgs が reheat する」 から「観測が摂動と共鳴を見分ける」 に降ろした。
+起源 (2026-09): 同 private paper。 候補 channel を走査して 1 つだけが条件に届くと結論した後、 user の確認質問で前提と弱点を列挙する監査 note を切り、 題を「機構が起きる」 型から「観測が 2 つの機構を見分ける」 型に降ろした。
 
 ## <a id="second-example-refine"></a>二例目が出たら refine
 
@@ -353,23 +353,23 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 ## <a id="box-test-vs-joint-posterior"></a>「$n_s$ が ±2σ 内 ∧ $r$ < 上限」 型の 1D box test は joint 領域を過大評価する — 縁に居る模型は公開 chain で 2D 判定 (2026-09)
 
-**Pattern**: 2 つの観測量への制約を「各 1D の ±2σ / 95% 上限を独立に満たす」 で判定すると、 模型が片方の上限の縁 (例: $r$ の 95% 上限付近) に居るとき許容域を過大評価する。 joint posterior の 95% 等高線は角で切れており、 1D box の角は 2D では外。 起源事例 (2026-09、 private paper repo): 1D box で開いていた γ 窓 3 つのうち 2 つが joint 2D で閉じ、 「最速の history が 2σ 内に残る」 という中心主張が消えた。
+**Pattern**: 2 つの観測量への制約を「各 1D の ±2σ / 95% 上限を独立に満たす」 で判定すると、 模型が片方の上限の縁 (例: $r$ の 95% 上限付近) に居るとき許容域を過大評価する。 joint posterior の 95% 等高線は角で切れており、 1D box の角は 2D では外。 起源事例 (2026-09、 private paper repo): 1D box で開いていた parameter 窓の大半が joint 2D で閉じ、 それに依っていた中心主張が消えた。
 
 **Fix**: (1) 公開 chain / 等高線点列 (観測論文の著者 repo に `contour_lines/` `chains/` があることが多い) で各模型点の信用水準 $C$ (= その点を通る HPD 等高線) を計算し、 軌跡上の最小値で判定する。 (2) **基線を混ぜない**: $n_s$ を dataset A (BAO 無し) から、 $r$ の上限を dataset B (BAO 込み chain 由来) から取ると、 存在しない組合せで判定している。 (3) tail の信用水準 (99.9x%) を 0.01% 刻みで引用しない — 65k sample の KDE は手法で 0.05–0.13% 動く。 2 自由度の $\Delta\chi^2$ か「$\gtrsim99.7\%$」 に丸める。 (4) 等高線への「距離」 は物理的に意味のある軸に沿って測る ([`scientific-computing.md#contour-distance-axis`](scientific-computing.md#contour-distance-axis))。 (5) 図から起こした等高線の精度は線幅 (~0.001) なので、 それ以下の「接触」 判定はしない。
 
 ## <a id="threshold-is-not-regime-onset"></a>近似が破れる閾値は、 反対 regime の始点ではない (2026-09)
 
-**Pattern**: 「パラメータ $X\gtrsim x_0$ で narrow-resonance の式が使えなくなる」 を「$X\gtrsim x_0$ で broad / tachyonic 共鳴が起きて速く終わる」 と読み替える。 前者は記述の限界、 後者は別の力学の主張で、 後者には独自の根拠 (成長が完了する条件、 膨張との競争) が要る。 起源事例 (2026-09、 private paper repo): 閾値の上を「瞬時再加熱」 と同一視して観測の結論の核にしていたが、 盲検査読 + 著者側の再計算で、 振動開始時に $H\sim m$ の模型では $q\propto a^{-3/2}$ が 1 振動で 1/7 に落ち、 線形成長は完了に 20 桁足りないと判明。 引用していた lattice 論文は $q=20$–$100$ の結果だった。
+**Pattern**: 「パラメータ $X\gtrsim x_0$ で narrow-resonance の式が使えなくなる」 を「$X\gtrsim x_0$ で broad / tachyonic 共鳴が起きて速く終わる」 と読み替える。 前者は記述の限界、 後者は別の力学の主張で、 後者には独自の根拠 (成長が完了する条件、 膨張との競争) が要る。 起源事例 (2026-09、 private paper repo): 閾値の上を「瞬時に完了する」 と同一視して観測の結論の核にしていたが、 盲検査読 + 著者側の再計算で、 膨張による共鳴 parameter の減衰が速く、 線形成長では完了に桁で足りないと判明。 引用していた lattice 論文は別の regime の結果だった。
 
 **Check**: 閾値の上について書く前に (a) その regime で「完了」 に必要な量 (占有数・エネルギー移送率) を書き下し、 (b) 膨張・振幅減衰・非線形の各競争相手と時間 scale を比べ、 (c) 引用先が同じ regime (同じ $q$、 同じ $H/m$) を扱っているか確認する。 閾値の上は「記述できる regime の終わり」 と書き、 到達不能な参照点 (瞬時値) は「模型外の参照」 と明記する。
 
-**2026-09-08 追補 (同事例、 第 3 回盲検)**: 閾値が 2 つあると (「式が使えなくなる」 $x_0$ と「膨張が成長を止めなくなる」 $x_1\gg x_0$)、 本文が両方を「the threshold」 と呼び、 表は $x_0$ 未満の history だけを載せ、 abstract の分離幅 (「$0.005$ in $n_s$、 factor 2 in $r$」) は $x_0$ 未満だけから取られる、 という型になる。 $x_0<x<x_1$ の history は本文の定義では摂動的なのに表に無く、 載せると分離幅が縮む (同事例: 0.004–0.007 → ≥0.003、 1.5–2 → ≥1.4)。 → **(d) 2 つの閾値に別の名前を付け、 その間の history を表・図に 1 行以上載せてから分離幅を書く**。 (e) 閾値の数値は「onset」 の定義 (振動開始を $\epsilon_V=1$ / $\epsilon_H=1$ / 最初の零点通過のどれで取るか) に $\pm20$ % 依存するので、 定義を書かずに 2 桁で書かない ([`scientific-computing.md#onset-is-eps-H-one`](scientific-computing.md#onset-is-eps-H-one))。
+**2026-09-08 追補 (同事例、 第 3 回盲検)**: 閾値が 2 つあると (「式が使えなくなる」 $x_0$ と「膨張が成長を止めなくなる」 $x_1\gg x_0$)、 本文が両方を「the threshold」 と呼び、 表は $x_0$ 未満の history だけを載せ、 abstract の分離幅は $x_0$ 未満だけから取られる、 という型になる。 $x_0<x<x_1$ の history は本文の定義では摂動的なのに表に無く、 載せると分離幅が縮む (同事例でも縮んだ)。 → **(d) 2 つの閾値に別の名前を付け、 その間の history を表・図に 1 行以上載せてから分離幅を書く**。 (e) 閾値の数値は「onset」 の定義 (振動開始を $\epsilon_V=1$ / $\epsilon_H=1$ / 最初の零点通過のどれで取るか) に有意に依存するので、 定義を書かずに 2 桁で書かない ([`scientific-computing.md#onset-is-eps-H-one`](scientific-computing.md#onset-is-eps-H-one))。
 
 ## <a id="abstract-geroch-compression"></a>Abstract = 文脈降下 + 3 message + 持ち帰る 1 文 (Geroch の introduction と conclusion の圧縮) (2026-09)
 
-**Pattern**: 技術的言明を結果の順に並べた abstract (次元 5 演算子・coupling scale・信用水準 99.9x% …) は、 読者に文脈も持ち帰る 1 文も残さない。 abstract は論文の introduction (文脈降下 + 結論の先出し) と conclusion (束ねる 1 文) の圧縮版として組む ([`giving-talks.md`](giving-talks.md) の introduction 節と conclusion 節)。
+**Pattern**: 技術的言明を結果の順に並べた abstract (演算子の次元・coupling scale・信用水準の細かい百分率 …) は、 読者に文脈も持ち帰る 1 文も残さない。 abstract は論文の introduction (文脈降下 + 結論の先出し) と conclusion (束ねる 1 文) の圧縮版として組む ([`giving-talks.md`](giving-talks.md) の introduction 節と conclusion 節)。
 
-**Form** (12 文前後): ① 文脈降下 2 文 (なぜこの量が観測に効くか → この模型ではそれが何で決まるか) ② 問い 1 文 ③ 3 message を各 1–2 文の非技術的な言い方で (道具立ての語は落とす、 恒等式は本文へ) ④ 持ち帰る 1 文 = **試験であって判決ではない** (「data は模型より速い再加熱を求める」 は論文の価値を殺す。 「spectral index がこの模型の速さを試験し、 次の測定が決着させる」) ⑤ 現状の data との比較は**付加情報として末尾** ⑥ 副産物は最後の 1 文。 **禁止**: 同格の挿入句 (「the only collective effect, a narrow parametric resonance, loses …」)、 絶対的な有意度 (「2025 data が 3σ で排除」 = 中心値が動けば死ぬ、 [#moving-observational-baseline](#moving-observational-baseline))、 細かい百分率 (99.7% → 3σ → 不要なら削除)、 自分の旧提案を受け身で書くこと (「proposed for this model」 → 「that we proposed earlier」)、 先行詞の無い複数形 (「the central values will move」 → 「wherever the measured values move」)、 対象の長い言い換え (「the coherent condensate left by inflation」 → 「the inflaton condensate」)。
+**Form** (12 文前後): ① 文脈降下 2 文 (なぜこの量が観測に効くか → この模型ではそれが何で決まるか) ② 問い 1 文 ③ 3 message を各 1–2 文の非技術的な言い方で (道具立ての語は落とす、 恒等式は本文へ) ④ 持ち帰る 1 文 = **試験であって判決ではない** (「data は模型に X を求める」 は論文の価値を殺す。 「観測量 Y がこの模型の X を試験し、 次の測定が決着させる」) ⑤ 現状の data との比較は**付加情報として末尾** ⑥ 副産物は最後の 1 文。 **禁止**: 同格の挿入句 (「the only ⟨類⟩, a ⟨具体⟩, …」)、 絶対的な有意度 (「最新 data が Nσ で排除」 = 中心値が動けば死ぬ、 [#moving-observational-baseline](#moving-observational-baseline))、 細かい百分率 (99.7% → 3σ → 不要なら削除)、 自分の旧提案を受け身で書くこと (「proposed for this model」 → 「that we proposed earlier」)、 先行詞の無い複数形 (「the central values will move」 → 「wherever the measured values move」)、 対象の長い言い換え (説明句で呼ぶより標準の名で呼ぶ)。
 
 ## <a id="sentence-length-audit"></a>文の長さの機械 sweep — 40 語超は分割候補 (2026-09)
 
@@ -379,30 +379,30 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 ## <a id="advocate-pass-after-retraction"></a>撤回を採用したら advocate pass を 1 回回す — 誤り探しの査読の反復は最小の防御可能な主張に収束する (2026-09)
 
-**Pattern**: 盲検・cold-eyes を「主張は証明されているか」 の向きで反復すると、 各 round は主張を削ることしかできない (退けた主張が実は正しいかは誰も問わない) ので、 生き残りは「最も守りやすい主張」 に収束する。 その過程で、 **計算で退けた regime と定義で退けた regime が同じ顔をする**。 起源事例 (2026-09、 private paper repo): 共鳴 regime を 2 round の盲検で「閾値の上は完了しない」 → 「瞬時行は模型外の参照」 と書き換え、 題の二分法だけが残った。 著者の「もとの話が全部消えたが本当に良いのか」 の一言で段ごとに棚卸しすると、 定理 1 段・数値 2 段は耐え、 「結合 ≳ 10 は模型外・lattice 案件」 の 1 段だけが計算でなく判断だった。 著者側 anchor script の scan 範囲を 1 行伸ばすと、 線形成長はその regime で 2–3 振動以内に完了し、 しかも引用していた lattice 研究の結合 scale と一致した — regime は在ったのに定義で消していた。
+**Pattern**: 盲検・cold-eyes を「主張は証明されているか」 の向きで反復すると、 各 round は主張を削ることしかできない (退けた主張が実は正しいかは誰も問わない) ので、 生き残りは「最も守りやすい主張」 に収束する。 その過程で、 **計算で退けた regime と定義で退けた regime が同じ顔をする**。 起源事例 (2026-09、 private paper repo): ある regime を 2 round の盲検で「閾値の上は完了しない」 → 「模型外の参照」 と書き換え、 題の二分法だけが残った。 元の主張が消えてよいのかを問う著者の一言で段ごとに棚卸しすると、 定理と数値の段は耐え、 「その結合の範囲は模型外」 の 1 段だけが計算でなく判断だった。 著者側 anchor script の scan 範囲を 1 行伸ばすと、 その regime では成長が速やかに完了し、 引用していた先行研究の parameter とも整合した — regime は在ったのに定義で消していた。
 
-**Check** (撤回を本文に入れる turn で): (a) 撤回が覆う parameter 領域と覆わない領域を書き分ける (「8 まで完了しない」 は「10 で完了しない」 を含意しない)。 (b) 覆わない領域を**同じ anchor script で**走査してから「模型外 / beyond scope / we do not follow」 と書く — 安価な scan があるのに scope 宣言で閉じるのは cell 埋め。 (c) 生き残った regime は消さずに置き、 その regime が模型の他の部分に課す条件 (値札) を数字で付ける ([#odd-coupling-sign-before-pricing](#odd-coupling-sign-before-pricing))。 (d) reviewer の finding 採用 = 前提検証 pass ([`physics-verification-cycle.md`](../../ai-collaboration/conventions/physics-verification-cycle.md#external-ai-referee-premise-verification)) の対として、 採用後に advocate pass「退けた主張はどこなら生きるか」 を**1 回だけ**、 数字で回す (advocate の反復は逆向きの ratchet)。
+**Check** (撤回を本文に入れる turn で): (a) 撤回が覆う parameter 領域と覆わない領域を書き分ける (「x まで完了しない」 は「x より上で完了しない」 を含意しない)。 (b) 覆わない領域を**同じ anchor script で**走査してから「模型外 / beyond scope / we do not follow」 と書く — 安価な scan があるのに scope 宣言で閉じるのは cell 埋め。 (c) 生き残った regime は消さずに置き、 その regime が模型の他の部分に課す条件 (値札) を数字で付ける ([#odd-coupling-sign-before-pricing](#odd-coupling-sign-before-pricing))。 (d) reviewer の finding 採用 = 前提検証 pass ([`physics-verification-cycle.md`](../../ai-collaboration/conventions/physics-verification-cycle.md#external-ai-referee-premise-verification)) の対として、 採用後に advocate pass「退けた主張はどこなら生きるか」 を**1 回だけ**、 数字で回す (advocate の反復は逆向きの ratchet)。
 
 ## <a id="nested-assumption-levels"></a>「A か B か」 の構成論争は入れ子にする — 一般 parametrization で走査し、 仮定を 1 つ足すごとに決まる関係と予言点を示す (2026-09)
 
-**Pattern**: 模型の「構成」 に複数の読み (例: potential の指数因子が Weyl 因子由来か、 手で入れた指数か) があり、 どちらを採るかで自由 parameter の数が変わるとき、 「A に決めろ」 と共著者に迫るか、 曖昧なまま独立 parameter として走査するかの二択になりがち。 前者は系譜 (前作の思想) とぶつかり、 後者は模型が持つ**予言点**を捨てる。 起源事例 (2026-09、 private paper repo): 前作 3 本が構成を決めていなかった (1 本は構造的に A、 1 本は現象論的に B、 1 本は単一 parameter で A 寄り) ため、 現行稿は「言葉は A、 表は B」 の混在で、 盲検が「どちらか書け」 と指摘した。
+**Pattern**: 模型の「構成」 に複数の読み (例: ある因子が変換から自動的に出るのか、 手で入れたのか) があり、 どちらを採るかで自由 parameter の数が変わるとき、 「A に決めろ」 と共著者に迫るか、 曖昧なまま独立 parameter として走査するかの二択になりがち。 前者は系譜 (前作の思想) とぶつかり、 後者は模型が持つ**予言点**を捨てる。 起源事例 (2026-09、 private paper repo): 系譜の前作が構成を決めていなかった (作ごとに A 寄り・B 寄りが割れていた) ため、 現行稿は「言葉は A、 表は B」 の混在で、 盲検が「どちらか書け」 と指摘した。
 
-**Fix**: 入れ子で書く。 (1) **一般レベル** = 前作と同じ現象論 (parameter は独立、 表・図の走査はここ) → (2) **構成レベル** = 1 つの仮定 (例: Jordan potential は多項式 → 指数因子は Weyl 因子 F^{-2}) で 1 つの関係 (例: γ_J = γ_χ/2) が決まる → (3) **最も制約された特別な場合** (例: universal coupling = 元の理論の Lagrangian そのもの) で残りも決まり、 parameter が消えて**予言点**になる。 各段で「仮定 1 つにつき関係 1 つ」 を明示し、 予言点は表・図に 1 行 / 1 点として**主役**に置く。 前作の自由さを否定せず、 「この scenario ならここまで決まる」 と読める。 共著者への問いは「A に決めてよいか」 でなく「この入れ子でよいか」 になり、 軽くなる。
+**Fix**: 入れ子で書く。 (1) **一般レベル** = 前作と同じ現象論 (parameter は独立、 表・図の走査はここ) → (2) **構成レベル** = 1 つの仮定 (例: ある因子は変換由来で、 手で入れた部分は無い) で 1 つの関係 (例: 2 つの結合の比が固定される) が決まる → (3) **最も制約された特別な場合** (例: 全結合が共通 = 元の理論の Lagrangian そのもの) で残りも決まり、 parameter が消えて**予言点**になる。 各段で「仮定 1 つにつき関係 1 つ」 を明示し、 予言点は表・図に 1 行 / 1 点として**主役**に置く。 前作の自由さを否定せず、 「この scenario ならここまで決まる」 と読める。 共著者への問いは「A に決めてよいか」 でなく「この入れ子でよいか」 になり、 軽くなる。
 
-**Check**: (a) 各レベルの仮定と、 それが決める関係を 1 対 1 で書けるか (書けないなら段が混ざっている)。 (b) 一般レベルの「独立 parameter」 が暗に何を許しているかを 1 文で言う (例: 「Jordan potential が自前の χ 依存を持つことを許す」 = Weyl 因子自体は外せない)。 (c) 予言点の数値は同じ fixed-point 機械で出し、 表の他の行と同じ精度で置く。 (d) 参照行 (瞬時再加熱など、 どの history も超えない値) は「上限」 と呼び、 未計算の regime の代表にしない ([#threshold-is-not-regime-onset](#threshold-is-not-regime-onset) (c))。 (e) 別機構 (例: 1-loop で指数を生成する appendix) が同じ関係に落ちる条件 (質量が Weyl 因子で走る) と落ちない条件を 1 文で添える。
+**Check**: (a) 各レベルの仮定と、 それが決める関係を 1 対 1 で書けるか (書けないなら段が混ざっている)。 (b) 一般レベルの「独立 parameter」 が暗に何を許しているかを 1 文で言う (例: 「元の potential が自前の依存を持つことを許す」 = 変換の因子自体は外せない)。 (c) 予言点の数値は同じ fixed-point 機械で出し、 表の他の行と同じ精度で置く。 (d) 参照行 (どの history も超えない極限値) は「上限」 と呼び、 未計算の regime の代表にしない ([#threshold-is-not-regime-onset](#threshold-is-not-regime-onset) (c))。 (e) 別機構 (例: 量子補正で同じ因子を生成する付録) が同じ関係に落ちる条件と落ちない条件を 1 文で添える。
 
 ## <a id="odd-coupling-sign-before-pricing"></a>regime に値札を付ける前に、 結合の符号に奇な量と偶な量を仕分ける (2026-09)
 
-**Pattern**: regime を定める効果 (共鳴の成長 ∝ γ²) は結合の符号に偶、 その regime の値札 (inflation 中の質量項 ∝ γ) は奇、 という組合せで、 片方の符号だけで値札を書くと、 反対符号では売りになるものを「代償」 と報告する。 起源事例 (2026-09、 同上): 結合 ≳ 10 の共鳴 regime の値札を「Hubble 級 tachyonic Higgs」 と書いたが、 質量項は γ に奇で、 負符号では同じ大きさの**正**質量 = 高 scale inflation で電弱真空を守る標準機構そのもの。 原稿は符号を固定していなかった。 さらに「Higgs 4 点結合が 10¹⁴ GeV で負」 は top 質量の誤差内で決まらない (絶対安定は 1–2σ 先) ので、 値札の 2 軸目も判決でなく依存関係として書く。
+**Pattern**: regime を定める効果 (成長率 ∝ γ²) は結合の符号に偶、 その regime の値札 (別の時期の質量項 ∝ γ) は奇、 という組合せで、 片方の符号だけで値札を書くと、 反対符号では売りになるものを「代償」 と報告する。 起源事例 (2026-09、 同上): 強結合 regime の値札を「不安定化する質量項」 と書いたが、 質量項は γ に奇で、 負符号では同じ大きさの**正**質量 = 真空を安定化する標準機構そのものだった。 原稿は符号を固定していなかった。 さらに値札の 2 軸目 (高 scale での結合の符号) は外部入力の誤差内で決まらなかったので、 判決でなく依存関係として書く。
 
 **Check**: (a) 各 parameter について、 主張のどれがその符号に偶でどれが奇かを列挙する。 (b) 符号が模型で固定されていなければ両枝を事実として書き、 符号の決定を模型の構成 (共著者・原典) に routing する。 (c) 外部入力 (top 質量・α_s・結合の running) に依存する verdict は「中心値では X、 誤差内で Y」 の形で書き、 中心値の verdict を事実にしない。 (d) anchor script は両符号を走らせる (偶なら一致が検算、 奇なら両枝の数字が本文に要る)。
 
-**2026-09-08 訂正 (同事例)**: 上の仕分けは不完全だった。 奇な項を 1 つ (微分由来の質量項 ∝ γ) 見つけて反対符号を「安定化」 と報告したが、 小結合で「無視できる」 として落としていた電弱質量項の conformal 因子 $e^{-\gamma\chi/M_\text{P}}$ も奇で、 結合 ~10 × 場の excursion ~10 $M_\text{P}$ では $e^{\pm100}$ になり verdict を反転させた (負符号は電弱 scale を Planck 超に持ち上げて除外)。 → **(e) 仕分けは全項で行う。 小結合で落とした項は、 regime の結合 × 場の excursion の指数を入れ直してから落とす** (negligible × $e^{100}$ は negligible ではない。 dilaton 型結合では質量次元を持つ parameter は必ず走られる = 4 点結合を不変にする関係は質量項を不変にしない)。 原典の convention 確認 (共著者への問い) より、 自分の Lagrangian の全項を再評価する方が安価で決定的だった。 訂正は元の判断記録と本 anchor の双方に日付つきで置く ([`physics-verification-cycle.md`](../../ai-collaboration/conventions/physics-verification-cycle.md#external-ai-referee-premise-verification) item 7 の型)。
+**2026-09-08 訂正 (同事例)**: 上の仕分けは不完全だった。 奇な項を 1 つ (微分由来の質量項 ∝ γ) 見つけて反対符号を「安定化」 と報告したが、 小結合で「無視できる」 として落としていた別の質量項の conformal 因子 $e^{-\gamma\chi/M_\text{P}}$ も奇で、 regime の結合 × 場の excursion では指数が大きくなり verdict を反転させた (負符号は別の scale を持ち上げて除外された)。 → **(e) 仕分けは全項で行う。 小結合で落とした項は、 regime の結合 × 場の excursion の指数を入れ直してから落とす** (negligible × 大きな指数因子は negligible ではない。 dilaton 型結合では質量次元を持つ parameter は必ず走られる = 4 点結合を不変にする関係は質量項を不変にしない)。 原典の convention 確認 (共著者への問い) より、 自分の Lagrangian の全項を再評価する方が安価で決定的だった。 訂正は元の判断記録と本 anchor の双方に日付つきで置く ([`physics-verification-cycle.md`](../../ai-collaboration/conventions/physics-verification-cycle.md#external-ai-referee-premise-verification) item 7 の型)。
 
 
 ## <a id="appendix-order-by-first-reference"></a>付録は本文での初参照順に並べる — 「展望は最後」 は本当に展望のときだけ (2026-09-08)
 
-**Pattern**: 付録を足す・移す pass のたびに順序が場当たりになり、 本文で先に参照される付録が後ろに来る。 「outlook だから最後」 の例外を作ると、 その付録が実は方法の説明 (レビュー) だったとき例外の根拠が消える (2026-09-08 の研究 LaTeX project の fRG 付録 = 題は私が付けた "Outlook"、 中身は Wetterich 方程式と pole 条件の段取り)。
+**Pattern**: 付録を足す・移す pass のたびに順序が場当たりになり、 本文で先に参照される付録が後ろに来る。 「outlook だから最後」 の例外を作ると、 その付録が実は方法の説明 (レビュー) だったとき例外の根拠が消える (2026-09-08 の研究 LaTeX project の付録 = 題は私が付けた "Outlook"、 中身は方法の段取りの説明)。
 
 **Rule**: 序論の案内文を除いた本文での初参照位置で並べる。 除くのは案内文の段落だけで、 序論の他の段落 (例: 結果の要約が「derived in App. X」 と付録を指す) からの参照は数える (2026-09-11 の gate record は、 結果段落の先行参照を「規則は案内文を除く」 として除外し付録順を ○ にした = 誤適用)。 序論の結果段落まで案内扱いにするかは原稿ごとの著者判断で、 そうするなら判断を記録に残し、 検査の設定 (`--exclude-section`) に書く。 案内文も同順に書き直す。 機械 = [`check-paper-prose.py`](../scripts/check-paper-prose.py) (A1 = 初参照順と file 順の食い違い / A2 = 本文から参照されない付録 / A3 = 案内文の中の順、 除いた行は毎回印字)。 移動は verbatim の MOVE (label 不変で cref は追従)、 位置依存の語 (previous / next appendix、 above / below) を grep 0 にする。 例外は「本当に展望しか書いていない付録」 だけで、 題でなく中身を読んで判断する。
 
@@ -412,7 +412,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Pattern**: 付録で文献の量をその文献の規格化 (階乗因子なし) のまま導入し、 本稿の縮約規約 (階乗の重み付き) と衝突した。 「文献に合わせた、 意図的」 と答えたが、 同類 sweep の grep 出力にその規約の行が出ていたのを読み落としていた (著者訂正)。
 
-**Rule**: 新記号を定義する前に、 本稿の同種の縮約・添字型・分数の書き方を grep して型を決める (ε の重み、 frame / spacetime 添字、 display の `\frac`)。 文献との換算は「文献の量 = 本稿の量 × 定数」 の辞書 1 文で書き、 結合定数は本稿の正規化で印字する (例: 文献の εT = 12S、 η_min = −1/8 ↔ η² = c_A²/144)。 数値が変わる (c_A² = 1/16 → 9/4 等) なら、 機械 anchor と living note に同じ turn で換算行を足す (CONVENTIONS「規約を変えたら同じ作業で」)。
+**Rule**: 新記号を定義する前に、 本稿の同種の縮約・添字型・分数の書き方を grep して型を決める (ε の重み、 frame / spacetime 添字、 display の `\frac`)。 文献との換算は「文献の量 = 本稿の量 × 定数」 の辞書 1 文で書き、 結合定数は本稿の正規化で印字する (例: 文献の量 = 本稿の量 × 定数、 文献の結合の値 ↔ 本稿の結合の値)。 数値が変わるなら、 機械 anchor と living note に同じ turn で換算行を足す (CONVENTIONS「規約を変えたら同じ作業で」)。
 
 **Check**: 定義 display の直後に、 本稿の既存の同型の式 (ε ε の縮約、 反対称化の重み) を 1 つ並べて読み、 重みが揃うか見る。 「文献がそう定義している」 は本稿内の不整合の言い訳にならない。
 
@@ -426,7 +426,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 一括改稿そのものの純粋性 (置換以外が紛れていないか) は機械で見る = [`ai-collaboration/scripts/check-rename-purity.py`](../../ai-collaboration/scripts/check-rename-purity.py) (逆写像して残差だけ読む、 規律 = [`physics-verification-cycle.md#inverse-map-purity`](../../ai-collaboration/conventions/physics-verification-cycle.md#inverse-map-purity))。 機械が通った後に人が読むのは次の 4 点で、 どれも「置換は正しいが原稿が読めない」 型:
 
-1. **初出で scheme を定義したか** — 改稿は綴りを揃えるだけで、 **記法の意味を導入する文は増えない**。 新綴りの初出箇所で、 (a) 区切り記号の後ろが何を表すか、 (b) 区切りの無い素の形が何を意味するか、 (c) 複合添字の区切り (`,` 等) の意味、 の 3 つが読者に渡っているか見る。 実測では初出は 2 つの具体例を語で説明するだけで、 一般則は 1500 行後の付録にしか無かった。
+1. **初出で scheme を定義したか** — 改稿は綴りを揃えるだけで、 **記法の意味を導入する文は増えない**。 新綴りの初出箇所で、 (a) 区切り記号の後ろが何を表すか、 (b) 区切りの無い素の形が何を意味するか、 (c) 複合添字の区切り (`,` 等) の意味、 の 3 つが読者に渡っているか見る。 実測では初出は 2 つの具体例を語で説明するだけで、 一般則は遠く後ろの付録にしか無かった。
 2. **同じ対象の 2 綴りの関係を、 必要な位置で述べたか** — 全体を表す綴りと、 その一部 (特定の寄与) を表す下付きつきの綴りが併存するのは正しい。 述べるべきは**どこで一致するか**で、 その 1 文が最初に必要になる箇所より後ろにあると読者は橋を架けられない ([`#statement-placement-check`](#statement-placement-check) の記法版)。
 3. <a id="delimiter-overloading"></a>**区切り記号が既存の用法と衝突していないか** — 新記法が縦棒・括弧・下付きを使うなら、 同じ display の中で**同じ字面が別の意味**で既に使われていないか読む (「～に関する変分」 の縦棒と「～の部分に制限」 の縦棒、 「～で評価」 の縦棒)。 改稿前は片方が下付き添字だったので衝突が無く、 **改稿によって初めて生まれる**。 大きさ (`\big|` と `|`) は区別の根拠にならない (読者は意味でなく寸法を読まされる)。
 4. **改訂しなかった節にこそ旧綴り・別綴りが残る** — 「この節は既にその scheme を使っていた」 と判断して触らなかった節が、 実は自分の中で 2 通りの綴りを使っていることがある (実測: 引数つきの長い形と短い形、 全体を指す素の形と一部を指す形が同一節内で混在)。 改稿の対象外と宣言した節を、 改稿後に 1 度読む。 comment 行の旧綴りは `--forbid` で走査する (comment を後で復活させると表に出る)。 **綴りの棚卸しは機械で**: `check-rename-purity.py --after <file> --census '<記号族の regex>'` が、 一致した綴りごとに出現数・行範囲・**その綴りが現れる節**をまとめて出す (2 綴りが別々の節に住んでいれば一目で分かる。 diff は綺麗なままなので純粋性検査では出ない = この項が機械化できる唯一の形)。
@@ -461,7 +461,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Rule**: (a) mostly-plus なら Wick 回転 x⁰ = −ix⁴ は座標変換で、 parity-even なスカラー密度の**相対係数**は signature に依らない (parity-odd = ε 1 個は i を拾う)。 ただし**作用密度の全体符号は反転する** (iS_M = −S_E、 すなわち Euclidean の作用密度 = −Lorentzian の Lagrangian 密度。 有効作用も同じ)。 よって「Euclidean の pole は Lorentzian の有効作用の −1 倍で、 比べるのは括弧 (相対係数) どうし」 と 1 文で書く。 mostly-minus なら更に g → −g の (−1)ⁿ 則 (n = 逆計量の縮約数) が項ごとに入る。 (b) 全体符号は、 Euclidean の結果と「同符号」 と確かめても anchor にならない (その比較自体が Wick の符号を渡る)。 本稿の signature の中で振幅 ↔ 有効作用の辞書を定義から置き (e^{iS}: amputated 1PI 図の和 = i × Γ⁽ⁿ⁾、 e^{−S}: = −Γ_E⁽ⁿ⁾)、 外部の絶対量に結ぶ → [#absolute-sign-external-anchor](#absolute-sign-external-anchor)。 (c) 同じ入力を δ と η で解いて係数を比べる script は**相対係数**の signature 非依存性の検査で、 同じ辞書を両 signature に使う限り全体符号については恒等式 (必ず一致する)。 辞書の符号は signature ごとに置き、 script には「Lorentzian の括弧 = −1 × Euclidean の括弧」 を assert させる。
 
-**2026-09-11 訂正**: 本 anchor の初版 (2026-09-08) は (a) で「共通因子は測度だけ」、 (b) で「m⁴ 項が Euclidean 有効作用 −ln det(D̸+m) の +m⁴ と、 本稿の規約 δ²Γ = −(J₁+J₂) から出る +m⁴|e| で一致」、 (c) で「δ と η の両方で解いて Wick dictionary が恒等になることを実測」 としていた。 3 点とも Wick の全体符号を落としており、 起源事例の原稿は有効作用の全体符号が逆のまま「確認済み」 と記録された (3 日後、 別 session の投稿前 gate が [#headline-claim-budget-check](#headline-claim-budget-check) の検算で発見)。 初版の文言は git history にある。
+**2026-09-11 訂正**: 本 anchor の初版 (2026-09-08) は (a) で「共通因子は測度だけ」、 (b) で「ある項が Euclidean 有効作用の対応項と、 本稿の規約から出る項で同符号に一致」、 (c) で「δ と η の両方で解いて Wick dictionary が恒等になることを実測」 としていた。 3 点とも Wick の全体符号を落としており、 起源事例の原稿は有効作用の全体符号が逆のまま「確認済み」 と記録された (3 日後、 別 session の投稿前 gate が [#headline-claim-budget-check](#headline-claim-budget-check) の検算で発見)。 初版の文言は git history にある。
 
 **Wording**: 自動詞の "continues with one common sign" は慣用でない (数学の "f continues analytically to" は別物)。 他動詞受動 "is analytically continued to" か、 動詞を避けて「座標変換だから不変」 で言う。
 
@@ -473,10 +473,10 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 1. **物理的な意味を持つ符号** (有効作用の全体符号、 真空エネルギー・運動項・質量二乗の符号、 running の向き) を印字したら、 **外部の絶対量に結ぶ機械検査を 1 本以上**置く。 外部の絶対量 = 教科書の値 (1 loop 真空エネルギー〔Coleman–Weinberg〕、 真空偏極の遮蔽の向き・β 関数の符号、 共形 anomaly の係数) か、 正定値性・unitarity。 その検査は**全体反転で FAIL しなければならない** — 原稿の辞書と係数を一斉に反転した版、 または誤っていた過去版に当てて落ちることを PASS 条件に含める (global-flip foil)。
 2. **整合性検査は数えない**: 恒等式・比・channel 分解・同一辞書の校正・別 frame の値との「同符号」 は、 何本積んでも全体符号の証拠にならない。 fleet を「ALL PASS」 と報告するときは、 fleet が不変な変換 (全体符号 / 全体規格化 / 因子 i / Levi-Civita の向き / ε の規約) を列挙し、 それぞれを破る anchor の有無を並べて書く (fleet invariance の申告)。
-3. **振幅 ↔ 有効作用の辞書は定義から置く**: 他の文書・別 signature の計算・数値の一致から写さない。 e^{iS} では amputated 1PI 図の和 = i × Γ⁽ⁿ⁾、 e^{−S} では = −Γ_E⁽ⁿ⁾ で、 両者は Wick の符号だけ異なる。 数値の一致から辞書を「同定」 したら、 比べた二つが同じ signature かを必ず書く (起源事例では、 Euclidean の Γ と Lorentzian の振幅の比較で出た −1 が、 signature の注記なしに Lorentzian 原稿の辞書になった)。
+3. **振幅 ↔ 有効作用の辞書は定義から置く**: 他の文書・別 signature の計算・数値の一致から写さない。 e^{iS} では amputated 1PI 図の和 = i × Γ⁽ⁿ⁾、 e^{−S} では = −Γ_E⁽ⁿ⁾ で、 両者は Wick の符号だけ異なる。 数値の一致から辞書を「同定」 したら、 比べた二つが同じ signature かを必ず書く (起源事例では、 signature の違う 2 つの計算の比較で出た −1 が、 signature の注記なしに原稿の辞書になった)。
 4. **gate の worker は project の規約文書を前提でなく検算対象として扱う**: 規約文書に書かれた符号の同定こそ、 定義から導き直す。 起源事例で誤りを見つけたのは、 規約文書より先に辞書を白紙で導いた pass だった。
 
-**Check**: (a) 符号を持つ印字量を列挙し、 各々の外部 anchor と global-flip foil を表 (登録簿) にする。 (b) foil は**入力 (原稿) を反転して** end-to-end で当てる — parse した変数を script 内で反転する foil は parse の取り違えを見ない。 (c) 例外 (traceback) で落ちたのは歯ではない (assertion で落ちること)。 (d) 同型の不変量 = 全体規格化 (kernel-level と action-level の因子 2)、 因子 i、 Levi-Civita の向き、 D = 4 − ε と 4 − 2ε の違い。 比と恒等式に不変な量は全部同じ扱い (起源事例の repo は因子 2 でも同型の事故歴があり、 物理観測量の直接計算で決着した)。 機械 backstop = ai-collaboration の [`scripts/check-sign-anchors.py`](../../ai-collaboration/scripts/check-sign-anchors.py) (登録簿の coverage / `--run` = foil の歯を end-to-end で / `--fleet-scan` = fleet のどの検査が変換を見分けるか / `--readers` = どの検査が原稿 file をそもそも開くか / `--deferrals` = 下の carrier 無し「規約差」 の ratchet)。 (e) 「原稿を開く検査は何本か」 は実行時に数える (`--readers` = audit hook)。 source を file 名で grep すると docstring・コメントの言及まで拾って過大になる (起源事例で grep 16 本、 実行時 1 本)。
+**Check**: (a) 符号を持つ印字量を列挙し、 各々の外部 anchor と global-flip foil を表 (登録簿) にする。 (b) foil は**入力 (原稿) を反転して** end-to-end で当てる — parse した変数を script 内で反転する foil は parse の取り違えを見ない。 (c) 例外 (traceback) で落ちたのは歯ではない (assertion で落ちること)。 (d) 同型の不変量 = 全体規格化 (kernel-level と action-level の因子 2)、 因子 i、 Levi-Civita の向き、 D = 4 − ε と 4 − 2ε の違い。 比と恒等式に不変な量は全部同じ扱い (全体規格化でも同型の事故が起きうる。 決着は物理観測量の直接計算で付ける)。 機械 backstop = ai-collaboration の [`scripts/check-sign-anchors.py`](../../ai-collaboration/scripts/check-sign-anchors.py) (登録簿の coverage / `--run` = foil の歯を end-to-end で / `--fleet-scan` = fleet のどの検査が変換を見分けるか / `--readers` = どの検査が原稿 file をそもそも開くか / `--deferrals` = 下の carrier 無し「規約差」 の ratchet)。 (e) 「原稿を開く検査は何本か」 は実行時に数える (`--readers` = audit hook)。 source を file 名で grep すると docstring・コメントの言及まで拾って過大になる (起源事例では grep の数が実行時の十倍以上)。
 
 ## <a id="convention-difference-closure"></a>「規約差」 は写像を書いて閉じる — 語で済ませた符号の食い違いは unverified として carrier に載せる (2026-09-11)
 
@@ -493,41 +493,41 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 ## <a id="cross-check-appendix-shape"></a>cross-check 付録の形 — 教科書でなく論文の密度: 目的 → 規約 → 写像 → 入力 → 結果 → 表 → 射程 (2026-09-08)
 
-**Pattern**: 検算の付録を書くと、 「一意な接続と関数があって」 型の前置き、 逐次代入の再掲 (「これを代入すると m⁴ + … で、 これは Eq. (41) の最初の 3 項」)、 中心電荷などの注、 本文中の文献引用、 定義の教科書的説明が積もり、 散文が式の 2 倍になる (著者「死ぬほど冗長」、 645 → 387 語)。
+**Pattern**: 検算の付録を書くと、 「一意な接続と関数があって」 型の前置き、 逐次代入の再掲 (「これを代入すると … で、 これは式 (N) の最初の数項」)、 結果に効かない量の注、 本文中の文献引用、 定義の教科書的説明が積もり、 散文が式の 2 倍になる (著者「死ぬほど冗長」、 645 → 387 語)。
 
 **Shape**: (1) 目的と独立性 1 文 (何を再現するか、 何に依らないか) → (2) 規約 (signature、 符号 anchor) 2 文 → (3) 写像 (pole map) display 1 本 → (4) 入力 (係数の一般式) display 1 本、 短い一般式は inline → (5) sector ごとに「入力 → 係数の値」 display 1 本 → (6) 文献辞書 1 文 (換算定数のみ) → (7) 表 (項 / 係数 / 入力 / 文献) → (8) 「写像を通せば表の係数」 + 射程 1 文。 落とすもの = 逐次代入の再掲 (表が担う)、 本文中の文献引用 (表の列が担う)、 標準恒等式の陽な形 (名前だけ)、 結果に効かない規約 (γ₅ の定義など)。
 
 **Symbol audit (同 pass)**: display に出る記号を列挙し、 各々に定義文があるか確認する。 「Laplace 型」 のような型の名前は定義の代わりにならない (著者「この記号が無定義では」)。 本稿の既存記号と衝突する文献記号は別字にするか肩付きで区別し、 その理由を ledger に残す。
 
-**Display は 1 目的** (2026-09-09 追記): 定義 (記号・ノルム関係) と物理の恒等式を 1 つの display に並べない。定義は本文の 1 文に、display は恒等式と係数の値だけ (著者「これは S^μ の定義がメインで他 3 つは補足なの？」)。射程の but 書き (「matching の代替ではない」 等) が同段落や本文に既出なら付録で繰り返さない。裸の括弧参照「(Sec. X)」 は関係を動詞で言う (as shown in / as described in)。 記法をまたぐ候補列挙と参照先の保持検査には [bare-parenthetical-crossrefs](latex.md#bare-parenthetical-crossrefs) の手順を使う。
+**Display は 1 目的** (2026-09-09 追記): 定義 (記号・ノルム関係) と物理の恒等式を 1 つの display に並べない。定義は本文の 1 文に、display は恒等式と係数の値だけ (著者「これは定義がメインで残りは補足なの？」)。射程の but 書き (「matching の代替ではない」 等) が同段落や本文に既出なら付録で繰り返さない。裸の括弧参照「(Sec. X)」 は関係を動詞で言う (as shown in / as described in)。 記法をまたぐ候補列挙と参照先の保持検査には [bare-parenthetical-crossrefs](latex.md#bare-parenthetical-crossrefs) の手順を使う。
 
 **Floor**: 定義・display・表・射程 1 文が残れば床。 そこから先は「何を読者に検算させないか」 の判断であって、 削減ではない。 家風の機械 backstop = [`scripts/check-display-math-style.py`](../scripts/check-display-math-style.py) (display 内の `\tfrac` と `\qquad` 並列)。
 
 ## <a id="composite-quantity-notation-migration"></a>合成量の記法を乗り換えたら前係数を自明極限で検算する — 「和」 系と「平均」 系の差は定数倍で潜る (2026-09-09)
 
-**Pattern**: 2 つの幅・分散・重みから作る合成量には「和」 系と「平均」 系の 2 流儀がある (例: $\sigma_\text{A} := (\sigma+\sigma')/2$ 〔平均〕 vs $\sigma_\text{sum} := \sigma+\sigma'$ 〔和〕、 $\sigma_\text{I} := [(\sigma^{-1}+\sigma'^{-1})/2]^{-1}$ 〔逆数の平均の逆数〕 vs $\sigma_\text{red} := (\sigma^{-1}+\sigma'^{-1})^{-1}$ 〔逆数の和の逆数〕)。 **記法を乗り換えるとき、 括弧の形だけ写して定義の差を吸収し忘れる**と、 前係数が定数倍ずれる。 指数部は合っているので読んでも気づかない。 起源事例 (2026-09): 先行研究の重なり係数 $(\sigma_\text{I}/\sigma_\text{A})^{d/4}$ を後続論文が $(\sigma_\text{red}/\sigma_\text{sum})^{d/4}$ と書いた。 $\sigma_\text{A} = \sigma_\text{sum}/2$ と $\sigma_\text{I} = 2\sigma_\text{red}$ で **分子・分母の 2 倍が同じ向きに効き、 括弧の中で 4 倍**が落ちた (振幅で $4^{3/4}$、 確率で 8)。 published 論文に載り、 それを引用した進行中原稿の 9 式に伝播した。
+**Pattern**: 2 つの幅・分散・重みから作る合成量には「和」 系と「平均」 系の 2 流儀がある (例: $\bar\sigma := (\sigma+\sigma')/2$ 〔平均〕 vs $\Sigma := \sigma+\sigma'$ 〔和〕、 $\tilde\sigma := [(\sigma^{-1}+\sigma'^{-1})/2]^{-1}$ 〔逆数の平均の逆数〕 vs $\sigma_\ast := (\sigma^{-1}+\sigma'^{-1})^{-1}$ 〔逆数の和の逆数〕)。 **記法を乗り換えるとき、 括弧の形だけ写して定義の差を吸収し忘れる**と、 前係数が定数倍ずれる。 指数部は合っているので読んでも気づかない。 起源事例 (2026-09): 先行の式の比 (平均系の幅どうし) を、 後の式が和系の幅どうしの比として同じ冪で写した。 平均系と和系は分子・分母で 2 倍ずつ違い、 **その 2 倍が同じ向きに効いて括弧の中で 4 倍**が落ちた。 誤りは既に印字された式に在り、 それを引いた式にも伝播していた。
 
-**Check 1 (自明極限の 1 行検算 — これが決定打)**: 前係数は必ず「答えが自明になる配置」 を持つ。 規格化された状態の自己重なり = 1、 等幅、 同一点、 距離ゼロ、 $t=0$、 結合ゼロ。 **その 1 点を代入するだけで真偽が確定する** (起源事例では $\braket{\Pi|\Pi} = 1$ に対し誤った係数は $4^{-3/4} = 0.354$ を返した)。 導出の再演より安く、 結論が二値。 前係数を書いた・写した・変えた **どの turn でも 1 行で回す**。
+**Check 1 (自明極限の 1 行検算 — これが決定打)**: 前係数は必ず「答えが自明になる配置」 を持つ。 規格化された状態の自己重なり = 1、 等幅、 同一点、 距離ゼロ、 $t=0$、 結合ゼロ。 **その 1 点を代入するだけで真偽が確定する** (起源事例では自己重なり = 1 のはずの配置で、 誤った係数は 1 から明らかに外れた値を返した)。 導出の再演より安く、 結論が二値。 前係数を書いた・写した・変えた **どの turn でも 1 行で回す**。
 
-**Check 2 (正しい形は自然な不等式を満たすことが多い)**: 起源事例の正しい係数 $(4\sigma_\text{red}/\sigma_\text{sum})^{d/4} = (\text{GM}/\text{AM})^{d/2}$ (幾何平均 / 算術平均) は相加相乗平均から $\le 1$、 等号は等幅のとき。 **合成量の比が既知の不等式・極限に載るか**を見ると、 定数倍のずれは形の不自然さとして表に出る (誤った形は等幅でも 1 にならない)。 載る形が見つかったら、 それを本文の言い方にも使う (「reduced と sum の比」 より「幾何平均と算術平均の比」 の方が主張として明快だった)。
+**Check 2 (正しい形は自然な不等式を満たすことが多い)**: 例: 2 つの幅の重なり係数は、 正しく書くと (幾何平均 / 算術平均) の冪になり、 相加相乗平均から $\le 1$、 等号は等幅のとき。 **合成量の比が既知の不等式・極限に載るか**を見ると、 定数倍のずれは形の不自然さとして表に出る (誤った形は等幅でも 1 にならない)。 載る形が見つかったら、 それを本文の言い方にも使う (「逆数の和系と和系の比」 より「幾何平均と算術平均の比」 の方が主張として明快だった)。
 
-**Check 3 (同一文書内に正しい系統が同居しうる)**: 誤りが引用経由で入った場合、 **自分の文書の別の節には独立導出した正しい形が残っていることがある** (起源事例では旧計算の節が $(4\sigma_\text{red}/\sigma_\text{sum})^{d/4}$ を持っていた)。 記法の全出現を grep して並べ、 形が割れていないか見る。 「引用元がそう書いている」 は自分の文書内の不整合の言い訳にならない ([#new-symbol-convention-consistency](#new-symbol-convention-consistency) の姉妹)。
+**Check 3 (同一文書内に正しい系統が同居しうる)**: 誤りが引用経由で入った場合、 **自分の文書の別の節には独立導出した正しい形が残っていることがある** (起源事例でも、 旧計算の節が正しい形を持っていた)。 記法の全出現を grep して並べ、 形が割れていないか見る。 「引用元がそう書いている」 は自分の文書内の不整合の言い訳にならない ([#new-symbol-convention-consistency](#new-symbol-convention-consistency) の姉妹)。
 
-**Check 4 (引用の係数は写す前に導出する)**: 先行研究から係数を持ってくるときは、 **自分の規約で 1 回導出してから**写す。 起源事例では 2 経路 (運動量空間の $\int\!d^dp$ と位置空間の $\int\!d^dx$) が独立に一致し、 引用元との差が確定した。 導出コストは Gauss 積分 1 本で、 published error を継承するコストより遥かに安い。
+**Check 4 (引用の係数は写す前に導出する)**: 先行研究から係数を持ってくるときは、 **自分の規約で 1 回導出してから**写す。 起源事例では独立な 2 経路 (運動量空間と位置空間の積分) が一致し、 引用元との差が確定した。 導出コストは Gauss 積分 1 本で、 published error を継承するコストより遥かに安い。
 
-**Downstream (誤りが published だったとき)**: 影響を「全体定数か、 力学変数 ($L$, $T$, 運動量移行) に依存するか」 で仕分ける。 全体定数なら物理的結論 (コヒーレンス長・位相・局在・保存則因子) は無傷なので erratum は規格化に限定できる。 ⚠️ ただし **abstract が「全体確率は X で決まる」 型の主張をしていればそこが直撃する** — 起源事例の abstract 最終文が正にその一文だった。 誤りの伝播先 (自分の他稿・引用した進行中原稿) を同じ turn で grep し、 carrier (TODO・erratum) に落とすまでを 1 単位にする。
+**Downstream (誤りが published だったとき)**: 影響を「全体定数か、 力学変数 ($L$, $T$, 運動量移行) に依存するか」 で仕分ける。 全体定数なら物理的結論 (コヒーレンス長・位相・局在・保存則因子) は無傷なので erratum は規格化に限定できる。 ⚠️ ただし **abstract が「全体確率は X で決まる」 型の主張をしていればそこが直撃する**。 誤りの伝播先 (自分の他稿・引用した進行中原稿) を同じ turn で grep し、 carrier (TODO・erratum) に落とすまでを 1 単位にする。
 
 ## <a id="figures-bound-to-a-convention"></a>本文の規約に縛られる図は本文の source で描く — 外部画像は drift して誰も気づかない (2026-09)
 
-**Pattern**: Feynman 図・運動量の流れ・添字の付き方・符号の向きは、本文のどこかの式が定義している。その図を外部 tool で作った画像 (PNG / PDF) として `\includegraphics` すると、**定義を直しても画像は直らない**。しかも caption は本文に合わせて更新されるので、**caption と画像が食い違ったまま何 pass も生き延びる**。機械 gate は掛からない (組版は通る、参照も解決する)。実際、盲検査読で初めて「図は $q$ が $(\mathbf b,\nu)$ 脚から入るが caption は $(\mathbf c,\rho)$」 が出た。
+**Pattern**: Feynman 図・運動量の流れ・添字の付き方・符号の向きは、本文のどこかの式が定義している。その図を外部 tool で作った画像 (PNG / PDF) として `\includegraphics` すると、**定義を直しても画像は直らない**。しかも caption は本文に合わせて更新されるので、**caption と画像が食い違ったまま何 pass も生き延びる**。機械 gate は掛からない (組版は通る、参照も解決する)。実際、盲検査読で初めて「図は運動量がある脚から入るが、 caption は別の脚」 が出た。
 
 **Check**: 図が本文の規約に縛られているなら (= 図の中の記号・矢印が式の定義から決まるなら)、**その図は原稿の source で描く** (TikZ など)。同じ preamble の style を使えば、vertex rule の図と loop 図の線種・矢印が自動で揃う。画像のままにするのは、規約に縛られない図 (写真・数値プロット・外部から借りた図) だけ。
 
 **食い違いを見つけたときに直すのは図であって caption ではない**: caption は本文の定義に縛られている側で、画像はその像。どちらが正かは「定義の式」 が決める。定義そのものが曖昧なら、そこを先に決める。
 
-**対称性で答えが変わらない場合も直す**: 上の例では振幅が $q$ の偶関数で、向きを逆に定義しても印字式は 1 文字も変わらなかった。それでも直すのは、**読者が図から規約を読み取るから**。「式が変わらない」 は「直さなくてよい」 ではない。
+**対称性で答えが変わらない場合も直す**: 上の例では振幅が運動量の偶関数で、向きを逆に定義しても印字式は 1 文字も変わらなかった。それでも直すのは、**読者が図から規約を読み取るから**。「式が変わらない」 は「直さなくてよい」 ではない。
 
-origin: 2026-09-12、5 年もの原稿で図 1 (PNG、共著者が外部 tool で作成) の運動量の向きが付録の定義と逆だった。TikZ で描き直して解消。ついでに $iJ_1(q)=$ のような定義の等号を図の中に置けるようになった (数式 display にはしない = 図は figure 環境 + caption のまま、という著者判断)。
+origin: 2026-09-12、長く改稿を重ねた原稿で、共著者が外部 tool で作った図 (PNG) の運動量の向きが付録の定義と逆だった。TikZ で描き直して解消。ついでに定義の等号 (振幅 = …) を図の中に置けるようになった (数式 display にはしない = 図は figure 環境 + caption のまま、という著者判断)。
 
 ## <a id="gate-spec-anchor-list"></a>投稿前 gate の spec に並べる anchor の最小 list (2026-09-11)
 
@@ -558,7 +558,7 @@ origin: 2026-09-12、5 年もの原稿で図 1 (PNG、共著者が外部 tool �
 2. **偽陽性率と検出力の較正** — 対立モデル (= 折れの無い真値) から同じ n の標本を生成し、 「折れあり」 が選ばれる割合を数える。 論文で使う判定閾値は**この表から決める** (慣用の ΔBIC ≥ 6 / 10 を借りてこない)。 併せて真値ありの検出力も出す。 これが無いと「n が足りなくて決着しない」 と「構造が無い」 を区別できない
 3. **適合度** — 勝者モデルの KS 距離をパラメトリック・ブートストラップの p 値で評価する。 全モデルが棄却される cell は「勝者」 を報告しない
 
-⚠️ **CCDF (累積分布) を log-log 平面で最小二乗して情報量規準を回すのは、 証拠を 1〜2 桁過大に評価する** — CCDF の点は同じ標本を共有していて残差が独立でないため。 実測 1 例: 同じデータで RSS ベースの ΔBIC = 79.2 (「極めて有意」) が、 離散標本の直接尤度では ΔBIC_L = 0.1 (決着せず) になった。 探索・可視化には CCDF 回帰でよいが、 **主張の根拠は生標本の尤度**に置き換える。
+⚠️ **CCDF (累積分布) を log-log 平面で最小二乗して情報量規準を回すのは、 証拠を 1〜2 桁過大に評価する** — CCDF の点は同じ標本を共有していて残差が独立でないため。 実測 1 例: 同じデータで RSS ベースでは「極めて有意」 だった ΔBIC が、 離散標本の直接尤度では決着しない大きさになった。 探索・可視化には CCDF 回帰でよいが、 **主張の根拠は生標本の尤度**に置き換える。
 
 - 折れ点の探索は縮退に注意する。 候補点の左右それぞれに **標本数と「異なる値の数」 の両方**の下限を課さないと、 同値が縦積みになった端点で見かけの完全一致が起き、 病的な最良適合が出る (勾配が負になる等、 分布として不正な解が「勝つ」)
 - 有限窓 (月・年で切る) は長い側を系統的に落とす。 打ち切り尤度で扱うか、 窓をまたぐ全長で数えるかを決め、 他方を感度解析に回す

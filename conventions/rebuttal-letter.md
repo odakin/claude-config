@@ -66,15 +66,15 @@ referee は submission PDF の番号で書く。 merge/restructure した改訂�
 
 ## 実例 (= 該当 private paper repo、 2026-06-02)
 
-2-paper merger の major revision で 37 referee comment に point-by-point 回答 (= 8pp)。 §1 reflex (= 本文 grep 照合) で **2 件のズレを発見・修正**:
-- 「the unsupported sentence has been removed」 ← 実際は Lorentz 不変性の根拠を追加して justify した (= 削除でなく根拠追加)。
+2 本の原稿を統合した major revision で、 数十の referee comment に point-by-point 回答。 §1 reflex (= 本文 grep 照合) で **2 件のズレを発見・修正**:
+- 「the unsupported sentence has been removed」 ← 実際は根拠を追加して justify した (= 削除でなく根拠追加)。
 - 「a reference … has been added」 ← 実際は旧版から `\eqref` で既に参照済みだった (= added でなく対応済み)。
 
-両方とも task tracker の記録ベースで回答を書いたために発生。 残り 35 Response は検証可能 claim (= 20+ の用語置換 / 削除 / 引用 + 質的 4 項目) が全て本文と一致。 → **教訓: rebuttal は最初から本文 grep で書く (= 記録ベースは removed/added が本文とズレる)、 §1 reflex を最初に回せば 2 件を未然に防げた**。
+両方とも task tracker の記録ベースで回答を書いたために発生。 残りの Response は検証可能 claim (= 用語置換 / 削除 / 引用 + 質的な項目) が全て本文と一致。 → **教訓: rebuttal は最初から本文 grep で書く (= 記録ベースは removed/added が本文とズレる)、 §1 reflex を最初に回せば 2 件を未然に防げた**。
 
 ## <a id="defensive-revision"></a>reject 後の誌替え再投稿: 防御改訂の 3 検査 (2026-08)
 
-rebuttal を書かない誌替え再投稿 (= reject 済み原稿を修正して別誌へ) で、本文に claim・引用・修正を足すときの検査 3 点。いずれも 2026-08 の実例 (reject を重ねた共著論文の 5 誌目) で発火した。
+rebuttal を書かない誌替え再投稿 (= reject 済み原稿を修正して別誌へ) で、本文に claim・引用・修正を足すときの検査 3 点。いずれも 2026-08 の実例 (reject 後の共著論文の再投稿) で発火した。
 
 1. **断言 framing 検査**: 足す文が「予言 + 精密実験の制限」型の量的主張なら、referee がその場で back-of-envelope できるかを自分で先に計算する。安全に通過すると示せない (= 見積もりが現行 bound と同 order 以下にならない) 制限は断言せず、**test/example framing** (「can be tested by ...」の例示) に落とす。新規主張ゼロで引用は復活でき、攻撃面を作らない。
 2. **修正の 2 次露出 sweep**: 表記・整合性の修正 (例: 未定義記号をただしい結合定数に relabel) が、それまで曖昧さの陰に隠れていた本文内矛盾 (= 図の使用パラメータ vs 本文の許容域、など) を**露出させないか**を突き合わせる。露出するなら、力学の駆動変数を特定して scaling で読み替えられないかをまず調べ、成立するなら caption/本文の 1 文で先回りして塞ぐ (= 数値の再計算より先に構造を疑う)。
@@ -82,15 +82,15 @@ rebuttal を書かない誌替え再投稿 (= reject 済み原稿を修正して
 
 関連: 依頼側の縮小原則 = [`research-email.md #shrink-the-ask`](research-email.md#shrink-the-ask)。
 
-> **姉妹**: 系譜 (= どの版か) と防御改訂 (= どう書くか) の手前に、 **中心主張がそもそも成立するか**の検算がある — [`paper-audit.md#headline-claim-budget-check`](paper-audit.md#headline-claim-budget-check) (= 模型の形式に依らない収支で 2〜3 行。 4 誌 reject 後の 5 誌目直前に中心主張が収支で不成立と判明した実例)。
+> **姉妹**: 系譜 (= どの版か) と防御改訂 (= どう書くか) の手前に、 **中心主張がそもそも成立するか**の検算がある — [`paper-audit.md#headline-claim-budget-check`](paper-audit.md#headline-claim-budget-check) (= 模型の形式に依らない収支で 2〜3 行。 再投稿の直前に中心主張が収支で不成立と判明した実例)。
 
 ## <a id="manuscript-lineage-verification"></a>改訂に入る前の系譜検証: 「手元の最新」 を疑う 3 検査 (2026-08-21)
 
-reject 後の改訂や 5 誌目の投稿準備で、 **土台にした版が共著者合意済の最新でなかった**事故の再発防止。 共著論文では「最後に自分が受け取った添付」 ≠ 最新 (自分が cc 外だった期間の改訂、 別の共著者が投稿システム向けに変換した版、 など) が普通に起きる。
+reject 後の改訂や誌替え再投稿の準備で、 **土台にした版が共著者合意済の最新でなかった**事故の再発防止。 共著論文では「最後に自分が受け取った添付」 ≠ 最新 (自分が cc 外だった期間の改訂、 別の共著者が投稿システム向けに変換した版、 など) が普通に起きる。
 
-1. **系譜表を作る** — 投稿ごとに (日付、 投稿者、 source の所在、 語数、 識別 keyword の有無) を 1 行ずつ並べる。 **語数・keyword は単調でなければならない** (改訂を重ねた版が 2,500 語短くなる、 referee が褒めた framing の語が消えている = 土台の取り違えの signal)。 referee report が言及する語句 (「coarse-grained」 等) が原稿に無ければ、 その report が読んだ版を持っていない。
+1. **系譜表を作る** — 投稿ごとに (日付、 投稿者、 source の所在、 語数、 識別 keyword の有無) を 1 行ずつ並べる。 **語数・keyword は単調でなければならない** (改訂を重ねた版が大幅に短くなる、 referee が褒めた framing の語が消えている = 土台の取り違えの signal)。 referee report が言及する語句が原稿に無ければ、 その report が読んだ版を持っていない。
 2. **cc 外期間を列挙する** — 共著者間 thread で自分が外れていた期間の版は「手元に無い」 と仮定し、 投稿者に source を直接要求する (投稿システムの proof PDF だけでは source は復元できない)。
-3. **referee が名指しした文を grep する** — 過去 report の引用句 ("at rest in all stages" 等) が改訂版に原文のまま残っていないか機械照合。 残っていれば「直した」 認識が誤り (= 別の版を直した) か、 修正が取り込まれていない。
+3. **referee が名指しした文を grep する** — 過去 report が名指しした句が改訂版に原文のまま残っていないか機械照合。 残っていれば「直した」 認識が誤り (= 別の版を直した) か、 修正が取り込まれていない。
 
 **図の再現性** — 数値図は「本文の式 + caption のパラメータ」 から再計算して照合する (= [`scientific-computing.md #figure-vector-extraction`](scientific-computing.md#figure-vector-extraction))。 caption のパラメータで再現できない図は、 作図 code が別の式・別のパラメータを使っていた signal で、 referee に突かれる前に著者間で決着させる。
 
@@ -98,6 +98,6 @@ reject 後の改訂や 5 誌目の投稿準備で、 **土台にした版が共�
 
 **Pattern**: 本稿の主張を支える cross-check (例: 別 sector の恒等式を多成分で機械検証) を、 その閉形式ごと companion に送って本文は「検証した、 詳細は Ref. [x]」 だけにすると、 referee は「検査可能な式が本稿に無い」 と突く。 このとき 4 手がある: (i) companion を先に (同時に) 公開して引用を checkable にする / (ii) 本稿は現状の正直な scope のままにし、 恒等式と検証 artifact を response letter の予備として手持ちにする (求められた時だけ付録化) / (iii) 主張を検証済み sector に絞る (真の主張を弱める) / (iv) 恒等式のうち印字済みの量だけで閉じる部分 (例: 最低次の接触項) を印字する。
 
-**Rule (2026-09-09 改訂)**: 既定は (ii) と (iv) の併用、 companion が近ければ (i) を重ねる。 **(iv) の可否は「印字済み量だけで閉じる部分」 の切れ目が構造的境界かで決まる**。 切れ目が「どの振幅が入るか」 で決まり (例: q = 0 の LL 恒等式には混合 eω 振幅が入らない = 背景 Lorentz 共変性で 5 脚の定数 tensor が存在しないので混合項は O(q²) から)、 本稿と companion の sector 分担線に一致するなら、 (iv) は fig leaf にならない。 その場合の書き方 = ① 恒等式**全体**を Γ レベルで display する (混合項は記号だけ、 値と規約辞書は companion) ② 印字部分は loop 計算の check として 3 拍 (何が決まるか / 調整余地なし / 一致した値) で書き、 機械 anchor (印字式からの audit script) を残す ③ 残りは「混合振幅が入る次数」 と名指しして companion へ送り、 検証範囲 (成分数・generic q・pole) を明記する。 切れ目が展開の途中の恣意的な打ち切りなら「自明部だけ印字して非自明部は次の論文」 に見えて「残りも出せ」 を誘うので、 (iv) は避けて (ii) だけにする。 (ii) の条件 = 本文の文が「係数決定には使わない cross-check」 のように主張の重さを既に限定していること、 材料 (note + 機械検証 script) が即座に出せる状態にあること。 ⚠️ 「既に本文で示した別の結果の言い換えだから印字する価値が無い」 は却下理由にならない — Ward–Takahashi 恒等式は誘導作用への制約でなく loop 計算の check で、 印字済みの GC 側の恒等式も同じ立場 (誘導作用が共変なら自動) にある。 検査可能な式がゼロの現状が floor で、 恒等式と閉じる部分の印字は checkable 量を単調に増やすだけで、 referee の要求はそれ以上強くならない。
+**Rule (2026-09-09 改訂)**: 既定は (ii) と (iv) の併用、 companion が近ければ (i) を重ねる。 **(iv) の可否は「印字済み量だけで閉じる部分」 の切れ目が構造的境界かで決まる**。 切れ目が「どの振幅が入るか」 で決まり (例: 最低次の恒等式には異なる sector を混ぜる振幅が入らない = 背景の対称性がその次数の混合項を作る定数 tensor を許さないので、 混合項は次の次数から)、 本稿と companion の sector 分担線に一致するなら、 (iv) は fig leaf にならない。 その場合の書き方 = ① 恒等式**全体**を Γ レベルで display する (混合項は記号だけ、 値と規約辞書は companion) ② 印字部分は loop 計算の check として 3 拍 (何が決まるか / 調整余地なし / 一致した値) で書き、 機械 anchor (印字式からの audit script) を残す ③ 残りは「混合振幅が入る次数」 と名指しして companion へ送り、 検証範囲 (成分数・generic q・pole) を明記する。 切れ目が展開の途中の恣意的な打ち切りなら「自明部だけ印字して非自明部は次の論文」 に見えて「残りも出せ」 を誘うので、 (iv) は避けて (ii) だけにする。 (ii) の条件 = 本文の文が「係数決定には使わない cross-check」 のように主張の重さを既に限定していること、 材料 (note + 機械検証 script) が即座に出せる状態にあること。 ⚠️ 「既に本文で示した別の結果の言い換えだから印字する価値が無い」 は却下理由にならない — Ward–Takahashi 恒等式は誘導作用への制約でなく loop 計算の check で、 印字済みの別の対称性の恒等式も同じ立場 (誘導作用が共変なら自動) にある。 検査可能な式がゼロの現状が floor で、 恒等式と閉じる部分の印字は checkable 量を単調に増やすだけで、 referee の要求はそれ以上強くならない。
 
 起源 = 2026-09-08 の第 2 ラウンド AI 査読 (ある恒等式を本稿でどこまで示すか)、 著者裁定「(ii) でいこう」 → **翌日に著者が (iv) を再提起して採用** (趣旨: 全く書かないのは有り得ない、 閉じる次数だけ書いて残りを次の論文に回すのが、 何もしないより悪いことは無い)。 印字式からの実測で、 閉じる次数が構造的な境界と判明し、 付録 (導出) + 本文 (最低次の形) に印字、 audit script が anchor。 ⚠️ meta: 09-08 版の rule「(iv) は罠」 は単一 instance の referee 心理推測をその日のうちに層1 へ hoist したもので、 翌日の first-principles 検算で反転した。 一般則の hoist は instance が settle してから (= 著者が採否を実際に運用した後)。 sibling = [`paper-audit.md#claim-strength-three-tests`](paper-audit.md#claim-strength-three-tests) (言明の強さ)、 [`#defensive-revision`](#defensive-revision) (断言 → test framing)。

@@ -171,7 +171,7 @@ arxiv_id: <id>
 title: ...
 authors: [...]
 read_purpose: |
-  申請の差別化主張 (= 「[N] は simplified treatment」 等) の verify。
+  申請の差別化主張 (= 「[N] は近似的な扱いにとどまる」 等) の verify。
   実際の論文 scope を確認、 wording overclaim を検出。
 read_date: YYYY-MM-DD
 pages: <N>
@@ -185,7 +185,7 @@ related_files:
 
 ## <a id="citation-verify"></a>引用文献の現物 verify (= 申請主張 wording の overclaim 検出)
 
-申請書が「先行研究 [N] は **simplified treatment** / **limited scope** / **subset of relevant interactions**」 等の差別化主張を含む時、 [N] の現物を fetch + 精読して **wording の妥当性を独立検証**する。
+申請書が「先行研究 [N] は **近似的な扱いにとどまる** / **扱う範囲が狭い** / **関連する効果の一部しか含まない**」 等の差別化主張を含む時、 [N] の現物を fetch + 精読して **wording の妥当性を独立検証**する。
 
 ### Fetch 経路
 
@@ -203,11 +203,11 @@ related_files:
 
 ### Wording の overclaim 判定
 
-申請書の disparaging label (= 「simplified」 「limited」 「subset」 等) を [N] 本体と照合:
+申請書の disparaging label (= 「近似的」 「限定的」 「一部のみ」 等) を [N] 本体と照合:
 
-- **真**: [N] が技術的に limited scope であり、 申請がそこを extend する正当な niche → wording 妥当
+- **真**: [N] が技術的に範囲の限られた扱いであり、 申請がそこを extend する正当な niche → wording 妥当
 - **偽**: [N] が **その framework 内で comprehensive** であり、 申請の wording が underestimate → overclaim
-- **「subset」 の解釈幅**: [N] が EFT framework で 1 operator focus なら「subset」 は技術的に弁護可能だが、 [N] の本来 scope を理解した上での評価としては不公正
+- **「一部のみ」 の解釈幅**: [N] が意図的に対象を絞った framework なら「一部のみ」 は技術的に弁護可能でも、 [N] の本来 scope を理解した上での評価としては不公正になりうる
 
 検証結果を `analysis.md §X` に reflect。 申請の真の novelty (= 残る gap) を狭く evaluation し直す根拠とする。
 
@@ -239,8 +239,8 @@ related_files:
 
 同区分内で複数申請を順 review する時、 **1 件目の criteria を 2 件目に無批判 transfer する反射**が起きる。 例:
 
-- (1 件目) = phenomenology 申請 → 「実験 cross-check」 が valid criteria → 4 score
-- (2 件目) = pure theory 申請 → 「実験 cross-check」 を持ち込んで 2 score を出す ← **category error**
+- (1 件目) = phenomenology 申請 → 「実験 cross-check」 が valid criteria
+- (2 件目) = pure theory 申請 → 「実験 cross-check」 を持ち込んで低い評点を出す ← **category error**
 
 各申請を **独立 evaluate** する。 申請性質を identify した上で適切な framework を選ぶ。 これは [`convention-design-principles.md §4 (= #orient-before-act)`](../docs/convention-design-principles.md#orient-before-act) の applied form。
 
@@ -306,9 +306,9 @@ scan 解像度限定で読み取り不能 / 不確実な cell は **`(read uncle
 ```markdown
 | 年度 | 事項 | 金額 |
 |---|---|---|
-| Y1 | (国内学会出張、 read unclear) | 110 |
-| Y1 | (read unclear) | 80 |
-| Y1 | (計) | **250** |  ← 列計は明確に読めた場合のみ確定
+| Y1 | (国内学会出張、 read unclear) | 100 |
+| Y1 | (read unclear) | 50 |
+| Y1 | (計) | **200** |  ← 列計は明確に読めた場合のみ確定
 ```
 
 reviewer 側で原本 (= PDF / 紙原本) を直接照合する際の **flag** として機能。
