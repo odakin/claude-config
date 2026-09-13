@@ -21,6 +21,7 @@ Usage:
   check-activity-facts.py                         staged added lines of the repo in cwd (public repos only)
   check-activity-facts.py --message-file FILE     commit message
   check-activity-facts.py --scan-tree REPO [--ack FILE] [--write-ack]   inventory of tracked text files
+  check-activity-facts.py --scan-public [ROOT] [--ack FILE]             the same for every public clone under ROOT
   check-activity-facts.py --replay REPO [--max-commits N]              per-commit counts over history
   check-activity-facts.py --lines FILE            classify each line of FILE (calibration on removed lines)
   check-activity-facts.py --selftest
@@ -206,6 +207,27 @@ def scan_tree(repo, terms, ack_path=None, write_ack=False, out=print):
     return 1 if new else 0
 
 
+def scan_public(root, terms, ack_path=None, out=print):
+    """--scan-tree over every clone under root that carries the public-repo marker; one summary line."""
+    root = Path(root)
+    repos = [d for d in sorted(root.iterdir()) if d.is_dir() and (d / MARKER).is_file() and (d / ".git").exists()]
+    if not repos:
+        out(f"scan-public [activity-facts]: no public clones under {root}")
+        return 0
+    worst, bad = 0, []
+    for d in repos:
+        lines = []
+        rc = scan_tree(d, terms, ack_path, out=lines.append)
+        if rc:
+            bad.append(d.name)
+            for l in lines:
+                out(l)
+        worst = max(worst, rc)
+    out(f"scan-public [activity-facts]: {len(repos)} public clone(s), {len(bad)} with unacked findings"
+        + (f" ({', '.join(bad)})" if bad else ""))
+    return worst
+
+
 def replay(repo, terms, max_commits=None, out=print):
     rc, revs = _git(["rev-list", "--no-merges", "HEAD"], cwd=repo)
     if rc != 0:
@@ -272,6 +294,9 @@ def selftest():
         expect("scan-tree: a TERM line is never acked", scan_tree(repo, terms, ack, write_ack=True, out=out.append) == 1)
         _git(["add", "."], cwd=repo)
         out = []
+        expect("scan-public: finds the marked clone and reports it (exit 1)",
+               scan_public(Path(td), terms, ack, out=out.append) == 1 and "1 public clone(s), 1 with unacked" in out[-1])
+        out = []
         expect("staged: public repo with a TERM line blocks", scan_staged(repo, terms, out=out.append) == 1)
         (repo / MARKER).unlink()
         out = []
@@ -295,6 +320,9 @@ def main():
         return scan_message(opt("--message-file"), terms)
     if "--scan-tree" in args:
         return scan_tree(opt("--scan-tree"), terms, opt("--ack"), "--write-ack" in args)
+    if "--scan-public" in args:
+        root = opt("--scan-public")
+        return scan_public(root if root and not root.startswith("--") else Path.home() / "Claude", terms, opt("--ack"))
     if "--replay" in args:
         m = opt("--max-commits")
         return replay(opt("--replay"), terms, int(m) if m else None)
