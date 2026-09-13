@@ -269,7 +269,7 @@ expect_pass "skip-short-ascii-embed-underscore" \
 # 片方だけで発火させると規約 doc の正当な文が全部落ちるので、共起を要求する。
 # --------------------------------------------------------------------
 expect_block "block-review-instance-cooccurrence" \
-  "モック種目(甲) の模擬審査: 段で評点が割れた (前段 4 / 後段 2)"
+  "モック種目(甲) の模擬審査: 段で評点が割れた (前段 5 / 後段 3)"
 
 expect_block "block-review-instance-ascii-term" \
   "MOCKGRANT review: score split across stages"
