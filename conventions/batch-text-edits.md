@@ -99,13 +99,14 @@ open(path, "w", encoding="utf-8").write(txt)
 
 **なぜ起きるか**: 2 つの操作が link を別々に扱う。 (1) test 用に dir を写すとき link を link のまま写す (`shutil.copytree(..., symlinks=True)` など) と、 絶対 path の link は写しの中でも元の実体を指すので、 「写しの TARGET」 への書込みがそのまま実体に届く。 (2) 一時 file + `os.replace(tmp, target)` の原子的な書込みは、 target の path に在る**link そのもの**を置き換え、 link 先には書かない。 使う側の path が symlink で実体は repo の中、 という配置 (install 済みの hook など) で踏む。
 
-**対処**: 読む・写す・書く前に TARGET を 1 回だけ実体の path へ解決する (`os.path.realpath`)。 写しの dir の中の他の link は link のまま写してよい (辿って写すと、 repo root に在る共有 folder への dir link まで丸ごと複製する)。 ただしその場合に守られるのは TARGET だけで、 test command が絶対 link や絶対 path を通して書く副作用は写しでは隔離されない。 [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) が実装し、 selftest に「絶対 link 越しの壊れた patch が実体に届かない」「link 越しに書いても link が残る」 foil がある。 **道具の「書いていない」 という報告は、 書き先の実体を読むまで証拠にならない** (この事例は実体を読み直して初めて見えた)。
+**対処**: 読む・写す・書く前に TARGET を 1 回だけ実体の path へ解決する (`os.path.realpath`)。 写しの dir の中の他の link は link のまま写してよい (辿って写すと、 repo root に在る共有 folder への dir link まで丸ごと複製する)。 ただしその場合に守られるのは TARGET だけで、 test command が絶対 link や絶対 path を通して書く副作用は写しでは隔離されない。 [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) が実装し、 selftest に「絶対 link 越しの壊れた patch が実体に届かない」「link 越しに書いても link が残る」 foil がある。 **道具の「書いていない」 という報告は、 書き先の実体を読むまで証拠にならない** (この事例は実体を読み直して初めて見えた)。 同じ一手で、 相対 path の不具合も片付く: 写し先を「一時 dir / 親 dir の name」 で作ると、 `Path("tool.py").parent.name` は空文字なので一時 dir そのもの、 `Path("../tool.py").parent.name` は `..` なので一時 dir の親を指す (前者は複製が `FileExistsError` で落ち、 後者は一時 dir の外へ写そうとする。 同日実測)。
 
 ## <a id="batch-text-verification"></a>適用後の検証
 
 1. **再 build が通る** (LaTeX なら error 0 + 頁数が期待どおり)
 2. **旧断片の grep が 0 件** (= モード 2 の後段、 assert では代替できない)
 3. **意図した箇所数と実 diff が一致** (`git diff --stat` の hunk 数を目で突き合わせる)
+4. **戻したら、 戻した箇所の `git diff` が空になることを確かめる**。 戻す pair は、 当てた pair の old と new を入れ替えたものにする (手で書いた削除の pair は、 隣の改行まで削りうる)。 実例 (2026-09-14): 別 session が足した 1 文を取り消した後、 直後の空行も消えていて、 次の段落が箇条書きの続きとして描画される形になっていた (取り消しに使った手段は未確認)。
 
 ## <a id="batch-text-adjacent"></a>隣接 kernel (別 domain、 混同しない)
 
