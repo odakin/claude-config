@@ -46,12 +46,12 @@ def _git(repo: Path, *args: str) -> str:
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
-def clones(root: Path) -> list:
+def clones(root: Path, need_slug: bool = True) -> list:
     out = []
     for d in sorted(root.iterdir()):
         if d.name.startswith(".") or not d.is_dir() or not (d / ".git").exists():
             continue
-        m = GITHUB_RE.search(_git(d, "remote", "get-url", "origin"))
+        m = GITHUB_RE.search(_git(d, "remote", "get-url", "origin")) if need_slug else None
         out.append({"dir": d, "slug": f"{m.group(1)}/{m.group(2)}" if m else None,
                     "marker": (d / MARKER).is_file()})
     return out
@@ -64,7 +64,13 @@ def hooks_dir(repo: Path) -> Path:
 
 
 def missing_stubs(repo: Path) -> list:
-    hd = hooks_dir(repo)
+    plain = repo / ".git" / "hooks"
+    if plain.is_dir() and not _missing_in(plain):   # common case: no git subprocess at session start
+        return []
+    return _missing_in(hooks_dir(repo))
+
+
+def _missing_in(hd: Path) -> list:
     missing = []
     for hook, needle in STUBS.items():
         f = hd / hook
@@ -104,7 +110,7 @@ def gh_visibility(slugs: list) -> tuple:
 
 
 def run(root: Path, hooks_only: bool, fix_hooks: bool, visibility=gh_visibility, out=print) -> int:
-    items = clones(root)
+    items = clones(root, need_slug=not hooks_only)
     findings = 0
     vis, err = ({}, None)
     if not hooks_only:
