@@ -24,8 +24,8 @@ not to pixel coordinates, so it survives layout drift between regenerations.
 Usage
 -----
     overlay-seal-pdf.py IN.pdf --out OUT.pdf \\
-        --place 'page=1,anchor=尾田 欣也,occurrence=1,size=22,dx=6,dy=0' --image seal1.png \\
-        --place 'page=3,anchor=尾田 欣也,size=26,dx=10' --image seal2.png
+        --place 'page=1,anchor=甲野 太郎,occurrence=1,size=22,dx=6,dy=0' --image seal1.png \\
+        --place 'page=3,anchor=甲野 太郎,size=26,dx=10' --image seal2.png
 
 * ``size`` is the **ink diameter on paper, in points** — the engine compensates for the
   PNG's content fill ratio, so what you pass is what gets measured on the printed sheet.

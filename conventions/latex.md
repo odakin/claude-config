@@ -752,8 +752,8 @@ JHEP.bst はフィールドから自動リンクを生成するので `\href` �
 執筆中の続編論文などを「著者 + in preparation」だけで引きたい（タイトル未確定なので入れない）場合の recipe（2026-07-13、Overleaf 共著 paper で確立）:
 
 ```bibtex
-@unpublished{Oda:2026prep,
-    author = "Oda, Kin-ya and friends",
+@unpublished{Author:2026prep,
+    author = "Author, A. and friends",
     note = "{\unskip}, in preparation"
 }
 ```
