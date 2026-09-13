@@ -365,8 +365,8 @@ grep -nE '\\(newcommand|renewcommand|providecommand|nc|def|NewDocumentCommand|De
 }
 ```
 
-- 短 argument: `\subretracted{Movement 3 retraction box}` → "See Movement 3 retraction box above for context." ✓
-- 拡張 argument: `\subretracted{Movement 3 retraction box --- the literature fact remains valid}` → "See Movement 3 retraction box --- the literature fact remains valid above for context." ✗ ("remains valid above for context" が文法的に意味不明)
+- 短 argument: `\subretracted{Section 2 correction note}` → "See Section 2 correction note above for context." ✓
+- 拡張 argument: `\subretracted{Section 2 correction note --- the earlier bound still holds}` → "See Section 2 correction note --- the earlier bound still holds above for context." ✗ ("remains valid above for context" が文法的に意味不明)
 
 source レベルでは「うまく書けている」 ように見える。 10 instances 中 5 instances broken だが 4 layer の sweep を回しても本人気付かず、 pdftotext で初めて発覚した実例。
 
@@ -378,8 +378,8 @@ source レベルでは「うまく書けている」 ように見える。 10 in
   \par\noindent\textit{[Retracted. #1]}\par%
 }
 % caller 側で full sentence を渡す:
-%   \subretracted{See Movement 3 retraction box above for context.}
-%   \subretracted{See Movement 3 retraction box above. The literature fact remains valid.}
+%   \subretracted{See Section 2 correction note above for context.}
+%   \subretracted{See Section 2 correction note above. The earlier bound still holds.}
 ```
 
 caller が完結した sentence を渡すので、 macro 側 fixed text と argument の grammatical 衝突が原理的に起きない。

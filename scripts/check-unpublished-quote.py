@@ -34,7 +34,12 @@ Bypass once: CLAUDE_UNPUBLISHED_GUARD=0 git commit ... (e.g. a quote of an alrea
 Usage:
   check-unpublished-quote.py [--config PATH]                   staged added lines of the current repo
   check-unpublished-quote.py --message-file PATH [--config PATH]
-  check-unpublished-quote.py --check-wiring [--config PATH]     armed? + canaries through the real index
+  check-unpublished-quote.py --check-wiring [--through-hooks] [--config PATH]
+                                        armed? + canaries through the real index; --through-hooks also commits the
+                                        canaries through the installed pre-commit and commit-msg hooks of a temp
+                                        public repo (the hooks use the personal layer the runners resolve)
+  check-unpublished-quote.py --scan-tree REPO [--config PATH]   audit every tracked text file of a repo as it is now
+                                        (the gate itself only sees added lines; this is the inventory of older text)
   check-unpublished-quote.py --replay REPO [--max-commits N] [--prose-k K] [--quote-min N] [--config PATH]
   check-unpublished-quote.py --selftest
 """
@@ -479,7 +484,7 @@ def _canaries(index: Index):
     return prose, quote
 
 
-def check_wiring(cfg, cfg_path) -> int:
+def check_wiring(cfg, cfg_path, through_hooks=False) -> int:
     if cfg is None:
         print("NOT ARMED [unpublished-quote]: no sources config (personal layer unpublished-sources.txt, --config, "
               "$CLAUDE_UNPUBLISHED_SOURCES or ~/.claude/unpublished-sources.txt)")
@@ -514,7 +519,80 @@ def check_wiring(cfg, cfg_path) -> int:
     print(f"{'ARMED' if ok else 'BROKEN'} [unpublished-quote]: {len(index.files)} source file(s), "
           f"{len(index.union['prose'])} prose + {len(index.union['quote'])} quote shingles; canaries: "
           + ", ".join(f"{k} {'blocked' if v else 'NOT blocked'}" for k, v in results.items()))
+    if ok and through_hooks:
+        hooks = check_through_hooks(quote)
+        hooks_ok = all(hooks.values())
+        print(f"{'HOOKS OK' if hooks_ok else 'HOOKS BROKEN'} [unpublished-quote]: real commits in a temp public repo: "
+              + ", ".join(f"{k} {'ok' if v else 'FAILED'}" for k, v in hooks.items()))
+        ok = hooks_ok
     return 0 if ok else 1
+
+
+def check_through_hooks(quote: str, env=None) -> dict:
+    """Commit through the installed public hooks of a temp repo: a staged quote and a quoted message must be
+    rejected by Tier D, a plain commit must pass. Catches a runner that is not wired or not resolving its config."""
+    env = dict(os.environ if env is None else env)
+    env.pop("CLAUDE_UNPUBLISHED_GUARD", None)
+    scripts = Path(__file__).resolve().parent
+    results = {}
+    with tempfile.TemporaryDirectory() as td:
+        repo = Path(td)
+
+        def git(*args):
+            return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, env=env)
+
+        git("init", "-q")
+        git("config", "user.name", "canary")
+        git("config", "user.email", "canary@example.org")
+        (repo / MARKER).parent.mkdir(parents=True)
+        (repo / MARKER).write_text("# canary repo for check-unpublished-quote.py --through-hooks\n")
+        for inst in ("install-public-precommit.sh", "install-public-commit-msg.sh"):
+            subprocess.run(["bash", str(scripts / inst), str(repo)], capture_output=True, text=True, env=env)
+        (repo / "doc.md").write_text(f"Example: `{quote}`.\n")
+        git("add", "doc.md", str(MARKER))
+        r = git("commit", "-q", "-m", "add a doc")
+        results["staged quote rejected"] = r.returncode != 0 and "[unpublished-quote] the staged change contains" in r.stderr + r.stdout
+        git("rm", "--cached", "-q", "doc.md")
+        (repo / "note.txt").write_text("harmless\n")
+        git("add", "note.txt", str(MARKER))
+        r = git("commit", "-q", "-m", f"Explain: `{quote}`")
+        results["quoted message rejected"] = r.returncode != 0 and "[unpublished-quote] the commit message contains" in r.stderr + r.stdout
+        r = git("commit", "-q", "-m", "A plain message about a harmless note")
+        results["plain commit passes"] = r.returncode == 0
+    return results
+
+
+TREE_SUFFIXES = (".md", ".markdown", ".py", ".sh", ".txt", ".yaml", ".yml", ".json", ".toml", ".tex", ".html", ".js", ".ts")
+
+
+def scan_tree(cfg, repo, index=None, out=print) -> int:
+    """Audit the current tracked text files of a repo (the inventory the go-forward gate cannot give)."""
+    repo = Path(repo).resolve()
+    rc, listing = _git(["ls-files", "-z"], cwd=repo)
+    if rc != 0:
+        out(f"✗ [unpublished-quote] not a git repo: {repo}")
+        return 3
+    index = index or Index(cfg).build()
+    if not index.armed():
+        out("NOT ARMED [unpublished-quote]: no source text")
+        return 0
+    findings, n = [], 0
+    for rel in listing.split("\0"):
+        if not rel.endswith(TREE_SUFFIXES):
+            continue
+        try:
+            text = (repo / rel).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        n += 1
+        full = text if rel.endswith((".md", ".markdown")) else None
+        findings += scan_lines(rel, list(enumerate(text.split("\n"), 1)), index, full)
+    for path, a, b, kind, family, h in findings:
+        span = f"{a}" if a == b else f"{a}-{b}"
+        out(f"{path}:{span}  {kind}  <- {', '.join(index.sources_of(family, h)) or '?'}")
+    note = "" if (repo / MARKER).is_file() else " (not marked public: its own sources may match)"
+    out(f"scan-tree [unpublished-quote]: {n} text file(s) in {repo.name}{note}; {len(findings)} finding(s)")
+    return 1 if findings else 0
 
 
 # ----------------------------------------------------------------------------- calibration replay
@@ -656,6 +734,28 @@ Then those numbers come from one careful toy run.
             finally:
                 sys.stdout = old_out
         expect("--check-wiring arms and both canaries block through the real index", wrc == 0)
+
+        tree = base / "treerepo"
+        (tree / ".claude").mkdir(parents=True)
+        (tree / MARKER).write_text("")
+        (tree / "notes.md").write_text("Old rule text with `then those numbers come from one careful toy run` in it.\n"
+                                       "A paraphrase about numbers from a careful run.\n")
+        _git(["init", "-q"], cwd=tree)
+        _git(["add", "."], cwd=tree)
+        lines = []
+        trc = scan_tree(cfg, tree, index=idx, out=lines.append)
+        expect("--scan-tree finds the old quotation in a tracked file (exit 1), not the paraphrase",
+               trc == 1 and any(l.startswith("notes.md:1 ") for l in lines) and not any(l.startswith("notes.md:2") for l in lines))
+
+        layer = base / "mock-layer"
+        layer.mkdir()
+        (layer / ".claude-personal-layer").write_text("")
+        (layer / "CLAUDE.md").write_text("# mock\n")
+        (layer / "unpublished-sources.txt").write_text(f"discover: {base} .tex\nexclude: */notes.tex\n")
+        hook_env = dict(os.environ, CLAUDE_PERSONAL_LAYER=str(layer), XDG_CACHE_HOME=str(base / "hook-cache"))
+        got = check_through_hooks("then those numbers come from one careful toy run", env=hook_env)
+        expect("--through-hooks: real hooks reject a staged quote and a quoted message, and pass a plain commit",
+               all(got.values()) and len(got) == 3)
     print("selftest:", "ALL PASS" if not failed else f"FAILED ({len(failed)})")
     return 0 if not failed else 1
 
@@ -667,6 +767,8 @@ def main() -> int:
     ap.add_argument("--config")
     ap.add_argument("--message-file")
     ap.add_argument("--check-wiring", action="store_true")
+    ap.add_argument("--through-hooks", action="store_true")
+    ap.add_argument("--scan-tree")
     ap.add_argument("--replay")
     ap.add_argument("--max-commits", type=int, default=300)
     ap.add_argument("--prose-k", type=int, default=PROSE_K)
@@ -677,9 +779,11 @@ def main() -> int:
         return 0
     cfg, cfg_path = resolve_config(a.config)
     if a.check_wiring:
-        return check_wiring(cfg, cfg_path)
+        return check_wiring(cfg, cfg_path, a.through_hooks)
     if cfg is None:
         return 0
+    if a.scan_tree:
+        return scan_tree(cfg, a.scan_tree)
     if a.replay:
         return replay(cfg, a.replay, a.max_commits, a.prose_k, a.quote_min)
     if a.message_file:
