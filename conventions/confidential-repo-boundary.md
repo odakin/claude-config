@@ -103,6 +103,14 @@ schema (= そもそも書けなくする) で守る。 片方で両方を守ろ�
 実装 = [`scripts/check-confidential-leak.py`](../scripts/check-confidential-leak.py) (pre-commit BLOCK)。
 機密文書の置き場所と索引範囲は machine-local の一覧 file が宣言する (= script には書かない)。
 
+<a id="paraphrase-reading-list"></a>**言い換えは gate にできないが、 読む候補は語彙の重なりで出せる** (2026-09-14)。 自分の言葉で書き直した例示も、
+その文書に固有の語 (模型名・macro・parameter の値) を運んでいることが多い。 [`scripts/scan-private-vocabulary.py`](../scripts/scan-private-vocabulary.py)
+`--scan <公開 repo>` が「公開 repo と非公開 repo が共有し、 他の repo ではほとんど使われない語」 を file:回数 付きで出す
+(`--staged` / `--diff A..B` なら追加行だけ = hoist の commit 前、 `--source-ext .tex --kinds word,control,decimal` で原稿由来に絞る。
+実測で公開 2 repo が 76 行 / 241 行)。 **出力は finding でなく読む候補** (公刊文献と原稿は語彙を共有する)、 しかも非公開 repo 名と
+語彙そのものを含むので端末に留める。 ⚠️ 評価の文章 (査読所見・模擬審査の指摘) は普通の語で書かれるので、 語彙の重なりにも
+出ない = 過程の語で別に走査する ([`convention-design-principles.md#sweep-null-needs-per-form-control`](../docs/convention-design-principles.md#sweep-null-needs-per-form-control))。
+
 ### 指紋の閾値は測って決める
 
 実測 (2026-09-12、 追跡 file 830,786 行に対して。 空白を除いた連続 24 文字を 1 断片):
@@ -197,6 +205,11 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 
 公開 repo の未公開文書の逐語は、 gate (追加行だけを見る) とは別に `scripts/check-unpublished-quote.py --scan-tree <repo>` で現在の全 file を棚卸しできる (2026-09-13 に公開 2 repo を走査し、 残っていた 1 件を一般形に直して 0 件)。
 
+<a id="cleanup-record-by-location"></a>**是正の記録は、 消した文言を書き写さずに所在で書く** (2026-09-14)。 結果表や漏洩の台帳を diff を読みながら埋めると、
+消したはずの文言が記録の側に移り、 そこから commit message へ運ばれる。 [`scripts/commit-hunk-anchors.py`](../scripts/commit-hunk-anchors.py)
+`<commit | A..B>` が hunk ごとに file・新しい側の行・直前の anchor (Markdown の `<a id>`、 Python は def/class) だけを出す
+(本文も見出しの文字列も出さない。 `--summary` で file × 節ごとの件数)。 公開 2 repo の是正 92 行の表をこれで埋めた。
+
 ---
 
 ## 7. この規約を実装している script
@@ -209,6 +222,8 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 | [`check-gitcrypt-readable.py`](../scripts/check-gitcrypt-readable.py) | 暗号化 file がこのマシンで読めるか (全 repo) | `.gitattributes` の `filter=git-crypt` 宣言 |
 | [`check-public-marker.py`](../scripts/check-public-marker.py) | 公開 repo の gate が入っているか: public なのに marker 無し / private なのに marker / marker があるのに hook 無し | GitHub の visibility (gh) と各 clone の marker・hook |
 | [`check-unpublished-quote.py`](../scripts/check-unpublished-quote.py) | 未公開文書の逐語 (quoted span / prose run) を公開 repo の commit と message で BLOCK / 配線監査 (カナリア 2 本、 `--through-hooks` で実 hook) / 現在の tree の棚卸し (`--scan-tree`) | 個人層の `unpublished-sources.txt` (public runner が渡す) |
+| [`scan-private-vocabulary.py`](../scripts/scan-private-vocabulary.py) | 公開 repo が非公開 repo と共有する珍しい語の一覧 (言い換えを読む候補、 gate ではない。 tree 全体 / `--staged` / `--diff`) | 無し (`.claude/public-repo.marker` の有無で公開・非公開を分ける、 `--source` / `--exclude` で絞る) |
+| [`commit-hunk-anchors.py`](../scripts/commit-hunk-anchors.py) | commit の hunk の所在 (file・行・直前の anchor / def) だけを出す = 是正の記録を本文なしで書く | 無し |
 
 いずれも **機密文字列も個人の配置も script 側に持たない**。 設定 file が無い環境では
 「対象外」 として何もしない (= 他の利用者の環境を壊さない)。
