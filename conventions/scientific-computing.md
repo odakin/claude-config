@@ -21,11 +21,11 @@ summary: 数値解析 gotchas (scale-dependent default、複素 null、固定変
 
 ある Bayesian fit pipeline の `HierarchicalBayesMean` 関数で、 `TauSqMax` (= τ² の積分上端) の default が固定値 `1000` (= 中性子寿命系の s² 単位を想定)。同じコードを単位が桁で違う量 (GeV² 単位) の解析に port した際、 10 万倍オーバーで τ² grid 50 点がほぼ全域で integrand ≈ 0 になり、 HB(α=0) の値が既存の公式値と小数第 3 位まで「一致」したように見えた。実際の正しい値は誤差を超えてずれていた。 詳細 RCA は該当リポの `DESIGN.md` に記載。
 
-### 実例 (2026-05-25、 同 pipeline で MuRange propagation case = sibling defect 13 ヶ月遅延発見)
+### 実例 (2026-05-25、 同 pipeline で MuRange propagation case = sibling defect 約 5 週遅延発見)
 
-同じ `HierarchicalBayesMean` 関数で **別の scale-blind default** `MuRange` (= μ 積分の bracket) の default が固定 `{Min[xs] - 10, Max[xs] + 10}` (= 中性子寿命系の s 単位、 spread ~5 を想定した margin 10)。 無次元の量 (data spread が 0.1 程度) に port した際、 margin 10 が data spread の **100 倍以上過大** → μ grid 400 点で posterior peak を 1-2 点しか拾えず Trapz discretization で HB SE が **数十 % inflated** + NIntegrate::precw 多発。 13 ヶ月 (2026-04-20 → 2026-05-25) 文書化された値が under-resolved な wrong value のまま使われていた。
+同じ `HierarchicalBayesMean` 関数で **別の scale-blind default** `MuRange` (= μ 積分の bracket) の default が固定 `{Min[xs] - 10, Max[xs] + 10}` (= 中性子寿命系の s 単位、 spread ~5 を想定した margin 10)。 無次元の量 (data spread が 0.1 程度) に port した際、 margin 10 が data spread の **100 倍以上過大** → μ grid 400 点で posterior peak を 1-2 点しか拾えず Trapz discretization で HB SE が **数十 % inflated** + NIntegrate::precw 多発。 2026-04-20 の fix から 2026-05-25 の発見まで約 5 週 (35 日)、 この default は残ったままで、 その間に port した先で文書化された値は under-resolved な wrong value だった。
 
-**根本因 (= 2026-04-20 fix の narrow scope)**: 2026-04-20 の §1 fix は flagged された `TauSqMax` のみ scale-adaptive 化したが、 同 file 同 function の **同形式 default (= `MuRange`)** を sweep しなかった。 同 trait family の sibling defect を残置 → 13 ヶ月後に別 unit system (= 無次元の量) で symptom 顕在化。
+**根本因 (= 2026-04-20 fix の narrow scope)**: 2026-04-20 の §1 fix は flagged された `TauSqMax` のみ scale-adaptive 化したが、 同 file 同 function の **同形式 default (= `MuRange`)** を sweep しなかった。 同 trait family の sibling defect を残置 → 約 5 週後に別 unit system (= 無次元の量) で symptom 顕在化。
 
 ### 実例 (2026-06-01、 scale-adaptive default 自体が「非 robust 統計量 + outlier」で破綻 = 3 例目、 §1 framing を 2 方向に拡張)
 
@@ -445,7 +445,7 @@ Ward 恒等式・対称性・内部無矛盾性・projector 代数 等の check 
 ### 防止策
 
 1. **overall scale は『同じ機構で既知量を計算』 して calibrate**: 自分の loop / 数値機構 (= 積分 measure・trace・pole 抽出・単位) で、 textbook 値が分かっている量を計算し、 一致を確認。 例: 場の理論の loop 機構なら QED vacuum polarization (= 1 Dirac fermion で発散 |Π|=4/3、 units 1/(16π²ε)、 transverse も同時 check)。 これが ratio check では届かない絶対 scale の唯一の anchor。
-2. **外部比較は magnitude と sign を分けて述べる**: 絶対値は calibrate 可能だが、 符号は規約依存 (= Euclidean vs Minkowski、 self-energy の overall sign 定義 等) のことが多い。 「match」 と一括りにせず「magnitude 一致 (calibrate 済) / sign は規約依存」 と分けて記す。
+2. **外部比較は magnitude と sign を分けて述べ、 sign は写像で閉じる**: 絶対値は防止策 1 で calibrate できるが、 符号は規約 (= Euclidean vs Minkowski、 self-energy の overall sign 定義 等) で変わりうる。 「match」 と一括りにせず magnitude と sign を分けて記す。 ただし **「sign は規約依存」 と書いて閉じない** — 両側の定義を並べて写像を計算し、 一致を示すまで sign は unverified のまま carrier に載せる (正本 = [`paper-audit.md#convention-difference-closure`](paper-audit.md#convention-difference-closure) Rule 1–2)。 書き方の例: 「magnitude 一致 (calibrate 済) / sign 未検証 (carrier: <TODO / 検査名>)」。
 3. **doc の数値 claim には実 check を紐付ける**: 「~を 1e-16 で満たす」 等と書いたら、 それを実際に検証する script が存在するか確認。 無ければ claim は未検証 — check を足す (= 「cell 埋めでなく error expose」 の claim-vs-check 版)。
 4. **calibration は『その既知量が exercise した構造的特徴』 の scale しか fix しない** (= calibration の scope 限界): 防止策 1 の QED calibration (= 単一添字 γ^μ 頂点) は、 target が持つ richer な構造 (= 多添字の縮約 / index-mixing) を cover しない。 単純構造の calibration pass を「pipeline 全体が absolute に正しい」 と一般化すると、 target の未 calibrate な構造を **crude な射影のまま信じる**死角になる (= §8 防止策 4「特殊値縮退」 の構造版 = **特殊構造縮退**)。 汚染されうる量は crude な index-trace/sum でなく、 **汚染構造が恒等的に消える clean probe** (= 関心量に直交する添字・配置を選ぶ) で直接抽出して cross-check する (= calibration が validation した「構造的特徴」 が target の構造を網羅しているかを問う、 一般則は [`convention-design-principles.md §8.8`](../docs/convention-design-principles.md#proxy-blind-spot) list-audit implicit-scope の数値 calibration 版)。
 
@@ -458,13 +458,14 @@ Fock 空間の演算子と、その展開係数である数値スピノルも区
 ### 実例 (2026-06、 場の理論の 1-loop 2 点関数)
 
 - 内部 check (2 種の Ward 恒等式 / projector 代数 / massless 極限) は全て ratio で overall normalization を constrain せず。 外部 conformal-anomaly 照合 (= form factor vs central charge c) が初の絶対 anchor だったが、 それ自体「自分の値が標準単位」 前提に**循環依存**していた。 → QED vacuum polarization を同機構で計算し |Π|=4/3 (textbook 一致) で scale を独立 calibrate、 magnitude match が solid 化。
-- 一方 QED は +4/3 (textbook −4/3) で **符号が規約依存** と判明 → 「magnitude 一致 + sign 規約依存」 と分けて記載 (= 当初 sign 込みで一括 match を主張していたのを訂正)。
+- 一方 QED は +4/3 (textbook −4/3) で **符号が規約依存** と判明 → 「magnitude 一致 + sign 規約依存」 と分けて記載 (= 当初 sign 込みで一括 match を主張していたのを訂正)。 ⚠️ 分けて書いた点は正しいが、 この「規約依存」 は写像を計算していない = [`paper-audit.md#convention-difference-closure`](paper-audit.md#convention-difference-closure) の基準では sign は unverified で、 閉じた記録として読まない (防止策 2 は 2026-09-14 にこの基準へ合わせた)。
 - projector 代数を「note は 1e-16 で満たすと主張」 していたが regression が未検証だった → 検証 script を追加 (= 防止策 3)。
 
 ### Anti-pattern
 
 - 全 ratio/構造 check pass を「結果は absolute に正しい」 と読み、 overall scale の死角を見落とす
 - 外部既知量との「match」 を magnitude と sign 一括で主張 (= 符号規約の罠)
+- sign の食い違いを「規約依存」 の語で閉じる (= 写像の計算も carrier も無い、 [`paper-audit.md#convention-difference-closure`](paper-audit.md#convention-difference-closure))
 - 単純構造の calibration (例: 単一添字頂点) pass を「pipeline 全体が airtight」 と一般化し、 target の未 calibrate な構造 (= 多添字 mixing 等) を crude 射影のまま信じる (= calibration の scope を validation した構造に限定して読まない)
 - doc に「verified」 と書くが実 check の script が無い
 
