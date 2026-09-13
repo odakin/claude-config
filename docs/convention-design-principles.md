@@ -1290,6 +1290,9 @@ origin: 申請の再提出で、`submitted/<日付>/` に「上げるはずだ�
    検出器側にも ⃠ (= 第三の状態) を出させる ([#required-field-fabrication](#required-field-fabrication) と同じ
    「無いを機械可読にする」)。
 4. 下流は**書式で信じる**。doc の一文は次の session にも user への助言にも等しく効く、と想定して書く。
+5. **公開層では、観察の印は「実測」 だけにする**。日付・件数・対象 (どの申請・どの案件) の来歴は非公開の記録に置く。
+   公開の手順書では、来歴そのものが owner の活動の事実になる ([`CLAUDE.md#owner-activity-facts`](../CLAUDE.md#owner-activity-facts))。
+   システムの挙動がいつ真だったか (§2.6) の日付は残してよい。 消すのは owner の出来事の日付と件数。
 
 §2.6 [#time-decaying-fact-authoring](#time-decaying-fact-authoring) が「いつ真だったか」 を要求するのに対し、
 本節は「**どうやって知ったか**」 を要求する。両方とも undated/unsourced な断定を禁じる規律。

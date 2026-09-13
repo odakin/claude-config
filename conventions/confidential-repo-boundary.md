@@ -222,6 +222,7 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 | [`check-gitcrypt-readable.py`](../scripts/check-gitcrypt-readable.py) | 暗号化 file がこのマシンで読めるか (全 repo) | `.gitattributes` の `filter=git-crypt` 宣言 |
 | [`check-public-marker.py`](../scripts/check-public-marker.py) | 公開 repo の gate が入っているか: public なのに marker 無し / private なのに marker / marker があるのに hook 無し | GitHub の visibility (gh) と各 clone の marker・hook |
 | [`check-unpublished-quote.py`](../scripts/check-unpublished-quote.py) | 未公開文書の逐語 (quoted span / prose run) を公開 repo の commit と message で BLOCK / 配線監査 (カナリア 2 本、 `--through-hooks` で実 hook) / 現在の tree の棚卸し (`--scan-tree`) | 個人層の `unpublished-sources.txt` (public runner が渡す) |
+| [`check-activity-facts.py`](../scripts/check-activity-facts.py) | owner の非公開の活動の事実 (応募・採否・事務の指摘・推薦の時期と件数と固有名) を公開 repo の commit と message で見る: 固有語 = BLOCK / 出来事の語 × 日付・件数 = 警告 / `--scan-tree` = 承認済み一覧つきの棚卸し ([`CLAUDE.md#owner-activity-facts`](../CLAUDE.md#owner-activity-facts)) | 個人層の `activity-fact-terms.txt` と承認済み一覧 |
 | [`scan-private-vocabulary.py`](../scripts/scan-private-vocabulary.py) | 公開 repo が非公開 repo と共有する珍しい語の一覧 (言い換えを読む候補、 gate ではない。 tree 全体 / `--staged` / `--diff`) | 無し (`.claude/public-repo.marker` の有無で公開・非公開を分ける、 `--source` / `--exclude` で絞る) |
 | [`commit-hunk-anchors.py`](../scripts/commit-hunk-anchors.py) | commit の hunk の所在 (file・行・直前の anchor / def) だけを出す = 是正の記録を本文なしで書く | 無し |
 

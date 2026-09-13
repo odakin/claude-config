@@ -225,6 +225,9 @@ run_leak_matcher() {
   #   - 近接 (評価語 → 数字) → 「Stage 1 の評点」 のような段階番号で FP
   #     (実測: 実際の sanitize 後 message がこれで落ちた)
   # 種目名と評価語が同じ message に同居して初めて「特定の申請への評価」 になる。
+  # ⚠️ 訂正: 「種目名だけ → 正当」 は制度を一般に論じる文についてだけ正しい。 種目名に日付・件数・
+  # 提出・差し戻しが並ぶ文は owner の活動の事実で、 Tier E (check-activity-facts.py) が見る
+  # (CLAUDE.md#owner-activity-facts)。
   #
   # 層: **種目名は値なので個人層** ($personal_layer/review-instance-terms.txt、
   # 無ければ本 check は skip)。 評価語は制度に依らない一般語なので本 file が持つ。

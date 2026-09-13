@@ -286,6 +286,16 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-unpubl
   unset XDG_CACHE_HOME
 fi
 
+# Tier E (2026-09-14): activity facts. A literal from the mock layer's activity-fact-terms.txt blocks; an event word
+# next to a date only warns. Fixture strings are split so this file does not trip the engine's own inventory.
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-activity-facts.py" ]; then
+  printf '%s\n' 'MOCKPROGRAM' > "$MOCK_LAYER/activity-fact-terms.txt"
+  expect_block "block-activity-fact-term" 'Uses the MOCKPROGRAM form for the budget table.'
+  expect_pass "pass-activity-fact-warn-only" "20""31-04-02 に ""応募"" の様式を直した"
+  expect_pass "pass-activity-fact-procedure" '差し戻しは正常フローで、窓は何度でも開く'
+  rm -f "$MOCK_LAYER/activity-fact-terms.txt"
+fi
+
 # ====================================================================
 echo ""
 echo "=== public-precommit-runner self-test ==="

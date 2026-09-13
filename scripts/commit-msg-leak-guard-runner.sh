@@ -119,6 +119,22 @@ if [ -z "$HITS" ] && [ "${CLAUDE_UNPUBLISHED_GUARD:-1}" != "0" ] && [ -f "$UQ_EN
 fi
 
 # ----------------------------------------------------------------------
+# Tier E (2026-09-14): owner の非公開の活動の事実が message に入っていないか (engine = check-activity-facts.py、
+# 固有語 = 個人層 activity-fact-terms.txt → BLOCK、 出来事の語 × 日付・件数 → 警告だけ)。
+# escape hatch: CLAUDE_ACTIVITY_FACTS_GUARD=0。 規律 = CLAUDE.md#owner-activity-facts
+# ----------------------------------------------------------------------
+AF_ENGINE="$SELF_DIR/check-activity-facts.py"
+if [ -z "$HITS" ] && [ "${CLAUDE_ACTIVITY_FACTS_GUARD:-1}" != "0" ] && [ -f "$AF_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  af_rc=0
+  af_out="$(python3 "$AF_ENGINE" --message-file "$MSG_FILE" 2>&1)" || af_rc=$?
+  [ -n "$af_out" ] && printf '%s\n' "$af_out" >&2
+  if [ "$af_rc" -eq 1 ] && printf '%s' "$af_out" | grep -q '\[activity-facts\] the commit message contains a literal'; then
+    echo "[commit-msg-leak-guard-runner] commit rejected (activity-facts). bypass once: CLAUDE_ACTIVITY_FACTS_GUARD=0" >&2
+    exit 1
+  fi
+fi
+
+# ----------------------------------------------------------------------
 # 判定
 # ----------------------------------------------------------------------
 if [ -z "$HITS" ]; then

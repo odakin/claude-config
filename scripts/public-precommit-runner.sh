@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# public-precommit-runner.sh — 公開リポ pre-commit gate（Tier A 構造 / B literal / C private repo 名 / D 未公開文書の逐語 + local-only 機密）
+# public-precommit-runner.sh — 公開リポ pre-commit gate（Tier A 構造 / B literal / C private repo 名 / D 未公開文書の逐語 + local-only 機密 / E 活動の事実）
 # public-precommit-runner.sh — 公開リポの pre-commit gate
 #
 # 正本: claude-config/scripts/public-precommit-runner.sh
@@ -319,6 +319,22 @@ if [ -z "$HITS" ]; then
       [ -n "$cl_out" ] && printf '%s\n' "$cl_out" >&2
       if [ "$cl_rc" -eq 1 ] && printf '%s' "$cl_out" | grep -q '\[confidential-leak\]'; then
         echo "[public-precommit-runner] commit rejected by Tier D (confidential-leak). bypass once: CLAUDE_LEAK_GUARD=0" >&2
+        exit 1
+      fi
+    fi
+    # Tier E (2026-09-14): owner の非公開の活動の事実 (何に・いつ・何件応募したか、 事務の指摘、 推薦、 固有名)。
+    # 識別子でも文書の文でもないので A-D は見ない。 engine = check-activity-facts.py: 個人層 activity-fact-terms.txt の
+    # 固有語 (プログラム名・領域番号・提出物 file 名の語幹) → BLOCK / 出来事の語 × 日付・件数の共起 → 警告だけ。
+    # 較正 = 公開 2 repo の直近 927 commit に replay して、 警告は 80 commit、 固有語の BLOCK は 14 commit (全件が実際の漏洩)。
+    # 止めるのは「exit 1 かつ engine の見出し」 のときだけ。 escape hatch: CLAUDE_ACTIVITY_FACTS_GUARD=0。
+    # 規律 = CLAUDE.md#owner-activity-facts
+    AF_ENGINE="$(dirname "$0")/check-activity-facts.py"
+    if [ "${CLAUDE_ACTIVITY_FACTS_GUARD:-1}" != "0" ] && [ -f "$AF_ENGINE" ]; then
+      af_rc=0
+      af_out="$(CLAUDE_PERSONAL_LAYER="${PERSONAL_LAYER:-${CLAUDE_PERSONAL_LAYER:-}}" python3 "$AF_ENGINE" 2>&1)" || af_rc=$?
+      [ -n "$af_out" ] && printf '%s\n' "$af_out" >&2
+      if [ "$af_rc" -eq 1 ] && printf '%s' "$af_out" | grep -q '\[activity-facts\] the staged change contains a literal'; then
+        echo "[public-precommit-runner] commit rejected by Tier E (activity-facts). bypass once: CLAUDE_ACTIVITY_FACTS_GUARD=0" >&2
         exit 1
       fi
     fi

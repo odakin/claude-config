@@ -298,6 +298,18 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-unpubl
   rm -f "$MOCK_LAYER/unpublished-sources.txt"; unset XDG_CACHE_HOME
 fi
 
+# Tier E (2026-09-14): activity facts in the message (literal blocks, co-occurrence only warns; split fixtures).
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-activity-facts.py" ]; then
+  printf '%s\n' 'MOCKPROGRAM' > "$MOCK_LAYER/activity-fact-terms.txt"
+  expect_block "block-activity-fact-term-in-message" 'Fix the MOCKPROGRAM budget table'
+  af_msg="$TMPDIR_TEST/msg-af-$RANDOM.txt"
+  printf '%s' "Fix the form used on 20""31-04-02 for the ""応募""" > "$af_msg"
+  af_err="$("$RUNNER" "$af_msg" message 2>&1 >/dev/null)"; af_rc=$?
+  if [ "$af_rc" = "0" ] && printf '%s' "$af_err" | grep -q '\[activity-facts\]'; then PASS=$((PASS+1)); else
+    FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [exit=$af_rc, warning shown?] pass-activity-fact-warn-only-in-message\n"; fi
+  rm -f "$MOCK_LAYER/activity-fact-terms.txt"
+fi
+
 # ====================================================================
 echo ""
 echo "=== commit-msg-leak-guard-runner self-test ==="
