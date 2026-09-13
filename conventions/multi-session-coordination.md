@@ -392,6 +392,9 @@ sender 側は上記 spawn-spec template を書いて chip を投げる。 receiv
 1. **spec が述べる外部 state は起票時点の snapshot** — 「CI が N 回連続で落ちている」 「まだ誰も直していない」 「X は未反映」 のように行動を分岐させる state の主張は、 着手前に live の一次 source (run 履歴・`git log origin/<branch>`・対象 file) で 1 回照会してから信用する。 起票から着手までの間に、 別 session が同じ問題を片付けていることがある。 実例 (2026-09-11): 「checks が直近 100 run すべて failure、 修正 commit を push して green を確認せよ」 という spec を受けた時点で、 別 session (Codex) の修正が約 2 時間前に push 済みで、 後続 4 run が green だった。 着手前の `gh run list` 1 回で重複修正を避け、 task は「原因と起点の確定 + 修正の検証」 に縮んだ。 [§3 の SESSION narrative の stale](#prev-commit-as-foreign) と同じ「state を書いた時点と読む時点のずれ」 を、 spec (= 他 session が自分宛てに書いた文) に当てたもの。 CI の場合の手順 = [`debugging-discipline.md#ci-red-streak-forensics`](debugging-discipline.md#ci-red-streak-forensics)。
 2. **起票側は対象 repo を `cwd` で明示する** — `spawn_task` の `cwd` は省略すると起票元 session の project になる (tool の仕様)。 起票元と別の repo の task を投げるときに省くと、 受け手は task と無関係な root で起動する。 実例 (同日): claude-config の CI task が、 封じた査読 sandbox (= CLAUDE.md が `~/Claude/` の読取と sandbox 外への書込を禁じる dir) を root にして起動した (起動経路は未確認。 `cwd` を省いた chip なら同じことが起きる)。
 3. **受け手の root の指示 file が task と矛盾したら、 最初の返信で矛盾を表に出す** — どちらも owner の指示なので、 黙ってどちらかを捨てない。 chat の明示指示に従って進めるなら、 (a) その旨を最初の返信に書く (= user が止められる)、 (b) 矛盾した root には何も書かない (結果 file・handoff・harness の自動 memory。 memory は起動時の root の project に紐づき、 次にその root で起動する session に自動 load される)、 (c) その root を使う別 session (例: 封じた sandbox の reviewer) に message を送らない、 (d) 後続の chip は `cwd` を対象 repo にする。 封じた sandbox 側の規則 = [`cold-eyes-isolation.md#sealed-sandbox`](../../ai-collaboration/conventions/cold-eyes-isolation.md#sealed-sandbox) の 8。
+4. **session の記録を読む仕事は、 どのマシンで走らせるかを spec に書く** — Claude Code の session 記録 (`~/.claude/projects/<slug>/*.jsonl`) は
+   マシンごとに別で、 同期されない。 別のマシンで書かれた session の記録は読めないので、 spec に「このマシンに無い id は記録なしと書き、
+   推測で埋めない」 を入れる (2026-09-14、 原因分析の作業書を別マシンに投げかけて気づいた)。
 
 ### 注意 (caveat)
 

@@ -329,6 +329,14 @@ sections:
     legacy: "8.44"
     level: 3
     title: "8.44 規則は「それを破る行為をする session」 が読み込む場所に置く — 正しい repo に書いた規則でも、 行為の場所から見えなければ無いのと同じ (2026-09-13)"
+  - id: rule-gap-not-owner-decision
+    legacy: "8.45"
+    level: 3
+    title: "8.45 規則に class が無いことから生じた迷いを、 owner の判断として中立に渡さない (2026-09-14)"
+  - id: semantic-detector-ack-ratchet
+    legacy: "8.46"
+    level: 3
+    title: "8.46 誤検出を持つ意味の検出器は、 承認を「行の中身の hash」 に縛って固定する (2026-09-14)"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

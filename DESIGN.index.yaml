@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: public-gate-tier-e
+    legacy: "2026-09-14"
+    level: 2
+    title: "2026-09-14: 公開 repo の Tier E (owner の非公開の活動の事実)"
   - id: public-gate-tier-d
     legacy: "2026-09-13"
     level: 2

@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-14: 公開 repo の Tier E (owner の非公開の活動の事実)](#public-gate-tier-e)
 - [2026-09-13: 公開 repo の Tier D (未公開文書の逐語) と marker 点検](#public-gate-tier-d)
 - [2026-09-11: 既存図の情報を inventory 後に置換する](#figure-replacement-information-design)
 - [2026-09-11: INSPIRE 監査は texkey から安定 identifier へ fallback](#inspire-stable-id-fallback)
@@ -36,6 +37,23 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="public-gate-tier-e"></a>2026-09-14: 公開 repo の Tier E (owner の非公開の活動の事実)
+
+**判断**:
+- 識別子・未公開文書の文に続く 3 つめの class として、 owner の非公開の活動の事実 (応募・採否・事務の指摘・推薦・期限の超過) を公開 repo で見る。
+- 固有語 (個人層 `activity-fact-terms.txt`) = BLOCK。 出来事の語と日付・件数が同じ行 = commit 時は警告だけ。 棚卸し (`--scan-public`) = 承認済み一覧に無い行があれば FAIL
+  ([`docs/convention-design-principles.md#semantic-detector-ack-ratchet`](docs/convention-design-principles.md#semantic-detector-ack-ratchet))。
+- 出来事の語は研究費・審査・推薦に特有の語に絞る。 手順の文にも出る語 (提出・申請・審査・指摘・締切・超過) は入れない。
+- engine が壊れたときは止めない (exit 1 かつ engine の見出しのときだけ止める)。
+
+**却下した案**:
+- 共起で BLOCK する = 公開 2 repo の直近 927 commit に replay すると、 語を絞る前は約 20% の commit で発火した (絞った後で約 9%)。
+- 固有語を Tier B の `sensitive-terms.txt` に足す = そちらはマシンごとの非追跡 file で、 別のマシンに届かない。
+- path 単位の除外 = その file に後から入った本物も黙る。
+
+**un-defer trigger**: 同じ class の漏洩が Tier E の後に 1 件でも公開 repo で見つかったら、 語の共起でなく「公開層に書いてよい文の型」 を決める方式を再検討する
+(再検討の作業は owner の個人層で進行中)。 規則 = [`CLAUDE.md#owner-activity-facts`](CLAUDE.md#owner-activity-facts)。
 
 ## <a id="public-gate-tier-d"></a>2026-09-13: 公開 repo の Tier D (未公開文書の逐語) と marker 点検
 

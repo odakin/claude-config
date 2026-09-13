@@ -205,6 +205,11 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 
 公開 repo の未公開文書の逐語は、 gate (追加行だけを見る) とは別に `scripts/check-unpublished-quote.py --scan-tree <repo>` で現在の全 file を棚卸しできる (2026-09-13 に公開 2 repo を走査し、 残っていた 1 件を一般形に直して 0 件)。
 
+公開層に上げてしまった物を**非公開へ戻す**ときは、 消すのでなく移す: ① 非公開 repo へ verbatim で写す (anchor id も同じに) →
+② 公開側は一般則だけに書き直す (script なら結果を実装した関数を非公開の module へ、 汎用の道具は残す) → ③ 非公開側の呼び元
+(shim・検査・文献台帳) を新しい置き場所へ付け替え、 検査を回す → ④ 公開側の転送表・索引から消えた anchor の行を削る。 履歴には残るので、
+履歴を書き換えるかは owner の判断 (既定 = 書き換えない)。
+
 <a id="cleanup-record-by-location"></a>**是正の記録は、 消した文言を書き写さずに所在で書く** (2026-09-14)。 結果表や漏洩の台帳を diff を読みながら埋めると、
 消したはずの文言が記録の側に移り、 そこから commit message へ運ばれる。 [`scripts/commit-hunk-anchors.py`](../scripts/commit-hunk-anchors.py)
 `<commit | A..B>` が hunk ごとに file・新しい側の行・直前の anchor (Markdown の `<a id>`、 Python は def/class) だけを出す
