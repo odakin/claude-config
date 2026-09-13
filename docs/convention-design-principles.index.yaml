@@ -669,6 +669,10 @@ sections:
     legacy: "20.5.3"
     level: 3
     title: "20.5.3 散文に焼いた「個数」 は、本文が伸びた瞬間に嘘になる"
+  - id: derived-value-beside-inputs
+    legacy: "20.5.4"
+    level: 3
+    title: "20.5.4 派生値を入力の隣に書くなら、 書く時に計算する — 並べた日付と期間は最初から合っていないことがある"
   - id: premise-expiry-scope
     legacy: "20.4"
     level: 3

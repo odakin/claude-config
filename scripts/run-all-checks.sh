@@ -10,6 +10,7 @@
 #   1b. 生成 doc の同期        (generate-tree.py --check: CLAUDE.md tree / CONVENTIONS.md 列挙 / conventions/README.md)
 #   2. 手動保守 index / script inventory / Codex integration contract の整合
 #   3. python validator selftest 群 (--selftest を持つ全 script を自動発見)
+#   3b. foil の歯               (scripts/*.mutants.json を check-foil-teeth.py で = 修正の一部を外した mutant でも selftest)
 #   4. bash test 群            (hooks/*.test.sh + scripts/**/*.test.sh)
 #   5. bash 構文検査           (setup.sh + hooks/*.sh + scripts/*.sh の bash -n)
 #   6. merge conflict marker 残置検査 (tracked file 全対象の git grep)
@@ -78,6 +79,14 @@ for py in scripts/*.py; do
     if grep -q -- "--selftest" "$py"; then
         run "selftest: $(basename "$py")" python3 "$py" --selftest
     fi
+done
+
+# 3b. foil の歯: *.mutants.json を持つ script は、 修正の一部を外した mutant でも selftest を回し、
+#     落ちるはずの check が落ち、 残るはずの check が残ることを見る (発見条件 = scripts/ 直下の *.mutants.json)。
+#     一般則 = ai-collaboration conventions/physics-verification-cycle.md#foil-teeth-per-fix-part
+for spec in scripts/*.mutants.json; do
+    [ -f "$spec" ] || continue
+    run "foil teeth: $(basename "$spec")" python3 scripts/check-foil-teeth.py "$spec"
 done
 
 # 4. bash test 群

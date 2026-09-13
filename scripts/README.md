@@ -7,6 +7,7 @@
 リポ全体の構造 tree = [CLAUDE.md](../CLAUDE.md)。
 
 - **[affix-image-xlsx.py](affix-image-xlsx.py)** — Place an image (seal / signature) into an .xlsx via Excel.app — without destroying the file.
+- **[apply-text-pairs.mutants.json](apply-text-pairs.mutants.json)** — apply-text-pairs.py の selftest の foil に歯があることを、 修正の一部を外した mutant 6 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[apply-text-pairs.py](apply-text-pairs.py)** — (old, new) の置換 pair 列を 1 file に当てる前に、 契約 (各 old は正確に 1 回 / 全検査が通るまで書かない) に加えて「再実行で二重に入る」「old が長い別物の先頭」 を拒否し、 必要なら patch 後の写しで test を回してから、 原子的に書く。--selftest 内蔵。
 - **[arxiv-package.py](arxiv-package.py)** — arXiv 投稿用の source package を作って検査する (コメント除去 / .bbl + .bib + .bst 同梱 / 包装物だけで組版 / 元原稿と PDF テキスト一致 / bibtex 再実行で .bbl 再現)。 metadata (題・abstract の平文化と照合) と arXiv の組版 PDF との頁ごと照合も。 --selftest 内蔵。 conventions/paper-submission.md#arxiv-package-tool
 - **[audit-codex-integration.sh](audit-codex-integration.sh)** — Codex 導入と指定 repo の root AGENTS.md / Git gate を read-only で確認する
@@ -27,8 +28,10 @@
 - **[check-display-math-style.py](check-display-math-style.py)** — Display-math house-style gate for LaTeX manuscripts (2026-09-09).
 - **[check-doc-truncation.py](check-doc-truncation.py)** — 台帳 doc の「黙って消える」削除を git 高水位で検出（表の行/list/見出し/entry の大幅減、[truncation-ok] で baseline reset、config 駆動）
 - **[check-docx-integrity.py](check-docx-integrity.py)** — docx の Word「破損」判定源を Word 不要・決定論で検出（single-quote 宣言 / checkbox 状態↔グリフ / bookmark / table grid / dangling r:id 等、 office-automation.md#docx-checkbox-content-control）
+- **[check-duration-beside-dates.py](check-duration-beside-dates.py)** — 散文に書いた期間 (N ヶ月 / N 週 / N 日 / N months …) が、 同じ段落に並べた日付の範囲 (YYYY-MM-DD → YYYY-MM-DD) の実際の差と桁で食い違う箇所を候補として出す (書いた時点の計算違いと、 その写しを拾う on-demand の走査)。--selftest 内蔵。
 - **[check-first-reply-stamp.py](check-first-reply-stamp.py)** — 最初の返信に自己同定 stamp (I7) が出たかを transcript から数える事後 audit
 - **[check-fleet-status.py](check-fleet-status.py)** — fleet heartbeat の reader（全マシン分の beat を読み role 別に異常 surface = always-on の heartbeat 停止 🔴 / best-effort のスリープは仕様で silent / beat が新鮮な時の server auth/version error 🔴。finding 0 件 silent、fetch しない = 呼び出し側が鮮度担保、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
+- **[check-foil-teeth.py](check-foil-teeth.py)** — selftest の foil に歯があるかを、 修正の一部だけを外した mutant で確かめる (mutant ごとに、 落ちるはずの check が FAIL し、 残るはずの check は PASS のまま = foil が互いに独立) — mutant は対象 script の隣の `<name>.mutants.json` に宣言する。--selftest 内蔵。
 - **[check-form-clipping.py](check-form-clipping.py)** — 生成 form PDF で「記入値が描画時に clip された」のを機械検出。
 - **[check-gitcrypt-readable.py](check-gitcrypt-readable.py)** — 暗号化 file が「このマシンで実際に読めるか」を必ず可視に報告する。
 - **[check-inbound-refs.py](check-inbound-refs.py)** — safety net for restructuring claude-config (layer 1).

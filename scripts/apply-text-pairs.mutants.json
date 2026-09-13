@@ -1,0 +1,89 @@
+{
+  "_comment": "apply-text-pairs.py の selftest の foil に歯があることを、 修正の一部を外した mutant 6 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 mutant ごとの expect_pass は、 その foil が前の foil の失敗に引きずられずに判定していることを見る。 mutant 6 は、 ラベルは一致数の検査なのに実際は token 境界の検査で落ちていた foil を見つけて直した跡 (2026-09-14)。",
+  "target": "apply-text-pairs.py",
+  "run": "python3 {} --selftest",
+  "mutants": [
+    {
+      "name": "TARGET を解決しない + 写し先の fallback も無い (2026-09-14 修正前の版)",
+      "pairs": [
+        ["    target = Path(os.path.realpath(target))\n", ""],
+        ["(target.parent.name or \"root\")", "target.parent.name"]
+      ],
+      "expect_fail": [
+        "bare relative TARGET",
+        "../ TARGET",
+        "absolute symlink does not reach the real file",
+        "keeps the link"
+      ]
+    },
+    {
+      "name": "realpath でなく abspath (相対 path は直るが symlink は辿らない)",
+      "pairs": [
+        ["target = Path(os.path.realpath(target))", "target = Path(os.path.abspath(target))"]
+      ],
+      "expect_fail": [
+        "absolute symlink does not reach the real file",
+        "keeps the link"
+      ],
+      "expect_pass": [
+        "bare relative TARGET",
+        "../ TARGET"
+      ]
+    },
+    {
+      "name": "写し先の fallback だけ (解決しない)",
+      "pairs": [
+        ["    target = Path(os.path.realpath(target))\n", ""]
+      ],
+      "expect_fail": [
+        "../ TARGET",
+        "absolute symlink does not reach the real file",
+        "keeps the link"
+      ],
+      "expect_pass": [
+        "bare relative TARGET"
+      ]
+    },
+    {
+      "name": "適用済み検査を外す (挿入型 pair の再実行 = batch-text-edits モード 6)",
+      "pairs": [
+        ["if old in new and new in text:", "if False and old in new and new in text:"]
+      ],
+      "expect_fail": [
+        "re-running the insertion pair is refused"
+      ],
+      "expect_pass": [
+        "an insertion pair applies once"
+      ]
+    },
+    {
+      "name": "token 境界の検査を外す (prefix 形の key = batch-text-edits モード 5)",
+      "pairs": [
+        ["if not allow_prefix and (", "if False and not allow_prefix and ("]
+      ],
+      "expect_fail": [
+        "stops inside a longer token is refused",
+        "starts mid-token"
+      ],
+      "expect_pass": [
+        "two matches is refused",
+        "--allow-prefix lets it through when intended",
+        "a delimiter-terminated old is not a prefix case",
+        "CJK text next to the match is not a token boundary"
+      ]
+    },
+    {
+      "name": "一致数の検査を 0 件だけにする (2 件以上を通す = batch-text-edits の契約)",
+      "pairs": [
+        ["        if n != 1:\n", "        if n == 0:\n"]
+      ],
+      "expect_fail": [
+        "two matches is refused"
+      ],
+      "expect_pass": [
+        "zero matches is refused",
+        "stops inside a longer token is refused"
+      ]
+    }
+  ]
+}

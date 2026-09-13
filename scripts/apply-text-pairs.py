@@ -184,14 +184,17 @@ def selftest() -> int:
 
         tgt.write_text(base, encoding="utf-8")
         check("zero matches is refused, nothing written", apply(tgt, [("nope", "x")], **q) == 1 and tgt.read_text() == base)
-        tgt.write_text(base + "helper\n", encoding="utf-8")
-        check("two matches is refused", apply(tgt, [("import helper\n", "import os\n"), ("helper.", "h.")], **q) == 1
-              and tgt.read_text() == base + "helper\n")
+        twice = base + "x = helper.VALUE\n"  # the second pair's old really occurs twice, both token-delimited
+        tgt.write_text(twice, encoding="utf-8")
+        check("two matches is refused",
+              apply(tgt, [("import helper\n", "import os\n"), ("helper.VALUE\n", "helper.VALUE + 0\n")], **q) == 1
+              and tgt.read_text() == twice)
 
         link = "see [k](DESIGN.md.local) and more\n"
         (d / "doc.md").write_text(link, encoding="utf-8")
         check("an old that stops inside a longer token is refused  [foil: prefix-shaped key]",
               apply(d / "doc.md", [("](DESIGN.md", "](../DESIGN.md")], **q) == 1)
+        (d / "doc.md").write_text(link, encoding="utf-8")  # independent of the foil above (mutants.json)
         check("--allow-prefix lets it through when intended",
               apply(d / "doc.md", [("](DESIGN.md", "](../DESIGN.md")], allow_prefix=True, **q) == 0)
         check("a delimiter-terminated old is not a prefix case",
@@ -240,12 +243,13 @@ def selftest() -> int:
         links.mkdir()
         via = links / "tool.py"
         via.symlink_to(tgt)  # absolute link, as an installed hook's symlink is
-        before = tgt.read_text()
+        tgt.write_text(seven, encoding="utf-8")
         check("--test through an absolute symlink does not reach the real file before the test  "
               "[foil: 2026-09-14 broken patch landed while printing 'nothing written']",
-              apply(via, broken, test="python3 {}", **q) == 1 and tgt.read_text() == before)
+              apply(via, broken, test="python3 {}", **q) == 1 and tgt.read_text() == seven)
+        tgt.write_text(seven, encoding="utf-8")
         check("writing through a symlink changes the real file and keeps the link",
-              apply(via, [("* 9", "* 10")], test="python3 {}", **q) == 0
+              apply(via, [("* 7", "* 10")], test="python3 {}", **q) == 0
               and "* 10" in tgt.read_text() and via.is_symlink())
         r = subprocess.run([sys.executable, __file__, str(pf)], capture_output=True, text=True)
         check("CLI: there is no default target (one path alone is an error)", r.returncode != 0)
