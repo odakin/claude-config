@@ -9,7 +9,7 @@ summary: 研究費/教務/学術様式の Excel xlsx を openpyxl で fill + 生
 
 > 🧠 **考え方 (原則編) は [`office-automation-principles.md`](office-automation-principles.md)** — 様式 = 「見た目が契約」 / file = 地層 / 処理 = lossy 解釈器の連鎖、 という枠組みと、 道具選択の梯子・検証 3 層モデル・既知情報 prefill / print-last 等の人間系原則。 **新しい様式・新しい罠 (= 本 file に slug が無い状況) ではまず原則編を読む**。 本 file は個別 gotcha の正本。
 
-origin: 2026-05 JST 系公募への応募で得た知見 (= 様式 1 研究計画調書 xlsx の Python 自動 fill、 figure 埋め込み、 字数制限管理、 PDF snapshot 生成、 TTS 確認)。
+origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx の Python 自動 fill、 figure 埋め込み、 字数制限管理、 PDF snapshot 生成、 TTS 確認)。
 
 > 🍳 **入口 — 多 sheet 様式 xlsx → 提出用 PDF を端から端まで** (= 構造把握 → fill → ページ分割 → 余白均等化 → 結合 → 検証) やる手順は [`multi-sheet-pdf-assembly`](#multi-sheet-pdf-assembly) の **RECIPE** に集約。 週次の様式 PDF 業務はまずそこを見る。
 
@@ -172,7 +172,7 @@ for sname in wb.sheetnames:
 3. 各 candidate に書き込み → `data_only=True` で読み戻して expected 字数を assert (= 雛形 self-check が再計算するなら整合確認も同時に走る)
 4. 並行して [`diff-form-xlsx.py`](../scripts/diff-form-xlsx.py) で label 改変を機械検証
 
-⚠️ これは経験則: 全 gov-form が従うとは限らない。 個別 form ではまず dump して確認、 「LEN 式の先 = 入力」 が成立しない例 (= 別 sheet 集計 / 縦並び list / radio button) があれば dump の値で判断。 観測元: 学振系様式 (2026-05)、 JST 系公募様式 (2026-06) で安定。
+⚠️ これは経験則: 全 gov-form が従うとは限らない。 個別 form ではまず dump して確認、 「LEN 式の先 = 入力」 が成立しない例 (= 別 sheet 集計 / 縦並び list / radio button) があれば dump の値で判断。 観測元: 複数の官製様式で安定。
 
 ## <a id="form-filename-convention"></a>ファイル命名規約 (form 別 registry)
 
@@ -180,7 +180,7 @@ for sname in wb.sheetnames:
 
 | Form | 命名規則 |
 |---|---|
-| JST 系公募の様式1 | `様式1＿研究計画調書＿<機関コード半角数字>＿<姓ローマ字><名ローマ字>.xlsx` (区切りは **全角アンダースコア `＿`**、 「様式1」 の `1` は半角、 ローマ字氏名は姓名の順で連続書き) |
+| ある公募の様式1 | `様式1＿研究計画調書＿<機関コード半角数字>＿<姓ローマ字><名ローマ字>.xlsx` (区切りは **全角アンダースコア `＿`**、 「様式1」 の `1` は半角、 ローマ字氏名は姓名の順で連続書き) |
 | 科研費 学振 DC1/DC2 | (個別の e-Rad 仕様、 form 毎に DC1.pdf / DC2.pdf 形式が指示される) |
 | 学内・財団推薦書 (汎用) | `<書類種別>_<年度>_<対象者識別>_<目的>.<拡張子>` (区切りは form 仕様に従う、 半角_全角＿混在に注意) |
 
@@ -620,7 +620,7 @@ set value of range "V11" of ws to "26279286"
 - 先頭ゼロが落ちる系 (= `007` → `7`) も同じ根。
 - ⚠️ apostrophe prefix (`'26279286`) でも文字列化できるが、 **書式固定の方が確実** (= apostrophe は Excel の版と入力経路で扱いが割れる)。
 
-origin: 2026-09-02 セミナー謝金 様式⑭-1 (= SPReAD 財源で課題番号が新しくなった回)。 fill 自体は成功していたのに機械照合だけが落ち、 原因特定に 1 往復かかった。
+origin: 謝金の様式 (= 財源が変わって課題番号が新しくなった回)。 fill 自体は成功していたのに機械照合だけが落ち、 原因特定に 1 往復かかった。
 
 ### <a id="merged-cell-text-clipping"></a>⚠️ 結合セルの長文 clipping は shrink_to_fit が効かない → font size を下げる
 
@@ -902,7 +902,7 @@ for r in range(1, ws.max_row + 1):
         ws.row_dimensions[r].height = min(409, _calc_height_for_cell(ws, r))
 ```
 
-origin: 2026-05-14 JST 系公募で 行 22 = 591.5pt / 行 26 = 2754pt の状態が「行 20-22 が非表示」 として事務担当者から指摘 → 行 22 = 30pt / 行 26 = 150pt に reset で修復。
+origin: ある公募の様式で 行の高さが極端に大きい状態が「行 20-22 が非表示」 として事務担当者から指摘 → 行の高さを reset して修復。
 
 ### <a id="topleftcell-scroll-persist"></a>sheetView.topLeftCell の scroll 位置 persistence
 
@@ -919,7 +919,7 @@ for sname in wb.sheetnames:
 
 または最初の submission で行高 (= [`row-height-409pt-limit`](#row-height-409pt-limit)) を適切化していれば、 topLeftCell も自然に A1 のままになる (= scroll 履歴が template 配布時点のまま)。
 
-origin: 2026-05-14 JST 系公募で「行 20-22 が非表示」 指摘と同時に発覚。 topLeftCell="A17" のままだと先頭の研究者情報行 (= 行 6-15) が viewport 外で「行を欠落して提出された」 と誤読される risk。
+origin: 上の「行が非表示」 指摘と同時に発覚。 topLeftCell="A17" のままだと先頭の研究者情報行 (= 行 6-15) が viewport 外で「行を欠落して提出された」 と誤読される risk。
 
 ### <a id="xlsx-rich-text-underline"></a>xlsx rich text formatting (= 部分 underline / bold / italic)
 
@@ -949,7 +949,7 @@ while True:
 cell.value = CellRichText(parts)
 ```
 
-🚨 **fill-driver caveat — plain text 転記は書式を運ばない (= 2 応募連続で同じ修正指示を受けた構造 trap)**: draft (md / plain text) から様式へ転記する fill driver は、 転記だけでは rich text 書式が乗らない。 様式 label に「本人に下線」 等の format 指示があるのに driver が `cell.value = text` で終わっていると、 **指示は構造的に落ちる** — 本 slug が既に存在し過去応募で適用実績があっても、 新 driver を書いた session がここに来なければ再演する (実例: 同一様式シリーズの第 1 回応募で本 slug を確立 → 第 2 回応募の新 driver が plain 転記のみ → 業績欄全件で下線欠落の修正指示、 2026-07)。 → **対策は driver 設計時に発火させる**: fill driver を書く前に `scan-form-instructions.py` で format 系指示を洗い ([`embedded-instruction-in-label`](#embedded-instruction-in-label))、 検出したら「転記 step の直後に rich text 適用 step」 を driver 仕様に含める (= e-Rad 系は [erad-submission.md 組み立て手順 step 0](erad-submission.md#assembly-order) が checklist 化済)。
+🚨 **fill-driver caveat — plain text 転記は書式を運ばない (= 続けて同じ修正指示を受けた構造 trap)**: draft (md / plain text) から様式へ転記する fill driver は、 転記だけでは rich text 書式が乗らない。 様式 label に「本人に下線」 等の format 指示があるのに driver が `cell.value = text` で終わっていると、 **指示は構造的に落ちる** — 本 slug が既に存在し過去応募で適用実績があっても、 新 driver を書いた session がここに来なければ再演する (実例: 同一様式シリーズの前の回で本 slug を確立 → 次の回の新 driver が plain 転記のみ → 業績欄全件で下線欠落の修正指示)。 → **対策は driver 設計時に発火させる**: fill driver を書く前に `scan-form-instructions.py` で format 系指示を洗い ([`embedded-instruction-in-label`](#embedded-instruction-in-label))、 検出したら「転記 step の直後に rich text 適用 step」 を driver 仕様に含める (= e-Rad 系は [erad-submission.md 組み立て手順 step 0](erad-submission.md#assembly-order) が checklist 化済)。
 
 **readback の 2 経路 (= 検証と再編集で使い分け)**:
 - **`load_workbook(path, rich_text=True)`** (openpyxl >= 3.1): rich text cell が `CellRichText` として読め、 **runs を直接 assert できる** (= `[b.text for b in cell.value if hasattr(b,'font') and b.font and b.font.u]` で下線 run を列挙)。 下線適用後の機械検証はこれが最短。 ⚠️ **既に rich text を持つ xlsx を再編集するときも必ず `rich_text=True` で load** する — default load で save すると既存 rich text が flatten されて消える。
@@ -965,7 +965,7 @@ print(f"Underlined runs: {underline_runs}")  # ['<applicant-initial>', '<applica
 
 xlsx XML の文字エンコード形式: ＭＳ Ｐゴシック等の全角文字は `&#65325;&#65331;` 等の numeric character reference にされる。 visual diff には decode しなければ読みにくい。
 
-origin: 2026-05-14 JST 系公募の様式 1 Sheet 2 A15 (研究業績欄) で提出者本人氏名 (= 業績欄の全行) に underline を rich text で適用。 readback は str だったが xlsx 内部 XML 上で `<u val="single"/>` × 5 個 確認で OK 検証。 2026-07-02 同シリーズ第 2 回応募の修正対応で fill-driver caveat + `rich_text=True` readback 経路を追記 (= 新 driver が plain 転記のみで下線を落とし、 業績が 1 件 1 セルだったため cell ごとに本人名 1 run の下線を `rich_text=True` load → 適用 → runs assert で修復した)。
+origin: ある公募の様式 1 の研究業績欄で提出者本人氏名 (= 業績欄の全行) に underline を rich text で適用。 readback は str だったが xlsx 内部 XML 上で `<u val="single"/>` × 5 個 確認で OK 検証。 同シリーズの次の回の修正対応で fill-driver caveat + `rich_text=True` readback 経路を追記 (= 新 driver が plain 転記のみで下線を落とし、 業績が 1 件 1 セルだったため cell ごとに本人名 1 run の下線を `rich_text=True` load → 適用 → runs assert で修復した)。
 
 ---
 
@@ -1652,7 +1652,7 @@ assert fitz.open("p1.pdf").page_count == 1
 
 **Why (= fill 側と同格の工程として扱う)**: 書き側 (fill / 変換) は本 doc で厚く規律化されている一方、 読み側は「fitz で読めば OK」 と暗黙に信頼されがち。 だが plain `get_text()` は **lossy な解釈器** (= [`office-automation-principles.md`](office-automation-principles.md) の「処理 = lossy 解釈器の連鎖」 の読み方向) であり、 表 PDF では**沈黙して間違える**。 誤帰属した値が mail / 記録 / 判断に流れると訂正コストは抽出 1 回のコストの数十倍。
 
-**origin**: 2026-07 研究費調書 (15pp) の研究組織表。 plain `get_text()` 出力で隣接する分担者の役割分担 wording が行間に混ざり、 **別の分担者の担当テーマを本人の担当と誤帰属して報告** + 経費・エフォート数値列を「layout 依存で抽出できず」 と早断 → user 訂正 (「読めない、 とかありえんやろ」) → `get_text("words")` + y-sort で全行・全数値を回収 (= 経費値は取れ、 エフォート欄は**真に空欄** = 承諾操作時の本人入力待ち、 という「空欄 vs 抽出不能」 の区別も ladder で初めて確定)。
+**origin**: ある申請書類の研究組織表。 plain `get_text()` 出力で隣接する分担者の役割分担 wording が行間に混ざり、 **別の分担者の担当テーマを本人の担当と誤帰属して報告** + 経費・エフォート数値列を「layout 依存で抽出できず」 と早断 → user 訂正 (「読めない、 とかありえんやろ」) → `get_text("words")` + y-sort で全行・全数値を回収 (= 経費値は取れ、 エフォート欄は**真に空欄** = 承諾操作時の本人入力待ち、 という「空欄 vs 抽出不能」 の区別も ladder で初めて確定)。
 
 ### <a id="docx-to-pdf-pages"></a>docx → PDF: Pages.app AppleScript が macOS では最も robust
 
@@ -1745,7 +1745,7 @@ docx を検証して「正しい」 と確認しても、 export が stale な�
 
 ⚡ **context-first reflex — 用件が「官公署様式の visual confirm」 なら最初から Pages 不可** (= 上記 reflex の前段、 2026-06 RCA で補強): ⚠️ **2026-09-02 訂正**: 旧記述は「mac default は Pages なので無思考で叩くと文脈に反する」 だったが、 **default は 2026-06-23 に Word 忠実版へ反転済** (= §入口の `docx-to-pdf.sh` 行が正本、 `--word` は現在 no-op)。 ∴ 引数なしで叩けば正式書類向けの経路に乗る — それでも **Pages を明示 (`--pages`) しないこと**が官公署様式での要点で、 以下の理由は有効 — 官公署様式・決裁書類は体裁が契約 → Pages の re-typeset で「見出し/表の重なり」 artifact が出る可能性 + そもそも reviewer は Word 体裁を見るので Pages 出力は提出にも目視確認にも不向き。 ① script を打つ前に「これは正式書類か?」 を 1 秒問う ② 正式書類なら `--word` を最初から付ける or fallback 1 (user の Word 書き出し / Word.app 目視) に直行 ③ docx が PW 暗号化なら automation はそもそも PW 入力 prompt にハマる → fallback 1 一択 (= [`docx-password-roundtrip-edit`](#docx-password-roundtrip-edit) からの誘導)。 origin = 2026-06 PW 暗号化 docx の visual confirm 場面で、 中身は python-docx readback + [`check-docx-integrity.py`](#docx-checkbox-content-control) で完全検証済なのに「画面で見たい」 欲求で default Pages を叩き、 cold-start を 3 回連続踏んだ後やっと fallback 1 (= 平文抽出 preview docx を Word.app open) に降りた RCA。 reflex を再活性化させたのは **「画面で見たい = PDF 化必須」 の誤等式** で、 実は user 目視確認は **Word.app で docx を直接開く方が早い** (= PDF 中継不要)。
 
-origin: 2026-06 ある官製様式 (JST 系) の docx 修正。 docx を直しても PDF が古いまま (= stale) → quit 不十分が真因 → `pkill` + fresh open で解消。 さらに Word が cold-start で `missing value` / 空ドキュメント複数の状態に陥り automation 不能 → Pages で代替 → 最終は user の Word 書き出しに委ねた。
+origin: ある官製様式の docx 修正。 docx を直しても PDF が古いまま (= stale) → quit 不十分が真因 → `pkill` + fresh open で解消。 さらに Word が cold-start で `missing value` / 空ドキュメント複数の状態に陥り automation 不能 → Pages で代替 → 最終は user の Word 書き出しに委ねた。
 
 ### <a id="docx-tmp-sandbox-deny"></a>Word が触る docx は `/tmp` 配下に置かない (= sandbox grant 不能、 project 配下で扱う)
 
@@ -2256,7 +2256,7 @@ for p in doc.paragraphs:
 
 個人 user は事前に両方準備しておく (= 個人層 layer に置く)。
 
-origin: 2026-05-14 JST 系公募の様式 0 + 様式 2 の氏名欄、 当初 hanko を挿入 → 「電子署名必要」 と事務担当者から電話指摘 → signature PNG に差替えて再提出。
+origin: ある公募の様式の氏名欄、 当初 hanko を挿入 → 「電子署名必要」 と事務担当者から電話指摘 → signature PNG に差替えて再提出。
 
 ### <a id="physical-seal-required"></a>紙原本要求の窓口では貼付電子印影は印刷しても拒否される (= 実押印が確実)
 
@@ -2393,7 +2393,7 @@ xml = xml.replace('<w:t>__</w:t>', '<w:t></w:t>')           # trailing 半角 2 
 
 各 form template ごとに trailing pattern が違うので、 dump で全 `<w:t>` を出力して目視確認後に置換 pattern を確定。
 
-origin: 2026-05-14 JST 系公募の様式 0 で発覚 (= 「氏名: <提出者氏名>＿」 という末尾装飾 _ が user 視覚に悪い印象を与えると指摘) → 上記 cleanup を fill_forms に追加。 様式 2 は trailing 装飾を持たない雛形だったため変更不要。
+origin: ある公募の様式で発覚 (= 「氏名: <提出者氏名>＿」 という末尾装飾 _ が user 視覚に悪い印象を与えると指摘) → 上記 cleanup を fill_forms に追加。 様式 2 は trailing 装飾を持たない雛形だったため変更不要。
 
 ### <a id="docx-pdf-page-compress"></a>docx → PDF の page count 圧縮 (= 余白縮小 + 行間 + 末尾空段落削除)
 
@@ -2487,7 +2487,7 @@ else:
 
 pre-fill 済み項目・本文テキスト・様式の表構造は**触らず書式だけ**変える ([`office-automation-principles.md`](office-automation-principles.md))。 編集後は **本文の文字数が変わっていない** (`cell.text` の len 比較) + pre-fill 項目が全部残っている、 を機械検証してから PDF 化・[`pdf-visual-confirm`](#pdf-visual-confirm)。 ⚠️ [`check-docx-integrity.py`](#docx-checkbox-content-control) が `table#N row#M: 論理列数 X ≠ gridCol Y` を出しても、 **元雛形でも同じ警告が出るなら横 merge 様式由来の benign** (= 自分の編集が壊したのではない) — 必ず元雛形と比較してから判断する (= 横 merge した row の論理セル数が gridCol より少ないのは正常)。
 
-origin: 2026-05-14 JST 系公募で 様式 0 = 2 → 1 page、 様式 2 = 3 → 2 page を上記 3 段階で達成。 2026-06 推薦書様式 (A4 1 枚厳守の表組み docx) を 2→1 page = font 9pt + 行間圧縮が **docGrid linePitch=360 で全く効かず**、 本文段落の snapToGrid 無効化 + trHeight 除去 + セル内空段落除去で解決 (= docGrid 段・表組み 2 圧縮源の動機)。 **2026-07-16 若手賞 推薦書 (別候補者・同 系統様式)** で trHeight 除去だけでは overflow 消えず、 `w:cantSplit` (= 行分割禁止 flag) も並存していたのが根 → 両方除去で fit (= 3 圧縮源の 1 番目に cantSplit を追加。 min-height 単独 fix の見落としは trap になりやすい)。
+origin: ある公募の様式 2 つをそれぞれ 1 page ずつ減らすのを上記 3 段階で達成。 推薦書様式 (A4 1 枚厳守の表組み docx) を 2→1 page = font 9pt + 行間圧縮が **docGrid linePitch=360 で全く効かず**、 本文段落の snapToGrid 無効化 + trHeight 除去 + セル内空段落除去で解決 (= docGrid 段・表組み 2 圧縮源の動機)。 **別の推薦書 (同系統様式)** で trHeight 除去だけでは overflow 消えず、 `w:cantSplit` (= 行分割禁止 flag) も並存していたのが根 → 両方除去で fit (= 3 圧縮源の 1 番目に cantSplit を追加。 min-height 単独 fix の見落としは trap になりやすい)。
 
 ---
 
@@ -2526,7 +2526,7 @@ Row N:    "<セクション名>の必要性" / "<セクション名>の明細"  
 Row N+1:  (空白、 列方向に merged)                        ← 記入位置
 ```
 
-例 (= 2026-05 JST 系公募の様式 1 研究計画調書 Sheet 3):
+例 (= ある公募の様式 1 研究計画調書):
 
 | 行 | 内容 | role |
 |---|---|---|
@@ -2551,7 +2551,7 @@ label cell に narrative を直接書き込んでしまう (= overwriting the pr
 **実害**:
 - 提出後に審査機関 (= 大学事務等) から 「**①様式の改変**」 として差戻し
 - ファイル単位の reject や再提出処理コスト
-- 2026-05-13 JST 系公募で 提出者が同 pattern で 3 箇所 (= Sheet 3 行 10/18/28) で発生、 所属機関の事務担当者から指摘で発覚。 提出者申告では prior form fill でも同 pattern を起こしていた (= 再発 pattern)
+- ある公募で 提出者が同 pattern で複数箇所に発生、 所属機関の事務担当者から指摘で発覚。 提出者申告では prior form fill でも同 pattern を起こしていた (= 再発 pattern)
 
 **PDF 版** (= 同型の認知盲点が PDF cell 構造で発火): PDF 雛形では label と data が「縦並び 2 行」 でなく「label cell + 隣接 data cell」 の**横並び 2 cell 構造**で組まれ、 label cell に書かれた「○○欄/(自筆にて記載)」 等の指示文を data field と reflex 判定して **画像/値を label cell に overlay** する事故が起きる。 真の data cell は隣接の text ゼロ cell。 判別手順 + assertion gate は [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation)。
 
@@ -2626,7 +2626,7 @@ origin: 2026-06-12 様式⑭-1。 「6/2 版で上書き済」 と記述され�
 
 ### <a id="embedded-instruction-in-label"></a>label 内 embedded instruction の見落とし防止
 
-label cell には input cell に対する **embedded instruction** が書かれていることがある。 例 (= JST 系公募の様式 1 から):
+label cell には input cell に対する **embedded instruction** が書かれていることがある。 例 (= ある公募の様式 1 から):
 
 - 「研究業績等\n※ ... **著者（本人に下線）**...」 → input cell で本人氏名を rich text underline 必須
 - 「研究目的(日本語：**80 文字以上 400 文字以内**)」 → input cell で字数制限を守る
@@ -2651,7 +2651,7 @@ python3 ~/Claude/claude-config/scripts/scan-form-instructions.py /path/to/form.x
 
 **運用**: 提出前に scan を回し、 各 instruction が input cell に反映されているかを user/Claude が手動 verify。 keyword 検出は informational (= critical/non-critical 判定なし、 exit 0)。
 
-origin: 2026-05-14 JST 系公募で「本人氏名に下線」 (= 様式 1 Sheet 2 A14 ラベル内) を見落として複数回再提出。 A14 ラベル全文 (= 80 字 truncate せず) を読んでいれば検出できた典型例。
+origin: ある公募で「本人氏名に下線」 (= 様式 1 のラベル内) を見落として複数回再提出。 ラベル全文 (= 80 字 truncate せず) を読んでいれば検出できた典型例。
 
 ### <a id="label-detection-at-dump"></a>dump 段階での label 識別
 

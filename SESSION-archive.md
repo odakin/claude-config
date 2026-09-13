@@ -720,7 +720,7 @@ odakin-prefs の mention は本 file CLAUDE.md §「安全規則 (公開リポ)�
 
 ---
 
-**2026-05-13 (前段)**: `conventions/office-automation.md` に 4 節を追加 (commit `2a48546`)。 ある研究費応募 (e-Rad 提出) の運用で確立した新ノウハウを横展開:
+**2026-05-13 (前段)**: `conventions/office-automation.md` に 4 節を追加 (commit `2a48546`)。 様式運用で確立した新ノウハウを横展開:
 
 - **§1-1b** 画像挿入のシート指定は `wb[name]` (= 名前) を使う。 `wb.sheetnames[N]` (= 数値 index) は form template が先頭に参考シートを持つ場合「N 枚目」 という直感とずれる罠 (= 「研究計画調書\_5 枚目」 を `sheetnames[4]` で取ると `研究計画調書_3枚目` を指す例で実際に破綻)
 - **§2-4** docx → PDF は macOS では Pages.app AppleScript が最も robust (= Microsoft Word AppleScript は変数 scope 罠、 LibreOffice は別途 install、 pandoc + xelatex はフォント地獄)

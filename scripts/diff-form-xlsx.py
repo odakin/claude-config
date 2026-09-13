@@ -20,9 +20,9 @@ Japanese government 様式 xlsx forms typically structure each section as:
     Row N:   "<セクション>の必要性"      ← pre-printed LABEL (do not overwrite)
     Row N+1: (empty, merged across columns) ← applicant writes here
 A common bug is writing the narrative INTO row N, overwriting the label.
-2026-05-13 JST SPReAD application submitted with this exact bug in 3 places
-(Sheet 3 rows 10/18/28); 教育研究支援課 flagged as "①様式の改変". The applicant
-also reports having made the same mistake on prior form fills. Run this script
+An application was submitted with this exact bug in several places, and the
+institution's office flagged it as a modified form. The same mistake had been
+made on earlier form fills. Run this script
 before submitting to catch the pattern mechanically.
 """
 
@@ -31,8 +31,8 @@ from openpyxl import load_workbook
 
 # Heuristic: suffix patterns suggesting the cell is a 様式 label
 LABEL_SUFFIXES = (
-    "の必要性",   # SPReAD: "設備備品費、消耗品費の必要性"
-    "の明細",     # SPReAD: "設備備品費の明細"
+    "の必要性",   # e.g. "設備備品費、消耗品費の必要性"
+    "の明細",     # e.g. "設備備品費の明細"
     "について",   # 学振等
     "の内容",     # 各種
     "の確認",     # 同意確認書系

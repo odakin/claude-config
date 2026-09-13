@@ -82,7 +82,7 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 
 **Reflex:** derived 間の不一致を見つけたら、 解決方向は「互いに合わせる」でなく「**SoT に対して検証**」 — どちらが正しいかを外部 anchor (正本 repo・一次資料・機械検査) に問う 1 手を、 調和の 1 手より先に置く。 整合性軸の検査は**内部無矛盾しか見えない** — coherent な誤りは整合性軸の不動点であり、 整合性 sweep を重ねるほど強くなる。 誤りを割るのは常に外部 anchor だけ。
 
-実例 (2026-09 RCA): 派生文書 A (調書 tex、 誤った名指し) と B (状態 doc、 匿名でほぼ正しい) の不一致を整合性 sweep が発見し、 B を A に合わせて「特定」 と commit — 合成された gloss は一次資料 (当該 arXiv の著者 list) と 1 手で矛盾する文で、 その矛盾が後日の検出 trigger にもなった (= 増幅は事故を悪化させると同時に自己矛盾を焼き込む)。 claim-target 帰属の domain 版 = [`actor-attribution.md#claim-target-attribution`](../conventions/actor-attribution.md#claim-target-attribution) 規律 9。
+実例: 派生文書 A (提出文書の tex、 誤った名指し) と B (状態 doc、 匿名でほぼ正しい) の不一致を整合性 sweep が発見し、 B を A に合わせて「特定」 と commit — 合成された gloss は一次資料 (当該 arXiv の著者 list) と 1 手で矛盾する文で、 その矛盾が後日の検出 trigger にもなった (= 増幅は事故を悪化させると同時に自己矛盾を焼き込む)。 claim-target 帰属の domain 版 = [`actor-attribution.md#claim-target-attribution`](../conventions/actor-attribution.md#claim-target-attribution) 規律 9。
 
 ### <a id="sot-read-side"></a>2.3 SoT の read 側 — entity を「言及するだけの store」を SoT と取り違えない
 
@@ -1010,7 +1010,7 @@ reflex: surfacing 機構を設計・監査するとき「この表示は**何を
 - **通知 channel の dedup には 2 class あり、 互いの代替にならない**: (a) 「新規 / 昇格時のみ 1 回」 dedup は速報 channel — 既知のまま放置された item を**構造的に再通知しない**ので、 壁紙化した item には最初から届かない。 (b) 最終盤 channel は「窓内は 1 日 1 回/item 再通知」 class が必要。 (a) の channel が既に稼働していることは (b) の不在を埋めない — 「通知機構はもうある」 という監査結論は、 **その dedup がどちらの class か**を確認するまで下せない。
 - **通知 job の実行 locus は受け手で決める**: 人間への local OS 通知は、共有 state を更新する singleton job と違って、**通知を受ける各端末**で動かなければ配信にならない。active-host gate の背後に置くと standby 端末では正しく defer している顔のまま人間への channel が消える。一般の配備・検証契約は [`scheduled-tasks.md#per-recipient-notification-locus`](../conventions/scheduled-tasks.md#per-recipient-notification-locus)。
 
-origin: 2026-08、 研究費公募の応募判断 TODO が 2 つの独立 surface 経路で 30 日間毎日 named 表示 (最終週は最高強度 + 実働中の同〆切案件の 1 行隣) されながら一度も消費されず学内〆を通過した RCA (= 機械 replay で表示履歴を verify 済)。 同月 sibling = 査読依頼が名指し horizon に 6 日 named 表示のまま未消費で自動取消 ([`§8.22`](#lapsing-deadline) origin の consumption 軸)。 対照の成功例 = 明示 disposition を要求する mail triage 段は同環境で機能し続けている。 [`§9.8`](#single-observation-scope-check) は同月 2 観察 + 対照 1 で充足。 instance (= 検出器名・ack field 実装・対策 ledger) は個人層に残置 (= kernel-up / instance-down)。
+origin: 期限つきの判断 TODO が 2 つの独立 surface 経路で 30 日間毎日 named 表示 (最終週は最高強度 + 実働中の同〆切案件の 1 行隣) されながら一度も消費されず期限を通過した RCA (= 機械 replay で表示履歴を verify 済)。 同月 sibling = 別の期限つき依頼が名指し horizon に 6 日 named 表示のまま未消費で自動取消 ([`§8.22`](#lapsing-deadline) origin の consumption 軸)。 対照の成功例 = 明示 disposition を要求する mail triage 段は同環境で機能し続けている。 [`§9.8`](#single-observation-scope-check) は同月 2 観察 + 対照 1 で充足。 instance (= 検出器名・ack field 実装・対策 ledger) は個人層に残置 (= kernel-up / instance-down)。
 
 ### <a id="detection-zero-location"></a>8.25 検出失敗の RCA は「ゼロの位置」を先に特定する — 能力の不在と trigger の不在を分離する
 
@@ -1063,7 +1063,7 @@ origin: 2026-09、 授業評価フィードバックの deep RCA。 draft 起草
 2. **選択肢を書く瞬間の self-check**: 「(a) と (b) のどちらを選んでも残る前提は何か」 — その共通前提こそ、 この確認が本来検証すべきだったものである可能性が高い。
 3. **draft 提示 + user OK は事実検証に対して null protection** (mail domain で確立済みの rule の一般形)。 user は文面の質・トーン・戦略を見る — 埋め込まれた事実の再導出はしない。 確認を「検証済み」 に数えられるのは、 設問がその軸を明示的に向いていた時だけ。
 
-**origin**: 2026-09、 研究費調書。 生成時に混入した誤帰属 (= グループ内略称の著名研究者名への衝突展開、 [actor-attribution.md #claim-target-attribution](../conventions/actor-attribution.md#claim-target-attribution)) を運ぶ文に、 user 確認 marker が「名指しのまま (a) / 匿名化 (b)」 の趣味だけを問い、 帰属の真偽は前提として素通りして提出に至った。 同じ marker 表の 2 行上には当の略称の正式名を問う設問があり user 回答も得ていた (= 衝突解消 data は同一 session 内に存在) が、 設問が真偽を向いていないため誰も接続しなかった。 marker の括弧書きは「名指しされた当人が審査員にいる確率」 まで評価していた — **P(読まれる) を評価して P(真) を評価しない、 照準ずれの純型**。
+**origin**: ある提出文書。 生成時に混入した誤帰属 (= グループ内略称の著名研究者名への衝突展開、 [actor-attribution.md #claim-target-attribution](../conventions/actor-attribution.md#claim-target-attribution)) を運ぶ文に、 user 確認 marker が「名指しのまま (a) / 匿名化 (b)」 の趣味だけを問い、 帰属の真偽は前提として素通りして提出に至った。 同じ marker 表の 2 行上には当の略称の正式名を問う設問があり user 回答も得ていた (= 衝突解消 data は同一 session 内に存在) が、 設問が真偽を向いていないため誰も接続しなかった。 marker の括弧書きは「名指しされた当人が審査員にいる確率」 まで評価していた — **P(読まれる) を評価して P(真) を評価しない、 照準ずれの純型**。
 
 ### <a id="generation-error-trigger-gap"></a>8.29 操作を trigger にする gate は、操作を伴わない生成 error を素通しする
 
@@ -1071,7 +1071,7 @@ origin: 2026-09、 授業評価フィードバックの deep RCA。 draft 起草
 
 **Reflex (gate 設計時):** 生成 error class を受け持つ gate は、 trigger を操作でなく**内容**に張る — (a) 成果物 text への pattern 検査 (例: 名指し × 誤り語彙の共起 regex を提出前 audit で回す)、 (b) 提出・送信という **stage boundary** での一括 audit (= 操作 trigger が無くても必ず通過する点)、 (c) 規律 wording は「書いた瞬間 = gate」 と生成の瞬間そのものに焼く (機械化不能な残余、 [`§8.12`](#firing-surface-hierarchy) の最弱面であることを承知で置く)。 生成物の fluency は provenance の証拠にならない — retrieval 由来と生成由来は書いている本人にも区別が付かない、 が設計の前提。
 
-origin: 2026-09 研究費調書の名指し誤帰属 RCA (= [`actor-attribution.md#claim-target-attribution`](../conventions/actor-attribution.md#claim-target-attribution))。 検証 reflex 群 (外部 null・mail 事実・PDF read) は全て操作 trigger で、 生成された固有名はどの reflex の射程にも入らず提出まで素通しした。 対策の機械面 = (a)(b) 型の提出前 named-claim audit。
+origin: ある提出文書の名指し誤帰属 RCA (= [`actor-attribution.md#claim-target-attribution`](../conventions/actor-attribution.md#claim-target-attribution))。 検証 reflex 群 (外部 null・mail 事実・PDF read) は全て操作 trigger で、 生成された固有名はどの reflex の射程にも入らず提出まで素通しした。 対策の機械面 = (a)(b) 型の提出前 named-claim audit。
 
 ### <a id="expected-inbound-tripwire"></a>8.30 予告された inbound 依頼には時計を — 「来るはず」 は tracked object になるまで網に乗らない
 

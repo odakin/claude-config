@@ -894,7 +894,7 @@ def load_acks(path: Path) -> list[dict]:
           - code: ABBREV                 # finding の code (必須)
             match: 略称「文科省」          # message の部分一致 (必須、空文字は不可)
             reason: YYYY-MM-DD ...        # なぜ直さないか (必須)
-            scope: kiban_b.pdf            # 任意。message に含まれること (= 種目に縛る)
+            scope: shumoku_a.pdf            # 任意。message に含まれること (= 種目に縛る)
             until: 'YYYY-MM-DD'           # 任意。この日を過ぎたら ack 失効 = 再び fail
     🔴 は ack できない (= 様式違反・保存不能・実体参照は必ず直す)。
     ⚠️ scope を書かないと **別種目の同じ指摘まで黙る** — PDF 由来の finding は常に由来 file 名を
@@ -1281,8 +1281,8 @@ def selftest() -> int:
                ["IDENTITY_FILENAME"])
         # 🔴 の偽陽性は提出を止めるので、桁数では判定しない (staging の日付・hash)
         expect("ID: file 名の日付・hash を ID と誤認しない",
-               ident(files=["S-13_kiban_b_20260908_fc1f7257.pdf",
-                            "S-74_gakuhen_26A204_20260908_69a992c6.pdf"]),
+               ident(files=["S-13_shumoku_a_20250101_0a1b2c3d.pdf",
+                            "S-74_shumoku_b_99Z999_20250101_4e5f6a7b.pdf"]),
                [], forbid=["IDENTITY_FILENAME", "IDENTITY_STALE"])
         expect("ID: 旧値は STALE のみ (FILENAME と二重に出さない)",
                ident(files=["様式1_研究計画調書_9876543210_Name.xlsx"]),
@@ -1308,7 +1308,7 @@ def selftest() -> int:
 
         F_SOFT = [("🟠", "ABBREV", "略称「文科省」が本文にある → 「文部科学省」")]
         F_HARD = [("🔴", "SKELETON_LOST", "様式が削除を禁じた欄が PDF に無い: 「研究期間」")]
-        ACK_OK = [dict(code="ABBREV", match="略称「文科省」", reason="2026-09-10 user 判断")]
+        ACK_OK = [dict(code="ABBREV", match="略称「文科省」", reason="user 判断")]
 
         rc, _ = run_report(F_SOFT, None, False)
         expect("ack: 🟠 のみ + 非 strict → 0", ["rc%d" % rc], ["rc0"])
@@ -1330,19 +1330,19 @@ def selftest() -> int:
         expect("ack: 直ったのに残る ack は 🧹 で報告",
                ["stale"] if "🧹" in out else [], ["stale"])
         # scope: 種目を跨いで黙らせる ack を検出できるか
-        F_TWO = [("🟠", "ABBREV", "kiban_b.pdf: 略称「文科省」が本文にある → 「文部科学省」"),
-                 ("🟠", "ABBREV", "houga.pdf: 略称「文科省」が本文にある → 「文部科学省」")]
+        F_TWO = [("🟠", "ABBREV", "shumoku_a.pdf: 略称「文科省」が本文にある → 「文部科学省」"),
+                 ("🟠", "ABBREV", "shumoku_b.pdf: 略称「文科省」が本文にある → 「文部科学省」")]
         rc, out = run_report(F_TWO, ACK_OK, True)
         expect("ack: scope 無しで 2 種目を黙らせたら 🧨",
                ["broad"] if "🧨" in out else [], ["broad"])
-        ACK_SCOPED = [dict(code="ABBREV", match="略称「文科省」", scope="kiban_b.pdf",
-                           reason="2026-09-10 基盤B のみ見送り")]
+        ACK_SCOPED = [dict(code="ABBREV", match="略称「文科省」", scope="shumoku_a.pdf",
+                           reason="種目 A のみ見送り (user 判断)")]
         rc, out = run_report(F_TWO, ACK_SCOPED, True)
         expect("ack: scope 付きなら他種目は残る (rc=1)", ["rc%d" % rc], ["rc1"])
         expect("ack: scope 付きは 🧨 を出さない",
                [] if "🧨" not in out else ["broad"], [], forbid=["broad"])
         expect("ack: scope 外の種目が検出に残る",
-               ["kept"] if "houga.pdf" in out.split("── 検出")[-1] else [], ["kept"])
+               ["kept"] if "shumoku_b.pdf" in out.split("── 検出")[-1] else [], ["kept"])
 
     print("\n" + ("✅ selftest PASS" if ok else "❌ selftest FAIL"))
     return 0 if ok else 1

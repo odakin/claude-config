@@ -10,8 +10,8 @@ Usage:
 例: 「※著者（本人に下線）」 「半角数字で記入」 「200 字以内」 「箇条書き」 等。
 
 label cell 全文を読まずに input cell を fill すると、 instruction を見落として
-提出後 reject される (例: 2026-05-14 JST SPReAD で「研究業績欄の本人氏名
-に下線」 を A14 内に書かれていたが見落とし、 複数回再提出で対応)。
+提出後 reject される (例: 「研究業績欄の本人氏名に下線」 がラベル内に
+書かれていたのを見落とし、 複数回再提出で対応)。
 
 本 script は xlsx の全 cell から **instruction keyword** にマッチする箇所を
 抽出し、 keyword 別に group 化して表示する。 提出前に通して、 各 instruction
