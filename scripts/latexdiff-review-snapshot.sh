@@ -56,7 +56,7 @@
 #   --allow-dirty / --allow-behind
 #   --no-math-guard       wrapper 展開 + safecmd + 無印検査を行わない (= 2026-09-12 以前の挙動)
 #   --allow-unmarked-math 無印の数式変更を検出しても停止しない (警告のみ)
-#   --selftest            strip logic + 命名 format + 同梱 3 script の selftest
+#   --selftest            strip logic + 命名 format + 同梱 4 script の selftest
 
 set -uo pipefail
 
@@ -68,6 +68,7 @@ SCRIPTDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 EXPANDER="$SCRIPTDIR/expand-display-math.py"
 SAFECMD_GEN="$SCRIPTDIR/latexdiff-safecmd.py"
 MARKUP_CHECK="$SCRIPTDIR/check-latexdiff-math-markup.py"
+DUP_LABELS="$SCRIPTDIR/latexdiff-strip-dup-labels.py"   # deleted copy keeps no \label (whole markup / MOVE), 2026-09-13
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -133,7 +134,7 @@ run_selftest() {
     echo "naming format OK"
     rm -rf "$d"
     local s
-    for s in "$EXPANDER" "$SAFECMD_GEN" "$MARKUP_CHECK"; do
+    for s in "$EXPANDER" "$SAFECMD_GEN" "$MARKUP_CHECK" "$DUP_LABELS"; do
         if [[ -f "$s" ]]; then
             python3 "$s" --selftest >/dev/null || die "$(basename "$s") selftest failed"
             echo "$(basename "$s") selftest OK"
@@ -249,6 +250,12 @@ fi
 # shellcheck disable=SC2086
 latexdiff --math-markup="$MATHMARKUP" --config VERBATIMENV=comment $SAFE_ARG $EXTRA_ARGS \
     "$D/base.tex" "$D/new.tex" > "$D/diff.tex" 2>"$D/latexdiff.err" || die "latexdiff 失敗: $(tail -3 "$D/latexdiff.err")"
+# changed (whole markup) or moved blocks appear twice with the same \label -> amsmath "Multiple \label's" is fatal below;
+# keep each label on the new copy only (conventions/latex.md#latexdiff-move-artifacts)
+if [[ -f "$DUP_LABELS" ]]; then
+    NDUP=$(python3 "$DUP_LABELS" "$D/diff.tex")
+    [[ "${NDUP:-0}" -gt 0 ]] && echo "label guard: 削除側の \label ${NDUP} 件を除去"
+fi
 
 # ---- guard: display math 内に無印の変更が残っていないか (= 色の出ない差分 PDF) ----
 if [[ "$MATH_GUARD" -eq 1 && -f "$MARKUP_CHECK" ]]; then

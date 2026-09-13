@@ -79,6 +79,9 @@ sections:
   - id: prescript-tall-nucleus
     level: 2
     title: "左肩の添字 macro は核の高さで浮く — `\\prescript` でなく標準 strut を基準にする (2026-09-13)"
+  - id: index-after-tall-delimiter
+    level: 2
+    title: "背の高い閉じ括弧の後の段違い添字は空 atom に付ける — `\\right]{}^{ab}{}_{\\mu\\nu}` (2026-09-13)"
   - id: maketitle-handset-author-block
     level: 2
     title: "手組み author block と `\\maketitle` を併用したら題扉の余白を詰める"
@@ -142,6 +145,9 @@ sections:
   - id: jhep-future-citation
     level: 2
     title: "JHEP.bst で future citation（in preparation、タイトル未定）を引く"
+  - id: inspire-inbook-handbook-metadata
+    level: 2
+    title: "INSPIRE の `@inbook` (Springer handbook の章) は booktitle・editor が空 — CrossRef の book 記録で補う (2026-09-13)"
   - id: hyperref-settings
     level: 2
     title: "hyperref 設定"

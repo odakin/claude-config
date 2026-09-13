@@ -94,6 +94,7 @@ ln -s "$PWD/Figures" "$PWD/ref.bib" "$PWD"/*.bst "$D"/   # 図・bib・bst を�
 | `Missing \cr` / `\endgroup` / display math 破壊 | 環境を隠した自作マクロ（例: align を包む `\al{}`）が `\DIFadd` に巻かれる | diff 前に当該マクロを本物の `\begin{align}…\end{align}` へ展開 |
 | **数式の変更が diff に色で出ない**（error は無い） | 同上: latexdiff は環境名で数式を認識するので、`\al{…}` の中身の変更は「引数付き command の差し替え」扱い = 旧式は `%DIFDELCMD` で comment out、新式は無印挿入 | 同じ展開を **両側**に当ててから diff。道具 = [`scripts/expand-display-math.py`](../scripts/expand-display-math.py)（展開する macro は入力の preamble から**導出**するので新しい wrapper も自動追随、balanced brace + `%` コメント + `\{` escape を扱う、`--selftest` 22 件）。engine が既定で当てる。2026-09-08 に或る paper repo で付録の式の符号反転が無印だった実例。機構 = [`overleaf-integration.md#latexdiff-wrapper-macro-expansion`](overleaf-integration.md#latexdiff-wrapper-macro-expansion) |
 | **引数付き自作 macro の中だけの変更が無印**（`\pn{x+y}`→`\pn{x-y}`: 旧式は `%DIFDELCMD` で comment out、新式は `\DIFadd` 無しで挿入。`\frac` や添字は色が付くので気づきにくい） | latexdiff は safe-command list（`\DIFadd{}` の中に入れてよい command）に無い command を含む token を着色しない | preamble の全 macro 名を **原稿から導出**して `--append-safecmd=a,b,c` に渡す（手書き list は新 macro で再発する）。さらに diff 出力を機械で走査し「display math 内で `\DIFaddbegin…\DIFaddend` に `\DIFadd{}` 外の残りがある / `%DIFDELCMD` の payload が実 command」を数えて 0 でなければ再生成を fail させる（= silent miss を silent にしない）。道具 = [`scripts/latexdiff-safecmd.py`](../scripts/latexdiff-safecmd.py)（list は preamble から導出、展開対象は expander に問い合わせる）+ [`scripts/check-latexdiff-math-markup.py`](../scripts/check-latexdiff-math-markup.py)（`--scan` が数え、`--selftest` は preamble の引数付き macro 全部に合成変更を通す）。engine が既定で両方回す |
+| **safe-command を足しても command 単位の変更が無印**（`\hat{e}` の削除、`\Big[`・`\Big\{`、`\phantom{…}`、`\dotsb`、`&{}`: coarse の `%DIFDELCMD` payload。2026-09-13 の実測で 21 件、wrapper 展開・safe-command 済みの状態で残った） | coarse は数式を token 単位で差分し、差し替え token が macro でない command だと着色せずに comment out / 挿入することがある | `--math-markup=whole`（変更のあった式を丸ごと旧 = 削除色・新 = 追加色で出す）にする。副作用の `Multiple \label's` は [`scripts/latexdiff-strip-dup-labels.py`](../scripts/latexdiff-strip-dup-labels.py) で削除側の label を落として消す。engine は既定 whole + この除去（[#latexdiff-move-artifacts](#latexdiff-move-artifacts)） |
 | `Misplaced alignment tab character &` / `Misplaced \cr`（math-markup coarse / whole で、off では通る） | latexdiff は数式 markup を `\\` と `&` でしか分割しないので、行区切りを包む自作マクロ（例: `\nn` = `\nonumber\\`）が `\DIFadd{…}` 内に閉じ込められる | 同じ前処理で `\nn` → `\nonumber\\` も展開（定義行は除外）。これで `--math-markup=coarse` が通り、`off`（削除式が消える）へ落とさずに済む。row-break macro も上の expander が preamble から導出する（本体に `\\` を含む 0 引数 macro） |
 | tikz error の連鎖 | ネストした tikzpicture/feynman 図が壊れる | 図を placeholder 文字列へ置換 +（下の）`--config PICTUREENV=…` |
 | 3 分かかる / output が無限ループ | CFONT の color markup が page builder と干渉 | `--type=UNDERLINE`（色でなく下線/取消線）。**hang の真因は CFONT 単独**で、UNDERLINE なら `twocolumn` のままコンパイルできる（2026-08 実証。旧対処の `onecolumn` 化は不要 = 実紙面レイアウトの diff の方が共著者に優しい） |
@@ -140,7 +141,7 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 
 **原因**: 移動元 (DIFdel 側) と移動先 (挿入側) の両方に同じ `\label{}` が残る。 `--math-markup=off` なら error 0 だが削除側の式そのものが消える。
 
-**扱い**: coarse のまま、 error と無印 token の件数を「MOVE 由来」 として ledger に記録する (原稿の問題ではない)。 恒久手当の候補 = regen script の後処理で DIFdel 区間内の `\label{X}` を `X-del` に付け替える。
+**扱い**: 恒久手当 = 実装済 (2026-09-13) — [`scripts/latexdiff-strip-dup-labels.py`](../scripts/latexdiff-strip-dup-labels.py) が `\DIFdelbegin … \DIFdelend` の中の `\label` を落とす (engine [`latexdiff-review-snapshot.sh`](../scripts/latexdiff-review-snapshot.sh) は latexdiff の直後に自動適用、 project の regen script は同 script を呼ぶ)。 error は 0 になり、 旧版だけにあった label への参照だけが undefined で残る (diff としては正しい)。 同じ重複は **`--math-markup=whole` では変更のあった式すべて**で起きる (旧式と新式が丸ごと 2 回出る) ので、 whole を使うなら必須。 それ以前の扱い = coarse のまま error と無印 token の件数を「MOVE 由来」 として ledger に記録していた。
 
 ## <a id="float-drift-after-insert"></a>display を 1 本足したら `[t]` の表が次頁 = References に流れた — float の source 位置を前へ (2026-09-08)
 
@@ -408,6 +409,18 @@ grep -B1 -A2 "your-marker-keyword" /tmp/render.txt
 ⚠️ `{\vphantom{X}}^{(#1)}` のように**特定の文字**を基準にしない — その文字に合わせた場当たりの macro になり、 別の核では同じ問題が形を変えて残る (著者の指摘: 1 つの文字に対してだけ恣意的に最適化した macro になる)。 `\mathstrut` は内容によらず標準の高さを与えるための strut。 飾りの無い核では見た目はほぼ不変 (添字と核の間は `\!` の分だけ `\prescript` より詰まる)。
 
 **確認**: 使用箇所のうち最も背の高い核を含む式を 1 つ render して、 飾り無しの核と添字の高さが揃うことを見る (途中の推敲 pass の目視 gate にはしない = [#visual-verification-intensity](#visual-verification-intensity))。
+
+## <a id="index-after-tall-delimiter"></a>背の高い閉じ括弧の後の段違い添字は空 atom に付ける — `\right]{}^{ab}{}_{\mu\nu}` (2026-09-13)
+
+`\left[ … \right]^{\mathbf{bc}}{}_{\nu\rho}` のように上付きだけを閉じ括弧に直接付けると、 TeX は上付きを**括弧の高さ**に合わせて持ち上げる一方、 `{}_{…}` の下付きは空 atom の標準位置に沈むので、 上下の添字の高さが揃わない (中身が `(\Gamma^{(2)})^{-1}` のように背が高いほど目立つ)。
+
+**処方**: 段違い添字は上下とも空 atom に付ける。 括弧との隙間が気になれば `\!` を 1 つ (著者の手直し、 2026-09-13)。
+
+```latex
+\left[\Paren{\Gamma^{(2)}}^{-1}\right]\!{}^{\mathbf{bc}}{}_{\nu\rho}   % 上下とも空 atom、 高さが揃う
+```
+
+**冪は括弧に直接付けたままでよい** (`\left(\frac{h}{v}\right)^2`、 `(\ldots)^{-1}`): 冪は括弧全体に掛かる量なので括弧の高さに合うのが正しい。 対象は**添字** (index) だけ。 sweep = `grep -nE '\\right[])}]\^\{[^}]*\}\{\}_'` (1 行に収まる形だけ、 行をまたぐ形は目視)。
 
 ## <a id="maketitle-handset-author-block"></a>手組み author block と `\maketitle` を併用したら題扉の余白を詰める
 
@@ -750,6 +763,20 @@ JHEP.bst はフィールドから自動リンクを生成するので `\href` �
 - bibtex の `Warning--empty title` は想定内（無害）
 - **タイトル確定時**: `title = "{...}"` を追加し、note を素の `"in preparation"` に戻す（title があれば bst が区切りを正しく出すので `{\unskip},` hack は不要になる）
 - 前提: note を render する版の JHEP.bst（[正本](#bibliography-style)）。stock JHEP.bst は note を落とすのでこの recipe 全体が silent no-op になる
+
+## <a id="inspire-inbook-handbook-metadata"></a>INSPIRE の `@inbook` (Springer handbook の章) は booktitle・editor が空 — CrossRef の book 記録で補う (2026-09-13)
+
+**症状**: INSPIRE の bibtex で取った handbook の章 (例: *Handbook of Quantum Gravity* の章、 DOI `10.1007/978-981-19-3079-9_21-1`) は `@inbook` に author・title・eprint・doi・year しか無く、 bibtex が `Warning--empty booktitle` を出し、 JHEP.bst は収録本を印字しない。
+
+**処方**: 章 DOI の末尾 (`_21-1` 等) を落とした **book DOI** を CrossRef API で引き、 `booktitle`・`editor`・`publisher` を補う (推測で埋めない = [#refs-bib-verification](#refs-bib-verification))。
+
+```bash
+curl -s https://api.crossref.org/works/10.1007/978-981-19-3079-9 | python3 -c "import json,sys; m=json.load(sys.stdin)['message']; print(m['title'], [(e['given'], e['family']) for e in m.get('editor', [])], m['publisher'])"
+```
+
+- **`address` は足さない**: publisher 名が地名を含む (`Springer Nature Singapore`) と、 JHEP.bst は「(Singapore), Springer Nature Singapore」 と二重に印字する。
+- **author 欄の list 全体を 1 組の括弧で包まない**: `author = "{Chkareuli, J.L. and Froggatt, C.D. and Nielsen, H.B.}"` は bibtex に 1 人の literal 名として渡り、 姓・名の順も `and` も生のまま印字される。 外側の括弧だけ外す (アクセント用の `{\'i}` などは残す)。 INSPIRE 以外の source から写した entry で起きやすい。
+- 補った後は `.bbl` を開いて「in *Handbook …*, C. Bambi, L. Modesto and I. Shapiro, eds., Springer Nature Singapore (2024)」 の形になっていることを確かめる。
 
 ## <a id="hyperref-settings"></a>hyperref 設定
 **新規 LaTeX ドキュメントは以下の hyperref 設定を使う:**
