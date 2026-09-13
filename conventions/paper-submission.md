@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき
 category: paper
-summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕)、 投稿 checklist + **投稿後の status 追跡** (= ポータルの role 略語 AE/EIC/ADM の役割分担・status 階梯の読み方・共著者も自分の account の Co-Authored 欄で閲覧可〔2026-08-21 訂正〕・**著者向け status API は無い** = 中間 status はメールされず Author Center のみ・decision はメール + 定期実読 backstop の 2 重・Claude 操作ブラウザに user が login すれば Claude が直接読める・催促の宛先) 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
+summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕 + **arXiv は source を公開する** = コメント除去・`.bbl`+`.bib`+`.bst` 同梱・元原稿と PDF テキスト一致を gate にした package 〔`scripts/arxiv-package.py`〕、 投稿画面 v1.5 の各段で見るもの、 package 作成後に原稿が動く race、 締切・公開時刻、 primary category と SCOAP3)、 投稿 checklist + **投稿後の status 追跡** (= ポータルの role 略語 AE/EIC/ADM の役割分担・status 階梯の読み方・共著者も自分の account の Co-Authored 欄で閲覧可〔2026-08-21 訂正〕・**著者向け status API は無い** = 中間 status はメールされず Author Center のみ・decision はメール + 定期実読 backstop の 2 重・Claude 操作ブラウザに user が login すれば Claude が直接読める・催促の宛先) 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
 -->
 # Paper Submission Workflow (= 投稿ポータル経由の落とし穴と定型対処)
 
@@ -9,7 +9,7 @@ summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv)
 
 **Sibling docs** (= 論文 lifecycle を分担): 自分 paper の internal audit = [`paper-audit.md`](paper-audit.md) / 投稿後の referee report への返信 = [`rebuttal-letter.md`](rebuttal-letter.md) / 自分が referee として外部評価 = [`peer-review-workflow.md`](peer-review-workflow.md) / grant 申請 = [`erad-submission.md`](erad-submission.md)。 本書 (= paper submission) はこれら 4 の方向違いで、 完成した論文を journal / arXiv に **出す**側。
 
-## <a id="tldr"></a>TL;DR — 詰まりやすい 5 点と第一選択の対処
+## <a id="tldr"></a>TL;DR — 詰まりやすい 6 点と第一選択の対処
 
 | # | 症状 | 第一選択の対処 |
 |---|---|---|
@@ -18,6 +18,7 @@ summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv)
 | 3 | Cover page の author affiliation が LaTeX 修正で追随しない | **Authors & Institutions form を別途更新** (§[form-vs-source-independence](#form-vs-source-independence)) |
 | 4 | "PDF should embed only Type1 fonts" 警告 | figure PDF に TrueType Courier 混入 が典型。 soft 要求のため実運用では通ることが多い、 blocker になったら figure 再生成 (§[type1-fonts](#type1-fonts)) |
 | 5 | arXiv upload で processing error | **PDF は source tarball に含めない** — arXiv は source から自動ビルド (v1 / replace-file 全 version 共通、§[arxiv-source-only](#arxiv-source-only)) |
+| 6 | arXiv に上げた source が公開される (原稿のコメントに著者間の注記) | **`scripts/arxiv-package.py build`** でコメントを除き、 元原稿と PDF テキスト一致・bibtex で `.bbl` 再現を gate に package を作る (§[arxiv-package-tool](#arxiv-package-tool))。 各画面で見るもの = §[arxiv-submission-steps](#arxiv-submission-steps) |
 
 投稿が通った後の「音沙汰が無い」 は §[post-submission-status](#post-submission-status) (= role 略語 AE/EIC/ADM と status 階梯、 著者向け API は無いので「decision メール + 定期 Author Center 実読」 の 2 重で追う)。
 
@@ -167,17 +168,18 @@ print(f"Non-Type1: {non_type1}")
 
 - 2026-07 の同じ投稿 = figure PDF 全てに TrueType Courier が MacRomanEncoding で埋め込み、 hyperref の URL 経由 Courier も 1 個。 `\urlstyle{rm}` 追加は無関係 (原因は figure)。 arXiv v1 が同 font 構成で受理済のため投稿でも blocker にならなかった。
 
-## <a id="arxiv-source-only"></a>5. arXiv は最終 PDF を受け付けない (source-only、v1 / v2 共通)
+## <a id="arxiv-source-only"></a>5. arXiv は source から組版し、 その source をそのまま公開する (v1 / v2 共通)
 
-arXiv は **source から自動ビルド** する processing model なので、 **v1 initial upload でも v2 以降の replace-file でも、 tarball / zip に PDF を含めると processing error になる**。 「v2 特有のルール」 ではなく arXiv 一般則。
+arXiv は **source から自動ビルド** する processing model なので、 **v1 initial upload でも v2 以降の replace-file でも、 tarball / zip に PDF を含めると processing error になる**。 「v2 特有のルール」 ではなく arXiv 一般則。 そして **upload した source は誰でも download できる** — arXiv 自身の投稿前 checklist も「残したくないデータ (例: TeX のコメント) を upload に含めない」 と注意している。 共同編集の原稿のコメントには、 著者間の赤入れや内部メモが残っていることが多い。
 
 ### 常に source-only で、v1/v2 で構成を揃える
 
-typical 構成 (revtex 系 pdflatex 論文):
+typical 構成 (pdflatex 論文):
 
 ```
-draft_A.tex           # 本文
-ref.bib               # BibTeX ソース
+paper.tex             # 本文 (コメント除去済み)
+paper.bbl             # BibTeX の出力 (main の .tex と同じ名前)
+refs.bib              # BibTeX ソース
 utphysmod.bst         # non-standard BibTeX スタイル (arXiv 標準に無いので同梱)
 Figures/
   <figure>.pdf        # 各図
@@ -189,33 +191,88 @@ Figures/
 - `.aux` / `.log` / `.out` / `.blg` / `.fdb_latexmk` / `.fls` / `.toc` 等のビルド artifact
 - macOS の `.DS_Store`
 - `draft_ANotes.bib` 等の latexmk 副産物
+- **コメント** (次節)
 
-### `.bbl` を含めるか
-
-- **v1 パターン踏襲**: 含めない (arXiv が bibtex 実行)、 `.bst` を代わりに同梱
-- **modern robust pattern**: `.bbl` を含める (arXiv が bibtex を skip、 build 高速化 + non-standard bib entry の 互換性 risk 軽減)
-- どちらも動く、 v1 が既に受理されているなら **v1 パターンを踏襲** が安全
-
-### submission bundle を作る手順
+### <a id="arxiv-package-tool"></a>道具: `scripts/arxiv-package.py` (package の作成と検査を 1 本で)
 
 ```bash
-# 投稿用 dir を作成
-mkdir -p submission/arxiv-vN
-cp <paper>/draft_A.tex <paper>/ref.bib <paper>/utphysmod.bst submission/arxiv-vN/
-mkdir -p submission/arxiv-vN/Figures
-cp <paper>/Figures/*.pdf submission/arxiv-vN/Figures/  # 本文で参照される図のみ
-
-# sanity build (aux 削除)
-(cd submission/arxiv-vN && latexmk -pdf draft_A.tex && \
- rm -f draft_A.{aux,log,out,bbl,blg,fdb_latexmk,fls,toc,pdf} draft_ANotes.bib)
-
-# zip 化
-(cd submission/arxiv-vN && zip -r ../arxiv-vN-source.zip . -x "*.DS_Store")
+python3 scripts/arxiv-package.py build <原稿 dir> --main paper --out arxiv/v1 --drop-graphicx-driver --expect-pages N --forbid '<著者注の目印>'
+python3 scripts/arxiv-package.py metadata <原稿 dir> --main paper --compare-abstract <Preview 画面から写した abstract の file>
+python3 scripts/arxiv-package.py compare-pdf <arXiv が組版した PDF> arxiv/v1/paper-arxiv-preview.pdf
 ```
+
+`build` は下の gate が全部通ると `ALL PASS` (exit 0):
+
+| gate | 防ぐもの |
+|---|---|
+| コメントだけの行が残っていない / `--forbid` の文字列が無い | 内部メモの公開 |
+| package の file だけで組版して error 0・未定義参照 0・rerun 警告なし・頁数一致 | arXiv 側で組めない / file が足りない |
+| package の PDF テキスト = 元原稿 (コメント付きのまま) の PDF テキスト | コメント除去や driver 除去が本文を変えた |
+| package で bibtex を回すと、 同梱の `.bbl` を byte 一致で再現する | `.bib` と `.bbl` の食い違い (source を落とした人が組み直すと参考文献が変わる) |
+
+- project 側には既定値 (原稿の path・著者注の目印) を持つ shim を置く。 目印は共同研究者の略号など project 固有の値なので層1 に書かない。
+- 生成物は再生成できるので gitignore にし、 project の記録には「どの commit から作ったか」 だけを残す。
+
+### <a id="arxiv-source-is-public"></a>コメントを消す規則
+
+- **コメントだけの行は行ごと消す** (空行を残すと段落が切れる)。 **行末コメントは `%` を残す** (行末の空白を殺す働きがあり、 消すと語間に空白が入る)。
+- `\%` はコメントでない。 `\url{..}` / `\href{..}` の URL、 `\verb`、 verbatim 系環境の中の `%` も触らない。
+- `comment` 環境 (package `comment`) の中身も source には残るので消す。 **`\iffalse … \fi` は機械で消さず、 人が中を見る** (入れ子や意図した切り替えがありうるので、 script は行番号だけ報告する)。
+- 消した結果の正しさは、 規則を網羅したかでなく **組んだ PDF のテキストが元と一致するか** で確かめる (catcode の変更など、 規則が想定しない書き方もこの比較で落ちる)。
+- `.bib` の entry の外にある文字 (区切りのコメント行など) は bibtex が無視するので残してよいが、 公開されるので一度目を通す。
+
+### <a id="arxiv-bibliography-files"></a>`.bbl` と `.bib` / `.bst` は両方入れる
+
+- arXiv は **`.bbl` があればそれを使い**、 無ければ bibliography の使い方を見て bib compiler を選んで回す。 `.bbl` の名前は **main の `.tex` と同じ**でないと使われない (arXiv help: submit_tex)。
+- 推奨 = **`.bbl` と `.bib` + 非標準 `.bst` を全部入れる**。 `.bbl` で arXiv の組版が手元と同じになり、 `.bib` + `.bst` で source を落とした人が参考文献を組み直せる (2026-09-14 著者判断「入れとかんと他の人が困る」)。 両者の食い違いは上の bibtex 再現 gate で止める。
+- `.bbl` だけを上げると、 Review Files 画面の自動 scan が `\bibliographystyle{X}` を見て「X が missing」 と出す。 `.bbl` がある限り組版には効かない警告だが、 `.bst` を同梱すれば出ない。
+- 既に `.bbl` 無しで受理された v1 の replace では、 v1 と構成を揃える方針 (上) を優先してよい。
+
+### <a id="arxiv-graphicx-driver"></a>graphicx の driver option は外す
+
+`\usepackage[dvipdfmx]{graphicx}` のように driver を明示した原稿は、 手元の pdflatex で通っていても外す。 arXiv の案内は「graphics / hyperref は driver を自動判定するので明示しない (衝突を避ける)」。 共有原稿を書き換えずに package 側だけで外してよい (`--drop-graphicx-driver`、 driver 以外の option は残す)。 外して PDF テキストが変わらないことは `build` の gate が見る。
+
+### <a id="arxiv-submission-steps"></a>投稿画面の各段で見るもの (Submission v1.5)
+
+| 段 | 見るもの |
+|---|---|
+| Start | 連絡先の確認 / Submission Agreement / 「author として投稿」 の 3 つの checkbox。 **License は後から変えられない** — シリーズの前作と揃えるなら、 前作の abs page に出ている license を見る。 primary category もここで選ぶ ([#arxiv-category-choice](#arxiv-category-choice)) |
+| Add Files | tar.gz を 1 つ上げる。 作り直したら **Delete All してから** 上げ直す (古い file が残ると混ざる) |
+| Review Files | 自動で選ばれた compiler / TeX Live の版 / top-level file、 各 file の「Used by」。 「missing」 の警告は中身を読む (`.bst` だけなら [#arxiv-bibliography-files](#arxiv-bibliography-files)) |
+| Process | ログにエラーが無いか。 **組版された PDF を download し、 `compare-pdf` で手元の package の PDF と頁ごとに比べる**。 想定内の差は 1 頁目の日付 (arXiv の組版日 = UTC) と `arXiv:submit/NNNNNNN` の印字だけ |
+| Metadata | Title / Authors / Abstract / Comments / cross-list。 Authors はコンマか「and」 で区切る (arXiv の例は `A, B and C` = and の前にコンマなし)。 Abstract は `metadata` が出す平文を貼る (語の間の `--` は `-`、 上限 1920 字、 `$` は MathJax で数式になる)。 Comments は頁数と図の数 |
+| Preview | 著者が 1 人ずつ別の名前として並んだか (「and X」 が 1 人分になっていないか)、 category、 abstract (画面から写して `metadata --compare-abstract` で照合)。 PDF を一度開くまで Submit は出ない |
+| Submit | login と Submit は投稿者本人。 公開前なら user page の Unsubmit で直せるが、 **公開は再投稿の時刻で決め直される** (締切前に再投稿すれば遅れない)。 公開前の修正では version 番号は増えない (arXiv help: submit) |
+
+### <a id="arxiv-freeze-race"></a>package を作ってから Submit までに原稿が動く
+
+共同編集の原稿は、 package を作った後にも共著者や並列 session が commit しうる。 **Add Files の直前と Submit の直前に** remote を fetch し、 package の元 commit と比べる。
+
+- remote が進んでいたら package を作り直し、 **前の package と file ごとに byte で比べる**。 コメント行だけの commit なら package は変わらない (上げ直し不要)。 本文が変わっていたら上げ直す。
+- 手元の editor の未保存・未 commit の編集も確かめる。 package は working tree から作るので、 commit 前の編集が入ると「どの版を出したか」 の記録と合わなくなる。
+
+### <a id="arxiv-schedule"></a>締切と公開時刻
+
+- 締切 = **米東部 14:00 (月〜金)**、 公開 = **その日の米東部 20:00** (金曜 14:00〜月曜 14:00 の投稿は月曜 20:00)。 米国の祝日は後ろにずれる (arXiv help: availability)。
+- 日本では、 米国の夏時間中は締切が翌 03:00・公開が翌 09:00、 冬は 04:00・10:00。 中国はそれぞれ日本の 1 時間前。 換算は暗算でなく `zoneinfo` 等で。
+- 共著者に知らせるときは米東部の時刻を写さず、 **読み手の現地時刻**で書く ([`research-email.md#times-in-recipient-zones`](research-email.md#times-in-recipient-zones))。
+- `\date` を指定しない原稿は、 arXiv が組版した日 (UTC) の日付が印字される。
+
+### <a id="arxiv-category-choice"></a>primary category と cross-list
+
+- **SCOAP3** (高エネルギー物理の論文のオープンアクセス費用を肩代わりする枠組み): JHEP / EPJC / PLB / NPB は全論文が対象で、 category を問わない。 PRD / PRL / PRC / PTEP / CPC / APPB / AHEP は、 **掲載前に arXiv に出し、 その primary が hep-ex / hep-lat / hep-ph / hep-th の論文**だけが対象 (cross-list に hep-* を足しても対象にならない)。 arXiv の moderator は分類を変えることがある。 出典 = SCOAP3 FAQ。 対象誌の最新は SCOAP3 の誌一覧で確かめる。
+- シリーズの論文は前作と揃えるのが既定。 前作の abs page の Subjects 行を見る (arXiv の export API で一括に引ける)。
+- cross-list は内容が本当に関係する分野だけにする (付けすぎは moderator に外されうる)。 決めるのは著者。
+
+### <a id="arxiv-coauthor-notice"></a>投稿後: 共著者への連絡と記録
+
+- 添付 = **arXiv が組版した PDF** (投稿した物そのもの) + **前回共著者に送った版からの latexdiff** (base の選び方 = [`research-email.md#diff-page-attachment`](research-email.md#diff-page-attachment))。 公開時刻は読み手の現地時刻で書き、 arXiv 番号は公開後の続報で送る。
+- 記録 = 投稿 ID・package の元 commit・category・license を project の記録に、 公開と番号の確認・続報を期限つき TODO に置く (人の記憶を carrier にしない)。
 
 ### 実例
 
 - 2026-07 のある arXiv v2 replace = v1 と同構成 (本文 tex + ref.bib + 非標準 bst + 図、 PDF 非同梱) で共著者に配布
+- 2026-09 のある物理論文の初回投稿 = 共同編集の原稿に、 著者間の注記のコメントが 200 行ほど残っていた → コメントを除き、 元原稿との PDF テキスト一致を gate にして package を作った。 upload の途中で並列 session が原稿に commit (コメント行だけ → package は byte 一致で上げ直し不要) → 直後に本文 1 文の修正が入り、 作り直して上げ直した。 `.bbl` だけの初版は Review Files で `.bst` が missing と出て、 著者判断で `.bib` と `.bst` も同梱した。 arXiv の組版 PDF は 1 頁目の日付と印字以外テキスト一致。 共著者への連絡の初稿は公開時刻を米東部で書き、 読み手の現地時刻に直した。 `scripts/arxiv-package.py` と本節の各 anchor はこの投稿から起こした。
 
 ## <a id="post-submission-status"></a>6. 投稿後の status 追跡 (= role 略語と status 階梯)
 
@@ -273,6 +330,7 @@ Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Mana
    - Main tex + bib + bst + figures (本文参照分のみ)
    - `.bbl` を含めるかの方針決定 (v1 パターン踏襲 or modern robust)
    - **非標準パッケージを事前同梱** (revtex4-2, tikz-feynman 等、 §[package-bundling](#package-bundling))
+   - **arXiv は `scripts/arxiv-package.py build`** で作る (コメント除去・`.bbl`+`.bib`+`.bst`・gate、 §[arxiv-package-tool](#arxiv-package-tool))。 Submit の直前に原稿の remote が動いていないか見る (§[arxiv-freeze-race](#arxiv-freeze-race))
    - aux ファイル削除
 3. **PDF 版**
    - journal 用は最終 PDF 同梱 (Main Document)、 arXiv 用は PDF 含めない (v1/v2 共通、§[arxiv-source-only](#arxiv-source-only))
@@ -287,7 +345,7 @@ Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Mana
    - topic match を第一、 personal connection は editor 推薦での compensating factor
 7. **投稿完了後**
    - Manuscript ID を SESSION.md 系に記録
-   - 受領確認メールを共著者に転送
+   - 受領確認メールを共著者に転送 (arXiv なら組版 PDF + 前回送った版からの latexdiff、 公開時刻は読み手の現地時刻で = §[arxiv-coauthor-notice](#arxiv-coauthor-notice))
    - arXiv v2 upload zip を投稿担当共著者に配布
    - **数週間後に Author Center で status を一度確認** し、 AE / EIC の顔ぶれと合わせて共著者に共有 (§[post-submission-status](#post-submission-status)。 共著者も Co-Authored 欄で見られるが decision メールは submitting author にしか来ない)
    - **定期実読の backstop TODO を立てる** (= 2 週おき、 decision メール着信で close。 §[status-automation](#status-automation))

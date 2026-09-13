@@ -266,6 +266,14 @@ origin: 2026-09-01、 大手出版社の commissioning 部門から分野違い�
 
 **Why**: 相手に履歴 UI を開かせるのは受け手の作業を増やす。 添付 1 枚なら返信の障壁が下がる。
 
+**続報の diff の base** (2026-09-14): 前便でも diff を送っていたなら、 次の diff の base は**前便の diff の新しい側の commit** (= 相手の手元にある版) にする。 それより古い版を base にすると、 相手は既に見た変更と新しい変更を区別できない。 投稿の報告でも同じ (投稿した版 vs 前便で送った版、 [`paper-submission.md#arxiv-coauthor-notice`](paper-submission.md#arxiv-coauthor-notice))。
+
+## <a id="times-in-recipient-zones"></a>時刻は読み手の現地時刻で書く — 予定を決めた system の時刻をそのまま写さない (2026-09-14)
+
+**Rule**: 公開・締切・会議の時刻を知らせるときは、 **読み手がいる地域の時刻**で書く。 読み手が複数の地域にまたがるなら地域ごとに並べる (例: `at 8:00 in China and 9:00 in Japan`)。 予定を決めた system の時刻 (arXiv の米東部、 会議サイトの UTC など) をそのまま写さない。 換算は夏時間込みで機械に任せる (Python の `zoneinfo` 等)、 暗算しない。
+
+**Why**: 書き手が画面で見ている時刻は、 読み手にとっては換算の宿題になる。 共著者への arXiv 投稿の報告で、 初稿が公開時刻を米東部で書き、 著者に「必要なのは日本と中国の時刻」 と直された。
+
 ## <a id="appendix-letters-unstable"></a>改稿中の付録の letter は識別子として不安定 — 連絡は題で呼び、 並べ替えたら letter の変更を一言 (2026-09-08)
 
 **Rule**: 付録を足す・並べ替える改訂中は「付録 E」 が翌日 B になる。 共著者便では付録を題 (「〇〇の節」「△△の付録」) で呼び、 letter は括弧で添える。 並べ替えた後の便で、 前便の letter がどう変わったかを 1 行で訂正する。 和文で "letter" と書くと通じない (著者指摘「letter って分からん」) — 「付録 E → 付録 B」 と具体に書く。 一般則 = [`paper-audit.md#appendix-order-by-first-reference`](paper-audit.md#appendix-order-by-first-reference)。
