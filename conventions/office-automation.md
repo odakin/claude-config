@@ -491,7 +491,7 @@ osascript -e 'tell application "Microsoft Excel" to quit'
 
 ⚠️ delay/quit/cold-start の非同期対策は **AppleScript で Office app を automation する一般則** (= -609「接続無効」 は quit 後も AppleScript が reference を clear せず vanishing app にコマンドが届く / app 未 ready で起き、 **any app に共通**)。 Word docx→PDF も同根の gotcha ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache) の cold-start / quit)。
 
-⚠️ **merged cell の値を消すときは `clear contents of range "H50:AD50"` (= merged 全域 + `of`)** — 単セル指定 `clear contents range "H50"` は **merged cell に対して silent no-op** (エラーも出ず値が残る)。 「消したつもり」 のまま PDF 生成まで通ってしまうので、 clear 後に **openpyxl readback で None を assert** するのが必須 gate (= 2026-07-27 実発生: 差し戻し対応で消したはずの記載が readback 検証で発覚、 検証しなければ再提出書類に旧記載が残っていた)。 `set value of range … to ""` も同様に merged では全域指定が安全。
+⚠️ **merged cell の値を消すときは `clear contents of range "H50:AD50"` (= merged 全域 + `of`)** — 単セル指定 `clear contents range "H50"` は **merged cell に対して silent no-op** (エラーも出ず値が残る)。 「消したつもり」 のまま PDF 生成まで通ってしまうので、 clear 後に **openpyxl readback で None を assert** するのが必須 gate (= 実発生: 差し戻し対応で消したはずの記載が readback 検証で発覚、 検証しなければ再提出書類に旧記載が残っていた)。 `set value of range … to ""` も同様に merged では全域指定が安全。
 
 ⚠️ **merged cell の font size を osascript で変える正しい構文** (= 長い氏名/所属が結合セルで両端切れた時の根本対処): `set font size of font object of range "G13" of ws to 9` (= **property 名は `font size`**)。 よくある誤り = `set size of font object of …` → **`-1728` (object not found)** で沈黙失敗する (= `size` という property は font object に無い)。 setup によっては `-10006` (errAEPrivilegeError) が返ることもあり、 その時は各操作を `try` で囲んで続行。 ⚠️ **font が効かない時の fallback を `shrink_to_fit=True` にしてはいけない** — **shrink_to_fit は結合セルでは no-op** (Excel 制約) で、 立てても何も縮まず「直したつもり」 で clip が残る (= 2026-06-16 謝金様式⑭-1 所属見切れ事故の温床)。 結合セルの文字溢れは **font size を下げる** のが唯一効く手。 詳細・検出・検証は [`merged-cell-text-clipping`](#merged-cell-text-clipping)。 origin: 2026-06-04 謝金様式の fill 後微修正 + 2026-06-16 G13 所属見切れ RCA。
 
@@ -1627,7 +1627,7 @@ assert fitz.open("p1.pdf").page_count == 1
 
 ### <a id="pdf-text-match-nfkc"></a>PDF text 照合は両辺 NFKC 正規化必須 (= CJK 互換字形の false negative)
 
-**症状**: PDF の text 層が 「日」 を U+2F49 (康熙部首「⽇」)、 「谷」 を 「⾕」、 **「田」 を U+2F53 (「⽥」)** 等の**互換字形で返す**ことがあり (= フォントの cmap 由来)、 `"申請日" in text` / `page.search_for("<氏名>")` が**正常な文書に対して空振り**する。 「prefill が消えている」 「ラベルが消えた」 等の誤診断 → 不要な作り直しに直結する。 発生源は多様: **fitz native embed だけでなく、 python-docx で書いた「田」 を Word.app AppleScript で PDF 化した経路** でも 「田」 (U+7530) → 「⽥」 (U+2F53) 変換が発生する (= 2026-07-16 若手賞 推薦書 signature 合成 verify で「尾田」 MUST_PRESENT が空振り、 視覚は正常だが raw `in` check 失敗)。 pipeline 全長で NFKC 前提を貫くこと。
+**症状**: PDF の text 層が 「日」 を U+2F49 (康熙部首「⽇」)、 「谷」 を 「⾕」、 **「田」 を U+2F53 (「⽥」)** 等の**互換字形で返す**ことがあり (= フォントの cmap 由来)、 `"申請日" in text` / `page.search_for("<氏名>")` が**正常な文書に対して空振り**する。 「prefill が消えている」 「ラベルが消えた」 等の誤診断 → 不要な作り直しに直結する。 発生源は多様: **fitz native embed だけでなく、 python-docx で書いた「田」 を Word.app AppleScript で PDF 化した経路** でも 「田」 (U+7530) → 「⽥」 (U+2F53) 変換が発生する (= 推薦書の署名合成の verify で、 氏名の MUST_PRESENT が空振り、 視覚は正常だが raw `in` check 失敗)。 pipeline 全長で NFKC 前提を貫くこと。
 
 **規律**: PDF text 抽出に対する文字列照合は、 **必ず `unicodedata.normalize("NFKC", text)` してから比較**する。 `search_for()` は内部照合を正規化できないので、 互換字形を含みうる語の bbox が要る時は `get_text("words")` を取って NFKC 照合で探す。 1 度の検証で 2 回連続 false negative を踏んだ実害 (= 2026-06-11 ⑭-2、 「氏名欄・申請者欄が空」 と 2 度誤診断)。
 
@@ -1989,7 +1989,7 @@ for line in new_lines:
 
 ### <a id="docx-new-run-rfonts-fallback"></a>python-docx で新規 run を作る時は rFonts を明示する (= docDefault テーマフォント落ち → 様式フォント指定違反)
 
-官製様式 docx (= 記載欄フォントを「MSゴシック 10.5pt」 等と**明示指定**し「書式設定は絶対に変更しない」 と書くタイプ) を python-docx で fill して提出したら、 受付側の書式 audit で**「記載欄のフォントが指定と異なる」 差し戻し**を受ける事故。 2026-07-17 実事故 (= 表彰推薦様式、 記入本文のほぼ全部が指定外フォントで提出され翌日差し戻し・期限当日再送)。
+官製様式 docx (= 記載欄フォントを「MSゴシック 10.5pt」 等と**明示指定**し「書式設定は絶対に変更しない」 と書くタイプ) を python-docx で fill して提出したら、 受付側の書式 audit で**「記載欄のフォントが指定と異なる」 差し戻し**を受ける事故。 実事故 (= 推薦の様式、 記入本文のほぼ全部が指定外フォントで提出され、 差し戻しを受けて再送)。
 
 **機構 — 新規 run はテーマフォントに落ちる**:
 
@@ -2267,7 +2267,7 @@ origin: ある公募の様式の氏名欄、 当初 hanko を挿入 → 「電�
 - **生成時の reflex**: 様式を openpyxl 等で生成するとき、 押印欄に印影画像を埋め込まず**空で出力**し、 印刷後の物理押印を前提にする (= そういう窓口は [`pdf-snapshot-xlsx-submission`](#pdf-snapshot-xlsx-submission) の通り提出本体も紙原本を要求しがち)。
 - **受理実態は組織・書類種・時期で変わる (= layer 3 routing)**: 実押印要求が緩む / 画像印影を事実上受理する運用に変わる組織も実在する。 本 slug の一般推奨 (= 実押印が最も確実) は不変のまま、 **自組織の「どの窓口で何が通るか」 は組織固有の運用知識なので個人層 (layer 3) に記録し、 実務ではそちらを優先する** (= 受理実態が変わったら layer 3 側を更新する。 本 slug を組織個別の実態で書き換えない)。
 
-origin: 2026-06 ある学内事務窓口で、 出張様式に貼り付けた電子印影を印刷提出 → 「印刷された印影は不可、 紙に実押印を」 と差戻し。 同窓口は謝金様式でも「ハンコ画像貼付は不可、 紙に朱肉 / シャチハタ捺印した原本を」 と一貫 (= 署名だけでなく **認印も電子貼付不可** の窓口が存在)。
+origin: ある学内事務窓口で、 出張様式に貼り付けた電子印影を印刷提出 → 「印刷された印影は不可、 紙に実押印を」 と差戻し。 同窓口は謝金様式でも「ハンコ画像貼付は不可、 紙に朱肉 / シャチハタ捺印した原本を」 と一貫 (= 署名だけでなく **認印も電子貼付不可** の窓口が存在)。
 
 ### <a id="signature-photo-to-transparent-png"></a>署名: 手書き写真 → 透過 PNG (raw → transparent、 [`signature-image-overlay-density`](#signature-image-overlay-density) の上流)
 
@@ -2678,7 +2678,7 @@ dump 時点で label が浮き上がる → fill 対象から自動的に除外�
 - **機械検証の補助**: ○前置きなら filled value が template label を **substring として含む**。 含まない短い mark (= `☑` 単体) への置換は [`label-overwrite-detection-limit`](#label-overwrite-detection-limit) の検出漏れ pattern に該当 → `diff-form-xlsx.py` の `VALUE_CHANGED` を [`manual-review-required`](#manual-review-required) 通り逐一 expose し「label を mark で潰していないか」 を手 review。
 - ⚠️ 審査機関が「印刷済み cell への文字追加」 自体を改変とみなす可能性は form/機関依存で未確定。 厳格なら fill 段階では label を素のまま残し、 **印刷後に手書き○囲み** (= デジタル無改変) に切替。
 
-origin: 2026-06 学外者旅費様式 (`3_…`) 支給方法選択。 前 session が `☑` で label を上書き → 審査機関差戻し → ○前置き (= label 保持) に修正。
+origin: 学外者旅費様式の支給方法選択。 前 session が `☑` で label を上書き → 審査機関差戻し → ○前置き (= label 保持) に修正。
 
 ### <a id="multi-sheet-formula-propagation"></a>multi-sheet form の数式伝播 + literal の帰属区別
 
@@ -2888,7 +2888,7 @@ origin: ある様式の自筆署名 overlay 後の検証。 過去 session で�
 
 ⚡ **reflex — 1 回 fail を確認したら image 再試行を即やめる**: 画像が読めないと分かったら、 **同じ画像読み込みを何十回も retry しない**。 in-session では回復しないので retry は時間と budget の純粋な浪費 + user を待たせる。 1 回の明確な fail で確定とみなし、 即座に手段を切り替える: ① **text 抽出で代替して続行** (= 大半はこれで足りる、 §上記) → ② visual が必須なら **user に relay 依頼** → ③ それも無理なら **新しい session に移る** (= image budget は session 単位なのでリセットされる)。 「もう一度試せば読めるかも」 は false hope。 同型 reflex は automation 全般に適用 (= [`docx-pdf-stale-cache`](#docx-pdf-stale-cache) の Word automation ループも同じ「N 回で諦めて fallback」)。
 
-origin: 2026-06 ある官製様式の修正で、 事務側の赤入れ PDF を全ページ画像化して赤字を追ううちに image limit に到達 → 以後 Claude は画像を一切読めず → docx 構造 + PDF テキスト基準の検証に切替 + 事務側の赤入れマークは user が page-by-page で relay して完遂 (= 読めない画像を何度も読み直そうとして時間を浪費したのが反省点)。
+origin: ある官製様式の修正で、 事務側の赤入れ PDF を全ページ画像化して赤字を追ううちに image limit に到達 → 以後 Claude は画像を一切読めず → docx 構造 + PDF テキスト基準の検証に切替 + 事務側の赤入れマークは user が page-by-page で relay して完遂 (= 読めない画像を何度も読み直そうとして時間を浪費したのが反省点)。
 
 ---
 

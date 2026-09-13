@@ -385,8 +385,8 @@ CLI script A の loader / helper を script B が `importlib.util.spec_from_file
 1. **人手更新される status field を発火条件にしない。** status は「人が最後にどう思ったか」
    の記録であって「今それが起きているか」 の事実ではない。 「公募が始まったら status を
    open にする」 型の運用は、 開始を知る者がいなければ誰も更新せず、 **entry が丸ごと
-   surface から消える** (= 実例 2026-07: 助成金 DB で status filter に阻まれた締切が
-   期限 6 日前まで一度も表示されず、 応募機会を 1 回失った)。 発火は**日付だけ**で判定し、
+   surface から消える** (= 実例: 助成金 DB で status filter に阻まれた締切が、
+   期限の直前まで一度も表示されなかった)。 発火は**日付だけ**で判定し、
    status の drift は同じ行の warning marker として可視化する (= 検出器を増やさない)。
 2. **anchor 切れ invariant**: 監視対象の entry は常に「未来の発火日を 1 つ以上持つ」 か
    「明示 exempt (= rolling / concluded / 対象外 priority)」 のどちらかでなければならない —

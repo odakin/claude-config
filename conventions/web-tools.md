@@ -231,7 +231,7 @@ backend が `permission_required` を return しても、 **sidepanel の prompt
 ### prompt すら出ずに拒否される domain がある (= 拡張では詰み、 Browser pane に切替)
 
 `navigate` が **"Navigation to this domain is not allowed"** を即返し、 sidepanel に Permission required dialog が出ない domain がある
-(2026-09-08 実測: 科研費電子申請システムの本体 `www-kaken.jsps.go.jp`。 トップの `www-shinsei.jsps.go.jp` は prompt が出て通る)。
+(実測: 科研費電子申請システムの本体 `www-kaken.jsps.go.jp`。 トップの `www-shinsei.jsps.go.jp` は prompt が出て通る)。
 拡張の設定でサイト許可を足す経路もあるが、 **Claude Code 内蔵の Browser pane は別 surface で allow-list も別** なので、 そちらで通るなら
 切替が最短 (login は pane を表示して user が打つ)。 frameset / popup 型の古い web app は pane + JS の方が扱いやすい
 ([#browser-pane-frameset-popups](#browser-pane-frameset-popups))。

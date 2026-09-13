@@ -137,6 +137,6 @@ field 名 / 保存関数名 / 画面遷移 / 行追加関数 を **1 回実測�
 harness 自身の `--selftest` は生成 JS を **node の stub DOM 上で実際に走らせて**契約 1-4 を確認する。
 site 側 driver の selftest からは `audit_steps(steps)` を呼ぶだけでこの層が乗る。
 
-初例 = 科研費電子申請システム (frameset + 引数付き保存関数 + 6 表の行追加、 2026-09-08 に実機で
+初例 = 科研費電子申請システム (frameset + 引数付き保存関数 + 6 表の行追加、 実機で
 往復・読み戻し・削除まで検証)。 サイト固有の台帳は
 [`kakenhi-proposal.md#ai-write-route`](kakenhi-proposal.md#ai-write-route) と当該 driver の docstring。

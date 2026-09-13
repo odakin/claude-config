@@ -469,7 +469,7 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 
   **診断**: `jsarticle` 等の pTeX class に `pdflatex` を打つと `! LaTeX Error: Unicode character X (U+XXXX) not set up for use with LaTeX` が日本語 1 文字ごとに連発する fingerprint が出る (2026-07-13 観測)。 log にこの pattern を見たら engine 選択ミス確定 → 正しい経路は `platex → platex → dvipdfmx` または `latexmk -latex=platex -pdfdvi <file>`。 `pdflatex` に別 patch を当てる方向は原理的に不可 (= class 側で pLaTeX 前提の macro を使っているため)。
 
-  **同 fingerprint の別原因 (engine は正しい場合)**: 正しい `platex` 経路でも、**丸数字 ①②③ (U+2460 系) 等の JIS X 0208 外文字**は同じ `Unicode character not set up` エラーになる (2026-08 に公募要領の「公募内容③⑤」を調書へ引用して観測)。対処 = `uplatex` へ移行 / `otf` package の `\ajMaru{3}` / 引用文なら番号を落として書き換え (調書等の使い捨て文書は書き換えが最速)。エラー行数が「日本語ほぼ全文字」なら engine ミス、「特定の記号だけ」なら本項。
+  **同 fingerprint の別原因 (engine は正しい場合)**: 正しい `platex` 経路でも、**丸数字 ①②③ (U+2460 系) 等の JIS X 0208 外文字**は同じ `Unicode character not set up` エラーになる (公募要領の丸数字つきの項目を調書へ引用して観測)。対処 = `uplatex` へ移行 / `otf` package の `\ajMaru{3}` / 引用文なら番号を落として書き換え (調書等の使い捨て文書は書き換えが最速)。エラー行数が「日本語ほぼ全文字」なら engine ミス、「特定の記号だけ」なら本項。
 - **BibTeX フルビルド**:
   - **lualatex (英語、odakin 標準)**: `lualatex → bibtex → lualatex → lualatex`
   - pdflatex (英語、互換代替): `pdflatex → bibtex → pdflatex → pdflatex`
@@ -489,7 +489,7 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 
 ⚠️ <a id="latexmk-pdf-overrides-rc"></a>**`latexmk -pdf` は `.latexmkrc` の engine 指定を上書きする** — repo が `.latexmkrc` で `$pdf_mode = 4` (lualatex) を宣言していても、コマンドラインの `-pdf` は `$pdf_mode = 1` (pdflatex) を意味するので、**error 0・警告なしで別 engine の PDF が出る**。壊れないので気付かない: 変わるのは合字・アクセント・分数まわりの組で、抽出テキストでは `Poincaré` → `Poincar´e`、`spin-1/2` の分数が潰れる形で出る (2026-09-12 実測)。→ **`.latexmkrc` を持つ repo では `latexmk` を素で叩く** (engine を明示したいときは `-pdf` でなく `-lualatex` / `-pdflatex`)。焼き直した PDF を比較検証に使うなら、まず `metadata['producer']` が旧版と一致するかを見る (= 中身の diff を読む前に engine の同一性を確かめる)。
 
-⚠️ <a id="nonstopmode-hides-undefined-env"></a>**`-interaction=nonstopmode` は undefined environment を握り潰して PDF を出す**: クラスが `amsmath` を読んでいないのに `\begin{equation*}` を書くと `! LaTeX Error: Environment equation* undefined.` が出るが、**nonstopmode では build が続き PDF も生成される** (中身は壊れた組版)。学会・申請書の配布クラスは `amsmath` を仮定できない (2026-08-22 実測: 科研費 LaTeX クラス)。→ **build の度に `grep -c "^!" *.log` が 0 であることを確認する**。素の `\[ ... \]` は amsmath なしで動くので、可搬性が要る文書ではこちらを既定にする。
+⚠️ <a id="nonstopmode-hides-undefined-env"></a>**`-interaction=nonstopmode` は undefined environment を握り潰して PDF を出す**: クラスが `amsmath` を読んでいないのに `\begin{equation*}` を書くと `! LaTeX Error: Environment equation* undefined.` が出るが、**nonstopmode では build が続き PDF も生成される** (中身は壊れた組版)。学会・申請書の配布クラスは `amsmath` を仮定できない (実測: 科研費の LaTeX クラス)。→ **build の度に `grep -c "^!" *.log` が 0 であることを確認する**。素の `\[ ... \]` は amsmath なしで動くので、可搬性が要る文書ではこちらを既定にする。
 
 ## <a id="silent-typesetting-traps"></a>silent に効かない組版指定 — 書いたのに無視される 5 型 (2026-09-12)
 
