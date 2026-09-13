@@ -534,6 +534,8 @@ LLM は decision point で **local context の pattern-match** に依存する�
 2. 既存の feedback_* memory は **削除または git 同期先に migrate** (migrate より削除を優先 — migrate は defer の一形態で accumulation を温存しがち)
 3. 規約として「memory に feedback を書かない」を書くのは弱い (§8.1 参照) — hook で enforce する
 
+**実例 (2026-09-13、 公開 repo の例示)**: 公開 repo の規約に残っていた未公開原稿の例示が、 後の hoist の書き方の手本になり、 禁止の規則ができた後にも同じ書き方が 2 回繰り返された。 それまでの修正はどれもその日に見つけた分だけを直していた = **前例の側を掃除しない限り、 規則を足しても手本は残る** (掃除の道具 = claude-config `scripts/check-unpublished-quote.py --scan-tree`)。
+
 ### <a id="friction-asymmetry"></a>8.4 Friction asymmetry と memory bias
 
 Claude が memory に書きたがる構造バイアスの正体は多くの場合、認知の怠慢ではなく **物理的摩擦の非対称**:
@@ -689,6 +691,8 @@ origin: ある追跡システムで「期限つき義務」 が複数回見落�
 実測 (2026-09-12): ある共有 engine の正本規約に、同じ出力の silent な壊れ方 3 行とその対処 (前処理・引数追加・出力検査) が 2 週間前から書かれていた。対処の実装は或る paper repo の中だけに在り、engine は 1 つも適用していなかった。engine を呼ぶ別 project は、その壊れ方が起こる条件 (当該 macro 定義) を満たしていた = **規約上は既知、運用上は無防備**。
 
 reflex: 症状表に対処を書く / 読むときに **「この対処は誰が実行するのか」** を 1 行で言えるようにする — 答えが「読んだ人が思い出して手で」 なら発火面は最弱 ([§8.12](#firing-surface-hierarchy) の 4) であり、共有 engine があるなら**そこに入れるまでが 1 単位**。逆向きの点検も安い: **project 側に在る script が、上層の engine に無い機能を持っていないか** (= 下層が上層を追い越している箇所は、他の呼び元が丸ごと取りこぼしている)。実装したら表の行に道具への link を張り、engine の既定に入れる。
+
+**実例 (2026-09-13)**: 機密の逐語照合 gate は作られ、 docstring にも「remote 付き repo に commit されるのを止める」 と書かれていたが、 呼び出しは private repo の hook chain にだけ在り、 **公開 repo の pre-commit からは一度も呼ばれていなかった** (= 一番守るべき target で走っていない)。 公開 repo の runner に配線し、 実際の hook を通す確認 (`check-unpublished-quote.py --check-wiring --through-hooks`) を定期検査に入れた。
 
 ### <a id="automation-trigger-routing"></a>8.12a 「自動化」は mechanism 名ではない — 5 軸で発火経路を先に route する
 
@@ -1119,6 +1123,7 @@ origin: 2026-09、 layer-3 の session 宛て board を v2 (request / claim / su
 - **実例 (2026-09-10)**: commit の trailer に session の出自を記録する設計で、 当初案は「公開 repo は id のみ / 非公開 repo は host と surface も」 の出し分けだった。 分岐は repo 側の marker file の有無に依存する = **marker 付け忘れの公開 repo で機器名が公開 history に焼き付く**。 採った解 = **id だけを書く**。 host は id から transcript を辿れば分かる (= 情報は失われていない) ので、 分岐を消しても機能が減らない。 結果、 全 repo で同一挙動になり marker 運用への依存がゼロになった。
 - **分岐を消せる条件** = richer 側の情報が safe 側から**導出可能**なとき。 導出経路があるなら「両方に書く」 は冗長で、 冗長は leak 面だけを増やす。 導出できないなら分岐は本質的 — その時は分岐条件を fail-safe (= 判定不能なら safe 側) に倒した上で、 [§8.13](#conditional-firing-visibility) に従って「今どちらで動いているか」 を可視信号にする。
 - 副次効果として、 分岐が消えると**説明も 1 本になる** (= 「public では〜、 private では〜」 という条件文を doc・test・review の全てで維持しなくてよい)。 条件分岐の維持コストは実装より doc 側に厚く乗る。
+- **実例 (2026-09-13、 marker の設定漏れ)**: 公開 repo の gate (識別子・repo 名・未公開文書の逐語) は全部 marker file の有無という分岐に依存していた。 GitHub で public の clone 7 本に marker が無く、 どの gate も走っていなかった。 marker を書く経路は新規 repo の setup だけで、 他所で作られた repo の clone は一度も通らない。 公開かどうかは GitHub 側にしか無く分岐は消せないので、 visibility と marker を突き合わせる点検 (claude-config `scripts/check-public-marker.py`) を常設し、 別マシンの hook は毎 session の install で揃える。
 
 ### <a id="post-resolution-scope-revalidation"></a>8.35 resolver の出力は新しい trust boundary — 最終 action target で scope を再検証する
 
@@ -1403,6 +1408,22 @@ class の別の形がその pattern を素通りすると、sweep は「無い�
 - **由来 (2026-09-13)**: 原稿の参照形を直す pass で、手の grep を sweep の正本にしていた。位置で判定する検査器を足すと、
   grep の射程外の 1 件が出た。同じ日、性能修正の同類探しで書いた正規表現が、探している書き方に一致しない形だった
   (広い grep を併走させて気づいた)。1 件目の instance = [`latex.md#bare-parenthetical-crossrefs`](../conventions/latex.md#bare-parenthetical-crossrefs)。
+
+### <a id="rule-visible-where-the-act-happens"></a>8.44 規則は「それを破る行為をする session」 が読み込む場所に置く — 正しい repo に書いた規則でも、 行為の場所から見えなければ無いのと同じ (2026-09-13)
+
+**症状**: 規則は存在し、 内容も正しく、 正本もはっきりしているのに、 同じ class の事故が規則の後で 2 回起きた。
+
+**実測 (2026-09-13)**: 「公開 repo の例示に未公開文書の文を持ち込まない」 という規則は、 公開 repo 自身の指示書 (その repo を作業 dir にしたときだけ読み込まれる) と、 別 repo の運用 doc の 1 項に在った。 例示を書いた session は上位の dir を作業 dir にして、 公開 repo の file を絶対 path で編集していた。 transcript で規則の文面が初めて現れたのは、 違反した commit の 33 分後だった。 その間に回した漏洩検査は識別子の list だけで、 規則が求める原稿の術語での走査は入っていなかった。
+
+**規則を書くときに問う**:
+1. この規則が守る**行為**は何か (例: 公開 repo に commit する、 層1 に例示を書く)。
+2. その行為をする session は**どこを作業 dir にして、 どの指示書を読み込んでいるか**。 行為の対象 repo と作業 dir は、 hoist・横断 sweep・別 repo からの絶対 path 編集では一致しない。
+3. 読み込まれないなら、 (a) 常に読み込まれる面 (root の指示書) に 1 行を置く、 (b) 行為の境界 (pre-commit・書き込み hook) に機械の gate を置く。 (b) は context に依存しないので、 機械で判定できる部分はこちらに寄せ、 (a) には判定できない部分 (言い換え・判断) を残す。
+
+**なぜ気づきにくいか**: 規則の書き手は規則の repo を作業 dir にして書くので、 自分には常に見えている。 見えないのは別の場所から来る session だけで、 そちらは規則が無いことに気づけない。 代わりに手元の前例が手本になる ([§8.3](#precedent-as-training-data))。
+
+関連: [#documented-not-wired](#documented-not-wired) (engine に入っていない) / [#firing-surface-hierarchy](#firing-surface-hierarchy) (発火面の強さ) / [#context-branch-as-leak-path](#context-branch-as-leak-path) (スイッチの設定漏れ)。
+
 
 ## <a id="triage-and-subtraction"></a>9. Triage と subtraction — 規約システムの成長・代謝バランス
 
@@ -2422,6 +2443,7 @@ field を optional に戻すと item が radar から消える (= 機構が必�
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
+| 2026-09-14 | §8.44 新設「規則は、それを破る行為をする session が読み込む場所に置く」 + §8.3 / §8.12a′ / §8.34 に実例 | 公開 repo の例示に未公開原稿の文が 1 週間で 3 回上がった RCA。規則は在ったが、行為をした session の読み込み面に無かった (初出は違反 commit の 33 分後)。同じ夜に配線漏れと marker の設定漏れも見つかった |
 | 2026-09-13 | §8.43 新設「sweep の「無い」 は、探している class の形ごとに陽性対照を通してから信じる」 | 同じ日に独立 2 件 (位置で定義される参照形の規則を違反の一形で掃いた grep / 探している書き方に一致しない正規表現)。§9.8 の複数事例を満たしたので、族の実例でなく節にした |
 | 2026-09-12 | §8.12 に「手動の入口 script」 tier と循環の警告を追加 | user「必ず読むリポ設定の肥大化は大丈夫そ?」 から実測したところ、auto-load される規律 file の肥大検出器が**入口 script (dashboard) にしか配線されていなかった**。その検出器は「過去 2 回とも発見が人間の手動だった」 ことを動機に作られたものなので、発火面を「人が見に来る」 に置いた時点で元の失敗を再生産していた。CI からも走るが finding が warn で exit 0 なので緑のまま埋もれる (= §22 の表示版)。kernel = 発火面 hierarchy の 3 と 4 の間に「手動の入口」 tier が在ること + **安全網をそれが覆う失敗モードと同じ経路に依存させない** + 検査を書いた turn に「誰の・どの event で走るか」 を 1 行で答える。対処は同じ engine を session 開始の surfacer に配線 (閾値内は沈黙なので noise 増ゼロ)。instance は個人層に残置 |
 | 2026-09-12 | §8.42 新設「検出器が literal で持つ signal は、その検出器について書かれた文章にも現れる」 | user「機械で警告が出る件はなんとかならんか」。実体は検索 null の nudge hook が検出語を素の部分文字列で探しており、**その hook 自身の source を grep した出力**で自己発火していた。同日、別 session が URL guard で同型を path 除外で処理しており、漏洩 gate の「pattern 一覧を同じ repo に置かない」 規律も同じ kernel と判明 (n=3)。kernel = 対策 2 つの射程差 — path 除外は**走査型**にしか効かず、tool 出力を見る検出器には外す file が無いので**構造 anchor** が唯一の手。落とし穴として「同じ error でも文脈で形が変わる」 (実測で 3 prefix) を明記。放置すると FP が保守作業に集中し §8.24 壁紙化の最短経路になる。instance は当該 hook の anchor 実装と回帰 test に残置 |

@@ -153,6 +153,7 @@ schema (= そもそも書けなくする) で守る。 片方で両方を守ろ�
   持たず、 Tier A-D のどれも走っていなかったと分かった (新規 repo の setup 経路は marker を書くが、 他所で作られた repo の clone は
   一度も通らない)。 点検 = [`scripts/check-public-marker.py`](../scripts/check-public-marker.py) (GitHub の visibility と marker と
   hook を突き合わせる。 marker を pull した直後の別マシンは `--hooks-only --fix-hooks` が hook を揃える)。
+- **配線の確認は 2 段**: `--check-wiring` = 本番の索引でカナリアが止まるか。 `--check-wiring --through-hooks` = 一時の公開 repo に両 hook を入れ、 引用を含む stage と message が実際の commit で拒否され、 平文の commit が通るか。 後者は runner の配線切れや設定の解決失敗まで捕まえる (約 5 秒)。
 - 止まったときは file と行と源の名前だけを出し、 一致した本文は出さない。 公刊版に在る文だと確かめた場合だけ
   `CLAUDE_UNPUBLISHED_GUARD=0` で 1 回通す。
 
@@ -194,6 +195,8 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 既存の記録を新しい基準で棚卸しする口を用意しておくと、 基準を変えた時に遡れる
 (= 「後から機密と分かったもの」 を中立化する操作も含めて)。
 
+公開 repo の未公開文書の逐語は、 gate (追加行だけを見る) とは別に `scripts/check-unpublished-quote.py --scan-tree <repo>` で現在の全 file を棚卸しできる (2026-09-13 に公開 2 repo を走査し、 残っていた 1 件を一般形に直して 0 件)。
+
 ---
 
 ## 7. この規約を実装している script
@@ -205,7 +208,7 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 | [`pack-pii-dirs.sh`](../scripts/pack-pii-dirs.sh) | 識別子入り dir を暗号化 tar に畳む / 畳み忘れ検出 | 各 repo の `.pii-pack-dirs` |
 | [`check-gitcrypt-readable.py`](../scripts/check-gitcrypt-readable.py) | 暗号化 file がこのマシンで読めるか (全 repo) | `.gitattributes` の `filter=git-crypt` 宣言 |
 | [`check-public-marker.py`](../scripts/check-public-marker.py) | 公開 repo の gate が入っているか: public なのに marker 無し / private なのに marker / marker があるのに hook 無し | GitHub の visibility (gh) と各 clone の marker・hook |
-| [`check-unpublished-quote.py`](../scripts/check-unpublished-quote.py) | 未公開文書の逐語 (quoted span / prose run) を公開 repo の commit と message で BLOCK / 配線監査 (カナリア 2 本) | 個人層の `unpublished-sources.txt` (public runner が渡す) |
+| [`check-unpublished-quote.py`](../scripts/check-unpublished-quote.py) | 未公開文書の逐語 (quoted span / prose run) を公開 repo の commit と message で BLOCK / 配線監査 (カナリア 2 本、 `--through-hooks` で実 hook) / 現在の tree の棚卸し (`--scan-tree`) | 個人層の `unpublished-sources.txt` (public runner が渡す) |
 
 いずれも **機密文字列も個人の配置も script 側に持たない**。 設定 file が無い環境では
 「対象外」 として何もしない (= 他の利用者の環境を壊さない)。

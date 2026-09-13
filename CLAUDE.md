@@ -252,7 +252,7 @@ setup.sh が自動で行うこと:
 
 新規リポを例外 list に追加する判断は user が行う (= Claude が独断で追加しない)。 また「既に commit history に名前が出てしまった repo」 を追跡的に追加するのも user 判断 (= 過去 leak の追認 vs 「list に入れず history 内残置は許容」 の判断は user の risk 評価による、 Claude は自動 list 化しない)。
 
-**commit message 拡張の根拠 (2026-05-13)**: file 本文では意識的に抽象化 (例: 「upstream リポ」) しても commit message で同 session の private repo 名を直書きする事故が複数 commit にわたって発生 (incident 集計は owner の private layer の leak-incidents 記録にあり)。 commit message は `git log` で grep 可能な public surface なので file 本文と同じ規律を適用する。 既存 `public-precommit-runner.sh` は file 本文の Tier A 検出のみで commit-msg は対象外だが、 2026-05-26 に `commit-msg-leak-guard-runner.sh` (BLOCK mode、 git native hook) で commit message scan を導入済 (= 設計詳細 [`DESIGN.md §2026-05-26`](DESIGN.md#commit-msg-leak-guard-option-b))。
+**commit message 拡張の根拠 (2026-05-13)**: file 本文では意識的に抽象化 (例: 「upstream リポ」) しても commit message で同 session の private repo 名を直書きする事故が複数 commit にわたって発生 (incident 集計は owner の private layer の leak-incidents 記録にあり)。 commit message は `git log` で grep 可能な public surface なので file 本文と同じ規律を適用する。 当時の `public-precommit-runner.sh` は file 本文の Tier A 検出のみで commit-msg は対象外だったが、 2026-05-26 に `commit-msg-leak-guard-runner.sh` (BLOCK mode、 git native hook) で commit message scan を導入済 (= 設計詳細 [`DESIGN.md §2026-05-26`](DESIGN.md#commit-msg-leak-guard-option-b))。 現在の tier 構成 (本文 = A 構造 / B literal / C private repo 名 / D 未公開文書の逐語 + local-only 機密、 message = 同じ matcher + D) = runner の header と [`conventions/confidential-repo-boundary.md#unpublished-text-public-gate`](conventions/confidential-repo-boundary.md#unpublished-text-public-gate)。
 
 ### Test file の private repo 名 literal 禁止 (2026-05-26 追加)
 

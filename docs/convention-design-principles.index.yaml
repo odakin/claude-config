@@ -325,6 +325,10 @@ sections:
     legacy: "8.43"
     level: 3
     title: "8.43 sweep の「無い」 は、探している class の形ごとに陽性対照を通してから信じる"
+  - id: rule-visible-where-the-act-happens
+    legacy: "8.44"
+    level: 3
+    title: "8.44 規則は「それを破る行為をする session」 が読み込む場所に置く — 正しい repo に書いた規則でも、 行為の場所から見えなければ無いのと同じ (2026-09-13)"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

@@ -119,7 +119,7 @@
 - **[prepare-commit-msg-session.test.sh](prepare-commit-msg-session.test.sh)** — prepare-commit-msg-session.sh の selftest
 - **[probe-python-nonascii-line.py](probe-python-nonascii-line.py)** — python が非 ASCII を含む長い 1 行を coding cookie 無しで読めなくなる境界 (file 実行と stdin = heredoc 実行の両方) を二分探索で測り、 cookie を置けば通るかも確かめる。 python を更新したら再測定する道具。--selftest 内蔵。
 - **[pty-leak-watch.sh](pty-leak-watch.sh)** — macOS Claude.app pty leak watchdog（LaunchAgent、枯渇前に macOS 通知、conventions/macos-claude-app-pty-leak.md）
-- **[public-precommit-runner.sh](public-precommit-runner.sh)** — 公開リポ pre-commit gate（Tier A + sensitive-terms.txt ephemeral）
+- **[public-precommit-runner.sh](public-precommit-runner.sh)** — 公開リポ pre-commit gate（Tier A 構造 / B literal / C private repo 名 / D 未公開文書の逐語 + local-only 機密）
 - **[public-precommit-runner.test.sh](public-precommit-runner.test.sh)** — self-tests for the file-body pre-commit gate
 - **[read-plot-axes.py](read-plot-axes.py)** — 公開図 (PDF / PNG) を pixel から数値に読み戻す — 枠・目盛りを検出して軸を較正し、点と境界線を data 座標で返す。
 - **[replace-line.py](replace-line.py)** — 一意 prefix assert 付きの 1 行置換 (= 「検証してから書く」 の機械化)。

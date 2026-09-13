@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: public-gate-tier-d
+    legacy: "2026-09-13"
+    level: 2
+    title: "2026-09-13: 公開 repo の Tier D (未公開文書の逐語) と marker 点検"
   - id: session-provenance-trailer-design
     legacy: "2026-09-10"
     level: 2

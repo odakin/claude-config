@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-13: 公開 repo の Tier D (未公開文書の逐語) と marker 点検](#public-gate-tier-d)
 - [2026-09-11: 既存図の情報を inventory 後に置換する](#figure-replacement-information-design)
 - [2026-09-11: INSPIRE 監査は texkey から安定 identifier へ fallback](#inspire-stable-id-fallback)
 - [2026-09-10/11: commit に agent/session/model/effort trailer (host/account は焼かない)](#session-provenance-trailer-design)
@@ -35,6 +36,23 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="public-gate-tier-d"></a>2026-09-13: 公開 repo の Tier D (未公開文書の逐語) と marker 点検
+
+**判断**:
+- 公開 repo の pre-commit と commit-msg に Tier D を足す。 D-1 = 未公開文書の逐語 (`scripts/check-unpublished-quote.py`)、 D-2 = 既存の `scripts/check-confidential-leak.py` (それまで private repo の hook chain にしか配線されていなかった)。
+- target は公開 repo だけ。 源の宣言は個人層 (`unpublished-sources.txt`) に置き、 engine は置き場所を持たない。
+- 止めるのは「exit 1 かつ engine 自身の見出し」 のときだけ (= engine の import error で全公開 repo の commit を止めない)。
+- 公開 repo の gate の唯一のスイッチは `.claude/public-repo.marker` なので、 GitHub の visibility と突き合わせる点検 (`scripts/check-public-marker.py`) を定期検査に置き、 別マシンの hook は毎 session の install で揃える。
+
+**却下した案**:
+- 内容語の shingle だけで検出する = 公開 2 repo の全履歴 replay で、 漏れた短い引用を 7 語では 1 件も拾えず、 5 語では半分が誤検出だった。
+- 非公開 repo の `.md` と `.py` も源にする = 層3 の plan や script から層1 へ一般則を上げる正当な写しが常に止まる。
+- pre-commit で毎回 GitHub に公開かどうかを問う = commit が network に依存する。 問うのは点検の側だけにした。
+
+**un-defer trigger**: 源に review report (`.md`) を足す = 査読所見の逐語が公開 repo に入りかけた 1 例目。 言い換えの検出は原理的に不可 (confidential-repo-boundary.md #4)。
+
+設計・較正・配線の確認の正本 = [`conventions/confidential-repo-boundary.md#unpublished-text-public-gate`](conventions/confidential-repo-boundary.md#unpublished-text-public-gate)。 なぜ規則だけでは止まらなかったか = [`docs/convention-design-principles.md#rule-visible-where-the-act-happens`](docs/convention-design-principles.md#rule-visible-where-the-act-happens)。
 
 ## <a id="session-provenance-trailer-design"></a>2026-09-10/11: commit に agent/session/model/effort trailer (host/account は焼かない)
 
