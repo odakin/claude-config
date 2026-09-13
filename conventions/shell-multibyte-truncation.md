@@ -58,5 +58,6 @@ except UnicodeDecodeError as e: print('INVALID', e)"
 
 - **規律**: 自然文の引数は **single quote** で囲む (single quote の中は一切展開されない)。文中に `'` が要るなら heredoc (`<<'EOF'`) か file 経由で渡す。
 - **痕跡**: 消えた token の場所には空の backtick 対 ` `` ` が残る。受け側の tool は**この指紋を拒否**して「引用符を直して再送」と言える (= 記録が immutable な board で事故を止めた実例、agent-board の writer gate)。
+- **痕跡が残らない形もある** (2026-09-13 実測、zsh): double quote の中の `` `x` `` は backtick ごと消えて空白だけが残り、`` ``x`` `` は中身だけが残る。どちらも空の backtick の対は残らないので、指紋で拒否する受け側もこの形は捕まえない。同日、commit message に書いた `` `~` `` が home dir の実行に化けて消え、`permission denied` が 1 行出ただけで commit と push は通った (履歴には「latex.md:  の無い」 が残った)。**再発 2 件目**。3 件目が出たら、`git commit -m` などの double quote の引数に backtick があれば止める PreToolUse guard を足す (校正の道具 = [`scripts/calibrate-bash-command-pattern.py`](../scripts/calibrate-bash-command-pattern.py))。それまでは commit message を `-F <file>` で渡す。
 - 関連: 文面を user が貼る側の規律は [`paste-destined-plain-text.md`](paste-destined-plain-text.md)、tool 入力に書いた文は user に見えていない = [`mid-turn-text-visibility.md`](mid-turn-text-visibility.md)。
 
