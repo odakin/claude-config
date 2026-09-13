@@ -32,7 +32,7 @@ Review lists (printed for reading; with --strict, L and P items also fail the ru
   P   position words that a relocation silently rebinds: previous / next / following / preceding
       (sub)section / appendix / chapter / paragraph, above / below, the former / the latter,
       aforementioned, hereafter; display-line positions (the second / last line of Eq. N), which a
-      re-broken display silently rebinds (name the term instead: "the two contorsion terms of Eq. N").
+      re-broken display silently rebinds (name the term instead: "the two mass terms of Eq. N").
   W   strong-word inventory: counts for only, unique(ly), complete(ly), automatically, every,
       whole, exact(ly), all orders, never, always, first time, novel, universal(ly), guarantee(d/s);
       lines for the rarer ones.

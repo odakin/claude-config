@@ -244,3 +244,6 @@ sections:
   - id: abbreviation-first-occurrence
     level: 2
     title: "略語は本文で長形が初めて出る箇所で定義する (2026-09-11)"
+  - id: notation-first-use
+    level: 2
+    title: "記法は初めて使う箇所で説明するか、 そこから定義の式を指す (2026-09-13)"

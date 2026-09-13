@@ -397,7 +397,7 @@ grep -B1 -A2 "your-marker-keyword" /tmp/render.txt
 
 ## <a id="prescript-tall-nucleus"></a>左肩の添字 macro は核の高さで浮く — `\prescript` でなく標準 strut を基準にする (2026-09-13)
 
-`\newcommand{\ord}[2]{\prescript{(#1)}{}{#2}}` (mathtools) のように左上添字を macro にすると、 `\prescript` は**引数の box の高さ**で添字の位置を決める。 核が `\hat{\overset{e,\omega}{T}}` のように飾り (overset・hat) で背が高いと、 添字が box の天辺まで持ち上がり、 核との間も空く。 error も warning も出ない。
+`\newcommand{\ord}[2]{\prescript{(#1)}{}{#2}}` (mathtools) のように左上添字を macro にすると、 `\prescript` は**引数の box の高さ**で添字の位置を決める。 核が `\hat{\overset{a,b}{X}}` のように飾り (overset・hat) で背が高いと、 添字が box の天辺まで持ち上がり、 核との間も空く。 error も warning も出ない。
 
 **処方**: macro の側で基準の高さを固定する。
 
@@ -405,7 +405,7 @@ grep -B1 -A2 "your-marker-keyword" /tmp/render.txt
 \newcommand{\ord}[2]{{\mathstrut}^{(#1)}\!#2}  % 左肩の高さは \mathstrut (TeX 標準の strut = 丸括弧の高さ)
 ```
 
-⚠️ `{\vphantom{T}}^{(#1)}` のように**特定の文字**を基準にしない — その文字に合わせた場当たりの macro になり、 別の核では同じ問題が形を変えて残る (著者指摘「T に対してのみ恣意的に最適化したマクロになる」)。 `\mathstrut` は内容によらず標準の高さを与えるための strut。 飾りの無い核では見た目はほぼ不変 (添字と核の間は `\!` の分だけ `\prescript` より詰まる)。
+⚠️ `{\vphantom{X}}^{(#1)}` のように**特定の文字**を基準にしない — その文字に合わせた場当たりの macro になり、 別の核では同じ問題が形を変えて残る (著者の指摘: 1 つの文字に対してだけ恣意的に最適化した macro になる)。 `\mathstrut` は内容によらず標準の高さを与えるための strut。 飾りの無い核では見た目はほぼ不変 (添字と核の間は `\!` の分だけ `\prescript` より詰まる)。
 
 **確認**: 使用箇所のうち最も背の高い核を含む式を 1 つ render して、 飾り無しの核と添字の高さが揃うことを見る (途中の推敲 pass の目視 gate にはしない = [#visual-verification-intensity](#visual-verification-intensity))。
 
@@ -664,6 +664,7 @@ pLaTeX の禁則処理は通常 `。、` の行頭落ちを防ぐが、**`\textb
 - **リポに vendor する場合は必ず正本から copy し、 `md5 -q <repo>/JHEP.bst` を正本 md5 と照合する**。 ⚠️ **他 repo からの copy は禁止** — 既存 repo には note 無効の stock v2.7 等の stale copy が複数残存しており、 そこから copy すると stale が増殖する（2026-07-24 RCA: `@unpublished` in-preparation entry の note が silent に落ちる形で発覚。 「note 表示有効」 と信じている file が実は stock、 は目視で見抜けない = md5 照合が唯一の cheap gate）
 - `\bibliographystyle{JHEP}` を指定
 - 将来 style を改版したら: 正本を編集 → 本節の md5 更新 → `setup.sh` 再実行で TEXMFHOME 同期 → vendor 済み repo は次に触る時に md5 照合で気付く
+- <a id="citation-order-numbering"></a>**番号は初出順で付く** (JHEP.bst は unsorted、 2026-09-13): ある文献の最初の引用を消す・後ろへ動かすと、 その文献と、 旧初出から新初出までの間で初めて引かれる文献の番号がまとめて変わる。 同じ build の中では bibtex が付け直すので不整合は出ないが、 **build の外に書いた番号 (査読返答・決定台帳・共著者へのメール・review note) は黙って古くなる** ⇒ build の外では bib key で書く。 2 版の PDF で番号が動いたら、 `.aux` の `\citation` の順で初出の位置を追うと原因が 1 行で分かる (実例: 脚注の引用を 1 つ消しただけで、 別の文献の番号が 9 繰り下がった。 誤りではなかった)。
 
 ## <a id="no-biblatex"></a>biblatex は使わない（JHEP.bst と非互換）
 
@@ -1188,3 +1189,13 @@ latexdiff old.tex new.tex | sed '1s/^/\\PassOptionsToPackage{normalem}{ulem}\n/'
 **検査は 2 条件**: (1) 略語が定義より前に出ない、 (2) 定義が長形の初出に付いている。 (1) だけでは、 後から前の節に書き足した段落が長形を使っていても通ってしまう。 2026-09-11 に同じ原稿を 2 回独立に走査し、 2 回とも (1) だけを見て取りこぼした (序論に書き足した段落が、 後ろの節にある定義より前で長形を使っていた)。
 
 **道具**: [`scripts/check-abbreviations.py`](../scripts/check-abbreviations.py) — D1 重複定義 / D2 定義前の使用 / D3 定義より前の長形 / D4 定義後の長形 / S1 「et al.」 「Ref.」 などの後の文末スペース / U (情報) 定義の無い大文字 token。 長形は「(ABBR)」 の直前の語の頭文字から推定し、 推定できないものは `--long ABBR='…'`、 固有名は `--allow`、 独自の display wrapper は `--display-macro` で渡す。 project 固有の allow / long は project 側の shim に置く。 投稿前 gate の spec に並べる (`paper-audit.md#gate-spec-anchor-list`)。
+
+## <a id="notation-first-use"></a>記法は初めて使う箇所で説明するか、 そこから定義の式を指す (2026-09-13)
+
+**ルール**: 添字の括弧 (反対称化・対称化)、 左肩の次数、 独自の演算子などの記法は、 本文で**初めて使う**箇所で説明するか、 そこに定義の式への参照を置く。 定義の式が付録や後の節にあること自体は構わない。 関連する 2 つの記法を 1 つの脚注でまとめて指してよい (後の記法の初出より前にその脚注があれば、 読み手は既に知っている)。
+
+**式の前方参照**: まだ印字されていない式を `\cref` で引くときは、 その式の記号が何かを同じ文で一言添える (`the kinetic operator of Eq. (X)` の形)。 前方参照そのものは誤りではない。
+
+**道具**: [`scripts/tex-first-use.py`](../scripts/tex-first-use.py) — `--pattern REGEX --defined-at LABEL` で初出の行と節を出し、 初出が定義より前で、 それより前にも直後にも定義への参照が無ければ exit 1。 `--exclude` で同じ形の別物 (次数ラベル `^{(2)}` など) を外し、 `--stop-at '\\appendix'` で付録の手前で止める。 `--forward-refs` はまだ印字されていない式への参照を列挙する (読む候補であって exit は変えない)。 略語は [#abbreviation-first-occurrence](#abbreviation-first-occurrence) と `check-abbreviations.py` が受け持つ。
+
+**なぜ**: 2026-09-13 の通読で著者が「対称化と反対称化は最初に出る場所で説明されているか」 と止まった。 定義の式は付録にあり、 本文の初出から数百行離れていた。 記法ごとに正規表現を変え、 次数ラベルを除き、 付録の手前で止める grep を 2 回手で書き直して答えた。 道具にした最初の版は、 preamble の `\let\origappendix\appendix` を付録の開始と読み、 初出より前の脚注にある参照も数えなかった。 どちらも実物の原稿に 1 回当てて見つかった (selftest の fixture だけでは出なかった)。

@@ -74,6 +74,7 @@
 - **[fix-bib-unicode.py](fix-bib-unicode.py)** — Unicode→LaTeX 変換スクリプト
 - **[fix-md-links.py](fix-md-links.py)** — markdown の相対 link のうち着地先 file が無いものを分類し、答えが一意に決まる 2 型 (../ の段数ずれ・git が記録した改名) だけ直す。解決は renderer と同じ (symlink は実体 path、%XX decode、`:行番号` 無視、code span・fence・$数式$ の中は link でない)、書換えは link target の終端まで一致した時だけ・保護領域の外だけ、書換え後に「差は link target の中だけ・新しい着地先は全て実在・対象 file ごとに差が在る」 を自己検証する。--selftest 内蔵。
 - **[fleet-heartbeat.py](fleet-heartbeat.py)** — per-machine heartbeat writer（毎時 launchd cron から自マシンの RC server 群〔launchd loaded + server ログ末尾 marker parse = Connected/auth error/version error〕 + config-dir auth metadata を <repo>/<subdir>/<host>.json に commit+push。**claude を一切呼ばない** = auth 失効でも監視が生き残る、state-change-or-age commit policy で git history を汚さない、fail-open、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
+- **[fold-dated-bullets.py](fold-dated-bullets.py)** — SESSION.md などの日付 bullet の連続ブロックを、要約 1 本 (+ 追記点の行) に畳み、全文を archive へ verbatim で退避する。相対 link は archive の深さに付け替え、退避の完全性を検算してから書く。
 - **[garoon-client.py](garoon-client.py)** — Cybozu Garoon (cloud) を **browser session cookie で script から読む** (画面 drive 不要)。
 - **[generate-doc-index.py](generate-doc-index.py)** — regenerate a slug index FROM its markdown, so Claude writes
 - **[generate-tree.py](generate-tree.py)** — CLAUDE.md 構造 tree (conventions/hooks/scripts) + CONVENTIONS.md 冒頭列挙 +
@@ -140,12 +141,14 @@
 - **[test_codex_mail_install.py](test_codex_mail_install.py)** — Installer tests run only below temporary directories, never real Codex home.
 - **[test_reviewed_mail.py](test_reviewed_mail.py)** — Network-free adversarial checks of the reviewed-reply transaction.
 - **[test_reviewed_mail_cli.py](test_reviewed_mail_cli.py)** — Offline checks: CLI authorization shape, pagination, full source extraction.
+- **[tex-first-use.py](tex-first-use.py)** — Is a notation explained where the reader first meets it? Lists the first body uses of a regex with line and section, checks the first one against the line of the defining \label (a reference to that label near the use counts as a pointer), and lists \cref-type references to equations that are printed further down.
 - **[tex2plain.py](tex2plain.py)** — .tex から LaTeX タグを除いたテキストを生成する (数式は Unicode で線形化、図キャプションは末尾へ)。
 - **[tune-seal-image.py](tune-seal-image.py)** — Calibrate a digitized seal PNG against a *printed* reference — stroke width and ink color.
 - **[validate-codex-skills.test.sh](validate-codex-skills.test.sh)** — shipped Codex skills の discovery metadata を検証する
 - **[verification-campaign-report.py](verification-campaign-report.py)** — [forwarder → ai-collaboration/scripts/verification-campaign-report.py] verify-to-learn campaign の集計: ledger.yaml (3 状態 / tier / readings) + git 由来の所要・entries per commit + efficacy proxy (受領側記入 novel_to_requester) を results.md の AUTO block に焼き、👁 未了 ite
 - **[verify-form-guidance.py](verify-form-guidance.py)** — 官製様式の「記入要領 (赤字/青字)」 が提出物に残置していないか検出。
 - **[verify-prototype-feedback.py](verify-prototype-feedback.py)** — Verify a prototype-feedback record and its local packet.
+- **[verify-verbatim-move.py](verify-verbatim-move.py)** — 「移しただけ」 の変更を読まずに検算する: 指定 file から消えた行が、すべて移動先 (同じ file を含む) に追加行として現れるかを git の差分で数える。markdown link の深さの付け替えは --normalize-links で同一視する。
 - **[with-gnu-userland.sh](with-gnu-userland.sh)** — macOS で Homebrew の GNU coreutils / sed / grep / findutils を PATH 先頭に差して command を走らせる (CI の ubuntu と同じ BSD/GNU 差を push 前に再現)
 - **[with-gnu-userland.test.sh](with-gnu-userland.test.sh)** — with-gnu-userland.sh の self-test (Homebrew の GNU userland が無い環境 = CI の ubuntu は SKIP)
 - **[xlsx-to-pdf.sh](xlsx-to-pdf.sh)** — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）

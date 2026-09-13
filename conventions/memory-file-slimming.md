@@ -125,6 +125,7 @@ pointer 行には「旧全文 = <archive>」 を 1 語添える (= 読み手が�
 SoT 照合を丁寧にやる余裕があるときは本則 (= SoT 側へ寄せる方が home が 1 つで済む)、
 live entry を大量に薄くするときはこの variant。
 ⚠️ **退避先が別の深さの dir なら、 verbatim の相対 link は着地しなくなる** (`SESSION-archive/2026-09.md` へ移した `review/x.md` は `../review/x.md` が要る)。 verbatim は「文字列を変えない」 ではなく「内容を変えない」: 移した直後に `scripts/fix-md-links.py --files <archive> --fix` で深さだけを直し、 `--list --strict` が 0 になってから commit する (2026-09-13 に 40 bullet を退避した回、 staged link guard が 39 本の depth と 1 本の ambiguous で commit を止めた)。
+**道具** (2026-09-13): 日付 bullet の連続ブロックなら [`scripts/fold-dated-bullets.py`](../scripts/fold-dated-bullets.py) が、 要約 1 行 (+ 追記点の行) への置換・archive への verbatim 退避・link の深さの付け替え・退避の完全性の検算を 1 回で行う (連続していない・同じ見出しが既にある、 のどちらかなら何も書かない)。 手で、 または別の道具で移した commit は [`scripts/verify-verbatim-move.py`](../scripts/verify-verbatim-move.py) `--from <src> --to <archive> --normalize-links` で検算する。 同じ commit で source の手順や状態の行も直したなら `--removed-prefix '<日付 prefix>'` で移した行だけに絞る (絞らないと、 その直した行が「移動先に無い」 と正しく列挙される)。 並列 session が同じ SESSION に追記している最中に畳むなら [`multi-session-coordination.md#fold-with-append-point`](multi-session-coordination.md#fold-with-append-point)。
 
 ## <a id="obligation-carrier-graduation"></a>義務 marker 付き entry の graduate 判定
 
