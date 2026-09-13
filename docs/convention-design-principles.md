@@ -1408,6 +1408,7 @@ class の別の形がその pattern を素通りすると、sweep は「無い�
 - **由来 (2026-09-13)**: 原稿の参照形を直す pass で、手の grep を sweep の正本にしていた。位置で判定する検査器を足すと、
   grep の射程外の 1 件が出た。同じ日、性能修正の同類探しで書いた正規表現が、探している書き方に一致しない形だった
   (広い grep を併走させて気づいた)。1 件目の instance = [`latex.md#bare-parenthetical-crossrefs`](../conventions/latex.md#bare-parenthetical-crossrefs)。
+- **3 件目 (2026-09-14、 漏洩 sweep)**: 公開 repo の例示から未公開文書の中身を抜く sweep で、 原稿の術語 167 語の list による走査は **自分の申請書に対する模擬審査の指摘と評点**を 0 件と答えた (評価の文章は原稿の術語を含まない)。 「模擬審査 / 盲検 / 実測 / 評点」 という**過程の語**から入り直して 10 行見つかった。 class の形 = 原稿の文・数値・結果、 **その文書に対する評価**、 経緯。 term list が当たるのは最初の形だけ ([`CLAUDE.md#non-identifier-content-leak`](../CLAUDE.md#non-identifier-content-leak))。
 
 ### <a id="rule-visible-where-the-act-happens"></a>8.44 規則は「それを破る行為をする session」 が読み込む場所に置く — 正しい repo に書いた規則でも、 行為の場所から見えなければ無いのと同じ (2026-09-13)
 
