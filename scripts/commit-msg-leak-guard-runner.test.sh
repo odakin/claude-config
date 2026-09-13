@@ -286,6 +286,18 @@ expect_pass "pass-review-verb-only" \
 expect_pass "pass-review-stage-number-not-score" \
   "Stage 1 の評点と所見を専用 file に書き切らせ、Stage 2 では書き換え禁止"
 
+# Tier D (2026-09-13): verbatim text of an unpublished document in the message (synthetic source).
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-unpublished-quote.py" ]; then
+  UQ_ROOT="$TMPDIR_TEST/uq-root"
+  mkdir -p "$UQ_ROOT/mockpriv-paper"
+  printf '%s\n' '\begin{document}' 'We argue that the copper kettle estimator keeps the quiet invariance exact at every order of the toy series.' '\end{document}' > "$UQ_ROOT/mockpriv-paper/draft.tex"
+  printf 'discover: %s .tex\n' "$UQ_ROOT" > "$MOCK_LAYER/unpublished-sources.txt"
+  export XDG_CACHE_HOME="$TMPDIR_TEST/uq-cache"
+  expect_block "block-unpublished-quote-in-message" 'Fix the rule: `the copper kettle estimator keeps the quiet invariance exact`'
+  expect_pass "pass-unpublished-paraphrase-in-message" 'Fix the rule about an estimator that keeps an invariance'
+  rm -f "$MOCK_LAYER/unpublished-sources.txt"; unset XDG_CACHE_HOME
+fi
+
 # ====================================================================
 echo ""
 echo "=== commit-msg-leak-guard-runner self-test ==="

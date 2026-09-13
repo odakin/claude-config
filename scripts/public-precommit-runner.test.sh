@@ -263,6 +263,29 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/fix-md-links
   md_case "pass-md-link-escape-env" 0 "see [doc](DOC.md)" "CLAUDE_MD_LINKS_GUARD=0"
 fi
 
+# Tier D (2026-09-13): verbatim text of an unpublished document. Synthetic manuscript in a mock private
+# project; the mock personal layer declares it. A quoted sentence blocks; a paraphrase and the escape env pass.
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-unpublished-quote.py" ]; then
+  MOCK_ROOT="$TMPDIR_TEST/mock-claude-root"
+  mkdir -p "$MOCK_ROOT/mockpriv-paper"
+  printf '%s\n' '\begin{document}' \
+    'We argue that the brass lantern regulator keeps the silent symmetry intact at every order of the toy expansion.' \
+    '\end{document}' > "$MOCK_ROOT/mockpriv-paper/draft.tex"
+  printf 'discover: %s .tex\n' "$MOCK_ROOT" > "$MOCK_LAYER/unpublished-sources.txt"
+  export XDG_CACHE_HOME="$TMPDIR_TEST/cache"
+  expect_block "block-unpublished-quoted-span" 'Example: `the brass lantern regulator keeps the silent symmetry intact` in a rule.'
+  expect_pass "pass-unpublished-paraphrase" 'Example: a regulator that preserves a hidden symmetry to all orders.'
+  uqf="uq-escape-$RANDOM.txt"
+  printf '%s' 'Example: `the brass lantern regulator keeps the silent symmetry intact`.' > "$MOCK_REPO/$uqf"
+  uq_rc="$(cd "$MOCK_REPO" && git add "$uqf" && env CLAUDE_UNPUBLISHED_GUARD=0 "$RUNNER" >/dev/null 2>&1; echo $?)"
+  (cd "$MOCK_REPO" && git reset -q HEAD "$uqf" >/dev/null 2>&1; rm -f "$uqf")
+  if [ "$uq_rc" = "0" ]; then PASS=$((PASS+1)); else
+    FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [exit=$uq_rc want=0] pass-unpublished-escape-env
+"; fi
+  rm -f "$MOCK_LAYER/unpublished-sources.txt"
+  unset XDG_CACHE_HOME
+fi
+
 # ====================================================================
 echo ""
 echo "=== public-precommit-runner self-test ==="

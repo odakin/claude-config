@@ -219,7 +219,7 @@ Codex の lifecycle forcing function と coverage 限界は [`codex/PARITY.md#co
 | **整合性** | 変更ファイル間で数値・用語・参照先が一致しているか |
 | **無矛盾性** | 既存ルール・テンプレートと矛盾していないか |
 | **効率性** | 重複がないか。SESSION.md ~80行、MEMORY.md は index-only（[§8.7](docs/convention-design-principles.md#mechanism-application-example)）か |
-| **安全性** | 個人情報・認証情報が公開リポに含まれていないか |
+| **安全性** | 個人情報・認証情報、 **未公開文書の中身** (原稿・査読・申請の文・数値・結果。 識別子の grep では掛からない) が公開リポに含まれていないか |
 
 ユーザーが「**3軸チェック**」と言った場合は上表のうち **整合性・無矛盾性・効率性** のみを指す（安全性は除外）。「4軸チェック」は全 4 軸。
 

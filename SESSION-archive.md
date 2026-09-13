@@ -2,6 +2,10 @@
 
 > 📦 [`SESSION.md`](SESSION.md) から分離した古い dated entry (grep 専用、 2026-09-11 〜 2026-04-21。 2026-09-11 の第 3 回縮退で移した分は先頭の節)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md`。 hot/cold 分離日: 2026-06-10 (初回) / 2026-09-01 (第 2 回 = 2026-06-01〜07-31 分を追加)。
 
+## 2026-09-13 夜 SESSION.md の索引から verbatim MOVE した行 (1 行、 SESSION.md の行数を保つため)
+
+- **09-05**: ML broadcast 見落とし由来の [`§8.30-8.32`](docs/convention-design-principles.md#expected-inbound-tripwire)、 [`machine-route-first.md#shared-document-write`](conventions/machine-route-first.md#shared-document-write) / [`#internal-endpoint-replay`](conventions/machine-route-first.md#internal-endpoint-replay)、 [`google-api-direct-access.md#drive-xlsx-inplace-update`](conventions/google-api-direct-access.md#drive-xlsx-inplace-update)、 [`data-pipeline-automation.md#cross-ledger-join`](conventions/data-pipeline-automation.md#cross-ledger-join) / [`personal-layer.md#owner-only-data-repo`](docs/personal-layer.md#owner-only-data-repo)、 [`web-map-projections.md`](conventions/web-map-projections.md) 新設、 verify-to-learn campaign の運用 kernel (ai-collaboration)。
+
 ## 2026-09-13 SESSION.md から verbatim MOVE した entry (本 session の 09-12〜13 分、 5 entry)
 
 > SESSION.md には 1 行の索引と正本 pointer だけを残した。 以下は移動時の原文そのまま。

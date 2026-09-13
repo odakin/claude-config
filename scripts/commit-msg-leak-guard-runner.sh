@@ -97,6 +97,28 @@ run_leak_matcher "$MESSAGE"
 HITS="${LEAK_MATCHER_HITS:-}"
 
 # ----------------------------------------------------------------------
+# Tier D (2026-09-13): 未公開文書の逐語が message に入っていないか (engine = check-unpublished-quote.py、
+# 源 = 個人層の unpublished-sources.txt)。 「exit 1 かつ engine 自身の見出し」 のときだけ止める。
+# escape hatch: CLAUDE_UNPUBLISHED_GUARD=0。 規律 = conventions/confidential-repo-boundary.md#unpublished-text-public-gate
+# ----------------------------------------------------------------------
+UQ_ENGINE="$SELF_DIR/check-unpublished-quote.py"
+if [ -z "$HITS" ] && [ "${CLAUDE_UNPUBLISHED_GUARD:-1}" != "0" ] && [ -f "$UQ_ENGINE" ] \
+    && [ -r "$SELF_DIR/lib/find-personal-layer.sh" ] && command -v python3 >/dev/null 2>&1; then
+  # shellcheck source=/dev/null
+  . "$SELF_DIR/lib/find-personal-layer.sh"
+  UQ_LAYER="$(find_personal_layer 2>/dev/null || true)"
+  if [ -n "$UQ_LAYER" ] && [ -f "$UQ_LAYER/unpublished-sources.txt" ]; then
+    uq_rc=0
+    uq_out="$(python3 "$UQ_ENGINE" --config "$UQ_LAYER/unpublished-sources.txt" --message-file "$MSG_FILE" 2>&1)" || uq_rc=$?
+    [ -n "$uq_out" ] && printf '%s\n' "$uq_out" >&2
+    if [ "$uq_rc" -eq 1 ] && printf '%s' "$uq_out" | grep -q '\[unpublished-quote\] the commit message contains'; then
+      echo "[commit-msg-leak-guard-runner] commit rejected (unpublished-quote). bypass once: CLAUDE_UNPUBLISHED_GUARD=0" >&2
+      exit 1
+    fi
+  fi
+fi
+
+# ----------------------------------------------------------------------
 # 判定
 # ----------------------------------------------------------------------
 if [ -z "$HITS" ]; then

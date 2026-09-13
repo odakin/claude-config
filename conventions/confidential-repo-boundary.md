@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5)
+when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate)
 category: infra
-summary: 暗号化は中身しか守らない (file 名・commit message・path は平文) ので識別子入り dir は暗号化 tar に畳む (連番+対応表は対応表が単一障害点で不可)、 保存しない > 暗号化する (通知に payload を載せず schema で縛る、 死んだ複製は削除)、 逐語の指紋照合は写しを捕まえるが言い換えは原理的に不可なので経路ごとに制御を変える (閾値は全件集計で決める = 誤検知 6800→24→0 の実測)、 fail-open な gate は必ずカナリアで実効性を毎回確かめ ARMED/NOT ARMED/対象外 の 3 状態を出す (沈黙を作らない)、 是正は go-forward にしか効かず履歴は別問題として人間の判断に委ねる
+summary: 暗号化は中身しか守らない (file 名・commit message・path は平文) ので識別子入り dir は暗号化 tar に畳む (連番+対応表は対応表が単一障害点で不可)、 保存しない > 暗号化する (通知に payload を載せず schema で縛る、 死んだ複製は削除)、 逐語の指紋照合は写しを捕まえるが言い換えは原理的に不可なので経路ごとに制御を変える (閾値は全件集計で決める = 誤検知 6800→24→0 の実測)、 fail-open な gate は必ずカナリアで実効性を毎回確かめ ARMED/NOT ARMED/対象外 の 3 状態を出す (沈黙を作らない)、 是正は go-forward にしか効かず履歴は別問題として人間の判断に委ねる、 公開 repo には未公開文書の逐語 gate を別に置く (漏れる例示は引用符に入った短い断片なので quoted span が主、 全履歴 replay で誤検出 0 を確かめて採用)、 gate が target の pre-commit で実際に走っているかは target ごとに確かめる
 -->
 # 機密の境界を機械で守る — 暗号化・file 名・通知・検査
 
@@ -119,6 +119,39 @@ schema (= そもそも書けなくする) で守る。 片方で両方を守ろ�
 ⚠️ ASCII だけの識別子 (file 名等) は日本語比率の下限で落ちる。 そこは pattern 照合が担当する
 = **役割分担**であって、 片方の閾値を緩めて両方を拾おうとしない。
 
+### <a id="unpublished-text-public-gate"></a>公開 repo には「未公開文書の逐語」 の gate を別に置く (2026-09-13)
+
+上の指紋照合は「local-only repo の実体」 を remote 付き repo に入れない gate で、 日本語だけを索引にする。
+**英文の原稿**と、 **remote は持つが公開ではない repo** (= 共著者と共有する原稿 repo) の本文は、 その索引の外にある。
+公開 repo の規約の「実例」 に未公開原稿の文をほぼ逐語で写した commit が 1 週間で 3 回 landed したのは、 この隙間だった。
+
+- **target は公開 repo だけ** (`.claude/public-repo.marker`)。 原稿 repo や決定台帳は原稿を引くのが仕事なので対象にしない。
+- **源の宣言は個人層**: `discover: ~/Claude .tex` (= 非公開 repo の `.tex` 全部。 新しい原稿 repo も自動で入る) と、
+  公刊済み・第三者の本文を外す `exclude:`。 script には置き場所を書かない。
+- **検出は 2 つ**。 較正で分かったのは、 漏れた例示の大半が**引用符に入った 5〜9 語の短い断片**だったこと
+  (内容語の shingle だけでは 7 語で 1 件も拾えなかった):
+  - **quoted span** = backtick か二重引用符の中の、 空白区切りで 5 語以上 (内容語 3 以上) の文で、 5 語の窓が全部源に在るもの。
+  - **prose run** = 引用符なしで、 内容語 6 個の連続が源と一致するもの (markdown の fence の中は除く)。
+- **正規化**: LaTeX の comment・数式・preamble・引用 key・制御綴り・謝辞の節を除き、 日本語は run を切る。
+  3 つ以上の top-level dir に現れる shingle は定型として捨てる。 索引は hash だけを cache に置く。
+- **較正** (公開 2 repo の全履歴 1,667 commit に replay):
+
+| 設定 | 検出 | 内訳 |
+|---|---|---|
+| 内容語 shingle のみ、 7 語 | 0 | 漏れた例示も拾えない |
+| 内容語 shingle のみ、 5 語 | 9 | 半分が TikZ の option・path・公的機関の名前・よくある物理の句 |
+| quoted span、 語を letter の塊で数える | 26 | 大半が backtick の path (`a/b-c.md` が 5 語に数えられた) |
+| **quoted span (空白区切りで 5 語) + prose run 6 語 + 謝辞の除外** | **10 (4 commit)** | **全件が原稿由来、 誤検出 0** ← 採用 |
+
+- **捕まえないもの = 言い換え** (上の表どおり)。 未公開の結果を自分の言葉で書いた例示は通るので、
+  規律 ([`CLAUDE.md#non-identifier-content-leak`](../CLAUDE.md#non-identifier-content-leak)) はそのまま要る。
+- ⚠️ **gate を作ったことと、 target の commit で走っていることは別の事実**。 同じ日に、 指紋 + pattern の gate
+  (`check-confidential-leak.py`) が層3 の chain にだけ配線され、 公開 repo の pre-commit (`public-precommit-runner.sh`)
+  からは呼ばれていなかったと分かった = 一番守るべき target で走っていなかった。 両方を public runner の Tier D にした。
+  配線は target の種類ごとに、 実際の commit (一時 repo で可) で止まることを確かめる (#5 のカナリアと同じ)。
+- 止まったときは file と行と源の名前だけを出し、 一致した本文は出さない。 公刊版に在る文だと確かめた場合だけ
+  `CLAUDE_UNPUBLISHED_GUARD=0` で 1 回通す。
+
 ---
 
 ## 5. fail-open な gate は、 効いているかを毎回確かめる
@@ -167,6 +200,7 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 | [`check-pii-filenames.py`](../scripts/check-pii-filenames.py) | 追跡 file 名の識別子を検出 | `~/.claude/pii-filename-patterns.txt` |
 | [`pack-pii-dirs.sh`](../scripts/pack-pii-dirs.sh) | 識別子入り dir を暗号化 tar に畳む / 畳み忘れ検出 | 各 repo の `.pii-pack-dirs` |
 | [`check-gitcrypt-readable.py`](../scripts/check-gitcrypt-readable.py) | 暗号化 file がこのマシンで読めるか (全 repo) | `.gitattributes` の `filter=git-crypt` 宣言 |
+| [`check-unpublished-quote.py`](../scripts/check-unpublished-quote.py) | 未公開文書の逐語 (quoted span / prose run) を公開 repo の commit と message で BLOCK / 配線監査 (カナリア 2 本) | 個人層の `unpublished-sources.txt` (public runner が渡す) |
 
 いずれも **機密文字列も個人の配置も script 側に持たない**。 設定 file が無い環境では
 「対象外」 として何もしない (= 他の利用者の環境を壊さない)。

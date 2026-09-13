@@ -43,6 +43,7 @@
 - **[check-pii-filenames.py](check-pii-filenames.py)** — 個人情報が file 名に出ている追跡 file を検出する。
 - **[check-preamble-aliases.py](check-preamble-aliases.py)** — flag raw notation where the preamble defines an alias.
 - **[check-script-index.py](check-script-index.py)** — Check that a Git repository's script inventory has direct Markdown links.
+- **[check-unpublished-quote.py](check-unpublished-quote.py)** — Stop verbatim text of unpublished documents (your private manuscripts) from being committed to a public repo: matches quoted spans and long prose runs in the staged added lines or a commit message against hashed word shingles of the declared sources; --selftest.
 - **[check-xlsx-integrity.py](check-xlsx-integrity.py)** — xlsx の Excel「破損」判定源を Excel 不要・決定論で検出（XML well-formed〔unbound prefix〕/ rels 両方向参照整合 / rId 重複 / Content_Types coverage。 zip 直編集 xlsx の納品前 gate、 office-automation.md#openpyxl-destroys-drawings）
 - **[check-yaml-lint.py](check-yaml-lint.py)** — fleet 横断 YAML hazard lint (yamllint を危険 rule 限定で全 repo の tracked yaml に回す。 truthy / dup-key / implicit-octal / syntax、 git-crypt lock file skip、 yamllint 未 install や root 不在は SKIP、 --selftest は毒入り fixture で検出能力自体を検証。 規約 = conventions/yaml-hazards.md#yamllint-hazard-config)
 - **[chromium-cookies.py](chromium-cookies.py)** — macOS の Chromium 系 browser (Brave / Chrome) の cookie を復号して取り出す。

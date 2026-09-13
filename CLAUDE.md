@@ -43,7 +43,7 @@ claude-config/
 │   ├── cold-eyes-isolation.md              # cold-eyes / 盲検 review を別 session に投げる前 / referee 版の原稿を用意する時 / review 結果の独立性を判定する時
 │   ├── collaborators.md                    # 共同研究者 DB (collaborators.yaml) を作成・更新するとき
 │   ├── concise-output.md                   # user への応答・報告・deliverable (README / 案内 doc / PDF) を書くとき常時 + **user 自身に操作してもらう手順を書くとき** (= #user-facing-steps)
-│   ├── confidential-repo-boundary.md       # 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5)
+│   ├── confidential-repo-boundary.md       # 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate)
 │   ├── data-pipeline-automation.md         # 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
 │   ├── debugging-discipline.md             # bug fix を提案する前・audit verdict を出す前 (検証規律) + CI が red のとき (= red streak の起点と原因 commit を探す・手元で Linux CI を再現する、 §17)
 │   ├── discord-bot.md                      # Discord Bot を運用・実装するとき
@@ -145,7 +145,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (146 file + lib/ 15 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (147 file + lib/ 15 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)
@@ -264,13 +264,14 @@ layer 1 (= 本 repo) の **test file source code に実 private repo 名を lite
 
 ⚠️ **2026-06-16 拡張 — test file に限らず「規約本文の例」 と「script の docstring / `--selftest` fixture」 も同じ**: layer 1 の convention 本文に書く**例**や script の selftest data も public surface。 trigger となった実 incident の **実人名・所属・固有値をそのまま例に使わず**、 架空データ (= 「甲野 太郎」 「架空大学」 等) に置換する。 2026-06-16 near-miss: office-automation の文字 clipping を整備中、 検出器 script の selftest と convention 本文の症状例へ **実セミナー講演者の氏名・所属 (= まさに結合セルで clip した当の値)** を literal で書き込み、 commit 直前の leak grep で検出して匿名化した。 = **incident を正確に記録しようとするほど実 PII を例に焼き込む引力が強い** (= 上記「過去事例の reproduce が目的化」 の PII 版)。 → commit 前に **変更 diff を実名 list で grep する** のを最終 gate にする (= 2026-06-16 はこれで救われた)。
 
-⚠️ <a id="non-identifier-content-leak"></a>**2026-09-12 拡張 — 禁止対象は識別子だけではない。「まだ公開されていない他人の文書の中身」 も同じ**: 上の禁止 list は識別子 (実名・email・repo 名・所属) を並べているが、 **識別子を 1 つも含まない文章でも leak は成立する**。 審査・査読の途中にある文書、 未公開の原稿、 未実施の配布物などから **文言をほぼ verbatim で引く / 図から読んだ実測値を写す / その値を `--selftest` fixture や docstring の例に使う** のがその形。
+⚠️ <a id="non-identifier-content-leak"></a>**2026-09-12 拡張 — 禁止対象は識別子だけではない。「まだ公開されていない文書の中身」 も同じ (他人の文書に限らず、 自著・共著の原稿も)**: 上の禁止 list は識別子 (実名・email・repo 名・所属) を並べているが、 **識別子を 1 つも含まない文章でも leak は成立する**。 審査・査読の途中にある文書、 未公開の原稿、 未実施の配布物などから **文言をほぼ verbatim で引く / 図から読んだ実測値を写す / その値を `--selftest` fixture や docstring の例に使う** のがその形。
 
 - **同定可能性**: 当人が公開している別の文書と突き合わせれば文言から案件が特定でき、 しかも書かれる中身は**その文書の弱点**であることが多い (= 評価・査読の文脈で引くため)。 「公開してよい一般則」 と「公開してはいけない個別評価」 が同じ段落に同居する
-- **既存の gate は構造的に素通りする**: 識別子でないので commit-msg-leak-guard も pre-commit の regex も掛からない。 **機械に頼れない class** と認識する
+- **識別子の gate は構造的に素通りする**: 識別子でないので commit-msg-leak-guard も pre-commit の regex も掛からない。 **逐語の写しは 2026-09-13 から公開 repo の pre-commit (Tier D = [`scripts/check-unpublished-quote.py`](scripts/check-unpublished-quote.py)) が止めるが、 言い換えは機械に頼れない** と認識する (較正と設計 = [`conventions/confidential-repo-boundary.md#unpublished-text-public-gate`](conventions/confidential-repo-boundary.md#unpublished-text-public-gate))
 - **対策**: 実例は**一般形で書き、数値は伏せる** (「X の理論は A の枠組みで論じられてきたが B には届かなかった」 型)。 一般則の説得力は落ちない。 `--selftest` / docstring の例示値は**合成値**で書く (2026-06-16 拡張と同じ規律を、 PII でない content にも広げたもの)
 - **hoist する turn の leak grep に「その案件に固有の term list」 を足す**: repo 名や実名の grep では掛からないので、 対象文書の固有の術語・数値・図の軸の値を list 化して追加 diff を走査する
 - **なぜ引力が働くか**: 規約は実例があるほど良くなるので、 **正確に書こうとするほど本物を写す**。 2026-06-16 の PII 版と同じ引力の、 content 版
+- **自著・共著の未公開原稿も同じ** (2026-09-13、 1 週間で 3 件目): 著者の裁定を決定台帳や非公開の文体規約に記録した turn で、 同じ素材から層1 の例示を書くと、 原稿の文がそのまま上がる (素材は原稿を逐語で引くのが正しい場所)。 層1 の文は一般形で書いてから素材と突き合わせ、 残った原稿の語・数値・結果を消す。 commit 前の漏洩検査を識別子の list だけで終えない
 
 
 ### Layer 軸 vs Leak 軸の関係 (= 混同しないための table)

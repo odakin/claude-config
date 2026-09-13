@@ -291,6 +291,38 @@ fi
 # 判定
 # ----------------------------------------------------------------------
 if [ -z "$HITS" ]; then
+  # Tier D (2026-09-13): 識別子を含まない leak。 D-1 = 未公開文書の逐語 (quoted span / prose run)、
+  # D-2 = local-only repo の機密 (指紋 + pattern)。 Tier A-C は識別子しか見ないので、 公開 repo の規約の
+  # 「実例」 に未公開原稿の文を写した commit が 1 週間で 3 回 landed した。 D-1 の engine =
+  # check-unpublished-quote.py (源 = 個人層の unpublished-sources.txt、 較正 = 公開 2 repo の全履歴 1,667 commit に
+  # replay して 4 commit を検出・全件が原稿由来、 誤検出 0)。 D-2 の engine = check-confidential-leak.py
+  # (2026-09-12 作成、 層3 chain = private repo にしか配線されておらず公開 repo では走っていなかった)。
+  # どちらも「exit 1 かつ engine 自身の見出し」 のときだけ止める (= engine の import error で全 commit を巻き添えにしない)。
+  # escape hatch: CLAUDE_UNPUBLISHED_GUARD=0 / CLAUDE_LEAK_GUARD=0。
+  # 規律 = conventions/confidential-repo-boundary.md#unpublished-text-public-gate
+  if command -v python3 >/dev/null 2>&1; then
+    UQ_ENGINE="$(dirname "$0")/check-unpublished-quote.py"
+    if [ "${CLAUDE_UNPUBLISHED_GUARD:-1}" != "0" ] && [ -f "$UQ_ENGINE" ] && [ -n "${PERSONAL_LAYER:-}" ] \
+        && [ -f "$PERSONAL_LAYER/unpublished-sources.txt" ]; then
+      uq_rc=0
+      uq_out="$(python3 "$UQ_ENGINE" --config "$PERSONAL_LAYER/unpublished-sources.txt" 2>&1)" || uq_rc=$?
+      [ -n "$uq_out" ] && printf '%s\n' "$uq_out" >&2
+      if [ "$uq_rc" -eq 1 ] && printf '%s' "$uq_out" | grep -q '\[unpublished-quote\] the staged change contains'; then
+        echo "[public-precommit-runner] commit rejected by Tier D (unpublished-quote). bypass once: CLAUDE_UNPUBLISHED_GUARD=0" >&2
+        exit 1
+      fi
+    fi
+    CL_ENGINE="$(dirname "$0")/check-confidential-leak.py"
+    if [ "${CLAUDE_LEAK_GUARD:-1}" != "0" ] && [ -f "$CL_ENGINE" ]; then
+      cl_rc=0
+      cl_out="$(python3 "$CL_ENGINE" 2>&1)" || cl_rc=$?
+      [ -n "$cl_out" ] && printf '%s\n' "$cl_out" >&2
+      if [ "$cl_rc" -eq 1 ] && printf '%s' "$cl_out" | grep -q '\[confidential-leak\]'; then
+        echo "[public-precommit-runner] commit rejected by Tier D (confidential-leak). bypass once: CLAUDE_LEAK_GUARD=0" >&2
+        exit 1
+      fi
+    fi
+  fi
   # markdown 相対 link guard (= leak ではないので leak 判定を通った後で走らせる)。
   # file を sub-dir や archive へ MOVE すると ../ の段数がずれて link が黙って死ぬ。
   # engine = 同 dir の fix-md-links.py --staged (staged .md の index の中身、 0.1 秒)。
