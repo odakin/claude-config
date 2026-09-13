@@ -33,7 +33,9 @@
 #     自分の検出文字列は検索対象になる = 素の substring match は自己言及で壊れる)
 #   - rate limit (default 180s、 state = ~/.claude/state/bash-search-nudge/)
 #   - 既知の miss (= 射程外、 意図的): 単一 path の存在 probe (ls -d X / test -e)、
-#     Read tool の offset/limit 部分読み、 `grep -c` の "0" 出力、 rg (未使用)。
+#     Read tool の offset/limit 部分読み、 `grep -c` の "0" 出力、 rg (未使用)、
+#     Bash tool の素の grep が ugrep --ignore-files として ignore された dir を飛ばす部分欠落
+#     (= 0 件でないので鳴らない。 conventions/shell-env.md#bash-tool-grep-ignores-gitignore)。
 #     単一 path probe は discovery か bounded 検証かが機械判別不能 = claim 時の
 #     scope 宣言規律 (個人層 CLAUDE.md inline §3) が floor。
 #

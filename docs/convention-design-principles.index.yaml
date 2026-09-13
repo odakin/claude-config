@@ -321,6 +321,10 @@ sections:
     legacy: "8.42"
     level: 3
     title: "8.42 検出器が literal で持つ signal は、 その検出器について書かれた文章にも現れる — 除外でなく**構造**に anchor する"
+  - id: sweep-null-needs-per-form-control
+    legacy: "8.43"
+    level: 3
+    title: "8.43 sweep の「無い」 は、探している class の形ごとに陽性対照を通してから信じる"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2

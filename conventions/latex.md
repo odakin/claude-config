@@ -22,7 +22,7 @@ LaTeX を含むリポで適用。CLAUDE.md から参照: `~/Claude/claude-config
 - `independent-position`: 前置詞・接続詞・冠詞・be 動詞・一部の動詞の直後、文・段落・脚注・キャプションの先頭、または見出しや display 数式の直後に置いた番号。`in~\labelcref` のように `~` が付いていても同格にはならないので候補に出る。
 - `missing-tie`: 名詞・インライン数式・マクロ引数の直後にあるが `~` の無い番号。参照に続く `and` / `or` / `to` の 2 つ目も対象。
 
-範囲の 2 つ目 `--\labelcref` と、参照に続くカンマ区切りの項は正しい形として通し、`--list-all` で点検用に表示する。`\blue{...}` のようなインラインのマクロと素の `{...}` は透過し、その前の語で判定する。裸の括弧参照として既に出た `\labelcref` は重ねて出さない。判定は閉じた機能語リストに基づくため、リストに無い動詞の直後の `~\labelcref` は出ない。この文体を採らない原稿では `--no-labelcref-form` で外す。`~` の付かない `\labelcref` だけを拾う grep は、`~` 付きの独立位置を拾えないので代わりにならない。
+範囲の 2 つ目 `--\labelcref` と、参照に続くカンマ区切りの項は正しい形として通し、`--list-all` で点検用に表示する。`\blue{...}` のようなインラインのマクロと素の `{...}` は透過し、その前の語で判定する。裸の括弧参照として既に出た `\labelcref` は重ねて出さない。判定は閉じた機能語リストに基づくため、リストに無い動詞の直後の `~\labelcref` は出ない。この文体を採らない原稿では `--no-labelcref-form` で外す。`~` の付かない `\labelcref` だけを拾う grep は、`~` 付きの独立位置を拾えないので代わりにならない (sweep の pattern を違反の一形で書く罠の一般則 = [`convention-design-principles.md#sweep-null-needs-per-form-control`](../docs/convention-design-principles.md#sweep-null-needs-per-form-control))。
 
 使い方はスクリプトの `--help` と `--selftest` が正本。`--list-all` は関係を説明した括弧参照も含めて確認でき、`--baseline <git-ref>` は参照コマンド・ラベル・引用・保護領域の保持を比較する。`--report` は入力ハッシュ付きの検査記録を生成する。任意のマクロや include を展開する TeX 処理系ではないため、原稿から読み込むファイルも明示的に渡す。
 
