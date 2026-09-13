@@ -253,7 +253,7 @@ python3 scripts/arxiv-package.py compare-pdf <arXiv が組版した PDF> arxiv/v
 
 ### <a id="arxiv-schedule"></a>締切と公開時刻
 
-- 締切 = **米東部 14:00 (月〜金)**、 公開 = **その日の米東部 20:00** (金曜 14:00〜月曜 14:00 の投稿は月曜 20:00)。 米国の祝日は後ろにずれる (arXiv help: availability)。
+- 締切 = **米東部 14:00 (月〜金)**。 公開 (米東部 20:00) は受付の窓で決まる: 月 14:00〜火 14:00 → **火**、 火〜水 → **水**、 水〜木 → **木**、 **木 14:00〜金 14:00 → 日曜**、 **金 14:00〜月 14:00 → 月曜**。 米国の祝日は後ろにずれる (arXiv help: availability の表)。
 - 日本では、 米国の夏時間中は締切が翌 03:00・公開が翌 09:00、 冬は 04:00・10:00。 中国はそれぞれ日本の 1 時間前。 換算は暗算でなく `zoneinfo` 等で。
 - 共著者に知らせるときは米東部の時刻を写さず、 **読み手の現地時刻**で書く ([`research-email.md#times-in-recipient-zones`](research-email.md#times-in-recipient-zones))。
 - `\date` を指定しない原稿は、 arXiv が組版した日 (UTC) の日付が印字される。
@@ -328,7 +328,7 @@ Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Mana
 1. **ブラウザ選択** = Safari / vanilla Chrome (§[browser-fallback](#browser-fallback))
 2. **source zip 準備**
    - Main tex + bib + bst + figures (本文参照分のみ)
-   - `.bbl` を含めるかの方針決定 (v1 パターン踏襲 or modern robust)
+   - `.bbl` と `.bib` / `.bst` の方針 (新規 arXiv は全部入れる、 `.bbl` 無しで受理済みの v1 の replace は v1 と揃えてよい = §[arxiv-bibliography-files](#arxiv-bibliography-files))
    - **非標準パッケージを事前同梱** (revtex4-2, tikz-feynman 等、 §[package-bundling](#package-bundling))
    - **arXiv は `scripts/arxiv-package.py build`** で作る (コメント除去・`.bbl`+`.bib`+`.bst`・gate、 §[arxiv-package-tool](#arxiv-package-tool))。 Submit の直前に原稿の remote が動いていないか見る (§[arxiv-freeze-race](#arxiv-freeze-race))
    - aux ファイル削除
