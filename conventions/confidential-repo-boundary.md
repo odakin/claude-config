@@ -149,6 +149,10 @@ schema (= そもそも書けなくする) で守る。 片方で両方を守ろ�
   (`check-confidential-leak.py`) が層3 の chain にだけ配線され、 公開 repo の pre-commit (`public-precommit-runner.sh`)
   からは呼ばれていなかったと分かった = 一番守るべき target で走っていなかった。 両方を public runner の Tier D にした。
   配線は target の種類ごとに、 実際の commit (一時 repo で可) で止まることを確かめる (#5 のカナリアと同じ)。
+- ⚠️ **公開 repo の gate の唯一のスイッチは `.claude/public-repo.marker`**。 同じ日に、 GitHub で public の clone 7 本が marker を
+  持たず、 Tier A-D のどれも走っていなかったと分かった (新規 repo の setup 経路は marker を書くが、 他所で作られた repo の clone は
+  一度も通らない)。 点検 = [`scripts/check-public-marker.py`](../scripts/check-public-marker.py) (GitHub の visibility と marker と
+  hook を突き合わせる。 marker を pull した直後の別マシンは `--hooks-only --fix-hooks` が hook を揃える)。
 - 止まったときは file と行と源の名前だけを出し、 一致した本文は出さない。 公刊版に在る文だと確かめた場合だけ
   `CLAUDE_UNPUBLISHED_GUARD=0` で 1 回通す。
 
@@ -200,6 +204,7 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 | [`check-pii-filenames.py`](../scripts/check-pii-filenames.py) | 追跡 file 名の識別子を検出 | `~/.claude/pii-filename-patterns.txt` |
 | [`pack-pii-dirs.sh`](../scripts/pack-pii-dirs.sh) | 識別子入り dir を暗号化 tar に畳む / 畳み忘れ検出 | 各 repo の `.pii-pack-dirs` |
 | [`check-gitcrypt-readable.py`](../scripts/check-gitcrypt-readable.py) | 暗号化 file がこのマシンで読めるか (全 repo) | `.gitattributes` の `filter=git-crypt` 宣言 |
+| [`check-public-marker.py`](../scripts/check-public-marker.py) | 公開 repo の gate が入っているか: public なのに marker 無し / private なのに marker / marker があるのに hook 無し | GitHub の visibility (gh) と各 clone の marker・hook |
 | [`check-unpublished-quote.py`](../scripts/check-unpublished-quote.py) | 未公開文書の逐語 (quoted span / prose run) を公開 repo の commit と message で BLOCK / 配線監査 (カナリア 2 本) | 個人層の `unpublished-sources.txt` (public runner が渡す) |
 
 いずれも **機密文字列も個人の配置も script 側に持たない**。 設定 file が無い環境では
