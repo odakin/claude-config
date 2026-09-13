@@ -31,7 +31,8 @@ Review lists (printed for reading; with --strict, L and P items also fail the ru
   L   sentences longer than --max-words words (default 40), longest first.
   P   position words that a relocation silently rebinds: previous / next / following / preceding
       (sub)section / appendix / chapter / paragraph, above / below, the former / the latter,
-      aforementioned, hereafter.
+      aforementioned, hereafter; display-line positions (the second / last line of Eq. N), which a
+      re-broken display silently rebinds (name the term instead: "the two contorsion terms of Eq. N").
   W   strong-word inventory: counts for only, unique(ly), complete(ly), automatically, every,
       whole, exact(ly), all orders, never, always, first time, novel, universal(ly), guarantee(d/s);
       lines for the rarer ones.
@@ -78,7 +79,9 @@ ROADMAP_DEFAULT = (r"(?i)organi[sz]ed as follows",
                    r"(?i)(?:this|the) (?:paper|article) is (?:organi[sz]ed|structured)")
 POSITION = re.compile(r"(?i)\b(?:previous|next|following|preceding|foregoing)\s+(?:sub)?"
                       r"(?:sections?|appendix|appendices|chapters?|paragraphs?)\b"
-                      r"|\b(?:above|below|hereafter|aforementioned)\b|\bthe\s+(?:former|latter)\b")
+                      r"|\b(?:above|below|hereafter|aforementioned)\b|\bthe\s+(?:former|latter)\b"
+                      r"|\b(?:first|second|third|fourth|fifth|last|upper|lower|top|bottom)\s+lines?\s+of\b"
+                      r"|\b(?:in|on)\s+the\s+(?:first|second|third|fourth|fifth|last|upper|lower|top|bottom)\s+lines?\b")
 STRONG = re.compile(r"(?i)\b(only|unique(?:ly)?|complete(?:ly)?|automatically|every|whole|exact(?:ly)?|"
                     r"all orders|never|always|first time|novel|universal(?:ly)?|guarantee[sd]?)\b")
 STRONG_FREQUENT = {"only", "every", "exact", "exactly", "complete"}
@@ -523,6 +526,12 @@ def selftest():
     pos = sorted(n for n, _, _ in rv["P"])
     expect("position words: 'above' (prose), 'the previous section', 'The next appendix'; not in math or comments",
            pos == sorted([at("The result above"), at("previous section"), at("next appendix")]), rv["P"])
+    mini = mask(strip_comments(r"The terms in the second line of Eq.~\eqref{eq:x} and the last line of "
+                                r"\cref{eq:y} differ, as $x$ in the first line shows; the line of sight and the first term are unrelated."))
+    hits = [m.group(0).lower() for m in POSITION.finditer(mini)]
+    expect("display-line positions (one hit per phrase): 'in the second line (of)', 'last line of', "
+           "'in the first line'; not 'line of sight' / 'the first term'",
+           hits == ["in the second line", "last line of", "in the first line"], hits)
     expect("strong words: body only (the abstract's 'Only' / 'exactly' on the same line are skipped)",
            any(c == "W" and "exact 1" in m and "only" not in m and "exactly" not in m for _, c, m in inf),
            [m for _, c, m in inf if c == "W"])

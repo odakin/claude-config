@@ -395,6 +395,20 @@ grep -B1 -A2 "your-marker-keyword" /tmp/render.txt
 
 **一般化 (= 同 class の bug が出やすい構造)**: figure caption macro / table header macro / footnote wrapper macro / theorem environment / itemize/enumerate label customization / hyperref anchor macro 等、 「macro 側で fixed prose を author し、 argument で variable 部分のみ受ける」 全ての構造に同警戒。 source 静的解析 (grep / lint) では基本的に expose 不能、 render が唯一の検証手段。
 
+## <a id="prescript-tall-nucleus"></a>左肩の添字 macro は核の高さで浮く — `\prescript` でなく標準 strut を基準にする (2026-09-13)
+
+`\newcommand{\ord}[2]{\prescript{(#1)}{}{#2}}` (mathtools) のように左上添字を macro にすると、 `\prescript` は**引数の box の高さ**で添字の位置を決める。 核が `\hat{\overset{e,\omega}{T}}` のように飾り (overset・hat) で背が高いと、 添字が box の天辺まで持ち上がり、 核との間も空く。 error も warning も出ない。
+
+**処方**: macro の側で基準の高さを固定する。
+
+```latex
+\newcommand{\ord}[2]{{\mathstrut}^{(#1)}\!#2}  % 左肩の高さは \mathstrut (TeX 標準の strut = 丸括弧の高さ)
+```
+
+⚠️ `{\vphantom{T}}^{(#1)}` のように**特定の文字**を基準にしない — その文字に合わせた場当たりの macro になり、 別の核では同じ問題が形を変えて残る (著者指摘「T に対してのみ恣意的に最適化したマクロになる」)。 `\mathstrut` は内容によらず標準の高さを与えるための strut。 飾りの無い核では見た目はほぼ不変 (添字と核の間は `\!` の分だけ `\prescript` より詰まる)。
+
+**確認**: 使用箇所のうち最も背の高い核を含む式を 1 つ render して、 飾り無しの核と添字の高さが揃うことを見る (途中の推敲 pass の目視 gate にはしない = [#visual-verification-intensity](#visual-verification-intensity))。
+
 ## <a id="maketitle-handset-author-block"></a>手組み author block と `\maketitle` を併用したら題扉の余白を詰める
 
 物理原稿では、 所属・ORCID・脚注 email を細かく組むために `\author` を使わず **`\maketitle` の後ろに `center` 環境で著者ブロックを手組み**することがある。

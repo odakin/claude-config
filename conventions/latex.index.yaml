@@ -76,6 +76,9 @@ sections:
   - id: fixed-framing-macro
     level: 2
     title: "新規 macro に fixed framing text を含める前に source-render asymmetry の罠を抑える"
+  - id: prescript-tall-nucleus
+    level: 2
+    title: "左肩の添字 macro は核の高さで浮く — `\\prescript` でなく標準 strut を基準にする (2026-09-13)"
   - id: maketitle-handset-author-block
     level: 2
     title: "手組み author block と `\\maketitle` を併用したら題扉の余白を詰める"
