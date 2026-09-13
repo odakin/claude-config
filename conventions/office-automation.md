@@ -1405,7 +1405,7 @@ origin: 2026-06-11 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefil
 
 **xlsx 版との対応** (= [`label-vs-input-antipattern`](#label-vs-input-antipattern) との sibling 関係): xlsx 版は「**label 行 (label/value 縦並び) の label 行に値を書く** = 様式改変」、 本 PDF 版は「**label cell (label/data 横並び or 縦並び) の label cell に画像/値を overlay** = 様式改変」。 構造が縦か横かと、 介入手段 (cell value set vs PDF overlay) が違うだけで、 失敗 mode は同型。 両者とも [`form-dump-first`](#form-dump-first) (= 雛形構造を最初に全 dump する) で予防 + 機械検出器で backstop する系列。
 
-origin: 2026-06-28 推薦書様式の自筆署名欄 overlay。 cell `Rect(316.1, 151.7, 392.6, 205.7)` に label 文字「○○欄/(自筆にて記載)」 が書かれていたので「これが署名欄」 と reflex 判定 → 署名画像を overlay (= label 文字に画像が重なる)。 user 訂正「そこは『○○欄はこの右側』 というラベル欄」 で発覚 → 隣接 cell `Rect(393.1, 151.7, 537.1, 205.7)` (= 内部 text ゼロ = 真の data cell) に再配置で正しく合成。 同 session に [`label-vs-input-antipattern`](#label-vs-input-antipattern) の構造を一度 trip した = 「reflex に判別ロジックを織り込めば catch できた」 例。
+origin: ある様式の自筆署名欄 overlay。 cell `Rect(316.1, 151.7, 392.6, 205.7)` に label 文字「○○欄/(自筆にて記載)」 が書かれていたので「これが署名欄」 と reflex 判定 → 署名画像を overlay (= label 文字に画像が重なる)。 user 訂正「そこは『○○欄はこの右側』 というラベル欄」 で発覚 → 隣接 cell `Rect(393.1, 151.7, 537.1, 205.7)` (= 内部 text ゼロ = 真の data cell) に再配置で正しく合成。 同 session に [`label-vs-input-antipattern`](#label-vs-input-antipattern) の構造を一度 trip した = 「reflex に判別ロジックを織り込めば catch できた」 例。
 
 ### <a id="pymupdf-insert-text-baseline"></a>PyMuPDF `insert_text` の y 座標は **font baseline** (= visual top/bottom と混同しない)
 
@@ -2370,7 +2370,7 @@ sig_boosted.unlink(missing_ok=True)   # cleanup
 
 **検証**: [`pdf-mutation-verification-schema`](#pdf-mutation-verification-schema) を通せば「PDF を mutate した結果が想定通り」 が確認できる (= image stream +1 / text 不変)。 ⚠️ 濃さそのものは pixel 階調 metric では決めにくいので、 [`pdf-visual-confirm`](#pdf-visual-confirm) (= Preview で目視) + user OK が最終 gate。
 
-origin: 2026-06-28 推薦書様式の signature overlay。 元 PNG (1000×278 px、 antialias edge 多数) を素のまま insert_image → user 「もっと濃く」 → alpha ×1.8 → user 「更に濃く」 → ×3.0 + RGB pure black で確定。 印刷した紙でも自筆署名と同等の濃度で読める。
+origin: ある様式の signature overlay。 元 PNG (1000×278 px、 antialias edge 多数) を素のまま insert_image → user 「もっと濃く」 → alpha ×1.8 → user 「更に濃く」 → ×3.0 + RGB pure black で確定。 印刷した紙でも自筆署名と同等の濃度で読める。
 
 ### <a id="placeholder-trailing-underscore"></a>docx template の placeholder 末尾装飾 underscore の cleanup
 
@@ -2861,7 +2861,7 @@ if errors:
 
 **text-only mutation との関係**: value overlay (= [`pdf-prefill-direct`](#pdf-prefill-direct)) の場合は text が変わるので `text_must_be_identical=False` にし、 代わりに**期待 text の delta** を `must_present` で網羅する (= 新規 overlay 値が全部 in を確認)。 image-only mutation (= 署名・印影 insert) は `text_must_be_identical=True` で「触ってないはずの text が本当に不変」 を強い invariant として点呼できる (= 過去訂正の保護に最強)。
 
-origin: 2026-06-28 推薦書様式の自筆署名 overlay 後の検証。 過去 session で §2 内の hallucination (= 別人姓を著者と取り違え) を訂正した PDF に対し signature overlay する際、 (1) text 不変 (= overlay が image-only である保証)、 (4) MUST-ABSENT に旧 hallucination 名を入れて「訂正が壊れていない」 を点呼、 (5) image stream +1 で「署名が確かに 1 枚だけ追加された」 を確認。 視覚は別途 [`pdf-visual-confirm`](#pdf-visual-confirm) で実施。
+origin: ある様式の自筆署名 overlay 後の検証。 過去 session で本文の誤り (人名の取り違え) を訂正した PDF に対し signature overlay する際、 (1) text 不変 (= overlay が image-only である保証)、 (4) MUST-ABSENT に旧 hallucination 名を入れて「訂正が壊れていない」 を点呼、 (5) image stream +1 で「署名が確かに 1 枚だけ追加された」 を確認。 視覚は別途 [`pdf-visual-confirm`](#pdf-visual-confirm) で実施。
 
 ### <a id="image-budget-exhaustion"></a>画像レンダリング検証の "image budget" 枯渇 → text-first 原則
 
