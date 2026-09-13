@@ -124,6 +124,7 @@ pointer 化する (= stale な正本への pointer は縮退の意味を毀損�
 pointer 行には「旧全文 = <archive>」 を 1 語添える (= 読み手が退避の存在を知る経路)。
 SoT 照合を丁寧にやる余裕があるときは本則 (= SoT 側へ寄せる方が home が 1 つで済む)、
 live entry を大量に薄くするときはこの variant。
+⚠️ **退避先が別の深さの dir なら、 verbatim の相対 link は着地しなくなる** (`SESSION-archive/2026-09.md` へ移した `review/x.md` は `../review/x.md` が要る)。 verbatim は「文字列を変えない」 ではなく「内容を変えない」: 移した直後に `scripts/fix-md-links.py --files <archive> --fix` で深さだけを直し、 `--list --strict` が 0 になってから commit する (2026-09-13 に 40 bullet を退避した回、 staged link guard が 39 本の depth と 1 本の ambiguous で commit を止めた)。
 
 ## <a id="obligation-carrier-graduation"></a>義務 marker 付き entry の graduate 判定
 
