@@ -481,7 +481,7 @@ index / 逆引き table には **書き手 (= 値を harvest して key を作�
 4. **「検査が大量に落ちた」 ときはデータでなく経路を疑う**。 全件が同じ形で落ちるなら
    個々の値ではなく直列化/読み戻しが原因のことが多い。
 
-初出: 2026-07 の成績集計。 未受験者を `total: null` で表す設計は正しかったが、
+初出: 成績集計の pipeline。 未受験者を `total: null` で表す設計は正しかったが、
 書き出しで `"None"` に化けて `--check` が 42 件の偽の不一致を出し、 さらに表示側の
 TypeError で `--write` が実行されていなかった (= 2 つが同時に起きて、 症状が
 「書けているのに検査が落ちる」 に見えた)。
@@ -498,7 +498,7 @@ TypeError で `--write` が実行されていなかった (= 2 つが同時に�
 ⚠️ **「主たる入力」 を無意識に母集団だと思い込む**のがこの失敗の本体。 主入力は
 たいてい「参加した人」 であって「対象者」 ではない。
 
-初出: 2026-07 の成績集計。 試験の答案転記に現れる学生だけを走査していたため、
+初出: 成績集計の pipeline。 試験の答案転記に現れる学生だけを走査していたため、
 **試験を欠席した学生が実際に取っていたレポート点・実験点が消えた** (= 合計 0 と
 表示されるが、 実際には満点を取っている者が複数いた)。 母集団 (履修者名簿) を
 走査集合に加えて解消。
@@ -538,4 +538,4 @@ pattern:
 - **判定は category に頼らず、 domain 側の相手先 alias (店名・機関名の別表記 = 半角カナ等) で照合する** — 外部 service の自動分類の誤りが (a) の warning としてそのまま浮く (実例: 病院支払いが「食費」 に分類されていたのを alias 一致で検出 → 元 service 側を修正)
 - alias は domain ledger の相手先 entry に持たせ、 tool に hard-code しない (tool は平文で公開可、 PII は暗号化側)
 
-実例 2026-09-05: 医療記録 repo の `visits.yaml` ⇄ 家計簿 CSV の join tool を初回実行 → 年次医療費が即出る + 自動分類誤り 2 件 + 記録漏れ受診 8 件 + 未取込 7 件が一度に見えた。 関連: [`#single-source-of-truth`](#single-source-of-truth) (soft duplication の一般則)、 [`machine-route-first.md #internal-endpoint-replay`](machine-route-first.md#internal-endpoint-replay) (検出した誤分類を元 service 側で直す経路)。
+実例: 受診 ledger ⇄ 家計簿 CSV の join tool を初回実行すると、 年次医療費が即出ると同時に、 自動分類の誤り・記録漏れの受診・未取込の明細が一度に見えた。 関連: [`#single-source-of-truth`](#single-source-of-truth) (soft duplication の一般則)、 [`machine-route-first.md #internal-endpoint-replay`](machine-route-first.md#internal-endpoint-replay) (検出した誤分類を元 service 側で直す経路)。

@@ -41,12 +41,12 @@ user が「投稿した」 と言ったら、 **同 turn で** 投稿先の read
 
 投稿が途中で切れていたら、 **切断位置を source の装飾境界と照合する**: 切断点が source の最初の bold / 装飾 span の開始直前と一致するなら、 rendered md 表示からのコピー経路と確定できる (= 後続全損 mode の指紋)。 実測では同一文面の再投稿 2 回がいずれも最初の bold span 直前で切断しており、 経路確定 → クリップボード直渡しへの切替で 1 発解消した。 この診断は ③ の read-back が前提 (= 切断は貼った本人の目視をすり抜ける)。
 
-## 根拠 (= 実測 4 incident、 2026-05〜08、 大学講義の Classroom 運用)
+## 根拠 (= 実測 4 incident、 大学講義の Classroom 運用)
 
-1. **2026-05**: chat に markdown で出した説明 draft を user が送信用に流用 → 記号剥がれで bold 部の主語・述語が消えた文面が学生に届いた (= ① の欠如)
-2. **2026-05 (2 週後)**: 「chat では plain text」 規律の確立後、 yaml field に書く draft で markdown が再発 (= 中間 artifact を別カテゴリと reflex 分類する trap → ① の「最終的にどの UI に貼られるか」 基準を明文化)
-3. **2026-07**: 課題文 draft .md の本文に bold 2 文 → user が rendered 表示からコピペ投稿 → **span 消失** (課題の本体指示 1 文が丸ごと欠落)。 投稿後 read-back 照合が欠落を検出し、 学生の実害前に修正 (= ③ が実働した初例。 ②③ を規律化)
-4. **2026-08**: chat に markdown bold 入りで提示した**参考データ** (成績集計の素材) から user がコピペ投稿 → **後続全損** (最初の bold span 以降が全部消えた)。 read-back 照合が 2 回連続で切断を検出 → 切断位置 fingerprinting で経路確定 → クリップボード直渡しで解消 (= 後続全損 mode・診断法・「素材も貼り付け素材」 の 3 点を規律化)
+1. **1 件目**: chat に markdown で出した説明 draft を user が送信用に流用 → 記号剥がれで bold 部の主語・述語が消えた文面が学生に届いた (= ① の欠如)
+2. **2 件目 (1 件目の直後)**: 「chat では plain text」 規律の確立後、 yaml field に書く draft で markdown が再発 (= 中間 artifact を別カテゴリと reflex 分類する trap → ① の「最終的にどの UI に貼られるか」 基準を明文化)
+3. **3 件目**: 課題文 draft .md の本文に bold 2 文 → user が rendered 表示からコピペ投稿 → **span 消失** (課題の本体指示 1 文が丸ごと欠落)。 投稿後 read-back 照合が欠落を検出し、 学生の実害前に修正 (= ③ が実働した初例。 ②③ を規律化)
+4. **4 件目**: chat に markdown bold 入りで提示した**参考データ** (成績集計の素材) から user がコピペ投稿 → **後続全損** (最初の bold span 以降が全部消えた)。 read-back 照合が 2 回連続で切断を検出 → 切断位置 fingerprinting で経路確定 → クリップボード直渡しで解消 (= 後続全損 mode・診断法・「素材も貼り付け素材」 の 3 点を規律化)
 
 ## <a id="same-framework-other-paste-targets"></a>同じ framework の別 instance — 貼り付け先が terminal のとき
 

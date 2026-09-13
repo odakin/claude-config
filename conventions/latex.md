@@ -677,7 +677,7 @@ pLaTeX の禁則処理は通常 `。、` の行頭落ちを防ぐが、**`\textb
 - **リポに vendor する場合は必ず正本から copy し、 `md5 -q <repo>/JHEP.bst` を正本 md5 と照合する**。 ⚠️ **他 repo からの copy は禁止** — 既存 repo には note 無効の stock v2.7 等の stale copy が複数残存しており、 そこから copy すると stale が増殖する（2026-07-24 RCA: `@unpublished` in-preparation entry の note が silent に落ちる形で発覚。 「note 表示有効」 と信じている file が実は stock、 は目視で見抜けない = md5 照合が唯一の cheap gate）
 - `\bibliographystyle{JHEP}` を指定
 - 将来 style を改版したら: 正本を編集 → 本節の md5 更新 → `setup.sh` 再実行で TEXMFHOME 同期 → vendor 済み repo は次に触る時に md5 照合で気付く
-- <a id="citation-order-numbering"></a>**番号は初出順で付く** (JHEP.bst は unsorted、 2026-09-13): ある文献の最初の引用を消す・後ろへ動かすと、 その文献と、 旧初出から新初出までの間で初めて引かれる文献の番号がまとめて変わる。 同じ build の中では bibtex が付け直すので不整合は出ないが、 **build の外に書いた番号 (査読返答・決定台帳・共著者へのメール・review note) は黙って古くなる** ⇒ build の外では bib key で書く。 2 版の PDF で番号が動いたら、 `.aux` の `\citation` の順で初出の位置を追うと原因が 1 行で分かる (実例: 脚注の引用を 1 つ消しただけで、 別の文献の番号が 9 繰り下がった。 誤りではなかった)。
+- <a id="citation-order-numbering"></a>**番号は初出順で付く** (JHEP.bst は unsorted): ある文献の最初の引用を消す・後ろへ動かすと、 その文献と、 旧初出から新初出までの間で初めて引かれる文献の番号がまとめて変わる。 同じ build の中では bibtex が付け直すので不整合は出ないが、 **build の外に書いた番号 (査読返答・決定台帳・共著者へのメール・review note) は黙って古くなる** ⇒ build の外では bib key で書く。 2 版の PDF で番号が動いたら、 `.aux` の `\citation` の順で初出の位置を追うと原因が 1 行で分かる (実例: 脚注の引用を 1 つ消しただけで、 別の文献の番号が 9 繰り下がった。 誤りではなかった)。
 
 ## <a id="no-biblatex"></a>biblatex は使わない（JHEP.bst と非互換）
 
@@ -1037,7 +1037,7 @@ python3 scripts/latex-pdf-audit.py paper.pdf --log paper.log --render-dir review
 
 **既存様式への記入**（申請書、Word/Excel/PDF template、帳票、overlay）では、欄・罫線・改頁・既存文字を動かしていないこと自体が受入条件なので、基準版との pixel 比較を使う。論文でも renderer・font・生成経路の移行後に版面同値性を証明する場合、または並行生成で PDF の出所が不明になり同じ source の二つの出力を照合する場合に限り、全ページ比較を追加してよい。通常の source/PDF 対応は隔離ビルド、入力 hash、完了した log で確立し、全ページ画像比較を代用にしない。
 
-origin: 2026-09-11、論文の通常改稿で固定様式向けの全ページ画像照合を流用し、検査が過剰になった事例から区別を明文化。
+origin: 論文の通常改稿で固定様式向けの全ページ画像照合を流用し、検査が過剰になった事例から区別を明文化。
 
 
 ## <a id="scratch-build-dir"></a>別 dir で組版するとき、生成物を原稿 dir へ symlink しない

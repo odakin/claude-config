@@ -97,7 +97,7 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 
 write 側「one fact, one home」（[`personal-layer.md#owner-automation-shared-project`](personal-layer.md#owner-automation-shared-project) の partition / MOVE-not-copy。 ⚠️ 2026-09-02 修正: 旧 ref `§publish-boundary` は実在しない anchor だった = §14.7 の HARD dangling）と対で、read 側は「one matter → read its single SoT」。**二重 SoT を*作らない*のと source document を SoT と*読み違えない*のは同一原則の両面。**
 
-origin: 2026-06-13 — ある案件（出張の宿泊証明）の status を問われ、会話冒頭で見ていた source document（個人アカウントのメール通知）を SoT と取り違え、その null から「未対応／記録なし」と結論 + 不在を説明する誤った root cause を作話。実際は別 SoT（業務台帳）に完全記録済で 1 grep の距離にあった。write path（記録）は完璧、read path（SoT を読む）が崩れた型。同日 sibling = 横断 lookup を要する案件で SoT 直読より手近 store を先に見た失敗（§8.11 / §8.12 と同根）。layer-3 機械対策 = source store を業務 query で検索したら正しい SoT へ routing する guard + matter-status を SoT-read に乗せる dispatch（instance は layer 3 archive 残置 = kernel-up / instance-down）。
+origin: ある案件（出張の証明書類）の status を問われ、会話冒頭で見ていた source document（個人アカウントのメール通知）を SoT と取り違え、その null から「未対応／記録なし」と結論 + 不在を説明する誤った root cause を作話。実際は別 SoT（業務台帳）に完全記録済で 1 grep の距離にあった。write path（記録）は完璧、read path（SoT を読む）が崩れた型。同日 sibling = 横断 lookup を要する案件で SoT 直読より手近 store を先に見た失敗（§8.11 / §8.12 と同根）。layer-3 機械対策 = source store を業務 query で検索したら正しい SoT へ routing する guard + matter-status を SoT-read に乗せる dispatch（instance は layer 3 archive 残置 = kernel-up / instance-down）。
 
 ### <a id="errata-on-preserved-records"></a>2.4 削除できない誤り記録には errata marker を残す
 
@@ -157,7 +157,7 @@ origin: SoT 重複が複数 domain で再発する構造を一般化 (2026-06-21
 
 判別フロー: **正本そのものの誤り → 本文を是正**（§2.2、marker でなく書き換え）/ **削除可能な決定記録**（価値が別所に抽出済 + git が履歴を保つ）**→ §7.2 で削除** / **削除不能な忠実履歴**（falsify せず残す要）**→ 本節 errata marker**。errata marker は「保持必須の非正本記録」専用で、正本や DESIGN.md entry には使わない（§7.2「※注釈で本文温存しない」と矛盾しない — 対象が別物）。
 
-origin: 2026-06-18 — 研究費様式の交通費記入ルールを是正した session。確定版を SoT（規約 md）へ書いた後も既存 TODO 2 件が旧暫定を live で肯定していた（= §2.2 sweep で発見し本文是正）。加えて**削除できない履歴**（事務担当宛の送信済メール draft / 過去の打診記録）に旧暫定が残り、こちらは是正でなく errata marker で「当時の誤り」を明示し本文は温存した。user 指摘「過去の誤った判断・知見には『これは誤り』とあとで分かる注を、上層で規律化してよい」。
+origin: 研究費様式の交通費記入ルールを是正した session。確定版を SoT（規約 md）へ書いた後も既存 TODO 2 件が旧暫定を live で肯定していた（= §2.2 sweep で発見し本文是正）。加えて**削除できない履歴**（事務担当宛の送信済メール draft / 過去の打診記録）に旧暫定が残り、こちらは是正でなく errata marker で「当時の誤り」を明示し本文は温存した。user 指摘「過去の誤った判断・知見には『これは誤り』とあとで分かる注を、上層で規律化してよい」。
 
 ---
 
@@ -618,7 +618,7 @@ Claude が memory に書きたがる構造バイアスの正体は多くの場�
 
 これは check-sot-drift.py / check-i18n-drift.py 等が言及する **「list-based audit の implicit-scope 盲点」 の正本 home**。 ⚠️ §10.8 (= 削除・委譲 ROI の trap) とは別物 — 旧来「§10.8」 を指していた blind-spot 参照は本 §8.8 が正しい referent。
 
-origin: 2026-06 官製様式の docx 記入要領削除。 run 直接色だけ見る strip + phrase list 照合の検証が **両方 pass** したのに、 段落 style 継承の色付きガイダンスが残存。 決定論 check が緑なのに実際は残っており、 人が rendered 色を目視して初めて発覚 → 検証を「色そのもの (PDF span color)」 に変えて決着。 「決定論 check ✅ ≠ 正しい」 は [office-automation.md#docx-checkbox-content-control](../conventions/office-automation.md#docx-checkbox-content-control) の「validator は必要条件であって十分条件でない」 と同根。
+origin: 官製様式の docx 記入要領削除。 run 直接色だけ見る strip + phrase list 照合の検証が **両方 pass** したのに、 段落 style 継承の色付きガイダンスが残存。 決定論 check が緑なのに実際は残っており、 人が rendered 色を目視して初めて発覚 → 検証を「色そのもの (PDF span color)」 に変えて決着。 「決定論 check ✅ ≠ 正しい」 は [office-automation.md#docx-checkbox-content-control](../conventions/office-automation.md#docx-checkbox-content-control) の「validator は必要条件であって十分条件でない」 と同根。
 
 ### <a id="set-diff-false-positive"></a>8.9 set 差分で drift を検出する時、差分には「真の違反」 と「正当な乖離」 が混在する
 
@@ -870,7 +870,7 @@ origin: 2026-06-13 desktop-hook-gap remediation。 odakin は Claude Code deskto
 
 **reflex**: 「事前告知が無い」 / 「規程に書かれていない」 / 「未連絡」 等を断定する前に、 sweep scope を「Verified scope = ___ / NOT verified = ___」 で明示する。 アクセス経路が機械化されていない channel (= 手動 login portal、 MCP 経路無し) は **「未 verify」 と honest framing して保留**、 内部 portal が institution に存在することが分かっている場合は universal absence を主張せず、 確認手段を user / 他 channel に委ねる。
 
-origin: 2026-06-29 ある institutional 締切超過の指摘を受け、 person-to-person mail (= Gmail) と 個別 reference PDF (= 配付資料) のみ sweep して「事前告知が見当たらない」 と 2 段で argue した RCA。 実際は institutional broadcast (= 学内 portal 掲示板) に 4 ヶ月前から告知が出ており、 単に sweep scope に portal が入っていなかった (= 共著者から portal URL 指摘で catch)。 [`§8.11`](#downstream-net-intake-leverage) (downstream net は intake で正しく表現された対象しか守れない) の dual: intake の channel category を取りこぼすと downstream sweep がいくら丁寧でも universal absence は嘘になる。
+origin: ある institutional 締切超過の指摘を受け、 person-to-person mail (= Gmail) と 個別 reference PDF (= 配付資料) のみ sweep して「事前告知が見当たらない」 と 2 段で argue した RCA。 実際は institutional broadcast (= 学内 portal 掲示板) に 4 ヶ月前から告知が出ており、 単に sweep scope に portal が入っていなかった (= 共著者から portal URL 指摘で catch)。 [`§8.11`](#downstream-net-intake-leverage) (downstream net は intake で正しく表現された対象しか守れない) の dual: intake の channel category を取りこぼすと downstream sweep がいくら丁寧でも universal absence は嘘になる。
 
 ### <a id="broadcast-obligation-blind-spot"></a>8.17 broadcast で届く個人義務 — per-person addressing proxy の構造的 false negative
 
@@ -889,7 +889,7 @@ origin: 2026-06-29 ある institutional 締切超過の指摘を受け、 person
 
 reflex: mail surfacing / triage 系の検出を設計・評価する時、 「個人義務が broadcast で届く経路」 を test case に含める (= per-person proxy の盲点を設計時に名指しする)。 逆に broadcast mail を noise として suppress する filter を書く時は「この経路で個人拘束の義務も届くか?」 を問う (= 会議招集・受講依頼・投票依頼は ML/BCC で届くのが典型)。
 
-origin: 2026-07、 年次の institutional 義務 (= 受講報告 + 書類提出、 学内締切付き) が BCC 一斉配信 (宛名「各位」) で初回 + リマインド 2 通の計 3 通届いたが、 name-mention surfacing を 3 通とも構造的に貫通。 4 通目 (= 個別名指しの Fwd 催促) で初めて surface し、 その時点で締切を 1.5 ヶ月超過。 しかも初回の 1 週間後に義務自体は認識され session 記録の prose に「今週の事務 N 件」 として書かれていたが、 tracked object 化されず deadline 網から不可視のまま (= 検出層と intake 層の複合failure)。 sibling 観測: 役員 ML の会議招集 3 通が ML bracket noise filter で suppress され会議欠席 (2026-06) / 学内 ML の会議通知が同型 filter で不検出 → filter 緩和 (2026-06)。 3+ 観察からの一般化 ([`§9.8`](#single-observation-scope-check) 充足)。 instance (= 検出器実装・sender 具体値) は個人層に残置 (= kernel-up / instance-down)。
+origin: 年次の institutional 義務 (= 受講報告 + 書類提出、 学内締切付き) が BCC 一斉配信 (宛名「各位」) で初回 + リマインド 2 通の計 3 通届いたが、 name-mention surfacing を 3 通とも構造的に貫通。 4 通目 (= 個別名指しの Fwd 催促) で初めて surface し、 その時点で締切を 1.5 ヶ月超過。 しかも初回の 1 週間後に義務自体は認識され session 記録の prose に「今週の事務 N 件」 として書かれていたが、 tracked object 化されず deadline 網から不可視のまま (= 検出層と intake 層の複合failure)。 sibling 観測: 役員 ML の会議招集 3 通が ML bracket noise filter で suppress され会議欠席 (2026-06) / 学内 ML の会議通知が同型 filter で不検出 → filter 緩和 (2026-06)。 3+ 観察からの一般化 ([`§9.8`](#single-observation-scope-check) 充足)。 instance (= 検出器実装・sender 具体値) は個人層に残置 (= kernel-up / instance-down)。
 
 ### <a id="request-mail-two-date-axes"></a>8.18 依頼 mail の二日付軸 — event 日を urgency の proxy にすると行動〆切が落ちる
 
@@ -897,7 +897,7 @@ origin: 2026-07、 年次の institutional 義務 (= 受講報告 + 書類提出
 
 reflex: 日付を扱う surfacing / reminder を設計・評価する時、 「この mail の actionable な日付はどれか — event 日か、 その手前の行動〆切か」 を分離して問い、 gate は**行動〆切軸に (も)** keying する。 締切文脈 (「までに」 等) の日付を「アポでない」 として捨てる filter を書く時は、 捨てた先に受け手が実在するかを [`§8.11 変種`](#receiverless-handoff) として verify する。
 
-origin: 2026-07、 会議日程調整の broadcast 依頼 (候補日 2 つ + 入力〆切が中 1 日) で、 検出器は候補日 (event 軸) を正しく抽出しながら入力〆切の日付を「期限 = 別 mechanism の領分」 として除外し、 push gate も event 日近接のみ → 〆切は event の 2 日前に silent 超過 (週末 + 祝日と重なり human catch も無し)。 sibling 観測 (同年 7 月): 候補日未確定型の日程調整 mail が「具体日時のあるアポ」 検出の圏外に落ち、 user の直接質問だけが catch。 2 観察 ([`§9.8`](#single-observation-scope-check) の 2+ bar 充足)。 instance (= 検出器の入力〆切 class 実装) は個人層に残置。
+origin: 会議日程調整の broadcast 依頼 (候補日 2 つ + 入力〆切が中 1 日) で、 検出器は候補日 (event 軸) を正しく抽出しながら入力〆切の日付を「期限 = 別 mechanism の領分」 として除外し、 push gate も event 日近接のみ → 〆切は event の 2 日前に silent 超過 (週末 + 祝日と重なり human catch も無し)。 sibling 観測 (同年 7 月): 候補日未確定型の日程調整 mail が「具体日時のあるアポ」 検出の圏外に落ち、 user の直接質問だけが catch。 2 観察 ([`§9.8`](#single-observation-scope-check) の 2+ bar 充足)。 instance (= 検出器の入力〆切 class 実装) は個人層に残置。
 
 ### <a id="retrieval-key-choice"></a>8.19 retrieval の null は「対象が無い」 でなく「key が悪い」 を先に疑う — 人間可読な属性は経路で失われ、 案件 ID は残る
 
@@ -917,7 +917,7 @@ origin: 2026-07、 会議日程調整の broadcast 依頼 (候補日 2 つ + 入
 
 **reflex**: retrieval が null または想定より薄いとき、 「無い」 と報告する前に (1) 使った key を列挙し (2) 各 key が上表のどれかで失われないかを問い (3) 案件 ID が分かるなら **ID 単独で**引き直す。 ID が不明なら、 ID を必ず含む隣接 record (= 受理通知・確認メール・自動返信) を先に探して ID を得る。 報告時は [`§8.16`](#absence-channel-coverage) と同じく「Verified scope = ___ / NOT verified = ___」 を key 軸でも埋める。
 
-origin: 2026-07、 ある論文の過去の査読所見を「メールに残っていない」 と報告した RCA。 誌名・送信者・添付の有無・直近時間窓で引いて null → 実際は**原稿管理 ID 単独で引けば全 round が残っていた** (= 最終報は本文のみで添付なし / 転送の件名に誌名が一度も出てこない / 発端は時間窓の外)。 sibling 観測: 同じ運用の連絡先取得手順に、 mask された公開ページを見て「取得できない」 と結論したが一次資料 (= 論文 PDF) には在った失敗例が既に記録されていた (= source 選択の同型)。 2 観察 ([`§9.8`](#single-observation-scope-check) の 2+ bar 充足)。 なお本節は「引き方」 の話で、 [`§8.11`](#downstream-net-intake-leverage) (= intake で表現されていない対象は下流で守れない) とは独立 — ID で引けたのは、 対象が最初から正しく記録されていたから。
+origin: ある論文の過去の査読所見を「メールに残っていない」 と報告した RCA。 誌名・送信者・添付の有無・直近時間窓で引いて null → 実際は**原稿管理 ID 単独で引けば全 round が残っていた** (= 最終報は本文のみで添付なし / 転送の件名に誌名が一度も出てこない / 発端は時間窓の外)。 sibling 観測: 同じ運用の連絡先取得手順に、 mask された公開ページを見て「取得できない」 と結論したが一次資料 (= 論文 PDF) には在った失敗例が既に記録されていた (= source 選択の同型)。 2 観察 ([`§9.8`](#single-observation-scope-check) の 2+ bar 充足)。 なお本節は「引き方」 の話で、 [`§8.11`](#downstream-net-intake-leverage) (= intake で表現されていない対象は下流で守れない) とは独立 — ID で引けたのは、 対象が最初から正しく記録されていたから。
 
 ### <a id="acceptance-is-not-specification"></a>8.20 「通った」 は仕様ではない — 前例成果物を base にするとき、 受理は正しさの証拠にならない
 
@@ -972,7 +972,7 @@ origin: 出版社 domain の noise 登録 (= 出版勧誘 spam が着信の大�
 
 domain 別 instantiation (査読依頼 = 依頼→数日で自動取消・解任) = [`peer-review-workflow.md#invitation-intake`](../conventions/peer-review-workflow.md#invitation-intake)。 機械 semantics (= marker field・cap 除外表示・救出窓の実装) は個人層 tooling に残置 (= kernel-up / instance-down)。
 
-origin: 2026-06、 研究 platform への招待 (返答期限つき) が priority 中で件数 summary に畳まれ 11 日埋もれた RCA (= 失効型 marker + cap 除外 + 救出窓を個人層で tooling 化した契機)。 sibling 観測: 期限つきの依頼が応答期限内に人間に届かず自動取消 (= [`§8.21`](#noise-obligation-signal-sharing) origin と同 incident の deadline 軸)。 2 観察 ([`§9.8`](#single-observation-scope-check) 充足)。 2026-08-18 に個人層 home から本節へ昇格 (= 層 1 doc が層 3 home を参照できない registry 制約の解消)。
+origin: 研究 platform への招待 (返答期限つき) が priority 中で件数 summary に畳まれ、 日単位で埋もれた RCA (= 失効型 marker + cap 除外 + 救出窓を個人層で tooling 化した契機)。 sibling 観測: 期限つきの依頼が応答期限内に人間に届かず自動取消 (= [`§8.21`](#noise-obligation-signal-sharing) origin と同 incident の deadline 軸)。 2 観察 ([`§9.8`](#single-observation-scope-check) 充足)。 2026-08-18 に個人層 home から本節へ昇格 (= 層 1 doc が層 3 home を参照できない registry 制約の解消)。
 
 ### <a id="lapsing-opportunity-intake"></a>8.23 失効型〆切つきの機会 — 義務網と応答網の谷間に落ちる opportunity class
 
@@ -990,7 +990,7 @@ failure の解剖 (3 点が独立に効く):
 
 reflex: mail triage / surfacing の網を列挙・設計するとき「**義務でも応答でもない、 〆切つきの機会はどの網が拾うか**」 を 1 行問う。 答えが「人間が読めば」 なら、 その class は網の外だと**宣言**する (= silent 死角を declared 死角に)。
 
-origin: 2026-08、 地域研究会の案内 (= 初報 + リマインド計 4 通、 BCC「各位」、 参加登録・発表申込の段階〆切つき) が約 3 ヶ月・4 通全部不可視のまま発表申込〆切が silent 失効。 名指し網 (宛先圏外) / 義務網 (義務でない) / 〆切抽出器 (締切語前置 + 早期告知で horizon 外) / 未認識 backlog 段 (rolling 窓で walk 前に silent 退場) の 4 経路が**独立に**落ち、 最終 catch は主催者の 4 通目 (〆切 2 日前) だった。 本 class 直接観察は 1 + 隣接 class sibling 2 (= [`§8.17`](#broadcast-obligation-blind-spot) 義務 broadcast 1.5 ヶ月 / [`§8.22`](#lapsing-deadline) 期限つき依頼の自動取消) — [`§9.8`](#single-observation-scope-check) は隣接 class 複数観察で充足と判断、 本 class 単独の再発で強化する。 instance (= ledger repo 名・triage 段の具体 arm・検出器実装) は個人層に残置 (= kernel-up / instance-down)。
+origin: 地域研究会の案内 (= 初報 + 複数のリマインド、 BCC「各位」、 参加登録・発表申込の段階〆切つき) が数か月・全通不可視のまま発表申込〆切が silent 失効。 名指し網 (宛先圏外) / 義務網 (義務でない) / 〆切抽出器 (締切語前置 + 早期告知で horizon 外) / 未認識 backlog 段 (rolling 窓で walk 前に silent 退場) の 4 経路が**独立に**落ち、 最終 catch は主催者の最後のリマインド (〆切直前) だった。 本 class 直接観察は 1 + 隣接 class sibling 2 (= [`§8.17`](#broadcast-obligation-blind-spot) 義務 broadcast 1.5 ヶ月 / [`§8.22`](#lapsing-deadline) 期限つき依頼の自動取消) — [`§9.8`](#single-observation-scope-check) は隣接 class 複数観察で充足と判断、 本 class 単独の再発で強化する。 instance (= ledger repo 名・triage 段の具体 arm・検出器実装) は個人層に残置 (= kernel-up / instance-down)。
 
 ### <a id="surfaced-not-consumed"></a>8.24 surface されても消費されない — silent 再表示の壁紙化と disposition 終端
 
@@ -1051,7 +1051,7 @@ origin: 2026-08、 運用記録 ledger の「open 状態のまま N 日経過」
 
 **委任は「見える不作為」 を cover しない**: 包括委任 (「進めておいて」) の下でも、 **不在が第三者に見える形で顕在化する義務** (公開リストに載らない・レビューまで投資した協力者が結果を見る) の見送りは外部発信級の act — 見送り前に named 確認 1 行 (「X を見送ります — Y さんがレビュー済みですが良いですか」) を要する。 判断時の警戒 2 点: (i) **催促強度は stakes の proxy ではない** (= 催促ゼロ = 低 stakes は [`§8.8`](#proxy-blind-spot) の disposition 版。 静かに自分の分を済ませた協力者ほど期待が確定済みで、 二度催促する人ほど目立つ — squeaky-wheel gradient)。 (ii) 見送り判断の前に後ろ向き 3 検査 (誰の期待を破るか / 自分の約束文が thread に無いか / 原依頼文書に可視化イベントが無いか) — いずれも記録から 1 手で読めるのに、 前向き検査 (催促が来ているか) だけで代替されやすい。
 
-origin: 2026-09、 授業評価フィードバックの deep RCA。 draft 起草 + 共担者の朱入れレビューまで完了した提出義務が、 レビュー返信の未記録 (kernel 1 欠落) → SSO form への「代行不可」 記載を終端に carrier 消失 (kernel 2-4 欠落) → 包括委任下で「低 stakes・催促なし」 と見送り close (= 依頼文書には全学公開が明記、 close が thread 監視も切断) → 66 日後に公開リストの不在を共担者が指摘して顕在化。 同 class の生存 sibling 2 件 (学術誌共著者の PW 設定 38 日滞留 / 機関業績調査 8 日超過) + 隣接 (審査依頼の web 回答失効) で [`§9.8`](#single-observation-scope-check) 充足 (close-kills-net は部分納品 close の二重不可視事故 〔2026-06〕 と 2 例)。 instance (= marker field 名・gate/lint script・cadence 実装・checklist 原文) は個人層に残置 (= kernel-up / instance-down)。
+origin: 授業評価フィードバックの deep RCA。 draft 起草 + 共担者の朱入れレビューまで完了した提出義務が、 レビュー返信の未記録 (kernel 1 欠落) → SSO form への「代行不可」 記載を終端に carrier 消失 (kernel 2-4 欠落) → 包括委任下で「低 stakes・催促なし」 と見送り close (= 依頼文書には全学公開が明記、 close が thread 監視も切断) → 66 日後に公開リストの不在を共担者が指摘して顕在化。 同 class の生存 sibling 2 件 (学術誌共著者の PW 設定 38 日滞留 / 機関業績調査 8 日超過) + 隣接 (審査依頼の web 回答失効) で [`§9.8`](#single-observation-scope-check) 充足 (close-kills-net は部分納品 close の二重不可視事故 〔2026-06〕 と 2 例)。 instance (= marker field 名・gate/lint script・cadence 実装・checklist 原文) は個人層に残置 (= kernel-up / instance-down)。
 
 ### <a id="confirmation-question-aim"></a>8.28 確認設問は照準した軸しか検証しない — 事実主張を運ぶ文の user 確認は真偽を第一問に
 
@@ -1081,7 +1081,7 @@ origin: ある提出文書の名指し誤帰属 RCA (= [`actor-attribution.md#cl
 
 reflex: 「〜が来る予定」「〜月に依頼あり」 を summary に書いた瞬間に「この予告に時計はあるか」 を問う。 [`multi-session-coordination.md #green-light-carrier`](../conventions/multi-session-coordination.md#green-light-carrier) (= 時計も owner も無い queue は拾われない) の inbound 版。
 
-origin: 2026-09、 7 月の会議資料に「翌年度の授業計画案 = 10 月〆、 7 月中に依頼が来る」 と正しく summary したが tracked entry を立てず、 8 月に届いた依頼は ML noise filter に沈み、 23 日後に user の記憶で発覚。 予告は 3 週間前から手元にあった。
+origin: 7 月の会議資料に「翌年度の授業計画案 = 10 月〆、 7 月中に依頼が来る」 と正しく summary したが tracked entry を立てず、 8 月に届いた依頼は ML noise filter に沈み、 23 日後に user の記憶で発覚。 予告は 3 週間前から手元にあった。
 
 ### <a id="principle-birth-stock-audit"></a>8.31 原則が生まれた turn で既存 config を棚卸しする — 登録時 gate は flow にしか効かない
 
@@ -1091,7 +1091,7 @@ origin: 2026-09、 7 月の会議資料に「翌年度の授業計画案 = 10 �
 
 reflex: 原則の origin 節を書き終えた瞬間に「この原則で今の config を通したら何件 flag されるか」 を実測する。 0 件でないなら、 原則の本文より先にその件数を直す。
 
-origin: 2026-09、 noise 抑制と義務 mail の signal 共有 ([`§8.21`](#noise-obligation-signal-sharing)) を 8 月に hoist した後も、 5 月に登録済みの学科・専攻 ML の bracket 抑制 (= 職務上いちばん義務密度の高い経路) は再監査されず、 9 月に同 generator で 3 件 (うち 1 件は〆切超過) を落とした。 hoist 時に既存 63 pattern を 1 周していれば、 その場で flag された entry だった。
+origin: noise 抑制と義務 mail の signal 共有 ([`§8.21`](#noise-obligation-signal-sharing)) を 8 月に hoist した後も、 5 月に登録済みの学科・専攻 ML の bracket 抑制 (= 職務上いちばん義務密度の高い経路) は再監査されず、 9 月に同 generator で 3 件 (うち 1 件は〆切超過) を落とした。 hoist 時に既存 63 pattern を 1 周していれば、 その場で flag された entry だった。
 
 ### <a id="rca-as-labeling"></a>8.32 「〜型」 と分類した瞬間が機械層を足す最安の瞬間 — label は対処ではない
 
@@ -1103,7 +1103,7 @@ reflex: 「〜型」「同型」「blind-spot 型」 と打った瞬間に、 �
 
 双対 = [#false-positive-declaration-needs-control](#false-positive-declaration-needs-control)。 「〜型」 が**対策を足す最安の瞬間**なら、「偽陽性」 は**検査を殺す最安の瞬間**である。
 
-origin: 2026-09、 7 月に ML 経由の依頼を 9 日遅れで遡及 triage し「broadcast-obligation blind-spot 型」 と正しく分類した記録が、 filter も carrier も変えずに終わり、 翌月の同 ML で 23 日の見落としを生んだ。 分類は合っていた。
+origin: 7 月に ML 経由の依頼を 9 日遅れで遡及 triage し「broadcast-obligation blind-spot 型」 と正しく分類した記録が、 filter も carrier も変えずに終わり、 翌月の同 ML で 23 日の見落としを生んだ。 分類は合っていた。
 
 ### <a id="protocol-cheapest-action-coverage"></a>8.33 新しい protocol は最頻・低 stakes の行為を protocol 内で最安にする — 迂回路は初日に現れる
 
@@ -1176,7 +1176,7 @@ domain 適用: 対外メールの書き方は [`research-email.md#mail-fact-poli
 
 reflex: 「自分を Cc に入れてもらった」 で追跡が済んだ気になった瞬間に、「**返事はどの受信箱に届くか**」 を 1 度問う。Cc が答えるのは「何を送ったか」 だけで、「何が返ってきたか」 ではない。
 
-origin: 2026-09、非会員の著者本人から編集事務局へ出した照会 (起草は第三者、第三者は Cc)。送信文面は Cc で正本化できたが、返信は reply-all されなければ届かず、手元の返信待ち検出器は category が違うため構造的に射程外だった。検出器を騙すより、時計と「本人に訊く」 を carrier にする方を採った。
+origin: 非会員の著者本人から編集事務局へ出した照会 (起草は第三者、第三者は Cc)。送信文面は Cc で正本化できたが、返信は reply-all されなければ届かず、手元の返信待ち検出器は category が違うため構造的に射程外だった。検出器を騙すより、時計と「本人に訊く」 を carrier にする方を採った。
 
 ### <a id="false-positive-declaration-needs-control"></a>8.38 「偽陽性だ」 の宣言は主張である — positive control を出せないなら、それは偽陽性でなく「未検証」
 
@@ -1222,7 +1222,7 @@ dismiss されやすいが、対立値の提示は解釈の余地を残さない
 [#rca-as-labeling](#rca-as-labeling) の双対 — あちらは「『〜型』 と言った瞬間が対策の最安時」、
 こちらは「『偽陽性』 と言った瞬間が**検査を殺す最安時**」。
 
-origin: 2026-09、機関事務への申請で、入力後の突合 script が 9 件の ✗ を出した。これを
+origin: 機関事務への申請で、入力後の突合 script が 9 件の ✗ を出した。これを
 「この様式では明細行が印字されないから偽陽性」 という**確かめていない構造説明**で全部無効化して送信し、
 事務から**同じ指摘を 2 度**受けた。反証 (= 同じ様式の別件が全行 ✓) は宣言の 1〜2 分前から同じ dir に
 置かれており、免罪は 16 分後に layer 1 へ「2 件とも実測」 として landed していた。
@@ -1297,7 +1297,7 @@ origin: 申請の再提出で、`submitted/<日付>/` に「上げるはずだ�
 §2.6 [#time-decaying-fact-authoring](#time-decaying-fact-authoring) が「いつ真だったか」 を要求するのに対し、
 本節は「**どうやって知ったか**」 を要求する。両方とも undated/unsourced な断定を禁じる規律。
 
-origin: 2026-09、申請の入力後検収で、検査が 1 対象に出した ✗ の**説明**として立てた仮説
+origin: 申請の入力後検収で、検査が 1 対象に出した ✗ の**説明**として立てた仮説
 (「この様式では明細行が印字されない」) が、同じ turn のうちに script の docstring へ
 「(実測、2 件とも)」 という形で焼かれ、同日 layer 1 にも landed した。実際には測っていない。
 4 日後、その一文は (a) 別 session の診断の前提になり (b) **user への助言 (「画面を目視するしか検証手段が無い」)
@@ -2269,7 +2269,7 @@ task 記録 (TODO notes 等) の**散文の中に埋まった sub-obligation** (
 ⚠️ **語彙を分ける**: 「生成した」 と「適用した」 を同じ完了語 (「対応済」「done」「✅」) で書かない。
 分けないと、後から読む人には**どちらの完了か判別できない**。
 
-origin: 2026-09、外部システムへの提出作業で、4 対象ぶんの明細 data を generator が一括再生成し、
+origin: 外部システムへの提出作業で、4 対象ぶんの明細 data を generator が一括再生成し、
 その復旧が「N 本再生成」 という 1 個の完了イベントとして記録された。必要な行動は**対象ごとに
 4 回の取込**だったが、その 4 個を数える表現は手順書にも記録にも無く、**1 対象ぶんの取込だけが
 落ちた**まま送信され、相手から同じ指摘を 2 度受けた。落ちなかった項目は、いずれも
@@ -2304,7 +2304,7 @@ origin: 2026-09、外部システムへの提出作業で、4 対象ぶんの明
 
 §20.1-20.3 は**自分側の doc** に残る旧前提の話。 同じ構造が**他者の頭の中**にもある: 事務職員・共同運営者は自分の案件に規則を当ててくれるが、 彼らが持つ前提 (= どの財源 / どの制度で動いているか) は切替 event を知らされていなければ旧のまま。 すると **旧前提の文書から正しく引用した、 適用範囲外の規則**が「ルール違反だから変更せよ」 の形で届く。 引用は正確なので疑いにくく、 従うと不要な変更 (= 確定済の日程を動かす等) を実行してしまう。
 
-- 実例 (2026-09): 講師謝金の財源を制度 A から制度 B に切り替えた後、 学科事務から「制度 A のマニュアルに『12 月中旬以降の謝金依頼は控えて』 とあるので 12/17 の講演を動かして」 と依頼が来た。 制度 B の執行文書には同趣旨の規則が**別パラメータ** (〆 12/15、 自制条項なし) で存在し、 かつ制度 B の担当課が 12/17 を名指しで個別受理済だった。 user の「別財源だからルールも別のはず」 → 正本 3 点 (A のマニュアル / B の執行文書 / B 担当課の回答) を照合して「変更不要」 が確定。
+- 実例: 講師謝金の財源を制度 A から制度 B に切り替えた後、 学科事務から「制度 A のマニュアルに『12 月中旬以降の謝金依頼は控えて』 とあるので 12/17 の講演を動かして」 と依頼が来た。 制度 B の執行文書には同趣旨の規則が**別パラメータ** (〆 12/15、 自制条項なし) で存在し、 かつ制度 B の担当課が 12/17 を名指しで個別受理済だった。 user の「別財源だからルールも別のはず」 → 正本 3 点 (A のマニュアル / B の執行文書 / B 担当課の回答) を照合して「変更不要」 が確定。
 - 判別の型: 他者から規則の引用が来たら、 従う前に **(i) 引用元の文書はどの前提 (財源・制度・版) のものか (ii) 当該案件の現前提と一致するか (iii) 現前提側に同趣旨の規則があるなら、 そのパラメータと個別合意** の 3 点を正本で読む。 「同じ趣旨の規則が別文書に別パラメータで在る」 のが典型で、 趣旨が同じだからと A の数値を B に当てない (= §kofu-shinsei の「別制度の条項を輸入しない」 と同型)。
 - 予防: 前提を切り替えた時点で、 **その前提で自分の案件に規則を当てる人 (学科事務等) にも切替を 1 行で伝える** (= 差分 doc の「再判定が要る規則」 欄の人間版。 伝えていなければ旧前提の介入は予測可能な event として受け止め、 相手の誤りとして扱わない)。 返答には**現前提の文書名 + 担当課の合意の記録 ID** を含め、 相手が自分の側で照合できる形にする。
 
@@ -2312,7 +2312,7 @@ origin: 2026-09、外部システムへの提出作業で、4 対象ぶんの明
 
 規則を差し替えたとき、 転換は **上流 1 箇所に landing する** (= 新しい正本、 決定の記録)。 だが旧規則を書いた**下流の手順書は転換を知らない**。 誰も見ないまま生き残り、 次にその手順書を読んだ者が**旧規則を正しく適用する** — 従順であるほど確実に間違える。
 
-- 実例 (2026-09): 「電子印影は受け付けられない、 実押印せよ」 という組織固有の運用が転換され「本人の認印は画像印影で可 (紙で出す場合)」 になった。 転換は正本と関連 3 doc には配られたが、 **別 project の手順書 1 本には配られなかった**。 5 週間後、 その手順書を読んで書類を作り、 **押印欄が空のまま完成**した (= 依頼者に指摘されるまで気づかない)。
+- 実例: 「電子印影は受け付けられない、 実押印せよ」 という組織固有の運用が転換され「本人の認印は画像印影で可 (紙で出す場合)」 になった。 転換は正本と関連 3 doc には配られたが、 **別 project の手順書 1 本には配られなかった**。 5 週間後、 その手順書を読んで書類を作り、 **押印欄が空のまま完成**した (= 依頼者に指摘されるまで気づかない)。
 - 同日の対照例: 別の規則転換では旧文言の literal を全 repo grep して 4 use-site を掃討した → 事故なし。 **差は「掃討したか」 だけ**。
 
 ⚠️ **掃討面は散文 doc だけではない** (= 2026-09-02 に 3 件): **code-as-SoT を名乗る script の docstring** (= 実装は新しい手順に直っているのに docstring が旧手順を説明していた)、 **skeleton / default 値** (= 新規 file の雛形が旧い定数を hard-code し、 毎回手で直す運用になっていた)、 **機械照合の spec** (= 規則を機械が読む面ゆえ露出が最も高い) も規則面である。 「doc を直した」 で完了にしない。
@@ -2519,7 +2519,7 @@ field を optional に戻すと item が radar から消える (= 機構が必�
 | 2026-09-09 | §22 新設「安全網が自分で使う probe の失敗は、健全と同じ姿の答えに化ける」 | layer-3 の session 開始 hook で、3 つの repo が 39 / 119 / 238 commits 遅れたまま放置され、別目的の検査がその古い手元を読んで落ちたことで偶然発覚。3 つとも「clean なら自動同期」の条件を満たしており、機構は在ったが手前の probe (並列 fetch) が per-item timeout / watchdog で打ち切られ、失敗を `\|\| true` が潰していた → 手元が更新されないまま「差分 0 = 同期済み」に化けていた (= silent failure ではなく **false healthy**)。しかも差分が溜まるほど probe が重くなり打ち切られやすくなる正のフィードバック付き。kernel = 失敗値が健全値と同じ形になる class の識別 + 4 pattern (成功を marker に記録して不在で検出 / 測れなかったことを測った結果と同型にしない / fail-open は報告付き / 閾値調整は観測後)。併発した第 2 の穴 (「手当てが要る」一覧が一部 frontend で honor されない経路にしかない) は §12 暗黙 scope の表示版。事故構造を再現する test を置き旧実装で FAIL することを確認済。instance は個人層に残置 (kernel-up / instance-down)。user 依頼 (「すべての知見をなるべく上層に」) |
 | 2026-09-02 | §20 新設「規則は前提より長生きする — 上流属性の切替は下流定数の一括再判定を要求する」 + §21 新設「同一 rule の variant は片方だけ更新され silent に stale 化する」 | layer-3 の事務運用 session で独立 2 件を観測: (a) 費用の出所が別制度へ移った後も旧出所の承認者を要求する規則と、 それに紐づく様式定数群 (制度名 / 番号 / 責任者 / 押印欄) が default 表に残存 — user の「これ何で要るんだっけ?」 で初めて出典を遡り前提失効が判明 (b) 手順書が新運用に全面改訂された際、 別言語 section の文面 sample だけが旧運用の値のまま残置。 §20 = 出典に「どの前提の下で」 が落ちる → 規則だけ生き残る機序 + 5 pattern (premise 併記 / 切替 doc に再判定欄 / 期間は終端を焼く / 「なぜ要る?」 を detector 扱い / 前提に紐づく定数を 1 表に束ねる)。 §21 = 同 session で「英語版 template 不在ゆえ規約で足した項目が個別起草に依存して落ちた」 実害から、 variant は正当な重複ゆえ §2 の削除方針で解けないことを明示し 3 択 (持たない / 生成する / parity gate) を整理 — remedy 3 は同 owner の別軸 (正本 doc の全 § に配布判断を強制する gate) で実証済。 instance は個人層・共有 project に残置 (kernel-up / instance-down)。 user 依頼 (「すべての知見をなるべく上層に」) |
 | 2026-09-01 | §8.27 新設「user-execution handoff — 最終 leg が人間本人にしかできない義務の手渡し機構」 | layer-3 の授業評価フィードバック deep RCA (= draft + 共担者レビュー完了済みの提出義務が、 レビュー返信未記録 → 「代行不可」 responsibility sink → 委任下の見送り close 〔全学公開の記録を読まず「低 stakes」〕 → close が thread 監視も切断 → 66 日後に第三者指摘で顕在化) を一般化。 4 段 kernel (readiness 同 turn / packet 1 行 / forced-disposition + 人間 channel / 「代行不可」 は probe + packet 併記) + close-kills-the-net + 委任は可視の不作為を cover しない (催促強度 ≠ stakes = §8.8 disposition 版)。 生存 sibling 2 + 隣接 1 + close 事故 2 例で §9.8 充足。 instance (marker field / gate script / cadence 実装) は個人層残置 (kernel-up / instance-down)。 user 依頼 (「すべての知見をなるべく上層に」) |
-| 2026-08-31 | §19 追加 (点呼行 = 散文 sub-obligation の脱落防止 marker pattern) | 宿泊証明書 (取得窓が滞在中に閉じる、 2026-08-08) と 印刷版 (紙の vintage、 2026-08-31 paper-staleness 3 例目) の 2 instance から meta-pattern を抽出。 固定 grammar 1 行 + absence-flagging 検出器 + stock sweep。 instance 実装は個人層 (kernel-up / instance-down) |
+| 2026-08-31 | §19 追加 (点呼行 = 散文 sub-obligation の脱落防止 marker pattern) | 宿泊証明書 (取得窓が滞在中に閉じる) と 印刷版 (紙の vintage、 2026-08-31 paper-staleness 3 例目) の 2 instance から meta-pattern を抽出。 固定 grammar 1 行 + absence-flagging 検出器 + stock sweep。 instance 実装は個人層 (kernel-up / instance-down) |
 | 2026-08-29 | §18 追加 (生成 view = 意図せぬ時点 backup + 件数 parity 検出) | career DB yaml が「軽微修正」を名乗る commit で 357 行切り詰められ 7 日間未検出 → 生成 export の残存データが発見と復元の糸口になった事故から抽出。kernel を §18 に、検出器 instance は個人層に sequester |
 | 2026-04-02 | 初版作成 | 武貞メール対応での8件の不手際を分析し、規約設計の原則を抽出 |
 | 2026-04-03 | §3 の適用事例追加 | push 連鎖障害: 「規約はあるが手順が不明確」→ CONVENTIONS §3 に粒度・障害対応を追加、教訓の詳細は email-office DESIGN.md に記録 |

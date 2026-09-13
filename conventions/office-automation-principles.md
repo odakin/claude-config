@@ -189,7 +189,7 @@ PDF / office ファイルの text 抽出は **見た目と同じ文字を返す�
 
 > 検証は「値が入ったか」 でなく「審査員の目に空欄・誤記入・崩れが無いか」 で閉じる。 catch を**人 (= 申請者) から機械へ**移すのが目的 — 人に何度も見つけさせる状態を pipeline で弾く状態にする。
 
-origin: 2026-06-27 ある研究費 docx 申請様式で同一様式に 4 記入ミス連続 (= ラベル欄上書き / 箇条書き空欄 / labeled 列空 / 概要箱が半分) → 申請者が毎回発見。 視覚 render 済でも見逃した = prose 規律 (「ちゃんと見ろ」) は recall 依存で floor にならない実証 → `diff-form-docx.py` を新設し本原則で運用。
+origin: ある研究費 docx 申請様式で同一様式に 4 記入ミス連続 (= ラベル欄上書き / 箇条書き空欄 / labeled 列空 / 概要箱が半分) → 申請者が毎回発見。 視覚 render 済でも見逃した = prose 規律 (「ちゃんと見ろ」) は recall 依存で floor にならない実証 → `diff-form-docx.py` を新設し本原則で運用。
 
 ---
 
@@ -212,6 +212,6 @@ origin: 2026-06-27 ある研究費 docx 申請様式で同一様式に 4 記入�
 > 変換のたびに検証し、 最後は画像で確認し、 異常は黙認せず、 既知情報は全部機械が書き、
 > 印刷は完成後に 1 回、 提出は受理確認で閉じる。**
 
-origin: 2026-06-11 謝金様式の当日運用 session (= 印刷事故 3 連 RCA + prefill 原則の確立)
+origin: 謝金様式の当日運用 session (= 印刷事故 3 連 RCA + prefill 原則の確立)
 + 2026-06-12 様式⑭-1 session (= [`provenance-skepticism`](#provenance-skepticism) 先行物の素性、 テンプレ stale / 記入済み混入 / 前例 script 再演の 3 連 RCA)。
 個別の手順・コード断片は office-automation.md の各 slug を参照。

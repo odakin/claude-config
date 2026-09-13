@@ -177,7 +177,7 @@ form を「作る・解析する」 側でなく「**提出する**」 側の制
 - [ ] どの account で提出するか (= domain 縛りの有無) を確認したか
 - [ ] 提出後、 受領 mail と「回答を編集」 link の有無を記録したか
 
-origin: 2026-07、 institutional compliance form (= 誓約チェック + 計画書 xlsx 添付) で 4 点を 1 事例で全部観測 — domain 縛りで通常メール account と別 account 提出 / 回答回数制限により追加提出は「担当者宛メールで」 の指示 / 提出版 xlsx はリポ保存済で控え確保。
+origin: institutional compliance form (= 誓約チェック + 計画書 xlsx 添付) で 4 点を 1 事例で全部観測 — domain 縛りで通常メール account と別 account 提出 / 回答回数制限により追加提出は「担当者宛メールで」 の指示 / 提出版 xlsx はリポ保存済で控え確保。
 
 ## 関連
 

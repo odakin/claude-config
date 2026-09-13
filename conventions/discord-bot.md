@@ -338,7 +338,7 @@ instance (組織図 YAML / ids / 人名) は owner の private layer。 一般�
 
 ## <a id="guild-creation-user-only"></a>Bot は server (guild) を作れない = 器は人間が作る
 
-`POST /guilds` は bot token では **`20001 Bots cannot use this endpoint`** (2026-09-08 実測、 在席 5 guild の bot でも不可 = 「10 guild 未満なら可」 は効かない)。 手順は **user が UI で server を作る → invite URL で bot を入れる**。 その後は invite 時の `MANAGE_CHANNELS` で category / channel / webhook (要 Manage Webhooks) を bot が全部作れる。 screen drive (browser 拡張 / computer-use) で代行しようとしない = user の 1 分の手作業が最短 (machine-route-first.md の ladder で「user 依頼」 が「画面 drive」 の上にある実例)。
+`POST /guilds` は bot token では **`20001 Bots cannot use this endpoint`** (実測、 在席 5 guild の bot でも不可 = 「10 guild 未満なら可」 は効かない)。 手順は **user が UI で server を作る → invite URL で bot を入れる**。 その後は invite 時の `MANAGE_CHANNELS` で category / channel / webhook (要 Manage Webhooks) を bot が全部作れる。 screen drive (browser 拡張 / computer-use) で代行しようとしない = user の 1 分の手作業が最短 (machine-route-first.md の ladder で「user 依頼」 が「画面 drive」 の上にある実例)。
 
 ## 関連
 

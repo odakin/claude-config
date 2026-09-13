@@ -75,7 +75,7 @@ ladder 6 (画面 drive) の中でも、 **他人が owner の共有 document** (
 
 公式 API も CLI も無い web app (家計簿 SaaS 等の消費者向け web app に多い) でも、 **UI が裏で叩いている内部 endpoint を、 ログイン済み page の context から同じ形で叩く**経路は大抵作れる。 画面 drive (座標 click・dropdown 開閉・スクロール) より速く、 行数・レイアウトに依存せず、 dry-run が自然に組める。 認証は browser session (cookie) をそのまま使うので token 整備が不要 = 「ログインだけ user、 操作は agent」 の分業がそのまま成立する。
 
-recipe (2026-09-05 家計簿カテゴリ一括修正で確立):
+recipe (家計簿カテゴリ一括修正で確立):
 
 1. **推測で組まず、 実 UI 操作 1 回分を捕捉する** — page context で `XMLHttpRequest.prototype.open/send/setRequestHeader` と `fetch` を一時 hook し、 対象操作を **1 回だけ・冪等な値で** (= 現在値を再選択する等) UI から実行して method / URL / header / body の field 名を取る。 method 違い (POST vs PUT) や encoding 違い (multipart vs urlencoded) は 404 で沈黙するので、 捕捉なしの試行は時間を溶かす。 CSRF token は `meta[name=csrf-token]` 等から取り、 log には残さない (`<redacted>`)。
 2. **id の類は DOM から実行時に解決する** (カテゴリ id ↔ 名前 等)。 hard-code すると相手側の変更で silent に別物を書く。 menu が lazy 生成 (一度開くまで DOM に無い) / 行の種別で中身が違う (支出行と収入行) といった罠は実測で潰す。
@@ -107,7 +107,7 @@ recipe (2026-09-07 Cybozu Garoon で確立、 部品 = [`scripts/chromium-cookie
 
 2026-08-28: claude.ai の共有会話を Claude Code に渡す経路が無く (WebFetch / curl / headless 全滅)、 スマホでは 1 message ずつの手動コピペしかなかった → **経路を 2 本実装**: ① in-app Browser pane での share URL 直読 (= agent 側の最短経路、 実は既存 tool が素通しだった) ② page-context API fetch のブックマークレット (= user 側 1 click export)。 手動コピペは消え、 経路は全 session の資産になった。 recipe = [`web-tools.md #claude-share-page-access`](web-tools.md#claude-share-page-access)。 注: bot 保護持ちサイトでは「経路を実装する」 と「保護を回避する」 の線引きが要る — 実ブラウザ + user click は前者、 headless 化・無人化は後者 (やらない)。
 
-2026-09-05: 家計簿 SaaS (公開 API 無し) の明細カテゴリ誤分類を、 まず画面 drive で 2 件直した (dropdown 開閉 × 2 段 × 2 件 + 誤 click 1 回、 ~10 round-trip) → user 「GUI のダサいやり方じゃなくて API 的に」 → XHR hook で UI 操作 1 回を捕捉し `PUT /cf/update` (urlencoded + CSRF) と判明、 rules-driven の dry-run/apply tool を実装。 以後は 4 手 (rules 読む → dry-run → 目視 → apply + reload 確認) で月をまたいで一括、 click ゼロ。 同時に業種語 regex の巻き込み (3 件) を経験し recipe 3 に焼いた。 recipe = #internal-endpoint-replay。
+実測: 家計簿 SaaS (公開 API 無し) の明細カテゴリ誤分類を、 まず画面 drive で 2 件直した (dropdown 開閉 × 2 段 × 2 件 + 誤 click 1 回、 ~10 round-trip) → user 「GUI のダサいやり方じゃなくて API 的に」 → XHR hook で UI 操作 1 回を捕捉し `PUT /cf/update` (urlencoded + CSRF) と判明、 rules-driven の dry-run/apply tool を実装。 以後は 4 手 (rules 読む → dry-run → 目視 → apply + reload 確認) で月をまたいで一括、 click ゼロ。 同時に業種語 regex の巻き込み (3 件) を経験し recipe 3 に焼いた。 recipe = #internal-endpoint-replay。
 
 2026-09-05 (同日 2 例目): 専攻主任が Drive に置いた「各自記入」 xlsx (他人 owner、 6 名記入済) に自分の行を書く作業を claude-in-chrome の cell click + type で実施 → name box click が cell 選択に化けて**注記行と見出し行を自分の値で上書き** (undo で救出)、 再試行では先頭 keystroke が食われ名前 cell 空 + 規則文の先頭欠けが保存された。 screenshot は stale で保存状態が読めず、 API の revision download でしか truth が分からなかった。 user 「ダサい GUI 的なやり方でなく自動化で」 → full `drive` scope の別 token を 1 consent で発行し、 revision download → openpyxl → `files.update` → 再 download verify の経路を実装 (~20 分)。 以後は 1 コマンド。 recipe = [`google-api-direct-access.md #drive-xlsx-inplace-update`](google-api-direct-access.md#drive-xlsx-inplace-update)、 規律 = #shared-document-write。
 

@@ -223,7 +223,7 @@ unzip -l form.xlsx | grep -iE 'drawing|media|ctrlProp'
 
 **事後の救済 (= 既に喪失してしまった file の復元)**: Excel.app で xlsx を **open + save 1-pass** すると、 Excel が元 file に在った drawing 構造を知っているケース (= vmlDrawing 等の legacy drawing で base 雛形に痕跡が残っている場合) では drawing が **re-emit される**ことが観察されている (= `commentsDrawing1.vml` → `vmlDrawing1.vml` への戻りを観測した実例あり)。 ⚠️ **universal な復元保証ではない** (= sample size 限定、 base 雛形が drawing 情報を完全に失っているケースは復元しない)。 osascript snippet は [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) の修復経路を流用 (= 副次効果として formula cache も同時復元)。 = 喪失検出 → まず Excel.app open+save で復元を試す → drawing 数 (`unzip -l xxx.xlsx | grep -iE 'drawing'`) で復元成否を verify → 復元しなければ回避 2 (= drawing XML migration) で再構成。
 
-origin: 2026-06 連続発生した「様式の標題テキストボックスが openpyxl save で消える」 事故。 cell value の一致検証では検出できず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF 画像確認で初めて気づく。 2026-06-12 に前例 script 流用経路で再発 (= 上記 reflex の起源)。 2026-06-23 に Excel.app open+save 経由の drawing re-emit を観測 (= 上記「事後の救済」 の起源)。
+origin: 連続発生した「様式の標題テキストボックスが openpyxl save で消える」 事故。 cell value の一致検証では検出できず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF 画像確認で初めて気づく。 2026-06-12 に前例 script 流用経路で再発 (= 上記 reflex の起源)。 2026-06-23 に Excel.app open+save 経由の drawing re-emit を観測 (= 上記「事後の救済」 の起源)。
 
 ### <a id="template-base-not-precedent-base"></a>🔥 様式の新規 fill は「配布雛形 base + 3 分離」 — 前回提出したファイルを copy しない
 
@@ -245,7 +245,7 @@ origin: 2026-06 連続発生した「様式の標題テキストボックスが 
 
 **再構築の実務** (= 既存の前例 base ファイルを雛形 base に移行する): 現行ファイルと雛形の**全 cell diff を機械で取る** — 差分 = 「意図した記入」 の完全リストが自動で得られる。 それを雛形 copy へ転記する (実測: 記入 70+ cells の様式 2 件で移行 ~30 分)。 diff に「現=None / 雛形=値」 として現れるのが**消すべき placeholder** で、 転記時に空文字を書く。
 
-origin: 2026-07-31。 前回受理ファイルを base にした結果、 事務記入欄への記入・赤字残置・決裁 routing 欄の欠落を同日中に 3 回指摘され、 user 「なんでちゃんともとからあるテンプレを使わないの？」 で本 pattern に転換。 diff 転記による再構築で前 trip の残骸 (別出張の経路 literal) も同時に発見・解消した。
+origin: 前回受理ファイルを base にした結果、 事務記入欄への記入・赤字残置・決裁 routing 欄の欠落を同日中に 3 回指摘され、 user 「なんでちゃんともとからあるテンプレを使わないの？」 で本 pattern に転換。 diff 転記による再構築で前 trip の残骸 (別出張の経路 literal) も同時に発見・解消した。
 
 **既知の誤りを含む提出版の保存 folder には quarantine marker を置く** (2026-08-11 追記): 提出済み版は史実 record として書き換えずに保存する ([`#errata-on-preserved-records`](../docs/convention-design-principles.md#errata-on-preserved-records) family) が、 **無印のまま置くと将来の作業者 (人間・AI とも) が「通った実績のあるファイル」 として copy する** — 本 pattern の origin 事故がまさにそれで、 散文の errata 記録だけでは再発した。 folder 冒頭に ls で必ず目に入る marker file (例: `00-⚠️-DO-NOT-USE-AS-BASE.md`) を置き、 中身は「既知の誤り正本への pointer + 本 § への参照」 の最小警告に留める (= 誤り明細の payload は errata 正本側に一元化、 重複させない)。
 
@@ -312,7 +312,7 @@ overlay-seal-pdf.py IN.pdf --out OUT.pdf \
 
 **使い分け** (vs [`xlsx-image-via-excel`](#xlsx-image-via-excel)): 画像が**白黒で構わない** (or blackAndWhite の無い workbook) なら xlsx 内挿入も可。 **色が意味を持つ画像 (= 印影) は常に本 overlay 経路**。 driver (= 様式ごとの gen-pdf script) に組み込んで「1 コマンドで印影つき提出 PDF」 にするのが運用形。
 
-origin: 2026-07-27 大学出張様式 — xlsx 内挿入 (Excel osascript 経由) で入れた印影が印刷でグレー化 → blackAndWhite off にしたら入力欄の背景色 (オレンジ/青) が紙に出た → 本 2 段構成で両立。
+origin: 大学出張様式 — xlsx 内挿入 (Excel osascript 経由) で入れた印影が印刷でグレー化 → blackAndWhite off にしたら入力欄の背景色 (オレンジ/青) が紙に出た → 本 2 段構成で両立。
 
 ### <a id="xlsx-image-via-excel"></a>xlsx に画像 (印影・署名) を置くなら Excel osascript — openpyxl `add_image` は **comments を倍増**させ formula cache も消す
 
@@ -320,7 +320,7 @@ origin: 2026-07-27 大学出張様式 — xlsx 内挿入 (Excel osascript 経由
 
 ⚠️ [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) には「`add_image` で入れた純画像は残る」 とあるが、 **それは「入れた画像が消えない」 という意味であって「他の part が無傷」 という意味ではない**。 comment を持つ様式では別経路で壊れる。
 
-**実測** (= 大学の出張様式 1 件、 comment 6 個入り、 2026-07-27):
+**実測** (= 大学の出張様式 1 件、 comment 6 個入り):
 
 | part | 元 | openpyxl `add_image` | **Excel osascript** |
 |---|---|---|---|
@@ -456,7 +456,7 @@ end tell
 - ⚠️ **2026-07-02 に「不成立」 と記録した経路** (= 2026-09-02 訂正): `make new picture ... with properties {file name:...}` を worksheet 直下で叩くと **-2710** (class 作成不可) になったが、 **range を取ってから `make new picture at it …` とすると通る** (2026-07-27 実測、 [`xlsx-image-via-excel`](#xlsx-image-via-excel))。 ∴ 「AppleScript では画像を作れない」 ではなく **anchor の取り方の問題**だった / System Events `keystroke "v"` = **TCC 1002** (osascript にキー送信権限なし、 権限付与すれば通るが不要) / `save as ws file format PDF file format` = **-1712** AppleEvent timeout (PDF export も AppleScript 経由は不安定)。
 - LibreOffice `soffice` 変換 PDF で図がページ分割されて見えても、 それは**変換器が印刷スケールを無視する現象** — xlsx 内の図は 1 枚。 実機確認は Excel で開く。
 
-origin: 2026-07-02 研究費様式の「図の貼付」 欄対応。 openpyxl↔Excel の堂々巡りを 1 往復実測した後、 clipboard paste 経路で画像・cache・下線 (rich text) 全部無傷を機械検証 17 項で確認。
+origin: 研究費様式の「図の貼付」 欄対応。 openpyxl↔Excel の堂々巡りを 1 往復実測した後、 clipboard paste 経路で画像・cache・下線 (rich text) 全部無傷を機械検証 17 項で確認。
 
 ### <a id="excel-osascript-cell-write"></a>Excel osascript で cell 値を書く堅牢パターン (= drawing 保護 + -609 回避)
 
@@ -493,7 +493,7 @@ osascript -e 'tell application "Microsoft Excel" to quit'
 
 ⚠️ **merged cell の値を消すときは `clear contents of range "H50:AD50"` (= merged 全域 + `of`)** — 単セル指定 `clear contents range "H50"` は **merged cell に対して silent no-op** (エラーも出ず値が残る)。 「消したつもり」 のまま PDF 生成まで通ってしまうので、 clear 後に **openpyxl readback で None を assert** するのが必須 gate (= 実発生: 差し戻し対応で消したはずの記載が readback 検証で発覚、 検証しなければ再提出書類に旧記載が残っていた)。 `set value of range … to ""` も同様に merged では全域指定が安全。
 
-⚠️ **merged cell の font size を osascript で変える正しい構文** (= 長い氏名/所属が結合セルで両端切れた時の根本対処): `set font size of font object of range "G13" of ws to 9` (= **property 名は `font size`**)。 よくある誤り = `set size of font object of …` → **`-1728` (object not found)** で沈黙失敗する (= `size` という property は font object に無い)。 setup によっては `-10006` (errAEPrivilegeError) が返ることもあり、 その時は各操作を `try` で囲んで続行。 ⚠️ **font が効かない時の fallback を `shrink_to_fit=True` にしてはいけない** — **shrink_to_fit は結合セルでは no-op** (Excel 制約) で、 立てても何も縮まず「直したつもり」 で clip が残る (= 2026-06-16 謝金様式⑭-1 所属見切れ事故の温床)。 結合セルの文字溢れは **font size を下げる** のが唯一効く手。 詳細・検出・検証は [`merged-cell-text-clipping`](#merged-cell-text-clipping)。 origin: 2026-06-04 謝金様式の fill 後微修正 + 2026-06-16 G13 所属見切れ RCA。
+⚠️ **merged cell の font size を osascript で変える正しい構文** (= 長い氏名/所属が結合セルで両端切れた時の根本対処): `set font size of font object of range "G13" of ws to 9` (= **property 名は `font size`**)。 よくある誤り = `set size of font object of …` → **`-1728` (object not found)** で沈黙失敗する (= `size` という property は font object に無い)。 setup によっては `-10006` (errAEPrivilegeError) が返ることもあり、 その時は各操作を `try` で囲んで続行。 ⚠️ **font が効かない時の fallback を `shrink_to_fit=True` にしてはいけない** — **shrink_to_fit は結合セルでは no-op** (Excel 制約) で、 立てても何も縮まず「直したつもり」 で clip が残る (= 2026-06-16 謝金様式⑭-1 所属見切れ事故の温床)。 結合セルの文字溢れは **font size を下げる** のが唯一効く手。 詳細・検出・検証は [`merged-cell-text-clipping`](#merged-cell-text-clipping)。 origin: 謝金様式の fill 後微修正 + G13 所属見切れ RCA。
 
 ⚠️ **正しい AppleScript property 名が不明なときの特定法** (= 上記 `font size` を当てた手順): Excel の scripting 定義は `sdef "/Applications/Microsoft Excel.app"` で引けるが **Xcode が要る** (Command Line Tools のみだと `xcode-select: error … requires Xcode` で空振り)。 → 候補構文を **`try` ブロックで順に試し、 効いたものだけ flag を立てて最後に save する probe applescript** を 1 本書けば **1 起動で特定**できる (= 構文を当て推量で叩いて Excel を毎回 cold-start するより速い + [`excel-osascript-cell-write`](#excel-osascript-cell-write) の crash リスクも減る)。 2026-06-16 に `size of font object` (誤、 -1728) → `font size of font object` (正) を probe で 1 発特定。
 
@@ -528,11 +528,11 @@ end tell
 
 ⚠️ **harness の Bash tool は foreground の bare `sleep` を block する** (= 「`killall …; sleep 6`」 を Bash に直書きすると止まる)。 → reset の待ちは (a) **`xlsx-to-pdf.sh` 等 script の内部 `sleep` に任せて script ごと呼ぶ**、 (b) **applescript 内の `delay`** で待つ、 (c) 長い処理は `run_in_background` で逃がす、 のいずれか。 bare `sleep` 直打ちに依存した reset 手順は harness 上で機能しない。
 
-⚠️ **遅いマシンでは cold-start の `open` だけで 90-120 秒を超える** (= thermal throttle 中の旧 Intel 機で実測): osascript client を短い timeout で回すと「ハング」 に見えるが、 実体はまだ launch 中。 対処 3 点: (a) **client 側 timeout は 300 秒以上**で呼ぶ、 (b) **client を kill しても Excel 側の open は止まらない** — Excel は後から open を完了して workbook を保持し続けるので、 リトライ前に `timeout 10 osascript -e 'tell application "Microsoft Excel" to get name of every workbook'` の **応答 probe** で状態を見る (= 応答すれば ready、 timeout すれば modal dialog か launch 中)、 (c) 既に開いた workbook への 2 度目の script は数秒で終わる (= 高くつくのは初回 open のみ)。 origin: 2026-08-20 海外出張様式 xlsm fill (90s timeout で kill → 実は launch 遅延、 再実行 1 発成功)。
+⚠️ **遅いマシンでは cold-start の `open` だけで 90-120 秒を超える** (= thermal throttle 中の旧 Intel 機で実測): osascript client を短い timeout で回すと「ハング」 に見えるが、 実体はまだ launch 中。 対処 3 点: (a) **client 側 timeout は 300 秒以上**で呼ぶ、 (b) **client を kill しても Excel 側の open は止まらない** — Excel は後から open を完了して workbook を保持し続けるので、 リトライ前に `timeout 10 osascript -e 'tell application "Microsoft Excel" to get name of every workbook'` の **応答 probe** で状態を見る (= 応答すれば ready、 timeout すれば modal dialog か launch 中)、 (c) 既に開いた workbook への 2 度目の script は数秒で終わる (= 高くつくのは初回 open のみ)。 origin: 海外出張様式 xlsm fill (90s timeout で kill → 実は launch 遅延、 再実行 1 発成功)。
 
 **検証**: 書き込み後は openpyxl で読み直して値を assert する (= osascript は失敗しても exit 0 で沈黙しがち)。 ⚠️ ただし **merged cell の値は fitz / openpyxl の text 抽出では取れないことがある** (= 結合範囲の左上以外は空に見える / PDF の text 抽出も同様) → 抽出の空振りを「書けていない」 と即断せず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF **画像**で最終確認する。
 
-origin: 2026-06-05 学外者用様式 (= 複数シート + 数式参照 + textbox 標題) の cell 値修正。 killall 直後の 1 osascript (activate→open→set→save→close saving yes→quit) が -609 で全 cell 未書き込み → 上記 4 点で復旧。
+origin: 学外者用様式 (= 複数シート + 数式参照 + textbox 標題) の cell 値修正。 killall 直後の 1 osascript (activate→open→set→save→close saving yes→quit) が -609 で全 cell 未書き込み → 上記 4 点で復旧。
 
 ### <a id="excel-merged-cell-write-anchor"></a>merged cell への AppleScript `set value` は非 anchor だと silent no-op — 書く前に merge 構造を読む
 
@@ -542,7 +542,7 @@ Excel AppleScript で `set value of range "AF13"` のように **merged range �
 - 行政様式は**列ごとに merge 単位が違う**ことがある (= 実例: 日時列 = 3 行結合 × 12、 別の列 = 6 行結合 × 6、 さらに最初の block だけ 3+3 分割)。 「同じ行間隔で繰り返し」 と仮定して等差で書くと、 半分が silent no-op になる。
 - 書き込み後の openpyxl 読み戻し assert ([`excel-osascript-cell-write`](#excel-osascript-cell-write) の検証項) はこの罠も一緒に catch する — 必ず回す。
 
-origin: 2026-07-28 出張日程表 (滞在日数列 = 6 行 merge) への日別値書き込みで、 3 行間隔で発行した set value の半分が silent 消失 → merge dump で構造判明 → anchor 行のみに再発行で解決。
+origin: 出張日程表 (滞在日数列 = 6 行 merge) への日別値書き込みで、 3 行間隔で発行した set value の半分が silent 消失 → merge dump で構造判明 → anchor 行のみに再発行で解決。
 
 ### <a id="excel-merged-border-anchor-seed"></a>merged cell の罫線は anchor セルの style が「種」 — 物理セルだけ消しても Excel save で復活する
 
@@ -553,7 +553,7 @@ xlsx の罫線を機械で消す/変える時の 3 段の罠:
 3. openpyxl で border を触ると formula cache が消える ([`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache)) → **Excel open+save で cache 復元**が必要 → その save が (2) の再伝播を起こす、 という循環がある。 手順は 「openpyxl で種ごと全部消す → Excel open+save → **再度 style 走査で残存ゼロを assert** → PDF render を PNG 化して**目視**」。 1 周で確定せず、 走査 → 消去 → save → 再走査のループで収束させる。
    - ⚠️ 走査範囲は **print_area 全域** (= 途中の行で打ち切ると表の最終 block を見落とす。 実例: r45 で打ち切って r46-51 の 2 block の placeholder と罫線を見落とし、 PNG 目視で発覚)。
 
-origin: 2026-07-28 出張日程表の hair 点線仕切り除去。 AppleScript no-op → openpyxl 物理セルのみ → Excel save で復活 → anchor 種の発見 → 全所在 map + ループで収束、 の 4 段を実測。
+origin: 出張日程表の hair 点線仕切り除去。 AppleScript no-op → openpyxl 物理セルのみ → Excel save で復活 → anchor 種の発見 → 全所在 map + ループで収束、 の 4 段を実測。
 
 ### <a id="excel-write-string-autoconvert"></a>Excel 経由 write は文字列を auto-convert する (= 日付文字列が serial 数字で印字される)
 
@@ -565,7 +565,7 @@ origin: 2026-07-28 出張日程表の hair 点線仕切り除去。 AppleScript 
 
 **検証**: 書き込み後 openpyxl で read-back し、 **値の型** (= str か datetime/число か) と `cell.number_format` を確認する。 `datetime` + `'General'` の組合せ = serial 印字事故の前兆。 auto-convert された日付が「たまたま日付書式で表示される」 場合もあるが、 様式の前例が文字列なら文字列で揃える (= 事務側の見た目互換)。
 
-origin: 2026-06-12 様式⑭-1 fill。 作業日 cell に書いた和文日付が serial 46198 (General) になり、 PDF 目視前の read-back 検証で捕捉 → apostrophe prefix で復旧。
+origin: 様式⑭-1 fill。 作業日 cell に書いた和文日付が serial 46198 (General) になり、 PDF 目視前の read-back 検証で捕捉 → apostrophe prefix で復旧。
 
 ⚠️ **追加 case 1 — `=TODAY()` 等 date 書式の cell を date 値で上書きすると「冗長書式」 を継承する** (2026-06-16): 申請日 cell が template で `=TODAY()` (date 書式付き) のとき、 そこに `"2026/6/16"` を書くと値が date になり、 cell の date 書式で「火曜日, 6/月 16, 2026」 のように冗長表示される (= General の serial 化とは別症状)。 → **apostrophe prefix の text** (`"'2026年6月16日"`) で上書きしてクリーンな固定文字列にする (= 申請日は提出時点の固定日なので `=TODAY()` の動的値より固定 text が正しい)。
 
@@ -603,7 +603,7 @@ sh.finish(color=(0,0,0), width=0.75); sh.commit(); d.save(pdf+'.t')  # → os.re
 ```
 Excel 側で結合セル border を再設定する手もあるが merged-cell border は描画が不安定なので、 出力 PDF への線描が確実。 ⚠️ ただし**生成物 PDF への後描画なので、 再生成したら再度引く必要**がある (= pipeline の最後に挟む)。
 
-origin: 2026-06-16 様式⑭-1 の承認欄ボックス (`AC48:AG51`/`AH49:AJ51`) 下罫線が複数件とも未描画 → user 指摘 → 当初 1 箇所を座標手描きで閉じたが、 user「他も全部チェックする system を作れ」 で [`scripts/close-pdf-form-boxes.py`](../scripts/close-pdf-form-boxes.py) に格上げ (= 全枠を検査して閉じる、 selftest 付)。
+origin: 様式⑭-1 の承認欄ボックス (`AC48:AG51`/`AH49:AJ51`) 下罫線が複数件とも未描画 → user 指摘 → 当初 1 箇所を座標手描きで閉じたが、 user「他も全部チェックする system を作れ」 で [`scripts/close-pdf-form-boxes.py`](../scripts/close-pdf-form-boxes.py) に格上げ (= 全枠を検査して閉じる、 selftest 付)。
 
 ### <a id="numeric-string-becomes-number"></a>ID 的な数字列は書式を text に固定してから書く (= Excel が数値化して機械照合が落ちる)
 
@@ -635,7 +635,7 @@ origin: 謝金の様式 (= 財源が変わって課題番号が新しくなっ�
 
 **検証 (= 機械 + 視覚、 両方)**: [`scripts/check-form-clipping.py`](../scripts/check-form-clipping.py) `<雛形.xlsx> <記入済.xlsx> <生成.pdf>` が、 雛形 diff で**記入セルだけ**に絞り、 各記入値が PDF 抽出テキストに完全な部分文字列として現れるか機械照合する (= 欠落 ≥3 字を clip 疑いとして flag、 `--selftest` 内蔵)。 ⚠️ レンダラによっては clip でも text 層に全文が残るので **[`pdf-visual-confirm`](#pdf-visual-confirm) の視覚確認も必ず併用** (= 検証 3 層は相互代替不可)。
 
-⚠️ **formula fan-out cell の変種 (= 上の機械照合の射程から構造的に漏れる)**: 様式は記入 cell を `=IF(旅費請求書!G17="","",旅費請求書!G17)` のような**数式で他 sheet に複製** (fan-out) することが多い。 この fan-out 先 merged cell が wrap 無しだと、 **参照元の文面を長くしたときだけ**そこで右端 truncate が発現する。 検証の穴が 2 重: (a) 数式 cell は雛形と同一なので**雛形 diff に出ない** = check-form-clipping の走査対象にならない、 (b) 記入値の全文は fan-out **元** (や wrap 済みの別 fan-out 先) のページの text 層で hit するので、 **PDF 全体からの部分文字列 search は truncate した 1 箇所を見逃す**。 さらに雛形が承認実績を持っていても、 それは**当時の短い文面で発現しなかった**だけ (= 承認済み template の流用は安全を保証しない)。 **対処**: 参照元の文面を差し替え/延長したら、 `=…!` の grep ([`cross-sheet-formula-chain`](#cross-sheet-formula-chain)) で fan-out 先を列挙 → 各先の wrap_text (+ [`wrap-text-needs-row-height`](#wrap-text-needs-row-height) の行高) を確認 → [`pdf-visual-confirm`](#pdf-visual-confirm) で**該当ページを個別に**目視。 embedded `\n` 入りの文面は wrap_text が立って初めて複数行 render される ([`explicit-newline-break`](#explicit-newline-break))。 origin: 2026-07 (承認済み雛形の流用で用務文面を延長 → 報告書 sheet の fan-out 先だけ truncate、 依頼書・承諾書側は wrap 済みで無事 = 全体 text search では検出不能だった)。
+⚠️ **formula fan-out cell の変種 (= 上の機械照合の射程から構造的に漏れる)**: 様式は記入 cell を `=IF(旅費請求書!G17="","",旅費請求書!G17)` のような**数式で他 sheet に複製** (fan-out) することが多い。 この fan-out 先 merged cell が wrap 無しだと、 **参照元の文面を長くしたときだけ**そこで右端 truncate が発現する。 検証の穴が 2 重: (a) 数式 cell は雛形と同一なので**雛形 diff に出ない** = check-form-clipping の走査対象にならない、 (b) 記入値の全文は fan-out **元** (や wrap 済みの別 fan-out 先) のページの text 層で hit するので、 **PDF 全体からの部分文字列 search は truncate した 1 箇所を見逃す**。 さらに雛形が承認実績を持っていても、 それは**当時の短い文面で発現しなかった**だけ (= 承認済み template の流用は安全を保証しない)。 **対処**: 参照元の文面を差し替え/延長したら、 `=…!` の grep ([`cross-sheet-formula-chain`](#cross-sheet-formula-chain)) で fan-out 先を列挙 → 各先の wrap_text (+ [`wrap-text-needs-row-height`](#wrap-text-needs-row-height) の行高) を確認 → [`pdf-visual-confirm`](#pdf-visual-confirm) で**該当ページを個別に**目視。 embedded `\n` 入りの文面は wrap_text が立って初めて複数行 render される ([`explicit-newline-break`](#explicit-newline-break))。 origin: (承認済み雛形の流用で用務文面を延長 → 報告書 sheet の fan-out 先だけ truncate、 依頼書・承諾書側は wrap 済みで無事 = 全体 text search では検出不能だった)。
 
 **再生成 pipeline** (= 様式⑭ 系を直したら毎回この順):
 
@@ -643,7 +643,7 @@ origin: 謝金の様式 (= 財源が変わって課題番号が新しくなっ�
 font 修正 → xlsx-to-pdf.sh → fitz で p1 抽出 → close-pdf-form-boxes.py → check-form-clipping.py + 視覚確認
 ```
 
-origin: 2026-06 謝金様式⑭-1 の G13 所属見切れ。 当時の規約が [`clear-yellow-fill-marks`](#clear-yellow-fill-marks) で shrink_to_fit=True を勧めていた (= 結合セルで無効) ため「規約どおりにやると直らない」 状態だった → font 縮小に訂正 + 機械検出器 (check-form-clipping.py) を新設し principles §2「機械層は clipping 捕捉不能」 を更新。
+origin: 謝金様式⑭-1 の G13 所属見切れ。 当時の規約が [`clear-yellow-fill-marks`](#clear-yellow-fill-marks) で shrink_to_fit=True を勧めていた (= 結合セルで無効) ため「規約どおりにやると直らない」 状態だった → font 縮小に訂正 + 機械検出器 (check-form-clipping.py) を新設し principles §2「機械層は clipping 捕捉不能」 を更新。
 
 ### <a id="xlimage-size-silent-fail"></a>`XLImage.width` / `.height` setter は silent fail する
 
@@ -1343,7 +1343,7 @@ doc.save("filled.pdf", garbage=3, deflate=True)
 - 雛形 PDF 内の `=TODAY()` 起因の `###############` は `add_redact_annot` + `apply_redactions()` で除去。 ⚠️ redact 矩形は**隣接文字の bbox に被ると巻き添え削除**する — `search_for` の返す rect を数 pt 縮めて適用
 - 検証 3 点 set: ① text 抽出 (NFKC) で全値 in ② **画像で目視** (= 配置ズレ・glyph 不描画は text 検証で見えない) ③ 印刷は [`print-raster-pdf`](#print-raster-pdf) 経由 (= subset font は printer で化けることがある)
 
-origin: 2026-06-11 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefill、 紙だけ必要な当日運用)。 openpyxl 派生の旧 file は標題消失で 1 枚無駄刷り → 本経路で 標題 + prefill 両立。
+origin: 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefill、 紙だけ必要な当日運用)。 openpyxl 派生の旧 file は標題消失で 1 枚無駄刷り → 本経路で 標題 + prefill 両立。
 
 **汎用実装**: [`scripts/pdf_form_fill.py`](../scripts/pdf_form_fill.py) (= library。 anchor 印字 / NFKC 照合 / `#+` redact / font subset / 内蔵検証 / 600dpi ラスタ化 を `build_document()` 1 呼び出しに集約)。 様式ごとの driver はこれを import して item spec (anchor / dx / dy / align / text。 □ への ✓ は `type:"check"` = anchor の □ 内にベクター描画、 font の ✓ glyph 有無に非依存) だけ書く。 **適用境界**: 単票向け。 記入項目が多く**派生 sheet が数式導出される workbook** (= 依頼書・承諾書が sheet 1 から自動で埋まる類) は、 [`excel-osascript-cell-write`](#excel-osascript-cell-write) で雛形 copy に Excel 記入 → PDF → ページ抽出の方が速くて正しい (= 派生書類も自動で完成する。 2026-06-11 旅費請求書一式で実証)。
 
@@ -1353,7 +1353,7 @@ origin: 2026-06-11 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefil
 
 **規律**: overlay フォントは **雛形の埋込フォントに合わせる**。 雛形のフォントは `fitz.open(tpl)[pno].get_fonts(full=True)` で確認 (= 基底名、 例 `AAAAAC+YuGothic-Regular` → `YuGothic-Regular`)。 **macOS で Excel が吐く PDF の既定日本語フォントは 游ゴシック** (= Office 同梱 `/Applications/Microsoft Excel.app/Contents/Resources/DFonts/YuGothR.ttc`)。 値の本文は **Regular** に揃える (= 雛形の Bold 見出しに引きずられない)。
 
-汎用エンジン [`pdf_form_fill.py`](../scripts/pdf_form_fill.py) は **`font=None` (既定) で雛形の埋込フォントに自動マッチ** (= `pick_font(template_pdf)` が `get_fonts` を読み `KNOWN_TEMPLATE_FONTS` から system font file を選ぶ)、 `FONT_CANDIDATES` 先頭も 游ゴシック。 雛形が游ゴシック以外なら `font=` で明示。 ⚠️ **既知 path は macOS** (= Office / macOS system フォント)。 **非 macOS では `pick_font` が `fc-match` (fontconfig) で `Noto Sans CJK` 等に解決**し、 それも無ければ `build_document(font=...)` で明示指定を要求する (= crash でなく actionable error)。 origin: 2026-06-24 謝金⑭-2 完成版で後乗せが `Arial Unicode` で太く雛形の游ゴシックと不揃い → user 指摘で発覚。
+汎用エンジン [`pdf_form_fill.py`](../scripts/pdf_form_fill.py) は **`font=None` (既定) で雛形の埋込フォントに自動マッチ** (= `pick_font(template_pdf)` が `get_fonts` を読み `KNOWN_TEMPLATE_FONTS` から system font file を選ぶ)、 `FONT_CANDIDATES` 先頭も 游ゴシック。 雛形が游ゴシック以外なら `font=` で明示。 ⚠️ **既知 path は macOS** (= Office / macOS system フォント)。 **非 macOS では `pick_font` が `fc-match` (fontconfig) で `Noto Sans CJK` 等に解決**し、 それも無ければ `build_document(font=...)` で明示指定を要求する (= crash でなく actionable error)。 origin: 謝金⑭-2 完成版で後乗せが `Arial Unicode` で太く雛形の游ゴシックと不揃い → user 指摘で発覚。
 
 ### <a id="pdf-prefill-template-prefilled"></a>雛形に既に値がある欄を二重印字しない (= 申請者欄 prefill 済の様式)
 
@@ -1463,7 +1463,7 @@ visual_center = (y_top + y_bot) / 2
 
 ⚠️ **「使う前に test」 の reflex 不発を防ぐ**: 「`insert_text` の y は visual top」 等の memory が直感的に強いほど誤りやすい。 当 slug の `y = baseline` を「使う直前に当 doc で再確認 (= recall でなく re-read)」 する規律で踏み込む — recall-dependent reflex は [`convention-design-principles.md §8.12`](../docs/convention-design-principles.md#firing-surface-hierarchy) と同様、 最弱発火面ゆえ「直感を疑った時に当 slug を読み直す」 のが第一線。
 
-origin: 2026-06 scan 様式 PDF への overlay session で、 baseline と visual bottom の混同に基づく座標補正が 3-4 ラウンド噛み合わず収束を遅らせた。 test PDF で bbox 実測 → ascender/descender 確定の 1 step を session 中盤で初めて回し以降は安定。 「使う前に test」 の reflex を slug に焼くことで「直感の memory」 を打ち消す形にした。
+origin: scan 様式 PDF への overlay session で、 baseline と visual bottom の混同に基づく座標補正が 3-4 ラウンド噛み合わず収束を遅らせた。 test PDF で bbox 実測 → ascender/descender 確定の 1 step を session 中盤で初めて回し以降は安定。 「使う前に test」 の reflex を slug に焼くことで「直感の memory」 を打ち消す形にした。
 
 ### <a id="scan-pdf-pixel-anchor-overlay"></a>🔥 scan PDF (vector 無し) への text/image overlay の位置決定 (= 既存印字を pixel anchor にして baseline を完全一致) — **重要度最大**
 
@@ -1590,7 +1590,7 @@ pixel_y → PDF_y = pixel_y × 72 / dpi
 - **visual 推定でなく cluster 数で確定**: マス数も、 マス幅も、 cluster 中心も、 全て numpy で確定 (= 直接 count / direct measure)。 「マス N 個に見える」 「マス幅 14 pt くらい」 等の visual 推定は信頼できない
 - **page-local の絶対視**: 同 form 種でも別 page の座標は別。 「同じ layout だから同じ x」 reflex は bug の根
 
-origin: 2026-06-29 行政・金融 scan 様式 PDF に氏名・住所・口座コード等を overlay した session で、 user 多ラウンド push (「ずれてる」 「線に重なってる」 「下にズレすぎ」 「マスの真ん中じゃない」) を浴びた後、 ようやく ① 見本ページ rosetta + ② 差分法による罫線/文字分離 + ③ cluster 数の numpy count + ④ baseline = visual_bottom - |descender|×size の 4 つの手順を組み合わせて収束。 各 step を 1 つでも skip すると数ラウンド相当の試行錯誤を費やす。 user 発言「死ぬほど重要なので念入りに SoT と参照」 で本 slug を念入りに layer 1 化 (= scan PDF への overlay は行政・金融・大学 様式の標準的事務作業で再発確率が高い、 そのときに「pixel 解析の手順を 0 から再構築」 する代わりに当 slug を読めば 1 ラウンドで収束する状態を保つ)。
+origin: 行政・金融 scan 様式 PDF に氏名・住所・口座コード等を overlay した session で、 user 多ラウンド push (「ずれてる」 「線に重なってる」 「下にズレすぎ」 「マスの真ん中じゃない」) を浴びた後、 ようやく ① 見本ページ rosetta + ② 差分法による罫線/文字分離 + ③ cluster 数の numpy count + ④ baseline = visual_bottom - |descender|×size の 4 つの手順を組み合わせて収束。 各 step を 1 つでも skip すると数ラウンド相当の試行錯誤を費やす。 user 発言「死ぬほど重要なので念入りに SoT と参照」 で本 slug を念入りに layer 1 化 (= scan PDF への overlay は行政・金融・大学 様式の標準的事務作業で再発確率が高い、 そのときに「pixel 解析の手順を 0 から再構築」 する代わりに当 slug を読めば 1 ラウンドで収束する状態を保つ)。
 
 ### <a id="print-raster-pdf"></a>加工した PDF の印刷は 600dpi ラスタ化してから (= WYSIWYG 保証)
 
@@ -1623,7 +1623,7 @@ n.insert_pdf(d, from_page=0, to_page=0); n.save("p1.pdf")
 assert fitz.open("p1.pdf").page_count == 1
 ```
 
-抽出方式は全環境で正しく、 page-ranges が効く環境でも害がない → 一律 default にする。 加えて、 **視認で見つけた表示破綻 (= `###` / 文字切れ / 欄消失) は print-blocker** — 「その欄はどうせ後で手書きするから」 等の理由で**黙認して刷らない** (直すか user に確認。 黙認判断の一人歩きで破綻紙を刷った実害が origin)。 origin: 2026-06-11 Canon laser queue で page-ranges 無視 + 同日 `###` 黙認印刷。
+抽出方式は全環境で正しく、 page-ranges が効く環境でも害がない → 一律 default にする。 加えて、 **視認で見つけた表示破綻 (= `###` / 文字切れ / 欄消失) は print-blocker** — 「その欄はどうせ後で手書きするから」 等の理由で**黙認して刷らない** (直すか user に確認。 黙認判断の一人歩きで破綻紙を刷った実害が origin)。 origin: Canon laser queue で page-ranges 無視 + 同日 `###` 黙認印刷。
 
 ### <a id="pdf-text-match-nfkc"></a>PDF text 照合は両辺 NFKC 正規化必須 (= CJK 互換字形の false negative)
 
@@ -1631,7 +1631,7 @@ assert fitz.open("p1.pdf").page_count == 1
 
 **規律**: PDF text 抽出に対する文字列照合は、 **必ず `unicodedata.normalize("NFKC", text)` してから比較**する。 `search_for()` は内部照合を正規化できないので、 互換字形を含みうる語の bbox が要る時は `get_text("words")` を取って NFKC 照合で探す。 1 度の検証で 2 回連続 false negative を踏んだ実害 (= 2026-06-11 ⑭-2、 「氏名欄・申請者欄が空」 と 2 度誤診断)。
 
-**dash 拡張 (= 同根)**: 同じ機構で、 埋込フォント (= subset 後) が **ASCII ハイフン `-` (U+002D) を抽出時に U+2010 (‐) / U+2011 (‑) 等へ round-trip** することがある (= 游ゴシック等で実観測)。 郵便番号 `123-4567` / 電話番号 / 口座番号のハイフンが照合で空振りし「印字が消えた」 と誤診断する (= 数字部は一致するので原因が掴みにくい)。 照合は NFKC に加えて **各種ダッシュを ASCII `-` に畳んでから**比較する (= `pdf_form_fill.py` の `flat()` = `NFKC` + dash map `‐‑‒–—―−﹣－` → `-`)。 origin: 2026-06-24 ⑭-2 完成版で住所郵便番号・TEL が verify 空振り (= 游ゴシック化で発生)。
+**dash 拡張 (= 同根)**: 同じ機構で、 埋込フォント (= subset 後) が **ASCII ハイフン `-` (U+002D) を抽出時に U+2010 (‐) / U+2011 (‑) 等へ round-trip** することがある (= 游ゴシック等で実観測)。 郵便番号 `123-4567` / 電話番号 / 口座番号のハイフンが照合で空振りし「印字が消えた」 と誤診断する (= 数字部は一致するので原因が掴みにくい)。 照合は NFKC に加えて **各種ダッシュを ASCII `-` に畳んでから**比較する (= `pdf_form_fill.py` の `flat()` = `NFKC` + dash map `‐‑‒–—―−﹣－` → `-`)。 origin: ⑭-2 完成版で住所郵便番号・TEL が verify 空振り (= 游ゴシック化で発生)。
 
 ### <a id="pdf-table-layout-aware-reading"></a>表・多段組 PDF は素の `get_text()` で読まない (= layout-aware 抽出 ladder、 「読めない」 禁止)
 
@@ -1784,7 +1784,7 @@ origin: 2026-06 PW 暗号化 docx を `/tmp/<work>/` に展開して round-trip 
 - Word / Excel の「最近使ったファイル」 に staging path が並ぶ (= 無害、 驚かないため記載)。
 - 本節は **Office sandbox 側**の dialog。 Claude Code 側の「作業ディレクトリ外の file を読みますか」 prompt は別 layer = [`claude-code-permissions.md`](claude-code-permissions.md) の `additionalDirectories` で扱う。
 
-origin: 2026-08-21 出張書類 session で案件 dir ごとに dialog を踏み、 remote 操作では押せないことが顕在化 → 別 session が実機で (a) を検証して layer 1 に固定。 検証 ledger (= 新規 dir vs group container × Word / Excel の 4 象限 + wrapper e2e) は個人層の results file に保存。
+origin: 出張書類 session で案件 dir ごとに dialog を踏み、 remote 操作では押せないことが顕在化 → 別 session が実機で (a) を検証して layer 1 に固定。 検証 ledger (= 新規 dir vs group container × Word / Excel の 4 象限 + wrapper e2e) は個人層の results file に保存。
 
 ### <a id="word-applescript-password-open"></a>Word.app の AppleScript で PW 暗号化 docx を開く / select/find が動かない罠
 
@@ -1811,7 +1811,7 @@ end tell
 - Word.app の AppleScript dictionary は Find 系オブジェクトの coercion が脆く、 cold-start に弱い (= [`docx-pdf-stale-cache`](#docx-pdf-stale-cache) と同根)
 - → **「特定シートだけ見せる」 用途では Find/select に頼らず [`docx-section-extract-preview`](#docx-section-extract-preview) で別 docx に抜き出す方が確実**
 
-origin: 2026-06 ある PW 暗号化 6 シート様式の visual confirm で、 物理シートだけ見せたい → AppleScript で `tell active document to select` / `tell selection to find object` を試行 → 全 syntax で error → 関心 table のみ deepcopy で別 docx に抽出する pattern に切替で解決。
+origin: ある PW 暗号化 6 シート様式の visual confirm で、 物理シートだけ見せたい → AppleScript で `tell active document to select` / `tell selection to find object` を試行 → 全 syntax で error → 関心 table のみ deepcopy で別 docx に抽出する pattern に切替で解決。
 
 ### <a id="docx-section-extract-preview"></a>機密書類の「必要なところだけ見せる」: 関心 table のみ平文 preview docx を生成して Word.app open
 
@@ -1948,7 +1948,7 @@ for idx, line in enumerate(lines):
 - 平文 [`docx-section-extract-preview`](#docx-section-extract-preview) を生成して Word.app で open する fallback 1 が確実
 - final (= encrypted) を user に手渡したい時は [`word-applescript-password-open`](#word-applescript-password-open) で PW 付き open
 
-origin: 2026-06 ある官公署様式 (= 担当者表 + 体制表 の 2 docx、 配布元から PW 別送) の記入返送。 form 構造は 6 シート (= 多科目分の table)、 自分の担当 1 シートのみ記入。 step 4 (roundtrip readback) で「点検方法の散文行が空 paragraph に流し込まれていない」 (= 私の paragraph index 取り違え) を 1 度検出 → 修正。 step 5 (visual confirm) で Pages cold-start を 3 回踏んで時間を浪費 → [`docx-pdf-stale-cache`] reflex に降りて平文抽出 preview pattern を確立。
+origin: ある官公署様式 (= 担当者表 + 体制表 の 2 docx、 配布元から PW 別送) の記入返送。 form 構造は 6 シート (= 多科目分の table)、 自分の担当 1 シートのみ記入。 step 4 (roundtrip readback) で「点検方法の散文行が空 paragraph に流し込まれていない」 (= 私の paragraph index 取り違え) を 1 度検出 → 修正。 step 5 (visual confirm) で Pages cold-start を 3 回踏んで時間を浪費 → [`docx-pdf-stale-cache`] reflex に降りて平文抽出 preview pattern を確立。
 
 ### <a id="docx-python-docx-surgical-edit"></a>確定済 docx の外科編集: python-docx で run / 段落を直接いじる
 
@@ -2170,7 +2170,7 @@ assert not blue, f"色付きガイダンス残存: {blue[:3]}"
 ```
   **一般則**: 色・構造など「意味を持つ属性」 の検証は、 **その属性自体を ground truth にする** (= proxy の phrase list や docx run 属性で代用しない)。 proxy 検証は proxy の盲点 (= list 外 / style 継承) をそのまま検証の盲点にする。
 
-origin: 2026-06 官製様式 docx の記入要領削除。 (a) 上部様式見出しブロックを過剰削除 → 復元、 (b) ※注記を削除し漏れ、 (c) `doc.paragraphs` 走査で content control 内の variant を取りこぼし「全消し」 と誤宣言、 (d) 青字記入要領を **run 直接色だけ見て strip** → 段落 style 継承の青字 (`a0`) を素通し + phrase 検証も list 外で pass → user が rendered 色を目視して発覚、 を反復。 テンプレ基準 + PDF テキスト + **PDF span 色** の検証で決着。
+origin: 官製様式 docx の記入要領削除。 (a) 上部様式見出しブロックを過剰削除 → 復元、 (b) ※注記を削除し漏れ、 (c) `doc.paragraphs` 走査で content control 内の variant を取りこぼし「全消し」 と誤宣言、 (d) 青字記入要領を **run 直接色だけ見て strip** → 段落 style 継承の青字 (`a0`) を素通し + phrase 検証も list 外で pass → user が rendered 色を目視して発覚、 を反復。 テンプレ基準 + PDF テキスト + **PDF span 色** の検証で決着。
 
 ### <a id="form-guidance-color-residue"></a>xlsx form の記入要領は **条件付き書式**で赤い — font 色検査は空振りする
 
@@ -2205,7 +2205,7 @@ for cr in cf.sqref.ranges:     # sqref は複数レンジを持ちうる ∴ ws[
 
 ⚠️ **検出器であって修正器にしない**。 [`docx-guidance-deletion`](#docx-guidance-deletion) (1) のとおり「様式構造の見出しは残す / 記入要領は消す」 の境界判断は機械にはできない。 さらに **消すのが正解とも限らない** — placeholder が「単位表記」 を兼ねている欄 (例: `時` `分` に number_format `0\:` が付いている = 数値を入れると `9:` と表示される設計) では、 正解は「消す」 ではなく「**入れる**」。 機械は「N 個ある / どのセルか / trigger は何か」 まで出して人間に渡す。
 
-origin: 2026-07-31、 出張様式の休講欄 (`日付選択` / `時限`) と会期時間欄 (`時` / `分`) を赤字のまま印刷。 最初に試した `cell.font.color.rgb` 検査が 0 件を返して素通りし、 人の目視が唯一の gate だった。 同型の残置は同じ様式の 2 ヶ月前の提出物にも在り、 「前例では問題なかった」 という確認自体が別書類を見ていた。
+origin: 出張様式の休講欄 (`日付選択` / `時限`) と会期時間欄 (`時` / `分`) を赤字のまま印刷。 最初に試した `cell.font.color.rgb` 検査が 0 件を返して素通りし、 人の目視が唯一の gate だった。 同型の残置は同じ様式の 2 ヶ月前の提出物にも在り、 「前例では問題なかった」 という確認自体が別書類を見ていた。
 
 ### <a id="erad-forbidden-chars"></a>e-Rad の使用禁止文字 (= 入力フィールド charset 制限)
 
@@ -2600,7 +2600,7 @@ HARD 検出時は exit 1。 完成度 finding (surface) は `--strict` で exit 
 
 ⚠️ EMPTY_LABELED_COL は blank 様式の row 0 が**全セル非空 (= 真のヘッダ行)** の表だけに適用 (= 表紙の key-value 表 〔ラベル|値|ラベル〕 は row 0 に空セルがあるので除外、 略歴/予算表だけ対象) = 列ヘッダ型と key-value 型の誤判定回避。
 
-origin: 2026-06-27 ある研究費 docx 申請様式で同一様式に 4 記入ミスを連続 (= 年令ラベル上書き / 「（１）」 箇条書き空欄 / 「年月」 列空 / 概要箱が半分・薄い) → そのつど申請者が発見・指摘。 視覚 render しても自分の記入箇所しか見ず素通りした = recall 依存の規律では止まらない実証 → 機械化。
+origin: ある研究費 docx 申請様式で同一様式に 4 記入ミスを連続 (= 年令ラベル上書き / 「（１）」 箇条書き空欄 / 「年月」 列空 / 概要箱が半分・薄い) → そのつど申請者が発見・指摘。 視覚 render しても自分の記入箇所しか見ず素通りした = recall 依存の規律では止まらない実証 → 機械化。
 
 ### <a id="template-provenance-check"></a>テンプレの素性確認 (= 「最新様式」 が誰かの記入済み修正版である罠)
 
@@ -2615,7 +2615,7 @@ origin: 2026-06-27 ある研究費 docx 申請様式で同一様式に 4 記入�
 
 **記入済み file からブランクテンプレを作る手順**: 個人データ cell を特定 (= dump で値 cell を列挙し、 label・記入例 placeholder 〔「〇〇大学」 等〕・全案件共通の定数 〔申請者・予算番号等〕 を除いた残り) → **Excel osascript で空文字に** (= 標題 drawing がある様式で openpyxl は不可 [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings)) → 黄色 fill 解除 → 検証 (= 再 dump + drawing 数 + 黄色走査) → テンプレとして保存 + **素性 (= どの file からいつ作ったか) を doc に記録**。
 
-origin: 2026-06-12 様式⑭-1。 「6/2 版で上書き済」 と記述されたテンプレが実は旧版 (= 新設の交通費起点住所行なし) で、 そこから作った別件書類が旧様式製になった + 真の新様式は個別案件の記入済み修正版にしか存在しなかった (= 上記手順でブランク化して解決)。 diff-form-xlsx をその記入済み file 基準で回しても残骸は不可視だった (= 上記盲点の実例)。
+origin: 様式⑭-1。 「6/2 版で上書き済」 と記述されたテンプレが実は旧版 (= 新設の交通費起点住所行なし) で、 そこから作った別件書類が旧様式製になった + 真の新様式は個別案件の記入済み修正版にしか存在しなかった (= 上記手順でブランク化して解決)。 diff-form-xlsx をその記入済み file 基準で回しても残骸は不可視だった (= 上記盲点の実例)。
 
 ### <a id="fill-prevention-workflow"></a>予防 workflow (= 規律)
 
@@ -2786,7 +2786,7 @@ end tell'
 - **gate を通しても目視は省かない**: gate は**既知の失敗形しか見ない**。 未知の崩れは render → 画像確認でしか捕まらない ([`pdf-visual-confirm`](#pdf-visual-confirm))。 gate の価値は「既知の型が二度と人間の目に頼らなくなる」 ことにある。
 - **retroactive fixture が効く**: 壊れていた版の実ファイルを取っておき、 gate がそれを FAIL にすることを確認する。 「今日の失敗を今日の gate が捕まえる」 が確認できて初めて配線完了。
 
-origin: 2026-07-28 の出張日程表。 5 種の欠陥 (= 日別記入漏れ / 集計値の旧ルール / placeholder 残置 / hair 点線 / 行高不揃いによる全体縮小とブロック内空白) が **全て値検査を素通りし、 提出者の目視だけが catch した**。 レイアウト不変条件 6 件を assert する gate を新設して生成 driver に配線し、 壊れていた版で retroactive に全件発火することを確認した。
+origin: 出張日程表。 5 種の欠陥 (= 日別記入漏れ / 集計値の旧ルール / placeholder 残置 / hair 点線 / 行高不揃いによる全体縮小とブロック内空白) が **全て値検査を素通りし、 提出者の目視だけが catch した**。 レイアウト不変条件 6 件を assert する gate を新設して生成 driver に配線し、 壊れていた版で retroactive に全件発火することを確認した。
 
 ### <a id="pdf-mutation-verification-schema"></a>PDF mutation 後の機械検証 schema (= text 不変 + keyword in/out + image stream delta)
 
@@ -3427,18 +3427,18 @@ with zipfile.ZipFile(src, 'w', zipfile.ZIP_DEFLATED) as zout:
 6. **date 書式済みの cell は serial を書く** (例: 出張予定日 N28 = `46368` → 2026-12-12)。 serial ↔ date の換算は openpyxl readback で確認 (`datetime` が返れば書式が生きている)。
 7. Excel automation との**hybrid が実戦形**: 値の大半は Excel osascript で書き、 **書式起因の後修正だけ本手術**で当てる (= Excel 再起動 round を 1 つ消す。 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 回避にも効く)。
 
-origin: 2026-08-20 海外出張様式 xlsm (= VBA + drawings 持ち) の日程表日付 7 cell。 Excel scripting が -1728/-1708 で不安定な throttled マシン上で、 値は AppleScript・書式は本手術の hybrid で完了。
+origin: 海外出張様式 xlsm (= VBA + drawings 持ち) の日程表日付 7 cell。 Excel scripting が -1728/-1708 で不安定な throttled マシン上で、 値は AppleScript・書式は本手術の hybrid で完了。
 
 ## <a id="xlsm-macro-export-trap"></a>xlsm (マクロ付き様式) の Excel export は「マクロ実行不可 → 印刷範囲未適用 → 全面 dump → crash」 に落ちる
 
-**症状** (2026-08-21 実測、 海外出張様式 = 「印刷範囲指定」 マクロ入り xlsm): [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の Excel 経路で export すると、 (1) 「マクロを実行できません」 dialog (= 自動化 context のマクロセキュリティで Workbook_Open / 印刷範囲マクロが走れない)、 (2) 印刷範囲が設定されないまま export されて **sheet 全面 + 記入例 face + 他 sheet が 1 ページに縮小 / 計 13 ページ** の役に立たない PDF、 (3) その後 Excel が crash、 (4) **export 過程で workbook が再保存され file が変わる** (git diff が出る = `git checkout -- <file>` で HEAD に戻す。 export は読むだけ、 という前提を置かない。 ⚠️ 2026-08-21 以降の [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) は staging 経由 = 再保存は copy に当たり**原本は不変**、 in-place `--no-stage` の時だけ本項が効く)。
+**症状** (実測、 海外出張様式 = 「印刷範囲指定」 マクロ入り xlsm): [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の Excel 経路で export すると、 (1) 「マクロを実行できません」 dialog (= 自動化 context のマクロセキュリティで Workbook_Open / 印刷範囲マクロが走れない)、 (2) 印刷範囲が設定されないまま export されて **sheet 全面 + 記入例 face + 他 sheet が 1 ページに縮小 / 計 13 ページ** の役に立たない PDF、 (3) その後 Excel が crash、 (4) **export 過程で workbook が再保存され file が変わる** (git diff が出る = `git checkout -- <file>` で HEAD に戻す。 export は読むだけ、 という前提を置かない。 ⚠️ 2026-08-21 以降の [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) は staging 経由 = 再保存は copy に当たり**原本は不変**、 in-place `--no-stage` の時だけ本項が効く)。
 
 **対処の階梯** (= Excel を増やさない方向に倒す):
 1. **値の変更は [`xlsx-cell-value-zip-surgery`](#xlsx-cell-value-zip-surgery)** (Excel 起動ゼロ、 VBA / drawings / form control 無傷)。 `scripts/check-xlsx-integrity.py` を gate に。
 2. **PDF が要るなら、 壊れた export からでも vector を救える** — [`vector-pdf-page-rescue`](#vector-pdf-page-rescue)。 再 export のために Excel を起こし直さない (= [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 と同根)。
 3. どうしても Excel で export するなら、 マクロが要らない場合は **xlsm → xlsx に落とした複製**を export 用に作る (= VBA を捨てた copy、 SoT の xlsm は触らない)。 ただし印刷範囲がマクロ依存の様式ではこれでも全面 dump になる。
 
-**判定 reflex**: 拡張子 `.xlsm` を見た瞬間に「Excel automation は 1 回も叩かない」 を default にする。 実測では **cold-start 90-120 秒 + マクロ dialog + crash** の三重苦で、 同じ成果は zip 手術 + PDF 手術の方が速く確実だった。 origin: 2026-08-21 (= 2_1 海外出張様式、 throttled Intel iMac)。
+**判定 reflex**: 拡張子 `.xlsm` を見た瞬間に「Excel automation は 1 回も叩かない」 を default にする。 実測では **cold-start 90-120 秒 + マクロ dialog + crash** の三重苦で、 同じ成果は zip 手術 + PDF 手術の方が速く確実だった。 origin: (= 2_1 海外出張様式、 throttled Intel iMac)。
 
 ## <a id="vector-pdf-page-rescue"></a>壊れた Excel export から様式ページを vector のまま救出する (= clip + show_pdf_page)
 
@@ -3463,7 +3463,7 @@ out.save('page_A4.pdf')
 3. 切り出し後の文字修正は [`pdf-cell-text-patch`](#pdf-cell-text-patch)。
 4. **セル幅に入らない値は export 時点で clip されている** (例: 日付 `2026/12/14` 10 文字が 8 文字幅のセルで末尾欠け) — 救出後に patch するか、 元の xlsm 側を短い表示 (`12/14` 等) に直してから export。
 
-origin: 2026-08-21 海外出張日程表 (予定)。
+origin: 海外出張日程表 (予定)。
 
 ## <a id="pdf-cell-text-patch"></a>vector PDF の表セル文字を差し替える (= 塗り色 sampling + 罫線保護 + CJK/Latin 分割描画)
 
@@ -3490,7 +3490,7 @@ origin: 2026-08-21 日程表 8 行の書き直し (Excel crash 後、 Excel を�
 - ❌ **実 font file の埋め込みでは直らなかった**: `page.insert_font(fontname="hag", fontfile="<HaranoAjiGothic-Regular.otf>")` で OTF (CFF) を埋め込んでも、 Word 由来の TrueType 部分は正常・**PyMuPDF 追記部だけ同じ printer で化けた** (2026-08-21 実測、 Canon LBP + CUPS)。 PyMuPDF の Type0/CFF subset を解釈できない driver がある = 「埋め込んだから安全」 も成立しない。 画面確認 (fitz raster / Preview) はこの差を**検出できない**。
 - `get_fonts()` に `helv`/`japan` や PyMuPDF 埋め込み font が載っている PDF を**そのまま `lp` に投げない**。 印刷前 gate = 「PyMuPDF で文字を描いた PDF か?」 → yes なら raster 版を刷る。 機械 gate = [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) (`--rasterize` で RGB raster も生成)、 手順全体 = [`print-preflight`](#print-preflight)。
 
-origin: 2026-08-21 海外出張願 + 日程表 = overlay 文字が紙で化け → OTF 埋め込みで再印刷 → **また化け** → raster で解決、 計 3 回刷り直し (user 指摘 3 連)。
+origin: 海外出張願 + 日程表 = overlay 文字が紙で化け → OTF 埋め込みで再印刷 → **また化け** → raster で解決、 計 3 回刷り直し (user 指摘 3 連)。
 
 ## <a id="docx-autofit-grid-overflow"></a>docx 様式の autofit 表は「1 セルの長い値」 で**別の行**が折り返し、 1 頁様式が 2 頁にはみ出す
 
@@ -3504,11 +3504,11 @@ origin: 2026-08-21 海外出張願 + 日程表 = overlay 文字が紙で化け �
 3. **検証 = 雛形 docx を同じ経路で PDF 化して page 数と主要ラベルの y 座標を突合** (= `get_text("blocks")` で「承認日」「許可します」 等の y が雛形と同じか)。 page 数一致だけでは行内折り返し (= 見た目の崩れ) を見逃す。
 4. ⚠️ 変換結果が変わらない時は Word の stale in-memory cache ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache)) を疑い、 `get name of every document` が `missing value` なら `pkill -x "Microsoft Word"` してから再変換。
 
-origin: 2026-08-21 海外出張願 (人事課 docx 様式) — 5 回の変換試行で (1)+(2) に収束、 雛形と y 座標一致を確認してから印刷。
+origin: 海外出張願 (人事課 docx 様式) — 5 回の変換試行で (1)+(2) に収束、 雛形と y 座標一致を確認してから印刷。
 
 ## <a id="print-preflight"></a>印刷直前の preflight (= 「画面で見えた」 を印刷の保証にしない)
 
-**起源 (2026-08-21、 同じ 1 枚の様式を 4 回刷り直し)**: ① docx 様式が 2 頁にはみ出し (= [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow)) → ② 直したら PyMuPDF 追記文字が紙で文字化け (= [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake)) → ③ raster を gray で作って認印が黒 → ④ 電話番号が罫線に被る (= [`pdf-overlay-anchoring`](#pdf-overlay-anchoring))。 **4 つとも個別には既知の罠**で、 欠けていたのは「lp に渡す前に機械と目で確認する段」。 user が remote で紙を見られないと、 1 回の失敗 = 1 往復 + 紙 1 枚。
+**起源 (同じ 1 枚の様式を 4 回刷り直し)**: ① docx 様式が 2 頁にはみ出し (= [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow)) → ② 直したら PyMuPDF 追記文字が紙で文字化け (= [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake)) → ③ raster を gray で作って認印が黒 → ④ 電話番号が罫線に被る (= [`pdf-overlay-anchoring`](#pdf-overlay-anchoring))。 **4 つとも個別には既知の罠**で、 欠けていたのは「lp に渡す前に機械と目で確認する段」。 user が remote で紙を見られないと、 1 回の失敗 = 1 往復 + 紙 1 枚。
 
 **印刷前 gate (全部通してから `lp`)**:
 

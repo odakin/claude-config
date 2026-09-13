@@ -174,7 +174,7 @@ Claude がメールを送信（またはドラフト作成）した場合、**�
 
 ⚠️ DM 確認は記録に残る形 (= scrollback できる channel) で行う。 口頭・電話のみだと後で「合意していない」 と紛糾しうる。 また確認 turnaround が長い場合は send-side responsibility の judgment (= 「expected delay」 vs 「重要なので待つ」) を sender が引き受ける。
 
-origin: 2026-06-29 学内事務向け詫び返信の作成 session。 共同署名 mail について、 (1) 初稿 → 共著者 DM 確認、 (2) 共著者新提案 (= 「次回会議の議題に取上げ依頼」 追加) を反映した修正稿 → 再 DM 確認、 (3) GO 受領 → send + 送信完了 DM 通知、 という 3 段の loop で運用した実例。 sender 単独 send だった場合、 共著者の追加提案が捨象されかつ署名のみ共同で出てしまう risk があった。
+origin: 学内事務向け詫び返信の作成 session。 共同署名 mail について、 (1) 初稿 → 共著者 DM 確認、 (2) 共著者新提案 (= 「次回会議の議題に取上げ依頼」 追加) を反映した修正稿 → 再 DM 確認、 (3) GO 受領 → send + 送信完了 DM 通知、 という 3 段の loop で運用した実例。 sender 単独 send だった場合、 共著者の追加提案が捨象されかつ署名のみ共同で出てしまう risk があった。
 
 ## <a id="version-arrives-off-thread"></a>相手の最新版は自分宛のスレッドに来るとは限らない
 
@@ -257,7 +257,7 @@ origin: 2026-06-29 学内事務向け詫び返信の作成 session。 共同署�
 
 処置: 軸 2-4 が揃って negative なら**失効するものは無い** (応答期限・義務なし) — 無視でよいが、 判断理由つきの declared-skip を記録に残す (= 将来の同種勧誘の前例になる + 監査系 sweep への再出現を止める)。 既定 decline にしたい発信 platform は [`convention-design-principles.md §8.21`](../docs/convention-design-principles.md#noise-obligation-signal-sharing) の記録付き opt-out へ。 ⚠️ 逆に、 editorial office 発の**査読依頼**は義務 class (放置 = 事故) — 勧誘と依頼を送信 domain で混同しない (同 §8.21 の bucket 混在)。
 
-origin: 2026-09-01、 大手出版社の commissioning 部門から分野違いの低 tier OA collection への Guest Editor 勧誘 (依頼 + 週次リマインド 3 通) を suppressed-mail 棚卸しで発掘した triage。 初回報告が件名のみの判定で user 押し返し後に本文精読した経緯ごと記録 (= 「本文 1 読」 規律の実例)。
+origin: 大手出版社の commissioning 部門から分野違いの低 tier OA collection への Guest Editor 勧誘 (依頼 + 週次リマインド 3 通) を suppressed-mail 棚卸しで発掘した triage。 初回報告が件名のみの判定で user 押し返し後に本文精読した経緯ごと記録 (= 「本文 1 読」 規律の実例)。
 
 
 ## <a id="diff-page-attachment"></a>共著者への変更連絡は該当頁の latexdiff を添付する — 「Overleaf の履歴で見えます」 は機械にしか通じない (2026-09-08)
