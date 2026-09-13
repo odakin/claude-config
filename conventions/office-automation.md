@@ -2044,7 +2044,7 @@ fill driver の verify 段 ([`pdf-mutation-verification-schema`](#pdf-mutation-v
 >
 > **🔧 自動予防システム (恒久・推奨)**: 個別ファイルを後追いで normalize すると取りこぼす (= 2026-06-05 に filled-official だけ直して提出名 copy を取り逃し再発)。 根治は **save 時 source で clean にする**: [`scripts/docx_decl_patch.py`](../scripts/docx_decl_patch.py) が python-docx の `Document.save()` を wrap し保存のたび宣言を Word 形式へ自動正規化 (lazy import hook・content 不変・idempotent)。 [`scripts/install-docx-decl-patch.sh`](../scripts/install-docx-decl-patch.sh) (= setup.sh Step 9) が user site-packages に `.pth`+module を置き **全 python3 起動で auto-load** → 以後どの script が吐く docx も source で Word-clean (= 覚える必要なし・race-free・取りこぼし不能)。 **3 段防御**: ① 自動 patch (save 時, 主) / ② [`normalize-docx-decl.py`](../scripts/normalize-docx-decl.py) (既存 docx の後追い修正 CLI) / ③ `check-docx-integrity.py` (single-quote 宣言の検出 gate)。 ⚠️ 覆えるのは `.pth` が効く python3 (= 既定の user-site 有効な python)。 venv/別 python は ②③ で補完。
 
-`☐ → ☑` の置換は **2 種類の ☐** で扱いが違う。 取り違えると **zip も XML も well-formed なのに Word だけが「このファイルは破損しています。 開いて修復しますか?」 を開くたびに出す** (= 2026-06-05 JST LOTUS 様式の RCA)。
+`☐ → ☑` の置換は **2 種類の ☐** で扱いが違う。 取り違えると **zip も XML も well-formed なのに Word だけが「このファイルは破損しています。 開いて修復しますか?」 を開くたびに出す** (= ある官製様式の RCA)。
 
 | ☐ の種類 | 構造 | グリフだけ置換して良いか |
 |---|---|---|
