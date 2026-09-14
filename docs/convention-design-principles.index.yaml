@@ -753,6 +753,10 @@ sections:
     legacy: "8.40"
     level: 3
     title: "8.40 粗い 1 件が中身を隠す — 「埋まっている」 は「検討した」 ではない"
+  - id: detector-config-must-be-derived
+    legacy: "8.50"
+    level: 3
+    title: "8.50 検出器が読む「人が書く一覧」 は育たない — 設定も SoT から導出し、 追随と死活を別々に検査する"
   - id: changelog
     level: 2
     title: "変更履歴"
