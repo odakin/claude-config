@@ -245,7 +245,7 @@ origin: 連続発生した「様式の標題テキストボックスが openpyxl
 
 **再構築の実務** (= 既存の前例 base ファイルを雛形 base に移行する): 現行ファイルと雛形の**全 cell diff を機械で取る** — 差分 = 「意図した記入」 の完全リストが自動で得られる。 それを雛形 copy へ転記する (実測: 記入 70+ cells の様式 2 件で移行 ~30 分)。 diff に「現=None / 雛形=値」 として現れるのが**消すべき placeholder** で、 転記時に空文字を書く。
 
-origin: 前回受理ファイルを base にした結果、 事務記入欄への記入・赤字残置・決裁 routing 欄の欠落を同日中に 3 回指摘され、 user 「なんでちゃんともとからあるテンプレを使わないの？」 で本 pattern に転換。 diff 転記による再構築で前 trip の残骸 (別出張の経路 literal) も同時に発見・解消した。
+origin: 前回受理ファイルを base にした結果、 事務記入欄への記入・赤字残置・決裁 routing 欄の欠落を同日中に何度も指摘され、 user 「なんでちゃんともとからあるテンプレを使わないの？」 で本 pattern に転換。 diff 転記による再構築で前 trip の残骸 (別出張の経路 literal) も同時に発見・解消した。
 
 **既知の誤りを含む提出版の保存 folder には quarantine marker を置く** (2026-08-11 追記): 提出済み版は史実 record として書き換えずに保存する ([`#errata-on-preserved-records`](../docs/convention-design-principles.md#errata-on-preserved-records) family) が、 **無印のまま置くと将来の作業者 (人間・AI とも) が「通った実績のあるファイル」 として copy する** — 本 pattern の origin 事故がまさにそれで、 散文の errata 記録だけでは再発した。 folder 冒頭に ls で必ず目に入る marker file (例: `00-⚠️-DO-NOT-USE-AS-BASE.md`) を置き、 中身は「既知の誤り正本への pointer + 本 § への参照」 の最小警告に留める (= 誤り明細の payload は errata 正本側に一元化、 重複させない)。
 
@@ -320,7 +320,7 @@ origin: 大学出張様式 — xlsx 内挿入 (Excel osascript 経由) で入れ
 
 ⚠️ [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) には「`add_image` で入れた純画像は残る」 とあるが、 **それは「入れた画像が消えない」 という意味であって「他の part が無傷」 という意味ではない**。 comment を持つ様式では別経路で壊れる。
 
-**実測** (= 大学の出張様式 1 件、 comment 6 個入り):
+**実測** (= 大学の出張様式、 comment 入り):
 
 | part | 元 | openpyxl `add_image` | **Excel osascript** |
 |---|---|---|---|
@@ -493,7 +493,7 @@ osascript -e 'tell application "Microsoft Excel" to quit'
 
 ⚠️ **merged cell の値を消すときは `clear contents of range "H50:AD50"` (= merged 全域 + `of`)** — 単セル指定 `clear contents range "H50"` は **merged cell に対して silent no-op** (エラーも出ず値が残る)。 「消したつもり」 のまま PDF 生成まで通ってしまうので、 clear 後に **openpyxl readback で None を assert** するのが必須 gate (= 実発生: 差し戻し対応で消したはずの記載が readback 検証で発覚、 検証しなければ再提出書類に旧記載が残っていた)。 `set value of range … to ""` も同様に merged では全域指定が安全。
 
-⚠️ **merged cell の font size を osascript で変える正しい構文** (= 長い氏名/所属が結合セルで両端切れた時の根本対処): `set font size of font object of range "G13" of ws to 9` (= **property 名は `font size`**)。 よくある誤り = `set size of font object of …` → **`-1728` (object not found)** で沈黙失敗する (= `size` という property は font object に無い)。 setup によっては `-10006` (errAEPrivilegeError) が返ることもあり、 その時は各操作を `try` で囲んで続行。 ⚠️ **font が効かない時の fallback を `shrink_to_fit=True` にしてはいけない** — **shrink_to_fit は結合セルでは no-op** (Excel 制約) で、 立てても何も縮まず「直したつもり」 で clip が残る (= 2026-06-16 謝金様式⑭-1 所属見切れ事故の温床)。 結合セルの文字溢れは **font size を下げる** のが唯一効く手。 詳細・検出・検証は [`merged-cell-text-clipping`](#merged-cell-text-clipping)。 origin: 謝金様式の fill 後微修正 + G13 所属見切れ RCA。
+⚠️ **merged cell の font size を osascript で変える正しい構文** (= 長い氏名/所属が結合セルで両端切れた時の根本対処): `set font size of font object of range "G13" of ws to 9` (= **property 名は `font size`**)。 よくある誤り = `set size of font object of …` → **`-1728` (object not found)** で沈黙失敗する (= `size` という property は font object に無い)。 setup によっては `-10006` (errAEPrivilegeError) が返ることもあり、 その時は各操作を `try` で囲んで続行。 ⚠️ **font が効かない時の fallback を `shrink_to_fit=True` にしてはいけない** — **shrink_to_fit は結合セルでは no-op** (Excel 制約) で、 立てても何も縮まず「直したつもり」 で clip が残る (= 謝金様式の所属見切れ事故の温床)。 結合セルの文字溢れは **font size を下げる** のが唯一効く手。 詳細・検出・検証は [`merged-cell-text-clipping`](#merged-cell-text-clipping)。 origin: 謝金様式の fill 後微修正 + G13 所属見切れ RCA。
 
 ⚠️ **正しい AppleScript property 名が不明なときの特定法** (= 上記 `font size` を当てた手順): Excel の scripting 定義は `sdef "/Applications/Microsoft Excel.app"` で引けるが **Xcode が要る** (Command Line Tools のみだと `xcode-select: error … requires Xcode` で空振り)。 → 候補構文を **`try` ブロックで順に試し、 効いたものだけ flag を立てて最後に save する probe applescript** を 1 本書けば **1 起動で特定**できる (= 構文を当て推量で叩いて Excel を毎回 cold-start するより速い + [`excel-osascript-cell-write`](#excel-osascript-cell-write) の crash リスクも減る)。 2026-06-16 に `size of font object` (誤、 -1728) → `font size of font object` (正) を probe で 1 発特定。
 
@@ -624,7 +624,7 @@ origin: 謝金の様式 (= 財源が変わって課題番号が新しくなっ�
 
 ### <a id="merged-cell-text-clipping"></a>⚠️ 結合セルの長文 clipping は shrink_to_fit が効かない → font size を下げる
 
-**症状**: 氏名・所属など長い文字列を**結合セル** (例 `G13:M13`) に固定 font で書くと、 セル幅を超えた分が PDF 描画で **両端 clip** (center 配置なら左右、 left 配置なら右) される。 セル値そのものは完全なので値 diff (diff-form-xlsx) や read-back では出ず、 視覚確認も所属行を凝視しないと気づかない。 2026-06 謝金様式⑭-1 で長い研究機関名 (= 16 字相当) が中央付近だけ表示され目視で発覚 (= 値は完全)。 短い所属 (= 11 字程度) は収まるので **長い値でだけ顕在化する silent failure**。
+**症状**: 氏名・所属など長い文字列を**結合セル** (例 `G13:M13`) に固定 font で書くと、 セル幅を超えた分が PDF 描画で **両端 clip** (center 配置なら左右、 left 配置なら右) される。 セル値そのものは完全なので値 diff (diff-form-xlsx) や read-back では出ず、 視覚確認も所属行を凝視しないと気づかない。 謝金様式で長い研究機関名 (= 16 字相当) が中央付近だけ表示され目視で発覚 (= 値は完全)。 短い所属 (= 11 字程度) は収まるので **長い値でだけ顕在化する silent failure**。
 
 **原因 + 効かない対処**: ⚠️ **shrink_to_fit は結合セルでは no-op** (Excel 制約)。 `Alignment(..., shrink_to_fit=True)` を立てても結合セルでは何も縮まない。 font 設定が効かない時の fallback を shrink_to_fit にすると「直したつもり」 で clip が残る (= この罠で 1 度はまった)。
 
@@ -1345,7 +1345,7 @@ doc.save("filled.pdf", garbage=3, deflate=True)
 
 origin: 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefill、 紙だけ必要な当日運用)。 openpyxl 派生の旧 file は標題消失で 1 枚無駄刷り → 本経路で 標題 + prefill 両立。
 
-**汎用実装**: [`scripts/pdf_form_fill.py`](../scripts/pdf_form_fill.py) (= library。 anchor 印字 / NFKC 照合 / `#+` redact / font subset / 内蔵検証 / 600dpi ラスタ化 を `build_document()` 1 呼び出しに集約)。 様式ごとの driver はこれを import して item spec (anchor / dx / dy / align / text。 □ への ✓ は `type:"check"` = anchor の □ 内にベクター描画、 font の ✓ glyph 有無に非依存) だけ書く。 **適用境界**: 単票向け。 記入項目が多く**派生 sheet が数式導出される workbook** (= 依頼書・承諾書が sheet 1 から自動で埋まる類) は、 [`excel-osascript-cell-write`](#excel-osascript-cell-write) で雛形 copy に Excel 記入 → PDF → ページ抽出の方が速くて正しい (= 派生書類も自動で完成する。 2026-06-11 旅費請求書一式で実証)。
+**汎用実装**: [`scripts/pdf_form_fill.py`](../scripts/pdf_form_fill.py) (= library。 anchor 印字 / NFKC 照合 / `#+` redact / font subset / 内蔵検証 / 600dpi ラスタ化 を `build_document()` 1 呼び出しに集約)。 様式ごとの driver はこれを import して item spec (anchor / dx / dy / align / text。 □ への ✓ は `type:"check"` = anchor の □ 内にベクター描画、 font の ✓ glyph 有無に非依存) だけ書く。 **適用境界**: 単票向け。 記入項目が多く**派生 sheet が数式導出される workbook** (= 依頼書・承諾書が sheet 1 から自動で埋まる類) は、 [`excel-osascript-cell-write`](#excel-osascript-cell-write) で雛形 copy に Excel 記入 → PDF → ページ抽出の方が速くて正しい (= 派生書類も自動で完成する。 旅費請求書一式で実証)。
 
 ### <a id="pdf-prefill-font-match"></a>overlay フォントは雛形の埋込フォントに合わせる (= 太さ・字形の不揃い防止)
 
@@ -2205,7 +2205,7 @@ for cr in cf.sqref.ranges:     # sqref は複数レンジを持ちうる ∴ ws[
 
 ⚠️ **検出器であって修正器にしない**。 [`docx-guidance-deletion`](#docx-guidance-deletion) (1) のとおり「様式構造の見出しは残す / 記入要領は消す」 の境界判断は機械にはできない。 さらに **消すのが正解とも限らない** — placeholder が「単位表記」 を兼ねている欄 (例: `時` `分` に number_format `0\:` が付いている = 数値を入れると `9:` と表示される設計) では、 正解は「消す」 ではなく「**入れる**」。 機械は「N 個ある / どのセルか / trigger は何か」 まで出して人間に渡す。
 
-origin: 出張様式の休講欄 (`日付選択` / `時限`) と会期時間欄 (`時` / `分`) を赤字のまま印刷。 最初に試した `cell.font.color.rgb` 検査が 0 件を返して素通りし、 人の目視が唯一の gate だった。 同型の残置は同じ様式の 2 ヶ月前の提出物にも在り、 「前例では問題なかった」 という確認自体が別書類を見ていた。
+origin: 出張様式の休講欄 (`日付選択` / `時限`) と会期時間欄 (`時` / `分`) を赤字のまま印刷。 最初に試した `cell.font.color.rgb` 検査が空を返して素通りし、 人の目視が唯一の gate だった。 同型の残置は同じ様式の以前の提出物にも在り、 「前例では問題なかった」 という確認自体が別書類を見ていた。
 
 ### <a id="erad-forbidden-chars"></a>e-Rad の使用禁止文字 (= 入力フィールド charset 制限)
 
@@ -2983,7 +2983,7 @@ ws.page_setup.fitToHeight = 1
 
 → Excel が「1 page に縮小 fit」 mode で全 content を 1 page に圧縮、 文字 clip 可能性。 通常 form では wrong (= row_breaks / col_breaks が ignored される可能性)。
 
-⚠️ **`fitToPage=True` だけでは縦に効かない罠**: `fitToHeight=0` (= template 既定値 = 無制限) のままだと、 fitToPage を立てても**縦は fit せず scale 任せで縦溢れ**する (= 2026-06 出張様式で全 sheet が `fitToPage=True ∧ fitToHeight=0 ∧ scale=75/36` で溢れていた実例)。 1 ページに収めるなら **`fitToWidth=1` と `fitToHeight=1` を両方明示**する (= 0 は「無制限」 で 1 は「1 ページ」、 別物)。
+⚠️ **`fitToPage=True` だけでは縦に効かない罠**: `fitToHeight=0` (= template 既定値 = 無制限) のままだと、 fitToPage を立てても**縦は fit せず scale 任せで縦溢れ**する (= 出張様式で全 sheet が `fitToPage=True ∧ fitToHeight=0 ∧ scale=75/36` で溢れていた実例)。 1 ページに収めるなら **`fitToWidth=1` と `fitToHeight=1` を両方明示**する (= 0 は「無制限」 で 1 は「1 ページ」、 別物)。
 
 ```python
 ws.sheet_properties.pageSetUpPr.fitToPage = False
@@ -3424,7 +3424,7 @@ with zipfile.ZipFile(src, 'w', zipfile.ZIP_DEFLATED) as zout:
 3. shared strings を触らない (= `t="inlineStr"` は `sharedStrings.xml` の count 更新が不要で、 追記型より安全)。
 4. **検証 3 点 set**: openpyxl readback で値 assert + `scripts/check-xlsx-integrity.py` (= zip 直編集の納品前 gate) + [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で label 上書きゼロ確認。
 5. **cell 要素が無い (= 空セルは XML に存在しないことがある) / self-closing `<c r="X" s="n"/>` のとき**: 同じ `<row r="N">` 内に**列順を保って挿入**する (style `s=` は同列の近傍 cell から流用)。 regex は `<c r="REF"(attrs)(/>|>…</c>)` の両形を受ける。 実測 2026-08-21: 日程表 8 行目 (C83/F83/O83) は行は在るが cell 無し → 挿入で対応。
-6. **date 書式済みの cell は serial を書く** (例: 出張予定日 N28 = `46368` → 2026-12-12)。 serial ↔ date の換算は openpyxl readback で確認 (`datetime` が返れば書式が生きている)。
+6. **date 書式済みの cell は serial を書く** (例: 日付 cell = `45658` → 2025-01-01)。 serial ↔ date の換算は openpyxl readback で確認 (`datetime` が返れば書式が生きている)。
 7. Excel automation との**hybrid が実戦形**: 値の大半は Excel osascript で書き、 **書式起因の後修正だけ本手術**で当てる (= Excel 再起動 round を 1 つ消す。 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 回避にも効く)。
 
 origin: 海外出張様式 xlsm (= VBA + drawings 持ち) の日程表日付 7 cell。 Excel scripting が -1728/-1708 で不安定な throttled マシン上で、 値は AppleScript・書式は本手術の hybrid で完了。
@@ -3490,7 +3490,7 @@ origin: 2026-08-21 日程表 8 行の書き直し (Excel crash 後、 Excel を�
 - ❌ **実 font file の埋め込みでは直らなかった**: `page.insert_font(fontname="hag", fontfile="<HaranoAjiGothic-Regular.otf>")` で OTF (CFF) を埋め込んでも、 Word 由来の TrueType 部分は正常・**PyMuPDF 追記部だけ同じ printer で化けた** (2026-08-21 実測、 Canon LBP + CUPS)。 PyMuPDF の Type0/CFF subset を解釈できない driver がある = 「埋め込んだから安全」 も成立しない。 画面確認 (fitz raster / Preview) はこの差を**検出できない**。
 - `get_fonts()` に `helv`/`japan` や PyMuPDF 埋め込み font が載っている PDF を**そのまま `lp` に投げない**。 印刷前 gate = 「PyMuPDF で文字を描いた PDF か?」 → yes なら raster 版を刷る。 機械 gate = [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) (`--rasterize` で RGB raster も生成)、 手順全体 = [`print-preflight`](#print-preflight)。
 
-origin: 海外出張願 + 日程表 = overlay 文字が紙で化け → OTF 埋め込みで再印刷 → **また化け** → raster で解決、 計 3 回刷り直し (user 指摘 3 連)。
+origin: 海外出張願 + 日程表 = overlay 文字が紙で化け → OTF 埋め込みで再印刷 → **また化け** → raster で解決、 何度も刷り直した (user 指摘が続いた)。
 
 ## <a id="docx-autofit-grid-overflow"></a>docx 様式の autofit 表は「1 セルの長い値」 で**別の行**が折り返し、 1 頁様式が 2 頁にはみ出す
 
@@ -3504,7 +3504,7 @@ origin: 海外出張願 + 日程表 = overlay 文字が紙で化け → OTF 埋�
 3. **検証 = 雛形 docx を同じ経路で PDF 化して page 数と主要ラベルの y 座標を突合** (= `get_text("blocks")` で「承認日」「許可します」 等の y が雛形と同じか)。 page 数一致だけでは行内折り返し (= 見た目の崩れ) を見逃す。
 4. ⚠️ 変換結果が変わらない時は Word の stale in-memory cache ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache)) を疑い、 `get name of every document` が `missing value` なら `pkill -x "Microsoft Word"` してから再変換。
 
-origin: 海外出張願 (人事課 docx 様式) — 5 回の変換試行で (1)+(2) に収束、 雛形と y 座標一致を確認してから印刷。
+origin: 海外出張願 (人事課 docx 様式) — 複数回の変換試行で (1)+(2) に収束、 雛形と y 座標一致を確認してから印刷。
 
 ## <a id="print-preflight"></a>印刷直前の preflight (= 「画面で見えた」 を印刷の保証にしない)
 

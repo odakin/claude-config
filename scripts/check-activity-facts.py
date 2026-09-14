@@ -10,10 +10,13 @@ text, so the identifier gates and the verbatim gate never looked at it
 Two kinds of finding:
   TERM   a literal from the personal layer's activity-fact-terms.txt (program names, area codes, file-name
          stems) on an added line or in the message -> BLOCK (exit 1). The literal is never printed.
-  FACT   an event word (応募 / 差し戻し / 採択 / 評点 / 種目 / 推薦書 ...) on the same line as a date
-         (YYYY-MM[-DD], YYYY 年[度]) or a count (N 種目 / 本 / 件 / 回 / 箇所) -> WARN (exit 0) in the
-         commit hooks. General procedure text has neither, so the co-occurrence is the signal; a rule's own
-         creation date next to a review word also fires, which is why this kind only warns.
+  FACT   an event word (応募 / 差し戻し / 採択 / 評点 / 種目 / 推薦書 / 出張 / 謝金 / 受診 ...) on the same line
+         as a date (YYYY-MM[-DD], YYYY 年[度], or a relative time such as 3 週後 / 翌月) or a count (N 種目 / 本 /
+         件 / 回 / 箇所) -> WARN (exit 0) in the commit hooks. General procedure text has neither, so the
+         co-occurrence is the signal; a rule's own creation date next to a review word also fires, which is why
+         this kind only warns. A provenance marker (origin: / 起源 / 実測 / 実例 / 初出) directly followed by a
+         date is a FACT even without an event word (2026-09-14: the house style put "when / which form / how
+         many prints" right there), unless the date is the rule's own (追記 / 新設 / 版 next to it).
 The inventory (--scan-tree) reports FACT lines that are not in the ack list (hash of path + normalized line)
 and exits 1 if any are new, so an accepted line is decided once.
 
@@ -44,8 +47,24 @@ ACK_FILE = "activity-facts-ack.txt"
 # were measured too noisy on the public repos' history (rule creation dates, "user 指摘", "決定超過") and are left out.
 ACTIVITY = ("応募", "再提出", "差し戻", "差戻", "採択", "不採択", "採否", "交付", "内定", "評点", "赤入れ", "種目",
             "調書", "査読依頼", "公募", "萌芽", "学術変革", "学変", "学振", "科研費", "基盤研究", "基盤(", "基盤B",
-            "挑戦的研究", "推薦書", "学内〆")
+            "挑戦的研究", "推薦書", "学内〆",
+            # 2026-09-14 second review: dated events outside grants are the same class (trips, honoraria,
+            # review invitations, grading, medical visits, household ledgers). Generic procedure words
+            # (様式 / 審査 / 査読 / 委員) stay out; the provenance-marker rule below covers their dated origins.
+            "出張", "旅費", "謝金", "査読招待", "委嘱", "成績", "受診", "家計", "口座")
 DATE_RE = re.compile(r"(?<![0-9])20[0-9]{2}(-[01][0-9](-[0-3][0-9])?|\s?年度?|(?=\s?(実測|実例)))")
+# a relative time is a date too: "3 週後" / "11 日埋もれ" / "1.5 ヶ月超過" / 翌月 (2026-09-14). 前年 / 昨年 are left
+# out: procedure text says 前年の… generically ("read last year's red ink") and they fired on rules, not events.
+REL_TIME_RE = re.compile(r"(?<![0-9.])[0-9]+(\.[0-9]+)?\s?(日|週間?|か月|ヶ月|カ月)\s?(後|前|超過|遅れ|埋もれ|経過)|翌日|翌週|翌月")
+# a provenance marker directly followed by a date, on a line that names an administrative / personal event
+# (form, trip, honorarium, office remark, review request, grading, visit ...), is a fact whatever the narrow
+# vocabulary above says: the house style wrote "origin: YYYY-MM-DD <which form / what the office said>"
+# (2026-09-14; measured on the public docs: with the event filter 103 lines, 81 of them facts; without it
+# ~280 technical provenance lines such as "実測 YYYY-MM-DD: the relay has no locking"). A rule's own date
+# ("追記" / "新設" / "版" right after it) is not an event.
+PROVENANCE_RE = re.compile(r"(origin|起源|実例|初出|実測)\s*[:：=]?\s*[(（]?\s*20[0-9]{2}|[(（]\s*20[0-9]{2}(-[0-9]{2}){0,2}\s*(実測|実例)")
+PROVENANCE_EVENT_RE = re.compile(r"様式|出張|旅費|謝金|招待|勧誘|依頼|成績|講義|受診|診断書|家計|口座|委員|会議|窓口|事務|申請|提出|印刷|刷り|〆|締切|審査|査読|推薦|応募|学生")
+RULE_DATE_RE = re.compile(r"追記|新設|制定|版|hoist|昇格|移動|改訂|split|renumber")
 COUNT_RE = re.compile(r"(?<![0-9.])[0-9]+\s?(種目|本|件|回|箇所|度)")
 TEXT_SUFFIXES = (".md", ".markdown", ".py", ".sh", ".txt", ".yaml", ".yml", ".json", ".toml", ".tex", ".html", ".js", ".ts")
 
@@ -92,8 +111,14 @@ def classify(line, terms):
     word = next((w for w in ACTIVITY if w in line), None)
     if word:
         marks = [m for m, rx in (("date", DATE_RE), ("count", COUNT_RE)) if rx.search(line)]
+        if "date" not in marks and REL_TIME_RE.search(line):
+            marks.insert(0, "date")
         if marks:
             kinds.append(f"FACT:{word}+{'+'.join(marks)}")
+    if not any(k.startswith("FACT:") for k in kinds):
+        prov = PROVENANCE_RE.search(line)
+        if prov and PROVENANCE_EVENT_RE.search(line) and not RULE_DATE_RE.search(line[prov.end():prov.end() + 30]):
+            kinds.append("FACT:来歴+date")
     return kinds
 
 
@@ -267,6 +292,12 @@ def selftest():
            and classify("MOCKPROGRAMS", terms) == [] and classify("S-1_MOCKPROGRAM_x.pdf", terms) == ["TERM"])
     expect("non-ASCII term is a substring match", classify("テスト制度の様式", terms) == ["TERM"])
     expect("decimal is not a count", classify("閾値 0.5 本の線で" + ev, terms) == [])
+    prov_mark = "ori" + "gin: "
+    expect("provenance marker + date -> FACT without an event word",
+           classify(prov_mark + "20" + "31-05-14 の会議で発覚", terms) == ["FACT:来歴+date"])
+    expect("provenance marker + the rule's own date -> nothing", classify(prov_mark + "20" + "31-05-14 追記", terms) == [])
+    expect("relative time + event word -> FACT", classify("3 週後に" + ev + " を出した", terms) == ["FACT:" + ev + "+date"])
+    expect("dated event outside grants -> FACT", (classify("20" + "31-06 の出" + "張で謝" + "金を受けた", terms) or [""])[0].startswith("FACT:"))
     diff = "diff --git a/x.md b/x.md\n+++ b/x.md\n@@ -0,0 +1,2 @@\n+" + dated + "\n+一般の手順\n"
     expect("added_lines keeps path and line numbers", added_lines(diff) == [("x.md", 1, dated), ("x.md", 2, "一般の手順")])
     lines = []

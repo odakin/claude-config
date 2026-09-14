@@ -119,7 +119,7 @@ reminder は declared skip の**予定された自然減衰**であって、 新
 opt-out list の両方 — 後者にしか痕跡が無い決着もある (= class 単位の opt-out は個別 task を
 作らずに終わることがある)。
 
-初出: 査読招待 2 件を「未応答、 受ける/断るを決めた方がよい」 と報告したが、
+初出: 未応答の査読招待を「受ける/断るを決めた方がよい」 と報告したが、
 1 件は前日に user が「無視でいい」 と declared skip 済 (= task 台帳に status 完了で記録)、
 もう 1 件は 3 週間前に class ごと opt-out 済 (= surface 設定の opt_out_senders に登録) だった。
 どちらも直前の session で自分が関与した決定ではなく、 台帳を引けば 1 grep で分かった。

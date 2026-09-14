@@ -239,8 +239,8 @@ related_files:
 
 同区分内で複数申請を順 review する時、 **1 件目の criteria を 2 件目に無批判 transfer する反射**が起きる。 例:
 
-- (1 件目) = phenomenology 申請 → 「実験 cross-check」 が valid criteria
-- (2 件目) = pure theory 申請 → 「実験 cross-check」 を持ち込んで低い評点を出す ← **category error**
+- 先の申請が phenomenology → 「実験 cross-check」 が valid criteria
+- 次の申請が pure theory → 同じ「実験 cross-check」 を持ち込んで低く評価してしまう ← **category error**
 
 各申請を **独立 evaluate** する。 申請性質を identify した上で適切な framework を選ぶ。 これは [`convention-design-principles.md §4 (= #orient-before-act)`](../docs/convention-design-principles.md#orient-before-act) の applied form。
 
