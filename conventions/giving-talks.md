@@ -15,7 +15,9 @@ This is an **own-words distillation** of **Robert Geroch, "Suggestions For Givin
 arXiv:gr-qc/9703019** (an essay of roughly 4500 words; written ~1973, posted to arXiv in
 1997). It tries to capture every point he makes, reorganized as a working checklist — but
 it is a summary, not the original text. For his exact wording and full reasoning, read the
-source: https://arxiv.org/abs/gr-qc/9703019
+source: https://arxiv.org/abs/gr-qc/9703019. In particular, before building the plan of a talk,
+read his section II (about 400 words) rather than relying on §2 below: the digest is a
+checklist, not a substitute for the essay.
 
 ## Core principle
 
