@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき
 category: paper
-summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕 + **arXiv は source を公開する** = コメント除去・`.bbl`+`.bib`+`.bst` 同梱・元原稿と PDF テキスト一致を gate にした package 〔`scripts/arxiv-package.py`〕、 投稿画面 v1.5 の各段で見るもの、 package 作成後に原稿が動く race、 締切・公開時刻、 primary category と SCOAP3)、 投稿 checklist + **投稿後の status 追跡** (= ポータルの role 略語 AE/EIC/ADM の役割分担・status 階梯の読み方・共著者も自分の account の Co-Authored 欄で閲覧可〔2026-08-21 訂正〕・**著者向け status API は無い** = 中間 status はメールされず Author Center のみ・decision はメール + 定期実読 backstop の 2 重・Claude 操作ブラウザに user が login すれば Claude が直接読める・催促の宛先) 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
+summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕 + **arXiv は source を公開する** = コメント除去・`.bbl`+`.bib`+`.bst` 同梱・元原稿と PDF テキスト一致を gate にした package 〔`scripts/arxiv-package.py`〕、 投稿画面 v1.5 の各段で見るもの、 package 作成後に原稿が動く race、 締切・公開時刻、 primary category と SCOAP3、 **公開直後の引用依頼を journal 投稿の前に仕分ける** 〔個人名なしの宛名は名前検出に掛からない = arXiv 番号で検索〕)、 投稿 checklist + **投稿後の status 追跡** (= ポータルの role 略語 AE/EIC/ADM の役割分担・status 階梯の読み方・共著者も自分の account の Co-Authored 欄で閲覧可〔2026-08-21 訂正〕・**著者向け status API は無い** = 中間 status はメールされず Author Center のみ・decision はメール + 定期実読 backstop の 2 重・Claude 操作ブラウザに user が login すれば Claude が直接読める・催促の宛先) 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
 -->
 # Paper Submission Workflow (= 投稿ポータル経由の落とし穴と定型対処)
 
@@ -269,6 +269,14 @@ python3 scripts/arxiv-package.py compare-pdf <arXiv が組版した PDF> arxiv/v
 - 添付 = **arXiv が組版した PDF** (投稿した物そのもの) + **前回共著者に送った版からの latexdiff** (base の選び方 = [`research-email.md#diff-page-attachment`](research-email.md#diff-page-attachment))。 公開時刻は読み手の現地時刻で書き、 arXiv 番号は公開後の続報で送る。
 - 記録 = 投稿 ID・package の元 commit・category・license を project の記録に、 公開と番号の確認・続報を期限つき TODO に置く (人の記憶を carrier にしない)。
 
+### <a id="arxiv-citation-requests"></a>公開直後の引用依頼を、 journal に出す前に仕分ける
+
+- arXiv に載ると、 関連論文の著者から「この論文も引用を」 というメールが公開後の数日に来ることがある。 journal への投稿をその数日の後に置けば、 足すべき文献を referee が読む版に入れられる。
+- **拾い方**: 宛名が "Dear authors" のように個人名を含まないメールは、 本文中の自分の名前で拾う検出器に掛からない。 **arXiv 番号と題の語で受信箱を毎日 1 回検索する**。 論文に email を印字した著者にだけ届く分があるので、 共著者の受信分と突き合わせる。
+- **仕分け**: 本当に欠けている先行研究か、 関連の薄い宣伝かに分ける。 足すかどうかは著者が決める。 返信するなら「あなたの論文を引用した」 と告げる形 ("we cite your X") にせず、 相手の仕事の位置づけで書くか、 引用には触れない。
+- **版のずれ**: 文献を足すと arXiv の版と journal に出す版が食い違う。 replace するか (journal 投稿と同時か、 accept 後にまとめてか) を仕分けと一緒に決める。
+- **journal 投稿を共著者が担当するとき**: 受付と decision のメールは submitting author にしか届かない (§[post-submission-status](#post-submission-status))。 自分に通知が来ないことは未投稿の証拠にならない = 予定日の後に共著者から受付番号を受け取るまでを期限つき TODO に置く。
+
 ### 実例
 
 - 2026-07 のある arXiv v2 replace = v1 と同構成 (本文 tex + ref.bib + 非標準 bst + 図、 PDF 非同梱) で共著者に配布
@@ -347,6 +355,7 @@ Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Mana
    - Manuscript ID を SESSION.md 系に記録
    - 受領確認メールを共著者に転送 (arXiv なら組版 PDF + 前回送った版からの latexdiff、 公開時刻は読み手の現地時刻で = §[arxiv-coauthor-notice](#arxiv-coauthor-notice))
    - arXiv v2 upload zip を投稿担当共著者に配布
+   - **arXiv 公開から journal 投稿までの間に引用依頼を仕分ける** (arXiv 番号と題で毎日検索、 共著者の受信分と突き合わせ = §[arxiv-citation-requests](#arxiv-citation-requests))
    - **数週間後に Author Center で status を一度確認** し、 AE / EIC の顔ぶれと合わせて共著者に共有 (§[post-submission-status](#post-submission-status)。 共著者も Co-Authored 欄で見られるが decision メールは submitting author にしか来ない)
    - **定期実読の backstop TODO を立てる** (= 2 週おき、 decision メール着信で close。 §[status-automation](#status-automation))
 
