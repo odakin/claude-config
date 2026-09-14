@@ -761,6 +761,10 @@ sections:
     legacy: "8.51"
     level: 3
     title: "8.51 検出器に鳴らされた文が欠陥とは限らない — 規約どおりの使用なら、 直すのは検出器で、 原文ではない"
+  - id: literal-anchor-detector
+    legacy: "8.52"
+    level: 3
+    title: "8.52 目印の文字列で重複を探す検出器は、 目印と「参照あり」 の判定の両方が黙って死ぬ — 登録簿そのものを機械で点検する"
   - id: changelog
     level: 2
     title: "変更履歴"
