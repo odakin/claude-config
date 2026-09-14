@@ -122,6 +122,7 @@
 - **[pdf-cleaner.html](pdf-cleaner.html)** — clipboard-cleaner.py のブラウザ版 fallback（非 macOS / pbcopy なし環境用、整形ロジックの正本は clipboard-cleaner.py で両実装を同期）
 - **[pdf-print-preflight.py](pdf-print-preflight.py)** — 印刷直前の PDF preflight — 「画面で見えた」 を印刷の保証にしない機械 gate (office-automation.md#print-preflight)。
 - **[pdf-side-by-side.py](pdf-side-by-side.py)** — 2 つの PDF の同じ箇所を左右に並べた比較頁を作る: 案を決めるのは source でなく組版された姿。
+- **[pdf-to-text.py](pdf-to-text.py)** — PDF の本文を grep できる plain text にする — 合字・行末ハイフン・柱・頁番号を直し、直した数を報告する。--selftest 内蔵 (network 不要)。
 - **[pdf_form_fill.py](pdf_form_fill.py)** — 雛形 PDF への直接印字エンジン（library。anchor 印字 / NFKC 照合 / #+ redact / font subset / 内蔵検証 / 600dpi ラスタ化、office-automation.md#pdf-prefill-direct の汎用実装。単票向け — 派生 sheet 数式導出付き workbook は excel-osascript 経路）
 - **[permission-dialog-audit.py](permission-dialog-audit.py)** — Claude desktop の承認 dialog を app log から集計し、 transcript と突合して main / sub-agent に振り分け、 1 件ごとに原因を切り分ける
 - **[pin-claude-cwd.sh](pin-claude-cwd.sh)** — Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
