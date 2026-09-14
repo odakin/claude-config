@@ -2715,6 +2715,7 @@ config payload 版で、 §8.34 が分岐 (= marker の有無) を扱うのに�
 
 **参照実装**: [`scripts/check-sot-drift.py`](../scripts/check-sot-drift.py) (scan + 点検 `audit_registry`、 registry は呼ぶ側が渡す) と
 [`scripts/sot-registry-add.py`](../scripts/sot-registry-add.py) (登録前に同じ点検を通し、 落ちたら何も書かない)。
+既存 topic の移し替え (目印の差し替え・参照や除外の出し入れ・承認) は [`scripts/sot-registry-edit.py`](../scripts/sot-registry-edit.py) (行単位で書き換えて comment を保ち、 書き換え後に読み直して照合する)。
 
 **適用の見分け方**: 検出器の finding が長く 0 件のまま、 除外一覧だけが増えている。 または、 登録から一度も鳴ったことがない topic がある。
 
