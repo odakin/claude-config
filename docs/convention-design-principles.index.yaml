@@ -757,6 +757,10 @@ sections:
     legacy: "8.50"
     level: 3
     title: "8.50 検出器が読む「人が書く一覧」 は育たない — 設定も SoT から導出し、 追随と死活を別々に検査する"
+  - id: flagged-text-is-not-the-defect
+    legacy: "8.51"
+    level: 3
+    title: "8.51 検出器に鳴らされた文が欠陥とは限らない — 規約どおりの使用なら、 直すのは検出器で、 原文ではない"
   - id: changelog
     level: 2
     title: "変更履歴"
