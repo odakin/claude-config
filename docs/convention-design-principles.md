@@ -2713,6 +2713,9 @@ config payload 版で、 §8.34 が分岐 (= marker の有無) を扱うのに�
 ものだけ撤去する (履歴の file 形は予防として残す)。 登録簿に注釈 comment が多いなら、 YAML を読み書きし直さず
 行単位で書き換え、 書き換え後に読み直して期待どおりかを照合する (読み書きし直すと comment が消える)。
 
+**参照実装**: [`scripts/check-sot-drift.py`](../scripts/check-sot-drift.py) (scan + 点検 `audit_registry`、 registry は呼ぶ側が渡す) と
+[`scripts/sot-registry-add.py`](../scripts/sot-registry-add.py) (登録前に同じ点検を通し、 落ちたら何も書かない)。
+
 **適用の見分け方**: 検出器の finding が長く 0 件のまま、 除外一覧だけが増えている。 または、 登録から一度も鳴ったことがない topic がある。
 
 ## <a id="changelog"></a>変更履歴
