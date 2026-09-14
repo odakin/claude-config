@@ -39,6 +39,7 @@
 - **[check-inbound-refs.py](check-inbound-refs.py)** — safety net for restructuring claude-config (layer 1).
 - **[check-latex-crossrefs.py](check-latex-crossrefs.py)** — Find bare parenthetical cross-references and misplaced \labelcref numbers.
 - **[check-latexdiff-math-markup.py](check-latexdiff-math-markup.py)** — Gate against latexdiff silently dropping equation changes (2026-09-08).
+- **[check-ledger-merge-loss.py](check-ledger-merge-loss.py)** — merge / rebase で台帳の entry が黙って消えていないかを id で照合する。
 - **[check-legacy-append-only.py](check-legacy-append-only.py)** — the `legacy` forwarding map in a slug index must be
 - **[check-markup-artifacts.py](check-markup-artifacts.py)** — 赤入れ・校正済み現物の台帳漏れ / 未読 / 書き起こし消失を surface（config 駆動、スキャンは grep に掛からないので file 単位で持つ）
 - **[check-md-anchors.py](check-md-anchors.py)** — markdown の `#anchor` 付き link を PATH で解決し、着地先の file にその anchor が実在するかを検査する (repo 内の自己参照も対象、 basename 一致でなく path 解決なので同名 file が複数 repo にあっても取り違えない)。--selftest 内蔵。
