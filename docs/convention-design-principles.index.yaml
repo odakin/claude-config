@@ -337,6 +337,14 @@ sections:
     legacy: "8.46"
     level: 3
     title: "8.46 誤検出を持つ意味の検出器は、 承認を「行の中身の hash」 に縛って固定する (2026-09-14)"
+  - id: deadline-in-the-referent
+    legacy: "8.47"
+    level: 3
+    title: "8.47 期限が本文に無く、参照先の予定にしかない義務 — 日付 detector の構造的圏外 (2026-09-14)"
+  - id: mention-implies-triage
+    legacy: "8.48"
+    level: 3
+    title: "8.48 自分の出力で言及した item は、その turn で triage を終える — 言及は認識の証拠 (2026-09-14)"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
