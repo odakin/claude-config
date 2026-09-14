@@ -40,6 +40,7 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 | 症状 (観察できること) | 真因 | 対処 (→ slug) |
 |---|---|---|
 | 印刷物を user に見せるたび別の欠陥が出て刷り直しが続く | 各修正後の検証が直前の症状にだけ狭まる + 「画面で見えた」 を印刷の保証にしている | `pdf-print-preflight.py` + crop 目視 + 全頁 PNG を user に → [`print-preflight`](#print-preflight) |
+| `lp -o media=A4` で送ったのに**別サイズの紙 (B5 等) で出る** | 本体 (操作パネル) の用紙サイズ設定が job の指定より優先された | 刷る前に本体の用紙設定とトレイの紙を user に確認 → [`print-preflight`](#print-preflight) 5. |
 | overlay した電話番号・メールが罫線に被る / 隣セルにはみ出す / 数字だけ浮いて見える | ラベル右端基準の配置、 CJK と数字の baseline 差 | 縦罫線 (`get_drawings`) を anchor、 数字は行中心 → [`pdf-overlay-anchoring`](#pdf-overlay-anchoring) |
 | PyMuPDF で追記した日本語/数字が**画面では正常・印刷で文字化け / 位置ずれ** | `japan`/`helv` 組み込み font は glyph 非埋め込み = printer に代替 font が無い | 印刷用は 600dpi **RGB** raster 版を刷る (font 埋め込みでも同 printer で化けた) → [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake) |
 | 値を入れた docx 様式が **1 頁→2 頁にはみ出す**、 折り返すのは触っていない行 | autofit 表は 1 セルの長い値で grid 列幅を組み替え、 別行のセルが狭まる (`tblLayout fixed` でも直らず) | 可変長値・○・認印は overlay、 溢れる 1 行だけ 9.5pt、 雛形 render と y 座標突合 → [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow) |
@@ -3516,8 +3517,11 @@ origin: 海外出張願 (人事課 docx 様式) — 複数回の変換試行で 
 2. **位置**: overlay した値 (電話・メール・氏名・○・認印) の周辺を **150-220 dpi の crop 画像で目視** — 罫線に被っていないか、 セルの中か、 行の縦中心か。 機械 gate では検出できない。
 3. **全体**: 80 dpi の全頁 render を 1 度見る (= 2 頁目の存在・空白・ブロックの落ちを拾う)。 **user が remote なら、 この全頁 PNG を chat に送ってから刷る** (= 紙を見られない人に代わって画面で承認してもらう)。
 4. **1 枚だけ刷って止まる**: 複数 doc を同時投入しない。 1 枚目の結果 (user 報告) を待ってから次。
+5. **用紙**: `lp -o media=A4` (や PageSize) は**本体の用紙設定を上書きする保証にならない** — 本体 (操作パネル) の用紙サイズが別サイズのままだと、 A4 指定の job がその紙に刷られた (実測)。 刷る前に「本体の用紙サイズ設定」 と「トレイの紙」 の両方を user に確かめてもらう。 ⚠️ 違うサイズで出たと言われたら、 原因を推測で説明しない (= 「プリンタは紙を見ない」 等の未検証の断定をしない)。 本体の設定を見てもらうのが先。
 
-**なぜ規律でなく gate か**: 今回の 4 失敗は全て「前の修正で安心して次の罠を踏む」 連鎖 (= 修正ごとに検証 scope が前の症状だけに狭まる)。 gate を固定 list にしておけば、 毎回同じ 4 点を通る。 個人層は `lp` を含む Bash に PreToolUse hook を掛けて本 script を強制できる。
+**Web ページを PDF 化したものも gate の対象**: headless browser の print-to-PDF (Chromium 系の `--print-to-pdf` 等) は文字を **Type3 font** で書くことがあり、 1. の font 検査で FAIL する (実測)。 PyMuPDF で描いた PDF でなくても、 FAIL なら同じく raster 版を刷る。
+
+**なぜ規律でなく gate か**: 今回の 4 失敗は全て「前の修正で安心して次の罠を踏む」 連鎖 (= 修正ごとに検証 scope が前の症状だけに狭まる)。 gate を固定 list にしておけば、 毎回同じ点を通る。 個人層は `lp` を含む Bash に PreToolUse hook を掛けて本 script を強制できる。
 
 ## <a id="single-gray-level"></a>グレーは 1 段階に固定する — 薄さは色でなく線幅で出す (2026-09-12)
 
