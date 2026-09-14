@@ -42,7 +42,14 @@ cat > "$MOCK_LAYER/repos.md" << 'REPOS_EOF'
 | repo | desc | visibility |
 |---|---|---|
 | `mockpriv-foo/` | mock private repo | private |
+| `odakin-prefs/` | allowlisted (例外 list) | private |
+| `email-office/` | allowlisted (例外 list) | private |
+| `health/` | allowlisted (例外 list) | private |
+| `agent-board/` | allowlisted (例外 list) | private |
+| `space-rock-diner/` | allowlisted (例外 list) | private |
 REPOS_EOF
+# ↑ 例外 list の名前も「非公開」として並べる。並べないと allowlist の test は
+#   allowlist を外しても通ってしまう (= 2026-09-14 に実測、それまでの allowlist test は飾りだった)
 
 # sensitive-terms.txt: ASCII (long + short) + 非 ASCII の三種
 cat > "$MOCK_LAYER/sensitive-terms.txt" << 'TERMS_EOF'
@@ -212,6 +219,10 @@ expect_pass "pass-tier-c-allowlist-health-as-english" \
   "run a health check on every repo and observe its health"
 expect_pass "pass-tier-c-allowlist-agent-board" \
   "Discord to agent-board bridge engine"
+
+# 2026-09-14 追加。企画リポと同名の公開 org / サイト URL を公開サイト側に書けることを固定する
+expect_pass "pass-tier-c-allowlist-space-rock-diner" \
+  "moved to https://space-rock-diner.pages.dev/ from space-rock-diner.github.io"
 
 # 編集時の hook (hooks/public-leak-guard.sh) と本 runner は同じ email allowlist を持つ。
 # 2026-09-12: runner だけ 2026-08-28 に例示 domain を足し、 hook は古いまま test fixture の
