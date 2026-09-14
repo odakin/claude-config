@@ -345,6 +345,10 @@ sections:
     legacy: "8.48"
     level: 3
     title: "8.48 自分の出力で言及した item は、その turn で triage を終える — 言及は認識の証拠 (2026-09-14)"
+  - id: hedge-scope-covers-only-generated-options
+    legacy: "8.49"
+    level: 3
+    title: "8.49 留保は自分が並べた選択肢の上にしか掛からない — 出所を疑う留保と、選択を疑う留保は別物 (2026-09-14)"
   - id: triage-and-subtraction
     legacy: "9"
     level: 2
