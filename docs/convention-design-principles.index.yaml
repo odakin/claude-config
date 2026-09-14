@@ -749,6 +749,10 @@ sections:
   - id: fabrication-detection
     level: 3
     title: "適用の見分け方"
+  - id: coarse-entry-hides-its-contents
+    legacy: "8.40"
+    level: 3
+    title: "8.40 粗い 1 件が中身を隠す — 「埋まっている」 は「検討した」 ではない"
   - id: changelog
     level: 2
     title: "変更履歴"
