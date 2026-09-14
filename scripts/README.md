@@ -152,6 +152,7 @@
 - **[surface-discord-bot-dm.py](surface-discord-bot-dm.py)** — Discord bot DM channel の未記録 message surface engine（daily fetcher が吐く JSON と user 側 ledger（text/YAML 内 messageId）の diff で「bot DM に返事が来ても誰も読まない」 死角を埋める汎用 CLI、 個別環境への依存ゼロ＝引数で bot ID / json-dir / ledger-dir / counterpart map / title を渡す、 finding 0 件 silent、 --selftest 内蔵。 personal layer に thin wrapper を 1 つ置いて呼ぶ、 conventions/discord-bot.md#bot-dm-surface）
 - **[sync-hook-settings.sh](sync-hook-settings.sh)** — 層1 hook の配線 (symlink + settings.json の entry) を hooks/settings-entries.json に揃える (無いものを足すだけ・冪等)
 - **[sync-hook-settings.test.sh](sync-hook-settings.test.sh)** — 層1 hook の配線 (symlink + settings の entry) を揃える script の test
+- **[sync-permission-rules.py](sync-permission-rules.py)** — settings.json の permission rule を spec (JSON) の宣言どおりに揃える (冪等)
 - **[test_codex_mail_install.py](test_codex_mail_install.py)** — Installer tests run only below temporary directories, never real Codex home.
 - **[test_reviewed_mail.py](test_reviewed_mail.py)** — Network-free adversarial checks of the reviewed-reply transaction.
 - **[test_reviewed_mail_cli.py](test_reviewed_mail_cli.py)** — Offline checks: CLI authorization shape, pagination, full source extraction.
@@ -177,6 +178,7 @@
 - **[lib/office-staging.sh](lib/office-staging.sh)** — Office (Word / Excel / PowerPoint) automation の「事前 grant 済み staging dir」 helper (sourceable lib、 macOS App Sandbox の folder-grant dialog を design-out、 office-automation.md#office-pregranted-staging-dir)
 - **[lib/office-staging.test.sh](lib/office-staging.test.sh)** — office-staging.sh + office_staging.py の self-test (hermetic、 Office 不要、 fake HOME)
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
+- **[lib/permission_rules.py](lib/permission_rules.py)** — settings.json の permission rule を宣言した形に揃える (engine)
 - **[lib/run_log.py](lib/run_log.py)** — 検査 script の出力を「証跡 file」 として残す helper (= 後から「いつ何を出したか」 を再構成できるようにする)。
 - **[lib/staged-conflict-markers.sh](lib/staged-conflict-markers.sh)** — merge conflict marker の staged-content gate (sourceable lib)
 - **[lib/staged-conflict-markers.test.sh](lib/staged-conflict-markers.test.sh)** — staged-conflict-markers.sh の self-test (hermetic)
