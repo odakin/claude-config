@@ -49,20 +49,37 @@ sit through other people's talks.
 
 ## 2. The plan: three or four messages
 
-- **Organize the whole talk around three or four "messages"** (three is slightly better). A
-  message is one important point with its supporting arguments and examples, or a cluster of
-  closely related remarks. Each becomes, in effect, its own small talk inside the talk.
-- **Give each message a title** (e.g. "The initial-value formulation of general relativity")
-  and **a one-sentence, non-technical summary** that captures its essence.
-- **Three-or-four is a hard cognitive limit.** Audiences cannot retain more than that many
-  essential points — do not exceed it.
-- **Expect to recast your material.** Your private thinking is a web of many small,
-  interconnected points; a talk is three or four big ones. Getting to that form usually means
-  dropping detail and connections, and sometimes adding new material so each message stands
-  complete on its own.
-- The hard balance: each message must be specific and cohesive enough to be memorable as a
-  unit, yet general enough that together they tell your whole story. Draft several
-  organizations and pick the strongest to refine.
+Geroch's plan is a *division* of what you want to say, made in this order:
+
+1. **Start from everything you want to say.** In your own mind the subject is "innumerable
+   interconnected small points"; the plan begins with that inventory, not with an outline.
+2. **Divide it into three or four messages.** Three is perhaps slightly better than four, and
+   either is much better than any other number: an audience will not come away from any talk
+   with more than three or four essential points, and with that few they can grasp and hold the
+   structure of the whole talk. A message is, for example, one important point together with its
+   supporting arguments and examples, or a collection of remarks that share some common
+   property. Each message will eventually become a short talk in its own right; the more
+   cohesive each one is, the better.
+3. **For each message, write a title and a non-technical summary of about a sentence.** The
+   title names the message's subject (Geroch's example: "The Initial-Value Formulation of
+   General Relativity"). The summary states the *content* of the message in plain words and is
+   as long as that takes. His example is one sentence of three clauses that carries the whole
+   message: "The 'initial time' becomes, in general relativity, a spacelike three-dimensional
+   surface; the 'state of the gravitational field at that time' becomes a pair of tensor fields
+   on this surface, subject to certain constraint equations; the 'evolution of the system' is
+   then described by equations which give the change in these fields under changes in the
+   spacelike surface." A slogan or a punch line is not this summary. The summary is reused
+   twice: it is the few descriptive sentences you give per message when announcing the
+   structure (§3b), and the few-sentence summary you say aloud when closing the message (§4).
+4. **Expect to recast.** The division is almost always essentially different from the way you
+   think about the subject: you omit details you would have liked to say, omit connections
+   between points, and add material to fill out a message.
+5. **The hard part is the balance.** Each message must be specific and cohesive enough to be
+   treated, and remembered, as a unit, yet general enough that taken together the messages
+   tell your story.
+6. **Make several, hopefully very different, organizations, then select the best for
+   refinement.** "Different" means different divisions of the material into messages (by
+   object, by question, by history, ...), not the same three messages in another order.
 
 ## 3. The introduction (about one-fifth of the talk)
 
@@ -78,8 +95,8 @@ interesting? What has it taught us about nature? Where do things stand, and wher
 heading? An optimistic framing of the future builds enthusiasm.
 
 **(b) Announce the structure.** Tell them the three or four messages up front — each title plus
-a few descriptive sentences. Put the titles where everyone can see them, and check them off as
-you deliver them. Explain how the messages relate and how together they sum up the subject,
+a few descriptive sentences (the non-technical summaries written in the plan, §2 step 3). Put
+the titles where everyone can see them, and check them off as you deliver them. Explain how the messages relate and how together they sum up the subject,
 and state the general conclusions in advance if you can. In effect: give a short talk about
 the structure of your talk.
 
@@ -87,8 +104,9 @@ the structure of your talk.
 
 - **Mark every message boundary explicitly.** Open each message by restating its title, saying
   you are starting it, and previewing its content ("We now begin our discussion of..."). Close
-  it by saying it is finished and giving a three-or-four-sentence non-technical summary ("To
-  summarize,..."). These closing summaries matter especially: they let the audience consolidate
+  it by saying it is finished and giving your few-sentence non-technical summary — the one
+  written in the plan (§2 step 3) — ("To summarize,..."). These closing summaries matter
+  especially: they let the audience consolidate
   what you said, and let anyone who got lost rejoin the thread. Make transitions between
   messages unmistakable.
 - **Keep re-orienting the audience.** Periodically restate the overall plan, where you are in
@@ -194,6 +212,11 @@ Lessons from preparing and delivering a 2026 conference talk, kept separate from
   merely raises and defers to future work. An over-promise discovered at this stage is handled
   with one honest sentence in the talk plus a prepared Q&A answer; discovered on stage, it is
   a disaster.
+- **A punch line is not a message summary, and a reordering is not a different organization.**
+  If a plan comes back with one-line slogans where the summaries should be, or with
+  "alternative organizations" that are the same three messages permuted, §2 has not been
+  followed: rewrite each summary with the message's content in it (Geroch's initial-value
+  sentence is the yardstick), and make the alternatives divide the material differently.
 - **After the talk, turn recurring Q&A questions into a backup slide for the published deck.**
   A question asked independently by several audience members maps the deck's weakest
   load-bearing claim — often an unstated order-of-magnitude assumption. Write the one-page
