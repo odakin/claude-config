@@ -4,12 +4,12 @@
 MCP の create_event が使えない session (= server 未接続 / bulk) と、
 学会の聴講計画のように **数十 event を一度に組み立てる** 用途のための CLI。
 
-設計動機 (2026-09-14、 JPS81 会期中に使い捨て script を 14 本書いた反省):
-  - 毎回 OAuth の load → build → insert を書き直していた (= 同じ 20 行の写経)
-  - **削除に dry-run が無い** ものを毎回その場で書いており、 保護対象 (他の予定・
-    終日 event) を消す事故と紙一重だった
-  - 「空き時間」 の計算を毎回その場の ad hoc なコードでやっていて、
-    block event が窓を占有する問題 (= 下記 gaps の docstring) に気づくのが遅れた
+設計動機 (= 実測。 この種の操作は使い捨て script で書き散らされやすい):
+  - OAuth の load → build → insert が毎回同じ 20 行の写経になる
+  - **削除に dry-run が無い** ものをその場で書くと、 保護対象 (他の予定・終日 event)
+    を巻き込む事故と紙一重になる
+  - 「空き時間」 の計算を ad hoc に書くと、 block event が窓を占有する問題
+    (= 下記 gaps の docstring) に気づけない
 
 ⚠️ **layer 1 なので calendar id も token path も持たない**。 呼び出し側 (= 個人層) が
    env で渡す。 個人の calendar id は layer 3 の SoT に置く (= 公開 repo に焼かない)。
@@ -21,13 +21,13 @@ env:
   CLAUDE_CALENDAR_TZ         timeZone (default Asia/Tokyo)
 
 使い方:
-  calendar-events.py list   --from 2026-09-14 --to 2026-09-18
-  calendar-events.py gaps   --from 2026-09-14 --to 2026-09-18 \
+  calendar-events.py list   --from 2030-01-10 --to 2030-01-14
+  calendar-events.py gaps   --from 2030-01-10 --to 2030-01-14 \
                             --windows 09:00-12:30,13:30-17:30
-  calendar-events.py dups   --from 2026-09-14 --to 2026-09-18
+  calendar-events.py dups   --from 2030-01-10 --to 2030-01-14
   calendar-events.py add    --spec talks.yaml [--apply]
-  calendar-events.py delete --from 2026-09-14T14:45 --to 2026-09-15 \
-                            --match 'JPS' --protect '収録|会期' [--apply]
+  calendar-events.py delete --from 2030-01-10T14:45 --to 2030-01-11 \
+                            --match '学会' --protect '打合せ|会期' [--apply]
   calendar-events.py --selftest
 
 add / delete は **既定 dry-run**。 実行は --apply。
@@ -72,8 +72,8 @@ def compute_gaps(busy: list[tuple[int, int]], window: tuple[int, int]) -> list[t
 
     ⚠️ **これは「予定が入っていない時間」 であって「やることが無い時間」 ではない**。
     session 丸ごとを 1 event にした block が置いてあると、 その窓は busy 扱いになり
-    **窓の中の個別トークが候補検討の射程から丸ごと落ちる** (= 2026-09-14 に実際、
-    3 つの窓が sweep 射程外だった)。 学会の聴講計画のように「重なってもよいから内容で
+    **窓の中の個別トークが候補検討の射程から丸ごと落ちる** (= 実測で、
+    複数の窓が sweep 射程外だった)。 学会の聴講計画のように「重なってもよいから内容で
     選びたい」 用途では gaps を入口にせず、 **プログラム全体を走査**すること。
     正本 = conventions/jps-talk-submission.md#candidate-calendar-discipline
     """
@@ -99,8 +99,7 @@ def find_duplicates(items: list[dict]) -> list[tuple[str, list[str]]]:
     """(開始時刻, 会場, 要約) が同一の event を重複として返す。
 
     「同じ時刻に別の候補」 は重複ではない (= 選択肢)。 **完全に同じ講演が 2 件**だけを
-    重複とみなす (= 2026-09-14 に block を split した際、 元が単一トークの event を
-    二重に作った実例)。
+    重複とみなす (= block を split する際、 元が単一トークの event を二重に作りやすい)。
     """
     seen: dict[tuple, list[str]] = {}
     for e in items:
@@ -328,41 +327,41 @@ def selftest() -> int:
     check(compute_gaps([(300, 400)], w) == [(540, 750)], "T8: 窓外の予定は無視")
 
     items = [
-        {"id": "a", "start": "2026-09-16T16:30", "location": "E532", "summary": "X"},
-        {"id": "b", "start": "2026-09-16T16:30", "location": "E532", "summary": "X"},
-        {"id": "c", "start": "2026-09-16T16:30", "location": "E514", "summary": "Y"},
+        {"id": "a", "start": "2030-01-12T16:30", "location": "A101", "summary": "X"},
+        {"id": "b", "start": "2030-01-12T16:30", "location": "A101", "summary": "X"},
+        {"id": "c", "start": "2030-01-12T16:30", "location": "A102", "summary": "Y"},
     ]
     d = find_duplicates(items)
     check(len(d) == 1 and sorted(d[0][1]) == ["a", "b"], "T9: 完全同一のみ重複")
     check(all("c" not in ids for _, ids in d), "T10: 同時刻の別候補は重複でない")
 
     ev = [
-        {"id": "1", "start": "2026-09-14", "summary": "JPS 会期"},
-        {"id": "2", "start": "2026-09-14T14:30", "summary": "🎧 JPS 浦野"},
-        {"id": "3", "start": "2026-09-14T15:15", "summary": "🎧 JPS 金田"},
-        {"id": "4", "start": "2026-09-14T21:00", "summary": "宇宙ロック食堂 収録"},
+        {"id": "1", "start": "2030-01-10", "summary": "学会 会期"},
+        {"id": "2", "start": "2030-01-10T14:30", "summary": "🎧 学会 甲講演"},
+        {"id": "3", "start": "2030-01-10T15:15", "summary": "🎧 学会 乙講演"},
+        {"id": "4", "start": "2030-01-10T21:00", "summary": "夜の打合せ"},
     ]
-    kill, keep = select_for_delete(ev, match="JPS", protect=None, cutoff="2026-09-14T14:45")
+    kill, keep = select_for_delete(ev, match="学会", protect=None, cutoff="2030-01-10T14:45")
     kids = [e["id"] for e in kill]
-    check(kids == ["3"], "T11: cutoff 後の JPS のみ削除対象")
+    check(kids == ["3"], "T11: cutoff 後の一致分のみ削除対象")
     check("1" in [e["id"] for e, _ in keep], "T12: 終日 event は常に保護")
-    check("4" in [e["id"] for e, _ in keep], "T13: match 外 (収録) は保護")
+    check("4" in [e["id"] for e, _ in keep], "T13: match 外の別予定は保護")
     check("2" in [e["id"] for e, _ in keep], "T14: cutoff 前は保護")
-    kill2, _ = select_for_delete(ev, match=None, protect="収録", cutoff=None)
+    kill2, _ = select_for_delete(ev, match=None, protect="打合せ", cutoff=None)
     check("4" not in [e["id"] for e in kill2], "T15: protect 正規表現が効く")
 
-    b = build_event_body({"summary": "s", "start": "2026-09-14T10:00",
-                          "end": "2026-09-14T10:15"}, "Asia/Tokyo")
+    b = build_event_body({"summary": "s", "start": "2030-01-10T10:00",
+                          "end": "2030-01-10T10:15"}, "Asia/Tokyo")
     check(b["reminders"]["overrides"][0]["minutes"] == 0, "T16: 既定 reminder が入る")
     check("location" not in b, "T17: 任意欄は無ければ入れない")
     try:
-        build_event_body({"summary": "s", "start": "2026-09-14T10:00",
-                          "end": "2026-09-14T09:00"}, "Asia/Tokyo")
+        build_event_body({"summary": "s", "start": "2030-01-10T10:00",
+                          "end": "2030-01-10T09:00"}, "Asia/Tokyo")
         check(False, "T18: end<=start は ValueError")
     except ValueError:
         check(True, "T18: end<=start は ValueError")
     try:
-        build_event_body({"start": "2026-09-14T10:00", "end": "2026-09-14T10:15"}, "Asia/Tokyo")
+        build_event_body({"start": "2030-01-10T10:00", "end": "2030-01-10T10:15"}, "Asia/Tokyo")
         check(False, "T19: summary 欠落は ValueError")
     except ValueError:
         check(True, "T19: summary 欠落は ValueError")
