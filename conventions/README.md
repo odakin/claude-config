@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 108 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 111 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -81,6 +81,8 @@ layer 1 (public) のドメイン固有規約 108 file をカテゴリ別に列�
   - Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入口マップ** = 様式仕事に入るとき最初に開く単一 router (= 考え方→principles / 罠→automation の symptom-index / 権限→claude-code-permissions / skill vs 手動 / PDF 化 wrapper / **PDF 読み取り〔表は layout-aware 抽出 ladder、 plain get_text 禁止 = pdf-table-layout-aware-reading〕** / 記入後の機械監査〔diff-form-xlsx/docx〕/ e-Rad)。 中身は持たず全て pointer、 新規 office 関連 file の入口
 - **[photographed-document-transcription.md](photographed-document-transcription.md)** — スキャナを通していない「撮っただけ」 の紙 (手書き答案・ノート・書類) を大量にモデルで読んで構造化するとき + その読み取りを複数 session に分担するとき + 撮影した印刷資料から引用を起こして文章の根拠にするとき + 自分の文書に他人が手書きで朱を入れて返してきた PDF (差し戻し・添削・紙の査読票) を読むとき
   - 撮影写真の一括転記は「前処理 → 帰属確定 → 分担転記 → 統合 → 導出」 の 5 段。前処理を省くと薄い筆跡を読み違え、タイルをモデル入力上限より大きくすると解像度が却って落ちる。帰属は 2 つの独立集合の一致で裏付け、転記は誤記も含む verbatim + 判読不能 marker、分担は part file 経由で統合し SoT 重複を残さない。活字資料からの引用抽出も同じく「転記でなく生成」で、語の置換・要約・原文に存在しない引用の創作・典拠の年の創作が申告なしに混じる — load-bearing に使う前に 1 対 1 照合、見開き 1 枚は逐語照合に足りない、そして原典を持つ人が直してきたら基準点 (自分の生成物) の方を先に疑う。 他人の書き込みが載った文書 (差し戻し・添削) は別種で、 転記でなく「どこに在るか」 の列挙が主題 — 色領域 mask + 連結成分 crop で全頁走査し、 部分走査で「書き込み無し」 と断定しない
+- **[podcast-audio-finishing.md](podcast-audio-finishing.md)** — 収録を配信用の音声ファイルに仕上げるとき (ジングルを付ける・音量を揃える・書き出す) + 仕上げた回を聞いて「つなぎが雑音っぽい」「間が長い」と言われたとき + 音声の区間の長さや無音を数値で測るとき
+  - 配信用の仕上げは「測る → 揃える → 1 回だけ符号化 → 測り直して検査」を機械にし、耳でしか分からない所だけ人に聞く。音量はジングルも本編も同じ -16 LUFS / true peak -1 dBTP 以下 (Apple Podcasts の公式要件) に揃え、ピークは高いサンプリング周波数で掛けたリミッターで抑える。ffmpeg の alimiter は既定で出力を自動で持ち上げ、loudnorm は目標を満たせないと黙って音量を上下させるモードに切り替わる。本編の頭尾は短くフェードし、録音開始で切れた語の断片を削るかは聞き比べで決める。冒頭ジングルの後ろの長い無音は切る。区間の測定はファイルの頭から行う (途中から切り出すと先頭が無音に見える)
 - **[tts-review.md](tts-review.md)** — 長文ドキュメント (提案書・原稿・メール draft 等) を音声読み上げで校正したいとき
   - macOS `say` による長文の音声読み上げ校正 (= 日本語 voice の選択・WPM・数式記号 / 英略語の読み替え前処理・「聞いて初めてバレる不自然な日本語」 の self-review 用途。 office-automation.md から 2026-07-10 切り出し)
 
@@ -180,12 +182,16 @@ layer 1 (public) のドメイン固有規約 108 file をカテゴリ別に列�
   - Google Forms の `FB_PUBLIC_LOAD_DATA_` HTML scrape で entry id 抽出 (= Forms API は entry id を返さない)、 prefill URL は単 section form のみ動作 (多 section で section navigation 後に prefill 失効)、 完全自動化は Selenium/Playwright + cookie 経由、 + 回答者側の提出制約 (= file-upload form の domain 縛り account / 回答回数制限 = 再回答不可・訂正は別経路 / **提出前にリポへ snapshot 保存** / 「回答を編集」 link は設定依存、 #respondent-side-constraints)
 - **[google-url.md](google-url.md)** — Google サービスの URL をチャットや文書に書くとき
   - Google サービス URL 書式 (`/u/N/` 禁止 + `?authuser=<email>` 必須、 hooks/google-url-guard.sh で機械的強制、 GCP project 管理 URL もカバー、 #shared-link-usp = 受け取った共有リンク 〔`usp=sharing` 等〕 には authuser を足さない = §(d) 「他人に渡す URL からは削る」 の裏面で guard も対象外にしている、 ただし `/u/N/` は共有リンクでも flag)
+- **[inline-svg-illustration.md](inline-svg-illustration.md)** — サイトのロゴ・アイコン・挿絵を SVG のコードで描くとき + 同じ SVG を 1 ページに何枚も埋め込むとき + 「それっぽく見えない」「美味しそうに見えない」と言われたとき
+  - コードで描く絵は「描く → ラスタにして見る → 直す」を回して初めて形になる (macOS なら qlmanage で PNG 化できる)。何の絵か分かる決め手は、その物にしか無い特徴 (楽器なら型ごとのボディやヘッドの形、料理なら実物の盛り付けと照り) を実物から取ること。小さく表示したときに潰れる細部より、輪郭の特徴を優先する。同じ SVG を 1 ページに複数入れるときは id に接頭辞を付ける (重複 id だと、非表示の SVG にある定義を参照した絵が描かれなくなる)
 - **[paste-destined-plain-text.md](paste-destined-plain-text.md)** — Claude が書いた文面 / コマンドを user が手で貼り付けて実行・投稿する workflow を設計・実行するとき (= 貼り先が plain text 入力欄でも terminal でも)
   - 貼り付け先行きテキストの 3 層規律 (= ① authoring: 最終的に plain text 入力欄へ貼られる文面は中間 artifact 込みで最初から markdown 装飾ゼロ 〔「いま md/yaml に書いている」 は適用除外の理由にならない〕 / ② delivery: クリップボード直渡し 〔pbcopy 等〕 か code block、 rendered md 表示からのコピーは bold span ごとテキスト消失する事故源なので禁止 / ③ verification: 投稿後に read-back API で読み戻して draft と機械照合、 記録 commit はその後。 記号剥がれ 〔文は残る〕 / span 消失 〔文ごと消える〕 / 後続全損 〔最初の span 以降が全部消える〕 の 3 段階の悪性差 + 切断位置 fingerprinting 〔切断点と装飾境界の照合で経路確定〕 + chat に出す参考データも貼り付け素材)。 3 層は貼り先一般の framework = 貼り先が対話 zsh なら ① は shell-env.md の 2 規律 (行内 # / tilde) で最上位 mode は silent 成功、 共通 kernel = 機械生成 artifact を人間貼り付け用に書き直した瞬間に元の保証が消える ∴ 提示文面それ自体が検査対象
 - **[prototype-feedback.md](prototype-feedback.md)** — 外部からウェブアプリ・制作物・企画等の試用とコメントを頼まれ、スクリーンショット・QR・一時URLから実物を確認して返却文面を作るとき
   - 外部プロトタイプへのフィードバックを、原資料 evidence・案件状態 record・返却本文 feedback の3正本に分離する手順。QR復号は遷移許可と分け、実画面で観察範囲と未検証範囲を記録し、表示名から身元を復元せず、clipboard準備と送付確認を別状態として扱う。UI試用は中心価値・主要導線・失敗回復・永続性・アクセシビリティ・配布信頼性を点検する
 - **[researchmap.md](researchmap.md)** — researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
   - researchmap 固有の機構と gotcha — write 経路は実質 web UI のみ (公開 API は read-only・write API は利用申請制、#write-paths)、/settings/imports の json/csv/zip 一括インポート (#bulk-import)、論文は ORCID 連携で自動反映・手動登録は非 DOI 系と講演のみ (#orcid-autofeed)、DOI 取り込みボタンと CrossRef metadata の癖 (#doi-import)、類似データ確認画面の 4 択 (#duplicate-screen)、タイトル日本語必須 + 言語ペア validation と両方向の実務解 (英題のみ=同値焼き / 和文のみ=英語欄全空、#title-validation)、講演の会議種別の選び方 (#presentation-category)、radio は form_input 直接設定 (#radio-quirk)、混雑・公開 API cache lag (#congestion)、/mypage は他人の permalink であって自分のポータルではない (#mypage-permalink-trap)
+- **[static-site-form-backend.md](static-site-form-backend.md)** — 静的サイト (GitHub Pages 等) に投稿フォーム・お便り欄・問い合わせ欄を置くとき + Cloudflare Pages へ引っ越す / Pages Functions・D1・Turnstile を CLI で組むとき + GitHub Pages の旧 URL から新しい URL へ転送するとき
+  - 静的ホスティングは送られた内容を受け取れない。mailto は宛先を公開し、別ドメインのフォームサービスへの送信は結果をページ側で読めない (受け口がエラーでも「届いた」と表示してしまう実測)。同じサイトに関数を置ける Cloudflare Pages + Functions + D1 なら、成否を正しく表示できる。Pages は Workers と違い URL にアカウント名が入らない。GitHub 連携はリポ所有者のブラウザ許可が要り、Direct Upload で作ると後から Git 連携に変えられない。Turnstile は wrangler で作れ (challenge-widgets.write)、受け口は success・action・hostname を必須にして確認できなければ拒否する。自動操作のブラウザは Turnstile を通れないので最終確認は人が送る。GitHub Pages の旧 URL は配信元を転送用ブランチに切り替え、組み直しを依頼する
 - **[substack.md](substack.md)** — Substack 記事の入稿・notes/コメント回収をするとき + 購読している publication の記事を一覧・本文・有料全文・購読メールから取り込むとき
   - Substack 規約（入稿: Markdown→リッチテキスト変換手順 / 取得: notes・コメントの Gmail MCP + WebFetch 経由回収 / 購読記事の取り込み: 公開一覧 API の途中切れ・全文判定は CJK を字で数える・有料全文は browser session 再利用・購読メールの整形と抜粋配信、 道具 = scripts/substack-fetch.py）
 - **[ui-toggle-convention.md](ui-toggle-convention.md)** — UI panel 内の toggle group を設計するとき

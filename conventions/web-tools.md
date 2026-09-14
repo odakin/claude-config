@@ -312,3 +312,15 @@ frameset の app では空文字と ref 無しが返る。 読み書きは `java
 3. **メール添付経由**: user が自分宛に添付送信 → Gmail 系 MCP の attachment download で取得。
 
 **典型パターン**: SSO 保護の社内 groupware (掲示板 / ファイル管理) を logged-in browser session 越しに読むのは成功するが、 file 取得だけが上記 block で落ちる — 読み (get_page_text / find) と取得 (download) は別権限帯だと思って設計する。
+
+## <a id="browser-pane-input-quirks"></a>内蔵 Browser pane の操作の癖（キー・スクリーンショット・再読み込み）
+
+- **`computer` の `key` で送った Enter / Return が、ページに届かないことがある**（実測: textarea に改行が入らず、
+  `keydown` の記録自体が残らない）。ページ側の不具合と決める前に、`type` で改行文字 `"\n"` を送るか、
+  値を入れて `input` イベントを発火させ、**値を読み戻して**確かめる
+- **スクリーンショットが真っ白（灰一色）で返る**ことがある（ページ遷移・再読み込みの直後に続いた、実測）。
+  待っても直らないときは、見た目の確認を `javascript_tool` / `read_page` での要素の位置・状態の読み取りに切り替える
+- **`#` だけ違う URL への `navigate` はページを読み直さない**（古い版が表示されたまま）。作り直したページを確かめるときは
+  `location.reload()` を使う
+- **ロボット判定（Turnstile 等）は自動操作では通れない**（トークンが発行されない、実測）。**突破しようとしない**。
+  判定を通った送信の確認は人に頼む（[`static-site-form-backend.md#turnstile`](static-site-form-backend.md#turnstile)）

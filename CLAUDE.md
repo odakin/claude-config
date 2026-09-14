@@ -66,6 +66,7 @@ claude-config/
 │   ├── hook-authoring.md                   # Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき
 │   ├── identity-in-config.md               # config file に ID/PII (Discord ID 等) を置く設計をするとき
 │   ├── indico-abstract-submission.md       # Indico (CERN 等) の会議に abstract 投稿・参加登録・支払いを進めるとき、会議の実績やアカウント重複を確認するとき
+│   ├── inline-svg-illustration.md          # サイトのロゴ・アイコン・挿絵を SVG のコードで描くとき + 同じ SVG を 1 ページに何枚も埋め込むとき + 「それっぽく見えない」「美味しそうに見えない」と言われたとき
 │   ├── install-failures.md                 # brew install を試行する前後 + source build 陥落時
 │   ├── japanese-email-honorifics.md        # 日本語メールで敬称 (様 / 皆様 / さん) を書くとき + 相手の文面を引用・要約して「ご/お」付き名詞を自分の文に持ち込むとき
 │   ├── jma-obsdl-download.md               # 気象庁の過去観測データ (時別値・日別値等) をスクリプトで一括取得したいとき
@@ -105,6 +106,7 @@ claude-config/
 │   ├── photographed-document-transcription.md # スキャナを通していない「撮っただけ」 の紙 (手書き答案・ノート・書類) を大量にモデルで読んで構造化するとき + その読み取りを複数 session に分担するとき + 撮影した印刷資料から引用を起こして文章の根拠にするとき + 自分の文書に他人が手書きで朱を入れて返してきた PDF (差し戻し・添削・紙の査読票) を読むとき
 │   ├── physics-notes.md                    # 物理・数理ノートを書くとき
 │   ├── physics-verification-cycle.md       # 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
+│   ├── podcast-audio-finishing.md          # 収録を配信用の音声ファイルに仕上げるとき (ジングルを付ける・音量を揃える・書き出す) + 仕上げた回を聞いて「つなぎが雑音っぽい」「間が長い」と言われたとき + 音声の区間の長さや無音を数値で測るとき
 │   ├── preview.md                          # preview / dev server 稼働中に user へ動作確認を依頼するとき
 │   ├── prompt-injection.md                 # 外部由来 tool result に adversarial 指示文を疑ったとき
 │   ├── prototype-feedback.md               # 外部からウェブアプリ・制作物・企画等の試用とコメントを頼まれ、スクリーンショット・QR・一時URLから実物を確認して返却文面を作るとき
@@ -121,6 +123,7 @@ claude-config/
 │   ├── shell-env.md                        # PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** + **Claude が Bash tool で複数の対象を loop で走査する 1-liner を書く瞬間** (= zsh は未 quote の変数を単語分割しない、 `#claude-issued-shell-commands`) + **Bash tool の `grep -r` で網羅を主張する瞬間** (= ugrep として `.gitignore` を読む、 `#bash-tool-grep-ignores-gitignore`) + **変数の直後に `:` を書く瞬間** (= `"$c:path"` は zsh の修飾子になる) (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
 │   ├── shell-multibyte-truncation.md       # shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき**
 │   ├── slack-mcp.md                        # Slack workspace を MCP で wire するとき
+│   ├── static-site-form-backend.md         # 静的サイト (GitHub Pages 等) に投稿フォーム・お便り欄・問い合わせ欄を置くとき + Cloudflare Pages へ引っ越す / Pages Functions・D1・Turnstile を CLI で組むとき + GitHub Pages の旧 URL から新しい URL へ転送するとき
 │   ├── substack.md                         # Substack 記事の入稿・notes/コメント回収をするとき + 購読している publication の記事を一覧・本文・有料全文・購読メールから取り込むとき
 │   ├── tenki-submission.md                 # 日本気象学会の機関誌「天気」への投稿を準備するとき
 │   ├── tikz-pgfplots.md                    # TikZ / pgfplots を含む LaTeX project で図を作るとき
@@ -145,7 +148,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (165 file + lib/ 16 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (166 file + lib/ 16 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)

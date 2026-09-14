@@ -10,6 +10,7 @@
 - **[apply-text-pairs.mutants.json](apply-text-pairs.mutants.json)** — apply-text-pairs.py の selftest の foil に歯があることを、 修正の一部を外した mutant 6 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[apply-text-pairs.py](apply-text-pairs.py)** — (old, new) の置換 pair 列を 1 file に当てる前に、 契約 (各 old は正確に 1 回 / 全検査が通るまで書かない) に加えて「再実行で二重に入る」「old が長い別物の先頭」 を拒否し、 必要なら patch 後の写しで test を回してから、 原子的に書く。--selftest 内蔵。
 - **[arxiv-package.py](arxiv-package.py)** — arXiv 投稿用の source package を作って検査する (コメント除去 / .bbl + .bib + .bst 同梱 / 包装物だけで組版 / 元原稿と PDF テキスト一致 / bibtex 再実行で .bbl 再現)。 metadata (題・abstract の平文化と照合) と arXiv の組版 PDF との頁ごと照合も。 --selftest 内蔵。 conventions/paper-submission.md#arxiv-package-tool
+- **[audio-finish-episode.py](audio-finish-episode.py)** — ポッドキャストの 1 回分を仕上げる: 本編にジングルを頭と尾に付け、音量を揃えて配信用 MP3 に書き出し、測り直して検査する。
 - **[audit-codex-integration.sh](audit-codex-integration.sh)** — Codex 導入と指定 repo の root AGENTS.md / Git gate を read-only で確認する
 - **[audit-codex-integration.test.sh](audit-codex-integration.test.sh)** — Codex integration audit の fixture test
 - **[audit-hooks.sh](audit-hooks.sh)** — 4 軸 hook 配信 audit (= silent malfunction の構造的検出、 (d) は自動部分のみ)
