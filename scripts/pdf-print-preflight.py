@@ -6,6 +6,9 @@
   2. font        : PyMuPDF が描いた文字 (組み込み helv/tiro/japan/china-* 等 = 非埋め込み、 および
                    PyMuPDF 埋め込みの Type0/CFF) が残っていないか (= printer 側で文字化け、 OTF 埋め込みでも化けた実績)
   3. 色          : 画像 (認印等) が載っている PDF を raster 化するなら RGB で、 の注意 (情報)
+  4. 用紙        : 頁の寸法と名前 (A4 等) を表示 (情報)。 ⚠️ lp の media 指定は本体の用紙設定を上書きしない
+                   (実測) ので、 刷る前に本体の用紙サイズとトレイの紙を確認する
+  ※ 2. は PyMuPDF 製に限らない: headless browser の print-to-PDF が書く Type3 font も非埋め込み扱いで FAIL になる (実測)
 
 オプション:
   --rasterize OUT.pdf [--dpi 600]  : 検査後に RGB raster 版を書き出す (font 問題を原理的に消す印刷用)
@@ -43,6 +46,11 @@ BUILTIN_BASEFONTS = {
 }
 
 
+# 寸法 (mm を丸めた短辺・長辺) → 名前
+PAPER_NAMES = {(210, 297): "A4", (148, 210): "A5", (297, 420): "A3", (182, 257): "B5 JIS", (176, 250): "B5 ISO",
+               (257, 364): "B4 JIS", (216, 279): "Letter", (100, 148): "はがき"}
+
+
 def inspect(path, expect_pages=None, template=None):
     """return (findings:list[str], infos:list[str])"""
     findings, infos = [], []
@@ -77,12 +85,20 @@ def inspect(path, expect_pages=None, template=None):
             has_image = True
     if risky:
         uniq = sorted(set(risky))
-        findings.append("🔴 printer で化けうる font が残っている (PyMuPDF 描画 / 非埋め込み): " + "; ".join(uniq)
+        shown = "; ".join(uniq[:5]) + (f"; … 他 {len(uniq) - 5} 個" if len(uniq) > 5 else "")
+        findings.append(f"🔴 printer で化けうる font が {len(uniq)} 個残っている (PyMuPDF 描画 / 非埋め込み): " + shown
                         + " → 印刷用は --rasterize で RGB raster 版を作って刷る")
     else:
         infos.append("font: PyMuPDF 描画 / 非埋め込み font なし ✓")
     if has_image:
         infos.append("画像あり (認印等) — raster 化するなら RGB (gray にすると朱が黒になる)")
+    sizes = sorted({(round(pg.rect.width * 25.4 / 72), round(pg.rect.height * 25.4 / 72)) for pg in doc})
+    labels = []
+    for w, h in sizes:
+        nm = PAPER_NAMES.get((min(w, h), max(w, h)))
+        labels.append(f"{w}×{h} mm" + (f" ({nm})" if nm else ""))
+    infos.append("用紙: " + ", ".join(labels)
+                 + " — lp の media 指定は本体の用紙設定を上書きしない = 本体の用紙サイズとトレイの紙を確認")
     return findings, infos
 
 
@@ -116,9 +132,11 @@ def selftest():
     assert any("page 数" in x for x in fc), fc
     # D: 文字なし 1 頁 → PASS
     e = os.path.join(d, "d.pdf"); doc = fitz.open(); doc.new_page(); doc.save(e)
-    fd, _ = inspect(e, template=b)
+    fd, idd = inspect(e, template=b)
     assert not fd, fd
-    print("pdf-print-preflight selftest: 4/4 PASS")
+    # E: PyMuPDF の新規頁 (既定 A4) に用紙名が付く
+    assert any(x.startswith("用紙: 210×297 mm (A4)") for x in idd), idd
+    print("pdf-print-preflight selftest: 5/5 PASS")
 
 
 def main():

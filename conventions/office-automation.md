@@ -3519,7 +3519,7 @@ origin: 海外出張願 (人事課 docx 様式) — 複数回の変換試行で 
 4. **1 枚だけ刷って止まる**: 複数 doc を同時投入しない。 1 枚目の結果 (user 報告) を待ってから次。
 5. **用紙**: `lp -o media=A4` (や PageSize) は**本体の用紙設定を上書きする保証にならない** — 本体 (操作パネル) の用紙サイズが別サイズのままだと、 A4 指定の job がその紙に刷られた (実測)。 刷る前に「本体の用紙サイズ設定」 と「トレイの紙」 の両方を user に確かめてもらう。 ⚠️ 違うサイズで出たと言われたら、 原因を推測で説明しない (= 「プリンタは紙を見ない」 等の未検証の断定をしない)。 本体の設定を見てもらうのが先。
 
-**Web ページを PDF 化したものも gate の対象**: headless browser の print-to-PDF (Chromium 系の `--print-to-pdf` 等) は文字を **Type3 font** で書くことがあり、 1. の font 検査で FAIL する (実測)。 PyMuPDF で描いた PDF でなくても、 FAIL なら同じく raster 版を刷る。
+**Web ページを PDF 化したものも gate の対象**: headless browser の print-to-PDF (Chromium 系の `--print-to-pdf` 等) は文字を **Type3 font** で書くことがあり、 1. の font 検査で FAIL する (実測)。 PyMuPDF で描いた PDF でなくても、 FAIL なら同じく raster 版を刷る。 印刷用 HTML ページ (`window.print()` 前提) を保存 HTML から PDF + raster 版にする道具 = [`scripts/html-print-pdf.py`](../scripts/html-print-pdf.py) (`<base href>` と `@page{size:A4}` の差し込み込み)。 `pdf-print-preflight.py` は頁の寸法と用紙名 (A4 / B5 等) も表示するので、 5. の照合に使う。
 
 **なぜ規律でなく gate か**: 今回の 4 失敗は全て「前の修正で安心して次の罠を踏む」 連鎖 (= 修正ごとに検証 scope が前の症状だけに狭まる)。 gate を固定 list にしておけば、 毎回同じ点を通る。 個人層は `lp` を含む Bash に PreToolUse hook を掛けて本 script を強制できる。
 

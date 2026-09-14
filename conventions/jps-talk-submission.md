@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 日本物理学会 (JPS) 年次大会の一般講演を申し込むとき
+when: 日本物理学会 (JPS) 年次大会の一般講演を申し込むとき + 参加票メールを受けた / 会期前に参加票・領収書を刷るとき
 category: office
 summary: 日本物理学会 (JPS) 大会 一般講演申込の form 機構と落とし穴 (= 会員マイページ経由・締切 14:00 型 / 登壇 1人1件 + 領域13 例外 + 2件目参加費免除 / キーワードは code 入力 / ^@^ 登壇者印・^A^ 区分記号・全角カンマ連結 / 受理票は別ドメイン外部運営から = from:jps.or.jp では検索不可 / 登録番号+パスワード durable 保存義務 / 要旨欄は非公開・題目のみ公開 → 集客は題目勝負。 制度個別値は当年の募集要項が正、 erad-submission.md の sibling)
 -->
@@ -96,3 +96,26 @@ summary: 日本物理学会 (JPS) 大会 一般講演申込の form 機構と落
 **道具**: `scripts/calendar-events.py` (list / gaps / dups / add / delete)。 **削除は既定 dry-run で、
 終日 event と protect 正規表現に当たるものを常に保護する** (= 「今日の X より後を消して」 で会期 event や
 夜の別予定を巻き込む事故を設計で塞いである)。 `gaps` の出力は上の 4 の理由で**入口にしない**。
+
+## <a id="participation-ticket"></a>参加票 (名札) と領収書 — 会期前に刷って持って行く
+
+講演申込の手順は番号通知・聴講計画で終わりがちだが、 **会期に入る前に参加票を刷る段がある**。 期限は mail に書かれず
+会期初日の前日にしかないので、 参加票メールを受けた turn でタスク管理に「会期初日の前日」 期限で起票する
+(一般形 = [convention-design-principles.md#deadline-in-the-referent](../docs/convention-design-principles.md#deadline-in-the-referent))。
+
+- **受付が無い大会がある** (実測): 参加票を提げて直接講演会場へ入る方式。 当日に受付で名札をもらう前提でいると、
+  会場で刷る手段が無い。 参加票を入れるホルダーは現地配布 (次回以降は持参して再利用、 と案内される)。
+- **参加票メール** = 会期の 1〜2 週間前に大会システム (受理票と同じ外部運営ドメイン) から、 **登録番号ごとに 1 通**。
+  件名は「参加票及び講演概要集」 型。 同じ登録番号 + パスワードで講演概要集 Web 版にも入れる。
+- **認証**: ID = 登録番号 / パスワード = **参加票メール本文のもの** (⚠️ 申込時の受理票のパスワードとは別物)。
+  login は本人が行う (agent は代行しない)。
+- **参加票は PDF ではなく「印刷用 HTML」** (`namecard.php` = `window.print()` 前提)。 「PDF を DL」 と探しても見つからない。
+  領収書 (`receipt.php`) も同じ個人ページから同じ形で出る。 A4 で刷って**四つ折り (A6)** にし、 氏名・所属を見える側に。
+  版面の半分が上下逆さなのは折る前提の正常な状態。
+- **機械で PDF にする** = 本人がブラウザでページを保存 (or 本人が curl で login → POST で取得) → [`scripts/html-print-pdf.py`](../scripts/html-print-pdf.py):
+  ```
+  python3 scripts/html-print-pdf.py namecard.html --base-href <参加票ページのディレクトリ URL> -o sankahyou.pdf --expect-pages 1 --png
+  ```
+  `<base href>` 差し込み (保存 HTML の CSS・画像は相対 path) と、 用紙指定の無い領収書型ページへの `@page{size:A4}` を script が行う。
+  出力の `*-print.pdf` (raster 版) を刷る — ブラウザの print-to-PDF は文字を Type3 font で書き、 そのままだと印刷前検査が落ちる。
+- **刷る前**: [office-automation.md#print-preflight](office-automation.md#print-preflight) の 5 点 (特に 5. = プリンタ本体の用紙サイズとトレイの紙)。
