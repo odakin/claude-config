@@ -200,6 +200,8 @@
 - **[lib/macos_apps.py](lib/macos_apps.py)** — Discover macOS app bundles and read their declared identity without launching them.
 - **[lib/merge-hook-event.sh](lib/merge-hook-event.sh)** — settings.json への hook event merge (単一リスト駆動)
 - **[lib/merge-hook-event.test.sh](lib/merge-hook-event.test.sh)** — merge_hook_event の self-test (hermetic、 実 settings.json 不使用)
+- **[lib/office-app-guard.sh](lib/office-app-guard.sh)** — Office (Excel / Word / PowerPoint) を osascript で駆動する前後の安全な reset + 背景起動 (user が開いた文書を持つ app は quit も kill もしない・前面に出さない、 sourceable lib + CLI、 office-automation.md#office-app-reset-guard)
+- **[lib/office-app-guard.test.sh](lib/office-app-guard.test.sh)** — office-app-guard.sh の hermetic test (osascript / open を PATH の stub に差し替え、 Office は起こさない。 macOS 以外でも走る)
 - **[lib/office-staging.sh](lib/office-staging.sh)** — Office (Word / Excel / PowerPoint) automation の「事前 grant 済み staging dir」 helper (sourceable lib、 macOS App Sandbox の folder-grant dialog を design-out、 office-automation.md#office-pregranted-staging-dir)
 - **[lib/office-staging.test.sh](lib/office-staging.test.sh)** — office-staging.sh + office_staging.py の self-test (hermetic、 Office 不要、 fake HOME)
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)

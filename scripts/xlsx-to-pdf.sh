@@ -36,6 +36,16 @@
 #   CLAUDE_OFFICE_STAGING_DIR=<dir> = override root. Lib = scripts/lib/office-staging.sh,
 #   doc = office-automation.md#office-pregranted-staging-dir.
 #
+# 🔒 Never touches the user's Excel work, never comes to the front (2026-09-15):
+#   Excel is launched with `open -g` (background) and never `activate`d; if it took the front
+#   anyway, focus goes back to the app you were using. The pre-run reset quits Excel ONLY when
+#   every open workbook is a staged copy (= left over from an earlier run) — with any other
+#   workbook open it skips the reset and opens/closes only its own copy. It never kills Excel.
+#   If this run launched Excel, it quits it again at the end (again only when nothing else is
+#   open). Refuses to run when Excel already has a workbook with the same name open (Excel
+#   cannot open two, and closing "ours" could discard your edits).
+#   Lib = scripts/lib/office-app-guard.sh, doc = office-automation.md#office-app-reset-guard.
+#
 # Usage:
 #   xlsx-to-pdf.sh [--no-stage] <input.xlsx> [sheet] [output.pdf]
 #     sheet       Excel engine only: export just that worksheet. The LibreOffice
@@ -62,6 +72,7 @@ if [ -f "$STAGING_LIB" ]; then
 else
   office_stage_file() { return 1; }; office_stage_cleanup() { :; }; office_stage_prune() { :; }; office_stage_report_fallback() { :; }
 fi
+GUARD_LIB="$(cd "$(dirname "$0")" && pwd)/lib/office-app-guard.sh"
 if [ "$NO_STAGE" = 1 ]; then CLAUDE_OFFICE_STAGING=0; export CLAUDE_OFFICE_STAGING; fi
 
 # --- pick a rendering engine ------------------------------------------------
@@ -98,40 +109,58 @@ elif [ "$(uname)" = "Darwin" ]; then
   else
     office_stage_report_fallback "$SRC"   # 予期せぬ fallback = ⚠️ stderr + fallback log (意図的 --no-stage は沈黙)
   fi
-  # Reset stale Excel state first (2026-06-05 RCA): `quit` is ASYNC — it returns
-  # before Excel has fully exited, so a leftover process from a prior run in the same
-  # session causes AppleEvent no-response (-1712) or parameter errors (-50). The sleep
-  # covers the async quit so the next `open` starts clean.
-  #   NOTE: this also closes any workbook the user has open in Excel — safe only while
-  #   the user is NOT editing in Excel during the run. If -1712/-50 still occurs, the
-  #   caller should `killall "Microsoft Excel"; sleep 4` (last resort; see
-  #   conventions/office-automation.md#xlsx-to-pdf-script).
-  osascript -e 'tell application "Microsoft Excel" to quit' >/dev/null 2>&1 || true
-  sleep 3
+  [ -f "$GUARD_LIB" ] || { echo "❌ missing $GUARD_LIB (required: without it this script cannot tell whether Excel holds your work)" >&2; exit 1; }
+  # shellcheck source=lib/office-app-guard.sh
+  . "$GUARD_LIB"
+  # Reset stale Excel state (2026-06-05 RCA: a leftover instance from earlier runs answers
+  # -1712 / -50). The guard quits Excel only when it holds nothing but staged copies, waits
+  # for the async quit to finish, and otherwise leaves Excel alone (#office-app-reset-guard).
+  office_front_remember
+  office_app_reset excel
+  if office_app_has_path excel "$WSRC"; then
+    echo "❌ Excel already has a workbook named '$(basename "$WSRC")' open — close it in Excel first (this script will not close your workbook)." >&2
+    exit 1
+  fi
+  if ! office_app_launch_background excel; then
+    echo "❌ Excel did not start / answer in the background." >&2
+    office_app_failure_hint excel
+    exit 1
+  fi
   if ! osascript - "$WSRC" "$SHEET" "$WPDF" <<'AS'; then
 on run argv
   set srcPath to item 1 of argv
   set sheetName to item 2 of argv
   set pdfPath to item 3 of argv
   with timeout of 200 seconds
-    tell application "Microsoft Excel"
-      activate
+    tell application id "com.microsoft.Excel"
+      -- no `activate`: Excel stays in the background
       set wbk to open workbook workbook file name (POSIX file srcPath)
-      if sheetName is "" then
-        set tgt to active sheet of wbk
-      else
-        set tgt to worksheet sheetName of wbk
-      end if
-      save as tgt filename (POSIX file pdfPath) file format PDF file format with overwrite
+      try
+        if sheetName is "" then
+          set tgt to active sheet of wbk
+        else
+          set tgt to worksheet sheetName of wbk
+        end if
+        save as tgt filename (POSIX file pdfPath) file format PDF file format with overwrite
+      on error errMsg number errNum
+        close wbk saving no   -- close ONLY the workbook this script opened
+        error errMsg number errNum
+      end try
       close wbk saving no
     end tell
   end timeout
 end run
 AS
     echo "❌ Excel AppleScript export failed (see error above)." >&2
+    office_app_close_ours excel "$WSRC"
+    office_app_release excel
+    office_front_restore "Microsoft Excel.app"
+    office_app_failure_hint excel
     [ "$WSRC" != "$SRC" ] && echo "   staged copy kept for diagnosis: $OFFICE_STAGE_DIR" >&2
     exit 1
   fi
+  office_app_release excel
+  office_front_restore "Microsoft Excel.app"
   if [ "$WPDF" != "$PDF" ]; then
     [ -f "$WPDF" ] || { echo "❌ Excel reported success but no PDF in staging: $WPDF" >&2; exit 1; }
     cp -p "$WPDF" "$PDF"

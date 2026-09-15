@@ -306,6 +306,11 @@ sections:
     title: "規則: Office に開かせる・保存させるのは staging の内側だけ (in-place は PreToolUse hook が deny)"
     related: [office-pregranted-staging-dir, excel-osascript-cell-write, xlsx-to-pdf-script, docx-to-pdf-pages, pptx-to-pdf-powerpoint]
     origin: "2026-09-15"
+  - id: office-app-reset-guard
+    level: 3
+    title: "規則: Office app の quit・kill・前面化は「自分のものだけ」 (reset は開いている文書を聞いてから)"
+    related: [xlsx-to-pdf-script, excel-osascript-cell-write, docx-pdf-stale-cache, pptx-to-pdf-powerpoint, office-pregranted-staging-dir, office-inplace-guard, xlsx-locked-by-excel]
+    origin: "2026-09-15"
   - id: word-applescript-password-open
     level: 3
     title: "Word.app の AppleScript で PW 暗号化 docx を開く / select/find が動かない罠"

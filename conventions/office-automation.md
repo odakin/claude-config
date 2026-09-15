@@ -45,10 +45,11 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 | overlay した電話番号・メールが罫線に被る / 隣セルにはみ出す / 数字だけ浮いて見える | ラベル右端基準の配置、 CJK と数字の baseline 差 | 縦罫線 (`get_drawings`) を anchor、 数字は行中心 → [`pdf-overlay-anchoring`](#pdf-overlay-anchoring) |
 | PyMuPDF で追記した日本語/数字が**画面では正常・印刷で文字化け / 位置ずれ** | `japan`/`helv` 組み込み font は glyph 非埋め込み = printer に代替 font が無い | 印刷用は 600dpi **RGB** raster 版を刷る (font 埋め込みでも同 printer で化けた) → [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake) |
 | 値を入れた docx 様式が **1 頁→2 頁にはみ出す**、 折り返すのは触っていない行 | autofit 表は 1 セルの長い値で grid 列幅を組み替え、 別行のセルが狭まる (`tblLayout fixed` でも直らず) | 可変長値・○・認印は overlay、 溢れる 1 行だけ 9.5pt、 雛形 render と y 座標突合 → [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow) |
-| Excel がクラッシュ /「作業内容を回復」 dialog | 同 session で osascript の open/save/close/quit を多数 cycle し既存 instance を酷使 | **補正を 1 pass に織り込む単発記入** + 各 op 前に killall reset → [`excel-osascript-cell-write`](#excel-osascript-cell-write) |
-| osascript が `-1712` (AppleEvent timeout) | Excel が固まり / **background 実行で automation 許可 dialog を出せない** | killall+sleep reset / **初回は foreground で許可 dialog に応答** → [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) |
+| Excel がクラッシュ /「作業内容を回復」 dialog | 同 session で osascript の open/save/close/quit を多数 cycle し既存 instance を酷使 | **補正を 1 pass に織り込む単発記入** + round が要る時だけ guard の reset (user の文書があれば quit しない) → [`excel-osascript-cell-write`](#excel-osascript-cell-write) / [`office-app-reset-guard`](#office-app-reset-guard) |
+| osascript が `-1712` (AppleEvent timeout) | Excel が固まり / **background 実行で automation 許可 dialog を出せない** | `office-app-guard.sh state` → `clear` なら reset、 user の文書があれば user に終了を頼む (kill しない) / **初回は foreground で許可 dialog に応答** → [`office-app-reset-guard`](#office-app-reset-guard) / [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) |
+| 変換・記入のたびに **Excel / Word が前面に出る** / user が開いていた book が閉じられた・保存 dialog で止まった | 旧手順の `activate`・Finder `open`・毎回の `quit` / `killall` / `pkill` | 起動は `open -g`、 activate しない、 quit は開いている文書を聞いてから自分のものだけ → [`office-app-reset-guard`](#office-app-reset-guard) |
 | Office 独自の**「ファイル アクセスを許可」 dialog が案件 dir ごとに出る** / PDF export の AppleScript が `-1712` で止まる (dialog が裏に出ている) | Word / Excel / PowerPoint は App Sandbox = **folder へ書く瞬間**に folder 単位の grant を要求 (open は通る、 save-as で出る) | 変換 script は **事前 grant 済み staging dir 経由が default** (= Office 自身の group container、 dialog ゼロ)。 手書き osascript・案件ごとの driver も staging 経由 (= `scripts/office-stage-run.sh` か helper)、 **in-place の open / save は PreToolUse hook が deny する** → [`office-pregranted-staging-dir`](#office-pregranted-staging-dir) |
-| osascript が `-609`「接続が無効」 で全 cell が沈黙・未書込 | 同一 tell に `close saving yes`+`quit` を詰めた / app 未 ready | reset + 4 勘所 → [`excel-osascript-cell-write`](#excel-osascript-cell-write) |
+| osascript が `-609`「接続が無効」 で全 cell が沈黙・未書込 | 同一 tell に `close saving yes`+`quit` を詰めた / app 未 ready | guard の reset ([`office-app-reset-guard`](#office-app-reset-guard)) + 4 勘所 → [`excel-osascript-cell-write`](#excel-osascript-cell-write) |
 | osascript が `-50` パラメータエラー | **`save workbook as … PDF` (workbook 単位の verb)** / merged cell への number-format 設定 | PDF は **sheet 単位** `save as <sheet>` ([`xlsx-to-pdf.sh`](#xlsx-to-pdf-script)) / 書式強制は apostrophe (下行) |
 | 日付が「46205」 等の serial 数字で印字される | Excel が和文日付文字列を date 値に auto-convert + cell 書式が General | **apostrophe prefix で text 強制** → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
 | 申請日等が「火曜日, 6/月 16, 2026」 の冗長書式で表示 | `=TODAY()` 等 date 書式の cell を date 値で上書き → 冗長書式を継承 | apostrophe prefix の text で上書き → [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) |
@@ -63,8 +64,8 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 | 承認欄/印影欄ボックスの**下罫線が出ない** (box が下に開く) | Excel→PDF が最下部の結合セル下罫線を落とす (罫線は xlsx に在るのに出力で消える) | **`close-pdf-form-boxes.py`** を pipeline 最後に挟む (= 開いた枠を全検出して閉じる、 print_area 拡張では直らない) → [`excel-pdf-bottom-border-drop`](#excel-pdf-bottom-border-drop) |
 | 値検査は全部通るのに **PDF にすると見た目が崩れる** (点線が残る / 字が小さい / 行の下半分が空白 / 未使用欄に記号) | 崩れの原因が**セルの外側の属性** (border / 行高 / merge 単位) にあり値 dump では原理的に不可視 | レイアウト不変条件の gate を書いて**生成 driver の冒頭に配線** (FAIL なら成果物を作らない) → [`form-layout-invariant-gate`](#form-layout-invariant-gate) |
 | 氏名/所属など**長い文字列が結合セルで両端切れ** | 固定 font でセル幅超過 + **shrink_to_fit は結合セルで無効** | **font size を下げる** (osascript は `font size of font object`) + `check-form-clipping.py` で機械検出 → [`merged-cell-text-clipping`](#merged-cell-text-clipping) |
-| xlsx が openpyxl から save できない / lock `~$…` が残る | Excel が当該 file を開いている | Excel quit + lock 削除 → [`xlsx-locked-by-excel`](#xlsx-locked-by-excel) |
-| Bash tool で `sleep` がブロックされ reset 待ちが打てない | harness が foreground の bare `sleep` を禁止 | bare sleep を打たず **script (xlsx-to-pdf.sh 等) に sleep を内包**させて呼ぶ / osascript 内 `delay` / 別 op は run_in_background |
+| xlsx が openpyxl から save できない / lock `~$…` が残る | Excel が当該 file を開いている | 開いているのが自分の copy なら閉じる、 user が開いているなら閉じてもらう + lock 削除 → [`xlsx-locked-by-excel`](#xlsx-locked-by-excel) |
+| Bash tool で `sleep` がブロックされ reset 待ちが打てない | harness が foreground の bare `sleep` を禁止 | bare sleep を打たず **`office-app-guard.sh reset`** (終了待ちを内包) か wrapper を呼ぶ / osascript 内 `delay` / 別 op は run_in_background |
 | 事務からの zip を展開したらファイル名が文字化け (`+ˆé—l.xlsx` 等) | zip のファイル名が cp932 (Shift-JIS) で、 macOS unzip が cp437 と解釈 | python zipfile で cp437→cp932 re-decode 展開 → [`zip-cp932-filenames`](#zip-cp932-filenames) |
 | 様式が「記入例」 入り sheet 1 枚だけ (空欄の記入 sheet が無い) | 記入例をそのまま実データに置換して提出する型の様式 | 記入例 rows を全 clear + 実データ、 ⚠️ pulldown 源泉 cell を消さない → [`example-sheet-to-real-data`](#example-sheet-to-real-data) |
 | fill 済 xlsx を**納品する**が計・合計 cell が data_only / preview で空 | fresh 雛形の formula は元々 cache 無し + openpyxl save も cache を作らない | 納品前に Excel open+save で焼き込み → data_only で検算 assert → [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) |
@@ -387,23 +388,21 @@ if sentinel.value is None:
 **修復経路 (= 既に cache が消えてしまった後)**: Excel.app で xlsx を **open + save 1-pass** する applescript で全 formula を再計算 + 保存する:
 
 ```applescript
--- shell 側で先に reset: killall "Microsoft Excel"; sleep 6
-tell application "Microsoft Excel"
-  activate
+-- shell 側で先に: bash …/scripts/lib/office-app-guard.sh reset excel  (user の文書があれば quit しない、 #office-app-reset-guard)
+tell application "Microsoft Excel"      -- activate しない (背景のまま)
+  set wbk to open workbook workbook file name (POSIX file "/abs/path/form.xlsx")
   delay 3
-  open POSIX file "/abs/path/form.xlsx"
-  delay 3
-  save workbook 1                          -- ★ workbook 1 (= active workbook は -1728 で fail)
+  save wbk                                 -- ★ open が返した参照 (= active workbook は -1728 / workbook 1 は user の book を指しうる)
   delay 2
-  close workbook 1 saving no
+  close wbk saving no
 end tell
 ```
 
-⚠️ **`workbook 1` 参照必須** (= `active workbook` は app 起動直後で `-1728 active workbook を取り出すことはできません` で fail、 詳細 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の `-1728 active workbook` anti-pattern)。
+⚠️ **open が返した参照で save / close する** (= `active workbook` は app 起動直後で `-1728 active workbook を取り出すことはできません` で fail、 詳細 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の `-1728 active workbook` anti-pattern。 `workbook 1` は起動中の Excel に user の book があるとそちらを指しうる = [`office-app-reset-guard`](#office-app-reset-guard))。
 
 副次効果として **drawing 構造も同時に re-emit される**ことが観察されている (= [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の事後救済と同じ経路、 sample size 限定の正直注記)。 つまり cache 破壊と drawing 破壊は **同じ Excel.app open+save 1-pass で両方救済**できるケースがある。
 
-**納品 xlsx の cache 焼き込み (= deliverable baking、 事故対応でなく納品工程として)**: 雛形の計・合計・差引 cell が formula である様式を openpyxl で fill して**そのまま先方に納品する**場合も同じ機構が効く — fresh 雛形は cache を持たないことが多く openpyxl save も作らないので、 受領側の添付 preview や自分の `data_only` 検算で数値が見えない。 納品前工程: (1) 上記 applescript の open+save を納品 file 全部に回す (= 焼き込み)、 (2) 焼き込み後に `data_only=True` で計・合計・差引 cell を読み**手元の期待値と assert 照合** (= 様式に「申請額 − 月次計」 のような検算 cell があればそれが 0 かも verify)。 受領側が Excel で開けば再計算されるので焼き込み自体は「開かずに読む」 経路のためだが、 (2) の検算が本体の価値 — **数式の実結果を検証せずに納品しない**。 ⚠️ user が Excel で作業中でありうる環境では batch 前に起動状態を確認し (`tell application "System Events" to (name of processes) contains "Microsoft Excel"`)、 起動中なら割り込まない (= user の未保存 workbook を巻き込む save/quit は不可逆事故。 workbook 単位の open/close に留めるか user に確認)。
+**納品 xlsx の cache 焼き込み (= deliverable baking、 事故対応でなく納品工程として)**: 雛形の計・合計・差引 cell が formula である様式を openpyxl で fill して**そのまま先方に納品する**場合も同じ機構が効く — fresh 雛形は cache を持たないことが多く openpyxl save も作らないので、 受領側の添付 preview や自分の `data_only` 検算で数値が見えない。 納品前工程: (1) 上記 applescript の open+save を納品 file 全部に回す (= 焼き込み)、 (2) 焼き込み後に `data_only=True` で計・合計・差引 cell を読み**手元の期待値と assert 照合** (= 様式に「申請額 − 月次計」 のような検算 cell があればそれが 0 かも verify)。 受領側が Excel で開けば再計算されるので焼き込み自体は「開かずに読む」 経路のためだが、 (2) の検算が本体の価値 — **数式の実結果を検証せずに納品しない**。 ⚠️ user が Excel で作業中でありうる環境では batch の reset を guard に任せる (= user の文書があれば quit しない、 自分の copy だけを参照で open/close する → [`office-app-reset-guard`](#office-app-reset-guard))。
 
 **回避 A (= 値を書くだけなら)**: [`excel-osascript-cell-write`](#excel-osascript-cell-write) 経由で値を書けば cache も drawing も保護される (= Excel の formula engine が常時走っているので cache が消えない)。 openpyxl 経路は cache + drawing の構造的損失を 2 軸で抱える。
 
@@ -438,20 +437,20 @@ origin: 2026-06 連続発生した「openpyxl save 後に gen-pdf で空欄/`#RE
 
 ```applescript
 set the clipboard to (read (POSIX file "/abs/path/figure.png") as «class PNGf»)
-tell application "Microsoft Excel"
-  activate
+tell application "Microsoft Excel"      -- app の activate はしない (#office-app-reset-guard)
+  set wbk to open workbook workbook file name (POSIX file "/abs/path/form.xlsx")
   delay 3
-  open POSIX file "/abs/path/form.xlsx"
-  delay 3
-  set ws to worksheet "対象シート名" of workbook 1
-  activate object ws
+  set ws to worksheet "対象シート名" of wbk
+  activate object ws                     -- sheet の選択 (paste 先の指定に要る、 app は前面に出さない)
   paste worksheet ws destination range "B21" of ws   -- ★ TCC 権限不要の Excel ネイティブ paste
   delay 2
-  save workbook 1
+  save wbk
   delay 2
-  close workbook 1 saving no
+  close wbk saving no
 end tell
 ```
+
+⚠️ 上の `activate object ws` が app を前面に出すかは未実測 (= 経路 ① の [`affix-image-xlsx.py`](../scripts/affix-image-xlsx.py) は前面に出ないことを実測済なので、 そちらを先に使う)。
 
 - **表示サイズは PNG の DPI metadata で制御**する: 貼り付け時のサイズ指定 API が無いので、 生成側 (matplotlib 等) で `dpi=200` 等を焼き込む → Excel が DPI を尊重して縮小表示 (例: 1342×840px @200dpi → 483×302pt ≈ 644×403px 表示)。 貼り付け先の空き寸法 (行高合計 × 列幅合計) を先に測ってから DPI を逆算する。
 - 検証: `unzip -l form.xlsx | grep media` (画像存在) + anchor/サイズは `xl/drawings/drawing1.xml` の `<xdr:from>`/`ext cx cy` (EMU、 ÷9525=px) + cache sentinel + (rich text があれば) runs assert。
@@ -462,14 +461,12 @@ origin: 研究費様式の「図の貼付」 欄対応。 openpyxl↔Excel の�
 
 ### <a id="excel-osascript-cell-write"></a>Excel osascript で cell 値を書く堅牢パターン (= drawing 保護 + -609 回避)
 
-[`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の回避 1 (= drawing を壊さず値だけ変える) や、 fill 後の微修正を Excel 経由でやる時の osascript の組み立て方。 **起動・reset** は [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の「連続 Excel 操作の reset」 (第 1 手 quit+sleep / 第 2 手 killall+sleep) に従い、 その上で **osascript 本体**を以下で組む (下の `/abs/path/form.xlsx` は staged copy の path = `on run argv` で受けて `office-stage-run.sh` で走らせる、 [`office-inplace-guard`](#office-inplace-guard)):
+[`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の回避 1 (= drawing を壊さず値だけ変える) や、 fill 後の微修正を Excel 経由でやる時の osascript の組み立て方。 **起動・reset** は [`office-app-reset-guard`](#office-app-reset-guard) に従い (= 背景起動、 user の文書が無い時だけ quit、 kill しない)、 その上で **osascript 本体**を以下で組む (下の `/abs/path/form.xlsx` は staged copy の path = `on run argv` で受けて `office-stage-run.sh` で走らせる、 [`office-inplace-guard`](#office-inplace-guard)):
 
 ```applescript
--- shell 側で先に reset: killall "Microsoft Excel"; sleep 6  (= cell 編集では sleep を 4 でなく 6 に厚く)
+-- shell 側で先に: G=…/scripts/lib/office-app-guard.sh; bash "$G" reset excel; bash "$G" launch excel  (= 背景起動 + 応答待ち)
 set lf to (ASCII character 10)
-tell application "Microsoft Excel"
-  activate
-  delay 3                              -- 起動を待つ (cold start)
+tell application "Microsoft Excel"     -- activate しない (背景のまま)
   set wbk to open workbook workbook file name (POSIX file "/abs/path/form.xlsx")
   delay 3                              -- workbook open を待つ
   set value of range "S13" of worksheet 1 of wbk to "..."    -- ★ worksheet は index 指定
@@ -481,15 +478,16 @@ tell application "Microsoft Excel"
 end tell
 ```
 ```bash
-# ★ quit は別 osascript に分離 (同一 tell 内の close saving yes + quit は -609 を誘発)
-osascript -e 'tell application "Microsoft Excel" to quit'
+# ★ quit は別 osascript に分離 (同一 tell 内の close saving yes + quit は -609 を誘発)。
+#   直接 quit を撃たず guard で = 自分が起動し user の文書が無い時だけ quit (#office-app-reset-guard)
+bash "$G" release excel 1     # 1 = 上の launch が launched=1 を返した時
 ```
 
 **4 つの勘所** (= いずれも欠くと「接続が無効です **(-609)**」 で値が書かれず沈黙失敗する、 2026-06-05 RCA):
 1. **worksheet は index** (`worksheet 1` / `worksheet 2`) で指定 — シート名に全角括弧・末尾スペースがあると名前解決が不安定 (= **openpyxl とは逆**: openpyxl は名前が安全で数値 index が罠 〔[`sheet-by-name-not-index`](#sheet-by-name-not-index)〕、 Excel osascript は名前が不安定なので index を使う)。 ⚠️ ただし index は順序依存なので、 **`worksheet N` が目的シートか dump (= [`form-dump-first`](#form-dump-first)、 sheet_state 付き) で確認してから**指定する (= 「index で参考シート混入」 罠は Excel osascript でも起きる)。
-2. **起動待ちを厚く** — `activate` 後 `delay 3` + `open` 後 `delay 3` (cold / killall 直後は特に)。
+2. **起動待ちを厚く** — 起動は guard の `launch` (= 文書一覧に答えるまで待つ) + `open` 後 `delay 3` (cold start 直後は特に)。
 3. **`close ... saving no`** — `save wbk` の後に `saving yes` を重ねない (二重保存)。
-4. **`quit` は別 osascript** — 同一 `tell` ブロックに `close saving yes` + `quit` (+ `return`) を詰めると接続が落ちる。
+4. **`quit` は別 osascript** — 同一 `tell` ブロックに `close saving yes` + `quit` (+ `return`) を詰めると接続が落ちる。 quit 自体は guard 経由 ([`office-app-reset-guard`](#office-app-reset-guard))。
 
 ⚠️ delay/quit/cold-start の非同期対策は **AppleScript で Office app を automation する一般則** (= -609「接続無効」 は quit 後も AppleScript が reference を clear せず vanishing app にコマンドが届く / app 未 ready で起き、 **any app に共通**)。 Word docx→PDF も同根の gotcha ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache) の cold-start / quit)。
 
@@ -501,36 +499,35 @@ osascript -e 'tell application "Microsoft Excel" to quit'
 
 ⚠️ **cell 内の部分文字列だけ書式を変える (= rich text 部分下線を Excel osascript で)**: `characters a thru b of range "X" of ws` は **文字範囲 [a..b] ではなく VBA `Characters(Start, Length)` へのマッピングで、 実測挙動は (start=a, length≈max(a,b))** — 「12 thru 19」 で 12 文字目から **19 文字分**に書式が付く (2026-07-02 に 2 パターン実測)。 狙った範囲を直接指定するのは困難なので、 **引き算方式**が確実: ① cell 全体に `set underline of font object of range … to underline style single` → ② 前部 `characters 1 thru <n_before>` を `underline style none` (= start=1 なら length 指定が素直に効く) → ③ 後部 `characters <start_after> thru 300` を `none` (= 末尾超過は clamp される)。 検証は openpyxl `rich_text=True` readback で runs を assert ([`xlsx-rich-text-underline`](#xlsx-rich-text-underline))。 この経路が要るのは **図 (画像) が入った xlsx の cell 編集** — openpyxl save は既存画像を消すので ([`xlsx-image-insert-excel-paste`](#xlsx-image-insert-excel-paste))、 画像入り file の後編集はすべて Excel osascript 経由になる。
 
-⚠️ **`-1728 active workbook を取り出すことはできません` anti-pattern (= workbook 参照の選び方)**: `tell application "Microsoft Excel" to set theBook to active workbook` は **app 起動直後 / open 完了前の context では `-1728` (object not found) で fail** する。 `active workbook` は app 内部で「ユーザー focus が当たった workbook」 の意味のため、 automation context (= バックグラウンドで起動 + open 直後 + ユーザー操作なし) では undefined になりうる。 `delay` で待っても解消しない。 → **代替 = `workbook 1`** (= 最も最近 open した workbook の index 参照、 起動直後でも安定):
+⚠️ **`-1728 active workbook を取り出すことはできません` anti-pattern (= workbook 参照の選び方)**: `tell application "Microsoft Excel" to set theBook to active workbook` は **app 起動直後 / open 完了前の context では `-1728` (object not found) で fail** する。 `active workbook` は app 内部で「ユーザー focus が当たった workbook」 の意味のため、 automation context (= バックグラウンドで起動 + open 直後 + ユーザー操作なし) では undefined になりうる。 `delay` で待っても解消しない。 → **代替 = `open workbook` が返す参照** (= 起動直後でも安定。 2026-09-15 訂正: 旧代替の `workbook 1` は、 起動中の Excel に user の book があるとそちらを指しうる = 保存・close が user の book に当たる、 [`office-app-reset-guard`](#office-app-reset-guard)):
 
 ```applescript
 -- ❌ anti-pattern (= 起動直後の active workbook = -1728)
 tell application "Microsoft Excel"
-  activate
   open POSIX file "/abs/path/form.xlsx"
   set theBook to active workbook                  -- -1728 で fail
 end tell
 
--- ✅ workbook 1 で順序参照 (= automation context で安定)
-tell application "Microsoft Excel"
-  activate
+-- ❌ workbook 1 (= user の book が開いていればそちらを指しうる)
+
+-- ✅ open workbook が返す参照 (= automation context で安定、 自分の book だけに当たる)
+tell application "Microsoft Excel"                 -- activate しない
+  set wbk to open workbook workbook file name (POSIX file "/abs/path/form.xlsx")
   delay 3
-  open POSIX file "/abs/path/form.xlsx"
-  delay 3
-  save workbook 1                                  -- ★ workbook 1 = 最も最近 open
-  close workbook 1 saving no
+  save wbk
+  close wbk saving no
 end tell
 ```
 
 ⚠️ 名称が紛らわしいが本節既出の **`font size of font object` 関連の `-1728`** (= property 名 `size` 誤り → `font size`) とは **異なる発火経路** で、 同じ error code が両方で出る。 区別: (a) `font size of font object` 関連の操作中なら property 名問題、 (b) `workbook` / `active workbook` 関連なら本 anti-pattern。 origin: 2026-06-23 cell 編集 + cache 復元 1-pass applescript で `active workbook` 参照が起動直後 fail → `workbook 1` 書き換えで復旧。
 
-⚠️ **`-1712` (AppleEvent timeout) は「Excel が固まっている」 signal**: 同一 session で Excel 操作 (= PDF export / cell write) を連続させると、 既存 instance が応答不能になり次の osascript が -1712 で落ちることがある。 復旧 = **`killall "Microsoft Excel"` → `sleep 5` → 再実行** (= -609 と同じ reset で直る、 driver script は 2 段 retry を組み込む)。 origin: 2026-06-11 雛形 PDF 化を 1 日に複数回実行した session。
+⚠️ **`-1712` (AppleEvent timeout) は「Excel が固まっている」 signal**: 同一 session で Excel 操作 (= PDF export / cell write) を連続させると、 既存 instance が応答不能になり次の osascript が -1712 で落ちることがある。 復旧 = **`office-app-guard.sh state excel` → `clear` なら `reset` → 再実行 / user の文書があれば user に終了を頼む** (= -609 と同じ reset で直る。 2026-09-15 から killall はしない = [`office-app-reset-guard`](#office-app-reset-guard))。 origin: 2026-06-11 雛形 PDF 化を 1 日に複数回実行した session。
 
-⚠️ **多 round は -1712 で済まず Excel 本体を CRASH させる → 「単発記入」 を第一原則に** (2026-06-16 RCA): 同 session で open/save/close/quit を **5 cycle 以上**重ねると Excel が落ちて「作業内容を回復します」 dialog が出る (= cell 記入 + 日付 serial 修正 + 書式修正 + PDF 書出 を別々に叩いた)。 → **補正を最初の 1 pass の applescript に織り込み、 修正の往復をゼロにする**: cell を書いてから「serial 化してた / 書式が冗長」 と気づいて再 open するのでなく、 **最初から** [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) の apostrophe prefix / `number format "@"` を入れておく (= 1 回の `open → set 全部 → save → close` で完結)。 round が避けられない時だけ各 op 前に killall reset。 ⚠️ crash しても **save 済 ∧ commit 済の disk file は無傷** (= git が安全網)。 Excel の「ドキュメントの回復」 pane が出ても **回復版を保存せず破棄** (disk の検証済 file が正、 回復版で上書きさせない)。
+⚠️ **多 round は -1712 で済まず Excel 本体を CRASH させる → 「単発記入」 を第一原則に** (2026-06-16 RCA): 同 session で open/save/close/quit を **5 cycle 以上**重ねると Excel が落ちて「作業内容を回復します」 dialog が出る (= cell 記入 + 日付 serial 修正 + 書式修正 + PDF 書出 を別々に叩いた)。 → **補正を最初の 1 pass の applescript に織り込み、 修正の往復をゼロにする**: cell を書いてから「serial 化してた / 書式が冗長」 と気づいて再 open するのでなく、 **最初から** [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) の apostrophe prefix / `number format "@"` を入れておく (= 1 回の `open → set 全部 → save → close` で完結)。 round が避けられない時だけ各 op 前に guard の reset ([`office-app-reset-guard`](#office-app-reset-guard))。 ⚠️ crash しても **save 済 ∧ commit 済の disk file は無傷** (= git が安全網)。 Excel の「ドキュメントの回復」 pane が出ても **回復版を保存せず破棄** (disk の検証済 file が正、 回復版で上書きさせない)。
 
-⚠️ **harness の Bash tool は foreground の bare `sleep` を block する** (= 「`killall …; sleep 6`」 を Bash に直書きすると止まる)。 → reset の待ちは (a) **`xlsx-to-pdf.sh` 等 script の内部 `sleep` に任せて script ごと呼ぶ**、 (b) **applescript 内の `delay`** で待つ、 (c) 長い処理は `run_in_background` で逃がす、 のいずれか。 bare `sleep` 直打ちに依存した reset 手順は harness 上で機能しない。
+⚠️ **harness の Bash tool は foreground の bare `sleep` を block する** (= 「`quit …; sleep 6`」 を Bash に直書きすると止まる)。 → reset の待ちは (a) **`office-app-guard.sh reset` / `xlsx-to-pdf.sh` 等 script の内部の待ちに任せて script ごと呼ぶ**、 (b) **applescript 内の `delay`** で待つ、 (c) 長い処理は `run_in_background` で逃がす、 のいずれか。 bare `sleep` 直打ちに依存した reset 手順は harness 上で機能しない。
 
-⚠️ **遅いマシンでは cold-start の `open` だけで 90-120 秒を超える** (= thermal throttle 中の旧 Intel 機で実測): osascript client を短い timeout で回すと「ハング」 に見えるが、 実体はまだ launch 中。 対処 3 点: (a) **client 側 timeout は 300 秒以上**で呼ぶ、 (b) **client を kill しても Excel 側の open は止まらない** — Excel は後から open を完了して workbook を保持し続けるので、 リトライ前に `timeout 10 osascript -e 'tell application "Microsoft Excel" to get name of every workbook'` の **応答 probe** で状態を見る (= 応答すれば ready、 timeout すれば modal dialog か launch 中)、 (c) 既に開いた workbook への 2 度目の script は数秒で終わる (= 高くつくのは初回 open のみ)。 origin: 海外出張様式 xlsm fill (90s timeout で kill → 実は launch 遅延、 再実行 1 発成功)。
+⚠️ **遅いマシンでは cold-start の `open` だけで 90-120 秒を超える** (= thermal throttle 中の旧 Intel 機で実測): osascript client を短い timeout で回すと「ハング」 に見えるが、 実体はまだ launch 中。 対処 3 点: (a) **client 側 timeout は 300 秒以上**で呼ぶ、 (b) **client を kill しても Excel 側の open は止まらない** — Excel は後から open を完了して workbook を保持し続けるので、 リトライ前に `timeout 10 osascript -e 'tell application "Microsoft Excel" to get name of every workbook'` の **応答 probe** で状態を見る (= 応答すれば ready、 timeout すれば modal dialog か launch 中。 未起動の Excel を起こさない版 = `office-app-guard.sh state excel` が `unknown` か)、 (c) 既に開いた workbook への 2 度目の script は数秒で終わる (= 高くつくのは初回 open のみ)。 origin: 海外出張様式 xlsm fill (90s timeout で kill → 実は launch 遅延、 再実行 1 発成功)。
 
 **検証**: 書き込み後は openpyxl で読み直して値を assert する (= osascript は失敗しても exit 0 で沈黙しがち)。 ⚠️ ただし **merged cell の値は fitz / openpyxl の text 抽出では取れないことがある** (= 結合範囲の左上以外は空に見える / PDF の text 抽出も同様) → 抽出の空振りを「書けていない」 と即断せず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF **画像**で最終確認する。
 
@@ -785,16 +782,16 @@ def fit_cell(ws, addr, content, line_height_pt=12.5, pad_pt=4, safety=0.95):
 
 **原因**: Excel が xlsx を編集モードで lock している。
 
-**正しい解法**: 再 fill する前に必ず Excel を quit:
+**正しい解法**: 再 fill する前に、 その file を Excel から外す。 **開いているのが誰かで手が変わる** (= user が開いて見ている book を quit で閉じると、 未保存の編集が保存 dialog で止まるか消える、 [`office-app-reset-guard`](#office-app-reset-guard)):
 
 ```bash
-osascript -e 'tell application "Microsoft Excel" to quit' 2>/dev/null
-sleep 1
+G=~/Claude/claude-config/scripts/lib/office-app-guard.sh
+bash "$G" close-ours excel /path/to/output.xlsx   # 自分 (前回の work-loop) が開いた copy だけ閉じる
+bash "$G" has-path excel /path/to/output.xlsx && echo "user が開いている → Excel で閉じてもらってから"
 python3 fill_xlsx.py
-open -a "Microsoft Excel" /path/to/output.xlsx
 ```
 
-`fill_xlsx.py` を反復実行する work-loop ではこの 3 行を冒頭に置く。
+`fill_xlsx.py` を反復実行する work-loop ではこの 3 行を冒頭に置く。 結果を user に見せる `open -a "Microsoft Excel" <file>` は前面に出てよい (= 見せるための操作) が、 次の周回の前に user に閉じてもらう。
 
 ### <a id="merged-cell-write-topleft"></a>Merged cells への write は top-left のみ有効
 
@@ -1248,11 +1245,9 @@ xlsx-to-pdf.sh <input.xlsx> [sheet] [output.pdf]
 - ⚠️ **近年の macOS は許可 dialog を最前面に出さないことがある** (= 要求元が非最前面の `osascript` 〔CLI / Claude 経由〕だと通知が focus を奪わず他 window の背後に出る、 既に許可済なら dialog 自体が出ない)。 → 「foreground で実行すれば dialog が見える」 とは限らない。 automation が無反応 (-1712) なら **見えない dialog が応答待ち**を疑い、 下記 System Settings で**事前に**許可しておくのが確実 (2026-06-25 観察: PowerPoint の初回 automation が dialog を観察できぬまま成功 = pre-grant か silent grant)。
 - 後から変更: システム設定 > プライバシーとセキュリティ > オートメーション。
 
-🔑 **連続 Excel 操作の不安定化と確実な reset (= 2026-06-05 RCA)**: 1 セッションで Excel を多数回 (= 10 回以上) 開閉すると、 `osascript ... to quit` が **非同期** (quit が返っても Excel は終了処理中) なため、 次の `open` 時に**前プロセスが残存** → AppleEvent 無応答 **(-1712)** / パラメータ拒否 **(-50)** が散発する。
-- **第 1 手 (通常)**: Excel を呼ぶ前に **`osascript -e 'tell application "Microsoft Excel" to quit'; sleep 3`** (= sleep を 1 でなく **3 以上**に厚く、 quit の非同期完了を待つ)。
-- **第 2 手 (失敗時)**: -1712 / -50 / **接続無効 (-609)** が出たら **`killall "Microsoft Excel"; sleep 4`** (= cell 値編集で killall を使うときは **sleep 6** に厚く) でプロセス強制終了 → クリーン起動 (= 2026-06-05 はこれで復旧)。 ⚠️ **`killall` は user が開いている未保存 Excel も問答無用で閉じる** → Claude 作業中に user が Excel を触らない前提でのみ使う (= 通常は第 1 手、 killall は最終手段)。 ⚠️ **killall 直後に cell 値を書く osascript を撃つ場合は起動待ち + 組み立て方が critical** → [`excel-osascript-cell-write`](#excel-osascript-cell-write) の 4 勘所に従う (= 怠ると -609 で沈黙失敗)。
+🔑 **連続 Excel 操作の不安定化と reset (= 2026-06-05 RCA)**: 1 セッションで Excel を多数回 (= 10 回以上) 開閉すると、 前の実行の Excel が残って (quit は**非同期** = 返っても終了処理中) 次の `open` が AppleEvent 無応答 **(-1712)** / パラメータ拒否 **(-50)** / 接続無効 **(-609)** になる。
+- **reset と復旧の手順は [`office-app-reset-guard`](#office-app-reset-guard) が正本** (2026-09-15 改訂: 旧「第 1 手 = 毎回 quit + sleep 3 / 第 2 手 = killall + sleep 4」 は user が開いている book を巻き込むので廃止。 今は開いている文書を聞き、 staged copy だけの時に quit して終了を待つ。 user の文書があれば reset を省き、 失敗が続くなら user に終了を頼む)。 `xlsx-to-pdf.sh` は Excel engine の起動直前にこの reset を組み込み済 (= 呼び出し側で忘れても毎回同じ判定)。
 - **失敗の沈黙化を防ぐ**: 上記「単独・短命」 と合わせ、 Excel コマンド直後に**出力ファイルの存在を検査**して失敗を verbose に surface する (= background 化 + GUI 不調の二重で失敗が埋もれた 2026-06-05 RCA。 `[ -f out.pdf ] || echo FAILED` を後置)。
-- 設計判断: `xlsx-to-pdf.sh` の Excel engine 分岐の起動直前に第 1 手 (quit + sleep) を組み込み済 (= 呼び出し側で忘れても毎回クリーン起動)。
 
 注意:
 - 印刷範囲・ページレイアウトが未設定だと各 sheet が複数ページに分割される。 提案書用途では問題ないが、 1 ページに収めたい場合は事前に [`print-area-one-page`](#print-area-one-page) (`ws.page_setup.fitToWidth = 1` 等) を openpyxl で set。
@@ -1279,7 +1274,7 @@ pptx-to-pdf.sh <input.pptx> [output.pdf]
 - **(a) `save … in` は HFS path を要求**: PowerPoint の `save in` に **POSIX path 文字列** (`"/Users/…"`) を渡すと、 `/` を**ファイル名の文字**とみなす HFS path として解釈し、 default フォルダに junk 名のファイルを**黙って書いて成功を返す** — 目的地にファイルが**できない**。 → colon 区切りの HFS path を渡す: `(POSIX file p) as text`。 (Excel の `save as` は `filename (POSIX file p)` = file object を受けるので挙動が違う点に注意。)
 - **(b) オートメーション権限**: 初回 foreground 実行で「"osascript" が "Microsoft PowerPoint" を制御することを求めています」 dialog → 許可。 background 実行は dialog を出せず -1743 / -1712 で失敗する (= [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の Excel と同じ機構)。
 
-🔒 **安全性 (= user の作業を壊さない)**: script は **開いた document だけを閉じる** (`close … saving no`) — **PowerPoint を quit せず**、 他の開いている document にも触らない。 user が別スライドを開いて作業中でも安全に走る (= 起動中 app への破壊的介入を避ける一般原則)。
+🔒 **安全性 (= user の作業を壊さない・前面に出さない)**: script は **自分が開いた deck だけを path で特定して閉じる** (`close … saving no`、 `active presentation` は使わない)。 他の document には触らず、 PowerPoint を quit するのは**この実行が起動し、 最後に何も開いていない時だけ**。 規則と機構の正本 = [`office-app-reset-guard`](#office-app-reset-guard)。
 
 ⚠️ **EMF 図 + 忠実度の検証義務**: macOS では PowerPoint が export 時に **embedded EMF vector 図をラスタライズ**する (= 通常は十分な解像度)。 だが図が**細かいハッチング / pattern fill** (= 「潰れ」 リスクのある 網掛け) を持つ deck では、 export 結果を**必ず目視 verify** する — 該当ページを高 DPI で render して確認する ([`pdf-visual-confirm`](#pdf-visual-confirm) の PDF visual confirmation、 LAYOUT 検証は [`image-budget-exhaustion`](#image-budget-exhaustion) の切り分け):
 
@@ -1673,7 +1668,7 @@ assert fitz.open("p1.pdf").page_count == 1
 ```bash
 osascript << 'OSAEOF'
 tell application "Pages"
-    activate
+    activate                            -- Pages は外すと open が missing value / -1712 (実測、 #office-app-reset-guard 射程外)
     set theDoc to open POSIX file "/path/to/form.docx"
     delay 2
     export theDoc to POSIX file "/path/to/form.pdf" as PDF
@@ -1700,18 +1695,11 @@ OSAEOF
 
 **原因**: Word が**前回 open したドキュメントを in-memory に保持**し、 osascript の `active document` がそのメモリ上の旧版を export する (= ディスクの新版を読み直さない)。 quit が中途半端 (= window だけ閉じてプロセス生存) だと特に起きる。
 
-**正しい解法 — 完全 kill → fresh open → export → PDF テキストで検証**:
+**正しい解法 — 毎回ちがう path で fresh open → その文書を export → PDF テキストで検証** (2026-09-15 改訂: 旧手順の `pkill -x "Microsoft Word"` は user の未保存文書ごと消し、 `active document` は user の文書を指しうるので廃止 = [`office-app-reset-guard`](#office-app-reset-guard))。 [`docx-to-pdf.sh`](../scripts/docx-to-pdf.sh) がこの形を実装済 = まずそれを使う:
 
-```bash
-# kill 前に user の文書が開いていないか probe (= user 環境 app への介入は禁則、 自分が起こした process のみ):
-#   timeout 20 osascript -e 'tell application "Microsoft Word" to get name of every document'  → `missing value` なら文書ゼロで安全
-pkill -x "Microsoft Word"          # ← window close では不十分、 プロセスを完全 kill
-sleep 2
-open "/path/to/form.docx"          # shell open (= file association)。 osascript 内 open より cold start に強い
-sleep 5                            # async load 完了待ち (= cold 時は長めに)
-# save as の AppleScript syntax は Word version 依存 (pdf-visual-confirm と同 caveat)。 active document を PDF 書き出し:
-osascript -e 'tell application "Microsoft Word" to save as active document file name "/path/to/out.pdf" file format format PDF'
-```
+- **stale の防御 = path を毎回変える** — staging の unique subdir ([`office-pregranted-staging-dir`](#office-pregranted-staging-dir)) に copy して開けば、 Word の in-memory 版が「同じ path」 として当たらない。 Word を kill しない。
+- reset は guard (`office-app-guard.sh reset word` = user の文書が無い時だけ quit) → 背景起動 (`launch word`) → `open -g -a "Microsoft Word" <staged docx>` (= shell open は cold start に強い、 `-g` で前面に出さない) → 文書一覧に staged path が出るまで待つ (`has-path`)。
+- export は **`full name` が staged path に一致する文書**に `save as document i file name "<out.pdf>" file format format PDF` → `close document i saving no` (save as の syntax は Word version 依存 = pdf-visual-confirm と同 caveat)。
 
 🔑 **検証は必ず「生成済み PDF のテキスト」 で回す** (docx でなく):
 
@@ -1733,7 +1721,7 @@ docx を検証して「正しい」 と確認しても、 export が stale な�
 
 **原因**: Word が cold (= 起動直後 / 直前に kill した) のまま osascript を撃つと `open` が非同期で間に合わず、 active document が無い／空。 `open -a "Microsoft Word" file` の戻り値を変数に取る方式も cold 時に変数未定義系で死ぬ (= [`docx-to-pdf-pages`](#docx-to-pdf-pages) の「変数 scope 罠」 の実体)。
 
-**正しい解法**: osascript 内で `open` せず、 **shell の `open <file>` (file association) + 長め sleep** で warm-up を保証してから export (= 故障 1 の前処理と同じ)。
+**正しい解法**: osascript 内で `open` せず、 **shell の `open -g -a "Microsoft Word" <file>` + 文書一覧に出るまで待つ** で warm-up を保証してから export (= 故障 1 の前処理と同じ)。
 
 ⚠️ **どうしても osascript 内で open する場合** (= 複数ファイルを 1 つの `tell` で loop する等) は 2 点を守る: **(a) `POSIX file (...)` の coercion は `tell application "Microsoft Word"` ブロックの外で評価する** — tell の内側で書くと Word に誤ルートされ `…変数は定義されていません` で死ぬ (= 変数 scope 罠の別形態)。 **(b) `open` の戻り値を変数に取らず**、 `activate` → `delay 3` (warm-up) → `open f` → `delay 5` → `set d to active document` で掴む (= cold-start で open の戻り値 binding は不安定)。 ただし結局 shell `open` + 別 osascript の方が安定するので、 osascript-内 open は loop 等で已むを得ない時だけ。
 
@@ -1779,7 +1767,7 @@ origin: 2026-06 PW 暗号化 docx を `/tmp/<work>/` に展開して round-trip 
 
 **副次効果 (= 設計上の bonus)**:
 - Excel の export 経路は **開いた workbook を再保存する**ことがある ([`xlsm-macro-export-trap`](#xlsm-macro-export-trap))。 staging では copy が書き換わるだけで **原本は byte 一致のまま** (= `git diff` が汚れない)。
-- unique subdir ゆえ Word の **stale in-memory cache ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache)) が「同じ path の再 open」 で再発しない** (= 既存の full kill 防御はそのまま併用)。
+- unique subdir ゆえ Word の **stale in-memory cache ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache)) が「同じ path の再 open」 で再発しない** (= 2026-09-15 から、 これが唯一の防御。 旧 full kill は user の文書を巻き込むので廃止 = [`office-app-reset-guard`](#office-app-reset-guard))。
 - `/tmp` 配下の input も copy されて通る (= [`docx-tmp-sandbox-deny`](#docx-tmp-sandbox-deny) の規律は in-place 経路限定に縮む)。
 
 ⚠️ **注意**:
@@ -1798,6 +1786,36 @@ origin: 出張書類 session で案件 dir ごとに dialog を踏み、 remote 
 - **強制**: PreToolUse(Bash) hook [`hooks/office-inplace-guard.py`](../hooks/office-inplace-guard.py) が、 (a) inline osascript (heredoc 含む) で開く・保存する path の literal が staging root の外、 (b) `osascript <file>.applescript|.scpt` で script 内の literal か argv の path が外、 (c) Office を osascript / appscript / JXA で open・save する python / shell script (直接実行・`-c`・heredoc 含む) が helper を import / source していない、 (d) wrapper の `--no-stage` や `CLAUDE_OFFICE_STAGING=0`、 を **deny** して上の直し方を返す。 通すもの = wrapper / `office-stage-run.sh` 配下 / staging root (と `CLAUDE_OFFICE_STAGING_DIR`) の内側 / 判定できない入力 (未解決の変数・読めない file = fail-open)。 配線 = [`hooks/settings-entries.json`](../hooks/settings-entries.json) (= 各マシンの `sync-hook-settings.sh` が次の session 開始 / pull で入れる)、 実効性 = `office-inplace-guard.py --canary` (本番の settings と install 済み hook がカナリアを deny するか = `ARMED` / `NOT ARMED` / `対象外`)。
 - **例外の書き方**: in-place が本当に要る時 (例 = 原本そのものを Excel で再保存して cache を戻す) だけ、 script file の中か command の末尾 comment に **`office-staging: exempt <理由>`** (理由が空なら無効)。 grant は folder ごとに 1 回で済むが、 remote 操作中は押せない点を理由と照らす。
 - **射程外 (既知の穴)**: `open -a "Microsoft Excel" <file>` (= 人が見る用途と区別できない) / import した module の中の駆動 / Makefile や別 tool 経由 / AppleScript 内で文字列を連結した path。 hook は事故を減らす網であって、 規則の home は本節。
+
+### <a id="office-app-reset-guard"></a>規則: Office app の quit・kill・前面化は「自分のものだけ」 (reset は開いている文書を聞いてから)
+
+**automation は、 user が開いている app・文書に quit / close / save / kill / activate をしない** (2026-09-15)。 旧 reset (= Excel を呼ぶ前に毎回 `quit` + sleep、 失敗したら `killall`、 Word は毎回 `pkill`) は廃止した。 未保存の book があれば `quit` は保存 dialog で script を止め、 kill は作業ごと消す。 `activate` と Finder の `open` は毎回 app を前面に出して user の手を止める。 本節が規則と機構の home で、 他節の reset・復旧手順はここを指す。
+
+**機構** = [`scripts/lib/office-app-guard.sh`](../scripts/lib/office-app-guard.sh) (bash の 1 実装。 python は `office_staging.office_app()` から同じ CLI を呼ぶ)。 4 wrapper (`xlsx-to-pdf.sh` / `docx-to-pdf.sh` / `pptx-to-pdf.sh` / `affix-image-xlsx.py`) が使う:
+
+- **reset** (`office_app_reset`、 旧「第 1 手 quit + sleep」 の置き換え): app に開いている文書 (`full name` + `saved`) を聞く。 全部が staging root の中の copy (+ 保存済みの起動用 book) なら、 自分の copy を保存せず閉じ、 **同じ osascript の中で数え直して 0 の時だけ** plain `quit` を撃ち、 終了を待つ。 staging root の外の文書・未保存の新規文書が 1 つでもある / 応答しない / dialog が quit を取り消した (-128) → **何もせず続行** (自分の copy だけを開閉する)。 `quit saving no` は使わない (= 数え直しをすり抜けた user の文書も保存 dialog が守る)。
+- **前面に出さない**: 起動は `open -g -b <bundle id>`、 AppleScript に `activate` を書かない、 Word は `open -g -a "Microsoft Word" <file>`。 それでも前面を奪っていたら、 始める前の前面 app に返す (`office_front_remember` / `office_front_restore`、 user が途中で別 app に移っていれば動かさない)。
+- **対象文書は path で特定**: `active document` / `active presentation` / `workbook 1` は user の文書を指しうる → `open workbook` が返す参照か、 `full name` が staged path に一致する文書だけを save / close する。 同じ path (Excel は同名 = 2 つ開けない) の文書が既に開いていれば、 開かずに止まる (= 開いていた方を「自分の」 として閉じると未保存の編集が消える)。
+- **後始末** (`office_app_release`): この実行が起動した app だけ、 自分の copy を閉じた後に reset と同じ条件で quit (= 起動前の状態に戻す)。 もとから起動していた app は起動したままにする。
+
+**wrapper 以外 (手書き osascript・案件ごとの driver) で reset したい時**:
+
+```bash
+G=~/Claude/claude-config/scripts/lib/office-app-guard.sh
+bash "$G" state excel     # not-running / clear / user-docs <n> / unknown
+bash "$G" reset excel     # clear の時だけ quit。 それ以外は何もしない (stderr に理由)
+bash "$G" launch excel    # 背景起動 (launched=1 なら後で: bash "$G" release excel 1)
+```
+
+python は `from office_staging import office_app` → `office_app("reset", "excel")` (使い方の例は `office_staging.py` の docstring)。
+
+**-1712 / -609 / -50 が続く時** (旧「第 2 手 killall」 の置き換え): `state` を見る → `clear` なら `reset` して再実行 / `user-docs` / `unknown` なら **user に「作業を保存して自分で終了 (⌘Q) してから」 を頼む**。 Claude は app 名指定の `killall` / `pkill` / 強制終了をしない。 唯一の例外 = **その session が自分で起動したと起動時刻で確かめた process で、 文書一覧に 0 と答えたもの**を PID 指定で終わらせる時 (例: hidden の dialog で `quit` が取り消され続ける)。
+
+**実測** (2026-09-15、 macOS 26.5 / Office 16.112): Excel / Word / PowerPoint の `full name` は POSIX path (古い版の HFS に備えて guard は変換してから比べる)。 起動中の Excel に `activate` なしで book を開いても、 `open -g -a` で Word に docx を開かせても、 前面は動かない。 **`open -j` (hidden) で起動すると、 開く失敗の警告 dialog まで見えなくなり、 `quit` が -128 で取り消されたまま誰も気づかない** → `-j` は使わない。 4 wrapper を実機で通し (前面は一度も Office に移らず、 文書の無い app だけが最後に quit)、 別の文書を開いた Excel では reset を省いて PDF を作り、 その文書を開いたまま残すことを確認。
+
+**検査**: [`scripts/lib/office-app-guard.test.sh`](../scripts/lib/office-app-guard.test.sh) (osascript / open を stub に差し替え = Office 不要: 未起動 / staged copy だけ / user の文書あり 〔保存済・未保存・名前だけの新規〕 / 応答なし / 確認と quit の間に文書が開かれた / dialog で取り消し / has-path / 前面を返す条件 / python の橋 + **wrapper に quit・kill・activate・`active document`・`workbook 1` が戻っていないかの lint** + macOS では `xlsx-to-pdf.sh` を stub の上で通す)。 AppleScript 本体の挙動は stub では検査できない = 上の実測が根拠。
+
+**射程外**: 背景で動かしても Office 自身の dialog (修復・マクロ警告・サインイン) は前面に出ることがある (= 前面は返すが dialog は消さない)。 **Pages 経路 (`docx-to-pdf.sh --pages`) は背景化できていない**: `activate` を外すと `open` が `missing value` (-1700) / -1712 で失敗し、 `open -g -a Pages <file>` でも 30 秒で文書が現れなかった (実測、 Pages 14.5。 Pages は staging しないので file access の確認が見えないまま止まると推定、 未確定) → Pages は従来どおり前面に出し、 終わったら前面を返す。 quit はしない (元から)。 Bash に直接 `killall "Microsoft Excel"` を書くことを止める hook は無い (= 規則の home は本節、 wrapper の回帰は test の lint が止める)。
 
 ### <a id="word-applescript-password-open"></a>Word.app の AppleScript で PW 暗号化 docx を開く / select/find が動かない罠
 
@@ -3515,7 +3533,7 @@ origin: 海外出張願 + 日程表 = overlay 文字が紙で化け → OTF 埋�
 1. **可変長の値は docx に入れず PDF overlay で載せる** (= メールアドレス・電話・○印・認印は [`pdf-prefill-direct`](#pdf-prefill-direct) 流儀で雛形 render 後に描く、 ○ は `rawdict` の glyph bbox で「（」 と「）」 の隙間中心に `draw_oval`)。 docx には表の列幅に影響しない短い値だけ入れる。
 2. それでも溢れる 1 行は **その段落だけ 9.5pt** (10.5pt 既定から 1pt 落とす = 視認差なし、 ~10% 幅節約)。
 3. **検証 = 雛形 docx を同じ経路で PDF 化して page 数と主要ラベルの y 座標を突合** (= `get_text("blocks")` で「承認日」「許可します」 等の y が雛形と同じか)。 page 数一致だけでは行内折り返し (= 見た目の崩れ) を見逃す。
-4. ⚠️ 変換結果が変わらない時は Word の stale in-memory cache ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache)) を疑い、 `get name of every document` が `missing value` なら `pkill -x "Microsoft Word"` してから再変換。
+4. ⚠️ 変換結果が変わらない時は Word の stale in-memory cache ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache)) を疑い、 staging 経由 (= 毎回ちがう path) で再変換する (`docx-to-pdf.sh` の既定。 Word は kill しない = [`office-app-reset-guard`](#office-app-reset-guard))。
 
 origin: 海外出張願 (人事課 docx 様式) — 複数回の変換試行で (1)+(2) に収束、 雛形と y 座標一致を確認してから印刷。
 

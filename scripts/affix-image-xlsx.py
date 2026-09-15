@@ -48,8 +48,13 @@ Usage
 
 Safety
 ------
-* Refuses to run when Excel already has the target workbook open (avoids clobbering
-  unsaved edits).
+* Refuses to run when Excel already has the target workbook (or one with the same
+  name) open (avoids clobbering unsaved edits).
+* Never touches the user's other workbooks and never comes to the front: Excel is
+  launched with ``open -g`` and never activated, the workbook is addressed by the
+  reference ``open workbook`` returned (never ``workbook 1``, which can be yours),
+  and Excel is quit at the end only when this run launched it and nothing else is
+  open (``scripts/lib/office-app-guard.sh``, ``office-automation.md#office-app-reset-guard``).
 * Writes a ``.bak`` next to the file unless ``--no-backup`` (in-place mode; with
   staging the original is never touched until the checks pass).
 * Post-condition assertions abort with exit 2 and restore the backup (in-place) /
@@ -67,7 +72,7 @@ import sys
 import zipfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
-from office_staging import Stage  # noqa: E402
+from office_staging import Stage, office_app  # noqa: E402
 
 
 def inventory(path: str) -> dict:
@@ -109,16 +114,12 @@ def run_osascript(script: str) -> str:
 
 
 def excel_has_open(path: str) -> bool:
-    """True when Excel is running with this workbook open."""
-    running = run_osascript(
-        'tell application "System Events" to return (name of processes) contains "Microsoft Excel"'
-    )
-    if running != "true":
-        return False
-    names = run_osascript(
-        'tell application "Microsoft Excel" to if running then return name of every workbook'
-    )
-    return os.path.basename(path) in names
+    """True when Excel is running with this workbook (or one with the same name) open.
+
+    Asks the app guard, which checks ``is running`` first (= never launches Excel) and
+    needs no System Events permission.
+    """
+    return office_app("has-path", "excel", path).returncode == 0
 
 
 def main() -> None:
@@ -156,43 +157,52 @@ def main() -> None:
         if st.active:
             print(f"staging: {st.dir} (pre-granted, no sandbox dialog)", file=sys.stderr)
 
-        if args.dry_run:
-            pos = run_osascript(f'''
-tell application "Microsoft Excel"
-  open POSIX file "{sbook}"
+        # background only: no `activate`, launched with `open -g` if needed, focus given back
+        front = office_app("front-remember").stdout.strip()
+        launch = office_app("launch", "excel")
+        if launch.returncode != 0:
+            sys.exit("Excel did not start / answer in the background.")
+        launched = "launched=1" in launch.stdout
+
+        try:
+            if args.dry_run:
+                pos = run_osascript(f'''
+tell application id "com.microsoft.Excel"
+  set wbk to open workbook workbook file name (POSIX file "{sbook}")
   delay 1
-  tell workbook 1
-    set r to range "{args.cell}" of worksheet "{args.sheet}"
-    set L to (left position of r)
-    set T to (top of r)
-  end tell
-  close workbook 1 saving no
+  set r to range "{args.cell}" of worksheet "{args.sheet}" of wbk
+  set L to (left position of r)
+  set T to (top of r)
+  close wbk saving no
   return (L as text) & "," & (T as text)
 end tell''')
-            left, top = (float(v) for v in pos.split(","))
-            print(f"[dry-run] {args.sheet}!{args.cell} -> left={left + args.dx} top={top + args.dy} size={args.size}")
-            print(f"[dry-run] inventory: {before_inv}")
-            return
+                left, top = (float(v) for v in pos.split(","))
+                print(f"[dry-run] {args.sheet}!{args.cell} -> left={left + args.dx} top={top + args.dy} size={args.size}")
+                print(f"[dry-run] inventory: {before_inv}")
+                return
 
-        backup = book + ".bak"
-        if not args.no_backup and not st.active:
-            shutil.copy2(book, backup)   # in-place mode only; staging never touches the original early
+            backup = book + ".bak"
+            if not args.no_backup and not st.active:
+                shutil.copy2(book, backup)   # in-place mode only; staging never touches the original early
 
-        run_osascript(f'''
-tell application "Microsoft Excel"
-  open POSIX file "{sbook}"
+            # the workbook is addressed by the reference `open workbook` returns — never `workbook 1`
+            run_osascript(f'''
+tell application id "com.microsoft.Excel"
+  set wbk to open workbook workbook file name (POSIX file "{sbook}")
   delay 1
-  tell workbook 1
-    tell worksheet "{args.sheet}"
-      set r to range "{args.cell}"
-      set L to (left position of r) + {args.dx}
-      set T to (top of r) + {args.dy}
-      make new picture at it with properties {{file name:(POSIX file "{simage}"), left position:L, top:T, width:{args.size}, height:{args.size}}}
-    end tell
-    save
+  tell worksheet "{args.sheet}" of wbk
+    set r to range "{args.cell}"
+    set L to (left position of r) + {args.dx}
+    set T to (top of r) + {args.dy}
+    make new picture at it with properties {{file name:(POSIX file "{simage}"), left position:L, top:T, width:{args.size}, height:{args.size}}}
   end tell
-  close workbook 1 saving no
+  save wbk
+  close wbk saving no
 end tell''')
+        finally:
+            office_app("close-ours", "excel", sbook)   # only our copy (e.g. left open by a failed script)
+            office_app("release", "excel", "1" if launched else "0")
+            office_app("front-restore", front, "Microsoft Excel.app")
 
         after_inv = inventory(sbook)
         after_cache = formula_cache_sample(sbook)

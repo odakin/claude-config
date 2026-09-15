@@ -37,8 +37,12 @@
 #   (Verified on Word + Excel; PowerPoint shares the entitlement — see the doc's ledger.)
 #
 # Safety: opens the deck, exports, and closes ONLY the document it opened
-#   (saving no). It does NOT quit PowerPoint and does NOT touch any other open
-#   document — safe to run while you have other PowerPoint work open.
+#   (matched by path, saving no — never `active presentation`, which could be yours).
+#   It never touches any other open document and never kills PowerPoint; it quits
+#   PowerPoint only when THIS run launched it and nothing else is open by the end.
+#   PowerPoint is launched with `open -g` and never activated (stays in the background;
+#   if it took the front anyway, focus goes back). Lib = scripts/lib/office-app-guard.sh,
+#   doc = office-automation.md#office-app-reset-guard.
 #
 # ⚠️ EMF FIGURES + FIDELITY: on macOS, PowerPoint rasterizes embedded EMF vector
 #   graphics on export (usually at adequate resolution). For a deck whose figures
@@ -70,6 +74,7 @@ if [ -f "$STAGING_LIB" ]; then
 else
   office_stage_file() { return 1; }; office_stage_cleanup() { :; }; office_stage_prune() { :; }; office_stage_report_fallback() { :; }
 fi
+GUARD_LIB="$(cd "$(dirname "$0")" && pwd)/lib/office-app-guard.sh"
 if [ "$NO_STAGE" = 1 ]; then CLAUDE_OFFICE_STAGING=0; export CLAUDE_OFFICE_STAGING; fi
 
 if [ "$(uname)" = "Darwin" ] && [ -d "/Applications/Microsoft PowerPoint.app" ]; then
@@ -83,14 +88,40 @@ if [ "$(uname)" = "Darwin" ] && [ -d "/Applications/Microsoft PowerPoint.app" ];
   else
     office_stage_report_fallback "$SRC"   # 予期せぬ fallback = ⚠️ stderr + fallback log (意図的 --no-stage は沈黙)
   fi
+  [ -f "$GUARD_LIB" ] || { echo "❌ missing $GUARD_LIB (required: without it this script cannot tell whether PowerPoint holds your work)" >&2; exit 1; }
+  # shellcheck source=lib/office-app-guard.sh
+  . "$GUARD_LIB"
+  office_front_remember
+  if office_app_has_path powerpoint "$WSRC"; then
+    echo "❌ PowerPoint already has this deck open: $WSRC — close it in PowerPoint first (this script will not close your deck)." >&2
+    exit 1
+  fi
+  if ! office_app_launch_background powerpoint; then
+    echo "❌ PowerPoint did not start / answer in the background." >&2
+    office_app_failure_hint powerpoint
+    exit 1
+  fi
   if ! osascript - "$WSRC" "$WPDF" <<'AS'; then
 on run argv
   set srcPath to item 1 of argv
   set outHFS to (POSIX file (item 2 of argv)) as text   -- HFS path: gotcha (a)
-  tell application "Microsoft PowerPoint"
-    with timeout of 580 seconds
-      open srcPath
-      set theDoc to active presentation                 -- the just-opened deck
+  with timeout of 580 seconds
+    tell application id "com.microsoft.Powerpoint" to open srcPath   -- no `activate`: stays in the background
+    -- find the deck this script opened, by path (never `active presentation` = could be the user's)
+    set idx to 0
+    repeat 120 times
+      tell application id "com.microsoft.Powerpoint" to set n to (count of presentations)
+      repeat with i from 1 to n
+        tell application id "com.microsoft.Powerpoint" to set fn to (full name of presentation i) as text
+        if fn does not start with "/" and fn contains ":" then set fn to POSIX path of fn
+        if fn is srcPath then set idx to i
+      end repeat
+      if idx is not 0 then exit repeat
+      delay 0.5
+    end repeat
+    if idx is 0 then error "deck not open in PowerPoint: " & srcPath
+    tell application id "com.microsoft.Powerpoint"
+      set theDoc to presentation idx
       try
         save theDoc in outHFS as save as PDF
       on error e number n
@@ -99,15 +130,21 @@ on run argv
         end try
         error "PowerPoint save failed (" & n & "): " & e
       end try
-      close theDoc saving no            -- close ONLY this doc; never quit the app
-    end timeout
-  end tell
+      close theDoc saving no            -- close ONLY this doc
+    end tell
+  end timeout
 end run
 AS
     echo "❌ PowerPoint AppleScript export failed (see error above)." >&2
+    office_app_close_ours powerpoint "$WSRC"
+    office_app_release powerpoint
+    office_front_restore "Microsoft PowerPoint.app"
+    office_app_failure_hint powerpoint
     [ "$WSRC" != "$SRC" ] && echo "   staged copy kept for diagnosis: $OFFICE_STAGE_DIR" >&2
     exit 1
   fi
+  office_app_release powerpoint
+  office_front_restore "Microsoft PowerPoint.app"
   if [ "$WPDF" != "$PDF" ]; then
     [ -f "$WPDF" ] || { echo "❌ PowerPoint reported success but no PDF in staging: $WPDF" >&2; exit 1; }
     cp -p "$WPDF" "$PDF"

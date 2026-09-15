@@ -16,7 +16,10 @@
 # Engine selection:
 #   macOS (default) : Microsoft Word via osascript — layout-faithful, for a
 #                     reviewer-facing copy. Handles the stale-cache + cold-start
-#                     gotchas (full kill + shell `open` + warm-up sleep).
+#                     gotchas (unique staged path + background `open -g` + wait
+#                     until listed). Never quits/kills a Word that holds documents
+#                     this script did not open, never comes to the front
+#                     (office-automation.md#office-app-reset-guard).
 #                     ⭐ docx は「Word 体裁が契約」 の正式書類 (= 行政・学術・社内
 #                     様式) が大半なので、 default は Word 忠実版に倒す
 #                     (2026-06-23 反転、 office-automation.md §docx-pdf-stale-cache
@@ -74,6 +77,15 @@ if [ -f "$STAGING_LIB" ]; then
 else
   office_stage_file() { return 1; }; office_stage_cleanup() { :; }; office_stage_prune() { :; }; office_stage_report_fallback() { :; }
 fi
+# app guard (= user の文書を持つ Word を quit / kill しない + 前面に出さない、 office-automation.md#office-app-reset-guard)。
+# Word 経路は必須 (render_word が無ければ止まる)、 Pages 経路は前面を返す関数だけ使う
+GUARD_LIB="$(cd "$(dirname "$0")" && pwd)/lib/office-app-guard.sh"
+if [ -f "$GUARD_LIB" ]; then
+  # shellcheck source=lib/office-app-guard.sh
+  . "$GUARD_LIB"
+else
+  office_front_remember() { :; }; office_front_restore() { :; }
+fi
 if [ "$NO_STAGE" = 1 ]; then CLAUDE_OFFICE_STAGING=0; export CLAUDE_OFFICE_STAGING; fi
 
 warn_tmp_input() {
@@ -95,7 +107,12 @@ soffice_bin() { if have soffice; then echo soffice; elif have libreoffice; then 
 
 render_pages() {
   # Robust macOS automation; uses the verified `export ... as PDF` form.
-  osascript - "$SRC" "$PDF" <<'AS'
+  # ⚠️ Pages keeps `activate`: without it `open` returned missing value / timed out (-1700 / -1712,
+  #    2026-09-15, Pages 14.5 — Pages is not staged, so its file-access prompt stays hidden). Pages
+  #    comes to the front here; focus is handed back afterwards (office-automation.md#office-app-reset-guard).
+  local rc=0
+  office_front_remember
+  osascript - "$SRC" "$PDF" <<'AS' || rc=$?
 on run argv
   set srcPath to item 1 of argv
   set pdfPath to item 2 of argv
@@ -110,19 +127,25 @@ on run argv
   end timeout
 end run
 AS
+  office_front_restore "Pages.app"
+  return "$rc"
 }
 
 render_word() {
   # Word engine: stale in-memory cache + cold-start failures
-  # (office-automation.md #docx-pdf-stale-cache). Defenses: full kill → shell
-  # `open` (file association = cold-start safe) → warm-up sleep → save as the
-  # active document, wrapped in `with timeout` (default AppleEvent timeout is
-  # 60s — too short for cold-start). save-as syntax is Word-version dependent.
+  # (office-automation.md #docx-pdf-stale-cache). Defenses: guarded reset (quit only
+  # when Word holds nothing but staged copies — never kill, office-automation.md
+  # #office-app-reset-guard) → background launch → shell `open -g` (file association
+  # = cold-start safe, -g = stays behind) → wait until the document is listed → save
+  # THAT document (matched by path, never `active document` = could be the user's),
+  # wrapped in `with timeout` (default AppleEvent timeout is 60s — too short for
+  # cold-start). save-as syntax is Word-version dependent.
   #
   # Staging (office-automation.md #office-pregranted-staging-dir): copy the docx
   # into the pre-granted dir, export there, copy the PDF back. The unique subdir
-  # also keeps Word's in-memory cache from matching a previous run's path.
-  local wsrc="$SRC" wpdf="$PDF"
+  # also keeps Word's in-memory cache from matching a previous run's path (= the
+  # reason the old full kill existed).
+  local wsrc="$SRC" wpdf="$PDF" ticks=0
   office_stage_prune 7
   if office_stage_file "$SRC"; then
     wsrc="$OFFICE_STAGED"
@@ -132,27 +155,65 @@ render_word() {
     office_stage_report_fallback "$SRC"   # 予期せぬ fallback = ⚠️ stderr + fallback log (意図的 --no-stage は沈黙)
     warn_tmp_input
   fi
-  pkill -x "Microsoft Word" 2>/dev/null || true
-  sleep 2
-  open "$wsrc"
-  sleep 6
-  if ! osascript <<AS 2>&1; then
-with timeout of 240 seconds
-  tell application "Microsoft Word"
-    save as active document file name "$wpdf" file format format PDF
-  end tell
-end timeout
+  [ -f "$GUARD_LIB" ] || { echo "❌ missing $GUARD_LIB (required: without it this script cannot tell whether Word holds your work)" >&2; return 1; }
+  office_front_remember
+  office_app_reset word
+  if office_app_has_path word "$wsrc"; then
+    echo "❌ Word already has this document open: $wsrc — close it in Word first (this script will not close your document)." >&2
+    return 1
+  fi
+  if ! office_app_launch_background word; then
+    echo "❌ Word did not start / answer in the background." >&2
+    office_app_failure_hint word
+    return 1
+  fi
+  open -g -a "Microsoft Word" "$wsrc"
+  until office_app_has_path word "$wsrc"; do
+    if [ "$ticks" -ge 120 ]; then
+      echo "❌ Word did not list the document within 60 s: $wsrc" >&2
+      office_app_close_ours word "$wsrc"; office_app_release word; office_front_restore "Microsoft Word.app"
+      office_app_failure_hint word
+      return 1
+    fi
+    sleep 0.5; ticks=$((ticks + 1))
+  done
+  sleep 2   # layout settle after load (the old fixed warm-up was 6 s from a cold kill)
+  if ! osascript - "$wsrc" "$wpdf" <<'AS' >/dev/null; then
+on run argv
+  set srcPath to item 1 of argv
+  set pdfPath to item 2 of argv
+  with timeout of 240 seconds
+    tell application id "com.microsoft.Word" to set n to (count of documents)
+    repeat with i from 1 to n
+      tell application id "com.microsoft.Word" to set fn to (full name of document i) as text
+      if fn does not start with "/" and fn contains ":" then set fn to POSIX path of fn
+      if fn is srcPath then
+        -- the document this script opened, matched by path (never `active document`)
+        tell application id "com.microsoft.Word"
+          save as document i file name pdfPath file format format PDF
+          close document i saving no
+        end tell
+        return "ok"
+      end if
+    end repeat
+  end timeout
+  error "document not open in Word: " & srcPath
+end run
 AS
     echo "" >&2
     echo "❌ Word AppleScript automation failed (cold-start / -1712 timeout / -609 connection)." >&2
+    office_app_close_ours word "$wsrc"
+    office_app_release word
+    office_front_restore "Microsoft Word.app"
+    office_app_failure_hint word
     echo "   Fallback (office-automation.md §docx-pdf-stale-cache fallback 1):" >&2
     echo "   open the file in Word manually and use File > 名前を付けて保存 > PDF。" >&2
     echo "   srcfile: $SRC" >&2
     [ "$wsrc" != "$SRC" ] && echo "   staged copy kept for diagnosis: $OFFICE_STAGE_DIR" >&2
-    osascript -e 'tell application "Microsoft Word" to close active document saving no' >/dev/null 2>&1 || true
     return 1
   fi
-  osascript -e 'tell application "Microsoft Word" to close active document saving no' >/dev/null 2>&1 || true
+  office_app_release word
+  office_front_restore "Microsoft Word.app"
   if [ "$wpdf" != "$PDF" ]; then
     [ -f "$wpdf" ] || { echo "❌ Word reported success but no PDF in staging: $wpdf" >&2; return 1; }
     cp -p "$wpdf" "$PDF"

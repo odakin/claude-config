@@ -16,6 +16,18 @@ macOS の Microsoft Office は App Sandbox で、 file を置いた folder へ�
         st.copy_back(staged_book, book)     # 書き戻し (同 dir の tmp → os.replace で atomic)
     # 正常終了で subdir を削除、 例外時は残す (診断用)
 
+app の reset・背景起動 (user の文書を持つ app は quit も kill もしない、 前面に出さない): ``office_app(cmd, *args)`` —
+実装は ``office-app-guard.sh`` の 1 つだけで、 ここは CLI を呼ぶ橋 (office-automation.md#office-app-reset-guard)::
+
+    front = office_app("front-remember").stdout.strip()
+    launched = "launched=1" in office_app("launch", "excel").stdout
+    try:
+        ... staged copy を開いて閉じる osascript (activate しない) ...
+    finally:
+        office_app("close-ours", "excel", staged_book)
+        office_app("release", "excel", "1" if launched else "0")
+        office_app("front-restore", front, "Microsoft Excel.app")
+
 path 判定 (副作用なし): ``is_staged_path(p)`` / ``staging_roots_for_match()`` —
 PreToolUse hook ``hooks/office-inplace-guard.py`` が「Office に staging 外の path を触らせる command」 を
 止めるのに使う (bash 版には無い、 python 専用の追加 API)。
@@ -25,11 +37,22 @@ from __future__ import annotations
 import os
 import platform
 import shutil
+import subprocess
 import tempfile
 import time
 
 ROOT_NAME = "claude-office-staging"
 GROUP_CONTAINER = "Library/Group Containers/UBF8T346G9.Office"
+APP_GUARD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "office-app-guard.sh")
+
+
+def office_app(cmd: str, *args: str) -> subprocess.CompletedProcess:
+    """office-app-guard.sh の CLI を呼ぶ (stdout は捕捉、 stderr の notice はそのまま流す)。
+
+    cmd = state / documents / reset / launch / release / has-path / close-ours / front-remember / front-restore。
+    判定・AppleScript は bash 側だけが持つ (= python に鏡像を作らない、 drift の余地を消す)。
+    """
+    return subprocess.run(["bash", APP_GUARD, cmd, *args], stdout=subprocess.PIPE, text=True)
 
 
 def staging_root() -> str | None:
