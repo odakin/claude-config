@@ -15,6 +15,10 @@
 #   **全 file が「追加行」 として見え**、 gate の全 Tier (A 構造 / B literal / C 非公開 repo 名 /
 #   D 未公開文書の逐語・機密 / E 活動の事実) がそのまま tree 全体に当たる。
 #   本物の index も working tree も remote も触らない (= 読むだけ)。
+#   ⚠️ 見るのは **commit 済の tree** (`git archive HEAD`) — 直したあと commit する前に走らせても
+#   finding は消えない。 「直した → commit → 走査」 の順で。
+#   ⚠️ 確認のために `CLAUDE_STATE_DIR` を temp に逃がした run は **本番の台帳に記録されない**
+#   (= 進捗として数えられない)。 決着させた repo は本番の台帳で 1 回通す。
 #
 # ⚠️ 射程: **現在の tree だけ**。 過去の commit の中身と commit message は見ない
 #   (= 履歴は go-forward な操作では消えない、 conventions/confidential-repo-boundary.md §6)。

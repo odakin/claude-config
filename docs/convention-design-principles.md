@@ -1414,6 +1414,12 @@ signal そのものが載る。 source を grep する / test fixture を読む 
 1. **path 除外** (= 自分の source / test / doc を検査対象から外す) — **走査型**の検出器 (= file 集合を
    読む lint / grep gate) にしか効かない。 ⚠️ 除外を dir 単位に広げると同居する別 gate まで silent に
    死ぬので、 除外は自分の file だけに閉じる。
+   ⚠️ <a id="excluded-config-is-a-hiding-place"></a>**除外した file は「隠し場所」 になる** — 検出器の設定 file
+   (受理一覧・除外語・pattern 一覧) は **検出対象の文字列をそのまま並べる**ので除外せざるを得ないが、
+   除外した瞬間、 そこに何を書いても検出器は見ない。 **代償は別の検査で払い戻す**: 設定の各 entry が
+   **検査対象の側に既に在る**ことを確かめ、 無いものを finding にする (= 「見た上で残す」 の宣言なら、
+   その文字列は対象のどこかに在るはず。 無いなら宣言ではなく新しい書き込み)。 この検査があると、
+   除外は「既に在るものを再提示しない」 だけの意味に縮み、 隠し場所には使えない。
 2. **構造 anchor** (= signal が「真の producer だけが出す形」 で現れたときだけ拾う) — **観測 channel**
    (= tool の出力・log・diff) を見る検出器には外すべき「file」 が無いので、 **こちらが唯一の手**。
    error message なら行頭 + 発行元 prefix + 区切り記号まで含めて固定する。
@@ -1459,6 +1465,8 @@ class の別の形がその pattern を素通りすると、sweep は「無い�
   grep の射程外の 1 件が出た。同じ日、性能修正の同類探しで書いた正規表現が、探している書き方に一致しない形だった
   (広い grep を併走させて気づいた)。1 件目の instance = [`latex.md#bare-parenthetical-crossrefs`](../conventions/latex.md#bare-parenthetical-crossrefs)。
 - **3 件目 (2026-09-14、 漏洩 sweep)**: 公開 repo の例示から未公開文書の中身を抜く sweep で、 原稿の術語の list による走査は **文書への評価 (模擬審査の指摘など)** を 0 件と答えた (評価の文章は原稿の術語を含まない)。 「模擬審査 / 盲検 / 実測 / 評点」 という**過程の語**から入り直すと見つかった。 class の形 = 原稿の文・数値・結果、 **その文書に対する評価**、 経緯。 term list が当たるのは最初の形だけ ([`CLAUDE.md#non-identifier-content-leak`](../CLAUDE.md#non-identifier-content-leak))。
+
+- **4 件目 (OS 差、 実測)**: 「個人の home 直下の絶対 path」 を止める gate が POSIX 形 (`/Users/<name>`) だけを見ていて、 **Windows 形 (`C:\Users\<name>`) が素通り**していた。 同じ class の事実に **OS ごとの表記**があり、 そのうち 1 形しか 書かれていない検出器は、 別 OS で書かれた成果物 (build spec・3D モデルの texture 参照・project file) の中で黙る。 class を挙げるときは「別の OS / 別の区切り文字 / 別の escape ではどう書かれるか」 まで数える (drive letter は任意、 区切りは `\` と `/` の両方が現れる)。
 
 ### <a id="rule-visible-where-the-act-happens"></a>8.44 規則は「それを破る行為をする session」 が読み込む場所に置く — 正しい repo に書いた規則でも、 行為の場所から見えなければ無いのと同じ (2026-09-13)
 

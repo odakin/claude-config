@@ -79,7 +79,7 @@ Read it again before attempting to write it.
   - `rebase` では**片側が採用されて成功したように見える**ことがある。 2 session が同じ append-only ledger (TODO / inbox の yaml) の末尾に追記していると、 **後から rebase した側の追記だけが消えたまま push される**。
   実例 (2026-09-14): 並行 session と同じ `TODO.yaml` (git-crypt) に双方が 1 entry 追記 → `pull --rebase` が conflict → 解決したつもりで進めたところ、 自分の entry が file から消えていた (`git status` は `UU` なのに marker 0 件、 parse も通る)。
   - **復旧手順**: `git merge origin/<branch>` → `git checkout origin/<branch> -- <ledger>` (= 上流版を丸ごと取る) → **自分の追記を再適用** → `git add` → merge commit。 rebase で押し通さない。
-  - ⚠️ **検収は「件数」 でなく「id の照合」** — 両側が 1 件ずつ足していると、 片方が消えても件数は合う。 自分が足した id が最終 file に在ることを名指しで確認する。
+  - ⚠️ **検収は「件数」 でなく「id の照合」** — 両側が 1 件ずつ足していると、 片方が消えても件数は合う。 自分が足した id が最終 file に在ることを名指しで確認する。 ⚠️ **既存 entry の書き換えだった場合は id も件数も変わらない** ので、 どちらの照合も通ってしまう — **書き換えた本文が最終 file に在るか**を見る (= 自分の版の該当 block を別 file に退避しておき、 上流版に当て直してから、 退避した本文と一致するかを確かめる)。
   - ⚠️ `.gitattributes` の `merge=union` は**効かない** (= union は暗号化バイト列を連結して file を壊す)。 自動 merge 側の解は無い。
   - **予防**: 暗号化 ledger への追記は「編集 → commit → push」 を 1 単位で閉じる ([#staging-window-race](#staging-window-race) 防御 2 の強化版)。 保持時間がそのまま衝突確率。
   - **機械 gate** = [`scripts/check-ledger-merge-loss.py`](../scripts/check-ledger-merge-loss.py) — 解決後・commit 前に `python3 … <ledger> --revs HEAD origin/<branch>` で **両側の id が残っているか**を照合する (消えていれば exit 1 + 消えた id を列挙)。 鍵は **`git cat-file --filters <rev>:<path>`** = smudge filter を通すので **git-crypt の repo でも平文が得られる** (`git show <rev>:<path>` は暗号文のままで使えない)。 この 1 点を知らないと「両親と比べられない」 と誤診して機械化を諦める。
