@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Install or audit an opt-in Codex rule for prompt-free normal Git pushes.
 
-The managed rule allows only `git push origin main` and
-`git push origin master`. Common destructive or scope-expanding push flags
-remain prompt-gated.
+The managed rule allows direct default-branch pushes and the equivalent
+detached-worktree forms (`HEAD:main` / `HEAD:master`, including full refs).
+Common destructive or scope-expanding push flags remain prompt-gated.
 The rule changes sandbox escalation handling, not repository checks or the
 authorization boundary recorded by the user's own workflow.
 """
@@ -26,15 +26,21 @@ RULE_NAME = "claude-config-git-push.rules"
 
 def desired() -> str:
     return MARKER + """prefix_rule(
-    pattern = ["git", "push", "origin", ["main", "master"]],
+    pattern = ["git", "push", "origin", ["main", "master", "HEAD:main", "HEAD:master", "HEAD:refs/heads/main", "HEAD:refs/heads/master"]],
     decision = "allow",
     justification = "Normal pushes to the default branch are owner-authorized after repository checks",
     match = [
         "git push origin main",
         "git push origin master",
+        "git push origin HEAD:main",
+        "git push origin HEAD:master",
+        "git push origin HEAD:refs/heads/main",
+        "git push origin HEAD:refs/heads/master",
     ],
     not_match = [
         "git push origin feature",
+        "git push origin HEAD:feature",
+        "git push origin :main",
         "git push --force origin main",
     ],
 )
@@ -46,7 +52,7 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["git", "push", "origin", ["main", "master"], ["--force", "-f", "--force-with-lease", "--force-if-includes", "--delete", "-d", "--mirror", "--prune", "--all", "--tags", "--follow-tags"]],
+    pattern = ["git", "push", "origin", ["main", "master", "HEAD:main", "HEAD:master", "HEAD:refs/heads/main", "HEAD:refs/heads/master"], ["--force", "-f", "--force-with-lease", "--force-if-includes", "--delete", "-d", "--mirror", "--prune", "--all", "--tags", "--follow-tags"]],
     decision = "prompt",
     justification = "Destructive or scope-expanding pushes require explicit approval",
 )
@@ -121,10 +127,16 @@ def selftest() -> int:
         cases = [
             (["git", "push", "origin", "main"], "allow"),
             (["git", "push", "origin", "master"], "allow"),
+            (["git", "push", "origin", "HEAD:main"], "allow"),
+            (["git", "push", "origin", "HEAD:master"], "allow"),
+            (["git", "push", "origin", "HEAD:refs/heads/main"], "allow"),
+            (["git", "push", "origin", "HEAD:refs/heads/master"], "allow"),
             (["git", "push", "origin", "main", "--force"], "prompt"),
             (["git", "push", "--force", "origin", "main"], "prompt"),
+            (["git", "push", "origin", "HEAD:main", "--force"], "prompt"),
+            (["git", "push", "--force-with-lease", "origin", "HEAD:main"], "prompt"),
             (["git", "push", "origin", "main", "--delete"], "prompt"),
-            (["git", "push", "origin", "main", "--tags"], "prompt"),
+            (["git", "push", "origin", "HEAD:refs/heads/main", "--tags"], "prompt"),
         ]
         for command, expected in cases:
             payload = execpolicy(target, command, root)
@@ -133,6 +145,18 @@ def selftest() -> int:
                 break
             if payload.get("decision") != expected:
                 print(f"[FAIL] execpolicy {command}: {payload.get('decision')} != {expected}")
+                return 1
+
+        for command in (
+            ["git", "push", "origin", "HEAD:feature"],
+            ["git", "push", "origin", ":main"],
+            ["git", "push", "upstream", "HEAD:main"],
+        ):
+            payload = execpolicy(target, command, root)
+            if payload is None:
+                break
+            if payload.get("decision") == "allow":
+                print(f"[FAIL] execpolicy unexpectedly allowed {command}")
                 return 1
 
         conflict_root = root / "conflict"

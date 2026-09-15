@@ -328,10 +328,13 @@ Keep `approval_policy = "on-request"` and the workspace sandbox. A user whose
 own Git workflow already grants standing authorization for normal delivery may
 run `python3 scripts/setup-codex-git-push.py --install`. It installs the
 managed user-layer rule
-`~/.codex/rules/claude-config-git-push.rules`, allowing only
-`git push origin main` and `git push origin master` without a prompt.
-Common force, delete, mirror, prune, all-branch, and tag-publishing forms remain
-`decision = "prompt"`.
+`~/.codex/rules/claude-config-git-push.rules`, allowing direct default-branch
+pushes (`git push origin main` / `master`) and the equivalent detached-worktree
+refspecs (`git push origin HEAD:main` / `HEAD:master`, including full
+`HEAD:refs/heads/...` spellings) without a prompt. The remote and destination
+branch remain fixed; changing only the source spelling to `HEAD` does not widen
+the publication target. Common force, delete, mirror, prune, all-branch, and
+tag-publishing forms remain `decision = "prompt"`.
 
 This uses the official experimental
 [`prefix_rule` mechanism](https://learn.chatgpt.com/docs/agent-configuration/rules):
