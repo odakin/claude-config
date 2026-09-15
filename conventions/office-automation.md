@@ -1666,8 +1666,10 @@ assert fitz.open("p1.pdf").page_count == 1
 
 ```bash
 osascript << 'OSAEOF'
+-- /path/to/form.docx は Pages の container 内の copy (~/Library/Containers/com.apple.iWork.Pages/Data/tmp/<unique>/)。
+-- container の外の file を activate なしで開くと、 見えない許可 dialog で missing value / -1712 になる (実測)。
+-- docx-to-pdf.sh --pages はこの copy・背景起動・自分が起動した Pages だけ quit を内蔵
 tell application "Pages"
-    activate                            -- Pages は外すと open が missing value / -1712 (実測、 #office-app-reset-guard 射程外)
     set theDoc to open POSIX file "/path/to/form.docx"
     delay 2
     export theDoc to POSIX file "/path/to/form.pdf" as PDF
@@ -1816,7 +1818,9 @@ python は `from office_staging import office_app` → `office_app("reset", "exc
 
 **検査**: [`scripts/lib/office-app-guard.test.sh`](../scripts/lib/office-app-guard.test.sh) (osascript / open を stub に差し替え = Office 不要: 未起動 / staged copy だけ / user の文書あり 〔保存済・未保存・名前だけの新規〕 / 応答なし / 確認と quit の間に文書が開かれた / dialog で取り消し / has-path / 前面を返す条件 / python の橋 + **wrapper に quit・kill・activate・`active document`・`workbook 1` が戻っていないかの lint** + macOS では `xlsx-to-pdf.sh` を stub の上で通す)。 AppleScript 本体の挙動は stub では検査できない = 上の実測が根拠。
 
-**射程外**: 背景で動かしても Office 自身の dialog (修復・マクロ警告・サインイン) は前面に出ることがある (= 前面は返すが dialog は消さない)。 **Pages 経路 (`docx-to-pdf.sh --pages`) は背景化できていない**: `activate` を外すと `open` が `missing value` (-1700) / -1712 で失敗し、 `open -g -a Pages <file>` でも 30 秒で文書が現れなかった (実測、 Pages 14.5。 Pages は staging しないので file access の確認が見えないまま止まると推定、 未確定) → Pages は従来どおり前面に出し、 終わったら前面を返す。 quit はしない (元から)。
+**射程外**: 背景で動かしても Office 自身の dialog (修復・マクロ警告・サインイン) は前面に出ることがある (= 前面は返すが dialog は消さない)。
+
+**Pages 経路 (`docx-to-pdf.sh --pages`)**: Pages は Office の group container に入らないので、 container の外の docx を `activate` なしで開くと、 見えない許可 dialog で `missing value` (-1700) / -1712 になる (実測、 Pages 14.5)。 wrapper は docx を **Pages 自身の container** (`~/Library/Containers/com.apple.iWork.Pages/Data/tmp/<unique>/`) に copy して背景のまま開き、 そこで export した PDF を持ち帰る (実測: dialog なし・前面は動かず)。 自分が起動した Pages だけ、 文書が 0 件の時に quit する。 container が無い環境では旧経路 (in-place + `activate`、 前面に出る) に落ちて stderr に ⚠️ を出す。 一般則 = [`macos-gui-app-automation.md#background-launch`](macos-gui-app-automation.md#background-launch)。
 
 **強制**: Bash の command で Office を名指しで止める形 (`killall` / `pkill` の引数に Microsoft Excel/Word/PowerPoint、 `kill $(pgrep …)`、 inline osascript の `tell application "Microsoft …" … quit`) は [`office-inplace-guard`](#office-inplace-guard) の hook が deny して guard の reset を案内する (例外 = 理由つき `# office-app: exempt <理由>`)。 script file の中の quit は見ない (= guard 自身が数え直してから撃つ quit を止めないため) ので、 wrapper と driver の回帰は `office-app-guard.test.sh` の lint が止める。
 

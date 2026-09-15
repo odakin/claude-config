@@ -24,7 +24,7 @@ osascript / AppleScript / JXA で GUI app を動かす script は、 **user が�
 
 - **起動は `open -g -b <bundle id>`** (= 前面に出さない)。 AppleScript に **`activate` を書かない**。 file を開くなら `open -g -a "<App>" <file>` (LaunchServices 経由 = cold start に強く、 sandbox app にも file 単位の読み取りが付く)。
 - **`open -j` (hidden) は使わない** — 開く失敗の警告などの dialog まで見えなくなり、 `quit` が -128 で取り消されたまま誰も気づかない (実測)。
-- `activate` を外すだけで背景のまま動く app がある一方、 **外すと動かない app もある** (実測: Excel は冷えた状態からの `tell` 起動でも前面が動かず書込・保存できた / Pages は `open` が `missing value` や -1712 で失敗した)。 外したら 1 回実機で確かめ、 動かない app は `activate` を残して下の「前面を返す」 だけ行う。
+- `activate` を外すだけで背景のまま動く app が多い (実測: Excel は冷えた状態からの `tell` 起動でも前面が動かず書込・保存できた)。 ⚠️ **外すと `open` が `missing value` / -1712 で止まる app は、 sandbox の file access 許可を dialog で求めていて、 その dialog が前面に出ないせい**であることがある (実測: Pages)。 `activate` を戻すのでなく、 **file をその app 自身の sandbox container の中 (`~/Library/Containers/<bundle id>/Data/tmp/<unique>/`) に copy して開かせ、 出力もそこに書かせてから持ち帰る** (= 許可が要らないので背景のまま通る。 Office 3 app の場合は共有の group container が同じ役 = [`office-automation.md#office-pregranted-staging-dir`](office-automation.md#office-pregranted-staging-dir))。 外したら 1 回実機で確かめる。
 
 ## <a id="is-running-probe"></a>3. 起動していない app を起こさずに調べる
 

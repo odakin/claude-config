@@ -107,26 +107,54 @@ soffice_bin() { if have soffice; then echo soffice; elif have libreoffice; then 
 
 render_pages() {
   # Robust macOS automation; uses the verified `export ... as PDF` form.
-  # ⚠️ Pages keeps `activate`: without it `open` returned missing value / timed out (-1700 / -1712,
-  #    measured on Pages 14.5 — Pages is not staged; a hidden file-access prompt is the suspected cause).
-  #    Pages comes to the front here; focus is handed back afterwards (macos-gui-app-automation.md#background-launch).
-  local rc=0
+  # Background (no `activate`) through Pages' OWN sandbox container: Pages is sandboxed and is not part of the
+  # Office group container, so a file elsewhere needs a grant it can only ask for in a dialog — with `activate`
+  # gone that dialog stays hidden and `open` returns missing value / -1712 (measured). Copied into
+  # ~/Library/Containers/com.apple.iWork.Pages/Data/tmp/<unique>/ it opens and exports without any dialog
+  # (measured, Pages 14.5). If that container is missing, fall back to the old in-place + `activate` path.
+  # Pages is quit at the end only when this run launched it and no document is open
+  # (macos-gui-app-automation.md#ask-before-quit / #background-launch).
+  local rc=0 pdir="$HOME/Library/Containers/com.apple.iWork.Pages/Data/tmp" d="" psrc="$SRC" ppdf="$PDF"
+  local fg=1 launched=0 ticks=0
   office_front_remember
-  osascript - "$SRC" "$PDF" <<'AS' || rc=$?
+  if [ -d "$pdir" ] && d="$(mktemp -d "$pdir/claude-stage-XXXXXX" 2>/dev/null)" \
+     && cp -p "$SRC" "$d/$(basename "$SRC")"; then
+    psrc="$d/$(basename "$SRC")"; ppdf="$d/$(basename "$PDF")"; fg=0
+  else
+    [ -n "$d" ] && rm -rf "$d"; d=""
+    echo "⚠️  docx-to-pdf --pages: Pages container not available → in-place + activate (Pages comes to the front)" >&2
+  fi
+  if [ "$fg" = 0 ] && [ "$(osascript -e 'application id "com.apple.iWork.Pages" is running' 2>/dev/null)" != true ]; then
+    open -g -b com.apple.iWork.Pages && launched=1
+    until osascript -e 'tell application id "com.apple.iWork.Pages" to count of documents' >/dev/null 2>&1; do
+      [ "$ticks" -ge 120 ] && break
+      sleep 0.5; ticks=$((ticks + 1))
+    done
+  fi
+  osascript - "$psrc" "$ppdf" "$fg" <<'AS' >/dev/null || rc=$?
 on run argv
   set srcPath to item 1 of argv
   set pdfPath to item 2 of argv
   with timeout of 200 seconds
-    tell application "Pages"
-      activate
-      set theDoc to open POSIX file srcPath
+    tell application id "com.apple.iWork.Pages"
+      if item 3 of argv is "1" then activate
+      set theDoc to open (POSIX file srcPath)
       delay 2
-      export theDoc to POSIX file pdfPath as PDF
+      export theDoc to (POSIX file pdfPath) as PDF
       close theDoc saving no
     end tell
   end timeout
+  return "ok"
 end run
 AS
+  if [ "$rc" -eq 0 ] && [ "$ppdf" != "$PDF" ]; then
+    if [ -f "$ppdf" ]; then cp -p "$ppdf" "$PDF"; else echo "❌ Pages reported success but no PDF: $ppdf" >&2; rc=1; fi
+  fi
+  if [ "$launched" = 1 ]; then
+    # 数え直しと quit を同じ osascript で (= 間に user が文書を開いたら quit しない、 saving no は付けない)
+    osascript -e 'tell application id "com.apple.iWork.Pages" to if (count of documents) is 0 then quit' >/dev/null 2>&1 || true
+  fi
+  [ -n "$d" ] && rm -rf "$d"
   office_front_restore "Pages.app"
   return "$rc"
 }
