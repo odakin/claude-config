@@ -12,7 +12,9 @@ conventions/github-security-automation.md#private-actions-minutes。
 config (JSON):
   {
     "base": "~/Claude",                       # repo dir の親 (既定 = この script の 2 つ上)
-    "path_prepend": ["~/Library/Python/3.9/bin"],   # 検査 tool を探す PATH の追加分 (任意)
+    "path_prepend": ["~/Library/Python/3.9/bin"],   # 検査 tool を探す PATH の追加分 (任意)。 ⚠️ 前に足すので
+                                              # 別の python3 がある dir を足すと検査 script の依存が消える
+    "env": {"PYTHONWARNINGS": "ignore"},     # 検査に渡す環境変数 (任意。 tool 自身の警告で末尾行が埋まるのを防ぐ等)
     "min_interval_hours": 6,                  # 同じ検査を続けて回す間隔の下限 (既定 6)
     "commands": {"semgrep": [["semgrep", "scan", "--error", "."]]},   # 名前つき command (任意)
     "checks": [
@@ -23,6 +25,8 @@ config (JSON):
   }
   run = argv の list の list (順に実行、 1 本でも非 0 なら red) か、 commands の名前。
   paths = git pathspec。 key = その pathspec に触れた最終 commit (既定 ".")。 key が前回と同じなら回さない。
+  check ごとの任意: "env" (その検査だけの環境変数) / "rerun_hours" (key が同じでもこの時間を過ぎたら回す =
+  他 repo や外部を見る検査用) / "timeout" (秒、 既定 900)。
   検査は working tree で走る (未 commit の変更も含む) が、 記録する key は commit。
 
 使い方:
@@ -103,8 +107,10 @@ def content_key(repo_dir: Path, paths: list[str]) -> str | None:
     return (r.stdout.strip() or None) if r.returncode == 0 else None
 
 
-def tool_env(cfg: dict) -> dict:
+def tool_env(cfg: dict, check: dict | None = None) -> dict:
     env = dict(os.environ)
+    env.update({k: str(v) for k, v in cfg.get("env", {}).items()})
+    env.update({k: str(v) for k, v in (check or {}).get("env", {}).items()})
     env["PATH"] = os.pathsep.join([*cfg["path_prepend"], env.get("PATH", "")])
     return env
 
@@ -159,7 +165,7 @@ def run_one(cfg: dict, check: dict, repo_dir: Path, key: str) -> dict:
     for argv in check["run"]:
         argv = expand_argv(argv, repo_dir)
         try:
-            p = subprocess.run(argv, cwd=repo_dir, env=tool_env(cfg), capture_output=True,
+            p = subprocess.run(argv, cwd=repo_dir, env=tool_env(cfg, check), capture_output=True,
                                timeout=max(1, deadline - now()))
             out = (p.stdout + p.stderr).decode("utf-8", "replace")
             rc = p.returncode
@@ -194,7 +200,9 @@ def do_run(cfg: dict, state_path: Path, force=False, only=None, out=print) -> in
             state[cid] = dict(prev, unprobed=why, probed_at=now())
             save_state(state_path, state)
             continue
-        if not force and prev.get("key") == key and not prev.get("unprobed"):
+        stale_hours = check.get("rerun_hours")  # 他 repo や外部を見る検査 = commit が変わらなくても定期に回す
+        aged = stale_hours is not None and prev.get("started") and now() - prev["started"] > float(stale_hours) * 3600
+        if not force and prev.get("key") == key and not prev.get("unprobed") and not aged:
             continue
         if not force and prev.get("started") and now() - prev["started"] < interval and not prev.get("unprobed"):
             continue
@@ -213,21 +221,27 @@ def do_status(cfg: dict, state_path: Path, strict=False, out=print) -> int:
         cid, rec = check_id(check), state.get(check_id(check))
         label = f"{check['repo']} · {check['name']}"
         if rec and rec.get("unprobed"):
-            unprobed.append(f"⚠️ {label}: 検査不能 — {rec['unprobed']}")
+            unprobed.append((rec["unprobed"], label))
             continue
         if not rec:
             pending.append(f"{label} (一度も回っていない)")
             continue
         if rec["rc"] != 0:
-            last = next((l for l in reversed(rec.get("tail", [])) if l.strip()), "")
+            # 末尾の罫線だけの行 (═══ 等) は飛ばし、 文字を含む最後の行を見出しにする
+            last = next((l.strip() for l in reversed(rec.get("tail", [])) if re.search(r"\w", l)), "")
             what = "timeout" if rec.get("timed_out") else f"exit {rec['rc']}"
             red.append(f"🔴 {label}: {what} ({fmt_age(rec['started'])}, {rec['key'][:8]}) — {last[:160]}")
         repo_dir = cfg["base"] / check["repo"]
         key = content_key(repo_dir, check.get("paths") or ["."]) if (repo_dir / ".git").exists() else None
         if key and key != rec.get("key") and now() - rec["started"] > PENDING_WARN_HOURS * 3600:
             pending.append(f"{label} (最後の run {fmt_age(rec['started'])}、 その後に commit あり)")
-    for line in red + unprobed:
+    for line in red:
         out(line)
+    by_reason: dict[str, list[str]] = {}
+    for why, label in unprobed:  # 同じ理由 (tool が無い等) は 1 行にまとめる = 14 repo で 14 行にしない
+        by_reason.setdefault(why, []).append(label)
+    for why, labels in by_reason.items():
+        out(f"⚠️ 検査不能 {len(labels)} 件 — {why}: " + " / ".join(labels))
     if pending:
         out(f"⏳ 手元の検査が {PENDING_WARN_HOURS}h 以上回っていない: " + " / ".join(pending[:6])
             + (f" … 他 {len(pending) - 6}" if len(pending) > 6 else ""))
@@ -260,13 +274,17 @@ def selftest() -> int:
         py = sys.executable
         cfg_path = base / "cfg.json"
         cfg_path.write_text(json.dumps({
-            "base": str(base), "min_interval_hours": 0,
+            "base": str(base), "min_interval_hours": 0, "env": {"LOCAL_CI_SELFTEST_VAR": "seen"},
             "commands": {"ok": [[py, "-c", "print('fine')"]]},
             "checks": [
                 {"repo": "good", "name": "ok", "run": "ok", "paths": ["src"]},
                 {"repo": "bad", "name": "fails", "run": [[py, "-c", "print('first')"],
                                                          [py, "-c", "import sys; print('boom line'); sys.exit(3)"]]},
                 {"repo": "good", "name": "notool", "run": [["no-such-tool-xyz", "--version"]]},
+                {"repo": "bad", "name": "notool", "run": [["no-such-tool-xyz", "--version"]]},
+                {"repo": "bad", "name": "env", "run": [[py, "-c", "import os; print(os.environ['LOCAL_CI_SELFTEST_VAR'])"]]},
+                {"repo": "bad", "name": "boxed", "env": {"LOCAL_CI_SELFTEST_VAR": "own"}, "rerun_hours": 1,
+                 "run": [[py, "-c", "import os, sys; print('real reason ' + os.environ['LOCAL_CI_SELFTEST_VAR']); print('════'); sys.exit(1)"]]},
                 {"repo": "missing", "name": "ok", "run": "ok"},
             ]}))
         cfg, state = load_config(cfg_path), base / "state" / "state.json"
@@ -278,16 +296,28 @@ def selftest() -> int:
                st.get("bad::fails", {}).get("rc") == 3 and "boom line" in st["bad::fails"]["tail"])
         expect("missing tool = unprobed, not green", "no-such-tool-xyz" in (st.get("good::notool", {}).get("unprobed") or ""))
         expect("missing clone = unprobed", "clone" in (st.get("missing::ok", {}).get("unprobed") or ""))
+        expect("config env reaches the command", st.get("bad::env", {}).get("tail") == ["seen"])
+        expect("a check's own env overrides the config env", "real reason own" in st.get("bad::boxed", {}).get("tail", []))
         lines = []
         do_status(cfg, state, out=lines.append)
         text = "\n".join(lines)
         expect("status shows the red check with its last output line", "🔴 bad · fails: exit 3" in text and "boom line" in text)
-        expect("status shows both unprobed checks", text.count("検査不能") == 2)
+        expect("unprobed checks with the same reason share one line, other reasons get their own",
+               text.count("検査不能") == 2 and "⚠️ 検査不能 2 件 — no-such-tool-xyz が無い" in text
+               and "good · notool / bad · notool" in text)
         expect("status does not mention the green check", "good · ok" not in text)
+        expect("status headline skips a trailing rule line", "🔴 bad · boxed: exit 1" in text and "— real reason own" in text)
         expect("--strict exits 1 when something is red", do_status(cfg, state, strict=True, out=lambda *_: None) == 1)
         log = []
         do_run(cfg, state, out=log.append)
         expect("unchanged key = not rerun", not any("good::ok" in l or "bad::fails" in l for l in log))
+        full = load_state(state)
+        full["bad::boxed"]["started"] -= 2 * 3600
+        save_state(state, full)
+        log = []
+        do_run(cfg, state, out=log.append)
+        expect("rerun_hours reruns a check whose key did not change once it is old enough",
+               any("bad::boxed" in l for l in log) and not any("bad::fails" in l for l in log))
         (base / "good" / "notes.txt").write_text("changed\n")
         git("good", "commit", "-qam", "notes only")
         log = []
