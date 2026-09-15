@@ -12,6 +12,8 @@ summary: SARIF は suppress 済み finding も残す (#sarif-suppressions を fi
 Semgrep を CI に置く典型形は 「`semgrep ci --sarif --output=… || true` + SARIF を artifact 保存」。
 この形では **workflow の success/fail は finding の有無を語らない** — finding は SARIF を
 取得して parse するまで見えない (`gh run download <id> -n <artifact名>`)。
+private repo では per-push の Semgrep が Actions の月の分数を使い切りやすい。 手元で回すなら finding で
+落ちる形 (`--severity ERROR --error`) にし、 git-crypt の平文を外す = [`github-security-automation.md#private-actions-minutes`](github-security-automation.md#private-actions-minutes)。
 
 ## <a id="sarif-suppressions"></a>SARIF は suppress 済み finding も残す
 
