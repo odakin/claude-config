@@ -23,8 +23,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Install jq
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq
+      - name: Install jq and ffmpeg (ffmpeg = audio-finish-episode.py selftest; without it the test only SKIPs)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq ffmpeg
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"

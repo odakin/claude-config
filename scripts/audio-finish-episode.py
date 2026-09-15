@@ -210,6 +210,11 @@ def finish(part: Path, jingle: Path, out: Path, *, target: float, offset: float,
 
 def selftest() -> None:
     """合成音 (声の代わりにピークの鋭い変調ノイズ、ジングルの代わりに大きめのサイン波) で一連を回す。"""
+    import shutil
+    missing = [tool for tool in ("ffmpeg", "ffprobe") if not shutil.which(tool)]
+    if missing:  # run-all-checks の契約: 依存が無い環境では理由を出して SKIP (exit 0)
+        print(f"SKIP: {' / '.join(missing)} が無い (audio-finish-episode selftest)")
+        return
     with tempfile.TemporaryDirectory() as d:
         d = Path(d)
         part, jingle, out = d / "part.m4a", d / "jingle.mp3", d / "out.mp3"

@@ -112,12 +112,51 @@ def in_codex_seatbelt(env=None):
     return (os.environ if env is None else env).get("CODEX_SANDBOX") == "seatbelt"
 
 
-def render_pdf(browser, html_path, out_pdf):
+WRITTEN_MARKER = "bytes written to file"
+
+
+def render_pdf(browser, html_path, out_pdf, timeout=120):
+    """headless で print-to-pdf し、 PDF を書き終えたら browser を止める。
+
+    実測: macOS の Chrome は「N bytes written to file」 を出して PDF を書いた後も process が終わらないことがある
+    (数秒で書けているのに timeout まで待って TimeoutExpired で落ちていた)。 ∴ 終了を待たず、 marker (または
+    size が 2 回続けて同じ) を見たら process group ごと止める。
+    """
+    import signal
+    import time
+
     profile_dir = os.path.join(os.path.dirname(html_path), "chromium-profile")
     cmd = browser_command(browser, html_path, out_pdf, profile_dir)
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    log_path = os.path.join(os.path.dirname(html_path), "browser.log")
+    with open(log_path, "wb") as log:
+        p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    deadline, last_size, stable = time.monotonic() + timeout, -1, 0
+    try:
+        while p.poll() is None and time.monotonic() < deadline:
+            size = os.path.getsize(out_pdf) if os.path.exists(out_pdf) else 0
+            with open(log_path, encoding="utf-8", errors="replace") as f:
+                written = WRITTEN_MARKER in f.read()
+            stable = stable + 1 if size > 0 and size == last_size else 0
+            if size > 0 and (written or stable >= 4):  # marker が無い build でも 2 秒同じ size なら書き終わり
+                break
+            last_size = size
+            time.sleep(0.5)
+    finally:
+        if p.poll() is None:
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(p.pid, sig)
+                except ProcessLookupError:
+                    break
+                try:
+                    p.wait(timeout=5)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+    with open(log_path, encoding="utf-8", errors="replace") as f:
+        tail = f.read().strip()[-400:]
     if not os.path.exists(out_pdf) or os.path.getsize(out_pdf) == 0:
-        raise RuntimeError(f"ブラウザが PDF を出さなかった (rc={r.returncode}): {r.stderr.strip()[-400:]}")
+        raise RuntimeError(f"ブラウザが PDF を出さなかった (rc={p.returncode}): {tail}")
 
 
 def page_report(pdf):
@@ -181,6 +220,18 @@ def selftest():
     assert in_codex_seatbelt({"CODEX_SANDBOX": "seatbelt"})
     assert not in_codex_seatbelt({})
     print("  sandbox guard: 2/2 PASS")
+    # 終わらない browser の代役: PDF と marker を書いた後 sleep し続ける (render_pdf が待たずに止めるか)
+    fake_dir = tempfile.mkdtemp()
+    fake = os.path.join(fake_dir, "hang-browser")
+    with open(fake, "w", encoding="utf-8") as f:
+        f.write("#!/bin/sh\nfor a in \"$@\"; do case \"$a\" in --print-to-pdf=*) o=\"${a#--print-to-pdf=}\";; esac; done\n"
+                "printf '%%PDF-1.4\\n' > \"$o\"; echo \"9 " + WRITTEN_MARKER + " $o\" >&2; exec sleep 600\n")
+    os.chmod(fake, 0o755)
+    import time
+    t0 = time.monotonic()
+    render_pdf(fake, os.path.join(fake_dir, "page.html"), os.path.join(fake_dir, "out.pdf"), timeout=30)
+    assert time.monotonic() - t0 < 15, "render_pdf waited for a browser that never exits"
+    print("  render_pdf: stops a browser that keeps running after writing the PDF PASS")
     if in_codex_seatbelt():
         print("  render: SKIP (Codex seatbelt 内では macOS GUI browser を起動しない)")
         print("html-print-pdf selftest: PASS")
