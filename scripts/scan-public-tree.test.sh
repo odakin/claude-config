@@ -139,6 +139,16 @@ printf '%s\t%s\t2026-01-01\t1\n' "$R9/a_dirty" deadbeef > "$ST9/public-tree-scan
 out="$(run "$ST9" --all --root "$R9" --max 1)"
 printf '%s' "$out" | grep -q 'z_fresh' && check ok "T9: 未記録の repo を先に走査" || check ng "T9: 未記録の repo を先に走査"
 
+# ---- (10) 走査済 repo でも受理一覧は検証される ----
+# gate は受理一覧を除外し、走査は台帳で skip する = 後から足した受理 entry を誰も見ない窓
+ST10="$T/state10"
+run "$ST10" --repo "$CLEAN" >/dev/null 2>&1          # 先に clean として台帳に記録
+printf 'NOT-IN-THE-TREE-EITHER   # 後から足した tree に無い token\n' > "$CLEAN/.claude/public-tree-accept.txt"
+out="$(run "$ST10" --repo "$CLEAN")"; rc=$?
+[ "$rc" -eq 1 ] && check ok "T10: 走査済でも受理一覧は検証される" || check ng "T10: 走査済でも受理一覧は検証される (rc=$rc: $out)"
+printf '%s' "$out" | grep -q '台帳に走査済' && check ng "T10b: skip で素通りしない" || check ok "T10b: skip で素通りしない"
+rm -f "$CLEAN/.claude/public-tree-accept.txt"
+
 echo
 echo "==== RESULT: PASS=$PASS FAIL=$FAIL ===="
 [ "$FAIL" -eq 0 ] || exit 1

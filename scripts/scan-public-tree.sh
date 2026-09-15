@@ -119,13 +119,15 @@ already_scanned() {
 # tree に無い文字列が並んでいたら、 それは受理ではなく **新しい開示** で、 しかも受理一覧は
 # gate の対象外なので黙って通る。 gate を外した代償をここで払い戻す。
 validate_accept() {
-  local accept="$1" root="$2" term
+  local repo="$1" accept term
+  accept="$repo/.claude/public-tree-accept.txt"
   [ -f "$accept" ] || return 0
   while IFS= read -r term; do
     term="${term%%#*}"
     term="$(printf '%s' "$term" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
     [ -z "$term" ] && continue
-    if ! grep -rqF --exclude='public-tree-accept.txt' -- "$term" "$root" 2>/dev/null; then
+    # tracked file だけを見る (= 公開されるのはそこだけ)。 受理一覧それ自身は除く
+    if ! git -C "$repo" grep -qF -e "$term" -- ':!.claude/public-tree-accept.txt' 2>/dev/null; then
       printf '%s\n' "$term"
     fi
   done < "$accept"
@@ -158,6 +160,19 @@ scan_one() {
     return 2
   }
 
+  # ⚠️ 受理一覧の検証は **skip より前**。 台帳で走査済になった repo に後から受理 entry を
+  # 足すと、 gate は受理一覧を除外していて見ず、 走査は skip して見ない = 誰も見ない窓ができる。
+  # git grep なので tree を展開せずに済み、 skip 側でも払える
+  local accept_bad
+  accept_bad="$(validate_accept "$repo")"
+  if [ -n "$accept_bad" ]; then
+    printf '%s\n' "🔴 [scan-public-tree] $name: 受理一覧に tree のどこにも無い文字列がある (= 受理でなく新しい開示)"
+    printf '%s\n' "$accept_bad" | sed 's/^/    /'
+    printf '%s\n' "    → 受理一覧に書けるのは、 既に tree に在る finding だけ。 消すか、 本文側を直す"
+    record "$repo" "$sha" 1
+    return 1
+  fi
+
   if already_scanned "$repo"; then
     say "[scan-public-tree] $name: skip (台帳に走査済。 回し直すなら --force)"
     return 3
@@ -180,20 +195,9 @@ scan_one() {
     git add -A -f 2>/dev/null
   )
 
-  local accept_bad
-  accept_bad="$(validate_accept "$repo/.claude/public-tree-accept.txt" "$tmp")"
-
   out="$(cd "$tmp" && "$RUNNER" 2>&1)"
   rc=$?
   rm -rf "$tmp"
-
-  if [ -n "$accept_bad" ]; then
-    printf '%s\n' "🔴 [scan-public-tree] $name: 受理一覧に tree のどこにも無い文字列がある (= 受理でなく新しい開示)"
-    printf '%s\n' "$accept_bad" | sed 's/^/    /'
-    printf '%s\n' "    → 受理一覧に書けるのは、 既に tree に在る finding だけ。 消すか、 本文側を直す"
-    record "$repo" "$sha" 1
-    return 1
-  fi
 
   if [ "$rc" -eq 0 ]; then
     say "[scan-public-tree] $name: 0 finding"
