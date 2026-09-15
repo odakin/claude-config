@@ -131,6 +131,8 @@ def classify(raw: str, ctx: Ctx) -> str:
             return ctx.assigns[n]
         if n == "HOME":
             return ctx.env.get("HOME", os.path.expanduser("~"))
+        if n == "PWD":
+            return ctx.cwd
         return m.group(0)
     for _ in range(3):                             # 代入の値にさらに $HOME 等が入る分
         if "$" not in s:
@@ -624,6 +626,7 @@ def selftest() -> int:
     check("osascript -e 'tell application \"Microsoft Word\" to save as active document file name \"/tmp/example/out.pdf\" file format format PDF'", True, "save as PDF の出力先が staging 外")
     check("F=/tmp/example/form.xlsx; osascript -e \"tell application \\\"Microsoft Excel\\\" to open POSIX file \\\"$F\\\"\"", True, "同じ command 内の代入を解決")
     check("osascript -e 'tell application \"Microsoft Excel\" to open alias \"Macintosh HD:Users:someone:form.xlsx\"'", True, "HFS path")
+    check("osascript -e \"tell application \\\"Microsoft Word\\\" to open POSIX file \\\"$PWD/a.docx\\\"\"", True, "$PWD は cwd として解決")
     check("osascript inplace.applescript", True, "applescript file (literal path)")
     check("osascript argv.applescript /tmp/example/form.xlsx", True, "applescript file + argv の path")
     check("python3 driver.py", True, "python driver (helper なし)")
