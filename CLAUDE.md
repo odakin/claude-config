@@ -28,7 +28,7 @@ claude-config/
 ├── JHEP.bst                # 物理論文用 BibTeX style (setup.sh が texmf-local に install)
 <!-- AUTO-TREE:conventions BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check、 源 = conventions/*.md 冒頭の doc-meta。 表示 = when 〔trigger〕 のみ、 詳細 summary は conventions/README.md 側 = 2026-09-01 auto-load 税 縮退) -->
 ├── conventions/          # ドメイン固有規約 (各行の説明 = doc-meta の when 〔いつ読むか〕。 詳細 summary + カテゴリ index = conventions/README.md)
-│   ├── academic-program-verification.md    # 研究者向けの割引・無償プログラム (AI ベンダーの academic plan 等) に申請するとき + 所属確認フォームの「研究室ページ」「機関メール」 欄を埋めるとき + 審査で即時不合格になったとき
+│   ├── academic-program-verification.md    # 研究者向けの割引・無償プログラム (AI ベンダーの academic plan 等) に申請するとき + 所属確認フォームの「研究室ページ」「機関メール」 欄を埋めるとき + 審査で即時不合格になったとき + 手動審査で不承認になり問い合わせるとき (#after-decline)
 │   ├── actor-attribution.md                # 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸)
 │   ├── android-chromium-remote-debug.md    # Android 実機の Brave/Chrome を remote debug (WiFi ADB + CDP) するとき
 │   ├── ask-user-question.md                # AskUserQuestion (選択肢 UI) の使用可否・使い所を判断するとき
@@ -50,7 +50,7 @@ claude-config/
 │   ├── dropbox-api-access.md               # Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload)
 │   ├── dropbox-placeholder-diagnosis.md    # Dropbox 配下の file が 0 byte に見えたとき
 │   ├── dropbox-refs.md                     # 共同 PDF を Dropbox に置いてリポから symlink 参照するとき
-│   ├── email-surface-pattern.md            # 重要送信者・ML topic の見落とし防止 surface を設計するとき
+│   ├── email-surface-pattern.md            # 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき
 │   ├── erad-submission.md                  # e-Rad 経由で研究費 (JST・科研費・財団等) に応募するとき
 │   ├── expensive-intermediate-artifacts.md # 5 分以上かかる生成物の出力先を決めるとき + snapshot artifact を命名するとき
 │   ├── garoon.md                           # Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを読む/探すとき + ワークフローを再利用・作成・申請するとき
@@ -152,7 +152,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (184 file + lib/ 25 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (184 file + lib/ 26 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)

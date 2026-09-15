@@ -113,6 +113,7 @@ commit gate (pre-commit) が staged file を舐めて検査する形は定石だ
   - **warn 検査** = [`scripts/lib/staged_diff.py`](../scripts/lib/staged_diff.py) の `staged_added_lines()` (bytes で受けて file ごとに厳密 decode。 既知の binary 拡張子と NUL 入りは飛ばし、 UTF-8 → cp932 の順に読めた file は読む = Shift_JIS の旧来 text も検査に残る。 textconv は残す)。 binary は検査の対象外であって「読めない入力」 ではないので、 上の 1 行報告は出さない (PDF を含む commit のたびに出る報告は壁紙になる)
   - **BLOCK gate** = `encoding="utf-8", errors="replace"` で全部読む (binary に平文で残った語も止める側に倒す。 例 = `check-confidential-leak.py` / `check-activity-facts.py`)
   - どちらも `--selftest` に「一時 repo に binary + trigger を含む text を stage して、 検出が出る」 case を置く (run-all-checks が自動で拾うので、 読み方が退行すると CI が落ちる)
+- <a id="warn-check-crash-visible"></a>**chain から warn-only の検査を呼ぶときは `|| true` で潰さない** — 異常終了の traceback は流れて消え、 その commit で検査が走らなかったことに誰も気づかない。 **commit は止めずに、 非 0 終了なら「<検査名> が異常終了 (rc=N) — この commit では走っていない」 と 1 行出す** (確認用の `--selftest` コマンドも添える)。 test は「落ちる検査を置いた一時 HOME で chain を回し、 commit が通り 1 行が出る / 正常・不在の検査では何も出ない」 の 3 case
 
 ### <a id="set-e-test-failure-report"></a>§0 補足 5: `set -e` の test は落ちた行を自己申告させる — 無言の exit 1 は CI log に test 名しか残さない
 

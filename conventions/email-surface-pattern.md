@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: 重要送信者・ML topic の見落とし防止 surface を設計するとき
+when: 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき
 category: mail
-summary: 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止
+summary: 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止。 別スレッドで届く待ち結果は待ち項目の検索条件で拾う (#new-thread-expected-inbound) / 送り手一括の雑音化は class 別の件数を数えてから (#sender-noise-volume-check) / 決着済み案件への自動督促は本文の案件 ID で畳む (#settled-matter-key) / 「記録済み」 の書式は検出器間で 1 つ (#recorded-id-notation)
 -->
 # Email surface pattern (= 重要送信者・ML トピックの見落とし防止)
 
@@ -123,3 +123,65 @@ opt-out list の両方 — 後者にしか痕跡が無い決着もある (= clas
 1 件は前日に user が「無視でいい」 と declared skip 済 (= task 台帳に status 完了で記録)、
 もう 1 件は 3 週間前に class ごと opt-out 済 (= surface 設定の opt_out_senders に登録) だった。
 どちらも直前の session で自分が関与した決定ではなく、 台帳を引けば 1 grep で分かった。
+
+## <a id="new-thread-expected-inbound"></a>待っている結果が別スレッドで来る — 待ち項目に検索条件を持たせる
+
+返信待ちの網は普通「送った mail のスレッドに相手の新着があるか」 を見る。 ところが **審査結果・受付通知・
+サポートの返事・申込システムの通知** は no-reply の自動送信で、 **毎回 新しいスレッド** になる。 送った
+スレッドには何も来ないので、 網は原理的に黙る。 さらにこういう送り手は宣伝メールと同じ domain から来るので、
+雑音 list にも入っていることが多い。
+
+実測: 結果通知が 1 通、 名指し (本文に宛名が無い) / 未認識 (送り手 domain が雑音 list) / 返信待ち (新スレッド) /
+期限 (回答の目安がまだ先) の **4 つの網を全部すり抜け**、 人に聞かれるまで気づかなかった。 台帳には
+「結果は機関アドレス宛」 と散文で書いてあったが、 散文は何も見張らない。
+
+- **待ち項目を立てる turn で、 送り手と件名で検索条件を書く** (例 `watch_query: [{account: <受信 account>,
+  q: "from:<送り手 domain> -subject:<雑音の件名> newer_than:45d"}]`)。 網は条件に当たった未記録 mail を
+  スレッドに依らず、 elevated tier で出す
+- 条件は **件名の除外で雑音を削る** (サインイン用リンク等、 同じ送り手からの読む価値の無い通知)
+- 期間は待つ長さに合わせる (`newer_than` を回答見込み + 余裕に)。 記録済みの mail は出さないので、 過去の
+  やりとりに当たっても静か
+- 実装 = [`scripts/lib/mail_watch.py`](../scripts/lib/mail_watch.py) の `watch_queries` / `unrecorded_threads`。
+  一般則 = [`convention-design-principles.md#retrieval-key-choice`](../docs/convention-design-principles.md#retrieval-key-choice)
+  (thread ID でなく送り手・件名という別の鍵で引く)、 予告された inbound の時計は
+  [`#expected-inbound-tripwire`](../docs/convention-design-principles.md#expected-inbound-tripwire)
+
+## <a id="sender-noise-volume-check"></a>送り手を丸ごと雑音にする前に、 class 別の件数を数える
+
+「この domain は宣伝ばかり」 と送り手単位で雑音 list に入れると、 **同じ送り手から来る少数の見るべき mail
+(審査結果・受付・請求の失敗) だけを確実に捨てる** 仕掛けになる。 宣伝の多い account で決めた判断を、 別の
+account (機関アドレス等) にもそのまま写したときに起きやすい。
+
+実測: 機関アカウントで送り手一括の雑音にしていた domain は、 実際には宣伝が 0 通で、 見るべき通知と
+サインイン用リンクしか来ていなかった = 雑音 list が捨てていたのは見るべき通知だけだった。
+
+- **入れる前に account ごとに `from:<domain>` を 1 年分数え、 件名で class に分ける**。 宣伝が無い account には入れない
+- 雑音の class が件名で分かるなら、 **送り手でなく件名のパターンで雑音にする** (見るべき class が素通りする)
+- 既存の送り手一括の行は、 見落としが出た turn でその account の実数を数え直す
+
+## <a id="settled-matter-key"></a>決着済み案件への自動督促 — 本文の案件 ID で畳む (消さない)
+
+決着 (完了 / 見送り) させた案件に、 相手のシステムが自動リマインダを送り続けることがある。 これも **毎回
+別スレッド** なので、 messageId / threadId で「記録済み」 を判定する網では未認識のまま再浮上し、 義務の
+class に見えれば最上位に出る。 実測: 見送りを決めた依頼の督促を「未認識の義務」 として拾い、 決着を知らずに
+重複で起票した。
+
+効く鍵は **本文に必ず入る案件 ID** (招待 URL の UUID / 原稿 ID / 受付番号) で、 スレッドが変わっても同じ。
+
+- 決着させる turn で、 台帳の項目に `matter_key:` を書く (短い・汎用の文字列は誤爆するので書かない。
+  実装は 8 文字未満を捨てる)
+- 網は **自動送信の送り手** (no-reply / notifications@ 等) ∧ **決着済み項目の key が件名・snippet・本文に入る**
+  mail だけを、 未認識の段と義務の push から外し、 **専用の 1 行段に残す** (消すと、 黙らせた物が見えなくなる)
+- **人間発は畳まない** — 決着済み案件への人の新しい連絡は見たい (見送り close で死ぬ網を作らない)
+- **項目を open に戻すと key は使われない** = 誤って畳んだときの戻し方が台帳の操作 1 つで済む
+- 本文を引くのは自動送信の mail だけにする (人間発は判定に本文が要らない、 API 呼び出しを増やさない)
+- 実装 = [`scripts/lib/mail_watch.py`](../scripts/lib/mail_watch.py) の `settled_matter_keys` / `split_settled`。
+  surface を迂回した raw sweep 側の同じ問題 = 上の [#raw-sweep-declared-skip](#raw-sweep-declared-skip)
+
+## <a id="recorded-id-notation"></a>「記録済み」 の書式を検出器ごとに持たない
+
+記録には `messageId:x` のほか、 ログ行の短縮形 (`mid:x`) なども混ざる。 複数の網がそれぞれ独自の regex で
+記録済み集合を作ると、 **ある網だけが短縮形を読まず、 記録済みの mail を「未認識」 に出し続ける** (実測:
+他の網は共有の harvester を使っていて、 1 つの網だけが独自 regex だった)。 書式の読み取りは共有の関数 1 つに
+寄せ、 その関数に「どの網が使っているか」 の一覧と、 一覧の全員が実際に import しているかの selftest を持たせる。
+一般則 = [`data-pipeline-automation.md#multipath-key-normalization`](data-pipeline-automation.md#multipath-key-normalization)。

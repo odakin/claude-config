@@ -92,8 +92,8 @@ layer 1 (public) のドメイン固有規約 115 file をカテゴリ別に列�
 
 ## メール (`mail`)
 
-- **[email-surface-pattern.md](email-surface-pattern.md)** — 重要送信者・ML topic の見落とし防止 surface を設計するとき
-  - 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止
+- **[email-surface-pattern.md](email-surface-pattern.md)** — 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき
+  - 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止。 別スレッドで届く待ち結果は待ち項目の検索条件で拾う (#new-thread-expected-inbound) / 送り手一括の雑音化は class 別の件数を数えてから (#sender-noise-volume-check) / 決着済み案件への自動督促は本文の案件 ID で畳む (#settled-matter-key) / 「記録済み」 の書式は検出器間で 1 つ (#recorded-id-notation)
 - **[gmail-mcp-multiaccount.md](gmail-mcp-multiaccount.md)** — 複数 Gmail アカウントを Claude Code の MCP として繋ぎたいとき + N 個目のアカウントを追加するとき
   - 多アカウント Gmail MCP の end-to-end runbook — @gongrzhe server を account 数ぶん起動 (1:1)、credential は git-crypt な private repo を canonical に symlink 運用 (1 回認証で全マシン)、reauth / runtime-links エンジンは scripts/gmail-mcp-*.sh (state+PKCE / alias 検証 / permission 矯正込み)、送信は ask gate 必須
 - **[gmail-sending.md](gmail-sending.md)** — Gmail でメールを送信する経路・MIME 実装を選ぶとき
@@ -182,8 +182,8 @@ layer 1 (public) のドメイン固有規約 115 file をカテゴリ別に列�
 
 ## Web・公開プラットフォーム (`web`)
 
-- **[academic-program-verification.md](academic-program-verification.md)** — 研究者向けの割引・無償プログラム (AI ベンダーの academic plan 等) に申請するとき + 所属確認フォームの「研究室ページ」「機関メール」 欄を埋めるとき + 審査で即時不合格になったとき
-  - ベンダーの研究者向けプログラム申請の所属確認 — 数秒で不合格は自動 gate・「手動審査へ」 は gate 通過 (#flow-shape) / 研究室ページは機関ドメイン上かつ申請名と同じ文字体系、 非英語圏は機関ドメイン上の英語ページを先に探す (#lab-page-requirements) / 手動審査の自由記述欄で役割・名前の対応・個人の公式ページを橋渡し、 字数は機械で数える (#evidence-field-bridge) / サインイン用 magic link は agent が開かず到着・失効時刻つきで user へ (#magic-link-handoff) / 回答予定日 +14d の待ち TODO (#after-submission)
+- **[academic-program-verification.md](academic-program-verification.md)** — 研究者向けの割引・無償プログラム (AI ベンダーの academic plan 等) に申請するとき + 所属確認フォームの「研究室ページ」「機関メール」 欄を埋めるとき + 審査で即時不合格になったとき + 手動審査で不承認になり問い合わせるとき (#after-decline)
+  - ベンダーの研究者向けプログラム申請の所属確認 — 数秒で不合格は自動 gate・「手動審査へ」 は gate 通過 (#flow-shape) / 研究室ページは機関ドメイン上かつ申請名と同じ文字体系、 非英語圏は機関ドメイン上の英語ページを先に探す (#lab-page-requirements) / 手動審査の自由記述欄で役割・名前の対応・個人の公式ページを橋渡し、 字数は機械で数える (#evidence-field-bridge) / サインイン用 magic link は agent が開かず到着・失効時刻つきで user へ (#magic-link-handoff) / 回答予定日 +14d の待ち TODO・結果は別スレッドの no-reply で来る (#after-submission) / 不承認後の再申請はメール確認直後に即時不合格 → 問い合わせ (無料アカウントの窓口は AI のみ、 本人確認ヘルプフォームの自由記述は 500 字) (#after-decline)
 - **[android-chromium-remote-debug.md](android-chromium-remote-debug.md)** — Android 実機の Brave/Chrome を remote debug (WiFi ADB + CDP) するとき
   - Android Brave/Chrome の remote debugging (WiFi ADB + CDP、 reload 前の live state capture procedure)
 - **[google-forms-automation.md](google-forms-automation.md)** — Google Forms の自動化・prefill・回答提出を扱うとき
