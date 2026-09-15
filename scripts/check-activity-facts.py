@@ -70,7 +70,10 @@ TEXT_SUFFIXES = (".md", ".markdown", ".py", ".sh", ".txt", ".yaml", ".yml", ".js
 
 
 def _git(args, cwd=None):
-    r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    # errors="replace": a staged binary (PDF, image) that git shows as text (no NUL in the first 8KB,
+    # or decrypted by textconv) is not valid UTF-8; text=True raised UnicodeDecodeError, the runner
+    # treats the crash as fail-open, and the whole commit went unchecked (same fix as check-confidential-leak.py)
+    r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, encoding="utf-8", errors="replace")
     return r.returncode, r.stdout
 
 
@@ -329,6 +332,11 @@ def selftest():
                scan_public(Path(td), terms, ack, out=out.append) == 1 and "1 public clone(s), 1 with unacked" in out[-1])
         out = []
         expect("staged: public repo with a TERM line blocks", scan_staged(repo, terms, out=out.append) == 1)
+        (repo / "scan.pdf").write_bytes(b"%PDF-1.4\n%\xc5\xd0\xe2\xe3\nstream \xff\xfe\n")
+        _git(["add", "."], cwd=repo)
+        out = []
+        expect("staged: a non-UTF-8 binary in the same commit does not stop the TERM block",
+               scan_staged(repo, terms, out=out.append) == 1)
         (repo / MARKER).unlink()
         out = []
         expect("staged: a repo without the marker is skipped", scan_staged(repo, terms, out=out.append) == 0)

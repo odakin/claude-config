@@ -197,6 +197,7 @@
 - **[lib/run_log.py](lib/run_log.py)** — 検査 script の出力を「証跡 file」 として残す helper (= 後から「いつ何を出したか」 を再構成できるようにする)。
 - **[lib/staged-conflict-markers.sh](lib/staged-conflict-markers.sh)** — merge conflict marker の staged-content gate (sourceable lib)
 - **[lib/staged-conflict-markers.test.sh](lib/staged-conflict-markers.test.sh)** — staged-conflict-markers.sh の self-test (hermetic)
+- **[lib/staged_diff.py](lib/staged_diff.py)** — staged 追加行を読む helper (= pre-commit の warn 検査が binary を含む commit で落ちないように)。
 - **[lib/test-err-trap.sh](lib/test-err-trap.sh)** — set -e の bash test で落ちた assertion の行とコマンドを stderr に出す ERR trap (sourceable lib)
 - **[lib/test-err-trap.test.sh](lib/test-err-trap.test.sh)** — test-err-trap.sh の self-test (hermetic、 走らせた bash で fixture を実行)
 - **[lib/transcript_turns.py](lib/transcript_turns.py)** — Claude Code の transcript (jsonl) を turn に分けて最終 assistant 発話を取り出す共通部品（Stop hook の「今の turn の最終発話」 と、 過去 transcript で句を校正する calibrate-final-message-pattern.py が同じ境界で読む。 引用の中かの判定 inside_quote と、 match を含む 1 文を返す sentence_around も持つ）

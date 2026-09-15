@@ -14,6 +14,11 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from staged_diff import staged_added_lines  # noqa: E402
 
 
 SKIP_BASENAMES = {
@@ -60,28 +65,22 @@ def skip_path(path: str) -> bool:
     return os.path.basename(path.strip()) in SKIP_BASENAMES
 
 
-def git_added_lines() -> list[str]:
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--cached", "-U0", "--no-color", "--diff-filter=ACM"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=20,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return []
-    added: list[str] = []
-    skip = False
-    for line in result.stdout.splitlines():
-        if line.startswith("+++ "):
-            target = line[4:]
-            if target.startswith(("a/", "b/")):
-                target = target[2:]
-            skip = skip_path(target)
-        elif line.startswith("+") and not skip:
-            added.append(line[1:])
-    return added
+def git_added_lines(cwd: str | None = None) -> list[str]:
+    # binary (PDF 等) を含む commit でも落ちず、 同じ commit の text file は読む (lib/staged_diff.py)
+    return [text for _path, _lineno, text in staged_added_lines(cwd=cwd, skip=skip_path)]
+
+
+def binary_commit_case() -> bool | None:
+    """一時 repo に binary + trigger を含む text を stage し、 warning が出るか (git 無し = None)。"""
+    with tempfile.TemporaryDirectory() as td:
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+        git = lambda *a: subprocess.run(["git", *a], cwd=td, env=env, capture_output=True, check=False)
+        if git("init", "-q").returncode != 0:
+            return None
+        Path(td, "scan.pdf").write_bytes(b"%PDF-1.4\n%\xc5\xd0\xe2\xe3\nstream \xff\xfe\n")
+        Path(td, "note.md").write_text("この規則の正本は docs/reference.md\n", encoding="utf-8")
+        git("add", "-A")
+        return bool(scan_added_lines(git_added_lines(cwd=td)))
 
 
 def run_selftest() -> int:
@@ -108,6 +107,11 @@ def run_selftest() -> int:
             ("ordinary source is scanned", not skip_path("docs/design.md")),
         ]
     )
+    fired = binary_commit_case()
+    if fired is None:
+        print("  [SKIP] staged binary + text: git not available")
+    else:
+        checks.append(("staged binary + text: warning still fires for the text file", fired))
     ok = True
     for label, condition in checks:
         print(f"  [{'PASS' if condition else 'FAIL'}] {label}")
