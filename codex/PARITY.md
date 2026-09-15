@@ -337,6 +337,12 @@ branch remain fixed; changing only the source spelling to `HEAD` does not widen
 the publication target. Common force, delete, mirror, prune, all-branch, and
 tag-publishing forms remain `decision = "prompt"`.
 
+The installer also removes only the exact UI-generated `git push origin main` /
+`master` allow lines from user-layer `default.rules` after the managed rule is
+installed. Those lines are superseded derived wiring; unrelated user rules and
+path-specific `git -C` rules are preserved. `--check` reports the exact legacy
+lines as stale so each machine converges on the managed source.
+
 This uses the official experimental
 [`prefix_rule` mechanism](https://learn.chatgpt.com/docs/agent-configuration/rules):
 rules load at startup, `allow` runs a matching command outside the sandbox

@@ -22,6 +22,10 @@ from pathlib import Path
 
 MARKER = "# Managed by claude-config/scripts/setup-codex-git-push.py\n"
 RULE_NAME = "claude-config-git-push.rules"
+LEGACY_DEFAULT_RULE_LINES = {
+    'prefix_rule(pattern=["git", "push", "origin", "main"], decision="allow")',
+    'prefix_rule(pattern=["git", "push", "origin", "master"], decision="allow")',
+}
 
 
 def desired() -> str:
@@ -59,6 +63,40 @@ prefix_rule(
 """
 
 
+def legacy_default_rules(codex_dir: Path) -> tuple[Path, list[str]]:
+    path = codex_dir / "rules" / "default.rules"
+    if path.is_symlink() or not path.is_file():
+        return path, []
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return path, [line for line in lines if line.strip() in LEGACY_DEFAULT_RULE_LINES]
+
+
+def prune_legacy_default_rules(codex_dir: Path) -> int:
+    path, legacy = legacy_default_rules(codex_dir)
+    if not legacy:
+        return 0
+    original = path.read_text(encoding="utf-8")
+    kept = [
+        line
+        for line in original.splitlines(keepends=True)
+        if line.strip() not in LEGACY_DEFAULT_RULE_LINES
+    ]
+    fd, temporary = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.writelines(kept)
+            os.fchmod(stream.fileno(), path.stat().st_mode & 0o777)
+        os.replace(temporary, path)
+    except BaseException:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+        raise
+    print(f"Removed {len(legacy)} superseded push rule(s) from {path}")
+    return len(legacy)
+
+
 def apply(codex_dir: Path, install: bool = False) -> Path:
     codex_dir = codex_dir.expanduser().resolve()
     target = codex_dir / "rules" / RULE_NAME
@@ -77,11 +115,17 @@ def apply(codex_dir: Path, install: bool = False) -> Path:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             os.fchmod(stream.fileno(), 0o600)
             stream.write(expected)
+        prune_legacy_default_rules(codex_dir)
 
     if not target.is_file() or target.read_text(encoding="utf-8") != expected:
         raise ValueError(f"normal-push rule missing or stale; run --install: {target}")
     if target.stat().st_mode & 0o077:
         raise ValueError(f"rule file must be private (0600): {target}")
+    legacy_path, legacy = legacy_default_rules(codex_dir)
+    if legacy:
+        raise ValueError(
+            f"superseded push rules remain in {legacy_path}; run --install to migrate"
+        )
 
     print(f"Codex normal-push rule verified: {target}")
     print("Restart Codex or start a fresh task before relying on newly installed rules.")
@@ -117,12 +161,38 @@ def selftest() -> int:
             print("[FAIL] audit accepted a missing rule")
             return 1
 
+        default_rule = root / "rules" / "default.rules"
+        default_rule.parent.mkdir(parents=True, exist_ok=True)
+        default_rule.write_text(
+            'prefix_rule(pattern=["git", "push", "origin", "main"], decision="allow")\n'
+            'prefix_rule(pattern=["git", "push", "origin", "master"], decision="allow")\n'
+            'prefix_rule(pattern=["git", "status"], decision="allow")\n',
+            encoding="utf-8",
+        )
         target = apply(root, install=True)
+        migrated = default_rule.read_text(encoding="utf-8")
+        if "git\", \"push" in migrated or "git\", \"status" not in migrated:
+            print("[FAIL] legacy default.rules migration removed the wrong lines")
+            return 1
         apply(root, install=True)
         apply(root)
         if target.stat().st_mode & 0o777 != 0o600:
             print("[FAIL] installed rule mode is not 0600")
             return 1
+
+        default_rule.write_text(
+            migrated
+            + 'prefix_rule(pattern=["git", "push", "origin", "main"], decision="allow")\n',
+            encoding="utf-8",
+        )
+        try:
+            apply(root)
+        except ValueError:
+            pass
+        else:
+            print("[FAIL] audit accepted a superseded default.rules push rule")
+            return 1
+        apply(root, install=True)
 
         cases = [
             (["git", "push", "origin", "main"], "allow"),

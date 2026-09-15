@@ -104,8 +104,9 @@ install the separate prompt-free rule for default-branch pushes:
 python3 scripts/setup-codex-git-push.py --install
 ```
 
-It allows direct `git push origin main` / `master` and detached-worktree
-`git push origin HEAD:main` / `HEAD:master` forms (including full destination
+It allows direct `git push origin main` / `git push origin master` and
+detached-worktree `git push origin HEAD:main` / `git push origin HEAD:master`
+forms (including full destination
 refs); destructive or scope-expanding push forms still prompt. Keep
 `approval_policy = "on-request"`, restart Codex, and verify with `--check` or
 `codex execpolicy check`. The

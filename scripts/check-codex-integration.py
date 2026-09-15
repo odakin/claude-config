@@ -257,16 +257,20 @@ GIT_PUSH_RULE_REQUIREMENTS = {
         "git push origin master",
         "git push origin HEAD:main",
         "git push origin HEAD:master",
+        "default.rules",
+        "superseded derived wiring",
     ),
     "README.md": (
         "scripts/setup-codex-git-push.py --install",
         "codex/PARITY.md#normal-git-push-rule",
         "git push origin HEAD:main",
+        "git push origin HEAD:master",
     ),
     "README.ja.md": (
         "scripts/setup-codex-git-push.py --install",
         "codex/PARITY.md#normal-git-push-rule",
         "git push origin HEAD:main",
+        "git push origin HEAD:master",
     ),
     "scripts/setup-codex-git-push.py": (
         'decision = "allow"',
@@ -277,6 +281,10 @@ GIT_PUSH_RULE_REQUIREMENTS = {
         "RULE_NAME = \"claude-config-git-push.rules\"",
         '"HEAD:main"',
         '"HEAD:master"',
+        '"HEAD:refs/heads/main"',
+        "LEGACY_DEFAULT_RULE_LINES",
+        "default.rules",
+        "superseded push rules",
     ),
     "scripts/audit-codex-integration.sh": (
         "setup-codex-git-push.py",
@@ -837,6 +845,19 @@ def selftest() -> int:
         errors = check(root)
         if not any("missing normal-git-push rule wiring" in error for error in errors):
             print("FAIL: missing detached-HEAD push coverage was not detected")
+            return 1
+
+        fixture(root)
+        push_rule_path = root / "scripts/setup-codex-git-push.py"
+        push_rule_path.write_text(
+            push_rule_path.read_text(encoding="utf-8").replace(
+                "LEGACY_DEFAULT_RULE_LINES", "REMOVED_LEGACY_RULE_MIGRATION"
+            ),
+            encoding="utf-8",
+        )
+        errors = check(root)
+        if not any("missing normal-git-push rule wiring" in error for error in errors):
+            print("FAIL: missing legacy-rule migration was not detected")
             return 1
 
         fixture(root)
