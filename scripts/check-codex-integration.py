@@ -533,9 +533,17 @@ def check(root: Path) -> list[str]:
     # Code's own hook system, and Claude-side hook work is a legitimate SESSION
     # topic. Entry granularity (not paragraph) so a Codex heading covers its
     # whole body even when the body itself doesn't repeat the word.
-    codex_sections = [
-        section for section in ("\n" + session).split("\n## ") if "codex" in section.lower()
-    ]
+    # A "## " section whose heading mentions Codex is scanned whole. Under any other heading
+    # (e.g. one dated index of "- " bullets covering many topics), scan only the bullets that
+    # mention Codex, so a Codex bullet elsewhere in the index does not turn a Claude-side hook
+    # bullet next to it into a violation.
+    codex_sections = []
+    for section in ("\n" + session).split("\n## "):
+        heading = section.split("\n", 1)[0]
+        if "codex" in heading.lower():
+            codex_sections.append(section)
+            continue
+        codex_sections.extend(b for b in ("\n" + section).split("\n- ") if "codex" in b.lower())
     for token in SESSION_DURABLE_TOKENS:
         if any(token in section for section in codex_sections):
             errors.append(f"SESSION.md: durable Codex implementation detail must live in {CANONICAL_POINTER}: {token}")
@@ -816,6 +824,36 @@ def selftest() -> int:
         errors = check(root)
         if any(error.startswith("SESSION.md: durable") for error in errors):
             print("FAIL: Claude-side hook vocabulary outside a Codex entry was flagged")
+            return 1
+
+        fixture(root)
+        (root / "SESSION.md").write_text(
+            CANONICAL_POINTER
+            + chr(10) * 2
+            + "## Recent index"
+            + chr(10)
+            + "- Codex instruction entrypoint trimmed to a pointer kernel"
+            + chr(10)
+            + "- Claude SessionStart injection folded into one block"
+            + chr(10),
+            encoding="utf-8",
+        )
+        errors = check(root)
+        if any(error.startswith("SESSION.md: durable") for error in errors):
+            print("FAIL: a Claude-side bullet next to a Codex bullet in one index section was flagged")
+            return 1
+        (root / "SESSION.md").write_text(
+            CANONICAL_POINTER
+            + chr(10) * 2
+            + "## Recent index"
+            + chr(10)
+            + "- Codex: set approval_policy in the local config"
+            + chr(10),
+            encoding="utf-8",
+        )
+        errors = check(root)
+        if not any(error.startswith("SESSION.md: durable") for error in errors):
+            print("FAIL: durable detail in a Codex bullet of an index section was not detected")
             return 1
 
         fixture(root)
