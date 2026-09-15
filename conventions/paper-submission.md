@@ -258,6 +258,19 @@ python3 scripts/arxiv-package.py compare-pdf <arXiv が組版した PDF> arxiv/v
 - 共著者に知らせるときは米東部の時刻を写さず、 **読み手の現地時刻**で書く ([`research-email.md#times-in-recipient-zones`](research-email.md#times-in-recipient-zones))。
 - `\date` を指定しない原稿は、 arXiv が組版した日 (UTC) の日付が印字される。
 
+### <a id="arxiv-publication-surface-lag"></a>公開直後は各 surface が一時的に食い違いうる
+
+arXiv の公開確認は 1 個の URL の成否で決めない。公開直後には、番号付き abs page と HTML は読めるが
+PDF / source がまだ取れない、`/list/<category>/new` / `recent` にまだ出ない、RSS や export API が前日の
+まま、という **surface 間の伝播差**が起こりうる。abs page の出現だけで「PDFまで公開済み」と言わず、
+PDF の 404 だけで「投稿が止められた」とも言わない。
+
+確認対象を分けて記録する: (1) 投稿者向け status / mail、(2) abs page と Subjects、(3) PDF、source、HTML、
+(4) primary / cross-list の new・recent 一覧、(5) RSS / export API。各 surface の HTTP status・表示日・
+観測時刻を残し、不一致なら「公開 surface の伝播途中、内部原因は未確定」と報告して時間を置いて再確認する。
+RSS は web 一覧と更新時刻が違うため、古い RSS だけを遅延の証拠にしない。status page に障害表示が無い時も、
+個別投稿の全 surface が同期済みだとは限らない。
+
 ### <a id="arxiv-category-choice"></a>primary category と cross-list
 
 - **SCOAP3** (高エネルギー物理の論文のオープンアクセス費用を肩代わりする枠組み): JHEP / EPJC / PLB / NPB は全論文が対象で、 category を問わない。 PRD / PRL / PRC / PTEP / CPC / APPB / AHEP は、 **掲載前に arXiv に出し、 その primary が hep-ex / hep-lat / hep-ph / hep-th の論文**だけが対象 (cross-list に hep-* を足しても対象にならない)。 arXiv の moderator は分類を変えることがある。 出典 = SCOAP3 FAQ。 対象誌の最新は SCOAP3 の誌一覧で確かめる。

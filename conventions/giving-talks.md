@@ -226,6 +226,12 @@ Lessons from preparing and delivering a 2026 conference talk, kept separate from
   hide the absence of a point, and a "message" that only sets the stage (the model, the
   postulate, the previous work) belongs in the introduction's context, not among the three.
   Test: someone who remembers only the three sentences should hold the essence of the talk.
+- **Do not require every message to carry a priority claim.** A message earns its place by being
+  a cohesive idea worth remembering, not by having been discovered in the current paper. Mark
+  provenance honestly: established framework may supply the physical picture, while the new
+  calculation supplies the result. In a short talk, move an established framework into the
+  introduction when it only sets up the question; keep it as a body message only when it is
+  itself one of the ideas the audience should retain. Do not manufacture novelty to fill a slot.
 - **After the talk, turn recurring Q&A questions into a backup slide for the published deck.**
   A question asked independently by several audience members maps the deck's weakest
   load-bearing claim — often an unstated order-of-magnitude assumption. Write the one-page

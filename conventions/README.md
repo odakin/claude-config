@@ -108,7 +108,7 @@ layer 1 (public) のドメイン固有規約 115 file をカテゴリ別に列�
 ## 論文・発表・研究文書 (`paper`)
 
 - **[beamer-slides.md](beamer-slides.md)** — Beamer/metropolis で研究スライドを作る・直すとき
-  - Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可・Keynote 混成 deck の PDF 出荷〔ビルド段階展開・微小タイルの圧縮 floor・16:9 letterbox 追補、#keynote-pdf-shipping〕。giving-talks.md〔中身/作法〕と相補)
+  - Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・Keynote の読戻しと PDF 出荷・LaTeXiT の可搬な式・生成画像の実 alpha 検査。giving-talks.md〔中身/作法〕と相補)
 - **[giving-talks.md](giving-talks.md)** — 講演・セミナー・発表の準備をするとき (+ 日本語版: [giving-talks.ja.md](giving-talks.ja.md))
   - 講演のしかた (= Robert Geroch "Suggestions For Giving Talks" arXiv:gr-qc/9703019 の own-words ダイジェスト、 主題選択 / 3-4 メッセージ構成 / 導入は全体の 1-5 / 視覚資料は図>言葉>式 / 1h で非自明な式 5 本・スライド 10 枚 / 質問は完全に正直に 等。 セミナー・JC・卒論発表の準備時に読む、 英語本体)
 - **[kakenhi-proposal.md](kakenhi-proposal.md)** — 科研費の研究計画調書 (基盤・挑戦的研究・若手等) を書く/直す/Web 入力するとき + 当年の様式 docx を入手した直後 (= 起草前に scripts/kakenhi-preflight.py で埋め込み指示を吸い出すとき) + 機関事務から差し戻しを受けたとき + 複数種目を同時期に出すとき

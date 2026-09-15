@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Beamer/metropolis で研究スライドを作る・直すとき
 category: paper
-summary: Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・.key 不可・Keynote 混成 deck の PDF 出荷〔ビルド段階展開・微小タイルの圧縮 floor・16:9 letterbox 追補、#keynote-pdf-shipping〕。giving-talks.md〔中身/作法〕と相補)
+summary: Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・Keynote の読戻しと PDF 出荷・LaTeXiT の可搬な式・生成画像の実 alpha 検査。giving-talks.md〔中身/作法〕と相補)
 -->
 # Beamer (metropolis) 研究スライド — ビルド・図・落とし穴
 
@@ -146,6 +146,47 @@ for i, p in enumerate(d):
 - 検証は必ず「documents 数の polling」で(open の戻り値は import 成功でも missing value のことがある)。
 
 QA は 3 の export PDF を頁画像化して §9 と同じ目視ループ。
+
+### <a id="keynote-iwa-text-fallback"></a>Keynote の本文を読む fallback — IWA は inventory にだけ使う
+
+既存 `.key` の review は **Keynote から PDF を書き出して頁画像を読む**のが第一選択。Keynote の操作が
+止まっている、または user が同じ app を操作中で export を完遂できない時は、
+[`scripts/keynote-iwa-text.py`](../scripts/keynote-iwa-text.py) で package 内の `Index/Slide*.iwa` を
+展開し、UTF-8 の text run を拾える。
+
+```bash
+python3 scripts/keynote-iwa-text.py deck.key --japanese-only
+```
+
+これは **本文の棚卸し専用**。IWA archive 名はスライド順ではなく、座標・色・見切れ・ビルド段階・
+発表者ノートも復元しない。従って「全頁を目視した」「レイアウトに問題なし」の証拠にはならない。
+出力にもこの限界を必ず残し、PDF export が可能になったら最終 QA はそちらで行う。
+
+### <a id="latexit-portable-snippet"></a>LaTeXiT / Keynote に渡す式は project macro を展開する
+
+論文の式を LaTeXiT や Keynote の方程式欄へ貼る時、論文固有の `\ov`、`\fn`、`\abb`、`\os`、
+色 macro 等はその app の preamble に無く、そのままでは組めない。配布する式片は `\frac`、
+`\mathrm`、`\left\|\cdot\right\|`、`\overset`、`\textcolor` など標準 command に展開する。
+色は stock の `blue` へ落とさず、本文または参照画像から確定した `\definecolor` を式片に同梱する。
+
+最小の `standalone` wrapper に `amsmath` と `color` / `xcolor` だけを読み、式片を実際に一度組んでから
+渡す。式片の source は deck の近くに保存する。chat で渡す時は
+[`latex.md#latex-in-chat-codeblock`](latex.md#latex-in-chat-codeblock)どおり code block に入れる。
+
+### <a id="generated-overlay-real-alpha"></a>生成画像の市松模様は透明の証拠ではない
+
+画像生成器へ「透明背景」と頼んでも、透明を模した市松模様を **RGB画素として描いた画像**が返ることが
+ある。見た目で判定せず、metadata の alpha channel、外周の alpha、穴を持つ図形なら穴の alpha を測る。
+
+- 元生成画像・prompt・仕上げ script・最終 RGBA を別に保存し、どの段で alpha を作ったかを記録する。
+- 前景が有彩色、背景が中立灰色なら、輝度しきい値より **色差**（例: 緑なら `G-R` と `G-B`）を matte
+  に使うと、市松模様と灰色の縁を落としながら antialias を残しやすい。しきい値・出力色・crop padding
+  は入力依存なので、個別 project の script / config に置く。
+- 検収は RGBA、alpha の範囲 0–255、外周と穴が透明、必要なら alpha 閾値上の連結成分数。輪郭を足す時は
+  検証済み alpha mask を膨張させて背面に置き、図形を再生成しない。
+
+生成器が shape と style を作り、決定的 script が alpha と輪郭を仕上げたなら、その分担をそのまま書く。
+「生成器が透明PNGを作った」と短絡して provenance を偽らない。
 
 ## <a id="keynote-pdf-shipping"></a>13. Keynote 混成 deck の PDF 出荷 (web 公開版)
 
