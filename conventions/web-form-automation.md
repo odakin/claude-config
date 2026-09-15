@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき
 category: web
-summary: flaky web form 入力の一般則 — 送信結果はレスポンスページで判断しない (過負荷サイトは POST 成功後にエラーページを返す、重複確認画面 = 前回送信成功の証拠、#submit-truth-is-server-state)、公開 read API の cache による false negative (#read-api-cache-lag)、radio/checkbox は click より form_input 直接設定 (#form-input-over-click)、動的 combobox は form_input 不可、多言語ペア validation の非対称発火と「同値を両欄に焼く」回避 (#language-pair-validation)、metadata 自動取り込みの著者順 verify (#imported-metadata-verify)、リトライ規律 (フォーム状態は保存されない前提で SoT から再入力)、upload POST だけの 503 はサイズ原因と早断定しない (#upload-only-503)、**同じサイトを繰り返し打つなら操作列を生成物にする step driver harness (#step-driver-harness = 値の正本 → steps → 読み戻し照合の 3 層、 実体 scripts/lib/web_driver.py、 element 不在は throw せず missing / 往復には wait / 生 HTML を返さない / 行狙いは literal 一致、 消えない人間の 4 段 = login・upload・送信・CAPTCHA)**
+summary: flaky web form 入力の一般則 — 送信結果はレスポンスページで判断しない (過負荷サイトは POST 成功後にエラーページを返す、重複確認画面 = 前回送信成功の証拠、#submit-truth-is-server-state)、公開 read API の cache による false negative (#read-api-cache-lag)、radio/checkbox は click より form_input 直接設定 (#form-input-over-click)、動的 combobox は form_input 不可、多言語ペア validation の非対称発火と「同値を両欄に焼く」回避 (#language-pair-validation)、metadata 自動取り込みの著者順 verify (#imported-metadata-verify)、リトライ規律 (フォーム状態は保存されない前提で SoT から再入力)、upload POST だけの 503 はサイズ原因と早断定しない (#upload-only-503)、**同じサイトを繰り返し打つなら操作列を生成物にする step driver harness (#step-driver-harness = 値の正本 → steps → 読み戻し照合の 3 層、 実体 scripts/lib/web_driver.py、 element 不在は throw せず missing / 往復には wait / 生 HTML を返さない / 行狙いは literal 一致、 消えない人間の 4 段 = login・upload・送信・CAPTCHA)**、 読み仮名欄の字種はラベル「かな」 でもカタカナ限定のことがある = 注記・エラー文で決める (#kana-reading-field)
 -->
 # flaky web form への browser-automation 入力の一般則
 
@@ -140,3 +140,16 @@ site 側 driver の selftest からは `audit_steps(steps)` を呼ぶだけで�
 初例 = 科研費電子申請システム (frameset + 引数付き保存関数 + 6 表の行追加、 実機で
 往復・読み戻し・削除まで検証)。 サイト固有の台帳は
 [`kakenhi-proposal.md#ai-write-route`](kakenhi-proposal.md#ai-write-route) と当該 driver の docstring。
+
+## <a id="kana-reading-field"></a>10. 読み仮名欄の字種はラベルで決めない — validation が決める
+
+氏名の読み欄は、 ラベルに「かな」「ふりがな」 と書いてあっても**カタカナしか通さない**ことがある
+(実測: 大手決済サービスの日本向け口座開設フォームで、 ラベル「かな」 の欄がひらがなを拒否し
+カタカナで通った)。 逆に「フリガナ」 表記でひらがなを要求する form もありうるし、 半角カナを
+禁止する form もある。 ラベルの字面から字種を推測して案内しない。
+
+- **入力を案内する前**: 字種の指定が注記・placeholder・エラー文に無いか読む。 無ければ
+  「拒否されたらカタカナ (または全角ひらがな) に切り替える」 と 2 択で渡す。
+- **拒否されたら**: 字種を切り替えて再試行する。 氏名そのものの誤りと早断定しない。
+- **値の正本**: 氏名の読みは 1 形 (例: カタカナ) で持ち、 字種の変換は form ごとに行う。
+  サイトごとの要求字種は、 そのサイトを繰り返し打つなら実測台帳 ([#step-driver-harness](#step-driver-harness)) に書く。
