@@ -432,7 +432,7 @@ def check_wiring(candidates=None, pointer=None, env=None):
 
     silent fail-open (= pattern 未設定でも何も言わずに素通り) は「効いていないことに
     気づけない」 ので、 この監査だけは黙らない。 3 状態を必ず 1 行出す:
-      ARMED / NOT ARMED (理由つき、 FAIL) / 対象外 (このマシンに作業リポ無し)
+      ARMED / NOT ARMED (理由つき、 FAIL) / 対象外 (宣言された候補に実体無し) / 未配線 (候補の宣言が無い = 未確認)
     """
     env = os.environ if env is None else env
     pointer = Path(pointer or env.get("CLAUDE_LEAK_SOURCES") or SOURCES_POINTER)
@@ -440,8 +440,17 @@ def check_wiring(candidates=None, pointer=None, env=None):
     present = [d for d in cands if (d / ".leak-patterns").is_file()]
 
     print("── 機密 leak guard の配線 (check-confidential-leak)")
+    # ⚠️ 「候補が 1 つも宣言されていない」 と「宣言された候補に守る実体が無い」 を混ぜない。
+    # 混ぜると、 設定 file が無いだけの machine で「守るべき実体がローカルに無い」 と
+    # **確かめていない事実を断定**して PASS する (= 空の config が「対象なし」 と同じ顔をする、
+    # docs/convention-design-principles.md#detector-config-must-be-derived)。
+    if not cands:
+        print("   未配線: 候補 dir が 1 つも宣言されていない "
+              "($CLAUDE_LEAK_CANDIDATE_DIRS / ~/.claude/leak-candidate-dirs.txt)")
+        print("   → このマシンに守る実体が在るかは **未確認**。 在るなら宣言するまで gate は走らない")
+        return 0
     if not present:
-        print("   対象外: このマシンに作業リポが無い (= 守るべき実体がローカルに無い)")
+        print("   対象外: 宣言された候補 dir に .leak-patterns が無い (= 守るべき実体がローカルに無い)")
         return 0
 
     problems = []
@@ -651,6 +660,15 @@ def selftest():
         # (11) このマシンに作業リポが無いときは「対象外」 で PASS
         if _quiet_wiring(candidates=[td / "nowhere"], pointer=td / "p0", env=env) != 0:
             fails.append("作業リポ不在で対象外 PASS にならない")
+
+        # (11b) 候補の宣言が 0 件なら「対象外」 ではなく「未配線」 と区別する
+        #       (= 設定 file が無いだけの machine で「守る実体が無い」 と断定しない)
+        import io as _io, contextlib as _ctx
+        _buf = _io.StringIO()
+        with _ctx.redirect_stdout(_buf):
+            _rc0 = check_wiring(candidates=[], pointer=td / "p0", env=env)
+        if _rc0 != 0 or "未配線" not in _buf.getvalue():
+            fails.append("候補の宣言が 0 件のとき「未配線」 と区別して報告しない")
 
         # (12) 作業リポは在るのに pointer 未登録 → NOT ARMED (exit 1)
         w = td / "work"; w.mkdir()
