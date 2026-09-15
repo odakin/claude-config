@@ -7,7 +7,7 @@ summary: ベンダーの研究者向けプログラム申請の所属確認 — 
 
 AI ベンダー等が PI 向けに出す割引・無償プランは、 申請フォームで **機関メール** と **研究室ページ** から所属を確かめる。 本 doc はその通し方と落ちどころ。
 
-観測元 = 実測 (非英語圏の大学に所属する PI の申請、 n=1)。 n=1 の観測は「観測」、 解釈は「推測」 と書き分ける。
+観測元 = 実測 (n=1)。 n=1 の観測は「観測」、 解釈は「推測」 と書き分ける。
 
 > 画面操作一般は [`web-form-automation.md`](web-form-automation.md)、 経路の選び方は [`machine-route-first.md`](machine-route-first.md)、 人間にしかできない最終操作の手渡しは [`convention-design-principles.md#user-execution-handoff`](../docs/convention-design-principles.md#user-execution-handoff)。
 
