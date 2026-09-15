@@ -65,6 +65,12 @@ summary: preview / dev server 動作中はユーザー確認依頼ターンに U
 
 したがって **build config 変更後の deploy は、視覚変化がなくても本番 URL を実ブラウザで踏んで console 0 error を確認するまで 'deployed' と呼ばない**。`pnpm preview` や chunk HTTP status 200 は必要条件で十分条件ではない。確認できるまで odakin に依頼する。
 
+## <a id="post-push-deployment-health"></a>push 後の deploy health は check-run の未解決 chain で見る
+
+push 成功は deploy 成功ではない。静的 hosting が GitHub check-run を返すなら、default branch の新しい commit から古い方へ辿り、対象 check の success に到達するまでにある failure・長く続く in-progress・grace 超過の check 不在を surface する。success より古い failure は既に修復済みなので再通知しない。
+
+公開 engine = [`scripts/check-pages-deploy.py`](../scripts/check-pages-deploy.py)。repo 一覧は利用者の運用 state なので引数 `--repo` で下層から渡し、layer 1 に特定 owner / site を焼かない。GitHub API が読めない状態を「健全」と同じ沈黙にせず、未検査として明示する。既定の check 名は `Cloudflare Pages` だが `--check-name` で同じ契約を持つ別 deploy provider に使える。
+
 ## Claude Preview の headless throttling 制約
 
 Claude Preview (MCP `preview_*` ツール) の headless Chrome には、アニメーション駆動アプリを事実上動かなくする **二重制約** がある。React Three Fiber / Three.js / Canvas 2D animation / WebGL ゲーム / `requestAnimationFrame` ベースのどの app でも発火する。

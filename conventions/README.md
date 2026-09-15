@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 112 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 113 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -50,6 +50,8 @@ layer 1 (public) のドメイン固有規約 112 file をカテゴリ別に列�
   - Claude Code Remote Control サーバーモードの launchd 常駐 (= スマホ / claude.ai/code から自マシンに新規セッションを生やす待ち受け。 要件 = claude.ai OAuth 〔managed key 不可〕 + 初回同意 y、 ⚠️ PTY 経由は stdin EOF cycling、 モバイル UI のリポ選択は same-dir で cwd 不変、 cloud session との見分け = 緑ドット computer icon、 #ts-rc-file-panel = RC 閲覧では chat 内 file link の右パネル render 不可 〔file は worker host 側にのみ在る、 正本 = claude-code-permissions.md#rc-chat-panel-no-render〕。 install SoT は scripts/install-remote-control-server.sh)
 - **[scheduled-tasks.md](scheduled-tasks.md)** — scheduled task / launchd routine を作成・管理するとき
   - Scheduled Tasks 規約（SKILL.md 二重構造・同期ルール・headless context budget = cwd の CLAUDE.md 肥大で "Prompt is too long" 全滅する罠と診断 ladder）
+- **[script-layer-placement.md](script-layer-placement.md)** — personal layer / shared project に script を新設するとき + 同じ役割の script が複数層にあると気づいたとき + generic engine と個別設定を分離するとき
+  - script は現在の置き場所でなく audience と依存で配置する。汎用 predicate・変換・selftest は上層 engine、owner/project 固有の値・credential・対象一覧・scheduler wiring は下層 config / shim。下層入口を保つ場合も実装は複製せず exec/import で上層正本を呼ぶ
 - **[slack-mcp.md](slack-mcp.md)** — Slack workspace を MCP で wire するとき
   - Slack workspace を user session token (xoxc/xoxd) で wire する規約（= admin 承認不要で一般 member として read+post、korotovsky/slack-mcp-server + wrapper で secret を config 外に逃がす + token 抽出手順〔Console `copy()` で xoxc / Application タブで xoxd cookie〕+ self-XSS「allow pasting」gate + clipboard 上書き/file名取り違え trap + post は SLACK_MCP_ADD_MESSAGE_TOOL=true で有効化・file upload tool は無く画像は user 手動 + reauth ~30日 + registration 介さず wrapper 直接 JSON-RPC invoke で当 session 使用。generic 機構のみ、workspace 固有値は個人層側）
 - **[time-context.md](time-context.md)** — multi-day session で「今日・明日・今夜」等の時刻 deictic を解釈するとき

@@ -48,11 +48,14 @@
 - **[check-memory-file-bloat.py](check-memory-file-bloat.py)** — memory file (CLAUDE.md / SESSION.md) の肥大 surface。
 - **[check-office-automation-index.py](check-office-automation-index.py)** — Validate office-automation.md against its slug index (office-automation.index.yaml).
 - **[check-overleaf-drift.py](check-overleaf-drift.py)** — Overleaf 正本 repo の drift / 整備漏れ検出（各 repo の scripts/overleaf-sync.sh --status を並列実行、 ID 未設定=CRITICAL / behind>0=WARN / DEPRECATED=silent / ahead-expected marker で恒常 ahead INFO 抑制、 finding 0 件 silent、 --selftest 内蔵。 個人層 dashboard 末尾から呼ぶ、 conventions/overleaf-integration.md#sync-script-contract）
+- **[check-pages-deploy.py](check-pages-deploy.py)** — Surface unresolved deployment check-runs for recent default-branch commits.
 - **[check-paper-prose.py](check-paper-prose.py)** — Prose gates for LaTeX manuscripts: appendix order by first main-text reference, sentence length, position words, strong-word inventory.
 - **[check-pii-filenames.py](check-pii-filenames.py)** — 個人情報が file 名に出ている追跡 file を検出する。
 - **[check-preamble-aliases.py](check-preamble-aliases.py)** — flag raw notation where the preamble defines an alias.
 - **[check-public-marker.py](check-public-marker.py)** — Are the public-repo leak gates switched on? Lists local clones whose GitHub repo is public but lack .claude/public-repo.marker (no public pre-commit gate runs), clones marked public whose repo is private, and marked clones whose gate hooks are not installed on this machine; --fix-hooks installs them; --selftest.
+- **[check-repo-registration.py](check-repo-registration.py)** — Find locally cloned, self-owned Git repositories absent from a registry.
 - **[check-script-index.py](check-script-index.py)** — Check that a Git repository's script inventory has direct Markdown links.
+- **[check-script-layering.py](check-script-layering.py)** — Detect duplicated cross-layer script engines and unreviewed lower-layer additions.
 - **[check-session-sot.py](check-session-sot.py)** — Detect durable-data accretion and bloat in SESSION.md files.
 - **[check-sot-drift.py](check-sot-drift.py)** — 「規則の正本は 1 か所、 他所は参照だけ」 を目印の文字列で機械検査する (registry 駆動)
 - **[check-unpublished-quote.py](check-unpublished-quote.py)** — Stop verbatim text of unpublished documents (your private manuscripts) from being committed to a public repo: matches quoted spans and long prose runs in the staged added lines or a commit message against hashed word shingles of the declared sources; --selftest.
@@ -130,6 +133,8 @@
 - **[pin-claude-cwd.sh](pin-claude-cwd.sh)** — Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
 - **[pptx-to-pdf.sh](pptx-to-pdf.sh)** — PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、PowerPoint 経路は事前 grant 済み staging dir 経由、office-automation.md#pptx-to-pdf-powerpoint）
 - **[pre-commit-bib](pre-commit-bib)** — Git pre-commit hook（上記を呼ぶ）
+- **[pre-commit-google-url-warn.py](pre-commit-google-url-warn.py)** — Warn when staged additions contain unstable account-bound Google URLs.
+- **[pre-commit-sot-declaration-warn.py](pre-commit-sot-declaration-warn.py)** — Warn when staged additions introduce a source-of-truth declaration.
 - **[prepare-commit-msg-session.sh](prepare-commit-msg-session.sh)** — commit に発生元 agent/session/model/effort の trailer block を付ける (並列 session の事後追跡)
 - **[prepare-commit-msg-session.test.sh](prepare-commit-msg-session.test.sh)** — prepare-commit-msg-session.sh の selftest
 - **[probe-python-nonascii-line.py](probe-python-nonascii-line.py)** — python が非 ASCII を含む長い 1 行を coding cookie 無しで読めなくなる境界 (file 実行と stdin = heredoc 実行の両方) を二分探索で測り、 cookie を置けば通るかも確かめる。 python を更新したら再測定する道具。--selftest 内蔵。

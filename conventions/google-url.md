@@ -192,6 +192,7 @@ Classroom: https://classroom.google.com/c/{classId}?authuser=<email>
 - 個人 Classroom 運用 repo の Classroom クラス一覧: stable URL `classroom.google.com/c/{ID}` を使用 (本規則の初出 context、 本ファイル新設の契機)。 ターン応答で URL を出すときは `?authuser=<email>` を併記する
 - owner の personal layer の user profile 記述「ブラウザでアクセス」: 2026-04-16 に `/u/1/` → `authuser=<email>` 形式に修正済み (= 個人層、 collaborator access 不要)
 - `claude-config/hooks/google-url-guard.sh`: PreToolUse hook (Edit / Write / MultiEdit / Bash) で **(A) `/u/N/` パターン** と **(B) account-sensitive な URL の authuser= 抜け** を検出して `permissionDecision=ask` で確認を仰ぐ。 setup.sh が ~/.claude/hooks/ に symlink を作成 + settings.json にマージ (2026-04-16 (A) 追加、 2026-05-09 (B) 追加 + claude-config 配下に移動)
+- [`scripts/pre-commit-google-url-warn.py`](../scripts/pre-commit-google-url-warn.py): lifecycle hook の出力が見えない frontend でも生きる Git-native fallback。staged 追加行だけを同じ二軸で warn し、低 stakes のため commit は止めない。
 
 ## 失敗履歴
 
