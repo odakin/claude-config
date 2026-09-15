@@ -162,7 +162,7 @@ layer 1 (public) のドメイン固有規約 112 file をカテゴリ別に列�
 - **[cold-eyes-isolation.md](cold-eyes-isolation.md)** — cold-eyes / 盲検 review を別 session に投げる前 / referee 版の原稿を用意する時 / review 結果の独立性を判定する時
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/cold-eyes-isolation.md (汚染経路 7 口 / 封じた sandbox / spec に書いてよいこと / 審査文書の変種 / 受領後の汚染 grep)。 本 file は旧 anchor を保つ stub
 - **[collaborators.md](collaborators.md)** — 共同研究者 DB (collaborators.yaml) を作成・更新するとき
-  - 共同研究者DB規約
+  - 共同研究者DB規約 (= 連絡先・所属に加え、native 表記は parts ごとの source と確度を持ち、発音は本人録音 / 母語話者録音 / 対象言語 TTS / IPA / 近似を区別。生成音声の一時 URL は正本に保存しない)
 - **[physics-notes.md](physics-notes.md)** — 物理・数理ノートを書くとき
   - 物理・数理ノートの 5 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側 / 検証 note は問題・結論・手当のみ / 配布物に内部記号を出さない) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
 - **[physics-verification-cycle.md](physics-verification-cycle.md)** — 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
