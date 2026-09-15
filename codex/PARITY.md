@@ -329,8 +329,9 @@ own Git workflow already grants standing authorization for normal delivery may
 run `python3 scripts/setup-codex-git-push.py --install`. It installs the
 managed user-layer rule
 `~/.codex/rules/claude-config-git-push.rules`, allowing direct default-branch
-pushes (`git push origin main` / `master`) and the equivalent detached-worktree
-refspecs (`git push origin HEAD:main` / `HEAD:master`, including full
+pushes (`git push origin main` / `git push origin master`) and the equivalent
+detached-worktree refspecs (`git push origin HEAD:main` /
+`git push origin HEAD:master`, including full
 `HEAD:refs/heads/...` spellings) without a prompt. The remote and destination
 branch remain fixed; changing only the source spelling to `HEAD` does not widen
 the publication target. Common force, delete, mirror, prune, all-branch, and

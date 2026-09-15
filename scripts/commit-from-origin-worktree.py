@@ -3,6 +3,8 @@
 """自分の変更を origin/<branch> から切った使い捨て worktree で commit・push する (live checkout の未 commit 変更・未 push commit・index に一切触れず、 相手の未 push commit を巻き込んで公開しない)。 git-crypt repo も復号済みで扱い、 push 直前の再 fetch + rebase、 衝突時は push せず worktree を残す。--selftest 内蔵。
 
 手順の正本 = [`conventions/multi-session-coordination.md#foreign-wip-scratch-worktree`](../conventions/multi-session-coordination.md#foreign-wip-scratch-worktree)。
+Codex で default branch へ送る `HEAD:<branch>` refspec の execution-permission 正本は
+[`codex/PARITY.md#normal-git-push-rule`](../codex/PARITY.md#normal-git-push-rule)（非 default branch まで blanket allow しない）。
 本 script はその機械化。 手で踏むと毎回 7 コマンド + git-crypt の 3 行 + 後始末で、 省略が起きる
 (2026-09-12〜13: live checkout から push した回の多くは behind が 0 であることしか確かめず、 ahead の中身が
 自分の commit だけかは見ていなかった。 相手の未 push commit が local に居れば一緒に公開する構造だった。

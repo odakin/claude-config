@@ -102,9 +102,10 @@ prompt-free push rule を別途 install する:
 python3 scripts/setup-codex-git-push.py --install
 ```
 
-`git push origin main` と `git push origin master` だけを allow し、破壊的または
-scope を広げる push 形は引き続き prompt にする。`approval_policy = "on-request"` は維持し、Codex を再起動して
-`--check` または `codex execpolicy check` で確認する。正本は
+直接の `git push origin main` / `master` と、detached worktree から同じ宛先へ送る
+`git push origin HEAD:main` / `HEAD:master`（完全な destination ref を含む）を allow し、
+破壊的または scope を広げる push 形は引き続き prompt にする。`approval_policy = "on-request"`
+は維持し、Codex を再起動して `--check` または `codex execpolicy check` で確認する。正本は
 [normal-git-push-rule](codex/PARITY.md#normal-git-push-rule)。
 
 architecture・layer 境界・Hook coverage・platform scope・automation routing・検証の正本は

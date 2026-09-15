@@ -255,14 +255,18 @@ GIT_PUSH_RULE_REQUIREMENTS = {
         "scripts/setup-codex-git-push.py",
         "git push origin main",
         "git push origin master",
+        "git push origin HEAD:main",
+        "git push origin HEAD:master",
     ),
     "README.md": (
         "scripts/setup-codex-git-push.py --install",
         "codex/PARITY.md#normal-git-push-rule",
+        "git push origin HEAD:main",
     ),
     "README.ja.md": (
         "scripts/setup-codex-git-push.py --install",
         "codex/PARITY.md#normal-git-push-rule",
+        "git push origin HEAD:main",
     ),
     "scripts/setup-codex-git-push.py": (
         'decision = "allow"',
@@ -271,6 +275,8 @@ GIT_PUSH_RULE_REQUIREMENTS = {
         '"--tags"',
         "execpolicy",
         "RULE_NAME = \"claude-config-git-push.rules\"",
+        '"HEAD:main"',
+        '"HEAD:master"',
     ),
     "scripts/audit-codex-integration.sh": (
         "setup-codex-git-push.py",
@@ -818,6 +824,19 @@ def selftest() -> int:
         errors = check(root)
         if not any("missing normal-git-push rule wiring" in error for error in errors):
             print("FAIL: missing normal-git-push rule wiring was not detected")
+            return 1
+
+        fixture(root)
+        push_rule_path = root / "scripts/setup-codex-git-push.py"
+        push_rule_path.write_text(
+            push_rule_path.read_text(encoding="utf-8").replace(
+                "HEAD:main", "HEAD:detached-default"
+            ),
+            encoding="utf-8",
+        )
+        errors = check(root)
+        if not any("missing normal-git-push rule wiring" in error for error in errors):
+            print("FAIL: missing detached-HEAD push coverage was not detected")
             return 1
 
         fixture(root)
