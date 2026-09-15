@@ -20,6 +20,9 @@ task-specific convention, route through `conventions/README.md` and load only
 the relevant document. Then read
 `codex/PARITY.md#codex-integration-sot`: it is the single durable source for
 the Codex architecture, layer boundaries, platform scope, and Hook contract.
+Before editing an `AGENTS.md` entry point, also read
+`codex/PARITY.md#instruction-entrypoint-kernel`; retain trigger + imperative
+source pointers and leave rule bodies in their owning documents.
 
 ## Installation and updates
 

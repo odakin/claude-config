@@ -15,6 +15,7 @@ CODEX_WORKSPACE_ROOT="${CODEX_WORKSPACE_ROOT:-$USER_HOME/Documents/Codex}"
 REPOS=()
 REPO_COUNT=0
 ISSUES=0
+PROJECT_AGENTS_MAX_BYTES=4096
 
 usage() {
   cat <<'EOF'
@@ -22,8 +23,8 @@ Usage: audit-codex-integration.sh [--repo <path>]...
 
 Read-only audit of the claude-config Codex integration.
 
-  --repo <path>  Also inspect the tracked root AGENTS.md, Agent-Session hook,
-                 and existing Git-side guards in this repository.
+  --repo <path>  Also inspect the tracked thin root AGENTS.md, Agent-Session
+                 hook, and existing Git-side guards in this repository.
   -h, --help     Show this help.
 EOF
 }
@@ -234,7 +235,15 @@ for requested_repo in "${REPOS[@]}"; do
     && git -C "$repo_root" ls-files --error-unmatch -- AGENTS.md >/dev/null 2>&1 \
     && grep -qF 'CLAUDE.md' "$agents_file" \
     && grep -qF 'SESSION.md' "$agents_file"; then
-    echo "OK: tracked root AGENTS.md dispatches to CLAUDE.md and SESSION.md"
+    agents_bytes="$(LC_ALL=C wc -c < "$agents_file")"
+    agents_bytes="$((agents_bytes + 0))"
+    if [ "$agents_bytes" -le "$PROJECT_AGENTS_MAX_BYTES" ]; then
+      echo "OK: tracked thin root AGENTS.md dispatches to CLAUDE.md and SESSION.md (${agents_bytes} bytes)"
+    else
+      echo "OVERSIZED: root AGENTS.md is ${agents_bytes} bytes; maximum is ${PROJECT_AGENTS_MAX_BYTES}" >&2
+      echo "  keep trigger + imperative source pointers; contract: codex/PARITY.md#instruction-entrypoint-kernel" >&2
+      ISSUES=$((ISSUES + 1))
+    fi
   else
     echo "MISSING: tracked, non-empty, regular root AGENTS.md with CLAUDE.md and SESSION.md pointers" >&2
     echo "  contract: CONVENTIONS.md#agent-instruction-entrypoints" >&2

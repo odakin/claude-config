@@ -47,8 +47,10 @@ ENTRY_POINTS = (
     "templates/personal-layer/README.md",
 )
 INSTRUCTION_ENTRYPOINT_MAX_BYTES = {
+    "AGENTS.md": 4096,
     "codex/HOME-AGENTS.md": 4096,
     "codex/AGENTS.md": 2048,
+    "templates/shared-project/AGENTS.md.template": 2048,
     "templates/personal-layer/codex/AGENTS.md.template": 2048,
 }
 SESSION_HANDOFF_REQUIREMENTS = {
@@ -209,6 +211,7 @@ PROJECT_ENTRYPOINT_REQUIREMENTS = {
         "CLAUDE.md",
         "SESSION.md",
         "CONVENTIONS.md#agent-instruction-entrypoints",
+        "codex/PARITY.md#instruction-entrypoint-kernel",
     ),
     "templates/shared-project/README.md": ("AGENTS.md.template",),
     "templates/shared-project/AUDIT.md.template": (
@@ -216,8 +219,10 @@ PROJECT_ENTRYPOINT_REQUIREMENTS = {
         "`CLAUDE.md` と `SESSION.md`",
     ),
     "scripts/audit-codex-integration.sh": (
-        "tracked root AGENTS.md",
+        "tracked thin root AGENTS.md",
         "CONVENTIONS.md#agent-instruction-entrypoints",
+        "codex/PARITY.md#instruction-entrypoint-kernel",
+        "PROJECT_AGENTS_MAX_BYTES=4096",
     ),
 }
 PERSONAL_OVERLAY_REQUIREMENTS = {

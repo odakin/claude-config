@@ -78,6 +78,26 @@ if HOME="$TEST_HOME" \
 fi
 git -C "$TEST_REPO" add AGENTS.md
 
+python3 - "$TEST_REPO/AGENTS.md" <<'PY'
+from pathlib import Path
+import sys
+
+Path(sys.argv[1]).write_text(
+    "Read CLAUDE.md and SESSION.md before work.\n" + "x" * 4097,
+    encoding="utf-8",
+)
+PY
+if HOME="$TEST_HOME" \
+  CODEX_USER_DIR="$TEST_CODEX_DIR" \
+  CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
+  "$SCRIPT_DIR/audit-codex-integration.sh" --repo "$TEST_REPO" \
+  > "$TEMP_ROOT/oversized-agents.out" 2>&1; then
+  echo "expected audit to reject a root AGENTS.md above 4 KiB" >&2
+  exit 1
+fi
+grep -q "OVERSIZED: root AGENTS.md" "$TEMP_ROOT/oversized-agents.out"
+printf '%s\n' '# Agent instructions' 'Read CLAUDE.md and SESSION.md before work.' > "$TEST_REPO/AGENTS.md"
+
 rm "$TEST_REPO/.hooks/commit-msg"
 if HOME="$TEST_HOME" \
   CODEX_USER_DIR="$TEST_CODEX_DIR" \

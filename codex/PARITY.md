@@ -79,11 +79,13 @@ Repository rules, operational steps, exception lists, and design rationale stay
 in their owning documents. The workspace entry point is a dispatcher to the
 global and repository sources, not a second copy of either.
 
-`scripts/check-codex-integration.py --check` caps the public global entry point
-at 4 KiB and the workspace and personal-overlay template entry points at 2 KiB.
-`scripts/setup-codex.sh` independently rejects a selected private overlay above
-4 KiB. These are regrowth backstops, not targets: a smaller trigger-and-pointer
-entry point is preferred.
+`scripts/check-codex-integration.py --check` caps the repository-root and
+public global entry points at 4 KiB, and the workspace, shared-project template,
+and personal-overlay template entry points at 2 KiB.
+`scripts/audit-codex-integration.sh --repo` applies the 4 KiB repository limit
+to any inspected project, while `scripts/setup-codex.sh` independently rejects
+a selected private overlay above 4 KiB. These are regrowth backstops, not
+targets: a smaller trigger-and-pointer entry point is preferred.
 
 ### <a id="session-handoff-contract"></a>Session handoff contract
 

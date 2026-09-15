@@ -89,7 +89,10 @@ If you own a marked private personal layer, first create its short
 This produces a mode-`0600` local global-instruction composite from public
 layer 1 and that selected layer-3 overlay. It never searches for, commits, or
 exposes personal content; the full private `CLAUDE.md` remains on-demand
-source material. Cloning alone never writes into a user's home directory: run
+source material. The overlay is limited to trigger + imperative source
+pointers and capped at 4 KiB; see the
+[instruction entry-point kernel](codex/PARITY.md#instruction-entrypoint-kernel).
+Cloning alone never writes into a user's home directory: run
 the installer once per machine. Ordinary links update through `git pull`; an
 explicit personal composite is refreshed after personal-layer pulls, and after
 public pulls once `setup.sh` has installed its current post-merge hook.

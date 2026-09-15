@@ -85,7 +85,10 @@ marker 付きの private personal layer を所有している場合は、templat
 
 これは public layer 1 と指定した layer 3 overlay を mode `0600` の local global-instruction
 composite にする。personal layer を検索・commit・外部露出することはなく、詳細な private
-`CLAUDE.md` は必要時だけ読む source のまま残る。公開リポを clone しただけで clone 者の
+`CLAUDE.md` は必要時だけ読む source のまま残る。overlay は trigger + imperative な
+source pointer だけに絞り 4 KiB を上限とする。正本は
+[instruction entry-point kernel](codex/PARITY.md#instruction-entrypoint-kernel)。
+公開リポを clone しただけで clone 者の
 home directory は書き換えない。各マシンで一度 installer を実行する。通常 link は `git pull`
 で source を更新し、explicit personal composite は personal layer の pull 後に refresh され、
 public layer の pull 後も current の `setup.sh` post-merge hook が install 済みなら refresh
