@@ -121,6 +121,7 @@
 - **[latexdiff-strip-dup-labels.py](latexdiff-strip-dup-labels.py)** — Drop \label{...} from the DELETED side of a latexdiff output, so each label survives only on the new text.
 - **[ledger-commit-cadence-gate.py](ledger-commit-cadence-gate.py)** — [forwarder → ai-collaboration/scripts/ledger-commit-cadence-gate.py] YAML ledger の commit cadence gate (pre-commit): 1 commit で追加される list entry (`- id:`) が N 個を超えたら refuse、escape env は hygiene log に記録 + worker scope gate (= env CAMPAIGN_WORKER_DIR が
 - **[local-ci.py](local-ci.py)** — CI を持たない repo の検査を手元で回す runner（config の repo × 検査を、 対象 path の最終 commit が変わったものだけ実行して結果を machine-local state に残し、 --status で red / 検査不能 / 長く未実行を 1 行ずつ出す。 並列起動は lock で 1 本、 --selftest 内蔵）
+- **[macos-app-bundle-audit.py](macos-app-bundle-audit.py)** — Inventory side-by-side macOS app bundles by name or bundle identifier. --selftest included.
 - **[make-review-sandbox.py](make-review-sandbox.py)** — [forwarder → ai-collaboration/scripts/make-review-sandbox.py] 封じた review sandbox (~/<sandbox-root>/<slug>/) を機械的に切る: 5 行の CLAUDE.md (= この dir 以外を読まない / 注入 reminder 無視 / git log 禁止 / 書くのは results と scratch のみ) + REVIEW-SPEC.md + 許可 file の copy
 - **[measure-pdf-layout.py](measure-pdf-layout.py)** — 組版された PDF の版面を実測する — 「指定したのに効いていない」 を目視でなく数値で捕まえる.
 - **[normalize-docx-decl.py](normalize-docx-decl.py)** — 既存 docx の XML 宣言を Word 形式へ後追い正規化する CLI（docx_decl_patch の path-based 版、 office-automation.md#docx-checkbox-content-control）
@@ -160,6 +161,7 @@
 - **[scan-public-tree.sh](scan-public-tree.sh)** — 公開 repo の現在の tree 全体を pre-commit gate の全 Tier に通す
 - **[scan-public-tree.test.sh](scan-public-tree.test.sh)** — self-tests for the full-tree re-run of the public gate
 - **[session_provenance_cache.py](session_provenance_cache.py)** — Own shared Codex model/effort resolution and the hook metadata cache.
+- **[set-file-associations.py](set-file-associations.py)** — Apply or verify declared macOS filename-extension handlers with duti; fail loud on unverifiable state. --selftest included.
 - **[setup-codex-git-push.py](setup-codex-git-push.py)** — Install or audit an opt-in Codex rule for prompt-free normal Git pushes.
 - **[setup-codex.sh](setup-codex.sh)** — claude-config の共有規約を Codex に安全に導入する
 - **[setup-codex.test.sh](setup-codex.test.sh)** — setup-codex.sh の隔離・冪等・非上書き性を検証する
@@ -193,6 +195,7 @@
 - **[lib/commit-msg-leak-matcher.sh](lib/commit-msg-leak-matcher.sh)** — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 10 allowlist の (a)(b)(c) check + 審査中の申請を識別する種目語×評価語の共起 (d))、 claude-code hook + git-side runner の両方が source する DRY 実装
 - **[lib/find-personal-layer.sh](lib/find-personal-layer.sh)** — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
 - **[lib/hook-stub.sh](lib/hook-stub.sh)** — lib/hook-stub.sh — hook stub installer 共通の「既存 stub の扱い」 (source して使う、 単体実行しない)
+- **[lib/macos_apps.py](lib/macos_apps.py)** — Discover macOS app bundles and read their declared identity without launching them.
 - **[lib/merge-hook-event.sh](lib/merge-hook-event.sh)** — settings.json への hook event merge (単一リスト駆動)
 - **[lib/merge-hook-event.test.sh](lib/merge-hook-event.test.sh)** — merge_hook_event の self-test (hermetic、 実 settings.json 不使用)
 - **[lib/office-staging.sh](lib/office-staging.sh)** — Office (Word / Excel / PowerPoint) automation の「事前 grant 済み staging dir」 helper (sourceable lib、 macOS App Sandbox の folder-grant dialog を design-out、 office-automation.md#office-pregranted-staging-dir)

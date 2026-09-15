@@ -81,6 +81,7 @@ claude-config/
 │   ├── macos-claude-code-tcc-recurring-prompt.md # Claude Code の App Management TCC dialog が繰り返し出るとき
 │   ├── macos-ime-ascii-layout.md           # macOS で直接入力と IME のキー配列を分けたいとき
 │   ├── macos-post-update-slowdown.md       # macOS update 直後に体感が重いとき + 定期メンテ棚卸し
+│   ├── macos-side-by-side-app-migration.md # macOS で「新しいバージョンを使用」「旧版は削除できます」等が繰り返し出るとき + 同じアプリの旧新版が別 bundle で共存するとき + 旧版を退避して書類の既定アプリを新版へ切り替えるとき
 │   ├── macos-tahoe-wallpaper.md            # macOS Tahoe (26.x) で wallpaper 変更を script/CLI/API から自動化しようとする前 + 起きてる wallpaper rotation が視覚的に効いてないと感じたとき
 │   ├── matplotlib-3d-illustrations.md      # matplotlib の 3D (mplot3d) で半透明の模式イラスト (平面波・波束・濃度場などスライド/論文の概念図) を描くとき
 │   ├── matplotlib-figure-qa.md             # matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき
@@ -150,7 +151,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (181 file + lib/ 17 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (183 file + lib/ 18 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)
