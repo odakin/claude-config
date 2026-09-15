@@ -206,8 +206,11 @@
 - **[lib/office-staging.test.sh](lib/office-staging.test.sh)** — office-staging.sh + office_staging.py の self-test (hermetic、 Office 不要、 fake HOME)
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
 - **[lib/permission_rules.py](lib/permission_rules.py)** — settings.json の permission rule を宣言した形に揃える (engine)
+- **[lib/public_tree_accept.py](lib/public_tree_accept.py)** — 公開 repo の棚卸し受理一覧 (.claude/public-tree-accept.txt) の `generated:` 宣言を読む。
+- **[lib/published_metadata.py](lib/published_metadata.py)** — 公刊済みの著作の書誌 (題名・著者・要旨) の行を、 leak 検出器の対象から外す。
 - **[lib/relay_check.py](lib/relay_check.py)** — surface した item を「この session で人に伝えたか」 と「同じ案件かもしれない別の item」 を判定する共通部品
 - **[lib/run_log.py](lib/run_log.py)** — 検査 script の出力を「証跡 file」 として残す helper (= 後から「いつ何を出したか」 を再構成できるようにする)。
+- **[lib/sensitive-terms.sh](lib/sensitive-terms.sh)** — 実名 gate (Tier B) の検出語 file を読む共通部品 (source して使う、 bash 3.2 可)
 - **[lib/staged-conflict-markers.sh](lib/staged-conflict-markers.sh)** — merge conflict marker の staged-content gate (sourceable lib)
 - **[lib/staged-conflict-markers.test.sh](lib/staged-conflict-markers.test.sh)** — staged-conflict-markers.sh の self-test (hermetic)
 - **[lib/staged_diff.py](lib/staged_diff.py)** — staged 追加行を読む helper (= pre-commit の warn 検査が binary を含む commit で落ちないように)。
