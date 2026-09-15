@@ -271,7 +271,8 @@ from datetime import date
 serial = (date(2026, 8, 13) - date(1899, 12, 30)).days   # 1900 date system
 ```
 ```applescript
-tell workbook 1 to set value of range "Y10" of worksheet "報告書" to 46247
+-- wbk = open workbook が返した参照 (workbook 1 は user の book を指しうる、 #office-app-reset-guard)
+set value of range "Y10" of worksheet "報告書" of wbk to 46247
 ```
 
 - 書式 (`number_format`) は雛形のものが効くので、 **シリアル値を書くだけで表示は「2026年8月13日 木曜日」 のまま**。
@@ -335,18 +336,16 @@ origin: 大学出張様式 — xlsx 内挿入 (Excel osascript 経由) で入れ
 **対処**: Excel に挿させる (= [`excel-osascript-cell-write`](#excel-osascript-cell-write) の画像版)。 anchor cell の左上を基準に points で置く:
 
 ```applescript
-tell application "Microsoft Excel"
-  open POSIX file "/abs/book.xlsx"
+tell application "Microsoft Excel"      -- activate しない / workbook 1 でなく open の返す参照 (#office-app-reset-guard)
+  set wbk to open workbook workbook file name (POSIX file "/abs/book.xlsx")
   delay 1
-  tell workbook 1
-    tell worksheet "依頼書"
-      set r to range "AH11"
-      make new picture at it with properties {file name:(POSIX file "/abs/seal.png"), ¬
-        left position:((left position of r) - 8), top:((top of r)), width:34, height:34}
-    end tell
-    save
+  tell worksheet "依頼書" of wbk
+    set r to range "AH11"
+    make new picture at it with properties {file name:(POSIX file "/abs/seal.png"), ¬
+      left position:((left position of r) - 8), top:((top of r)), width:34, height:34}
   end tell
-  close workbook 1 saving no
+  save wbk
+  close wbk saving no
 end tell
 ```
 
