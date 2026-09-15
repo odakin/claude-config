@@ -178,7 +178,15 @@ gate 自身の不調で作業全体を止めないためである。 しかし�
 - 設定 file が **カナリア** (= 無害な合言葉) を宣言する
 - 検査は **本番の設定のまま** 一時 repo を作り、 カナリアを実際に BLOCK できるか試す
 - 結果を **必ず 1 行出す**。 沈黙という状態を作らない:
-  `ARMED` / `NOT ARMED` (理由つき、 FAIL) / `対象外` (= 守るべきものがこのマシンに無い)
+  `ARMED` / `NOT ARMED` (理由つき、 FAIL) / `対象外` (= 宣言された対象に実体が無い) /
+  `未配線` (= 対象の宣言そのものが無い)
+
+⚠️ <a id="not-configured-is-not-nothing-to-protect"></a>**`対象外` と `未配線` を混ぜない** — 対象を宣言する設定が空 / 不在のとき、
+検査は「守るべきものが無い」 と **確かめずに断定**できてしまう (= 空の設定が「対象なし」 と同じ顔をする、
+[`docs/convention-design-principles.md#detector-config-must-be-derived`](../docs/convention-design-principles.md#detector-config-must-be-derived))。
+設定が無いなら、 そのマシンに実体が在るかは **未確認**であって、 無いことの証明ではない。
+2 つは別の語で出し、 `未配線` では「在るなら宣言するまで gate は走らない」 まで書く
+(= 読んだ人が「自分の環境は守られている」 と誤読しないところまでが報告)。
 
 ⚠️ **カナリアの値を engine 側に literal で書かない** — 書くと engine 自身の commit が自分の
 gate に弾かれる。 値の home は設定 file だけにし、 engine は directive 名だけを持つ。
