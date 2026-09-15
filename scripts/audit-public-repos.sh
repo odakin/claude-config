@@ -52,7 +52,7 @@ fi
 # mktemp で unpredictable filename + owner-only permission
 # ⚠️ template の X は末尾に置く。 BSD (macOS) の mktemp は `XXXXXX.md` の X を置換せず literal の名前で作るので、
 # 2 回目以降は「File exists」 で REPORT が空になり、 報告の書き込みが全部失敗していた (実測)
-REPORT="$(mktemp "${TMPDIR:-/tmp}/public-leak-audit-XXXXXX")" || { echo "audit-public-repos.sh: mktemp failed" >&2; exit 2; }
+REPORT="$(mktemp "${TMPDIR:-/tmp}/public-leak-audit-XXXXXX")" || { echo "audit-public-repos.sh: mktemp failed" >&2; exit 3; }   # 3 = 監査自体が走らなかった (2 は marker 欠落)
 chmod 600 "$REPORT"
 
 
@@ -180,7 +180,7 @@ printf '  targets: %s\n' "$(wc -l < "$TARGETS_FILE" | tr -d ' ')"
 printf '  hit sections: %s\n' "$TOTAL_HITS"
 printf '  missing markers: %s\n' "$MISSING_MARKER_COUNT"
 
-# exit code: 0 clean, 1 hits, 2 missing markers
+# exit code: 0 clean, 1 hits, 2 missing markers, 3 = 監査自体が走らなかった (report を作れない)
 if [ "$TOTAL_HITS" -gt 0 ]; then
   exit 1
 fi
