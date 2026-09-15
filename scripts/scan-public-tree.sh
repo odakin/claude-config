@@ -40,6 +40,9 @@
 #   既に公開されていて「見た上で残す」 と決めた Tier A の token を、 この棚卸しでだけ落とす。
 #   **gate 本体には効かない** (= 新しい書き込みは今までどおり止まる)。 件数と file 名を出す
 #   Tier B/C は受理できない — 実名や非公開 repo 名を「受理」 で寝かせないため、 直すしかない。
+#   `generated: <glob>  # 生成元` 行 = 外部の公開データを機械が変換した file を棚卸しから外す (データ形式の
+#   file だけ・外した数を毎回表示。 判定の正本 = lib/public_tree_accept.py)。 姓の短い term が地名等に当たる
+#   Tier B は受理でなく個人層の compound_allow で消す (lib/sensitive-terms.sh)。 公刊済みの書誌は runner が外す
 #
 # 台帳 (machine-local): $CLAUDE_STATE_DIR (既定 ~/.claude/state)/public-tree-scan.tsv
 #   repo<TAB>HEAD sha<TAB>走査日<TAB>finding 件数

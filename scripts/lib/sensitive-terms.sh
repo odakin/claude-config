@@ -1,7 +1,8 @@
 # sensitive-terms.sh — 実名 gate (Tier B) の検出語 file を読む共通部品 (source して使う、 bash 3.2 可)
 #
 # 正本: claude-config/scripts/lib/sensitive-terms.sh
-# caller: public-precommit-runner.sh (Tier B) / lib/commit-msg-leak-matcher.sh (a) / audit-public-repos.sh
+# caller: public-precommit-runner.sh (Tier B。 scan-public-tree.sh と週次の audit-public-repos.sh もこの runner 経由) /
+#         lib/commit-msg-leak-matcher.sh (a)
 # 規律: conventions/confidential-repo-boundary.md#name-compound-allow
 #
 # 検出語 file (個人層の sensitive-terms.txt、 build-sensitive-terms.py が生成) の行の種類:

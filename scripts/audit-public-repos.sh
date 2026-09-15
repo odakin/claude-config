@@ -7,12 +7,9 @@
 #   2. `~/Claude/<name>/` に存在する repo を対象に絞る
 #   3. 各対象 repo で:
 #        a. `.claude/public-repo.marker` の有無 (missing は warn)
-#        b. Tier A 構造制約 regex (public-leak-guard.sh と同じ 5 種)
-#           を `git grep -nE` で適用
-#        c. 個人層の `sensitive-terms.txt` (= lib/find-personal-layer.sh で動的解決、
-#           foreign user では個人層なし → 空文字列でこのチェックは skip) が存在
-#           すれば ephemeral に `git grep -nFf` で literal check
-#   4. 結果を `/tmp/public-leak-audit-<YYYYMMDD-HHMMSS>.md` に出力
+#        b. 中身は scan-public-tree.sh --force に委ねる (= commit gate と同じ runner に tree 全体を通す。
+#           Tier A-E + 受理一覧 + generated: 宣言 + 公刊済みの書誌 + 許可複合語が gate と同じに効く)
+#   4. 結果を `$TMPDIR/public-leak-audit-XXXXXX` (markdown) に出力
 #   5. missing marker と発見 hit を summary として stdout にも出す
 #
 # 運用:
@@ -53,16 +50,11 @@ if [ -n "$PERSONAL_LAYER" ]; then
   SENSITIVE_TERMS="$PERSONAL_LAYER/sensitive-terms.txt"
 fi
 # mktemp で unpredictable filename + owner-only permission
-REPORT="$(mktemp /tmp/public-leak-audit-XXXXXX.md)"
+# ⚠️ template の X は末尾に置く。 BSD (macOS) の mktemp は `XXXXXX.md` の X を置換せず literal の名前で作るので、
+# 2 回目以降は「File exists」 で REPORT が空になり、 報告の書き込みが全部失敗していた (実測)
+REPORT="$(mktemp "${TMPDIR:-/tmp}/public-leak-audit-XXXXXX")" || { echo "audit-public-repos.sh: mktemp failed" >&2; exit 2; }
 chmod 600 "$REPORT"
 
-# Tier A regex (public-leak-guard.sh と同じ。
-# 各 pattern を個別に `git grep -nE` して後で allowlist 除外する)
-EMAIL_RE='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
-PATH_RE='/Users/[a-z][a-z0-9_-]*'
-IPV4_RE='([0-9]{1,3}\.){3}[0-9]{1,3}'
-TOKEN_RE='(ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9]{30,})'
-DISCORD_ID_RE='<@&?[0-9]{17,20}>'
 
 # ----------------------------------------------------------------------
 # Target repos enumeration
@@ -128,116 +120,21 @@ while IFS= read -r repo; do
     # marker がなくても scan は続ける (既存 leak の把握のため)
   fi
 
-  # Tier A scan
+  # 中身の検査は scan-public-tree.sh に委ねる = commit gate と同じ runner に tree 全体を通すので、
+  # 受理一覧・generated: 宣言・公刊済みの書誌・許可複合語が gate と同じに効く。 以前は Tier A/B を
+  # この script 独自の grep で持っていて gate より粗く (受理一覧を読まない・comment 行も term として照合)、
+  # 毎週同じ誤検知で exit 1 になり、 数百 MB の報告を書いていた (実測)。 --force = 台帳の「走査済」 を無視
+  # (= 週次の役割は gate を通らない書き込み 〔CI の bot commit・web 編集〕 の後追い)
   repo_hits=""
+  scan_rc=0
+  scan_out="$(bash "$(dirname "$0")/scan-public-tree.sh" --repo "$repo" --force --quiet 2>&1)" || scan_rc=$?
+  if [ "$scan_rc" -eq 1 ]; then   # 0 = finding 無し / 2 = 対象外 (commit が無い等)
+    repo_hits="
 
-  # email (with allowlist filter)
-  email_raw="$(git -C "$repo" grep -nE "$EMAIL_RE" 2>/dev/null \
-    | grep -vE '(noreply@anthropic\.com|noreply@github\.com|support@github\.com|[A-Za-z0-9._%+-]+@example\.(com|org|net|invalid)|[A-Za-z0-9._%+-]+@[23]x\.[A-Za-z0-9]+)' \
-    || true)"
-  if [ -n "$email_raw" ]; then
-    repo_hits="${repo_hits}
-
-### [tier-a/email]
+### [scan-public-tree] exit=${scan_rc}
 \`\`\`
-$(printf '%s\n' "$email_raw" | head -20)
+$(printf '%s\n' "$scan_out" | head -60)
 \`\`\`"
-  fi
-
-  # /Users/<name>
-  path_raw="$(git -C "$repo" grep -nE "$PATH_RE" 2>/dev/null || true)"
-  if [ -n "$path_raw" ]; then
-    repo_hits="${repo_hits}
-
-### [tier-a/abs_path]
-\`\`\`
-$(printf '%s\n' "$path_raw" | head -20)
-\`\`\`"
-  fi
-
-  # IPv4 (post-filter allowlist)
-  ipv4_raw="$(git -C "$repo" grep -nE "$IPV4_RE" 2>/dev/null || true)"
-  ipv4_filtered=""
-  if [ -n "$ipv4_raw" ]; then
-    while IFS= read -r line; do
-      # line: path:line:content. IP を抽出して allowlist 判定。
-      ip="$(printf '%s' "$line" | grep -oE "$IPV4_RE" | head -1)"
-      [ -z "$ip" ] && continue
-      case "$ip" in
-        0.0.0.0|255.255.255.255) continue ;;
-        127.*|10.*|192.168.*|169.254.*) continue ;;
-        172.16.*|172.17.*|172.18.*|172.19.*|172.2[0-9].*|172.3[01].*) continue ;;
-      esac
-      ipv4_filtered="${ipv4_filtered}${line}
-"
-    done <<< "$ipv4_raw"
-  fi
-  if [ -n "$ipv4_filtered" ]; then
-    repo_hits="${repo_hits}
-
-### [tier-a/ipv4]
-\`\`\`
-$(printf '%s' "$ipv4_filtered" | head -20)
-\`\`\`"
-  fi
-
-  # discord_mention (Discord snowflake `<@NNN>` / `<@&NNN>`)
-  discord_raw="$(git -C "$repo" grep -nE "$DISCORD_ID_RE" 2>/dev/null || true)"
-  if [ -n "$discord_raw" ]; then
-    repo_hits="${repo_hits}
-
-### [tier-a/discord_mention]
-\`\`\`
-$(printf '%s\n' "$discord_raw" | head -20)
-\`\`\`"
-  fi
-
-  # token prefix
-  token_raw="$(git -C "$repo" grep -nE "$TOKEN_RE" 2>/dev/null || true)"
-  if [ -n "$token_raw" ]; then
-    # 本体 redact: 先頭 10 文字以降を伏せる
-    token_redacted="$(printf '%s\n' "$token_raw" \
-      | sed -E "s/(ghp_[A-Za-z0-9]{6}|github_pat_[A-Za-z0-9_]{4}|sk-[A-Za-z0-9]{6})[A-Za-z0-9_]+/\1.../g")"
-    repo_hits="${repo_hits}
-
-### [tier-a/token_prefix]
-\`\`\`
-$(printf '%s\n' "$token_redacted" | head -20)
-\`\`\`"
-  fi
-
-  # Tier B literal (sensitive-terms.txt, ephemeral)
-  if [ -f "$SENSITIVE_TERMS" ] && [ -s "$SENSITIVE_TERMS" ]; then
-    # 行の種類 (`#` = comment / `!` = 許可複合語 / ASCII = 単語境界 / 他 = 部分一致) は commit gate と同じ
-    # (正本 = lib/sensitive-terms.sh)。 以前は file をそのまま -Ff に渡していて、 comment 行も term として
-    # 照合し、 ASCII term に単語境界が無かった (= gate より粗い監査が毎週同じ誤検知を出す)
-    . "$(dirname "$0")/lib/sensitive-terms.sh"
-    st_a="$(mktemp)"; st_n="$(mktemp)"; st_w="$(mktemp)"; st_raw="$(mktemp)"
-    st_split "$SENSITIVE_TERMS" "$st_a" "$st_n" "$st_w"
-    {
-      [ -s "$st_n" ] && git -C "$repo" grep -nIFf "$st_n" 2>/dev/null
-      [ -s "$st_a" ] && git -C "$repo" grep -nIwFf "$st_a" 2>/dev/null
-    } | sort -u > "$st_raw"
-    # 許可複合語を消した本文で当たり直す (= 番号で元の行に戻る)
-    literal_raw="$(
-      awk '{ p = index($0, ":"); rest = substr($0, p + 1); q = index(rest, ":"); print substr(rest, q + 1) }' "$st_raw" \
-        | st_strip_allowed "$st_w" \
-        | st_hit_line_numbers "$st_a" "$st_n" \
-        | awk 'NR == FNR { hit[$1] = 1; next } (FNR in hit)' - "$st_raw"
-    )"
-    rm -f "$st_a" "$st_n" "$st_w" "$st_raw"
-    if [ -n "$literal_raw" ]; then
-      # 本体を晒さず「何行 hit、どのファイルか」のみ
-      literal_count="$(printf '%s\n' "$literal_raw" | wc -l | tr -d ' ')"
-      literal_files="$(printf '%s\n' "$literal_raw" | awk -F: '{ print $1 }' | sort -u | head -20)"
-      repo_hits="${repo_hits}
-
-### [tier-b/literal]
-${literal_count} line(s) matched sensitive-terms.txt in:
-\`\`\`
-$(printf '%s\n' "$literal_files")
-\`\`\`"
-    fi
   fi
 
   if [ -n "$repo_hits" ]; then
