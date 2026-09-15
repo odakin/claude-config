@@ -21,9 +21,9 @@ Why: 大学の研究費で外貨の立替 (海外会議の参加費・海外の�
   (どれを使うかは決めない)。
 
 使い方:
-  fx-ttm-jpy.py 2026-09-15 GBP 371          # TTS / TTB / TTM と円換算
-  fx-ttm-jpy.py 2026-09-15 USD 120.50 --json
-  fx-ttm-jpy.py 2026-09-13 EUR 80 --no-fallback
+  fx-ttm-jpy.py 2025-04-01 EUR 250          # TTS / TTB / TTM と円換算
+  fx-ttm-jpy.py 2025-04-01 USD 120.50 --json
+  fx-ttm-jpy.py 2025-04-05 EUR 80 --no-fallback
   fx-ttm-jpy.py --selftest
 
 終了コード: 0 = 換算できた / 2 = 公表が無い・通貨が無い / 3 = 取得失敗
@@ -133,12 +133,12 @@ def selftest() -> int:
                 f"<td class=\"t_right\">{tts} </td>\n<td class=\"t_right\">{ttb} </td>\n"
                 f"<td class=\"t_center\">{mark}</td>\n</tr>")
 
-    mon = dt.date(2026, 9, 14)
+    mon = dt.date(2025, 3, 3)
     pages = {
-        mon: page(mon, row("GBP", "212.82", "204.82") + row("KRW", "11.68", "11.28", "*1")
+        mon: page(mon, row("GBP", "200.13", "190.00") + row("KRW", "10.00", "9.60", "*1")
                   + row("IDR", "1.08", "0.88", "*3") + row("XXX", "-", "-")),
-        dt.date(2026, 9, 13): "<h2>三菱UFJ銀行公表の対顧客外国為替相場</h2>",   # 休日 = 表なし
-        dt.date(2026, 9, 12): "<h2>三菱UFJ銀行公表の対顧客外国為替相場</h2>",
+        dt.date(2025, 3, 2): "<h2>三菱UFJ銀行公表の対顧客外国為替相場</h2>",   # 休日 = 表なし
+        dt.date(2025, 3, 1): "<h2>三菱UFJ銀行公表の対顧客外国為替相場</h2>",
     }
     fetcher = lambda d: pages.get(d, "<h2>no data</h2>")
     fails = 0
@@ -148,34 +148,34 @@ def selftest() -> int:
         print(("PASS " if cond else "FAIL ") + name)
         fails += 0 if cond else 1
 
-    c = convert(lookup(mon, "GBP", True, fetcher), Decimal("371"))
-    check("TTM = (TTS+TTB)/2", c["ttm"] == Decimal("208.82"))
-    check("GBP 371 → 77472.22 円", c["jpy"] == Decimal("77472.22"))
-    check("丸め 3 種", (c["jpy_floor"], c["jpy_round"], c["jpy_ceil"]) == (77472, 77472, 77473))
+    c = convert(lookup(mon, "GBP", True, fetcher), Decimal("250"))
+    check("TTM = (TTS+TTB)/2", c["ttm"] == Decimal("195.065"))
+    check("GBP 250 → 48766.25 円", c["jpy"] == Decimal("48766.25"))
+    check("丸め 3 種", (c["jpy_floor"], c["jpy_round"], c["jpy_ceil"]) == (48766, 48766, 48767))
     check("当日公表なら fell_back=False", c["fell_back"] is False)
     k = convert(lookup(mon, "KRW", True, fetcher), Decimal("10000"))
-    check("*1 通貨は 100 単位あたり", k["per_100"] and k["jpy"] == Decimal("1148"))
+    check("*1 通貨は 100 単位あたり", k["per_100"] and k["jpy"] == Decimal("980"))
     i = convert(lookup(mon, "IDR", True, fetcher), Decimal("100"))
     check("IDR (*3) も 100 単位あたり", i["per_100"] and i["jpy"] == Decimal("0.98"))
     none_week = {}
     try:
-        lookup(dt.date(2026, 9, 13), "GBP", True, lambda d: none_week.get(d, "<h2>休</h2>"))
+        lookup(dt.date(2025, 3, 2), "GBP", True, lambda d: none_week.get(d, "<h2>休</h2>"))
         check("7 日さかのぼっても無ければ LookupError", False)
     except LookupError:
         check("7 日さかのぼっても無ければ LookupError", True)
-    sun = dt.date(2026, 9, 20)
+    sun = dt.date(2025, 3, 9)
     past = lambda day, rows: (f"<h2>{day.year}年{day.month}月{day.day}日の為替相場　As of</h2>"
                               f"<table class=\"data-table7\">{rows}</table>")
-    pages2 = {dt.date(2026, 9, 18): past(dt.date(2026, 9, 18), row("GBP", "210.00", "202.00"))}
+    pages2 = {dt.date(2025, 3, 7): past(dt.date(2025, 3, 7), row("GBP", "210.00", "202.00"))}
     fb2 = lookup(sun, "GBP", True, lambda d: pages2.get(d, "<h2>休</h2>"))
-    check("日曜 → 金曜の相場、 fell_back=True", fb2["rate_date"] == "2026-09-18" and fb2["fell_back"])
-    check("過去日ページの見出し「…日の為替相場」 も日付として読む", parse(pages2[dt.date(2026, 9, 18)])[0] == dt.date(2026, 9, 18))
+    check("日曜 → 金曜の相場、 fell_back=True", fb2["rate_date"] == "2025-03-07" and fb2["fell_back"])
+    check("過去日ページの見出し「…日の為替相場」 も日付として読む", parse(pages2[dt.date(2025, 3, 7)])[0] == dt.date(2025, 3, 7))
     try:
         lookup(sun, "GBP", False, lambda d: pages2.get(d, "<h2>休</h2>"))
         check("--no-fallback で休日は失敗", False)
     except LookupError:
         check("--no-fallback で休日は失敗", True)
-    wrongday = {sun: page(dt.date(2026, 9, 18), row("GBP", "1", "1"))}
+    wrongday = {sun: page(dt.date(2025, 3, 7), row("GBP", "1", "1"))}
     try:
         lookup(sun, "GBP", False, lambda d: wrongday.get(d, ""))
         check("表の日付が要求日と違うページは採らない", False)
