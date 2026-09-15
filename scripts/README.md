@@ -196,7 +196,7 @@
 - **[lib/commit-msg-leak-matcher.sh](lib/commit-msg-leak-matcher.sh)** — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 10 allowlist の (a)(b)(c) check + 審査中の申請を識別する種目語×評価語の共起 (d))、 claude-code hook + git-side runner の両方が source する DRY 実装
 - **[lib/find-personal-layer.sh](lib/find-personal-layer.sh)** — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
 - **[lib/hook-stub.sh](lib/hook-stub.sh)** — lib/hook-stub.sh — hook stub installer 共通の「既存 stub の扱い」 (source して使う、 単体実行しない)
-- **[lib/ja_deadline_dates.py](lib/ja_deadline_dates.py)** — 日本語の散文 (task 記録・メモ) から「期限らしい日付」 を取る共通部品（締切語が隣接 ∧ 済/完了 が隣接しない日付だけ。 窓は隣の日付で切る = 隣の項目の〆や済を誤帰属しない。 docs/convention-design-principles.md#single-deadline-field-many-legs、 --selftest）
+- **[lib/ja_deadline_dates.py](lib/ja_deadline_dates.py)** — 日本語の文から「期限らしい日付」 を取る共通部品（散文 = task 記録・メモの次の期限 / メール本文 = 入力・提出・申請の〆切。 締切語の隣接・行動語・行動窓の範囲の終端・引用除去・述語の指紋。 docs/convention-design-principles.md#single-deadline-field-many-legs / #elapsed-time-urgency-inversion、 --selftest）
 - **[lib/macos_apps.py](lib/macos_apps.py)** — Discover macOS app bundles and read their declared identity without launching them.
 - **[lib/merge-hook-event.sh](lib/merge-hook-event.sh)** — settings.json への hook event merge (単一リスト駆動)
 - **[lib/merge-hook-event.test.sh](lib/merge-hook-event.test.sh)** — merge_hook_event の self-test (hermetic、 実 settings.json 不使用)
