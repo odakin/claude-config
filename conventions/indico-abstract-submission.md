@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Indico (CERN 等) の会議に abstract 投稿・参加登録・支払いを進めるとき、会議の実績やアカウント重複を確認するとき
 category: office
-summary: Indico (indico.cern.ch 系) の abstract 投稿で実際に踏んだ機構と落とし穴 (= CERN SSO の login 経路選択 〔guest 登録の確認 mail が来ない / 外部 ID = Google 等で入り既存 profile に紐付ける〕 / 所属は SSO 同期を切らないと編集不可 / 別 mail で profile が二重化したら merge 依頼 / abstract form の Authors 〔= 発表者を含む著者〕 と順序は手動並べ替え 〔alphabetical は自分で〕 / 受理通知 mail に abstract ID / reminder 分単位 〔1 週間 = 10080〕 / 本文は plain text 寄り / 参加費を主催側の販売サイトで払う場合の区分既定値・手数料・決済代行だけの checkout・請求通貨で払う・未払い注文の取消 = #external-checkout / 研究費精算の費目・宛名つき領収書・購入日 TTM 換算 〔scripts/fx-ttm-jpy.py〕 = #fee-reimbursement)。 jps-talk-submission.md / paper-submission.md の sibling (会議 abstract 側)
+summary: Indico (indico.cern.ch 系) の abstract 投稿で実際に踏んだ機構と落とし穴 (= CERN SSO の login 経路選択 〔guest 登録の確認 mail が来ない / 外部 ID = Google 等で入り既存 profile に紐付ける〕 / 所属は SSO 同期を切らないと編集不可 / 別 mail で profile が二重化したら merge 依頼 / abstract form の Authors 〔= 発表者を含む著者〕 と順序は手動並べ替え 〔alphabetical は自分で〕 / 受理通知 mail に abstract ID / reminder 分単位 〔1 週間 = 10080〕 / 本文は plain text 寄り / 参加費を主催側の販売サイトで払う場合の区分既定値・手数料・決済代行だけの checkout・請求通貨で払う・未払い注文の取消 = #external-checkout / 研究費精算の費目・宛名つき領収書・購入日 TTM 換算 〔scripts/fx-ttm-jpy.py〕 = #fee-reimbursement / 発表の証明に Contribution の公開ページ・推測 URL は別 event を返す = #presentation-proof)。 jps-talk-submission.md / paper-submission.md の sibling (会議 abstract 側)
 -->
 # indico-abstract-submission.md — Indico 会議 abstract 投稿の機構と落とし穴
 
@@ -61,6 +61,15 @@ summary: Indico (indico.cern.ch 系) の abstract 投稿で実際に踏んだ機
   支払受領期限、個別の発表取消期限も別。一般期限の前の催促は、すぐ期限切れという
   意味でも、その日まで枠が保証されるという意味でもない。
 
+## <a id="presentation-proof"></a>6b. 発表することを証明する書類 (学内の出張・助成の添付)
+
+- **Contribution List の個別ページ** (`/event/<id>/contributions/<contribution id>/`) は login 不要で公開され、 題目・種別 (Talk 等)・発表者と所属・著者が載る
+  = 「招待講演・論文発表を明示する書類」 に使える。 **abstract ページ** (`/abstracts/<id>/`) は login を要求するので、 そのままは使えない (実測)。
+  PDF 化 = 保存した HTML を [`scripts/html-print-pdf.py`](../scripts/html-print-pdf.py) `--base-href https://<indico host>/` (アイコン用の font は四角に化けるが文字は残る)。
+- 採択の通知メールも PDF にして一緒に出すと、 まだ timetable が公開されていない時期でも発表が確定していることを示せる。
+- ⚠️ **URL の数字は event 内の連番ではなく site 全体の通し番号** (ページ `/page/<id>-<slug>`、 contribution など)。 推測で組んだ URL は **別の event のページ**を返すことがあるので、
+  取得したら `<title>` の event 名を確かめる。 リンクは event の Overview から辿る (実測)。
+
 ## <a id="conference-evidence"></a>7. 会議の実体と参加価値を分けて評価する
 
 Indicoへの掲載や著名な諮問委員名だけを保証として扱わない。過去の登壇者・実験
@@ -107,6 +116,8 @@ Indico の登録と参加費の決済が別のサイトに分かれている会�
 - **支払後の報告**: 注文番号・金額の内訳・決済の取引 ID・Indico の登録番号を 1 通にまとめ、
   運営からの質問 (講演区分等) への回答も同じ便に載せる。 研究費で精算しうるなら、 領収書の宛名を
   所属機関の規程に合わせて同じ便で依頼する。 支払いの記録は決済代行の領収メールを正とする。
+- **取引 ID は 2 つある**: 販売サイトの自動領収メールに載る決済代行の取引 ID (売り手側) と、 決済代行が買い手に送る領収書の取引 ID は**別番号** (実測)。
+  報告や精算に書くときは、 どちらの書類の番号かを添える。 販売サイトの自動領収は宛名が名前だけで所属が入らないことが多い (= 機関宛の領収書にはならない)。
 - <a id="fee-reimbursement"></a>**研究費で精算するとき** (機関の規程が優先。 以下はよくある形):
   - **費目**: 参加費を旅費に含めず、 会費等の別費目で立替精算する機関がある。 出張手続き (出張届・旅費) とは別の伝票になる。
   - **領収書**: 宛名を「機関名 + 氏名」 に求められることが多い。 **カード明細は領収書の代わりにならない**ことが多いので、

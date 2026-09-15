@@ -3592,6 +3592,9 @@ origin: 海外出張願 (人事課 docx 様式) — 複数回の変換試行で 
 - ✅ **数字の縦位置**: CJK ラベルは em box が baseline 下に沈むので、 数字を同じ baseline に置くと「浮いて」 見える。 `baseline = label_center_y + 0.36 * fontsize` で数字の cap-height 中心をラベルの縦中心に合わせる。 CJK の値はラベルと同じ baseline (`label.y1 - 1.8`) でよい。
 - ✅ **○ 印**: `page.get_text("rawdict")` で「（」 と「）」 の glyph bbox を取り、 その隙間の中心に `draw_oval` (半径 ≤ 行高/2 − 0.6、 上限 4.3pt)。 半角 `( )` は隙間が 2-3pt しか無いので円が括弧に被るが、 読みとしては「○」 で通る。 **docx 側に全角 ○ を打ち込まない** (= 幅が変わり折り返す、 [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow))。
 - ✅ **認印**: 「印」 ラベルの中心に 30pt 角の PNG を `insert_image(overlay=True)`。 gray raster にすると朱が消える。
+- ✅ **○ の helper**: 語を囲む = [`scripts/pdf_form_fill.py`](../scripts/pdf_form_fill.py) `circle_word(page, key, near=見出しrect, x_min=, x_max=, pick="unique")`、 空の括弧の中 = `circle_paren_gap(page, key)`。 同じ語が別の欄にも居る (「無」 が注記に、 1 文字の「C」 が略語に) ので、 見出しの行と x 範囲で絞り、 一意でなければ例外にする。 PyMuPDF の `search_for` は ASCII の大文字小文字を区別しない (= 「C」 は語中の c にも当たる)。
+- ✅ **認印の前に氏名**: 認印を overlay する turn で、 氏名欄そのものが空のまま残りやすい (実測 = 「印」 の位置だけを見て氏名を入れ忘れた)。 「印」 は氏名欄の右端に居ることが多いので、 印の中心を少し左に寄せないと右罫線に掛かる。
+- ✅ **docx に段落を足して値を書くとき**: 見出し・注記の段落を `deepcopy` して足すと、 **その段落の太字・字の大きさを引き継ぐ** (実測 = 研究計画の本文が全部太字になった)。 足した run の `bold=False` と size を明示する。 行の高さが固定でない表では、 本文が 1 行増えるだけで 1 頁目の末尾の行が次の頁に押し出される ([`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow)) = 生成したら頁数と各頁の先頭行を確かめる。
 
 ## <a id="zip-cp932-filenames"></a>日本語ファイル名 zip の展開 (= cp932 文字化け)
 

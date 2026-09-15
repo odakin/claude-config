@@ -472,6 +472,78 @@ def _draw_check(page, r: "fitz.Rect") -> None:
     page.draw_line(p2, p3, width=1.1, color=(0, 0, 0))
 
 
+def _oval(page, rect: "fitz.Rect", width: float = 0.9) -> None:
+    sh = page.new_shape()
+    sh.draw_oval(rect)
+    sh.finish(color=(0, 0, 0), width=width)
+    sh.commit()
+
+
+def circle_word(page, key: str, *, near: "fitz.Rect" = None, y_tol: float = 8.0,
+                x_min: float = None, x_max: float = None, pick: str = "first",
+                pad: float = 2.5, width: float = 0.9) -> "fitz.Rect":
+    """「該当するものを○で囲む」 様式で、 選ぶ語 (`key`) を楕円で囲む。 囲んだ語の rect を返す。
+
+    同じ語が頁に何度も出る (例: 「C」 が別欄の略語にも居る / 「無」 が注記にも居る) ので、
+    `near` (= 同じ行の見出し rect) を渡すとその行 (中心の y 差 < y_tol) だけに絞る。
+    `x_min` / `x_max` で行内の範囲をさらに絞る (例: 「不採択 (A・B・C)・採択」 の括弧の中だけ)。
+    候補が 0 件なら LookupError、 `pick="unique"` で 2 件以上なら LookupError (= 取り違えを黙って囲まない)。
+    ⚠️ PyMuPDF の search_for は ASCII の大文字小文字を区別しない (= 「C」 は cancel の c にも当たる) ので、
+    1 文字の ASCII を囲むときは near / x_min / x_max で必ず絞る。
+    1 文字の語は glyph が細いので正円にする (半径 = 字の大きい方の辺 / 2 + 3)。"""
+    rs = page.search_for(key)
+    if near is not None:
+        cy = (near.y0 + near.y1) / 2
+        rs = [r for r in rs if abs((r.y0 + r.y1) / 2 - cy) < y_tol]
+    if x_min is not None:
+        rs = [r for r in rs if r.x0 > x_min]
+    if x_max is not None:
+        rs = [r for r in rs if r.x1 < x_max]
+    rs = sorted(rs, key=lambda r: (r.y0, r.x0))
+    if not rs:
+        raise LookupError(f"○で囲む語が見つからない: {key!r}")
+    if pick == "unique" and len(rs) != 1:
+        raise LookupError(f"○で囲む語が一意でない ({len(rs)} 件): {key!r}")
+    r = rs[0]
+    if len(key) == 1:
+        rad = max(r.width, r.height) / 2 + 3
+        cx, cy = (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2
+        _oval(page, fitz.Rect(cx - rad, cy - rad, cx + rad, cy + rad), width)
+    else:
+        _oval(page, fitz.Rect(r.x0 - pad, r.y0 - pad, r.x1 + pad, r.y1 + pad), width)
+    return r
+
+
+def circle_paren_gap(page, key: str, *, width: float = 0.9) -> "fitz.Rect":
+    """「（　）出張期間中…」 型の選択肢で、 `key` の直前にある空の括弧の中へ小さな ○ を描く。 描いた円の rect を返す。
+
+    括弧の位置は glyph の bbox から取る (= 語の rect から固定 offset で推測すると font と字間で外れる)。
+    全角・半角の括弧のどちらでもよい。 同じ行に括弧が無ければ LookupError。"""
+    hits = sorted(page.search_for(key), key=lambda r: (r.y0, r.x0))
+    if not hits:
+        raise LookupError(f"括弧の後ろの語が見つからない: {key!r}")
+    r = hits[0]
+    chars = []
+    for b in page.get_text("rawdict")["blocks"]:
+        for ln in b.get("lines", []):
+            lb = fitz.Rect(ln["bbox"])
+            if abs((lb.y0 + lb.y1) / 2 - (r.y0 + r.y1) / 2) < max(4.0, r.height / 2):
+                chars += [(c["c"], fitz.Rect(c["bbox"])) for s in ln["spans"] for c in s["chars"]]
+    closes = sorted([(c, rc) for c, rc in chars if c in ")）" and rc.x0 < r.x0 + 0.5], key=lambda t: -t[1].x0)
+    if not closes:
+        raise LookupError(f"{key!r} の前に閉じ括弧が無い")
+    close = closes[0]
+    opens = sorted([(c, rc) for c, rc in chars if c in "(（" and rc.x0 < close[1].x0], key=lambda t: -t[1].x0)
+    if not opens:
+        raise LookupError(f"{key!r} の前に開き括弧が無い")
+    cx = (opens[0][1].x1 + close[1].x0) / 2
+    cy = (r.y0 + r.y1) / 2
+    rad = max(2.0, min(r.height / 2 - 0.6, 4.3))
+    circle = fitz.Rect(cx - rad, cy - rad, cx + rad, cy + rad)
+    _oval(page, circle, width)
+    return circle
+
+
 def redact_hash_runs(page) -> int:
     """`####` 等 (= =TODAY() の列幅 overflow、 個数は出力時の列幅依存) を除去。"""
     rects = [fitz.Rect(w[:4]) for w in page.get_text("words") if re.fullmatch(r"#+", w[4])]
@@ -902,6 +974,36 @@ def _selftest():
     orig_p.unlink(missing_ok=True)
     same_p.unlink(missing_ok=True)
     diff_p.unlink(missing_ok=True)
+
+    # ------------------------------------------------------------------
+    # Fixture C: ○で囲む選択肢 (circle_word / circle_paren_gap)
+    # ------------------------------------------------------------------
+    doc = fitz.open()
+    page = doc.new_page(width=500, height=200)
+    page.insert_text((20, 40), "Result", fontname="helv", fontsize=10)
+    page.insert_text((90, 40), "Rejected ( A . B . C ) . Accepted", fontname="helv", fontsize=10)
+    page.insert_text((20, 80), "Note: see Section C", fontname="helv", fontsize=10)
+    page.insert_text((20, 120), "( ) no classes", fontname="helv", fontsize=10)
+    page.insert_text((20, 140), "( ) cancel the classes below", fontname="helv", fontsize=10)
+    n0 = len(page.get_drawings())
+    label = page.search_for("Result")[0]
+    rej = circle_word(page, "Rejected", near=label)
+    acc = [r for r in page.search_for("Accepted") if abs(r.y0 - label.y0) < 8][0]
+    c = circle_word(page, "C", near=label, x_min=rej.x1, x_max=acc.x0, pick="unique")
+    assert abs((c.y0 + c.y1) / 2 - (label.y0 + label.y1) / 2) < 8, f"C circled on wrong row: {c}"
+    print(f"  ✓ C circle_word: row-limited pick ignores the 'C' in another row ({c})")
+    try:
+        circle_word(page, "C", pick="unique")
+        assert False, "should LookupError (two C on the page)"
+    except LookupError:
+        print(f"  ✓ C circle_word pick=unique without row filter → LookupError")
+    g = circle_paren_gap(page, "cancel the classes")
+    opn = [r for r in page.search_for("(") if abs(r.y0 - g.y0) < 10]
+    assert opn and g.x0 > opn[0].x0 and g.y0 > 125, f"paren gap circle misplaced: {g}"
+    print(f"  ✓ C circle_paren_gap: circle inside '( )' of the right line ({g})")
+    assert len(page.get_drawings()) - n0 == 3, f"expected 3 ovals: {len(page.get_drawings()) - n0}"
+    print(f"  ✓ C drew exactly 3 ovals")
+    doc.close()
 
     print("=== ALL PASS ===")
 
