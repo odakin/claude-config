@@ -20,6 +20,7 @@ trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 unset CLAUDE_OFFICE_STAGING CLAUDE_OFFICE_STAGING_DIR
+export CLAUDE_OFFICE_APP_GUARD=0   # 本物の Office に問い合わせない (Stage の app guard 配線は T10 で stub の上で検査)
 
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS + 1)); echo "✅ $1"; }
@@ -147,6 +148,48 @@ n_after="$( [ -f "$CLAUDE_OFFICE_STAGING_LOG" ] && wc -l < "$CLAUDE_OFFICE_STAGI
 check "$n_after" "$n_before" "T9 disabled は log 不変"
 check "$(CLAUDE_OFFICE_STAGING=0 office_staging_fallback_reason)" "disabled" "T9 reason disabled"
 unset CLAUDE_OFFICE_STAGING_DIR CLAUDE_OFFICE_STAGING_LOG
+
+# T10: python Stage の app guard (macOS のみ、 osascript / open は stub)
+#   入る時に未起動 → with の中で起動した Excel は、 出る時に自分の copy を閉じて quit / 入る時に起動済みなら quit しない
+if [ "$(uname)" = "Darwin" ]; then
+    STUBS="$TMP/stubs"; M="$TMP/mock"; mkdir -p "$STUBS" "$M"
+    cat > "$STUBS/osascript" <<STUB
+#!/usr/bin/env bash
+s=""; args=(); if [ "\${1:-}" = "-" ]; then shift; s="\$(cat)"; args=("\$@"); else while [ \$# -gt 0 ]; do [ "\$1" = -e ] && { s="\$s \$2"; shift; }; shift; done; fi
+case "\$s" in
+  *office-app-guard:documents*) [ "\$(cat $M/running)" = true ] && { echo ok; cat $M/docs; } || echo not-running ;;
+  *office-app-guard:close-ours*) for a in "\${args[@]}"; do echo "close \$a" >> $M/log; done; : > $M/docs ;;
+  *office-app-guard:quit-if-empty*) if [ -s $M/docs ]; then echo "blocked 1"; else echo quit >> $M/log; echo false > $M/running; echo quit; fi ;;
+  *"is running"*) cat $M/running ;;
+  *frontmost*) echo /Applications/Editor.app/ ;;
+esac
+STUB
+    printf '#!/usr/bin/env bash\necho "open $*" >> %s/log\n' "$M" > "$STUBS/open"
+    chmod +x "$STUBS/osascript" "$STUBS/open"
+    export CLAUDE_OFFICE_STAGING_DIR="$TMP/override-root"
+    printf 'B' > "$TMP/g.xlsx"
+    for case_ in launched-in-with already-running; do
+        : > "$M/log"; : > "$M/docs"
+        if [ "$case_" = launched-in-with ]; then echo false > "$M/running"; else echo true > "$M/running"; printf 'false\t$HOME/Documents/other.xlsx\n' > "$M/docs"; fi
+        CLAUDE_OFFICE_APP_GUARD=1 PATH="$STUBS:$PATH" PYTHONPATH="$HERE" python3 - "$TMP/g.xlsx" "$M" "$case_" <<'EOF'
+import sys
+from office_staging import Stage
+book, m, case = sys.argv[1:4]
+with Stage(book) as st:
+    open(m + "/running", "w").write("true\n")                                # driver の tell が Excel を起動した
+    open(m + "/docs", "a").write("true\t" + st.paths[0] + "\n")               # staged copy を開いたまま
+EOF
+        log="$(tr '\n' '|' < "$M/log")"
+        if [ "$case_" = launched-in-with ]; then
+            case "$log" in *close*g.xlsx*quit*) ok "T10 Stage: with の中で起動した Excel は copy を閉じて quit" ;; *) bad "T10 Stage launched: log=$log" ;; esac
+        else
+            case "$log" in *quit*) bad "T10 Stage: 起動済みの Excel を quit した (log=$log)" ;; *close*) ok "T10 Stage: 起動済みの Excel は copy を閉じるだけで quit しない" ;; *) bad "T10 Stage already-running: log=$log" ;; esac
+        fi
+    done
+    unset CLAUDE_OFFICE_STAGING_DIR
+else
+    echo "SKIP T10 (macOS でない = Stage の app guard は無効)"
+fi
 
 echo "--- office-staging.test: PASS=$PASS FAIL=$FAIL ---"
 [ "$FAIL" -eq 0 ] || exit 1

@@ -176,14 +176,35 @@ def prune(days: int = 7) -> None:
             pass
 
 
-class Stage:
-    """copy files into a unique staging subdir; cleanup on clean exit, keep on exception."""
+_APP_BY_EXT = {".xlsx": "excel", ".xlsm": "excel", ".xlsb": "excel", ".xls": "excel",
+               ".docx": "word", ".docm": "word", ".doc": "word",
+               ".pptx": "powerpoint", ".pptm": "powerpoint", ".ppt": "powerpoint"}
+_APP_BUNDLE = {"excel": "Microsoft Excel.app", "word": "Microsoft Word.app", "powerpoint": "Microsoft PowerPoint.app"}
 
-    def __init__(self, *files: str):
+
+def _app_guard_enabled() -> bool:
+    return (platform.system() == "Darwin" and os.path.exists(APP_GUARD)
+            and os.environ.get("CLAUDE_OFFICE_APP_GUARD", "1").strip().lower() not in ("0", "no", "off", "false"))
+
+
+class Stage:
+    """copy files into a unique staging subdir; cleanup on clean exit, keep on exception.
+
+    app guard (macOS、 最初の file の拡張子が Excel / Word / PowerPoint のとき): 入る時に app が起動していたかと前面 app を
+    覚え、 出る時に staged copy だけを保存せず閉じ、 **入る時に起動していなかった app** (= この with の中で起動した) は
+    文書が 0 件なら quit、 奪った前面を返す (office-automation.md#office-app-reset-guard)。 driver 側は何も書かなくてよい。
+    ``Stage(..., app_guard=False)`` か ``CLAUDE_OFFICE_APP_GUARD=0`` で無効。
+    """
+
+    def __init__(self, *files: str, app_guard: bool = True):
         self.sources = [os.path.abspath(f) for f in files]
         self.dir: str | None = None
         self.paths: list[str] = list(self.sources)
         self.active = False
+        self._app_guard = app_guard
+        self._app: str | None = None
+        self._was_running = True
+        self._front = ""
 
     def __enter__(self) -> "Stage":
         root = staging_root()
@@ -201,7 +222,26 @@ class Stage:
             fh.write("\n".join(self.sources) + "\n")
         self.paths = staged
         self.active = True
+        self._app = _APP_BY_EXT.get(os.path.splitext(self.sources[0])[1].lower()) if self.sources else None
+        if self._app and self._app_guard and _app_guard_enabled():
+            self._was_running = office_app("state", self._app).stdout.strip() not in ("not-running", "")
+            self._front = office_app("front-remember").stdout.strip()
+        else:
+            self._app = None
         return self
+
+    def _release_app(self) -> None:
+        """staged copy を閉じ、 この with の中で起動した app だけ空なら quit、 前面を返す (失敗しても作業は止めない)."""
+        if not self._app:
+            return
+        try:
+            office_app("close-ours", self._app, *self.paths)
+            if not self._was_running:
+                office_app("release", self._app, "1")
+            office_app("front-restore", self._front, _APP_BUNDLE[self._app])
+        except OSError:
+            pass
+        self._app = None
 
     @staticmethod
     def copy_back(staged: str, dest: str) -> None:
@@ -218,6 +258,7 @@ class Stage:
         self.active = False
 
     def __exit__(self, exc_type, exc, tb) -> bool:
+        self._release_app()   # 先に Office から閉じる (= 開いている最中に subdir を消さない)
         if exc_type is None:
             self.cleanup()
         # 例外時は残す (= 診断用、 bash 版と同じ契約)
