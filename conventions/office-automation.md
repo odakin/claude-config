@@ -32,6 +32,7 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
    - **docx → PDF**: [`scripts/docx-to-pdf.sh`](#docx-to-pdf-pages)
    - **pptx → PDF (スライド、 網掛け/pattern fill を潰さない)**: [`scripts/pptx-to-pdf.sh`](#pptx-to-pdf-powerpoint) (PowerPoint native export 優先 = 最高忠実度、 LibreOffice は潰すので fallback のみ)
    - **様式改変 / 破損の検出**: [`diff-form-xlsx.py`](#diff-form-xlsx-detection) / `check-xlsx-integrity.py` / `check-docx-integrity.py`
+3. **自前の osascript を書くなら Office に触らせる file は staging copy だけ** — 本 doc のコード例の `/abs/path/…` は staged copy の placeholder として読む (実行は `scripts/office-stage-run.sh <file> -- osascript x.applescript {}` か helper。 in-place は hook が deny) → [`office-inplace-guard`](#office-inplace-guard)
 
 > **RCA 2026-06-16 (= 本 section の存在理由)**: ある session が上を読まずに学術様式の Excel cell 記入を hand-roll した結果、 **既出の罠 (日付 serial 化 [`excel-write-string-autoconvert`](#excel-write-string-autoconvert) / consecutive-op freeze [`excel-osascript-cell-write`](#excel-osascript-cell-write) / PDF export の verb 誤り [`xlsx-to-pdf-script`](#xlsx-to-pdf-script)) を全て再発見し、 さらに Excel を 5 サイクル叩いてクラッシュさせた**。 = 「読めば 1 発、 読まねば数十ターン + クラッシュ」。 後続 session がこの轍を踏まないための入口がこの早見表。
 
@@ -461,7 +462,7 @@ origin: 研究費様式の「図の貼付」 欄対応。 openpyxl↔Excel の�
 
 ### <a id="excel-osascript-cell-write"></a>Excel osascript で cell 値を書く堅牢パターン (= drawing 保護 + -609 回避)
 
-[`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の回避 1 (= drawing を壊さず値だけ変える) や、 fill 後の微修正を Excel 経由でやる時の osascript の組み立て方。 **起動・reset** は [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の「連続 Excel 操作の reset」 (第 1 手 quit+sleep / 第 2 手 killall+sleep) に従い、 その上で **osascript 本体**を以下で組む:
+[`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の回避 1 (= drawing を壊さず値だけ変える) や、 fill 後の微修正を Excel 経由でやる時の osascript の組み立て方。 **起動・reset** は [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の「連続 Excel 操作の reset」 (第 1 手 quit+sleep / 第 2 手 killall+sleep) に従い、 その上で **osascript 本体**を以下で組む (下の `/abs/path/form.xlsx` は staged copy の path = `on run argv` で受けて `office-stage-run.sh` で走らせる、 [`office-inplace-guard`](#office-inplace-guard)):
 
 ```applescript
 -- shell 側で先に reset: killall "Microsoft Excel"; sleep 6  (= cell 編集では sleep を 4 でなく 6 に厚く)
