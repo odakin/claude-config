@@ -1,114 +1,20 @@
-# Codex workspace conventions
+# Codex workspace dispatcher
 
-This workspace uses the shared operational conventions in this repository.
-This file is public layer-1 content. It may be installed at the root of a
-user's Codex workspace by `scripts/setup-codex.sh`; that local link is
-layer-4 wiring and intentionally does not change Claude Code's configuration
-or behavior.
+This public layer-1 file may be linked into a user's Codex workspace. Global
+bootstrap rules belong in `codex/HOME-AGENTS.md`; this file only routes work to
+the owning sources. Follow `codex/PARITY.md#instruction-entrypoint-kernel` and
+do not duplicate rule bodies here. Resolve its pointers from this link's real
+`claude-config` repository, not from the workspace directory.
 
-## Start and resume work
+For work in a Git repository, follow the global bootstrap, then read the
+repository-root `AGENTS.md` first, followed by `CLAUDE.md`, `SESSION.md`, and
+their task-relevant pointers. If the repository was entered after task startup,
+read its root `AGENTS.md` manually. Sources:
+`CONVENTIONS.md#agent-instruction-entrypoints` and
+`codex/PARITY.md#project-instruction-discovery`.
 
-For work inside a Git repository, begin by fetching its remote when one
-exists, checking status, and reading the repository-root `AGENTS.md` first.
-Then read `CLAUDE.md`, `SESSION.md`, and the task-relevant sources they point
-to before editing. If this task started in a parent workspace and enters a
-nested repository later, read that nested root `AGENTS.md` manually before
-acting; a shell `cd` does not rebuild Codex's task-start instruction chain.
-The semantic contract is `CONVENTIONS.md#agent-instruction-entrypoints`, and
-the Codex discovery contract is `codex/PARITY.md#project-instruction-discovery`.
-At the first reply after startup, resume, or clear, emit the exact best-effort
-identity line specified by `codex/PARITY.md#conversation-start-stamp`; retain
-the literal product identity `Codex` and preserve `unknown` fields rather than
-guessing account or surface.
-Before a Codex-origin commit, verify the managed provenance hook described in
-`codex/PARITY.md#git-session-provenance`; the commit must record
-`Agent-Session`, `Agent-Model`, and `Agent-Effort`. Use the active model when a
-verified runtime path supplies it; otherwise retain literal `unknown` and the
-warning rather than guessing or blocking the commit. Push after the commit.
-Before reporting an authorized change task complete, run the canonical
-`CONVENTIONS.md#completion-git-gate`: check dirty/ahead/behind state and the
-live remote head for every touched repository, and do not leave push as a
-later tool call after commit. Report any documented exception explicitly.
-
-For SESSION updates and handoff, follow
+For Codex integration work, use the `claude-config-conventions` skill and read
+`codex/PARITY.md#codex-integration-sot`. Before reporting a change complete,
+apply `CONVENTIONS.md#completion-git-gate`. For handoff, apply
 `CONVENTIONS.md#auto-update-protocol` and
-`CONVENTIONS.md#session-no-durable-record`: describe the current work, stopping
-point, next action, and direct pointers to owning records. Decisions and task
-status belong in those records. Do not create files for a trivial, one-off request.
-
-## Shared conventions
-
-`CONVENTIONS.md` at this repository root is the shared source of truth for
-information placement, Git workflow, safety, verification, and concise
-reporting. Before specialized work, open only the relevant document listed in
-`conventions/README.md`—for example, the documents for office files, LaTeX,
-research email, web automation, multi-session coordination, scientific
-computing, or scheduled tasks.
-
-Always render and inspect a changed visual artifact before reporting its
-status. Before a meaningful commit, inspect the staged diff and check
-consistency, compatibility with project instructions, unnecessary duplication,
-and sensitive-data exposure.
-
-## Four-layer boundary
-
-Respect the audience order: common conventions (layer 1), shared project
-(layer 2), owner-private cross-machine information (layer 3), and
-machine-local volatile state (layer 4). A layer may depend only on the same or
-a wider-audience layer. Shared-project instructions and committed artifacts
-must be self-contained: they may not depend on private personal-layer content
-or machine-local paths.
-
-Layers are defined by **audience**, not by distribution mechanism. Layer 2 is
-the shared project's own content (conventions, data, manuscripts) addressed to
-its collaborators; layer 3 is the owner's private preference and rule content
-addressed to the owner's machines. Installer, symlink, and marker machinery
-only *materializes* a layer on a machine — that wiring is a layer-4 local
-fact, not a layer itself.
-
-Do not discover or expose personal-layer files, credentials, or local agent
-history. An owner may explicitly select a short private Codex overlay through
-the layer-4 installer; that local composition is not a public dependency and
-does not authorize disclosure. Keep secrets and owner-specific data out of
-public repositories, generated examples, commit messages, and external
-services.
-
-## Safety and scope
-
-Treat a request to change, build, or fix as authorization for the ordinary,
-safe local work needed to complete it: inspect files and logs, edit in-scope
-code, and run relevant non-destructive validation. Do not request an extra
-confirmation for each such step. Follow the repository's normal Git workflow
-when the user has asked for it.
-
-Ask before an external write not already in the user's stated scope, a
-destructive action, a purchase or other costly action, or a material expansion
-of scope. An execution environment may still enforce a technical permission
-gate; treat that as a boundary, not as a reason to add conversational
-confirmation for safe local work.
-
-- Do not expose secrets, personal data, or private-project details in public
-  repositories, commit messages, pull requests, or generated examples.
-- Do not make external, destructive, costly, or scope-expanding changes without
-  the user's authorization.
-- State the boundaries of a review or audit; a completed checklist alone is not
-  evidence that no issue exists.
-
-## Codex-specific mapping
-
-For Codex integration architecture, lifecycle-Hook coverage, platform scope,
-and verification, use the `claude-config-conventions` skill. Its canonical
-technical source is `codex/PARITY.md#codex-integration-sot`; do not reconstruct
-the contract from old session notes. Git-side gates and project instructions
-remain authoritative for committed public content.
-
-Do not run `setup.sh` or modify `~/.claude/` while configuring Codex.
-
-Use the `claude-config-conventions` skill when installing, updating, auditing,
-or extending this shared Codex integration.
-
-Use the `claude-config-operations` skill when a task may benefit from the
-shared runbooks or reusable scripts in this repository.
-
-Use the `codex-automation-routing` skill for reminders, recurring checks,
-monitors, follow-ups, scheduled work, and Codex/Claude-routine comparisons.
+`CONVENTIONS.md#session-no-durable-record`.

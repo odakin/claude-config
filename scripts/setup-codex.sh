@@ -30,6 +30,7 @@ EFFORT=""
 CONFIGURE_SAFE_LOCAL=0
 PERSONAL_LAYER=""
 PERSONAL_AGENTS=""
+PERSONAL_AGENTS_MAX_BYTES=4096
 REFRESH_PERSONAL_LAYER=0
 REQUESTED_REPOS=()
 REPO_ROOTS=()
@@ -56,7 +57,8 @@ composite; its contents never enter this repository.
                                 external or out-of-scope actions.
   --personal-layer <path>       Explicitly bind one marked layer-3 directory.
                                 Requires <path>/codex/AGENTS.md, a concise
-                                Codex-specific private overlay. A local
+                                Codex-specific private overlay (maximum 4 KiB).
+                                A local
                                 post-merge refresh is installed when safe.
   --repo <path>                 Install the Agent-Session Git trailer hook in
                                 exactly this repository. Repeatable.
@@ -213,6 +215,7 @@ preflight_session_hook() {
 }
 
 configure_personal_layer() {
+  local personal_agents_bytes
   [ -n "$PERSONAL_LAYER" ] || return 0
   if [ ! -d "$PERSONAL_LAYER" ]; then
     echo "personal layer is not a directory: $PERSONAL_LAYER" >&2
@@ -226,6 +229,12 @@ configure_personal_layer() {
   PERSONAL_AGENTS="$PERSONAL_LAYER/codex/AGENTS.md"
   if [ ! -s "$PERSONAL_AGENTS" ]; then
     echo "personal Codex overlay is missing or empty: $PERSONAL_AGENTS" >&2
+    exit 2
+  fi
+  personal_agents_bytes="$(LC_ALL=C wc -c < "$PERSONAL_AGENTS")"
+  if [ "$personal_agents_bytes" -gt "$PERSONAL_AGENTS_MAX_BYTES" ]; then
+    echo "personal Codex overlay exceeds ${PERSONAL_AGENTS_MAX_BYTES} bytes: $PERSONAL_AGENTS" >&2
+    echo "keep trigger + imperative source pointers here; move rule bodies to their source of truth" >&2
     exit 2
   fi
 }

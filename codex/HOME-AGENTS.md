@@ -1,123 +1,69 @@
-# Global Codex conventions
+# Global Codex bootstrap
 
-Apply the shared `claude-config` conventions in every local Codex session.
-This file is public layer-1 content. `scripts/setup-codex.sh` may link it into
-`~/.codex/AGENTS.md`, but that installed path and its trust state are
-machine-local layer-4 wiring. This content must remain useful without access
-to owner-private data.
+This public layer-1 file is the small instruction kernel loaded before Codex
+can open task-specific sources. Keep trigger conditions and imperative pointers
+here; keep rule bodies in their canonical documents. The contract is
+`codex/PARITY.md#instruction-entrypoint-kernel`.
 
-For Git work, fetch first when a remote exists, read the repository-root
-`AGENTS.md` first, then read `CLAUDE.md`, `SESSION.md`, and the task-relevant
-sources they point to. Preserve the project's own instructions. If the task
-started in a parent workspace and enters a nested repository later, read that
-nested root `AGENTS.md` manually before acting; a shell `cd` does not prove that
-the task-start instruction chain included it. The semantic contract is
-`CONVENTIONS.md#agent-instruction-entrypoints`, and Codex discovery details are
+Resolve layer-1 pointers from the `claude-config` repository containing the
+generated header's `public-source`, or the real target of
+`~/.codex/AGENTS.md`; never resolve them against an unrelated working directory.
+
+## Repository routing
+
+For Git work, fetch first when a remote exists. Before editing, read the
+repository-root `AGENTS.md`, then `CLAUDE.md`, `SESSION.md`, and only the
+task-relevant sources they name. If a task started in a parent workspace and
+later enters a nested repository, read that nested root `AGENTS.md` manually;
+a shell `cd` does not rebuild the startup chain. The semantic and discovery
+contracts are `CONVENTIONS.md#agent-instruction-entrypoints` and
 `codex/PARITY.md#project-instruction-discovery`.
-Before a Codex-origin commit, verify the repository's managed provenance hook;
-the commit must carry `Agent-Session`, `Agent-Model`, and `Agent-Effort`.
-Use the active Codex model when available. If all verified runtime paths fail,
-keep literal `unknown` and the hook warning rather than guessing from a default
-or blocking the commit. Install or audit the hook through the
-`claude-config-conventions` route and
-`codex/PARITY.md#git-session-provenance`, then push after the commit.
-For an authorized change task, do not report completion after local save or
-validation alone. Immediately before the completion report, apply
-`CONVENTIONS.md#completion-git-gate`: inspect task-touched repositories for
-dirty/ahead/behind state, keep commit and push in the same command chain, and
-verify local `HEAD` equals the live remote branch head. If an enumerated
-exception applies, state the repository, residual state, reason, and next
-action instead of silently calling the task complete.
-Use the `claude-config-conventions` skill when installing, updating, auditing,
-or extending this Codex integration.
-Use the `claude-config-operations` skill when a task may be covered by the
-shared operational runbooks or scripts.
-Use the `codex-automation-routing` skill for reminders, recurring checks,
-monitors, follow-ups, scheduled work, and Codex/Claude-routine comparisons.
 
-When maintaining the Codex integration, treat
-`codex/PARITY.md#codex-integration-sot` as the durable technical source of
-truth; do not infer it from old session notes.
+Use the `claude-config-conventions` skill for this Codex integration and treat
+`codex/PARITY.md#codex-integration-sot` as its technical source of truth. Use
+`claude-config-operations` for covered runbooks and reusable scripts, and
+`codex-automation-routing` for reminders, schedules, monitors, and follow-ups.
 
-## Session handoff
+## Delivery and handoff
 
-At task completion or handoff, update the owning records first, then make
-`SESSION.md` explain the current work, stopping point, next action, and direct
-pointers to those records. A pointer list alone does not establish current
-context. Do not duplicate durable decisions, correspondence, identifiers, or
-task status; do not create a separate closure report as the resume entry point.
-Read `CONVENTIONS.md#auto-update-protocol` and
-`CONVENTIONS.md#session-no-durable-record` for the canonical procedure.
-Before finishing, read the affected SESSION section as a new Codex would:
-can it resume without this conversation, and is each fact owned elsewhere?
-The same boundary is also the completion Git gate above; handoff prose does not
-substitute for committing and pushing authorized repository changes.
+Before a Codex-origin commit, read and apply
+`codex/PARITY.md#git-session-provenance`; the commit must carry
+`Agent-Session`, `Agent-Model`, and `Agent-Effort`, preserving literal
+`unknown` when verified runtime data is unavailable.
 
-## Context-budget discipline
+Before reporting an authorized change complete, read and apply
+`CONVENTIONS.md#completion-git-gate`. For handoff or session closure, read and
+apply `CONVENTIONS.md#auto-update-protocol` and
+`CONVENTIONS.md#session-no-durable-record`. Do not restate those procedures in
+this entry point.
 
-Keep global startup context compact. Treat detailed runbooks and private
-records as task-specific, on-demand sources; use targeted searches and bounded
-excerpts rather than preloading broad document trees or verbose command output.
-Do not depend on undocumented local configuration to control automatic context
-compaction; the integration boundary is recorded in
-`codex/PARITY.md#codex-integration-sot`.
+## Context and machine-local truth
 
-## Machine-local truth
+Keep global startup context compact. Open detailed runbooks and private records
+as on-demand sources; see `codex/PARITY.md#codex-integration-sot`.
 
 ### Session identity stamp
 
-At the first user-visible reply after session startup, resume, or clear, begin
-with the exact one-line identity stamp injected by the SessionStart hook. Keep
-the literal product identity `Codex` in every stamp and keep all remaining
-fields, including literal `unknown`; never infer an account or surface from a
-title, CLI login, or configured default. If the injected stamp is absent,
-make the first tool call `python3 "$HOME/.codex/claude-config-hooks/session_stamp.py"`
-and place its output unchanged at the start of that reply. Do not restamp after
-compaction alone. The source and limits are
+At the first user-visible reply after startup, resume, or clear, begin with the
+exact identity stamp injected by the SessionStart Hook. Keep the literal product
+identity `Codex` and all `unknown` fields. If the stamp is absent, make the
+first tool call `python3 "$HOME/.codex/claude-config-hooks/session_stamp.py"`
+and use its output unchanged. Do not restamp after compaction alone. Source:
 `codex/PARITY.md#conversation-start-stamp`.
 
-A title, prior message, or report from another host is only an observation,
-not this machine's state. Before claiming or acting on a machine-local fact,
-verify it locally (`hostname` and the relevant audit) and state the checked
-host, time, and scope. The detailed Codex mechanism is
-`codex/PARITY.md#machine-local-provenance`.
+Before a machine-local claim or action, verify the current host with `hostname`
+and the relevant audit; never infer it from a title, transcript, or another
+host's report. Source: `codex/PARITY.md#machine-local-provenance`.
 
-## Four-layer boundary
+## Boundaries
 
-Respect the audience order: common conventions (layer 1), shared project
-(layer 2), owner-private cross-machine information (layer 3), and
-machine-local volatile state (layer 4). A layer may depend only on the same or
-a wider-audience layer. In particular, a shared project must be self-contained
-and must not depend on a private personal layer or a machine-local path.
+Respect the audience order: public common rules (layer 1), shared-project
+content (layer 2), owner-private cross-machine content (layer 3), and
+machine-local state (layer 4). A shared project must not depend on layers 3 or
+4. Do not discover or expose private files, credentials, personal data, or
+local agent history. Source: `codex/PARITY.md#four-layer-architecture`.
 
-Layers are defined by **audience**, not by distribution mechanism. Layer 2 is
-the shared project's own content (conventions, data, manuscripts) addressed to
-its collaborators; layer 3 is the owner's private preference and rule content
-addressed to the owner's machines. Installer, symlink, and marker machinery
-only *materializes* a layer on a machine — that wiring is a layer-4 local
-fact, not a layer itself.
-
-Do not discover or expose personal-layer files, credentials, or local agent
-history. An owner may explicitly select a short private Codex overlay through
-the layer-4 installer; that local composition is not a public dependency and
-does not authorize disclosure. Keep secrets and owner-specific data out of
-public repositories, generated examples, commit messages, and external
-services.
-
-## Autonomous in-scope work
-
-Treat a request to change, build, or fix as authorization for the ordinary,
-safe local work needed to complete it: inspect files and logs, edit in-scope
-code, and run relevant non-destructive validation. Do not request an extra
-confirmation for each such step. Follow the repository's normal Git workflow
-when the user has asked for it.
-
-Ask before an external write not already in the user's stated scope, a
-destructive action, a purchase or other costly action, or a material expansion
-of scope. An execution environment may still enforce a technical permission
-gate; treat that as a boundary, not as a reason to add conversational
-confirmation for safe local work.
-
-Native Codex hooks provide a second safety layer for selected high-signal
-events. They do not replace project Git hooks or the boundaries above, and
-they must never cause Claude Code configuration to be read or changed.
+Treat a request to change, build, or fix as authority for ordinary safe local
+work. Ask before external, destructive, costly, or materially scope-expanding
+actions not already authorized. Do not alter Claude Code configuration while
+configuring Codex. Source: `codex/PARITY.md#codex-integration-sot`.

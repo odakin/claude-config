@@ -62,6 +62,29 @@ Therefore every repository governed by these conventions carries a tracked, non-
 
 If a task starts in a parent workspace and only later selects a nested repository, the agent must read that repository's root `AGENTS.md` before acting; for sustained work, the task should start with that repository as its project root so native discovery covers it. A machine-local fallback filename is optional convenience, not cross-machine or collaborator evidence. `scripts/setup-codex.sh` must not create or edit layer-2 project files: templates create the entry point during project setup, and `scripts/audit-codex-integration.sh --repo <path>` reports a missing, untracked, symlinked, or incomplete root entry point.
 
+### <a id="instruction-entrypoint-kernel"></a>Instruction entry-point kernel
+
+Discovery loads the selected `AGENTS.md` text; it does not transclude the
+target of a Markdown link. A secondary entry point must therefore retain three
+things: the trigger, an imperative to read or apply the source, and a stable
+source pointer. It must not copy the source's WHAT / WHY / HOW payload. This is
+the Codex application of
+[`no-duplicate-rules`](../docs/convention-design-principles.md#no-duplicate-rules):
+point-of-use firing and a single source of truth are compatible.
+
+Only instructions needed before Codex can safely perform that first read belong
+inline in the global bootstrap kernel: source routing, first-reply identity,
+machine verification, the privacy boundary, and the authorization boundary.
+Repository rules, operational steps, exception lists, and design rationale stay
+in their owning documents. The workspace entry point is a dispatcher to the
+global and repository sources, not a second copy of either.
+
+`scripts/check-codex-integration.py --check` caps the public global entry point
+at 4 KiB and the workspace and personal-overlay template entry points at 2 KiB.
+`scripts/setup-codex.sh` independently rejects a selected private overlay above
+4 KiB. These are regrowth backstops, not targets: a smaller trigger-and-pointer
+entry point is preferred.
+
 ### <a id="session-handoff-contract"></a>Session handoff contract
 
 The semantic procedure is owned by
@@ -265,7 +288,8 @@ An owner who explicitly passes `--personal-layer <path>` may replace only the
 global `~/.codex/AGENTS.md` link with a mode-`0600`, generated layer-4
 composite. It concatenates the public `codex/HOME-AGENTS.md` with the
 selected layer-3 `<path>/codex/AGENTS.md`; the latter is deliberately a short
-Codex-specific overlay, not the owner's full `CLAUDE.md`. The other six
+Codex-specific trigger-and-pointer overlay of at most 4 KiB, not the owner's
+full `CLAUDE.md`. The other six
 managed links stay unchanged. The marker `.claude-personal-layer` and
 non-empty overlay are required, but the installer never searches for a
 personal layer: choosing its path is an explicit owner action.

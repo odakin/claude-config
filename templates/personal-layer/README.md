@@ -71,6 +71,7 @@ current post-merge hook. The audit reports otherwise. The installer refuses a
 - **user-profile.md** — your identity, signatures, account info. Used when Claude drafts emails or fills forms.
 - **codex/AGENTS.md** — your concise Codex-specific private routing overlay.
   It is not a second `CLAUDE.md`; keep the detailed private rules in their
-  existing sources and point Codex to them only when relevant.
+  existing sources and use trigger + imperative read pointers only when
+  relevant. The installer rejects overlays above 4 KiB as a regrowth backstop.
 
 You don't need all of them. Start with CLAUDE.md and add the rest as you find use cases.

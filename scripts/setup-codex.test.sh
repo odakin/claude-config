@@ -88,8 +88,8 @@ run_setup --set-default-effort high --configure-safe-local \
 [ "$(readlink "$TEST_CODEX_DIR/skills/codex-automation-routing")" = "$CONFIG_ROOT/codex/skills/codex-automation-routing" ]
 [ "$(readlink "$TEST_CODEX_DIR/claude-config-hooks")" = "$CONFIG_ROOT/codex/hooks" ]
 [ "$(readlink "$TEST_CODEX_DIR/hooks.json")" = "$CONFIG_ROOT/codex/hooks/hooks.json" ]
-grep -q '^## Four-layer boundary$' "$TEST_CODEX_DIR/AGENTS.md"
-grep -q '^## Autonomous in-scope work$' "$TEST_CODEX_DIR/AGENTS.md"
+grep -q '^## Repository routing$' "$TEST_CODEX_DIR/AGENTS.md"
+grep -q '^## Boundaries$' "$TEST_CODEX_DIR/AGENTS.md"
 grep -qx 'model_reasoning_effort = "high"' "$TEST_CODEX_DIR/config.toml"
 grep -qx 'approval_policy = "on-request"' "$TEST_CODEX_DIR/config.toml"
 grep -qx 'sandbox_mode = "workspace-write"' "$TEST_CODEX_DIR/config.toml"
@@ -136,7 +136,7 @@ run_setup --personal-layer "$PERSONAL_LAYER"
 grep -qx '<!-- claude-config-codex: global-personal-composite -->' "$TEST_CODEX_DIR/AGENTS.md"
 grep -qx "<!-- personal-source: $PERSONAL_LAYER -->" "$TEST_CODEX_DIR/AGENTS.md"
 grep -qx 'INITIAL_PERSONAL_OVERLAY' "$TEST_CODEX_DIR/AGENTS.md"
-grep -q '^# Global Codex conventions$' "$TEST_CODEX_DIR/AGENTS.md"
+grep -q '^# Global Codex bootstrap$' "$TEST_CODEX_DIR/AGENTS.md"
 [ "$(file_mode "$TEST_CODEX_DIR/AGENTS.md")" = "600" ]
 grep -qF '# claude-config post-merge extensions' "$PERSONAL_LAYER/.git/hooks/post-merge"
 PERSONAL_REFRESH="$PERSONAL_LAYER/.git/hooks/post-merge.d/claude-config-codex-personal-layer.sh"
@@ -146,6 +146,24 @@ grep -qF -- '--refresh-personal-layer' "$PERSONAL_REFRESH"
 printf '%s\n' 'UPDATED_PERSONAL_OVERLAY' >> "$PERSONAL_LAYER/codex/AGENTS.md"
 "$PERSONAL_LAYER/.git/hooks/post-merge" 0 0 0 >/dev/null
 grep -qx 'UPDATED_PERSONAL_OVERLAY' "$TEST_CODEX_DIR/AGENTS.md"
+
+OVERSIZED_LAYER="$TEMP_ROOT/oversized-personal-layer"
+OVERSIZED_HOME="$TEMP_ROOT/oversized-home"
+mkdir -p "$OVERSIZED_LAYER/codex" "$OVERSIZED_HOME/.codex"
+: > "$OVERSIZED_LAYER/.claude-personal-layer"
+python3 - "$OVERSIZED_LAYER/codex/AGENTS.md" <<'PY'
+from pathlib import Path
+import sys
+
+Path(sys.argv[1]).write_text("x" * 4097, encoding="utf-8")
+PY
+if run_setup_for "$OVERSIZED_HOME" "$OVERSIZED_HOME/.codex" \
+  "$OVERSIZED_HOME/Documents/Codex" --personal-layer "$OVERSIZED_LAYER" \
+  >/dev/null 2>&1; then
+  echo "expected setup to reject a personal overlay above 4 KiB" >&2
+  exit 1
+fi
+[ ! -e "$OVERSIZED_HOME/.codex/AGENTS.md" ]
 
 HOME="$TEST_HOME" \
 CODEX_USER_DIR="$TEST_CODEX_DIR" \

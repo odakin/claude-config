@@ -46,6 +46,11 @@ ENTRY_POINTS = (
     "codex/skills/codex-automation-routing/SKILL.md",
     "templates/personal-layer/README.md",
 )
+INSTRUCTION_ENTRYPOINT_MAX_BYTES = {
+    "codex/HOME-AGENTS.md": 4096,
+    "codex/AGENTS.md": 2048,
+    "templates/personal-layer/codex/AGENTS.md.template": 2048,
+}
 SESSION_HANDOFF_REQUIREMENTS = {
     "CONVENTIONS.md": ("codex/PARITY.md#session-handoff-contract",),
     "codex/AGENTS.md": ("CONVENTIONS.md#auto-update-protocol", "CONVENTIONS.md#session-no-durable-record"),
@@ -89,13 +94,11 @@ COMPLETION_GATE_REQUIREMENTS = {
     ),
     "codex/HOME-AGENTS.md": (
         "CONVENTIONS.md#completion-git-gate",
-        "dirty/ahead/behind",
-        "live remote branch head",
+        "Before reporting an authorized change complete",
     ),
     "codex/AGENTS.md": (
         "CONVENTIONS.md#completion-git-gate",
-        "dirty/ahead/behind",
-        "later tool call after commit",
+        "Before reporting a change complete",
     ),
     "codex/skills/claude-config-conventions/SKILL.md": (
         "CONVENTIONS.md#completion-git-gate",
@@ -190,7 +193,7 @@ PROJECT_ENTRYPOINT_REQUIREMENTS = {
         "repository-root",
         "CONVENTIONS.md#agent-instruction-entrypoints",
         "codex/PARITY.md#project-instruction-discovery",
-        "nested root `AGENTS.md` manually",
+        "read that nested root `AGENTS.md` manually",
     ),
     "codex/AGENTS.md": (
         "repository-root `AGENTS.md` first",
@@ -222,19 +225,22 @@ PERSONAL_OVERLAY_REQUIREMENTS = {
         "--personal-layer <path>",
         "<path>/codex/AGENTS.md",
         "post-merge.d",
+        'id="instruction-entrypoint-kernel"',
     ),
     "scripts/setup-codex.sh": (
         "--personal-layer",
         "--refresh-personal-layer",
         "global-personal-composite",
+        "PERSONAL_AGENTS_MAX_BYTES=4096",
     ),
     "scripts/audit-codex-integration.sh": (
         "global-personal-composite",
         "personal-layer pull refresh",
     ),
     "templates/personal-layer/codex/AGENTS.md.template": (
-        "Personal Codex overlay",
+        "Personal Codex routing overlay",
         "Personal-source routing",
+        "codex/PARITY.md#instruction-entrypoint-kernel",
     ),
 }
 CONTEXT_BUDGET_REQUIREMENTS = {
@@ -275,12 +281,12 @@ MACHINE_PROVENANCE_REQUIREMENTS = {
         "verify it locally with `hostname`",
     ),
     "codex/HOME-AGENTS.md": (
-        "## Machine-local truth",
+        "## Context and machine-local truth",
         "### Session identity stamp",
-        "literal product identity `Codex`",
+        "literal product\nidentity `Codex`",
         "session_stamp.py",
-        "A title, prior message, or report from another host is only an observation",
-        "verify it locally (`hostname` and the relevant audit)",
+        "verify the current host with `hostname`",
+        "never infer it from a title, transcript, or another\nhost's report",
     ),
 }
 AUTOMATION_ROUTING_REQUIREMENTS = {
@@ -421,6 +427,18 @@ def check(root: Path) -> list[str]:
         for stale in SUPERSEDED_CLAIMS:
             if stale in content:
                 errors.append(f"{relative}: superseded capability claim is present")
+
+    for relative, maximum in INSTRUCTION_ENTRYPOINT_MAX_BYTES.items():
+        try:
+            size = len(text(root / relative).encode("utf-8"))
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        if size > maximum:
+            errors.append(
+                f"{relative}: instruction entry point is {size} bytes; "
+                f"maximum is {maximum}; keep trigger-and-pointer stubs only"
+            )
 
     for stale in SUPERSEDED_CLAIMS:
         if stale in parity_text:
@@ -756,6 +774,17 @@ def selftest() -> int:
         errors = check(root)
         if not any(error.startswith("codex/HOME-AGENTS.md: missing machine-provenance") for error in errors):
             print("FAIL: missing machine-provenance contract was not detected")
+            return 1
+
+        fixture(root)
+        oversized_path = root / "codex/HOME-AGENTS.md"
+        oversized_path.write_text(
+            oversized_path.read_text(encoding="utf-8") + "x" * 4097,
+            encoding="utf-8",
+        )
+        errors = check(root)
+        if not any("instruction entry point is" in error for error in errors):
+            print("FAIL: oversized instruction entry point was not detected")
             return 1
 
         fixture(root)
