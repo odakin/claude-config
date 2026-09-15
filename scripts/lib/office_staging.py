@@ -15,6 +15,10 @@ macOS の Microsoft Office は App Sandbox で、 file を置いた folder へ�
         ... Excel に staged_book を触らせる ...
         st.copy_back(staged_book, book)     # 書き戻し (同 dir の tmp → os.replace で atomic)
     # 正常終了で subdir を削除、 例外時は残す (診断用)
+
+path 判定 (副作用なし): ``is_staged_path(p)`` / ``staging_roots_for_match()`` —
+PreToolUse hook ``hooks/office-inplace-guard.py`` が「Office に staging 外の path を触らせる command」 を
+止めるのに使う (bash 版には無い、 python 専用の追加 API)。
 """
 from __future__ import annotations
 
@@ -47,6 +51,34 @@ def staging_root() -> str | None:
     except OSError:
         return None
     return root if os.access(root, os.W_OK) else None
+
+
+def staging_roots_for_match(env: dict | None = None) -> list[str]:
+    """「staging の内側」 と見なす root の list (副作用なし = mkdir しない。 hook の path 判定用)。
+
+    default root (<group container>/claude-office-staging) と ``CLAUDE_OFFICE_STAGING_DIR`` override の両方。
+    staging_root() と違い、 無効化 env や dir の実在には依存しない (= 判定対象の path が内側かだけを見る)。
+    """
+    env = os.environ if env is None else env
+    home = env.get("HOME") or os.path.expanduser("~")
+    roots = [os.path.join(home, GROUP_CONTAINER, ROOT_NAME)]
+    override = env.get("CLAUDE_OFFICE_STAGING_DIR", "")
+    if override:
+        roots.append(os.path.expanduser(override))
+    return [os.path.normpath(r) for r in roots]
+
+
+def is_staged_path(path: str, env: dict | None = None, extra_roots: list[str] | None = None) -> bool:
+    """path が staging root (または override) の内側か。 macOS の既定 FS に合わせ大文字小文字は区別しない。"""
+    if not path:
+        return False
+    env = os.environ if env is None else env
+    p = os.path.normpath(os.path.expanduser(path)).lower()
+    for root in staging_roots_for_match(env) + [os.path.normpath(r) for r in (extra_roots or [])]:
+        r = root.lower().rstrip("/")
+        if p == r or p.startswith(r + "/"):
+            return True
+    return False
 
 
 def fallback_reason() -> str:

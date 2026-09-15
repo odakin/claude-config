@@ -29,6 +29,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[memory-guard-bash.test.sh](memory-guard-bash.test.sh)** — memory-guard-bash.sh (Bash 用) の self-test (hermetic)
 - **[memory-guard.sh](memory-guard.sh)** — メモリ書き込みガード — Edit/Write 用（§8 feedback deny + escape hatch: machine-local marker）
 - **[memory-guard.test.sh](memory-guard.test.sh)** — memory-guard.sh (Edit/Write 用) の self-test (hermetic)
+- **[office-inplace-guard.py](office-inplace-guard.py)** — PreToolUse(Bash): Excel / Word / PowerPoint に staging 外の path を開かせる・保存させる command を deny (office-automation.md#office-pregranted-staging-dir)
+- **[office-inplace-guard.test.sh](office-inplace-guard.test.sh)** — 述語の selftest + hook 入出力 (deny の JSON / 読めない入力で死なない / opt-out) + カナリア (偽 HOME の本番配線で ARMED / NOT ARMED)
 - **[pasted-command-comment-guard.sh](pasted-command-comment-guard.sh)** — user に貼らせるコマンドに `#` コメントが混ざっていたら Stop で書き直させる (対話 zsh は # をコメントにしない)
 - **[pasted-command-comment-guard.test.sh](pasted-command-comment-guard.test.sh)** — logic + incident-replay selftest
 - **[pdf-read-fallback-nudge.sh](pdf-read-fallback-nudge.sh)** — PostToolUse(Read): Read tool が .pdf を `pdftoppm is not installed` で fail した時に PyMuPDF 1-liner を system reminder で injection (= 2026-05-18 RCA、 規律 wording に依存しない機械的 enforcement layer)
