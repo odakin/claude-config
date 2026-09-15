@@ -592,17 +592,20 @@ degenerate 比較も踏んでおり、3 件とも基準点の選び方が原因�
 本節は、GUI application、browser、daemon、native host などの復旧を実行する前の診断手順だけを持つ。
 
 1. **対象本体と制御面を別々に測る**: process / singleton lock / application inventory と、extension / socket /
-   native-host / account / profile の接続を別 probe にする。接続失敗は process 不在を意味しない。
+   native-host / account / profile の接続を別 probe にする。接続失敗は process 不在を意味しない。process-list probe
+   自身が非 0 / permission error なら `unknown` であり、singleton lock・application inventory 等の独立 probe へ移る。
 2. **発生源を帰属する**: crash / hang / 再起動なら OS report の responsible process、parent、coalition、起動時刻と、
    runtime が生成する command の内容指紋を突き合わせる ([#execution-path-attribution](#execution-path-attribution))。
 3. **実行前に command を展開する**: `--dry-run`、`man`、source の actual binding で、`new` / `fresh` / `force` /
-   `replace` と profile / storage 引数を確認する。名前が `open` でも新 instance 強制なら destructive transition である。
+   `replace` と profile / storage 引数を確認する。同名 script が複数 cache に在るなら live config / process argv から
+   実行実体を解決する。名前が `open` でも新 instance 強制なら destructive transition である。
 4. **5 状態へ bin して 1 本だけ選ぶ**: stopped→launch、healthy→reuse/no-op、transport failure→reconnect、
    wrong context→explicit switch、unknown→fail-loud。複数 branch を「念のため」連続実行しない。
 5. **before/after の state delta を取る**: 目的機能の回復に加え、process / window / tab / crash report / lock /
    notification の増分を確認する。retry で目的が通っても余剰が増えたら未修復 ([#recovery-ends-investigation](#recovery-ends-investigation))。
 6. **runtime cache patch と上流修正を分ける**: versioned cache の局所 patch は immediate mitigation。対象 version、
-   backup、差分、再適用条件を明示し、update で消える machine-local state を正本や恒久修正と呼ばない。
+   actual binding、backup、差分、再適用条件を明示し、update で消える machine-local state を正本や恒久修正と呼ばない。
+   実行 process が source を読み込み済みなら再起動境界も別に検証する。
 
 Codex の外部 Chromium browser では、公式の profile 選択契約と具体的な branch を
 [`codex/PARITY.md#external-browser-lifecycle`](../codex/PARITY.md#external-browser-lifecycle) に置く。

@@ -493,6 +493,15 @@ Apply it to Codex external-browser recovery as follows:
 - process or connection state unknown: report the failed probe rather than
   treating unknown as stopped.
 
+On macOS, a sandboxed process-list probe may itself be unavailable. Treat its
+nonzero result as unknown and use an independent application inventory or the
+Chromium `SingletonLock` PID before deciding to launch. A direct headless launch
+of another process from the same GUI browser bundle can abort during macOS
+application registration, before profile isolation takes effect. A deterministic
+helper running inside the Codex seatbelt must therefore refuse that GUI launch;
+the caller can use an approved unsandboxed execution path or another non-running
+browser when rendering genuinely requires a standalone browser process.
+
 A forced fresh process can have a legitimate narrow purpose: macOS launch
 arguments such as a profile selector may only reach a newly created process.
 That purpose does not override the observed live state. A correct implementation
@@ -504,9 +513,12 @@ reports, or notifications.
 Bundled plugin caches and their version-specific launch scripts are layer-4
 runtime state. A local edit that removes a force-new-instance flag is a reversible
 mitigation for the affected build, not the durable implementation and not an
-installer responsibility. Keep a backup, verify the generated command, expect an
-application/plugin update to replace the cache, and use the product feedback path
-for an upstream fix. Do not teach `scripts/setup-codex.sh` to patch a vendor cache.
+installer responsibility. Resolve the actual tool-service path from the live
+trusted-service configuration: the native extension host and the agent-facing
+browser service may point at different cache trees with same-named scripts. Keep
+a backup, verify the generated command, expect an application/plugin update to
+replace the cache, and use the product feedback path for an upstream fix. Do not
+teach `scripts/setup-codex.sh` to patch a vendor cache.
 
 ## Four-layer architecture
 

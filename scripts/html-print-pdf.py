@@ -14,7 +14,9 @@
   2. <head> 先頭に `@page{size:<paper>}` を差す。 先頭に置くので、 ページ側 CSS が @page を持っていればそちらが勝つ
      (= 用紙指定の無いページだけ A4 になる。 領収書型のページは CSS が用紙を指定しないことがある)。
   3. headless の Chromium 系ブラウザ (Brave / Chrome / Chromium / Edge を自動検出、 --browser で指定) で
-     --print-to-pdf。 ヘッダ・フッタ (URL・日付) は付けない。
+     --print-to-pdf。macOS では GUI 稼働中の同じ app bundle を候補から外し、停止中の browser を選ぶ。
+     さらに通常 profile と singleton/profile lock を共有しないよう、一時 user-data-dir を使う。
+     ヘッダ・フッタ (URL・日付) は付けない。
   4. pdf-print-preflight.py に通し、 --rasterize で RGB raster 版を作る。 ⚠️ Chromium の print-to-pdf は文字を
      Type3 font で書くことがあり、 そのままだと preflight が FAIL する (実測) = 刷るのは raster 版。
 
@@ -43,6 +45,33 @@ BROWSER_CANDIDATES = [
     "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     "brave-browser", "google-chrome", "chromium", "chromium-browser", "microsoft-edge",
 ]
+MACOS_USER_DATA_DIRS = {
+    "Brave Browser": ("Library", "Application Support", "BraveSoftware", "Brave-Browser"),
+    "Google Chrome": ("Library", "Application Support", "Google", "Chrome"),
+    "Chromium": ("Library", "Application Support", "Chromium"),
+    "Microsoft Edge": ("Library", "Application Support", "Microsoft Edge"),
+}
+
+
+def browser_is_running(browser):
+    if sys.platform != "darwin" or not os.path.isabs(browser):
+        return False
+    process_name = os.path.basename(browser)
+    segments = MACOS_USER_DATA_DIRS.get(process_name)
+    if segments:
+        lock = os.path.join(os.path.expanduser("~"), *segments, "SingletonLock")
+        try:
+            target = os.readlink(lock)
+            pid = int(target.rsplit("-", 1)[1])
+            os.kill(pid, 0)
+            return True
+        except PermissionError:
+            return True
+        except (FileNotFoundError, OSError, ValueError, IndexError):
+            pass
+    r = subprocess.run(["/usr/bin/pgrep", "-x", process_name],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return r.returncode == 0
 
 
 def find_browser(explicit=None):
@@ -50,9 +79,11 @@ def find_browser(explicit=None):
         if not c:
             continue
         if os.path.isabs(c) and os.access(c, os.X_OK):
-            return c
+            if not browser_is_running(c):
+                return c
+            continue
         w = shutil.which(c)
-        if w:
+        if w and not browser_is_running(w):
             return w
     return None
 
@@ -71,9 +102,19 @@ def prepare_html(html, base_href=None, paper="A4"):
     return html[:m.end()] + inject + html[m.end():]
 
 
+def browser_command(browser, html_path, out_pdf, user_data_dir):
+    return [browser, "--headless", "--disable-gpu", "--no-pdf-header-footer",
+            f"--user-data-dir={user_data_dir}", f"--print-to-pdf={out_pdf}",
+            "file://" + os.path.abspath(html_path)]
+
+
+def in_codex_seatbelt(env=None):
+    return (os.environ if env is None else env).get("CODEX_SANDBOX") == "seatbelt"
+
+
 def render_pdf(browser, html_path, out_pdf):
-    cmd = [browser, "--headless", "--disable-gpu", "--no-pdf-header-footer",
-           f"--print-to-pdf={out_pdf}", "file://" + os.path.abspath(html_path)]
+    profile_dir = os.path.join(os.path.dirname(html_path), "chromium-profile")
+    cmd = browser_command(browser, html_path, out_pdf, profile_dir)
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if not os.path.exists(out_pdf) or os.path.getsize(out_pdf) == 0:
         raise RuntimeError(f"ブラウザが PDF を出さなかった (rc={r.returncode}): {r.stderr.strip()[-400:]}")
@@ -90,6 +131,9 @@ def page_report(pdf):
 
 
 def run(src, out, base_href=None, paper="A4", expect_pages=None, browser=None, dpi=300, png=False):
+    if in_codex_seatbelt():
+        print("html-print-pdf: Codex seatbelt 内では macOS GUI browser を起動しない; 承認済みの sandbox 外実行を使う", file=sys.stderr)
+        return 2
     b = find_browser(browser)
     if not b:
         print("html-print-pdf: Chromium 系ブラウザが見つからない (--browser で path を指定)", file=sys.stderr)
@@ -130,6 +174,17 @@ def selftest():
     h3 = prepare_html("<body>no head</body>", None, "A4")
     assert h3.startswith("<head>") and "@page" in h3
     print("  prepare_html: 3/3 PASS")
+    cmd = browser_command("/browser", "/tmp/page.html", "/tmp/page.pdf", "/tmp/profile")
+    assert "--user-data-dir=/tmp/profile" in cmd, cmd
+    assert cmd[-1] == "file:///tmp/page.html", cmd
+    print("  browser_command: isolated user-data-dir PASS")
+    assert in_codex_seatbelt({"CODEX_SANDBOX": "seatbelt"})
+    assert not in_codex_seatbelt({})
+    print("  sandbox guard: 2/2 PASS")
+    if in_codex_seatbelt():
+        print("  render: SKIP (Codex seatbelt 内では macOS GUI browser を起動しない)")
+        print("html-print-pdf selftest: PASS")
+        return 0
     b = find_browser()
     if not b:
         print("  render: SKIP (Chromium 系ブラウザ無し)")

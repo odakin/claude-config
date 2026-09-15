@@ -335,6 +335,8 @@ EXTERNAL_BROWSER_RECOVERY_REQUIREMENTS = {
         'id="recovery-state-dispatch"',
         "docs/convention-design-principles.md#recovery-state-transition",
         "launch は recovery の同義語ではない",
+        "process-list probe",
+        "live config / process argv",
         "codex/PARITY.md#external-browser-lifecycle",
     ),
     "codex/PARITY.md": (
@@ -343,7 +345,9 @@ EXTERNAL_BROWSER_RECOVERY_REQUIREMENTS = {
         "docs/convention-design-principles.md#recovery-state-transition",
         "conventions/debugging-discipline.md#recovery-state-dispatch",
         "do not force a parallel process over the same",
-        "Do not teach `scripts/setup-codex.sh` to patch a vendor cache.",
+        "Chromium `SingletonLock` PID",
+        "live\ntrusted-service configuration",
+        "patch a vendor cache.",
     ),
 }
 MACHINE_PROVENANCE_REQUIREMENTS = {
