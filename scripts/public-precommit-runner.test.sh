@@ -47,6 +47,7 @@ cat > "$MOCK_LAYER/repos.md" << 'REPOS_EOF'
 | `health/` | allowlisted (例外 list) | private |
 | `agent-board/` | allowlisted (例外 list) | private |
 | `space-rock-diner/` | allowlisted (例外 list) | private |
+| `article-audits/` | allowlisted (例外 list) | private |
 REPOS_EOF
 # ↑ 例外 list の名前も「非公開」として並べる。並べないと allowlist の test は
 #   allowlist を外しても通ってしまう (= 2026-09-14 に実測、それまでの allowlist test は飾りだった)
@@ -246,6 +247,10 @@ expect_pass "pass-tier-c-allowlist-agent-board" \
 # 2026-09-14 追加。企画リポと同名の公開 org / サイト URL を公開サイト側に書けることを固定する
 expect_pass "pass-tier-c-allowlist-space-rock-diner" \
   "moved to https://space-rock-diner.pages.dev/ from space-rock-diner.github.io"
+
+# 2026-09-15 追加。 公開 mirror (<源>-public) が自分の源の repo 名を書けることを固定する
+expect_pass "pass-tier-c-allowlist-article-audits" \
+  "Source of truth: ~/Claude/article-audits/ (private), this is its public mirror"
 
 # 編集時の hook (hooks/public-leak-guard.sh) と本 runner は同じ email allowlist を持つ。
 # 2026-09-12: runner だけ 2026-08-28 に例示 domain を足し、 hook は古いまま test fixture の
