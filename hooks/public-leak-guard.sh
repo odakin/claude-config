@@ -111,7 +111,7 @@ HITS=""
 EMAIL_HITS="$(
   printf '%s' "$CONTENT" \
     | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' 2>/dev/null \
-    | grep -vE '^(noreply@anthropic\.com|noreply@github\.com|support@github\.com|git@(github\.com|gitlab\.com|bitbucket\.org)|[A-Za-z0-9._%+-]+@example\.(com|org|net|invalid))$' \
+    | grep -vE '^(noreply@anthropic\.com|noreply@github\.com|support@github\.com|git@(github\.com|gitlab\.com|bitbucket\.org)|[A-Za-z0-9._%+-]+@example\.(com|org|net|invalid)|[A-Za-z0-9._%+-]+@[23]x\.[A-Za-z0-9]+)$' \
     || true
 )"
 if [ -n "$EMAIL_HITS" ]; then

@@ -144,6 +144,13 @@ expect_block "block-long-ascii-as-word" \
 A_UNIX="$(printf '/%s/someone/proj' Users)"
 A_WIN_BS="$(printf 'C:\\%s\\Someone\\proj' Users)"
 A_WIN_SL="$(printf 'D:/%s/Someone/proj' Users)"
+# retina asset の file 名は email ではない (実測: vendored な UI asset で大量に発火した)
+expect_pass "pass-retina-asset-name" \
+  "icon: TrackCurvesButtonDisabled@2x.png"
+# ⚠️ fixture の address も literal で書かない (= この test file 自身が Tier A で落ちる)
+REAL_MAIL="$(printf 'someone@%s.example.jp' somewhere)"
+expect_block "block-real-email-still" "contact: $REAL_MAIL"
+
 expect_block "block-abs-path-unix"              "p = '$A_UNIX'"
 expect_block "block-abs-path-windows-backslash" "p = r'$A_WIN_BS'"
 expect_block "block-abs-path-windows-slash"     "p = \"$A_WIN_SL\""

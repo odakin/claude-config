@@ -124,7 +124,8 @@ HITS=""
 EMAIL_HITS="$(
   awk -F'\t' '{ print $2 }' "$ADDED_BUF" \
     | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' 2>/dev/null \
-    | grep -vE '^(noreply@anthropic\.com|noreply@github\.com|support@github\.com|git@(github\.com|gitlab\.com|bitbucket\.org)|[A-Za-z0-9._%+-]+@example\.(com|org|net|invalid))$' \
+    `# 末尾の @[23]x.<ext> は retina asset の file 名 (Icon@2x.png)。 TLD に 2x/3x は無いので安全に外せる` \
+    | grep -vE '^(noreply@anthropic\.com|noreply@github\.com|support@github\.com|git@(github\.com|gitlab\.com|bitbucket\.org)|[A-Za-z0-9._%+-]+@example\.(com|org|net|invalid)|[A-Za-z0-9._%+-]+@[23]x\.[A-Za-z0-9]+)$' \
     | sort -u \
     || true
 )"
