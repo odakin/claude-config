@@ -32,6 +32,14 @@ CODEX_USER_DIR="$TEST_CODEX_DIR" \
 CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
   "$SCRIPT_DIR/audit-codex-integration.sh" >/dev/null
 
+python3 "$SCRIPT_DIR/setup-codex-git-push.py" --install \
+  --codex-dir "$TEST_CODEX_DIR" >/dev/null
+HOME="$TEST_HOME" \
+CODEX_USER_DIR="$TEST_CODEX_DIR" \
+CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
+  "$SCRIPT_DIR/audit-codex-integration.sh" > "$TEMP_ROOT/push-rule-audit.out"
+grep -q "OK: opt-in prompt-free normal Git push rule" "$TEMP_ROOT/push-rule-audit.out"
+
 TEST_REPO="$TEMP_ROOT/repo"
 mkdir -p "$TEST_REPO/.claude" "$TEST_REPO/.hooks"
 git -C "$TEST_REPO" init -q

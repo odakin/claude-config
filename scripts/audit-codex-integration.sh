@@ -210,6 +210,20 @@ else
   echo "NOTE: Codex config not found: $CONFIG_FILE"
 fi
 
+GIT_PUSH_RULE="$CODEX_USER_DIR/rules/claude-config-git-push.rules"
+if [ -e "$GIT_PUSH_RULE" ] || [ -L "$GIT_PUSH_RULE" ]; then
+  if python3 "$SCRIPT_DIR/setup-codex-git-push.py" --check \
+    --codex-dir "$CODEX_USER_DIR" >/dev/null 2>&1; then
+    echo "OK: opt-in prompt-free normal Git push rule"
+  else
+    echo "MISSING: opt-in normal Git push rule is stale or unmanaged" >&2
+    echo "  repair: python3 $SCRIPT_DIR/setup-codex-git-push.py --install" >&2
+    ISSUES=$((ISSUES + 1))
+  fi
+else
+  echo "NOTE: prompt-free normal Git push rule is not installed (opt-in)"
+fi
+
 echo "NOTE: These are layer-4 links to public layer-1 source, or an explicitly selected L1+L3 local composite. A fresh clone has no effect until this installer runs on that machine."
 echo "NOTE: Codex requires a one-time trust review before user-level hooks run; inspect it in the Codex client."
 

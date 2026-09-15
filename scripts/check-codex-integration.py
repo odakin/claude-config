@@ -248,6 +248,35 @@ PERSONAL_OVERLAY_REQUIREMENTS = {
         "codex/PARITY.md#instruction-entrypoint-kernel",
     ),
 }
+GIT_PUSH_RULE_REQUIREMENTS = {
+    "codex/PARITY.md": (
+        'id="normal-git-push-rule"',
+        "https://learn.chatgpt.com/docs/agent-configuration/rules",
+        "scripts/setup-codex-git-push.py",
+        "git push origin main",
+        "git push origin master",
+    ),
+    "README.md": (
+        "scripts/setup-codex-git-push.py --install",
+        "codex/PARITY.md#normal-git-push-rule",
+    ),
+    "README.ja.md": (
+        "scripts/setup-codex-git-push.py --install",
+        "codex/PARITY.md#normal-git-push-rule",
+    ),
+    "scripts/setup-codex-git-push.py": (
+        'decision = "allow"',
+        'decision = "prompt"',
+        '"--delete"',
+        '"--tags"',
+        "execpolicy",
+        "RULE_NAME = \"claude-config-git-push.rules\"",
+    ),
+    "scripts/audit-codex-integration.sh": (
+        "setup-codex-git-push.py",
+        "prompt-free normal Git push rule",
+    ),
+}
 CONTEXT_BUDGET_REQUIREMENTS = {
     "codex/PARITY.md": (
         "## Context-budget discipline",
@@ -527,6 +556,16 @@ def check(root: Path) -> list[str]:
         for fragment in fragments:
             if fragment not in content:
                 errors.append(f"{relative}: missing personal-overlay contract: {fragment}")
+    for relative, fragments in GIT_PUSH_RULE_REQUIREMENTS.items():
+        path = root / relative
+        try:
+            content = text(path)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        for fragment in fragments:
+            if fragment not in content:
+                errors.append(f"{relative}: missing normal-git-push rule wiring: {fragment}")
     for relative, fragments in CONTEXT_BUDGET_REQUIREMENTS.items():
         path = root / relative
         try:
@@ -604,6 +643,11 @@ def fixture(root: Path) -> None:
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
         path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
     for relative, fragments in PERSONAL_OVERLAY_REQUIREMENTS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
+    for relative, fragments in GIT_PUSH_RULE_REQUIREMENTS.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -761,6 +805,19 @@ def selftest() -> int:
         errors = check(root)
         if not any(error.startswith("scripts/setup-codex.sh: missing personal-overlay") for error in errors):
             print("FAIL: missing personal-overlay wiring was not detected")
+            return 1
+
+        fixture(root)
+        push_rule_path = root / "scripts/setup-codex-git-push.py"
+        push_rule_path.write_text(
+            push_rule_path.read_text(encoding="utf-8").replace(
+                'decision = "allow"', 'decision = "removed"'
+            ),
+            encoding="utf-8",
+        )
+        errors = check(root)
+        if not any("missing normal-git-push rule wiring" in error for error in errors):
+            print("FAIL: missing normal-git-push rule wiring was not detected")
             return 1
 
         fixture(root)

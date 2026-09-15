@@ -322,6 +322,28 @@ The installer can also set Codex's top-level `model_reasoning_effort`,
 That enables ordinary, in-scope local work without weakening safeguards for
 external, destructive, costly, or out-of-scope actions.
 
+### <a id="normal-git-push-rule"></a>Opt-in normal Git push rule
+
+Keep `approval_policy = "on-request"` and the workspace sandbox. A user whose
+own Git workflow already grants standing authorization for normal delivery may
+run `python3 scripts/setup-codex-git-push.py --install`. It installs the
+managed user-layer rule
+`~/.codex/rules/claude-config-git-push.rules`, allowing only
+`git push origin main` and `git push origin master` without a prompt.
+Common force, delete, mirror, prune, all-branch, and tag-publishing forms remain
+`decision = "prompt"`.
+
+This uses the official experimental
+[`prefix_rule` mechanism](https://learn.chatgpt.com/docs/agent-configuration/rules):
+rules load at startup, `allow` runs a matching command outside the sandbox
+without prompting, and the most restrictive matching decision wins. Verify the
+installed rule with `--check` and `codex execpolicy check`, then start a
+fresh task. The rule is an execution permission, not authorization by itself:
+the user's owning workflow must grant the push, and repository pre-commit,
+commit-message, provenance, dirty/ahead/behind, and live-remote gates remain
+authoritative. Destructive or scope-expanding Git pushes still require explicit
+approval.
+
 ## <a id="git-session-provenance"></a>Git session provenance
 
 New AI-origin commits use one vendor-neutral trailer block:

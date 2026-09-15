@@ -97,6 +97,19 @@ the installer once per machine. Ordinary links update through `git pull`; an
 explicit personal composite is refreshed after personal-layer pulls, and after
 public pulls once `setup.sh` has installed its current post-merge hook.
 
+If your own Git workflow grants standing authorization for ordinary delivery,
+install the separate prompt-free rule for default-branch pushes:
+
+```bash
+python3 scripts/setup-codex-git-push.py --install
+```
+
+It allows `git push origin main` and `git push origin master`; destructive
+or scope-expanding push forms still prompt. Keep `approval_policy = "on-request"`, restart Codex,
+and verify with `--check` or `codex execpolicy check`. The
+[rule contract](codex/PARITY.md#normal-git-push-rule) does not bypass
+repository gates or create authorization where the user's workflow has none.
+
 Codex requires a one-time Hook trust review, so install alone does not assert
 that Hooks are active. The [Codex capability map](codex/PARITY.md#codex-integration-sot)
 is the source of truth for the architecture, layer boundaries, Hook coverage,

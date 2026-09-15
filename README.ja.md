@@ -94,6 +94,19 @@ home directory は書き換えない。各マシンで一度 installer を実行
 public layer の pull 後も current の `setup.sh` post-merge hook が install 済みなら refresh
 される。Codex の user
 Hook は一度 trust review が必要なので、install 完了だけで active 化までを主張しない。
+
+自分の Git workflow が通常 delivery への継続的な許可を持つ場合は、default branch の
+prompt-free push rule を別途 install する:
+
+```bash
+python3 scripts/setup-codex-git-push.py --install
+```
+
+`git push origin main` と `git push origin master` だけを allow し、破壊的または
+scope を広げる push 形は引き続き prompt にする。`approval_policy = "on-request"` は維持し、Codex を再起動して
+`--check` または `codex execpolicy check` で確認する。正本は
+[normal-git-push-rule](codex/PARITY.md#normal-git-push-rule)。
+
 architecture・layer 境界・Hook coverage・platform scope・automation routing・検証の正本は
 [Codex capability map](codex/PARITY.md#codex-integration-sot)。install される
 `codex-automation-routing` skill は、同一 task の follow-up、独立 project schedule、
