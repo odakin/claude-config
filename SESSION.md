@@ -2,6 +2,7 @@
 
 > 📌 **このファイル = 直近の作業の索引 + Open items (目安 ~80 行 = [`CONVENTIONS.md#pre-push-check`](CONVENTIONS.md#pre-push-check))**。 entry は「日付 + 何を + 正本への pointer」 の 1-3 行で「直近」 の先頭に足す。 経緯・実測・RCA は正本 doc か [`SESSION-archive.md`](SESSION-archive.md) (grep 用) へ。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md`、 Codex 統合の正本は [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot)。 縮退: 2026-06-10 hot/cold 分離 / 2026-09-01 第 2 回 / 2026-09-11 第 3 回 (2026-08-12〜09-11 の 55 entry を archive へ verbatim MOVE、 義務行は Open items へ lift)。
 ## 直近 (2026-09-12〜09-15) の索引 — 本文は SESSION-archive.md、 規則は各正本 (09-06〜09-11 の索引行も同 archive へ退避済)
+- **09-15 SESSION-as-SoT 検出器に byte-size 二軸を追加**: 公開 engine [`scripts/check-session-sot.py`](scripts/check-session-sot.py) が messageId 密度 + 全体 64 KiB + 最大行 2 KiB を測る。閾値と校正の正本 = [`memory-file-slimming.md#regrowth-backstop`](conventions/memory-file-slimming.md#regrowth-backstop)。
 - **09-15 Codex の通常 push を prompt-free にする opt-in rule**: 公開 installer [`scripts/setup-codex-git-push.py`](scripts/setup-codex-git-push.py) が `origin main/master` を allow、force 系を prompt のままにし、`--selftest` で実 `codex execpolicy` まで検査。正本 = [`codex/PARITY.md#normal-git-push-rule`](codex/PARITY.md#normal-git-push-rule)。
 - **09-15 Codex instruction entrypoint を trigger + imperative pointer の最小 kernel に縮退**: 公開 global / workspace / shared-project・personal template の rule-body 重複を除去し、公開面の byte cap + 任意 repo の audit cap + private overlay 4 KiB installer gate を追加。正本 = [`codex/PARITY.md#instruction-entrypoint-kernel`](codex/PARITY.md#instruction-entrypoint-kernel)。
 

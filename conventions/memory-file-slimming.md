@@ -196,6 +196,10 @@ CLAUDE.md 95 → 35 KB)。
   遥か下) のまま誰も気付かなかった。 縮退した file には**行数の閾値**も登録し (warn = 目安 + slack、 同じく実 fleet で
   silent を確認)、 **追記した本人に届く面** (= commit 時の warn) にも置く。 実例 = claude-config の
   `.claude/pre-commit-extra.sh` 検査 5 (100 行)。
+- **SESSION-as-SoT detector は whole-file bytes と largest UTF-8 line の両方を測る。** 行数だけでは durable payload を
+  一つの巨大 bullet に詰めた file が抜け、全体量だけでは短い file 内の異常な一行が埋もれるためである。公開 engine
+  [`scripts/check-session-sot.py`](../scripts/check-session-sot.py) の既定 warn は 64 KiB / 2 KiB。これは意味上の違反判定
+  ではなく、高信号の byte proxy であり、live fleet で慢性点灯しない境界に校正してから変更する。
 
 (以上の置き方は任意の常設検出器に通じる一般形だが、 実例 1 件のため本 doc 留め —
 2 例目で上層 doc への hoist を判断する。)

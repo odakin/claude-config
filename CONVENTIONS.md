@@ -80,6 +80,8 @@ nested directory に `AGENTS.md` / `AGENTS.override.md` を足すのは、その
 
 **how**: 案件の状態を SESSION に書きたくなったら、代わりに **case-SoT の識別子への pointer 1 行**にする (= 「案件 X の状態は `<ledger>#<id>` が SoT」)。narrative を溜めない — 古い節は上の [`graduation-identifier-verify`](#graduation-identifier-verify) で識別子の destination 実在を機械照合してから除去する。
 
+機械 backstop = [`scripts/check-session-sot.py`](scripts/check-session-sot.py)。messageId 密度に加え whole-file bytes と最大 UTF-8 line bytes を測るため、長い payload を一つの bullet に詰めても size proxy をすり抜けない。閾値と校正原則の正本は [`memory-file-slimming.md#regrowth-backstop`](conventions/memory-file-slimming.md#regrowth-backstop)。
+
 更新・終了時の具体的な確認は [§3 自動更新プロトコル](#auto-update-protocol) が正本。Codexへの導入・発火・検査の配線は [Codex引継ぎ仕様](codex/PARITY.md#session-handoff-contract) を参照。
 
 ⚠️ この規則は**リポ種別を問わない**。個別 project リポの SESSION も同じで、「このリポの案件だから状態もここに」は誤り (= case-SoT が別リポにあるなら pointer にする)。
