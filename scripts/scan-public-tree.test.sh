@@ -80,6 +80,15 @@ out="$(run "$ST4" --repo "$DIRTY")"; rc=$?
 [ "$rc" -eq 0 ] && check ok "T4: 受理 token は棚卸しで落ちる" || check ng "T4: 受理 token は棚卸しで落ちる (rc=$rc: $out)"
 rm -f "$DIRTY/.claude/public-tree-accept.txt"
 
+# ---- (4b) 数字を含む tag (ipv4) も受理で落ちる ----
+# `[a-z_]+` だと ipv4 の 4 に当たらず、 token を消した後の空の tag 行が残っていた
+ST4B="$T/state4b"
+FAKE_IP="$(printf '203.0.%s.9' 113)"   # literal で書くと test file 自身が Tier A で落ちる
+IPREPO="$(mk_repo iprepo "endpoint は $FAKE_IP を使う")"
+printf '%s   # 文書用 IP (RFC 5737)\n' "$FAKE_IP" > "$IPREPO/.claude/public-tree-accept.txt"
+out="$(run "$ST4B" --repo "$IPREPO")"; rc=$?
+[ "$rc" -eq 0 ] && check ok "T4b2: ipv4 tag も受理で落ちる" || check ng "T4b2: ipv4 tag も受理で落ちる (rc=$rc: $out)"
+
 # ---- (5) --force ----
 ST5="$T/state5"
 run "$ST5" --repo "$CLEAN" >/dev/null 2>&1

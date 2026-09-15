@@ -134,6 +134,22 @@ expect_pass() {
 expect_block "block-long-ascii-as-word" \
   "config: MOCK_SECRET_TERM_ALPHA = abc"
 
+# ====================================================================
+# Tier A: home 直下の絶対 path (macOS/Linux + Windows)
+# 実測: Windows 形 (`C:\Users\<name>`) が抜けていて、 別マシンで書かれた
+# build spec の中の username が public repo に残っていた
+# ====================================================================
+# ⚠️ fixture の path を literal で書かない (= この test file 自身が Tier A で落ちる、
+# docs/convention-design-principles.md#detector-fires-on-its-own-signal)。 実行時に組み立てる
+A_UNIX="$(printf '/%s/someone/proj' Users)"
+A_WIN_BS="$(printf 'C:\\%s\\Someone\\proj' Users)"
+A_WIN_SL="$(printf 'D:/%s/Someone/proj' Users)"
+expect_block "block-abs-path-unix"              "p = '$A_UNIX'"
+expect_block "block-abs-path-windows-backslash" "p = r'$A_WIN_BS'"
+expect_block "block-abs-path-windows-slash"     "p = \"$A_WIN_SL\""
+expect_pass "pass-users-without-drive" \
+  "docs: see the Users section of the manual"
+
 expect_block "block-short-ascii-as-word" \
   "ship NXYZ milestone"
 

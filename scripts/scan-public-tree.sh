@@ -139,7 +139,7 @@ filter_accepted() {
   done < "$accept"
   [ "${#sed_args[@]}" -eq 0 ] && { cat; return 0; }
   # 受理 substring を消し、 tag だけ残った Tier A 行を落とす
-  sed "${sed_args[@]}" | sed -E '/^\[tier-a\/[a-z_]+\][[:space:]]*$/d'
+  sed "${sed_args[@]}" | sed -E '/^\[tier-a\/[a-z0-9_]+\][[:space:]]*$/d'   # ⚠️ 数字を含む tag (ipv4) があるので [a-z_] では足りない
 }
 
 # ----------------------------------------------------------------------

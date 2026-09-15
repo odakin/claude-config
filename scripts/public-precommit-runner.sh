@@ -15,7 +15,7 @@
 #          予約 doc 用 domain、 実在人物であり得ないので fixture / 例示に安全
 #          / ssh remote の user 部 = git@<code host> の github.com・gitlab.com・
 #          bitbucket.org。 remote URL の一部であって個人の address ではない、 2026-09-12)
-#        - /Users/<name> 絶対 path
+#        - home 直下の絶対 path (`/Users/<name>` と Windows の `C:\Users\<name>`)
 #        - IPv4 (RFC1918 / loopback / link-local / broadcast allowlist)
 #        - token prefix (ghp_ / github_pat_ / sk- + 30 文字以上)
 #   4. 個人層の `sensitive-terms.txt` (= lib/find-personal-layer.sh で動的解決、
@@ -133,10 +133,14 @@ if [ -n "$EMAIL_HITS" ]; then
 [tier-a/email] $(printf '%s' "$EMAIL_HITS" | head -5 | tr '\n' ' ')"
 fi
 
-# Tier A-2: /Users/<name>
+# Tier A-2: home 直下の絶対 path。 macOS/Linux の `/Users/<name>` と
+# **Windows の `C:\Users\<name>`** の両方 (= 後者が抜けていて、 別マシンで書かれた
+# build spec の中の他人の username が public repo に残っていた、 実測)。
+# Windows 形は drive letter を任意にし、 区切りは `\` と `/` の両方を見る
+# (= Python の raw string / MSYS path / JSON の escape で両方現れる)
 PATH_HITS="$(
   awk -F'\t' '{ print $2 }' "$ADDED_BUF" \
-    | grep -oE '/Users/[a-z][a-z0-9_-]*' 2>/dev/null \
+    | grep -oE '/Users/[a-z][a-z0-9_-]*|[A-Za-z]:[\\/]+Users[\\/]+[A-Za-z][A-Za-z0-9_.-]*' 2>/dev/null \
     | sort -u \
     || true
 )"
