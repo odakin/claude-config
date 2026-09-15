@@ -109,6 +109,10 @@ commit gate (pre-commit) が staged file を舐めて検査する形は定石だ
 - **「読めない」 は検査結果ではなく検査不能** — 例外を捕まえて専用の状態 (`READ_SKIP` 等) で返し、 **1 行報告して続行**する (= 黙って通さない / 落ちもしない。 [`convention-design-principles.md#silent-probe-false-healthy`](../docs/convention-design-principles.md#silent-probe-false-healthy) の pattern 3 と同じ形)
 - **それを corruption に数えない** — 他 session の書き込み途中で自分の commit を止めるのは gate の役目ではない
 - 呼び出し側で [`multi-session-coordination.md#staging-window-race`](multi-session-coordination.md#staging-window-race) の `git commit -- <path>` を使うと **hook が見る範囲が自分の path だけになり**、 この巻き込み自体が起きない (= 上流での design-out)
+- <a id="staged-diff-binary"></a>**`git diff --cached` を `text=True` で読まない** — git の binary 判定は「先頭 8KB に NUL があるか」 だけなので、 NUL を含まない binary (PDF など) と textconv (git-crypt 等) で平文に戻した binary は text として diff に出て、 `UnicodeDecodeError` になる。 warn-only の hook は commit を通すので、 **同じ commit の text file の検査が黙って走らない** (`--numstat` の `-\t-` でも見分けられない)。 実測: 暗号化 repo に PDF を 1 本 commit しただけで warn hook 2 本と、 fail-open 扱いの BLOCK gate 1 本が落ちた
+  - **warn 検査** = [`scripts/lib/staged_diff.py`](../scripts/lib/staged_diff.py) の `staged_added_lines()` (bytes で受けて file ごとに厳密 decode、 UTF-8 でない section は binary として飛ばす、 textconv は残す)。 binary は検査の対象外であって「読めない入力」 ではないので、 上の 1 行報告は出さない (PDF を含む commit のたびに出る報告は壁紙になる)
+  - **BLOCK gate** = `encoding="utf-8", errors="replace"` で全部読む (binary に平文で残った語も止める側に倒す。 例 = `check-confidential-leak.py` / `check-activity-facts.py`)
+  - どちらも `--selftest` に「一時 repo に binary + trigger を含む text を stage して、 検出が出る」 case を置く (run-all-checks が自動で拾うので、 読み方が退行すると CI が落ちる)
 
 ### <a id="set-e-test-failure-report"></a>§0 補足 5: `set -e` の test は落ちた行を自己申告させる — 無言の exit 1 は CI log に test 名しか残さない
 

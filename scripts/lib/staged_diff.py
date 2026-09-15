@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """staged 追加行を読む helper (= pre-commit の warn 検査が binary を含む commit で落ちないように)。
 
-由来 (2026-09-15): `git diff --cached` を `text=True` で読む warn 検査が、 staged に binary
+由来 (実測): `git diff --cached` を `text=True` で読む warn 検査が、 staged に binary
 (PDF など) を含む commit で UnicodeDecodeError を出して落ちた。 hook は warn-only で commit は
 通るので、 **同じ commit の text file の検査も黙って走らなくなる** (= fail-open が沈黙になる)。
 git の binary 判定は「先頭 8KB に NUL があるか」 なので、 NUL を含まない binary と、 textconv
@@ -11,6 +11,7 @@ git の binary 判定は「先頭 8KB に NUL があるか」 なので、 NUL �
 ∴ 出力は bytes で受け取り、 file ごとの section を UTF-8 として厳密に decode する。 decode
 できない section (または NUL を含む section) は binary として飛ばし、 他の file は読む。
 textconv は切らない (git-crypt で暗号化された text file を平文で検査するため)。
+warn と BLOCK で読み方を分ける理由 = conventions/hook-authoring.md#staged-diff-binary。
 
 使い方:
 
