@@ -769,6 +769,14 @@ sections:
     legacy: "8.52"
     level: 3
     title: "8.52 目印の文字列で重複を探す検出器は、 目印と「参照あり」 の判定の両方が黙って死ぬ — 登録簿そのものを機械で点検する"
+  - id: display-cap-is-not-the-count
+    legacy: "8.53"
+    level: 3
+    title: "8.53 表示の上限を件数として出す検出器は、 自分が壊れたことを隠す — 過検出は「うるさい」 ではなく「見えなくする」"
+  - id: detector-installed-after-the-stock
+    legacy: "8.54"
+    level: 3
+    title: "8.54 後から入れた検出器は、 それ以前の在庫を検査していない — 設置と同じ turn に全量を 1 回通す"
   - id: changelog
     level: 2
     title: "変更履歴"

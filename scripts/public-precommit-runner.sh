@@ -67,6 +67,12 @@ fi
 # Stage 済みファイルを列挙。削除済み (D)・merge commit は skip。
 # ----------------------------------------------------------------------
 STAGED="$(git diff --cached --name-status 2>/dev/null | awk '$1 != "D" { print $NF }')"
+# ⚠️ 受理一覧 (.claude/public-tree-accept.txt) は **受理した token をそのまま並べる file** なので、
+# 本 gate に掛けると自分の signal で必ず落ちる (= 検出器が自分の設定を検出する、
+# docs/convention-design-principles.md#detector-fires-on-its-own-signal)。 この 1 file だけ外す。
+# 隠し場所にならない保証は scan-public-tree.sh 側が持つ — **受理一覧に書けるのは tree の他の場所に
+# 既に在る文字列だけ** で、 そうでない行は finding として報告される。
+STAGED="$(printf '%s\n' "$STAGED" | grep -v '^\.claude/public-tree-accept\.txt$' || true)"
 [ -z "$STAGED" ] && exit 0
 
 # ----------------------------------------------------------------------
@@ -229,22 +235,31 @@ if [ -f "$SENSITIVE_TERMS" ] && [ -s "$SENSITIVE_TERMS" ]; then
     )"
   fi
 
-  # 結合 (= 空行除去 + head -5 で上限)
-  LITERAL_HITS="$(
+  # 結合 (= 空行除去)。 **件数は上限をかける前に数える** — 表示の上限を件数の真値として
+  # 報告すると、 検出語に一般語が混じって全行に当たる状態でも「5 件」 としか出ず、
+  # gate が実質死んでいることに気づけない (= 真の hit も表示窓から押し出される)。
+  # 規律 = docs/convention-design-principles.md#display-cap-is-not-the-count
+  LITERAL_ALL="$(
     {
       [ -n "$LITERAL_HITS_ASCII" ] && printf '%s\n' "$LITERAL_HITS_ASCII"
       [ -n "$LITERAL_HITS_NA" ]    && printf '%s\n' "$LITERAL_HITS_NA"
-    } | sed '/^$/d' | head -5
+    } | sed '/^$/d'
   )"
+  LITERAL_HITS="$(printf '%s\n' "$LITERAL_ALL" | sed '/^$/d' | head -5)"
 
   if [ -n "$LITERAL_HITS" ]; then
-    LITERAL_COUNT="$(printf '%s\n' "$LITERAL_HITS" | wc -l | tr -d ' ')"
-    LITERAL_FILES="$(
+    LITERAL_COUNT="$(printf '%s\n' "$LITERAL_ALL" | sed '/^$/d' | wc -l | tr -d ' ')"
+    # file 名も **全 hit** から起こす (= 表示は head -5 で切るが、 切ったことが分かるよう
+    # 総数を併記する。 上限を総数と取り違えないための同じ配慮)
+    LITERAL_FILES_ALL="$(
       awk -F'\t' 'NR==FNR { bad[$0]=1; next }
         bad[$2] { print $1 }' \
-        <(printf '%s\n' "$LITERAL_HITS") "$ADDED_BUF" \
-      | sort -u | head -5 | tr '\n' ' '
+        <(printf '%s\n' "$LITERAL_ALL") "$ADDED_BUF" \
+      | sort -u
     )"
+    LITERAL_FILE_COUNT="$(printf '%s\n' "$LITERAL_FILES_ALL" | sed '/^$/d' | wc -l | tr -d ' ')"
+    LITERAL_FILES="$(printf '%s\n' "$LITERAL_FILES_ALL" | head -5 | tr '\n' ' ')"
+    [ "$LITERAL_FILE_COUNT" -gt 5 ] && LITERAL_FILES="${LITERAL_FILES}… (計 ${LITERAL_FILE_COUNT} file)"
     HITS="${HITS}
 [tier-b/literal] ${LITERAL_COUNT} line(s) match sensitive-terms.txt in: ${LITERAL_FILES}"
   fi

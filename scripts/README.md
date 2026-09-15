@@ -152,6 +152,8 @@
 - **[run-all-checks.sh](run-all-checks.sh)** — claude-config の全機械検査を 1 コマンドで回す (検査リストの SoT)
 - **[scan-form-instructions.py](scan-form-instructions.py)** — 様式 xlsx の label 内 embedded instruction を category 別に抽出（office-automation.md#embedded-instruction-in-label）
 - **[scan-private-vocabulary.py](scan-private-vocabulary.py)** — Audit a public repo for rare vocabulary it shares with your non-public repos (technical words, LaTeX control words, Japanese compounds, decimals): the reading list for paraphrased leaks that the verbatim gate cannot see; terminal output only, not a gate; --selftest
+- **[scan-public-tree.sh](scan-public-tree.sh)** — 公開 repo の現在の tree 全体を pre-commit gate の全 Tier に通す
+- **[scan-public-tree.test.sh](scan-public-tree.test.sh)** — self-tests for the full-tree re-run of the public gate
 - **[session_provenance_cache.py](session_provenance_cache.py)** — Own shared Codex model/effort resolution and the hook metadata cache.
 - **[setup-codex-git-push.py](setup-codex-git-push.py)** — Install or audit an opt-in Codex rule for prompt-free normal Git pushes.
 - **[setup-codex.sh](setup-codex.sh)** — claude-config の共有規約を Codex に安全に導入する

@@ -205,6 +205,45 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 
 公開 repo の未公開文書の逐語は、 gate (追加行だけを見る) とは別に `scripts/check-unpublished-quote.py --scan-tree <repo>` で現在の全 file を棚卸しできる (2026-09-13 に公開 2 repo を走査し、 残っていた 1 件を一般形に直して 0 件)。
 
+### <a id="gate-installed-after-history"></a>gate を入れても、 入れる前から在った中身は検査されていない
+
+pre-commit gate は **staged 差分 (= これから足す行) しか見ない**。 だから **既に履歴のある repo に
+gate を後から入れても、 その repo の中身は一度も検査されないまま**残る。 「gate を入れた」 は
+「検査した」 ではなく、 設置直後の finding 0 は *在庫を見ていないから 0* でしかない。
+一般則 = [`docs/convention-design-principles.md#detector-installed-after-the-stock`](../docs/convention-design-principles.md#detector-installed-after-the-stock)。
+
+∴ **gate を設置したら、 同じ turn に tree 全体を 1 回通すまでが 1 単位**:
+[`scripts/scan-public-tree.sh`](../scripts/scan-public-tree.sh) が tracked file を temp dir に展開して
+fresh な index に置き、 **全 file が「追加行」 に見える状態**で同じ runner を走らせる (= Tier A-E が
+そのまま tree 全体に当たる)。 `--all` で marker つき repo を横断、 結果は machine-local の台帳に記録し、
+**finding があった repo は「走査済」 にしない**。
+
+既に公開されていて「見た上で残す」 と決めたものは、 repo の `.claude/public-tree-accept.txt` に
+理由つきで 1 行書く。 この受理は **棚卸しにだけ効き、 commit gate には効かない** (= 新しい書き込みは
+今までどおり止まる)。 受理できるのは token を名指しできる Tier A だけで、 件数と file 名しか出ない
+Tier B/C (= 実名・非公開 repo 名) は受理させない — 寝かせてよい物を型で絞る。
+
+⚠️ 射程は **現在の tree** まで。 過去の commit の中身と commit message は別
+(= message の棚卸しは `check-unpublished-quote.py --replay`、 履歴の書き換えは人間の判断)。
+
+### <a id="visibility-decided-at-publish-time"></a>公開にするかは、 中身が出来てから・公開する直前に決める
+
+repo を作る時点の「公開してよいか」 は、 **まだ書かれていない中身についての予測**でしかない。
+実際に書かれるもの — とくに **設計判断の記録** — は、 他の repo との比較や没案の理由を含むので、
+**非公開の対象への参照が自然に生える**。 その参照は削れば判断の記録が読めなくなる種類のもので、
+「公開のために薄める」 と資料の価値そのものが落ちる。
+
+∴ visibility は **初回 push の直前にもう一度判定する**。 判定材料は、 上の tree 全体の走査結果が
+そのまま使える (= Tier C が出るなら、 その repo は公開に向いていない、 という情報)。
+
+- 非公開への参照が **消せるなら**消して公開する
+- 参照が **判断の記録そのもの**なら、 repo を非公開にする方が安い
+- 公開を選ぶなら、 その repo は以後すべての commit が gate を通る (= 毎回の税) ことも見込む
+
+⚠️ 公開 → 非公開へ倒しても、 **公開されていた間のことは取り消せない** (= 公開 event は外部の
+記録に残りうる)。 「短時間だから無かったこと」 にはせず、 何が外に出たかを書き残す。
+visibility の **判断基準そのもの** (何を公開する人なのか) は個人の層に属する。
+
 公開層に上げてしまった物を**非公開へ戻す**ときは、 消すのでなく移す: ① 非公開 repo へ verbatim で写す (anchor id も同じに) →
 ② 公開側は一般則だけに書き直す (script なら結果を実装した関数を非公開の module へ、 汎用の道具は残す) → ③ 非公開側の呼び元
 (shim・検査・文献台帳) を新しい置き場所へ付け替え、 検査を回す → ④ 公開側の転送表・索引から消えた anchor の行を削る。 履歴には残るので、
@@ -230,6 +269,7 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 | [`check-activity-facts.py`](../scripts/check-activity-facts.py) | owner の非公開の活動の事実 (応募・採否・事務の指摘・推薦の時期と件数と固有名) を公開 repo の commit と message で見る: 固有語 = BLOCK / 出来事の語 × 日付・件数 = 警告 / `--scan-tree` = 承認済み一覧つきの棚卸し ([`CLAUDE.md#owner-activity-facts`](../CLAUDE.md#owner-activity-facts)) | 個人層の `activity-fact-terms.txt` と承認済み一覧 |
 | [`scan-private-vocabulary.py`](../scripts/scan-private-vocabulary.py) | 公開 repo が非公開 repo と共有する珍しい語の一覧 (言い換えを読む候補、 gate ではない。 tree 全体 / `--staged` / `--diff`) | 無し (`.claude/public-repo.marker` の有無で公開・非公開を分ける、 `--source` / `--exclude` で絞る) |
 | [`commit-hunk-anchors.py`](../scripts/commit-hunk-anchors.py) | commit の hunk の所在 (file・行・直前の anchor / def) だけを出す = 是正の記録を本文なしで書く | 無し |
+| [`scan-public-tree.sh`](../scripts/scan-public-tree.sh) | 公開 repo の tree 全体を pre-commit gate の全 Tier に通す (= gate は差分しか見ないので、 gate より古い中身はこれでしか見つからない)。 `--all` で横断、 台帳で 1 repo 1 回 | 各 repo の `.claude/public-tree-accept.txt` (棚卸しでだけ効く受理一覧) |
 
 いずれも **機密文字列も個人の配置も script 側に持たない**。 設定 file が無い環境では
 「対象外」 として何もしない (= 他の利用者の環境を壊さない)。

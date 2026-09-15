@@ -35,6 +35,25 @@ GitHub Free plan + private repo で **API は 200 を返すが設定は反映さ
 
 **規律**: setting 変更系 API は必ず write 後に read で verify、 報告は実 state ベース。 「API が 200 返したから success」 を rely しない。
 
+### <a id="visibility-change-drops-settings"></a>public → private に倒すと、 既に効いていた設定が黙って外れる
+
+上の表は **private repo に設定しようとした**ときの話だが、 逆向き — **public で有効だった設定を持つ repo を
+private に変える** — でも同じことが起きる。 baseline を適用済みの公開 repo を非公開にすると、
+Free plan では次が**警告なしに無効化される**:
+
+| 機能 | public (Free) | private に倒した後 |
+|---|---|---|
+| CodeQL default setup | 有効 | `403 Code scanning is not enabled for this repository` |
+| branch protection (force-push / delete 禁止) | 有効 | `403 Upgrade to GitHub Pro or make this repository public` |
+
+**課金は発生しない** (= 有料 plan へ勝手に上がるのではなく、 機能が消える)。 問題は
+**setup 時の記録が「適用済」 のまま残ること** — 後から見ると守られているように読めるので、
+visibility を変えた turn に **実 state を読み直して記録を訂正する** (= 上と同じ verify-after-write の、
+write が visibility 変更である場合)。
+
+⚠️ 失われるのは「事故を止める側」 の設定なので、 非公開に倒した repo では
+force-push と branch 削除が素通りになる。 その repo を扱う手順の側で補う。
+
 ## <a id="auto-merge-workflow"></a>3. Auto-merge workflow の設計
 
 ### Trigger 選定

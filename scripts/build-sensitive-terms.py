@@ -97,23 +97,30 @@ def load_config() -> dict | None:
 def extract_names(text: str, cell_stop: set[str] | None = None) -> tuple[set[str], set[str]]:
     """(CJK 名, ASCII 名) を返す。 file の形式は表 or yaml を想定。"""
     cjk, ascii_ = set(), set()
+    # cell_stop は **全部の枝**に当てる。 PLAIN_RE の枝だけに当てていたので、
+    # `| 見出し (english) | ... |` の形の表の見出し行が人名として拾われ、 その prefix
+    # (= 普通名詞) が term になっていた。 括弧の中の英語も同じ行から来るので一緒に落とす。
+    stop = cell_stop if cell_stop is not None else DEFAULT_CELL_STOP
     for line in text.splitlines():
         m = ROW_RE.match(line)
         if m:
-            cjk.add(m.group(1))
-            ascii_.add(" ".join(m.group(2).split()))
+            if m.group(1) not in stop:
+                cjk.add(m.group(1))
+                ascii_.add(" ".join(m.group(2).split()))
             continue
         m = REV_RE.match(line)
         if m:
-            ascii_.add(" ".join(m.group(1).split()))
-            cjk.add(m.group(2))
+            if m.group(2) not in stop:
+                ascii_.add(" ".join(m.group(1).split()))
+                cjk.add(m.group(2))
             continue
         m = PLAIN_RE.match(line)
-        if m and m.group(1) not in (cell_stop if cell_stop is not None else DEFAULT_CELL_STOP):
-            cjk.add(m.group(1))
+        if m:
+            if m.group(1) not in stop:
+                cjk.add(m.group(1))
             continue
         m = YAML_RE.match(line)
-        if m:
+        if m and m.group(1) not in stop:
             cjk.add(m.group(1))
     return cjk, ascii_
 
@@ -121,8 +128,13 @@ def extract_names(text: str, cell_stop: set[str] | None = None) -> tuple[set[str
 def expand_cjk(name: str, prefix_stop: set[str] | None = None) -> set[str]:
     """氏名から term を作る。 **姓だけの表記も実際に書かれる**ので prefix も出す。
 
-    姓と名の境界は CJK 連結名から確定できないため、 長さ 2..len-1 の prefix を全部出す
-    (= 余分な prefix は実在しない語なので害が無い。 落とすより出すほうが安全側)。
+    姓と名の境界は CJK 連結名から確定できないため、 長さ 2..len-1 の prefix を全部出す。
+
+    ⚠️ 「余分な prefix は実在しない語なので害が無い」 は **偽**。 短い prefix は普通名詞に
+    なることがあり (実測: 2-4 字の prefix が公開 repo の 1 file あたり数十行に当たった)、
+    そうなると gate の報告が過検出で埋まって**真の hit が表示窓から押し出される**。
+    過検出の costs は 0 ではない = prefix_stoplist で落とす。
+    規律 = docs/convention-design-principles.md#display-cap-is-not-the-count
     """
     out = {name}
     for k in range(MIN_CJK_TERM, len(name)):
@@ -291,6 +303,13 @@ def selftest() -> int:
     check(c4 == {"甲野太郎"} and "Taro Kono" in a4, "T4c: romaji(漢字) の逆順")
     check(extract_names("| 2026.09 | x |\n| 10:30–12:00 | y |\n")[0] == set(),
           "T4d: 日付・時刻セルは名前でない")
+    # cell_stop は PLAIN_RE の枝だけでなく全部の枝に当たる (= 見出し行を人名にしない)。
+    # 落ちていると、 見出しの prefix が普通名詞の term になって gate の報告を埋める。
+    c5, a5 = extract_names("| 用途 (labeling) | アドレス |\n", {"用途"})
+    check(c5 == set() and a5 == set(), "T4e: 見出し (CJK (english)) は CJK も括弧内も拾わない")
+    c6, a6 = extract_names("| Labeling Note (用途) | x |\n", {"用途"})
+    check(c6 == set() and a6 == set(), "T4f: 逆順の見出しも同じ")
+    check(extract_names("  name: 用途\n", {"用途"})[0] == set(), "T4g: yaml の name: にも当たる")
 
     e = expand_cjk("甲野太郎", set())
     check("甲野太郎" in e and "甲野" in e, "T5: 全体と 2 字 prefix の両方")

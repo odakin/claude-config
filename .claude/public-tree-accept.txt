@@ -1,0 +1,13 @@
+# public-tree-accept.txt — scan-public-tree.sh の棚卸しで「見た上で残す」 と決めた token。
+#
+# ⚠️ これは **pre-commit gate には効かない**。 効くのは既存の tree を棚卸しする
+#    scripts/scan-public-tree.sh だけで、 新しい書き込みは今までどおり Tier A で止まる。
+# ⚠️ Tier B (実名) と Tier C (非公開 repo 名) は受理できない (= 直すしかない)。
+#
+# 各行の判断の根拠は DESIGN.md の「公開リポに残す既知の例外」 の表が正本。
+
+/Users/odakin          # DESIGN.md の例外表: パス記述ルールの反例として明示している 1 行
+info@medialab.sissa.it # vendored な JHEP.bst の header にある発行元の公開連絡先 (第三者が公開している値)
+forum@mg1.substack.com # Substack の system sender。 通知メールの扱いを書いた規約で参照する
+reaction@mg1.substack.com # 同上
+user@instance.tld      # placeholder (実在しない TLD)。 ActivityPub の表記例
