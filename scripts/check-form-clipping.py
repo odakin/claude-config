@@ -12,7 +12,7 @@ WHY (office-automation-principles の検証 3 層 = 機械/視覚/実機。 従�
 所属行を凝視しないと気づかない → 人の目だけが gate だった)。 ここを埋める。
 
 WHAT: 雛形 (template) と記入済 (filled) を diff して **記入セル (= 値が変わったセル)**
-だけを取り、 生成 PDF と 4 つの面で照合する:
+だけを取り、 生成 PDF と次の面で照合する:
   1. clip       = 各記入値が PDF の抽出テキスト (全ページ連結 + NFKC 正規化 + 空白除去) に
                   完全な部分文字列として現れるか。 一部だけ (最長片 ≥3 字、 欠落 ≥3 字) = clip 疑い。
                   ほぼ現れない (最長片 < 3 字) = 別ページ/別 sheet (flag しない)
@@ -37,7 +37,7 @@ PDF に載らない sheet の値は、 呼び元が filled からその sheet �
 LIMIT (= 視覚確認を置換しない): レンダラによっては clip しても text 層に全文を残す
 (clip-path 方式) ことがある。 LibreOffice / Excel は実測で truncate するため 1 で捕まるが
 engine 依存。 3 は線を塗りの矩形 / line で描く renderer を前提にする (Excel の PDF は実測で矩形)。
-罫線の無い余白へのはみ出しで他の字にも当たらないもの、 4 字未満の値は見ない。
+罫線の無い余白へのはみ出しで他の字にも当たらないもの、 1・2 は 4 字未満 / 3 は 2 字未満の値を見ない (短い部分一致の誤検出)。
 本検出は「機械層の第一防衛線」 であって pdf-visual-confirm を置換しない。
 
 USAGE:
@@ -63,6 +63,7 @@ FRAG_MIN = 3      # この字数以上の連続片が在る = そのセルがこ
 EDGE = 0.15       # 字の box の端のこの割合は罫線が掛かっても「横切る」 と数えない (下線・枠の内側の余白)
 OVERLAP = 0.35    # 別の字の box とこの割合を超えて重なったら重なり
 RULE_THICK = 2.0  # これ以下の太さの塗り矩形を罫線とみなす (pt)
+OVERFLOW_MIN_LEN = 2  # はみ出しは 2 字の値から見る (位置で判定するので短い部分一致の誤検出が起きにくい)
 
 
 def _norm(s: str) -> str:
@@ -296,7 +297,7 @@ def check(template, filled, pdf, min_len=4, min_scale=None):
     return {"values": len(values),
             "clip": [{"loc": l, "value": v, "frag": f, "len": n} for l, v, f, n in find_clipping(values, text, min_len)],
             "overflow": [{"loc": l, "value": v, "page": p, "chars": n, "example": e}
-                         for l, v, p, n, e in find_overflow(values, pdf, min_len)],
+                         for l, v, p, n, e in find_overflow(values, pdf, min(min_len, OVERFLOW_MIN_LEN))],
             "small": ([{"loc": l, "value": v, "page": p, "pt": s, "scale": k}
                        for l, v, p, s, k in find_small(values, pdf, _input_fonts(filled), min_scale, min_len)]
                       if min_scale else []),
