@@ -331,6 +331,52 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-activi
 fi
 
 # ====================================================================
+# Tier B の許可複合語 (2026-09-15): `!複合語` 行は照合の前に本文から消す。 姓の 2 字 prefix が地名に
+# 当たる誤検知を、 prefix を落とさずに消すため。 foil = 同じ行・別の行に姓だけの言及が残れば止まる
+# ====================================================================
+# expect_named <want rc> <case name> <file name> <content>
+expect_named() {
+  local want="$1" name="$2" fname="$3" content="$4" rc
+  mkdir -p "$(dirname "$MOCK_REPO/$fname")"
+  printf '%s' "$content" > "$MOCK_REPO/$fname"
+  (
+    cd "$MOCK_REPO"
+    git add "$fname" 2>/dev/null
+    "$RUNNER" >/dev/null 2>&1
+    echo "$?"
+    git reset HEAD "$fname" >/dev/null 2>&1
+    rm -f "$fname"
+  ) > "$TMPDIR_TEST/_rc.txt"
+  rc="$(cat "$TMPDIR_TEST/_rc.txt")"
+  if [ "$rc" = "$want" ]; then PASS=$((PASS+1)); else
+    FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [exit=$rc want=$want] $name
+"; fi
+}
+cp "$MOCK_LAYER/sensitive-terms.txt" "$TMPDIR_TEST/terms.bak"
+printf '%s\n' '!モック秘語町' >> "$MOCK_LAYER/sensitive-terms.txt"
+expect_named 0 "pass-allowed-compound" "map.txt" "[36.1, 139.2],  // モック秘語町西部"
+expect_named 1 "block-compound-foil-bare-term-on-same-line" "map.txt" "モック秘語町 と モック秘語さん"
+expect_named 1 "block-compound-foil-other-line" "map2.txt" "$(printf 'モック秘語町\nモック秘語さんへ')"
+cp "$TMPDIR_TEST/terms.bak" "$MOCK_LAYER/sensitive-terms.txt"
+expect_named 1 "block-compound-foil-without-allow-line" "map3.txt" "// モック秘語町西部"
+
+# ====================================================================
+# 公刊済みの著作の書誌 (2026-09-15): arXiv / DOI を持つ JSON record の authors・title・abstract と、
+# 公開先 link だけの markdown 行は Tier A-C の対象外。 書き手の文 (reason) に同じ語を書けば止まる
+# ====================================================================
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/lib/published_metadata.py" ]; then
+  PM_URL="https://arxiv.org/abs/2609.00001"
+  PM_OK="$(printf '{\n  "papers": [\n    {\n      "arxiv_id": "2609.00001",\n      "title": "A Study",\n      "authors": [\n        "MOCK_SECRET_TERM_ALPHA",\n        "Jane Roe"\n      ],\n      "url": "%s",\n      "reason": "nice"\n    }\n  ]\n}\n' "$PM_URL")"
+  PM_BAD="$(printf '{\n  "papers": [\n    {\n      "arxiv_id": "2609.00001",\n      "title": "A Study",\n      "authors": [\n        "Jane Roe"\n      ],\n      "url": "%s",\n      "reason": "MOCK_SECRET_TERM_ALPHA is back"\n    }\n  ]\n}\n' "$PM_URL")"
+  PM_NOID="$(printf '{\n  "papers": [\n    {\n      "title": "A Study",\n      "authors": [\n        "MOCK_SECRET_TERM_ALPHA"\n      ]\n    }\n  ]\n}\n')"
+  expect_named 0 "pass-published-record-author" "archive/a.json" "$PM_OK"
+  expect_named 1 "block-name-in-reason-of-published-record" "archive/b.json" "$PM_BAD"
+  expect_named 1 "block-foil-record-without-published-id" "archive/c.json" "$PM_NOID"
+  expect_named 0 "pass-md-published-link-only" "refs.md" "- [MOCK_SECRET_TERM_ALPHA theory]($PM_URL)"
+  expect_named 1 "block-md-link-with-other-words" "refs2.md" "- see [MOCK_SECRET_TERM_ALPHA theory]($PM_URL) by NXYZ"
+fi
+
+# ====================================================================
 echo ""
 echo "=== public-precommit-runner self-test ==="
 echo "PASS: $PASS"

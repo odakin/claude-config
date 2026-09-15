@@ -17,6 +17,7 @@ config (個人層 `sensitive-terms-sources.yaml`):
     sources: [contacts.md, ../other-repo/collaborators.yaml]   # 個人層からの相対 path
     cell_stoplist: [担当]        # 表の第 1 セルだが人名でない語
     prefix_stoplist: [東京]      # 2 字 prefix が普通名詞になる語
+    compound_allow: [東京駅前]   # term を含むが人名でない複合語 (地名等)。 照合の前に本文から消す (`!` 行で出力)
 
 使い方:
   build-sensitive-terms.py --check    # SoT の名前が一覧に全部あるか
@@ -90,6 +91,7 @@ def load_config() -> dict | None:
         "sources": [(PREFS / s).resolve() for s in c.get("sources", [])],
         "cell_stoplist": set(c.get("cell_stoplist", [])) | DEFAULT_CELL_STOP,
         "prefix_stoplist": set(c.get("prefix_stoplist", [])),
+        "compound_allow": [str(x).strip() for x in (c.get("compound_allow") or []) if str(x).strip()],
     }
     return _CFG
 
@@ -165,6 +167,30 @@ def collect(sources=None) -> tuple[set[str], set[str], list[str]]:
     return cjk, ascii_, seen
 
 
+def validate_compounds(compounds, terms) -> tuple[list[str], list[str]]:
+    """(使える複合語, 問題) を返す。
+
+    複合語の許可は「姓の 2 字 prefix が地名などに当たる」 誤検知だけを消す口 (= prefix を stoplist に落とすと
+    「X さん」 も止まらなくなるので、 その複合語だけを許可する)。 **3 字以上の term (= 氏名に近い語) や ASCII の
+    term を含む複合語は許可しない** — 許可すると氏名そのものを消す抜け道になる。 term を 1 つも含まない複合語は
+    問題として返す (= 検出語の再生成で当たらなくなった許可が溜まらないように)。
+    """
+    ok, problems = [], []
+    long_terms = [t for t in terms if not t.isascii() and len(t) >= 3]
+    ascii_terms = [t for t in terms if t.isascii()]
+    short_terms = [t for t in terms if not t.isascii() and len(t) < 3]
+    for c in compounds:
+        if c.startswith(("!", "#")):
+            problems.append(f"{mask(c)}: 先頭が ! か # (= 行の種類の記号と衝突)")
+        elif any(t in c for t in long_terms) or any(t.lower() in c.lower() for t in ascii_terms):
+            problems.append(f"{mask(c)}: 3 字以上の term か ASCII の term を含む (= 氏名を消す抜け道になる)")
+        elif not any(t in c for t in short_terms):
+            problems.append(f"{mask(c)}: どの term も含まない (= 許可する意味が無い)")
+        else:
+            ok.append(c)
+    return ok, problems
+
+
 def mask(t: str) -> str:
     return t[0] + "…" if len(t) > 1 else "…"
 
@@ -186,7 +212,13 @@ def cmd_write() -> int:
         return 0
     cjk, ascii_, seen = collect()
     manual, _ = read_terms()
-    block = sorted(cjk) + sorted(ascii_)
+    compounds, problems = validate_compounds(load_config()["compound_allow"], cjk | ascii_)
+    if problems:
+        print("✗ compound_allow に使えない複合語がある (書き込まない):")
+        for pr in problems:
+            print("  " + pr)
+        return 1
+    block = sorted(cjk) + sorted(ascii_) + ["!" + c for c in sorted(compounds)]
     body = [l for l in manual if l.strip()] + [BEGIN] + block + [END]
     TERMS.write_text("\n".join(body) + "\n")
     print(f"wrote {TERMS.name}: 手書き {len([l for l in manual if l.strip()])} 行 + 生成 {len(block)} 件 "
@@ -204,8 +236,19 @@ def cmd_check() -> int:
         print("skip [sensitive-terms]: 連絡先 SoT がこのマシンに無い (= 守る対象が無い)")
         return 0
     manual, gen = read_terms()
-    have = set(l.strip() for l in manual + gen if l.strip() and not l.strip().startswith("#"))
+    have = set(l.strip() for l in manual + gen if l.strip() and not l.strip().startswith(("#", "!")))
     missing = sorted((cjk | ascii_) - have)
+    compounds, problems = validate_compounds(load_config()["compound_allow"], cjk | ascii_)
+    allowed_have = set(l.strip()[1:] for l in gen if l.strip().startswith("!"))
+    if problems:
+        print("BROKEN [sensitive-terms]: compound_allow に使えない複合語がある")
+        for pr in problems:
+            print("  " + pr)
+        return 1
+    if set(compounds) != allowed_have:
+        print(f"STALE [sensitive-terms]: 許可複合語が設定と一致しない (設定 {len(compounds)} / 一覧 {len(allowed_have)})")
+        print("  → python3 scripts/build-sensitive-terms.py --write")
+        return 1
     if not TERMS.exists() or not have:
         print(f"NOT ARMED [sensitive-terms]: {TERMS.name} が空か不在 — "
               f"公開 repo の Tier B は素通りする。 --write で生成する")
@@ -237,7 +280,7 @@ def cmd_canary() -> int:  # noqa: C901
         print("対象外 [sensitive-terms/canary]: 個人層に sensitive-terms-sources.yaml が無い")
         return 0
     manual, gen = read_terms()
-    terms = [l.strip() for l in gen if l.strip() and not l.strip().startswith("#")]
+    terms = [l.strip() for l in gen if l.strip() and not l.strip().startswith(("#", "!"))]
     if not terms:
         print("NOT ARMED [sensitive-terms/canary]: 生成 block が空 — 止める対象が無い")
         return 1
@@ -317,6 +360,9 @@ def selftest() -> int:
     check("東京" not in expand_cjk("東京太郎", {"東京"}), "T7: stoplist の prefix は出さない")
     check(expand_cjk("甲野", set()) == {"甲野"}, "T8: 2 字名は自身のみ")
 
+    ok_c, pr_c = validate_compounds(["甲野町", "甲野太郎通り", "Kono Park", "乙町"], {"甲野", "甲野太郎", "Kono"})
+    check(ok_c == ["甲野町"], "T11: 2 字 term を含む複合語だけ許可")
+    check(len(pr_c) == 3, "T12: 3 字以上の term / ASCII term を含む・term を含まない複合語は拒否")
     check(mask("甲野太郎") == "甲…", "T9: mask は先頭 1 字だけ残す")
     check(len(mask("甲野")) == 2, "T10: mask 後の長さ")
 

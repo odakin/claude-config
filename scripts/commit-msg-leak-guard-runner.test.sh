@@ -67,6 +67,7 @@ MOCK_SECRET_TERM_ALPHA
 mock-confidential-keyword
 NXYZ
 モック秘語
+!モック秘語町
 TERMS_EOF
 
 # 偽 review-instance-terms.txt (= matcher (d) 審査軸 が読む種目名の list)
@@ -187,6 +188,12 @@ expect_block "block-sensitive-literal" \
 
 expect_block "block-sensitive-literal-kebab" \
   "rotate mock-confidential-keyword settings"
+
+# (a-0) 許可複合語 (`!` 行、 lib/sensitive-terms.sh): 複合語だけの言及は通り、 同じ message に姓だけの言及があれば止まる
+expect_pass "pass-allowed-compound" \
+  "map: モック秘語町 の座標を直す"
+expect_block "block-compound-foil-bare-term" \
+  "map: モック秘語町 と モック秘語さんの件"
 
 # 2026-06-29 word-boundary regression suite
 # (a-1) 短 ASCII term: standalone word は依然 hit

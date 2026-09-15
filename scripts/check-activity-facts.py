@@ -40,6 +40,15 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+try:  # 公刊済みの書誌の行 / 棚卸しでの生成データ宣言 (lib/published_metadata.py, lib/public_tree_accept.py)。 無ければ外さない
+    from published_metadata import metadata_line_numbers as _published_lines, applies_to as _published_applies
+    from public_tree_accept import generated_files as _generated_files
+except ImportError:  # pragma: no cover
+    _published_lines = lambda path, text: set()  # noqa: E731
+    _published_applies = lambda path: False  # noqa: E731
+    _generated_files = lambda repo: (set(), [], [])  # noqa: E731
+
 MARKER = Path(".claude") / "public-repo.marker"
 TERMS_FILE = "activity-fact-terms.txt"
 ACK_FILE = "activity-facts-ack.txt"
@@ -170,8 +179,13 @@ def scan_staged(repo, terms, out=print):
     rc, diff = _git(["diff", "--cached", "--unified=0", "--no-color"], cwd=repo)
     if rc != 0:
         return 3
-    findings = []
+    findings, published = [], {}
     for path, lineno, text in added_lines(diff):
+        if _published_applies(path):
+            if path not in published:
+                published[path] = _published_lines(path, _git(["show", f":{path}"], cwd=repo)[1])
+            if lineno in published[path]:
+                continue
         kinds = classify(text, terms)
         if kinds:
             findings.append((path, lineno, kinds))
@@ -202,15 +216,23 @@ def scan_tree(repo, terms, ack_path=None, write_ack=False, out=print):
         out(f"✗ [activity-facts] not a git repo: {repo}")
         return 3
     ack = read_ack(ack_path)
+    generated, gen_problems, gen_summary = _generated_files(repo)
+    for prob in gen_problems:
+        out(f"  ✗ {prob}")
+    if gen_summary:
+        out(f"  (generated: 宣言の {len(generated)} file を外した: {'; '.join(gen_summary)})")
     new, acked, terms_hit, keys = [], 0, 0, []
     for rel in listing.split("\0"):
-        if not rel.endswith(TEXT_SUFFIXES):
+        if not rel.endswith(TEXT_SUFFIXES) or rel in generated:
             continue
         try:
             text = (repo / rel).read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
+        skip = _published_lines(rel, text)
         for i, line in enumerate(text.splitlines(), 1):
+            if i in skip:
+                continue
             kinds = classify(line, terms)
             if not kinds:
                 continue
@@ -232,7 +254,7 @@ def scan_tree(repo, terms, ack_path=None, write_ack=False, out=print):
         out(f"acked {len(keys)} line(s) into {ack_path} (TERM findings are never acked)")
         new = [x for x in new if "TERM" in x[2]]
     out(f"scan-tree [activity-facts]: {repo.name}: {len(new)} unacked finding(s) ({terms_hit} TERM), {acked} acked")
-    return 1 if new else 0
+    return 1 if (new or gen_problems) else 0
 
 
 def scan_public(root, terms, ack_path=None, out=print):

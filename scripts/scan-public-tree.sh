@@ -126,6 +126,7 @@ validate_accept() {
     term="${term%%#*}"
     term="$(printf '%s' "$term" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
     [ -z "$term" ] && continue
+    case "$term" in generated:*) continue ;; esac   # 生成データの宣言 (= token ではない、 lib/public_tree_accept.py が検査)
     # tracked file だけを見る (= 公開されるのはそこだけ)。 受理一覧それ自身は除く
     if ! git -C "$repo" grep -qF -e "$term" -- ':!.claude/public-tree-accept.txt' 2>/dev/null; then
       printf '%s\n' "$term"
@@ -141,6 +142,7 @@ filter_accepted() {
     term="${term%%#*}"
     term="$(printf '%s' "$term" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
     [ -z "$term" ] && continue
+    case "$term" in generated:*) continue ;; esac
     sed_args+=(-e "s|$(printf '%s' "$term" | sed 's/[][\.*^$/&|]/\\&/g')||g")
   done < "$accept"
   [ "${#sed_args[@]}" -eq 0 ] && { cat; return 0; }
@@ -173,6 +175,23 @@ scan_one() {
     return 1
   fi
 
+  # 生成データの宣言 (`generated: <glob>  # 生成元`) も skip より前に検査する (理由は上と同じ)。
+  # 外せるのはデータ形式の file だけ = 判定と理由の正本は lib/public_tree_accept.py
+  local gen_list="" gen_err="" gen_rc=0
+  if [ -f "$repo/.claude/public-tree-accept.txt" ] && grep -q '^[[:space:]]*generated:' "$repo/.claude/public-tree-accept.txt"; then
+    gen_err="$(mktemp)"
+    gen_list="$(python3 "$SELF_DIR/lib/public_tree_accept.py" --generated "$repo" 2>"$gen_err")" || gen_rc=$?
+    if [ "$gen_rc" -ne 0 ]; then
+      printf '%s\n' "🔴 [scan-public-tree] $name: 受理一覧の generated: 宣言が無効"
+      sed 's/^/    /' "$gen_err"
+      [ -s "$gen_err" ] || printf '%s\n' "    (python3 か lib/public_tree_accept.py を実行できない)"
+      rm -f "$gen_err"
+      record "$repo" "$sha" 1
+      return 1
+    fi
+    rm -f "$gen_err"
+  fi
+
   if already_scanned "$repo"; then
     say "[scan-public-tree] $name: skip (台帳に走査済。 回し直すなら --force)"
     return 3
@@ -187,6 +206,15 @@ scan_one() {
   fi
   # repo-local の chain hook は走査では動かさない (= 副作用を持ちうる)
   rm -f "$tmp/.claude/pre-commit-extra.sh"
+  # 生成データとして宣言した file を外す (= 数を毎回表示する。 黙って外さない)
+  if [ -n "$gen_list" ]; then
+    local gen_n=0 gf
+    while IFS= read -r gf; do
+      [ -n "$gf" ] || continue
+      rm -f "$tmp/$gf" && gen_n=$((gen_n + 1))
+    done <<< "$gen_list"
+    say "[scan-public-tree] $name: generated: 宣言の $gen_n file を走査から外した (受理一覧に生成元つきで宣言)"
+  fi
 
   (
     cd "$tmp" || exit 2

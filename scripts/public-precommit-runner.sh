@@ -110,6 +110,20 @@ while IFS= read -r file; do
       ' >> "$ADDED_BUF"
 done <<< "$STAGED"
 
+# 公刊済みの著作の書誌 (arXiv / DOI の title・authors・abstract、 公開先 link だけの行) を外す (2026-09-15)。
+# 定義上公開済みで、 これを残すと共同研究者の論文を記録する bot の自動 commit が著者名で毎回止まる (実測)。
+# 書き手の文 (reason / summary / link 以外の語がある行) は外さない。 判定と理由の正本 = lib/published_metadata.py、
+# 規律 = conventions/confidential-repo-boundary.md#published-metadata-is-public。
+# python3 / lib が無い・失敗したときは外さない (= 鳴る側に倒れる)
+PM_LIB="$(dirname "$0")/lib/published_metadata.py"
+if [ -f "$PM_LIB" ] && command -v python3 >/dev/null 2>&1 && [ -s "$ADDED_BUF" ]; then
+  PM_OUT="$(mktemp)"
+  if python3 "$PM_LIB" --filter-added "$ADDED_BUF" > "$PM_OUT" 2>/dev/null; then
+    cat "$PM_OUT" > "$ADDED_BUF"
+  fi
+  rm -f "$PM_OUT"
+fi
+
 # 追加行なしでも early-exit しない (2026-06-18): 削除のみ commit (= 例: slug index の legacy 行
 # 削除) でも、 末尾の repo-local chain hook (.claude/pre-commit-extra.sh = legacy append-only
 # gate / tree drift) を走らせる必要があるため。 leak scan 自体は ADDED_BUF が空なら下流の
@@ -209,57 +223,36 @@ fi
 #   化)、 escape hatch (= --no-verify) で逃げない。 詳細 RCA:
 #   odakin-prefs/plans/2026-06-29-archive-leak-wordbound-results.md
 # ----------------------------------------------------------------------
-if [ -f "$SENSITIVE_TERMS" ] && [ -s "$SENSITIVE_TERMS" ]; then
+if [ -f "$SENSITIVE_TERMS" ] && [ -s "$SENSITIVE_TERMS" ] && [ -f "$(dirname "$0")/lib/sensitive-terms.sh" ]; then
+  . "$(dirname "$0")/lib/sensitive-terms.sh"
   ASCII_TERMS="$(mktemp)"
   NA_TERMS="$(mktemp)"
+  ALLOW_TERMS="$(mktemp)"
   # 既存 EXIT trap は ADDED_BUF のみ — 拡張
   # shellcheck disable=SC2064
-  trap "rm -f '$ADDED_BUF' '$ASCII_TERMS' '$NA_TERMS'" EXIT
+  trap "rm -f '$ADDED_BUF' '$ASCII_TERMS' '$NA_TERMS' '$ALLOW_TERMS'" EXIT
 
-  awk -v a="$ASCII_TERMS" -v n="$NA_TERMS" '
-    /^[[:space:]]*$/ { next }
-    /^[[:space:]]*#/ { next }
-    /^[ -~]+$/      { print > a; next }
-                    { print > n }
-  ' "$SENSITIVE_TERMS"
+  # 行の種類 (`!複合語` = 許可 / ASCII = 単語境界 / 他 = 部分一致) の正本 = lib/sensitive-terms.sh
+  st_split "$SENSITIVE_TERMS" "$ASCII_TERMS" "$NA_TERMS" "$ALLOW_TERMS"
 
-  LITERAL_HITS_ASCII=""
-  if [ -s "$ASCII_TERMS" ]; then
-    LITERAL_HITS_ASCII="$(
-      awk -F'\t' '{ print $2 }' "$ADDED_BUF" \
-        | grep -wFf "$ASCII_TERMS" 2>/dev/null \
-        || true
-    )"
-  fi
-  LITERAL_HITS_NA=""
-  if [ -s "$NA_TERMS" ]; then
-    LITERAL_HITS_NA="$(
-      awk -F'\t' '{ print $2 }' "$ADDED_BUF" \
-        | grep -Ff "$NA_TERMS" 2>/dev/null \
-        || true
-    )"
-  fi
-
-  # 結合 (= 空行除去)。 **件数は上限をかける前に数える** — 表示の上限を件数の真値として
-  # 報告すると、 検出語に一般語が混じって全行に当たる状態でも「5 件」 としか出ず、
-  # gate が実質死んでいることに気づけない (= 真の hit も表示窓から押し出される)。
-  # 規律 = docs/convention-design-principles.md#display-cap-is-not-the-count
-  LITERAL_ALL="$(
-    {
-      [ -n "$LITERAL_HITS_ASCII" ] && printf '%s\n' "$LITERAL_HITS_ASCII"
-      [ -n "$LITERAL_HITS_NA" ]    && printf '%s\n' "$LITERAL_HITS_NA"
-    } | sed '/^$/d'
+  # 許可した複合語を消した本文で照合し、 当たった行の **番号** で ADDED_BUF に戻る
+  # (= 本文を書き換えたので、 行の文字列では file に戻れない)
+  LITERAL_NUMS="$(
+    awk -F'\t' '{ print $2 }' "$ADDED_BUF" \
+      | st_strip_allowed "$ALLOW_TERMS" \
+      | st_hit_line_numbers "$ASCII_TERMS" "$NA_TERMS"
   )"
-  LITERAL_HITS="$(printf '%s\n' "$LITERAL_ALL" | sed '/^$/d' | head -5)"
 
-  if [ -n "$LITERAL_HITS" ]; then
-    LITERAL_COUNT="$(printf '%s\n' "$LITERAL_ALL" | sed '/^$/d' | wc -l | tr -d ' ')"
-    # file 名も **全 hit** から起こす (= 表示は head -5 で切るが、 切ったことが分かるよう
-    # 総数を併記する。 上限を総数と取り違えないための同じ配慮)
+  # **件数は上限をかける前に数える** — 表示の上限を件数の真値として報告すると、 検出語に一般語が
+  # 混じって全行に当たる状態でも「5 件」 としか出ず、 gate が実質死んでいることに気づけない。
+  # 規律 = docs/convention-design-principles.md#display-cap-is-not-the-count
+  if [ -n "$LITERAL_NUMS" ]; then
+    LITERAL_COUNT="$(printf '%s\n' "$LITERAL_NUMS" | sed '/^$/d' | wc -l | tr -d ' ')"
+    # file 名も **全 hit** から起こす (= 表示は head -5 で切るが、 切ったことが分かるよう総数を併記する)
     LITERAL_FILES_ALL="$(
-      awk -F'\t' 'NR==FNR { bad[$0]=1; next }
-        bad[$2] { print $1 }' \
-        <(printf '%s\n' "$LITERAL_ALL") "$ADDED_BUF" \
+      awk -F'\t' 'NR==FNR { hit[$1]=1; next }
+        (FNR in hit) { print $1 }' \
+        <(printf '%s\n' "$LITERAL_NUMS") "$ADDED_BUF" \
       | sort -u
     )"
     LITERAL_FILE_COUNT="$(printf '%s\n' "$LITERAL_FILES_ALL" | sed '/^$/d' | wc -l | tr -d ' ')"

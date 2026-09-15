@@ -234,6 +234,45 @@ Tier B/C (= 実名・非公開 repo 名) は受理させない — 寝かせて�
 ⚠️ 射程は **現在の tree** まで。 過去の commit の中身と commit message は別
 (= message の棚卸しは `check-unpublished-quote.py --replay`、 履歴の書き換えは人間の判断)。
 
+⚠️ **vendored / 生成物の dir を名前で走査から外さない**。 実測: 大量の finding の出元が他人の package cache に
+見えた repo で、 中身を分けると実体の大半は **build tool の生成物に焼かれた、 共同作業者の開発機の home path**
+(= owner 側の漏洩) だった。 dir 名で外していたらそれごと隠れる。 生成物を追跡しているなら直し方は
+**追跡を外す** (+ 標準の `.gitignore`) で、 除外ではない。
+
+#### <a id="published-metadata-is-public"></a>公刊済みの著作の書誌は、 構造で検出器から外す
+
+arXiv / DOI で公開された著作の **題名・著者・要旨**は定義上もう公開されている。 ところが論文を記録する bot の
+archive は著者名をそのまま持ち、 自分の論文が載った日には要旨が手元の原稿と逐語で一致する。 実測: その archive を
+stage すると実名 (Tier B) と逐語 (Tier D) が必ず落ち、 **無人の自動 commit が毎回止まる** (= 止める物は無いのに
+transport が黙って壊れる)。 README の参考文献 link も、 改稿中の原稿と同じ題名で Tier D に当たる。
+
+許可 list で逃がすと論文が増えるたびに古くなる。 書誌は行の構造で見分けられるので構造で外す
+([`scripts/lib/published_metadata.py`](../scripts/lib/published_metadata.py)、 runner の Tier A-C と Tier D / E の engine が共有):
+- JSON: arXiv id か arXiv / DOI / INSPIRE の URL を持つ object の `title` / `abstract` / `authors` の**値の行**
+  (pretty-print のときだけ。 1 行 JSON は外さない = 鳴る側)
+- Markdown: 公開先 URL への link **だけ**で出来ている行
+- **外さない**: 同じ object の `reason` / `summary` 等 (= 書き手の文) と、 link の外に語がある行。
+  ⚠️ 書き手の文を AI が生成する bot では、 生成の指示に「購読者・共同研究者の名前を書かない」 を入れる
+  (= 構造で外せない側の文は、 源で書かせない)
+
+#### <a id="name-compound-allow"></a>姓の短い term が地名などに当たるときは、 複合語だけを許可する
+
+実名 gate の term には姓の 2 字 prefix も入る (= 本文では姓だけで書かれるため)。 その 2 字が地名・歴史上の人物名の
+一部に現れると、 公開の地図や冗談の文言で鳴る。 prefix ごと stoplist に落とすと「X さん」 も止まらなくなる。
+∴ **その複合語だけ**を個人層の設定 (`compound_allow`) に書き、 照合の前に本文から消す
+(行の種類の正本 = [`scripts/lib/sensitive-terms.sh`](../scripts/lib/sensitive-terms.sh)、 commit gate・commit-msg・週次監査で共通)。
+builder は **3 字以上の term や ASCII term を含む複合語を拒否**する (= 氏名を消す抜け道にしない)。 同じ行に
+姓だけの言及が残れば今までどおり止まる。 足すのは中身を読んで人を指さないと確認したときだけ。
+
+#### <a id="generated-data-declaration"></a>外部の公開データを機械が変換して置いた file は、 生成元つきで宣言して棚卸しから外す
+
+官公庁の公開データを CI が毎日 JSON に直す、 のような file は第三者の公開記録で、 人名・連絡先・日付と件数が数千行並ぶ。
+実名・連絡先・活動の事実の棚卸しが全部鳴り、 行ごとの承認もデータ更新のたびに失効する。 受理一覧に
+`generated: <glob>  # <生成元>` と書くと、 **棚卸しからだけ**外れる (commit gate には効かない)。
+path 単位の除外は後から入った本物も黙らせる ([`#semantic-detector-ack-ratchet`](../docs/convention-design-principles.md#semantic-detector-ack-ratchet)) ので、 代償を型で絞る
+([`scripts/lib/public_tree_accept.py`](../scripts/lib/public_tree_accept.py)): 宣言できるのは **データ形式の file だけ** (文章・code が 1 つでも当たれば宣言ごと無効)、
+glob は tracked file に当たること、 生成元を書くこと、 外した数を走査のたびに表示すること。
+
 ### <a id="visibility-decided-at-publish-time"></a>公開にするかは、 中身が出来てから・公開する直前に決める
 
 repo を作る時点の「公開してよいか」 は、 **まだ書かれていない中身についての予測**でしかない。

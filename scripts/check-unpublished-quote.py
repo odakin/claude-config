@@ -60,6 +60,13 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+try:  # 公刊済みの書誌の行は対象外 (lib/published_metadata.py)。 無ければ外さない = 鳴る側
+    from published_metadata import metadata_line_numbers as _published_lines, applies_to as _published_applies
+except ImportError:  # pragma: no cover
+    _published_lines = lambda path, text: set()  # noqa: E731
+    _published_applies = lambda path: False  # noqa: E731
+
 PROSE_K = 6
 QUOTE_K = 5
 QUOTE_MIN_WORDS = 5
@@ -399,6 +406,9 @@ def quoted_hits(lines, index: Index, skip=frozenset(), min_words=QUOTE_MIN_WORDS
 
 def scan_lines(path, lines, index, full_text=None, min_words=QUOTE_MIN_WORDS):
     skip = fenced_lines(full_text) if (full_text is not None and path.endswith((".md", ".markdown"))) else frozenset()
+    if full_text is not None:
+        # 公刊済みの著作の書誌 (arXiv の要旨・題名、 公開先 link だけの行) は定義上公開済み
+        skip = set(skip) | _published_lines(path, full_text)
     found = []
     for a, b, n, h in prose_runs(lines, index, skip):
         found.append((path, a, b, f"prose run of {n} content words", "prose", h))
@@ -435,7 +445,7 @@ def scan_staged(cfg, cwd=None, index=None) -> int:
         return 0
     findings = []
     for path, lines in added_lines_from_diff(diff).items():
-        full = _git(["show", f":{path}"], cwd=cwd)[1] if path.endswith((".md", ".markdown")) else None
+        full = _git(["show", f":{path}"], cwd=cwd)[1] if (path.endswith((".md", ".markdown")) or _published_applies(path)) else None
         findings += scan_lines(path, lines, index, full)
     if findings:
         report(findings, index, "the staged change")
@@ -585,7 +595,7 @@ def scan_tree(cfg, repo, index=None, out=print) -> int:
         except OSError:
             continue
         n += 1
-        full = text if rel.endswith((".md", ".markdown")) else None
+        full = text if (rel.endswith((".md", ".markdown")) or _published_applies(rel)) else None
         findings += scan_lines(rel, list(enumerate(text.split("\n"), 1)), index, full)
     for path, a, b, kind, family, h in findings:
         span = f"{a}" if a == b else f"{a}-{b}"
@@ -604,7 +614,7 @@ def replay(cfg, repo, max_commits, prose_k, quote_min) -> int:
         rc, diff = _git(["show", "--no-color", "-U0", "--format=", "--no-ext-diff", sha], cwd=repo)
         hits = []
         for path, lines in added_lines_from_diff(diff).items():
-            full = _git(["show", f"{sha}:{path}"], cwd=repo)[1] if path.endswith((".md", ".markdown")) else None
+            full = _git(["show", f"{sha}:{path}"], cwd=repo)[1] if (path.endswith((".md", ".markdown")) or _published_applies(path)) else None
             hits += scan_lines(path, lines, index, full, quote_min)
         if hits:
             _, subj = _git(["log", "-1", "--format=%h %cs %s", sha], cwd=repo)

@@ -208,7 +208,24 @@ $(printf '%s\n' "$token_redacted" | head -20)
 
   # Tier B literal (sensitive-terms.txt, ephemeral)
   if [ -f "$SENSITIVE_TERMS" ] && [ -s "$SENSITIVE_TERMS" ]; then
-    literal_raw="$(git -C "$repo" grep -nFf "$SENSITIVE_TERMS" 2>/dev/null || true)"
+    # 行の種類 (`#` = comment / `!` = 許可複合語 / ASCII = 単語境界 / 他 = 部分一致) は commit gate と同じ
+    # (正本 = lib/sensitive-terms.sh)。 以前は file をそのまま -Ff に渡していて、 comment 行も term として
+    # 照合し、 ASCII term に単語境界が無かった (= gate より粗い監査が毎週同じ誤検知を出す)
+    . "$(dirname "$0")/lib/sensitive-terms.sh"
+    st_a="$(mktemp)"; st_n="$(mktemp)"; st_w="$(mktemp)"; st_raw="$(mktemp)"
+    st_split "$SENSITIVE_TERMS" "$st_a" "$st_n" "$st_w"
+    {
+      [ -s "$st_n" ] && git -C "$repo" grep -nIFf "$st_n" 2>/dev/null
+      [ -s "$st_a" ] && git -C "$repo" grep -nIwFf "$st_a" 2>/dev/null
+    } | sort -u > "$st_raw"
+    # 許可複合語を消した本文で当たり直す (= 番号で元の行に戻る)
+    literal_raw="$(
+      awk '{ p = index($0, ":"); rest = substr($0, p + 1); q = index(rest, ":"); print substr(rest, q + 1) }' "$st_raw" \
+        | st_strip_allowed "$st_w" \
+        | st_hit_line_numbers "$st_a" "$st_n" \
+        | awk 'NR == FNR { hit[$1] = 1; next } (FNR in hit)' - "$st_raw"
+    )"
+    rm -f "$st_a" "$st_n" "$st_w" "$st_raw"
     if [ -n "$literal_raw" ]; then
       # 本体を晒さず「何行 hit、どのファイルか」のみ
       literal_count="$(printf '%s\n' "$literal_raw" | wc -l | tr -d ' ')"

@@ -94,20 +94,30 @@ run_leak_matcher() {
   # ----------------------------------------------------------------
   sensitive_terms="$personal_layer/sensitive-terms.txt"
   if [ -s "$sensitive_terms" ]; then
-    local ascii_terms na_terms ascii_hits na_hits
+    local ascii_terms na_terms allow_terms ascii_hits na_hits st_lib literal_message="$message"
     ascii_terms="$(mktemp)"
     na_terms="$(mktemp)"
-    awk -v a="$ascii_terms" -v n="$na_terms" '
-      /^[[:space:]]*$/ { next }
-      /^[[:space:]]*#/ { next }
-      /^[ -~]+$/      { print > a; next }
-                      { print > n }
-    ' "$sensitive_terms"
+    allow_terms="$(mktemp)"
+    # 行の種類 (`!複合語` = 照合前に消す許可語 / ASCII / 他) の正本 = lib/sensitive-terms.sh。
+    # lib が読めないときは従来の分割 (= 許可語なし、 鳴る側に倒れる)
+    st_lib="$(dirname "${BASH_SOURCE[0]}")/sensitive-terms.sh"
+    if [ -f "$st_lib" ]; then
+      . "$st_lib"
+      st_split "$sensitive_terms" "$ascii_terms" "$na_terms" "$allow_terms"
+      literal_message="$(printf '%s' "$message" | st_strip_allowed "$allow_terms")"
+    else
+      awk -v a="$ascii_terms" -v n="$na_terms" '
+        /^[[:space:]]*$/ { next }
+        /^[[:space:]]*#/ { next }
+        /^[ -~]+$/      { print > a; next }
+                        { print > n }
+      ' "$sensitive_terms"
+    fi
 
     ascii_hits=""
     if [ -s "$ascii_terms" ]; then
       ascii_hits="$(
-        printf '%s' "$message" \
+        printf '%s' "$literal_message" \
           | grep -wFf "$ascii_terms" 2>/dev/null \
           || true
       )"
@@ -115,12 +125,12 @@ run_leak_matcher() {
     na_hits=""
     if [ -s "$na_terms" ]; then
       na_hits="$(
-        printf '%s' "$message" \
+        printf '%s' "$literal_message" \
           | grep -Ff "$na_terms" 2>/dev/null \
           || true
       )"
     fi
-    rm -f "$ascii_terms" "$na_terms"
+    rm -f "$ascii_terms" "$na_terms" "$allow_terms"
 
     literal_hits="$(
       {
