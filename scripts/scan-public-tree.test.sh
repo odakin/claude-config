@@ -113,6 +113,23 @@ out="$(run "$ST8" --repo "$CLEAN")"; rc=$?
 printf '%s' "$out" | grep -q '新しい開示' && check ok "T8b: 理由を明示する" || check ng "T8b: 理由を明示する"
 rm -f "$CLEAN/.claude/public-tree-accept.txt"
 
+# ---- (9) finding ありの repo が予算を食い潰さない (= 未記録を先に回す) ----
+# 素直に並べると、 finding ありは走査済にならないので --max の枠を毎回そいつらが取り、
+# 一度も見ていない repo に永久に到達しない
+ST9="$T/state9"; mkdir -p "$ST9"
+R9="$T/root9"; mkdir -p "$R9"          # 他の test repo を巻き込まない専用 root
+( cd "$R9" && mkdir -p a_dirty/.claude z_fresh/.claude )
+for n in a_dirty z_fresh; do
+  printf '# marker\n' > "$R9/$n/.claude/public-repo.marker"
+  printf 'ふつうの文\n' > "$R9/$n/note.md"
+  git -C "$R9/$n" init -q
+  git -C "$R9/$n" add -A >/dev/null 2>&1
+  git -C "$R9/$n" -c user.email=t@example.com -c user.name=t commit -qm init >/dev/null 2>&1
+done
+printf '%s\t%s\t2026-01-01\t1\n' "$R9/a_dirty" deadbeef > "$ST9/public-tree-scan.tsv"
+out="$(run "$ST9" --all --root "$R9" --max 1)"
+printf '%s' "$out" | grep -q 'z_fresh' && check ok "T9: 未記録の repo を先に走査" || check ng "T9: 未記録の repo を先に走査"
+
 echo
 echo "==== RESULT: PASS=$PASS FAIL=$FAIL ===="
 [ "$FAIL" -eq 0 ] || exit 1

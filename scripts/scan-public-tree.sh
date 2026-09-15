@@ -29,6 +29,8 @@
 #
 # ⚠️ 1 repo あたり数分かかる (= Tier D が未公開文書の索引を毎回作り直す)。 定期検査から呼ぶときは
 #   `--max 2` のように区切る: 台帳が進捗を持つので、 何回かに分けて全体が埋まる。
+#   ⚠️ **未記録の repo を先に回す** — finding ありは走査済にしない設計なので、 素直に並べると
+#   予算を毎回そいつらが食い潰し、 一度も見ていない repo に永久に到達しない。
 #
 # 受理: repo の `.claude/public-tree-accept.txt` (1 行 1 substring、 `#` 以降は理由)。
 #   既に公開されていて「見た上で残す」 と決めた Tier A の token を、 この棚卸しでだけ落とす。
@@ -79,6 +81,14 @@ record() {
   # $1 = repo path, $2 = sha, $3 = findings count
   mkdir -p "$STATE_DIR" 2>/dev/null || return 0
   printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$(date +%Y-%m-%d)" "$3" >> "$LEDGER"
+}
+
+# 台帳に **何らかの** 記録があるか (= finding ありも含む)。 --all の順序づけに使う:
+# finding ありの repo は走査済にしない設計なので、 素直に並べると予算 (--max) を毎回
+# そいつらが食い潰し、 **一度も見ていない repo に永久に到達しない**。 未記録を先に回す。
+has_record() {
+  [ -f "$LEDGER" ] || return 1
+  awk -F'\t' -v r="$1" '$1 == r { found = 1 } END { exit found ? 0 : 1 }' "$LEDGER"
 }
 
 already_scanned() {
@@ -227,11 +237,18 @@ if [ "$MODE" = "all" ]; then
   [ -d "$ROOT" ] || { echo "scan-public-tree.sh: no such root: $ROOT" >&2; exit 2; }
   found=0
   scanned=0
+  # 未記録 → 記録あり の順に並べる (= 予算がある限り、 まだ一度も見ていない repo を先に)
+  fresh=""; seen=""
   for d in "$ROOT"/*/; do
     [ -f "${d}.claude/public-repo.marker" ] || continue
     [ -d "${d}.git" ] || continue
     found=$((found + 1))
-    scan_one "${d%/}"
+    if has_record "${d%/}"; then seen="$seen
+${d%/}"; else fresh="$fresh
+${d%/}"; fi
+  done
+  for r in $(printf '%s\n%s\n' "$fresh" "$seen" | sed '/^$/d'); do
+    scan_one "$r"
     rc_one=$?
     [ "$rc_one" -eq 1 ] && RC=1
     # 新しく走査した repo だけ数える (= 台帳 skip 〔3〕 と対象外 〔2〕 は上限を消費しない)
