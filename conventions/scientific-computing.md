@@ -402,6 +402,7 @@ disputed な量 (vertex 係数・規格化・符号) を「相手の結果に一
 
 - §6 — transcript hallucination の sympy verify (= 本 § は「source 自体の error」 への拡張)
 - [`debugging-discipline.md` fix-verification-3-axis](debugging-discipline.md#fix-verification-3-axis) — 「conceptually clean」 主張の verify 義務 (= 同 trait)
+- [作用の等価性・多項式性](../../ai-collaboration/conventions/physics-verification-cycle.md#action-equivalence-and-polynomiality) — Euler微分、任意lapse、動く補助場制約、非等方sliceを分ける作用版の独立導出
 - 同 trait family = 「安価な操作 (= 一致合わせ / memory recall / literal-copy) で expensive 操作 (= 独立導出 / 数値 verify) を bypass する」。 review / sweep / context 構築 domain にも同型に現れる
 
 ## <a id="first-principles-crosscheck"></a>8. 数値結果は第一原理 (次元解析・対称性・Ward 恒等式・既知極限) で cross-check; 自前の数値がバグり得る

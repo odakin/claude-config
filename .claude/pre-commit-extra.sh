@@ -71,7 +71,7 @@ SESSION_WARN_LINES=100
 if git -C "$REPO_ROOT" diff --cached --name-only -- SESSION.md | grep -qx 'SESSION.md'; then
   session_lines="$(git -C "$REPO_ROOT" show :SESSION.md 2>/dev/null | wc -l | tr -d ' ')"
   if [ -n "$session_lines" ] && [ "$session_lines" -ge "$SESSION_WARN_LINES" ]; then
-    echo "  ⚠️ [pre-commit-extra] SESSION.md = $session_lines 行 (≥ $SESSION_WARN_LINES。 目安 ~80 = CONVENTIONS.md#pre-push-check):" >&2
+    echo "  ⚠️ [pre-commit-extra] SESSION.md = $session_lines 行 (≥ ${SESSION_WARN_LINES}。 目安 ~80 = CONVENTIONS.md#pre-push-check):" >&2
     echo "    → 新 entry は「日付 + 何を + 正本への pointer」 の 1-3 行に。 経緯・実測は正本 doc か SESSION-archive.md へ MOVE (手順 = conventions/memory-file-slimming.md)" >&2
     warned=1
   fi
