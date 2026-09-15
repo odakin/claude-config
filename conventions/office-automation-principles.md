@@ -82,7 +82,7 @@ content control / XML 宣言 / bookmark)。 **どの道具も、 この地層の
 
 | 層 | 何で検証 | 捕まえられるもの | 捕まえられないもの |
 |---|---|---|---|
-| ① 機械 (決定論) | 雛形 diff / integrity script / NFKC text 照合 / 結合セル clipping 照合 (check-form-clipping.py) | label 上書き、 構造破損、 値の欠落、 **結合セルの記入値 clipping** (= 値↔描画 text 照合、 engine 依存の第一防衛線) | 見た目の破綻 (overflow `###` / 配置ズレ / glyph 不描画) |
+| ① 機械 (決定論) | 雛形 diff / integrity script / NFKC text 照合 / 結合セル clipping 照合 (check-form-clipping.py) | label 上書き、 構造破損、 値の欠落、 **結合セルの記入値 clipping** (= 値↔描画 text 照合、 engine 依存の第一防衛線) | 見た目の破綻 (配置ズレ / glyph 不描画 / 罫線の無い余白へのはみ出し。 `###` と罫線・他の字へのはみ出しは check-form-clipping が拾う) |
 | ② 視覚 (render) | PDF を**画像として**目視 | `###` / 文字切れ / 標題消失 / ズレ | 次の解釈器の挙動 (printer 化け) |
 | ③ 実機 | 実際に Word/Excel で開く、 実際に印刷する | 「破損」 ダイアログ、 printer RIP 問題 | — (最終 ground truth) |
 
