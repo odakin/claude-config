@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: repo の Dependabot/CodeQL/Semgrep baseline や Dependabot PR を扱うとき
+when: repo の Dependabot/CodeQL/Semgrep baseline や Dependabot PR を扱うとき + private repo の workflow が一斉に数秒で red になったとき / private に検査の workflow を置くとき (#private-actions-minutes)
 category: infra
-summary: 全 repo 横断の Dependabot/CodeQL/Semgrep/auto-merge baseline + Free plan silent rejection + Dependabot PR tier-based merge discipline + supply-chain hardening (= cooldown + action SHA pin + dependabot.yml 編集で即時 scan burst #supply-chain-hardening) + ESM migration backwards-compatible normalizer + `gh` CLI gotcha (= users/X/repos public-only / mergeStateStatus UNKNOWN retry) + bash set -e + heredoc + $() interaction fix + monorepo dependabot.yml directories+groups + cascading PR convergence loop。 finding の読み書きは sibling semgrep-ci.md
+summary: 全 repo 横断の Dependabot/CodeQL/Semgrep/auto-merge baseline + Free plan silent rejection + private repo の Actions 分数上限 (= per-push 検査で枠を使い切ると全 workflow が未起動 red、 検査は手元へ = local-ci.py、 #private-actions-minutes) + Dependabot PR tier-based merge discipline + supply-chain hardening (= cooldown + action SHA pin + dependabot.yml 編集で即時 scan burst #supply-chain-hardening) + ESM migration backwards-compatible normalizer + `gh` CLI gotcha (= users/X/repos public-only / mergeStateStatus UNKNOWN retry) + bash set -e + heredoc + $() interaction fix + monorepo dependabot.yml directories+groups + cascading PR convergence loop。 finding の読み書きは sibling semgrep-ci.md
 -->
 # GitHub Security Automation
 
@@ -14,7 +14,7 @@ Repo 群を横断する **Dependabot / CodeQL / Semgrep / auto-merge** 系の自
 [2] Dependabot security updates (= automated-security-fixes) ── 全 plan 無料、 自動 PR
 [3] Dependabot version updates (= .github/dependabot.yml) ──── code repo に monthly schedule
 [4] CodeQL Default (= 公開 repo は無料、 private は GHAS 必要) ── 公開 code repo に対し有効化
-[5] Semgrep workflow (= .github/workflows/semgrep.yml) ─────── private code repo に対し配置
+[5] Semgrep ─────── private code repo に対し。 Actions の分数を食うので、 お金をかけないなら手元で回す (#private-actions-minutes)
 [6] Dependabot auto-merge workflow ─── github-actions + patch/minor を自動 merge
 [7] branch protection (= main の force-push / delete 禁止) ── 公開 repo は無料、 private は Pro 必要
 [8] Push protection + Private vulnerability reporting ────── 公開 repo は無料
@@ -53,6 +53,33 @@ write が visibility 変更である場合)。
 
 ⚠️ 失われるのは「事故を止める側」 の設定なので、 非公開に倒した repo では
 force-push と branch 削除が素通りになる。 その repo を扱う手順の側で補う。
+
+### <a id="private-actions-minutes"></a>private repo の Actions は月の分数に上限がある — per-push の検査は枠を使い切る
+
+public repo の GitHub-hosted runner は無料で上限が無いが、 **private repo は account 全体で月の分数に上限がある**
+(Free plan。 超過分は支払い方法と spending limit しだい)。 上限を越えると以後の run は **数秒で failure** になり、
+job は runner に載らないまま残る (`runner_name` 空・steps 0、 annotation = 「recent account payments have failed or
+your spending limit needs to be increased」)。 **コードの失敗ではない**のに、 その account の private repo の
+全 workflow が一斉に red に見える (Dependabot の update job も、 検査でない定期 job も止まる)。
+
+- **使い切る形**: push の多い private repo に per-push の検査 (Semgrep / test) を置く。 実測: push の多い private
+  repo 1 本の per-push Semgrep が月の枠の大半を占めた。 `paths` filter を持たない workflow と、 無人 commit
+  (heartbeat 等) を受ける repo が危ない
+- **見分け方**: red の run の jobs を読み、 全 job が `runner_name` 空かつ steps 0 なら未起動。 検出器 =
+  [`scripts/check-ci-red.py`](../scripts/check-ci-red.py) (未起動を件数に数えず 🧾 の 1 行に分ける)。
+  使用量の API (`/users/<u>/settings/billing/usage`) は token に `user` scope が要る
+- **お金をかけないなら private の検査は手元へ**: 検査の workflow を止め (`gh workflow disable` = 可逆、 file は
+  残る)、 同じ検査を手元で回す。 ⚠️ **「手元で回す」 は放っておくと「誰も回さない」 になる** — 実行と結果の
+  表示を、 人が毎回見る面 (session 開始の hook など) に置く。 runner = [`scripts/local-ci.py`](../scripts/local-ci.py)
+  (repo × 検査の一覧を config に持ち、 対象 path の最終 commit が変わったものだけ回し、 red / 回せない /
+  長く回っていない を 1 行ずつ出す)
+- **手元の scan は平文を読む**: git-crypt で暗号化して保存した secret は、 remote では暗号文なので CI の secret
+  検出には掛からないが、 手元では毎回掛かる。 暗号化 file を scan から外す (local-ci.py の `@exclude-git-crypt`)
+- **`|| true` の検査は CI にあっても何も知らせていない**: SARIF を artifact に置くだけの Semgrep は red にならず、
+  artifact を読みに行かない限り新しい finding は誰にも見えない。 手元へ移すときに finding で落ちる形
+  (`--error`) にすると、 置き換えが監視の強化になる
+- **新しい private repo を作る道具** (baseline を配る script) も同じ判断に揃える。 揃えないと、 止めた
+  per-push の検査が次の repo で復活する
 
 ## <a id="auto-merge-workflow"></a>3. Auto-merge workflow の設計
 

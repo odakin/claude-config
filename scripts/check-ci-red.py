@@ -20,6 +20,9 @@ scripts/ci-red-streak.py (red / green の述語は同じ)。 手順 = convention
   - 🚨 長期 = 継続 LONG_HOURS 時間以上 または LONG_RUNS run 以上
     (= 「push した本人が直すだろう」 の窓を越えた red)
   - 遡りの上限 = MAX_PAGES × PAGE run。 上限まで red なら run 数に「+」 を付ける
+  - 未起動 = red の最新 run の job が全部 runner 無し・steps 0 (= GitHub が起動しなかった。 課金の失敗 /
+    private repo の無料枠の上限)。 件数に数えず 🧾 の 1 行にまとめる (Dependabot の job も同じ)。
+    jobs API が失敗したら普通の red として出す (not_started の docstring)
 
 取得失敗の扱い: repo / workflow 一覧 / run 一覧のどれかの API が失敗したら、 その repo を
   「検査不能」 として最後に 1 行にまとめる (= 「動いて 0 件」 と「動かなかった」 を区別する。
@@ -348,9 +351,24 @@ def config_changed_at(repo, branch, as_of):
         return None
 
 
+def not_started(repo, run) -> bool:
+    """run の job が 1 本も runner に載らずに終わったか (= GitHub が job を起動しなかった)。
+    実測: 課金の失敗や private repo の無料枠 (月の分数) を使い切ると、 以後の run は数秒で failure になり、
+    job は runner_name 空・steps 0 のまま残る (annotation は「recent account payments have failed or your
+    spending limit needs to be increased」)。 コードの失敗ではないので red と分けて出す。
+    jobs API が失敗したら False (= 普通の red として出す。 隠す側に倒さない)。"""
+    rid = (run or {}).get("id")
+    if rid is None:
+        return False
+    data, err = gh_api(f"repos/{repo}/actions/runs/{rid}/jobs?per_page=100")
+    jobs = ((data or {}).get("jobs") or []) if not err else []
+    return bool(jobs) and all(not j.get("steps") and not j.get("runner_name") for j in jobs)
+
+
 def check_repo(repo, as_of=None):
     """→ (CI red の list, Dependabot job 失敗の list, 検査不能の理由 or None)。
-    archived は対象外 (silent)。"""
+    archived は対象外 (silent)。 GitHub が起動しなかった run (not_started) は red の list に
+    not_started=True で入れ、 render が別の 1 行にまとめる。"""
     info, err = gh_api(f"repos/{repo}")
     if err:
         return [], [], f"repo 情報: {err}"
@@ -371,7 +389,12 @@ def check_repo(repo, as_of=None):
             if err:
                 fails.append(f"{wf.get('name') or wf.get('path')}: {err}")
             elif jobs:
-                deps.append({"repo": repo, "jobs": jobs})
+                blocked = [(job, run) for job, run in jobs if not_started(repo, run)]
+                reds += [{"repo": repo, "workflow": f"Dependabot · {job}", "not_started": True}
+                         for job, _ in blocked]
+                jobs = [x for x in jobs if x not in blocked]
+                if jobs:
+                    deps.append({"repo": repo, "jobs": jobs})
             continue
         st, err = workflow_streak(repo, wf, branch, as_of)
         if err:
@@ -379,7 +402,7 @@ def check_repo(repo, as_of=None):
             continue
         if st["state"] == "red":
             reds.append(dict(st, repo=repo, workflow=wf.get("name") or wf.get("path") or "?",
-                             branch=branch))
+                             branch=branch, not_started=not_started(repo, st["latest_red"])))
     return reds, deps, ("; ".join(fails) if fails else None)
 
 
@@ -400,7 +423,9 @@ def render(reds, deps, unprobed, now, n_repos, as_of=None, dep_mode="detail"):
     """表示行の list (空 = 無出力)。 CI red は長期 → 継続の長い順、 次に Dependabot、 最後に検査不能。"""
     if dep_mode == "off":
         deps = []
-    if not reds and not deps and not unprobed:
+    blocked = [x for x in reds if x.get("not_started")]
+    reds = [x for x in reds if not x.get("not_started")]
+    if not reds and not deps and not unprobed and not blocked:
         return []
     for x in reds:
         x["age"] = now - parse_ts(x["first_red"]["created_at"])
@@ -425,6 +450,13 @@ def render(reds, deps, unprobed, now, n_repos, as_of=None, dep_mode="detail"):
                      f"({_fmt_ts(fr['created_at'])}〜、 {gtxt})")
         lines.append(f"      最新の失敗 = {lr.get('html_url', '')} "
                      f"({(lr.get('head_sha') or '')[:7]})")
+    if blocked:
+        repos = sorted({x["repo"] for x in blocked})
+        lines.append(f"  🧾 GitHub が job を起動していない {len(blocked)} workflow / {len(repos)} repo "
+                     f"(= コードの失敗ではない。 課金の失敗か private repo の無料枠の上限 = 設定の Billing。 "
+                     f"お金をかけないなら private の検査は手元へ = "
+                     f"conventions/github-security-automation.md#private-actions-minutes): "
+                     + "、 ".join(repos))
     if deps and dep_mode == "summary":
         eco = {}
         for d in deps:
@@ -618,7 +650,9 @@ def selftest() -> int:
                 # config から消えた job (最新 run が他より 50 日古い) → 出さない
                 R("failure", 60 - 24 * 50, rid=600, title="bundler in /. - Update #0")],
     }
-    wf_ids = {1: "red150", 2: "red1200", 3: "green", 4: "short", 5: "red150", 6: "dep"}
+    history["blocked"] = [R("failure", 70, rid=77), R("success", 69, rid=76)]
+    wf_ids = {1: "red150", 2: "red1200", 3: "green", 4: "short", 5: "red150", 6: "dep", 7: "blocked"}
+    blocked_runs = {77}  # GitHub が起動しなかった run (runner 無し・steps 0)
     calls = []
 
     cfg_changed = {"o/r": (base + timedelta(hours=50)).strftime("%Y-%m-%dT%H:%M:%SZ")}
@@ -636,6 +670,11 @@ def selftest() -> int:
             if t == "error":
                 return None, "Server Error (HTTP 500)"
             return ([{"commit": {"committer": {"date": t}}}] if t else []), None
+        mj = re.match(r"repos/o/\w+/actions/runs/(\d+)/jobs", path)
+        if mj:
+            if int(mj.group(1)) in blocked_runs:
+                return {"jobs": [{"name": "j", "steps": [], "runner_name": ""}]}, None
+            return {"jobs": [{"name": "j", "steps": [{"name": "s"}], "runner_name": "GitHub Actions 1"}]}, None
         if path == "repos/o/missing":
             return None, "Not Found (HTTP 404)"
         if path == "repos/o/old":
@@ -653,6 +692,7 @@ def selftest() -> int:
                 {"id": 5, "name": "off", "state": "disabled_manually", "path": "x"},
                 {"id": 6, "name": "Dependabot Updates", "state": "active",
                  "path": "dynamic/dependabot/dependabot-updates"},
+                {"id": 7, "name": "billing", "state": "active", "path": ".github/workflows/b.yml"},
             ]}, None
         if path == "repos/o/flaky/actions/workflows?per_page=100":
             return {"workflows": [{"id": 9, "name": "w", "state": "active", "path": "w"}]}, None
@@ -691,6 +731,14 @@ def selftest() -> int:
        == [("npm_and_yarn in /.", 604), ("npm_and_yarn in /. for lodash", 608),
            ("pip in /.", 606)])
     ck("disabled workflow は対象外", "off" not in byname)
+    ck("job が runner に載らなかった red は not_started", byname.get("billing", {}).get("not_started") is True
+       and byname["long"]["not_started"] is False)
+    blocked_runs.add(606)
+    reds_b, deps_b, _ = check_repo("o/r")
+    blocked_runs.discard(606)
+    ck("起動されなかった Dependabot job は 🟡 から外して not_started へ",
+       any(x["workflow"] == "Dependabot · pip in /." and x.get("not_started") for x in reds_b)
+       and "pip in /." not in [j for j, _ in deps_b[0]["jobs"]])
     ck("green workflow は finding にしない", "ok" not in byname)
     ck("150 連続 red を page を跨いで数える",
        byname.get("long", {}).get("n_red") == 150 and not byname["long"]["capped"])
@@ -737,6 +785,11 @@ def selftest() -> int:
     ck("render: 10 run 以上は時間が短くても 🚨",
        "🚨 長期" in "\n".join(render(ten, [], [], base + timedelta(hours=31), 1)))
     ck("render: 何も無ければ無出力", render([], [], [], now, 5) == [])
+    ck("render: 起動されなかった workflow は件数に数えず 🧾 の 1 行",
+       "🧾 GitHub が job を起動していない 1 workflow / 1 repo" in text and "billing: " not in text)
+    tb = render([byname["billing"]], [], [], now, 1)
+    ck("render: 起動されなかった run だけでも出す (失敗行の案内は出さない)",
+       len(tb) == 2 and "(0 件 / 1 repo 検査)" in tb[0] and tb[1].startswith("  🧾"))
     t3 = "\n".join(render([], [], [("x", "未 clone")], now, 0))
     ck("render: 検査不能だけでも出す (0 件と区別)", "0 件" in t3 and "検査不能 1 repo" in t3)
 
