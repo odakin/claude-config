@@ -118,6 +118,7 @@
 - **[install-session-trailer.sh](install-session-trailer.sh)** — 各 repo に prepare-commit-msg stub を冪等配置 (agent/session/model/effort trailer)
 - **[jps-program-talks.py](jps-program-talks.py)** — 日本物理学会 (JPS) 年次大会 / 春季大会の Web program を機械で読む。
 - **[kakenhi-preflight.py](kakenhi-preflight.py)** — 科研費 研究計画調書の「機関事務が必ず突く点」を提出前に機械検出（様式骨格の生存 / 埋め込み指示の抽出 / 表記 lint / 経費明細の粒度・費目帰属、kakenhi-proposal.md#office-review-loop）
+- **[keynote-iwa-text.py](keynote-iwa-text.py)** — Extract a text inventory from Keynote .key slide IWA archives (layout/order not reconstructed).
 - **[latex-pdf-audit.py](latex-pdf-audit.py)** — Audit a LaTeX log and PDF, and optionally render numbered pages for visual review.
 - **[latexdiff-review-snapshot.sh](latexdiff-review-snapshot.sh)** — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex 最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
 - **[latexdiff-safecmd.py](latexdiff-safecmd.py)** — Derive latexdiff's --append-safecmd list from the manuscript preamble.
