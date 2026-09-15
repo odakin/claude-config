@@ -54,6 +54,7 @@ summary: Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入
 | pptx → PDF | [`scripts/pptx-to-pdf.sh`](../scripts/pptx-to-pdf.sh) (= PowerPoint native export 優先、 LibreOffice fallback) | [`office-automation.md#pptx-to-pdf-powerpoint`](office-automation.md#pptx-to-pdf-powerpoint) (= 網掛け / pattern fill を潰さない要件は native 一択) |
 
 🔑 3 wrapper の macOS Office 経路は **事前 grant 済み staging dir 経由が default** (= Office 3 app が共有する group container に copy → export → copy back、 Office の「ファイル アクセスを許可」 dialog が案件 dir ごとに出るのを design-out、 `--no-stage` で旧 in-place)。 機構・実測・注意は [`office-automation.md#office-pregranted-staging-dir`](office-automation.md#office-pregranted-staging-dir)、 lib = [`scripts/lib/office-staging.sh`](../scripts/lib/office-staging.sh) (+ python 鏡像 `office_staging.py`)。
+🚫 **wrapper 以外 (手書き osascript・案件ごとの driver) も staging 経由が規則で、 in-place の open / save は hook が deny する** — 直し方 (`scripts/office-stage-run.sh` / helper) と例外の書き方は [`office-automation.md#office-inplace-guard`](office-automation.md#office-inplace-guard)。
 
 ⚠️ **docx は「Word 体裁が契約」 の正式書類が大半** ゆえ Pages re-typeset は重なり artifact を生む。 default を Word に倒している (2026-06 反転)。 詳細・新規 docx automation script を書く時の reflex は [`office-automation-principles.md` tool-selection-ladder](office-automation-principles.md#tool-selection-ladder) 参照。
 
@@ -80,6 +81,7 @@ summary: Office ファイル (Excel/Word/PDF/PowerPoint) ハンドリング**入
 | [`docx-to-pdf.sh`](../scripts/docx-to-pdf.sh) | docx → PDF (macOS Word 忠実版 default、 `--pages` で Pages、 非 mac LibreOffice、 Word 経路は staging 経由) |
 | [`pptx-to-pdf.sh`](../scripts/pptx-to-pdf.sh) | pptx → PDF (PowerPoint native 優先、 LibreOffice fallback、 PowerPoint 経路は staging 経由) |
 | [`lib/office-staging.sh`](../scripts/lib/office-staging.sh) / [`lib/office_staging.py`](../scripts/lib/office_staging.py) | Office 駆動 script 共通の **事前 grant 済み staging dir** helper (= sandbox の folder-grant dialog を design-out、 新規 Office automation script はこれを source) → [`#office-pregranted-staging-dir`](office-automation.md#office-pregranted-staging-dir) |
+| [`office-stage-run.sh`](../scripts/office-stage-run.sh) | 手書きの Office 駆動 command を staging 経由で 1 回走らせる (`<file> -- osascript x.applescript {}`)。 in-place は [`hooks/office-inplace-guard.py`](../hooks/office-inplace-guard.py) が deny → [`#office-inplace-guard`](office-automation.md#office-inplace-guard) |
 | [`close-pdf-form-boxes.py`](../scripts/close-pdf-form-boxes.py) | Excel→PDF で落ちた下罫線 (= 承認/印影欄の box が開く) を全検出して閉じる → [`#excel-pdf-bottom-border-drop`](office-automation.md#excel-pdf-bottom-border-drop) |
 | [`pdf_form_fill.py`](../scripts/pdf_form_fill.py) | 雛形 PDF への直接印字 engine (= anchor 印字 / NFKC 照合 / 600dpi ラスタ化 / 内蔵検証)、 紙単票向け → [`#pdf-prefill-direct`](office-automation.md#pdf-prefill-direct) |
 | [`check-docx-integrity.py`](../scripts/check-docx-integrity.py) | docx の Word「破損」 判定 (Word 不要・決定論) → [`#docx-checkbox-content-control`](office-automation.md#docx-checkbox-content-control) |
