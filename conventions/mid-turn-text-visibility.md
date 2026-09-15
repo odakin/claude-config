@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: ツール呼び出しを含むターンで user に見せる文面・結論・訂正を出すとき / 応答に機械向けの marker・sentinel を埋め込もうとするとき
 category: harness-core
-summary: user に見える提示面はターン最終テキストメッセージ (+ 明示的な file 提示) だけ — mid-turn テキストは表示されないことがあり (Claude Code desktop で実測、同一 session 内 2 連発)、tool 入力 (Bash heredoc / Edit content) や書き込んだ file はそもそも提示面でない (2026-08-29 再発で確定した変種)。文面 deliverable・結論・訂正は必ずターン最終メッセージに全文置く。「上の文面」「先ほどの訂正」と自ターン内を指す行為自体が事故 signal。逆向きの取り違えとして、最終メッセージの HTML comment は隠れず literal 表示される (2026-09-12 desktop 実測) ため、hook 用 marker 等の機械向け signal は提示面でなく tool 入力に置く
+summary: user に見える提示面はターン最終テキストメッセージ (+ 明示的な file 提示) だけ — mid-turn テキストは表示されないことがあり (Claude Code desktop で実測、同一 session 内 2 連発)、tool 入力 (Bash heredoc / Edit content) や書き込んだ file はそもそも提示面でない (2026-08-29 再発で確定した変種)。文面 deliverable・結論・訂正は必ずターン最終メッセージに全文置く。「上の文面」「先ほどの訂正」と自ターン内を指す行為自体が事故 signal。逆向きの取り違えとして、最終メッセージの HTML comment は隠れず literal 表示される (2026-09-12 desktop 実測) ため、hook 用 marker 等の機械向け signal は提示面でなく tool 入力に置く。browser tool 側の audio player / screenshot も user-visible の証拠でなく、media は最終応答の direct link / local file まで運ぶ
 -->
 # ツール呼び出しターンのテキスト可視性 — deliverable は最終メッセージに全文
 
@@ -55,6 +55,19 @@ hook を書く側の含意が 2 つある。
 1. **marker の検出は turn の転写全体を走査する形にする** (= assistant text + `tool_use` の `.input.command` + `tool_result`)。 assistant text だけを見る検出にすると、 呼ぶ側には「可視面を汚す」 以外に marker を出す手段が無くなる。
 2. **marker が必要な turn を最小化する**。 hook の発火条件が狭ければ marker が要る turn も狭い。 呼ぶ側が毎 turn reflex で marker を出しているなら、 発火条件を満たさない turn では純粋な noise であり、 規律側の bug (実例: 「生成した ∧ 応答本文がその名前に触れた」 の両方が成った turn だけ発火する hook に対し、 無関係な turn まで marker を出していた)。
 
+## <a id="tool-side-media-not-user-visible"></a>tool 側の player は user-visible media ではない
+
+browser / computer-use の accessibility tree や screenshot に音声 player が現れても、
+それは **agent が操作できる surface の観測**であって、user の chat / panel に同じ player が提示された証拠ではない。
+agent 側で再生状態になったことも「user が聞けた」「再生ボタンが見える」の証拠にならない。
+
+音声・動画を user に渡すときは、最終メッセージに app が描画できる local media file、または user が直接開ける
+通常の Markdown link を置く。side pane の表示要求・deliverable marker・tool screenshot は補助であり、最終提示の代替にしない。
+raw media page が crash したり panel が見えなかったりしたら、見えたと主張せず link へ縮退する。
+
+対象言語の発音を返す場合は [`pronunciation-verification.md#audio-delivery-surface`](pronunciation-verification.md#audio-delivery-surface)
+がこの一般則を発音 workflow に適用する。
+
 ## 規律
 
 1. **user が受け取るべきもの (文面 deliverable・結論・判断材料・訂正) は、
@@ -75,6 +88,8 @@ hook を書く側の含意が 2 つある。
    ([#machine-marker-in-tool-input](#machine-marker-in-tool-input))。
 7. **「この印は user には見えない」と doc に書くなら、実際にその frontend で
    確認してから書く**。未確認の不可視前提は、破れても Claude 側から観測できない。
+8. **tool 側で player が見えたことを user-visible と数えない**。media deliverable は最終応答の
+   direct link / local file まで運び、user が見えないと言ったら tool screenshot で反論しない。
 
 ## なぜ滑りやすいか
 

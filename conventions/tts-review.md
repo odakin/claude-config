@@ -7,6 +7,10 @@ summary: macOS `say` による長文の音声読み上げ校正 (= 日本語 voi
 
 **いつ読む**: 長文 (提案書・論文和文・原稿・重要メール draft 等) を書き終えて、 視覚読み以外の校正 pass をかけたいとき。
 
+**scope boundary**: 本 file は、既に書かれた長文を耳で校正するための local TTS を扱う。
+未知言語・転写された人名の発音を調べる場面では macOS `say` の英語 voice を使わず、
+[`pronunciation-verification.md`](pronunciation-verification.md) の対象言語 evidence ladder と専用 TTS 経路を使う。
+
 > 起源は様式 xlsx の fill 作業 ( [`office-automation.md`](office-automation.md))。 音声校正自体は form fill と独立に任意の長文に効くため、 2026-07-10 に単独 file へ切り出した。
 
 ## <a id="tts-review"></a>基本形

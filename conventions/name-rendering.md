@@ -31,6 +31,15 @@ summary: transliteration・正規化された人名 field は不可逆な投影 
 
 推測した表記を「たぶんこれ」と括弧なしで記録に書き込んだ瞬間、それは後続の全 readout にとって既成事実になる。
 
+## <a id="pronunciation-is-separate-fact"></a>表記と発音は別の fact
+
+正しいローマ字表記が確認できても、その綴りを英語の字価で読めるとは限らない。native script が確認できても、
+方言・姓名順・本人固有の読みまでは自動的に確定しない。**人名表記の source と、発音の evidence を同じ欄で代用しない。**
+
+実際の音を求められたら [`pronunciation-verification.md`](pronunciation-verification.md) の evidence ladder を使う。
+本人録音・母語話者録音・対象言語 TTS・IPA・他言語による近似を区別し、ローマ字を system の英語 voice へ
+渡した結果を「その言語の発音」として提示しない。
+
 ## <a id="name-printing-stakes"></a>高 stakes: 物理的に残る / 対外に出る印字
 
 **招待状・案内状・賞状・名札・記念品・著者名・credit・振込先・名簿**では、誤記が刷り直しや対外的な失礼に直結する。ここでは推測混入を絶対に許さず、**印字の直前に正本と 1 回照合する**。

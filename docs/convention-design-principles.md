@@ -744,6 +744,10 @@ origin: 横断 lookup script が規律表の機械補強 column に**記載済�
 
 変更 → 検証 → 永続化 → 配信 → 読み戻し、のように価値が複数段を完走して初めて届く workflow では、各段の成功がそれぞれ「終わった」感を作る。build 成功、worktree clean、commit 成功は中間状態であり、delivery の postcondition ではない。**完了報告の直前を独立した stage boundary として定義し、そこで最終状態を直接観測する**。
 
+media delivery も同じで、agent が browser tool 内の player を生成・再生できたことは中間状態にすぎない。
+user 向け postcondition は **user-visible surface に直接開ける link / local media file が在ること**であり、tool 側 screenshot や
+accessibility tree はその証拠にならない。具体規律は [`mid-turn-text-visibility.md#tool-side-media-not-user-visible`](../conventions/mid-turn-text-visibility.md#tool-side-media-not-user-visible)。
+
 gate の入力は「どの command を実行したか」という履歴より、workflow が要求する**状態ベクトル**を優先する。Git delivery なら task 由来 dirt、local `HEAD`、tracking ref の ahead/behind、live remote branch head。外部送信なら送信済み receipt と読み戻し、生成 mirror なら source/target digest、という形である。状態を見れば、command 自体の未実行、途中失敗、別 call へ残した最終 leg のいずれも同じ未充足として扱える。具体的な Git 契約は [`CONVENTIONS.md#completion-git-gate`](../CONVENTIONS.md#completion-git-gate)。
 
 既存 state を task の失敗に誤帰属しないため、可能なら最初の mutation 前に baseline を取る。完了時の状態が baseline と同じなら、着手前からの無関係 dirt を agent の変更として stage しない。一方、baseline 取得後に変化した state、local/remote head の不一致、live state の照会不能は silent pass にせず、解消または明示例外へ送る。
@@ -2723,6 +2727,7 @@ config payload 版で、 §8.34 が分岐 (= marker の有無) を扱うのに�
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
+| 2026-09-15 | §8.12c に media delivery の最終状態を追補 | 対象言語 TTS の生成・tool 側 player の再生は成功したが、user の chat / panel に再生ボタンが存在しなかった。生成成功と提示成功を同じ完了扱いにしたため、最終応答の direct audio link まで運ぶのが遅れた。新原則を増やさず、既存の completion-boundary state gate に適用例として昇格 |
 | 2026-09-14 | §8.52 の対策 5 に 2 項追補: #pointer-needs-reader-access (参照を足す前に読み手が正本を読めるか) / #unreferenceable-copy-is-blind (参照を足せない書き写しを許すと死角 → 縮める・生成する・死角として受け入れて注釈に下流 file を書く) | 露出した書き写しを「全部に参照を足す」 と提案し、 うち 1 件が読み手の広い場所にあって参照が依存になると後から気づいた (実測) |
 | 2026-09-14 | §8.52 新設「目印の文字列で重複を探す検出器は、 目印と『参照あり』 の判定の両方が黙って死ぬ — 登録簿そのものを機械で点検する」 | 個人層の正本重複検出器で、 語を目印にした topic・参照判定に目印が含まれて永久に鳴らない topic・一般語を参照とみなす topic・正本から目印が消えた topic が、 すべて finding 0 のまま残っていた (実測)。 移し替えを手作業で済ませた後、 点検を検出器と登録道具に組み込んだ |
 | 2026-09-14 | §8.51 新設「検出器に鳴らされた文が欠陥とは限らない — 規約どおりの使用なら、直すのは検出器で、原文ではない」 | 正本の重複検出が語の使用に鳴った箇所を、 対処文どおりに本文側で直そうとして原文を書き換えた (本文への変更を戻し、 検出器の目印を定義文へ移した)。 対処文が本文の変更しか示していなかった |

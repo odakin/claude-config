@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-15: 発音 evidence と user-visible 音声 delivery を分離する](#pronunciation-evidence-and-delivery)
 - [2026-09-14: 公開 repo の Tier E (owner の非公開の活動の事実)](#public-gate-tier-e)
 - [2026-09-13: 公開 repo の Tier D (未公開文書の逐語) と marker 点検](#public-gate-tier-d)
 - [2026-09-11: 既存図の情報を inventory 後に置換する](#figure-replacement-information-design)
@@ -35,6 +36,27 @@
 - [公開リポ leak 防止: 構造制約 hook + pre-commit ephemeral literal check](#public-repo-leak-prevention)
 - [sensitive-terms.txt の symlink architecture (2026-05-14 追補)](#sensitive-terms-symlink-architecture)
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
+
+---
+
+## <a id="pronunciation-evidence-and-delivery"></a>2026-09-15: 発音 evidence と user-visible 音声 delivery を分離する
+
+**問題**: 転写された人名を英語 system voice に渡すと「音は出る」が対象言語の発音にはならない。
+さらに browser tool 側の player を再生・表示しても、その player が user の chat / panel に提示されたとは限らない。
+この 2 つを一つの成功扱いにすると、**言語として誤った音**と**user に届かない音**の両方を「再生済」で閉じる。
+
+**採用**:
+
+1. 表記の復元 (`name-rendering.md`) と発音 evidence (`pronunciation-verification.md`) を別の fact として扱う。
+2. 発音は本人・母語話者録音 → 対象言語 TTS → IPA の順で取り、他言語 TTS は明示した近似に限る。
+3. 繰り返す対象言語 TTS は UI click でなく API wrapper を layer 1 に置く。ウイグル語の最初の実装は
+   `scripts/uyghur-tts.py` が Idirak/MMS-TTS の公開 endpoint を使い、直接音声 URL または明示保存した WAV を返す。
+4. delivery の完了条件は、tool 側の player でなく、最終応答にある user が開ける link / local media file とする。
+
+**所有**: 発音の evidence ladder と Uyghur route は [`conventions/pronunciation-verification.md`](conventions/pronunciation-verification.md)、
+提示面の一般則は [`conventions/mid-turn-text-visibility.md#tool-side-media-not-user-visible`](conventions/mid-turn-text-visibility.md#tool-side-media-not-user-visible)、
+長文の local 音声校正は [`conventions/tts-review.md`](conventions/tts-review.md) が正本。生成 URL の UUID は一時 artifact なので
+SESSION / DESIGN / 人名 SoT に保存しない。
 
 ---
 
