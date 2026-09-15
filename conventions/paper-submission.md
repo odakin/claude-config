@@ -266,7 +266,7 @@ python3 scripts/arxiv-package.py compare-pdf <arXiv が組版した PDF> arxiv/v
 
 ### <a id="arxiv-coauthor-notice"></a>投稿後: 共著者への連絡と記録
 
-- 添付 = **arXiv が組版した PDF** (投稿した物そのもの) + **前回共著者に送った版からの latexdiff** (base の選び方 = [`research-email.md#diff-page-attachment`](research-email.md#diff-page-attachment))。 公開時刻は読み手の現地時刻で書き、 arXiv 番号は公開後の続報で送る。
+- 添付 = **arXiv が組版した PDF** (投稿した物そのもの) + **前回共著者に送った版からの latexdiff** (base の選び方 = [`research-email.md#diff-page-attachment`](research-email.md#diff-page-attachment))。 公開時刻は読み手の現地時刻で書く。 arXiv 番号だけの続報は既定で送らない (共著者は公開を arXiv で見られる。 通信を増やさない)。
 - 記録 = 投稿 ID・package の元 commit・category・license を project の記録に、 公開と番号の確認・続報を期限つき TODO に置く (人の記憶を carrier にしない)。
 - 公開の確認 = 公開時刻の後に `https://arxiv.org/list/<primary>/new` を題名で探し、 abs page の Subjects 行で cross-list が残っているか (moderator が外すことがある) を見る。 export API の題名検索は公開当日に空の応答だった (実測、 原因は未切り分け) ので、 空を「未公開」 と読まない。 番号が出たら、 番号待ちで止めていた記録 (project の記録・TODO・講演の記録) を同じ turn でまとめて更新する。
 
