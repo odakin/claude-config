@@ -823,8 +823,8 @@ SessionStart hook の注入は agent の文脈にだけ入り、 人の画面に
 
 - **1 本の digest hook だけが注入する**。 他の hook は注入を止めるが、 **副作用 (surface file・台帳・OS 通知・警告行) は止めない** — 共通の出力 helper に「畳む hook 名の list (設定 file)」 を読ませ、 該当なら注入だけを捨てる。 設定が読めなければ畳まない (fail-open = 注入が増える側に倒す)
 - **行数の上限で切らない**。 上限を超えた分は読まれない。 条件を絞ったうえで**全件を見出し 1 行ずつ**出す (中身は正本への id で辿る)
-- **畳んだ class は件数だけ 1 行に出す** (「ほかは一覧で: 超過 N / 返事待ち N …」)。 件数行に無い class は黙って消える = hook を畳むときは件数行にも足すまでが 1 単位
-- **畳んではいけない class** = 自分で決めた期日の reminder (期日当日から数日) と、 条件で発火する reminder (「この日に観察する」 型)。 「外から決まった期限だけ」 に絞ると、 これらが一度も出なくなる。 **日付を差し替えて描画する env** (例 `*_TODAY=YYYY-MM-DD`) を用意し、 発火させたい日付で描いて確かめる
+- **畳んだ class は件数だけ 1 行に出す** (「ほかは一覧で: 超過 N / 返事待ち N …」)。 件数行に無い class は黙って消える = hook を畳むときは件数行にも足すまでが 1 単位。 **条件の外に落ちたもの** (±N 日より前に過ぎた等) も件数に入れる ([`#narrowing-makes-input-load-bearing`](../docs/convention-design-principles.md#narrowing-makes-input-load-bearing))
+- **畳んではいけない class** = 自分で決めた期日の reminder (期日当日から数日) と、 条件で発火する reminder (「この日に観察する」 型)。 「外から決まった期限だけ」 に絞ると、 これらが一度も出なくなる。 **日付を差し替えて描画する env** (例 `*_TODAY=YYYY-MM-DD`) を用意し、 発火させたい日付で描いて確かめる。 一般には、 畳む変更を入れる turn に同じ入力で旧表示と新表示を並べ、 旧にあって新に無い行を 1 回列挙する (同 §8.59 の 2。 これを飛ばすと上の 2 class が消えたことに気づけない = 実測)
 - hook の test root では digest を無効にする (env 1 本)。 そうしないと他の hook の test が注入を見られず落ちる
 
 **数え方**
@@ -845,7 +845,7 @@ SessionStart hook の注入は agent の文脈にだけ入り、 人の画面に
 
 **届いているかの確認**
 
-- 注入も Stop も hook が生きていることが前提。 root 限定の kill switch で全 hook が止まっても session の中からは見えない ([§2 補足 2](#disableallhooks-kill-switch)) ので、 hook と独立した経路 (定期実行の OS 通知など) で「hook の最終実行が古い」 を出す
+- 注入も Stop も hook が生きていることが前提。 root 限定の kill switch で全 hook が止まっても session の中からは見えない ([§2 補足 2](#disableallhooks-kill-switch)) ので、 hook と独立した経路 (定期実行の OS 通知など) で「hook の最終実行が古い」 を出す。 注入がどの session に届き、 どの印で出たかは transcript から数える ([`scripts/injection-reach-audit.py`](../scripts/injection-reach-audit.py)、 [`#surface-reader-is-not-the-owner`](../docs/convention-design-principles.md#surface-reader-is-not-the-owner))
 
 ---
 
