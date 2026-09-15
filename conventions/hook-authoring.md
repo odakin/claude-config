@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき
 category: harness-core
-summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook の同 session 発火も build 依存 = 2026-06 は session / app 起動時 snapshot、 desktop 2.1.266 は Stop hook を hot-reload → 足した直後に discriminator で測る / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)** + **§2 補足 2 #disableallhooks-kill-switch = root 限定の disableAllHooks が「frontend 差」 に化ける 〔自 session では検出不能 = 外側から scripts/hook-liveness-audit.py、 audit-hooks.sh の (d) 自動部分〕** + **test-root-not-parent-dir = test は自分の repo を checkout の親 dir 経由で指さない 〔worktree で落ち・live を検査・python shim は CI でも空振り = 一時 root に symlink 1 本 + 兄弟 repo は正規 layout + 不在は SKIP + mutation で確かめる〕** + **§12 #text-pattern-stop-hook = 最終発話の句で当てる Stop hook は過去の最終発話で校正してから入れる 〔scripts/calibrate-final-message-pattern.py + 共通部品 scripts/lib/transcript_turns.py〕・引用の例示を除く・block は 1 回・fail-open** + **§14 #opt-in-side-effect-hook = 人に向けた副作用だけの hook (音・通知) は層1 に既定 off で置き marker で opt-in、 surface の許可 list は実測値だけ、 実行の証拠を state file に残す** + **#command-guard-calibration = command を見る PreToolUse guard も過去の Bash command で校正 (scripts/calibrate-bash-command-pattern.py) し、 わざと該当する無害な command で live 確認**)
+summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook の同 session 発火も build 依存 = 2026-06 は session / app 起動時 snapshot、 desktop 2.1.266 は Stop hook を hot-reload → 足した直後に discriminator で測る / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)** + **§2 補足 2 #disableallhooks-kill-switch = root 限定の disableAllHooks が「frontend 差」 に化ける 〔自 session では検出不能 = 外側から scripts/hook-liveness-audit.py、 audit-hooks.sh の (d) 自動部分〕** + **test-root-not-parent-dir = test は自分の repo を checkout の親 dir 経由で指さない 〔worktree で落ち・live を検査・python shim は CI でも空振り = 一時 root に symlink 1 本 + 兄弟 repo は正規 layout + 不在は SKIP + mutation で確かめる〕** + **§12 #text-pattern-stop-hook = 最終発話の句で当てる Stop hook は過去の最終発話で校正してから入れる 〔scripts/calibrate-final-message-pattern.py + 共通部品 scripts/lib/transcript_turns.py〕・引用の例示を除く・block は 1 回・fail-open** + **§14 #opt-in-side-effect-hook = 人に向けた副作用だけの hook (音・通知) は層1 に既定 off で置き marker で opt-in、 surface の許可 list は実測値だけ、 実行の証拠を state file に残す** + **#command-guard-calibration = command を見る PreToolUse guard も過去の Bash command で校正 (scripts/calibrate-bash-command-pattern.py) し、 わざと該当する無害な command で live 確認** + **§15 #injection-digest-and-relay = SessionStart の注入は期限の近い item の 1 ブロックに畳み (副作用は止めない・行数で切らない・自分で決めた期日と条件発火は畳まない)、 短い窓の item は伝えたかを Stop で問う 〔scripts/lib/relay_check.py〕**)
 -->
 # Claude Code hooks の作成 + 配信規律
 <!-- slug index: hook-authoring.index.yaml — cross-ref sections by #slug (stable), not §-number. See convention-design-principles §14.2 / §14.7. -->
@@ -814,6 +814,38 @@ block も model 向け出力もせず、 人に向けた副作用 (音を鳴ら�
 - **動いた証拠を自分で残す**: 実行したら時刻を `~/.claude/state/<name>.last` に書く。 live 確認と、 他 machine の確認 TODO の完了判定 ([`multi-machine-state.md#machine-gated-pending-action`](multi-machine-state.md#machine-gated-pending-action) の (6)) がこれを読む。
 - 命名: block しないので [§0](#naming-convention) の `-nudge` (§0 の表は model 向け出力を想定しているが、 副作用だけの hook も「block しない」 側に入れる)。
 - test は副作用の実体を差し替える (再生コマンドを引数を書き出すだけの偽物に、 `$HOME` を一時 dir に) = CI (Linux、 再生コマンドが無い) でも回る。
+
+## <a id="injection-digest-and-relay"></a>§15. SessionStart の注入を 1 ブロックに畳み、 期限の近い item は人に伝えたかを Stop で問う
+
+SessionStart hook の注入は agent の文脈にだけ入り、 人の画面には出ない ([`#surface-reader-is-not-the-owner`](../docs/convention-design-principles.md#surface-reader-is-not-the-owner))。 hook を足すたびに注入の量が増え、 1 件の依頼が他の行に埋もれて agent も人も読まなくなる (実測)。 検出器を増やすのでなく、 **注入を「人が動く・期限が外から決まっている・近い」 item の 1 ブロックに畳み、 短い窓の item は伝えたかを session の終わりに問う** 形にする。 共通部品 = [`scripts/lib/relay_check.py`](../scripts/lib/relay_check.py)。
+
+**畳み方 (digest)**
+
+- **1 本の digest hook だけが注入する**。 他の hook は注入を止めるが、 **副作用 (surface file・台帳・OS 通知・警告行) は止めない** — 共通の出力 helper に「畳む hook 名の list (設定 file)」 を読ませ、 該当なら注入だけを捨てる。 設定が読めなければ畳まない (fail-open = 注入が増える側に倒す)
+- **行数の上限で切らない**。 上限を超えた分は読まれない。 条件を絞ったうえで**全件を見出し 1 行ずつ**出す (中身は正本への id で辿る)
+- **畳んだ class は件数だけ 1 行に出す** (「ほかは一覧で: 超過 N / 返事待ち N …」)。 件数行に無い class は黙って消える = hook を畳むときは件数行にも足すまでが 1 単位
+- **畳んではいけない class** = 自分で決めた期日の reminder (期日当日から数日) と、 条件で発火する reminder (「この日に観察する」 型)。 「外から決まった期限だけ」 に絞ると、 これらが一度も出なくなる。 **日付を差し替えて描画する env** (例 `*_TODAY=YYYY-MM-DD`) を用意し、 発火させたい日付で描いて確かめる
+- hook の test root では digest を無効にする (env 1 本)。 そうしないと他の hook の test が注入を見られず落ちる
+
+**数え方**
+
+- 「何 session 表示したか」 の台帳は**注入の経路からだけ記録する** (env で記録を許可)。 dashboard や手動実行からも記録すると、 人に 1 回も見せていないのに回数が増え、 回数で上げる強制が早く発火する (実測)
+
+**伝えたかの検査 (Stop)**
+
+- 対象は**本文の期限まで短い窓 (例 2 日以内) の item だけ**。 期限は経過時間でなく**残り時間**で判定する (経過時間の緊急印は短い窓で逆転する = [`#elapsed-time-urgency-inversion`](../docs/convention-design-principles.md#elapsed-time-urgency-inversion))
+- 判定 = この session の assistant の text に、 item の件名の語 (固有の 4 字 / 長い英単語) が 1 つでも出たか。 出ていなければ block して「1 行伝える」 を求める。 **処分 (返信・TODO 化) までは求めない** (初回表示で処分を強制すると印が壁紙になる = [`#surfaced-not-consumed`](../docs/convention-design-principles.md#surfaced-not-consumed))
+- 誤判定の cost を 1 block に抑える: `stop_hook_active` なら即 exit 0 / 語が取れない件名は判定しない (止めない側) / import や transcript の読み取り失敗は黙る (fail-open)。 transcript は長い session で大きいので、 対象 item がある時だけ読む
+- **workspace の外で動く session (封じた review sandbox など) では止めない** (cwd で gate、 env で外せる) — 隔離した session に外の item を持ち込むと隔離が壊れる
+- 句で当てる Stop hook なので、 語の抽出を変えたら過去の transcript で校正する ([§12](#text-pattern-stop-hook))
+
+**案件単位で見せる**
+
+- 1 件を処分させるときは、 件名の語を共有する未処理 item を並べる (`relay_check.related`、 多くの件名に出る語では結ばない)。 件名を変えて届いた後続を見ないまま「失効した」 と判定するのは不在の主張 ([`#lapse-claim-is-absence-claim`](../docs/convention-design-principles.md#lapse-claim-is-absence-claim))
+
+**届いているかの確認**
+
+- 注入も Stop も hook が生きていることが前提。 root 限定の kill switch で全 hook が止まっても session の中からは見えない ([§2 補足 2](#disableallhooks-kill-switch)) ので、 hook と独立した経路 (定期実行の OS 通知など) で「hook の最終実行が古い」 を出す
 
 ---
 

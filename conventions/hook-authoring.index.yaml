@@ -278,6 +278,9 @@ sections:
   - id: opt-in-side-effect-hook
     level: 2
     title: "§14. 人に向けた副作用だけの hook (音・通知) は層1 に既定 off で置き、 marker で opt-in"
+  - id: injection-digest-and-relay
+    level: 2
+    title: "§15. SessionStart の注入を 1 ブロックに畳み、 期限の近い item は人に伝えたかを Stop で問う"
   - id: related-docs
     level: 2
     title: "関連"
