@@ -131,6 +131,10 @@ check_conflict_markers() {
 }
 run "conflict markers (git grep)" check_conflict_markers
 
+# 7. mktemp の template で X の後ろに拡張子 (BSD/macOS では X が置換されず固定名 → 2 回目から失敗。 Linux CI では再現しない)
+run "mktemp template (X は末尾 = conventions/hook-authoring.md#mktemp-template-suffix)" \
+    python3 scripts/check-mktemp-template.py .
+
 echo ""
 echo "════════════════════════════════════"
 echo " run-all-checks: PASS=$PASS FAIL=$FAIL"

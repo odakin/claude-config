@@ -797,6 +797,10 @@ sections:
     legacy: "8.59"
     level: 3
     title: "8.59 表示を絞る変更は、 絞った後に残る入力の正しさを load-bearing にする — 条件の外に落ちたものは件数で残す"
+  - id: detector-change-breaks-downstream-writers
+    legacy: "8.60"
+    level: 3
+    title: "8.60 検出器を締める変更は、 その前に立つ無人の書き手を黙って止める — 過去の出力を今の検出器に通し直す"
   - id: changelog
     level: 2
     title: "変更履歴"

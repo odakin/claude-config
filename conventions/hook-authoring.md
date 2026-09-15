@@ -115,6 +115,8 @@ commit gate (pre-commit) が staged file を舐めて検査する形は定石だ
   - どちらも `--selftest` に「一時 repo に binary + trigger を含む text を stage して、 検出が出る」 case を置く (run-all-checks が自動で拾うので、 読み方が退行すると CI が落ちる)
 - <a id="warn-check-crash-visible"></a>**chain から warn-only の検査を呼ぶときは `|| true` で潰さない** — 異常終了の traceback は流れて消え、 その commit で検査が走らなかったことに誰も気づかない。 **commit は止めずに、 非 0 終了なら「<検査名> が異常終了 (rc=N) — この commit では走っていない」 と 1 行出す** (確認用の `--selftest` コマンドも添える)。 test は「落ちる検査を置いた一時 HOME で chain を回し、 commit が通り 1 行が出る / 正常・不在の検査では何も出ない」 の 3 case
 
+- <a id="mktemp-template-suffix"></a>**`mktemp` の template は X を末尾に置く** — GNU は `name-XXXXXX.md` の X を置換するが、 **BSD (macOS) は末尾の X しか置換しない**。 後ろに拡張子があると literal の名前で作られ、 1 回目は成功、 2 回目以降は「File exists」 で空の path が返り、 その先の書き込みが全部失敗する (同時に走る 2 本は同じ file を奪い合う)。 Linux の CI では再現しない。 実測: 無人の週次監査が 2 回目以降ずっと報告を書けないまま exit 1 を返していた。 拡張子が要るときは `d="$(mktemp -d)"` の中に固定名で作る。 機械 = [`scripts/check-mktemp-template.py`](../scripts/check-mktemp-template.py) (run-all-checks から。 `--root` で複数 repo を横断)
+
 ### <a id="set-e-test-failure-report"></a>§0 補足 5: `set -e` の test は落ちた行を自己申告させる — 無言の exit 1 は CI log に test 名しか残さない
 
 **罠**: `set -euo pipefail` の test で bare な `[ ... ]` / `grep -q` を assertion にすると、 落ちた瞬間に**何も言わずに exit 1** する。 集計 runner (`scripts/run-all-checks.sh`) は test 名しか出さないので、 CI log には `✗ test: <name>` だけが残り、 どの assertion が落ちたか読めない。

@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate)
+when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers)
 category: infra
 summary: 暗号化は中身しか守らない (file 名・commit message・path は平文) ので識別子入り dir は暗号化 tar に畳む (連番+対応表は対応表が単一障害点で不可)、 保存しない > 暗号化する (通知に payload を載せず schema で縛る、 死んだ複製は削除)、 逐語の指紋照合は写しを捕まえるが言い換えは原理的に不可なので経路ごとに制御を変える (閾値は全件集計で決める = 誤検知 6800→24→0 の実測)、 fail-open な gate は必ずカナリアで実効性を毎回確かめ ARMED/NOT ARMED/対象外 の 3 状態を出す (沈黙を作らない)、 是正は go-forward にしか効かず履歴は別問題として人間の判断に委ねる、 公開 repo には未公開文書の逐語 gate を別に置く (漏れる例示は引用符に入った短い断片なので quoted span が主、 全履歴 replay で誤検出 0 を確かめて採用)、 gate が target の pre-commit で実際に走っているかは target ごとに確かめる
 -->
@@ -272,6 +272,39 @@ builder は **3 字以上の term や ASCII term を含む複合語を拒否**�
 path 単位の除外は後から入った本物も黙らせる ([`#semantic-detector-ack-ratchet`](../docs/convention-design-principles.md#semantic-detector-ack-ratchet)) ので、 代償を型で絞る
 ([`scripts/lib/public_tree_accept.py`](../scripts/lib/public_tree_accept.py)): 宣言できるのは **データ形式の file だけ** (文章・code が 1 つでも当たれば宣言ごと無効)、
 glob は tracked file に当たること、 生成元を書くこと、 外した数を走査のたびに表示すること。
+
+#### <a id="tree-finding-resolution"></a>棚卸しの finding を決着させる判定表
+
+finding は「直す」 か「見た上で残す」 のどちらかで閉じるが、 残し方は finding の種類で口が違う。 **上から順に当てる**
+(= 直せるものを残す口に流さない):
+
+| finding の中身 | 決着のさせ方 |
+|---|---|
+| owner 側が書いた識別子・非公開 repo 名・未公開の文 | **本文を一般形に直す** (Tier B/C は受理できない) |
+| 開発機の home path が設定・build spec に焼かれている | **bug fix として直す** ([`#personal-path-is-also-a-portability-bug`](#personal-path-is-also-a-portability-bug)) |
+| IDE / game engine 等が生成する cache・log・user 設定を追跡している | **追跡を外す** + その tool の標準 `.gitignore` (dir を名前で走査から外すのではない) |
+| upstream (fork 元・同梱 runtime・exporter) の連絡先・例示 path・版番号 | Tier A の **受理** (token + 理由) |
+| IP に見える版番号 (browser の User-Agent の `Chrome/<major>.0.0.0`・assembly の `Version=<n>.0.0.0` 等) | Tier A の **受理** |
+| 姓の短い term が地名・歴史上の人物名・普通語の一部に当たる | 個人層の **`compound_allow`** ([`#name-compound-allow`](#name-compound-allow)) |
+| arXiv / DOI の書誌 (題名・著者・要旨)、 公開論文への link だけの行 | 何もしない (runner が構造で外す = [`#published-metadata-is-public`](#published-metadata-is-public))。 残るなら構造 (id / URL) が無い |
+| 外部の公開データを機械が変換した file | **`generated:` 宣言** ([`#generated-data-declaration`](#generated-data-declaration)) |
+| 名前が公開 repo 自身の identity の一部 (公開 mirror の源の名前など) | 非公開 repo 名の例外 list (owner 判断、 criterion は層1 の安全規則) |
+
+- どの種類の term が当たったかは gate の出力から分からない (件数と file 名だけ) — [`scripts/explain-sensitive-hits.py`](../scripts/explain-sensitive-hits.py) `--repo` が同じ除外を当てた後の残りを種類つき・term を伏せて出す
+- **archived の公開 repo** は push できない。 受理一覧を入れるなら unarchive → commit (message に `[skip ci]` = 古い CI を起こさない) → push → すぐ archive に戻し、 戻ったことを確認する
+- 決着させたら **本番の台帳で** `scan-public-tree.sh --repo <repo> --force` を 1 回通す (= temp の台帳で確かめただけでは進捗にならない)
+
+#### <a id="gate-change-replays-unattended-writers"></a>gate を締めたら、 その前に立つ無人の書き手の過去の出力を通し直す
+
+検出語の再生成・Tier の追加・runner の修正は、 **公開 repo に自動で commit する routine** (日次の archive 等) を黙って止めうる。
+書き手は失敗を warning で握りつぶす設計のことが多く、 その日の出力に偶然当たる語が無ければ、 当たる出力が出る日まで表に出ない。
+実測: 検出語を締めた後、 論文を記録する bot の archive が共著者名と手元の原稿と同じ要旨で必ず止まる状態になっていたが、 締めた当日の出力は通っていた。
+
+∴ gate を変えた turn に、 無人の書き手の直近の commit を **今の** gate に通す: [`scripts/replay-public-gate.sh`](../scripts/replay-public-gate.sh)
+`--repo <repo> --path <書き手の出力先> --since "14 days ago"` (C が変えた file だけを temp repo に置き、 親の版 → C の版の差分として runner を回す)。
+止まる commit があれば、 誤検知なら検出器側を直し ([上の判定表](#tree-finding-resolution))、 本物なら書き手の出力 (生成の指示) を直す。
+定期実行にも載せる (= gate の変更と書き手の出力の変化のどちらからでも鳴るように)。 一般則 =
+[`docs/convention-design-principles.md#detector-change-breaks-downstream-writers`](../docs/convention-design-principles.md#detector-change-breaks-downstream-writers)。
 
 ### <a id="visibility-decided-at-publish-time"></a>公開にするかは、 中身が出来てから・公開する直前に決める
 

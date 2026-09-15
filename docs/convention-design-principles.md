@@ -2986,6 +2986,27 @@ origin: 手順列を持つ記録で、 途中の更新が期限欄を目安の�
 
 origin: 注入を期限の近い義務だけに絞った変更で、 期限欄が古いまま残った記録が件数ごと消えていた (実測)。
 
+### <a id="detector-change-breaks-downstream-writers"></a>8.60 検出器を締める変更は、 その前に立つ無人の書き手を黙って止める — 過去の出力を今の検出器に通し直す
+
+gate (commit を止める検出器) の語を増やす・判定を広げる変更は、 **人が見ている commit では即座に鳴るので安全に見える**。
+ところが同じ gate の前には、 無人で出力を commit する routine が立っていることがある。 routine は失敗を warning で握りつぶす設計が多く、
+しかも **締めた当日の出力に当たる語が無ければ通る** ので、 当たる出力が出る日まで壊れたことが表に出ない (出た日にも誰も見ていない)。
+検出器の較正は「人の commit で誤爆しないか」 で行われ、 **機械の出力の分布**は較正の標本に入っていない。
+
+**対策**:
+
+1. 検出器を変える turn に、 **無人の書き手の直近の出力を今の検出器に通し直す** (= 較正の標本に機械の出力を足す)
+2. 止まる出力の中身で分ける: 誤検知 (公開済みの書誌・第三者の公開データ・地名) なら**検出器側を構造で直す** / 本物 (書き手が生成した文に実名) なら**書き手の生成の指示を直す**
+3. 通し直しを定期実行にも載せる (= 検出器の変更と、 書き手の出力の変化のどちらからでも鳴る)。 窓は直近に限る (= 直した後も履歴に残る古い出力で永久に赤くならない)
+4. 無人の書き手の失敗経路 (warning で握りつぶす) 自体を、 見える面に上げられるなら上げる
+
+**適用の見分け方**: 検出器の変更を「人の commit で鳴るか」 だけで確かめた / その repo に bot や定期 routine の commit が混じっている。
+
+**実装例** = [`scripts/replay-public-gate.sh`](../scripts/replay-public-gate.sh) (規約 = [`conventions/confidential-repo-boundary.md#gate-change-replays-unattended-writers`](../conventions/confidential-repo-boundary.md#gate-change-replays-unattended-writers))。
+兄弟 = [§8.54](#detector-installed-after-the-stock) (設置前の在庫) / [§8.59](#narrowing-makes-input-load-bearing) (絞る変更で消えるもの)。
+
+origin: 検出語を締めた後、 論文を記録する bot の archive が共著者名と要旨で必ず止まる状態になっていたが、 締めた当日の出力は通っていた (実測)。
+
 ## <a id="changelog"></a>変更履歴
 
 | 日付 | 変更 | 動機 |
