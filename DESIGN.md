@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-15: 公開 repo の gate の誤検知を構造で消す (書誌・複合語・生成データ) + 棚卸しと監査を 1 本に](#public-gate-structural-exemptions)
 - [2026-09-15: 発音 evidence と user-visible 音声 delivery を分離する](#pronunciation-evidence-and-delivery)
 - [2026-09-14: 公開 repo の Tier E (owner の非公開の活動の事実)](#public-gate-tier-e)
 - [2026-09-13: 公開 repo の Tier D (未公開文書の逐語) と marker 点検](#public-gate-tier-d)
@@ -38,6 +39,24 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="public-gate-structural-exemptions"></a>2026-09-15: 公開 repo の gate の誤検知を構造で消す (書誌・複合語・生成データ) + 棚卸しと監査を 1 本に
+
+**判断**:
+- 公刊済みの書誌 (arXiv / DOI を持つ JSON record の title・authors・abstract の値の行、 公開先 link だけの md 行) は **行の構造で** Tier A-E から外す (`lib/published_metadata.py`)。 書き手の文 (reason / summary / link 以外の語) は外さない
+- 実名 gate の姓 2 字 term が地名等に当たる誤検知は、 個人層の `compound_allow` で **複合語だけ** を照合前に消す (`lib/sensitive-terms.sh`、 runner と commit-msg matcher が共有)。 3 字以上の term・ASCII term を含む複合語は builder が拒否
+- 外部の公開データを機械が変換した file は、 受理一覧の `generated: <glob>  # 生成元` で **棚卸しからだけ** 外す (`lib/public_tree_accept.py`)。 データ形式の file に限る
+- 週次監査 (`audit-public-repos.sh`) は中身の検査を `scan-public-tree.sh --force` に委ね、 独自の grep を削除 (= 棚卸し・監査・commit gate の除外が 1 つの runner に揃う)
+- gate を締めたら無人の書き手の直近 commit を今の gate に通す (`replay-public-gate.sh`)
+
+**却下した案**:
+- 書誌を許可 list (題名・著者名の列挙) で逃がす = 論文が増えるたびに古くなり、 list 自体が名前の一覧になる
+- 棚卸しで Tier B を path / file 単位で受理する = 公開の受理一覧に置けば term の在り処を晒し、 後から入った実名も黙る
+- 姓 2 字の prefix を stoplist に落とす = 「X さん」 が止まらなくなる (網が縮む)
+- vendored / 生成物の dir を名前で走査から外す = 実測では生成物に共同作業者の開発機の path が焼かれていて、 除外するとそれが隠れる
+- 無人の書き手の commit を `--no-verify` にする = 実名の網を自分で外す
+
+**un-defer trigger**: `compound_allow` が 20 語を超えたら、 地名辞書などから導出する方式を再検討 (= 手で足す list は育たないか膨らむ)。 規約 = [`conventions/confidential-repo-boundary.md#tree-finding-resolution`](conventions/confidential-repo-boundary.md#tree-finding-resolution)。
 
 ## <a id="pronunciation-evidence-and-delivery"></a>2026-09-15: 発音 evidence と user-visible 音声 delivery を分離する
 

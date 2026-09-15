@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: public-gate-structural-exemptions
+    legacy: "2026-09-15"
+    level: 2
+    title: "2026-09-15: 公開 repo の gate の誤検知を構造で消す (書誌・複合語・生成データ) + 棚卸しと監査を 1 本に"
   - id: pronunciation-evidence-and-delivery
     legacy: "2026-09-15"
     level: 2
