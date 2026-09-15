@@ -74,7 +74,7 @@ while [ $# -gt 0 ]; do
     --max)    shift; MAXN="${1:-0}" ;;
     --force)  FORCE=1 ;;
     --quiet)  QUIET=1 ;;
-    -h|--help) sed -n '1,44p' "$0"; exit 0 ;;
+    -h|--help) awk '/^set -uo pipefail/ { exit } { print }' "$0"; exit 0 ;;   # header 全体 (行数を焼かない)
     *) echo "scan-public-tree.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
