@@ -466,6 +466,48 @@ preserve the no-`~/.claude`-writes boundary.
 This limitation applies only to the Codex installer. The repository's existing
 Windows bootstrap for Claude Code remains supported and unaffected.
 
+## <a id="external-browser-lifecycle"></a>External-browser lifecycle and recovery
+
+Source check: 2026-09-15. The official
+[ChatGPT browser-extension guide](https://learn.chatgpt.com/docs/chrome-extension)
+supports Chrome, Edge, Brave, Opera, and Vivaldi, tells the user to select the
+browser in a ChatGPT Work or Codex chat, and requires the browser profile where
+the extension is installed. The external browser is therefore a user-selected,
+profile-bound live context; it is not a disposable implementation detail of the
+agent. Use the in-app browser for an isolated ChatGPT-owned profile instead.
+
+The product-neutral source of truth is
+[`recovery-state-transition`](../docs/convention-design-principles.md#recovery-state-transition),
+with the operational diagnosis in
+[`debugging-discipline.md#recovery-state-dispatch`](../conventions/debugging-discipline.md#recovery-state-dispatch).
+Apply it to Codex external-browser recovery as follows:
+
+- connected and healthy: reuse the selected extension-backed browser; do not launch;
+- browser running but extension transport unavailable: retry the lightweight
+  connection once, then repair or surface the transport/profile mismatch;
+- browser stopped: after the applicable user-permission boundary, launch the
+  selected profile once and retry the connection;
+- browser running under the wrong profile: ask the user to select the profile
+  where the extension is enabled; do not force a parallel process over the same
+  user-data directory; and
+- process or connection state unknown: report the failed probe rather than
+  treating unknown as stopped.
+
+A forced fresh process can have a legitimate narrow purpose: macOS launch
+arguments such as a profile selector may only reach a newly created process.
+That purpose does not override the observed live state. A correct implementation
+branches before launch, preserves a healthy singleton, and uses an independently
+isolated profile/storage root only when a true parallel instance is required.
+Retries must be bounded and must not accumulate windows, tabs, processes, crash
+reports, or notifications.
+
+Bundled plugin caches and their version-specific launch scripts are layer-4
+runtime state. A local edit that removes a force-new-instance flag is a reversible
+mitigation for the affected build, not the durable implementation and not an
+installer responsibility. Keep a backup, verify the generated command, expect an
+application/plugin update to replace the cache, and use the product feedback path
+for an upstream fix. Do not teach `scripts/setup-codex.sh` to patch a vendor cache.
+
 ## Four-layer architecture
 
 Codex follows the same audience order as the shared configuration:

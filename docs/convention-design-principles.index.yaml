@@ -197,6 +197,10 @@ sections:
     legacy: "8.12d"
     level: 3
     title: "8.12d 人の記憶も carrier ではない — 「あとで 1 回やって」 を人に渡さない"
+  - id: recovery-state-transition
+    legacy: "8.12e"
+    level: 3
+    title: "8.12e 復旧は命令の再実行でなく状態遷移 — healthy な既存 instance を壊して作り直さない"
   - id: conditional-firing-visibility
     legacy: "8.13"
     level: 3

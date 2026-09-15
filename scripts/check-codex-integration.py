@@ -11,6 +11,8 @@ This checker deliberately verifies only objective invariants:
 * known superseded capability claims do not return;
 * the shipped Hooks configuration names the expected local adapters.
 * repository/template entry points retain the root AGENTS.md discovery contract;
+* the external-browser recovery application retains pointers to the shared
+  state-transition source of truth and official browser-profile contract;
 * the aggregate runner, CI, and pre-commit warning keep the contract and
   adapter tests wired to an automatic trigger.
 
@@ -318,6 +320,32 @@ CONTEXT_BUDGET_REQUIREMENTS = {
     "README.md": ("context-capacity-evidence-layers", "billing or credit policy"),
     "README.ja.md": ("context-capacity-evidence-layers", "課金・credit"),
 }
+EXTERNAL_BROWSER_RECOVERY_REQUIREMENTS = {
+    "docs/convention-design-principles.md": (
+        'id="recovery-state-transition"',
+        "absent / stopped",
+        "present + healthy",
+        "present + transport/control-plane failure",
+        "present + wrong context/profile/session",
+        "unknown / probe failure",
+        "debugging-discipline.md#recovery-state-dispatch",
+        "codex/PARITY.md#external-browser-lifecycle",
+    ),
+    "conventions/debugging-discipline.md": (
+        'id="recovery-state-dispatch"',
+        "docs/convention-design-principles.md#recovery-state-transition",
+        "launch は recovery の同義語ではない",
+        "codex/PARITY.md#external-browser-lifecycle",
+    ),
+    "codex/PARITY.md": (
+        'id="external-browser-lifecycle"',
+        "https://learn.chatgpt.com/docs/chrome-extension",
+        "docs/convention-design-principles.md#recovery-state-transition",
+        "conventions/debugging-discipline.md#recovery-state-dispatch",
+        "do not force a parallel process over the same",
+        "Do not teach `scripts/setup-codex.sh` to patch a vendor cache.",
+    ),
+}
 MACHINE_PROVENANCE_REQUIREMENTS = {
     "codex/PARITY.md": (
         'id="machine-local-provenance"',
@@ -590,6 +618,16 @@ def check(root: Path) -> list[str]:
         for fragment in fragments:
             if fragment not in content:
                 errors.append(f"{relative}: missing context-budget contract: {fragment}")
+    for relative, fragments in EXTERNAL_BROWSER_RECOVERY_REQUIREMENTS.items():
+        path = root / relative
+        try:
+            content = text(path)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        for fragment in fragments:
+            if fragment not in content:
+                errors.append(f"{relative}: missing external-browser recovery contract: {fragment}")
     for relative, fragments in MACHINE_PROVENANCE_REQUIREMENTS.items():
         path = root / relative
         try:
@@ -667,6 +705,11 @@ def fixture(root: Path) -> None:
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
         path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
     for relative, fragments in CONTEXT_BUDGET_REQUIREMENTS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        path.write_text(existing + "\n".join(fragments) + "\n", encoding="utf-8")
+    for relative, fragments in EXTERNAL_BROWSER_RECOVERY_REQUIREMENTS.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -867,6 +910,19 @@ def selftest() -> int:
         errors = check(root)
         if not any(error.startswith("codex/HOME-AGENTS.md: missing context-budget") for error in errors):
             print("FAIL: missing context-budget contract was not detected")
+            return 1
+
+        fixture(root)
+        browser_recovery_path = root / "codex/PARITY.md"
+        browser_recovery_path.write_text(
+            browser_recovery_path.read_text(encoding="utf-8").replace(
+                'id="external-browser-lifecycle"', 'id="removed-browser-lifecycle"'
+            ),
+            encoding="utf-8",
+        )
+        errors = check(root)
+        if not any("missing external-browser recovery contract" in error for error in errors):
+            print("FAIL: missing external-browser recovery contract was not detected")
             return 1
 
         fixture(root)

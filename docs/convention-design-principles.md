@@ -776,6 +776,43 @@ origin: 長い変更 task で既存の commit/push 規則と dirty nudge が在�
 
 origin: 2026-09-12、 新しい hook を足した直後に「別マシンで installer を 1 回実行」 と書いた。 その installer は既に毎 session 冪等に再走していて、 手順自体が不要だった。 user の返答 = 「次を 1 回実行、 とか覚えてられるわけなくない？」。 同じ session で「次に別マシンを使うとき、 そこの Claude に◯◯と頼めば済む」 とも書いており、 こちらは自動で出る carrier を作ったのが次の turn だった。
 
+### <a id="recovery-state-transition"></a>8.12e 復旧は命令の再実行でなく状態遷移 — healthy な既存 instance を壊して作り直さない
+
+`start` / `open` / `restart` / `retry` という command 名は、望む終状態を表さない。復旧の正本は
+「どの命令をもう一度打つか」ではなく、**観測した事前状態から、望む事後状態へどの遷移を選ぶか**である。
+特に singleton、profile、session、lock、共有 storage を持つ外部 application では、起動済みの instance は
+捨ててよい残骸ではなく、守るべき live state である。
+
+最低限、事前状態を次の 5 つに分ける。単一の probe の失敗を「停止中」へ潰さない。
+
+| 事前状態 | 第一の遷移 | 禁止する短絡 |
+|---|---|---|
+| absent / stopped | user の許可境界を満たして 1 回だけ launch | 接続 probe の失敗だけで absent と断定 |
+| present + healthy | reuse / no-op | 念のため restart、fresh instance を追加 |
+| present + transport/control-plane failure | reconnect / transport repair | data-plane の application process を複製して代用 |
+| present + wrong context/profile/session | explicit switch / 正しい context を user に選ばせる | 同じ storage を共有する別 instance を force-create |
+| unknown / probe failure | 診断を fail-loud にして止まる | unknown を absent 扱いして mutation |
+
+**状態保存の序列**は `reuse/no-op → reconnect → explicit context switch → orderly restart → isolated new instance`。
+右へ進むほど既存 state を失うので、左の遷移が不可能だと観測してからだけ進む。真に並列 instance が必要なら、
+同じ profile / user-data directory / lock を共有させず、独立 storage と lifecycle を設計する。
+
+起動引数を確実に `main()` へ渡す、profile を指定する、新しい window を出す、といった**正当な局所目的**は、
+force-new-instance の十分条件ではない。引数が fresh process にしか届かないなら、(a) stopped 時だけその launch を使う、
+(b) running 時は既存 instance の制御面で context を切り替える、(c) 制御面に経路が無ければ user に明示して止まる、
+の分岐を持つ。引数を通す都合で事前状態を上書きしてはならない。
+
+retry は同じ状態から同じ副作用を増やさない冪等性と、event ごとの回数上限を持つ。検収は目的機能だけでなく、
+**余剰 process / window / tab / crash report / lock / notification が増えていないこと**も state delta で見る。
+具体的な診断順序は
+[`debugging-discipline.md#recovery-state-dispatch`](../conventions/debugging-discipline.md#recovery-state-dispatch)、
+Codex の外部 browser への適用は
+[`codex/PARITY.md#external-browser-lifecycle`](../codex/PARITY.md#external-browser-lifecycle) が所有する。
+
+origin: macOS の外部 browser adapter が、既に live な singleton に対して fresh instance を強制し、
+新 process が application 登録中に abort する事例。機構は複数回反復したが 1 製品 family の観察なので、
+本節の scope は **singleton / context-bound な外部 application の自動復旧**に限定する。あらゆる relaunch を禁じる根拠ではない。
+
 ### <a id="conditional-firing-visibility"></a>8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる
 
 §8.12 は発火面の強弱だった。 本節はその前提条件: **出力の不在は ambiguous** — 「動いて該当なし (= 正常な沈黙)」 と「そもそも動いていない (= 未配線・未登録・未 install)」 を外から区別できない。 per-machine wiring / scheduled task 登録 / opt-in install のように **活性化に手動 step を要する mechanism** は、 その step が抜けても何も言わない (= silent dead) ので、 設計者は「動いている」 と誤認し続ける。
@@ -2727,6 +2764,7 @@ config payload 版で、 §8.34 が分岐 (= marker の有無) を扱うのに�
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
+| 2026-09-15 | §8.12e 新設「復旧は命令の再実行でなく状態遷移」 | 起動済みの singleton application に fresh instance を強制する browser adapter が、profile 引数を通す局所目的は持ちながら新 process を反復 crash させた。`absent / healthy / transport failure / wrong context / unknown` を分け、状態保存順に遷移を選ぶ kernel へ一般化。単一製品 family 由来なので適用範囲も限定した |
 | 2026-09-15 | §8.12c に media delivery の最終状態を追補 | 対象言語 TTS の生成・tool 側 player の再生は成功したが、user の chat / panel に再生ボタンが存在しなかった。生成成功と提示成功を同じ完了扱いにしたため、最終応答の direct audio link まで運ぶのが遅れた。新原則を増やさず、既存の completion-boundary state gate に適用例として昇格 |
 | 2026-09-14 | §8.52 の対策 5 に 2 項追補: #pointer-needs-reader-access (参照を足す前に読み手が正本を読めるか) / #unreferenceable-copy-is-blind (参照を足せない書き写しを許すと死角 → 縮める・生成する・死角として受け入れて注釈に下流 file を書く) | 露出した書き写しを「全部に参照を足す」 と提案し、 うち 1 件が読み手の広い場所にあって参照が依存になると後から気づいた (実測) |
 | 2026-09-14 | §8.52 新設「目印の文字列で重複を探す検出器は、 目印と『参照あり』 の判定の両方が黙って死ぬ — 登録簿そのものを機械で点検する」 | 個人層の正本重複検出器で、 語を目印にした topic・参照判定に目印が含まれて永久に鳴らない topic・一般語を参照とみなす topic・正本から目印が消えた topic が、 すべて finding 0 のまま残っていた (実測)。 移し替えを手作業で済ませた後、 点検を検出器と登録道具に組み込んだ |

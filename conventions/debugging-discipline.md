@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: bug fix を提案する前・audit verdict を出す前 (検証規律) + CI が red のとき (= red streak の起点と原因 commit を探す・手元で Linux CI を再現する、 §17)
+when: bug fix を提案する前・audit verdict を出す前 (検証規律) + CI が red のとき (= red streak の起点と原因 commit を探す・手元で Linux CI を再現する、 §17) + 外部 GUI app / daemon / browser の復旧で start・open・restart・retry を提案または実行する前 (= #recovery-state-dispatch)
 category: infra
-summary: Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)、 性能修復は measure-first + 出力等価性 (= 受け入れ diff の前に noise floor を測る / 旧版は同じ dir に別名で置いて並走) + 決定的並列化 + #run-scoped-cache = 鮮度が価値の検出器 fleet の cache は TTL でなく run に閉じる 〔TTL は新着を silent に隠す〕 (§15)、 機能の回復は調査終了の条件でない = 症状が「余剰」 型だと retry で直った瞬間に原因が再発源に残る + origin 不明の残骸は恒常 noise 化して調査 trigger を失う (§16)、 CI の red streak は起点から遡る = 着手前に最新 run を再照会 / 最後の green → 最初の red (run は push 単位) + pickaxe で導入 commit / 使い捨て clone × native・GNU userland × 空 HOME の行列で再現 / 無言の assertion を自己申告型に / 常時 red は情報を運ばない / #flaky-is-a-symptom = 「flaky」 は診断名ではない 〔再実行で緑でも原因を見るまで閉じない。 疑う順 = 値の中身・順序/時刻・環境差・資源。 `--log-failed` は抜粋なので完全ログを取る〕 (§17、 scripts/ci-red-streak.py・scripts/ci-local-repro.sh)
+summary: Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)、 性能修復は measure-first + 出力等価性 (= 受け入れ diff の前に noise floor を測る / 旧版は同じ dir に別名で置いて並走) + 決定的並列化 + #run-scoped-cache = 鮮度が価値の検出器 fleet の cache は TTL でなく run に閉じる 〔TTL は新着を silent に隠す〕 (§15)、 機能の回復は調査終了の条件でない = 症状が「余剰」 型だと retry で直った瞬間に原因が再発源に残る + origin 不明の残骸は恒常 noise 化して調査 trigger を失う (§16)、 復旧は起動命令の反復でなく事前状態別 dispatch = healthy は reuse / 接続異常は reconnect / stopped だけ launch / context 不一致は explicit switch / unknown は fail-loud (#recovery-state-dispatch)、 CI の red streak は起点から遡る = 着手前に最新 run を再照会 / 最後の green → 最初の red (run は push 単位) + pickaxe で導入 commit / 使い捨て clone × native・GNU userland × 空 HOME の行列で再現 / 無言の assertion を自己申告型に / 常時 red は情報を運ばない / #flaky-is-a-symptom = 「flaky」 は診断名ではない 〔再実行で緑でも原因を見るまで閉じない。 疑う順 = 値の中身・順序/時刻・環境差・資源。 `--log-failed` は抜粋なので完全ログを取る〕 (§17、 scripts/ci-red-streak.py・scripts/ci-local-repro.sh)
 -->
 # Debugging discipline
 
@@ -585,11 +585,35 @@ snapshot ができた瞬間に**未来と比較**しかけた (b) 回帰 test �
 先行して同 session で (c) 「自分の snapshot copy と比べて『1 行も増えていない』」 という
 degenerate 比較も踏んでおり、3 件とも基準点の選び方が原因という同型。
 
+## <a id="recovery-state-dispatch"></a>20. 外部 process の復旧は事前状態で dispatch する — launch は recovery の同義語ではない
+
+一般原則と状態保存の序列は
+[`recovery-state-transition`](../docs/convention-design-principles.md#recovery-state-transition) が正本。
+本節は、GUI application、browser、daemon、native host などの復旧を実行する前の診断手順だけを持つ。
+
+1. **対象本体と制御面を別々に測る**: process / singleton lock / application inventory と、extension / socket /
+   native-host / account / profile の接続を別 probe にする。接続失敗は process 不在を意味しない。
+2. **発生源を帰属する**: crash / hang / 再起動なら OS report の responsible process、parent、coalition、起動時刻と、
+   runtime が生成する command の内容指紋を突き合わせる ([#execution-path-attribution](#execution-path-attribution))。
+3. **実行前に command を展開する**: `--dry-run`、`man`、source の actual binding で、`new` / `fresh` / `force` /
+   `replace` と profile / storage 引数を確認する。名前が `open` でも新 instance 強制なら destructive transition である。
+4. **5 状態へ bin して 1 本だけ選ぶ**: stopped→launch、healthy→reuse/no-op、transport failure→reconnect、
+   wrong context→explicit switch、unknown→fail-loud。複数 branch を「念のため」連続実行しない。
+5. **before/after の state delta を取る**: 目的機能の回復に加え、process / window / tab / crash report / lock /
+   notification の増分を確認する。retry で目的が通っても余剰が増えたら未修復 ([#recovery-ends-investigation](#recovery-ends-investigation))。
+6. **runtime cache patch と上流修正を分ける**: versioned cache の局所 patch は immediate mitigation。対象 version、
+   backup、差分、再適用条件を明示し、update で消える machine-local state を正本や恒久修正と呼ばない。
+
+Codex の外部 Chromium browser では、公式の profile 選択契約と具体的な branch を
+[`codex/PARITY.md#external-browser-lifecycle`](../codex/PARITY.md#external-browser-lifecycle) に置く。
+本節へ browser 名、bundle path、plugin version、owner の profile 名を複製しない。
+
 ## 関連
 
 - [`CONVENTIONS.md §3`](../CONVENTIONS.md) — 4 軸 sweep の base 規約
 - [`scientific-computing.md` explicit-integrator-instability](scientific-computing.md#explicit-integrator-instability) — L5 numerical fix の (A)/(B)/(C) 階層、 V3 algorithm 網羅の domain-specific application
 - [`docs/convention-design-principles.md`](../docs/convention-design-principles.md) — 規約配置の meta-rule
+- [`docs/convention-design-principles.md#recovery-state-transition`](../docs/convention-design-principles.md#recovery-state-transition) — 復旧を状態遷移として選ぶ一般正本
 - [`docs/sensitive-repo-patterns.ja.md §パターン 5-3`](../docs/sensitive-repo-patterns.ja.md) — 実装直後の 4 軸 review
 
 ### 個人層との関係
