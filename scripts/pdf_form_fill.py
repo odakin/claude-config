@@ -48,6 +48,8 @@ item の仕様:
   verify_pdf_mutation()               : PDF mutation 後の機械検証 5 項目 schema (page 数 / text 不変 / must-present /
                                         must-absent / image stream delta、 #pdf-mutation-verification-schema)
   redact_hash_runs() / redact_words() : 不要表示 (= `#+` overflow 等) を redact で除去
+  circle_word() / circle_paren_gap()  : 「該当するものを○で囲む」 様式の ○ (語を囲む / 空の括弧の中)。 同じ語の取り違えは
+                                        見出し行 near= と x 範囲で絞り、 pick="unique" で一意でなければ例外 (#pdf-overlay-anchoring)
 """
 
 from __future__ import annotations
