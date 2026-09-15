@@ -56,6 +56,16 @@ summary: 日本物理学会 (JPS) 大会 一般講演申込の form 機構と落
 - **英語の読み手には** `https://onsite.gakkai-web.net/jps/jps_search/<meeting>/program/date_e/program<領域>.html#j<session>`。 題目も英語で載っているので、 **英題は自分で訳さずここから取る** (実測)。
 - **anchor は session 単位しか無い**。 講演ごとの link は概要集 PDF (`data/pdf/<講演番号>.pdf`) だけで、 login なしでは 401 = 告知には使えない (実測)。 link を開いた人は session の先頭に着くので、 **本文に「session の N 番目」・開始〜終了時刻・建物と部屋を書く** (会場記号 → 建物は会場案内の配置図)。 link があっても時刻は本文から落とさない (時刻の抜けた案内メールの draft を実測)。 海外の読み手には時刻に (JST) を付ける。
 - 字数の上限がある SNS は [`scripts/post-length.py`](../scripts/post-length.py) で数える。 X は日本語と絵文字が 2、 URL が 23 なので、 Bluesky や Mastodon に入る文面が X では超える。 ハッシュタグは末尾に足すより本文の語をタグにする (`#arXiv に`) 方が短い。
+- Vivaldi Social は Mastodon 系でも上限が別で、公式英語 help の現行値は **1337 文字、URL は 23 文字**。
+  `post-length.py` は Mastodon 500 と Vivaldi 1337 を別行で検査する。公式の言語版が食い違う場合は、
+  投稿画面または英語の一次情報で現行値を確かめ `--vivaldi-limit` で上書きする。
+- Facebook の hashtag は clickable で同じ tag の投稿を辿れるが、見える範囲は投稿の audience 設定に従う
+  ([Meta の説明](https://about.fb.com/news/2013/06/public-conversations-on-facebook/))。個人の学術告知では、
+  継続企画・会期中の索引として同じ tag を使う目的が無ければ、末尾の hashtag 列は既定で付けない。
+  検索可能であることを reach 増加の保証として書かない。
+- 同日に複数講演があるとき、一本目の投稿に二本目をぶら下げる文面は、親投稿の書誌を繰り返さず
+  「午前は物理教育の話も」のように関係を一文で示す。時刻・建物・部屋・講演番号・実物への link は
+  子投稿側にも自立して残し、時間が離れた読者が親を開かなくても来場できるようにする。
 
 ## <a id="program-triage-by-interest-profile"></a>聴講計画: 関心プロファイルで program を triage する
 

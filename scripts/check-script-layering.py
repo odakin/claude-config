@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 
-SCRIPT_SUFFIXES = {".py", ".sh", ".js", ".jl", ".wl", ".wls", ".ipynb"}
+SCRIPT_SUFFIXES = {".py", ".sh", ".js", ".mjs", ".jl", ".wl", ".wls", ".ipynb"}
 LAYER3_DECLARATION = "layer-placement: layer3"
 SHIM_MARKERS = ("os.execv", "importlib.util", "exec ")
 
@@ -140,6 +140,7 @@ def run_selftest() -> int:
         got = duplicate_findings(upper, lower)
         checks.extend(
             [
+                ("ES module scripts are inventoried", ".mjs" in SCRIPT_SUFFIXES),
                 ("delegating shim is accepted", ("DUPLICATE_ENGINE", "shim.py") not in got),
                 ("identical copy is rejected", ("DUPLICATE_COPY", "copy.py") in got),
                 ("forked engine is rejected", ("DUPLICATE_ENGINE", "fork.py") in got),

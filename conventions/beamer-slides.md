@@ -1,13 +1,12 @@
 <!-- doc-meta
-when: Beamer/metropolis で研究スライドを作る・直すとき
+when: Beamer/metropolis または編集可能な PPTX / Keynote で研究スライドを作る・直すとき + 既存デッキの「同じ感じ」を引き継ぐとき
 category: paper
-summary: Beamer/metropolis 研究スライドの技術規約 (= install 不要フォント〔Fira/Harano Aji〕・配色・[shrink] の横縮小罠・standout の \\ 落とし穴・セクション扉を全 TOC+現在強調・PDF ページラベル重複の後処理修正〔page 番号振り直し〕・再現ビルド build.sh・視覚 QA ループ・matplotlib 図生成〔日本語/CIE 厳密スペクトル〕・論文図の領域レンダ抽出・Keynote の読戻しと PDF 出荷・LaTeXiT の可搬な式・生成画像の実 alpha 検査。giving-talks.md〔中身/作法〕と相補)
+summary: 研究スライドの技術規約 (= Beamer の build・font・section・page label / 既存デッキの構成・意匠・素材を分けて継承 / editable PPTX の共通 artifact-tool helper / Keynote 読戻し + PDF 出荷 / 全頁 visual QA / QR payload と link 検査。giving-talks.md〔中身/作法〕と相補)
 -->
-# Beamer (metropolis) 研究スライド — ビルド・図・落とし穴
+# 研究スライド — Beamer・PPTX・Keynote のビルドと検収
 
-LaTeX Beamer(特に **metropolis** テーマ)で研究発表スライドを**プログラム的に作る/直す**ときの
-技術規約。図の生成・抽出、再現可能なビルド、視覚 QA も含む。**読むタイミング:** Beamer スライドを
-作る/直す、発表用の図を生成・論文から抽出する、PDF のページ番号がおかしい、日本語スライドのフォント。
+研究発表スライドをプログラム的に作る・直すときの技術規約。Beamer 固有の build に加え、
+編集可能な PPTX、Keynote、既存デッキの継承、図の生成・抽出、再現可能なビルド、視覚 QA を扱う。
 
 棲み分け(§2 定義は1箇所):
 - **発表の中身・作法**(主題選択・3-4 メッセージ・図優先・質問対応 等)= [`giving-talks.md`](giving-talks.md)(Geroch 蒸留)。
@@ -200,4 +199,41 @@ Keynote で仕上げた deck (LaTeX 頁の貼り込み混成を含む) を web �
   page = doc.new_page(width=1024, height=768)          # Keynote 4:3
   page.show_pdf_page(fitz.Rect(0, y0, 1024, y0 + h), src, 0)  # y0 = (768 - h) / 2
   ```
+
+## <a id="reference-deck-adaptation"></a>14. 既存デッキの「同じ感じ」を継承する
+
+「前回と同じ感じ」は一つの値ではない。元デッキを全頁レンダリングし、次の三つを別々に読む。
+
+1. **意匠**: slide size、font の PostScript 名、色、余白、写真の crop、影、頁番号。
+2. **進行**: 表紙、実演、別件の短い案内、メッセージ一覧、説明、まとめ、終幕などの順と時間配分。
+3. **内容と素材**: 再利用する図・写真・式、その出所とライセンス。新しい講演の主張は今回の abstract / paper / case-SoT から取る。
+
+意匠だけを真似て進行を捨てたり、古い内容を新しい講演へ持ち越したりしない。元 PDF / PPTX は SHA-256 で
+固定し、font policy は抽出器が実際に返した family 名を使う。PDF の埋込み font 名が
+`HiraMinProN-W3` のような PostScript 名なら、表示名を推測して書き換えない。
+
+元デッキから写真・科学図を再利用する場合は、元ファイルから直接抽出し、案件側の asset 台帳に頁と出所を
+残す。異なる時刻のスクリーンショットを左右比較に置く場合は「表示モードの例」であり同時刻の定量比較では
+ないと notes に書く。主張の根拠として必要な差を、撮影時刻の差で作らない。
+
+## <a id="artifact-tool-editable-pptx"></a>15. Artifact Tool で編集可能な PPTX を作る共通部
+
+`@oai/artifact-tool` が使える環境では、共通の runtime load、editable text / image、speaker notes、
+finalizer、全頁 PNG 出力を [`scripts/lib/artifact-presentation.mjs`](../scripts/lib/artifact-presentation.mjs)
+から使う。案件側 `build.mjs` はスライドの内容・座標・asset と reference hash だけを持つ。
+汎用 helper を案件ごとにコピーしない。
+
+検収は次を一単位にする。
+
+1. candidate と final を別 path にし、finalizer の package / font / geometry / first-party import を通す。
+2. 全頁を PNG にして一枚ずつ見る。意図的な文字 shadow は overlap warning の受理対象だが、slide boundary 外は直す。
+3. Keynote 利用者向けなら PPTX を Keynote で実際に開き、`.key` と最高品質 PDF を保存する。Mac の deck は
+   Keynote の表示と Keynote 出力 PDF を正とし、汎用 renderer の代替 font だけで font 不良と決めない。
+4. PDF の頁数・slide size・本文抽出・hyperlink を検査し、PDF を全頁レンダリングして再度見る。
+5. QR は画像の見た目で済ませず [`scripts/decode-qr.py`](../scripts/decode-qr.py) で payload を復号し、
+   文字リンクと同じ URL か照合する。会場専用 room 等の fragment も比較対象にする。
+
+Artifact Tool で speaker notes を持つ PPTX が Keynote に import できた実例はある。これは
+python-pptx の notes part を Keynote が拒否する上の既知事例を否定しない。生成器ごとに import と
+発表者表示を確認し、重要な進行メモは deck 近傍の Markdown にも置く。
 </content>

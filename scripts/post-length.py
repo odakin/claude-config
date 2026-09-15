@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""post-length.py — SNS 投稿文の長さを X / Bluesky / Mastodon の数え方で並べて数え、上限を超えるものを示す (X は日本語・絵文字が 2、URL は 23)。--selftest 内蔵。
+"""post-length.py — SNS 投稿文の長さを X / Bluesky / Mastodon / Vivaldi Social の数え方で並べて数え、上限を超えるものを示す。--selftest 内蔵。
 
 Why: 同じ告知文を複数の SNS に出すとき、 数え方が違うので「Bluesky と Mastodon には入るのに X では超える」
 が起きる (実測: 同じ文面が Bluesky 292/300 で X は 345/280)。 手で数えると日本語の重みと URL の置き換えを
@@ -14,12 +14,15 @@ Why: 同じ告知文を複数の SNS に出すとき、 数え方が違うので
             肌色・国旗の対・keycap を 1 つにまとめる)。
   Mastodon  ≤ 500 (サーバ設定で変わる)。 URL は 23。 本 script は code point で数える (grapheme より多いか同じ
             = 上側に倒す)。 @user@domain の domain 部分は数えない実装のサーバがあるが、 本 script は数える。
+  Vivaldi   ≤ 1337。URL は 23。Vivaldi Social の公式英語 help の現行値を既定にする。instance 設定や
+            公式 help が変わった場合は --vivaldi-limit で上書きする。
 
 使い方:
-  post-length.py post.txt                 # 3 つを表で。 超えたものがあれば exit 1
+  post-length.py post.txt                 # 4 媒体を表で。 超えたものがあれば exit 1
   pbpaste | post-length.py -              # 標準入力
   post-length.py post.txt --only x        # X だけ判定 (exit code も X だけで決まる)
   post-length.py post.txt --mastodon-limit 1000
+  post-length.py post.txt --only vivaldi
   post-length.py --selftest
 """
 from __future__ import annotations
@@ -103,12 +106,17 @@ def mastodon_length(text: str) -> int:
     return len(URL.sub("x" * 23, text))
 
 
-def measure(text: str, mastodon_limit: int = 500) -> list[tuple[str, int, int]]:
+def measure(
+    text: str,
+    mastodon_limit: int = 500,
+    vivaldi_limit: int = 1337,
+) -> list[tuple[str, int, int]]:
     text = text.strip("\n")
     return [
         ("x", x_length(text), 280),
         ("bluesky", bluesky_length(text), 300),
         ("mastodon", mastodon_length(text), mastodon_limit),
+        ("vivaldi", mastodon_length(text), vivaldi_limit),
     ]
 
 
@@ -133,6 +141,7 @@ def selftest() -> int:
     check("bsky combining", bluesky_length("é"), 1)
     check("bsky url full length", bluesky_length("https://a.b/c"), 13)
     check("mastodon url 23", mastodon_length("x https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), 2 + 23)
+    check("vivaldi default limit", dict((name, limit) for name, _, limit in measure("x"))["vivaldi"], 1337)
     # 同じ文面が Bluesky には入り X では超える型 (合成例)
     sample = "📄✨ 新しい論文が出ました！\nhttps://example.org/abs/0000.00000\n" + "あ" * 120 + "\n#example"
     rows = {k: (n, lim) for k, n, lim in measure(sample)}
@@ -141,15 +150,16 @@ def selftest() -> int:
     if fails:
         print("FAIL\n  " + "\n  ".join(fails))
         return 1
-    print("selftest PASS (16 checks)")
+    print("selftest PASS (17 checks)")
     return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("file", nargs="?", help="投稿文の file (- = stdin)")
-    ap.add_argument("--only", choices=["x", "bluesky", "mastodon"], action="append")
+    ap.add_argument("--only", choices=["x", "bluesky", "mastodon", "vivaldi"], action="append")
     ap.add_argument("--mastodon-limit", type=int, default=500)
+    ap.add_argument("--vivaldi-limit", type=int, default=1337)
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -158,7 +168,7 @@ def main() -> int:
         ap.error("file か --selftest を指定")
     text = sys.stdin.read() if a.file == "-" else open(a.file, encoding="utf-8").read()
     over = False
-    for name, n, lim in measure(text, a.mastodon_limit):
+    for name, n, lim in measure(text, a.mastodon_limit, a.vivaldi_limit):
         if a.only and name not in a.only:
             continue
         ok = n <= lim

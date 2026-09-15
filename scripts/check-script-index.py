@@ -8,7 +8,7 @@ Usage:
 
 The inventory is git ls-files (tracked plus nonignored untracked files),
 restricted to --scan paths and --suffix extensions. Defaults: scan the whole
-repository; .py,.sh,.wls,.wl,.jl,.ipynb,.nb. All indexes are explicit; a link
+repository; .py,.sh,.js,.mjs,.wls,.wl,.jl,.ipynb,.nb. All indexes are explicit; a link
 to another index does not recursively load it. Script links are resolved
 relative to their index, never relative to the working directory.
 
@@ -33,7 +33,7 @@ import tempfile
 from urllib.parse import unquote, urlsplit
 
 
-SUFFIXES = ".py,.sh,.wls,.wl,.jl,.ipynb,.nb"
+SUFFIXES = ".py,.sh,.js,.mjs,.wls,.wl,.jl,.ipynb,.nb"
 LINK = re.compile(r"(?<!!)\[[^\]\n]*\]\(\s*(<[^>\n]+>|[^\s()]+)(?:\s+\"[^\"\n]*\")?\s*\)")
 
 

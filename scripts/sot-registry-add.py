@@ -32,7 +32,8 @@ spec.json は 1 topic の object か、 その list:
      "audit_ack": {"識別子の形でない値": "値そのものを追う anchor"}}
 
 - `home` は --base からの相対 path。
-- `home_section` が slug 形 (英小文字・数字・`-`) でないとき (見出し文言や § 番号) は anchor id の存在検査をしない。
+- `home_section` は任意。省略時は registry に空の field を書かない。slug 形 (英小文字・数字・`-`) でないとき
+  (見出し文言や § 番号) は anchor id の存在検査をしない。
 - `allow_globs` を省くと SESSION / SESSION-archive / plans の 3 つを入れる。 `pointer_patterns` を省くと topic 名。
 - `--no-preview` で scan と点検を省く。
 """
@@ -85,9 +86,10 @@ def check(spec: dict, base: Path, registry_text: str) -> list[str]:
 def render(spec: dict) -> str:
     lines = [f"- topic: {spec['topic']}",
              f"  description: {q(spec['description'])}",
-             f"  home: {spec['home']}",
-             f"  home_section: {scalar(spec.get('home_section', '')) if spec.get('home_section') else ''}",
-             "  anchor_tokens:"]
+             f"  home: {spec['home']}"]
+    if spec.get("home_section"):
+        lines.append(f"  home_section: {scalar(spec['home_section'])}")
+    lines.append("  anchor_tokens:")
     lines += [f"  - {q(t)}" for t in spec["anchor_tokens"]]
     ptr = spec.get("pointer_patterns") or [spec["topic"]]
     lines += ["  pointer_patterns:"] + [f"  - {scalar(p)}" for p in ptr]
@@ -206,6 +208,11 @@ def selftest() -> int:
         mixed = [dict(good, topic="t6"), bad_tok]
         c("one bad spec in a batch writes nothing", add(mixed, base, reg, False) == 1 and reg.read_text() == before)
         c("single quotes in the description are YAML-escaped", "'it''s a rule'" in reg.read_text())
+        no_section = dict(good, topic="no-section")
+        no_section.pop("home_section")
+        rendered = render(no_section)
+        c("omitted home_section writes no empty field or trailing whitespace",
+          "home_section:" not in rendered and not any(line.endswith(" ") for line in rendered.splitlines()))
         try:
             import yaml  # type: ignore
             c("the registry still parses as YAML", len(yaml.safe_load(reg.read_text())["topics"]) == 2)

@@ -203,6 +203,18 @@ followed), and **while listening to others** (diagnose what works, what doesn't,
 
 Lessons from preparing and delivering a 2026 conference talk, kept separate from the digest above:
 
+- **A live demo needs its own failure-complete version of the talk.** Put the shortest useful entry point on the slide,
+  such as a QR code to a prepared room, and budget the demo as part of the talk rather than treating it as free time.
+  Keep one static screen and the explanatory figure immediately after it so the same message survives a failed network,
+  blocked peer connection, slow audience onboarding, or an expired service. Decode the QR and test its exact payload;
+  repeat it on the final slide when the audience may continue after the talk.
+- **Make optional material removable at a named boundary.** A cross-promotion slide, extra example, or second demo pass
+  should have an explicit skip rule in the notes. The conclusion gets a fixed latest start time, so a slow demo removes
+  the optional unit instead of consuming the summary.
+- **Label an educational use as a proposal until it has been evaluated.** A classroom activity can invite prediction,
+  action, and explanation without claiming a measured learning effect. Say that it is a suggested use when no student
+  data or assessment supports an outcome claim.
+
 - **Choose the three messages from the paper's own voice, not from your recent work sessions.**
   The submitted abstract's sentence order *is* the authors' own considered ranking of what the
   paper most wants to say; the introduction's problem statement and the summary's paragraph
