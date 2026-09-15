@@ -50,6 +50,13 @@ summary: 日本物理学会 (JPS) 大会 一般講演申込の form 機構と落
 
 **道具**: 上記 1-2 (日程表 → session → `<li>` 数え) は [`scripts/jps-program-talks.py`](../scripts/jps-program-talks.py) に固めてある — `slot 16pE532-11` (番号 → 日時・会場・題目)、 `sessions --day 15 --slot p` (当日午後の全 session)、 `talks j15aG721` (session の講演 + 計算した開始時刻)、 `grep '<regex>'` (全領域の題目を横断検索)。 program の構造 fact (anchor / `<li>` / 休憩 div / 領域 file code / 概要集は login 越し) は script docstring が正本。
 
+## <a id="talk-announcement-links"></a>講演の告知 (SNS・メール) に貼るリンクと、本文に書くこと
+
+- **貼るのは大会サイトの「領域別プログラム」** (`https://jps<yyyy>a.gakkai-web.net/data/html/program<領域>.html#j<session>`、 login 不要)。 上の `onsite.gakkai-web.net/jps/jps_search/...` は同じ内容の検索サイト側で、 開きはするが告知には公式側を使う。 host 名は大会ごとに変わりうるので、 大会トップの「領域別プログラム」 link から辿って確かめる (実測)。
+- **英語の読み手には** `https://onsite.gakkai-web.net/jps/jps_search/<meeting>/program/date_e/program<領域>.html#j<session>`。 題目も英語で載っているので、 **英題は自分で訳さずここから取る** (実測)。
+- **anchor は session 単位しか無い**。 講演ごとの link は概要集 PDF (`data/pdf/<講演番号>.pdf`) だけで、 login なしでは 401 = 告知には使えない (実測)。 link を開いた人は session の先頭に着くので、 **本文に「session の N 番目」・開始〜終了時刻・建物と部屋を書く** (会場記号 → 建物は会場案内の配置図)。 link があっても時刻は本文から落とさない (時刻の抜けた案内メールの draft を実測)。 海外の読み手には時刻に (JST) を付ける。
+- 字数の上限がある SNS は [`scripts/post-length.py`](../scripts/post-length.py) で数える。 X は日本語と絵文字が 2、 URL が 23 なので、 Bluesky や Mastodon に入る文面が X では超える。 ハッシュタグは末尾に足すより本文の語をタグにする (`#arXiv に`) 方が短い。
+
 ## <a id="program-triage-by-interest-profile"></a>聴講計画: 関心プロファイルで program を triage する
 
 会期の全日程に出る場合、 3,000-4,000 件の題目から自分向けを拾う作業は「keyword を思いつく」 だけでは漏れる。 手順 (2026 秋で確立):
