@@ -35,7 +35,7 @@ GOOD='{"tool_name":"Bash","cwd":"/tmp","tool_input":{"command":"xlsx-to-pdf.sh /
 echo "=== hook 入出力 ==="
 out="$(run_hook "$BAD")"
 case "$out" in
-  *'"permissionDecision": "deny"'*'office-stage-run.sh'*'office-pregranted-staging-dir'*) ok "in-place の inline osascript → deny + 直し方 + 正本" ;;
+  *'"permissionDecision": "deny"'*'office-stage-run.sh'*'office-inplace-guard'*) ok "in-place の inline osascript → deny + 直し方 + 正本" ;;
   *) ng "deny されない: $out" ;;
 esac
 printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin)["hookSpecificOutput"]; assert d["hookEventName"]=="PreToolUse" and d["permissionDecisionReason"]' \

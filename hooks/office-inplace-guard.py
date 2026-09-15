@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""office-inplace-guard.py — PreToolUse(Bash): Excel / Word / PowerPoint に staging 外の path を開かせる・保存させる command を deny (office-automation.md#office-pregranted-staging-dir)
+"""office-inplace-guard.py — PreToolUse(Bash): Excel / Word / PowerPoint に staging 外の path を開かせる・保存させる command を deny (office-automation.md#office-inplace-guard)
 
 なぜ:
   macOS の Microsoft Office は App Sandbox で、 folder へ書く瞬間に folder ごとの「ファイル アクセスを許可」
@@ -54,9 +54,10 @@ LIB = os.path.normpath(os.path.join(HERE, "..", "scripts", "lib"))
 if LIB not in sys.path:
     sys.path.insert(0, LIB)
 
-SOT = "claude-config/conventions/office-automation.md#office-pregranted-staging-dir"
+SOT = "claude-config/conventions/office-automation.md#office-inplace-guard"
 WRAPPERS = {"xlsx-to-pdf.sh", "docx-to-pdf.sh", "pptx-to-pdf.sh", "affix-image-xlsx.py"}
 RUNNER = "office-stage-run.sh"
+RUNNER_PATH = os.path.normpath(os.path.join(HERE, "..", "scripts", RUNNER))
 MAX_READ = 2 * 1024 * 1024
 
 APPS = r"Microsoft\s+(?:Excel|Word|PowerPoint)"
@@ -466,7 +467,7 @@ def reason_text(issue: str, env: dict) -> str:
         f"[office-inplace-guard] {issue}。 macOS の Office は folder ごとに「ファイル アクセスを許可」 dialog を出す "
         f"(remote では押せず -1712 で止まる)。 直し方: "
         f"(1) PDF 化 / 画像貼付は layer-1 wrapper (xlsx-to-pdf.sh / docx-to-pdf.sh / pptx-to-pdf.sh / affix-image-xlsx.py) = 既定で staging。 "
-        f"(2) 自前の osascript は `~/Claude/claude-config/scripts/office-stage-run.sh <file> -- osascript fill.applescript {{}}` "
+        f"(2) 自前の osascript は `{RUNNER_PATH} <file> -- osascript fill.applescript {{}}` "
         f"(`{{}}` = staged copy、 成功時に書き戻し。 出力は `{{dir}}/out.pdf` + `--out out.pdf=<dest>`)。 "
         f"(3) script は helper を使う: python = `from office_staging import Stage` (sys.path に claude-config/scripts/lib)、 "
         f"bash = `source …/scripts/lib/office-staging.sh; office_stage_file <src>` → `$OFFICE_STAGED` を開く → copy back。 "
