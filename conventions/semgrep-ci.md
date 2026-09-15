@@ -29,6 +29,9 @@ severity は `runs[].tool.driver.rules[].defaultConfiguration.level` (error / wa
 有効な位置は 2 つだけ: **match 開始行の行末** trailing、 または **直前行の純粋 comment 行**。
 
 - rule ID は SARIF の `ruleId` 全文 (full path 形式) をそのまま使う。
+  ⚠️ **端末の出力から写さない** — `--quiet` 等の人向け出力や状態の要約は rule ID を途中で切ることがあり、
+  切れた ID の注記は照合しないので suppress が黙って外れる (実測: 行を移す refactor で末尾の数文字が欠けた ID を
+  写し、 手元の検査が赤くなった)。 行を移すときは注記を**元の行から丸ごと**運ぶ。
 - **directive の後ろに説明文を続けない** — `# nosemgrep: <id>` の id token に prose が
   混入して照合が壊れる。 理由説明は別の comment 行に書く。
 - ⚠️ **Python の multi-line 呼び出しは match 開始行が引数行になる** rule がある
