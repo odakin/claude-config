@@ -526,7 +526,7 @@ end tell
 
 ⚠️ **harness の Bash tool は foreground の bare `sleep` を block する** (= 「`quit …; sleep 6`」 を Bash に直書きすると止まる)。 → reset の待ちは (a) **`office-app-guard.sh reset` / `xlsx-to-pdf.sh` 等 script の内部の待ちに任せて script ごと呼ぶ**、 (b) **applescript 内の `delay`** で待つ、 (c) 長い処理は `run_in_background` で逃がす、 のいずれか。 bare `sleep` 直打ちに依存した reset 手順は harness 上で機能しない。
 
-⚠️ **遅いマシンでは cold-start の `open` だけで 90-120 秒を超える** (= thermal throttle 中の旧 Intel 機で実測): osascript client を短い timeout で回すと「ハング」 に見えるが、 実体はまだ launch 中。 対処 3 点: (a) **client 側 timeout は 300 秒以上**で呼ぶ、 (b) **client を kill しても Excel 側の open は止まらない** — Excel は後から open を完了して workbook を保持し続けるので、 リトライ前に `timeout 10 osascript -e 'tell application "Microsoft Excel" to get name of every workbook'` の **応答 probe** で状態を見る (= 応答すれば ready、 timeout すれば modal dialog か launch 中。 未起動の Excel を起こさない版 = `office-app-guard.sh state excel` が `unknown` か)、 (c) 既に開いた workbook への 2 度目の script は数秒で終わる (= 高くつくのは初回 open のみ)。 origin: 海外出張様式 xlsm fill (90s timeout で kill → 実は launch 遅延、 再実行 1 発成功)。
+⚠️ **遅いマシンでは cold-start の `open` だけで 90-120 秒を超える** (= thermal throttle 中の旧 Intel 機で実測): osascript client を短い timeout で回すと「ハング」 に見えるが、 実体はまだ launch 中。 対処 3 点: (a) **client 側 timeout は 300 秒以上**で呼ぶ、 (b) **client を kill しても Excel 側の open は止まらない** — Excel は後から open を完了して workbook を保持し続けるので、 リトライ前に `timeout 10 osascript -e 'tell application "Microsoft Excel" to get name of every workbook'` の **応答 probe** で状態を見る (= 応答すれば ready、 timeout すれば modal dialog か launch 中。 未起動の Excel を起こさない版 = `office-app-guard.sh state excel` が `unknown` か)、 (c) 既に開いた workbook への 2 度目の script は数秒で終わる (= 高くつくのは初回 open のみ)。 origin: マクロ入り様式 xlsm fill (90s timeout で kill → 実は launch 遅延、 再実行 1 発成功)。
 
 **検証**: 書き込み後は openpyxl で読み直して値を assert する (= osascript は失敗しても exit 0 で沈黙しがち)。 ⚠️ ただし **merged cell の値は fitz / openpyxl の text 抽出では取れないことがある** (= 結合範囲の左上以外は空に見える / PDF の text 抽出も同様) → 抽出の空振りを「書けていない」 と即断せず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF **画像**で最終確認する。
 
@@ -3457,18 +3457,18 @@ with zipfile.ZipFile(src, 'w', zipfile.ZIP_DEFLATED) as zout:
 6. **date 書式済みの cell は serial を書く** (例: 日付 cell = `45658` → 2025-01-01)。 serial ↔ date の換算は openpyxl readback で確認 (`datetime` が返れば書式が生きている)。
 7. Excel automation との**hybrid が実戦形**: 値の大半は Excel osascript で書き、 **書式起因の後修正だけ本手術**で当てる (= Excel 再起動 round を 1 つ消す。 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 回避にも効く)。
 
-origin: 海外出張様式 xlsm (= VBA + drawings 持ち) の日程表日付 7 cell。 Excel scripting が -1728/-1708 で不安定な throttled マシン上で、 値は AppleScript・書式は本手術の hybrid で完了。
+origin: マクロ入り様式 xlsm (= VBA + drawings 持ち) の日付 cell。 Excel scripting が -1728/-1708 で不安定な throttled マシン上で、 値は AppleScript・書式は本手術の hybrid で完了。
 
 ## <a id="xlsm-macro-export-trap"></a>xlsm (マクロ付き様式) の Excel export は「マクロ実行不可 → 印刷範囲未適用 → 全面 dump → crash」 に落ちる
 
-**症状** (実測、 海外出張様式 = 「印刷範囲指定」 マクロ入り xlsm): [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の Excel 経路で export すると、 (1) 「マクロを実行できません」 dialog (= 自動化 context のマクロセキュリティで Workbook_Open / 印刷範囲マクロが走れない)、 (2) 印刷範囲が設定されないまま export されて **sheet 全面 + 記入例 face + 他 sheet が 1 ページに縮小 / 計 13 ページ** の役に立たない PDF、 (3) その後 Excel が crash、 (4) **export 過程で workbook が再保存され file が変わる** (git diff が出る = `git checkout -- <file>` で HEAD に戻す。 export は読むだけ、 という前提を置かない。 ⚠️ 2026-08-21 以降の [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) は staging 経由 = 再保存は copy に当たり**原本は不変**、 in-place `--no-stage` の時だけ本項が効く)。
+**症状** (実測、 「印刷範囲指定」 マクロ入りの様式 xlsm): [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の Excel 経路で export すると、 (1) 「マクロを実行できません」 dialog (= 自動化 context のマクロセキュリティで Workbook_Open / 印刷範囲マクロが走れない)、 (2) 印刷範囲が設定されないまま export されて **sheet 全面 + 記入例 face + 他 sheet が 1 ページに縮小 / 計 13 ページ** の役に立たない PDF、 (3) その後 Excel が crash、 (4) **export 過程で workbook が再保存され file が変わる** (git diff が出る = `git checkout -- <file>` で HEAD に戻す。 export は読むだけ、 という前提を置かない。 ⚠️ 2026-08-21 以降の [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) は staging 経由 = 再保存は copy に当たり**原本は不変**、 in-place `--no-stage` の時だけ本項が効く)。
 
 **対処の階梯** (= Excel を増やさない方向に倒す):
 1. **値の変更は [`xlsx-cell-value-zip-surgery`](#xlsx-cell-value-zip-surgery)** (Excel 起動ゼロ、 VBA / drawings / form control 無傷)。 `scripts/check-xlsx-integrity.py` を gate に。
 2. **PDF が要るなら、 壊れた export からでも vector を救える** — [`vector-pdf-page-rescue`](#vector-pdf-page-rescue)。 再 export のために Excel を起こし直さない (= [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 と同根)。
 3. どうしても Excel で export するなら、 マクロが要らない場合は **xlsm → xlsx に落とした複製**を export 用に作る (= VBA を捨てた copy、 SoT の xlsm は触らない)。 ただし印刷範囲がマクロ依存の様式ではこれでも全面 dump になる。
 
-**判定 reflex**: 拡張子 `.xlsm` を見た瞬間に「Excel automation は 1 回も叩かない」 を default にする。 実測では **cold-start 90-120 秒 + マクロ dialog + crash** の三重苦で、 同じ成果は zip 手術 + PDF 手術の方が速く確実だった。 origin: (= 2_1 海外出張様式、 throttled Intel iMac)。
+**判定 reflex**: 拡張子 `.xlsm` を見た瞬間に「Excel automation は 1 回も叩かない」 を default にする。 実測では **cold-start 90-120 秒 + マクロ dialog + crash** の三重苦で、 同じ成果は zip 手術 + PDF 手術の方が速く確実だった。 origin: (= マクロ入り様式、 throttled Intel iMac)。
 
 ## <a id="vector-pdf-page-rescue"></a>壊れた Excel export から様式ページを vector のまま救出する (= clip + show_pdf_page)
 
