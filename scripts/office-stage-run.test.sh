@@ -13,6 +13,7 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/proj" "$TMP/root"
 export CLAUDE_OFFICE_STAGING_DIR="$TMP/root"
 export CLAUDE_OFFICE_STAGING_LOG="$TMP/fallback.log"
+export CLAUDE_OFFICE_APP_GUARD=0   # 本物の Excel を起こさない (guard の配線は末尾で stub の上で検査)
 unset CLAUDE_OFFICE_STAGING
 
 echo "=== staging あり ==="
@@ -47,6 +48,34 @@ bash "$RUN" "$TMP/proj/d.xlsx" >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 2 ] && ok "-- と command が無ければ usage (rc=2)" || ng "rc=$rc"
 bash "$RUN" "$TMP/proj/nope.xlsx" -- true >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 2 ] && ok "入力が無ければ rc=2" || ng "rc=$rc"
+
+echo "=== app guard の配線 (macOS のみ、 osascript / open は stub) ==="
+if [ "$(uname)" = Darwin ]; then
+  STUBS="$TMP/stubs"; M="$TMP/mock"; mkdir -p "$STUBS" "$M"; echo false > "$M/running"; : > "$M/log"
+  cat > "$STUBS/osascript" <<STUB
+#!/usr/bin/env bash
+s=""; if [ "\${1:-}" = "-" ]; then s="\$(cat)"; else while [ \$# -gt 0 ]; do [ "\$1" = -e ] && { s="\$s \$2"; shift; }; shift; done; fi
+case "\$s" in
+  *office-app-guard:documents*) [ "\$(cat $M/running)" = true ] && echo ok || echo not-running ;;
+  *office-app-guard:close-ours*) : ;;
+  *office-app-guard:quit-if-empty*) echo quit >> $M/log; echo false > $M/running; echo quit ;;
+  *"is running"*) cat $M/running ;;
+  *frontmost*) echo /Applications/Editor.app/ ;;
+esac
+STUB
+  cat > "$STUBS/open" <<STUB
+#!/usr/bin/env bash
+case "\$*" in "-g -b "*) echo launch-bg >> $M/log; echo true > $M/running ;; *) echo "open \$*" >> $M/log ;; esac
+STUB
+  chmod +x "$STUBS/osascript" "$STUBS/open"
+  printf 'orig\n' > "$TMP/proj/g.xlsx"
+  CLAUDE_OFFICE_APP_GUARD=1 PATH="$STUBS:$PATH" bash "$RUN" "$TMP/proj/g.xlsx" -- sh -c 'echo ran >> "$1"' _ "$M/log" >/dev/null 2>&1; rc=$?
+  [ "$rc" -eq 0 ] && ok "guard 有効でも command は走る (rc=0)" || ng "guard: rc=$rc"
+  [ "$(tr '\n' ' ' < "$M/log")" = "launch-bg ran quit " ] && ok "未起動の Excel: 背景起動 → command → 自分が起動した分だけ quit" \
+    || ng "guard の順序: $(tr '\n' ' ' < "$M/log")"
+else
+  echo "  SKIP  (macOS でない = guard は配線されない)"
+fi
 
 echo
 echo "=== Result: $pass passed, $fail failed ==="

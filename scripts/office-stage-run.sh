@@ -24,6 +24,10 @@
 #     --out の持ち帰り + subdir 削除。 失敗時は subdir を残して path を stderr に出す (診断用、 lib と同じ)
 #   * staging が使えない環境 (非 macOS / Office 未 install / CLAUDE_OFFICE_STAGING=0) は lib の規則どおり
 #     in-place に落ちる (予期せぬ理由なら lib が ⚠️ + fallback log)。 {} = <file>、 {dir} = <file> の dir
+#   * app guard (macOS、 拡張子から Excel / Word / PowerPoint を決める): command の前に reset (= 開いている文書が
+#     staged copy だけの時だけ quit) + 背景起動、 後に自分の copy を閉じて「この実行が起動した app」 だけ quit +
+#     奪った前面を返す。 同じ path (Excel は同名) の文書が既に開いていれば command を走らせず rc=2。
+#     AppleScript 側に activate を書かない。 CLAUDE_OFFICE_APP_GUARD=0 で無効 (office-automation.md#office-app-reset-guard)
 #   * bash 3.2 compatible
 set -u
 
@@ -66,8 +70,37 @@ for a in "$@"; do
   CMD+=("$a")
 done
 
+APP=""
+case "$(printf '%s' "$SRC" | tr 'A-Z' 'a-z')" in
+  *.xlsx|*.xlsm|*.xlsb|*.xls) APP=excel ;;
+  *.docx|*.docm|*.doc) APP=word ;;
+  *.pptx|*.pptm|*.ppt) APP=powerpoint ;;
+esac
+GUARD=0
+if [ -n "$APP" ] && [ "${CLAUDE_OFFICE_APP_GUARD:-1}" != 0 ] && [ "$(uname)" = Darwin ] \
+   && [ -f "$SCRIPT_DIR/lib/office-app-guard.sh" ]; then
+  # shellcheck source=lib/office-app-guard.sh
+  . "$SCRIPT_DIR/lib/office-app-guard.sh"
+  GUARD=1
+  office_front_remember
+  office_app_reset "$APP"
+  if office_app_has_path "$APP" "$STAGED"; then
+    echo "office-stage-run: $APP already has '$(basename "$STAGED")' open — close it first (this runner will not close your document)" >&2
+    [ "$ACTIVE" -eq 1 ] && office_stage_cleanup
+    exit 2
+  fi
+  office_app_launch_background "$APP" || echo "office-stage-run: ⚠️ $APP did not answer after a background launch; running the command anyway" >&2
+fi
+
 "${CMD[@]}"
 rc=$?
+
+if [ "$GUARD" -eq 1 ]; then
+  office_app_close_ours "$APP" "$STAGED"   # 自分の copy だけ (command が閉じ忘れた時)
+  office_app_release "$APP"
+  office_front_restore "$(_office_app_bundle "$APP")"
+  [ "$rc" -ne 0 ] && office_app_failure_hint "$APP"
+fi
 
 if [ "$rc" -ne 0 ]; then
   [ "$ACTIVE" -eq 1 ] && echo "office-stage-run: command failed (rc=$rc); staged copy kept for diagnosis: $SDIR" >&2

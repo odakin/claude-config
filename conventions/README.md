@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 114 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 115 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -150,6 +150,8 @@ layer 1 (public) のドメイン固有規約 114 file をカテゴリ別に列�
   - macOS で Claude.app が `kern.tty.ptmx_max=511` を独占 → Terminal 等で `forkpty: Device not configured` 発生時の段階的 sysctl bump workaround (hard ceiling ~960、 root 対処は Claude.app restart、 Anthropic bug report 候補)
 - **[macos-claude-code-tcc-recurring-prompt.md](macos-claude-code-tcc-recurring-prompt.md)** — Claude Code の App Management TCC dialog が繰り返し出るとき
   - Claude Code の app bundle が `~/Library/Application Support/Claude/claude-code/<version>/claude.app` という versioned path に置かれているため、 App Management TCC 権限が auto-update 毎に invalidate されて dialog が再 prompt される構造的症状 (= sibling pty-leak と同じく Anthropic 側 fix 待ち候補、 stable launcher path 化が root 対策)
+- **[macos-gui-app-automation.md](macos-gui-app-automation.md)** — macOS の GUI app (Office / Pages / Keynote / Preview 等) を osascript・AppleScript・JXA で駆動する script を書く・直すとき + app を quit / kill / 再起動しようとした瞬間 + 自動化のたびに app が前面に出る・user の文書が閉じられたと言われたとき
+  - macOS の GUI app を script で駆動するときの作法。 (1) quit の前に app へ開いている文書を聞き、 自分が開いたもの以外が 1 つでもあれば quit も kill もしない (数え直しと quit は同じ osascript の中、 plain quit で saving no を付けない、 app 名指定の killall/pkill は禁止) (2) 背景で動かす = `open -g`、 `activate` を書かない、 `open -j` (hidden) は dialog まで隠して quit が -128 で取り消されたまま残るので使わない (3) `application id "…" is running` は app を起動しない probe、 `tell application` は起動する (4) 前面を奪ったら `path to frontmost application` で覚えた app へ `open -a` で返す (System Events 権限不要) (5) 文書は path か open が返す参照で指す (`active document` / `workbook 1` は user の文書を指しうる、 /private/tmp と /tmp の表記差を揃える)。 Office 向け実装 = scripts/lib/office-app-guard.sh
 - **[macos-ime-ascii-layout.md](macos-ime-ascii-layout.md)** — macOS で直接入力と IME のキー配列を分けたいとき
   - macOS で「直接入力=非 US 配列、IME 中=US 配列」を共存させる gotchas (= IME のキー変換は MRU ASCII-capable layout 従属 / TISSetInputMethodKeyboardLayoutOverride は外部から効かない / 無効化 layout は MRU 候補外 / CGEvent 書き換え 2 経路は IME バイパス・mozc の Option=ALT 扱いで不成立 / 成立解 = IME 切替検知 + US layout 動的有効化+瞬間選択〔権限不要〕 / CLI バイナリの tap は .app bundle 化で TCC 安定)
 - **[macos-post-update-slowdown.md](macos-post-update-slowdown.md)** — macOS update 直後に体感が重いとき + 定期メンテ棚卸し

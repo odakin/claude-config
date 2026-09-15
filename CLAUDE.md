@@ -79,6 +79,7 @@ claude-config/
 │   ├── macos-claude-app-notifications.md   # Claude for Mac (desktop / Code タブ) の通知音が鳴らない・通知が来ないとき + macOS の通知が全般に鳴らない原因を調べるとき + 集中モード (おやすみモード) の設定画面を user に案内する前
 │   ├── macos-claude-app-pty-leak.md        # macOS で forkpty: Device not configured が出たとき
 │   ├── macos-claude-code-tcc-recurring-prompt.md # Claude Code の App Management TCC dialog が繰り返し出るとき
+│   ├── macos-gui-app-automation.md         # macOS の GUI app (Office / Pages / Keynote / Preview 等) を osascript・AppleScript・JXA で駆動する script を書く・直すとき + app を quit / kill / 再起動しようとした瞬間 + 自動化のたびに app が前面に出る・user の文書が閉じられたと言われたとき
 │   ├── macos-ime-ascii-layout.md           # macOS で直接入力と IME のキー配列を分けたいとき
 │   ├── macos-post-update-slowdown.md       # macOS update 直後に体感が重いとき + 定期メンテ棚卸し
 │   ├── macos-side-by-side-app-migration.md # macOS で「新しいバージョンを使用」「旧版は削除できます」等が繰り返し出るとき + 同じアプリの旧新版が別 bundle で共存するとき + 旧版を退避して書類の既定アプリを新版へ切り替えるとき

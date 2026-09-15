@@ -1788,9 +1788,9 @@ origin: 出張書類 session で案件 dir ごとに dialog を踏み、 remote 
 
 ### <a id="office-app-reset-guard"></a>規則: Office app の quit・kill・前面化は「自分のものだけ」 (reset は開いている文書を聞いてから)
 
-**automation は、 user が開いている app・文書に quit / close / save / kill / activate をしない** (2026-09-15)。 旧 reset (= Excel を呼ぶ前に毎回 `quit` + sleep、 失敗したら `killall`、 Word は毎回 `pkill`) は廃止した。 未保存の book があれば `quit` は保存 dialog で script を止め、 kill は作業ごと消す。 `activate` と Finder の `open` は毎回 app を前面に出して user の手を止める。 本節が規則と機構の home で、 他節の reset・復旧手順はここを指す。
+**automation は、 user が開いている app・文書に quit / close / save / kill / activate をしない** (2026-09-15)。 旧 reset (= Excel を呼ぶ前に毎回 `quit` + sleep、 失敗したら `killall`、 Word は毎回 `pkill`) は廃止した。 未保存の book があれば `quit` は保存 dialog で script を止め、 kill は作業ごと消す。 `activate` と Finder の `open` は毎回 app を前面に出して user の手を止める。 本節が **Office での規則と機構**の home で、 他節の reset・復旧手順はここを指す。 app を問わない一般則 (quit の前に文書を聞く / 背景起動 / 起動しない probe / 前面を返す / 文書を path で指す) の正本は [`macos-gui-app-automation.md`](macos-gui-app-automation.md)。
 
-**機構** = [`scripts/lib/office-app-guard.sh`](../scripts/lib/office-app-guard.sh) (bash の 1 実装。 python は `office_staging.office_app()` から同じ CLI を呼ぶ)。 4 wrapper (`xlsx-to-pdf.sh` / `docx-to-pdf.sh` / `pptx-to-pdf.sh` / `affix-image-xlsx.py`) が使う:
+**機構** = [`scripts/lib/office-app-guard.sh`](../scripts/lib/office-app-guard.sh) (bash の 1 実装。 python は `office_staging.office_app()` から同じ CLI を呼ぶ)。 4 wrapper (`xlsx-to-pdf.sh` / `docx-to-pdf.sh` / `pptx-to-pdf.sh` / `affix-image-xlsx.py`) と、 手書きの osascript を走らせる [`office-stage-run.sh`](../scripts/office-stage-run.sh) (= 拡張子から app を決めて command の前後に挟む、 `CLAUDE_OFFICE_APP_GUARD=0` で無効) が使う:
 
 - **reset** (`office_app_reset`、 旧「第 1 手 quit + sleep」 の置き換え): app に開いている文書 (`full name` + `saved`) を聞く。 全部が staging root の中の copy (+ 保存済みの起動用 book) なら、 自分の copy を保存せず閉じ、 **同じ osascript の中で数え直して 0 の時だけ** plain `quit` を撃ち、 終了を待つ。 staging root の外の文書・未保存の新規文書が 1 つでもある / 応答しない / dialog が quit を取り消した (-128) → **何もせず続行** (自分の copy だけを開閉する)。 `quit saving no` は使わない (= 数え直しをすり抜けた user の文書も保存 dialog が守る)。
 - **前面に出さない**: 起動は `open -g -b <bundle id>`、 AppleScript に `activate` を書かない、 Word は `open -g -a "Microsoft Word" <file>`。 それでも前面を奪っていたら、 始める前の前面 app に返す (`office_front_remember` / `office_front_restore`、 user が途中で別 app に移っていれば動かさない)。
@@ -1810,7 +1810,9 @@ python は `from office_staging import office_app` → `office_app("reset", "exc
 
 **-1712 / -609 / -50 が続く時** (旧「第 2 手 killall」 の置き換え): `state` を見る → `clear` なら `reset` して再実行 / `user-docs` / `unknown` なら **user に「作業を保存して自分で終了 (⌘Q) してから」 を頼む**。 Claude は app 名指定の `killall` / `pkill` / 強制終了をしない。 唯一の例外 = **その session が自分で起動したと起動時刻で確かめた process で、 文書一覧に 0 と答えたもの**を PID 指定で終わらせる時 (例: hidden の dialog で `quit` が取り消され続ける)。
 
-**実測** (2026-09-15、 macOS 26.5 / Office 16.112): Excel / Word / PowerPoint の `full name` は POSIX path (古い版の HFS に備えて guard は変換してから比べる)。 起動中の Excel に `activate` なしで book を開いても、 `open -g -a` で Word に docx を開かせても、 前面は動かない。 **`open -j` (hidden) で起動すると、 開く失敗の警告 dialog まで見えなくなり、 `quit` が -128 で取り消されたまま誰も気づかない** → `-j` は使わない。 4 wrapper を実機で通し (前面は一度も Office に移らず、 文書の無い app だけが最後に quit)、 別の文書を開いた Excel では reset を省いて PDF を作り、 その文書を開いたまま残すことを確認。
+**実測** (macOS 26.5 / Office 16.112): Excel / Word / PowerPoint の `full name` は POSIX path (古い版の HFS に備えて guard は変換してから比べる)。 Excel は `/private/tmp/x` を `/tmp/x` と答える (= guard は揃えてから比べる)。 起動中の Excel に `activate` なしで book を開いても、 冷えた Excel を `activate` なしの `tell` で起動しても、 `open -g -a` で Word に docx を開かせても、 前面は動かない (= 案件ごとの driver は `activate` を消すだけで背景になる)。 **`open -j` (hidden) で起動すると、 開く失敗の警告 dialog まで見えなくなり、 `quit` が -128 で取り消されたまま誰も気づかない** → `-j` は使わない。 4 wrapper と `office-stage-run.sh` を実機で通し (前面は一度も Office に移らず、 文書の無い app だけが最後に quit)、 別の文書を開いた Excel では reset を省いて PDF を作り、 その文書を開いたまま残すことを確認。
+
+⚠️ **wrapper や driver の source を Bash の heredoc (python / sed) で書き換えると [`office-inplace-guard`](#office-inplace-guard) の hook に deny される** (= 書き換える文字列に Office を開く AppleScript が含まれ、 実行と区別できない)。 source の編集は Edit tool で行う。
 
 **検査**: [`scripts/lib/office-app-guard.test.sh`](../scripts/lib/office-app-guard.test.sh) (osascript / open を stub に差し替え = Office 不要: 未起動 / staged copy だけ / user の文書あり 〔保存済・未保存・名前だけの新規〕 / 応答なし / 確認と quit の間に文書が開かれた / dialog で取り消し / has-path / 前面を返す条件 / python の橋 + **wrapper に quit・kill・activate・`active document`・`workbook 1` が戻っていないかの lint** + macOS では `xlsx-to-pdf.sh` を stub の上で通す)。 AppleScript 本体の挙動は stub では検査できない = 上の実測が根拠。
 
@@ -3549,6 +3551,8 @@ origin: 海外出張願 (人事課 docx 様式) — 複数回の変換試行で 
 5. **用紙**: `lp -o media=A4` (や PageSize) は**本体の用紙設定を上書きする保証にならない** — 本体 (操作パネル) の用紙サイズが別サイズのままだと、 A4 指定の job がその紙に刷られた (実測)。 刷る前に「本体の用紙サイズ設定」 と「トレイの紙」 の両方を user に確かめてもらう。 ⚠️ 違うサイズで出たと言われたら、 原因を推測で説明しない (= 「プリンタは紙を見ない」 等の未検証の断定をしない)。 本体の設定を見てもらうのが先。
 
 **Web ページを PDF 化したものも gate の対象**: headless browser の print-to-PDF (Chromium 系の `--print-to-pdf` 等) は文字を **Type3 font** で書くことがあり、 1. の font 検査で FAIL する (実測)。 PyMuPDF で描いた PDF でなくても、 FAIL なら同じく raster 版を刷る。 印刷用 HTML ページ (`window.print()` 前提) を保存 HTML から PDF + raster 版にする道具 = [`scripts/html-print-pdf.py`](../scripts/html-print-pdf.py) (`<base href>` と `@page{size:A4}` の差し込み込み)。 `pdf-print-preflight.py` は頁の寸法と用紙名 (A4 / B5 等) も表示するので、 5. の照合に使う。
+
+<a id="headless-print-to-pdf-no-exit"></a>⚠️ **headless の print-to-PDF は、 PDF を書き終えた後も browser の process が終わらないことがある** (実測: macOS の Chrome 系で、 数秒で PDF を書いたまま居座り、 `subprocess.run(timeout=...)` が毎回 timeout で落ちた)。 終了を待たず、 **「N bytes written to file」 の出力か、 PDF の size が数秒変わらないこと** を見て process group ごと止める。 test は「PDF と marker を書いてから sleep し続ける偽の browser」 で、 render が timeout より十分早く返ることを確かめる。 実装 = [`scripts/html-print-pdf.py`](../scripts/html-print-pdf.py) `render_pdf`。
 
 **なぜ規律でなく gate か**: 今回の 4 失敗は全て「前の修正で安心して次の罠を踏む」 連鎖 (= 修正ごとに検証 scope が前の症状だけに狭まる)。 gate を固定 list にしておけば、 毎回同じ点を通る。 個人層は `lp` を含む Bash に PreToolUse hook を掛けて本 script を強制できる。
 

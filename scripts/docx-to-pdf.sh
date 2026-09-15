@@ -108,8 +108,8 @@ soffice_bin() { if have soffice; then echo soffice; elif have libreoffice; then 
 render_pages() {
   # Robust macOS automation; uses the verified `export ... as PDF` form.
   # ⚠️ Pages keeps `activate`: without it `open` returned missing value / timed out (-1700 / -1712,
-  #    2026-09-15, Pages 14.5 — Pages is not staged, so its file-access prompt stays hidden). Pages
-  #    comes to the front here; focus is handed back afterwards (office-automation.md#office-app-reset-guard).
+  #    measured on Pages 14.5 — Pages is not staged; a hidden file-access prompt is the suspected cause).
+  #    Pages comes to the front here; focus is handed back afterwards (macos-gui-app-automation.md#background-launch).
   local rc=0
   office_front_remember
   osascript - "$SRC" "$PDF" <<'AS' || rc=$?

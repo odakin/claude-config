@@ -822,6 +822,9 @@ retry は同じ状態から同じ副作用を増やさない冪等性と、event
 [`debugging-discipline.md#recovery-state-dispatch`](../conventions/debugging-discipline.md#recovery-state-dispatch)、
 Codex の外部 browser への適用は
 [`codex/PARITY.md#external-browser-lifecycle`](../codex/PARITY.md#external-browser-lifecycle) が所有する。
+文書を持つ GUI app (Office 等) を script が「reset のために quit / kill」 する場面への適用
+(= user の文書を live state として数え、 自分のものだけの時に限って orderly quit) は
+[`macos-gui-app-automation.md#ask-before-quit`](../conventions/macos-gui-app-automation.md#ask-before-quit) が所有する。
 
 origin: macOS の外部 browser adapter が、既に live な singleton に対して fresh instance を強制し、
 新 process が application 登録中に abort する事例。機構は複数回反復したが 1 製品 family の観察なので、
@@ -971,6 +974,8 @@ origin: 会議日程調整の broadcast 依頼 (候補日 2 つ + 入力〆切�
 **案件 ID は残る**: 発行体が採番した ID (= 原稿番号 / 申請番号 / 課題番号 / ticket ID / 伝票番号) は、 system が件名と本文の両方に literal で刻み、 転送・引用・機械翻訳を越えてそのまま運ばれる。 ∴ **過去の案件記録を掘り起こす第一の key は ID**、 人間可読な属性は補助に落とす。
 
 **reflex**: retrieval が null または想定より薄いとき、 「無い」 と報告する前に (1) 使った key を列挙し (2) 各 key が上表のどれかで失われないかを問い (3) 案件 ID が分かるなら **ID 単独で**引き直す。 ID が不明なら、 ID を必ず含む隣接 record (= 受理通知・確認メール・自動返信) を先に探して ID を得る。 報告時は [`§8.16`](#absence-channel-coverage) と同じく「Verified scope = ___ / NOT verified = ___」 を key 軸でも埋める。
+
+**検出器の「既知」 判定にも同じ key の問題がある**: 送り手が毎回 新しいスレッドで送る通知 (審査結果・受付・督促) は、 thread ID で「待っている返事か」「記録済みか」 を判定する網を原理的にすり抜ける。 待ちは **送り手と件名の検索条件** で、 決着済み案件への督促は **本文の案件 ID** で判定する ([`email-surface-pattern.md#new-thread-expected-inbound`](../conventions/email-surface-pattern.md#new-thread-expected-inbound) / [`#settled-matter-key`](../conventions/email-surface-pattern.md#settled-matter-key))。
 
 origin: ある論文の過去の査読所見を「メールに残っていない」 と報告した RCA。 誌名・送信者・添付の有無・直近時間窓で引いて null → 実際は**原稿管理 ID 単独で引けば全 round が残っていた** (= 最終報は本文のみで添付なし / 転送の件名に誌名が一度も出てこない / 発端は時間窓の外)。 sibling 観測: 同じ運用の連絡先取得手順に、 mask された公開ページを見て「取得できない」 と結論したが一次資料 (= 論文 PDF) には在った失敗例が既に記録されていた (= source 選択の同型)。 2 観察 ([`§9.8`](#single-observation-scope-check) の 2+ bar 充足)。 なお本節は「引き方」 の話で、 [`§8.11`](#downstream-net-intake-leverage) (= intake で表現されていない対象は下流で守れない) とは独立 — ID で引けたのは、 対象が最初から正しく記録されていたから。
 
