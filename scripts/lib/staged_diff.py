@@ -8,8 +8,10 @@ git の binary 判定は「先頭 8KB に NUL があるか」 なので、 NUL �
 (git-crypt 等) で平文に戻した binary は、 どちらも text として diff に出る。 --numstat の
 `-\t-` だけでは見分けられない。
 
-∴ 出力は bytes で受け取り、 file ごとの section を UTF-8 として厳密に decode する。 decode
-できない section (または NUL を含む section) は binary として飛ばし、 他の file は読む。
+∴ 出力は bytes で受け取り、 file ごとの section を厳密に decode する: 既知の binary 拡張子 → 飛ばす /
+NUL を含む → 飛ばす / UTF-8 → 読む / cp932 (Shift_JIS の旧来 text) → 読む / どちらでもない → binary として
+飛ばす。 他の file は読む。 cp932 は緩い (1 byte の 0x80-0xFF も通す) が、 実測で乱 byte 512 byte 以上の
+section を 2000 回中 0 回しか通さなかったので、 誤って読むのは NUL を含まない小さい binary だけ (= warn 検査なら無害)。
 textconv は切らない (git-crypt で暗号化された text file を平文で検査するため)。
 warn と BLOCK で読み方を分ける理由 = conventions/hook-authoring.md#staged-diff-binary。
 
@@ -32,6 +34,19 @@ DIFF_ARGS = ["diff", "--cached", "-U0", "--no-color", "--no-ext-diff", "--diff-f
 _HUNK = re.compile(rb"^@@ -\d+(?:,\d+)? \+(\d+)")
 
 Added = Tuple[str, int, str]
+BINARY_SUFFIXES = (".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".ico", ".zip", ".gz", ".tgz", ".xz",
+                   ".7z", ".xlsx", ".docx", ".pptx", ".key", ".numbers", ".pages", ".mp3", ".m4a", ".wav", ".aac",
+                   ".mp4", ".mov", ".ttf", ".otf", ".woff", ".woff2", ".sqlite", ".db", ".pyc")
+FALLBACK_ENCODINGS = ("utf-8", "cp932")
+
+
+def _decode(chunks: List[bytes]) -> Optional[List[str]]:
+    for encoding in FALLBACK_ENCODINGS:
+        try:
+            return [chunk.decode(encoding) for chunk in chunks]
+        except UnicodeDecodeError:
+            continue
+    return None
 
 
 def _target_path(line: bytes) -> Optional[str]:
@@ -71,14 +86,13 @@ def parse_added_lines(raw: bytes, skip: Optional[Callable[[str], bool]] = None) 
                 lineno += 1
         if path is None or not body or (skip and skip(path)):
             continue
-        try:
-            if any(b"\0" in chunk for _, chunk in body):
-                raise UnicodeDecodeError("utf-8", b"", 0, 1, "NUL byte")
-            decoded = [(n, chunk.decode("utf-8").rstrip("\r")) for n, chunk in body]
-        except UnicodeDecodeError:
+        texts = None
+        if not path.lower().endswith(BINARY_SUFFIXES) and not any(b"\0" in chunk for _, chunk in body):
+            texts = _decode([chunk for _, chunk in body])
+        if texts is None:
             binary.append(path)
             continue
-        added.extend((path, n, text) for n, text in decoded)
+        added.extend((path, n, text.rstrip("\r")) for (n, _), text in zip(body, texts))
     return added, binary
 
 
@@ -105,13 +119,21 @@ def selftest() -> int:
         if not cond:
             fails.append(label)
 
-    raw = (b"diff --git a/x.bin b/x.bin\n+++ b/x.bin\n@@ -0,0 +1 @@\n+%PDF \xc5\xd0\n"
+    raw = (b"diff --git a/x.bin b/x.bin\n+++ b/x.bin\n@@ -0,0 +1 @@\n+%PDF \xc5\xd0 \x81\x7f\n"
            b"diff --git a/y.md b/y.md\n+++ b/y.md\n@@ -0,0 +1,2 @@\n+one\n+\xe4\xba\x8c\n")
     added, binary = parse_added_lines(raw)
     expect("invalid UTF-8 section is skipped, the text section is kept",
            added == [("y.md", 1, "one"), ("y.md", 2, "二")] and binary == ["x.bin"])
     added, _ = parse_added_lines(raw, skip=lambda p: p == "y.md")
     expect("skip callback drops a path", added == [])
+    sjis = "https://docs.google.com/d/example 日本語\n".encode("cp932")
+    added, binary = parse_added_lines(b"diff --git a/s.txt b/s.txt\n+++ b/s.txt\n@@ -0,0 +1 @@\n+" + sjis)
+    expect("a Shift_JIS (cp932) text file is read, not skipped",
+           added == [("s.txt", 1, "https://docs.google.com/d/example 日本語")] and binary == [])
+    added, binary = parse_added_lines(b"diff --git a/t.pdf b/t.pdf\n+++ b/t.pdf\n@@ -0,0 +1 @@\n+%PDF plain ascii\n")
+    expect("a known binary suffix is skipped even when its bytes decode", added == [] and binary == ["t.pdf"])
+    added, binary = parse_added_lines(b"diff --git a/u.bin b/u.bin\n+++ b/u.bin\n@@ -0,0 +1 @@\n+" + bytes(range(128, 256)) + b"\n")
+    expect("bytes that are neither UTF-8 nor cp932 are skipped", added == [] and binary == ["u.bin"])
     added, binary = parse_added_lines(b"diff --git a/z b/z\n+++ b/z\n@@ -0,0 +1 @@\n+a\0b\n")
     expect("NUL byte marks a section as binary", added == [] and binary == ["z"])
     added, _ = parse_added_lines(b"diff --git a/w b/w\n--- /dev/null\n+++ b/w\n@@ -0,0 +1,2 @@\n+++ kept\n+x\n")

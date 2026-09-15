@@ -534,6 +534,13 @@ def selftest():
         if not any(k == "line" for k, *_ in h):
             fails.append("remote あり・追加行一致を block できていない")
 
+        # (1b) 同じ commit に UTF-8 でない binary (NUL を含まない PDF 等) があっても、 text の一致を block する
+        (r1 / "scan.pdf").write_bytes(b"%PDF-1.4\n%\xc5\xd0\xe2\xe3\nstream \xff\xfe\n")
+        _git(["add", "scan.pdf"], cwd=r1)
+        if not any(k == "line" for k, *_ in scan(cwd=r1, env=env)):
+            fails.append("binary と同じ commit で追加行一致を block できていない")
+        _git(["rm", "-q", "--cached", "scan.pdf"], cwd=r1)
+
         # (2) remote なし → 素通り
         r2 = td / "r2"; r2.mkdir(); mkrepo(r2, False)
         (r2 / "a.md").write_text("これは zz9999sug の話\n", encoding="utf-8")

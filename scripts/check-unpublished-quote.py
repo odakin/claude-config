@@ -700,6 +700,12 @@ Then those numbers come from one careful toy run.
                        "```\nthe induced coupling stays finite once the auxiliary field is integrated out\n```\n")
         _git(["add", "conventions.md"], cwd=pub)
         expect("a short verbatim quotation in a public repo blocks (exit 1)", quiet(scan_staged, cfg, cwd=pub, index=idx) == 1)
+        (pub / "scan.pdf").write_bytes(b"%PDF-1.4\n%\xc5\xd0\xe2\xe3\nstream \xff\xfe\n")
+        _git(["add", "scan.pdf"], cwd=pub)
+        expect("... still blocks when a non-UTF-8 binary is staged in the same commit",
+               quiet(scan_staged, cfg, cwd=pub, index=idx) == 1)
+        _git(["rm", "-q", "--cached", "scan.pdf"], cwd=pub)
+        (pub / "scan.pdf").unlink()
         lines = list(enumerate(doc.read_text().split("\n"), 1))
         found = scan_lines("conventions.md", lines, idx, doc.read_text())
         expect("... reported as a quoted span on line 3, and nothing else", [(f[1], f[4]) for f in found] == [(3, "quote")])

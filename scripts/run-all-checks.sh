@@ -9,7 +9,7 @@
 #   1. 自動生成 index の同期   (generate-doc-index.py --check-all)
 #   1b. 生成 doc の同期        (generate-tree.py --check: CLAUDE.md tree / CONVENTIONS.md 列挙 / conventions/README.md)
 #   2. 手動保守 index / script inventory / Codex integration contract の整合
-#   3. python validator selftest 群 (--selftest を持つ全 script を自動発見)
+#   3. python validator selftest 群 (--selftest を持つ全 script を自動発見) + 3a. scripts/lib/*.py の selftest
 #   3b. foil の歯               (scripts/*.mutants.json を check-foil-teeth.py で = 修正の一部を外した mutant でも selftest)
 #   4. bash test 群            (hooks/*.test.sh + scripts/**/*.test.sh)
 #   5. bash 構文検査           (setup.sh + hooks/*.sh + scripts/*.sh の bash -n)
@@ -78,6 +78,16 @@ for py in scripts/*.py; do
     [ -f "$py" ] || continue
     if grep -q -- "--selftest" "$py"; then
         run "selftest: $(basename "$py")" python3 "$py" --selftest
+    fi
+done
+
+# 3a. scripts/lib/*.py の selftest (発見条件 = `if __name__ == "__main__"` の行か直後 2 行に selftest の語。
+#     lib の module は --selftest 引数を取らず、 直接実行が selftest になっている。 web_driver.py のように
+#     直接実行が CLI の module は対象外)
+for py in scripts/lib/*.py; do
+    [ -f "$py" ] || continue
+    if grep -A2 '__name__ == "__main__"' "$py" | grep -q selftest; then
+        run "selftest: lib/$(basename "$py")" python3 "$py"
     fi
 done
 
