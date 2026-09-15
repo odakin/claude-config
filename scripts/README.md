@@ -92,6 +92,7 @@
 - **[fix-md-links.py](fix-md-links.py)** — markdown の相対 link のうち着地先 file が無いものを分類し、答えが一意に決まる 2 型 (../ の段数ずれ・git が記録した改名) だけ直す。解決は renderer と同じ (symlink は実体 path、%XX decode、`:行番号` 無視、code span・fence・$数式$ の中は link でない)、書換えは link target の終端まで一致した時だけ・保護領域の外だけ、書換え後に「差は link target の中だけ・新しい着地先は全て実在・対象 file ごとに差が在る」 を自己検証する。--selftest 内蔵。
 - **[fleet-heartbeat.py](fleet-heartbeat.py)** — per-machine heartbeat writer（毎時 launchd cron から自マシンの RC server 群〔launchd loaded + server ログ末尾 marker parse = Connected/auth error/version error〕 + config-dir auth metadata を <repo>/<subdir>/<host>.json に commit+push。**claude を一切呼ばない** = auth 失効でも監視が生き残る、state-change-or-age commit policy で git history を汚さない、fail-open、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
 - **[fold-dated-bullets.py](fold-dated-bullets.py)** — SESSION.md などの日付 bullet の連続ブロックを、要約 1 本 (+ 追記点の行) に畳み、全文を archive へ verbatim で退避する。相対 link は archive の深さに付け替え、退避の完全性を検算してから書く。
+- **[fx-ttm-jpy.py](fx-ttm-jpy.py)** — 指定日の三菱UFJ銀行 公表相場 (TTS / TTB) を取り、 TTM = (TTS+TTB)/2 で外貨額を円に換算する。 --selftest 内蔵。
 - **[garoon-client.py](garoon-client.py)** — Cybozu Garoon (cloud) を **browser session cookie で script から読む** (画面 drive 不要)。
 - **[generate-doc-index.py](generate-doc-index.py)** — regenerate a slug index FROM its markdown, so Claude writes
 - **[generate-tree.py](generate-tree.py)** — CLAUDE.md 構造 tree (conventions/hooks/scripts) + CONVENTIONS.md 冒頭列挙 +

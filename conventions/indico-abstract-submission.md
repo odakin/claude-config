@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Indico (CERN 等) の会議に abstract 投稿・参加登録・支払いを進めるとき、会議の実績やアカウント重複を確認するとき
 category: office
-summary: Indico (indico.cern.ch 系) の abstract 投稿で実際に踏んだ機構と落とし穴 (= CERN SSO の login 経路選択 〔guest 登録の確認 mail が来ない / 外部 ID = Google 等で入り既存 profile に紐付ける〕 / 所属は SSO 同期を切らないと編集不可 / 別 mail で profile が二重化したら merge 依頼 / abstract form の Authors 〔= 発表者を含む著者〕 と順序は手動並べ替え 〔alphabetical は自分で〕 / 受理通知 mail に abstract ID / reminder 分単位 〔1 週間 = 10080〕 / 本文は plain text 寄り / 参加費を主催側の販売サイトで払う場合の区分既定値・手数料・決済代行だけの checkout・請求通貨で払う・未払い注文の取消 = #external-checkout)。 jps-talk-submission.md / paper-submission.md の sibling (会議 abstract 側)
+summary: Indico (indico.cern.ch 系) の abstract 投稿で実際に踏んだ機構と落とし穴 (= CERN SSO の login 経路選択 〔guest 登録の確認 mail が来ない / 外部 ID = Google 等で入り既存 profile に紐付ける〕 / 所属は SSO 同期を切らないと編集不可 / 別 mail で profile が二重化したら merge 依頼 / abstract form の Authors 〔= 発表者を含む著者〕 と順序は手動並べ替え 〔alphabetical は自分で〕 / 受理通知 mail に abstract ID / reminder 分単位 〔1 週間 = 10080〕 / 本文は plain text 寄り / 参加費を主催側の販売サイトで払う場合の区分既定値・手数料・決済代行だけの checkout・請求通貨で払う・未払い注文の取消 = #external-checkout / 研究費精算の費目・宛名つき領収書・購入日 TTM 換算 〔scripts/fx-ttm-jpy.py〕 = #fee-reimbursement)。 jps-talk-submission.md / paper-submission.md の sibling (会議 abstract 側)
 -->
 # indico-abstract-submission.md — Indico 会議 abstract 投稿の機構と落とし穴
 
@@ -107,3 +107,12 @@ Indico の登録と参加費の決済が別のサイトに分かれている会�
 - **支払後の報告**: 注文番号・金額の内訳・決済の取引 ID・Indico の登録番号を 1 通にまとめ、
   運営からの質問 (講演区分等) への回答も同じ便に載せる。 研究費で精算しうるなら、 領収書の宛名を
   所属機関の規程に合わせて同じ便で依頼する。 支払いの記録は決済代行の領収メールを正とする。
+- <a id="fee-reimbursement"></a>**研究費で精算するとき** (機関の規程が優先。 以下はよくある形):
+  - **費目**: 参加費を旅費に含めず、 会費等の別費目で立替精算する機関がある。 出張手続き (出張届・旅費) とは別の伝票になる。
+  - **領収書**: 宛名を「機関名 + 氏名」 に求められることが多い。 **カード明細は領収書の代わりにならない**ことが多いので、
+    運営に宛名つきの receipt を依頼する (決済代行の自動の領収メールは宛名が個人名だけ)。 カードは本人名義・1 回払いが条件のことがある。
+  - **円換算**: 「購入日の TTM」 で換算させる規程が多い。 カード明細の円額やカード会社のレートとは一致しない。
+    公表相場から計算する = [`scripts/fx-ttm-jpy.py`](../scripts/fx-ttm-jpy.py) (`<日付> <通貨> <外貨額>`、 休日と 100 通貨単位の通貨を扱い、 丸めは 3 通り並べる)。
+    購入日は決済した現地日付でなく、 **精算する機関の所在地の日付**で数える (時差で日付がずれる)。
+  - **手数料**: 販売サイトが足した手数料を参加費と一緒に立替額に入れてよいかは、 事務に確かめる。
+  - **財源の期間**: 期間の決まった研究費 (単年度・半年の補助金) では、 支払日と会期がどちらも期間内か、 精算の締めがいつかを先に確かめる。
