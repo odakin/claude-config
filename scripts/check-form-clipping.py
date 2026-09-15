@@ -23,7 +23,7 @@ WHAT: 雛形 (template) と記入済 (filled) を diff して **記入セル (= 
   3. overflow   = 完全に描かれた値の字が、 罫線の上に乗る / 他の字と重なる (= 折り返した行が欄の
                   上下にはみ出す、 折り返さない文字列が隣の欄へ伸びる)。 字の text 層は全文残るので
                   1・2 では見えない。 字の box (PyMuPDF rawdict の char bbox = em box) の中央部
-                  (上下左右 15% を除く) を罫線 (Excel が塗りの細い矩形で描く線) が横切るか、
+                  (上下左右 15% を除く) を罫線 (Excel が塗りの細い矩形で描く線・Pattern で塗る点線) が横切るか、
                   別の字の box と 35% 超重なるか
   4. hash       = PDF に `###` がある (= 数値・日付が欄の幅に入らず Excel が # で埋めた)
   5. small      = (``--min-scale K`` の時) 記入値の描画の字の大きさ (字の box の高さ) が、 その cell の font size の
@@ -36,7 +36,9 @@ PDF に載らない sheet の値は、 呼び元が filled からその sheet �
 
 LIMIT (= 視覚確認を置換しない): レンダラによっては clip しても text 層に全文を残す
 (clip-path 方式) ことがある。 LibreOffice / Excel は実測で truncate するため 1 で捕まるが
-engine 依存。 3 は線を塗りの矩形 / line で描く renderer を前提にする (Excel の PDF は実測で矩形)。
+engine 依存。 3 は線を塗りの矩形 / line / Pattern で塗った細い矩形 (Excel の点線) で描く renderer を前提にする
+(Excel の PDF は実測で矩形。 点線は get_drawings に出ないので content stream から拾う = _pattern_rules)。
+字の box の上下 15% に掛かる罫線 (= 行の高さぎりぎりで字が罫線に触れる) は数えない = 行高の見積りの側で余裕を持たせる。
 罫線の無い余白へのはみ出しで他の字にも当たらないもの、 1・2 は 4 字未満 / 3 は 2 字未満の値を見ない (短い部分一致の誤検出)。
 本検出は「機械層の第一防衛線」 であって pdf-visual-confirm を置換しない。
 
@@ -53,6 +55,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import unicodedata
 from collections import defaultdict
@@ -66,9 +69,24 @@ RULE_THICK = 2.0  # これ以下の太さの塗り矩形を罫線とみなす (p
 OVERFLOW_MIN_LEN = 2  # はみ出しは 2 字の値から見る (位置で判定するので短い部分一致の誤検出が起きにくい)
 
 
+# CJK 部首補助 (U+2E80-2EFF) は NFKC で統合漢字に戻らない (康熙部首 U+2F00- は戻る)。 日本語 font は同じ glyph を
+# 部首補助の符号にも割り当てており、 PDF の text 層は低い方の符号を返すことがある = 値の「長」 が PDF では「⻑」
+# (U+2ED1) になり、 完全に描かれた値を clip と誤検出する (実測: Mac Excel の PDF、 記入欄の「長い説明」)。
+# 対応 = Unicode EquivalentUnifiedIdeograph のうち日本語の文で出る字 (値の側には現れない符号なので、 誤って
+# 同一視しても実害は切れの見逃しに限られ、 それも片側だけの字に限られる)。
+_RADICAL_SUPPLEMENT = {
+    "\u2E8C": "小", "\u2E8D": "小", "\u2E9C": "日", "\u2E9D": "月", "\u2E9F": "母", "\u2EA0": "民",
+    "\u2EA7": "牛", "\u2EA9": "王", "\u2EAB": "目", "\u2EAC": "示", "\u2EB6": "羊", "\u2EBD": "臼",
+    "\u2EC1": "虎", "\u2EC4": "西", "\u2EC6": "角", "\u2ED1": "長", "\u2ED7": "雨", "\u2ED8": "青",
+    "\u2EDD": "食", "\u2EE3": "骨", "\u2EE4": "鬼", "\u2EE8": "麦", "\u2EE9": "黄", "\u2EEB": "斉",
+    "\u2EED": "歯", "\u2EEF": "竜", "\u2EF2": "亀",
+}
+_RADICAL_TABLE = str.maketrans(_RADICAL_SUPPLEMENT)
+
+
 def _norm(s: str) -> str:
-    """NFKC 正規化 + 空白除去 (= ⾼→高 等の互換字、 折り返し空白、 全/半角差を吸収)。"""
-    s = unicodedata.normalize("NFKC", s)
+    """NFKC 正規化 + CJK 部首補助の統合漢字化 + 空白除去 (= ⾼→高 / ⻑→長 等の互換字、 折り返し空白、 全/半角差を吸収)。"""
+    s = unicodedata.normalize("NFKC", s).translate(_RADICAL_TABLE)
     return "".join(ch for ch in s if not ch.isspace())
 
 
@@ -125,6 +143,40 @@ def find_clipping(values, pdf_text, min_len=4):
     return flagged
 
 
+_PATTERN_FILL = re.compile(r"/Pattern\s+cs\s*/\S+\s+scn\s*((?:-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?\s+[ml]\s+)+)h\s+f\b")
+
+
+def _pattern_rules(page):
+    """Pattern で塗った細い矩形 = 点線の罫線 (横 [(x0,x1,y)], 縦 [(y0,y1,x)])。
+
+    Excel (Mac) の PDF は点線の罫線を ``/Pattern cs /P1 scn x y m … l h f`` (tile 画像の pattern で塗った細い矩形) で
+    描き、 PyMuPDF の get_drawings はそれを返さない (実測: 記入欄の点線 28 本が 0 本)。 content stream から
+    直接拾う。 座標変換 (cm) が掛かった区間の path は拾わない (= 位置を誤るより見ない側)。"""
+    import fitz
+
+    try:
+        doc = page.parent
+        stream = b"".join(doc.xref_stream(x) or b"" for x in page.get_contents()).decode("latin1")
+    except Exception:  # noqa: BLE001 — 読めない stream は「点線なし」 として従来の検査だけ
+        return [], []
+    hs, vs = [], []
+    mat = page.transformation_matrix
+    for m in _PATTERN_FILL.finditer(stream):
+        q = stream.rfind("q ", 0, m.start())
+        if q >= 0 and re.search(r"\bcm\b", stream[q:m.start()]):
+            continue
+        nums = [float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", m.group(1))]
+        pts = [fitz.Point(nums[i], nums[i + 1]) * mat for i in range(0, len(nums) - 1, 2)]
+        if len(pts) < 2:
+            continue
+        r = fitz.Rect(min(p.x for p in pts), min(p.y for p in pts), max(p.x for p in pts), max(p.y for p in pts))
+        if r.height <= RULE_THICK and r.width > r.height:
+            hs.append((r.x0, r.x1, (r.y0 + r.y1) / 2))
+        elif r.width <= RULE_THICK and r.height > r.width:
+            vs.append((r.y0, r.y1, (r.x0 + r.x1) / 2))
+    return hs, vs
+
+
 def _page_model(page):
     """page の (正規化した字の列, 字ごとの box, 横の罫線 [(x0,x1,y)], 縦の罫線 [(y0,y1,x)])。"""
     import fitz
@@ -137,7 +189,7 @@ def _page_model(page):
                     for n in _norm(ch["c"]):
                         chars.append(n)
                         rects.append(fitz.Rect(ch["bbox"]))
-    hs, vs = [], []
+    hs, vs = _pattern_rules(page)
     for path in page.get_drawings():
         for it in path["items"]:
             if it[0] == "re":
@@ -319,6 +371,21 @@ def _selftest():
         [("S!G13", "架空女子大学大学院")], "所属 架空女子大学大学院 職名") == []))
     cases.append(("NFKC 互換字を同一視", find_clipping(
         [("S!A1", "あいう大学")], "あいう⼤学") == []))  # ⼤=U+2F24 → NFKC → 大
+    import fitz as _fz
+    _d = _fz.open()
+    _pg = _d.new_page(width=200, height=200)
+    _xref = _pg.get_contents()[0] if _pg.get_contents() else None
+    if _xref is None:
+        _pg.insert_text((10, 20), " ")
+        _xref = _pg.get_contents()[0]
+    _d.update_stream(_xref, b"q 0 0 200 200 re W n /Pattern cs /P1 scn 20 100.5 m 180 100.5 l 180 100 l 20 100 l h f Q "
+                            b"q 1 0 0 1 0 50 cm /Pattern cs /P2 scn 20 20.5 m 180 20.5 l 180 20 l 20 20 l h f Q")
+    _hs, _vs = _pattern_rules(_d[0])
+    cases.append(("点線 (Pattern で塗った細い矩形) を罫線として拾う・cm の区間は拾わない",
+                  len(_hs) == 1 and abs(_hs[0][2] - 99.75) < 0.01 and not _vs))
+    _d.close()
+    cases.append(("CJK 部首補助を同一視 (NFKC で戻らない ⻑)", find_clipping(
+        [("S!A1", "架空の長い説明を含む文")], "架空の⻑い説明を含む文") == []))  # ⻑=U+2ED1 → 長
     cases.append(("別ページ非検出", find_clipping(
         [("S!A1", "まったく無関係な長い文字列")], "ここには別の短い内容のみ") == []))
     cases.append(("折返し空白吸収", find_clipping(
