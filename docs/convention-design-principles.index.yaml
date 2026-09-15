@@ -789,6 +789,14 @@ sections:
     legacy: "8.57"
     level: 3
     title: "8.57 「期間が過ぎた」 は不在の主張 — 失効と書く前に、 案件の key で後続を引く"
+  - id: single-deadline-field-many-legs
+    legacy: "8.58"
+    level: 3
+    title: "8.58 期限欄は 1 つ、 手順の期限は複数 — 目安で欄を上書きすると、 本物の期限は注釈と散文に落ちる"
+  - id: narrowing-makes-input-load-bearing
+    legacy: "8.59"
+    level: 3
+    title: "8.59 表示を絞る変更は、 絞った後に残る入力の正しさを load-bearing にする — 条件の外に落ちたものは件数で残す"
   - id: changelog
     level: 2
     title: "変更履歴"
