@@ -45,6 +45,6 @@ osascript / AppleScript / JXA で GUI app を動かす script は、 **user が�
 
 ## <a id="implementations"></a>実装と検査
 
-- Office 向け = [`scripts/lib/office-app-guard.sh`](../scripts/lib/office-app-guard.sh) (bash の 1 実装 + CLI、 python は `scripts/lib/office_staging.py` の `office_app()`)。 手書きの osascript は [`scripts/office-stage-run.sh`](../scripts/office-stage-run.sh) が拡張子から app を決めて前後に guard を挟む。
+- Office 向け = [`scripts/lib/office-app-guard.sh`](../scripts/lib/office-app-guard.sh) (bash の 1 実装 + CLI、 python は `scripts/lib/office_staging.py` の `office_app()`)。 手書きの osascript は [`scripts/office-stage-run.sh`](../scripts/office-stage-run.sh) が拡張子から app を決めて前後に guard を挟む。 Bash で Office を名指しで止める command (`killall` / `pkill` / `kill $(pgrep …)` / inline osascript の quit) は PreToolUse hook [`hooks/office-inplace-guard.py`](../hooks/office-inplace-guard.py) が deny する。
 - 検査の型 = osascript / open を PATH の stub に差し替え、 app の状態 (起動中か・文書一覧) を file で持つ ([`scripts/lib/office-app-guard.test.sh`](../scripts/lib/office-app-guard.test.sh))。 **AppleScript 本体の挙動は stub では検査できない** = 実機で 1 回確かめた結果を doc に残す。
 - 他の app に広げる時は、 app ごとに「文書一覧の取り方」 (Office = `full name` + `saved` / Pages 等 = `file of document`) と「`activate` を外して動くか」 を 1 回ずつ実測する。

@@ -19,6 +19,11 @@
      script 内の path literal がすべて staging の内側なら通す。
   4. layer-1 wrapper (xlsx-to-pdf.sh / docx-to-pdf.sh / pptx-to-pdf.sh / affix-image-xlsx.py) の `--no-stage`、
      および Office を駆動する command への `CLAUDE_OFFICE_STAGING=0|no|off|false`。
+  5. Office app を名指しで止める command = `killall` / `pkill` の引数に Microsoft Excel/Word/PowerPoint、
+     `kill $(pgrep … Microsoft …)`、 inline osascript の `tell application "Microsoft …" … quit`
+     (= user が開いている文書を巻き込む。 直し方 = scripts/lib/office-app-guard.sh の reset、
+     正本 = macos-gui-app-automation.md#ask-before-quit)。 例外 marker は別 = `office-app: exempt <理由>`。
+     script file の中の quit は見ない (guard 自身の quit は開いている文書を数え直してから撃つ)。
 
 通すもの:
   - layer-1 wrapper そのもの (既定で stage する) / `scripts/office-stage-run.sh` 配下の command
@@ -81,6 +86,11 @@ HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)(\w+)\1[^\n]*\n(.*?)\n[ \t]*\2[ \t]*(?=
 OSA_WORD = re.compile(r"(?:^|[\n;&|(`]|\$\()[ \t]*(?:[A-Za-z_]\w*=\S*[ \t]+)*(?:(?:exec|time|nohup|command|env)[ \t]+)*"
                       r"(?:\S*/)?osascript\b")
 PREFIX_WORDS = {"exec", "time", "nohup", "command", "env", "sudo", "caffeinate"}
+APP_EXEMPT = re.compile(r"office-app:\s*exempt[ \t]+\S", re.I)
+APP_NAME = re.compile(r"Microsoft[\s_]+(?:Excel|Word|PowerPoint)", re.I)
+KILL_PGREP = re.compile(r"(?:^|[\s;&|(])kill\b[^\n;&|]*?\$\(\s*pgrep\b[^)]*" + APPS, re.I)
+QUIT_VERB = re.compile(r"(?<![\w.])quit\b", re.I)
+APP_SOT = "claude-config/conventions/macos-gui-app-automation.md#ask-before-quit"
 
 
 # ---------------------------------------------------------------- path helpers
@@ -431,12 +441,44 @@ def split_segments(cmd: str) -> list[tuple[list[str], str]] | None:
     return segs
 
 
+def _strip_prefix(tokens: list[str]) -> list[str]:
+    i = 0
+    while i < len(tokens) and (re.match(r"^[A-Za-z_]\w*=", tokens[i]) or os.path.basename(tokens[i]) in PREFIX_WORDS):
+        i += 1
+    return tokens[i:]
+
+
+def find_app_stop(cmd: str, segs: list[tuple[list[str], str]] | None) -> str | None:
+    """Office app を名指しで止める command (killall / pkill / kill $(pgrep) / inline osascript の quit)。"""
+    if APP_EXEMPT.search(cmd):
+        return None
+    if KILL_PGREP.search(_strip_comments(cmd)):
+        return "APP:kill $(pgrep …) で Office app を強制終了しようとしている"
+    for tokens, heredoc in segs or []:
+        tokens = _strip_prefix(tokens)
+        if not tokens:
+            continue
+        word = os.path.basename(tokens[0])
+        if word in ("killall", "pkill") and APP_NAME.search(" ".join(tokens[1:])):
+            return f"APP:{word} で Office app を名指しで強制終了しようとしている"
+        if word == "osascript":
+            inline = "\n".join(tokens[j + 1] for j in range(len(tokens) - 1) if tokens[j] == "-e")
+            if heredoc and ("-" in tokens[1:] or len(tokens) == 1):
+                inline += "\n" + heredoc
+            if inline and QUIT_VERB.search(inline) and (TELL.search(inline) or OBJ.search(inline)):
+                return "APP:inline osascript で Office app を quit しようとしている"
+    return None
+
+
 def find_issue(cmd: str, cwd: str, env: dict) -> str | None:
     if not cmd:
         return None
     cmd_exempt = bool(EXEMPT.search(cmd))
     ctx = Ctx(cwd or os.getcwd(), env, parse_assigns(cmd))
     segs = split_segments(cmd)
+    stop = find_app_stop(cmd, segs)
+    if stop:
+        return stop
     if segs is None:
         if OSA_WORD.search(cmd) and not cmd_exempt:
             return check_applescript_text(cmd, ctx)
@@ -461,6 +503,16 @@ def find_issue(cmd: str, cwd: str, env: dict) -> str | None:
 
 
 def reason_text(issue: str, env: dict) -> str:
+    if issue.startswith("APP:"):
+        guard = os.path.normpath(os.path.join(HERE, "..", "scripts", "lib", "office-app-guard.sh"))
+        return (
+            f"[office-inplace-guard] {issue[4:]}。 user が同じ app で文書を開いていると、 quit は保存 dialog で止まり、 "
+            f"kill は未保存の作業ごと消す。 直し方: `bash {guard} state <excel|word|powerpoint>` で開いている文書を見る → "
+            f"`clear` なら `bash {guard} reset <app>` (= 自分の staged copy だけの時に quit して終了を待つ) / "
+            f"`user-docs` / `unknown` なら user に「保存して自分で終了してから」 を頼む。 wrapper と office-stage-run.sh は "
+            f"この reset を内蔵。 自分が起動したと確かめた process で文書 0 件のものを止めるだけなら PID 指定で、 "
+            f"どうしても名指しが要るなら理由つきで `# office-app: exempt <理由>`。 正本 = {APP_SOT}"
+        )
     try:
         root = _lib().staging_roots_for_match(env)[0]
     except Exception:  # noqa: BLE001
@@ -636,6 +688,13 @@ def selftest() -> int:
     check("bash ~/Claude/claude-config/scripts/docx-to-pdf.sh --no-stage a.docx", True, "bash wrapper --no-stage")
     check("CLAUDE_OFFICE_STAGING=0 xlsx-to-pdf.sh form.xlsx", True, "wrapper を env で無効化")
     check("true && osascript -e 'tell app \"Microsoft Excel\" to save active workbook in \"/tmp/example/out.xlsx\"'", True, "tell app 省略形 + && の後")
+    check("killall \"Microsoft Excel\"; sleep 4", True, "killall で Excel を名指し")
+    check("pkill -x \"Microsoft Word\" 2>/dev/null || true", True, "pkill で Word を名指し")
+    check("sudo killall -9 'Microsoft PowerPoint'", True, "sudo + killall -9 (PowerPoint)")
+    check("kill $(pgrep -x \"Microsoft Excel\")", True, "kill $(pgrep …)")
+    check("osascript -e 'tell application \"Microsoft Excel\" to quit'", True, "inline osascript の quit")
+    check("osascript -e 'tell application id \"com.microsoft.Word\" to quit saving no'", True, "bundle id の quit saving no")
+    check("osascript <<'EOF'\ntell application \"Microsoft PowerPoint\"\n  quit\nend tell\nEOF", True, "heredoc の quit")
     # 通す
     check("xlsx-to-pdf.sh form.xlsx", False, "wrapper (既定 staging)")
     check("zsh ~/Claude/claude-config/scripts/xlsx-to-pdf.sh /tmp/example/form.xlsx", False, "zsh wrapper")
@@ -662,6 +721,15 @@ def selftest() -> int:
     check("echo 'unbalanced", False, "shlex が壊れる入力")
     check("open -a 'Microsoft Excel' /tmp/example/form.xlsx", False, "open -a (射程外)")
     check("osascript -e 'tell application \"Keynote\" to open POSIX file \"/tmp/example/a.key\"'", False, "Office 以外の app")
+    check("killall Dock", False, "Office 以外の killall")
+    check("osascript -e 'tell application \"Pages\" to quit'", False, "Office 以外の quit")
+    check("command grep -rn 'killall \"Microsoft Excel\"' .", False, "grep の引数の killall (実行ではない)")
+    check("echo 'pkill -x \"Microsoft Word\"'", False, "echo の中の pkill")
+    check("bash ~/Claude/claude-config/scripts/lib/office-app-guard.sh reset excel", False, "guard の reset (script 内の quit は見ない)")
+    check("pgrep -x 'Microsoft Excel'", False, "pgrep だけ (read-only)")
+    check("osascript -e 'application id \"com.microsoft.Excel\" is running'", False, "is running probe")
+    check("killall 'Microsoft Excel' # office-app: exempt 自分が起動した process で文書 0 件を確認済み", False, "office-app exempt (理由つき)")
+    check("killall 'Microsoft Excel' # office-app: exempt", True, "理由なし office-app exempt は無効")
     shutil.rmtree(tmp, ignore_errors=True)
     print("selftest:", "PASS" if not fails else f"{fails} FAIL")
     return 1 if fails else 0
