@@ -777,6 +777,18 @@ sections:
     legacy: "8.54"
     level: 3
     title: "8.54 後から入れた検出器は、 それ以前の在庫を検査していない — 設置と同じ turn に全量を 1 回通す"
+  - id: elapsed-time-urgency-inversion
+    legacy: "8.55"
+    level: 3
+    title: "8.55 経過日数で強める印は、 期限の近い義務ほど弱く付く — 期限が取れる item は残り時間で印と並びを決める"
+  - id: surface-reader-is-not-the-owner
+    legacy: "8.56"
+    level: 3
+    title: "8.56 表示を読むのは agent、 義務を負うのは人 — 「表示した」 を「伝わった」 と数えない"
+  - id: lapse-claim-is-absence-claim
+    legacy: "8.57"
+    level: 3
+    title: "8.57 「期間が過ぎた」 は不在の主張 — 失効と書く前に、 案件の key で後続を引く"
   - id: changelog
     level: 2
     title: "変更履歴"
