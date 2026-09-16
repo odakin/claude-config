@@ -9,6 +9,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from git_blob import read_blob_text  # noqa: E402  blob は worktree に出したときの中身で読む (git-crypt の暗号化 path も平文)
+
 
 SCRIPT_SUFFIXES = {".py", ".sh", ".js", ".mjs", ".jl", ".wl", ".wls", ".ipynb"}
 LAYER3_DECLARATION = "layer-placement: layer3"
@@ -75,15 +78,9 @@ def staged_added_scripts(repo: Path) -> list[str]:
 
 def staged_blob(repo: Path, relative: str) -> str:
     try:
-        result = subprocess.run(
-            ["git", "-C", str(repo), "show", f":{relative}"],
-            capture_output=True,
-            check=False,
-            timeout=20,
-        )
+        return read_blob_text(f":{relative}", cwd=str(repo), timeout=20) or ""
     except (OSError, subprocess.TimeoutExpired):
         return ""
-    return result.stdout.decode("utf-8", errors="replace") if result.returncode == 0 else ""
 
 
 def new_lower_findings(repo: Path, lower_dir: Path, upper_dir: Path) -> list[tuple[str, str]]:

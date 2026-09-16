@@ -55,7 +55,9 @@ from pathlib import Path
 from urllib.parse import unquote
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import importlib.util as _ilu
+from git_blob import read_blob  # blob は worktree に出したときの中身で読む (git-crypt の暗号化 path も平文)
 
 _spec = _ilu.spec_from_file_location("_cma", Path(__file__).with_name("check-md-anchors.py"))
 _cma = _ilu.module_from_spec(_spec)                     # type: ignore
@@ -246,7 +248,7 @@ def scan_staged(repo: Path, excludes: list[str], include_verbatim: bool, git: "G
     for name in out.decode("utf-8", "surrogateescape").split("\0"):
         if not name.endswith(".md"):
             continue
-        blob = subprocess.run(["git", "-C", str(repo), "show", f":{name}"], capture_output=True).stdout
+        blob = read_blob(f":{name}", cwd=str(repo))[1]
         scan_text(repo / name, blob.decode("utf-8", "replace"), name, git, excludes, include_verbatim, rows)
     return rows
 

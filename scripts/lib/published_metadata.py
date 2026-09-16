@@ -30,6 +30,7 @@ archive) は著者名と要旨をそのまま持ち、 自分の論文が載っ�
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -143,10 +144,10 @@ def metadata_texts(path: str, text: str | None) -> set:
 
 
 def _staged_text(path: str) -> str | None:
-    r = subprocess.run(["git", "show", f":{path}"], capture_output=True)
-    if r.returncode != 0:
-        return None
-    return r.stdout.decode("utf-8", errors="replace")
+    # blob は worktree に出したときの中身で読む (git-crypt の暗号化 path も平文) = 同じ dir の git_blob.py
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from git_blob import read_blob_text
+    return read_blob_text(f":{path}")
 
 
 def filter_added(buf_lines: Iterable[str], read=_staged_text) -> list:

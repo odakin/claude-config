@@ -48,6 +48,12 @@ except ImportError:  # pragma: no cover
     _published_lines = lambda path, text: set()  # noqa: E731
     _published_applies = lambda path: False  # noqa: E731
     _generated_files = lambda repo: (set(), [], [])  # noqa: E731
+try:  # blob は worktree に出したときの中身で読む = git-crypt の暗号化 path も平文 (lib/git_blob.py)
+    from git_blob import read_blob_text as _read_blob_text
+except ImportError:  # pragma: no cover
+    def _read_blob_text(spec, cwd=None):
+        r = subprocess.run(["git", "show", spec], cwd=cwd, capture_output=True, encoding="utf-8", errors="replace")
+        return r.stdout if r.returncode == 0 else None
 
 MARKER = Path(".claude") / "public-repo.marker"
 TERMS_FILE = "activity-fact-terms.txt"
@@ -183,7 +189,7 @@ def scan_staged(repo, terms, out=print):
     for path, lineno, text in added_lines(diff):
         if _published_applies(path):
             if path not in published:
-                published[path] = _published_lines(path, _git(["show", f":{path}"], cwd=repo)[1])
+                published[path] = _published_lines(path, _read_blob_text(f":{path}", cwd=repo) or "")
             if lineno in published[path]:
                 continue
         kinds = classify(text, terms)

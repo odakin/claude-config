@@ -66,6 +66,12 @@ try:  # 公刊済みの書誌の行は対象外 (lib/published_metadata.py)。 �
 except ImportError:  # pragma: no cover
     _published_lines = lambda path, text: set()  # noqa: E731
     _published_applies = lambda path: False  # noqa: E731
+try:  # blob は worktree に出したときの中身で読む = git-crypt の暗号化 path も平文 (lib/git_blob.py)
+    from git_blob import read_blob_text as _read_blob_text
+except ImportError:  # pragma: no cover
+    def _read_blob_text(spec, cwd=None):
+        r = subprocess.run(["git", "show", spec], cwd=cwd, capture_output=True, encoding="utf-8", errors="replace")
+        return r.stdout if r.returncode == 0 else None
 
 PROSE_K = 6
 QUOTE_K = 5
@@ -445,7 +451,7 @@ def scan_staged(cfg, cwd=None, index=None) -> int:
         return 0
     findings = []
     for path, lines in added_lines_from_diff(diff).items():
-        full = _git(["show", f":{path}"], cwd=cwd)[1] if (path.endswith((".md", ".markdown")) or _published_applies(path)) else None
+        full = (_read_blob_text(f":{path}", cwd=cwd) or "") if (path.endswith((".md", ".markdown")) or _published_applies(path)) else None
         findings += scan_lines(path, lines, index, full)
     if findings:
         report(findings, index, "the staged change")

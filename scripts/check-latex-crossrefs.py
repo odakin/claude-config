@@ -55,7 +55,11 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from git_blob import read_blob  # noqa: E402  blob は worktree に出したときの中身で読む (git-crypt の暗号化 path も平文)
 
 
 REF = re.compile(
@@ -385,7 +389,10 @@ def baseline_check(path, text, revision, labelcref=True):
     commit = subprocess.check_output(
         ["git", "-C", str(root), "rev-parse", "--verify", revision+"^{commit}"], text=True).strip()
     relative = path.resolve().relative_to(root).as_posix()
-    before = subprocess.check_output(["git", "-C", str(root), "show", commit+":"+relative]).decode("utf-8")
+    rc, data = read_blob(commit+":"+relative, cwd=str(root))
+    if rc != 0:
+        raise subprocess.CalledProcessError(rc, ["git", "cat-file", "--filters", commit+":"+relative])
+    before = data.decode("utf-8")
     prior = inspect_text(before, path)
     counts = {"baseline_bare_count": sum(row["bare"] for row in prior),
               "baseline_parenthetical_count": len(prior)}
