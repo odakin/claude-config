@@ -23,8 +23,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Install jq and ffmpeg (ffmpeg = audio-finish-episode.py selftest; without it the test only SKIPs)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq ffmpeg
+      - name: Install jq, ffmpeg and git-crypt (ffmpeg = audio-finish-episode.py selftest, git-crypt = staged-conflict-markers T8/T9; without them those tests only SKIP)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq ffmpeg git-crypt
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"

@@ -17,6 +17,11 @@
 #   - `grep -I` = binary file は対象外
 #   - `=======` 単独行は見ない (= markdown setext 見出しと衝突する FP 源。 <<< / >>> は
 #     conflict で必ず対で残るので 2 種の検出で機能的に十分)
+#   - git-crypt の対象 path (filter=git-crypt) は `git cat-file --filters` で復号して読む
+#     (= index の blob は暗号文なので `git show` + `grep -I` では binary 扱いで何も見えない。
+#     2026-09-16 実測: 暗号化が既定の repo で marker 入りの staged file が素通りした)。
+#     filter 全般でなく git-crypt に絞る = LFS 等の smudge を commit のたびに走らせない。
+#     lock 中で復号できなければ素通り (fail-open)
 #
 # escape hatch:
 #   - 引用等で行頭 marker を書きたい → indent する (行頭でなければ非検出)
@@ -31,10 +36,16 @@ check_staged_conflict_markers() {
     if [ "${CLAUDE_SKIP_CONFLICT_GATE:-0}" = "1" ]; then
         return 0
     fi
-    local f hits found=0
+    local f hits found=0 crypt_paths
+    crypt_paths="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null \
+        | git check-attr --stdin filter 2>/dev/null | sed -n 's/: filter: git-crypt$//p')"
     while IFS= read -r f; do
         [ -n "$f" ] || continue
-        hits="$(git show ":$f" 2>/dev/null | grep -nIE '^(<{7}|>{7}) ' || true)"
+        if [ -n "$crypt_paths" ] && printf '%s\n' "$crypt_paths" | grep -qxF -- "$f"; then
+            hits="$(git cat-file --filters ":$f" 2>/dev/null | grep -nIE '^(<{7}|>{7}) ' || true)"
+        else
+            hits="$(git show ":$f" 2>/dev/null | grep -nIE '^(<{7}|>{7}) ' || true)"
+        fi
         if [ -n "$hits" ]; then
             found=1
             echo "pre-commit: ✗ merge conflict marker (staged): $f" >&2

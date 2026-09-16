@@ -88,6 +88,37 @@ git reset -q -- f.bin && rm -f f.bin
 # T7: 削除 commit (D) は scan 対象外 → pass
 git rm -q c.txt
 check 0 "T7 削除のみ staged → pass (diff-filter=ACMR)"
+git commit -qm "rm c"
+
+# T8/T9: git-crypt で暗号化される path (index の blob が暗号文) → 復号して読む
+if command -v git-crypt >/dev/null 2>&1; then
+    CR="$TMP/crypt"
+    git init -q "$CR"
+    (
+        cd "$CR" || exit 1
+        git config user.email "noreply@anthropic.com"
+        git config user.name "test"
+        git config commit.gpgsign false
+        git-crypt init >/dev/null 2>&1
+        printf '* filter=git-crypt diff=git-crypt\n.gitattributes !filter !diff\n' > .gitattributes
+        git add .gitattributes && git commit -qm init
+    )
+    cd "$CR" || exit 1
+    { printf 'x\n%s HEAD\n' "$MK_OPEN"; printf '%s other\n' "$MK_CLOSE"; } > g.txt
+    git add g.txt
+    if git show :g.txt | head -c 9 | tr -d '\000' | grep -q GITCRYPT; then
+        check 1 "T8 git-crypt 暗号化 path の marker → block"
+    else
+        FAIL=$((FAIL + 1)); echo "❌ T8 fixture: staged blob が暗号化されていない"
+    fi
+    git reset -q -- g.txt && rm -f g.txt
+    echo "clean" > h.txt
+    git add h.txt
+    check 0 "T9 git-crypt 暗号化 path の clean file → pass"
+    cd "$TMP" || exit 1
+else
+    echo "SKIP: T8/T9 git-crypt が無い環境"
+fi
 
 echo "--- staged-conflict-markers.test: PASS=$PASS FAIL=$FAIL ---"
 [ "$FAIL" -eq 0 ] || exit 1
