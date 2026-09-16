@@ -181,6 +181,19 @@ else
   results+=("⚠️ D3: standalone alias 未 register — send route 列挙 skip")
 fi
 
+# D4. 返信の経路を send 経路と別に案内している (= 返信に使えない経路だけを指さない)
+missing_d4=""
+for key in "--reply-to-message" "send_mail.py" "thread が割れ" "threading 引数"; do
+  if ! printf '%s' "$out" | grep -qF -- "$key"; then
+    missing_d4="$missing_d4 [$key]"
+  fi
+done
+if [ -z "$missing_d4" ]; then
+  pass=$((pass+1)); results+=("✅ D4: 返信経路 (send_mail.py --reply-to-message) と、 使えない 2 経路の理由が出る")
+else
+  fail=$((fail+1)); results+=("❌ D4: 返信経路の案内欠落:$missing_d4")
+fi
+
 echo ""
 echo "=== 結果 ==="
 for r in "${results[@]}"; do echo "  $r"; done

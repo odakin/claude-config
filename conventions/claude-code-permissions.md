@@ -130,6 +130,12 @@ PreToolUse hook (mail 誤送信 guard 等) は desktop で出力 honor されず
 
 ⚠️ **この gate の限界 (= 過信しない)**: ask の match は「typed command 文字列」への glob なので、変数間接 (`S=<path>; python3 $S --send`) や glob 表記で literal を外すと素通りする。敵対的回避への防御ではなく、**good-faith な呼び出しに機械の一拍を課す speed bump**。最終防御は呼び出し側の規律 (draft 提示 + user 明示承認) と、hook が生きている surface での hook 層。
 
+<a id="every-send-channel-same-anchor"></a>**外部発信の経路が複数あるなら、 全経路を同じ anchor に揃える (実測)**: 上の 3 点 set を 1 経路 (例: メール CLI) の宣言 ask と hook だけに入れると、 別の発信経路の guard (例: chat 投稿 CLI の hook = script 本文に API write があれば ask) は dry-run でも聞き続け、 **1 送信 2 回の dialog が経路を変えて再発する**。 苦情が出た経路だけを直すのは経路 1 本の修正で、 「どの発信経路でも 1 送信 = dialog 1 回」 という性質は閉じない。
+
+- **guard を足す・直すときの test の必須 case**: 正規 CLI の dry-run (flag 無し) = 無音 / 実送信 flag = ask / flag が展開で入りうる形 (`$` / backtick) = ask / **同名だが正規 path でない複製** = ask。 dry-run 無音の case を持たない guard は、 この性質を守っているか分からない
+- <a id="adhoc-send-script-outside-exemption"></a>**使い捨ての送信 script は例外の外に落ちる**: 一時 dir に書いた送信 script は「flag 無し = dry-run」 の約束を持たないので、 guard は script 名で match するしかなく、 dry-run も本送信も毎回聞く。 正規 CLI に要る機能 (例: 返信の threading) が無いと思い込んだ model がこれを書く。 対策は ask のまま案内するより **止めて、 正規 CLI の使い方を止めた理由の文に書く** 方が早い: ask の説明文は dialog にも tool 結果にも出ないことがあるが、 止めた理由が model に届けば最初の 1 回で正規経路に戻れる。 ⚠️ **止め方は exit 2 + stderr** にする — JSON の `permissionDecision: deny` だけで理由を載せないと tool 結果は「denied」 の一語しか返らず (実測)、 `permissionDecisionReason` に載せる形は build によって hook 出力ごと無視された記録がある ([hook-authoring.md#build-dependent-docs-drift](hook-authoring.md#build-dependent-docs-drift)) = 無視されると止まらずに実行される。 exit 2 は JSON の解釈に依らず止まり、 stderr が model に返る。 射程は一時 dir (`/tmp` / `/private/tmp` / `$TMPDIR`) の直接実行に限り、 repo 内の送信 script は従来どおり ask にする
+- **効いているかの確かめ方**: [`permission-dialog-audit.py --diagnose`](#desktop-permission-dialog-log) で hook 由来の dialog を送信ごとに並べ、 **外部発信の hook ask 件数 = 実送信件数** になっているかを見る
+
 反映は session 起動時ロード (§反映タイミング) なので、パターン変更後も**既存 session には旧パターンが残る**。domain 実例 (メール送信の --send 化) は [`gmail-sending.md`](gmail-sending.md#permission-gate-anchor)。
 
 ## <a id="always-approve-tools"></a>permission 設定で抑止できない tool (= always-prompt class、 2026-06-28)

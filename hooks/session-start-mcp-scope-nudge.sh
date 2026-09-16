@@ -153,8 +153,12 @@ universal claim を書く前の必須 anchoring (= 起票 RCA で破綻した 4 
 if [ -n "$KNOWN_GMAIL" ]; then
   SEND_ROUTE="standalone mcp__gmail-<alias>__send_email (= register 済 alias: $KNOWN_GMAIL)"
 else
-  SEND_ROUTE="この machine に standalone alias は未 register (= account-direct.py か user に依頼)"
+  SEND_ROUTE="この machine に standalone alias は未 register (= send_mail.py か user に依頼)"
 fi
+# 返信 (= 既存 thread への送信) の経路は send 経路と別に案内する。 送信の案内が返信に使えない
+# 経路 (MCP send_email = read が Message-ID を返さず thread が割れる / account-direct.py send =
+# threading 引数なし) だけを指すと、 model が header を手で組む使い捨て送信 script に流れ、
+# 正規 CLI の dry-run 例外が効かずに 1 送信で確認 dialog が 2 回以上出る (実測)。
 REMINDER="${REMINDER}
 
 ✉️ write/send capability (= read と別軸、 universal claim template とは別の trap):
@@ -164,7 +168,12 @@ REMINDER="${REMINDER}
      draft 作成 (create_draft) + label 操作のみ。 send_email / delete_email / modify_email は
      expose しない (= 「read-only」 ではなく「send 不可」 が正確 — draft/label は書ける)。
    - send/delete/modify は: $SEND_ROUTE
-     ✅ 「送れない」 と結論する前に ToolSearch で mcp__gmail-<alias>__send_email の wire を確認。"
+     ✅ 「送れない」 と結論する前に ToolSearch で mcp__gmail-<alias>__send_email の wire を確認。
+   - ⚠️ 返信 (= 既存 thread に続ける送信) は上のどれでもなく、 送信 CLI の返信 option を使う:
+     ~/Claude/gmail-mcp-config/send_mail.py --reply-to-message <gmail message id> (新規も同 CLI)。
+     In-Reply-To / References / threadId / Re: 件名を自動で解決し、 --send 無しは dry-run。
+     MCP send_email は thread が割れ、 account-direct.py send は threading 引数を持たない。
+     Message-ID を手で組む使い捨て送信 script を書かない (= 実行のたびに確認 dialog が出る)。"
 
 if [ "$IS_DESKTOP" = 1 ]; then
   REMINDER="${REMINDER}
