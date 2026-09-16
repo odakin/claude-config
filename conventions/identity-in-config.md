@@ -62,7 +62,10 @@ odakin の 4 層アーキテクチャ (`docs/personal-layer.md`) に従って、
 ### 実装ルール
 
 1. **public repo の config.yaml / profile には identity 数値 ID を直接書かない**。`mention_target_env: DISCORD_MENTION_<NAME>` のように env 変数**名**のみ保持する
-2. **canonical source は layer 2**。`collaborators.yaml` (git-crypt) の `discord_id` field に置く (`conventions/collaborators.md` 参照)
+2. **canonical source は private 層の 1 箇所**。 共同研究者だけなら `collaborators.yaml` (git-crypt) の `discord_id` field (`conventions/collaborators.md` 参照)。 事務職員・学生・別 server の人まで扱うなら、 人の ID だけを持つ private な台帳 (key → ID + 根拠 + 確認済みか) を正本にし、 `collaborators.yaml` の field はその**写し**として扱う。 どちらにしても:
+   - **正本は 1 つ**。 写し (collaborator DB の field、 bot の許可リスト、 tool の `.env`) の値の一致は機械で検査する (= 片方だけ空・片方だけ更新、 が黙って起きる)
+   - **script は key で引き、 ID を直書きしない**。 doc にも ID の表を作らず key で指す (= 表を作ると 2 つ目の正本になる。 検査で「doc の表の行に正本の ID」 を警告にすると再発が見える)
+   - ID を足すときは推測で入れず、 根拠と確認の有無を一緒に書く (引き方 = [`discord-bot.md#group-call-mentions`](discord-bot.md#group-call-mentions))
 3. **runtime 側は `.env` (gitignored)** が実値を保持。`load_dotenv()` 等で env に展開
 4. **Cross-machine sync**: 新 Mac では `git-crypt unlock` 後に helper script (例: `tools/sync_mentions.py`) で `collaborators.yaml` → `.env` を再生成。Dropbox 暗号化 backup は不要 (layer 2 git-crypt が backup も兼ねる)
 5. **Fail-soft**: env 未設定時に tool が crash しない設計にする。mention なしで送信 + warning log が無難
