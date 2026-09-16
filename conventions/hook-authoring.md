@@ -289,7 +289,7 @@ setup.sh 自体は idempotent design なので (i) は実装コスト低。 但�
 
 ### <a id="installer-tracked-stub"></a>installer は git が track している file を書き換えない (2026-09-12)
 
-`core.hooksPath` を repo 内 (例: `scripts/hooks`) に向けた repo では、 hook stub が **repo の中身** (track 済み file) になる。 そこへ installer が「自分の形式」 で上書きすると、 意味が同じでも worktree が汚れ続け、 SessionStart の自動 pull (stash → ff → pop) と繰り返し衝突する (実例: repo は `"$HOME/..."` 形の stub を track、 installer は解決済みの absolute path で毎回上書き → stash pop conflict)。 規則 (実装 = `scripts/lib/hook-stub.sh`、 stub installer 3 本が共有):
+`core.hooksPath` を repo 内 (例: `scripts/hooks`) に向けた repo では、 hook stub が **repo の中身** (track 済み file) になる。 そこへ installer が「自分の形式」 で上書きすると、 意味が同じでも worktree が汚れ続け、 SessionStart の自動 pull (stash → ff → pop) と繰り返し衝突する (実例: repo は `"$HOME/..."` 形の stub を track、 installer は解決済みの absolute path で毎回上書き → stash pop conflict)。 規則 (実装 = `scripts/lib/hook-stub.sh`、 stub installer 3 本 + `install-precommit-bib.sh` が共有):
 
 - **同じ runner を指す stub は書かない** (`$HOME` を展開して `-ef` で比較。 mtime も動かさない)。
 - **track 済み file の内容は書かない**: 別の場所を指していても警告だけ出す (直すのは repo 側の commit)。 stub でない自前の hook も、 退避・上書きしない。
