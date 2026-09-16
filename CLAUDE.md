@@ -116,7 +116,7 @@ claude-config/
 │   ├── prototype-feedback.md               # 外部からウェブアプリ・制作物・企画等の試用とコメントを頼まれ、スクリーンショット・QR・一時URLから実物を確認して返却文面を作るとき
 │   ├── rebuttal-letter.md                  # referee report への point-by-point 返信を書くとき
 │   ├── remote-control-server.md            # Remote Control サーバーモードを常駐・troubleshoot するとき
-│   ├── research-email.md                   # 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき + 成人の学生について保護者から様子や期待を尋ねられ返信を書くとき (#guardian-inquiry)
+│   ├── research-email.md                   # 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき + 成人の学生について保護者から様子や期待を尋ねられ返信を書くとき (#guardian-inquiry) + 学内の運用ルールに止められた依頼を出し直すとき (#blocking-rule-origin)
 │   ├── researchmap.md                      # researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
 │   ├── scheduled-tasks.md                  # scheduled task / launchd routine を作成・管理するとき
 │   ├── scientific-computing.md             # 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき
