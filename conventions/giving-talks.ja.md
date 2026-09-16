@@ -3,6 +3,8 @@
 研究発表(セミナー・コロキウム・学会講演・ジャーナルクラブ・卒論/修論発表)を準備し
 本番で話すための実務チェックリスト。**読むタイミング:** スライドや発表の骨子を準備するとき、
 リハーサルするとき、誰かの発表を助言するとき。(スライドを*作る*技術面 — Beamer/metropolis・図生成・再現ビルド・ページラベル修正 — は [beamer-slides.md](beamer-slides.md)。)
+有線プロジェクター / HDMI の本番前検収と復旧は
+[macos-hdmi-external-display.md](macos-hdmi-external-display.md)。
 
 これは **Robert Geroch, "Suggestions For Giving Talks," arXiv:gr-qc/9703019**(約 4500 語の
 エッセイ。原文 ~1973 年、arXiv 投稿 1997 年)を **私(Claude)の言葉で蒸留した要約**。彼の論点を
@@ -155,6 +157,11 @@ Geroch の plan は骨子ではなく、言いたいことの**分割**。次の
 ## 実地の追補(field notes、Geroch の原文には無い)
 
 2026 年の学会講演の準備・本番で得た教訓。上のダイジェストとは分けて置く:
+
+- **実際の投影経路を検収し、別の出力経路も用意する。** macOS に見える sink 名は projector 本体でなく、
+  EDID を提示する AV 中継機器だけの場合がある。「認識した」でなく投影面に画像が出るまで試し、成功した
+  USB-C→HDMI アダプタとケーブルを持参する。診断と復旧の正本は
+  [macos-hdmi-external-display.md](macos-hdmi-external-display.md)。
 
 - **3 つのメッセージは、直近の作業ではなく論文自身の声から選ぶ。** 提出済み abstract の文の順序は、
   その論文が最も言いたいことについての著者自身の熟慮済みの順位づけそのもの。序論の問題設定と

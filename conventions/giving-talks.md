@@ -9,7 +9,8 @@ A practical checklist for preparing and delivering a research talk (seminar, col
 conference talk, journal club, thesis defense). **Load this when** preparing slides or a
 talk outline, rehearsing, or advising someone on a presentation. (For the *technical* side of
 building slides — Beamer/metropolis, figure generation, reproducible PDF build, page-label
-fixes — see [beamer-slides.md](beamer-slides.md).)
+fixes — see [beamer-slides.md](beamer-slides.md). For wired projector/HDMI preflight and
+recovery, see [macos-hdmi-external-display.md](macos-hdmi-external-display.md).)
 
 This is an **own-words distillation** of **Robert Geroch, "Suggestions For Giving Talks,"
 arXiv:gr-qc/9703019** (an essay of roughly 4500 words; written ~1973, posted to arXiv in
@@ -202,6 +203,11 @@ followed), and **while listening to others** (diagnose what works, what doesn't,
 ## Practical addenda (field notes, NOT from Geroch)
 
 Lessons from preparing and delivering a 2026 conference talk, kept separate from the digest above:
+
+- **Preflight the actual projection path, with a second output path ready.** A sink name in macOS may identify only
+  an EDID-emulating AV intermediary, not the projector downstream. Test the projected image, not merely display
+  enumeration; carry the USB-C-to-HDMI adapter and cable that succeeded. The diagnostic and recovery source of truth
+  is [macos-hdmi-external-display.md](macos-hdmi-external-display.md).
 
 - **A live demo needs its own failure-complete version of the talk.** Put the shortest useful entry point on the slide,
   such as a QR code to a prepared room, and budget the demo as part of the talk rather than treating it as free time.
