@@ -793,11 +793,13 @@ curl -s https://api.crossref.org/works/10.1007/978-981-19-3079-9 | python3 -c "i
 
 手動確認・インストール:
 ```bash
-# 確認: .git/hooks/pre-commit が pre-commit-bib を指しているか
+# 確認: .git/hooks/pre-commit が pre-commit-bib を指しているか (repo が自前の hook を持つなら、 その hook が pre-commit-bib を呼んでいるか)
 ls -la .git/hooks/pre-commit
-# インストール (setup.sh が走らなかった repo の retroactive fix):
-ln -s ~/Claude/claude-config/scripts/pre-commit-bib .git/hooks/pre-commit
+# インストール (setup.sh が走らなかった repo の retroactive fix。 既存の hook は置き換えない):
+bash ~/Claude/claude-config/scripts/install-precommit-bib.sh .
 ```
+
+⚠️ **repo が自前の pre-commit (検査 gate) を持つときは、 その hook の中から pre-commit-bib を呼ぶ** (例: `BIBFIX="$HOME/Claude/claude-config/scripts/pre-commit-bib"; if [ -x "$BIBFIX" ]; then "$BIBFIX"; fi`)。 Step 6 は repo が管理する hook を置き換えず、 chain の有無を表示するだけ (2026-09-16 まで Step 6 は repo の hook を pre-commit-bib で置き換えていた = [`hook-authoring.md#installer-tracked-stub`](hook-authoring.md#installer-tracked-stub))。
 
 ステージされた `.tex`/`.bib` 等の非 LaTeX 文字（Unicode 引用符、ダッシュ等）を自動でLaTeXコマンドに変換する。 具体例:
 

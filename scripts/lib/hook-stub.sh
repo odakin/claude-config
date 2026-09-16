@@ -41,10 +41,18 @@ hook_stub_rel() {  # $1 = repo, $2 = hook
   printf '%s\n' "$rel"
 }
 
-# hook を repo が track しているか
+# hook を repo が track しているか。 hook が symlink なら link 先 (1 段) で判定する:
+# .git/hooks/pre-commit → repo の track 済み hook という link は repo の中身であり、 installer が link 越しに
+# 書くと track 済み file 本体が書き換わる (2026-09-16、 repo の installer が張った link を見分けていなかった)。
 hook_stub_is_tracked() {  # $1 = repo, $2 = hook
-  local rel
-  rel="$(hook_stub_rel "$1" "$2")" || return 1
+  local rel h="$2" d r
+  if [ -L "$h" ]; then
+    h="$(readlink "$h")"
+    case "$h" in /*) ;; *) h="$(dirname "$2")/$h" ;; esac
+  fi
+  d="$(cd "$(dirname "$h")" 2>/dev/null && pwd -P)" || return 1
+  r="$(cd "$1" 2>/dev/null && pwd -P)" || return 1
+  rel="$(hook_stub_rel "$r" "$d/$(basename "$h")")" || return 1
   git -C "$1" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1
 }
 

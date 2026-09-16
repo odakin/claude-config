@@ -295,7 +295,10 @@ setup.sh 自体は idempotent design なので (i) は実装コスト低。 但�
 - **track 済み file の内容は書かない**: 別の場所を指していても警告だけ出す (直すのは repo 側の commit)。 stub でない自前の hook も、 退避・上書きしない。
 - **過去の installer が書いた差分は戻す**: track 済み stub の worktree 側が installer の書く 4 行 (shebang / header / Do not edit / exec) そのままで、 track 版の exec 先が実在するときだけ `git checkout --` で track 版に戻す (1 行でも手で足してあれば触らない)。 installer は setup.sh 実行時にしか走らないので、 既に汚れた他マシンの worktree は `scripts/heal-hook-stubs.sh <base>` を SessionStart から呼んで直す。
 - **repo 内 hooksPath に置く untrack の stub は `.git/info/exclude` に載せる** (clone ごとの設定。 共有 repo の status に `??` を出し続けず、 他人の clone に無い stub を commit させない)。
-- test = `scripts/install-hook-stubs.test.sh`。
+- **symlink は link 先で判定する** (2026-09-16): `.git/hooks/pre-commit` → repo の track 済み hook という link は repo の中身。 link を track 判定の外に置くと、 installer の「stub を最新化」 が link 越しに track 済み file 本体を書き換える (再現済み: 旧 lib で `install-public-precommit.sh` が repo の hook を stub に置き換えた)。
+- **共通 hook を全 repo に配る installer は、 自分が置いたものだけを最新化する** (2026-09-16、 setup.sh Step 6 = `scripts/install-precommit-bib.sh`)。 自分が置いたと言えるのは「自分の実体への link / 別の場所にある同名の実体への link (base を移した後の古い link) / 旧版のコピー」 だけ。 それ以外は chain の有無を表示して残す。 旧 Step 6 は link 先が自分でなければ付け替え、 通常 file は `.bak` に退避して置き換えていたので、 repo の installer が張った link (検査 gate を走らせてから共通 hook を chain する hook) も区別されず、 gate が黙って無効になっていた。 **「chain しているなら残す」 では足りない**: pre-commit-bib を chain しない repo の hook も同じく置き換えられていた (実測)。
+- **repo が自前の hook を宣言していれば、 空いた slot を共通 hook で埋めない。 repo の hook も自動では有効化しない**: 宣言 = track 済みの `hooks/pre-commit` / `.githooks/pre-commit` / pre-commit に触れる `install-hooks.sh`。 空いた slot を埋めると、 新しい clone で repo の hook が入らないまま気づかれない。 逆に installer が repo の hook を張ると、 共同研究者が push できる code を clone ごとの同意 (repo の installer を走らせること) なしに git hook にする。 → finding として repo 側の入れ方を出し、 直るまで毎 session 出す (`install-precommit-bib.sh --check`。 installer は setup.sh 実行時にしか走らないので、 過去に置き換えられた他マシンの状態はこちらで拾う)。
+- test = `scripts/install-hook-stubs.test.sh` (stub installer + symlink) / `scripts/install-precommit-bib.test.sh` (共通 hook の installer)。
 
 ### <a id="tool-matcher-coverage-boundary"></a>§2 補足: tool-matcher の coverage boundary — Bash/script write は Edit/Write guard を素通りする
 

@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: precommit-installer-respects-repo-hooks
+    legacy: "2026-09-16"
+    level: 2
+    title: "2026-09-16: 共通 pre-commit の installer は repo が管理する hook を置き換えない"
   - id: public-gate-structural-exemptions
     legacy: "2026-09-15"
     level: 2

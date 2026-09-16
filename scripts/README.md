@@ -111,6 +111,8 @@
 - **[install-hook-stubs.test.sh](install-hook-stubs.test.sh)** — hook stub installer 3 本 + heal-hook-stubs.sh の test (lib/hook-stub.sh の規約)
 - **[install-launchd-cron.sh](install-launchd-cron.sh)** — 汎用 launchd cron 登録エンジン（無人ルーチンを launchd cron で回す plist 生成・登録・状態確認・解除。--label-prefix / --workdir / --routine "id\|type\|target\|cron" を呼び出し側が渡す＝ROUTINES 焼かず汎用、cron は */N step + N-M 曜日範囲を StartCalendarInterval へ展開、skill=claude -p indirection / cmd=直接実行、CLI 認証で Claude Code (desktop) 切替非依存、--status/--run/--install-one/--uninstall-one/--uninstall/--ensure（未install のみ install=新ホスト自動配備、SessionStart から呼ぶ）、idempotent、macOS 限定、conventions/scheduled-tasks.md#launchd-cron-engine）
 - **[install-overleaf-sync.sh](install-overleaf-sync.sh)** — Overleaf 連携 repo に sync script を 1 コマンド設置（template 展開 + URL から ID 抽出・焼き込み + --merge-opts / --ahead-expected + token があれば --status smoke、 冪等・別 ID は --force、 conventions/overleaf-integration.md#new-integration-checklist）
+- **[install-precommit-bib.sh](install-precommit-bib.sh)** — 共通 pre-commit (pre-commit-bib) を repo に張る。 repo が自分で管理する pre-commit は置き換えない
+- **[install-precommit-bib.test.sh](install-precommit-bib.test.sh)** — install-precommit-bib.sh の test (repo が管理する pre-commit を置き換えない)
 - **[install-pty-leak-mitigation.sh](install-pty-leak-mitigation.sh)** — pty-leak-watch.sh watchdog + persistent bump LaunchDaemon を現ユーザに 1 コマンド install（--persist / --replace-agent / --replace-daemon、idempotent、macOS 限定）
 - **[install-public-commit-msg.sh](install-public-commit-msg.sh)** — 各 public repo に commit-msg stub を冪等配置（marker check + core.hooksPath cascade）
 - **[install-public-precommit.sh](install-public-precommit.sh)** — 各 public repo に pre-commit stub を冪等配置

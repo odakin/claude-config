@@ -126,6 +126,18 @@ bash "$HERE/install-public-precommit.sh" "$H/c" >/dev/null 2>&1
 clean "$H/c" scripts/hooks && ng "hand-edited stub was reverted" || ok "hand-edited stub left alone"
 grep -q "extra line added by hand" "$H/c/scripts/hooks/pre-commit" && ok "hand-added line survives" || ng "hand-added line lost"
 
+echo "=== T10: .git/hooks symlink to a tracked repo hook is not written through ==="
+R10="$TMP/r10"; mkrepo "$R10" public
+mkdir -p "$R10/hooks"
+# runner 名を含むが installer の stub 形ではない repo の hook (= 自前の検査から runner を chain する形)
+printf '#!/bin/bash\necho gate\n"%s" "$@"\n' "$HERE/public-precommit-runner.sh" > "$R10/hooks/pre-commit"
+chmod +x "$R10/hooks/pre-commit"
+git -C "$R10" add -A && git -C "$R10" commit -q --no-verify -m init
+ln -s "$R10/hooks/pre-commit" "$R10/.git/hooks/pre-commit"
+bash "$HERE/install-public-precommit.sh" "$R10" >/dev/null 2>&1
+clean "$R10" hooks && ok "tracked hook not rewritten through the link" || ng "tracked hook rewritten: $(git -C "$R10" diff -- hooks)"
+[ "$(readlink "$R10/.git/hooks/pre-commit")" = "$R10/hooks/pre-commit" ] && ok "link kept" || ng "link moved/replaced"
+
 echo
 echo "=== Result: $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ] && exit 0 || exit 1

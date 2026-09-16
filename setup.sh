@@ -1086,83 +1086,20 @@ fi
 #   (depth 4 で detection failed)
 # - 新方式 (= 全 repo install) は時点依存性が消える、 LaTeX 不在 repo でも
 #   hook overhead は staged file の grep 1 回のみ (= 無視できる)
+#
+# 本体 = scripts/install-precommit-bib.sh (test = install-precommit-bib.test.sh)。
+# 自分が置いた pre-commit (pre-commit-bib への link / 旧版コピー) だけを最新化し、 repo が管理する
+# pre-commit は退避も上書きもしない。 repo が自前の pre-commit を宣言しているのに効いていなければ
+# ⚠ で repo 側の入れ方を出す (2026-09-16: 旧 Step 6 が repo の検査 gate を pre-commit-bib で置き換えていた)。
+# public repo (.claude/public-repo.marker) は Step 8 の stub が管轄なので installer 側で飛ばす。
 echo ""
 echo "=== Step 6: Installing pre-commit hooks for all repos (LaTeX guard) ==="
 
-PRE_COMMIT_SRC="$SCRIPT_DIR/scripts/pre-commit-bib"
-
-if [ ! -f "$PRE_COMMIT_SRC" ]; then
-    echo "  ERROR: $PRE_COMMIT_SRC not found. Skipping."
+PRE_COMMIT_INSTALLER="$SCRIPT_DIR/scripts/install-precommit-bib.sh"
+if [ ! -f "$PRE_COMMIT_INSTALLER" ]; then
+    echo "  ERROR: $PRE_COMMIT_INSTALLER not found. Skipping."
 else
-    INSTALLED=0
-    SKIPPED_HOOK=0
-
-    for REPO_DIR in "$CLAUDE_DIR"/*/; do
-        [ -d "$REPO_DIR/.git" ] || continue
-
-        HOOK_DST="$REPO_DIR.git/hooks/pre-commit"
-        REPO_NAME="$(basename "$REPO_DIR")"
-
-        # public repo (= .claude/public-repo.marker 持ち) の pre-commit は
-        # Step 8 (install-public-precommit.sh) の stub が管轄。 ここで fix-bib
-        # symlink を重ねると ln が File exists で fail + .bak を毎回 clobber
-        # するだけなので skip する (最終状態は Step 8 が保証)。
-        if [ -f "$REPO_DIR.claude/public-repo.marker" ]; then
-            SKIPPED_HOOK=$((SKIPPED_HOOK + 1))
-            continue
-        fi
-
-        if [ "$IS_WINDOWS" = true ]; then
-            # Windows: コピー
-            if [ -f "$HOOK_DST" ] && grep -q "fix-bib-unicode" "$HOOK_DST" 2>/dev/null; then
-                SKIPPED_HOOK=$((SKIPPED_HOOK + 1))
-            else
-                if [ -f "$HOOK_DST" ]; then
-                    cp "$HOOK_DST" "$HOOK_DST.bak"
-                    echo "  WARNING: $REPO_NAME had existing pre-commit → backed up to .bak"
-                fi
-                cp -f "$PRE_COMMIT_SRC" "$HOOK_DST"
-                chmod +x "$HOOK_DST"
-                echo "  Installed (copy): $REPO_NAME"
-                INSTALLED=$((INSTALLED + 1))
-            fi
-        else
-            # Mac/Linux: symlink
-            if [ -L "$HOOK_DST" ]; then
-                CURRENT_TARGET="$(readlink "$HOOK_DST")"
-                if [ "$CURRENT_TARGET" = "$PRE_COMMIT_SRC" ]; then
-                    SKIPPED_HOOK=$((SKIPPED_HOOK + 1))
-                else
-                    echo "  UPDATE: $REPO_NAME (was -> $CURRENT_TARGET)"
-                    rm "$HOOK_DST"
-                    ln -s "$PRE_COMMIT_SRC" "$HOOK_DST"
-                    INSTALLED=$((INSTALLED + 1))
-                fi
-            elif [ -f "$HOOK_DST" ]; then
-                if grep -q "fix-bib-unicode" "$HOOK_DST" 2>/dev/null; then
-                    # 旧バージョン（直接コピー）→ symlink に差し替え
-                    rm "$HOOK_DST"
-                    ln -s "$PRE_COMMIT_SRC" "$HOOK_DST"
-                    echo "  Upgraded to symlink: $REPO_NAME"
-                    INSTALLED=$((INSTALLED + 1))
-                else
-                    cp "$HOOK_DST" "$HOOK_DST.bak"
-                    echo "  WARNING: $REPO_NAME had existing pre-commit → backed up to .bak"
-                    rm "$HOOK_DST"
-                    ln -s "$PRE_COMMIT_SRC" "$HOOK_DST"
-                    echo "  Installed (symlink): $REPO_NAME"
-                    INSTALLED=$((INSTALLED + 1))
-                fi
-            else
-                ln -s "$PRE_COMMIT_SRC" "$HOOK_DST"
-                echo "  Installed (symlink): $REPO_NAME"
-                INSTALLED=$((INSTALLED + 1))
-            fi
-        fi
-    done
-
-    echo "  Installed: $INSTALLED repos"
-    echo "  Already up to date: $SKIPPED_HOOK repos"
+    bash "$PRE_COMMIT_INSTALLER" "$CLAUDE_DIR"/*/ || echo "  WARNING: pre-commit installer failed (non-fatal)"
 fi
 
 # --- 6b. Install JHEP.bst to TEXMFHOME (optional) ---

@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-16: 共通 pre-commit の installer は repo が管理する hook を置き換えない](#precommit-installer-respects-repo-hooks)
 - [2026-09-15: 公開 repo の gate の誤検知を構造で消す (書誌・複合語・生成データ) + 棚卸しと監査を 1 本に](#public-gate-structural-exemptions)
 - [2026-09-15: 発音 evidence と user-visible 音声 delivery を分離する](#pronunciation-evidence-and-delivery)
 - [2026-09-14: 公開 repo の Tier E (owner の非公開の活動の事実)](#public-gate-tier-e)
@@ -37,6 +38,25 @@
 - [公開リポ leak 防止: 構造制約 hook + pre-commit ephemeral literal check](#public-repo-leak-prevention)
 - [sensitive-terms.txt の symlink architecture (2026-05-14 追補)](#sensitive-terms-symlink-architecture)
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
+
+---
+
+## <a id="precommit-installer-respects-repo-hooks"></a>2026-09-16: 共通 pre-commit の installer は repo が管理する hook を置き換えない
+
+**起点 (実測)**: 検証 repo の `.git/hooks/pre-commit` が repo 自身の hook (commit 粒度 gate + worker の書込み範囲 gate を走らせてから pre-commit-bib を chain) でなく pre-commit-bib を直接指しており、 2 つの gate が効いていなかった。 原因 = setup.sh Step 6 が「link 先が pre-commit-bib でなければ付け替え、 通常 file は `.bak` に退避して置き換え」 ていたこと。 setup.sh は変更のたびに再実行を促される (git-state-nudge) ので、 repo の installer を走らせても次の再実行で戻される。 全 repo を sweep すると、 もう 1 repo (repo 自身の hook は pre-commit-bib を chain しない) も同じ形で数か月前から無効だった ([2026-05-14](#pre-commit-bib-all-repos) の一括 install の記録にある「旧 hook を上書き」 と同じ形)。 同日に public repo 用の lib にも、 `.git/hooks` の link を track 判定の外に置いたせいで link 越しに track 済み hook 本体を stub で書き換える経路が潜在していた (fixture で再現)。
+
+**判断**:
+- Step 6 の本体を `scripts/install-precommit-bib.sh` に切り出す。 **自分が置いたもの (pre-commit-bib への link / 別の場所の pre-commit-bib への link / 旧版コピー) だけを最新化**し、 それ以外は chain の有無を表示して残す。 `.bak` 退避はしない。 hook の位置は `git rev-parse --git-path hooks/pre-commit` (= core.hooksPath を反映)、 core.hooksPath の先には書かない
+- repo が自前の pre-commit を**宣言**していれば (track 済みの `hooks/pre-commit` / `.githooks/pre-commit` / pre-commit に触れる `install-hooks.sh`)、 効いている hook が pre-commit-bib か空のとき **pre-commit-bib で埋めずに finding** として repo 側の入れ方を出す
+- `lib/hook-stub.sh` の `hook_stub_is_tracked` は symlink を 1 段たどって判定 (Step 8 / 8b の installer も同じ lib を使うので一緒に塞がる)
+- 検出 = `install-precommit-bib.sh --check`。 installer は setup.sh 実行時にしか走らないので、 過去に置き換えられた他マシンの状態は owner の SessionStart (config-bootstrap) が毎回これを呼んで出す
+
+**棄却した案**:
+- *「既存 hook が pre-commit-bib を呼んでいれば skip」 だけ*: chain しない repo の hook (上の 2 例目) を救えない。 置き換えてよいかは「chain しているか」 でなく「自分が置いたか」 で決まる
+- *repo が track する hook を installer が自動で張る / repo の `install-hooks.sh` を自動実行する*: 自分の repo だけでなく fork や共著 repo も clone されるので、 共同研究者が push できる code を clone ごとの同意なしに git hook にする (= 実行経路を増やす)。 案内に留め、 実行は各マシンで 1 回の判断にする
+- *宣言を独自の marker file にする*: 既存の repo は既に `hooks/` / `.githooks/` / `install-hooks.sh` の形で宣言しており、 marker を足すまで検出できない期間が生まれる。 既存の形を読む方が穴が小さい (代わりに、 どれにも当たらない独自配置の repo は検出の外)
+
+**un-defer trigger**: 宣言の 3 形に当たらない repo 管理 hook で同じ無効化が起きたら、 宣言の読み取りを増やすか marker を導入する。
 
 ---
 
