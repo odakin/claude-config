@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: macOS で HDMI / USB-C 経由の外部ディスプレイ・テレビ・プロジェクター・会場 AV 設備を接続したのに画面が出ないとき + 投影側にミラーリング/拡張の選択を求める待機メッセージだけ出るとき + 「ディスプレイ」設定に中継機器名が見えるのに投影されないとき
 category: macos
-summary: macOS の外部表示を、未検出 / 表示方法の選択待ち / current mode と次回既定値の混同 / EDID 中継機器より下流の断線 / 出力経路の相性に分ける。接続待ちは Control Center の「画面ミラーリング」から開始し、表示中は外部側をミラーリング・1920x1080・60 Hz にする。sink 名が AV 中継機器なら「Mac が projector を認識」の証拠ではない。本体 HDMI が列挙だけして映像が出ない時は、既知良好な USB-C→HDMI を別経路として試す
+summary: macOS の外部表示を、未検出 / 表示方法の選択待ち / current mode と次回既定値の混同 / EDID 中継機器より下流の断線 / 出力経路の相性に分ける。接続待ちは Control Center の「画面ミラーリング」から開始し、表示中は外部側をミラーリング・1920x1080・60 Hz にする。sink 名が AV 中継機器なら「Mac が projector を認識」の証拠ではなく、system_profiler / ioreg の null も不在証明でない。本体 HDMI が列挙だけして映像が出ない時は、既知良好な USB-C→HDMI を別経路として試す
 -->
 
 # macOS で HDMI 外部表示が認識されるのに映らないとき
@@ -46,6 +46,12 @@ summary: macOS の外部表示を、未検出 / 表示方法の選択待ち / cu
 **実測:** Apple Silicon Mac → 業務用 AV 中継機器の経路で、本体 HDMI は sink の列挙・ミラーリング・1080p/60 Hz の設定まで成立したが下流に画像が出ず、USB-C→HDMI アダプタへ替えると画像が出た。これは「経路依存」を示すが、根因が Mac の HDMI PHY、ケーブル、中継機器、EDID 設定のどこかまでは同定しない。
 
 講演・授業では、実際に成功した USB-C→HDMI アダプタと HDMI ケーブルを持参する。本体 HDMI が別のディスプレイで動くなら、本体端子の故障とは断定しない。
+
+## <a id="display-cli-null-not-absence"></a>CLI の null を外部表示の不在証明にしない
+
+**実測 n=1 (macOS 26.5.2):** 「ディスプレイ」設定には外部 sink が表示され、ミラーリング・60 Hzを選べる状態でも、`system_profiler SPDisplaysDataType` は GPU 情報だけを返して display row を出さず、`ioreg -r -c IODisplayConnect -l` も空だった。WindowServer の display / HDMI / EDID 語による直近ログ検索にも接続 event は出なかった。これらの null から「外部表示を認識していない」と結論しない。
+
+現時点では、(a) システム設定に現れる sink / 使用形態 / refresh rate と、(b) 投影面に実画像が出たか、の 2 つを別々に確認する。上記 CLI probe は positive control を返さないため、これを包んだ汎用診断 script は作らない。macOS の版替えで信頼できる API / command が確認できたときに再検討する。
 
 ## <a id="external-display-preflight"></a>本番前の検収
 
