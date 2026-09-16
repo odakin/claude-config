@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Discord Bot を運用・実装するとき
 category: infra
-summary: Discord Bot 運用 (権限ポリシー・private channel 加入・per-channel error non-fatal な fetcher・Token 取扱・組織 NW での API ブロック)
+summary: Discord Bot 運用 (権限ポリシー・private channel 加入・per-channel error non-fatal な fetcher・Token 取扱・組織 NW での API ブロック・グループへの呼びかけの個別 mention と user ID の根拠つき引き方)
 -->
 # discord-bot: Discord Bot を運用するときの規律
 
@@ -45,7 +45,7 @@ invite URL の `permissions=` bitfield は **bot 専用 role の guild-level 権
 - 主語 = 組織 / system (「研究室セミナーのお知らせ」 「明日のリマインダー」) → 組織名義 bot (= fetcher と同居してよい)
 - 主語 = 個人 (「〜と考えております」 「〜については私から照会済です」) → 個人名義 bot (= 名前に個人を示す語を含める、 例 `<handle>-secretary`)
 
-判別は投稿ごとでなく「この投稿の一人称は誰か」 の 1 問。 迷う例: 事務職員への回答 = 個人 (組織 bot で出すと組織回答に見える) / 会場変更の周知 = 組織。 trade-off: 個人名義 bot を同 server に足すと Token surface が 1 つ増える (= 上の権限ポリシーで被害範囲を見積もる、 前節の guild-level 注意も込み)。 過去に組織 bot で出した個人名義投稿は遡及修正しない (= 履歴は履歴、 以後の routing を変えるだけ)。
+判別は投稿ごとでなく「この投稿の一人称は誰か」 の 1 問。 迷う例: 事務職員への回答 = 個人 (組織 bot で出すと組織回答に見える) / 会場変更の周知 = 組織 / **組織のメンバー全員への呼びかけ (募集・希望集め) = 組織** — 本文に「頼んでみます」 のような個人の一人称が混ざっていても、 宛先が組織全体なら組織 bot で出し、 末尾に発信者名を 1 行添える (= 一人称の有無でなく宛先の範囲で決める。 個人 bot は特定の相手とのやり取り用)。 trade-off: 個人名義 bot を同 server に足すと Token surface が 1 つ増える (= 上の権限ポリシーで被害範囲を見積もる、 前節の guild-level 注意も込み)。 過去に組織 bot で出した個人名義投稿は遡及修正しない (= 履歴は履歴、 以後の routing を変えるだけ)。
 
 ## Private channel への Bot 追加手順
 
@@ -322,6 +322,20 @@ sys.exit(subprocess.call(args))
 - fetcher 側 (= 段 1) の non-fatal error handling = 上記 §「複数 channel から data を fetch するときの error handling」
 - ledger に何を書くかは personal layer own preference (= ledger format は text/YAML どれでも snowflake が grep できれば OK)
 - 「intake で encode する原則」 (= 「読んだ」 を text に書く discipline) は inbox / email surface 全般に共通する設計指針
+
+## <a id="group-call-mentions"></a>グループへの呼びかけ: 個別 mention・宛名の行・ID の引き方
+
+募集・希望集め・締切つきの問い合わせを server に出すときの規律。
+
+1. **@everyone でなく、 宛てたい人を個別に mention する**。 @everyone は全員の前提が変わる事実のためのもので、 bot の標準権限にも含めていない (上の権限表)。 募集や意見集めは対象者を並べる。
+2. **mention していない人にも読んでほしい一言は、 mention を並べた行に書く**。 通知や一覧のプレビューに出るのは先頭だけなので、 本文の途中に「〇〇の人もどうぞ」 と書いても、 mention されていない人は開かない。
+3. **user ID を推測で入れない** (= 表示名は変わり、 ユーザー名は本名と無関係なことが多い。 間違った ID は ping が黙って届かないだけで、 投稿は成功する)。 取得済みの message log から、 根拠の強い順に引く:
+   - ① 本人の自己紹介 (「〜です」) や名札の投稿
+   - ② 他のメンバーが名前と並べてその ID を mention した投稿
+   - ③ ユーザー名・表示名の一致 (弱い。 本人確認前として扱い、 記録にもそう書く)
+
+   道具 = [`scripts/discord-member-lookup.py`](../scripts/discord-member-lookup.py) `find <名前> --alias <別表記> <log...>`。 ⚠️ 「`<@相手>` への挨拶に続けて自分が名乗る」 投稿では、 名前と mention が隣り合っていても名前は**投稿者本人**のもの (= 挨拶の相手に付けると誤帰属する。 script はこの形を本人の自己紹介として扱う)。 引いた ID は根拠と一緒に owner の private な ID 表に記録する (= 次は表から引く)。
+4. **投稿直前の新着確認は、 送信と別のコマンドで行う** (`discord-post.py --recent N` → 結果を読む → `--send`)。 1 つのコマンドに束ねると、 新着を読む前に投稿が出る。 文面を直した後の再承認も同じで、 前の承認は直す前の文面に対するもの。
 
 ## <a id="webhook-personas"></a>Webhook persona: bot 1 体で複数の「社員」 を演じる (2026-09-08)
 
