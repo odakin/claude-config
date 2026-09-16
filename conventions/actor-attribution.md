@@ -22,7 +22,7 @@ summary: carrier proxy (= commit author / push 者 / 送信者 / 記録の書き
 1. **proxy の種類を明示して報告する。** 「X の編集」でなく「commit author = X (= push 者、 起草者とは限らない)」。 carrier 欄を報告文に写す瞬間に proxy 種を括弧で注記する — 断定形に落とすのはこの瞬間なので、 書式で塞ぐ。
 2. <a id="group-product-default"></a>**collaborative context の default = group product。** live meeting での共同編集・共著 Overleaf・共同研究 repo では、 **単独 authorship を主張する積極的証拠がない限り** group product として framing する。 「1 人の名前で運ばれてきた」は積極的証拠ではない (= 上の lossy encoding)。
 3. <a id="inline-marker-addressee"></a>**inline marker (`\red{[XX: ...]}` / `%% TODO(XX)` 等) = 宛先 tag 付き group to-do** であって「XX 個人への指令」「XX の担当宣言」ではない。 tag は「誰に見てほしいか」の routing であり authorship / ownership の主張ではない。
-4. <a id="statement-attribution"></a>**発言の帰属: 記録の書き手・転送者・要約者を発言者と混同しない。** thread・議事・チャットの「誰が言ったか」が曖昧なら「〜の記録によると (発言者未確認)」と hedge する。 複数人会議 (Zoom 等) の指摘・発見を named collaborator 1 人に reflex で寄せない — 不明なら「全員で」or 確認。
+4. <a id="statement-attribution"></a>**発言の帰属: 記録の書き手・転送者・要約者を発言者と混同しない。** thread・議事・チャットの「誰が言ったか」が曖昧なら「〜の記録によると (発言者未確認)」と hedge する。 複数人会議 (Zoom 等) の指摘・発見を named collaborator 1 人に reflex で寄せない — 不明なら「全員で」or 確認。 ⚠️ <a id="stage-label-reads-as-speaker"></a>**「<人名> レビュー「…」」 のように段階名に人名を入れた句は、 「その人が担当した段階で出た評価」 とも「その人が言った」 とも読める** — 後の session は後者に読み替えて対外文面に使う (実測)。 引用を記録するとき、 発言者を確かめていなければ人名をどこにも置かず「〜という評価になった」 と書く。
 5. <a id="load-bearing-verify"></a>**帰属が load-bearing な場面では単一 proxy から断定を書かない。** メール文面・論文 credit・attribution ledger 記入・対外報告など、 誤帰属が外に出る/固着する場面では、 **複数の独立 proxy で verify するか user に確認**する。 安価な 1 手 (= `git log --format='%an'` で author 欄の分布を見る / thread の別 message と突合) で高価な誤帰属を防ぐ。
 
 ## <a id="claim-target-attribution"></a>第二の帰属軸: claim-target (その主張は誰についてのものか)

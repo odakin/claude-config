@@ -19,6 +19,7 @@ Usage:
       --channel <CHANNEL_ID> (--content "text" | --content-file msg.txt) [--send]
   python3 discord-post.py --token-file ... --dm-user <USER_ID> ...   # open DM first
   python3 discord-post.py --token-file ... --channel <ID> --check    # read-only probe
+  python3 discord-post.py --token-file ... --channel <ID> --recent 10  # read-only: last N messages
   python3 discord-post.py ... --attach path/to/file [--attach ...]   # attach file(s)
   python3 discord-post.py --selftest
 
@@ -112,6 +113,20 @@ def _multipart_body(payload_json, attach_paths):
     return b"".join(parts), f"multipart/form-data; boundary={boundary}"
 
 
+def _format_messages(msgs):
+    """GET /channels/{id}/messages の結果 (新しい順) を古い順の 1 行ずつにする。
+    改行は ' / ' に畳み、 添付は file 名だけ出す (= 読む用。 本文の全文は API の JSON にある)。"""
+    lines = []
+    for m in reversed(msgs or []):
+        ts = (m.get("timestamp") or "")[:19].replace("T", " ")
+        author = (m.get("author") or {}).get("username", "?")
+        text = (m.get("content") or "").replace("\n", " / ")
+        atts = [a.get("filename", "") for a in m.get("attachments") or []]
+        tail = f" [attachments: {', '.join(atts)}]" if atts else ""
+        lines.append(f"{ts} | {m.get('id', '')} | {author} | {text}{tail}")
+    return lines
+
+
 def _explain(code, body):
     msgs = [f"HTTP {code}: {body[:300]}"]
     for key, hint in HINTS.items():
@@ -134,6 +149,9 @@ def main(argv=None):
                    help="actually send; without it this is a dry run")
     p.add_argument("--check", action="store_true",
                    help="read-only probe: GET the channel to validate token/UA/access")
+    p.add_argument("--recent", type=int, metavar="N",
+                   help="read-only: print the last N messages of the channel, oldest first "
+                        "(1-100). Use this instead of ad-hoc API reads")
     p.add_argument("--selftest", action="store_true")
     a = p.parse_args(argv)
 
@@ -160,6 +178,22 @@ def main(argv=None):
         if err:
             print(_explain(*err), file=sys.stderr); return 1
         print(f"ok channel_id={resp['id']} type={resp.get('type')}")
+        return 0
+
+    if a.recent is not None:
+        target = a.channel
+        if a.dm_user:
+            # DM channel を開く (or 既存を返す) POST。 相手には何も表示されない
+            resp, err = _request(f"{API}/users/@me/channels", token,
+                                 {"recipient_id": a.dm_user})
+            if err:
+                print(_explain(*err), file=sys.stderr); return 1
+            target = resp["id"]
+        limit = min(max(a.recent, 1), 100)
+        resp, err = _request(f"{API}/channels/{target}/messages?limit={limit}", token)
+        if err:
+            print(_explain(*err), file=sys.stderr); return 1
+        print("\n".join(_format_messages(resp)))
         return 0
 
     if bool(a.content) == bool(a.content_file):
@@ -231,6 +265,15 @@ def selftest():
     check("50007 hint", "DMs closed" in _explain(403, '{"message": "x", "code": 50007}'))
     check("40005 hint", "attachment exceeds" in _explain(413, '{"code": 40005}'))
     check("401 hint", "git-crypt" in _explain(401, "Unauthorized"))
+    # --recent formatter: API returns newest first; print oldest first, fold newlines, list attachments
+    fmt = _format_messages([
+        {"id": "2", "timestamp": "2026-01-02T03:04:05.000+00:00", "author": {"username": "b"},
+         "content": "line1\nline2", "attachments": [{"filename": "x.pdf"}]},
+        {"id": "1", "timestamp": "2026-01-01T00:00:00.000+00:00", "author": {"username": "a"},
+         "content": "first", "attachments": []},
+    ])
+    check("recent: oldest first", len(fmt) == 2 and fmt[0].endswith("| a | first"))
+    check("recent: newline folded + attachments", fmt[1].endswith("line1 / line2 [attachments: x.pdf]"))
     # arg validation: dry-run is the default (no --send flag -> no network use)
     import inspect
     src = inspect.getsource(main)

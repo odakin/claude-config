@@ -193,6 +193,10 @@ Python の `email.message.EmailMessage` なら `set_content` (plain) → `add_al
 
 **受信側の表示:** Gmail (web / mobile) と Apple Mail は cid inline を本文位置に表示する。実測 2026-08 (数式検算 note を研究者宛てに送信)。
 
+## <a id="from-display-name"></a>11. From の表示名は Gmail 側の送信名で置き換わることがある
+
+API 直送で MIME の From に表示名 (`"表示名" <addr>`) を入れても、 送信後の message の From は account の送信名設定の表示名になっていることがある (実測)。 表示名で相手に名前の表記を伝えたい (例: 相手が名前を誤記している) なら、 表示名に頼らず**署名**で示す。 送信名を変えたいなら Gmail の設定 (「名前」) の側で変える。
+
 ## 関連
 
 - MCP の scope / capability (send tool 不在 ≠ 送信不能): [`mcp.md`](mcp.md)
