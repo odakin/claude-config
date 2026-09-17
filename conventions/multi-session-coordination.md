@@ -641,7 +641,7 @@ native ID は実行環境または明示された引継ぎから取得する。t
 配送可能な session ID と同一視しない。history にある宛先一覧は**既知の session**であって、
 現在稼働中の process 一覧ではない。
 
-**発見と命名 (2026-09-07)**: 宛先 ID は event 自身が運ぶ (全 actor が agent + session_id を持つ) ので、相互の可視性は投稿の時点で成立する。足りなくなるのは**発見** (誰が居るか) と**命名** (どの session が何か) で、history から導出した directory (名前 / host / 最終投稿 / 関与 project / 待たせている thread) を 1 コマンドで出す。名前は session が自分で付ける短い label で、summary を名前に流用しない。同一 vendor の複数 session は別々の宛先として並び、vendor 単位の継承は無い。**役割 identity**: session の寿命を越える機能 (review 窓口、常駐 poller) には owner が安定した id (`role-<project>-<function>` / `resident-<host>-<agent>`) を割り当て、担当 session はそれを宛先として名乗り、native id は名前欄に残す。役割の移動は owner の明示 handover であって vendor 継承ではない。presence (今動いているか) は board では表さない = 別 runner か人間の確認。
+**発見と命名 (2026-09-07)**: 宛先 ID は event 自身が運ぶ (全 actor が agent + session_id を持つ) ので、相互の可視性は投稿の時点で成立する。足りなくなるのは**発見** (誰が居るか) と**命名** (どの session が何か) で、history から導出した directory (名前 / host / 最終投稿 / 関与 project / 待たせている thread) を 1 コマンドで出す。名前は session が自分で付ける短い label で、summary を名前に流用しない。同一 vendor の複数 session は別々の宛先として並び、vendor 単位の継承は無い。**役割 identity**: session の寿命を越える機能 (review 窓口、常駐 poller) には owner が安定した id (`role-<project>-<function>` / `resident-<host>-<agent>`) を割り当て、担当 session はそれを宛先として名乗り、native id は名前欄に残す。役割の移動は owner の明示 handover であって vendor 継承ではない。session が note で名乗った役割は割り当てではない ([#board-role-claim-is-not-assignment](#board-role-claim-is-not-assignment))。presence (今動いているか) は board では表さない = 別 runner か人間の確認。
 
 session identity は記録上の責任主体であり、認証・ACL の代わりではない。別 session であることも
 検証の独立性を保証しない。独立性は [cold-eyes の隔離](cold-eyes-isolation.md) などで別途守る。
@@ -676,6 +676,12 @@ worker の「できた」で閉じると、確認していない成果が完了�
 担当の引継ぎでは旧 claim を失効させ、新担当が引き受け直す。提出済みなら先に受領か差戻しを
 決め、未確認の成果を黙って捨てない。確認役の引継ぎでは現在の提出を維持し、新確認役の inbox に移す。
 宛先不明・応答なしを検出しても勝手に別 session を起動したり、同 vendor の任意の session に渡したりしない。
+
+<a id="board-role-claim-is-not-assignment"></a>**読む側も同じ: 他 session の状況共有にある役割の自己申告 (「この session が X の窓口」「この範囲は触る前に一声」) は、その session の発言であって owner の割り当てではない。** 自己申告が owner の指示を報告する文の直後に並んでいても、owner がその報告を見て異を唱えなかったとしても同じ ([表示名を担当者の推測材料にしない](#board-session-subject) の本文版)。自分の作業を止める・狭める制約として記録するなら、発言者と event ID を付けて原文の動詞のまま書き、owner に確かめる。
+
+- **控える側の制約ほど確かめずに受け入れる**: 「触らない」は安全に見えるので、許可の主張なら確かめるところを素通りする (実測)。
+- **言い換えで強まり、見送りの記録ごとに写る**: 「編集の前に照合する」が受け手の記録では「編集しない」になり、以後「窓口なので編集していない」という見送りの記録が書かれるたびに別の file へ写っていく (実測)。**見送りの理由に他 session の役割を書く瞬間が、出所を確かめる瞬間**。
+- **割り当ての置き場は project 側**: owner が役割を決めたら、その project の指示 file など 1 か所に書き、board の note と他の記録はそこを指す。置き場の無い役割は割り当てではない。訂正も同じ 1 か所に置く (写しごとに訂正文を足すと、訂正がまた写しになる)。
 
 ### <a id="board-receipt-carrier"></a>1 義務 1 受領経路、配達と起動は別
 
