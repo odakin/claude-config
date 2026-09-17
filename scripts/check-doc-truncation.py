@@ -31,6 +31,9 @@ working tree の「数えられる要素」数を、当該 file を触った直�
   - marker 規約より前の正当な削減は config の `acks:` で個別に許す (理由必須)。
     push 済みで marker を後付けできない削減は `commit:` 付きの ack にする = その commit までの
     削減だけを許し、以後の削減は再び検出する (`commit:` の無い ack はその doc の監視を恒久に止める)
+  - 内容を別 file (正本) へ移した削減を ack する前に、 旧版の識別子 (ID・key・見出し) の集合が
+    「新版 ∪ 移動先」 に含まれることを機械で確かめ、 確かめ方を reason に書く (commit message の
+    「移した」 だけで ack しない = 移す途中で落ちた要素はこの検出器しか見ていない)
 
 ⚠️ **無差別に全 doc へ当てない**。memory file の縮退 (MOVE + pointer 化) のように、
 **意図的に縮めるのが正しい運用**の doc がある。対象は config で明示する。
