@@ -27,6 +27,14 @@ scope を足したら token を取り直す (consent を 1 回)。 同じ OAuth 
 - 作った直後は誰にも見えない (学生は参加コードか招待で入る)。 返り値の `enrollmentCode` が参加コード
 - **ヘッダー画像 (テーマ) は API に項目が無い** (実測 = `courses.get` の返す field に theme / photo が無い) = 画面の「カスタマイズ → 写真をアップロード」 で貼る。 画像は横長 4:1 (例 1600×400) で、 左下にクラス名が白字で重なるので左下は暗く・模様を少なくすると読める
 
+## <a id="class-calendar"></a>クラスのカレンダーに授業の予定を入れる
+
+- クラスを作ると、 そのクラス用の Google カレンダーが自動で作られる (`courses.get` の `calendarId` = `c_classroom…@group.calendar.google.com`、 実測)。 先生のアカウントは owner。 課題の期限はここに自動で載るが、 **授業の時間そのものは載らない** → 毎週の予定を 1 件入れておくと、 学生の Google カレンダーに授業が並ぶ
+- 形 = 毎週の繰り返し 1 件 (`RRULE:FREQ=WEEKLY;UNTIL=<最終回の開始 (UTC)>;BYDAY=<曜日>`) + 授業の無い日を `EXDATE;TZID=<地域>:<日付T時刻>,...` で除く (休暇・休講日・オンデマンド週・補講日・自分の休講)。 除く日は学年暦から拾う
+- クラスのカレンダーは timeZone が UTC で作られる (実測) → event 側に地域の timeZone を明示する。 `UNTIL` は UTC、 `EXDATE` は TZID 付きの現地時刻で書く
+- 入れたら `singleEvents=true` で展開して、 回数と日付の並びを学年暦と照合する (EXDATE の書き損じは展開しないと見えない)
+- 補講のように日付が確定していない回は入れず、 確定してから単発で足す
+
 ## <a id="late-submission-lock"></a>API で作った課題と「期限後に提出を締め切る」
 
 - API で作った課題 (courseWork) には `associatedWithDeveloper: true` が永続的に付き、 画面の「期限後に提出を締め切る」 が灰色になる (「サードパーティ製ツールからの提出は締め切ることができません」)。 DRAFT で作っても外れない = **期限後の締切が要る課題は画面で作る**
