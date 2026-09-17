@@ -229,6 +229,14 @@
       "hooks": [
         {
           "type": "command",
+          "command": "~/.claude/hooks/chat-file-ref-enforce.sh"
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
           "command": "~/.claude/hooks/first-turn-stamp-check.py"
         }
       ]

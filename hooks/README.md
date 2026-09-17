@@ -8,6 +8,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 
 - **[bash-search-zero-result-nudge.sh](bash-search-zero-result-nudge.sh)** — PostToolUse(Bash): ローカル discovery 検索の null (tree 検索空振り / glob 不成立) + truncate-before-grep pipeline を検出し「部分 scope の null で不在断定するな」 の scope 宣言 template を inject
 - **[bash-search-zero-result-nudge.test.sh](bash-search-zero-result-nudge.test.sh)** — logic + incident-reproduction selftest
+- **[chat-file-ref-enforce.sh](chat-file-ref-enforce.sh)** — Stop: 最終メッセージの file 参照 (link / path に見える inline code) が desktop の右パネルで開けない形なら、 正しい path を添えて 1 回だけ書き直させる
+- **[chat-file-ref-enforce.test.sh](chat-file-ref-enforce.test.sh)** — logic + incident-replay selftest
 - **[currentdate-anchor.py](currentdate-anchor.py)** — session start temporal anchor
 - **[expensive-tmp-guard.sh](expensive-tmp-guard.sh)** — PreToolUse(Bash): Audiveris / oemer / ML training 系の -output /tmp/ パターンを検出して `permissionDecision: ask`
 - **[expensive-tmp-guard.test.sh](expensive-tmp-guard.test.sh)** — expensive-tmp-guard.sh の self-test (hermetic)

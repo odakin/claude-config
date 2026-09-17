@@ -211,6 +211,7 @@
 
 - **[lib/artifact-presentation.mjs](lib/artifact-presentation.mjs)** — Shared @oai/artifact-tool presentation builder: editable primitives, notes, finalization, and page renders.
 - **[lib/artifact-presentation.test.mjs](lib/artifact-presentation.test.mjs)** — Hermetic self-test for artifact-presentation.mjs; uses a fake slide API and needs no Office app.
+- **[lib/chat_file_refs.py](lib/chat_file_refs.py)** — chat の最終発話にある file 参照 (markdown link の href と、 path に見える inline code) を、 Claude Code desktop app の右パネルと同じ基準で解決し、 開けないものに正しい path を添えて返す共通部品 (Stop hook chat-file-ref-enforce.sh と校正が共用)
 - **[lib/commit-msg-leak-matcher.sh](lib/commit-msg-leak-matcher.sh)** — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 10 allowlist の (a)(b)(c) check + 審査中の申請を識別する種目語×評価語の共起 (d))、 claude-code hook + git-side runner の両方が source する DRY 実装
 - **[lib/find-personal-layer.sh](lib/find-personal-layer.sh)** — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
 - **[lib/git_blob.py](lib/git_blob.py)** — git の blob を worktree に出したときの中身で読む helper (git-crypt で暗号化される path も平文で)。

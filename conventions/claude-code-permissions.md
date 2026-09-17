@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき
 category: harness-core
-summary: Claude Code CLI の permission プロンプト削減 (= cwd 外 file 〔`~/Downloads` 等〕の Read/Edit/Write が毎回確認される症状を `additionalDirectories` で cwd 同様に無確認化、 bare tool allow は cwd 外を素通ししない observed〔docs 解釈と食い違い〕、 deny > ask > allow で機密は `deny` 優先、 setup.sh `configure_permissions` は `allow` のみ触る = additionalDirectories/deny は直書き永続、 settings 反映は安全側に次セッション〔allow 追加と disableAllHooks 除去は desktop 2.1.260 で同 session 即時を実測〕、 #chat-link-rendering-scope = chat 応答内の markdown link `[label](path)` を click した右パネル rendering も同 scope〔session cwd + additionalDirectories〕に従い scope 外は「読み取れませんでした / 作業ディレクトリの外」 表示〔#rc-chat-panel-no-render = Remote Control 閲覧では scope 通過でも同一 error で render 不可 = file が worker host 側にのみ在る、 唯一 RC で完結する対処 = 内容を chat 本文に出させる、 observed n=1〕、 frontend 3 系統切り分け〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕、 §always-approve-tools = permission 設定で抑止できない always-prompt tool class〔`ccd_session_mgmt__search_session_transcripts` 等 cross-session tool は `allow` 登録でも承認チップが出る = 経路を外す以外に消せない、 token-handshake 返送への含意込み〕、 #ask-pattern-action-anchor = 高 stakes Bash gate の ask パターンは file 名 substring でなく不可逆 action の実行形〔`--send` 等の explicit flag〕に anchor〔ask > allow ゆえ allow で例外を彫れない = パターン絞りが唯一の手段・tool 側は fail-safe 既定・gate 対象 invocation は chain 禁止〕、 #desktop-permission-dialog-log = desktop の承認 dialog は app log に 1 件 2 行 〔Emitted / Received〕 で残る → scripts/permission-dialog-audit.py で tool 別集計と main / sub-agent 振り分け、 #monitor-needs-own-allow = Monitor は Bash の allow にも内容 ask rule にも掛からない独立 tool、 #agent-launch-no-prompt = Agent 起動は allow 済なら dialog 無し 〔「背景作業で聞かれる」 = Monitor / spawn chip / Workflow / 中身の ask gate〕、 #protected-settings-edit = Claude による .claude/settings*.json 等 protected path の編集は default mode では毎回 dialog 〔allow rule で消せない = 公式 docs、 auto は classifier 判定〕・Bash で迂回しない・「毎回」 と言われたら先に dialog 内訳を実測・desktop のモード選択はフォルダごとに defaultMode より優先、 #symlink-both-paths = symlink の path と実体 path の両方を登録、 #file-rule-tools = path rule を見るのは Read/Edit だけ 〔Write/Glob の rule は参照されない、 名指ししない間接読みは塞げない = sandbox〕、 #always-allow-persists-literal = 「常に許可」 は command 文字列を settings.local.json に保存 → secret を command に書かない 〔#always-allow-never-matches-again = 保存が literal ゆえ **per-call 一意な path を含む command では二度と一致しない** = tool 出力の spill file 〔`~/.claude/projects/…/tool-results/<乱数>.txt`〕 を sed で読む形が代表例、 押すほど死んだ allow 行が増えるだけ → Bash でなく Read tool + glob path rule で塞ぐ、 「押しても減らない」 と言われたら毎回変わる部分の有無をまず見る〕、 #long-command-falls-back-to-ask = 長すぎる Bash は auto の自動承認から外れて dialog になり pattern 化できないので「常に許可」 も出ない 〔実測 2,111 通過 / 4,272 dialog、 backstop = hooks/long-bash-command-guard.sh が閾値超を block して分割・file 経由へ誘導、 guard の自己参照は自分の source/test/doc だけ除外〕、 承認 dialog の原因切り分けは scripts/permission-dialog-audit.py --diagnose が hook / fixed / length / rule / rule_unique / unmatched に自動分類 〔⚠️ 件数を読むなら --no-run-hooks を使わない = 意図した hook gate が rule 系に落ちて水増しされる〕)
+summary: Claude Code CLI の permission プロンプト削減 (= cwd 外 file 〔`~/Downloads` 等〕の Read/Edit/Write が毎回確認される症状を `additionalDirectories` で cwd 同様に無確認化、 bare tool allow は cwd 外を素通ししない observed〔docs 解釈と食い違い〕、 deny > ask > allow で機密は `deny` 優先、 setup.sh `configure_permissions` は `allow` のみ触る = additionalDirectories/deny は直書き永続、 settings 反映は安全側に次セッション〔allow 追加と disableAllHooks 除去は desktop 2.1.260 で同 session 即時を実測〕、 #chat-link-rendering-scope = chat 応答内の markdown link `[label](path)` を click した右パネル rendering も同 scope〔session cwd + additionalDirectories〕に従い scope 外は「読み取れませんでした / 作業ディレクトリの外」 表示〔#chat-link-resolution-base = 相対 path の基準は session を始めたフォルダで Bash の cd に追従しない = harness の「Primary working directory」 通知どおり repo の中からの path を書くと開けない、 inline code の dir/file.ext もリンクになる、 既定 = link は絶対 path・inline code は基準フォルダからの path、 表示文言で原因を見分ける表、 Stop hook chat-file-ref-enforce.sh〕〔#rc-chat-panel-no-render = Remote Control 閲覧では scope 通過でも同一 error で render 不可 = file が worker host 側にのみ在る、 唯一 RC で完結する対処 = 内容を chat 本文に出させる、 observed n=1〕、 frontend 3 系統切り分け〔CLI settings.json / Claude Code デスクトップ Tool policy / macOS TCC〕、 §always-approve-tools = permission 設定で抑止できない always-prompt tool class〔`ccd_session_mgmt__search_session_transcripts` 等 cross-session tool は `allow` 登録でも承認チップが出る = 経路を外す以外に消せない、 token-handshake 返送への含意込み〕、 #ask-pattern-action-anchor = 高 stakes Bash gate の ask パターンは file 名 substring でなく不可逆 action の実行形〔`--send` 等の explicit flag〕に anchor〔ask > allow ゆえ allow で例外を彫れない = パターン絞りが唯一の手段・tool 側は fail-safe 既定・gate 対象 invocation は chain 禁止〕、 #desktop-permission-dialog-log = desktop の承認 dialog は app log に 1 件 2 行 〔Emitted / Received〕 で残る → scripts/permission-dialog-audit.py で tool 別集計と main / sub-agent 振り分け、 #monitor-needs-own-allow = Monitor は Bash の allow にも内容 ask rule にも掛からない独立 tool、 #agent-launch-no-prompt = Agent 起動は allow 済なら dialog 無し 〔「背景作業で聞かれる」 = Monitor / spawn chip / Workflow / 中身の ask gate〕、 #protected-settings-edit = Claude による .claude/settings*.json 等 protected path の編集は default mode では毎回 dialog 〔allow rule で消せない = 公式 docs、 auto は classifier 判定〕・Bash で迂回しない・「毎回」 と言われたら先に dialog 内訳を実測・desktop のモード選択はフォルダごとに defaultMode より優先、 #symlink-both-paths = symlink の path と実体 path の両方を登録、 #file-rule-tools = path rule を見るのは Read/Edit だけ 〔Write/Glob の rule は参照されない、 名指ししない間接読みは塞げない = sandbox〕、 #always-allow-persists-literal = 「常に許可」 は command 文字列を settings.local.json に保存 → secret を command に書かない 〔#always-allow-never-matches-again = 保存が literal ゆえ **per-call 一意な path を含む command では二度と一致しない** = tool 出力の spill file 〔`~/.claude/projects/…/tool-results/<乱数>.txt`〕 を sed で読む形が代表例、 押すほど死んだ allow 行が増えるだけ → Bash でなく Read tool + glob path rule で塞ぐ、 「押しても減らない」 と言われたら毎回変わる部分の有無をまず見る〕、 #long-command-falls-back-to-ask = 長すぎる Bash は auto の自動承認から外れて dialog になり pattern 化できないので「常に許可」 も出ない 〔実測 2,111 通過 / 4,272 dialog、 backstop = hooks/long-bash-command-guard.sh が閾値超を block して分割・file 経由へ誘導、 guard の自己参照は自分の source/test/doc だけ除外〕、 承認 dialog の原因切り分けは scripts/permission-dialog-audit.py --diagnose が hook / fixed / length / rule / rule_unique / unmatched に自動分類 〔⚠️ 件数を読むなら --no-run-hooks を使わない = 意図した hook gate が rule 系に落ちて水増しされる〕)
 -->
 # Claude Code の permission プロンプトを減らす (additionalDirectories と working directory 境界)
 
@@ -59,6 +59,8 @@ Claude Code (desktop app / VS Code 拡張の chat panel) は、応答本文内�
 
 > このファイルを読み取れませんでした — 削除または移動された可能性があるか、作業ディレクトリの外に存在する可能性があります
 
+(文言は build で変わる。 現行の文言と原因の対応 = [#chat-link-resolution-base](#chat-link-resolution-base) の表。 **file が在るのに「見つかりませんでした」 なら scope より先に相対 path の基準を疑う**。)
+
 **診断**:
 
 0. **Remote Control 経由で見ていないか** (→ 下の「Remote Control 経由では scope 通過でも render 不可」)。RC なら 1-3 は無関係 — scope を直しても解決しない。
@@ -85,6 +87,40 @@ Claude Code (desktop app / VS Code 拡張の chat panel) は、応答本文内�
 - ⚠️ observed n=1 (2026-07-27、user 側の切り分けによる同定。scope 3 段通過 + file 実在 + RC 閲覧の組で再現、worker host 側での表示は未検証)。
 
 **Bash 経由との非対称**: 上記 §核心 / §対処 の Bash tool は cwd 外 path でも通りやすい観察と同型 (= Bash は permission 判定が緩い、Read/Edit/Write と chat rendering は厳しい)。「Bash で `cat <path>` は通ったのに chat link は落ちる」という非対称は、この scope 差の同じ現れ。
+
+### <a id="chat-link-resolution-base"></a>相対 path の基準は「session を始めたフォルダ」 — Bash の cd では変わらない
+
+scope の中の file でも、 **相対 path の基準を取り違えると開けない**。 これが最も多い形 (実測: desktop の最終発話で校正すると約 8% の turn に開けない参照があり、 link を含むのは約 1%)。
+
+**解決の規則** (desktop app の bundle を読んで確認、 実測の画面と一致):
+
+| 書き方 | 解決 |
+|---|---|
+| 相対 path (`dir/file.md`、 `../x.md`) | session を始めたときに選んだフォルダに連結し、 `..` を畳む |
+| 絶対 path (`/…/file.md`) | そのまま |
+| `~/…` | home に展開 |
+| 本文に素で書いた絶対 path / `~/…` (拡張子つき) | 自動でリンクになる |
+| inline code の `dir/file.ext` | リンクとして描かれ、 相対 path と同じ基準で開く (観測 n=1。 区切りの無い `file.md` と `dir/` はリンクにならなかった) |
+
+連結した結果が、 そのフォルダか session に追加したフォルダ (`additionalDirectories` 等) の中にあれば開く。
+
+**罠**: Bash で `cd` すると、 harness は「Primary working directory: <repo> (was <root>)」 と通知し、 system prompt も「href は working directory からの相対」 と指示する。 **右パネルの基準はこの通知に追従しない** (session の設定に持つフォルダで、 起動時から変わらない)。 通知どおり repo の中からの path を書くと、 自分では正しく書いたつもりで開けない link になる。 repo の中で作業を続けているほど滑りやすい。
+
+**書き方の既定**:
+- markdown link の href = **絶対 path** (表示文字列は file 名でよい)。 基準を覚えていなくても壊れない
+- inline code に path を書くなら、 **session を始めたフォルダからの path** (repo 名から書く)。 repo の中からの path を inline code に書くと、 押せるのに開けない link になる
+- 開けない形を例として見せたいだけなら fenced code block に入れる (fence の中はリンクにならない)
+
+**表示で原因を見分ける** (日本語 UI の文言):
+
+| 表示 | 原因 |
+|---|---|
+| 「このファイルが見つかりませんでした」 + 「削除または移動された可能性があります。」 | フォルダの中だが、 連結した path に file が無い = **基準の取り違え**を先に疑う |
+| 「このファイルは作業ディレクトリの外にあります」 | 連結した path が scope の外 = [§chat-link-rendering-scope](#chat-link-rendering-scope) |
+| 「見つかりませんでした」 + 「…または作業ディレクトリの外にあります。」 | 上の 2 つのどちらか |
+| 「このファイルは、このリモートコントロールセッションを実行しているマシン上にあり、ここからは読み込めませんでした。…」 | [#rc-chat-panel-no-render](#rc-chat-panel-no-render) |
+
+**機械の検査**: Stop hook [`hooks/chat-file-ref-enforce.sh`](../hooks/chat-file-ref-enforce.sh) が、 最終発話の link と inline code のうち「基準フォルダに連結すると無い ∧ transcript に出た cwd か基準フォルダ直下の dir に連結すると在る」 ものを見つけ、 正しい path を添えて 1 回だけ書き直させる。 どこにも無い path (例示) と絶対 path は見ない。 判定の部品 = [`scripts/lib/chat_file_refs.py`](../scripts/lib/chat_file_refs.py) (基準フォルダは transcript の最初の environment snapshot から取る)、 再校正 = `python3 scripts/lib/chat_file_refs.py calibrate <days>`。
 
 ## <a id="frontend-split"></a>frontend 切り分け (同じ症状でも 3 系統)
 
