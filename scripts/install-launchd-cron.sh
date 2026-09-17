@@ -1,5 +1,5 @@
 #!/bin/sh
-# install-launchd-cron.sh — 汎用 launchd cron 登録エンジン（無人ルーチンを launchd cron で回す plist 生成・登録・状態確認・解除。--label-prefix / --workdir / --routine "id\|type\|target\|cron" を呼び出し側が渡す＝ROUTINES 焼かず汎用、cron は */N step + N-M 曜日範囲を StartCalendarInterval へ展開、skill=claude -p indirection / cmd=直接実行、CLI 認証で Claude Code (desktop) 切替非依存、--status/--run/--install-one/--uninstall-one/--uninstall/--ensure（未install のみ install=新ホスト自動配備、SessionStart から呼ぶ）、idempotent、macOS 限定、conventions/scheduled-tasks.md#launchd-cron-engine）
+# install-launchd-cron.sh — 汎用 launchd cron 登録エンジン（無人ルーチンを launchd cron で回す plist 生成・登録・状態確認・解除。--label-prefix / --workdir / --routine "id\|type\|target\|cron" を呼び出し側が渡す＝ROUTINES 焼かず汎用、cron の各欄の , リスト・N-M 範囲・*/S と N-M/S step を StartCalendarInterval 配列へ展開 (読めない欄は plist を書く前に 1 行で exit 2)、skill=claude -p indirection / cmd=直接実行、CLI 認証で Claude Code (desktop) 切替非依存、--status/--run/--install-one/--uninstall-one/--uninstall/--ensure（未install のみ install=新ホスト自動配備、SessionStart から呼ぶ）、idempotent、macOS 限定、conventions/scheduled-tasks.md#launchd-cron-engine）
 # install-launchd-cron.sh — 汎用 launchd cron 登録エンジン (macOS)。
 # 原理 doc: conventions/scheduled-tasks.md (= 機構選択の一般則 §0 + 本エンジンの SoT note)。
 # このスクリプトが plist / label / cron→StartCalendarInterval 設計の SoT
@@ -39,9 +39,14 @@
 #   routine spec = "task-id|type|target|cron"
 #     type   = skill | cmd
 #     target = SKILL.md (skill) or script (cmd) の絶対 path (= git 管理 repo 内 / cross-machine 追跡可)
-#     cron   = 5-field (minute hour dom month dow)。 `*/N` step 分 (= `*/30` → Minute [0,30,...]) と
-#              `N-M` 曜日範囲 (= `1-5` → Weekday 月〜金) を StartCalendarInterval 配列へ展開する
-#              (launchd は step を持たないため)。
+#     cron   = 5-field (minute hour dom month dow)。 各欄に書ける形 = `*` / `N` / `N-M` / `*/S` /
+#              `N-M/S` と、 それらの `,` 区切り (例: `5 8,12,17 * * *` / `*/30 9-17 * * 1-5`)。
+#              launchd は範囲・リスト・step を持たないので、 値を列挙して StartCalendarInterval の
+#              配列へ展開する (全域になる欄は key を書かない = wildcard)。 曜日の 7 は 0 (日曜)。
+#              日と曜日が両方 `*` 以外なら cron と同じく「どちらかに合えば」 走る (= 別 entry に分ける)。
+#              名前 (`MON` / `JAN`)・`N/S`・`@daily` 等は読まない: install / --install-one / --ensure は
+#              plist を 1 枚も書く前に「どの routine のどの欄の何が読めないか」 を 1 行ずつ stderr に
+#              出して exit 2 (--status / --run / --uninstall* は cron を読まないので止まらない)。
 #
 #   env:
 #     CRON_MODEL   skill routine の `--model` を pin (空なら CLI 既定)。 既定 model が unavailable
@@ -160,42 +165,101 @@ find_routine() {
   done
 }
 
-# plist 生成は plistlib に委譲 (= XML エスケープ事故回避 + cron→StartCalendarInterval 変換)
-write_plist() {
-  task_id="$1"; kind="$2"; target="$3"; cron="$4"
-  label="$(label_for "$task_id")"; plist="$(plist_path "$task_id")"; logf="$(log_for "$task_id")"
-  if [ "$kind" = skill ]; then prompt="$(prompt_for "$target")"; else prompt=""; fi
-  python3 - "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$cron" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" "$CRON_EFFORT" "$CRON_CONFIG_DIR" "$NODE_BIN_DIR" <<'PYEOF'
-import sys, plistlib
-label, claude_bin, kind, target, prompt, logf, cron, out, model, workdir, gate, nopersist, rcoff = sys.argv[1:14]
-effort = sys.argv[14] if len(sys.argv) > 14 else ""
-config_dir = sys.argv[15] if len(sys.argv) > 15 else ""
-node_dir = sys.argv[16] if len(sys.argv) > 16 else ""
-minute, hour, dom, month, dow = cron.split()
-# minute: '*' / 整数 / '*/N' step (= 毎 N 分。 StartCalendarInterval は step を持たないので
-# Minute 値を列挙して array に展開する。 例: '*/30' → [0, 30])
-if minute == '*':
-    minutes = [None]
-elif minute.startswith('*/'):
-    step = int(minute[2:]); minutes = list(range(0, 60, step))
-else:
-    minutes = [int(minute)]
-base = {}
-if hour != '*': base['Hour'] = int(hour)
-if dom != '*': base['Day'] = int(dom)
-if dow == '*':
-    weekdays = [None]
-elif '-' in dow:
-    a, b = dow.split('-'); weekdays = list(range(int(a), int(b) + 1))
-else:
-    weekdays = [int(dow)]
-entries = []
-for m in minutes:
-    for w in weekdays:
-        e = dict(base)
-        if m is not None: e['Minute'] = m
-        if w is not None: e['Weekday'] = w
-        entries.append(e)
+# cron→StartCalendarInterval 変換と plist 生成 (= plistlib に委譲、 XML エスケープ事故回避)。
+#   plist_py check <task-id> <cron> [...]    cron だけ読む (組を並べて 1 process で)。 読めない組ごとに
+#                                            1 行を stderr に出し、 1 つでもあれば exit 2
+#   plist_py write <task-id> <cron> <...>     plist を書く (読めない cron は check と同じ 1 行で exit 2)
+plist_py() {
+  python3 - "$@" <<'PYEOF'
+import sys, re, plistlib
+
+# 5 欄の名前・plist key・値域。 曜日の 7 は 0 (日曜) と同じ。
+FIELDS = [('分', 'Minute', 0, 59), ('時', 'Hour', 0, 23), ('日', 'Day', 1, 31),
+          ('月', 'Month', 1, 12), ('曜日', 'Weekday', 0, 7)]
+NUM = re.compile(r'[0-9]+')
+
+class Unreadable(Exception):
+    pass
+
+class CronError(Exception):
+    pass
+
+def expand_field(text, lo, hi, weekday):
+    """1 欄を値の list へ。 全域なら None (= plist に key を書かない = launchd の wildcard)。
+    書ける形 = '*' / 'N' / 'N-M' / '*/S' / 'N-M/S' と、 それらの ',' 区切り。"""
+    values = set()
+    for item in text.split(','):
+        body, slash, step_text = item.partition('/')
+        step = 1
+        if slash:
+            if not NUM.fullmatch(step_text) or int(step_text) == 0:
+                raise Unreadable
+            step = int(step_text)
+        if body == '*':
+            a, b = lo, hi
+        elif '-' in body:
+            a_text, _, b_text = body.partition('-')
+            if not (NUM.fullmatch(a_text) and NUM.fullmatch(b_text)):
+                raise Unreadable
+            a, b = int(a_text), int(b_text)
+        elif NUM.fullmatch(body) and not slash:
+            a = b = int(body)
+        else:
+            raise Unreadable
+        if not lo <= a <= b <= hi:
+            raise Unreadable
+        values.update(range(a, b + 1, step))
+    if weekday and 7 in values:
+        values.discard(7); values.add(0)
+    full = set(range(0, 7)) if weekday else set(range(lo, hi + 1))
+    return None if values == full else sorted(values)
+
+def calendar_entries(task_id, cron):
+    parts = cron.split()
+    if len(parts) != 5:
+        raise CronError('ERROR: routine %s: cron "%s" が 5 欄 (分 時 日 月 曜日) でない (%d 欄)'
+                         % (task_id, cron, len(parts)))
+    sets = {}
+    for (name, key, lo, hi), text in zip(FIELDS, parts):
+        try:
+            sets[key] = expand_field(text, lo, hi, key == 'Weekday')
+        except Unreadable:
+            raise CronError('ERROR: routine %s: cron "%s" の%sの欄 "%s" を読めない '
+                             '(書ける形 = * / N / N-M / */S / N-M/S と , 区切り、 範囲 %d-%d)'
+                             % (task_id, cron, name, text, lo, hi))
+    def product(keys):
+        entries = [{}]
+        for key in keys:
+            if sets[key] is not None:
+                entries = [dict(e, **{key: v}) for e in entries for v in sets[key]]
+        return entries
+    common = ['Minute', 'Hour', 'Month']
+    if sets['Day'] is not None and sets['Weekday'] is not None:
+        # cron は日と曜日が両方指定だと「どちらかに合えば」 走る。 launchd の 1 entry は全 key が
+        # 合った時だけ走るので、 日の系統と曜日の系統を別 entry にする。
+        return product(common + ['Day']) + product(common + ['Weekday'])
+    return product(common + ['Day', 'Weekday'])
+
+def entries_or_exit(task_id, cron):
+    try:
+        return calendar_entries(task_id, cron)
+    except CronError as e:
+        sys.stderr.write('%s\n' % e)
+        sys.exit(2)
+
+if sys.argv[1] == 'check':
+    pairs = sys.argv[2:]
+    bad = 0
+    for i in range(0, len(pairs) - 1, 2):
+        try:
+            calendar_entries(pairs[i], pairs[i + 1])
+        except CronError as e:
+            sys.stderr.write('%s\n' % e)
+            bad = 1
+    sys.exit(2 if bad else 0)
+
+task_id, cron, label, claude_bin, kind, target, prompt, logf, out, model, workdir, gate, nopersist, rcoff, effort, config_dir, node_dir = sys.argv[2:19]
+entries = entries_or_exit(task_id, cron)
 sci = entries[0] if len(entries) == 1 else entries
 # CLI 認証で実行。 API key/inference token を unset して必ず claude.ai OAuth を使う。
 # CRON_CONFIG_DIR pin があれば別 account の認証ストアを export (= 消費 account の分離)。
@@ -229,7 +293,31 @@ d = {
 with open(out, 'wb') as f:
     plistlib.dump(d, f)
 PYEOF
+}
+
+write_plist() {
+  task_id="$1"; kind="$2"; target="$3"; cron="$4"
+  label="$(label_for "$task_id")"; plist="$(plist_path "$task_id")"; logf="$(log_for "$task_id")"
+  if [ "$kind" = skill ]; then prompt="$(prompt_for "$target")"; else prompt=""; fi
+  plist_py write "$task_id" "$cron" "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" "$CRON_EFFORT" "$CRON_CONFIG_DIR" "$NODE_BIN_DIR" \
+    || { echo "  ERROR plist を書けず: $task_id (登録しない)" >&2; return 1; }
   echo "  plist: $plist  ($kind, cron: $cron)"
+}
+
+# plist を書く action は書き始める前に cron を読む (= 読めない書き方で「ensure install」 だけ出て
+# 未登録のまま残る・途中の routine まで install して止まる、 を防ぐ)。 $1 = task-id (空 = 全 routine)。
+# 読めない routine ごとに 1 行を stderr に出し、 1 つでもあれば非 0。
+check_crons() {
+  only="${1:-}"
+  printf '%s\n' "$ROUTINES_ACC" | {
+    set --
+    while IFS='|' read -r task_id kind target cron; do
+      [ -n "$task_id" ] || continue
+      [ -z "$only" ] || [ "$task_id" = "$only" ] || continue
+      set -- "$@" "$task_id" "$cron"
+    done
+    [ $# -eq 0 ] || plist_py check "$@"
+  }
 }
 
 bootstrap_one() {
@@ -256,6 +344,7 @@ cli_account() {
 }
 
 cmd_install() {
+  check_crons || exit 2
   echo "== launchd cron 無人ルーチン install (host: $(hostname -s)) =="
   echo "   CLI bin: $CLAUDE_BIN"
   echo "   CLI account: $(cli_account)${CRON_CONFIG_DIR:+  (config-dir pin: $CRON_CONFIG_DIR)}"
@@ -268,8 +357,7 @@ cmd_install() {
       continue
     fi
     echo "- $task_id"
-    write_plist "$task_id" "$kind" "$target" "$cron"
-    bootstrap_one "$task_id"
+    write_plist "$task_id" "$kind" "$target" "$cron" && bootstrap_one "$task_id"
   done
   echo
   echo "✅ install 完了。 動作確認は呼び出し元の --run <task-id>、 状態は --status。"
@@ -319,11 +407,12 @@ cmd_install_one() {  # 単体 install (= このマシンでは一部 routine だ
   IFS='|' read -r task_id kind target cron <<EOF
 $spec
 EOF
+  check_crons "$task_id" || exit 2
   [ -f "$target" ] || { echo "ERROR: target 不在 ($target) — 該当 repo を git pull したか確認"; exit 1; }
   mkdir -p "$LA_DIR" "$LOG_DIR"
   echo "== 単体 install: $task_id (host: $(hostname -s)) =="
   echo "   CLI account: $(cli_account)"
-  write_plist "$task_id" "$kind" "$target" "$cron"
+  write_plist "$task_id" "$kind" "$target" "$cron" || exit 1
   bootstrap_one "$task_id"
   echo "✅ $task_id を install。 動作確認は呼び出し元の --run $task_id。"
 }
@@ -350,6 +439,9 @@ cmd_uninstall() {
 cmd_ensure() {  # 未 install の routine だけ install (= SessionStart 等から冪等に呼ぶ自己修復。 quiet + fail-open)
   # loaded 済みは無音 skip / target 未取得 (git pull 待ち) も無音 skip / skill で claude 不在も skip。
   # → 新 routine を ROUTINES に足して git pull した後、 次 session でそのマシンに自動 install される。
+  # ⚠️ fail-open の例外 = 読めない cron (= 呼び出し側の spec の誤り)。 1 本でもあれば 1 行ずつ stderr に
+  #    出して、 どの routine も install せず exit 2 (= 「ensure install」 だけ出て未登録、 を起こさない)。
+  check_crons || exit 2
   mkdir -p "$LA_DIR" "$LOG_DIR" 2>/dev/null
   printf '%s\n' "$ROUTINES_ACC" | while IFS='|' read -r task_id kind target cron; do
     [ -n "$task_id" ] || continue
@@ -358,8 +450,7 @@ cmd_ensure() {  # 未 install の routine だけ install (= SessionStart 等か�
     [ -f "$target" ] || continue                                    # target 未取得 = 静かに skip
     { [ "$kind" = skill ] && [ ! -x "$CLAUDE_BIN" ]; } && continue  # skill は claude 必須
     echo "  + ensure install: $task_id"
-    write_plist "$task_id" "$kind" "$target" "$cron"
-    bootstrap_one "$task_id"
+    write_plist "$task_id" "$kind" "$target" "$cron" && bootstrap_one "$task_id"
   done
   return 0
 }
