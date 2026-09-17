@@ -220,6 +220,8 @@
 
 ## lib/ — sourceable helper 群
 
+- **[lib/agents-entrypoint-warn.sh](lib/agents-entrypoint-warn.sh)** — root に CLAUDE.md があるのに AGENTS.md が無い repo の commit で 1 回知らせる (止めない)
+- **[lib/agents-entrypoint-warn.test.sh](lib/agents-entrypoint-warn.test.sh)** — CLAUDE.md だけの repo で鳴り、 AGENTS.md を stage / track すると・opt-out で・CLAUDE.md が無いと鳴らない
 - **[lib/artifact-presentation.mjs](lib/artifact-presentation.mjs)** — Shared @oai/artifact-tool presentation builder: editable primitives, notes, finalization, and page renders.
 - **[lib/artifact-presentation.test.mjs](lib/artifact-presentation.test.mjs)** — Hermetic self-test for artifact-presentation.mjs; uses a fake slide API and needs no Office app.
 - **[lib/browser_tab.py](lib/browser_tab.py)** — 起動中の Chromium 系 browser に裏で tab を 1 枚開かせ、 行き先を見て、 自分が開いた tab だけを閉じる (macOS)。 SSO 保護サイトの login 切れからの復帰用
