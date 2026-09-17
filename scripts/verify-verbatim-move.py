@@ -15,6 +15,8 @@ usage:
 
 --rev を省くと HEAD と working tree の差分を見る (`--rev X` だけなら X と working tree)。 同じ commit で source の他の行も直したときは `--removed-prefix` で移した行だけに絞る。 空行は数えない。 多重集合で数える (同じ行が 2 回消えたら 2 回現れる必要)。
 --from に指定した file の削除行のうち、 追加行 (全 --to の合計) で賄えないものを列挙し、 1 行でもあれば exit 1。
+移動先が複数なら `--to` を繰り返す (`--to a --to b`)。 無い path・未追跡の file は数える前に exit 2 で止める
+(git diff はどちらにも「差分なし」 を返し、 偽の FAIL / PASS になる)。
 追加行が削除行より多いのは許す (要約や見出しを足すのは移動と両立する)。 書き換えを許さない検査なので、
 移動と同時に文言を直した commit は FAIL が正しい (直すなら移動と別の commit にする)。
 """
@@ -50,6 +52,28 @@ def _diff_lines(repo: Path, rev: str | None, path: str) -> tuple[list[str], list
 
 def normalize(line: str, links: bool) -> str:
     return LINK_TARGET.sub("](", line) if links else line
+
+
+def path_problems(repo: Path, rev: str | None, paths: list[str]) -> list[str]:
+    """差分を数える前に path を確かめる。 git diff は無い path にも未追跡の file にも「差分なし」 を返すので、
+    そのまま数えると「移した行が現れない」 という偽の FAIL (移動先側) か偽の PASS (移動元側) になる。
+    実測: `--to a.md,b.md` と 1 つに書き、 存在しない path「a.md,b.md」 として全行が missing と出た。"""
+    ends = [x for x in (rev or "").split("..") if x] or ["HEAD"]
+    out = []
+    for path in paths:
+        tracked = subprocess.run(["git", "-C", str(repo), "ls-files", "--error-unmatch", "--", path],
+                                 capture_output=True).returncode == 0
+        in_rev = any(subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{e}:{path}"],
+                                    capture_output=True).returncode == 0 for e in ends)
+        if tracked or in_rev:
+            continue
+        if (repo / path).exists():
+            out.append(f"{path}: 未追跡 = git diff に出ない (`git add -N {path}` してから数える)")
+        elif "," in path:
+            out.append(f"{path}: 無い path。 移動先が複数なら --to を 1 path ずつ繰り返す (--to a --to b)")
+        else:
+            out.append(f"{path}: 無い path (working tree にも {' / '.join(ends)} にも無い)")
+    return out
 
 
 def verify(repo: Path, rev: str | None, src: str, dsts: list[str], links: bool,
@@ -115,6 +139,13 @@ def selftest() -> int:
         expect("an unrelated edit in the same source fails the plain check", m == ["# S"])
         m, n, _ = verify(repo, "HEAD~1", "S.md", ["arch/A.md"], links=True, removed_prefix="- **")
         expect("--removed-prefix limits the check to the moved bullets", m == [] and n == 2)
+        pr = path_problems(repo, None, ["S.md", "arch/A.md,p.tex"])
+        expect("a comma-joined --to is reported as a missing path with the repeat-the-flag hint (not as missing lines)",
+               len(pr) == 1 and "--to を 1 path ずつ" in pr[0])
+        (repo / "arch" / "new.md").write_text("- **a** see [x](../review/x.md)\n", encoding="utf-8")
+        pr = path_problems(repo, "HEAD~1..HEAD", ["arch/new.md", "S.md"])
+        expect("an untracked destination is reported (git diff would show nothing for it)",
+               len(pr) == 1 and "git add -N" in pr[0])
     print("selftest:", "ALL PASS" if not failed else f"FAILED ({len(failed)})")
     return 0 if not failed else 1
 
@@ -131,6 +162,11 @@ def main() -> int:
     ap.add_argument("--removed-prefix", help="only check removed lines starting with this (e.g. the folded bullets), "
                     "when the same commit also edited other lines of the source")
     a = ap.parse_args()
+    probs = path_problems(a.repo, a.rev, [a.src] + [d for d in a.dsts if d != a.src])
+    if probs:
+        for x in probs:
+            print("✗ " + x)
+        return 2
     missing, n, extra = verify(a.repo, a.rev, a.src, a.dsts, a.normalize_links, a.removed_prefix)
     if missing:
         print(f"✗ {len(missing)} of {n} removed line(s) from {a.src} do not reappear in {', '.join(a.dsts)}:")
