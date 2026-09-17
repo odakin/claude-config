@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき**
+when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths)
 category: infra
 summary: シェルの多バイト UTF-8 切り詰め gotchas (= cut -c/head -c/bash 部分文字列は byte 単位で多バイト文字を割り invalid UTF-8 → osascript 等下流で文字列全体が文字化け、 launchd は LANG 空で C locale ゆえ特に注意、 安全策=python 文字単位 truncate + valid UTF-8 検証 1-liner、 2026-06-24 osascript 通知 RCA)
 -->
@@ -44,6 +44,13 @@ except UnicodeDecodeError as e: print('INVALID', e)"
 
 - 実例: 挿入した一文を `/usr/bin/grep -o '…[^。]*。'` で表示してから commit する `&&` chain を書いた。表示が 0 件で exit 1 になって commit は走らず、`;` の後ろに置いた検査の出力だけが出た。同じ pattern は先頭に `LC_ALL=en_US.UTF-8` を付けると一致した。
 - 書き方: 非 ASCII を含む pattern は python で書くか、`LC_ALL=en_US.UTF-8` を明示する。表示のための grep を gate の chain に入れない ([shell-env.md#test-gate-no-pipe](shell-env.md#test-gate-no-pipe))。
+
+## <a id="git-quoted-paths"></a>git が出す path は、 非 ASCII の file 名を引用符つき 8 進にする
+
+- `git log --name-only` / `git diff --name-only` / `git status` / `git ls-files` は、 既定 (`core.quotepath=true`) で**非 ASCII の file 名を `"docs/2_1_\346\265\267….xlsm"` の形**で出す = 先頭と末尾が `"`。
+- ∴ **出力行を `endswith(".xlsm")` や拡張子の正規表現で判定する検出器は、 日本語の file 名だけを黙って取りこぼす** (実測: 印刷済みの紙の鮮度検査が、 日本語名の様式の修正を見逃した。 ASCII 名の file は正しく出るので気づきにくい)。
+- 対策: `git -c core.quotepath=false …` で呼ぶ。 それでも `"` / `\` / 制御文字を含む名前は引用符で囲まれるので、 **引用符を外してから判定する** (実装例 = [`scripts/lib/staged_diff.py`](../scripts/lib/staged_diff.py) の path 取り出し)。 完全に曖昧さを消すなら `-z` (NUL 区切り、 引用しない) を使う。
+- 検出器の selftest が git の出力を偽の文字列で与えていると、 この取りこぼしは selftest を通る = 非 ASCII の file 名を 1 本含む実 repo で 1 回回す。
 
 ## まとめ (reflex)
 
