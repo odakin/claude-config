@@ -5,17 +5,17 @@ summary: Classroom API の実測済み挙動 = 先生はクラスを ACTIVE で�
 -->
 # Google Classroom API の実測済み挙動
 
-教員アカウントで Classroom API (v1) を叩くときに、 docs だけからは読み取りにくい挙動の集。 接続の setup (OAuth client・token の置き場) は [`google-api-direct-access.md`](google-api-direct-access.md)、 URL を書くときは [`google-url.md`](google-url.md)。 ここに書いてあるのは全て実測 (Workspace for Education の教員アカウント 1 件)。 組織の管理設定で変わりうる箇所は ⚠️ を付けた。
+教員アカウントで Classroom API (v1) を叩くときに、 docs だけからは読み取りにくい挙動の集。 接続の setup (OAuth client・token の置き場) は [`google-api-direct-access.md`](google-api-direct-access.md)、 URL を書くときは [`google-url.md`](google-url.md)。 「実測」 と書いた項目は Workspace for Education の教員アカウント 1 件で確かめたもの。 印の無い項目は API の仕様から書いたもので未実測。 組織の管理設定で変わりうる箇所は ⚠️ を付けた。
 
 ## <a id="scopes"></a>scope と、 それで何ができるか
 
 | scope | 読める / できる | 足りないと起きること |
 |---|---|---|
-| `classroom.courses.readonly` | クラス一覧・詳細 | 作成・変更は 403 (= 「作れない」 の原因はたいていこれ) |
+| `classroom.courses.readonly` | クラス一覧・詳細 | 作成・変更はできない (= 「作れない」 の原因はたいていこれ。 実測 = 作成の tool を持たない読むだけの構成で止まった) |
 | `classroom.courses` | クラスの作成・変更 (名前・section・状態 = ARCHIVED 等) | — |
-| `classroom.rosters.readonly` | 学生・教師の一覧 (userId と氏名) | 招待が 403 |
+| `classroom.rosters.readonly` | 学生・教師の一覧 (userId と氏名、 実測) | 招待はできない |
 | `classroom.rosters` | 招待の作成 | — |
-| `classroom.profile.emails` | 一覧に mail address が付く | 無いと userId と氏名だけ (address で突き合わせられない) |
+| `classroom.profile.emails` | 一覧に mail address が付く | 無いと userId と氏名だけ (address で突き合わせられない、 実測) |
 | `classroom.announcements` | お知らせの読み書き | — |
 | `classroom.coursework.students` | 課題の作成・提出の読み書き | — |
 
@@ -25,7 +25,7 @@ scope を足したら token を取り直す (consent を 1 回)。 同じ OAuth 
 
 - `courses.create` に `ownerId: "me"` と `courseState: "ACTIVE"` を渡すと、 そのまま ACTIVE で返る (実測)。 ⚠️ 組織によっては PROVISIONED で返る → 所有者本人なら `courses.patch` (`updateMask: courseState`) で ACTIVE にできる。 両方を扱う実装にしておく
 - 作った直後は誰にも見えない (学生は参加コードか招待で入る)。 返り値の `enrollmentCode` が参加コード
-- **ヘッダー画像 (テーマ) は API に項目が無い** (Course resource に theme / photo の field が無い) = 画面の「カスタマイズ → 写真をアップロード」 で貼る。 画像は横長 4:1 (例 1600×400) で、 左下にクラス名が白字で重なるので左下は暗く・模様を少なくすると読める
+- **ヘッダー画像 (テーマ) は API に項目が無い** (実測 = `courses.get` の返す field に theme / photo が無い) = 画面の「カスタマイズ → 写真をアップロード」 で貼る。 画像は横長 4:1 (例 1600×400) で、 左下にクラス名が白字で重なるので左下は暗く・模様を少なくすると読める
 
 ## <a id="late-submission-lock"></a>API で作った課題と「期限後に提出を締め切る」
 
@@ -39,14 +39,14 @@ scope を足したら token を取り直す (consent を 1 回)。 同じ OAuth 
 
 - **先生は学生を直接追加できない**: `courses.students.create` は管理者か、 参加コードを持つ本人の自己登録用。 先生からは `invitations.create` (`role: STUDENT | TEACHER`) で招待する
 - 招待すると **Google が招待した全員に mail を出す** = 取り消せない外向きの送信。 対象と人数を人に見せて OK をもらってから送る。 実装は既定を dry-run にする
-- 招待を受け入れた時点でクラスに入る。 送った直後でもすぐ参加する人がいるので、 検算は「参加済み + 承諾待ちの招待 (`invitations.list`) = 招待した数」 で見る
-- すでに招待済み・参加済みの人への招待は `ALREADY_EXISTS` で返る = 再実行しても重複しない
-- **`userId` は mail address でも数値の userId でもよい**: 1 人が複数の address (学内の複数ドメイン等) を持つと、 どれが Classroom のアカウントか推測になる。 以前のクラスの教師一覧 (`courses.teachers.list`) に出ている数値 userId で招待すれば、 同じアカウントに確実に届く
+- 招待を受け入れた時点でクラスに入る。 送った直後でもすぐ参加する人がいるので (実測)、 検算は「参加済み + 承諾待ちの招待 (`invitations.list`) = 招待した数」 で見る
+- すでに招待済み・参加済みの人への招待は `ALREADY_EXISTS` で返る (未実測) = 実装はこれを失敗でなく「済み」 として数える
+- **`userId` は mail address でも数値の userId でもよい** (実測): 1 人が複数の address (学内の複数ドメイン等) を持つと、 どれが Classroom のアカウントか推測になる。 以前のクラスの教師一覧 (`courses.teachers.list`) に出ている数値 userId で招待すれば、 同じアカウントに確実に届く
 - 名簿 (教務システムの CSV 等) の address で学生を一括招待するのが学期はじめの定形。 旧課程・新課程で時間割番号や科目名が分かれる科目は、 名簿を科目名で絞ると片方が落ちる → コマ (曜日・時限) で束ねる
 
 ## <a id="announcement-attachments"></a>お知らせにファイルを添付する
 
-- `courses.announcements.create` の `materials` に `{driveFile: {driveFile: {id}, shareMode: "VIEW"}}` を入れる。 file は先生本人の Drive に上げておくだけでよく、 **共有設定は要らない** (Classroom が受講者に閲覧権限を付ける)
+- `courses.announcements.create` の `materials` に `{driveFile: {driveFile: {id}, shareMode: "VIEW"}}` を入れる (実測)。 file は先生本人の Drive に上げておくだけでよく、 **共有設定は要らない** (Classroom が受講者に閲覧権限を付ける)
 - Drive への upload に使う token (例: `drive.file` scope の別 token) と Classroom の token が別でも、 同じアカウントなら添付できる (実測)
 - 添付の代わりに Dropbox 等の共有リンクを本文に貼る運用もある。 添付は Classroom の中で開けて、 受講者以外には見えない
 - お知らせも投稿した瞬間にクラス全員に見える: 文面と添付を人に見せてから投稿し、 投稿後は `announcements.get` で読み戻して本文と添付を照合する (貼り付けで文が落ちる事故の検出 = [`paste-destined-plain-text.md`](paste-destined-plain-text.md))
