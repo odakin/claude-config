@@ -821,6 +821,10 @@ sections:
     legacy: "8.65"
     level: 3
     title: "8.65 入口の doc (README) に状態を写さない — 状態を進める操作は写しを通らない"
+  - id: audit-unit-vs-rule-unit
+    legacy: "8.66"
+    level: 3
+    title: "8.66 検査が列挙する単位を、規則が守る対象の単位に合わせる — ずれた分は永久に見えない"
   - id: changelog
     level: 2
     title: "変更履歴"
