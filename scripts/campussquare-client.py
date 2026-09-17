@@ -16,18 +16,9 @@ subcommand:
 共通 option: --base https://<host> (env CAMPUSSQUARE_BASE)  --browser brave|chrome  --profile Default
              --browser-refresh off|keep|close (env CAMPUSSQUARE_BROWSER_REFRESH)  --wait-login 秒
 
-機構 fact (実測、 CampusSquare for WEB、 context path /campusweb):
-  - portal = `GET /campusweb/campusportal.do?page=main` (生きていれば 200 + title "CampusSquare for WEB")。
-  - 画面遷移は Spring Web Flow: `GET campussquare.do?_flowId=<FLOW>` → 302 → `?_flowExecutionKey=...` の画面。
-    以後の操作は form の hidden `_flowExecutionKey` + `_eventId` を POST。 key は画面ごとに変わるので毎回その画面から取る。
-  - シラバス検索 = flow `SYW0001000-flow`、 form `SearchForm` を `_eventId=search` で POST
-    (field: nendo / kaikoKubunCode / kyokannm / kaikoKamokunm / jikanwaricd / yobi / jigen / freeWord / _displayCount / s_no)。
-    ⚠️ 教員でログインしていると kyokannm に本人の氏名が既定で入っている = 空で送らないと自分の担当だけに絞られる。
-    結果の各行 = `refer('<年度>','<時間割所属コード>','<時間割番号>','<locale>')` → form `ReferForm` を `_eventId=input` で POST
-    すると参照画面 (「シラバス参照」、 読むだけ。 保存の操作は無い)。
-  - cookie = host の `JSESSIONID` (CampusSquare) + `_shibsession_*` (SP)。 IdP の cookie は読まない。
-  - 切れの判定 = 3xx で別 host (IdP) / `Shibboleth.sso` / login を含む path へ、 または 200 でログイン画面の title。
-    ⚠️ CampusSquare 本体の timeout 画面の形は未実測 (出たら expired() に足して selftest に回帰を足す)。
+画面の仕組み (Spring Web Flow・シラバス検索の form・教員ログイン時の担当者欄の罠・CSV の形式) = conventions/campussquare.md。
+切れの判定 = 3xx で別 host (IdP) / `Shibboleth.sso` / login を含む path へ、 または 200 でログイン画面の title。
+  ⚠️ CampusSquare 本体の timeout 画面の形は未実測 (出たら expired() に足して selftest に回帰を足す)。
 
 ⚠️ 出力に cookie / flow key を出さない。 取得した学生情報 (名簿・成績) は private 層にしか置かない。 書き込み (成績登録等) は射程外。
 """

@@ -36,6 +36,7 @@ claude-config/
 │   ├── batch-text-edits.md                 # 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape)
 │   ├── beamer-slides.md                    # Beamer/metropolis または編集可能な PPTX / Keynote で研究スライドを作る・直すとき + 既存デッキの「同じ感じ」を引き継ぐとき
 │   ├── book-purchase-lookup.md             # 図書館に本の購入を頼む前 (書誌を揃える・その館に所蔵が無いか・新刊で買えるか・いくらか) + 共有された本のリストや著者の著作一覧から購入候補を作るとき + 申込メールを候補リストから起こすとき
+│   ├── campussquare.md                     # 大学の教務システム CampusSquare for WEB (シラバス・履修者名簿・成績登録) を読む・扱うとき + 名簿 CSV を科目別に分けるとき + 成績を CSV で一括登録するとき + 内蔵 browser でログイン画面が出て「読めない」 と言いそうになったとき
 │   ├── chalkboard-close-up-merge.md        # 板書写真 PDF に close-up annotation を統合するとき
 │   ├── claude-ai-routines.md               # claude.ai routines (RemoteTrigger / cloud cron) を作成・管理するとき
 │   ├── claude-app-bundle-reading.md        # Claude desktop app (Code タブ等) の画面の挙動・文言の原因を、 docs や推測でなく app 本体で確かめたいとき + hook や規約が desktop の挙動を前提にする前 + 読んだ結論を user の画面で裏付ける実験を頼むとき
@@ -63,6 +64,7 @@ claude-config/
 │   ├── gmail-mcp-multiaccount.md           # 複数 Gmail アカウントを Claude Code の MCP として繋ぎたいとき + N 個目のアカウントを追加するとき
 │   ├── gmail-sending.md                    # Gmail でメールを送信する経路・MIME 実装を選ぶとき
 │   ├── google-api-direct-access.md         # Google API を Python から直接叩く setup をするとき
+│   ├── google-classroom-api.md             # Google Classroom をプログラムから操作するとき (クラスの作成・名簿からの招待・お知らせや課題の投稿・提出の読み取り) + 学期はじめにクラスを用意するとき + API で作った課題の設定が画面で変えられないと気づいたとき
 │   ├── google-forms-automation.md          # Google Forms の自動化・prefill・回答提出を扱うとき
 │   ├── google-url.md                       # Google サービスの URL をチャットや文書に書くとき
 │   ├── hanko-digitization.md               # 押印 (ハンコ) のスマホ写真から書類合成用の透過 PNG (シャープな輪郭 + 自然なかすれ + 写真由来の色 + 複数バリアント) を作るとき + 印影・ロゴ等の小さいラスタ素材を高解像度化したいのに補間拡大がボケるとき

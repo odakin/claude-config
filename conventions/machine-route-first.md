@@ -51,6 +51,8 @@ OAuth を伴う実装では loopback consent の hardening 4 点 set ([`google-a
 2. **修復 or 最小 user 手順**: agent 側で直せる段 (= `select_browser` で最新接続を掴む / 拡張 toggle / token 再取得 / MCP 再登録) は自分で回す。 user にしか押せない段 (= allow-list の「Always allow」 click / OAuth consent / 拡張の再ログイン) は **番号付き 1 画面**で渡し、 押されたら同 turn で続きを引き取る。
 3. **carrier + 記録**: 同 turn で閉じなければ、 配線完成を運ぶ TODO (user_action 付き) を立て、 **機械別の配線状態を personal 層の環境 doc に表で残す** (= 「iMac は通る / MacBook は allow-list 未許可」 のように。 どの機械で通るかは次の session が最初に見る事実)。 配線が通ったら同 doc を更新するまでが 1 単位。
 
+<a id="agent-browser-login-is-not-a-gap-verdict"></a>**agent 専用の browser でログイン画面が出たのは、 経路が無い証拠ではない**: 内蔵の Browser pane など agent が開く browser は user のログインを持っていない。 そこでログイン画面が出ても「この pane が未ログイン」 というだけで、 user の browser には同じ IdP のログインが生きていることが多い。 パスワードを打てないからと「読めない」 で止めず、 同じ IdP の別サイトで cookie 再利用の経路が通っているか ([`garoon.md#garoon-script-route`](garoon.md#garoon-script-route)) を見て、 同じ部品で降りる (実測: 教務システムのシラバスがこれで 1 turn で読めた = [`campussquare.md`](campussquare.md))。
+
 **なぜ**: 配線 gap は再発する (= 機械 × account × domain の組合せごとに 1 回ずつ踏む)。 1 回目に「未 verify」 で流すと、 次の session も同じ gap で同じ scope 外宣言をし、 経路は永久に通らない。 gap を踏んだ瞬間が最も安く直せる (= 症状が目の前にある)。 これは努力目標であって強制 gate ではない — ただし「未確認」 と書く前に 1-3 を回したかを自問する floor。
 
 ## <a id="shared-document-write"></a>他人 owner の共有 document への書込は画面 drive しない (= blast radius が自分の外)
