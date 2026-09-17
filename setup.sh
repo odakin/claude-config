@@ -773,6 +773,29 @@ elif [ -f "$DEFAULT_ROOT_TEMPLATE" ]; then
     fi
 fi
 
+# --- Step 5a': <base>/AGENTS.md (Codex がこの dir で task を始めたときの入口) ---
+# Claude Code は cwd の祖先の CLAUDE.md を自動で読むが、Codex は AGENTS.md しか自動発見しない
+# (codex/PARITY.md#project-instruction-discovery)。<base> は repo ではないので repo 用の入口とは別に、
+# 「ここの CLAUDE.md を読め + repo で作業するならその repo の入口を先に読め」 だけを持つ薄い file を置く。
+# 個人層の AGENTS.md を symlink しない = それは repo の入口で、SESSION.md 等の相対 pointer が <base> では解決しない。
+# 手で直した file は上書きしない (= 触っていない時だけ雛形に揃える)。
+HOME_AGENTS="$CLAUDE_DIR/AGENTS.md"
+ROOT_AGENTS_TEMPLATE="$SCRIPT_DIR/templates/root-AGENTS.md.default"
+if [ -f "$ROOT_AGENTS_TEMPLATE" ]; then
+    echo ""
+    echo "=== Step 5a': Workspace-root AGENTS.md (Codex entry point) ==="
+    if [ -L "$HOME_AGENTS" ]; then
+        echo "  $HOME_AGENTS is a symlink to $(readlink "$HOME_AGENTS"). Leaving it in place."
+    elif [ ! -e "$HOME_AGENTS" ]; then
+        cp "$ROOT_AGENTS_TEMPLATE" "$HOME_AGENTS"
+        echo "  Installed $HOME_AGENTS"
+    elif cmp -s "$HOME_AGENTS" "$ROOT_AGENTS_TEMPLATE"; then
+        echo "  Already installed: $HOME_AGENTS"
+    else
+        echo "  $HOME_AGENTS exists and differs from the template. Leaving it in place."
+    fi
+fi
+
 # --- 5a2. Set up Dropbox refs symlinks (per personal-layer registry) ---
 # 個人層に dropbox-collabs.yaml があれば、setup-dropbox-refs.sh を呼んで
 # <base>/<repo>/dropbox-refs symlink を作る。さらに個人層 .git/hooks/post-merge

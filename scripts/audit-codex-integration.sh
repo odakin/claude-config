@@ -140,6 +140,15 @@ fi
 check_link "local Codex-workspace AGENTS.md entry point" \
   "$CONFIG_ROOT/codex/AGENTS.md" \
   "$CODEX_WORKSPACE_ROOT/AGENTS.md" || true
+# <base> (= repo を並べた dir) は repo ではないので repo の入口では覆えない。 Codex がそこで task を始めた時に
+# 「ここの CLAUDE.md を読め + repo に入ったらその repo の入口を先に読め」 を出す薄い file (setup.sh Step 5a')。
+BASE_DIR="$(cd "$CONFIG_ROOT/.." && pwd)"
+if [ -f "$BASE_DIR/AGENTS.md" ] && [ -s "$BASE_DIR/AGENTS.md" ]; then
+  echo "OK: workspace-root AGENTS.md ($BASE_DIR/AGENTS.md)"
+else
+  echo "MISSING: workspace-root AGENTS.md ($BASE_DIR/AGENTS.md — run claude-config/setup.sh, Step 5a')" >&2
+  ISSUES=$((ISSUES + 1))
+fi
 check_link "local claude-config-conventions skill" \
   "$CONFIG_ROOT/codex/skills/claude-config-conventions" \
   "$CODEX_USER_DIR/skills/claude-config-conventions" || true

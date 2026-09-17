@@ -1,0 +1,15 @@
+# Agent instructions — workspace root
+
+This directory is the base directory that holds the repositories, not a repository itself.
+
+Read `CLAUDE.md` in this directory before acting; it is the home instruction file (the personal layer's, when one
+is installed). The shared conventions are `CONVENTIONS.md` here (a link into `claude-config`).
+
+**When the work is in a repository under this directory, read that repository's root `AGENTS.md` first, then its
+`CLAUDE.md` and `SESSION.md`, and follow their task-relevant pointers before acting.** Codex builds its instruction
+chain once per task, so a repository entered after task startup is not added automatically — read its entry point
+by hand, or start the next task with that repository as the project root.
+
+This file is a thin entry point: it routes, and does not hold project rules, current state, or design decisions.
+Contract: https://github.com/odakin/claude-config/blob/main/CONVENTIONS.md#agent-instruction-entrypoints
+Kernel: https://github.com/odakin/claude-config/blob/main/codex/PARITY.md#instruction-entrypoint-kernel
