@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 116 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 117 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -188,6 +188,8 @@ layer 1 (public) のドメイン固有規約 116 file をカテゴリ別に列�
   - ベンダーの研究者向けプログラム申請の所属確認 — 数秒で不合格は自動 gate・「手動審査へ」 は gate 通過 (#flow-shape) / 研究室ページは機関ドメイン上かつ申請名と同じ文字体系、 非英語圏は機関ドメイン上の英語ページを先に探す (#lab-page-requirements) / 手動審査の自由記述欄で役割・名前の対応・個人の公式ページを橋渡し、 字数は機械で数える (#evidence-field-bridge) / サインイン用 magic link は agent が開かず到着・失効時刻つきで user へ (#magic-link-handoff) / 回答予定日 +14d の待ち TODO・結果は別スレッドの no-reply で来る (#after-submission) / 不承認後の再申請はメール確認直後に即時不合格 → 問い合わせ (無料アカウントの窓口は AI のみ、 本人確認ヘルプフォームの自由記述は 500 字) (#after-decline)
 - **[android-chromium-remote-debug.md](android-chromium-remote-debug.md)** — Android 実機の Brave/Chrome を remote debug (WiFi ADB + CDP) するとき
   - Android Brave/Chrome の remote debugging (WiFi ADB + CDP、 reload 前の live state capture procedure)
+- **[flight-search.md](flight-search.md)** — 航空券の候補を調べて比べる表を作るとき (内蔵 Browser pane で比較サイト・航空会社サイトを読む) + 出張の申請書に日付・経由地を書く前 + 旅費補助に予約確認を添える段取りを組むとき
+  - 航空券の候補調べを agent が内蔵 Browser pane で行う手順と壊れ方 — 入口は URL だけで検索結果まで開ける比較サイト (Kayak / Expedia、 scripts/flight-search-urls.py) で、 航空会社公式は検索前の bot 判定で止まりやすく Google フライトは URL の自然文を受け付けない (#url-driven-search / #google-flights-form)、 CAPTCHA・長押し判定・Cloudflare は押さずに経路を変え使えた/使えなかった経路を記録 (#bot-checks)、 結果は広告と重複で冗長なので dialog から便名・運航会社・運賃種別を抜き時刻つきで 2 サイト以上を突き合わせる (#reading-results)、 止まる所は個人情報入力の直前 = 旅程確認画面 (#stop-before-personal-info)、 その画面は税込の合計だけで運賃・燃油・税の内訳は出ない (#fare-breakdown)、 支払い前の保留を前提にしない (#hold-before-payment)、 0:05 発・深夜乗継で申請書の日付・経由地域とずれる (#itinerary-vs-travel-request)
 - **[google-forms-automation.md](google-forms-automation.md)** — Google Forms の自動化・prefill・回答提出を扱うとき
   - Google Forms の `FB_PUBLIC_LOAD_DATA_` HTML scrape で entry id 抽出 (= Forms API は entry id を返さない)、 prefill URL は単 section form のみ動作 (多 section で section navigation 後に prefill 失効)、 完全自動化は Selenium/Playwright + cookie 経由、 + 回答者側の提出制約 (= file-upload form の domain 縛り account / 回答回数制限 = 再回答不可・訂正は別経路 / **提出前にリポへ snapshot 保存** / 「回答を編集」 link は設定依存、 #respondent-side-constraints)
 - **[google-url.md](google-url.md)** — Google サービスの URL をチャットや文書に書くとき
