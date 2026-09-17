@@ -2,8 +2,8 @@
 """web-page-watch.py — 公開 web ページの本文が変わったら知らせる (台帳の URL を定期に読み、 目印で切り出した本文の差分を state に残して、 macOS 通知と SessionStart 用の行を出す。 標準ライブラリだけで動き、 YAML 台帳のときだけ PyYAML が要る)
 
 用途: 受付の再開・日程の変更のように「いつ変わるか分からないが、 変わったらすぐ動く」 告知を、
-人の記憶や「その頃に見る」 という予定に頼らずに拾う (一般則 =
-docs/convention-design-principles.md#human-memory-not-a-carrier)。
+人の記憶や「その頃に見る」 という予定に頼らずに拾う。 正本 = conventions/public-page-watch.md
+(告知の正本の層 / 目印 / 今すぐやることを書く / 知らせる面の重ね方 / 表示側は state だけ読む / 経路の健康診断)。
 
 台帳 (.json は標準ライブラリだけで読む。 それ以外は YAML として読む)
   targets[]
@@ -19,7 +19,7 @@ docs/convention-design-principles.md#human-memory-not-a-carrier)。
     urgent   true なら 🚨 で出し、 --alert (消えないダイアログ) と --on-change (スマホ等) の対象にする。
              false / 省略は 🔔 = バナー通知と行だけ
     signals  決め手の文言 (任意)。 [{"gone": "受付を中止しています", "say": "受付再開の可能性が高い"},
-             {"appears": "補正予算", "say": "補正予算案が載った"}] のように、 確認済みの本文と最新の本文を比べて
+             {"appears": "日程を変更しました", "say": "日程が動いた"}] のように、 確認済みの本文と最新の本文を比べて
              消えた / 現れた文言があれば行と通知に「(「…」 が消えた = <say>)」 と出す
     note     補足 (任意。 案件の TODO id など。 行の末尾に [..] で添える)
   state      state file の path (任意。 既定 = ~/.local/state/web-page-watch/<台帳の名前>.json)

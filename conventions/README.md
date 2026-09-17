@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 121 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 122 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -257,6 +257,8 @@ layer 1 (public) のドメイン固有規約 121 file をカテゴリ別に列�
   - マシン固有の install 不可 package を layer 4 (machine-local memory) に蓄積する規律 (再試行コスト回避、 frontmatter format + machine-local marker + 試行日/コマンド/原因/代替の必須項目) + source build 陥落時の GitHub Releases prebuilt binary 直置き recipe (#prebuilt-binary-fallback = 配置先は non-interactive PATH 必須〔.zshrc 専用 PATH は Claude Bash から不可視で silent 再発〕+ git-lfs 不在は LFS repo の全 push を diff 内容と無関係に block)
 - **[jma-obsdl-download.md](jma-obsdl-download.md)** — 気象庁の過去観測データ (時別値・日別値等) をスクリプトで一括取得したいとき
   - 気象庁「過去の気象データ・ダウンロード」(obsdl) の機械取得 recipe — show/table POST の現行フィールド (#show-table-post、 旧 recipe の interAnnualFlag は現行 interAnnualType で 400 になる)、 element/地点 ID の動的発見 (#element-station-discovery)、 44,000 値制限に合わせた block 設計と politeness (#volume-limit-politeness)、 CSV の位相 (24 時 = 翌日 0 時)・エンコーディング・ブロック境界の gotcha (#csv-format-gotchas)、 現象なし情報/品質情報/均質番号の一次資料の意味 (#quality-columns)、 長期系列を使う前の QC 点検 4 点 = 行数の暦検算・品質符号の分布・痕跡時間 (実測 15%)・記録分解能の年代 (#long-record-qc)、 protocol はページ自身の JS から読む一般技法 (#protocol-from-page-js)、 取得物は既知データと突合してから使う (#validate-before-use)
+- **[public-page-watch.md](public-page-watch.md)** — 「いつ変わるか分からないが、 変わったらすぐ動く」 公開ページの告知 (受付の再開・募集の開始・日程の変更・議事の結果) を待つとき + 待っている告知の正本を記録に書くとき + 無人の定期実行から人に知らせる経路 (OS 通知・ダイアログ・スマホ push) を組むとき + headless `claude -p` を通知の送信だけに使うとき
+  - 告知の待ちは人の「その頃に見る」 に載せず、 台帳のページを定期に読んで目印の間の本文の差分で拾う (道具 = scripts/web-page-watch.py)。 知らせる文は「変わった」 で止めず、 決め手の文言 (「受付を中止しています」 が消えた等) と今すぐやることまで書く。 数秒で消えるバナーは単独で頼らず、 dashboard の最上段と session 開始時 (確認するまで出続ける) を土台に、 急ぐものだけ押すまで消えないダイアログとスマホ push を重ねる。 dashboard / session hook は state を読むだけ (そこで巡回すると通知を消費する)。 追加の経路は巡回ごとに健康診断し、 失敗を黙らせない。 headless `claude -p` で push を送るときは hook・MCP・CLAUDE.md を切り、 prompt は stdin で渡す (道具 = scripts/headless-push-notification.sh)。 告知の正本は層になっている (状況 = そのページ / 規則 = 要綱・規程 / 運用 = 案内・FAQ) ので、 記録には読んだ版を書き、 動く前に版を見比べる
 - **[secret-handoff.md](secret-handoff.md)** — secret を user から受け取る・別マシンへ運ぶとき + **token を rotate するとき** (= 分業と主体照合、 #rotation-labor-split) + **暗号化 backup を作る/パスフレーズを失ったとき** (#backup-round-trip / #passphrase-loss-is-recoverable)
   - Secret を clipboard 経由で安全に運ぶ手順 (chat に literal を貼らせない原則と clipboard 1 個競合の回避、 配置先と cross-machine 耐久性、 mode 衛生 〔cp -p / git / open() は 0600 を運ばず dir 755 も露出面 = 生成側で冪等矯正、 #mode-hygiene〕、 shell rc に複製しない 〔perm 644 + 全 audit の射程外 + os.environ 優先で正本を上書きし rotate が silent に効かなくなる、 #no-shell-rc-copies〕、 backup は往復検証してから差し替える 〔#backup-round-trip〕、 パスフレーズ喪失は平文が 1 台に残っていれば全件再暗号化で復旧 〔#passphrase-loss-is-recoverable〕、 rotate の分業 = 人間は再発行のみ・残りは script で値を AI context に載せない + 主体照合必須 〔#rotation-labor-split〕)
 - **[semgrep-ci.md](semgrep-ci.md)** — Semgrep を CI で運用する・finding を読む/消す・false positive を nosemgrep 注記するとき
