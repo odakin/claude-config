@@ -18,7 +18,7 @@ conventions/machine-route-first.md#sso-session-recovery、 AppleScript の機構
   - AppleScript が使えない (自動操作の許可が無い / 無人実行 / 応答しない) 時は `open -g` で開くだけに落ちる。
     その時 where() は None を返し、 watch は state_changed だけを上限つきで待つ。
 
-`python3 browser_tab.py --selftest` = watch の結末判定を偽の tab と時計で通す (browser・network なし)。
+`python3 browser_tab.py` (直接実行) = selftest: watch の結末判定を偽の tab と時計で通す (browser・network なし)。
 """
 from __future__ import annotations
 
@@ -219,9 +219,7 @@ def _rejects_unknown_app():
     return False
 
 
-if __name__ == "__main__":
-    if "--selftest" not in sys.argv:
-        sys.exit(__doc__)
+if __name__ == "__main__":  # 直接実行 = selftest (scripts/lib の module の流儀。 run-all-checks が引数なしで呼ぶ)
     ok = True
     for name, good in selftest_cases():
         ok &= bool(good)
