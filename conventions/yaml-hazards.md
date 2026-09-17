@@ -38,6 +38,7 @@ YAML の「脆さ」 は独立な 2 軸に分解される。 軸ごとに対処�
 | 値中の「コロン + 空白」 | mapping に誤読 | 値全体を quote。 ⚠️ **valid YAML なので lint 不能** — 消したいなら schema/domain gate 側 |
 | version 風 (`3.10`) | float 3.1 | quote |
 | implicit octal (`0755`) | 493 | quote or `0o755` |
+| block scalar (`notes: |`) の末尾に**浅いインデント**で行を足す | block scalar がそこで終わり、 足した行が**同じ mapping の新しい key** になる (行に「コロン + 空白」 があると `key: value` として valid) = 文章が消えたように見え、 parse error も出ない (実測: script で追記した 1 行) | 追記は既存の本文行と同じインデントで。 追記後に load して、 足した文が目的の field の中にあることと、 **想定外の key が増えていないこと**を assert する |
 
 ## <a id="format-choice"></a>形式選択 — 新規 data file を起こす瞬間に 1 回問う
 
