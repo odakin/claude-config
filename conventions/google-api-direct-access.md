@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Google API を Python から直接叩く setup をするとき
 category: infra
-summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避、 loopback OAuth consent フローの CSRF/横取り対策 〔state nonce + PKCE S256 + request-loop + 手動貼付の state 検証 + 補償制御 hard-fail + 識別子 charset 検証、 #oauth-loopback-hardening〕) + #drive-xlsx-inplace-update (= 他人 owner の共有 xlsx に書く: full drive 別 token / revisions.get_media が truth / openpyxl round-trip の損失 / files.update 同 ID / 再 download literal verify)
+summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 他人から共有された folder を読み続ける 〔宛先 account の token (別 account では 404) + 台帳 + id/modifiedTime の差分 + 共有通知メールの照合、 #shared-folder-watch〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避、 loopback OAuth consent フローの CSRF/横取り対策 〔state nonce + PKCE S256 + request-loop + 手動貼付の state 検証 + 補償制御 hard-fail + 識別子 charset 検証、 #oauth-loopback-hardening〕) + #drive-xlsx-inplace-update (= 他人 owner の共有 xlsx に書く: full drive 別 token / revisions.get_media が truth / openpyxl round-trip の損失 / files.update 同 ID / 再 download literal verify)
 -->
 # Google API を Python から直接アクセスする setup
 
@@ -194,6 +194,21 @@ elif mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 - **DL した様式はそのまま雛形として保存し、 fill は copy に対して行う** (= [`office-files.md`](office-files.md) の template-provenance 原則。 提出物で雛形を上書きすると再 fill・diff 検証が死ぬ)。
 
 worked example: 配布 folder 30 file (root 6 + subfolder 24、 PDF + xlsx 混在) を 1 script で取得し、 repo docs/ に binary + manifest を保存 (2026-07)。
+
+## <a id="shared-folder-watch"></a>他人から共有された folder を読み続ける (= 宛先 account の token + 台帳 + 版の差分 + 共有通知の照合)
+
+共同作業者が Drive folder を自分の account 宛てに共有し、 以後も資料が足されていくときの配線。 一回だけ取るなら上の [一括 download](#drive-folder-bulk-download) で足りる。 読み続けるなら次の 4 点を揃える。
+
+1. **token は共有を受けた account で発行する**。 共有は宛先 account からしか見えない。 別 account の token で `files.get` すると 403 ではなく **404 (File not found)** が返り、 「folder が無い」 と見分けがつかない (実測)。 404 を見たら不在と結論する前に、 共有通知の宛先と token の account を突き合わせる。 読むだけなら scope は `drive.readonly`。 発行の直後に `about.get` の `user.emailAddress` を照合し、 違う account で承認した token は保存しない (下の §OAuth token のアカウント検証 の Drive 版)。
+2. **読みに行く folder を台帳に書く**。 folder ID・宛先 account・写しの置き場・関係する project を 1 entry にする。 folder ID と共有者名は通知メールから取り、 推測で埋めない。
+3. **版の差分で取る**。 再帰 listing の `id` と `modifiedTime` を、 前回取った版の記録 (写しの横に置く state file) と比べ、 新規と更新だけを落とす。 Drive から消えた file は写しから消さず、 件数だけ知らせる (消すかは人が決める)。 写しも state もマシンごとに持つ。
+4. **知らせる面と取る面を分ける**。 session 開始時の通知は listing だけにし (速い)、 download は明示的な sync で行う (大きな file で hook の時間制限に当たらない)。 未承認の account は、 承認されるまで通知に出し続ける。 これが人が 1 回やる操作の carrier を兼ねる。
+
+**台帳に無い共有を拾う**: Drive の共有通知メール (送信元は Google の共有通知用の noreply アドレス。 手元の通知 1 通から取って query に使う) の本文から `drive/folders/<id>` / `file/d/<id>` / `docs.google.com/<type>/d/<id>` を抜き、 台帳にも無視リストにも無い id を知らせる。 共有 1 回に通知 1 通なので、 「共有に気づいた session が終わると誰も読みに行かない」 状態をこれで塞げる。
+
+**写しは git に入れない**: 第三者の資料 (スキャン・原稿) を commit しない。 project の `.gitignore` に写しの dir を入れてから台帳に足す。
+
+**hook 環境の依存**: 通知 hook は client library の無い python でも動くように、 REST を標準ライブラリで叩く (token の refresh → `files.list` → `alt=media` / `export`)。 refresh した access token は credential file に書き戻さない (下の §Token refresh の運用)。
 
 ## <a id="gmail-bulk-cleanup"></a>Gmail 一括掃除 (= batchModify TRASH + 送信者別集計 + 本文入り通知の salvage)
 
