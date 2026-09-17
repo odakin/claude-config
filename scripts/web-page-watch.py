@@ -14,22 +14,34 @@ docs/convention-design-principles.md#human-memory-not-a-carrier)。
     end      本文の終わりの目印 (任意)。 start より後で最初にこの文字列を含む行の手前まで
              (目印の外 = ナビ・関連リンク・フッタの変化では知らせない)
     until    YYYY-MM-DD (任意)。 この日を過ぎたら読まない (= 期限つきの監視を台帳に置き忘れない)
-    note     変わったときに次にやること (任意。 🔔 行に添える)
+    action   変わったら**今すぐ何をするか** (任意だが実質必須)。 「変わった」 だけでは人は動かないので、
+             通知・ダイアログ・dashboard の行はすべて「→ 今すぐ: <action>」 を載せる
+    urgent   true なら 🚨 で出し、 --alert (消えないダイアログ) と --on-change (スマホ等) の対象にする。
+             false / 省略は 🔔 = バナー通知と行だけ
+    signals  決め手の文言 (任意)。 [{"gone": "受付を中止しています", "say": "受付再開の可能性が高い"},
+             {"appears": "補正予算", "say": "補正予算案が載った"}] のように、 確認済みの本文と最新の本文を比べて
+             消えた / 現れた文言があれば行と通知に「(「…」 が消えた = <say>)」 と出す
+    note     補足 (任意。 案件の TODO id など。 行の末尾に [..] で添える)
   state      state file の path (任意。 既定 = ~/.local/state/web-page-watch/<台帳の名前>.json)
   stale_hours  最後の巡回からこの時間を超えたら ⏸️ を出す (任意。 既定 36)
 
 使い方:
   web-page-watch.py --ledger L              全 target を読み、 変化を state に記録して行を出す (定期実行用)
-  web-page-watch.py --ledger L --notify     同上 + 新しい本文を見つけたら macOS 通知
+  web-page-watch.py --ledger L --notify     同上 + 新しい本文を見つけたら macOS 通知 (バナー = 数秒で消える)
+  web-page-watch.py --ledger L --alert      同上 + urgent の target は押すまで消えない警告ダイアログ (バナーだけでは見落とす)
+  web-page-watch.py --ledger L --on-change CMD   urgent の target に新しい本文を見つけたら CMD を実行し、 引数の末尾に
+                                            通知文 (変わった + 決め手 + 今すぐやること) を 1 つずつ足す
+                                            (= スマホへの通知など、 別の経路を呼び出し側が差し込む口)
   web-page-watch.py --ledger L --surface    network に出ず、 state から未確認の変化と異常だけを出す (SessionStart 用)
   web-page-watch.py --ledger L --show ID    未確認の変化の差分を出す
   web-page-watch.py --ledger L --ack ID     確認済みにする (今の本文を新しい基準にする)。 ID = all で全部
   web-page-watch.py --selftest              合成データだけで検査する (network に出ない)
 
 出す行 (知らせることが無ければ無出力):
-  🔔 <label> が変わった (<最初に気づいた時刻>) → <note> / 差分 = --show <id>、 確認したら --ack <id>
+  🚨 / 🔔 <label> が変わった (<決め手>) → 今すぐ: <action> [<note>] (<最初に気づいた時刻>) / 差分 = --show <id>、 済んだら --ack <id>
   ⚠️ <label> を N 回続けて読めていない (<理由>)   … 3 回目から。 目印が見つからない (= ページの作りが変わった) は 1 回目から
   ⏸️ 最後の巡回が H 時間前 / まだ一度も巡回していない   … --surface だけ。 期限内の target があるときだけ
+  ⚠️ 変化を知らせる追加の経路 (--on-change) が失敗した   … 次に成功するまで出続ける (= スマホ等に届かなかったことを黙らせない)
   ⌛ 期限 (until) を過ぎた target N 件 → 台帳から外す
 
 state: target ごとに baseline (確認済みの本文) と latest (最後に読めた本文)。 初めて読んだ本文は基準にするだけで
@@ -221,9 +233,9 @@ def report(ledger: dict, state: dict, *, surface: bool, prog: str, ledger_arg: s
     for t in active:
         s = st_targets.get(t["id"]) or {}
         if s.get("changed_at") and s.get("latest_hash") != s.get("baseline_hash"):
-            note = f" → {t['note']}" if t.get("note") else ""
-            out.append(f"🔔 {label_of(t)} が変わった ({s['changed_at'][:16].replace('T', ' ')}){note}"
-                       f" / 差分 = {prog} --ledger {ledger_arg} --show {t['id']}、 確認したら --ack {t['id']}")
+            mark = "🚨" if t.get("urgent") else "🔔"
+            out.append(f"{mark} {message_for(t, s)} ({s['changed_at'][:16].replace('T', ' ')})"
+                       f" / 差分 = {prog} --ledger {ledger_arg} --show {t['id']}、 済んだら --ack {t['id']}")
         errs = s.get("errors", 0)
         if errs and (s.get("marker_missing") or errs >= ERROR_THRESHOLD):
             out.append(f"⚠️ {label_of(t)} を {errs} 回続けて読めていない ({s.get('last_error')}) — {t['url']}")
@@ -234,6 +246,10 @@ def report(ledger: dict, state: dict, *, surface: bool, prog: str, ledger_arg: s
             out.append(f"⏸️ ページの見張りがまだ一度も巡回していない (定期実行が未配備の疑い。 台帳 = {ledger_arg})")
         elif age > stale:
             out.append(f"⏸️ ページの見張りの最後の巡回が {age:.0f} 時間前 (定期実行が止まっている疑い。 台帳 = {ledger_arg})")
+    oce = state.get("on_change_error")
+    if oce and oce.get("error"):
+        out.append(f"⚠️ 変化を知らせる追加の経路 (--on-change) が {str(oce.get('at'))[:16].replace('T', ' ')} に失敗した"
+                   f" = スマホ等に届いていない可能性 ({oce['error']})")
     if gone:
         out.append(f"⌛ 期限 (until) を過ぎた見張り {len(gone)} 件 ({', '.join(t['id'] for t in gone)}) → 台帳から外す")
     return out
@@ -263,11 +279,42 @@ def ack(ledger: dict, state: dict, which: str) -> list[str]:
     return done
 
 
-def notify_macos(targets: list[dict]) -> None:
-    if sys.platform != "darwin" or not targets:
+def fired_signals(target: dict, s: dict) -> list[str]:
+    """確認済みの本文 (baseline) と最新の本文 (latest) を比べ、 決め手の文言の消失・出現を説明文にする。"""
+    old = "\n".join(s.get("baseline") or [])
+    new = "\n".join(s.get("latest") or [])
+    out = []
+    for sig in target.get("signals") or []:
+        say = f" = {sig['say']}" if sig.get("say") else ""
+        if sig.get("gone") and sig["gone"] in old and sig["gone"] not in new:
+            out.append(f"「{sig['gone']}」 が消えた{say}")
+        if sig.get("appears") and sig["appears"] not in old and sig["appears"] in new:
+            out.append(f"「{sig['appears']}」 が出た{say}")
+    return out
+
+
+def message_for(target: dict, s: dict) -> str:
+    """通知・ダイアログ・行に共通の文: 何が変わったか + 決め手 + 今すぐやること + 補足。"""
+    msg = f"{label_of(target)} が変わった"
+    sigs = fired_signals(target, s)
+    if sigs:
+        msg += f" ({' / '.join(sigs)})"
+    if target.get("action"):
+        msg += f" → 今すぐ: {target['action']}"
+    if target.get("note"):
+        msg += f" [{target['note']}]"
+    return msg
+
+
+def notify_macos(messages: list[str], alert: bool = False) -> None:
+    """バナー通知 (数秒で消える) を出す。 alert=True なら押すまで消えない警告ダイアログも出す。
+
+    ダイアログは待たずに切り離して起動する (= 定期実行を止めない。 人が居なくても画面に残り続ける)。
+    """
+    if sys.platform != "darwin" or not messages:
         return
-    title = "ページが更新された"
-    msg = " / ".join(label_of(t) for t in targets)
+    title = "ページが更新された — 今すぐ対応"
+    msg = " / ".join(messages)
     script = ['on run argv', 'display notification (item 2 of argv) with title (item 1 of argv) sound name "Glass"',
               'end run']
     cmd = ["osascript"] + sum((["-e", ln] for ln in script), []) + [title, msg]
@@ -275,10 +322,40 @@ def notify_macos(targets: list[dict]) -> None:
         subprocess.run(cmd, check=False, timeout=20, capture_output=True)
     except (OSError, subprocess.SubprocessError):
         pass
+    if not alert:
+        return
+    body = "\n\n".join(messages)
+    ascript = ['on run argv', 'activate',
+               'display alert (item 1 of argv) message (item 2 of argv) as critical buttons {"確認した"}',
+               'end run']
+    acmd = ["osascript"] + sum((["-e", ln] for ln in ascript), []) + [title, body]
+    try:
+        subprocess.Popen(acmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        pass
 
 
-def main(argv: list[str] | None = None, *, fetch=fetch_url, notifier=notify_macos, now: str | None = None,
-         prog: str | None = None) -> int:
+def run_on_change(command: str, messages: list[str], timeout: int = 300) -> str | None:
+    """知らせる文があれば command を実行する (引数の末尾に通知文を 1 つずつ足す)。
+
+    別の経路 (スマホへの通知など) を呼び出し側が差し込む口。 失敗しても巡回は続ける。
+    """
+    if not command or not messages:
+        return None
+    import shlex  # noqa: PLC0415
+    try:
+        r = subprocess.run(shlex.split(command) + list(messages), check=False, timeout=timeout,
+                           capture_output=True, text=True)
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        return f"⚠️ web-page-watch: --on-change を実行できない ({type(e).__name__}: {e})"
+    if r.returncode != 0:
+        tail = (r.stderr or r.stdout or "").strip().splitlines()[-1:] or [""]
+        return f"⚠️ web-page-watch: --on-change が失敗 (exit {r.returncode}: {tail[0][:200]})"
+    return None
+
+
+def main(argv: list[str] | None = None, *, fetch=fetch_url, notifier=notify_macos, on_change=run_on_change,
+         now: str | None = None, prog: str | None = None) -> int:
     ap = argparse.ArgumentParser(prog=prog, description=__doc__.splitlines()[0])
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--surface", action="store_true", help="network に出ず state だけから出す")
@@ -287,6 +364,8 @@ def main(argv: list[str] | None = None, *, fetch=fetch_url, notifier=notify_maco
     g.add_argument("--selftest", action="store_true")
     ap.add_argument("--ledger", help="台帳 (YAML / JSON)")
     ap.add_argument("--notify", action="store_true", help="新しい本文を見つけたら macOS 通知")
+    ap.add_argument("--alert", action="store_true", help="--notify に加えて、 押すまで消えない警告ダイアログを出す")
+    ap.add_argument("--on-change", metavar="CMD", help="新しい本文を見つけたら CMD を実行 (引数の末尾に「label → note」)")
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
@@ -314,12 +393,22 @@ def main(argv: list[str] | None = None, *, fetch=fetch_url, notifier=notify_maco
         return 0
     if not a.surface:
         fresh = check(ledger, state, fetch=fetch, now=now)
+        st_targets = state.get("targets") or {}
+        all_msgs = [message_for(t, st_targets.get(t["id"]) or {}) for t in fresh]
+        urgent_msgs = [message_for(t, st_targets.get(t["id"]) or {}) for t in fresh if t.get("urgent")]
+        if a.notify or a.alert:
+            notifier(all_msgs, alert=bool(a.alert and urgent_msgs))
+        if a.on_change and urgent_msgs:
+            err = on_change(a.on_change, urgent_msgs)
+            # 追加の経路の失敗は log だけでなく state に残し、 surface / dashboard に出し続ける (= 黙って落ちない)。
+            # 次に成功した時点で消える
+            state["on_change_error"] = {"at": now or now_iso(), "error": err} if err else None
+            if err:
+                print(err)
         try:
             write_state(sp, state)
         except OSError as e:
             print(f"⚠️ web-page-watch: state を書けない ({sp}: {e})")
-        if a.notify:
-            notifier(fresh)
     lines = report(ledger, state, surface=a.surface, prog=prog, ledger_arg=a.ledger, now=now)
     if lines:
         print("\n".join(lines))
@@ -352,10 +441,14 @@ def selftest() -> int:  # noqa: PLR0915
     with tempfile.TemporaryDirectory() as d:
         led = Path(d) / "watch.json"
         led.write_text(json.dumps({"state": str(Path(d) / "s.json"), "targets": [
-            {"id": "a", "url": "u:a", "label": "ページA", "start": "更新日", "end": "お問い合わせ", "note": "申請する"},
+            {"id": "a", "url": "u:a", "label": "ページA", "start": "更新日", "end": "お問い合わせ",
+             "action": "申請する", "urgent": True, "note": "TODO-1",
+             "signals": [{"gone": "受付を中止しています", "say": "受付再開の可能性"},
+                         {"appears": "存在しない文言", "say": "出ない"}]},
+            {"id": "b", "url": "u:b", "label": "ページB", "action": "日程を見る"},
             {"id": "old", "url": "u:old", "until": "2026-01-01"},
         ]}), encoding="utf-8")
-        pages = {"u:a": page("<p>受付を中止しています。</p>")}
+        pages = {"u:a": page("<p>受付を中止しています。</p>"), "u:b": "<p>日程 10/9</p>"}
         fetched: list[str] = []
         notified: list[list[str]] = []
 
@@ -366,49 +459,73 @@ def selftest() -> int:  # noqa: PLR0915
                 raise v
             return v
 
-        def notifier(ts: list[dict]) -> None:
-            if ts:
-                notified.append([t["id"] for t in ts])
+        alerts: list[bool] = []
+        hooked: list[tuple[str, list[str]]] = []
+
+        def notifier(msgs: list[str], alert: bool = False) -> None:
+            if msgs:
+                notified.append(list(msgs))
+                alerts.append(alert)
+
+        def on_change(cmd: str, msgs: list[str]) -> str | None:
+            if not msgs:
+                return None
+            hooked.append((cmd, list(msgs)))
+            return "⚠️ 差し込み失敗" if cmd == "broken" else None
+
+        def changed(o: str) -> bool:
+            return "🚨" in o or "🔔" in o
 
         def run(*args: str, when: str = "2026-10-01T12:00:00+09:00") -> str:
             import contextlib
             import io
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                main(["--ledger", str(led), *args], fetch=fetch, notifier=notifier, now=when, prog="wpw")
+                main(["--ledger", str(led), *args], fetch=fetch, notifier=notifier, on_change=on_change,
+                     now=when, prog="wpw")
             return buf.getvalue()
 
         out = run("--notify")
-        ok("🔔" not in out and not notified, "first read = baseline only")
+        ok(not changed(out) and not notified, "first read = baseline only")
         ok("u:old" not in fetched and "⌛" in out, "expired target skipped and reported")
         ok("⏸️" not in run("--surface"), "fresh run not stale")
 
         pages["u:a"] = page("<p>受付を中止しています。</p>", nav="ナビ変更", foot="フッタ変更")
         out = run("--notify")
-        ok("🔔" not in out and not notified, "change outside markers ignored")
+        ok(not changed(out) and not notified, "change outside markers ignored")
 
         pages["u:a"] = page("<p>申請受付を再開しました。</p>")
-        out = run("--notify")
-        ok("🔔 ページA が変わった" in out and "→ 申請する" in out and notified == [["a"]], "change inside markers notifies")
-        run("--notify")
-        ok(notified == [["a"]], "same new body not re-notified")
-        ok("🔔" in run("--surface"), "pending change persists in surface")
+        out = run("--notify", "--alert", "--on-change", "push-cmd")
+        ok("🚨 ページA が変わった (「受付を中止しています」 が消えた = 受付再開の可能性) → 今すぐ: 申請する [TODO-1]" in out and len(notified) == 1, "urgent change line = signal + action + note")
+        ok(alerts == [True], "--alert raises dialog for urgent target")
+        ok(hooked == [("push-cmd", ["ページA が変わった (「受付を中止しています」 が消えた = 受付再開の可能性) → 今すぐ: 申請する [TODO-1]"])], "--on-change gets the full message")
+        ok("出ない" not in out, "signal that did not fire is not shown")
+        run("--notify", "--alert", "--on-change", "push-cmd")
+        ok(len(notified) == 1 and len(hooked) == 1, "same new body not re-notified nor re-hooked")
+        ok("🚨" in run("--surface"), "pending change persists in surface")
         diff = run("--show", "a")
         ok("-受付を中止しています。" in diff and "+申請受付を再開しました。" in diff, "show gives diff")
 
         pages["u:a"] = page("<p>申請受付を再開しました。残り 5 件</p>")
-        run("--notify")
-        ok(notified == [["a"], ["a"]], "further change before ack re-notifies")
+        out = run("--notify", "--on-change", "broken")
+        ok(len(notified) == 2, "further change before ack re-notifies")
+        ok("⚠️ 差し込み失敗" in out, "on-change failure printed")
+        ok("追加の経路 (--on-change) が" in run("--surface"), "on-change failure persists in surface")
 
         pages["u:a"] = page("<p>受付を中止しています。</p>")
         out = run("--notify")
-        ok("🔔" not in out, "reverting to baseline clears pending")
+        ok(not changed(out), "reverting to baseline clears pending")
 
         pages["u:a"] = page("<p>申請受付を再開しました。</p>")
         run()
-        ok("確認済みにした: a" in run("--ack", "a") and "🔔" not in run("--surface"), "ack clears")
+        ok("確認済みにした: a" in run("--ack", "a") and not changed(run("--surface")), "ack clears")
         run()
-        ok("🔔" not in run("--surface"), "acked body is new baseline")
+        ok(not changed(run("--surface")), "acked body is new baseline")
+        ok("追加の経路" in run("--surface"), "on-change failure survives ack")
+        pages["u:a"] = page("<p>申請受付を再開しました。予算の残りあり</p>")
+        run("--notify", "--on-change", "push-cmd")
+        ok("追加の経路" not in run("--surface"), "successful on-change clears the failure")
+        run("--ack", "a")
 
         pages["u:a"] = OSError("timeout")
         run()
@@ -428,6 +545,13 @@ def selftest() -> int:  # noqa: PLR0915
         ok("⏸️" in out and "時間前" in out, "stale last_run warns in surface")
         ok("⏸️" not in run(when="2026-10-05T12:00:00+09:00"), "stale line only in surface")
 
+        n_before, h_before = len(notified), len(hooked)
+        pages["u:b"] = "<p>日程 10/13</p>"
+        out = run("--notify", "--alert", "--on-change", "push-cmd", when="2026-10-05T13:00:00+09:00")
+        ok("🔔 ページB が変わった → 今すぐ: 日程を見る" in out, "non-urgent change = 🔔 with action")
+        ok(len(notified) == n_before + 1 and alerts[-1] is False and len(hooked) == h_before,
+           "non-urgent: banner only, no dialog, no on-change")
+
         led2 = Path(d) / "never.json"
         led2.write_text(json.dumps({"state": str(Path(d) / "s2.json"),
                                     "targets": [{"id": "b", "url": "u:b"}]}), encoding="utf-8")
@@ -438,6 +562,14 @@ def selftest() -> int:  # noqa: PLR0915
             main(["--ledger", str(led2), "--surface"], fetch=fetch, now="2026-10-01T12:00:00+09:00", prog="wpw")
         ok("まだ一度も巡回していない" in buf.getvalue(), "never-run surface warns")
         ok(not (Path(d) / "s2.json").exists(), "surface does not write state")
+
+    # run_on_change: 実コマンドの成否 (失敗は ⚠️ 1 行、 対象が無ければ呼ばない)
+    t1 = ["X が変わった → 今すぐ: N"]
+    ok(run_on_change("true", t1) is None, "on-change success is quiet")
+    err = run_on_change("false", t1)
+    ok(bool(err) and "exit 1" in err, "on-change failure reported")
+    ok(run_on_change("false", []) is None, "on-change not called without changes")
+    ok("実行できない" in (run_on_change("/nonexistent/cmd-xyz", t1) or ""), "on-change missing command reported")
 
     # 実際の state の既定の置き場は台帳ごとに分かれる
     ok(default_state_path(Path("/x/foo.yaml")).name == "foo.json", "default state path per ledger")
