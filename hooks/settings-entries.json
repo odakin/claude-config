@@ -206,6 +206,15 @@
           "command": "~/.claude/hooks/bash-search-zero-result-nudge.sh"
         }
       ]
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/chat-path-base-nudge.sh"
+        }
+      ]
     }
   ],
   "Stop": [

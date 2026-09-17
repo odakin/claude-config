@@ -10,6 +10,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[bash-search-zero-result-nudge.test.sh](bash-search-zero-result-nudge.test.sh)** — logic + incident-reproduction selftest
 - **[chat-file-ref-enforce.sh](chat-file-ref-enforce.sh)** — Stop: 最終メッセージの file 参照 (link / path に見える inline code) が desktop の右パネルで開けない形なら、 正しい path を添えて 1 回だけ書き直させる
 - **[chat-file-ref-enforce.test.sh](chat-file-ref-enforce.test.sh)** — logic + incident-replay selftest
+- **[chat-path-base-nudge.sh](chat-path-base-nudge.sh)** — PostToolUse(Bash): 作業ディレクトリが session を始めたフォルダから離れたとき、 chat の file 参照 (link の href・inline code の dir/file.ext) を右パネルが開く基準は変わらないことを、 session × 作業ディレクトリごとに 1 回だけ知らせる
+- **[chat-path-base-nudge.test.sh](chat-path-base-nudge.test.sh)** — logic selftest
 - **[currentdate-anchor.py](currentdate-anchor.py)** — session start temporal anchor
 - **[expensive-tmp-guard.sh](expensive-tmp-guard.sh)** — PreToolUse(Bash): Audiveris / oemer / ML training 系の -output /tmp/ パターンを検出して `permissionDecision: ask`
 - **[expensive-tmp-guard.test.sh](expensive-tmp-guard.test.sh)** — expensive-tmp-guard.sh の self-test (hermetic)

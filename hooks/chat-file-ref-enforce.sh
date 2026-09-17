@@ -10,11 +10,14 @@
 #
 # 述語 (= scripts/lib/chat_file_refs.py の find_broken):
 #   fire = session の frontend が右パネルを持つ (transcript の entrypoint が claude-desktop / claude-desktop-3p / claude-vscode)
-#        ∧ 最終発話の markdown link の href か、 `/` を含み拡張子で終わる inline code が
-#          「基準フォルダに連結すると無い (か、 フォルダの外に出る)」
-#        ∧ 「transcript に出た cwd か基準フォルダ直下の dir に連結すると在る」
+#        ∧ 最終発話の markdown link の href か、 app が link として描く形の inline code (app の式を写したもの) が
+#          (a) 「基準フォルダに連結すると無い (か、 フォルダの外に出る)」
+#              ∧ 「transcript に出た cwd か基準フォルダ直下の dir に連結すると在る」
+#          (b) 「基準フォルダに連結すると file が在るが、 直近の cwd (≠ 基準) にも同じ相対 path の別の file が在る」
+#              (= 意図と違う file が開く。 例: 親フォルダと repo の両方に在る CLAUDE.md を repo の中で書いた)
 #   除外 = URL / anchor だけの href / 絶対 path / ~/ / fenced code block の中 (list・引用の中の fence を含む) /
-#          link の label の中の inline code (app は別の link にしない = 押すと href が開く) / どこにも無い path。
+#          link の label の中の inline code (app は別の link にしない = 押すと href が開く) / どこにも無い path /
+#          基準フォルダが git repo で、 path の末尾一致が 1 件に決まる (app の本体がそれを開く)。
 #   基準フォルダ = transcript の最初の environment snapshot の workingDirectory (古い build の transcript には
 #          snapshot が無いので、 最初に現れた cwd)。
 #   校正 (実測、 desktop transcript の最終発話): 発火は約 8% の turn、 link を含むのは約 1%。
@@ -31,11 +34,11 @@
 #   - 基準フォルダの外の file は、 絶対 path に直しても右パネルでは開けないことがある (#chat-link-rendering-scope)。
 #   - どこにも実在しない path の inline code も押せる (開けない) リンクになるが、 正しい path を示せないので拾わない
 #     (= 例示の path。 fenced block に入れるよう規約で扱う)。
-#   - app の本体は、 基準フォルダが git repo なら path の末尾一致 (git ls-files) で file を探し、 worktree に入った
-#     session では worktree の path を先に試す。 この hook はどちらも写していない = git repo の直下や worktree で
-#     始めた session では、 本体が開ける参照を「開けない」 と言うことがある (誤検出の側、 block は 1 回で済む)。
-#   - 基準フォルダに同名の file が在ると、 意図と違う file が開いても検出できない (例: 親フォルダと repo の両方に
-#     在る CLAUDE.md を、 repo の中からの path で書いた場合)。
+#   - app の本体の git 末尾一致は第 1 段 (tracked → untracked で 1 件) だけ写している。 複数一致のときの本体の
+#     絞り込み (変更中の file に近いものを選ぶ) は写さず、 開けない側に数える。 worktree に入った session で本体が
+#     worktree の path を先に試す挙動は写していない = その session では本体が開ける参照を「開けない」 と言うことがある。
+#   - app の解決規則は版で変わる。 読んだ版と読み方 = conventions/claude-app-bundle-reading.md。
+#   事前の知らせ (cd の直後に基準を 1 回伝える) = hooks/chat-path-base-nudge.sh。 本 hook はその後ろの網。
 #   test = hooks/chat-file-ref-enforce.test.sh
 
 set -uo pipefail

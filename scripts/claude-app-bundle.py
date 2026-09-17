@@ -7,6 +7,8 @@
   claude-app-bundle.py grep FRHpsQyd2G                    key や語を画面の bundle から探す (--where asar|engine も可)
   claude-app-bundle.py resolve cd2efac6e-DdNhqOhn.js Se   minified 名がどの chunk のどの関数かを辿る
   claude-app-bundle.py asar-ls index.chunk                app.asar の中の file 一覧 (部分一致で絞る)
+  claude-app-bundle.py slice index.chunk-X.js --where asar --find "async someFunction(" --len 3000
+                                                          関数を丸ごと読む (grep が出した位置からなら --at <offset>)
   claude-app-bundle.py --selftest
 
 なぜ grep でなく本 script か: bundle は 1 行が MB 級の minified JS で、 `grep -o '.{0,80}X.{0,200}'` は
@@ -125,8 +127,37 @@ def grep_sources(where: str, app: str, engine: str | None):
                 yield "engine:" + label, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
 
 
+def cmd_slice(args) -> int:
+    """名前が一致する source 1 本から、 位置 (--at) か語 (--find、 --nth 番目) 以降を --len bytes 切り出す。
+    grep は前後の数百 bytes しか出さないので、 関数を丸ごと読むときはこちら。"""
+    hits = [(n, b) for n, b in grep_sources(args.where, args.app, args.engine)
+            if args.where == "engine" or n.endswith(args.name)]
+    if len(hits) != 1:
+        print(f"source が 1 本に定まらない ({len(hits)} 本): {args.name}", file=sys.stderr)
+        return 2
+    name, buf = hits[0]
+    start = args.at
+    if args.find is not None:
+        start = -1
+        for _ in range(args.nth + 1):
+            start = buf.find(args.find.encode(), start + 1)
+            if start < 0:
+                print(f"見つからない: {args.find!r} ({name})", file=sys.stderr)
+                return 1
+    if start is None:
+        print("--at か --find のどちらかを指定する", file=sys.stderr)
+        return 2
+    print(f"{name}:{start}")
+    print(bytes(buf[start:start + args.len]).decode("utf-8", "replace"))
+    return 0
+
+
 def cmd_grep(args) -> int:
-    rx = re.compile(args.pattern.encode())
+    try:
+        rx = re.compile(args.pattern.encode())
+    except re.error as e:
+        print(f"正規表現が不正: {e} (括弧などの記号そのものを探すなら \\ で escape する)", file=sys.stderr)
+        return 2
     n = 0
     for name, buf in grep_sources(args.where, args.app, args.engine):
         per = 0
@@ -221,9 +252,10 @@ def resolve(assets: str, chunk: str, name: str, depth: int = 4) -> list[str]:
 
 
 def cmd_resolve(args) -> int:
-    for line in resolve(paths(args.app)["assets"], args.chunk, args.name):
+    lines = resolve(paths(args.app)["assets"], args.chunk, args.name)
+    for line in lines:
         print(line)
-    return 0
+    return 1 if not lines or "見つからない" in lines[-1] else 0
 
 
 def cmd_asar_ls(args) -> int:
@@ -300,6 +332,21 @@ def selftest() -> int:
         got = [n for n, buf in grep_sources("engine", app, eng) if re.search(rb"claude-desktop", buf)]
         check("grep --where engine: binary を mmap で探す", len(got) == 1)
 
+        import contextlib
+        import io
+        ns = dict(app=app, engine=None, where="asar", name="main.js", at=None, find="originCwd", nth=0, len=12)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = cmd_slice(argparse.Namespace(**ns))
+        check("slice: app.asar の中の file を語の位置から切り出す", rc == 0 and out.getvalue().endswith("originCwd:f\n"))
+        with contextlib.redirect_stderr(io.StringIO()):
+            check("slice: 語が無ければ exit 1", cmd_slice(argparse.Namespace(**{**ns, "find": "NOPE"})) == 1)
+            check("grep: 不正な正規表現は traceback でなく exit 2",
+                  cmd_grep(argparse.Namespace(**{**vars(a), "pattern": "("})) == 2)
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = cmd_resolve(argparse.Namespace(app=app, chunk="nope.js", name="Se"))
+        check("resolve: 見つからなければ exit 1", rc == 1)
+
     print("ALL PASS" if not fails else f"{len(fails)} FAIL")
     return 1 if fails else 0
 
@@ -333,8 +380,20 @@ def main(argv=None) -> int:
     s = sub.add_parser("asar-ls")
     s.add_argument("filter", nargs="?", default="")
     s.set_defaults(fn=cmd_asar_ls)
+    s = sub.add_parser("slice")
+    s.add_argument("name", help="source の名前の末尾 (chunk の file 名 / app.asar の中の path)。 --where engine では無視")
+    s.add_argument("--where", choices=["renderer", "asar", "engine"], default="renderer")
+    s.add_argument("--at", type=int, default=None, help="grep が出した位置 (bytes)")
+    s.add_argument("--find", default=None, help="この語が現れる位置から")
+    s.add_argument("--nth", type=int, default=0, help="--find の何番目の出現か (0 始まり)")
+    s.add_argument("--len", type=int, default=2000)
+    s.set_defaults(fn=cmd_slice)
     args = ap.parse_args(argv)
-    return args.fn(args)
+    try:
+        return args.fn(args)
+    except FileNotFoundError as e:
+        print(f"app の file が無い: {e.filename} (--app で Claude.app の場所を指定する)", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

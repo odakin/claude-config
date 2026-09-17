@@ -7,6 +7,9 @@
 # §B 誤検出の regression: 基準フォルダからの正しい path / 絶対 path / ~/ / URL / anchor / fenced block の中 /
 #     どこにも無い path / 区切りの無い名前 / 追加フォルダの中へ ../ で出る path / CLI の session / 途中の text だけ。
 #     B11-B14 = 検収で見つけた誤検出 (link の label の inline code / list・引用の中の fence) と scheme 判定の回帰。
+#     B15-B16 = 同名 file が同じ実体 (symlink) / app が link にしない文字を含む inline code。
+# §A' 検収の追補: 行頭の inline な 3 連 backtick を fence と取り違えない / 基準フォルダの同名の別 file が開く形。
+# §D 基準フォルダが git repo: app の path の末尾一致 (1 件なら開く = silent、 複数なら fire、 untracked も見る)。
 # §C fail-open と配線: stop_hook_active / transcript 不在 / 空入力 / 部品の不在・例外 = 沈黙。 symlink 経由で部品を見つける。
 
 set -uo pipefail
@@ -24,6 +27,9 @@ ROOT="$TMP/root"
 mkdir -p "$ROOT/book/drafts" "$ROOT/book/notes" "$ROOT/tools/scripts" "$TMP/extra"
 : > "$ROOT/book/drafts/intro.md"; : > "$ROOT/book/notes/design.md"; : > "$ROOT/tools/scripts/run.py"
 : > "$ROOT/CLAUDE.md"; : > "$TMP/extra/memo.md"; : > "$ROOT/book/SESSION.md"
+echo "book の指示書" > "$ROOT/book/CLAUDE.md"          # A10: 基準フォルダの CLAUDE.md とは別の file
+: > "$ROOT/book/LINKED.md"; ln -s "$ROOT/book/LINKED.md" "$ROOT/LINKED.md"   # B15: 同じ実体
+mkdir -p "$ROOT/book/pkg/@scope"; : > "$ROOT/book/pkg/@scope/index.js"       # B16
 
 # mktranscript path entrypoint root additional_json final_text [mid_text]
 #   環境 snapshot (root) → user → assistant tool_use (cwd = root/book に cd した後) → tool_result → final
@@ -108,6 +114,30 @@ case_ "B13: 引用 > の中の fence = silent" 0 "> ${BT}${BT}${BT}
 > [x](drafts/intro.md)
 > ${BT}${BT}${BT}"
 case_ "B14: mailto / tel は scheme のまま = silent" 0 "[m](mailto:a@example.com) [t](tel:123)"
+case_ "B15: 基準と cwd の同名 file が同じ実体 (symlink) = silent" 0 "[LINKED.md](LINKED.md)"
+case_ "B16: app が link にしない文字 (@) を含む inline code = silent" 0 "${BT}pkg/@scope/index.js${BT}"
+
+echo "=== §A' 検収の追補 (見逃し・意図と違う file) ==="
+case_ "A9: 行頭の inline な 3 連 backtick は fence ではない = 後ろの link を見逃さない" 1 \
+  "${BT}${BT}${BT}code${BT}${BT}${BT} は例です。
+
+本物: [x](drafts/intro.md)" "book/drafts/intro.md"
+case_ "A10: 基準フォルダの同名の別 file が開く (repo の中で [CLAUDE.md](CLAUDE.md)) = fire" 1 \
+  "[CLAUDE.md](CLAUDE.md)" "同名の別 file"
+
+echo "=== §D 基準フォルダが git repo (app は path の末尾一致で探す) ==="
+if command -v git >/dev/null 2>&1; then
+  GROOT="$TMP/groot"
+  mkdir -p "$GROOT/book/drafts" "$GROOT/a/notes" "$GROOT/b/notes"
+  : > "$GROOT/book/drafts/intro.md"; : > "$GROOT/a/notes/dup.md"; : > "$GROOT/b/notes/dup.md"
+  git init -q "$GROOT" && git -C "$GROOT" add -A
+  : > "$GROOT/book/drafts/new.md"   # untracked
+  case_ "D1: tracked の末尾一致が 1 件 = app が開く = silent" 0 "[x](drafts/intro.md)" "" "claude-desktop" "$GROOT"
+  case_ "D2: 末尾一致が 2 件 = app の絞り込みは写さない = fire" 1 "[x](notes/dup.md)" "a/notes/dup.md" "claude-desktop" "$GROOT"
+  case_ "D3: tracked に無く untracked の末尾一致が 1 件 = silent" 0 "${BT}drafts/new.md${BT}" "" "claude-desktop" "$GROOT"
+else
+  results+=("⏭  §D: git が無いので skip")
+fi
 
 echo "=== §C fail-open と配線 ==="
 mktranscript "$TMP/c.jsonl" claude-desktop "$ROOT" "[]" "[drafts/intro.md](drafts/intro.md)"

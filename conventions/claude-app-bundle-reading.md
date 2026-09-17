@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Claude desktop app (Code タブ等) の画面の挙動・文言の原因を、 docs や推測でなく app 本体で確かめたいとき + hook や規約が desktop の挙動を前提にする前 + 読んだ結論を user の画面で裏付ける実験を頼むとき
 category: harness-core
-summary: Claude desktop app の挙動を本体から確かめる手順。 置き場所 (画面 = Resources/ion-dist の minified JS と i18n JSON / main process = app.asar / 埋込 engine = Application Support の claude-code/<版>) と、 文言 → 翻訳 key → 描画 chunk → minified 名の import/export 付け替えを辿る → main process の順。 道具 = scripts/claude-app-bundle.py (version / i18n / grep --where renderer|asar|engine / resolve / asar-ls)。 落とし穴 = 素の grep -o は MB 級の 1 行で時間切れ・名前は chunk ごとに付け替わる・版依存 (読んだ版を記録)・条件が複数 chunk に散ると読み切れない → user の画面 1 回で判別する実験 (仮説ごとに結果が分かれる入力を並べる + 答えの形を指定)。 実例 = claude-code-permissions.md#chat-link-resolution-base / macos-claude-app-notifications.md#app-notification-model
+summary: Claude desktop app の挙動を本体から確かめる手順。 置き場所 (画面 = Resources/ion-dist の minified JS と i18n JSON / main process = app.asar / 埋込 engine = Application Support の claude-code/<版>) と、 文言 → 翻訳 key → 描画 chunk → minified 名の import/export 付け替えを辿る → main process の順。 道具 = scripts/claude-app-bundle.py (version / i18n / grep --where renderer|asar|engine / resolve / slice / asar-ls)。 落とし穴 = 素の grep -o は MB 級の 1 行で時間切れ・名前は chunk ごとに付け替わる・版依存 (読んだ版を記録)・条件が複数 chunk に散ると読み切れない → user の画面 1 回で判別する実験 (仮説ごとに結果が分かれる入力を並べる + 答えの形を指定)。 実例 = claude-code-permissions.md#chat-link-resolution-base / macos-claude-app-notifications.md#app-notification-model
 -->
 # Claude desktop app の挙動を本体から確かめる
 
@@ -23,7 +23,7 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 1. **文言 → 翻訳 key**: `claude-app-bundle.py i18n "このファイルが見つかりませんでした"` → key と英語原文。
 2. **key → 描画 chunk**: `claude-app-bundle.py grep <key>` → どの chunk のどこで出しているか。 前後を読むと、 その文言を出す条件 (エラーの分類名など) が見える。
 3. **分類を決める関数 → minified 名を辿る**: 条件の関数は別 chunk から `import{Gt as Se}from"./shared-….js"` のように**名前を付け替えて**持ち込まれている。 `claude-app-bundle.py resolve <chunk> <名前>` が import → export → 定義まで辿る (付け替えは段ごとに違うので、 手で grep すると別の関数に着く)。
-4. **値の出どころ → main process**: 画面が受け取る値 (session の作業フォルダ等) を誰が決めるかは `grep <語> --where asar`。
+4. **値の出どころ → main process**: 画面が受け取る値 (session の作業フォルダ等) を誰が決めるかは `grep <語> --where asar`。 関数を丸ごと読むときは `slice <asar の中の file 名> --where asar --find "async <関数名>(" --len 3000` (grep は前後の数百 bytes しか出さない。 grep が出した位置からなら `--at <offset>`)。
 5. **engine 側の定数**: `grep <語> --where engine` (例: 環境変数が取りうる値の一覧)。
 
 ## <a id="pitfalls"></a>落とし穴

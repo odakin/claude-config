@@ -152,6 +152,33 @@ def session_root_and_cwds(entries: list[dict]) -> tuple[str | None, list[str]]:
     return root, list(reversed(order))
 
 
+def session_root_fast(path, max_lines: int = 200) -> str | None:
+    """transcript の先頭だけ読んで session を始めた folder を返す (tool call のたびに走る hook 用 = 全行を読まない)。
+    最初の environment snapshot は先頭の数十行以内に現れる (実測)。 max_lines までに無ければ、 そこまでに見た最初の cwd。"""
+    first_cwd = None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for i, line in enumerate(f):
+                if i >= max_lines:
+                    break
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(e, dict):
+                    continue
+                root = next((s.get("workingDirectory") for s in _env_snapshots([e])
+                             if isinstance(s.get("workingDirectory"), str)), None)
+                if root:
+                    return root
+                c = e.get("cwd")
+                if first_cwd is None and isinstance(c, str) and c:
+                    first_cwd = c
+    except OSError:
+        return None
+    return first_cwd
+
+
 def session_entrypoint(entries: list[dict]) -> str | None:
     for e in entries:
         ep = e.get("entrypoint") if isinstance(e, dict) else None
