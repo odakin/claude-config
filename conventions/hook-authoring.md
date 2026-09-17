@@ -609,7 +609,7 @@ claude-code の hook 関連挙動は **running build によって docs と乖離
 
 ### <a id="new-hook-session-snapshot"></a>9.1 新規 hook は同 session で live 発火しない (= session 開始時 snapshot)
 
-> 🔄 **build 依存 (2026-09-12 追記)**: 本項の snapshot 挙動は 2026-06 の build の実測。 desktop 埋込 2.1.266 では mid-session に足した Stop hook が同じ session で発火した (= 本項末の 🔄)。 「新 session / app 再起動が要る」 と決め打ちせず、 足した直後に下の discriminator で測る。
+> 🔄 **build 依存 (2026-09-12 追記)**: 本項の snapshot 挙動は 2026-06 の build の実測。 desktop 埋込 2.1.266 では mid-session に足した Stop hook が同じ session で発火した (= 本項末の 🔄)。 2.1.271 でも同じ (Edit で settings に足した Stop entry が、 次の turn 終わりで block を返した)。 「新 session / app 再起動が要る」 と決め打ちせず、 足した直後に下の discriminator で測る。
 
 **実測 (2026-06-10、 Opus 4.8 1M harness)**: settings.json に hook を **mid-session で追加しても、 その session 中は発火しない**。 = この build は hook 設定を **session 開始時に snapshot** する。
 

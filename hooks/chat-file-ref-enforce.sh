@@ -9,7 +9,7 @@
 #   inline code の `dir/file.ext` もリンクとして描かれ、 同じ基準で開かれる (観測 n=1)。
 #
 # 述語 (= scripts/lib/chat_file_refs.py の find_broken):
-#   fire = session の frontend が右パネルを持つ (transcript の entrypoint が claude-desktop / claude-vscode)
+#   fire = session の frontend が右パネルを持つ (transcript の entrypoint が claude-desktop / claude-desktop-3p / claude-vscode)
 #        ∧ 最終発話の markdown link の href か、 `/` を含み拡張子で終わる inline code が
 #          「基準フォルダに連結すると無い (か、 フォルダの外に出る)」
 #        ∧ 「transcript に出た cwd か基準フォルダ直下の dir に連結すると在る」

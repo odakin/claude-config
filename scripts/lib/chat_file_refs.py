@@ -186,7 +186,7 @@ def session_entrypoint(entries: list[dict]) -> str | None:
 # ---- hook / 校正の入口 -------------------------------------------------------------
 
 # 右パネルで file を開く frontend。 CLI (端末) には右パネルが無いので対象外。
-PANEL_ENTRYPOINTS = ("claude-desktop", "claude-vscode")
+PANEL_ENTRYPOINTS = ("claude-desktop", "claude-desktop-3p", "claude-vscode")  # 名前は engine の entrypoint 一覧で確認
 DOC = "claude-config/conventions/claude-code-permissions.md#chat-link-resolution-base"
 BT = chr(96)  # backtick
 

@@ -74,6 +74,7 @@ case_ "A3: 行番号・anchor つき href も解決して fire" 1 \
 case_ "A4: repo を基準にした session が ../ で外へ (追加フォルダ無し) = fire (フォルダの外)" 1 \
   "[run](../tools/scripts/run.py)" "フォルダの外" "claude-desktop" "$ROOT/book"
 case_ "A5: VS Code の panel も対象" 1 "[x](drafts/intro.md)" "" "claude-vscode"
+case_ "A6: 第三者版 desktop も対象" 1 "[x](drafts/intro.md)" "" "claude-desktop-3p"
 
 echo "=== §B 誤検出の regression ==="
 case_ "B1: 基準フォルダからの path = silent" 0 "[intro](book/drafts/intro.md) と ${BT}tools/scripts/run.py${BT}"
