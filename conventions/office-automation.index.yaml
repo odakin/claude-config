@@ -709,6 +709,9 @@ sections:
   - id: docx-autofit-grid-overflow
     level: 2
     title: "docx 様式の autofit 表は「1 セルの長い値」 で**別の行**が折り返し、 1 頁様式が 2 頁にはみ出す"
+  - id: docx-form-repeat-pipeline
+    level: 2
+    title: "docx 様式を毎回作り直す pipeline の 4 点 — 雛形から作る・値の置き場を分ける・凍結は値と書式の digest・印は語の位置から"
   - id: print-preflight
     level: 2
     title: "印刷直前の preflight (= 「画面で見えた」 を印刷の保証にしない)"

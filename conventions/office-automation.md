@@ -3562,6 +3562,25 @@ origin: 海外出張願 + 日程表 = overlay 文字が紙で化け → OTF 埋�
 
 origin: 海外出張願 (人事課 docx 様式) — 複数回の変換試行で (1)+(2) に収束、 雛形と y 座標一致を確認してから印刷。
 
+## <a id="docx-form-repeat-pipeline"></a>docx 様式を毎回作り直す pipeline の 4 点 — 雛形から作る・値の置き場を分ける・凍結は値と書式の digest・印は語の位置から
+
+同じ docx 様式を案件ごとに繰り返し作るとき、 手作業の builder を複製していくと次の 4 つが崩れる (実測)。 型として固定する:
+
+1. **毎回、 雛形から作り直す**。 記入済みの docx に書き足すと、 段落を足す欄 (雛形の注記を残して下に値を書く欄) が二重になる。
+   fill は冪等 = 「雛形 + 値 → docx」 にして、 前回の出力を入力にしない。
+2. **値の置き場を 2 つに分け、 両方を記録する**。 表の列幅に影響しない値は docx に、 可変長の短い値と ○ は PDF に重ねる
+   ([#docx-autofit-grid-overflow](#docx-autofit-grid-overflow))。 重ねる側の値は docx と対の sidecar (例: `<stem>.overlay.yaml`) に書き、
+   build はそれを読む = 「何を ○ で囲んだか」 が PDF の中にしか無い状態を作らない。 値に依らない雛形の直し (1 字溢れる行の字の大きさ) は
+   様式の spec に理由つきで置き、 fill が毎回当てる。
+3. **提出物の凍結・差分は docx の bytes でなく、 値と書式の digest で比べる**。 値 = 本文と表の cell の文字、
+   書式 = 紙の見た目を変える属性 (段落の揃え・style・字の大きさ・太字・表の列幅・用紙と余白)。 Word や python-docx の保存で変わる属性
+   (rsid 等) は入れない。 bytes で比べると、 内容が同じ作り直しを「変更」 と誤認し、 凍結が壊れているのか判定できない。 sidecar は bytes の digest でよい。
+4. **押印の位置は定数でなく、 Word が出した PDF の語の位置から出す** (例: 一番右の「印」 の字、 ある見出しより上の候補だけ、 中心からの横のずれ)。
+   雛形の改版や値の長さで行が動いても追従する。 押印するのは印刷提出用だけで、 確認用 (押印なし) を対で出す
+   ([#seal-artifact-marker](#seal-artifact-marker))。
+
+検証 = 手作業で作った既存の出力と同じ値で作り直し、 頁ごとの語・線の数・○ の数・印影の中心を突き合わせる (位置は 1 pt 未満の差まで一致させた、 実測)。
+
 ## <a id="print-preflight"></a>印刷直前の preflight (= 「画面で見えた」 を印刷の保証にしない)
 
 **起源 (同じ 1 枚の様式を 4 回刷り直し)**: ① docx 様式が 2 頁にはみ出し (= [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow)) → ② 直したら PyMuPDF 追記文字が紙で文字化け (= [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake)) → ③ raster を gray で作って認印が黒 → ④ 電話番号が罫線に被る (= [`pdf-overlay-anchoring`](#pdf-overlay-anchoring))。 **4 つとも個別には既知の罠**で、 欠けていたのは「lp に渡す前に機械と目で確認する段」。 user が remote で紙を見られないと、 1 回の失敗 = 1 往復 + 紙 1 枚。

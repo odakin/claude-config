@@ -801,6 +801,10 @@ sections:
     legacy: "8.60"
     level: 3
     title: "8.60 検出器を締める変更は、 その前に立つ無人の書き手を黙って止める — 過去の出力を今の検出器に通し直す"
+  - id: rules-present-but-not-read-before-the-act
+    legacy: "8.61"
+    level: 3
+    title: "8.61 規則は在るのに、 行為の直前に効かない 4 つの入口 — 理由の無い手順・問いの置き換え・必読の grep 化・訂正の 1 本化"
   - id: changelog
     level: 2
     title: "変更履歴"

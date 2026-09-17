@@ -419,6 +419,7 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 ### How to apply
 
 - gate / hook / detector を作ったら、 **catch すべき violation を実際に仕込んだ実 e2e** を 1 回通す (= 「正常 input で通る」 だけでなく「**異常 input が本当に block されるか**」)。 破壊的 e2e (= 実 commit / 実書込) は revert 前提で安全に。
+- <a id="violation-e2e-on-a-copy"></a>⚠️ **違反を仕込む e2e は、 守る対象の複製 (使い捨て git / scratch dir) で行う**。 guard がまだ対象を登録していない段階で本物に違反を起こすと、 guard は発火せず、 **試験そのものが守りたかった破壊になる** (実測: 凍結で止まるはずの旧 builder を、 対象を凍結に登録する前に本物で走らせ、 守る対象の出力を作り直した。 git から戻して差分なしを確認)。 順序 = ① 対象を guard に登録 → ② 複製で違反を起こして止まることを確認 → ③ 本物では dry-run か読み取りだけ。 revert できる場所でも、 revert は「壊れたことに気づいた」 時にしか起きない。
 - **confidence 境界を report に明示し、 重要な機構は境界を残さず実検証する**。 「logic ✅ だから動く」 と打ち切らない。 4 軸 sweep (= grep / 論理) で error 0 でも、 実 e2e で silent dead が出ることがある (= 静的 sweep と動的 e2e は別 layer)。
 
 ### 関連事故 / 検証例
