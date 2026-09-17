@@ -10,15 +10,20 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
   Claude Code : <claude-dir>/*/*.jsonl  (既定 ~/.claude/projects)
                 record の type が user / assistant、 message.content は文字列か
                 {type: text, text} の list
-  Codex       : <codex-dir>/**/*.jsonl (既定 ~/.codex/sessions)
+  Codex       : <codex-dir>/**/*.jsonl (既定 ~/.codex/sessions と ~/.codex/archived_sessions)
                 record の type が response_item、 payload.type が message、
                 payload.role が user / assistant / developer、 content は {text} の list
+                ⚠️ Codex はアーカイブした session を sessions/YYYY/MM/DD から archived_sessions/ (平置き) へ
+                移す。 sessions だけを読むと、 元の発言は見つからず、 別 session に貼られた写しだけが当たる (実測)
 
 既定の挙動:
   - 役割は user だけ (--role any で全部)。 harness が差し込んだ user 側の文
     (system-reminder・command 表示・AGENTS.md 指示・文脈圧縮の要約。 INJECTED_PREFIXES) は除く (--include-injected で含める)
   - 同じ agent・役割・本文の重複は 1 回だけ出す (Codex の記録は同じ発言を複数回持つことがある)
   - 行を JSON として読む前に、 素の行に対して文字列の有無を先に見る (大きな記録でも速い)
+  - 一致が別 session に貼られた会話の抜粋 (`[12] user: …` の形) の中なら、 役割の欄に「(写し)」 を付ける。
+    その行の時刻と session は写した側のもので、 発言した側ではない (元の発言は --role any で探し直すか、
+    写しの無い行を見る)
 
 使い方:
   search-agent-transcripts.py 混ぜる
@@ -43,6 +48,9 @@ from pathlib import Path
 
 # harness が user 役で差し込む文の書き出し (system-reminder・command 表示・AGENTS.md 指示・文脈圧縮の要約)
 INJECTED_PREFIXES = ("<", "# AGENTS.md", "This session is being continued from a previous conversation")
+# 別 session に貼られた会話の抜粋で、 一致の直前に来る話者ラベル (`[12] user: `)
+QUOTED_SPEAKER_RE = re.compile(r"\[\d+\]\s*(?:user|assistant)\s*:\s*$")
+DEFAULT_CODEX_DIRS = ("~/.codex/sessions", "~/.codex/archived_sessions")
 
 
 def _texts_claude(rec: dict) -> tuple[str | None, list[str]]:
@@ -81,18 +89,27 @@ def _session_of(path: Path, agent: str) -> str:
     return name
 
 
-def iter_files(agent: str, claude_dir: Path, codex_dir: Path):
+def iter_files(agent: str, claude_dir: Path, codex_dirs):
     if agent in ("claude", "both") and claude_dir.is_dir():
         for f in sorted(claude_dir.glob("*/*.jsonl")):
             yield "claude", f
-    if agent in ("codex", "both") and codex_dir.is_dir():
-        for f in sorted(codex_dir.rglob("*.jsonl")):
-            yield "codex", f
+    if agent in ("codex", "both"):
+        if isinstance(codex_dirs, (str, Path)):
+            codex_dirs = [codex_dirs]
+        seen: set = set()
+        for d in codex_dirs:
+            d = Path(d)
+            if not d.is_dir():
+                continue
+            for f in sorted(d.rglob("*.jsonl")):
+                if f.resolve() not in seen:
+                    seen.add(f.resolve())
+                    yield "codex", f
 
 
 def search(pattern: str, *, regex: bool, role: str, agent: str, since: str | None,
            until: str | None, session: str | None, context: int, include_injected: bool,
-           claude_dir: Path, codex_dir: Path, limit: int) -> list[tuple]:
+           claude_dir: Path, codex_dir, limit: int) -> list[tuple]:
     rx = re.compile(pattern) if regex else None
     raw_probe = None if regex else pattern
     seen: set = set()
@@ -138,7 +155,8 @@ def search(pattern: str, *, regex: bool, role: str, agent: str, since: str | Non
                     seen.add(key)
                     j = m.end() if m is not None else i + len(pattern)
                     snip = tx[max(0, i - context): j + context].replace("\n", " ")
-                    hits.append((ts, ag, sid[:8], r, snip))
+                    shown = r + "(写し)" if QUOTED_SPEAKER_RE.search(tx[max(0, i - 40): i]) else r
+                    hits.append((ts, ag, sid[:8], shown, snip))
     hits.sort()
     return hits[:limit] if limit else hits
 
@@ -184,6 +202,26 @@ def selftest() -> int:
             check("--session で session を絞る", [x[2] for x in search("りんご", **{**base, "session": "aaaa"})] == ["aaaaaaaa"]),
             check("event_msg など会話でない record は読まない", all("task" not in x[4] for x in search("りんご", **{**base, "role": "any"}))),
         ]
+        # アーカイブされた Codex session (平置き) と、 別 session に貼られた会話の抜粋
+        arch = Path(td) / "codex-archived"
+        arch.mkdir()
+        (arch / "rollout-2099-01-04T00-00-00-00000000-0000-4000-8000-0000000a4c4d.jsonl").write_text(json.dumps(
+            {"type": "response_item", "timestamp": "2099-01-04T00:00:00Z",
+             "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "ぶどうは紫"}]}},
+            ensure_ascii=False) + "\n", encoding="utf-8")
+        (cx / "rollout-2099-01-05T00-00-00-00000000-0000-4000-8000-00000000c0b1.jsonl").write_text(json.dumps(
+            {"type": "response_item", "timestamp": "2099-01-05T00:00:00Z",
+             "payload": {"type": "message", "role": "user",
+                         "content": [{"type": "input_text", "text": "前の会話:\n[3] user: ぶどうは紫\n[4] assistant: はい"}]}},
+            ensure_ascii=False) + "\n", encoding="utf-8")
+        two = {**base, "codex_dir": [Path(td) / "codex", arch]}
+        hb = search("ぶどうは紫", **{**base, "agent": "codex"})
+        hb2 = search("ぶどうは紫", **{**two, "agent": "codex"})
+        results += [
+            check("sessions だけだと元の発言は無く写しだけが当たる", [x[3] for x in hb] == ["user(写し)"]),
+            check("archived も読むと元の発言 (写しの印なし) が出る", [x[3] for x in hb2] == ["user", "user(写し)"]),
+            check("写しでない一致には印が付かない", all("写し" not in x[3] for x in search("りんご", **base))),
+        ]
     print(f"{ok}/{len(results)} PASS")
     return 0 if all(results) else 1
 
@@ -201,7 +239,8 @@ def main() -> int:
     ap.add_argument("--include-injected", action="store_true", help="harness が差し込んだ user 側の文も含める")
     ap.add_argument("--limit", type=int, default=200)
     ap.add_argument("--claude-dir", default=os.path.expanduser("~/.claude/projects"))
-    ap.add_argument("--codex-dir", default=os.path.expanduser("~/.codex/sessions"))
+    ap.add_argument("--codex-dir", action="append",
+                    help="Codex の記録の dir (繰り返し可。 既定 = ~/.codex/sessions と ~/.codex/archived_sessions)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -210,7 +249,9 @@ def main() -> int:
         ap.error("pattern が要る")
     hits = search(a.pattern, regex=a.regex, role=a.role, agent=a.agent, since=a.since, until=a.until,
                   session=a.session, context=a.context, include_injected=a.include_injected,
-                  claude_dir=Path(a.claude_dir), codex_dir=Path(a.codex_dir), limit=a.limit)
+                  claude_dir=Path(a.claude_dir),
+                  codex_dir=[Path(os.path.expanduser(d)) for d in (a.codex_dir or DEFAULT_CODEX_DIRS)],
+                  limit=a.limit)
     for ts, ag, sid, r, snip in hits:
         print(f"{ts[:19]}  {ag:6}  {sid}  {r:9}  {snip}")
     if not hits:
