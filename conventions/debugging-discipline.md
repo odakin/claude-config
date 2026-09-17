@@ -598,6 +598,7 @@ degenerate 比較も踏んでおり、3 件とも基準点の選び方が原因�
    自身が非 0 / permission error なら `unknown` であり、singleton lock・application inventory 等の独立 probe へ移る。
 2. **発生源を帰属する**: crash / hang / 再起動なら OS report の responsible process、parent、coalition、起動時刻と、
    runtime が生成する command の内容指紋を突き合わせる ([#execution-path-attribution](#execution-path-attribution))。
+   macOS の crash report を型に分ける道具と、 帰属を言う前の除外台帳 = [`macos-app-crash-triage.md`](macos-app-crash-triage.md)。
 3. **実行前に command を展開する**: `--dry-run`、`man`、source の actual binding で、`new` / `fresh` / `force` /
    `replace` と profile / storage 引数を確認する。同名 script が複数 cache に在るなら live config / process argv から
    実行実体を解決する。名前が `open` でも新 instance 強制なら destructive transition である。
