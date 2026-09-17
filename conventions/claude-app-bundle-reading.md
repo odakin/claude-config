@@ -30,7 +30,10 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 
 - **素の `grep -o '.{0,80}X.{0,200}'` は時間切れになる** (実測: 120 秒で終わらない)。 1 行が MB 級なので、 python の `re` で bytes に当てて前後だけ切り出す (本道具がそうしている)。 ugrep は長い正規表現で `exceeds complexity limits` になることもある。
 - **同じ関数でも chunk ごとに名前が違う**。 ある chunk の `Se` と別 chunk の `Se` は無関係。 必ず import を辿る。
-- **「コードにそう書いてある」 ≠ 「画面でそうなる」**。 条件が複数 chunk の plugin に散っていると、 読み切れないことがある (実測: inline code をリンクにする条件は読み切れなかった)。 読み切れない・結論が load-bearing なら、 次の実験で画面 1 回に決めさせる。
+- **「コードにそう書いてある」 ≠ 「画面でそうなる」**。 条件が複数 chunk の plugin に散っていると、 読み切れないことがある。 読み切れない・結論が load-bearing なら、 次の実験で画面 1 回に決めさせる。
+- **「見つからない」 ≠ 「読めない」 — 探す語を変える**。 実測: inline code をリンクにする条件は、 markdown の plugin 側から探して見つからず画面実験で決めたが、 後の検収で **描画する側** (mdast の node 型名 `inlineCode` と、 描画した要素の `data-…` 属性名を grep → その component が呼ぶ parser を `resolve`) から入ると、 数 KB の 1 chunk に正規表現ごと読めた。 入口の候補 = 画面の文言 (i18n) / node 型名 / DOM の属性名 / log に出る文言 (main process は失敗を `[…] could not resolve` のように log へ書くので、 **app の log の文言を `--where asar` で探す**と解決関数に直接着く)。
+- **renderer の判定と main process の解決は別物**。 画面側 (renderer) は path の形で「中か外か」 を決めるだけで、 実際に file を探すのは main process の関数。 fallback (別の基準での再試行など) は main process 側にしか無いので、 renderer だけ読んで「解決の規則」 を書くと抜ける (実測: [`claude-code-permissions.md#chat-link-resolution-base`](claude-code-permissions.md#chat-link-resolution-base) の「本体が持つ fallback」)。
+- **本体の log は実測の台帳になる**。 `~/Library/Logs/Claude/main*.log` に、 解決に失敗した path と試した基準が残る = 「実際に押されて開けなかった」 件数と形を、 会話記録からの推定でなく数えられる。
 
 ## <a id="screen-experiment"></a>読み切れないときは、 画面 1 回で決まる実験を頼む
 

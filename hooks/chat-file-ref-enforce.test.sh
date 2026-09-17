@@ -3,8 +3,10 @@
 #
 # §A incident replay: cd で repo に入った後、 repo の中からの path を link / inline code で書いた最終発話 (= 右パネルで
 #     「このファイルが見つかりませんでした」) と、 repo を基準にした session が ../ で外の repo を指す形を再現して fire を確認。
+#     A7-A8 = 検収で見つけた見逃し・2 重計上 (区切りの無い名前 + 行番号の href / label が inline code の link)。
 # §B 誤検出の regression: 基準フォルダからの正しい path / 絶対 path / ~/ / URL / anchor / fenced block の中 /
 #     どこにも無い path / 区切りの無い名前 / 追加フォルダの中へ ../ で出る path / CLI の session / 途中の text だけ。
+#     B11-B14 = 検収で見つけた誤検出 (link の label の inline code / list・引用の中の fence) と scheme 判定の回帰。
 # §C fail-open と配線: stop_hook_active / transcript 不在 / 空入力 / 部品の不在・例外 = 沈黙。 symlink 経由で部品を見つける。
 
 set -uo pipefail
@@ -21,7 +23,7 @@ trap 'rm -rf "$TMP"' EXIT
 ROOT="$TMP/root"
 mkdir -p "$ROOT/book/drafts" "$ROOT/book/notes" "$ROOT/tools/scripts" "$TMP/extra"
 : > "$ROOT/book/drafts/intro.md"; : > "$ROOT/book/notes/design.md"; : > "$ROOT/tools/scripts/run.py"
-: > "$ROOT/CLAUDE.md"; : > "$TMP/extra/memo.md"
+: > "$ROOT/CLAUDE.md"; : > "$TMP/extra/memo.md"; : > "$ROOT/book/SESSION.md"
 
 # mktranscript path entrypoint root additional_json final_text [mid_text]
 #   環境 snapshot (root) → user → assistant tool_use (cwd = root/book に cd した後) → tool_result → final
@@ -75,6 +77,10 @@ case_ "A4: repo を基準にした session が ../ で外へ (追加フォルダ
   "[run](../tools/scripts/run.py)" "フォルダの外" "claude-desktop" "$ROOT/book"
 case_ "A5: VS Code の panel も対象" 1 "[x](drafts/intro.md)" "" "claude-vscode"
 case_ "A6: 第三者版 desktop も対象" 1 "[x](drafts/intro.md)" "" "claude-desktop-3p"
+case_ "A7: 区切りの無い名前 + 行番号の href (scheme と取り違えない) = fire" 1 \
+  "[SESSION.md:42](SESSION.md:42)" "book/SESSION.md"
+case_ "A8: label が inline code の link = link の 1 件だけ (code と 2 重に数えない)" 1 \
+  "[${BT}drafts/intro.md${BT}](drafts/intro.md)" "file 参照 1 件"
 
 echo "=== §B 誤検出の regression ==="
 case_ "B1: 基準フォルダからの path = silent" 0 "[intro](book/drafts/intro.md) と ${BT}tools/scripts/run.py${BT}"
@@ -90,6 +96,18 @@ case_ "B7: ../ で出た先が追加フォルダの中 = silent" 0 "[run](../too
 case_ "B8: CLI の session = silent" 0 "[drafts/intro.md](drafts/intro.md)" "" "cli"
 case_ "B9: 途中の text だけに在り最終発話は clean = silent" 0 "完了しました。" "" "claude-desktop" "$ROOT" "[]" "[drafts/intro.md](drafts/intro.md)"
 case_ "B10: inline code の中の link 記法 = silent" 0 "${BT}[a](drafts/intro.md)${BT}"
+case_ "B11: label が repo の中からの path の inline code・href は正しい絶対 path = silent (押すと href が開く)" 0 \
+  "[${BT}drafts/intro.md${BT}]($ROOT/book/drafts/intro.md)"
+case_ "B12: list の中で 4 桁以上 indent された fence の中 = silent" 0 "1. 手順
+
+    ${BT}${BT}${BT}bash
+    cat drafts/intro.md ${BT}drafts/intro.md${BT} [x](drafts/intro.md)
+    ${BT}${BT}${BT}
+"
+case_ "B13: 引用 > の中の fence = silent" 0 "> ${BT}${BT}${BT}
+> [x](drafts/intro.md)
+> ${BT}${BT}${BT}"
+case_ "B14: mailto / tel は scheme のまま = silent" 0 "[m](mailto:a@example.com) [t](tel:123)"
 
 echo "=== §C fail-open と配線 ==="
 mktranscript "$TMP/c.jsonl" claude-desktop "$ROOT" "[]" "[drafts/intro.md](drafts/intro.md)"

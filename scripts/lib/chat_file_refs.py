@@ -5,7 +5,10 @@
   「Primary working directory」 が変わっても、 この基準は変わらない。
 - 絶対 path はそのまま、 `~/` は home に展開する。
 - inline code の中身も、 `/` を含み拡張子で終わる形なら、 file が実在しなくても link として描かれる (実測。
-  `CLAUDE.md` のような区切りの無い名前と `dir/` は描かれない)。
+  `CLAUDE.md` のような区切りの無い名前と `dir/` は描かれない)。 link の label の中の inline code は別の link に
+  ならない (押すと href が開く) ので拾わない。
+- app の本体が持つ fallback (基準フォルダが git repo のときの path の末尾一致 / worktree の path を先に試す) は
+  写していない = その種の session では、 本体が開ける参照を検出することがある (正本の同節)。
 
 検出の条件 (= 誤検出を避けるため狭くとる):
   開けない (基準 folder に連結すると存在しない / 基準の外に出る) ∧ 別の folder に連結すると存在する。
@@ -22,10 +25,14 @@ from urllib.parse import unquote
 from transcript_turns import (session_additional_dirs, session_entrypoint,  # noqa: F401
                               session_root_and_cwds)
 
-FENCE_RE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n.*?(?:^[ \t]{0,3}\1[ \t]*$|\Z)", re.S | re.M)
+# fence の前置きは桁数を問わず、 引用の `>` も許す (list の中で 4 桁以上 indent された fence と、 引用の中の fence も
+# 描画上は code block。 広く取る側 = 検出が減る側なので、 取りすぎても誤検出にはならない)
+FENCE_RE = re.compile(r"^[ \t>]*(`{3,}|~{3,})[^\n]*\n.*?(?:^[ \t>]*\1[ \t]*$|\Z)", re.S | re.M)
 CODE_SPAN_RE = re.compile(r"(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 LINK_RE = re.compile(r"\[[^\]\n]*\]\(\s*<([^>\n]+)>[^)\n]*\)|\[[^\]\n]*\]\(\s*([^)\s]+)(?:\s+\"[^\"\n]*\")?\s*\)")
-SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+# scheme の判定は app と同じ式 (bundle の file 参照 parser)。 `SESSION.md:42` のような「区切りの無い名前 + 行番号」 は
+# scheme ではなく file + 行番号 (class に `.` が無い + 行番号の後置は scheme にしない)
+SCHEME_RE = re.compile(r"^[a-z][a-z0-9+-]+:(?!\d+(?:[-:]\d+)?$)", re.I)
 # inline code を link 候補とみなす形: 空白を含まず、 `/` を含み、 拡張子で終わる (行番号の後置は許す)
 CODE_PATH_RE = re.compile(r"^[^\s`<>|*?\"']*/[^\s`<>|*?\"']*\.[A-Za-z0-9]{1,10}(?::\d+(?:[-:]\d+)?)?$")
 LINE_SUFFIX_RE = re.compile(r":\d+(?:[-:]\d+)?$")
@@ -38,16 +45,20 @@ def _blank(m: re.Match) -> str:
 def extract_refs(text: str) -> list[tuple[str, str, str]]:
     """最終発話 → [(kind, raw, path)]。 kind = "link" | "code"。 fenced block の中は描かれないので見ない。"""
     body = FENCE_RE.sub(_blank, text or "")
+    blanked = CODE_SPAN_RE.sub(_blank, body)  # code span の中の [..](..) は link として描かれない (長さは保つ)
+    links = [m for m in LINK_RE.finditer(blanked) if (m.group(1) or m.group(2) or "").strip()]
     refs: list[tuple[str, str, str]] = []
     for m in CODE_SPAN_RE.finditer(body):
         inner = m.group(2).strip()
-        if CODE_PATH_RE.match(inner):
-            refs.append(("code", m.group(0), inner))
-    body = CODE_SPAN_RE.sub(_blank, body)  # code span の中の [..](..) は link として描かれない
-    for m in LINK_RE.finditer(body):
-        href = (m.group(1) or m.group(2) or "").strip()
-        if href:
-            refs.append(("link", m.group(0), href))
+        if not CODE_PATH_RE.match(inner):
+            continue
+        # link の label の中の inline code は別の link にならない (app は anchor の子を「link の中」 として描き、
+        # 押すと href が開く)。 [`dir/file.md`](/絶対/path) を code の側で拾わない
+        if any(lm.start() <= m.start() < lm.end() for lm in links):
+            continue
+        refs.append(("code", m.group(0), inner))
+    for m in links:
+        refs.append(("link", m.group(0), (m.group(1) or m.group(2)).strip()))
     return refs
 
 

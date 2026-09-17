@@ -50,6 +50,8 @@ def collect(path: str) -> list[dict]:
                 e = json.loads(line)
             except Exception:
                 continue
+            if not isinstance(e, dict):
+                continue  # 数値や配列だけの行 (JSON としては正しい) も、 壊れた行と同じに飛ばす
             content = (e.get("message") or {}).get("content")
             if e.get("type") == "assistant":
                 t = _text_of(content)
@@ -77,8 +79,13 @@ def write_images(items: list[dict], out_dir: str, png: bool) -> list[str]:
     for it in items:
         ext = EXT.get(it["media_type"], "bin")
         fp = os.path.join(out_dir, f"{it['index']:05d}-{it['k']}.{ext}")
+        try:
+            raw = base64.b64decode(it["data"], validate=True)
+        except ValueError:
+            print(f"skip: 行 {it['index']} の画像 {it['k']} は base64 として読めない", file=sys.stderr)
+            continue
         with open(fp, "wb") as f:
-            f.write(base64.b64decode(it["data"]))
+            f.write(raw)
         if png and ext != "png" and shutil.which("sips"):
             pp = fp.rsplit(".", 1)[0] + ".png"
             r = subprocess.run(["sips", "-s", "format", "png", fp, "--out", pp], capture_output=True)
@@ -109,17 +116,22 @@ def selftest() -> int:
                 {"type": "text", "text": "ひらけない"}]}},
             {"type": "user", "message": {"content": [{"type": "tool_result", "content": "ok"}]}},
             "not json",
+            "123",
+            '["valid json", "but not an object"]',
         ]
         with open(tr, "w") as f:
             for r in rows:
                 f.write((json.dumps(r, ensure_ascii=False) if isinstance(r, dict) else r) + "\n")
         items = collect(tr)
-        check("user message の画像を 1 枚拾う (壊れた行は飛ばす)", len(items) == 1)
+        check("user message の画像を 1 枚拾う (壊れた行・object でない行は飛ばす)", len(items) == 1)
         check("直前の assistant 発話を添える", items and "drafts/a.md" in items[0]["prev_assistant"])
         check("同じ message の文字列を添える", items and items[0]["text"] == "ひらけない")
         out = write_images(items, os.path.join(t, "out"), png=False)
         check("file に書き出す (中身は元の bytes)", len(out) == 1 and open(out[0], "rb").read()[:4] == b"\x89PNG")
         check("id の先頭では見つからない path は None", find_transcript("no-such-session-id-xyz") is None)
+        bad = [dict(items[0], data="!!!not-base64", k=1)] + items
+        out2 = write_images(bad, os.path.join(t, "out2"), png=False)
+        check("base64 として読めない画像は飛ばして残りを書く", len(out2) == 1 and out2[0].endswith("-0.png"))
     print("ALL PASS" if not fails else f"{len(fails)} FAIL")
     return 1 if fails else 0
 

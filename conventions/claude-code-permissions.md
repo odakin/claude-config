@@ -104,6 +104,18 @@ scope の中の file でも、 **相対 path の基準を取り違えると開�
 
 連結した結果が、 そのフォルダか session に追加したフォルダ (`additionalDirectories` 等) の中にあれば開く。
 
+**本体が持つ fallback** (検収で main process の解決関数を読んで追記。 app 2.110.0 / engine 2.1.271。 コード上の確認で、 画面では未確認):
+
+- **基準フォルダが git repo のとき**: 連結した先に file が無いと、 本体は `git ls-files` (無ければ untracked) で **path の末尾一致**を探し、 1 件に決まればそれを開く (複数なら変更中の file に近いものを選ぶ)。 repo の直下で始めた session は、 subdirectory からの相対 path でも開くことがある。 **基準フォルダが git repo でない** (複数の repo を束ねた親フォルダで始めた) session にはこの救済が無く、 上の表どおりに失敗する
+- **worktree に入った session** (desktop の worktree、 EnterWorktree): 本体は worktree の path を先に試す。 「起動時から変わらない」 のは通常の `cd` に対してで、 worktree への出入りでは基準が動く
+- `..` で外に出る相対 path は、 session の元のフォルダ (originCwd) でも試す
+
+**inline code をリンクにする条件** (同じ検収で renderer の file 参照 parser から読めた。 画面実験の結論 「形だけで決まる」 と一致):
+
+- 形 = `segment/…/name.ext` に行番号の後置 (`:12` / `:12-20`) を許す。 使える文字は **文字・数字・`_` `.` `-` `(` `)` `[` `]` だけ** — 空白・`~`・`@`・`+`・`$`・`*` を含む inline code はリンクにならない (`~/x/y.md` の inline code も、 ならない)。 **絶対 path (`/…/name.ext`) の inline code はリンクになる**
+- **link の label の中の inline code は別のリンクにならない** (押すと href が開く)。 `` [`dir/file.md`](/絶対/path) `` は label が repo の中からの path でも開く
+- href の scheme 判定は `^[a-z][a-z0-9+-]+:` で、 直後が行番号だけなら scheme にしない = `SESSION.md:42` は file + 行番号として扱われる。 href は `decodeURI` してから解釈される
+
 **罠**: Bash で `cd` すると、 harness は「Primary working directory: <repo> (was <root>)」 と通知し、 system prompt も「href は working directory からの相対」 と指示する。 **右パネルの基準はこの通知に追従しない** (session の設定に持つフォルダで、 起動時から変わらない)。 通知どおり repo の中からの path を書くと、 自分では正しく書いたつもりで開けない link になる。 repo の中で作業を続けているほど滑りやすい。
 
 **書き方の既定**:
@@ -120,7 +132,7 @@ scope の中の file でも、 **相対 path の基準を取り違えると開�
 | 「見つかりませんでした」 + 「…または作業ディレクトリの外にあります。」 | 上の 2 つのどちらか |
 | 「このファイルは、このリモートコントロールセッションを実行しているマシン上にあり、ここからは読み込めませんでした。…」 | [#rc-chat-panel-no-render](#rc-chat-panel-no-render) |
 
-**機械の検査**: Stop hook [`hooks/chat-file-ref-enforce.sh`](../hooks/chat-file-ref-enforce.sh) が、 最終発話の link と inline code のうち「基準フォルダに連結すると無い ∧ transcript に出た cwd か基準フォルダ直下の dir に連結すると在る」 ものを見つけ、 正しい path を添えて 1 回だけ書き直させる。 どこにも無い path (例示) と絶対 path は見ない。 判定の部品 = [`scripts/lib/chat_file_refs.py`](../scripts/lib/chat_file_refs.py) (基準フォルダは transcript の最初の environment snapshot から取る)、 再校正 = `python3 scripts/lib/chat_file_refs.py calibrate <days>`。
+**機械の検査**: Stop hook [`hooks/chat-file-ref-enforce.sh`](../hooks/chat-file-ref-enforce.sh) が、 最終発話の link と inline code のうち「基準フォルダに連結すると無い ∧ transcript に出た cwd か基準フォルダ直下の dir に連結すると在る」 ものを見つけ、 正しい path を添えて 1 回だけ書き直させる。 どこにも無い path (例示)・絶対 path・link の label の中の inline code は見ない。 ⚠️ 本体の git 末尾一致と worktree の基準移動は写していない = **git repo の直下や worktree で始めた session では、 本体が開ける参照を「開けない」 と言うことがある** (誤検出の側。 過去の会話記録での実測では該当 0 件)。 判定の部品 = [`scripts/lib/chat_file_refs.py`](../scripts/lib/chat_file_refs.py) (基準フォルダは transcript の最初の environment snapshot から取る)、 再校正 = `python3 scripts/lib/chat_file_refs.py calibrate <days>`。
 
 ## <a id="frontend-split"></a>frontend 切り分け (同じ症状でも 3 系統)
 

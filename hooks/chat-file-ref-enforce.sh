@@ -13,8 +13,10 @@
 #        ∧ 最終発話の markdown link の href か、 `/` を含み拡張子で終わる inline code が
 #          「基準フォルダに連結すると無い (か、 フォルダの外に出る)」
 #        ∧ 「transcript に出た cwd か基準フォルダ直下の dir に連結すると在る」
-#   除外 = URL / anchor だけの href / 絶対 path / ~/ / fenced code block の中 / どこにも無い path。
-#   基準フォルダ = transcript に最初に現れた cwd。
+#   除外 = URL / anchor だけの href / 絶対 path / ~/ / fenced code block の中 (list・引用の中の fence を含む) /
+#          link の label の中の inline code (app は別の link にしない = 押すと href が開く) / どこにも無い path。
+#   基準フォルダ = transcript の最初の environment snapshot の workingDirectory (古い build の transcript には
+#          snapshot が無いので、 最初に現れた cwd)。
 #   校正 (実測、 desktop transcript の最終発話): 発火は約 8% の turn、 link を含むのは約 1%。
 #   link の検出は目視で全件が開けない形 (repo の中からの path / ../ で始まる path / 基準外)。
 #   inline code の検出が大半を占める (= 押せるのに開けない link になっている、 と読む。 リンク化の条件は下の限界を参照)。
@@ -29,6 +31,11 @@
 #   - 基準フォルダの外の file は、 絶対 path に直しても右パネルでは開けないことがある (#chat-link-rendering-scope)。
 #   - どこにも実在しない path の inline code も押せる (開けない) リンクになるが、 正しい path を示せないので拾わない
 #     (= 例示の path。 fenced block に入れるよう規約で扱う)。
+#   - app の本体は、 基準フォルダが git repo なら path の末尾一致 (git ls-files) で file を探し、 worktree に入った
+#     session では worktree の path を先に試す。 この hook はどちらも写していない = git repo の直下や worktree で
+#     始めた session では、 本体が開ける参照を「開けない」 と言うことがある (誤検出の側、 block は 1 回で済む)。
+#   - 基準フォルダに同名の file が在ると、 意図と違う file が開いても検出できない (例: 親フォルダと repo の両方に
+#     在る CLAUDE.md を、 repo の中からの path で書いた場合)。
 #   test = hooks/chat-file-ref-enforce.test.sh
 
 set -uo pipefail
