@@ -38,6 +38,7 @@ claude-config/
 │   ├── book-purchase-lookup.md             # 図書館に本の購入を頼む前 (書誌を揃える・その館に所蔵が無いか・新刊で買えるか・いくらか) + 共有された本のリストや著者の著作一覧から購入候補を作るとき + 申込メールを候補リストから起こすとき
 │   ├── chalkboard-close-up-merge.md        # 板書写真 PDF に close-up annotation を統合するとき
 │   ├── claude-ai-routines.md               # claude.ai routines (RemoteTrigger / cloud cron) を作成・管理するとき
+│   ├── claude-app-bundle-reading.md        # Claude desktop app (Code タブ等) の画面の挙動・文言の原因を、 docs や推測でなく app 本体で確かめたいとき + hook や規約が desktop の挙動を前提にする前 + 読んだ結論を user の画面で裏付ける実験を頼むとき
 │   ├── claude-app-cwd-pin.md               # Claude.app の folder picker 起点固定 (launchd) を設定・解除するとき
 │   ├── claude-code-permissions.md          # Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき
 │   ├── clipboard-cleaner.md                # PDF コピー由来の段落内改行・RTF 書式をクリップボードで整形したいとき
@@ -157,7 +158,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (201 file + lib/ 30 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (203 file + lib/ 30 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)

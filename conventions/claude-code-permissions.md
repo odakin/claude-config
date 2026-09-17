@@ -80,7 +80,7 @@ Claude Code (desktop app / VS Code 拡張の chat panel) は、応答本文内�
 
 ### <a id="rc-chat-panel-no-render"></a>Remote Control 経由では scope 通過でも render 不可
 
-**scope 診断 (上の 1-3) を全部通過しているのに拒否される**ケースがある: session を **Remote Control で別端末から閲覧している**とき。file は worker host のディスクにあり、**閲覧している端末側には存在しない**ため、右パネルは render できない。error message は scope 外のときと**同一文言** (「削除または移動された可能性があるか、作業ディレクトリの外に存在する可能性」) なので、**scope 問題だと誤誘導される** (= 「作業ディレクトリの外」はどちらの原因でも表示される)。
+**scope 診断 (上の 1-3) を全部通過しているのに拒否される**ケースがある: session を **Remote Control で別端末から閲覧している**とき。file は worker host のディスクにあり、**閲覧している端末側には存在しない**ため、右パネルは render できない。error message は scope 外のときと**同一文言** (「削除または移動された可能性があるか、作業ディレクトリの外に存在する可能性」) なので、**scope 問題だと誤誘導される** (= 「作業ディレクトリの外」はどちらの原因でも表示される)。 ⚠️ これは観測時の build の文言。 現行 build は RC 専用の文言 (「このファイルは、このリモートコントロールセッションを実行しているマシン上にあり…」) を持つ = 文言で見分けられる ([#chat-link-resolution-base](#chat-link-resolution-base) の表)。 文言は build で変わるので、 迷ったら [`claude-app-bundle-reading.md`](claude-app-bundle-reading.md) で今の版の出し分けを読む。
 
 - **見分け方**: scope 3 段が全部 ✅ なのに拒否 → 次に疑うのは「この画面は RC か」。session の worker host は冒頭の自己同定 stamp ([multi-account-machine-surface.md I7](multi-account-machine-surface.md)) か `hostname` 1 発で確認できる。
 - **対処**: worker host 側の画面で開く / `open <path>` を worker host で実行して OS アプリに出す (RC 画面には届かない) / **内容を chat 本文に出させる** (= text は bridge を通るので RC でも読める。唯一 RC 画面で完結する手)。

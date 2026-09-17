@@ -783,6 +783,8 @@ turn 終了時 (Stop) に最終 assistant 発話を読み、 決まった句 (�
 - **発火数でなく発火行の性質を数える** — 「N 件発火」 では足りない。1 件ずつ読んで**真陽性 / 誤検出**に仕分ける。仕分けた結果が「全部誤検出の語」 と「全部真陽性の語」 に割れたら、gate を弱めるのでなく **list 側を語ごとに直す** (= 前者は除外、後者は出現側を一般化)。実測例: 600 commit の replay で発火 5 = 5 件とも真陽性、除外候補 4 語のうち 1 語だけが 100% 誤検出だった。
 - **配線した直後に、 わざと該当する無害な command を打つ** — deny が返れば、 配線と「足した hook が同じ session で効くか」 ([§9.1](#new-hook-session-snapshot)) を同時に確かめられる。
 
+<a id="entrypoint-values"></a>**frontend で挙動を変える hook は entrypoint を見る**: engine は起動元を env `CLAUDE_CODE_ENTRYPOINT` に持ち、 transcript の各行にも `entrypoint` として記録する (Stop hook は transcript から読めば env に頼らなくてよい)。 値 (engine の一覧、 実測): `cli` / `claude-desktop` / `claude-desktop-3p` / `claude-vscode` / `sdk-cli` / `sdk-ts` / `sdk-py` / `mcp` / `bench` / `local-agent` / `claude-code-github-action` / `remote` / `remote_desktop` / `remote_mobile` / `remote_cowork` / `remote_trigger` / `claude-in-slack` / `claude-in-teams` / `ssh-remote` ほか。 版で増えるので読み直す = `scripts/claude-app-bundle.py grep '"claude-desktop-3p"' --where engine` ([`claude-app-bundle-reading.md`](claude-app-bundle-reading.md))。 ⚠️ 自己申告の値なので子 process に継承・漏れうる ([`debugging-discipline.md#firing-probe-execute-vs-honor`](debugging-discipline.md#firing-probe-execute-vs-honor) の 2) = 誤判定のコストが小さい用途 (1 回の block・表示の切り替え) に限る。 実例 = [`hooks/chat-file-ref-enforce.sh`](../hooks/chat-file-ref-enforce.sh) (右パネルを持つ `claude-desktop` / `claude-desktop-3p` / `claude-vscode` だけ検査)。
+
 ---
 
 ## <a id="cross-session-hook-concurrency"></a>§13. 並列 session の同じ hook は同時に走る — 状態を書き換える hook は資源ごとの lock を取り、 取れなければ skip と言う

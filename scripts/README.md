@@ -68,6 +68,7 @@
 - **[ci-local-repro.sh](ci-local-repro.sh)** — Linux CI だけで落ちる command を commit ごとに手元で再現する (使い捨て clone × native/GNU userland × 空の HOME の行列)
 - **[ci-local-repro.test.sh](ci-local-repro.test.sh)** — ci-local-repro.sh の fixture test (commit 行列の rc・空 HOME・元 repo 無変更・hook 非複製・使い方の誤り・GNU shim)
 - **[ci-red-streak.py](ci-red-streak.py)** — GitHub Actions の red streak を起点まで遡る (現状・最後の green・最初の red run・失敗行・原因 commit)。
+- **[claude-app-bundle.py](claude-app-bundle.py)** — Claude desktop app の挙動を、 docs や推測でなく app 本体 (画面の JS bundle・翻訳・main process の app.asar・埋込 engine) から確かめる検索道具
 - **[claude-app-notify-diagnose.py](claude-app-notify-diagnose.py)** — Claude for Mac の通知が鳴らない・来ない原因を層ごとに read-only 診断する (conventions/macos-claude-app-notifications.md)。
 - **[claude-session-whoami.py](claude-session-whoami.py)** — session の host / surface (desktop|CLI) / account を機械同定する probe。
 - **[clipboard-cleaner.py](clipboard-cleaner.py)** — クリップボード一発整形 CLI（PDF コピーの段落内改行除去 + pbcopy 書き戻しで RTF 書式除去、明示発火のみ・常駐なし、--selftest 内蔵、hammerspoon ⌃⌥⌘V から呼ばれる、conventions/clipboard-cleaner.md）
@@ -197,6 +198,7 @@
 - **[test_reviewed_mail_cli.py](test_reviewed_mail_cli.py)** — Offline checks: CLI authorization shape, pagination, full source extraction.
 - **[tex-first-use.py](tex-first-use.py)** — Is a notation explained where the reader first meets it? Lists the first body uses of a regex with line and section, checks the first one against the line of the defining \label (a reference to that label near the use counts as a pointer), and lists \cref-type references to equations that are printed further down.
 - **[tex2plain.py](tex2plain.py)** — .tex から LaTeX タグを除いたテキストを生成する (数式は Unicode で線形化、図キャプションは末尾へ)。
+- **[transcript-images.py](transcript-images.py)** — Claude Code の会話記録 (jsonl) から、 user が貼った画像 (画面写真) を file に取り出す
 - **[tune-seal-image.py](tune-seal-image.py)** — Calibrate a digitized seal PNG against a *printed* reference — stroke width and ink color.
 - **[uyghur-tts.py](uyghur-tts.py)** — Generate Uyghur speech through the public Idirak/MMS-TTS endpoint.
 - **[validate-codex-skills.test.sh](validate-codex-skills.test.sh)** — shipped Codex skills の discovery metadata を検証する
