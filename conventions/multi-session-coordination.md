@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき
+when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment)
 category: harness-core
 summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**生成物の再生成はその防御を貫通する (#generated-file-contamination)**、**起きた後の追跡は commit の `Agent-Session:` + model/effort trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
 -->

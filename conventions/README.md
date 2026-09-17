@@ -32,7 +32,7 @@ layer 1 (public) のドメイン固有規約 118 file をカテゴリ別に列�
   - アカウント × マシン × 端末 (desktop app / スマホ remote) の 2×2×2 を全部シームレスにする設計原理 (= 3 軸の本質差・切替 mechanics・seamless invariant I1-I9・破れの検出・cross-machine 不可視の正直な限界。 RC server / multi-machine-state / scheduled-tasks の全体像 doc)
 - **[multi-machine-state.md](multi-machine-state.md)** — 複数マシンで同じ Claude Code setup を運用・audit するとき
   - 複数マシンで同じ Claude Code セットアップを使うときの規律 (audit scope 明示・実機検証・idempotent setup.sh)
-- **[multi-session-coordination.md](multi-session-coordination.md)** — 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき
+- **[multi-session-coordination.md](multi-session-coordination.md)** — 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment)
   - 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**生成物の再生成はその防御を貫通する (#generated-file-contamination)**、**起きた後の追跡は commit の `Agent-Session:` + model/effort trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
 - **[name-rendering.md](name-rendering.md)** — 人名を記録・文面・印字物に書く瞬間で、手元にある表記が機械 field (メールヘッダ / git author / CSV・LDAP export / 登録システム) 由来のとき
   - transliteration・正規化された人名 field は不可逆な投影 — 手元に無い表記形 (native script / 濁点・記号 / 漢字) を推測で復元しない。3 択 (権威 source から取る / 本人に聞く / その表記を使わない) + 高 stakes 印字物の照合 + 確定後の SoT 化と errata
