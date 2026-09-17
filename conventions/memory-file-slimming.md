@@ -201,6 +201,15 @@ CLAUDE.md 95 → 35 KB)。
   [`scripts/check-session-sot.py`](../scripts/check-session-sot.py) の既定 warn は 64 KiB / 2 KiB。これは意味上の違反判定
   ではなく、高信号の byte proxy であり、live fleet で慢性点灯しない境界に校正してから変更する。
 
+- <a id="per-entry-commit-warn"></a>**entry が並ぶ節 (作業中 project の一覧・索引) は、 file 全体の byte でなく entry ごとの byte を commit 時に見る。**
+  file 全体の閾値は「どこかが育った」 しか言わず、 しかも次の session で出るので書いた本人に届かない。 一覧型の節が育つ経路は
+  entry の書き換えのたびに状態・経緯を写し込むことで、 実測では 1 週間に追加・更新された entry 91 回のうち 71 回が
+  1200 B を超えていた (= 床 ~800 B の 1.5 倍)。 warn の対象は **HEAD に無い (新規・書き換えた) entry だけ**にする
+  (= 既存の長い entry を触らない commit で慢性点灯させない)。 節の冒頭にも「entry は pointer + 次の一手だけ、
+  状態・経緯は各 repo の SESSION / plan」 と規範を置き、 warn の文面から同じ規範を指す。 3 回目の縮退では
+  graduation の yield が 2 回目 (~0) と違い 10 entry あった = 完了した RCA / plan の entry が「完了」 と書き換えられた
+  まま一覧に残っていた (graduate は完了を書いた turn でするのが安い)。
+
 (以上の置き方は任意の常設検出器に通じる一般形だが、 実例 1 件のため本 doc 留め —
 2 例目で上層 doc への hoist を判断する。)
 
