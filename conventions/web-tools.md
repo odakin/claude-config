@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings)
+when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot)
 category: web
 summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)**
 -->
@@ -300,6 +300,14 @@ frameset の app では空文字と ref 無しが返る。 読み書きは `java
 - **本番 record に試し書きしない** = 検証は sandbox (別種目の新規 draft 等) で往復 → 読み戻し → 削除まで通してから本番。
 
 実例 (科研費電子申請システムの読み・書き経路 + driver 設計) = [kakenhi-proposal.md#ai-read-route](kakenhi-proposal.md#ai-read-route) / [#ai-write-route](kakenhi-proposal.md#ai-write-route)。
+
+## <a id="browser-pane-local-file-snapshot"></a>内蔵 Browser pane で project folder の外の `file://` を開くと、 静的な snapshot になり page tool が使えない
+
+生成した HTML を目で確かめたいとき、 scratchpad など作業 folder の外の file を `preview_start {url: "file:///…"}` で開くと、 表示は出るが `find` / `read_page` / `get_page_text` は「local file なので操作できない」 で拒否される (実測)。 page の中身を tool で確かめるなら:
+
+- 作業 folder の中の、 **git が ignore する dir** に出力を書く (生成物を commit に混ぜない)
+- `.claude/launch.json` にその dir を配信する静的 server (`python3 -m http.server <port> --bind 127.0.0.1 -d <dir>`) を置き、 `preview_start {name}` → `navigate` で `http://localhost:<port>/<file>` を開く (既にある設定を使えるなら足さない)
+- 確かめ終わったら `preview_stop` し、 出力を消す (私的な中身の HTML を置きっぱなしにしない)
 
 ## <a id="browser-download-automation"></a>**Chrome 拡張**からの file download は user gesture 必須 (= scripted download の silent block)
 
