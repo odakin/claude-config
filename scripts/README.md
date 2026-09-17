@@ -175,6 +175,7 @@
 - **[setup-codex.sh](setup-codex.sh)** — claude-config の共有規約を Codex に安全に導入する
 - **[setup-codex.test.sh](setup-codex.test.sh)** — setup-codex.sh の隔離・冪等・非上書き性を検証する
 - **[setup-dropbox-refs.sh](setup-dropbox-refs.sh)** — personal layer の dropbox-collabs.yaml を読んで symlink を生成
+- **[shared-drive-folder-watch.py](shared-drive-folder-watch.py)** — 他人から共有された Google Drive folder を台帳で監視し、 版の差分だけを手元の写しに落とす (標準ライブラリだけで動く)
 - **[smoke-googleapis.mjs](smoke-googleapis.mjs)** — googleapis / google-auth-library の依存 bump 後 read-only smoke test (対象 dir 自身の node_modules を createRequire で load し、 実 API read か token refresh で更新実体を検証。 書き込み API・token 永続化なし。 規約 = conventions/google-api-direct-access.md)
 - **[sot-registry-add.py](sot-registry-add.py)** — check-sot-drift.py の registry に topic を足す前に検査し、 通ったものだけ registry の書式で末尾に追記する
 - **[sot-registry-edit.py](sot-registry-edit.py)** — check-sot-drift.py の registry を topic 単位の操作で行ごと書き換える (comment と書式を保つ)

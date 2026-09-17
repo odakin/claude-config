@@ -210,6 +210,8 @@ worked example: 配布 folder 30 file (root 6 + subfolder 24、 PDF + xlsx 混�
 
 **hook 環境の依存**: 通知 hook は client library の無い python でも動くように、 REST を標準ライブラリで叩く (token の refresh → `files.list` → `alt=media` / `export`)。 refresh した access token は credential file に書き戻さない (下の §Token refresh の運用)。
 
+**実装**: [`scripts/shared-drive-folder-watch.py`](../scripts/shared-drive-folder-watch.py) が上の 4 点と通知 id の判定を持つ (標準ライブラリだけ。 台帳は YAML か JSON、 account → token の対応は台帳に書くか呼び出し側が注入)。 共有通知メールを取ってくる部分は持たない — 手元のメール経路で本文を読み、 `extract_drive_ids` と `share_notice` に渡す薄い wrapper を個人側に置く。
+
 ## <a id="gmail-bulk-cleanup"></a>Gmail 一括掃除 (= batchModify TRASH + 送信者別集計 + 本文入り通知の salvage)
 
 storage 満杯対策等で Gmail を数千〜数万通単位で掃除するときの安全 pattern。 query 一発の削除より 1 段精密な「集計 → レビュー → ID list 削除 → salvage」 の流れ。
