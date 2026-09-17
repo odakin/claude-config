@@ -328,7 +328,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--app", help="report file 名の先頭 (= process 名、 例: 'Example Browser')")
     parser.add_argument("--report", action="append", help=".ips を直接指定 (複数可)")
     parser.add_argument("--days", type=float, default=14)
-    parser.add_argument("--log", action="store_true", help="起動 5 秒以内の crash に unified log の窓を添える")
+    parser.add_argument("--log", action="store_true", help="起動直後の crash (登録失敗の abort を除く) に unified log の窓を添える")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--home", type=Path, default=Path.home(), help=argparse.SUPPRESS)
     parser.add_argument("--system-reports", type=Path, default=SYSTEM_REPORTS, help=argparse.SUPPRESS)
@@ -341,7 +341,7 @@ def main(argv: list[str] | None = None) -> int:
     records = collect(args, args.home, args.system_reports)
     if args.log:
         for record in records:
-            if record["lifetime_s"] is not None and record["lifetime_s"] <= STARTUP_SECONDS:
+            if record["class"] in ("startup-during-bundle-replacement", "startup-crash"):  # 登録失敗の abort は更新器と無関係
                 record["log"] = log_window(record)
     if args.json:
         print(json.dumps(records, ensure_ascii=False, indent=2))

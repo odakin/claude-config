@@ -16,7 +16,7 @@ python3 scripts/macos-crash-triage.py --app "<report file 名の先頭 = process
 
 [`macos-crash-triage.py`](../scripts/macos-crash-triage.py) は読むだけで、 アプリの起動・終了・設定変更をしない。
 report ごとに 起動→落ちるまでの秒数 / report の版番号・crash key の版・今入っている版 / 例外 / 親 process /
-faulting thread の先頭 frame / 起動引数 (Chromium 系) / 型 / 起動 5 秒以内のものは unified log の窓 を出す。
+faulting thread の先頭 frame / 起動引数 (Chromium 系) / 型 / 起動直後の crash (登録失敗の abort を除く) には unified log の窓 を出す。
 型の判定は手がかりであって結論ではない。 帰属を言う前に [#exclusion-before-vendor-blame](#exclusion-before-vendor-blame) を通す。
 
 ## <a id="crash-report-sources"></a>証拠の置き場と読み方の罠
@@ -51,18 +51,18 @@ faulting thread の先頭 frame / 起動引数 (Chromium 系) / 型 / 起動 5 �
 
 ## <a id="update-relaunch-race"></a>更新中の bundle 差し替えと再起動の競合
 
-Sparkle で自己更新する Chromium 系ブラウザで実測した連鎖:
+Sparkle で自己更新する Chromium 系ブラウザで実測した連鎖 (時間間隔は観測 1 例):
 
 1. 更新器が新しい版を取得して、 終了時に入れる形で待たせる (`defaults read <bundle id>` の `SULastCheckTime` が取得の時刻、 `SUAutomaticallyUpdate = 1` なら黙って入れる設定)。
 2. 最後の窓が閉じる (`_kLSApplicationWouldBeTerminatedByTALKey=1`)。
-3. 約 60 秒後、 **アプリ自身が**更新の署名を検査して (syspolicyd への接続) 普通に終了する (exit handler が走る)。
+3. 約 60 秒後、 アプリが syspolicyd に接続して (更新の署名検査と推定) から普通に終了する (exit handler が走る)。
 4. ほぼ同時に 再起動の起動要求 (`LS launch`、 起動引数に `--no-startup-window`) と 更新器 (`Autoupdate` の `PID to listen: <旧 pid>`) が並走する。
 5. 再起動された process が**旧版のコード**で動き (crash key の `ver` が旧版)、 差し替えで消えかけの旧版の resource を読めずに 1 秒以内に落ちる。 report の版番号は空。
 
 - **後始末は不要**: 差し替えが終われば普通に起動できる。 Chromium 系なら user-data-dir の `Last Version` file が新しい版に進めば起動成功、 profile は壊れていない。
 - **機序は推定**: 5. で旧版のコードが動いた経路 (起動要求が旧 bundle を指したまま解決された等) は log からは確証できない。
   上流の同型の報告 = [brave/brave-browser#25576](https://github.com/brave/brave-browser/issues/25576) (再起動に 2 経路があり、 更新保留の有無で選び分けていない)。 同一の不具合かは別途確認が要る。
-- **macOS の自動終了ではないことの確かめ方**: `Info.plist` に `NSSupportsAutomaticTermination` が無ければ、 窓が閉じた後に OS が黙って終了させることはない (3. はアプリ側の動作)。
+- **macOS の自動終了との区別は決め手が無い**: `Info.plist` に `NSSupportsAutomaticTermination` が無くても、 アプリは実行時に自動終了を有効にできる (`NSProcessInfo` の `enableAutomaticTermination:`)。 key の不在は傍証に留め、 終了の直前に更新器の動き (署名検査・`PID to listen`) が並んでいるかを合わせて見る。
 - **予防策は未検証**: 更新を黙って入れる設定を切る (更新が遅れる代償) / 更新待ちの間は窓を全部閉じたまま放置しない、 はどちらも効果を実測していない。 効くと書く前に試す。
 
 ## <a id="startup-abort-app-registration"></a>window server に登録できない起動
@@ -87,7 +87,7 @@ Sparkle で自己更新する Chromium 系ブラウザで実測した連鎖:
 
 - **agent の操作**: 落ちた時刻の前後に動いていた Claude Code / Codex の記録に、 そのアプリ・その bundle・`open -a`・`osascript`・`killall` を含む操作があるか。 記録の横断検索 = [`search-agent-transcripts.py`](../scripts/search-agent-transcripts.py)。
 - **定期的な kill**: 同時刻の `killall` 等は、 WindowServer の `Process death` の名前で誰が死んだかを確かめる (別の常駐処理の kill が偶然重なっただけのことがある)。
-- **OS の自動終了**: `NSSupportsAutomaticTermination` の有無。
+- **OS の自動終了**: `NSSupportsAutomaticTermination` の有無は傍証止まり (実行時に有効化できる) = 無くても「外した」 欄には入れず、 更新器の動きと合わせて書く。
 - **更新器の設定と時刻**: `defaults read <bundle id>` の更新関係の key。
 - **電源状態**: `pmset -g` の `lowpowermode`。 遅延で競合の窓が広がる可能性は、 否定も肯定もできないなら「外せていない」 に置く。
 
