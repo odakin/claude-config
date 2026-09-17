@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: user への応答・報告・deliverable (README / 案内 doc / PDF) を書くとき常時 + **user 自身に操作してもらう手順を書くとき** (= #user-facing-steps)
+when: user への応答・報告・deliverable (README / 案内 doc / PDF) を書くとき常時 + **user 自身に操作してもらう手順を書くとき** (= #user-facing-steps) + **user に判断や確認を頼む質問を書くとき** (= #decision-questions)
 category: harness-core
 summary: 常に簡潔を旨とする — 応答は結論先行で支持詳細を削る、deliverable は「読む負担 = 相手が払う価格」とみなし 1 画面を目安に、iteration ごとの肥大 (verbosity creep) を意識的に抑える
 -->
@@ -47,6 +47,11 @@ summary: 常に簡潔を旨とする — 応答は結論先行で支持詳細を
    その carrier を名指しする ([`convention-design-principles.md#human-memory-not-a-carrier`](../docs/convention-design-principles.md#human-memory-not-a-carrier))。
 
 判断を仰ぐときも同じ: 選択肢を並べて終わらず、 **推奨を 1 つ名指し**してから他を出す。
+
+<a id="decision-questions"></a>**判断を仰ぐ質問の書き方** (実測: 推奨を付けても 2 回続けて「違いが分からん」 と返った):
+- **選択肢は user が見る結果の言葉で書く** — 実装の語 (「inline code も block する / link だけ」) でなく、 選んだ後に user の画面や手間がどう変わるか (「押しても開かない書き方を、 返事を送る前に直させる」)。 実装の語の選択肢に付けた推奨は、 推奨ごと伝わらない。
+- **その違いが user にとって意味を持たないなら聞かない** — 推奨で進めて「こうした、 変えたければ言って」 と報告する。 聞くのは結果が user の手間・リスク・外部への見え方を変えるときだけ。
+- **確認を 2 つ以上頼むときは答えの形を指定する** — 短い返事 (「1」) がどの問いへの答えか決まらない。 「1: 開く / 開かない、 2: A / B / 両方」 のように選択肢ごと書き、 それでも曖昧なら記録する前に読み方を確かめる。
 
 > 起源 (2026-09-09): 同一 session で user が 3 度 clarity を訴えた
 > (「なに言ってるか分からん」「〜は何をコピーすんのよ。ちゃんときっちり手順書いてよ」
