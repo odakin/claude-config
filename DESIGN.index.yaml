@@ -7,6 +7,14 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: sso-session-recovery-design
+    legacy: "2026-09-17"
+    level: 2
+    title: "2026-09-17: SSO 保護サイトの login 切れは、 予告も推定もせず、 使う時に tab の行き先を見て復帰する"
+  - id: hook-retirement-registry
+    legacy: "2026-09-17"
+    level: 2
+    title: "2026-09-17: hook の退役は registry に書き、 毎回の sync が外す (installer の hardcode をやめる)"
   - id: precommit-installer-respects-repo-hooks
     legacy: "2026-09-16"
     level: 2

@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 外部 service / アプリを操作・データ取得する経路を選ぶとき (画面 drive を検討し始めた瞬間)
+when: 外部 service / アプリを操作・データ取得する経路を選ぶとき (画面 drive を検討し始めた瞬間) + browser の cookie を再利用する script が login 切れで止まる・本人が毎回ログインに呼ばれるとき / ログインの切れを予告・監視しようとしたとき (#sso-session-recovery)
 category: harness-core
 summary: 経路 ladder (dedicated MCP → API 直 → CLI → 経路を実装 → user 依頼 → 画面 drive) — 画面 drive は最終手段で、経路が無いときは「実装するのが先」 (#build-the-route-first = 実装した経路を auto-load 面に記録するまでが 1 単位)。 画面 drive の 3 重コスト (unreliable click / user のマシン拘束 / 対象取り違え) と許容例外。 **他人 owner の共有 document (sheet / form / doc) への書込は画面 drive 禁止級** (#shared-document-write = blast radius が自分の外、 xlsx は API in-place update、 native Sheets は Sheets API、 経路が無ければ user 依頼が先)。 公開 API の無い web app は #internal-endpoint-replay (= XHR hook で UI 操作 1 回を捕捉 → 同 endpoint を page context から叩く → rules/dry-run/apply → reload で確認)
 -->
@@ -95,11 +95,33 @@ recipe (2026-09-07 Cybozu Garoon で確立、 部品 = [`scripts/chromium-cookie
 1. **cookie は browser の暗号化 DB から復号する** (macOS Chromium 系 = sqlite `Cookies` を copy → Keychain "<Browser> Safe Storage" → PBKDF2 → AES-128-CBC、 Chromium 130+ は host_key SHA-256 prefix)。 **Keychain 読み出しの初回 dialog だけが user 段** (= 「常に許可」 で以後 silent)。 password も token も新たに発行しない = 認証境界を増やさない。
 2. **API の形は JS を読んで復元する** — search box が叩く endpoint (`fts/api/search` 等) は HTML には無く、 minified JS の `makeSearchParam` に param 名が全部ある。 必須 param が欠けると 5xx で沈黙する (= cabinet に `cabinetFolderId` + `fileOnly` が要る等) ので、 推測せず JS を grep する。 csrf ticket は page の inline `__PRELOADED_DATA__` から。
 3. **HTML を grep して「0 件」 と言わない** — 検索結果 page は template に「該当なし」 文言を常在させ、 結果は JS が後から描画する。 browser MCP の `get_page_text` も描画前に読めば同じ罠 (= 実測: 3 query 連続で偽の no-data)。 API の JSON を正とする。
-4. **login 切れの判定を script に持たせる** (302 → IdP / 200 + login page HTML) → 「browser で 1 回 login して」 と言って止まる。 script が login を代行しない (= SSO の credential は user 専権)。 ただし切れは 2 層ありうる (app 本体のセッション / IdP のログイン): 本体だけの切れなら、 browser に tab を開かせて入り直させれば本人の操作なしで復帰できる。 どちらの切れかは**見積もらず、 開かせた tab の行き先で見る**。 本人に頼むのは IdP も切れている時だけで、 その時は script がログイン完了を待って続きから進む (実装と設計の要点 = [`garoon.md#garoon-session-recovery`](garoon.md#garoon-session-recovery))。 切れが頻繁と言われたら、 対策の前にどの層がどう切れているかを測る = [`debugging-discipline.md#login-lifetime-measurement`](debugging-discipline.md#login-lifetime-measurement)。
+4. **login 切れの判定を script に持たせる** (302 → IdP / 200 + login page HTML)。 script が login を代行しない (= SSO の credential は user 専権)。 切れたら「browser で 1 回 login して」 と言って止まる前に、 **本体だけの切れなら browser に入り直させて復帰する** = 下の [#sso-session-recovery](#sso-session-recovery)。 切れが頻繁と言われたら、 対策の前にどの層がどう切れているかを測る = [`debugging-discipline.md#login-lifetime-measurement`](debugging-discipline.md#login-lifetime-measurement)。
 5. **別 host の Basic 認証 (規程集の類) は射程外** — cookie は host 単位、 ID/PW 入力は agent 禁則 → user 依頼 (ladder 5) に戻す。 「cookie で全部読める」 と過信しない。
 6. **auto-load 面に「第一選択 = script 経路」 と書くまでが 1 単位** (#build-the-route-first と同じ)。 browser MCP 経路は fallback として残す。
 
 線引きは #internal-endpoint-replay と同じ (= user 本人の session で user が UI からできる read を機械化するだけ、 無人化・他人の session・bot 保護回避には使わない)。 cookie 値は secret (= session hijack 可能) — chat / log / commit に出さない。
+
+### <a id="sso-session-recovery"></a>login 切れからの復帰 — 見積もらずに見る・使う時にだけ・本人に頼むのは要る時だけ
+
+recipe 4 の中身。 部品 = [`scripts/lib/browser_tab.py`](../scripts/lib/browser_tab.py) (browser に裏で tab を開かせ、 行き先を見て、 自分の tab だけ閉じる) + 結末の判定 `watch()`。 初例の手順 = [`garoon.md#garoon-session-recovery`](garoon.md#garoon-session-recovery)。
+
+SSO 保護サイトの切れは 2 層ある: **サイト本体のセッション**と **IdP のログイン**。 本体だけが切れていて IdP が生きていれば、 browser がそのサイトを開くだけで (パスワードも追加認証もなしに) 入り直せる。 IdP も切れていれば本人のログインが要る。 script の復帰は次の順:
+
+1. 手元の cookie が古いだけなら読み直す (browser は既に入り直していて、 cookie の disk への書き出しが遅れていた場合。 browser に触らない)。
+2. 起動中の browser に tab を 1 枚、 裏で開かせ、 **tab の行き先を見る**。 サイトの中に着いた = 入り直せた → cookie の更新を待って読み直し、 撃ち直す / 外 (ログイン画面) で数秒止まった = 本人のログインが要る → 専用の exit code で止まる。
+3. 本人のログインが要る時は、 agent が user に 1 行で頼み、 同じ command を「ログイン完了を待つ」 option つき・background で実行し直す。 本人がログインし終えたら続きから進む = [完了は報告させず、 機械が状態で見る](../docs/convention-design-principles.md#completion-by-observation)。
+
+設計の要点と理由:
+
+- **見積もらずに見る** ([原則](../docs/convention-design-principles.md#observe-dont-estimate))。 「IdP がまだ生きているか」 は、 有効期間の推定 (閲覧履歴の最後のログイン + 期間) でも当てられるが、 推定は組織ごとの値が要り、 期間が放置型か絶対時間型かで外れ、 別端末のログインを知らない。 tab の行き先なら数秒で**観測**でき、 待ち方も「上限まで盲目に poll」 から「結末が見えた時点で終わる」 に変わる (実測: ログイン切れの判定が上限待ちの数十秒 → 数秒)。 観測の代償 = browser が IdP に 1 回触れること。 だから観測は読む用事がある時にだけ行う。
+- **通常の周期を警告にしない** ([原則](../docs/convention-design-principles.md#steady-state-is-not-a-finding))。 IdP の有効期間より利用の間隔が長い使い方では「切れている」 が通常の状態で、 session 開始や dashboard で知らせても、 先にログインしておく意味が無い (次に使う時にはまた切れている)。 **死活監視に載せるのは配線の故障だけ** (cookie を復号できない等、 network なしで見られるもの)。 切れは使う時に見て、 その場で復帰する。 監視のために組織へ定期的に撃つこともなくなる。
+- **IdP の有効期間は組織の方針** — 定期アクセスで延ばす仕組みは作らない。 減らせるのは「作業の途中で止まること」 と「本人の手数」 で、 ログインの回数ではない。
+- **見るのは tab の URL (query と fragment を落としたもの) と読み込み中かだけ**。 ページの中身・認証応答 (SAML 等) は読まず、 IdP の cookie も読まない。 query は AppleScript の中で落とし、 script に渡さない。 入り直すのは browser 自身で、 script は認証に触れない。
+- **人の browser に触る副作用は opt-in**。 公開の client の既定は「何も開かない」。 開かせる・閉じるは、 利用者が自分の入口 (org と流儀を env で渡す数行の wrapper) で選ぶ。 閉じるのは自分が開いた tab だけで、 閉じる直前に「まだ自分が開いた場所に居るか」 を確かめる。 本人がログインに使った tab、 ログイン待ちが時間切れになった tab (入力の途中かもしれない) は閉じない。 待たずに止まる時はログイン画面の tab も閉じる (失敗のたびに tab が溜まらない)。
+- **既に開いている同じサイトの tab を使い回さない**。 reload は本人の入力中の form を壊しうる。 tab の id を run をまたいで覚える案も、 「その tab は今も自分のものか」 を判定できないので採らない (= 状態を持たない)。
+- **ログイン画面の判定は「外に、 読み込み完了のまま、 数回続けて同じ場所」**。 SSO の通過は一瞬 IdP の URL を通るので、 1 回見ただけでは決めない。 サイトの外かどうかは host と path で決め、 IdP ごとの URL の形は持たない (= 組織固有の値が client に要らない)。
+- AppleScript が使えない環境 (自動操作の許可が無い・無人実行) では「開くだけ」 に落ち、 cookie の更新だけを上限つきで待つ。 incognito 等の窓には開かない (SSO のログインを共有していない)。 機構 = [`macos-gui-app-automation.md#chromium-tab-scripting`](macos-gui-app-automation.md#chromium-tab-scripting)。
+- **browser の中で読む経路 (browser MCP) に寄せない理由**: SSO は browser が面倒を見てくれるが、 拡張の接続と domain 許可が機械 × account ごとの配線になり、 無人の検査から使えず、 1 回の読み取りが tool call 数回になる。 cookie 再利用を第一選択のまま、 入り直しだけを browser に任せるのが両者の良い所取り。
 
 ## 実例
 

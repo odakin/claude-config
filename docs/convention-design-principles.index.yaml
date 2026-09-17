@@ -805,6 +805,18 @@ sections:
     legacy: "8.61"
     level: 3
     title: "8.61 規則は在るのに、 行為の直前に効かない 4 つの入口 — 理由の無い手順・問いの置き換え・必読の grep 化・訂正の 1 本化"
+  - id: steady-state-is-not-a-finding
+    legacy: "8.62"
+    level: 3
+    title: "8.62 通常の周期の状態を警告にしない — 知らせる価値は「今打てる手が、 用事の時点の結果を変えるか」 で決まる"
+  - id: observe-dont-estimate
+    legacy: "8.63"
+    level: 3
+    title: "8.63 観測できるものを推定で置き換えない — 推定器を作る前に、 1 回の安い観測で同じ問いに答えられないかを問う"
+  - id: completion-by-observation
+    legacy: "8.64"
+    level: 3
+    title: "8.64 人に頼んだ操作の完了は、 報告させず機械が状態で見る — 頼む・待つ・続きから進む"
   - id: changelog
     level: 2
     title: "変更履歴"

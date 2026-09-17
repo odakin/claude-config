@@ -4,6 +4,8 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-17: SSO 保護サイトの login 切れは、 予告も推定もせず、 使う時に tab の行き先を見て復帰する](#sso-session-recovery-design)
+- [2026-09-17: hook の退役は registry に書き、 毎回の sync が外す](#hook-retirement-registry)
 - [2026-09-16: 共通 pre-commit の installer は repo が管理する hook を置き換えない](#precommit-installer-respects-repo-hooks)
 - [2026-09-15: 公開 repo の gate の誤検知を構造で消す (書誌・複合語・生成データ) + 棚卸しと監査を 1 本に](#public-gate-structural-exemptions)
 - [2026-09-15: 発音 evidence と user-visible 音声 delivery を分離する](#pronunciation-evidence-and-delivery)
@@ -40,6 +42,41 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="sso-session-recovery-design"></a>2026-09-17: SSO 保護サイトの login 切れは、 予告も推定もせず、 使う時に tab の行き先を見て復帰する
+
+**起点 (実測)**: browser の session cookie を再利用してサイトを読む client ([`garoon-client.py`](scripts/garoon-client.py)) が、 login 切れのたびに止まって本人を呼んでいた。 同日に入れた最初の対策は 2 本立てだった — (E) 閲覧履歴から「IdP の最後のログイン + 有効期間」 を推定し、 切れる前後に session 開始時へ予告する / (F) 切れたら `open -g` で browser に tab を開かせ、 cookie DB の更新を上限まで poll する。 動きはしたが、 (E) の予告は利用間隔が有効期間より長い使い方では毎回出るだけ、 (F) は成否が見えず tab が溜まり、 (E) の推定を (F) が使っていなかった。
+
+**判断**:
+- **予告と常時の死活警告を捨てる**。 切れは故障でなく周期で、 先にログインしても次の利用まで持たない ([principles §8.62](docs/convention-design-principles.md#steady-state-is-not-a-finding))。 監視に残すのは配線の故障だけ (`doctor` = cookie を復号できるか、 network なし)
+- **推定を捨て、 観測にする**。 開かせた tab の行き先 (query を落とした URL と読み込み中か) を AppleScript で見れば、 入り直せたか・ログイン画面で止まったかが数秒で分かる ([§8.63](docs/convention-design-principles.md#observe-dont-estimate))。 IdP の URL の形も有効期間も client は持たない = 組織固有の値が公開層に要らない
+- **本人に頼むのは IdP も切れている時だけ、 頼んだ後は script が完了を見る** (`--wait-login`、 [§8.64](docs/convention-design-principles.md#completion-by-observation))。 待たない時は専用の exit code (75) で止まり、 agent が次の手を選べる
+- **browser に触る副作用は opt-in** (`--browser-refresh off|keep|close`、 既定 off)。 公開の client が既定で人の browser に tab を開くのは筋が悪い。 利用者は org と流儀を数行の wrapper (private 層) で 1 回決める
+- **閉じるのは自分が開いた tab だけ**、 id で指し、 閉じる直前に場所を確かめる。 本人がログインに使った tab・時間切れの tab は閉じない
+- tab の駆動と結末判定は [`scripts/lib/browser_tab.py`](scripts/lib/browser_tab.py) に切り出す (判定 `watch()` は tab と時計を差し替えて selftest できる純粋な関数)。 client 側に残るのはサイト固有の「切れ判定」 と「中か外か」 だけ
+- 規約の置き場: 設計の要点 = [`machine-route-first.md#sso-session-recovery`](conventions/machine-route-first.md#sso-session-recovery) (session-cookie-reuse の一部)、 サイトの手順 = [`garoon.md#garoon-session-recovery`](conventions/garoon.md#garoon-session-recovery)、 AppleScript の機構 = [`macos-gui-app-automation.md#chromium-tab-scripting`](conventions/macos-gui-app-automation.md#chromium-tab-scripting)
+
+**棄却した案**:
+- *(E) の推定を (F) に渡す (切れている見込みなら tab を開かない)*: 推定器と組織固有の定数を公開 client に持ち込むことになり、 推定が外れる経路 (期間の型が未決・別端末のログイン) も持ち込む。 しかも IdP が切れている時は本人がログインする tab がどのみち要る = 開かないことの得が無い
+- *既に開いている同じサイトの tab を reload して使い回す*: 本人の入力中の form を壊しうる。 script からは「その tab を今使っているか」 が分からない
+- *自分が開いた tab の id を run をまたいで覚え、 次回それを使う*: 本人がその tab で作業を始めていたら本人のもの。 判定できないので状態は持たない。 tab が溜まる問題は「成功時と、 待たない失敗時に自分の tab を閉じる」 で足りる
+- *browser の中で読む経路 (browser MCP) に全面的に寄せる*: SSO は browser が面倒を見てくれるが、 拡張の接続と domain 許可が機械 × account ごとの配線になり、 無人の検査から使えず、 1 回の読み取りが tool call 数回になる。 cookie 再利用を第一選択のまま、 入り直しだけを browser に任せる
+- *サイト本体のセッションを定期アクセスで生かし続ける*: 相手への定期的な負荷になり、 IdP 側が放置型なら有効期間 (組織の方針) の延命にもなる。 しない
+- *別 window・最小化した window で開く*: 窓の出現と Dock の動きの方が tab 1 枚より目に付く。 前面の tab を元に戻すだけにした
+- *ログイン待ちで OS 通知を出す / browser を前面に出す*: 頼む経路は agent の chat で足りる。 部品を増やさない
+
+**未検証**: 入り直せる側 (IdP が生きている時の本体切れ) と `--wait-login`・`close` の実走。 selftest は結末判定を偽の tab で通すだけで、 AppleScript 本体は「開く」 「行き先を見る」 しか実機で確かめていない (閉じる側は `osacompile` のみ)。
+
+## <a id="hook-retirement-registry"></a>2026-09-17: hook の退役は registry に書き、 毎回の sync が外す (installer の hardcode をやめる)
+
+**起点 (実測)**: 個人層の hook を 1 本消した時、 配線 (hooks dir の symlink + `settings.json` の entry) が「足すだけ」 なので、 各マシンに command が残る形だと分かった。 層1 には同じ型の掃除が `setup.sh` に hardcode で在ったが、 pull だけで新しい hook を配線する経路 ([#ci-and-single-list-wiring](#ci-and-single-list-wiring)) を作った後も、 退役だけは setup.sh の再実行に依存していた。
+
+**判断**: 退役は `hooks/retired-hooks.txt` (1 行 1 file 名、 `Event:file 名` で event だけの退役) に書き、 [`scripts/lib/prune-retired-hooks.sh`](scripts/lib/prune-retired-hooks.sh) が外す。 層1 は `sync-hook-settings.sh` が毎回呼び、 個人層の installer は同じ関数に自分の registry を渡す。 setup.sh の hardcode 2 件は registry へ移した。 規約 = [`hook-authoring.md#additive-wiring-needs-retirement`](conventions/hook-authoring.md#additive-wiring-needs-retirement)。
+
+**棄却した案**:
+- *registry を持たず、 「command の指す file が無い entry」 を自動で消す*: 他の層・利用者が足した hook も、 その repo が一時的に無い (未 clone・移動中・別マシン) だけで消してしまう。 消す対象は「自分が退役させたと宣言したもの」 に限る
+- *list (settings-entries.json) に無い自層の hook を全部消す*: 自層の hook かどうかを command の path から判定できない (どの層も同じ hooks dir に symlink を張る)
+- *registry の名前が repo にまだ在っても外す*: 書き間違い 1 行で生きている hook が全マシンから外れる。 在る名前は外さず WARN にした (event 指定の退役だけは、 file が現役なのが前提なので当てない)
 
 ## <a id="precommit-installer-respects-repo-hooks"></a>2026-09-16: 共通 pre-commit の installer は repo が管理する hook を置き換えない
 

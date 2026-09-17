@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: macOS の GUI app (Office / Pages / Keynote / Preview 等) を osascript・AppleScript・JXA で駆動する script を書く・直すとき + app を quit / kill / 再起動しようとした瞬間 + 自動化のたびに app が前面に出る・user の文書が閉じられたと言われたとき
+when: macOS の GUI app (Office / Pages / Keynote / Preview 等) を osascript・AppleScript・JXA で駆動する script を書く・直すとき + app を quit / kill / 再起動しようとした瞬間 + 自動化のたびに app が前面に出る・user の文書が閉じられたと言われたとき + 本人が使っている browser に script から tab を開かせる・閉じるとき (#chromium-tab-scripting)
 category: macos
-summary: macOS の GUI app を script で駆動するときの作法。 (1) quit の前に app へ開いている文書を聞き、 自分が開いたもの以外が 1 つでもあれば quit も kill もしない (数え直しと quit は同じ osascript の中、 plain quit で saving no を付けない、 app 名指定の killall/pkill は禁止) (2) 背景で動かす = `open -g`、 `activate` を書かない、 `open -j` (hidden) は dialog まで隠して quit が -128 で取り消されたまま残るので使わない (3) `application id "…" is running` は app を起動しない probe、 `tell application` は起動する (4) 前面を奪ったら `path to frontmost application` で覚えた app へ `open -a` で返す (System Events 権限不要) (5) 文書は path か open が返す参照で指す (`active document` / `workbook 1` は user の文書を指しうる、 /private/tmp と /tmp の表記差を揃える)。 Office 向け実装 = scripts/lib/office-app-guard.sh
+summary: macOS の GUI app を script で駆動するときの作法。 (1) quit の前に app へ開いている文書を聞き、 自分が開いたもの以外が 1 つでもあれば quit も kill もしない (数え直しと quit は同じ osascript の中、 plain quit で saving no を付けない、 app 名指定の killall/pkill は禁止) (2) 背景で動かす = `open -g`、 `activate` を書かない、 `open -j` (hidden) は dialog まで隠して quit が -128 で取り消されたまま残るので使わない (3) `application id "…" is running` は app を起動しない probe、 `tell application` は起動する (4) 前面を奪ったら `path to frontmost application` で覚えた app へ `open -a` で返す (System Events 権限不要) (5) 文書は path か open が返す参照で指す (`active document` / `workbook 1` は user の文書を指しうる、 /private/tmp と /tmp の表記差を揃える) (6) Chromium 系 browser の tab = 裏で開いて前面の tab を戻す・id で指す・見るのは query を落とした URL と loading だけ・閉じるのは自分が開いた tab を場所を確かめてから (scripts/lib/browser_tab.py)。 Office 向け実装 = scripts/lib/office-app-guard.sh
 -->
 
 # macOS の GUI app を script で駆動する作法 <a id="macos-gui-app-automation"></a>
@@ -42,6 +42,20 @@ osascript / AppleScript / JXA で GUI app を動かす script は、 **user が�
 - `active document` / `active presentation` / `active workbook` / `workbook 1` は、 user が同じ app で文書を開いていると **user の文書を指しうる** (= save / close が user の文書に当たる)。 `open workbook …` が返す参照か、 `full name` が自分の path に一致する文書だけを save / close する。
 - 同じ path (Excel は同名の book を 2 つ開けないので**同名**) の文書が既に開いていたら、 開かずに止まる (= 開いていた方を自分のものとして閉じると未保存の編集が消える)。
 - **path の表記差を揃えてから比べる**: app は `/private/tmp/x` を `/tmp/x` と答えることがある (実測: Excel)。 古い版は HFS path (`Macintosh HD:Users:…`) で答えるので POSIX に変換してから比べる (変換は scripting addition なので `tell` の外で)。
+
+## <a id="chromium-tab-scripting"></a>6. Chromium 系 browser の tab を裏で開き、 行き先を見て、 自分の tab だけ閉じる
+
+本人が使っている browser に「1 回だけページを開かせる」 用途 (SSO の入り直し = [`machine-route-first.md#sso-session-recovery`](machine-route-first.md#sso-session-recovery))。 実装 = [`scripts/lib/browser_tab.py`](../scripts/lib/browser_tab.py)。 文書 app の「quit の前に聞く」 (1.) と同じ考え方を tab に当てる = **閉じてよいのは自分が開いたものだけで、 閉じる直前に確かめる**。
+
+- **開く**: `make new tab at end of tabs of <window> with properties {URL:u}` は、 その窓の前面の tab を新しい tab に切り替える。 直前に `active tab index` を覚え、 直後に戻す (実測: `activate` を書かなければ app は前面に出ない)。 窓が 1 枚も無ければ `make new window` → `active tab` の `URL` を設定。 `open -g -a <App> <url>` でも裏で開けるが、 開いた tab を後から特定できない (= 行き先を見られず、 閉じられない)。
+- **窓を選ぶ**: `mode of window` が `"normal"` の窓だけ。 incognito 等の窓は cookie を共有していないので、 SSO の入り直しに使うと必ずログイン画面に落ちる。
+- **tab は id で指す**: 開いた時に `id of window` と `id of tab` を返し、 以後は `tab id T of window id W` で指す。 本人が tab を別の窓へ移す・閉じると参照が error になる → `try` で受けて「無くなった」 として扱う (index や `active tab` で指すと本人の tab に当たる = 5. と同じ)。
+- **見るのは `URL` と `loading` だけ**。 URL の query と fragment は AppleScript の中で落としてから返す (`text item delimiters` を `?` と `#` に)。 redirect の途中の URL には認証の request が query に載ることがあり、 script 側に渡す理由が無い。 ページの中身 (`execute javascript` 等) は読まない。
+- **閉じる**: `close <tab>`。 直前に URL を取り直し、 期待する prefix の下に居る時だけ閉じる (開いた後に本人がその tab で別の場所へ移っていたら、 もう本人の tab)。 最後の 1 枚を閉じると窓も閉じるはず (= 自分で作った窓なら元の状態に戻る。 未実測)。
+- **app 名を AppleScript の本文に入れるなら固定の一覧からだけ** (`tell application "<名前>"` は変数にすると用語が解決できないので本文に埋めることになる = 外から来た文字列を埋めない)。
+- **起動していない browser を起こさない**: `tell application` は app を起動する (3.)。 先に `pgrep -x` / `is running` で見て、 起動していなければ何もしない。
+- **自動操作の許可 (Automation) は「呼び元の app × 相手の app」 ごと**で、 初回に macOS の dialog が出る。 無人実行では dialog を出せず error -1743 になる。 osascript が応答しない・失敗する時は「開くだけ」 (`open -g`) に落とし、 行き先が見えない前提で別の信号 (cookie の更新等) を上限つきで待つ。
+- **実行せずに構文だけ確かめる** = `osacompile -o /tmp/x.scpt script.applescript` (app の用語も解決される。 本人の browser で閉じる系の操作を試走できない時の最低限)。
 
 ## <a id="implementations"></a>実装と検査
 

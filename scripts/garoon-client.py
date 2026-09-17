@@ -36,7 +36,7 @@ subcommand:
   - login 切れの判定 = 302 → SSO (別 host) / 302 → `<org>.cybozu.com/login` / 200 + `<title>ログイン` /
     REST の 401。 切れていたら下の「login 切れからの復帰」。 script はパスワードも OTP も扱わない。
 
-login 切れからの復帰 (一般則 = conventions/garoon.md#garoon-session-recovery):
+login 切れからの復帰 (手順 = conventions/garoon.md#garoon-session-recovery、 設計の要点 = conventions/machine-route-first.md#sso-session-recovery):
   切れは 2 層ある = Garoon 本体のセッション (JSESSIONID) と SSO (IdP) のログイン。 本体だけが切れていて IdP が
   生きていれば、 browser が Garoon を開くだけで入り直せる。 IdP も切れていれば本人のログインが要る。
   どちらなのかを**見積もらず、 browser に開かせた tab の行き先で見る**:
@@ -48,7 +48,8 @@ login 切れからの復帰 (一般則 = conventions/garoon.md#garoon-session-re
        - tab が Garoon の外 (ログイン画面) で止まった = 本人のログインが要る → exit 75 で止まる (`close` なら、 その
          ログイン画面の tab も閉じる = 失敗のたびに tab が溜まらない)。 `--wait-login 秒` を付けると、 tab をログインの
          入口として残し、 本人がログインし終えるのを待って続きから進む。
-    3. 見るのは tab の「query を落とした URL」 と「読み込み中か」 だけ (ページの中身・認証応答は読まない)。 IdP の cookie も読まない。
+    3. tab の駆動と結末の判定は scripts/lib/browser_tab.py (他の SSO 保護サイトの client でも使える部品)。
+       見るのは tab の「query を落とした URL」 と「読み込み中か」 だけ (ページの中身・認証応答は読まない)。 IdP の cookie も読まない。
        AppleScript が使えない環境では `open -g` で開くだけに落ち、 cookie DB の更新だけを待つ。
   ⚠️ IdP の有効期間 (組織の方針) は延ばさない = 定期的に開かせる仕組みにしない。 開かせるのは読む用事がある時だけ。
   ⚠️ Chromium の cookie DB 書き出しは最大 30 秒ほど遅れる。
@@ -63,7 +64,6 @@ import platform
 import re
 import shutil
 import sqlite3
-import subprocess
 import sys
 import tempfile
 import time
@@ -72,12 +72,10 @@ from urllib.parse import urlparse
 
 
 HERE = Path(__file__).resolve().parent
-BROWSER_APPS = {"brave": "Brave Browser", "chrome": "Google Chrome", "chromium": "Chromium"}
-REFRESH_WAIT_S = 40     # 入り直しを待つ上限 (tab の行き先が見えない時はこれだけが頼り)
-FLUSH_WAIT_S = 35       # tab が Garoon に着いてから、 cookie DB への書き出しを待つ上限
-POLL_S = 1.5
-LOGIN_STABLE_POLLS = 3  # 同じ「Garoon の外」 に読み込み完了のまま止まっているのを何回見たらログイン画面と判断するか
-EX_LOGIN = 75           # exit code (EX_TEMPFAIL): 本人のログインが要る
+sys.path.insert(0, str(HERE))  # importlib 経由で読まれた時も lib を引けるように
+from lib.browser_tab import BROWSER_APPS, BrowserTab, watch, selftest_cases as _tab_selftest_cases  # noqa: E402
+
+EX_LOGIN = 75  # exit code (EX_TEMPFAIL): 本人のログインが要る
 
 
 class LoginRequired(Exception):
@@ -118,141 +116,6 @@ def inside(url, base_host):
     """tab の行き先 (query なしの URL) が Garoon の中か (= ログイン画面でも別 host でもない)。"""
     u = urlparse(url)
     return u.scheme == "https" and u.hostname == base_host and not u.path.rstrip("/").endswith("/login")
-
-
-class BrowserTab:
-    """起動中の Chromium 系 browser に tab を 1 枚開かせ、 その行き先を見る (macOS、 AppleScript)。
-
-    見るのは「query を落とした URL」 と「読み込み中か」 だけ (query は AppleScript の中で落とす = script に渡らない)。
-    前面の tab は開いた直後に元へ戻す。 browser は前面に出さない。 AppleScript が使えない (自動操作の許可が無い /
-    応答しない) 時は `open -g` で開くだけに落ち、 行き先は見えない (where() = None)。
-    """
-
-    _OPEN = """on run argv
-  set u to item 1 of argv
-  tell application "@APP@"
-    set w to missing value
-    repeat with i from 1 to (count of windows)
-      if mode of window i is "normal" then
-        set w to window i
-        exit repeat
-      end if
-    end repeat
-    if w is missing value then
-      set w to make new window
-      set t to active tab of w
-      set URL of t to u
-    else
-      set prev to active tab index of w
-      set t to make new tab at end of tabs of w with properties {URL:u}
-      set active tab index of w to prev
-    end if
-    return ((id of w) as text) & " " & ((id of t) as text)
-  end tell
-end run"""
-
-    _FIND = """on run argv
-  set wid to (item 1 of argv) as integer
-  set tid to (item 2 of argv) as integer
-  tell application "@APP@"
-    try
-      set t to tab id tid of window id wid
-      set u to URL of t
-      set ld to loading of t
-    on error
-      return "gone"
-    end try
-@ACT@
-  end tell
-  repeat with d in {"?", "#"}
-    set AppleScript's text item delimiters to (d as text)
-    set u to text item 1 of u
-  end repeat
-  set AppleScript's text item delimiters to ""
-  return u & " " & (ld as text)
-end run"""
-
-    _CLOSE_ACT = """    if u starts with (item 3 of argv) then
-      close t
-      return "closed"
-    end if"""
-
-    def __init__(self, app):
-        self.app, self.ids = app, None
-
-    @staticmethod
-    def running(app):
-        return subprocess.run(["pgrep", "-xq", app]).returncode == 0
-
-    def _osa(self, script, *args, timeout=15):
-        try:
-            r = subprocess.run(["osascript", "-e", script.replace("@APP@", self.app), *args],
-                               capture_output=True, text=True, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            return None
-        return r.stdout.strip() if r.returncode == 0 else None
-
-    def open(self, url):
-        out = self._osa(self._OPEN, url)
-        if out and len(out.split()) == 2:
-            self.ids = out.split()
-        else:  # AppleScript 不可 → 開くだけ
-            subprocess.run(["open", "-g", "-a", self.app, url], check=False)
-
-    def where(self):
-        """None = 見えない / "gone" = tab が無くなった / (query なしの URL, 読み込み中か)。"""
-        if not self.ids:
-            return None
-        out = self._osa(self._FIND.replace("@ACT@", ""), *self.ids)
-        if out is None:
-            return None
-        if out == "gone":
-            return "gone"
-        url, _, loading = out.rpartition(" ")
-        return url, loading == "true"
-
-    def close(self, prefix):
-        """自分が開いた tab が今も prefix の下に居る時だけ閉じる (= 本人が別の場所へ使い回した tab は閉じない)。"""
-        return bool(self.ids) and self._osa(self._FIND.replace("@ACT@", self._CLOSE_ACT), *self.ids, prefix) == "closed"
-
-
-def watch(where, stamp_changed, base_host, wait_login=0, clock=time.time, sleep=time.sleep, say=_say):
-    """browser に開かせた tab と cookie DB を見て、 入り直しの結末を返す (判定だけ = selftest が偽物で通す)。
-
-    → (結末, ログイン画面を見たか, 最後に見た tab の場所)。 結末 = "fresh" cookie DB が更新された / "stale" tab は
-    Garoon に着いたが DB は変わらなかった / "login" ログイン画面で止まった (wait_login=0 の時だけ) / "timeout"。
-    """
-    deadline = clock() + max(REFRESH_WAIT_S, wait_login)
-    arrived = None
-    saw_login = False
-    last, still = None, 0
-    if wait_login and where() is None:
-        say(f"ログイン待ち (最大 {wait_login} 秒)。 browser で Garoon にログインすると続きから進む")
-    while clock() < deadline:
-        sleep(POLL_S)
-        if stamp_changed():
-            return "fresh", saw_login, last
-        at = where()
-        if not isinstance(at, tuple):
-            continue  # 見えない / tab が無くなった → cookie DB だけが頼り
-        url, loading = at
-        if not loading and inside(url, base_host):
-            if arrived is None:
-                arrived = clock()
-                deadline = max(deadline, arrived + FLUSH_WAIT_S)
-            elif clock() - arrived >= FLUSH_WAIT_S:
-                return "stale", saw_login, url
-            last = url
-            continue
-        arrived = None
-        still = still + 1 if (not loading and url == last) else 0
-        last = url
-        if still >= LOGIN_STABLE_POLLS - 1 and not saw_login:
-            saw_login = True
-            if not wait_login:
-                return "login", True, url
-            say(f"ログイン画面で止まった = 本人のログインが要る。 ログイン待ち (最大 {wait_login} 秒)、 終われば続きから進む")
-    return ("stale" if arrived else "timeout"), saw_login, last
 
 
 class Garoon:
@@ -314,7 +177,8 @@ class Garoon:
         elif not self.wait_login:
             return
         t0 = time.time()
-        end, saw_login, at = watch(tab.where if tab else (lambda: None), self._stamp_changed, self.host, self.wait_login)
+        end, saw_login, at = watch(tab.where if tab else (lambda: None), self._stamp_changed, lambda u: inside(u, self.host),
+                                   self.wait_login, say=_say)
         if end == "login":
             if self.refresh == "close":
                 tab.close(at)  # 待たないなら入口も残さない (= 失敗のたびにログイン画面の tab が溜まらない)
@@ -414,22 +278,6 @@ def doctor(browser, profile):
     return []
 
 
-def _fake_run(script, changed_at=None, wait_login=0):
-    """selftest 用: tab の行き先の台本 (1 poll に 1 つ、 尽きたら最後を繰り返す) と cookie DB が変わる時刻で watch を回す。"""
-    t = [0.0]
-    said = []
-
-    def where():
-        return script[min(int(t[0] / POLL_S), len(script) - 1)]
-
-    def sleep(sec):
-        t[0] += sec
-
-    end = watch(where, lambda: changed_at is not None and t[0] >= changed_at, "x.cybozu.com", wait_login,
-                clock=lambda: t[0], sleep=sleep, say=said.append)
-    return end[:2], t[0], said
-
-
 def selftest():
     host = "x.cybozu.com"
     cases = [
@@ -448,23 +296,8 @@ def selftest():
         ok &= got == want
         print("PASS" if got == want else "FAIL", code, loc[:40], "->", got)
 
-    # 入り直しの結末 (tab の行き先 + cookie DB の更新時刻の台本)
-    G, L, A = ("https://x.cybozu.com/g/portal/index.csp", False), ("https://idp.example/auth/session", False), \
-        ("https://idp.example/auth/saml2/x/assertions", False)
-    loading = ("https://x.cybozu.com/g/", True)
-    checks = [
-        ("SSO を素通り → DB 更新で fresh、 ログイン画面は見ていない", _fake_run([loading, A, G], changed_at=12)[0] == ("fresh", False)),
-        ("ログイン画面で止まる → 数秒で login (40 秒待たない)", (lambda r: r[0] == ("login", True) and r[1] <= 6)(_fake_run([loading, L]))),
-        ("途中で一瞬 IdP を通るだけならログイン画面と見ない", _fake_run([A, A, G], changed_at=9)[0] == ("fresh", False)),
-        ("wait-login: ログイン画面 → 本人がログイン → fresh、 ログイン画面を見た印が立つ",
-         (lambda r: r[0] == ("fresh", True) and len(r[2]) == 1)(_fake_run([L] * 20 + [G], changed_at=45, wait_login=300))),
-        ("wait-login: 誰もログインしなければ上限で timeout", (lambda r: r[0] == ("timeout", True) and 299 <= r[1] <= 302)(
-            _fake_run([L], wait_login=300))),
-        ("Garoon に着いたのに DB が変わらない → stale (撃ち直して決める)", _fake_run([G])[0] == ("stale", False)),
-        ("tab が見えない (AppleScript 不可) → DB 更新だけで fresh", _fake_run([None], changed_at=20)[0] == ("fresh", False)),
-        ("tab が見えず DB も変わらない → timeout", (lambda r: r[0] == ("timeout", False) and r[1] <= 42)(_fake_run([None]))),
-        ("tab を本人が閉じた → DB 更新だけを待つ", _fake_run([loading, "gone"], changed_at=10)[0] == ("fresh", False)),
-        ("tab が見えない wait-login は最初に 1 回だけ言う", len(_fake_run([None], changed_at=30, wait_login=300)[2]) == 1),
+    # 入り直しの結末判定 (偽の tab と時計) は lib 側の台本を回す
+    checks = _tab_selftest_cases() + [
         ("Garoon の中の判定: /login と別 host と http は外", inside("https://x.cybozu.com/g/", host)
          and not inside("https://x.cybozu.com/login", host) and not inside("https://y.cybozu.com/g/", host)
          and not inside("http://x.cybozu.com/g/", host) and not inside("chrome-error://chromewebdata/", host)),
