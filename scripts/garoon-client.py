@@ -285,6 +285,11 @@ class Garoon:
         except Exception:  # noqa: BLE001
             return None
 
+    def _stamp_changed(self):
+        """cookie DB の JSESSIONID が、 手元に読んだ時から変わったか (一時的に読めないのは「変わった」 に数えない)。"""
+        now = self._stamp()
+        return now is not None and now != self._loaded_stamp
+
     def _load(self):
         """cookie を browser から読み直す。 時刻を先に読む (= 逆順だと、 間に挟まった更新を見落とす)。"""
         self._loaded_stamp = self._stamp()
@@ -297,7 +302,7 @@ class Garoon:
         if self._recovered:
             return
         self._recovered = True
-        if self._stamp() != self._loaded_stamp:  # browser はもう入り直していて、 手元が古いだけ
+        if self._stamp_changed():  # browser はもう入り直していて、 手元が古いだけ
             self._load()
             yield "reload"
         app = BROWSER_APPS.get(self.browser)
@@ -309,8 +314,7 @@ class Garoon:
         elif not self.wait_login:
             return
         t0 = time.time()
-        end, saw_login, at = watch(tab.where if tab else (lambda: None), lambda: self._stamp() != self._loaded_stamp,
-                                   self.host, self.wait_login)
+        end, saw_login, at = watch(tab.where if tab else (lambda: None), self._stamp_changed, self.host, self.wait_login)
         if end == "login":
             if self.refresh == "close":
                 tab.close(at)  # 待たないなら入口も残さない (= 失敗のたびにログイン画面の tab が溜まらない)
@@ -500,7 +504,8 @@ def main():
     if not a.cmd:
         ap.error("subcommand が要る")
     if a.cmd == "doctor":
-        print("\n".join(doctor(a.browser, a.profile)), end="")
+        for line in doctor(a.browser, a.profile):
+            print(line)
         return
     if not a.org:
         raise SystemExit("--org か env GAROON_ORG が要る (= 組織 subdomain、 private 層の環境 doc 参照)")
