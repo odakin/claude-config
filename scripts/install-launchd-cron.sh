@@ -305,15 +305,17 @@ write_plist() {
 }
 
 # plist を書く action は書き始める前に cron を読む (= 読めない書き方で「ensure install」 だけ出て
-# 未登録のまま残る・途中の routine まで install して止まる、 を防ぐ)。 $1 = task-id (空 = 全 routine)。
-# 読めない routine ごとに 1 行を stderr に出し、 1 つでもあれば非 0。
+# 未登録のまま残る・途中の routine まで install して止まる、 を防ぐ)。 $1 = 空白区切りの task-id
+# (空 = 全 routine)。 読めない routine ごとに 1 行を stderr に出し、 1 つでもあれば非 0。
 check_crons() {
   only="${1:-}"
   printf '%s\n' "$ROUTINES_ACC" | {
     set --
     while IFS='|' read -r task_id kind target cron; do
       [ -n "$task_id" ] || continue
-      [ -z "$only" ] || [ "$task_id" = "$only" ] || continue
+      if [ -n "$only" ]; then
+        case " $only " in *" $task_id "*) ;; *) continue ;; esac
+      fi
       set -- "$@" "$task_id" "$cron"
     done
     [ $# -eq 0 ] || plist_py check "$@"
@@ -439,16 +441,24 @@ cmd_uninstall() {
 cmd_ensure() {  # 未 install の routine だけ install (= SessionStart 等から冪等に呼ぶ自己修復。 quiet + fail-open)
   # loaded 済みは無音 skip / target 未取得 (git pull 待ち) も無音 skip / skill で claude 不在も skip。
   # → 新 routine を ROUTINES に足して git pull した後、 次 session でそのマシンに自動 install される。
-  # ⚠️ fail-open の例外 = 読めない cron (= 呼び出し側の spec の誤り)。 1 本でもあれば 1 行ずつ stderr に
-  #    出して、 どの routine も install せず exit 2 (= 「ensure install」 だけ出て未登録、 を起こさない)。
-  check_crons || exit 2
-  mkdir -p "$LA_DIR" "$LOG_DIR" 2>/dev/null
-  printf '%s\n' "$ROUTINES_ACC" | while IFS='|' read -r task_id kind target cron; do
+  # ⚠️ fail-open の例外 = install する routine の読めない cron (= 呼び出し側の spec の誤り)。 1 本でも
+  #    あれば 1 行ずつ stderr に出して、 どれも install せず exit 2 (= 「ensure install」 だけ出て未登録、
+  #    を起こさない)。 cron を読むのは install する routine がある時だけ (= 全部 loaded の定常状態では
+  #    python を起動しない。 SessionStart から毎回呼ばれるため)。
+  pending="$(printf '%s\n' "$ROUTINES_ACC" | while IFS='|' read -r task_id kind target cron; do
     [ -n "$task_id" ] || continue
-    label="$(label_for "$task_id")"
-    launchctl print "$DOMAIN/$label" >/dev/null 2>&1 && continue   # 既に loaded = 冪等 skip
+    launchctl print "$DOMAIN/$(label_for "$task_id")" >/dev/null 2>&1 && continue   # 既に loaded = 冪等 skip
     [ -f "$target" ] || continue                                    # target 未取得 = 静かに skip
     { [ "$kind" = skill ] && [ ! -x "$CLAUDE_BIN" ]; } && continue  # skill は claude 必須
+    printf '%s ' "$task_id"
+  done)"
+  [ -n "$pending" ] || return 0
+  check_crons "$pending" || exit 2
+  mkdir -p "$LA_DIR" "$LOG_DIR" 2>/dev/null
+  for task_id in $pending; do
+    IFS='|' read -r task_id kind target cron <<EOF
+$(find_routine "$task_id")
+EOF
     echo "  + ensure install: $task_id"
     write_plist "$task_id" "$kind" "$target" "$cron" && bootstrap_one "$task_id"
   done

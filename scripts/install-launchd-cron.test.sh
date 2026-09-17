@@ -135,6 +135,18 @@ rc=$?
 [ "$(wc -l <"$TMP/err" | tr -d ' ')" = 1 ] && grep -q 'routine broken' "$TMP/err" \
   && ok "stderr は broken の 1 行" || ng "stderr: $(cat "$TMP/err")"
 
+echo "T6b --ensure は install する routine の cron だけ読む"
+: > "$STATE/$PREFIX.broken"
+engine --routine "good|cmd|$TARGET|0 9 * * *" --routine "broken|cmd|$TARGET|0 25 * * *" --ensure >"$TMP/out" 2>"$TMP/err"
+[ $? -eq 0 ] && [ -f "$(plist_of good)" ] && [ ! -s "$TMP/err" ] \
+  && ok "loaded 済みの broken は good の install を止めない" || ng "rc/plist/stderr: $(cat "$TMP/out" "$TMP/err")"
+mkdir -p "$TMP/nopy"
+printf '#!/bin/sh\n: > "%s/python-ran"\nexit 1\n' "$TMP" > "$TMP/nopy/python3"
+chmod +x "$TMP/nopy/python3"
+PATH="$TMP/nopy:$BIN:$PATH" LCRON_LA_DIR="$LA" LCRON_LOG_DIR="$TMP/log" CLAUDE_BIN="$BIN/claude" HOME="$TMP" \
+  sh "$ENGINE" --label-prefix "$PREFIX" --routine "good|cmd|$TARGET|0 9 * * *" --ensure >"$TMP/out" 2>&1
+[ $? -eq 0 ] && [ ! -e "$TMP/python-ran" ] && ok "全部 loaded なら python を起動しない" || ng "python が走った / $(cat "$TMP/out")"
+
 echo "T7 cron を読まない action / 指定 routine だけ読む action"
 engine --routine "good|cmd|$TARGET|0 9 * * *" --routine "broken|cmd|$TARGET|0 25 * * *" --install-one good >"$TMP/out" 2>"$TMP/err"
 [ $? -eq 0 ] && [ -f "$(plist_of good)" ] && ok "--install-one good は broken に止められない" || ng "$(cat "$TMP/out" "$TMP/err")"
