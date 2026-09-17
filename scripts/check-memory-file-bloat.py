@@ -26,8 +26,8 @@ CLAUDE.md 連鎖は毎 session + 毎 headless routine が払う税で、 肥大�
              再肥大を拾わない (2026-09-11 の claude-config/SESSION.md は 506 行でも 91 KB)。 縮退した file を縮退と
              同じ turn で登録する (= 層1 claude-config/conventions/memory-file-slimming.md#regrowth-backstop)。
              claude-config/SESSION.md = 🟡 100 / 🔴 200 行 (目安 ~80 + slack。 縮退直後の 47 行 = 健康 floor では点かない)。
-             同じ 100 行を claude-config の .claude/pre-commit-extra.sh 検査 5 が commit 時に追記した本人へ warn する
-             (値を変えるときは両方)。
+             同じ閾値で、 claude-config の .claude/pre-commit-extra.sh 検査 5 が `--staged` で commit 時に本人へ warn する
+             (値は LINE_LIMITS だけが持つ)。
 
 運用:
   - finding 0 件 = silent / fail-open (= 予期せぬ例外は exit 0 + 1 行 note、 dashboard を殺さない)
@@ -42,6 +42,11 @@ CLAUDE.md 連鎖は毎 session + 毎 headless routine が払う税で、 肥大�
     実害を出したら un-defer (git 高水位方式 = check-career-db-truncation.py の型を流用)
 
 selftest: --selftest (tempdir fixture、 実 fleet 非依存)。 root 差し替え = 第 1 引数 --root DIR。
+
+commit 時 warn (= 書いた本人に、 書いた commit で届ける): `--staged [--repo DIR] [--file CLAUDE.md]
+[--entry-section '### 見出し'] [--entry-bytes 1200] [--file-kb 150]` = stage した file の ① 全体 KB ② LINE_LIMITS の行数
+③ 見出しの節で新規・書き換えた entry の byte (#per-entry-commit-warn)。 止めない (exit 0)、 検査不能は exit 3 (呼び元が
+「この commit では走っていない」 を出す = hook-authoring.md#warn-check-crash-visible)。 file を stage していなければ何もしない。
 """
 import os
 import sys
@@ -95,6 +100,84 @@ def scan(root: Path, line_limits=None):
         elif n >= warn:
             findings.append((1, f"🟡 {rel} = {n} 行 (≥ {warn} 行、 縮退後の再肥大。 新 entry は 1-3 行 + 正本 pointer)"))
     return findings
+
+
+def _section_entries(text: str, heading: str) -> list:
+    """heading (例 `### 現在の作業プロジェクト`) で始まる行の節にある `- ` bullet 行。 節は同じか上の level の見出しで終わる。"""
+    lines = text.split("\n")
+    start = next((i for i, l in enumerate(lines) if l.startswith(heading)), None)
+    if start is None:
+        return []
+    level = len(heading) - len(heading.lstrip("#"))
+    out = []
+    for l in lines[start + 1:]:
+        h = len(l) - len(l.lstrip("#"))
+        if h and l[h:h + 1] == " " and h <= level:
+            break
+        if l.startswith("- "):
+            out.append(l)
+    return out
+
+
+def staged_warnings(repo: Path, rel: str, entry_section=None, entry_bytes=1200, file_kb=WARN_FILE_KB,
+                    line_limits=None) -> list:
+    """commit 時 warn (= 書いた本人に、 書いた commit で届ける。 次の session の surface では遅い)。
+    stage された `rel` について: ① file 全体が file_kb 以上 ② LINE_LIMITS に `<repo 名>/<rel>` があれば行数 ③ entry_section の
+    節で HEAD に無い (新規・書き換えた) entry が entry_bytes 超。 既存の長い entry を触らない commit では鳴らない
+    (= #per-entry-commit-warn)。 blob は smudge を通して読む (git-crypt の path も平文 = hook-authoring.md#blob-read-git-crypt)。"""
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+    from git_blob import read_blob_text
+
+    staged = read_blob_text(f":{rel}", cwd=str(repo))
+    if staged is None:
+        return []
+    head = read_blob_text(f"HEAD:{rel}", cwd=str(repo)) or ""
+    msgs = []
+    kb = len(staged.encode("utf-8")) / 1024
+    if kb >= file_kb:
+        msgs.append(f"{rel} が {kb:.0f} KB (≥ {file_kb} KB) — 縮退の手順 = 層1 {SLIM_DOC}")
+    limits = LINE_LIMITS if line_limits is None else line_limits
+    warn_lines = limits.get(f"{repo.resolve().name}/{rel}", (None, None))[0]
+    n = staged.count("\n")
+    if warn_lines is not None and n >= warn_lines:
+        msgs.append(f"{rel} = {n} 行 (≥ {warn_lines}) — 新 entry は「日付 + 何を + 正本への pointer」 の 1-3 行、"
+                    f" 経緯・実測は正本 doc か archive へ MOVE (手順 = 層1 {SLIM_DOC})")
+    if entry_section:
+        old = set(_section_entries(head, entry_section))
+        for l in _section_entries(staged, entry_section):
+            b = len(l.encode("utf-8"))
+            if l not in old and b > entry_bytes:
+                msgs.append(f"「{entry_section.lstrip('# ')}」 の entry が {b} B (> {entry_bytes}): {l[:40]}… — entry は"
+                            f" pointer + 次の一手だけ、 状態・経緯は各 repo の SESSION / plan"
+                            f" (層1 {SLIM_DOC}#per-entry-commit-warn)")
+    return msgs
+
+
+def staged_main(argv) -> int:
+    import argparse
+    ap = argparse.ArgumentParser(prog="check-memory-file-bloat.py --staged")
+    ap.add_argument("--staged", action="store_true")
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--file", dest="rel", default="CLAUDE.md")
+    ap.add_argument("--entry-section", help="entry が並ぶ節の見出し行の先頭 (例: '### 現在の作業プロジェクト')")
+    ap.add_argument("--entry-bytes", type=int, default=1200)
+    ap.add_argument("--file-kb", type=int, default=WARN_FILE_KB)
+    a = ap.parse_args(argv)
+    try:
+        import subprocess
+        names = subprocess.run(["git", "-C", a.repo, "diff", "--cached", "--name-only"], capture_output=True,
+                               text=True, check=True).stdout.split("\n")
+        if a.rel not in names:
+            return 0
+        repo = Path(subprocess.run(["git", "-C", a.repo, "rev-parse", "--show-toplevel"], capture_output=True,
+                                   text=True, check=True).stdout.strip())
+        msgs = staged_warnings(repo, a.rel, a.entry_section, a.entry_bytes, a.file_kb)
+    except Exception as e:  # noqa: BLE001  warn 検査の故障で commit を止めない。 呼び元が rc で「走らなかった」 を出す
+        print(f"check-memory-file-bloat --staged: 検査不能 = {e.__class__.__name__}: {e}", file=sys.stderr)
+        return 3
+    for m in msgs:
+        print(f"⚠️ pre-commit (memory file 肥大 WARN): {m}", file=sys.stderr)
+    return 0
 
 
 def report(findings, surface: bool = False) -> None:
@@ -171,6 +254,34 @@ def selftest() -> int:
         (tmp / "long-repo" / "SESSION.md").write_text("x\n" * 500, encoding="utf-8")
         check(not any("long-repo" in l for _, l in scan(tmp, lim)), "未登録の 500 行 SESSION.md は行数では silent")
         check(not any("missing" in l for _, l in scan(tmp, {"missing/SESSION.md": (1, 2)})), "登録 file が無ければ silent")
+        # --staged (commit 時 warn): 一時 repo で HEAD と index を作る
+        import subprocess as sp
+        g = tmp / "staged-repo"
+        g.mkdir()
+        sp.run(["git", "-C", str(g), "init", "-q"], check=True)
+        sec = "### 作業中"
+        long_old = "- **old** " + "y" * 1300
+        (g / "CLAUDE.md").write_text(f"# t\n{sec}\n{long_old}\n- short\n## 次\n- " + "z" * 1300 + "\n", encoding="utf-8")
+        sp.run(["git", "-C", str(g), "add", "CLAUDE.md"], check=True)
+        sp.run(["git", "-C", str(g), "-c", "commit.gpgsign=false", "commit", "-qm", "i"], check=True,
+               env=dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
+                        GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid"))
+
+        def stage(text):
+            (g / "CLAUDE.md").write_text(text, encoding="utf-8")
+            sp.run(["git", "-C", str(g), "add", "CLAUDE.md"], check=True)
+            return staged_warnings(g, "CLAUDE.md", sec, 1200, WARN_FILE_KB, {})
+
+        base = f"# t\n{sec}\n{long_old}\n- short\n## 次\n- " + "z" * 1300 + "\n"
+        check(stage(base + "x\n") == [], "--staged: 既存の長い entry と節の外の長い行には鳴らない")
+        w = stage(base.replace("- short", "- short " + "w" * 1300))
+        check(len(w) == 1 and "作業中" in w[0] and "B (> 1200)" in w[0], "--staged: 書き換えた entry が 1200 B 超で 1 件")
+        check(len(stage(base + "x" * (151 * 1024) + "\n")) == 1, "--staged: file 全体 150 KB 以上で 1 件")
+        sp.run(["git", "-C", str(g), "reset", "-q"], check=True)
+        (g / "SESSION.md").write_text("x\n" * 120, encoding="utf-8")
+        sp.run(["git", "-C", str(g), "add", "SESSION.md"], check=True)
+        w = staged_warnings(g, "SESSION.md", None, 1200, WARN_FILE_KB, {"staged-repo/SESSION.md": (100, 200)})
+        check(len(w) == 1 and "120 行" in w[0], "--staged: LINE_LIMITS に登録した file は行数で鳴る")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -182,6 +293,8 @@ def main() -> int:
     args = sys.argv[1:]
     if args == ["--selftest"]:
         return selftest()
+    if "--staged" in args:
+        return staged_main(args)
     surface = False
     if "--surface" in args:
         surface = True
@@ -191,7 +304,7 @@ def main() -> int:
     if len(args) == 2 and args[0] == "--root":
         root = Path(args[1])
     elif args:
-        print("usage: check-memory-file-bloat.py [--root DIR | --surface | --selftest]")
+        print("usage: check-memory-file-bloat.py [--root DIR | --surface | --selftest | --staged ...]")
         return 64
     try:
         report(scan(root), surface=surface)
