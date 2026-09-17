@@ -79,6 +79,24 @@ def selftest() -> int:
                and read_blob_text(":a.txt", cwd=td) == "second\n")
         expect("missing path -> None", read_blob_text(":nope.txt", cwd=td) is None)
 
+        # git-crypt が無い環境 (CI) でも同じ class を確かめる: 可逆な clean / smudge filter (rot13) を掛けると、 index の
+        # blob は clean 後の形になり、 `git show` は別物を、 smudge を通す読み方は worktree と同じ中身を返す
+        rt = os.path.join(td, "rot")
+        os.makedirs(rt)
+        git("init", "-q", cwd=rt)
+        rot = "tr 'A-Za-z' 'N-ZA-Mn-za-m'"
+        git("config", "filter.rot.clean", rot, cwd=rt)
+        git("config", "filter.rot.smudge", rot, cwd=rt)
+        with open(os.path.join(rt, ".gitattributes"), "w", encoding="utf-8") as fh:
+            fh.write("f.yaml filter=rot\n")
+        with open(os.path.join(rt, "f.yaml"), "w", encoding="utf-8") as fh:
+            fh.write("status: open\n")
+        git("add", "-A", cwd=rt)
+        raw = subprocess.run(["git", "show", ":f.yaml"], cwd=rt, env=env, capture_output=True).stdout
+        expect("fixture (no git-crypt needed): the raw staged blob of a filtered path is the cleaned form",
+               raw == b"fgnghf: bcra\n")
+        expect("filtered staged path is read through smudge", read_blob_text(":f.yaml", cwd=rt) == "status: open\n")
+
         if shutil.which("git-crypt") is None:
             print("SKIP: git-crypt tests (git-crypt not installed)")
         else:
