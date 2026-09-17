@@ -505,6 +505,7 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
   \AtBeginDvi{\special{papersize=210mm,297mm}}
   ```
 - `dvipdfmx -p a4` でも直るが、**誰がどこで組んでも同じにしたいなら tex 側に書く**
+- jsclasses (jsarticle / jsbook) なら、class option に `papersize` を足すだけでよい (`\documentclass[uplatex,dvipdfmx,a5paper,papersize]{jsbook}`)。用紙の option を変えたとき (A4 → A5 など) も special が追随する。実測: `dvipdfmx` option だけでは Letter のままだった
 - ⚠️ `geometry` を読み込むと papersize special が出るため A4 になる。∴ **同じ repo でも `geometry` を使う file だけ A4、使わない file が Letter**、という分岐が起きる (両方を並べて刷って初めて気づく)
 
 ### <a id="tabular-cell-trailing-hspace"></a>tabular セル末尾の裸 `\hspace` は `\unskip` に消される
