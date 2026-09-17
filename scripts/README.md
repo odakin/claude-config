@@ -86,6 +86,7 @@
 - **[discord-post.py](discord-post.py)** — canonical Discord Bot API poster (stdlib only).
 - **[docx-to-pdf.sh](docx-to-pdf.sh)** — Word docx/doc → PDF 変換（macOS 既定 Word 忠実版 → --pages で Pages → 非 macOS LibreOffice、Word 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避、office-automation.md#docx-to-pdf-pages）
 - **[docx_decl_patch.py](docx_decl_patch.py)** — python-docx の Document.save() を auto-patch し XML 宣言を Word 形式(double-quote+CRLF)で書く（厳格 Word の「破損」回避、 save 時 source 修正・lazy import hook、 office-automation.md#docx-checkbox-content-control）
+- **[drive-download-folder.py](drive-download-folder.py)** — Google Drive folder を再帰で一括 download する (native は export、 各 dir に manifest、 token と OAuth client は引数で受ける)
 - **[dropbox-root.sh](dropbox-root.sh)** — Dropbox install root を OS 横断で resolve（dropbox-refs 規約用）
 - **[enhance-scan.py](enhance-scan.py)** — 手書き文書の撮影写真の可読化: 紙の切り出し + 照明ムラ除去 + コントラスト伸張 + タイル出力。
 - **[expand-display-math.py](expand-display-math.py)** — Expand the manuscript's display-math wrapper macros into real environments.

@@ -195,6 +195,8 @@ elif mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 worked example: 配布 folder 30 file (root 6 + subfolder 24、 PDF + xlsx 混在) を 1 script で取得し、 repo docs/ に binary + manifest を保存 (2026-07)。
 
+**実装**: [`scripts/drive-download-folder.py`](../scripts/drive-download-folder.py) (上の 4 step + 衝突 suffix + 失敗を数えて exit 1。 token と OAuth client は引数で受ける。 account 名で選びたいなら、 対応表を持つ薄い wrapper から `build_service` / `run` を呼ぶ)。
+
 ## <a id="shared-folder-watch"></a>他人から共有された folder を読み続ける (= 宛先 account の token + 台帳 + 版の差分 + 共有通知の照合)
 
 共同作業者が Drive folder を自分の account 宛てに共有し、 以後も資料が足されていくときの配線。 一回だけ取るなら上の [一括 download](#drive-folder-bulk-download) で足りる。 読み続けるなら次の 4 点を揃える。
