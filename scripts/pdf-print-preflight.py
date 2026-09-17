@@ -33,6 +33,9 @@ except ImportError:  # pragma: no cover
     print("pdf-print-preflight: PyMuPDF (fitz) が必要: pip install pymupdf", file=sys.stderr)
     sys.exit(2)
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+from seal_artifact import MARKER, copy_marker, mark_doc  # noqa: E402
+
 # PyMuPDF の組み込み font (非埋め込み)。 get_fonts() の basefont / ref 名に現れる。
 BUILTIN_FONT_NAMES = {
     "helv", "heit", "hebo", "hebi", "tiro", "tibo", "tiit", "tibi", "cour", "cobo", "coit", "cobi",
@@ -109,6 +112,7 @@ def rasterize(src, out, dpi=600):
         pix = page.get_pixmap(dpi=dpi, colorspace=fitz.csRGB)
         np_ = o.new_page(width=page.rect.width, height=page.rect.height)
         np_.insert_image(np_.rect, pixmap=pix)
+    copy_marker(doc, o)  # 紙専用の印 (lib/seal_artifact.py) を raster 版へ引き継ぐ (印影が画素に焼かれて見分けられなくなるため)
     o.save(out, deflate=True)
     return out
 
@@ -136,7 +140,13 @@ def selftest():
     assert not fd, fd
     # E: PyMuPDF の新規頁 (既定 A4) に用紙名が付く
     assert any(x.startswith("用紙: 210×297 mm (A4)") for x in idd), idd
-    print("pdf-print-preflight selftest: 5/5 PASS")
+    # F: 紙専用の印 (seal_artifact.MARKER) は raster 版へ引き継がれ、 印の無い入力には付かない
+    f = os.path.join(d, "f.pdf"); doc = fitz.open(); doc.new_page(); mark_doc(doc); doc.save(f)
+    g = os.path.join(d, "g.pdf"); rasterize(f, g, dpi=36)
+    assert MARKER in (fitz.open(g).metadata.get("keywords") or "")
+    h = os.path.join(d, "h.pdf"); rasterize(e, h, dpi=36)
+    assert MARKER not in (fitz.open(h).metadata.get("keywords") or "")
+    print("pdf-print-preflight selftest: 6/6 PASS")
 
 
 def main():

@@ -56,6 +56,7 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 | **前回通った書類を copy したのに差し戻された** / 別の trip の値が紛れ込む | 前例ファイル base (= 受理は正しさの証拠にならない + 見えない残骸を運ぶ) | 配布雛形 base + 値は spec・体裁は temp の 3 分離 → [`template-base-not-precedent-base`](#template-base-not-precedent-base) |
 | **提出用 PDF を再生成したら日付が変わった** / 報告書の日付が用務より前 | 様式の日付欄が `=TODAY()` のまま (= 生成日が入る) | fill 完了時に日付シリアルの固定値へ焼く → [`form-today-formula-freeze`](#form-today-formula-freeze) |
 | **印影が印刷でグレーになる** / blackAndWhite off にしたら背景色が出た | 様式の `blackAndWhite=True` は背景色抑制に必要で、 workbook 内の画像は必ず白黒化される | 白黒 PDF を生成後に **overlay-seal-pdf.py** で印影を乗せる (text anchor 配置 + 赤 px assert) → [`seal-color-pdf-overlay`](#seal-color-pdf-overlay) |
+| **印影を重ねた PDF をメール添付・共有で出しかけた** (「印影はもう入っている」 が送れる理由に見えた) | 紙専用という性質が file に書かれておらず、 送信の確認は同意だけで添付の中身を見ない | 作る時に紙専用の印 + 出口で添付の中身を見る gate (代理印刷だけ例外) → [`seal-artifact-marker`](#seal-artifact-marker) |
 | **印影・署名の画像を xlsx に置きたい** | openpyxl `add_image` は comments part を倍増させ Excel が破損警告 (+ formula cache も消える) | Excel osascript で `make new picture` (= anchor cell の left/top から points 指定) → [`xlsx-image-via-excel`](#xlsx-image-via-excel)、 script = `affix-image-xlsx.py` |
 | 標題・縦書きラベル・textbox が消えた | openpyxl の save が drawing (shape) を破壊 | Excel osascript / fitz 直印字 / 別 file XML 移植 の 3 経路 → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
 | 様式の**チェックボックスの箱が紙 / PDF から消える** (窓口から「どちらか判別できない」 と照会が来る) | openpyxl の save が form control (= `xl/ctrlProps/*` + VML Checkbox) を drop (標題 textbox と同経路・より無症状) | 雛形と ctrlProps 数比較で検出 → 該当側 label セルに文字 ☑ 前置の fallback → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
@@ -355,7 +356,24 @@ end tell
 
 ⚠️ **印影など「色が意味を持つ」 画像はこの経路では駄目なことが多い** — 様式テンプレの `page_setup.blackAndWhite=True` が印刷/PDF 化で画像をグレー化する。 その場合は [`seal-color-pdf-overlay`](#seal-color-pdf-overlay) (= PDF 化後に overlay) が正。
 
-⚠️ **画像印影を埋めてよいのは紙で提出する成果物だけ** (= 印刷を挟まずファイルのまま相手に渡ると、 画像を貼ったことが判別されうる)。 媒体で運用が分かれる点は各自の運用 SoT で規定すること。
+⚠️ **画像印影を埋めてよいのは紙で提出する成果物だけ** (= 印刷を挟まずファイルのまま相手に渡ると、 画像を貼ったことが判別されうる)。 媒体で運用が分かれる点は各自の運用 SoT で規定すること。 機械で守る形 = [`seal-artifact-marker`](#seal-artifact-marker)。
+
+### <a id="seal-artifact-marker"></a>🔥 印影入りの成果物は「作る時に紙専用の印」 + 「出口で中身を見る gate」 — 規則の文だけでは送られる
+
+**症状**: 「画像印影は紙で出すものだけ」 という運用が文書にあるのに、 提出方法を相談された場面で、 印影を重ねた PDF をメール添付で出す案が出る (実測)。 しかも「印影はもう入っている」 が、 **メールで出せる理由**として挙がる = 禁止の条件そのものが、 押す手間が済んだ準備完了の印として読まれる。
+
+**なぜ規則の文では止まらないか**:
+- 規則は印影・媒体という**性質**で書かれるが、 手続きの手順メモは**案件** (制度名・窓口) の語で探される。 案件の語で探すと性質で書かれた規則に当たらない。
+- 手順メモの「刷る」 に印刷品質の理由 (raster 化) しか書かれていないと、 「印刷は要るのか」 と問われた瞬間に、 紙で出す本当の理由ごと手順が削られる。
+- 送信の確認 dialog は「送ってよいか」 を聞く**同意**の gate で、 添付の**中身**を見ない。 承認する人の注意は文面に向いている。
+
+**機械の形** (実装 = [`scripts/lib/seal_artifact.py`](../scripts/lib/seal_artifact.py) + [`scripts/check-seal-attachments.py`](../scripts/check-seal-attachments.py)):
+1. **作る側**: [`overlay-seal-pdf.py`](../scripts/overlay-seal-pdf.py) が出力の PDF Keywords に `paper-only:seal-image` を書き、 [`pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) `--rasterize` が raster 版へ引き継ぐ (印影が画素に焼かれて見分けられなくなるため)。 engine を通さず画像を直接貼る driver は `seal_artifact.mark_doc(doc)` を保存前に呼ぶ。
+2. **出口側**: 添付の信号を 3 つの強さで見る — `marker` / `seal-image` (PDF の SMask・Office file の media 画像・PNG 自体の alpha が印影画像と完全一致。 直接貼った出力に効く) / `name+ink` (file 名の token + 頁の印影色)。 file 名だけの一致は警告に留める (印影の無い「印刷用」 版で誤検出するため)。 赤い画素の量だけでは判定しない (ポスター・会議資料で大量に鳴った、 実測)。
+3. **例外は代理印刷だけ**: 受け取った人が印刷して紙で窓口に出す場合。 宛先に窓口が含まれない ∧ 本文に「印刷して紙で出してほしい」 の依頼がある時だけ通す (経由者に印刷を明示する運用規則を、 そのまま機械の条件にする)。 窓口の address は連絡先の台帳から**導出**し ([#detector-config-must-be-derived](../docs/convention-design-principles.md#detector-config-must-be-derived))、 台帳を読めない時は例外を使わない (= 全部止める側に倒す)。
+4. **出口は全部**: メール送信 CLI・MCP の send と draft (下書きは人が送るので作る時に止めるしかない)・共有・upload。 1 本だけ塞ぐと残りの出口から出る。
+
+**印影画像を 1 枚に固定しない** ([`hanko-digitization.md`](hanko-digitization.md) の variant をランダムに引く規則) も同じ形で守る: code file に個々の印影画像の file 名が literal で出る追加行を pre-commit で止める (固定した driver は複製されて次の案件に引き継がれる、 実測)。
 
 ### <a id="openpyxl-clears-formula-cache"></a>⚠️ openpyxl の save は周辺 cell の formula cache を消す
 

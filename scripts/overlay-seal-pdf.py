@@ -60,6 +60,14 @@ Usage
 Verification built in: after stamping, each target region is rasterized and
 asserted to contain saturated-red pixels (a gray/monochrome seal fails the
 run). Exit 2 on any failure; the output file is removed.
+
+Paper-only marker: the output's PDF Keywords get ``paper-only:seal-image``
+(``lib/seal_artifact.py``). A stamped image is fine on paper but can be told
+apart when the file itself is handed over (mail attachment, shared drive,
+upload), so exit points can refuse files that carry the marker
+(convention = conventions/office-automation.md#seal-artifact-marker).
+``pdf-print-preflight.py --rasterize`` carries the marker over to the raster
+copy. ``--no-marker`` skips it (e.g. a signature meant for a digital copy).
 """
 from __future__ import annotations
 
@@ -68,6 +76,9 @@ import os
 import sys
 
 import fitz
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+from seal_artifact import mark_doc  # noqa: E402
 
 
 def parse_place(spec: str) -> dict:
@@ -209,6 +220,8 @@ def main() -> None:
     ap.add_argument("--out", required=True)
     ap.add_argument("--place", action="append", required=True, help="page=N,anchor=TEXT[,occurrence=N,size=PT,dx=PT,dy=PT]")
     ap.add_argument("--image", action="append", required=True, help="image path, one per --place (paired in order)")
+    ap.add_argument("--no-marker", action="store_true",
+                    help="do not write the paper-only marker (only for a copy meant to be handed over as a file)")
     args = ap.parse_args()
 
     if os.path.abspath(args.out) == os.path.abspath(args.pdf):
@@ -236,6 +249,8 @@ def main() -> None:
         stamp_multiply(page, rect, image)
         targets.append((p["page"], rect, image))
 
+    if not args.no_marker:
+        mark_doc(doc)
     doc.save(args.out)
     doc.close()
 

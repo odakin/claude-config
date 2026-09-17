@@ -47,6 +47,10 @@ sections:
     level: 3
     title: "xlsx に画像 (印影・署名) を置くなら Excel osascript — openpyxl `add_image` は **comments を倍増**させ formula cache も消す"
     related: [openpyxl-destroys-drawings, openpyxl-clears-formula-cache, excel-osascript-cell-write, pdf-visual-confirm]
+  - id: seal-artifact-marker
+    level: 3
+    title: "🔥 印影入りの成果物は「作る時に紙専用の印」 + 「出口で中身を見る gate」 — 規則の文だけでは送られる"
+    related: [seal-color-pdf-overlay, xlsx-image-via-excel, physical-seal-required, unsealed-page-mail-submission]
   - id: openpyxl-clears-formula-cache
     level: 3
     title: "⚠️ openpyxl の save は周辺 cell の formula cache を消す"

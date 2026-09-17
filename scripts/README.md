@@ -60,6 +60,7 @@
 - **[check-script-index.py](check-script-index.py)** — Check that a Git repository's script inventory has direct Markdown links.
 - **[check-script-layering.mutants.json](check-script-layering.mutants.json)** — check-script-layering.py の selftest の foil に歯があることを mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[check-script-layering.py](check-script-layering.py)** — Detect duplicated cross-layer script engines and unreviewed lower-layer additions.
+- **[check-seal-attachments.py](check-seal-attachments.py)** — 印影画像の入った file を、file のまま相手に渡す前に止める (メール添付・共有・upload の出口用)。
 - **[check-session-sot.py](check-session-sot.py)** — Detect durable-data accretion and bloat in SESSION.md files.
 - **[check-sot-drift.py](check-sot-drift.py)** — 「規則の正本は 1 か所、 他所は参照だけ」 を目印の文字列で機械検査する (registry 駆動)
 - **[check-unpublished-quote.py](check-unpublished-quote.py)** — Stop verbatim text of unpublished documents (your private manuscripts) from being committed to a public repo: matches quoted spans and long prose runs in the staged added lines or a commit message against hashed word shingles of the declared sources; --selftest.
@@ -237,6 +238,7 @@
 - **[lib/published_metadata.py](lib/published_metadata.py)** — 公刊済みの著作の書誌 (題名・著者・要旨) の行を、 leak 検出器の対象から外す。
 - **[lib/relay_check.py](lib/relay_check.py)** — surface した item を「この session で人に伝えたか」 と「同じ案件かもしれない別の item」 を判定する共通部品
 - **[lib/run_log.py](lib/run_log.py)** — 検査 script の出力を「証跡 file」 として残す helper (= 後から「いつ何を出したか」 を再構成できるようにする)。
+- **[lib/seal_artifact.py](lib/seal_artifact.py)** — 画像の押印 (ハンコ画像) が入った成果物に、作る時に印を付け、出口で見つける。
 - **[lib/sensitive-terms.sh](lib/sensitive-terms.sh)** — 実名 gate (Tier B) の検出語 file を読む共通部品 (source して使う、 bash 3.2 可)
 - **[lib/staged-conflict-markers.sh](lib/staged-conflict-markers.sh)** — merge conflict marker の staged-content gate (sourceable lib)
 - **[lib/staged-conflict-markers.test.sh](lib/staged-conflict-markers.test.sh)** — staged-conflict-markers.sh の self-test (hermetic)
