@@ -73,7 +73,7 @@ claude-config/
 │   ├── install-failures.md                 # brew install を試行する前後 + source build 陥落時
 │   ├── japanese-email-honorifics.md        # 日本語メールで敬称 (様 / 皆様 / さん) を書くとき + 相手の文面を引用・要約して「ご/お」付き名詞を自分の文に持ち込むとき
 │   ├── jma-obsdl-download.md               # 気象庁の過去観測データ (時別値・日別値等) をスクリプトで一括取得したいとき
-│   ├── jps-talk-submission.md              # 日本物理学会 (JPS) 年次大会の一般講演を申し込むとき + 参加票メールを受けた / 会期前に参加票・領収書を刷るとき
+│   ├── jps-talk-submission.md              # 日本物理学会 (JPS) 年次大会の一般講演を申し込むとき + 参加票メールを受けた / 会期前に参加票・領収書を刷るとき + 参加費を所属機関で精算するとき (領収書の宛名)
 │   ├── kakenhi-proposal.md                 # 科研費の研究計画調書 (基盤・挑戦的研究・若手等) を書く/直す/Web 入力するとき + 当年の様式 docx を入手した直後 (= 起草前に scripts/kakenhi-preflight.py で埋め込み指示を吸い出すとき) + 機関事務から差し戻しを受けたとき + 複数種目を同時期に出すとき
 │   ├── latex.md                            # LaTeX を含むリポで作業するとき
 │   ├── launchd-cloudstorage-tcc.md         # launchd agent が ~/Library/CloudStorage/ 配下を読む script を書く前
