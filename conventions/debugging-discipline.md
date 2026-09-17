@@ -296,6 +296,8 @@ grep -h '"type":"tool_use"' ~/.claude/projects/<project-hash>/*.jsonl \
 
 project-hash は `~/.claude/projects/` 直下の `-` 区切り path 表現 (= 例: `-Users-<user>-<project-path>`)。 `ls ~/.claude/projects/` で列挙。
 
+**発言を探すとき** (tool_use でなく、 user や assistant が何を言ったか。 例: 「前に決めたはず」 と言われて正本に記録が無い): [`scripts/search-agent-transcripts.py`](../scripts/search-agent-transcripts.py) が Claude Code と Codex (`~/.codex/sessions/**/*.jsonl`) の記録を横断し、 役割・agent・日付・session で絞り、 harness が差し込んだ文と Codex の重複を除いて、 時刻と前後の文を出す。 Codex の記録は大きく、 素の `grep -r` は時間切れになりやすい (実測)。 見つかった発言を決定として記録するときは、 誰の発言か (提案か、 決定か) を添える ([actor-attribution.md#statement-attribution](actor-attribution.md#statement-attribution))。 0 件は「このマシンの記録に無い」 だけを意味する。
+
 ### How to apply
 
 1. 「Claude が消した / 書いた / 上書きしたかも?」 容疑が user / 自己から提示されたら、 即 `~/.claude/projects/<project-hash>/*.jsonl` を grep

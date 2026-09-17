@@ -16,6 +16,8 @@ stage しても実 hook が rc=0 で通った。
 config (個人層 `sensitive-terms-sources.yaml`):
     sources: [contacts.md, ../other-repo/collaborators.yaml]   # 個人層からの相対 path
     cell_stoplist: [担当]        # 表の第 1 セルだが人名でない語
+        # ⚠️ 連絡先 doc で 1 人分を `| 項目 | 値 |` の表で書くと、 項目名 (「住所」 等) が人名として拾われる (実測)。
+        #    その doc は箇条書きにするか、 項目名をここに足す
     prefix_stoplist: [東京]      # 2 字 prefix が普通名詞になる語
     compound_allow: [東京駅前]   # term を含むが人名でない複合語 (地名等)。 照合の前に本文から消す (`!` 行で出力)
 

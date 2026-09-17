@@ -168,6 +168,7 @@
 - **[scan-private-vocabulary.py](scan-private-vocabulary.py)** — Audit a public repo for rare vocabulary it shares with your non-public repos (technical words, LaTeX control words, Japanese compounds, decimals): the reading list for paraphrased leaks that the verbatim gate cannot see; terminal output only, not a gate; --selftest
 - **[scan-public-tree.sh](scan-public-tree.sh)** — 公開 repo の現在の tree 全体を pre-commit gate の全 Tier に通す
 - **[scan-public-tree.test.sh](scan-public-tree.test.sh)** — self-tests for the full-tree re-run of the public gate
+- **[search-agent-transcripts.py](search-agent-transcripts.py)** — Claude Code と Codex の会話記録を横断して、発言を文字列で探す
 - **[session_provenance_cache.py](session_provenance_cache.py)** — Own shared Codex model/effort resolution and the hook metadata cache.
 - **[set-file-associations.py](set-file-associations.py)** — Apply or verify declared macOS filename-extension handlers with duti; fail loud on unverifiable state. --selftest included.
 - **[setup-codex-git-push.py](setup-codex-git-push.py)** — Install or audit an opt-in Codex rule for prompt-free normal Git pushes.

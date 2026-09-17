@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき
+when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings)
 category: web
 summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)**
 -->
@@ -198,6 +198,14 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
   文献照合の grep は `| head -40` で切って本文に残す。
 
 ---
+
+## <a id="cinii-library-holdings"></a>ある図書館が本を持っているかを調べる (= CiNii Books OpenSearch の参加組織フィルタ)
+
+大学図書館に購入を依頼する前などに、 その図書館が既に持っているか (複本になるか) を確かめる経路。 図書館ごとの OPAC 画面を開かずに、 API で引ける。
+
+- **API**: `https://ci.nii.ac.jp/books/opensearch/search?q=<書名など>&format=json` に、 参加組織コード `fano=<その図書館のコード>` を足すと、 その図書館の所蔵だけに絞れる (app ID なしで引けた、 実測)。 件数は `@graph[0]["opensearch:totalResults"]`、 書誌は `items`。 フィルタなしの件数と比べると、 絞れているかを 1 回で確かめられる。
+- **参加組織コード**: CiNii Books の図書館ページ (`ci.nii.ac.jp/library/<コード>`) の URL にある。 一度調べたら、 その図書館を使う側の非公開の記録に置く。
+- **判断は OPAC で確かめる**: CiNii の所蔵は各図書館の登録を集めたもので、 登録の遅れや、 別の版・別の巻の扱いの違いがある。 「持っていない」 と結論する前に、 その図書館の OPAC で書名と版を確かめる。 電子書籍の所蔵は CiNii に出ないことがある。
 
 ## <a id="chrome-domain-permission-model"></a>Claude in Chrome MCP の domain permission モデル
 

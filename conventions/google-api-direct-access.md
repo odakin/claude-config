@@ -202,7 +202,7 @@ worked example: 配布 folder 30 file (root 6 + subfolder 24、 PDF + xlsx 混�
 1. **token は共有を受けた account で発行する**。 共有は宛先 account からしか見えない。 別 account の token で `files.get` すると 403 ではなく **404 (File not found)** が返り、 「folder が無い」 と見分けがつかない (実測)。 404 を見たら不在と結論する前に、 共有通知の宛先と token の account を突き合わせる。 読むだけなら scope は `drive.readonly`。 発行の直後に `about.get` の `user.emailAddress` を照合し、 違う account で承認した token は保存しない (下の §OAuth token のアカウント検証 の Drive 版)。
 2. **読みに行く folder を台帳に書く**。 folder ID・宛先 account・写しの置き場・関係する project を 1 entry にする。 folder ID と共有者名は通知メールから取り、 推測で埋めない。
 3. **版の差分で取る**。 再帰 listing の `id` と `modifiedTime` を、 前回取った版の記録 (写しの横に置く state file) と比べ、 新規と更新だけを落とす。 Drive から消えた file は写しから消さず、 件数だけ知らせる (消すかは人が決める)。 写しも state もマシンごとに持つ。
-4. **知らせる面と取る面を分ける**。 session 開始時の通知は listing だけにし (速い)、 download は明示的な sync で行う (大きな file で hook の時間制限に当たらない)。 未承認の account は、 承認されるまで通知に出し続ける。 これが人が 1 回やる操作の carrier を兼ねる。
+4. **知らせる面と取る面を分ける**。 session 開始時の通知は listing だけにし (速い)、 download は明示的な sync で行う (大きな file で hook の時間制限に当たらない)。 未承認の account は、 承認されるまで通知に出し続ける。 これが人が 1 回やる操作の carrier を兼ねる。 **download の read timeout は listing と別に長く取る**: 大きなスキャン PDF では、 listing 用の短い timeout (数十秒) で 同じ file の取得が続けて切れた (実測)。 途中まで書いた file は `.part` に置き、 読み終えてから名前を変える (切れた写しを完成品と取り違えない)。
 
 **台帳に無い共有を拾う**: Drive の共有通知メール (送信元は Google の共有通知用の noreply アドレス。 手元の通知 1 通から取って query に使う) の本文から `drive/folders/<id>` / `file/d/<id>` / `docs.google.com/<type>/d/<id>` を抜き、 台帳にも無視リストにも無い id を知らせる。 共有 1 回に通知 1 通なので、 「共有に気づいた session が終わると誰も読みに行かない」 状態をこれで塞げる。
 
