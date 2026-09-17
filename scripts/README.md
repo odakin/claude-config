@@ -169,6 +169,7 @@
 - **[reviewed_mail_cli.py](reviewed_mail_cli.py)** — Shared mail CLI/Gmail gateway with injected account factory; stdlib only.
 - **[routine-host-gate.py](routine-host-gate.py)** — 汎用 active-routine-host gate（無人ルーチンを複数マシンに install しつつ「今の本番ホスト」を台帳1ファイルで決める。台帳の host が自分でなければ defer〔exit 1〕、台帳不在/破損は fail-open〔exit 0〕、最新 committed 台帳を fetch して読む、--selftest 内蔵。install-launchd-cron.sh --gate から呼ぶ、conventions/multi-machine-state.md#account-host-failover）
 - **[run-all-checks.sh](run-all-checks.sh)** — claude-config の全機械検査を 1 コマンドで回す (検査リストの SoT)
+- **[scan-book-survey.py](scan-book-survey.py)** — 書籍のスキャン PDF を棚卸しするための下見: 刷り色の測定・奥付と目次の候補・文字層 (OCR) の語検索・ノンブルのずれ・奥付と見開きの確認画像。--selftest 内蔵。
 - **[scan-form-instructions.py](scan-form-instructions.py)** — 様式 xlsx の label 内 embedded instruction を category 別に抽出（office-automation.md#embedded-instruction-in-label）
 - **[scan-private-vocabulary.py](scan-private-vocabulary.py)** — Audit a public repo for rare vocabulary it shares with your non-public repos (technical words, LaTeX control words, Japanese compounds, decimals): the reading list for paraphrased leaks that the verbatim gate cannot see; terminal output only, not a gate; --selftest
 - **[scan-public-tree.sh](scan-public-tree.sh)** — 公開 repo の現在の tree 全体を pre-commit gate の全 Tier に通す
