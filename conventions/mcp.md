@@ -167,6 +167,14 @@ Chrome MCP は `claude mcp` 配下ではなく **Claude.app の Chrome extension
 - **2026-05-01**: classroom-cis (stdio) が session 中に disconnected。server.mjs 単独 stdio handshake は OK、log は `Successfully connected` で終わる (落ちた時刻のログなし)。`claude mcp remove + add` で再登録 → 数分後に ToolSearch + tool 呼び出し成功。Mac app は quit せず session 維持で復旧した sample。同時に gmail-* 4 server も system-reminder で disconnected と告知されたが、こちらは自動で再接続成功 (stdio でも `@gongrzhe` の MCP は graceful reconnect 機構を持つ模様)。Chrome MCP は別 incident で接続不可、Mac app 側の対応必要。
 - **2026-05-19**: Classroom UI (= 課題提出者一覧の「ファイルを開いていない」 ラベル展開 view) を Chrome MCP で scrape 試行。 上記症状 (body 75 chars / progressbar 永続 / iframe BLOCKED) を観察、 ~1 min waiting で reload + 更新 button click でも改善せず。 fallback で user 主 browser からの paste 経由に切替えて解決。 一般化ルール (= 上記「対処」) を本 convention に組み入れ。
 
+## <a id="remote-mcp-oauth-redirect-rejected"></a>remote MCP の OAuth が「Redirect URI must use HTTPS or a local loopback address」 で止まるとき
+
+- **現象** (実測): desktop app の MCP サーバー一覧から remote (HTTP) の MCP を「連携」 すると、 認可サーバーが `invalid_request` で拒否する。 desktop app が渡す戻り先 URL を、 HTTPS か loopback しか受け付けない認可サーバーが弾いている = user の操作ミスではない
+- **対処**: 同じマシンのターミナルで `claude mcp login <server 名>` を実行する。 名前は `claude mcp get` / `list` の表記 (plugin 由来なら `plugin:<plugin>:<server>`)。 CLI は `http://localhost:<port>/callback` を戻り先にするので通る。 ブラウザが開かなければ表示された URL を開く (headless は `--no-browser`)
+- **同意画面**: 依頼元 (client) と戻り先 (`localhost`) が起動したものと一致するかを見てから進む。 権限の template は最小 (読み取り) から始め、 書き込みは確認を挟める既存の CLI 経路に残す。 件数だけでは読み取り専用か分からないので、 グループを 1 つ開いて権限名を見る
+- **確認**: `claude mcp get <server 名>` が `✔ Connected`
+- ⚠️ 認証前から開いていた desktop session は `needs_auth` のまま (実測)。 その session の中では tool は増えないので、 新しい session を開いてから使う
+
 ## MCP 設定リポの役割
 
 MCP サーバーの認証情報やセットアップ手順を一箇所で管理するためのリポ。複数のプロジェクトが同じ MCP サーバー（Gmail、Calendar 等）を利用する場合、認証情報の管理を各プロジェクトに分散させると更新漏れや不整合が起きる。設定リポに集約することで、アカウント追加・トークン更新・サーバー移行等の変更が1箇所で完結する。
