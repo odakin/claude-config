@@ -17,7 +17,17 @@ SAML-only 組織では REST の password auth が admin 限定・OAuth client �
 | csrf ticket | `/g/cabinet/search.csp` 等の inline `grn.__PRELOADED_DATA__.csrfTicket` (portal は 302 なので注意) |
 | 掲示板 REST | `GET /g/api/v1/bulletin/categories` 等、 cookie + `X-Requested-With: XMLHttpRequest` で session auth |
 | 添付 download | `GET /g/bulletin/file_download.csp/-/<name>?fid=F` は session 内 GET で 200 (application/pdf)。 cabinet の `download.csp` は time= token 要の可能性 (未実測) |
-| login 切れ | 302 → `<org>.ex-tic.com` (SSO) / **302 → `<org>.cybozu.com/login?redirect=…` (cybozu 自身の login)** / login page HTML / REST API の 401 `GRN_REST_API_00003` → user が browser で 1 回 login、 script は代行しない。 ⚠️ 死活検査で「SSO への 302 だけ切れ、 他の 302 は健全」 と書くと、 自前 login への 302 で切れているのに silent になる (実測) 。 ⚠️ **login 直後は browser が cookie DB (SQLite) に新しい session cookie を書くまで十数秒の遅れがある** (Chromium 系で実測) = login の直後に 1 回目の検査が「切れ」 のままでも、 少し待って読み直す |
+| login 切れ | 302 → `<org>.ex-tic.com` (SSO) / **302 → `<org>.cybozu.com/login?redirect=…` (cybozu 自身の login)** / login page HTML / REST API の 401 `GRN_REST_API_00003` → 下の [#garoon-browser-reauth](#garoon-browser-reauth) を 1 回試し、 だめなら user が browser で 1 回 login (script はパスワード・OTP を代行しない)。 ⚠️ 死活検査で「SSO への 302 だけ切れ、 他の 302 は健全」 と書くと、 自前 login への 302 で切れているのに silent になる (実測) 。 ⚠️ **login 直後は browser が cookie DB (SQLite) に新しい session cookie を書くまで十数秒の遅れがある** (Chromium 系で実測) = login の直後に 1 回目の検査が「切れ」 のままでも、 少し待って読み直す |
+
+### <a id="garoon-browser-reauth"></a>切れたら browser に入り直させる (IdP が生きている間は OTP なし)
+
+Garoon のセッション切れは 2 層ある: **Garoon 本体のセッション** (JSESSIONID) と **IdP のログイン** (SSO 側)。 本体だけが切れていて IdP が生きていれば、 browser で Garoon を開くだけでパスワードも OTP もなしに入り直せる。 `garoon-client.py` はこれを既定で 1 回試す = **起動中の** browser に `open -g` で portal を開かせ、 cookie DB の JSESSIONID が更新されるのを最大 45 秒待って読み直す。
+
+- **script は IdP の cookie で SAML を自分で辿らない** (= 認証応答を script が扱うことになる)。 入り直すのは browser 自身。
+- browser が起動していなければ何もしない (勝手に起動しない)。 IdP も切れていれば開いたタブがログイン画面になる = そこで本人がログインしてから再実行。 開いたタブは閉じない。
+- **IdP の有効期間は組織の方針** — 定期アクセスで延ばす仕組みは作らない。 減らせるのは「作業の途中で止まる」 ことで、 回数ではない。 切れる時刻は browser の閲覧履歴 (IdP の OTP 画面を通った時刻) から見積もれるので、 予告は組織への request なしで出せる。
+- 実測: Garoon を開いたままのタブは裏の通信で JSESSIONID を差し替えることがあり、 古い番号は 1 時間ほどで使えなくなった。 script は起動時に読んだ cookie を長く持ち続けず、 実行のたびに読み直す。
+- 切り方 = `--no-reauth-browser` / env `GAROON_REAUTH_BROWSER=0`。
 
 ⚠️ **`search.csp` の HTML 自体は結果を含まない** (JS が上の API を叩いて描画、 no-data 文言は template に常在) — HTML を grep して「0 件」 と結論しない。 browser MCP の `get_page_text` も描画前に読むと同じ罠。
 ⚠️ 「規程集」 のような**外部 site への link** (= Basic 認証の別 host) は cookie 再利用の射程外 = ID/PW は user 専権 (script も agent も入力しない)。
