@@ -210,6 +210,7 @@
 - **[verify-form-guidance.py](verify-form-guidance.py)** — 官製様式の「記入要領 (赤字/青字)」 が提出物に残置していないか検出。
 - **[verify-prototype-feedback.py](verify-prototype-feedback.py)** — Verify a prototype-feedback record and its local packet.
 - **[verify-verbatim-move.py](verify-verbatim-move.py)** — 「移しただけ」 の変更を読まずに検算する: 指定 file から消えた行が、すべて移動先 (同じ file を含む) に追加行として現れるかを git の差分で数える。markdown link の深さの付け替えは --normalize-links で同一視する。
+- **[web-page-watch.py](web-page-watch.py)** — 公開 web ページの本文が変わったら知らせる (台帳の URL を定期に読み、 目印で切り出した本文の差分を state に残して、 macOS 通知と SessionStart 用の行を出す。 標準ライブラリだけで動き、 YAML 台帳のときだけ PyYAML が要る)
 - **[with-gnu-userland.sh](with-gnu-userland.sh)** — macOS で Homebrew の GNU coreutils / sed / grep / findutils を PATH 先頭に差して command を走らせる (CI の ubuntu と同じ BSD/GNU 差を push 前に再現)
 - **[with-gnu-userland.test.sh](with-gnu-userland.test.sh)** — with-gnu-userland.sh の self-test (Homebrew の GNU userland が無い環境 = CI の ubuntu は SKIP)
 - **[xlsx-to-pdf.sh](xlsx-to-pdf.sh)** — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
