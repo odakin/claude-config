@@ -134,6 +134,15 @@
       ]
     },
     {
+      "matcher": "Bash|Grep|Glob",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/protected-dir-access-guard.py"
+        }
+      ]
+    },
+    {
       "matcher": "mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)",
       "hooks": [
         {

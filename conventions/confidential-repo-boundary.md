@@ -197,6 +197,20 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 「1 件も無い」 と「読めていない」 が区別できなくなるのが最悪の壊れ方。
 鍵を持たない環境 (CI 等) は **SKIP を宣言して緑にしない**。
 
+### <a id="protected-dir-access-guard"></a>読むだけでも触らせない dir は、 path rule でなく PreToolUse hook で守る
+
+**罠**: settings の `Read(path)` / `Edit(path)` の ask / deny rule は、 Bash では file を名指しする読み方 (`cat` など) にしか効かない ([`claude-code-permissions.md#file-rule-tools`](claude-code-permissions.md#file-rule-tools))。 **上位 dir から再帰する検索は、 保護 dir の名前を 1 度も書かずに中へ届く** (実測: repo を横断して探す sweep が上位 dir からの `find` で保護 dir を拾い、 続く loop の `git -C` と相対 path の `grep` が中を読んだ。 確認は 0 回)。 Grep / Glob tool を上位 dir から走らせたときに path rule が効くかは未検証 (確かめるには保護 dir を検索することになる) なので、 同じ hook で先に塞ぐ。
+
+**機構** = [`hooks/protected-dir-access-guard.py`](../hooks/protected-dir-access-guard.py) (PreToolUse `Bash|Grep|Glob`、 **ask**):
+
+- 確認を出す = path の名指し (実体 path / home 直下の symlink 別名 / `~` / `$HOME` / `親/名前` / 親の直後の glob) ・ 上位 dir を名指しした再帰 (find / grep -r / rg / du / os.walk / `**/` …) ・ cwd が中 ・ cwd が上位 dir で再帰 ・ cwd が親で名前か glob ・ Grep / Glob の起点が中か上位 dir
+- 出さない = 名前を含む文 (commit message・規約の grep) ・ 再帰しない一覧 ・ 保護 dir の外の具体的な dir への再帰
+- 保護 dir そのものには触れない (親だけを実体化して比べる)
+- **宣言** = `~/.claude/protected-dirs.txt` と `~/.claude/leak-pattern-sources.txt` (§4 の作業リポ登録)。 remote に出してはいけない実体の置き場は、 触ってもいけない dir でもある — 別の list にすると片方だけが更新される ([`docs/convention-design-principles.md#detector-config-must-be-derived`](../docs/convention-design-principles.md#detector-config-must-be-derived))
+- **deny にしない**: その dir の作業 session では中で作業するのが正当。 止まるのは仕様
+- fail-open なので §5 のとおり `--canary` で毎回確かめる (ARMED / NOT ARMED / 未配線 / 対象外)
+- ⚠️ 射程外 = 変数に分けて組み立てた path、 script file の中の走査。 目的は事故の防止で回避への対策ではないので、 **横断の検索・sweep を書く側の規律**と併用する: 対象は repo の一覧 (registry) から取り、 上位 dir からの `find` で発見しない
+
 ---
 
 ## 6. 過去の分は別問題として扱う
@@ -367,6 +381,7 @@ visibility の **判断基準そのもの** (何を公開する人なのか) は
 | [`scan-private-vocabulary.py`](../scripts/scan-private-vocabulary.py) | 公開 repo が非公開 repo と共有する珍しい語の一覧 (言い換えを読む候補、 gate ではない。 tree 全体 / `--staged` / `--diff`) | 無し (`.claude/public-repo.marker` の有無で公開・非公開を分ける、 `--source` / `--exclude` で絞る) |
 | [`commit-hunk-anchors.py`](../scripts/commit-hunk-anchors.py) | commit の hunk の所在 (file・行・直前の anchor / def) だけを出す = 是正の記録を本文なしで書く | 無し |
 | [`scan-public-tree.sh`](../scripts/scan-public-tree.sh) | 公開 repo の tree 全体を pre-commit gate の全 Tier に通す (= gate は差分しか見ないので、 gate より古い中身はこれでしか見つからない)。 `--all` で横断、 台帳で 1 repo 1 回 | 各 repo の `.claude/public-tree-accept.txt` (棚卸しでだけ効く受理一覧) |
+| [`hooks/protected-dir-access-guard.py`](../hooks/protected-dir-access-guard.py) | 保護 dir へ Bash / Grep / Glob で触れうる操作の前に確認を出す (PreToolUse、 ask) / `--canary` で本番配線の実効性 ([§5 の節](#protected-dir-access-guard)) | `~/.claude/protected-dirs.txt` / `~/.claude/leak-pattern-sources.txt` |
 
 いずれも **機密文字列も個人の配置も script 側に持たない**。 設定 file が無い環境では
 「対象外」 として何もしない (= 他の利用者の環境を壊さない)。

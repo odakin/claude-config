@@ -38,7 +38,7 @@ cwd 配下のファイルは確認なしで編集できるのに、cwd の**外*
 
 - rule の評価順は **deny → ask → allow**。最初に match した rule が勝つので、**deny が最強**。
 - `additionalDirectories` で広いディレクトリ (例: home の `Documents` や `Dropbox` 全体) を開けても、その中の機密サブフォルダは `permissions.deny` で個別 block できる。deny の方が優先されるので、「広く開けて一部だけ塞ぐ」が成立する。
-- <a id="file-rule-tools"></a>file の path rule を見るのは **`Read(path)` と `Edit(path)` だけ** (公式 docs `permissions`、 Claude Code v2.1.210 以降)。 `Write(...)` / `NotebookEdit(...)` / `Glob(...)` の path rule は受け付けられるが**参照されない** (起動時に警告が出る) — 書き込みは `Edit(...)` で、 Glob は `Read(...)` で塞ぐ。 `Read` / `Edit` の deny rule は、 Claude Code が Bash の中で認識する file コマンド (`cat` / `head` / `tail` / `sed`) と redirect 先 (`> file` / `< file`) にも効く。 ただし **file を名指ししない読み方** (その dir での `grep -r pattern .`、 script が中で file を開く) には効かない。 全 process を止める OS レベルの遮断は sandbox (公式 docs `sandboxing`)。 `Bash(*/abs/secret*)` のような内容 rule は、 path を直接書いたコマンドだけを捕まえる歯止め。
+- <a id="file-rule-tools"></a>file の path rule を見るのは **`Read(path)` と `Edit(path)` だけ** (公式 docs `permissions`、 Claude Code v2.1.210 以降)。 `Write(...)` / `NotebookEdit(...)` / `Glob(...)` の path rule は受け付けられるが**参照されない** (起動時に警告が出る) — 書き込みは `Edit(...)` で、 Glob は `Read(...)` で塞ぐ。 `Read` / `Edit` の deny rule は、 Claude Code が Bash の中で認識する file コマンド (`cat` / `head` / `tail` / `sed`) と redirect 先 (`> file` / `< file`) にも効く。 ただし **file を名指ししない読み方** (その dir での `grep -r pattern .`、 script が中で file を開く) には効かない。 全 process を止める OS レベルの遮断は sandbox (公式 docs `sandboxing`)。 `Bash(*/abs/secret*)` のような内容 rule は、 path を直接書いたコマンドだけを捕まえる歯止め。 読むだけでも触らせない dir (上位 dir からの再帰検索を含む) は PreToolUse hook で塞ぐ = [`confidential-repo-boundary.md#protected-dir-access-guard`](confidential-repo-boundary.md#protected-dir-access-guard)。
 
 ## 反映タイミング
 
