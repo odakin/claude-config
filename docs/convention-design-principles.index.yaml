@@ -817,6 +817,10 @@ sections:
     legacy: "8.64"
     level: 3
     title: "8.64 人に頼んだ操作の完了は、 報告させず機械が状態で見る — 頼む・待つ・続きから進む"
+  - id: index-doc-state-copy
+    legacy: "8.65"
+    level: 3
+    title: "8.65 入口の doc (README) に状態を写さない — 状態を進める操作は写しを通らない"
   - id: changelog
     level: 2
     title: "変更履歴"
