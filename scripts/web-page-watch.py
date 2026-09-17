@@ -32,6 +32,7 @@ docs/convention-design-principles.md#human-memory-not-a-carrier)。
   web-page-watch.py --ledger L --on-change CMD   urgent の target に新しい本文を見つけたら CMD を実行し、 引数の末尾に
                                             通知文 (変わった + 決め手 + 今すぐやること) を 1 つずつ足す
                                             (= スマホへの通知など、 別の経路を呼び出し側が差し込む口)
+  web-page-watch.py --ledger L --probe CMD  巡回のたびに CMD (その経路の軽い健康診断) を実行し、 失敗中は ⚠️ を出す
   web-page-watch.py --ledger L --surface    network に出ず、 state から未確認の変化と異常だけを出す (SessionStart 用)
   web-page-watch.py --ledger L --show ID    未確認の変化の差分を出す
   web-page-watch.py --ledger L --ack ID     確認済みにする (今の本文を新しい基準にする)。 ID = all で全部
@@ -42,6 +43,7 @@ docs/convention-design-principles.md#human-memory-not-a-carrier)。
   ⚠️ <label> を N 回続けて読めていない (<理由>)   … 3 回目から。 目印が見つからない (= ページの作りが変わった) は 1 回目から
   ⏸️ 最後の巡回が H 時間前 / まだ一度も巡回していない   … --surface だけ。 期限内の target があるときだけ
   ⚠️ 変化を知らせる追加の経路 (--on-change) が失敗した   … 次に成功するまで出続ける (= スマホ等に届かなかったことを黙らせない)
+  ⚠️ 変化を知らせる追加の経路が使えない状態 (--probe)   … 巡回ごとの軽い検査が失敗している間 (= 変化が起きる前に直せる)
   ⌛ 期限 (until) を過ぎた target N 件 → 台帳から外す
 
 state: target ごとに baseline (確認済みの本文) と latest (最後に読めた本文)。 初めて読んだ本文は基準にするだけで
@@ -246,6 +248,10 @@ def report(ledger: dict, state: dict, *, surface: bool, prog: str, ledger_arg: s
             out.append(f"⏸️ ページの見張りがまだ一度も巡回していない (定期実行が未配備の疑い。 台帳 = {ledger_arg})")
         elif age > stale:
             out.append(f"⏸️ ページの見張りの最後の巡回が {age:.0f} 時間前 (定期実行が止まっている疑い。 台帳 = {ledger_arg})")
+    pe = state.get("probe_error")
+    if pe and pe.get("error"):
+        out.append(f"⚠️ 変化を知らせる追加の経路が使えない状態 ({str(pe.get('at'))[:16].replace('T', ' ')} の検査: {pe['error']})"
+                   " = このまま変化が起きるとスマホ等に届かない")
     oce = state.get("on_change_error")
     if oce and oce.get("error"):
         out.append(f"⚠️ 変化を知らせる追加の経路 (--on-change) が {str(oce.get('at'))[:16].replace('T', ' ')} に失敗した"
@@ -354,8 +360,21 @@ def run_on_change(command: str, messages: list[str], timeout: int = 300) -> str 
     return None
 
 
+def run_probe(command: str, timeout: int = 60) -> str | None:
+    """--probe の CMD を実行する。 成功 (exit 0) なら None、 失敗なら理由 1 行。"""
+    import shlex  # noqa: PLC0415
+    try:
+        r = subprocess.run(shlex.split(command), check=False, timeout=timeout, capture_output=True, text=True)
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        return f"実行できない ({type(e).__name__}: {e})"
+    if r.returncode != 0:
+        tail = (r.stderr or r.stdout or "").strip().splitlines()[-1:] or [""]
+        return f"exit {r.returncode}: {tail[0][:200]}"
+    return None
+
+
 def main(argv: list[str] | None = None, *, fetch=fetch_url, notifier=notify_macos, on_change=run_on_change,
-         now: str | None = None, prog: str | None = None) -> int:
+         probe=run_probe, now: str | None = None, prog: str | None = None) -> int:
     ap = argparse.ArgumentParser(prog=prog, description=__doc__.splitlines()[0])
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--surface", action="store_true", help="network に出ず state だけから出す")
@@ -366,6 +385,9 @@ def main(argv: list[str] | None = None, *, fetch=fetch_url, notifier=notify_maco
     ap.add_argument("--notify", action="store_true", help="新しい本文を見つけたら macOS 通知")
     ap.add_argument("--alert", action="store_true", help="--notify に加えて、 押すまで消えない警告ダイアログを出す")
     ap.add_argument("--on-change", metavar="CMD", help="新しい本文を見つけたら CMD を実行 (引数の末尾に「label → note」)")
+    ap.add_argument("--probe", metavar="CMD",
+                    help="巡回のたびに CMD を実行し、 失敗なら「追加の経路が使えない状態」 を ⚠️ で出す "
+                         "(= 変化が起きてから経路の故障に気づくのでは遅い。 CMD は token を使わない軽い検査にする)")
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
@@ -405,6 +427,11 @@ def main(argv: list[str] | None = None, *, fetch=fetch_url, notifier=notify_maco
             state["on_change_error"] = {"at": now or now_iso(), "error": err} if err else None
             if err:
                 print(err)
+        if a.probe:
+            perr = probe(a.probe)
+            state["probe_error"] = {"at": now or now_iso(), "error": perr} if perr else None
+            if perr:
+                print(perr)
         try:
             write_state(sp, state)
         except OSError as e:
@@ -482,7 +509,7 @@ def selftest() -> int:  # noqa: PLR0915
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 main(["--ledger", str(led), *args], fetch=fetch, notifier=notifier, on_change=on_change,
-                     now=when, prog="wpw")
+                     probe=lambda cmd: "未ログイン" if cmd == "bad-probe" else None, now=when, prog="wpw")
             return buf.getvalue()
 
         out = run("--notify")
@@ -544,6 +571,11 @@ def selftest() -> int:  # noqa: PLR0915
         out = run("--surface", when="2026-10-05T12:00:00+09:00")
         ok("⏸️" in out and "時間前" in out, "stale last_run warns in surface")
         ok("⏸️" not in run(when="2026-10-05T12:00:00+09:00"), "stale line only in surface")
+        run("--probe", "bad-probe", when="2026-10-05T12:10:00+09:00")
+        ok("使えない状態" in run("--surface", when="2026-10-05T12:20:00+09:00"), "failing probe warns before any change")
+        run("--probe", "good-probe", when="2026-10-05T12:30:00+09:00")
+        ok("使えない状態" not in run("--surface", when="2026-10-05T12:40:00+09:00"), "passing probe clears the warning")
+        ok(run_probe("true") is None and "exit 1" in (run_probe("false") or ""), "run_probe maps exit status")
 
         n_before, h_before = len(notified), len(hooked)
         pages["u:b"] = "<p>日程 10/13</p>"
