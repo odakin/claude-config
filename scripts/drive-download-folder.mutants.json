@@ -1,0 +1,33 @@
+{
+  "_comment": "drive-download-folder.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 4 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。",
+  "target": "drive-download-folder.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "FAIL ",
+  "pass_marker": "PASS ",
+  "mutants": [
+    {
+      "name": "listing の 2 page 目以降を読まない",
+      "pairs": [["        if not page:", "        if True:"]],
+      "expect_fail": ["nextPageToken が尽きるまで読む"],
+      "expect_pass": ["名前衝突だけ連番 suffix"]
+    },
+    {
+      "name": "名前が衝突しても suffix を付けない",
+      "pairs": [["    if not p.exists():", "    if True:"]],
+      "expect_fail": ["名前衝突だけ連番 suffix"],
+      "expect_pass": ["nextPageToken が尽きるまで読む"]
+    },
+    {
+      "name": "失敗があっても exit 0",
+      "pairs": [["return 1 if err else 0", "return 0"]],
+      "expect_fail": ["件数を出して exit 1"],
+      "expect_pass": ["失敗が無ければ exit 0"]
+    },
+    {
+      "name": "native を export しても拡張子を足さない",
+      "pairs": [["out_name = name if name.lower().endswith(ext) else name + ext", "out_name = name"]],
+      "expect_fail": ["native は拡張子を足して export"],
+      "expect_pass": ["token が無ければ発行手順を出して止まる"]
+    }
+  ]
+}

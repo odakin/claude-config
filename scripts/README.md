@@ -56,6 +56,7 @@
 - **[check-public-marker.py](check-public-marker.py)** — Are the public-repo leak gates switched on? Lists local clones whose GitHub repo is public but lack .claude/public-repo.marker (no public pre-commit gate runs), clones marked public whose repo is private, and marked clones whose gate hooks are not installed on this machine; --fix-hooks installs them; --selftest.
 - **[check-repo-registration.py](check-repo-registration.py)** — Find locally cloned, self-owned Git repositories absent from a registry.
 - **[check-script-index.py](check-script-index.py)** — Check that a Git repository's script inventory has direct Markdown links.
+- **[check-script-layering.mutants.json](check-script-layering.mutants.json)** — check-script-layering.py の selftest の foil に歯があることを mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[check-script-layering.py](check-script-layering.py)** — Detect duplicated cross-layer script engines and unreviewed lower-layer additions.
 - **[check-session-sot.py](check-session-sot.py)** — Detect durable-data accretion and bloat in SESSION.md files.
 - **[check-sot-drift.py](check-sot-drift.py)** — 「規則の正本は 1 か所、 他所は参照だけ」 を目印の文字列で機械検査する (registry 駆動)
@@ -86,6 +87,7 @@
 - **[discord-post.py](discord-post.py)** — canonical Discord Bot API poster (stdlib only).
 - **[docx-to-pdf.sh](docx-to-pdf.sh)** — Word docx/doc → PDF 変換（macOS 既定 Word 忠実版 → --pages で Pages → 非 macOS LibreOffice、Word 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避、office-automation.md#docx-to-pdf-pages）
 - **[docx_decl_patch.py](docx_decl_patch.py)** — python-docx の Document.save() を auto-patch し XML 宣言を Word 形式(double-quote+CRLF)で書く（厳格 Word の「破損」回避、 save 時 source 修正・lazy import hook、 office-automation.md#docx-checkbox-content-control）
+- **[drive-download-folder.mutants.json](drive-download-folder.mutants.json)** — drive-download-folder.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 4 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[drive-download-folder.py](drive-download-folder.py)** — Google Drive folder を再帰で一括 download する (native は export、 各 dir に manifest、 token と OAuth client は引数で受ける)
 - **[dropbox-root.sh](dropbox-root.sh)** — Dropbox install root を OS 横断で resolve（dropbox-refs 規約用）
 - **[enhance-scan.py](enhance-scan.py)** — 手書き文書の撮影写真の可読化: 紙の切り出し + 照明ムラ除去 + コントラスト伸張 + タイル出力。
@@ -177,6 +179,7 @@
 - **[setup-codex.sh](setup-codex.sh)** — claude-config の共有規約を Codex に安全に導入する
 - **[setup-codex.test.sh](setup-codex.test.sh)** — setup-codex.sh の隔離・冪等・非上書き性を検証する
 - **[setup-dropbox-refs.sh](setup-dropbox-refs.sh)** — personal layer の dropbox-collabs.yaml を読んで symlink を生成
+- **[shared-drive-folder-watch.mutants.json](shared-drive-folder-watch.mutants.json)** — shared-drive-folder-watch.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 8 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[shared-drive-folder-watch.py](shared-drive-folder-watch.py)** — 他人から共有された Google Drive folder を台帳で監視し、 版の差分だけを手元の写しに落とす (標準ライブラリだけで動く)
 - **[smoke-googleapis.mjs](smoke-googleapis.mjs)** — googleapis / google-auth-library の依存 bump 後 read-only smoke test (対象 dir 自身の node_modules を createRequire で load し、 実 API read か token refresh で更新実体を検証。 書き込み API・token 永続化なし。 規約 = conventions/google-api-direct-access.md)
 - **[sot-registry-add.py](sot-registry-add.py)** — check-sot-drift.py の registry に topic を足す前に検査し、 通ったものだけ registry の書式で末尾に追記する

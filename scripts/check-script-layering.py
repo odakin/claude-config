@@ -15,7 +15,8 @@ from git_blob import read_blob_text  # noqa: E402  blob は worktree に出し�
 
 SCRIPT_SUFFIXES = {".py", ".sh", ".js", ".mjs", ".jl", ".wl", ".wls", ".ipynb"}
 LAYER3_DECLARATION = "layer-placement: layer3"
-SHIM_MARKERS = ("os.execv", "importlib.util", "exec ")
+# exec(compile( = engine の source を毎回 compile して読む shim (exec_module は stale .pyc を掴みうる)
+SHIM_MARKERS = ("os.execv", "importlib.util", "exec ", "exec(compile(")
 
 
 def scripts_under(directory: Path) -> dict[str, Path]:
@@ -129,6 +130,12 @@ def run_selftest() -> int:
             "# claude-config/scripts/shim.py\nimport os\nos.execv('python3', ['python3'])\n",
             encoding="utf-8",
         )
+        (upper / "compiled.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+        (lower / "compiled.py").write_text(
+            "# claude-config/scripts/compiled.py\nns = {}\n"
+            "exec(compile(open('e').read(), 'e', 'exec'), ns)\n",
+            encoding="utf-8",
+        )
         (upper / "copy.py").write_text("print('same')\n", encoding="utf-8")
         (lower / "copy.py").write_text("print('same')\n", encoding="utf-8")
         (upper / "fork.py").write_text("print('upper')\n", encoding="utf-8")
@@ -139,9 +146,10 @@ def run_selftest() -> int:
             [
                 ("ES module scripts are inventoried", ".mjs" in SCRIPT_SUFFIXES),
                 ("delegating shim is accepted", ("DUPLICATE_ENGINE", "shim.py") not in got),
+                ("compile-and-exec shim is accepted", ("DUPLICATE_ENGINE", "compiled.py") not in got),
                 ("identical copy is rejected", ("DUPLICATE_COPY", "copy.py") in got),
                 ("forked engine is rejected", ("DUPLICATE_ENGINE", "fork.py") in got),
-                ("explicit mirror exception works", not duplicate_findings(upper, lower, {"copy.py", "fork.py"})),
+                ("explicit mirror exception works", not duplicate_findings(upper, lower, {"copy.py", "fork.py", "compiled.py"})),
                 ("lower-only inventory is complete", sorted(set(scripts_under(lower)) - set(scripts_under(upper))) == ["private.py"]),
             ]
         )

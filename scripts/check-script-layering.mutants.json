@@ -1,0 +1,26 @@
+{
+  "_comment": "check-script-layering.py の selftest の foil に歯があることを mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 compile して exec する shim (exec_module の stale .pyc を避ける書き方) を shim と認めない版で、 その検査だけが落ち、 他の検査は残ることを見る。",
+  "target": "check-script-layering.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "  [FAIL] ",
+  "pass_marker": "  [PASS] ",
+  "mutants": [
+    {
+      "name": "compile して exec する shim を shim と認めない",
+      "pairs": [
+        [
+          "\"exec \", \"exec(compile(\")",
+          "\"exec \")"
+        ]
+      ],
+      "expect_fail": [
+        "compile-and-exec shim is accepted"
+      ],
+      "expect_pass": [
+        "delegating shim is accepted",
+        "explicit mirror exception works",
+        "forked engine is rejected"
+      ]
+    }
+  ]
+}

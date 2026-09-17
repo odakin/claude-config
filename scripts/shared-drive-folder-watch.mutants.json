@@ -1,0 +1,56 @@
+{
+  "_comment": "shared-drive-folder-watch.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 8 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 .part の mutant は、 最初の selftest が「.part が残っていない」 だけを見ていて、 本名へ直接書く版でも通ってしまったのを直した跡 (実測)。",
+  "target": "shared-drive-folder-watch.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "FAIL ",
+  "pass_marker": "PASS ",
+  "mutants": [
+    {
+      "name": "surface でも Drive から消えた file の件数を出す",
+      "pairs": [["if gone and mode != \"surface\":", "if gone:"]],
+      "expect_fail": ["surface では出さない"],
+      "expect_pass": ["sync: 取り終えたら最新"]
+    },
+    {
+      "name": "exclude を効かせない",
+      "pairs": [["        listing = [f for f in listing if not any(w in f[\"rel\"] for w in excl)]", "        pass"]],
+      "expect_fail": ["exclude の語を含む file は数えない"],
+      "expect_pass": ["404 → 見えない"]
+    },
+    {
+      "name": "download が .part を使わず本名へ直接書く",
+      "pairs": [["tmp = dest.with_name(dest.name + \".part\")", "tmp = dest"]],
+      "expect_fail": ["読み終えるまで本名の file を作らず"],
+      "expect_pass": ["native は export、 他は alt=media"]
+    },
+    {
+      "name": "知らせた id を known に足さない",
+      "pairs": [["    known.update(new)\n", ""]],
+      "expect_fail": ["同じ id は 2 回知らせない"],
+      "expect_pass": ["既知 id だけなら知らせない"]
+    },
+    {
+      "name": "credential の注入より台帳が勝つ",
+      "pairs": [["for source in (reg.get(\"credentials\") or {}, injected or {}):", "for source in (injected or {}, reg.get(\"credentials\") or {}):"]],
+      "expect_fail": ["注入が台帳に勝ち"],
+      "expect_pass": ["path だけの形"]
+    },
+    {
+      "name": "--only で絞らない",
+      "pairs": [["if only and mode == \"sync\":", "if False:"]],
+      "expect_fail": ["語を含む file だけ落とす"]
+    },
+    {
+      "name": "404 を「見えない」 と読まない",
+      "pairs": [["if e.status in (403, 404):", "if e.status in (403,):"]],
+      "expect_fail": ["404 → 見えない"],
+      "expect_pass": ["invalid_grant → 再承認の案内"]
+    },
+    {
+      "name": "--no-mail / --list でも通知 source を呼ぶ",
+      "pairs": [["if share_notice_source and not a.no_mail and mode in (\"check\", \"surface\"):", "if share_notice_source:"]],
+      "expect_fail": ["--no-mail と --list では通知 source を呼ばない"],
+      "expect_pass": ["surface で通知 source を呼ぶ"]
+    }
+  ]
+}
