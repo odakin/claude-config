@@ -17,7 +17,7 @@ SAML-only 組織では REST の password auth が admin 限定・OAuth client �
 | csrf ticket | `/g/cabinet/search.csp` 等の inline `grn.__PRELOADED_DATA__.csrfTicket` (portal は 302 なので注意) |
 | 掲示板 REST | `GET /g/api/v1/bulletin/categories` 等、 cookie + `X-Requested-With: XMLHttpRequest` で session auth |
 | 添付 download | `GET /g/bulletin/file_download.csp/-/<name>?fid=F` は session 内 GET で 200 (application/pdf)。 cabinet の `download.csp` は time= token 要の可能性 (未実測) |
-| login 切れ | 302 → `<org>.ex-tic.com` (SSO) / login page HTML → user が browser で 1 回 login、 script は代行しない |
+| login 切れ | 302 → `<org>.ex-tic.com` (SSO) / **302 → `<org>.cybozu.com/login?redirect=…` (cybozu 自身の login)** / login page HTML / REST API の 401 `GRN_REST_API_00003` → user が browser で 1 回 login、 script は代行しない。 ⚠️ 死活検査で「SSO への 302 だけ切れ、 他の 302 は健全」 と書くと、 自前 login への 302 で切れているのに silent になる (実測) |
 
 ⚠️ **`search.csp` の HTML 自体は結果を含まない** (JS が上の API を叩いて描画、 no-data 文言は template に常在) — HTML を grep して「0 件」 と結論しない。 browser MCP の `get_page_text` も描画前に読むと同じ罠。
 ⚠️ 「規程集」 のような**外部 site への link** (= Basic 認証の別 host) は cookie 再利用の射程外 = ID/PW は user 専権 (script も agent も入力しない)。
