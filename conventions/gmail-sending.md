@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Gmail でメールを送信する経路・MIME 実装を選ぶとき
 category: mail
-summary: Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕 / #double-confirmation-design = chat 承認〔規律層 = 内容〕と harness chip〔backstop = 未承認送信〕は別の脅威モデル — chip の品質 3 条件〔実行形 anchor・1 送信 1 個・dialog = 内容〕、 うざい chip の治療は廃止でなく anchor 絞り、 宣言配線は silent 消失しうる = 登録直後 verify + documented ⊆ live の機械 audit、 並走 gate 層〔宣言 ask・hook・fail-safe〕は同じ実送信-flag anchor を共有〔片層だけ script 名 match だと dry-run に誤爆 chip / argparse prefix 短縮は allow_abbrev=False で殺す〕 / #draft-approval-single-source = chat 提示 draft と送信 body-file の 2 度書きは乖離源 — body-file 先行 Write + chat は view、 承認後の変更は再提示、 全外部発信に適用)
+summary: Gmail 送信の経路選択と MIME 落とし穴 (= 返信は RFC 5322 Message-ID が要り MCP read では取れない → API 直送 script + 親 id 1 個で 3 点 set 自動解決を推奨 / 非 ASCII 添付 filename は RFC 2231 kwarg 必須〔f-string 直書きは noname 化〕 / 添付付き送信は送信後 MIME 検証まで 1 単位 / dry-run 先頭 truncate 罠 / Bash sandbox の network 遮断 / 承認 gate は script 名でなく実送信 flag に anchor〔fail-safe 既定 + ask パターン誤爆防止〕 / #double-confirmation-design = chat 承認〔規律層 = 内容〕と harness chip〔backstop = 未承認送信〕は別の脅威モデル — chip の品質 3 条件〔実行形 anchor・1 送信 1 個・dialog = 内容〕、 うざい chip の治療は廃止でなく anchor 絞り、 宣言配線は silent 消失しうる = 登録直後 verify + documented ⊆ live の機械 audit、 並走 gate 層〔宣言 ask・hook・fail-safe〕は同じ実送信-flag anchor を共有〔片層だけ script 名 match だと dry-run に誤爆 chip / argparse prefix 短縮は allow_abbrev=False で殺す〕 / #draft-approval-single-source = chat 提示 draft と送信 body-file の 2 度書きは乖離源 — body-file 先行 Write + chat は view、 承認後の変更は再提示、 全外部発信に適用 / #quote-chain = 複数 message を新規メールに引用するときは新しい順の入れ子を header から組み、 最初の 1 通まで含め、 抜粋を原文と照合)
 -->
 # Gmail 送信の経路選択と MIME 落とし穴
 
@@ -196,6 +196,18 @@ Python の `email.message.EmailMessage` なら `set_content` (plain) → `add_al
 ## <a id="from-display-name"></a>11. From の表示名は Gmail 側の送信名で置き換わることがある
 
 API 直送で MIME の From に表示名 (`"表示名" <addr>`) を入れても、 送信後の message の From は account の送信名設定の表示名になっていることがある (実測)。 表示名で相手に名前の表記を伝えたい (例: 相手が名前を誤記している) なら、 表示名に頼らず**署名**で示す。 送信名を変えたいなら Gmail の設定 (「名前」) の側で変える。
+
+## <a id="quote-chain"></a>12. 過去のやりとりを新規メールに引用する: 新しい順の入れ子を header から組む
+
+経緯を別の相手 (別組織の窓口など) に示すために、 複数の message の該当部分を新規メールの末尾に引用するときの形。
+
+- **新しい message を最上段に置き、 1 通古くなるごとに引用を 1 段深くする**。 各段の頭に `On <日時>, <差出人> wrote:` を置き、 全段で同じ書式にする。
+- **やりとりの最初の 1 通まで含める**。 起点の問いが無いと、 途中の返事が何に答えているかが読めない。
+- **相手のメールソフトが作った引用の形を写さない**。 インライン返信の message をそのまま写すと、 古い発言が新しい返事より上に来て、 ソフトごとに違う `On … wrote:` 行 (言語・日時の書式) が混ざる (実測)。 各 message から抜粋だけを取り、 段は組み直す。
+- **日時は header から機械で変換する**。 差出人の時差 (`-0500` など) を手で換算すると誤る。
+- **抜粋は元の本文と照合する**。 手で写すと語尾の改変や取り違えが混ざる。 照合では空白・引用記号・HTML 由来の強調記号 (`*…*`) を無視する (= 相手のソフトの折り返しで行が一致しなくなるため)。
+
+送信 script に持たせる形の例: spec = `[{"message": <id>, "lines": [抜粋, ...]}, ...]` を新しい順に並べて渡し、 script が各 message の header を引いて段を組み、 抜粋が本文に無ければ送信前に止める。 引用は本文の送信前検査 (HTML entity の混入など) の後に付ける (= 相手の原文を自分の本文の検査に巻き込まない)。
 
 ## 関連
 
