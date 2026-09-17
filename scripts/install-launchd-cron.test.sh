@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-launchd-cron.test.sh — install-launchd-cron.sh の cron 展開 (リスト / 範囲 / step) と、 読めない cron で plist を書く前に止まることの test
+# install-launchd-cron.test.sh — install-launchd-cron.sh の cron 展開 (リスト / 範囲 / step)、 読めない cron で plist を書く前に止まること、 --ensure が cron の変わった routine を直すことの test
 #
 # launchctl と uname は偽物を PATH の先頭に置く (= 実 launchd に触らず、 Linux CI でも install 経路を通す)。
 # plist の書き先は LCRON_LA_DIR で一時 dir。
@@ -11,6 +11,9 @@
 #      「ensure install」 無し
 #   T6 読めない routine が 1 本でもあれば --ensure は他の routine も install しない
 #   T7 --install-one は指定した routine の cron だけ読む / --status と --uninstall-one は止まらない
+#   T6b --ensure は loaded で照合前の routine の cron も読む / 全部照合済みなら python を起動しない
+#   T8 loaded 済み routine の cron (または変換の版) が変わったら --ensure が StartCalendarInterval だけ書き換えて
+#      再 load (ProgramArguments の pin は残す)、 実行中なら保留、 plist が消えていれば書き直す、 照合済み印の読み書き
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,7 +35,9 @@ cat > "$BIN/launchctl" <<EOF
 case "\$1" in
   bootstrap) : > "$STATE/\$(basename "\$3" .plist)" ;;
   bootout)   rm -f "$STATE/\${2##*/}" ;;
-  print)     [ -f "$STATE/\${2##*/}" ] ;;
+  print)     [ -f "$STATE/\${2##*/}" ] || exit 1
+             [ -f "$STATE/\${2##*/}.running" ] && echo "state = running"
+             exit 0 ;;
   *)         exit 1 ;;
 esac
 EOF
@@ -135,17 +140,25 @@ rc=$?
 [ "$(wc -l <"$TMP/err" | tr -d ' ')" = 1 ] && grep -q 'routine broken' "$TMP/err" \
   && ok "stderr は broken の 1 行" || ng "stderr: $(cat "$TMP/err")"
 
-echo "T6b --ensure は install する routine の cron だけ読む"
+echo "T6b --ensure の定常状態と照合前の読めない routine"
 : > "$STATE/$PREFIX.broken"
 engine --routine "good|cmd|$TARGET|0 9 * * *" --routine "broken|cmd|$TARGET|0 25 * * *" --ensure >"$TMP/out" 2>"$TMP/err"
-[ $? -eq 0 ] && [ -f "$(plist_of good)" ] && [ ! -s "$TMP/err" ] \
-  && ok "loaded 済みの broken は good の install を止めない" || ng "rc/plist/stderr: $(cat "$TMP/out" "$TMP/err")"
+rc=$?
+[ "$rc" -ne 0 ] && [ ! -e "$(plist_of good)" ] && [ "$(wc -l <"$TMP/err" | tr -d ' ')" = 1 ] && grep -q 'routine broken' "$TMP/err" \
+  && ok "loaded で未照合の broken も読む = good も install せず止まる" || ng "rc=$rc plist=$(ls "$LA" 2>/dev/null) err=$(cat "$TMP/err")"
+rm -f "$STATE/$PREFIX.broken"
+engine --routine "good|cmd|$TARGET|0 9 * * *" --ensure >"$TMP/out" 2>"$TMP/err"
+[ $? -eq 0 ] && [ -f "$(plist_of good)" ] && ok "broken を直せば good が入る" || ng "$(cat "$TMP/out" "$TMP/err")"
+nopy_engine() {  # python3 を「起動したら印を残して失敗する」 偽物にして engine を回す
+  PATH="$TMP/nopy:$BIN:$PATH" LCRON_LA_DIR="$LA" LCRON_LOG_DIR="$TMP/log" CLAUDE_BIN="$BIN/claude" HOME="$TMP" \
+    sh "$ENGINE" --label-prefix "$PREFIX" "$@"
+}
 mkdir -p "$TMP/nopy"
 printf '#!/bin/sh\n: > "%s/python-ran"\nexit 1\n' "$TMP" > "$TMP/nopy/python3"
 chmod +x "$TMP/nopy/python3"
-PATH="$TMP/nopy:$BIN:$PATH" LCRON_LA_DIR="$LA" LCRON_LOG_DIR="$TMP/log" CLAUDE_BIN="$BIN/claude" HOME="$TMP" \
-  sh "$ENGINE" --label-prefix "$PREFIX" --routine "good|cmd|$TARGET|0 9 * * *" --ensure >"$TMP/out" 2>&1
-[ $? -eq 0 ] && [ ! -e "$TMP/python-ran" ] && ok "全部 loaded なら python を起動しない" || ng "python が走った / $(cat "$TMP/out")"
+rm -f "$TMP/python-ran"
+nopy_engine --routine "good|cmd|$TARGET|0 9 * * *" --ensure >"$TMP/out" 2>&1
+[ $? -eq 0 ] && [ ! -e "$TMP/python-ran" ] && [ ! -s "$TMP/out" ] && ok "全部 loaded + 照合済みなら python を起動せず無言" || ng "python が走った / $(cat "$TMP/out")"
 
 echo "T7 cron を読まない action / 指定 routine だけ読む action"
 engine --routine "good|cmd|$TARGET|0 9 * * *" --routine "broken|cmd|$TARGET|0 25 * * *" --install-one good >"$TMP/out" 2>"$TMP/err"
@@ -154,6 +167,56 @@ engine --routine "broken|cmd|$TARGET|0 25 * * *" --status >"$TMP/out" 2>"$TMP/er
 [ $? -eq 0 ] && ok "--status は止まらない" || ng "--status: $(cat "$TMP/err")"
 engine --uninstall-one good >"$TMP/out" 2>"$TMP/err"
 [ $? -eq 0 ] && [ ! -e "$(plist_of good)" ] && ok "--uninstall-one は止まらない" || ng "--uninstall-one: $(cat "$TMP/err")"
+
+echo "T8 loaded 済み routine の cron が変わったら --ensure が calendar だけ直す"
+rm -rf "$LA" "$STATE"; mkdir -p "$STATE"
+STAMP="$TMP/Library/Application Support/install-launchd-cron/$PREFIX.upd.cron"
+engine --routine "upd|cmd|$TARGET|0 9 10 * *" --install-one upd >/dev/null 2>&1
+# install 後に plist の command へ手で pin 相当の印を足す (= 自動更新が ProgramArguments を触らないことの確認用)
+python3 -c 'import plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,"rb")); d["ProgramArguments"][-1]+=" # PIN-MARK"; plistlib.dump(d,open(p,"wb"))' "$(plist_of upd)"
+has_pin() { python3 -c 'import plistlib,sys; sys.exit(0 if "PIN-MARK" in plistlib.load(open(sys.argv[1],"rb"))["ProgramArguments"][-1] else 1)' "$(plist_of upd)"; }
+[ "$(cat "$STAMP" 2>/dev/null)" = "2 0 9 10 * *" ] && ok "install が照合済み印を書く (空白を含む既定 dir)" || ng "印: $(cat "$STAMP" 2>&1)"
+
+engine --routine "upd|cmd|$TARGET|0 9 10 4 *" --ensure >"$TMP/out" 2>"$TMP/err"
+rc=$?
+got="$(sci "$(plist_of upd)")"
+if [ "$rc" -eq 0 ] && [ "$got" = '{"Day":10,"Hour":9,"Minute":0,"Month":4}' ] && grep -q "ensure update: upd" "$TMP/out" \
+   && grep -q "OK loaded: $PREFIX.upd" "$TMP/out" && has_pin && [ "$(cat "$STAMP")" = "2 0 9 10 4 *" ] && [ ! -s "$TMP/err" ]; then
+  ok "cron の変更 → calendar だけ書き換え + 再 load + 印更新 (pin は残る)"
+else
+  ng "rc=$rc got=$got out=$(tr '\n' ' ' <"$TMP/out") err=$(cat "$TMP/err") stamp=$(cat "$STAMP")"
+fi
+
+rm -f "$TMP/python-ran"
+nopy_engine --routine "upd|cmd|$TARGET|0 9 10 4 *" --ensure >"$TMP/out" 2>&1
+[ $? -eq 0 ] && [ ! -e "$TMP/python-ran" ] && [ ! -s "$TMP/out" ] && ok "更新後の 2 回目は python 0 回・無言" || ng "$(cat "$TMP/out")"
+
+rm -f "$STAMP"
+engine --routine "upd|cmd|$TARGET|0 9 10 4 *" --ensure >"$TMP/out" 2>"$TMP/err"
+[ $? -eq 0 ] && [ ! -s "$TMP/out" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "2 0 9 10 4 *" ] \
+  && ok "印が無く calendar が一致 (= 旧 engine で入れた routine) → 書き換えず印だけ書く" || ng "out=$(cat "$TMP/out") stamp=$(cat "$STAMP" 2>&1)"
+
+printf '1 0 9 10 4 *\n' > "$STAMP"
+engine --routine "upd|cmd|$TARGET|0 9 10 4 *" --ensure >"$TMP/out" 2>"$TMP/err"
+[ $? -eq 0 ] && [ ! -s "$TMP/out" ] && [ "$(cat "$STAMP")" = "2 0 9 10 4 *" ] \
+  && ok "変換の版が古い印 → 照合し直して印を今の版に" || ng "out=$(cat "$TMP/out") stamp=$(cat "$STAMP")"
+
+: > "$STATE/$PREFIX.upd.running"
+engine --routine "upd|cmd|$TARGET|0 9 10 5 *" --ensure >"$TMP/out" 2>"$TMP/err"
+[ $? -eq 0 ] && grep -q "ensure update 保留: upd" "$TMP/out" && [ "$(sci "$(plist_of upd)")" = '{"Day":10,"Hour":9,"Minute":0,"Month":4}' ] \
+  && [ "$(cat "$STAMP")" = "2 0 9 10 4 *" ] && ok "実行中の job は書き換えず保留 (印も据え置き)" || ng "out=$(cat "$TMP/out") stamp=$(cat "$STAMP")"
+rm -f "$STATE/$PREFIX.upd.running"
+engine --routine "upd|cmd|$TARGET|0 9 10 5 *" --ensure >"$TMP/out" 2>"$TMP/err"
+[ $? -eq 0 ] && grep -q "ensure update: upd" "$TMP/out" && [ "$(sci "$(plist_of upd)")" = '{"Day":10,"Hour":9,"Minute":0,"Month":5}' ] \
+  && ok "実行が終われば次の --ensure で直す" || ng "out=$(cat "$TMP/out")"
+
+rm -f "$(plist_of upd)"
+engine --routine "upd|cmd|$TARGET|0 9 10 6 *" --ensure >"$TMP/out" 2>"$TMP/err"
+[ $? -eq 0 ] && grep -q "ensure install: upd (loaded だが plist が無い)" "$TMP/out" && [ "$(sci "$(plist_of upd)")" = '{"Day":10,"Hour":9,"Minute":0,"Month":6}' ] \
+  && ok "loaded だが plist が消えていれば書き直す" || ng "out=$(cat "$TMP/out") err=$(cat "$TMP/err")"
+
+engine --routine "upd|cmd|$TARGET|0 9 10 6 *" --uninstall-one upd >/dev/null 2>&1
+[ ! -e "$STAMP" ] && [ ! -e "$(plist_of upd)" ] && ok "--uninstall-one が印も消す" || ng "印が残った"
 
 echo
 echo "install-launchd-cron.test.sh: PASS=$PASS FAIL=$FAIL"

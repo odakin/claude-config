@@ -1,5 +1,5 @@
 #!/bin/sh
-# install-launchd-cron.sh — 汎用 launchd cron 登録エンジン（無人ルーチンを launchd cron で回す plist 生成・登録・状態確認・解除。--label-prefix / --workdir / --routine "id\|type\|target\|cron" を呼び出し側が渡す＝ROUTINES 焼かず汎用、cron の各欄の , リスト・N-M 範囲・*/S と N-M/S step を StartCalendarInterval 配列へ展開 (読めない欄は plist を書く前に 1 行で exit 2)、skill=claude -p indirection / cmd=直接実行、CLI 認証で Claude Code (desktop) 切替非依存、--status/--run/--install-one/--uninstall-one/--uninstall/--ensure（未install のみ install=新ホスト自動配備、SessionStart から呼ぶ）、idempotent、macOS 限定、conventions/scheduled-tasks.md#launchd-cron-engine）
+# install-launchd-cron.sh — 汎用 launchd cron 登録エンジン（無人ルーチンを launchd cron で回す plist 生成・登録・状態確認・解除。--label-prefix / --workdir / --routine "id\|type\|target\|cron" を呼び出し側が渡す＝ROUTINES 焼かず汎用、cron の各欄の , リスト・N-M 範囲・*/S と N-M/S step を StartCalendarInterval 配列へ展開 (読めない欄は plist を書く前に 1 行で exit 2)、skill=claude -p indirection / cmd=直接実行、CLI 認証で Claude Code (desktop) 切替非依存、--status/--run/--install-one/--uninstall-one/--uninstall/--ensure（未install を install=新ホスト自動配備 + loaded でも cron が plist とずれていれば calendar だけ書き換えて再 load、SessionStart から呼ぶ）、idempotent、macOS 限定、conventions/scheduled-tasks.md#launchd-cron-engine）
 # install-launchd-cron.sh — 汎用 launchd cron 登録エンジン (macOS)。
 # 原理 doc: conventions/scheduled-tasks.md (= 機構選択の一般則 §0 + 本エンジンの SoT note)。
 # このスクリプトが plist / label / cron→StartCalendarInterval 設計の SoT
@@ -27,8 +27,15 @@
 #
 #   ACTION (既定 = 全 routine install):
 #     (なし) | install          全 routine を install / 更新
-#     --ensure                   未 install の routine だけ install (= 冪等・quiet・fail-open)。
-#                                 SessionStart 等から呼び、 新 routine を git pull したマシンに自動配備
+#     --ensure                   未 install の routine を install + loaded 済みでも cron (または engine の
+#                                 cron→calendar 変換の版) が plist とずれていれば StartCalendarInterval だけ
+#                                 書き換えて再 load (= 冪等・quiet・fail-open)。 SessionStart 等から呼び、
+#                                 新 routine も cron の変更も git pull したマシンに自動で届く。
+#                                 ⚠️ 届くのは calendar だけ: command 側 (--gate / CRON_MODEL / CRON_EFFORT /
+#                                 CRON_CONFIG_DIR / target) の変更は --install-one で入れ直す (= 自動で作り直すと
+#                                 install 時に手で渡した pin が消えるため、 あえて触らない)。 実行中の job は殺さない
+#                                 よう次の --ensure に回す。 照合済み印 = $LCRON_STATE_DIR (既定
+#                                 ~/Library/Application Support/install-launchd-cron/) の <label>.cron
 #     --status                   全 routine の状態 + log tail
 #     --run <task-id>            1 routine を前景で 1 回実行 (= 動作確認)
 #     --install-one <task-id>    1 routine だけ install
@@ -77,6 +84,8 @@ esac
 
 LA_DIR="${LCRON_LA_DIR:-$HOME/Library/LaunchAgents}"   # LCRON_LA_DIR は test 用 override
 LOG_DIR="${LCRON_LOG_DIR:-$HOME/Library/Logs}"
+STATE_DIR="${LCRON_STATE_DIR:-$HOME/Library/Application Support/install-launchd-cron}"   # --ensure の照合済み印
+CAL_VERSION=2   # cron→StartCalendarInterval 変換の版 (2 = 各欄の , / N-M / */S / N-M/S + 月 + 日と曜日の OR)
 DOMAIN="gui/$(id -u)"
 CRON_MODEL="${CRON_MODEL:-}"
 CRON_EFFORT="${CRON_EFFORT:-}"
@@ -258,6 +267,34 @@ if sys.argv[1] == 'check':
             bad = 1
     sys.exit(2 if bad else 0)
 
+if sys.argv[1] == 'recal':
+    # loaded な routine の calendar を spec と比べ、 ずれていれば StartCalendarInterval だけを書き換える
+    # (= ProgramArguments 等は触らない = install 時の CRON_MODEL / CRON_EFFORT / CRON_CONFIG_DIR の pin を保つ)。
+    # 組 = <task-id> <cron> <plist> <running 0|1>。 1 組ごとに "same|held|updated|missing <task-id>" を出す。
+    import os
+    args = sys.argv[2:]
+    for i in range(0, len(args) - 3, 4):
+        task_id, cron, path, running = args[i:i + 4]
+        entries = entries_or_exit(task_id, cron)
+        want = entries[0] if len(entries) == 1 else entries
+        try:
+            with open(path, 'rb') as f:
+                d = plistlib.load(f)
+        except Exception:
+            print('missing', task_id)
+            continue
+        if d.get('StartCalendarInterval') == want:
+            print('same', task_id)
+        elif running == '1':
+            print('held', task_id)   # 実行中の job を bootout すると殺すので、 次の呼び出しに回す
+        else:
+            d['StartCalendarInterval'] = want
+            with open(path + '.tmp', 'wb') as f:
+                plistlib.dump(d, f)
+            os.replace(path + '.tmp', path)
+            print('updated', task_id)
+    sys.exit(0)
+
 task_id, cron, label, claude_bin, kind, target, prompt, logf, out, model, workdir, gate, nopersist, rcoff, effort, config_dir, node_dir = sys.argv[2:19]
 entries = entries_or_exit(task_id, cron)
 sci = entries[0] if len(entries) == 1 else entries
@@ -301,7 +338,18 @@ write_plist() {
   if [ "$kind" = skill ]; then prompt="$(prompt_for "$target")"; else prompt=""; fi
   plist_py write "$task_id" "$cron" "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" "$CRON_EFFORT" "$CRON_CONFIG_DIR" "$NODE_BIN_DIR" \
     || { echo "  ERROR plist を書けず: $task_id (登録しない)" >&2; return 1; }
+  record_cron "$task_id" "$cron"
   echo "  plist: $plist  ($kind, cron: $cron)"
+}
+
+# --ensure の照合済み印 = 「この cron をこの変換の版で plist に書いた」。 印が spec と一致する loaded routine は
+# plist を読まずに skip する (= 定常状態で python を起動しない)。 印は cache にすぎず、 正本は plist
+# (= 消えても次の --ensure が plist と照合して書き直す)。 cron→calendar 変換の意味を変えたら CAL_VERSION を
+# 上げる = 全 loaded routine を 1 回照合し直させる。
+record_cron() {
+  mkdir -p "$STATE_DIR" 2>/dev/null
+  printf '%s %s\n' "$CAL_VERSION" "$2" > "$STATE_DIR/${LABEL_PREFIX}.$1.cron" 2>/dev/null
+  return 0
 }
 
 # plist を書く action は書き始める前に cron を読む (= 読めない書き方で「ensure install」 だけ出て
@@ -423,7 +471,7 @@ cmd_uninstall_one() {  # 単体 uninstall (= 期間限定ジョブの停止等�
   [ -n "$ACTION_ARG" ] || { echo "usage: --uninstall-one <task-id>"; exit 1; }
   label="$(label_for "$ACTION_ARG")"; plist="$(plist_path "$ACTION_ARG")"
   launchctl bootout "$DOMAIN/$label" 2>/dev/null
-  rm -f "$plist"
+  rm -f "$plist" "$STATE_DIR/$label.cron"
   echo "✅ removed: $label"
 }
 
@@ -432,30 +480,70 @@ cmd_uninstall() {
     [ -n "$task_id" ] || continue
     label="$(label_for "$task_id")"; plist="$(plist_path "$task_id")"
     launchctl bootout "$DOMAIN/$label" 2>/dev/null
-    rm -f "$plist"
+    rm -f "$plist" "$STATE_DIR/$label.cron"
     echo "  removed: $label"
   done
   echo "✅ uninstall 完了"
 }
 
-cmd_ensure() {  # 未 install の routine だけ install (= SessionStart 等から冪等に呼ぶ自己修復。 quiet + fail-open)
-  # loaded 済みは無音 skip / target 未取得 (git pull 待ち) も無音 skip / skill で claude 不在も skip。
+cmd_ensure() {  # 未 install の routine を install + loaded でも calendar が spec とずれていれば直す (= SessionStart 等から冪等に呼ぶ自己修復。 quiet + fail-open)
+  # target 未取得 (git pull 待ち) は無音 skip / skill で claude 不在も skip。
   # → 新 routine を ROUTINES に足して git pull した後、 次 session でそのマシンに自動 install される。
-  # ⚠️ fail-open の例外 = install する routine の読めない cron (= 呼び出し側の spec の誤り)。 1 本でも
-  #    あれば 1 行ずつ stderr に出して、 どれも install せず exit 2 (= 「ensure install」 だけ出て未登録、
-  #    を起こさない)。 cron を読むのは install する routine がある時だけ (= 全部 loaded の定常状態では
-  #    python を起動しない。 SessionStart から毎回呼ばれるため)。
-  pending="$(printf '%s\n' "$ROUTINES_ACC" | while IFS='|' read -r task_id kind target cron; do
+  # → 既存 routine の cron を書き換えて (または engine の変換が変わって) git pull した後も、 次 session で
+  #    そのマシンの plist の StartCalendarInterval だけが書き換わって再 load される (= ProgramArguments は
+  #    触らないので install 時の CRON_MODEL 等の pin は残る)。 job が実行中なら殺さないよう次回に回す。
+  #    照合済み印 (record_cron) が spec と一致する loaded routine は plist を読まない (= 定常状態で python 0 回)。
+  # ⚠️ fail-open の例外 = install / 照合する routine の読めない cron (= 呼び出し側の spec の誤り)。 1 本でも
+  #    あれば 1 行ずつ stderr に出して、 何も変えず exit 2 (= 「ensure install」 だけ出て未登録、 を起こさない)。
+  todo="$(printf '%s\n' "$ROUTINES_ACC" | while IFS='|' read -r task_id kind target cron; do
     [ -n "$task_id" ] || continue
-    launchctl print "$DOMAIN/$(label_for "$task_id")" >/dev/null 2>&1 && continue   # 既に loaded = 冪等 skip
     [ -f "$target" ] || continue                                    # target 未取得 = 静かに skip
     { [ "$kind" = skill ] && [ ! -x "$CLAUDE_BIN" ]; } && continue  # skill は claude 必須
-    printf '%s ' "$task_id"
+    if info="$(launchctl print "$DOMAIN/${LABEL_PREFIX}.$task_id" 2>/dev/null)"; then
+      stamp=""; f="$STATE_DIR/${LABEL_PREFIX}.$task_id.cron"
+      [ -f "$f" ] && IFS= read -r stamp < "$f"
+      [ "$stamp" = "$CAL_VERSION $cron" ] && continue               # 照合済み = 冪等 skip
+      # ⚠️ $(...) の中の case は bash 3.2 (macOS /bin/sh) がパターンの ")" で構文を誤るので "(" を前置
+      case "$info" in
+        (*"state = running"*) printf 'V1 %s\n' "$task_id" ;;
+        (*)                   printf 'V0 %s\n' "$task_id" ;;
+      esac
+    else
+      printf 'I %s\n' "$task_id"
+    fi
   done)"
-  [ -n "$pending" ] || return 0
-  check_crons "$pending" || exit 2
+  [ -n "$todo" ] || return 0
+  ids="$(printf '%s\n' "$todo" | while read -r _ task_id; do printf '%s ' "$task_id"; done)"
+  check_crons "$ids" || exit 2
   mkdir -p "$LA_DIR" "$LOG_DIR" 2>/dev/null
-  for task_id in $pending; do
+
+  # loaded な routine: calendar を照合し、 ずれていれば calendar だけ書き換えて再 load
+  printf '%s\n' "$todo" | {
+    set --
+    while read -r tag task_id; do
+      case "$tag" in V*) ;; *) continue ;; esac
+      IFS='|' read -r _ _ _ cron <<EOF
+$(find_routine "$task_id")
+EOF
+      set -- "$@" "$task_id" "$cron" "$(plist_path "$task_id")" "${tag#V}"
+    done
+    [ $# -eq 0 ] || plist_py recal "$@"
+  } | while read -r result task_id; do
+    IFS='|' read -r _ kind target cron <<EOF
+$(find_routine "$task_id")
+EOF
+    case "$result" in
+      same)    record_cron "$task_id" "$cron" ;;
+      held)    echo "  ~ ensure update 保留: $task_id (実行中。 次の --ensure で直す)" ;;
+      updated) echo "  ~ ensure update: $task_id (cron: $cron)"
+               bootstrap_one "$task_id"; record_cron "$task_id" "$cron" ;;
+      missing) echo "  + ensure install: $task_id (loaded だが plist が無い)"
+               write_plist "$task_id" "$kind" "$target" "$cron" && bootstrap_one "$task_id" ;;
+    esac
+  done
+
+  # 未 install の routine
+  for task_id in $(printf '%s\n' "$todo" | while read -r tag task_id; do [ "$tag" = I ] && printf '%s ' "$task_id"; done); do
     IFS='|' read -r task_id kind target cron <<EOF
 $(find_routine "$task_id")
 EOF
