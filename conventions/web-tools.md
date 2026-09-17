@@ -205,7 +205,8 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 
 - **API**: `https://ci.nii.ac.jp/books/opensearch/search?q=<書名など>&format=json` に、 参加組織コード `fano=<その図書館のコード>` を足すと、 その図書館の所蔵だけに絞れる (app ID なしで引けた、 実測)。 件数は `@graph[0]["opensearch:totalResults"]`、 書誌は `items`。 フィルタなしの件数と比べると、 絞れているかを 1 回で確かめられる。
 - **参加組織コード**: CiNii Books の図書館ページ (`ci.nii.ac.jp/library/<コード>`) の URL にある。 一度調べたら、 その図書館を使う側の非公開の記録に置く。
-- **判断は OPAC で確かめる**: CiNii の所蔵は各図書館の登録を集めたもので、 登録の遅れや、 別の版・別の巻の扱いの違いがある。 「持っていない」 と結論する前に、 その図書館の OPAC で書名と版を確かめる。 電子書籍の所蔵は CiNii に出ないことがある。 実測では、 CiNii で「その館に無い」 と出た本の約 4 分の 1 が OPAC にあった (CiNii に載っていない紙の本、 電子書籍、 ISBN の無い古い登録の 3 通り)。 ∴ 参加組織フィルタは候補を絞る下調べで、 所蔵なしの結論には使わない。 OPAC は ISBN と書名の両方で引く (古い登録は ISBN で当たらない)。
+- **判断は OPAC で確かめる**: CiNii の所蔵は各図書館の登録を集めたもので、 登録の遅れや、 別の版・別の巻の扱いの違いがある。 「持っていない」 と結論する前に、 その図書館の OPAC で書名と版を確かめる。 電子書籍の所蔵は CiNii に出ないことがある。 実測では、 CiNii で「その館に無い」 と出た本のかなりの部分が OPAC にあった (CiNii に載っていない紙の本、 電子書籍、 ISBN の無い古い登録の 3 通り)。 ∴ 参加組織フィルタは候補を絞る下調べで、 所蔵なしの結論には使わない。 OPAC は ISBN と書名の両方で引く (古い登録は ISBN で当たらない)。
+- **道具と、 購入依頼までの手順**: [`scripts/book-lookup.py`](../scripts/book-lookup.py) (`bib` / `held` / `opac` / `price`) と [book-purchase-lookup.md](book-purchase-lookup.md) (書誌 → 所蔵 → 価格と入手 → 品切れ本 → 申込メール)。
 
 ## <a id="chrome-domain-permission-model"></a>Claude in Chrome MCP の domain permission モデル
 

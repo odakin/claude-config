@@ -210,6 +210,8 @@ worked example: 配布 folder 30 file (root 6 + subfolder 24、 PDF + xlsx 混�
 
 **写しは git に入れない**: 第三者の資料 (スキャン・原稿) を commit しない。 project の `.gitignore` に写しの dir を入れてから台帳に足す。
 
+**取り込まないと決めた file を 1 回だけ見る**: 台帳で除外した file の奥付だけ確かめる、 のような 1 回きりの下見は、 写しと state を変えずに別 dir へ落とす (`--fetch-to DIR --only 語`。 除外した file も対象)。 写しに入れて後から消すと、 state と写しがずれる。 落とした先は一時 dir にし、 見終えたら消す。
+
 **hook 環境の依存**: 通知 hook は client library の無い python でも動くように、 REST を標準ライブラリで叩く (token の refresh → `files.list` → `alt=media` / `export`)。 refresh した access token は credential file に書き戻さない (下の §Token refresh の運用)。
 
 **実装**: [`scripts/shared-drive-folder-watch.py`](../scripts/shared-drive-folder-watch.py) が上の 4 点と通知 id の判定を持つ (標準ライブラリだけ。 台帳は YAML か JSON、 account → token の対応は台帳に書くか呼び出し側が注入)。 共有通知メールを取ってくる部分は持たない — 手元のメール経路で本文を読み、 `extract_drive_ids` と `share_notice` に渡す薄い wrapper を個人側に置く。

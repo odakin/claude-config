@@ -12,6 +12,7 @@ summary: 書籍スキャンの棚卸しは「題名で仮に区分 → 監視台
 ([photographed-document-transcription.md](photographed-document-transcription.md))、 表や多段組の文字抽出は
 [office-automation.md#pdf-table-layout-aware-reading](office-automation.md#pdf-table-layout-aware-reading)。
 共有 folder の監視と取り込みは [google-api-direct-access.md#shared-folder-watch](google-api-direct-access.md#shared-folder-watch)。
+棚卸しした本を図書館の購入候補にするときの書誌・所蔵・価格の下調べは [book-purchase-lookup.md](book-purchase-lookup.md)。
 
 ## <a id="workflow"></a>手順
 

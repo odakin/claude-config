@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 119 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 120 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -65,6 +65,8 @@ layer 1 (public) のドメイン固有規約 119 file をカテゴリ別に列�
 
 - **[audio-transcription.md](audio-transcription.md)** — 会議・インタビュー・収録の録音を機械 (whisper 等) で文字起こしして、その結果を引用・記録に使うとき + 転写した語が聞き取れない・機械が割れるとき + 長い録音を配信・共有用に分割するとき
   - 機械の音声転写も「転記」ではなく「生成」で、聞き取れない語はもっともらしい別の語として出てくる — 候補が割れたら推測で埋めず該当区間を切り出して人に聞く (多数決は当たらない実測あり)。語頭欠落は会議ツールのノイズ抑制が源で、転写して初めて可視化され、デコード側の工夫では戻らない (直すのは収録側)。「設定を変えた」と「効いた」は別なのでノイズフロアで測る。分割の切れ目は「音の切れ目」と「話の切れ目」の両方を満たす所に置き、無劣化 copy + 尺の合計一致 + 両側の再転写で検証する
+- **[book-purchase-lookup.md](book-purchase-lookup.md)** — 図書館に本の購入を頼む前 (書誌を揃える・その館に所蔵が無いか・新刊で買えるか・いくらか) + 共有された本のリストや著者の著作一覧から購入候補を作るとき + 申込メールを候補リストから起こすとき
+  - 購入依頼の下調べは「書誌 (CiNii、 版が決まらなければ奥付) → 所蔵 (CiNii の参加組織フィルタはヒント、 結論はその館の OPAC を ISBN と書名の両方で) → 価格と入手 (openBD は登録時の値、 今の定価と在庫は書店の商品ページ、 価格が出ない = 注文できない見込み、 版元の在庫あり絞り込みが一番強い) → 紙か電子か・置き場所 (その年の館の通知を読む) → 品切れ本 (規則に書いていなければ在庫調査と古書購入を館に聞く) → 申込メールは候補リストから生成」。 道具 = scripts/book-lookup.py。 CiNii に無い紙の本・電子書籍・ISBN の無い古い登録が所蔵確認をすり抜ける、 書名の部分一致は別の本に当たる、 雑誌扱いの叢書は ISBN を持たない、 旧版だけ所蔵は館の規則しだい
 - **[chalkboard-close-up-merge.md](chalkboard-close-up-merge.md)** — 板書写真 PDF に close-up annotation を統合するとき
   - 板書写真 PDF で「広域 + close-up annotation」 2 枚を 1 page に統合する手順 (= Keynote 手作業経路 〔黒板 theme + 透過 chalk PNG overlay〕 を推奨、 PIL inline composite は anchor 明確時のみ。 free-form 配置は user が掴んでドラッグ、 AppleScript で .key auto 生成 + slide PNG export までを台本化、 chalk-only RGBA mask threshold 100-140 + Gaussian blur 1.5 px の標準値、 板書 reflex の延長)
 - **[erad-submission.md](erad-submission.md)** — e-Rad 経由で研究費 (JST・科研費・財団等) に応募するとき

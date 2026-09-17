@@ -16,6 +16,7 @@
 - **[audit-hooks.sh](audit-hooks.sh)** — 4 軸 hook 配信 audit (= silent malfunction の構造的検出、 (d) は自動部分のみ)
 - **[audit-public-repos.sh](audit-public-repos.sh)** — 全 public repo の leak 定期監査（週次 scheduled-task 対象）
 - **[audit-push-provenance.py](audit-push-provenance.py)** — ある session の commit を載せた push が、 他 session の (または trailer の無い) commit も一緒に公開していないかを、 各 repo の remote-tracking ref の reflog (`update by push`) と commit の `Agent-Session` trailer から事後に監査する。--selftest 内蔵。
+- **[book-lookup.py](book-lookup.py)** — 本の書誌・図書館の所蔵・価格と入手できるかを、 ISBN や書名からまとめて引く (CiNii Books / 図書館 OPAC / openBD / 紀伊國屋 / 楽天)。--selftest 内蔵。
 - **[bootstrap-stdio-mcps.sh](bootstrap-stdio-mcps.sh)** — generic auto-bootstrap library for self-hosted stdio MCPs.
 - **[bootstrap-stdio-mcps.test.sh](bootstrap-stdio-mcps.test.sh)** — self-test for the generic stdio MCP bootstrap library.
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入

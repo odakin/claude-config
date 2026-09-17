@@ -29,6 +29,8 @@ sync の案内文 を注入できる (台帳の値より優先)。 共有通知�
   shared-drive-folder-watch.py --registry R --surface  SessionStart hook 用 (Drive から消えた file の件数は出さない)
   shared-drive-folder-watch.py --registry R --sync [--only 語]   未取得・更新された file を写しに落とす
   shared-drive-folder-watch.py --registry R --list     登録 folder の中身を一覧する (落とさない)
+  shared-drive-folder-watch.py --registry R --fetch-to DIR --only 語   語を含む file を DIR に落とす
+                       (写しと state は変えない。 exclude した file も対象 = 取り込まないと決めた file の奥付だけ見る等)
   --no-mail            共有通知の照合 (share_notice_source が渡されたときだけ走る) を省く
   --selftest           合成データだけで検査する (network に出ない)
 
@@ -312,8 +314,8 @@ def entry_label(entry: dict) -> str:
 
 def check_folder(entry: dict, mode: str, lines: list[str], cfg: dict,
                  only: list[str] | None = None, drive: RestDrive | None = None) -> None:
-    """entry 1 つを見て lines に足す。 mode = check / surface / list / sync。
-    cfg = {credentials: resolve_credentials() の戻り値, default_account, sync_command}。"""
+    """entry 1 つを見て lines に足す。 mode = check / surface / list / sync / fetch。
+    cfg = {credentials: resolve_credentials() の戻り値, default_account, sync_command, fetch_to (fetch のとき)}。"""
     drive = drive or RestDrive()
     label = entry_label(entry)
     account = entry.get("account") or cfg.get("default_account")
@@ -347,6 +349,7 @@ def check_folder(entry: dict, mode: str, lines: list[str], cfg: dict,
         lines.append(f"⚠️ {label}: {type(e).__name__}: {msg[:120]}{hint}")
         return
 
+    full = listing
     excl = [str(x) for x in entry.get("exclude") or []]
     if excl:
         listing = [f for f in listing if not any(w in f["rel"] for w in excl)]
@@ -355,6 +358,22 @@ def check_folder(entry: dict, mode: str, lines: list[str], cfg: dict,
     todo, gone = diff_listing(listing, state)
     if only and mode == "sync":
         todo = [f for f in todo if any(w in f["rel"] for w in only)]
+
+    if mode == "fetch":
+        # 写しと state に触らず、 名前に語を含む file を別の dir に落とす (exclude した file も対象)。
+        # 用途 = 取り込まないと決めた本の奥付だけ確かめる、 など 1 回きりの下見。
+        dest_dir = _expand(cfg["fetch_to"])
+        hits = [f for f in full if any(w in f["rel"] for w in only or [])]
+        if not hits:
+            lines.append(f"ℹ️ {label}: 語に合う file が無い ({', '.join(only or [])})")
+        for f in hits:
+            try:
+                n = drive.download(f, token, dest_dir / f["rel"])
+            except Exception as e:
+                lines.append(f"⚠️ {label}: {f['rel']} を取れない: {e}")
+                continue
+            lines.append(f"⬇️ {f['rel']} ({n:,} B) → {dest_dir}")
+        return
 
     if mode == "list":
         lines.append(f"📂 {label}: {len(listing)} file → mirror {entry['mirror']}")
@@ -408,19 +427,25 @@ def main(argv: list[str] | None = None, *, registry=None, credentials: dict | No
     ap.add_argument("--registry", help="台帳 (YAML / JSON)。 呼び出し側が注入していれば省ける")
     ap.add_argument("--no-mail", action="store_true", help="共有通知の照合を省く")
     ap.add_argument("--only", action="append", default=[], help="--sync で名前にこの語を含む file だけ落とす (複数可)")
+    g.add_argument("--fetch-to", metavar="DIR",
+                   help="--only の語を含む file を DIR に落とす。 写しと state は変えず、 exclude した file も対象 (1 回きりの下見用)")
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
+    if a.fetch_to and not a.only:
+        ap.error("--fetch-to には --only が要る (folder 丸ごとは --sync で)")
     reg_path = _expand(a.registry) if a.registry else (Path(registry) if registry else None)
     if reg_path is None:
         ap.error("--registry が要る")
-    mode = "sync" if a.sync else "list" if a.list else "surface" if a.surface else "check"
+    mode = ("sync" if a.sync else "fetch" if a.fetch_to else "list" if a.list
+            else "surface" if a.surface else "check")
     try:
         reg = load_registry(reg_path)
         cfg = {
             "credentials": resolve_credentials(reg, credentials, oauth_keys),
             "default_account": default_account or reg.get("default_account"),
             "sync_command": sync_command or f"python3 {Path(__file__).resolve()} --registry {reg_path} --sync",
+            "fetch_to": a.fetch_to,
         }
     except Exception as e:
         print(f"⚠️ {reg_path.name} を読めない: {e}")
@@ -575,6 +600,19 @@ def selftest() -> int:
         check(set(st["files"]) == {"f1"} and st["folder_id"] == "F", "sync: 取った版を state に書く")
         run(base, "sync")
         check(run(base, "sync") == [f"✅ {label}: 最新 (2 file、 {mirror})"], "sync: 取り終えたら最新")
+        fetch_dir = root / "fetched"
+        state_before = json.dumps(read_state(mirror), sort_keys=True)
+        fake.downloaded.clear()
+        out_fetch: list[str] = []
+        check_folder(base, "fetch", out_fetch, dict(cfg, fetch_to=str(fetch_dir)), ["skip-me"], fake)
+        check(fake.downloaded == ["skip-me.pdf"] and (fetch_dir / "skip-me.pdf").exists()
+              and out_fetch == [f"⬇️ skip-me.pdf (3 B) → {fetch_dir}"],
+              "fetch: exclude した file も語で指定すれば別 dir に落とす")
+        check(json.dumps(read_state(mirror), sort_keys=True) == state_before and not (mirror / "skip-me.pdf").exists(),
+              "fetch: 写しと state は変えない")
+        out_none: list[str] = []
+        check_folder(base, "fetch", out_none, dict(cfg, fetch_to=str(fetch_dir)), ["no-such"], fake)
+        check(out_none == [f"ℹ️ {label}: 語に合う file が無い (no-such)"], "fetch: 合う file が無ければ 1 行で知らせる")
         fake.listings["F"] = files[:1]
         check(run(base, "check") == [f"ℹ️ {label}: Drive から消えた file 1 件 (mirror には残してある)"]
               and run(base, "surface") == [], "消えた file は check で件数だけ、 surface では出さない")
@@ -624,6 +662,13 @@ def selftest() -> int:
         run_main("--surface", "--no-mail")
         run_main("--list")
         check(calls == ["x"], "main: --no-mail と --list では通知 source を呼ばない")
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                main(["--registry", str(reg_file), "--fetch-to", str(root / "x")])
+            refused = False
+        except SystemExit:
+            refused = True
+        check(refused, "main: --fetch-to は --only なしを断る (folder 丸ごとを別 dir に落とさない)")
         broken = root / "broken.json"
         broken.write_text("{", encoding="utf-8")
         buf = io.StringIO()
