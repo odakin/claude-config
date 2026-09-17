@@ -551,6 +551,64 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 2. 調整は「枠の上下罫線の中点」と「ラベルの中心」の差を測って足し引きする (1 回で ±0.5 pt に入る)
 3. 罫線を拾うときは**図の座標軸を罫線と誤認しない** — 軸も水平で細長い。幅で閾値を切る (罫線は表幅、軸は図幅)
 
+## <a id="jsclasses-mag-true-lengths"></a>jsclasses の 10pt 以外は版面ごと拡大する — mm で書いた長さが黙って伸びる (`nomag*`)
+
+jsarticle / jsbook は、 `11pt` `12pt` などを指定すると、 既定では `\mag` で版面全体を拡大して字の大きさを作る。 このとき、 preamble や package が `mm` `pt` で指定した長さも同じ倍率で伸びる。 error も warning も出ない。
+
+- 実測 (uplatex + dvipdfmx、 jsbook、 A5): `eso-pic` で引いた `\rule{40mm}{10mm}` は、 `11pt` では 43.8 mm に描かれた (1.095 倍)。 `11pt,nomag*` と `10pt` では 40.0 mm だった。 PDF の用紙寸法はどれも同じで、 頁数も `11pt` と `11pt,nomag*` で変わらなかったので、 頁数や用紙を見ても気づけない。
+- 診断: PDF に描かれた罫の幅を測る (`fitz` の `page.get_drawings()` の `rect.width` を mm に直す)。
+- 対策: 実寸で描きたい物 (小口の色帯、 囲みの余白、 TikZ の図、 `geometry` の指定) がある文書では、 class option に `nomag*` を足す (`\documentclass[uplatex,dvipdfmx,a5paper,papersize,11pt,nomag*]{jsbook}`)。 `nomag*` は `\mag` を使わず、 字の大きさだけを変える。 1 行の字数と頁割りは `11pt` と同じになる。
+- 個別に実寸を書くなら `truemm` `truept` を使う手もあるが、 package の中の長さまでは直せない。
+
+## <a id="back-of-book-notes"></a>巻末に回したノートに、 元の章の番号と頁つきの参照を付ける (小口の色帯つき)
+
+本文から出した計算や補足を巻末にまとめる本で、 「ノート 3.2」 のように元の章の番号を付け、 本文からは「(→ ノート 3.2，p.123)」 と頁つきで参照する仕掛け。 章の `\label` を使うので、 章の順番を入れ替えても番号が追随する。
+
+```latex
+\makeatletter
+\newcounter{backnote}
+\newcommand{\backnote@chap}{}
+\renewcommand{\thebacknote}{\ref*{\backnote@chap}.\arabic{backnote}}
+% 巻末側: その章の分の始まり。 #1 = 元の章の \label
+\newcommand{\backnotesof}[1]{%
+  \setcounter{backnote}{0}\renewcommand{\backnote@chap}{#1}%
+  \section*{第\ref*{#1}章のノート}%
+  \addcontentsline{toc}{section}{第\ref*{#1}章のノート}}
+% 巻末側: ノート 1 本。 #1 = このノートの \label、 #2 = 題
+\newcommand{\backnote}[2]{%
+  \refstepcounter{backnote}\label{#1}%
+  \subsection*{ノート \thebacknote\quad #2}}
+% 本文側
+\newcommand{\tobacknote}[1]{（→ ノート~\ref{#1}，p.\pageref{#1}）}
+\makeatother
+```
+
+- `\thebacknote` の中の章番号は `\ref*` (hyperref の星つき = リンクを作らない版) にする。 番号そのものは、 本文側の `\ref` がリンクにする。
+- 巻末では式番号が本文と紛れるので、 `\renewcommand{\theequation}{N.\arabic{equation}}` のように頭文字を付ける。
+- 小口の色帯 (閉じた本の外から巻末の場所が分かる) は `eso-pic` で、 奇数頁は右端、 偶数頁は左端に描く。 帯を出す範囲は `\newif` のスイッチを `\global` で切り替える。 `\include` の直後に `\clearpage` してから切ると、 最後の頁まで帯が付く。
+
+```latex
+\usepackage{eso-pic}
+\makeatletter
+\newif\ifthumb@band
+\newcommand{\thumbbandon}{\global\thumb@bandtrue}
+\newcommand{\thumbbandoff}{\global\thumb@bandfalse}
+\newlength{\thumbbandwidth}\setlength{\thumbbandwidth}{4mm}
+\AddToShipoutPictureBG{%
+  \ifthumb@band
+    \ifodd\value{page}%
+      \AtPageLowerLeft{\hspace*{\dimexpr\paperwidth-\thumbbandwidth}%
+        {\color{blue!35}\rule{\thumbbandwidth}{\paperheight}}}%
+    \else
+      \AtPageLowerLeft{{\color{blue!35}\rule{\thumbbandwidth}{\paperheight}}}%
+    \fi
+  \fi}
+\makeatother
+```
+
+- 帯の幅を実寸にするには、 上の [#jsclasses-mag-true-lengths](#jsclasses-mag-true-lengths) の `nomag*` が要る。
+- 実測: uplatex + dvipdfmx + jsbook で、 章付きの番号、 頁つきの参照、 目次の項目、 外側の端の帯が意図どおりに出た。 章番号を `\ref` で引くので、 参照が落ち着くまで組版を繰り返す。
+
 ## <a id="matplotlib-cjk-figure-embedding"></a>matplotlib の CJK 入り図は PNG で取り込む (PDF は platex+dvipdfmx で描画だけ化ける)
 
 matplotlib が CJK フォント (macOS Hiragino 等の `.ttc`、`pdf.fonttype = 42`) を埋め込んだ PDF を
@@ -917,6 +975,15 @@ hook に除外機構が無く、 ある repo に arXiv の LaTeX ソースを ve
 
 - **コピペ用**の LaTeX / コード / `_` を含むパス → **code block**（保全優先）
 - chat 上で**読ませるだけ**の数式（コピペ不要）は別軸 — 環境によって `$...$` が未レンダーなので Unicode 添字・上付きで書く
+
+## <a id="md-math-preview"></a>数式入りの Markdown を人に見せるときは HTML にして browser で開く (右パネルは数式を描かない)
+
+Claude Code の desktop app の右パネルは、 Markdown の中の TeX 数式 (`\( \)` / `\[ \]` / `$ $`) を描かず、 source のまま表示する。 数式を含む設計ノートや試稿の `.md` を link で渡しても、 読む側には式が読めない。
+
+- 対策: [`scripts/preview-md-math.sh`](../scripts/preview-md-math.sh) で MathJax つきの HTML に変換して browser で開く (pandoc が必要。 出力は repo の `build/preview/` で、 git の管理外に置く)。
+- 変換した HTML はその時点の写しで、 `.md` を直しても更新されない。 **`.md` を編集した turn では、 変換し直してから見せる** (人に「もう一度実行して」 と頼まない。 repo の指示 file に「見せるとき・直したときは Claude が変換する」 と 1 行書いておくと、 次の session にも伝わる)。
+- MathJax は CDN から読むので、 offline では数式が描かれない。
+- `.tex` の原稿は対象外 (PDF を組んで見せる)。
 
 ## <a id="gitignore"></a>.gitignore
 **LaTeX 生成 PDF はリポに含める（ignore しない）。** 共同編集者がコンパイル環境を持っていない場合でも最新の PDF を参照できるようにするため。`*.pdf` を ignore する場合は `!<main>.pdf` で除外対象から外す。

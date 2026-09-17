@@ -106,6 +106,12 @@ sections:
   - id: multirow-vs-raisebox-centering
     level: 3
     title: "縦中央に置くのは `\\multirow` だけ、`\\raisebox` は持ち上げるだけ"
+  - id: jsclasses-mag-true-lengths
+    level: 2
+    title: "jsclasses の 10pt 以外は版面ごと拡大する — mm で書いた長さが黙って伸びる (`nomag*`)"
+  - id: back-of-book-notes
+    level: 2
+    title: "巻末に回したノートに、 元の章の番号と頁つきの参照を付ける (小口の色帯つき)"
   - id: matplotlib-cjk-figure-embedding
     level: 2
     title: "matplotlib の CJK 入り図は PNG で取り込む (PDF は platex+dvipdfmx で描画だけ化ける)"
@@ -181,6 +187,9 @@ sections:
   - id: latex-in-chat-codeblock
     level: 2
     title: "チャットで LaTeX / 数式を渡すときは code block で（コピペ保全）"
+  - id: md-math-preview
+    level: 2
+    title: "数式入りの Markdown を人に見せるときは HTML にして browser で開く (右パネルは数式を描かない)"
   - id: gitignore
     level: 2
     title: ".gitignore"

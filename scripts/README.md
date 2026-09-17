@@ -159,6 +159,7 @@
 - **[pre-commit-sot-declaration-warn.py](pre-commit-sot-declaration-warn.py)** — Warn when staged additions introduce a source-of-truth declaration.
 - **[prepare-commit-msg-session.sh](prepare-commit-msg-session.sh)** — commit に発生元 agent/session/model/effort の trailer block を付ける (並列 session の事後追跡)
 - **[prepare-commit-msg-session.test.sh](prepare-commit-msg-session.test.sh)** — prepare-commit-msg-session.sh の selftest
+- **[preview-md-math.sh](preview-md-math.sh)** — 数式入りの Markdown を MathJax つき HTML にして browser で開く。
 - **[probe-python-nonascii-line.py](probe-python-nonascii-line.py)** — python が非 ASCII を含む長い 1 行を coding cookie 無しで読めなくなる境界 (file 実行と stdin = heredoc 実行の両方) を二分探索で測り、 cookie を置けば通るかも確かめる。 python を更新したら再測定する道具。--selftest 内蔵。
 - **[pty-leak-watch.sh](pty-leak-watch.sh)** — macOS Claude.app pty leak watchdog（LaunchAgent、枯渇前に macOS 通知、conventions/macos-claude-app-pty-leak.md）
 - **[public-precommit-runner.sh](public-precommit-runner.sh)** — 公開リポ pre-commit gate（Tier A 構造 / B literal / C private repo 名 / D 未公開文書の逐語 + local-only 機密 / E 活動の事実）

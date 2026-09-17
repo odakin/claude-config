@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape)
 category: infra
-summary: plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 7 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる / 1 回一致は prefix 形の key (path・識別子) を守らない = 長い別物の先頭に 1 回だけ一致して誤置換、 終端の区切りまで含めるか構文解析した単位で置換 / 挿入型の pair (new が old を含む) は再実行しても count==1 のまま通って二重に入る = 適用済み検査を足す / TARGET が symlink だと test 用の写しは link 越しに実体へ書き、 一時 file + os.replace は link を普通の file に置き換える = 先に実体の path へ解決する。 機械化 = scripts/apply-text-pairs.py)
+summary: plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 8 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる / 1 回一致は prefix 形の key (path・識別子) を守らない = 長い別物の先頭に 1 回だけ一致して誤置換、 終端の区切りまで含めるか構文解析した単位で置換 / 挿入型の pair (new が old を含む) は再実行しても count==1 のまま通って二重に入る = 適用済み検査を足す / TARGET が symlink だと test 用の写しは link 越しに実体へ書き、 一時 file + os.replace は link を普通の file に置き換える = 先に実体の path へ解決する / macOS 付属の python 3.9 は 1023 byte を超える多バイト行を source として読めず Non-UTF-8 の SyntaxError で落ちる = 長い文面は別 file に置いて読む。 機械化 = scripts/apply-text-pairs.py)
 -->
 # Batch text surgery — 一括置換 script の契約と失敗モード
 
@@ -29,7 +29,7 @@ open(path, "w", encoding="utf-8").write(txt)
 | 1-2 箇所 | Edit tool | 差分がそのまま可視になり人間 review が効く |
 | 3 箇所以上 / 長い string / 系統的 sweep | 本 pattern | 手数と転記ミスが線形に増えるのを止める |
 
-## <a id="batch-text-failure-modes"></a>7 つの失敗モード
+## <a id="batch-text-failure-modes"></a>8 つの失敗モード
 
 ### <a id="assert-does-not-gate-downstream"></a>1. assert の verdict は下流に伝わらない
 
@@ -102,6 +102,14 @@ open(path, "w", encoding="utf-8").write(txt)
 **なぜ起きるか**: 2 つの操作が link を別々に扱う。 (1) test 用に dir を写すとき link を link のまま写す (`shutil.copytree(..., symlinks=True)` など) と、 絶対 path の link は写しの中でも元の実体を指すので、 「写しの TARGET」 への書込みがそのまま実体に届く。 (2) 一時 file + `os.replace(tmp, target)` の原子的な書込みは、 target の path に在る**link そのもの**を置き換え、 link 先には書かない。 使う側の path が symlink で実体は repo の中、 という配置 (install 済みの hook など) で踏む。
 
 **対処**: 読む・写す・書く前に TARGET を 1 回だけ実体の path へ解決する (`os.path.realpath`)。 写しの dir の中の他の link は link のまま写してよい (辿って写すと、 repo root に在る共有 folder への dir link まで丸ごと複製する)。 ただしその場合に守られるのは TARGET だけで、 test command が絶対 link や絶対 path を通して書く副作用は写しでは隔離されない。 [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) が実装し、 selftest に「絶対 link 越しの壊れた patch が実体に届かない」「link 越しに書いても link が残る」 foil がある。 **道具の「書いていない」 という報告は、 書き先の実体を読むまで証拠にならない** (この事例は実体を読み直して初めて見えた)。 同じ一手で、 相対 path の不具合も片付く: 写し先を「一時 dir / 親 dir の name」 で作ると、 `Path("tool.py").parent.name` は空文字なので一時 dir そのもの、 `Path("../tool.py").parent.name` は `..` なので一時 dir の親を指す (前者は複製が `FileExistsError` で落ち、 後者は一時 dir の外へ写そうとする。 同日実測)。
+
+### <a id="system-python-long-multibyte-line"></a>8. macOS 付属の python は、 長い多バイト行を source として読めない (2026-09-17)
+
+**症状**: 置換 script の中に日本語の長い文字列を 1 行で書いて `/usr/bin/python3` (Xcode 付属の 3.9.6) で走らせると、 `SyntaxError: Non-UTF-8 code starting with '\xe3' in file …, but no encoding declared` で落ちる。 file は正しい UTF-8 で、 encoding 宣言を足しても直らない。 heredoc (`python3 - <<'EOF'`) に書いても同じ。 同じ file を新しい python (Homebrew の 3.14) で走らせると通る。
+
+**なぜ起きるか**: この版は source を 1023 byte ずつ読み、 区切りが多バイト文字の途中に落ちると、 残りの断片を不正な UTF-8 として拒否する。 実測: `x = "` の後に 3 byte の文字を並べた 1 行は、 300 字 (906 byte) では通り、 341 字 (1028 byte) では落ちた。 行頭を 5 → 6 → 7 byte と変えると、 落ちる・通る・落ちると入れ替わった (1023 byte 目が文字の境界に当たるかどうかで決まる)。 1 行が 1023 byte 以下なら起きない。
+
+**対処**: 長い非 ASCII の文字列を Python の source に直接書かない。 (1) 文面は別の text file に置き、 script は `io.open(path, encoding='utf-8')` で読む (pair 列なら 1 件 1 file か、 tab 区切りの 1 行 1 件)。 (2) source に書くなら、 隣り合う文字列 literal に割って 1 行を短く保つ。 (3) 走らせる python を固定できるなら新しい版にする ([shell-env.md#bound-command-runtime](shell-env.md#bound-command-runtime))。 error 文は encoding 宣言の不足を疑わせるが、 宣言を足しても直らないのが見分け方になる。
 
 ## <a id="batch-text-verification"></a>適用後の検証
 
