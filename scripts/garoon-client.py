@@ -74,7 +74,7 @@ def _cc():
 
 
 def _cookies(browser, profile, org):
-    return _cc().load_cookies(browser, ["cybozu.com", "ex-tic.com"], profile)
+    return _cc().load_cookies(browser, ["cybozu.com"], profile)  # IdP の cookie は読まない (= script は IdP に触れない)
 
 
 def expired(code, location, text, base_host):
@@ -162,7 +162,8 @@ class Garoon:
     @property
     def csrf(self):
         if not self._csrf:
-            t = self._request("GET", "/g/cabinet/search.csp", params={"text": "x"}, allow_redirects=True).text
+            # redirect を辿らない (= 切れた時に SSO host へ cookie を持って行かず、 302 を切れとして捕まえる)
+            t = self._request("GET", "/g/cabinet/search.csp", params={"text": "x"}).text
             m = re.search(r'"csrfTicket":"([0-9a-f]+)"', t)
             if not m:
                 raise SystemExit("csrfTicket が取れない (= 未 login か page 構造変化)")
