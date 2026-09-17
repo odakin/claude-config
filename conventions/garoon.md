@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを読む/探すとき + ワークフローを再利用・作成・申請するとき
+when: Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを読む/探すとき + ワークフローを再利用・作成・申請するとき + login 切れで読めないとき / SSO 保護サイトの login 切れからの復帰を組むとき (#garoon-session-recovery)
 category: infra
-summary: Garoon cloud の自動化 (= SSO でも logged-in session 越しに読める、 read は cookie 再利用 script が第一選択、 workflow write は承認済み申請再利用 → 値の全読み戻し → 経路確認 → owner 明示 OK → 送信一覧検証、 download token の期限切れ = login page 化)
+summary: Garoon cloud の自動化 (= SSO でも logged-in session 越しに読める、 read は cookie 再利用 script が第一選択、 login 切れは browser に開かせた tab の行き先を見て復帰・本人のログインが要る時だけ頼む、 workflow write は承認済み申請再利用 → 値の全読み戻し → 経路確認 → owner 明示 OK → 送信一覧検証、 download token の期限切れ = login page 化)
 -->
 # Cybozu Garoon の自動化
 
@@ -17,17 +17,27 @@ SAML-only 組織では REST の password auth が admin 限定・OAuth client �
 | csrf ticket | `/g/cabinet/search.csp` 等の inline `grn.__PRELOADED_DATA__.csrfTicket` (portal は 302 なので注意) |
 | 掲示板 REST | `GET /g/api/v1/bulletin/categories` 等、 cookie + `X-Requested-With: XMLHttpRequest` で session auth |
 | 添付 download | `GET /g/bulletin/file_download.csp/-/<name>?fid=F` は session 内 GET で 200 (application/pdf)。 cabinet の `download.csp` は time= token 要の可能性 (未実測) |
-| login 切れ | 302 → `<org>.ex-tic.com` (SSO) / **302 → `<org>.cybozu.com/login?redirect=…` (cybozu 自身の login)** / login page HTML / REST API の 401 `GRN_REST_API_00003` → 下の [#garoon-browser-reauth](#garoon-browser-reauth) を 1 回試し、 だめなら user が browser で 1 回 login (script はパスワード・OTP を代行しない)。 ⚠️ 死活検査で「SSO への 302 だけ切れ、 他の 302 は健全」 と書くと、 自前 login への 302 で切れているのに silent になる (実測) 。 ⚠️ **login 直後は browser が cookie DB (SQLite) に新しい session cookie を書くまで十数秒の遅れがある** (Chromium 系で実測) = login の直後に 1 回目の検査が「切れ」 のままでも、 少し待って読み直す |
+| login 切れ | 302 → `<org>.ex-tic.com` (SSO) / **302 → `<org>.cybozu.com/login?redirect=…` (cybozu 自身の login)** / login page HTML / REST API の 401 `GRN_REST_API_00003` → 下の [#garoon-session-recovery](#garoon-session-recovery) を 1 回試し、 だめなら user が browser で 1 回 login (script はパスワード・OTP を代行しない)。 ⚠️ 死活検査で「SSO への 302 だけ切れ、 他の 302 は健全」 と書くと、 自前 login への 302 で切れているのに silent になる (実測) 。 ⚠️ **login 直後は browser が cookie DB (SQLite) に新しい session cookie を書くまで十数秒の遅れがある** (Chromium 系で実測) = login の直後に 1 回目の検査が「切れ」 のままでも、 少し待って読み直す |
 
-### <a id="garoon-browser-reauth"></a>切れたら browser に入り直させる (IdP が生きている間は OTP なし)
+### <a id="garoon-session-recovery"></a><a id="garoon-browser-reauth"></a>login 切れからの復帰 (見積もらずに見る・使う時にだけ・本人に頼むのは要る時だけ)
 
-Garoon のセッション切れは 2 層ある: **Garoon 本体のセッション** (JSESSIONID) と **IdP のログイン** (SSO 側)。 本体だけが切れていて IdP が生きていれば、 browser で Garoon を開くだけでパスワードも OTP もなしに入り直せる。 `garoon-client.py` はこれを既定で 1 回試す = **起動中の** browser に `open -g` で portal を開かせ、 cookie DB の JSESSIONID が更新されるのを最大 45 秒待って読み直す。
+Garoon のセッション切れは 2 層ある: **Garoon 本体のセッション** (JSESSIONID) と **IdP のログイン** (SSO 側)。 本体だけが切れていて IdP が生きていれば、 browser で Garoon を開くだけでパスワードも OTP もなしに入り直せる。 IdP も切れていれば本人のログインが要る。 `garoon-client.py` は切れを見た時、 次の順で 1 回だけ復帰を試す:
 
-- **script は IdP の cookie で SAML を自分で辿らない** (= 認証応答を script が扱うことになる)。 入り直すのは browser 自身。
-- browser が起動していなければ何もしない (勝手に起動しない)。 IdP も切れていれば開いたタブがログイン画面になる = そこで本人がログインしてから再実行。 開いたタブは閉じない。
-- **IdP の有効期間は組織の方針** — 定期アクセスで延ばす仕組みは作らない。 減らせるのは「作業の途中で止まる」 ことで、 回数ではない。 切れる時刻は browser の閲覧履歴 (IdP の OTP 画面を通った時刻) から見積もれるので、 予告は組織への request なしで出せる。
-- 実測: Garoon を開いたままのタブは、 ページ移動なしに裏の通信で JSESSIONID を差し替えることがある (理由は未確認)。 script は起動時に読んだ cookie を長く持ち続けず、 実行のたびに読み直す。 本体セッションの寿命を測るときは、 途中で IdP をログアウトしないこと (ログアウト後に切れていても寿命の証拠にならない)。
-- 切り方 = `--no-reauth-browser` / env `GAROON_REAUTH_BROWSER=0`。
+1. **手元の cookie が古いだけ**なら読み直す (browser は既に入り直していて、 cookie DB への書き出しが遅れていた場合。 browser には触らない)。
+2. `--browser-refresh keep|close` (env `GAROON_BROWSER_REFRESH`) を指定していれば、 **起動中の** browser に tab を 1 枚、 裏で開かせる (AppleScript。 前面の tab は開いた直後に元へ戻し、 browser を前面に出さない。 起動していなければ何もしない)。 そのうえで **tab の行き先を見る**:
+   - Garoon の中に着いた = 入り直せた → cookie DB の更新を待って読み直し、 撃ち直す。 `close` なら自分が開いたその tab を閉じる。
+   - Garoon の外 (ログイン画面) で数秒止まった = **本人のログインが要る** → exit 75。 `close` ならそのログイン画面の tab も閉じる (失敗のたびに tab が溜まらない)。
+3. 本人のログインが要る時は、 agent が user に 1 行で頼み、 同じ command を `--wait-login <秒>` つき・background で実行し直す。 ログイン画面の tab が開いたままになり、 本人がログインし終えたら続きから進む (= user は「終わった」 と報告しなくてよい)。 本人がログインに使った tab は閉じない。
+
+設計の要点 (= 別の SSO 保護サイトで同じ形を組む時も同じ):
+
+- **見積もらずに見る**: 「IdP のログインがまだ生きているか」 は、 有効期間の推定 (閲覧履歴 + 期間) でも当てられるが、 browser に開かせた tab の行き先を見れば数秒で**観測**できる。 観測できるものを推定で置き換えない (推定は組織ごとの値・放置型か絶対時間型かの未決・別端末のログインで外れる)。 待ち時間も「上限まで盲目に poll」 から「結末が見えた時点で終わる」 に変わる。
+- **見るのは tab の URL (query を落としたもの) と読み込み中かだけ**。 ページの中身・認証応答 (SAML) は読まず、 IdP の cookie も読まない。 query は AppleScript の中で落とし、 script に渡さない。 入り直すのは browser 自身。
+- **通常の周期を警告にしない**: IdP の有効期間より利用の間隔が長い使い方では、 「切れている」 が通常の状態になる。 それを session 開始や dashboard で毎回知らせても、 先にログインしておく意味が無く (次に使う時にはまた切れている)、 常時出ている行は読まれなくなる。 **死活監視に載せるのは配線の故障だけ** (cookie を復号できない等 = `doctor`、 network なし)。 切れは使う時に見て、 その場で復帰する。
+- **IdP の有効期間は組織の方針** — 定期アクセスで延ばす仕組みは作らない。 browser に開かせるのは読む用事がある時だけ。
+- **人の browser に触る副作用は opt-in**: 公開の client の既定は `off` (何も開かない)。 開かせる・閉じるは、 利用者が自分の入口 (wrapper / env) で選ぶ。 閉じるのは自分が開いた tab だけで、 閉じる直前に「まだ自分が開いた場所に居るか」 を確かめる (本人が使い回した tab は本人のもの)。
+- AppleScript が使えない環境 (自動操作の許可が無い・無人実行) では `open -g` で開くだけに落ち、 cookie DB の更新だけを上限つきで待つ。 incognito 等の窓には開かない (SSO のログインを共有していない)。
+- 実測: Garoon を開いたままの tab は、 ページ移動なしに裏の通信で JSESSIONID を差し替えることがある (理由は未確認)。 script は起動時に読んだ cookie を長く持ち続けず、 実行のたびに読み直す。 Chromium の cookie DB 書き出しは最大 30 秒ほど遅れる。 本体セッションの寿命を測るときは、 途中で IdP をログアウトしないこと (ログアウト後に切れていても寿命の証拠にならない)。
 
 ⚠️ **`search.csp` の HTML 自体は結果を含まない** (JS が上の API を叩いて描画、 no-data 文言は template に常在) — HTML を grep して「0 件」 と結論しない。 browser MCP の `get_page_text` も描画前に読むと同じ罠。
 ⚠️ 「規程集」 のような**外部 site への link** (= Basic 認証の別 host) は cookie 再利用の射程外 = ID/PW は user 専権 (script も agent も入力しない)。
