@@ -22,7 +22,7 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
 
 使い方:
   search-agent-transcripts.py 混ぜる
-  search-agent-transcripts.py '重ね(る|て)' --regex --role any --since 2026-09-01
+  search-agent-transcripts.py '重ね(る|て)' --regex --role any --since <YYYY-MM-DD>
   search-agent-transcripts.py 決めた --agent claude --session <session id の先頭> --context 200
   search-agent-transcripts.py --selftest
 
@@ -158,7 +158,7 @@ def selftest() -> int:
         ]) + "\n", encoding="utf-8")
         codex_msg = {"type": "response_item", "timestamp": "2099-01-02T00:00:00Z",
                      "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "りんごは青では"}]}}
-        (cx / "rollout-2099-01-02T00-00-00-01a0a861-bcd2-77e3-9d86-e34a0925a3f7.jsonl").write_text(
+        (cx / "rollout-2099-01-02T00-00-00-00000000-0000-4000-8000-00000000c0de.jsonl").write_text(
             "\n".join(json.dumps(r, ensure_ascii=False) for r in [codex_msg, codex_msg,
                       {"type": "event_msg", "payload": {"type": "task_complete", "last_agent_message": "りんご"}}]) + "\n",
             encoding="utf-8")
@@ -175,7 +175,7 @@ def selftest() -> int:
         h = search("りんご", **base)
         results = [
             check("user だけ・注入文は除く・Codex の重複は 1 回", [x[1] for x in h] == ["claude", "codex"]),
-            check("Codex の session id を file 名から取る", h[1][2] == "01a0a861"),
+            check("Codex の session id を file 名から取る", h[1][2] == "00000000"),
             check("--role any で assistant も出る", len(search("りんご", **{**base, "role": "any"})) == 3),
             check("--include-injected で注入文も出る", len(search("りんご", **{**base, "include_injected": True})) == 3),
             check("--since で日付を絞る", [x[1] for x in search("りんご", **{**base, "since": "2099-01-02"})] == ["codex"]),
