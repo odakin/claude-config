@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸)
+when: 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸) + 記録に「決定」「方針」「担当」 と書く瞬間 (= 決定の状態の軸、 #decision-state-at-record-time)
 category: harness-core
-summary: carrier proxy (= commit author / push 者 / 送信者 / 記録の書き手) を内容の判断主体・発言主体と等値しない — 帰属 5 規律 (proxy 種類の明示 / collaborative default = group product / inline marker = 宛先 tag / 発言者 ≠ 記録者 / load-bearing 帰属は複数 proxy verify) + claim-target 軸 (= 主張は誰についてのものか — 自己生成した名指しの無検証断定・内部略称の衝突展開) + 機械化不能の honest 限界
+summary: carrier proxy (= commit author / push 者 / 送信者 / 記録の書き手) を内容の判断主体・発言主体と等値しない — 帰属 5 規律 (proxy 種類の明示 / collaborative default = group product / inline marker = 宛先 tag / 発言者 ≠ 記録者 / load-bearing 帰属は複数 proxy verify) + claim-target 軸 (= 主張は誰についてのものか — 自己生成した名指しの無検証断定・内部略称の衝突展開) + 決定の状態の軸 (= 決定 / 提案 / 他 session の自己申告を記録の瞬間に確かめる、 両方向に壊れる) + 機械化不能の honest 限界
 -->
 # Actor / statement attribution — 行為・発言の帰属規律
 
@@ -42,6 +42,21 @@ failure form (実測、 genericized):
 8. **検証できない名指しは削る** — 多くの場合、 真実 (自著の誤りを機械検証で検出・訂正した等) の方が主張として強い (instance rule = [kakenhi-proposal.md #mock-review-and-claims](kakenhi-proposal.md#mock-review-and-claims))。
 9. **derived 文書間の帰属不一致を見つけたら、 解決方向は「互いに合わせる」 でなく「SoT に対して検証」。** 具体度が高い方を真とみなす specificity bias に注意 — 実測の増幅 mode では、 整合性 sweep が匿名で正しい記録を名指しの誤りに「特定」 して**裏付け文書を製造**した (= 整合性軸は内部無矛盾しか見えず、 coherent な誤りを捕まえられない)。
 
+## <a id="decision-state-at-record-time"></a>第三の軸: 決定の状態 (それは決まったことか、 誰が決めたか)
+
+carrier 軸・claim-target 軸と別に、 **記録に「決定」「方針」「担当」 と書く瞬間**に壊れる軸がある。 書こうとしている内容が次のどれかを、 その瞬間に確かめる:
+
+- (a) **owner の決定** — owner の発言そのものを引ける (原文の動詞のまま書ける)
+- (b) **提案・試稿・叩き台** — agent や協力者が出したもので、 採否は未定
+- (c) **他 session の自己申告** — 別の agent session が名乗った窓口・担当・触らない範囲
+
+両方向に壊れる (実測):
+
+10. **決定でないものを決定として写さない。** 試稿に書いてある順序や、 他 session が名乗った窓口が、 次の記録では「決まったこと」 になる。 控える側の制約 (「編集しない」) ほど確かめずに受け入れられ、 言い換えで強まり、 「〜なので見送った」 という記録のたびに別の file へ写る。 board 上の形と読む側・書く側の規則 = [multi-session-coordination.md#board-role-claim-is-not-assignment](multi-session-coordination.md#board-role-claim-is-not-assignment)。
+11. **決定を提案のまま置かない。** agent の提案に owner が同意した返事は決定であり、 同じ turn で決定の置き場に書く。 書き落とすと、 後で owner に指摘されるまで正本に無い。 決定か提案のままかが読み切れないときは、 記録する turn で owner に聞く (推測でどちらかに寄せない)。
+12. **確かめる先は owner の発言そのもの。** 書いた agent 自身の報告や tool の説明文は、 自分の判断を「指示に基づき」 と書くことがある (実測)。 会話記録の user 役の発言を引く ([debugging-discipline.md#transcript-search-archived-and-quoted](debugging-discipline.md#transcript-search-archived-and-quoted))。
+13. **置き場は 1 か所、 原文の動詞で。** owner の決定は決定を集める 1 か所 (設計 doc の決定欄・project の指示 file) に書き、 他の記録はそこを指す。 提案は「提案」「比較材料」 と明記する。 置き場が無いまま各所に全文で写すと、 出所が消えて後の読み手には (a) と (b)(c) の区別がつかなくなり、 訂正も写しの数だけ要る。
+
 ## <a id="attribution-evidence"></a>再発 evidence (genericized)
 
 - 共著物理論文の Overleaf git mirror を pull し、 単一 commit author の 146 行更新を「その人の update」と単独 narrative で報告 → 実際は会議で共著者全員が live 編集した group product (user 訂正 1)。 再 framing 後も、 同日朝に owner 名義の commit 20+ 本 (= owner の live 編集を coding agent が auto-push した分) が並んでいる事実を git log で確認しないまま narrative を維持 (user 訂正 2)。 **1 incident 内で規律 2 (group default) と規律 5 (proxy 分布の安価な確認) を連続で落とした**。
@@ -58,5 +73,5 @@ failure form (実測、 genericized):
 - **実行経路・原因の帰属 (機械 domain)** = [debugging-discipline.md #execution-path-attribution](debugging-discipline.md#execution-path-attribution) (= 内容指紋で経路を確定 / control case で discriminate)。 対象が人でなく機構。
 - **アウトリーチ宛先の身元 verify** = [research-email.md](research-email.md) §アウトリーチ前の身元確認 (= 宛先が論文著者本人かの corroboration)。 「これから接触する相手は誰か」であって「この記録は誰の行為か」ではない。
 - **文献の著者名 verify** (= citation authorship の誤同定・hallucination) は帰属 family だが kernel は「未検証 identity の断定」 — 検証原則は規律 5 と同じ (複数 proxy / 一次資料 verify)。
-- **役割の自己申告** = [multi-session-coordination.md #board-role-claim-is-not-assignment](multi-session-coordination.md#board-role-claim-is-not-assignment) (= 他 session が名乗った窓口・担当を owner の割り当てとして記録しない)。本 doc が「その記録は誰の行為か」、あちらが「その制約は誰が決めたか」。
+- **役割の自己申告の board 上の形** = [multi-session-coordination.md #board-role-claim-is-not-assignment](multi-session-coordination.md#board-role-claim-is-not-assignment) (読む側・書く側の規則と表示時の注意)。 一般形は本 doc の [#decision-state-at-record-time](#decision-state-at-record-time)。
 - **人名の表記** = [name-rendering.md](name-rendering.md) (= ローマ字化・記号平坦化された name field から native 表記を推測で復元しない)。**同じ lossy-encoding family** で、本 doc が「その記録は誰の行為か」、あちらが「その人の名前はどう書くか」。
