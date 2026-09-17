@@ -34,6 +34,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[pasted-command-comment-guard.sh](pasted-command-comment-guard.sh)** — user に貼らせるコマンドに `#` コメントが混ざっていたら Stop で書き直させる (対話 zsh は # をコメントにしない)
 - **[pasted-command-comment-guard.test.sh](pasted-command-comment-guard.test.sh)** — logic + incident-replay selftest
 - **[pdf-read-fallback-nudge.sh](pdf-read-fallback-nudge.sh)** — PostToolUse(Read): Read tool が .pdf を `pdftoppm is not installed` で fail した時に PyMuPDF 1-liner を system reminder で injection (= 2026-05-18 RCA、 規律 wording に依存しない機械的 enforcement layer)
+- **[protected-dir-access-guard.py](protected-dir-access-guard.py)** — PreToolUse(Bash / Grep / Glob): 保護を宣言した dir へ触れうる操作の前に確認を出す (ask)
+- **[protected-dir-access-guard.test.sh](protected-dir-access-guard.test.sh)** — 保護 dir の名指し・上位 dir の再帰・cwd・Grep/Glob に確認が出て、 無関係な操作には出ないか + 設定の読み方 + カナリア
 - **[public-leak-guard.sh](public-leak-guard.sh)** — 公開リポ leak 防止 — PreToolUse(Edit|Write|MultiEdit) Tier A 構造制約 regex
 - **[public-leak-guard.test.sh](public-leak-guard.test.sh)** — public-leak-guard.sh の self-test (hermetic)
 - **[session-commit-nudge.sh](session-commit-nudge.sh)** — session-commit-nudge.sh
