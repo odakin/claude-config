@@ -278,28 +278,9 @@ install_hooks() {
         return 0
     fi
 
-    # 退役した hook の entry の掃除 (sync は足すだけで消さないので、 掃除は setup.sh が持つ)
-    if [ -f "$SETTINGS" ]; then
-        # session-git-check.sh: git-state-nudge の初回 fetch に置き換えて退役
-        if jq -e '.hooks.SessionStart[]? | select(.hooks[]?.command | contains("session-git-check.sh"))' \
-           "$SETTINGS" > /dev/null 2>&1; then
-            echo "  Removing obsolete SessionStart hook (session-git-check.sh)..."
-            jq '.hooks.SessionStart |= map(select(.hooks[]?.command | contains("session-git-check.sh") | not))
-                | if .hooks.SessionStart == [] then del(.hooks.SessionStart) else . end' \
-                "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-        fi
-        # UserPromptSubmit の currentdate-anchor.py: 2026-05-20 試行 → 同日退役 (UI 汚染)。
-        # 詳細: conventions/time-context.md#design-history
-        if jq -e '.hooks.UserPromptSubmit[]? | select(.hooks[]?.command | contains("currentdate-anchor.py"))' \
-           "$SETTINGS" > /dev/null 2>&1; then
-            echo "  Removing obsolete UserPromptSubmit hook (currentdate-anchor.py)..."
-            jq '.hooks.UserPromptSubmit |= map(select(.hooks[]?.command | contains("currentdate-anchor.py") | not))
-                | if .hooks.UserPromptSubmit == [] then del(.hooks.UserPromptSubmit) else . end' \
-                "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-        fi
-    fi
-
-    # 配線 (hooks/settings-entries.json の無い entry を足すだけ・冪等。 symlink は上の loop で張り済み)
+    # 配線 (hooks/settings-entries.json の無い entry を足す + hooks/retired-hooks.txt の退役 hook を外す・冪等。
+    # symlink は上の loop で張り済み。 退役の掃除を本 script の hardcode にしない = setup.sh を再実行しないマシンでも
+    # pull 後の sync で外れる: conventions/hook-authoring.md#additive-wiring-needs-retirement)
     bash "$SYNC_HOOK_SETTINGS" --no-link "$SETTINGS"
     echo "  Hooks check complete."
 }

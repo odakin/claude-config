@@ -196,7 +196,7 @@
 - **[sot-registry-edit.py](sot-registry-edit.py)** — check-sot-drift.py の registry を topic 単位の操作で行ごと書き換える (comment と書式を保つ)
 - **[substack-fetch.py](substack-fetch.py)** — Substack の公開一覧・記事本文・有料全文 (browser session 再利用)・購読メール整形を CLI で取る。
 - **[surface-discord-bot-dm.py](surface-discord-bot-dm.py)** — Discord bot DM channel の未記録 message surface engine（daily fetcher が吐く JSON と user 側 ledger（text/YAML 内 messageId）の diff で「bot DM に返事が来ても誰も読まない」 死角を埋める汎用 CLI、 個別環境への依存ゼロ＝引数で bot ID / json-dir / ledger-dir / counterpart map / title を渡す、 finding 0 件 silent、 --selftest 内蔵。 personal layer に thin wrapper を 1 つ置いて呼ぶ、 conventions/discord-bot.md#bot-dm-surface）
-- **[sync-hook-settings.sh](sync-hook-settings.sh)** — 層1 hook の配線 (symlink + settings.json の entry) を hooks/settings-entries.json に揃える (無いものを足すだけ・冪等)
+- **[sync-hook-settings.sh](sync-hook-settings.sh)** — 層1 hook の配線 (symlink + settings.json の entry) を hooks/settings-entries.json に揃える (無いものを足す + 退役 registry の hook を外す・冪等)
 - **[sync-hook-settings.test.sh](sync-hook-settings.test.sh)** — 層1 hook の配線 (symlink + settings の entry) を揃える script の test
 - **[sync-permission-rules.py](sync-permission-rules.py)** — settings.json の permission rule を spec (JSON) の宣言どおりに揃える (冪等)
 - **[test_codex_mail_install.py](test_codex_mail_install.py)** — Installer tests run only below temporary directories, never real Codex home.
@@ -237,6 +237,8 @@
 - **[lib/office-staging.test.sh](lib/office-staging.test.sh)** — office-staging.sh + office_staging.py の self-test (hermetic、 Office 不要、 fake HOME)
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
 - **[lib/permission_rules.py](lib/permission_rules.py)** — settings.json の permission rule を宣言した形に揃える (engine)
+- **[lib/prune-retired-hooks.sh](lib/prune-retired-hooks.sh)** — 退役した hook を外す (hooks dir の symlink + settings.json の entry)。 registry 駆動・冪等
+- **[lib/prune-retired-hooks.test.sh](lib/prune-retired-hooks.test.sh)** — 退役 hook の掃除 (scripts/lib/prune-retired-hooks.sh) の test
 - **[lib/public_tree_accept.py](lib/public_tree_accept.py)** — 公開 repo の棚卸し受理一覧 (.claude/public-tree-accept.txt) の `generated:` 宣言を読む。
 - **[lib/published_metadata.py](lib/published_metadata.py)** — 公刊済みの著作の書誌 (題名・著者・要旨) の行を、 leak 検出器の対象から外す。
 - **[lib/relay_check.py](lib/relay_check.py)** — surface した item を「この session で人に伝えたか」 と「同じ案件かもしれない別の item」 を判定する共通部品

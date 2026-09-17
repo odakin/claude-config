@@ -30,6 +30,12 @@ sections:
   - id: test-root-not-parent-dir
     level: 3
     title: "§0 補足 6: test は自分の repo を「checkout の親 dir」 経由で指さない — worktree で落ち、 live を検査する"
+  - id: surface-filter-keeps-errors
+    level: 3
+    title: "§0 補足 7: 自動適用の出力を絞って surface する hook は、 stderr を合流させてエラーの行も拾う"
+  - id: fake-platform-commands-in-path
+    level: 3
+    title: "§0 補足 8: macOS 専用の installer は偽の platform command を PATH の先頭に置いて test する"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2
@@ -46,6 +52,9 @@ sections:
     level: 3
     title: "回避策"
     related: [bash32-problem, bash32-reproducer]
+  - id: bash32-case-in-command-substitution
+    level: 3
+    title: "`$(...)` の中の `case` のパターンは `(` を前置する (`-n` を通り、 実行時にだけ落ちる)"
   - id: bash32-vs-runtime-backtick-expansion
     level: 3
     title: "bash 3.2 parser bug と runtime backtick 展開を同じ事故にしない"
@@ -114,6 +123,9 @@ sections:
     level: 3
     title: "防止策"
     related: [partial-install-problem]
+  - id: additive-wiring-needs-retirement
+    level: 3
+    title: "§4 補足: 足すだけの配線には、 退役の経路が別に要る"
   - id: hook-architectural-rationale
     legacy: "5"
     level: 2

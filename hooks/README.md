@@ -42,6 +42,7 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[protected-dir-access-guard.test.sh](protected-dir-access-guard.test.sh)** — 保護 dir の名指し・上位 dir の再帰・cwd・Grep/Glob に確認が出て、 無関係な操作には出ないか + 設定の読み方 + カナリア
 - **[public-leak-guard.sh](public-leak-guard.sh)** — 公開リポ leak 防止 — PreToolUse(Edit|Write|MultiEdit) Tier A 構造制約 regex
 - **[public-leak-guard.test.sh](public-leak-guard.test.sh)** — public-leak-guard.sh の self-test (hermetic)
+- **[retired-hooks.txt](retired-hooks.txt)** — 退役した層1 hook の registry (scripts/sync-hook-settings.sh が各マシンの symlink と settings.json から外す)
 - **[session-commit-nudge.sh](session-commit-nudge.sh)** — session-commit-nudge.sh
 - **[session-commit-nudge.test.sh](session-commit-nudge.test.sh)** — self-tests for session-commit-nudge.sh
 - **[session-start-claude-account-change.sh](session-start-claude-account-change.sh)** — SessionStart hook (layer 1, claude-config)

@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき + app や tool の挙動を当てる hook を書くとき (#imitate-target-predicate) + 事後の block の手前に事前の知らせを置くとき (#counter-notice-at-injection)
+when: Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき + app や tool の挙動を当てる hook を書くとき (#imitate-target-predicate) + 事後の block の手前に事前の知らせを置くとき (#counter-notice-at-injection) + hook を消す・event から外すとき (#additive-wiring-needs-retirement)
 category: harness-core
 summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook の同 session 発火も build 依存 = 2026-06 は session / app 起動時 snapshot、 desktop 2.1.266 は Stop hook を hot-reload → 足した直後に discriminator で測る / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)** + **§2 補足 2 #disableallhooks-kill-switch = root 限定の disableAllHooks が「frontend 差」 に化ける 〔自 session では検出不能 = 外側から scripts/hook-liveness-audit.py、 audit-hooks.sh の (d) 自動部分〕** + **test-root-not-parent-dir = test は自分の repo を checkout の親 dir 経由で指さない 〔worktree で落ち・live を検査・python shim は CI でも空振り = 一時 root に symlink 1 本 + 兄弟 repo は正規 layout + 不在は SKIP + mutation で確かめる〕** + **§12 #text-pattern-stop-hook = 最終発話の句で当てる Stop hook は過去の最終発話で校正してから入れる 〔scripts/calibrate-final-message-pattern.py + 共通部品 scripts/lib/transcript_turns.py〕・引用の例示を除く・block は 1 回・fail-open** + **§14 #opt-in-side-effect-hook = 人に向けた副作用だけの hook (音・通知) は層1 に既定 off で置き marker で opt-in、 surface の許可 list は実測値だけ、 実行の証拠を state file に残す** + **#command-guard-calibration = command を見る PreToolUse guard も過去の Bash command で校正 (scripts/calibrate-bash-command-pattern.py) し、 わざと該当する無害な command で live 確認** + **§15 #injection-digest-and-relay = SessionStart の注入は期限の近い item の 1 ブロックに畳み (副作用は止めない・行数で切らない・自分で決めた期日と条件発火は畳まない)、 短い窓の item は伝えたかを Stop で問う 〔scripts/lib/relay_check.py〕**)
 -->
@@ -164,6 +164,24 @@ python の shim が兄弟 repo (層1 engine 等) を `Path(__file__).resolve().p
 
 **実例 (2026-09-12)**: odakin-prefs の SessionStart hook test 6 本が使い捨て worktree でだけ落ちた (payload 不在)。 同じ前提の test がさらに 4 本、 worktree でも通っていたが live の `lib-surface.sh` を source していた。 python の shim 2 本は worktree だけでなく **CI でも**空振りしていた。 層1 でも、 stub installer の test が `$HOME` の外に置いた worktree でだけ落ちた (`"$HOME/..."` 形と絶対 path 形が同じ文字列になり、 fixture が差分を作れない) — 置き場所への依存は root の導き方以外からも入る。 並列 session を避ける worktree 運用 ([multi-session-coordination.md#foreign-wip-scratch-worktree](multi-session-coordination.md#foreign-wip-scratch-worktree)) を使って初めて露出した class。
 
+### <a id="surface-filter-keeps-errors"></a>§0 補足 7: 自動適用の出力を絞って surface する hook は、 stderr を合流させてエラーの行も拾う
+
+SessionStart 等で installer / 同期 script を回し、 その出力を `grep` で絞って「何をしたか」 だけを注入する hook は、 **成功の行だけを拾い stderr を捨てると、 失敗が「何もしなかった」 と同じ見え方になる**。 script は spec の誤りを 1 行の ERROR として stderr に出すのが普通なので、 `2>/dev/null` の時点で唯一の信号が消える (実測: 読めない設定のまま登録されず、 session 開始時には何も出なかった)。
+
+- 起動は `2>&1` で合流させ、 拾う正規表現に `ERROR` / `WARN` を入れる。 複数の wrapper を回すなら正規表現は 1 か所に置く
+- 見出しを「追加した」 だけにしない (= エラーの行が成功の見出しの下に並ぶと読み違える)。 「追加 / 更新 / 要対応」 のように書く
+- test は偽の wrapper で、 更新の行・stderr の ERROR・拾わない雑音の行を出し、 前 2 つが surface され雑音が出ないことを見る。 旧版に当てて落ちることも確かめる (= 歯)
+
+### <a id="fake-platform-commands-in-path"></a>§0 補足 8: macOS 専用の installer は偽の platform command を PATH の先頭に置いて test する
+
+`launchctl` や `uname` の判定を持つ installer は、 そのままだと Linux の CI で `[skip]` に落ちて何も検査されない。 偽物を PATH の先頭に置くと install の流れを丸ごと通せる。
+
+- `uname` = `Darwin` を返すだけ。 `launchctl` = 一時 dir に file を置いて `bootstrap` / `bootout` / `print` を模す (「実行中」 などの状態も file の有無で出し分ける)
+- ⚠️ **本物に触らないことを test の冒頭で確かめる**: `command -v launchctl` が偽物でなければ中止する。 書き先 (plist dir・log dir・state dir) は env の override で一時 dir に向ける
+- 「定常状態では X を起動しない」 は、 X (例: `python3`) を「起動したら印を残して失敗する偽物」 に差し替えて証明する。 時間の計測より確実で、 CI の揺れにも強い
+- engine を `sh` で起動すると CI では dash で回る = POSIX の検査を兼ねる。 ただし bash 3.2 固有の癖 ([置換の中の `case`](#bash32-case-in-command-substitution)) は macOS の `/bin/sh` で回すまで見えないので、 手元でも回す
+- 実機に効く自動移行 (登録済みの物を書き換える等) は、 出荷前に**実機の状態の写し**を一時 dir に置き、 同じ偽物で 1 回再現する。 変わるのが想定した物だけで、 2 回目が無言なことを見る ([`debugging-discipline.md#violation-e2e-on-a-copy`](debugging-discipline.md#violation-e2e-on-a-copy) と同じ「複製で試す」)
+
 ---
 
 ## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug
@@ -202,6 +220,24 @@ pat = re.compile(r"<<-?\s*[\x22\x27]?([A-Z]+)[\x22\x27]?\s*")
 
 別解: 中間 file に書き出す (= `python3 -c '...'` への移行は引用問題が増えるので非推奨、 heredoc を `>/tmp/script.py` で先に書いて `python3 /tmp/script.py` で呼ぶのは clean だが手数が増える)。
 
+### <a id="bash32-case-in-command-substitution"></a>`$(...)` の中の `case` のパターンは `(` を前置する (`-n` を通り、 実行時にだけ落ちる)
+
+同じ bash 3.2 の `$(...)` parser の弱点の別の形。 置換の中に `case` を置き、 パターンを `a)` / `*)` と書くと、 閉じ括弧を置換の終わりと取り違える。
+
+```sh
+x="$(printf 'a\n' | while read -r v; do
+  case "$v" in
+    a) printf 'A' ;;      # ← bash 3.2 はここで置換が閉じたと読む
+    *) printf '?' ;;
+  esac
+done)"
+```
+
+- **症状**: macOS の `/bin/sh` と `/bin/bash` (3.2) で、 その置換だけが `command substitution: line N: syntax error near unexpected token` を stderr に出して失敗する。 **script は止まらない**。 値は空のまま処理が進むので、 `set -u` なら離れた場所で unbound variable として見える (実測)
+- **`sh -n` / `bash -n` は通る** (置換の中身は実行時に読まれる)。 bash 5・dash・zsh では起きないので、 Linux の CI は緑のまま = 手元の macOS で test を `/bin/sh` 経由で回すまで見えない
+- **回避**: パターンを `(a) ...;;` / `(*) ...;;` と書く (POSIX の書き方で、 どの shell でも同じ意味)。 または `case` を関数に出し、 置換の中からは関数を呼ぶだけにする
+- **検出**: 静的に拾うには shell の字句解析 (quote・入れ子・heredoc) が要り、 正規表現の近似は誤検出だらけになる (実測)。 macOS 向けの script は test を `/bin/sh` で回すのが安い網
+
 ### <a id="bash32-vs-runtime-backtick-expansion"></a>bash 3.2 parser bug と runtime backtick 展開を同じ事故にしない
 
 どちらも「backtickを含む文面が壊れた」と見えるが、発生時点・症状・修復先が異なる。
@@ -211,14 +247,14 @@ pat = re.compile(r"<<-?\s*[\x22\x27]?([A-Z]+)[\x22\x27]?\s*")
 | **bash 3.2 parser bug** | `$(...)` 内のquoted heredoc bodyを外側parserが誤走査し、literal quote/backtickで構文解析が壊れる | commandは開始前にsyntax error。報告行は真因より数十行後になり得る。`/bin/bash -n`で再現 | heredoc bodyのliteralをhex/`chr(...)`等へ置換、またはcommand substitution外へ分離 |
 | **runtime command substitution** | double-quoted CLI argument内の `` `token` `` / `$()` をshellが正しく実行し、そのstdoutで元文字列を置換する | command自体は成功し得るが、引数・投稿・記録から文字が消える。empty backticks等がfingerprint | user-authored値はsingle quote、argv配列、またはfile/stdinで渡し、送信前validatorで欠落fingerprintを拒否 |
 
-前者はshell実装のparser limitation、後者はshell仕様どおりの評価である。前者を「掲示板や送信先の不具合」と報告したり、後者をbash更新で直そうとしない。最初の分岐は **`bash -n` が実行前に落ちるか / commandは走ってpayloadだけ欠けたか**。
+前者はshell実装のparser limitation、後者はshell仕様どおりの評価である。前者を「掲示板や送信先の不具合」と報告したり、後者をbash更新で直そうとしない。最初の分岐は **`bash -n` が実行前に落ちるか / commandは走ってpayloadだけ欠けたか**。 ⚠️ 例外 = [`$(...)` の中の `case`](#bash32-case-in-command-substitution) は parser bug なのに `-n` を通り、 走って値だけ欠ける。 stderr に `command substitution: ... syntax error` が出ていれば parser 側。
 
 ### <a id="bash32-debug-difficulty"></a>Debug が困難な理由 / メタ規律
 
 - minimal isolated test (= heredoc 1 個を `$(...)` 無しで実行) は通る → 「block の中身が壊れた」 と reflex 判定しがち。 真因は **block 間 interaction** (= 外側 parser が内側 body を scan する parser bug)
 - 「error 報告行」 と「真因行」 が大きく乖離する → 修正対象を誤特定して時間を溶かす
 
-**メタ規律**: hook を書いた直後に `/bin/bash -n <hook>` で syntax check + minimal stdin で 1 回 fire 確認。 homebrew bash で書いて満足しない。 macOS stock bash で fail する書き方を完成形と認識する事故を予防。
+**メタ規律**: hook を書いた直後に `/bin/bash -n <hook>` で syntax check + minimal stdin で 1 回 fire 確認 (`-n` だけでは [置換の中の `case`](#bash32-case-in-command-substitution) を見逃すので、 fire 確認は省かない)。 homebrew bash で書いて満足しない。 macOS stock bash で fail する書き方を完成形と認識する事故を予防。
 
 ---
 
@@ -403,6 +439,18 @@ setup.sh の `install_hooks()` 関数内の **「symlink 配置 → settings.jso
 hook 配信を「fix した」 と claim する前に **§2 の delivery 3 軸 (= (a)(b)(c))ゲート質問を独立に通す**。 「`ln -s` 通った」 「config に書き足した」 のどちらか単独では不十分。
 
 **規律**: hook 配信修復 task では、 必ず symlink + settings.json + try-fire の 3 step を **同じ作業 unit に bundle** する。 分離すると次の作業者 (= 別 session の Claude / 別マシンの自分) が partial state を canonical と誤認する。
+
+### <a id="additive-wiring-needs-retirement"></a>§4 補足: 足すだけの配線には、 退役の経路が別に要る
+
+hook の配線 (hooks dir の symlink + `settings.json` の entry) は「無いものを足すだけ」 で作る — 他の層や利用者が足した entry を壊さないためで、 これ自体は正しい。 その裏面として、 **hook を repo から消しても各マシンの配線は残る**。 残った entry は、 その event のたびに「file が無い」 command として走り、 失敗し続ける (壊れた symlink は `ls` では見えても hook 一覧の検査では「配線済み」 に見えることがある)。
+
+- **退役は registry に書く**: 1 行 1 file 名の text file (`hooks/retired-hooks.txt`) に名前と理由を書き、 毎 session 走る sync 経路が同じ関数で外す = [`scripts/lib/prune-retired-hooks.sh`](../scripts/lib/prune-retired-hooks.sh) (層1 は [`scripts/sync-hook-settings.sh`](../scripts/sync-hook-settings.sh) が呼ぶ。 個人層の installer は自分の registry を同じ関数に渡す)。 **hook を消す commit = list から抜く + registry に足す、 を同じ commit で**。
+- **掃除を install script の hardcode にしない**: 「この名前を settings から消す」 を installer の本文に書くと、 その installer を再実行しないマシンでは永久に残る (pull だけで新しい hook が配線される経路を作ったなら、 退役も同じ経路に載せる)。
+- **event だけの退役**: 同じ file を別の event で使い続けるなら `Event:file 名` と書く (その event の entry だけを外し、 symlink は触らない)。
+- **安全側の既定**: registry に名前が在っても、 hook の実体が repo にまだ在れば外さない (書き間違いで生きている hook を消さない)。 消すのは symlink だけで、 entry は「command の語のどれかが `/<file 名>` で終わる hook」 だけを抜く (同じ entry に同居する他の hook・他の層の entry は残す)。 `--check` は残骸を不足と同じ「配線のずれ」 として数える。
+- **list と registry の矛盾は test で止める**: 同じ名前が両方に在ると、 毎回足して毎回外す (= [`scripts/sync-hook-settings.test.sh`](../scripts/sync-hook-settings.test.sh) が検査)。
+
+origin: hook を 1 本消した時に、 各マシンの `settings.json` に command が残る形だと分かった (実測)。 同じ型の掃除が installer に hardcode で在り、 構造上、 その installer を再実行しないマシンには届かない形だった。
 
 ---
 

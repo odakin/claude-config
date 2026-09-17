@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sync-hook-settings.sh — 層1 hook の配線 (symlink + settings.json の entry) を hooks/settings-entries.json に揃える (無いものを足すだけ・冪等)
+# sync-hook-settings.sh — 層1 hook の配線 (symlink + settings.json の entry) を hooks/settings-entries.json に揃える (無いものを足す + 退役 registry の hook を外す・冪等)
 #
 # usage: sync-hook-settings.sh [--no-link] [--check] [SETTINGS]
 #   SETTINGS   既定 = ~/.claude/settings.json。 hook の置き場は <SETTINGS の dir>/hooks/
@@ -11,7 +11,10 @@
 #             (= 指す先が消えた。 例: 他の層から本 repo へ移設された hook) だけを張り直し、 生きている
 #             symlink と通常 file (Windows の copy 方式) は触らない。 Windows は copy で置く
 #   2. merge: scripts/lib/merge-hook-event.sh で event ごとに無い entry を足す。 既存の entry・他の層が
-#             足した entry は触らない (= 削除はしない。 退役 hook の掃除は setup.sh の cleanup が持つ)
+#             足した entry は触らない
+#   3. prune: hooks/retired-hooks.txt に名前のある hook だけを外す (symlink + entry)。 足すだけの配線は、 消した hook を
+#             各マシンに残すので、 退役は registry に書く = scripts/lib/prune-retired-hooks.sh
+#             (conventions/hook-authoring.md#additive-wiring-needs-retirement)。 --check では残骸も不足として数える
 #
 # 呼び元 (= 3 経路が同じ list と同じ関数を使う):
 #   setup.sh Step 2 / setup.sh が生成する post-merge hook (pull だけで新しい hook が効く) /
@@ -27,6 +30,7 @@ set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENTRIES="${SYNC_HOOK_ENTRIES:-$ROOT/hooks/settings-entries.json}"
+RETIRED="${SYNC_HOOK_RETIRED:-$ROOT/hooks/retired-hooks.txt}"
 LINK=1
 CHECK=0
 SETTINGS=""
@@ -95,6 +99,9 @@ if [ "$CHECK" -eq 1 ]; then
       fi
     done < <(jq -r --arg ev "$event" '.[$ev][].hooks[]?.command | sub("^.*/hooks/"; "")' "$ENTRIES" | tr -d '\r')
   done
+  # shellcheck source=lib/prune-retired-hooks.sh
+  . "$ROOT/scripts/lib/prune-retired-hooks.sh"
+  prune_retired_hooks "$RETIRED" "$ROOT/hooks" "$HOOKS_DST" "$SETTINGS" --check || missing=$((missing + 1))
   [ "$missing" -eq 0 ] && exit 0
   exit 1
 fi
@@ -109,4 +116,9 @@ fi
 for event in $events; do
   merge_hook_event "$event" "$(jq -c --arg ev "$event" '.[$ev]' "$ENTRIES")" "$SETTINGS"
 done
+
+# ---------- 3. prune ----------
+# shellcheck source=lib/prune-retired-hooks.sh
+. "$ROOT/scripts/lib/prune-retired-hooks.sh"
+prune_retired_hooks "$RETIRED" "$ROOT/hooks" "$HOOKS_DST" "$SETTINGS"
 exit 0

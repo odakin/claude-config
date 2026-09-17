@@ -1,0 +1,8 @@
+# retired-hooks.txt — 退役した層1 hook の registry (scripts/sync-hook-settings.sh が各マシンの symlink と settings.json から外す)
+#
+# 書式: 1 行 1 file 名 (`#` 以降は理由)。 `Event:file 名` = その event からだけ外す (file は別の event で現役)。
+# hook を repo から消す・event から外す時は、 hooks/settings-entries.json から抜くのと同じ commit でここに足す。
+# 配線は「足すだけ」 なので、 ここに書かないと各マシンに残る。 規約 = conventions/hook-authoring.md#additive-wiring-needs-retirement
+
+session-git-check.sh                     # git-state-nudge.sh の初回 fetch に置き換え (毎 session の通知が雑音だった)
+UserPromptSubmit:currentdate-anchor.py   # 毎 prompt・画面に出る版を退役 (SessionStart 版は現役)。 conventions/time-context.md#design-history

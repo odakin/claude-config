@@ -79,5 +79,45 @@ else
   ok
 fi
 
+# 退役 registry と list が矛盾しない (= 同じ hook を毎回足して毎回外す、 にならない) + 掃除を setup.sh に hardcode していない
+RETIRED="$ROOT/hooks/retired-hooks.txt"
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  case "$line" in
+    *:*) ev="${line%%:*}"; name="${line#*:}" ;;
+    *)   ev=""; name="$line" ;;
+  esac
+  if jq -e --arg ev "$ev" --arg n "/$name" \
+      '[to_entries[] | select(.key | startswith("_") | not) | select($ev == "" or .key == $ev)
+        | .value[].hooks[]?.command | split(" ") | .[] | select(endswith($n))] | length > 0' "$ENTRIES" >/dev/null 2>&1; then
+    ng "retired-hooks.txt の $line が settings-entries.json にも在る (足して外すを毎回繰り返す)"
+  else
+    ok
+  fi
+done < <(sed 's/#.*//' "$RETIRED" 2>/dev/null | awk 'NF {print $1}')
+if grep -q 'Removing obsolete' "$ROOT/setup.sh"; then
+  ng "setup.sh に退役 hook の掃除が hardcode で残っている (hooks/retired-hooks.txt に書く)"
+else
+  ok
+fi
+
+# sync が退役 registry の hook を外す (end-to-end: 足す + 外す)
+T3="$(mktemp -d "${TMPDIR:-/tmp}/sync-hook-retired.XXXXXX")"
+mkdir -p "$T3/hooks"
+ln -s "$ROOT/hooks/gone-hook.sh" "$T3/hooks/gone-hook.sh"
+echo '{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "~/.claude/hooks/gone-hook.sh"}]}]}}' > "$T3/settings.json"
+printf 'gone-hook.sh  # test\n' > "$T3/retired.txt"
+SYNC_HOOK_RETIRED="$T3/retired.txt" bash "$ROOT/scripts/sync-hook-settings.sh" --check "$T3/settings.json" >/dev/null 2>&1 \
+  && ng "--check が退役 hook の残骸を不足に数えない" || ok
+SYNC_HOOK_RETIRED="$T3/retired.txt" bash "$ROOT/scripts/sync-hook-settings.sh" "$T3/settings.json" >/dev/null 2>&1
+if grep -q 'gone-hook.sh' "$T3/settings.json" || [ -L "$T3/hooks/gone-hook.sh" ]; then
+  ng "sync が退役 hook を外さない"
+else
+  ok
+fi
+SYNC_HOOK_RETIRED="$T3/retired.txt" bash "$ROOT/scripts/sync-hook-settings.sh" --check "$T3/settings.json" >/dev/null 2>&1 \
+  && ok || ng "外した後の --check が clean にならない"
+rm -rf "$T3"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
