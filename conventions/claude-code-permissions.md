@@ -97,10 +97,10 @@ scope の中の file でも、 **相対 path の基準を取り違えると開�
 | 書き方 | 解決 |
 |---|---|
 | 相対 path (`dir/file.md`、 `../x.md`) | session を始めたときに選んだフォルダに連結し、 `..` を畳む |
-| 絶対 path (`/…/file.md`) | そのまま |
+| 絶対 path (`/…/file.md`) | そのまま (実測: 右パネルで開いた) |
 | `~/…` | home に展開 |
 | 本文に素で書いた絶対 path / `~/…` (拡張子つき) | 自動でリンクになる |
-| inline code の `dir/file.ext` | リンクとして描かれ、 相対 path と同じ基準で開く (観測 n=1。 区切りの無い `file.md` と `dir/` はリンクにならなかった) |
+| inline code の `dir/file.ext` | **形だけで**リンクになり (実測: 実在しない path も青く描かれた。 区切りの無い `file.md` と `dir/` はならない)、 相対 path と同じ基準で開く |
 
 連結した結果が、 そのフォルダか session に追加したフォルダ (`additionalDirectories` 等) の中にあれば開く。
 
@@ -109,7 +109,7 @@ scope の中の file でも、 **相対 path の基準を取り違えると開�
 **書き方の既定**:
 - markdown link の href = **絶対 path** (表示文字列は file 名でよい)。 基準を覚えていなくても壊れない
 - inline code に path を書くなら、 **session を始めたフォルダからの path** (repo 名から書く)。 repo の中からの path を inline code に書くと、 押せるのに開けない link になる
-- 開けない形を例として見せたいだけなら fenced code block に入れる (fence の中はリンクにならない)
+- 例示の path (`path/to/file.md` 等) も inline code に入れると押せるリンクになる (実在を見ないので必ず開けない)。 例示は fenced code block に入れるか backtick を付けない (fence の中はリンクにならない)
 
 **表示で原因を見分ける** (日本語 UI の文言):
 

@@ -4,8 +4,8 @@
 - 相対 path は **session を始めたときに選んだ folder** に連結する。 Bash の cd で harness が通知する
   「Primary working directory」 が変わっても、 この基準は変わらない。
 - 絶対 path はそのまま、 `~/` は home に展開する。
-- inline code の中身も、 `/` を含み拡張子で終わる path なら link として描かれる (観測 n=1、 `CLAUDE.md` のような
-  区切りの無い名前は描かれなかった)。
+- inline code の中身も、 `/` を含み拡張子で終わる形なら、 file が実在しなくても link として描かれる (実測。
+  `CLAUDE.md` のような区切りの無い名前と `dir/` は描かれない)。
 
 検出の条件 (= 誤検出を避けるため狭くとる):
   開けない (基準 folder に連結すると存在しない / 基準の外に出る) ∧ 別の folder に連結すると存在する。

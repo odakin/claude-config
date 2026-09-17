@@ -6,7 +6,7 @@
 #   Bash で cd すると harness は「Primary working directory: <repo> (was <root>)」 と通知し、
 #   system prompt も「href は working directory からの相対」 と言うので、 repo の中からの path を
 #   書きたくなる。 しかし右パネルの基準は変わらないので「このファイルが見つかりませんでした」 になる。
-#   inline code の `dir/file.ext` もリンクとして描かれ、 同じ基準で開かれる (観測 n=1)。
+#   inline code の `dir/file.ext` も形だけでリンクとして描かれ (実在しない path も)、 同じ基準で開かれる (実測)。
 #
 # 述語 (= scripts/lib/chat_file_refs.py の find_broken):
 #   fire = session の frontend が右パネルを持つ (transcript の entrypoint が claude-desktop / claude-desktop-3p / claude-vscode)
@@ -27,7 +27,8 @@
 # ⚠️ 射程の限界:
 #   - Remote Control で別端末から見ている画面では、 正しい path でも開けない (#rc-chat-panel-no-render)。 hook からは見分けられない。
 #   - 基準フォルダの外の file は、 絶対 path に直しても右パネルでは開けないことがある (#chat-link-rendering-scope)。
-#   - inline code がリンクになる条件は bundle から特定しきれていない (`/` と拡張子を持つ形で観測 n=1)。
+#   - どこにも実在しない path の inline code も押せる (開けない) リンクになるが、 正しい path を示せないので拾わない
+#     (= 例示の path。 fenced block に入れるよう規約で扱う)。
 #   test = hooks/chat-file-ref-enforce.test.sh
 
 set -uo pipefail
