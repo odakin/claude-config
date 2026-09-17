@@ -33,7 +33,7 @@ claude-config/
 │   ├── android-chromium-remote-debug.md    # Android 実機の Brave/Chrome を remote debug (WiFi ADB + CDP) するとき
 │   ├── ask-user-question.md                # AskUserQuestion (選択肢 UI) の使用可否・使い所を判断するとき
 │   ├── audio-transcription.md              # 会議・インタビュー・収録の録音を機械 (whisper 等) で文字起こしして、その結果を引用・記録に使うとき + 転写した語が聞き取れない・機械が割れるとき + 長い録音を配信・共有用に分割するとき
-│   ├── batch-text-edits.md                 # 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき)
+│   ├── batch-text-edits.md                 # 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape)
 │   ├── beamer-slides.md                    # Beamer/metropolis または編集可能な PPTX / Keynote で研究スライドを作る・直すとき + 既存デッキの「同じ感じ」を引き継ぐとき
 │   ├── book-purchase-lookup.md             # 図書館に本の購入を頼む前 (書誌を揃える・その館に所蔵が無いか・新刊で買えるか・いくらか) + 共有された本のリストや著者の著作一覧から購入候補を作るとき + 申込メールを候補リストから起こすとき
 │   ├── chalkboard-close-up-merge.md        # 板書写真 PDF に close-up annotation を統合するとき
@@ -66,7 +66,7 @@ claude-config/
 │   ├── google-forms-automation.md          # Google Forms の自動化・prefill・回答提出を扱うとき
 │   ├── google-url.md                       # Google サービスの URL をチャットや文書に書くとき
 │   ├── hanko-digitization.md               # 押印 (ハンコ) のスマホ写真から書類合成用の透過 PNG (シャープな輪郭 + 自然なかすれ + 写真由来の色 + 複数バリアント) を作るとき + 印影・ロゴ等の小さいラスタ素材を高解像度化したいのに補間拡大がボケるとき
-│   ├── hook-authoring.md                   # Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき
+│   ├── hook-authoring.md                   # Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき + app や tool の挙動を当てる hook を書くとき (#imitate-target-predicate) + 事後の block の手前に事前の知らせを置くとき (#counter-notice-at-injection)
 │   ├── identity-in-config.md               # config file に ID/PII (Discord ID 等) を置く設計をするとき
 │   ├── indico-abstract-submission.md       # Indico (CERN 等) の会議に abstract 投稿・参加登録・支払いを進めるとき、会議の実績やアカウント重複を確認するとき
 │   ├── inline-svg-illustration.md          # サイトのロゴ・アイコン・挿絵を SVG のコードで描くとき + 同じ SVG を 1 ページに何枚も埋め込むとき + 「それっぽく見えない」「美味しそうに見えない」と言われたとき
@@ -98,7 +98,7 @@ claude-config/
 │   ├── ml-forward-judgment.md              # ML forward された依頼メールを inbox 化するとき
 │   ├── multi-account-machine-surface.md    # アカウント × マシン × 端末の複数セル運用を設計・診断するとき
 │   ├── multi-machine-state.md              # 複数マシンで同じ Claude Code setup を運用・audit するとき
-│   ├── multi-session-coordination.md       # 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment)
+│   ├── multi-session-coordination.md       # 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment) + 作ったものの検収を別 session に頼む・頼まれたとき (#review-handoff)
 │   ├── name-rendering.md                   # 人名を記録・文面・印字物に書く瞬間で、手元にある表記が機械 field (メールヘッダ / git author / CSV・LDAP export / 登録システム) 由来のとき
 │   ├── office-automation-principles.md     # 新しい様式・slug の無い罠に当たったとき (考え方の原則編)
 │   ├── office-automation.md                # 研究費/教務/学術様式の xlsx/docx を機械で fill するとき (罠の症例集)
@@ -158,7 +158,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (203 file + lib/ 30 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (204 file + lib/ 30 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)

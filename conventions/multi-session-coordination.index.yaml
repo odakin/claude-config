@@ -45,6 +45,9 @@ sections:
   - id: receiver-premise-snapshot
     level: 3
     title: "受け取った側の着手前確認 — spec の state 主張は起票時点の snapshot、 root が task と食い違ったら表に出す (2026-09-11)"
+  - id: review-handoff
+    level: 3
+    title: "作ったものの検収を別 session に頼むとき — 作業書に書くことと、 受け手の進め方"
   - id: green-light-carrier
     level: 3
     title: "green-light は同 turn で「運搬体 (carrier)」 を持たねばならない — 「別 session 待ち」 は carrier ではない"

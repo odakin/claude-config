@@ -6,6 +6,9 @@ turn の境界 = type が user で、 content が tool_result の list でない
 使い方と校正の手順 = conventions/hook-authoring.md#text-pattern-stop-hook。
 session の情報 (始めたフォルダ・cwd の履歴・追加フォルダ・entrypoint) も読む: 基準フォルダ = 最初の environment
 snapshot の workingDirectory (各行の cwd は Bash の cd で変わるので、 最初の cwd は fallback)。
+tool call のたびに走る hook は session_root_fast (先頭だけ読む)。
+Stop hook の block の reason は isMeta の user 行として入り、 tool_result を持たないので turn の境界になる
+(= block 後の出し直しは別の turn として数えられる。 校正の turn 数と発火数を読むときに効く)。
 transcript を証拠に使う手順 = conventions/debugging-discipline.md#transcript-screenshots。
 """
 from __future__ import annotations

@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき)
+when: 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape)
 category: infra
 summary: plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 7 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる / 1 回一致は prefix 形の key (path・識別子) を守らない = 長い別物の先頭に 1 回だけ一致して誤置換、 終端の区切りまで含めるか構文解析した単位で置換 / 挿入型の pair (new が old を含む) は再実行しても count==1 のまま通って二重に入る = 適用済み検査を足す / TARGET が symlink だと test 用の写しは link 越しに実体へ書き、 一時 file + os.replace は link を普通の file に置き換える = 先に実体の path へ解決する。 機械化 = scripts/apply-text-pairs.py)
 -->
@@ -61,6 +61,8 @@ open(path, "w", encoding="utf-8").write(txt)
 **対策 (予防 — こちらが上流)**: `old` を**手で打ち直さず file から機械的に取る** (= 読み込んだ内容を slice して pair へ渡す)。 目視転記は trailing space・全角空白・NBSP・改行位置を静かに落とす。
 
 **対策 (診断)**: 不一致したら byte を見る (`od -c` / python の `repr()` / `grep -n` で前後を出す)。 **「同じに見える」は証拠にならない**。
+
+<a id="tool-arg-unicode-escape"></a>**書く側の同じ罠 — 編集 tool の引数に書いた `\uXXXX` は実文字になる** (実測): Edit / Write の引数は JSON の文字列なので、 `\u0300` と書くと JSON の escape として解釈され、 file には**結合文字そのもの**が入る (backslash を 2 つ重ねた時だけ escape 表記が残る)。 source の正規表現の文字 class に結合文字や不可視の文字が実文字で入ると、 動作は同じでも、 読めない・diff で見えない・次の `old` の照合が byte で外れる (実測: 後から「その行を 1 回だけ含むはず」 の検査が 0 回になって気づいた)。 escape 表記を file に残したいときは、 **script で行を組み立てて書く** (escape を文字列の連結で作る) か、 書いた後に**その行の非 ASCII を検査する** (`grep -nP '[^\x00-\x7F]' <file>` を正規表現の行に当てる)。
 
 ### <a id="zero-count-is-ambiguous"></a>4. count==0 は「typo」とは限らない
 

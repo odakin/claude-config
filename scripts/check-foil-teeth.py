@@ -16,7 +16,8 @@ spec (JSON):
 
     {"_comment": "説明の 1 文目 (generate-tree.py が scripts/README.md に使う)",
      "target": "apply-text-pairs.py",               # spec の dir からの相対 path
-     "run": "python3 {} --selftest",                 # {} = 写しの target、 cwd = 写しの dir
+     "run": "python3 {} --selftest",                 # {} = 写しの target、 cwd = 写しの dir、 {spec_dir} = spec の在る元の dir
+                                                     # (test が別の dir に在るとき: "env LIBDIR=. bash {spec_dir}/../hooks/x.test.sh")
      "fail_marker": "[FAIL] ", "pass_marker": "[PASS] ",   # 省略時はこの 2 つ (行頭一致)
      "mutants": [
        {"name": "修正の何を外したか",
@@ -97,14 +98,16 @@ def mutate(text: str, pairs: list, name: str) -> str:
     return text
 
 
-def run_copy(target: Path, text: str, cmd: str, timeout: int) -> tuple[int, list[str]]:
+def run_copy(target: Path, text: str, cmd: str, timeout: int, spec_dir: Path | None = None) -> tuple[int, list[str]]:
     with tempfile.TemporaryDirectory() as td:
         dst = Path(td) / (target.parent.name or "root")
         shutil.copytree(target.parent, dst, symlinks=True,
                         ignore=shutil.ignore_patterns(".git", "__pycache__", "node_modules"))
         copy = dst / target.name
         copy.write_text(text, encoding="utf-8")
-        argv = [a.replace("{}", str(copy)) for a in shlex.split(cmd)]
+        # {spec_dir} = spec の在る元の dir (写しではない)。 test が target とは別の dir に在るときに指す
+        argv = [a.replace("{spec_dir}", str(spec_dir or target.parent)).replace("{}", str(copy))
+                for a in shlex.split(cmd)]
         try:
             r = subprocess.run(argv, cwd=dst, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -126,7 +129,8 @@ def check_spec(spec_path: Path, timeout: int = TIMEOUT, out=print) -> int:
     fail_marker = spec.get("fail_marker", DEFAULT_FAIL)
     pass_marker = spec.get("pass_marker", DEFAULT_PASS)
 
-    rc, lines = run_copy(target, base_text, spec["run"], timeout)
+    spec_dir = Path(os.path.realpath(spec_path.parent))
+    rc, lines = run_copy(target, base_text, spec["run"], timeout, spec_dir)
     base_fails = [ln for ln in lines if ln.startswith(fail_marker)]
     if rc != 0 or base_fails:
         out(f"[BASE-RED] {target.name}: the unmutated copy exits {rc} with {len(base_fails)} FAIL line(s)")
@@ -144,7 +148,7 @@ def check_spec(spec_path: Path, timeout: int = TIMEOUT, out=print) -> int:
 
     problems = 0
     for m, text in mutants:
-        rc, lines = run_copy(target, text, spec["run"], timeout)
+        rc, lines = run_copy(target, text, spec["run"], timeout, spec_dir)
         fails = [ln for ln in lines if ln.startswith(fail_marker)]
         passes = [ln for ln in lines if ln.startswith(pass_marker)]
         missing_fail = [s for s in m["expect_fail"] if not any(s in ln for ln in fails)]
@@ -221,6 +225,13 @@ def selftest() -> int:
         rc = check_spec(spec_file("good", [kill]), out=log.append)
         expect("a mutant that removes the fix is killed, the sibling check stays PASS (and the copy can import a "
                "sibling module)", rc == 0 and any(ln.startswith("[KILLED]") for ln in log))
+
+        log.clear()
+        (pkg / "runner.sh").write_text('python3 "$1"\n', encoding="utf-8")
+        rc = check_spec(spec_file("viaspecdir", [kill], run="sh {spec_dir}/runner.sh {}"), out=log.append)
+        expect("{spec_dir} in run points at the spec's own directory (a test that lives outside the copy can be run)",
+               rc == 0 and any(ln.startswith("[KILLED]") for ln in log))
+        (pkg / "viaspecdir.mutants.json").unlink()
 
         log.clear()
         cosmetic = {"name": "comment only", "pairs": [["    return x\n", "    return x  # note\n"]],

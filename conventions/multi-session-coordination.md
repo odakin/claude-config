@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment)
+when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment) + 作ったものの検収を別 session に頼む・頼まれたとき (#review-handoff)
 category: harness-core
 summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**生成物の再生成はその防御を貫通する (#generated-file-contamination)**、**起きた後の追跡は commit の `Agent-Session:` + model/effort trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
 -->
@@ -407,6 +407,23 @@ sender 側は上記 spawn-spec template を書いて chip を投げる。 receiv
 4. **session の記録を読む仕事は、 どのマシンで走らせるかを spec に書く** — Claude Code の session 記録 (`~/.claude/projects/<slug>/*.jsonl`) は
    マシンごとに別で、 同期されない。 別のマシンで書かれた session の記録は読めないので、 spec に「このマシンに無い id は記録なしと書き、
    推測で埋めない」 を入れる (2026-09-14、 原因分析の作業書を別マシンに投げかけて気づいた)。
+
+### <a id="review-handoff"></a>作ったものの検収を別 session に頼むとき — 作業書に書くことと、 受け手の進め方
+
+作った本人の 4 軸 sweep は、 自分の説明を自分で確かめる形になる。 道具・hook・検出器のように「説明と実装の食い違い」 が後で高くつくものは、 別 session に検収を頼むと安く見つかる (実測: 起票側の sweep と全 test が緑の成果物から、 誤検出 3 形・見逃し 2 形・説明と本体の食い違い 2 件が出た)。 盲検の査読 ([`cold-eyes-isolation.md`](../../ai-collaboration/conventions/cold-eyes-isolation.md)) と違い、 受け手は repo も記録も読める — 隔離でなく**読む順序**で独立を保つ。
+
+**作業書 (起票側)**:
+- 目的を「問題なしの報告を作ること」 でなく「不具合・誤検出・見逃し・説明と実装の食い違い・公開してはいけない記述を見つけること」 と書く。
+- **起票側の記録 (results / RCA) は、 受け手が自分の所見を書き出した後に読む**、 と順序を指定する (先に読むと結論に引っ張られる)。 対象の file と commit は列挙する。
+- **直してよい範囲を線引きする**: 「明らかな不具合 ∧ 直し方が 1 通り ∧ test を足せる」 は直して commit、 「何を検出するか・止めるか」 のような設計の選択は、 所見 + 提案 + 根拠で返す。 触ってはいけないもの (設定 file、 外部への発信) を名指しする。
+- results に書くことを指定する: 所見 (重さ順、 再現手順か根拠つき)・確かめた範囲と確かめていない範囲・判断を求める項目 (選択肢と推奨)。
+
+**進め方 (受け手)**:
+1. 対象を読み、 **疑った点を仮説として番号つきで固定してから**動かす。 壊れなかった仮説も results に「棄却」 として残す (= 何を試して無事だったかが、 次の検収の出発点になる)。 自分の期待の方が誤りだった case は、 所見でなく期待の誤りとして分けて書く。
+2. 既存の test → 自作の入力 (書式の揺れ・境界・異常な入力) → **実データ** (過去の記録に当てて、 検出を最低数十件は目で読む) → **相手にしている本体** (hook が app の挙動を当てるものなら app のコード、 [`hook-authoring.md#imitate-target-predicate`](hook-authoring.md#imitate-target-predicate)) の順に当てる。 合成入力で見つかった形は、 実データでの頻度を測ってから重さを決める (合成では壊れるが実データに 0 件、 は「低」)。
+3. 直した case は、 **修正前の部品では落ちることを repo に残る形で確かめる** ([`hook-authoring.md#hook-test-foil-teeth`](hook-authoring.md#hook-test-foil-teeth))。
+4. 設計の選択を委任されたら、 決めた理由と、 前に出した推奨から変えた場合はその理由を results に書く。 外部への発信だけは、 委任の言い回しに関わらず文面を見せて明示の OK を取る。
+5. 起票元が既に閉じていたら、 marker の受領は user への報告をもって行い、 受け手が consume する ([§Marker 経済](#return-signal-economy) の「1 系譜 1 marker」 は保つ = 追補で 2 本目を作らない)。
 
 ### 注意 (caveat)
 

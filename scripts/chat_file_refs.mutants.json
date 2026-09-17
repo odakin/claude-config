@@ -1,0 +1,151 @@
+{
+  "_comment": "chat_file_refs.py (Stop hook chat-file-ref-enforce.sh の判定の部品) の修正を 1 つずつ外した mutant 9 本で、 hook の test の該当 case が落ち、 隣の case は通り続けることを確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 test は hooks/ に在るので {spec_dir} で指し、 部品の写しの dir を env で渡す。",
+  "target": "lib/chat_file_refs.py",
+  "run": "env CHAT_FILE_REF_TEST_LIBDIR=. bash {spec_dir}/../hooks/chat-file-ref-enforce.test.sh",
+  "fail_marker": "❌ ",
+  "pass_marker": "✅ ",
+  "mutants": [
+    {
+      "name": "link の label の中の inline code を除かない",
+      "pairs": [
+        [
+          "        if any(lm.start() <= m.start() < lm.end() for lm in links):\n            continue\n",
+          ""
+        ]
+      ],
+      "expect_fail": [
+        "A8:",
+        "B11:"
+      ],
+      "expect_pass": [
+        "A2:"
+      ]
+    },
+    {
+      "name": "scheme の判定が「名前 + 行番号」 を scheme と取り違える (class に . が在り、 行番号の後置を見ない)",
+      "pairs": [
+        [
+          "SCHEME_RE = re.compile(r\"^[a-z][a-z0-9+-]+:(?!\\d+(?:[-:]\\d+)?$)\", re.I)",
+          "SCHEME_RE = re.compile(r\"^[A-Za-z][A-Za-z0-9+.-]*:\")"
+        ]
+      ],
+      "expect_fail": [
+        "A7:"
+      ],
+      "expect_pass": [
+        "B14:"
+      ]
+    },
+    {
+      "name": "fence の前置きを 3 桁までしか許さない (list・引用の中の fence を見落とす)",
+      "pairs": [
+        [
+          "r\"^[ \\t>]*(`",
+          "r\"^[ \\t]{0,3}(`"
+        ],
+        [
+          "(?:^[ \\t>]*\\1",
+          "(?:^[ \\t]{0,3}\\1"
+        ]
+      ],
+      "expect_fail": [
+        "B12:",
+        "B13:"
+      ],
+      "expect_pass": [
+        "B4:"
+      ]
+    },
+    {
+      "name": "行頭の inline な 3 連 backtick を fence の開始と取り違える",
+      "pairs": [
+        [
+          "(`{3,}(?=[^`\\n]*\\n)|~{3,})",
+          "(`{3,}|~{3,})"
+        ]
+      ],
+      "expect_fail": [
+        "A9:"
+      ],
+      "expect_pass": [
+        "B4:"
+      ]
+    },
+    {
+      "name": "inline code の形が app より広い (@ を含む path も link 扱い)",
+      "pairs": [
+        [
+          "_L = r\"\\w\\u0300",
+          "_L = r\"\\w@\\u0300"
+        ]
+      ],
+      "expect_fail": [
+        "B16:"
+      ],
+      "expect_pass": [
+        "A2:"
+      ]
+    },
+    {
+      "name": "git の末尾一致が 1 件でも拾う (app が開く参照を開けないと言う)",
+      "pairs": [
+        [
+          "if len(git_suffix_matches(listing, p)) == 1:",
+          "if len(git_suffix_matches(listing, p)) == -1:"
+        ]
+      ],
+      "expect_fail": [
+        "D1:",
+        "D3:"
+      ],
+      "expect_pass": [
+        "D2:"
+      ]
+    },
+    {
+      "name": "末尾一致で untracked を見ない",
+      "pairs": [
+        [
+          "    for names in listing:\n",
+          "    for names in listing[:1]:\n"
+        ]
+      ],
+      "expect_fail": [
+        "D3:"
+      ],
+      "expect_pass": [
+        "D1:"
+      ]
+    },
+    {
+      "name": "意図と違う file が開く形を拾わない",
+      "pairs": [
+        [
+          "                findings.append({\"kind\": kind, \"raw\": raw, \"path\": p, \"reason\": \"shadowed\", \"candidates\": [other]})\n",
+          "                pass\n"
+        ]
+      ],
+      "expect_fail": [
+        "A10:"
+      ],
+      "expect_pass": [
+        "B15:"
+      ]
+    },
+    {
+      "name": "同名 file が同じ実体 (symlink) でも拾う",
+      "pairs": [
+        [
+          "\n                    and os.path.realpath(other) != os.path.realpath(target)):",
+          "):"
+        ]
+      ],
+      "expect_fail": [
+        "B15:"
+      ],
+      "expect_pass": [
+        "A10:"
+      ]
+    }
+  ]
+}

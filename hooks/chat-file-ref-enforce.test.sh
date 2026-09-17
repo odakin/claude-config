@@ -23,6 +23,14 @@ pass=0; fail=0; results=()
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# 歯の検査 (scripts/chat_file_refs.mutants.json → check-foil-teeth.py) は、 修正の一部を外した部品の写しの dir を渡す。
+# hook は <root>/scripts/lib を読むので、 その形の root を一時 dir に組む。 C6 (symlink 経由) だけは実物の部品を読む。
+if [ -n "${CHAT_FILE_REF_TEST_LIBDIR:-}" ]; then
+  LIBDIR="$(cd "$CHAT_FILE_REF_TEST_LIBDIR" && pwd)" || { echo "FAIL: no such dir: $CHAT_FILE_REF_TEST_LIBDIR"; exit 1; }
+  mkdir -p "$TMP/cfg/scripts" && ln -s "$LIBDIR" "$TMP/cfg/scripts/lib"
+  REPO="$TMP/cfg"
+fi
+
 ROOT="$TMP/root"
 mkdir -p "$ROOT/book/drafts" "$ROOT/book/notes" "$ROOT/tools/scripts" "$TMP/extra"
 : > "$ROOT/book/drafts/intro.md"; : > "$ROOT/book/notes/design.md"; : > "$ROOT/tools/scripts/run.py"
