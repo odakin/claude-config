@@ -83,6 +83,15 @@ else
     echo "pre-commit: staged-conflict-markers.sh not found. Skipping conflict-marker gate." >&2
 fi
 
+# root AGENTS.md の入口が無い repo を知らせる (止めない、 SoT = lib/agents-entrypoint-warn.sh header)。
+AGENTS_WARN_LIB="$SCRIPTS_DIR/lib/agents-entrypoint-warn.sh"
+[[ -f "$AGENTS_WARN_LIB" ]] || AGENTS_WARN_LIB="$HOME/Claude/claude-config/scripts/lib/agents-entrypoint-warn.sh"
+if [[ -f "$AGENTS_WARN_LIB" ]]; then
+    # shellcheck source=/dev/null
+    source "$AGENTS_WARN_LIB"
+    warn_missing_agents_entrypoint
+fi
+
 # Optional chain to layer-3 (= personal layer) custom hook.
 # odakin-prefs/scripts/pre-commit-yaml-scan.sh があれば呼ぶ。 他 user で本 file
 # 不在なら silent skip (= layer 3 不在の他 Claude Code user の env に影響なし)。

@@ -62,7 +62,7 @@ dispatcher として書く。Codex は link 先を instruction chain へ自動�
 発火条件は `AGENTS.md` に残し、WHAT / WHY / HOW の本文は正本へ置く。Codex 固有の
 境界と最小 kernel は [`codex/PARITY.md#instruction-entrypoint-kernel`](codex/PARITY.md#instruction-entrypoint-kernel) が正本。
 
-新規 shared repo は [`templates/shared-project/AGENTS.md.template`](templates/shared-project/AGENTS.md.template) から作る。既存 repo は次に触る通常の整備単位で追加し、`scripts/audit-codex-integration.sh --repo <path>` で root 配置・tracking・上記 pointer・4 KiB 上限を検査する。installer が layer 2 project file を勝手に生成してはならない。`project_doc_fallback_filenames` 等の個人設定は layer 4 の補助にすぎず、共同編集者・別ホストで解決できる committed `AGENTS.md` の代替にしない。
+新規 shared repo は [`templates/shared-project/AGENTS.md.template`](templates/shared-project/AGENTS.md.template) から作る。既存 repo にも同じ雛形を機械で置く (= 「次に触る時に足す」 を人の記憶に任せると足されない、 [#manual-work-in-design-records](docs/convention-design-principles.md#manual-work-in-design-records))。 root に `CLAUDE.md` があって `AGENTS.md` が無い repo では、 commit のたびに pre-commit が知らせる (止めない、 [`scripts/lib/agents-entrypoint-warn.sh`](scripts/lib/agents-entrypoint-warn.sh))。 中身は `scripts/audit-codex-integration.sh --repo <path>` で root 配置・tracking・上記 pointer・4 KiB 上限を検査する。installer が layer 2 project file を勝手に生成してはならない。`project_doc_fallback_filenames` 等の個人設定は layer 4 の補助にすぎず、共同編集者・別ホストで解決できる committed `AGENTS.md` の代替にしない。
 
 nested directory に `AGENTS.md` / `AGENTS.override.md` を足すのは、その subtree に本当に別の規則がある場合だけ。root の入口を nested file で置き換えたり、temporary override を project の恒久正本にしたりしない。shared repo での layer 2 境界は [`conventions/shared-repo.md#agent-entrypoint`](conventions/shared-repo.md#agent-entrypoint) を参照。
 

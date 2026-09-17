@@ -89,6 +89,13 @@ if [ -f "$CONFLICT_LIB" ]; then
   fi
 fi
 
+# root AGENTS.md の入口が無い repo を知らせる (止めない、 SoT = lib/agents-entrypoint-warn.sh header)
+AGENTS_WARN_LIB="$(dirname "$0")/lib/agents-entrypoint-warn.sh"
+if [ -f "$AGENTS_WARN_LIB" ]; then
+  . "$AGENTS_WARN_LIB"
+  warn_missing_agents_entrypoint
+fi
+
 # ----------------------------------------------------------------------
 # 各ファイルの追加行を 1 つのバッファに集約 (file:line prefix 付き)
 # `git diff --cached -U0 --no-color -- <file>` の出力から `+` 行を抜く。
