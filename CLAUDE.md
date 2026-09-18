@@ -35,7 +35,7 @@ claude-config/
 │   ├── audio-transcription.md              # 会議・インタビュー・収録の録音を機械 (whisper 等) で文字起こしして、その結果を引用・記録に使うとき + 転写した語が聞き取れない・機械が割れるとき + 長い録音を配信・共有用に分割するとき
 │   ├── batch-text-edits.md                 # 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape)
 │   ├── beamer-slides.md                    # Beamer/metropolis または編集可能な PPTX / Keynote で研究スライドを作る・直すとき + 既存デッキの「同じ感じ」を引き継ぐとき
-│   ├── book-purchase-lookup.md             # 図書館に本の購入を頼む前 (書誌を揃える・その館に所蔵が無いか・新刊で買えるか・いくらか) + 共有された本のリストや著者の著作一覧から購入候補を作るとき + 申込メールを候補リストから起こすとき
+│   ├── book-purchase-lookup.md             # 図書館に本の購入を頼む前 (書誌を揃える・その館に所蔵が無いか・新刊で買えるか・いくらか) + 共有された本のリストや著者の著作一覧から購入候補を作るとき + 「この著者の本を全部」「この分野の定番を全部」 と頼まれたとき + 申込メールを候補リストから起こすとき
 │   ├── campussquare.md                     # 大学の教務システム CampusSquare for WEB (シラバス・履修者名簿・成績登録) を読む・扱うとき + 名簿 CSV を科目別に分けるとき + 成績を CSV で一括登録するとき + 内蔵 browser でログイン画面が出て「読めない」 と言いそうになったとき
 │   ├── chalkboard-close-up-merge.md        # 板書写真 PDF に close-up annotation を統合するとき
 │   ├── chalkboard-photo-archive.md         # 授業の板書をスマホで撮った写真を、 授業ごとの PDF にまとめて置き場所に保管し受講者に見せる仕組みを作る・回すとき + 板書 PDF の「第何回」 がずれた・上書きしてしまったとき
@@ -64,7 +64,7 @@ claude-config/
 │   ├── giving-talks.ja.md                  # giving-talks.md の日本語版
 │   ├── gmail-mcp-multiaccount.md           # 複数 Gmail アカウントを Claude Code の MCP として繋ぎたいとき + N 個目のアカウントを追加するとき
 │   ├── gmail-sending.md                    # Gmail でメールを送信する経路・MIME 実装を選ぶとき
-│   ├── google-api-direct-access.md         # Google API を Python から直接叩く setup をするとき
+│   ├── google-api-direct-access.md         # Google API を Python から直接叩く setup をするとき + ML (Google Groups) 宛に送る前に、 購読者一覧を読めない ML に入っていない人を見分けるとき (#group-membership-without-owner)
 │   ├── google-classroom-api.md             # Google Classroom をプログラムから操作するとき (クラスの作成・名簿からの招待・お知らせや課題の投稿・提出の読み取り) + 学期はじめにクラスを用意するとき + API で作った課題の設定が画面で変えられないと気づいたとき
 │   ├── google-forms-automation.md          # Google Forms の自動化・prefill・回答提出を扱うとき
 │   ├── google-url.md                       # Google サービスの URL をチャットや文書に書くとき
@@ -163,7 +163,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (218 file + lib/ 39 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (219 file + lib/ 39 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)
