@@ -241,6 +241,7 @@
 - **[lib/office-staging.test.sh](lib/office-staging.test.sh)** — office-staging.sh + office_staging.py の self-test (hermetic、 Office 不要、 fake HOME)
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
 - **[lib/permission_rules.py](lib/permission_rules.py)** — settings.json の permission rule を宣言した形に揃える (engine)
+- **[lib/print_pages.py](lib/print_pages.py)** — 刷る PDF の各頁が「窓口に出す頁」 かを、作る時に file へ宣言し、刷る直前に読む。宣言の無い頁は見出しから推定する。
 - **[lib/prune-retired-hooks.sh](lib/prune-retired-hooks.sh)** — 退役した hook を外す (hooks dir の symlink + settings.json の entry)。 registry 駆動・冪等
 - **[lib/prune-retired-hooks.test.sh](lib/prune-retired-hooks.test.sh)** — 退役 hook の掃除 (scripts/lib/prune-retired-hooks.sh) の test
 - **[lib/public_tree_accept.py](lib/public_tree_accept.py)** — 公開 repo の棚卸し受理一覧 (.claude/public-tree-accept.txt) の `generated:` 宣言を読む。

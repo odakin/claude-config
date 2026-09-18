@@ -41,6 +41,7 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 | 症状 (観察できること) | 真因 | 対処 (→ slug) |
 |---|---|---|
 | 印刷物を user に見せるたび別の欠陥が出て刷り直しが続く | 各修正後の検証が直前の症状にだけ狭まる + 「画面で見えた」 を印刷の保証にしている | `pdf-print-preflight.py` + crop 目視 + 全頁 PNG を user に → [`print-preflight`](#print-preflight) |
+| 様式付属の**説明書き・記載例・マスタ・白紙の頁まで紙に出た** (頁数の検査は通っていた) | 生成の単位が様式の file 丸ごと + 頁数の一致は刷る頁の集合を問わない + 刷る段からどの頁を出すかが見えない | 頁の役割を記入 map に・刷る file は提出頁だけ (`pdf-print-preflight.py --pages`)・宣言を file に埋めて刷る直前の gate が読む → [`print-submission-pages-only`](#print-submission-pages-only) |
 | `lp -o media=A4` で送ったのに**別サイズの紙 (B5 等) で出る** | 本体 (操作パネル) の用紙サイズ設定が job の指定より優先された | 刷る前に本体の用紙設定とトレイの紙を user に確認 → [`print-preflight`](#print-preflight) 5. |
 | overlay した電話番号・メールが罫線に被る / 隣セルにはみ出す / 数字だけ浮いて見える | ラベル右端基準の配置、 CJK と数字の baseline 差 | 縦罫線 (`get_drawings`) を anchor、 数字は行中心 → [`pdf-overlay-anchoring`](#pdf-overlay-anchoring) |
 | PyMuPDF で追記した日本語/数字が**画面では正常・印刷で文字化け / 位置ずれ** | `japan`/`helv` 組み込み font は glyph 非埋め込み = printer に代替 font が無い | 印刷用は 600dpi **RGB** raster 版を刷る (font 埋め込みでも同 printer で化けた) → [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake) |
@@ -1637,7 +1638,7 @@ n.insert_pdf(d, from_page=0, to_page=0); n.save("p1.pdf")
 assert fitz.open("p1.pdf").page_count == 1
 ```
 
-抽出方式は全環境で正しく、 page-ranges が効く環境でも害がない → 一律 default にする。 加えて、 **視認で見つけた表示破綻 (= `###` / 文字切れ / 欄消失) は print-blocker** — 「その欄はどうせ後で手書きするから」 等の理由で**黙認して刷らない** (直すか user に確認。 黙認判断の一人歩きで破綻紙を刷った実害が origin)。 origin: Canon laser queue で page-ranges 無視 + 同日 `###` 黙認印刷。
+抽出方式は全環境で正しく、 page-ranges が効く環境でも害がない → 一律 default にする。 道具 = [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) `--rasterize <刷る.pdf> --pages <頁>` (選んだ頁だけの file を作り、 提出頁と宣言する = [`print-submission-pages-only`](#print-submission-pages-only))。 加えて、 **視認で見つけた表示破綻 (= `###` / 文字切れ / 欄消失) は print-blocker** — 「その欄はどうせ後で手書きするから」 等の理由で**黙認して刷らない** (直すか user に確認。 黙認判断の一人歩きで破綻紙を刷った実害が origin)。 origin: Canon laser queue で page-ranges 無視 + 同日 `###` 黙認印刷。
 
 ### <a id="pdf-text-match-nfkc"></a>PDF text 照合は両辺 NFKC 正規化必須 (= CJK 互換字形の false negative)
 
@@ -3587,7 +3588,8 @@ origin: 海外出張願 (人事課 docx 様式) — 複数回の変換試行で 
 
 **印刷前 gate (全部通してから `lp`)**:
 
-1. **機械**: [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) `<print.pdf> --template <雛形.pdf>` (or `--expect-pages N`) が PASS (= page 数一致 + PyMuPDF 描画 / 非埋め込み font ゼロ)。 FAIL なら `--rasterize <out.pdf>` で **RGB 600dpi raster** を作り、 そちらを刷る (認印の朱色は RGB でしか残らない)。
+0. **刷る頁**: 刷る file は**窓口に出す頁だけ**か — 様式付属の説明書き・記載例・マスタ・控え・白紙を入れない ([`print-submission-pages-only`](#print-submission-pages-only))。 頁数が期待どおりでも、 それは「はみ出していない」 しか言わない。
+1. **機械**: [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) `<print.pdf> --template <雛形.pdf>` (or `--expect-pages N`) が PASS (= page 数一致 + PyMuPDF 描画 / 非埋め込み font ゼロ + 頁の役割 = 全頁が提出頁の宣言つき、 または宣言の無い 1 頁で出さない頁に見えない)。 FAIL なら `--rasterize <out.pdf>` で **RGB 600dpi raster** を作り、 そちらを刷る (認印の朱色は RGB でしか残らない)。 頁を選ぶ時は `--pages <頁>` を足す (選んだ頁だけの file を作り、 提出頁と宣言する)。 ⚠️ `--template` は雛形の全頁数と比べるので、 提出頁だけを刷る file には `--expect-pages <提出頁の数>` を使う。
 2. **位置**: overlay した値 (電話・メール・氏名・○・認印) の周辺を **150-220 dpi の crop 画像で目視** — 罫線に被っていないか、 セルの中か、 行の縦中心か。 機械 gate では検出できない。
 3. **全体**: 80 dpi の全頁 render を 1 度見る (= 2 頁目の存在・空白・ブロックの落ちを拾う)。 **user が remote なら、 この全頁 PNG を chat に送ってから刷る** (= 紙を見られない人に代わって画面で承認してもらう)。
 4. **1 枚だけ刷って止まる**: 複数 doc を同時投入しない。 1 枚目の結果 (user 報告) を待ってから次。
@@ -3597,7 +3599,23 @@ origin: 海外出張願 (人事課 docx 様式) — 複数回の変換試行で 
 
 <a id="headless-print-to-pdf-no-exit"></a>⚠️ **headless の print-to-PDF は、 PDF を書き終えた後も browser の process が終わらないことがある** (実測: macOS の Chrome 系で、 数秒で PDF を書いたまま居座り、 `subprocess.run(timeout=...)` が毎回 timeout で落ちた)。 終了を待たず、 **「N bytes written to file」 の出力か、 PDF の size が数秒変わらないこと** を見て process group ごと止める。 test は「PDF と marker を書いてから sleep し続ける偽の browser」 で、 render が timeout より十分早く返ることを確かめる。 実装 = [`scripts/html-print-pdf.py`](../scripts/html-print-pdf.py) `render_pdf`。
 
-**なぜ規律でなく gate か**: 今回の 4 失敗は全て「前の修正で安心して次の罠を踏む」 連鎖 (= 修正ごとに検証 scope が前の症状だけに狭まる)。 gate を固定 list にしておけば、 毎回同じ点を通る。 個人層は `lp` を含む Bash に PreToolUse hook を掛けて本 script を強制できる。
+**なぜ規律でなく gate か**: 今回の 4 失敗は全て「前の修正で安心して次の罠を踏む」 連鎖 (= 修正ごとに検証 scope が前の症状だけに狭まる)。 gate を固定 list にしておけば、 毎回同じ点を通る。 個人層は `lp` を含む Bash に PreToolUse hook を掛けて本 script を強制できる。 ⚠️ その hook は FAIL を**確認 (ask) でなく block (exit 2 + stderr)** で返す — 確認の dialog に理由が出ない build がある ([`hook-authoring.md#build-dependent-docs-drift`](hook-authoring.md#build-dependent-docs-drift)) ので、 ask だと user は理由を見ずに承認し、 model も直し方を知らないまま刷る。 block なら理由 (頁の一覧・直し方) が model に届き、 model が刷る file を作り直す。
+
+## <a id="print-submission-pages-only"></a>刷るのは窓口に出す頁だけ — 頁の役割を記入 map に書き、 刷る file に埋め込み、 刷る直前に読む
+
+**構造**: 配布される様式の file は、 窓口に出す頁と出さない頁の束であることが多い — 様式に付いてくる説明書き・注意事項・募集の案内、 記載例・見本、 選択肢やマスタの一覧 (spreadsheet の別 sheet)、 本人の控え、 白紙の頁。 生成の単位を「様式の file」 にすると、 出さない頁が黙って紙に流れる。 しかもどの段も全頁を刷る前提を疑わない: 生成は file を丸ごと PDF にし、 記録は出力を丸ごと記録し、 手順書は「刷るのは N 頁」 と写し、 **頁数の検査は N 頁であることを期待どおりと通し** (頁数の一致は「はみ出していない」 しか言わない = 刷る頁の集合を問わない)、 `lp` は file を丸ごと刷る (実測)。 どの頁を出すかは file の外 (記入 map) で決まるので、 刷る段からは見えない。
+
+**規律 (3 段)**:
+
+1. **頁の役割を記入 map (様式ごとの spec) に持つ**: 頁ごとに役割を書く = `submit` (窓口に出す。 受付印を押して返される控えを含む) / `keep` (手元の控え = PDF が控えなので刷らない) / `instructions` (説明書き・注意事項・要領) / `example` (記載例・見本) / `master` (マスタ・選択肢の一覧) / `blank`。 出力の頁集合は `submit` だけにし、 `submit` の頁には**その頁に必ずある字** (anchor) を持たせて生成のたびに照合する (様式が改訂されて頁の中身がずれたら生成が止まる)。 様式の file を丸ごと 1 本の PDF にする経路 (Word の文書等) は**全頁の役割を必須**にする。 sheet と印刷範囲を選んで組む経路 (spreadsheet) は、 刷る sheet を **whitelist** で持てば足りる (blacklist だと、 様式に足された説明の sheet が刷られる)。
+2. **刷る file は提出頁だけで作り、 その宣言を file に書き込む**: 頁は file で選ぶ (`lp -o page-ranges` は無視される queue がある = [`lp-page-ranges-distrust`](#lp-page-ranges-distrust))。 印刷用の raster 版は字を持たず、 刷る段で中身を読めない → 作る道具が「全頁 = 提出頁」 の宣言を PDF に書き込み (Info 辞書。 raster 化・頁の抜き出しで引き継ぐ)、 刷る段がそれを読む。 実装 = [`scripts/lib/print_pages.py`](../scripts/lib/print_pages.py) (宣言・推定・判定) + [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) `--pages <頁>` (その頁だけの raster / vector を作って宣言する)。
+3. **刷る直前の gate は頁の一覧を出し、 宣言の無い複数頁と、 出さない頁に見える頁を止める**: 宣言の無い file は見出しから推定する — strong = 記入例・記載例・見本・表示例 / 控 / 注意事項・留意事項・要領・手引・記入方法 / 白紙 (1 頁でも止める)、 weak = 見出しが「…について」 / 罫線も画像も無い短い行の一覧 (一覧に ⚠️ で出すだけ)。 **宣言の無い 2 頁以上は推定に関わらず止める** (= どの頁を出すかを決めてから刷る。 raster は中身を読めない)。 推定で疑わしい頁を残すなら理由を宣言に残す (`--include-flagged '<理由>'`、 読むために刷る資料など)。
+
+**誤判定の向き**: 止めすぎ = 宣言を 1 回足す手間 / 見逃し = 紙の無駄 (gate の無い状態と同じ)。 ∴ 止めるのは strong の語と宣言の無い複数頁に限り、 weak は一覧に出す。 実測 (提出した様式・案内・要領・スライド・論文の束で試した): strong の語が当たったのは記入例・要領・手引・注意事項・白紙だけで、 提出した様式の頁には当たらなかった。 weak の「…について」 は案内文書・スライド・同意書の題にも当たり、 罫線なしの一覧は論文の目次や短い書状にも当たる (= だから weak)。 白紙の判定は「36 dpi で暗い画素が 2 個以下」 = 白紙の scan は 0、 短い 1 語だけの頁でも 10 を超える (実測) ので、 字の少ない頁を白紙と誤らない。
+
+**刷り直しも頁で**: 刷った後に直したら、 前に刷った版と頁ごとに比べて**変わった頁だけ**を刷り直す (`--changed-from <前の版> --pages changed`)。 同じ中身の描画は画素まで一致するので、 変わった頁は機械で決まる。 数式で連動する別頁の変化もこれで拾える ([`printed-artifact-staleness`](#printed-artifact-staleness) 規律 2)。
+
+**控え**: 手元の控えは PDF が控え。 刷るのは窓口が控えに受付印を押して返す運用の時だけ (その時は `submit`)。
 
 ## <a id="single-gray-level"></a>グレーは 1 段階に固定する — 薄さは色でなく線幅で出す (2026-09-12)
 
