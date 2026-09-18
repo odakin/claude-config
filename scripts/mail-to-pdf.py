@@ -12,6 +12,7 @@
   1. text を HTML に包む (<pre> = 改行と字下げをそのまま、 長い行は折り返す、 HTML は escape)。
   2. --redact の正規表現に当たった部分を ■ に置き換える (元の値は PDF の文字層にも残らない)。
      ⚠️ 伏せたい値の書式は送り手ごとに違う = 出力を読み戻して値が消えたかを確かめる (本 script は置換の件数を出す)。
+     当たった部分は項目名ごと消える。 項目名を残すなら固定幅の後読み (例 '(?<=PIN code: )\\S+')。
   3. 同じ dir の html-print-pdf.py で A4 PDF にする (headless の Chromium 系ブラウザ、 日本語 font はブラウザ任せ)。
      html-print-pdf.py は刷る用の raster 版 (<out>-print.pdf) も作る。 メールで出すだけならそちらは要らない。
 
