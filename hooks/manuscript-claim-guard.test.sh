@@ -3,6 +3,7 @@
 #
 # 架空の原稿 repo (合成の表題・概要) と架空の transcript を temp に作る。 実在の原稿の文は使わない。
 # 面: (1) Claude PreToolUse の Edit / Write / Bash(git commit) (2) pre-commit-bib 経由の git pre-commit。
+# 両面を git-crypt 相当の repo (blob が暗号文) でも回す (鍵は使わず filter を config で模す)。
 # Codex 面 (apply_patch) は codex/hooks/codex-hooks.test.sh、 engine の述語は engine の --selftest。
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -111,6 +112,61 @@ _check "agent の commit (承認なしの式の変更) は reject" \
   "$(cd "$REPO" && HOME="$T/home" CLAUDE_CODE_SESSION_ID=sess-a git commit -q -m x >/dev/null 2>&1 && echo committed || echo rejected)" rejected
 _check "人の commit (agent の env なし) は通す" \
   "$(cd "$REPO" && HOME="$T/home" git commit -q -m x >/dev/null 2>&1 && echo committed || echo rejected)" committed
+
+echo "=== git-crypt 相当の repo (index / commit の blob が暗号文) ==="
+# 本物の鍵は使わない: git-crypt と同じ名前の filter を config で模す。 clean = 先頭 \0GITCRYPT\0 + 非 UTF-8 の
+# byte + 反転 (= 本物と同じく blob を UTF-8 で decode すると 10 byte 目で落ちる)、 smudge / textconv = その逆。
+# 以前は blob を `git show` の UTF-8 decode で読み、 この repo では例外 → fail-open で何も止めていなかった。
+CR="$T/crypt"; FAKE="$T/fake-git-crypt.py"
+mkdir -p "$CR/src"
+cat > "$FAKE" <<'PY'
+import sys
+HDR = b"\x00GITCRYPT\x00\xff"
+d = open(sys.argv[2], "rb").read() if sys.argv[1] == "textconv" else sys.stdin.buffer.read()
+out = HDR + d[::-1] if sys.argv[1] == "clean" else (d[len(HDR):][::-1] if d.startswith(HDR) else d)
+sys.stdout.buffer.write(out)
+PY
+git -C "$CR" init -q
+git -C "$CR" config filter.git-crypt.clean "python3 '$FAKE' clean"
+git -C "$CR" config filter.git-crypt.smudge "python3 '$FAKE' smudge"
+git -C "$CR" config filter.git-crypt.required true
+git -C "$CR" config diff.git-crypt.textconv "python3 '$FAKE' textconv"
+printf '%s\n' '* filter=git-crypt diff=git-crypt' '.gitattributes !filter !diff' > "$CR/.gitattributes"
+git -C "$REPO" show "$(git -C "$REPO" rev-list --max-parents=0 HEAD)":src/main.tex > "$CR/src/main.tex"
+git -C "$CR" add -A && git -C "$CR" commit -q -m init
+_check "fixture: commit の blob は暗号文 (UTF-8 で読めない)" \
+  "$(git -C "$CR" show HEAD:src/main.tex | python3 -c 'import sys; d = sys.stdin.buffer.read()
+try: d.decode("utf-8"); print("utf8")
+except UnicodeDecodeError: print("cipher" if d.startswith(b"\0GITCRYPT\0") else "other")')" cipher
+_cbash() { jq -n --arg cmd "$1" --arg c "$CR" '{hook_event_name:"PreToolUse", tool_name:"Bash", session_id:"sess-a", cwd:$c, tool_input:{command:$cmd}}' | _run; }
+_cerr() {  # $1=command -> hook の stderr に internal error が出たか (yes / no)
+  jq -n --arg cmd "$1" --arg c "$CR" '{hook_event_name:"PreToolUse", tool_name:"Bash", session_id:"sess-a", cwd:$c, tool_input:{command:$cmd}}' \
+    | python3 "$HOOK" 2>&1 >/dev/null | grep -q 'internal error' && echo yes || echo no
+}
+sed 's/f = g + h/f = g - h/' "$CR/src/main.tex" > "$CR/src/m.tmp" && mv "$CR/src/m.tmp" "$CR/src/main.tex"
+_check "Bash: 式を変えて git commit -- path を止める" "$(_cbash 'git commit -m x -- src/main.tex')" deny
+_check "Bash: 同上で internal error を出さない" "$(_cerr 'git commit -m x -- src/main.tex')" no
+_check "Bash: git add && git commit も止める" "$(_cbash 'git add src/main.tex && git commit -m x')" deny
+git -C "$CR" add src/main.tex
+ln -s "$ROOT/scripts/pre-commit-bib" "$CR/.git/hooks/pre-commit"
+_cpre() {  # agent の commit -> "<committed|rejected> <internal error が出たら ierr>"
+  local out rc=0
+  out="$(cd "$CR" && HOME="$T/home" CLAUDE_CODE_SESSION_ID=sess-a git commit -q -m x 2>&1)" || rc=$?
+  printf '%s%s' "$([ "$rc" -eq 0 ] && echo committed || echo rejected)" \
+    "$(printf '%s' "$out" | grep -q 'internal error' && echo ' ierr' || true)"
+}
+_check "pre-commit: 承認なしの式の変更は reject (例外で素通りしない)" "$(_cpre)" rejected
+git -C "$CR" reset -q && git -C "$CR" checkout -q -- src/main.tex
+sed 's/Body text may change./Body text was changed./' "$CR/src/main.tex" > "$CR/src/m.tmp" && mv "$CR/src/m.tmp" "$CR/src/main.tex"
+_check "Bash: 保護外の本文の commit は通す" "$(_cbash 'git commit -m x -- src/main.tex')" none
+git -C "$CR" add src/main.tex
+_check "pre-commit: 保護外の本文の commit は通す" "$(_cpre)" committed
+# lock 中 (filter の設定が無い = worktree も暗号文) は中身を比べられない: 例外を出さずに通す
+git -C "$CR" config --remove-section filter.git-crypt
+rm "$CR/src/main.tex" && git -C "$CR" checkout -q -- src/main.tex
+printf 'x' >> "$CR/src/main.tex"
+_check "lock 中: 暗号文を原稿として読まず internal error も出さない" \
+  "$(_cbash 'git commit -a -m x') $(_cerr 'git commit -a -m x')" "none no"
 
 echo "=== fail-open ==="
 _check "壊れた stdin は何も出さない" "$(printf 'not json' | _run)" none
