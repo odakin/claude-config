@@ -170,6 +170,18 @@ _check "lock 中: 暗号文を原稿として読まず internal error も出さ�
 
 echo "=== fail-open ==="
 _check "壊れた stdin は何も出さない" "$(printf 'not json' | _run)" none
+_adapter_err() {  # $1=adapter の repo 相対 path $2=dir 名 -> 例外を投げる偽 engine の上で adapter の stderr を「行数 暗号文を含むか 400 字未満か」 で返す
+  local d="$T/fake-$2"
+  mkdir -p "$d/scripts" "$d/$(dirname "$1")"
+  cp "$ROOT/$1" "$d/$1"
+  printf '%s\n' 'raise UnicodeDecodeError("utf-8", b"\x00GITCRYPT\x00\xff" + b"Q" * 5000, 10, 11, "invalid start byte\nsecond line")' \
+    > "$d/scripts/manuscript-claim-guard.py"
+  printf '{}' | python3 "$d/$1" 2>&1 >/dev/null \
+    | python3 -c 'import sys; d = sys.stdin.read(); print(d.count("\n"), "GITCRYPT" in d, len(d) < 400)'
+}
+_check "Claude adapter: engine の例外 (改行・blob の bytes 入り) を 1 行で、 中身を出さない" \
+  "$(_adapter_err hooks/manuscript-claim-guard.py claude)" "1 False True"
+_check "Codex adapter: 同上" "$(_adapter_err codex/hooks/manuscript_claim_guard.py codex)" "1 False True"
 
 echo
 echo "manuscript-claim-guard.test: PASS=$PASS FAIL=$FAIL"

@@ -937,6 +937,12 @@ def changes_for_repo(repo: Path, mode: str, paths: list[str]) -> list[dict]:
 
 # ---------------------------------------------------------------- modes
 
+def fail_open_line(exc: BaseException) -> str:
+    """fail-open の表示を 1 行で: 型名 + 空白 (改行を含む) を畳んで切り詰めた str。 repr は出さない
+    (UnicodeDecodeError の repr は blob の bytes を丸ごと含む = hook-authoring.md#blob-read-git-crypt)。"""
+    return f"manuscript-claim-guard: internal error (fail-open): {type(exc).__name__}: {' '.join(str(exc).split())[:200]}"
+
+
 def hook_mode(agent: str) -> int:
     try:
         event = json.load(sys.stdin)
@@ -947,7 +953,7 @@ def hook_mode(agent: str) -> int:
     try:
         return _hook(agent, event)
     except Exception as exc:  # fail-open
-        print(f"manuscript-claim-guard: internal error (fail-open): {type(exc).__name__}: {str(exc)[:200]}", file=sys.stderr)
+        print(fail_open_line(exc), file=sys.stderr)
         return 0
 
 
@@ -1026,7 +1032,7 @@ def git_precommit_mode() -> int:
         ch = changes_for_repo(repo, "index", [])
         left = unapproved(ch, repo, session)
     except Exception as exc:  # fail-open
-        print(f"manuscript-claim-guard: internal error (fail-open): {type(exc).__name__}: {str(exc)[:200]}", file=sys.stderr)
+        print(fail_open_line(exc), file=sys.stderr)
         return 0
     if left:
         print(deny_reason(left, session), file=sys.stderr)
@@ -1326,6 +1332,13 @@ def selftest() -> int:
         subprocess.run(["git", "add", "src/main.tex"], cwd=rt, env=genv, capture_output=True, check=False)
         check("filter の掛かった repo でも式の変更だけを検出",
               [c["region"] for c in changes_for_repo(rt, "index", [])] == ["eq:ab"])
+        # fail-open の表示: 例外の文に改行・blob の bytes があっても 1 行で、 中身を出さない
+        big = UnicodeDecodeError("utf-8", b"\x00GITCRYPT\x00\xff" + b"Q" * 5000, 10, 11, "invalid start byte")
+        multi = ValueError("line one\nline two\r\n" + "z" * 500)
+        check("fail-open の表示は 1 行で blob の bytes を含まない",
+              all("\n" not in fail_open_line(e) and "\r" not in fail_open_line(e) and len(fail_open_line(e)) < 320
+                  for e in (big, multi)) and "GITCRYPT" not in fail_open_line(big)
+              and "line one line two" in fail_open_line(multi))
         os.environ.pop("MANUSCRIPT_CLAIM_GUARD_STATE_DIR", None)
         os.environ.pop("MANUSCRIPT_CLAIM_GUARD_HOME", None)
 

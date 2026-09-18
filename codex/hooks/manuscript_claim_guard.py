@@ -27,6 +27,6 @@ if __name__ == "__main__":
         runpy.run_path(ENGINE, run_name="__main__")
     except SystemExit:
         pass
-    except Exception as exc:  # fail-open
-        print(f"manuscript_claim_guard: {exc!r}", file=sys.stderr)
+    except Exception as exc:  # fail-open (one line; no repr, which can carry whole blob bytes)
+        print(f"manuscript_claim_guard: {type(exc).__name__}: {' '.join(str(exc).split())[:200]}", file=sys.stderr)
     sys.exit(0)
