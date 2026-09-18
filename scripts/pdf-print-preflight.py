@@ -22,6 +22,9 @@
                                      ⚠️ lp -o page-ranges は無視される queue がある (実測) = 刷る頁だけの file を作る
   --include-flagged REASON         : 説明書き・記載例等に見える頁を、 理由つきで OUT に残す (理由は宣言に記録)
   --changed-from OLD.pdf           : 前に刷った版と頁ごとに比べ、 変わった頁を出す (--pages changed = その頁だけ刷り直す)
+  --hook                           : PreToolUse(Bash) の hook として動く (入力 JSON を stdin から。 `lp`/`lpr` に渡す PDF を
+                                     検査し、 FAIL なら exit 2 + 理由を stderr = 実行前に止まり理由が model に届く)。
+                                     配線例 = hook の command を `python3 <この script> --hook` に (個人層の shim でもよい)
   --selftest                       : 合成 PDF で FAIL/PASS の両方を確認
 
 使い方:
@@ -36,6 +39,7 @@ raster を gray にして認印が黒 → 値の位置ずれ) から。 各失�
 """
 import argparse
 import os
+import re
 import sys
 import tempfile
 
@@ -267,7 +271,63 @@ def selftest():
     # J: 宣言つき raster (頁を選ばない経路) は宣言を引き継ぐ
     r2 = os.path.join(d, "r2.pdf"); rasterize(two, r2, dpi=36)
     assert read_record(fitz.open(r2)) is not None and not inspect(r2)[0]
-    print("pdf-print-preflight selftest: 10/10 PASS")
+    # K: --hook (PreToolUse の入力 JSON) = lp + 宣言の無い 4 頁は止める / 宣言つき・lp でない・lpstat・無い file は通す
+    ev = lambda cmd: {"tool_name": "Bash", "cwd": d, "tool_input": {"command": cmd}}  # noqa: E731
+    rc, msg = hook(ev(f"lp -d Office_Printer -o sides=one-sided {four}"))
+    assert rc == 2 and "宣言が無い" in msg and "--pages" in msg, (rc, msg)
+    assert hook(ev(f'lp -d X "{os.path.basename(two)}"'))[0] == 0          # 相対 path + 引用符 = cwd 基準
+    assert hook(ev(f"ls {four}"))[0] == 0 and hook(ev(f"lpstat -o; echo {four}"))[0] == 0
+    assert hook(ev(f"lp {os.path.join(d, 'nope.pdf')}"))[0] == 0 and hook({"tool_input": {}})[0] == 0
+    assert hook(ev(f"lp {four}"), env={"PRINT_PREFLIGHT_DISABLE": "1"})[0] == 0
+    print("pdf-print-preflight selftest: 11/11 PASS")
+
+
+HOOK_LP = re.compile(r"(^|[;&|\s])lpr?\s")
+HOOK_PDF = re.compile(r"(\"[^\"]*\.pdf\"|'[^']*\.pdf'|[^\s\"']+\.pdf)")
+
+
+def hook(payload: dict, env=None) -> tuple:
+    """PreToolUse(Bash) の入力 → (exit code, stderr の文)。 `lp` / `lpr` に .pdf を渡す command だけを見て、 PDF ごとに
+    inspect を回す。 1 本でも FAIL なら 2 (= 実行前に止め、 理由を model に返す)。 それ以外・読めない入力は 0 (fail-open)。
+
+    止め方を確認 (ask) にしないのは、 確認の dialog に理由が出ない build がある (conventions/hook-authoring.md
+    #build-dependent-docs-drift) = user は理由を見ずに承認し、 model も直し方を知らないまま刷るため。"""
+    env = os.environ if env is None else env
+    if env.get("PRINT_PREFLIGHT_DISABLE") == "1":
+        return 0, ""
+    cmd = ((payload or {}).get("tool_input") or {}).get("command") or ""
+    if ".pdf" not in cmd or not HOOK_LP.search(cmd):
+        return 0, ""
+    cwd = (payload or {}).get("cwd") or ""
+    fails = []
+    for m in HOOK_PDF.finditer(cmd):
+        tok = m.group(1).strip("\"'")
+        path = os.path.expanduser(tok) if tok.startswith("~/") else tok
+        if not os.path.isabs(path) and cwd:
+            path = os.path.join(cwd, path)
+        if not os.path.isfile(path):
+            continue
+        try:
+            findings, infos = inspect(path)
+        except Exception as e:  # noqa: BLE001 - 読めない PDF は止めずに知らせない (fail-open、 lp 側が失敗を出す)
+            print(f"pdf-print-preflight --hook: {path} を読めない ({type(e).__name__})", file=sys.stderr)
+            continue
+        if findings:
+            fails.append(f"── {path}\n" + "\n".join(["  · " + i for i in infos] + ["  " + f for f in findings]))
+    if not fails:
+        return 0, ""
+    msg = "\n".join([
+        "[print-preflight] 印刷前 preflight FAIL — この PDF はそのまま lp に渡さない (文字化け / 窓口に出さない頁 / どの頁を出すかの宣言なし):",
+        *fails, "",
+        "対処 (直してから lp を打ち直す):",
+        "  - 頁: 窓口に出す頁だけの file を作る = pdf-print-preflight.py <元の PDF> --rasterize <刷る.pdf> --pages <頁>",
+        "        (lp -o page-ranges は無視される queue がある = 頁は file で選ぶ。 説明書き・記載例・控え・マスタ・白紙は刷らない。",
+        "         本当に要る頁なら --include-flagged '<理由>'。 様式の記入 map を持つ生成道具なら、 提出頁だけを出力するよう直す)",
+        "  - font: --rasterize で RGB 600dpi raster 版を作って刷る (認印は RGB でしか朱が残らない)。",
+        "  - 刷る頁の一覧 (上) を user に 1 行で伝えてから刷る。 crop 目視 + remote の user には全頁 PNG。",
+        "正本: conventions/office-automation.md#print-preflight / #print-submission-pages-only",
+    ])
+    return 2, msg
 
 
 def main():
@@ -281,10 +341,22 @@ def main():
     ap.add_argument("--include-flagged", metavar="REASON", help="説明書き等に見える頁を理由つきで残す")
     ap.add_argument("--changed-from", metavar="OLD_PDF", help="前に刷った版と頁ごとに比べる")
     ap.add_argument("--dpi", type=int, default=600)
+    ap.add_argument("--hook", action="store_true",
+                    help="PreToolUse(Bash) hook として動く: 入力 JSON を stdin から読み、 lp に渡す PDF が FAIL なら exit 2")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         selftest(); return 0
+    if a.hook:
+        import json
+        try:
+            payload = json.loads(sys.stdin.read() or "{}")
+        except ValueError:
+            return 0
+        rc, msg = hook(payload)
+        if msg:
+            print(msg, file=sys.stderr)
+        return rc
     if not a.pdf:
         ap.error("pdf を指定 (or --selftest)")
     if a.rasterize and a.extract:

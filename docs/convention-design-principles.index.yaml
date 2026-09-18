@@ -825,6 +825,10 @@ sections:
     legacy: "8.66"
     level: 3
     title: "8.66 検査が列挙する単位を、規則が守る対象の単位に合わせる — ずれた分は永久に見えない"
+  - id: green-check-endorses-unasked-premise
+    legacy: "8.67"
+    level: 3
+    title: "8.67 検査の緑は、 検査が問わなかった前提まで追認して読まれる — 前提を決める判断が成果物の外にあるなら、 作る時に成果物へ書き込み、 出口で読む"
   - id: changelog
     level: 2
     title: "変更履歴"

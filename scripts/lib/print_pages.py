@@ -25,10 +25,16 @@
     誤判定の害の向き: 止めすぎ = 宣言を 1 回足す手間 (--include-flagged で理由つきで残せる) / 見逃し = 紙の無駄
     (gate の無い状態と同じ)。 ∴ 疑わしきは一覧に出し、止めるのは strong と「宣言の無い複数頁」 だけ。
 
+記入 map 側 (様式ごとの spec を持つ生成道具が使う): role_map_problems (頁の役割の宣言の矛盾) / anchor_misses (宣言した頁の
+    目印が PDF のその頁に在るか = 雛形の改訂で頁がずれたら止める) / declare_submit (刷る file に「全頁 = 提出頁」 を書く。
+    宣言の無い頁に strong の推定が当たれば書かずに止める理由を返す)。
+
     sys.path.insert(0, str(<claude-config>/"scripts"/"lib"))
     from print_pages import read_record, write_record, copy_record, classify, inventory, problems, parse_pages
+    from print_pages import role_map_problems, anchor_misses, declare_submit
 
-直接実行 = selftest。
+直接実行 = selftest。 --scan <PDF か dir ...> = 頁の推定を当てて疑わしい頁を出す (止める語を変える前の較正:
+実際に出した物と出さない物の束に当てて誤検出を数える)。
 """
 from __future__ import annotations
 
@@ -277,6 +283,81 @@ def problems(doc) -> tuple:
     return blocking, lines
 
 
+# ---------------------------------------------------------------- 記入 map (様式ごとの spec) の頁の役割
+
+def norm_text(s: str) -> str:
+    """照合用: NFKC + 空白を全部除く (Word / Excel の PDF は字間に空白や全角半角の揺れが入る)。"""
+    return _ja(s or "")
+
+
+def role_map_problems(roles: dict, groups: dict, n_pages: int | None = None, name: str = "") -> list:
+    """頁の役割の宣言 (記入 map 側) の矛盾。 空 = 問題なし。
+
+    roles  = {頁 (1 始まり): {"role", "anchor"?, ...}} / groups = {出力のまとまり: [頁, ...]} (= 1 本の刷る file)
+    n_pages = 文書まるごとを 1 本の PDF にする経路 (Word 等) の総頁数。 渡すと全頁の役割を必須にする。
+    - 役割は ROLES のどれか、 submit の頁は anchor (その頁に必ずある字) を持つ
+    - まとまりの頁は submit だけ / submit の頁はどれかのまとまりに入る (= 出す頁を刷り忘れない)"""
+    p = f"{name}: " if name else ""
+    out = []
+    roles = {int(k): (v if isinstance(v, dict) else {"role": v}) for k, v in (roles or {}).items()}
+    if n_pages is not None and sorted(roles) != list(range(1, int(n_pages) + 1)):
+        out.append(f"{p}頁の役割が 1〜{n_pages} 頁の全部に無い (在るのは {sorted(roles)})")
+    if not roles:
+        return out
+    for k, r in roles.items():
+        if r.get("role") not in ROLES:
+            out.append(f"{p}頁 {k} の役割 {r.get('role')!r} は {list(ROLES)} のどれでもない")
+        if r.get("role") == "submit" and not r.get("anchor"):
+            out.append(f"{p}頁 {k} (submit) に anchor (その頁に必ずある字) が無い")
+    grouped = set()
+    for gid, pages in (groups or {}).items():
+        for pg in pages or []:
+            grouped.add(int(pg))
+            r = roles.get(int(pg))
+            if r is None:
+                out.append(f"{p}まとまり {gid} の頁 {pg} に役割が無い")
+            elif r.get("role") != "submit":
+                out.append(f"{p}まとまり {gid} の頁 {pg} は {r.get('role')} (= 窓口に出さない頁) — まとまりから外す")
+    for k, r in roles.items():
+        if r.get("role") == "submit" and k not in grouped:
+            out.append(f"{p}頁 {k} は submit なのにどのまとまりにも無い (= 刷られない)")
+    return out
+
+
+def anchor_misses(doc, roles: dict) -> list:
+    """[(頁, anchor)] = 宣言の anchor が PDF のその頁に無いもの (= 雛形が改訂されて頁の中身がずれた)。"""
+    bad = []
+    for k, r in (roles or {}).items():
+        r = r if isinstance(r, dict) else {"role": r}
+        a, k = r.get("anchor"), int(k)
+        if not a:
+            continue
+        if k > doc.page_count or norm_text(a) not in norm_text(doc[k - 1].get_text()):
+            bad.append((k, a))
+    return bad
+
+
+def declare_submit(doc, labels: list, src: str, dropped: list | None = None) -> tuple:
+    """doc (= 刷る file、 全頁が窓口に出す頁) に宣言を書く。 返り値 = (止める理由の list, 表示の行の list)。
+
+    labels[i] = i 頁目の名前 (None = 見出しから)。 宣言の無い頁 (label が None) に strong の推定が当たれば止める
+    (= 記入 map に役割を書くか、 まとまりから外すかを決めてから刷る)。 宣言した頁の推定は行に出すだけ。
+    止める理由があれば書かない。 保存は呼び出し側。"""
+    stop, lines, names = [], [], []
+    for i, page in enumerate(doc):
+        g = classify(page)
+        declared = labels[i] if i < len(labels) else None
+        names.append(declared or g["heading"])
+        if declared is None and g["strength"] == "strong":
+            stop.append(f"{i + 1} 頁は{ROLES[g['role']]}に見える ({g['why']})")
+        elif g["role"]:
+            lines.append(f"⚠️ {i + 1} 頁: {ROLES[g['role']]}? ({g['why']}) — "
+                         + ("宣言では提出頁 (anchor 照合済み)" if declared else "窓口に出す頁か見る"))
+    if not stop:
+        write_record(doc, [{"role": "submit", "label": n} for n in names], src, dropped=dropped)
+    return stop, lines
+
+
 # ---------------------------------------------------------------- 頁の指定
 
 def parse_pages(spec: str, n: int) -> list:
@@ -453,8 +534,84 @@ def selftest() -> None:
     page(new, ["研究計画書", "テーマ 改"])
     page(new, ["追加", "頁"])
     assert changed_pages(old, old) == [] and changed_pages(new, old) == [2, 3], changed_pages(new, old)
+    # 記入 map の頁の役割 / 頁の目印 / 刷る file への宣言
+    roles = {1: {"role": "submit", "anchor": "甲 申請書"}, 2: {"role": "submit", "anchor": "計画書"},
+             3: {"role": "instructions", "anchor": "本制度について"}}
+    assert role_map_problems(roles, {"g": [1, 2]}, n_pages=3) == []
+    for bad_roles, groups, n, word in ((roles, {"g": [1, 2, 3]}, 3, "外す"), (roles, {"g": [1]}, 3, "刷られない"),
+                                       ({1: {"role": "submit", "anchor": "a"}}, {"g": [1]}, 3, "全部"),
+                                       ({**roles, 3: {"role": "note"}}, {"g": [1, 2]}, 3, "どれでもない"),
+                                       ({**roles, 2: {"role": "submit"}}, {"g": [1, 2]}, 3, "anchor")):
+        probs = role_map_problems(bad_roles, groups, n_pages=n)
+        assert any(word in x for x in probs), (word, probs)
+    assert role_map_problems({}, {"g": [1]}) == []   # 総頁数を渡さない経路 (sheet を選んで組む) は宣言が無くてよい
+    w = fitz.open()
+    for t in ("甲 申請書", "研究 計画書", "本制度について"):
+        page(w, [t])
+    assert anchor_misses(w, roles) == [], anchor_misses(w, roles)
+    assert anchor_misses(w, {**roles, 2: {"role": "submit", "anchor": "について"}}) == [(2, "について")]
+    g2 = fitz.open()
+    g2.insert_pdf(w, from_page=0, to_page=1)
+    stop, lines = declare_submit(g2, ["様式", "計画書"], "selftest", dropped=[{"from": 3, "role": "instructions"}])
+    assert not stop and read_record(g2)["pages"][1]["label"] == "計画書"
+    ex = fitz.open()
+    page(ex, ["旅費請求書"])
+    page(ex, ["記入例"])
+    stop, _ = declare_submit(ex, [None, None], "selftest")
+    assert stop and read_record(ex) is None, stop   # 宣言の無い頁の strong = 止めて書かない
     print("print_pages selftest: PASS")
 
 
+def scan(paths, strong_only: bool = False) -> dict:
+    """PDF (file か dir、 dir は再帰) の頁を推定し、 疑わしい頁を 1 行ずつ出す。 返り値 = 集計。
+    推定の較正用 = 止める語を足す・外す前に、 実際に出した物と出さない物の束に当てて誤検出を数える。"""
+    import os
+    from collections import Counter
+
+    files = []
+    for p in paths:
+        p = os.path.expanduser(p)
+        if os.path.isdir(p):
+            for root, _dirs, names in os.walk(p):
+                if "/.git" in root:
+                    continue
+                files += [os.path.join(root, n) for n in sorted(names) if n.lower().endswith(".pdf")]
+        elif p.lower().endswith(".pdf"):
+            files.append(p)
+    count = Counter()
+    for f in files:
+        try:
+            d = fitz.open(f)
+        except Exception:  # noqa: BLE001 - 壊れた・暗号化の PDF は数えるだけ
+            count["unreadable"] += 1
+            continue
+        if d.needs_pass or d.is_encrypted:
+            count["unreadable"] += 1
+            continue
+        count["files"] += 1
+        rec = read_record(d)
+        for page in d:
+            count["pages"] += 1
+            g = classify(page)
+            if not g["role"] or (strong_only and g["strength"] != "strong"):
+                continue
+            count[g["strength"]] += 1
+            print(f"{g['strength']:6} {ROLES[g['role']]:6} p.{page.number + 1:<3} {f}  {g['why']}"
+                  + ("  [宣言あり]" if rec else ""))
+    print(f"-- files {count['files']} / pages {count['pages']} / strong {count['strong']} / weak {count['weak']}"
+          f" / 読めない {count['unreadable']}")
+    return dict(count)
+
+
 if __name__ == "__main__":
-    selftest()
+    import argparse
+
+    ap = argparse.ArgumentParser(description="刷る頁の宣言と推定 (引数なし = selftest)")
+    ap.add_argument("--scan", nargs="+", metavar="PATH", help="PDF / dir の頁を推定して疑わしい頁を出す (推定の較正用)")
+    ap.add_argument("--strong-only", action="store_true", help="--scan で strong (止める側) だけ出す")
+    ap.add_argument("--selftest", action="store_true")
+    a = ap.parse_args()
+    if a.scan:
+        scan(a.scan, a.strong_only)
+    else:
+        selftest()
