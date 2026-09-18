@@ -337,6 +337,8 @@ grep -nE '\\(newcommand|renewcommand|providecommand|nc|def|NewDocumentCommand|De
 
 ## <a id="macro-alias-forcing-function"></a>マクロ alias の forcing function
 
+> 新しい記号を足して検査が生の文字を止めたとき (preamble に、 その文字を別の意味の alias に割り当てた使われていない定義が残っている場合など): 検査の設定に例外を足す前に、 原稿の既存の流儀で書ける別の記法が無いかを見る (例: 長さの新記号でなく、 既存の「幅の 2 乗」 の族の添字違い)。 例外を足すのは、 その文字が本当に必要なときだけ。
+
 上の絶対則を「読めば守る」 discipline だけに頼ると、共著者の Claude や別 session で raw 記法が静かに再混入する。**典型的な抜け道**: atom（`\h`・`\bs`・各 subscript alias）が個別には正規 alias なのに、それらを束ねた **compound macro をバイパスして書き下した形**（`\h T_{...}` を専用マクロの代わりに longhand）は、atom-level の grep / linter をすり抜ける。違反は linter が見る一段上で起きる。さらに別 dialect（別の綴り・別 primitive）でまるごと書かれた領域は、denylist に列挙していない綴りなので 0 hit で素通りする。
 
 → 各 LaTeX repo に **3 段の機械 enforcement** を置く:

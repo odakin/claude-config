@@ -171,6 +171,15 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 3. 物理量を固定した極限 (質量 → 0、 エネルギー → ∞) で条件がどう動くかを見る。 「質量が小さいから X」 と書く前に、 lab の量を固定したとき条件が質量に依るかを確かめる。
 4. 数値は桁ごとに算術を書く (単位換算で二乗を取り忘れると桁が半分になる。 実測)。
 
+**補足の検査** (盲検の導出で出た一般則。 実測):
+
+- **長さごとに frame と方向を書く**。 動く波束の lab の長さは収縮した長さで、 静止系の長さは boost 因子倍。 lab の長さを静止系 (または横) の長さとして不変な幅に入れると boost 因子の 2 乗が落ち、 反対の漸近 regime に移る。 見分ける症状 = 含意される平均エネルギーが label のエネルギーと一致しない。
+- **label と平均**。 共変な波束の族では、 label の運動量が平均の運動量に等しいのは片方の漸近 regime だけ。 label を「粒子のエネルギー」 として使う前に、 運動量空間の密度から平均と相対幅を計算する。 相対幅が 1 の程度なら「label = 物理的なエネルギー」 という模型化が既に破れている。
+- **1 parameter には 1 観測量**。 静止系で等方な 1 parameter の族は、 縦と横の独立な data を同時には再現できない。 その parameter が再現すべき観測量 (距離をまたぐ干渉なら coherent なエネルギー幅) を先に決め、 族が外す方を明記する。 弱めて書かない。
+- **線源の scale は 2 つある**。 頂点の局在 (運動量の不確定) と coherence 時間 (エネルギーの不確定) は、 放出する粒子が遅いとき何桁も違う。 coherence length の観測量が使うのは後者。 干渉 data から抜いた幅は生成と検出の合成 (2 乗和) で、 合成の下限はどちらか一方の下限ではない。
+- **裾の重い profile は芯の半値幅と分位点も出す**。 rms は cutoff の scale で決まることがあり、 どの密度 (不変測度つきの場の絶対値 2 乗、 位置演算子の密度、 電荷密度) を使うかで parameter 的に大きく違う。 「波束の位置」 も、 絶対値 2 乗の最大・周辺分布の中央値・確率で重みづけた平均が別の場所 (波面、 そのはるか後ろ、 古典軌道) に来ることがある。 どれを指すかを書く。
+- **不確定性原理の sanity check**。 引用したエネルギーでの換算波長より短い局在は、 そのエネルギーの状態ではない。 そういう入力は exotic な regime の証拠ではなく、 不整合な入力として扱う。
+
 **Prior check**: 帰結が、 長く使われてきた近似や標準の公式を「現実の parameter で破綻する」 と言うなら、 それは発見か前提の誤りのどちらかで、 事前確率は後者に傾く。 headline に上げる前に、 帰結を支える前提の 1 文を独立に検算する (前提だけを渡す導出の盲検 = [`cold-eyes-isolation.md`](../../ai-collaboration/conventions/cold-eyes-isolation.md))。 前提の文の出所と著者の確認状況は [`actor-attribution.md#premise-provenance`](actor-attribution.md#premise-provenance) の手順で引く。
 
 **境界**: これは主張を立てる側の検査。 他の agent や査読から原稿の主張に不利な finding を受けたとき、 その finding が効く regime と原稿がそこに居るかを査定するのは受ける側の規則で、 入口は [`manuscript-claim-ownership.md`](manuscript-claim-ownership.md)。 両者は「確立した結果を覆す含意なら前提を先に疑う」 で同じ向きを向く。 隣接: [#headline-claim-budget-check](#headline-claim-budget-check) (中心主張を形式に依らない収支で検算) / [#threshold-is-not-regime-onset](#threshold-is-not-regime-onset) (閾値は反対 regime の始点ではない)。
