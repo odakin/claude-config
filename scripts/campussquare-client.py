@@ -74,6 +74,9 @@ def expired(code, location, text, base_host):
             return "login redirect"
     if code == 200 and re.search(r"<title>[^<]*(ログイン|Login)", (text or "")[:3000], re.I):
         return "login page"
+    # session 切れの flow は 200 で「認証エラー」 画面 (form authorizationError) を返す (2026-09-19 実測)
+    if code == 200 and re.search(r'<title>\s*認証エラー|<form[^>]*name="authorizationError"', (text or "")[:3000]):
+        return "auth error page"
     if code in (401, 403):
         return str(code)
     return None
@@ -264,6 +267,7 @@ def selftest():
         ((302, "https://cs.example.ac.jp/Shibboleth.sso/Login?target=x", ""), "login redirect"),
         ((302, "/campusweb/login.do", ""), "login redirect"),
         ((200, "", "<html><head><title>ログイン</title>"), "login page"),
+        ((200, "", '<title>認証エラー</title><form name="authorizationError" method="post">'), "auth error page"),
         ((302, "/campusweb/campussquare.do?_flowExecutionKey=_cX_kY", ""), None),
         ((200, "", "<title>CampusSquare for WEB</title>"), None),
     ]
