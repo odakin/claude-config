@@ -12,7 +12,7 @@ summary: Indico (indico.cern.ch 系) の abstract 投稿で実際に踏んだ機
 ## 1. login 経路 (indico.cern.ch = CERN SSO)
 
 - login ボタンは CERN SSO に飛ぶ。 選択肢は概ね (a) CERN account / (b) **guest (external) account を新規作成** / (c) **外部 ID provider (Google 等) でサインイン**。
-- (b) は **確認 mail が届かない・遅れることがある** (2026-08 実測: 待っても来ない)。 先に (c) を試す。 Google で入ると、 **同じ mail address の既存 Indico profile があればそこに紐付く** (= 過去に登録した profile がそのまま使える)。
+- (b) は **確認 mail が届かない・遅れることがある** (実測: 待っても来ない)。 先に (c) を試す。 Google で入ると、 **同じ mail address の既存 Indico profile があればそこに紐付く** (= 過去に登録した profile がそのまま使える)。
 - 「Google で入る経路が無いように見える」 時は、 SSO 画面の **"Sign in with …" / "link account"** 系の導線を探す — 初見で見えにくい位置にある。
 - 一度外部 ID で入れたら、 以後もその ID で入る (= 別の mail で guest を作ると profile が二重化する)。
 
@@ -27,7 +27,7 @@ summary: Indico (indico.cern.ch 系) の abstract 投稿で実際に踏んだ機
 - **並び順は手動** (= 追加順のまま)。 alphabetical にしたいなら自分で並べ替える (drag / 上下)。 後から気付くと編集で直せるが、 提出前に 1 度見る。
 - 著者 entry は Indico の user DB 検索で追加できるが、 **所属が古い** ことがある (= 本人 profile 未更新)。 表示名・所属を form 上で上書きして揃える。
 - 本文は plain text 中心 (= markdown は効かない、 LaTeX は event 設定次第)。 字数 / 単語数上限は event 設定、 超過は submit 時に弾かれる。
-- **タイトルの大文字**: 投稿 form は何も強制しない。 分野の慣習 (素粒子は sentence case が普通) に合わせる。 副題の区切りは「:」 + 次語を大文字 ("…: Real vs virtual propagation")。
+- **タイトルの大文字**: 投稿 form は何も強制しない。 分野の慣習 (素粒子は sentence case が普通) に合わせる。 副題の区切りは「:」 + 次語を大文字 (架空の例: "Wave packets do not spread uniformly: A closer look")。
 - 受理通知 mail (subject に "abstract" + event 名) に **abstract ID と URL** が入る — 記録はその mail の messageId と ID を残す (= 後の採否通知・修正依頼は ID で来る)。
 - "Submit" 後も締切まで編集可 (= event 設定次第)。 編集したら再度 confirmation が来ることがある。
 

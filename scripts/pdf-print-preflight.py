@@ -32,7 +32,7 @@
   python3 pdf-print-preflight.py form.pdf --rasterize form_print.pdf --pages 1-2      # 窓口に出す 2 頁だけ刷る
   python3 pdf-print-preflight.py new.pdf --changed-from printed.pdf --rasterize re.pdf --pages changed
 
-設計: 2026-08-21 に同じ 1 枚の様式を 4 回刷り直した RCA (2 頁はみ出し → 組み込み font 文字化け →
+設計: 同じ 1 枚の様式の刷り直しが続いた実測の RCA (2 頁はみ出し → 組み込み font 文字化け →
 raster を gray にして認印が黒 → 値の位置ずれ) から。 各失敗は個別には既知だったが印刷前に**機械で**
 確認する段が無かった。 本 script はその段。 視覚確認 (crop 画像) は別途必須 (= 位置ずれは font/頁数では出ない)。
 5. は、 頁数の検査が様式付属の説明書きの頁まで「期待どおり」 と通した実測から (頁数は刷る頁の集合を問わない)。

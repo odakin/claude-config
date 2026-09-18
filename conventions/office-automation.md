@@ -1623,7 +1623,7 @@ np.insert_image(np.rect, filename="r.png"); out.save("print_raster.pdf", deflate
 
 Excel / Word が直接吐いた PDF は素のままで OK (= OS 標準フォントのみで化け実績なし)。 origin: 2026-06-11 ⑭-2 完成版が Canon laser で化けた実害 (画面検証は通過していた)。
 
-⚠️ **2026-08-21 追加観察 (同じ Canon laser)**: `insert_font(fontfile=<OTF>)` で実 font を埋め込んでも**化けた** (= 「埋め込んだから安全」 も不成立)、 `get_pixmap(colorspace=csGRAY)` だと**認印の朱が黒**になる → **raster は RGB**。 機械 gate = [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) (`--rasterize` で RGB 600dpi を生成)、 印刷前 4 点 gate = [`print-preflight`](#print-preflight)。 ⚠️ 本節は 2026-06-11 から存在したが 2026-08-21 の session は読まずに 3 回化けを刷った = 「まず [symptom-index](#symptom-index) を引く」 の実例。
+⚠️ **追加観察 (実測、 同じ laser printer)**: `insert_font(fontfile=<OTF>)` で実 font を埋め込んでも**化けた** (= 「埋め込んだから安全」 も不成立)、 `get_pixmap(colorspace=csGRAY)` だと**認印の朱が黒**になる → **raster は RGB**。 機械 gate = [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) (`--rasterize` で RGB 600dpi を生成)、 印刷前 4 点 gate = [`print-preflight`](#print-preflight)。 ⚠️ 本節が在っても、 印刷前に読まれず化けた紙を何度も刷った実測がある = 「まず [symptom-index](#symptom-index) を引く」 の実例 (機械の止め方 = [`print-preflight`](#print-preflight))。
 
 ### <a id="lp-page-ranges-distrust"></a>`lp -o page-ranges` を信用しない (= 印刷は単独ページ PDF を抽出してから)
 
@@ -3463,10 +3463,10 @@ import zipfile, re, shutil
 shutil.copy2(src, src + '.bak')
 zin = zipfile.ZipFile(src + '.bak')
 data = zin.read('xl/worksheets/sheet1.xml').decode('utf-8')
-# 数値 cell <c r="C62" s="12"><v>46370</v></c> → 表示文字列 (inlineStr) へ
-pat = re.compile(r'<c r="C62"((?:(?!/?>)[^>])*)>(?:<v>46370(?:\.0)?</v>)</c>')
+# 数値 cell <c r="C12" s="12"><v>45672</v></c> → 表示文字列 (inlineStr) へ
+pat = re.compile(r'<c r="C12"((?:(?!/?>)[^>])*)>(?:<v>45672(?:\.0)?</v>)</c>')
 m = pat.search(data); attrs = re.sub(r'\s*t="[^"]*"', '', m.group(1))
-data = data[:m.start()] + f'<c r="C62"{attrs} t="inlineStr"><is><t>2026/12/14</t></is></c>' + data[m.end():]
+data = data[:m.start()] + f'<c r="C12"{attrs} t="inlineStr"><is><t>2025/01/15</t></is></c>' + data[m.end():]
 with zipfile.ZipFile(src, 'w', zipfile.ZIP_DEFLATED) as zout:
     for item in zin.infolist():
         raw = zin.read(item.filename)
@@ -3477,10 +3477,10 @@ with zipfile.ZipFile(src, 'w', zipfile.ZIP_DEFLATED) as zout:
 勘所:
 
 1. **置換は「見つからなければ fail」 で数える** (= replaced N/N を assert、 [`batch-text-edits`](batch-text-edits.md) と同じ契約)。 `s=` (style) 属性は保持、 既存 `t=` 属性は落としてから `t="inlineStr"` を付ける。
-2. **日付 serial の表示事故が典型の使い所**: General 書式の cell に日付 serial を書くと**印字が生の serial 値 (46370) になる**。 Excel で number format を当て直すより、 **表示文字列を inlineStr で焼く**方が確実 (= 印字目的の様式では日付が text でも実害なし)。 逆に雛形側が日付書式済みの cell (= 記入例 face に datetime が入っている列) は serial のままで正しく表示される — **書式の有無は openpyxl の `cell.number_format` で先に確認**。
+2. **日付 serial の表示事故が典型の使い所**: General 書式の cell に日付 serial を書くと**印字が生の serial 値 (45672) になる**。 Excel で number format を当て直すより、 **表示文字列を inlineStr で焼く**方が確実 (= 印字目的の様式では日付が text でも実害なし)。 逆に雛形側が日付書式済みの cell (= 記入例 face に datetime が入っている列) は serial のままで正しく表示される — **書式の有無は openpyxl の `cell.number_format` で先に確認**。
 3. shared strings を触らない (= `t="inlineStr"` は `sharedStrings.xml` の count 更新が不要で、 追記型より安全)。
 4. **検証 3 点 set**: openpyxl readback で値 assert + `scripts/check-xlsx-integrity.py` (= zip 直編集の納品前 gate) + [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で label 上書きゼロ確認。
-5. **cell 要素が無い (= 空セルは XML に存在しないことがある) / self-closing `<c r="X" s="n"/>` のとき**: 同じ `<row r="N">` 内に**列順を保って挿入**する (style `s=` は同列の近傍 cell から流用)。 regex は `<c r="REF"(attrs)(/>|>…</c>)` の両形を受ける。 実測 2026-08-21: 日程表 8 行目 (C83/F83/O83) は行は在るが cell 無し → 挿入で対応。
+5. **cell 要素が無い (= 空セルは XML に存在しないことがある) / self-closing `<c r="X" s="n"/>` のとき**: 同じ `<row r="N">` 内に**列順を保って挿入**する (style `s=` は同列の近傍 cell から流用)。 regex は `<c r="REF"(attrs)(/>|>…</c>)` の両形を受ける。 実測: 表の最終行は `<row>` だけ在って値を入れる `<c>` が 1 つも無かった → 挿入で対応。
 6. **date 書式済みの cell は serial を書く** (例: 日付 cell = `45658` → 2025-01-01)。 serial ↔ date の換算は openpyxl readback で確認 (`datetime` が返れば書式が生きている)。
 7. Excel automation との**hybrid が実戦形**: 値の大半は Excel osascript で書き、 **書式起因の後修正だけ本手術**で当てる (= Excel 再起動 round を 1 つ消す。 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 回避にも効く)。
 
@@ -3529,14 +3529,14 @@ Excel / Word を起こさずに様式 PDF のセル値だけ直す手順 (= 日�
 1. **塗り潰し色はその場で sample**: `page.get_drawings()` のうち `fill` を持ち当該点を含む rect の色を使う (白で塗ると着色セルで目立つ)。
 2. **罫線を踏まない**: 塗り rect は罫線から ≥1pt 内側。 旧文字が罫線を越えて overflow していた場合は罫線ごと塗って **`draw_line` で罫線を引き直す** (幅・色は元 drawing から取る)。
 3. **行の y は既存データ行の pitch から外挿** (dashed 罫線は小片の集合で拾いにくい)、 列の x は貫通縦線から (上記 rescue 節 2)。
-4. **CJK と Latin は別フォントで分割描画**: PyMuPDF 内蔵 `fontname="japan"` (Droid Sans Fallback) は **Latin が字間の開いた等幅風**になる (`NuDM-2026` / `13:00` が間延び)。 `re.finditer(r'[\x00-\x7f]+|[^\x00-\x7f]+')` で run を分け、 ASCII は `helv`、 CJK は `japan` で順に `insert_text`、 幅合計で fontsize を fit。
+4. **CJK と Latin は別フォントで分割描画**: PyMuPDF 内蔵 `fontname="japan"` (Droid Sans Fallback) は **Latin が字間の開いた等幅風**になる (`ABC-2026` / `13:00` のような英数字が間延び)。 `re.finditer(r'[\x00-\x7f]+|[^\x00-\x7f]+')` で run を分け、 ASCII は `helv`、 CJK は `japan` で順に `insert_text`、 幅合計で fontsize を fit。
 5. **検証は render 画像を見る** (clip 付き `get_pixmap(dpi=120-130)`)。 text 抽出では塗り潰しの取りこぼし・残滓は見えない。
 
-origin: 2026-08-21 日程表 8 行の書き直し (Excel crash 後、 Excel を再起動せずに完了)。
+origin: 実測 (日程表の複数行を書き直し、 Excel crash の後 Excel を再起動せずに完了)。
 
 ## <a id="pymupdf-builtin-font-print-mojibake"></a>PyMuPDF で描いた文字 (組み込み `japan` / `helv`、 OTF 埋め込みも) は**プリンタで文字化け**しうる — 印刷用は raster 化
 
-> **SoT は [`print-raster-pdf`](#print-raster-pdf) (2026-06-11 起源、 subset font 化け → 600dpi raster)。** 本節は 2026-08-21 の追加観察 (組み込み font / OTF 埋め込み / gray raster) の記録で、 規律は同じ「印刷用は raster」。
+> **SoT は [`print-raster-pdf`](#print-raster-pdf) (2026-06-11 起源、 subset font 化け → 600dpi raster)。** 本節はその追加観察 (組み込み font / OTF 埋め込み / gray raster) の記録で、 規律は同じ「印刷用は raster」。
 
 **症状**: `page.insert_text(..., fontname="japan")` で追記した日本語が **画面 (Preview / fitz raster) では正常**なのに、 `lp` で印刷すると □ や別文字に化ける。 Latin の `helv` (Helvetica) も環境によっては位置ずれ・代替 font になる。
 
@@ -3547,7 +3547,7 @@ origin: 2026-08-21 日程表 8 行の書き直し (Excel crash 後、 Excel を�
 - ❌ **実 font file の埋め込みでは直らなかった**: `page.insert_font(fontname="hag", fontfile="<HaranoAjiGothic-Regular.otf>")` で OTF (CFF) を埋め込んでも、 Word 由来の TrueType 部分は正常・**PyMuPDF 追記部だけ同じ printer で化けた** (2026-08-21 実測、 Canon LBP + CUPS)。 PyMuPDF の Type0/CFF subset を解釈できない driver がある = 「埋め込んだから安全」 も成立しない。 画面確認 (fitz raster / Preview) はこの差を**検出できない**。
 - `get_fonts()` に `helv`/`japan` や PyMuPDF 埋め込み font が載っている PDF を**そのまま `lp` に投げない**。 印刷前 gate = 「PyMuPDF で文字を描いた PDF か?」 → yes なら raster 版を刷る。 機械 gate = [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) (`--rasterize` で RGB raster も生成)、 手順全体 = [`print-preflight`](#print-preflight)。
 
-origin: 海外出張願 + 日程表 = overlay 文字が紙で化け → OTF 埋め込みで再印刷 → **また化け** → raster で解決、 何度も刷り直した (user 指摘が続いた)。
+origin: 実測 (様式 + 付属表の overlay 文字が紙で化け → OTF 埋め込みで再印刷 → **また化け** → raster で解決)。
 
 ## <a id="docx-autofit-grid-overflow"></a>docx 様式の autofit 表は「1 セルの長い値」 で**別の行**が折り返し、 1 頁様式が 2 頁にはみ出す
 
@@ -3561,7 +3561,7 @@ origin: 海外出張願 + 日程表 = overlay 文字が紙で化け → OTF 埋�
 3. **検証 = 雛形 docx を同じ経路で PDF 化して page 数と主要ラベルの y 座標を突合** (= `get_text("blocks")` で「承認日」「許可します」 等の y が雛形と同じか)。 page 数一致だけでは行内折り返し (= 見た目の崩れ) を見逃す。
 4. ⚠️ 変換結果が変わらない時は Word の stale in-memory cache ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache)) を疑い、 staging 経由 (= 毎回ちがう path) で再変換する (`docx-to-pdf.sh` の既定。 Word は kill しない = [`office-app-reset-guard`](#office-app-reset-guard))。
 
-origin: 海外出張願 (人事課 docx 様式) — 複数回の変換試行で (1)+(2) に収束、 雛形と y 座標一致を確認してから印刷。
+origin: 実測 (autofit 表の docx 様式) — 変換を繰り返して (1)+(2) に収束、 雛形と y 座標一致を確認してから印刷。
 
 ## <a id="docx-form-repeat-pipeline"></a>docx 様式を毎回作り直す pipeline の 4 点 — 雛形から作る・値の置き場を分ける・凍結は値と書式の digest・印は語の位置から
 
@@ -3584,7 +3584,7 @@ origin: 海外出張願 (人事課 docx 様式) — 複数回の変換試行で 
 
 ## <a id="print-preflight"></a>印刷直前の preflight (= 「画面で見えた」 を印刷の保証にしない)
 
-**起源 (同じ 1 枚の様式を 4 回刷り直し)**: ① docx 様式が 2 頁にはみ出し (= [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow)) → ② 直したら PyMuPDF 追記文字が紙で文字化け (= [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake)) → ③ raster を gray で作って認印が黒 → ④ 電話番号が罫線に被る (= [`pdf-overlay-anchoring`](#pdf-overlay-anchoring))。 **4 つとも個別には既知の罠**で、 欠けていたのは「lp に渡す前に機械と目で確認する段」。 user が remote で紙を見られないと、 1 回の失敗 = 1 往復 + 紙 1 枚。
+**起源 (実測、 同じ 1 枚の様式の刷り直しが続いた)**: ① docx 様式が 2 頁にはみ出し (= [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow)) → ② 直したら PyMuPDF 追記文字が紙で文字化け (= [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake)) → ③ raster を gray で作って認印が黒 → ④ 電話番号が罫線に被る (= [`pdf-overlay-anchoring`](#pdf-overlay-anchoring))。 **どれも個別には既知の罠**で、 欠けていたのは「lp に渡す前に機械と目で確認する段」。 user が remote で紙を見られないと、 1 回の失敗 = 1 往復 + 紙 1 枚。
 
 **印刷前 gate (全部通してから `lp`)**:
 
