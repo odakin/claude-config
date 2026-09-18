@@ -44,6 +44,7 @@ engine = [`scripts/manuscript-claim-guard.py`](../scripts/manuscript-claim-guard
    `python3 <claude-config>/scripts/manuscript-claim-guard.py approve --file <path> --region <領域> [--region …] --change '<何を変えるか 1 行>' --quote '<著者の発言>'`
    領域の名前は deny の文面に出る (`title` / `abstract` / `intro` / `conclusion` / `eq:<label>` / `math` = その file の全数式 / `math-add` = 式の追加だけ / `section:<見出し>` / `authority:<id>` など)。
 3. 記録してから同じ変更をやり直す。
+4. Bash などで保護領域を既に書き換えてしまい、 commit が止まったら: 保護領域の変更だけを作業ツリーで戻し (`git diff` を提案として会話か作業ノートに残す)、 完了の報告には「著者の裁定待ちの提案」 と書く。 完了 gate ([`CONVENTIONS.md#completion-git-gate`](../CONVENTIONS.md#completion-git-gate)) は commit と push を求めるが、 裁定の無い保護領域の変更を commit して満たすことはしない。
 
 記録の前に engine は、 引用がこの session の transcript の user 発言 (tool の出力・hook の注入・sub-agent の prompt を除く) に verbatim であるかを照合し、 無ければ記録を拒否する。 記録は session に束縛され (別の session は使えない)、 machine-local の state (`~/.claude/state/manuscript-claim-guard/`) に置く。 公開 repo に著者の発言を書かないため。 監査の本体は transcript。
 
