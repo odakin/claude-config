@@ -256,3 +256,24 @@ Lessons from preparing and delivering a 2026 conference talk, kept separate from
   answer (the assumption's provenance, its honest uncertainty band, and why the conclusions
   survive across that band) and append it to the version of the slides published on the web:
   the published deck is read for far longer than the talk was heard.
+
+### <a id="abstract-as-invitation"></a>Writing the submitted abstract (field notes, NOT from Geroch)
+
+A conference abstract is the talk's invitation: it is read by people deciding whether to come, and later it
+fixes the promises the talk must keep (see "Audit the abstract's promises" above). Measured rules from revising
+one abstract through many rounds:
+
+- **Open with a flat claim.** A rhetorical question as the first sentence can read as if the speaker does not
+  have the answer; opening with definitions is dull. The first sentence should already say what is new.
+- **Keep contested vocabulary out of the opener.** If a key term is disputed between camps, open with the
+  physics everyone accepts and introduce the loaded term only after the text has pinned down what it means.
+  Readers from the other camp stop at a provocative first line.
+- **State the relation to known results as an operation on them.** "We extend theorem X to regime Y" tells the
+  reader what is new; "X turns out to hold better than expected" does not. Check that every pronoun has one
+  possible referent.
+- **Price every observability claim before writing it.** "Within reach of improved resolution" is a number:
+  compute the required resolution; if no planned experiment reaches it, drop the sentence.
+- **Mark optional content plainly.** "If time permits, I will also discuss ..." is unambiguous; "Time permitting,"
+  as an opener is parsed wrongly by many readers, and "I may" undersells.
+- **Re-read for length after each revision round.** Every round of fixes adds words; the abstract that answers
+  all objections is usually longer than one anyone reads.
