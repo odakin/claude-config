@@ -201,7 +201,9 @@ def cmd_opac(a) -> None:
     for q in a.query:
         text = page_text(fetch(a.url.replace("{q}", urllib.parse.quote(q))))
         n, items = parse_opac(text, a.hit, a.item)
-        print("\t".join([q, f"{n} 件"] + items))
+        # 行は先頭 5 件まで (1 ページ目だけ)。 当たりが多いと 6 件目以降の本を見落とすので、 切れたことを出す
+        more = [f"…ほか {n - len(items)} 件は表示していない (書名と著者を空白でつないだ AND 検索で絞る)"] if a.item and n > len(items) else []
+        print("\t".join([q, f"{n} 件"] + items + more))
         time.sleep(PAUSE)
 
 
