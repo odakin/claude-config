@@ -225,6 +225,7 @@
 - **[with-gnu-userland.sh](with-gnu-userland.sh)** — macOS で Homebrew の GNU coreutils / sed / grep / findutils を PATH 先頭に差して command を走らせる (CI の ubuntu と同じ BSD/GNU 差を push 前に再現)
 - **[with-gnu-userland.test.sh](with-gnu-userland.test.sh)** — with-gnu-userland.sh の self-test (Homebrew の GNU userland が無い環境 = CI の ubuntu は SKIP)
 - **[xlsx-to-pdf.sh](xlsx-to-pdf.sh)** — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
+- **[xlsx-zip-set-cells.py](xlsx-zip-set-cells.py)** — xlsx / xlsm の値セルだけを zip 直編集で書き換える (Excel も openpyxl も使わない。 他の zip member は byte 同一、 VBA・drawings・form control は無傷。 office-automation.md#xlsx-cell-value-zip-surgery の実装)
 
 ## lib/ — sourceable helper 群
 

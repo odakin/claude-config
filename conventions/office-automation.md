@@ -40,6 +40,7 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 
 | 症状 (観察できること) | 真因 | 対処 (→ slug) |
 |---|---|---|
+| xlsx / xlsm の値を数セル変えたいだけなのに、 Excel が遅い・落ちる / openpyxl で保存すると図形・ボタンが消える | 値の変更に workbook 全体を開いて保存し直している | worksheet XML の `<c>` だけ差し替える `scripts/xlsx-zip-set-cells.py` → [`xlsx-cell-value-zip-surgery`](#xlsx-cell-value-zip-surgery) |
 | 印刷物を user に見せるたび別の欠陥が出て刷り直しが続く | 各修正後の検証が直前の症状にだけ狭まる + 「画面で見えた」 を印刷の保証にしている | `pdf-print-preflight.py` + crop 目視 + 全頁 PNG を user に → [`print-preflight`](#print-preflight) |
 | 様式付属の**説明書き・記載例・マスタ・白紙の頁まで紙に出た** (頁数の検査は通っていた) | 生成の単位が様式の file 丸ごと + 頁数の一致は刷る頁の集合を問わない + 刷る段からどの頁を出すかが見えない | 頁の役割を記入 map に・刷る file は提出頁だけ (`pdf-print-preflight.py --pages`)・宣言を file に埋めて刷る直前の gate が読む → [`print-submission-pages-only`](#print-submission-pages-only) |
 | `lp -o media=A4` で送ったのに**別サイズの紙 (B5 等) で出る** | 本体 (操作パネル) の用紙サイズ設定が job の指定より優先された | 刷る前に本体の用紙設定とトレイの紙を user に確認 → [`print-preflight`](#print-preflight) 5. |
@@ -1773,13 +1774,13 @@ origin: 2026-06 PW 暗号化 docx を `/tmp/<work>/` に展開して round-trip 
 
 [`docx-tmp-sandbox-deny`](#docx-tmp-sandbox-deny) の「project 配下なら初回 1 回」 は、 **案件ごとに新しい dir を切る運用では「初回 1 回 × 案件数」 が積み上がる**。 しかも dialog は GUI にしか出ないので、 remote から Mac を操作している時は見えも押せもせず、 AppleScript 側には `-1712` (AppleEvent timeout) としてしか現れない。 本節はこれを規律でなく**機構**で消す。
 
-**機構 (2026-08-21 実測、 macOS 13.7 / Office 16.101。 2026-08-22 に macOS 26.5 / Office 16.112 でも同挙動を確認 = 下の注意 1)**:
+**機構 (実測 = macOS 13.7 / Office 16.101 と macOS 26.5 / Office 16.112 の 2 構成で同挙動、 下の注意 1)**:
 
 - Word / Excel / PowerPoint は全て App Sandbox (`com.apple.security.app-sandbox` + `files.user-selected.read-write` + `files.bookmarks.app-scope`)。 folder 単位の grant は security-scoped bookmark として各 app の container (`~/Library/Containers/com.microsoft.<App>/Data/Library/Preferences/com.microsoft.<App>.securebookmarks.plist`) に溜まる。
 - **dialog が出るのは「folder へ書く」 瞬間** (= PDF export / save-as)。 `open <file>` (LaunchServices) で渡した docx を**読む**だけなら新規 dir でも出ない (= file 単位の sandbox extension が付くため)。 ∴ 「開けたのに export で止まる」 が典型 signature。
 - 3 app は entitlement `com.apple.security.application-groups` で **App Group container `~/Library/Group Containers/UBF8T346G9.Office/` を共有**しており、 その内側は sandbox profile の内側 = **grant 不要**。 実測: 新規 dir の docx を Word で開き PDF save-as → dialog + `-1712` / 同じ docx を group container 配下に copy して同操作 → **0.7 s で成功・dialog ゼロ**。 Excel も同型 (新規 dir → dialog + `-1712` / group container → 2.4 s 成功)。
 
-**実装 (layer 1)**: [`scripts/lib/office-staging.sh`](../scripts/lib/office-staging.sh) (bash、 sourceable) + 鏡像 [`scripts/lib/office_staging.py`](../scripts/lib/office_staging.py)。 root = `<group container>/claude-office-staging/`、 1 実行 = `mktemp -d` の unique subdir (`<timestamp>-<pid>-XXXXXX`) に **basename を保って copy** → Office に開かせる → 出力を呼び出し元へ copy back → 成功時のみ subdir 削除 (失敗時は残す + `.source` に元 path = 診断用 provenance)、 7 日超の残骸は次回実行時に prune。 **呼び出し側 API は不変** — [`docx-to-pdf.sh`](#docx-to-pdf-pages) (Word 経路) / [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) (Excel 経路) / [`pptx-to-pdf.sh`](#pptx-to-pdf-powerpoint) (PowerPoint 経路) / [`affix-image-xlsx.py`](#xlsx-image-via-excel) (workbook + 画像の両方を stage、 post-condition を staged copy で検査してから atomic に書き戻し) が内部で使う。 新しく Office を osascript で駆動する script を書くなら同 lib を source する。 制御: `--no-stage` / `CLAUDE_OFFICE_STAGING=0` で旧 in-place 挙動、 `CLAUDE_OFFICE_STAGING_DIR=<dir>` で root 差し替え。 hermetic test = `scripts/lib/office-staging.test.sh` (bash 版と python 版の root 解決一致も検査)。 **fallback は黙らない (2026-08-22)**: root が作れずに in-place へ落ちる時 (= 予期せぬ理由 `mkdir-failed` / `not-writable` / `no-office`) は lib が stderr に `⚠️ staging: UNAVAILABLE (<reason>: <root>)` を出し、 `${XDG_STATE_HOME:-~/.local/state}/claude-office-staging/fallback.log` (env `CLAUDE_OFFICE_STAGING_LOG`) に 1 行 append する (= 呼んだ session が即気づく + 後続 session の検出器が拾える。 意図的な `--no-stage` / `CLAUDE_OFFICE_STAGING=0` は沈黙)。 理由の 1 語 = `office_staging_fallback_reason` / `office_staging.fallback_reason()`。 個人層側は log の未 ack entry + live probe を SessionStart / dashboard で surface する check script を置く (= 本 repo には含めない、 log 契約だけが公開 API)。
+**実装 (layer 1)**: [`scripts/lib/office-staging.sh`](../scripts/lib/office-staging.sh) (bash、 sourceable) + 鏡像 [`scripts/lib/office_staging.py`](../scripts/lib/office_staging.py)。 root = `<group container>/claude-office-staging/`、 1 実行 = `mktemp -d` の unique subdir (`<timestamp>-<pid>-XXXXXX`) に **basename を保って copy** → Office に開かせる → 出力を呼び出し元へ copy back → 成功時のみ subdir 削除 (失敗時は残す + `.source` に元 path = 診断用 provenance)、 7 日超の残骸は次回実行時に prune。 **呼び出し側 API は不変** — [`docx-to-pdf.sh`](#docx-to-pdf-pages) (Word 経路) / [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) (Excel 経路) / [`pptx-to-pdf.sh`](#pptx-to-pdf-powerpoint) (PowerPoint 経路) / [`affix-image-xlsx.py`](#xlsx-image-via-excel) (workbook + 画像の両方を stage、 post-condition を staged copy で検査してから atomic に書き戻し) が内部で使う。 新しく Office を osascript で駆動する script を書くなら同 lib を source する。 制御: `--no-stage` / `CLAUDE_OFFICE_STAGING=0` で旧 in-place 挙動、 `CLAUDE_OFFICE_STAGING_DIR=<dir>` で root 差し替え。 hermetic test = `scripts/lib/office-staging.test.sh` (bash 版と python 版の root 解決一致も検査)。 **fallback は黙らない**: root が作れずに in-place へ落ちる時 (= 予期せぬ理由 `mkdir-failed` / `not-writable` / `no-office`) は lib が stderr に `⚠️ staging: UNAVAILABLE (<reason>: <root>)` を出し、 `${XDG_STATE_HOME:-~/.local/state}/claude-office-staging/fallback.log` (env `CLAUDE_OFFICE_STAGING_LOG`) に 1 行 append する (= 呼んだ session が即気づく + 後続 session の検出器が拾える。 意図的な `--no-stage` / `CLAUDE_OFFICE_STAGING=0` は沈黙)。 理由の 1 語 = `office_staging_fallback_reason` / `office_staging.fallback_reason()`。 **検出器** = [`scripts/check-office-staging.py`](../scripts/check-office-staging.py): (A) root が今作れないか (live probe) + (B) log の未 ack entry を出し、 該当 0 件は沈黙 (= SessionStart / dashboard から呼ぶ前提。 呼ぶ配線とマシン別の実測記録の所在 〔`--fleet-note`〕 は各個人層)、 受領は `--ack`。 **新しいマシン・OS / Office の更新の後は `check-office-staging.py --e2e`** (前面で実行) = `$HOME` 直下の新しい dir に 1 頁の docx / xlsx / pptx を作って 3 wrapper を順に叩き、 app ごとに「`staging:` 行・PDF・頁数・本文の marker」 を 1 行で出す (dialog が出れば wrapper は timeout / `-1712` で落ちるので、 成功 = dialog 無し。 staging が使えない状態では走らない)。
 
 **規則と強制**: wrapper 以外の経路 (手書き osascript・案件ごとの driver) も含めて staging の内側でしか Office に開かせない・保存させない。 in-place は PreToolUse hook が deny する → [`office-inplace-guard`](#office-inplace-guard)
 
@@ -1791,12 +1792,14 @@ origin: 2026-06 PW 暗号化 docx を `/tmp/<work>/` に展開して round-trip 
 - `/tmp` 配下の input も copy されて通る (= [`docx-tmp-sandbox-deny`](#docx-tmp-sandbox-deny) の規律は in-place 経路限定に縮む)。
 
 ⚠️ **注意**:
-- **macOS 15 (Sequoia) 以降**は他 app の `~/Library/Containers` / `~/Library/Group Containers` への Terminal からのアクセスに App Data 保護 (TCC) が掛かると報告されている。 **実測 (2026-08-22、 macOS 26.5 / Office 16.112、 Apple Silicon)**: Claude Code desktop 配下の zsh からは `mkdir` + copy + Word / Excel export がすべて dialog ゼロで通った (= この経路では TCC は発火せず、 override 不要。 ただし TCC.db は読めないので「既 grant」 と「対象外」 は未分離、 Terminal.app 直下の zsh は未測)。 もし掛かる環境なら shell から root を作れず lib は空を返して in-place に fall back する (= 旧挙動 = dialog 復活、 signature = stderr に `staging:` 行が出ない)。 対処 = 一度だけ TCC を許可するか、 `CLAUDE_OFFICE_STAGING_DIR=~/.office-staging` 等を設定して**その dir を 1 回だけ手動 grant** する (= 候補 (b))。
+- **macOS 15 (Sequoia) 以降**は他 app の `~/Library/Containers` / `~/Library/Group Containers` への Terminal からのアクセスに App Data 保護 (TCC) が掛かると報告されている。 **実測 (macOS 26.5 / Office 16.112、 Apple Silicon)**: Claude Code desktop 配下の zsh からは `mkdir` + copy + Word / Excel export がすべて dialog ゼロで通った (= この経路では TCC は発火せず、 override 不要。 ただし TCC.db は読めないので「既 grant」 と「対象外」 は未分離、 Terminal.app 直下の zsh は未測)。 もし掛かる環境なら shell から root を作れず lib は空を返して in-place に fall back する (= 旧挙動 = dialog 復活、 signature = stderr に `staging:` 行が出ない)。 対処 = 一度だけ TCC を許可するか、 `CLAUDE_OFFICE_STAGING_DIR=~/.office-staging` 等を設定して**その dir を 1 回だけ手動 grant** する (= 候補 (b))。
 - **staging root 自体を消さない**・**Office が開いている最中に subdir を外から消さない** (= Word の resume queue に死んだ path が残り、 次回起動で「文書を開くことができません」 が連発する、 [`docx-tmp-sandbox-deny`](#docx-tmp-sandbox-deny) と同じ機構)。 lib は「close してから cleanup / 失敗時は残す」 の順序でこれを守る。
 - Word / Excel の「最近使ったファイル」 に staging path が並ぶ (= 無害、 驚かないため記載)。
 - 本節は **Office sandbox 側**の dialog。 Claude Code 側の「作業ディレクトリ外の file を読みますか」 prompt は別 layer = [`claude-code-permissions.md`](claude-code-permissions.md) の `additionalDirectories` で扱う。
 
-origin: 出張書類 session で案件 dir ごとに dialog を踏み、 remote 操作では押せないことが顕在化 → 別 session が実機で (a) を検証して layer 1 に固定。 検証 ledger (= 新規 dir vs group container × Word / Excel の 4 象限 + wrapper e2e) は個人層の results file に保存。
+**診断 (dialog の正体を確かめる)**: `codesign -d --entitlements :- "/Applications/Microsoft Word.app"` で `app-sandbox` と `application-groups` を見る / grant の蓄積は上の securebookmarks.plist (python の `plistlib` で読める、 key = file URL) / dialog が画面に出ているかを script から読む方法と罠は [`macos-gui-app-automation.md#dialog-presence-probe`](macos-gui-app-automation.md#dialog-presence-probe)。
+
+origin: 実測 (案件ごとに dir を切る運用で、 remote 操作中に dialog が押せず止まった)。 検証の記録 (新規 dir と group container × Word / Excel の 4 象限 + wrapper e2e) は個人層に置く。
 
 ### <a id="office-inplace-guard"></a>規則: Office に開かせる・保存させるのは staging の内側だけ (in-place は PreToolUse hook が deny)
 
@@ -3458,6 +3461,8 @@ print('value 変更:', [k for k in tpl_inkan & edit_inkan if values[k]['TPL'] !=
 
 [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) 回避のもう 1 つの経路: **worksheet XML の `<c>` 要素だけを regex で書き換え、 他の zip member を byte 同一で書き戻す**。 Excel automation が使えない/不安定な環境 (= CI・throttled マシン・[`excel-osascript-cell-write`](#excel-osascript-cell-write) が flaky な時) で、 drawings / VBA (`vbaProject.bin`) / form control を一切触らずに値だけ直せる。
 
+⚡ **まず [`scripts/xlsx-zip-set-cells.py`](../scripts/xlsx-zip-set-cells.py) を使う (hand-roll しない)**: `xlsx-zip-set-cells.py BOOK --sheet <sheet 名> --set C12=文字列 --set D12=#45672 --out OUT` (上書きは `--in-place` を明示、 `--spec cells.json` で一括)。 下の勘所 1-6 (件数照合 / `s=` 保持と `t=` 付け直し / inlineStr / cell・行の欠落は列順・行順に挿入して style を同じ列から借りる / 数式 cell は既定で拒否・消したら calcChain を外す / 書いた後の読み戻し + 他 member の CRC 一致 + `check-xlsx-integrity.py`) を全部内蔵。 マクロ入り様式 (xlsm) の実物で「変わる member は worksheet 1 つだけ・VBA 保持・integrity PASS」 を確認済み。 下の code は script が中でやっていることの説明。
+
 ```python
 import zipfile, re, shutil
 shutil.copy2(src, src + '.bak')
@@ -3491,7 +3496,7 @@ origin: マクロ入り様式 xlsm (= VBA + drawings 持ち) の日付 cell。 E
 **症状** (実測、 「印刷範囲指定」 マクロ入りの様式 xlsm): [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の Excel 経路で export すると、 (1) 「マクロを実行できません」 dialog (= 自動化 context のマクロセキュリティで Workbook_Open / 印刷範囲マクロが走れない)、 (2) 印刷範囲が設定されないまま export されて **sheet 全面 + 記入例 face + 他 sheet が 1 ページに縮小 / 計 13 ページ** の役に立たない PDF、 (3) その後 Excel が crash、 (4) **export 過程で workbook が再保存され file が変わる** (git diff が出る = `git checkout -- <file>` で HEAD に戻す。 export は読むだけ、 という前提を置かない。 ⚠️ 2026-08-21 以降の [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) は staging 経由 = 再保存は copy に当たり**原本は不変**、 in-place `--no-stage` の時だけ本項が効く)。
 
 **対処の階梯** (= Excel を増やさない方向に倒す):
-1. **値の変更は [`xlsx-cell-value-zip-surgery`](#xlsx-cell-value-zip-surgery)** (Excel 起動ゼロ、 VBA / drawings / form control 無傷)。 `scripts/check-xlsx-integrity.py` を gate に。
+1. **値の変更は [`xlsx-cell-value-zip-surgery`](#xlsx-cell-value-zip-surgery) = `scripts/xlsx-zip-set-cells.py`** (Excel 起動ゼロ、 VBA / drawings / form control 無傷、 `check-xlsx-integrity.py` の gate を内蔵)。
 2. **PDF が要るなら、 壊れた export からでも vector を救える** — [`vector-pdf-page-rescue`](#vector-pdf-page-rescue)。 再 export のために Excel を起こし直さない (= [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 と同根)。
 3. どうしても Excel で export するなら、 マクロが要らない場合は **xlsm → xlsx に落とした複製**を export 用に作る (= VBA を捨てた copy、 SoT の xlsm は触らない)。 ただし印刷範囲がマクロ依存の様式ではこれでも全面 dump になる。
 
@@ -3501,30 +3506,30 @@ origin: マクロ入り様式 xlsm (= VBA + drawings 持ち) の日付 cell。 E
 
 Excel export が全面 dump (= 1 ページに sheet 全体が縮小) でも、 **中身は vector** なので必要領域だけ切り出して A4 に再スケールすれば印刷品質の様式ページになる:
 
+⚡ **helper = [`scripts/pdf_form_fill.py`](../scripts/pdf_form_fill.py) `rescue_page_region(src, pno, clip)`** (= 下の show_pdf_page を A4・余白 40pt・縦横比保持で行い Document を返す)。 案件側が決めるのは clip だけ:
+
 ```python
 import fitz
+from pdf_form_fill import rescue_page_region
 src = fitz.open('export.pdf'); p = src[0]
-title = sorted(p.search_for('海外出張日程表'), key=lambda r: r.x0)[0]   # 左 face の見出し (右 face = 記入例)
-right_edge = sorted(p.search_for('滞在日数'), key=lambda r: r.x0)[0].x1 + 6   # 表の右端列 header
+title = sorted(p.search_for('日程表'), key=lambda r: r.x0)[0]        # 左 face の見出し (右 face = 記入例)
+right_edge = sorted(p.search_for('備考'), key=lambda r: r.x0)[0].x1 + 6   # 表の右端列 header
 words = [w for w in p.get_text('words') if w[1] > title.y0 - 5 and w[2] < right_edge + 2]
 clip = fitz.Rect(min(w[0] for w in words) - 4, title.y0 - 6, right_edge, max(w[3] for w in words) + 3)
-out = fitz.open(); page = out.new_page(width=595.2, height=841.9)
-m = 40; s = min((595.2 - 2*m)/clip.width, (841.9 - 2*m)/clip.height)
-page.show_pdf_page(fitz.Rect(m, m, m + clip.width*s, m + clip.height*s), src, 0, clip=clip)
-out.save('page_A4.pdf')
+rescue_page_region(src, 0, clip).save('page_A4.pdf')
 ```
 
 勘所:
 1. **clip は text anchor から導く** (見出し + 表の端の header)。 drawings の bbox で広げると隣 face の注意書き box を巻き込む (実測: 記入例 face の赤枠が混入)。
 2. **列境界は「表の高さを貫く縦線」 だけを使う** — `get_drawings()` で `width < 2 and height > (表高の大半)` の rect を選ぶ。 短い縦線片 (height 50-100) を境界と誤認すると、 15pt 幅の偽「列」 に合わせて塗り潰し・書込みして既存文字を削る (実測 1 回、 やり直し)。
 3. 切り出し後の文字修正は [`pdf-cell-text-patch`](#pdf-cell-text-patch)。
-4. **セル幅に入らない値は export 時点で clip されている** (例: 日付 `2026/12/14` 10 文字が 8 文字幅のセルで末尾欠け) — 救出後に patch するか、 元の xlsm 側を短い表示 (`12/14` 等) に直してから export。
+4. **セル幅に入らない値は export 時点で clip されている** (例: 日付 `2025/01/15` 10 文字が 8 文字幅のセルで末尾欠け) — 救出後に patch するか、 元の xlsm 側を短い表示 (`01/15` 等) に直してから export。
 
-origin: 海外出張日程表 (予定)。
+origin: 実測 (マクロ入り様式の日程表ページ)。
 
 ## <a id="pdf-cell-text-patch"></a>vector PDF の表セル文字を差し替える (= 塗り色 sampling + 罫線保護 + CJK/Latin 分割描画)
 
-Excel / Word を起こさずに様式 PDF のセル値だけ直す手順 (= 日付欠け・行追加・文言差替)。
+Excel / Word を起こさずに様式 PDF のセル値だけ直す手順 (= 日付欠け・行追加・文言差替)。 ⚡ **helper = [`scripts/pdf_form_fill.py`](../scripts/pdf_form_fill.py) `patch_cell_text(page, cell_rect, text, align=, maxsize=)`** (= 下の 1 と 4 を 1 呼び出しで: セル自身の塗り色で隠す → 幅に合わせて縮める → CJK/Latin を run ごとに描く。 部品 = `cell_fill_color` / `split_cjk_latin` / `mixed_text_length`)。 案件側が決めるのは列の x と行の y (下の 2・3)。
 
 1. **塗り潰し色はその場で sample**: `page.get_drawings()` のうち `fill` を持ち当該点を含む rect の色を使う (白で塗ると着色セルで目立つ)。
 2. **罫線を踏まない**: 塗り rect は罫線から ≥1pt 内側。 旧文字が罫線を越えて overflow していた場合は罫線ごと塗って **`draw_line` で罫線を引き直す** (幅・色は元 drawing から取る)。
@@ -3653,7 +3658,7 @@ origin: 実測 (autofit 表の docx 様式) — 変換を繰り返して (1)+(2)
 雛形 PDF にラベルが描かれている様式へ値を `insert_text` で載せるとき:
 
 - ❌ `x = label.x1 + 12`: ラベルと値の間に**セル境界の縦罫線**がある様式 (= 「携帯電話 | 値」) では、 値が罫線に被る or 隣のセルにはみ出す。 画面では「ほぼ合っている」 ように見えて紙で目立つ。
-- ✅ **罫線を検出して anchor**: `page.get_drawings()` から `rect.width < 2 and rect.height > 6` の縦線を集め、 ラベル行の y 範囲にかかり `x0 > label.x1` の最も近い線を「値セルの左辺」 とし、 `x = border.x1 + 6` から描く。 罫線が無ければ (同セル内) ラベル右端基準に fallback。
+- ✅ **罫線を検出して anchor**: `page.get_drawings()` から `rect.width < 2 and rect.height > 6` の縦線を集め、 ラベル行の y 範囲にかかり `x0 > label.x1` の最も近い線を「値セルの左辺」 とし、 `x = border.x1 + 6` から描く。 罫線が無ければ (同セル内) ラベル右端基準に fallback。 ⚡ **helper = [`scripts/pdf_form_fill.py`](../scripts/pdf_form_fill.py) `put_value_right_of_label(page, label, text, fontname=, size=, cjk=)`** (= この bullet と次の「数字の縦位置」 を 1 呼び出しで。 罫線だけ欲しいなら `border_right_of(page, label_rect)`)。
 - ✅ **数字の縦位置**: CJK ラベルは em box が baseline 下に沈むので、 数字を同じ baseline に置くと「浮いて」 見える。 `baseline = label_center_y + 0.36 * fontsize` で数字の cap-height 中心をラベルの縦中心に合わせる。 CJK の値はラベルと同じ baseline (`label.y1 - 1.8`) でよい。
 - ✅ **○ 印**: `page.get_text("rawdict")` で「（」 と「）」 の glyph bbox を取り、 その隙間の中心に `draw_oval` (半径 ≤ 行高/2 − 0.6、 上限 4.3pt)。 半角 `( )` は隙間が 2-3pt しか無いので円が括弧に被るが、 読みとしては「○」 で通る。 **docx 側に全角 ○ を打ち込まない** (= 幅が変わり折り返す、 [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow))。
 - ✅ **認印**: 「印」 ラベルの中心に 30pt 角の PNG を `insert_image(overlay=True)`。 gray raster にすると朱が消える。

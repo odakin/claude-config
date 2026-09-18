@@ -50,6 +50,13 @@ item の仕様:
   redact_hash_runs() / redact_words() : 不要表示 (= `#+` overflow 等) を redact で除去
   circle_word() / circle_paren_gap()  : 「該当するものを○で囲む」 様式の ○ (語を囲む / 空の括弧の中)。 同じ語の取り違えは
                                         見出し行 near= と x 範囲で絞り、 pick="unique" で一意でなければ例外 (#pdf-overlay-anchoring)
+  border_right_of() / put_value_right_of_label()
+                                      : label の右の縦罫線 (= 値セルの左辺) を anchor に値を書く、 数字は行の縦中心に
+                                        (#pdf-overlay-anchoring。 label 右端 + 固定 offset は罫線に被る)
+  rescue_page_region()                : 壊れた export の 1 頁から様式部分を vector のまま A4 1 頁へ救出 (#vector-pdf-page-rescue)
+  patch_cell_text() / cell_fill_color() / split_cjk_latin() / mixed_text_length()
+                                      : 表セルの文字差替え = セル自身の塗り色で消す → 幅に合わせて縮める → CJK/Latin を
+                                        run ごとに font を変えて描く (#pdf-cell-text-patch)
 """
 
 from __future__ import annotations
@@ -546,6 +553,122 @@ def circle_paren_gap(page, key: str, *, width: float = 0.9) -> "fitz.Rect":
     return circle
 
 
+def border_right_of(page, label_rect: "fitz.Rect", *, min_height: float = 6.0):
+    """label の行の高さにかかる縦罫線のうち、 label の右で最も近いもの (= 値セルの左辺) を返す。 無ければ None。
+
+    Word / Excel が吐いた様式 PDF のセル境界は細い縦長の drawing (幅 < 2pt) で描かれる。 値を
+    「label の右端 + 固定 offset」 に置くと、 label と値の間にある罫線に被るか隣のセルへはみ出す
+    (画面では気づきにくく紙で目立つ、 #pdf-overlay-anchoring)。"""
+    cy = (label_rect.y0 + label_rect.y1) / 2
+    cand = [d["rect"] for d in page.get_drawings()
+            if d.get("rect") is not None and d["rect"].width < 2.0 and d["rect"].height > min_height]
+    cand = [v for v in cand if v.y0 - 2 <= cy <= v.y1 + 2 and v.x0 > label_rect.x1 - 1]
+    return min(cand, key=lambda v: v.x0) if cand else None
+
+
+def put_value_right_of_label(page, label: str, text: str, *, fontname: str, size: float = 10,
+                             pad: float = 6.0, cjk: bool = None, occurrence: int = 0) -> "fitz.Point":
+    """label と同じ行の、 label の右のセルに値を書く。 書き始めの点 (x, baseline) を返す。
+
+    - x = label の右の縦罫線 (border_right_of) + pad。 罫線が無い (同じセルに label と値が並ぶ) なら label 右端 + 12
+    - y = 数字・英字は label の縦中心に字の中心を合わせる (baseline = 中心 + 0.36 × size)。 CJK の値は label と
+      同じ baseline (label 下端 − 1.8)。 cjk=None なら text に非 ASCII があるかで決める
+    - fontname は呼び出し側が page.insert_font で登録した名前 (組み込み "helv" / "japan" は紙で化けることがある
+      = 印刷は raster 版から、 #print-raster-pdf)"""
+    hits = sorted(page.search_for(label), key=lambda r: (r.y0, r.x0))
+    if len(hits) <= occurrence:
+        raise LookupError(f"label が見つからない: {label!r} (#{occurrence})")
+    lab = hits[occurrence]
+    b = border_right_of(page, lab)
+    x = (b.x1 + pad) if b else (lab.x1 + 12)
+    if cjk is None:
+        cjk = not text.isascii()
+    base = (lab.y1 - 1.8) if cjk else ((lab.y0 + lab.y1) / 2 + 0.36 * size)
+    page.insert_text((x, base), text, fontsize=size, fontname=fontname)
+    return fitz.Point(x, base)
+
+
+def rescue_page_region(src, pno: int, clip: "fitz.Rect", *, width: float = 595.2, height: float = 841.9,
+                       margin: float = 40.0) -> "fitz.Document":
+    """壊れた export (印刷範囲が効かず 1 頁に全面 dump された PDF 等) から、 様式の部分 `clip` だけを
+    vector のまま新しい 1 頁 (既定 A4) に縦横比を保って拡大配置した Document を返す (#vector-pdf-page-rescue)。
+    src は path でも fitz.Document でもよい。 文字は text のまま残るので、 後から patch_cell_text で直せる。"""
+    doc = src if isinstance(src, fitz.Document) else fitz.open(src)
+    out = fitz.open()
+    page = out.new_page(width=width, height=height)
+    s = min((width - 2 * margin) / clip.width, (height - 2 * margin) / clip.height)
+    page.show_pdf_page(fitz.Rect(margin, margin, margin + clip.width * s, margin + clip.height * s), doc, pno, clip=clip)
+    return out
+
+
+def cell_fill_color(page, point: "fitz.Point", default=(1, 1, 1)):
+    """point を含む塗りつぶし drawing のうち最も小さいもの (= そのセル自身) の塗り色。 無ければ default (白)。
+    セルの文字を消すとき、 白で塗ると色付きセル (入力欄の淡黄等) に白い穴が開く = 塗り色を sample して塗る。"""
+    best = None
+    for d in page.get_drawings():
+        r, f = d.get("rect"), d.get("fill")
+        if f is None or r is None or not r.contains(point):
+            continue
+        area = abs(r.width * r.height)
+        if best is None or area < best[0]:
+            best = (area, f)
+    return best[1] if best else default
+
+
+_RUN_RE = re.compile(r"[\x00-\x7f]+|[^\x00-\x7f]+")
+
+
+def split_cjk_latin(text: str) -> list:
+    """ASCII の run と非 ASCII の run に分ける ([(run, is_ascii), ...])。 CJK font 1 本で英数字を書くと
+    字間の開いた等幅風になる (組み込み "japan" で実測) = run ごとに font を変えて並べる。"""
+    return [(m.group(0), m.group(0).isascii()) for m in _RUN_RE.finditer(text)]
+
+
+def _run_length(run: str, name: str, size: float, fontfiles: dict) -> float:
+    if name in fontfiles:
+        return fitz.Font(fontfile=fontfiles[name]).text_length(run, fontsize=size)
+    return fitz.get_text_length(run, fontname=name, fontsize=size)
+
+
+def mixed_text_length(text: str, size: float, latin: str = "helv", cjk: str = "japan", fontfiles: dict = None) -> float:
+    """split_cjk_latin の run ごとに font を変えたときの幅 (pt)。 fontfiles = {fontname: path} (page に登録した実 font)。"""
+    fontfiles = fontfiles or {}
+    return sum(_run_length(run, latin if asc else cjk, size, fontfiles) for run, asc in split_cjk_latin(text))
+
+
+def patch_cell_text(page, cell: "fitz.Rect", text: str, *, align: str = "left", maxsize: float = 8.5,
+                    minsize: float = 4.0, latin: str = "helv", cjk: str = "japan", fontfiles: dict = None,
+                    cover: bool = True, inset: float = 1.0) -> float:
+    """vector PDF の表セル 1 つの文字を差し替える (#pdf-cell-text-patch)。 使った fontsize を返す。
+
+    1. cover=True なら cell を inset 分縮めた矩形をセル自身の塗り色で塗って旧文字を隠す (罫線を塗らないよう
+       inset する。 罫線ごと消えたら呼び出し側で引き直す)。 ⚠️ 旧文字は text 層に残る = 検証は画素で
+    2. 幅に収まるまで maxsize から 0.25pt 刻みで縮める (minsize で止める)
+    3. CJK / Latin を run ごとに font を変えて並べる (split_cjk_latin)、 縦はセル中心 (baseline = 中心 + 0.35 × size)
+    fontfiles = {fontname: path} を渡すと実 font の幅で測る (page.insert_font で同じ名前を登録しておく)。"""
+    fontfiles = fontfiles or {}
+    inner = fitz.Rect(cell.x0 + inset, cell.y0 + inset, cell.x1 - inset, cell.y1 - inset)
+    if cover:
+        fill = cell_fill_color(page, fitz.Point((cell.x0 + cell.x1) / 2, (cell.y0 + cell.y1) / 2))
+        sh = page.new_shape()
+        sh.draw_rect(inner)
+        sh.finish(color=None, fill=fill)
+        sh.commit()
+    if not text:
+        return 0.0
+    size = maxsize
+    while mixed_text_length(text, size, latin, cjk, fontfiles) > inner.width - 4 and size > minsize:
+        size -= 0.25
+    w = mixed_text_length(text, size, latin, cjk, fontfiles)
+    x = inner.x0 + 2 if align == "left" else (inner.x0 + inner.x1 - w) / 2
+    cy = (cell.y0 + cell.y1) / 2
+    for run, asc in split_cjk_latin(text):
+        name = latin if asc else cjk
+        page.insert_text((x, cy + size * 0.35), run, fontsize=size, fontname=name)
+        x += _run_length(run, name, size, fontfiles)
+    return size
+
+
 def redact_hash_runs(page) -> int:
     """`####` 等 (= =TODAY() の列幅 overflow、 個数は出力時の列幅依存) を除去。"""
     rects = [fitz.Rect(w[:4]) for w in page.get_text("words") if re.fullmatch(r"#+", w[4])]
@@ -1005,6 +1128,36 @@ def _selftest():
     print(f"  ✓ C circle_paren_gap: circle inside '( )' of the right line ({g})")
     assert len(page.get_drawings()) - n0 == 3, f"expected 3 ovals: {len(page.get_drawings()) - n0}"
     print(f"  ✓ C drew exactly 3 ovals")
+    doc.close()
+
+    # ------------------------------------------------------------------
+    # Fixture E: 罫線 anchor の値配置 / 頁救出 / セル文字差替え
+    # ------------------------------------------------------------------
+    doc = fitz.open()
+    page = doc.new_page(width=500, height=300)
+    page.insert_text((20, 40), "Phone", fontname="helv", fontsize=10)
+    page.draw_line(fitz.Point(90, 25), fitz.Point(90, 50))              # label と値の間の縦罫線
+    page.draw_rect(fitz.Rect(20, 100, 200, 130), color=(0, 0, 0), fill=(1, 1, 0.8))   # 淡黄のセル
+    page.insert_text((25, 120), "OLD VALUE", fontname="helv", fontsize=9)
+    lab = page.search_for("Phone")[0]
+    b = border_right_of(page, lab)
+    assert b is not None and abs(b.x0 - 90) < 1.5, f"border not found: {b}"
+    pt = put_value_right_of_label(page, "Phone", "000-0000-0000", fontname="helv", size=10)
+    assert pt.x > 90 and abs(pt.y - ((lab.y0 + lab.y1) / 2 + 3.6)) < 0.01, f"value misplaced: {pt}"
+    print(f"  ✓ E put_value_right_of_label: starts right of the rule ({pt.x:.1f} > 90)")
+    fill = cell_fill_color(page, fitz.Point(100, 115))
+    assert all(abs(a - e) < 0.01 for a, e in zip(fill, (1, 1, 0.8))), fill
+    size = patch_cell_text(page, fitz.Rect(20, 100, 200, 130), "新 value 2025/01/15 とても長い説明の文字列", maxsize=9)
+    assert size < 9, f"should shrink to fit: {size}"
+    pix = page.get_pixmap(clip=fitz.Rect(22, 102, 198, 128), dpi=72)
+    corner = pix.pixel(1, 1)
+    assert corner[2] < 240 and corner[0] > 240, f"cover should keep the pale-yellow fill, got {corner}"
+    print(f"  ✓ E patch_cell_text covered with the sampled fill and shrank to {size}pt")
+    assert split_cjk_latin("ABC 会議 13:00") == [("ABC ", True), ("会議", False), (" 13:00", True)]
+    resc = rescue_page_region(doc, 0, fitz.Rect(10, 20, 210, 140))
+    rp = resc[0]
+    assert abs(rp.rect.width - 595.2) < 0.1 and "Phone" in rp.get_text(), rp.get_text()[:40]
+    print(f"  ✓ E rescue_page_region: region re-laid on A4 with text kept as text")
     doc.close()
 
     print("=== ALL PASS ===")
