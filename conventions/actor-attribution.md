@@ -57,6 +57,12 @@ carrier 軸・claim-target 軸と別に、 **記録に「決定」「方針」�
 12. **確かめる先は owner の発言そのもの。** 書いた agent 自身の報告や tool の説明文は、 自分の判断を「指示に基づき」 と書くことがある (実測)。 会話記録の user 役の発言を引く ([debugging-discipline.md#transcript-search-archived-and-quoted](debugging-discipline.md#transcript-search-archived-and-quoted))。
 13. **置き場は 1 か所、 原文の動詞で。** owner の決定は決定を集める 1 か所 (設計 doc の決定欄・project の指示 file) に書き、 他の記録はそこを指す。 提案は「提案」「比較材料」 と明記する。 置き場が無いまま各所に全文で写すと、 出所が消えて後の読み手には (a) と (b)(c) の区別がつかなくなり、 訂正も写しの数だけ要る。
 
+14. <a id="premise-provenance"></a>**原稿の headline を支える前提の文は、 出所と著者の確認状況を一次記録で引いてから論じる。** 前提の 1 文 (「現実の系では X ≪ 1」 型) が疑われたら、 物理を論じる前に、 誰がいつ書き、 著者がいつ何を確認したかを確定する。 前提が AI の起草のまま著者の確認を経ずに headline の根拠になっていた、 という型は (b) を (a) として扱った記録の一種である。
+    - **初出**: `git log -S '<前提の文の特徴的な部分>' --format='%h %ad %an | %s | %(trailers)' -- <原稿>` は出現回数が変わった commit を並べる (最古 = 初出、 最新 = 撤去)。 整形で文が変わっていれば短い特徴語で引き直す。 `-S` は回数の差しか見ないので移動は見えない ([`overleaf-integration.md#push-sweeps-editor-edits`](overleaf-integration.md#push-sweeps-editor-edits) の注)。
+    - **書き手**: git author は commit した account であって書き手ではない。 `Co-Authored-By` と session trailer ([`multi-session-coordination.md#session-provenance-trailer`](multi-session-coordination.md#session-provenance-trailer)) で agent を読む。 trailer の付き始めより前の commit は「trailer 無し = 人の commit」 と読まず、 件名の癖・掲示板・会話記録で判定して根拠を書く。 付き始めの commit を証拠の境界として記録する。
+    - **どの clone で作られたか**: 手元の reflog に `commit:` として現れるか、 fast-forward の範囲で届いたかを見る。 fast-forward の行は着地点しか出ないので、 `git merge-base --is-ancestor <commit> <着地点>` を直前と直後の着地点に当てて範囲を決める。 範囲で届いたなら別の clone (別のマシン・別の checkout) で作られた。 reflog は clone ごとで期限もあるので、 見えないことは不在の証拠にならない。
+    - **確認状況**: review 台帳で、 前提を含む節を誰がいつ確認したかを引き、 「式の整合を確認した」 と「前提が現実の系に当たるか確認した」 を分けて書く。 前提が一度も著者の確認を通っていなければそう明記する。 headline の変更そのものの扱いは [`manuscript-claim-ownership.md`](manuscript-claim-ownership.md)、 前提を lab の量で検算する手順は [`paper-audit.md#regime-premise-in-lab-quantities`](paper-audit.md#regime-premise-in-lab-quantities)。
+
 ## <a id="attribution-evidence"></a>再発 evidence (genericized)
 
 - 共著物理論文の Overleaf git mirror を pull し、 単一 commit author の 146 行更新を「その人の update」と単独 narrative で報告 → 実際は会議で共著者全員が live 編集した group product (user 訂正 1)。 再 framing 後も、 同日朝に owner 名義の commit 20+ 本 (= owner の live 編集を coding agent が auto-push した分) が並んでいる事実を git log で確認しないまま narrative を維持 (user 訂正 2)。 **1 incident 内で規律 2 (group default) と規律 5 (proxy 分布の安価な確認) を連続で落とした**。

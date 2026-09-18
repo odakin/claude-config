@@ -160,6 +160,21 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 **符号も収支の対象 (2026-09-11 追補)**: 係数の**符号**が物理を運ぶとき (真空エネルギーの向き、 運動項・質量二乗の符号、 running の向き)、 それも formalism と独立な 2〜3 行で検算する — 振幅と有効作用の辞書を定義から導き直し、 教科書の絶対量 (1 loop 真空エネルギー、 真空偏極の遮蔽の向き) と比べる。 起源事例 (2026-09): 投稿前 gate の worker がこの anchor に従って辞書を白紙から導き、 1 つの項を教科書の 1 loop の絶対量と比べたことで、 多数の検査が全 PASS のまま見逃していた有効作用の全体符号の反転が見つかった → [#absolute-sign-external-anchor](#absolute-sign-external-anchor)。
 
+## <a id="regime-premise-in-lab-quantities"></a>「現実の regime」 と呼ぶ前に、 不変な parameter を lab の観測量に直す — 確立した結果を覆す帰結は前提から疑う
+
+**Pattern**: 模型の Lorentz 不変な parameter (幅・結合・スケールの比) を静止系の長さや Compton 波長と比べて「現実の系はこちらの regime」 と決め、 その regime の帰結を headline に置く。 不変な量が lab のどの量に当たるか (横か縦か、 静止系か lab か) は取り違えやすく、 取り違えたまま regime を名指すと、 帰結の全体が前提の 1 文に乗る。 前提の文は短く導出の途中に置かれるので、 式の再導出や数値の再現では試されない。
+
+**Check** (「realistic」「for any physical」「現実の」 を regime に付ける前に 1 回):
+
+1. 条件を lab の量 (局在の幅・エネルギー幅・時間幅) で書き直す。 不変量 1 つが lab の複数の量 (方向ごとの幅など) に対応するなら全部書く。
+2. 条件が含意する lab の量を、 線源と検出の運動学 (生成過程が許すエネルギー幅、 測定の分解能) と突き合わせる。 含意されるエネルギー幅がエネルギー自体に届くなら、 その regime は「現実の」 ではなく特殊な準備である。
+3. 物理量を固定した極限 (質量 → 0、 エネルギー → ∞) で条件がどう動くかを見る。 「質量が小さいから X」 と書く前に、 lab の量を固定したとき条件が質量に依るかを確かめる。
+4. 数値は桁ごとに算術を書く (単位換算で二乗を取り忘れると桁が半分になる。 実測)。
+
+**Prior check**: 帰結が、 長く使われてきた近似や標準の公式を「現実の parameter で破綻する」 と言うなら、 それは発見か前提の誤りのどちらかで、 事前確率は後者に傾く。 headline に上げる前に、 帰結を支える前提の 1 文を独立に検算する (前提だけを渡す導出の盲検 = [`cold-eyes-isolation.md`](../../ai-collaboration/conventions/cold-eyes-isolation.md))。 前提の文の出所と著者の確認状況は [`actor-attribution.md#premise-provenance`](actor-attribution.md#premise-provenance) の手順で引く。
+
+**境界**: これは主張を立てる側の検査。 他の agent や査読から原稿の主張に不利な finding を受けたとき、 その finding が効く regime と原稿がそこに居るかを査定するのは受ける側の規則で、 入口は [`manuscript-claim-ownership.md`](manuscript-claim-ownership.md)。 両者は「確立した結果を覆す含意なら前提を先に疑う」 で同じ向きを向く。 隣接: [#headline-claim-budget-check](#headline-claim-budget-check) (中心主張を形式に依らない収支で検算) / [#threshold-is-not-regime-onset](#threshold-is-not-regime-onset) (閾値は反対 regime の始点ではない)。
+
 ## <a id="figure-irreproducible-taxonomy"></a>図が本文の式から再現できない時の 4 分類 (2026-08)
 
 図を caption の定義どおりに再実装しても合わない時、 原因は 4 つに分かれる。 **どれかを決めないと処置 (式を直す / 図を差し替える / caption を直す / 設定を直す) が決まらない**ので、 「再現不能」 で止めない。
