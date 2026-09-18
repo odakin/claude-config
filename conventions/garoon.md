@@ -27,7 +27,7 @@ Garoon のセッション切れは 2 層ある: **Garoon 本体のセッショ�
 2. `--browser-refresh keep|close` (env `GAROON_BROWSER_REFRESH`) を指定していれば、 **起動中の** browser に tab を 1 枚、 裏で開かせる (AppleScript。 前面の tab は開いた直後に元へ戻し、 browser を前面に出さない。 起動していなければ何もしない)。 そのうえで **tab の行き先を見る**:
    - Garoon の中に着いた = 入り直せた → cookie DB の更新を待って読み直し、 撃ち直す。 `close` なら自分が開いたその tab を閉じる。
    - Garoon の外 (ログイン画面) で数秒止まった = **本人のログインが要る** → exit 75。 `close` ならそのログイン画面の tab も閉じる (失敗のたびに tab が溜まらない)。
-3. 本人のログインが要る時は、 agent が user に 1 行で頼み、 同じ command を `--wait-login <秒>` つき・background で実行し直す。 ログイン画面の tab が開いたままになり、 本人がログインし終えたら続きから進む (= user は「終わった」 と報告しなくてよい)。 本人がログインに使った tab は閉じない。
+3. 本人のログインが要る時は、 agent が user に 1 行で頼み、 同じ command を `--wait-login <秒>` つき (subcommand の前でも後でも効く) ・background で実行し直す。 ログイン画面の tab が開いたままになり、 本人がログインし終えたら続きから進む (= user は「終わった」 と報告しなくてよい)。 本人がログインに使った tab は閉じない。
 
 **設計の要点と理由 (見積もらずに見る / 通常の周期を警告にしない / IdP を延命しない / browser に触る副作用は opt-in / 既存の tab を使い回さない / browser の中で読む経路に寄せない理由) の正本 = [`machine-route-first.md#sso-session-recovery`](machine-route-first.md#sso-session-recovery)** (別の SSO 保護サイトで同じ形を組む時もそこから)。 tab を駆動する部品 = [`scripts/lib/browser_tab.py`](../scripts/lib/browser_tab.py)。
 
@@ -64,6 +64,14 @@ Garoon 固有の実測:
 4. **最終送信は owner の明示 OK 後に 1 回だけ**: 提示は少なくとも申請者・標題・日時・主要値・備考・添付の有無・処理経路を含む。承認前に「申請する」を押さない。
 5. **成功画面で閉じない**: 申請後は「送信一覧」を開き、新しい行の **申請番号 / フォーム名 / 標題 / 状況 / 現在の処理者 / 申請時刻**を確認する。レスポンス画面でなく server-side list が成否の正 ([`web-form-automation.md#submit-truth-is-server-state`](web-form-automation.md#submit-truth-is-server-state))。
 6. **ID と現在地を case SoT に回収する**: 申請番号・内部 pid・送信時状態・URL を案件側に保存。workflow は申請時点で閉じず、承認 / 差し戻し / 取り消しの終端まで追う。
+
+<a id="garoon-workflow-form-quirks"></a>**画面で入力するときの罠** (driver の無いフォームを browser MCP で埋めるとき、実測):
+
+- **「申請する」 の 1 回目の click で画面が変わらないことがある**。押し直す前に**別 tab で送信一覧を開き、新しい行が無いことを確かめてから**押し直す (= 押し直しは二重申請の入口。結果画面でなく server 側の一覧が成否の正、上の 5. と同じ)。
+- **入力欄の name は `item_<数字>`** (日付は `_year` / `_month` / `_day` / `_hour` / `_minute` の 5 つに分かれる)。label は同じ行の `th` から引いて対応表を作ってから値を入れる。
+- **select は値を入れたら `change` を発火する**: 年・月を変えると日の選択肢 (曜日つき) が作り直される。年 → 月 → 日の順に入れ、最後に表示文字列を読み戻す。
+- **browser MCP の JS 実行結果は、cookie や query string らしい文字列を含むと丸ごと伏せられる** (同一 origin への fetch の結果を返す等)。一覧や結果は page text の取得で読み、JS は「name と値だけ」 を返す形にする。
+- 「実施日」 のような radio (指定あり / 指定なし) は、前回承認された申請の選択をそのまま引き継いで、隣の日付欄の値も通ることがある。どちらを選ぶかは値の SoT 側で決め、画面の既定に任せない。
 
 **接続の実務**: 自動選択が未 login の in-app browser を開く一方、同じマシンの external Chromium に SSO session が残っていることがある。その場合は再 login の前に接続済み browser 一覧を取り、最新のログイン済み tab を claim する。画面 title/URL の一時的な「ログイン」表示で判定せず、DOM 内の user 名 / portal / workflow を読んで session 実状態を判定する。
 

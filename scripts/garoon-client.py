@@ -297,7 +297,14 @@ def selftest():
         print("PASS" if got == want else "FAIL", code, loc[:40], "->", got)
 
     # 入り直しの結末判定 (偽の tab と時計) は lib 側の台本を回す
+    def _parsed(argv):
+        return build_parser().parse_args(argv)
     checks = _tab_selftest_cases() + [
+        ("--wait-login は subcommand の後ろでも効く", _parsed(["search", "k", "--wait-login", "5"]).wait_login == 5),
+        ("--wait-login は subcommand の前でも効く", _parsed(["--wait-login", "7", "search", "k"]).wait_login == 7),
+        ("後ろで指定しなければ前の値が残る", _parsed(["--wait-login", "7", "--json", "search", "k"]).json is True
+         and _parsed(["--wait-login", "7", "search", "k"]).wait_login == 7),
+        ("何も付けなければ既定値", _parsed(["status"]).wait_login == 0 and _parsed(["status"]).json is False),
         ("Garoon の中の判定: /login と別 host と http は外", inside("https://x.cybozu.com/g/", host)
          and not inside("https://x.cybozu.com/login", host) and not inside("https://y.cybozu.com/g/", host)
          and not inside("http://x.cybozu.com/g/", host) and not inside("chrome-error://chromewebdata/", host)),
@@ -309,29 +316,40 @@ def selftest():
     return 0 if ok else 1
 
 
-def main():
+def build_parser():
+    """引数の組み立て。 --wait-login / --browser-refresh / --json は subcommand の前でも後でも効く
+    (= 後ろに付けると argparse の unrecognized arguments で落ちていた、 実測)。"""
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--org", default=os.environ.get("GAROON_ORG"), help="cybozu.com subdomain (env GAROON_ORG)")
     ap.add_argument("--browser", default="brave")
     ap.add_argument("--profile", default="Default")
+    refresh_help = ("切れた時に起動中の browser に裏で tab を開かせて入り直すか (env GAROON_BROWSER_REFRESH)。 "
+                    "keep = 開いた tab を残す / close = 入り直せたら自分が開いた tab を閉じる")
+    wait_help = "本人のログインが要る時、 ログインし終えるのをこの秒数まで待って続きから進む"
     ap.add_argument("--browser-refresh", choices=("off", "keep", "close"),
-                    default=os.environ.get("GAROON_BROWSER_REFRESH", "off"),
-                    help="切れた時に起動中の browser に裏で tab を開かせて入り直すか (env GAROON_BROWSER_REFRESH)。 "
-                         "keep = 開いた tab を残す / close = 入り直せたら自分が開いた tab を閉じる")
-    ap.add_argument("--wait-login", type=int, default=0, metavar="秒",
-                    help="本人のログインが要る時、 ログインし終えるのをこの秒数まで待って続きから進む")
+                    default=os.environ.get("GAROON_BROWSER_REFRESH", "off"), help=refresh_help)
+    ap.add_argument("--wait-login", type=int, default=0, metavar="秒", help=wait_help)
     ap.add_argument("--selftest", action="store_true", help="切れ判定と入り直しの結末判定の自己テスト (network・browser なし)")
+    ap.add_argument("--json", action="store_true", help="raw JSON を出す")
+    # subcommand の後ろにも同じ option を置けるようにする。 default=SUPPRESS = 後ろで指定しなかった時に前の値を消さない
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--browser-refresh", choices=("off", "keep", "close"), default=argparse.SUPPRESS, help=refresh_help)
+    common.add_argument("--wait-login", type=int, default=argparse.SUPPRESS, metavar="秒", help=wait_help)
+    common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="raw JSON を出す")
     sub = ap.add_subparsers(dest="cmd")
-    ap.add_argument("--json", action="store_true", help="raw JSON を出す (subcommand の前に置く)")
-    p = sub.add_parser("search"); p.add_argument("keyword"); p.add_argument("--app", default="bulletin"); p.add_argument("--start", type=int, default=0)
-    sub.add_parser("bulletin-categories")
-    p = sub.add_parser("bulletin-topics"); p.add_argument("category_id")
-    p = sub.add_parser("bulletin-topic"); p.add_argument("topic_id")
-    p = sub.add_parser("download"); p.add_argument("fid"); p.add_argument("--app", default="bulletin"); p.add_argument("--out", required=True)
-    p = sub.add_parser("get"); p.add_argument("path")
-    sub.add_parser("status")
-    sub.add_parser("doctor")
-    a = ap.parse_args()
+    p = sub.add_parser("search", parents=[common]); p.add_argument("keyword"); p.add_argument("--app", default="bulletin"); p.add_argument("--start", type=int, default=0)
+    sub.add_parser("bulletin-categories", parents=[common])
+    p = sub.add_parser("bulletin-topics", parents=[common]); p.add_argument("category_id")
+    p = sub.add_parser("bulletin-topic", parents=[common]); p.add_argument("topic_id")
+    p = sub.add_parser("download", parents=[common]); p.add_argument("fid"); p.add_argument("--app", default="bulletin"); p.add_argument("--out", required=True)
+    p = sub.add_parser("get", parents=[common]); p.add_argument("path")
+    sub.add_parser("status", parents=[common])
+    sub.add_parser("doctor", parents=[common])
+    return ap
+
+
+def main():
+    a = build_parser().parse_args()
     if a.selftest:
         sys.exit(selftest())
     if not a.cmd:
