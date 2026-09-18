@@ -8,9 +8,7 @@ summary: LaTeX 固有規約（物理リポで参照）
 LaTeX を含むリポで適用。CLAUDE.md から参照: `~/Claude/claude-config/conventions/latex.md`
 
 ## <a id="equation-safety"></a>式の安全規則
-- **物理主張・式の変更は著者の依頼・承認の範囲で行う。** 既に依頼・承認された修正は、根拠と関連する検証を確認して通常の本文・数式に反映する。範囲外や未確定の案は会話または作業ノートで提案し、確定本文に混ぜない。
-- **提案を PDF に印字・着色する指示とは解釈しない。** `\AI{}` 等の review 注記や `\red{}` 等の着色は、ユーザーがその出力を明示的に指定した場合だけ行う。既存の注記・色は今回の変更対象でなければ保つ。
-- 英語校正・文法修正など確実に正しい本文修正は可
+- **原稿の表題・概要・序論・結論・式を AI agent が変える条件は [`manuscript-claim-ownership.md#rule`](manuscript-claim-ownership.md#rule) が正本** (著者の項目ごとの裁定 = 著者の発言の verbatim。 変更は提案として出す。 印字しない指示は直接書く許可ではない。 英語校正は可)。 機械 gate = `scripts/manuscript-claim-guard.py`。
 
 ## <a id="bare-parenthetical-crossrefs"></a>裸の括弧参照と `\labelcref` の置き場所の検出、保持検査
 

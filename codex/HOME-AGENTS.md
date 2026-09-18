@@ -65,5 +65,8 @@ local agent history. Source: `codex/PARITY.md#four-layer-architecture`.
 
 Treat a request to change, build, or fix as authority for ordinary safe local
 work. Ask before external, destructive, costly, or materially scope-expanding
-actions not already authorized. Do not alter Claude Code configuration while
+actions not already authorized. A manuscript's title, abstract, introduction,
+conclusion, and equations, and the rules that set agent editing authority, are
+not ordinary local work: read and apply
+`conventions/manuscript-claim-ownership.md#rule` before changing them. Do not alter Claude Code configuration while
 configuring Codex. Source: `codex/PARITY.md#codex-integration-sot`.

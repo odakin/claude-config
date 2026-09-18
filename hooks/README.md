@@ -25,6 +25,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[google-url-guard.test.sh](google-url-guard.test.sh)** — google-url-guard.sh の self-test (hermetic)
 - **[long-bash-command-guard.sh](long-bash-command-guard.sh)** — 長すぎる Bash command を block — PreToolUse(Bash): 閾値超は分割 / file 経由に誘導
 - **[long-bash-command-guard.test.sh](long-bash-command-guard.test.sh)** — long-bash-command-guard.sh の self-test (配信対象外)
+- **[manuscript-claim-guard.py](manuscript-claim-guard.py)** — PreToolUse(Edit|Write|MultiEdit|Bash): 原稿の保護領域 (表題・概要・序論・結論・数式) と agent の権限規約を、著者の項目ごとの承認なしに書き換える編集・commit を deny (engine = scripts/manuscript-claim-guard.py、 正本 = conventions/manuscript-claim-ownership.md)
+- **[manuscript-claim-guard.test.sh](manuscript-claim-guard.test.sh)** — 原稿の保護領域と権限規約の gate を Claude hook・git pre-commit の 2 面で検査 (negative control つき)
 - **[mcp-search-scope-reminder-nudge.sh](mcp-search-scope-reminder-nudge.sh)** — PreToolUse hook (layer 1)
 - **[mcp-search-scope-reminder-nudge.test.sh](mcp-search-scope-reminder-nudge.test.sh)** — logic + retroactive selftest
 - **[mcp-search-zero-result-nudge.sh](mcp-search-zero-result-nudge.sh)** — PostToolUse hook (layer 1)

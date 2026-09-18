@@ -53,7 +53,14 @@ assert any(
     any("first_turn_stamp_check.py" in hook.get("command", "") for hook in group.get("hooks", []))
     for group in hooks["Stop"]
 )
+for matcher in ("Bash", "apply_patch"):
+    assert any(
+        group.get("matcher") == matcher
+        and any("manuscript_claim_guard.py" in hook.get("command", "") for hook in group.get("hooks", []))
+        for group in hooks["PreToolUse"]
+    ), matcher
 PY
+test -f "$SCRIPT_DIR/manuscript_claim_guard.py"
 
 PUBLIC_REPO="$TEMP_ROOT/public"
 mkdir -p "$PUBLIC_REPO/.git" "$PUBLIC_REPO/.claude"
@@ -448,5 +455,59 @@ context = json.load(open(sys.argv[1], encoding="utf-8"))["hookSpecificOutput"]["
 assert "first user-visible reply" not in context
 assert "account unknown" not in context
 PY
+
+# Manuscript claims and authority rules: same predicate as the Claude hook and the Git pre-commit.
+# Synthetic manuscript and transcript only. Semantic home: conventions/manuscript-claim-ownership.md.
+MCG_REPO="$TEMP_ROOT/mcg-paper"
+MCG_HOME="$TEMP_ROOT/mcg-home"
+mkdir -p "$MCG_REPO/src" "$MCG_HOME/.codex/sessions/2026/01/01"
+git init -q "$MCG_REPO"
+printf '%s\n' '\documentclass{article}' '\begin{document}' '\title{A toy model of heat flow}' \
+  '\begin{abstract}' 'We find that the toy lattice conducts heat. The conductivity grows linearly.' '\end{abstract}' \
+  '\section{Method}' 'Body.' '\begin{align}' 'u &= v \label{eq:uv}' '\end{align}' '\end{document}' \
+  > "$MCG_REPO/src/main.tex"
+git -C "$MCG_REPO" add -A
+GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid \
+  git -C "$MCG_REPO" commit -q -m init
+printf '%s\n' '{"type":"event_msg","payload":{"type":"user_message","message":"二文目は削ってよい"}}' \
+  > "$MCG_HOME/.codex/sessions/2026/01/01/rollout-2026-01-01T00-00-00-cdx-mcg.jsonl"
+mcg_patch() {  # $1 = removed abstract line, $2 = added line
+  MCG_REPO="$MCG_REPO" MCG_OLD="$1" MCG_NEW="$2" python3 - <<'PY'
+import json
+import os
+
+patch = (
+    "*** Begin Patch\n*** Update File: src/main.tex\n@@\n \\begin{abstract}\n"
+    f"-{os.environ['MCG_OLD']}\n+{os.environ['MCG_NEW']}\n*** End Patch"
+)
+print(json.dumps({"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "session_id": "cdx-mcg",
+                  "cwd": os.environ["MCG_REPO"], "tool_input": {"command": patch}}))
+PY
+}
+mcg_decision() {
+  MANUSCRIPT_CLAIM_GUARD_STATE_DIR="$TEMP_ROOT/mcg-state" MANUSCRIPT_CLAIM_GUARD_HOME="$MCG_HOME" \
+    python3 "$SCRIPT_DIR/manuscript_claim_guard.py" | grep -q '"permissionDecision": "deny"' && echo deny || echo allow
+}
+MCG_FULL='We find that the toy lattice conducts heat. The conductivity grows linearly.'
+# negative control: dropping a claim from the abstract without approval is denied
+[ "$(mcg_patch "$MCG_FULL" 'We find that the toy lattice conducts heat.' | mcg_decision)" = deny ]
+# article-only copyedit passes
+[ "$(mcg_patch "$MCG_FULL" 'We find that a toy lattice conducts heat. The conductivity grows linearly.' | mcg_decision)" = allow ]
+# a patch whose removed line is not in the file (the tool itself would fail) is not a protected change
+[ "$(mcg_patch 'We never find this.' 'Anything.' | mcg_decision)" = allow ]
+# after the author's verbatim words are recorded for this session and region, the same patch passes
+MANUSCRIPT_CLAIM_GUARD_STATE_DIR="$TEMP_ROOT/mcg-state" MANUSCRIPT_CLAIM_GUARD_HOME="$MCG_HOME" \
+  python3 "$SCRIPT_DIR/../../scripts/manuscript-claim-guard.py" approve --session codex:cdx-mcg \
+  --file "$MCG_REPO/src/main.tex" --region abstract --change 'drop the second sentence' --quote '二文目は削ってよい' >/dev/null
+[ "$(mcg_patch "$MCG_FULL" 'We find that the toy lattice conducts heat.' | mcg_decision)" = allow ]
+# Bash git commit carries the same predicate: an equation changed through the shell, another session, no approval
+MCG_BASH="$(MCG_REPO="$MCG_REPO" python3 -c 'import json,os; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","session_id":"cdx-other","cwd":os.environ["MCG_REPO"],"tool_input":{"command":"git commit -a -m x"}}))')"
+python3 - "$MCG_REPO/src/main.tex" <<'PY'
+import sys
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read().replace("u &= v", "u &= -v")
+open(path, "w", encoding="utf-8").write(text)
+PY
+[ "$(printf '%s' "$MCG_BASH" | mcg_decision)" = deny ]
 
 echo "Codex hook tests passed"

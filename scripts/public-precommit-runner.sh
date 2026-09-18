@@ -89,6 +89,22 @@ if [ -f "$CONFLICT_LIB" ]; then
   fi
 fi
 
+# ----------------------------------------------------------------------
+# 原稿の主張と agent の権限規約の gate (AI agent の session の commit だけを見る。 人の commit は通す)。
+# 公開 repo では主に権限規約 (正本 doc の本文・参照行・配線) の lock として効く。
+# 止めるのは「exit 1 かつ engine の見出し」 のときだけ (= engine の内部エラーで全 commit を止めない)。
+# 正本 = conventions/manuscript-claim-ownership.md
+# ----------------------------------------------------------------------
+MCG_ENGINE="$(dirname "$0")/manuscript-claim-guard.py"
+if [ -f "$MCG_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  mcg_rc=0
+  mcg_out="$(python3 "$MCG_ENGINE" git-precommit 2>&1)" || mcg_rc=$?
+  [ -n "$mcg_out" ] && printf '%s\n' "$mcg_out" >&2
+  if [ "$mcg_rc" -eq 1 ] && printf '%s' "$mcg_out" | grep -q 'manuscript-claim-guard:'; then
+    exit 1
+  fi
+fi
+
 # root AGENTS.md の入口が無い repo を知らせる (止めない、 SoT = lib/agents-entrypoint-warn.sh header)
 AGENTS_WARN_LIB="$(dirname "$0")/lib/agents-entrypoint-warn.sh"
 if [ -f "$AGENTS_WARN_LIB" ]; then

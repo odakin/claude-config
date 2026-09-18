@@ -143,6 +143,16 @@
       ]
     },
     {
+      "matcher": "Edit|Write|MultiEdit|Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/manuscript-claim-guard.py",
+          "timeout": 20
+        }
+      ]
+    },
+    {
       "matcher": "mcp__.*__(search_threads|search_emails|list_messages|list_threads|search_threads_by|list_events)",
       "hooks": [
         {

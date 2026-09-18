@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 125 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 126 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -123,6 +123,8 @@ layer 1 (public) のドメイン固有規約 125 file をカテゴリ別に列�
   - 科研費調書の機構知見 — **起草の入口** (#drafting-entry-point = 前年の赤入れを読む / 当年の様式から指示を吸い出す / 書いている最中に人が見る 7 項目 / 提出手順から検査器を呼ぶ)、公開の審査基準 (評定要素) を取得して欄構成を正対させる (波及効果の見落とし穴 / 萌芽は「探索的性質・芽生え期」の literal 対応 / 事前選考の評点分布)、紙面設計 (詰めすぎ⇄空きすぎの振り子・独立行見出し・モノクロ審査・図 canvas 高さでの行回収)、遂行能力欄の材料発掘 (海外研究歴・受賞・資金獲得・日付つき業績統計) と業績リスト見出しの compliance (「引用文献」化で preprint 引用と「掲載済み限定」を両立)、研究協力者の書き方 (実名×役割が匿名の分野列挙に勝る / 身分は書かなければ見えない)、提出前の模擬書面審査 (審査員 persona × 調書のみ読ませる別 session) と名指し主張の帰属検証・「未解決」框付けの先行結論検査・図と本文の整合・観測到達性の数字、提出後凍結中の差し戻し改訂 (頁ジオメトリ保存 = 字数収支ペアリング + 頁末 y 実測 + Web 入力不変原則)、電子申請システムの機構 (毎朝 5:00 再起動で編集消失・応募情報の期限付き削除・応募受入状況欄の e-Rad 連携射程と全角 reject)、公募研究 (学術変革) の実務 (別領域 2 件まで・tier 選択・学内〆超過の救済)、研究課題名の衝突検査 (公募文言正対 + 他分野ホットトピックとの同名衝突)、機関事務の差し戻しループ (書き込みスキャン PDF の色領域走査・指摘の定型 10 類型と全種目への横展開・「7 割は埋めて」の紙面下限・窓は何度でも開く・進捗の時制/専念義務の身分/これまでの研究から本課題への流れ)、差し替え物の staging 機構 (build stamp / staging dir 一本化 / 必須語・禁止語 gate / 入力後の突合 verifier / Web 入力値 SoT + 鏡像 gate)、経費明細の粒度 (品名型番・1 行 1 事項・旅費の場所日数人数) と費目帰属・二重計上 (サブスク/委託はその他・招聘者滞在費は外国旅費側)、様式を組み直す運用に固有の穴 (様式の骨格が黙って消える・様式の埋め込み指示が読まれない) と年非依存の機械検査 scripts/kakenhi-preflight.py、 電子申請システムの画面を印刷すると表示中の範囲 1 頁しか PDF にならない (#print-visible-range-only)
 - **[latex.md](latex.md)** — LaTeX を含むリポで作業するとき
   - LaTeX 固有規約（物理リポで参照）
+- **[manuscript-claim-ownership.md](manuscript-claim-ownership.md)** — AI agent (Claude / Codex / 他 vendor / sub-agent / 無人 worker) が原稿 (.tex) の表題・概要・序論・結論・数式に触れる前 + 著者の依頼を「承認」 と読みそうになった瞬間 + manuscript-claim-guard に deny されたとき + agent の編集権限を定める規則 (本 doc・各層の参照・gate の設定と配線) を変える前
+  - 原稿の主張の所有権と AI agent の編集境界の正本。 保護領域 (表題・概要・序論・結論・数式) は著者の項目ごとの裁定 (著者の発言の verbatim を file × 領域ごとに記録) なしに agent が書き換えない・削らない・足さない。 変更は提案として出し、 印字しない指示は直接書く許可ではない。 権限の規則そのものも同じ扱い (強める変更も含む)。 機械 gate = scripts/manuscript-claim-guard.py を Claude / Codex の PreToolUse と git pre-commit が同じ述語で呼ぶ
 - **[matplotlib-3d-illustrations.md](matplotlib-3d-illustrations.md)** — matplotlib の 3D (mplot3d) で半透明の模式イラスト (平面波・波束・濃度場などスライド/論文の概念図) を描くとき
   - 半透明 3D イラストの実測知見 — 周期構造は視線角で消える (projection averaging)・粗密は alpha でなく点密度で・疑似 volume render はスラブ合成・裾の楕円が生む「下から見てる」錯視の解消・スライド素材の透明背景
 - **[matplotlib-figure-qa.md](matplotlib-figure-qa.md)** — matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check)

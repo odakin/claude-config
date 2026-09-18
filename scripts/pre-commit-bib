@@ -83,6 +83,22 @@ else
     echo "pre-commit: staged-conflict-markers.sh not found. Skipping conflict-marker gate." >&2
 fi
 
+# 原稿の主張と agent の権限規約の gate (AI agent の session の commit だけを見る。 人の commit は通す)。
+# 保護領域 (表題・概要・序論・結論・数式) と権限規約の、 著者の項目ごとの承認 (著者の発言の verbatim を
+# transcript で照合したもの) の無い変更を止める。 Claude / Codex の PreToolUse hook と同じ engine・同じ述語。
+# 止めるのは「exit 1 かつ engine の見出し」 のときだけ (= engine の内部エラーで全 commit を止めない)。
+# 正本 = conventions/manuscript-claim-ownership.md
+MCG_ENGINE="$SCRIPTS_DIR/manuscript-claim-guard.py"
+[[ -f "$MCG_ENGINE" ]] || MCG_ENGINE="$HOME/Claude/claude-config/scripts/manuscript-claim-guard.py"
+if [[ -f "$MCG_ENGINE" ]] && command -v python3 >/dev/null 2>&1; then
+    mcg_rc=0
+    mcg_out="$(python3 "$MCG_ENGINE" git-precommit 2>&1)" || mcg_rc=$?
+    [[ -n "$mcg_out" ]] && printf '%s\n' "$mcg_out" >&2
+    if [[ $mcg_rc -eq 1 ]] && printf '%s' "$mcg_out" | grep -q 'manuscript-claim-guard:'; then
+        exit 1
+    fi
+fi
+
 # root AGENTS.md の入口が無い repo を知らせる (止めない、 SoT = lib/agents-entrypoint-warn.sh header)。
 AGENTS_WARN_LIB="$SCRIPTS_DIR/lib/agents-entrypoint-warn.sh"
 [[ -f "$AGENTS_WARN_LIB" ]] || AGENTS_WARN_LIB="$HOME/Claude/claude-config/scripts/lib/agents-entrypoint-warn.sh"

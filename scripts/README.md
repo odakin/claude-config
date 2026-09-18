@@ -147,6 +147,7 @@
 - **[macos-crash-triage.py](macos-crash-triage.py)** — macOS のアプリ crash report (.ips) を、 Chromium の Crashpad crash key と unified log で裏付けて型に分ける (読むだけ)。--selftest 内蔵。 conventions/macos-app-crash-triage.md
 - **[mail-to-pdf.py](mail-to-pdf.py)** — 受信したメールの本文 (text) を、 事務に出す添付書類の PDF にする (日本語可・秘密の値を伏せられる)。
 - **[make-review-sandbox.py](make-review-sandbox.py)** — [forwarder → ai-collaboration/scripts/make-review-sandbox.py] 封じた review sandbox (~/<sandbox-root>/<slug>/) を機械的に切る: 5 行の CLAUDE.md (= この dir 以外を読まない / 注入 reminder 無視 / git log 禁止 / 書くのは results と scratch のみ) + REVIEW-SPEC.md + 許可 file の copy
+- **[manuscript-claim-guard.py](manuscript-claim-guard.py)** — 原稿の保護領域 (表題・概要・序論・結論・数式環境) と agent の権限規約を、 著者の項目ごとの承認 (著者の発言の verbatim を transcript で照合) なしに AI agent が書き換える変更を止める engine (Claude / Codex の PreToolUse と git pre-commit が同じ述語で呼ぶ)
 - **[measure-pdf-layout.py](measure-pdf-layout.py)** — 組版された PDF の版面を実測する — 「指定したのに効いていない」 を目視でなく数値で捕まえる.
 - **[normalize-docx-decl.py](normalize-docx-decl.py)** — 既存 docx の XML 宣言を Word 形式へ後追い正規化する CLI（docx_decl_patch の path-based 版、 office-automation.md#docx-checkbox-content-control）
 - **[office-stage-run.sh](office-stage-run.sh)** — 任意の Office 駆動 command を事前 grant 済み staging dir 経由で 1 回走らせる (入力を stage → `{}` を staged path に置換して実行 → 成功時に書き戻し、 office-automation.md#office-pregranted-staging-dir)

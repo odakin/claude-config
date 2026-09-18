@@ -92,6 +92,7 @@ claude-config/
 │   ├── macos-post-update-slowdown.md       # macOS update 直後に体感が重いとき + 定期メンテ棚卸し
 │   ├── macos-side-by-side-app-migration.md # macOS で「新しいバージョンを使用」「旧版は削除できます」等が繰り返し出るとき + 同じアプリの旧新版が別 bundle で共存するとき + 旧版を退避して書類の既定アプリを新版へ切り替えるとき
 │   ├── macos-tahoe-wallpaper.md            # macOS Tahoe (26.x) で wallpaper 変更を script/CLI/API から自動化しようとする前 + 起きてる wallpaper rotation が視覚的に効いてないと感じたとき
+│   ├── manuscript-claim-ownership.md       # AI agent (Claude / Codex / 他 vendor / sub-agent / 無人 worker) が原稿 (.tex) の表題・概要・序論・結論・数式に触れる前 + 著者の依頼を「承認」 と読みそうになった瞬間 + manuscript-claim-guard に deny されたとき + agent の編集権限を定める規則 (本 doc・各層の参照・gate の設定と配線) を変える前
 │   ├── matplotlib-3d-illustrations.md      # matplotlib の 3D (mplot3d) で半透明の模式イラスト (平面波・波束・濃度場などスライド/論文の概念図) を描くとき
 │   ├── matplotlib-figure-qa.md             # matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check)
 │   ├── mcp.md                              # MCP ツールを使うとき (アカウント確認・scope 判定を含む)
@@ -156,13 +157,13 @@ claude-config/
 │   └── zenn.md                             # Zenn.dev 記事を執筆・入稿するとき
 <!-- AUTO-TREE:conventions END -->
 <!-- AUTO-TREE:hooks BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は hooks/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── hooks/                # Claude Code hooks (56 file。 setup.sh が ~/.claude/hooks/ に symlink。 全列挙 + 説明 = hooks/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── hooks/                # Claude Code hooks (58 file。 setup.sh が ~/.claude/hooks/ に symlink。 全列挙 + 説明 = hooks/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:hooks END -->
 ├── hammerspoon/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (217 file + lib/ 39 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (218 file + lib/ 39 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)
