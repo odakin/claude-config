@@ -36,6 +36,7 @@ import json
 import re
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -213,9 +214,14 @@ def cmd_price(a) -> None:
     ob = parse_openbd(json.loads(fetch("https://api.openbd.jp/v1/get?isbn=" + ",".join(good)))) if good else {}
     for isbn in good:
         kind = "01" if isbn.startswith("9784") else "02"
-        tax, base, stock = parse_kinokuniya(page_text(fetch(f"https://www.kinokuniya.co.jp/f/dsg-{kind}-{isbn}")))
-        row = [isbn, f"openBD {ob.get(isbn, '登録なし')}",
-               f"紀伊國屋 税込 {tax} (本体 {base}) {stock}" if tax else "紀伊國屋 価格なし = 注文できない見込み"]
+        try:
+            tax, base, stock = parse_kinokuniya(page_text(fetch(f"https://www.kinokuniya.co.jp/f/dsg-{kind}-{isbn}")))
+            kino = f"紀伊國屋 税込 {tax} (本体 {base}) {stock}" if tax else "紀伊國屋 価格なし = 注文できない見込み"
+        except urllib.error.HTTPError as e:  # 商品ページの無い ISBN は 404 で返る (自費出版の洋書など)
+            if e.code != 404:
+                raise
+            kino = "紀伊國屋 商品ページなし (404) = 取り扱いなし"
+        row = [isbn, f"openBD {ob.get(isbn, '登録なし')}", kino]
         time.sleep(PAUSE)
         if a.rakuten:
             rp, rs = parse_rakuten(page_text(fetch(f"https://books.rakuten.co.jp/search?sitem={isbn}&g=001")), isbn)
