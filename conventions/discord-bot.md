@@ -256,6 +256,8 @@ Discord bot が **DM channel** で会話を受け取ると、 daily fetcher (= `
 - 未記録 = CRITICAL surface (dashboard / SessionStart hook 経由)
 - 「読んだ」 ことを ledger に messageId 記録した瞬間 silent 化 = **intake で encode する原則**
 
+<a id="dm-snapshot-staleness"></a>⚠️ **surface が見るのは段 1 の最後の snapshot まで** = daily fetcher なら最大 1 日遅れる。 「Discord でも返事は来ていない」 と言う前に snapshot の取得時刻を見て、 相手に聞いたのがそれより後なら **fetcher を一時 dir に出力させて今の状態を読む** (実測: 朝の snapshot の後に届いた返事は、 surface にも JSON にも無かった)。 一時 dir にするのは、 cron が commit する snapshot を手で上書きしないため。 報告は「snapshot M/D HH:MM 時点」 か「今 fetch した」 かを添える。
+
 ### Engine (layer 1): `scripts/surface-discord-bot-dm.py`
 
 汎用 CLI engine。 個別環境への依存ゼロ、 引数で全 config を渡す。
