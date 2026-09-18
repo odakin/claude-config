@@ -157,6 +157,8 @@ for arg in "$@"; do
 done
 
 if [ "$MODE" = install ]; then
+  # 全 repo の link は同じ実体を指すので、 実体 1 つを見れば足りる (#killed-hook-stub)
+  hook_exec_heal "$SRC" "pre-commit-bib" 2>&1 | sed 's/^/  /' || true
   echo "  Installed/updated: $INSTALLED repos"
   echo "  Already up to date: $UP_TO_DATE repos"
   echo "  Left alone (not installed by claude-config): $LEFT_ALONE repos"

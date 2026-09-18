@@ -10,6 +10,11 @@
 #   T6 過去の installer が track 済み stub に書いた差分 → installer 実行で track 版に戻る
 #   T7 heal-hook-stubs.sh → installer の書いた差分だけ戻し、 user の手直しには触らない
 #   T8 track 済みの自前 pre-commit (stub でない) → 退避も上書きもしない
+# 規約 2 = macOS に exec で kill される hook は同じ bytes の新しい inode に作り直す (#killed-hook-stub):
+#   T11 kill される untrack stub → installer が作り直す / T12 kill される track 済み stub → 作り直しても git は clean
+#   T13 heal-hook-stubs.sh: kill される runner と symlink 先 (repo の hook) を作り直し、 2 回目は無音
+#   T14 作り直しても kill される → WARNING を出して 1 回で止める / T15 検査は hook の本体を 1 行も走らせない
+#   T16 bash 以外の hook・macOS 以外は調べない
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,6 +29,30 @@ esac
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
+
+# 偽の exec 検査 (#killed-hook-stub): 本物の macOS の kill は任意に起こせないので、 BASH_ENV の中で「exec された
+# file の inode が $FAKE_KILLED に載っていれば自分を SIGKILL」 する。 macOS と同じく判定は inode ごと = 同じ bytes でも
+# 新しい inode なら通る。 $FAKE_KILLED_PATHS の path は inode に依らず kill し続ける (= 作り直しても直らない場合)。
+# OS も Darwin に固定し、 Linux の CI でも同じ経路を通す。 ($0 は BASH_ENV の中では "bash" なので path は ps から取る)
+FAKE_ENV="$TMP/fake-exec-probe.bash"
+cat > "$FAKE_ENV" <<'EOF'
+set -- $(ps -ww -o args= -p $$)
+p="${2:-}"
+set -- $(ls -iL "$p" 2>/dev/null)
+if grep -qxF "$p" "$FAKE_KILLED_PATHS" 2>/dev/null || { [ -n "${1:-}" ] && grep -qx "$1" "$FAKE_KILLED" 2>/dev/null; }; then
+  kill -9 $$
+fi
+exit 0
+EOF
+export HOOK_EXEC_PROBE_OS=Darwin HOOK_EXEC_PROBE_ENV="$FAKE_ENV"
+export FAKE_KILLED="$TMP/killed-inodes" FAKE_KILLED_PATHS="$TMP/killed-paths"
+: > "$FAKE_KILLED"; : > "$FAKE_KILLED_PATHS"
+inode() { set -- $(ls -iL "$1"); echo "$1"; }
+kill_mark() { inode "$1" >> "$FAKE_KILLED"; }
+execs() {  # hook を偽の検査で exec して 137 以外なら真
+  { BASH_ENV="$FAKE_ENV" "$1" </dev/null >/dev/null 2>&1; } 2>/dev/null
+  [ $? -ne 137 ]
+}
 ok() { PASS=$((PASS+1)); echo "  ok: $1"; }
 ng() { FAIL=$((FAIL+1)); echo "  NG: $1"; }
 
@@ -70,8 +99,12 @@ case "$err" in *"not rewriting"*) ok "warning printed" ;; *) ng "no warning (got
 echo "=== T3: untracked stale stub in .git/hooks is refreshed ==="
 R3="$TMP/r3"; mkrepo "$R3" public
 stub "/old/place/public-precommit-runner.sh" > "$R3/.git/hooks/pre-commit"
+i3="$(inode "$R3/.git/hooks/pre-commit")"
 bash "$HERE/install-public-precommit.sh" "$R3" >/dev/null 2>&1
 grep -qF "exec \"$HERE/public-precommit-runner.sh\"" "$R3/.git/hooks/pre-commit" && ok "stale stub refreshed" || ng "not refreshed: $(cat "$R3/.git/hooks/pre-commit")"
+# 同じ inode への上書きでは macOS の kill の判定が残る = 書くときは新しい inode (#killed-hook-stub)
+[ "$(inode "$R3/.git/hooks/pre-commit")" != "$i3" ] && ok "refreshed into a new inode" || ng "refreshed in place (same inode)"
+[ -x "$R3/.git/hooks/pre-commit" ] && ok "refreshed stub is executable" || ng "refreshed stub lost +x"
 
 echo "=== T4: untracked in-worktree trailer stub is excluded ==="
 bash "$HERE/install-session-trailer.sh" "$R" >/dev/null 2>&1
@@ -137,6 +170,78 @@ ln -s "$R10/hooks/pre-commit" "$R10/.git/hooks/pre-commit"
 bash "$HERE/install-public-precommit.sh" "$R10" >/dev/null 2>&1
 clean "$R10" hooks && ok "tracked hook not rewritten through the link" || ng "tracked hook rewritten: $(git -C "$R10" diff -- hooks)"
 [ "$(readlink "$R10/.git/hooks/pre-commit")" = "$R10/hooks/pre-commit" ] && ok "link kept" || ng "link moved/replaced"
+
+echo "=== T11: installer recreates an untracked stub that macOS kills on exec ==="
+R11="$TMP/r11"; mkrepo "$R11"
+bash "$HERE/install-session-trailer.sh" "$R11" >/dev/null 2>&1
+H11="$R11/.git/hooks/prepare-commit-msg"; cp "$H11" "$TMP/h11.orig"
+kill_mark "$H11"
+execs "$H11" && ng "fixture should be killed" || ok "fixture killed (inode marked)"
+out="$(bash "$HERE/install-session-trailer.sh" "$R11" 2>&1)"
+execs "$H11" && ok "stub executes after installer" || ng "still killed (got: $out)"
+cmp -s "$H11" "$TMP/h11.orig" && ok "same bytes" || ng "content changed"
+[ -x "$H11" ] && ok "still executable" || ng "lost +x"
+case "$out" in *"recreated"*"$H11"*) ok "recreation reported" ;; *) ng "no report (got: $out)" ;; esac
+out="$(bash "$HERE/install-session-trailer.sh" "$R11" 2>&1)"
+case "$out" in *recreated*) ng "second run recreated again: $out" ;; *) ok "second run leaves it alone" ;; esac
+
+echo "=== T12: tracked stub that macOS kills is recreated with the worktree still clean ==="
+R12="$TMP/r12"; mk_tracked_repo "$R12"
+kill_mark "$R12/scripts/hooks/pre-commit"
+bash "$HERE/install-public-precommit.sh" "$R12" >/dev/null 2>&1
+execs "$R12/scripts/hooks/pre-commit" && ok "tracked stub executes after installer" || ng "tracked stub still killed"
+clean "$R12" scripts/hooks && ok "worktree clean (same bytes, same mode)" || ng "worktree dirtied: $(git -C "$R12" status --porcelain)"
+
+echo "=== T13: heal-hook-stubs.sh recreates killed runners and symlink targets, then is silent ==="
+H13="$TMP/heal13"; mkdir -p "$H13"
+mkrepo "$H13/a"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP/fake-runner.sh"; chmod +x "$TMP/fake-runner.sh"
+stub "$TMP/fake-runner.sh" > "$H13/a/.git/hooks/commit-msg"; chmod +x "$H13/a/.git/hooks/commit-msg"
+kill_mark "$TMP/fake-runner.sh"
+mkrepo "$H13/b"
+mkdir -p "$H13/b/hooks"
+printf '#!/bin/bash\necho gate\n' > "$H13/b/hooks/pre-commit"; chmod +x "$H13/b/hooks/pre-commit"
+git -C "$H13/b" add -A && git -C "$H13/b" commit -q --no-verify -m init
+ln -s ../../hooks/pre-commit "$H13/b/.git/hooks/pre-commit"
+kill_mark "$H13/b/hooks/pre-commit"
+out="$(bash "$HERE/heal-hook-stubs.sh" "$H13" 2>&1)"
+execs "$TMP/fake-runner.sh" && ok "killed runner recreated" || ng "runner still killed (got: $out)"
+execs "$H13/b/.git/hooks/pre-commit" && ok "symlinked hook executes" || ng "symlinked hook still killed (got: $out)"
+[ -L "$H13/b/.git/hooks/pre-commit" ] && ok "link kept" || ng "link replaced by a file"
+clean "$H13/b" hooks && ok "tracked link target unchanged in git" || ng "tracked target dirtied"
+case "$out" in *"runner recreated"*"fake-runner.sh"*) ok "runner recreation reported" ;; *) ng "runner report missing (got: $out)" ;; esac
+out2="$(bash "$HERE/heal-hook-stubs.sh" "$H13" 2>&1)"
+[ -z "$out2" ] && ok "second run silent" || ng "second run not silent: $out2"
+
+echo "=== T14: a hook still killed after recreation is reported once, not retried ==="
+H14="$TMP/heal14"; mkdir -p "$H14"; mkrepo "$H14/a"
+printf '#!/bin/bash\nexit 0\n' > "$H14/a/.git/hooks/pre-push"; chmod +x "$H14/a/.git/hooks/pre-push"
+cp "$H14/a/.git/hooks/pre-push" "$TMP/h14.orig"
+echo "$H14/a/.git/hooks/pre-push" > "$FAKE_KILLED_PATHS"
+out="$(bash "$HERE/heal-hook-stubs.sh" "$H14" 2>&1)"; rc=$?
+: > "$FAKE_KILLED_PATHS"
+[ "$rc" -eq 0 ] && ok "heal exits 0" || ng "heal exit $rc"
+case "$out" in *"WARNING"*"still killed"*"pre-push"*) ok "still-killed warning shown" ;; *) ng "no warning (got: $out)" ;; esac
+[ "$(printf '%s\n' "$out" | grep -c 'still killed')" = "1" ] && ok "reported once" || ng "reported more than once"
+cmp -s "$H14/a/.git/hooks/pre-push" "$TMP/h14.orig" && ok "content unchanged" || ng "content changed"
+
+echo "=== T15: the exec probe runs no line of the hook (real probe file) ==="
+R15="$TMP/r15"; mkdir -p "$R15"
+printf '#!/bin/bash\ntouch "%s/ran"\n' "$R15" > "$R15/hook"; chmod +x "$R15/hook"
+( unset HOOK_EXEC_PROBE_ENV; . "$HERE/lib/hook-stub.sh"; hook_exec_killed "$R15/hook" ) && ng "reported killed" || ok "not killed"
+[ ! -e "$R15/ran" ] && ok "hook body did not run" || ng "hook body ran during the probe"
+
+echo "=== T16: non-bash hooks and non-macOS are not probed ==="
+H16="$TMP/heal16"; mkdir -p "$H16"; mkrepo "$H16/a"
+printf '#!/bin/sh\nexit 0\n' > "$H16/a/.git/hooks/post-merge"; chmod +x "$H16/a/.git/hooks/post-merge"
+printf '#!/bin/bash\nexit 0\n' > "$H16/a/.git/hooks/pre-commit"; chmod +x "$H16/a/.git/hooks/pre-commit"
+kill_mark "$H16/a/.git/hooks/post-merge"; kill_mark "$H16/a/.git/hooks/pre-commit"
+i_sh="$(inode "$H16/a/.git/hooks/post-merge")"; i_bash="$(inode "$H16/a/.git/hooks/pre-commit")"
+HOOK_EXEC_PROBE_OS=Linux bash "$HERE/heal-hook-stubs.sh" "$H16" >/dev/null 2>&1
+[ "$(inode "$H16/a/.git/hooks/pre-commit")" = "$i_bash" ] && ok "non-macOS: nothing recreated" || ng "recreated on non-macOS"
+bash "$HERE/heal-hook-stubs.sh" "$H16" >/dev/null 2>&1
+[ "$(inode "$H16/a/.git/hooks/post-merge")" = "$i_sh" ] && ok "#!/bin/sh hook not touched" || ng "sh hook recreated"
+[ "$(inode "$H16/a/.git/hooks/pre-commit")" != "$i_bash" ] && ok "bash hook recreated on macOS" || ng "bash hook not recreated"
 
 echo
 echo "=== Result: $PASS passed, $FAIL failed ==="

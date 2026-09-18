@@ -82,6 +82,9 @@ sections:
   - id: installer-tracked-stub
     level: 3
     title: "installer は git が track している file を書き換えない (2026-09-12)"
+  - id: killed-hook-stub
+    level: 3
+    title: "macOS に exec で kill される hook は、 同じ中身の新しい inode に作り直す (2026-09-19)"
   - id: tool-matcher-coverage-boundary
     legacy: "2-supplement"
     level: 3

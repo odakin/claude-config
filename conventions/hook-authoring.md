@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき + app や tool の挙動を当てる hook を書くとき (#imitate-target-predicate) + 事後の block の手前に事前の知らせを置くとき (#counter-notice-at-injection) + hook を消す・event から外すとき (#additive-wiring-needs-retirement)
+when: Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき + app や tool の挙動を当てる hook を書くとき (#imitate-target-predicate) + 事後の block の手前に事前の知らせを置くとき (#counter-notice-at-injection) + hook を消す・event から外すとき (#additive-wiring-needs-retirement) + git commit が「hook ... died of signal 9」 で止まったとき (#killed-hook-stub)
 category: harness-core
 summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook の同 session 発火も build 依存 = 2026-06 は session / app 起動時 snapshot、 desktop 2.1.266 は Stop hook を hot-reload → 足した直後に discriminator で測る / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)** + **§2 補足 2 #disableallhooks-kill-switch = root 限定の disableAllHooks が「frontend 差」 に化ける 〔自 session では検出不能 = 外側から scripts/hook-liveness-audit.py、 audit-hooks.sh の (d) 自動部分〕** + **test-root-not-parent-dir = test は自分の repo を checkout の親 dir 経由で指さない 〔worktree で落ち・live を検査・python shim は CI でも空振り = 一時 root に symlink 1 本 + 兄弟 repo は正規 layout + 不在は SKIP + mutation で確かめる〕** + **§12 #text-pattern-stop-hook = 最終発話の句で当てる Stop hook は過去の最終発話で校正してから入れる 〔scripts/calibrate-final-message-pattern.py + 共通部品 scripts/lib/transcript_turns.py〕・引用の例示を除く・block は 1 回・fail-open** + **§14 #opt-in-side-effect-hook = 人に向けた副作用だけの hook (音・通知) は層1 に既定 off で置き marker で opt-in、 surface の許可 list は実測値だけ、 実行の証拠を state file に残す** + **#command-guard-calibration = command を見る PreToolUse guard も過去の Bash command で校正 (scripts/calibrate-bash-command-pattern.py) し、 わざと該当する無害な command で live 確認** + **§15 #injection-digest-and-relay = SessionStart の注入は期限の近い item の 1 ブロックに畳み (副作用は止めない・行数で切らない・自分で決めた期日と条件発火は畳まない)、 短い窓の item は伝えたかを Stop で問う 〔scripts/lib/relay_check.py〕**)
 -->
@@ -337,6 +337,29 @@ setup.sh 自体は idempotent design なので (i) は実装コスト低。 但�
 - **共通 hook を全 repo に配る installer は、 自分が置いたものだけを最新化する** (2026-09-16、 setup.sh Step 6 = `scripts/install-precommit-bib.sh`)。 自分が置いたと言えるのは「自分の実体への link / 別の場所にある同名の実体への link (base を移した後の古い link) / 旧版のコピー」 だけ。 それ以外は chain の有無を表示して残す。 旧 Step 6 は link 先が自分でなければ付け替え、 通常 file は `.bak` に退避して置き換えていたので、 repo の installer が張った link (検査 gate を走らせてから共通 hook を chain する hook) も区別されず、 gate が黙って無効になっていた。 **「chain しているなら残す」 では足りない**: pre-commit-bib を chain しない repo の hook も同じく置き換えられていた (実測)。
 - **repo が自前の hook を宣言していれば、 空いた slot を共通 hook で埋めない。 repo の hook も自動では有効化しない**: 宣言 = track 済みの `hooks/pre-commit` / `.githooks/pre-commit` / pre-commit に触れる `install-hooks.sh`。 空いた slot を埋めると、 新しい clone で repo の hook が入らないまま気づかれない。 逆に installer が repo の hook を張ると、 共同研究者が push できる code を clone ごとの同意 (repo の installer を走らせること) なしに git hook にする。 → finding として repo 側の入れ方を出し、 直るまで毎 session 出す (`install-precommit-bib.sh --check`。 installer は setup.sh 実行時にしか走らないので、 過去に置き換えられた他マシンの状態はこちらで拾う)。
 - test = `scripts/install-hook-stubs.test.sh` (stub installer + symlink) / `scripts/install-precommit-bib.test.sh` (共通 hook の installer)。
+
+### <a id="killed-hook-stub"></a>macOS に exec で kill される hook は、 同じ中身の新しい inode に作り直す (2026-09-19)
+
+**症状**: `git commit` が `.git/hooks/<name> died of signal 9` で止まる。 同じ中身 (md5)・同じ xattr (`com.apple.provenance`)・同じ mtime の stub が、 repo によって通ったり kill されたりする。 `bash <runner>` で runner を直接呼ぶと通る。 pre-commit / prepare-commit-msg / commit-msg / pre-push / post-merge のどれにも起きる。
+
+**実測したこと**:
+- kill の判定は **file (inode) ごと**: 同じ inode の hard link は別 path でも kill、 中身も xattr も同じ `cp -p` の複製 (新しい inode) は通る。 **同じ inode への上書き (`printf > hook`) では直らない**。 一時 file に書いて `mv` で差し替えると直る
+- kill は 0.00 秒で起き、 その exec について syspolicyd も kernel も 1 行も記録しない = 覚えた判定がその場で使われている
+- 起きた時の unified log: 別アプリ (Chromium 系ブラウザの `code_sign_clone`) の helper が拒否と再起動を繰り返し、 kernel の `ASP: Security policy would not allow process` が約 2 分で約 17 万件。 同じ時間に syspolicyd が `Error performing Yara scan ... Code=3` → `Terminating process due to Malware rejection` と、 `Failed to generate SecStaticCode ... error: 100024` (= Security framework の 100000 + errno 24 = EMFILE) を出していた。 25 分後も `ASP: Could not find reference ..., process must have died` (期限切れの依頼への返答) が続き、 syspolicyd の RSS は約 2.9 GB (起動から約 3 日)
+- kill される本数は何もしなくても減っていく (数十分で 109 → 87 → 71 本) が、 いつ消えるかは読めない。 macOS の更新直後ではなかった
+
+**推定 (未確認)**: macOS は provenance 付きの script を exec するとき syspolicyd に XProtect の scan をさせ、 kernel (AppleSystemPolicy) が結果を vnode に覚える。 syspolicyd が詰まって scan が失敗すると malware 側に倒して覚え、 以後その file の exec は syspolicyd に聞かずに SIGKILL になる。 減っていくのは vnode が回収されて覚えた判定が消えるため。 再起動で全部消えるかは確かめていない。
+
+規則 (実装 = `scripts/lib/hook-stub.sh`):
+- **stub は一時 file + `mv` で新しい inode に書く** (`hook_stub_put`)。 同じ inode への上書きでは覚えた判定が残る
+- **既存の stub が最新でも exec を検査し、 kill されるなら同じ bytes・同じ mode で作り直す** (`hook_exec_heal_chain` = stub と、 stub が exec する runner)。 **中身は変えない** ので track 済み file でも git の差分は出ない ([#installer-tracked-stub](#installer-tracked-stub) と両立)。 symlink は実体を作り直し、 link は残す
+- **作り直しても kill されるなら WARNING を出して止める。 繰り返さない**: syspolicyd がまだ詰まっているか、 本当に malware と判定されたかのどちらかで、 どちらも installer が回り込んでよいものではない。 **macOS の設定 (Gatekeeper・XProtect) には触らない**。 作り直した file も macOS がもう一度 scan する = 検査を外したことにはならない
+- **検査は hook を 1 行も走らせない**: bash は非対話で script を起動すると 1 行目より前に `$BASH_ENV` を読む。 `exit 0` だけの file (`scripts/lib/hook-exec-probe.bash`) を渡すと、 exec が通るか (137 = SIGKILL か) だけが分かる。 bash 以外の shebang は検査しない (`#!/bin/sh` は非対話で `$ENV` / `$BASH_ENV` を読まない)。 macOS 以外では検査しない
+- **発火面は SessionStart と setup**: `scripts/heal-hook-stubs.sh` が全 repo の、 git が実際に使う hooks dir (`core.hooksPath` を反映) の hook と runner を実体ごとに 1 回ずつ検査して直す (約 180 本で、 段 1 と合わせて約 2 秒。 検査が足すのは約 0.7 秒)。 SessionStart から毎回呼べば commit が止まる前に直る (個人層の bootstrap hook から呼ぶ形。 過去の installer の差分を戻す段と同じ script)。 setup.sh は Step 8c で同じものを呼ぶ (Step 8b は installer の出力を捨てているため、 直らなかった WARNING をここで見せる)
+- **session の途中で `died of signal 9` が出たら** `bash <base>/claude-config/scripts/heal-hook-stubs.sh` を 1 回走らせる。 手で `cat > x && mv` しない (installer と同じ判定・報告を通す)
+- **調べ方**: `BASH_ENV=<exit 0 だけの file> <hook>; echo $?` が 137 なら kill の判定が付いている。 kill を起こした時間を知るには unified log の syspolicyd と kernel の `(AppleSystemPolicy)` を見る。 ⚠️ **大量出力の後は log が落ちる** (実測: 同じ時刻に画面で見えた EMFILE の行が、 後から時間を区切った集計には出なかった) = 件数を根拠にしない
+- 射程外: bash 以外の hook / runner がさらに exec する script (python は `python3 x.py` で起動すれば exec の判定を受けない) / syspolicyd 自体の不調 (hook を作り直しても、 詰まっている間に初めて exec される file は同じ目に遭いうる)
+- test = `scripts/install-hook-stubs.test.sh` T11–T16。 macOS の kill は任意に起こせないので、 偽の `$BASH_ENV` が「exec された file の inode が一覧にあれば自分を SIGKILL」 する = inode ごとに判定を覚える挙動を Linux の CI でも再現する。 修正前の code では 10 項目が落ちることを確かめた
 
 ### <a id="tool-matcher-coverage-boundary"></a>§2 補足: tool-matcher の coverage boundary — Bash/script write は Edit/Write guard を素通りする
 

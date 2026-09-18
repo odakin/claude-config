@@ -119,7 +119,7 @@
 - **[gmail-mcp-reauth.sh](gmail-mcp-reauth.sh)** — 多アカウント Gmail MCP の OAuth (再)認証エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 - **[gpt_measurements.py](gpt_measurements.py)** — [forwarder → ai-collaboration/scripts/gpt_measurements.py]
 - **[headless-push-notification.sh](headless-push-notification.sh)** — 無人の定期実行から、 閉じた headless `claude -p` 1 回でスマホ (Claude アプリ) に push 通知を送る。 --probe で送らずに送れる状態かだけを見る (token 不要)
-- **[heal-hook-stubs.sh](heal-hook-stubs.sh)** — 過去の installer が書き換えた「git 管理下の hook stub」 を track 版に戻す (冪等・差分なしは無音)
+- **[heal-hook-stubs.sh](heal-hook-stubs.sh)** — 壊れた git hook を直す: 過去の installer が書き換えた git 管理下の stub を track 版に戻す + macOS に exec で kill される hook を同じ中身の新しい file に作り直す (冪等・直すものが無ければ無音)
 - **[hook-liveness-audit.py](hook-liveness-audit.py)** — user hook が「そもそも走っていない」 root を検出 (disableAllHooks kill switch の settings 全 tier 走査 + transcript 上の SessionStart 発火証拠)
 - **[html-print-pdf.py](html-print-pdf.py)** — 「印刷用 HTML ページ」 (window.print() 前提) を保存 HTML から A4 PDF にし、 刷れる raster 版まで作る。
 - **[injection-reach-audit.py](injection-reach-audit.py)** — hook の注入 (SessionStart 等) に指定の語が何 session 出たか、 その session の assistant と user がそれに触れたかを transcript から数える（配達と伝達を別々に数える RCA 用。 docs/convention-design-principles.md#surface-reader-is-not-the-owner、 --selftest）

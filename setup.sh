@@ -28,6 +28,8 @@
 #        marker の警告。 commit-msg layer は 2026-05-26 追加 (= claude-code
 #        2.1.x harness invoke bug 修復 option B、 詳細は
 #        conventions/hook-authoring.md#delivery-audit-4-axes (d))
+#   8c. (macOS) exec で kill される git hook を同じ中身の新しい file に作り直す
+#        （conventions/hook-authoring.md#killed-hook-stub）
 #   6d. zsh の interactive_comments を有効化（貼り付けたコマンドの行内 `#` が
 #        argv に化けて壊れるのを防ぐ保険。conventions/shell-env.md
 #        #no-inline-comments-in-pasted-commands。odakin は自動 / 他は tip 表示のみ）
@@ -1355,6 +1357,22 @@ else
     done
     echo "  Installed prepare-commit-msg stubs in $SESSION_COUNT repo(s)."
     echo "  Opt-out per repo: git config agent.sessionTrailer false"
+fi
+
+# --- 8c. macOS に exec で kill される git hook を作り直す (conventions/hook-authoring.md#killed-hook-stub) ---
+echo ""
+echo "=== Step 8c: Checking that every git hook can be executed (macOS) ==="
+# macOS は exec 時の malware 判定を file (inode) ごとに覚え、 syspolicyd が詰まっている間の判定失敗は kill として残る
+# (git は "hook ... died of signal 9")。 上の installer は自分の stub と runner を直すが、 出力を捨てているので、
+# 作り直しても直らない hook の WARNING と、 Step 4 / 5a2 の post-merge・repo 自前の hook はここで拾う。
+HEAL_SH="$SCRIPT_DIR/scripts/heal-hook-stubs.sh"
+if [ -f "$HEAL_SH" ]; then
+    HEAL_OUT="$(bash "$HEAL_SH" "$CLAUDE_DIR" 2>&1)"
+    if [ -n "$HEAL_OUT" ]; then
+        printf '%s\n' "$HEAL_OUT" | sed 's/^/  /'
+    else
+        echo "  Nothing to fix."
+    fi
 fi
 
 # --- 9. Install python-docx XML declaration auto-patch (Word「破損」回避) ---

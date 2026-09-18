@@ -13,6 +13,11 @@
 #     repo の worktree 内に置いた untrack stub は .git/info/exclude に載せる (clone ごとの設定)。
 #
 # 使う側 (installer) は set -euo pipefail 下で source する前提。 各関数は失敗を握りつぶして return する。
+#
+# 規約 2 (conventions/hook-authoring.md#killed-hook-stub):
+#   macOS に exec で kill される hook は、 同じ bytes・同じ mode の新しい inode に作り直す (中身は変えない)。
+#   macOS は kill の判定を file (inode) ごとに覚えるので、 同じ inode への上書きでは直らない。 stub を書くときも
+#   一時 file + mv で新しい inode に置く。
 
 # stub の exec 先を出す ("$HOME" は展開)
 hook_stub_target() {
@@ -98,33 +103,121 @@ hook_stub_exclude() {  # $1 = repo, $2 = hook
   return 0
 }
 
+# ---------- macOS に exec で kill される hook (conventions/hook-authoring.md#killed-hook-stub) ----------
+# macOS は provenance 付きの script を exec するとき syspolicyd に malware scan させ、 判定を file (inode) ごとに
+# kernel に覚えさせる。 syspolicyd が詰まって scan が失敗すると「malware」 側に倒して覚え、 以後その file の exec は
+# 即 SIGKILL (git は "hook ... died of signal 9")。 中身は関係ない = 同じ bytes の新しい inode は scan し直されて通る。
+HOOK_EXEC_PROBE_ENV="${HOOK_EXEC_PROBE_ENV:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hook-exec-probe.bash}"
+_HOOK_EXEC_OS="${HOOK_EXEC_PROBE_OS:-$(uname -s 2>/dev/null || true)}"
+
+# symlink を辿った実体の path
+hook_real_path() {  # $1 = file
+  local f="$1" t n=0
+  while [ -L "$f" ] && [ "$n" -lt 20 ]; do
+    t="$(readlink "$f")" || return 1
+    case "$t" in /*) f="$t" ;; *) f="$(dirname "$f")/$t" ;; esac
+    n=$((n + 1))
+  done
+  printf '%s\n' "$f"
+}
+
+# exec すると SIGKILL で止まるか (0 = 止まる)。 bash の script だけを見る: $BASH_ENV に exit 0 だけの file を渡すので
+# hook は 1 行も走らず、 exec が通るかだけが分かる。 bash 以外の shebang と macOS 以外は調べない (= 1)。
+hook_exec_killed() {  # $1 = file
+  local f="$1" l rc=0
+  [ "$_HOOK_EXEC_OS" = Darwin ] || return 1
+  case "$f" in */*) ;; *) f="./$f" ;; esac   # PATH を引かせない
+  [ -f "$f" ] && [ -x "$f" ] || return 1
+  IFS= read -r l < "$f" 2>/dev/null || [ -n "${l:-}" ] || return 1
+  case "$l" in '#!'*bash*) ;; *) return 1 ;; esac
+  { BASH_ENV="$HOOK_EXEC_PROBE_ENV" "$f" </dev/null >/dev/null 2>&1; } 2>/dev/null || rc=$?
+  [ "$rc" -eq 137 ]
+}
+
+# 同じ bytes・同じ mode の新しい inode に置き換える (symlink は実体を作り直す)。 中身は変えない =
+# track 済み file でも git の差分は出ない (#installer-tracked-stub と両立)
+hook_recreate() {  # $1 = file
+  local f tmp
+  f="$(hook_real_path "$1")" || return 1
+  [ -f "$f" ] || return 1
+  tmp="$(mktemp "$(dirname "$f")/.$(basename "$f").XXXXXX")" || return 1
+  if cp -p "$f" "$tmp" && cmp -s "$f" "$tmp" && mv -f "$tmp" "$f"; then
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
+# kill される hook を 1 回だけ作り直す。 0 = 作り直して通った / 1 = 何もしない (kill されていない・調べられない) /
+# 2 = 作り直しても kill される (syspolicyd がまだ詰まっているか、 本当に malware と判定された。 繰り返さない)
+hook_exec_heal() {  # $1 = file, $2 = label
+  local real
+  hook_exec_killed "$1" || return 1
+  real="$(hook_real_path "$1")" || real="$1"
+  [ "$real" = "$1" ] && real="" || real=" (-> $real)"
+  if hook_recreate "$1" && ! hook_exec_killed "$1"; then
+    echo "$2 recreated (macOS was killing it on exec): $1$real"
+    return 0
+  fi
+  echo "WARNING: $2 is still killed by macOS on exec after recreating it: $1$real" >&2
+  echo "  see claude-config/conventions/hook-authoring.md#killed-hook-stub" >&2
+  return 2
+}
+
+# hook と、 stub ならその exec 先 (runner) も見る。 stub の検査は runner を exec する前に終わるので、 runner は別に見る
+hook_exec_heal_chain() {  # $1 = hook, $2 = label
+  local t rc=1 r=0
+  hook_exec_heal "$1" "$2" || rc=$?
+  t="$(hook_stub_target "$1")"
+  if [ -n "$t" ] && [ -f "$t" ]; then
+    hook_exec_heal "$t" "$2 runner" || r=$?
+    [ "$r" -eq 2 ] && rc=2
+    [ "$r" -eq 0 ] && [ "$rc" -ne 2 ] && rc=0
+  fi
+  return "$rc"
+}
+
+# stub の中身を新しい inode に書く (同じ inode への上書きでは macOS の kill の判定が残る)
+hook_stub_put() {  # $1 = hook, $2 = content
+  local tmp
+  tmp="$(mktemp "$(dirname "$1")/.$(basename "$1").XXXXXX")" || return 1
+  if printf '%s' "$2" > "$tmp" && chmod 755 "$tmp" && mv -f "$tmp" "$1"; then
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
 # 本 installer が置いた既存 stub を冪等に最新化する
 hook_stub_refresh() {  # $1 = repo, $2 = hook, $3 = runner, $4 = stub content, $5 = label
   local repo="$1" hook="$2" runner="$3" content="$4" label="$5"
   if hook_stub_is_tracked "$repo" "$hook"; then
-    hook_stub_restore_drift "$repo" "$hook" "$runner" && return 0
-    if hook_stub_points_to "$hook" "$runner"; then
-      echo "$label stub up to date (tracked by the repo): $hook"
-    else
-      echo "WARNING: $label stub is tracked by git and points elsewhere; not rewriting it: $hook" >&2
-      echo "  fix it in the repo and commit: exec \"$runner\" \"\$@\"" >&2
+    if ! hook_stub_restore_drift "$repo" "$hook" "$runner"; then
+      if hook_stub_points_to "$hook" "$runner"; then
+        echo "$label stub up to date (tracked by the repo): $hook"
+      else
+        echo "WARNING: $label stub is tracked by git and points elsewhere; not rewriting it: $hook" >&2
+        echo "  fix it in the repo and commit: exec \"$runner\" \"\$@\"" >&2
+      fi
     fi
+    hook_exec_heal_chain "$hook" "$label stub" || true
     return 0
   fi
   if hook_stub_points_to "$hook" "$runner"; then
     echo "$label stub up to date: $hook"
   else
-    printf '%s' "$content" > "$hook"
+    hook_stub_put "$hook" "$content"
     echo "$label stub refreshed: $hook"
   fi
   [ -x "$hook" ] || chmod +x "$hook"
   hook_stub_exclude "$repo" "$hook"
+  hook_exec_heal_chain "$hook" "$label stub" || true
 }
 
 # 新規 stub を置く
 hook_stub_write() {  # $1 = repo, $2 = hook, $3 = stub content, $4 = label
-  printf '%s' "$3" > "$2"
-  chmod +x "$2"
+  hook_stub_put "$2" "$3"
   hook_stub_exclude "$1" "$2"
   echo "$4 stub installed: $2"
+  hook_exec_heal_chain "$2" "$4 stub" || true
 }
