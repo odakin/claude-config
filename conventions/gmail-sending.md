@@ -213,5 +213,6 @@ API 直送で MIME の From に表示名 (`"表示名" <addr>`) を入れても�
 
 - MCP の scope / capability (send tool 不在 ≠ 送信不能): [`mcp.md`](mcp.md)
 - Google API を Python から直接叩く setup 一般: [`google-api-direct-access.md`](google-api-direct-access.md)
+- ML 宛に送るとき、 届けたい人が ML に入っているか (購読者一覧を読めない ML で、 入っていない人を過去のメールの宛先から見分けて個別に足す): [`google-api-direct-access.md#group-membership-without-owner`](google-api-direct-access.md#group-membership-without-owner)
 - 送信内容の記録・分類: [`research-email.md`](research-email.md)
 - 具体実装の例: 個人層側の Gmail 直送 script (= 本 doc の §2 自動解決 + §4 自動検証を実装したもの) を各自の private 層に置き、そこから本 doc を参照する

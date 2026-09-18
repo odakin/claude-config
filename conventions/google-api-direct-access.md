@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Google API を Python から直接叩く setup をするとき
+when: Google API を Python から直接叩く setup をするとき + ML (Google Groups) 宛に送る前に、 購読者一覧を読めない ML に入っていない人を見分けるとき (#group-membership-without-owner)
 category: infra
 summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 他人から共有された folder を読み続ける 〔宛先 account の token (別 account では 404) + 台帳 + id/modifiedTime の差分 + 共有通知メールの照合、 #shared-folder-watch〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避、 loopback OAuth consent フローの CSRF/横取り対策 〔state nonce + PKCE S256 + request-loop + 手動貼付の state 検証 + 補償制御 hard-fail + 識別子 charset 検証、 #oauth-loopback-hardening〕) + #drive-xlsx-inplace-update (= 他人 owner の共有 xlsx に書く: full drive 別 token / revisions.get_media が truth / openpyxl round-trip の損失 / files.update 同 ID / 再 download literal verify)
 -->
@@ -436,3 +436,15 @@ caller permission が API server 側でどう扱われるか docs に明記さ�
 3. group の OWNER role を caller が持っていれば Cloud Identity 経路で write OK の可能性高、 試行で確定
 
 これは「**user 確認 = mechanism 確定と短絡しない**」 reflex の典型 application (= confidence escalation 防止、 user の claim level fact 〔= 「admin かどうか」〕 から mechanism level 〔= 「全 API NG かどうか」〕 への jump を避ける)。
+
+### <a id="group-membership-without-owner"></a>owner でない group の購読者を知りたいとき (ML 宛に送る前に「入っていない人」 を見分ける)
+
+ML 宛に送る用件で、 **届けたい人がその ML に入っているとは限らない** (新任・後から加わった分野の人・ML ができた後の異動)。
+自分が owner / manager でない group では `groups.lookup` が 403 (`Permission denied for resource <group> (or it may not exist)`) になり、 購読者一覧は読めない (実測)。 そのときは過去のメールから推す:
+
+1. その ML 宛の過去のメールを数か月分引き、 **To / Cc の全体**を並べる (件名だけでなく header を読む。 `account-direct.py <account> get <id>` 等)。
+2. **他の送り手が毎回 ML と並べて個別に宛先に足している人は、 ML に入っていない**と読む (送り手たちがそれを知っているから足している)。
+3. 投稿が `'<名前>' via <ML>` と表示される人は、 ドメイン外のアドレス (私用アドレス) で ML に入っている。 ドメインのアドレス宛の用件はそこに届かない可能性がある。
+4. 組織の公開の名簿 (学科・部署の教員一覧) と突き合わせ、 ML に一度も出てこない人を拾う。
+5. 送るときは ML を To に置き、 入っていないと推した人を**個別に To に足す** (重複して届くのは害が小さい)。 宛名は ML の宛名 1 つにし、 足した人の名前は並べない。
+6. これは推定であって一覧の確認ではない。 誰が入っていないと推したかを、 非公開の連絡先の記録に書いておく (次に送る人が同じ調査をしない)。
