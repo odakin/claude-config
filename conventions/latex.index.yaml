@@ -217,6 +217,9 @@ sections:
   - id: latex-pdf-audit
     level: 2
     title: "LaTeX log と PDF の検査を再利用する"
+  - id: redistribute-old-pdf
+    level: 3
+    title: "昔組んだ PDF を配り直す前に、 未解決の参照が無いかを本文で見る"
   - id: visual-verification-intensity
     level: 3
     title: "成果物の種類で視覚検査の強度を分ける"
