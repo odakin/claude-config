@@ -107,6 +107,7 @@ hook_stub_exclude() {  # $1 = repo, $2 = hook
 # macOS は provenance 付きの script を exec するとき syspolicyd に malware scan させ、 判定を file (inode) ごとに
 # kernel に覚えさせる。 syspolicyd が詰まって scan が失敗すると「malware」 側に倒して覚え、 以後その file の exec は
 # 即 SIGKILL (git は "hook ... died of signal 9")。 中身は関係ない = 同じ bytes の新しい inode は scan し直されて通る。
+# (仕組み・実測と推定の区別・診断の道具の正本 = conventions/macos-exec-policy-kill.md)
 HOOK_EXEC_PROBE_ENV="${HOOK_EXEC_PROBE_ENV:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hook-exec-probe.bash}"
 _HOOK_EXEC_OS="${HOOK_EXEC_PROBE_OS:-$(uname -s 2>/dev/null || true)}"
 

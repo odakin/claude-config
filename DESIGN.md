@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-19: macOS に exec で kill される git hook は、 同じ中身の新しい inode に作り直す (検査は SessionStart で毎回)](#killed-hook-recreate-design)
 - [2026-09-17: SSO 保護サイトの login 切れは、 予告も推定もせず、 使う時に tab の行き先を見て復帰する](#sso-session-recovery-design)
 - [2026-09-17: hook の退役は registry に書き、 毎回の sync が外す](#hook-retirement-registry)
 - [2026-09-16: 共通 pre-commit の installer は repo が管理する hook を置き換えない](#precommit-installer-respects-repo-hooks)
@@ -40,6 +41,29 @@
 - [公開リポ leak 防止: 構造制約 hook + pre-commit ephemeral literal check](#public-repo-leak-prevention)
 - [sensitive-terms.txt の symlink architecture (2026-05-14 追補)](#sensitive-terms-symlink-architecture)
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
+
+---
+
+## <a id="killed-hook-recreate-design"></a>2026-09-19: macOS に exec で kill される git hook は、 同じ中身の新しい inode に作り直す (検査は SessionStart で毎回)
+
+**起点 (実測)**: 同じ中身の hook stub が、 repo によって `died of signal 9` になって commit が止まった。 判定は inode ごとで、 同じ inode への上書きでは直らず、 新しい inode の複製は通る (仕組み・実測と推定の区別 = [`conventions/macos-exec-policy-kill.md`](conventions/macos-exec-policy-kill.md)、 hook を配る側の規則 = [`conventions/hook-authoring.md#killed-hook-stub`](conventions/hook-authoring.md#killed-hook-stub))。
+
+**判断**:
+- 直し方 = 同じ bytes・同じ mode の新しい inode (一時 file + `mv`)。 macOS が scan し直すので検査は外れない。 installer の書き込みも常に新しい inode にする (`hook_stub_put`)
+- 検査 = `$BASH_ENV` に `exit 0` だけの file を渡す = hook を 1 行も走らせない。 本体を走らせずに済むので、 SessionStart で全 repo の全 hook に回せる
+- 作り直すのは 1 回だけ。 直らなければ WARNING を出して止める
+- 発火面 = SessionStart (個人層の bootstrap が `scripts/heal-hook-stubs.sh --surface` を呼ぶ) + setup.sh Step 8c + 各 installer。 見出しへの振り分けは層1 の script が持つ (呼ぶ側が出力の文言に依存しないため)
+- 対象 = git が実際に使う hooks dir の全 hook (repo 自前の hook も) と stub の runner。 中身を変えないので、 「installer は自分が置いたものだけを最新化する」 ([#precommit-installer-respects-repo-hooks](#precommit-installer-respects-repo-hooks)) とも「git が track している file の内容は書かない」 とも衝突しない
+- macOS 限定・bash の shebang 限定
+
+**棄却した案**:
+- *xattr (`com.apple.provenance`) を剥がす / Gatekeeper・XProtect の設定を変える*: 安全機構を弱める。 作り直した file は provenance を持ったまま通る (実測) ので要らない
+- *同じ inode に同じ中身を書き直す (installer の旧来の `printf > hook`)*: 判定が残る (実測)
+- *本物の hook を走らせて検査する (`git hook run`)*: pre-commit は index に対する本物の検査が走るので SessionStart で全 repo には回せない。 手元の確認用に留める
+- *kill を見つけたら再起動を促す*: 再起動で消えるかは確かめておらず、 作り直しで直る
+- *直るまで作り直しを繰り返す*: syspolicyd が詰まっている間は同じ目に遭い、 本当に malware と判定されたなら回り込むことになる
+
+**un-defer trigger**: bash 以外の hook (sh / python) で同じ kill が起きたら、 shebang に依らない検査 (起動直後に止めた子の生死を見る等) を検討する。 再起動で消えることを確かめたら、 規約の「推定」 を「実測」 に直す (SESSION の Open item)。
 
 ---
 

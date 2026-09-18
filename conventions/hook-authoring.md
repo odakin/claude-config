@@ -183,6 +183,17 @@ SessionStart 等で installer / 同期 script を回し、 その出力を `grep
 - engine を `sh` で起動すると CI では dash で回る = POSIX の検査を兼ねる。 ただし bash 3.2 固有の癖 ([置換の中の `case`](#bash32-case-in-command-substitution)) は macOS の `/bin/sh` で回すまで見えないので、 手元でも回す
 - 実機に効く自動移行 (登録済みの物を書き換える等) は、 出荷前に**実機の状態の写し**を一時 dir に置き、 同じ偽物で 1 回再現する。 変わるのが想定した物だけで、 2 回目が無言なことを見る ([`debugging-discipline.md#violation-e2e-on-a-copy`](debugging-discipline.md#violation-e2e-on-a-copy) と同じ「複製で試す」)
 
+### <a id="exec-probe-test-techniques"></a>§0 補足 9: exec の可否を本体を走らせずに調べる・OS の kill を test で再現する・旧版で歯を確かめる
+
+hook や installer が「この file は exec できるか」 を見る必要があるとき (macOS の exec kill = [`macos-exec-policy-kill.md`](macos-exec-policy-kill.md)) の技法。
+
+- **本体を走らせない検査**: bash は非対話で script を起動すると 1 行目より前に `$BASH_ENV` を読む。 `exit 0` だけの file を渡すと、 exec が通るかだけが分かる (137 = SIGKILL)。 `#!/bin/sh` は読まないので対象外
+- **`$BASH_ENV` の中では `$0` は `bash`** (script の path ではない)。 path が要るなら `set -- $(ps -ww -o args= -p $$)` の `$2` (shebang 経由の起動は `bash <path>` の形で残る)
+- **OS の kill を test で再現する**: 偽の `$BASH_ENV` に「`ls -iL` で出した inode が一覧にあれば `kill -9 $$`」 を書く。 inode ごとに判定を覚える挙動がそのまま再現でき、 Linux の CI でも同じ経路を通る。 「作り直しても直らない」 場合は path の一覧で kill する (例 = `scripts/install-hook-stubs.test.sh` の冒頭)
+- **bash の `Killed: 9` の表示**は、 kill された子を待っている側の shell が出す。 検査の出力を汚さないなら `{ cmd; } 2>/dev/null` で囲む (cmd 自体の redirect では消えない)
+- **旧版で歯を確かめるのに stash を使わない**: 並列 session や SessionStart の自動 pull (stash → ff → pop) とぶつかる。 `git archive HEAD scripts | tar -x -C <tmp>` で旧版を一時 dir に展開し、 新しい test だけ上書きして回す (新しい確認が旧版で落ち、 新版で通るのを見る)。 test が兄弟 file (設定・偽物の置き場) に頼るなら、 その分の無関係な失敗は数から除いて報告する
+- **commit せずに hook を git と同じ呼び方で走らせる**: `git hook run <name> -- <引数>` (git 2.36 以降。 `core.hooksPath` を反映)。 prepare-commit-msg なら一時の message file と `message` を渡す。 ⚠️ pre-commit は index に対する本物の検査が走る
+
 ---
 
 ## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug
@@ -340,26 +351,17 @@ setup.sh 自体は idempotent design なので (i) は実装コスト低。 但�
 
 ### <a id="killed-hook-stub"></a>macOS に exec で kill される hook は、 同じ中身の新しい inode に作り直す (2026-09-19)
 
-**症状**: `git commit` が `.git/hooks/<name> died of signal 9` で止まる。 同じ中身 (md5)・同じ xattr (`com.apple.provenance`)・同じ mtime の stub が、 repo によって通ったり kill されたりする。 `bash <runner>` で runner を直接呼ぶと通る。 pre-commit / prepare-commit-msg / commit-msg / pre-push / post-merge のどれにも起きる。
-
-**実測したこと**:
-- kill の判定は **file (inode) ごと**: 同じ inode の hard link は別 path でも kill、 中身も xattr も同じ `cp -p` の複製 (新しい inode) は通る。 **同じ inode への上書き (`printf > hook`) では直らない**。 一時 file に書いて `mv` で差し替えると直る
-- kill は 0.00 秒で起き、 その exec について syspolicyd も kernel も 1 行も記録しない = 覚えた判定がその場で使われている
-- 起きた時の unified log: 別アプリ (Chromium 系ブラウザの `code_sign_clone`) の helper が拒否と再起動を繰り返し、 kernel の `ASP: Security policy would not allow process` が約 2 分で約 17 万件。 同じ時間に syspolicyd が `Error performing Yara scan ... Code=3` → `Terminating process due to Malware rejection` と、 `Failed to generate SecStaticCode ... error: 100024` (= Security framework の 100000 + errno 24 = EMFILE) を出していた。 25 分後も `ASP: Could not find reference ..., process must have died` (期限切れの依頼への返答) が続き、 syspolicyd の RSS は約 2.9 GB (起動から約 3 日)
-- kill される本数は何もしなくても減っていく (数十分で 109 → 87 → 71 本) が、 いつ消えるかは読めない。 macOS の更新直後ではなかった
-
-**推定 (未確認)**: macOS は provenance 付きの script を exec するとき syspolicyd に XProtect の scan をさせ、 kernel (AppleSystemPolicy) が結果を vnode に覚える。 syspolicyd が詰まって scan が失敗すると malware 側に倒して覚え、 以後その file の exec は syspolicyd に聞かずに SIGKILL になる。 減っていくのは vnode が回収されて覚えた判定が消えるため。 再起動で全部消えるかは確かめていない。
+**症状**: `git commit` が `.git/hooks/<name> died of signal 9` で止まる。 同じ中身・同じ xattr・同じ mtime の stub が、 repo によって通ったり kill されたりする。 `bash <runner>` で runner を直接呼ぶと通る。 pre-commit / prepare-commit-msg / commit-msg / pre-push / post-merge のどれにも起きる。 **macOS 側の仕組み (判定は inode ごと・syspolicyd が詰まると scan の失敗が kill として残る)・実測と推定の区別・診断の道具は [`macos-exec-policy-kill.md`](macos-exec-policy-kill.md) が正本**。 ここには hook を配る側の規則だけを置く。
 
 規則 (実装 = `scripts/lib/hook-stub.sh`):
 - **stub は一時 file + `mv` で新しい inode に書く** (`hook_stub_put`)。 同じ inode への上書きでは覚えた判定が残る
 - **既存の stub が最新でも exec を検査し、 kill されるなら同じ bytes・同じ mode で作り直す** (`hook_exec_heal_chain` = stub と、 stub が exec する runner)。 **中身は変えない** ので track 済み file でも git の差分は出ない ([#installer-tracked-stub](#installer-tracked-stub) と両立)。 symlink は実体を作り直し、 link は残す
-- **作り直しても kill されるなら WARNING を出して止める。 繰り返さない**: syspolicyd がまだ詰まっているか、 本当に malware と判定されたかのどちらかで、 どちらも installer が回り込んでよいものではない。 **macOS の設定 (Gatekeeper・XProtect) には触らない**。 作り直した file も macOS がもう一度 scan する = 検査を外したことにはならない
-- **検査は hook を 1 行も走らせない**: bash は非対話で script を起動すると 1 行目より前に `$BASH_ENV` を読む。 `exit 0` だけの file (`scripts/lib/hook-exec-probe.bash`) を渡すと、 exec が通るか (137 = SIGKILL か) だけが分かる。 bash 以外の shebang は検査しない (`#!/bin/sh` は非対話で `$ENV` / `$BASH_ENV` を読まない)。 macOS 以外では検査しない
-- **発火面は SessionStart と setup**: `scripts/heal-hook-stubs.sh` が全 repo の、 git が実際に使う hooks dir (`core.hooksPath` を反映) の hook と runner を実体ごとに 1 回ずつ検査して直す (約 180 本で、 段 1 と合わせて約 2 秒。 検査が足すのは約 0.7 秒)。 SessionStart から毎回呼べば commit が止まる前に直る (個人層の bootstrap hook から呼ぶ形。 過去の installer の差分を戻す段と同じ script)。 setup.sh は Step 8c で同じものを呼ぶ (Step 8b は installer の出力を捨てているため、 直らなかった WARNING をここで見せる)
-- **session の途中で `died of signal 9` が出たら** `bash <base>/claude-config/scripts/heal-hook-stubs.sh` を 1 回走らせる。 手で `cat > x && mv` しない (installer と同じ判定・報告を通す)
-- **調べ方**: `BASH_ENV=<exit 0 だけの file> <hook>; echo $?` が 137 なら kill の判定が付いている。 kill を起こした時間を知るには unified log の syspolicyd と kernel の `(AppleSystemPolicy)` を見る。 ⚠️ **大量出力の後は log が落ちる** (実測: 同じ時刻に画面で見えた EMFILE の行が、 後から時間を区切った集計には出なかった) = 件数を根拠にしない
+- **作り直しても kill されるなら WARNING を出して止める。 繰り返さない**: syspolicyd がまだ詰まっているか、 本当に malware と判定されたかのどちらかで、 どちらも installer が回り込んでよいものではない。 **macOS の設定 (Gatekeeper・XProtect) にも xattr にも触らない**。 作り直した file も macOS がもう一度 scan する = 検査を外したことにはならない
+- **検査は hook を 1 行も走らせない** (`$BASH_ENV` に `exit 0` だけの file を渡す = [`macos-exec-policy-kill.md#exec-probe`](macos-exec-policy-kill.md#exec-probe))。 bash 以外の shebang と macOS 以外は検査しない
+- **発火面は SessionStart と setup**: `scripts/heal-hook-stubs.sh` が全 repo の、 git が実際に使う hooks dir (`core.hooksPath` を反映) の hook と runner を実体ごとに 1 回ずつ検査して直す (hook 180 本規模で、 段 1 と合わせて約 2 秒。 検査が足すのは約 0.7 秒)。 SessionStart から `--surface` で毎回呼べば commit が止まる前に直り、 結果は「戻した / 作り直した / 要対応」 の 3 見出しで出る (個人層の bootstrap hook から呼ぶ形。 見出しと振り分けは script が持つ = 呼ぶ側は出力をそのまま出すだけ)。 setup.sh は Step 8c で同じものを呼ぶ (Step 8b は installer の出力を捨てているため、 直らなかった WARNING をここで見せる)
+- **session の途中で `died of signal 9` が出たら** `bash <base>/claude-config/scripts/heal-hook-stubs.sh` を 1 回走らせる。 手で `cat > x && mv` しない (installer と同じ判定・報告を通す)。 書かずに一覧だけ見るなら `--check` (kill されるものがあれば exit 1)
 - 射程外: bash 以外の hook / runner がさらに exec する script (python は `python3 x.py` で起動すれば exec の判定を受けない) / syspolicyd 自体の不調 (hook を作り直しても、 詰まっている間に初めて exec される file は同じ目に遭いうる)
-- test = `scripts/install-hook-stubs.test.sh` T11–T16。 macOS の kill は任意に起こせないので、 偽の `$BASH_ENV` が「exec された file の inode が一覧にあれば自分を SIGKILL」 する = inode ごとに判定を覚える挙動を Linux の CI でも再現する。 修正前の code では 10 項目が落ちることを確かめた
+- test = `scripts/install-hook-stubs.test.sh` T11–T18 (inode ごとの判定の再現 = [#exec-probe-test-techniques](#exec-probe-test-techniques))。 修正前の code では 10 項目が落ちることを確かめた。 設計の判断 = [`DESIGN.md#killed-hook-recreate-design`](../DESIGN.md#killed-hook-recreate-design)
 
 ### <a id="tool-matcher-coverage-boundary"></a>§2 補足: tool-matcher の coverage boundary — Bash/script write は Edit/Write guard を素通りする
 

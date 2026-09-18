@@ -36,6 +36,9 @@ sections:
   - id: fake-platform-commands-in-path
     level: 3
     title: "§0 補足 8: macOS 専用の installer は偽の platform command を PATH の先頭に置いて test する"
+  - id: exec-probe-test-techniques
+    level: 3
+    title: "§0 補足 9: exec の可否を本体を走らせずに調べる・OS の kill を test で再現する・旧版で歯を確かめる"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2

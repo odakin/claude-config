@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: killed-hook-recreate-design
+    legacy: "2026-09-19"
+    level: 2
+    title: "2026-09-19: macOS に exec で kill される git hook は、 同じ中身の新しい inode に作り直す (検査は SessionStart で毎回)"
   - id: sso-session-recovery-design
     legacy: "2026-09-17"
     level: 2

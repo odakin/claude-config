@@ -15,6 +15,7 @@
 #   T13 heal-hook-stubs.sh: kill される runner と symlink 先 (repo の hook) を作り直し、 2 回目は無音
 #   T14 作り直しても kill される → WARNING を出して 1 回で止める / T15 検査は hook の本体を 1 行も走らせない
 #   T16 bash 以外の hook・macOS 以外は調べない
+#   T17 --surface = 戻した / 作り直した / 要対応 の 3 見出し / T18 --check = 書かずに列挙して exit 1
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -242,6 +243,35 @@ HOOK_EXEC_PROBE_OS=Linux bash "$HERE/heal-hook-stubs.sh" "$H16" >/dev/null 2>&1
 bash "$HERE/heal-hook-stubs.sh" "$H16" >/dev/null 2>&1
 [ "$(inode "$H16/a/.git/hooks/post-merge")" = "$i_sh" ] && ok "#!/bin/sh hook not touched" || ng "sh hook recreated"
 [ "$(inode "$H16/a/.git/hooks/pre-commit")" != "$i_bash" ] && ok "bash hook recreated on macOS" || ng "bash hook not recreated"
+
+echo "=== T17: --surface groups restored / recreated / still-killed under their own headings ==="
+H17="$TMP/heal17"; mkdir -p "$H17"
+mk_tracked_repo "$H17/a"
+stub "$HERE/commit-msg-leak-guard-runner.sh" > "$H17/a/scripts/hooks/commit-msg"      # installer drift → restored
+mkrepo "$H17/b"
+printf '#!/bin/bash\nexit 0\n' > "$H17/b/.git/hooks/pre-commit"; chmod +x "$H17/b/.git/hooks/pre-commit"
+kill_mark "$H17/b/.git/hooks/pre-commit"                                               # → recreated
+printf '#!/bin/bash\nexit 0\n' > "$H17/b/.git/hooks/pre-push"; chmod +x "$H17/b/.git/hooks/pre-push"
+echo "$H17/b/.git/hooks/pre-push" > "$FAKE_KILLED_PATHS"                                # → still killed
+out="$(bash "$HERE/heal-hook-stubs.sh" --surface "$H17" 2>&1)"
+: > "$FAKE_KILLED_PATHS"
+case "$out" in *"track 版に戻した"*"/a/scripts/hooks/commit-msg"*"#installer-tracked-stub"*) ok "restored under its heading" ;; *) ng "restored heading (got: $out)" ;; esac
+case "$out" in *"kill されていた git hook"*"/b/.git/hooks/pre-commit"*"#killed-hook-stub"*) ok "recreated under its heading" ;; *) ng "recreated heading (got: $out)" ;; esac
+case "$out" in *"要対応"*"still killed"*"/b/.git/hooks/pre-push"*) ok "still-killed under the action heading" ;; *) ng "action heading (got: $out)" ;; esac
+out2="$(bash "$HERE/heal-hook-stubs.sh" --surface "$H17" 2>&1)"
+[ -z "$out2" ] && ok "--surface silent when nothing to do" || ng "--surface not silent: $out2"
+
+echo "=== T18: --check lists killed hooks without writing and exits 1 ==="
+H18="$TMP/heal18"; mkdir -p "$H18"; mkrepo "$H18/a"
+printf '#!/bin/bash\nexit 0\n' > "$H18/a/.git/hooks/commit-msg"; chmod +x "$H18/a/.git/hooks/commit-msg"
+kill_mark "$H18/a/.git/hooks/commit-msg"; i18="$(inode "$H18/a/.git/hooks/commit-msg")"
+out="$(bash "$HERE/heal-hook-stubs.sh" --check "$H18" 2>&1)"; rc=$?
+[ "$rc" -eq 1 ] && ok "exit 1 when a hook is killed" || ng "exit $rc"
+case "$out" in "killed: $H18/a/.git/hooks/commit-msg") ok "killed hook listed" ;; *) ng "output: $out" ;; esac
+[ "$(inode "$H18/a/.git/hooks/commit-msg")" = "$i18" ] && ok "--check did not recreate" || ng "--check wrote the file"
+bash "$HERE/heal-hook-stubs.sh" "$H18" >/dev/null 2>&1
+out="$(bash "$HERE/heal-hook-stubs.sh" --check "$H18" 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] && [ -z "$out" ] && ok "exit 0 and silent after healing" || ng "after heal: rc=$rc out=$out"
 
 echo
 echo "=== Result: $PASS passed, $FAIL failed ==="
