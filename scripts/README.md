@@ -25,6 +25,8 @@
 - **[calibrate-bash-command-pattern.py](calibrate-bash-command-pattern.py)** — Bash の command を見る PreToolUse guard の述語を、 過去の transcript の Bash tool 呼び出しに当てて検出数と例を出す（導入前の誤検出の見積もり用。 --hook で hook file の find_issues(command) をそのまま使う、 --selftest。 conventions/hook-authoring.md#command-guard-calibration）
 - **[calibrate-final-message-pattern.py](calibrate-final-message-pattern.py)** — 発話を見る Stop hook の句を、 過去の transcript の各 turn の最終 assistant 発話に当てて検出数と例を出す（導入前の誤検出の見積もり用。 turn の境界は hook と同じ scripts/lib/transcript_turns.py、 --skip-quoted / --exclude-sentence-with で hook の除外を再現、 --selftest。 conventions/hook-authoring.md#text-pattern-stop-hook）
 - **[campussquare-client.py](campussquare-client.py)** — 大学の教務システム CampusSquare for WEB を **browser session cookie で script から読む** (画面 drive 不要)。
+- **[campussquare-roster-split.mutants.json](campussquare-roster-split.mutants.json)** — campussquare-roster-split.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
+- **[campussquare-roster-split.py](campussquare-roster-split.py)** — CampusSquare の「全担当科目の名簿 CSV」 を、科目 (コマ) ごとの成績登録用の名簿 CSV の形に分ける。
 - **[chat_file_refs.mutants.json](chat_file_refs.mutants.json)** — chat_file_refs.py (Stop hook chat-file-ref-enforce.sh の判定の部品) の修正を 1 つずつ外した mutant 9 本で、 hook の test の該当 case が落ち、 隣の case は通り続けることを確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[check-abbreviations.py](check-abbreviations.py)** — Abbreviation hygiene for LaTeX manuscripts: each abbreviation is defined once, at the FIRST body
 - **[check-activity-facts.py](check-activity-facts.py)** — Keep the owner's non-public activity facts (what was applied for, when, how many, what the office said, which deadline passed) out of public repos: pre-commit / commit-msg check on added lines, --scan-tree inventory with an ack list, --replay calibration, --selftest.
@@ -71,9 +73,11 @@
 - **[ci-local-repro.sh](ci-local-repro.sh)** — Linux CI だけで落ちる command を commit ごとに手元で再現する (使い捨て clone × native/GNU userland × 空の HOME の行列)
 - **[ci-local-repro.test.sh](ci-local-repro.test.sh)** — ci-local-repro.sh の fixture test (commit 行列の rc・空 HOME・元 repo 無変更・hook 非複製・使い方の誤り・GNU shim)
 - **[ci-red-streak.py](ci-red-streak.py)** — GitHub Actions の red streak を起点まで遡る (現状・最後の green・最初の red run・失敗行・原因 commit)。
+- **[class_meetings.mutants.json](class_meetings.mutants.json)** — lib/class_meetings.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 4 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[claude-app-bundle.py](claude-app-bundle.py)** — Claude desktop app の挙動を、 docs や推測でなく app 本体 (画面の JS bundle・翻訳・main process の app.asar・埋込 engine) から確かめる検索道具
 - **[claude-app-notify-diagnose.py](claude-app-notify-diagnose.py)** — Claude for Mac の通知が鳴らない・来ない原因を層ごとに read-only 診断する (conventions/macos-claude-app-notifications.md)。
 - **[claude-session-whoami.py](claude-session-whoami.py)** — session の host / surface (desktop|CLI) / account を機械同定する probe。
+- **[clip-copy.sh](clip-copy.sh)** — 貼り付け用の文面をクリップボードに入れ、読み戻して一致を確かめる (macOS。 日本語などの非 ASCII も通す)
 - **[clipboard-cleaner.py](clipboard-cleaner.py)** — クリップボード一発整形 CLI（PDF コピーの段落内改行除去 + pbcopy 書き戻しで RTF 書式除去、明示発火のみ・常駐なし、--selftest 内蔵、hammerspoon ⌃⌥⌘V から呼ばれる、conventions/clipboard-cleaner.md）
 - **[close-pdf-form-boxes.py](close-pdf-form-boxes.py)** — Excel→PDF 出力で落ちたフォームの枠罫線を検出して閉じる。
 - **[codex_mail_install.py](codex_mail_install.py)** — Install/audit only the owner-selected Codex mail skill and narrow prompt rule.
@@ -155,6 +159,7 @@
 - **[pdf-to-text.py](pdf-to-text.py)** — PDF の本文を grep できる plain text にする — 合字・行末ハイフン・柱・頁番号を直し、直した数を報告する。--selftest 内蔵 (network 不要)。
 - **[pdf_form_fill.py](pdf_form_fill.py)** — 雛形 PDF への直接印字エンジン（library。anchor 印字 / NFKC 照合 / #+ redact / font subset / 内蔵検証 / 600dpi ラスタ化、office-automation.md#pdf-prefill-direct の汎用実装。単票向け — 派生 sheet 数式導出付き workbook は excel-osascript 経路）
 - **[permission-dialog-audit.py](permission-dialog-audit.py)** — Claude desktop の承認 dialog を app log から集計し、 transcript と突合して main / sub-agent に振り分け、 1 件ごとに原因を切り分ける
+- **[photos_picker.mutants.json](photos_picker.mutants.json)** — lib/photos_picker.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[pin-claude-cwd.sh](pin-claude-cwd.sh)** — Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
 - **[post-length.py](post-length.py)** — SNS 投稿文の長さを X / Bluesky / Mastodon / Vivaldi Social の数え方で並べて数え、上限を超えるものを示す。--selftest 内蔵。
 - **[pptx-to-pdf.sh](pptx-to-pdf.sh)** — PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、PowerPoint 経路は事前 grant 済み staging dir 経由、office-automation.md#pptx-to-pdf-powerpoint）
@@ -226,6 +231,7 @@
 - **[lib/artifact-presentation.test.mjs](lib/artifact-presentation.test.mjs)** — Hermetic self-test for artifact-presentation.mjs; uses a fake slide API and needs no Office app.
 - **[lib/browser_tab.py](lib/browser_tab.py)** — 起動中の Chromium 系 browser に裏で tab を 1 枚開かせ、 行き先を見て、 自分が開いた tab だけを閉じる (macOS)。 SSO 保護サイトの login 切れからの復帰用
 - **[lib/chat_file_refs.py](lib/chat_file_refs.py)** — chat の最終発話にある file 参照 (markdown link の href と、 path に見える inline code) を、 Claude Code desktop app の右パネルと同じ基準で解決し、 開けないものに正しい path を添えて返す共通部品 (Stop hook chat-file-ref-enforce.sh と校正が共用)
+- **[lib/class_meetings.py](lib/class_meetings.py)** — 授業の「第何回か」 をクラスのカレンダーから数え、 撮影時刻を時限に振り分ける helper (python3 class_meetings.py で selftest)
 - **[lib/commit-msg-leak-matcher.sh](lib/commit-msg-leak-matcher.sh)** — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 10 allowlist の (a)(b)(c) check + 審査中の申請を識別する種目語×評価語の共起 (d))、 claude-code hook + git-side runner の両方が source する DRY 実装
 - **[lib/find-personal-layer.sh](lib/find-personal-layer.sh)** — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
 - **[lib/git_blob.py](lib/git_blob.py)** — git の blob を worktree に出したときの中身で読む helper (git-crypt で暗号化される path も平文で)。
@@ -241,6 +247,7 @@
 - **[lib/office-staging.test.sh](lib/office-staging.test.sh)** — office-staging.sh + office_staging.py の self-test (hermetic、 Office 不要、 fake HOME)
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
 - **[lib/permission_rules.py](lib/permission_rules.py)** — settings.json の permission rule を宣言した形に揃える (engine)
+- **[lib/photos_picker.py](lib/photos_picker.py)** — Google Photos Picker API の client (session を作る → 本人が URL を開いて写真を選ぶ → 選ばれた写真を列挙・download。 python3 photos_picker.py で selftest)
 - **[lib/print_pages.py](lib/print_pages.py)** — 刷る PDF の各頁が「窓口に出す頁」 かを、作る時に file へ宣言し、刷る直前に読む。宣言の無い頁は見出しから推定する。
 - **[lib/prune-retired-hooks.sh](lib/prune-retired-hooks.sh)** — 退役した hook を外す (hooks dir の symlink + settings.json の entry)。 registry 駆動・冪等
 - **[lib/prune-retired-hooks.test.sh](lib/prune-retired-hooks.test.sh)** — 退役 hook の掃除 (scripts/lib/prune-retired-hooks.sh) の test

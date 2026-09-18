@@ -1,0 +1,33 @@
+{
+  "_comment": "lib/class_meetings.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 4 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。",
+  "target": "lib/class_meetings.py",
+  "run": "python3 {}",
+  "fail_marker": "FAIL ",
+  "pass_marker": "PASS ",
+  "mutants": [
+    {
+      "name": "課題の期限 (短い予定) も数える",
+      "pairs": [["        if te - ts < dt.timedelta(minutes=min_minutes):  # 課題の期限など\n            continue\n", ""]],
+      "expect_fail": ["課題の期限 (短い予定) は数えない"],
+      "expect_pass": ["授業のある日を学期はじめから数える (休講の週は飛ばす)", "終日の予定は数えない"]
+    },
+    {
+      "name": "終日の予定も数える",
+      "pairs": [["        if not s or not en:  # 終日の予定\n            continue\n", "        if not s or not en:  # 終日の予定\n            days.add(dt.date.fromisoformat(e[\"start\"][\"date\"]))\n            continue\n"]],
+      "expect_fail": ["終日の予定は数えない"],
+      "expect_pass": ["課題の期限 (短い予定) は数えない", "取り消した予定は数えない"]
+    },
+    {
+      "name": "取り消した予定も数える",
+      "pairs": [["        if e.get(\"status\") == \"cancelled\":\n            continue\n", ""]],
+      "expect_fail": ["取り消した予定は数えない"],
+      "expect_pass": ["終日の予定は数えない"]
+    },
+    {
+      "name": "境目を前の授業の終わりにする",
+      "pairs": [["(periods[i][1] + periods[i + 1][0]) // 2", "periods[i][1]"]],
+      "expect_fail": ["隣の授業との境目 = 前の終わりと次の始まりの中点"],
+      "expect_pass": ["授業のある日を学期はじめから数える (休講の週は飛ばす)"]
+    }
+  ]
+}

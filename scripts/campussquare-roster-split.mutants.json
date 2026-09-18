@@ -1,0 +1,27 @@
+{
+  "_comment": "campussquare-roster-split.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。",
+  "target": "campussquare-roster-split.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "FAIL ",
+  "pass_marker": "PASS ",
+  "mutants": [
+    {
+      "name": "カナの列を落とさない",
+      "pairs": [["for i, t in enumerate(toks) if i != k)", "for i, t in enumerate(toks) if True)"]],
+      "expect_fail": ["カナの列を header と行の両方から落とす"],
+      "expect_pass": ["他の科目の行を混ぜない"]
+    },
+    {
+      "name": "旧課程の番号の行を集めない",
+      "pairs": [["        for c in codes:", "        for c in codes[:1]:"]],
+      "expect_fail": ["新課程の番号の行 → 旧課程の番号の行の順に集める"],
+      "expect_pass": ["他の科目の行を混ぜない"]
+    },
+    {
+      "name": "既にある file を上書きする",
+      "pairs": [["            if p.exists():", "            if False:"]],
+      "expect_fail": ["既にある file は上書きせず exit 1"],
+      "expect_pass": ["--write で CP932 の file を書く (無ければ dry-run)"]
+    }
+  ]
+}

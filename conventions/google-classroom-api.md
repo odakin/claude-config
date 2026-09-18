@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Google Classroom をプログラムから操作するとき (クラスの作成・名簿からの招待・お知らせや課題の投稿・提出の読み取り) + 学期はじめにクラスを用意するとき + API で作った課題の設定が画面で変えられないと気づいたとき
 category: infra
-summary: Classroom API の実測済み挙動 = 先生はクラスを ACTIVE で直接作れる / 学生を直接追加できず招待のみ (全員に mail) / 教師は別クラスで見えている数値 userId で招待すると住所の推測が要らない / API で作った課題は期限後締切を画面で ON にできないが API で作ったクラスに画面で作った課題なら ON にできる / お知らせの Drive 添付は共有設定不要 / ヘッダー画像は API に項目が無い / scope ごとの読める・書ける範囲
+summary: Classroom API の実測済み挙動 = 先生はクラスを ACTIVE で直接作れる / 学生を直接追加できず招待のみ (全員に mail) / 教師は別クラスで見えている数値 userId で招待すると住所の推測が要らない / API で作った課題は期限後締切を画面で ON にできないが API で作ったクラスに画面で作った課題なら ON にできる / お知らせの Drive 添付は共有設定不要 / 添付の中身は Drive の同じ file を上書きして差し替える (再投稿しない) / クラスのカレンダーの予定件数が「第何回か」 の正本 / 作ったばかりのクラスのカレンダーは先生の Android に予定 0 件で先に届くことがある / 期限は UTC で返る / ヘッダー画像は API に項目が無い / scope ごとの読める・書ける範囲
 -->
 # Google Classroom API の実測済み挙動
 
@@ -34,6 +34,9 @@ scope を足したら token を取り直す (consent を 1 回)。 同じ OAuth 
 - クラスのカレンダーは timeZone が UTC で作られる (実測) → event 側に地域の timeZone を明示する。 `UNTIL` は UTC、 `EXDATE` は TZID 付きの現地時刻で書く
 - 入れたら `singleEvents=true` で展開して、 回数と日付の並びを学年暦と照合する (EXDATE の書き損じは展開しないと見えない)
 - 補講のように日付が確定していない回は入れず、 確定してから単発で足す
+- <a id="class-calendar-lecture-number"></a>**このカレンダーは「第何回か」 の正本にできる**: 学期はじめからの、 開始時刻つきで 30 分以上の予定の件数がその日の回数 (Classroom が自動で入れる課題の期限は 1 分の予定、 終日の予定もあるので数えない)。 部品 = [`scripts/lib/class_meetings.py`](../scripts/lib/class_meetings.py) の `lecture_number`。 記録 (板書・動画) の続き番号と食い違ったら止める使い方 = [`chalkboard-photo-archive.md#numbering`](chalkboard-photo-archive.md#numbering)
+- <a id="class-calendar-phone"></a>⚠️ **先生の Android 端末では、 作ったばかりのクラスのカレンダーが「名前だけ・予定 0 件」 で先に届くことがある** (実測): Google 純正でないカレンダーアプリ (端末の共通のカレンダー置き場を読むもの) で予定が出ない。 アカウントの同期のカレンダーも、 カレンダーごとの「同期」 も全部オンのままでこう見えた。 Google カレンダーのアプリを開くと同期が走って中身が届いた (仕組みは推測)。 → 予定を入れたら先生の端末で件数を 1 回見て、 0 件ならそのアプリを 1 回開く。 「端末に届かない」 を調べる前提として、 ⚠️ Google のアカウントの予定は iCloud を通らない (Mac で見えているのは Mac に Google のアカウントを直接登録しているから、 iCloud の CalDAV で同期する端末からは見えない)
+- 別の自分のアカウントにカレンダーを共有して見せる (`acl.insert`) のは、 agent の auto mode が「権限の付与」 として止めることがある (実測)。 見せたい端末に元のアカウントが入っていないかを先に確かめる (入っていれば共有は要らない)
 
 ## <a id="late-submission-lock"></a>API で作った課題と「期限後に提出を締め切る」
 
@@ -59,12 +62,14 @@ scope を足したら token を取り直す (consent を 1 回)。 同じ OAuth 
 - Drive への upload に使う token (例: `drive.file` scope の別 token) と Classroom の token が別でも、 同じアカウントなら添付できる (実測)
 - 添付の代わりに Dropbox 等の共有リンクを本文に貼る運用もある。 添付は Classroom の中で開けて、 受講者以外には見えない
 - お知らせも投稿した瞬間にクラス全員に見える: 文面と添付を人に見せてから投稿し、 投稿後は `announcements.get` で読み戻して本文と添付を照合する (貼り付けで文が落ちる事故の検出 = [`paste-destined-plain-text.md`](paste-destined-plain-text.md))
+- <a id="replace-attachment-in-place"></a>**添付の中身だけ差し替える = Drive の同じ file を上書きする** (実測): `files.update(fileId, media_body=…)` で中身を入れ替えると、 お知らせは添付の同じ file を指したまま = 投稿し直さない (受講者に通知が飛ばない)。 添付の表示名は Drive の file 名のまま、 前の版は Drive の版履歴に残る。 `drive.file` scope の token でも、 同じ OAuth client で上げた file なら書ける。 上書きの前に Drive 側の `md5Checksum` が「差し替える前の手元の file」 と一致するかを見て、 違う file を上書きしないようにする。 上書き後は `md5Checksum` が新しい file と一致することを見る
 
 ## <a id="read-submissions"></a>提出の読み取り
 
 - 短答課題の提出は `studentSubmissions.list`。 締切前は未提出の submission が `CREATED` で並ぶだけ = 取り込み件数 0 を「提出が無い」 と読まない ([`debugging-discipline.md`](debugging-discipline.md) の dedup の話と同じ)
 - `assignedGrade` は返却 (`RETURNED`) 後にだけ入る。 返却前の採点は `draftGrade`
 - 画面の「ファイルを開いていない」 は API に無い
+- 画面で作った課題を読み戻して確かめられるのは、 タイトル・本文・期限・状態まで。 **`dueDate` / `dueTime` は UTC** (日本時間 23:59 の期限は `dueTime` 14:59 で返る、 実測)。 「期限後に提出を締め切る」 などの画面のスイッチは読み戻しの対象にならない (= 画面で見る)
 
 ## 実装の置き場所
 

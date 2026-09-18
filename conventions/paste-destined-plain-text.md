@@ -29,7 +29,9 @@ span 消失・後続全損は記号剥がれより悪性 (= 欠落に気づき�
 
 ### ② delivery — コピー操作を機械側に寄せる
 
-1. **第一選択 = クリップボード直渡し**: 文面確定後に `cat <plain-text-file> | pbcopy` (macOS。 Linux は `xclip -selection clipboard` / WSL は `clip.exe`) を実行し、 「クリップボードに入れました、 貼り付けてください」 と渡す。 user のコピー操作自体が消えるので、 rendered 表示経由の変換事故も選択範囲ミスも構造的に起きない。 ⚠️ クリップボードは単一資源 — 使用直前に載せる (途中で別のコピーに上書きされる前提で、 貼り付け直前の turn で実行)
+1. **第一選択 = クリップボード直渡し**: 文面確定後に [`scripts/clip-copy.sh`](../scripts/clip-copy.sh) `<plain-text-file>` (macOS。 入れた後に読み戻して一致を確かめ、 違えば exit 1) を実行し、 「クリップボードに入れました、 貼り付けてください」 と渡す。 user のコピー操作自体が消えるので、 rendered 表示経由の変換事故も選択範囲ミスも構造的に起きない。 ⚠️ クリップボードは単一資源 — 使用直前に載せる (途中で別のコピーに上書きされる前提で、 貼り付け直前の turn で実行)
+   - <a id="pbcopy-empty-locale"></a>⚠️ **素の `pbcopy` は locale が空だと日本語を黙って捨てる** (実測): LANG / LC_ALL / LC_CTYPE が未設定の shell (agent の Bash tool など) で非 ASCII の文字列を `pbcopy` に流すと、 **exit 0 のまま空のクリップボード**になる (ASCII だけなら通る)。 「入れました」 と渡すと相手は空を貼る。 素の `pbcopy` を使うなら `LANG=en_US.UTF-8 pbcopy < file` とし、 `pbpaste` で読み戻して一致を見てから渡す (clip-copy.sh はこの 2 つを内蔵)。 AppleScript の `set the clipboard to (read POSIX file "…" as «class utf8»)` も通る
+   - Linux は `xclip -selection clipboard` / WSL は `clip.exe`。 どちらも読み戻しで確かめてから渡す
 2. **第二選択 = chat の code block**: ``` で囲んだテキストは rendered されないので、 そこからのコピーは安全
 3. **禁止 = rendered md 表示からのコピー**: chat の地の文や viewer panel で開いた .md の描画をコピー元にしない (= span 消失の事故経路)。 draft file を目視レビューに使うのは OK、 コピー元にしない
 

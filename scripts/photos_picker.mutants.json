@@ -1,0 +1,27 @@
+{
+  "_comment": "lib/photos_picker.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。",
+  "target": "lib/photos_picker.py",
+  "run": "python3 {}",
+  "fail_marker": "FAIL ",
+  "pass_marker": "PASS ",
+  "mutants": [
+    {
+      "name": "2 ページ目以降を読まない",
+      "pairs": [["            token = data.get(\"nextPageToken\")", "            token = None"]],
+      "expect_fail": ["nextPageToken が尽きるまで読み、 写真以外 (動画) は除く"],
+      "expect_pass": ["原寸は baseUrl に =d を付けて取る"]
+    },
+    {
+      "name": "動画も写真として返す",
+      "pairs": [["if photos_only and it.get(\"type\") != \"PHOTO\":", "if False:"]],
+      "expect_fail": ["nextPageToken が尽きるまで読み、 写真以外 (動画) は除く"],
+      "expect_pass": ["photos_only=False なら動画も返す"]
+    },
+    {
+      "name": "選び終わるのを待たない",
+      "pairs": [["            if s.get(\"mediaItemsSet\"):", "            if True:"]],
+      "expect_fail": ["選び終わる (mediaItemsSet) まで poll し、 その間だけ待つ"],
+      "expect_pass": ["原寸は baseUrl に =d を付けて取る"]
+    }
+  ]
+}

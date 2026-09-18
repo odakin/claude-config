@@ -1101,6 +1101,14 @@ python3 scripts/latex-pdf-audit.py paper.pdf --log paper.log --render-dir review
 
 出力の `visual_review: not_assessed` は画像を検査したという意味ではなく、画像確認の要否も判定しない。要否は下記の成果物別の範囲で決める。画像確認を行う場合は生成された PNG を開いて確認する。既存 PNG を上書きしないため、再検査時は新しい出力 directory を指定する。
 
+### <a id="redistribute-old-pdf"></a>昔組んだ PDF を配り直す前に、 未解決の参照が無いかを本文で見る
+
+過去の講義ノート等を「前の版をとりあえず」 と配るとき、 log が残っていなければ上の audit は回せない。 PDF の本文テキストに **`[?`** (未解決の引用) や **`??`** (未解決の相互参照) が無いかを探す (PyMuPDF の `get_text()` で全頁を連結して検索すれば足りる)。 文献処理 (bibtex) を回さずに書き出した PDF は、 引用が全部 `[?,?]` で参考文献の頁も無い形になり、 見た目では気づきにくい (実測)。
+
+- 見つかったら source を複製して文献処理込みで組み直す (`latexmk` が bibtex まで回す。 pTeX 系 class なら `latexmk -pdfdvi -latex='platex -interaction=nonstopmode -halt-on-error %O %S' -e '$dvipdf=q/dvipdfmx %O -o %D %S/'`)
+- 組み直した版と前の版は、 空白を除いたテキストを比べ、 引用番号 (`[?]` ↔ `[1,2]`) を正規化すれば一致することを確かめる。 残る差が目次の頁番号だけなら本文は同じ (TeX の版が違うと頁割りが動く、 実測)
+- 配った先の file を差し替える手順は配布先による (Classroom の添付なら [`google-classroom-api.md#replace-attachment-in-place`](google-classroom-api.md#replace-attachment-in-place))
+
 ### <a id="visual-verification-intensity"></a>成果物の種類で視覚検査の強度を分ける
 
 **論文・ノートの通常編集**では、ビルド、参照、変更した数式・論理を検査し、必要に応じて font を確認する。ページ画像化・目視照合・pixel 比較は既定の完了条件にしない。図や組版自体を変更するとき、レイアウト不具合が疑われるとき、または著者が求めたときだけ必要なページを画像で確認する。固定様式向けの検査を一律適用しない。

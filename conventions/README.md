@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 124 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 125 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -71,6 +71,8 @@ layer 1 (public) のドメイン固有規約 124 file をカテゴリ別に列�
   - 購入依頼の下調べは「書誌 (CiNii、 版が決まらなければ奥付) → 所蔵 (CiNii の参加組織フィルタはヒント、 結論はその館の OPAC を ISBN と書名の両方で) → 価格と入手 (openBD は登録時の値、 今の定価と在庫は書店の商品ページ、 価格が出ない = 注文できない見込み、 版元の在庫あり絞り込みが一番強い) → 紙か電子か・置き場所 (その年の館の通知を読む) → 品切れ本 (規則に書いていなければ在庫調査と古書購入を館に聞く) → 申込メールは候補リストから生成」。 道具 = scripts/book-lookup.py。 CiNii に無い紙の本・電子書籍・ISBN の無い古い登録が所蔵確認をすり抜ける、 書名の部分一致は別の本に当たる、 雑誌扱いの叢書は ISBN を持たない、 旧版だけ所蔵は館の規則しだい
 - **[chalkboard-close-up-merge.md](chalkboard-close-up-merge.md)** — 板書写真 PDF に close-up annotation を統合するとき
   - 板書写真 PDF で「広域 + close-up annotation」 2 枚を 1 page に統合する手順 (= Keynote 手作業経路 〔黒板 theme + 透過 chalk PNG overlay〕 を推奨、 PIL inline composite は anchor 明確時のみ。 free-form 配置は user が掴んでドラッグ、 AppleScript で .key auto 生成 + slide PNG export までを台本化、 chalk-only RGBA mask threshold 100-140 + Gaussian blur 1.5 px の標準値、 板書 reflex の延長)
+- **[chalkboard-photo-archive.md](chalkboard-photo-archive.md)** — 授業の板書をスマホで撮った写真を、 授業ごとの PDF にまとめて置き場所に保管し受講者に見せる仕組みを作る・回すとき + 板書 PDF の「第何回」 がずれた・上書きしてしまったとき
+  - 板書写真の保管と公開の手順 = Google Photos Picker で 1 日分をまとめて選ぶ (Library API は本人の写真を列挙できない) → 撮影時刻で時限に振り分け (隣の授業との中点) → 時限ごとに 1 PDF → 「第N回」 は置き場所の続き番号とクラスのカレンダーの件数を照合して食い違えば止める → 同じ回の PDF は上書きしない (--force) → 指定日以外の写真は入れない → どれも写真を選ぶ前に判定 → 受講者には学期はじめに共有フォルダのリンクを 1 回案内し以後は足すだけ (動画も同じ) → 振り返りは板書から書き起こして数式を検算。 部品 = scripts/lib/photos_picker.py + lib/class_meetings.py
 - **[erad-submission.md](erad-submission.md)** — e-Rad 経由で研究費 (JST・科研費・財団等) に応募するとき
   - e-Rad 経由の研究費応募 (JST・科研費・財団等) のフォーム固有制限・書式ルール・つまずきどころ (= 制度横断で効く e-Rad 挙動のみ、 制度個別値 〔費目・字数上限・締切〕 は各公募要領 + 応募管理リポが正)
 - **[hanko-digitization.md](hanko-digitization.md)** — 押印 (ハンコ) のスマホ写真から書類合成用の透過 PNG (シャープな輪郭 + 自然なかすれ + 写真由来の色 + 複数バリアント) を作るとき + 印影・ロゴ等の小さいラスタ素材を高解像度化したいのに補間拡大がボケるとき
@@ -254,7 +256,7 @@ layer 1 (public) のドメイン固有規約 124 file をカテゴリ別に列�
 - **[google-api-direct-access.md](google-api-direct-access.md)** — Google API を Python から直接叩く setup をするとき
   - Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 他人から共有された folder を読み続ける 〔宛先 account の token (別 account では 404) + 台帳 + id/modifiedTime の差分 + 共有通知メールの照合、 #shared-folder-watch〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避、 loopback OAuth consent フローの CSRF/横取り対策 〔state nonce + PKCE S256 + request-loop + 手動貼付の state 検証 + 補償制御 hard-fail + 識別子 charset 検証、 #oauth-loopback-hardening〕) + #drive-xlsx-inplace-update (= 他人 owner の共有 xlsx に書く: full drive 別 token / revisions.get_media が truth / openpyxl round-trip の損失 / files.update 同 ID / 再 download literal verify)
 - **[google-classroom-api.md](google-classroom-api.md)** — Google Classroom をプログラムから操作するとき (クラスの作成・名簿からの招待・お知らせや課題の投稿・提出の読み取り) + 学期はじめにクラスを用意するとき + API で作った課題の設定が画面で変えられないと気づいたとき
-  - Classroom API の実測済み挙動 = 先生はクラスを ACTIVE で直接作れる / 学生を直接追加できず招待のみ (全員に mail) / 教師は別クラスで見えている数値 userId で招待すると住所の推測が要らない / API で作った課題は期限後締切を画面で ON にできないが API で作ったクラスに画面で作った課題なら ON にできる / お知らせの Drive 添付は共有設定不要 / ヘッダー画像は API に項目が無い / scope ごとの読める・書ける範囲
+  - Classroom API の実測済み挙動 = 先生はクラスを ACTIVE で直接作れる / 学生を直接追加できず招待のみ (全員に mail) / 教師は別クラスで見えている数値 userId で招待すると住所の推測が要らない / API で作った課題は期限後締切を画面で ON にできないが API で作ったクラスに画面で作った課題なら ON にできる / お知らせの Drive 添付は共有設定不要 / 添付の中身は Drive の同じ file を上書きして差し替える (再投稿しない) / クラスのカレンダーの予定件数が「第何回か」 の正本 / 作ったばかりのクラスのカレンダーは先生の Android に予定 0 件で先に届くことがある / 期限は UTC で返る / ヘッダー画像は API に項目が無い / scope ごとの読める・書ける範囲
 - **[identity-in-config.md](identity-in-config.md)** — config file に ID/PII (Discord ID 等) を置く設計をするとき
   - Identity-in-Config 規約（Discord 等 PII-in-disguise、layer 2 + env var bridge）
 - **[install-failures.md](install-failures.md)** — brew install を試行する前後 + source build 陥落時
