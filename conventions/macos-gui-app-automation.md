@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: macOS の GUI app (Office / Pages / Keynote / Preview 等) を osascript・AppleScript・JXA で駆動する script を書く・直すとき + app を quit / kill / 再起動しようとした瞬間 + 自動化のたびに app が前面に出る・user の文書が閉じられたと言われたとき + 本人が使っている browser に script から tab を開かせる・閉じるとき (#chromium-tab-scripting)
+when: macOS の GUI app (Office / Pages / Keynote / Preview 等) を osascript・AppleScript・JXA で駆動する script を書く・直すとき + app を quit / kill / 再起動しようとした瞬間 + 自動化のたびに app が前面に出る・user の文書が閉じられたと言われたとき + 本人が使っている browser に script から tab を開かせる・閉じるとき (#chromium-tab-scripting) + 自動化が止まった原因が app の dialog かを script から確かめるとき (#dialog-presence-probe)
 category: macos
-summary: macOS の GUI app を script で駆動するときの作法。 (1) quit の前に app へ開いている文書を聞き、 自分が開いたもの以外が 1 つでもあれば quit も kill もしない (数え直しと quit は同じ osascript の中、 plain quit で saving no を付けない、 app 名指定の killall/pkill は禁止) (2) 背景で動かす = `open -g`、 `activate` を書かない、 `open -j` (hidden) は dialog まで隠して quit が -128 で取り消されたまま残るので使わない (3) `application id "…" is running` は app を起動しない probe、 `tell application` は起動する (4) 前面を奪ったら `path to frontmost application` で覚えた app へ `open -a` で返す (System Events 権限不要) (5) 文書は path か open が返す参照で指す (`active document` / `workbook 1` は user の文書を指しうる、 /private/tmp と /tmp の表記差を揃える) (6) Chromium 系 browser の tab = 裏で開いて前面の tab を戻す・id で指す・見るのは query を落とした URL と loading だけ・閉じるのは自分が開いた tab を場所を確かめてから (scripts/lib/browser_tab.py)。 Office 向け実装 = scripts/lib/office-app-guard.sh
+summary: macOS の GUI app を script で駆動するときの作法。 (1) quit の前に app へ開いている文書を聞き、 自分が開いたもの以外が 1 つでもあれば quit も kill もしない (数え直しと quit は同じ osascript の中、 plain quit で saving no を付けない、 app 名指定の killall/pkill は禁止) (2) 背景で動かす = `open -g`、 `activate` を書かない、 `open -j` (hidden) は dialog まで隠して quit が -128 で取り消されたまま残るので使わない (3) `application id "…" is running` は app を起動しない probe、 `tell application` は起動する (4) 前面を奪ったら `path to frontmost application` で覚えた app へ `open -a` で返す (System Events 権限不要) (5) 文書は path か open が返す参照で指す (`active document` / `workbook 1` は user の文書を指しうる、 /private/tmp と /tmp の表記差を揃える) (6) Chromium 系 browser の tab = 裏で開いて前面の tab を戻す・id で指す・見るのは query を落とした URL と loading だけ・閉じるのは自分が開いた tab を場所を確かめてから (scripts/lib/browser_tab.py) (7) app が dialog を出しているかを読む = System Events は補助アクセスが要り無いと -25211、 代わりは画面撮影か「AppleScript が -1712 で止まったか」、 probe 自身の失敗 message に検出語が入る罠。 Office 向け実装 = scripts/lib/office-app-guard.sh
 -->
 
 # macOS の GUI app を script で駆動する作法 <a id="macos-gui-app-automation"></a>
@@ -56,6 +56,14 @@ osascript / AppleScript / JXA で GUI app を動かす script は、 **user が�
 - **起動していない browser を起こさない**: `tell application` は app を起動する (3.)。 先に `pgrep -x` / `is running` で見て、 起動していなければ何もしない。
 - **自動操作の許可 (Automation) は「呼び元の app × 相手の app」 ごと**で、 初回に macOS の dialog が出る。 無人実行では dialog を出せず error -1743 になる。 osascript が応答しない・失敗する時は「開くだけ」 (`open -g`) に落とし、 行き先が見えない前提で別の信号 (cookie の更新等) を上限つきで待つ。
 - **実行せずに構文だけ確かめる** = `osacompile -o /tmp/x.scpt script.applescript` (app の用語も解決される。 本人の browser で閉じる系の操作を試走できない時の最低限)。
+
+## <a id="dialog-presence-probe"></a>7. app が dialog を出しているかを script から確かめる
+
+「自動化が止まったのは app の dialog のせいか」 を確かめたい時 (例 = sandbox の folder 許可 dialog、 [`office-automation.md#office-pregranted-staging-dir`](office-automation.md#office-pregranted-staging-dir))。
+
+- **System Events で UI を読む** (`tell process "X"` の `windows` / `sheets` / `buttons` / `static texts`) には、 osascript を呼んだ app (Terminal / Claude.app 等) に **補助アクセス (Accessibility) の許可**が要る。 無いと error `-25211` (「補助アクセスは許可されません」)。 app 自身の AppleScript 辞書 (`name of every document` 等) はこの許可が要らないが、 dialog は見えない。
+- **許可が無い時の代わり** (実測): (a) `screencapture -x <png>` で画面を撮り、 縮小して画像で見る (他 app の窓を写すには呼び元に画面収録の許可が要る — 写らなければそれを疑う)。 (b) 待っていた AppleScript の結果で推す = modal dialog が出ている間 app は AppleEvent に答えず、 `with timeout` を過ぎて `-1712` で返る。 数秒で成功して返れば dialog は出ていない。 (b) は無人でも回るので、 回帰検査は (b) を合否に使い、 (a) は最初の 1 回の確認に使う。
+- **probe の出力を判定に使う前に、 probe 自身が成功したか (exit code) を見る**: 「アクセス」 のような語で dialog を探すと、 補助アクセスが無い時の失敗 message そのものに一致し、 UI を 1 つも読めていないのに「dialog あり」 と判定する (実測)。 検出語が自分の失敗経路の出力にも現れる形 = [`convention-design-principles.md#detector-fires-on-its-own-signal`](../docs/convention-design-principles.md#detector-fires-on-its-own-signal)。
 
 ## <a id="implementations"></a>実装と検査
 

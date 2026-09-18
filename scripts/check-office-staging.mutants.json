@@ -1,0 +1,121 @@
+{
+  "_comment": "check-office-staging.py の selftest の foil に歯があることを mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 fallback の読み取り・log の rotate・e2e の合否判定と後始末の判定の各部を 1 つずつ外した版で、 その検査だけが落ち他は残ることを見る。",
+  "target": "check-office-staging.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "  [FAIL] ",
+  "pass_marker": "  [PASS] ",
+  "mutants": [
+    {
+      "name": "stderr の staging: UNAVAILABLE を読まない",
+      "pairs": [
+        [
+          "if \"staging: UNAVAILABLE\" in s:",
+          "if False:"
+        ]
+      ],
+      "expect_fail": [
+        "e2e: UNAVAILABLE を読む"
+      ],
+      "expect_pass": [
+        "e2e: in-place fallback は成功でも失敗扱い",
+        "e2e: 全条件で ok"
+      ]
+    },
+    {
+      "name": "log が rotate して cursor が行数を超えた時に全行を未 ack にしない",
+      "pairs": [
+        [
+          "if cursor > len(lines):",
+          "if False:"
+        ]
+      ],
+      "expect_fail": [
+        "log: rotate で cursor 超過"
+      ],
+      "expect_pass": [
+        "log: ack 後は silent",
+        "log: ack 後の新着 1 件だけ flag"
+      ]
+    },
+    {
+      "name": "staging: 行が無い成功 (= staging を経由していない) を通す",
+      "pairs": [
+        [
+          "if st != \"staged\":",
+          "if False:"
+        ]
+      ],
+      "expect_fail": [
+        "e2e: staging 行なしは失敗"
+      ],
+      "expect_pass": [
+        "e2e: 全条件で ok",
+        "e2e: MARKER 不一致は失敗 (stale)"
+      ]
+    },
+    {
+      "name": "PDF 本文の MARKER 不一致 (= stale / 別文書) を通す",
+      "pairs": [
+        [
+          "if marker_found is False:",
+          "if False:"
+        ]
+      ],
+      "expect_fail": [
+        "e2e: MARKER 不一致は失敗 (stale)"
+      ],
+      "expect_pass": [
+        "e2e: PyMuPDF 無しは未照合 ok",
+        "e2e: 頁数違いは失敗"
+      ]
+    },
+    {
+      "name": "意図的な無効化 (CLAUDE_OFFICE_STAGING=0) でも probe が鳴る",
+      "pairs": [
+        [
+          "has_office or disabled or reason",
+          "has_office or reason"
+        ]
+      ],
+      "expect_fail": [
+        "probe: disabled は silent"
+      ],
+      "expect_pass": [
+        "probe: 非 macOS は silent",
+        "probe: ok は silent"
+      ]
+    },
+    {
+      "name": "wrapper の後に app が AppleEvent に答えなくても clean にする",
+      "pairs": [
+        [
+          "if state is None or state == \"unknown\":",
+          "if False:"
+        ]
+      ],
+      "expect_fail": [
+        "後始末: 応答しない app は失敗"
+      ],
+      "expect_pass": [
+        "後始末: 自分の copy が開いたままは失敗",
+        "後始末: 起動していない / 空なら clean"
+      ]
+    },
+    {
+      "name": "閉じたはずの staged copy が開いたままでも clean にする",
+      "pairs": [
+        [
+          "    if copy_open:\n        return False, \"copy-open\"\n",
+          ""
+        ]
+      ],
+      "expect_fail": [
+        "後始末: 自分の copy が開いたままは失敗"
+      ],
+      "expect_pass": [
+        "後始末: 応答しない app は失敗",
+        "後始末: 起動していない / 空なら clean"
+      ]
+    }
+  ]
+}
