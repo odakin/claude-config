@@ -61,6 +61,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+try:
+    from git_blob import read_blob_text  # smudge filter を通す = git-crypt の path も平文で読む
+except ImportError:  # lib が無い古い配置 = git show に戻す
+    read_blob_text = None
+
 RULE_REF_TOKEN = "manuscript-claim-ownership.md" + "#rule"  # 分けて書く = 本 file の行が参照行に見えないように
 ENGINE_TOKENS = ("manuscript-claim-guard", "manuscript_claim_guard")
 CONFIG_REL = ".claude/manuscript-guard.json"
@@ -857,14 +863,27 @@ def commit_targets(command: str, cwd: Path) -> list[tuple[Path, str, list[str]]]
     return list(out.values())
 
 
+def blob_text(repo: Path, spec: str) -> str | None:
+    """git の blob を worktree と同じ中身で読む (git-crypt の path は暗号文でなく平文。
+    hook-authoring.md#blob-read-git-crypt)。 読めなければ None。"""
+    if read_blob_text is not None:
+        try:
+            return read_blob_text(spec, cwd=str(repo), timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "show", spec], capture_output=True, timeout=10, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout.decode("utf-8", errors="replace") if r.returncode == 0 else None
+
+
 def head_text(repo: Path, rel: str, rev: str = "HEAD") -> str:
-    r = git(repo, "show", f"{rev}:{rel}")
-    return r.stdout if r is not None and r.returncode == 0 else ""
+    return blob_text(repo, f"{rev}:{rel}") or ""
 
 
 def index_text(repo: Path, rel: str) -> str | None:
-    r = git(repo, "show", f":{rel}")
-    return r.stdout if r is not None and r.returncode == 0 else None
+    return blob_text(repo, f":{rel}")
 
 
 def changes_for_repo(repo: Path, mode: str, paths: list[str]) -> list[dict]:
@@ -906,6 +925,8 @@ def changes_for_repo(repo: Path, mode: str, paths: list[str]) -> list[dict]:
             new = read_text(repo / rel) if (repo / rel).exists() else ""
             if new is None:
                 continue
+        if old.startswith("\x00GITCRYPT") or new.startswith("\x00GITCRYPT"):
+            continue  # 復号できない (lock 中) = 中身を比べられない。 暗号文を原稿として読まない
         # 範囲は HEAD と新しい設定の広い方で判定する (設定の緩和で自分を範囲外にする経路を塞ぐ)
         ch_new = protected_changes(rel, old, new, repo, cfg)
         ch_head = protected_changes(rel, old, new, repo, head_cfg) if head_cfg != cfg else []
@@ -926,7 +947,7 @@ def hook_mode(agent: str) -> int:
     try:
         return _hook(agent, event)
     except Exception as exc:  # fail-open
-        print(f"manuscript-claim-guard: internal error (fail-open): {exc!r}", file=sys.stderr)
+        print(f"manuscript-claim-guard: internal error (fail-open): {type(exc).__name__}: {str(exc)[:200]}", file=sys.stderr)
         return 0
 
 
@@ -1005,7 +1026,7 @@ def git_precommit_mode() -> int:
         ch = changes_for_repo(repo, "index", [])
         left = unapproved(ch, repo, session)
     except Exception as exc:  # fail-open
-        print(f"manuscript-claim-guard: internal error (fail-open): {exc!r}", file=sys.stderr)
+        print(f"manuscript-claim-guard: internal error (fail-open): {type(exc).__name__}: {str(exc)[:200]}", file=sys.stderr)
         return 0
     if left:
         print(deny_reason(left, session), file=sys.stderr)
@@ -1289,6 +1310,22 @@ def selftest() -> int:
         bad = patch.replace("-We find", "-We never find")
         _, failed3 = codex_edits(dict(cev, tool_input={"command": bad}))
         check("apply_patch: 当たらない patch は失敗扱いで拾う", len(failed3) == 1)
+        # clean / smudge filter の掛かった repo (git-crypt と同じ class): blob は worktree と同じ中身で読む
+        rt = tdp / "rot"
+        (rt / "src").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q"], cwd=rt, env=genv, capture_output=True, check=False)
+        rot = "tr 'A-Za-z' 'N-ZA-Mn-za-m'"
+        for key in ("filter.rot.clean", "filter.rot.smudge"):
+            subprocess.run(["git", "config", key, rot], cwd=rt, env=genv, capture_output=True, check=False)
+        (rt / ".gitattributes").write_text("*.tex filter=rot\n", encoding="utf-8")
+        (rt / "src" / "main.tex").write_text(paper, encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=rt, env=genv, capture_output=True, check=False)
+        subprocess.run(["git", "commit", "-q", "-m", "i"], cwd=rt, env=genv, capture_output=True, check=False)
+        check("filter の掛かった blob を平文で読む", head_text(rt, "src/main.tex") == paper)
+        (rt / "src" / "main.tex").write_text(paper.replace("b + c", "b - c"), encoding="utf-8")
+        subprocess.run(["git", "add", "src/main.tex"], cwd=rt, env=genv, capture_output=True, check=False)
+        check("filter の掛かった repo でも式の変更だけを検出",
+              [c["region"] for c in changes_for_repo(rt, "index", [])] == ["eq:ab"])
         os.environ.pop("MANUSCRIPT_CLAIM_GUARD_STATE_DIR", None)
         os.environ.pop("MANUSCRIPT_CLAIM_GUARD_HOME", None)
 
