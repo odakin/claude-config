@@ -233,6 +233,14 @@ JSPS「挑戦的研究（開拓・萌芽）の書面審査における評定基�
   SoT の表記と括弧の全角/半角が違うので、正規化して一致する option を選ぶ)。
 - **保存 = 画面の `onTransientSaveWithUpload()`** (一部の画面は引数付き = link の href をそのまま eval する)。中は `lockButton` + `setTimeout(500ms)` で submit
   するので、**呼んだら 4 秒待ってから次の JS**。成功は本文の「一時保存が完了しました」で判定し、エラー語 (バイト以内 / 文字以内 / できません) も同時に grep。
+- <a id="two-completion-states"></a>🔥 **「保存できた」 は「提出できる状態」 ではない — 到達点は 2 つある** (実測)。 画面ごとの処理状況に
+  **一時保存だけの状態**と**確定保存した状態**の 2 段があり、 一時保存を何度繰り返しても前者のままで**提出に進めない**。 関数が別:
+  一時保存 = `onTransientSave()` / `onTransientSaveWithUpload()` → 前者の状態。 確定 = `onSaveWithUpload()` → **確認画面**が出て、
+  そこで `onSave()` → 後者の状態 + 管理画面へ戻る。 **全画面が後者でないと提出の操作が出ない**。
+  ∴ driver は「保存の成功メッセージが出た」 を完了条件にせず、 **管理画面の一覧で各画面の状態を読み戻して**到達点を確かめる
+  (= 一覧の状態表示が唯一の ground truth。 一般則 = [`web-form-automation.md#submit-truth-is-server-state`](web-form-automation.md#submit-truth-is-server-state) の
+  「完了の段が複数ある」 版 = [`#multi-stage-completion`](web-form-automation.md#multi-stage-completion))。 一覧の状態の**綴り**は種目・画面で揺れるので、
+  driver 側で literal 一致に頼らず「提出に進める / 進めない」 の 2 値に正規化する (綴りの実測は層 3 の driver docstring)。
 - **行の追加はすべてサーバ往復** (経費明細 `addMeisaiA()`〜`F()`、応募状況 `onAddOuboJokyo` / `onAddUkeireJokyo` / `onAddERadSonotaJokyo` / `onAddSonotaJokyo`)。
   1 回ごとに待つ (連続呼びは lockButton で 2 回目以降が捨てられる)。入力済みの値は往復で保たれる。CSV 取込 (file input) と添付 upload は
   **JS から file を置けない** = 明細は行追加 + 代入で代替 (行数分の往復、50 行で 3 分程度)、添付だけ人間の 1 操作。
