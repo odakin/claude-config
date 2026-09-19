@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 127 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 128 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -75,6 +75,8 @@ layer 1 (public) のドメイン固有規約 127 file をカテゴリ別に列�
   - 板書写真の保管と公開の手順 = Google Photos Picker で 1 日分をまとめて選ぶ (Library API は本人の写真を列挙できない) → 撮影時刻で時限に振り分け (隣の授業との中点) → 時限ごとに 1 PDF → 「第N回」 は置き場所の続き番号とクラスのカレンダーの件数を照合して食い違えば止める → 同じ回の PDF は上書きしない (--force) → 指定日以外の写真は入れない → どれも写真を選ぶ前に判定 → 受講者には学期はじめに共有フォルダのリンクを 1 回案内し以後は足すだけ (動画も同じ) → 振り返りは板書から書き起こして数式を検算。 部品 = scripts/lib/photos_picker.py + lib/class_meetings.py
 - **[erad-submission.md](erad-submission.md)** — e-Rad 経由で研究費 (JST・科研費・財団等) に応募するとき
   - e-Rad 経由の研究費応募 (JST・科研費・財団等) のフォーム固有制限・書式ルール・つまずきどころ (= 制度横断で効く e-Rad 挙動のみ、 制度個別値 〔費目・字数上限・締切〕 は各公募要領 + 応募管理リポが正)
+- **[form-case-pipeline.md](form-case-pipeline.md)** — 同じ様式 (申請書・請求書・届) を人や回ごとに何度も出す作業を仕組みにするとき + 提出した書類を新しい書類の base にしてしまう / 提出済みの file を黙って上書きする事故を止めたいとき + 同じ規則が手順書・案件メモ・README に書き写されて食い違うのを止めたいとき + 様式の一部の頁だけを作り直したいとき
+  - 様式の案件 pipeline (formcase) の規約 — 規則の home は 1 つ + 他は生成 view / 提出状態を案件ごとの data (document → group → issue) に持つ / 凍結は content-addressed (sha256 + 書式 fingerprint) / 紙と記録の関係を field で持つ / 出力を書く前に gate。 engine = scripts/formcase/ (汎用)、 様式と案件は呼び元の repo。 導入手順と限界 (言い換えは lint の外 / fingerprint の射程 / 字の切れ gate の死角) つき
 - **[hanko-digitization.md](hanko-digitization.md)** — 押印 (ハンコ) のスマホ写真から書類合成用の透過 PNG (シャープな輪郭 + 自然なかすれ + 写真由来の色 + 複数バリアント) を作るとき + 印影・ロゴ等の小さいラスタ素材を高解像度化したいのに補間拡大がボケるとき
   - 実写 1 枚 (印影 ~300px 径) から 3000×3000 透過 PNG 30 変奏を量産した実 session の確定パラメータ付きフル pipeline。核心 = 補間拡大では元画像の情報量を超えられないので potrace でベクトル化してから任意解像度でラスタライズ (エッジ鮮鋭度 実測 13 倍)。2 値化しきい値は redness = R − min(G,B) > 110 を比較シートで user に選ばせる (甘いと文字の窓が潰れる)。かすれは均一に濃い実物からは取れないので合成 — ランダム散布でなく「縁 + 押し圧ムラ + 実写の局所薄部」に寄せ、抜け率 4% が本物のシャチハタに最も近い (9% でデザイン品に見え始める)。色はベタ単色でなく実写インク色を最近傍補完で転写。variant は seed × 抜け率 × 回転のみ変え、色マップ等は cache。検証は目視でなく数値 5 項目 (bbox 内収まり / 隣接ペア差分 >2% / α0 率 / 薄色画素 0 / 文字の穴保存)。下流の派生版正規化 (content fill 一定化) + random picker pattern も併記
 - **[indico-abstract-submission.md](indico-abstract-submission.md)** — Indico (CERN 等) の会議に abstract 投稿・参加登録・支払いを進めるとき、会議の実績やアカウント重複を確認するとき

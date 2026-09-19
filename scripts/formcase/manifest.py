@@ -1,6 +1,6 @@
 """submission.yaml (案件ごとの提出状態) の読み書きと凍結の判定。
 
-schema (= formcase/1) の説明は ``conventions/form-case-pipeline.md`` §manifest。 ここはその実行系。
+schema (= formcase/1) の説明は ``conventions/form-case-pipeline.md`` #manifest。 ここはその実行系。
 
 用語:
   document  1 つの workbook (+ そこから作る出力) の単位 (= 1 人 1 様式の書類)
@@ -17,7 +17,7 @@ schema (= formcase/1) の説明は ``conventions/form-case-pipeline.md`` §manif
 
 凍結の記録は「freeze した時の tree」 で、 刷った・送った・出したものと同じとは限らない。 printed / sent / submitted の
 issue は ``paper: same|differs|unverified`` (+ ``paper_diff`` / ``paper_basis`` / ``paper_commit``) でその関係を持ち、
-``date: unknown`` を owner に確認済みなら ``date_ack`` を持つ (正本 = ``conventions/form-case-pipeline.md`` §paper)。
+``date: unknown`` を owner に確認済みなら ``date_ack`` を持つ (正本 = ``conventions/form-case-pipeline.md`` #paper)。
 """
 from __future__ import annotations
 

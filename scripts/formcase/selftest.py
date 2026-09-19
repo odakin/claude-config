@@ -321,11 +321,14 @@ def run() -> int:
 
         run_docx_tests(tmp, expect)
         run_page_role_tests(tmp, expect)
-        inst_st = CF.instance_selftest() if saved.get("cfg") is not None else None
-        if inst_st:
-            print(f"── instance の selftest ({inst_st})")
+        if saved.get("cfg") is not None:        # 呼び元の設定に戻してから instance の selftest を探す
             CF._STATE.update(saved)
             CF._invalidate()
+            inst_st = CF.instance_selftest()
+        else:
+            inst_st = None
+        if inst_st:
+            print(f"── instance の selftest ({inst_st})")
             import importlib.util
 
             sp = importlib.util.spec_from_file_location("formcase_instance_selftest", inst_st)

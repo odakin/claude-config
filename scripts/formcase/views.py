@@ -32,7 +32,7 @@ from . import rules as R
 BEGIN_RE = re.compile(r"(?<!`)<!-- formcase:view (?P<args>[^>]*?) -->(?!`)")
 END_RE = re.compile(r"(?<!`)<!-- /formcase:view -->(?!`)")
 END = "<!-- /formcase:view -->"
-NOTE = "<!-- 生成物 (formcase.py views --write)。 手で直さない — 規則はお手本 spec (reference/*.yaml) を直す -->"
+# generated view の注記の文は呼び元のもの (= その doc の中身になる)。 設定の views.note、 既定 = config.DEFAULTS
 NOTE_STATUS = ("<!-- 生成物 (submission.yaml から。 freeze / annotate / reopen が描き直す)。 手で直さない — "
                "状態は formcase.py freeze / annotate で manifest に書く -->")
 HIST_BEGIN_RE = re.compile(r"(?<!`)<!-- formcase:history -->(?!`)")
@@ -157,7 +157,7 @@ def process(text: str, all_rules=None, case_dir=None):
             pos = end
             continue
         out.append(text[pos:m.end()])
-        note = NOTE_STATUS if _args(m.group("args")).get("kind") == "status" else NOTE
+        note = NOTE_STATUS if _args(m.group("args")).get("kind") == "status" else CF.view_note()
         out.append("\n" + note + "\n" + body + "\n")
         pos = end
     out.append(text[pos:])

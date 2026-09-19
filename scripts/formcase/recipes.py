@@ -63,7 +63,7 @@ def _seal_image() -> str:
     cmd = CF.seal_image_cmd()
     if not cmd:
         raise BuildError("押印のある出力を作るには設定の seal_image_cmd (印影の画像 path を最後の行に印字する command) が要る")
-    argv = [os.path.expanduser(str(x)) for x in cmd]
+    argv = [sys.executable if x == "python3" else os.path.expanduser(str(x)) for x in cmd]
     r = subprocess.run(argv, capture_output=True, text=True)
     if r.returncode != 0 or not r.stdout.strip():
         raise BuildError(f"seal_image_cmd が印影の path を返さない ({argv}): {r.stderr.strip()[-200:]}")
@@ -499,7 +499,7 @@ def recipe_for(form_id):
         if DF.is_docx(S.get(form_id)):
             return RecipeDocx(form_id)
         raise BuildError(f"form {form_id!r} の生成 recipe が無い (設定の recipes が指す file に register する。 "
-                         "form-case-pipeline.md §射程)")
+                         "form-case-pipeline.md #scope)")
     return cls()
 
 
@@ -521,7 +521,7 @@ def _build(m, doc_id, groups, out_dir=None) -> dict:
         raise BuildError(f"{doc_id}: workbook が無い")
     unsupported = [g for g in groups if g not in rc.outputs]
     if unsupported:
-        raise BuildError(f"recipe {rc.form} は group {unsupported} を作れない (form-case-pipeline.md §射程)")
+        raise BuildError(f"recipe {rc.form} は group {unsupported} を作れない (form-case-pipeline.md #scope)")
     role_probs = S.page_role_problems(spec)              # 刷る頁の宣言の矛盾 (form-case-pipeline.md #page-roles)
     if role_probs:
         raise BuildError("spec の頁の役割が矛盾している: " + " / ".join(role_probs))

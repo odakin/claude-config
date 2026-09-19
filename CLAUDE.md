@@ -58,6 +58,7 @@ claude-config/
 │   ├── erad-submission.md                  # e-Rad 経由で研究費 (JST・科研費・財団等) に応募するとき
 │   ├── expensive-intermediate-artifacts.md # 5 分以上かかる生成物の出力先を決めるとき + snapshot artifact を命名するとき
 │   ├── flight-search.md                    # 航空券の候補を調べて比べる表を作るとき (内蔵 Browser pane で比較サイト・航空会社サイトを読む) + 出張の申請書に日付・経由地を書く前 + 旅費補助に予約確認を添える段取りを組むとき
+│   ├── form-case-pipeline.md               # 同じ様式 (申請書・請求書・届) を人や回ごとに何度も出す作業を仕組みにするとき + 提出した書類を新しい書類の base にしてしまう / 提出済みの file を黙って上書きする事故を止めたいとき + 同じ規則が手順書・案件メモ・README に書き写されて食い違うのを止めたいとき + 様式の一部の頁だけを作り直したいとき
 │   ├── garoon.md                           # Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを読む/探すとき + ワークフローを再利用・作成・申請するとき + login 切れで読めないとき / SSO 保護サイトの login 切れからの復帰を組むとき (#garoon-session-recovery)
 │   ├── github-security-automation.md       # repo の Dependabot/CodeQL/Semgrep baseline や Dependabot PR を扱うとき + private repo の workflow が一斉に数秒で red になったとき / private に検査の workflow を置くとき (#private-actions-minutes)
 │   ├── giving-talks.md                     # 講演・セミナー・発表の準備をするとき

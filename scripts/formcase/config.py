@@ -31,7 +31,9 @@ key (すべて任意。 相対 path は config file のある dir から、 ``gl
   recipes          instance の recipe を register する python file の list (config dir から)
   instance_selftest  instance 固有の selftest を持つ python file (``run(expect, tmp)`` を持つ)
   lint             {ack, targets, case_readme, forms_by_path, context_stopwords, value_shape_words}
-  views            {roots, files} (generated view を探す dir / 明示 file。 workspace_root から)
+  views            {roots, files, note} (generated view を探す dir / 明示 file / 生成物に書く注記の文)
+  markers          {errata_note, precedent_prefix} (隔離 marker に入る呼び元の文 = errata の注記 /
+                   「前例を base にしない」 一般則の link の前に置く語)
   scaffold         {spec_hint, process_hint, derived_workbook_suffix}
 """
 from __future__ import annotations
@@ -65,7 +67,9 @@ DEFAULTS = {
     "instance_selftest": "",
     "lint": {"ack": "", "targets": [], "case_readme": [], "forms_by_path": [], "context_stopwords": [],
              "value_shape_words": []},
-    "views": {"roots": [], "files": []},
+    "views": {"roots": [], "files": [],
+              "note": "<!-- 生成物 (formcase.py views --write)。 手で直さない — 規則はお手本 spec を直す -->"},
+    "markers": {"errata_note": "", "precedent_prefix": ""},
     "scaffold": {"spec_hint": "", "process_hint": "", "derived_workbook_suffix": {}},
 }
 
@@ -236,6 +240,21 @@ def lint_ack() -> Path | None:
 
 def view_cfg() -> dict:
     return cfg()["views"]
+
+
+def view_note() -> str:
+    """generated view の先頭に書く注記 (= 呼び元の doc の中身になるので engine が決めない)。"""
+    return str(view_cfg().get("note") or DEFAULTS["views"]["note"])
+
+
+def marker_precedent_prefix() -> str:
+    """「前例を base にしない」 一般則の link の前に置く語 (= 呼び元の層の呼び方。 空なら何も置かない)。"""
+    return str(cfg()["markers"].get("precedent_prefix") or "")
+
+
+def marker_errata_note() -> str:
+    """隔離 marker の「既知の誤り」 の前に置く注記 (呼び元の事情。 空なら書かない)。"""
+    return str(cfg()["markers"].get("errata_note") or "")
 
 
 def scaffold_cfg() -> dict:

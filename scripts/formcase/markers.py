@@ -54,7 +54,7 @@ def render(m: M.Manifest) -> str | None:
         "`formcase.py check` が bytes と sheet の値の変化を 🔴 にする)。 参照してよいのは「何を出したか」 の確認だけ。",
         "",
         f"**新しい書類は `formcase.py new` で配布雛形から** (前の案件の xlsx・driver を写さない。 一般則 = "
-        f"[`{Path(CF.precedent_doc()).name}`]({_precedent_link(m.case_dir)}))。 "
+        f"{CF.marker_precedent_prefix()}[`{Path(CF.precedent_doc()).name}`]({_precedent_link(m.case_dir)}))。 "
         "この案件の draft の group を作り直すのは `formcase.py build`、 凍結 group の作り直しは `formcase.py reopen` (新しい file 名)。",
         "",
         "列「紙」 = 記録した file・sheet の値が、 実際に刷った / 送った / 出したものと同じか (manifest の `paper:`)。",
@@ -68,6 +68,9 @@ def render(m: M.Manifest) -> str | None:
     errata = m.data.get("errata") or []
     if errata:
         lines += ["", "## 既知の誤り・注意 (明細の正本は各 link 先)", ""]
+        note = CF.marker_errata_note()
+        if note:
+            lines += [note, ""]
         lines += ["- " + "\n  ".join(x.strip() for x in e.strip().split("\n")) for e in errata]
     return "\n".join(lines) + "\n"
 

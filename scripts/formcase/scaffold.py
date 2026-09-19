@@ -207,7 +207,7 @@ def new_case(form_id: str, case_dir, doc: str, workbook: str | None = None, todo
         if gid in outs:
             cur["outputs"] = outs[gid]
         else:
-            cur["note"] = f"recipe {form_id} はこの group を作らない (旧 driver の型を使う。 form-case-pipeline.md §射程)"
+            cur["note"] = f"recipe {form_id} はこの group を作らない (旧 driver の型を使う。 form-case-pipeline.md #scope)"
         groups[gid] = {"current": cur}
     entry = {"form": str(form_id), "workbook": wb_name, "groups": groups}
     if from_doc:

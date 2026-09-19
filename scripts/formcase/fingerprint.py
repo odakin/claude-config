@@ -5,7 +5,7 @@ v2 (manifest.sheet_digests_v2) の射程外だったもの = 罫線・塗り / �
 そのまま有効 (re-freeze しない。 check は在る版のうち一番新しいものを照合する)。
 
 **揺れの実測 (Mac Excel、 配布雛形 3 種と案件 workbook 3 冊)** — 何を「同じ」 と
-見なすかの根拠 (form-case-pipeline.md §限界 #fingerprint-noise):
+見なすかの根拠 (form-case-pipeline.md #fingerprint-noise):
 
 1. Windows の Excel が最後に保存した配布雛形を Mac Excel が初めて保存すると (= 96dpi の格子 → 72dpi の格子):
    - 列幅が Mac Excel の pixel の格子に丸め直される (1/8 字や 1/7 字の格子 → 1/6 字。 1.25 → 1.1640625)。
