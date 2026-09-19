@@ -841,6 +841,34 @@ sections:
     legacy: "8.68"
     level: 3
     title: "8.68 規則の写しは逐語 lint では追い切れない — doc が規則を書けない構造にし、 成果物は gate に決めさせる"
+  - id: environment-literal-placement
+    legacy: "24"
+    level: 2
+    title: "24. 環境に依存する値は「配る物」 に焼かない — 実行時に導くか、 導けない形式なら install 時に生成する"
+  - id: literal-placement-question
+    legacy: "24.1"
+    level: 3
+    title: "24.1 判別の 1 問"
+  - id: literal-placement-three-ways
+    legacy: "24.2"
+    level: 3
+    title: "24.2 三択 — 実行時に導く / install 時に生成する / 理由つきの literal"
+  - id: justified-literal
+    legacy: "24.3"
+    level: 3
+    title: "24.3 literal が正しい 3 つの型 — 消さずに理由を残す"
+  - id: do-not-rewrite-records
+    legacy: "24.4"
+    level: 3
+    title: "24.4 ⚠️ 記録は掃除の対象ではない"
+  - id: expansion-is-the-readers-job
+    legacy: "24.5"
+    level: 3
+    title: "24.5 実装の罠 — 展開するのは書いた側ではなく読む側"
+  - id: literal-placement-origin
+    legacy: "24.6"
+    level: 3
+    title: "24.6 由来"
   - id: changelog
     level: 2
     title: "変更履歴"
