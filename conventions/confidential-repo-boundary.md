@@ -201,7 +201,7 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 
 **罠**: settings の `Read(path)` / `Edit(path)` の ask / deny rule は、 Bash では file を名指しする読み方 (`cat` など) にしか効かない ([`claude-code-permissions.md#file-rule-tools`](claude-code-permissions.md#file-rule-tools))。 **上位 dir から再帰する検索は、 保護 dir の名前を 1 度も書かずに中へ届く** (実測: repo を横断して探す sweep が上位 dir からの `find` で保護 dir を拾い、 続く loop の `git -C` と相対 path の `grep` が中を読んだ。 確認は 0 回)。 Grep / Glob tool を上位 dir から走らせたときに path rule が効くかは未検証 (確かめるには保護 dir を検索することになる) なので、 同じ hook で先に塞ぐ。
 
-**機構** = [`hooks/protected-dir-access-guard.py`](../hooks/protected-dir-access-guard.py) (PreToolUse `Bash|Grep|Glob`、 **ask**):
+**機構** = [`hooks/protected-dir-access-guard.py`](../hooks/protected-dir-access-guard.py) (PreToolUse `Bash|Grep|Glob|Read|Edit|Write`、 **ask**。 同じ script が PostToolUse でも走り、 許可された事実を記録する = 下の「1 回限り」):
 
 - 確認を出す = path の名指し (実体 path / home 直下の symlink 別名 / `~` / `$HOME` / `親/名前` / 親の直後の glob) ・ 上位 dir を名指しした再帰 (find / grep -r / rg / du / os.walk / `**/` …) ・ cwd が中 ・ cwd が上位 dir で再帰 ・ cwd が親で名前か glob ・ Grep / Glob の起点が中か上位 dir
 - 出さない = 名前を含む文 (commit message・規約の grep) ・ 再帰しない一覧 ・ 保護 dir の外の具体的な dir への再帰
@@ -209,6 +209,7 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 - **宣言** = `~/.claude/protected-dirs.txt` と `~/.claude/leak-pattern-sources.txt` (§4 の作業リポ登録)。 remote に出してはいけない実体の置き場は、 触ってもいけない dir でもある — 別の list にすると片方だけが更新される ([`docs/convention-design-principles.md#detector-config-must-be-derived`](../docs/convention-design-principles.md#detector-config-must-be-derived))
 - <a id="swap-the-new-gate-in-first"></a>⚠️ **どちらも machine-local なので、 二重の門を入れ替えるときは順序が要る**: この一覧 file は**即時**に効き、 settings の rule は**次 session から**効く。 だから path rule の kind を緩める (`deny` → `ask`) ときは **先に一覧を配り、 後から rule を外す**。 逆にすると、 file を名指ししない読み方が確認なしで通る窓が開く。 一覧を git の宣言から配る engine = [`scripts/sync-protected-dirs.py`](../scripts/sync-protected-dirs.py) (足すだけ・冪等。 宣言に無い行と他経路の一覧は消さない)、 rule 側は [`multi-machine-state.md#gate-rules-reassert-every-session`](multi-machine-state.md#gate-rules-reassert-every-session)。 ⚠️ 一覧が空のマシンでは hook は何も守らない (fail-open) ので、 **緩める前にそのマシンの `--canary` が保護 dir を数えているか**を見る
 - **この hook 自体は deny にしない**: その dir の作業 session では中で作業するのが正当。 止まるのは仕様。 ⚠️ **ただし settings 側に `deny` を重ねている環境がある** (= 作業 session でも Claude には触らせない、 と決めた dir)。 hook の ask と deny rule が同じ command に当たると **hook の理由だけが返って deny は見えない** ので、 拒否の原因を hook だと読み違える ([`claude-code-permissions.md#hook-masks-deny`](claude-code-permissions.md#hook-masks-deny))。 deny を重ねてあるかは settings の `permissions.deny` を読んで確かめる (hook の挙動からは分からない)
+- <a id="one-approval-per-session"></a>**同じ session で毎回聞くと、 人は読まずに押す** — 中で作業する session では確認が儀式になり、 gate の意味が消える。 そこで **PostToolUse で「実際に tool が走った」 = 許可された事実を記録し、 以後その session ではその dir について `allow` を返す** (記録は session ごと・dir ごと・古い分は間引く。 session をまたいでは開かない)。 ⚠️ 記録するのは PostToolUse だけ (= 拒否された call では開かない)。 ⚠️ **trade-off**: 1 回許可すると、 その session の後続の call は確認なしで中に触れる — **その session に外部由来の指示 (web・mail・他人の文書) が混ざれば同じ扉を通る**ので、 開けた session ではそれらを持ち込まない。 ⚠️ PostToolUse の配線が無いと記録されず毎回聞かれる (= 上の「儀式」 に戻る) ので、 `--canary` はその欠落も 1 行で言う
 - fail-open なので §5 のとおり `--canary` で毎回確かめる (ARMED / NOT ARMED / 未配線 / 対象外)
 - ⚠️ 射程外 = 変数に分けて組み立てた path、 script file の中の走査。 目的は事故の防止で回避への対策ではないので、 **横断の検索・sweep を書く側の規律**と併用する: 対象は repo の一覧 (registry) から取り、 上位 dir からの `find` で発見しない
 

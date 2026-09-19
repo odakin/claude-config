@@ -27,12 +27,25 @@
     (f) 探す起点 (path、 無ければ cwd。 Glob は pattern の literal 部分を足す) が D の中か上位 dir、
         または Glob の pattern が `P/B` を含む
 
+  Read / Edit / Write
+    (g) tool_input の file_path が D の中
+
 確認を出さないもの: B を含む文 (commit message・規約の grep)、 再帰しない一覧 (`ls <親>`)、 D の外の具体的な dir への
   再帰、 他の tool。 ⚠️ 射程外 = 変数に分けて組み立てた path、 script file の中の走査 (目的は事故の防止)。
 ask にする理由 (deny にしない): 保護 dir の作業 session では、 中で作業するのが正当。 止まるのは仕様。
 
+session 内の 1 回限り (= 「一度許可したら、 その session では通し」):
+  同じ session で毎回確認が出ると、 中で作業する session では人が読まずに押す儀式になる (= gate が壊れる)。
+  そこで **PostToolUse で「実際に通った」 = user が許可した事実を記録**し、 以後その session ではその dir に
+  ついて allow を返す (記録 = ~/.claude/protected-dir-unlock/<session_id>、 session ごと・dir ごと)。
+  - 記録するのは PostToolUse (= tool が走った後) だけ。 PreToolUse は記録しない (= 拒否された call で開かない)
+  - session_id の無い呼び出し (canary 等) は常に ask (= 記録も参照もしない)
+  - 古い記録は書くときに間引く (既定 7 日)
+  ⚠️ trade-off: 1 回許可すると、 その session の後続の call は確認なしで中に触れる (= 本人が意図した作業の
+  ためだが、 その session に外部由来の指示が混ざれば同じ扉を通る)。 session をまたいでは開かない。
+
 usage:
-  (hook)                                   stdin = PreToolUse の JSON
+  (hook)                                   stdin = PreToolUse / PostToolUse の JSON
   protected-dir-access-guard.py --canary   本番の settings.json と install 済み hook で、 宣言した dir の probe に
                                            確認が出るかを 1 行で報告 (ARMED / NOT ARMED / 未配線 / 対象外)
 """
@@ -43,6 +56,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 HOOK_NAME = "protected-dir-access-guard.py"
 BOUND_END = r"""(?=/|["')\s;&|]|$)"""
@@ -179,15 +193,64 @@ def _norm(p: str, cwd: str, home: str, aliases) -> str:
     return _physical(os.path.normpath(p), aliases)
 
 
+UNLOCK_DIR = "protected-dir-unlock"
+UNLOCK_KEEP_DAYS = 7
+
+
+def _unlock_file(home: str, sid: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", sid)[:128]
+    return os.path.join(home, ".claude", UNLOCK_DIR, safe)
+
+
+def is_unlocked(home: str, sid: str, phys: str) -> bool:
+    """この session で、 この保護 dir が既に許可されたか (session_id が無ければ常に False)。"""
+    if not sid:
+        return False
+    try:
+        with open(_unlock_file(home, sid), encoding="utf-8") as fh:
+            return any(line.strip() == phys for line in fh)
+    except OSError:
+        return False
+
+
+def record_unlock(home: str, sid: str, phys: str) -> bool:
+    """許可された事実を記録する (冪等)。 書けたら True。 ついでに古い記録を間引く。"""
+    if not sid:
+        return False
+    if is_unlocked(home, sid, phys):
+        return False
+    path = _unlock_file(home, sid)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(phys + "\n")
+    except OSError:
+        return False
+    cutoff = time.time() - UNLOCK_KEEP_DAYS * 86400
+    try:
+        for n in os.listdir(os.path.dirname(path)):
+            f = os.path.join(os.path.dirname(path), n)
+            if f != path and os.path.getmtime(f) < cutoff:
+                os.remove(f)
+    except OSError:
+        pass
+    return True
+
+
 def decide(payload: dict, home: str | None = None) -> str:
     """確認を出す理由 (空 = 出さない)。"""
+    return _decide(payload, home)[0]
+
+
+def _decide(payload: dict, home: str | None = None) -> tuple[str, str]:
+    """(確認を出す理由, 当たった保護 dir の実体 path)。 理由が空なら dir も空。"""
     home = home or _home()
     dirs = load_dirs(home)
     if not dirs:
-        return ""
+        return "", ""
     tool = payload.get("tool_name") or ""
-    if tool not in ("Bash", "Grep", "Glob"):
-        return ""
+    if tool not in ("Bash", "Grep", "Glob", "Read", "Edit", "Write"):
+        return "", ""
     ti = payload.get("tool_input") or {}
     aliases = _aliases(home)
     cwd = payload.get("cwd") or os.getcwd()
@@ -197,34 +260,38 @@ def decide(payload: dict, home: str | None = None) -> str:
         if tool == "Bash":
             cmd = ti.get("command") or ""
             if not cmd:
-                return ""
+                return "", ""
             recursive = bool(RECURSIVE_RE.search(cmd))
             if pr.path_re.search(cmd) or pr.pb_re.search(cmd) or pr.parent_glob_re.search(cmd):
-                return f"command が保護 dir「{pr.name}」 の path を書いている"
+                return f"command が保護 dir「{pr.name}」 の path を書いている", pr.phys
             if recursive and pr.anc_re.search(cmd):
-                return f"command が保護 dir「{pr.name}」 を含む上位 dir を再帰して辿る"
+                return f"command が保護 dir「{pr.name}」 を含む上位 dir を再帰して辿る", pr.phys
             if pr.inside(ncwd):
-                return f"cwd が保護 dir「{pr.name}」 の中"
+                return f"cwd が保護 dir「{pr.name}」 の中", pr.phys
             if recursive and pr.ancestor(ncwd):
-                return f"cwd が保護 dir「{pr.name}」 を含む上位 dir で、 command が再帰して辿る"
+                return f"cwd が保護 dir「{pr.name}」 を含む上位 dir で、 command が再帰して辿る", pr.phys
             if pr.is_parent(ncwd) and (pr.name_word_re.search(cmd) or re.search(r"[*?]", cmd)):
-                return f"cwd が保護 dir「{pr.name}」 の親で、 command がその名前か glob を使う"
+                return f"cwd が保護 dir「{pr.name}」 の親で、 command がその名前か glob を使う", pr.phys
+        elif tool in ("Read", "Edit", "Write"):
+            fp = ti.get("file_path") or ti.get("notebook_path") or ""
+            if fp and pr.inside(_norm(fp, cwd, home, aliases)):
+                return f"{tool} の file が保護 dir「{pr.name}」 の中", pr.phys
         else:
             base = ti.get("path") or cwd
             pat = ti.get("pattern") or ""
             if tool == "Glob" and pat:
                 if pr.pb_re.search(pat):
-                    return f"Glob の pattern が保護 dir「{pr.name}」 を名指す"
+                    return f"Glob の pattern が保護 dir「{pr.name}」 を名指す", pr.phys
                 lit = re.split(r"[*?\[]", pat, maxsplit=1)[0]
                 lit = lit.rsplit("/", 1)[0] if "/" in lit else ""
                 if lit:
                     base = lit if (lit.startswith("/") or lit.startswith("~")) else os.path.join(base, lit)
             nb = _norm(base, cwd, home, aliases)
             if pr.inside(nb):
-                return f"{tool} の起点が保護 dir「{pr.name}」 の中"
+                return f"{tool} の起点が保護 dir「{pr.name}」 の中", pr.phys
             if pr.ancestor(nb):
-                return f"{tool} の起点が保護 dir「{pr.name}」 を含む上位 dir (再帰で中に届く)"
-    return ""
+                return f"{tool} の起点が保護 dir「{pr.name}」 を含む上位 dir (再帰で中に届く)", pr.phys
+    return "", ""
 
 
 def main() -> int:
@@ -232,17 +299,30 @@ def main() -> int:
         payload = json.load(sys.stdin)
     except (ValueError, OSError):
         return 0
+    home = _home()
+    sid = payload.get("session_id") or ""
     try:
-        reason = decide(payload)
+        reason, phys = _decide(payload, home)
     except Exception:  # noqa: BLE001  fail-open: guard の不調で作業を止めない (効いているかは --canary が見る)
         return 0
     if not reason:
+        return 0
+    if (payload.get("hook_event_name") or "") == "PostToolUse":
+        # ここに来た = tool が実際に走った = user が許可した。 以後この session では聞かない
+        record_unlock(home, sid, phys)
+        return 0
+    if is_unlocked(home, sid, phys):
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse", "permissionDecision": "allow",
+            "permissionDecisionReason": f"この session では既に許可済み ({os.path.basename(phys)})",
+        }}, ensure_ascii=False))
         return 0
     sys.stderr.write(
         "🔒 protected-dir-access-guard: 保護を宣言した dir に触れる可能性があります\n"
         f"  理由: {reason}\n"
         "  意図せず当たったなら: 対象をその dir の外の具体的な dir に絞って出し直す (上位 dir から再帰しない)。\n"
-        "  その dir の作業 session で意図して触るなら: user が許可する。\n"
+        "  その dir の作業 session で意図して触るなら: user が許可する (= 許可したら、 この session では\n"
+        "  その dir について以後聞かない。 session をまたいでは開かない)。\n"
         "  規約: claude-config/conventions/confidential-repo-boundary.md#protected-dir-access-guard\n"
     )
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask"}}, ensure_ascii=False))
@@ -277,13 +357,21 @@ def canary() -> int:
             c = h.get("command", "")
             if HOOK_NAME in c:
                 hook = os.path.expanduser(c.split()[0].replace("~", home, 1))
-                for t in ("Bash", "Grep", "Glob"):
+                for t in ("Bash", "Grep", "Glob", "Read", "Edit", "Write"):
                     try:
                         if re.fullmatch(ent.get("matcher", ""), t):
                             wired.add(t)
                     except re.error:
                         pass
-    missing = {"Bash", "Grep", "Glob"} - wired
+    post_wired = False
+    for ent in (conf.get("hooks") or {}).get("PostToolUse") or []:
+        for h in ent.get("hooks") or []:
+            if HOOK_NAME in h.get("command", ""):
+                try:
+                    post_wired = bool(re.fullmatch(ent.get("matcher", ""), "Bash"))
+                except re.error:
+                    post_wired = False
+    missing = {"Bash", "Grep", "Glob", "Read", "Edit", "Write"} - wired
     if missing:
         print(f"NOT ARMED: protected-dir-access-guard (settings.json の PreToolUse に {'/'.join(sorted(missing))} の "
               "entry が無い → claude-config/scripts/sync-hook-settings.sh)")
@@ -307,12 +395,17 @@ def canary() -> int:
             bad.append(f"{name}: Bash の名指しに確認が出ない")
         if not run("Grep", {"pattern": "x", "path": os.path.dirname(d)}, "/"):
             bad.append(f"{name}: 親 dir を起点の Grep に確認が出ない")
+        if not run("Read", {"file_path": os.path.join(d, "x.txt")}, "/"):
+            bad.append(f"{name}: 中の file の Read に確認が出ない")
         if run("Bash", {"command": "ls /"}, "/"):
             bad.append(f"{name}: 無関係な command に確認が出る")
     if bad:
         print("NOT ARMED: protected-dir-access-guard (" + " / ".join(bad) + ")")
         return 1
-    print(f"ARMED: protected-dir-access-guard ({len(present)} dir、 Bash / Grep / Glob)")
+    note = "" if post_wired else (
+        " ⚠️ session 内の 1 回限り許可は未配線 (= 毎回聞かれる。 PostToolUse の entry が無い "
+        "→ claude-config/scripts/sync-hook-settings.sh)")
+    print(f"ARMED: protected-dir-access-guard ({len(present)} dir、 Bash / Grep / Glob / Read / Edit / Write)" + note)
     return 0
 
 

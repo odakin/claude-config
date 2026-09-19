@@ -46,4 +46,30 @@ merge_hook_event() {
                 "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
         fi
     done < <(printf '%s' "$entries" | jq -r '.[].hooks[]?.command | sub("^.*/hooks/"; "")' | tr -d '\r')
+
+    # matcher の照合 (2026-09-19): 「在るか」 だけ見て足す ensure は、 宣言側で matcher を変えても
+    # 既に entry が在るマシンに届かない (= そのマシンだけ旧い tool 集合のまま走る。
+    # conventions/multi-machine-state.md#ensure-reconciles-content)。 その hook 専用の entry
+    # (= hooks が 1 本だけ) に限って matcher を宣言どおりに直す。 他の hook と束ねられた entry は
+    # 直すと巻き添えになるので、 違いを報告するだけにする。
+    while IFS= read -r cmd; do
+        [ -z "$cmd" ] && continue
+        local want live n solo
+        want=$(printf '%s' "$entries" | jq -r --arg cmd "$cmd" \
+            '[.[] | select(.hooks[]?.command | contains($cmd))][0] | .matcher // empty')
+        [ -z "$want" ] && continue
+        n=$(jq -r --arg cmd "$cmd" "[.hooks.${event}[] | select(.hooks[]?.command | contains(\$cmd))] | length" "$settings")
+        [ "$n" = "1" ] || continue
+        live=$(jq -r --arg cmd "$cmd" "[.hooks.${event}[] | select(.hooks[]?.command | contains(\$cmd))][0] | .matcher // \"\"" "$settings")
+        [ "$live" = "$want" ] && continue
+        solo=$(jq -r --arg cmd "$cmd" "[.hooks.${event}[] | select(.hooks[]?.command | contains(\$cmd))][0] | (.hooks | length)" "$settings")
+        if [ "$solo" = "1" ]; then
+            echo "  Updating ${event} matcher: $cmd ($live → $want)"
+            jq --arg cmd "$cmd" --arg want "$want" \
+                ".hooks.${event} |= map(if ((.hooks | length) == 1) and ((.hooks[0].command // \"\") | contains(\$cmd)) then .matcher = \$want else . end)" \
+                "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
+        else
+            echo "  NOTE: ${event} の $cmd は matcher が宣言と違う ($live ≠ $want) が、 他の hook と同じ entry なので触らない" >&2
+        fi
+    done < <(printf '%s' "$entries" | jq -r '.[].hooks[]?.command | sub("^.*/hooks/"; "")' | tr -d '\r')
 }

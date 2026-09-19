@@ -76,7 +76,9 @@ _bash "cwd が親でも名前も glob も無い" 'echo hello' none "$CS/部署"
 _tool "Grep path=~/Claude" Grep '{"pattern":"x","path":"~/Claude"}' none
 _tool "Glob 相対 (cwd ~/Claude)" Glob '{"pattern":"**/*.md"}' none
 _tool "Glob に語だけ (起点が外)" Glob '{"pattern":"**/機密作業/**"}' none
-_tool "Read は対象外" Read "$(jq -n --arg p "$F/a.md" '{file_path:$p}')" none
+_tool "Read の file が中" Read "$(jq -n --arg p "$F/a.md" '{file_path:$p}')" ask
+_tool "Edit の file が中" Edit "$(jq -n --arg p "$F/a.md" '{file_path:$p}')" ask
+_tool "Read の file が外" Read "$(jq -n --arg p "$T/other/a.md" '{file_path:$p}')" none
 _bash "空 command" '' none
 
 echo "=== 設定の読み方 ==="
@@ -91,11 +93,35 @@ _check "CLAUDE_PROTECTED_DIRS は file より優先" "$got" none
 out=$(printf 'not json' | HOME="$T" python3 "$HOOK" 2>&1); rc=$?
 _check "壊れた入力で死なない (rc 0・無出力)" "$rc:$out" "0:"
 
+echo "=== session 内の 1 回限り許可 ==="
+_ev() {  # $1=event $2=session_id $3=tool $4=json input -> ask / allow / none
+  jq -n --arg e "$1" --arg s "$2" --arg t "$3" --argjson i "$4" --arg c "$T/Claude" \
+     '{hook_event_name:$e, session_id:$s, tool_name:$t, tool_input:$i, cwd:$c}' \
+    | env -u CLAUDE_PROTECTED_DIRS HOME="$T" python3 "$HOOK" 2>/dev/null \
+    | { out=$(cat); case "$out" in *'"permissionDecision": "allow"'*) echo allow ;; *'"permissionDecision": "ask"'*) echo ask ;; *) echo none ;; esac; }
+}
+IN=$(jq -n --arg p "$F/a.md" '{file_path:$p}')
+_check "許可前は ask" "$(_ev PreToolUse sess-A Read "$IN")" ask
+_check "PostToolUse は決定を返さない" "$(_ev PostToolUse sess-A Read "$IN")" none
+[ -s "$T/.claude/protected-dir-unlock/sess-A" ] && _check "許可が記録される" ok ok || _check "許可が記録されない" bad ok
+_check "同じ session は以後 allow" "$(_ev PreToolUse sess-A Read "$IN")" allow
+_check "同じ session は Bash も allow" "$(_ev PreToolUse sess-A Bash "$(jq -n --arg c "ls $F" '{command:$c}')")" allow
+_check "別 session はまた ask" "$(_ev PreToolUse sess-B Read "$IN")" ask
+_check "session_id が無ければ ask のまま" "$(_ev PreToolUse "" Read "$IN")" ask
+_check "PostToolUse でも session_id 無しは記録しない" "$(_ev PostToolUse "" Read "$IN")" none
+[ ! -e "$T/.claude/protected-dir-unlock/_" ] && _check "空 session の記録を作らない" ok ok || _check "空 session の記録を作った" bad ok
+_check "保護 dir の外は PostToolUse でも記録しない" "$(_ev PostToolUse sess-C Read "$(jq -n --arg p "$T/other/a.md" '{file_path:$p}')")" none
+[ ! -e "$T/.claude/protected-dir-unlock/sess-C" ] && _check "外の file で unlock しない" ok ok || _check "外の file で unlock した" bad ok
+rm -rf "$T/.claude/protected-dir-unlock"
+
 echo "=== カナリア ==="
 S="$T/.claude/settings.json"
-jq -n --arg h "$HOOK" '{hooks:{PreToolUse:[{matcher:"Bash",hooks:[{type:"command",command:$h}]},{matcher:"Grep|Glob",hooks:[{type:"command",command:$h}]}]}}' > "$S"
+jq -n --arg h "$HOOK" '{hooks:{PreToolUse:[{matcher:"Bash",hooks:[{type:"command",command:$h}]},{matcher:"Grep|Glob|Read|Edit|Write",hooks:[{type:"command",command:$h}]}]}}' > "$S"
 out=$(env -u CLAUDE_PROTECTED_DIRS HOME="$T" python3 "$HOOK" --canary 2>&1); rc=$?
-case "$rc:$out" in "0:ARMED"*) _check "配線あり → ARMED" ok ok ;; *) _check "配線あり → ARMED ($out)" "$rc" 0 ;; esac
+case "$rc:$out" in "0:ARMED"*"1 回限り許可は未配線"*) _check "PostToolUse 未配線 → ARMED + 警告" ok ok ;; *) _check "PostToolUse 未配線の警告 ($out)" "$rc" 0 ;; esac
+jq -n --arg h "$HOOK" '{hooks:{PreToolUse:[{matcher:"Bash|Grep|Glob|Read|Edit|Write",hooks:[{type:"command",command:$h}]}],PostToolUse:[{matcher:"Bash|Grep|Glob|Read|Edit|Write",hooks:[{type:"command",command:$h}]}]}}' > "$S"
+out=$(env -u CLAUDE_PROTECTED_DIRS HOME="$T" python3 "$HOOK" --canary 2>&1); rc=$?
+case "$rc:$out" in "0:ARMED"*"1 回限り許可は未配線"*) _check "両方配線 → 警告なし ($out)" bad ok ;; "0:ARMED"*) _check "両方配線 → ARMED (警告なし)" ok ok ;; *) _check "両方配線 ($out)" "$rc" 0 ;; esac
 jq -n --arg h "$HOOK" '{hooks:{PreToolUse:[{matcher:"Bash",hooks:[{type:"command",command:$h}]}]}}' > "$S"
 out=$(env -u CLAUDE_PROTECTED_DIRS HOME="$T" python3 "$HOOK" --canary 2>&1); rc=$?
 case "$rc:$out" in "1:NOT ARMED"*Grep*) _check "Grep/Glob の配線が無い → NOT ARMED" ok ok ;; *) _check "Grep/Glob 欠落 ($out)" "$rc" 1 ;; esac

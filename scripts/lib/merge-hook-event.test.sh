@@ -69,6 +69,32 @@ jq -e '.hooks.Stop[] | select(.hooks[].command | contains("c-multi.sh nudge"))' 
 derived=$(printf '%s' "$ENTRIES" | jq -r '.[].hooks[]?.command | sub("^.*/hooks/"; "")' | tr -d '\r' | tr '\n' ' ')
 [ "$derived" = "a-guard.sh b-nudge.sh c-multi.sh track " ] && ok || miss "case6: derived list mismatch: '$derived'"
 
+# --- case 7: 宣言の matcher が変わったら、 その hook 専用の entry は直す (在るかだけ見ない) ---
+echo '{"hooks": {"PostToolUse": [
+  {"matcher": "Bash", "hooks": [{"type": "command", "command": "~/.claude/hooks/a-guard.sh"}]},
+  {"matcher": "Read", "hooks": [{"type": "command", "command": "~/.claude/hooks/b-nudge.sh"}]},
+  {"matcher": "Edit", "hooks": [{"type": "command", "command": "~/.claude/hooks/c-multi.sh track"}]}
+]}}' > "$S"
+WIDER=$(printf '%s' "$ENTRIES" | jq '(.[] | select(.hooks[]?.command | contains("a-guard.sh")) | .matcher) = "Bash|Read|Edit"')
+merge_hook_event "PostToolUse" "$WIDER" "$S" >/dev/null
+m=$(jq -r '.hooks.PostToolUse[] | select(.hooks[].command | contains("a-guard.sh")) | .matcher' "$S")
+[ "$m" = "Bash|Read|Edit" ] && ok || miss "case7: matcher not reconciled (got $m)"
+m2=$(jq -r '.hooks.PostToolUse[] | select(.hooks[].command | contains("b-nudge.sh")) | .matcher' "$S")
+[ "$m2" = "Read" ] && ok || miss "case7: other entry touched (got $m2)"
+n=$(jq '.hooks.PostToolUse | length' "$S")
+[ "$n" = "3" ] && ok || miss "case7: entry count changed (got $n)"
+
+# --- case 8: 他の hook と束ねた entry は matcher を触らない (巻き添えにしない) ---
+echo '{"hooks": {"PostToolUse": [
+  {"matcher": "Bash", "hooks": [{"type": "command", "command": "~/.claude/hooks/a-guard.sh"},
+                                {"type": "command", "command": "~/.claude/hooks/other.sh"}]},
+  {"matcher": "Read", "hooks": [{"type": "command", "command": "~/.claude/hooks/b-nudge.sh"}]},
+  {"matcher": "Edit", "hooks": [{"type": "command", "command": "~/.claude/hooks/c-multi.sh track"}]}
+]}}' > "$S"
+merge_hook_event "PostToolUse" "$WIDER" "$S" 2>/dev/null >/dev/null
+m=$(jq -r '.hooks.PostToolUse[] | select(.hooks[].command | contains("a-guard.sh")) | .matcher' "$S")
+[ "$m" = "Bash" ] && ok || miss "case8: bundled entry matcher rewritten (got $m)"
+
 echo ""
 echo "=== Result: PASS=$PASS FAIL=$FAIL ==="
 [ "$FAIL" -eq 0 ]

@@ -134,7 +134,7 @@
       ]
     },
     {
-      "matcher": "Bash|Grep|Glob",
+      "matcher": "Bash|Grep|Glob|Read|Edit|Write",
       "hooks": [
         {
           "type": "command",
@@ -223,6 +223,15 @@
         {
           "type": "command",
           "command": "~/.claude/hooks/chat-path-base-nudge.sh"
+        }
+      ]
+    },
+    {
+      "matcher": "Bash|Grep|Glob|Read|Edit|Write",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/protected-dir-access-guard.py"
         }
       ]
     }
