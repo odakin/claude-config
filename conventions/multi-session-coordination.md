@@ -13,6 +13,8 @@ scope: 1 user の手元で並列 AI session が同じ project を扱う場面。
 
 ## <a id="file-path-race"></a>1. 同 file path を別 session が独立に書く race
 
+> 🔎 **今この瞬間の兄弟を数える道具** = [`scripts/list-live-sessions.py`](../scripts/list-live-sessions.py) (harness が残す live session の刻印を読むだけ・何も書かない。 `--surface` で「同じ cwd の兄弟」 を 1 ブロックに、 `--self <uuid>` で自分を除外)。 **messaging の道具ではない** (addressable id は持てない) = 編集前に `git fetch` して明示 path で commit する、 の判断材料。
+
 ### 問題
 
 - session A: 朝の zoom 中に `analyses/data/foo.yaml` を compile + commit
