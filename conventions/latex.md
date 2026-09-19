@@ -1062,7 +1062,7 @@ Claude Code の desktop app の右パネルは、 Markdown の中の TeX 数式 
 
 - **対象の一覧を人が書かない**。 新しいノートを組めば、 登録なしで次の回から写る (人が育てる一覧は育たない = [`docs/convention-design-principles.md#detector-config-must-be-derived`](../docs/convention-design-principles.md#detector-config-must-be-derived))。 絞るのは除外の側で、 保管庫の dir (archive / old / submissions など) と、 直近 N 日に commit も変更も無い PDF を外す。 一度写したものは、 その後も更新し続ける。
 - **暗号化している PDF は写さない** (git-crypt の filter が付いた path)。 復号した写しを repo の外に置くと、 暗号化で守っていた範囲が黙って広がる。 携帯で読みたいものが暗号化の側にあるときは、 写すかどうかを持ち主が決める。
-- **発火は AI のターンの終わり (Stop hook、 背景で実行、 出力なし)**。 PDF はほぼ AI のターンの中で組まれるので、 組んだ直後に写る。 macOS の launchd の定期実行にしないのは、 launchd の process が同期フォルダ (`~/Library/CloudStorage/`) に書けないため ([`launchd-cloudstorage-tcc.md`](launchd-cloudstorage-tcc.md))。 残る隙間 = 人が editor で組んだ分は、 次の AI のターンの終わりまで写らない。
+- **発火は AI のターンの終わり (Stop hook、 背景で実行、 出力なし)**。 PDF はほぼ AI のターンの中で組まれるので、 組んだ直後に写る。 macOS の launchd の定期実行にしないのは、 launchd の process が同期フォルダ (`~/Library/CloudStorage/`) に書けないため ([`launchd-cloudstorage-tcc.md`](launchd-cloudstorage-tcc.md))。 残る隙間 = 人が editor で組んだ分は、 次の AI のターンの終わりまで写らない。 同じ hook を session の開始にも配線しておくと、 ターンの終わりの hook が走らない環境でも次の session で追いつく (出力の無い hook なので、 開始時の注入は増えない)。 hook には実走の印 (時刻を 1 行書く file) を持たせる。 副作用だけの hook は、 走っていなくても誰も気づかない。
 - **複数のマシンが同じ写し先に書く前提で、 上書きは「中身が違う ∧ 元のほうが新しい」 ときだけ**。 pull の遅れたマシンが古い PDF で新しい写しを上書きしない。 同じ理由で、 写し先の PDF を自動では消さない (別のマシンにまだ無い PDF を消してしまう)。 整理は `--prune-report` の一覧を見て人が決める。
 - **`main.pdf` のような名前は、 写すときに意味のある dir 名か repo 名に付け替える** (携帯の一覧で `main.pdf` が並んでも選べない)。
 - **親の repo が ignore している入れ子の clone (Overleaf の clone など) も見る**。 共著の原稿の本体がそこにあることが多い。
