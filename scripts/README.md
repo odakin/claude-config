@@ -63,6 +63,7 @@
 - **[check-pii-filenames.py](check-pii-filenames.py)** — 個人情報が file 名に出ている追跡 file を検出する。
 - **[check-preamble-aliases.py](check-preamble-aliases.py)** — flag raw notation where the preamble defines an alias.
 - **[check-public-marker.py](check-public-marker.py)** — Are the public-repo leak gates switched on? Lists local clones whose GitHub repo is public but lack .claude/public-repo.marker (no public pre-commit gate runs), clones marked public whose repo is private, and marked clones whose gate hooks are not installed on this machine; --fix-hooks installs them; --selftest.
+- **[check-remote-control-auth.py](check-remote-control-auth.py)** — Remote Control サーバーの auth を **この機械で** 診断する。
 - **[check-repo-registration.py](check-repo-registration.py)** — Find locally cloned, self-owned Git repositories absent from a registry.
 - **[check-script-index.py](check-script-index.py)** — Check that a Git repository's script inventory has direct Markdown links.
 - **[check-script-layering.mutants.json](check-script-layering.mutants.json)** — check-script-layering.py の selftest の foil に歯があることを mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
