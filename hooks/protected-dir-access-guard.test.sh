@@ -105,6 +105,9 @@ _check "許可前は ask" "$(_ev PreToolUse sess-A Read "$IN")" ask
 _check "PostToolUse は決定を返さない" "$(_ev PostToolUse sess-A Read "$IN")" none
 [ -s "$T/.claude/protected-dir-unlock/sess-A" ] && _check "許可が記録される" ok ok || _check "許可が記録されない" bad ok
 _check "同じ session は以後 allow" "$(_ev PreToolUse sess-A Read "$IN")" allow
+_ev PostToolUse sess-A Read "$IN" >/dev/null
+n=$(wc -l < "$T/.claude/protected-dir-unlock/sess-A" | tr -d " ")
+_check "記録は二重にしない (= 2 回目の PostToolUse)" "$n" 1
 _check "同じ session は Bash も allow" "$(_ev PreToolUse sess-A Bash "$(jq -n --arg c "ls $F" '{command:$c}')")" allow
 _check "別 session はまた ask" "$(_ev PreToolUse sess-B Read "$IN")" ask
 _check "session_id が無ければ ask のまま" "$(_ev PreToolUse "" Read "$IN")" ask

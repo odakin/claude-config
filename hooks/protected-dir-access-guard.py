@@ -301,6 +301,18 @@ def main() -> int:
         return 0
     home = _home()
     sid = payload.get("session_id") or ""
+    if (payload.get("hook_event_name") or "") == "PostToolUse" and sid:
+        # 既に全 dir を許可済なら判定まで行かない (= 中で作業している session の毎 call の無駄を省く)
+        try:
+            with open(_unlock_file(home, sid), encoding="utf-8") as fh:
+                done = {line.strip() for line in fh if line.strip()}
+            if done and all(
+                os.path.join(os.path.realpath(os.path.dirname(d)), os.path.basename(d)) in done
+                for d in load_dirs(home)
+            ):
+                return 0
+        except OSError:
+            pass
     try:
         reason, phys = _decide(payload, home)
     except Exception:  # noqa: BLE001  fail-open: guard の不調で作業を止めない (効いているかは --canary が見る)
