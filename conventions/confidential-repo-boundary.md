@@ -69,7 +69,7 @@ failure mode が必ず付いてくる。 保存しなくて済むなら、 そ�
 
 ---
 
-## 3. 通知は報告書ではない
+## <a id="notification-is-not-a-report"></a>3. 通知は報告書ではない
 
 別 session や別 process への「終わった」 通知 (marker / status file) に、 結果の要約を書き始めると、
 その要約が payload になって境界を越える。 通知の contract を機械で縛る:
@@ -227,7 +227,7 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 
 - **複製は元の SoT から分岐する**: 元が直っても複製は直らない。 複製から作った成果物 (印刷物・変換結果) は、 **どの版から作ったか**を残さないと後から照合できない ([`office-automation.md#printed-artifact-staleness`](office-automation.md#printed-artifact-staleness) と同じ構造)
 - **複製先が backup・同期・索引の対象だと露出が伸びる**: home 直下の同期 folder に置くと、 消す前に別の場所へ渡ることがある。 置き場は同期されない local dir を選ぶ
-- **記録に中身を書かない**: 作業の記録・別 session への通知・commit message には、 **file 名も中身も書かない** (= 記録は remote に乗る。 [`#3`](#3) の「通知は報告書ではない」 と同じ)。 書くのは「1 件処理した」 までで、 所在は口頭 (chat) で渡す
+- **記録に中身を書かない**: 作業の記録・別 session への通知・commit message には、 **file 名も中身も書かない** (= 記録は remote に乗る。 [`#notification-is-not-a-report`](#notification-is-not-a-report) の「通知は報告書ではない」 と同じ)。 書くのは「1 件処理した」 までで、 所在は口頭 (chat) で渡す
 
 **これを「回避の手口」 にしない**: 2 の判断をするのは user であって Claude ではない。 Claude 側の既定は 1 で、 2 は user が明示的に選んだときだけ成立する。 Claude が「こうすれば通ります」 と先に手を動かす形にすると、 gate は事実上無い。
 
