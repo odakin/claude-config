@@ -461,6 +461,10 @@ sections:
     level: 3
     title: "label 内 embedded instruction の見落とし防止"
     origin: "2026-05"
+  - id: cell-address-rule-rot
+    level: 3
+    title: "🔥 記入指示をセル番地で書くと、 様式の組み替えを生き延びて別の意味の行に書く"
+    related: [embedded-instruction-in-label, label-overwrite-bug, template-base-not-precedent-base, form-layout-invariant-gate]
   - id: label-detection-at-dump
     legacy: "5-6"
     level: 3

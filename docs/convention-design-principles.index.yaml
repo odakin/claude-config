@@ -661,6 +661,14 @@ sections:
     legacy: "19.4"
     level: 3
     title: "19.4 第 2 の消失経路 — 一括生成の完了イベントが、個別適用の未了を隠す"
+  - id: state-as-one-record
+    legacy: "19.5"
+    level: 3
+    title: "19.5 点呼行が 3 つ目の読み手を持ったら、 案件ごとに 1 つの状態 record へ育てる — 散文の marker を正本にしない"
+  - id: record-is-not-the-artifact
+    legacy: "19.6"
+    level: 3
+    title: "19.6 凍結した記録は「渡した物そのもの」 として引用される — 一致するかを機械可読な field で宣言させ、 無宣言の凍結を拒否する"
   - id: premise-bound-rule-expiry
     legacy: "20"
     level: 2
@@ -829,6 +837,10 @@ sections:
     legacy: "8.67"
     level: 3
     title: "8.67 検査の緑は、 検査が問わなかった前提まで追認して読まれる — 前提を決める判断が成果物の外にあるなら、 作る時に成果物へ書き込み、 出口で読む"
+  - id: rule-copy-lint-reach
+    legacy: "8.68"
+    level: 3
+    title: "8.68 規則の写しは逐語 lint では追い切れない — doc が規則を書けない構造にし、 成果物は gate に決めさせる"
   - id: changelog
     level: 2
     title: "変更履歴"
