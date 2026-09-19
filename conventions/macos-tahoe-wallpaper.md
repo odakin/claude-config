@@ -247,6 +247,21 @@ codesign -f -s - ~/Applications/WallpaperRotator.app                       # Inf
 
 ---
 
+## <a id="adhoc-rebuild-loses-tcc"></a>⚠️ ad-hoc 署名の helper は **作り直すたびに** TCC 許可を失う — 変更は 1 回の rebuild にまとめる
+
+上の常駐 applet は「常駐させることで権限確認を 1 回に畳む」 のが要点だが、 **applet 自体を作り直すと確認は再び出る**。
+
+- **実測 (macOS 26.x)**: bundle ID も配置先 path も同じまま作り直しただけで、 **毎回**「アプリ管理」 の確認ダイアログが再表示された (連続 5 回)。 旧い版のメモには「bundle ID と path が同じなら grant は残る」 とあったが、 **この OS では成立しない**。
+- **推定機構**: `codesign -f -s -` の **ad-hoc 署名は作り直すたびに cdhash が変わる**。 TCC は署名を identity の一部として見るので、 名前と場所が同じでも「別のアプリ」 として扱われる。 正式な署名証明書で署名すれば identity は安定するが、 個人の helper でそこまでやる動機は薄い。
+
+**実務上の含意 (= 人間のコストの話)**: 試行錯誤で作り直すと、 **その回数だけ人間がダイアログを押させられる**。 計測や実験の順序を変えるだけで消せる:
+
+1. **shell 側で測れるものを先に測り切る** — 呼ばれる script の所要・出力・副作用は、 helper を経由せず直接実行して確かめられる。
+2. **helper に入れる変更を確定してから 1 度だけ焼く** — 閾値の調整・log の増減・scheduling の変更をまとめて 1 回に。
+3. **一時的な計測用の版を焼いたら、 元に戻す rebuild も 1 回に数える** — 「測る用」 と「戻す用」 で 2 回出ることを最初から勘定に入れる。
+
+⚠️ この非対称 (= 機械には安い試行錯誤が、 人間には 1 回ずつダイアログとして課金される) は helper の rebuild 一般に効く。 **「もう一度焼けばいい」 と思った瞬間に、 誰が代金を払うかを確認する**。
+
 ## <a id="wallpaper-cache-bloat-extension"></a>cache 肥大は静止画 rotation でも起きる (既知 bug の拡張)
 
 layer 1 [`macos-post-update-slowdown.md#wallpaper-cache-bloat`](macos-post-update-slowdown.md#wallpaper-cache-bloat) は動画壁紙が `~/Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches` を 100 GB+ に育てる既知 bug を記述しているが、 **静止画 rotation でも同型で肥大する** (実測 2026-07-11: 60秒間隔 rotation を 3 日間放置で 21 GB / 1,556 file)。

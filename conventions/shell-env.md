@@ -309,3 +309,48 @@ claims. The generic Codex mail installer and its isolated fixtures are
 `scripts/codex_mail_install.py` and `scripts/test_codex_mail_install.py`.
 The mail transaction contract remains in
 [Gmail sending](gmail-sending.md#reviewed-reply-bundle).
+
+## <a id="system-python3-is-xcode-gated"></a>macOS の `/usr/bin/python3` は Xcode に従属する shim — 自動化の土台に素で置かない
+
+**主張**: macOS の `/usr/bin/python3` (同様に `/usr/bin/git`, `/usr/bin/clang`, `/usr/bin/make` ほか) は**インタプリタの実体ではなく、 `xcrun` を経由して「現在選ばれている developer directory」 へ解決する shim**。 その dir が Xcode.app を指していて **ライセンスが未同意 / Xcode がインストール途中**だと、 shim は要求された仕事をする前に
+
+```
+You must agree to the Xcode license agreements...
+```
+
+を出して **exit 69** で終わる。 `python3 --version` すら通らない = **スクリプトの中身とは無関係に、 python を起動する全ての箇所が同時に死ぬ**。
+
+### <a id="xcode-gate-blast-radius"></a>なぜ「1 つの不具合」 に見えないか
+
+この壊れ方の性質:
+
+- **同時多発**: `python3` を呼ぶ hook・定期ジョブ・常駐 agent が**一斉に**落ちる。 個々の症状 (通知が出ない / 自動処理が止まった / 画面が更新されない) は無関係に見え、 別々の原因を探しに行きやすい。
+- **無関係な症状で先に気づく**: 実測では、 最初に人間が気づいたのは「デスクトップの壁紙が切り替わらない」 で、 同じ原因で死んでいた常駐 hook 群には誰も気づいていなかった。 **最初に目に入った症状を問題の定義にしない**。
+- **exit 69 が手がかり**: `EX_UNAVAILABLE`。 ログに `rc=69` / `exit 69` が並び、 かつ複数の無関係なジョブで同時に出ていたら、 まずこの gate を疑う。 確認は 1 コマンド: `/usr/bin/python3 -c ''; echo $?`。
+- **新しい機械・移行直後に踏みやすい**: ライセンス同意は機械ごとの状態で、 移行ツールでは運ばれない。 **Xcode の更新でも外れうる**ので、 同意し直すだけでは再発する。
+
+### <a id="xcode-gate-wrong-fix"></a>⚠️ 別の python へ逃がすのは (多くの場合) 誤り
+
+反射的に Homebrew 等の python へ切り替えたくなるが、 **依存 package がどちらに入っているかを先に見る**。 実測では、 自動化が使う third-party package (YAML / Google API client / PDF / スプレッドシート系) は **system 側の user site (`~/Library/Python/<ver>/lib/python/site-packages`) にしか入っておらず**、 逃がすと `ModuleNotFoundError` という**別の壊れ方に置き換わるだけ**だった。
+
+正しい対処は「**同じインタプリタを、 shim を経由せずに起動する**」:
+
+| 道具 | 効果 | 向き |
+|---|---|---|
+| `DEVELOPER_DIR=/Library/Developer/CommandLineTools` | shim の解決先を Xcode から外す。 **呼び出し側を 1 つも書き換えずに全ての呼び出しに効く** | 環境変数を置ける層 (session の env / job の wrapper) |
+| `/Library/Developer/CommandLineTools/usr/bin/python3` を直に呼ぶ | shim を通らない実体 path。 env を継げない文脈 (別 process として起動される helper 等) 向き | 個別のスクリプト |
+
+どちらも **同じ実体 (同じ版・同じ site-packages)** に届くので、 依存も挙動も変わらない。 ⚠️ CommandLineTools が入っていない機械では両方とも成立しないので、 **存在を確かめてから適用し、 無ければ何もしない** (= 壊れた path を掴ませない)。
+
+### <a id="xcode-gate-declare-per-firing-surface"></a>宣言する場所は「発火面」 ごとに分かれる
+
+1 箇所直せば終わりではない。 **その python を起動するのは誰か**で経路が違う:
+
+| 発火面 | 届く経路 | 届かない経路 |
+|---|---|---|
+| agent の session と hook | agent の設定の env (= 全 hook と shell 呼び出しに継承される) | 各 hook を個別に書き換える (= 数が多く、 次に増えた hook に効かない) |
+| OS の定期ジョブ (launchd / cron) | 各 job の **wrapper script 内で export** (= 配布物なので同期するだけで全機械に届く) | agent の設定 (= OS のジョブは読まない) / job 定義ファイルの環境変数 (= 機械ごとに再登録が要る) |
+| 独立した常駐 helper・GUI helper | script 側で**起動できる実体を probe して選ぶ** (= env を継がない) | 上の 2 つ |
+
+⚠️ **「軽いから安全」 に見える probe ほど実行可能性に依存している**: `--version` / `--help` / `which` は、 この gate が閉じていると**何も返さない**。 その空を「非対応」 と読むと別の silent な後退を生む (= [convention-design-principles.md §22](../docs/convention-design-principles.md#silent-probe-false-healthy))。
+
