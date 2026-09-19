@@ -321,11 +321,18 @@ def notify_macos(messages: list[str], alert: bool = False) -> None:
         return
     title = "ページが更新された — 今すぐ対応"
     msg = " / ".join(messages)
-    script = ['on run argv', 'display notification (item 2 of argv) with title (item 1 of argv) sound name "Glass"',
-              'end run']
-    cmd = ["osascript"] + sum((["-e", ln] for ln in script), []) + [title, msg]
+    # 投稿は claude-notify.sh へ一本化する (= 直に osascript を呼ぶとスクリプトエディタの
+    # 通知になり、 押しても行き先が無い。 conventions/macos-clickable-notifications.md)
+    notifier = Path(__file__).resolve().parent / "claude-notify.sh"
+    if notifier.exists():
+        cmd = ["sh", str(notifier), "--title", title, "--body", msg, "--sound", "Glass"]
+    else:
+        script = ['on run argv',
+                  'display notification (item 2 of argv) with title (item 1 of argv) sound name "Glass"',
+                  'end run']
+        cmd = ["osascript"] + sum((["-e", ln] for ln in script), []) + [title, msg]
     try:
-        subprocess.run(cmd, check=False, timeout=20, capture_output=True)
+        subprocess.run(cmd, check=False, timeout=30, capture_output=True)
     except (OSError, subprocess.SubprocessError):
         pass
     if not alert:

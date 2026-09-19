@@ -27,11 +27,21 @@ if [ "$PCT" -ge 70 ]; then
   echo "$TS used=$USED max=$MAX pct=${PCT}% top=[$TOP]" >> "$LOG"
 fi
 
-# 通知: 93% で危機 / 85% で警告
+# 通知: 93% で危機 / 85% で警告。 投稿は claude-notify.sh へ一本化する
+# (= 直に osascript を呼ぶとスクリプトエディタの通知になり、 押しても行き先が無い。
+#  conventions/macos-clickable-notifications.md)
+NOTIFY="$(dirname "$0")/claude-notify.sh"
+_notify() {
+  if [ -f "$NOTIFY" ]; then
+    sh "$NOTIFY" --title "$1" --body "$2" --sound "$3" >/dev/null 2>&1
+  else
+    osascript -e "display notification \"$2\" with title \"$1\" sound name \"$3\"" >/dev/null 2>&1
+  fi
+}
 if [ "$PCT" -ge 93 ]; then
-  osascript -e "display notification \"pty ${USED}/${MAX} (${PCT}%) 枯渇寸前 — 今すぐ Claude.app restart を。枯渇後は復旧操作も pty を取れず不能\" with title \"pty leak 危機\" sound name \"Sosumi\"" >/dev/null 2>&1
+  _notify "pty leak 危機" "pty ${USED}/${MAX} (${PCT}%) 枯渇寸前 — 今すぐ Claude.app restart を。枯渇後は復旧操作も pty を取れず不能" "Sosumi"
 elif [ "$PCT" -ge 85 ]; then
-  osascript -e "display notification \"pty ${USED}/${MAX} (${PCT}%) — 作業の区切りで Claude.app restart を\" with title \"pty leak 警告\" sound name \"Basso\"" >/dev/null 2>&1
+  _notify "pty leak 警告" "pty ${USED}/${MAX} (${PCT}%) — 作業の区切りで Claude.app restart を" "Basso"
 fi
 
 exit 0

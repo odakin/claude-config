@@ -79,13 +79,28 @@ log stream --style compact --predicate 'process == "usernoted" OR process == "No
 `defaults read com.apple.ncprefs apps | grep <bundle-id>` は**遅れて反映される**ので、
 そこに無いことを「配送されていない」の根拠にしない (実測で false negative)。
 
-## <a id="rebuild-resets-permission"></a>作り直すと許可が消える
+## <a id="rebuild-and-identity"></a>何を変えると許可が消えるか (通知と TCC で違う)
 
-ad-hoc 署名 (`codesign -s -`) のアプリは rebuild のたびに cdhash が変わり、macOS は
-**別のアプリ**として扱う。通知の許可も TCC の許可もリセットされる。
-∴ **変更は 1 回の rebuild にまとめ、許可を出してもらうのは最後**。bundle id を変えるのも
-同じ効果を持つので、名前は最初に決める。
-(同型の罠 = [`macos-tahoe-wallpaper.md#adhoc-rebuild-loses-tcc`](macos-tahoe-wallpaper.md#adhoc-rebuild-loses-tcc))
+| 変えたもの | 通知の許可 | TCC (画面収録・アプリ管理等) |
+|---|---|---|
+| 中身だけ作り直す (bundle id 同じ、ad-hoc 署名) | **残る** (実測) | 消える (cdhash が変わる) |
+| bundle id を変える | **消える** (= 別のアプリ) | 消える |
+
+通知の許可は **bundle id で引かれる**ので、ad-hoc 署名の cdhash が変わっても残る。
+一方 TCC は cdhash 基準なので、同じ rebuild で消える
+([`macos-tahoe-wallpaper.md#adhoc-rebuild-loses-tcc`](macos-tahoe-wallpaper.md#adhoc-rebuild-loses-tcc))。
+
+∴ **bundle id は最初に決めて、後から変えない**。中身の変更は自由にしてよい。
+⚠️ この 2 つを「どちらも rebuild で消える」と一括りにしないこと — TCC の経験則を通知へ
+そのまま延ばすと、変更のたびに人へ許可を求める無駄な手順が付く (実測で否定された)。
+
+## <a id="click-target-contract"></a>click 先は投稿側の層が決める
+
+applet に行き先を焼き込むと、そのアプリが 1 つの用途に縛られる。**applet は
+`~/.claude/notify-click.sh` を `/bin/sh` で実行するだけ**にして、中身は使う側が置く
+(installer が symlink を張る)。無ければ既定の場所を開くだけにする。
+
+⚠️ その script の `PATH` は `/usr/bin:/bin` しかない。python 等を使うなら script 側で張る。
 
 ## <a id="notification-body-must-be-ranked"></a>通知本文の 1 行は「選ぶ」もの
 
