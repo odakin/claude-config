@@ -26,6 +26,7 @@ claims の網羅 = ``claims_coverage()`` (値・yes/no の規則に claims が�
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
@@ -36,6 +37,12 @@ from . import specs as S
 from . import views as V
 
 ALL_KINDS = ("superseded", "marker", "value")
+
+
+def invalidate() -> None:
+    """設定・spec が差し替わったら、 設定から組んだ正規表現を作り直す (config.configure / reset が呼ぶ)。"""
+    _rule_ref_re.cache_clear()
+    _value_shape_re.cache_clear()
 
 
 def ack_path() -> Path | None:
@@ -272,6 +279,7 @@ _VALUE_SHAPE_BASE = (r"[0-9０-９]|『[^』]+』|☑|□|○|空欄|空で|空�
                      r"だけ|のみ|本人|事務|窓口|担当|自動転記|=|＝|数式|固定値|文字列")
 
 
+@lru_cache(maxsize=1)
 def _value_shape_re():
     """値・yes/no の規則の形。 「誰が書く欄か」 を言う語は組織ごとに違うので、 設定の ``lint.value_shape_words``
     (例: 窓口の部署名・相手の呼び方) を足せる (= 一覧を engine が持たない)。"""
@@ -395,6 +403,7 @@ def cell_claim_hits(raw_line: str, facts: dict) -> list:
 # ---------------------------------------------------------------------------
 # 規則の形の文: process doc は cell / 値の規則を書かない (規則 id か generated view を置く)
 # ---------------------------------------------------------------------------
+@lru_cache(maxsize=1)                 # 1 行ごとに組み直すと lint 全体が数倍になる (実測)
 def _rule_ref_re():
     """規則 id の参照 (`<form>/<rule>`) の regex。 様式 id は spec から導出する (人が一覧を書かない)。"""
     ids = sorted(S.spec_ids(), key=len, reverse=True)

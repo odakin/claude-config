@@ -20,6 +20,3 @@
 from .config import configure  # noqa: F401
 from .guard import legacy_guard  # noqa: F401
 from .manifest import FROZEN_STATES, STATES, Manifest, ManifestError, load  # noqa: F401
-
-MODULES = ("check", "config", "docx_form", "excel", "fill", "fingerprint", "gates", "guard", "layout",
-           "lifecycle", "lint", "manifest", "markers", "recipes", "rules", "scaffold", "specs", "views")

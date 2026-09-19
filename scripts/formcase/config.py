@@ -106,9 +106,10 @@ def reset() -> None:
 
 
 def _invalidate() -> None:
-    from . import specs
+    from . import lint, specs
 
     specs.invalidate()
+    lint.invalidate()
 
 
 def _merge(base: dict, over: dict) -> dict:
