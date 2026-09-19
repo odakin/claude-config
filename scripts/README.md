@@ -51,6 +51,7 @@
 - **[check-legacy-append-only.py](check-legacy-append-only.py)** — the `legacy` forwarding map in a slug index must be
 - **[check-markup-artifacts.py](check-markup-artifacts.py)** — 赤入れ・校正済み現物の台帳漏れ / 未読 / 書き起こし消失を surface（config 駆動、スキャンは grep に掛からないので file 単位で持つ）
 - **[check-md-anchors.py](check-md-anchors.py)** — markdown の `#anchor` 付き link を PATH で解決し、着地先の file にその anchor が実在するかを検査する (repo 内の自己参照も対象、 basename 一致でなく path 解決なので同名 file が複数 repo にあっても取り違えない)。--selftest 内蔵。
+- **[check-md-tex-copy.py](check-md-tex-copy.py)** — md が正本・TeX が写しのノートで、 写しの文が正本と一致しているか、 写しが古くなっていないかを見る (骨格 raw/ と数式を直した TeX の突き合わせ)。
 - **[check-memory-file-bloat.py](check-memory-file-bloat.py)** — memory file (CLAUDE.md / SESSION.md) の肥大 surface。
 - **[check-mktemp-template.py](check-mktemp-template.py)** — `mktemp` の template で X の後ろに拡張子を付けた書き方を見つける (BSD/macOS で固定名になる)。
 - **[check-office-automation-index.py](check-office-automation-index.py)** — Validate office-automation.md against its slug index (office-automation.index.yaml).
@@ -156,6 +157,7 @@
 - **[mail-to-pdf.py](mail-to-pdf.py)** — 受信したメールの本文 (text) を、 事務に出す添付書類の PDF にする (日本語可・秘密の値を伏せられる)。
 - **[make-review-sandbox.py](make-review-sandbox.py)** — [forwarder → ai-collaboration/scripts/make-review-sandbox.py] 封じた review sandbox (~/<sandbox-root>/<slug>/) を機械的に切る: 5 行の CLAUDE.md (= この dir 以外を読まない / 注入 reminder 無視 / git log 禁止 / 書くのは results と scratch のみ) + REVIEW-SPEC.md + 許可 file の copy
 - **[manuscript-claim-guard.py](manuscript-claim-guard.py)** — 原稿の保護領域 (表題・概要・序論・結論・数式環境) と agent の権限規約を、 著者の項目ごとの承認 (著者の発言の verbatim を transcript で照合) なしに AI agent が書き換える変更を止める engine (Claude / Codex の PreToolUse と git pre-commit が同じ述語で呼ぶ)
+- **[md-note-to-tex.py](md-note-to-tex.py)** — Markdown のノートを、 手元の TeX preamble に載る骨格 (raw/) へ機械で変える (正本が md、 TeX が写しのときの写し作りの前半。 構造だけ)。
 - **[measure-pdf-layout.py](measure-pdf-layout.py)** — 組版された PDF の版面を実測する — 「指定したのに効いていない」 を目視でなく数値で捕まえる.
 - **[normalize-docx-decl.py](normalize-docx-decl.py)** — 既存 docx の XML 宣言を Word 形式へ後追い正規化する CLI（docx_decl_patch の path-based 版、 office-automation.md#docx-checkbox-content-control）
 - **[office-stage-run.sh](office-stage-run.sh)** — 任意の Office 駆動 command を事前 grant 済み staging dir 経由で 1 回走らせる (入力を stage → `{}` を staged path に置換して実行 → 成功時に書き戻し、 office-automation.md#office-pregranted-staging-dir)

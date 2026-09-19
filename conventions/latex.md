@@ -1023,6 +1023,37 @@ Claude Code の desktop app の右パネルは、 Markdown の中の TeX 数式 
 - MathJax は CDN から読むので、 offline では数式が描かれない。
 - `.tex` の原稿は対象外 (PDF を組んで見せる)。
 
+## <a id="md-tex-source-and-copy"></a>同じノートを Markdown と TeX の両方で持つときは、 片方を正本、 片方を写しにする
+
+数式の多い Markdown のノートを TeX でも組みたくなることがある (本の preamble で読みたい、 式を原稿へ持っていきたい)。 そのとき二つとも直せる状態に置くと、 片方だけを直した時点から黙ってずれる (一般則 = [`docs/convention-design-principles.md#no-duplicate-rules`](../docs/convention-design-principles.md#no-duplicate-rules))。 作った turn に、 どちらが正本でどちらが写しかを決めて、 両方の頭に書く。
+
+**どちらを正本にするかは「これから誰が直すか」 で決める。**
+
+| これから直すのは | 正本 | 理由 |
+|---|---|---|
+| AI (調査の材料・設計のノート・AI が書いて AI が更新する文書) | md | AI は md のほうが速く確実に直せる。 diff が読める。 chat から link で開ける。 TeX の写しは読むためと式を持ち出すための参照 |
+| 著者 (原稿・章・著者が 1 文ずつ裁定する文章) | tex | 著者が自分の editor と自分の macro で直す。 md は試稿として凍結し、 以後は直さない |
+
+迷ったら、 次に直すのが誰かを著者に 1 行で聞く。 「両方を正本にして同期する」 は選ばない (双方向の同期は、 どちらの変更が新しいかを誰も判定できなくなる)。
+
+**写しの作り方 — 機械でできる所は機械で、 生成になる所は照合する。**
+
+1. **構造は機械で**: 見出し・表・箇条書き・リンクは pandoc に任せる。 [`scripts/md-note-to-tex.py`](../scripts/md-note-to-tex.py) が節ごとの骨格 (`raw/sec-NN.tex`) を作る。 骨格は照合の基準なので手で直さない。
+2. **数式は生成になる**: md の数式が Unicode の地の文 (`P₁`、 `α ≥ 1`、 `|n⟩⟨n|`) で書いてあると、 TeX に直す作業は規則で書き切れず、 人か worker が読んで書くことになる。 これは転記ではなく生成で、 語の置換や数値の書き換えが申告なしに混じりうる (同じ性質 = [`photographed-document-transcription.md#quotation-extraction`](photographed-document-transcription.md#quotation-extraction))。 仕様に「文は一字も変えない。 分からない式は見たままにして注を付ける」 と書き、 直した節を骨格と機械で突き合わせる。
+3. **照合**: [`scripts/check-md-tex-copy.py`](../scripts/check-md-tex-copy.py) が、 日本語の字・数字・4 字以上の英字の語の並びを骨格と比べる。 worker に渡すなら、 worker 自身にこの検査を回させて ✓ になるまで直させる (節ごとに別 context に分けると、 1 本の出力が長くなりすぎない)。
+4. **検査が見ないものを言う**: この照合は数式の意味を見ない (記号の取り違え、 上付きと下付きの取り違え)。 意味は組んだ PDF を読んで確かめる。 報告には「文の一致は全節、 式の意味は目視した範囲」 と範囲を分けて書く。
+
+**写しの鮮度は機械で見る。 人に「あとで反映して」 を残さない** ([`#human-memory-not-a-carrier`](../docs/convention-design-principles.md#human-memory-not-a-carrier))。 `check-md-tex-copy.py DIR --source NOTE.md` は、 正本から骨格を作り直して保存してある骨格と比べ、 違う節を「写しが古い」 と出す。 これを session の開始や CI で回る検査に入れておくと、 md だけを直した次の機会に出る。 正本を直した turn で写しも直すのが既定で、 検査はその取りこぼしの網である。 repo には手順を 3 行で書いておく (骨格を作り直す → 変わった節の写しを直す → 検査して組む)。
+
+**実測した壊れ方** (照合の述語と周りの仕掛け):
+
+- **数は「数字 1 字ずつ」 で比べる**。 数の単位で比べると、 `p₁²` は骨格では `12` と続き、 正しい TeX の `p_1^2` では `1` と `2` に割れるので、 正しく直した節が不一致になる。 `10³` も同じ。
+- **命令名だけでなく環境名も語から外す**。 骨格の `\begin{pmatrix}` を家風の `\pmat{}` に直すと、 語 `pmatrix` の数が変わる。
+- **欧文のアクセントは書き方を問わず同じ字とみなす** (`é` / `\'e` / `{\'e}`)。 pre-commit の Unicode 自動修正が後から書き方を変える。
+- **骨格は Unicode の自動修正から外す**。 自動修正 hook が骨格の `φ` を `$\varphi$` などに書き換えると、 骨格を作り直すたびに差分が出て、 鮮度の検査が意味を失う。 `.gitattributes` に `<dir>/raw/** -latex-autofix` を書く (opt-out の機構 = [`#vendored-latex-opt-out`](#vendored-latex-opt-out))。
+- **文字で描いた図は組めない**。 `verbatim` の中の罫線の字と和文は等幅にならず、 桁が揃わない。 同じ中身の TikZ の図に差し替え、 照合からは `verbatim` と `\input` の行を外す。
+- **md に写しへの案内を 1 行足すと、 それも正本の変更である**。 骨格を作り直してから commit する (直さないと、 最初の鮮度の検査で自分の変更が出る)。
+
 ## <a id="gitignore"></a>.gitignore
 **LaTeX 生成 PDF はリポに含める（ignore しない）。** 共同編集者がコンパイル環境を持っていない場合でも最新の PDF を参照できるようにするため。`*.pdf` を ignore する場合は `!<main>.pdf` で除外対象から外す。
 
