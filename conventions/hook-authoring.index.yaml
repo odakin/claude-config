@@ -39,6 +39,9 @@ sections:
   - id: exec-probe-test-techniques
     level: 3
     title: "§0 補足 9: exec の可否を本体を走らせずに調べる・OS の kill を test で再現する・旧版で歯を確かめる"
+  - id: hook-stdin-pipe-sigpipe
+    level: 3
+    title: "§0 補足 10: hook に stdin を pipe で渡す test は、 書き手の死に方を hook の判定として読む (`pipefail` × SIGPIPE = 141)"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2

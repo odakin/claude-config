@@ -77,7 +77,7 @@ case "$VAL" in ''|*[!0-9]*) VAL=0 ;; esac
 
 **実例 2 (2026-09-11、 test の helper)**: 225 push 連続 red の原因 (`stat -f '%Lp'` の assertion、 経緯は [§0 補足 5](#set-e-test-failure-report)) を直した bbc1b62 の helper は `if stat -f '%Lp' F >/dev/null 2>&1; then stat -f '%Lp' F; else stat -c '%a' F; fi` = **exit code 分岐**だった。 GNU 側が exit 1 になるのは `%Lp` という名前の file が cwd に無いからにすぎず、 在れば GNU でも exit 0 で FS 情報を返す (GNU coreutils 9.10 で実測。 `ci-local-repro.sh --userland both -- sh -c 'touch %Lp && bash scripts/setup-codex.test.sh'` で GNU 側だけが落ちた)。 本節の一般則どおり、 GNU 形を先に試して出力が mode の形 (3-4 桁の 8 進) でなければ BSD 形に落ちる分岐に直した。 CI の遡り方 = [`debugging-discipline.md#ci-red-streak-forensics`](debugging-discipline.md#ci-red-streak-forensics)。
 
-**兄弟形 = pipe 越しの成否判定** (同 kernel「見かけの exit code を信用しない」): `if cmd | sed 's/^/  /'; then` は **sed の exit code** を test している — cmd が失敗しても sed が成功すれば偽 success。 表示整形の pipe を挟むなら判定は `{ cmd 2>&1 | sed 's/^/  /'; exit "${PIPESTATUS[0]}"; }` の subshell 形で **PIPESTATUS[0]** に anchor する (`set -o pipefail` は「どれかが失敗した」 しか言えず「どれが」 を区別しない点に注意)。 実例: setup.sh の git-crypt unlock 判定が sed の exit code を見て失敗を success 計上していた (2026-07-10 修正)。
+**兄弟形 = pipe 越しの成否判定** (同 kernel「見かけの exit code を信用しない」): `if cmd | sed 's/^/  /'; then` は **sed の exit code** を test している — cmd が失敗しても sed が成功すれば偽 success。 表示整形の pipe を挟むなら判定は `{ cmd 2>&1 | sed 's/^/  /'; exit "${PIPESTATUS[0]}"; }` の subshell 形で **PIPESTATUS[0]** に anchor する (`set -o pipefail` は「どれかが失敗した」 しか言えず「どれが」 を区別しない点に注意)。 実例: setup.sh の git-crypt unlock 判定が sed の exit code を見て失敗を success 計上していた (2026-07-10 修正)。 **第 3 形 = 前段の rc を見てしまう形** (`writer | hook` で書き手が SIGPIPE で死ぬ) = [§0 補足 10](#hook-stdin-pipe-sigpipe)。
 
 ### <a id="err-trap-inline-conditional-substitution"></a>§0 補足 3: `trap 'exit 0' ERR` × 条件付き inline 置換 = 値が空の環境でだけ hook が silent 死
 
@@ -193,6 +193,18 @@ hook や installer が「この file は exec できるか」 を見る必要が
 - **bash の `Killed: 9` の表示**は、 kill された子を待っている側の shell が出す。 検査の出力を汚さないなら `{ cmd; } 2>/dev/null` で囲む (cmd 自体の redirect では消えない)
 - **旧版で歯を確かめるのに stash を使わない**: 並列 session や SessionStart の自動 pull (stash → ff → pop) とぶつかる。 `git archive HEAD scripts | tar -x -C <tmp>` で旧版を一時 dir に展開し、 新しい test だけ上書きして回す (新しい確認が旧版で落ち、 新版で通るのを見る)。 test が兄弟 file (設定・偽物の置き場) に頼るなら、 その分の無関係な失敗は数から除いて報告する
 - **commit せずに hook を git と同じ呼び方で走らせる**: `git hook run <name> -- <引数>` (git 2.36 以降。 `core.hooksPath` を反映)。 prepare-commit-msg なら一時の message file と `message` を渡す。 ⚠️ pre-commit は index に対する本物の検査が走る
+
+### <a id="hook-stdin-pipe-sigpipe"></a>§0 補足 10: hook に stdin を pipe で渡す test は、 書き手の死に方を hook の判定として読む (`pipefail` × SIGPIPE = 141)
+
+**罠**: `printf '<JSON>' | bash hook.sh; echo $?` は、 hook が **stdin を読まずに exit する経路**で嘘の値を返す。 hook 側で stdin を読まない経路は普通に在る — 無効化の env switch、 安価な前段の filter (tool 名・path で先に落とす)、 引数だけで決まる早期 return。 その時 hook が閉じた読み口へ書いた `printf` が **SIGPIPE で死に**、 `set -o pipefail` の下では pipeline の exit code が書き手の 141 になる。 test は hook の判定 (0 = 通す / 2 = 止める) を見ているつもりで、 **書き手の死に方**を見る。
+
+- 症状の形: hook 単体を手で叩くと期待どおりなのに、 test だけが落ちる / 「無効化した時は通す」 の 1 件だけが 141 で落ちる / stderr は空。
+- **`stdout` と `exit code` で症状が分かれる**: stdout を取る helper (`$(...)`) は書き手の死が出力に出ないので通り、 exit code を取る helper だけが落ちる = 「同じ入力で片方の test だけ落ちる」 の指紋。
+- **直し方**: 書き手を pipeline の外に出す。 `bash hook.sh < <(payload)` (process substitution) なら `printf` は pipeline の要素ではないので、 その死は pipeline の rc に混ざらない。 payload を 1 度だけ file に書いて `< "$f"` で渡すのも同じ効果 (bash 3.2 でも動く)。
+- hook を**書く側**の対処 = 早期 return の前に stdin を捨てる (`cat >/dev/null 2>&1 || true`) 手もあるが、 無効化の経路まで入力を読むのは本末転倒 (= 止めたい処理の手前で読む)。 **呼ぶ側を直すのが既定**。
+- 一般則としては [§0 補足 2](#substitution-fallback-stdout-mixing) の「見かけの exit code を信用しない」 族の第 3 形: 補足 2 = fallback chain が前段の stdout を混ぜる / 同節の兄弟形 = `cmd | sed` が **後段**の rc を見る / 本節 = `writer | hook` が **前段**の rc を見る。 pipeline を挟んだら「その rc は誰のものか」 を毎回問う。
+
+origin: 印刷の gate hook の test で、 無効化の env switch を立てた 1 件だけが 141 で落ちた (実測)。 hook は switch を見て stdin を読まずに exit しており、 test の `printf` が SIGPIPE で死んでいた。
 
 ---
 
