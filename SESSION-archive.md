@@ -785,7 +785,7 @@ odakin-prefs の mention は本 file CLAUDE.md §「安全規則 (公開リポ)�
 
 ---
 
-**2026-05-13 (後段)**: 同日にもう 1 round の知見追加。 学事業務 (= 部署 / 学科 ML / 入試案件) を巡る一連の事故 + 解決 setup から、 以下を新規 / 拡張で documented。 全て layer 1 (= 全 Claude Code ユーザーが恩恵を受ける一般則) として書き、 PII は placeholder 化:
+**2026-05-13 (後段)**: 同日にもう 1 round の知見追加。 学事業務 (= 部署 / 学科 ML / 委員会案件) を巡る一連の事故 + 解決 setup から、 以下を新規 / 拡張で documented。 全て layer 1 (= 全 Claude Code ユーザーが恩恵を受ける一般則) として書き、 PII は placeholder 化:
 
 ### 新規 conventions (3 ファイル)
 

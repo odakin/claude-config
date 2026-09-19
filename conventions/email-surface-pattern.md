@@ -5,7 +5,7 @@ summary: 重要送信者・ML トピックを Gmail filter + retroactive labelin
 -->
 # Email surface pattern (= 重要送信者・ML トピックの見落とし防止)
 
-特定の送信者 (= 重要部署・取引先・上長) や ML 上のトピック (= 入試・会議・人事) を**機械的に検出して Claude セッション開始時に必ず surface する**仕組み。 「見落とした」 を「規律違反」 ではなく「仕組み不足」 と捉えて構造化する。 CLAUDE.md から参照: `~/Claude/claude-config/conventions/email-surface-pattern.md`
+特定の送信者 (= 重要部署・取引先・上長) や ML 上のトピック (= 委員会業務・会議・人事) を**機械的に検出して Claude セッション開始時に必ず surface する**仕組み。 「見落とした」 を「規律違反」 ではなく「仕組み不足」 と捉えて構造化する。 CLAUDE.md から参照: `~/Claude/claude-config/conventions/email-surface-pattern.md`
 
 ## 動機 (= 規律 vs 仕組み)
 
@@ -28,7 +28,7 @@ from:(<addr1> OR <addr2> OR <addr3>)
 → addLabels: [<重要送信者ラベル>, STARRED, IMPORTANT]
 ```
 
-例: 入試運営部署の 3 メールアドレスから来るメール全てに「<部署名>」 ラベル + 黄色星 + 重要マーク自動付与。
+例: 機密性の高い業務を扱う部署の 3 メールアドレスから来るメール全てに「<部署名>」 ラベル + 黄色星 + 重要マーク自動付与。
 
 **Pattern B: ML + subject keyword による検出** (= 学科 ML 等での重要トピック)
 ```
@@ -36,7 +36,7 @@ to:<ml-address> AND (subject:keyword1 OR subject:keyword2 OR ...)
 → addLabels: [<トピックラベル>, IMPORTANT]
 ```
 
-例: 学科 ML での「入試 / 運営委員 / 作問 / 学科会議」 等 subject に対し「学科業務」 ラベル + 重要マーク。
+例: 学科 ML での「<業務名> / 運営委員 / 担当割当 / 学科会議」 等 subject に対し「学科業務」 ラベル + 重要マーク。
 
 注意:
 - Pattern A は STARRED + IMPORTANT 両方付ける (= 強い signal)、 Pattern B は IMPORTANT のみ (= ML は数多いので STARRED は noise になる)
@@ -90,10 +90,10 @@ session-start step    -> 該当業務リポの CLAUDE.md §「セッション開
 ## false positive / false negative の trade-off
 
 - **filter が too greedy** (= 例: subject に「入学」 を含む全 ML) → 入学式・入学予定者数等の false positive、 ラベルが noisy。 軽微、 見落とし防止優先で許容
-- **filter が too narrow** (= 例: subject に「入試問題」 のみ) → 「入試運営委員」 「作問」 関連を取りこぼし、 見落とし発生。 重大、 false negative は許容しない
+- **filter が too narrow** (= 例: subject に「<業務名>」 の完全一致のみ) → 「<業務名>運営委員」 「担当割当」 関連を取りこぼし、 見落とし発生。 重大、 false negative は許容しない
 - **判定原則**: false positive を許容して false negative を防ぐ方向で設計
 
-ラベル名の選択も「狭めすぎない」 がベター (= 「入試-ML」 より「学科業務-ML」 で会議・人事等も catch する余地)。 ただしラベル名が広すぎると surface 件数が爆発する trade-off あり、 user の実情に合わせて調整。
+ラベル名の選択も「狭めすぎない」 がベター (= 「<業務名>-ML」 より「学科業務-ML」 で会議・人事等も catch する余地)。 ただしラベル名が広すぎると surface 件数が爆発する trade-off あり、 user の実情に合わせて調整。
 
 ## 失敗からの導入 RCA (= 規律ではなく仕組みで防ぐ)
 

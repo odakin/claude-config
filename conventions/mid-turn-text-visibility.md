@@ -60,7 +60,7 @@ hook を書く側の含意が 2 つある。
 上の置き場所を規約にした後も、 同じ marker の露出は続いた (実測: 規約化の翌日以降に 4 回、 うち 4 turn 連続の session が 1 つ)。 原因は呼ぶ側の規律ではなく**写し**: 「この turn では marker を応答に含める」 という古い書き方が、 marker の正本の doc の別の節と、 作業 repo の指示書に残っていて、 その作業に入った session は写しの方を読んだ。 正本の 1 節を直しただけでは、 auto-load される写しに勝てない。
 
 1. **marker の書き方を直す commit で、 marker の literal を全 repo で grep して写しを pointer に替える** (正本の同じ file の別の節を含む。 scan root の外に在る repo の指示書は機械の drift 検出が届かないので、 名指しで開いて直す)。
-2. **出た turn で止める網** = Stop hook [`visible-html-comment-enforce.py`](../hooks/visible-html-comment-enforce.py)。 最終発話から fenced block と inline code を除いた残りに HTML comment が在れば 1 回だけ差し戻す。 表示の後に走るので最初の 1 回の露出は防げないが、 同じ session の次の turn からの繰り返しを止める。 校正 (実測、 3 週間の最終発話 4555 件) = 発火 36 件がすべて同じ marker の露出で、 誤検出 0。
+2. **出た turn で止める網** = Stop hook [`visible-html-comment-enforce.py`](../hooks/visible-html-comment-enforce.py)。 最終発話から fenced block と inline code を除いた残りに HTML comment が在れば 1 回だけ差し戻す。 表示の後に走るので最初の 1 回の露出は防げないが、 同じ session の次の turn からの繰り返しを止める。 校正 (実測) = 発火はすべて同じ marker の露出で、 誤検出 0。
 3. **marker を要らなくする側が本筋**。 呼ぶ側が marker で伝えていた条件を hook 自身が観測できるなら、 hook に判定させる (実例: 「user が別の viewer で同じ PDF を見ているので開かない」 を、 その viewer の process が起動中で隣に同名の source が在る、 という観測に置き換えた)。 marker は hook が観測できない意図だけに残す。
 
 ## <a id="tool-side-media-not-user-visible"></a>tool 側の player は user-visible media ではない

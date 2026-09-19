@@ -89,7 +89,7 @@ ML 主任が部署外から受けた「○○作成依頼」 を ML 全体に Fw
 
 **規律導入** (`conventions/ml-forward-judgment.md`): inbox 化時に 3 段ゲートを必ず通す:
 1. 元メール To に自分の名前があるか?
-2. 役割割当キーワード (= 分野 / 担当 / 責任者 / 作問 / 審査) が本文にあるか?
+2. 役割割当キーワード (= 分野 / 担当 / 責任者 / 実作業 / 審査) が本文にあるか?
 3. 過去 ML スレッドで自分が割当 source として出ているか?
 
 判定根拠 (= ゲート 3 の引用元 ML message ID) は inbox notes に必ず残す (= future Claude が判定を追体験可能)。
@@ -103,7 +103,7 @@ ML 主任が部署外から受けた「○○作成依頼」 を ML 全体に Fw
 - Layer 2: Retroactive labeling (= 既存メールへの遡及適用、 batch_modify で過去 1 年分一斉)
 - Layer 3: Dashboard surface (= session 開始 script で UNREAD のみ最優先表示)
 
-false positive / false negative の trade-off は「**false positive を許容して false negative を 0 に寄せる**」 方向。 ラベル名は狭めすぎない (= 「入試-ML」 より「学科業務-ML」 で会議・人事等もカバー)。
+false positive / false negative の trade-off は「**false positive を許容して false negative を 0 に寄せる**」 方向。 ラベル名は狭めすぎない (= 「<業務名>-ML」 より「学科業務-ML」 で会議・人事等もカバー)。
 
 #### Bonus: 仕組みのため Google Sheets 自動読みを設計
 
