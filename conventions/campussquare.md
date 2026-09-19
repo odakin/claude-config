@@ -12,6 +12,7 @@ summary: CampusSquare は学内 SSO の奥だが browser の session cookie 再�
 - [`scripts/campussquare-client.py`](../scripts/campussquare-client.py): `syllabus-search` (年度・時間割番号・科目名・担当者・語) / `syllabus <時間割番号>` (本文を text で) / `status` / `doctor`。 host は `--base` (env `CAMPUSSQUARE_BASE`) で与え、 個人層の入口 script が注入する ([`script-layer-placement.md`](script-layer-placement.md))
 - cookie = host の `JSESSIONID` (CampusSquare) と `_shibsession_*` (SP)。 IdP の cookie は読まない。 CampusSquare 本体の session は短い (30 分程度) が、 IdP のログインが browser に生きていれば、 起動中の browser に裏で開かせて入り直す (= [`garoon.md#garoon-session-recovery`](garoon.md#garoon-session-recovery) と同じ仕組み、 部品 = `scripts/lib/browser_tab.py`)
 - 同じ組織の別サイト (groupware 等) が同じ IdP で cookie 再利用に乗っているなら、 CampusSquare もほぼそのまま乗る
+- <a id="auth-error-page"></a>⚠️ **本体の session が切れると、 flow の GET は 302 でなく 200 で「認証エラー」 画面を返すことがある** (title が「認証エラー」、 form `authorizationError` を JavaScript で親画面へ POST し直すだけの画面)。 切れ判定を「302 か login 画面か」 だけにすると、 この画面を普通の画面として読み、 次の form が無いという別のエラーに化ける。 client の `expired()` はこの画面も切れとして扱い、 入り直す (実測)
 
 ## <a id="web-flow"></a>画面の仕組み (Spring Web Flow)
 

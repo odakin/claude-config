@@ -609,6 +609,44 @@ jsarticle / jsbook は、 `11pt` `12pt` などを指定すると、 既定では
 - 帯の幅を実寸にするには、 上の [#jsclasses-mag-true-lengths](#jsclasses-mag-true-lengths) の `nomag*` が要る。
 - 実測: uplatex + dvipdfmx + jsbook で、 章付きの番号、 頁つきの参照、 目次の項目、 外側の端の帯が意図どおりに出た。 章番号を `\ref` で引くので、 参照が落ち着くまで組版を繰り返す。
 
+<a id="chapter-thumb-tabs"></a>**章ごとの爪 (小口の章見出し)**: 本文の各頁の外側の端に、 章ごとに高さをずらした色の四角 (爪) と章番号を付けると、 閉じた本の小口から章の位置が分かる。 巻末の帯と同じ `eso-pic` の背景で描く。
+
+```latex
+\makeatletter
+\newif\ifthumb@on
+\newcounter{thumb@base}\newcounter{thumb@slot}
+\newcommand{\thumbslots}{10}                                % 縦に並べる段の数
+\newlength{\thumbwidth}\setlength{\thumbwidth}{6mm}
+\newlength{\thumbheight}\setlength{\thumbheight}{16mm}      % 1 段の高さ
+\newlength{\thumbtop}\setlength{\thumbtop}{20mm}            % 紙の上端から 1 段目まで
+\g@addto@macro\mainmatter{\global\thumb@ontrue}             % 前付けには付けない
+\g@addto@macro\backmatter{\global\thumb@onfalse}            % 巻末には付けない
+\let\thumb@appendix\appendix                                % 付録は本文の最後の章の次の段から
+\renewcommand{\appendix}{\setcounter{thumb@base}{\value{chapter}}\thumb@appendix}
+\newcommand{\thumb@tab}{%
+  \setcounter{thumb@slot}{\numexpr\value{thumb@base}+\value{chapter}-1\relax}%
+  \@whilenum\value{thumb@slot}>\numexpr\thumbslots-1\relax\do{\addtocounter{thumb@slot}{-\thumbslots}}%
+  \raisebox{\dimexpr\paperheight-\thumbtop-\thumbheight*\numexpr\value{thumb@slot}+1\relax\relax}{%
+    \rlap{{\color{blue}\rule{\thumbwidth}{\thumbheight}}}%
+    \makebox[\thumbwidth][c]{\raisebox{\dimexpr.5\thumbheight-.5ex\relax}{%
+      {\color{white}\sffamily\bfseries\small\thechapter}}}}}
+\AddToShipoutPictureBG{%
+  \ifthumb@on\ifnum\value{chapter}>0 \ifthumb@band\else
+    \ifodd\value{page}\AtPageLowerLeft{\hspace*{\dimexpr\paperwidth-\thumbwidth}\thumb@tab}%
+    \else\AtPageLowerLeft{\thumb@tab}\fi
+  \fi\fi\fi}
+\makeatother
+```
+
+- 巻末の帯 (上の `\ifthumb@band`) が出ている頁には爪を出さない。 帯は全高・淡色、 爪は段ごと・濃色にして見分ける。
+- `\appendix` は章の番号を 0 に戻すので、 戻す前の値を控えて段をずらさないと、 付録 A が第 1 章と同じ高さに出る。
+- 章の頁は、 次の章の `\cleardoublepage` で前の章の最後の頁が出てから番号が進むので、 各頁の爪は正しい章になる (空白の偶数頁は前の章の爪になる)。
+- 紙の端まで色を出すには、 仕上がり線の外まで色を伸ばす塗り足しが要る。 `papersize` で仕上がり寸法の PDF を作るとこの余白が無いので、 入稿前に印刷所の指定で作り直す (帯も同じ)。
+- 確かめ方: 各頁の外側の数 mm を切り出して横に並べると、 閉じた本の小口の見え方になる (PyMuPDF で頁を画像にして端を crop)。
+- 実測 (uplatex + dvipdfmx + jsbook、 A5)。
+
+<a id="makefile-include-deps"></a>**`\include` する file の置き場を増やしたら、 Makefile の依存にも足す**: 依存が `chapters/*.tex` などの wildcard だけだと、 新しい folder (前付けなど) の file を直しても `make` が「最新」 と判断して組み直さない。 画面の PDF が古いまま気づきにくい (実測)。
+
 ## <a id="matplotlib-cjk-figure-embedding"></a>matplotlib の CJK 入り図は PNG で取り込む (PDF は platex+dvipdfmx で描画だけ化ける)
 
 matplotlib が CJK フォント (macOS Hiragino 等の `.ttc`、`pdf.fonttype = 42`) を埋め込んだ PDF を

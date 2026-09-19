@@ -941,6 +941,7 @@ origin: 2026-06-13 desktop-hook-gap remediation。 odakin は Claude Code deskto
 
 - **person-to-person** (= 直接送られてくる notice): mail / chat DM / 個別通知
 - **broadcast** (= 受信者が読みに来る型): 内部 portal / 掲示板 / 公式 bulletin / 共有 cron / LMS
+- <a id="committee-workspace-channel"></a>**委員会の作業場** (= 委員会専用の LMS コース・共有 folder に置かれた議題と記録): 運用の取り決め (数え方・担当の条件など) が規程集にも手引きにも会議資料にも無く、 制度を立ち上げた委員会の初期の記録にだけ書かれていることがある。 全体向けの portal 検索では当たらないので、 その制度を扱う委員会の作業場を別の channel として数える (実測)
 
 後者は構成員全員に同時 distribute されるが「読みに来ない人には届かない」 性質。 person-to-person mail sweep だけで「告知されていない」 と universalize すると、 broadcast channel に actual notice があった場合に大きな失敗 (= 「告知なし」 と argue → 実は portal で N 日前から告知済) を生む。
 
