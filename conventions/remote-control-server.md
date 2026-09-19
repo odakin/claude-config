@@ -114,6 +114,12 @@ install が通ったのに server がまともに起動しない・接続でき�
 
 ⚠️ この error の literal を org policy blocker と誤読して support に issue を切る前に必ず `claude --version` と `which -a claude` を確認。 実測で **~1.5h 診断に溶かした** 事例あり。
 
+### <a id="local-auth-triage"></a>auth の切り分けは **その機械で** しかできない — 診断を session 開始に載せる
+
+他機から見える heartbeat 等の集約は、 server の log を文字列で分類するので **「未 login」 と「API key の混入」 を同じ値 (`auth_error`) に畳む** (= [convention-design-principles.md §22](../docs/convention-design-principles.md#silent-probe-false-healthy) の「1 つの値に 2 つの意味」)。 切り分ける `claude auth status` はその config-dir を持つ機械でしか叩けないので、 放っておくと「次にその機械を触った人が思い出して叩く」 に依存する (= 人の記憶が carrier)。 実測では片方の config-dir が数日 `auth_error` のまま残り、 同じ機械のもう片方は `connected` だった (= **機械ではなく config-dir ごとに切れる**)。
+
+道具 = [`scripts/check-remote-control-auth.py`](../scripts/check-remote-control-auth.py)。 **安い検出 → 高い判別**の順で、 log の末尾に auth 異常の語が在る server にだけ probe を実行する (= 健全なときの費用をほぼ 0 にして常設できる)。 分類は `ok` / `api_key` / `logged_out` / `unknown` の 4 つで、 ⚠️ **probe を実行できなかった `unknown` を `ok` に畳まない**。 分類が変わった時だけ台帳に 1 行残すので (値は書かない)、 「別の機械で login したら切れた気がする」 型の仮説を時刻の並びで検証できる。
+
 ### <a id="ts-api-key-conflict"></a>"Remote Control requires claude.ai subscription auth" — `ANTHROPIC_API_KEY` が混入
 
 **症状**: v2.1.139+ の新しい CLI で `Error: Remote Control requires claude.ai subscription auth. ANTHROPIC_API_KEY is set, so this session is using API-key auth — unset it (or run in a shell without it) to use Remote Control.` が返る。 これは**正直な error** で wording どおり。
