@@ -1054,6 +1054,17 @@ Claude Code の desktop app の右パネルは、 Markdown の中の TeX 数式 
 - **文字で描いた図は組めない**。 `verbatim` の中の罫線の字と和文は等幅にならず、 桁が揃わない。 同じ中身の TikZ の図に差し替え、 照合からは `verbatim` と `\input` の行を外す。
 - **md に写しへの案内を 1 行足すと、 それも正本の変更である**。 骨格を作り直してから commit する (直さないと、 最初の鮮度の検査で自分の変更が出る)。
 
+## <a id="built-pdf-phone-sync"></a>組んだ PDF の最新版を同期フォルダの 1 か所へ写す (携帯で常に読めるように)
+
+原稿やノートの PDF は repo ごとに散らばっていて、 携帯からは読めない。 [`scripts/sync-built-pdfs.py`](../scripts/sync-built-pdfs.py) が、 作業 dir の下の全 repo から「同じ場所に同じ名前の `.tex` がある PDF」 を見つけて、 同期フォルダ (Dropbox 等) の `<repo>/<名前>.pdf` へ写す。 設計の判断は次のとおり (細部は script の冒頭)。
+
+- **対象の一覧を人が書かない**。 新しいノートを組めば、 登録なしで次の回から写る (人が育てる一覧は育たない = [`docs/convention-design-principles.md#detector-config-must-be-derived`](../docs/convention-design-principles.md#detector-config-must-be-derived))。 絞るのは除外の側で、 保管庫の dir (archive / old / submissions など) と、 直近 N 日に commit も変更も無い PDF を外す。 一度写したものは、 その後も更新し続ける。
+- **暗号化している PDF は写さない** (git-crypt の filter が付いた path)。 復号した写しを repo の外に置くと、 暗号化で守っていた範囲が黙って広がる。 携帯で読みたいものが暗号化の側にあるときは、 写すかどうかを持ち主が決める。
+- **発火は AI のターンの終わり (Stop hook、 背景で実行、 出力なし)**。 PDF はほぼ AI のターンの中で組まれるので、 組んだ直後に写る。 macOS の launchd の定期実行にしないのは、 launchd の process が同期フォルダ (`~/Library/CloudStorage/`) に書けないため ([`launchd-cloudstorage-tcc.md`](launchd-cloudstorage-tcc.md))。 残る隙間 = 人が editor で組んだ分は、 次の AI のターンの終わりまで写らない。
+- **複数のマシンが同じ写し先に書く前提で、 上書きは「中身が違う ∧ 元のほうが新しい」 ときだけ**。 pull の遅れたマシンが古い PDF で新しい写しを上書きしない。 同じ理由で、 写し先の PDF を自動では消さない (別のマシンにまだ無い PDF を消してしまう)。 整理は `--prune-report` の一覧を見て人が決める。
+- **`main.pdf` のような名前は、 写すときに意味のある dir 名か repo 名に付け替える** (携帯の一覧で `main.pdf` が並んでも選べない)。
+- **親の repo が ignore している入れ子の clone (Overleaf の clone など) も見る**。 共著の原稿の本体がそこにあることが多い。
+
 ## <a id="gitignore"></a>.gitignore
 **LaTeX 生成 PDF はリポに含める（ignore しない）。** 共同編集者がコンパイル環境を持っていない場合でも最新の PDF を参照できるようにするため。`*.pdf` を ignore する場合は `!<main>.pdf` で除外対象から外す。
 

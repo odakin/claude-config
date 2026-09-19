@@ -193,6 +193,9 @@ sections:
   - id: md-tex-source-and-copy
     level: 2
     title: "同じノートを Markdown と TeX の両方で持つときは、 片方を正本、 片方を写しにする"
+  - id: built-pdf-phone-sync
+    level: 2
+    title: "組んだ PDF の最新版を同期フォルダの 1 か所へ写す (携帯で常に読めるように)"
   - id: gitignore
     level: 2
     title: ".gitignore"
