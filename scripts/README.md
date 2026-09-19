@@ -81,6 +81,7 @@
 - **[class_meetings.mutants.json](class_meetings.mutants.json)** — lib/class_meetings.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 4 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[claude-app-bundle.py](claude-app-bundle.py)** — Claude desktop app の挙動を、 docs や推測でなく app 本体 (画面の JS bundle・翻訳・main process の app.asar・埋込 engine) から確かめる検索道具
 - **[claude-app-notify-diagnose.py](claude-app-notify-diagnose.py)** — Claude for Mac の通知が鳴らない・来ない原因を層ごとに read-only 診断する (conventions/macos-claude-app-notifications.md)。
+- **[claude-notify.sh](claude-notify.sh)** — macOS 通知を出す唯一の入口 (= 押すと行き先がある通知)。
 - **[claude-session-whoami.py](claude-session-whoami.py)** — session の host / surface (desktop|CLI) / account を機械同定する probe。
 - **[clip-copy.sh](clip-copy.sh)** — 貼り付け用の文面をクリップボードに入れ、読み戻して一致を確かめる (macOS。 日本語などの非 ASCII も通す)
 - **[clipboard-cleaner.py](clipboard-cleaner.py)** — クリップボード一発整形 CLI（PDF コピーの段落内改行除去 + pbcopy 書き戻しで RTF 書式除去、明示発火のみ・常駐なし、--selftest 内蔵、hammerspoon ⌃⌥⌘V から呼ばれる、conventions/clipboard-cleaner.md）
@@ -239,6 +240,30 @@
 - **[xlsx-to-pdf.sh](xlsx-to-pdf.sh)** — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
 - **[xlsx-zip-set-cells.py](xlsx-zip-set-cells.py)** — xlsx / xlsm の値セルだけを zip 直編集で書き換える (Excel も openpyxl も使わない。 他の zip member は byte 同一、 VBA・drawings・form control は無傷。 office-automation.md#xlsx-cell-value-zip-surgery の実装)
 - **[zoom-client.py](zoom-client.py)** — Zoom を **Server-to-Server OAuth で script から** 読む / 部屋を作る (画面 drive 不要)。
+
+## formcase/ — 様式の案件 pipeline の engine (入口 = formcase.py、 規約 = conventions/form-case-pipeline.md)
+
+- **[formcase/__init__.py](formcase/__init__.py)** — formcase — 様式の案件を「配布雛形 + お手本 spec + 提出状態の manifest」 で扱う汎用 engine。
+- **[formcase/check.py](formcase/check.py)** — 案件 manifest の検査 (構造 + 凍結の不変条件 + 印刷した紙の鮮度)。 gate の実行は gates.py。
+- **[formcase/config.py](formcase/config.py)** — instance 設定 (= engine が持たない、 呼び元の repo に属する値) の唯一の入口。
+- **[formcase/docx_form.py](formcase/docx_form.py)** — Word (docx) 様式の記入・gate・fingerprint・PDF の重ね書き (spec の ``meta.kind: docx``)。 使い方の正本 = form-case-pipeline.md #docx。
+- **[formcase/excel.py](formcase/excel.py)** — Excel の操作は全部ここ (staging 経由・前面に出さない・1 回に 1 job)。
+- **[formcase/fill.py](formcase/fill.py)** — 案件の fill stub (fill_<doc>.py) の実行系。 値を Excel で書き → 読み戻し → gate を回して結果を出す。
+- **[formcase/fingerprint.py](formcase/fingerprint.py)** — 凍結 sheet の書式の fingerprint v3 (``frozen.sheet_digest_v3``)。
+- **[formcase/gates.py](formcase/gates.py)** — gate を group の範囲で回す (= 凍結 group の sheet を今日の spec で裁かない / build 対象外の group を巻き込まない)。
+- **[formcase/guard.py](formcase/guard.py)** — 凍結出力を守る 2 つの入口: 旧 driver の冒頭 guard と pre-commit の staged guard。
+- **[formcase/layout.py](formcase/layout.py)** — 刷る temp の体裁 (= 値は案件の workbook、 体裁は build の temp にだけ当てる。 案件の xlsx は変えない)。
+- **[formcase/lifecycle.py](formcase/lifecycle.py)** — issue の状態遷移 (freeze / reopen)。 manifest を手で書き換えずにこれを通す = sha256 と sheet digest が残る。
+- **[formcase/lint.py](formcase/lint.py)** — 規則の書き写し lint — process doc に規則の本文 (とくに廃止した版) が手で書き写されていないか。
+- **[formcase/manifest.py](formcase/manifest.py)** — submission.yaml (案件ごとの提出状態) の読み書きと凍結の判定。
+- **[formcase/markers.py](formcase/markers.py)** — 案件 dir の隔離 marker (00-⚠️-DO-NOT-USE-AS-BASE.md) を manifest から生成する。
+- **[formcase/recipes.py](formcase/recipes.py)** — 様式ごとの生成 recipe (= 値は spec と案件の workbook、 体裁は使い捨ての temp / staged copy にだけ当てる)。
+- **[formcase/rules.py](formcase/rules.py)** — お手本 spec の中の「規則」 (= id + summary を持つ entry) を集める。
+- **[formcase/scaffold.py](formcase/scaffold.py)** — 新しい案件を配布雛形から作る (= 前の案件の dir・driver・xlsx を写さない唯一の入口)。
+- **[formcase/selftest.py](formcase/selftest.py)** — engine の内蔵 fixture test (Office 不要)。 ``python3 formcase.py --selftest``。
+- **[formcase/selftest_docx.py](formcase/selftest_docx.py)** — Word 様式 (docx_form) と 刷る頁 (page_roles) の test。 fixture は全部合成 (Office 不要)。
+- **[formcase/specs.py](formcase/specs.py)** — お手本 spec (``<spec_dir>/*.yaml``) の読み込み。 spec の書式の正本は各 yaml と記入内容 gate。
+- **[formcase/views.py](formcase/views.py)** — doc の中の generated view (規則の表・checklist・セル定数表) を spec から描く。
 
 ## lib/ — sourceable helper 群
 
