@@ -172,10 +172,10 @@ def selftest() -> int:
            json.loads(both.read_text(encoding="utf-8"))["permissions"]["ask"] == [new, "mcp__mail__send"])
         # retired_re = kind を跨ぐ移動 (deny で禁止していた dir を ask に緩める) の宣言
         ret = td / "r.json"
-        ask_rule = "Read(~/Dropbox/dir-a/**)"
+        ask_rule = "Read(~/sync/dir-a/**)"
         ret.write_text(json.dumps({"permissions": {
-            "deny": ["Read(~/Dropbox/dir-a/**)", "Edit(~/mnt/Dropbox/dir-a/**)",
-                     "Read(~/Dropbox/dir-b/dir-a-like/**)", "Read(~/Dropbox/old-dir-a/**)"],
+            "deny": ["Read(~/sync/dir-a/**)", "Edit(~/mnt/dir-a/**)",
+                     "Read(~/sync/dir-b/dir-a-like/**)", "Read(~/sync/old-dir-a/**)"],
             "ask": []}}), encoding="utf-8")
         rspec = {"_why": "注釈 key は無視される", "deny": {"retired_re": [r"\(.*/dir-a/"]},
                  "ask": {"required": [ask_rule]}}
@@ -183,7 +183,7 @@ def selftest() -> int:
         ch = apply(ret, rspec)
         j = json.loads(ret.read_text(encoding="utf-8"))["permissions"]
         ck("apply: retire で deny から取り除く (path の区切りで境界を見る)",
-           j["deny"] == ["Read(~/Dropbox/dir-b/dir-a-like/**)", "Read(~/Dropbox/old-dir-a/**)"])
+           j["deny"] == ["Read(~/sync/dir-b/dir-a-like/**)", "Read(~/sync/old-dir-a/**)"])
         ck("apply: 同じ宣言で ask に足す", j["ask"] == [ask_rule])
         ck("apply: 取り除いた rule を 1 行ずつ返す", len([x for x in ch if "retire" in x]) == 2)
         ck("apply: 2 回目は空 (冪等)", apply(ret, rspec) == [])

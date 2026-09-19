@@ -212,6 +212,7 @@
 - **[sync-hook-settings.sh](sync-hook-settings.sh)** — 層1 hook の配線 (symlink + settings.json の entry) を hooks/settings-entries.json に揃える (無いものを足す + 退役 registry の hook を外す・冪等)
 - **[sync-hook-settings.test.sh](sync-hook-settings.test.sh)** — 層1 hook の配線 (symlink + settings の entry) を揃える script の test
 - **[sync-permission-rules.py](sync-permission-rules.py)** — settings.json の permission rule を spec (JSON) の宣言どおりに揃える (冪等)
+- **[sync-protected-dirs.py](sync-protected-dirs.py)** — 「触る前に確認を出す dir」 の宣言を machine-local の一覧 file に配る (冪等)
 - **[test_codex_mail_install.py](test_codex_mail_install.py)** — Installer tests run only below temporary directories, never real Codex home.
 - **[test_reviewed_mail.py](test_reviewed_mail.py)** — Network-free adversarial checks of the reviewed-reply transaction.
 - **[test_reviewed_mail_cli.py](test_reviewed_mail_cli.py)** — Offline checks: CLI authorization shape, pagination, full source extraction.
