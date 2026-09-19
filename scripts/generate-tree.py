@@ -391,7 +391,7 @@ def build_outputs(root: Path):
     tracked = tracked_files(root)
     conv_entries = collect_conventions(root, errors, tracked=tracked)
     hooks, _ = collect_dir_files(root, "hooks", errors, tracked=tracked)
-    scripts, _ = collect_dir_files(root, "scripts", errors, allow_dirs=("lib",), tracked=tracked)
+    scripts, _ = collect_dir_files(root, "scripts", errors, allow_dirs=("lib", "formcase"), tracked=tracked)
     lib, _ = collect_dir_files(root, "scripts/lib", errors, tracked=tracked)
     if errors:
         return {}, errors  # 源が不正なら render しない (不正 category 等で render が壊れるため)

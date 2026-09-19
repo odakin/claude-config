@@ -694,7 +694,7 @@ def _precommit_tests(tmp, case, expect) -> None:
     bl = G.staged_findings(repo)
     expect("pre-commit: 凍結 sheet の書式だけの変更も BLOCK", any("(書式)" in b for b in bl), bl)
     m = M.load(case)
-    L.reopen(m, "d1", "g1", "差し戻し対応", "2026-09-19")
+    L.reopen(m, "d1", "g1", "訂正の指示があった", "2026-09-19")
     m.save()
     git("add", f"{rel}/{M.MANIFEST_NAME}")
     bl = G.staged_findings(repo)

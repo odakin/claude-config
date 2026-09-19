@@ -110,6 +110,7 @@
 - **[fleet-heartbeat.py](fleet-heartbeat.py)** — per-machine heartbeat writer（毎時 launchd cron から自マシンの RC server 群〔launchd loaded + server ログ末尾 marker parse = Connected/auth error/version error〕 + config-dir auth metadata を <repo>/<subdir>/<host>.json に commit+push。**claude を一切呼ばない** = auth 失効でも監視が生き残る、state-change-or-age commit policy で git history を汚さない、fail-open、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
 - **[flight-search-urls.py](flight-search-urls.py)** — 航空券の往復検索 URL を比較サイト別に作る (Kayak / Expedia)。 --selftest 内蔵。
 - **[fold-dated-bullets.py](fold-dated-bullets.py)** — SESSION.md などの日付 bullet の連続ブロックを、要約 1 本 (+ 追記点の行) に畳み、全文を archive へ verbatim で退避する。相対 link は archive の深さに付け替え、退避の完全性を検算してから書く。
+- **[formcase.py](formcase.py)** — 様式の案件の入口 CLI。 規約の正本 = conventions/form-case-pipeline.md。
 - **[fx-ttm-jpy.py](fx-ttm-jpy.py)** — 指定日の三菱UFJ銀行 公表相場 (TTS / TTB) を取り、 TTM = (TTS+TTB)/2 で外貨額を円に換算する。 --selftest 内蔵。
 - **[garoon-client.py](garoon-client.py)** — Cybozu Garoon (cloud) を **browser session cookie で script から読む** (画面 drive 不要)。
 - **[generate-dir-readme.py](generate-dir-readme.py)** — 任意の dir の README.md を、 各 file 冒頭の説明 1 行目から生成する (README に正本を置かないための索引生成器)
