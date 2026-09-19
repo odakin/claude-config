@@ -71,8 +71,9 @@ PAPER_NAMES = {(210, 297): "A4", (148, 210): "A5", (297, 420): "A3", (182, 257):
                (257, 364): "B4 JIS", (216, 279): "Letter", (100, 148): "はがき"}
 
 PAGE_FIX = ("→ 窓口に出す頁だけの file を作って刷る: pdf-print-preflight.py <元の PDF> --extract <刷る.pdf> --pages <頁> "
-            "(font が 🔴 のときだけ --extract を --rasterize に = font が ✓ なら raster 化は不要。 "
-            "頁の一覧を見て全頁とも出す物だと確かめたなら --pages all。 "
+            "(頁の一覧を見て全頁とも出す物だと確かめたなら --pages all。 "
+            "⚠️ font が 🔴 のとき / 記号・数式の多い文書 / その queue で化けた実績があるときは "
+            "--extract でなく --rasterize = font ✓ は raster 不要の判定ではない。 "
             "説明書き等に見える頁を残すなら --include-flagged '<理由>')")
 
 
@@ -114,7 +115,9 @@ def inspect(path, expect_pages=None, template=None, pages_check=True):
         findings.append(f"🔴 printer で化けうる font が {len(uniq)} 個残っている (PyMuPDF 描画 / 非埋め込み): " + shown
                         + " → 印刷用は --rasterize で RGB raster 版を作って刷る")
     else:
-        infos.append("font: PyMuPDF 描画 / 非埋め込み font なし ✓")
+        infos.append("font: PyMuPDF 描画 / 非埋め込み font なし ✓ "
+                     "(= 既知の壊れ方が無いだけ。 printer の RIP が全 glyph を出す保証ではない "
+                     "= 正しく subset 埋め込みされた CM Type1 でも laser queue が記号を落とした実測あり)")
     if has_image:
         infos.append("画像あり (認印等) — raster 化するなら RGB (gray にすると朱が黒になる)")
     sizes = sorted({(round(pg.rect.width * 25.4 / 72), round(pg.rect.height * 25.4 / 72)) for pg in doc})
@@ -325,9 +328,11 @@ def hook(payload: dict, env=None) -> tuple:
         "  - 頁: 窓口に出す頁だけの file を作る = pdf-print-preflight.py <元の PDF> --extract <刷る.pdf> --pages <頁>",
         "        (lp -o page-ranges は無視される queue がある = 頁は file で選ぶ。 説明書き・記載例・控え・マスタ・白紙は刷らない。",
         "         本当に要る頁なら --include-flagged '<理由>'。 様式の記入 map を持つ生成道具なら、 提出頁だけを出力するよう直す。",
-        "         ⚠️ 上の font が ✓ なら --rasterize でなく --extract (= vector のまま頁を選ぶ)。 配布物のように",
-        "         全頁とも出す物だと頁の一覧で確かめたなら --pages all で『全頁を提出頁』 と宣言する)",
-        "  - font: 🔴 のときだけ --rasterize で RGB 600dpi raster 版を作って刷る (認印は RGB でしか朱が残らない)。",
+        "         配布物のように全頁とも出す物だと頁の一覧で確かめたなら --pages all で『全頁を提出頁』 と宣言する)",
+        "  - font: 🔴 のとき / 記号・数式の多い文書 / その queue で化けた実績があるときは --rasterize で",
+        "        RGB 600dpi raster 版を作って刷る (認印は RGB でしか朱が残らない)。 ⚠️ font の ✓ は「既知の壊れ方が",
+        "        無い」 であって RIP が全 glyph を出す保証ではない = 正しく subset 埋め込みされた CM Type1 でも",
+        "        laser queue が記号 (slash・Greek) を落とした実測がある。 化けは 1 部目の現物でしか分からない。",
         "  - 刷る頁の一覧 (上) を user に 1 行で伝えてから刷る。 crop 目視 + remote の user には全頁 PNG。",
         "正本: conventions/office-automation.md#print-preflight / #print-submission-pages-only",
     ])
