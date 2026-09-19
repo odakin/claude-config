@@ -529,7 +529,7 @@ def selftest():
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         pat = td / "pats.txt"
-        pat.write_text("# c\n作題ファイル\tzz9999sug\n秘匿語\tsecret-?word\n", encoding="utf-8")
+        pat.write_text("# c\n保護 file\tzz9999sug\n秘匿語\tsecret-?word\n", encoding="utf-8")
         env = {"CLAUDE_LEAK_PATTERNS": str(pat), "CLAUDE_LEAK_SOURCES": str(td / "none")}
 
         if len(load_patterns(env)) != 2:

@@ -115,7 +115,7 @@ claude-config/
 │   ├── paste-destined-plain-text.md        # Claude が書いた文面 / コマンドを user が手で貼り付けて実行・投稿する workflow を設計・実行するとき (= 貼り先が plain text 入力欄でも terminal でも)
 │   ├── peer-review-workflow.md             # referee・審査委員として他者の paper / 申請書を評価するとき
 │   ├── personal-skills.md                  # personal skill (~/.claude/skills/) を規律の発火面として使うとき
-│   ├── photographed-document-transcription.md # スキャナを通していない「撮っただけ」 の紙 (手書き答案・ノート・書類) を大量にモデルで読んで構造化するとき + その読み取りを複数 session に分担するとき + 撮影した印刷資料から引用を起こして文章の根拠にするとき + 自分の文書に他人が手書きで朱を入れて返してきた PDF (差し戻し・添削・紙の査読票) を読むとき
+│   ├── photographed-document-transcription.md # スキャナを通していない「撮っただけ」 の紙 (手書きの提出物・ノート・書類) を大量にモデルで読んで構造化するとき + その読み取りを複数 session に分担するとき + 撮影した印刷資料から引用を起こして文章の根拠にするとき + 自分の文書に他人が手書きで朱を入れて返してきた PDF (差し戻し・添削・紙の査読票) を読むとき
 │   ├── physics-notes.md                    # 物理・数理ノートを書くとき
 │   ├── physics-verification-cycle.md       # 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
 │   ├── podcast-audio-finishing.md          # 収録を配信用の音声ファイルに仕上げるとき (ジングルを付ける・音量を揃える・書き出す) + 仕上げた回を聞いて「つなぎが雑音っぽい」「間が長い」と言われたとき + 音声の区間の長さや無音を数値で測るとき
