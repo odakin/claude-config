@@ -960,7 +960,8 @@ papers/upstream/ms.tex     -latex-autofix
 - 属性なし (= 既定) の file は従来どおり fix される (= 後方互換)。
 - 仕組み: hook が staged LaTeX file 各々に `git check-attr latex-autofix -- <file>` を問い、 `unset` のものを fixer から外す (`scripts/pre-commit-bib`)。 末尾の layer-3 chain hook は除外と無関係に常に走る。
 - `.gitattributes` は commit に乗るので全 clone (共同編集者含む) に伝播する。
-- ⚠️ opt-out は「自動 fix からの保護」 であって「自分が書く新規 .tex でアクセント直書き OK」 ではない。 vendored 取り込み専用。
+- ⚠️ opt-out は「自動 fix からの保護」 であって「自分が書く新規 .tex でアクセント直書き OK」 ではない。 vendored 取り込み専用。 (もう一つの使い道 = 機械が作り直す照合の基準。 [`#md-tex-source-and-copy`](#md-tex-source-and-copy))
+- <a id="autofix-with-pathspec-commit"></a>⚠️ **`git commit -- <path>` (並列 session 対策の pathspec commit) と自動 fix は噛み合わない** (実測): hook が「auto-fixed … and re-staged」 と言っても、 その修正は今の commit に入らず、 commit の後に `git status` が `MM` (index と作業 tree の両方に修正が残る) になる。 commit の直後に status を見て、 残っていたら同じ path でもう一度 commit する。 fix が掛かった file を別の検査の基準にしているなら、 2 回目の commit の前にその検査を回し直す。
 
 ### <a id="pre-commit-hook-design-motivation"></a>設計動機 (2026-06-09)
 
@@ -1041,6 +1042,7 @@ Claude Code の desktop app の右パネルは、 Markdown の中の TeX 数式 
 1. **構造は機械で**: 見出し・表・箇条書き・リンクは pandoc に任せる。 [`scripts/md-note-to-tex.py`](../scripts/md-note-to-tex.py) が節ごとの骨格 (`raw/sec-NN.tex`) を作る。 骨格は照合の基準なので手で直さない。
 2. **数式は生成になる**: md の数式が Unicode の地の文 (`P₁`、 `α ≥ 1`、 `|n⟩⟨n|`) で書いてあると、 TeX に直す作業は規則で書き切れず、 人か worker が読んで書くことになる。 これは転記ではなく生成で、 語の置換や数値の書き換えが申告なしに混じりうる (同じ性質 = [`photographed-document-transcription.md#quotation-extraction`](photographed-document-transcription.md#quotation-extraction))。 仕様に「文は一字も変えない。 分からない式は見たままにして注を付ける」 と書き、 直した節を骨格と機械で突き合わせる。
 3. **照合**: [`scripts/check-md-tex-copy.py`](../scripts/check-md-tex-copy.py) が、 日本語の字・数字・4 字以上の英字の語の並びを骨格と比べる。 worker に渡すなら、 worker 自身にこの検査を回させて ✓ になるまで直させる (節ごとに別 context に分けると、 1 本の出力が長くなりすぎない)。
+   - worker に渡す仕様に書くこと: 割り当ての file と「ほかは触らない・git は操作しない」 / 文は一字も変えない (言い換え・要約・追加・削除・並べ替えの禁止を列挙) / 記号の書き方は写し先の macro と既存の本文に合わせる (見本の file を名指す) / 数式にするものとしないものの線引きを例で (ただの数・人名・単位つきの値) / 曖昧な式は見たままにして `% TODO` の注を付ける (検査はコメントを見ない) / 報告の形 (作った file・検査の結果・注を付けた箇所・正本の式そのものが怪しい箇所は直さずに報告)。 最後の項目は、 写しを作る作業が正本の通読を兼ねるので、 正本の側の直し候補が副産物として集まる。
 4. **検査が見ないものを言う**: この照合は数式の意味を見ない (記号の取り違え、 上付きと下付きの取り違え)。 意味は組んだ PDF を読んで確かめる。 報告には「文の一致は全節、 式の意味は目視した範囲」 と範囲を分けて書く。
 
 **写しの鮮度は機械で見る。 人に「あとで反映して」 を残さない** ([`#human-memory-not-a-carrier`](../docs/convention-design-principles.md#human-memory-not-a-carrier))。 `check-md-tex-copy.py DIR --source NOTE.md` は、 正本から骨格を作り直して保存してある骨格と比べ、 違う節を「写しが古い」 と出す。 これを session の開始や CI で回る検査に入れておくと、 md だけを直した次の機会に出る。 正本を直した turn で写しも直すのが既定で、 検査はその取りこぼしの網である。 repo には手順を 3 行で書いておく (骨格を作り直す → 変わった節の写しを直す → 検査して組む)。
