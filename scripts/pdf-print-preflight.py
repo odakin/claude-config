@@ -70,8 +70,10 @@ BUILTIN_BASEFONTS = {
 PAPER_NAMES = {(210, 297): "A4", (148, 210): "A5", (297, 420): "A3", (182, 257): "B5 JIS", (176, 250): "B5 ISO",
                (257, 364): "B4 JIS", (216, 279): "Letter", (100, 148): "はがき"}
 
-PAGE_FIX = ("→ 窓口に出す頁だけの file を作って刷る: pdf-print-preflight.py <元の PDF> --rasterize <刷る.pdf> --pages <頁> "
-            "(説明書き等に見える頁を残すなら --include-flagged '<理由>')")
+PAGE_FIX = ("→ 窓口に出す頁だけの file を作って刷る: pdf-print-preflight.py <元の PDF> --extract <刷る.pdf> --pages <頁> "
+            "(font が 🔴 のときだけ --extract を --rasterize に = font が ✓ なら raster 化は不要。 "
+            "頁の一覧を見て全頁とも出す物だと確かめたなら --pages all。 "
+            "説明書き等に見える頁を残すなら --include-flagged '<理由>')")
 
 
 def inspect(path, expect_pages=None, template=None, pages_check=True):
@@ -320,10 +322,12 @@ def hook(payload: dict, env=None) -> tuple:
         "[print-preflight] 印刷前 preflight FAIL — この PDF はそのまま lp に渡さない (文字化け / 窓口に出さない頁 / どの頁を出すかの宣言なし):",
         *fails, "",
         "対処 (直してから lp を打ち直す):",
-        "  - 頁: 窓口に出す頁だけの file を作る = pdf-print-preflight.py <元の PDF> --rasterize <刷る.pdf> --pages <頁>",
+        "  - 頁: 窓口に出す頁だけの file を作る = pdf-print-preflight.py <元の PDF> --extract <刷る.pdf> --pages <頁>",
         "        (lp -o page-ranges は無視される queue がある = 頁は file で選ぶ。 説明書き・記載例・控え・マスタ・白紙は刷らない。",
-        "         本当に要る頁なら --include-flagged '<理由>'。 様式の記入 map を持つ生成道具なら、 提出頁だけを出力するよう直す)",
-        "  - font: --rasterize で RGB 600dpi raster 版を作って刷る (認印は RGB でしか朱が残らない)。",
+        "         本当に要る頁なら --include-flagged '<理由>'。 様式の記入 map を持つ生成道具なら、 提出頁だけを出力するよう直す。",
+        "         ⚠️ 上の font が ✓ なら --rasterize でなく --extract (= vector のまま頁を選ぶ)。 配布物のように",
+        "         全頁とも出す物だと頁の一覧で確かめたなら --pages all で『全頁を提出頁』 と宣言する)",
+        "  - font: 🔴 のときだけ --rasterize で RGB 600dpi raster 版を作って刷る (認印は RGB でしか朱が残らない)。",
         "  - 刷る頁の一覧 (上) を user に 1 行で伝えてから刷る。 crop 目視 + remote の user には全頁 PNG。",
         "正本: conventions/office-automation.md#print-preflight / #print-submission-pages-only",
     ])

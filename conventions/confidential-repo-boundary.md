@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers)
+when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers) / 触れない dir の中身を機械で処理する必要が出たとき (#work-on-a-copy-not-by-lowering-the-gate)
 category: infra
-summary: 暗号化は中身しか守らない (file 名・commit message・path は平文) ので識別子入り dir は暗号化 tar に畳む (連番+対応表は対応表が単一障害点で不可)、 保存しない > 暗号化する (通知に payload を載せず schema で縛る、 死んだ複製は削除)、 逐語の指紋照合は写しを捕まえるが言い換えは原理的に不可なので経路ごとに制御を変える (閾値は全件集計で決める = 誤検知 6800→24→0 の実測)、 fail-open な gate は必ずカナリアで実効性を毎回確かめ ARMED/NOT ARMED/対象外 の 3 状態を出す (沈黙を作らない)、 是正は go-forward にしか効かず履歴は別問題として人間の判断に委ねる、 公開 repo には未公開文書の逐語 gate を別に置く (漏れる例示は引用符に入った短い断片なので quoted span が主、 全履歴 replay で誤検出 0 を確かめて採用)、 gate が target の pre-commit で実際に走っているかは target ごとに確かめる
+summary: 暗号化は中身しか守らない (file 名・commit message・path は平文) ので識別子入り dir は暗号化 tar に畳む (連番+対応表は対応表が単一障害点で不可)、 保存しない > 暗号化する (通知に payload を載せず schema で縛る、 死んだ複製は削除)、 逐語の指紋照合は写しを捕まえるが言い換えは原理的に不可なので経路ごとに制御を変える (閾値は全件集計で決める = 誤検知 6800→24→0 の実測)、 fail-open な gate は必ずカナリアで実効性を毎回確かめ ARMED/NOT ARMED/対象外 の 3 状態を出す (沈黙を作らない)、 是正は go-forward にしか効かず履歴は別問題として人間の判断に委ねる、 公開 repo には未公開文書の逐語 gate を別に置く (漏れる例示は引用符に入った短い断片なので quoted span が主、 全履歴 replay で誤検出 0 を確かめて採用)、 gate が target の pre-commit で実際に走っているかは target ごとに確かめる、 触れない dir の中身を機械で処理する必要が出ても deny を外して戻す形にしない (外れている間は dir 全体が無関係な call にも開く) = user が 1 file だけ許可 scope に複製 → 作業 → 複製と中間生成物を消す、 複製は元の SoT から分岐し記録には file 名も中身も書かない
 -->
 # 機密の境界を機械で守る — 暗号化・file 名・通知・検査
 
@@ -207,9 +207,27 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 - 出さない = 名前を含む文 (commit message・規約の grep) ・ 再帰しない一覧 ・ 保護 dir の外の具体的な dir への再帰
 - 保護 dir そのものには触れない (親だけを実体化して比べる)
 - **宣言** = `~/.claude/protected-dirs.txt` と `~/.claude/leak-pattern-sources.txt` (§4 の作業リポ登録)。 remote に出してはいけない実体の置き場は、 触ってもいけない dir でもある — 別の list にすると片方だけが更新される ([`docs/convention-design-principles.md#detector-config-must-be-derived`](../docs/convention-design-principles.md#detector-config-must-be-derived))
-- **deny にしない**: その dir の作業 session では中で作業するのが正当。 止まるのは仕様
+- **この hook 自体は deny にしない**: その dir の作業 session では中で作業するのが正当。 止まるのは仕様。 ⚠️ **ただし settings 側に `deny` を重ねている環境がある** (= 作業 session でも Claude には触らせない、 と決めた dir)。 hook の ask と deny rule が同じ command に当たると **hook の理由だけが返って deny は見えない** ので、 拒否の原因を hook だと読み違える ([`claude-code-permissions.md#hook-masks-deny`](claude-code-permissions.md#hook-masks-deny))。 deny を重ねてあるかは settings の `permissions.deny` を読んで確かめる (hook の挙動からは分からない)
 - fail-open なので §5 のとおり `--canary` で毎回確かめる (ARMED / NOT ARMED / 未配線 / 対象外)
 - ⚠️ 射程外 = 変数に分けて組み立てた path、 script file の中の走査。 目的は事故の防止で回避への対策ではないので、 **横断の検索・sweep を書く側の規律**と併用する: 対象は repo の一覧 (registry) から取り、 上位 dir からの `find` で発見しない
+
+### <a id="work-on-a-copy-not-by-lowering-the-gate"></a>触れない dir の中身を処理する必要が出たら、 gate を下げずに「1 file だけ外に出してもらう」
+
+`deny` で守った dir の file を Claude に処理させたくなる場面はある (機械でしかできない検査・変換・印刷の前処理など)。 このとき **deny を外して作業して戻す**のは最悪の選択肢 — 外れている間は**その dir 全体**が、 当の作業に関係しない call にも開く。 外し忘れれば boundary は黙って消える。
+
+**順序**:
+
+1. **やらずに済ませられないかを先に見る**: 出力だけが要るなら、 手順を user に渡して user の手元で実行してもらう (= 中身が Claude の context にも tool 結果にも入らない。 **最も安全**)
+2. それでも Claude が処理する必要があるなら、 **user が対象 file だけを許可 scope の dir に複製**する。 露出が「1 file・1 回」 に限られ、 boundary の設定は動かない。 **複製は user が行う** (Claude が copy すると、 保護 dir を読む操作そのものが deny に当たるうえ、 「Claude が勝手に外へ出した」 形になる)
+3. 終わったら**複製と中間生成物を消す**。 消す対象を作業の最後に 1 行で列挙する (temp dir の中間 file・render した画像・抽出した部分 file は忘れられやすい)
+
+**⚠️ 複製した瞬間に増える risk** (= 「1 file だけ」 は無害の意味ではない):
+
+- **複製は元の SoT から分岐する**: 元が直っても複製は直らない。 複製から作った成果物 (印刷物・変換結果) は、 **どの版から作ったか**を残さないと後から照合できない ([`office-automation.md#printed-artifact-staleness`](office-automation.md#printed-artifact-staleness) と同じ構造)
+- **複製先が backup・同期・索引の対象だと露出が伸びる**: home 直下の同期 folder に置くと、 消す前に別の場所へ渡ることがある。 置き場は同期されない local dir を選ぶ
+- **記録に中身を書かない**: 作業の記録・別 session への通知・commit message には、 **file 名も中身も書かない** (= 記録は remote に乗る。 [`#3`](#3) の「通知は報告書ではない」 と同じ)。 書くのは「1 件処理した」 までで、 所在は口頭 (chat) で渡す
+
+**これを「回避の手口」 にしない**: 2 の判断をするのは user であって Claude ではない。 Claude 側の既定は 1 で、 2 は user が明示的に選んだときだけ成立する。 Claude が「こうすれば通ります」 と先に手を動かす形にすると、 gate は事実上無い。
 
 ---
 
