@@ -170,7 +170,11 @@ auto-load される file の肥大が AUTO-GENERATED block 由来なら、 縮�
 (README 等) へ移す。 [#pointer-conversion](#pointer-conversion) step 4 の
 「routing table は trigger 列こそが routing 機能」 の生成側適用で、 源 data は不変なので
 情報の削除ゼロで済む。 移し先の README は AUTO-GENERATED の view であり正本ではない
-(= 「README に正本を置かない」 規律と両立する)。 実例 = 本 repo `generate-tree.py` の
+(= 「README に正本を置かない」 規律と両立する)。 手書きの README を生成 view に置き換える汎用の道具 =
+[`scripts/generate-dir-readme.py`](../scripts/generate-dir-readme.py) (任意の dir の各 file 冒頭の説明 1 行目から
+索引を作り、 `--check` で手編集と説明の書き忘れを止める。 README の詳細を各 file 冒頭へ移すときは、
+1023 byte を超える多バイト行を折り返す = [`batch-text-edits.md#system-python-long-multibyte-line`](batch-text-edits.md#system-python-long-multibyte-line))。
+実例 = 本 repo `generate-tree.py` の
 2026-09-01 契約変更 (設計記録 = [`DESIGN.md #auto-tree-autoload-slim`](../DESIGN.md#auto-tree-autoload-slim)、
 CLAUDE.md 95 → 35 KB)。
 

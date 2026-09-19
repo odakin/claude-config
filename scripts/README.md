@@ -112,6 +112,7 @@
 - **[fold-dated-bullets.py](fold-dated-bullets.py)** — SESSION.md などの日付 bullet の連続ブロックを、要約 1 本 (+ 追記点の行) に畳み、全文を archive へ verbatim で退避する。相対 link は archive の深さに付け替え、退避の完全性を検算してから書く。
 - **[fx-ttm-jpy.py](fx-ttm-jpy.py)** — 指定日の三菱UFJ銀行 公表相場 (TTS / TTB) を取り、 TTM = (TTS+TTB)/2 で外貨額を円に換算する。 --selftest 内蔵。
 - **[garoon-client.py](garoon-client.py)** — Cybozu Garoon (cloud) を **browser session cookie で script から読む** (画面 drive 不要)。
+- **[generate-dir-readme.py](generate-dir-readme.py)** — 任意の dir の README.md を、 各 file 冒頭の説明 1 行目から生成する (README に正本を置かないための索引生成器)
 - **[generate-doc-index.py](generate-doc-index.py)** — regenerate a slug index FROM its markdown, so Claude writes
 - **[generate-tree.py](generate-tree.py)** — CLAUDE.md 構造 tree (conventions/hooks/scripts) + CONVENTIONS.md 冒頭列挙 +
 - **[gmail-mcp-engines.test.sh](gmail-mcp-engines.test.sh)** — gmail MCP engine 2 本 (reauth / install-runtime-links) の hermetic self-test
