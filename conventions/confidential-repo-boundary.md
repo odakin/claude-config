@@ -215,6 +215,8 @@ gate に弾かれる。 値の home は設定 file だけにし、 engine は di
 
 `deny` で守った dir の file を Claude に処理させたくなる場面はある (機械でしかできない検査・変換・印刷の前処理など)。 このとき **deny を外して作業して戻す**のは最悪の選択肢 — 外れている間は**その dir 全体**が、 当の作業に関係しない call にも開く。 外し忘れれば boundary は黙って消える。
 
+⚠️ **「作業のたびに本人が許可する dir」 は、 下げて戻すのではなく最初から `ask` にする** (= 別の判断)。 本人が中で作業する dir を `deny` にすると、 許可を出しても通らず、 通すために毎回 gate を触ることになる (= 上の最悪の選択肢を常態化させる)。 その dir は `ask` にして **1 操作ごとに確認を出す** — dir が開きっぱなしにならず、 許可は操作ごとに本人が出す。 ⚠️ `ask` は kind を変える恒久的な判断なので、 **git に載せた宣言で全マシンを揃える** ([`multi-machine-state.md#gate-rules-reassert-every-session`](multi-machine-state.md#gate-rules-reassert-every-session))。 file を名指ししない読み方 (`find` / `grep -r` / script の中の走査) は path rule の射程外なので、 [`#protected-dir-access-guard`](#protected-dir-access-guard) を併せて配線する。 以下は「本人も触らせるつもりがない dir」 の話。
+
 **順序**:
 
 1. **やらずに済ませられないかを先に見る**: 出力だけが要るなら、 手順を user に渡して user の手元で実行してもらう (= 中身が Claude の context にも tool 結果にも入らない。 **最も安全**)

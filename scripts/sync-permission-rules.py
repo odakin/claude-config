@@ -7,6 +7,9 @@ usage:
   sync-permission-rules.py --selftest
 
   SPEC     = {"ask": {"required": [...], "superseded": {"旧 rule": "置き換え先"}}, "deny": {...}}
+             spec の中の文字列の `${HOME}` は実行したマシンの home に展開する (= 絶対 path を含む
+             rule を git に載せた 1 つの spec で複数マシンに配れる)。 form / 意味の正本 = engine の
+             docstring (required / superseded / retired_re / "_" 始まりの注釈 key)
   PATH     = 既定 ~/.claude/settings.json (symlink なら実体を書く)
   失敗 (file 不在 / JSON 破損 / spec 不正) = stderr に理由、 exit 2、 何も書かない
 
@@ -26,6 +29,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 import permission_rules  # noqa: E402
 
 
+def _expand(obj, home: str):
+    """spec の中の文字列の ${HOME} を home に展開する (dict の key も対象)。"""
+    if isinstance(obj, str):
+        return obj.replace("${HOME}", home)
+    if isinstance(obj, list):
+        return [_expand(x, home) for x in obj]
+    if isinstance(obj, dict):
+        return {_expand(k, home): _expand(v, home) for k, v in obj.items()}
+    return obj
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--spec", type=Path)
@@ -38,7 +52,7 @@ def main() -> int:
     if not a.spec:
         ap.error("--spec が必要")
     try:
-        spec = json.loads(a.spec.read_text(encoding="utf-8"))
+        spec = _expand(json.loads(a.spec.read_text(encoding="utf-8")), str(Path.home()).rstrip("/"))
         if a.apply:
             for line in permission_rules.apply(a.settings, spec):
                 print(line)
