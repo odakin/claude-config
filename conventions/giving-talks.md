@@ -50,7 +50,7 @@ sit through other people's talks.
   make good titles. (E.g. prefer "Black Holes are Stable" over the dull "Perturbations of the
   Kerr Solution" or the opaque "Linearized Fields in a Kerr Background Metric.")
 
-## 2. The plan: three or four messages
+## <a id="plan-three-or-four-messages"></a>2. The plan: three or four messages
 
 Geroch's plan is a *division* of what you want to say, made in this order:
 
