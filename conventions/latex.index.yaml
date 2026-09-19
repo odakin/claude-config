@@ -190,6 +190,9 @@ sections:
   - id: md-math-preview
     level: 2
     title: "数式入りの Markdown を人に見せるときは HTML にして browser で開く (右パネルは数式を描かない)"
+  - id: md-tex-source-and-copy
+    level: 2
+    title: "同じノートを Markdown と TeX の両方で持つときは、 片方を正本、 片方を写しにする"
   - id: gitignore
     level: 2
     title: ".gitignore"
