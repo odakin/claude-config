@@ -265,6 +265,14 @@
       "hooks": [
         {
           "type": "command",
+          "command": "~/.claude/hooks/visible-html-comment-enforce.py"
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
           "command": "~/.claude/hooks/first-turn-stamp-check.py"
         }
       ]
