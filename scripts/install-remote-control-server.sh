@@ -130,15 +130,35 @@ CLAUDE_BIN="$HOME/.local/bin/claude"
 # "<host-short>-<alias>" を焼く (例: myhost-alice)。 スマホの環境 picker と「最近の項目」 で
 # どの account の server / session か一目で分かる (= 無いと同 host の 2 server が同名で並ぶ)。
 # 古い CLI は flag 未対応の可能性があるため capability-gated (= 未対応なら従来 hostname 既定)。
+# ⚠️ probe の **空**は「未対応」 ではない: `claude remote-control --help` は auth が無い / CLI を
+#    起動できない時にも 1 文字も返さない。 空を「未対応」 に変換すると、 auth が切れている間に
+#    再 install しただけで命名が黙って外れ、 同一 host の複数 server が picker に同名で並ぶ状態へ
+#    戻る (= silent な機能後退。 実測)。 ゆえに 3 分岐にする:
+#      probe に出力あり → その答えを信じる (= 本物の capability 判定)
+#      probe が空 ∧ 既存 plist に命名あり → 以前の probe 成功を証拠として引き継ぐ (host は現在値で再評価)
+#      probe が空 ∧ 既存もなし          → 判定不能として warn (= 黙って落とさない)
 RC_NAME_ARGS=""
 if [ -n "$LABEL_SUFFIX" ]; then
   HOST_SHORT="$(hostname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')"
   if [ -n "$HOST_SHORT" ]; then
     RC_HELP="$("$CLAUDE_BIN" remote-control --help 2>/dev/null || true)"
-    printf '%s' "$RC_HELP" | grep -q -- '--name' \
-      && RC_NAME_ARGS=" --name \"$HOST_SHORT-$LABEL_SUFFIX\""
-    printf '%s' "$RC_HELP" | grep -q -- '--remote-control-session-name-prefix' \
-      && RC_NAME_ARGS="$RC_NAME_ARGS --remote-control-session-name-prefix \"$HOST_SHORT-$LABEL_SUFFIX\""
+    if [ -n "$RC_HELP" ]; then
+      printf '%s' "$RC_HELP" | grep -q -- '--name' \
+        && RC_NAME_ARGS=" --name \"$HOST_SHORT-$LABEL_SUFFIX\""
+      printf '%s' "$RC_HELP" | grep -q -- '--remote-control-session-name-prefix' \
+        && RC_NAME_ARGS="$RC_NAME_ARGS --remote-control-session-name-prefix \"$HOST_SHORT-$LABEL_SUFFIX\""
+    elif [ -f "$PLIST" ] && grep -q -- '--name' "$PLIST" 2>/dev/null; then
+      RC_NAME_ARGS=" --name \"$HOST_SHORT-$LABEL_SUFFIX\""
+      grep -q -- '--remote-control-session-name-prefix' "$PLIST" 2>/dev/null \
+        && RC_NAME_ARGS="$RC_NAME_ARGS --remote-control-session-name-prefix \"$HOST_SHORT-$LABEL_SUFFIX\""
+      echo "[warn] capability probe が空 (claude を起動できない = 多くは未 auth)。" >&2
+      echo "       既存 plist の命名を現在の host 名で引き継いだ: $HOST_SHORT-$LABEL_SUFFIX" >&2
+    else
+      echo "[warn] capability probe が空 (claude を起動できない = 多くは未 auth) ゆえ命名 flag の" >&2
+      echo "       可否を判定できず、 命名なしで入れた。 同一 host に複数 account の server を" >&2
+      echo "       並べると picker で区別できない。 auth 確立後に同じ command をもう一度実行すると" >&2
+      echo "       命名が焼かれる。" >&2
+    fi
   fi
 fi
 
