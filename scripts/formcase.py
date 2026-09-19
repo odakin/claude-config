@@ -520,6 +520,18 @@ def main(argv=None) -> int:
     except M.ManifestError as e:
         print(f"🔴 {e}", file=sys.stderr)
         return 2
+    except Exception as e:  # noqa: BLE001
+        # pre-commit の入口 (guard / lint --staged) だけは、 想定外の例外を 1 で落とさない。
+        # 1 = 「明示の BLOCK」 は呼び元 (pre-commit chain) の約束なので、 engine の故障が
+        # 1 になると**無関係な commit が全部止まる** (= 案件 README も新規 file も。 実測)。
+        # しかも「凍結を守って止めた」 のと区別がつかない。
+        # 故障は 3 = 「検査が走っていない」 として呼び元に渡し、 commit は通す。
+        # cmd_guard / cmd_lint_staged の内側にも同じ受けがあるが、 その try の外
+        # (import・repo の解決・設定の読み込み) で落ちる型はここでしか拾えない。
+        if args.cmd == "guard" or (args.cmd == "lint" and getattr(args, "staged", False)):
+            print(f"⚠️ formcase {args.cmd} の内部エラー (commit は止めない): {e!r}", file=sys.stderr)
+            return 3
+        raise
 
 
 if __name__ == "__main__":

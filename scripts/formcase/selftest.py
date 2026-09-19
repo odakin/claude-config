@@ -312,6 +312,7 @@ def run() -> int:
         _annotate_tests(tmp, case, expect, fails)
         _lifecycle_tests(tmp, case, expect, fails)
         _precommit_tests(tmp, case, expect)
+        _exit_code_tests(expect)
         _recipe_tests(tmp, inst, expect)
         _excel_tests(tmp, expect)
         _layout_tests(tmp, expect)
@@ -709,6 +710,38 @@ def _precommit_tests(tmp, case, expect) -> None:
     expect("pre-commit: 壊れた manifest を BLOCK", any("form" in b for b in bl), bl)
     git("checkout", "--", f"{rel}/{M.MANIFEST_NAME}")
     git("reset", "-q")
+
+
+def _exit_code_tests(expect) -> None:
+    """pre-commit の入口 (guard / lint --staged) は、 内部の故障で 1 を返してはいけない。
+
+    1 = 「明示の BLOCK」 は呼び元 (pre-commit chain) との約束なので、 engine の故障が 1 になると
+    **その repo のどの commit も止まる** — しかも「凍結を守った」 のと区別がつかない。 2026-09-20 に
+    実測 (層1 CLI の読み込みが失敗した状態で、 無関係な新規 file の commit まで止まった)。
+    対話の入口はこの受けに入れない = 本当の bug を traceback のまま見せる。"""
+    import importlib.util
+
+    cli_path = Path(__file__).resolve().parent.parent / "formcase.py"
+    sp = importlib.util.spec_from_file_location("formcase_cli_selftest", cli_path)
+    cli = importlib.util.module_from_spec(sp)
+    sys.modules[sp.name] = cli
+    sp.loader.exec_module(cli)
+
+    def boom(args):
+        raise RuntimeError("simulated internal failure")
+
+    saved = {k: getattr(cli, k) for k in ("cmd_guard", "cmd_lint", "cmd_status")}
+    try:
+        cli.cmd_guard = cli.cmd_lint = cli.cmd_status = boom
+        for argv, name in ((["guard", "--staged"], "guard --staged"), (["lint", "--staged"], "lint --staged")):
+            with contextlib.redirect_stderr(io.StringIO()):
+                rc = cli.main(argv)
+            expect(f"pre-commit: {name} の内部エラーは 3 (= commit を止めない)", rc == 3, rc)
+        expect("pre-commit でない入口は例外のまま (故障を握りつぶさない)",
+               _raises(RuntimeError, cli.main, ["status"]))
+    finally:
+        for k, v in saved.items():
+            setattr(cli, k, v)
 
 
 # ---------------------------------------------------------------------------
