@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 128 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 129 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -166,6 +166,8 @@ layer 1 (public) のドメイン固有規約 128 file をカテゴリ別に列�
   - Claude Code の app bundle が `~/Library/Application Support/Claude/claude-code/<version>/claude.app` という versioned path に置かれているため、 App Management TCC 権限が auto-update 毎に invalidate されて dialog が再 prompt される構造的症状 (= sibling pty-leak と同じく Anthropic 側 fix 待ち候補、 stable launcher path 化が root 対策)
 - **[macos-exec-policy-kill.md](macos-exec-policy-kill.md)** — script や git hook の実行が SIGKILL で止まるとき (exit 137 / "Killed: 9" / git の "hook ... died of signal 9") + 同じ中身の script が場所によって kill されたりされなかったりするとき + syspolicyd が重い・メモリが膨らんでいるとき + 別のアプリの起動失敗が大量に続いた後に手元の script が動かなくなったとき
   - macOS は exec 時の malware 判定を file (inode) ごとに覚える。 syspolicyd が詰まって scan に失敗すると、 その判定が kill として残り、 以後その file の exec は即 SIGKILL になる。 中身は無関係なので、 同じ bytes・同じ mode の新しい inode に作り直すと scan し直されて通る (同じ inode への上書きでは直らない)。 診断 = scripts/macos-exec-kill-triage.py、 git hook の直し方 = hook-authoring.md#killed-hook-stub
+- **[macos-filevault.md](macos-filevault.md)** — FileVault を入れるか決めるとき + 有効か無効かを判断するとき + 復旧キーの置き場を決めるとき + 復旧キーを画面から書き取ったとき + 無人 routine を走らせる機を選ぶとき
+  - FileVault の有無は fdesetup status だけが答え (記憶・toggle の色で判断しない)。 ログイン後は完全に透過なので agent の作業には影響せず、 唯一の差は再起動後ログインまで LaunchAgent が走らないこと。 復旧キーはそれが開けるディスクの中だけに置くと循環する = 別デバイスから辿れる置き場に台帳を作り、 転記は validaterecovery (root 要 = 人の操作) で照合する。 「On なのに鍵が無い」 は静かな穴なので scripts/check-filevault-posture.py で毎回見る
 - **[macos-gui-app-automation.md](macos-gui-app-automation.md)** — macOS の GUI app (Office / Pages / Keynote / Preview 等) を osascript・AppleScript・JXA で駆動する script を書く・直すとき + app を quit / kill / 再起動しようとした瞬間 + 自動化のたびに app が前面に出る・user の文書が閉じられたと言われたとき + 本人が使っている browser に script から tab を開かせる・閉じるとき (#chromium-tab-scripting) + 自動化が止まった原因が app の dialog かを script から確かめるとき (#dialog-presence-probe)
   - macOS の GUI app を script で駆動するときの作法。 (1) quit の前に app へ開いている文書を聞き、 自分が開いたもの以外が 1 つでもあれば quit も kill もしない (数え直しと quit は同じ osascript の中、 plain quit で saving no を付けない、 app 名指定の killall/pkill は禁止) (2) 背景で動かす = `open -g`、 `activate` を書かない、 `open -j` (hidden) は dialog まで隠して quit が -128 で取り消されたまま残るので使わない (3) `application id "…" is running` は app を起動しない probe、 `tell application` は起動する (4) 前面を奪ったら `path to frontmost application` で覚えた app へ `open -a` で返す (System Events 権限不要) (5) 文書は path か open が返す参照で指す (`active document` / `workbook 1` は user の文書を指しうる、 /private/tmp と /tmp の表記差を揃える) (6) Chromium 系 browser の tab = 裏で開いて前面の tab を戻す・id で指す・見るのは query を落とした URL と loading だけ・閉じるのは自分が開いた tab を場所を確かめてから (scripts/lib/browser_tab.py) (7) app が dialog を出しているかを読む = System Events は補助アクセスが要り無いと -25211、 代わりは画面撮影か「AppleScript が -1712 で止まったか」、 probe 自身の失敗 message に検出語が入る罠。 Office 向け実装 = scripts/lib/office-app-guard.sh
 - **[macos-hdmi-external-display.md](macos-hdmi-external-display.md)** — macOS で HDMI / USB-C 経由の外部ディスプレイ・テレビ・プロジェクター・会場 AV 設備を接続したのに画面が出ないとき + 投影側にミラーリング/拡張の選択を求める待機メッセージだけ出るとき + 「ディスプレイ」設定に中継機器名が見えるのに投影されないとき
