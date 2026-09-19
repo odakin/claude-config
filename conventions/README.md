@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 129 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 130 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -164,6 +164,8 @@ layer 1 (public) のドメイン固有規約 129 file をカテゴリ別に列�
   - macOS で Claude.app が `kern.tty.ptmx_max=511` を独占 → Terminal 等で `forkpty: Device not configured` 発生時の段階的 sysctl bump workaround (hard ceiling ~960、 root 対処は Claude.app restart、 Anthropic bug report 候補)
 - **[macos-claude-code-tcc-recurring-prompt.md](macos-claude-code-tcc-recurring-prompt.md)** — Claude Code の App Management TCC dialog が繰り返し出るとき
   - Claude Code の app bundle が `~/Library/Application Support/Claude/claude-code/<version>/claude.app` という versioned path に置かれているため、 App Management TCC 権限が auto-update 毎に invalidate されて dialog が再 prompt される構造的症状 (= sibling pty-leak と同じく Anthropic 側 fix 待ち候補、 stable launcher path 化が root 対策)
+- **[macos-clickable-notifications.md](macos-clickable-notifications.md)** — script や定期ジョブから macOS 通知を出す前 + 出している通知をクリックしても何も起きない / 関係ないアプリが開くと気づいたとき + 通知を出すアプリを作り直す前 + 複数の source から集めた finding の 1 行を通知本文に選ぶとき
+  - osascript の display notification はスクリプトエディタの通知になり、クリックしても空の書類選択ダイアログが開くだけで本文の 1 行から先に進めない。自前の applet から投稿して click 先を持たせる recipe (queue file で投稿と click を分ける / 投稿直後に終了すると配送されない / 新しいアプリは許可を出すまで通知センターに溜まるだけ / ad-hoc 署名の rebuild で許可が消える / 通知本文は入力順でなく重大度で選ぶ)
 - **[macos-exec-policy-kill.md](macos-exec-policy-kill.md)** — script や git hook の実行が SIGKILL で止まるとき (exit 137 / "Killed: 9" / git の "hook ... died of signal 9") + 同じ中身の script が場所によって kill されたりされなかったりするとき + syspolicyd が重い・メモリが膨らんでいるとき + 別のアプリの起動失敗が大量に続いた後に手元の script が動かなくなったとき
   - macOS は exec 時の malware 判定を file (inode) ごとに覚える。 syspolicyd が詰まって scan に失敗すると、 その判定が kill として残り、 以後その file の exec は即 SIGKILL になる。 中身は無関係なので、 同じ bytes・同じ mode の新しい inode に作り直すと scan し直されて通る (同じ inode への上書きでは直らない)。 診断 = scripts/macos-exec-kill-triage.py、 git hook の直し方 = hook-authoring.md#killed-hook-stub
 - **[macos-filevault.md](macos-filevault.md)** — FileVault を入れるか決めるとき + 有効か無効かを判断するとき + 復旧キーの置き場を決めるとき + 復旧キーを画面から書き取ったとき + 無人 routine を走らせる機を選ぶとき
