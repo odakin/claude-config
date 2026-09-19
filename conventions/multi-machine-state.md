@@ -56,7 +56,7 @@ launchd / cron の定期ジョブは **登録したマシンでだけ走る**。
 ジョブ script 側で「自分は稼働ホストか」 を判定したい時 (= 非ホストでは沈黙する surface 等) は **arch (`uname -m` / `platform.machine()`) や hostname を programmatic discriminator** に使う。 arch はフリートが arch で割れている場合 (例: 常時起動機 = x86_64 / ノート = arm64) に簡潔で堅牢。
 
 - **判定は config 値に外出し + env で override 可能に**する (= 別 arch のマシンから両分岐を test できる)。 例: `host_arch` を config に置き、 `platform.machine()` と比較、 test 用に env `..._HOST_ARCH` で上書き
-- arch 判定は fleet 構成 (= どのマシンが何 arch か) に依存する **cross-machine な比較 fact**。 これは個人レイヤー (= 各 user の machine 構成 doc) に置く。 本 public 規約には具体 arch を hardcode しない
+- arch 判定は fleet 構成 (= どのマシンが何 arch か) に依存する **cross-machine な比較 fact**。 これは個人レイヤー (= 各 user の machine 構成 doc) に置く。 本 public 規約には具体 arch を hardcode しない (= 環境依存の値を配る物に焼かない一般則は [convention-design-principles.md #environment-literal-placement](../docs/convention-design-principles.md#environment-literal-placement))
 - 将来 arch が揃う (例: 全マシン Apple Silicon 化) と arch discriminator は効かなくなる → hostname / 明示 marker file へ移行
 
 ### <a id="account-host-failover"></a>account / host failover: active-routine-host 台帳 + gate
