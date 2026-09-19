@@ -304,9 +304,34 @@ def _glob_re(pat: str):
     return re.compile("^" + "".join(out) + "$")
 
 
-def rel_to_workspace(p) -> str | None:
+@lru_cache(maxsize=512)
+def _repo_rel(dir_str: str) -> str | None:
+    """その dir を含む git repo の ``<repo dir 名>`` (workspace の外に clone されている時の代用 root)。"""
+    import subprocess
     try:
-        return str(Path(p).resolve().relative_to(workspace_root()))
+        out = subprocess.run(["git", "-C", dir_str, "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=5)
+    except Exception:
+        return None
+    return out.stdout.strip() if out.returncode == 0 and out.stdout.strip() else None
+
+
+def rel_to_workspace(p) -> str | None:
+    """glob を当てる path (= workspace root からの相対)。
+
+    workspace の外にある clone・一時 repo でも、 その repo を含む git の toplevel を root の代わりに使い
+    ``<repo dir 名>/<repo 内の相対 path>`` を返す (= 「どの repo の、 どこ」 という同じ形で規則を書けるようにする。
+    これが無いと、 workspace の外で走らせた検査は path が当たらず黙って素通りする)。"""
+    rp = Path(p).resolve()
+    try:
+        return str(rp.relative_to(workspace_root()))
+    except ValueError:
+        pass
+    top = _repo_rel(str(rp.parent))
+    if not top:
+        return None
+    try:
+        return str(Path(Path(top).name) / rp.relative_to(Path(top)))
     except ValueError:
         return None
 
