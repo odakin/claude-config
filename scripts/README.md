@@ -280,6 +280,7 @@
 - **[lib/hook-exec-probe.bash](lib/hook-exec-probe.bash)** — lib/hook-exec-probe.bash — hook の exec 検査で BASH_ENV に渡す file (bash が $BASH_ENV として読む。 直接は実行も source もしない)
 - **[lib/hook-stub.sh](lib/hook-stub.sh)** — lib/hook-stub.sh — hook stub installer 共通の「既存 stub の扱い」 (source して使う、 単体実行しない)
 - **[lib/ja_deadline_dates.py](lib/ja_deadline_dates.py)** — 日本語の文から「期限らしい日付」 を取る共通部品（散文 = task 記録・メモの次の期限 / メール本文 = 入力・提出・申請の〆切。 締切語の隣接・行動語・行動窓の範囲の終端・引用除去・述語の指紋。 docs/convention-design-principles.md#single-deadline-field-many-legs / #elapsed-time-urgency-inversion、 --selftest）
+- **[lib/ledger_page.py](lib/ledger_page.py)** — 行で書かれた台帳を、 一目で読める 1 枚の HTML にする。
 - **[lib/macos_apps.py](lib/macos_apps.py)** — Discover macOS app bundles and read their declared identity without launching them.
 - **[lib/mail_watch.py](lib/mail_watch.py)** — 既知スレッドを辿るだけでは拾えない mail を拾う helper（待ち項目の検索条件 / 決着済み案件への自動督促の判定 / 本文 text の取り出し。 Gmail API の service を受け取る、 python3 mail_watch.py で selftest）
 - **[lib/merge-hook-event.sh](lib/merge-hook-event.sh)** — settings.json への hook event merge (単一リスト駆動)
