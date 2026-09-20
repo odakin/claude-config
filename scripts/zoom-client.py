@@ -5,6 +5,8 @@
 **Server-to-Server OAuth app** を 1 つ作れる (= client_id / client_secret / account_id の 3 値)。
 これだけで token を自己発行でき、 以後は部屋の作成も設定の読み取りも機械経路で回る。
 一般則 = conventions/machine-route-first.md #route-ladder (= 画面 drive は最終手段)。
+罠と手順の正本 = conventions/zoom-meetings.md (= S2S app の作り方 / use_pmi / passcode と待機室 /
+365 日失効 / 録画と議事録の違い / 部屋の記録の仕方)。
 
 subcommand:
   whoami                                    自分 (account / user / PMI) を表示 = 配線の死活確認
@@ -20,12 +22,12 @@ create の既定 = **type 3 (定期ミーティング・固定時刻なし)** = 
 
 ⚠️ 部屋の作成・削除は外部 service の account 変更 = **既定 dry-run**、 実行は `--apply`。
 ⚠️ 「固定時刻なし」 の定期ミーティングは **最終使用から 365 日で失効**する (PMI と違う点)。
-⚠️ **create は必ず `use_pmi: false` を送る** (2026-09-20 実測): アカウント設定
+⚠️ **create は必ず `use_pmi: false` を送る** (実測): アカウント設定
    「予定されたミーティングに個人ミーティング ID を使用」 が ON だと、 新しく作った部屋の
    join_url が **個人部屋のもの** (`/j/<PMI>?pwd=…&omn=<新 id>`) になり、 別の部屋を作ったつもりが
    PMI の別名でしかない、 という状態になる。 id が新しく発番されるので気づきにくい
    (= 見分け方は join_url の番号が PMI と同じか / `settings.use_pmi`)。
-⚠️ Zoom は「パスコード」 と「待機室」 の**どちらかを必須**にする (2026-09-20 実測): passcode なしで
+⚠️ Zoom は「パスコード」 と「待機室」 の**どちらかを必須**にする (実測): passcode なしで
    作ると `waiting_room` が **要求に関わらず true に上書きされる** (= ホストが毎回入室を承認する羽目になり、
    「いつでも入れる部屋」 が壊れる)。 ∴ create は既定で passcode を自動生成し join_url に埋める。
 
