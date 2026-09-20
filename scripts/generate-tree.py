@@ -11,7 +11,7 @@ conventions/README.md (カテゴリ index) を単一 source から自動生成 (
                              -->
                          `X.ja.md` で `X.md` が実在するものは翻訳 variant (doc-meta 不要、親 entry に併記)。
                          README.md (= 本 script の生成物) は対象外。
-  * hooks/ scripts/ scripts/lib/ … 各 file header の説明 1 行目
+  * hooks/ scripts/ scripts/<subdir>/ … 各 file header の説明 1 行目
                          (.py = module docstring 1 行目 / .sh 等 = shebang 直後の最初の # comment /
                           .mjs .js 等 = shebang 直後の最初の // comment /
                           .html = 先頭 3 行内の <!-- --> comment。 いずれも先頭の "<basename> — " prefix は strip)。
@@ -27,7 +27,8 @@ conventions/README.md (カテゴリ index) を単一 source から自動生成 (
   2. CONVENTIONS.md     … <!-- AUTO-ENUM BEGIN --> 〜 <!-- AUTO-ENUM END --> (冒頭の全列挙 blockquote)
   3. conventions/README.md … file 全体を生成 (カテゴリ別 index、 when + summary)
   4. hooks/README.md    … file 全体を生成 (hook 全列挙 + 説明 1 行目)
-  5. scripts/README.md  … file 全体を生成 (script + lib 全列挙 + 説明 1 行目)
+  5. scripts/README.md  … file 全体を生成 (script + subdir 〔lib / formcase〕 全列挙 + 説明 1 行目。
+                          subdir の一覧 = SCRIPTS_SUBDIRS = CLAUDE.md の tree 行と共通の源)
      ⚠️ 列挙は **git 管理下の file** から作る — 新規 script を `git add` する前に --write すると
         その script だけ黙って落ち、 --check は「index に無い」 とだけ言う (2026-09-12 実測)。
 
@@ -70,13 +71,17 @@ DOC_META_OPEN = "<!-- doc-meta"
 SEP_RE = r"(?:—|–|--|-)"
 ALIGN_CAP = 36  # tree 内の name 列揃え幅の上限 (これより長い name は 1 space 区切り)
 
-# scripts/ の subdir = {dir 名: README の節 title}。 **一覧はここ 1 つ** — 「並ぶことを許す
-# (allow_dirs)」 と「実際に並べる」 を別々に持つと、 片方にだけ足したとき README に載らないまま
-# inventory 検査だけが落ちる (2026-09-19 に formcase を allow_dirs にだけ足して発生、 21 file が
-# 未掲載。 conventions/convention-design-principles.md#detector-config-must-be-derived と同じ型)。
+# scripts/ の subdir = {dir 名: {title = README の節見出し, unit = CLAUDE.md の tree 行の単位語}}。
+# **一覧はここ 1 つ** — 「並ぶことを許す (allow_dirs)」 と「実際に並べる」 を別々に持つと、 片方に
+# だけ足したとき README に載らないまま inventory 検査だけが落ちる (2026-09-19 に formcase を
+# allow_dirs にだけ足して発生、 21 file が未掲載)。 CLAUDE.md の tree 行も同じ dict から作るので、
+# ここに 1 行足せば README の節と tree 行の両方に出る
+# (conventions/convention-design-principles.md#detector-config-must-be-derived と同じ型)。
 SCRIPTS_SUBDIRS = {
-    "lib": "sourceable helper 群",
-    "formcase": "様式の案件 pipeline の engine (入口 = formcase.py、 規約 = conventions/form-case-pipeline.md)",
+    "lib": {"title": "sourceable helper 群", "unit": "helper"},
+    "formcase": {"unit": "module",
+                 "title": "様式の案件 pipeline の engine "
+                          "(入口 = formcase.py、 規約 = conventions/form-case-pipeline.md)"},
 }
 
 
@@ -282,10 +287,13 @@ def render_tree_hooks(files):
     ]
 
 
-def render_tree_scripts(files, lib_files):
+def render_tree_scripts(files, subdirs):
+    """CLAUDE.md の scripts/ 行。 subdir は SCRIPTS_SUBDIRS 由来なので、 足せば README と同時にここにも出る。"""
+    subs = "".join(f" + {name}/ {len(sub_files)} {SCRIPTS_SUBDIRS[name]['unit']}"
+                   for name, _, sub_files in subdirs)
     return [
         "├── scripts/              # 運用 script 群 "
-        f"({len(files)} file + lib/ {len(lib_files)} helper。 "
+        f"({len(files)} file{subs}。 "
         "全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)",
     ]
 
@@ -404,9 +412,8 @@ def build_outputs(root: Path):
     hooks, _ = collect_dir_files(root, "hooks", errors, tracked=tracked)
     scripts, sub_names = collect_dir_files(root, "scripts", errors,
                                            allow_dirs=tuple(SCRIPTS_SUBDIRS), tracked=tracked)
-    subdirs = [(n, SCRIPTS_SUBDIRS[n], collect_dir_files(root, f"scripts/{n}", errors, tracked=tracked)[0])
+    subdirs = [(n, SCRIPTS_SUBDIRS[n]["title"], collect_dir_files(root, f"scripts/{n}", errors, tracked=tracked)[0])
                for n in sub_names]
-    lib = next((f for n, _, f in subdirs if n == "lib"), [])
     if errors:
         return {}, errors  # 源が不正なら render しない (不正 category 等で render が壊れるため)
 
@@ -418,7 +425,7 @@ def build_outputs(root: Path):
     text = splice(text, "<!-- AUTO-TREE:hooks BEGIN", "<!-- AUTO-TREE:hooks END",
                   render_tree_hooks(hooks), "CLAUDE.md", errors)
     text = splice(text, "<!-- AUTO-TREE:scripts BEGIN", "<!-- AUTO-TREE:scripts END",
-                  render_tree_scripts(scripts, lib), "CLAUDE.md", errors)
+                  render_tree_scripts(scripts, subdirs), "CLAUDE.md", errors)
     outputs[claude_md] = text
 
     conv_md = root / "CONVENTIONS.md"
@@ -522,6 +529,8 @@ def selftest() -> int:
         check(claude.index("beta.md ") < claude.index("beta.ja.md"), "variant が親の後")
         check("hook のテスト説明" not in claude and "1 file" in claude, "tree の hooks は件数 + pointer のみ")
         check("script のテスト説明" not in claude, "tree の scripts も per-file 行なし")
+        check("lib/ 1 helper" in claude and "formcase/ 1 module" in claude,
+              "tree の scripts 行が subdir を名指し (README と同じ SCRIPTS_SUBDIRS 由来)")
         check("hammerspoon/   # manual block" in claude, "手動 block は不変")
         hooks_readme = (tmp / "hooks" / "README.md").read_text(encoding="utf-8")
         check("AUTO-GENERATED" in hooks_readme and "hook のテスト説明" in hooks_readme, "hooks/README.md に hook desc")
