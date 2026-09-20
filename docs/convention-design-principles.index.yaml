@@ -841,6 +841,14 @@ sections:
     legacy: "8.68"
     level: 3
     title: "8.68 規則の写しは逐語 lint では追い切れない — doc が規則を書けない構造にし、 成果物は gate に決めさせる"
+  - id: failure-exit-equals-violation-exit
+    legacy: "8.69"
+    level: 3
+    title: "8.69 「止まった」 は対照にならない — 故障の合図を違反の合図と同じ値にすると、 全部が止まる故障が陽性対照を緑にする"
+  - id: isolation-shortens-the-path
+    legacy: "8.70"
+    level: 3
+    title: "8.70 隔離のために環境を差し替えた test は、 意図より手前で落ちて緑になる — 新しい対照は「直す前の実装で赤くなる」 ことまで確かめて初めて対照になる"
   - id: environment-literal-placement
     legacy: "24"
     level: 2

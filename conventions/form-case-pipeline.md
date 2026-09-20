@@ -216,6 +216,12 @@ engine は instance (どの repo の / どの様式の / 誰の案件か) を一
    configure(Path(__file__).resolve().parent.parent / "formcase.config.json")
    from .guard import legacy_guard           # noqa: F401,E402
    ```
+
+   入口 CLI (`<forms dir>/formcase.py`) を置くなら、 **engine の読み込みを丸ごと try で囲み、
+   失敗を 3 で返す** ([下記 §10.6](#adopt) の終了値の約束)。 `import` だけを囲って
+   `exec_module` を外に出すと、 engine が書きかけ・pull 途中・依存欠けのときに
+   traceback の 1 で終わり、 pre-commit がそれを「違反」 と読んで**無関係な commit まで止める**
+   (実測)。
 3. **お手本 spec を書く** (`<spec_dir>/*.yaml`): `meta` (id / 雛形 / 主 sheet) / `groups` / `cells` /
    `render` / `page_roles` / 必要なら `nittei` (1 日 1 block の表) と `cross_checks`
 4. **様式ごとの recipe を書いて register する** ([下記 §11](#recipe))
@@ -223,6 +229,25 @@ engine は instance (どの repo の / どの様式の / 誰の案件か) を一
    institution のもの)。 設定の `gates` に script を書き、 様式ごとにどれを回すかを `gates_by_form` か
    spec の `meta.gates` で決める
 6. **配線する**: pre-commit から `guard --staged` と `lint --staged`、 日々の発火面から `audit`
+
+   **終了値の約束** (= 呼び元と engine の契約。 守らないと commit が全部止まる):
+
+   | 値 | 意味 | 呼び元 |
+   |---|---|---|
+   | 0 | 問題なし | 通す |
+   | 1 | **違反** (凍結の記録を変える / 案件 README に状態を書いた) | 止める |
+   | 2 | manifest の構造が壊れている | 止めない (内容を出す) |
+   | 3 | **検査が走っていない** (engine 不在・読み込み失敗・内部エラー) | 止めない + 「走っていない」 と出す |
+
+   pre-commit 側は **1 だけを止める**。 engine 側は、 pre-commit の入口 (`guard` /
+   `lint --staged`) で想定外の例外を 3 に落とす (対話の入口は例外のまま = 本当の欠陥を隠さない)。
+   engine が git-crypt で暗号化される運用なら、 呼び元は **locked を先に判定して engine を
+   起動しない** (暗号文を処理系に渡すと版によって 1 で落ち、 違反と区別できない)。
+   一般則 = [`docs/convention-design-principles.md#failure-exit-equals-violation-exit`](../docs/convention-design-principles.md#failure-exit-equals-violation-exit)。
+
+   ⚠️ **配線の test は「止まったこと」 でなく「この検査が止めたこと」 まで見る** — 一律に止まる
+   故障のとき、 違反を止める段だけが**偽の緑**になり、 症状が 2 方向に割れて見える。 engine を
+   壊した状態で「無関係な commit は通り、 走っていないと出る」 段も置く。
 
 ## <a id="recipe"></a>11. recipe の書き方 (様式ごと)
 
