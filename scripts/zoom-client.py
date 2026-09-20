@@ -11,6 +11,7 @@ subcommand:
   show <meeting_id>                         ミーティング 1 件の設定を表示 (PMI 番号も可)
   list [--type scheduled|upcoming|previous_meetings]   自分のミーティング一覧
   create --topic T [--like <meeting_id>] [--apply]     部屋を作る (既定 dry-run)
+  update <meeting_id> --set k=v [...] [--apply]        既存の部屋の settings を変える (既定 dry-run)
   delete <meeting_id> [--apply]             部屋を消す (既定 dry-run)
 
 create の既定 = **type 3 (定期ミーティング・固定時刻なし)** = 「いつでも入れる常設の部屋」。
@@ -19,8 +20,14 @@ create の既定 = **type 3 (定期ミーティング・固定時刻なし)** = 
 
 ⚠️ 部屋の作成・削除は外部 service の account 変更 = **既定 dry-run**、 実行は `--apply`。
 ⚠️ 「固定時刻なし」 の定期ミーティングは **最終使用から 365 日で失効**する (PMI と違う点)。
-⚠️ Zoom は「パスコード」 と「待機室」 の**どちらかを必須**にする。 waiting_room=false で作ると
-   パスコードが付く (join_url に埋め込まれる) — これは Zoom 側の強制で、 本 script は外さない。
+⚠️ **create は必ず `use_pmi: false` を送る** (2026-09-20 実測): アカウント設定
+   「予定されたミーティングに個人ミーティング ID を使用」 が ON だと、 新しく作った部屋の
+   join_url が **個人部屋のもの** (`/j/<PMI>?pwd=…&omn=<新 id>`) になり、 別の部屋を作ったつもりが
+   PMI の別名でしかない、 という状態になる。 id が新しく発番されるので気づきにくい
+   (= 見分け方は join_url の番号が PMI と同じか / `settings.use_pmi`)。
+⚠️ Zoom は「パスコード」 と「待機室」 の**どちらかを必須**にする (2026-09-20 実測): passcode なしで
+   作ると `waiting_room` が **要求に関わらず true に上書きされる** (= ホストが毎回入室を承認する羽目になり、
+   「いつでも入れる部屋」 が壊れる)。 ∴ create は既定で passcode を自動生成し join_url に埋める。
 
 credential: JSON {"account_id": ..., "client_id": ..., "client_secret": ...}
   path = --cred <path> / env ZOOM_CRED / ~/.secrets/zoom-s2s-oauth.json の順。
@@ -41,6 +48,7 @@ import argparse
 import base64
 import json
 import os
+import secrets
 import sys
 import urllib.error
 import urllib.parse
@@ -65,6 +73,8 @@ COPY_SETTINGS = (
     "encryption_type",
     "show_share_button",
     "private_meeting",
+    "use_pmi",
+    "auto_start_meeting_summary",
 )
 
 TYPE_RECURRING_NO_FIXED = 3
@@ -167,6 +177,12 @@ def cmd_create(token: str, args) -> int:
         src_settings = src.get("settings") or {}
         settings = {k: src_settings[k] for k in COPY_SETTINGS if k in src_settings}
         print(f"■ 設定の写し元: {src.get('topic')} (id={src.get('id')}, type={src.get('type')})")
+    # ⚠️ 必ず明示的に false (docstring の use_pmi 注意)。 写し元が PMI でも、 アカウント既定が
+    #    ON でも、 「新しい部屋」 を作る以上 PMI の別名になってはいけない。
+    settings["use_pmi"] = False
+    for kv in args.set or []:
+        k, _, v = kv.partition("=")
+        settings[k.strip()] = _coerce(v.strip())
     payload = {
         "topic": args.topic,
         "type": TYPE_RECURRING_NO_FIXED,
@@ -175,6 +191,14 @@ def cmd_create(token: str, args) -> int:
     }
     if args.agenda:
         payload["agenda"] = args.agenda
+    # ⚠️ passcode を付けないと Zoom が待機室を強制 ON にする (= 「ぶっ通し」 が壊れる)。
+    #    既定で自動生成し、 join_url に ?pwd= が埋まる形にする。 --password "" で明示的に無しにできる。
+    if args.password is None:
+        payload["password"] = "".join(
+            secrets.choice("abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(8)
+        )
+    elif args.password:
+        payload["password"] = args.password
     print("■ 作る部屋:")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     if not args.apply:
@@ -183,6 +207,37 @@ def cmd_create(token: str, args) -> int:
     created = api(token, "POST", "/users/me/meetings", payload)
     print("\n■ 作成しました:")
     _print_meeting(created)
+    return 0
+
+
+def _coerce(v: str):
+    low = v.lower()
+    if low in ("true", "false"):
+        return low == "true"
+    if low in ("null", "none") and v != "none":  # "none" は auto_recording の正当な値
+        return None
+    try:
+        return int(v)
+    except ValueError:
+        return v
+
+
+def cmd_update(token: str, args) -> int:
+    before = api(token, "GET", f"/meetings/{args.meeting_id}")
+    cur = before.get("settings") or {}
+    changes = {}
+    for kv in args.set:
+        k, _, v = kv.partition("=")
+        k, new = k.strip(), _coerce(v.strip())
+        changes[k] = new
+        print(f"  {k:28s} {cur.get(k)!r} → {new!r}")
+    print(f"■ 対象: {before.get('topic')} (id={before.get('id')})")
+    if not args.apply:
+        print("(dry-run — 実行するには --apply)")
+        return 0
+    api(token, "PATCH", f"/meetings/{args.meeting_id}", {"settings": changes})
+    print("\n■ 変更後:")
+    _print_meeting(api(token, "GET", f"/meetings/{args.meeting_id}"))
     return 0
 
 
@@ -215,7 +270,14 @@ def main(argv: list[str]) -> int:
     p_create.add_argument("--like", help="設定を写す元のミーティング id (PMI を渡すのが普通)")
     p_create.add_argument("--agenda")
     p_create.add_argument("--timezone", default="Asia/Tokyo")
+    p_create.add_argument("--set", action="append", help="settings を上書き (k=v、 複数可)")
+    p_create.add_argument("--password", help="passcode (既定 = 自動生成。 空文字で無し = 待機室が強制 ON になる)")
     p_create.add_argument("--apply", action="store_true", help="実際に作る")
+
+    p_up = sub.add_parser("update", help="既存の部屋の settings を変える (既定 dry-run)")
+    p_up.add_argument("meeting_id")
+    p_up.add_argument("--set", action="append", required=True, help="k=v (複数可)")
+    p_up.add_argument("--apply", action="store_true")
 
     p_del = sub.add_parser("delete", help="部屋を消す (既定 dry-run)")
     p_del.add_argument("meeting_id")
@@ -229,6 +291,7 @@ def main(argv: list[str]) -> int:
             "show": cmd_show,
             "list": cmd_list,
             "create": cmd_create,
+            "update": cmd_update,
             "delete": cmd_delete,
         }[args.cmd](token, args)
     except ZoomError as exc:
