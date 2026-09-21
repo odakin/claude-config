@@ -849,6 +849,10 @@ sections:
     legacy: "8.70"
     level: 3
     title: "8.70 隔離のために環境を差し替えた test は、 意図より手前で落ちて緑になる — 新しい対照は「直す前の実装で赤くなる」 ことまで確かめて初めて対照になる"
+  - id: event-anchored-legs
+    legacy: "8.71"
+    level: 3
+    title: "8.71 行事の日付から決まる手順は、 回ごとの起票でなく行事の日付から導く — 起票した回でしか鳴らない仕組みは、 起票を忘れた回に全部そろって黙る"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
