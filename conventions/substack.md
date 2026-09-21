@@ -91,6 +91,8 @@ Markdown で書いてよい（見出し・太字・箇条書き等は全て Subs
 - 公開前に Substack のプレビュー機能でも最終確認すること
 - 画像は md-to-substack では変換されない → Substack エディタで手動挿入
 - Substack の Notes（短文投稿）では太字・イタリック・リンクのみ使用可能（見出し・箇条書し不可）
+- <a id="notes-posting-behavior"></a>Notes に貼った文は **1 行ごとの改行が段落になる**（行間が空いて見える。実測）。詰めて見せたい行はまとめて 1 行にする。
+  **リンクのカードは本文の最後の URL から作られた**（実測）= カードにしたいページの URL を最後に置く
 
 ---
 
@@ -99,6 +101,12 @@ Markdown で書いてよい（見出し・太字・箇条書き等は全て Subs
 自分または他人が Substack に書いた note や article comment を事後に取得して Markdown 化する際の手順。研究リポで過去の発言を原文保存したい、分析の証跡として確保したい、といった用途を想定する。
 
 ## 3 つの取得経路と特性
+
+### (0) 公開 API で、ある人の最近の notes を本文ごと取る（URL が分からないとき）
+
+`https://substack.com/api/v1/user/<handle>/public_profile` の `id` を取り、`https://substack.com/api/v1/reader/feed/profile/<id>` を読むと、
+`items[].comment` に最近の note の `body`（本文の生テキスト）・`date`・`id`・`attachments`（リンクのカードの URL 等）が入っている。
+note の URL は `https://substack.com/@<handle>/note/c-<id>`。ログイン不要（実測。投稿した直後の note が本文どおりかを確かめるのに使える）
 
 ### (1) WebFetch で note URL を直接取得
 
