@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: launchd agent が ~/Library/CloudStorage/ 配下を読む script を書く前
 category: macos
-summary: launchd agent が ~/Library/CloudStorage/ (Dropbox / iCloud Drive / OneDrive / Box) 配下を読む script を書くための TCC 越え pattern (= 症状 Operation not permitted は手動実行なら通るが launchd 経由で失敗 / 3 択 A: /bin/zsh に FDA〔広すぎ非推奨〕 A': osacompile で狭い .app wrapper + narrow FDA〔推奨、 permission holder が narrow + 自己記述性〕 B: CloudStorage 外に mirror〔permission dance 不要〕 / A' 実装テンプレ = osacompile + open -g -a + EnvironmentVariables LANG + FDA panel での .app 選択 / gotcha = LANG 未設定で日本語 path 壊れる / open -a 非同期 / bundle ID 衝突)
+summary: launchd agent が ~/Library/CloudStorage/ (Dropbox / iCloud Drive / OneDrive / Box) 配下を読む script を書くための TCC 越え pattern (= 症状 Operation not permitted は手動実行なら通るが launchd 経由で失敗 / 4 択 A: /bin/zsh に FDA〔広すぎ非推奨〕 A': osacompile で狭い .app wrapper + narrow FDA〔推奨、 permission holder が narrow + 自己記述性〕 B: CloudStorage 外に mirror〔permission dance 不要〕 C: 読む仕事を無人 job から外す〔対話の場で済ませ、 無人側は読まない〕 / A' 実装テンプレ = osacompile + open -g -a + EnvironmentVariables LANG + FDA panel での .app 選択 / gotcha = LANG 未設定で日本語 path 壊れる / open -a 非同期 / bundle ID 衝突)
 -->
 # launchd agent が `~/Library/CloudStorage/` を読むための TCC 越え pattern
 
@@ -43,13 +43,14 @@ launchd 経由の実行で `ls_err='ls: <path>: Operation not permitted'` が出
 
 ---
 
-## <a id="solution-comparison"></a>解決策 3 種類 + trade-off
+## <a id="solution-comparison"></a>解決策 4 種類 + trade-off
 
 | 方式 | permission 範囲 | 実装コスト | attack surface | 推奨度 |
 |---|---|---|---|---|
 | A. `/bin/zsh` (or `/bin/bash`) に FDA | **全 zsh script** | 5 秒 GUI | 全 zsh 実行が FDA 継承 | ⚠️ 広すぎ |
 | **A'. `osacompile` で狭い .app wrapper → その .app にだけ FDA** | この 1 app のみ | 5-10 分 | **この app のみ** | ⭐ 推奨 |
 | B. CloudStorage 外に mirror | **permission 不要** | 5-10 分 | ゼロ | ◎ 最頑健 |
+| C. 読む仕事を無人 job から外す ([下](#option-c-move-the-read)) | **permission 不要** | 設計の変更 | ゼロ | ◎ 読む仕事が人の操作のたびに 1 回で済むとき |
 
 ### 各 trade-off 詳細
 
@@ -251,6 +252,17 @@ rsync -a --delete "$SRC" "$DST"
 launchd plist で 1 時間おき等の低頻度で `mirror-wallpaper-source.sh` を叩く (この launchd agent 自体は CloudStorage 読むので FDA or A' 必要)。 rotation script は `$DST` を読む (= 通常フォルダなので FDA 不要)。
 
 CloudStorage 側の同期壊れても mirror 側は生き残る = 独立性 ◎。 disk 二重消費が唯一の trade-off。
+
+---
+
+## <a id="option-c-move-the-read"></a>Option C: 読む仕事を無人 job から外す
+
+CloudStorage のファイルを読む必要が、 人が操作するたびに 1 回だけ生じるなら (例: 人が OK を出したファイルを外部サービスへ上げる)、 **読む仕事を人が操作するその場 (対話の session / 手で打つコマンド) で済ませ**、 無人の job はファイルを読まない仕事だけにする。 対話の場は Terminal / Claude の process なので CloudStorage を読める。 無人の job には、 読んだ結果 (上げた先の ID・ハッシュ・状態) を git 等で渡す。
+
+- 向くもの: 公開予約・アップロード・一度きりの変換。 無人の側は「状態の確認・掲載・知らせ」 に残る
+- 向かないもの: 無人の側が毎回ファイルの中身を読む必要があるもの (例: 壁紙を時間ごとに替える) → A' か B
+- 無人の側に「人の操作が済んでいないのに期限が近い」 ことを知らせる役を持たせると、 読む仕事が手元に移ったことで生じる抜けを埋められる
+- 実例 = ポッドキャストの自動配信 ([`podcast-distribution.md#unattended-release-split`](podcast-distribution.md#unattended-release-split))
 
 ---
 

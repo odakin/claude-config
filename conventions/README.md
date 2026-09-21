@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 131 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 132 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -95,6 +95,8 @@ layer 1 (public) のドメイン固有規約 131 file をカテゴリ別に列�
   - 撮影写真の一括転記は「前処理 → 帰属確定 → 分担転記 → 統合 → 導出」 の 5 段。前処理を省くと薄い筆跡を読み違え、タイルをモデル入力上限より大きくすると解像度が却って落ちる。帰属は 2 つの独立集合の一致で裏付け、転記は誤記も含む verbatim + 判読不能 marker、分担は part file 経由で統合し SoT 重複を残さない。活字資料からの引用抽出も同じく「転記でなく生成」で、語の置換・要約・原文に存在しない引用の創作・典拠の年の創作が申告なしに混じる — load-bearing に使う前に 1 対 1 照合、見開き 1 枚は逐語照合に足りない、そして原典を持つ人が直してきたら基準点 (自分の生成物) の方を先に疑う。 他人の書き込みが載った文書 (差し戻し・添削) は別種で、 転記でなく「どこに在るか」 の列挙が主題 — 色領域 mask + 連結成分 crop で全頁走査し、 部分走査で「書き込み無し」 と断定しない
 - **[podcast-audio-finishing.md](podcast-audio-finishing.md)** — 収録を配信用の音声ファイルに仕上げるとき (ジングルを付ける・音量を揃える・書き出す) + 仕上げた回を聞いて「つなぎが雑音っぽい」「間が長い」と言われたとき + 音声の区間の長さや無音を数値で測るとき
   - 配信用の仕上げは「測る → 揃える → 1 回だけ符号化 → 測り直して検査」を機械にし、耳でしか分からない所だけ人に聞く。音量はジングルも本編も同じ -16 LUFS / true peak -1 dBTP 以下 (Apple Podcasts の公式要件) に揃え、ピークは高いサンプリング周波数で掛けたリミッターで抑える。ffmpeg の alimiter は既定で出力を自動で持ち上げ、loudnorm は目標を満たせないと黙って音量を上下させるモードに切り替わる。本編の頭尾は短くフェードし、録音開始で切れた語の断片を削るかは聞き比べで決める。冒頭ジングルの後ろの長い無音は切る。冒頭にかけ声を付けるなら、ジングルの盛り上がりを声の下に敷いてアタックを語尾の直後に置き、冒頭用の音は可逆形式で持って --intro で渡す。区間の測定はファイルの頭から行う (途中から切り出すと先頭が無音に見える)
+- **[podcast-distribution.md](podcast-distribution.md)** — ポッドキャストを RSS で各配信先 (Spotify / Apple Podcasts / Amazon Music / YouTube) に登録するとき + 番組の画像・説明文・各回の紹介文を配信先に載せるとき + 公開予約を API で入れる・配信を自動にするとき + LISTEN (listen.style) を API で操作するとき
+  - 配信先への登録は「ホストの RSS を渡し、RSS のメール宛に届く確認で持ち主を示す」の繰り返しで、先に RSS を完成させる (1 回分以上・長さ入り)。画像は RGB の JPEG で渡す (PNG は透明度つきに保存し直されることがある)。ホストの RSS の番組リンクは変えられないことがあるので、公式サイトへのリンクは番組の説明文と各回の紹介文の末尾に書く (回ごとの目印つき)。API で公開予約を入れるときは時差が無視されうる = UTC に直して渡し、作ったら読み戻す。無人のマシンに配信させるなら、音声を読む仕事 (上げる・予約する) は OK を出す手元でやり、無人の側は公開の確認と掲載と知らせだけにする。LISTEN は GraphQL で上げられるが、番組の設定を変える口は無い
 - **[scanned-book-survey.md](scanned-book-survey.md)** — 他人から共有された書籍スキャン PDF の束 (自炊 PDF・参考書の束) を、書誌・刷り色・関連箇所で棚卸しするとき + スキャン PDF から刷り色・奥付・ページ番号を読み取るとき
   - 書籍スキャンの棚卸しは「題名で仮に区分 → 監視台帳の除外 → 取り込み → 下見 (scripts/scan-book-survey.py) → 奥付と要所は画像で読む → 見た範囲つきで正本ノートに記録 → 数冊ごとに commit」。colorspace は刷り色ではない (全ページ Gray は判定不能、 1 色の色相に集中してもフルカラーと区別できない)、 OCR 文字層は案内板で日付・ISBN・人名・数式は画像で読む、 検索 0 件は不在の証明にならない、 引用や記録は本のノンブルで書くので PDF とのずれを測る、 前付けの全文 dump は数万 token になるので圧縮して上限を切る、 ページ画像と PDF は git に入れず所見は自分の言葉で
 - **[tts-review.md](tts-review.md)** — 長文ドキュメント (提案書・原稿・メール draft 等) を音声読み上げで校正したいとき
@@ -153,7 +155,7 @@ layer 1 (public) のドメイン固有規約 131 file をカテゴリ別に列�
 - **[clipboard-cleaner.md](clipboard-cleaner.md)** — PDF コピー由来の段落内改行・RTF 書式をクリップボードで整形したいとき
   - PDF コピーの段落内改行・RTF 書式の後始末 (= ⌃⌥⌘V hotkey 〔貼り付け先で押す = 整形+即貼り付け〕 / CLI / ブラウザ版の 3 入口、全て明示発火・常駐 poll なし〔誤爆 + secret-handoff の clipboard 単一資源原則と衝突するため daemon 不採用〕、整形ロジック正本は scripts/clipboard-cleaner.py)
 - **[launchd-cloudstorage-tcc.md](launchd-cloudstorage-tcc.md)** — launchd agent が ~/Library/CloudStorage/ 配下を読む script を書く前
-  - launchd agent が ~/Library/CloudStorage/ (Dropbox / iCloud Drive / OneDrive / Box) 配下を読む script を書くための TCC 越え pattern (= 症状 Operation not permitted は手動実行なら通るが launchd 経由で失敗 / 3 択 A: /bin/zsh に FDA〔広すぎ非推奨〕 A': osacompile で狭い .app wrapper + narrow FDA〔推奨、 permission holder が narrow + 自己記述性〕 B: CloudStorage 外に mirror〔permission dance 不要〕 / A' 実装テンプレ = osacompile + open -g -a + EnvironmentVariables LANG + FDA panel での .app 選択 / gotcha = LANG 未設定で日本語 path 壊れる / open -a 非同期 / bundle ID 衝突)
+  - launchd agent が ~/Library/CloudStorage/ (Dropbox / iCloud Drive / OneDrive / Box) 配下を読む script を書くための TCC 越え pattern (= 症状 Operation not permitted は手動実行なら通るが launchd 経由で失敗 / 4 択 A: /bin/zsh に FDA〔広すぎ非推奨〕 A': osacompile で狭い .app wrapper + narrow FDA〔推奨、 permission holder が narrow + 自己記述性〕 B: CloudStorage 外に mirror〔permission dance 不要〕 C: 読む仕事を無人 job から外す〔対話の場で済ませ、 無人側は読まない〕 / A' 実装テンプレ = osacompile + open -g -a + EnvironmentVariables LANG + FDA panel での .app 選択 / gotcha = LANG 未設定で日本語 path 壊れる / open -a 非同期 / bundle ID 衝突)
 - **[macos-app-crash-triage.md](macos-app-crash-triage.md)** — macOS で「(アプリ) が予期しない理由で終了しました」 が出たとき + 同じアプリが繰り返し落ちるとき + crash の原因を「ベンダーの不具合」「自動化のせい」 と言う前
   - macOS アプリの crash を、 .ips report・Chromium の Crashpad crash key・unified log の 3 つの証拠で型 (更新中の bundle 差し替えと再起動の競合 / window server に登録できない起動 / 起動直後 / 稼働中) に分け、 原因を誰かに帰属する前に環境側の要因を除外台帳で潰す。 道具 = scripts/macos-crash-triage.py (読むだけ)
 - **[macos-calendar-write.md](macos-calendar-write.md)** — macOS Calendar.app 上の iCloud (または CalDAV / local) 所有 calendar に AppleScript / osascript で event を書き込もうとする前 + Google Calendar API から見て read-only (webcal 購読) な calendar に write する経路を探しているとき
