@@ -140,7 +140,7 @@ README_TMPL = """# {case}
 <!-- formcase:view kind=status -->
 <!-- /formcase:view -->
 
-- 状態 (どの書類を・いつ刷り・送り・出したか) の正本 = [`submission.yaml`](submission.yaml)。 上の表はその生成物で、 freeze / annotate / reopen が描き直す。 未提出・提出予定・印刷版・未決・返事待ちを README に手で書かない (`formcase.py lint` と pre-commit が止める。 状態の説明は `annotate --note`、 未決の問い・約束は案件の TODO)
+- 状態 (どの書類を・いつ刷り・送り・出したか、 何を待っているか) の正本 = [`submission.yaml`](submission.yaml)。 上の表はその生成物で、 freeze / annotate / reopen が描き直す。 状態を README に手で書かない (`formcase.py lint` と pre-commit が止める。 状態の説明は `annotate --note`、 決まっていない問い・約束は案件の TODO)。 ⚠️ この定型文自体に状態の語を並べない = new した案件の最初の commit を lint が止める (2026-09-22)
 - 何を書くか = お手本 spec `{spec_hint}` (`formcase.py rules`){process_hint}
 - 記入 = `python3 fill_{doc}.py`、 PDF = `formcase.py build {case_rel} --doc {doc}`
 

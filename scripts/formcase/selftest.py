@@ -802,6 +802,10 @@ def _recipe_tests(tmp, inst, expect) -> None:
     readme = (c2 / "README.md").read_text(encoding="utf-8")
     expect("README 枠は kind=status の生成表 + 設定の spec_hint / process_hint",
            "formcase:view kind=status" in readme and "reference/fx.yaml" in readme and "<手順 doc>" in readme, readme)
+    from . import lint as LI
+    hits = [(ln, LI.state_hits(ln)) for ln in readme.splitlines() if LI.state_hits(ln)]
+    expect("new が書いた README の定型文は状態の lint に掛からない (掛かると new した案件の最初の commit が止まる)",
+           not hits, hits)
 
 
 def _raises(exc, fn, *a, **k) -> bool:
