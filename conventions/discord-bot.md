@@ -147,7 +147,7 @@ req = urllib.request.Request(
 
 公式 SDK (discord.py / discord.js 等) は自動で正しい UA を付けるため、 SDK 経由なら気にする必要なし。 **生 HTTP request を書く時だけ落とし穴**。 ad-hoc な one-shot post script (= odakin が CLI からメッセージ送信する典型ユースケース) で頻発する。
 
-**⚠️ 2026-07-10 に「本節はあったのに再発」した**: 送信 session は運用 doc (= ID・token 表) を grep で読むため、 別 doc の本節が発火面にならない (= 文末 pointer は grep 到達者に届かない)。 design-out として **canonical 送信 script [`scripts/discord-post.py`](../scripts/discord-post.py)** に規則を焼き込んだ (= 正しい UA / エラー code 解読 hint / **既定 dry-run + 明示 `--send`** 〔= claude-code-permissions.md #ask-pattern-action-anchor 準拠〕 / `--dm-user` で DM channel 開設 / `--check` で read-only 疎通 / **`--recent N` で直近 N 件を古い順に読む** (= channel の会話を確かめるための使い捨ての API 読み取りを書かない。 送信 flag を持たないので投稿 guard の確認も出ない)確認 / **`--attach` でファイル添付 (repeat 可、 下記 §「ファイル添付付き送信」)** / `--selftest` 内蔵)。 **ad-hoc な curl / urllib を書く前にまずこれを使う。**
+**⚠️ 2026-07-10 に「本節はあったのに再発」した**: 送信 session は運用 doc (= ID・token 表) を grep で読むため、 別 doc の本節が発火面にならない (= 文末 pointer は grep 到達者に届かない)。 design-out として **canonical 送信 script [`scripts/discord-post.py`](../scripts/discord-post.py)** に規則を焼き込んだ (= 正しい UA / エラー code 解読 hint / **既定 dry-run + 明示 `--send`** 〔= claude-code-permissions.md #ask-pattern-action-anchor 準拠〕 / `--dm-user` で DM channel 開設 / `--check` で read-only 疎通 / **`--recent N` で直近 N 件を古い順に読む** (= channel の会話を確かめるための使い捨ての API 読み取りを書かない。 送信 flag を持たないので投稿 guard の確認も出ない)確認 / **`--attach` でファイル添付 (repeat 可、 下記 §「ファイル添付付き送信」)** / **@everyone・@here が効いたかを送信後に読み戻す** (下記 [`#mass-mention-silently-dropped`](#mass-mention-silently-dropped)) / `--selftest` 内蔵)。 **ad-hoc な curl / urllib を書く前にまずこれを使う。**
 
 ## <a id="send-attachments"></a>ファイル添付付き送信 (= multipart/form-data)
 
@@ -191,6 +191,17 @@ python3 ~/Claude/claude-config/scripts/discord-post.py \
 - **多ファイル同時添付でも各ファイル単位で判定される** (合計サイズ cap は別 concern、 通常 100 MB 前後)
 
 ⚠️ **本節を書く前は `discord-post.py` に `--attach` が無く**、 送信 session は raw curl / Python `requests` の multipart を毎回手書きしていた (2026-07-16 実測)。 canonical script に焼き込んだ (= §「User-Agent header 必須」 で hoist した design-out 原則を「添付」 領域にも適用)。 test = `scripts/discord-post.py --selftest` に multipart body 構築 + Content-Type header + boundary 閉じ + attachment bytes 含有 の 5 case を追加。
+
+## <a id="mass-mention-silently-dropped"></a>@everyone / @here は権限が無いと黙って効かない (= 投稿の成功は通知の成功ではない)
+
+本文に `@everyone` / `@here` を書いても、 bot にその channel の **Mention Everyone** 権限 (bit `1 << 17`) が無ければ、
+Discord は投稿を受け付けたうえで**通知だけを落とす** (HTTP 200、 本文には文字列が残る)。 API は error を返さないので、
+「送れた」 の確認では気づけない。 全員に知らせたい告知ほどこの形で失敗する。
+
+- **確かめ方**: 投稿の応答 (`POST /channels/{id}/messages` の返り値) の `mention_everyone` が `true` か。
+  [`discord-post.py`](../scripts/discord-post.py) は本文に mass mention があると、 送信後にこれを読み、 立っていなければ警告して **exit 3** で終わる (dry-run でも前もって注意を出す)
+- **前もって確かめたいとき**: bot の member の role 権限を OR し、 channel の overwrite (`@everyone` role → bot の role → bot 本人の順に deny を落として allow を足す) を当てた結果に bit 17 があるか (`ADMINISTRATOR` なら全部あり)。 読むだけの API で済む
+- **足りなかったとき**: server の管理者が bot の role か channel の overwrite に Mention Everyone を足す。 足せないなら別の経路 (メール等) で知らせる
 
 ## Cloudflare 1010 error の鑑別: User-Agent vs 組織 NW egress filter
 

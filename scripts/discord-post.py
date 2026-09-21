@@ -24,6 +24,13 @@ Usage:
   python3 discord-post.py --selftest
 
 On success prints:  sent message_id=<id> channel_id=<id>
+
+Mass mentions (@everyone / @here) need the bot's "Mention Everyone" permission in
+that channel. Without it Discord still accepts the post (HTTP 200) and just drops the
+ping, so a post can look successful while nobody is notified. After sending, this
+script reads `mention_everyone` from the API response and exits 3 with a warning if a
+mass mention in the text did not take effect (conventions/discord-bot.md
+#mass-mention-silently-dropped).
 """
 import argparse
 import json
@@ -127,6 +134,15 @@ def _format_messages(msgs):
     return lines
 
 
+def _wants_mass_mention(body):
+    return "@everyone" in body or "@here" in body
+
+
+def _mass_mention_dropped(body, resp):
+    """本文に @everyone / @here があるのに、 送信結果の mention_everyone が立っていない。"""
+    return _wants_mass_mention(body) and not (resp or {}).get("mention_everyone")
+
+
 def _explain(code, body):
     msgs = [f"HTTP {code}: {body[:300]}"]
     for key, hint in HINTS.items():
@@ -223,6 +239,9 @@ def main(argv=None):
                 extra += f"\n  attach: {path} ({os.path.getsize(path)} B)"
         print(f"[dry run] would post {len(body)} chars to {target}{extra}; "
               f"re-run with --send after the draft is approved")
+        if _wants_mass_mention(body):
+            print("note: @everyone/@here needs the bot's Mention Everyone permission here; "
+                  "without it the post succeeds but nobody is pinged (checked after --send)")
         print("-" * 40)
         print(body)
         return 0
@@ -247,6 +266,12 @@ def main(argv=None):
     n_att = len(resp.get("attachments", []))
     tail = f" attachments={n_att}" if n_att else ""
     print(f"sent message_id={resp['id']} channel_id={resp['channel_id']}{tail}")
+    if _mass_mention_dropped(body, resp):
+        print("WARNING: the text has @everyone/@here but Discord did not apply it "
+              "(mention_everyone=false) = the post is up but nobody was pinged. "
+              "Grant the bot Mention Everyone in this channel, or tell people another way.",
+              file=sys.stderr)
+        return 3
     return 0
 
 
@@ -278,6 +303,14 @@ def selftest():
     import inspect
     src = inspect.getsource(main)
     check("send gated behind --send", "if not a.send:" in src)
+    # mass mention: flagged when the text asks for it but the response did not apply it
+    check("mass mention dropped -> flagged",
+          _mass_mention_dropped("@everyone hi", {"mention_everyone": False}))
+    check("mass mention applied -> ok",
+          not _mass_mention_dropped("@everyone hi", {"mention_everyone": True}))
+    check("@here counts as mass mention", _mass_mention_dropped("@here hi", {}))
+    check("no mass mention -> never flagged",
+          not _mass_mention_dropped("hi all", {"mention_everyone": False}))
     # multipart: payload_json + files[0] parts, correct Content-Type header
     import tempfile
     with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as fh:
