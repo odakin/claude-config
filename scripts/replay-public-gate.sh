@@ -15,6 +15,10 @@
 #   C の版で上書きして stage → public-precommit-runner.sh を実行 (= C の差分だけが「追加行」 に見える。
 #   Tier A-E と書誌・複合語の除外が commit 時と同じに効く)。 本物の repo は読むだけ。
 #   ⚠️ 見るのは **今の** 検出語と runner。 過去にその commit が通ったかではない。
+#   ⚠️ 原稿の主張の gate (manuscript-claim-guard) は「今の session に著者の承認記録があるか」 を見るので、 過去の
+#      commit を今の session で replay すると保護領域を触った commit は必ず落ちる (実測)。 replay は agent session の
+#      env 4 つ (AGENT_ENV_KEYS と同じ) を外して runner を呼ぶ = 人の commit として通し、 leak の gate (Tier A-E) だけを見る
+#      (2026-09-22、 著者の裁定を approve で記録済)。
 #   ⚠️ CI の bot (author が `[bot]` で終わる = GitHub Actions 等) の commit は手元の gate を一度も通らない書き手なので
 #      既定で飛ばし、 件数だけ出す (実測: 行政の公開データを毎日 commit する bot が Tier A/B で 14 本止まる判定になった。
 #      その repo の棚卸しは `generated:` 宣言で決着済で、 commit gate 側に直すものは無かった)。 --include-bots で含める。
@@ -78,7 +82,8 @@ replay_one() {
       esac
     done < <(git -C "$repo" diff-tree --no-commit-id --name-status -r "$c")
     git add -A -f >/dev/null 2>&1
-    "$RUNNER" 2>&1
+    # 過去の commit は人の commit として replay する (header の ⚠️ 原稿の主張の gate を参照)
+    env -u CLAUDE_CONFIG_AGENT_SESSION -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID "$RUNNER" 2>&1
   )
   rc=$?
   rm -rf "$tmp"
