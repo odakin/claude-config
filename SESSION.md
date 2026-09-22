@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-原稿と編集権限の保護を強化したところ。[該当 head の CI](https://github.com/odakin/claude-config/actions/runs/35692071219) は保護関連の試験が通り、全体は文書生成と installer/audit の 6 試験が失敗。次の CI 調査はこの run の失敗行から再開する (audit の親 workspace 入口不在は変更前にも再現)。規則・承認の記録・検査不能時の扱いは [所有権の正本](conventions/manuscript-claim-ownership.md#mechanism)、Codex の配線と実機確認の境界は [統合仕様](codex/PARITY.md#codex-integration-sot) から再開する。
+原稿と編集権限の保護を強化し、関連試験と後続 head の全体 CI を確認したところ。再開時は [run 履歴](https://github.com/odakin/claude-config/actions) で現在値を確認し、以前の失敗を現在の未解決事項としてコピーしない。規則・承認の記録・検査不能時の扱いは [所有権の正本](conventions/manuscript-claim-ownership.md#mechanism)、Codex の配線と実機確認の境界は [統合仕様](codex/PARITY.md#codex-integration-sot) から再開する。
 
 > 📌 **このファイル = 直近の作業の索引 + Open items (目安 ~80 行 = [`CONVENTIONS.md#pre-push-check`](CONVENTIONS.md#pre-push-check))**。 entry は「日付 + 何を + 正本への pointer」 の 1-3 行で「直近」 の先頭に足す。 経緯・実測・RCA は正本 doc か [`SESSION-archive.md`](SESSION-archive.md) (grep 用) へ。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md`、 Codex 統合の正本は [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot)。 縮退: 2026-06-10 hot/cold 分離 / 2026-09-01 第 2 回 / 2026-09-11 第 3 回 (2026-08-12〜09-11 の 55 entry を archive へ verbatim MOVE、 義務行は Open items へ lift)。
 ## 直近 (2026-09-16〜09-22) の索引 — 本文は SESSION-archive.md、 規則は各正本 (09-06〜09-15 の索引行も同 archive へ退避済)
