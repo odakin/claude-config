@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: API を持たないアプリ (個人向けメッセンジャー・業務アプリ) で「届いたものを読む」 機械経路が要るとき + macOS の通知センター DB を script から読むとき + 読めずに Operation not permitted が出たとき
 category: macos
-summary: API の無いアプリでも、 macOS の通知として表示された内容 (題・副題・本文・時刻) は通知センターの SQLite DB に残る → 写しを取って読めば「受信を読む」 を段 4 に降ろせる (#mechanism、 engine = scripts/macos-notification-db.py)。 DB は TCC の下 = 起動側 app にフルディスクアクセス、 読めない時は exit 3 で 0 件と区別 (#tcc)。 限界 = app が起動していた間の通知だけ・消した通知は消える・本文は切れる (#limits)。 アプリは必要時に背景起動 (#launch-on-demand)。 個人アカウントのプロトコルを模倣する非公式 client は使わない (#no-unofficial-client)。 定期の surface は「見た印」 の台帳と組にする (#seen-ledger)
+summary: API の無いアプリでも、 macOS の通知として表示された内容 (題・副題・本文・時刻) は通知センターの SQLite DB に残る → 写しを取って読めば「受信を読む」 を段 4 に降ろせる (#mechanism、 engine = scripts/macos-notification-db.py)。 DB は TCC の下 = 起動側 app にフルディスクアクセス、 読めない時は exit 3 で 0 件と区別 (#tcc)。 限界 = app が起動していた間の通知だけ・消した通知は消える・本文は切れる (#limits)。 アプリは必要時に背景起動し、 自分が起こしたものは読み終わったら閉じる (#launch-on-demand / #close-what-you-launched)。 個人アカウントのプロトコルを模倣する非公式 client は使わない (#no-unofficial-client)。 定期の surface は「見た印」 の台帳と組にする (#seen-ledger)
 -->
 # macOS の通知センター DB から、 API の無いアプリの受信を読む
 
@@ -61,6 +61,12 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
 - **閉じていた間に届いた分が、 起動時に通知として出るかはアプリ次第** = 1 回実測して shim の docstring に書く。
   出ないアプリなら、 その分は画面で読むしかない (起動しっぱなしにするかは持ち主の判断)。
 - SessionStart hook や dashboard からは GUI アプリを起こさない (起動は読みたい時の明示操作)。
+- <a id="close-what-you-launched"></a>**自分が起こしたアプリは、 読み終わったら通常の終了で閉じる** (元から起動していたものは閉じない)。
+  メッセンジャーには「PC 版を使っている間はスマホに通知しない」 類の設定があり、 起こしたまま放置すると
+  持ち主のスマホに通知が来なくなる。 判定は「起動前に居なかったか」 で持ち、 終了の成否は AppleScript の戻り値でなく
+  process が消えたかで見る (実測: quit に -128 を返しつつ実際には終了するアプリがある)。 kill はしない。
+  quit は持ち主の環境への介入なので、 この設計自体を持ち主と決めてから入れる
+  ([`macos-gui-app-automation.md#ask-before-quit`](macos-gui-app-automation.md#ask-before-quit))。
 
 ## <a id="no-unofficial-client"></a>非公式 client は使わない
 
