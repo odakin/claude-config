@@ -48,6 +48,9 @@ sections:
   - id: hook-cost-per-item
     level: 3
     title: "§0 補足 12: hook の処理時間を入力の件数に比例させない — 件ごとに外部 process を呼ばない"
+  - id: pretooluse-timeout-fail-open
+    level: 3
+    title: "§0 補足 13: PreToolUse hook の timeout 超過は素通り (実測) — 測り方と、 hook file が読み込みで死ぬ場合も同じ"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2

@@ -112,6 +112,8 @@ CLI の session 検出・対応する transcript 表現・state の保存先の�
 
 shell の検査も完全な interpreter ではない。認識する実行位置の Git 呼出しと標準の shell `-c` 包装を検査し、改行と引用された文字列を区別する。出力・検索・commit message・here-document 本文の例示を実行と混同しない。alias、展開・置換、複雑な shell 制御、計算で組み立てた command や別のプログラム内からの呼出しは網羅しない。ツール名を変えれば許されるという意味ではなく、上の規則と操作別の gate が必要な残る経路である。Git の mode 検査も、OS の全アクセス権や未 commit の任意の shell 書込みを監視するものではない。
 
+Bash の `cd $VAR` (変数) は展開せずに path として辿り、 存在しない path から親へ上がって cwd の repo に当たる = 一時 dir での `cd $T && git commit` が cwd の repo の変更で止まる (fail-closed の誤停止、 実測)。 直すなら変数を含む cd は検査不能 (WorkingDirectoryUnavailable) に倒す。
+
 本人の発言が何を許可したかという意味判断も、文字列の照合では保証できない。候補 hash は別内容への転用を防ぐが、誤った許可解釈や承認 state の偽造を暗号学的に防ぐものではない。
 
 同じ agent が checker・runtime・承認 state を物理的に書ける環境では、OS による権限分離ではない。悪意ある改変まで排除するには、agent が変更できない管理層の policy、別権限の承認者、実行前の操作 gate が必要になる。本作業でそれらが配備されたと偽らず、確認した経路と未確認の経路を明記する。「二度と起こさない」という要求を、根拠のない完全保証に変換しない。
