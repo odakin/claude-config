@@ -19,9 +19,11 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
 - DB = `~/Library/Group Containers/group.com.apple.usernoted/db2/db` (SQLite、 WAL あり)。
 - **本物を開かず、 DB + `-wal` + `-shm` を一時 dir に写してから読む** (通知 daemon を lock しない・
   checkpoint されていない新しい通知も読む)。
-- 形 (公開されている解析記事の形。 macOS の版で変わりうる = 初回は `--list-apps` で表と件数が出るかを見る):
+- 形 (実測 = macOS 26。 他の版は初回に `--list-apps` で表と件数が出るかを見る):
   表 `app` (app_id, identifier = bundle id) と `record` (app_id, uuid, `data` = binary plist,
   `delivered_date` = 2001-01-01 起算の秒)。 plist の `req` に `titl` (題 = 多くは送り主) / `subt` / `body`。
+- `app` 表に行がある = 通知の登録がある、 だけ。 record が 0 件なら「まだ 1 件も残っていない」
+  (起動していない・届いていない・消された・OS の通知設定で止まっている、 の区別はつかない)。
 - 形が違う record は 1 件だけ落として続ける (全体を落とさない)。
 
 ## <a id="tcc"></a>TCC (フルディスクアクセス)
@@ -34,6 +36,12 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
   定期の surface 側はこれを「未チェック」 として見せる (黙って 0 件にしない)。
 - 付与の対象 = **script を起動した側の app** (Terminal / Claude Code desktop / IDE)。 launchd から読むなら
   狭い applet に付与する ([`launchd-cloudstorage-tcc.md`](launchd-cloudstorage-tcc.md) の A' pattern)。
+- <a id="tcc-responsible-process"></a>**「起動した側」 は親 process を辿って確かめる** (推測で app 本体に付けない):
+  `p=$$; while [ "$p" -gt 1 ]; do ps -o pid=,ppid=,comm= -p $p; p=$(ps -o ppid= -p $p); done`。
+  実測: Claude Code desktop の Bash は app 本体 (`/Applications/Claude.app`) でなく、
+  `~/Library/Application Support/Claude/claude-code/<版>/claude.app` の helper から起動されていて、
+  app 本体に付与済みでも読めず、 helper 側の付与で読めた。 ⚠️ path に版番号が入る = **版が上がると
+  付与が切れる可能性がある** (設定画面に同名の項目が版の数だけ並ぶのがその痕跡)。 exit 3 が戻ったら親を辿り直す。
 - 付与はシステム設定の操作 = **人が 1 回**。 付与後は起動側 app を再起動してから確かめる
   (起動中の process に効くかは版で違う)。
 

@@ -15,10 +15,12 @@
       違反 / 該当ありの 1 と同じ値にしない = docs/convention-design-principles.md#failure-exit-equals-violation-exit)。
       付与の対象 = この script を起動した側の app (Terminal / Claude desktop / launchd なら applet =
       conventions/launchd-cloudstorage-tcc.md の A' pattern)。
-    - schema (公開されている解析記事の形。 **本 script の作者はまだ実機の DB で確かめていない** = 初回は
-      `--list-apps` で表と件数が出るかを見る): 表 `app` (app_id, identifier) と `record` (app_id, uuid,
-      data = binary plist, delivered_date / request_date = 2001-01-01 起算の秒)。 `data['req']` に titl / subt / body。
-      macOS の版で変わりうる。 形が違う record は 1 件だけ落として続ける (全体を落とさない)。
+    - schema (実測 = macOS 26 で確認。 他の版は `--list-apps` で表と件数が出るかを先に見る): 表 `app`
+      (app_id, identifier) と `record` (rec_id, app_id, uuid, data = binary plist, request_date,
+      request_last_date, delivered_date = 2001-01-01 起算の秒, presented, style, snooze_fire_date)。
+      `data['req']` の titl / subt / body で題・副題・本文が取れる。 他に requests / delivered / displayed /
+      snoozed / categories 表があるが本 script は読まない。 形が違う record は 1 件だけ落として続ける。
+    - 通知を 1 件も出したことのない app でも `app` 表には行があることがある (= 登録済み ≠ 届いた)。
 
 使い方
     python3 macos-notification-db.py --list-apps                 # DB に居る app と件数 (最初にこれ)
