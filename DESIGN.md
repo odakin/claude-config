@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-22: CI の 6 件の赤は runner の環境差 — font・<base> の AGENTS.md・ext4 の inode 再利用](#ci-runner-env-failures)
 - [2026-09-19: macOS に exec で kill される git hook は、 同じ中身の新しい inode に作り直す (検査は SessionStart で毎回)](#killed-hook-recreate-design)
 - [2026-09-17: SSO 保護サイトの login 切れは、 予告も推定もせず、 使う時に tab の行き先を見て復帰する](#sso-session-recovery-design)
 - [2026-09-17: hook の退役は registry に書き、 毎回の sync が外す](#hook-retirement-registry)
@@ -43,6 +44,21 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="ci-runner-env-failures"></a>2026-09-22: CI の 6 件の赤は runner の環境差 — font・<base> の AGENTS.md・ext4 の inode 再利用 (検査の意図は保ち、 環境の欠落は宣言する)
+
+**背景**: 9 月中旬から `checks` が 222 成功 / 6 失敗で赤のまま (Codex の依頼 = board `claude-config/2026-09-22-ci-six-checks-repair`)。 6 件とも macOS の手元では緑 = ubuntu の runner でだけ落ちる。 原因は 4 種で、 どれも検査の対象 (道具) の壊れではなく、 検査が**手元の環境に暗黙に依存**していた。
+
+| 検査 | 原因 (runner でだけ赤) | 直し方 | 直す前に赤くなる対照 |
+|---|---|---|---|
+| `formcase.py --selftest` (行の送り) | `line_pitch("游ゴシック")` が Excel 同梱 font (macOS の path) を読む前提。 fontTools も requirements に無かった | selftest が合成 TTF 2 本 (hhea 1.602 em = 游ゴシック相当 / 1.0 em = MS 系相当) を `fontBuilder` で作って読ませ、 実機 font は在れば追加で見る (無ければ SKIP を宣言)。 `fonttools` を requirements に | font 無しの写しで旧 test ❌ → 新 test ✅ / `line_pitch` が hhea を無視する mutant で新 test ❌ (歯あり) |
+| `html-print-pdf.py` / `mail-to-pdf.py --selftest` | runner に日本語 font が無い → Chromium は無い glyph を描かず PDF の文字層にも残さない → 日本語だけの頁が preflight で「白紙」・文字層に日本語なし | runner に `fonts-noto-cjk` (checks.yml) = 日本語の描画を**実際に**検査する。 selftest は `japanese_font_available()` (macOS = 真 / 他は `fc-list :lang=ja`) で日本語の項だけ理由つき SKIP、 経路 (browser → PDF → preflight → raster) と伏せた値の検査は常に走る | `HTML_PRINT_PDF_JA_FONT=0` で SKIP 側の経路が通る / font を入れた CI の log に SKIP でなく PASS の行 |
+| `audit-codex-integration.test.sh` / `setup-codex.test.sh` | `9ddf7a6` が足した <base>/AGENTS.md の検査が `CONFIG_ROOT/..` を見る = test の fixture の外 (owner の機械には在り、 CI の checkout の親には無い) | `CLAUDE_BASE_DIR` で <base> を差せるように (既定 = checkout の親、 本番は不変)。 test は fixture の <base> に template を置き、 audit の test に「無ければ MISSING で止まる」 負の対照 | 親に AGENTS.md の無い写しで旧 = FAIL (MISSING) / 新 = passed |
+| `install-hook-stubs.test.sh` T13 / T17 | 偽の exec 検査は **inode 番号**で kill を覚える。 ext4 は空いた番号をすぐ再利用するので、 作り直しで空いた番号が次の一時 file に付き、 別 file の判定を引き継ぐ (APFS は再利用しない = macOS では出ない) | `kill_mark` が印を付けた inode を hard link で生かす (番号が空かない)。 本番の installer は新 inode を作るだけで正しく、 変えない | Linux でだけ再現 = 修正前の CI で 3 NG、 修正後 0。 手元 (APFS) は両方 53/53 |
+
+**原則**: 環境に依存する検査は (a) 依存を fixture に取り込む (合成 font・fixture の <base>・hard link) か、 (b) 環境を整える (runner に font) か、 (c) 走れない理由を **宣言して** SKIP する (silent skip 禁止 = `run-all-checks.sh` 冒頭の契約)。 (c) だけで緑にすると検査が消えるので、 今回は (a)(b) を主に、 (c) は font の無い機械の日本語の項に限った。
+
+**残る制限**: runner の日本語 font は apt の `fonts-noto-cjk` に依存 (image が変われば SKIP に落ちて log に出る) / 日本語 font の判定は fontconfig 経由 (`fc-list` が無い Linux = 偽 = SKIP) / formcase の実機 font の項は macOS + Excel の機械だけ (合成 font が代替) / inode 再利用の対策は test 側の fixture だけ。 手元の `run-all-checks.sh` = PASS 228 / FAIL 0 (macOS)、 CI = [https://github.com/odakin/claude-config/actions/runs/35738944982](https://github.com/odakin/claude-config/actions/runs/35738944982) (0a14fa0)。 保護 file 6 本 (checks.yml / audit と test 3 本 / hook-authoring.md) は本人の承認を `approve --quote --candidate` で記録してから当てた。
 
 ## <a id="killed-hook-recreate-design"></a>2026-09-19: macOS に exec で kill される git hook は、 同じ中身の新しい inode に作り直す (検査は SessionStart で毎回)
 

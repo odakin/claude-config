@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: ci-runner-env-failures
+    legacy: "2026-09-22"
+    level: 2
+    title: "2026-09-22: CI の 6 件の赤は runner の環境差 — font・<base> の AGENTS.md・ext4 の inode 再利用 (検査の意図は保ち、 環境の欠落は宣言する)"
   - id: killed-hook-recreate-design
     legacy: "2026-09-19"
     level: 2
