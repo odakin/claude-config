@@ -57,6 +57,7 @@ repo 内 shell script (hooks/ + scripts/ + setup.sh) の統一方針 (2026-07-10
 - **例外: `fix-snapshot-path-patch.sh` は `#!/bin/zsh`** (= zsh 環境の PATH snapshot を patch する対象整合で zsh、 launchd WatchPaths 起動)。
 - **hook (hooks/*.sh) は `set -uo pipefail` を標準**。 `set -e` は**使わない** — hook 内の grep / git は「no match」 等で正当に非ゼロ exit するので、 -e は最初のそれで hook を殺す (git-state-nudge.sh header の設計 note 参照)。 optional な env / 変数は `${VAR:-default}` で明示するのが -u との契約。
 - **set -u を既存 script に後付けする時は、 先に .test.sh で挙動を固定してから** (= unbound 参照が実行 path 依存で潜んでいることがあり、 挙動変化 (途中死) が silent に起きるため。 hooks/ の guard hook は全数 .test.sh 持ち)。
+- **日本語の直前の変数は `${var}` と書く** — UTF-8 の locale では bash 3.2 が全角文字の先頭 byte を変数名に取り込み、 `set -u` なら落ち、 無ければ値が黙って消える ([`shell-multibyte-truncation.md#unbraced-var-before-multibyte`](shell-multibyte-truncation.md#unbraced-var-before-multibyte))。
 - scripts/ 側の `set` は script の性質で選ぶ (fail-open が契約の surface 系は敢えて緩くする場合がある) が、 新規 script は `set -u` 以上を default とする。
 
 ### <a id="substitution-fallback-stdout-mixing"></a>§0 補足 2: `$(a || b)` fallback は「a の部分 stdout」 を混入させる — BSD/GNU 分岐は exit code でなく出力検証で
@@ -207,6 +208,12 @@ hook や installer が「この file は exec できるか」 を見る必要が
 origin: 印刷の gate hook の test で、 無効化の env switch を立てた 1 件だけが 141 で落ちた (実測)。 hook は switch を見て stdin を読まずに exit しており、 test の `printf` が SIGPIPE で死んでいた。
 
 ---
+
+### <a id="test-isolates-live-machine-state"></a>§0 補足 11: test は、 本番の run と共有する machine-global な資源を自分専用にする
+
+- Stop / SessionStart hook は、 同じ機械の全 session で毎 turn 裏で走る。 engine が tempdir の lock・state dir・cache のような machine-global な資源を使うとき、 test が同じ資源を使うと、 **本番の run と重なった回だけ落ちる** (engine は lock を見て黙って退き、 test は「写っていない」 で落ちる)。 単独で何度回しても通るので flaky に見える ([`debugging-discipline.md#flaky-is-a-symptom`](debugging-discipline.md#flaky-is-a-symptom) の (d) 資源)
+- 対策: `.test.sh` の冒頭で `export TMPDIR="$TMP"` とし、 state dir の env も使い捨ての dir に向ける。 engine の `--selftest` も `tempfile.tempdir` を selftest 用の dir に差し替える。 確かめ方 = 本番の lock を手で作った状態で test を回し、 緑になること
+- lock の書き方: **取れずに退く判定を `try:` の中に置かない** — `finally:` の unlink が他の run の lock を消し、 次の起動と 2 本が並走する。 退く判定は `try` の前に置き、 取得は `os.open(..., O_CREAT | O_EXCL)` で行う (実装例 = [`scripts/sync-built-pdfs.py`](../scripts/sync-built-pdfs.py) の `take_lock`)
 
 ## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug
 

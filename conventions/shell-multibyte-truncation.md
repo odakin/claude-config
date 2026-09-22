@@ -52,12 +52,24 @@ except UnicodeDecodeError as e: print('INVALID', e)"
 - 対策: `git -c core.quotepath=false …` で呼ぶ。 それでも `"` / `\` / 制御文字を含む名前は引用符で囲まれるので、 **引用符を外してから判定する** (実装例 = [`scripts/lib/staged_diff.py`](../scripts/lib/staged_diff.py) の path 取り出し)。 完全に曖昧さを消すなら `-z` (NUL 区切り、 引用しない) を使う。
 - 検出器の selftest が git の出力を偽の文字列で与えていると、 この取りこぼしは selftest を通る = 非 ASCII の file 名を 1 本含む実 repo で 1 回回す。
 
+## <a id="unbraced-var-before-multibyte"></a>変数の直後の全角文字は変数名に取り込まれる — 非 ASCII の直前は `${var}`
+
+`"$rpath、 直近 14 日"` のように変数の直後に空白なしで非 ASCII の文字を置くと、 UTF-8 の locale では shell がその文字 (の一部) を変数名の続きとして読む。
+
+- **bash (macOS 同梱の 3.2)**: 日本語の文字ならかな・漢字・句読点・全角括弧のどれでも、 UTF-8 表現の先頭 byte を変数名に取り込む。 `set -u` の script は `rpath�: unbound variable` で止まり、 `set -u` が無いと**値が黙って消えて**残りの byte が文字化けして出る
+- **zsh 5.9**: かな・漢字 (Unicode の文字) は変数名に取り込み (`$xを` は空)、 句読点・全角括弧 (`、` `）`) は取り込まない。 Claude Code の Bash tool は zsh なので、 Claude が発行するコマンドにも効く
+- **locale で出たり出なかったりする**: C locale (`LANG` / `LC_ALL` が空 = launchd や Bash tool の既定) ではどちらも正しく展開する。 UTF-8 の locale を渡す呼び出し元 (terminal・locale を持つ hook の実行環境) でだけ壊れるので、 **手元で通ったことは反証にならない** (実測: 検査 script が session 開始 hook から回ると落ち、 C locale では通った)
+- **書き方**: 変数の直後に非 ASCII の文字が来るときは必ず `${var}` と書く (`"… (${rpath}、 直近 14 日)"`)。 空白を挟めば起きない (`"$task_id を"` は安全) が、 句読点・括弧が直後に来る形は多い
+- **探し方**: 追跡中の shell script を byte 列として `(?<![\\'$])\$[A-Za-z_][A-Za-z0-9_]*[\xc0-\xff]` で走査する (コメント行は除く)。 実測では当たりは全件が本物だった。 **commit 時の機械の検出は未整備** — 次に同じ class の不具合を見たら、 この正規表現で検出器を作って pre-commit に載せる (un-defer trigger)
+- 新しい bash (Homebrew の 5.x) は未確認
+
 ## まとめ (reflex)
 
 - shell で非 ASCII を切る時は `cut -c` / `head -c` / byte slice を**使わない** → python の文字単位 truncate。
 - 切った結果を別プロセスに渡す前に valid UTF-8 を検証。
 - daemon (launchd/cron) は `LANG` 空 = C locale 前提で組む。
 - `grep` / `sed` の `[...]` に非 ASCII を入れない (C locale では byte の集合)。Claude Code の Bash tool も `LANG` 空の前提で書く。
+- 変数の直後に非 ASCII の文字を置くときは `${var}` (UTF-8 の locale では文字が変数名に取り込まれる、 [#unbraced-var-before-multibyte](#unbraced-var-before-multibyte))。
 
 ## <a id="prose-args-quoting"></a>自然文を CLI 引数で渡すときの quoting — backtick は double quote の中で消える (2026-09)
 
