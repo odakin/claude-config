@@ -747,7 +747,8 @@ def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) 
 # ============================================================
 # --check / --schema / --migrate
 # ============================================================
-def run_check(ledger: Ledger, out=print) -> int:
+def run_check(ledger: Ledger, out=print, quiet: bool = False) -> int:
+    """印と索引の整合。 quiet=True (dashboard 用) は問題がある時だけ出力する (= 0 件なら無音)。"""
     n_ok = n_bad = 0
     for name, p, e in ledger.inbox:
         if e.get("recorded_upto") is None and e.get("messages") is None:
@@ -758,7 +759,8 @@ def run_check(ledger: Ledger, out=print) -> int:
             out(f"🔴 {name}/{p.name}:{e.get('id')}: " + "; ".join(probs))
         else:
             n_ok += 1
-    out(f"check: 印つき entry {n_ok + n_bad} 件、 問題 {n_bad} 件" + (" (台帳が読めない: " + "; ".join(ledger.broken) + ")" if ledger.broken else ""))
+    if n_bad or ledger.broken or not quiet:
+        out(f"check: 印つき entry {n_ok + n_bad} 件、 問題 {n_bad} 件" + (" (台帳が読めない: " + "; ".join(ledger.broken) + ")" if ledger.broken else ""))
     return 1 if n_bad or ledger.broken else 0
 
 
@@ -1104,6 +1106,7 @@ def main(argv=None) -> int:
     ap.add_argument("--no-todo", action="store_true")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--quiet", action="store_true", help="--check で問題が無ければ何も出さない (dashboard 用)")
     ap.add_argument("--schema", action="store_true")
     ap.add_argument("--migrate", metavar="LEDGER")
     ap.add_argument("--remigrate", action="store_true")
@@ -1135,7 +1138,7 @@ def main(argv=None) -> int:
         ap.error("--ledger を 1 つ以上 (shim が渡す)")
     ledger = Ledger(cfg)
     if args.check:
-        return run_check(ledger)
+        return run_check(ledger, quiet=args.quiet)
     if args.migrate:
         return run_migrate(cfg, args.migrate, ledger, Gmail(cfg, use_cache=True), args.apply, args.limit, args.only, remigrate=args.remigrate)
     if not args.target:
