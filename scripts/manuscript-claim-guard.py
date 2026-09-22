@@ -1243,6 +1243,7 @@ def prefetch_blobs(repo: Path, specs: list[tuple[str, str]]) -> None:
     if r.returncode != 0:
         return
     out, pos = r.stdout, 0
+    got: dict[tuple[str, str], str | None] = {}
     for spec, _path in todo:
         nl = out.find(b"\n", pos)
         if nl < 0:
@@ -1250,18 +1251,36 @@ def prefetch_blobs(repo: Path, specs: list[tuple[str, str]]) -> None:
         header = out[pos:nl].decode("utf-8", "replace")
         pos = nl + 1
         if header.endswith((" missing", " ambiguous")):
-            _BLOB_CACHE[(str(repo), spec)] = None
+            got[(str(repo), spec)] = None
             continue
         parts = header.split()
         if len(parts) != 3 or not parts[2].isdigit():
             return
         size = int(parts[2])
-        data = out[pos:pos + size]
-        pos += size + 1
+        end = pos + size
+        # header の size は filter を通す**前**の object の大きさ (git-crypt の blob は平文 + 22 byte、 CRLF の変換も違う) で、
+        # 通した後の中身とはずれる。 ずれると区切りが合わない (直後が改行でない / 次が header の形でない) ので、 その batch は
+        # 丸ごと捨てて 1 件ずつ (filter 経由) に戻る。 実測: git-crypt の repo で承認済み候補の hash が合わず commit が止まった
+        if end >= len(out) or out[end:end + 1] != b"\n" or not _batch_frame_ok(out, end + 1):
+            return
+        data = out[pos:end]
+        pos = end + 1
         try:
-            _BLOB_CACHE[(str(repo), spec)] = data.decode("utf-8")
+            got[(str(repo), spec)] = data.decode("utf-8")
         except UnicodeDecodeError:
-            _BLOB_CACHE[(str(repo), spec)] = None
+            got[(str(repo), spec)] = None
+    _BLOB_CACHE.update(got)
+
+
+_BATCH_HEADER_RE = re.compile(rb"^[0-9a-f]{40,64} (blob|tree|commit|tag) \d+$|^\S+ (missing|ambiguous)$")
+
+
+def _batch_frame_ok(out: bytes, pos: int) -> bool:
+    """batch の出力の pos が終端か、 次の header 行の先頭か (= 直前の中身を header の size どおりに切れた証拠)。"""
+    if pos >= len(out):
+        return True
+    nl = out.find(b"\n", pos)
+    return bool(_BATCH_HEADER_RE.match(out[pos:nl if nl >= 0 else len(out)]))
 
 
 def blob_text(repo: Path, spec: str) -> str | None:
@@ -2197,6 +2216,24 @@ def selftest() -> int:
               (str(rt), "HEAD:nope.tex") in _BLOB_CACHE and _BLOB_CACHE[(str(rt), "HEAD:nope.tex")] is None
               and (str(rt), "HEAD:sp ace.tex") not in _BLOB_CACHE)
         check("空白を含む path は 1 件ずつ (filter 経由で) 読む", head_text(rt, "sp ace.tex") == "x\n")
+        # filter で長さが変わる repo (git-crypt = 平文 + 22 byte と同じ class): batch の header の size は filter 前の
+        # object の大きさなので、 size で切ると 2 件目以降がずれる。 まとめ読みの後も worktree と同じ中身で読めること
+        rl = tdp / "longer"
+        rl.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=rl, env=genv, capture_output=True, check=False)
+        subprocess.run(["git", "config", "filter.pre.clean", "sed 's/^>>//'"], cwd=rl, env=genv, capture_output=True, check=False)
+        subprocess.run(["git", "config", "filter.pre.smudge", "sed 's/^/>>/'"], cwd=rl, env=genv, capture_output=True, check=False)
+        (rl / ".gitattributes").write_text("*.tex filter=pre\n", encoding="utf-8")
+        (rl / "a.tex").write_text("alpha\nbeta\n", encoding="utf-8")
+        (rl / "b.tex").write_text("gamma\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=rl, env=genv, capture_output=True, check=False)
+        subprocess.run(["git", "commit", "-q", "-m", "i"], cwd=rl, env=genv, capture_output=True, check=False)
+        reset_caches()
+        prefetch_blobs(rl, [("HEAD:a.tex", "a.tex"), ("HEAD:b.tex", "b.tex")])
+        check(f"filter で長さが変わる repo: まとめ読みの後も 1 件目が worktree と同じ中身 ({head_text(rl, 'a.tex')!r})",
+              head_text(rl, "a.tex") == ">>alpha\n>>beta\n")
+        check(f"filter で長さが変わる repo: まとめ読みの後も 2 件目がずれない ({head_text(rl, 'b.tex')!r})",
+              head_text(rl, "b.tex") == ">>gamma\n")
         os.environ.pop("MANUSCRIPT_CLAIM_GUARD_STATE_DIR", None)
         os.environ.pop("MANUSCRIPT_CLAIM_GUARD_HOME", None)
 
