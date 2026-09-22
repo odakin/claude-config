@@ -42,6 +42,9 @@ sections:
   - id: hook-stdin-pipe-sigpipe
     level: 3
     title: "§0 補足 10: hook に stdin を pipe で渡す test は、 書き手の死に方を hook の判定として読む (`pipefail` × SIGPIPE = 141)"
+  - id: test-isolates-live-machine-state
+    level: 3
+    title: "§0 補足 11: test は、 本番の run と共有する machine-global な資源を自分専用にする"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2
