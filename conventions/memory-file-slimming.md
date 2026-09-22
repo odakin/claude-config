@@ -162,6 +162,11 @@ archive を新設したら検出器の除外 registry を同 commit で更新す
    (= 並行編集の混入は「読んだ内容を保存し直す」 操作で無言に取り込まれる)。
 3. 自分の途中状態が他者 commit に入っていたら、 当該 commit に対の file が揃っているかを
    commit 単位で機械確認する (揃っていれば欠損なし、 巻き込みの旨を自 commit message に記載)。
+   **揃っていない (= 縮んだ本体だけが入り、 verbatim 退避の archive が未 commit) なら、 巻き戻さず
+   archive を HEAD の上に commit して対を揃える** (実測: 相手の `git commit -- <本体>` が本体だけを
+   拾い、 旧全文が履歴に無い半端な状態が数分あった。 revert すると縮退が消え、 相手の変更も巻き込む。
+   commit message に混入した commit の hash を書けば履歴が辿れる)。 同じ file に相手の未 commit hunk が
+   居る状態で自分の分だけ commit する経路 = [`multi-session-coordination.md#temp-index-commit`](multi-session-coordination.md#temp-index-commit)。
 
 ## <a id="generated-block-slimming"></a>生成 block への適用 (= 手書き file だけが税ではない)
 
