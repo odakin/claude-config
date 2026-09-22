@@ -963,6 +963,7 @@ SessionStart hook の注入は agent の文脈にだけ入り、 人の画面に
 **案件単位で見せる**
 
 - 1 件を処分させるときは、 件名の語を共有する未処理 item を並べる (`relay_check.related`、 多くの件名に出る語では結ばない)。 件名を変えて届いた後続を見ないまま「失効した」 と判定するのは不在の主張 ([`#lapse-claim-is-absence-claim`](../docs/convention-design-principles.md#lapse-claim-is-absence-claim))
+- 「返事を待っている義務」 と「その返事が届いた」 のように対になる 2 つの検出を別々の見出しで出さない。 結ぶ鍵 (義務 → スレッド) を持つ検出器の側で、 義務の行に届いた返事を付けて最上段に 1 行で出し、 元の見出しからは外す。 片方の取得失敗を「なし」 と返さない ([`#paired-signals-join-at-render`](../docs/convention-design-principles.md#paired-signals-join-at-render))
 
 **届いているかの確認**
 
