@@ -14,6 +14,11 @@ TEST_HOME="$TEMP_ROOT/home"
 TEST_CODEX_DIR="$TEST_HOME/.codex"
 TEST_WORKSPACE="$TEST_HOME/Documents/Codex"
 mkdir -p "$TEST_CODEX_DIR/skills" "$TEST_WORKSPACE"
+# <base> (= repo を並べた dir) の fixture。 既定 (この checkout の親) は CI では AGENTS.md を持たないので env で差す
+TEST_BASE="$TEMP_ROOT/base"
+mkdir -p "$TEST_BASE"
+cp "$CONFIG_ROOT/templates/root-AGENTS.md.default" "$TEST_BASE/AGENTS.md"
+export CLAUDE_BASE_DIR="$TEST_BASE"
 ln -s "$CONFIG_ROOT/codex/HOME-AGENTS.md" "$TEST_CODEX_DIR/AGENTS.md"
 ln -s "$CONFIG_ROOT/codex/AGENTS.md" "$TEST_WORKSPACE/AGENTS.md"
 ln -s "$CONFIG_ROOT/codex/skills/claude-config-conventions" \
@@ -31,6 +36,19 @@ HOME="$TEST_HOME" \
 CODEX_USER_DIR="$TEST_CODEX_DIR" \
 CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
   "$SCRIPT_DIR/audit-codex-integration.sh" >/dev/null
+
+# <base> に AGENTS.md が無ければ MISSING を出して落ちる (fixture で意図どおり止まることを見る = 検出能力の対照)
+EMPTY_BASE="$TEMP_ROOT/empty-base"
+mkdir -p "$EMPTY_BASE"
+if HOME="$TEST_HOME" \
+  CODEX_USER_DIR="$TEST_CODEX_DIR" \
+  CODEX_WORKSPACE_ROOT="$TEST_WORKSPACE" \
+  CLAUDE_BASE_DIR="$EMPTY_BASE" \
+  "$SCRIPT_DIR/audit-codex-integration.sh" > "$TEMP_ROOT/empty-base.out" 2>&1; then
+  echo "expected audit to fail for a missing workspace-root AGENTS.md" >&2
+  exit 1
+fi
+grep -q "MISSING: workspace-root AGENTS.md" "$TEMP_ROOT/empty-base.out"
 
 python3 "$SCRIPT_DIR/setup-codex-git-push.py" --install \
   --codex-dir "$TEST_CODEX_DIR" >/dev/null

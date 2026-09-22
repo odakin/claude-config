@@ -16,6 +16,7 @@
 #   T14 作り直しても kill される → WARNING を出して 1 回で止める / T15 検査は hook の本体を 1 行も走らせない
 #   T16 bash 以外の hook・macOS 以外は調べない
 #   T17 --surface = 戻した / 作り直した / 要対応 の 3 見出し / T18 --check = 書かずに列挙して exit 1
+#   (偽の kill 一覧は inode 番号 = 印を付けた inode は hard link で生かす。 Linux の fs は番号を再利用する)
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,7 +50,11 @@ export HOOK_EXEC_PROBE_OS=Darwin HOOK_EXEC_PROBE_ENV="$FAKE_ENV"
 export FAKE_KILLED="$TMP/killed-inodes" FAKE_KILLED_PATHS="$TMP/killed-paths"
 : > "$FAKE_KILLED"; : > "$FAKE_KILLED_PATHS"
 inode() { set -- $(ls -iL "$1"); echo "$1"; }
-kill_mark() { inode "$1" >> "$FAKE_KILLED"; }
+# 印を付けた inode は hard link で控えを取って生かす: Linux の fs (ext4) は空いた inode 番号をすぐ再利用するので、
+# 作り直しで空いた番号が次の一時 file に付き、 別の file の判定を引き継ぐ (2026-09-22 CI の T13 / T17)。 macOS (APFS) は
+# 番号を再利用しないので手元では出ない。 控え = 同じ inode の別 path (macOS の実物も hard link は path に依らず kill)
+KEEP="$TMP/keep-inodes"; mkdir -p "$KEEP"; keep_n=0
+kill_mark() { inode "$1" >> "$FAKE_KILLED"; keep_n=$((keep_n+1)); ln -L "$1" "$KEEP/$keep_n" 2>/dev/null || ln "$1" "$KEEP/$keep_n"; }
 execs() {  # hook を偽の検査で exec して 137 以外なら真
   { BASH_ENV="$FAKE_ENV" "$1" </dev/null >/dev/null 2>&1; } 2>/dev/null
   [ $? -ne 137 ]

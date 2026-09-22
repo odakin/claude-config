@@ -18,6 +18,11 @@ printf '%s\n' 'setup-codex.sh --refresh-personal-layer' > "$PUBLIC_POST_MERGE_FI
 TEST_HOME="$TEMP_ROOT/home"
 TEST_CODEX_DIR="$TEST_HOME/.codex"
 TEST_WORKSPACE="$TEST_HOME/Documents/Codex"
+# <base> の fixture (audit-codex-integration.sh の workspace-root AGENTS.md)。 CI の checkout の親には無いので env で差す
+TEST_BASE="$TEMP_ROOT/base"
+mkdir -p "$TEST_BASE"
+cp "$CONFIG_ROOT/templates/root-AGENTS.md.default" "$TEST_BASE/AGENTS.md"
+export CLAUDE_BASE_DIR="$TEST_BASE"
 mkdir -p "$TEST_CODEX_DIR" "$TEST_HOME"
 TEST_REPOS_ROOT="$TEMP_ROOT/repos"
 TRAILER_REPO="$TEST_REPOS_ROOT/direct"

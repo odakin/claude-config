@@ -4,6 +4,8 @@
 # Claude 側には一切書き込まない。managed symlink と Codex config の概況を表示し、
 # --repo を渡した場合だけ root AGENTS.md、Agent-Session trailer hook、既存 Git-side
 # gate も確認する。
+# 環境変数: CODEX_USER_DIR / CODEX_WORKSPACE_ROOT / CLAUDE_BASE_DIR (= <base>、 workspace-root AGENTS.md を探す dir。
+# 既定はこの checkout の親 = 本番。 test の fixture だけが差す)
 
 set -u
 
@@ -148,7 +150,9 @@ check_link "local Codex-workspace AGENTS.md entry point" \
   "$CODEX_WORKSPACE_ROOT/AGENTS.md" || true
 # <base> (= repo を並べた dir) は repo ではないので repo の入口では覆えない。 Codex がそこで task を始めた時に
 # 「ここの CLAUDE.md を読め + repo に入ったらその repo の入口を先に読め」 を出す薄い file (setup.sh Step 5a')。
-BASE_DIR="$(cd "$CONFIG_ROOT/.." && pwd)"
+# CLAUDE_BASE_DIR = <base> の上書き (test の fixture 用)。 CI の checkout の親は <base> ではなく AGENTS.md を持たないので、
+# 既定のままでは fixture の欠落と本物の欠落を区別できない。 本番は未設定 = この checkout の親。
+BASE_DIR="${CLAUDE_BASE_DIR:-$(cd "$CONFIG_ROOT/.." && pwd)}"
 if [ -f "$BASE_DIR/AGENTS.md" ] && [ -s "$BASE_DIR/AGENTS.md" ]; then
   echo "OK: workspace-root AGENTS.md ($BASE_DIR/AGENTS.md)"
 else

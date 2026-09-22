@@ -190,7 +190,7 @@ hook や installer が「この file は exec できるか」 を見る必要が
 
 - **本体を走らせない検査**: bash は非対話で script を起動すると 1 行目より前に `$BASH_ENV` を読む。 `exit 0` だけの file を渡すと、 exec が通るかだけが分かる (137 = SIGKILL)。 `#!/bin/sh` は読まないので対象外
 - **`$BASH_ENV` の中では `$0` は `bash`** (script の path ではない)。 path が要るなら `set -- $(ps -ww -o args= -p $$)` の `$2` (shebang 経由の起動は `bash <path>` の形で残る)
-- **OS の kill を test で再現する**: 偽の `$BASH_ENV` に「`ls -iL` で出した inode が一覧にあれば `kill -9 $$`」 を書く。 inode ごとに判定を覚える挙動がそのまま再現でき、 Linux の CI でも同じ経路を通る。 「作り直しても直らない」 場合は path の一覧で kill する (例 = `scripts/install-hook-stubs.test.sh` の冒頭)
+- **OS の kill を test で再現する**: 偽の `$BASH_ENV` に「`ls -iL` で出した inode が一覧にあれば `kill -9 $$`」 を書く。 inode ごとに判定を覚える挙動がそのまま再現でき、 Linux の CI でも同じ経路を通る。 「作り直しても直らない」 場合は path の一覧で kill する (例 = `scripts/install-hook-stubs.test.sh` の冒頭)。 ⚠️ **印を付けた inode は hard link で控えを取って生かす**: Linux の fs (ext4) は空いた inode 番号をすぐ再利用するので、 作り直しで空いた番号が次の一時 file に付き、 別の file の判定を引き継ぐ (2026-09-22 CI の T13 / T17 で実測。 APFS は再利用しないので macOS の手元では出ない)
 - **bash の `Killed: 9` の表示**は、 kill された子を待っている側の shell が出す。 検査の出力を汚さないなら `{ cmd; } 2>/dev/null` で囲む (cmd 自体の redirect では消えない)
 - **旧版で歯を確かめるのに stash を使わない**: 並列 session や SessionStart の自動 pull (stash → ff → pop) とぶつかる。 `git archive HEAD scripts | tar -x -C <tmp>` で旧版を一時 dir に展開し、 新しい test だけ上書きして回す (新しい確認が旧版で落ち、 新版で通るのを見る)。 test が兄弟 file (設定・偽物の置き場) に頼るなら、 その分の無関係な失敗は数から除いて報告する
 - **commit せずに hook を git と同じ呼び方で走らせる**: `git hook run <name> -- <引数>` (git 2.36 以降。 `core.hooksPath` を反映)。 prepare-commit-msg なら一時の message file と `message` を渡す。 ⚠️ pre-commit は index に対する本物の検査が走る
@@ -387,7 +387,7 @@ setup.sh 自体は idempotent design なので (i) は実装コスト低。 但�
 - **発火面は SessionStart と setup**: `scripts/heal-hook-stubs.sh` が全 repo の、 git が実際に使う hooks dir (`core.hooksPath` を反映) の hook と runner を実体ごとに 1 回ずつ検査して直す (hook 180 本規模で、 段 1 と合わせて約 2 秒。 検査が足すのは約 0.7 秒)。 SessionStart から `--surface` で毎回呼べば commit が止まる前に直り、 結果は「戻した / 作り直した / 要対応」 の 3 見出しで出る (個人層の bootstrap hook から呼ぶ形。 見出しと振り分けは script が持つ = 呼ぶ側は出力をそのまま出すだけ)。 setup.sh は Step 8c で同じものを呼ぶ (Step 8b は installer の出力を捨てているため、 直らなかった WARNING をここで見せる)
 - **session の途中で `died of signal 9` が出たら** `bash <base>/claude-config/scripts/heal-hook-stubs.sh` を 1 回走らせる。 手で `cat > x && mv` しない (installer と同じ判定・報告を通す)。 書かずに一覧だけ見るなら `--check` (kill されるものがあれば exit 1)
 - 射程外: bash 以外の hook / runner がさらに exec する script (python は `python3 x.py` で起動すれば exec の判定を受けない) / syspolicyd 自体の不調 (hook を作り直しても、 詰まっている間に初めて exec される file は同じ目に遭いうる)
-- test = `scripts/install-hook-stubs.test.sh` T11–T18 (inode ごとの判定の再現 = [#exec-probe-test-techniques](#exec-probe-test-techniques))。 修正前の code では 10 項目が落ちることを確かめた。 設計の判断 = [`DESIGN.md#killed-hook-recreate-design`](../DESIGN.md#killed-hook-recreate-design)
+- test = `scripts/install-hook-stubs.test.sh` T11–T18 (inode ごとの判定の再現 = [#exec-probe-test-techniques](#exec-probe-test-techniques))。 修正前の code では 10 項目が落ちることを確かめた。 偽の kill 一覧は inode 番号なので、 印を付けた inode は hard link で生かす (Linux の fs は番号を再利用する = 上の技法の ⚠️)。 設計の判断 = [`DESIGN.md#killed-hook-recreate-design`](../DESIGN.md#killed-hook-recreate-design)
 
 ### <a id="tool-matcher-coverage-boundary"></a>§2 補足: tool-matcher の coverage boundary — Bash/script write は Edit/Write guard を素通りする
 
