@@ -91,7 +91,7 @@ CSR SPA のニュース/結果ページの URL を多数検証する場面 (例:
 ### How to apply
 
 - **URL を先に組む**: じゃらんは施設 ID から `https://www.jalan.net/yad<ID>/plan/` (料金一覧)、 booking.com は `.ja.html` を付けると日本語で出る。 WebSearch で施設ページの URL を取ってから pane で開く
-- **取る項目を決めてから読む** (口コミの裏取りなら [`consumer-review-writing.md#price-lookup`](consumer-review-writing.md#price-lookup) の一覧)。 `get_page_text` は 3 万字前後で「この宿を見た人は他に」 の推薦一覧が繰り返し混じるので、 `max_chars` は 25,000〜30,000 で足りる
+- **取る項目を決めてから読む** (口コミの裏取りなら [`consumer-review-posting.md#price-claim`](consumer-review-posting.md#price-claim) の一覧)。 `get_page_text` は 3 万字前後で「この宿を見た人は他に」 の推薦一覧が繰り返し混じるので、 `max_chars` は 25,000〜30,000 で足りる
 - 料金は**日付・人数で変わる**ので、 幅 (最安〜通常) と取得日を手元の記録に残し、 公開文には幅だけ書く
 
 ## <a id="cookie-replay-oauth-spa"></a>Browser cookie replay は OAuth-token SPA を認証しない (= member 限定クラウドフォルダは無人 upload 不可)
