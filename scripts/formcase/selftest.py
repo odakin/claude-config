@@ -288,6 +288,62 @@ def _set(case: Path, sheet: str, cell: str, val):
 
 
 # ---------------------------------------------------------------------------
+def _synth_font(dir_: Path, name: str, ascent: int, descent: int, line_gap: int) -> None:
+    """hhea の行の高さだけを持つ最小の TTF (1000 upem、 glyph は .notdef と 'a')。 fontTools が要る。"""
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+
+    fb = FontBuilder(1000, isTTF=True)
+    fb.setupGlyphOrder([".notdef", "a"])
+    fb.setupCharacterMap({0x61: "a"})
+    pen = TTGlyphPen(None)
+    pen.moveTo((50, 0)); pen.lineTo((550, 0)); pen.lineTo((550, 700)); pen.lineTo((50, 700)); pen.closePath()
+    fb.setupGlyf({".notdef": TTGlyphPen(None).glyph(), "a": pen.glyph()})
+    fb.setupHorizontalMetrics({".notdef": (500, 0), "a": (600, 50)})
+    fb.setupHorizontalHeader(ascent=ascent, descent=descent, lineGap=line_gap)
+    fb.setupNameTable({"familyName": name, "styleName": "Regular"})
+    fb.setupOS2(sTypoAscender=ascent, sTypoDescender=descent, usWinAscent=ascent, usWinDescent=-descent)
+    fb.setupPost()
+    fb.save(str(dir_ / (name.replace(" ", "-") + ".ttf")))
+
+
+def _synth_font_checks(expect) -> None:
+    """line_pitch が font の行の高さから出ることを、 合成 font で (機械の font に依らず) 確かめる。"""
+    from . import layout as LY
+
+    try:
+        import fontTools.fontBuilder  # noqa: F401
+    except ImportError:
+        print("  SKIP 行の送り (fontTools が無い = font の行の高さは読めず、 既定 LINE_PITCH に倒れる経路だけ見る)")
+        expect("行の送り: font が読めなければ既定 LINE_PITCH", LY.line_pitch("ＭＳ Ｐゴシック") == LY.LINE_PITCH)
+        return
+    tall, flat = "Synth Tall Gothic", "Synth Flat Gothic"
+    with tempfile.TemporaryDirectory() as td:
+        fdir = Path(td)
+        _synth_font(fdir, tall, 1160, -442, 0)   # 1.602 em × LINE_GAP 1.04 = 1.666 (> LINE_PITCH 1.3)
+        _synth_font(fdir, flat, 880, -120, 0)    # 1.0 em × 1.04 = 1.04 (< LINE_PITCH → 既定が勝つ)
+        saved = (LY.DFONTS, LY.FONT_FILES)
+        LY.DFONTS, LY.FONT_FILES = fdir, tuple(p.name for p in sorted(fdir.iterdir()))
+        for fn in (LY._fonts, LY._advance, LY.line_pitch):
+            fn.cache_clear()
+        try:
+            expect("行の送り: 行の高い font (合成、 hhea 1.602 em = 游ゴシック相当) は MS 系より高い (font の行の高さから)",
+                   LY.line_pitch(tall) > 1.5, LY.line_pitch(tall))
+            expect("行の送り: 行の高さ 1 em の font (合成、 MS 系相当) は既定 LINE_PITCH に留まる",
+                   LY.line_pitch(flat) == LY.LINE_PITCH, LY.line_pitch(flat))
+            expect("行の送り: 無い font は既定 LINE_PITCH", LY.line_pitch("ＭＳ Ｐゴシック") == LY.LINE_PITCH)
+            expect("行の送り: 字の幅も合成 font の hmtx から (a = 0.6 em)", LY._advance(tall, "a") == 0.6, LY._advance(tall, "a"))
+        finally:
+            LY.DFONTS, LY.FONT_FILES = saved
+            for fn in (LY._fonts, LY._advance, LY.line_pitch):
+                fn.cache_clear()
+    if (LY.DFONTS / "YuGothR.ttc").exists():
+        expect("行の送り: 実機の 游ゴシック (Excel 同梱) は MS 系より高い",
+               LY.line_pitch("游ゴシック") > 1.5 and LY.line_pitch("ＭＳ Ｐゴシック") == LY.LINE_PITCH)
+    else:
+        print("  SKIP 行の送り: Excel 同梱の font が無い機械 (実機 font の項は合成 font で代替済)")
+
+
 def run() -> int:
     ok = True
 
@@ -949,8 +1005,10 @@ def _layout_tests(tmp, expect) -> None:
     before = LY._row_h(w4[MAIN], 17)
     LY.fit_text(w4, w4v, [MAIN], extra={(MAIN, "G17"): {"pt": 10}})
     expect("PDF で足りなかった欄 (extra) は今の高さに足す", LY._row_h(w4[MAIN], 17) > before)
-    expect("行の送り: 游ゴシックは MS 系より高い (font の行の高さから)",
-           LY.line_pitch("游ゴシック") > 1.5 and LY.line_pitch("ＭＳ Ｐゴシック") == LY.LINE_PITCH)
+    # 行の送りは font の hhea (ascent − descent + lineGap) から。 Excel 同梱の font は macOS にしか無いので、 合成した
+    # 2 本の TTF (行の高さ 1.602 em = 游ゴシック相当 / 1.0 em = MS 系相当) を一時 dir に置いて読ませ、 実機の font が
+    # 在ればそれも見る (Linux の CI は合成だけ。 2026-09-22: 実機 font 前提の 1 項が CI で常に赤だった)。
+    _synth_font_checks(expect)
     # snapshot → 体裁 → excel_ops (openpyxl で save すると図形が消える雛形の経路)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

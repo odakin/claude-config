@@ -67,6 +67,15 @@ def run(src, out, title=None, patterns=(), expect_pages=None):
         return subprocess.run(cmd).returncode
 
 
+def _engine_module():
+    """同じ dir の html-print-pdf.py を module として読む (font の有無の判定を共有する。 file 名に - が在るので importlib で)。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("html_print_pdf", ENGINE)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def selftest():
     sample = ("Date: Thu, 1 Jan 2099 10:00:00 +0900\nFrom: 架空旅行社 <x@example.invalid>\n"
               "Subject: 見積\n\n1 泊 100 ドル、 PIN code: 123456\n暗証番号：654321\n<script>alert(1)</script>\n")
@@ -94,9 +103,17 @@ def selftest():
             else:
                 import fitz
                 t = "".join(p.get_text() for p in fitz.open(out))
-                good = "架空旅行社" in t and "123456" not in t and "654321" not in t
+                good = "123456" not in t and "654321" not in t
                 ok &= good
-                print("PASS" if good else "FAIL", "PDF の文字層に日本語があり、 伏せた値が無い")
+                print("PASS" if good else "FAIL", "PDF の文字層に伏せた値が無い")
+                # 日本語 font の無い機械 (fontconfig に :lang=ja が無い) では Chromium が日本語を描かず文字層にも残さない =
+                # 道具の壊れと区別できないので、 その項だけ理由つきで SKIP (伏せた値の検査は上で済)
+                if _engine_module().japanese_font_available():
+                    good = "架空旅行社" in t
+                    ok &= good
+                    print("PASS" if good else "FAIL", "PDF の文字層に日本語がある")
+                else:
+                    print("SKIP PDF の文字層の日本語 (日本語 font が無い環境 = fc-list :lang=ja が空)")
     except ImportError:
         print("SKIP PDF の読み戻し (PyMuPDF が無い)")
     print("selftest", "PASS" if ok else "FAIL")

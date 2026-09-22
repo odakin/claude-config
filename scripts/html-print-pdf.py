@@ -88,6 +88,24 @@ def find_browser(explicit=None):
     return None
 
 
+def japanese_font_available(env=None):
+    """日本語の glyph を持つ font がこの機械に在るか。 Chromium は無い glyph を描かず PDF の文字層にも残さないので、
+    日本語だけの頁は白紙になり preflight が止める (2026-09-22 の CI = ubuntu runner で実測)。 macOS は Hiragino 同梱 =
+    常に真、 それ以外は fontconfig (fc-list :lang=ja) に聞く (無ければ偽)。 HTML_PRINT_PDF_JA_FONT=0/1 は test 用の上書き
+    (font の在る機械で selftest の SKIP 側の経路を通す。 本番の判定には使わない)。"""
+    env = os.environ if env is None else env
+    forced = env.get("HTML_PRINT_PDF_JA_FONT")
+    if forced in ("0", "1"):
+        return forced == "1"
+    if sys.platform == "darwin":
+        return True
+    try:
+        r = subprocess.run(["fc-list", ":lang=ja", "family"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return bool(r.stdout.strip())
+
+
 def prepare_html(html, base_href=None, paper="A4"):
     """<base href> と @page を差した HTML を返す。 <head> が無ければ先頭に作る。"""
     m = re.search(r"<head[^>]*>", html, flags=re.I)
@@ -220,6 +238,9 @@ def selftest():
     assert in_codex_seatbelt({"CODEX_SANDBOX": "seatbelt"})
     assert not in_codex_seatbelt({})
     print("  sandbox guard: 2/2 PASS")
+    assert japanese_font_available({"HTML_PRINT_PDF_JA_FONT": "0"}) is False
+    assert japanese_font_available({"HTML_PRINT_PDF_JA_FONT": "1"}) is True
+    print("  japanese_font_available: override 2/2 PASS")
     # 終わらない browser の代役: PDF と marker を書いた後 sleep し続ける (render_pdf が待たずに止めるか)
     fake_dir = tempfile.mkdtemp()
     fake = os.path.join(fake_dir, "hang-browser")
@@ -242,8 +263,14 @@ def selftest():
         return 0
     d = tempfile.mkdtemp()
     src = os.path.join(d, "t.html")
+    # 日本語 font の無い機械では、 日本語だけの頁は Chromium が何も描かず preflight が「白紙」 で止める (= 環境の欠落で
+    # あって道具の壊れではない)。 そこでは英字の頁で経路 (browser → PDF → preflight → raster) だけ確かめ、 SKIP を宣言する。
+    ja = japanese_font_available()
+    if not ja:
+        print("  render: SKIP 日本語の描画 (日本語 font が無い環境 = fc-list :lang=ja が空。 英字の頁で経路だけ確かめる)")
+    body = "<h1>合成 テスト 参加票</h1>" if ja else "<h1>Synthetic test form</h1>"
     with open(src, "w", encoding="utf-8") as f:
-        f.write("<html><head><meta charset='utf-8'></head><body><h1>合成 テスト 参加票</h1></body></html>")
+        f.write("<html><head><meta charset='utf-8'></head><body>" + body + "</body></html>")
     out = os.path.join(d, "t.pdf")
     rc = run(src, out, expect_pages=1, dpi=72)
     assert rc == 0, rc
@@ -253,6 +280,10 @@ def selftest():
         p = fitz.open(os.path.join(d, "t-print.pdf"))[0]
         w, hh = round(p.rect.width * 25.4 / 72), round(p.rect.height * 25.4 / 72)
         assert (w, hh) == (210, 297), (w, hh)
+        if ja:
+            t = "".join(pg.get_text() for pg in fitz.open(out))
+            assert "参加票" in t, "日本語 font が在るのに文字層に日本語が無い: " + repr(t[:80])
+            print("  render: 日本語の文字層 PASS")
     except ImportError:
         pass
     print("html-print-pdf selftest: PASS")

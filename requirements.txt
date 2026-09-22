@@ -9,6 +9,10 @@ PyMuPDF>=1.28.0
 # xlsx 系 (diff-form-xlsx.py / scan-form-instructions.py / check-xlsx-integrity.py / check-form-clipping.py)
 openpyxl>=3.1.5
 
+# font の行の高さ・字の幅 (formcase の layout = 値の長さで決まる行高。 無ければ既定の幅で見積もる = 動くが粗い)。
+# selftest は合成 font を fontBuilder で作る (機械の font に依らない)
+fonttools>=4.40
+
 # docx 系 (diff-form-docx.py / docx_decl_patch.py / normalize-docx-decl.py / check-docx-integrity.py)
 python-docx>=1.2.0
 
