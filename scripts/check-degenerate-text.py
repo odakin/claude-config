@@ -27,6 +27,9 @@
   W1 縮小       = SHRINK_MIN_REMOVED (200) 行以上減り、 HEAD の SHRINK_FRACTION (1/2) 以下 → ⚠️ を出すだけ (縮退は正当な操作)
   fleet scan は G2 の絶対値だけ (HEAD が無いので比は取れない。 YAML は定型行が正常に数百回並ぶので対象外 = 別の検出器)
 
+  --recover PATH [--out PATH]  replace('', X) で壊れた file から壊す直前の本文を再構成する (block と block の間に元の本文が
+                          1 文字ずつ残る形 = 挿入型の壊れは元を保存する)。 最頻の content line の 2 回目の出現までを block X と
+                          推定し、 X で split した断片が全部 1 文字であることを検証してから連結。 意図した X は別途 1 回だけ当て直す
 exit: 0 = 通す (W1 は出しても 0) / 1 = 止める (--staged) or finding (--strict) / 3 = 検査が走っていない (git repo でない等。
       1 行出す。 呼び元は 1 以外で止めない = docs/convention-design-principles.md#failure-exit-equals-violation-exit)
 escape hatch: CLAUDE_DEGENERATE_TEXT_GUARD=0 (意図した大量追加・JSON の整形など) / git 標準の --no-verify
@@ -264,6 +267,54 @@ def run_scan(roots: List[str], paths: List[str], surface: bool, strict: bool) ->
     return 1 if strict else 0
 
 
+# ---------------------------------------------------------------- --recover
+def find_inserted_block(text: str) -> Optional[str]:
+    """replace('', X) の形 (X c1 X c2 … cN X) から X を推定する。 最頻の content line L の 1 回目と 2 回目の出現位置の差が
+    |X| + 1 (= 間の 1 文字) なので X = text[:差-1]。 split して検証できなければ None。"""
+    n, line = max_repeat(text)
+    if n < 3:
+        return None
+    lines = text.split("\n")
+    pos, at = [], 0
+    for ln in lines:
+        if ln.strip() == line:
+            pos.append(at)
+            if len(pos) == 2:
+                break
+        at += len(ln) + 1
+    if len(pos) < 2:
+        return None
+    for extra in (1, 0):  # 通常は 1 文字挟まる。 念のため 0 も試す
+        size = pos[1] - pos[0] - extra
+        if size <= 0:
+            continue
+        block = text[:size]
+        pieces = text.split(block)
+        if len(pieces) >= 3 and all(len(p) == extra for p in pieces[1:-1]) and pieces[0] == "" and pieces[-1] == "":
+            return block
+    return None
+
+
+def run_recover(path: str, out: Optional[str]) -> int:
+    src = Path(path).expanduser()
+    try:
+        text = src.read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"⚠️ {HEADING} 読めない: {e}")
+        return 3
+    block = find_inserted_block(text)
+    if block is None:
+        print(f"{HEADING} {src}: replace('', X) の形ではない (block を推定できない) — git の直前の版から復元する")
+        return 1
+    pieces = text.split(block)
+    recovered = "".join(pieces)
+    dst = Path(out).expanduser() if out else src.with_suffix(src.suffix + ".recovered")
+    dst.write_text(recovered, encoding="utf-8")
+    print(f"{HEADING} {src}: block {line_count(block)} 行 × {len(pieces) - 1:,} 回を外し、 {len(recovered):,} 文字 / {line_count(recovered):,} 行を {dst} に書いた")
+    print(f"  block (意図した差分なら 1 回だけ当て直す):\n" + "\n".join("    " + ln for ln in block.rstrip("\n").splitlines()[:8]))
+    return 0
+
+
 # ---------------------------------------------------------------- selftest
 def selftest() -> int:
     import shutil
@@ -359,6 +410,15 @@ def selftest() -> int:
         rc, out = gate(r3, env)
         check("W1: 600 → 50 行の縮退は ⚠️ を出すが止めない", rc == 0 and "⚠️" in out and "縮退" in out)
 
+        # --- --recover: 壊す直前の本文が戻る / 普通の file は「形でない」
+        broken = Path(td, "broken.md"); broken.write_text(prose.replace("", block), encoding="utf-8")
+        r = subprocess.run([sys.executable, str(here), "--recover", str(broken)], env=env, capture_output=True, text=True, check=False)
+        check("--recover: replace('') の壊れから元の本文を再構成 (byte 一致)",
+              r.returncode == 0 and Path(td, "broken.md.recovered").read_text(encoding="utf-8") == prose)
+        plain = Path(td, "plain.md"); plain.write_text(prose, encoding="utf-8")
+        r = subprocess.run([sys.executable, str(here), "--recover", str(plain)], env=env, capture_output=True, text=True, check=False)
+        check("--recover: 壊れていない file は rc 1 (形でない)", r.returncode == 1 and "形ではない" in r.stdout)
+
         # --- 検査が走っていない = 3
         nog = Path(td, "not-a-repo"); nog.mkdir()
         r = subprocess.run([sys.executable, str(here), "--staged", "--repo", str(nog)], env=env,
@@ -408,10 +468,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--repo", help="--staged の repo (既定 = cwd)")
     ap.add_argument("--surface", action="store_true", help="fleet scan: finding 行だけ (SessionStart 用)")
     ap.add_argument("--strict", action="store_true", help="fleet scan: finding があれば exit 1 (CI 用)")
+    ap.add_argument("--recover", metavar="PATH", help="replace('', X) で壊れた file から壊す直前の本文を再構成する")
+    ap.add_argument("--out", metavar="PATH", help="--recover の書き先 (既定 = PATH + .recovered)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
+    if a.recover:
+        return run_recover(a.recover, a.out)
     if a.staged:
         return run_staged(a.repo)
     roots = a.root or ([] if a.paths else ["."])

@@ -339,7 +339,10 @@ finding は「直す」 か「見た上で残す」 のどちらかで閉じる�
 ∴ gate を変えた turn に、 無人の書き手の直近の commit を **今の** gate に通す: [`scripts/replay-public-gate.sh`](../scripts/replay-public-gate.sh)
 `--repo <repo> --path <書き手の出力先> --since "14 days ago"` (C が変えた file だけを temp repo に置き、 親の版 → C の版の差分として runner を回す)。
 止まる commit があれば、 誤検知なら検出器側を直し ([上の判定表](#tree-finding-resolution))、 本物なら書き手の出力 (生成の指示) を直す。
-定期実行にも載せる (= gate の変更と書き手の出力の変化のどちらからでも鳴るように)。 一般則 =
+定期実行にも載せる (= gate の変更と書き手の出力の変化のどちらからでも鳴るように、 手元の検査 runner に「手元の gate を通る書き手の repo × 直近 14 日」 で)。
+replay が見るのは leak の gate だけ: CI の bot (author が `[bot]`) の commit は手元の gate を一度も通らない書き手なので既定で飛ばして件数だけ出し
+(実測: 公開データを毎日 commit する bot が Tier A/B で十数本止まる判定になったが、 その repo の棚卸しは `generated:` 宣言で決着済で直すものは無かった)、
+原稿の主張の gate は「今の session に著者の承認があるか」 を見るので過去の commit では必ず落ちる = agent session の env を外して人の commit として通す。 一般則 =
 [`docs/convention-design-principles.md#detector-change-breaks-downstream-writers`](../docs/convention-design-principles.md#detector-change-breaks-downstream-writers)。
 
 ### <a id="visibility-decided-at-publish-time"></a>公開にするかは、 中身が出来てから・公開する直前に決める
