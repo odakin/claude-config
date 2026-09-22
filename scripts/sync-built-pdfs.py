@@ -130,12 +130,28 @@ def copy_atomic(src: Path, dst: Path) -> None:
     os.replace(tmp, dst)
 
 
+def take_lock(lock: Path) -> bool:
+    """同時に 1 本だけ走らせる。 取れなければ False (別の run の lock は消さない = 消すと 2 本が並走する)。"""
+    try:
+        if time.time() - lock.stat().st_mtime < 300:
+            return False
+        lock.unlink()  # 300 秒より古い = 落ちた run の残り
+    except FileNotFoundError:
+        pass
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        return False  # 同時に起動した別の run が先に取った
+    with os.fdopen(fd, "w") as fh:
+        fh.write(str(os.getpid()))
+    return True
+
+
 def run(base: Path, dest: Path, exclude, dry: bool, quiet: bool, recent_days: int = 0) -> int:
     lock = Path(tempfile.gettempdir()) / f"sync-built-pdfs-{os.getuid()}.lock"
+    if not take_lock(lock):
+        return 0
     try:
-        if lock.exists() and time.time() - lock.stat().st_mtime < 300:
-            return 0
-        lock.write_text(str(os.getpid()))
         copied = [(s, d) for s, d in plan(base, dest, exclude, recent_days) if needs_copy(s, d)]
         for s, d in copied:
             if not dry:
@@ -158,70 +174,89 @@ def prune_report(base: Path, dest: Path, exclude) -> int:
 
 
 def selftest() -> int:
-    with tempfile.TemporaryDirectory() as t:
-        base, dest = Path(t) / "base", Path(t) / "dest"
-        repo = base / "r1"
-        (repo / "notes" / "topic").mkdir(parents=True)
-        (repo / "sec").mkdir()
-        subprocess.run(["git", "init", "-q", str(repo)], check=True)
-        for rel in ("main", "notes/topic/main", "talk", "sec/secret"):
-            (repo / f"{rel}.tex").write_text("x")
-            (repo / f"{rel}.pdf").write_bytes(b"%PDF " + rel.encode())
-        (repo / "orphan.pdf").write_bytes(b"%PDF orphan")          # .tex が無い → 対象外
-        (repo / ".gitattributes").write_text("sec/** filter=git-crypt diff=git-crypt\n")
-        jobs = {str(d.relative_to(dest)) for _, d in plan(base, dest, [])}
-        assert jobs == {"r1/r1.pdf", "r1/topic.pdf", "r1/talk.pdf"}, jobs
-        assert {str(d.relative_to(dest)) for _, d in plan(base, dest, ["r1/notes/*"])} == {"r1/r1.pdf", "r1/talk.pdf"}
-        run(base, dest, [], False, True)
-        assert (dest / "r1/topic.pdf").read_bytes() == b"%PDF notes/topic/main"
-        # 古いマシンの古い PDF は、 新しい写しを上書きしない
-        (dest / "r1/talk.pdf").write_bytes(b"%PDF newer elsewhere")
-        old = time.time() - 3600
-        os.utime(repo / "talk.pdf", (old, old))
-        run(base, dest, [], False, True)
-        assert (dest / "r1/talk.pdf").read_bytes() == b"%PDF newer elsewhere"
-        # 元が新しくなれば写す
-        (repo / "talk.pdf").write_bytes(b"%PDF rebuilt")
-        new = time.time() + 5
-        os.utime(repo / "talk.pdf", (new, new))
-        run(base, dest, [], False, True)
-        assert (dest / "r1/talk.pdf").read_bytes() == b"%PDF rebuilt"
-        # 同じ名前がぶつかったら path 全体の名前にする
-        (repo / "a" / "x").mkdir(parents=True)
-        (repo / "b" / "x").mkdir(parents=True)
-        for rel in ("a/x/main", "b/x/main"):
-            (repo / f"{rel}.tex").write_text("x")
-            (repo / f"{rel}.pdf").write_bytes(b"%PDF")
-        names = {str(d.relative_to(dest)) for _, d in plan(base, dest, [])}
-        assert {"r1/a--x--main.pdf", "r1/b--x--main.pdf"} <= names, names
-        # 一般的な名前 + 一般的な dir (src / v3) は repo 名に。 入れ子の repo (親が ignore) も見る
-        assert target_names("r9", ["manuscript/v3/main.pdf"]) == {"manuscript/v3/main.pdf": "r9.pdf"}
-        assert target_names("r9", ["paper-x/main.pdf"]) == {"paper-x/main.pdf": "paper-x.pdf"}
-        inner = repo / "external" / "overleaf"
-        inner.mkdir(parents=True)
-        subprocess.run(["git", "init", "-q", str(inner)], check=True)
-        (inner / "paper.tex").write_text("x")
-        (inner / "paper.pdf").write_bytes(b"%PDF inner")
-        (repo / ".gitignore").write_text("external/\n")
-        got = {str(d.relative_to(dest)) for s_, d in plan(base, dest, []) if "overleaf" in str(s_)}
-        assert got == {"r1/external--overleaf--r1.pdf"}, got   # 親の main.pdf = r1.pdf とぶつかるので前置き
-        shutil.rmtree(repo / "external")
-        (repo / ".gitignore").unlink()
-        # 保管庫の dir は写さない。 recent_days は、 commit も変更も無い古いものを外す
-        (repo / "archive").mkdir()
-        (repo / "archive" / "gone.tex").write_text("x")
-        (repo / "archive" / "gone.pdf").write_bytes(b"%PDF")
-        assert not any("gone" in str(d) for _, d in plan(base, dest, []))
-        env = dict(os.environ, GIT_AUTHOR_DATE="2001-01-01T00:00:00", GIT_COMMITTER_DATE="2001-01-01T00:00:00")
-        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
-        subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
-                        "-c", "commit.gpgsign=false", "commit", "-qm", "old", "--no-verify"], check=True, env=env)
-        shutil.rmtree(dest)
-        assert plan(base, dest, [], 30) == [], "古い commit だけなら recent_days で外れる"
-        (repo / "talk.pdf").write_bytes(b"%PDF rebuilt again")
-        assert [d.name for _, d in plan(base, dest, [], 30)] == ["talk.pdf"]
+    saved = tempfile.tempdir
+    try:
+        with tempfile.TemporaryDirectory() as t:
+            # lock を本番の run (Stop hook が毎 turn 裏で起動する) と共有しない = 並走で黙って写さない flake を避ける
+            tempfile.tempdir = t
+            _selftest(Path(t))
+    finally:
+        tempfile.tempdir = saved
     print("selftest OK")
     return 0
+
+
+def _selftest(t: Path) -> None:
+    base, dest = Path(t) / "base", Path(t) / "dest"
+    repo = base / "r1"
+    (repo / "notes" / "topic").mkdir(parents=True)
+    (repo / "sec").mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    for rel in ("main", "notes/topic/main", "talk", "sec/secret"):
+        (repo / f"{rel}.tex").write_text("x")
+        (repo / f"{rel}.pdf").write_bytes(b"%PDF " + rel.encode())
+    (repo / "orphan.pdf").write_bytes(b"%PDF orphan")          # .tex が無い → 対象外
+    (repo / ".gitattributes").write_text("sec/** filter=git-crypt diff=git-crypt\n")
+    jobs = {str(d.relative_to(dest)) for _, d in plan(base, dest, [])}
+    assert jobs == {"r1/r1.pdf", "r1/topic.pdf", "r1/talk.pdf"}, jobs
+    assert {str(d.relative_to(dest)) for _, d in plan(base, dest, ["r1/notes/*"])} == {"r1/r1.pdf", "r1/talk.pdf"}
+    # 別の run が lock を持つ間は写さずに退き、 その lock を消さない (消すと次の起動と 2 本が並走する)
+    lk = Path(tempfile.gettempdir()) / f"sync-built-pdfs-{os.getuid()}.lock"
+    lk.write_text("99999")
+    run(base, dest, [], False, True)
+    assert not dest.exists() and lk.exists(), "lock を持つ別の run の最中に写した / その lock を消した"
+    # 300 秒より古い lock は落ちた run の残り = 取り直して写す
+    stale = time.time() - 600
+    os.utime(lk, (stale, stale))
+    run(base, dest, [], False, True)
+    assert not lk.exists(), "終わった run が lock を残した"
+    assert (dest / "r1/topic.pdf").read_bytes() == b"%PDF notes/topic/main"
+    # 古いマシンの古い PDF は、 新しい写しを上書きしない
+    (dest / "r1/talk.pdf").write_bytes(b"%PDF newer elsewhere")
+    old = time.time() - 3600
+    os.utime(repo / "talk.pdf", (old, old))
+    run(base, dest, [], False, True)
+    assert (dest / "r1/talk.pdf").read_bytes() == b"%PDF newer elsewhere"
+    # 元が新しくなれば写す
+    (repo / "talk.pdf").write_bytes(b"%PDF rebuilt")
+    new = time.time() + 5
+    os.utime(repo / "talk.pdf", (new, new))
+    run(base, dest, [], False, True)
+    assert (dest / "r1/talk.pdf").read_bytes() == b"%PDF rebuilt"
+    # 同じ名前がぶつかったら path 全体の名前にする
+    (repo / "a" / "x").mkdir(parents=True)
+    (repo / "b" / "x").mkdir(parents=True)
+    for rel in ("a/x/main", "b/x/main"):
+        (repo / f"{rel}.tex").write_text("x")
+        (repo / f"{rel}.pdf").write_bytes(b"%PDF")
+    names = {str(d.relative_to(dest)) for _, d in plan(base, dest, [])}
+    assert {"r1/a--x--main.pdf", "r1/b--x--main.pdf"} <= names, names
+    # 一般的な名前 + 一般的な dir (src / v3) は repo 名に。 入れ子の repo (親が ignore) も見る
+    assert target_names("r9", ["manuscript/v3/main.pdf"]) == {"manuscript/v3/main.pdf": "r9.pdf"}
+    assert target_names("r9", ["paper-x/main.pdf"]) == {"paper-x/main.pdf": "paper-x.pdf"}
+    inner = repo / "external" / "overleaf"
+    inner.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(inner)], check=True)
+    (inner / "paper.tex").write_text("x")
+    (inner / "paper.pdf").write_bytes(b"%PDF inner")
+    (repo / ".gitignore").write_text("external/\n")
+    got = {str(d.relative_to(dest)) for s_, d in plan(base, dest, []) if "overleaf" in str(s_)}
+    assert got == {"r1/external--overleaf--r1.pdf"}, got   # 親の main.pdf = r1.pdf とぶつかるので前置き
+    shutil.rmtree(repo / "external")
+    (repo / ".gitignore").unlink()
+    # 保管庫の dir は写さない。 recent_days は、 commit も変更も無い古いものを外す
+    (repo / "archive").mkdir()
+    (repo / "archive" / "gone.tex").write_text("x")
+    (repo / "archive" / "gone.pdf").write_bytes(b"%PDF")
+    assert not any("gone" in str(d) for _, d in plan(base, dest, []))
+    env = dict(os.environ, GIT_AUTHOR_DATE="2001-01-01T00:00:00", GIT_COMMITTER_DATE="2001-01-01T00:00:00")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                    "-c", "commit.gpgsign=false", "commit", "-qm", "old", "--no-verify"], check=True, env=env)
+    shutil.rmtree(dest)
+    assert plan(base, dest, [], 30) == [], "古い commit だけなら recent_days で外れる"
+    (repo / "talk.pdf").write_bytes(b"%PDF rebuilt again")
+    assert [d.name for _, d in plan(base, dest, [], 30)] == ["talk.pdf"]
 
 
 def main() -> int:
