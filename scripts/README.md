@@ -237,6 +237,7 @@
 - **[test_reviewed_mail_cli.py](test_reviewed_mail_cli.py)** — Offline checks: CLI authorization shape, pagination, full source extraction.
 - **[tex-first-use.py](tex-first-use.py)** — Is a notation explained where the reader first meets it? Lists the first body uses of a regex with line and section, checks the first one against the line of the defining \label (a reference to that label near the use counts as a pointer), and lists \cref-type references to equations that are printed further down.
 - **[tex2plain.py](tex2plain.py)** — .tex から LaTeX タグを除いたテキストを生成する (数式は Unicode で線形化、図キャプションは末尾へ)。
+- **[todo-ledger-split.py](todo-ledger-split.py)** — 1 file の list (`TODO.yaml`) の TODO 台帳を 1 entry 1 file (`todo/<id>.yaml`) に分割する (既定 dry-run)。
 - **[transcript-images.py](transcript-images.py)** — Claude Code の会話記録 (jsonl) から、 user が貼った画像 (画面写真) を file に取り出す
 - **[tune-seal-image.py](tune-seal-image.py)** — Calibrate a digitized seal PNG against a *printed* reference — stroke width and ink color.
 - **[uyghur-tts.py](uyghur-tts.py)** — Generate Uyghur speech through the public Idirak/MMS-TTS endpoint.
@@ -321,6 +322,7 @@
 - **[lib/staged_diff.py](lib/staged_diff.py)** — staged 追加行を読む helper (= pre-commit の warn 検査が binary を含む commit で落ちないように)。
 - **[lib/test-err-trap.sh](lib/test-err-trap.sh)** — set -e の bash test で落ちた assertion の行とコマンドを stderr に出す ERR trap (sourceable lib)
 - **[lib/test-err-trap.test.sh](lib/test-err-trap.test.sh)** — test-err-trap.sh の self-test (hermetic、 走らせた bash で fixture を実行)
+- **[lib/todo_ledger.py](lib/todo_ledger.py)** — 1 entry 1 file の TODO 台帳 (`<repo>/todo/<id>.yaml`) の読み書き (単一 home)。
 - **[lib/todo_thread_links.py](lib/todo_thread_links.py)** — 台帳の項目 (TODO) と mail thread を結ぶ link の読み方 (単一 home)。
 - **[lib/transcript_turns.py](lib/transcript_turns.py)** — Claude Code の transcript (jsonl) を turn に分けて最終 assistant 発話を取り出す共通部品（Stop hook の「今の turn の最終発話」 と、 過去 transcript で句を校正する calibrate-final-message-pattern.py が同じ境界で読む。 引用の中かの判定 inside_quote と、 match を含む 1 文を返す sentence_around も持つ）
 - **[lib/web_driver.py](lib/web_driver.py)** — 「値の正本 → 画面に打つ操作列」 を決定的に生成する site 非依存 harness

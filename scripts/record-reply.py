@@ -66,6 +66,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "lib"))
 from recorded_ids import MSGID_RE, THREADID_RE, harvest_entry, harvest_message_ids  # noqa: E402
 from todo_thread_links import harvest_todo_refs, norm_account, owner_from, resolve_threads, thread_ids  # noqa: E402
+# 項目の台帳 = <ledger>/todo/<id>.yaml (1 entry 1 file、 旧 <ledger>/TODO.yaml が残っていればそれも読む) = lib/todo_ledger.py
+from todo_ledger import (LEGACY_NAME as TODO_LEGACY_NAME, TodoLedgerError, dedent_entry,  # noqa: E402
+                         entry_text as todo_entry_text, indent_entry, load_todos_with_paths)
 import gmail_read  # noqa: E402
 
 SUMMARY_MAX_LINES = 3
@@ -84,7 +87,7 @@ except ImportError:  # pragma: no cover
 class Config:
     """台帳の場所と、 記録に要る個人の値 (= shim が渡す。 engine に既定の個人値は無い)。"""
     root: Path
-    ledgers: list[str]                       # <root>/<name>/inbox/*.yaml + <root>/<name>/TODO.yaml
+    ledgers: list[str]                       # <root>/<name>/inbox/*.yaml + <root>/<name>/todo/<id>.yaml (旧 TODO.yaml も)
     accounts: tuple[str, ...] = ()           # 試す順。 先頭 = 既定
     creds_dir: Path = Path.home() / ".gmail-mcp"
     owner_tokens: tuple[str, ...] = ()       # From にこれを含めば自分発 (→)
@@ -136,12 +139,13 @@ class Ledger:
                         for t in harvest_todo_refs(e):
                             self.inverse.setdefault(t, []).append(eid)
                     self.known |= self._harv[-1]
-            tp = cfg.root / name / "TODO.yaml"
-            if tp.exists():
-                for t in self._load_list(tp):
+            try:
+                for tp, t in load_todos_with_paths(cfg.root / name):   # todo/<id>.yaml (+ 旧 TODO.yaml)
                     if isinstance(t.get("id"), str):
                         self.todos[t["id"]] = (name, tp, t)
                     self.known |= harvest_entry(t)
+            except TodoLedgerError as e:
+                self.broken.append(str(e))
 
     def _load_list(self, p: Path) -> list[dict]:
         try:
@@ -489,7 +493,7 @@ def write_verified(path: Path, new_text: str, verify) -> None:
     path.write_text(new_text, encoding="utf-8")
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        why = verify(data if isinstance(data, list) else None)
+        why = verify(data if isinstance(data, (list, dict)) else None)   # dict = todo/<id>.yaml (1 file 1 entry)
     except Exception as e:
         why = f"再 parse 失敗: {str(e).splitlines()[0] if str(e) else e}"
     if why:
@@ -499,7 +503,7 @@ def write_verified(path: Path, new_text: str, verify) -> None:
 
 def _verify_inbox(entry_id: str, n_before: int, created: bool, want_mids: set[str]):
     def v(data):
-        if data is None:
+        if not isinstance(data, list):
             return "list として読めない"
         if len(data) != n_before + (1 if created else 0):
             return f"entry 数が {n_before} → {len(data)} (期待 {n_before + (1 if created else 0)})"
@@ -517,9 +521,10 @@ def _verify_inbox(entry_id: str, n_before: int, created: bool, want_mids: set[st
 
 def _verify_todo(todo_id: str, n_before: int, context: str, today: str, status: str | None):
     def v(data):
-        if data is None or len(data) != n_before:
+        items = data if isinstance(data, list) else ([data] if isinstance(data, dict) else None)   # dict = todo/<id>.yaml
+        if items is None or len(items) != n_before:
             return "entry 数が変わった / 読めない"
-        t = next((x for x in data if isinstance(x, dict) and x.get("id") == todo_id), None)
+        t = next((x for x in items if isinstance(x, dict) and x.get("id") == todo_id), None)
         if t is None:
             return f"項目 {todo_id} が無い"
         if t.get("status_context") != context:
@@ -668,11 +673,16 @@ def apply_plan(cfg: Config, p: dict, ledger: Ledger, todo_id: str | None, args, 
         written.append(c["path"])
     if todo_id and not args.no_todo:
         _, tpath, _ = ledger.todos[todo_id]
-        text = tpath.read_text(encoding="utf-8")
-        n_before = len([x for x in (yaml.safe_load(text) or []) if isinstance(x, dict)])
         ctx = compose_context(cfg, p, today, args.next)
-        write_verified(tpath, update_todo_text(text, todo_id, ctx, today, args.status, tid),
-                       _verify_todo(todo_id, n_before, ctx, today, args.status))
+        if tpath.name == TODO_LEGACY_NAME:   # 旧 list 形 (移行中に残っている TODO.yaml)
+            text = tpath.read_text(encoding="utf-8")   # 書く直前に読み直す (並列 session)
+            n_before = len([x for x in (yaml.safe_load(text) or []) if isinstance(x, dict)])
+            write_verified(tpath, update_todo_text(text, todo_id, ctx, today, args.status, tid),
+                           _verify_todo(todo_id, n_before, ctx, today, args.status))
+        else:   # todo/<id>.yaml (1 file 1 entry): list 形に戻して同じ編集を当て、 mapping に戻す (= 書式を保つ経路を 1 本に)
+            text = todo_entry_text(tpath)
+            new_text = dedent_entry(update_todo_text(indent_entry(text), todo_id, ctx, today, args.status, tid))
+            write_verified(tpath, new_text, _verify_todo(todo_id, 1, ctx, today, args.status))
         written.append(tpath)
     return written
 
@@ -1030,6 +1040,33 @@ def _selftest() -> int:
         tb = yaml.safe_load((td / "ledger-b" / "TODO.yaml").read_text(encoding="utf-8"))[0]
         check(tb.get("status") == "doing" and tb.get("email_ref") == "threadId:bbbb000000000001", "--status と email_ref を項目に書く")
         check(new is not None and set(harvest_entry(new)) >= {"bbbb000000000001", "bbbb000000000002"}, "t3 新規 entry も round-trip")
+        # todo/<id>.yaml (1 entry 1 file) の台帳: 項目の file だけを書き、 mapping と注釈を保つ
+        (td / "ledger-c" / "inbox").mkdir(parents=True)
+        (td / "ledger-c" / "todo").mkdir()
+        todo_c = td / "ledger-c" / "todo" / "2026-10-02-todo-c.yaml"
+        todo_c.write_text('# section note\nid: "2026-10-02-todo-c"\ntask: |\n  split ledger\nstatus: open\ncreated: "2026-09-01"\n'
+                          'notes: |\n  keep me\n', encoding="utf-8")
+        (td / "ledger-c" / "todo" / "README.md").write_text("# not an entry\n", encoding="utf-8")
+        cfg_c = Config(**{**vars(cfg), "ledgers": ["ledger-a", "ledger-b", "ledger-c"]})
+        threads[("acct-a", "dddd000000000001")] = [msg("dddd000000000001", T, CP), msg("dddd000000000002", T + 2000, OW)]
+        gm = FakeGmail(threads)
+        led = Ledger(cfg_c)
+        check(not led.broken and led.todos["2026-10-02-todo-c"][1] == todo_c and led.todos["2026-09-30-todo-a"][1].name == "TODO.yaml",
+              "t13 台帳は todo/<id>.yaml と旧 TODO.yaml の両方から項目を読む (README は entry でない)")
+        ns5 = argparse.Namespace(target="dddd000000000001", todo="2026-10-02-todo-c", account="acct-a", next="reply", status="doing",
+                                 summary="c thread.", slug="c-thread", id=None, ledger_for_new=None, no_todo=False, apply=True)
+        out_lines.clear()
+        rc = run_record(cfg_c, ns5, led, gm, "2026-09-22", pr)
+        tc_raw = todo_c.read_text(encoding="utf-8")
+        tc = yaml.safe_load(tc_raw)
+        check(rc == 0 and isinstance(tc, dict) and tc["id"] == "2026-10-02-todo-c" and tc["status"] == "doing"
+              and tc["email_ref"] == "threadId:dddd000000000001" and str(tc["updated"]) == "2026-09-22"
+              and tc["status_context"].startswith("2026-09-22 sent to Owner Example") and tc["notes"] == "keep me\n"
+              and tc_raw.startswith("# section note\nid: ") and not tc_raw.startswith("- "),
+              "t13 todo/<id>.yaml の項目は mapping のまま (注釈・block scalar を保って status / updated / email_ref / status_context を書く)")
+        cin = yaml.safe_load((td / "ledger-c" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8"))
+        check(len(cin) == 1 and cin[0]["related_todo"] == ["2026-10-02-todo-c"] and not (td / "ledger-c" / "TODO.yaml").exists(),
+              "t13 新規 entry は項目の台帳 (ledger-c) に、 旧 TODO.yaml は作らない")
         pth = td / "ledger-a" / "inbox" / "2026-09.yaml"
         orig = pth.read_text(encoding="utf-8")
         try:
