@@ -41,6 +41,8 @@ usage:
       [--rc-label-prefix com.claude-config.remote-control-server]
       [--cron-label-prefix <prefix>]     # optional: 無人 cron job 数も記録
       [--inventory 'LABEL=GLOB' ...]     # optional: 名前一覧を記録 (下記 name 規則)
+      [--job-label-prefix <prefix> ...]  # optional: ジョブごとの健康 (下記 job health)
+      [--job-python-modules yaml,...]     # optional: ジョブの python3 が import できるべき module
   fleet-heartbeat.py --selftest
 
 書かれる JSON (subdir/<hostname>.json):
@@ -48,7 +50,25 @@ usage:
     config_dirs: {alias: email_metadata_or_null},
     remote_control_at_startup, old_usr_local_cli, cron_jobs,
     desktop_scheduled_tasks: [{registry, enabled_ids}],
-    inventories: {label: [name, ...]} }        # --inventory 指定時のみ
+    inventories: {label: [name, ...]},         # --inventory 指定時のみ
+    jobs: [{label, last_exit, python, python_ok, bare_python}],  # --job-label-prefix 指定時のみ
+    job_python_modules: [module, ...] }                          # 同上
+
+job health (--job-label-prefix、 opt-in、 repeatable):
+  launchd の無人ジョブは job 定義の PATH で `python3` を解決する。 その PATH は agent の session や対話 shell と
+  先頭の dir が違い、 package manager の更新で `python3` の実体が差し替わると、 編集ゼロで依存 (yaml 等) が消えて
+  engine が import で終わる。 fail-open の engine は exit 0 で終わるので、 そのマシンの中からも成功に見える
+  (conventions/shell-env.md#job-python-by-capability)。 そこで各ジョブについて次を記録し、 reader が他マシンから見る:
+  - last_exit = `launchctl list` の最後の終了コード (未実行は null)
+  - python = job 定義の PATH (ProgramArguments の `export PATH="..."` か EnvironmentVariables) で解決した python3
+  - python_runs = その python3 が起動できるか (Xcode の gate の exit 69 等で落ちれば False)
+  - python_ok = その python3 が --job-python-modules を全部 import できるか。 未指定なら null
+  - bare_in_command = job の command (起動の関門など) が `python3` を PATH で呼ぶか
+  - bare_in_wrapper = command が `exec bash "<wrapper>"` で呼ぶ wrapper が `python3` を PATH で呼ぶか
+    (`"$PY"` や絶対 path で呼ぶ wrapper は PATH の python3 の健康に依存しない)
+  reader は bare_in_command ∧ ¬python_runs (= 関門が起動できず、 そのジョブは黙って休み続ける) と
+  bare_in_wrapper ∧ ¬python_ok (= engine が import で終わる) を出す。 command の位置 (行頭・; && || | $( の直後) の
+  `python3` だけを数える (echo の文中の語は数えない)
 
   name 規則 = **glob の最初の `*` 以降の最初の path 要素**:
     'gmail_accounts=~/.gmail-mcp/*/credentials.json' → 各 account dir 名の一覧 (= 親 dir 名)
@@ -157,7 +177,7 @@ def scan_inventory(spec: str):
     return label, sorted(names)
 
 
-def collect(rc_prefix, cron_prefix, inventory_specs=None):
+def collect(rc_prefix, cron_prefix, inventory_specs=None, job_prefixes=None, job_modules=None):
     home = Path.home()
     data = {
         "host": hostname_short(),
@@ -188,6 +208,13 @@ def collect(rc_prefix, cron_prefix, inventory_specs=None):
             cron_count += 1
     if cron_prefix:
         data["cron_jobs"] = cron_count
+    # job health (opt-in、 docstring §job health)
+    if job_prefixes:
+        try:
+            data["jobs"] = scan_jobs(out, list(job_prefixes), list(job_modules or []), home)
+            data["job_python_modules"] = list(job_modules or [])
+        except Exception:
+            pass  # fail-open (= beat 全体を落とさない)
     data["servers"].sort(key=lambda s: s["label"])
     # config dirs の auth metadata (= secret は読まない、 email 欄のみ)。
     # ⚠️ config JSON の場所は default と pinned dir で違う: 既定 (CLAUDE_CONFIG_DIR 未指定) は
@@ -237,6 +264,109 @@ def collect(rc_prefix, cron_prefix, inventory_specs=None):
     return data
 
 
+# コマンドとして呼ぶ位置の python3 だけ (行頭 / ; & | ( ` / $( / exec then do else の直後)。 文字列中の語は数えない
+_BARE_PY_RE = re.compile(r"(?:^|[;&|(`]\s*|\$\(\s*|\b(?:exec|then|do|else)\s+)python3\s")
+_EXPORT_PATH_RE = re.compile(r'export PATH="([^"]*)"')
+_WRAPPER_RE = re.compile(r'(?:exec\s+)?bash\s+"([^"]+\.sh)"')
+
+
+def _expand(p, home):
+    return p.replace("$HOME", str(home)).replace("${HOME}", str(home)).replace("~", str(home), 1 if p.startswith("~") else 0)
+
+
+def job_path(plist, home):
+    """job 定義の PATH (command の最後の `export PATH="..."` > EnvironmentVariables.PATH)。 無ければ None (= launchd 既定)。"""
+    cmd = " ".join(str(x) for x in (plist.get("ProgramArguments") or []))
+    m = _EXPORT_PATH_RE.findall(cmd)
+    if m:
+        return ":".join(_expand(p, home) for p in m[-1].split(":"))
+    env = plist.get("EnvironmentVariables") or {}
+    return _expand(env["PATH"], home) if env.get("PATH") else None
+
+
+def resolve_in_path(name, path):
+    """PATH の順で最初に見つかる実行 file (launchd 既定の PATH は /usr/bin:/bin:/usr/sbin:/sbin)。"""
+    for d in (path or "/usr/bin:/bin:/usr/sbin:/sbin").split(":"):
+        c = os.path.join(d, name)
+        if d and os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def bare_python_in(text):
+    """`python3` を PATH で呼ぶ行があるか (comment と `command -v python3` は除く)。"""
+    for ln in text.splitlines():
+        t = ln.strip()
+        if not t or t.startswith("#") or "command -v python3" in t:
+            continue
+        if _BARE_PY_RE.search(t):
+            return True
+    return False
+
+
+def job_health(label, status, plist, modules, home):
+    """1 ジョブの健康。 probe だけが外に出る (python3 -c 'import ...'、 timeout 10s、 失敗は False)。"""
+    rec = {"label": label, "last_exit": None, "python": None, "python_runs": None, "python_ok": None,
+           "bare_in_command": None, "bare_in_wrapper": None}
+    try:
+        rec["last_exit"] = int(status)
+    except (TypeError, ValueError):
+        pass
+    if not isinstance(plist, dict):
+        return rec
+    cmd = " ".join(str(x) for x in (plist.get("ProgramArguments") or []))
+    # job の command (= 起動の関門など。 標準ライブラリで足りる) と wrapper (= engine。 依存を使う) を分けて見る
+    rec["bare_in_command"] = bare_python_in(cmd.replace(";", "\n").replace("&&", "\n").replace("||", "\n"))
+    bw = False
+    for w in _WRAPPER_RE.findall(cmd):
+        try:
+            bw = bw or bare_python_in(Path(_expand(w, home)).read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            pass
+    rec["bare_in_wrapper"] = bw
+    py = resolve_in_path("python3", job_path(plist, home))
+    rec["python"] = py
+
+    def _probe(code):
+        if not py:
+            return False
+        env = dict(os.environ)
+        if os.path.isdir("/Library/Developer/CommandLineTools"):
+            env.setdefault("DEVELOPER_DIR", "/Library/Developer/CommandLineTools")
+        try:
+            return subprocess.run([py, "-c", code], env=env, capture_output=True, timeout=10).returncode == 0
+        except Exception:
+            return False
+    rec["python_runs"] = _probe("import sys")
+    if modules:
+        rec["python_ok"] = rec["python_runs"] and _probe("import sys; " + "; ".join(f"import {m}" for m in modules))
+    return rec
+
+
+def scan_jobs(launchctl_out, prefixes, modules, home):
+    import plistlib
+    out = []
+    for line in launchctl_out.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        status, label = parts[1], parts[2]
+        if not any(label.startswith(p) for p in prefixes):
+            continue
+        try:
+            with open(home / "Library/LaunchAgents" / f"{label}.plist", "rb") as f:
+                pl = plistlib.load(f)
+        except Exception:
+            pl = None
+        try:
+            out.append(job_health(label, status, pl, modules, home))
+        except Exception:
+            out.append({"label": label, "last_exit": None, "python": None, "python_runs": None, "python_ok": None,
+                        "bare_in_command": None, "bare_in_wrapper": None})
+    out.sort(key=lambda r: r["label"])
+    return out
+
+
 def scan_desktop_tasks(home: Path):
     """全 account registry の scheduled-tasks.json から enabled task id を収集 (fail-open)。"""
     out = []
@@ -272,6 +402,9 @@ def essence(d: dict):
             "desktop_tasks": d.get("desktop_scheduled_tasks"),
             # inventory の増減 (= account 追加 / 欠落) も即 commit (= 他マシンの reader に早く届く)
             "inventories": d.get("inventories"),
+            # job の健康の変化 (= 壊れた / 直った) も即 commit (last_exit は 0 か否かだけ)
+            "jobs": [(j.get("label"), (j.get("last_exit") or 0) != 0, j.get("python_runs"), j.get("python_ok"),
+                      j.get("bare_in_command"), j.get("bare_in_wrapper")) for j in d.get("jobs") or []],
         },
         sort_keys=True,
     )
@@ -282,8 +415,8 @@ def git(repo: Path, *args, timeout=60):
 
 
 def beat(repo: Path, subdir: str, min_interval_h: float, rc_prefix: str, cron_prefix,
-         inventory_specs=None):
-    data = collect(rc_prefix, cron_prefix, inventory_specs)
+         inventory_specs=None, job_prefixes=None, job_modules=None):
+    data = collect(rc_prefix, cron_prefix, inventory_specs, job_prefixes, job_modules)
     rel = f"{subdir}/{data['host']}.json"
     fpath = repo / rel
     fpath.parent.mkdir(parents=True, exist_ok=True)
@@ -394,6 +527,35 @@ def selftest():
         ok += 1
         # --inventory 未指定なら field 自体を作らない (= 旧 beat と同形、 opt-in)
         assert "inventories" not in collect(RC_LABEL_PREFIX_DEFAULT, None, None)
+        # job health: PATH の python3 が module を読めないジョブを、 wrapper の書き方ごと記録する
+        jroot = Path(td) / "jobhome"
+        (jroot / "brew").mkdir(parents=True)
+        (jroot / "sys").mkdir(parents=True)
+        (jroot / "Library/LaunchAgents").mkdir(parents=True)
+        for d_, good in (("brew", False), ("sys", True)):
+            p = jroot / d_ / "python3"
+            p.write_text("#!/bin/sh\nexit %d\n" % (0 if good else 1))
+            p.chmod(0o755)
+        w_bare = jroot / "bare-cron.sh"
+        w_bare.write_text("#!/bin/bash\n# python3 はコメント\ncommand -v python3 >/dev/null || exit 0\necho \"python3 が無い\"\npython3 \"$ENGINE\" --x\n")
+        w_pick = jroot / "pick-cron.sh"
+        w_pick.write_text("#!/bin/bash\nPY=\"$(pick_python yaml)\" || exit 3\n\"$PY\" \"$ENGINE\"\n")
+        def mkpl(target, path):
+            return {"ProgramArguments": ["/bin/sh", "-c",
+                    'export PATH="%s"; cd "$HOME" && exec bash "%s"' % (path, target)]}
+        jb = job_health("j.bare", "0", mkpl(str(w_bare), f"$HOME/brew:$HOME/sys"), ["yaml"], jroot)
+        assert jb["python"] == str(jroot / "brew/python3") and jb["python_ok"] is False and jb["python_runs"] is False             and jb["bare_in_wrapper"] is True and jb["bare_in_command"] is False, jb
+        jp = job_health("j.pick", "3", mkpl(str(w_pick), f"$HOME/brew:$HOME/sys"), ["yaml"], jroot)
+        assert jp["bare_in_wrapper"] is False and jp["last_exit"] == 3, jp
+        jg = job_health("j.gate", "-", {"ProgramArguments": ["/bin/sh", "-c",
+                        'export PATH="$HOME/sys"; cd x && python3 "gate.py" || exit 0; exec claude -p']}, ["yaml"], jroot)
+        assert jg["bare_in_command"] is True and jg["bare_in_wrapper"] is False and jg["python_ok"] is True             and jg["python_runs"] is True and jg["last_exit"] is None, jg
+        assert not bare_python_in('echo "yaml を import できる python3 が無い" >&2')
+        assert bare_python_in('out="$(python3 x.py)"') and bare_python_in("python3 x.py")             and not bare_python_in('PY=python3') and not bare_python_in('[ -x /usr/bin/python3 ] && PY=/usr/bin/python3')
+        assert job_health("j.none", "0", None, ["yaml"], jroot)["python"] is None
+        assert resolve_in_path("python3", None) in (None, "/usr/bin/python3")
+        e1 = essence({"jobs": [jb]}); e2 = essence({"jobs": [dict(jb, python_ok=True)]})
+        assert e1 != e2, "job の健康の変化は即 commit"
         ok += 1
     print(f"selftest: {ok}/14 PASS")
 
@@ -409,6 +571,10 @@ def main():
                     metavar="LABEL=GLOB",
                     help="このマシンに置かれた物の **名前だけ** を記録 (repeatable、 中身は読まない)。 "
                          "reader が fleet 横断で突合し「他マシンには在るのにここには無い」 を surface")
+    ap.add_argument("--job-label-prefix", action="append", default=[],
+                    help="この prefix の launchd job ごとに最後の終了コードと、 job の PATH での python3 の健康を記録 (repeatable)")
+    ap.add_argument("--job-python-modules", default="",
+                    help="ジョブの python3 が import できるべき module (カンマ区切り、 例 yaml)")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
@@ -420,7 +586,8 @@ def main():
     try:
         msg = beat(Path(args.repo).expanduser(), args.subdir,
                    args.min_commit_interval_hours, args.rc_label_prefix,
-                   args.cron_label_prefix, args.inventory)
+                   args.cron_label_prefix, args.inventory, args.job_label_prefix,
+                   [m.strip() for m in args.job_python_modules.split(",") if m.strip()])
         print(msg)
     except Exception as e:
         print(f"fail-open: {e}", file=sys.stderr)

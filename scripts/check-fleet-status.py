@@ -98,7 +98,31 @@ def inventory_findings(beats):
     return out
 
 
-def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_tasks=False):
+def job_findings(host, d, self_host=None):
+    """1 マシンの beat の jobs から finding を作る (writer の --job-label-prefix、 docstring = fleet-heartbeat.py §job health)。
+    - 🔴 command (起動の関門など) が PATH の python3 を呼ぶのに、 その python3 が起動できない = ジョブは黙って休み続ける
+    - 🟠 wrapper が PATH の python3 を呼ぶのに、 必要な module を import できない = engine が起動直後に終わる
+    - 🟠 最後の終了コードが 0 でない (自分のマシンの分は check-cron-health が出すので出さない)
+    旧 beat (jobs 欄なし) は何も言わない。"""
+    out = []
+    mods = ", ".join(d.get("job_python_modules") or []) or "必要な module"
+    for j in d.get("jobs") or []:
+        lab = j.get("label", "?")
+        py = j.get("python") or "(PATH に python3 が無い)"
+        if j.get("bare_in_command") and j.get("python_runs") is False:
+            out.append(f"🔴 {host}: job {lab} の起動行が PATH の python3 ({py}) を呼ぶが、 それが起動できない "
+                       f"= 関門の失敗が「待機」 と同じに扱われ黙って休み続ける (shell-env.md#job-python-by-capability)")
+        elif j.get("bare_in_wrapper") and j.get("python_ok") is False:
+            out.append(f"🟠 {host}: job {lab} の wrapper が PATH の python3 ({py}) を呼ぶが {mods} を import できない "
+                       f"= engine が起動直後に終わる (exit 0 なら成功に見える)。 wrapper で pick_python を使う "
+                       f"(shell-env.md#job-python-by-capability)")
+        le = j.get("last_exit")
+        if host != self_host and isinstance(le, int) and le != 0:
+            out.append(f"🟠 {host}: job {lab} の最後の終了コード = {le} (そのマシンの ~/Library/Logs/{lab}.log)")
+    return out
+
+
+def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_tasks=False, self_host=None):
     now = now or time.time()
     expect_accounts = expect_accounts or []
     findings = []
@@ -136,6 +160,7 @@ def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_
                 findings.append(f"{mark} {host}: server {s.get('label')} = {st} — {desc}")
             elif s.get("pid") is None:
                 findings.append(f"🟠 {host}: server {s.get('label')} が loaded だが process 無し")
+        findings.extend(job_findings(host, d, self_host))
         if role == "always-on" and not d.get("servers"):
             findings.append(f"🟠 {host} (always-on): RC server が 1 本も loaded されていない")
         # coverage check: expected account の suffix server (= label 末尾 .<acct>) が居るか
@@ -271,7 +296,23 @@ def selftest():
         f = scan(d, {}, 6, now)
         assert any("lap" in x and "a2" in x and "a3" in x and "96h" in x for x in f), f
         ok += 1
-    print(f"selftest: {ok}/15 PASS")
+        # 16: job health (旧 beat は黙る / 関門が起動できない = 🔴 / engine が import できない = 🟠 / 他マシンの非 0 終了 = 🟠)
+        beat_j = {"job_python_modules": ["yaml"], "jobs": [
+            {"label": "j.gate", "python": "/x/python3", "python_runs": False, "python_ok": False,
+             "bare_in_command": True, "bare_in_wrapper": False, "last_exit": 69},
+            {"label": "j.wrap", "python": "/b/python3", "python_runs": True, "python_ok": False,
+             "bare_in_command": False, "bare_in_wrapper": True, "last_exit": 0},
+            {"label": "j.pick", "python": "/b/python3", "python_runs": True, "python_ok": False,
+             "bare_in_command": False, "bare_in_wrapper": False, "last_exit": 0}]}
+        fj = job_findings("imac", beat_j, self_host="m5")
+        assert any(x.startswith("🔴 imac: job j.gate") for x in fj), fj
+        assert any(x.startswith("🟠 imac: job j.wrap") and "yaml" in x for x in fj), fj
+        assert any("j.gate の最後の終了コード = 69" in x for x in fj), fj
+        assert not any("j.pick" in x for x in fj), "pick_python の wrapper は PATH の python3 の健康に依存しない"
+        assert not any("終了コード" in x for x in job_findings("m5", beat_j, self_host="m5")), "自分の分は cron-health に任せる"
+        assert job_findings("old", {"servers": []}) == [], "旧 beat は黙る"
+        ok += 1
+    print(f"selftest: {ok}/16 PASS")
 
 
 def main():
@@ -298,8 +339,10 @@ def main():
     if not dir_.is_dir():
         sys.exit(0)  # fleet 未開始 = silent (fail-open)
     try:
+        import socket
+        me = socket.gethostname().split(".")[0]
         findings = scan(dir_, roles, args.stale_hours, expect_accounts=args.expect_account,
-                        warn_desktop_tasks=args.warn_desktop_tasks)
+                        warn_desktop_tasks=args.warn_desktop_tasks, self_host=me)
     except Exception:
         sys.exit(0)
     if findings:

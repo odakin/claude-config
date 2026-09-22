@@ -18,6 +18,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGINE="$HERE/install-launchd-cron.sh"
+V="$(sed -n 's/^CAL_VERSION=\([0-9]*\).*/\1/p' "$ENGINE")"   # 照合済み印の版
 command -v python3 >/dev/null 2>&1 || { echo "SKIP: python3 が無い (plist 生成に必要)"; exit 0; }
 
 TMP="$(mktemp -d)"
@@ -175,13 +176,13 @@ engine --routine "upd|cmd|$TARGET|0 9 10 * *" --install-one upd >/dev/null 2>&1
 # install 後に plist の command へ手で pin 相当の印を足す (= 自動更新が ProgramArguments を触らないことの確認用)
 python3 -c 'import plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,"rb")); d["ProgramArguments"][-1]+=" # PIN-MARK"; plistlib.dump(d,open(p,"wb"))' "$(plist_of upd)"
 has_pin() { python3 -c 'import plistlib,sys; sys.exit(0 if "PIN-MARK" in plistlib.load(open(sys.argv[1],"rb"))["ProgramArguments"][-1] else 1)' "$(plist_of upd)"; }
-[ "$(cat "$STAMP" 2>/dev/null)" = "2 0 9 10 * *" ] && ok "install が照合済み印を書く (空白を含む既定 dir)" || ng "印: $(cat "$STAMP" 2>&1)"
+[ "$(cat "$STAMP" 2>/dev/null)" = "$V 0 9 10 * *" ] && ok "install が照合済み印を書く (空白を含む既定 dir)" || ng "印: $(cat "$STAMP" 2>&1)"
 
 engine --routine "upd|cmd|$TARGET|0 9 10 4 *" --ensure >"$TMP/out" 2>"$TMP/err"
 rc=$?
 got="$(sci "$(plist_of upd)")"
 if [ "$rc" -eq 0 ] && [ "$got" = '{"Day":10,"Hour":9,"Minute":0,"Month":4}' ] && grep -q "ensure update: upd" "$TMP/out" \
-   && grep -q "OK loaded: $PREFIX.upd" "$TMP/out" && has_pin && [ "$(cat "$STAMP")" = "2 0 9 10 4 *" ] && [ ! -s "$TMP/err" ]; then
+   && grep -q "OK loaded: $PREFIX.upd" "$TMP/out" && has_pin && [ "$(cat "$STAMP")" = "$V 0 9 10 4 *" ] && [ ! -s "$TMP/err" ]; then
   ok "cron の変更 → calendar だけ書き換え + 再 load + 印更新 (pin は残る)"
 else
   ng "rc=$rc got=$got out=$(tr '\n' ' ' <"$TMP/out") err=$(cat "$TMP/err") stamp=$(cat "$STAMP")"
@@ -193,18 +194,18 @@ nopy_engine --routine "upd|cmd|$TARGET|0 9 10 4 *" --ensure >"$TMP/out" 2>&1
 
 rm -f "$STAMP"
 engine --routine "upd|cmd|$TARGET|0 9 10 4 *" --ensure >"$TMP/out" 2>"$TMP/err"
-[ $? -eq 0 ] && [ ! -s "$TMP/out" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "2 0 9 10 4 *" ] \
+[ $? -eq 0 ] && [ ! -s "$TMP/out" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "$V 0 9 10 4 *" ] \
   && ok "印が無く calendar が一致 (= 旧 engine で入れた routine) → 書き換えず印だけ書く" || ng "out=$(cat "$TMP/out") stamp=$(cat "$STAMP" 2>&1)"
 
 printf '1 0 9 10 4 *\n' > "$STAMP"
 engine --routine "upd|cmd|$TARGET|0 9 10 4 *" --ensure >"$TMP/out" 2>"$TMP/err"
-[ $? -eq 0 ] && [ ! -s "$TMP/out" ] && [ "$(cat "$STAMP")" = "2 0 9 10 4 *" ] \
+[ $? -eq 0 ] && [ ! -s "$TMP/out" ] && [ "$(cat "$STAMP")" = "$V 0 9 10 4 *" ] \
   && ok "変換の版が古い印 → 照合し直して印を今の版に" || ng "out=$(cat "$TMP/out") stamp=$(cat "$STAMP")"
 
 : > "$STATE/$PREFIX.upd.running"
 engine --routine "upd|cmd|$TARGET|0 9 10 5 *" --ensure >"$TMP/out" 2>"$TMP/err"
 [ $? -eq 0 ] && grep -q "ensure update 保留: upd" "$TMP/out" && [ "$(sci "$(plist_of upd)")" = '{"Day":10,"Hour":9,"Minute":0,"Month":4}' ] \
-  && [ "$(cat "$STAMP")" = "2 0 9 10 4 *" ] && ok "実行中の job は書き換えず保留 (印も据え置き)" || ng "out=$(cat "$TMP/out") stamp=$(cat "$STAMP")"
+  && [ "$(cat "$STAMP")" = "$V 0 9 10 4 *" ] && ok "実行中の job は書き換えず保留 (印も据え置き)" || ng "out=$(cat "$TMP/out") stamp=$(cat "$STAMP")"
 rm -f "$STATE/$PREFIX.upd.running"
 engine --routine "upd|cmd|$TARGET|0 9 10 5 *" --ensure >"$TMP/out" 2>"$TMP/err"
 [ $? -eq 0 ] && grep -q "ensure update: upd" "$TMP/out" && [ "$(sci "$(plist_of upd)")" = '{"Day":10,"Hour":9,"Minute":0,"Month":5}' ] \
@@ -217,6 +218,36 @@ engine --routine "upd|cmd|$TARGET|0 9 10 6 *" --ensure >"$TMP/out" 2>"$TMP/err"
 
 engine --routine "upd|cmd|$TARGET|0 9 10 6 *" --uninstall-one upd >/dev/null 2>&1
 [ ! -e "$STAMP" ] && [ ! -e "$(plist_of upd)" ] && ok "--uninstall-one が印も消す" || ng "印が残った"
+
+echo "T9 関門の失敗 (python が起動できない等) を待機と分ける + 旧形の plist を --ensure が新形に直す"
+GT="$TMP/gtarget.sh"; printf '#!/bin/sh\necho ran > "%s/ran"\n' "$TMP" > "$GT"; chmod +x "$GT"
+gcmd() { python3 -c 'import plistlib,sys; print(plistlib.load(open(sys.argv[1],"rb"))["ProgramArguments"][2])' "$(plist_of "$1")"; }
+for g in "true:0:ran" "false:0:skip" "sh -c 'exit 69':69:skip"; do
+  gate="${g%%:*}"; rest="${g#*:}"; want_rc="${rest%%:*}"; want_run="${rest#*:}"
+  engine --workdir "$TMP" --gate "$gate" --routine "g|cmd|$GT|0 9 * * *" --install-one g >/dev/null 2>&1
+  rm -f "$TMP/ran"
+  HOME="$TMP" /bin/sh -c "$(gcmd g)" >/dev/null 2>"$TMP/gerr"; rc=$?
+  ran=skip; [ -f "$TMP/ran" ] && ran=ran
+  if [ "$rc" = "$want_rc" ] && [ "$ran" = "$want_run" ]; then ok "関門 [$gate] → rc=$rc / $ran"
+  else ng "関門 [$gate] → rc=$rc (want $want_rc) / $ran (want $want_run) err=$(cat "$TMP/gerr")"; fi
+done
+grep -q "routine gate failed rc=69" "$TMP/gerr" && ok "関門の失敗は stderr に 1 行 (= launchd の log に残る)" || ng "stderr=$(cat "$TMP/gerr")"
+# 旧形の plist (+ 手で足した pin) を置き、 旧版の照合済み印を書いてから --ensure
+python3 - "$(plist_of g)" <<'PYOLD'
+import plistlib, re, sys
+p = sys.argv[1]; d = plistlib.load(open(p, "rb")); c = d["ProgramArguments"][2]
+c = re.sub(r'\{ (.+?); _g=\$\?;.*?fi; \} && exec ', r'\1 || exit 0; exec ', c, flags=re.S) + " # PIN-MARK"
+d["ProgramArguments"][2] = c; plistlib.dump(d, open(p, "wb"))
+PYOLD
+gcmd g | grep -q ' || exit 0; exec ' && ok "旧形の plist を用意できた" || ng "旧形にできない: $(gcmd g)"
+printf '2 0 9 * * *\n' > "$TMP/Library/Application Support/install-launchd-cron/$PREFIX.g.cron" 2>/dev/null \
+  || { mkdir -p "$TMP/lstate"; printf '2 0 9 * * *\n' > "$TMP/lstate/$PREFIX.g.cron"; }
+PATH="$BIN:$PATH" LCRON_LA_DIR="$LA" LCRON_LOG_DIR="$TMP/log" CLAUDE_BIN="$BIN/claude" HOME="$TMP" \
+  sh "$ENGINE" --label-prefix "$PREFIX" --workdir "$TMP" --gate "sh -c 'exit 69'" --routine "g|cmd|$GT|0 9 * * *" --ensure >"$TMP/out" 2>"$TMP/err"
+c="$(gcmd g)"
+if printf '%s' "$c" | grep -q '_g=\$?' && ! printf '%s' "$c" | grep -q ' || exit 0; exec ' && printf '%s' "$c" | grep -q 'PIN-MARK' \
+   && grep -q "ensure update: g" "$TMP/out"; then ok "--ensure が旧形の関門を新形に直す (pin は残す)"
+else ng "out=$(cat "$TMP/out") err=$(cat "$TMP/err") cmd=$c"; fi
 
 echo
 echo "install-launchd-cron.test.sh: PASS=$PASS FAIL=$FAIL"

@@ -85,7 +85,7 @@ esac
 LA_DIR="${LCRON_LA_DIR:-$HOME/Library/LaunchAgents}"   # LCRON_LA_DIR は test 用 override
 LOG_DIR="${LCRON_LOG_DIR:-$HOME/Library/Logs}"
 STATE_DIR="${LCRON_STATE_DIR:-$HOME/Library/Application Support/install-launchd-cron}"   # --ensure の照合済み印
-CAL_VERSION=2   # cron→StartCalendarInterval 変換の版 (2 = 各欄の , / N-M / */S / N-M/S + 月 + 日と曜日の OR)
+CAL_VERSION=3   # plist 変換の版 (2 = 各欄の , / N-M / */S / N-M/S + 月 + 日と曜日の OR、 3 = 関門の起動行が失敗を待機と分ける)
 DOMAIN="gui/$(id -u)"
 CRON_MODEL="${CRON_MODEL:-}"
 CRON_EFFORT="${CRON_EFFORT:-}"
@@ -182,6 +182,25 @@ plist_py() {
   python3 - "$@" <<'PYEOF'
 import sys, re, plistlib
 
+# 関門 (--gate) の起動行。 関門の終了値は 0 = 実行 / 1 = 待機 (別のマシンが本番)。 旧形 `GATE || exit 0` は
+# それ以外の非 0 (python3 が起動できない exit 69・127 など) も「待機」 と同じ exit 0 にしていた = ジョブが
+# 黙って永久に休み、 launchd の記録は成功のまま (conventions/shell-env.md#job-python-by-capability)。
+# 新形は待機だけを exit 0 にし、 失敗は非 0 で終わらせて launchd の終了コード (cron health・fleet の job health) に出す。
+def gate_block(gate):
+    return ('{ %s; _g=$?; if [ "$_g" -eq 1 ]; then exit 0; elif [ "$_g" -ne 0 ]; then '
+            'echo "routine gate failed rc=$_g" >&2; exit "$_g"; fi; } && ' % gate)
+
+
+_OLD_GATE_RE = re.compile(r'(cd "[^"]*" && )(.+?) \|\| exit 0; (exec )', re.S)
+
+
+def upgrade_gate(cmd):
+    """旧形 `cd W && GATE || exit 0; exec ...` を新形 `cd W && { GATE; ... } && exec ...` に (他は 1 文字も変えない)。"""
+    m = _OLD_GATE_RE.search(cmd)
+    if not m:
+        return cmd
+    return cmd[:m.start()] + m.group(1) + gate_block(m.group(2)) + m.group(3) + cmd[m.end():]
+
 # 5 欄の名前・plist key・値域。 曜日の 7 は 0 (日曜) と同じ。
 FIELDS = [('分', 'Minute', 0, 59), ('時', 'Hour', 0, 23), ('日', 'Day', 1, 31),
           ('月', 'Month', 1, 12), ('曜日', 'Weekday', 0, 7)]
@@ -269,7 +288,7 @@ if sys.argv[1] == 'check':
 
 if sys.argv[1] == 'recal':
     # loaded な routine の calendar を spec と比べ、 ずれていれば StartCalendarInterval だけを書き換える
-    # (= ProgramArguments 等は触らない = install 時の CRON_MODEL / CRON_EFFORT / CRON_CONFIG_DIR の pin を保つ)。
+    # (= ProgramArguments は関門の旧形を新形にするだけ = install 時の CRON_MODEL / CRON_EFFORT / CRON_CONFIG_DIR の pin を保つ)。
     # 組 = <task-id> <cron> <plist> <running 0|1>。 1 組ごとに "same|held|updated|missing <task-id>" を出す。
     import os
     args = sys.argv[2:]
@@ -283,12 +302,15 @@ if sys.argv[1] == 'recal':
         except Exception:
             print('missing', task_id)
             continue
-        if d.get('StartCalendarInterval') == want:
+        pa = list(d.get('ProgramArguments') or [])
+        new_pa = pa[:2] + [upgrade_gate(pa[2]) if isinstance(pa[2], str) else pa[2]] + pa[3:] if len(pa) >= 3 else pa
+        if d.get('StartCalendarInterval') == want and new_pa == pa:
             print('same', task_id)
         elif running == '1':
             print('held', task_id)   # 実行中の job を bootout すると殺すので、 次の呼び出しに回す
         else:
             d['StartCalendarInterval'] = want
+            d['ProgramArguments'] = new_pa
             with open(path + '.tmp', 'wb') as f:
                 plistlib.dump(d, f)
             os.replace(path + '.tmp', path)
@@ -308,8 +330,8 @@ if node_dir and node_dir not in base_path.split(":"):
 prefix = ('unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; ' + pin +
           'export PATH="%s"; ' % base_path +
           'cd "%s" && ' % workdir)
-# 任意の gate: cd の後・exec の前に挿入。 `cd && <gate> || exit 0;` で gate 非 0 = defer (exit 0)。
-gate_prefix = (gate + ' || exit 0; ') if gate else ''
+# 任意の gate: cd の後・exec の前に挿入。 gate の 1 = defer (exit 0)、 その他の非 0 = 失敗 (= 同じ終了値で終わる。 gate_block)
+gate_prefix = gate_block(gate) if gate else ''
 if kind == 'skill':
     model_flag = ('--model %s ' % model) if model else ''
     model_flag += ('--effort %s ' % effort) if effort else ''
@@ -491,7 +513,7 @@ cmd_ensure() {  # 未 install の routine を install + loaded でも calendar �
   # → 新 routine を ROUTINES に足して git pull した後、 次 session でそのマシンに自動 install される。
   # → 既存 routine の cron を書き換えて (または engine の変換が変わって) git pull した後も、 次 session で
   #    そのマシンの plist の StartCalendarInterval だけが書き換わって再 load される (= ProgramArguments は
-  #    触らないので install 時の CRON_MODEL 等の pin は残る)。 job が実行中なら殺さないよう次回に回す。
+  #    関門の旧形 `GATE || exit 0` を新形にするだけなので install 時の CRON_MODEL 等の pin は残る)。 job が実行中なら殺さないよう次回に回す。
   #    照合済み印 (record_cron) が spec と一致する loaded routine は plist を読まない (= 定常状態で python 0 回)。
   # ⚠️ fail-open の例外 = install / 照合する routine の読めない cron (= 呼び出し側の spec の誤り)。 1 本でも
   #    あれば 1 行ずつ stderr に出して、 何も変えず exit 2 (= 「ensure install」 だけ出て未登録、 を起こさない)。

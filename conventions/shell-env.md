@@ -349,8 +349,25 @@ You must agree to the Xcode license agreements...
 | 発火面 | 届く経路 | 届かない経路 |
 |---|---|---|
 | agent の session と hook | agent の設定の env (= 全 hook と shell 呼び出しに継承される) | 各 hook を個別に書き換える (= 数が多く、 次に増えた hook に効かない) |
-| OS の定期ジョブ (launchd / cron) | 各 job の **wrapper script 内で export** (= 配布物なので同期するだけで全機械に届く) | agent の設定 (= OS のジョブは読まない) / job 定義ファイルの環境変数 (= 機械ごとに再登録が要る) |
+| OS の定期ジョブ (launchd / cron) | 各 job の **wrapper script 内で export** (= 配布物なので同期するだけで全機械に届く)。 ⚠️ `python3` 自体も PATH で解決せず [#job-python-by-capability](#job-python-by-capability) で選ぶ | agent の設定 (= OS のジョブは読まない) / job 定義ファイルの環境変数 (= 機械ごとに再登録が要る) |
 | 独立した常駐 helper・GUI helper | script 側で**起動できる実体を probe して選ぶ** (= env を継がない) | 上の 2 つ |
 
 ⚠️ **「軽いから安全」 に見える probe ほど実行可能性に依存している**: `--version` / `--help` / `which` は、 この gate が閉じていると**何も返さない**。 その空を「非対応」 と読むと別の silent な後退を生む (= [convention-design-principles.md §22](../docs/convention-design-principles.md#silent-probe-false-healthy))。
 
+## <a id="job-python-by-capability"></a>無人ジョブの `python3` は PATH の順でなく「依存を import できるか」 で選ぶ — 発火面ごとに別の interpreter になる
+
+**主張**: 素の `python3` は、 それを起動する発火面の PATH で解決される。 agent の session (設定の env)、 対話 shell (rc)、 OS の定期ジョブ (job 定義) は PATH の先頭に来る dir が違う。 同じ機械に python3 が複数ある (OS 付属・package manager の複数の版) と、 **発火面ごとに別の interpreter になる**。 package manager の更新で PATH 上の `python3` の実体が新しい版に差し替わると、 **編集が 1 つも無いのに**ジョブの interpreter から third-party の依存が消える。
+
+### <a id="job-python-invisible"></a>壊れ方がその機械の中から見えない理由 (実測)
+
+- **session で試すと通る**: session は別の interpreter を掴んでいる。 「手で実行したら動いた」 はジョブの環境の証明にならない
+- **成功の終了コードで何もしない**: engine を fail-open に書いていると (`ImportError` で exit 0)、 launchd の記録も cron の健康診断も正常を示す。 通知のジョブなら症状は「通知が来ない」 だけで、 来ないことには誰も気づかない
+- **関門が「待機」 に畳む**: 起動行が `<gate> || exit 0` 型だと、 interpreter が起動すらできない場合 (Xcode の gate の exit 69 / 見つからない 127) も「別のマシンが本番なので待機」 と同じ exit 0 になり、 ジョブが黙って永久に休む
+
+### <a id="job-python-fix"></a>対処 (3 つを組にする)
+
+1. **wrapper は interpreter を能力で選ぶ**: [`scripts/lib/pick-python.sh`](../scripts/lib/pick-python.sh) を source して `PY="$(pick_python yaml)" || { echo "$PY" >&2; exit 3; }` → `"$PY" engine.py`。 候補の順 = OS 付属の実体 (shim を通らない path) → shim (+ `DEVELOPER_DIR`) → PATH 上の順。 1 つも無ければ**非 0 で終わる** (= launchd の終了コードに出る)。 依存の無い engine も `pick_python` (module なし) で「起動できる」 ものを選ぶ
+2. **関門の失敗を待機と分ける**: 関門の終了値は 0 = 実行 / 1 = 待機 と決め、 それ以外の非 0 は失敗として同じ終了値で終わらせる。 [`scheduled-tasks.md#launchd-cron-engine`](scheduled-tasks.md#launchd-cron-engine) の `--gate` はこの形を生成し、 既に入っている job 定義も `--ensure` が 1 回照合して書き換える (model 等の手の指定は残す)
+3. **他の機械から見る**: 壊れた機械の中の検査は、 その機械で誰かが session を開くまで何も言わない。 [`multi-machine-state.md#fleet-heartbeat`](multi-machine-state.md#fleet-heartbeat) の job health (`--job-label-prefix` / `--job-python-modules`) が各ジョブの最後の終了コードと、 job の PATH で解決した python3 が起動できるか・依存を import できるかを記録し、 reader が「関門の python3 が起動できない」 (🔴) / 「wrapper が PATH の python3 を呼ぶのに依存を import できない」 (🟠) / 他の機械の非 0 終了 (🟠) を出す
+
+⚠️ [#xcode-gate-wrong-fix](#xcode-gate-wrong-fix) の「別の python へ逃がすのは誤り」 は、 **PATH の順が黙って逃がしている**場合にも当てはまる = 意図して選んでいないのに、 ジョブは別の interpreter で動いている。 表の「OS の定期ジョブ」 行の `DEVELOPER_DIR` の宣言だけでは足りない (shim を直しても、 PATH が先に別の python3 を返す)。
