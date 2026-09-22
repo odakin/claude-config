@@ -390,6 +390,7 @@ sender 側は上記 spawn-spec template を書いて chip を投げる。 receiv
 - unique token
 - 完了時実行 command 全文 (= results-inbox の `--record` 系)
 - 「上位 session の次回起動時に自動 surface」 等の **上位 session 前提** wording
+- board の宛先 (= `role-<project>-<function>` か session id + `inbox --session … --sync` / `claim` の command) — v2 request を通す handoff の形。 token も return spine も無いが、 これも「君に向けて書かれた依頼」 の form marker
 
 これらが揃った message を受けたら **その prompt を再 spawn しない**。 template の構造要素そのものが「君は終端の worker」 を示す **addressing の form marker** である (sender は自分を「上位」 として frame している = message は自分より下位 = 君に向けて書かれている)。 動詞 semantic 判別 (「投げて」 = spawn 明示 vs 「担当してほしい」 = execute 明示 vs あいまい 3-way) より、 form の syntactic 判別が頑健 = 前者は [`convention-design-principles.md §8.8 (= #proxy-blind-spot)`](../docs/convention-design-principles.md#proxy-blind-spot) の意味的 proxy 判別に該当、 後者は proxy でなく form 直接。
 
@@ -478,6 +479,7 @@ honest な天井: **「起動した」 を *live 親に自動 push* する経路
 1. **spawn_task chip** (harness にあれば) — user の可視 queue に入り、 1 click で worker session が立つ
 2. **deadline つき TODO** (task ledger に mint、 `cross_ref` = plan file path、 self-imposed deadline 〔例 +14d〕 + 適切な priority) — deadline-horizon 系の毎 session push + 強制 disposition (= act / 明示 defer / 見送り決着) の管轄に入る
 3. **即時実装** (= 小さければその場でやる — queue に入れない のが最強の queue 管理)
+4. **session 宛ての board request** (v2 `request`、 受け手の session か role id 宛て) — 受け手の inbox と、 受け取り側の session 開始時の surface に載る (実装は各 user の private layer。 [1 義務 1 受領経路](#board-receipt-carrier) = この carrier を選んだ義務に完了 marker や期日つき TODO を重ねない)
 
 「plan header に green-light 済みと書く」 「project list に 🟡 で載せる」 は**どれも carrier ではない** (= push されない記録)。 これは same-turn conversion family の一員: 会議確定メール → 同 turn calendar 登録 / 依頼メール → 同 turn TODO / 印刷 → 同 turn 点呼行、 と同じ「生まれた瞬間に機械の管轄へ」。
 
