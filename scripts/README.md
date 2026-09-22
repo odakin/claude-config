@@ -35,6 +35,7 @@
 - **[check-ci-red.py](check-ci-red.py)** — GitHub Actions の red 検出器（repo 横断で「default branch の最新 completed run が失敗中の workflow」 を列挙し、 連続失敗 run 数・継続時間・最後の success を印字、 長期 red を 🚨 で強調。 取得失敗は「検査不能」 行で明示 = 黙って緑にしない、 finding 0 件 silent、 --as-of で過去時点を再現、 --selftest 内蔵。 対象 = --repo / --owner / 個人層の repo 一覧 (--from-repos-md、 未 clone・remote 未設定も検査不能行に)、 呼び出し側 = 個人層 dashboard / session 開始 hook）
 - **[check-codex-integration.py](check-codex-integration.py)** — Codex SoT, session drift, Hook, and trigger-wiring gate.
 - **[check-confidential-leak.py](check-confidential-leak.py)** — 機密 pattern が remote 付き repo に commit されるのを止める。
+- **[check-degenerate-text.py](check-degenerate-text.py)** — script 置換の暴走で壊れた text file (1 行の異常な繰り返し / HEAD 比の爆発的な増加) を commit で止める + fleet を走査して surface する。
 - **[check-display-math-style.py](check-display-math-style.py)** — Display-math house-style gate for LaTeX manuscripts (2026-09-09).
 - **[check-doc-truncation.py](check-doc-truncation.py)** — 台帳 doc の「黙って消える」削除を git 高水位で検出（表の行/list/見出し/entry の大幅減、[truncation-ok] で baseline reset、config 駆動）
 - **[check-docx-integrity.py](check-docx-integrity.py)** — docx の Word「破損」判定源を Word 不要・決定論で検出（single-quote 宣言 / checkbox 状態↔グリフ / bookmark / table grid / dangling r:id 等、 office-automation.md#docx-checkbox-content-control）

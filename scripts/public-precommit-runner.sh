@@ -105,6 +105,21 @@ if [ -f "$MCG_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
   fi
 fi
 
+# ----------------------------------------------------------------------
+# script 置換の暴走で壊れた text の gate (1 行の異常な繰り返し / HEAD 比の爆発的な増加。 縮小は ⚠️ だけ)。
+# 述語・閾値・escape hatch (CLAUDE_DEGENERATE_TEXT_GUARD=0) の SoT = check-degenerate-text.py docstring。
+# 止めるのは「exit 1 かつ engine の見出し」 のときだけ (= engine の故障 〔rc 3〕 で全 commit を止めない)。
+# ----------------------------------------------------------------------
+DGT_ENGINE="$(dirname "$0")/check-degenerate-text.py"
+if [ -f "$DGT_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  dgt_rc=0
+  dgt_out="$(python3 "$DGT_ENGINE" --staged 2>&1)" || dgt_rc=$?
+  [ -n "$dgt_out" ] && printf '%s\n' "$dgt_out" >&2
+  if [ "$dgt_rc" -eq 1 ] && printf '%s' "$dgt_out" | grep -q 'check-degenerate-text:'; then
+    exit 1
+  fi
+fi
+
 # root AGENTS.md の入口が無い repo を知らせる (止めない、 SoT = lib/agents-entrypoint-warn.sh header)
 AGENTS_WARN_LIB="$(dirname "$0")/lib/agents-entrypoint-warn.sh"
 if [ -f "$AGENTS_WARN_LIB" ]; then

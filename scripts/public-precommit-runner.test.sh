@@ -252,6 +252,19 @@ expect_pass "pass-tier-c-allowlist-space-rock-diner" \
 expect_pass "pass-tier-c-allowlist-article-audits" \
   "Source of truth: ~/Claude/article-audits/ (private), this is its public mirror"
 
+# --------------------------------------------------------------------
+# 壊れた text の gate (2026-09-22 追加): 一括置換の old が空になって同じ行が全文字の間に入った形を止める。
+# 述語と閾値の SoT = check-degenerate-text.py docstring。 ここは配線の固定 = 閾値超で止まる / 閾値未満は通る /
+# escape hatch で通る (= 止めたのがこの gate だという証拠。 「止まった」 だけでは別の gate かもしれない)。
+# --------------------------------------------------------------------
+DGT_LINE="repeated content line for the degenerate text gate fixture 0123456789"
+expect_block "block-degenerate-text-repeated-line" \
+  "$(for _ in $(seq 1 250); do printf '%s\n' "$DGT_LINE"; done)"
+expect_pass "pass-degenerate-text-under-threshold" \
+  "$(for _ in $(seq 1 150); do printf '%s\n' "$DGT_LINE"; done)"
+CLAUDE_DEGENERATE_TEXT_GUARD=0 expect_pass "pass-degenerate-text-escape-hatch-proves-which-gate" \
+  "$(for _ in $(seq 1 250); do printf '%s\n' "$DGT_LINE"; done)"
+
 # 編集時の hook (hooks/public-leak-guard.sh) と本 runner は同じ email allowlist を持つ。
 # 2026-09-12: runner だけ 2026-08-28 に例示 domain を足し、 hook は古いまま test fixture の
 # Write ごとに確認 dialog を出していた → 片側だけの修正が再発しないよう一致を固定する。
