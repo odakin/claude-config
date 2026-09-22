@@ -13,6 +13,7 @@
 | CI 報告の訂正 | CodeQL の成功を全体 CI の成功とした誤りを検証記録で訂正済み。workflow / head / 結果を分離する |
 | wiring の設計比較 | `de142cc` の未採用 proposal と、以下の観測用 script。現行規則の変更ではない |
 | 後続の独立検収 | 機能の再確認と大量入力時の性能差し戻しを検証記録へ受領。追加案 F は proposal の受領欄に記録。最終設計・性能修正は後続作業であり、本整理では実装していない |
+| 性能修正と wiring の裁定・実装 (2026-09-22、後続担当) | `c4456a5`。件数に比例しない Git 呼出し、redirect の誤停止・素通りの修正、F の採用 (block 限定 + canary の生存記録)。裁定と残る穴 = [agent-rule-ownership#wiring-scope](../conventions/agent-rule-ownership.md#wiring-scope)、実測・修正前で赤・依頼元 harness の結果 = [検証記録](agent-rule-guard-verification.md) の末尾 2 節。本人の承認は候補 8 file の hash に束縛して記録 |
 
 初期作業を含む会話履歴と残存ファイルを照合した。元の stdin script や一時 fixture が削除されている箇所は、保存済みと装わない。reviewer の2文書は既存返信からの事後整理であり、新規の実行ログではない。初期 [依頼書](guard-review/REVIEW-SPEC.md) と [pathspec の追加依頼](guard-review/PATHSPEC-REVIEW.md) も保存した。初期の読取専用依頼と、後続ラウンドでの合成 fixture 実行の指示を同時点の指示として混ぜない。
 
