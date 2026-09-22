@@ -19,7 +19,9 @@
   content line = strip 後 40 字以上 かつ 異なる文字 8 種以上 (= `$$` / ``` / `* * *` / `%+++++` / `# ═══` の装飾行を除く。
                  装飾行は正常な .md で最大 140 回、 .tex で 458 回並ぶ)
   G2 繰り返し   = content line が REPEAT_MIN (200) 回以上 かつ HEAD での同じ行の回数の REPEAT_RATIO (10) 倍以上 → 止める
-                 (fleet の正常最大 = .txt の log 73 回 / .md 46 回未満 / YAML の定型行 472 回 〔HEAD 比で守る〕。 事故 = 2 万回超)
+                 (fleet の正常最大 = .txt の log 73 回 / .md 46 回未満 / YAML の定型行 472 回 〔HEAD 比で守る〕。 事故 = 2 万回超)。
+                 HEAD に無い新規 file の絶対値は prose (SCAN_EXTS) だけ = 生成 data の YAML / code は新規でも同じ長い行が
+                 数百回並ぶ (実測: 公開 repo の履歴に 208 回の report)
   G1 増加       = HEAD の GROWTH_RATIO (10) 倍以上 かつ GROWTH_MIN_ADDED (1,000) 行以上の追加 → 止める
                  (5 行の骨組みを 300 行に育てる・40 行の SESSION を 600 行にするのは止めない。 事故 = 300 倍超)
   W1 縮小       = SHRINK_MIN_REMOVED (200) 行以上減り、 HEAD の SHRINK_FRACTION (1/2) 以下 → ⚠️ を出すだけ (縮退は正当な操作)
@@ -105,14 +107,16 @@ def _short(line: str, n: int = 60) -> str:
     return line if len(line) <= n else line[: n - 1] + "…"
 
 
-def judge(staged: str, head: Optional[str]) -> Tuple[List[str], List[str]]:
-    """(止める理由の list, 警告の list)。 文言は path を含まない (呼び元が付ける)。"""
+def judge(staged: str, head: Optional[str], prose: bool = True) -> Tuple[List[str], List[str]]:
+    """(止める理由の list, 警告の list)。 文言は path を含まない (呼び元が付ける)。
+    prose=False (YAML / code) の新規 file は G2 の絶対値で止めない = 生成 data (report / cache) は新規でも同じ長い行が
+    数百回並ぶ (実測: 公開 repo の履歴に 208 回の YAML report)。 既存 file なら HEAD 比で守る。"""
     blocks: List[str] = []
     warns: List[str] = []
     sl = line_count(staged)
     hl = line_count(head) if head is not None else None
     n, line = max_repeat(staged)
-    if n >= REPEAT_MIN:
+    if n >= REPEAT_MIN and (head is not None or prose):
         base = count_line(head, line)
         if n >= REPEAT_RATIO * base:
             blocks.append(f"1 行が {n:,} 回 (HEAD では {base:,} 回) — script 置換の暴走の疑い\n      「{_short(line)}」")
@@ -179,7 +183,7 @@ def run_staged(repo_arg: Optional[str]) -> int:
             if staged is None:
                 continue
             head = blob_text(repo, f"HEAD:{p}") if has_head else None
-            blocks, warns = judge(staged, head)
+            blocks, warns = judge(staged, head, prose=Path(p).suffix.lower() in SCAN_EXTS)
             if blocks:
                 blocked.append((p, blocks))
             if warns:
@@ -344,6 +348,10 @@ def selftest() -> int:
         stage(r3, "new.md", (long_line + "\n") * 300, env)
         rc, out = gate(r3, env)
         check("新規 file: 同じ content line 300 回は絶対値で止める", rc == 1 and "new.md" in out)
+        git(r3, "reset", "-q", env=env)
+        stage(r3, "report.yaml", "items:\n" + (long_line + "\n") * 300, env)
+        rc, out = gate(r3, env)
+        check("陰性: 新規の YAML (生成 data) に同じ長い行 300 回は通す (絶対値は prose だけ)", rc == 0 and "✗" not in out)
         git(r3, "reset", "-q", env=env)
         big = "\n".join(f"line {i} of a long session log with enough text {i}" for i in range(600)) + "\n"
         commit_file(r3, "SESSION.md", big, env)
