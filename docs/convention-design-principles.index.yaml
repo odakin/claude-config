@@ -853,6 +853,10 @@ sections:
     legacy: "8.71"
     level: 3
     title: "8.71 行事の日付から決まる手順は、 回ごとの起票でなく行事の日付から導く — 起票した回でしか鳴らない仕組みは、 起票を忘れた回に全部そろって黙る"
+  - id: catch-all-branch-absorbs-covered-class
+    legacy: "8.72"
+    level: 3
+    title: "8.72 「未対応」 の受け皿は、 上流が既に扱う class を吸ってはいけない — 索引の miss を「resolver 未実装」 に降格しない"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
