@@ -15,14 +15,18 @@
 #   C の版で上書きして stage → public-precommit-runner.sh を実行 (= C の差分だけが「追加行」 に見える。
 #   Tier A-E と書誌・複合語の除外が commit 時と同じに効く)。 本物の repo は読むだけ。
 #   ⚠️ 見るのは **今の** 検出語と runner。 過去にその commit が通ったかではない。
+#   ⚠️ CI の bot (author が `[bot]` で終わる = GitHub Actions 等) の commit は手元の gate を一度も通らない書き手なので
+#      既定で飛ばし、 件数だけ出す (実測: 行政の公開データを毎日 commit する bot が Tier A/B で 14 本止まる判定になった。
+#      その repo の棚卸しは `generated:` 宣言で決着済で、 commit gate 側に直すものは無かった)。 --include-bots で含める。
 #
 # usage:
-#   replay-public-gate.sh [--repo DIR] [--last N] [--since WHEN] [--path PATHSPEC]
+#   replay-public-gate.sh [--repo DIR] [--last N] [--since WHEN] [--path PATHSPEC] [--include-bots]
 #     --repo  対象 repo (既定 = cwd の repo)
 #     --last  直近 N commit (既定 10)。 --path を付けると、 その path を触った commit だけを数える
 #     --since git log の --since (例: "14 days ago")。 定期実行ではこれを付ける = 直した後も履歴に残る古い commit で
 #             永久に赤くならないように、 窓を「次の出力が似ていそうな直近」 に限る
 #     --path  例: archive  (無人の書き手が書く場所に絞る)
+#     --include-bots  author が `[bot]` の commit も通す (既定は飛ばして件数だけ)
 #   replay-public-gate.sh --selftest
 #
 # exit: 0 = 全部通る / 1 = 今なら止まる commit がある / 2 = usage / 3 = runner 不在
@@ -36,6 +40,7 @@ REPO=""
 LAST=10
 PATHSPEC=""
 SINCE=""
+INCLUDE_BOTS=0
 
 replay_one() {
   # $1 = repo, $2 = commit。 stdout = runner の出力。 return = runner の rc
@@ -101,6 +106,18 @@ selftest() {
   if [ "$rc" -eq 0 ]; then echo "PASS plain commit passes"; else echo "FAIL plain commit rc=$rc"; fails=$((fails+1)); fi
   out="$(replay_one "$td/r" "$(git -C "$td/r" rev-parse HEAD~2)")"; rc=$?
   if [ "$rc" -eq 0 ]; then echo "PASS root commit (no parent) is replayed"; else echo "FAIL root commit rc=$rc"; fails=$((fails+1)); fi
+  # CI の bot の commit: 既定で飛ばす (term 入りでも赤くならない、 件数は出る) / --include-bots なら止まる
+  (
+    cd "$td" && git init -q b && cd b
+    git config user.email "t@example.com"; git config user.name t
+    printf 'plain\n' > a.txt && git add a.txt && git commit -qm one
+    printf 'plain\nMOCK_REPLAY_TERM here\n' > a.txt && git add a.txt \
+      && git commit -qm two --author="ci[bot] <ci@example.com>"
+  )
+  out="$(bash "$0" --repo "$td/b" --last 5 2>&1)"; rc=$?
+  if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'bot の commit 1 本'; then echo "PASS bot-authored commit is skipped by default (counted)"; else echo "FAIL bot skip rc=$rc: $out"; fails=$((fails+1)); fi
+  out="$(bash "$0" --repo "$td/b" --last 5 --include-bots 2>&1)"; rc=$?
+  if [ "$rc" -eq 1 ]; then echo "PASS --include-bots replays the bot commit (blocked)"; else echo "FAIL include-bots rc=$rc"; fails=$((fails+1)); fi
   rm -rf "$td"
   if [ "$fails" -eq 0 ]; then echo "replay-public-gate selftest: OK"; return 0; fi
   echo "replay-public-gate selftest: $fails FAIL"; return 1
@@ -112,6 +129,7 @@ while [ $# -gt 0 ]; do
     --last) shift; LAST="${1:-10}" ;;
     --path) shift; PATHSPEC="${1:-}" ;;
     --since) shift; SINCE="${1:-}" ;;
+    --include-bots) INCLUDE_BOTS=1 ;;
     --selftest) [ -x "$RUNNER" ] || exit 3; selftest; exit $? ;;
     -h|--help) awk '/^set -uo pipefail/ { exit } { print }' "$0"; exit 0 ;;
     *) echo "replay-public-gate.sh: unknown argument: $1" >&2; exit 2 ;;
@@ -137,7 +155,13 @@ fi
 
 blocked=0
 total=0
+skipped_bots=0
 for c in $COMMITS; do
+  # CI の bot の commit は手元の gate を通らない書き手 (header 参照) = 既定で飛ばして件数だけ
+  if [ "$INCLUDE_BOTS" -eq 0 ] && git -C "$REPO" log -1 --format=%an "$c" | grep -qE '\[bot\]$'; then
+    skipped_bots=$((skipped_bots + 1))
+    continue
+  fi
   total=$((total + 1))
   out="$(replay_one "$REPO" "$c")"; rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -148,10 +172,12 @@ for c in $COMMITS; do
   fi
 done
 name="$(basename "$REPO")"
+bots_note=""
+[ "$skipped_bots" -gt 0 ] && bots_note=" (CI の bot の commit $skipped_bots 本は手元の gate を通らないので飛ばした、 --include-bots で含める)"
 if [ "$blocked" -gt 0 ]; then
-  echo "✗ [replay-public-gate] $name: 直近 $total commit${PATHSPEC:+ ($PATHSPEC)} のうち $blocked 本が今の gate で止まる — 無人の書き手なら次の同種の出力で commit が失敗する"
+  echo "✗ [replay-public-gate] $name: 直近 $total commit${PATHSPEC:+ ($PATHSPEC)} のうち $blocked 本が今の gate で止まる — 無人の書き手なら次の同種の出力で commit が失敗する$bots_note"
   echo "  → 誤検知なら検出器側を直す (conventions/confidential-repo-boundary.md#tree-finding-resolution)、 本物なら書き手の出力を直す"
   exit 1
 fi
-echo "ok [replay-public-gate] $name: 直近 $total commit${PATHSPEC:+ ($PATHSPEC)} は今の gate を通る"
+echo "ok [replay-public-gate] $name: 直近 $total commit${PATHSPEC:+ ($PATHSPEC)} は今の gate を通る$bots_note"
 exit 0
