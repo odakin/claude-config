@@ -1,0 +1,3 @@
+# Git pathspec inspection review
+
+Review the revision7 delta from revision6 and the new hooks/manuscript-claim-guard.test.sh cases. Requirements: ordinary pending untracked directory add+commit must work; protected equations in plain/dotted directory and Git globs must be rejected for the equation, not inspection failure. Git selection failure must remain InspectionError. Use Git to select changed tracked and nonignored untracked names; keep cwd/magic/exclusion semantics. Pending add -A/. must inspect selected untracked files, but commit -a or add -u alone must not include them. This is synthetic source only; do not read live repositories/state. Provide concrete counterexamples if necessary and a bounded verdict.

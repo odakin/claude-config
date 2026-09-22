@@ -1,0 +1,385 @@
+{
+  "MANIFEST.json": [
+    {
+      "path": ".agent-rule-guard.json",
+      "after_sha256": "15cb013cc06ff956f9c64e06e036a2b538024cd9cd577bd7d8dee5d4e1e99e21"
+    },
+    {
+      "path": "scripts/agent-rule-guard.py",
+      "after_sha256": "fb6e41ad40a34f5906ae82a9015fb1fa33ebe83d5472eb22e9488b83cb1e7bee"
+    },
+    {
+      "path": "scripts/manuscript-claim-guard.py",
+      "before_sha256": "17a45054b217515c9907365f4cd1a1e32a0371fa37aed82547d06e9ae09439b9",
+      "after_sha256": "2e9c4831d5156aef445a8959904e50128b6928dd3c4673c7ef71876c8e1fc129"
+    },
+    {
+      "path": "scripts/audit-codex-hook-runtime.py",
+      "after_sha256": "aa4f9ddf0d5867240ed95066cb1e6eef4a9a65038c753a5f9713350101ddedf4"
+    },
+    {
+      "path": "scripts/audit-codex-integration.sh",
+      "before_sha256": "5faac7c4478a96ff66f8cff057ce6bc4fe8f577ed6bd95591ff19438629d7abe",
+      "after_sha256": "ab2dcc15f1ccdb7ce37997088220e76c8fd82ccffd39689b768bb75c9236c430"
+    },
+    {
+      "path": "conventions/agent-rule-ownership.md",
+      "after_sha256": "f1f80706c98ee430616bc296ffe298f643014ce2fb7262d6c07b9c5d3810a7e0"
+    },
+    {
+      "path": "conventions/manuscript-claim-ownership.md",
+      "before_sha256": "3a0549cd40153a4c125768f5c7052bce1324c6fa9435c331d8eb747263bc61bd",
+      "after_sha256": "7081073a7f88ad5e52a6bc2bcc4208e824ed3fea702e95c0efd5ad2a3975e51c"
+    },
+    {
+      "path": "codex/HOME-AGENTS.md",
+      "before_sha256": "aafb9b17332a32de2b3a5b241a4eb5d3eacc9c3aa979caba0020894e3fd929d9",
+      "after_sha256": "76d61f78de50c4dff03c5e0c1ae72d74d2ba23db145c0156e60969905aebb31f"
+    },
+    {
+      "path": "codex/PARITY.md",
+      "before_sha256": "9ad6eb21cc08dfc40e8e5266130d1a7a798978230b7ab4964b43010a60f2e2f3",
+      "after_sha256": "41044b241fba40a83ea0ebf35d6c1ec78f4816061b894984a887ba0ab767a9a6"
+    },
+    {
+      "path": "CONVENTIONS.md",
+      "before_sha256": "35e9a183b60d5f411b973347674b3dc77675b78f44adddeaaed1ef276a89fb4f",
+      "after_sha256": "a93d1934bb09836323d7e33da7558fc189c5d3f362558f5048ce1ed3ac3c9de8"
+    },
+    {
+      "path": "docs/convention-design-principles.md",
+      "before_sha256": "ecca33ab1572943316e445e1c2a82689e8b50c15671d93b4e3deccc1f4d3b24e",
+      "after_sha256": "69d7711aba0e37b73504f249cb46fdd8aea8e25ac3643b557e752953f151e60d"
+    },
+    {
+      "path": "hooks/manuscript-claim-guard.py",
+      "before_sha256": "7ea897ab054d8a803c3f25ab25a1e4370393524648328b0318c10c3b930503d2",
+      "after_sha256": "7ea897ab054d8a803c3f25ab25a1e4370393524648328b0318c10c3b930503d2"
+    },
+    {
+      "path": "hooks/manuscript-claim-guard.test.sh",
+      "before_sha256": "a026affd3e7c842f9135183e41b2df1f0c75a3a593bc1a146f1e60bbbf5f71f3",
+      "after_sha256": "a026affd3e7c842f9135183e41b2df1f0c75a3a593bc1a146f1e60bbbf5f71f3"
+    },
+    {
+      "path": "codex/hooks/manuscript_claim_guard.py",
+      "before_sha256": "48a6c63b056f3fb11f321a16a6475a45a3352a643b3c1072a44055d460ad398d",
+      "after_sha256": "48a6c63b056f3fb11f321a16a6475a45a3352a643b3c1072a44055d460ad398d"
+    },
+    {
+      "path": "codex/hooks/codex-hooks.test.sh",
+      "before_sha256": "89c2b410deccd187764d26412bf6472cfc0a5eba0298717f5243d3e2918f2953",
+      "after_sha256": "89c2b410deccd187764d26412bf6472cfc0a5eba0298717f5243d3e2918f2953"
+    },
+    {
+      "path": "codex/hooks/hooks.json",
+      "before_sha256": "501da82338f16bd3a2261c8d0180d91c8ce90f79cd3d63517b3357729d8eb374",
+      "after_sha256": "501da82338f16bd3a2261c8d0180d91c8ce90f79cd3d63517b3357729d8eb374"
+    },
+    {
+      "path": "scripts/pre-commit-bib",
+      "before_sha256": "27f0f9f9cc90b2f0ce2b66ceac3bce13dcfba975c4fcdf6a50a5258099458641",
+      "after_sha256": "27f0f9f9cc90b2f0ce2b66ceac3bce13dcfba975c4fcdf6a50a5258099458641"
+    },
+    {
+      "path": "scripts/public-precommit-runner.sh",
+      "before_sha256": "73f70d2b570055b0f8415e0e958eb9fcdf01a3929349b0eb4c9c3a238bc6ab67",
+      "after_sha256": "73f70d2b570055b0f8415e0e958eb9fcdf01a3929349b0eb4c9c3a238bc6ab67"
+    },
+    {
+      "path": "scripts/lib/git_blob.py",
+      "before_sha256": "6a4eab2e1524150982fc234fea1abbe1fa0cc09b75dc43e3c11c3d37bcd46e94",
+      "after_sha256": "6a4eab2e1524150982fc234fea1abbe1fa0cc09b75dc43e3c11c3d37bcd46e94"
+    },
+    {
+      "path": "scripts/check-codex-integration.py",
+      "before_sha256": "1ea3c97ee8c7966c7bf57568f6c64dfb971ce79f323c18627eef930a2d7bbcc1",
+      "after_sha256": "1ea3c97ee8c7966c7bf57568f6c64dfb971ce79f323c18627eef930a2d7bbcc1"
+    },
+    {
+      "path": "scripts/audit-codex-integration.test.sh",
+      "before_sha256": "75c90332ffdb7db2409f7b09ed24cc7c411054622985a74596e6044c077779e8",
+      "after_sha256": "75c90332ffdb7db2409f7b09ed24cc7c411054622985a74596e6044c077779e8"
+    }
+  ],
+  "REVISED-MANIFEST.json": [
+    {
+      "path": ".agent-rule-guard.json",
+      "sha256": "15cb013cc06ff956f9c64e06e036a2b538024cd9cd577bd7d8dee5d4e1e99e21"
+    },
+    {
+      "path": "scripts/agent-rule-guard.py",
+      "sha256": "e5a86354a07c0997f37db7213e1fa040a9346d2ff71f44e3d02baee8b3939088"
+    },
+    {
+      "path": "scripts/manuscript-claim-guard.py",
+      "sha256": "2b541f95071efa0499ab4e2732fb6b2f6e5abc391ebd04cb1eceb1867d5e853a"
+    },
+    {
+      "path": "scripts/audit-codex-hook-runtime.py",
+      "sha256": "aa4f9ddf0d5867240ed95066cb1e6eef4a9a65038c753a5f9713350101ddedf4"
+    },
+    {
+      "path": "scripts/audit-codex-integration.sh",
+      "sha256": "ab2dcc15f1ccdb7ce37997088220e76c8fd82ccffd39689b768bb75c9236c430"
+    },
+    {
+      "path": "conventions/agent-rule-ownership.md",
+      "sha256": "ea3e724b6381fc1746ecb2dcce2ef3762162d5aa038bcf27b084736f7782b749"
+    },
+    {
+      "path": "conventions/manuscript-claim-ownership.md",
+      "sha256": "7081073a7f88ad5e52a6bc2bcc4208e824ed3fea702e95c0efd5ad2a3975e51c"
+    },
+    {
+      "path": "codex/HOME-AGENTS.md",
+      "sha256": "76d61f78de50c4dff03c5e0c1ae72d74d2ba23db145c0156e60969905aebb31f"
+    },
+    {
+      "path": "codex/PARITY.md",
+      "sha256": "41044b241fba40a83ea0ebf35d6c1ec78f4816061b894984a887ba0ab767a9a6"
+    },
+    {
+      "path": "CONVENTIONS.md",
+      "sha256": "a93d1934bb09836323d7e33da7558fc189c5d3f362558f5048ce1ed3ac3c9de8"
+    },
+    {
+      "path": "docs/convention-design-principles.md",
+      "sha256": "69d7711aba0e37b73504f249cb46fdd8aea8e25ac3643b557e752953f151e60d"
+    },
+    {
+      "path": "hooks/manuscript-claim-guard.py",
+      "sha256": "7ea897ab054d8a803c3f25ab25a1e4370393524648328b0318c10c3b930503d2"
+    },
+    {
+      "path": "hooks/manuscript-claim-guard.test.sh",
+      "sha256": "a026affd3e7c842f9135183e41b2df1f0c75a3a593bc1a146f1e60bbbf5f71f3"
+    },
+    {
+      "path": "codex/hooks/manuscript_claim_guard.py",
+      "sha256": "48a6c63b056f3fb11f321a16a6475a45a3352a643b3c1072a44055d460ad398d"
+    },
+    {
+      "path": "codex/hooks/codex-hooks.test.sh",
+      "sha256": "89c2b410deccd187764d26412bf6472cfc0a5eba0298717f5243d3e2918f2953"
+    },
+    {
+      "path": "codex/hooks/hooks.json",
+      "sha256": "501da82338f16bd3a2261c8d0180d91c8ce90f79cd3d63517b3357729d8eb374"
+    },
+    {
+      "path": "scripts/pre-commit-bib",
+      "sha256": "27f0f9f9cc90b2f0ce2b66ceac3bce13dcfba975c4fcdf6a50a5258099458641"
+    },
+    {
+      "path": "scripts/public-precommit-runner.sh",
+      "sha256": "73f70d2b570055b0f8415e0e958eb9fcdf01a3929349b0eb4c9c3a238bc6ab67"
+    },
+    {
+      "path": "scripts/lib/git_blob.py",
+      "sha256": "6a4eab2e1524150982fc234fea1abbe1fa0cc09b75dc43e3c11c3d37bcd46e94"
+    },
+    {
+      "path": "scripts/check-codex-integration.py",
+      "sha256": "1ea3c97ee8c7966c7bf57568f6c64dfb971ce79f323c18627eef930a2d7bbcc1"
+    },
+    {
+      "path": "scripts/audit-codex-integration.test.sh",
+      "sha256": "75c90332ffdb7db2409f7b09ed24cc7c411054622985a74596e6044c077779e8"
+    }
+  ],
+  "REVISION3-MANIFEST.json": [
+    {
+      "path": ".agent-rule-guard.json",
+      "sha256": "15cb013cc06ff956f9c64e06e036a2b538024cd9cd577bd7d8dee5d4e1e99e21"
+    },
+    {
+      "path": "scripts/agent-rule-guard.py",
+      "sha256": "843d4cb6c96ecb4228e8fcbf340414347fc37afbd26ef3fddc531642b4a2ec0d"
+    },
+    {
+      "path": "scripts/manuscript-claim-guard.py",
+      "sha256": "784745c479bb76c6767cd78e18cd5575ed382f38e85d89ff08c0d39dcb80ee97"
+    },
+    {
+      "path": "scripts/audit-codex-hook-runtime.py",
+      "sha256": "aa4f9ddf0d5867240ed95066cb1e6eef4a9a65038c753a5f9713350101ddedf4"
+    },
+    {
+      "path": "scripts/audit-codex-integration.sh",
+      "sha256": "ab2dcc15f1ccdb7ce37997088220e76c8fd82ccffd39689b768bb75c9236c430"
+    },
+    {
+      "path": "conventions/agent-rule-ownership.md",
+      "sha256": "36fbfc6a7b12abbb469b73057945f80816e8dc070ab4ff102120c74e5a18dcc7"
+    },
+    {
+      "path": "conventions/manuscript-claim-ownership.md",
+      "sha256": "7081073a7f88ad5e52a6bc2bcc4208e824ed3fea702e95c0efd5ad2a3975e51c"
+    },
+    {
+      "path": "codex/HOME-AGENTS.md",
+      "sha256": "3d4614bc5020b7c1f8632bd50cab767e4768bcdd9ec3e8b045a779b6f9f55fd8"
+    },
+    {
+      "path": "codex/PARITY.md",
+      "sha256": "41044b241fba40a83ea0ebf35d6c1ec78f4816061b894984a887ba0ab767a9a6"
+    },
+    {
+      "path": "CONVENTIONS.md",
+      "sha256": "a22b54b8c8536ec880b8ee702ad75277f51bab2d04f4175348959dda136afe7d"
+    },
+    {
+      "path": "docs/convention-design-principles.md",
+      "sha256": "69d7711aba0e37b73504f249cb46fdd8aea8e25ac3643b557e752953f151e60d"
+    },
+    {
+      "path": "hooks/manuscript-claim-guard.py",
+      "sha256": "7ea897ab054d8a803c3f25ab25a1e4370393524648328b0318c10c3b930503d2"
+    },
+    {
+      "path": "hooks/manuscript-claim-guard.test.sh",
+      "sha256": "a026affd3e7c842f9135183e41b2df1f0c75a3a593bc1a146f1e60bbbf5f71f3"
+    },
+    {
+      "path": "codex/hooks/manuscript_claim_guard.py",
+      "sha256": "48a6c63b056f3fb11f321a16a6475a45a3352a643b3c1072a44055d460ad398d"
+    },
+    {
+      "path": "codex/hooks/codex-hooks.test.sh",
+      "sha256": "89c2b410deccd187764d26412bf6472cfc0a5eba0298717f5243d3e2918f2953"
+    },
+    {
+      "path": "codex/hooks/hooks.json",
+      "sha256": "501da82338f16bd3a2261c8d0180d91c8ce90f79cd3d63517b3357729d8eb374"
+    },
+    {
+      "path": "scripts/pre-commit-bib",
+      "sha256": "27f0f9f9cc90b2f0ce2b66ceac3bce13dcfba975c4fcdf6a50a5258099458641"
+    },
+    {
+      "path": "scripts/public-precommit-runner.sh",
+      "sha256": "73f70d2b570055b0f8415e0e958eb9fcdf01a3929349b0eb4c9c3a238bc6ab67"
+    },
+    {
+      "path": "scripts/lib/git_blob.py",
+      "sha256": "6a4eab2e1524150982fc234fea1abbe1fa0cc09b75dc43e3c11c3d37bcd46e94"
+    },
+    {
+      "path": "scripts/check-codex-integration.py",
+      "sha256": "1ea3c97ee8c7966c7bf57568f6c64dfb971ce79f323c18627eef930a2d7bbcc1"
+    },
+    {
+      "path": "scripts/audit-codex-integration.test.sh",
+      "sha256": "75c90332ffdb7db2409f7b09ed24cc7c411054622985a74596e6044c077779e8"
+    }
+  ],
+  "REVISION4-MANIFEST.json": [
+    {
+      "path": ".agent-rule-guard.json",
+      "sha256": "15cb013cc06ff956f9c64e06e036a2b538024cd9cd577bd7d8dee5d4e1e99e21"
+    },
+    {
+      "path": "scripts/agent-rule-guard.py",
+      "sha256": "8e8ad1a002c45ec42c20eec38a743839cbcdad1bb3a24c61878974114ae2068c"
+    },
+    {
+      "path": "scripts/manuscript-claim-guard.py",
+      "sha256": "d45d62f21211c1b3fccf8afb3ae38d4a0dae5268e8ac50412916b0d2a782522f"
+    },
+    {
+      "path": "scripts/audit-codex-hook-runtime.py",
+      "sha256": "aa4f9ddf0d5867240ed95066cb1e6eef4a9a65038c753a5f9713350101ddedf4"
+    },
+    {
+      "path": "scripts/audit-codex-integration.sh",
+      "sha256": "ab2dcc15f1ccdb7ce37997088220e76c8fd82ccffd39689b768bb75c9236c430"
+    },
+    {
+      "path": "conventions/agent-rule-ownership.md",
+      "sha256": "cb7720af5cfe1aa145fdfcda55ea13e6fb3f6c5e2ebf6ad4affbb39cd5cdf43a"
+    },
+    {
+      "path": "conventions/manuscript-claim-ownership.md",
+      "sha256": "7081073a7f88ad5e52a6bc2bcc4208e824ed3fea702e95c0efd5ad2a3975e51c"
+    },
+    {
+      "path": "codex/HOME-AGENTS.md",
+      "sha256": "3d4614bc5020b7c1f8632bd50cab767e4768bcdd9ec3e8b045a779b6f9f55fd8"
+    },
+    {
+      "path": "codex/PARITY.md",
+      "sha256": "41044b241fba40a83ea0ebf35d6c1ec78f4816061b894984a887ba0ab767a9a6"
+    },
+    {
+      "path": "CONVENTIONS.md",
+      "sha256": "ae700f3abb4180f8ca6ced30d9cd40124c61217d4e514dbe30b5c6ccb87d4cba"
+    },
+    {
+      "path": "docs/convention-design-principles.md",
+      "sha256": "69d7711aba0e37b73504f249cb46fdd8aea8e25ac3643b557e752953f151e60d"
+    },
+    {
+      "path": "hooks/manuscript-claim-guard.py",
+      "sha256": "7ea897ab054d8a803c3f25ab25a1e4370393524648328b0318c10c3b930503d2"
+    },
+    {
+      "path": "hooks/manuscript-claim-guard.test.sh",
+      "sha256": "a026affd3e7c842f9135183e41b2df1f0c75a3a593bc1a146f1e60bbbf5f71f3"
+    },
+    {
+      "path": "codex/hooks/manuscript_claim_guard.py",
+      "sha256": "48a6c63b056f3fb11f321a16a6475a45a3352a643b3c1072a44055d460ad398d"
+    },
+    {
+      "path": "codex/hooks/codex-hooks.test.sh",
+      "sha256": "89c2b410deccd187764d26412bf6472cfc0a5eba0298717f5243d3e2918f2953"
+    },
+    {
+      "path": "codex/hooks/hooks.json",
+      "sha256": "501da82338f16bd3a2261c8d0180d91c8ce90f79cd3d63517b3357729d8eb374"
+    },
+    {
+      "path": "scripts/pre-commit-bib",
+      "sha256": "27f0f9f9cc90b2f0ce2b66ceac3bce13dcfba975c4fcdf6a50a5258099458641"
+    },
+    {
+      "path": "scripts/public-precommit-runner.sh",
+      "sha256": "73f70d2b570055b0f8415e0e958eb9fcdf01a3929349b0eb4c9c3a238bc6ab67"
+    },
+    {
+      "path": "scripts/lib/git_blob.py",
+      "sha256": "6a4eab2e1524150982fc234fea1abbe1fa0cc09b75dc43e3c11c3d37bcd46e94"
+    },
+    {
+      "path": "scripts/check-codex-integration.py",
+      "sha256": "1ea3c97ee8c7966c7bf57568f6c64dfb971ce79f323c18627eef930a2d7bbcc1"
+    },
+    {
+      "path": "scripts/audit-codex-integration.test.sh",
+      "sha256": "75c90332ffdb7db2409f7b09ed24cc7c411054622985a74596e6044c077779e8"
+    }
+  ],
+  "REVISION5-MANIFEST.json": {
+    "bootstrap/manuscript-claim-guard.py": "1df0a5a7fd00129fff2cac8baf975de53e7f492bac2df718ab13cc47575e5b14",
+    "scripts/manuscript-claim-guard.py": "b22de00dd4bbce1b4a25eee55cbd41b180e70f0d26a16bb2d157ae7372fc1ab3"
+  },
+  "REVISION6-MANIFEST.json": {
+    "bootstrap/manuscript-claim-guard.py": "9c841517cdfd48d01a283d23b00cbffa5787e80be855b7a98423fff20fa4f2fd",
+    "scripts/manuscript-claim-guard.py": "325ad4d3077df2201ff66099ff51b4013e629529a7b3f75522c1bcae092bc74c"
+  },
+  "REVISION7-MANIFEST.json": {
+    "hooks/manuscript-claim-guard.test.sh": "23614436be1ff6c1ff8796ba3e939b3cb5c3327c8b5bb93a81254f6dc661bc9e",
+    "scripts/manuscript-claim-guard.py": "7f378692ad0ca2418f0b3998b1c501758b3636ee53c66e299e0f9f6f0f95d099"
+  },
+  "REVISION8-MANIFEST.json": {
+    "hooks/manuscript-claim-guard.test.sh": "4f9e4d147928b4431196c15c0f8f6a12dfc741dbc097261c32c3022a2cba01bf",
+    "scripts/manuscript-claim-guard.py": "da4b9e52cd88a25b222b88f72d10be276afb5567922f60aa6ddaf80fdceb304d",
+    "scripts/agent-rule-guard.py": "ccb20b15d224fec33417ab08f597f5821c3e7fdf7cb088fc8f4c5faccc6db3d8"
+  },
+  "REVISION9-MANIFEST.json": {
+    "codex/PARITY.md": "1a2f892a973d9601cdc8c8d897050c5152c0a871ec10d507705258ba85bb5d60",
+    "scripts/manuscript-claim-guard.py": "3de871fa9745d5f73ada53c392f2b27aef1a74388b67881f624b6744e2173594",
+    "codex/hooks/codex-hooks.test.sh": "05e79ff9942781acdab85105609451eb70a28611a93d65ab0eb11c5ec5c56448"
+  }
+}

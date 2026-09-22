@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-規則保護の共通化を終え、wiring の全文 lock による編集負担について [未採用の設計比較](docs/guard-wiring-scope-proposal.md) を用意したところ。現在は本人の裁定待ちで、規則・engine・配線の変更には着手していない。次は同書の裁定項目から再開する。稼働中の規則は [規則の所有権](conventions/agent-rule-ownership.md)、既存の試験と限界は [検証記録](docs/agent-rule-guard-verification.md) にある。
+規則保護の資料整理を終えたところ。圧縮前の初期作業から reviewer の成果物・検収までの入口は [成果物台帳](docs/guard-review-records.md)。性能の差し戻しと wiring の最終比較・判断・実装は後続担当へ引継ぎ済みであり、資料整理の完了と、その後続作業の完了は区別する。再開時は台帳の未解決点と [未採用案の受領欄](docs/guard-wiring-scope-proposal.md#received-review) から進む。
 
 > 📌 **このファイル = 直近の作業の索引 + Open items (目安 ~80 行 = [`CONVENTIONS.md#pre-push-check`](CONVENTIONS.md#pre-push-check))**。 entry は「日付 + 何を + 正本への pointer」 の 1-3 行で「直近」 の先頭に足す。 経緯・実測・RCA は正本 doc か [`SESSION-archive.md`](SESSION-archive.md) (grep 用) へ。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md`、 Codex 統合の正本は [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot)。 縮退: 2026-06-10 hot/cold 分離 / 2026-09-01 第 2 回 / 2026-09-11 第 3 回 (2026-08-12〜09-11 の 55 entry を archive へ verbatim MOVE、 義務行は Open items へ lift)。
 ## 直近 (2026-09-16〜09-22) の索引 — 本文は SESSION-archive.md、 規則は各正本 (09-06〜09-15 の索引行も同 archive へ退避済)

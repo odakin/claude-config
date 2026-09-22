@@ -2,6 +2,8 @@
 
 規則・原因分析・手順の正本は [agent-rule-ownership](../conventions/agent-rule-ownership.md)。本書は実装の検証証拠を持つ。個別案件の本文や裁定、機械ローカルの承認記録を公開側へ移していない。
 
+整理した全資料の入口は [成果物と検収の記録](guard-review-records.md)。後続検収では機能の確認と別に性能の差し戻しがあり、以下の過去の限定 accept を全面受領と読まない。
+
 ## 先行する共通 gate の修正
 
 `7f25cee` の原稿保護強化では次を再現して修正した。一般化後も回帰試験に残している。
@@ -98,3 +100,9 @@ runtime の構成監査は [audit-codex-hook-runtime.py](../scripts/audit-codex-
 ## 残る境界
 
 一般の自然言語の義務、本人発言の許可の意味、未知の shell 表現、任意のプログラムからの実行、OS による権限分離はこの検証の対象外である。[保証の境界](../conventions/agent-rule-ownership.md#limits) を参照する。操作ごとの gate は引き続きその操作の直前で働く必要がある。
+
+## 後続 reviewer の検収と未解決点
+
+Claude reviewer は `ab95786` に対して独立の合成例を実行し、機能の分類を受領した。一方、追加済みの具体的な file 名を一つずつ Git pathspec として再展開する経路について性能を差し戻した。報告値は 150 file の binary で約 0.0→5.9 秒、text で約 4.0→9.0 秒、3000 text file の directory で約184秒。これらは reviewer の報告であり、本整理で新たに再計測した値ではない。20秒の hook timeout を超えた場合の実際の停止/通過は未確認と報告されている。
+
+保存した観測 script とその限界は [成果物台帳](guard-review-records.md)。規模の軸と委任の境界は [review-handoff](../conventions/multi-session-coordination.md#review-handoff)、外部 process の回数と timeout の測り方は [hook-cost-per-item](../conventions/hook-authoring.md#hook-cost-per-item) が所有する。今回の資料整理は、この性能問題を解決したことにも、wiring の設計を採用したことにもならない。後続の担当へ引継ぎ済みである。

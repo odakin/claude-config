@@ -34,6 +34,7 @@
 - **[check-abbreviations.py](check-abbreviations.py)** — Abbreviation hygiene for LaTeX manuscripts: each abbreviation is defined once, at the FIRST body
 - **[check-activity-facts.py](check-activity-facts.py)** — Keep the owner's non-public activity facts (what was applied for, when, how many, what the office said, which deadline passed) out of public repos: pre-commit / commit-msg check on added lines, --scan-tree inventory with an ack list, --replay calibration, --selftest.
 - **[check-american-spelling.py](check-american-spelling.py)** — Reject curated British spellings in live LaTeX prose and figure text.
+- **[check-calendar-app-sync.py](check-calendar-app-sync.py)** — Mac の Calendar.app が各アカウントと同期できているかを **この機械で** 見る。
 - **[check-ci-red.py](check-ci-red.py)** — GitHub Actions の red 検出器（repo 横断で「default branch の最新 completed run が失敗中の workflow」 を列挙し、 連続失敗 run 数・継続時間・最後の success を印字、 長期 red を 🚨 で強調。 取得失敗は「検査不能」 行で明示 = 黙って緑にしない、 finding 0 件 silent、 --as-of で過去時点を再現、 --selftest 内蔵。 対象 = --repo / --owner / 個人層の repo 一覧 (--from-repos-md、 未 clone・remote 未設定も検査不能行に)、 呼び出し側 = 個人層 dashboard / session 開始 hook）
 - **[check-codex-integration.py](check-codex-integration.py)** — Codex SoT, session drift, Hook, and trigger-wiring gate.
 - **[check-confidential-leak.py](check-confidential-leak.py)** — 機密 pattern が remote 付き repo に commit されるのを止める。
@@ -128,6 +129,10 @@
 - **[gmail-mcp-install-runtime-links.sh](gmail-mcp-install-runtime-links.sh)** — ~/.gmail-mcp/ の runtime credential を config repo canonical への symlink に張り替える冪等エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 - **[gmail-mcp-reauth.sh](gmail-mcp-reauth.sh)** — 多アカウント Gmail MCP の OAuth (再)認証エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 - **[gpt_measurements.py](gpt_measurements.py)** — [forwarder → ai-collaboration/scripts/gpt_measurements.py]
+- **[guard-review-compare.py](guard-review-compare.py)** — Compare a selected historical engine with the worktree engine: hook path (explicit files / dir) and pre-commit path, N new files.
+- **[guard-review-pathspec.sh](guard-review-pathspec.sh)** — Independent acceptance cases for the manuscript-claim-guard pathspec fix (mock repos only).
+- **[guard-review-profile.py](guard-review-profile.py)** — Profile manuscript-claim-guard changes_for_repo on N untracked files (mock repo).
+- **[guard-review-wiring.py](guard-review-wiring.py)** — Observe synthetic wiring-scope counterexamples; no policy is installed or relaxed.
 - **[headless-push-notification.sh](headless-push-notification.sh)** — 無人の定期実行から、 閉じた headless `claude -p` 1 回でスマホ (Claude アプリ) に push 通知を送る。 --probe で送らずに送れる状態かだけを見る (token 不要)
 - **[heal-hook-stubs.sh](heal-hook-stubs.sh)** — 壊れた git hook を直す: 過去の installer が書き換えた git 管理下の stub を track 版に戻す + macOS に exec で kill される hook を同じ中身の新しい file に作り直す (冪等・直すものが無ければ無音)
 - **[hook-liveness-audit.py](hook-liveness-audit.py)** — user hook が「そもそも走っていない」 root を検出 (disableAllHooks kill switch の settings 全 tier 走査 + transcript 上の SessionStart 発火証拠)
@@ -297,6 +302,8 @@
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
 - **[lib/permission_rules.py](lib/permission_rules.py)** — settings.json の permission rule を宣言した形に揃える (engine)
 - **[lib/photos_picker.py](lib/photos_picker.py)** — Google Photos Picker API の client (session を作る → 本人が URL を開いて写真を選ぶ → 選ばれた写真を列挙・download。 python3 photos_picker.py で selftest)
+- **[lib/pick-python.sh](lib/pick-python.sh)** — 無人ジョブ (launchd / cron) の wrapper が使う python3 を、 PATH の順でなく「必要な module を import できるか」 で選ぶ (source して pick_python を呼ぶ)
+- **[lib/pick-python.test.sh](lib/pick-python.test.sh)** — pick-python.sh (無人ジョブの python3 を import できるかで選ぶ) の検査
 - **[lib/print_pages.py](lib/print_pages.py)** — 刷る PDF の各頁が「窓口に出す頁」 かを、作る時に file へ宣言し、刷る直前に読む。宣言の無い頁は見出しから推定する。
 - **[lib/prune-retired-hooks.sh](lib/prune-retired-hooks.sh)** — 退役した hook を外す (hooks dir の symlink + settings.json の entry)。 registry 駆動・冪等
 - **[lib/prune-retired-hooks.test.sh](lib/prune-retired-hooks.test.sh)** — 退役 hook の掃除 (scripts/lib/prune-retired-hooks.sh) の test
