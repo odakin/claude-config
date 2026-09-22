@@ -423,9 +423,9 @@ sender 側は上記 spawn-spec template を書いて chip を投げる。 receiv
 
 **進め方 (受け手)**:
 1. 対象を読み、 **疑った点を仮説として番号つきで固定してから**動かす。 壊れなかった仮説も results に「棄却」 として残す (= 何を試して無事だったかが、 次の検収の出発点になる)。 自分の期待の方が誤りだった case は、 所見でなく期待の誤りとして分けて書く。
-2. 既存の test → 自作の入力 (書式の揺れ・境界・異常な入力) → **実データ** (過去の記録に当てて、 検出を最低数十件は目で読む) → **相手にしている本体** (hook が app の挙動を当てるものなら app のコード、 [`hook-authoring.md#imitate-target-predicate`](hook-authoring.md#imitate-target-predicate)) の順に当てる。 合成入力で見つかった形は、 実データでの頻度を測ってから重さを決める (合成では壊れるが実データに 0 件、 は「低」)。
+2. 既存の test → 自作の入力 (書式の揺れ・境界・異常な入力) → **実データ** (過去の記録に当てて、 検出を最低数十件は目で読む) → **相手にしている本体** (hook が app の挙動を当てるものなら app のコード、 [`hook-authoring.md#imitate-target-predicate`](hook-authoring.md#imitate-target-predicate)) の順に当てる。 合成入力で見つかった形は、 実データでの頻度を測ってから重さを決める (合成では壊れるが実データに 0 件、 は「低」)。 **規模の軸も 1 本入れる**: 数百〜数千件の入力で経過時間を測り、 入力の件数に比例して外部 process を呼んでいないかを見る (hook なら settings の timeout と比べる)。 正しさの test が全部緑でも、 件ごとの呼び出しは規模でだけ表に出る (実測: 独立に書いた正しさの例は全部通った修正が、 数千件の dir の commit で hook の timeout の数倍かかった。 書き方 = [`hook-authoring.md#hook-cost-per-item`](hook-authoring.md#hook-cost-per-item))。
 3. 直した case は、 **修正前の部品では落ちることを repo に残る形で確かめる** ([`hook-authoring.md#hook-test-foil-teeth`](hook-authoring.md#hook-test-foil-teeth))。
-4. 設計の選択を委任されたら、 決めた理由と、 前に出した推奨から変えた場合はその理由を results に書く。 外部への発信だけは、 委任の言い回しに関わらず文面を見せて明示の OK を取る。
+4. 設計の選択を委任されたら、 決めた理由と、 前に出した推奨から変えた場合はその理由を results に書く。 外部への発信だけは、 委任の言い回しに関わらず文面を見せて明示の OK を取る。 **保護された規則・配線・原稿を変える承認も同じ** — 「最終判断を任せる」 は承認の代わりにならない。 承認は受け手の session の会話に結びつく ([`agent-rule-ownership.md`](agent-rule-ownership.md)) ので、 起票側の session での委任の発言は受け手に届かない。 受け手は変更を candidate にまとめ、 差分を 1 回見せて本人の一言をもらう。 起票側は作業書にそう書いておく。
 5. 起票元が既に閉じていたら、 marker の受領は user への報告をもって行い、 受け手が consume する ([§Marker 経済](#return-signal-economy) の「1 系譜 1 marker」 は保つ = 追補で 2 本目を作らない)。
 
 ### 注意 (caveat)

@@ -215,6 +215,13 @@ origin: 印刷の gate hook の test で、 無効化の env switch を立てた
 - 対策: `.test.sh` の冒頭で `export TMPDIR="$TMP"` とし、 state dir の env も使い捨ての dir に向ける。 engine の `--selftest` も `tempfile.tempdir` を selftest 用の dir に差し替える。 確かめ方 = 本番の lock を手で作った状態で test を回し、 緑になること
 - lock の書き方: **取れずに退く判定を `try:` の中に置かない** — `finally:` の unlink が他の run の lock を消し、 次の起動と 2 本が並走する。 退く判定は `try` の前に置き、 取得は `os.open(..., O_CREAT | O_EXCL)` で行う (実装例 = [`scripts/sync-built-pdfs.py`](../scripts/sync-built-pdfs.py) の `take_lock`)
 
+### <a id="hook-cost-per-item"></a>§0 補足 12: hook の処理時間を入力の件数に比例させない — 件ごとに外部 process を呼ばない
+
+- PreToolUse hook には settings の `timeout` (秒) がある。 commit・一括編集の検査で**件ごとに git を呼ぶ** (1 件ずつ pathspec を展開し直す、 1 file ずつ `git show` / `cat-file` / `ls-tree` する) と、 数百件で timeout を越える (実測: 1 件あたり git 約 5 回で、 数千 file の dir の commit が timeout の数倍かかった。 対象外として読み飛ばす binary の file も、 展開の段で同じだけ払っていた)
+- 書き方: 集合は 1 回で聞く — pathspec はまとめて 1 回展開し、 既に具体名になった file は展開し直さない。 中身は `git cat-file --batch` や、 path をまとめた `git ls-tree` の 1 回で読む。 件数に比例してよいのは python の中の処理だけ
+- 測り方: `cProfile` で `subprocess.run` の呼び出し回数を件数で割る (件数に比例していたら直す)。 旧版との比較は、 旧版を別名で置いて同じ入力を当てる ([`debugging-discipline.md#performance-fix-discipline`](debugging-discipline.md#performance-fix-discipline))
+- timeout を越えたとき hook が止める側に倒れるか素通りするかは、 推測で書かずに実測して、 その gate の doc に書く (どちらでも利用者には誤動作に見える)
+
 ## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug
 
 ### <a id="bash32-problem"></a>問題

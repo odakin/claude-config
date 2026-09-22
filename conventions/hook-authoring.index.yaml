@@ -45,6 +45,9 @@ sections:
   - id: test-isolates-live-machine-state
     level: 3
     title: "§0 補足 11: test は、 本番の run と共有する machine-global な資源を自分専用にする"
+  - id: hook-cost-per-item
+    level: 3
+    title: "§0 補足 12: hook の処理時間を入力の件数に比例させない — 件ごとに外部 process を呼ばない"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2
