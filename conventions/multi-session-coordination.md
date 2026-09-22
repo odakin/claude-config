@@ -479,7 +479,7 @@ honest な天井: **「起動した」 を *live 親に自動 push* する経路
 1. **spawn_task chip** (harness にあれば) — user の可視 queue に入り、 1 click で worker session が立つ
 2. **deadline つき TODO** (task ledger に mint、 `cross_ref` = plan file path、 self-imposed deadline 〔例 +14d〕 + 適切な priority) — deadline-horizon 系の毎 session push + 強制 disposition (= act / 明示 defer / 見送り決着) の管轄に入る
 3. **即時実装** (= 小さければその場でやる — queue に入れない のが最強の queue 管理)
-4. **session 宛ての board request** (v2 `request`、 受け手の session か role id 宛て) — 受け手の inbox と、 受け取り側の session 開始時の surface に載る (実装は各 user の private layer。 [1 義務 1 受領経路](#board-receipt-carrier) = この carrier を選んだ義務に完了 marker や期日つき TODO を重ねない)
+4. **session 宛ての board request** (v2 `request`、 受け手の session か role id 宛て) — 受け手の inbox と、 受け取り側の session 開始時の surface に載る (実装は各 user の private layer。 [1 義務 1 受領経路](#board-receipt-carrier) = この carrier を選んだ義務に完了 marker や期日つき TODO を重ねない)。 **板への投稿は記録であって push ではない** = 相手の session が生きている (session 一覧に居る) なら、 投稿のたびに直接 message (`SendMessage`) で「thread id + 何を書いたか」 を 1 行送る。 message だけで済ませない (板に無いものは記録に残らない)
 
 「plan header に green-light 済みと書く」 「project list に 🟡 で載せる」 は**どれも carrier ではない** (= push されない記録)。 これは same-turn conversion family の一員: 会議確定メール → 同 turn calendar 登録 / 依頼メール → 同 turn TODO / 印刷 → 同 turn 点呼行、 と同じ「生まれた瞬間に機械の管轄へ」。
 
