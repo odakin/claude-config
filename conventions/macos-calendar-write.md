@@ -115,6 +115,8 @@ API / MCP で Google 所有 calendar に書いた予定を、 user は Mac の C
 
 **直し方** = そのアカウントの再サインイン (システム設定 → インターネットアカウント、 または Calendar.app のツールバーの ⚠ から)。 **パスワードを扱うので user の操作**。 Claude は切り分けの結果と場所を 1 行で渡す。
 
+**機械で見る** = `scripts/check-calendar-app-sync.py` (2 と、 Calendar.app が使う CalDAV の子アカウントの**親** 〔Google 等〕 の認証を読む。 子は親が切れても認証済みのままなので親まで辿る。 `--surface` は異常時だけ、 flag なしで全アカウントの表)。
+
 **やってはいけない読み方**:
 
 - `osascript -e 'tell application "Calendar" to reload calendars'` の **rc=0 は同期の成功を意味しない** (失敗するアカウントは reload しても失敗する)。
