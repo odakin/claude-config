@@ -3293,6 +3293,15 @@ origin: 定期講演会の告知と講演者への案内が、 開催の直前�
 同じ期間に複数の session がその回の事務書類 (独立の記録を持つ失効型の手順) を処理し、 うち 1 つは状況の一覧で「告知は未送信」 と
 正しく報告していたが、 記録にも網にも載らなかった。 過去の回を並べると、 規約の期日を守れた回は手順によっては半数に満たなかった。
 
+### <a id="catch-all-branch-absorbs-covered-class"></a>8.72 「未対応」 の受け皿は、 上流が既に扱う class を吸ってはいけない — 索引の miss を「resolver 未実装」 に降格しない
+
+参照の検査器は「索引 (登録済の kind を全部読み込んだ表) で引く → 無ければ file system の resolver に落とす → resolver が知らない kind は None = ⚪ 記録のみ」 の 3 段で組まれることが多い。 このとき resolver の末尾の `return None` は「判定できない」 の意味だが、 **索引が扱う kind でここに来た**とは「索引に無かった」 = 参照先の不在そのものである。 その分岐を書き忘れると、 壊れた参照が低 severity の「resolver 拡張候補」 として恒常表示され、 読み手は「未実装の kind がある」 と読んで放置する。 実測: 索引が扱う kind の不在参照が複数、 低 severity の候補一覧に紛れて長く残っていた。 同じ検査器で同型の category error が別の入力でも起きていた (外部 URL の `:` を kind の区切りに食って「未対応 kind 'https'」 を出し続けた)。
+
+- **受け皿の枝の前に「この class は上流が扱うか」 を問う**: 索引の (repo, kind) の集合を持ち、 resolver の冒頭でその集合に当たれば False (= 不在) を返す。 「呼び出し側が先に索引を引く」 という契約を resolver 側の注釈にも書く (= 索引 hit なら resolver には来ない、 来たら miss)。
+- **key の表記ゆれは parse 段で正規化する**: schema の文書が小文字、 実装の索引が大文字、 のように表記が割れていると、 片方で書かれた参照は索引に当たらず同じ受け皿に落ちる。 登録済の kind については大小文字を問わず正規名へ寄せ、 両方の書き方を selftest に置く。 未登録の kind は触らない (= 誤って 🔴 に格上げしない)。
+- **直す前の実装で陽性対照を赤にしてから直す** ([`#isolation-shortens-the-path`](#isolation-shortens-the-path) と同じ順)。 直した後は corpus 全体の finding を before / after で突き合わせる (新しい 🔴 が本物か 1 件ずつ、 消えた ⚪ が期待した集合と一致するか)。
+- 同型 = [`#failure-exit-equals-violation-exit`](#failure-exit-equals-violation-exit) (故障と違反を同じ値にしない) の裏側: **不在と未判定を同じ値にしない**。 検出器を広げたら [`#detector-change-breaks-downstream-writers`](#detector-change-breaks-downstream-writers) (その前に立つ無人の書き手の過去の出力を通し直す)。
+
 ## <a id="environment-literal-placement"></a>24. 環境に依存する値は「配る物」 に焼かない — 実行時に導くか、 導けない形式なら install 時に生成する
 
 ### <a id="literal-placement-question"></a>24.1 判別の 1 問
