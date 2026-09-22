@@ -158,6 +158,7 @@
 - **[macos-app-bundle-audit.py](macos-app-bundle-audit.py)** — Inventory side-by-side macOS app bundles by name or bundle identifier. --selftest included.
 - **[macos-crash-triage.py](macos-crash-triage.py)** — macOS のアプリ crash report (.ips) を、 Chromium の Crashpad crash key と unified log で裏付けて型に分ける (読むだけ)。--selftest 内蔵。 conventions/macos-app-crash-triage.md
 - **[macos-exec-kill-triage.py](macos-exec-kill-triage.py)** — script の exec が macOS に SIGKILL される (exit 137 / "Killed: 9" / git の "died of signal 9") 原因を、 syspolicyd の状態・unified log・file ごとの検査で揃える (読むだけ)。
+- **[macos-notification-db.py](macos-notification-db.py)** — macOS 通知センターの DB から、ある app が出した通知 (題・副題・本文・時刻) を読む。
 - **[mail-to-pdf.py](mail-to-pdf.py)** — 受信したメールの本文 (text) を、 事務に出す添付書類の PDF にする (日本語可・秘密の値を伏せられる)。
 - **[make-review-sandbox.py](make-review-sandbox.py)** — [forwarder → ai-collaboration/scripts/make-review-sandbox.py] 封じた review sandbox (~/<sandbox-root>/<slug>/) を機械的に切る: 5 行の CLAUDE.md (= この dir 以外を読まない / 注入 reminder 無視 / git log 禁止 / 書くのは results と scratch のみ) + REVIEW-SPEC.md + 許可 file の copy
 - **[manuscript-claim-guard.py](manuscript-claim-guard.py)** — 原稿の保護領域 (表題・概要・序論・結論・数式環境) と agent の権限規約を、 著者の項目ごとの承認 (著者の発言の verbatim を transcript で照合) なしに AI agent が書き換える変更を止める engine (Claude / Codex の PreToolUse と git pre-commit が同じ述語で呼ぶ)

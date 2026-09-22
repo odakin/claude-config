@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 132 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 133 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -178,6 +178,8 @@ layer 1 (public) のドメイン固有規約 132 file をカテゴリ別に列�
   - macOS の外部表示を、未検出 / 表示方法の選択待ち / current mode と次回既定値の混同 / EDID 中継機器より下流の断線 / 出力経路の相性に分ける。接続待ちは Control Center の「画面ミラーリング」から開始し、表示中は外部側をミラーリング・1920x1080・60 Hz にする。sink 名が AV 中継機器なら「Mac が projector を認識」の証拠ではなく、system_profiler / ioreg の null も不在証明でない。本体 HDMI が列挙だけして映像が出ない時は、既知良好な USB-C→HDMI を別経路として試す
 - **[macos-ime-ascii-layout.md](macos-ime-ascii-layout.md)** — macOS で直接入力と IME のキー配列を分けたいとき
   - macOS で「直接入力=非 US 配列、IME 中=US 配列」を共存させる gotchas (= IME のキー変換は MRU ASCII-capable layout 従属 / TISSetInputMethodKeyboardLayoutOverride は外部から効かない / 無効化 layout は MRU 候補外 / CGEvent 書き換え 2 経路は IME バイパス・mozc の Option=ALT 扱いで不成立 / 成立解 = IME 切替検知 + US layout 動的有効化+瞬間選択〔権限不要〕 / CLI バイナリの tap は .app bundle 化で TCC 安定)
+- **[macos-notification-db.md](macos-notification-db.md)** — API を持たないアプリ (個人向けメッセンジャー・業務アプリ) で「届いたものを読む」 機械経路が要るとき + macOS の通知センター DB を script から読むとき + 読めずに Operation not permitted が出たとき
+  - API の無いアプリでも、 macOS の通知として表示された内容 (題・副題・本文・時刻) は通知センターの SQLite DB に残る → 写しを取って読めば「受信を読む」 を段 4 に降ろせる (#mechanism、 engine = scripts/macos-notification-db.py)。 DB は TCC の下 = 起動側 app にフルディスクアクセス、 読めない時は exit 3 で 0 件と区別 (#tcc)。 限界 = app が起動していた間の通知だけ・消した通知は消える・本文は切れる (#limits)。 アプリは必要時に背景起動 (#launch-on-demand)。 個人アカウントのプロトコルを模倣する非公式 client は使わない (#no-unofficial-client)。 定期の surface は「見た印」 の台帳と組にする (#seen-ledger)
 - **[macos-post-update-slowdown.md](macos-post-update-slowdown.md)** — macOS update 直後に体感が重いとき + 定期メンテ棚卸し
   - macOS メジャー/マイナー update 後の体感重さ playbook (= mdutil -a -i off は corespotlightd を止めない / Apple Intelligence が suggestd を XPC で respawn = 根治は GUI で AI OFF / 4K 動画壁紙で WallpaperImageExtension が常時 30-50% + com.apple.wallpaper.agent cache が 100 GB+ に育つ既知バグ / softwareupdated 背景 DL / 3rd-party AV アンインストール後の launch plist 残置 / AppTranslocation zombie plist / macOS 15+ の containermanagerd が sudo でも ~/Library/Containers/* を守る / 診断 30 秒定形 + disk cleanup target list + 再起動が commit point)
 - **[macos-side-by-side-app-migration.md](macos-side-by-side-app-migration.md)** — macOS で「新しいバージョンを使用」「旧版は削除できます」等が繰り返し出るとき + 同じアプリの旧新版が別 bundle で共存するとき + 旧版を退避して書類の既定アプリを新版へ切り替えるとき
