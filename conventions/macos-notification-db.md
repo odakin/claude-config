@@ -42,8 +42,9 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
   `~/Library/Application Support/Claude/claude-code/<版>/claude.app` の helper から起動されていて、
   app 本体に付与済みでも読めず、 helper 側の付与で読めた。 ⚠️ path に版番号が入る = **版が上がると
   付与が切れる可能性がある** (設定画面に同名の項目が版の数だけ並ぶのがその痕跡)。 exit 3 が戻ったら親を辿り直す。
-- 付与はシステム設定の操作 = **人が 1 回**。 付与後は起動側 app を再起動してから確かめる
-  (起動中の process に効くかは版で違う)。
+- 付与はシステム設定の操作 = **人が 1 回**。 実測では起動中の process にも再起動なしで効いた
+  (効かなければ起動側 app を再起動してから確かめる)。 設定画面を直接開く =
+  `open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"`。
 
 ## <a id="limits"></a>限界 (出力の読み方に効く)
 
