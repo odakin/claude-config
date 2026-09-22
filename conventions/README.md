@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 133 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 134 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -214,6 +214,8 @@ layer 1 (public) のドメイン固有規約 133 file をカテゴリ別に列�
   - Android Brave/Chrome の remote debugging (WiFi ADB + CDP、 reload 前の live state capture procedure)
 - **[campussquare.md](campussquare.md)** — 大学の教務システム CampusSquare for WEB (シラバス・履修者名簿・成績登録) を読む・扱うとき + 名簿 CSV を科目別に分けるとき + 成績を CSV で一括登録するとき + 内蔵 browser でログイン画面が出て「読めない」 と言いそうになったとき
   - CampusSquare は学内 SSO の奥だが browser の session cookie 再利用で script から読める (scripts/campussquare-client.py、 シラバス検索・本文) / 画面は Spring Web Flow = hidden の _flowExecutionKey と _eventId を POST → 302 → GET / 教員でログインするとシラバス検索の担当者欄に本人名が既定で入る / 名簿・成績 CSV は CP932・CRLF・全 field quoted・評語は末尾から 2 列目 / アップロードと「提出」 は別操作
+- **[consumer-review-posting.md](consumer-review-posting.md)** — 宿・店・サービスの口コミ (レビュー) を本人の代わりに起草して投稿先を選ぶとき + 「予約サイトに書けない」 と分かった時 + 写真のキャプションや投稿後のアンケートを埋める時
+  - 宿泊・店舗の口コミを agent が起草して本人が投稿するまでの手順と壊れ方 — 書く前に投稿先の適格性を確かめる (予約サイトの口コミは自サイト経由の宿泊が条件、 booking.com の「パートナー・オファー」 予約は規約で口コミ不可、 予約経路を問わないのは Google マップと Tripadvisor = #eligibility)、 相場の主張は当日の料金表を内蔵 Browser pane で読んで倍率を書く (WebFetch は予約サイトを読めない = #price-claim)、 1 泊の観察を一般法則の形で書かない・予約サイトが公開している情報を暴露として書かない・敬語の向きを客の側から確かめる (#claim-discipline)、 構成は結論 → 主問題 → 対応 → 副次 → まとめ (#structure)、 媒体の書式 = Google マップは書式なし・サブ欄は本文の繰り返しにしない、 Tripadvisor はタイトル + 本文 + 審査、 booking.com は招待メールからのみで良かった点/悪かった点の箇条 (#platform-format)、 機械翻訳で読まれる前提で主語を省かず反語を避ける (#machine-translation)、 写真のキャプションは事実だけ・写真で分からないことは言葉で補う (#photo-captions)
 - **[flight-search.md](flight-search.md)** — 航空券の候補を調べて比べる表を作るとき (内蔵 Browser pane で比較サイト・航空会社サイトを読む) + 出張の申請書に日付・経由地を書く前 + 旅費補助に予約確認を添える段取りを組むとき
   - 航空券の候補調べを agent が内蔵 Browser pane で行う手順と壊れ方 — 入口は URL だけで検索結果まで開ける比較サイト (Kayak / Expedia、 scripts/flight-search-urls.py) で、 航空会社公式は検索前の bot 判定で止まりやすく Google フライトは URL の自然文を受け付けない (#url-driven-search / #google-flights-form)、 CAPTCHA・長押し判定・Cloudflare は押さずに経路を変え使えた/使えなかった経路を記録 (#bot-checks)、 結果は広告と重複で冗長なので dialog から便名・運航会社・運賃種別を抜き時刻つきで 2 サイト以上を突き合わせる (#reading-results)、 止まる所は個人情報入力の直前 = 旅程確認画面 (#stop-before-personal-info)、 その画面は税込の合計だけで運賃・燃油・税の内訳は出ない (#fare-breakdown)、 支払い前の保留を前提にしない (#hold-before-payment)、 0:05 発・深夜乗継で申請書の日付・経由地域とずれる (#itinerary-vs-travel-request)、 Google フライトの「自己乗り継ぎ」 は別々の航空券で最安値タブに混ざり、 複数都市検索では出ない組み合わせがある (#self-transfer)、 予約先は比較サイト経由と直接で値段が違い、 旅行サイトは払う前に有料の追加を段ごとに足す (#booking-channel)、 航空会社公式が組まない短い乗継を旅行サイトが売ることがあり、 買った後に e チケット番号が全区間 1 つかで確かめる (#connection-not-sold-by-airline)、 旅費補助に出す書類は確定メール・詳細メール・予約内容 PDF の 3 つに分かれ、 暗証番号を塗り日本語 PDF の豆腐を避ける (#confirmation-documents)、 昼の区間は日陰側の窓 (#window-side)
 - **[google-forms-automation.md](google-forms-automation.md)** — Google Forms の自動化・prefill・回答提出を扱うとき
