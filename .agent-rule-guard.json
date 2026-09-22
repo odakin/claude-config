@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "protect_paths": [
+    "hooks/*",
+    "codex/hooks/*",
+    "codex/skills/*/SKILL.md",
+    "codex/PARITY.md",
+    "scripts/*guard*",
+    "scripts/pre-commit-bib",
+    "scripts/public-precommit*",
+    "scripts/setup-codex*",
+    "scripts/audit-codex*",
+    "scripts/check-codex-integration.py",
+    "scripts/lib/permission_rules.py",
+    "scripts/sync-permission-rules.py",
+    "scripts/install-*hook*",
+    "scripts/install-*precommit*",
+    "scripts/lib/hook-stub.sh",
+    "templates/*/AGENTS.md.template",
+    "codex/HOME-AGENTS.md",
+    "scripts/run-all-checks.sh",
+    "scripts/check-*.py",
+    "scripts/lib/*",
+    ".claude/pre-commit-extra.sh",
+    "scripts/*hook*",
+    "scripts/install-*commit*",
+    "setup.sh"
+  ]
+}

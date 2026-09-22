@@ -104,6 +104,122 @@ _check "--no-verify でも hook 側で止める" "$(_bash 'git commit --no-verif
 _check "commit でない Bash は見ない" "$(_bash 'git status')" none
 git -C "$REPO" checkout -q -- src/main.tex
 
+echo "=== Git pathspec: directory / glob / pending untracked ==="
+PS="$T/selection-fixture"
+mkdir -p "$PS/plain" "$PS/paper.v2" "$PS/sub"
+git -C "$PS" init -q
+printf 'Fixture\n' > "$PS/README.md"
+for dir in plain paper.v2; do
+  cat > "$PS/$dir/main.tex" <<'TEX'
+\begin{abstract}A synthetic model.\end{abstract}
+\begin{equation}a=b\label{eq:pathspec}\end{equation}
+TEX
+done
+printf 'ordinary baseline\n' > "$PS/plain/data.txt"
+printf 'ignored/\n' > "$PS/.gitignore"
+git -C "$PS" add README.md .gitignore plain/main.tex plain/data.txt paper.v2/main.tex
+git -C "$PS" commit -qm baseline
+_pathspec_result() { # classify denial cause, not just exit/deny (a broken checker also denies)
+  jq -n --arg cmd "$1" --arg c "${2:-$PS}" \
+    '{hook_event_name:"PreToolUse",tool_name:"Bash",session_id:"pathspec-test",cwd:$c,tool_input:{command:$cmd}}' \
+    | python3 "$HOOK" | python3 -c '
+import json,sys
+text=sys.stdin.read()
+value=json.loads(text) if text.strip() else {}
+out=value.get("hookSpecificOutput", {})
+reason=out.get("permissionDecisionReason", "")
+print("inspection" if "inspection unavailable" in reason else
+      "equation" if out.get("permissionDecision")=="deny" and "eq:pathspec" in reason else
+      "deny-other" if out.get("permissionDecision")=="deny" else "allow")'
+}
+mkdir -p "$PS/data/forms-2026" "$PS/empty"
+printf 'ordinary fixture data\n' > "$PS/data/forms-2026/form.txt"
+_check "pathspec (a): pending untracked directory add + commit is allowed" \
+  "$(_pathspec_result 'git add data/forms-2026/ && git commit -m x -- data/forms-2026/')" allow
+_check "empty directory expansion is an ordinary no-op" \
+  "$(_pathspec_result 'git commit -m x -- empty/')" allow
+for dir in plain paper.v2; do
+  sed 's/a=b/a=c/' "$PS/$dir/main.tex" > "$PS/$dir/new.tex"
+  mv "$PS/$dir/new.tex" "$PS/$dir/main.tex"
+done
+_check "pathspec (b): directory rejects the equation, not an inspection failure" \
+  "$(_pathspec_result 'git commit -m x -- plain/')" equation
+_check "pathspec (c): dotted directory rejects the equation" \
+  "$(_pathspec_result 'git commit -m x -- paper.v2/')" equation
+_check "pathspec (d): quoted glob rejects the equation" \
+  "$(_pathspec_result "git commit -m x -- '*.tex'")" equation
+_check "Git pathspec magic is passed to Git unchanged" \
+  "$(_pathspec_result "git commit -m x -- ':(top,glob)paper.v2/*.tex'" "$PS/sub")" equation
+_check "Git exclusions apply to the selection together" \
+  "$(_pathspec_result "git commit -m x -- '*.tex' ':(exclude)*.tex'")" allow
+_check "explicit path commit does not inspect an unrelated preceding add" \
+  "$(_pathspec_result 'git add plain/ && git commit -m x -- data/forms-2026/')" allow
+# Reset only synthetic worktree content; no hook/approval bypass.
+git -C "$PS" checkout -q -- plain/main.tex paper.v2/main.tex
+mkdir -p "$PS/draft" "$PS/ignored"
+cp "$PS/plain/main.tex" "$PS/draft/new.tex"
+cp "$PS/plain/main.tex" "$PS/ignored/new.tex"
+_check "pending git add -A includes untracked manuscript" \
+  "$(_pathspec_result 'git add -A && git commit -m x')" equation
+_check "pending git add . includes untracked manuscript" \
+  "$(_pathspec_result 'git add . && git commit -m x')" equation
+_check "pending git add -A plus commit -a still includes untracked manuscript" \
+  "$(_pathspec_result 'git add -A && git commit -am x')" equation
+_check "commit -a alone does not include untracked manuscript" \
+  "$(_pathspec_result 'git commit -am x')" allow
+_check "git add -u does not include untracked manuscript" \
+  "$(_pathspec_result 'git add -u && git commit -m x')" allow
+_check "git add . is relative to the actual subdirectory" \
+  "$(_pathspec_result 'git add . && git commit -m x' "$PS/data")" allow
+_check "bundled git add -Av includes untracked manuscript" \
+  "$(_pathspec_result 'git add -Av && git commit -m x')" equation
+_check "bundled git add -uv keeps untracked manuscript excluded" \
+  "$(_pathspec_result 'git add -uv && git commit -m x')" allow
+_check "git add dry-run does not stage untracked manuscript" \
+  "$(_pathspec_result 'git add -An && git commit -m x')" allow
+_check "forced add includes the explicitly selected ignored manuscript" \
+  "$(_pathspec_result 'git add -f ignored/ && git commit -m x -- ignored/')" equation
+cp "$PS/plain/main.tex" "$PS/plain/new.tex"
+printf 'ordinary update\n' >> "$PS/plain/data.txt"
+_check "path-only commit without add excludes adjacent untracked manuscript" \
+  "$(_pathspec_result 'git commit -m x -- plain/')" allow
+rm "$PS/plain/new.tex"
+sed 's/a=b/a=c/' "$PS/plain/main.tex" > "$PS/plain/changed.tex"
+mv "$PS/plain/changed.tex" "$PS/plain/main.tex"
+git -C "$PS" add plain/main.tex
+git -C "$PS" show HEAD:plain/main.tex > "$PS/plain/main.tex"
+printf 'ordinary staged update\n' >> "$PS/README.md"
+git -C "$PS" add README.md
+_check "pending add cancels an index-only equation change restored in worktree" \
+  "$(_pathspec_result 'git add plain/ && git commit -m x')" allow
+# Check the actual Git selection behind that positive control.
+git -C "$PS" add plain/
+_check "actual Git add removes the stale equation change from index" \
+  "$(git -C "$PS" diff --cached --quiet -- plain/main.tex && echo clean || echo changed)" clean
+rm "$PS/draft/new.tex"
+_check "ignored untracked manuscript is excluded" \
+  "$(_pathspec_result 'git add -A && git commit -m x')" allow
+# Unborn HEAD uses the cached and nonignored untracked names, not diff HEAD.
+UNBORN="$T/unborn-selection"
+mkdir -p "$UNBORN/draft"
+git -C "$UNBORN" init -q
+cp "$PS/plain/main.tex" "$UNBORN/draft/new.tex"
+_check "unborn repository still inspects selected untracked manuscript" \
+  "$(_pathspec_result 'git add draft/ && git commit -m x -- draft/' "$UNBORN")" equation
+# Failure of Git's selector is not an empty list or a successful check.
+mkdir -p "$T/pathspec-fail-bin"
+REAL_GIT="$(command -v git)"
+cat > "$T/pathspec-fail-bin/git" <<SHIM
+#!/bin/sh
+for argument do
+  if [ "\$argument" = "--name-only" ]; then exit 42; fi
+done
+exec "$REAL_GIT" "\$@"
+SHIM
+chmod +x "$T/pathspec-fail-bin/git"
+_check "Git selection failure remains inspection unavailable" \
+  "$(PATH="$T/pathspec-fail-bin:$PATH" _pathspec_result 'git commit -m x -- plain/')" inspection
+
 echo "=== git pre-commit (pre-commit-bib 経由) ==="
 ln -s "$ROOT/scripts/pre-commit-bib" "$REPO/.git/hooks/pre-commit"
 sed 's/f = g + h/f = 2g + h/' "$REPO/src/main.tex" > "$REPO/src/m.tmp" && mv "$REPO/src/m.tmp" "$REPO/src/main.tex"

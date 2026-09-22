@@ -15,16 +15,20 @@ CODEX_WORKSPACE_ROOT="${CODEX_WORKSPACE_ROOT:-$USER_HOME/Documents/Codex}"
 REPOS=()
 REPO_COUNT=0
 ISSUES=0
+CHECK_RUNTIME=0
+RUNTIME_CODEX=codex
 PROJECT_AGENTS_MAX_BYTES=4096
 
 usage() {
   cat <<'EOF'
-Usage: audit-codex-integration.sh [--repo <path>]...
+Usage: audit-codex-integration.sh [--repo <path>]... [--runtime] [--codex <executable>]
 
 Read-only audit of the claude-config Codex integration.
 
   --repo <path>  Also inspect the tracked thin root AGENTS.md, Agent-Session
                  hook, and existing Git-side guards in this repository.
+  --runtime      Read persisted trust of the authority hooks (not live dispatch).
+  --codex PATH   Installed Codex executable for --runtime (default: codex).
   -h, --help     Show this help.
 EOF
 }
@@ -37,6 +41,8 @@ while [ "$#" -gt 0 ]; do
       REPOS+=("$1")
       REPO_COUNT=$((REPO_COUNT + 1))
       ;;
+    --runtime) CHECK_RUNTIME=1 ;;
+    --codex) shift; [ "$#" -gt 0 ] || exit 2; RUNTIME_CODEX="$1" ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -299,6 +305,12 @@ for requested_repo in "${REPOS[@]}"; do
     echo "NOTE: no managed pre-commit gate detected (this may be intentional)."
   fi
 done
+fi
+
+if [ "$CHECK_RUNTIME" -eq 1 ]; then
+  python3 "$SCRIPT_DIR/audit-codex-hook-runtime.py" --codex "$RUNTIME_CODEX" --cwd "$PWD" || ISSUES=$((ISSUES + 1))
+else
+  echo "NOT CHECKED: runtime trust (use --runtime); actual tool rejection needs a separate live probe."
 fi
 
 if [ "$ISSUES" -gt 0 ]; then

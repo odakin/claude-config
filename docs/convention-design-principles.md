@@ -204,6 +204,8 @@ origin: 研究費様式の交通費記入ルールを是正した session。確�
 
 ### <a id="motivated-substitution-trap"></a>4.1 指定された成果物・手段から逸脱する時の self-justification trap（motivated substitution）
 
+規則・禁止・必須手順の適用を自分の判断で変えそうになった場合の規範と機械検査は、[agent-rule-ownership.md](../conventions/agent-rule-ownership.md#rule) が所有する。
+
 タスクが**特定の成果物・手法を名指す**とき（「X を実装して」/ plan に「手法 Y」と明記 等）、より一般的・印象的・自分好みの別手法が思い浮かぶと、LLM は**逸脱の正当化を後付けで製造**しやすい。起点は「目標（outcome）」を最適化して「指定された手段（named deliverable）」を交換可能と見なすこと。§4 の「orient before act」が *事前確認のスキップ* を扱うのに対し、こちらは *（誤って）orient した後に、別物へ静かにすり替える* failure。
 
 **なぜ特に危険:** 逸脱先がしばしば本当に有用な副産物を出すため「良い判断だった」と誤学習する。正当化は粘り、**事後分析（post-mortem）まで生き残る**（「でも技術的には正しかった」という逃げ道として）。silent な置換は依頼者が気づいて差し戻す手間を生み、「X をやる」と言った時に毎回成果物を検証させる＝信頼の侵食。判断自体が良くても、**黙って差し替えた**ことが failure。

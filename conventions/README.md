@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 134 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 135 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -247,6 +247,8 @@ layer 1 (public) のドメイン固有規約 134 file をカテゴリ別に列�
 
 ## エンジニアリング一般 (`infra`)
 
+- **[agent-rule-ownership.md](agent-rule-ownership.md)** — agent が規則・禁止・必須手順を適用外と判断する前、規則や検査の配線・例外を変更する前、規則との衝突を理由に別経路を選ぶ前
+  - 作業の裁量と規則を変更する権限を分ける正本。規則を自己判断で緩めず、適用範囲・例外・配線まで保護する。一般の指示文書と設定の機械検査、著者の具体的裁定、発火の検証、機械で保証しない範囲を定める
 - **[batch-text-edits.md](batch-text-edits.md)** — 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape)
   - plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 9 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる / 1 回一致は prefix 形の key (path・識別子) を守らない = 長い別物の先頭に 1 回だけ一致して誤置換、 終端の区切りまで含めるか構文解析した単位で置換 / 挿入型の pair (new が old を含む) は再実行しても count==1 のまま通って二重に入る = 適用済み検査を足す / TARGET が symlink だと test 用の写しは link 越しに実体へ書き、 一時 file + os.replace は link を普通の file に置き換える = 先に実体の path へ解決する / macOS 付属の python 3.9 は 1023 byte を超える多バイト行を source として読めず Non-UTF-8 の SyntaxError で落ちる = 長い文面は別 file に置いて読む / 計算で作った old 〔slice〕 は終点の anchor が前にも在ると空になり `replace('', new)` が全文字の間に挿入して file が数百倍に膨れる = 終点は始点より後ろで探し、 計算した old にも assert old and count==1、 書いた後に行数の桁を見る、 commit gate = scripts/check-degenerate-text.py。 機械化 = scripts/apply-text-pairs.py)
 - **[confidential-repo-boundary.md](confidential-repo-boundary.md)** — 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers) / 触れない dir の中身を機械で処理する必要が出たとき (#work-on-a-copy-not-by-lowering-the-gate)

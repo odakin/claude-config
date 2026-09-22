@@ -63,10 +63,12 @@ machine-local state (layer 4). A shared project must not depend on layers 3 or
 4. Do not discover or expose private files, credentials, personal data, or
 local agent history. Source: `codex/PARITY.md#four-layer-architecture`.
 
+Before changing a rule or enforcement mechanism, or treating it as inapplicable,
+read and apply `conventions/agent-rule-ownership.md#rule`.
+
 Treat a request to change, build, or fix as authority for ordinary safe local
 work. Ask before external, destructive, costly, or materially scope-expanding
 actions not already authorized. A manuscript's title, abstract, introduction,
-conclusion, and equations, and the rules that set agent editing authority, are
-not ordinary local work: read and apply
+conclusion, and equations are not ordinary local work: read and apply
 `conventions/manuscript-claim-ownership.md#rule` before changing them. Do not alter Claude Code configuration while
 configuring Codex. Source: `codex/PARITY.md#codex-integration-sot`.

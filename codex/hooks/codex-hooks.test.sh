@@ -501,7 +501,7 @@ MANUSCRIPT_CLAIM_GUARD_STATE_DIR="$TEMP_ROOT/mcg-state" MANUSCRIPT_CLAIM_GUARD_H
   --file "$MCG_REPO/src/main.tex" --region abstract --change 'drop the second sentence' --quote '二文目は削ってよい' >/dev/null
 [ "$(mcg_patch "$MCG_FULL" 'We find that the toy lattice conducts heat.' | mcg_decision)" = allow ]
 # Bash git commit carries the same predicate: an equation changed through the shell, another session, no approval
-MCG_BASH="$(MCG_REPO="$MCG_REPO" python3 -c 'import json,os; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","session_id":"cdx-other","cwd":os.environ["MCG_REPO"],"tool_input":{"command":"git commit -a -m x"}}))')"
+MCG_BASH="$(MCG_REPO="$MCG_REPO" python3 -c 'import json,os; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","session_id":"cdx-other","cwd":os.environ["MCG_REPO"],"tool_input":{"command":"git -C "+os.environ["MCG_REPO"]+" commit -a -m x"}}))')"
 python3 - "$MCG_REPO/src/main.tex" <<'PY'
 import sys
 path = sys.argv[1]
@@ -509,5 +509,31 @@ text = open(path, encoding="utf-8").read().replace("u &= v", "u &= -v")
 open(path, "w", encoding="utf-8").write(text)
 PY
 [ "$(printf '%s' "$MCG_BASH" | mcg_decision)" = deny ]
+
+# The native Desktop path may omit tool workdir while reporting only task cwd.
+MCG_REPO="$MCG_REPO" MCG_ADAPTER="$SCRIPT_DIR/manuscript_claim_guard.py" python3 - <<'PY'
+import json, os, subprocess, sys
+repo = os.environ['MCG_REPO']
+def inspect(command, workdir=None):
+    ti = {'command': command}
+    if workdir is not None:
+        ti['workdir'] = workdir
+    event = {'hook_event_name': 'PreToolUse', 'tool_name': 'Bash', 'session_id': 'cdx-cwd',
+             'cwd': os.path.dirname(repo), 'tool_input': ti}
+    result = subprocess.run([sys.executable, os.environ['MCG_ADAPTER']], input=json.dumps(event),
+                            text=True, capture_output=True, check=True)
+    output = json.loads(result.stdout)['hookSpecificOutput'] if result.stdout.strip() else {}
+    return output.get('permissionDecision'), output.get('permissionDecisionReason', '')
+for directory in (None, '', 'relative'):
+    decision, reason = inspect('git commit -a -m x', directory)
+    assert decision == 'deny' and 'working directory' in reason, (directory, decision, reason)
+for command, directory in [('git commit -a -m x', repo), ('git -C ' + repo + ' commit -a -m x', None)]:
+    decision, reason = inspect(command, directory)
+    assert decision == 'deny' and 'inspection unavailable' not in reason, (command, decision, reason)
+for command in ('git status', 'git add --dry-run .', 'git commit --dry-run'):
+    decision, reason = inspect(command)
+    assert decision != 'deny', (command, reason)
+print('Codex working-directory contract: 8 cases passed')
+PY
 
 echo "Codex hook tests passed"

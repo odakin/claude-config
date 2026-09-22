@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-原稿と編集権限の保護を強化し、関連試験と後続 head の全体 CI を確認したところ。再開時は [run 履歴](https://github.com/odakin/claude-config/actions) で現在値を確認し、以前の失敗を現在の未解決事項としてコピーしない。規則・承認の記録・検査不能時の扱いは [所有権の正本](conventions/manuscript-claim-ownership.md#mechanism)、Codex の配線と実機確認の境界は [統合仕様](codex/PARITY.md#codex-integration-sot) から再開する。
+規則の自己緩和を論文以外にも防ぐ共通化を反映し、検証を終えたところ。原因・規則・実施手順は [規則の所有権](conventions/agent-rule-ownership.md)、試験と独立検品の証拠・限界は [検証記録](docs/agent-rule-guard-verification.md) にある。次の変更は対象操作の正本とこの検証記録から再開する。
 
 > 📌 **このファイル = 直近の作業の索引 + Open items (目安 ~80 行 = [`CONVENTIONS.md#pre-push-check`](CONVENTIONS.md#pre-push-check))**。 entry は「日付 + 何を + 正本への pointer」 の 1-3 行で「直近」 の先頭に足す。 経緯・実測・RCA は正本 doc か [`SESSION-archive.md`](SESSION-archive.md) (grep 用) へ。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md`、 Codex 統合の正本は [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot)。 縮退: 2026-06-10 hot/cold 分離 / 2026-09-01 第 2 回 / 2026-09-11 第 3 回 (2026-08-12〜09-11 の 55 entry を archive へ verbatim MOVE、 義務行は Open items へ lift)。
 ## 直近 (2026-09-16〜09-22) の索引 — 本文は SESSION-archive.md、 規則は各正本 (09-06〜09-15 の索引行も同 archive へ退避済)

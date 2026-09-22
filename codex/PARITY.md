@@ -687,8 +687,27 @@ high-signal, product-neutral subset:
 | `SessionStart` | Restores a compact reminder to read the active project instructions and `SESSION.md`, constructs the conversation-start identity stamp, and caches hook-supplied session/model provenance. | It reads only current hook input and local runtime facts; it does not discover personal-layer data or session history. |
 | `UserPromptSubmit` | Refreshes the active model cache before every user turn, including after a model change. On the first prompt of a session only, re-injects the identity stamp as `additionalContext` (see [`#conversation-start-stamp`](#conversation-start-stamp)). | The cache step emits no output and stores only validated session/model metadata; the stamp step fires once per session and stays silent outside the workspace root. |
 | `PreToolUse(Bash)` | Refreshes the machine-local session/model provenance cache and records a Git baseline for completion-gate targets. | It neither authorizes nor rewrites the command; the detailed state predicate is owned by [`#completion-git-gate-hook`](#completion-git-gate-hook). |
-| `PreToolUse(apply_patch)` + `PreToolUse(Bash)` (manuscript claims) | Denies a patch or `git commit` that changes a manuscript's title, abstract, introduction, conclusion, or equations, or an agent-authority rule, without an itemized approval recorded from the author's verbatim words in this session's rollout. | Same engine and predicate as the Claude hook and the Git pre-commit ([`scripts/manuscript-claim-guard.py`](../scripts/manuscript-claim-guard.py)); semantic home = [`manuscript-claim-ownership.md#rule`](../conventions/manuscript-claim-ownership.md#rule), limits in its `#limits`. Uses `deny` only; `ask` is not part of the Codex contract. |
+| `PreToolUse(apply_patch)` + `PreToolUse(Bash)` (rules and manuscript claims) | Protects agent-governance documents, enforcement configuration and declared gate implementations as well as manuscript claims; rejects recognized literal Git hook-suppression commands. Rule changes require the owner's words bound to the exact candidate. | Generic predicate = [`agent-rule-guard.py`](../scripts/agent-rule-guard.py); existing [`manuscript-claim-guard.py`](../scripts/manuscript-claim-guard.py) dispatches it with the manuscript predicate. Normative owner = [`agent-rule-ownership.md#rule`](../conventions/agent-rule-ownership.md#rule); domain owner = [`manuscript-claim-ownership.md#rule`](../conventions/manuscript-claim-ownership.md#rule). Existing hook names and trust definitions stay compatible. Uses `deny`, including inspection failure. |
 | `PostToolUse(apply_patch)` + `Stop` | Provides a conservative tracking fallback, then blocks one turn-end continuation when task-created dirt or local/live-remote head drift remains. At the first `Stop` of a session, also records (observe) or sends back once (block) a first turn whose replies never led with the identity stamp. | It never commits or pushes automatically; `stop_hook_active`, client trust, path resolution, and specialized execution paths bound enforcement as documented in [`#completion-git-gate-hook`](#completion-git-gate-hook). The stamp check reads only the current session's rollout and is evaluated once per session. |
+
+The Desktop Bash hook input was observed to retain the task `cwd` while
+omitting `exec_command.workdir` (only `tool_input.command` arrived). The guard
+must not infer the actual repository from that task directory. For Codex Bash
+calls without an explicit, nonempty absolute `tool_input.workdir`, write each
+Git add/commit invocation as `git -C /absolute/repository ...`; unresolved calls
+fail as inspection unavailable. A standalone `cd` is not accepted as proof,
+because flattened shell tokens cannot prove its control flow or subshell scope.
+Claude's event-cwd contract is unchanged. Nonmutating add/commit dry-runs remain
+allowed. This boundary is tested separately from hook trust and installation.
+
+Persisted trust can be checked with `scripts/audit-codex-integration.sh --runtime`
+(or [`audit-codex-hook-runtime.py`](../scripts/audit-codex-hook-runtime.py) directly).
+Select the Desktop executable with `--codex` when inspecting that runtime. The
+helper creates no model task and writes no trust decision. It always labels
+live dispatch `not_tested`: a fresh server's trusted configuration does not
+prove that an existing task has reloaded it. Complete verification uses actual
+synthetic tool calls which must reject a prohibited edit and allow a benign
+control, following the [general procedure](../conventions/agent-rule-ownership.md#operation).
 
 This subset intentionally does **not** import owner-private deadline ledgers or
 their SessionStart horizon output. Therefore, a reminder being visible in
