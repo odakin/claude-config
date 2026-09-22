@@ -464,7 +464,7 @@ EOF
   echo "   CLI account: $(cli_account)"
   write_plist "$task_id" "$kind" "$target" "$cron" || exit 1
   bootstrap_one "$task_id"
-  echo "✅ $task_id を install。 動作確認は呼び出し元の --run $task_id。"
+  echo "✅ $task_id を install。 動作確認は呼び出し元の --run ${task_id}。"
 }
 
 cmd_uninstall_one() {  # 単体 uninstall (= 期間限定ジョブの停止等。 routine spec 不要)
