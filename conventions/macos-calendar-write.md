@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: macOS Calendar.app 上の iCloud (または CalDAV / local) 所有 calendar に AppleScript / osascript で event を書き込もうとする前 + Google Calendar API から見て read-only (webcal 購読) な calendar に write する経路を探しているとき
+when: macOS Calendar.app 上の iCloud (または CalDAV / local) 所有 calendar に AppleScript / osascript で event を書き込もうとする前 + Google Calendar API から見て read-only (webcal 購読) な calendar に write する経路を探しているとき + API で Google Calendar に書いた予定が Mac の Calendar.app に出ない時 (#google-to-calendar-app-sync-check)
 category: macos
 summary: macOS Calendar.app の calendar に AppleScript (osascript) で event を作る universal recipe。 `tell application "Calendar" ... make new event with properties {summary, location, description, start date, end date}` で書ける。 property 名は英語 literal (日本語は syntax error)、 calendar name は Calendar.app が list する literal string (全角括弧 / 空白 込み)、 iCloud 側の write は数分〜数十分で iCloud sync 経由で Google Calendar の webcal 購読 view (`@import.calendar.google.com`) に反映、 他 iCloud 端末には即時反映。 TCC = Terminal.app / iTerm 側に Calendar 権限を付与、 osascript 経由も同 grant で通る。 verify は `every event whose summary contains "..."` で件数 + start date 確認。 「MCP から write 不可能な calendar (= webcal import は Google 側 read-only)」 の唯一の Claude-executable 経路
 -->
@@ -93,6 +93,34 @@ iCloud 所有 calendar を Google Calendar に **webcal 購読** させている
 - **Google Calendar view**: 遅延あり (Google が webcal を再取得するタイミングまで表示されない)
 
 ∴ verify は Calendar.app 側 (osascript) で行い、 Google view の反映は待つ。 「Google に見えない = 未書き込み」 とは限らない (= §3 単一情報源 null 結論飛躍 の calendar domain 変種)。
+
+## <a id="google-to-calendar-app-sync-check"></a>逆向き: API で Google Calendar に書いた予定が Mac の Calendar.app に出ない
+
+API / MCP で Google 所有 calendar に書いた予定を、 user は Mac の Calendar.app (Google アカウントを CalDAV で登録) で見ることが多い。 **API の書き込み成功は「user の画面に出た」 ではない**。 Calendar.app 側のアカウントが同期に失敗し続けていると、 予定もその通知 (Calendar.app が出す alarm) も user に届かないまま、 どこにもエラーが出ない (実測)。
+
+**切り分け (全部 read-only)**:
+
+1. **Calendar.app に予定があるか** — §verify pattern の osascript を、 見ているはずの calendar 名で打つ。 ⚠️ `every calendar` を全部回すと遅く (数十秒〜timeout)、 名前で 1 つに絞る。
+2. **アカウントの同期状態** — Calendar.app の DB を read-only で開き、 アカウント (Store) ごとの最後の同期と error を見る:
+
+   ```bash
+   DB="$HOME/Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb"
+   sqlite3 "file:$DB?mode=ro" "select ROWID, name, error_id,
+     datetime(last_sync_start+978307200,'unixepoch','localtime'),
+     round(last_sync_end-last_sync_start,3) from Store where type=2;"
+   ```
+
+   時刻は 2001-01-01 起点の秒 (`+978307200` で Unix 時刻)。 **`error_id` が 0 でなく、 同期の所要が ~0 秒** = そのアカウントは同期を試みるたびに即失敗している。 正常なアカウントは同じ時刻に error 0 で数百 ms〜秒かかる。 error の中身は `Error` 表の `user_info` (NSKeyedArchiver の plist)。
+3. **予定の行が DB にあるか** — `CalendarItem` を `summary like '%<distinctive key>%'` で引く (1 と独立な 2 本目の証拠)。
+
+**直し方** = そのアカウントの再サインイン (システム設定 → インターネットアカウント、 または Calendar.app のツールバーの ⚠ から)。 **パスワードを扱うので user の操作**。 Claude は切り分けの結果と場所を 1 行で渡す。
+
+**やってはいけない読み方**:
+
+- `osascript -e 'tell application "Calendar" to reload calendars'` の **rc=0 は同期の成功を意味しない** (失敗するアカウントは reload しても失敗する)。
+- 反映を poll して待つだけにしない — 待つ前に 2 の error を見る (失敗中なら何分待っても来ない)。
+- EventKit で書き出す自作 tool が出力を **cwd 相対の file** に書き、 書けない時に黙る作りだと、 別の cwd から回した poll は古い file を読み続けて「まだ無い」 と誤判定する。 **tool の stdout を読む**か、 出力 path を固定する。
+- DB を開けるかは呼び出し元 process の権限次第 (TCC)。 開けなかったことを「アカウントは正常」 と読まない。
 
 ## <a id="reminders-not-enforced-by-mcp-hooks"></a>reminder / alarm は AppleScript で個別に付与する
 
