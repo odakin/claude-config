@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Google Classroom をプログラムから操作するとき (クラスの作成・名簿からの招待・お知らせや課題の投稿・提出の読み取り) + 学期はじめにクラスを用意するとき + API で作った課題の設定が画面で変えられないと気づいたとき
 category: infra
-summary: Classroom API の実測済み挙動 = 先生はクラスを ACTIVE で直接作れる / 学生を直接追加できず招待のみ (全員に mail) / 教師は別クラスで見えている数値 userId で招待すると住所の推測が要らない / API で作った課題は期限後締切を画面で ON にできないが API で作ったクラスに画面で作った課題なら ON にできる / お知らせの Drive 添付は共有設定不要 / 添付の中身は Drive の同じ file を上書きして差し替える (再投稿しない) / クラスのカレンダーの予定件数が「第何回か」 の正本 / 作ったばかりのクラスのカレンダーは先生の Android に予定 0 件で先に届くことがある / 期限は UTC で返る / ヘッダー画像は API に項目が無い / scope ごとの読める・書ける範囲
+summary: Classroom API の実測済み挙動 = 先生はクラスを ACTIVE で直接作れる / 学生を直接追加できず招待のみ (全員に mail) / 教師は別クラスで見えている数値 userId で招待すると住所の推測が要らない / API で作った課題は期限後締切を画面で ON にできないが API で作ったクラスに画面で作った課題なら ON にできる / お知らせの Drive 添付は共有設定不要 / お知らせは下書き (DRAFT) で作れて受講者に見えず、 状態を指定しない一覧には出ない / 添付の中身は Drive の同じ file を上書きして差し替える (再投稿しない) / クラスのカレンダーの予定件数が「第何回か」 の正本 / 作ったばかりのクラスのカレンダーは先生の Android に予定 0 件で先に届くことがある / 期限は UTC で返る / ヘッダー画像は API に項目が無い / scope ごとの読める・書ける範囲
 -->
 # Google Classroom API の実測済み挙動
 
@@ -62,6 +62,7 @@ scope を足したら token を取り直す (consent を 1 回)。 同じ OAuth 
 - Drive への upload に使う token (例: `drive.file` scope の別 token) と Classroom の token が別でも、 同じアカウントなら添付できる (実測)
 - 添付の代わりに Dropbox 等の共有リンクを本文に貼る運用もある。 添付は Classroom の中で開けて、 受講者以外には見えない
 - お知らせも投稿した瞬間にクラス全員に見える: 文面と添付を人に見せてから投稿し、 投稿後は `announcements.get` で読み戻して本文と添付を照合する (貼り付けで文が落ちる事故の検出 = [`paste-destined-plain-text.md`](paste-destined-plain-text.md))
+- <a id="draft-announcement"></a>**お知らせは下書き (`state: "DRAFT"`) で作れる** (実測): 受講者には見えず、 授業中に先生が画面の下書きから「投稿」 を押せば公開される = 授業で見せる資料を前夜に入れておく用途に向く (公開の判断を当日に残せる)。 ⚠️ 下書きには `alternateLink` が返らない (作成結果から URL を取る処理はそこで落ちる。 作成は成功しているので**再実行しない** = 二重に作る)。 ⚠️ `announcements.list` は状態を指定しないと公開済みしか返さず、 下書きが見えない (実測) = 読み戻しは `announcementStates: ["DRAFT", "PUBLISHED"]` を付けて一覧し、 `announcements.get` で本文を照合する。 ⚠️ 共同で教える先生から下書きが見えるかは未実測 = 相手に「入れておいた」 と伝えるときは、 相手が画面で見られる前提にしない
 - <a id="replace-attachment-in-place"></a>**添付の中身だけ差し替える = Drive の同じ file を上書きする** (実測): `files.update(fileId, media_body=…)` で中身を入れ替えると、 お知らせは添付の同じ file を指したまま = 投稿し直さない (受講者に通知が飛ばない)。 添付の表示名は Drive の file 名のまま、 前の版は Drive の版履歴に残る。 `drive.file` scope の token でも、 同じ OAuth client で上げた file なら書ける。 上書きの前に Drive 側の `md5Checksum` が「差し替える前の手元の file」 と一致するかを見て、 違う file を上書きしないようにする。 上書き後は `md5Checksum` が新しい file と一致することを見る
 
 ## <a id="read-submissions"></a>提出の読み取り

@@ -114,7 +114,7 @@ layer 1 (public) のドメイン固有規約 135 file をカテゴリ別に列�
   - 日本語メールの敬称規約 (内 vs 外、身内に「様」「皆様」を使わない、引用・要約時の「ご/お」帰属反転)
 - **[ml-forward-judgment.md](ml-forward-judgment.md)** — ML forward された依頼メールを inbox 化するとき
   - ML forward された依頼メールの inbox 化時の reflex 判定 trap 防止 (= 元 TO に名前なし = action なし、 ではない / 過去 ML の分野割当を遡る規律)
-- **[research-email.md](research-email.md)** — 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき + 成人の学生について保護者から様子や期待を尋ねられ返信を書くとき (#guardian-inquiry) + 学内の運用ルールに止められた依頼を出し直すとき (#blocking-rule-origin)
+- **[research-email.md](research-email.md)** — 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき + 成人の学生について保護者から様子や期待を尋ねられ返信を書くとき (#guardian-inquiry) + 学内の運用ルールに止められた依頼を出し直すとき (#blocking-rule-origin) + 先に短い返事 (了解・あとで返事します) を送ったスレッドに続きの返信を書くとき (#follow-up-after-quick-ack)
   - 研究メールの分類・記録と、事実提供・規程判断・将来確約を分ける対外文面規約
 
 ## 論文・発表・研究文書 (`paper`)
@@ -274,7 +274,7 @@ layer 1 (public) のドメイン固有規約 135 file をカテゴリ別に列�
 - **[google-api-direct-access.md](google-api-direct-access.md)** — Google API を Python から直接叩く setup をするとき + ML (Google Groups) 宛に送る前に、 購読者一覧を読めない ML に入っていない人を見分けるとき (#group-membership-without-owner)
   - Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 他人から共有された folder を読み続ける 〔宛先 account の token (別 account では 404) + 台帳 + id/modifiedTime の差分 + 共有通知メールの照合、 #shared-folder-watch〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避、 loopback OAuth consent フローの CSRF/横取り対策 〔state nonce + PKCE S256 + request-loop + 手動貼付の state 検証 + 補償制御 hard-fail + 識別子 charset 検証、 #oauth-loopback-hardening〕) + #drive-xlsx-inplace-update (= 他人 owner の共有 xlsx に書く: full drive 別 token / revisions.get_media が truth / openpyxl round-trip の損失 / files.update 同 ID / 再 download literal verify)
 - **[google-classroom-api.md](google-classroom-api.md)** — Google Classroom をプログラムから操作するとき (クラスの作成・名簿からの招待・お知らせや課題の投稿・提出の読み取り) + 学期はじめにクラスを用意するとき + API で作った課題の設定が画面で変えられないと気づいたとき
-  - Classroom API の実測済み挙動 = 先生はクラスを ACTIVE で直接作れる / 学生を直接追加できず招待のみ (全員に mail) / 教師は別クラスで見えている数値 userId で招待すると住所の推測が要らない / API で作った課題は期限後締切を画面で ON にできないが API で作ったクラスに画面で作った課題なら ON にできる / お知らせの Drive 添付は共有設定不要 / 添付の中身は Drive の同じ file を上書きして差し替える (再投稿しない) / クラスのカレンダーの予定件数が「第何回か」 の正本 / 作ったばかりのクラスのカレンダーは先生の Android に予定 0 件で先に届くことがある / 期限は UTC で返る / ヘッダー画像は API に項目が無い / scope ごとの読める・書ける範囲
+  - Classroom API の実測済み挙動 = 先生はクラスを ACTIVE で直接作れる / 学生を直接追加できず招待のみ (全員に mail) / 教師は別クラスで見えている数値 userId で招待すると住所の推測が要らない / API で作った課題は期限後締切を画面で ON にできないが API で作ったクラスに画面で作った課題なら ON にできる / お知らせの Drive 添付は共有設定不要 / お知らせは下書き (DRAFT) で作れて受講者に見えず、 状態を指定しない一覧には出ない / 添付の中身は Drive の同じ file を上書きして差し替える (再投稿しない) / クラスのカレンダーの予定件数が「第何回か」 の正本 / 作ったばかりのクラスのカレンダーは先生の Android に予定 0 件で先に届くことがある / 期限は UTC で返る / ヘッダー画像は API に項目が無い / scope ごとの読める・書ける範囲
 - **[identity-in-config.md](identity-in-config.md)** — config file に ID/PII (Discord ID 等) を置く設計をするとき
   - Identity-in-Config 規約（Discord 等 PII-in-disguise、layer 2 + env var bridge）
 - **[install-failures.md](install-failures.md)** — brew install を試行する前後 + source build 陥落時
