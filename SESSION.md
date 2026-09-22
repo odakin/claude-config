@@ -1,5 +1,7 @@
 # SESSION — claude-config
 
+原稿と編集権限の保護を強化したところ。規則・承認の記録・検査不能時の扱いは [所有権の正本](conventions/manuscript-claim-ownership.md#mechanism)、Codex の配線と実機確認の境界は [統合仕様](codex/PARITY.md#codex-integration-sot) から再開する。
+
 > 📌 **このファイル = 直近の作業の索引 + Open items (目安 ~80 行 = [`CONVENTIONS.md#pre-push-check`](CONVENTIONS.md#pre-push-check))**。 entry は「日付 + 何を + 正本への pointer」 の 1-3 行で「直近」 の先頭に足す。 経緯・実測・RCA は正本 doc か [`SESSION-archive.md`](SESSION-archive.md) (grep 用) へ。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md`、 Codex 統合の正本は [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot)。 縮退: 2026-06-10 hot/cold 分離 / 2026-09-01 第 2 回 / 2026-09-11 第 3 回 (2026-08-12〜09-11 の 55 entry を archive へ verbatim MOVE、 義務行は Open items へ lift)。
 ## 直近 (2026-09-16〜09-22) の索引 — 本文は SESSION-archive.md、 規則は各正本 (09-06〜09-15 の索引行も同 archive へ退避済)
 - **09-22f API の無いアプリの受信を macOS の通知センター DB から読む**: 正本 [`macos-notification-db.md`](conventions/macos-notification-db.md) (DB を写してから読む / TCC で読めない時は exit 3 で 0 件と区別 / 付与の対象は親 process を辿って決める = Claude Code desktop は版ごとの helper で版更新で切れうる `#tcc-responsible-process` / 非公式 client は使わない / 見た印の台帳)、 engine [`scripts/macos-notification-db.py`](scripts/macos-notification-db.py) (`--selftest` = 合成 DB)。 未確認 = 閉じていた間の通知が起動時に出るかはアプリ次第 (shim 側で実測して書く)

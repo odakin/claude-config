@@ -5,28 +5,36 @@
 
 Thin adapter: passes the event to `scripts/manuscript-claim-guard.py hook codex`,
 the same predicate the Claude hook and the Git pre-commit call. Semantic home:
-`conventions/manuscript-claim-ownership.md`. Missing engine or an exception is
-fail-open; the Git-side check remains the last line.
+`conventions/manuscript-claim-ownership.md`. Missing or broken engine denies the
+pending call as uninspected; it never grants permission to weaken a restriction.
 """
 
 from __future__ import annotations
 
 import os
+import json
 import runpy
 import sys
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 ENGINE = os.path.normpath(os.path.join(HERE, "..", "..", "scripts", "manuscript-claim-guard.py"))
 
+def unavailable(kind):
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+        "permissionDecision": "deny", "permissionDecisionReason":
+        f"manuscript-claim-guard: inspection unavailable ({kind}); repair the guard and retry; do not disable it."}}))
+
 if __name__ == "__main__":
     if not os.path.isfile(ENGINE):
+        unavailable("missing engine")
         sys.exit(0)
     sys.argv = [ENGINE, "hook", "codex"]
     sys.dont_write_bytecode = True
     try:
         runpy.run_path(ENGINE, run_name="__main__")
-    except SystemExit:
-        pass
-    except Exception as exc:  # fail-open (one line; no repr, which can carry whole blob bytes)
-        print(f"manuscript_claim_guard: {type(exc).__name__}: {' '.join(str(exc).split())[:200]}", file=sys.stderr)
+    except SystemExit as exc:
+        if exc.code not in (None, 0):
+            unavailable("engine exit")
+    except Exception as exc:
+        unavailable(type(exc).__name__)
     sys.exit(0)

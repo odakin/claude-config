@@ -73,7 +73,7 @@ STAGED="$(git diff --cached --name-status 2>/dev/null | awk '$1 != "D" { print $
 # 隠し場所にならない保証は scan-public-tree.sh 側が持つ — **受理一覧に書けるのは tree の他の場所に
 # 既に在る文字列だけ** で、 そうでない行は finding として報告される。
 STAGED="$(printf '%s\n' "$STAGED" | grep -v '^\.claude/public-tree-accept\.txt$' || true)"
-[ -z "$STAGED" ] && exit 0
+# Even a deletion-only commit must reach the manuscript/authority gate below.
 
 # ----------------------------------------------------------------------
 # Merge conflict marker gate (staged content 全体、 shared lib)。
@@ -92,18 +92,24 @@ fi
 # ----------------------------------------------------------------------
 # 原稿の主張と agent の権限規約の gate (AI agent の session の commit だけを見る。 人の commit は通す)。
 # 公開 repo では主に権限規約 (正本 doc の本文・参照行・配線) の lock として効く。
-# 止めるのは「exit 1 かつ engine の見出し」 のときだけ (= engine の内部エラーで全 commit を止めない)。
+# agent の commit は検査不能でも止め、修復して再検査する。
 # 正本 = conventions/manuscript-claim-ownership.md
 # ----------------------------------------------------------------------
 MCG_ENGINE="$(dirname "$0")/manuscript-claim-guard.py"
-if [ -f "$MCG_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+if [ -n "${CLAUDE_CONFIG_AGENT_SESSION:-}${CLAUDE_CODE_SESSION_ID:-}${CODEX_SESSION_ID:-}${CODEX_THREAD_ID:-}" ]; then
+  if [ ! -f "$MCG_ENGINE" ] || ! command -v python3 >/dev/null 2>&1; then
+    echo 'manuscript-claim-guard: inspection unavailable (engine/runtime missing); repair and retry.' >&2
+    exit 1
+  fi
   mcg_rc=0
   mcg_out="$(python3 "$MCG_ENGINE" git-precommit 2>&1)" || mcg_rc=$?
   [ -n "$mcg_out" ] && printf '%s\n' "$mcg_out" >&2
-  if [ "$mcg_rc" -eq 1 ] && printf '%s' "$mcg_out" | grep -q 'manuscript-claim-guard:'; then
+  if [ "$mcg_rc" -ne 0 ]; then
+    echo 'manuscript-claim-guard: commit stopped; resolve the finding or inspection failure and retry.' >&2
     exit 1
   fi
 fi
+[ -z "$STAGED" ] && exit 0
 
 # ----------------------------------------------------------------------
 # script 置換の暴走で壊れた text の gate (1 行の異常な繰り返し / HEAD 比の爆発的な増加。 縮小は ⚠️ だけ)。

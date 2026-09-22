@@ -4,7 +4,7 @@
 # agent-authority:file
 
 薄い adapter: event を engine の `hook claude` にそのまま渡す。 述語・承認・限界は engine と正本 doc が持つ。
-engine が見つからない・例外 = fail-open (何も出さず exit 0)。 git 側の最後の砦は scripts/pre-commit-bib と
+engine が見つからない・例外 = 検査不能として deny。 git 側の最後の砦は scripts/pre-commit-bib と
 scripts/public-precommit-runner.sh から呼ぶ同じ engine。
 
 `--canary` = このマシンの本番配線 (settings.json の entry + install 済み hook + git pre-commit の呼び出し) が、
@@ -102,13 +102,15 @@ if __name__ == "__main__":
     if "--canary" in sys.argv[1:]:
         sys.exit(canary())
     if not os.path.isfile(ENGINE):
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+            "permissionDecisionReason": "manuscript-claim-guard: inspection unavailable (missing engine); repair and retry."}}))
         sys.exit(0)
     sys.argv = [ENGINE, "hook", "claude"]
     sys.dont_write_bytecode = True
     try:
         runpy.run_path(ENGINE, run_name="__main__")
-    except SystemExit:
-        pass
-    except Exception as exc:  # fail-open (1 行で。 repr は blob の bytes を丸ごと含み得るので出さない)
-        print(f"manuscript-claim-guard hook: {type(exc).__name__}: {' '.join(str(exc).split())[:200]}", file=sys.stderr)
+    except (SystemExit, Exception) as exc:
+        if not isinstance(exc, SystemExit) or exc.code not in (None, 0):
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                "permissionDecisionReason": "manuscript-claim-guard: inspection unavailable (engine failure); repair and retry."}}))
     sys.exit(0)

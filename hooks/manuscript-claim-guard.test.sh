@@ -161,27 +161,56 @@ sed 's/Body text may change./Body text was changed./' "$CR/src/main.tex" > "$CR/
 _check "Bash: 保護外の本文の commit は通す" "$(_cbash 'git commit -m x -- src/main.tex')" none
 git -C "$CR" add src/main.tex
 _check "pre-commit: 保護外の本文の commit は通す" "$(_cpre)" committed
-# lock 中 (filter の設定が無い = worktree も暗号文) は中身を比べられない: 例外を出さずに通す
+# lock 中は検査できないため止め、暗号文は出力しない。
 git -C "$CR" config --remove-section filter.git-crypt
 rm "$CR/src/main.tex" && git -C "$CR" checkout -q -- src/main.tex
 printf 'x' >> "$CR/src/main.tex"
-_check "lock 中: 暗号文を原稿として読まず internal error も出さない" \
-  "$(_cbash 'git commit -a -m x') $(_cerr 'git commit -a -m x')" "none no"
+_check "lock 中: 検査不能として止め、暗号文は出さない" \
+  "$(_cbash 'git commit -a -m x') $(_cerr 'git commit -a -m x')" "deny no"
 
-echo "=== fail-open ==="
-_check "壊れた stdin は何も出さない" "$(printf 'not json' | _run)" none
+echo "=== inspection unavailable ==="
+_check "壊れた stdin は検査不能として止める" "$(printf 'not json' | _run)" deny
 _adapter_err() {  # $1=adapter の repo 相対 path $2=dir 名 -> 例外を投げる偽 engine の上で adapter の stderr を「行数 暗号文を含むか 400 字未満か」 で返す
   local d="$T/fake-$2"
   mkdir -p "$d/scripts" "$d/$(dirname "$1")"
   cp "$ROOT/$1" "$d/$1"
   printf '%s\n' 'raise UnicodeDecodeError("utf-8", b"\x00GITCRYPT\x00\xff" + b"Q" * 5000, 10, 11, "invalid start byte\nsecond line")' \
     > "$d/scripts/manuscript-claim-guard.py"
-  printf '{}' | python3 "$d/$1" 2>&1 >/dev/null \
-    | python3 -c 'import sys; d = sys.stdin.read(); print(d.count("\n"), "GITCRYPT" in d, len(d) < 400)'
+  printf '{}' | python3 "$d/$1" \
+    | python3 -c 'import sys,json; d = sys.stdin.read(); print(json.loads(d)["hookSpecificOutput"]["permissionDecision"], "GITCRYPT" in d)'
 }
-_check "Claude adapter: engine の例外 (改行・blob の bytes 入り) を 1 行で、 中身を出さない" \
-  "$(_adapter_err hooks/manuscript-claim-guard.py claude)" "1 False True"
-_check "Codex adapter: 同上" "$(_adapter_err codex/hooks/manuscript_claim_guard.py codex)" "1 False True"
+_check "Claude adapter: engine の例外は deny し中身を出さない" \
+  "$(_adapter_err hooks/manuscript-claim-guard.py claude)" "deny False"
+_check "Codex adapter: 同上" "$(_adapter_err codex/hooks/manuscript_claim_guard.py codex)" "deny False"
+
+echo "=== public gate: deletion-only commit ==="
+PUB="$T/public"
+mkdir -p "$PUB"
+git -C "$PUB" init -q
+printf '%s\n' "<!-- $MK:begin id=claims -->" 'Agents preserve restrictions.' "<!-- $MK:end id=claims -->" > "$PUB/RULES.md"
+git -C "$PUB" add RULES.md && git -C "$PUB" commit -qm init
+git -C "$PUB" rm -q RULES.md
+public_rc=0
+(cd "$PUB" && HOME="$T/home" CLAUDE_CODE_SESSION_ID=sess-a bash "$ROOT/scripts/public-precommit-runner.sh") > "$T/public-deny" 2>&1 || public_rc=$?
+_check "規則 file だけの削除も公開 gate が止める" "$public_rc" 1
+_check "失敗元は権限の gate" "$(grep -q 'authority:claims' "$T/public-deny" && echo authority || echo wrong)" authority
+
+echo "=== pre-commit: broken/missing engine ==="
+BROKEN="$T/broken"
+mkdir -p "$BROKEN/scripts/lib"
+cp "$ROOT/scripts/pre-commit-bib" "$BROKEN/scripts/pre-commit-bib"
+cp "$ROOT/scripts/public-precommit-runner.sh" "$BROKEN/scripts/public-precommit-runner.sh"
+cp "$ROOT/scripts/lib/find-personal-layer.sh" "$BROKEN/scripts/lib/find-personal-layer.sh"
+for fixture in syntax missing; do
+  if [ "$fixture" = syntax ]; then printf '%s\n' 'this is not valid Python !!!' > "$BROKEN/scripts/manuscript-claim-guard.py";
+  else rm "$BROKEN/scripts/manuscript-claim-guard.py"; fi
+  for gate in pre-commit-bib public-precommit-runner.sh; do
+    broken_rc=0
+    (cd "$PUB" && HOME="$T/home" CLAUDE_CODE_SESSION_ID=sess-a bash "$BROKEN/scripts/$gate") > "$T/broken-deny" 2>&1 || broken_rc=$?
+    _check "$gate: $fixture engine で agent commit を通さない" "$broken_rc" 1
+    _check "$gate: 原因を gate の検査不能として表示" "$(grep -q 'manuscript-claim-guard:' "$T/broken-deny" && echo guard || echo wrong)" guard
+  done
+done
 
 echo
 echo "manuscript-claim-guard.test: PASS=$PASS FAIL=$FAIL"
