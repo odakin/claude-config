@@ -304,12 +304,12 @@ def selftest():
              "bare_in_command": False, "bare_in_wrapper": True, "last_exit": 0},
             {"label": "j.pick", "python": "/b/python3", "python_runs": True, "python_ok": False,
              "bare_in_command": False, "bare_in_wrapper": False, "last_exit": 0}]}
-        fj = job_findings("imac", beat_j, self_host="m5")
-        assert any(x.startswith("🔴 imac: job j.gate") for x in fj), fj
-        assert any(x.startswith("🟠 imac: job j.wrap") and "yaml" in x for x in fj), fj
+        fj = job_findings("host-a", beat_j, self_host="host-b")
+        assert any(x.startswith("🔴 host-a: job j.gate") for x in fj), fj
+        assert any(x.startswith("🟠 host-a: job j.wrap") and "yaml" in x for x in fj), fj
         assert any("j.gate の最後の終了コード = 69" in x for x in fj), fj
         assert not any("j.pick" in x for x in fj), "pick_python の wrapper は PATH の python3 の健康に依存しない"
-        assert not any("終了コード" in x for x in job_findings("m5", beat_j, self_host="m5")), "自分の分は cron-health に任せる"
+        assert not any("終了コード" in x for x in job_findings("host-b", beat_j, self_host="host-b")), "自分の分は cron-health に任せる"
         assert job_findings("old", {"servers": []}) == [], "旧 beat は黙る"
         ok += 1
     print(f"selftest: {ok}/16 PASS")
