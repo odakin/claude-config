@@ -48,6 +48,7 @@ engine = [`scripts/manuscript-claim-guard.py`](../scripts/manuscript-claim-guard
 - **opt-out を既定にした理由**: 設定 file を置いた repo だけを守る opt-in は、 置き忘れた repo の検査が 0 になり、 守られているつもりの穴になる ([`latex.md#macro-alias-forcing-function`](latex.md#macro-alias-forcing-function) の opt-in 検査が実際にそうなった)。 abstract を持つ原稿は既定で範囲に入る。
 - **摩擦**: 実測では、 著者の裁定を受けた改稿でも保護領域に触れることは珍しくない。 記録は session × file × 領域ごとに 1 回で済む。 agent が書く研究ノートなど、 範囲から外したい `.tex` は repo の設定の `exclude` に書く。 設定の変更も権限の lock に入るので、 著者の発言の verbatim が要る。
 - **配線が届く経路**: Claude = `hooks/settings-entries.json` → `scripts/sync-hook-settings.sh` (setup.sh・post-merge・個人層の session 開始 bootstrap)。 Codex = `codex/hooks/hooks.json` (install 済みの machine では repo への symlink なので pull で届く。 hook の trust は machine ごとに再確認が要ることがある)。 git = `pre-commit-bib` / `public-precommit-runner.sh` は各 repo の hook から symlink または絶対 path で呼ばれるので、 pull で届く。
+- **配線の生存**: canary (`hooks/manuscript-claim-guard.py --canary --caller <呼び元>`) は判定と時刻と呼び元を machine-local の state に書き、 SessionStart の `--liveness` (settings-entries.json) が古ければ走らせ直して、 NOT ARMED と報告の途絶えた呼び元を出す。 呼び元の script では canary の呼出し行だけを agent-authority の block で守る (判断と残る穴 = [agent-rule-ownership.md#wiring-scope](agent-rule-ownership.md#wiring-scope))。
 
 ## <a id="limits"></a>5. 限界 — 機械で止まらないもの
 
@@ -61,6 +62,7 @@ engine = [`scripts/manuscript-claim-guard.py`](../scripts/manuscript-claim-guard
 - **検査不能**: この gate は、止め損ねる害を重く見て **fail-closed** とする。Git の故障・読取不能・壊れた設定・復号不能・engine の不在や例外では、hook は deny、agent の Git gate は非 0 を返す。「違反」と「検査不能」を表示で区別し、依存経路を修復して同じ操作を再検査する。人の terminal (agent env なし) は対象外。公開 Git gate も削除だけの commit を検査する。
 - **同一主体が書ける範囲**: ローカルの hook・engine・承認 state を同じ agent が物理的に書ける限り、これは OS による隔離ではない。全文 hash は承認の誤転用を検出するが、著者の発言の意味や state の偽造まで保証しない。engine の自己保守は適用前の scratch 検査を必須とし、無効化して通す運用をしない。
 - **hook の配信**: trust と配信は machine ごと。 install 済みを確かめる方法は §4。
+- **hook の timeout は素通り**: settings の timeout (20 s) を越えた PreToolUse hook は打ち切られ、 tool はそのまま実行される (実測 2026-09-22: Claude Code CLI 2.1.198 で、 4 s 待ってから deny を返す hook を project settings に timeout 1 s で置くと `touch` が実行され、 timeout 10 s なら止まった。 desktop の埋込 engine 2.1.275 も打ち切りを「status 1・出力なし」 に畳む同じ経路)。 git の pre-commit に timeout は無い。 だから検査の時間を件数に比例させない ([`hook-authoring.md#hook-cost-per-item`](hook-authoring.md#hook-cost-per-item)。 実測: 3000 file の dir の `add` + `commit -- dir/` が 201 s → 0.4 s、 追跡済み 3000 file の `commit -a` が 1.8 s、 staged 3000 file の pre-commit が 1.3 s。 engine の selftest が git の呼び出し回数を file 数で比べる)。
 
 ## <a id="why"></a>6. 実測 (一般形)
 

@@ -110,3 +110,59 @@ Claude reviewer は `ab95786` に対して独立の合成例を実行し、機�
 続く依頼元の追加報告では、commit の command に stdout の redirect (`> file` / `> file 2>&1`) があると inspection unavailable になる誤拒否が挙げられた。報告では `|| { … }`・command substitution・pipe と切り分けている。本整理で再現・修正した結果ではなく、後続担当への追加課題として受領した。
 
 新しい保護 file の commit は、本文だけでなく追加による Git mode の差分にも既存の承認記録が必要、という操作上の注意も受領した。記録の正本は [共通の裁定手順](../conventions/agent-rule-ownership.md#approval) と CLI であり、ここで別の承認手順を新設しない。
+
+上の未解決点 (性能・timeout・redirect・wiring の裁定) は、次の 2 節で解決した。mode の注意は [共通の裁定手順](../conventions/agent-rule-ownership.md#approval) の 3 に 1 文で足した。
+
+## 規模の後退の修正 (2026-09-22、後続担当)
+
+`ab95786` の pathspec 展開は、先行する `git add` で選ばれた file ごとに `:(literal)` の pathspec を 1 つ作り、commit の検査がそれを 1 つずつ Git に展開し直していた (1 file あたり git 約 5 回)。新しい text file はさらに HEAD の読み取りで約 4 回。対象外として読み飛ばす binary も展開の段で同じだけ払っていた。修正 = Git が展開した具体名をそのまま運ぶ (`GitNames`)、HEAD にある path の一覧を 1 回で取る (無い path は git を呼ばない)、blob は `git cat-file --batch --filters` で 1 回にまとめる (空白を含む path は 1 件ずつ、batch が失敗したら従来の 1 件ずつに戻る)、file ごとの `rev-parse` を repo 既知のときは省く。
+
+実測 (同じ machine、hook 1 回の壁時計。fixture = 架空 repo に未追跡の text file N 個、command = `git add big/ && git commit -m x -- big/`):
+
+| 入力 | 修正前 (`a8ce60c`) | 修正後 |
+|---|---|---|
+| 150 text | 9.6 s | 0.23 s |
+| 500 text | 28.7 s (> timeout 20 s) | 0.24 s |
+| 3000 text | 201 s | 0.37 s |
+| 150 / 3000 PDF (対象外) | 6.3 s / — | 0.23 s / 0.27 s |
+| 150 / 3000 追跡済み .tex を変更 (`commit -a`) | 8.6 s / — | 0.32 s / 1.8 s |
+| 3000 staged text の pre-commit | — | 1.3 s |
+
+engine の selftest が git の呼び出し回数を数える (件数に依らないこと): 未追跡 dir の add + commit で 40 file と 80 file が同じ 19 回、`commit -a` の 80 file 変更で 11 回、staged 40 file の pre-commit で 10 回。`hooks/manuscript-claim-guard.test.sh` に 3000 file の 3 経路 (add + commit -- dir/、`commit -a`、git-precommit) の経過時間 < 10 s と、3000 file の中の未追跡の原稿を止める陽性対照を足した。ab95786 の検収で使った正しさの例 (dot 付き dir・glob・`:(glob)`・`:!` 除外・`add -A` の新原稿・dir の削除は止める / ignore だけの dir・空白入り dir・非原稿の dir は通す / 不正な magic は検査不能) は同じ test で変わらず通る。依頼元の独立 harness ([guard-review-pathspec.sh](../scripts/guard-review-pathspec.sh) / [guard-review-compare.py](../scripts/guard-review-compare.py)) の結果は下の表。
+
+**redirect の誤停止と素通り**: 依頼元の追加報告 (`> file` で inspection unavailable) を再現すると、`> /dev/null` と `< /dev/null` は検査不能、`2>/dev/null` と `> log 2>&1` は **素通り** だった (`2>/dev/null` が何にも当たらない pathspec になり、`commit -a` の原稿の変更が空の選択として通る)。修正 = shell の分割で redirect (`[fd]>` `>>` `>|` `<` `<>` `&>` `&>>`、`&fd` の複製、対象の語) を引数から外す。対象の無い redirect は分割の失敗 (= bash も構文 error)。検査 = 述語の selftest 10 件、engine の selftest 3 件、hook 経由の 3 件 (修正前は検査不能 1 件・素通り 2 件で赤)。`--no-verify` の検出は redirect の後ろでも効く。
+
+**timeout 超過は素通り (実測)**: Claude Code CLI 2.1.198 で、project settings に「4 s 待ってから deny を返す」 PreToolUse hook を置き、timeout 1 s なら `touch` が実行され (fail-open)、timeout 10 s なら止まった。desktop の埋込 engine 2.1.275 の hook runner も、打ち切り (abort) を「status 1・stdout なし・aborted」 に畳む同じ経路。公式 docs はこの挙動を書いていない。記録先 = [manuscript-claim-ownership.md#limits](../conventions/manuscript-claim-ownership.md#limits)。Codex の hook の timeout 挙動は未測定。
+
+## 配線 lock の範囲 (2026-09-22、後続担当)
+
+裁定と理由の正本 = [agent-rule-ownership.md#wiring-scope](../conventions/agent-rule-ownership.md#wiring-scope)。実装 = `authority_regions()` が、engine の名前への言及が全部 `agent-authority` の block の中にある file では `authority:wiring` を出さない (block は `authority:<id>` として従来どおり領域)。同じ id の block が複数あれば `authority:<id>~2` … として全部を領域にする (以前は最後の block だけが残り、前の block の変更が見えなかった)。canary は判定・時刻・呼び元を state に書き、SessionStart の `--liveness` が古ければ走らせ直して NOT ARMED と報告の途絶えを出す。
+
+検査 (全部、修正前の部品では赤):
+
+| 性質 | test |
+|---|---|
+| block の外の行は通る / block の中の呼出し行・marker の削除は止まる / 言及が block の外に残る file は全文のまま / marker の id にある名前は block の外 / 閉じ忘れは末尾まで / 宣言済み・組み込みの file lock は block で解除されない / 同じ id の block は全部が領域 | `agent-rule-guard.py --selftest` (+11)、hook 経由の Edit と Bash commit = `manuscript-claim-guard.test.sh` (+5) |
+| canary が state を書く / 健全なら沈黙 / 14 日途絶えた呼び元を 🟡 / 古い state は走らせ直す / 配線切れは NOT ARMED と exit 1 → 🔴 | `manuscript-claim-guard.test.sh` (+6) |
+| 迂回の形: 手前の `exit 0`・`run()` の差し替えは報告が更新されない (陽性対照 = 元の script は更新する) / `|| true` は script の exit を 0 にするが NOT ARMED は表に出る | 同 (+5) |
+
+**修正前で赤** (修正前 = `a8ce60c` の hook / engine / 述語に、新しい test をそのまま当てた):
+
+| 新しい test | 修正前の結果 |
+|---|---|
+| engine selftest の git 回数 (40 / 80 file の add + commit -- dir/) | 390 回 / 750 回 = 1 file あたり 9 回 (修正後 19 / 19) |
+| test.sh の規模 3 経路 (3000 file、< 10 s) | 190.6 s / 22.9 s / 43.7 s で 3 件とも赤 (修正後 0.4 / 1.3 / 1.3 s) |
+| 述語の selftest (block 限定・同じ id の block) | 「block の外は普通」「全文の領域を出さない」「同じ id の block を全部守る」「同じ id で領域を分ける」 の 4 件が赤。block の中・marker の削除・外の言及・閉じ忘れ・宣言済み file の 6 件は修正前も通る (= 全文 lock の下でも守られていた性質) |
+| test.sh の block 化 (hook 経由の Edit / Bash commit) | 「block の外の行は自由」 2 件が赤、止める側の 3 件は修正前も通る |
+| test.sh の redirect | `> /dev/null` = 検査不能、`2>/dev/null` と `> log 2>&1` = 素通り (allow) の 3 件が赤 |
+| test.sh の生存記録 | 11 件のうち 7 件が赤 (state が書かれない / 沈黙しない / 🟡・🔴 が出ない / 走らせ直さない / 陽性対照が更新しない / `|| true` で NOT ARMED が出ない)。迂回 2 件 (手前の `exit 0`・`run()` の差し替え = 「報告が更新されない」) は、修正前は state 自体が無いので空同士で一致して緑 — 陽性対照の赤がそれを補う |
+
+修正前の hook は `--liveness` を知らず hook mode で stdin を読むため、旧 guard での run は stdin を閉じ、規模の節を外し、`set -e` を外して最後まで走らせた (規模の節は上の別 run)。合計 75 通過 / 12 赤。新しい hook は `--liveness` で stdin を読み切ってから判定する (SessionStart の入力を捨てて EPIPE にしない)。
+
+依頼元の独立 harness (Codex が `2c277c4` で上層へ移したもの) を候補に当てた結果:
+
+| harness | 結果 |
+|---|---|
+| `scripts/guard-review-pathspec.sh` (GUARD_REVIEW_HOOK = 候補の hook) | 20 / 20 (非原稿 4・保護の変更 9・新規/削除 4・非保護 1・fail-closed 1・規模 3000 file = 0.7 s) |
+| `scripts/guard-review-compare.py 300 --before-ref 7f25cee` (text 300 file) | hook「add files && commit -- files」 15.9 s → 0.3 s / 「add dir && commit -- dir」 InspectionError (7f25cee の dir の誤拒否) → 0.2 s ok / pre-commit (index) 19.7 s → 0.2 s。PDF は両方 0.1〜0.2 s。3000 file は 7f25cee 側が長すぎて打ち切った (候補側の 3000 は上の表と pathspec harness) |
+| `scripts/guard-review-profile.py 150 .txt` (候補) | `subprocess` の communicate 10 回 = git 10 回で 150 file (件数に依らない) |

@@ -14,8 +14,12 @@ permission/CI definition needs a reviewed candidate, even for a benign edit.
 Ordinary application code and status/index prose are not blanket-protected.
 Repositories add enforcement implementation paths in .agent-rule-guard.json;
 the manifest has no exclusion/disable switch. Callers must union HEAD, index
-and worktree declarations. This is not isolation from a malicious agent with
-write access to the checker/runtime itself and does not interpret all prose.
+and worktree declarations. A code file that mentions an engine is locked as a
+whole unless every mention sits inside an explicit begin/end block; then the
+blocks carry the lock and the rest is ordinary code (decision record and the
+holes this leaves: conventions/agent-rule-ownership.md#wiring-scope). This is
+not isolation from a malicious agent with write access to the checker/runtime
+itself and does not interpret all prose.
 """
 from __future__ import annotations
 
@@ -83,22 +87,49 @@ def authority_regions(text: str, path: str, extra_paths: tuple[str, ...] | list[
     out: dict[str, str] = {}
     if text and (MARK_FILE_RE.search(text) or protected_path(path, extra_paths)):
         out["authority:file"] = text
+    blocks: list[tuple[int, int]] = []  # body spans of explicit blocks (marker lines excluded)
     for begin in MARK_BEGIN_RE.finditer(text):
         rid = begin.group(1)
         end = re.compile(MARK_END_TMPL.format(id=re.escape(rid)), re.M).search(text, begin.end())
-        out["authority:" + rid] = text[begin.end():end.start()] if end else text[begin.end():] + "\n<<unterminated>>"
+        stop = end.start() if end else len(text)
+        key, n = "authority:" + rid, 2
+        while key in out:  # a repeated id protects every block, not only the last one
+            key, n = f"authority:{rid}~{n}", n + 1
+        out[key] = text[begin.end():stop] if end else text[begin.end():] + "\n<<unterminated>>"
+        blocks.append((begin.end(), stop))
     refs = sorted(re.sub(r"\s+", " ", line).strip() for line in text.splitlines()
                   if any(token in line for token in RULE_REF_TOKENS))
     if refs:
         out["authority:rule-ref"] = "\n".join(refs)
     if Path(path).suffix.lower() in WIRING_SUFFIXES and any(t in text for t in ENGINE_TOKENS):
-        out["authority:wiring"] = text
+        if not wiring_inside_blocks(text, blocks):
+            out["authority:wiring"] = text
     if path.replace("\\", "/").endswith(".claude/manuscript-guard.json"):
         try:
             out["config"] = json.dumps(json.loads(text or "{}"), sort_keys=True)
         except ValueError:
             out["config"] = text
     return out
+
+
+def wiring_inside_blocks(text: str, blocks: list[tuple[int, int]]) -> bool:
+    """True when every engine-name mention lies inside the body of an explicit block.
+
+    The blocks are regions of their own, so they carry the wiring lock and the
+    rest of the file is ordinary code. A mention outside every block body,
+    including one inside a marker line (for example in the block id), keeps the
+    whole-file lock. Moving a file into this shape is itself a locked change.
+    Bypasses that stay outside the block (an earlier exit, a replaced helper,
+    a swallowed exit status) are not prevented here; the canary's liveness
+    record surfaces them (conventions/agent-rule-ownership.md#wiring-scope).
+    """
+    if not blocks:
+        return False
+    for token in ENGINE_TOKENS:
+        for hit in re.finditer(re.escape(token), text):
+            if not any(start <= hit.start() and hit.end() <= stop for start, stop in blocks):
+                return False
+    return True
 
 
 def shell_segments(command: str) -> list[list[str]]:
@@ -115,10 +146,11 @@ def shell_segments(command: str) -> list[list[str]]:
     quote = None
     pending_docs: list[tuple[str, bool]] = []
     expect_doc: bool | None = None
+    expect_target = False  # the next word is a redirection target, not an argument
     i = 0
 
     def flush_word():
-        nonlocal expect_doc
+        nonlocal expect_doc, expect_target
         if not raw:
             return
         parts = shlex.split("".join(raw), comments=False, posix=True)
@@ -128,14 +160,34 @@ def shell_segments(command: str) -> list[list[str]]:
         if expect_doc is not None:
             pending_docs.append((parts[0], expect_doc))
             expect_doc = None
+        elif expect_target:
+            expect_target = False
         else:
             current.append(parts[0])
 
     def end_segment():
         flush_word()
+        if expect_target:
+            raise ValueError("incomplete redirection")
         if current:
             segments.append(current[:])
             current.clear()
+
+    def redirect_target(pos: int) -> int:
+        """After a redirection operator: `&fd` / `&-` duplicates are consumed here, a
+        file name is the next word (dropped by flush_word). Redirections are not
+        arguments: `2>/dev/null` after `commit -a` used to become a pathspec that
+        matched nothing, so the commit was inspected as an empty selection."""
+        nonlocal expect_target
+        while pos < len(command) and command[pos] in " \t":
+            pos += 1
+        if pos < len(command) and command[pos] == "&":
+            pos += 1
+            while pos < len(command) and (command[pos].isdigit() or command[pos] == "-"):
+                pos += 1
+            return pos
+        expect_target = True
+        return pos
 
     while i < len(command):
         ch = command[i]
@@ -176,6 +228,10 @@ def shell_segments(command: str) -> list[list[str]]:
                     if (line.lstrip("\t") if strip_tabs else line) == delimiter:
                         break
             pending_docs.clear()
+        elif command.startswith("&>", i):  # &> file / &>> file (before & ends the segment)
+            flush_word()
+            i += 3 if command.startswith("&>>", i) else 2
+            i = redirect_target(i)
         elif ch in ";&|()":
             end_segment()
             i += 1
@@ -188,12 +244,20 @@ def shell_segments(command: str) -> list[list[str]]:
             strip_tabs = command.startswith("<<-", i)
             i += 3 if strip_tabs else 2
             expect_doc = strip_tabs
+        elif ch in "<>":  # [fd]>, [fd]>>, >|, [fd]<, <> — then &fd or a target word
+            if raw and "".join(raw).isdigit():
+                raw.clear()  # an attached fd number belongs to the operator
+            else:
+                flush_word()
+            two = command[i:i + 2]
+            i += 2 if two in (">>", ">|", "<>") else 1
+            i = redirect_target(i)
         else:
             raw.append(ch)
             i += 1
     if quote or expect_doc is not None:
         raise ValueError("incomplete shell quoting or heredoc")
-    end_segment()
+    end_segment()  # flushes the last word (a pending redirection target is dropped there; a missing one raises)
     return segments
 
 
@@ -366,6 +430,37 @@ def selftest() -> int:
     check("marked rule survives marker deletion", changed("docs/storage.md", marker, "Keep backups.\n"))
     call = "python3 agent-rule-guard.py git-precommit\n"
     check("early exit cannot retain only the call line", changed("scripts/check.sh", call, "exit 0\n" + call))
+    # Block-scoped wiring (agent-rule-ownership.md#wiring-scope): the block is the lock, the rest is ordinary.
+    boxed = ("#!/bin/sh\nrun() { \"$@\"; }\n"
+             "# agent-authority:begin id=guard-canary\n"
+             "run python3 manuscript-claim-guard.py --canary\n"
+             "# agent-authority:end id=guard-canary\n"
+             "echo ordinary diagnostics\n")
+    check("wiring inside an explicit block: the rest of the file is ordinary",
+          not changed("scripts/diagnostics.sh", boxed, boxed.replace("ordinary diagnostics", "other diagnostics")))
+    check("wiring inside an explicit block: the block itself stays protected",
+          changed("scripts/diagnostics.sh", boxed, boxed.replace("--canary", "--canary || true")))
+    check("wiring inside an explicit block: removing the markers is protected",
+          changed("scripts/diagnostics.sh", boxed,
+                  boxed.replace("# agent-authority:begin id=guard-canary\n", "").replace("# agent-authority:end id=guard-canary\n", "")))
+    check("block-scoped wiring does not emit the whole-file region",
+          "authority:wiring" not in authority_regions(boxed, "scripts/diagnostics.sh"))
+    loose = boxed + "# see manuscript-claim-guard.py\n"
+    check("a mention outside every block keeps the whole-file lock",
+          changed("scripts/diagnostics.sh", loose, loose.replace("ordinary diagnostics", "other diagnostics")))
+    check("a mention inside the marker id is outside the block body: whole-file lock",
+          "authority:wiring" in authority_regions(boxed.replace("id=guard-canary", "id=manuscript-claim-guard-canary"),
+                                                  "scripts/diagnostics.sh"))
+    unterminated = boxed.replace("# agent-authority:end id=guard-canary\n", "")
+    check("an unterminated block reaches the end of the file",
+          changed("scripts/diagnostics.sh", unterminated, unterminated.replace("ordinary diagnostics", "other diagnostics")))
+    check("block scoping never overrides a declared or built-in file lock",
+          changed("hooks/diagnostics.sh", boxed, boxed.replace("ordinary diagnostics", "other diagnostics"), ["hooks/*"]))
+    twice = marker + "Other text.\n" + marker.replace("Keep backups.", "Keep logs.")
+    check("a repeated block id protects every block",
+          changed("docs/storage.md", twice, twice.replace("Keep backups.", "Drop backups.")))
+    check("a repeated block id keeps distinct regions",
+          {"authority:retention", "authority:retention~2"} <= set(authority_regions(twice, "docs/storage.md")))
     check("canonical pointer removal is protected", changed("SESSION.md", RULE_REF_TOKENS[0], ""))
     good = '{"version":1,"protect_paths":["scripts/check-*.py"]}'
     check("valid additive manifest", parse_manifest(good) == ["scripts/check-*.py"])
@@ -388,6 +483,24 @@ def selftest() -> int:
                 "bash -lc 'git commit -n -m test'", "git commit -an -m test",
                 "env -u CODEX_THREAD_ID git commit --no-verify"):
         check("literal gate bypass is rejected: " + cmd, bool(git_bypass_attempts(cmd)))
+    # Redirections are shell syntax, not arguments (an attached fd, a dup, a target word, &>).
+    for cmd, expect in (("git commit -am x > log.txt 2>&1", [["git", "commit", "-am", "x"]]),
+                        ("git commit -m x 2>/dev/null", [["git", "commit", "-m", "x"]]),
+                        ("git commit -m x &>> log", [["git", "commit", "-m", "x"]]),
+                        ("git commit -m x >log <in", [["git", "commit", "-m", "x"]]),
+                        ("git commit -m x 1>&2", [["git", "commit", "-m", "x"]]),
+                        ("git commit -m x 2>&1 | tee log", [["git", "commit", "-m", "x"], ["tee", "log"]]),
+                        ("git commit -m 'a > b' -- '2>'", [["git", "commit", "-m", "a > b", "--", "2>"]])):
+        check("redirections are not arguments: " + cmd, shell_segments(cmd) == expect)
+    check("literal gate bypass is rejected behind a redirection",
+          bool(git_bypass_attempts("git commit --no-verify -m x > /dev/null 2>&1")))
+    for cmd in ("git commit -m x >", "git commit -m x 2>; echo"):
+        try:
+            shell_segments(cmd)
+        except ValueError:
+            check("incomplete redirection is rejected: " + cmd, True)
+        else:
+            check("incomplete redirection is rejected: " + cmd, False)
     for cmd in ("git commit -m 'mention --no-verify in a message'", "git commit -m --no-verify",
                 "git commit -mmention", "git commit -man", "git commit -Fnotes.txt",
                 "git commit -am --no-verify", "git commit -Ssigningkey -m test",

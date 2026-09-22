@@ -152,6 +152,12 @@ _check "Git pathspec magic is passed to Git unchanged" \
   "$(_pathspec_result "git commit -m x -- ':(top,glob)paper.v2/*.tex'" "$PS/sub")" equation
 _check "Git exclusions apply to the selection together" \
   "$(_pathspec_result "git commit -m x -- '*.tex' ':(exclude)*.tex'")" allow
+# redirect は引数でない: 以前は `> /dev/null` で検査不能、 `2>/dev/null` / `> log 2>&1` は空の pathspec として素通り
+_check "stdout の redirect が付いた commit -a も式を止める (検査不能にしない)" \
+  "$(_pathspec_result 'git commit -am x > /dev/null')" equation
+_check "stderr の redirect が付いた commit -a も式を止める (素通りしない)" \
+  "$(_pathspec_result 'git commit -am x 2>/dev/null')" equation
+_check "> log 2>&1 の形も式を止める" "$(_pathspec_result 'git commit -am x > log.txt 2>&1')" equation
 _check "explicit path commit does not inspect an unrelated preceding add" \
   "$(_pathspec_result 'git add plain/ && git commit -m x -- data/forms-2026/')" allow
 # Reset only synthetic worktree content; no hook/approval bypass.
@@ -327,6 +333,135 @@ for fixture in syntax missing; do
     _check "$gate: 原因を gate の検査不能として表示" "$(grep -q 'manuscript-claim-guard:' "$T/broken-deny" && echo guard || echo wrong)" guard
   done
 done
+
+echo "=== 規模: file の数に比例して git を呼ばない (hook の timeout は 20 s) ==="
+# 直す前の実装 (ab95786): 1 file あたり git 約 5 回 (1 file 1 pathspec に戻して展開し直す) + 新 file の読み取り
+# 4 回 → 3000 file の dir の commit が 201 s (実測)。 直した後は git の回数が件数に依らない (engine の selftest が
+# 回数を数える)。 ここは経過時間: CI の遅い runner でも timeout の半分に収まることを見る (比例していれば桁で超える)。
+BULK="$T/bulk"
+mkdir -p "$BULK/big"
+git -C "$BULK" init -q
+printf 'baseline\n' > "$BULK/README.md"
+git -C "$BULK" add README.md && git -C "$BULK" commit -qm baseline
+python3 - "$BULK/big" <<'PY'
+import sys, pathlib
+d = pathlib.Path(sys.argv[1])
+for i in range(3000):
+    (d / f"f{i}.txt").write_text(f"ordinary data {i}\n")
+PY
+_timed() {  # $1=verdict command … -> "<verdict> <seconds>"; the command is eval'd (uses $PASS-independent helpers)
+  local start end verdict
+  start=$(python3 -c 'import time; print(time.time())')
+  verdict="$(eval "$1")"
+  end=$(python3 -c 'import time; print(time.time())')
+  printf '%s %s' "$verdict" "$(python3 -c "print(round($end - $start, 1))")"
+}
+_under() {  # $1="<verdict> <seconds>" $2=expected verdict $3=limit -> ok | "<verdict> <seconds>"
+  python3 -c 'import sys; v, s = sys.argv[1].split(); print("ok" if v == sys.argv[2] and float(s) < float(sys.argv[3]) else sys.argv[1])' "$1" "$2" "$3"
+}
+R="$(_timed "_pathspec_result 'git add big/ && git commit -m x -- big/' '$BULK'")"
+echo "  (3000 untracked text files, add + commit -- dir/: $R)"
+_check "3000 file の dir の add + commit -- dir/ は通り、 10 s 未満" "$(_under "$R" allow 10)" ok
+cp "$PS/plain/main.tex" "$BULK/big/paper.tex"
+_check "3000 file の中の未追跡の原稿は止める (規模の修正で検査が落ちていない)" \
+  "$(_pathspec_result 'git add big/ && git commit -m x -- big/' "$BULK")" equation
+rm "$BULK/big/paper.tex"
+git -C "$BULK" add big && git -C "$BULK" commit -qm tracked
+python3 - "$BULK/big" <<'PY'
+import sys, pathlib
+for p in pathlib.Path(sys.argv[1]).glob("*.txt"):
+    p.write_text(p.read_text() + "edited\n")
+PY
+R="$(_timed "_pathspec_result 'git commit -am x' '$BULK'")"
+echo "  (3000 modified tracked text files, commit -a: $R)"
+_check "追跡済み 3000 file の commit -a は通り、 10 s 未満" "$(_under "$R" allow 10)" ok
+git -C "$BULK" add -A
+R="$(_timed "(cd '$BULK' && HOME='$T/home' CLAUDE_CODE_SESSION_ID=sess-a python3 '$ENGINE' git-precommit >/dev/null 2>&1 && echo allow || echo deny)")"
+echo "  (3000 staged text files, git-precommit: $R)"
+_check "staged 3000 file の git-precommit は通り、 10 s 未満" "$(_under "$R" allow 10)" ok
+
+echo "=== 配線の lock を明示 block に絞る (agent-rule-ownership.md#wiring-scope) ==="
+# engine の名前を含む script は全文 lock。 ただし、 言及が全部 agent-authority の block の中にある file は block だけ。
+mkdir -p "$REPO/tools"
+printf '%s\n' '#!/bin/sh' 'run() { "$@"; }' "# $MK:begin id=guard-canary" \
+  'run python3 "$HOME/Claude/claude-config/hooks/manuscript-claim-guard.py" --canary --caller diagnostics' \
+  "# $MK:end id=guard-canary" 'echo ordinary diagnostics' > "$REPO/tools/diagnostics.sh"
+git -C "$REPO" add tools/diagnostics.sh && git -C "$REPO" commit -qm diagnostics
+_check "block の外の普通の行は自由" "$(_edit 'ordinary diagnostics' 'other diagnostics' tools/diagnostics.sh)" none
+_check "block の中の呼び出し行は止める" "$(_edit '--caller diagnostics' '--caller diagnostics || true' tools/diagnostics.sh)" deny
+_check "block の marker を外すのは止める" "$(_edit "# $MK:end id=guard-canary
+" '' tools/diagnostics.sh)" deny
+_check "Bash の commit でも block の外の行は自由" \
+  "$(sed 's/ordinary diagnostics/other diagnostics/' "$REPO/tools/diagnostics.sh" > "$REPO/tools/d.tmp" && mv "$REPO/tools/d.tmp" "$REPO/tools/diagnostics.sh"; _bash 'git commit -m x -- tools/diagnostics.sh')" none
+git -C "$REPO" checkout -q -- tools/diagnostics.sh
+printf '%s\n' '# see manuscript-claim-guard.py' >> "$REPO/tools/diagnostics.sh"
+git -C "$REPO" add tools/diagnostics.sh && git -C "$REPO" commit -qm mention
+_check "block の外に言及が残る file は全文 lock のまま" "$(_edit 'ordinary diagnostics' 'other diagnostics' tools/diagnostics.sh)" deny
+
+echo "=== canary の生存記録 (--liveness = SessionStart の面) ==="
+# 合成の HOME に本番と同じ形の配線 (settings.json の 4 entry + install 済み hook) を置き、 canary をそこで走らせる。
+LH="$T/livehome"
+mkdir -p "$LH/.claude/hooks"
+ln -s "$HOOK" "$LH/.claude/hooks/manuscript-claim-guard.py"
+_wire() {  # $1 = matcher 一覧 (space 区切り) -> settings.json
+  python3 - "$LH/.claude/settings.json" "$LH/.claude/hooks/manuscript-claim-guard.py" $1 <<'PY'
+import json, sys
+path, hook, *matchers = sys.argv[1:]
+json.dump({"hooks": {"PreToolUse": [{"matcher": m, "hooks": [{"type": "command", "command": hook}]} for m in matchers]}},
+          open(path, "w"))
+PY
+}
+_wire "Edit Write MultiEdit Bash"
+_live() { HOME="$LH" python3 "$HOOK" "$@" 2>/dev/null; }
+_state() { python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' \
+  "$MANUSCRIPT_CLAIM_GUARD_STATE_DIR/canary-liveness.json" "$1"; }
+_age() {  # $1 = python 式で state を書き換える (d が dict)
+  python3 - "$MANUSCRIPT_CLAIM_GUARD_STATE_DIR/canary-liveness.json" "$1" <<'PY'
+import json, sys, datetime
+p, expr = sys.argv[1], sys.argv[2]
+d = json.load(open(p))
+ago = lambda days: (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).isoformat(timespec="seconds")
+exec(expr)
+json.dump(d, open(p, "w"))
+PY
+}
+_check "canary は判定と呼び元を state に書く" \
+  "$(_live --canary --caller synthetic >/dev/null; _state 'str(d["armed"]) + " " + ",".join(sorted(d["callers"]))')" "True synthetic"
+_check "健全なら --liveness は沈黙" "$(_live --liveness | wc -l | tr -d ' ')" 0
+_age 'd["callers"]["synthetic"] = ago(20)'
+_check "報告が 14 日以上途絶えた呼び元を 🟡 で出す" "$(_live --liveness | grep -c '🟡.*synthetic')" 1
+_age 'd["at"] = ago(3); d["armed"] = False'
+_check "古い state は canary を走らせ直して今の判定に戻す" \
+  "$(_live --liveness --silent-days 30 >/dev/null; _state 'str(d["armed"]) + " " + str("session-start" in d["callers"])')" "True True"
+_wire "Edit Write MultiEdit"
+_check "配線切れ (Bash の entry 無し) = canary は NOT ARMED と exit 1" \
+  "$(_live --canary --caller synthetic >/dev/null && echo armed || echo not-armed)" not-armed
+_check "NOT ARMED は --liveness が 🔴 で出す" "$(_live --liveness --silent-days 30 | grep -c '🔴.*NOT ARMED')" 1
+_wire "Edit Write MultiEdit Bash"
+_live --canary --caller synthetic >/dev/null
+# 迂回の形 (block の外側): 合成の run-all-checks 風 script。 止めずに、 報告の途絶え / NOT ARMED として表に出す。
+cat > "$T/checks.sh" <<EOF
+#!/bin/sh
+run() { "\$@"; }
+# $MK:begin id=guard-canary
+run python3 "$HOOK" --canary --caller synthetic-script
+# $MK:end id=guard-canary
+EOF
+_stamp() { _state 'd["callers"].get("synthetic-script", "none")'; }
+HOME="$LH" sh "$T/checks.sh" >/dev/null; S0="$(_stamp)"
+_check "基準: block 経由の呼び出しは報告される" "$([ "$S0" != none ] && echo reported || echo silent)" reported
+sleep 1
+awk 'NR==2{print "exit 0"}1' "$T/checks.sh" > "$T/checks-exit.sh"; HOME="$LH" sh "$T/checks-exit.sh" >/dev/null
+_check "手前の exit 0 = 報告が更新されない (= 途絶えとして表に出る側)" "$(_stamp)" "$S0"
+awk 'NR==3{print "run() { :; }"}1' "$T/checks.sh" > "$T/checks-fn.sh"; HOME="$LH" sh "$T/checks-fn.sh" >/dev/null
+_check "run() の差し替え = 報告が更新されない" "$(_stamp)" "$S0"
+HOME="$LH" sh "$T/checks.sh" >/dev/null
+_check "陽性対照: 元の script は報告を更新する" "$([ "$(_stamp)" != "$S0" ] && echo updated || echo stale)" updated
+_wire "Edit Write MultiEdit"
+sed 's/--caller synthetic-script/--caller synthetic-script || true/' "$T/checks.sh" > "$T/checks-true.sh"
+true_rc=0; HOME="$LH" sh "$T/checks-true.sh" >/dev/null || true_rc=$?
+_check "|| true で script の exit は 0 になるが、 NOT ARMED は --liveness に出る" \
+  "$true_rc $(_live --liveness --silent-days 30 | grep -c 'NOT ARMED')" "0 1"
 
 echo
 echo "manuscript-claim-guard.test: PASS=$PASS FAIL=$FAIL"

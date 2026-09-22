@@ -1,8 +1,8 @@
-# Wiring lock の範囲: 未採用の設計案
+# Wiring lock の範囲: 設計案の比較 (裁定済み)
 
-**状態: 設計検討のみ。採用の裁定なし。** 本書は現行の規則・engine・配線を変更しない。実装は本人の具体的な裁定後、その範囲だけを対象とする。規範は [規則の所有権](../conventions/agent-rule-ownership.md)、原稿固有の制約は [原稿の所有権](../conventions/manuscript-claim-ownership.md) にある。
+**状態: 2026-09-22 に裁定・実装済み。** 採った案 (F = block 限定 + canary の生存記録)、捨てた案ごとの理由、残る穴の正本は [規則の所有権 #wiring-scope](../conventions/agent-rule-ownership.md#wiring-scope)、実装の検証は [検証記録](agent-rule-guard-verification.md)。本書は比較の記録として残す (以下は裁定前の本文のまま。F は検収で加わった案で、下の表には無い)。規範は [規則の所有権](../conventions/agent-rule-ownership.md)、原稿固有の制約は [原稿の所有権](../conventions/manuscript-claim-ownership.md) にある。
 
-後続 reviewer の検収と追加案は [受領欄](#received-review)。D の推奨を採用済みの決定と扱わない。最終比較・判断・実装は後続担当へ引き継いでおり、この文書の整理では再選定していない。
+後続 reviewer の検収と追加案は [受領欄](#received-review)。D の推奨は採用されなかった (裁定は上の正本)。
 
 ## <a id="current"></a>現在の判定と問題
 
@@ -110,3 +110,5 @@ D は「block を別 file にして、大きな本体から呼ぶ」案ではな
 「9例をすべて検出できる」「残る穴が D と同程度」は reviewer の提案上の見立てであり、ここで実証または採用した結論ではない。C / D / F の具体的な差分、何を検出・阻止するか、負担と残る穴は後続担当の未了事項として渡す。既存の D 推奨の記録は経緯として保持し、指摘を取り込んだ最終判断と取り違えない。
 
 検収で作られた道具・原記録の保存状況・現在の正本は [成果物台帳](guard-review-records.md) へ。
+
+**裁定 (2026-09-22、本人の承認を受けて実装):** F を採用。既定の全文 lock は変えず、言及が全部 `agent-authority` の block の中にある file だけ block を lock とし、block の外側からの迂回は canary の生存記録 (SessionStart の `--liveness`) で表に出す。C / D / E の扱いと残る穴 = [agent-rule-ownership.md#wiring-scope](../conventions/agent-rule-ownership.md#wiring-scope)。

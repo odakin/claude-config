@@ -343,11 +343,54 @@ def checked_git(repo: Path, *args: str) -> subprocess.CompletedProcess:
     return r
 
 
+# 1 回の検査の間だけ覚える Git の状態 = 件ごとに git を呼ばないため (hook-authoring.md#hook-cost-per-item:
+# 実測で 1 file あたり git 約 5 回 → 3000 file の dir の commit が hook の timeout 20 s に対して 200 s)。
+# 検査の入口 (changes_for_repo / commit_targets) と、 cache を作り直す所で HEAD を読み直す = 同じ process で
+# commit を重ねる selftest でも古い HEAD を見ない。 blob は入口ごとに捨てる (index の中身は検査の間に変わる)。
+_HEAD_REF: dict[str, str | None] = {}                   # repo -> HEAD の commit id (unborn = None)
+_HEAD_TREE: dict[tuple[str, str], frozenset[str]] = {}   # (repo, commit id) -> HEAD にある path
+_BLOB_CACHE: dict[tuple[str, str], str | None] = {}      # (repo, spec) -> まとめて読んだ blob (None = 無い / 読めない)
+
+
+def head_ref(repo: Path, refresh: bool = False) -> str | None:
+    key = str(repo)
+    if refresh or key not in _HEAD_REF:
+        r = git(repo, "rev-parse", "--verify", "--quiet", "HEAD")
+        if r is None or r.returncode not in (0, 1):
+            raise InspectionError("cannot inspect Git HEAD")
+        _HEAD_REF[key] = r.stdout.strip() if r.returncode == 0 else None
+    return _HEAD_REF[key]
+
+
 def has_head(repo: Path) -> bool:
-    r = git(repo, "rev-parse", "--verify", "--quiet", "HEAD")
-    if r is not None and r.returncode in (0, 1):
-        return r.returncode == 0
-    raise InspectionError("cannot inspect Git HEAD")
+    return head_ref(repo) is not None
+
+
+def head_tree(repo: Path) -> frozenset[str]:
+    """HEAD にある path の集合 (ls-tree 1 回)。 無い path (= 新しい file) を読みに行かないための索引。"""
+    sha = head_ref(repo)
+    if sha is None:
+        return frozenset()
+    key = (str(repo), sha)
+    if key not in _HEAD_TREE:
+        r = checked_git(repo, "ls-tree", "-r", "--name-only", "-z", "HEAD")
+        _HEAD_TREE[key] = frozenset(filter(None, r.stdout.split("\0")))
+    return _HEAD_TREE[key]
+
+
+def begin_inspection(repo: Path) -> None:
+    """検査の入口: HEAD を読み直し、 前の検査の blob を捨てる。"""
+    _BLOB_CACHE.clear()
+    head_ref(repo, refresh=True)
+
+
+def reset_caches() -> None:
+    """process 内の Git 由来の cache を全部捨てる (selftest が commit を重ねた後に呼ぶ)。"""
+    _INPUT_CACHE.clear()
+    _AUTHORITY_PATH_CACHE.clear()
+    _HEAD_REF.clear()
+    _HEAD_TREE.clear()
+    _BLOB_CACHE.clear()
 
 
 _INPUT_CACHE: dict[tuple[str, str], set[str]] = {}
@@ -358,6 +401,7 @@ def input_graph(repo: Path, revision: str = "worktree") -> set[str]:
     key = (str(repo), revision)
     if key in _INPUT_CACHE:
         return _INPUT_CACHE[key]
+    head_ref(repo, refresh=True)
     if revision == "HEAD":
         if not has_head(repo):
             return set()
@@ -365,6 +409,8 @@ def input_graph(repo: Path, revision: str = "worktree") -> set[str]:
     else:
         r = checked_git(repo, "ls-files", "-z", "--", "*.tex")
     files = [f for f in r.stdout.split("\0") if f.endswith(".tex")]
+    if revision in ("HEAD", "index"):  # 原稿の数だけ cat-file を呼ばない
+        prefetch_blobs(repo, [(("HEAD:" if revision == "HEAD" else ":") + f, f) for f in files])
     texts: dict[str, str] = {}
     for f in files:
         if revision in ("HEAD", "index"):
@@ -423,6 +469,7 @@ def authority_paths(repo: Path | None) -> list[str]:
     key = str(repo)
     if key in _AUTHORITY_PATH_CACHE:
         return _AUTHORITY_PATH_CACHE[key]
+    head_ref(repo, refresh=True)
     sources = []
     path = repo / AUTHORITY_CONFIG_REL
     if path.exists():
@@ -864,15 +911,17 @@ def read_text(p: Path) -> str | None:
         return None
 
 
-def relevant_text_file(p: Path) -> bool:
+def relevant_text_file(p: Path, repo: Path | None = None) -> bool:
+    """repo を渡すと file ごとの rev-parse を省く (呼び元が root を知っている commit の検査)。"""
     if p.is_symlink():
-        authority_paths(repo_root(p.parent))  # validate declared links before reading their target
+        authority_paths(repo if repo is not None else repo_root(p.parent))  # validate declared links before reading their target
     if p.suffix.lower() in TEXT_SUFFIXES or p.name == Path(CONFIG_REL).name:
         return True
     # Explicit policy declarations outrank the convenience text-extension list.
     # Use the lexical parent: a protected symlink's suffix/role must not vanish
     # merely because its target has a different name.
-    repo = repo_root(p.parent)
+    if repo is None:
+        repo = repo_root(p.parent)
     rel = os.path.relpath(p.absolute(), repo) if repo else str(p.absolute())
     return _rule_guard.protected_path(rel, authority_paths(repo))
 
@@ -1033,6 +1082,11 @@ class GitPathspec(NamedTuple):
     include_ignored: bool = False
 
 
+class GitNames(NamedTuple):
+    """Git が既に具体名に展開した file (repo 相対、 作業ツリーを読む)。 展開し直さない = 件数に比例して git を呼ばない。"""
+    names: tuple[str, ...]
+
+
 def expand_commit_pathspec(repo: Path, selection: GitPathspec | str) -> list[str]:
     """Let Git expand directories/globs/magic together, including exclusions.
 
@@ -1063,9 +1117,10 @@ def expand_commit_pathspec(repo: Path, selection: GitPathspec | str) -> list[str
     return sorted(names)
 
 
-def commit_targets(command: str, cwd: Path, require_explicit_cwd: bool = False) -> list[tuple[Path, str, list[GitPathspec]]]:
+def commit_targets(command: str, cwd: Path,
+                   require_explicit_cwd: bool = False) -> list[tuple[Path, str, list[GitPathspec | GitNames]]]:
     """Collect actual commit invocations using the shared quote-aware tokenizer."""
-    out: dict[str, tuple[Path, str, list[GitPathspec]]] = {}
+    out: dict[str, tuple[Path, str, list[GitPathspec | GitNames]]] = {}
     added: dict[str, list[GitPathspec]] = {}
 
     def walk(script: str, current: Path, depth: int = 0) -> None:
@@ -1119,6 +1174,8 @@ def commit_targets(command: str, cwd: Path, require_explicit_cwd: bool = False) 
             root = repo_root(repo_dir)
             if root is None:
                 continue
+            if str(root) not in added and str(root) not in out:
+                head_ref(root, refresh=True)
             if rest[0] == "add":
                 add_flags, selected = _rule_guard.git_operation_options("add", rest[1:])
                 if add_flags & {"pathspec_file", "interactive"}:
@@ -1138,6 +1195,7 @@ def commit_targets(command: str, cwd: Path, require_explicit_cwd: bool = False) 
                 continue
             if flags & {"pathspec_file", "interactive"}:
                 raise InspectionError("use an explicit staged or path commit for inspected changes")
+            paths: list[GitPathspec | GitNames]
             if selected_paths or "only" in flags:
                 paths = [GitPathspec(repo_dir, tuple(selected_paths), False)] if selected_paths else []
                 mode = "index+paths" if "include" in flags else "paths"
@@ -1152,8 +1210,11 @@ def commit_targets(command: str, cwd: Path, require_explicit_cwd: bool = False) 
                 added_names = {name for choice in extra for name in expand_commit_pathspec(root, choice)}
                 matching = set(expand_commit_pathspec(root, paths[0]._replace(
                     include_untracked=True, include_ignored=any(choice.include_ignored for choice in extra))))
-                paths.extend(GitPathspec(root, (":(literal)" + name,), True, True)
-                             for name in sorted(added_names & matching))
+                # Git が両方の選択を既に展開した = 具体名をそのまま渡す (1 file 1 pathspec に戻して
+                # 展開し直すと git 5 回/file = 3000 file で timeout の 10 倍、 実測)。
+                chosen = tuple(sorted(added_names & matching))
+                if chosen:
+                    paths.append(GitNames(chosen))
             if extra and mode != "paths":
                 paths = paths + extra
                 mode = "all+paths" if mode == "all" else "index+paths"
@@ -1163,9 +1224,51 @@ def commit_targets(command: str, cwd: Path, require_explicit_cwd: bool = False) 
     return list(out.values())
 
 
+def prefetch_blobs(repo: Path, specs: list[tuple[str, str]]) -> None:
+    """[(spec, path)] を `git cat-file --batch --filters` 1 回で読んで _BLOB_CACHE に入れる (smudge を通す =
+    git-crypt の path も平文、 hook-authoring.md#blob-read-git-crypt)。 batch の入力は空白で object と path を
+    分けるので、 空白を含む path は入れない (= blob_text が 1 件ずつ読む)。 batch が失敗したら何も入れない
+    (= 従来どおり 1 件ずつ)。 実測: 300 blob = 1 件ずつ 2.0 s / batch 0.02 s。"""
+    todo = [(spec, path) for spec, path in specs
+            if (str(repo), spec) not in _BLOB_CACHE and not re.search(r"\s", spec + path)]
+    if not todo:
+        return
+    stdin = "".join(f"{spec} {path}\n" for spec, path in todo).encode("utf-8")
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "cat-file", "--batch", "--filters"], input=stdin,
+                           capture_output=True, timeout=60, check=False,
+                           env=dict(os.environ, GIT_LFS_SKIP_SMUDGE="1"))
+    except (OSError, subprocess.TimeoutExpired):
+        return
+    if r.returncode != 0:
+        return
+    out, pos = r.stdout, 0
+    for spec, _path in todo:
+        nl = out.find(b"\n", pos)
+        if nl < 0:
+            return  # 出力が途中で終わった = 残りは 1 件ずつ
+        header = out[pos:nl].decode("utf-8", "replace")
+        pos = nl + 1
+        if header.endswith((" missing", " ambiguous")):
+            _BLOB_CACHE[(str(repo), spec)] = None
+            continue
+        parts = header.split()
+        if len(parts) != 3 or not parts[2].isdigit():
+            return
+        size = int(parts[2])
+        data = out[pos:pos + size]
+        pos += size + 1
+        try:
+            _BLOB_CACHE[(str(repo), spec)] = data.decode("utf-8")
+        except UnicodeDecodeError:
+            _BLOB_CACHE[(str(repo), spec)] = None
+
+
 def blob_text(repo: Path, spec: str) -> str | None:
     """git の blob を worktree と同じ中身で読む (git-crypt の path は暗号文でなく平文。
-    hook-authoring.md#blob-read-git-crypt)。 読めなければ None。"""
+    hook-authoring.md#blob-read-git-crypt)。 読めなければ None。 まとめて読んだ blob があればそれ。"""
+    if (str(repo), spec) in _BLOB_CACHE:
+        return _BLOB_CACHE[(str(repo), spec)]
     if read_blob_text is not None:
         try:
             return read_blob_text(spec, cwd=str(repo), timeout=10, errors="strict")
@@ -1179,6 +1282,8 @@ def blob_text(repo: Path, spec: str) -> str | None:
 
 
 def head_text(repo: Path, rel: str, rev: str = "HEAD") -> str:
+    if rev == "HEAD" and rel not in head_tree(repo):
+        return ""  # 新しい file: git を呼ばない
     text = blob_text(repo, f"{rev}:{rel}")
     if text is not None:
         return text
@@ -1223,7 +1328,8 @@ def git_mode(repo: Path, rel: str, source: str) -> str:
     return entries[0].split(" ", 1)[0]
 
 
-def changes_for_repo(repo: Path, mode: str, paths: list[GitPathspec | str]) -> list[dict]:
+def changes_for_repo(repo: Path, mode: str, paths: list[GitPathspec | GitNames | str]) -> list[dict]:
+    begin_inspection(repo)
     rels: dict[str, str] = {}  # rel -> source (index / worktree)
     if mode in ("index", "index+paths"):
         r = checked_git(repo, "diff", "--cached", "--no-renames", "--name-only", "-z", "--diff-filter=ACMRDT")
@@ -1235,6 +1341,10 @@ def changes_for_repo(repo: Path, mode: str, paths: list[GitPathspec | str]) -> l
             rels[rel] = "worktree"
     if mode in ("paths", "index+paths", "all+paths"):
         for selection in paths:
+            if isinstance(selection, GitNames):
+                for rel in selection.names:
+                    rels[rel] = "worktree"
+                continue
             for rel in expand_commit_pathspec(repo, selection):
                 rels[rel] = "worktree"
     staged_cfg_text = None
@@ -1243,9 +1353,13 @@ def changes_for_repo(repo: Path, mode: str, paths: list[GitPathspec | str]) -> l
     cfg = load_config(repo) if staged_cfg_text is None else load_config(repo, staged_cfg_text)
     head_cfg = load_config(repo, head_text(repo, CONFIG_REL)) if head_text(repo, CONFIG_REL) else {}
     changes: list[dict] = []
-    for rel, src in sorted(rels.items()):
-        if not relevant_text_file(repo / rel):
-            continue
+    declared = authority_paths(repo)
+    wanted = [rel for rel in sorted(rels) if relevant_text_file(repo / rel, repo)]
+    tree = head_tree(repo)
+    prefetch_blobs(repo, [(f"HEAD:{rel}", rel) for rel in wanted if rel in tree]
+                   + [(f":{rel}", rel) for rel in wanted if rels[rel] == "index"])
+    for rel in wanted:
+        src = rels[rel]
         old = head_text(repo, rel)
         if src == "index":
             new = index_text(repo, rel)
@@ -1263,7 +1377,6 @@ def changes_for_repo(repo: Path, mode: str, paths: list[GitPathspec | str]) -> l
         ch_head = protected_changes(rel, old, new, repo, head_cfg) if head_cfg != cfg else []
         seen = {(c["region"], c["kind"]) for c in ch_new}
         changes.extend(ch_new + [c for c in ch_head if (c["region"], c["kind"]) not in seen])
-        declared = authority_paths(repo)
         if authority_regions(old, rel, declared) or authority_regions(new, rel, declared):
             before_mode = git_mode(repo, rel, "HEAD")
             after_mode = git_mode(repo, rel, "index") if src == "index" else worktree_mode(repo / rel)
@@ -1777,7 +1890,7 @@ def selftest() -> int:
         (repo / "src/main.tex").write_text(paper)
         (repo / "src/child.tex").write_text("\\begin{equation}a=c\\label{eq:child}\\end{equation}\n")
         g("add", "-A")
-        _INPUT_CACHE.clear()
+        reset_caches()
         check("input を外しても HEAD の子原稿の式を検査",
               any(c["file"] == "src/child.tex" and c["region"] == "eq:child"
                   for c in changes_for_repo(repo, "index", [])))
@@ -1844,7 +1957,7 @@ def selftest() -> int:
         (repo / "custom/check.py").write_text("pass\n")
         manifest.write_text(json.dumps({"version": 1, "protect_paths": []}))
         g("add", "-A")
-        _AUTHORITY_PATH_CACHE.clear()
+        reset_caches()
         generic_changes = changes_for_repo(repo, "index", [])
         check("一般の AGENTS 規則も marker なしで拒否対象",
               any(c["file"] == "AGENTS.md" and c["region"] == "authority:file" for c in generic_changes))
@@ -1884,7 +1997,7 @@ def selftest() -> int:
         (repo / "AGENTS.md").unlink()
         (repo / "AGENTS.md").symlink_to("README.md")
         g("add", "-A")
-        _AUTHORITY_PATH_CACHE.clear()
+        reset_caches()
         structural = changes_for_repo(repo, "index", [])
         check("宣言された Ruby gate を拡張子で落とさない",
               any(c["file"] == "custom/gate.rb" and c["region"] == "authority:file" for c in structural))
@@ -1913,7 +2026,7 @@ def selftest() -> int:
               bool(unapproved(other_mode, repo, ("claude", "sess-1"))))
         manifest.write_text(json.dumps({"version": 1, "protect_paths": ["custom/gate.bin"]}))
         (repo / "custom/gate.bin").write_bytes(b"\xff\xfe")
-        _AUTHORITY_PATH_CACHE.clear()
+        reset_caches()
         binary_event = dict(ev, tool_input={"file_path": str(repo / "custom/gate.bin"), "old_string": "x", "new_string": "y"})
         try:
             claude_edits(binary_event)
@@ -1929,7 +2042,7 @@ def selftest() -> int:
         gate_link.symlink_to("impl.rb")
         manifest.write_text(json.dumps({"version": 1, "protect_paths": ["custom/release.rb"]}))
         g("add", "-A"); g("commit", "-qm", "symlink gate fixture")
-        _AUTHORITY_PATH_CACHE.clear()
+        reset_caches()
         alias_event = dict(ev, tool_input={"file_path": str(gate_link), "old_string": "verify_release()", "new_string": "exit 0"})
         alias_output = io.StringIO()
         with contextlib.redirect_stdout(alias_output):
@@ -1943,7 +2056,7 @@ def selftest() -> int:
         (repo / "other-policy.txt").write_text("Keep review.\n")
         (repo / "AGENTS.md").unlink(); (repo / "AGENTS.md").symlink_to("other-policy.txt")
         g("add", "AGENTS.md", "other-policy.txt")
-        _AUTHORITY_PATH_CACHE.clear()
+        reset_caches()
         link_changes = [c for c in changes_for_repo(repo, "index", []) if c["file"] == "AGENTS.md"]
         link_candidate = tdp / "link-candidate"
         link_candidate.symlink_to("other-policy.txt")
@@ -1966,6 +2079,14 @@ def selftest() -> int:
               commit_targets("git commit -m -a", repo)[0][1] == "index")
         check("-- 無しの明示 path も worktree を検査",
               commit_targets("git commit -m test AGENTS.md", repo)[0][1] == "paths")
+        # redirect は pathspec でない (以前は `2>/dev/null` が何にも当たらない pathspec になり、 commit -a の
+        # 原稿の変更が空の選択として素通りした / `> /dev/null` は検査不能になった)
+        check("stdout の redirect が付いても commit -a のまま検査する",
+              commit_targets("git commit -am x > /dev/null 2>&1", repo)[0][1] == "all")
+        check("stderr だけの redirect でも同じ",
+              commit_targets("git commit -am x 2>/dev/null", repo)[0][1] == "all")
+        check("redirect の前の -- path は path のまま",
+              commit_targets("git commit -m x -- AGENTS.md > log", repo)[0][1] == "paths")
         (repo / "v1").mkdir(exist_ok=True)
         (repo / "v1/check.rb").write_text("verify_release()\n")
         (repo / "v1/notes.txt").write_text("Ordinary notes.\n")
@@ -1974,7 +2095,7 @@ def selftest() -> int:
         (repo / "release.rb").symlink_to("current/check.rb")
         manifest.write_text(json.dumps({"version": 1, "protect_paths": ["release.rb"]}))
         g("add", "-A"); g("commit", "-qm", "directory link fixture")
-        _AUTHORITY_PATH_CACHE.clear()
+        reset_caches()
         closure = authority_paths(repo)
         check("参照先の親 directory link と実装を両方保護",
               "current" in closure and "v1/check.rb" in closure)
@@ -1995,7 +2116,7 @@ def selftest() -> int:
         outside = tdp / "external-policy"
         outside.mkdir(); (outside / "check.rb").write_text("verify_release()\n")
         directory_link.unlink(); directory_link.symlink_to("../external-policy", target_is_directory=True)
-        _AUTHORITY_PATH_CACHE.clear()
+        reset_caches()
         try:
             authority_paths(repo)
         except InspectionError:
@@ -2009,6 +2130,73 @@ def selftest() -> int:
               all("\n" not in inspection_reason(e) and "\r" not in inspection_reason(e) and len(inspection_reason(e)) < 320
                   for e in (big, multi)) and "GITCRYPT" not in inspection_reason(big)
              )
+        # 規模: git の呼び出し回数を file の数に比例させない (hook-authoring.md#hook-cost-per-item)。
+        # 直す前の実装は 1 file あたり git 約 5 回 (pathspec を 1 つずつ展開し直す) + 新 file の読み取り 4 回。
+        bulk = tdp / "bulk"
+        (bulk / "big").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q"], cwd=bulk, env=genv, capture_output=True, check=False)
+        (bulk / "README.md").write_text("baseline\n")
+        subprocess.run(["git", "add", "-A"], cwd=bulk, env=genv, capture_output=True, check=False)
+        subprocess.run(["git", "commit", "-qm", "i"], cwd=bulk, env=genv, capture_output=True, check=False)
+
+        def counted(fn):
+            real_run, calls = subprocess.run, [0]
+
+            def counting(*a, **kw):
+                calls[0] += 1
+                return real_run(*a, **kw)
+            reset_caches()
+            with mock_patch.object(subprocess, "run", counting):
+                result = fn()
+            return calls[0], result
+
+        def bulk_files(n: int) -> None:
+            for f in (bulk / "big").iterdir():
+                f.unlink()
+            for i in range(n):
+                (bulk / "big" / f"f{i}.txt").write_text(f"ordinary data {i}\n")
+
+        def inspect_add_commit():
+            targets = commit_targets("git add big/ && git commit -m x -- big/", bulk)
+            return [c for rp, mode, paths in targets for c in changes_for_repo(rp, mode, paths)]
+
+        bulk_files(40)
+        calls40, _ = counted(inspect_add_commit)
+        bulk_files(80)
+        calls80, _ = counted(inspect_add_commit)
+        check(f"未追跡 dir の add + commit -- dir/: git の回数が file 数に依らない ({calls40} / {calls80})",
+              calls40 == calls80 and calls40 < 40)
+        (bulk / "big" / "paper.tex").write_text(paper)
+        _, found = counted(inspect_add_commit)
+        check("具体名で渡しても未追跡の原稿は検査される", any(c["region"] == "abstract" for c in found))
+        (bulk / "big" / "paper.tex").unlink()
+        bulk_files(80)
+        subprocess.run(["git", "add", "-A"], cwd=bulk, env=genv, capture_output=True, check=False)
+        subprocess.run(["git", "commit", "-qm", "tracked"], cwd=bulk, env=genv, capture_output=True, check=False)
+        for f in (bulk / "big").iterdir():
+            f.write_text(f.read_text() + "edited\n")
+        calls_all80, _ = counted(lambda: changes_for_repo(bulk, "all", []))
+        for f in sorted((bulk / "big").iterdir())[:40]:
+            subprocess.run(["git", "checkout", "-q", "--", str(f)], cwd=bulk, env=genv, capture_output=True, check=False)
+        calls_all40, _ = counted(lambda: changes_for_repo(bulk, "all", []))
+        check(f"追跡済み file の一括変更 (commit -a): git の回数が file 数に依らない ({calls_all40} / {calls_all80})",
+              calls_all40 == calls_all80 and calls_all80 < 40)
+        subprocess.run(["git", "add", "-A"], cwd=bulk, env=genv, capture_output=True, check=False)
+        calls_index, _ = counted(lambda: changes_for_repo(bulk, "index", []))
+        check(f"staged 40 file の pre-commit: git の回数が file 数に依らない ({calls_index})", calls_index < 40)
+        # まとめ読み: filter の掛かった path は平文、 無い path は None、 空白を含む path は 1 件ずつ
+        (rt / "sp ace.tex").write_text("x\n")
+        subprocess.run(["git", "add", "-A"], cwd=rt, env=genv, capture_output=True, check=False)
+        subprocess.run(["git", "commit", "-qm", "space"], cwd=rt, env=genv, capture_output=True, check=False)
+        reset_caches()
+        prefetch_blobs(rt, [("HEAD:src/main.tex", "src/main.tex"), ("HEAD:sp ace.tex", "sp ace.tex"),
+                            ("HEAD:nope.tex", "nope.tex")])
+        check("まとめ読みでも filter の掛かった blob は平文",
+              _BLOB_CACHE.get((str(rt), "HEAD:src/main.tex")) == paper.replace("b + c", "b - c"))
+        check("まとめ読みは無い path を None にし、 空白を含む path は入れない",
+              (str(rt), "HEAD:nope.tex") in _BLOB_CACHE and _BLOB_CACHE[(str(rt), "HEAD:nope.tex")] is None
+              and (str(rt), "HEAD:sp ace.tex") not in _BLOB_CACHE)
+        check("空白を含む path は 1 件ずつ (filter 経由で) 読む", head_text(rt, "sp ace.tex") == "x\n")
         os.environ.pop("MANUSCRIPT_CLAIM_GUARD_STATE_DIR", None)
         os.environ.pop("MANUSCRIPT_CLAIM_GUARD_HOME", None)
 
