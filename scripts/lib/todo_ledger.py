@@ -58,13 +58,19 @@ class TodoLedgerError(ValueError):
 # path
 # ------------------------------------------------------------
 def resolve_repo(p) -> Path:
-    """repo dir / `<repo>/todo` / `<repo>/TODO.yaml` のどれを渡されても repo dir を返す。"""
+    """repo dir / `<repo>/todo` / 旧 list 形の file (`<repo>/TODO.yaml`、 test fixture の `x/todo.yaml` 等) のどれを渡されても repo dir を返す。"""
     p = Path(p).expanduser()
-    if p.name == LEGACY_NAME:
+    if p.name == LEGACY_NAME or p.is_file():
         return p.parent
     if p.name == DIR_NAME and p.is_dir() and not (p / DIR_NAME).is_dir() and not (p / LEGACY_NAME).exists():
         return p.parent
     return p
+
+
+def _legacy_file(p) -> Path:
+    """渡された path が file ならそれ (名前を問わず旧 list 形として読む)、 それ以外は `<repo>/TODO.yaml`。"""
+    p = Path(p).expanduser()
+    return p if (p.is_file() and p.name != DIR_NAME) else resolve_repo(p) / LEGACY_NAME
 
 
 def todo_dir(repo) -> Path:
@@ -180,7 +186,7 @@ def load_todos_with_paths(repo) -> List[Tuple[Path, dict]]:
         e = read_todo(p)
         out.append((p, e))
         seen.add(e["id"])
-    lp = r / LEGACY_NAME
+    lp = _legacy_file(repo)
     if lp.is_file():
         for e in _load_legacy_list(lp):
             eid = e.get("id")
@@ -446,6 +452,12 @@ def _selftest() -> int:
         empty = Path(td) / "empty"
         empty.mkdir()
         check(load_todos(empty) == [] and todo_files(empty) == [], "todo/ も TODO.yaml も無い repo は空 list")
+        # 旧 list 形の file を名前を問わず直接渡せる (test fixture の `x/todo.yaml` / 任意の path)
+        fx = Path(td) / "fx"
+        fx.mkdir()
+        (fx / "todo.yaml").write_text('- id: "2026-02-01-fixture"\n  status: open\n', encoding="utf-8")
+        check([e["id"] for e in load_todos(fx / "todo.yaml")] == ["2026-02-01-fixture"] and resolve_repo(fx / "todo.yaml") == fx,
+              "旧 list 形の file は名前を問わず path で渡せる (repo = その親 dir)")
     print(f"selftest: {'ALL PASS' if not fails else f'FAIL {fails}'}")
     return 1 if fails else 0
 
