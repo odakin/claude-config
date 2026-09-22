@@ -106,3 +106,7 @@ runtime の構成監査は [audit-codex-hook-runtime.py](../scripts/audit-codex-
 Claude reviewer は `ab95786` に対して独立の合成例を実行し、機能の分類を受領した。一方、追加済みの具体的な file 名を一つずつ Git pathspec として再展開する経路について性能を差し戻した。報告値は 150 file の binary で約 0.0→5.9 秒、text で約 4.0→9.0 秒、3000 text file の directory で約184秒。これらは reviewer の報告であり、本整理で新たに再計測した値ではない。20秒の hook timeout を超えた場合の実際の停止/通過は未確認と報告されている。
 
 保存した観測 script とその限界は [成果物台帳](guard-review-records.md)。規模の軸と委任の境界は [review-handoff](../conventions/multi-session-coordination.md#review-handoff)、外部 process の回数と timeout の測り方は [hook-cost-per-item](../conventions/hook-authoring.md#hook-cost-per-item) が所有する。今回の資料整理は、この性能問題を解決したことにも、wiring の設計を採用したことにもならない。後続の担当へ引継ぎ済みである。
+
+続く依頼元の追加報告では、commit の command に stdout の redirect (`> file` / `> file 2>&1`) があると inspection unavailable になる誤拒否が挙げられた。報告では `|| { … }`・command substitution・pipe と切り分けている。本整理で再現・修正した結果ではなく、後続担当への追加課題として受領した。
+
+新しい保護 file の commit は、本文だけでなく追加による Git mode の差分にも既存の承認記録が必要、という操作上の注意も受領した。記録の正本は [共通の裁定手順](../conventions/agent-rule-ownership.md#approval) と CLI であり、ここで別の承認手順を新設しない。
