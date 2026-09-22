@@ -69,6 +69,10 @@
 
 ## Open items（forward-looking）
 
+- [ ] **規則保護 gate の cwd 解決が `cd $VAR` を展開せず親へ上がって cwd の repo に当たる** (2026-09-22 実測: 一時 dir での `cd $T && git commit` が cwd の repo の未 commit 変更で deny、 fail-closed の誤停止)。 直すなら変数を含む cd は検査不能 (WorkingDirectoryUnavailable) に倒す。 記録 = [検証記録](docs/agent-rule-guard-verification.md) 残る境界。
+- [ ] **Codex の hook の timeout 挙動は未測定** (Claude は素通り = 実測、 [manuscript-claim-ownership.md#limits](conventions/manuscript-claim-ownership.md#limits))。 層1 hook-authoring.md への一般形の追記候補 = owner 個人層の plans (保護 file なので承認待ち)。
+- [ ] **`--liveness` の実 session での観察**: 健全なら沈黙 / run-all-checks からの報告が 14 日途絶えると 🟡 (2026-09-22 配線、 この machine のみ確認)。
+
 - [ ] **規則保護の guard が、 作業中の割り込みで送られた本人の発言を承認として数えない** (記録上 `queued_command` の attachment で user の発言でない) — 数えるかは agent の権限規則の変更 = owner 判断 (carrier = owner 個人層の TODO)。 それまでは通常の返事で一言もらう
 - [ ] **job health の他マシンでの初回観測** ([`shell-env.md#job-python-by-capability`](conventions/shell-env.md#job-python-by-capability)) — 各マシンで claude-config を pull した後の heartbeat から reader に出る。 常駐機で session を開くまで旧形の beat
 

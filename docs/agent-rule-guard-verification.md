@@ -101,6 +101,8 @@ runtime の構成監査は [audit-codex-hook-runtime.py](../scripts/audit-codex-
 
 一般の自然言語の義務、本人発言の許可の意味、未知の shell 表現、任意のプログラムからの実行、OS による権限分離はこの検証の対象外である。[保証の境界](../conventions/agent-rule-ownership.md#limits) を参照する。操作ごとの gate は引き続きその操作の直前で働く必要がある。
 
+観測した誤停止 (fail-closed 側、2026-09-22): Bash の `cd $VAR` (変数) は展開されずに path として辿られ、存在しない path から親へ上がって cwd の repo に当たるため、一時 dir での `cd $T && git commit` が cwd の repo の未 commit 変更で deny された。直すなら変数を含む cd は検査不能 (`WorkingDirectoryUnavailable`) に倒す。未修正。
+
 ## 後続 reviewer の検収と未解決点
 
 Claude reviewer は `ab95786` に対して独立の合成例を実行し、機能の分類を受領した。一方、追加済みの具体的な file 名を一つずつ Git pathspec として再展開する経路について性能を差し戻した。報告値は 150 file の binary で約 0.0→5.9 秒、text で約 4.0→9.0 秒、3000 text file の directory で約184秒。これらは reviewer の報告であり、本整理で新たに再計測した値ではない。20秒の hook timeout を超えた場合の実際の停止/通過は未確認と報告されている。
