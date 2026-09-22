@@ -78,6 +78,22 @@ CSR SPA のニュース/結果ページの URL を多数検証する場面 (例:
 
 「claude.ai の会話を Claude Code に渡したい」: share URL を curl / WebFetch / headless で読もうとして全滅し、 bot 保護の回避に向かいそうになる — が、 正解は上の 2 経路 (pane 直読 / page 内 fetch)。 スマホからでも share ページ + ブックマークレット 1 tap で全文 `.md` が落とせる。
 
+## <a id="booking-sites-browser-pane"></a>予約サイト (じゃらん / booking.com / 価格.com) の料金表は WebFetch でなく Browser pane で読む
+
+宿の料金・部屋一覧・運営者情報を裏取りするとき、 WebFetch は 3 通りに壊れる (実測):
+
+| サイト | WebFetch の結果 | Browser pane (`navigate` → `get_page_text`) |
+|---|---|---|
+| じゃらん (`jalan.net/yad<ID>/plan/`) | 本文が文字化けして要約側が「読めない」 (文字コードの取り違え) | ✅ 全プラン × 全部屋の 1 名 / 2 名料金、 「※バスなしトイレなし」 注記、 空室カレンダーまで text で取れる |
+| booking.com (`/hotel/jp/<slug>.ja.html`) | 空 (JS 描画) | ✅ 部屋タイプの literal 名、 評価点と件数、 管理者の自己紹介文、 規則 (門限・年齢) が取れる。 料金は日付を選ぶまで出ない |
+| 価格.com トラベル (`travel.kakaku.com`) | `ENOTFOUND` (fetch 先から DNS 不到達) | 未実測 (WebSearch の summary に最安値が出るが、 summary は hallucinate しうる = 本 doc 冒頭) |
+
+### How to apply
+
+- **URL を先に組む**: じゃらんは施設 ID から `https://www.jalan.net/yad<ID>/plan/` (料金一覧)、 booking.com は `.ja.html` を付けると日本語で出る。 WebSearch で施設ページの URL を取ってから pane で開く
+- **取る項目を決めてから読む** (口コミの裏取りなら [`consumer-review-writing.md#price-lookup`](consumer-review-writing.md#price-lookup) の一覧)。 `get_page_text` は 3 万字前後で「この宿を見た人は他に」 の推薦一覧が繰り返し混じるので、 `max_chars` は 25,000〜30,000 で足りる
+- 料金は**日付・人数で変わる**ので、 幅 (最安〜通常) と取得日を手元の記録に残し、 公開文には幅だけ書く
+
 ## <a id="cookie-replay-oauth-spa"></a>Browser cookie replay は OAuth-token SPA を認証しない (= member 限定クラウドフォルダは無人 upload 不可)
 
 Chromium (Brave/Chrome) の cookie DB を復号して session cookie を replay すれば authenticated アクセスできる — これは **cookie-session 方式のサイト (伝統的サーバーセッション、 Slack の `d` cookie 等) にのみ成立**する。 **OAuth/token 方式の modern SPA (Box enterprise・多くの SaaS) では成立しない**: 認証本体は login 後に fetch される **in-memory の access token** で、 cookie DB には persist されないため、 cookie を全部そろえて replay しても API 呼び出しが 401 になる。
