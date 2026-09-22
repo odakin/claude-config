@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを読む/探すとき + ワークフローを再利用・作成・申請するとき + login 切れで読めないとき / SSO 保護サイトの login 切れからの復帰を組むとき (#garoon-session-recovery)
+when: Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを読む/探すとき + ワークフローを再利用・作成・申請するとき + 申請した後の承認・差し戻し・コメントを script で確かめるとき (#garoon-workflow-status-read) + login 切れで読めないとき / SSO 保護サイトの login 切れからの復帰を組むとき (#garoon-session-recovery)
 category: infra
 summary: Garoon cloud の自動化 (= SSO でも logged-in session 越しに読める、 read は cookie 再利用 script が第一選択、 login 切れは browser に開かせた tab の行き先を見て復帰・本人のログインが要る時だけ頼む、 workflow write は承認済み申請再利用 → 値の全読み戻し → 経路確認 → owner 明示 OK → 送信一覧検証、 download token の期限切れ = login page 化)
 -->
@@ -72,6 +72,12 @@ Garoon 固有の実測:
 - **select は値を入れたら `change` を発火する**: 年・月を変えると日の選択肢 (曜日つき) が作り直される。年 → 月 → 日の順に入れ、最後に表示文字列を読み戻す。
 - **browser MCP の JS 実行結果は、cookie や query string らしい文字列を含むと丸ごと伏せられる** (同一 origin への fetch の結果を返す等)。一覧や結果は page text の取得で読み、JS は「name と値だけ」 を返す形にする。
 - 「実施日」 のような radio (指定あり / 指定なし) は、前回承認された申請の選択をそのまま引き継いで、隣の日付欄の値も通ることがある。どちらを選ぶかは値の SoT 側で決め、画面の既定に任せない。
+
+<a id="garoon-workflow-status-read"></a>**申請後の状態を script で追う (read、 実測)**: 承認 / 差し戻し / コメントは全文検索に出ず (下の「App 別 URL」 の ⚠️)、 通知メールも来るとは限らない。 `garoon-client.py get` で読む:
+
+1. `get "/g/workflow/index.csp"` の HTML の左メニューに、 最新一覧 / 受信一覧 / 送信一覧 / 下書き の `index.csp?fid=<N>` link が並ぶ (fid の値は組織ごと = 一度読んで案件側の台帳に写す)。 `send_list.csp` のような推測 URL は存在しない (エラー FW00051)。
+2. 送信一覧 `get "/g/workflow/index.csp?fid=<送信一覧>"` の HTML には申請ごとに `view.csp?fid=<N>&pid=<内部 id>` の link が 2 本 (フォーム名と標題) 出る。 **`pid` は内部 id で、 画面に出る申請番号 No. とは別の数**。 申請直後に手順 6 で両方を回収しておくと、 後で一覧を引かずに済む。
+3. `get "/g/workflow/view.csp?fid=<N>&pid=<内部 id>"` が申請内容と進行状況 (経路 step ごとに 結果 / 日時 / 処理者 / コメント) を持つ。 HTML なので `<script>` / `<style>` を落として tag を剥がしてから読む。 **未処理の判定** = 担当 step に結果と日時が無く、 画面に「申請を取り戻す」 が出ている。 担当課の「貸出は N 週間まで」 のような条件は承認のコメント欄に書かれるので、 結果だけでなくコメントまで読む。
 
 **接続の実務**: 自動選択が未 login の in-app browser を開く一方、同じマシンの external Chromium に SSO session が残っていることがある。その場合は再 login の前に接続済み browser 一覧を取り、最新のログイン済み tab を claim する。画面 title/URL の一時的な「ログイン」表示で判定せず、DOM 内の user 名 / portal / workflow を読んで session 実状態を判定する。
 
