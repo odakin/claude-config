@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき
 category: web
-summary: flaky web form 入力の一般則 — 送信結果はレスポンスページで判断しない (過負荷サイトは POST 成功後にエラーページを返す、重複確認画面 = 前回送信成功の証拠、#submit-truth-is-server-state)、公開 read API の cache による false negative (#read-api-cache-lag)、radio/checkbox は click より form_input 直接設定 (#form-input-over-click)、動的 combobox は form_input 不可、多言語ペア validation の非対称発火と「同値を両欄に焼く」回避 (#language-pair-validation)、metadata 自動取り込みの著者順 verify (#imported-metadata-verify)、リトライ規律 (フォーム状態は保存されない前提で SoT から再入力)、upload POST だけの 503 はサイズ原因と早断定しない (#upload-only-503)、**同じサイトを繰り返し打つなら操作列を生成物にする step driver harness (#step-driver-harness = 値の正本 → steps → 読み戻し照合の 3 層、 実体 scripts/lib/web_driver.py、 element 不在は throw せず missing / 往復には wait / 生 HTML を返さない / 行狙いは literal 一致、 消えない人間の 4 段 = login・upload・送信・CAPTCHA)**、 読み仮名欄の字種はラベル「かな」 でもカタカナ限定のことがある = 注記・エラー文で決める (#kana-reading-field)
+summary: flaky web form 入力の一般則 — 送信結果はレスポンスページで判断しない (過負荷サイトは POST 成功後にエラーページを返す、重複確認画面 = 前回送信成功の証拠、#submit-truth-is-server-state)、画面の受付完了は照合済みを意味しない (受付と審査が別段のサイト、#async-validation-after-accept)、公開 read API の cache による false negative (#read-api-cache-lag)、radio/checkbox は click より form_input 直接設定 (#form-input-over-click)、動的 combobox は form_input 不可、多言語ペア validation の非対称発火と「同値を両欄に焼く」回避 (#language-pair-validation)、metadata 自動取り込みの著者順 verify (#imported-metadata-verify)、リトライ規律 (フォーム状態は保存されない前提で SoT から再入力)、upload POST だけの 503 はサイズ原因と早断定しない (#upload-only-503)、**同じサイトを繰り返し打つなら操作列を生成物にする step driver harness (#step-driver-harness = 値の正本 → steps → 読み戻し照合の 3 層、 実体 scripts/lib/web_driver.py、 element 不在は throw せず missing / 往復には wait / 生 HTML を返さない / 行狙いは literal 一致、 消えない人間の 4 段 = login・upload・送信・CAPTCHA)**、 読み仮名欄の字種はラベル「かな」 でもカタカナ限定のことがある = 注記・エラー文で決める (#kana-reading-field)
 -->
 # flaky web form への browser-automation 入力の一般則
 
@@ -18,6 +18,7 @@ summary: flaky web form 入力の一般則 — 送信結果はレスポンスペ
 - **成否は必ずデータ側で確認する**: 登録一覧ページ / 編集一覧の件数・タイムスタンプ / 公開 API。「登録日時 + 登録者」表示が出れば確定
 - **重複確認画面 (「類似データが既に登録されています」等) が出たら、それは前回送信が成功していた証拠**。読まずに「強制追加」すると二重登録になる。前回分の内容が意図どおりなら今回分は破棄が正解
 - エラーページ後の盲目リトライは二重送信リスク。**確認 → 不在なら再送信** の順を崩さない
+- <a id="async-validation-after-accept"></a>**受付と照合が別の段のサイトでは、 画面の「受け付けました」 は入力値が正しいことを意味しない**: 登録・申込の画面は値を受け取るだけで、 契約情報・口座番号などとの突き合わせは後の審査で行い、 結果をメールで知らせる形がある (実測)。 人に報告するときは「送った (受け付けられた)」 と「通った」 を分けて書き、 未確定のものを確定として記録しない。 結果の通知を待つ carrier (通知の送信元でメールを見張る等) を同じ turn に置く。 弾かれた通知は送信専用アドレスから届き、 メールの自動分類で埋もれやすい
 - <a id="multi-stage-completion"></a>🔥 **完了の段が複数あるサイトでは、「保存できた」 は「次に進める」 を意味しない**: 入力画面ごとに *下書き* と *確定* の 2 段 (以上) を持つサイトでは、 下書き保存の成功メッセージは正直であり、 かつ**到達点を語らない** — 確定の操作 (別の関数 / 確認画面を経る 2 段 click) を踏まないと、 全体の提出・申請の操作がそもそも現れない。 自動化がこれを踏み外すと、 **全画面が「保存済み」 に見えるのに何も提出できない**状態で人に返る。
   - **段の名前 (画面に出る状態の語) を driver の判定に literal で焼かない** — 画面・種目・言語で綴りが揺れる。 「次に進めるか / 進めないか」 の 2 値に正規化し、 綴りの実測は instance 側の台帳に置く。
   - **完了条件は「操作を呼べた」 ではなく「一覧の状態が変わった」** (= 本節の一般則の適用)。 保存関数を呼んだ後に一覧を読み戻し、 段が上がっていなければ確定の操作が残っている、 と判定する。
