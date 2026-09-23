@@ -204,7 +204,7 @@ def staged_warnings(repo, days: int) -> list[str]:
             continue
         prior = run("log", f"--since={days}.days", "--format=%H", "HEAD", "--", path).split() if has_head else []
         n = len(prior) + 1
-        if n < FREQ_VERSIONS and size * n < PATH_TOTAL_MIB * 2**20:
+        if n < 2 or (n < FREQ_VERSIONS and size * n < PATH_TOTAL_MIB * 2**20):  # 1 版目は増え方でない (大きさは上で見た)
             continue
         row = {"path": path, "crypt": path in crypt_paths(repo, [path])}
         out.append(f"⚠️ check-history-growth: {path} はこの commit で直近 {days} 日の {n} 版目 (1 版 {_mib(size)}、 "
