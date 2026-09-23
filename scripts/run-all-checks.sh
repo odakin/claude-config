@@ -131,6 +131,23 @@ check_conflict_markers() {
 }
 run "conflict markers (git grep)" check_conflict_markers
 
+# 6b. yaml.safe_load を直に呼ぶ code の再混入。 純 Python 版の読み込み器は C 版 (libyaml) の約 10 倍遅く、
+#     SessionStart の hook が同時に台帳を読むと、 それが時間切れの主因になる (実測。 C 版で結果が同じことも実測)。
+#     書くときは各 script の _yaml_safe_load (C 版、 無い環境では純 Python 版に戻る) を使う。 注釈の中は数えない。
+check_fast_yaml() {
+    local hits
+    hits="$(git grep -n -E '(^|[^A-Za-z0-9_.])yaml\.safe_load(_all)?\(' -- 'scripts/*.py' 'hooks/*.py' 2>/dev/null \
+        | grep -v -E '^[^:]+:[0-9]+:[^#]*#.*yaml\.safe_load' \
+        | grep -v -E '`[^`]*yaml\.safe_load' || true)"
+    if [ -n "$hits" ]; then
+        echo "$hits"
+        echo "  ✗ yaml.safe_load を直に呼んでいる (C 版の約 10 倍遅い) → その file の _yaml_safe_load を使う"
+        return 1
+    fi
+    return 0
+}
+run "fast YAML loader (no bare yaml.safe_load)" check_fast_yaml
+
 # 7. mktemp の template で X の後ろに拡張子 (BSD/macOS では X が置換されず固定名 → 2 回目から失敗。 Linux CI では再現しない)
 run "mktemp template (X は末尾 = conventions/hook-authoring.md#mktemp-template-suffix)" \
     python3 scripts/check-mktemp-template.py .
