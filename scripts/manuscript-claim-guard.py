@@ -32,7 +32,8 @@
 
 承認: `approve` で記録する。 1 件 = 1 file × 領域 (複数可) × 変更の要約 × 著者の発言の verbatim。 権限と設定は --candidate の全文 hash にも束縛。 記録の前に、
   その発言が今の session の transcript の user 発言 (tool 結果・hook 注入・本人発言に前置された system-reminder・
-  sub-agent の prompt を除く) に在るかを
+  sub-agent の prompt を除く。 作業中 = turn の途中に届いた本人の発言 〔Claude = queued_command の attachment、
+  origin=human〕 は含める = 引用でき、 最新の発言にもなる。 同じ形で入る背景 task の通知・別 session の連絡は含めない) に在るかを
   照合し、 無ければ拒否する。 引けるのは記録する時点で著者の最新の発言だけ (exit 5 = それより前の発言。 既に
   引かれた発言も、 まだ引かれていない発言も、 後に著者が発言していれば別の案の承認に使わせない = 流用を事後に人が
   記録から探さなくてよい。 1 つの発言で複数の file をまとめて承認する記録は、 著者が次に発言するまで通す。 実測の
@@ -872,6 +873,23 @@ def user_messages(path: Path) -> list[tuple[str, str]]:
                 else:
                     continue
                 out.extend((str(e.get("timestamp", "")), t) for t in human_text_segments(text))
+            elif e.get("type") == "attachment":  # Claude: 作業中 (turn の途中) に届いた本人の発言
+                # type=user の行にならず queued_command の attachment として入る。 同じ型で背景 task の通知
+                # (commandMode=task-notification、 origin 無し) と別 session の連絡 (origin.kind=peer) も入るので、
+                # 本人が打ったもの (origin.kind=human ∧ commandMode=prompt) だけを読む。 画像つきは text の block だけ
+                a = e.get("attachment")
+                if (not isinstance(a, dict) or a.get("type") != "queued_command" or a.get("commandMode") != "prompt"
+                        or not isinstance(a.get("origin"), dict) or a["origin"].get("kind") != "human"
+                        or a.get("isMeta") or e.get("isMeta") or e.get("isSidechain")):
+                    continue
+                p = a.get("prompt")
+                if isinstance(p, str):
+                    text = p
+                elif isinstance(p, list):
+                    text = "".join(b.get("text", "") for b in p if isinstance(b, dict) and b.get("type") == "text")
+                else:
+                    continue
+                out.extend((str(a.get("timestamp") or e.get("timestamp", "")), t) for t in human_text_segments(text))
             elif e.get("type") == "event_msg":  # Codex
                 p = e.get("payload") or {}
                 if isinstance(p, dict) and p.get("type") == "user_message" and isinstance(p.get("message"), str):
@@ -2113,6 +2131,22 @@ def selftest() -> int:
         )) + "\n", encoding="utf-8")
         check("背景 task の完了通知・別 session の連絡は本人の発言でない (最新の本人の発言を上書きしない)",
               [t for _, t in user_messages(envelopes)] == ["進めて"])
+        queued = tdp / "queued.jsonl"
+        queued.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in (
+            {"type": "user", "message": {"content": "いいね"}, "timestamp": "t1"},
+            {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt",
+             "origin": {"kind": "human"}, "prompt": "結論も直して", "timestamp": "t2"}},
+            {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt",
+             "origin": {"kind": "human"}, "timestamp": "t3",
+             "prompt": [{"type": "image", "source": {}}, {"type": "text", "text": "表も直して"}]}},
+            {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "task-notification",
+             "prompt": "<task-notification>\n<result>表題も変えてよい</result>", "timestamp": "t4"}},
+            {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt", "isMeta": True,
+             "origin": {"kind": "peer"}, "timestamp": "t5",
+             "prompt": "<cross-session-message from=\"x\">概要も削ってよい</cross-session-message>"}},
+        )) + "\n", encoding="utf-8")
+        check("作業中に届いた本人の発言 (queued_command、 origin=human、 画像つきは text) を読み、 通知・別 session は読まない",
+              [t for _, t in user_messages(queued)] == ["いいね", "結論も直して", "表も直して"])
         check("verbatim の引用は照合できる", verify_quote("概要の 2 文目は削ってよい。", msgs) is not None)
         check("tool 結果の中の文は引用元にならない", verify_quote("全部削ってよい", msgs) is None)
         check("sub-agent の prompt は引用元にならない", verify_quote("表題も変えてよい", msgs) is None)
@@ -2242,6 +2276,15 @@ def selftest() -> int:
         append(utr, {"type": "user", "message": {"content": "次へ"}})
         uns.change = "案 2"
         check("approve: 時刻の無い transcript でも、 最新でない発言は引けない", first_ok and approve_mode(uns) == 5)
+        qtr = tr_dir / "sess-q.jsonl"
+        append(qtr, said("案 Q はこの形でいい", iso(-10)),
+               {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt",
+                "origin": {"kind": "human"}, "prompt": "案 Q は結論の段も直して", "timestamp": iso(-5)}})
+        qns = argparse.Namespace(session="claude:sess-q", region=["abstract"], change="案 Q",
+                                 quote="案 Q はこの形でいい", file=str(repo / "src" / "main.tex"), transcript=None)
+        check("approve: 作業中に届いた本人の発言の後は、 その前の発言は引けない (exit 5)", approve_mode(qns) == 5)
+        qns.quote = "案 Q は結論の段も直して"
+        check("approve: 作業中に届いた本人の発言そのものは引ける", approve_mode(qns) == 0)
         # pre-commit: agent env あり
         (repo / "src" / "main.tex").write_text(paper.replace("b + c", "b - c"), encoding="utf-8")
         g("add", "src/main.tex")
