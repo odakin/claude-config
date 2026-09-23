@@ -31,11 +31,14 @@ finding (閾値は本 file の定数だけが持つ):
     python3 check-history-growth.py --repo ~/src/repo            # 1 repo
     python3 check-history-growth.py --root ~/src                  # 直下の全 repo
     python3 check-history-growth.py --root ~/src --top 5 --json   # 機械向け
-    python3 check-history-growth.py --staged                      # pre-commit: commit しようとしている版が何版目か (警告だけ)
+    python3 check-history-growth.py --staged                      # pre-commit: 何版目か・大きさを警告 (100 MiB 超だけ止める)
     python3 check-history-growth.py --selftest
 
 finding が無い repo は何も出さない (= 健全なら沈黙)。 exit は finding があっても 0 (検出器。 `--strict` で 1)。
-`--staged` は常に exit 0 (書いた本人への知らせで、 commit は止めない。 検査が走らなければ ⚪ を 1 行出す)。
+`--staged` は知らせるだけで commit を止めない (exit 0) — 例外は 1 つ、 **GitHub の上限 (1 file 100 MiB) を超える file** は
+push が拒否され、 commit すると履歴から消すまで同期が止まるので、 `check-history-growth: BLOCK` の見出しつきで exit 1。
+50 MiB 超は残りの余白つきで警告 (暗号化や作り直しで少し増えただけで上限を越える)。 検査が走らなければ ⚪ を 1 行出して exit 3
+(= 故障を違反と同じ値にしない、 呼び元は 1 ∧ 見出しのときだけ止める)。
 
 ## 限界
 
@@ -59,6 +62,10 @@ FREQ_VERSIONS = 20        # 期間内の版数 …
 FREQ_MIN_KIB = 256        # … ∧ 最新の版の大きさ
 REPO_TOTAL_MIB = 150      # 期間内の repo 全体の binary の版の合計
 SNIFF = 8000              # git の binary 判定と同じ窓
+# GitHub の 1 file の制限 (公式 docs "About large files on GitHub": 50 MiB で警告・100 MiB を超えると push を拒否)
+WARN_FILE_MIB = 50
+HARD_FILE_MIB = 100
+BLOCK_MARK = "check-history-growth: BLOCK"   # pre-commit はこの見出し ∧ exit 1 のときだけ止める
 
 GIT_ENV_DROP = ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_OBJECT_DIRECTORY")
 
@@ -184,6 +191,15 @@ def staged_warnings(repo, days: int) -> list[str]:
         if not sha:
             continue
         size = blob_sizes(repo, [sha]).get(sha, 0)
+        # 1 file の大きさ (text も含む): 上限を超えた commit は push できない = ここで止める (BLOCK_MARK)
+        if size > HARD_FILE_MIB * 2**20:
+            out.append(f"⛔ {BLOCK_MARK} {path} は {size / 2**20:.2f} MiB — GitHub は {HARD_FILE_MIB} MiB を超える file を push で拒否する"
+                       f" (commit すると履歴から消すまで push できない)。 追跡しない・分ける・解像度を下げる ({DOC}#hosting-limits)")
+            continue
+        if size > WARN_FILE_MIB * 2**20:
+            out.append(f"⚠️ check-history-growth: {path} は {size / 2**20:.2f} MiB — GitHub の推奨 ({WARN_FILE_MIB} MiB) 超。"
+                       f" 上限 {HARD_FILE_MIB} MiB まで残り {_mib(HARD_FILE_MIB * 2**20 - size)} (作り直して少し増えると push できない、"
+                       f" {DOC}#hosting-limits)")
         if size < FREQ_MIN_KIB * 1024 or not is_binary_blob(repo, sha):
             continue
         prior = run("log", f"--since={days}.days", "--format=%H", "HEAD", "--", path).split() if has_head else []
@@ -288,6 +304,22 @@ def selftest() -> int:
         (fresh / "big.bin").write_bytes(b"\0" + rnd(FREQ_MIN_KIB * 1024 * 3))
         subprocess.run(["git", "-C", str(fresh), "add", "-A"], check=True, env=_env())
         check("commit 時: 最初の commit (HEAD 無し) でも落ちず、 1 版目は黙る", staged_warnings(fresh, 30) == [])
+        # 1 file の大きさ: 上限超は BLOCK、 推奨超は余白つきの警告 (text でも数える)
+        (fresh / "huge.bin").write_bytes(b"\0" + rnd(HARD_FILE_MIB * 2**20 + 10))
+        (fresh / "large.txt").write_text("y" * (WARN_FILE_MIB * 2**20 + 10))
+        subprocess.run(["git", "-C", str(fresh), "add", "-A"], check=True, env=_env())
+        sw = staged_warnings(fresh, 30)
+        check("commit 時: 上限 (100 MiB) を超える file は BLOCK の見出し",
+              any(BLOCK_MARK in w and "huge.bin" in w for w in sw))
+        check("commit 時: 推奨 (50 MiB) 超は警告だけ (text も)",
+              any("large.txt" in w and "残り" in w and BLOCK_MARK not in w for w in sw))
+        cwd = os.getcwd()
+        os.chdir(fresh)
+        try:
+            rc = main(["--staged"])
+        finally:
+            os.chdir(cwd)
+        check("commit 時: BLOCK があれば exit 1", rc == 1)
         # 期間: 90 日前の commit は 30 日の窓に入らず、 120 日の窓には入る
         old = Path(td) / "old"
         subprocess.run(["git", "init", "-q", "-b", "main", str(old)], check=True, env=_env())
@@ -328,11 +360,13 @@ def main(argv=None) -> int:
         return selftest()
     if a.staged:
         try:
-            for line in staged_warnings(Path.cwd(), a.days):
-                print(line, file=sys.stderr)
-        except Exception as e:  # 警告だけの段 = 壊れても commit を止めない。 ただし黙らない
+            lines = staged_warnings(Path.cwd(), a.days)
+        except Exception as e:  # 壊れても commit を止めない (故障 ≠ 違反 = exit 3)。 ただし黙らない
             print(f"⚪ check-history-growth --staged: 検査が走らなかった ({type(e).__name__}: {e})", file=sys.stderr)
-        return 0
+            return 3
+        for line in lines:
+            print(line, file=sys.stderr)
+        return 1 if any(BLOCK_MARK in l for l in lines) else 0
     targets = [Path(p).expanduser() for p in a.repo]
     if a.root:
         targets += repos_under(Path(a.root))
