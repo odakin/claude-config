@@ -1094,6 +1094,8 @@ def claude_edits(event: dict) -> list[tuple[Path, str, str]]:
             continue
         if a not in new:
             return []  # tool 自身が失敗する
+        if b == "" and not a.endswith("\n") and (a + "\n") in new:
+            a += "\n"  # Claude Code の Edit は削除 (new_string が空) のとき直後の改行も消す (実測) = 実物と同じ結果で判定する
         new = new.replace(a, b) if e.get("replace_all") else new.replace(a, b, 1)
     return [(p, old, new)]
 
@@ -2214,6 +2216,8 @@ def selftest() -> int:
                              "old_string": " The conductivity grows linearly.", "new_string": ""}}
         edits = claude_edits(ev)
         rel_changes = protected_changes("src/main.tex", edits[0][1], edits[0][2], repo)
+        check("hook: 空の new_string の削除は直後の改行も消えた結果で判定 (Claude Code の Edit と同じ)",
+              edits[0][2] == paper.replace(" The conductivity grows linearly.\n", ""))
         check("hook: 承認なしの概要の削除は未承認", len(unapproved(rel_changes, repo, ("claude", "sess-1"))) == 1)
         ns = argparse.Namespace(session="claude:sess-1", region=["abstract"], change="概要の 2 文目を削る",
                                 quote="まったく別の文", file=str(repo / "src" / "main.tex"), transcript=None)
