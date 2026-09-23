@@ -91,6 +91,32 @@ def _close_boxes(src, dst):
     return dst
 
 
+def with_copy_page(src, plain, page_index: int, dst, anchor: str | None = None, dpi: int = 300):
+    """当事者に送る 1 本 (form-case-pipeline.md #recipient-send-version): 束の 1 頁 (0 始まり) だけを白黒の raster
+    (= コピーに見える) に差し替える。 src = 押印済みの束 (無ければ plain)、 plain = 刷る頁の宣言を持つ押印なしの束。
+    anchor を渡すと、 その頁の字にその語が無いとき止める (雛形の頁の並びが変わった)。 認印の画像の印と宣言を引き継ぐ。"""
+    import fitz
+
+    sys.path.insert(0, str(CC / "lib"))
+    from seal_artifact import copy_marker
+
+    d = fitz.open(str(src))
+    if anchor is not None and anchor not in "".join(d[page_index].get_text().split()):
+        raise BuildError(f"{page_index + 1} 頁目に「{anchor}」 が無い = recipe の頁の前提外")
+    out = fitz.open()
+    for i, pg in enumerate(d):
+        if i != page_index:
+            out.insert_pdf(d, from_page=i, to_page=i)
+            continue
+        pix = pg.get_pixmap(dpi=dpi, colorspace=fitz.csGRAY)
+        np_ = out.new_page(width=pg.rect.width, height=pg.rect.height)
+        np_.insert_image(np_.rect, pixmap=pix)
+    copy_marker(d, out)
+    PP.copy_record(fitz.open(str(plain)), out)
+    out.save(str(dst), deflate=True)
+    return Path(dst)
+
+
 def _raster(src, dst, dpi=600):
     """印刷用の raster PDF (subset font の printer 化け対策、 層1 #print-raster-pdf。 pdf_form_fill と同じ作り)。
     刷る頁の宣言 (層1 print_pages) を引き継ぐ (= raster は字が無く、 刷る直前の gate が中身を読めないため)。"""

@@ -375,6 +375,7 @@ def run() -> int:
         _view_lint_tests(tmp, expect)
         _case_readme_tests(tmp, expect)
         _value_from_tests(tmp, expect)
+        _copy_page_tests(tmp, expect)
         from .selftest_docx import run_docx_tests, run_page_role_tests
 
         run_docx_tests(tmp, expect)
@@ -400,6 +401,32 @@ def run() -> int:
         shutil.rmtree(tmp, ignore_errors=True)
     print("selftest:", "ALL PASS" if ok else "FAILED")
     return 0 if ok else 1
+
+
+def _copy_page_tests(tmp, expect) -> None:
+    """recipes.with_copy_page = 当事者に送る 1 本 (#recipient-send-version): 1 頁だけ白黒の raster に差し替える。"""
+    import fitz
+
+    from .recipes import PP, BuildError, with_copy_page
+
+    plain = tmp / "cp_plain.pdf"
+    d = fitz.open()
+    for t in ("合成 旅費請求書", "合成 依頼書", "合成 承諾書"):
+        d.new_page().insert_text((72, 72), t, fontname="japan")
+    PP.write_record(d, [{"role": "submit", "label": t} for t in ("a", "b", "c")], "selftest")
+    d.save(plain)
+    out = with_copy_page(plain, plain, 1, tmp / "cp_out.pdf", anchor="依頼書")
+    o = fitz.open(out)
+    expect("with_copy_page: 頁数は変わらない", o.page_count == 3)
+    expect("with_copy_page: 差し替えた頁は字を持たない (raster)", o[1].get_text().strip() == "")
+    expect("with_copy_page: 他の頁は元のまま", "旅費請求書" in "".join(o[0].get_text().split()))
+    expect("with_copy_page: 刷る頁の宣言を引き継ぐ", PP.read_record(o) is not None)
+    try:
+        with_copy_page(plain, plain, 0, tmp / "cp_bad.pdf", anchor="依頼書")
+        stopped = False
+    except BuildError:
+        stopped = True
+    expect("with_copy_page: 頁の目印が無ければ止める", stopped)
 
 
 def _value_from_tests(tmp, expect) -> None:
