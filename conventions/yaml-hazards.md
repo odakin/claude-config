@@ -18,6 +18,16 @@ YAML の「脆さ」 は独立な 2 軸に分解される。 軸ごとに対処�
 - Python: 常に `yaml.safe_load` (または `CSafeLoader`)。 `yaml.load` / `full_load` を
   新規 code に書かない。
 - JS: js-yaml v4+ は default safe。
+- <a id="fast-safe-loader"></a>**安全性は `yaml.safe_load` と `CSafeLoader` で同じ、 速さは違う**:
+  `yaml.safe_load` は純 Python の `SafeLoader` を使い、 C 版の `CSafeLoader` (libyaml) より
+  約 10 倍遅い (実測)。 同じ台帳を多数の process が同時に読む場面 (session 開始の hook 群・
+  定期 job) では、 これだけで CPU が詰まって時間切れになる (単独で測ると気づかない = 同時に
+  走らせて測る)。 各 file に
+  `yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))` の helper を置いて
+  使う (C 版の無い環境では `SafeLoader` に戻る)。 切り替える前に、 手元の全 YAML を両方の
+  読み込み器で読んで結果が一致することを確かめる (実測では差 0)。 置き換えは tokenize で
+  呼び出しの token だけを対象にし、 文字列と注釈の中は変えない。 本 repo では
+  `scripts/run-all-checks.sh` が `yaml.safe_load` を直に呼ぶ code の再混入を止める。
 - XML でも同型: 外部入力の parse は defusedxml を第一選択 (stdlib ElementTree は
   entity 爆発に弱い)。
 
