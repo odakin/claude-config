@@ -33,7 +33,11 @@ source (`.tex` / script / 元の data) が repo にあるなら、 生成物は 
 
 1. **追跡しない** (`.gitignore` に書く) — 既定。 source だけを commit する
 2. **読むために置いているなら別の経路で配る** — 携帯で読む・手元で最新を見るのが目的なら同期フォルダへ写す
-   ([`latex.md#built-pdf-phone-sync`](latex.md#built-pdf-phone-sync))。 共同編集者に渡すなら release やメールの添付
+   ([`latex.md#built-pdf-phone-sync`](latex.md#built-pdf-phone-sync)、 git から外した PDF も写り、 共同編集者が source だけ push した文書は手元で組み直してから写す)。
+   **共同編集の repo では、 各自の git push で発火する仕組みを repo に仕込む** ([`templates/shared-project/pdf-publish/`](../templates/shared-project/pdf-publish/)、 配る = [`scripts/install-pdf-publish.py`](../scripts/install-pdf-publish.py)):
+   pre-push hook が push した文書の PDF を (古ければ組み直して) 共有フォルダへ背景で写す。 発火が各自の手元の push なので、 無人の定期実行
+   (launchd は同期フォルダに書けない = [`launchd-cloudstorage-tcc.md`](launchd-cloudstorage-tcc.md)) も新しい API 権限も要らない。
+   共同編集者は claude-config を持たないので、 repo には単体で動く写しを置く (drift は `install-pdf-publish.py check`)
 3. **控えとして残す必要がある版だけ commit する** — 投稿した版・提出した版など節目だけ。 版は tag で指す
    (file 名に版番号を入れない = [`CONVENTIONS.md`](../CONVENTIONS.md#git-conventions))。 途中の build は commit しない
 

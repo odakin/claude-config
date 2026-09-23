@@ -82,6 +82,8 @@ PDF / 成果物を Dropbox 等で**別経路配信**している共有リポで�
 ```
 LaTeX リポの場合は [conventions/latex.md](latex.md) の .gitignore セクションも参照。
 
+
+<a id="built-pdfs-not-in-git"></a>**build した PDF は commit しない** — 共同編集者の分も含めて毎回まるごと履歴に積まれる。 PDF は .gitignore に入れ、 相手の最新は各自の push で発火する共有フォルダへの写しで見る (仕組み = [`templates/shared-project/pdf-publish/`](../templates/shared-project/pdf-publish/)、 正本 = [`repo-history-growth.md#generated-binaries`](repo-history-growth.md#generated-binaries))。 既存の repo に入れるときは共同編集者の了解を取ってから (pull で手元の PDF が一度消える)。
 ## パスの記述
 CLAUDE.md・SESSION.md 等でローカルパスを書くときは `~` 表記を使う（`/Users/<user>/` は共同編集者の環境で壊れる）。
 
