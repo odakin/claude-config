@@ -204,8 +204,9 @@ hook や installer が「この file は exec できるか」 を見る必要が
 - **直し方**: 書き手を pipeline の外に出す。 `bash hook.sh < <(payload)` (process substitution) なら `printf` は pipeline の要素ではないので、 その死は pipeline の rc に混ざらない。 payload を 1 度だけ file に書いて `< "$f"` で渡すのも同じ効果 (bash 3.2 でも動く)。
 - hook を**書く側**の対処 = 早期 return の前に stdin を捨てる (`cat >/dev/null 2>&1 || true`) 手もあるが、 無効化の経路まで入力を読むのは本末転倒 (= 止めたい処理の手前で読む)。 **呼ぶ側を直すのが既定**。
 - 一般則としては [§0 補足 2](#substitution-fallback-stdout-mixing) の「見かけの exit code を信用しない」 族の第 3 形: 補足 2 = fallback chain が前段の stdout を混ぜる / 同節の兄弟形 = `cmd | sed` が **後段**の rc を見る / 本節 = `writer | hook` が **前段**の rc を見る。 pipeline を挟んだら「その rc は誰のものか」 を毎回問う。
+- **逆向きの形 = hook が stdin を読み切るのに、 test が stdin を渡さずに呼ぶ**: 書き手の EPIPE を避けるために入力を最後まで読む hook (SessionStart 等) を、 test の helper が stdin を指定せずに呼ぶと、 呼び元の stdin を継ぐ。 それが閉じない non-tty (agent の shell の socket 等) だと hook は入力待ちで止まり、 test 全体が timeout まで返らない (手元の terminal は tty なので、 `isatty` で読みを飛ばす実装では再現しない)。 **直し方**: helper で必ず `</dev/null` か payload を渡す。 hook 側で読むのをやめるのは上の EPIPE 対策を壊すので既定にしない。
 
-origin: 印刷の gate hook の test で、 無効化の env switch を立てた 1 件だけが 141 で落ちた (実測)。 hook は switch を見て stdin を読まずに exit しており、 test の `printf` が SIGPIPE で死んでいた。
+origin: 印刷の gate hook の test で、 無効化の env switch を立てた 1 件だけが 141 で落ちた (実測)。 hook は switch を見て stdin を読まずに exit しており、 test の `printf` が SIGPIPE で死んでいた。 逆向きの形も実測 = SessionStart の生存確認 hook の test が、 agent の shell から回した時だけ止まった。
 
 ---
 
