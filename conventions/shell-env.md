@@ -351,6 +351,9 @@ You must agree to the Xcode license agreements...
 | agent の session と hook | agent の設定の env (= 全 hook と shell 呼び出しに継承される) | 各 hook を個別に書き換える (= 数が多く、 次に増えた hook に効かない) |
 | OS の定期ジョブ (launchd / cron) | 各 job の **wrapper script 内で export** (= 配布物なので同期するだけで全機械に届く)。 ⚠️ `python3` 自体も PATH で解決せず [#job-python-by-capability](#job-python-by-capability) で選ぶ | agent の設定 (= OS のジョブは読まない) / job 定義ファイルの環境変数 (= 機械ごとに再登録が要る) |
 | 独立した常駐 helper・GUI helper | script 側で**起動できる実体を probe して選ぶ** (= env を継がない) | 上の 2 つ |
+| 本人の対話 shell (terminal) | login shell の起動 file (`~/.zshenv` 等) で、 CommandLineTools の存在と `DEVELOPER_DIR` 未設定を確かめてから export | 上の 3 つ (= agent・job・helper を直しても、 system default の developer dir は Xcode を指したまま) |
+
+⚠️ **本人の terminal は見落としやすい**: 上の 3 面を直した後でも、 本人が terminal で直に叩いた `python3` だけが license の同意を求めた (実測)。 対話 shell で固定したら、 terminal から `xcodebuild` / `xcrun simctl` を使う時だけ `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` を前置する。 `xcode-select -s` で system default ごと変える手もあるが、 Xcode を前提にする道具まで巻き込みうるので既定にしない。 本人に terminal で実行してもらう command を渡すときは、 その command が shim の python を起動するか (= この gate を踏みうるか) を先に考える
 
 ⚠️ **「軽いから安全」 に見える probe ほど実行可能性に依存している**: `--version` / `--help` / `which` は、 この gate が閉じていると**何も返さない**。 その空を「非対応」 と読むと別の silent な後退を生む (= [convention-design-principles.md §22](../docs/convention-design-principles.md#silent-probe-false-healthy))。
 

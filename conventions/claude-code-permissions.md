@@ -56,6 +56,7 @@ cwd 配下のファイルは確認なしで編集できるのに、cwd の**外*
 - **やってはいけないこと**: user の「許可」 を受けて同じ call をそのまま打ち直す。 同じ理由で落ちるだけで、 user には「言ったのに無視された」 と見える。 **2 回目を打つ前に、 何が拒否したのか (rule / hook / classifier) を確定させる**
 - **消し方は 3 つ**: (a) user が mode を `default` に変える (= dialog が本人に届くようになる) (b) settings に rule を足す (c) **その操作をやめ、 user の手元で実行してもらう**
 - ⚠️ **機密を守るための `deny` なら (c) が既定**。 deny を外すのは boundary の設計判断そのものを変える行為なので、 「user が作業を望んでいる」 を根拠に Claude の判断で外さない (= 外す/戻すの往復中に別の call が素通りする窓も開く)。 対象 file だけを許可 scope に出してもらう形は [`confidential-repo-boundary.md#work-on-a-copy-not-by-lowering-the-gate`](confidential-repo-boundary.md#work-on-a-copy-not-by-lowering-the-gate)
+- <a id="classifier-deny-other-session"></a>⚠️ **止められた操作を別 session に回して通すのも迂回** (2026-09-23 追加、 実測) — classifier の判定は session ごとで、 同じ操作が並列 session では通ることがある。 並列 session への依頼に載せてよいのは、 **owner がその操作を明示に望んでいる時だけ**。 依頼文に「自分の session で止められた事実」 と「owner の発言」 を書く (= 受け手が同じ判断を持てるように)。 通ったら、 どの session が当てたかを owner に報告する (= 残すか戻すかは owner が決める)。 owner の明示の発言が無いなら (c) に戻す
 - 変数間接で literal match を外して通すのは**回避**であってやらない (= gate の意図を無効化する。 [§この gate の限界](#ask-pattern-action-anchor) は「敵対的回避への防御ではない」 と書いているが、 それは**書き手が守る前提**の上での話)
 
 ## 反映タイミング
