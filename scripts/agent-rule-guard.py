@@ -364,7 +364,9 @@ def insertion_exemption(path: str, old: str, new: str,
     free = []
     old_bodies = {zid: old[a:b] for zid, a, b in free_zones(old)}
     for zid, a, b in free_zones(new):
-        if new[a:b] == old_bodies.get(zid):
+        # a zone that did not exist before was created by a locked change (its markers need approval), so its
+        # initial body is not "written into a free zone"
+        if zid not in old_bodies or new[a:b] == old_bodies[zid]:
             continue
         before = Counter(u for u, _ in _units(old_bodies.get(zid, "")))
         written = " ".join((Counter(u for u, _ in _units(new[a:b]) if u != "\n") - before).elements())
@@ -839,6 +841,10 @@ def selftest() -> int:
     r = insertion_exemption("CLAUDE.md", zoned, zoned.replace("- a: 進行中", "- a: 進行中、 確認不要"))
     check("relaxation words inside a free zone are logged, not blocked",
           r is not None and r["ok"] and r["free"] and r["free"][0][1] == "不要")
+    unzoned = zoned.replace("<!-- agent-free:begin id=status -->\n", "").replace("<!-- agent-free:end id=status -->\n", "")
+    r = insertion_exemption("CLAUDE.md", unzoned, zoned)
+    check("creating a zone (a locked change) does not log its initial body as written into the zone",
+          r is not None and not r["ok"] and r["free"] == [])
     print(f"agent-rule-guard selftest: {len(failures)} failure(s)")
     return bool(failures)
 
