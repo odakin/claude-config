@@ -20,6 +20,9 @@ repo は縮まない。 落とすには履歴を書き換えて force-push す�
     # 3. 他の machine で 1 回: 手元の HEAD と「落とした file を除いて同じ中身」 の commit が新しい履歴に在るときだけ ref を動かす
     python3 git-drop-path-history.py follow --local ~/src/repo --path TODO.yaml
 
+    # 4. (任意) 手元を今すぐ縮める: 旧 object は手元の reflog が掴んでいて、 放っておけば 30 日後の自動 gc まで残る
+    python3 git-drop-path-history.py shrink --local ~/src/repo
+
 - 予行演習は **remote からの mirror clone** で行う (手元の checkout から clone すると stash など手元の ref まで運ぶ)。
   `--prune-empty never` で、 その file だけを変えた commit も空 commit として残す (message に残した判断の記録を失わない。
   大きさは blob で決まるのでほぼ変わらない)。 検証 = file が残る commit 0 件 / 既定 branch の tree が不変 / commit 数が不変。
@@ -28,6 +31,9 @@ repo は縮まない。 落とすには履歴を書き換えて force-push す�
   手元は中身が同じなので `git reset --keep` で ref だけ動かす (未 commit の変更は保たれる)。
 - 追従は、 見つからなければ止まる (= 未 push の commit がある)。 `git pull --rebase` は古い commit を新しい履歴に積み直すので使わない。
   出力: 揃えた時は「揃えた」 を含む 1 行 (呼び元が 1 回だけ知らせる目印)、 既に揃っている / clone が無い時は exit 0、 止まった時は exit 1。
+- 本番・追従の直後、 手元の `.git` は書き換え前より**大きい** (旧 object を reflog が掴んだまま新しい object が増える、 実測)。
+  `shrink` は届かない reflog を今すぐ切って gc する。 stash が在れば止まる (古い stash は reflog にしか無く、 切ると消える)。
+  戻れなくなるのは手元だけ = 書き換えの前に取った bundle が控え。
 
 ## 限界
 
@@ -171,6 +177,7 @@ def cmd_apply(a) -> int:
     if a.map_out and cm.exists():
         shutil.copy(cm, Path(a.map_out).expanduser())
         print(f"  旧 → 新 SHA の対応表: {a.map_out}")
+    print(f"  手元の .git は旧 object を reflog が掴んだまま (30 日後の自動 gc まで)。 今すぐ縮めるなら shrink --local {local}")
     return 0
 
 
@@ -200,6 +207,26 @@ def cmd_follow(a) -> int:
         return 1
     git(local, "reset", "-q", "--keep", target)
     print(f"{name}: 新しい履歴に揃えた (手元の HEAD = 新履歴の {found[:7]} と同じ中身 → {a.branch} = {git(local, 'rev-parse', '--short', 'HEAD')})")
+    return 0
+
+
+# ---------------------------------------------------------------- shrink
+
+def cmd_shrink(a) -> int:
+    local = Path(a.local).expanduser()
+    name = local.name
+    if not (local / ".git").exists():
+        print(f"{name}: clone が無い = skip")
+        return 0
+    if git(local, "stash", "list"):
+        print(f"{name}: stash が在る = 止まる (古い stash は reflog にしか無く、 reflog を切ると消える。 先に stash を片付ける)",
+              file=sys.stderr)
+        return 1
+    before = git(local, "count-objects", "-vH")
+    git(local, "reflog", "expire", "--expire-unreachable=now", "--all")
+    git(local, "gc", "-q", "--prune=now")
+    after = git(local, "count-objects", "-vH")
+    print(f"{name}: 手元を縮めた ({_pack(before)} → {_pack(after)})")
     return 0
 
 
@@ -303,6 +330,23 @@ def selftest() -> int:
               git(local2, "rev-parse", "HEAD") == git(new, "rev-parse", "HEAD")
               == git(local2, "ls-remote", str(remote2), "refs/heads/main").split("\t")[0])
         check("本番: 手元の未 commit の file は残る", (local2 / "wip.txt").exists())
+        # shrink: 手元の reflog だけが掴む旧 commit を落とす / stash が在れば止まる
+        gone = git(local2, "rev-parse", "HEAD")
+        (local2 / "x.txt").write_text("to be orphaned\n")
+        git(local2, "commit", "-q", "-am", "orphan")
+        orphan = git(local2, "rev-parse", "HEAD")
+        git(local2, "reset", "-q", "--keep", gone)
+        git(local2, "stash", "-q", "-u")
+        check("縮める: stash が在れば止まる (reflog を切らない)",
+              cmd_shrink(argparse.Namespace(local=str(local2))) == 1
+              and subprocess.run(["git", "-C", str(local2), "cat-file", "-e", orphan], env=_env()).returncode == 0)
+        git(local2, "stash", "pop", "-q")
+        check("縮める: 前提が揃えば届かない旧 commit が消える",
+              cmd_shrink(argparse.Namespace(local=str(local2))) == 0
+              and subprocess.run(["git", "-C", str(local2), "cat-file", "-e", orphan], capture_output=True,
+                                 env=_env()).returncode != 0)
+        check("縮める: 手元の HEAD と未追跡の file はそのまま",
+              git(local2, "rev-parse", "HEAD") == gone and (local2 / "wip.txt").exists())
         check("hook の env (GIT_INDEX_FILE) を子の git に渡さない",
               "GIT_INDEX_FILE" not in _env() if "GIT_INDEX_FILE" in os.environ else True)
     print(f"selftest: {'FAILED ' + str(len(fails)) if fails else 'ALL PASS'}")
@@ -351,6 +395,8 @@ def main(argv=None) -> int:
     f.add_argument("--path", required=True)
     f.add_argument("--branch", default="main")
     f.add_argument("--max", type=int, default=300)
+    k = sub.add_parser("shrink")
+    k.add_argument("--local", required=True)
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
@@ -362,6 +408,8 @@ def main(argv=None) -> int:
         return cmd_apply(a)
     if a.cmd == "follow":
         return cmd_follow(a)
+    if a.cmd == "shrink":
+        return cmd_shrink(a)
     ap.print_help()
     return 2
 
