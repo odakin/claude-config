@@ -40,14 +40,20 @@ Gmail の読み = lib/gmail_read.py。
                   [--summary "<3 行まで>"] [--slug <romaji>|--id <entry id>] [--ledger-for-new <name>] [--no-todo] [--apply]
   record-reply.py --check | --schema | --migrate <ledger> [--remigrate] [--apply] [--limit N] [--only <id>] | --selftest
   設定 option: --root DIR --ledger NAME (複数) --accounts a,b,c --creds-dir DIR --owner-token TOKEN (複数)
-              --status-enum a,b,c --category-in / --category-out --ctx-reply / --ctx-sent (template) --tz NAME
-              --cache-dir DIR --month-header "<template>"
+              --status-enum a,b,c --category-in / --category-out --tz NAME --cache-dir DIR --month-header "<template>"
+              現在地の template (最新の記録 message で選ぶ): --ctx-reply = 相手発で、 thread に自分の先行 message が在る /
+              --ctx-new-in = 相手発で、 自分の先行 message が無い (新規の受信・相手の追送) / --ctx-sent = 自分発で、 相手の
+              先行 message が在る (返信) / --ctx-new-out = 自分発で、 相手の先行 message が無い (新規の送信・自分の追送)
+
+相手 ({name} と索引の名前): 相手発 = 差出人、 自分発 = 宛先 (To → Cc → Bcc の順に自分の address を除いた最初の人、
+  残りは ` +N`)。 自分宛てだけの message は宛先 (= 自分) をそのまま出す。
 
 selftest (= 偽の Gmail + 2 台帳の fixture、 API に触らない): t1 legacy 4 書式から未記録 = 全 message − harvester の集合 /
   t2 片方の台帳にしか無い entry を辿る / t3 書いた id の round-trip / t4 dry-run は byte 不変 / t5 項目の現在地・updated・
   email_ref / t6 --check が印 ≠ 最新を赤に / t7 notes を作らない・summary 4 行目 warn・enum 外を拒む / t8 再 parse 失敗で
   戻す / t9 status_context は 1 行の JSON 文字列 / t10 移行は message として記録した id だけ / t11 root を載せない /
-  t12 --remigrate は root の行だけ外す。
+  t12 --remigrate は root の行だけ外す / t13 todo/<id>.yaml の項目 / t14 自分発の相手 = 宛先 (索引と現在地)、
+  返事でない message は --ctx-new-out / --ctx-new-in。
 """
 from __future__ import annotations
 
@@ -60,6 +66,7 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from email.utils import getaddresses
 from pathlib import Path
 
 def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
@@ -99,8 +106,10 @@ class Config:
     status_enum: set[str] | None = None      # None = 検査しない
     category_in: str = "received"
     category_out: str = "sent"
-    ctx_reply: str = "{date} reply from {name} ({subj}) → next: {next}"
-    ctx_sent: str = "{date} sent to {name} ({subj}) → next: {next}"
+    ctx_reply: str = "{date} reply from {name} ({subj}) → next: {next}"        # 相手発・返事
+    ctx_sent: str = "{date} replied to {name} ({subj}) → next: {next}"         # 自分発・返信
+    ctx_new_in: str = "{date} mail from {name} ({subj}) → next: {next}"        # 相手発・返事でない
+    ctx_new_out: str = "{date} sent to {name} ({subj}) → next: {next}"         # 自分発・返信でない
     tz: str = "local"
     cache_dir: Path = Path.home() / ".cache" / "record-reply"
     month_header: str = "# {year}-{month:02d} mail ledger"
@@ -228,9 +237,36 @@ def from_display(from_hdr: str) -> str:
     return (m.group(1) if m else s) or "(unknown)"
 
 
+def counterpart(cfg: Config, m: dict) -> str:
+    """message の相手 = 相手発なら差出人、 自分発なら宛先 (To → Cc → Bcc の順に、 自分の address を除いた最初の人 + ` +N`)。
+
+    自分発に差出人を出すと常に自分の名前になり、 「→ 自分」 が「自分宛て」 に読める (= 索引と現在地の両方で誤読の元)。
+    """
+    if not owner_from(m.get("from", ""), cfg.owner_tokens):
+        return from_display(m.get("from", ""))
+    for fld in ("to", "cc", "bcc"):
+        people = [(n.strip(), a.strip()) for n, a in getaddresses([m.get(fld) or ""]) if (n or a).strip()]
+        others = [(n, a) for n, a in people if not owner_from(f"{n} <{a}>", cfg.owner_tokens)]
+        if others:
+            n, a = others[0]
+            return (n or a) + (f" +{len(others) - 1}" if len(others) > 1 else "")
+    return from_display(m.get("to") or m.get("from", ""))   # 自分宛てだけ (控えの自分送り)
+
+
+def answers_other_side(cfg: Config, msgs: list[dict], m: dict) -> bool:
+    """m より前に、 m の差出人と反対側 (自分 ⇔ 相手) の message が thread に在るか (= m は返事か)。"""
+    ours = owner_from(m.get("from", ""), cfg.owner_tokens)
+    for x in msgs:
+        if x["id"] == m["id"]:
+            return False
+        if owner_from(x.get("from", ""), cfg.owner_tokens) != ours:
+            return True
+    return False
+
+
 def message_line(cfg: Config, m: dict) -> str:
     arrow = "→" if owner_from(m.get("from", ""), cfg.owner_tokens) else "←"
-    return f"mid:{m['id']} {stamp(cfg, m.get('internalDate'))} {arrow} {from_display(m.get('from', ''))}"
+    return f"mid:{m['id']} {stamp(cfg, m.get('internalDate'))} {arrow} {counterpart(cfg, m)}"
 
 
 def upto_value(cfg: Config, m: dict) -> str:
@@ -649,8 +685,9 @@ def show_plan(cfg: Config, p: dict, out=print) -> None:
 def compose_context(cfg: Config, p: dict, today: str, nxt: str) -> str:
     rec = [m for m in p["msgs"] if m["id"] in p["record"]]
     latest = rec[-1] if rec else p["msgs"][-1]
-    name, subj = from_display(latest.get("from", "")), (latest.get("subject") or "")[:40]
-    tpl = cfg.ctx_sent if owner_from(latest.get("from", ""), cfg.owner_tokens) else cfg.ctx_reply
+    name, subj = counterpart(cfg, latest), (latest.get("subject") or "")[:40]
+    ours, answer = owner_from(latest.get("from", ""), cfg.owner_tokens), answers_other_side(cfg, p["msgs"], latest)
+    tpl = (cfg.ctx_sent if answer else cfg.ctx_new_out) if ours else (cfg.ctx_reply if answer else cfg.ctx_new_in)
     return tpl.format(date=today, name=name, subj=subj, next=nxt)
 
 
@@ -788,8 +825,8 @@ SCHEMA_EXAMPLE = '''- id: "2026-01-15-example-payment-received"      # 命名 = 
   threadId: "0000000000000001"
   messageId: "0000000000000002"                    # 最初に記録した message (互換)
   recorded_upto: "messageId:0000000000000003 (2026-01-22 16:56)"   # 読んだ位置の印。 道具だけが進める
-  messages:                                        # 機械が書く索引 (1 通 1 行、 ← 相手発 / → 自分発)
-    - "mid:0000000000000001 2026-01-03 10:00 → Owner Example"
+  messages:                                        # 機械が書く索引 (1 通 1 行、 名前 = 相手: ← 相手発の差出人 / → 自分発の宛先)
+    - "mid:0000000000000001 2026-01-03 10:00 → Example Admin"
     - "mid:0000000000000002 2026-01-15 21:25 ← Example Admin"
     - "mid:0000000000000003 2026-01-22 16:56 ← Example Admin"
   category: received                               # message の素性だけ (案件の状態は項目側)
@@ -951,12 +988,14 @@ def _selftest() -> int:
         if not cond:
             fails += 1
 
-    def msg(mid, ts, frm, subj="Re: test", body="本文\n> 引用"):
-        return {"id": mid, "internalDate": str(ts), "from": frm, "to": "owner@example.org", "cc": "",
-                "subject": subj, "date": "", "body": body}
-
     T = 1790035200000  # = 2026-09-22 00:00 UTC の epoch ms (1 時間おきに 5 通)
     OW, CP = "Owner Example <owner@example.org>", "Counter Part <cp@example.org>"
+
+    def msg(mid, ts, frm, subj="Re: test", body="本文\n> 引用", to=None, cc="", bcc=""):
+        # 宛先の既定 = 実際の向き (自分発 → 相手、 相手発 → 自分)。 自分発にも自分を入れると相手の判定が試せない
+        return {"id": mid, "internalDate": str(ts), "from": frm, "to": to if to is not None else (CP if frm == OW else OW),
+                "cc": cc, "bcc": bcc, "subject": subj, "date": "", "body": body}
+
     m1, m2, m3, m4, m5 = "aaaa000000000001", "aaaa000000000002", "aaaa000000000003", "aaaa000000000004", "aaaa000000000005"
     threads = {("acct-a", m1): [msg(m1, T, OW), msg(m2, T + 3600000, CP), msg(m3, T + 7200000, CP),
                                 msg(m4, T + 10800000, CP, body="返事の本文です\n> 前の引用"), msg(m5, T + 14400000, OW)],
@@ -1002,13 +1041,13 @@ def _selftest() -> int:
         e1 = next(x for x in eo if x["id"] == "2026-09-20-e1")
         check(set(harvest_entry(e1)) >= {m1, m2, m3, m4, m5}, "t3 書いた entry の全 id が harvest_entry で拾われる (round-trip)")
         check(e1.get("recorded_upto") == f"messageId:{m5} (2026-09-22 04:00)", "recorded_upto = 最新の message (tz の刻印)")
-        check(e1.get("messages", [None])[0] == f"mid:{m1} 2026-09-22 00:00 → Owner Example" and len(e1.get("messages", [])) == 5,
-              "messages = legacy field の id も含めて thread の全 5 通、 日付順、 自分発は →")
+        check(e1.get("messages", [None])[0] == f"mid:{m1} 2026-09-22 00:00 → Counter Part" and len(e1.get("messages", [])) == 5,
+              "messages = legacy field の id も含めて thread の全 5 通、 日付順、 自分発は → + 宛先")
         check(not check_entry(e1) and "notes" not in e1 and e1.get("category") == "sent" and len(eo) == 2,
               "t7 notes を作らず category を触らない、 entry 数は不変")
         todo = _yaml_safe_load((td / "ledger-a" / "TODO.yaml").read_text(encoding="utf-8"))[0]
-        check(todo.get("status_context") == "2026-09-22 sent to Owner Example (Re: test) → next: read and answer",
-              "t5 status_context を上書き (最新は自分発 = ctx_sent template)")
+        check(todo.get("status_context") == "2026-09-22 replied to Counter Part (Re: test) → next: read and answer",
+              "t5 status_context を上書き (最新は相手の後の自分発 = ctx_sent template、 名前は宛先)")
         check(str(todo.get("updated")) == "2026-09-22" and todo.get("email_ref") == "threadId:aaaa000000000001",
               "t5 updated と email_ref (無かったので threadId 1 行)")
         raw_todo = (td / "ledger-a" / "TODO.yaml").read_text(encoding="utf-8")
@@ -1066,12 +1105,45 @@ def _selftest() -> int:
         tc = _yaml_safe_load(tc_raw)
         check(rc == 0 and isinstance(tc, dict) and tc["id"] == "2026-10-02-todo-c" and tc["status"] == "doing"
               and tc["email_ref"] == "threadId:dddd000000000001" and str(tc["updated"]) == "2026-09-22"
-              and tc["status_context"].startswith("2026-09-22 sent to Owner Example") and tc["notes"] == "keep me\n"
+              and tc["status_context"].startswith("2026-09-22 replied to Counter Part") and tc["notes"] == "keep me\n"
               and tc_raw.startswith("# section note\nid: ") and not tc_raw.startswith("- "),
               "t13 todo/<id>.yaml の項目は mapping のまま (注釈・block scalar を保って status / updated / email_ref / status_context を書く)")
         cin = _yaml_safe_load((td / "ledger-c" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8"))
         check(len(cin) == 1 and cin[0]["related_todo"] == ["2026-10-02-todo-c"] and not (td / "ledger-c" / "TODO.yaml").exists(),
               "t13 新規 entry は項目の台帳 (ledger-c) に、 旧 TODO.yaml は作らない")
+        # t14 自分発の新規 thread (宛先は素の address): 索引の → と現在地の名前は宛先、 動詞は「返信」 でなく「送信」
+        e_mid = "eeee000000000001"
+        threads[("acct-a", e_mid)] = [msg(e_mid, T, OW, subj="new request", to="cp@example.org")]
+        gm = FakeGmail(threads)
+        todo_e = td / "ledger-c" / "todo" / "2026-10-03-todo-e.yaml"
+        todo_e.write_text('id: "2026-10-03-todo-e"\ntask: |\n  ask cp\nstatus: open\ncreated: "2026-09-22"\n', encoding="utf-8")
+        ns6 = argparse.Namespace(target=e_mid, todo="2026-10-03-todo-e", account="acct-a", next="wait", status=None,
+                                 summary="new request.", slug="new-request", id=None, ledger_for_new=None, no_todo=False, apply=True)
+        out_lines.clear()
+        rc = run_record(cfg_c, ns6, Ledger(cfg_c), gm, "2026-09-22", pr)
+        ne = next((x for x in _yaml_safe_load((td / "ledger-c" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8"))
+                   if str(x.get("id", "")).endswith("-new-request-sent")), None)
+        te = _yaml_safe_load(todo_e.read_text(encoding="utf-8"))
+        check(rc == 0 and ne is not None and ne.get("messages") == [f"mid:{e_mid} 2026-09-22 00:00 → cp@example.org"],
+              "t14 新規送信の索引 = → + 宛先 (差出人 = 自分ではない)")
+        check(te.get("status_context") == "2026-09-22 sent to cp@example.org (new request) → next: wait",
+              "t14 新規送信の現在地 = ctx_new_out (返信 template でない) + 宛先")
+
+        def ctx_of(thread):
+            return compose_context(cfg, {"msgs": thread, "record": [thread[-1]["id"]]}, "2026-09-22", "n")
+        f1, f2, f3 = "ffff000000000001", "ffff000000000002", "ffff000000000003"
+        check(ctx_of([msg(f1, T, OW, subj="s"), msg(f2, T + 1, OW, subj="s")]) == "2026-09-22 sent to Counter Part (s) → next: n",
+              "t14 自分の追送 (相手の先行 message が無い) も ctx_new_out")
+        check(ctx_of([msg(f1, T, CP, subj="s")]) == "2026-09-22 mail from Counter Part (s) → next: n",
+              "t14 相手発の新規 thread は ctx_new_in (「返事」 でない)")
+        check(ctx_of([msg(f1, T, OW, subj="s"), msg(f2, T + 1, CP, subj="s")]) == "2026-09-22 reply from Counter Part (s) → next: n",
+              "t14 自分の後の相手発は ctx_reply")
+        three = f"{OW}, {CP}, Third Person <tp@example.org>"
+        check(counterpart(cfg, msg(f3, T, OW, to=three)) == "Counter Part +1"
+              and counterpart(cfg, msg(f3, T, OW, to="owner@example.org", bcc=CP)) == "Counter Part"
+              and counterpart(cfg, msg(f3, T, OW, to=OW)) == "Owner Example"
+              and counterpart(cfg, msg(f3, T, CP)) == "Counter Part",
+              "t14 相手 = 自分を除いた最初の宛先 (+N) / To が自分だけなら Bcc / 自分宛てだけは自分 / 相手発は差出人")
         pth = td / "ledger-a" / "inbox" / "2026-09.yaml"
         orig = pth.read_text(encoding="utf-8")
         try:
@@ -1102,7 +1174,7 @@ def _selftest() -> int:
               "t11 移行は threadId 由来の root を索引に載せない (message 集合が不変)")
         pth7.write_text(pth7.read_text(encoding="utf-8").replace(
             f'  messages:\n    - "mid:{m3} 2026-09-22 02:00 ← Counter Part"',
-            f'  messages:\n    - "mid:{m1} 2026-09-22 00:00 → Owner Example"\n    - "mid:{m3} 2026-09-22 02:00 ← Counter Part"\n'
+            f'  messages:\n    - "mid:{m1} 2026-09-22 00:00 → Counter Part"\n    - "mid:{m3} 2026-09-22 02:00 ← Counter Part"\n'
             f'    - "mid:{m4} 2026-09-22 03:00 ← Counter Part"').replace(
             f"messageId:{m3} (2026-09-22 02:00)", f"messageId:{m4} (2026-09-22 03:00)"), encoding="utf-8")
         out_lines.clear()
@@ -1129,7 +1201,8 @@ def build_config(args) -> Config:
                  creds_dir=Path(args.creds_dir).expanduser(), owner_tokens=tuple(args.owner_token or ()),
                  status_enum=(set(x for x in args.status_enum.split(",") if x) if args.status_enum else None),
                  category_in=args.category_in, category_out=args.category_out,
-                 ctx_reply=args.ctx_reply, ctx_sent=args.ctx_sent, tz=args.tz,
+                 ctx_reply=args.ctx_reply, ctx_sent=args.ctx_sent, ctx_new_in=args.ctx_new_in,
+                 ctx_new_out=args.ctx_new_out, tz=args.tz,
                  cache_dir=Path(args.cache_dir).expanduser(), month_header=args.month_header)
     return cfg
 
@@ -1164,8 +1237,10 @@ def main(argv=None) -> int:
     ap.add_argument("--status-enum", default="", help="項目の status の enum (comma 区切り。 空 = 検査しない)")
     ap.add_argument("--category-in", default="received")
     ap.add_argument("--category-out", default="sent")
-    ap.add_argument("--ctx-reply", default="{date} reply from {name} ({subj}) → next: {next}")
-    ap.add_argument("--ctx-sent", default="{date} sent to {name} ({subj}) → next: {next}")
+    ap.add_argument("--ctx-reply", default=Config.ctx_reply, help="相手発で、 thread に自分の先行 message が在る (返事)")
+    ap.add_argument("--ctx-sent", default=Config.ctx_sent, help="自分発で、 thread に相手の先行 message が在る (返信)")
+    ap.add_argument("--ctx-new-in", default=Config.ctx_new_in, help="相手発で、 自分の先行 message が無い (新規の受信・追送)")
+    ap.add_argument("--ctx-new-out", default=Config.ctx_new_out, help="自分発で、 相手の先行 message が無い (新規の送信・追送)")
     ap.add_argument("--tz", default="local")
     ap.add_argument("--cache-dir", default=str(Path.home() / ".cache" / "record-reply"))
     ap.add_argument("--month-header", default="# {year}-{month:02d} mail ledger")

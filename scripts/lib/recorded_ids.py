@@ -19,7 +19,7 @@
      - YAML コメント内の id (parser が捨てるため構造的に不可視。 記録は必ず値として書く)
      - prefix 無しの bare hex が散文中に単独出現 (偶発 hex 一致の偽 suppress を避ける)
   書き手の道具 (scripts/record-reply.py) が書く印 `recorded_upto: "messageId:<hex> (<日時>)"` と索引
-  `messages: ["mid:<hex> <日時> ← <差出人>", …]` は契約 2 の中 (fixture で固定 = 道具の出力と読み手の述語が
+  `messages: ["mid:<hex> <日時> ← <差出人>" / "… → <宛先>", …]` は契約 2 の中 (fixture で固定 = 道具の出力と読み手の述語が
   別々に動かない)。
 
 harvest_message_ids = messageId だけの変種 (threadId を含めない)。 「message は未認識 ∧ thread は認識済」 を分けて
@@ -133,7 +133,7 @@ FIXTURES: list[tuple[str, dict, set[str]]] = [
      {"recorded_upto": "messageId:aaaa000000000014 (2026-01-01 16:56)"}, {"aaaa000000000014"}),
     ("道具が書く索引 messages[] (← / → の方向つき)",
      {"messages": ["mid:aaaa000000000015 2026-01-01 21:25 ← Example Admin",
-                   "mid:aaaa000000000016 2026-01-02 09:00 → Owner Example"]},
+                   "mid:aaaa000000000016 2026-01-02 09:00 → Example Admin"]},
      {"aaaa000000000015", "aaaa000000000016"}),
     # negatives
     ("入れ子でも prefix 無しの bare hex は非認識", {"refs": {"gmail_msg_id": "aaaa000000000012"}}, set()),

@@ -19,14 +19,14 @@ entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house st
 | `subject` / `from` / `to` / `cc` / `account` / `received` or `sent` | 最初に記録した message の素性 | 道具 |
 | `threadId` / `messageId` | thread と最初の message (互換のため残す) | 道具 |
 | `recorded_upto` | `"messageId:<hex> (<YYYY-MM-DD HH:MM>)"` = **読んだ位置の印**。 索引の最新と一致 | 道具だけ |
-| `messages` | 1 通 1 行 `"mid:<hex> <日時> ← <差出人>"` (← 相手発 / → 自分発) = **機械が書く索引**。 本文・snippet は書かない | 道具だけ |
+| `messages` | 1 通 1 行 `"mid:<hex> <日時> ← <差出人>"` / `"mid:<hex> <日時> → <宛先>"` = **機械が書く索引**。 名前は常に**相手** (← 相手発 = 差出人 / → 自分発 = 宛先。 自分を除いた最初の宛先 + ` +N`、 To が自分だけなら Cc → Bcc)。 本文・snippet は書かない | 道具だけ |
 | `category` | message の素性 (received / sent)。 案件の状態は項目側 | 道具 (既存 entry は触らない) |
 | `related_todo` | 結ぶ項目の id (裸) | 道具 (無ければ足す) |
 | `summary` | 3 行まで。 事実の正本 (金額・日付・決定) は書かず pointer だけ | 人 / agent |
 
 印と索引の値は harvester の契約の中の書式 (`messageId:` / `mid:` 接頭辞) で書く = 読み手を変えない。 道具の出力の形は harvester の fixture に載せて固定する。
 
-項目側 (TODO): `status_context` = 現在地の 1 欄 (道具が `"<日付> <差出人> の返事 (<件名>) → 次: <一手>"` の形で**上書き**、 template は shim が渡す)、 `updated` = 今日、 `--status` があれば `status` (enum は shim が渡す)、 `email_ref` が無ければ `"threadId:<id>"` の 1 行。 notes には決定・事実・根拠だけを書き、 日付つきの進捗行を足さない (= 台帳が log になって肥大しない。 履歴は版管理)。
+項目側 (TODO): `status_context` = 現在地の 1 欄 (道具が `"<日付> <相手> の返事 (<件名>) → 次: <一手>"` の形で**上書き**、 template は shim が渡す。 template は記録した最新の message の向きと「返事か」 で 4 つから選ぶ = 相手発の返事 `--ctx-reply` / 相手発で返事でない `--ctx-new-in` / 自分発の返信 `--ctx-sent` / 自分発で返信でない `--ctx-new-out`。 「返事か」 = thread のそれより前に反対側の message が在るか。 新規の送信を「返信」 と書かない)、 `updated` = 今日、 `--status` があれば `status` (enum は shim が渡す)、 `email_ref` が無ければ `"threadId:<id>"` の 1 行。 notes には決定・事実・根拠だけを書き、 日付つきの進捗行を足さない (= 台帳が log になって肥大しない。 履歴は版管理)。
 
 ## <a id="procedure"></a>2. 手順
 
@@ -45,4 +45,4 @@ entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house st
 
 ## <a id="adoption"></a>4. 導入 (shim の作り方)
 
-下の層に同名の shim を置き、 個人の値を option で渡して engine を `os.execv` する (= [`check-script-layering.py`](../scripts/check-script-layering.py) が shim と認める形)。 渡すもの: `--root` / `--ledger` (複数) / `--accounts` (試す順、 先頭 = 既定) / `--creds-dir` / `--owner-token` (自分発の判定) / `--status-enum` / `--category-in` `--category-out` / `--ctx-reply` `--ctx-sent` (現在地の template) / `--tz` / `--cache-dir` / `--month-header`。 shim の `--selftest` は配線の canary (台帳 dir の存在 / enum の parity / 層1 の file) を見てから engine の selftest を回す。 読み手の検出器は `lib/recorded_ids.py` を import し、 その一覧と delegation 検査を shim 側の selftest に持たせる ([`email-surface-pattern.md#recorded-id-notation`](email-surface-pattern.md#recorded-id-notation))。
+下の層に同名の shim を置き、 個人の値を option で渡して engine を `os.execv` する (= [`check-script-layering.py`](../scripts/check-script-layering.py) が shim と認める形)。 渡すもの: `--root` / `--ledger` (複数) / `--accounts` (試す順、 先頭 = 既定) / `--creds-dir` / `--owner-token` (自分発の判定) / `--status-enum` / `--category-in` `--category-out` / `--ctx-reply` `--ctx-sent` `--ctx-new-in` `--ctx-new-out` (現在地の template、 §3) / `--tz` / `--cache-dir` / `--month-header`。 shim の `--selftest` は配線の canary (台帳 dir の存在 / enum の parity / 層1 の file) を見てから engine の selftest を回す。 読み手の検出器は `lib/recorded_ids.py` を import し、 その一覧と delegation 検査を shim 側の selftest に持たせる ([`email-surface-pattern.md#recorded-id-notation`](email-surface-pattern.md#recorded-id-notation))。

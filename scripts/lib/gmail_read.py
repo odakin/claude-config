@@ -128,12 +128,15 @@ def walk_text(payload: dict) -> str:
 
 
 def normalize_messages(raw_messages: list[dict], full: bool) -> list[dict]:
-    """API の thread.messages → [{id, from, to, cc, subject, date, internalDate, body}] を internalDate 昇順で。"""
+    """API の thread.messages → [{id, from, to, cc, bcc, subject, date, internalDate, body}] を internalDate 昇順で。
+
+    bcc は自分発の控えにだけ残る header (= 宛先が Bcc だけの送信で相手を知る唯一の手がかり)。
+    """
     out = []
     for m in raw_messages or []:
         out.append({
             "id": m.get("id"), "internalDate": m.get("internalDate", "0"),
-            "from": header(m, "From"), "to": header(m, "To"), "cc": header(m, "Cc"),
+            "from": header(m, "From"), "to": header(m, "To"), "cc": header(m, "Cc"), "bcc": header(m, "Bcc"),
             "subject": header(m, "Subject") or "(no subject)", "date": header(m, "Date"),
             "body": walk_text(m.get("payload", {})) if full else "",
         })
