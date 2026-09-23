@@ -8,6 +8,7 @@
     extract_input_deadlines(body, today, horizon_days=7)    # [{"date", "time", "context", "kind"}]
     deadlines_from_body(body, received, horizon_days=120)    # 引用を落として日付だけの昇順 list
     strip_quoted(body)                                       # 返信の引用部を落とす (転送本文は残す)
+    drop_reply_headers(body)                                 # 引用の中身は残し、 引用ヘッダ行 (日時つき) だけ落とす
     predicate_version(*extra)                                # 抽出述語の指紋 (cache の鮮度判定用)
 
 2 つを分けている理由: 散文は「〆」 単独・「申請」「応募」 が期限の印になり、 済/完了 の記号で終わった項目を除く必要がある。
@@ -164,6 +165,14 @@ def strip_quoted(body: str) -> str:
     return "\n".join(out)
 
 
+def drop_reply_headers(body: str) -> str:
+    """引用ヘッダ行 (「YYYY年M月D日(曜) H:MM 名前 <addr>:」 / 「On ... wrote:」、 行頭の > は何段でも) だけを落とす。
+    引用の中身は残す = 元の mail に書かれた日時が今も生きている検出器 (予定の抽出) 向け。 ヘッダの日時は
+    「いつ書かれたか」 であって予定ではないのに、 日付 + 時刻の形なので予定として拾われる (実測の誤検出)。"""
+    return "\n".join(ln for ln in (body or "").splitlines()
+                     if not REPLY_HEADER_RE.match(ln.lstrip().lstrip(">").lstrip(" >")))
+
+
 def deadlines_from_body(body: str, received: date, horizon_days: int = 120) -> list[str]:
     """引用を除いた本文の〆切を ISO 日付の昇順 list で返す純関数。 取れなければ []。"""
     try:
@@ -236,6 +245,10 @@ def _selftest() -> int:
     check(deadlines_from_body(quoted, t) == [], "メール: 引用部だけにある古い期限は取らない")
     fwd = "---------- Forwarded message ---------\n差戻の件、7月24日（水）までにご修正ください。"
     check(deadlines_from_body(fwd, t) == ["2030-07-24"], "メール: 転送本文の期限は取る")
+    rh = "了解です。\n\n2030年7月24日(水) 8:31 Taro <taro@example.org>:\n\n> > 2030年7月23日(火) 22:46 <hanako@example.org>:\n> 7月30日 13:00 から打ち合わせ\nOn Tue, Jul 23, 2030 at 9:00 PM Hanako wrote:"
+    dr = drop_reply_headers(rh)
+    check("8:31" not in dr and "22:46" not in dr and "wrote:" not in dr and "7月30日 13:00" in dr,
+          "引用ヘッダ: ヘッダ行 (> 付きも) だけ落とし、 引用の中身は残す")
     v = predicate_version("120")
     check(v == predicate_version("120") and v != predicate_version("7"), "指紋: 同じ述語と extra で同じ、 extra が違えば違う")
     print(f"\n==== RESULT: PASS={ok} FAIL={ng} ====")
