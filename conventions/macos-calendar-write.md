@@ -105,6 +105,7 @@ API / MCP で Google 所有 calendar に書いた予定を、 user は Mac の C
 
    ```bash
    DB="$HOME/Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb"
+   [ -e "$DB" ] || DB="$HOME/Library/Calendars/Calendar.sqlitedb"   # macOS 13 の置き場所 (実測)
    sqlite3 "file:$DB?mode=ro" "select ROWID, name, error_id,
      datetime(last_sync_start+978307200,'unixepoch','localtime'),
      round(last_sync_end-last_sync_start,3) from Store where type=2;"

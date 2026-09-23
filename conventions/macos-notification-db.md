@@ -16,7 +16,7 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
 
 ## <a id="mechanism"></a>機構
 
-- DB = `~/Library/Group Containers/group.com.apple.usernoted/db2/db` (SQLite、 WAL あり)。
+- DB = `~/Library/Group Containers/group.com.apple.usernoted/db2/db` (SQLite、 WAL あり)。 ⚠️ 置き場所は macOS の版で違う (実測: 13 では `$(getconf DARWIN_USER_DIR)com.apple.notificationcenter/db2/db`)。 片方しか探さないと、 その版の機械では「DB が無い」 で黙る = engine の `default_db_path()` は在る方を使う。
 - **本物を開かず、 DB + `-wal` + `-shm` を一時 dir に写してから読む** (通知 daemon を lock しない・
   checkpoint されていない新しい通知も読む)。
 - 形 (実測 = macOS 26。 他の版は初回に `--list-apps` で表と件数が出るかを見る):
