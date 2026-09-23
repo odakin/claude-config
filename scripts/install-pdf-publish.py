@@ -26,6 +26,17 @@ build した PDF を commit すると、 差分が効かず版ごとにまるご
 (file は手元に残る。 ⚠️ 他の clone では pull すると手元の PDF が消える = 次の build で戻る。 図の PDF は触らない)。
 commit と push はしない (共同編集者の了解を取ってから人が行う)。 CLAUDE.md に足す文面は最後に出す (保護 file なので書かない)。
 
+## 既存の共同編集の repo に入れる手順 (実測で通した順)
+
+1. `git worktree add -b pdf-publish <scratch> origin/main` で別の worktree に branch を作り、 そこで install (--untrack)
+   (= 同じ clone で作業中の他の session の HEAD を動かさない)。 `pdf-publish.sh --all --dry-run` で写す対象と名前を見て、
+   文書を 1 つずつ touch して組み直しから写すまでを本物で確かめる (DROPBOX_ROOT を偽の dir にすれば共有フォルダは要らない)
+2. branch を commit・push → 共有フォルダを作って共有 (相手を編集者として招待。 相手が書き込めないと意味が無い)
+3. main に入れる clone では、 **追跡から外れる PDF を退避 → `merge --ff-only` → 戻す** (git は追跡から外れた file を消す。
+   戻した PDF は ignore された file として残る)。 他の clone は pull で PDF が一度消え、 次の build で戻る
+4. 連絡は「こうしました、 不具合があれば」 の報告にする (docs/convention-design-principles.md#automate-before-asking-others)。
+   hook は clone ごとの設定なので、 自分の他のマシンは `ensure` を session 開始の自動設定から呼ぶ
+
 ## 限界
 
 - 共有フォルダの作成と共有 (招待) は Dropbox 側の操作 (この道具はしない)。 無い機械では hook は黙って skip し、 記録に 1 行残す
