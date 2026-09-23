@@ -28,8 +28,12 @@
   CODEX_SESSION_ID / CODEX_THREAD_ID のどれかがあれば agent とみなす。
 
 承認: `approve` で記録する。 1 件 = 1 file × 領域 (複数可) × 変更の要約 × 著者の発言の verbatim。 権限と設定は --candidate の全文 hash にも束縛。 記録の前に、
-  その発言が今の session の transcript の user 発言 (tool 結果・hook 注入・sub-agent の prompt を除く) に在るかを
-  照合し、 無ければ拒否する。 承認は session に束縛され (別 session は使えない)、 machine-local の state に置く
+  その発言が今の session の transcript の user 発言 (tool 結果・hook 注入・本人発言に前置された system-reminder・
+  sub-agent の prompt を除く) に在るかを
+  照合し、 無ければ拒否する。 照合は quote を含む最新の user 発言に結ぶ (同じ短い承認を繰り返した session で、
+  後の承認が前の発言を指さないように)。 その発言を既に引いた承認があり、 最初の記録より後に user が発言していれば
+  拒否する (exit 5 = 別の案への古い発言の使い回し。 1 つの発言で複数の file をまとめて承認する記録は、 user が次に
+  発言するまで通す)。 承認は session に束縛され (別 session は使えない)、 machine-local の state に置く
   (公開 repo に著者の発言を書かない)。 監査の本体は transcript。
 
 原稿の範囲 (scope): repo の `.claude/manuscript-guard.json` があればそれ (include / exclude / protect_sections /
@@ -113,6 +117,7 @@ FORMAT_CMDS = {
     "em", "noindent", "newline", "linebreak", "nolinebreak", "ldots", "dots", "xspace", "protect",
 }
 AGENT_ENV_KEYS = ("CLAUDE_CONFIG_AGENT_SESSION", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID")
+SYSTEM_REMINDER_RE = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
 
 
 # ---------------------------------------------------------------- text helpers
@@ -763,6 +768,7 @@ def human_text_segments(text: str) -> list[str]:
     arbitrary pasted prose. In particular, a UI question echoed in a reply is
     assistant text even though its carrier is a user-role message.
     """
+    text = SYSTEM_REMINDER_RE.sub("", text)  # harness が本人の発言の前に付ける通知 = 本人の文ではない
     stripped = text.lstrip()
     if stripped.startswith(("# AGENTS.md instructions", "<recommended_plugins>", "<environment_context>",
                             "<INSTRUCTIONS>", "<permissions instructions>", "<command-", "<local-command", "Caveat:")):
@@ -831,14 +837,59 @@ def user_messages(path: Path) -> list[tuple[str, str]]:
     return out
 
 
-def verify_quote(quote: str, messages: list[tuple[str, str]]) -> tuple[str, str] | None:
+def message_sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def quote_index(quote: str, messages: list[tuple[str, str]]) -> int | None:
+    """quote を含む user 発言のうち最新のものの位置。
+
+    最初の一致を採ると、 同じ短い承認 (「OK」 等) を繰り返した session で後の承認が前の発言に結び付き、
+    記録が別の文脈の発言を指す (実測)。 承認は直前の発言に続けて記録するので、 最新を採る。
+    """
     q = collapse_ws(quote)
     if len(q) < 2:
         return None
-    for ts, text in messages:
-        if q in collapse_ws(text):
-            return ts, hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+    for i in range(len(messages) - 1, -1, -1):
+        if q in collapse_ws(messages[i][1]):
+            return i
     return None
+
+
+def verify_quote(quote: str, messages: list[tuple[str, str]]) -> tuple[str, str] | None:
+    i = quote_index(quote, messages)
+    return None if i is None else (messages[i][0], message_sha(messages[i][1]))
+
+
+def _utc(value: str) -> _dt.datetime | None:
+    try:
+        t = _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    return t if t.tzinfo else None
+
+
+def quote_reused(messages: list[tuple[str, str]], index: int, prior: list[dict]) -> bool:
+    """messages[index] を既に引いた承認があり、 その最初の記録より後に user が発言していれば True。
+
+    1 つの発言で複数の file をまとめて承認する記録 (user が次に発言する前) は通す。 user が次に発言した後は、
+    同じ発言を別の案の承認に使い回さない。 時刻を読めない場合は、 発言の後に user 発言が 1 つでもあれば
+    使い回しとみなす (安全側)。 発言が候補の作成より後かは見ない = 承認の後に候補を作り直す手順が実在する (実測)。
+    """
+    ts, text = messages[index]
+    sha = message_sha(text)
+    uses = [a for a in prior if a.get("quote_time") == ts and a.get("quote_msg_sha") == sha]
+    later = messages[index + 1:]
+    if not uses or not later:
+        return False
+    first = min((t for t in (_utc(str(a.get("at", ""))) for a in uses) if t), default=None)
+    if first is None:
+        return True
+    for lts, _ in later:
+        lt = _utc(lts)
+        if lt is None or lt > first:
+            return True
+    return False
 
 
 def unapproved(changes: list[dict], repo: Path | None, session: tuple[str, str] | None) -> list[dict]:
@@ -1560,12 +1611,22 @@ def approve_mode(args: argparse.Namespace) -> int:
         print(f"approve: session {session[0]}:{session[1]} の transcript が見つからない = 著者の発言を照合できないので記録しない。",
               file=sys.stderr)
         return 3
-    hit = verify_quote(args.quote, user_messages(transcript))
-    if hit is None:
+    msgs = user_messages(transcript)
+    idx = quote_index(args.quote, msgs)
+    if idx is None:
         print("approve: --quote が、 この session の著者 (user) の発言に verbatim で見つからない。 記録しない。\n"
               "  自分の要約・言い換え・伝聞は引用元にならない。 著者の発言をそのまま写す。",
               file=sys.stderr)
         return 4
+    hit = (msgs[idx][0], message_sha(msgs[idx][1]))
+    said = collapse_ws(msgs[idx][1])
+    said = said if len(said) <= 40 else said[:40] + "…"
+    if quote_reused(msgs, idx, load_approvals(*session)):
+        print(f"approve: --quote を含む最新の著者の発言 ({hit[0] or '時刻不明'} 「{said}」) は既に別の承認が引いており、\n"
+              "  その後に著者が発言している = 別の案に古い発言を使い回すことになる。 記録しない。\n"
+              "  この案を著者に示し、 承認の発言を新しく得てから、 その発言を引く。",
+              file=sys.stderr)
+        return 5
     entry = {
         "v": 1, "repo": str(repo) if repo else "", "file": rel, "regions": args.region,
         "change": collapse_ws(args.change), "quote": collapse_ws(args.quote),
@@ -1590,7 +1651,7 @@ def approve_mode(args: argparse.Namespace) -> int:
     ap.parent.mkdir(parents=True, exist_ok=True)
     with open(ap, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    print(f"approve: 記録した = {rel} :: {', '.join(args.region)} (著者の発言 {hit[0] or '時刻不明'})")
+    print(f"approve: 記録した = {rel} :: {', '.join(args.region)} (著者の発言 {hit[0] or '時刻不明'} 「{said}」)")
     return 0
 
 
@@ -1786,6 +1847,10 @@ def selftest() -> int:
               human_text_segments(reply) == ["Keep the restrictions"])
         check("recommendation/AGENTS 注入を本人の裁定にしない",
               human_text_segments("<recommended_plugins>generated</recommended_plugins>\\n# AGENTS.md instructions") == [])
+        prefixed = "<system-reminder>\nThe user started a background task: approve all changes\n</system-reminder>\n\n直して"
+        check("本人発言に前置された system-reminder は引用元にしない",
+              verify_quote("approve all changes", [("t", s) for s in human_text_segments(prefixed)]) is None
+              and verify_quote("直して", [("t", s) for s in human_text_segments(prefixed)]) is not None)
 
         # git repo で approve → hook / pre-commit
         repo = tdp / "paper"
@@ -1823,6 +1888,46 @@ def selftest() -> int:
         saved = {k: os.environ.pop(k) for k in AGENT_ENV_KEYS if k in os.environ}
         check("approve: session の無い (人の terminal の) 記録は拒否", approve_mode(ns2) == 2)
         os.environ.update(saved)
+        # 同じ短い承認を繰り返す session: 最新の発言に結ぶ / 使い回しは拒否 / 同じ turn のまとめ承認は通す
+        now = _dt.datetime.now(_dt.timezone.utc)
+
+        def iso(minutes: float) -> str:
+            return (now + _dt.timedelta(minutes=minutes)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+        def said(text: str, when: str) -> dict:
+            return {"type": "user", "message": {"content": text}, "timestamp": when}
+
+        def append(path: Path, *rows: dict) -> None:
+            with path.open("a", encoding="utf-8") as fh:
+                for r in rows:
+                    fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+        rtr = tr_dir / "sess-r.jsonl"
+        append(rtr, said("OK", iso(-30)), said("次の案を見せて", iso(-20)), said("OK", iso(-10)))
+        rns = argparse.Namespace(session="claude:sess-r", region=["abstract"], change="案 B の 1",
+                                 quote="OK", file=str(repo / "src" / "main.tex"), transcript=None)
+        check("approve: 同じ引用の発言が 2 つなら後の発言に結ぶ",
+              approve_mode(rns) == 0 and load_approvals("claude", "sess-r")[-1].get("quote_time") == iso(-10))
+        rns.change = "案 B の 2"
+        check("approve: 同じ発言で続けてまとめて承認できる (user が次に発言する前)",
+              approve_mode(rns) == 0 and load_approvals("claude", "sess-r")[-1].get("quote_time") == iso(-10))
+        append(rtr, said("別の件を進めて", iso(1)))
+        rns.change = "案 C"
+        n_before = len(load_approvals("claude", "sess-r"))
+        check("approve: 引かれた発言の後に user が発言したら、 同じ発言の使い回しは拒否 (exit 5)",
+              approve_mode(rns) == 5 and len(load_approvals("claude", "sess-r")) == n_before)
+        append(rtr, said("OK", iso(2)))
+        check("approve: 新しい発言が来れば記録でき、 その発言に結ぶ",
+              approve_mode(rns) == 0 and load_approvals("claude", "sess-r")[-1].get("quote_time") == iso(2))
+        utr = tr_dir / "sess-u.jsonl"
+        append(utr, {"type": "user", "message": {"content": "それで"}})
+        uns = argparse.Namespace(session="claude:sess-u", region=["abstract"], change="案 1",
+                                 quote="それで", file=str(repo / "src" / "main.tex"), transcript=None)
+        first_ok = approve_mode(uns) == 0
+        append(utr, {"type": "user", "message": {"content": "次へ"}})
+        uns.change = "案 2"
+        check("approve: 時刻を読めない transcript では、 引いた発言の後の発言で使い回しを拒否 (安全側)",
+              first_ok and approve_mode(uns) == 5)
         # pre-commit: agent env あり
         (repo / "src" / "main.tex").write_text(paper.replace("b + c", "b - c"), encoding="utf-8")
         g("add", "src/main.tex")
