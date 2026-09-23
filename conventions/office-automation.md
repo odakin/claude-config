@@ -44,6 +44,7 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 | 印刷物を user に見せるたび別の欠陥が出て刷り直しが続く | 各修正後の検証が直前の症状にだけ狭まる + 「画面で見えた」 を印刷の保証にしている | `pdf-print-preflight.py` + crop 目視 + 全頁 PNG を user に → [`print-preflight`](#print-preflight) |
 | 様式付属の**説明書き・記載例・マスタ・白紙の頁まで紙に出た** (頁数の検査は通っていた) | 生成の単位が様式の file 丸ごと + 頁数の一致は刷る頁の集合を問わない + 刷る段からどの頁を出すかが見えない | 頁の役割を記入 map に・刷る file は提出頁だけ (`pdf-print-preflight.py --pages`)・宣言を file に埋めて刷る直前の gate が読む → [`print-submission-pages-only`](#print-submission-pages-only) |
 | `lp -o media=A4` で送ったのに**別サイズの紙 (B5 等) で出る** | 本体 (操作パネル) の用紙サイズ設定が job の指定より優先された | 刷る前に本体の用紙設定とトレイの紙を user に確認 → [`print-preflight`](#print-preflight) 5. |
+| `lp` の前の hook が**「本体の用紙が PDF と合わない」** で止めた | 本体が IPP で報告するトレイの用紙 (本体の設定) が PDF の寸法と違う | 本体の設定と紙を PDF に合わせてから刷り直す。 意図した縮小・拡大なら command の頭に `PRINT_PREFLIGHT_PRINTER=0` → [`printer-media-ipp`](#printer-media-ipp) |
 | overlay した電話番号・メールが罫線に被る / 隣セルにはみ出す / 数字だけ浮いて見える | ラベル右端基準の配置、 CJK と数字の baseline 差 | 縦罫線 (`get_drawings`) を anchor、 数字は行中心 → [`pdf-overlay-anchoring`](#pdf-overlay-anchoring) |
 | PyMuPDF で追記した日本語/数字が**画面では正常・印刷で文字化け / 位置ずれ** | `japan`/`helv` 組み込み font は glyph 非埋め込み = printer に代替 font が無い | 印刷用は 600dpi **RGB** raster 版を刷る (font 埋め込みでも同 printer で化けた) → [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake) |
 | 値を入れた docx 様式が **1 頁→2 頁にはみ出す**、 折り返すのは触っていない行 | autofit 表は 1 セルの長い値で grid 列幅を組み替え、 別行のセルが狭まる (`tblLayout fixed` でも直らず) | 可変長値・○・認印は overlay、 溢れる 1 行だけ 9.5pt、 雛形 render と y 座標突合 → [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow) |
@@ -3622,12 +3623,25 @@ origin: 実測 (autofit 表の docx 様式) — 変換を繰り返して (1)+(2)
 3. **全体**: 80 dpi の全頁 render を 1 度見る (= 2 頁目の存在・空白・ブロックの落ちを拾う)。 **user が remote なら、 この全頁 PNG を chat に送ってから刷る** (= 紙を見られない人に代わって画面で承認してもらう)。
 4. **1 枚だけ刷って止まる**: 複数 doc を同時投入しない。 1 枚目の結果 (user 報告) を待ってから次。
 5. **用紙**: `lp -o media=A4` (や PageSize) は**本体の用紙設定を上書きする保証にならない** — 本体 (操作パネル) の用紙サイズが別サイズのままだと、 A4 指定の job がその紙に刷られた (実測)。 刷る前に「本体の用紙サイズ設定」 と「トレイの紙」 の両方を user に確かめてもらう。 ⚠️ 違うサイズで出たと言われたら、 原因を推測で説明しない (= 「プリンタは紙を見ない」 等の未検証の断定をしない)。 本体の設定を見てもらうのが先。
+   - <a id="printer-media-ipp-step"></a>**先に機械で本体に聞く** (追加の段): `pdf-print-preflight.py <print.pdf> --printer <queue>` が本体のトレイの用紙を IPP で読み、 PDF の寸法と合わなければ 🔴 (lp に掛かる hook も同じ問い合わせをして止める)。 ⚠️ 一致しても上の user への確認は省かない — 本体の報告は設定であって紙の実測ではなく、 設定を変えたときに報告が追従するかも未検証 ([`printer-media-ipp`](#printer-media-ipp))。
 
 **Web ページを PDF 化したものも gate の対象**: headless browser の print-to-PDF (Chromium 系の `--print-to-pdf` 等) は文字を **Type3 font** で書くことがあり、 1. の font 検査で FAIL する (実測)。 PyMuPDF で描いた PDF でなくても、 FAIL なら同じく raster 版を刷る。 印刷用 HTML ページ (`window.print()` 前提) を保存 HTML から PDF + raster 版にする道具 = [`scripts/html-print-pdf.py`](../scripts/html-print-pdf.py) (`<base href>` と `@page{size:A4}` の差し込み込み)。 `pdf-print-preflight.py` は頁の寸法と用紙名 (A4 / B5 等) も表示するので、 5. の照合に使う。 **メールの本文 (text) を添付書類の PDF にする**のは [`scripts/mail-to-pdf.py`](../scripts/mail-to-pdf.py) (同じ engine を通る、 `--redact` で暗証番号等を伏せる)。 ⚠️ PyMuPDF の組み込み font (`cour` / `helv` 等) で text を描く使い捨て script は ASCII 以外を描けない = 日本語や記号の混じるメールで字が落ちる。
 
 <a id="headless-print-to-pdf-no-exit"></a>⚠️ **headless の print-to-PDF は、 PDF を書き終えた後も browser の process が終わらないことがある** (実測: macOS の Chrome 系で、 数秒で PDF を書いたまま居座り、 `subprocess.run(timeout=...)` が毎回 timeout で落ちた)。 終了を待たず、 **「N bytes written to file」 の出力か、 PDF の size が数秒変わらないこと** を見て process group ごと止める。 test は「PDF と marker を書いてから sleep し続ける偽の browser」 で、 render が timeout より十分早く返ることを確かめる。 実装 = [`scripts/html-print-pdf.py`](../scripts/html-print-pdf.py) `render_pdf`。
 
 **なぜ規律でなく gate か**: 今回の 4 失敗は全て「前の修正で安心して次の罠を踏む」 連鎖 (= 修正ごとに検証 scope が前の症状だけに狭まる)。 gate を固定 list にしておけば、 毎回同じ点を通る。 `lp` を含む Bash に掛ける PreToolUse hook の判定は本 script の `--hook` (入力 JSON を stdin から読み、 `lp`/`lpr` に渡す PDF を検査) が持つ = hook 側は配線の名前と安い前段の filter (lp と .pdf を含まない command では python を起こさない) だけにする。 ⚠️ FAIL は**確認 (ask) でなく block (exit 2 + stderr)** で返す — 確認の dialog に理由が出ない build がある ([`hook-authoring.md#build-dependent-docs-drift`](hook-authoring.md#build-dependent-docs-drift)) ので、 ask だと user は理由を見ずに承認し、 model も直し方を知らないまま刷る。 block なら理由 (頁の一覧・直し方) が model に届き、 model が刷る file を作り直す。
+
+<a id="print-hook-lp-args-only"></a>**hook が見るのは `lp` / `lpr` の引数の PDF だけ**: command 中の全 .pdf を見ていた頃は、 同じ command で元の PDF から刷る file を作ってから `lp` すると、 作る元の (頁の宣言が無い) PDF で止まった (実測)。 同じ command の変数の代入と `cd` は順に追う。 追えない引数 (`$f`・command 置換) や、 `lp` が段の先頭に無い形があれば、 取りこぼさないよう command 中の全 .pdf を見る。 PDF が通ったら [`printer-media-ipp`](#printer-media-ipp) の問い合わせをする。
+
+<a id="printer-media-ipp"></a>**本体の用紙を IPP で聞く (5. の追加の段)**: 道具 = [`scripts/lib/printer_media.py`](../scripts/lib/printer_media.py) (`pdf-print-preflight.py --printer` と `--hook` が使う)。
+
+- **聞くもの**: IPP の Get-Printer-Attributes の `media-col-ready` (トレイごとの寸法とトレイ名) / `media-ready` (PWG の用紙名) / `printer-state`。 手で聞くなら `ipptool -T 4 -tv ipp://<host>/ipp/print <test file>` (test file の中身 = 上の file の `REQUEST`)。
+- **URI**: queue の `device-uri` は `lpoptions -p <queue>` で読む (`lpstat -v` と違い locale に依らない)。 機種独自の backend (scheme が `ipp` / `ipps` でない) の queue でも、 本体は素の `ipp://<host>/ipp/print` に答えた (実測)。 `dnssd://` は名前解決が要るので聞かない = ⚪ (未確認)。
+- **読み方**: 報告値は本体の**設定**であって、 紙を測った値でないことがある (サイズ検知の無いトレイは設定をそのまま返す)。 実測は「報告と出た紙が一致した」 だけで、 本体の設定を変えたときに報告が追従するかは未検証。 ∴ 合わなければ止める根拠にはなるが、 一致を 5. の user への確認の代わりにしない。 追従を実測したら、 確認を「トレイの紙」 だけに絞れるかを判断する。
+- **両面は別に見る**: 本体の `sides-default` が片面でも、 CUPS の queue の既定 (driver 独自の option) が両面のことがある (実測)。 紙に効くのは queue の側 = `lpoptions -p <queue> -l` の `*` の付いた値を見て、 片面は `lp -o <その option>=<片面の値>` で明示する。 `--printer` はこの既定も出す。
+- **意図して別の紙に刷る** (縮小・拡大) ときは hook が止めるので、 command の頭に `PRINT_PREFLIGHT_PRINTER=0` を付ける。 本体の報告が誤っていると現物で確かめたときも同じ。
+
+<a id="print-intermediate-files"></a>**刷るために作った file は元の文書の完全な写し**: raster 版や頁を選んだ版を、 元の file の隣・repo の中・同期される folder に作ると、 機密の文書が同期や commit で別の場所に複製される。 session の作業用の temp dir に作り、 機密の文書なら刷り終えたら消す (作り直しは数秒 = 残す理由が無い)。
 
 ## <a id="print-submission-pages-only"></a>刷るのは窓口に出す頁だけ — 頁の役割を記入 map に書き、 刷る file に埋め込み、 刷る直前に読む
 

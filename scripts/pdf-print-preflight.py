@@ -8,7 +8,8 @@
                    PyMuPDF 埋め込みの Type0/CFF) が残っていないか (= printer 側で文字化け、 OTF 埋め込みでも化けた実績)
   3. 色          : 画像 (認印等) が載っている PDF を raster 化するなら RGB で、 の注意 (情報)
   4. 用紙        : 頁の寸法と名前 (A4 等) を表示 (情報)。 ⚠️ lp の media 指定は本体の用紙設定を上書きしない
-                   (実測) ので、 刷る前に本体の用紙サイズとトレイの紙を確認する
+                   (実測) ので、 刷る前に本体の用紙サイズとトレイの紙を確認する。 --printer を付けると本体に IPP で聞き、
+                   本体が報告するトレイの用紙が PDF の寸法と合わなければ 🔴 (lib/printer_media.py、 答えが無ければ ⚪ で通す)
   5. 頁の役割    : 全頁が「窓口に出す頁」 か (office-automation.md#print-submission-pages-only、 lib/print_pages.py)。
                    file に宣言 (作った道具が書く) があればそれを読み、 提出でない頁 (説明書き・記載例・控え・マスタ・白紙)
                    が入っていれば 🔴。 宣言が無ければ見出しから推定し、 記載例・控え・注意事項・白紙に見える頁と、
@@ -22,8 +23,14 @@
                                      ⚠️ lp -o page-ranges は無視される queue がある (実測) = 刷る頁だけの file を作る
   --include-flagged REASON         : 説明書き・記載例等に見える頁を、 理由つきで OUT に残す (理由は宣言に記録)
   --changed-from OLD.pdf           : 前に刷った版と頁ごとに比べ、 変わった頁を出す (--pages changed = その頁だけ刷り直す)
+  --printer [QUEUE]                : 本体にトレイの用紙を IPP で聞いて PDF と比べる (QUEUE 省略 = 既定の送信先)。
+                                     queue の既定が両面ならそれも出す (本体の sides-default とは別物 = 実測で食い違った)
   --hook                           : PreToolUse(Bash) の hook として動く (入力 JSON を stdin から。 `lp`/`lpr` に渡す PDF を
                                      検査し、 FAIL なら exit 2 + 理由を stderr = 実行前に止まり理由が model に届く)。
+                                     見るのは lp / lpr の引数の PDF だけ (同じ command の別の段 = 作る元の PDF は見ない)。
+                                     同じ command で代入した変数と cd は追う。 追えない引数 ($f 等) があれば command 中の
+                                     全 .pdf を見る (取りこぼさない側)。 PDF が通ったら -d の queue の本体に用紙を聞き、
+                                     合わなければ止める (PRINT_PREFLIGHT_PRINTER=0 で聞かない)。
                                      配線例 = hook の command を `python3 <この script> --hook` に (個人層の shim でもよい)
   --selftest                       : 合成 PDF で FAIL/PASS の両方を確認
 
@@ -31,6 +38,7 @@
   python3 pdf-print-preflight.py form_print.pdf --template blank.pdf
   python3 pdf-print-preflight.py form.pdf --rasterize form_print.pdf --pages 1-2      # 窓口に出す 2 頁だけ刷る
   python3 pdf-print-preflight.py new.pdf --changed-from printed.pdf --rasterize re.pdf --pages changed
+  python3 pdf-print-preflight.py print.pdf --printer Office_Printer                    # 本体のトレイの用紙と比べる
 
 設計: 同じ 1 枚の様式の刷り直しが続いた実測の RCA (2 頁はみ出し → 組み込み font 文字化け →
 raster を gray にして認印が黒 → 値の位置ずれ) から。 各失敗は個別には既知だったが印刷前に**機械で**
@@ -38,8 +46,10 @@ raster を gray にして認印が黒 → 値の位置ずれ) から。 各失�
 5. は、 頁数の検査が様式付属の説明書きの頁まで「期待どおり」 と通した実測から (頁数は刷る頁の集合を問わない)。
 """
 import argparse
+import glob
 import os
 import re
+import shlex
 import sys
 import tempfile
 
@@ -52,6 +62,7 @@ except ImportError:  # pragma: no cover
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 from print_pages import ROLES, changed_pages, classify, parse_pages, problems, read_record, write_record  # noqa: E402
 from seal_artifact import MARKER, copy_marker, mark_doc  # noqa: E402
+import printer_media  # noqa: E402
 
 # PyMuPDF の組み込み font (非埋め込み)。 get_fonts() の basefont / ref 名に現れる。
 BUILTIN_FONT_NAMES = {
@@ -126,7 +137,8 @@ def inspect(path, expect_pages=None, template=None, pages_check=True):
         nm = PAPER_NAMES.get((min(w, h), max(w, h)))
         labels.append(f"{w}×{h} mm" + (f" ({nm})" if nm else ""))
     infos.append("用紙: " + ", ".join(labels)
-                 + " — lp の media 指定は本体の用紙設定を上書きしない = 本体の用紙サイズとトレイの紙を確認")
+                 + " — lp の media 指定は本体の用紙設定を上書きしない = 本体の用紙サイズとトレイの紙を確認"
+                 + " (本体に聞く = --printer <queue>)")
     if pages_check:
         blocking, lines = problems(doc)
         rec = read_record(doc)
@@ -280,20 +292,134 @@ def selftest():
     ev = lambda cmd: {"tool_name": "Bash", "cwd": d, "tool_input": {"command": cmd}}  # noqa: E731
     rc, msg = hook(ev(f"lp -d Office_Printer -o sides=one-sided {four}"))
     assert rc == 2 and "宣言が無い" in msg and "--pages" in msg, (rc, msg)
-    assert hook(ev(f'lp -d X "{os.path.basename(two)}"'))[0] == 0          # 相対 path + 引用符 = cwd 基準
+    E = {"PRINT_PREFLIGHT_PRINTER": "0"}  # 通る側の test は本体に聞かない (本物の queue に問い合わせない)
+    assert hook(ev(f'lp -d X "{os.path.basename(two)}"'), env=E)[0] == 0   # 相対 path + 引用符 = cwd 基準
     assert hook(ev(f"ls {four}"))[0] == 0 and hook(ev(f"lpstat -o; echo {four}"))[0] == 0
     assert hook(ev(f"lp {os.path.join(d, 'nope.pdf')}"))[0] == 0 and hook({"tool_input": {}})[0] == 0
     assert hook(ev(f"lp {four}"), env={"PRINT_PREFLIGHT_DISABLE": "1"})[0] == 0
-    print("pdf-print-preflight selftest: 11/11 PASS")
+    # L: 見るのは lp の引数だけ = 同じ command で元の PDF から作って刷るのは通す。 代入・cd は追い、 追えない引数は全 .pdf を見る
+    assert hook(ev(f"python3 pre.py {four} --rasterize {two} --pages 1-2 && lp -d Q {two}"), env=E)[0] == 0
+    assert hook(ev(f"S={d}; cd / && lp -d Q $S/{os.path.basename(four)}"), env=E)[0] == 2
+    assert hook(ev(f"cd {d} && lp -o VendorDuplex=None {os.path.basename(four)}"), env=E)[0] == 2
+    assert hook(ev(f"for f in {four}; do lp $f; done"), env=E)[0] == 2
+    # M: PDF が通ったら本体の用紙を聞く = 合わなければ止める / 答えが無ければ通す / PRINT_PREFLIGHT_PRINTER=0 で聞かない
+    seen = []
+
+    def fake(queue, sizes, opts, names=None):
+        seen.append((queue, sizes, opts))
+        return ["🔴 本体の用紙: 本体が報告するトレイの用紙 = B5 JIS (182×257 mm) / PDF = A4 (210×297 mm)"], []
+    rc, msg = hook(ev(f"lp -d Q -o sides=one-sided {two}"), env={}, printer_check=fake)
+    assert rc == 2 and "本体の用紙" in msg and seen == [("Q", {(210, 297)}, ["sides=one-sided"])], (rc, msg, seen)
+    assert hook(ev(f"PRINT_PREFLIGHT_PRINTER=0 lp -d Q {two}"), env={}, printer_check=fake)[0] == 0
+    assert hook(ev(f"lp -d Q {two}"), env={}, printer_check=lambda *x, **k: ([], ["⚪ 未確認"]))[0] == 0
+    printer_media._selftest()
+    print("pdf-print-preflight selftest: 13/13 PASS (printer_media 含む)")
 
 
 HOOK_LP = re.compile(r"(^|[;&|\s])lpr?\s")
 HOOK_PDF = re.compile(r"(\"[^\"]*\.pdf\"|'[^']*\.pdf'|[^\s\"']+\.pdf)")
+HOOK_SEG = re.compile(r"&&|\|\||[;|\n]")
+HOOK_PREFIX = {"command", "sudo", "env", "nohup", "time", "exec", "do", "then", "else", "{", "(", "!", "export"}
+HOOK_VAR = re.compile(r"\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))")
 
 
-def hook(payload: dict, env=None) -> tuple:
+def _expand(tok, vars_):
+    """$NAME / ${NAME} / 先頭の ~ を展開。 追えない変数・command 置換が残れば None。"""
+    if "$(" in tok or "`" in tok:
+        return None
+    miss = []
+
+    def rep(m):
+        name = m.group(1) or m.group(2)
+        if name in vars_:
+            return vars_[name]
+        if name in os.environ:
+            return os.environ[name]
+        miss.append(name)
+        return ""
+    out = HOOK_VAR.sub(rep, tok)
+    if miss:
+        return None
+    return os.path.expanduser(out) if out.startswith("~") else out
+
+
+def lp_targets(cmd, cwd=""):
+    """command の中の lp / lpr の段 → (lp が見えたか, PDF の path, queue, -o の値, 追えない引数があったか, 代入された変数)。
+    段は && || ; | 改行で切る。 同じ command の中の代入と cd を順に追う (= `S=...; cd dir && lp $S/x.pdf` を解決する)。"""
+    vars_, pdfs, opts = {}, [], []
+    queue, found, unresolved = None, False, False
+    for seg in HOOK_SEG.split(cmd):
+        try:
+            words = shlex.split(seg, comments=True)
+        except ValueError:
+            words = seg.split()
+        i = 0
+        while i < len(words):
+            m = re.match(r"^([A-Za-z_]\w*)=(.*)$", words[i])
+            if m:
+                val = _expand(m.group(2), vars_)
+                if val is not None:
+                    vars_[m.group(1)] = val
+            elif words[i] not in HOOK_PREFIX:
+                break
+            i += 1
+        rest = words[i:]
+        if not rest:
+            continue
+        head = os.path.basename(rest[0])
+        if head == "cd":
+            dest = _expand(rest[1], vars_) if len(rest) > 1 else os.path.expanduser("~")
+            if dest is not None:
+                cwd = os.path.normpath(dest if os.path.isabs(dest) or not cwd else os.path.join(cwd, dest))
+            continue
+        if head not in ("lp", "lpr"):
+            continue
+        found = True
+        qflag = "-d" if head == "lp" else "-P"
+        args, j = rest[1:], 0
+        while j < len(args):
+            a = args[j]
+            if a in (qflag, "-o") and j + 1 < len(args):
+                if a == "-o":
+                    opts.append(args[j + 1])
+                else:
+                    queue = args[j + 1]
+                j += 2
+                continue
+            if a.startswith(qflag) and len(a) > 2:
+                queue = a[2:]
+            elif a.startswith("-o") and len(a) > 2:
+                opts.append(a[2:])
+            elif a.lower().endswith(".pdf") or "$" in a or any(c in a for c in "*?["):
+                path = _expand(a, vars_)
+                if path is None:
+                    unresolved = True
+                else:
+                    if not os.path.isabs(path) and cwd:
+                        path = os.path.join(cwd, path)
+                    hits = sorted(glob.glob(path)) if any(c in path for c in "*?[") else [path]
+                    pdfs.extend(h for h in hits if h.lower().endswith(".pdf"))
+            j += 1
+    return found, pdfs, queue, opts, unresolved, vars_
+
+
+def pdf_sizes(path):
+    """PDF の頁の寸法 → {(短辺 mm, 長辺 mm)} (本体の用紙と比べる用)。"""
+    out = set()
+    for pg in fitz.open(path):
+        w, h = pg.rect.width * 25.4 / 72, pg.rect.height * 25.4 / 72
+        out.add((round(min(w, h)), round(max(w, h))))
+    return out
+
+
+def hook(payload: dict, env=None, printer_check=None) -> tuple:
     """PreToolUse(Bash) の入力 → (exit code, stderr の文)。 `lp` / `lpr` に .pdf を渡す command だけを見て、 PDF ごとに
     inspect を回す。 1 本でも FAIL なら 2 (= 実行前に止め、 理由を model に返す)。 それ以外・読めない入力は 0 (fail-open)。
+    PDF が通ったら、 lp の queue の本体にトレイの用紙を聞き (lib/printer_media.py)、 PDF の寸法と合わなければ 2。
+
+    見るのは lp / lpr の引数の PDF だけ: 以前は command 中の全 .pdf を見ていたので、 `preflight 元.pdf --rasterize 刷る.pdf
+    && lp 刷る.pdf` のように同じ command で作ってから刷ると、 作る元の (宣言の無い) PDF で止まった (実測)。 追えない引数
+    ($f・command 置換) や lp が段の先頭に無い形 (xargs lp 等) では、 取りこぼさないよう従来どおり全 .pdf を見る。
 
     止め方を確認 (ask) にしないのは、 確認の dialog に理由が出ない build がある (conventions/hook-authoring.md
     #build-dependent-docs-drift) = user は理由を見ずに承認し、 model も直し方を知らないまま刷るため。"""
@@ -304,23 +430,40 @@ def hook(payload: dict, env=None) -> tuple:
     if ".pdf" not in cmd or not HOOK_LP.search(cmd):
         return 0, ""
     cwd = (payload or {}).get("cwd") or ""
-    fails = []
-    for m in HOOK_PDF.finditer(cmd):
-        tok = m.group(1).strip("\"'")
-        path = os.path.expanduser(tok) if tok.startswith("~/") else tok
-        if not os.path.isabs(path) and cwd:
-            path = os.path.join(cwd, path)
-        if not os.path.isfile(path):
+    found, paths, queue, opts, unresolved, vars_ = lp_targets(cmd, cwd)
+    if not found or unresolved:
+        for m in HOOK_PDF.finditer(cmd):
+            tok = m.group(1).strip("\"'")
+            path = os.path.expanduser(tok) if tok.startswith("~/") else tok
+            if not os.path.isabs(path) and cwd:
+                path = os.path.join(cwd, path)
+            paths.append(path)
+    fails, sizes, seen = [], set(), set()
+    for path in paths:
+        if path in seen or not os.path.isfile(path):
             continue
+        seen.add(path)
         try:
             findings, infos = inspect(path)
+            sizes |= pdf_sizes(path)
         except Exception as e:  # noqa: BLE001 - 読めない PDF は止めずに知らせない (fail-open、 lp 側が失敗を出す)
             print(f"pdf-print-preflight --hook: {path} を読めない ({type(e).__name__})", file=sys.stderr)
             continue
         if findings:
             fails.append(f"── {path}\n" + "\n".join(["  · " + i for i in infos] + ["  " + f for f in findings]))
     if not fails:
-        return 0, ""
+        if not (found and sizes) or "0" in (env.get("PRINT_PREFLIGHT_PRINTER"), vars_.get("PRINT_PREFLIGHT_PRINTER")):
+            return 0, ""
+        pf, _ = (printer_check or printer_media.check)(queue, sizes, opts, names=PAPER_NAMES)
+        if not pf:
+            return 0, ""
+        return 2, "\n".join([
+            "[print-preflight] 本体の用紙が PDF と合わない — このまま刷ると本体の設定どおりの紙に出る:",
+            *["  " + f for f in pf], "",
+            "対処: 本体 (操作パネル) の用紙サイズ設定とトレイの紙を PDF に合わせてから lp を打ち直す (user に頼む)。",
+            "      意図して別の紙に刷る (縮小・拡大) 時と、 本体の報告が誤っていると現物で確かめた時だけ、 command の頭に PRINT_PREFLIGHT_PRINTER=0 を付ける (本体に聞かない)。",
+            "正本: conventions/office-automation.md#printer-media-ipp",
+        ])
     msg = "\n".join([
         "[print-preflight] 印刷前 preflight FAIL — この PDF はそのまま lp に渡さない (文字化け / 窓口に出さない頁 / どの頁を出すかの宣言なし):",
         *fails, "",
@@ -350,6 +493,8 @@ def main():
     ap.add_argument("--include-flagged", metavar="REASON", help="説明書き等に見える頁を理由つきで残す")
     ap.add_argument("--changed-from", metavar="OLD_PDF", help="前に刷った版と頁ごとに比べる")
     ap.add_argument("--dpi", type=int, default=600)
+    ap.add_argument("--printer", nargs="?", const="", metavar="QUEUE",
+                    help="本体にトレイの用紙を IPP で聞いて PDF と比べる (QUEUE 省略 = 既定の送信先)")
     ap.add_argument("--hook", action="store_true",
                     help="PreToolUse(Bash) hook として動く: 入力 JSON を stdin から読み、 lp に渡す PDF が FAIL なら exit 2")
     ap.add_argument("--selftest", action="store_true")
@@ -368,6 +513,19 @@ def main():
         return rc
     if not a.pdf:
         ap.error("pdf を指定 (or --selftest)")
+    rc = run_checks(a, ap)
+    if a.printer is not None:
+        pf, pi = printer_media.check(a.printer or None, pdf_sizes(a.pdf), names=PAPER_NAMES)
+        for i in pi:
+            print("  ·", i)
+        for f in pf:
+            print(" ", f)
+        rc = rc or (1 if pf else 0)
+    return rc
+
+
+def run_checks(a, ap):
+    """--printer 以外の CLI の検査 (頁・font・用紙の寸法・書き出し) → exit code。"""
     if a.rasterize and a.extract:
         ap.error("--rasterize と --extract はどちらか 1 つ")
     out = a.rasterize or a.extract
