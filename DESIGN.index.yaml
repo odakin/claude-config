@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: memory-budget-gate
+    legacy: "2026-09-23"
+    level: 2
+    title: "2026-09-23: memory file の予算 gate — 予算を超えて育つ commit だけ止める (縮める commit は通す)"
   - id: approve-quote-binding
     legacy: "2026-09-23"
     level: 2

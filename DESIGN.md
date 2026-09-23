@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-23: memory file の予算 gate — 予算を超えて育つ commit だけ止める (縮める commit は通す)](#memory-budget-gate)
 - [2026-09-23: approve の引用照合 — 引けるのは記録する時点で著者の最新の発言だけ (短い引用は発言の全体)](#approve-quote-binding)
 - [2026-09-22: CI の 6 件の赤は runner の環境差 — font・<base> の AGENTS.md・ext4 の inode 再利用](#ci-runner-env-failures)
 - [2026-09-19: macOS に exec で kill される git hook は、 同じ中身の新しい inode に作り直す (検査は SessionStart で毎回)](#killed-hook-recreate-design)
@@ -46,6 +47,28 @@
 
 ---
 
+## <a id="memory-budget-gate"></a>2026-09-23: memory file の予算 gate — 予算を超えて育つ commit だけ止める (縮める commit は通す)
+
+**背景 (実測)**: auto-load される memory file の肥大は warn (SessionStart・dashboard・commit 時) で見えていたが、 warn はどの commit も止めない。 並行する複数の session が制約の行・索引の行・entry を書き足し、 縮退の直後から 1 日 ~4 KB 育って、 warn の閾値に 2 日で戻った (= 縮退しても再肥大の速さが勝つ)。
+
+**判断** (engine = [`scripts/check-memory-file-bloat.py`](scripts/check-memory-file-bloat.py) の `--staged --block`、 規則 = [`conventions/memory-file-slimming.md#commit-budget-gate`](conventions/memory-file-slimming.md#commit-budget-gate)):
+1. 止めるのは「stage した file が予算以上 ∧ HEAD より byte が増える」 commit だけ。 縮める commit・予算内の commit は通す = 予算を超えてからは、 足す分を同じ commit で MOVE + pointer 化して払う。
+2. 予算 (`BLOCK_FILE_KB`) は warn (`WARN_FILE_KB`) より下 = commit で育つ限り surface の warn に届かない。 値は engine の定数だけが持つ。
+3. 検査の故障は exit 3 (違反の 1 と分ける)。 呼び元は commit を止めず「この commit では走っていない」 を出す。 engine が古い機械 (`--block` を知らない) でも同じ扱いになる。
+4. 逃げ道は env `CLAUDE_MEMORY_BUDGET_GUARD=0` (warn に落として通す)。 使うのは owner が明示したときだけ。
+5. 配線は利用者の層 = pre-commit から `--block` を渡した file だけが対象 (既定は従来どおり warn だけ)。
+
+**採らなかった案**:
+- *絶対サイズで止める (予算以上なら常に止める)*: 予算を超えた状態では縮退の commit まで止まり、 抜け出せない。
+- *節ごとの予算 (索引・制約表・entry 一覧それぞれに上限)*: 節の境界が変わるたびに設定が要る。 どの節で払うかは書き手が決めればよく、 file 全体の予算で足りる。
+- *warn の閾値を下げる*: 止めない限り並行 session の追記は積み上がる (warn は既に commit 時にも出ていた)。
+
+**較正 (実測)**: 縮退の直後で予算まで ~14 KiB の余裕。 本物の pre-commit に一時 index (`GIT_INDEX_FILE`) で 20 KB 足した file を渡し、 予算の検査として rc 1 で止まることを確かめた (worktree と本物の index は触らない)。 ⚠️ 試験データは閾値からの差で作る: 最初の試行は「今の file + 固定量」 で作り、 縮退で base が縮んでいたため予算の内側 (143.5 KiB) に落ちて素通りした。 rc だけでなく止めた検査の行まで見たので気づけた ([`conventions/hook-authoring.md`](conventions/hook-authoring.md) の配線 test の規律と同じ)。
+
+**代償**: 予算を超えてから制約を 1 行足したい session は、 同じ commit で何かを archive へ移す手間を払う。
+
+---
+
 ## <a id="approve-quote-binding"></a>2026-09-23: approve の引用照合 — 引けるのは記録する時点で著者の最新の発言だけ (短い引用は発言の全体)
 
 **背景 (実測)**: `approve --quote` の照合は、 引用を含む**最初の** user 発言を返していた。 同じ短い承認 (「OK」) を 2 回に分けて使った session で、 後の承認の記録がすべて前の「OK」 を指した (中身は候補の全文 hash に束縛されていたので保護は効いていた = 監査の帰属だけが誤り)。 同じ照合は部分一致なので「OK」 が「BOOK」「OK じゃない」 にも当たり、 本人の発言の前に harness が付ける `<system-reminder>` の文まで引用元にしていた。
@@ -65,7 +88,7 @@
 
 **代償**: 承認の後、 記録の前に著者が別の発言をすると記録できない (もう一度承認を得る)。 較正の記録では 0 件。
 
-**未検証**: Codex の rollout は 1 本しか見ていない。 その 1 本は 1 つの発言を同じ文面で 2 回書いていた (最新の方に一致するので判定は崩れない)。 発言の後に user-role の注入を足す client があれば、 正当な承認が exit 5 になる = その時は注入の除外 (`human_text_segments`) に足す。 ⇒ Claude でも実際に起きた: 背景 task の完了通知・別 session の連絡が user-role で入り、「最新の本人の発言」 を上書きして正当な承認が exit 5 になった (実測)。 出どころの欄 (`turnOrigin` ≠ human) と封筒 (`<task-notification>` 等) で本人の発言から外して解消 (`96bbda4`)。 較正のとき 1 つの session で「通知は数えられていない」 と確かめたが、 別の session では数えられていた = 1 session の不在の実測で一般化しない。
+**未検証**: Codex の rollout は 1 本しか見ていない。 その 1 本は 1 つの発言を同じ文面で 2 回書いていた (最新の方に一致するので判定は崩れない)。 発言の後に user-role の注入を足す client があれば、 正当な承認が exit 5 になる = その時は注入の除外 (`human_text_segments`) に足す。 ⇒ Claude でも実際に起きた: 背景 task の完了通知・別 session の連絡が user-role で入り、「最新の本人の発言」 を上書きして正当な承認が exit 5 になった (実測)。 出どころの欄 (`turnOrigin` ≠ human) と封筒 (`<task-notification>` 等) で本人の発言から外して解消 (`96bbda4`)。 較正のとき 1 つの session で「通知は数えられていない」 と確かめたが、 別の session では数えられていた = 1 session の不在の実測で一般化しない。 ⇒ 逆向きも実際に起きた: 作業中 (assistant の turn の途中) に届いた本人の発言は transcript に `type: user` の行でなく `attachment` (`type: queued_command`、 `origin.kind: human`、 `commandMode: prompt`) として入り、 照合器に見えない (実測) = その発言を引用できず、 しかも「最新の本人の発言」 の判定からも漏れる (作業中に届いた発言の後でも、 その前の承認の発言が引けた)。 未解消 = 数えるかは agent の権限規則の変更 = owner の裁定待ち (carrier = owner 個人層の TODO、 SESSION.md Open items)。
 
 **運用メモ**: canary を手で回す時は `--caller` を付けない (付けた名前は呼び元として liveness の記録に残り、 後で「報告の途絶えた呼び元」 として出る)。 hook の test は、 stdin を読み切る hook を stdin を閉じて呼ぶ ([`hooks/manuscript-claim-guard.test.sh`](hooks/manuscript-claim-guard.test.sh) の `_live`。 閉じない stdin を継ぐと入力待ちで止まる。 関連 = [`conventions/hook-authoring.md#hook-stdin-pipe-sigpipe`](conventions/hook-authoring.md#hook-stdin-pipe-sigpipe))。
 
