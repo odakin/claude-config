@@ -22,8 +22,9 @@ scripts/public-precommit-runner.sh から呼ぶ同じ engine。
 agent-authority の block で守る (= その file の他の行は普通に直せる)。 block の外側からの迂回 (手前の exit 0・
 helper 関数の差し替え = canary が走らない / `|| true` = 失敗が消える) は止めずに、 ここで「報告が途絶えた」
 「NOT ARMED」 として表に出す。 判断の記録と残る穴 = conventions/agent-rule-ownership.md#wiring-scope。
-同じ面で、 承認なしで入った規則の文書への追記 (engine の `additive-log --surface`) の未読を出す
-(= 事前に止めない代わりに本人が後で読む、 conventions/agent-rule-ownership.md#additive-and-free-zones)。
+同じ面で、 承認なしで入った規則の文書への追記のうち、 その場の返事で伝わっていないもの (engine の
+`additive-log --surface`) を、 人のいる session の開始に割り当てて出す (その session の Stop が返事に書かせる。
+人のいない session = CLAUDE_CODE_ENTRYPOINT が sdk-* には渡さない、 conventions/agent-rule-ownership.md#additive-and-free-zones)。
 """
 from __future__ import annotations
 
@@ -169,7 +170,7 @@ def canary(caller: str | None) -> int:
     return 0 if armed else 1
 
 
-def liveness(max_age_hours: float, silent_days: float) -> int:
+def liveness(max_age_hours: float, silent_days: float, session: str | None = None) -> int:
     state = load_state()
     if state is None or age_hours(state.get("at")) > max_age_hours:
         armed, detail = probe()
@@ -195,7 +196,8 @@ def liveness(max_age_hours: float, silent_days: float) -> int:
                              " conventions/agent-rule-ownership.md#wiring-scope)")
     # 承認なしで入った規則の文書への追記 = 本人が後で読む面 (conventions/agent-rule-ownership.md#additive-and-free-zones)
     try:
-        r = subprocess.run([sys.executable, ENGINE, "additive-log", "--surface"], capture_output=True, text=True,
+        r = subprocess.run([sys.executable, ENGINE, "additive-log", "--surface"] + (["--session", session] if session else []),
+                           capture_output=True, text=True,
                            timeout=10, stdin=subprocess.DEVNULL)
         if r.returncode != 0:
             raise OSError(r.returncode)
@@ -222,12 +224,21 @@ def main(argv: list[str]) -> int:
             pass
         return 0
     if "--liveness" in argv:
-        # SessionStart の入力 (JSON) は使わないが読み切る = 書き手が EPIPE になって stdout ごと落とされないため
+        # SessionStart の入力 (JSON) を読み切る = 書き手が EPIPE になって stdout ごと落とされないため。 session id は
+        # 追記の割り当てに使う (人のいない session には割り当てない)
+        raw = ""
         try:
             if not sys.stdin.isatty():
-                sys.stdin.read()
+                raw = sys.stdin.read()
         except (OSError, ValueError):
             pass
+        try:
+            sid = str((json.loads(raw) if raw.strip() else {}).get("session_id") or "")
+        except (ValueError, AttributeError):
+            sid = ""
+        session = None
+        if re.fullmatch(r"[A-Za-z0-9._-]{1,128}", sid) and not os.environ.get("CLAUDE_CODE_ENTRYPOINT", "").startswith("sdk-"):
+            session = "claude:" + sid
 
         def num(flag: str, default: float) -> float:
             if flag in argv and argv.index(flag) + 1 < len(argv):
@@ -236,7 +247,7 @@ def main(argv: list[str]) -> int:
                 except ValueError:
                     return default
             return default
-        return liveness(num("--max-age-hours", 24.0), num("--silent-days", 14.0))
+        return liveness(num("--max-age-hours", 24.0), num("--silent-days", 14.0), session)
     if not os.path.isfile(ENGINE):
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
             "permissionDecisionReason": "manuscript-claim-guard: inspection unavailable (missing engine); repair and retry."}}))

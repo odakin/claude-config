@@ -441,8 +441,12 @@ _check "健全なら --liveness は沈黙" "$(_live --liveness | wc -l | tr -d '
 # 承認なしで入った規則の文書への追記 (agent-rule-ownership.md#additive-and-free-zones) は同じ面に出る
 printf '%s\n' '{"kind": "insert", "file": "conventions/x.md", "repo": "/r/demo", "sha": "0", "text": "t", "session": "claude:s", "at": "2999-01-01T00:00:00+00:00"}' \
   > "$MANUSCRIPT_CLAIM_GUARD_STATE_DIR/additive-log.jsonl"
-_check "未読の追記は --liveness が 📜 で出す" "$(_live --liveness | grep -c '📜.*demo/conventions/x.md')" 1
-rm -f "$MANUSCRIPT_CLAIM_GUARD_STATE_DIR/additive-log.jsonl"
+_check "人のいない session の開始には出さない" \
+  "$(jq -n '{session_id:"s-headless"}' | CLAUDE_CODE_ENTRYPOINT=sdk-cli HOME="$LH" python3 "$HOOK" --liveness 2>/dev/null | grep -c '📜' || true)" 0
+_check "event に session の無い開始には出さない" "$(_live --liveness | grep -c '📜' || true)" 0
+_check "返事で伝わっていない追記は、 人のいる session の開始で 📜 に出る" \
+  "$(jq -n '{session_id:"s-live"}' | CLAUDE_CODE_ENTRYPOINT=cli HOME="$LH" python3 "$HOOK" --liveness 2>/dev/null | grep -c '📜.*demo/conventions/x.md')" 1
+rm -f "$MANUSCRIPT_CLAIM_GUARD_STATE_DIR/additive-log.jsonl" "$MANUSCRIPT_CLAIM_GUARD_STATE_DIR/additive-handled.json"
 _age 'd["callers"]["synthetic"] = ago(20)'
 _check "報告が 14 日以上途絶えた呼び元を 🟡 で出す" "$(_live --liveness | grep -c '🟡.*synthetic')" 1
 _age 'd["at"] = ago(3); d["armed"] = False'

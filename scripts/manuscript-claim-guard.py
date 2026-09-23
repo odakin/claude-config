@@ -23,8 +23,8 @@
        config            <repo>/.claude/manuscript-guard.json
      強める変更と弱める変更は機械で区別できないので、 どちらも承認を要る。 例外は 2 つ (述語は agent-rule-guard.py):
        規則の文書 (CLAUDE.md / AGENTS.md / CONVENTIONS.md / conventions/*.md。 規則保護の正本 2 本・marker・manifest の
-       file は除く) で、 既存の文を変えずに文・行・節を足すだけの変更 (緩和の語なし) は事前の承認なしに通し、 本人が
-       後で読む記録 (additive-log) に残す。 本人が宣言した `agent-free` の区画 (状況の一覧・生成物) の中は保護しない。
+       file は除く) で、 既存の文を変えずに文・行・節を足すだけの変更 (緩和の語なし) は事前の承認なしに通し、 記録
+       (additive-log) に残して、 入れた turn の最後の返事に書かせる (Stop。 本人の既読の操作は無い)。 本人が宣言した `agent-free` の区画 (状況の一覧・生成物) の中は保護しない。
 
 誰に効くか: AI agent の session だけ。 人が terminal で commit した場合 (agent の session env が無い) は通す。
   Claude / Codex の hook は常に agent。 git pre-commit は CLAUDE_CONFIG_AGENT_SESSION / CLAUDE_CODE_SESSION_ID /
@@ -53,8 +53,9 @@
   manuscript-claim-guard.py approvals [--session agent:id]    記録済み承認の一覧
   manuscript-claim-guard.py stop claude|codex      Stop の event を stdin で受け、 記録した承認を最後の返事に書いていなければ差し戻す (fail-open)
   manuscript-claim-guard.py scan FILE [--rev HEAD]            HEAD (または rev) と作業ツリーの保護領域の差分を表示
-  manuscript-claim-guard.py additive-log [--surface] [--days N]   承認なしで入った規則の文書への追記 (本人が後で読む記録)
-  manuscript-claim-guard.py additive-log --ack --quote '<本人の発言>'  本人が読んだ = 以後の surface から外す
+  manuscript-claim-guard.py additive-log [--days N]          承認なしで入った規則の文書への追記の記録 (30 日) と処理状態
+  manuscript-claim-guard.py additive-log --surface --session agent:id   返事で伝わっていない追記を、 人のいる session の
+                                                              開始に割り当てて出す (その session の Stop が返事に書かせる)
   manuscript-claim-guard.py --selftest
 
 検査不能は fail-closed: hook は deny JSON、agent の git pre-commit は exit 1。故障を違反と区別して表示する。
@@ -641,7 +642,8 @@ PROSE_DETAIL = "追記扱いにならない理由: "
 PENDING_EXEMPTIONS: list[dict] = []
 ADDITIVE_LOG = "additive-log.jsonl"
 ADDITIVE_ACK = "additive-ack.json"
-ADDITIVE_SHOWN = "additive-shown.json"  # 最後に本人へ見せた時刻と、 そこに含まれた最新の記録の時刻
+ADDITIVE_HANDLED = "additive-handled.json"  # 返事で本人に伝えた記録と、 session 開始で割り当てた先
+ADDITIVE_KEEP_DAYS = 30
 
 
 def note_exemption(rel: str, repo: Path | None, new: str, exempt: dict, inserted: bool) -> None:
@@ -999,24 +1001,33 @@ def disclosed(a: dict, reply: str) -> bool:
     return any(name in line and head in collapse_ws(line) for line in reply.splitlines())
 
 
-def undisclosed_approvals(agent: str, sid: str, event: dict) -> list[dict]:
+def undisclosed_approvals(agent: str, sid: str, msgs: list[tuple[str, str]], replies: list[str]) -> list[dict]:
     """著者の最新の発言に結んだ承認のうち、 その後の返事に書いていないもの。"""
-    tr = find_transcript(agent, sid, event.get("transcript_path"))
-    if tr is None:
-        return []
-    msgs = user_messages(tr)
-    if not msgs:
-        return []
     ts, text = msgs[-1]
     sha = message_sha(text)
     mine = [a for a in load_approvals(agent, sid) if a.get("quote_time") == ts and a.get("quote_msg_sha") == sha]
-    if not mine:
-        return []
-    replies = assistant_replies_since(agent, tr, ts)
-    last = event.get("last_assistant_message")
-    if isinstance(last, str) and last.strip():
-        replies.append(last)
     return [a for a in mine if not any(disclosed(a, r) for r in replies)]
+
+
+def undisclosed_additive(me: str, since: str, replies: list[str], state: dict) -> list[dict]:
+    """この session が著者の最新の発言の後に入れた追記と、 session 開始でこの session に割り当てた追記のうち、 返事に
+    書いていないもの。 書いてあったものは処理済みにする (本人の既読の操作は無い)。"""
+    start = _utc(since)
+    start = start.replace(microsecond=0) if start else None
+    demand = []
+    for e in pending_additive(state):
+        at = _utc(str(e.get("at", "")))
+        if state["assigned"].get(additive_key(e)) == me or (
+                e.get("session") == me and start is not None and at is not None and at >= start):
+            demand.append(e)
+    told = [e for e in demand if any(additive_disclosed(e, r) for r in replies)]
+    if told:
+        now = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+        for e in told:
+            state["handled"][additive_key(e)] = {"how": "reply", "session": me, "at": now}
+            state["assigned"].pop(additive_key(e), None)
+        save_handled(state)
+    return [e for e in demand if e not in told]
 
 
 def stop_check(agent: str, event: dict) -> str | None:
@@ -1025,24 +1036,51 @@ def stop_check(agent: str, event: dict) -> str | None:
         if not isinstance(event, dict) or event.get("stop_hook_active") is True:
             return None
         sid = str(event.get("session_id") or "")
-        if not SAFE_ID.match(sid) or not approvals_path(agent, sid).exists():
+        if not SAFE_ID.match(sid):
             return None
-        left = undisclosed_approvals(agent, sid, event)
+        me = f"{agent}:{sid}"
+        has_appr = approvals_path(agent, sid).exists()
+        # 人のいない session (claude -p 等) の返事に書いても本人は読まない = 追記は求めず、 人のいる session の開始に回す
+        headless = agent == "claude" and os.environ.get("CLAUDE_CODE_ENTRYPOINT", "").startswith("sdk-")
+        state = load_handled()
+        mine_add = [] if headless else [e for e in pending_additive(state)
+                                        if e.get("session") == me or state["assigned"].get(additive_key(e)) == me]
+        if not has_appr and not mine_add:
+            return None
+        tr = find_transcript(agent, sid, event.get("transcript_path"))
+        if tr is None:
+            return None
+        msgs = user_messages(tr)
+        if not msgs:
+            return None
+        replies = assistant_replies_since(agent, tr, msgs[-1][0])
+        last = event.get("last_assistant_message")
+        if isinstance(last, str) and last.strip():
+            replies.append(last)
+        left = undisclosed_approvals(agent, sid, msgs, replies) if has_appr else []
+        left_add = undisclosed_additive(me, msgs[-1][0], replies, state) if mine_add else []
     except Exception:
         return None
-    if not left:
+    if not left and not left_add:
         return None
 
     def short(q: str) -> str:
         q = collapse_ws(q)
         return q if len(q) <= 40 else q[:40] + "…"
 
-    rows = "\n".join(f"- 「{short(str(a.get('quote', '')))}」 を {a.get('file')} の承認として記録した"
-                     f" ({', '.join(a.get('regions') or [])}): {a.get('change', '')}" for a in left)
-    reason = ("manuscript-claim-guard: このターンで著者の発言を承認として記録したが、 最後の返事にそれを書いていない"
-              " (著者が見ないまま記録だけが残る)。 次の行を返事に入れて、 返事の全文を出し直す:\n" + rows +
-              "\n引いた発言と file 名が同じ行にあれば足りる。 違う意味で引いていたら、 そう書いて著者の判断を仰ぐ。"
-              " 正本 = conventions/agent-rule-ownership.md#approval")
+    parts = []
+    if left:
+        parts.append("このターンで著者の発言を承認として記録したが、 最後の返事にそれを書いていない"
+                     " (著者が見ないまま記録だけが残る)。 次の行を返事に入れる:\n" +
+                     "\n".join(f"- 「{short(str(a.get('quote', '')))}」 を {a.get('file')} の承認として記録した"
+                               f" ({', '.join(a.get('regions') or [])}): {a.get('change', '')}" for a in left) +
+                     "\n引いた発言と file 名が同じ行にあれば足りる。 違う意味で引いていたら、 そう書いて著者の判断を仰ぐ。")
+    if left_add:
+        parts.append("承認なしで規則の文書に追記したが、 最後の返事にそれを書いていない (本人の目に入らないまま入る)。"
+                     " 次の行を返事に入れる:\n" + "\n".join(additive_line(e) for e in left_add) +
+                     "\nfile 名と「追記」 が同じ行にあれば足りる。")
+    reason = ("manuscript-claim-guard: " + "\n\n".join(parts) + "\n返事の全文を出し直す。"
+              " 正本 = conventions/agent-rule-ownership.md#approval と #additive-and-free-zones")
     return json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False)
 
 
@@ -1911,8 +1949,14 @@ def write_exemptions(session: tuple[str, str] | None) -> bool:
         return True
     path = state_dir() / ADDITIVE_LOG
     try:
-        seen = {(e.get("repo"), e.get("file"), e.get("sha"), e.get("kind"), e.get("zone"))
-                for e in load_additive_log()}
+        rows = load_additive_log()
+        cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=ADDITIVE_KEEP_DAYS)
+        kept = [e for e in rows if (_utc(str(e.get("at", ""))) or cutoff) >= cutoff]
+        if len(kept) != len(rows):  # 30 日より古い記録を落とす (機械用の記録。 伝えるのは返事)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in kept), encoding="utf-8")
+            os.replace(tmp, path)
+        seen = {(e.get("repo"), e.get("file"), e.get("sha"), e.get("kind"), e.get("zone")) for e in kept}
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as fh:
             for e in PENDING_EXEMPTIONS:
@@ -1946,21 +1990,6 @@ def load_additive_log() -> list[dict]:
     return out
 
 
-def unread_additive(days: float | None = None) -> list[dict]:
-    """本人が既読にしていない記録。 期限で黙って消さない (days は一覧の絞り込みだけ)。"""
-    try:
-        acked = _utc(json.loads((state_dir() / ADDITIVE_ACK).read_text(encoding="utf-8")).get("through", ""))
-    except (OSError, ValueError, AttributeError):
-        acked = None
-    since = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=days) if days else None
-    out = []
-    for e in load_additive_log():
-        at = _utc(str(e.get("at", "")))
-        if at is None or ((acked is None or at > acked) and (since is None or at > since)):
-            out.append(e)
-    return out
-
-
 def _utc(value: str) -> _dt.datetime | None:
     try:
         t = _dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
@@ -1969,89 +1998,112 @@ def _utc(value: str) -> _dt.datetime | None:
     return t if t.tzinfo else None
 
 
-ACK_WORDS = ("読んだ", "読みました", "見た", "見ました", "確認した", "確認しました", "既読")
+def additive_key(e: dict) -> str:
+    return "|".join(str(e.get(k, "")) for k in ("at", "repo", "file", "sha", "kind", "zone"))
 
 
-def note_shown(entries: list[dict]) -> bool:
-    """本人に見せた時刻と、 見せた記録の最新の時刻を残す (既読はこの範囲までしか付かない)。"""
-    latest = max((str(e.get("at", "")) for e in entries if _utc(str(e.get("at", "")))), default="")
+def load_handled() -> dict:
+    """{"handled": {key: {...}}, "assigned": {key: "agent:sid"}}。 無ければ、 廃止した既読 (additive-ack) の時点までを
+    処理済みとして引き継ぐ。"""
     try:
-        path = state_dir() / ADDITIVE_SHOWN
+        d = json.loads((state_dir() / ADDITIVE_HANDLED).read_text(encoding="utf-8"))
+        if isinstance(d, dict):
+            return {"handled": dict(d.get("handled") or {}), "assigned": dict(d.get("assigned") or {})}
+    except (OSError, ValueError, TypeError):
+        pass
+    d: dict = {"handled": {}, "assigned": {}}
+    try:
+        through = _utc(json.loads((state_dir() / ADDITIVE_ACK).read_text(encoding="utf-8")).get("through", ""))
+    except (OSError, ValueError, AttributeError):
+        through = None
+    if through is not None:
+        for e in load_additive_log():
+            at = _utc(str(e.get("at", "")))
+            if at is not None and at <= through:
+                d["handled"][additive_key(e)] = {"how": "ack"}
+    return d
+
+
+def save_handled(d: dict) -> bool:
+    keys = {additive_key(e) for e in load_additive_log()}
+    d = {"handled": {k: v for k, v in d["handled"].items() if k in keys},
+         "assigned": {k: v for k, v in d["assigned"].items() if k in keys}}
+    path = state_dir() / ADDITIVE_HANDLED
+    try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
-                                    "through": latest}) + "\n", encoding="utf-8")
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(d, ensure_ascii=False) + "\n", encoding="utf-8")
+        os.replace(tmp, path)
     except OSError:
         return False
     return True
 
 
+def pending_additive(state: dict | None = None) -> list[dict]:
+    """返事でまだ本人に伝わっていない記録。"""
+    state = state or load_handled()
+    return [e for e in load_additive_log() if additive_key(e) not in state["handled"]]
+
+
+def additive_disclosed(e: dict, reply: str) -> bool:
+    """返事の同じ行に、 追記した file の名前と「追記」 (区画なら「緩和」) がある。"""
+    name = Path(str(e.get("file", ""))).name
+    if not name:
+        return True
+    return any(name in line and ("追記" in line or "緩和" in line) for line in reply.splitlines())
+
+
+def additive_line(e: dict) -> str:
+    where = f"{Path(e.get('repo') or '~').name}/{e.get('file')}"
+    text = collapse_ws(str(e.get("text", "")))[:60]
+    if e.get("kind") == "free":
+        return f"- 規則でない区画 {e.get('zone')} に緩和の語「{e.get('term')}」 を含む追記をした: {where} — {text}"
+    return f"- 規則の文書に承認なしで追記した: {where} — {text}"
+
+
 def additive_log_mode(args: argparse.Namespace) -> int:
-    entries = unread_additive(None if args.surface or args.ack else args.days)
     if args.ack:
-        session = session_from_env()
-        transcript = find_transcript(*session) if session else None
-        msgs = user_messages(transcript) if transcript is not None else []
-        idx = quote_index(args.quote, msgs) if args.quote else None
-        said = msgs[idx][1] if idx is not None else ""
-        spoken = _utc(msgs[idx][0]) if idx is not None else None
-        if idx is None or idx != len(msgs) - 1 or spoken is None or not any(w in said for w in ACK_WORDS):
-            print("additive-log --ack: 本人の最新の発言で、 読んだことを言うもの (「読んだ」「確認した」 等を含む) を --quote に"
-                  " 引く。 この session の transcript で照合できない。 記録しない。\n"
-                  "  読んだという記録は本人の行為 = 別の依頼の文を引いて agent が自分の追記を既読にしない。",
-                  file=sys.stderr)
-            return 4
-        # 既読にするのは、 その発言より前に本人へ見せた (surface / 一覧) 時点までの記録だけ = 見せた後・発言の後に
-        # 入った追記は未読のまま
-        try:
-            shown = json.loads((state_dir() / ADDITIVE_SHOWN).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            shown = {}
-        shown_at, shown_through = _utc(str(shown.get("at", ""))), _utc(str(shown.get("through", "")))
-        if shown_at is None or shown_through is None or shown_at > spoken:
-            print("additive-log --ack: 本人の発言より前に、 記録を本人に見せた跡 (session 開始の 📜 か additive-log の一覧)"
-                  " が無い。 先に一覧を見せてから、 本人の発言を引く。 記録しない。", file=sys.stderr)
-            return 4
-        bound = min(spoken, shown_through)
-        through = max((str(e.get("at", "")) for e in load_additive_log()
-                       if (_utc(str(e.get("at", ""))) or bound) <= bound), default="")
-        acked = [e for e in entries if (_utc(str(e.get("at", ""))) or bound) <= bound]
-        try:
-            before = json.loads((state_dir() / ADDITIVE_ACK).read_text(encoding="utf-8")).get("through", "")
-        except (OSError, ValueError, AttributeError):
-            before = ""
-        through = max(through, str(before)) if _utc(str(before)) else through
-        path = state_dir() / ADDITIVE_ACK
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"through": through, "quote": collapse_ws(args.quote),
-                                    "session": f"{session[0]}:{session[1]}",
-                                    "at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")},
-                                   ensure_ascii=False) + "\n", encoding="utf-8")
-        print(f"additive-log: {len(acked)} 件を本人が読んだと記録した (残り未読 {len(entries) - len(acked)} 件)")
+        print("additive-log --ack は廃止: 追記は、 入れた turn の返事に書いた時点で処理済みになる (本人の既読の操作は要らない)。"
+              " 正本 = conventions/agent-rule-ownership.md#additive-and-free-zones")
         return 0
-    if entries and not note_shown(entries):
-        print("🟡 manuscript-claim-guard: 追記の記録を見せた跡 (additive-shown) を書けない = 本人は既読にできない。"
-              " state の置き場を確かめる")
+    state = load_handled()
     if args.surface:
-        if not entries:
+        # 人のいる session の開始だけ: 返事で伝わっていない追記をこの session に割り当てて出し、 その session の Stop が
+        # 返事に書くまで求める。 session が分からない開始 (人のいない session 等) には出さず、 割り当てもしない
+        # = 誰も見ていない表示で処理済みにしない。
+        session = parse_session(args.session) if getattr(args, "session", None) else None
+        pend = pending_additive(state)
+        if session is None or not pend:
             return 0
+        for e in pend:
+            state["assigned"][additive_key(e)] = f"{session[0]}:{session[1]}"
+        if not save_handled(state):
+            print("🟡 manuscript-claim-guard: 追記の記録の処理状態 (additive-handled) を書けない。 state の置き場を確かめる")
         files: dict[str, int] = {}
-        for e in entries:
+        for e in pend:
             name = f"{Path(e.get('repo') or '~').name}/{e.get('file')}"
             files[name] = files.get(name, 0) + 1
         shown = ", ".join(f"{k}{'' if v == 1 else f' ×{v}'}" for k, v in list(files.items())[:6])
         more = f" ほか {len(files) - 6} file" if len(files) > 6 else ""
-        print(f"📜 承認なしで入った規則の文書への追記 {len(entries)} 件 (本人が未読): {shown}{more}。"
-              f" 本人に 1 行で伝える。 中身 = python3 {Path(__file__).resolve()} additive-log、"
-              " 本人が読んだら本人の発言を --ack --quote に引く (正本 = claude-config/conventions/agent-rule-ownership.md#additive-and-free-zones)")
-        for e in entries:
-            if e.get("kind") == "free":
-                print(f"  ⚠️ 規則でない区画 {e.get('zone')} に緩和の語「{e.get('term')}」: "
-                      f"{Path(e.get('repo') or '~').name}/{e.get('file')} — {collapse_ws(str(e.get('text', '')))[:80]}")
+        print(f"📜 承認なしで入った規則の文書への追記のうち、 その場の返事で本人に伝わっていないもの {len(pend)} 件: {shown}{more}。"
+              " この session の最初の返事に次の行をそのまま書く (Stop が確かめる。 書けば処理済み = 本人の操作は要らない。"
+              " 正本 = claude-config/conventions/agent-rule-ownership.md#additive-and-free-zones):")
+        for e in pend:
+            print("  " + additive_line(e))
         return 0
-    for e in entries:
+    since = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=args.days) if args.days else None
+    for e in load_additive_log():
+        at = _utc(str(e.get("at", "")))
+        if since is not None and at is not None and at <= since:
+            continue
+        key = additive_key(e)
+        done = state["handled"].get(key)
+        status = (f"処理済み ({done.get('how')})" if isinstance(done, dict) else
+                  f"未処理 (割り当て先 {state['assigned'][key]})" if key in state["assigned"] else "未処理")
         where = f"{Path(e.get('repo') or '~').name}/{e.get('file')}"
         label = "追記" if e.get("kind") == "insert" else f"区画 {e.get('zone')} (緩和の語「{e.get('term')}」)"
-        print(f"{str(e.get('at', ''))[:16]} {where} [{label}] session={e.get('session')}\n  {collapse_ws(str(e.get('text', '')))}")
+        print(f"{str(e.get('at', ''))[:16]} {where} [{label}] {status} session={e.get('session')}\n"
+              f"  {collapse_ws(str(e.get('text', '')))}")
     return 0
 
 
@@ -2927,7 +2979,9 @@ def selftest() -> int:
               [(e["kind"], e.get("term")) for e in PENDING_EXEMPTIONS] == [("free", "不要")])
         check("guard の state は編集 tool で書かせない",
               guard_state_path(state_dir() / ADDITIVE_LOG) and not guard_state_path(rr / "CLAUDE.md"))
-        print("[追記の記録と既読]")
+        print("[追記の記録と、 返事で伝える]")
+        saved_ep = os.environ.get("CLAUDE_CODE_ENTRYPOINT")
+        os.environ["CLAUDE_CODE_ENTRYPOINT"] = "cli"  # 人のいる session として回す (試験を回す環境に左右されない)
         PENDING_EXEMPTIONS.clear()
         protected_changes("conventions/mail.md", rules, rules + "宛先も読む。\n", rr, {})
         protected_changes("conventions/mail.md", rules, rules + "宛先も読む。\n", rr, {})
@@ -2935,36 +2989,69 @@ def selftest() -> int:
               write_exemptions(("claude", "sess-1")) and len(load_additive_log()) == 1 and not PENDING_EXEMPTIONS)
         import contextlib
         import io
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            additive_log_mode(argparse.Namespace(ack=False, surface=True, days=None, quote=None))
-        check("SessionStart の面に未読の件数と file が出る", "📜" in buf.getvalue() and "mail.md" in buf.getvalue())
+
+        def surface(session: str | None) -> str:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                additive_log_mode(argparse.Namespace(ack=False, surface=True, days=None, quote=None, session=session))
+            return buf.getvalue()
+
+        a_now = _dt.datetime.now(_dt.timezone.utc)
+
+        def at(minutes: float) -> str:
+            return (a_now + _dt.timedelta(minutes=minutes)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+        def one_msg(name: str, text: str, minutes: float) -> Path:
+            p = tr_dir / f"{name}.jsonl"
+            p.write_text(json.dumps({"type": "user", "message": {"content": text}, "timestamp": at(minutes)},
+                                    ensure_ascii=False) + "\n", encoding="utf-8")
+            return p
+
+        check("session の分からない開始 (人のいない session 等) には出さず、 割り当てもしない",
+              surface(None) == "" and not load_handled()["assigned"])
+        out = surface("claude:sess-ss")
+        check("返事で伝わっていない追記を、 人のいる session の開始で出して割り当てる",
+              "📜" in out and "mail.md" in out and set(load_handled()["assigned"].values()) == {"claude:sess-ss"})
+        ss_ev = {"session_id": "sess-ss", "transcript_path": str(one_msg("sess-ss", "こんにちは", -1))}
+        out = stop_check("claude", dict(ss_ev, last_assistant_message="こんにちは"))
+        check("割り当てた追記を返事に書かなければ差し戻す", out is not None and "mail.md" in json.loads(out)["reason"])
+        check("返事に書けば通り、 処理済みになる (本人の既読の操作は無い)",
+              stop_check("claude", dict(ss_ev, last_assistant_message="- 規則の文書に承認なしで追記した: conventions/mail.md"))
+              is None and not pending_additive())
+        check("処理済みは session 開始に二度と出ない", surface("claude:sess-tt") == "")
+        ad_ev = {"session_id": "sess-ad", "transcript_path": str(one_msg("sess-ad", "知見を足して", -2))}
+        PENDING_EXEMPTIONS.clear()
+        protected_changes("conventions/mail.md", rules, rules + "件名も読む。\n", rr, {})
+        write_exemptions(("claude", "sess-ad"))
+        check("自分の追記を最後の返事に書かなければ差し戻す",
+              stop_check("claude", dict(ad_ev, last_assistant_message="足しました")) is not None)
+        check("別の session の Stop には求めない",
+              stop_check("claude", {"session_id": "sess-zz", "transcript_path": ad_ev["transcript_path"]}) is None)
+        os.environ["CLAUDE_CODE_ENTRYPOINT"] = "sdk-cli"
+        check("人のいない session の Stop では求めず、 処理済みにもしない (次の人のいる session に出す)",
+              stop_check("claude", dict(ad_ev, last_assistant_message="規則の文書に追記した: mail.md")) is None
+              and len(pending_additive()) == 1)
+        os.environ["CLAUDE_CODE_ENTRYPOINT"] = "cli"
+        check("file 名と「追記」 が同じ行にあれば通し、 処理済みにする",
+              stop_check("claude", dict(ad_ev, last_assistant_message="- 規則の文書に承認なしで追記した: demo/conventions/mail.md"))
+              is None and not pending_additive())
         with open(state_dir() / ADDITIVE_LOG, "a", encoding="utf-8") as fh:
             fh.write(json.dumps({"kind": "insert", "file": "old.md", "repo": "", "sha": "1", "text": "t",
                                  "at": "2000-01-01T00:00:00+00:00"}) + "\n")
-        check("未読は期限で黙って消えない", any(e["file"] == "old.md" for e in unread_additive()))
-        os.environ["CLAUDE_CONFIG_AGENT_SESSION"] = "claude:sess-1"
-        now = _dt.datetime.now(_dt.timezone.utc)
-
-        def say(text: str, minutes: int) -> None:
-            with open(tr, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps({"type": "user", "message": {"content": text},
-                                     "timestamp": (now + _dt.timedelta(minutes=minutes)).isoformat().replace("+00:00", "Z")},
-                                    ensure_ascii=False) + "\n")
-
-        def ack(quote: str) -> int:
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                return additive_log_mode(argparse.Namespace(ack=True, surface=False, days=None, quote=quote))
-        say("conventions の知見を上層に整備して、 古い hook の配線も見直しておいて", 1)
-        check("読んだことを言わない依頼の文では既読にしない", ack("conventions の知見を上層に整備して") == 4)
-        say("追記は全部読んだ、 問題なし", 2)
-        with open(state_dir() / ADDITIVE_LOG, "a", encoding="utf-8") as fh:
-            for name, minutes in (("mid.md", 1), ("later.md", 5)):
-                fh.write(json.dumps({"kind": "insert", "file": name, "repo": "", "sha": name, "text": "t",
-                                     "at": (now + _dt.timedelta(minutes=minutes)).isoformat(timespec="seconds")}) + "\n")
-        check("本人の最新の発言でない文では既読にしない", ack("conventions の知見を上層に整備して") == 4)
-        check("既読になるのは本人に見せた時点までの記録だけ (見せた後・発言の後に入った追記は未読のまま)",
-              ack("追記は全部読んだ、 問題なし") == 0 and [e["file"] for e in unread_additive()] == ["mid.md", "later.md"])
+        PENDING_EXEMPTIONS.clear()
+        protected_changes("conventions/mail.md", rules, rules + "宛名も読む。\n", rr, {})
+        write_exemptions(("claude", "sess-1"))
+        check("30 日より古い記録は次の書き込みで消える", not any(e["file"] == "old.md" for e in load_additive_log()))
+        (state_dir() / ADDITIVE_HANDLED).unlink(missing_ok=True)
+        (state_dir() / ADDITIVE_ACK).write_text(json.dumps({"through": "2999-01-01T00:00:00+00:00"}) + "\n")
+        check("廃止した既読 (additive-ack) の時点までは処理済みとして引き継ぐ", not pending_additive(load_handled()))
+        with contextlib.redirect_stdout(io.StringIO()):
+            gone = additive_log_mode(argparse.Namespace(ack=True, surface=False, days=None, quote="読んだ", session=None))
+        check("--ack は廃止 (何も書かず 0)", gone == 0 and not (state_dir() / ADDITIVE_HANDLED).exists())
+        if saved_ep is None:
+            os.environ.pop("CLAUDE_CODE_ENTRYPOINT", None)
+        else:
+            os.environ["CLAUDE_CODE_ENTRYPOINT"] = saved_ep
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             _hook("claude", {"tool_name": "Write", "session_id": "sess-1", "cwd": str(rr),
@@ -3003,10 +3090,12 @@ def main(argv: list[str] | None = None) -> int:
     st = sub.add_parser("stop")
     st.add_argument("agent", choices=["claude", "codex"])
     g = sub.add_parser("additive-log")
-    g.add_argument("--surface", action="store_true", help="SessionStart 用の要約 (未読が無ければ沈黙)")
+    g.add_argument("--surface", action="store_true",
+                   help="SessionStart 用: 返事で伝わっていない追記を --session に割り当てて出す (無ければ沈黙)")
+    g.add_argument("--session", help="割り当て先の agent:id (人のいる session の開始だけが渡す)")
     g.add_argument("--days", type=float, default=None, help="一覧を直近 N 日に絞る (surface は絞らない)")
-    g.add_argument("--ack", action="store_true", help="本人が読んだと記録する (--quote に本人の発言)")
-    g.add_argument("--quote")
+    g.add_argument("--ack", action="store_true", help="廃止 (返事に書いた時点で処理済みになる)")
+    g.add_argument("--quote", help="廃止")
     args = ap.parse_args(argv)
     if args.selftest:
         return selftest()
