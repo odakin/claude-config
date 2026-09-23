@@ -35,6 +35,11 @@ import re
 import sys
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 HOME = Path.home()
 
 
@@ -88,7 +93,7 @@ def load_config() -> dict | None:
     if not CONFIG or not CONFIG.exists():
         return None
     import yaml
-    c = yaml.safe_load(CONFIG.read_text()) or {}
+    c = _yaml_safe_load(CONFIG.read_text()) or {}
     _CFG = {
         "sources": [(PREFS / s).resolve() for s in c.get("sources", [])],
         "cell_stoplist": set(c.get("cell_stoplist", [])) | DEFAULT_CELL_STOP,

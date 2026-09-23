@@ -38,6 +38,11 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 try:
     import yaml
 except ImportError:  # pragma: no cover
@@ -355,10 +360,10 @@ def _selftest() -> int:
             fails += 1
 
     header, parts = split_legacy(LEGACY_FIXTURE)
-    orig = yaml.safe_load(LEGACY_FIXTURE)
+    orig = _yaml_safe_load(LEGACY_FIXTURE)
     check(header == ["# ledger header", "# source: a | b", ""], "split: 冒頭の注釈行を返す")
     check([i for i, _ in parts] == ["2026-01-02-second", "2026-01-01-first", "2026-01-03-third"], "split: 旧 file の順で entry を切る")
-    check([yaml.safe_load(t) for _, t in parts] == orig, "split: dedent した text の parse が元の list と ==")
+    check([_yaml_safe_load(t) for _, t in parts] == orig, "split: dedent した text の parse が元の list と ==")
     check(parts[1][1].startswith("# ── section note"), "split: 節の注釈行は次の entry の頭に送る")
     check(parts[2][1].endswith("status: open\n# trailing note\n"), "split: 最後の entry の後ろの注釈はその file の末尾")
     check('notes: |\n  two lines\n  with "quotes" and: colons\n\n  and a blank line inside\n' in parts[0][1],

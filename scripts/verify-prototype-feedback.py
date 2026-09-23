@@ -12,6 +12,11 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 
 STATUSES = {
     "received",
@@ -47,7 +52,7 @@ def load_record(path: Path) -> dict[str, Any]:
             raise RuntimeError(
                 "PyYAML is required for YAML records; JSON records use the standard library"
             ) from exc
-        data = yaml.safe_load(text)
+        data = _yaml_safe_load(text)
     if not isinstance(data, dict):
         raise ValueError("record root must be a mapping/object")
     return data

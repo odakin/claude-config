@@ -44,6 +44,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 try:
     import yaml
 except ImportError:
@@ -778,7 +783,7 @@ def main() -> int:
     if not args.registry.exists():
         return 0  # registry 無ければ silent (= dashboard 連鎖を止めない)
     try:
-        registry = yaml.safe_load(args.registry.read_text(encoding="utf-8")) or {}
+        registry = _yaml_safe_load(args.registry.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as e:
         print(f"[check-sot-drift] registry parse error: {e}", file=sys.stderr)
         return 0

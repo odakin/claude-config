@@ -64,6 +64,11 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 STATE_NAME = "_shared_drive_state.json"
 TIMEOUT = 20
 DOWNLOAD_TIMEOUT = 180  # listing と別に長く取る: 大きなスキャン PDF は数十秒の timeout で同じ file の取得が続けて切れた (実測)
@@ -95,7 +100,7 @@ def load_registry(path: Path) -> dict:
         data = json.loads(text) if text.strip() else {}
     else:
         import yaml  # YAML の台帳だけ PyYAML を使う
-        data = yaml.safe_load(text)
+        data = _yaml_safe_load(text)
     data = data or {}
     data["folders"] = data.get("folders") or []
     data["share_mail"] = data.get("share_mail") or {}

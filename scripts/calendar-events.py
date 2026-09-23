@@ -43,6 +43,11 @@ import sys
 import warnings
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 warnings.filterwarnings("ignore")
 
 JST = datetime.timezone(datetime.timedelta(hours=9))
@@ -260,7 +265,7 @@ def cmd_dups(a) -> int:
 
 def cmd_add(a) -> int:
     import yaml
-    specs = yaml.safe_load(Path(a.spec).read_text())
+    specs = _yaml_safe_load(Path(a.spec).read_text())
     if isinstance(specs, dict):
         specs = specs.get("events", [])
     tz = os.environ.get("CLAUDE_CALENDAR_TZ", "Asia/Tokyo")

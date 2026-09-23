@@ -37,6 +37,11 @@ from . import rules as R
 from . import specs as S
 from . import views as V
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 ALL_KINDS = ("superseded", "marker", "value")
 
 
@@ -502,7 +507,7 @@ def load_ack() -> list:
     p = ack_path()
     if p is None or not p.exists():
         return []
-    d = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    d = _yaml_safe_load(p.read_text(encoding="utf-8")) or {}
     return d.get("acks") or []
 
 
@@ -513,7 +518,7 @@ def forms_for(path: Path) -> tuple:
     mani = p.parent / "submission.yaml"
     if mani.exists():
         try:
-            d = yaml.safe_load(mani.read_text(encoding="utf-8")) or {}
+            d = _yaml_safe_load(mani.read_text(encoding="utf-8")) or {}
             fs = tuple(sorted({str(x.get("form")) for x in (d.get("documents") or {}).values()}))
             if fs:
                 return fs

@@ -47,6 +47,11 @@ from pathlib import Path
 
 import yaml
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 CFG_PATH = ".github/dependabot.yml"
 GITCRYPT_MAGIC = b"\x00GITCRYPT"
 JUDGED = ("npm", "pip", "github-actions")
@@ -102,7 +107,7 @@ def entries(cfg: dict):
 
 def judge(cfg_text: str, paths, encrypted) -> dict:
     """→ {keep: [...], drop: [(eco, 理由)], info: [...]}。 encrypted(path) -> bool。"""
-    cfg = yaml.safe_load(cfg_text) or {}
+    cfg = _yaml_safe_load(cfg_text) or {}
     keep, drop = [], []
     configured = set()
     for eco, d in entries(cfg):
@@ -144,7 +149,7 @@ def remove_entries(text: str, drop_ecos) -> str:
 
 
 def remaining_ecos(text: str) -> list[str]:
-    return [e for e, _ in entries(yaml.safe_load(text) or {})]
+    return [e for e, _ in entries(_yaml_safe_load(text) or {})]
 
 
 def parse_repo_lines(text: str) -> list[str]:

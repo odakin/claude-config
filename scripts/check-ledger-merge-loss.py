@@ -42,6 +42,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 
 def _git(args: list[str], cwd: Path) -> str | None:
     try:
@@ -62,7 +67,7 @@ def ids_of(text: str | None) -> set[str] | None:
         return None
     try:
         import yaml
-        data = yaml.safe_load(text)
+        data = _yaml_safe_load(text)
     except Exception:
         return None
     if not isinstance(data, list):

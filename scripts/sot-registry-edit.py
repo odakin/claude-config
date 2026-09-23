@@ -29,6 +29,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 try:
     import yaml
 except ImportError:
@@ -96,8 +101,8 @@ def rewrite(src: str, ops: dict) -> str:
                 block.append(L[i])
                 i += 1
             rm = set(o.get(f"{key}_remove", []))
-            kept = [b for b in block if b.startswith("  #") or str(yaml.safe_load(b[4:])) not in rm]
-            existing = {str(yaml.safe_load(b[4:])) for b in kept if b.startswith("  - ")}
+            kept = [b for b in block if b.startswith("  #") or str(_yaml_safe_load(b[4:])) not in rm]
+            existing = {str(_yaml_safe_load(b[4:])) for b in kept if b.startswith("  - ")}
             adds = [x for x in o.get(f"{key}_add", []) if x not in existing]  # 既に在る値は足さない (plan と同じ)
             if (rm or adds) and o.get("note"):
                 kept.append(f"  # {o['note']}")
@@ -135,7 +140,7 @@ def _has_ack_after(L: list[str], i: int) -> bool:
 
 def apply(ops: dict, registry: Path, base: Path, dry_run: bool) -> int:
     src = registry.read_text(encoding="utf-8")
-    reg = yaml.safe_load(src) or {}
+    reg = _yaml_safe_load(src) or {}
     errs, expect = plan(ops, reg, base)
     # list block を持たない topic への add は行単位で追記できないので拒否 (= 手で block を足してから)
     by = {t.get("topic"): t for t in reg.get("topics", []) or []}
@@ -149,7 +154,7 @@ def apply(ops: dict, registry: Path, base: Path, dry_run: bool) -> int:
         print("nothing written")
         return 1
     text = rewrite(src, ops)
-    reg2 = yaml.safe_load(text) or {}
+    reg2 = _yaml_safe_load(text) or {}
     by2 = {t.get("topic"): t for t in reg2.get("topics", []) or []}
     bad = []
     for tp, exp in expect.items():
@@ -193,7 +198,7 @@ def selftest() -> int:
                            "ack": {"x": "理由"}, "note": "語から定義文へ"}}
         c("dry-run は書かない", apply(good, reg, base, True) == 0 and "'用語'" in reg.read_text())
         c("適用すると期待どおり", apply(good, reg, base, False) == 0)
-        t = yaml.safe_load(reg.read_text())["topics"][0]
+        t = _yaml_safe_load(reg.read_text())["topics"][0]
         c("anchor 置換", t["anchor_tokens"] == ["規則を定義する文はここ"])
         c("pointer 削除", t["pointer_patterns"] == ["rule-a"])
         c("allow 追加", t["allow_globs"] == ["*/SESSION.md", "*/plans/*"])
@@ -212,10 +217,10 @@ def selftest() -> int:
         c("拒否した操作は何も書かない", reg.read_text() == before)
         c("既に在る値の add は重複させない (照合も通る)",
           apply({"rule-a": {"allow_add": ["*/SESSION.md"]}}, reg, base, False) == 0
-          and yaml.safe_load(reg.read_text())["topics"][0]["allow_globs"] == ["*/SESSION.md", "*/plans/*"])
+          and _yaml_safe_load(reg.read_text())["topics"][0]["allow_globs"] == ["*/SESSION.md", "*/plans/*"])
         c("2 回目の ack は既存 audit_ack に追記",
           apply({"rule-a": {"ack": {"y": "理由2"}}}, reg, base, False) == 0
-          and yaml.safe_load(reg.read_text())["topics"][0]["audit_ack"] == {"x": "理由", "y": "理由2"})
+          and _yaml_safe_load(reg.read_text())["topics"][0]["audit_ack"] == {"x": "理由", "y": "理由2"})
     print("\nALL PASS" if ok else "\nFAILED")
     return 0 if ok else 1
 

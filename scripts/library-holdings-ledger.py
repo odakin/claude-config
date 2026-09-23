@@ -57,6 +57,11 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
 OK_RESULTS = {"所蔵なし", "旧版のみ", "訳書のみ"}  # 申し込んでよい結論
 RESULTS = OK_RESULTS | {"図書", "電子ブック"}
@@ -87,7 +92,7 @@ def load_config(path: str) -> dict:
 def load_ledger(cfg: dict) -> list[dict]:
     import yaml
     p = Path(cfg["ledger"])
-    return (yaml.safe_load(p.read_text()) or []) if p.exists() else []
+    return (_yaml_safe_load(p.read_text()) or []) if p.exists() else []
 
 
 def save_ledger(cfg: dict, entries: list[dict]) -> None:

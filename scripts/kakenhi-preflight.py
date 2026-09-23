@@ -81,6 +81,11 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 # ── 様式 docx から骨格を拾うための規則 ────────────────────────────────────────
 # 「この欄を消すな」と様式自身が書いている印。ここに掛かる見出しは 🔴 扱いにする。
 PROTECTED_MARKERS = ("削除することなく", "削除しないこと", "動かさないこと", "削除せず")
@@ -614,7 +619,7 @@ def load_identity(path: Path) -> dict:
         import yaml
     except ImportError:
         die("identity file を読むには PyYAML が要る (pip install pyyaml)")
-    data = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("identity") or {}
+    data = (_yaml_safe_load(path.read_text(encoding="utf-8")) or {}).get("identity") or {}
     if not data.get("current") and not data.get("superseded"):
         die(f"{path.name}: identity.current も identity.superseded も無い")
     return data
@@ -905,7 +910,7 @@ def load_acks(path: Path) -> list[dict]:
         import yaml
     except ImportError:
         die("ack file を読むには PyYAML が要る (pip install pyyaml)")
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    data = _yaml_safe_load(path.read_text(encoding="utf-8")) or {}
     acks = data.get("acks") or []
     for i, a in enumerate(acks, 1):
         for k in ("code", "match", "reason"):

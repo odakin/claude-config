@@ -11,6 +11,11 @@ import yaml
 
 from . import config as CF
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 
 @lru_cache(maxsize=None)
 def _load_all(spec_dir: str) -> dict:
@@ -19,7 +24,7 @@ def _load_all(spec_dir: str) -> dict:
         raw = p.read_bytes()
         if raw.startswith(b"\x00GITCRYPT"):
             continue
-        d = yaml.safe_load(raw.decode("utf-8")) or {}
+        d = _yaml_safe_load(raw.decode("utf-8")) or {}
         sid = (d.get("meta") or {}).get("id")
         if sid:
             d["_path"] = p

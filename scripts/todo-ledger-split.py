@@ -34,6 +34,11 @@ from typing import Callable, List, Optional
 
 import yaml
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 from todo_ledger import (DIR_NAME, LEGACY_NAME, TodoLedgerError, entry_text, load_todos, resolve_repo,  # noqa: E402
                          split_legacy, todo_path, write_todo)
@@ -105,7 +110,7 @@ def run(repo_arg, apply: bool = False, readme: bool = True, use_git: bool = True
     except TodoLedgerError as e:
         out(f"✗ {e}")
         return 1
-    orig = yaml.safe_load(text)
+    orig = _yaml_safe_load(text)
     problems: List[str] = []
     same, to_write = [], []
     for eid, t in parts:
@@ -241,7 +246,7 @@ def _selftest() -> int:
         (repo / ".gitattributes").write_text(f"{LEGACY_NAME} filter=git-crypt diff=git-crypt\n", encoding="utf-8")
         g("add", "-A")
         g("commit", "-q", "-m", "init")
-        orig = yaml.safe_load(FIXTURE)
+        orig = _yaml_safe_load(FIXTURE)
 
         # T1 dry-run: 何も書かない
         log.clear()
@@ -314,7 +319,7 @@ def _selftest() -> int:
         check(rc == 1 and "重複" in joined() and not (bad / DIR_NAME).exists(), "T8 id の重複は書かずに止まる")
         # 直す前に赤くなる対照: 旧来の読み手 (yaml.safe_load(TODO.yaml)) は分割後の repo を読めない
         try:
-            yaml.safe_load((repo / LEGACY_NAME).read_text(encoding="utf-8"))
+            _yaml_safe_load((repo / LEGACY_NAME).read_text(encoding="utf-8"))
             old_reader_ok = True
         except FileNotFoundError:
             old_reader_ok = False

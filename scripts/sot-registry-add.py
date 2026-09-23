@@ -47,6 +47,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 DEFAULT_ALLOW = ["*/SESSION.md", "*/SESSION-archive.md", "*/plans/*"]
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
@@ -161,7 +166,7 @@ def add(specs: list[dict], base: Path, registry: Path, dry_run: bool, do_preview
     registry.write_text(new_text, encoding="utf-8")
     try:
         import yaml  # type: ignore
-        data = yaml.safe_load(registry.read_text(encoding="utf-8"))
+        data = _yaml_safe_load(registry.read_text(encoding="utf-8"))
         names = [t.get("topic") for t in data.get("topics", [])]
         missing = [s["topic"] for s in specs if s["topic"] not in names]
         if missing:
@@ -215,7 +220,7 @@ def selftest() -> int:
           "home_section:" not in rendered and not any(line.endswith(" ") for line in rendered.splitlines()))
         try:
             import yaml  # type: ignore
-            c("the registry still parses as YAML", len(yaml.safe_load(reg.read_text())["topics"]) == 2)
+            c("the registry still parses as YAML", len(_yaml_safe_load(reg.read_text())["topics"]) == 2)
         except ImportError:
             print("[SKIP] PyYAML not installed")
         eng = Path(__file__).with_name("check-sot-drift.py")

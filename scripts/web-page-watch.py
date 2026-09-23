@@ -67,6 +67,11 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 TIMEOUT = 20
 ERROR_THRESHOLD = 3
 DEFAULT_STALE_HOURS = 36
@@ -87,7 +92,7 @@ def load_ledger(path: Path) -> dict:
         data = json.loads(text)
     else:
         import yaml  # noqa: PLC0415 (YAML 台帳のときだけ要る)
-        data = yaml.safe_load(text)
+        data = _yaml_safe_load(text)
     data = data or {}
     for t in data.get("targets") or []:
         if not t.get("id") or not t.get("url"):

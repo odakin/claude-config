@@ -62,6 +62,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "lib"))
 from recorded_ids import MSGID_RE, THREADID_RE, harvest_entry, harvest_message_ids  # noqa: E402
@@ -149,7 +154,7 @@ class Ledger:
 
     def _load_list(self, p: Path) -> list[dict]:
         try:
-            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+            data = _yaml_safe_load(p.read_text(encoding="utf-8"))
         except Exception as e:
             self.broken.append(f"{p}: {str(e).splitlines()[0] if str(e) else 'parse error'}")
             return []
@@ -326,7 +331,7 @@ def update_entry_text(cfg: Config, text: str, entry_id: str, msgs: list[dict], r
     if span is None:
         raise KeyError(entry_id)
     s, e = span
-    entry = yaml.safe_load("\n".join(lines[s:e])) or [{}]
+    entry = _yaml_safe_load("\n".join(lines[s:e])) or [{}]
     entry = entry[0] if isinstance(entry, list) else entry
     by_id = {m["id"]: m for m in msgs}
     existing = [x for x in (entry.get("messages") or []) if isinstance(x, str)]
@@ -406,7 +411,7 @@ def update_todo_text(text: str, todo_id: str, context: str, today: str, status: 
     if span is None:
         raise KeyError(todo_id)
     s, e = span
-    entry = yaml.safe_load("\n".join(lines[s:e]))[0]
+    entry = _yaml_safe_load("\n".join(lines[s:e]))[0]
     edits = []
     ctx_line = f"  status_context: {yaml_str(context)}"
     sp = field_span(lines, s, e, "status_context")
@@ -492,7 +497,7 @@ def write_verified(path: Path, new_text: str, verify) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(new_text, encoding="utf-8")
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = _yaml_safe_load(path.read_text(encoding="utf-8"))
         why = verify(data if isinstance(data, (list, dict)) else None)   # dict = todo/<id>.yaml (1 file 1 entry)
     except Exception as e:
         why = f"再 parse 失敗: {str(e).splitlines()[0] if str(e) else e}"
@@ -655,7 +660,7 @@ def apply_plan(cfg: Config, p: dict, ledger: Ledger, todo_id: str | None, args, 
     if p["home"]:
         _, path, entry = p["home"]
         text = path.read_text(encoding="utf-8")  # 書く直前に読み直す (並列 session)
-        n_before = len([x for x in (yaml.safe_load(text) or []) if isinstance(x, dict)])
+        n_before = len([x for x in (_yaml_safe_load(text) or []) if isinstance(x, dict)])
         new_text = update_entry_text(cfg, text, entry["id"], msgs, rec_ids, todo_id, add_thread=True, tid=tid)
         if new_text != text:
             want = set(rec_ids) | (harvest_entry(entry) & {m["id"] for m in msgs})
@@ -667,7 +672,7 @@ def apply_plan(cfg: Config, p: dict, ledger: Ledger, todo_id: str | None, args, 
         c = p["create"]
         y, mo = int(c["id"][:4]), int(c["id"][5:7])
         text = c["path"].read_text(encoding="utf-8") if c["path"].exists() else cfg.month_header.format(year=y, month=mo) + "\n"
-        n_before = len([x for x in (yaml.safe_load(text) or []) if isinstance(x, dict)])
+        n_before = len([x for x in (_yaml_safe_load(text) or []) if isinstance(x, dict)])
         entry_text = render_new_entry(cfg, c["id"], msgs, rec_ids, p["account"], [todo_id] if todo_id else [], args.summary or "", tid)
         write_verified(c["path"], append_entry_text(text, entry_text), _verify_inbox(c["id"], n_before, True, set(rec_ids)))
         written.append(c["path"])
@@ -676,7 +681,7 @@ def apply_plan(cfg: Config, p: dict, ledger: Ledger, todo_id: str | None, args, 
         ctx = compose_context(cfg, p, today, args.next)
         if tpath.name == TODO_LEGACY_NAME:   # 旧 list 形 (移行中に残っている TODO.yaml)
             text = tpath.read_text(encoding="utf-8")   # 書く直前に読み直す (並列 session)
-            n_before = len([x for x in (yaml.safe_load(text) or []) if isinstance(x, dict)])
+            n_before = len([x for x in (_yaml_safe_load(text) or []) if isinstance(x, dict)])
             write_verified(tpath, update_todo_text(text, todo_id, ctx, today, args.status, tid),
                            _verify_todo(todo_id, n_before, ctx, today, args.status))
         else:   # todo/<id>.yaml (1 file 1 entry): list 形に戻して同じ編集を当て、 mapping に戻す (= 書式を保つ経路を 1 本に)
@@ -878,7 +883,7 @@ def run_migrate(cfg: Config, name: str, ledger: Ledger, gmail, apply: bool, limi
         return 0
     for p, items in per_file.items():
         text = p.read_text(encoding="utf-8")
-        n_before = len([x for x in (yaml.safe_load(text) or []) if isinstance(x, dict)])
+        n_before = len([x for x in (_yaml_safe_load(text) or []) if isinstance(x, dict)])
         new_text = text
         for e, msgs, rec in items:
             new_text = update_entry_text(cfg, new_text, e["id"], msgs, rec, None, add_thread=False, tid="", reset=True)
@@ -993,7 +998,7 @@ def _selftest() -> int:
         ns.apply = True
         out_lines.clear()
         check(run_record(cfg, ns, Ledger(cfg), gm, "2026-09-22", pr) == 0, "apply が exit 0")
-        eo = yaml.safe_load((td / "ledger-a" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8"))
+        eo = _yaml_safe_load((td / "ledger-a" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8"))
         e1 = next(x for x in eo if x["id"] == "2026-09-20-e1")
         check(set(harvest_entry(e1)) >= {m1, m2, m3, m4, m5}, "t3 書いた entry の全 id が harvest_entry で拾われる (round-trip)")
         check(e1.get("recorded_upto") == f"messageId:{m5} (2026-09-22 04:00)", "recorded_upto = 最新の message (tz の刻印)")
@@ -1001,7 +1006,7 @@ def _selftest() -> int:
               "messages = legacy field の id も含めて thread の全 5 通、 日付順、 自分発は →")
         check(not check_entry(e1) and "notes" not in e1 and e1.get("category") == "sent" and len(eo) == 2,
               "t7 notes を作らず category を触らない、 entry 数は不変")
-        todo = yaml.safe_load((td / "ledger-a" / "TODO.yaml").read_text(encoding="utf-8"))[0]
+        todo = _yaml_safe_load((td / "ledger-a" / "TODO.yaml").read_text(encoding="utf-8"))[0]
         check(todo.get("status_context") == "2026-09-22 sent to Owner Example (Re: test) → next: read and answer",
               "t5 status_context を上書き (最新は自分発 = ctx_sent template)")
         check(str(todo.get("updated")) == "2026-09-22" and todo.get("email_ref") == "threadId:aaaa000000000001",
@@ -1032,12 +1037,12 @@ def _selftest() -> int:
         ns4.slug = "cp-dates"
         out_lines.clear()
         rc = run_record(cfg, ns4, Ledger(cfg), gm, "2026-09-22", pr)
-        ts = yaml.safe_load((td / "ledger-b" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8"))
+        ts = _yaml_safe_load((td / "ledger-b" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8"))
         new = next((x for x in ts if str(x.get("id", "")).endswith("-cp-dates-received")), None)
         check(rc == 0 and new is not None and new["threadId"] == "bbbb000000000001" and new["related_todo"] == ["2026-10-01-todo-b"]
               and len(new["messages"]) == 2 and not check_entry(new) and new["category"] == "received",
               "新規 entry を項目の台帳 (ledger-b) の月 file に作る (threadId / related_todo / messages / category)")
-        tb = yaml.safe_load((td / "ledger-b" / "TODO.yaml").read_text(encoding="utf-8"))[0]
+        tb = _yaml_safe_load((td / "ledger-b" / "TODO.yaml").read_text(encoding="utf-8"))[0]
         check(tb.get("status") == "doing" and tb.get("email_ref") == "threadId:bbbb000000000001", "--status と email_ref を項目に書く")
         check(new is not None and set(harvest_entry(new)) >= {"bbbb000000000001", "bbbb000000000002"}, "t3 新規 entry も round-trip")
         # todo/<id>.yaml (1 entry 1 file) の台帳: 項目の file だけを書き、 mapping と注釈を保つ
@@ -1058,13 +1063,13 @@ def _selftest() -> int:
         out_lines.clear()
         rc = run_record(cfg_c, ns5, led, gm, "2026-09-22", pr)
         tc_raw = todo_c.read_text(encoding="utf-8")
-        tc = yaml.safe_load(tc_raw)
+        tc = _yaml_safe_load(tc_raw)
         check(rc == 0 and isinstance(tc, dict) and tc["id"] == "2026-10-02-todo-c" and tc["status"] == "doing"
               and tc["email_ref"] == "threadId:dddd000000000001" and str(tc["updated"]) == "2026-09-22"
               and tc["status_context"].startswith("2026-09-22 sent to Owner Example") and tc["notes"] == "keep me\n"
               and tc_raw.startswith("# section note\nid: ") and not tc_raw.startswith("- "),
               "t13 todo/<id>.yaml の項目は mapping のまま (注釈・block scalar を保って status / updated / email_ref / status_context を書く)")
-        cin = yaml.safe_load((td / "ledger-c" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8"))
+        cin = _yaml_safe_load((td / "ledger-c" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8"))
         check(len(cin) == 1 and cin[0]["related_todo"] == ["2026-10-02-todo-c"] and not (td / "ledger-c" / "TODO.yaml").exists(),
               "t13 新規 entry は項目の台帳 (ledger-c) に、 旧 TODO.yaml は作らない")
         pth = td / "ledger-a" / "inbox" / "2026-09.yaml"
@@ -1079,7 +1084,7 @@ def _selftest() -> int:
             encoding="utf-8")
         out_lines.clear()
         rc = run_migrate(cfg, "ledger-a", Ledger(cfg), gm, apply=True, limit=None, only="2026-08-01-legacy", out=pr)
-        old = yaml.safe_load((td / "ledger-a" / "inbox" / "2026-08.yaml").read_text(encoding="utf-8"))[0]
+        old = _yaml_safe_load((td / "ledger-a" / "inbox" / "2026-08.yaml").read_text(encoding="utf-8"))[0]
         check(rc == 0 and old.get("messages") == [f"mid:{m2} 2026-09-22 01:00 ← Counter Part"] and "threadId" not in old
               and old.get("recorded_upto") == f"messageId:{m2} (2026-09-22 01:00)" and harvest_entry(old) == {m2},
               "t10 移行は entry 自身の message id だけを索引に書き、 threadId を足さない (harvest 集合は不変)")
@@ -1092,7 +1097,7 @@ def _selftest() -> int:
         out_lines.clear()
         rc = run_migrate(cfg, "ledger-a", Ledger(cfg), gm, apply=True, limit=None, only="2026-07-01-thread-only-root", out=pr)
         pth7 = td / "ledger-a" / "inbox" / "2026-07.yaml"
-        tr = yaml.safe_load(pth7.read_text(encoding="utf-8"))[0]
+        tr = _yaml_safe_load(pth7.read_text(encoding="utf-8"))[0]
         check(rc == 0 and tr.get("messages") == [f"mid:{m3} 2026-09-22 02:00 ← Counter Part"] and harvest_message_ids(tr) == {m3},
               "t11 移行は threadId 由来の root を索引に載せない (message 集合が不変)")
         pth7.write_text(pth7.read_text(encoding="utf-8").replace(
@@ -1102,13 +1107,13 @@ def _selftest() -> int:
             f"messageId:{m3} (2026-09-22 02:00)", f"messageId:{m4} (2026-09-22 03:00)"), encoding="utf-8")
         out_lines.clear()
         rc = run_migrate(cfg, "ledger-a", Ledger(cfg), gm, apply=True, limit=None, only="2026-07-01-thread-only-root", out=pr, remigrate=True)
-        tr = yaml.safe_load(pth7.read_text(encoding="utf-8"))[0]
+        tr = _yaml_safe_load(pth7.read_text(encoding="utf-8"))[0]
         check(rc == 0 and tr.get("messages") == [f"mid:{m3} 2026-09-22 02:00 ← Counter Part", f"mid:{m4} 2026-09-22 03:00 ← Counter Part"]
               and tr.get("recorded_upto") == f"messageId:{m4} (2026-09-22 03:00)",
               "t12 --remigrate は root の行だけ外し、 通常の記録で足した行 (m4) は残す")
         out_lines.clear()
         rc = run_migrate(cfg, "ledger-a", Ledger(cfg), gm, apply=True, limit=None, only="2026-07-01-thread-only-root", out=pr, remigrate=True)
-        check(rc == 0 and yaml.safe_load(pth7.read_text(encoding="utf-8"))[0] == tr, "t12 --remigrate は冪等")
+        check(rc == 0 and _yaml_safe_load(pth7.read_text(encoding="utf-8"))[0] == tr, "t12 --remigrate は冪等")
     finally:
         shutil.rmtree(td, ignore_errors=True)
     print(f"selftest: {'ALL PASS' if not fails else f'FAIL {fails}'}")

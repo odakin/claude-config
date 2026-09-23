@@ -46,6 +46,11 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 API = "https://discord.com/api/v10"
 UA = "DiscordBot (https://github.com/odakin/claude-config discord-board-bridge, 0.2)"  # 層1 discord-bot.md#discord-api-user-agent
 ACCEPT_EMOJI = "✅"
@@ -67,7 +72,7 @@ def _p(v: str) -> str:
 
 def load_config(path: Path) -> dict:
     import yaml
-    cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    cfg = _yaml_safe_load(path.read_text(encoding="utf-8")) or {}
     cfg.setdefault("token_file", "")
     cfg.setdefault("board_root", "")        # board.py のある repo (例 ~/Claude/agent-board)
     cfg.setdefault("source_root", "~/Claude")  # <source_root>/<project> = request の --source
@@ -103,7 +108,7 @@ def org_channels(cfg: dict, org: dict | None = None, ids: dict | None = None) ->
     try:
         if org is None:
             import yaml
-            org = yaml.safe_load(Path(os.path.expanduser(cfg["org_file"])).read_text(encoding="utf-8"))
+            org = _yaml_safe_load(Path(os.path.expanduser(cfg["org_file"])).read_text(encoding="utf-8"))
         if ids is None:
             ids = json.loads(Path(os.path.expanduser(cfg["org_ids_file"])).read_text(encoding="utf-8"))
     except Exception:

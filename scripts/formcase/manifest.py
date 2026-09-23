@@ -30,6 +30,11 @@ from pathlib import Path
 
 import yaml
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 SCHEMA = "formcase/1"
 MANIFEST_NAME = "submission.yaml"
 STATES = ("draft", "printed", "sent", "submitted", "unknown")
@@ -81,12 +86,12 @@ def load(case_dir) -> "Manifest":
     p = case_dir / MANIFEST_NAME
     if not p.exists():
         raise ManifestError(f"{MANIFEST_NAME} が無い: {case_dir}")
-    data = yaml.safe_load(read_bytes(p).decode("utf-8"))
+    data = _yaml_safe_load(read_bytes(p).decode("utf-8"))
     return Manifest(case_dir, data)
 
 
 def loads(text: str, case_dir) -> "Manifest":
-    return Manifest(Path(case_dir).resolve(), yaml.safe_load(text))
+    return Manifest(Path(case_dir).resolve(), _yaml_safe_load(text))
 
 
 def dump_text(data: dict) -> str:

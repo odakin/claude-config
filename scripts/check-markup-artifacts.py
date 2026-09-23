@@ -36,6 +36,11 @@ import sys
 import unicodedata
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 # config で渡すもの (呼び側が自分の層で持つ):
 #   registry: <root からの台帳 path>
 #   registry_base: <台帳内の相対 path の基準 repo>
@@ -70,7 +75,7 @@ def load_registry(root: Path, registry: str) -> dict | None:
     except ImportError:
         return None
     try:
-        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        return _yaml_safe_load(p.read_text(encoding="utf-8")) or {}
     except Exception:
         return None
 
@@ -270,7 +275,7 @@ def main() -> int:
         cfg = {}
         if a.config and a.config.exists():
             import yaml
-            cfg = yaml.safe_load(a.config.read_text(encoding="utf-8")) or {}
+            cfg = _yaml_safe_load(a.config.read_text(encoding="utf-8")) or {}
         f = audit(a.root, cfg)
     except Exception as e:                      # noqa: BLE001 — dashboard を殺さない
         print(f"(check-office-review-artifacts: skip — {e})", file=sys.stderr)

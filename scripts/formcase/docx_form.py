@@ -32,6 +32,11 @@ from pathlib import Path
 
 import yaml
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 KIND = "docx"
 OVERLAY_SUFFIX = ".overlay.yaml"
 
@@ -201,7 +206,7 @@ def load_overlay(docx_path) -> dict:
     p = overlay_path(docx_path)
     if not p.exists():
         return {}
-    return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    return _yaml_safe_load(p.read_text(encoding="utf-8")) or {}
 
 
 def gate(spec, template: Path, docx_path: Path) -> tuple:

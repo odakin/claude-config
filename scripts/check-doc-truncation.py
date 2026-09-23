@@ -64,6 +64,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml) で返す = 約 10 倍速 (2026-09-23)
+    import yaml
+    return yaml.load(stream, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 RESET_MARKER = "[truncation-ok]"
 # git-crypt の blob は `git show` だと暗号のまま返る (先頭 \0GITCRYPT)。数えると 0 になり、
 # **黙って監視対象から外れる** = この script が防ごうとしている失敗そのもの。
@@ -298,7 +303,7 @@ def main() -> int:
         return 0
     try:
         import yaml
-        cfg = yaml.safe_load(a.config.read_text(encoding="utf-8")) or {}
+        cfg = _yaml_safe_load(a.config.read_text(encoding="utf-8")) or {}
         f = audit(a.root, cfg)
     except Exception as e:                       # noqa: BLE001
         print(f"(check-doc-truncation: skip — {e})", file=sys.stderr)
