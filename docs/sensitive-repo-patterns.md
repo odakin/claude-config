@@ -39,6 +39,8 @@ New files are encrypted automatically. No one forgets to add a filter line. The 
 
 **Pattern 2-3:** Comments in `.gitattributes` explaining *why* files are encrypted are themselves a leak of operational intent. Strip them.
 
+**Pattern 2-4: Ledgers you append to often should be one entry per file.** git-crypt stores a full encrypted blob per version (no delta compression), and encrypted files cannot be 3-way merged. A single list file grows history by its whole size on every commit and collides between parallel writers. Split it into `todo/<id>.yaml` (one mapping per file, file name = id): declare the new directory encrypted *before* the first file, cut the text at entry boundaries instead of re-dumping YAML, move readers onto one loader first, and compare before/after outputs as sets and as orders separately. Details and tools: [Japanese version §2-4](sensitive-repo-patterns.ja.md#pattern-2-4).
+
 ## <a id="part-3-minimize"></a>Part 3: Minimize the Public Surface
 
 **Pattern 3-1: Slug design.** Do not encode identities in filenames. Use opaque slugs (`a.md`, `b.md`, `n1.md`) and keep the slug-to-identity mapping only in an encrypted `INDEX` file. Semantic fragments (`ac`, `tok`, `bnk`) are combinable into guesses and should be avoided.
@@ -106,3 +108,4 @@ See the Japanese version's Appendix A/B/C for:
 ## Changelog
 
 - **2026-04-09**: Initial version. Patterns extracted from the implementation of a private encrypted notes repository and generalized for public sharing.
+- **2026-09-23**: Added Pattern 2-4 (one entry per file for frequently appended ledgers).

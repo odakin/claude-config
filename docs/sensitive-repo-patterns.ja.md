@@ -107,6 +107,23 @@ SESSION.md filter=git-crypt diff=git-crypt
 README.md !filter !diff
 ```
 
+### <a id="pattern-2-4"></a>パターン 2-4: 頻繁に書き足す台帳は 1 entry 1 file にする
+
+git-crypt は file を丸ごと暗号化するので、 **版ごとに全文の暗号 blob が積まれる** (差分圧縮が効かない)。 1 つの file の list に entry を書き足していく台帳 (タスク・受信記録など) は、 1 commit ごとに file の大きさだけ履歴が増える。 さらに暗号化された file は 3-way merge できないので、 並列の session が同じ file に書くと衝突し、 片方の追記が黙って消えることがある。
+
+→ entry ごとに file を分ける (例: `todo/<id>.yaml`、 1 file = 1 entry の mapping、 file 名 = id)。 1 commit の増分は触った entry の大きさになり、 別の entry は別の file なので `git commit -- <path>` で互いを巻き込まない。 open / closed で dir を分けない (閉じるたびに mv すると履歴が割れる。 読み手は status で選ぶ)。
+
+移行の手順 (実測):
+
+1. **暗号化の宣言を最初の file より先に**: allow-list 方式なら新しい dir の行 (`todo/** filter=git-crypt diff=git-crypt`) を先に足す。 足し忘れると新しい dir は平文で push される。 移行の道具は「旧 file に filter が付き、 新しい dir に付いていない」 を見て書かずに止まる。 push 前に `git-crypt status <dir>` で全部 encrypted、 push 後に origin の blob の先頭が `\0GITCRYPT` であることを確かめる
+2. **YAML を dump し直さない**: text を entry の境界 (`- id:`) で切ってインデントを外すだけにする。 dump し直すと引用符・block scalar・key の順・注釈が変わり、 書式に依存する読み手 (行単位の書き換え、 grep) が壊れる。 旧 file を消す前に、 各 file を parse した結果が元の list の要素と全件一致することを照合する
+3. **読み手を 1 つの loader に寄せてから移す**: 読み手が各自で `yaml.safe_load(<file>)` を持っていると、 置き場を変えるたびに全部を触る。 loader は新しい dir と旧 file の両方を読み (同じ id は新しい側が勝つ)、 移行の途中でも動く。 file の id と file 名の不一致・mapping でない file・暗号文のままの file は例外にする (黙って読み飛ばさない)
+4. **前後の出力は集合と順序を分けて比べる**: 読み込み順が「書き足した順」 から「file 名順」 に変わるので、 そのままの diff は並びの差で埋まる。 行を sort して diff を取れば集合の差だけが残る。 残った差が「上位 N 件だけ表示」 の同順位の入れ替わりなら、 並べ替えの key に安定な id を足して決定的にする
+5. **手書きの雛形も直す**: 手順書にある entry の雛形が list 形 (`- id:`) のままだと、 写した人が新しい形の file に list を書く。 雛形を mapping 形にし、 corruption 検査に「id ≠ file 名」「1 file に entry が 2 つ」 を足す。 ただし YAML は key 直下の sequence を同じ indent で書ける (`cross_ref:` の次の行が `- "…"`) ので、 「col 0 の `- `」 を全部 entry と見なすと誤検出する (`- id:` だけを見る)
+6. **並列 session に先に知らせる**: 旧 file の削除を index に stage している間に、 同じ repo の別 session が path 指定の commit をすると、 その削除を拾って先に push することがある (実測。 機構 = [`multi-session-coordination.md#staging-window-race`](../conventions/multi-session-coordination.md#staging-window-race))。 移行の直前に一声かけ、 stage から commit までを短くする
+
+道具: [`scripts/lib/todo_ledger.py`](../scripts/lib/todo_ledger.py) (loader と分割の部品、 `python3` で selftest) / [`scripts/todo-ledger-split.py`](../scripts/todo-ledger-split.py) (分割、 既定 dry-run) / [`scripts/check-ledger-merge-loss.py`](../scripts/check-ledger-merge-loss.py) (merge・rebase の後に消えた entry を id で照合。 dir を渡すと file 名で照合)。 履歴に残った旧 file の全版は、 移行が landed した後に別途 (履歴の書き換えは不可逆、 全 clone の再取得が要る)。
+
 ---
 
 ## <a id="part-3-minimize"></a>Part 3: 公開面の最小化
@@ -384,3 +401,4 @@ refinement を書き加えるときには、**古い section の example が新�
 ## 更新履歴
 
 - **2026-04-09**: 初版。私的な暗号化ノートリポの実装経験から抽出したパターンを公開共有可能な形に汎化
+- **2026-09-23**: パターン 2-4 (頻繁に書き足す台帳は 1 entry 1 file) を追加
