@@ -322,6 +322,27 @@ rm -rf "$bgc/.git/claude-bg-fetch.lock"
 ( eval "$BGF"; _FETCHOK="$TMP/fok"; _TIMEOUT_BIN=""; CLAUDE_SYNC_SWEEP_BG=0 _bg_fetch "$bgc" )
 if [ -e "$TMP/fok/.bg-bgf" ]; then ng "_bg_fetch: CLAUDE_SYNC_SWEEP_BG=0 でも起動した"; else ok "_bg_fetch: kill switch で投げない"; fi
 
+echo "=== T18: git diff だけが「変更あり」 と言う file (filter つきの空 file) → stash を試みず ff ==="
+# git-crypt の「暗号化した空 file」 と同じ形: clean は空を非空の blob に写し、 smudge は空を出す。 git diff は
+# サイズ 0 の file に clean を通さず空のまま比べるので「変更あり」、 status / stash は clean を通すので「変更なし」 (実測)
+CLEAN="$TMP/fake-clean.sh"
+printf '#!/bin/sh\nc=$(cat)\nif [ -z "$c" ]; then printf HDR; else printf %%s "$c"; fi\n' > "$CLEAN"; chmod +x "$CLEAN"
+git config --global filter.fake.clean "$CLEAN"
+git config --global filter.fake.smudge "sh -c 'cat >/dev/null'"
+RP="$(mk_remote p)"
+seedp="$TMP/seedp"; git_quiet clone -q "$RP" "$seedp"
+( cd "$seedp" && printf '*.x filter=fake\n' > .gitattributes && : > keep.x && git_quiet add -A && git_quiet commit -qm keep && git_quiet push -q origin HEAD:main )
+git_quiet clone -q "$RP" "$ROOT/repoP"
+advance_remote "$RP" p
+sleep 1; touch "$ROOT/repoP/keep.x"
+if ( cd "$ROOT/repoP" && ! git diff --quiet && [ -z "$(git status --porcelain --untracked-files=no)" ] ); then
+  ok "前提: git diff は変更あり、 status は変更なし"
+else ng "前提が再現しない"; fi
+out="$(run)"
+[ -n "$(line_of "$out" P repoP)" ] && ok "phantom dirty でも最新化 (P 行)" || ng "expected P repoP (got: $out)"
+if printf '%s' "$out" | grep -q "stash push が何も作らなかった"; then ng "stash の空振りで中止した"; else ok "stash の空振りで中止しない"; fi
+git config --global --unset filter.fake.clean; git config --global --unset filter.fake.smudge
+
 echo
 echo "==== RESULT: PASS=$PASS FAIL=$FAIL ===="
 [ "$FAIL" -eq 0 ]

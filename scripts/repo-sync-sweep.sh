@@ -348,8 +348,13 @@ _pull_locked() {
   # tracked dirty (= stash が要る変更) と untracked のみ (= ff に影響しない) を区別する。
   # `git status --porcelain` の行数は untracked も数えるので判定には使わない (= untracked のみを
   # 「stash 要」 と誤判定すると pop が空振りする)。
-  if ! git diff --cached --quiet 2>/dev/null; then tracked_dirty=1; had_staged=1; fi
-  if ! git diff --quiet 2>/dev/null; then tracked_dirty=1; fi
+  # 判定は `git status` (= stash と同じ見方) で行い、 `git diff --quiet` は使わない: git diff はサイズ 0 の file に
+  # clean filter を通さず空のまま比べるので、 git-crypt で暗号化した空の file (commit された blob = 暗号化の 22 バイト、
+  # 作業ツリー = 0 バイト) を「変更あり」 と答え続ける。 stash は clean を通して「変更なし」 と見るので、 退避しようとして
+  # 何も作らず、 下の「stash push が何も作らなかった」 で毎回中止していた (実測)。 行頭の X 欄 = index 側の変更。
+  _st="$(git status --porcelain --untracked-files=no 2>/dev/null)"
+  if [ -n "$_st" ]; then tracked_dirty=1; fi
+  if printf '%s\n' "$_st" | grep -q '^[^ ?]'; then had_staged=1; fi
 
   if [ "$tracked_dirty" -eq 0 ]; then
     # behind-only & tracked-clean = fast-forward 保証 (incoming commit が untracked と同名 file を
