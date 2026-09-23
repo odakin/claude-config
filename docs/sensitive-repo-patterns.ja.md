@@ -124,10 +124,10 @@ git-crypt は file を丸ごと暗号化するので、 **版ごとに全文の�
 
 分割しても、 それまでに積まれた旧 file の全版は履歴に残る (repo の大きさは減らない = 減るのは増え方)。 落とすなら**不可逆**なので人間の判断で ([`confidential-repo-boundary.md`](../conventions/confidential-repo-boundary.md) の履歴の書き換えの項)、 次の順で (実測):
 
-- **予行演習は remote からの mirror clone で**: 手元の checkout から clone すると stash などの手元の ref まで運んでしまう。 `git filter-repo --path <旧 file> --invert-paths` の後に、 旧 file が残る commit が 0 件で、 **既定 branch の先頭の tree が書き換え前と同じ** (= 中身は 1 byte も変わらない) ことを確かめる。 旧 file を消すだけの commit は空になって落ちる。 remote の ref 一覧も見る (pull request の ref など消せない ref が旧 object を抱え続ける)。
+- **予行演習は remote からの mirror clone で**: 手元の checkout から clone すると stash などの手元の ref まで運んでしまう。 `git filter-repo --path <旧 file> --invert-paths` の後に、 旧 file が残る commit が 0 件で、 **既定 branch の先頭の tree が書き換え前と同じ** (= 中身は 1 byte も変わらない) ことを確かめる。 既定の filter-repo は旧 file だけを変えた commit を空として落とす = commit message に書いた判断の出所が消え、 commit 数も減る。 `--prune-empty never` で空 commit として残し、 commit 数が書き換え前と同じことも確かめる (大きさへの影響はほぼ無い = 落とすのは blob)。 filter-repo が書く旧 → 新 SHA の対応表 (`filter-repo/commit-map`) は保存する (記録に書いた旧 SHA を後から引くため)。 remote の ref 一覧も見る (pull request の ref など消せない ref が旧 object を抱え続ける)。
 - **本番は予行演習の後に何も進んでいないことを確かめてから**: remote の先頭が予行演習の時の値のままか (`--force-with-lease=<branch>:<旧 SHA>`)、 手元の checkout に未 push の commit が無いかを見て、 どちらかが違えば止まる。 手元は中身が同じなので `git reset --keep origin/<branch>` で ref だけ動かす (未 commit の変更は保たれる)。
 - **他の machine は後から 1 回追従する**: 手元の HEAD と「落とした file を除いて同じ中身」 の commit が新しい履歴に在れば、 未 push の仕事は無いので ref だけ動かす。 無ければ未 push の commit がある = 止めて人が見る。 追従しないと、 その machine の自動 pull は「分岐」 で止まり続ける。 追従の手順は、 その machine で次に作業する時に出る carrier (期日つきの項目) に載せる。
-- **agent には走らせられないことがある**: Claude Code の auto mode は `git filter-repo` を、 scratch の複製に対してでも破壊的な git 操作として止める (実測)。 予行演習と本番を別々の script にし、 本人が terminal で走らせる。
+- **agent には走らせられないことがある**: Claude Code の auto mode は `git filter-repo` を、 scratch の複製に対してでも破壊的な git 操作として止める (実測)。 予行演習と本番を別々の手順にし、 本人が terminal で走らせる。 3 段 (予行演習・本番・他 machine の追従) の道具 = [`scripts/git-drop-path-history.py`](../scripts/git-drop-path-history.py) (`rehearse` / `apply` / `follow`。 追従と本番の止まる条件は `--selftest` が合成 repo で確かめ、 書き換えそのものの確認 `--selftest-rewrite` は本人が走らせる)。
 - **remote がすぐ縮むとは限らない**: force-push の後も旧 object は host 側の gc まで残る (GitHub は数日〜数か月 = [`identity-in-config.md`](../conventions/identity-in-config.md)、 急ぐなら support に依頼)。 書き換えの前に `git bundle create <file> --all` で全体の控えを取っておく。
 
 道具: [`scripts/lib/todo_ledger.py`](../scripts/lib/todo_ledger.py) (loader と分割の部品、 `python3` で selftest) / [`scripts/todo-ledger-split.py`](../scripts/todo-ledger-split.py) (分割、 既定 dry-run) / [`scripts/check-ledger-merge-loss.py`](../scripts/check-ledger-merge-loss.py) (merge・rebase の後に消えた entry を id で照合。 dir を渡すと file 名で照合)。 履歴に残った旧 file の全版は、 移行が landed した後に別途 (履歴の書き換えは不可逆、 全 clone の再取得が要る)。
@@ -409,4 +409,4 @@ refinement を書き加えるときには、**古い section の example が新�
 ## 更新履歴
 
 - **2026-04-09**: 初版。私的な暗号化ノートリポの実装経験から抽出したパターンを公開共有可能な形に汎化
-- **2026-09-23**: パターン 2-4 (頻繁に書き足す台帳は 1 entry 1 file) を追加
+- **2026-09-23**: パターン 2-4 (頻繁に書き足す台帳は 1 entry 1 file) を追加。 同日、 履歴から旧 file を落とす節に空 commit を残す指定と道具 (`scripts/git-drop-path-history.py`) を追記

@@ -126,6 +126,7 @@
 - **[generate-dir-readme.py](generate-dir-readme.py)** — 任意の dir の README.md を、 各 file 冒頭の説明 1 行目から生成する (README に正本を置かないための索引生成器)
 - **[generate-doc-index.py](generate-doc-index.py)** — regenerate a slug index FROM its markdown, so Claude writes
 - **[generate-tree.py](generate-tree.py)** — CLAUDE.md 構造 tree (conventions/hooks/scripts) + CONVENTIONS.md 冒頭列挙 +
+- **[git-drop-path-history.py](git-drop-path-history.py)** — ある file の全版を git の履歴から落とす (不可逆) を、 予行演習・本番・他 machine の追従の 3 段で安全に行う。
 - **[gmail-mcp-engines.test.sh](gmail-mcp-engines.test.sh)** — gmail MCP engine 2 本 (reauth / install-runtime-links) の hermetic self-test
 - **[gmail-mcp-install-runtime-links.sh](gmail-mcp-install-runtime-links.sh)** — ~/.gmail-mcp/ の runtime credential を config repo canonical への symlink に張り替える冪等エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 - **[gmail-mcp-reauth.sh](gmail-mcp-reauth.sh)** — 多アカウント Gmail MCP の OAuth (再)認証エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
