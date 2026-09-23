@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-23: approve の引用照合 — 引けるのは記録する時点で著者の最新の発言だけ (短い引用は発言の全体)](#approve-quote-binding)
 - [2026-09-22: CI の 6 件の赤は runner の環境差 — font・<base> の AGENTS.md・ext4 の inode 再利用](#ci-runner-env-failures)
 - [2026-09-19: macOS に exec で kill される git hook は、 同じ中身の新しい inode に作り直す (検査は SessionStart で毎回)](#killed-hook-recreate-design)
 - [2026-09-17: SSO 保護サイトの login 切れは、 予告も推定もせず、 使う時に tab の行き先を見て復帰する](#sso-session-recovery-design)
@@ -42,6 +43,33 @@
 - [公開リポ leak 防止: 構造制約 hook + pre-commit ephemeral literal check](#public-repo-leak-prevention)
 - [sensitive-terms.txt の symlink architecture (2026-05-14 追補)](#sensitive-terms-symlink-architecture)
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
+
+---
+
+## <a id="approve-quote-binding"></a>2026-09-23: approve の引用照合 — 引けるのは記録する時点で著者の最新の発言だけ (短い引用は発言の全体)
+
+**背景 (実測)**: `approve --quote` の照合は、 引用を含む**最初の** user 発言を返していた。 同じ短い承認 (「OK」) を 2 回に分けて使った session で、 後の承認の記録がすべて前の「OK」 を指した (中身は候補の全文 hash に束縛されていたので保護は効いていた = 監査の帰属だけが誤り)。 同じ照合は部分一致なので「OK」 が「BOOK」「OK じゃない」 にも当たり、 本人の発言の前に harness が付ける `<system-reminder>` の文まで引用元にしていた。
+
+**判断** (engine = [`scripts/manuscript-claim-guard.py`](scripts/manuscript-claim-guard.py) の docstring「承認:」、 規則 = [`conventions/agent-rule-ownership.md#approval`](conventions/agent-rule-ownership.md#approval) 2.):
+1. 引けるのは**記録する時点で著者の最新の発言だけ** (exit 5)。 同じ発言で複数の file をまとめて承認する記録は、 著者が次に発言するまで通る。 古い発言は、 既に引かれたものも、 まだ引かれていないものも引けない = 流用を事後に人が記録から探す前提を置かない。
+2. **短い引用 (`SHORT_QUOTE` 文字未満) は発言の全体**と一致する時だけ (端の空白・句読点は除いて比べる。 疑問符は除かない = 「OK?」 は承認でない)。 長い引用は発言の一部でよい。 発言の全体を引けば必ず照合できる = 正当な承認は落ちない。
+3. 本人の発言に前置された `<system-reminder>` の塊は引用元から除く (hook 注入の除外と揃える)。
+4. approve の出力に、 結び付いた発言の時刻と冒頭を出す (結び付け違いがその場で見える)。
+
+**採らなかった案**:
+- *発言が候補 file の作成より後であることを要求 (mtime)*: 承認の後に同じ中身の候補を作り直す手順が実在する (実測) = 正当な承認を落とす。 file の時刻は「著者がいつ見たか」 の証拠にならない。
+- *同じ発言の再利用だけを止める (最初の記録の時刻と、 その後の発言を比べる)*: 一度入れたが、 まだ引かれていない古い発言が引けるまま残り、 限界として「記録を人が後から読む」 と書くことになった。 「最新の発言だけ」 はこれを含み、 時刻の比較も要らない (位置で決まる = 時刻の無い transcript でも同じ判定)。
+- *短い引用を語の境界で区切る*: 「OK じゃない」 の「OK」 は境界で区切れるので通ってしまう。 否定は機械で読めないので、 短い引用は全体一致にした。
+
+**較正 (実測)**: 蓄積した承認記録を新しい規則で読み直すと全件通る。 引いた発言と記録の間に著者の別の発言が挟まった正当な承認は 0 件、 長い発言の一部を引いた承認の引用は 28 字以上だった (閾値 12 はその下)。
+
+**代償**: 承認の後、 記録の前に著者が別の発言をすると記録できない (もう一度承認を得る)。 較正の記録では 0 件。
+
+**未検証**: Codex の rollout は 1 本しか見ていない。 その 1 本は 1 つの発言を同じ文面で 2 回書いていた (最新の方に一致するので判定は崩れない)。 発言の後に user-role の注入を足す client があれば、 正当な承認が exit 5 になる = その時は注入の除外 (`human_text_segments`) に足す。
+
+**運用メモ**: canary を手で回す時は `--caller` を付けない (付けた名前は呼び元として liveness の記録に残り、 後で「報告の途絶えた呼び元」 として出る)。 hook の test は、 stdin を読み切る hook を stdin を閉じて呼ぶ ([`hooks/manuscript-claim-guard.test.sh`](hooks/manuscript-claim-guard.test.sh) の `_live`。 閉じない stdin を継ぐと入力待ちで止まる。 関連 = [`conventions/hook-authoring.md#hook-stdin-pipe-sigpipe`](conventions/hook-authoring.md#hook-stdin-pipe-sigpipe))。
+
+commit: `7c9cee2` (最新の一致 + 再利用の判定 + system-reminder) → `b693cf6` (短い引用) → `535cbba` (test の stdin) → `5219492` (最新の発言だけ、 再利用の判定を削除)。
 
 ---
 

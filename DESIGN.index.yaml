@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: approve-quote-binding
+    legacy: "2026-09-23"
+    level: 2
+    title: "2026-09-23: approve の引用照合 — 引けるのは記録する時点で著者の最新の発言だけ (短い引用は発言の全体)"
   - id: ci-runner-env-failures
     legacy: "2026-09-22"
     level: 2
