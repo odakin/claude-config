@@ -14,7 +14,7 @@ summary: 研究メールの分類・記録と、事実提供・規程判断・�
 | 分類 | 条件 | 処理先 |
 |------|------|--------|
 | 研究メール | 送信者が `research-collab/collaborators.yaml` に登録 **または** 件名が既知プロジェクトに関連 | `research-collab/threads/{project}.yaml` |
-| 事務メール | 大学事務・委員会・人事・学生対応 | `email-office/TODO.yaml` |
+| 事務メール | 大学事務・委員会・人事・学生対応 | `email-office/todo/<id>.yaml` |
 | その他 | 上記以外 | 通常対応（必要に応じて分類） |
 
 ## <a id="thread-recording-rules"></a>スレッド記録ルール

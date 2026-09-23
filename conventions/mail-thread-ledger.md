@@ -9,7 +9,7 @@ summary: mail の記録は thread 1 つに entry 1 つ、 id は道具 (scripts/
 
 ## <a id="schema"></a>1. 台帳の形
 
-台帳 = `<root>/<ledger>/inbox/<YYYY-MM>.yaml` (mail の entry の列) と `<root>/<ledger>/TODO.yaml` (項目の列)。 複数の台帳を 1 つの道具が読む (= 「1 つの台帳だけ grep して未記録と誤る」 を design-out)。
+台帳 = `<root>/<ledger>/inbox/<YYYY-MM>.yaml` (mail の entry の列) と `<root>/<ledger>/todo/<id>.yaml` (1 entry 1 file。 旧 `<root>/<ledger>/TODO.yaml` が残っていればそれも読む、 読み方 = `scripts/lib/todo_ledger.py`) (項目の列)。 複数の台帳を 1 つの道具が読む (= 「1 つの台帳だけ grep して未記録と誤る」 を design-out)。
 
 entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house style の**部分集合** = 既存の読み手が今のまま読める):
 
