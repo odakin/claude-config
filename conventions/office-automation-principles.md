@@ -130,7 +130,7 @@ PDF / office ファイルの text 抽出は **見た目と同じ文字を返す�
   常備 ([`merged-cell-write-topleft`](office-automation.md#merged-cell-write-topleft))
 - PDF: 座標は **label 語の bbox から相対導出** (`get_text("words")` + NFKC 照合)。 これなら
   雛形の微改訂に生き残る
-- 検証も同じ思想: 「N ページ目が⑭-2」 と hardcode せず、 内容 (= 特徴語) でページを特定する
+- 検証も同じ思想: 「N ページ目が様式 X」 と hardcode せず、 内容 (= 特徴語) でページを特定する
 
 ---
 
@@ -212,6 +212,6 @@ origin: ある研究費 docx 申請様式で同一様式に 4 記入ミス連続
 > 変換のたびに検証し、 最後は画像で確認し、 異常は黙認せず、 既知情報は全部機械が書き、
 > 印刷は完成後に 1 回、 提出は受理確認で閉じる。**
 
-origin: 謝金様式の当日運用 session (= 印刷事故 3 連 RCA + prefill 原則の確立)
-+ 2026-06-12 様式⑭-1 session (= [`provenance-skepticism`](#provenance-skepticism) 先行物の素性、 テンプレ stale / 記入済み混入 / 前例 script 再演の 3 連 RCA)。
+origin: 実測 (様式の当日運用 = 印刷事故 3 連 RCA + prefill 原則の確立)
++ 実測 (別の様式 = [`provenance-skepticism`](#provenance-skepticism) 先行物の素性、 テンプレ stale / 記入済み混入 / 前例 script 再演の 3 連 RCA)。
 個別の手順・コード断片は office-automation.md の各 slug を参照。

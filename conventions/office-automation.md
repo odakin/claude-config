@@ -585,7 +585,7 @@ origin: 出張日程表の hair 点線仕切り除去。 AppleScript no-op → o
 
 **検証**: 書き込み後 openpyxl で read-back し、 **値の型** (= str か datetime/число か) と `cell.number_format` を確認する。 `datetime` + `'General'` の組合せ = serial 印字事故の前兆。 auto-convert された日付が「たまたま日付書式で表示される」 場合もあるが、 様式の前例が文字列なら文字列で揃える (= 事務側の見た目互換)。
 
-origin: 様式⑭-1 fill。 作業日 cell に書いた和文日付が serial 46198 (General) になり、 PDF 目視前の read-back 検証で捕捉 → apostrophe prefix で復旧。
+origin: 実測 (様式の fill)。 作業日 cell に書いた和文日付が serial 46198 (General) になり、 PDF 目視前の read-back 検証で捕捉 → apostrophe prefix で復旧。
 
 ⚠️ **追加 case 1 — `=TODAY()` 等 date 書式の cell を date 値で上書きすると「冗長書式」 を継承する** (2026-06-16): 申請日 cell が template で `=TODAY()` (date 書式付き) のとき、 そこに `"2026/6/16"` を書くと値が date になり、 cell の date 書式で「火曜日, 6/月 16, 2026」 のように冗長表示される (= General の serial 化とは別症状)。 → **apostrophe prefix の text** (`"'2026年6月16日"`) で上書きしてクリーンな固定文字列にする (= 申請日は提出時点の固定日なので `=TODAY()` の動的値より固定 text が正しい)。
 
@@ -623,24 +623,24 @@ sh.finish(color=(0,0,0), width=0.75); sh.commit(); d.save(pdf+'.t')  # → os.re
 ```
 Excel 側で結合セル border を再設定する手もあるが merged-cell border は描画が不安定なので、 出力 PDF への線描が確実。 ⚠️ ただし**生成物 PDF への後描画なので、 再生成したら再度引く必要**がある (= pipeline の最後に挟む)。
 
-origin: 様式⑭-1 の承認欄ボックス (`AC48:AG51`/`AH49:AJ51`) 下罫線が複数件とも未描画 → user 指摘 → 当初 1 箇所を座標手描きで閉じたが、 user「他も全部チェックする system を作れ」 で [`scripts/close-pdf-form-boxes.py`](../scripts/close-pdf-form-boxes.py) に格上げ (= 全枠を検査して閉じる、 selftest 付)。
+origin: 実測 — 様式の承認欄ボックス (`AC48:AG51`/`AH49:AJ51`) 下罫線が複数件とも未描画 → user 指摘 → 当初 1 箇所を座標手描きで閉じたが、 user「他も全部チェックする system を作れ」 で [`scripts/close-pdf-form-boxes.py`](../scripts/close-pdf-form-boxes.py) に格上げ (= 全枠を検査して閉じる、 selftest 付)。
 
 ### <a id="numeric-string-becomes-number"></a>ID 的な数字列は書式を text に固定してから書く (= Excel が数値化して機械照合が落ちる)
 
-**症状**: 課題番号・整理番号・学籍番号・電話番号のような **「数字だが数値ではない」 値**を Excel osascript で書き込むと、 Excel が**数値として解釈**してセルに入る。 見た目は同じでも、 後段で `openpyxl` が読むと `26279286`  (int) であって `'26279286'` (str) ではないため、 **spec の文字列比較 gate が FAIL する** (= 2026-09-02 実測: 様式⑭-1 の課題番号で発生、 「'26279286' でなければならない (現在 26279286)」 という一見わけの分からない失敗表示になる)。
+**症状**: 課題番号・整理番号・学籍番号・電話番号のような **「数字だが数値ではない」 値**を Excel osascript で書き込むと、 Excel が**数値として解釈**してセルに入る。 見た目は同じでも、 後段で `openpyxl` が読むと `12345678`  (int) であって `'12345678'` (str) ではないため、 **spec の文字列比較 gate が FAIL する** (= 実測: 様式の課題番号で発生、 「'12345678' でなければならない (現在 12345678)」 という一見わけの分からない失敗表示になる)。
 
 **対処**: **値を書く前に number format を `"@"` (= 文字列) に固定する**。
 
 ```applescript
 set number format of range "V11" of ws to "@"
-set value of range "V11" of ws to "26279286"
+set value of range "V11" of ws to "12345678"
 ```
 
 - 日付欄でも同じ対処が要る (= 素で書くと date serial `46198` が印字される。 幅不足で `###` になる系は [`datetime-cell-hash-overflow`](#datetime-cell-hash-overflow))。 ∴ **「数字に見えるが計算しない値」 は全部この扱い**。
 - 先頭ゼロが落ちる系 (= `007` → `7`) も同じ根。
-- ⚠️ apostrophe prefix (`'26279286`) でも文字列化できるが、 **書式固定の方が確実** (= apostrophe は Excel の版と入力経路で扱いが割れる)。
+- ⚠️ apostrophe prefix (`'12345678`) でも文字列化できるが、 **書式固定の方が確実** (= apostrophe は Excel の版と入力経路で扱いが割れる)。
 
-origin: 謝金の様式 (= 財源が変わって課題番号が新しくなった回)。 fill 自体は成功していたのに機械照合だけが落ち、 原因特定に 1 往復かかった。
+origin: 実測 (様式の課題番号欄)。 fill 自体は成功していたのに機械照合だけが落ち、 原因特定に 1 往復かかった。
 
 ### <a id="merged-cell-text-clipping"></a>⚠️ 結合セルの長文 clipping は shrink_to_fit が効かない → font size を下げる
 
@@ -657,13 +657,13 @@ origin: 謝金の様式 (= 財源が変わって課題番号が新しくなっ�
 
 ⚠️ **formula fan-out cell の変種 (= 部分文字列の照合だけでは漏れる。 下の (a)(b) を塞ぐには、 記入済 workbook を Excel が保存した形 〔数式の計算済み値つき〕 で渡し、 同じ値の欄の数を数える = check-form-clipping の fan-out 検査)**: 様式は記入 cell を `=IF(請求書!G17="","",請求書!G17)` のような**数式で他 sheet に複製** (fan-out) することが多い。 この fan-out 先 merged cell が wrap 無しだと、 **参照元の文面を長くしたときだけ**そこで右端 truncate が発現する。 検証の穴が 2 重: (a) 数式 cell は雛形と同一なので**雛形 diff に出ない** = check-form-clipping の走査対象にならない、 (b) 記入値の全文は fan-out **元** (や wrap 済みの別 fan-out 先) のページの text 層で hit するので、 **PDF 全体からの部分文字列 search は truncate した 1 箇所を見逃す**。 さらに雛形が承認実績を持っていても、 それは**当時の短い文面で発現しなかった**だけ (= 承認済み template の流用は安全を保証しない)。 **対処**: 参照元の文面を差し替え/延長したら、 `=…!` の grep ([`cross-sheet-formula-chain`](#cross-sheet-formula-chain)) で fan-out 先を列挙 → 各先の wrap_text (+ [`wrap-text-needs-row-height`](#wrap-text-needs-row-height) の行高) を確認 → [`pdf-visual-confirm`](#pdf-visual-confirm) で**該当ページを個別に**目視。 embedded `\n` 入りの文面は wrap_text が立って初めて複数行 render される ([`explicit-newline-break`](#explicit-newline-break))。 origin: (承認済み雛形の流用で用務文面を延長 → 報告書 sheet の fan-out 先だけ truncate、 依頼書・承諾書側は wrap 済みで無事 = 全体 text search では検出不能だった)。
 
-**再生成 pipeline** (= 様式⑭ 系を直したら毎回この順):
+**再生成 pipeline** (= この系の様式を直したら毎回この順):
 
 ```
 font 修正 → xlsx-to-pdf.sh → fitz で p1 抽出 → close-pdf-form-boxes.py → check-form-clipping.py + 視覚確認
 ```
 
-origin: 謝金様式⑭-1 の G13 所属見切れ。 当時の規約が [`clear-yellow-fill-marks`](#clear-yellow-fill-marks) で shrink_to_fit=True を勧めていた (= 結合セルで無効) ため「規約どおりにやると直らない」 状態だった → font 縮小に訂正 + 機械検出器 (check-form-clipping.py) を新設し principles §2「機械層は clipping 捕捉不能」 を更新。
+origin: 実測 — 様式の結合セル (G13) で所属が見切れた。 当時の規約が [`clear-yellow-fill-marks`](#clear-yellow-fill-marks) で shrink_to_fit=True を勧めていた (= 結合セルで無効) ため「規約どおりにやると直らない」 状態だった → font 縮小に訂正 + 機械検出器 (check-form-clipping.py) を新設し principles §2「機械層は clipping 捕捉不能」 を更新。
 
 ### <a id="xlimage-size-silent-fail"></a>`XLImage.width` / `.height` setter は silent fail する
 
@@ -1361,7 +1361,7 @@ doc.save("filled.pdf", garbage=3, deflate=True)
 - 雛形 PDF 内の `=TODAY()` 起因の `###############` は `add_redact_annot` + `apply_redactions()` で除去。 ⚠️ redact 矩形は**隣接文字の bbox に被ると巻き添え削除**する — `search_for` の返す rect を数 pt 縮めて適用
 - 検証 3 点 set: ① text 抽出 (NFKC) で全値 in ② **画像で目視** (= 配置ズレ・glyph 不描画は text 検証で見えない) ③ 印刷は [`print-raster-pdf`](#print-raster-pdf) 経由 (= subset font は printer で化けることがある)
 
-origin: 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefill、 紙だけ必要な当日運用)。 openpyxl 派生の旧 file は標題消失で 1 枚無駄刷り → 本経路で 標題 + prefill 両立。
+origin: 実測 (= 標題 drawing 持ち雛形への prefill、 紙だけ必要な当日運用)。 openpyxl 派生の旧 file は標題消失で 1 枚無駄刷り → 本経路で 標題 + prefill 両立。
 
 **汎用実装**: [`scripts/pdf_form_fill.py`](../scripts/pdf_form_fill.py) (= library。 anchor 印字 / NFKC 照合 / `#+` redact / font subset / 内蔵検証 / 600dpi ラスタ化 を `build_document()` 1 呼び出しに集約)。 様式ごとの driver はこれを import して item spec (anchor / dx / dy / align / text。 □ への ✓ は `type:"check"` = anchor の □ 内にベクター描画、 font の ✓ glyph 有無に非依存) だけ書く。 **適用境界**: 単票向け。 記入項目が多く**派生 sheet が数式導出される workbook** (= 依頼書・承諾書が sheet 1 から自動で埋まる類) は、 [`excel-osascript-cell-write`](#excel-osascript-cell-write) で雛形 copy に Excel 記入 → PDF → ページ抽出の方が速くて正しい (= 派生書類も自動で完成する。 旅費請求書一式で実証)。
 
@@ -1371,11 +1371,11 @@ origin: 謝金様式⑭-2 (= 標題 drawing 持ち雛形への prefill、 紙だ
 
 **規律**: overlay フォントは **雛形の埋込フォントに合わせる**。 雛形のフォントは `fitz.open(tpl)[pno].get_fonts(full=True)` で確認 (= 基底名、 例 `AAAAAC+YuGothic-Regular` → `YuGothic-Regular`)。 **macOS で Excel が吐く PDF の既定日本語フォントは 游ゴシック** (= Office 同梱 `/Applications/Microsoft Excel.app/Contents/Resources/DFonts/YuGothR.ttc`)。 値の本文は **Regular** に揃える (= 雛形の Bold 見出しに引きずられない)。
 
-汎用エンジン [`pdf_form_fill.py`](../scripts/pdf_form_fill.py) は **`font=None` (既定) で雛形の埋込フォントに自動マッチ** (= `pick_font(template_pdf)` が `get_fonts` を読み `KNOWN_TEMPLATE_FONTS` から system font file を選ぶ)、 `FONT_CANDIDATES` 先頭も 游ゴシック。 雛形が游ゴシック以外なら `font=` で明示。 ⚠️ **既知 path は macOS** (= Office / macOS system フォント)。 **非 macOS では `pick_font` が `fc-match` (fontconfig) で `Noto Sans CJK` 等に解決**し、 それも無ければ `build_document(font=...)` で明示指定を要求する (= crash でなく actionable error)。 origin: 謝金⑭-2 完成版で後乗せが `Arial Unicode` で太く雛形の游ゴシックと不揃い → user 指摘で発覚。
+汎用エンジン [`pdf_form_fill.py`](../scripts/pdf_form_fill.py) は **`font=None` (既定) で雛形の埋込フォントに自動マッチ** (= `pick_font(template_pdf)` が `get_fonts` を読み `KNOWN_TEMPLATE_FONTS` から system font file を選ぶ)、 `FONT_CANDIDATES` 先頭も 游ゴシック。 雛形が游ゴシック以外なら `font=` で明示。 ⚠️ **既知 path は macOS** (= Office / macOS system フォント)。 **非 macOS では `pick_font` が `fc-match` (fontconfig) で `Noto Sans CJK` 等に解決**し、 それも無ければ `build_document(font=...)` で明示指定を要求する (= crash でなく actionable error)。 origin: 実測 — 後乗せが `Arial Unicode` で太く雛形の游ゴシックと不揃い → user 指摘で発覚。
 
 ### <a id="pdf-prefill-template-prefilled"></a>雛形に既に値がある欄を二重印字しない (= 申請者欄 prefill 済の様式)
 
-**症状**: 様式の雛形 xlsx が **一部の欄を既に印字済** (= 例: 科研費の申請者ブロック〔所属・氏名・課題番号〕が雛形に prefill 済) なのに、 fill script がその欄も `insert_text` で書く → **同じ値が二重に重なって印字**される。 雛形を「ブランク版」 と思い込むと起きる。 画面で薄く重なると気付きにくく、 紙に出て / user 指摘で初めて分かる (= 2026-06-24 ⑭-2 で 6/22 送付版から二重のまま流れていた)。
+**症状**: 様式の雛形 xlsx が **一部の欄を既に印字済** (= 例: 科研費の申請者ブロック〔所属・氏名・課題番号〕が雛形に prefill 済) なのに、 fill script がその欄も `insert_text` で書く → **同じ値が二重に重なって印字**される。 雛形を「ブランク版」 と思い込むと起きる。 画面で薄く重なると気付きにくく、 紙に出て / user 指摘で初めて分かる (= 実測: 送付済みの版から二重のまま流れていた)。
 
 **規律**: fill 前に **雛形 PDF の text を dump して「その欄が既に埋まっていないか」 を確認**する (= [`form-dump-first`](#form-dump-first) の PDF prefill 版)。 既に値がある欄は item に入れない (= 雛形側が正、 後乗せしない)。 別財源で雛形を差し替える時は雛形側の申請者欄を直す。
 
@@ -1624,7 +1624,7 @@ out = fitz.open(); np = out.new_page(width=page.rect.width, height=page.rect.hei
 np.insert_image(np.rect, filename="r.png"); out.save("print_raster.pdf", deflate=True)
 ```
 
-Excel / Word が直接吐いた PDF は素のままで OK (= OS 標準フォントのみで化け実績なし)。 origin: 2026-06-11 ⑭-2 完成版が Canon laser で化けた実害 (画面検証は通過していた)。
+Excel / Word が直接吐いた PDF は素のままで OK (= OS 標準フォントのみで化け実績なし)。 origin: 実測 (laser printer で化けた。 画面検証は通過していた)。
 
 <a id="raster-scope-beyond-processed-pdf"></a>⚠️ **射程は「加工した PDF」 より広い (実測)**: 組版器 (LaTeX 等) が**直接**吐いた PDF — fitz を一度も通しておらず、 font は全て subset 埋め込み (CM Type1 CFF + 和文 CID)、 [`print-preflight`](#print-preflight) の font 検査も ✓ — が、 同じ laser queue で **記号だけを落とした** (slash と Greek 大文字。 和文・英数字・図は正常で、 画面 render も raster も正常 = **紙にだけ出ない**)。 ∴ raster の要否を「fitz で加工したか」 で決めない:
 
@@ -1654,9 +1654,9 @@ assert fitz.open("p1.pdf").page_count == 1
 
 **症状**: PDF の text 層が 「日」 を U+2F49 (康熙部首「⽇」)、 「谷」 を 「⾕」、 **「田」 を U+2F53 (「⽥」)** 等の**互換字形で返す**ことがあり (= フォントの cmap 由来)、 `"申請日" in text` / `page.search_for("<氏名>")` が**正常な文書に対して空振り**する。 「prefill が消えている」 「ラベルが消えた」 等の誤診断 → 不要な作り直しに直結する。 発生源は多様: **fitz native embed だけでなく、 python-docx で書いた「田」 を Word.app AppleScript で PDF 化した経路** でも 「田」 (U+7530) → 「⽥」 (U+2F53) 変換が発生する (= 推薦書の署名合成の verify で、 氏名の MUST_PRESENT が空振り、 視覚は正常だが raw `in` check 失敗)。 pipeline 全長で NFKC 前提を貫くこと。
 
-**規律**: PDF text 抽出に対する文字列照合は、 **必ず `unicodedata.normalize("NFKC", text)` してから比較**する。 `search_for()` は内部照合を正規化できないので、 互換字形を含みうる語の bbox が要る時は `get_text("words")` を取って NFKC 照合で探す。 1 度の検証で 2 回連続 false negative を踏んだ実害 (= 2026-06-11 ⑭-2、 「氏名欄・申請者欄が空」 と 2 度誤診断)。
+**規律**: PDF text 抽出に対する文字列照合は、 **必ず `unicodedata.normalize("NFKC", text)` してから比較**する。 `search_for()` は内部照合を正規化できないので、 互換字形を含みうる語の bbox が要る時は `get_text("words")` を取って NFKC 照合で探す。 1 度の検証で 2 回連続 false negative を踏んだ実害 (= 実測: 「氏名欄・申請者欄が空」 と 2 度誤診断)。
 
-**dash 拡張 (= 同根)**: 同じ機構で、 埋込フォント (= subset 後) が **ASCII ハイフン `-` (U+002D) を抽出時に U+2010 (‐) / U+2011 (‑) 等へ round-trip** することがある (= 游ゴシック等で実観測)。 郵便番号 `123-4567` / 電話番号 / 口座番号のハイフンが照合で空振りし「印字が消えた」 と誤診断する (= 数字部は一致するので原因が掴みにくい)。 照合は NFKC に加えて **各種ダッシュを ASCII `-` に畳んでから**比較する (= `pdf_form_fill.py` の `flat()` = `NFKC` + dash map `‐‑‒–—―−﹣－` → `-`)。 origin: ⑭-2 完成版で住所郵便番号・TEL が verify 空振り (= 游ゴシック化で発生)。
+**dash 拡張 (= 同根)**: 同じ機構で、 埋込フォント (= subset 後) が **ASCII ハイフン `-` (U+002D) を抽出時に U+2010 (‐) / U+2011 (‑) 等へ round-trip** することがある (= 游ゴシック等で実観測)。 郵便番号 `123-4567` / 電話番号 / 口座番号のハイフンが照合で空振りし「印字が消えた」 と誤診断する (= 数字部は一致するので原因が掴みにくい)。 照合は NFKC に加えて **各種ダッシュを ASCII `-` に畳んでから**比較する (= `pdf_form_fill.py` の `flat()` = `NFKC` + dash map `‐‑‒–—―−﹣－` → `-`)。 origin: 実測 — 住所の郵便番号・TEL が verify で空振り (= 游ゴシック化で発生)。
 
 ### <a id="pdf-table-layout-aware-reading"></a>表・多段組 PDF は素の `get_text()` で読まない (= layout-aware 抽出 ladder、 「読めない」 禁止)
 
@@ -2684,7 +2684,7 @@ origin: ある研究費 docx 申請様式で同一様式に 4 記入ミスを連
 
 **記入済み file からブランクテンプレを作る手順**: 個人データ cell を特定 (= dump で値 cell を列挙し、 label・記入例 placeholder 〔「〇〇大学」 等〕・全案件共通の定数 〔申請者・予算番号等〕 を除いた残り) → **Excel osascript で空文字に** (= 標題 drawing がある様式で openpyxl は不可 [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings)) → 黄色 fill 解除 → 検証 (= 再 dump + drawing 数 + 黄色走査) → テンプレとして保存 + **素性 (= どの file からいつ作ったか) を doc に記録**。
 
-origin: 様式⑭-1。 「6/2 版で上書き済」 と記述されたテンプレが実は旧版 (= 新設の交通費起点住所行なし) で、 そこから作った別件書類が旧様式製になった + 真の新様式は個別案件の記入済み修正版にしか存在しなかった (= 上記手順でブランク化して解決)。 diff-form-xlsx をその記入済み file 基準で回しても残骸は不可視だった (= 上記盲点の実例)。
+origin: 実測。 「新版で上書き済」 と記述されたテンプレが実は旧版 (= 新設の交通費起点住所行なし) で、 そこから作った別件書類が旧様式製になった + 真の新様式は個別案件の記入済み修正版にしか存在しなかった (= 上記手順でブランク化して解決)。 diff-form-xlsx をその記入済み file 基準で回しても残骸は不可視だった (= 上記盲点の実例)。
 
 ### <a id="fill-prevention-workflow"></a>予防 workflow (= 規律)
 
@@ -2772,7 +2772,7 @@ origin: 学外者旅費様式の支給方法選択。 前 session が `☑` で 
 
 ### <a id="clear-yellow-fill-marks"></a>事務が黄色マークした入力 cell は fill 後に「白に戻す」 (= 黄色残置 = 様式改変扱い)
 
-事務 (= 教研支援課 等) が修正版様式を返すとき、 **記入してほしい cell を黄色 fill でマーク + コメント**して送ることがある。 指示は典型的に「黄色セルに追記 → **セルを白に戻して** → 押印 → 提出」。 値を入れただけで黄色を残すと「標題等が黄色のまま = 様式の改変」 扱いになりうる (= [`label-overwrite-bug`](#label-overwrite-bug) の label overwrite とは別経路の 改変リスク)。
+事務 (= 学内の事務窓口) が修正版様式を返すとき、 **記入してほしい cell を黄色 fill でマーク + コメント**して送ることがある。 指示は典型的に「黄色セルに追記 → **セルを白に戻して** → 押印 → 提出」。 値を入れただけで黄色を残すと「標題等が黄色のまま = 様式の改変」 扱いになりうる (= [`label-overwrite-bug`](#label-overwrite-bug) の label overwrite とは別経路の 改変リスク)。
 
 - **fill 後に該当 cell の fill をクリア**する: `cell.fill = PatternFill(fill_type=None)` (= openpyxl、 merged は top-left cell に set)。
 - ⚠️ **file が標題 drawing を持つ場合は openpyxl 法は使えない** ([`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) = fill クリアのための save で標題が消える)。 **Excel osascript で解除**する:
@@ -2781,13 +2781,13 @@ origin: 学外者旅費様式の支給方法選択。 前 session が `☑` で 
     set color index of (interior object of range (contents of addr) of ws) to color index none
   end repeat
   ```
-  (= `contents of addr` が list 要素の dereference に必須。 起動・保存の枠組は [`excel-osascript-cell-write`](#excel-osascript-cell-write) の堅牢パターンに従う。 2026-06-12 様式⑭-1 で確立)
+  (= `contents of addr` が list 要素の dereference に必須。 起動・保存の枠組は [`excel-osascript-cell-write`](#excel-osascript-cell-write) の堅牢パターンに従う。 実測から確立)
 - ⚠️ **`diff-form-xlsx.py` ([`diff-form-xlsx-detection`](#diff-form-xlsx-detection)) は cell 値の diff のみで fill 色を見ない** → 黄色残置を catch できない。 **[`pdf-visual-confirm`](#pdf-visual-confirm) PDF visual confirmation でのみ可視化**される。
 - 黄色 cell の機械走査: `cell.fill.patternType == 'solid' and getattr(cell.fill.fgColor, 'rgb', None) == 'FFFFFF00'`。
 
-同じ [`pdf-visual-confirm`](#pdf-visual-confirm) PDF visual で**同時に捕捉される他の落とし穴** (= いずれも cell 値検証では見えない。 2026-06-03 教研支援課様式⑭-1 fill で 3 件同時発見):
+同じ [`pdf-visual-confirm`](#pdf-visual-confirm) PDF visual で**同時に捕捉される他の落とし穴** (= いずれも cell 値検証では見えない。 実測: 1 回の様式 fill で 3 件同時発見):
 - **文字 clipping**: center 配置の長い文字列 (= 例「東京大学大学院工学系研究科」) が cell 幅超過で**両端が clip** (= left 配置なら右のみ clip)。 **非結合セル**なら fix = `cell.alignment = Alignment(horizontal=a.horizontal, vertical=a.vertical, ..., shrink_to_fit=True)` (= 既存 alignment 属性を保持して shrink_to_fit だけ足す)。 ⚠️ **結合セル (例 G13:M13) では shrink_to_fit は no-op** = 効かない。 結合セルは **font size を下げる**のが唯一の手 ([`merged-cell-text-clipping`](#merged-cell-text-clipping))。
-- **multi-sheet workbook → PDF 全ページ出力**: `xlsx-to-pdf.sh` ([`xlsx-to-pdf-script`](#xlsx-to-pdf-script)) に sheet 名を渡しても Excel engine が **workbook 全 sheet を各ページ出力**することがある (= 例 様式⑭-1/⑭-2/⑭-3/領収書/dropdown の 5 sheet → 5 ページ PDF)。 提出は目的 sheet のみなので **PyMuPDF で目的ページを抽出**: `import fitz; src=fitz.open(big); out=fitz.open(); out.insert_pdf(src, from_page=0, to_page=0); out.save(submit)`。 [`multi-sheet-form`](#multi-sheet-form) の多 sheet 注意と併読。
+- **multi-sheet workbook → PDF 全ページ出力**: `xlsx-to-pdf.sh` ([`xlsx-to-pdf-script`](#xlsx-to-pdf-script)) に sheet 名を渡しても Excel engine が **workbook 全 sheet を各ページ出力**することがある (= 例 様式 3 枚 + 領収書 + dropdown 用の 5 sheet → 5 ページ PDF)。 提出は目的 sheet のみなので **PyMuPDF で目的ページを抽出**: `import fitz; src=fitz.open(big); out=fitz.open(); out.insert_pdf(src, from_page=0, to_page=0); out.save(submit)`。 [`multi-sheet-form`](#multi-sheet-form) の多 sheet 注意と併読。
 
 ---
 
@@ -3573,7 +3573,7 @@ origin: 実測 (日程表の複数行を書き直し、 Excel crash の後 Excel
 
 **対処 = 印刷用は raster 化 (= 唯一 printer 非依存で通った経路)**:
 - `pix = page.get_pixmap(dpi=600, colorspace=fitz.csRGB)` → 新 PDF に `insert_image(page.rect, pixmap=pix)`。 font 問題が原理的に消える (紙提出の様式なら品質十分、 A4 RGB 600dpi で ~1.5 MB)。 ⚠️ **`csGRAY` にすると認印の朱色が黒になる** — 印影入りは必ず RGB。 vector 版は repo に残し (画面用)、 印刷物は `*_print_raster.pdf` から出す。
-- ❌ **実 font file の埋め込みでは直らなかった**: `page.insert_font(fontname="hag", fontfile="<HaranoAjiGothic-Regular.otf>")` で OTF (CFF) を埋め込んでも、 Word 由来の TrueType 部分は正常・**PyMuPDF 追記部だけ同じ printer で化けた** (2026-08-21 実測、 Canon LBP + CUPS)。 PyMuPDF の Type0/CFF subset を解釈できない driver がある = 「埋め込んだから安全」 も成立しない。 画面確認 (fitz raster / Preview) はこの差を**検出できない**。
+- ❌ **実 font file の埋め込みでは直らなかった**: `page.insert_font(fontname="hag", fontfile="<HaranoAjiGothic-Regular.otf>")` で OTF (CFF) を埋め込んでも、 Word 由来の TrueType 部分は正常・**PyMuPDF 追記部だけ同じ printer で化けた** (実測、 laser printer + CUPS)。 PyMuPDF の Type0/CFF subset を解釈できない driver がある = 「埋め込んだから安全」 も成立しない。 画面確認 (fitz raster / Preview) はこの差を**検出できない**。
 - `get_fonts()` に `helv`/`japan` や PyMuPDF 埋め込み font が載っている PDF を**そのまま `lp` に投げない**。 印刷前 gate = 「PyMuPDF で文字を描いた PDF か?」 → yes なら raster 版を刷る。 機械 gate = [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) (`--rasterize` で RGB raster も生成)、 手順全体 = [`print-preflight`](#print-preflight)。
 
 origin: 実測 (様式 + 付属表の overlay 文字が紙で化け → OTF 埋め込みで再印刷 → **また化け** → raster で解決)。
