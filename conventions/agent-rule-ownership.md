@@ -48,7 +48,7 @@ summary: 作業の裁量と規則を変更する権限を分ける正本。規�
 | file の属性による無効化 | Git が持つ type と実行 bit、symlink の行き先。本文不変の chmod -x や通常 file から symlink への置換も検査。保護された link の repo 内参照先も保護 |
 | 承認の転用 | session・file・領域に加えて候補全文の hash と、属性変更なら変更後の Git mode。別内容・別属性への変更に同じ承認を使わない |
 
-manifest は `version: 1` と `protect_paths` の追加宣言だけを持つ。除外・無効化の field は受け付けない。manifest 自体も保護する。保護された symlink は HEAD・index・作業ツリーから repo 内の参照先まで辿る。repo 外へ出る保護 link は、この repo の検査だけでは守れないため検査不能として扱う。データと制御の意味を自動判定しないため、既定の指示文書・設定は無害な改訂でも候補を記録する側に倒す。通常のアプリケーション本文や、規則の参照を含まない進捗の更新は一括で止めない。
+manifest は `version: 1` と `protect_paths` の追加宣言だけを持つ。 **宣言は関門が依存する file の閉包で書き、 dir や名前の glob (`lib/*`・`check-*`) で書かない**: glob は関門と無関係な 新しい file の追加や検出器の修正まで本人の裁定待ちにし、 agent は置き場をずらして避ける = 保護が作業の置き場を歪める (実測)。 関門の chain (pre-commit・hook の enforcer・engine) が source / import / exec する file を列挙し、 新しい依存を足す commit で manifest にも足す。除外・無効化の field は受け付けない。manifest 自体も保護する。保護された symlink は HEAD・index・作業ツリーから repo 内の参照先まで辿る。repo 外へ出る保護 link は、この repo の検査だけでは守れないため検査不能として扱う。データと制御の意味を自動判定しないため、既定の指示文書・設定は無害な改訂でも候補を記録する側に倒す。通常のアプリケーション本文や、規則の参照を含まない進捗の更新は一括で止めない。
 
 規則を検査する述語は共有するが、Git の検査省略はそれ自体を拒否する。規則を改訂する正規の手順は、その具体的な変更を裁定・記録して既存の gate を通すことであり、gate を丸ごと省くことではない。
 

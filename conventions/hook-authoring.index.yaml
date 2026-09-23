@@ -51,6 +51,9 @@ sections:
   - id: pretooluse-timeout-fail-open
     level: 3
     title: "§0 補足 13: PreToolUse hook の timeout 超過は素通り (実測) — 測り方と、 hook file が読み込みで死ぬ場合も同じ"
+  - id: hook-git-env-cross-repo
+    level: 3
+    title: "§0 補足 14: hook から別 repo に git を打つときは `GIT_INDEX_FILE` を外す"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2
