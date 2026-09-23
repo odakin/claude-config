@@ -29,7 +29,7 @@ commit と push はしない (共同編集者の了解を取ってから人が�
 ## 既存の共同編集の repo に入れる手順 (実測で通した順)
 
 1. `git worktree add -b pdf-publish <scratch> origin/main` で別の worktree に branch を作り、 そこで install (--untrack)
-   (= 同じ clone で作業中の他の session の HEAD を動かさない)。 `pdf-publish.sh --all --dry-run` で写す対象と名前を見て、
+   (= 同じ clone で作業中の他の session の HEAD を動かさない、 conventions/multi-session-coordination.md#foreign-wip-scratch-worktree)。 `pdf-publish.sh --all --dry-run` で写す対象と名前を見て、
    文書を 1 つずつ touch して組み直しから写すまでを本物で確かめる (DROPBOX_ROOT を偽の dir にすれば共有フォルダは要らない)
 2. branch を commit・push → 共有フォルダを作って共有 (相手を編集者として招待。 相手が書き込めないと意味が無い)
 3. main に入れる clone では、 **追跡から外れる PDF を退避 → `merge --ff-only` → 戻す** (git は追跡から外れた file を消す。
