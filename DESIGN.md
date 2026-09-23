@@ -65,7 +65,7 @@
 
 **代償**: 承認の後、 記録の前に著者が別の発言をすると記録できない (もう一度承認を得る)。 較正の記録では 0 件。
 
-**未検証**: Codex の rollout は 1 本しか見ていない。 その 1 本は 1 つの発言を同じ文面で 2 回書いていた (最新の方に一致するので判定は崩れない)。 発言の後に user-role の注入を足す client があれば、 正当な承認が exit 5 になる = その時は注入の除外 (`human_text_segments`) に足す。
+**未検証**: Codex の rollout は 1 本しか見ていない。 その 1 本は 1 つの発言を同じ文面で 2 回書いていた (最新の方に一致するので判定は崩れない)。 発言の後に user-role の注入を足す client があれば、 正当な承認が exit 5 になる = その時は注入の除外 (`human_text_segments`) に足す。 ⇒ Claude でも実際に起きた: 背景 task の完了通知・別 session の連絡が user-role で入り、「最新の本人の発言」 を上書きして正当な承認が exit 5 になった (実測)。 出どころの欄 (`turnOrigin` ≠ human) と封筒 (`<task-notification>` 等) で本人の発言から外して解消 (`96bbda4`)。 較正のとき 1 つの session で「通知は数えられていない」 と確かめたが、 別の session では数えられていた = 1 session の不在の実測で一般化しない。
 
 **運用メモ**: canary を手で回す時は `--caller` を付けない (付けた名前は呼び元として liveness の記録に残り、 後で「報告の途絶えた呼び元」 として出る)。 hook の test は、 stdin を読み切る hook を stdin を閉じて呼ぶ ([`hooks/manuscript-claim-guard.test.sh`](hooks/manuscript-claim-guard.test.sh) の `_live`。 閉じない stdin を継ぐと入力待ちで止まる。 関連 = [`conventions/hook-authoring.md#hook-stdin-pipe-sigpipe`](conventions/hook-authoring.md#hook-stdin-pipe-sigpipe))。
 
