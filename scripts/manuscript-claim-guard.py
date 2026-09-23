@@ -40,7 +40,8 @@
   承認記録では、 引いた発言と記録の間に著者の発言が挟まった正当な承認は 0 件)。 短い引用 (SHORT_QUOTE 文字未満) は、 発言の全体 (端の空白・句読点を除く) と一致する時だけ
   照合する (「OK」 が「BOOK」「OK じゃない」「OK?」 に当たらないように。 足りなければ発言の全体か、 それ以上の長さを
   引く)。 承認は session に束縛され (別 session は使えない)、 machine-local の state に置く
-  (公開 repo に著者の発言を書かない)。 監査の本体は transcript。
+  (公開 repo に著者の発言を書かない)。 監査の本体は transcript。 記録したら、 そのターンの最後の返事に引いた発言と対象の
+  file を書く (Stop が確かめ、 無ければ 1 回差し戻す = 意味の取り違えを著者がその場で見る。 後から記録を読む前提にしない)。
 
 原稿の範囲 (scope): repo の `.claude/manuscript-guard.json` があればそれ (include / exclude / protect_sections /
   disabled)、 無ければ既定 = abstract 環境を持つ .tex と、 そこから \\input / \\include / \\subfile される .tex。
@@ -50,6 +51,7 @@
   manuscript-claim-guard.py git-precommit          repo (cwd) の staged 差分を検査 (agent session のみ、 違反 exit 1)
   manuscript-claim-guard.py approve --file F --region R [--region R2 …] --change '<1 行>' --quote '<著者の発言>'
   manuscript-claim-guard.py approvals [--session agent:id]    記録済み承認の一覧
+  manuscript-claim-guard.py stop claude|codex      Stop の event を stdin で受け、 記録した承認を最後の返事に書いていなければ差し戻す (fail-open)
   manuscript-claim-guard.py scan FILE [--rev HEAD]            HEAD (または rev) と作業ツリーの保護領域の差分を表示
   manuscript-claim-guard.py additive-log [--surface] [--days N]   承認なしで入った規則の文書への追記 (本人が後で読む記録)
   manuscript-claim-guard.py additive-log --ack --quote '<本人の発言>'  本人が読んだ = 以後の surface から外す
@@ -950,6 +952,111 @@ def verify_quote(quote: str, messages: list[tuple[str, str]]) -> tuple[str, str]
     return None if i is None else (messages[i][0], message_sha(messages[i][1]))
 
 
+# ---------------------------------------------------------------- Stop: 記録した承認を最後の返事に書かせる
+
+def assistant_replies_since(agent: str, path: Path, since: str) -> list[str]:
+    """著者の発言 (時刻 since) 以降の assistant の返事。 Claude = 各 turn の最終 text、 Codex = output_text。"""
+    out: list[str] = []
+    if agent == "claude":
+        try:
+            import transcript_turns as tt
+            groups = tt.turns(tt.load_entries(path))
+        except Exception:
+            return out
+        for g in groups:
+            if not g or (since and str(g[0].get("timestamp", "")) < since):
+                continue
+            final, _ = tt.summarize(g)
+            if final:
+                out.append(final)
+        return out
+    try:
+        handle = open(path, encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    with handle:
+        for line in handle:
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            p = e.get("payload") if isinstance(e, dict) else None
+            if (not isinstance(p, dict) or e.get("type") != "response_item" or p.get("type") != "message"
+                    or p.get("role") != "assistant" or (since and str(e.get("timestamp", "")) < since)):
+                continue
+            text = "".join(b.get("text", "") for b in p.get("content") or [] if isinstance(b, dict))
+            if text.strip():
+                out.append(text)
+    return out
+
+
+def disclosed(a: dict, reply: str) -> bool:
+    """返事の同じ行に、 引いた発言 (先頭 20 字) と対象の file 名がある。"""
+    name = Path(str(a.get("file", ""))).name
+    head = collapse_ws(str(a.get("quote", "")))[:20]
+    if not name or not head:
+        return True
+    return any(name in line and head in collapse_ws(line) for line in reply.splitlines())
+
+
+def undisclosed_approvals(agent: str, sid: str, event: dict) -> list[dict]:
+    """著者の最新の発言に結んだ承認のうち、 その後の返事に書いていないもの。"""
+    tr = find_transcript(agent, sid, event.get("transcript_path"))
+    if tr is None:
+        return []
+    msgs = user_messages(tr)
+    if not msgs:
+        return []
+    ts, text = msgs[-1]
+    sha = message_sha(text)
+    mine = [a for a in load_approvals(agent, sid) if a.get("quote_time") == ts and a.get("quote_msg_sha") == sha]
+    if not mine:
+        return []
+    replies = assistant_replies_since(agent, tr, ts)
+    last = event.get("last_assistant_message")
+    if isinstance(last, str) and last.strip():
+        replies.append(last)
+    return [a for a in mine if not any(disclosed(a, r) for r in replies)]
+
+
+def stop_check(agent: str, event: dict) -> str | None:
+    """Stop の判定。 差し戻すなら出力する JSON、 通すなら None。 読めない・壊れているときは通す (返事を終えられなくしない)。"""
+    try:
+        if not isinstance(event, dict) or event.get("stop_hook_active") is True:
+            return None
+        sid = str(event.get("session_id") or "")
+        if not SAFE_ID.match(sid) or not approvals_path(agent, sid).exists():
+            return None
+        left = undisclosed_approvals(agent, sid, event)
+    except Exception:
+        return None
+    if not left:
+        return None
+
+    def short(q: str) -> str:
+        q = collapse_ws(q)
+        return q if len(q) <= 40 else q[:40] + "…"
+
+    rows = "\n".join(f"- 「{short(str(a.get('quote', '')))}」 を {a.get('file')} の承認として記録した"
+                     f" ({', '.join(a.get('regions') or [])}): {a.get('change', '')}" for a in left)
+    reason = ("manuscript-claim-guard: このターンで著者の発言を承認として記録したが、 最後の返事にそれを書いていない"
+              " (著者が見ないまま記録だけが残る)。 次の行を返事に入れて、 返事の全文を出し直す:\n" + rows +
+              "\n引いた発言と file 名が同じ行にあれば足りる。 違う意味で引いていたら、 そう書いて著者の判断を仰ぐ。"
+              " 正本 = conventions/agent-rule-ownership.md#approval")
+    return json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False)
+
+
+def stop_mode(agent: str) -> int:
+    try:
+        event = json.load(sys.stdin)
+    except (ValueError, OSError):
+        return 0
+    out = stop_check(agent, event)
+    if out:
+        print(out)
+    return 0
+
+
 def unapproved(changes: list[dict], repo: Path | None, session: tuple[str, str] | None) -> list[dict]:
     if not changes:
         return []
@@ -1763,6 +1870,9 @@ def approve_mode(args: argparse.Namespace) -> int:
     with open(ap, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
     print(f"approve: 記録した = {rel} :: {', '.join(args.region)} (著者の発言 {hit[0] or '時刻不明'} 「{said}」)")
+    shown = collapse_ws(args.quote)
+    shown = shown if len(shown) <= 40 else shown[:40] + "…"
+    print(f"  このターンの最後の返事に書く (Stop が確かめる): 「{shown}」 を {rel} の承認として記録した")
     return 0
 
 
@@ -2289,6 +2399,56 @@ def selftest() -> int:
         check("approve: 作業中に届いた本人の発言の後は、 その前の発言は引けない (exit 5)", approve_mode(qns) == 5)
         qns.quote = "案 Q は結論の段も直して"
         check("approve: 作業中に届いた本人の発言そのものは引ける", approve_mode(qns) == 0)
+        # Stop: 著者の最新の発言に結んだ承認は、 その後の最後の返事に書くまで 1 回差し戻す
+        def stop_rows(path: Path, rows: list[dict]) -> None:
+            path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+
+        s_tr = tr_dir / "sess-s.jsonl"
+        s_said = "この案で表題を変えてよい"
+        stop_rows(s_tr, [
+            {"type": "user", "message": {"content": "前の話"}, "timestamp": iso(-20)},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "前の返事"}]}, "timestamp": iso(-19)},
+            {"type": "user", "message": {"content": s_said}, "timestamp": iso(-10)},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "当てました。"}]}, "timestamp": iso(-9)},
+        ])
+        s_ev = {"session_id": "sess-s", "transcript_path": str(s_tr)}
+        check("Stop: 承認の記録が無い session は通す", stop_check("claude", s_ev) is None)
+        sns = argparse.Namespace(session="claude:sess-s", region=["title"], change="表題を変える",
+                                 quote=s_said, file=str(repo / "src" / "main.tex"), transcript=None)
+        s_rec = approve_mode(sns) == 0
+        out = stop_check("claude", s_ev)
+        check("Stop: 記録した承認を最後の返事に書いていなければ差し戻す",
+              s_rec and out is not None and json.loads(out)["decision"] == "block" and "main.tex" in json.loads(out)["reason"])
+        check("Stop: 2 回目 (stop_hook_active) は通す", stop_check("claude", dict(s_ev, stop_hook_active=True)) is None)
+        check("Stop: 発言と file 名が別の行なら書いたことにしない",
+              stop_check("claude", dict(s_ev, last_assistant_message=f"「{s_said}」 を記録した\nfile = main.tex")) is not None)
+        check("Stop: 同じ行に書けば通す (last_assistant_message)",
+              stop_check("claude", dict(s_ev, last_assistant_message=f"- 「{s_said}」 を src/main.tex の承認として記録した")) is None)
+        with s_tr.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "assistant", "message": {"content": [{"type": "text",
+                     "text": f"「{s_said}」 → main.tex の表題の承認として記録"}]}, "timestamp": iso(-8)}, ensure_ascii=False) + "\n")
+        check("Stop: 同じ発言の後の turn の返事に書いてあれば通す", stop_check("claude", s_ev) is None)
+        with s_tr.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "user", "message": {"content": "次の話"}, "timestamp": iso(-5)}, ensure_ascii=False) + "\n")
+        check("Stop: 著者が次に発言した後は、 前の発言の承認を求めない", stop_check("claude", s_ev) is None)
+        check("Stop: 壊れた event でも通す (返事を終えられなくしない)", stop_check("claude", "not a dict") is None)
+        c_tr = home / ".codex" / "sessions" / "2026" / "09" / "11" / "rollout-x-cdx-stop.jsonl"
+        c_tr.parent.mkdir(parents=True, exist_ok=True)
+        c_said = "式 (2) を直してよい"
+        stop_rows(c_tr, [
+            {"type": "event_msg", "payload": {"type": "user_message", "message": c_said}, "timestamp": iso(-3)},
+            {"type": "response_item", "payload": {"type": "message", "role": "assistant",
+             "content": [{"type": "output_text", "text": "直しました。"}]}, "timestamp": iso(-2)},
+        ])
+        cns = argparse.Namespace(session="codex:cdx-stop", region=["math"], change="式 (2) を直す",
+                                 quote=c_said, file=str(repo / "src" / "main.tex"), transcript=None)
+        c_ev = {"session_id": "cdx-stop"}
+        check("Stop (Codex): 返事に書いていなければ差し戻す", approve_mode(cns) == 0 and stop_check("codex", c_ev) is not None)
+        with c_tr.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [
+                {"type": "output_text", "text": f"「{c_said}」 を main.tex の承認として記録した"}]}, "timestamp": iso(-1)},
+                ensure_ascii=False) + "\n")
+        check("Stop (Codex): rollout の返事に書いてあれば通す", stop_check("codex", c_ev) is None)
         # pre-commit: agent env あり
         (repo / "src" / "main.tex").write_text(paper.replace("b + c", "b - c"), encoding="utf-8")
         g("add", "src/main.tex")
@@ -2840,6 +3000,8 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("scan")
     s.add_argument("file")
     s.add_argument("--rev", default="HEAD")
+    st = sub.add_parser("stop")
+    st.add_argument("agent", choices=["claude", "codex"])
     g = sub.add_parser("additive-log")
     g.add_argument("--surface", action="store_true", help="SessionStart 用の要約 (未読が無ければ沈黙)")
     g.add_argument("--days", type=float, default=None, help="一覧を直近 N 日に絞る (surface は絞らない)")
@@ -2858,6 +3020,8 @@ def main(argv: list[str] | None = None) -> int:
         return approvals_mode(args)
     if args.mode == "scan":
         return scan_mode(args)
+    if args.mode == "stop":
+        return stop_mode(args.agent)
     if args.mode == "additive-log":
         return additive_log_mode(args)
     ap.print_help()

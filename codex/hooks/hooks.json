@@ -104,6 +104,11 @@
             "type": "command",
             "command": "python3 \"$HOME/.codex/claude-config-hooks/first_turn_stamp_check.py\"",
             "timeout": 8
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/manuscript_claim_guard.py\" --stop",
+            "timeout": 12
           }
         ]
       }

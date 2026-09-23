@@ -81,6 +81,15 @@ _check "著者の発言の verbatim で承認を記録" \
        --change '概要の 2 文目を削る' --quote '概要の 2 文目は削ってよい。' >/dev/null 2>&1 && echo recorded || echo refused)" recorded
 _check "承認後: 概要の削除は通る" "$(_edit ' The conductivity grows linearly.' '')" none
 _check "承認は領域ごと: 表題は止まったまま" "$(_edit 'A toy model of heat flow' 'Heat flow revisited')" deny
+_stop() {  # $1 = 最後の返事 (last_assistant_message)
+  jq -n --arg t "$TR" --arg m "$1" '{session_id:"sess-a", transcript_path:$t, last_assistant_message:$m}' \
+    | python3 "$HOOK" --stop | grep -c '"decision": "block"' || true
+}
+_check "Stop: 記録した承認を最後の返事に書いていなければ差し戻す" "$(_stop '当てました')" 1
+_check "Stop: 引いた発言と file 名を同じ行に書けば通す" "$(_stop '「概要の 2 文目は削ってよい。」 を src/main.tex の承認として記録した')" 0
+# adapter は隣に engine が無いと ~/Claude/claude-config の engine を使う = HOME も空にして両方が無い状態を作る
+_check "Stop: engine が無くても返事は終えられる (fail-open)" \
+  "$(mkdir -p "$T/noengine/hooks" && cp "$HOOK" "$T/noengine/hooks/" && jq -n '{session_id:"sess-a"}' | HOME="$T/noengine" python3 "$T/noengine/hooks/manuscript-claim-guard.py" --stop | wc -c | tr -d ' ')" 0
 
 echo "=== 権限規約の lock ==="
 # marker と正本の anchor は実行時に組み立てる (= この test file 自体が規約の file に見えないように)

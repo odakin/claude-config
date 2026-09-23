@@ -25,6 +25,15 @@ def unavailable(kind):
         f"manuscript-claim-guard: inspection unavailable ({kind}); repair the guard and retry; do not disable it."}}))
 
 if __name__ == "__main__":
+    if "--stop" in sys.argv[1:]:  # Stop の面: 記録した承認を最後の返事に書かせる。 壊れていたら通す (fail-open)
+        if os.path.isfile(ENGINE):
+            sys.argv = [ENGINE, "stop", "codex"]
+            sys.dont_write_bytecode = True
+            try:
+                runpy.run_path(ENGINE, run_name="__main__")
+            except (SystemExit, Exception):
+                pass
+        sys.exit(0)
     if not os.path.isfile(ENGINE):
         unavailable("missing engine")
         sys.exit(0)

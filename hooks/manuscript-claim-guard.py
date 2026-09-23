@@ -13,6 +13,9 @@ scripts/public-precommit-runner.sh から呼ぶ同じ engine。
 なので、 配線切れは canary でしか見えない。 呼び元 = 個人層の run-all-checks (`--caller run-all-checks`) と
 下の `--liveness`。
 
+`--stop` = Stop の面 (settings-entries.json で配線)。 engine の `stop claude` に event を渡す。 記録した承認を最後の返事に
+書いていなければ 1 回差し戻す。 engine の不在・例外は通す (fail-open = 返事を終えられなくしない)。
+
 `--liveness [--max-age-hours H] [--silent-days D]` = SessionStart の面 (settings-entries.json で配線)。 state が
 無い / H 時間 (既定 24) より古ければ canary を走らせ直し、 NOT ARMED と、 D 日 (既定 14) より長く報告の途絶えた
 呼び元を 1 行ずつ出す。 健全なら沈黙、 exit は常に 0。 呼び元の script は canary の呼び出し行だけを
@@ -208,6 +211,16 @@ def main(argv: list[str]) -> int:
     if "--canary" in argv:
         caller = argv[argv.index("--caller") + 1] if "--caller" in argv and argv.index("--caller") + 1 < len(argv) else None
         return canary(caller)
+    if "--stop" in argv:
+        if not os.path.isfile(ENGINE):
+            return 0
+        sys.argv = [ENGINE, "stop", "claude"]
+        sys.dont_write_bytecode = True
+        try:
+            runpy.run_path(ENGINE, run_name="__main__")
+        except (SystemExit, Exception):
+            pass
+        return 0
     if "--liveness" in argv:
         # SessionStart の入力 (JSON) は使わないが読み切る = 書き手が EPIPE になって stdout ごと落とされないため
         try:

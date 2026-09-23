@@ -290,6 +290,14 @@
       "hooks": [
         {
           "type": "command",
+          "command": "~/.claude/hooks/manuscript-claim-guard.py --stop"
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
           "command": "~/.claude/hooks/turn-complete-sound-nudge.sh"
         }
       ]
