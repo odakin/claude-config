@@ -277,6 +277,11 @@ headless `claude -p` の routine は、 使う config dir (`CLAUDE_CONFIG_DIR`) 
   [`remote-control-server.md#login-from-agent-session`](remote-control-server.md#login-from-agent-session)。
 - ⚠️ 同じ config dir を借りる経路 (headless の通知送信など) も同時に止まる = その config dir に依存する経路を
   全部点呼し、 直した後にそれぞれの健康診断 (probe) を回す。
+- **desktop app のログアウトの後に切れた例** (実測、 因果は未確定): desktop app で account X をログアウトした後、
+  同じ機械で X の無人 job / RC が使う config dir が、 次のトークン更新 (直前の更新から約 8 時間後) で切れた。
+  ログアウトの直後の問い合わせは通るので、 翌朝の job の失敗まで見えない。 検知 =
+  [`scripts/check-desktop-logout-auth.py`](../scripts/check-desktop-logout-auth.py) (desktop app の log のログアウトと
+  keychain 項目の更新時刻を突き合わせて 🔴 を出し、 `--install-watch` で確かめる問い合わせを自動で予約する)。
 
 ## recurring task の jitter
 
