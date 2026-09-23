@@ -45,7 +45,31 @@ import sys
 import tempfile
 from pathlib import Path
 
-DB_PATH = Path.home() / "Library/Group Containers/group.com.apple.usernoted/db2/db"
+def _present(p: Path) -> bool:
+    """在るか。 TCC で stat 自体を拒まれたら「在るが読めない」 = True (= 読めない理由は probe_db が出す)。"""
+    try:
+        return p.exists()
+    except PermissionError:
+        return True
+
+
+def default_db_path() -> Path:
+    """通知センター DB の置き場所は macOS の版で違う (実測: 26 = group container / 13 = DARWIN_USER_DIR の下)。
+    在る方を返し、 どちらも無ければ新しい方 (= 不在の理由がその path で出る)。"""
+    new = Path.home() / "Library/Group Containers/group.com.apple.usernoted/db2/db"
+    try:
+        import subprocess
+        d = subprocess.run(["getconf", "DARWIN_USER_DIR"], capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:
+        d = ""
+    old = Path(d) / "com.apple.notificationcenter/db2/db" if d else None
+    for p in (new, old):
+        if p is not None and _present(p):
+            return p
+    return new
+
+
+DB_PATH = default_db_path()
 COCOA_EPOCH = dt.datetime(2001, 1, 1, tzinfo=dt.timezone.utc)
 FDA_HINT = ("システム設定 › プライバシーとセキュリティ › フルディスクアクセス に、 この script を起動した app "
             "(Terminal / Claude desktop / launchd の applet) を追加")

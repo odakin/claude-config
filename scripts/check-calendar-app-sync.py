@@ -51,10 +51,28 @@ FIX = {
 }
 
 
+def _present(p: Path) -> bool:
+    """在るか。 TCC で stat 自体を拒まれたら「在るが読めない」 = True (= 読めない理由は後段が出す)。"""
+    try:
+        return p.exists()
+    except PermissionError:
+        return True
+
+
+def _default_calendar_db(home: Path) -> Path:
+    """Calendar.app の DB の置き場所は macOS の版で違う (実測: 26 = group container / 13 = ~/Library/Calendars)。
+    在る方を返し、 どちらも無ければ新しい方 (= 不在の理由がその path で出る)。"""
+    new = home / "Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb"
+    old = home / "Library/Calendars/Calendar.sqlitedb"
+    for p in (new, old):
+        if _present(p):
+            return p
+    return new
+
+
 def _paths() -> tuple[Path, Path]:
     home = Path.home()
-    cal = os.environ.get("CALSYNC_CALENDAR_DB") or str(
-        home / "Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb")
+    cal = os.environ.get("CALSYNC_CALENDAR_DB") or str(_default_calendar_db(home))
     acc = os.environ.get("CALSYNC_ACCOUNTS_DB") or str(home / "Library/Accounts/Accounts4.sqlite")
     return Path(cal), Path(acc)
 
