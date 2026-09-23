@@ -26,6 +26,7 @@ claims の網羅 = ``claims_coverage()`` (値・yes/no の規則に claims が�
 from __future__ import annotations
 
 import re
+import unicodedata
 from functools import lru_cache
 from pathlib import Path
 
@@ -430,7 +431,8 @@ def statement_vocab(forms) -> tuple:
     for rid, c in _claims_of_rules():
         if rid.split("/")[0] in forms:
             for a in c.get("about") or []:
-                if len(nrm(str(a))) >= 2 and not re.search(r"[0-9０-９⑭]", str(a)):
+                # 数字を含む語は語彙にしない。 全角数字・丸数字 (①…) は NFKC で [0-9] に畳んでから見る
+                if len(nrm(str(a))) >= 2 and not re.search(r"[0-9]", unicodedata.normalize("NFKC", str(a))):
                     words.add(_keep(str(a)))
     for sid, spec in S.all_specs().items():
         if sid in forms:
