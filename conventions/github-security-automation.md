@@ -67,7 +67,9 @@ your spending limit needs to be increased」)。 **コードの失敗ではな�
   (heartbeat 等) を受ける repo が危ない
 - **見分け方**: red の run の jobs を読み、 全 job が `runner_name` 空かつ steps 0 なら未起動。 検出器 =
   [`scripts/check-ci-red.py`](../scripts/check-ci-red.py) (未起動を件数に数えず 🧾 の 1 行に分ける)。
-  使用量の API (`/users/<u>/settings/billing/usage`) は token に `user` scope が要る
+  使用量の API (`/users/<u>/settings/billing/usage`) は token に `user` scope が要る。 scope が無いときの見積もり =
+  [`scripts/actions-usage-estimate.py`](../scripts/actions-usage-estimate.py) (run の履歴を repo 全部で集め、 workflow ごとに
+  回数と run 単位で切り上げた分を出す。 請求額そのものではない。 `--since` で、 止めた後に漏れが無いかを見る)
 - **お金をかけないなら private の検査は手元へ**: 検査の workflow を止め (`gh workflow disable` = 可逆、 file は
   残る)、 同じ検査を手元で回す。 ⚠️ **「手元で回す」 は放っておくと「誰も回さない」 になる** — 実行と結果の
   表示を、 人が毎回見る面 (session 開始の hook など) に置く。 runner = [`scripts/local-ci.py`](../scripts/local-ci.py)

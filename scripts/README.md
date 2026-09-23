@@ -6,6 +6,7 @@
 
 リポ全体の構造 tree = [CLAUDE.md](../CLAUDE.md)。
 
+- **[actions-usage-estimate.py](actions-usage-estimate.py)** — GitHub Actions の月の使用量を、 課金 API を使わずに run の履歴から workflow ごとに見積もる (private repo の無料枠の棚卸し用)。
 - **[affix-image-xlsx.py](affix-image-xlsx.py)** — Place an image (seal / signature) into an .xlsx via Excel.app — without destroying the file.
 - **[agent-rule-guard.py](agent-rule-guard.py)** — Protect agent-governance documents, enforcement configuration and declared gates; compatible approval/scan entry point.
 - **[apply-text-pairs.mutants.json](apply-text-pairs.mutants.json)** — apply-text-pairs.py の selftest の foil に歯があることを、 修正の一部を外した mutant 6 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。

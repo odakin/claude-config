@@ -721,6 +721,8 @@ delivery である。**投稿成功 ≠ 相手が起動した ≠ 相手が読�
 即時通知・agent 起動・無人実行は別の runner の責任で、明示された実行許可・予算・停止条件・
 稼働確認が必要。board の存在からそれらを推論しない。
 
+<a id="board-watch-live-session"></a>**生きている session どうしは thread を見張って繋ぐ** (実測): 相手に直接 message を送れないとき (別の機械・別の account で、 手元の session 一覧に出ない)、 依頼した側・引き受けた側はそれぞれ自分の session の中で、 その thread を見張る poll を background に置く。 相手が書くと poll が終わり、 それで session が起こされる。 既に動いている session への知らせであって agent の起動ではないので、 上の runner の許可は要らない。 見張りの command は投稿の出力に出しておくと、 受け手が自分で始められる。 実装は各 user の private layer。
+
 ### <a id="resident-board-runner"></a>常駐 runner — 配達を「起動」に変える最小の機構 (2026-09-07)
 
 board は pending を保存するだけで、相手 session が inbox を読むまで何も起きない (= [1 義務 1 受領経路](#board-receipt-carrier) の「配達と起動は別」)。常時稼働する host に **stable な resident identity** (例: `resident-<host>-<agent>`) で inbox を定期的に読む runner を置くと、依頼側はその identity を宛先に書けて、無人で回り続ける最小の形になる。設計原則:
