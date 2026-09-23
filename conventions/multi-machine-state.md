@@ -94,6 +94,13 @@ launchd / cron の定期ジョブは **登録したマシンでだけ走る**。
   3. **実行中の対象は入れ直さず次回に回す** (launchd の bootout は実行中の job を殺す)
   4. **出荷前に実機の状態の写しで再現する** ([`hook-authoring.md#fake-platform-commands-in-path`](hook-authoring.md#fake-platform-commands-in-path))。 auto-apply の出力は更新とエラーの行も surface する ([`hook-authoring.md#surface-filter-keeps-errors`](hook-authoring.md#surface-filter-keeps-errors))
   - 実装例 = [`scheduled-tasks.md#launchd-cron-engine`](scheduled-tasks.md#launchd-cron-engine) の `--ensure` (calendar と、 関門の起動行の旧形だけを書き換える)
+- <a id="history-rewrite-follow"></a>**共有 repo の履歴を書き換えたら (force-push)、 各マシンの追従は auto-apply 層の一度きりの段に載せる** (2026-09-23 追加) — 書き換えた後も、 他マシンの clone は古い履歴のまま残る。 「各マシンで追従の script を 1 回」 は人の記憶頼みになる ([`../docs/convention-design-principles.md#human-memory-not-a-carrier`](../docs/convention-design-principles.md#human-memory-not-a-carrier))。 しかも behind の repo に `git pull --rebase` を案内する表示に従うと、 古い commit を新しい履歴の上に積み直し、 落とした内容が戻る。 無人の同期は diverged を merge せず止まるので無害だが、 人と agent の手が危ない。
+  1. **追従は中身で判定する**: 手元の HEAD と「落とした path を除いて同じ tree」 の commit が新しい履歴に在るときだけ ref を動かす (`git reset --keep` = 未 commit の変更は保つ)。 無ければ未 push の commit がある = 止めて人に見せる
+  2. **SessionStart の auto-apply に、 印つきの一度きりの段として載せる**: 揃えた / 既に揃っている / clone が無い、 のどれでも印を置き、 以後は fetch もしない。 揃えた時だけ 1 回知らせる。 止まった時は印を置かずに知らせ、 次の session で再試行する
+  3. **止まった時の表示で、 危ない command を名指しで止める** (`git pull --rebase` をしない)
+  4. **印の名前は書き換え 1 回ごとに変える** (次の書き換えで前の印が「済み」 と読まれない)
+  5. **無人ジョブの pull が `--ff-only` かを確かめる**: diverged で止まるだけなら無害。 `--rebase` や merge で pull するジョブが書き換えた repo を触るなら、 追従が済むまで止める
+  - 手順の全体 (予行演習・本番・他マシンの追従) = [`../docs/sensitive-repo-patterns.ja.md#pattern-2-4`](../docs/sensitive-repo-patterns.ja.md#pattern-2-4)
 
 ## <a id="fleet-heartbeat"></a>Fleet heartbeat — cross-machine state の bounded 可視化
 
