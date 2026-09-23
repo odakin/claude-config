@@ -27,11 +27,11 @@ exclude の GLOB は `<repo>/<repo 内の path>` に対して当てる (fnmatch)
 
 組み直し (設定の "build"): build した PDF を git から外すと (conventions/repo-history-growth.md#generated-binaries)、
 共同編集者が source だけ push したとき手元の PDF が古いまま / 無いままになる。 写す前に、 規則に従って
-「追跡されていない ∧ 同名の .tex より古い (か無い) ∧ .tex が recent_days の内に変わった」 PDF だけを組み直す。
+「repo が ignore と宣言している ∧ 同名の .tex より古い (か無い) ∧ .tex が recent_days の内に変わった」 PDF だけを組み直す。
   {"repo": "r", "dir": "report", "cmd": "./build.sh {stem}"}      # dir 直下の \\documentclass を持つ .tex ごとに 1 回
   {"repo": "r", "docs": ["a.tex", "b/main.tex"], "cmd": "..."}   # 複数の文書を 1 回のコマンドで組む
-⚠️ 追跡中の PDF は組み直さない (変更として誰かの commit に紛れ込み、 履歴を太らせる) = repo が PDF を
-git から外すまで、 その repo には何もしない。 失敗は source が変わるまで再試行しない。 記録 =
+⚠️ ignore されていない PDF は組み直さない — 追跡中なら変更として、 未追跡のままなら `git add -A` で、 誰かの commit に
+紛れ込み履歴を太らせる = repo が PDF を .gitignore に入れるまで、 その repo には何もしない。 失敗は source が変わるまで再試行しない。 記録 =
 ~/.claude/state/sync-built-pdfs-build.{json,log}。 組み直しだけ止める: CLAUDE_PDF_BUILD=0。
 """
 import argparse
@@ -170,6 +170,11 @@ BUILD_LOCK_STALE = 3600
 TEX_BINS = ("/Library/TeX/texbin", "/usr/local/bin", "/opt/homebrew/bin")
 
 
+def is_ignored(repo: Path, rel: str) -> bool:
+    """repo の .gitignore 等が ignore と宣言している path か (追跡中の file は ignore と見なさない = git と同じ)。"""
+    return subprocess.run(["git", "-C", str(repo), "check-ignore", "-q", "--", rel], capture_output=True).returncode == 0
+
+
 def is_root_doc(tex: Path) -> bool:
     try:
         with tex.open(encoding="utf-8", errors="replace") as fh:
@@ -198,8 +203,8 @@ def build_targets(base: Path, rules, recent_days: int):
             for tex in texs:
                 pdf = tex.with_suffix(".pdf")
                 rel_tex, rel_pdf = str(tex.relative_to(repo)), str(pdf.relative_to(repo))
-                if not tex.is_file() or git(repo, "ls-files", "--", rel_pdf).strip():
-                    continue  # 追跡中の PDF は触らない
+                if not tex.is_file() or not is_ignored(repo, rel_pdf):
+                    continue  # repo が ignore と宣言した PDF だけ (追跡中・未追跡のまま置かれた PDF は `git add -A` で commit に入る)
                 if pdf.exists() and pdf.stat().st_mtime + 1 >= tex.stat().st_mtime:
                     continue
                 if touched is not None and rel_tex not in touched:
@@ -416,6 +421,16 @@ def _selftest_build(base: Path, dest: Path, state: Path) -> None:
     os.utime(r2 / "bad.tex", (newer, newer))
     run(base, dest, [], False, True, 30, rules, state)
     assert len((state / "sync-built-pdfs-build.log").read_text().splitlines()) == log_n + 1, "source が変わっても再試行しない"
+    # ignore されていない (未追跡のまま置かれる) PDF は組まない = `git add -A` で commit に入るため
+    r4 = base / "r4"
+    r4.mkdir()
+    subprocess.run(["git", "init", "-q", str(r4)], check=True)
+    (r4 / "u.tex").write_text("\\documentclass{article}\n")
+    subprocess.run(["git", "-C", str(r4), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(r4), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                    "-c", "commit.gpgsign=false", "commit", "-qm", "src"], check=True)
+    run(base, dest, [], False, True, 30, [{"repo": "r4", "dir": "", "cmd": "cp {stem}.tex {stem}.pdf"}], state)
+    assert not (r4 / "u.pdf").exists(), "ignore されていない PDF を組んだ (未追跡のまま置くと commit に入る)"
 
 
 def main() -> int:
