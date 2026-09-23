@@ -31,7 +31,9 @@ STUB_HEAD = '''#!/usr/bin/env python3
 - kind = text | number | date | textfmt (数値に見える文字列) | clear | formula | general (書式) | fontsize。 value=None の行は未記入 = 実行を止める。
   build の字の切れ gate (check-form-clipping) で止まった欄は (sheet, cell, 'fontsize', 7〜11, group) を足す。
   「書かない欄」 (空が正 / 雛形のまま) はここに出ない。 fixed の値は spec から入れてある。
-- 住所・口座の値はこの file に書かない (workbook の欄にだけ入れる。 値の出所の pointer を comment に)。
+- 住所・口座の値はこの file に書かない (workbook の欄にだけ入れる)。 既にその値を持つ workbook があれば
+  `from formcase.fill import value_from` → value=value_from(<その xlsx>, <sheet>, <cell>) で実行時に読む
+  (stub に残るのは出所の path と cell だけ = form-case-pipeline.md #pii-runtime-source)。
 - PDF を作る = `python3 {cli} build {case_rel} --doc {doc}`
 """
 import os

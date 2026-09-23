@@ -17,6 +17,25 @@ from . import guard as G
 from . import manifest as M
 
 
+def value_from(workbook, sheet: str, cell: str):
+    """住所・口座のような個人情報を stub に書かずに EDITS へ入れる: 既にその値を持つ workbook (本人が前に出して受理された様式・
+    案件の置き場の xlsx) の cell を実行時に読む。 値は新しい workbook の欄にだけ入り、 stub には出所の path と cell だけが残る
+    (form-case-pipeline.md #pii-runtime-source)。 読めない・空なら止める (= 空欄のまま紙にしない)。"""
+    import openpyxl
+
+    path = Path(workbook).expanduser()
+    if not path.is_file():
+        raise SystemExit(f"🔴 値の出所の workbook が無い: {path}")
+    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    if sheet not in wb.sheetnames:
+        raise SystemExit(f"🔴 値の出所に sheet が無い: {path.name} / {sheet}")
+    v = wb[sheet][cell].value
+    wb.close()
+    if v in (None, ""):
+        raise SystemExit(f"🔴 値の出所の cell が空: {path.name} / {sheet}!{cell}")
+    return v
+
+
 def run_docx(stub_file, doc_id, fields, choices, texts) -> int:
     """Word 様式の記入 (form-case-pipeline.md #docx)。 FIELDS を雛形から作り直した docx に打ち、 CHOICES / TEXTS を overlay.yaml に書き、
     読み戻し → gate。 value=None は未記入 (書かない)。 凍結 group がある document には書かない (先に reopen)。"""

@@ -374,6 +374,7 @@ def run() -> int:
         _layout_tests(tmp, expect)
         _view_lint_tests(tmp, expect)
         _case_readme_tests(tmp, expect)
+        _value_from_tests(tmp, expect)
         from .selftest_docx import run_docx_tests, run_page_role_tests
 
         run_docx_tests(tmp, expect)
@@ -399,6 +400,28 @@ def run() -> int:
         shutil.rmtree(tmp, ignore_errors=True)
     print("selftest:", "ALL PASS" if ok else "FAILED")
     return 0 if ok else 1
+
+
+def _value_from_tests(tmp, expect) -> None:
+    """fill.value_from = 個人情報を stub に書かずに別の workbook から実行時に読む (#pii-runtime-source)。"""
+    import openpyxl
+
+    from .fill import value_from
+
+    src = tmp / "vf_src.xlsx"
+    wb = openpyxl.Workbook()
+    wb.active.title = "S"
+    wb["S"]["B2"] = "合成住所 1-2-3"
+    wb.save(src)
+    expect("value_from: cell の値を読む", value_from(src, "S", "B2") == "合成住所 1-2-3")
+    for label, args in (("空の cell", (src, "S", "C3")), ("無い sheet", (src, "X", "B2")),
+                        ("無い file", (tmp / "nope.xlsx", "S", "B2"))):
+        try:
+            value_from(*args)
+            stopped = False
+        except SystemExit:
+            stopped = True
+        expect(f"value_from: {label}なら止める", stopped)
 
 
 # ---------------------------------------------------------------------------
