@@ -204,6 +204,7 @@ Discord は投稿を受け付けたうえで**通知だけを落とす** (HTTP 2
   [`discord-post.py`](../scripts/discord-post.py) は本文に mass mention があると、 送信後にこれを読み、 立っていなければ警告して **exit 3** で終わる (dry-run でも前もって注意を出す)
 - **前もって確かめたいとき**: bot の member の role 権限を OR し、 channel の overwrite (`@everyone` role → bot の role → bot 本人の順に deny を落として allow を足す) を当てた結果に bit 17 があるか (`ADMINISTRATOR` なら全部あり)。 読むだけの API で済む
 - **足りなかったとき**: server の管理者が bot の role か channel の overwrite に Mention Everyone を足す。 足せないなら別の経路 (メール等) で知らせる
+- <a id="mass-mention-precheck"></a>**道具**: 上の事前の計算は [`discord-post.py`](../scripts/discord-post.py) が行う。 `--check` と、 本文に `@everyone` / `@here` がある dry-run が、 読むだけの API (channel / thread なら親 channel / guild の role / bot 本人の member) から `mass mention: ALLOWED` / `DENIED` を出す。 使い捨ての API script を書かずにこの 1 行を読む。 送信後の `mention_everyone` の確認 (exit 3) も残す (= 事前の計算は権限の読み違い、 事後の確認は Discord 側の実際を見る)
 
 ## Cloudflare 1010 error の鑑別: User-Agent vs 組織 NW egress filter
 

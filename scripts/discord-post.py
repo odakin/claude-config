@@ -31,6 +31,12 @@ ping, so a post can look successful while nobody is notified. After sending, thi
 script reads `mention_everyone` from the API response and exits 3 with a warning if a
 mass mention in the text did not take effect (conventions/discord-bot.md
 #mass-mention-silently-dropped).
+
+Before sending, the same permission is computed from the API (read-only GETs: the
+channel, its parent for threads, the guild roles and the bot's own member) and shown
+by --check and by a dry run whose text has @everyone/@here — so "can this bot ping
+everyone here?" is answered before the post, without an ad-hoc API script
+(conventions/discord-bot.md #mass-mention-precheck).
 """
 import argparse
 import json
@@ -143,6 +149,80 @@ def _mass_mention_dropped(body, resp):
     return _wants_mass_mention(body) and not (resp or {}).get("mention_everyone")
 
 
+MENTION_EVERYONE = 1 << 17
+ADMINISTRATOR = 1 << 3
+THREAD_TYPES = (10, 11, 12)  # thread は親 channel の overwrite を継ぐ
+
+
+def _can_mention_everyone(guild_id, member_id, member_role_ids, role_perms, overwrites):
+    """Discord の権限算出 (base → channel overwrite) を Mention Everyone の 1 bit だけで行う。
+
+    role_perms = {role_id: int}。 @everyone role の id は guild_id と同じ。
+    順序 = role の合算 → Administrator なら全許可 → @everyone の overwrite →
+    role の overwrite (deny を全部当ててから allow を全部) → member 個別の overwrite。
+    """
+    perms = role_perms.get(guild_id, 0)
+    for rid in member_role_ids:
+        perms |= role_perms.get(rid, 0)
+    if perms & ADMINISTRATOR:
+        return True
+    ow = {o.get("id"): o for o in overwrites or []}
+    ev = ow.get(guild_id)
+    if ev:
+        perms = (perms & ~int(ev.get("deny", 0))) | int(ev.get("allow", 0))
+    allow = deny = 0
+    for rid in member_role_ids:
+        o = ow.get(rid)
+        if o:
+            allow |= int(o.get("allow", 0))
+            deny |= int(o.get("deny", 0))
+    perms = (perms & ~deny) | allow
+    mo = ow.get(member_id)
+    if mo:
+        perms = (perms & ~int(mo.get("deny", 0))) | int(mo.get("allow", 0))
+    return bool(perms & MENTION_EVERYONE)
+
+
+def _probe_mass_mention(token, channel_id):
+    """この bot がこの channel で @everyone / @here を効かせられるかを API から計算する。
+
+    読むだけ (GET 4-5 回)。 返り値 = (True / False / None, 説明)。 None = 判定できなかった。
+    """
+    ch, err = _request(f"{API}/channels/{channel_id}", token)
+    if err:
+        return None, _explain(*err)
+    gid = ch.get("guild_id")
+    if not gid:
+        return None, "not a server channel (DM): @everyone / @here do not apply"
+    src = ch
+    if ch.get("type") in THREAD_TYPES and ch.get("parent_id"):
+        src, err = _request(f"{API}/channels/{ch['parent_id']}", token)
+        if err:
+            return None, "parent channel: " + _explain(*err)
+    me, err = _request(f"{API}/users/@me", token)
+    if err:
+        return None, _explain(*err)
+    roles, err = _request(f"{API}/guilds/{gid}/roles", token)
+    if err:
+        return None, "guild roles: " + _explain(*err)
+    member, err = _request(f"{API}/guilds/{gid}/members/{me['id']}", token)
+    if err:
+        return None, "bot member: " + _explain(*err)
+    role_perms = {r["id"]: int(r.get("permissions", 0)) for r in roles}
+    overwrites = src.get("permission_overwrites") or []
+    ok = _can_mention_everyone(gid, me["id"], member.get("roles") or [], role_perms, overwrites)
+    return ok, f"bot roles + {len(overwrites)} channel overwrite(s)"
+
+
+def _mass_mention_line(allowed, detail):
+    if allowed is True:
+        return f"mass mention: ALLOWED here ({detail}) = @everyone/@here will ping"
+    if allowed is False:
+        return (f"mass mention: DENIED here ({detail}) = the post would go up but nobody "
+                f"is pinged. Grant the bot Mention Everyone in this channel first")
+    return f"mass mention: could not determine ({detail}); it is checked again after --send"
+
+
 def _explain(code, body):
     msgs = [f"HTTP {code}: {body[:300]}"]
     for key, hint in HINTS.items():
@@ -194,6 +274,8 @@ def main(argv=None):
         if err:
             print(_explain(*err), file=sys.stderr); return 1
         print(f"ok channel_id={resp['id']} type={resp.get('type')}")
+        if resp.get("guild_id"):
+            print(_mass_mention_line(*_probe_mass_mention(token, target)))
         return 0
 
     if a.recent is not None:
@@ -240,8 +322,13 @@ def main(argv=None):
         print(f"[dry run] would post {len(body)} chars to {target}{extra}; "
               f"re-run with --send after the draft is approved")
         if _wants_mass_mention(body):
-            print("note: @everyone/@here needs the bot's Mention Everyone permission here; "
-                  "without it the post succeeds but nobody is pinged (checked after --send)")
+            if a.channel:
+                # read-only GETs; nothing is posted in a dry run
+                allowed, detail = _probe_mass_mention(token, a.channel)
+                print(_mass_mention_line(allowed, detail),
+                      file=sys.stderr if allowed is False else sys.stdout)
+            else:
+                print("note: @everyone/@here do not apply in a DM")
         print("-" * 40)
         print(body)
         return 0
@@ -299,10 +386,33 @@ def selftest():
     ])
     check("recent: oldest first", len(fmt) == 2 and fmt[0].endswith("| a | first"))
     check("recent: newline folded + attachments", fmt[1].endswith("line1 / line2 [attachments: x.pdf]"))
-    # arg validation: dry-run is the default (no --send flag -> no network use)
+    # arg validation: dry-run is the default (no --send flag -> no POST; the dry run
+    # only GETs when it pre-checks a mass mention)
     import inspect
     src = inspect.getsource(main)
     check("send gated behind --send", "if not a.send:" in src)
+    # mass-mention pre-check: Discord permission order on synthetic ids (G = @everyone role)
+    G, BOT, R = "g1", "u-bot", "r-bot"
+    ME, ADM = MENTION_EVERYONE, ADMINISTRATOR
+    check("precheck: role grants, no overwrites -> allowed",
+          _can_mention_everyone(G, BOT, [R], {G: 0, R: ME}, []))
+    check("precheck: nobody grants -> denied",
+          not _can_mention_everyone(G, BOT, [R], {G: 0, R: 0}, []))
+    check("precheck: @everyone overwrite deny beats role grant",
+          not _can_mention_everyone(G, BOT, [R], {G: 0, R: ME},
+                                    [{"id": G, "allow": "0", "deny": str(ME)}]))
+    check("precheck: role overwrite allow beats @everyone deny",
+          _can_mention_everyone(G, BOT, [R], {G: 0, R: 0},
+                                [{"id": G, "allow": "0", "deny": str(ME)},
+                                 {"id": R, "allow": str(ME), "deny": "0"}]))
+    check("precheck: member overwrite deny is last",
+          not _can_mention_everyone(G, BOT, [R], {G: 0, R: ME},
+                                    [{"id": BOT, "allow": "0", "deny": str(ME)}]))
+    check("precheck: administrator ignores overwrites",
+          _can_mention_everyone(G, BOT, [R], {G: 0, R: ADM},
+                                [{"id": G, "allow": "0", "deny": str(ME)}]))
+    check("precheck line: denied says nobody is pinged",
+          "nobody" in _mass_mention_line(False, "x"))
     # mass mention: flagged when the text asks for it but the response did not apply it
     check("mass mention dropped -> flagged",
           _mass_mention_dropped("@everyone hi", {"mention_everyone": False}))
