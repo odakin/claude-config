@@ -2396,6 +2396,36 @@ def selftest() -> int:
         check("承認した候補だけ通る", not unapproved(protected_changes("RULES.md", locked, stronger, repo), repo, ("claude", "sess-1")))
         check("同じ session・file・領域でも規制撤廃へ転用できない",
               bool(unapproved(protected_changes("RULES.md", locked, weaker, repo), repo, ("claude", "sess-1"))))
+        # commit 時の gate も候補の全文で判定する (別の repo で試す = 上の repo の staged を巻き込まない)
+        r2 = tdp / "rules-repo"
+        r2.mkdir()
+
+        def g2(*a):
+            return subprocess.run(["git", *a], cwd=r2, env=genv, capture_output=True, text=True, check=False)
+
+        g2("init", "-q")
+        (r2 / "RULES.md").write_text(locked)
+        g2("add", "-A")
+        g2("commit", "-qm", "init")
+        cand2 = tdp / "proposed2.md"
+        cand2.write_text(stronger)
+        ans2 = argparse.Namespace(session="claude:sess-1", region=["authority:file"], change="strengthen",
+                                 quote="規制を保持して再発防止を実装する。", file=str(r2 / "RULES.md"), transcript=str(tr),
+                                 candidate=str(cand2))
+        check("別の repo の候補も本人発言から記録", approve_mode(ans2) == 0)
+        penv2 = dict(genv, CLAUDE_CODE_SESSION_ID="sess-1")
+
+        def precommit2():
+            reset_caches()
+            return subprocess.run([sys.executable, str(Path(__file__).resolve()), "git-precommit"], cwd=r2,
+                                  env=penv2, capture_output=True, text=True, check=False).returncode
+
+        (r2 / "RULES.md").write_text(stronger.rstrip("\n"))
+        g2("add", "RULES.md")
+        check("pre-commit: 承認した候補と末尾の改行 1 つずれた staged は exit 1", precommit2() == 1)
+        (r2 / "RULES.md").write_text(stronger)
+        g2("add", "RULES.md")
+        check("pre-commit: 承認した候補どおりの staged は通る", precommit2() == 0)
         ans.candidate = None
         check("権限の領域だけの承認は拒否", approve_mode(ans) == 2)
         # Inspection errors must produce a deny, not an empty successful result.
