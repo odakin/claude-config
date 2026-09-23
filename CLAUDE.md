@@ -134,6 +134,7 @@ claude-config/
 │   ├── public-page-watch.md                # 「いつ変わるか分からないが、 変わったらすぐ動く」 公開ページの告知 (受付の再開・募集の開始・日程の変更・議事の結果) を待つとき + 待っている告知の正本を記録に書くとき + 無人の定期実行から人に知らせる経路 (OS 通知・ダイアログ・スマホ push) を組むとき + headless `claude -p` を通知の送信だけに使うとき
 │   ├── rebuttal-letter.md                  # referee report への point-by-point 返信を書くとき
 │   ├── remote-control-server.md            # Remote Control サーバーモードを常駐・troubleshoot するとき
+│   ├── repo-history-growth.md              # build した PDF・図・様式の出力を commit しようとするとき + git-crypt で暗号化した file を頻繁に書き足す台帳にするとき + 自動生成の data を定期 job で commit するとき + repo (.git) が大きい・clone や fetch が重いと気づいたとき + check-history-growth.py の 🟠 / commit 時の ⚠️ を見たとき
 │   ├── research-email.md                   # 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき + 成人の学生について保護者から様子や期待を尋ねられ返信を書くとき (#guardian-inquiry) + 学内の運用ルールに止められた依頼を出し直すとき (#blocking-rule-origin) + 先に短い返事 (了解・あとで返事します) を送ったスレッドに続きの返信を書くとき (#follow-up-after-quick-ack)
 │   ├── researchmap.md                      # researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
 │   ├── scanned-book-survey.md              # 他人から共有された書籍スキャン PDF の束 (自炊 PDF・参考書の束) を、書誌・刷り色・関連箇所で棚卸しするとき + スキャン PDF から刷り色・奥付・ページ番号を読み取るとき
@@ -174,7 +175,7 @@ claude-config/
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (247 file + formcase/ 21 module + lib/ 48 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (249 file + formcase/ 21 module + lib/ 48 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)

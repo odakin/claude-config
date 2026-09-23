@@ -126,6 +126,19 @@ if [ -f "$DGT_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
   fi
 fi
 
+# 差分の効かない file (build した PDF・暗号化した台帳) の頻繁な commit と、 大きすぎる file を知らせる。
+# 止めるのは GitHub が push を拒否する大きさ (1 file 100 MiB 超) だけ = 「exit 1 かつ engine の見出し」 のとき
+# (engine の故障 〔rc 3〕 では止めない)。 SoT = check-history-growth.py docstring / conventions/repo-history-growth.md。
+HG_ENGINE="$(dirname "$0")/check-history-growth.py"
+if [ -f "$HG_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  hg_rc=0
+  hg_out="$(python3 "$HG_ENGINE" --staged 2>&1)" || hg_rc=$?
+  [ -n "$hg_out" ] && printf '%s\n' "$hg_out" >&2
+  if [ "$hg_rc" -eq 1 ] && printf '%s' "$hg_out" | grep -q 'check-history-growth: BLOCK'; then
+    exit 1
+  fi
+fi
+
 # root AGENTS.md の入口が無い repo を知らせる (止めない、 SoT = lib/agents-entrypoint-warn.sh header)
 AGENTS_WARN_LIB="$(dirname "$0")/lib/agents-entrypoint-warn.sh"
 if [ -f "$AGENTS_WARN_LIB" ]; then

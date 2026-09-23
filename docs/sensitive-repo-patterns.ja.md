@@ -109,6 +109,8 @@ README.md !filter !diff
 
 ### <a id="pattern-2-4"></a>パターン 2-4: 頻繁に書き足す台帳は 1 entry 1 file にする
 
+> 一般形 (生成物の PDF・hosting の上限・検出の道具を含む、 暗号化に限らない履歴の増え方) の正本 = [`conventions/repo-history-growth.md`](../conventions/repo-history-growth.md)。 本節は暗号化した台帳の移し方と、 履歴から旧 file を落とす手順を持つ。
+
 git-crypt は file を丸ごと暗号化するので、 **版ごとに全文の暗号 blob が積まれる** (差分圧縮が効かない)。 1 つの file の list に entry を書き足していく台帳 (タスク・受信記録など) は、 1 commit ごとに file の大きさだけ履歴が増える。 さらに暗号化された file は 3-way merge できないので、 並列の session が同じ file に書くと衝突し、 片方の追記が黙って消えることがある。
 
 → entry ごとに file を分ける (例: `todo/<id>.yaml`、 1 file = 1 entry の mapping、 file 名 = id)。 1 commit の増分は触った entry の大きさになり、 別の entry は別の file なので `git commit -- <path>` で互いを巻き込まない。 open / closed で dir を分けない (閉じるたびに mv すると履歴が割れる。 読み手は status で選ぶ)。

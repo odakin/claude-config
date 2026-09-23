@@ -1058,7 +1058,7 @@ Claude Code の desktop app の右パネルは、 Markdown の中の TeX 数式 
 
 ## <a id="built-pdf-phone-sync"></a>組んだ PDF の最新版を同期フォルダの 1 か所へ写す (携帯で常に読めるように)
 
-原稿やノートの PDF は repo ごとに散らばっていて、 携帯からは読めない。 [`scripts/sync-built-pdfs.py`](../scripts/sync-built-pdfs.py) が、 作業 dir の下の全 repo から「同じ場所に同じ名前の `.tex` がある PDF」 を見つけて、 同期フォルダ (Dropbox 等) の `<repo>/<名前>.pdf` へ写す。 設計の判断は次のとおり (細部は script の冒頭)。
+原稿やノートの PDF は repo ごとに散らばっていて、 携帯からは読めない。 (読むために PDF を build のたびに commit する代わりにもなる = 差分の効かない版は毎回まるごと履歴に積まれる、 [`repo-history-growth.md#generated-binaries`](repo-history-growth.md#generated-binaries)。) [`scripts/sync-built-pdfs.py`](../scripts/sync-built-pdfs.py) が、 作業 dir の下の全 repo から「同じ場所に同じ名前の `.tex` がある PDF」 を見つけて、 同期フォルダ (Dropbox 等) の `<repo>/<名前>.pdf` へ写す。 設計の判断は次のとおり (細部は script の冒頭)。
 
 - **対象の一覧を人が書かない**。 新しいノートを組めば、 登録なしで次の回から写る (人が育てる一覧は育たない = [`docs/convention-design-principles.md#detector-config-must-be-derived`](../docs/convention-design-principles.md#detector-config-must-be-derived))。 絞るのは除外の側で、 保管庫の dir (archive / old / submissions など) と、 直近 N 日に commit も変更も無い PDF を外す。 一度写したものは、 その後も更新し続ける。
 - **暗号化している PDF は写さない** (git-crypt の filter が付いた path)。 復号した写しを repo の外に置くと、 暗号化で守っていた範囲が黙って広がる。 携帯で読みたいものが暗号化の側にあるときは、 写すかどうかを持ち主が決める。
