@@ -412,7 +412,8 @@ json.dump({"hooks": {"PreToolUse": [{"matcher": m, "hooks": [{"type": "command",
 PY
 }
 _wire "Edit Write MultiEdit Bash"
-_live() { HOME="$LH" python3 "$HOOK" "$@" 2>/dev/null; }
+# stdin を閉じて呼ぶ = --liveness は SessionStart の入力を読み切るので、 閉じない stdin (agent の shell 等) を継ぐと止まる
+_live() { HOME="$LH" python3 "$HOOK" "$@" 2>/dev/null </dev/null; }
 _state() { python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' \
   "$MANUSCRIPT_CLAIM_GUARD_STATE_DIR/canary-liveness.json" "$1"; }
 _age() {  # $1 = python 式で state を書き換える (d が dict)
