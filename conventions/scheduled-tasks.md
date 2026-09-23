@@ -240,6 +240,44 @@ exit status にしか痕跡が残らない)。
 残っているのに**それを見る機械が無い**のが本失敗の delivery layer だった (= agent の生死を見る
 heartbeat とは別 layer: job は「生きて」 いて毎日失敗していた)。
 
+⚠️ **終了コードだけでは足りない**: plist を読み込み直すと 0 に戻り ([`#reload-resets-exit-status`](#reload-resets-exit-status))、
+しかも原因を言わない ([`#headless-auth-expiry`](#headless-auth-expiry))。 直近の run の log 末尾も読む。
+実装 = [`scripts/check-cron-health.py`](../scripts/check-cron-health.py) (そのマシン) と fleet heartbeat の job health
+(他のマシン、 [`multi-machine-state.md#fleet-heartbeat`](multi-machine-state.md#fleet-heartbeat))、 判定は両方とも
+[`scripts/lib/launchd_job_log.py`](../scripts/lib/launchd_job_log.py) の 1 か所。
+
+## <a id="reload-resets-exit-status"></a>plist を読み込み直すと、 失敗は終了コード 0 の顔になる
+
+launchd は job を読み込み直すと、 次に走るまで `launchctl list` の終了コードを 0 で表示する (実測)。
+routine の定義を書き直す仕組み (定義の照合で plist を更新する installer 等) があると、 **失敗した run の後に
+plist が書き直された job は exit 0 に戻り、 終了コードだけを見る検出器から消える**。 同じ原因で全部が
+失敗していても、 書き直しの時刻の前後で「失敗 と 成功」 に割れて見える (実測)。
+
+- **対策**: 終了コードに加えて、 直近の run の log 末尾を読む。 終了コード 0 でも、 末尾が既知の失敗の文言で
+  log が新しい (既定 3 日以内) なら失敗として出す。 log が古いときは末尾が直近の run とは限らないので拾わない。
+- 判定の正本 = [`scripts/lib/launchd_job_log.py`](../scripts/lib/launchd_job_log.py) (`hidden_failure`)。
+- **限界**: 既知の文言を出さずに終わる失敗は、 読み込み直しの後は見えない = 各 routine 固有の heartbeat
+  (成果物の更新時刻など) が相補する。
+
+## <a id="headless-auth-expiry"></a>無人 routine の config dir の認証切れ (= 全 routine が起動直後に同じ文言で終わる)
+
+headless `claude -p` の routine は、 使う config dir (`CLAUDE_CONFIG_DIR`) の claude.ai の認証が切れると、
+全部が起動直後に `Failed to authenticate: OAuth session expired and could not be refreshed`
+(か `Not logged in · Please run /login`) で終わる (実測)。 無人用の config dir は人が対話で使わないので、
+切れても誰も login の画面を見ない = 検出器が言わない限り気づかない。 切れる時期は予告されない (実測)。
+
+- **検出**: log 末尾の文言 (判定 = `scripts/lib/launchd_job_log.py` の `AUTH_MARKERS`)。 そのマシンでは
+  `check-cron-health.py` が job ごとに原因と config dir を出し、 config dir ごとに 1 行 login の command を出す。
+  他のマシンでは fleet の reader (`check-fleet-status.py`) が config dir ごとに 🔴 1 行。
+- 再ログインした後も、 次の run までは失敗が残って見える。 `check-cron-health.py` はその config dir が今
+  ログイン済みかを `claude auth status` で読み (読むだけ)、 「次の run で消える」 に切り替える。
+- **直し方**: そのマシンで `CLAUDE_CONFIG_DIR=<dir> claude auth login`。 ブラウザのアカウントに掴まれる罠 =
+  [`remote-control-server.md#oauth-grabs-browser-account`](remote-control-server.md#oauth-grabs-browser-account)、
+  agent の session から頼まれたときの手順 =
+  [`remote-control-server.md#login-from-agent-session`](remote-control-server.md#login-from-agent-session)。
+- ⚠️ 同じ config dir を借りる経路 (headless の通知送信など) も同時に止まる = その config dir に依存する経路を
+  全部点呼し、 直した後にそれぞれの健康診断 (probe) を回す。
+
 ## recurring task の jitter
 
 recurring (`cronExpression`) task は dispatch 時に数分の deterministic jitter が乗る (= server load 分散、 例: `0 3 * * *` → 実発火 03:08)。 one-time (`fireAt`) は jitter なし。 分単位の正確な発火を要する用途では考慮する。
