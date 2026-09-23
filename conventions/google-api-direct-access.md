@@ -419,6 +419,7 @@ owner level の write には `cloud-identity.groups` (= full) が必要だが、
 - **`memberships.list` の default view では `createTime` が返らない** (= 簡略 view、 `(no time)` で出力)。 詳細 view (`view=FULL` query param) で取れる可能性、 当面未検証
 - **delivery 状態 (= 配信エラー有無) は API 経由では取得不能**: UI からの CSV export なら取れる。 audit には UI export を quarterly / yearly で取って diff 取る運用が推奨
 - **`nickname` field (= UI 表示名 hint) も API 経由では取得不能**: 同上 CSV 経由
+- **組織外 address の add は Google アカウントに紐づくかで分かれる** (実測): 個人 gmail のように Google アカウントを持つ address は `memberships.create` で入る。 大学・ISP の独自ドメインのように Google アカウントに紐づかない address は error 2028 で拒否され、 group owner が Groups の web UI から足すしかない。 「外部 address は API 不可」 と一括りにせず、 まず API で試し、 2028 が返った address だけ web UI に回す
 
 ### 実証 / 動作確認パターン
 

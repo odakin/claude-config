@@ -77,7 +77,7 @@ Garoon 固有の実測:
 
 1. `get "/g/workflow/index.csp"` の HTML の左メニューに、 最新一覧 / 受信一覧 / 送信一覧 / 下書き の `index.csp?fid=<N>` link が並ぶ (fid の値は組織ごと = 一度読んで案件側の台帳に写す)。 `send_list.csp` のような推測 URL は存在しない (エラー FW00051)。
 2. 送信一覧 `get "/g/workflow/index.csp?fid=<送信一覧>"` の HTML には申請ごとに `view.csp?fid=<N>&pid=<内部 id>` の link が 2 本 (フォーム名と標題) 出る。 **`pid` は内部 id で、 画面に出る申請番号 No. とは別の数**。 申請直後に手順 6 で両方を回収しておくと、 後で一覧を引かずに済む。
-3. `get "/g/workflow/view.csp?fid=<N>&pid=<内部 id>"` が申請内容と進行状況 (経路 step ごとに 結果 / 日時 / 処理者 / コメント) を持つ。 HTML なので `<script>` / `<style>` を落として tag を剥がしてから読む。 **未処理の判定** = 担当 step に結果と日時が無く、 画面に「申請を取り戻す」 が出ている。 担当課の「貸出は N 週間まで」 のような条件は承認のコメント欄に書かれるので、 結果だけでなくコメントまで読む。
+3. `get "/g/workflow/view.csp?fid=<N>&pid=<内部 id>"` が申請内容と進行状況 (経路 step ごとに 結果 / 日時 / 処理者 / コメント) を持つ。 HTML なので `<script>` / `<style>` を落として tag を剥がしてから読む。 **未処理の判定** = 担当 step に結果と日時が無く、 画面に「申請を取り戻す」 が出ている。 担当課の「貸出は N 週間まで」 のような条件は承認のコメント欄に書かれるので、 結果だけでなくコメントまで読む。 ⚠️ **一覧の状況「進行中」 は未承認の意味ではない** (実測): 担当課の step が承認済み (コメントに「予約済み」 等) でも、 後段の決裁者や回覧が残っている間は一覧に「進行中」 と出続け、 それが数日続く。 用件が成立したかは一覧の状況語でなく、 担当課の step の結果とコメントで判断する。
 
 **接続の実務**: 自動選択が未 login の in-app browser を開く一方、同じマシンの external Chromium に SSO session が残っていることがある。その場合は再 login の前に接続済み browser 一覧を取り、最新のログイン済み tab を claim する。画面 title/URL の一時的な「ログイン」表示で判定せず、DOM 内の user 名 / portal / workflow を読んで session 実状態を判定する。
 
@@ -110,5 +110,6 @@ Garoon 固有の実測:
 ## 運用上の含意
 
 - **「掲示板にしか出ない告知」 は mail 監視の構造的圏外** — 制度の募集 (期限付き機会) や全社通知は Garoon 掲示板が一次 channel のことがある。 不在主張 (「告知されていない」) の前に掲示板検索を回す。
+- **ワークフローの承認・差し戻しも mail 監視の圏外になりうる** — 組織の通知設定によっては承認の連絡がメールに来ず Garoon の中にだけ出る (実測)。 mail の null で「まだ承認されていない」 と結論しない。 承認待ちの案件を「返事待ち」 として mail の着信に任せて寝かせず、 見に行く日を決めて [#garoon-workflow-status-read](#garoon-workflow-status-read) で読む。 一般則 = [convention-design-principles.md#absence-channel-coverage](../docs/convention-design-principles.md#absence-channel-coverage)。
 - 掲示は**掲示期間**付き (= 期限後に消える)。 重要な掲示は本文を自リポの SoT に転記してから参照する。
 - 組織固有の value (= subdomain / どの app に何があるか / folder 構成) は private 層に書く — 本 doc は機構 fact のみ。
