@@ -14,7 +14,7 @@
     from gmail_read import load_account_creds, build_service, service_for, thread_messages, thread_of_message, walk_text
     svc = build_service(load_account_creds(Path.home() / ".gmail-mcp", "alias"))
     svc = service_for(Path.home() / ".gmail-mcp", "alias", label="my-detector")   # 失敗は stderr に 1 行、 None (検出器向け)
-    msgs = thread_messages(svc, thread_id, full=True)   # None = 引けなかった (404 / auth / 一時失敗)
+    msgs = thread_messages(svc, thread_id, full=True)   # None = 引けなかった (404 / auth / 一時失敗)。 下書きは除く
     python3 gmail_read.py                                # selftest (API に触らない = 本文の取り出しと並べ替えだけ)
 """
 from __future__ import annotations
@@ -127,15 +127,21 @@ def walk_text(payload: dict) -> str:
     return ""
 
 
-def normalize_messages(raw_messages: list[dict], full: bool) -> list[dict]:
-    """API の thread.messages → [{id, from, to, cc, bcc, subject, date, internalDate, body}] を internalDate 昇順で。
+def normalize_messages(raw_messages: list[dict], full: bool, include_drafts: bool = False) -> list[dict]:
+    """API の thread.messages → [{id, from, to, cc, bcc, subject, date, internalDate, labels, body}] を internalDate 昇順で。
 
     bcc は自分発の控えにだけ残る header (= 宛先が Bcc だけの送信で相手を知る唯一の手がかり)。
+    **下書き (label DRAFT) は既定で除く** (threads.get は未送信の下書きも thread の message として返す = 除かないと、
+    記録する道具は下書きを「自分が送った」 と書き、 返事を見張る検出器は「最後は自分発 = 返事済み」 と読んで相手の
+    未返信の mail を隠す。 実測)。 下書きかどうかを見たい呼び手 (移行の道具) だけ include_drafts=True。
     """
     out = []
     for m in raw_messages or []:
+        labels = [x for x in (m.get("labelIds") or []) if isinstance(x, str)]
+        if "DRAFT" in labels and not include_drafts:
+            continue
         out.append({
-            "id": m.get("id"), "internalDate": m.get("internalDate", "0"),
+            "id": m.get("id"), "internalDate": m.get("internalDate", "0"), "labels": labels,
             "from": header(m, "From"), "to": header(m, "To"), "cc": header(m, "Cc"), "bcc": header(m, "Bcc"),
             "subject": header(m, "Subject") or "(no subject)", "date": header(m, "Date"),
             "body": walk_text(m.get("payload", {})) if full else "",
@@ -145,8 +151,9 @@ def normalize_messages(raw_messages: list[dict], full: bool) -> list[dict]:
 
 
 def thread_messages(service, thread_id: str, full: bool = True,
-                    metadata_headers=("From", "To", "Cc", "Subject", "Date")) -> list[dict] | None:
-    """thread の message 列 (昇順)。 None = 引けなかった (404 / 認証 / 一時失敗 = 呼び手は「未記録」 に倒さない)。"""
+                    metadata_headers=("From", "To", "Cc", "Bcc", "Subject", "Date"),
+                    include_drafts: bool = False) -> list[dict] | None:
+    """thread の message 列 (昇順、 下書きは既定で除く)。 None = 引けなかった (404 / 認証 / 一時失敗 = 呼び手は「未記録」 に倒さない)。"""
     if service is None:
         return None
     kwargs = {"userId": "me", "id": thread_id, "format": "full" if full else "metadata"}
@@ -156,7 +163,7 @@ def thread_messages(service, thread_id: str, full: bool = True,
         raw = service.users().threads().get(**kwargs).execute()
     except Exception:
         return None
-    return normalize_messages(raw.get("messages", []) or [], full)
+    return normalize_messages(raw.get("messages", []) or [], full, include_drafts=include_drafts)
 
 
 def thread_of_message(service, message_id: str) -> str | None:
@@ -194,6 +201,12 @@ def selftest() -> int:
     msgs = normalize_messages(raw, full=False)
     expect("normalize_messages: internalDate 昇順・header 名は大小無視・件名の既定", [m["id"] for m in msgs] == ["a", "b"]
            and msgs[0]["from"] == "A <a@x>" and msgs[0]["subject"] == "(no subject)" and msgs[1]["body"] == "")
+    raw_d = [{"id": "s", "internalDate": "100", "labelIds": ["SENT"], "payload": {"headers": [{"name": "From", "value": "O <o@x>"}]}},
+             {"id": "d", "internalDate": "200", "labelIds": ["DRAFT"], "payload": {"headers": [{"name": "From", "value": "O <o@x>"}]}}]
+    expect("normalize_messages: 下書き (DRAFT) は既定で除き、 include_drafts=True なら labels つきで返す",
+           [m["id"] for m in normalize_messages(raw_d, full=False)] == ["s"]
+           and [(m["id"], m["labels"]) for m in normalize_messages(raw_d, full=False, include_drafts=True)]
+           == [("s", ["SENT"]), ("d", ["DRAFT"])])
     expect("thread_messages / thread_of_message: service 無しは None", thread_messages(None, "x") is None and thread_of_message(None, "x") is None)
     expect("load_account_creds: 無い account は None", load_account_creds(Path("/nonexistent-dir-for-selftest"), "x") is None)
     import io

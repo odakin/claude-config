@@ -39,6 +39,9 @@ Gmail の読み = lib/gmail_read.py。
   record-reply.py <対象> [--todo <id>] [--account <alias>] [--next "<次の一手>"] [--status <enum>]
                   [--summary "<3 行まで>"] [--slug <romaji>|--id <entry id>] [--ledger-for-new <name>] [--no-todo] [--apply]
   record-reply.py --check | --schema | --migrate <ledger> [--remigrate] [--apply] [--limit N] [--only <id>] | --selftest
+  record-reply.py --relabel <ledger> [--apply] [--limit N] [--only <id>]
+                  (既存の索引の向き・相手を今の規則で Gmail から引き直す。 id と日時は元の行のまま、 下書きの行は外して
+                   印が指していれば残る最新へ。 冪等、 cache を使わない)
   設定 option: --root DIR --ledger NAME (複数) --accounts a,b,c --creds-dir DIR --owner-token TOKEN (複数)
               --status-enum a,b,c --category-in / --category-out --tz NAME --cache-dir DIR --month-header "<template>"
               現在地の template (最新の記録 message で選ぶ): --ctx-reply = 相手発で、 thread に自分の先行 message が在る /
@@ -53,7 +56,10 @@ selftest (= 偽の Gmail + 2 台帳の fixture、 API に触らない): t1 legac
   email_ref / t6 --check が印 ≠ 最新を赤に / t7 notes を作らない・summary 4 行目 warn・enum 外を拒む / t8 再 parse 失敗で
   戻す / t9 status_context は 1 行の JSON 文字列 / t10 移行は message として記録した id だけ / t11 root を載せない /
   t12 --remigrate は root の行だけ外す / t13 todo/<id>.yaml の項目 / t14 自分発の相手 = 宛先 (索引と現在地)、
-  返事でない message は --ctx-new-out / --ctx-new-in。
+  返事でない message (新規・追送・転送) は --ctx-new-out / --ctx-new-in / t15 --relabel (相手の引き直し・下書きの
+  行を外して印を戻す・Gmail に無い id は残す・他の field は不変・冪等)。
+下書き: Gmail は未送信の下書きも thread の message として返す。 lib/gmail_read が既定で除く (= 記録しない・返事の
+  判定に入れない)。 下書きを記録してしまった既存の行は --relabel が外す。
 """
 from __future__ import annotations
 
@@ -188,24 +194,26 @@ class Gmail:
             self._svc[account] = gmail_read.build_service(gmail_read.load_account_creds(self.cfg.creds_dir, account))
         return self._svc[account]
 
-    def thread(self, account: str, tid: str, full: bool = True, refresh: bool = False) -> list[dict] | None:
+    def thread(self, account: str, tid: str, full: bool = True, refresh: bool = False,
+               include_drafts: bool = False) -> list[dict] | None:
         svc = self.service(account)
         if svc is None:
             return None
-        cache = self.cfg.cache_dir / account / f"{tid}.{'full' if full else 'meta'}.json"
+        # v2 = labels つき・下書き除外の後 (v1 の cache は下書きを含み labels が無い = 読まない)
+        cache = self.cfg.cache_dir / account / f"{tid}.{'full' if full else 'meta'}{'.drafts' if include_drafts else ''}.v2.json"
         self.last_tid = tid   # 呼び手が「本当の thread id」 を知るため (404 → 引き直しで変わる)
         if self.use_cache and not refresh and cache.exists():
             try:
                 return json.loads(cache.read_text(encoding="utf-8"))
             except Exception:
                 pass
-        out = gmail_read.thread_messages(svc, tid, full=full)
+        out = gmail_read.thread_messages(svc, tid, full=full, include_drafts=include_drafts)
         if out is None:
             # 返信の messageId で threads.get すると 404 = 本当の thread を引き直す
             real = gmail_read.thread_of_message(svc, tid)
             if not real or real == tid:
                 return None
-            return self.thread(account, real, full, refresh)
+            return self.thread(account, real, full, refresh, include_drafts)
         if self.use_cache:
             try:
                 cache.parent.mkdir(parents=True, exist_ok=True)
@@ -253,8 +261,18 @@ def counterpart(cfg: Config, m: dict) -> str:
     return from_display(m.get("to") or m.get("from", ""))   # 自分宛てだけ (控えの自分送り)
 
 
+FORWARD_SUBJ_RE = re.compile(r"^\s*(?:\[[^\]]*\]\s*)?(?:fwd?|fw|転送)\s*[:：]", re.I)   # 先頭の接頭辞 (ML の [tag] は許す)
+
+
 def answers_other_side(cfg: Config, msgs: list[dict], m: dict) -> bool:
-    """m より前に、 m の差出人と反対側 (自分 ⇔ 相手) の message が thread に在るか (= m は返事か)。"""
+    """m は返事か = 件名が転送でなく、 m より前に m の差出人と反対側 (自分 ⇔ 相手) の message が thread に在る。
+
+    判定の較正 (実測、 台帳の全索引行 × Gmail の header): thread の順で見る本方式が最も外れない。 In-Reply-To は
+    送信の道具が付けない / 道具に渡した「直前の自分の mail」 を指すので使えず、 参加者 (宛先が前に書いたか) は ML
+    宛ての返信を外す。 本方式の外れは thread に入った転送だけ = 件名の先頭で外す。 下書きは msgs に来ない (lib が除く)。
+    """
+    if FORWARD_SUBJ_RE.match(m.get("subject") or ""):
+        return False
     ours = owner_from(m.get("from", ""), cfg.owner_tokens)
     for x in msgs:
         if x["id"] == m["id"]:
@@ -958,6 +976,146 @@ def run_migrate(cfg: Config, name: str, ledger: Ledger, gmail, apply: bool, limi
 
 
 # ============================================================
+# --relabel (= 既存の索引の向きと相手を Gmail から引き直す。 id と日時は元の行のまま)
+# ============================================================
+def relabel_lines(cfg: Config, old: list[str], found: dict[str, dict]) -> tuple[list[str], list[str], list[str]]:
+    """索引の行を引き直す → (新しい行, 外した下書きの id, Gmail に無かった id)。 読めない行と無い id の行はそのまま。"""
+    new, drafts, missing = [], [], []
+    for x in old:
+        m = MSG_LINE_RE.match(x)
+        msg = found.get(m.group(1)) if m else None
+        if m and msg is None:
+            missing.append(m.group(1))
+        if msg is None:
+            new.append(x)
+        elif "DRAFT" in (msg.get("labels") or []):
+            drafts.append(m.group(1))   # 下書きは送っていない = 索引から外す
+        else:
+            arrow = "→" if owner_from(msg.get("from", ""), cfg.owner_tokens) else "←"
+            new.append(f"mid:{m.group(1)} {m.group(2)} {arrow} {counterpart(cfg, msg)}")
+    return new, drafts, missing
+
+
+def relabel_entry_text(text: str, entry_id: str, new_lines: list[str], new_upto: str | None) -> str:
+    """entry の messages と recorded_upto だけを置き換える (索引が空になれば印と索引を外す)。"""
+    lines = text.split("\n")
+    s, e = find_block(lines, entry_id)
+    edits = []
+    msp, usp = field_span(lines, s, e, "messages"), field_span(lines, s, e, "recorded_upto")
+    if msp:
+        edits.append((msp[0], msp[1], (["  messages:"] + [f"    - {yaml_str(x)}" for x in new_lines]) if new_lines else []))
+    if usp:
+        edits.append((usp[0], usp[1], [f"  recorded_upto: {yaml_str(new_upto)}"] if new_upto and new_lines else []))
+    for a, b, rep in sorted(edits, key=lambda x: x[0], reverse=True):
+        lines[a:b] = rep
+    return "\n".join(lines)
+
+
+def _entry_messages(cfg: Config, gmail, e: dict, ids: list[str]) -> dict[str, dict]:
+    """entry の id → message (下書き込み)。 entry の threadId から引き、 足りない id は messages.get で thread を探す。"""
+    acct = norm_account(e.get("account"), cfg.accounts)
+    found: dict[str, dict] = {}
+    for a in ([acct] if acct else list(cfg.accounts)):
+        if gmail.service(a) is None:
+            continue
+        seen: set[str] = set()
+        todo = list(thread_ids(e.get("threadId")))
+        for mid in [None] + ids:
+            if mid is not None and mid in found:
+                continue
+            if mid is not None:
+                t = gmail.thread_of_message(a, mid)
+                todo = [t] if t else []
+            for t in todo:
+                if t in seen:
+                    continue
+                seen.add(t)
+                for m in gmail.thread(a, t, full=False, include_drafts=True) or []:
+                    found.setdefault(m["id"], m)
+        if all(i in found for i in ids):
+            break
+    return found
+
+
+def run_relabel(cfg: Config, name: str, ledger: Ledger, gmail, apply: bool, limit: int | None, only: str | None,
+                out=print) -> int:
+    """既存 entry の索引の向きと相手を今の規則で引き直す (冪等)。 下書きの行は外し、 印が指していれば最新の行へ戻す。"""
+    if name not in cfg.ledgers:
+        out(f"台帳は {cfg.ledgers} のどれか")
+        return 1
+    if ledger.broken:
+        out("台帳が壊れている間は書かない: " + "; ".join(ledger.broken))
+        return 3
+    targets = [(p, e) for r, p, e in ledger.inbox if r == name and isinstance(e.get("messages"), list)
+               and isinstance(e.get("id"), str) and (only is None or e.get("id") == only)][:limit]
+    found_by: dict[str, dict[str, dict]] = {}
+    for i, (p, e) in enumerate(targets):
+        ids = [m.group(1) for m in (MSG_LINE_RE.match(str(x)) for x in e["messages"]) if m]
+        found_by[e["id"]] = _entry_messages(cfg, gmail, e, ids)
+        if i and i % 100 == 0:
+            out(f"  … {i}/{len(targets)} entry を Gmail で引いた")
+    stats = {"entries": len(targets), "changed": 0, "lines": 0, "drafts": 0, "missing": 0}
+    shown = 0
+    for p in dict.fromkeys(p for p, _ in targets):
+        text = p.read_text(encoding="utf-8")   # 書く直前に読み直す (並列 session が足した行も今の text から)
+        data = [x for x in (_yaml_safe_load(text) or []) if isinstance(x, dict)]
+        want: dict[str, tuple[list[str], str | None, dict]] = {}
+        new_text = text
+        for e in data:
+            eid = e.get("id")
+            if eid not in found_by or not isinstance(e.get("messages"), list):
+                continue
+            old = [str(x) for x in e["messages"]]
+            new, drafts, missing = relabel_lines(cfg, old, found_by[eid])
+            stats["missing"] += len(missing)
+            if new == old:
+                continue
+            upto = e.get("recorded_upto")
+            um = UPTO_RE.match(str(upto)) if upto is not None else None
+            if new and um and um.group(1) in drafts:   # 印が下書きを指していた = 残る最新の行へ
+                last = max((MSG_LINE_RE.match(x) for x in new if MSG_LINE_RE.match(x)), key=lambda m: m.group(2))
+                upto = f"messageId:{last.group(1)} ({last.group(2)})"
+            by_old = {m.group(1): x for x in old for m in [MSG_LINE_RE.match(x)] if m}
+            pairs = [(by_old[m.group(1)], x) for x in new for m in [MSG_LINE_RE.match(x)] if m and by_old.get(m.group(1)) != x]
+            stats["changed"] += 1
+            stats["drafts"] += len(drafts)
+            stats["lines"] += len(pairs)
+            for d in drafts:
+                out(f"  ✂️ {p.name}:{eid}: 下書き mid:{d} を索引から外す (送っていない)")
+            for a, b in pairs[: max(0, 12 - shown)]:
+                out(f"    {a}\n  → {b}")
+                shown += 1
+            want[eid] = (new, upto if new else None, _without_marks(e))
+            new_text = relabel_entry_text(new_text, eid, new, upto if new else None)
+        if not want or not apply:
+            continue
+
+        def verify(parsed, want=want, n=len(data)):
+            rows = [x for x in (parsed or []) if isinstance(x, dict)]
+            if len(rows) != n:
+                return f"entry 数が {n} → {len(rows)}"
+            for x in rows:
+                if x.get("id") in want:
+                    lines, upto, rest = want[x["id"]]
+                    if [str(y) for y in (x.get("messages") or [])] != lines or x.get("recorded_upto") != upto:
+                        return f"{x['id']}: 索引か印が期待と違う"
+                    if _without_marks(x) != rest:
+                        return f"{x['id']}: 索引と印以外が変わった"
+                    if lines and check_entry(x):
+                        return f"{x['id']}: " + "; ".join(check_entry(x))
+            return None
+        try:
+            write_verified(p, new_text, verify)
+        except WriteFailed as ex:
+            out(f"✗ {ex} (exit 3)")
+            return 3
+        out(f"✓ 書いた: {p} ({len(want)} entry)")
+    out(f"relabel {name}: entry {stats['entries']} 件中 {stats['changed']} 件を引き直す (行 {stats['lines']}、 下書き {stats['drafts']}、"
+        f" Gmail に無い id {stats['missing']} = そのまま)" + ("" if apply else " — dry-run。 書くなら --apply"))
+    return 0
+
+
+# ============================================================
 # selftest (= 偽の Gmail + 2 台帳の fixture)
 # ============================================================
 class FakeGmail:
@@ -967,9 +1125,9 @@ class FakeGmail:
     def service(self, account):
         return object() if account in self.accounts else None
 
-    def thread(self, account, tid, full=True, refresh=False):
-        m = self.threads.get((account, tid))
-        return [dict(x) for x in m] if m is not None else None
+    def thread(self, account, tid, full=True, refresh=False, include_drafts=False):
+        m = self.threads.get((account, tid))   # lib と同じく下書きは既定で除く
+        return [dict(x) for x in m if include_drafts or "DRAFT" not in (x.get("labels") or [])] if m is not None else None
 
     def thread_of_message(self, account, mid):
         for (a, t), msgs in self.threads.items():
@@ -991,10 +1149,10 @@ def _selftest() -> int:
     T = 1790035200000  # = 2026-09-22 00:00 UTC の epoch ms (1 時間おきに 5 通)
     OW, CP = "Owner Example <owner@example.org>", "Counter Part <cp@example.org>"
 
-    def msg(mid, ts, frm, subj="Re: test", body="本文\n> 引用", to=None, cc="", bcc=""):
+    def msg(mid, ts, frm, subj="Re: test", body="本文\n> 引用", to=None, cc="", bcc="", labels=()):
         # 宛先の既定 = 実際の向き (自分発 → 相手、 相手発 → 自分)。 自分発にも自分を入れると相手の判定が試せない
         return {"id": mid, "internalDate": str(ts), "from": frm, "to": to if to is not None else (CP if frm == OW else OW),
-                "cc": cc, "bcc": bcc, "subject": subj, "date": "", "body": body}
+                "cc": cc, "bcc": bcc, "subject": subj, "date": "", "body": body, "labels": list(labels)}
 
     m1, m2, m3, m4, m5 = "aaaa000000000001", "aaaa000000000002", "aaaa000000000003", "aaaa000000000004", "aaaa000000000005"
     threads = {("acct-a", m1): [msg(m1, T, OW), msg(m2, T + 3600000, CP), msg(m3, T + 7200000, CP),
@@ -1138,12 +1296,61 @@ def _selftest() -> int:
               "t14 相手発の新規 thread は ctx_new_in (「返事」 でない)")
         check(ctx_of([msg(f1, T, OW, subj="s"), msg(f2, T + 1, CP, subj="s")]) == "2026-09-22 reply from Counter Part (s) → next: n",
               "t14 自分の後の相手発は ctx_reply")
+        fw = msg(f2, T + 1, OW, subj="Fwd: s", to="Third Person <tp@example.org>")
+        check(ctx_of([msg(f1, T, CP, subj="s"), fw]) == "2026-09-22 sent to Third Person (Fwd: s) → next: n"
+              and ctx_of([msg(f1, T, OW, subj="s"), msg(f2, T + 1, CP, subj="[ml:12] Fw: s")]).startswith("2026-09-22 mail from")
+              and ctx_of([msg(f1, T, OW, subj="s"), msg(f2, T + 1, CP, subj="Re: Fwd: s")]).startswith("2026-09-22 reply from"),
+              "t14 thread に入った転送 (件名の先頭が Fwd / Fw、 ML の [tag] の後も) は返事でない。 Re: Fwd: は返事")
         three = f"{OW}, {CP}, Third Person <tp@example.org>"
         check(counterpart(cfg, msg(f3, T, OW, to=three)) == "Counter Part +1"
               and counterpart(cfg, msg(f3, T, OW, to="owner@example.org", bcc=CP)) == "Counter Part"
               and counterpart(cfg, msg(f3, T, OW, to=OW)) == "Owner Example"
               and counterpart(cfg, msg(f3, T, CP)) == "Counter Part",
               "t14 相手 = 自分を除いた最初の宛先 (+N) / To が自分だけなら Bcc / 自分宛てだけは自分 / 相手発は差出人")
+        # t15 --relabel: 旧形式 (→ の相手 = 自分) + 下書きを記録した行 + 印が下書き + Gmail に無い id
+        g0, g1, g2, g3 = "abcd000000000000", "abcd000000000001", "abcd000000000002", "abcd000000000003"
+        threads[("acct-a", g1)] = [msg(g1, T, CP, subj="q"), msg(g2, T + 3600000, OW, subj="Re: q"),
+                                   msg(g3, T + 7200000, OW, subj="Re: q", labels=["DRAFT"])]
+        gm = FakeGmail(threads)
+        (td / "ledger-d" / "inbox").mkdir(parents=True)
+        pd = td / "ledger-d" / "inbox" / "2026-09.yaml"
+        pd.write_text(
+            f'# d\n\n- id: "2026-09-22-q-received"\n  subject: "q"\n  account: acct-a\n  threadId: "{g1}"\n'
+            f'  recorded_upto: "messageId:{g3} (2026-09-22 02:00)"\n  messages:\n'
+            f'    - "mid:{g0} 2026-09-21 23:00 ← Someone Else"\n    - "mid:{g1} 2026-09-22 00:00 ← Counter Part"\n'
+            f'    - "mid:{g2} 2026-09-22 01:00 → Owner Example"\n    - "mid:{g3} 2026-09-22 02:00 → Owner Example"\n'
+            f'  category: received\n  related_todo:\n    - "2026-10-09-q"\n  summary: |\n    q.\n\n'
+            f'- id: "2026-09-22-other"\n  subject: "o"\n  account: acct-a\n  category: fyi\n  summary: |\n    untouched.\n',
+            encoding="utf-8")
+        cfg_d = Config(**{**vars(cfg), "ledgers": ["ledger-d"]})
+        before_d = pd.read_text(encoding="utf-8")
+        out_lines.clear()
+        check(run_relabel(cfg_d, "ledger-d", Ledger(cfg_d), gm, False, None, None, pr) == 0
+              and pd.read_text(encoding="utf-8") == before_d and "下書き mid:" + g3 in "\n".join(out_lines),
+              "t15 --relabel の dry-run は file を変えず、 下書きの行を外す予定を出す")
+        out_lines.clear()
+        rc = run_relabel(cfg_d, "ledger-d", Ledger(cfg_d), gm, True, None, None, pr)
+        rd = _yaml_safe_load(pd.read_text(encoding="utf-8"))
+        q = rd[0]
+        check(rc == 0 and q["messages"] == [f"mid:{g0} 2026-09-21 23:00 ← Someone Else", f"mid:{g1} 2026-09-22 00:00 ← Counter Part",
+                                             f"mid:{g2} 2026-09-22 01:00 → Counter Part"]
+              and q["recorded_upto"] == f"messageId:{g2} (2026-09-22 01:00)" and not check_entry(q),
+              "t15 → の相手を宛先に引き直し、 下書きの行を外して印を残る最新へ、 Gmail に無い id の行は残す")
+        check(q["summary"] == "q.\n" and q["related_todo"] == ["2026-10-09-q"] and rd[1] == {
+              "id": "2026-09-22-other", "subject": "o", "account": "acct-a", "category": "fyi", "summary": "untouched.\n"}
+              and pd.read_text(encoding="utf-8").startswith("# d\n\n- id: "),
+              "t15 索引と印以外は変えない (他の field・他の entry・先頭の注釈)")
+        after_d = pd.read_text(encoding="utf-8")
+        out_lines.clear()
+        check(run_relabel(cfg_d, "ledger-d", Ledger(cfg_d), gm, True, None, None, pr) == 0
+              and pd.read_text(encoding="utf-8") == after_d and "0 件を引き直す" in "\n".join(out_lines),
+              "t15 --relabel は冪等")
+        out_lines.clear()
+        ns7 = argparse.Namespace(target=g1, todo=None, account="acct-a", next=None, status=None, summary=None, slug=None,
+                                 id=None, ledger_for_new=None, no_todo=True, apply=False)
+        run_record(cfg_d, ns7, Ledger(cfg_d), gm, "2026-09-22", pr)
+        check(g3 not in "\n".join(out_lines) and "未記録 0" in "\n".join(out_lines),
+              "t15 通常の記録は下書きを message として数えない (記録しない・返事の判定に入れない)")
         pth = td / "ledger-a" / "inbox" / "2026-09.yaml"
         orig = pth.read_text(encoding="utf-8")
         try:
@@ -1225,6 +1432,7 @@ def main(argv=None) -> int:
     ap.add_argument("--schema", action="store_true")
     ap.add_argument("--migrate", metavar="LEDGER")
     ap.add_argument("--remigrate", action="store_true")
+    ap.add_argument("--relabel", metavar="LEDGER", help="既存の索引の向きと相手を Gmail から引き直す (下書きの行は外す、 冪等)")
     ap.add_argument("--limit", type=int)
     ap.add_argument("--only")
     ap.add_argument("--selftest", action="store_true")
@@ -1256,6 +1464,8 @@ def main(argv=None) -> int:
     ledger = Ledger(cfg)
     if args.check:
         return run_check(ledger, quiet=args.quiet)
+    if args.relabel:   # 毎回 Gmail を引く (cache は下書きが後で送られたことを隠す)
+        return run_relabel(cfg, args.relabel, ledger, Gmail(cfg, use_cache=False), args.apply, args.limit, args.only)
     if args.migrate:
         return run_migrate(cfg, args.migrate, ledger, Gmail(cfg, use_cache=True), args.apply, args.limit, args.only, remigrate=args.remigrate)
     if not args.target:
