@@ -1342,7 +1342,7 @@ subprocess.run([
 
 ### <a id="pdf-prefill-direct"></a>雛形 PDF への直接印字 (= drawing 保護の回避経路 3、 紙提出専用)
 
-成果物が**印刷した紙だけ**でよい (= xlsx 本体の提出が無い) とき、 [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の回避経路 1 (osascript) / 2 (zip 注入) より速い第 3 の経路: **雛形 xlsx を Excel 経由で PDF 化 (= drawing は render されて画像同然になる) → その PDF に fitz で値を直接印字**する。 ⚠️ 印字する値に本人の口座番号が入るときは、 `auto` mode では書き出しと確認が止まる。 政府発行の番号は印字しない = [`claude-code-permissions.md#own-numbers-in-local-forms`](claude-code-permissions.md#own-numbers-in-local-forms)。
+成果物が**印刷した紙だけ**でよい (= xlsx 本体の提出が無い) とき、 [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の回避経路 1 (osascript) / 2 (zip 注入) より速い第 3 の経路: **雛形 xlsx を Excel 経由で PDF 化 (= drawing は render されて画像同然になる) → その PDF に fitz で値を直接印字**する。 ⚠️ 印字する値に本人の口座番号が入るときは、 `auto` mode では書き出しと確認が止まる = [`claude-code-permissions.md#own-numbers-in-local-forms`](claude-code-permissions.md#own-numbers-in-local-forms)。
 
 ```python
 import fitz
