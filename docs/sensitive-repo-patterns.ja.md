@@ -122,6 +122,14 @@ git-crypt は file を丸ごと暗号化するので、 **版ごとに全文の�
 5. **手書きの雛形も直す**: 手順書にある entry の雛形が list 形 (`- id:`) のままだと、 写した人が新しい形の file に list を書く。 雛形を mapping 形にし、 corruption 検査に「id ≠ file 名」「1 file に entry が 2 つ」 を足す。 ただし YAML は key 直下の sequence を同じ indent で書ける (`cross_ref:` の次の行が `- "…"`) ので、 「col 0 の `- `」 を全部 entry と見なすと誤検出する (`- id:` だけを見る)
 6. **並列 session に先に知らせる**: 旧 file の削除を index に stage している間に、 同じ repo の別 session が path 指定の commit をすると、 その削除を拾って先に push することがある (実測。 機構 = [`multi-session-coordination.md#staging-window-race`](../conventions/multi-session-coordination.md#staging-window-race))。 移行の直前に一声かけ、 stage から commit までを短くする
 
+分割しても、 それまでに積まれた旧 file の全版は履歴に残る (repo の大きさは減らない = 減るのは増え方)。 落とすなら**不可逆**なので人間の判断で ([`confidential-repo-boundary.md`](../conventions/confidential-repo-boundary.md) の履歴の書き換えの項)、 次の順で (実測):
+
+- **予行演習は remote からの mirror clone で**: 手元の checkout から clone すると stash などの手元の ref まで運んでしまう。 `git filter-repo --path <旧 file> --invert-paths` の後に、 旧 file が残る commit が 0 件で、 **既定 branch の先頭の tree が書き換え前と同じ** (= 中身は 1 byte も変わらない) ことを確かめる。 旧 file を消すだけの commit は空になって落ちる。 remote の ref 一覧も見る (pull request の ref など消せない ref が旧 object を抱え続ける)。
+- **本番は予行演習の後に何も進んでいないことを確かめてから**: remote の先頭が予行演習の時の値のままか (`--force-with-lease=<branch>:<旧 SHA>`)、 手元の checkout に未 push の commit が無いかを見て、 どちらかが違えば止まる。 手元は中身が同じなので `git reset --keep origin/<branch>` で ref だけ動かす (未 commit の変更は保たれる)。
+- **他の machine は後から 1 回追従する**: 手元の HEAD と「落とした file を除いて同じ中身」 の commit が新しい履歴に在れば、 未 push の仕事は無いので ref だけ動かす。 無ければ未 push の commit がある = 止めて人が見る。 追従しないと、 その machine の自動 pull は「分岐」 で止まり続ける。 追従の手順は、 その machine で次に作業する時に出る carrier (期日つきの項目) に載せる。
+- **agent には走らせられないことがある**: Claude Code の auto mode は `git filter-repo` を、 scratch の複製に対してでも破壊的な git 操作として止める (実測)。 予行演習と本番を別々の script にし、 本人が terminal で走らせる。
+- **remote がすぐ縮むとは限らない**: force-push の後も旧 object は host 側の gc まで残る (GitHub は数日〜数か月 = [`identity-in-config.md`](../conventions/identity-in-config.md)、 急ぐなら support に依頼)。 書き換えの前に `git bundle create <file> --all` で全体の控えを取っておく。
+
 道具: [`scripts/lib/todo_ledger.py`](../scripts/lib/todo_ledger.py) (loader と分割の部品、 `python3` で selftest) / [`scripts/todo-ledger-split.py`](../scripts/todo-ledger-split.py) (分割、 既定 dry-run) / [`scripts/check-ledger-merge-loss.py`](../scripts/check-ledger-merge-loss.py) (merge・rebase の後に消えた entry を id で照合。 dir を渡すと file 名で照合)。 履歴に残った旧 file の全版は、 移行が landed した後に別途 (履歴の書き換えは不可逆、 全 clone の再取得が要る)。
 
 ---
