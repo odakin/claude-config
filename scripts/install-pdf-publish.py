@@ -19,6 +19,7 @@ build した PDF を commit すると、 差分が効かず版ごとにまるご
 
     install-pdf-publish.py install <repo> --dest <共有フォルダ名> --doc 'report/*.tex' --build './build.sh {stem}' [--doc ... --build ...] [--untrack] [--dry-run]
     install-pdf-publish.py check <repo>        # 写しが正本と同じか・hook が置かれているか
+    install-pdf-publish.py ensure --root <dir> # 写しを持つのに hook の無い clone に置く (session 開始の自動設定から呼ぶ、 置いた時だけ出力)
     install-pdf-publish.py --selftest          # 合成の repo と bare remote で、 push で発火して写ることまで確かめる
 
 `--untrack` = 追跡中の生成 PDF (同じ dir に \\documentclass を持つ同名の .tex がある PDF) を `git rm --cached` する
@@ -159,6 +160,23 @@ def check(repo: Path) -> int:
     return 1 if bad else 0
 
 
+def ensure(root: Path) -> int:
+    """root 直下の repo のうち、 pdf-publish の写しを持つのに この clone に hook が無いものへ hook を置く (冪等)。
+
+    hook は clone ごとの設定で git が運ばないので、 pull で仕組みが届いた clone に人の記憶で 1 回、 にしないため
+    session 開始の自動設定から呼ぶ。 置いた repo だけ 1 行ずつ出す (何もしなければ沈黙)。"""
+    for repo in sorted(p for p in root.expanduser().iterdir() if (p / ".git").exists()):
+        inst = repo / TOOLS / "install-hook.sh"
+        if not inst.exists():
+            continue
+        chk = subprocess.run(["sh", str(inst), "--check"], cwd=repo, capture_output=True, text=True)
+        if chk.returncode == 0:
+            continue
+        r = subprocess.run(["sh", str(inst)], cwd=repo, capture_output=True, text=True)
+        print(f"{repo.name}: {'pre-push hook を置いた' if r.returncode == 0 else '置けなかった: ' + (r.stderr or r.stdout).strip()[:120]}")
+    return 0
+
+
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
@@ -237,6 +255,21 @@ def selftest() -> int:
             r = subprocess.run(["git", "-C", str(repo), "push", "-q", "origin", "main"], capture_output=True)
             ok("既存の pre-push を鎖でつなぎ、 その失敗で push が止まる",
                r.returncode != 0 and (hook.parent / "pre-push.before-pdf-publish").exists())
+            # ensure: 写しを持つのに hook の無い clone (= pull で仕組みが届いた別の clone) に置く
+            other = t / "root" / "other"
+            (t / "root").mkdir()
+            subprocess.run(["git", "clone", "-q", str(remote), str(other)], check=True, capture_output=True)
+            import contextlib
+            import io
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                ensure(t / "root")
+            chk = subprocess.run(["sh", str(other / TOOLS / "install-hook.sh"), "--check"], cwd=other, capture_output=True)
+            ok("ensure: 仕組みが届いた clone に hook を置く", chk.returncode == 0 and "other" in buf.getvalue())
+            buf2 = io.StringIO()
+            with contextlib.redirect_stdout(buf2):
+                ensure(t / "root")
+            ok("ensure: 2 回目は沈黙", buf2.getvalue() == "")
             # 写しが正本と違えば check が言う
             (repo / TOOLS / "pdf-publish.sh").write_text("#!/bin/sh\nexit 0\n")
             ok("写しの drift を check が言う", check(repo) == 1)
@@ -263,6 +296,8 @@ def main(argv=None) -> int:
     i.add_argument("--dry-run", action="store_true")
     c = sub.add_parser("check")
     c.add_argument("repo")
+    e = sub.add_parser("ensure")
+    e.add_argument("--root", required=True)
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
@@ -270,6 +305,8 @@ def main(argv=None) -> int:
         return install(Path(a.repo), a.dest, a.doc, a.build, a.untrack, a.dry_run)
     if a.cmd == "check":
         return check(Path(a.repo))
+    if a.cmd == "ensure":
+        return ensure(Path(a.root))
     ap.print_help()
     return 2
 
