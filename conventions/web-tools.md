@@ -87,12 +87,16 @@ CSR SPA のニュース/結果ページの URL を多数検証する場面 (例:
 | じゃらん (`jalan.net/yad<ID>/plan/`) | 本文が文字化けして要約側が「読めない」 (文字コードの取り違え) | ✅ 全プラン × 全部屋の 1 名 / 2 名料金、 「※バスなしトイレなし」 注記、 空室カレンダーまで text で取れる |
 | booking.com (`/hotel/jp/<slug>.ja.html`) | 空 (JS 描画) | ✅ 部屋タイプの literal 名、 評価点と件数、 管理者の自己紹介文、 規則 (門限・年齢) が取れる。 料金は日付を選ぶまで出ない |
 | 価格.com トラベル (`travel.kakaku.com`) | `ENOTFOUND` (fetch 先から DNS 不到達) | 未実測 (WebSearch の summary に最安値が出るが、 summary は hallucinate しうる = 本 doc 冒頭) |
+| フードデリバリーの店ページ (Uber Eats `/jp/store/…`) | 403 Forbidden | ✅ 住所を入れなくても、 セットと単品のメニュー名・宅配の価格・受付時間が text で取れる |
+| 宅配ピザ等の注文サイト (店を選ぶまで値段を出さない SPA) | 空 or 値段なし | 値段は出ない (店と受け取り方の選択が要る) → 裏の一覧 API を読む ([`machine-route-first.md#read-only-endpoint-discovery`](machine-route-first.md#read-only-endpoint-discovery)) |
 
 ### How to apply
 
 - **URL を先に組む**: じゃらんは施設 ID から `https://www.jalan.net/yad<ID>/plan/` (料金一覧)、 booking.com は `.ja.html` を付けると日本語で出る。 WebSearch で施設ページの URL を取ってから pane で開く
 - **取る項目を決めてから読む** (口コミの裏取りなら [`consumer-review-posting.md#price-claim`](consumer-review-posting.md#price-claim) の一覧)。 `get_page_text` は 3 万字前後で「この宿を見た人は他に」 の推薦一覧が繰り返し混じるので、 `max_chars` は 25,000〜30,000 で足りる
 - 料金は**日付・人数で変わる**ので、 幅 (最安〜通常) と取得日を手元の記録に残し、 公開文には幅だけ書く
+- <a id="stale-third-party-prices"></a>**口コミ・地図・まとめ記事の価格は掲載時期が分からず、 古いことが多い** (実測: 地図サイトのメニュー欄の値が、 宅配アプリの現在価格から逆算した店頭価格よりはるかに安かった)。 人に伝える値は、 今注文できる経路 (公式の注文ページ・宅配アプリ・公式 PDF の価格表) で上か下を押さえてから出す。 宅配アプリの価格は店頭の 2〜3 割増し (実測) なので、 上限の目安には使えるが、 店頭価格そのものとしては書かない
+- 店の「公式サイト」 として第三者の頁に載っている domain は、 失効して別物 (広告・カジノ等) に替わっていることがある (実測)。 運営会社の頁から辿った URL を使う
 
 ## <a id="cookie-replay-oauth-spa"></a>Browser cookie replay は OAuth-token SPA を認証しない (= member 限定クラウドフォルダは無人 upload 不可)
 

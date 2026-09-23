@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""calendar-events.py — Google Calendar の event を機械で読む / 足す / 消す。
+"""calendar-events.py — Google Calendar の event を機械で読む / 足す / 直す / 消す。
 
 MCP の create_event が使えない session (= server 未接続 / bulk) と、
 学会の聴講計画のように **数十 event を一度に組み立てる** 用途のための CLI。
@@ -10,6 +10,11 @@ MCP の create_event が使えない session (= server 未接続 / bulk) と、
     を巻き込む事故と紙一重になる
   - 「空き時間」 の計算を ad hoc に書くと、 block event が窓を占有する問題
     (= 下記 gaps の docstring) に気づけない
+  - 既存 event の時刻や説明を 1 か所直すだけでも、 道具に無いと OAuth の写経が
+    また始まる (= patch)
+  - **範囲が空 (--to <= --from) の list は黙って 0 件を返し、 「予定なし」 と
+    読み違える** (= 1 日分を見るつもりで --from と --to に同じ日付を渡すと、
+    --to は排他なので空になる)。 空の範囲はエラーにする
 
 ⚠️ **layer 1 なので calendar id も token path も持たない**。 呼び出し側 (= 個人層) が
    env で渡す。 個人の calendar id は layer 3 の SoT に置く (= 公開 repo に焼かない)。
@@ -26,11 +31,16 @@ env:
                             --windows 09:00-12:30,13:30-17:30
   calendar-events.py dups   --from 2030-01-10 --to 2030-01-14
   calendar-events.py add    --spec talks.yaml [--apply]
+  calendar-events.py patch  --id <event id> [--start/--end 2030-01-10T13:00] \
+                            [--summary '…'] [--append-description '…'] \
+                            [--reminders 0,15,60] [--apply]
   calendar-events.py delete --from 2030-01-10T14:45 --to 2030-01-11 \
                             --match '学会' --protect '打合せ|会期' [--apply]
   calendar-events.py --selftest
 
-add / delete は **既定 dry-run**。 実行は --apply。
+add / patch / delete は **既定 dry-run**。 実行は --apply。
+--to は**排他** (日付だけなら その日の 0:00)。 1 日分を見るなら --to に翌日を渡す。
+event id は `list --ids` で引く。 patch の説明は置き換えず末尾に足す。
 """
 from __future__ import annotations
 
@@ -165,6 +175,48 @@ def build_event_body(spec: dict, tz: str, default_reminders=None) -> dict:
     return body
 
 
+def _norm_bound(x: str) -> str:
+    """'YYYY-MM-DD' / 'YYYY-MM-DDTHH:MM' を比較できる 'YYYY-MM-DDTHH:MM' に揃える。"""
+    return x[:16] if "T" in x else f"{x}T00:00"
+
+
+def check_range(frm: str, to: str) -> None:
+    """--to <= --from なら ValueError (= 空の範囲で「0 件」 を返して読み違えさせない)。"""
+    if _norm_bound(to) <= _norm_bound(frm):
+        raise ValueError(
+            f"範囲が空: --from {frm} --to {to} (--to は排他。 1 日分なら --to に翌日を渡す)")
+
+
+def build_patch_body(current: dict, tz: str, start: str | None = None, end: str | None = None,
+                     summary: str | None = None, append_description: str | None = None,
+                     reminders: list[int] | None = None) -> dict:
+    """既存 event (API の dict) と変更の指定 → events.patch の body。
+
+    指定した欄だけを入れる。 時刻は 'YYYY-MM-DDTHH:MM'。 変更後の end <= start は ValueError。
+    説明は**置き換えず末尾に足す** (= 前の記録を消さない)。 指定が 1 つも無ければ ValueError。
+    """
+    body: dict = {}
+    if start:
+        body["start"] = {"dateTime": f"{start}:00+09:00", "timeZone": tz}
+    if end:
+        body["end"] = {"dateTime": f"{end}:00+09:00", "timeZone": tz}
+    new_s = start or current.get("start", {}).get("dateTime", "")[:16]
+    new_e = end or current.get("end", {}).get("dateTime", "")[:16]
+    if (start or end) and new_s and new_e and new_e <= new_s:
+        raise ValueError(f"変更後の end <= start: {new_s} .. {new_e}")
+    if summary:
+        body["summary"] = summary
+    if append_description:
+        cur = (current.get("description") or "").rstrip()
+        body["description"] = f"{cur}\n\n{append_description}" if cur else append_description
+    if reminders is not None:
+        body["reminders"] = {"useDefault": False,
+                             "overrides": [{"method": "popup", "minutes": m} for m in reminders]}
+    if not body:
+        raise ValueError("変更する欄が指定されていない")
+    return body
+
+
 # ---------------------------------------------------------------- API 層
 
 def _cfg(name: str, required: bool = True) -> str:
@@ -283,6 +335,34 @@ def cmd_add(a) -> int:
     return 0
 
 
+def cmd_patch(a) -> int:
+    svc = get_service()
+    cal = _cfg("CLAUDE_CALENDAR_ID")
+    tz = os.environ.get("CLAUDE_CALENDAR_TZ", "Asia/Tokyo")
+    cur = svc.events().get(calendarId=cal, eventId=a.id).execute()
+    rem = [int(x) for x in a.reminders.split(",")] if a.reminders else None
+    body = build_patch_body(cur, tz, start=a.start, end=a.end, summary=a.summary,
+                            append_description=a.append_description, reminders=rem)
+    s0 = cur["start"].get("dateTime", cur["start"].get("date", ""))
+    e0 = cur["end"].get("dateTime", cur["end"].get("date", ""))
+    print(f"  対象: {cur.get('summary', '')}  {s0[:16]}-{e0[11:16]}")
+    for k, v in body.items():
+        if k in ("start", "end"):
+            print(f"  {k}: {cur.get(k, {}).get('dateTime', '')[:16]} → {v['dateTime'][:16]}")
+        elif k == "reminders":
+            print(f"  reminders → {[o['minutes'] for o in v['overrides']]}")
+        elif k == "description":
+            print(f"  description の末尾に追記: {a.append_description!r}")
+        else:
+            print(f"  {k}: {cur.get(k, '')!r} → {v!r}")
+    if not a.apply:
+        print("\n(dry-run。 --apply で実行)")
+        return 0
+    ev = svc.events().patch(calendarId=cal, eventId=a.id, body=body).execute()
+    print(f"  ✅ patched {ev['id']}")
+    return 0
+
+
 def cmd_delete(a) -> int:
     svc = get_service()
     cal = _cfg("CLAUDE_CALENDAR_ID")
@@ -371,6 +451,36 @@ def selftest() -> int:
     except ValueError:
         check(True, "T19: summary 欠落は ValueError")
 
+    try:
+        check_range("2030-01-10", "2030-01-10")
+        check(False, "T20: 同じ日付の --from/--to は空の範囲としてエラー")
+    except ValueError:
+        check(True, "T20: 同じ日付の --from/--to は空の範囲としてエラー")
+    try:
+        check_range("2030-01-10T14:45", "2030-01-11")
+        check_range("2030-01-10", "2030-01-11")
+        check(True, "T21: 正しい範囲は通る (時刻つきと日付だけの混在も)")
+    except ValueError:
+        check(False, "T21: 正しい範囲は通る (時刻つきと日付だけの混在も)")
+
+    cur = {"summary": "s", "description": "前の記録",
+           "start": {"dateTime": "2030-01-10T12:30:00+09:00"},
+           "end": {"dateTime": "2030-01-10T13:10:00+09:00"}}
+    pb = build_patch_body(cur, "Asia/Tokyo", end="2030-01-10T13:00", append_description="追記")
+    check(pb["end"]["dateTime"].startswith("2030-01-10T13:00") and "start" not in pb,
+          "T22: patch は指定した欄だけ入れる")
+    check(pb["description"] == "前の記録\n\n追記", "T23: 説明は置き換えず末尾に足す")
+    try:
+        build_patch_body(cur, "Asia/Tokyo", end="2030-01-10T12:00")
+        check(False, "T24: 変更後の end <= start は ValueError")
+    except ValueError:
+        check(True, "T24: 変更後の end <= start は ValueError")
+    try:
+        build_patch_body(cur, "Asia/Tokyo")
+        check(False, "T25: 指定なしの patch は ValueError")
+    except ValueError:
+        check(True, "T25: 指定なしの patch は ValueError")
+
     print(f"\n==== RESULT: PASS={ok} FAIL={fail} ====")
     return 1 if fail else 0
 
@@ -391,6 +501,12 @@ def main() -> int:
     q = sub.add_parser("dups"); common(q)
     q = sub.add_parser("add")
     q.add_argument("--spec", required=True); q.add_argument("--apply", action="store_true")
+    q = sub.add_parser("patch")
+    q.add_argument("--id", required=True)
+    q.add_argument("--start"); q.add_argument("--end"); q.add_argument("--summary")
+    q.add_argument("--append-description", dest="append_description")
+    q.add_argument("--reminders", help="分の list (例 0,15,60,120,1440)")
+    q.add_argument("--apply", action="store_true")
     q = sub.add_parser("delete"); common(q)
     q.add_argument("--match"); q.add_argument("--protect")
     q.add_argument("--apply", action="store_true")
@@ -401,8 +517,14 @@ def main() -> int:
     if not a.cmd:
         p.print_help()
         return 1
+    if a.cmd in ("list", "gaps", "dups", "delete"):
+        try:
+            check_range(a.frm, a.to)
+        except ValueError as e:
+            print(f"❌ {e}", file=sys.stderr)
+            return 2
     return {"list": cmd_list, "gaps": cmd_gaps, "dups": cmd_dups,
-            "add": cmd_add, "delete": cmd_delete}[a.cmd](a)
+            "add": cmd_add, "patch": cmd_patch, "delete": cmd_delete}[a.cmd](a)
 
 
 if __name__ == "__main__":

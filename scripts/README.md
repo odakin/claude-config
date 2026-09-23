@@ -25,7 +25,7 @@
 - **[bootstrap-stdio-mcps.test.sh](bootstrap-stdio-mcps.test.sh)** — self-test for the generic stdio MCP bootstrap library.
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入
 - **[build-sensitive-terms.py](build-sensitive-terms.py)** — 実名などの literal gate (Tier B) の term 一覧を SoT から生成する。
-- **[calendar-events.py](calendar-events.py)** — Google Calendar の event を機械で読む / 足す / 消す。
+- **[calendar-events.py](calendar-events.py)** — Google Calendar の event を機械で読む / 足す / 直す / 消す。
 - **[calibrate-bash-command-pattern.py](calibrate-bash-command-pattern.py)** — Bash の command を見る PreToolUse guard の述語を、 過去の transcript の Bash tool 呼び出しに当てて検出数と例を出す（導入前の誤検出の見積もり用。 --hook で hook file の find_issues(command) をそのまま使う、 --selftest。 conventions/hook-authoring.md#command-guard-calibration）
 - **[calibrate-final-message-pattern.py](calibrate-final-message-pattern.py)** — 発話を見る Stop hook の句を、 過去の transcript の各 turn の最終 assistant 発話に当てて検出数と例を出す（導入前の誤検出の見積もり用。 turn の境界は hook と同じ scripts/lib/transcript_turns.py、 --skip-quoted / --exclude-sentence-with で hook の除外を再現、 --selftest。 conventions/hook-authoring.md#text-pattern-stop-hook）
 - **[campussquare-client.py](campussquare-client.py)** — 大学の教務システム CampusSquare for WEB を **browser session cookie で script から読む** (画面 drive 不要)。

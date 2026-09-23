@@ -88,6 +88,13 @@ recipe (家計簿カテゴリ一括修正で確立):
 
 線引き: これは **user 本人の session で user が UI からできる操作を、 同じ endpoint で機械化するだけ** (= 所有者権限の範囲内)。 bot 保護の回避・無人化・他人のデータ・利用規約が禁じる自動取得には使わない (#実例 2026-08-28 の注と同じ線)。
 
+<a id="read-only-endpoint-discovery"></a>**読むだけなら捕捉は要らない** (実測): 画面が店や条件を選ぶまで値を出さない SPA (注文サイトのメニュー価格など) で、 公開されている値を一覧で読みたいだけのときは、 上の recipe 1 の hook を仕掛けなくても降りられる。
+
+- **URL**: page を 1 回開いた後、 page context で `performance.getEntriesByType('resource')` を読み、 `xmlhttprequest` / `fetch` の URL を並べる。 分析 tag を除けば、 一覧の API はすぐ見つかる
+- **header**: そのまま `fetch` すると「client が要る」「言語が要る」 で 400 になることがある。 値は app の bundle の中にある (axios なら `defaults.headers.common.<名前> = "…"` を grep)。 これは全訪問者の browser に配られる公開の識別子で、 本人の認証情報ではない
+- **条件の切替**: query の 1 つ (宅配 / 持ち帰り、 店の code) を変えて取り直すと、 画面で選び直さずに別の条件の値が並ぶ。 店の code を変えても値が同じなら「全店共通」 と言ってよいが、 **その code がどの店かは別に確かめる** (id の見た目で店を推測しない)
+- **線引き**: 誰でも画面で見られる値を、 画面と同じ頻度で読むだけにする。 認証の要る data・大量取得・定期巡回には使わない
+
 ## <a id="session-cookie-reuse"></a>credential を発行できない web app: browser session cookie の再利用 (= ladder 4 のもう 1 形態)
 
 #internal-endpoint-replay は「ログイン済み page の context から叩く」 = browser MCP がまだ要る。 もう一段上が **browser の session cookie を script 側に持ち出して、 browser も拡張も無しに HTTP を撃つ**経路。 SAML/SSO-only の groupware・学内 portal のように「API の password 認証は admin 限定 / OAuth client は admin 登録要 / user が発行できる token が無い」 環境で、 残る唯一の機械経路になる。
