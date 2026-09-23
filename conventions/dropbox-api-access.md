@@ -50,9 +50,19 @@ file でも folder でも同じ。 返る URL は `https://www.dropbox.com/scl/�
 - **メンバー確認**: `POST /2/sharing/list_folder_members` `{"shared_folder_id": …}` → `users[].user.email` + `access_type` (owner/editor/viewer)、`invitees[]` は招待未承諾
 - **雲内検索**: `POST /2/files/search_v2` `{"query": …, "options": {"file_status": "active"}}` (`"deleted"` で削除済みも)。⚠️ **同期エラーで upload に失敗した file は雲に痕跡ゼロ** — search でも list でも出ない。「雲に無い」は「どのマシンにも無い」を意味しない (実体は作成元マシンのローカルにだけある)
 
+## <a id="shared-folder-editor-invite"></a>共有フォルダにして相手を編集者として招待する (相手も書き込める)
+
+閲覧リンクでは相手が書き込めない。 共同で使うフォルダは shared folder にして編集者として招待する。 scope は共有リンクと同じ `sharing.write` + `sharing.read` で足りる (内容の read / write 権限は要らない)。
+
+- `POST /2/sharing/share_folder` `{"path": …, "force_async": false}` → `shared_folder_id`。 既に共有なら 409 `bad_path` / `already_shared` に id が入る = 冪等に扱える。 大きいフォルダは `async_job_id` → `check_share_job_status`
+- `POST /2/sharing/add_folder_member` `{"shared_folder_id": …, "members": [{"member": {".tag": "email", "email": …}, "access_level": {".tag": "editor"}}]}` — ⚠️ **相手に Dropbox から招待メールが飛ぶ = 外部発信** (道具は既定 dry-run にし、 送る指定のときだけ呼ぶ)
+- `POST /2/sharing/list_folder_members` で参加者と招待中を見る。 相手がそのアドレスの Dropbox アカウントを持っていれば、 招待の直後から参加者に載る (実測)
+- **招待先は見つかったアドレス全部** — 相手がこのサービスで使っているアドレスは分からない。 使っているアカウントで参加が成立し、 残りの招待は未受諾のまま残る ([`#person-address-channels`](../docs/convention-design-principles.md#person-address-channels))
+- 用途の例 = 共同編集の repo の PDF を push のたびに写す共有フォルダ ([`templates/shared-project/pdf-publish/`](../templates/shared-project/pdf-publish/))
+
 ## <a id="blast-radius"></a>blast radius (= この token で何が壊せるか)
 
-`sharing.write` token は **Dropbox 全体の任意 file / folder への公開リンク発行**ができる = 漏洩時は data exfiltration 級。 最小 scope でも「軽い secret」 ではない:
+`sharing.write` token は **Dropbox 全体の任意 file / folder への公開リンク発行**と、 **任意のフォルダを共有フォルダにして他人を招待すること**ができる = 漏洩時は data exfiltration 級。 最小 scope でも「軽い secret」 ではない:
 
 - 暗号化保管 (git-crypt 等) + mode 600、 値を chat / plaintext commit に出さない
 - `files.content.*` を付けない限り**内容の read / write は API level で拒否される** (`files/get_temporary_link` が 400 "not permitted to access this endpoint" を返すことを 1 probe で実測確認できる = scope 検証の exposure 操作)

@@ -237,6 +237,8 @@ origin: 印刷の gate hook の test で、 無効化の env switch を立てた
 
 ## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug
 
+- <a id="hook-git-env-same-repo"></a>**逆向き = commit しようとしている同じ repo の staged を読む段は `GIT_INDEX_FILE` を残す**。 捨てると main の index を読み、 `git commit -- <path>` の一時 index にだけある staged を見落とし、 commit されない file を数える (実装例 = `scripts/check-history-growth.py` の `staged_warnings`、 一時 index を捨てる実装では落ちる test つき)。 1 本の script に両方の段があるなら、 git を呼ぶ関数を 2 つに分けて env の扱いを名前で区別する
+
 ### <a id="bash32-problem"></a>問題
 
 `$(...)` command substitution 内に heredoc を置き、 heredoc body に literal `"` または `'` (= 例えば Python regex の `[\"']` パターン) を含めると、 bash 3.2 の parser が外側 `$(...)` の閉じ `)` を find する際に body 内の quote を一部 consume、 **遥か後の行 で `syntax error near unexpected token '('`** を報告する。
