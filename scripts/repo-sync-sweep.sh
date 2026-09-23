@@ -138,6 +138,10 @@ _cleanup() {
 trap _cleanup EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
+# 全 repo の fetch を上限なしで並列に起動する (実測: 平常の負荷では上限なしが最速で、 並列数を絞るほど遅い)。
+# 重い機械の session 開始で fetch がほぼ全部打ち切られるのは、 並列の fetch 同士でなく session 開始の hook 群・
+# 並走 session を含む機械全体の負荷による (同じ機械で負荷が引いた後は同じ repo 群が数秒で全部終わる) =
+# 並列数に上限を付けても直らず、 平常時を遅くするだけ。 取り残しは fetch 未完了として出る → 手で pull-all。
 for gd in "$ROOT"/*/.git; do
   [ -e "$gd" ] || continue
   repo="${gd%/.git}"
