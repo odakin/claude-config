@@ -19,6 +19,8 @@ scripts/public-precommit-runner.sh から呼ぶ同じ engine。
 agent-authority の block で守る (= その file の他の行は普通に直せる)。 block の外側からの迂回 (手前の exit 0・
 helper 関数の差し替え = canary が走らない / `|| true` = 失敗が消える) は止めずに、 ここで「報告が途絶えた」
 「NOT ARMED」 として表に出す。 判断の記録と残る穴 = conventions/agent-rule-ownership.md#wiring-scope。
+同じ面で、 承認なしで入った規則の文書への追記 (engine の `additive-log --surface`) の未読を出す
+(= 事前に止めない代わりに本人が後で読む、 conventions/agent-rule-ownership.md#additive-and-free-zones)。
 """
 from __future__ import annotations
 
@@ -188,6 +190,15 @@ def liveness(max_age_hours: float, silent_days: float) -> int:
                 lines.append(f"🟡 manuscript-claim-guard: {caller} からの canary の報告が {shown} 無い (最後 = {str(stamp)[:10]})。"
                              " その呼び出しが外れたか、 手前で止まっている (呼び元 script の agent-authority block の外側を見る:"
                              " conventions/agent-rule-ownership.md#wiring-scope)")
+    # 承認なしで入った規則の文書への追記 = 本人が後で読む面 (conventions/agent-rule-ownership.md#additive-and-free-zones)
+    try:
+        r = subprocess.run([sys.executable, ENGINE, "additive-log", "--surface"], capture_output=True, text=True,
+                           timeout=10, stdin=subprocess.DEVNULL)
+        if r.returncode != 0:
+            raise OSError(r.returncode)
+        lines.extend(x for x in r.stdout.splitlines() if x.strip())
+    except (OSError, subprocess.SubprocessError):
+        lines.append("🟡 manuscript-claim-guard: 承認なしで入った追記の記録を読めない。 確認 = python3 " + ENGINE + " additive-log")
     if lines:
         print("\n".join(lines))
     return 0

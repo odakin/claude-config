@@ -429,6 +429,11 @@ PY
 _check "canary は判定と呼び元を state に書く" \
   "$(_live --canary --caller synthetic >/dev/null; _state 'str(d["armed"]) + " " + ",".join(sorted(d["callers"]))')" "True synthetic"
 _check "健全なら --liveness は沈黙" "$(_live --liveness | wc -l | tr -d ' ')" 0
+# 承認なしで入った規則の文書への追記 (agent-rule-ownership.md#additive-and-free-zones) は同じ面に出る
+printf '%s\n' '{"kind": "insert", "file": "conventions/x.md", "repo": "/r/demo", "sha": "0", "text": "t", "session": "claude:s", "at": "2999-01-01T00:00:00+00:00"}' \
+  > "$MANUSCRIPT_CLAIM_GUARD_STATE_DIR/additive-log.jsonl"
+_check "未読の追記は --liveness が 📜 で出す" "$(_live --liveness | grep -c '📜.*demo/conventions/x.md')" 1
+rm -f "$MANUSCRIPT_CLAIM_GUARD_STATE_DIR/additive-log.jsonl"
 _age 'd["callers"]["synthetic"] = ago(20)'
 _check "報告が 14 日以上途絶えた呼び元を 🟡 で出す" "$(_live --liveness | grep -c '🟡.*synthetic')" 1
 _age 'd["at"] = ago(3); d["armed"] = False'

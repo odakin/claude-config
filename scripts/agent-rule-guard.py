@@ -20,9 +20,24 @@ blocks carry the lock and the rest is ordinary code (decision record and the
 holes this leaves: conventions/agent-rule-ownership.md#wiring-scope). This is
 not isolation from a malicious agent with write access to the checker/runtime
 itself and does not interpret all prose.
+
+Two exceptions apply only to built-in prose instruction documents (CLAUDE.md /
+AGENTS.md / CONVENTIONS.md / conventions/*.md, not the guard's own rule docs,
+not marker files, not manifest-declared patterns; the dispatcher also requires
+a Git repository): an `agent-free` zone the owner declared is masked out of the
+file lock, and a change that only inserts whole sentences, lines or sections
+(existing units intact, their heading/code/comment context unchanged, no
+relaxation vocabulary or hiding markup in the inserted text, not a brand-new
+entry document) is exempt from prior approval; the dispatcher logs it for the
+owner to read afterwards. Whether an edit strengthens or weakens a rule is not
+decided here; the inserted-only shape and the vocabulary tripwire are proxies
+with known holes (conventions/agent-rule-ownership.md#additive-and-free-zones).
+Callers pass manifest patterns as extra_paths, never the expanded set of every
+protected path (that set contains every tracked rule document).
 """
 from __future__ import annotations
 
+from collections import Counter
 import fnmatch
 import json
 from pathlib import Path, PurePosixPath
@@ -49,6 +64,41 @@ CONTROL_PATTERNS = (
 MARK_FILE_RE = re.compile(r"^\s*(?:#|//|%|<!--)\s*agent-authority:file\b", re.M)
 MARK_BEGIN_RE = re.compile(r"^\s*(?:#|//|%|<!--)\s*agent-authority:begin\s+id=([A-Za-z0-9._-]+)", re.M)
 MARK_END_TMPL = r"^\s*(?:#|//|%|<!--)\s*agent-authority:end\s+id={id}\b"
+# Owner-declared non-rule zones (status lists, generated blocks) inside prose instruction documents.
+FREE_BEGIN_RE = re.compile(r"^[ \t]*<!--[ \t]*agent-free:begin[ \t]+id=([A-Za-z0-9._-]+)[ \t]*-->[ \t]*$", re.M)
+FREE_END_TMPL = r"^[ \t]*<!--[ \t]*agent-free:end[ \t]+id={id}[ \t]*-->[ \t]*$"
+GUARD_RULE_DOCS = {"agent-rule-ownership.md", "manuscript-claim-ownership.md"}
+# Inserted text containing any of these falls back to prior approval. Substring match; the list
+# over-matches on purpose (a false hit costs one approval, a miss lets an exception in unread).
+RELAX_TERMS_JA = (
+    "ただし", "但し", "例外", "除く", "除いて", "除外", "不要", "要らない", "いらない", "省略", "省く", "省いて",
+    "省け", "免除", "適用しない", "適用外", "適用されない", "対象外", "対象としない", "任意", "構わない",
+    "かまわない", "差し支えない", "限らない", "に限る", "に限って", "に限り", "のみに適用", "だけに適用",
+    "してよい", "しても良い", "してもよい", "でよい", "でもよい", "て良い", "ても良い", "で良い", "なくてよい",
+    "なくても", "しなくて", "ずに済", "ずとも", "優先する", "優先して", "優先させ", "上書き", "無効", "廃止",
+    "撤回", "撤廃", "取り消", "緩め", "緩和", "無視", "従わな", "読まなくて", "聞かずに", "確認なし", "確認せず",
+    "承認なし", "承認せず", "許可なし", "自己判断", "裁量で", "素通し", "規則ではない", "義務ではない",
+    "必須ではない", "強制ではない", "効力", "拘束", "努力目標", "推奨に", "目安に", "にとどめ", "に留め",
+    "なしで", "外せる", "ていい", "てもいい", "許され", "以外は", "しない限り", "でない限り", "で足りる", "で十分",
+    "てよい", "てよく", "改定", "改訂", "に代えて", "に代わ", "に限った", "に限定", "だけの話", "のみの話",
+    # redefinition, precedence, historicising, scope and discretion (an independent review's bypasses)
+    "とは", "優先", "勝つ", "更新)", "時点の記録", "記録である", "歴史", "当時の", "参考情報", "扱うのは",
+    "自分の判断", "の判断で", "独断",
+)
+RELAX_TERMS_EN = (
+    "unless", "except", "exception", "exempt", "optional", "optionally", "skip", "not required",
+    "no longer", "need not", "needn't", "don't need", "do not need", "override", "overrides", "supersede",
+    "supersedes", "ignore", "disregard", "disable", "disabled", "deprecated", "obsolete", "bypass", "waive",
+    "allowed to", "permitted", "omit", "relax", "loosen", "only applies", "only apply", "does not apply",
+    "doesn't apply", "not apply", "no-verify",
+)
+# Markup that hides or demotes text, and invisible characters that make a changed sentence look unchanged.
+RELAX_MARKUP = ("<!--", "-->", "~~", "<div", "<span", "<details", "<style", "<script", "<template", "<noscript",
+                "<iframe", "​", "‌", "‍", "⁠", "﻿", "­")
+_RELAX_EN_RE = re.compile(r"(?<![A-Za-z])(" + "|".join(re.escape(t) for t in RELAX_TERMS_EN) + r")(?![A-Za-z])", re.I)
+_SENTENCE_END_RE = re.compile(r"(?<=[。．])")
+_HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.*?)[ \t#]*$")
+_FENCE_RE = re.compile(r"^[ \t]*(```|~~~)")
 
 
 def parse_manifest(text: str | None) -> list[str]:
@@ -86,7 +136,7 @@ def authority_regions(text: str, path: str, extra_paths: tuple[str, ...] | list[
     """
     out: dict[str, str] = {}
     if text and (MARK_FILE_RE.search(text) or protected_path(path, extra_paths)):
-        out["authority:file"] = text
+        out["authority:file"] = mask_free_zones(text) if prose_policy_doc(path, (text,), extra_paths) else text
     blocks: list[tuple[int, int]] = []  # body spans of explicit blocks (marker lines excluded)
     for begin in MARK_BEGIN_RE.finditer(text):
         rid = begin.group(1)
@@ -130,6 +180,198 @@ def wiring_inside_blocks(text: str, blocks: list[tuple[int, int]]) -> bool:
             if not any(start <= hit.start() and hit.end() <= stop for start, stop in blocks):
                 return False
     return True
+
+
+def prose_policy_doc(path: str, texts: tuple[str, ...], extra_paths: tuple[str, ...] | list[str] = ()) -> bool:
+    """True for a built-in prose instruction document where free zones and the insertion exemption apply.
+
+    Excluded: the guard's own rule documents, files carrying the whole-file
+    marker (in any of the given versions) and paths a manifest declared.
+    """
+    rel = path.replace("\\", "/")
+    p = PurePosixPath(rel)
+    if p.suffix.lower() != ".md" or p.name in GUARD_RULE_DOCS:
+        return False
+    if any(fnmatch.fnmatchcase(rel, x) for x in extra_paths):
+        return False
+    if any(t and MARK_FILE_RE.search(t) for t in texts):
+        return False
+    return p.name in ENTRYPOINT_NAMES or any(
+        fnmatch.fnmatchcase(rel, pat) for pat in ("conventions/*.md", "*/conventions/*.md"))
+
+
+def free_zones(text: str) -> list[tuple[str, int, int]]:
+    """(id, body start, body end) of each terminated zone.
+
+    Frees nothing for an unterminated begin, a marker inside a code fence or an
+    HTML comment (documenting the syntax must not unlock text), or a repeated id
+    (only the first zone with an id counts, so a second one cannot widen it).
+    """
+    if "agent-free:" not in text:
+        return []
+    starts, pos = [], 0
+    for ctx, line in zip(_line_contexts(text), text.split("\n")):
+        starts.append((pos, not ctx[1] and not ctx[2]))
+        pos += len(line) + 1
+    live = lambda at: next((ok for s, ok in reversed(starts) if s <= at), False)
+    zones: list[tuple[str, int, int]] = []
+    seen: set[str] = set()
+    pos = 0
+    while True:
+        begin = FREE_BEGIN_RE.search(text, pos)
+        if not begin:
+            return zones
+        zid = begin.group(1)
+        end = re.compile(FREE_END_TMPL.format(id=re.escape(zid)), re.M).search(text, begin.end())
+        if not end:
+            return zones
+        if zid not in seen and live(begin.start()) and live(end.start()):
+            zones.append((zid, begin.end(), end.start()))
+        seen.add(zid)
+        pos = end.end()
+
+
+def mask_free_zones(text: str) -> str:
+    """Replace zone bodies with a placeholder; the marker lines stay, so adding or moving a zone is a change."""
+    out, pos = [], 0
+    for zid, start, stop in free_zones(text):
+        out.append(text[pos:start] + f"\n<<agent-free:{zid}>>\n")
+        pos = stop
+    out.append(text[pos:])
+    return "".join(out)
+
+
+def relax_hit(text: str) -> str | None:
+    """First relaxation-shaped term in inserted text, or None."""
+    for term in RELAX_MARKUP + RELAX_TERMS_JA:
+        if term in text:
+            return term
+    m = _RELAX_EN_RE.search(text)
+    return m.group(1) if m else None
+
+
+def _units(text: str) -> list[tuple[str, int]]:
+    """(unit, line number) sequence: sentences split after 。/．, with a "\\n" unit at each line break.
+
+    The first unit of a line keeps its indentation, so nesting changes are not
+    insertions; line breaks are units, so joining or splitting lines is not one.
+    """
+    units: list[tuple[str, int]] = []
+    for i, line in enumerate(text.split("\n")):
+        if i:
+            units.append(("\n", i))
+        first = True
+        for part in _SENTENCE_END_RE.split(line):
+            s = part.rstrip() if first else part.strip()
+            if s.strip():
+                units.append((s, i))
+                first = False
+    return units
+
+
+def _line_contexts(text: str) -> list[tuple[tuple[str, ...], bool, bool]]:
+    """Per line: (heading ancestry, inside a code fence, inside an HTML comment) at the line start."""
+    out = []
+    stack: list[tuple[int, str]] = []
+    fence: str | None = None
+    comment = False
+    for line in text.split("\n"):
+        hm = _HEADING_RE.match(line) if fence is None and not comment else None
+        if hm:  # a heading's own context is its ancestors, so a section inserted before it moves nothing
+            level = len(hm.group(1))
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+        out.append((tuple(t for _, t in stack), fence is not None, comment))
+        if hm:
+            stack.append((level, hm.group(2)))
+            continue
+        if fence is not None:
+            if line.lstrip().startswith(fence):
+                fence = None
+            continue
+        fm = _FENCE_RE.match(line)
+        if fm and not comment:
+            fence = fm.group(1)
+            continue
+        pos = 0
+        while True:
+            j = line.find("-->" if comment else "<!--", pos)
+            if j < 0:
+                break
+            pos = j + (3 if comment else 4)
+            comment = not comment
+    return out
+
+
+def _greedy_alignment(old: list[str], new: list[str], from_end: bool = False) -> list[int] | None:
+    """Index in new of each old unit (old as a subsequence of new), matched earliest (or latest). None = not one."""
+    out: list[int] = []
+    order = range(len(new) - 1, -1, -1) if from_end else range(len(new))
+    it = iter(order)
+    for u in (reversed(old) if from_end else old):
+        for j in it:
+            if new[j] == u:
+                out.append(j)
+                break
+        else:
+            return None
+    return out[::-1] if from_end else out
+
+
+def insertion_only(old: str, new: str) -> tuple[bool, str, str]:
+    """(ok, reason, inserted text): new = old with whole units inserted and no existing unit moved in context."""
+    if old == new:
+        return True, "", ""
+    ou, nu = _units(old), _units(new)
+    oc, nc = _line_contexts(old), _line_contexts(new)
+    # Only insertions are acceptable, so a greedy subsequence walk decides it in linear time (a general diff
+    # grows with the product of the lengths: 4 s on a 280 KB document, and a hook that outlives its timeout
+    # lets the tool run unchecked). Greedy from either end; either alignment that keeps every context passes.
+    alignments = [_greedy_alignment([u for u, _ in ou], [u for u, _ in nu], rev) for rev in (False, True)]
+    if alignments[0] is None:
+        return False, "既存の文を変えた・消した", ""
+    good = next((a for a in alignments if a is not None and all(
+        ou[i][0] == "\n" or oc[ou[i][1]] == nc[nu[j][1]] for i, j in enumerate(a))), None)
+    if good is None:
+        return False, "既存の行の所属 (見出し・コード・コメント) が変わる", ""
+    kept = set(good)
+    inserted = [u for j, (u, _) in enumerate(nu) if j not in kept and u != "\n"]
+    text = " ".join(inserted)
+    hit = relax_hit(text)
+    if hit:
+        return False, f"足した文に緩和の語「{hit}」がある", text
+    return True, "", text
+
+
+def insertion_exemption(path: str, old: str, new: str,
+                        extra_paths: tuple[str, ...] | list[str] = ()) -> dict | None:
+    """Decide whether a prose-document change skips prior approval. None = not a prose policy document.
+
+    Returns {"ok", "reason", "inserted", "free"}; "free" lists (zone id, term, text)
+    for relaxation-shaped text written inside a free zone (logged, not blocked).
+    Rule-reference lines may only be added, never changed or removed.
+    """
+    if not prose_policy_doc(path, (old, new), extra_paths):
+        return None
+    ok, reason, inserted = insertion_only(mask_free_zones(old), mask_free_zones(new))
+    if ok and not old and new and PurePosixPath(path.replace("\\", "/")).name in ENTRYPOINT_NAMES:
+        # a new entry document is read automatically for a whole directory tree: a new scope of standing orders
+        ok, reason = False, "新しい入口の文書 (CLAUDE.md / AGENTS.md 等) を作る"
+    if ok:
+        refs = [authority_regions(t, path, extra_paths).get("authority:rule-ref", "") for t in (old, new)]
+        if Counter(x for x in refs[0].split("\n") if x) - Counter(x for x in refs[1].split("\n") if x):
+            ok, reason = False, "正本を指す参照の行を変えた・消した"
+    free = []
+    old_bodies = {zid: old[a:b] for zid, a, b in free_zones(old)}
+    for zid, a, b in free_zones(new):
+        if new[a:b] == old_bodies.get(zid):
+            continue
+        before = Counter(u for u, _ in _units(old_bodies.get(zid, "")))
+        written = " ".join((Counter(u for u, _ in _units(new[a:b]) if u != "\n") - before).elements())
+        hit = relax_hit(written)
+        if hit:
+            free.append((zid, hit, written))
+    return {"ok": ok, "reason": reason, "inserted": inserted, "free": free}
 
 
 def shell_segments(command: str) -> list[list[str]]:
@@ -511,6 +753,92 @@ def selftest() -> int:
                 "cat <<'EOF'\ngit push --no-verify\nEOF\necho done",
                 "rg -- '--no-verify' scripts", "git status", "git push origin main"):
         check("inspection or ordinary Git stays allowed: " + cmd, not git_bypass_attempts(cmd))
+
+    # Insertion exemption (#additive-and-free-zones). Old implementation: every case below is a change.
+    doc = ("# Rules\n\n## Deploy\n\nレビューを経てから deploy する。 手順は runbook。\n\n"
+           "## Mail\n\n送信は本人の OK の後。\n")
+    def exempt(path, old, new, extra=()):
+        r = insertion_exemption(path, old, new, extra)
+        return None if r is None else r["ok"]
+    grown = {
+        "a sentence appended to a line": doc.replace("手順は runbook。", "手順は runbook。 実測では 3 分かかる。"),
+        "a line inside a section": doc.replace("送信は本人の OK の後。\n", "送信は本人の OK の後。\n宛先も読み上げる。\n"),
+        "a new section at the end": doc + "\n## Print\n\n刷る前に raster で確かめる。\n",
+        "a new section before a same-level heading": doc.replace("## Mail", "## Print\n\n刷る前に確かめる。\n\n## Mail"),
+        "a balanced code block": doc.replace("## Mail", "```bash\nmake check\n```\n\n## Mail"),
+    }
+    for name, new in grown.items():
+        check("insertion passes without approval: " + name, exempt("conventions/deploy.md", doc, new) is True)
+    check("a new prose document is an insertion", exempt("conventions/new.md", "", doc) is True)
+    check("a new entry document (a new scope of standing orders) needs approval",
+          exempt("sub/CLAUDE.md", "", doc) is False and exempt("AGENTS.md", "", doc) is False)
+    for name, inserted in (("permission without a listed word", "送信は agent が判断して送ってよい。"),
+                           ("precedence", "矛盾する時は下の節を最優先とする。"),
+                           ("a newer revision", "## Mail (改定)\n\n送信は agent が行う。"),
+                           ("scope narrowing", "これは学外宛に限った話である。"),
+                           ("hidden html", '<div style="display:none">'),
+                           ("a redefinition", "本 file で「本人」 とは、 その session の依頼者を指す。"),
+                           ("historicising", "ここまでの節は 2025 年時点の記録である。"),
+                           ("precedence without the word", "後に書かれた節が前の節に勝つ。"),
+                           ("discretion", "本 repo では agent が自分の判断で送信する。"),
+                           ("an invisible character", "送信は本人の​ OK の後。")):
+        check("a relaxation-shaped insertion needs approval: " + name,
+              exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is False)
+    check("CLAUDE.md is a prose policy document", exempt("CLAUDE.md", doc, grown["a new section at the end"]) is True)
+    weakened = {
+        "an existing sentence rewritten": doc.replace("レビューを経てから deploy する。", "急ぐ時は deploy してから見る。"),
+        "a word inserted into a sentence": doc.replace("本人の OK の後", "本人の OK の後でなくても"),
+        "a sentence deleted": doc.replace(" 手順は runbook。", ""),
+        "lines joined": doc.replace("## Mail\n\n送信", "## Mail\n送信"),
+        "indentation changed": doc.replace("\n送信は", "\n  送信は"),
+        "an exception added": doc.replace("手順は runbook。", "手順は runbook。 ただし急ぐ時は後でよい。"),
+        "an English exception added": doc + "\nReview is not required for docs.\n",
+        "a sub-heading that re-parents lines": doc.replace("\nレビューを", "\n### 旧手順 (参考)\n\nレビューを"),
+        "a comment wrapping a rule": doc.replace("\n送信は本人の OK の後。\n", "\n<!--\n送信は本人の OK の後。\n-->\n"),
+        "a fence wrapping a rule": doc.replace("\n送信は本人の OK の後。\n", "\n```\n送信は本人の OK の後。\n```\n"),
+        "an inline comment opened": doc.replace("レビューを経てから deploy する。", "<!--。 レビューを経てから deploy する。 -->。"),
+        "strikethrough": doc.replace("送信は本人の OK の後。", "~~送信は本人の OK の後。~~"),
+        "a free zone declared by the agent": doc + "\n<!-- agent-free:begin id=x -->\n<!-- agent-free:end id=x -->\n",
+        "a rule reference changed": (f"See {RULE_REF_TOKENS[0]} for limits.\n",  # token built, not literal:
+                                     f"See {RULE_REF_TOKENS[0]} for limits, and more.\n"),  # this file has no ref lines
+    }
+    for name, new in weakened.items():
+        old_text, new_text = new if isinstance(new, tuple) else (doc, new)
+        check("still needs approval: " + name, exempt("conventions/deploy.md", old_text, new_text) is False)
+    check("a whole-file marker keeps the full lock",
+          exempt("conventions/x.md", "<!-- agent-authority:file -->\n" + doc,
+                 "<!-- agent-authority:file -->\n" + grown["a new section at the end"]) is None)
+    check("the guard's own rule documents keep the full lock",
+          exempt("conventions/agent-rule-ownership.md", doc, grown["a new section at the end"]) is None)
+    check("manifest paths keep the full lock",
+          exempt("docs/policy.md", doc, grown["a new section at the end"], ("docs/*",)) is None)
+    check("settings are not prose policy documents", exempt(".claude/settings.json", "{}", '{"a": 1}') is None)
+    check("a deletion of the document is not an insertion", exempt("conventions/deploy.md", doc, "") is False)
+
+    zoned = ("# P\n\n規則の文。\n\n<!-- agent-free:begin id=status -->\n- a: 進行中\n<!-- agent-free:end id=status -->\n"
+             "\n<!-- agent-authority:begin id=gate -->\n門は下げない。\n<!-- agent-authority:end id=gate -->\n")
+    def moved(old, new, path="CLAUDE.md"):
+        a, b = authority_regions(old, path), authority_regions(new, path)
+        return sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+    check("a free zone body is outside the file lock",
+          moved(zoned, zoned.replace("- a: 進行中", "- a: 完了、 archive へ")) == [])
+    check("a locked block keeps its lock next to a free zone",
+          "authority:gate" in moved(zoned, zoned.replace("門は下げない。", "門は下げてよい。")))
+    check("an insertion inside a locked block keeps the block lock",
+          "authority:gate" in moved(zoned, zoned.replace("門は下げない。", "門は下げない。 実測あり。")))
+    check("moving a zone marker is a file change",
+          moved(zoned, zoned.replace("<!-- agent-free:begin id=status -->\n", "").replace(
+              "\n規則の文。\n", "\n<!-- agent-free:begin id=status -->\n規則の文。\n")) == ["authority:file"])
+    check("an unterminated zone frees nothing",
+          moved("x\n<!-- agent-free:begin id=z -->\na\n", "x\n<!-- agent-free:begin id=z -->\nb\n") == ["authority:file"])
+    fenced = "x\n```\n<!-- agent-free:begin id=z -->\na\n<!-- agent-free:end id=z -->\n```\n"
+    check("markers shown inside a code fence free nothing", moved(fenced, fenced.replace("\na\n", "\nb\n")) == ["authority:file"])
+    twice = zoned + "\n<!-- agent-free:begin id=status -->\n規則。\n<!-- agent-free:end id=status -->\n"
+    check("a repeated zone id frees only its first zone",
+          moved(twice, twice.replace("\n規則。\n", "\n規則でない。\n")) == ["authority:file"])
+    r = insertion_exemption("CLAUDE.md", zoned, zoned.replace("- a: 進行中", "- a: 進行中、 確認不要"))
+    check("relaxation words inside a free zone are logged, not blocked",
+          r is not None and r["ok"] and r["free"] and r["free"][0][1] == "不要")
     print(f"agent-rule-guard selftest: {len(failures)} failure(s)")
     return bool(failures)
 

@@ -26,6 +26,7 @@ claude-config/
 ├── README.ja.md            # プロジェクト説明（日本語）
 ├── setup.sh                # セットアップスクリプト
 ├── JHEP.bst                # 物理論文用 BibTeX style (setup.sh が texmf-local に install)
+<!-- agent-free:begin id=auto-tree-conventions -->
 <!-- AUTO-TREE:conventions BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check、 源 = conventions/*.md 冒頭の doc-meta。 表示 = when 〔trigger〕 のみ、 詳細 summary は conventions/README.md 側 = 2026-09-01 auto-load 税 縮退) -->
 ├── conventions/          # ドメイン固有規約 (各行の説明 = doc-meta の when 〔いつ読むか〕。 詳細 summary + カテゴリ index = conventions/README.md)
 │   ├── academic-program-verification.md    # 研究者向けの割引・無償プログラム (AI ベンダーの academic plan 等) に申請するとき + 所属確認フォームの「研究室ページ」「機関メール」 欄を埋めるとき + 審査で即時不合格になったとき + 手動審査で不承認になり問い合わせるとき (#after-decline)
@@ -167,16 +168,21 @@ claude-config/
 │   ├── zenn.md                             # Zenn.dev 記事を執筆・入稿するとき
 │   └── zoom-meetings.md                    # Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき
 <!-- AUTO-TREE:conventions END -->
+<!-- agent-free:end id=auto-tree-conventions -->
+<!-- agent-free:begin id=auto-tree-hooks -->
 <!-- AUTO-TREE:hooks BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は hooks/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
 ├── hooks/                # Claude Code hooks (60 file。 setup.sh が ~/.claude/hooks/ に symlink。 全列挙 + 説明 = hooks/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:hooks END -->
+<!-- agent-free:end id=auto-tree-hooks -->
 ├── hammerspoon/
 │   └── init.lua                # Hammerspoon 設定（Claude Cmd+Q 誤終了防止 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
+<!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
 ├── scripts/              # 運用 script 群 (250 file + formcase/ 21 module + lib/ 48 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
+<!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
 │   ├── root-CLAUDE.md.default          # 個人層なしのデフォルト ~/Claude/CLAUDE.md (setup.sh が配置)
 │   ├── overleaf-sync.sh.template       # Overleaf 連携 repo 用 sync script template（PROJECT_ID hardcode = ID の SoT、 --status/--merge、 conventions/overleaf-integration.md#sync-script-contract）

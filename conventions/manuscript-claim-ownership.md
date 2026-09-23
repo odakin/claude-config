@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: AI agent (Claude / Codex / 他 vendor / sub-agent / 無人 worker) が原稿 (.tex) の表題・概要・序論・結論・数式に触れる前 + 著者の依頼を「承認」 と読みそうになった瞬間 + manuscript-claim-guard に deny されたとき + agent の編集権限を定める規則 (本 doc・各層の参照・gate の設定と配線) を変える前
 category: paper
-summary: 原稿の主張の所有権と AI agent の編集境界の正本。 保護領域 (表題・概要・序論・結論・数式) は著者の項目ごとの裁定 (著者の発言の verbatim を file × 領域ごとに記録) なしに agent が書き換えない・削らない・足さない。 変更は提案として出し、 印字しない指示は直接書く許可ではない。 権限の規則そのものも同じ扱い (強める変更も含む)。 機械 gate = scripts/manuscript-claim-guard.py を Claude / Codex の PreToolUse と git pre-commit が同じ述語で呼ぶ
+summary: 原稿の主張の所有権と AI agent の編集境界の正本。 保護領域 (表題・概要・序論・結論・数式) は著者の項目ごとの裁定 (著者の発言の verbatim を file × 領域ごとに記録) なしに agent が書き換えない・削らない・足さない。 変更は提案として出し、 印字しない指示は直接書く許可ではない。 権限の規則そのものも同じ扱い (強める変更も含む。 規則の文書への追記と規則でない区画だけは agent-rule-ownership.md#additive-and-free-zones)。 機械 gate = scripts/manuscript-claim-guard.py を Claude / Codex の PreToolUse と git pre-commit が同じ述語で呼ぶ
 -->
 # 原稿の主張の所有権と AI agent の編集境界
 
