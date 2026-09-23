@@ -38,6 +38,7 @@
 - **[check-ci-red.py](check-ci-red.py)** — GitHub Actions の red 検出器（repo 横断で「default branch の最新 completed run が失敗中の workflow」 を列挙し、 連続失敗 run 数・継続時間・最後の success を印字、 長期 red を 🚨 で強調。 取得失敗は「検査不能」 行で明示 = 黙って緑にしない、 finding 0 件 silent、 --as-of で過去時点を再現、 --selftest 内蔵。 対象 = --repo / --owner / 個人層の repo 一覧 (--from-repos-md、 未 clone・remote 未設定も検査不能行に)、 呼び出し側 = 個人層 dashboard / session 開始 hook）
 - **[check-codex-integration.py](check-codex-integration.py)** — Codex SoT, session drift, Hook, and trigger-wiring gate.
 - **[check-confidential-leak.py](check-confidential-leak.py)** — 機密 pattern が remote 付き repo に commit されるのを止める。
+- **[check-cron-health.py](check-cron-health.py)** — launchd の無人ジョブの失敗を、 そのマシンで原因つきで出す horizon (= 「黙って全滅」 の再発防止)。
 - **[check-degenerate-text.py](check-degenerate-text.py)** — script 置換の暴走で壊れた text file (1 行の異常な繰り返し / HEAD 比の爆発的な増加) を commit で止める + fleet を走査して surface する。
 - **[check-display-math-style.py](check-display-math-style.py)** — Display-math house-style gate for LaTeX manuscripts (2026-09-09).
 - **[check-doc-truncation.py](check-doc-truncation.py)** — 台帳 doc の「黙って消える」削除を git 高水位で検出（表の行/list/見出し/entry の大幅減、[truncation-ok] で baseline reset、config 駆動）
@@ -293,6 +294,7 @@
 - **[lib/hook-exec-probe.bash](lib/hook-exec-probe.bash)** — lib/hook-exec-probe.bash — hook の exec 検査で BASH_ENV に渡す file (bash が $BASH_ENV として読む。 直接は実行も source もしない)
 - **[lib/hook-stub.sh](lib/hook-stub.sh)** — lib/hook-stub.sh — hook stub installer 共通の「既存 stub の扱い」 (source して使う、 単体実行しない)
 - **[lib/ja_deadline_dates.py](lib/ja_deadline_dates.py)** — 日本語の文から「期限らしい日付」 を取る共通部品（散文 = task 記録・メモの次の期限 / メール本文 = 入力・提出・申請の〆切。 締切語の隣接・行動語・行動窓の範囲の終端・引用除去・述語の指紋。 docs/convention-design-principles.md#single-deadline-field-many-legs / #elapsed-time-urgency-inversion、 --selftest）
+- **[lib/launchd_job_log.py](lib/launchd_job_log.py)** — launchd の無人ジョブについて「直近の run が既知の形で失敗したか」 を log 末尾から読む共有判定。
 - **[lib/ledger_page.py](lib/ledger_page.py)** — 行で書かれた台帳を、 一目で読める 1 枚の HTML にする。
 - **[lib/macos_apps.py](lib/macos_apps.py)** — Discover macOS app bundles and read their declared identity without launching them.
 - **[lib/mail_watch.py](lib/mail_watch.py)** — 既知スレッドを辿るだけでは拾えない mail を拾う helper（待ち項目の検索条件 / 決着済み案件への自動督促の判定 / 本文 text の取り出し。 Gmail API の service を受け取る、 python3 mail_watch.py で selftest）

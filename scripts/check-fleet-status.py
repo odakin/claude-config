@@ -54,6 +54,14 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+try:
+    from launchd_job_log import HIDDEN_FAIL_DAYS as _HFD   # 書き手 (fleet-heartbeat) と同じ閾値
+except Exception:
+    _HFD = 3
+_HIDDEN_FAIL_H = _HFD * 24
+_CAUSE = {"auth": "Claude の認証切れ", "ptl": "Prompt is too long (context 超過)"}
+
 BAD = {
     "auth_error": ("🔴", "auth 失効で cycling 中 (= そのマシンで `claude auth login`。 remote-control-server.md#ts-api-key-conflict / #account-auth-keychain)"),
     "version_error": ("🔴", "CLI が古くて RC 不能 (remote-control-server.md#ts-version-mismatch)"),
@@ -102,9 +110,15 @@ def job_findings(host, d, self_host=None):
     """1 マシンの beat の jobs から finding を作る (writer の --job-label-prefix、 docstring = fleet-heartbeat.py §job health)。
     - 🔴 command (起動の関門など) が PATH の python3 を呼ぶのに、 その python3 が起動できない = ジョブは黙って休み続ける
     - 🟠 wrapper が PATH の python3 を呼ぶのに、 必要な module を import できない = engine が起動直後に終わる
-    - 🟠 最後の終了コードが 0 でない (自分のマシンの分は check-cron-health が出すので出さない)
-    旧 beat (jobs 欄なし) は何も言わない。"""
+    - 🟠 最後の終了コードが 0 でない (自分のマシンの分は check-cron-health が出すので出さない)。 直近 run の log 末尾が
+      既知の失敗なら原因を添える (log_failure、 判定 = lib/launchd_job_log.py)
+    - 🟠 終了コードは 0 でも、 直近 run の log 末尾が既知の失敗で log が新しい (= plist の読み込み直しで 0 に戻った、
+      conventions/scheduled-tasks.md#reload-resets-exit-status)
+    - 🔴 Claude の認証切れで失敗している job がある config dir ごとに 1 行 + そのマシンでの login の command
+      (conventions/scheduled-tasks.md#headless-auth-expiry)
+    旧 beat (jobs 欄なし / log_failure 欄なし) は、 その欄の分だけ何も言わない。"""
     out = []
+    auth: dict[str, int] = {}
     mods = ", ".join(d.get("job_python_modules") or []) or "必要な module"
     for j in d.get("jobs") or []:
         lab = j.get("label", "?")
@@ -117,8 +131,27 @@ def job_findings(host, d, self_host=None):
                        f"= engine が起動直後に終わる (exit 0 なら成功に見える)。 wrapper で pick_python を使う "
                        f"(shell-env.md#job-python-by-capability)")
         le = j.get("last_exit")
-        if host != self_host and isinstance(le, int) and le != 0:
-            out.append(f"🟠 {host}: job {lab} の最後の終了コード = {le} (そのマシンの ~/Library/Logs/{lab}.log)")
+        if host == self_host:
+            continue   # 自分の分は check-cron-health が同じ判定で出す
+        lf, age_h = j.get("log_failure"), j.get("log_age_h")
+        cause = _CAUSE.get(lf or "", "")
+        fresh = isinstance(age_h, (int, float)) and 0 <= age_h < _HIDDEN_FAIL_H
+        failing = False
+        if isinstance(le, int) and le != 0:
+            failing = True
+            out.append(f"🟠 {host}: job {lab} の最後の終了コード = {le}"
+                       f"{f' — 直近 run の log 末尾 = {cause}' if cause else ''} (そのマシンの ~/Library/Logs/{lab}.log)")
+        elif le == 0 and cause and fresh:
+            failing = True
+            out.append(f"🟠 {host}: job {lab} は終了コード 0 だが直近 run の log 末尾 = {cause}"
+                       f" (= plist の読み込み直しで 0 に戻った、 scheduled-tasks.md#reload-resets-exit-status)")
+        if failing and lf == "auth":
+            cd = j.get("config_dir") or "<その job の plist の CLAUDE_CONFIG_DIR>"
+            auth[cd] = auth.get(cd, 0) + 1
+    for cd, n in auth.items():
+        out.append(f"🔴 {host}: Claude の認証切れで無人 job {n} 本が失敗 ({cd}) = そのマシンの terminal で"
+                   f" `CLAUDE_CONFIG_DIR={cd} claude auth login` (再ログイン済みなら次の run で消える、"
+                   f" scheduled-tasks.md#headless-auth-expiry)")
     return out
 
 
@@ -312,7 +345,25 @@ def selftest():
         assert not any("終了コード" in x for x in job_findings("host-b", beat_j, self_host="host-b")), "自分の分は cron-health に任せる"
         assert job_findings("old", {"servers": []}) == [], "旧 beat は黙る"
         ok += 1
-    print(f"selftest: {ok}/16 PASS")
+        # 17: 直近 run の log 末尾 (認証切れ = 原因つき 🟠 + config dir ごとに 🔴 1 行 / exit 0 に隠れた失敗 / 古い log は黙る)
+        beat_a = {"jobs": [
+            {"label": "j.a1", "last_exit": 1, "log_failure": "auth", "log_age_h": 2, "config_dir": "/c/.claude-x"},
+            {"label": "j.a2", "last_exit": 0, "log_failure": "auth", "log_age_h": 5, "config_dir": "/c/.claude-x"},
+            {"label": "j.old", "last_exit": 0, "log_failure": "auth", "log_age_h": 24 * 10, "config_dir": "/c/.claude-x"},
+            {"label": "j.p", "last_exit": 1, "log_failure": "ptl", "log_age_h": 1},
+            {"label": "j.ok", "last_exit": 0, "log_failure": None, "log_age_h": 1}]}
+        fa = job_findings("host-a", beat_a, self_host="host-b")
+        assert any("j.a1 の最後の終了コード = 1 — 直近 run の log 末尾 = Claude の認証切れ" in x for x in fa), fa
+        assert any("j.a2 は終了コード 0 だが" in x for x in fa), fa
+        assert not any("j.old" in x or "j.ok" in x for x in fa), fa
+        assert any("j.p" in x and "Prompt is too long" in x for x in fa), fa
+        assert [x for x in fa if x.startswith("🔴")] == [
+            "🔴 host-a: Claude の認証切れで無人 job 2 本が失敗 (/c/.claude-x) = そのマシンの terminal で"
+            " `CLAUDE_CONFIG_DIR=/c/.claude-x claude auth login` (再ログイン済みなら次の run で消える、"
+            " scheduled-tasks.md#headless-auth-expiry)"], fa
+        assert job_findings("host-b", beat_a, self_host="host-b") == [], "自分の分は cron-health に任せる"
+        ok += 1
+    print(f"selftest: {ok}/17 PASS")
 
 
 def main():

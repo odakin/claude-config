@@ -51,7 +51,8 @@ usage:
     remote_control_at_startup, old_usr_local_cli, cron_jobs,
     desktop_scheduled_tasks: [{registry, enabled_ids}],
     inventories: {label: [name, ...]},         # --inventory 指定時のみ
-    jobs: [{label, last_exit, python, python_ok, bare_python}],  # --job-label-prefix 指定時のみ
+    jobs: [{label, last_exit, python, python_runs, python_ok, bare_in_command, bare_in_wrapper,
+            log_failure, log_age_h, config_dir?}],               # --job-label-prefix 指定時のみ
     job_python_modules: [module, ...] }                          # 同上
 
 job health (--job-label-prefix、 opt-in、 repeatable):
@@ -66,6 +67,10 @@ job health (--job-label-prefix、 opt-in、 repeatable):
   - bare_in_command = job の command (起動の関門など) が `python3` を PATH で呼ぶか
   - bare_in_wrapper = command が `exec bash "<wrapper>"` で呼ぶ wrapper が `python3` を PATH で呼ぶか
     (`"$PY"` や絶対 path で呼ぶ wrapper は PATH の python3 の健康に依存しない)
+  - log_failure = 直近 run の log 末尾の既知の失敗 ("auth" = Claude の認証切れ / "ptl" = Prompt is too long / null)、
+    log_age_h = その log の最終更新からの時間、 config_dir = auth のときだけ plist の CLAUDE_CONFIG_DIR
+    (判定 = scripts/lib/launchd_job_log.py、 check-cron-health と共有。 plist を読み込み直すと last_exit は 0 に戻るので、
+    last_exit だけでは失敗が消える = conventions/scheduled-tasks.md#reload-resets-exit-status)
   reader は bare_in_command ∧ ¬python_runs (= 関門が起動できず、 そのジョブは黙って休み続ける) と
   bare_in_wrapper ∧ ¬python_ok (= engine が import で終わる) を出す。 command の位置 (行頭・; && || | $( の直後) の
   `python3` だけを数える (echo の文中の語は数えない)
@@ -91,6 +96,12 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+try:
+    import launchd_job_log as _jl   # 直近 run の log 末尾の判定 (check-cron-health と共有)
+except Exception:                   # 部品が無い古い checkout でも beat は止めない
+    _jl = None
 
 RC_LABEL_PREFIX_DEFAULT = "com.claude-config.remote-control-server"
 
@@ -307,11 +318,21 @@ def bare_python_in(text):
 def job_health(label, status, plist, modules, home):
     """1 ジョブの健康。 probe だけが外に出る (python3 -c 'import ...'、 timeout 10s、 失敗は False)。"""
     rec = {"label": label, "last_exit": None, "python": None, "python_runs": None, "python_ok": None,
-           "bare_in_command": None, "bare_in_wrapper": None}
+           "bare_in_command": None, "bare_in_wrapper": None, "log_failure": None, "log_age_h": None}
     try:
         rec["last_exit"] = int(status)
     except (TypeError, ValueError):
         pass
+    if _jl is not None:   # 直近 run の log 末尾 (= 読み込み直しで 0 に戻った失敗と、 失敗の原因を他マシンへ運ぶ)
+        try:
+            lp = _jl.job_log_path(label, plist if isinstance(plist, dict) else None, home / "Library/Logs")
+            rec["log_failure"] = _jl.failure_kind(lp) or None
+            age = _jl.log_age_days(lp)
+            rec["log_age_h"] = round(age * 24, 1) if age is not None else None
+            if rec["log_failure"] == "auth":
+                rec["config_dir"] = _jl.config_dir_of(plist if isinstance(plist, dict) else None) or None
+        except Exception:
+            pass
     if not isinstance(plist, dict):
         return rec
     cmd = " ".join(str(x) for x in (plist.get("ProgramArguments") or []))
@@ -404,7 +425,8 @@ def essence(d: dict):
             "inventories": d.get("inventories"),
             # job の健康の変化 (= 壊れた / 直った) も即 commit (last_exit は 0 か否かだけ)
             "jobs": [(j.get("label"), (j.get("last_exit") or 0) != 0, j.get("python_runs"), j.get("python_ok"),
-                      j.get("bare_in_command"), j.get("bare_in_wrapper")) for j in d.get("jobs") or []],
+                      j.get("bare_in_command"), j.get("bare_in_wrapper"), j.get("log_failure"))
+                     for j in d.get("jobs") or []],
         },
         sort_keys=True,
     )
@@ -556,6 +578,16 @@ def selftest():
         assert resolve_in_path("python3", None) in (None, "/usr/bin/python3")
         e1 = essence({"jobs": [jb]}); e2 = essence({"jobs": [dict(jb, python_ok=True)]})
         assert e1 != e2, "job の健康の変化は即 commit"
+        # 直近 run の log 末尾 (lib/launchd_job_log.py と共有の判定): exit 0 でも認証切れを運ぶ
+        (jroot / "Library/Logs").mkdir(parents=True, exist_ok=True)
+        (jroot / "Library/Logs/j.auth.log").write_text("warn\nFailed to authenticate: OAuth session expired\n")
+        ja = job_health("j.auth", "0", {"ProgramArguments": ["/bin/sh", "-c",
+                        'export CLAUDE_CONFIG_DIR="/c/.claude-x"; exec claude -p']}, [], jroot)
+        if _jl is not None:
+            assert ja["log_failure"] == "auth" and ja["config_dir"] == "/c/.claude-x" \
+                and ja["log_age_h"] is not None and ja["last_exit"] == 0, ja
+            assert essence({"jobs": [ja]}) != essence({"jobs": [dict(ja, log_failure=None)]}), "失敗の原因の変化も即 commit"
+        assert job_health("j.nolog", "0", None, [], jroot)["log_failure"] is None
         ok += 1
     print(f"selftest: {ok}/14 PASS")
 

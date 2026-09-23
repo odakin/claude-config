@@ -26,7 +26,11 @@ config (JSON):
   run = argv の list の list (順に実行、 1 本でも非 0 なら red) か、 commands の名前。
   paths = git pathspec。 key = その pathspec に触れた最終 commit (既定 ".")。 key が前回と同じなら回さない。
   check ごとの任意: "env" (その検査だけの環境変数) / "rerun_hours" (key が同じでもこの時間を過ぎたら回す =
-  他 repo や外部を見る検査用) / "timeout" (秒、 既定 900)。
+  他 repo や外部を見る検査用) / "timeout" (秒、 既定 900) / "deps" (検査が呼ぶ他 repo の名前の list、 base の下)。
+  deps: **赤の結果だけ**、 その repo の HEAD が run の後に動いたら key が同じでも (間隔の下限も無視して) 回し直す。
+  = 依存先の更新 (まだ pull していなかった共有 script の到着・その修正) で直った赤が、 自 repo に commit が無いせいで
+  何日も残り続けない (実測)。 緑は回し直さない (= 依存先の commit のたびに重い検査を回さない)。 --status は、
+  依存先が動いた後の赤に「次の --run で回し直す」 を添える。
   検査は working tree で走る (未 commit の変更も含む) が、 記録する key は commit。
 
 使い方:
@@ -107,6 +111,24 @@ def content_key(repo_dir: Path, paths: list[str]) -> str | None:
     return (r.stdout.strip() or None) if r.returncode == 0 else None
 
 
+def deps_key(cfg: dict, check: dict) -> str | None:
+    """check の deps (他 repo) の HEAD を並べた文字列。 deps が無ければ None。 読めない repo は '?'。"""
+    deps = check.get("deps") or []
+    if not deps:
+        return None
+    parts = []
+    for dep in deps:
+        r = subprocess.run(["git", "-C", str(cfg["base"] / dep), "rev-parse", "HEAD"], capture_output=True, text=True)
+        parts.append(f"{dep}@{r.stdout.strip() if r.returncode == 0 else '?'}")
+    return " ".join(parts)
+
+
+def deps_moved_since(cfg: dict, check: dict, rec: dict) -> bool:
+    """赤の結果で、 deps の HEAD がその run の後に動いた (= 回し直す価値がある)。 緑・deps 無しは False。"""
+    dk = deps_key(cfg, check)
+    return dk is not None and rec.get("rc") not in (0, None) and rec.get("deps_key") != dk
+
+
 def tool_env(cfg: dict, check: dict | None = None) -> dict:
     env = dict(os.environ)
     env.update({k: str(v) for k, v in cfg.get("env", {}).items()})
@@ -178,7 +200,8 @@ def run_one(cfg: dict, check: dict, repo_dir: Path, key: str) -> dict:
         if rc != 0:
             break
     return {"key": key, "rc": rc, "timed_out": timed_out, "started": started,
-            "duration": round(now() - started, 1), "tail": lines[-TAIL_LINES:], "unprobed": None}
+            "duration": round(now() - started, 1), "tail": lines[-TAIL_LINES:], "unprobed": None,
+            "deps_key": deps_key(cfg, check)}
 
 
 def do_run(cfg: dict, state_path: Path, force=False, only=None, out=print) -> int:
@@ -202,9 +225,11 @@ def do_run(cfg: dict, state_path: Path, force=False, only=None, out=print) -> in
             continue
         stale_hours = check.get("rerun_hours")  # 他 repo や外部を見る検査 = commit が変わらなくても定期に回す
         aged = stale_hours is not None and prev.get("started") and now() - prev["started"] > float(stale_hours) * 3600
-        if not force and prev.get("key") == key and not prev.get("unprobed") and not aged:
+        dep_moved = deps_moved_since(cfg, check, prev)   # 依存先の更新で直ったかもしれない赤 = 間隔の下限も待たない
+        if not force and not dep_moved and prev.get("key") == key and not prev.get("unprobed") and not aged:
             continue
-        if not force and prev.get("started") and now() - prev["started"] < interval and not prev.get("unprobed"):
+        if (not force and not dep_moved and prev.get("started") and now() - prev["started"] < interval
+                and not prev.get("unprobed")):
             continue
         result = run_one(cfg, check, repo_dir, key)
         state = load_state(state_path)
@@ -230,7 +255,9 @@ def do_status(cfg: dict, state_path: Path, strict=False, out=print) -> int:
             # 末尾の罫線だけの行 (═══ 等) は飛ばし、 文字を含む最後の行を見出しにする
             last = next((l.strip() for l in reversed(rec.get("tail", [])) if re.search(r"\w", l)), "")
             what = "timeout" if rec.get("timed_out") else f"exit {rec['rc']}"
-            red.append(f"🔴 {label}: {what} ({fmt_age(rec['started'])}, {rec['key'][:8]}) — {last[:160]}")
+            moved = (f" [依存 {' '.join(check.get('deps') or [])} が run の後に更新 = 次の --run で回し直す]"
+                     if deps_moved_since(cfg, check, rec) else "")
+            red.append(f"🔴 {label}: {what} ({fmt_age(rec['started'])}, {rec['key'][:8]}){moved} — {last[:160]}")
         repo_dir = cfg["base"] / check["repo"]
         key = content_key(repo_dir, check.get("paths") or ["."]) if (repo_dir / ".git").exists() else None
         if key and key != rec.get("key") and now() - rec["started"] > PENDING_WARN_HOURS * 3600:
@@ -264,7 +291,7 @@ def selftest() -> int:
                    GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
                    GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
         git = lambda repo, *a: subprocess.run(["git", "-C", str(base / repo), *a], env=env, capture_output=True)
-        for repo in ("good", "bad"):
+        for repo in ("good", "bad", "dep"):
             (base / repo / "src").mkdir(parents=True)
             (base / repo / "src" / "a.txt").write_text("1\n")
             (base / repo / "notes.txt").write_text("n\n")
@@ -286,6 +313,11 @@ def selftest() -> int:
                 {"repo": "bad", "name": "boxed", "env": {"LOCAL_CI_SELFTEST_VAR": "own"}, "rerun_hours": 1,
                  "run": [[py, "-c", "import os, sys; print('real reason ' + os.environ['LOCAL_CI_SELFTEST_VAR']); print('════'); sys.exit(1)"]]},
                 {"repo": "missing", "name": "ok", "run": "ok"},
+                # 依存先 (dep) の file を読む検査: dep/src/a.txt が "2" でないと赤 (初期値は "1")
+                {"repo": "bad", "name": "usesdep", "deps": ["dep"], "paths": ["src"],
+                 "run": [[py, "-c", "import sys; sys.exit(0 if open(sys.argv[1]).read().strip() == '2' else 1)",
+                          str(base / "dep" / "src" / "a.txt")]]},
+                {"repo": "good", "name": "greendep", "deps": ["dep"], "paths": ["src"], "run": "ok"},
             ]}))
         cfg, state = load_config(cfg_path), base / "state" / "state.json"
         log = []
@@ -328,6 +360,22 @@ def selftest() -> int:
         log = []
         do_run(cfg, state, out=log.append)
         expect("a commit inside the check's paths reruns it", any("good::ok exit 0" in l for l in log))
+        # deps: 依存先が動いたら赤だけ回し直す (緑は回さない)。 status はその赤に「次の --run で回し直す」 を添える
+        expect("a check reading its dep starts red", load_state(state).get("bad::usesdep", {}).get("rc") == 1)
+        (base / "dep" / "src" / "a.txt").write_text("2\n")
+        git("dep", "commit", "-qam", "fix in dep")
+        lines = []
+        do_status(cfg, state, out=lines.append)
+        expect("status marks a red check whose dep moved", any("bad · usesdep" in l and "依存 dep" in l for l in lines))
+        log = []
+        do_run(cfg, state, out=log.append)
+        expect("a red check reruns when its dep moves (key unchanged)", any("bad::usesdep exit 0" in l for l in log))
+        expect("a green check does not rerun when its dep moves", not any("good::greendep" in l for l in log))
+        (base / "dep" / "src" / "a.txt").write_text("0\n")
+        git("dep", "commit", "-qam", "break dep")
+        log = []
+        do_run(cfg, state, out=log.append)
+        expect("a green check with a moved dep still waits for its own key", not any("bad::usesdep" in l for l in log))
         with open(state.with_suffix(".lock"), "w") as held:
             fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
             log = []
