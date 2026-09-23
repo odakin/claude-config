@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -116,6 +117,10 @@ def time_to_frame(t: float, pk: list[dict]) -> int:
 
 
 def selftest() -> int:
+    missing = [tool for tool in ("ffmpeg", "ffprobe") if not shutil.which(tool)]
+    if missing:  # run-all-checks の契約: 依存が無い環境では理由を出して SKIP (exit 0)
+        print(f"SKIP: {' / '.join(missing)} が無い (audio-split-by-frames selftest)")
+        return 0
     with tempfile.TemporaryDirectory() as d:
         d = Path(d)
         src = d / "tone.m4a"
