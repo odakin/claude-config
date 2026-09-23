@@ -33,7 +33,9 @@
   照合し、 無ければ拒否する。 照合は quote を含む最新の user 発言に結ぶ (同じ短い承認を繰り返した session で、
   後の承認が前の発言を指さないように)。 その発言を既に引いた承認があり、 最初の記録より後に user が発言していれば
   拒否する (exit 5 = 別の案への古い発言の使い回し。 1 つの発言で複数の file をまとめて承認する記録は、 user が次に
-  発言するまで通す)。 承認は session に束縛され (別 session は使えない)、 machine-local の state に置く
+  発言するまで通す)。 短い引用 (SHORT_QUOTE 文字未満) は、 発言の全体 (端の空白・句読点を除く) と一致する時だけ
+  照合する (「OK」 が「BOOK」「OK じゃない」「OK?」 に当たらないように。 足りなければ発言の全体か、 それ以上の長さを
+  引く)。 承認は session に束縛され (別 session は使えない)、 machine-local の state に置く
   (公開 repo に著者の発言を書かない)。 監査の本体は transcript。
 
 原稿の範囲 (scope): repo の `.claude/manuscript-guard.json` があればそれ (include / exclude / protect_sections /
@@ -118,6 +120,11 @@ FORMAT_CMDS = {
 }
 AGENT_ENV_KEYS = ("CLAUDE_CONFIG_AGENT_SESSION", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID")
 SYSTEM_REMINDER_RE = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
+# これ未満の引用は発言の全体と一致する時だけ照合する。 実測の承認記録では、 長い発言の一部を引いた承認は
+# 28 字以上、 それより短い引用は全部が発言の全体だった = 12 で正当な承認を落とさない。 疑問符は落とさない
+# (「OK?」 は承認ではない)。
+SHORT_QUOTE = 12
+EDGE_PUNCT = " 。．.！!、,，"
 
 
 # ---------------------------------------------------------------- text helpers
@@ -848,12 +855,24 @@ def quote_index(quote: str, messages: list[tuple[str, str]]) -> int | None:
     記録が別の文脈の発言を指す (実測)。 承認は直前の発言に続けて記録するので、 最新を採る。
     """
     q = collapse_ws(quote)
-    if len(q) < 2:
+    if len(q.strip(EDGE_PUNCT)) < 2:
         return None
     for i in range(len(messages) - 1, -1, -1):
-        if q in collapse_ws(messages[i][1]):
+        if quote_matches(q, messages[i][1]):
             return i
     return None
+
+
+def quote_matches(q: str, text: str) -> bool:
+    """q (collapse 済み) が発言 text の引用として成り立つか。
+
+    短い引用は発言の全体 (端の空白・句読点を除く) と一致する時だけ = 部分一致は「OK」 が「BOOK」「OK じゃない」 に
+    当たる。 長い引用は発言の一部でよい (長い依頼文の中の 1 文を引く)。
+    """
+    core = q.strip(EDGE_PUNCT)
+    if len(core) < SHORT_QUOTE:
+        return core == collapse_ws(text).strip(EDGE_PUNCT)
+    return q in collapse_ws(text)
 
 
 def verify_quote(quote: str, messages: list[tuple[str, str]]) -> tuple[str, str] | None:
@@ -1614,6 +1633,14 @@ def approve_mode(args: argparse.Namespace) -> int:
     msgs = user_messages(transcript)
     idx = quote_index(args.quote, msgs)
     if idx is None:
+        q = collapse_ws(args.quote)
+        if len(q.strip(EDGE_PUNCT)) < SHORT_QUOTE and any(q in collapse_ws(m) for _, m in msgs):
+            print(f"approve: --quote が短い ({SHORT_QUOTE} 文字未満) ので、 著者の発言の全体と一致する時だけ照合する。"
+                  " 一致したのは発言の一部だけ。 記録しない。\n"
+                  f"  その発言の全体をそのまま引くか、 {SHORT_QUOTE} 文字以上を引く"
+                  " (「OK」 が「BOOK」「OK じゃない」 に当たらないように)。",
+                  file=sys.stderr)
+            return 4
         print("approve: --quote が、 この session の著者 (user) の発言に verbatim で見つからない。 記録しない。\n"
               "  自分の要約・言い換え・伝聞は引用元にならない。 著者の発言をそのまま写す。",
               file=sys.stderr)
@@ -1819,6 +1846,13 @@ def selftest() -> int:
         check("tool 結果の中の文は引用元にならない", verify_quote("全部削ってよい", msgs) is None)
         check("sub-agent の prompt は引用元にならない", verify_quote("表題も変えてよい", msgs) is None)
         check("言い換えは照合できない", verify_quote("概要の二文目を削除してよい", msgs) is None)
+        check("短い引用は他の語の一部に当たらない", verify_quote("OK", [("t", "BOOK を読んで")]) is None)
+        check("短い引用は否定の文の一部に当たらない", verify_quote("OK", [("t", "OK じゃない")]) is None)
+        check("短い引用は疑問の文に当たらない", verify_quote("OK", [("t", "OK?")]) is None)
+        check("短い引用は端の句読点を除いた発言の全体と照合する", verify_quote("OK", [("t", " OK。")]) is not None)
+        check("最新の一致は、 短い引用なら全体が一致する発言",
+              verify_quote("OK", [("a", "OK"), ("b", "OK じゃない")]) == ("a", message_sha("OK")))
+        check("句読点だけの引用は照合しない", verify_quote("。。", [("t", "。。")]) is None)
         codex_tr = home / ".codex" / "sessions" / "2026" / "09" / "10" / "rollout-x-cdx-1.jsonl"
         codex_tr.parent.mkdir(parents=True)
         codex_tr.write_text(json.dumps({"type": "event_msg", "payload": {"type": "user_message", "message": "式 (3) を直して"}})
@@ -1904,6 +1938,10 @@ def selftest() -> int:
 
         rtr = tr_dir / "sess-r.jsonl"
         append(rtr, said("OK", iso(-30)), said("次の案を見せて", iso(-20)), said("OK", iso(-10)))
+        append(rtr, said("BOOK の件は後で", iso(-5)))
+        rns = argparse.Namespace(session="claude:sess-r", region=["abstract"], change="案 A",
+                                 quote="BOOK", file=str(repo / "src" / "main.tex"), transcript=None)
+        check("approve: 短い引用が発言の一部にしか当たらなければ拒否 (exit 4)", approve_mode(rns) == 4)
         rns = argparse.Namespace(session="claude:sess-r", region=["abstract"], change="案 B の 1",
                                  quote="OK", file=str(repo / "src" / "main.tex"), transcript=None)
         check("approve: 同じ引用の発言が 2 つなら後の発言に結ぶ",
