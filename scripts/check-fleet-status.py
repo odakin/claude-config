@@ -38,6 +38,11 @@ coverage check (--expect-account、 repeatable):
   **beat が新鮮なマシンに expected account の suffix server が loaded されているか** を検査。
   欠けていれば 🟠 (= そのマシンのその account の mobile セルが未開通)。
   suffix と account の対応は label 末尾 (= `<rc-prefix>.<acct>`) で判定。
+  同じ account 名で **config dir の取り違え** も検査する: beat の config_dirs で `~/.claude-<acct>` が
+  別の account (email の local part が <acct> でない) でログインしていれば 🔴 (= 再ログインの時に
+  ブラウザが別 account だった、 remote-control-server.md#oauth-grabs-browser-account。 その dir を使う
+  server / 無人 job は名前と違う account で動き続け、 他の検査は黙る)。 account 名が email の local part
+  でない命名なら `--expect-account <acct>=<email>` で対応を明示する。
 
 usage:
   check-fleet-status.py --dir <fleet-status-dir> [--role HOST=always-on ...]
@@ -197,11 +202,30 @@ def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_
         if role == "always-on" and not d.get("servers"):
             findings.append(f"🟠 {host} (always-on): RC server が 1 本も loaded されていない")
         # coverage check: expected account の suffix server (= label 末尾 .<acct>) が居るか
-        for acct in expect_accounts:
+        for spec in expect_accounts:
+            acct = spec.split("=", 1)[0]
             if not any(s.get("label", "").endswith(f".{acct}") for s in d.get("servers", [])):
                 findings.append(
                     f"🟠 {host}: {acct} の per-account server 無し = このマシンの {acct} mobile セル未開通 "
                     f"(1 回の OAuth + suffix server install で永続開通)"
+                )
+        # config dir の取り違え: ~/.claude-<acct> が別 account でログインしている (= 再ログイン時に
+        # ブラウザが別 account だった)。 beat の email は .claude.json の metadata = 確認はそのマシンで
+        # `claude auth status`。
+        dirs = d.get("config_dirs") or {}
+        for spec in expect_accounts:
+            acct, _, want = spec.partition("=")
+            email = dirs.get(acct)
+            if not email:
+                continue
+            ok_acct = (email.lower() == want.lower()) if want else (email.split("@")[0].lower() == acct.lower())
+            if not ok_acct:
+                findings.append(
+                    f"🔴 {host}: config dir ~/.claude-{acct} が {email} でログインしている (名前は {acct}) "
+                    f"= その dir を使う server / 無人 job は {acct} でなく {email} で動いている。 そのマシンの"
+                    f"ブラウザの claude.ai を {acct} に切り替えてから `CLAUDE_CONFIG_DIR=~/.claude-{acct} claude auth login`、"
+                    f" `claude auth status` で email を確かめ、 その dir の server を再起動 "
+                    f"(remote-control-server.md#oauth-grabs-browser-account)"
                 )
         # desktop scheduled task の復活検出 (= opt-in。 「無人ジョブは launchd only」 方針の
         # マシンで、 account 切替が旧 registry の enabled task を黙って復活させ launchd 移行済
@@ -268,6 +292,23 @@ def selftest():
         f = scan(d, {}, 6, now, expect_accounts=["a1", "a2"])
         assert any("lap" in x and "a2" in x and "未開通" in x for x in f), f
         assert not any("srv" in x for x in f), f
+        ok += 1
+        # 4c: config dir の取り違え — ~/.claude-a2 が a1 の email → 🔴、 一致なら silent、 = 形式で明示も可
+        beat = {"host": "srv", "epoch": now - 600,
+                "servers": [{"label": "p.a1", "pid": "2", "last_status": "connected"},
+                            {"label": "p.a2", "pid": "3", "last_status": "connected"}],
+                "config_dirs": {"default": "a1@example.org", "a1": "a1@example.org", "a2": "a1@example.org"}}
+        (d / "srv.json").write_text(json.dumps(beat))
+        (d / "lap.json").unlink()
+        f = scan(d, {}, 6, now, expect_accounts=["a1", "a2"])
+        assert any("🔴" in x and "~/.claude-a2" in x and "a1@example.org" in x for x in f), f
+        assert not any("~/.claude-a1 " in x for x in f), f
+        f = scan(d, {}, 6, now, expect_accounts=["a1", "a2=a1@example.org"])
+        assert not any("~/.claude-a2" in x for x in f), f
+        beat["config_dirs"]["a2"] = "a2@example.org"
+        (d / "srv.json").write_text(json.dumps(beat))
+        f = scan(d, {}, 6, now, expect_accounts=["a1", "a2"])
+        assert f == [], f
         ok += 1
         # 5: always-on で beat file 不在 → ℹ️
         f = scan(d, {"ghost": "always-on"}, 6, now)
@@ -363,7 +404,7 @@ def selftest():
             " scheduled-tasks.md#headless-auth-expiry)"], fa
         assert job_findings("host-b", beat_a, self_host="host-b") == [], "自分の分は cron-health に任せる"
         ok += 1
-    print(f"selftest: {ok}/17 PASS")
+    print(f"selftest: {ok}/18 PASS")
 
 
 def main():
