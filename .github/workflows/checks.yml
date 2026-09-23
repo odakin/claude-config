@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Install jq, ffmpeg, git-crypt and a Japanese font (ffmpeg = audio-finish-episode.py selftest, git-crypt = staged-conflict-markers T8/T9, fonts-noto-cjk = html-print-pdf.py / mail-to-pdf.py selftests render Japanese; without them those tests only SKIP)
+      - name: Install jq, ffmpeg, git-crypt and a Japanese font (ffmpeg = audio-finish-episode.py / audio-split-by-frames.py selftests, git-crypt = staged-conflict-markers T8/T9, fonts-noto-cjk = html-print-pdf.py / mail-to-pdf.py selftests render Japanese; without them those tests only SKIP)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq jq ffmpeg git-crypt fonts-noto-cjk
       - uses: actions/setup-python@v7
         with:
