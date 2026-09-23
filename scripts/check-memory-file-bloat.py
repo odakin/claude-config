@@ -47,12 +47,20 @@ commit 時 warn (= 書いた本人に、 書いた commit で届ける): `--stag
 [--entry-section '### 見出し'] [--entry-bytes 1200] [--file-kb 150]` = stage した file の ① 全体 KB ② LINE_LIMITS の行数
 ③ 見出しの節で新規・書き換えた entry の byte (#per-entry-commit-warn)。 止めない (exit 0)、 検査不能は exit 3 (呼び元が
 「この commit では走っていない」 を出す = hook-authoring.md#warn-check-crash-visible)。 file を stage していなければ何もしない。
+
+commit 時の予算 gate (`--staged ... --block`、 #commit-budget-gate): stage した file が BLOCK_FILE_KB 以上 **かつ** HEAD より
+byte が増える commit だけ exit 1 (= 止める)。 縮める commit・予算内の commit は通す (= 予算を超えてからは、 足す分を同じ
+commit で MOVE + pointer 化して払う)。 BLOCK_FILE_KB は warn (WARN_FILE_KB) より下に置く = commit で育つ限り surface の
+🟡 に届かない。 故障は exit 3 (違反の 1 と分ける = convention-design-principles.md#failure-exit-equals-violation-exit)。
+逃げ道 = env CLAUDE_MEMORY_BUDGET_GUARD=0 (warn に落として通す。 使うのは owner が明示したときだけ)。
+値の根拠 (実測): 縮退の直後から 1 日 ~4 KB 育ち、 150 KB の warn は縮退の 2 日後にまた点いた = warn では止まらない。
 """
 import os
 import sys
 from pathlib import Path
 
 WARN_FILE_KB = 150
+BLOCK_FILE_KB = 145  # commit 時の予算 (--block)。 warn より下 = commit で育つ限り 🟡 に届かない
 CRIT_FILE_KB = 200
 WARN_REPO_KB = 200
 CRIT_REPO_KB = 300
@@ -153,6 +161,23 @@ def staged_warnings(repo: Path, rel: str, entry_section=None, entry_bytes=1200, 
     return msgs
 
 
+def staged_block(repo: Path, rel: str, block_kb=BLOCK_FILE_KB):
+    """commit 時の予算 gate (#commit-budget-gate)。 stage した file が block_kb 以上 ∧ HEAD より byte が増えるなら
+    止める理由の文を返す。 それ以外 (予算内 / 縮める / 同じ) は None。 HEAD に無い file は HEAD = 0 byte として扱う。"""
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+    from git_blob import read_blob_text
+
+    staged = read_blob_text(f":{rel}", cwd=str(repo))
+    if staged is None:
+        return None
+    head = read_blob_text(f"HEAD:{rel}", cwd=str(repo)) or ""
+    s, h = len(staged.encode("utf-8")), len(head.encode("utf-8"))
+    if s < block_kb * 1024 or s <= h:
+        return None
+    return (f"{rel} が予算 {block_kb} KB を超えたまま育つ ({h / 1024:.1f} → {s / 1024:.1f} KB、 +{s - h} B)。"
+            f" 足す分を同じ commit で MOVE + pointer 化して払う (縮める commit は通る)。 手順 = 層1 {SLIM_DOC}")
+
+
 def staged_main(argv) -> int:
     import argparse
     ap = argparse.ArgumentParser(prog="check-memory-file-bloat.py --staged")
@@ -162,6 +187,8 @@ def staged_main(argv) -> int:
     ap.add_argument("--entry-section", help="entry が並ぶ節の見出し行の先頭 (例: '### 現在の作業プロジェクト')")
     ap.add_argument("--entry-bytes", type=int, default=1200)
     ap.add_argument("--file-kb", type=int, default=WARN_FILE_KB)
+    ap.add_argument("--block", action="store_true",
+                    help="予算 (BLOCK_FILE_KB) を超えたまま育つ commit を exit 1 で止める (#commit-budget-gate)")
     a = ap.parse_args(argv)
     try:
         import subprocess
@@ -172,11 +199,18 @@ def staged_main(argv) -> int:
         repo = Path(subprocess.run(["git", "-C", a.repo, "rev-parse", "--show-toplevel"], capture_output=True,
                                    text=True, check=True).stdout.strip())
         msgs = staged_warnings(repo, a.rel, a.entry_section, a.entry_bytes, a.file_kb)
-    except Exception as e:  # noqa: BLE001  warn 検査の故障で commit を止めない。 呼び元が rc で「走らなかった」 を出す
+        block = staged_block(repo, a.rel) if a.block else None
+    except Exception as e:  # noqa: BLE001  検査の故障で commit を止めない。 呼び元が rc 3 で「走らなかった」 を出す
         print(f"check-memory-file-bloat --staged: 検査不能 = {e.__class__.__name__}: {e}", file=sys.stderr)
         return 3
     for m in msgs:
         print(f"⚠️ pre-commit (memory file 肥大 WARN): {m}", file=sys.stderr)
+    if block:
+        if os.environ.get("CLAUDE_MEMORY_BUDGET_GUARD") == "0":
+            print(f"⚠️ pre-commit (memory file 予算、 CLAUDE_MEMORY_BUDGET_GUARD=0 で通す): {block}", file=sys.stderr)
+            return 0
+        print(f"🛑 pre-commit BLOCK (memory file 予算): {block}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -277,6 +311,38 @@ def selftest() -> int:
         w = stage(base.replace("- short", "- short " + "w" * 1300))
         check(len(w) == 1 and "作業中" in w[0] and "B (> 1200)" in w[0], "--staged: 書き換えた entry が 1200 B 超で 1 件")
         check(len(stage(base + "x" * (151 * 1024) + "\n")) == 1, "--staged: file 全体 150 KB 以上で 1 件")
+        # 予算 gate (--block): HEAD を予算超えにしてから、 育つ / 縮む / 同じ / 予算内 を見る
+        big = base + "x" * ((BLOCK_FILE_KB + 1) * 1024) + "\n"
+        (g / "CLAUDE.md").write_text(big, encoding="utf-8")
+        sp.run(["git", "-C", str(g), "add", "CLAUDE.md"], check=True)
+        sp.run(["git", "-C", str(g), "-c", "commit.gpgsign=false", "commit", "-qm", "big"], check=True,
+               env=dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
+                        GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid"))
+
+        def block_of(text):
+            (g / "CLAUDE.md").write_text(text, encoding="utf-8")
+            sp.run(["git", "-C", str(g), "add", "CLAUDE.md"], check=True)
+            return staged_block(g, "CLAUDE.md")
+
+        check(block_of(big + "grow\n") is not None, "--block: 予算超えのまま育つ commit は止める")
+        check(block_of(big[:-2048]) is None, "--block: 予算超えでも縮める commit は通す")
+        check(block_of(big) is None, "--block: 予算超えでも増えない commit は通す")
+        check(block_of(base + "small\n") is None, "--block: 予算内に戻す commit は通す")
+        stage_ok = sp.run([sys.executable, __file__, "--staged", "--repo", str(g), "--block"],
+                          capture_output=True, text=True)
+        check(stage_ok.returncode == 0, "--block (CLI): 予算内の stage は rc 0")
+        (g / "CLAUDE.md").write_text(big + "grow\n", encoding="utf-8")
+        sp.run(["git", "-C", str(g), "add", "CLAUDE.md"], check=True)
+        r = sp.run([sys.executable, __file__, "--staged", "--repo", str(g), "--block"], capture_output=True, text=True)
+        check(r.returncode == 1 and "BLOCK" in r.stderr, "--block (CLI): 育つ stage は rc 1 + BLOCK 行")
+        r = sp.run([sys.executable, __file__, "--staged", "--repo", str(g)], capture_output=True, text=True)
+        check(r.returncode == 0, "--block を付けなければ従来どおり warn だけ (rc 0)")
+        r = sp.run([sys.executable, __file__, "--staged", "--repo", str(g), "--block"], capture_output=True, text=True,
+                   env=dict(os.environ, CLAUDE_MEMORY_BUDGET_GUARD="0"))
+        check(r.returncode == 0 and "CLAUDE_MEMORY_BUDGET_GUARD=0" in r.stderr, "--block: env=0 で warn に落として通す")
+        r = sp.run([sys.executable, __file__, "--staged", "--repo", str(tmp / "no-such-repo"), "--block"],
+                   capture_output=True, text=True)
+        check(r.returncode == 3, "--block: 検査不能は rc 3 (違反の 1 と分ける)")
         sp.run(["git", "-C", str(g), "reset", "-q"], check=True)
         (g / "SESSION.md").write_text("x\n" * 120, encoding="utf-8")
         sp.run(["git", "-C", str(g), "add", "SESSION.md"], check=True)

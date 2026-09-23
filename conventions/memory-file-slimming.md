@@ -221,6 +221,14 @@ CLAUDE.md 95 → 35 KB)。
   `--staged --file CLAUDE.md --entry-section '### <節の見出し>'` (① file 全体の KB ② `LINE_LIMITS` に登録した file の行数
   ③ 節の新規・書き換え entry の byte。 止めない、 検査不能は rc 3)。 各自の pre-commit から呼ぶ (閾値を hook に書き写さない)。
 
+- <a id="commit-budget-gate"></a>**warn を出しても育ち続ける file は、 予算を超えて育つ commit をその時点で止める。**
+  warn は書いた本人に届いてもその commit を止めないので、 並行する複数の session の追記が積み上がる (実測: 縮退した直後から
+  1 日 ~4 KB 育ち、 warn の閾値に 2 日で戻った)。 gate の形: ① 予算は warn より下に置く (= commit で育つ限り surface の warn に
+  届かない) ② 止めるのは「予算以上 ∧ HEAD より byte が増える」 commit だけ — 縮める commit・予算内の commit は通す (= 予算を
+  超えてからは、 足す分を同じ commit で MOVE + pointer 化して払う。 縮退の commit 自体は止まらない) ③ 故障は違反と別の終了値
+  (3) で「この commit では走っていない」 を出す ④ 逃げ道の env は owner が明示したときだけ使う。 engine =
+  [`scripts/check-memory-file-bloat.py`](../scripts/check-memory-file-bloat.py) `--staged --block` (予算の値は engine だけが持つ)。
+
 (以上の置き方は任意の常設検出器に通じる一般形だが、 実例 1 件のため本 doc 留め —
 2 例目で上層 doc への hoist を判断する。)
 
