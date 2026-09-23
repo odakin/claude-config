@@ -24,6 +24,15 @@ repo の中に clone してある別の repo (親が ignore している Overlea
   sync-built-pdfs.py --selftest
 exclude の GLOB は `<repo>/<repo 内の path>` に対して当てる (fnmatch)。
 止める: 環境変数 CLAUDE_PDF_SYNC=0。
+
+組み直し (設定の "build"): build した PDF を git から外すと (conventions/repo-history-growth.md#generated-binaries)、
+共同編集者が source だけ push したとき手元の PDF が古いまま / 無いままになる。 写す前に、 規則に従って
+「追跡されていない ∧ 同名の .tex より古い (か無い) ∧ .tex が recent_days の内に変わった」 PDF だけを組み直す。
+  {"repo": "r", "dir": "report", "cmd": "./build.sh {stem}"}      # dir 直下の \\documentclass を持つ .tex ごとに 1 回
+  {"repo": "r", "docs": ["a.tex", "b/main.tex"], "cmd": "..."}   # 複数の文書を 1 回のコマンドで組む
+⚠️ 追跡中の PDF は組み直さない (変更として誰かの commit に紛れ込み、 履歴を太らせる) = repo が PDF を
+git から外すまで、 その repo には何もしない。 失敗は source が変わるまで再試行しない。 記録 =
+~/.claude/state/sync-built-pdfs-build.{json,log}。 組み直しだけ止める: CLAUDE_PDF_BUILD=0。
 """
 import argparse
 import filecmp
@@ -31,6 +40,7 @@ import fnmatch
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -49,9 +59,13 @@ def git(repo: Path, *args: str, stdin: bytes = b"") -> bytes:
 
 
 def built_pdfs(repo: Path):
-    """repo の中の「同名の .tex がある PDF」 で、 git-crypt でないもの (repo からの相対 path)。"""
+    """repo の中の「同名の .tex がある PDF」 で、 git-crypt でないもの (repo からの相対 path)。
+
+    追跡中・未追跡に加えて **ignore されている PDF も見る** — build した PDF を git から外す
+    (conventions/repo-history-growth.md#generated-binaries) と ignore 側に移るので、 見ないと写らなくなる。"""
     out = git(repo, "ls-files", "-z", "-co", "--exclude-standard", "--", "*.pdf")
-    paths = [p for p in out.decode("utf-8", "replace").split("\0") if p]
+    out += b"\0" + git(repo, "ls-files", "-z", "-oi", "--exclude-standard", "--", "*.pdf")
+    paths = list(dict.fromkeys(p for p in out.decode("utf-8", "replace").split("\0") if p))
     paths = [p for p in paths if (repo / p).with_suffix(".tex").is_file() and (repo / p).stat().st_size > 0]
     paths = [p for p in paths if not any(d.lower() in SKIP_DIRS or d.lower().endswith(("_old", "-old", "revisions"))
                                          for d in Path(p).parts[:-1])]
@@ -147,7 +161,114 @@ def take_lock(lock: Path) -> bool:
     return True
 
 
-def run(base: Path, dest: Path, exclude, dry: bool, quiet: bool, recent_days: int = 0) -> int:
+# ---------------------------------------------------------------- 組み直し (build)
+# git から外した PDF は、 相手が source だけ push すると手元で古いままになる。 設定の build 規則に従って
+# 「追跡されていない ∧ .tex より古い (か無い) ∧ .tex が最近変わった」 PDF だけを組み直してから写す。
+# ⚠️ 追跡中の PDF は組み直さない = 組み直すと変更として誰かの commit に紛れ込み、 履歴を太らせる
+# (= repo が PDF を git から外すまでは、 その repo に何もしない)。
+BUILD_LOCK_STALE = 3600
+TEX_BINS = ("/Library/TeX/texbin", "/usr/local/bin", "/opt/homebrew/bin")
+
+
+def is_root_doc(tex: Path) -> bool:
+    try:
+        with tex.open(encoding="utf-8", errors="replace") as fh:
+            return any("\\documentclass" in line for _, line in zip(range(200), fh))
+    except OSError:
+        return False
+
+
+def build_targets(base: Path, rules, recent_days: int):
+    """build 規則 → [(実行 dir, command, [(tex, pdf), ...])]。 command 1 回で組む単位ごとにまとめる。"""
+    out = []
+    for r in rules:
+        repo = base / r["repo"]
+        if not (repo / ".git").exists():
+            continue
+        touched = recently_touched(repo, recent_days) if recent_days else None
+        if "docs" in r:
+            docs = [repo / d for d in r["docs"]]
+            groups = [(repo, r["cmd"], docs)]
+        else:
+            d = repo / r.get("dir", "")
+            docs = sorted(t for t in d.glob("*.tex") if is_root_doc(t))
+            groups = [(d, r["cmd"].replace("{stem}", shlex.quote(t.stem)), [t]) for t in docs]
+        for cwd, cmd, texs in groups:
+            stale = []
+            for tex in texs:
+                pdf = tex.with_suffix(".pdf")
+                rel_tex, rel_pdf = str(tex.relative_to(repo)), str(pdf.relative_to(repo))
+                if not tex.is_file() or git(repo, "ls-files", "--", rel_pdf).strip():
+                    continue  # 追跡中の PDF は触らない
+                if pdf.exists() and pdf.stat().st_mtime + 1 >= tex.stat().st_mtime:
+                    continue
+                if touched is not None and rel_tex not in touched:
+                    continue  # 最近変わっていない文書は、 PDF が無くても一斉には組まない
+                stale.append((tex, pdf))
+            if stale:
+                out.append((cwd, cmd, stale, int(r.get("timeout", 600))))
+    return out
+
+
+def run_builds(base: Path, rules, recent_days: int, state_dir: Path, dry: bool, quiet: bool) -> None:
+    if not rules or os.environ.get("CLAUDE_PDF_BUILD") == "0":
+        return
+    lock = Path(tempfile.gettempdir()) / f"sync-built-pdfs-build-{os.getuid()}.lock"
+    try:
+        if time.time() - lock.stat().st_mtime > BUILD_LOCK_STALE:
+            lock.unlink()
+    except FileNotFoundError:
+        pass
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        return  # 別の run が組んでいる
+    os.close(fd)
+    memo_path = state_dir / "sync-built-pdfs-build.json"
+    try:
+        memo = json.loads(memo_path.read_text()) if memo_path.exists() else {}
+    except (OSError, ValueError):
+        memo = {}
+    env = dict(os.environ, PATH=":".join([b for b in TEX_BINS if Path(b).is_dir()] + [os.environ.get("PATH", "")]))
+    log = []
+    try:
+        for cwd, cmd, stale, timeout in build_targets(base, rules, recent_days):
+            key = str(stale[0][0])
+            fp = max(t.stat().st_mtime for t, _ in stale)
+            if memo.get(key) == fp:
+                continue  # 同じ source で前回失敗した = source が変わるまで試さない
+            if dry:
+                if not quiet:
+                    print(f"would build ({cwd}): {cmd}")
+                continue
+            try:
+                r = subprocess.run(cmd, shell=True, cwd=cwd, env=env, capture_output=True, timeout=timeout)
+                ok = r.returncode == 0 and all(p.exists() and p.stat().st_mtime + 1 >= fp for _, p in stale)
+            except subprocess.TimeoutExpired:
+                ok = False
+            if ok:
+                memo.pop(key, None)
+            else:
+                memo[key] = fp
+            log.append(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {'ok ' if ok else 'NG '} {cwd}: {cmd}")
+            if not quiet:
+                print(log[-1])
+    finally:
+        lock.unlink(missing_ok=True)
+        if not dry:
+            try:
+                state_dir.mkdir(parents=True, exist_ok=True)
+                memo_path.write_text(json.dumps(memo, ensure_ascii=False, indent=1))
+                if log:
+                    with (state_dir / "sync-built-pdfs-build.log").open("a", encoding="utf-8") as fh:
+                        fh.write("\n".join(log) + "\n")
+            except OSError:
+                pass
+
+
+def run(base: Path, dest: Path, exclude, dry: bool, quiet: bool, recent_days: int = 0,
+        build_rules=None, state_dir: Path = Path("~/.claude/state").expanduser()) -> int:
+    run_builds(base, build_rules or [], recent_days, state_dir, dry, quiet)
     lock = Path(tempfile.gettempdir()) / f"sync-built-pdfs-{os.getuid()}.lock"
     if not take_lock(lock):
         return 0
@@ -257,6 +378,44 @@ def _selftest(t: Path) -> None:
     assert plan(base, dest, [], 30) == [], "古い commit だけなら recent_days で外れる"
     (repo / "talk.pdf").write_bytes(b"%PDF rebuilt again")
     assert [d.name for _, d in plan(base, dest, [], 30)] == ["talk.pdf"]
+    _selftest_build(base, dest, Path(t) / "state")
+
+
+def _selftest_build(base: Path, dest: Path, state: Path) -> None:
+    """git から外した PDF の組み直し: 追跡していない PDF だけ・断片は組まない・失敗は source が変わるまで試さない。"""
+    r2 = base / "r2"
+    (r2 / "x").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(r2)], check=True)
+    (r2 / ".gitignore").write_text("*.pdf\n")
+    (r2 / "a.tex").write_text("\\documentclass{article}\n")
+    (r2 / "frag.tex").write_text("\\section{only a fragment}\n")
+    (r2 / "bad.tex").write_text("\\documentclass{article}\n")
+    (r2 / "x" / "y.tex").write_text("\\documentclass{article}\n")
+    (r2 / "tracked.tex").write_text("\\documentclass{article}\n")
+    (r2 / "tracked.pdf").write_bytes(b"%PDF tracked")
+    subprocess.run(["git", "-C", str(r2), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(r2), "add", "-f", "tracked.pdf"], check=True)
+    subprocess.run(["git", "-C", str(r2), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                    "-c", "commit.gpgsign=false", "commit", "-qm", "src"], check=True)
+    later = time.time() + 5
+    os.utime(r2 / "tracked.tex", (later, later))   # 追跡中の PDF より .tex が新しい
+    rules = [{"repo": "r2", "dir": "", "cmd": "if [ {stem} = bad ]; then exit 1; fi; cp {stem}.tex {stem}.pdf"},
+             {"repo": "r2", "docs": ["x/y.tex"], "cmd": "cp x/y.tex x/y.pdf"}]
+    run(base, dest, [], False, True, 30, rules, state)
+    assert (r2 / "a.pdf").exists(), "ignore した PDF を組み直していない"
+    assert not (r2 / "frag.pdf").exists(), "\\documentclass の無い断片を組んだ"
+    assert (r2 / "x" / "y.pdf").exists(), "docs の規則 (1 コマンドで組む) が走っていない"
+    assert (r2 / "tracked.pdf").read_bytes() == b"%PDF tracked", "追跡中の PDF を組み直した (commit に紛れ込む)"
+    assert (dest / "r2" / "a.pdf").exists(), "ignore した PDF が写し先に写っていない"
+    memo = json.loads((state / "sync-built-pdfs-build.json").read_text())
+    assert str(r2 / "bad.tex") in memo, "失敗を記録していない"
+    log_n = len((state / "sync-built-pdfs-build.log").read_text().splitlines())
+    run(base, dest, [], False, True, 30, rules, state)
+    assert len((state / "sync-built-pdfs-build.log").read_text().splitlines()) == log_n, "同じ source で失敗を繰り返した"
+    newer = time.time() + 20
+    os.utime(r2 / "bad.tex", (newer, newer))
+    run(base, dest, [], False, True, 30, rules, state)
+    assert len((state / "sync-built-pdfs-build.log").read_text().splitlines()) == log_n + 1, "source が変わっても再試行しない"
 
 
 def main() -> int:
@@ -284,7 +443,7 @@ def main() -> int:
     if a.prune_report:
         return prune_report(base, dest, exclude)
     recent = a.recent_days if a.recent_days is not None else int(cfg.get("recent_days", 0))
-    return run(base, dest, exclude, a.dry_run, a.quiet, recent)
+    return run(base, dest, exclude, a.dry_run, a.quiet, recent, cfg.get("build", []))
 
 
 if __name__ == "__main__":
