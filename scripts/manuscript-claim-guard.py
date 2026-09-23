@@ -30,10 +30,10 @@
 承認: `approve` で記録する。 1 件 = 1 file × 領域 (複数可) × 変更の要約 × 著者の発言の verbatim。 権限と設定は --candidate の全文 hash にも束縛。 記録の前に、
   その発言が今の session の transcript の user 発言 (tool 結果・hook 注入・本人発言に前置された system-reminder・
   sub-agent の prompt を除く) に在るかを
-  照合し、 無ければ拒否する。 照合は quote を含む最新の user 発言に結ぶ (同じ短い承認を繰り返した session で、
-  後の承認が前の発言を指さないように)。 その発言を既に引いた承認があり、 最初の記録より後に user が発言していれば
-  拒否する (exit 5 = 別の案への古い発言の使い回し。 1 つの発言で複数の file をまとめて承認する記録は、 user が次に
-  発言するまで通す)。 短い引用 (SHORT_QUOTE 文字未満) は、 発言の全体 (端の空白・句読点を除く) と一致する時だけ
+  照合し、 無ければ拒否する。 引けるのは記録する時点で著者の最新の発言だけ (exit 5 = それより前の発言。 既に
+  引かれた発言も、 まだ引かれていない発言も、 後に著者が発言していれば別の案の承認に使わせない = 流用を事後に人が
+  記録から探さなくてよい。 1 つの発言で複数の file をまとめて承認する記録は、 著者が次に発言するまで通す。 実測の
+  承認記録では、 引いた発言と記録の間に著者の発言が挟まった正当な承認は 0 件)。 短い引用 (SHORT_QUOTE 文字未満) は、 発言の全体 (端の空白・句読点を除く) と一致する時だけ
   照合する (「OK」 が「BOOK」「OK じゃない」「OK?」 に当たらないように。 足りなければ発言の全体か、 それ以上の長さを
   引く)。 承認は session に束縛され (別 session は使えない)、 machine-local の state に置く
   (公開 repo に著者の発言を書かない)。 監査の本体は transcript。
@@ -880,37 +880,6 @@ def verify_quote(quote: str, messages: list[tuple[str, str]]) -> tuple[str, str]
     return None if i is None else (messages[i][0], message_sha(messages[i][1]))
 
 
-def _utc(value: str) -> _dt.datetime | None:
-    try:
-        t = _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except (ValueError, TypeError):
-        return None
-    return t if t.tzinfo else None
-
-
-def quote_reused(messages: list[tuple[str, str]], index: int, prior: list[dict]) -> bool:
-    """messages[index] を既に引いた承認があり、 その最初の記録より後に user が発言していれば True。
-
-    1 つの発言で複数の file をまとめて承認する記録 (user が次に発言する前) は通す。 user が次に発言した後は、
-    同じ発言を別の案の承認に使い回さない。 時刻を読めない場合は、 発言の後に user 発言が 1 つでもあれば
-    使い回しとみなす (安全側)。 発言が候補の作成より後かは見ない = 承認の後に候補を作り直す手順が実在する (実測)。
-    """
-    ts, text = messages[index]
-    sha = message_sha(text)
-    uses = [a for a in prior if a.get("quote_time") == ts and a.get("quote_msg_sha") == sha]
-    later = messages[index + 1:]
-    if not uses or not later:
-        return False
-    first = min((t for t in (_utc(str(a.get("at", ""))) for a in uses) if t), default=None)
-    if first is None:
-        return True
-    for lts, _ in later:
-        lt = _utc(lts)
-        if lt is None or lt > first:
-            return True
-    return False
-
-
 def unapproved(changes: list[dict], repo: Path | None, session: tuple[str, str] | None) -> list[dict]:
     if not changes:
         return []
@@ -1648,9 +1617,10 @@ def approve_mode(args: argparse.Namespace) -> int:
     hit = (msgs[idx][0], message_sha(msgs[idx][1]))
     said = collapse_ws(msgs[idx][1])
     said = said if len(said) <= 40 else said[:40] + "…"
-    if quote_reused(msgs, idx, load_approvals(*session)):
-        print(f"approve: --quote を含む最新の著者の発言 ({hit[0] or '時刻不明'} 「{said}」) は既に別の承認が引いており、\n"
-              "  その後に著者が発言している = 別の案に古い発言を使い回すことになる。 記録しない。\n"
+    if idx != len(msgs) - 1:
+        print(f"approve: --quote が一致したのは著者の最新の発言ではない ({hit[0] or '時刻不明'} 「{said}」、 その後に"
+              f"著者が {len(msgs) - 1 - idx} 回発言している)。 記録しない。\n"
+              "  引けるのは記録する時点で最新の著者の発言だけ = 古い発言を別の案の承認に使わない。\n"
               "  この案を著者に示し、 承認の発言を新しく得てから、 その発言を引く。",
               file=sys.stderr)
         return 5
@@ -1922,7 +1892,7 @@ def selftest() -> int:
         saved = {k: os.environ.pop(k) for k in AGENT_ENV_KEYS if k in os.environ}
         check("approve: session の無い (人の terminal の) 記録は拒否", approve_mode(ns2) == 2)
         os.environ.update(saved)
-        # 同じ短い承認を繰り返す session: 最新の発言に結ぶ / 使い回しは拒否 / 同じ turn のまとめ承認は通す
+        # 引けるのは記録する時点で著者の最新の発言だけ: 同じ turn のまとめ承認は通す / 古い発言は引かれていてもいなくても拒否
         now = _dt.datetime.now(_dt.timezone.utc)
 
         def iso(minutes: float) -> str:
@@ -1937,8 +1907,8 @@ def selftest() -> int:
                     fh.write(json.dumps(r, ensure_ascii=False) + "\n")
 
         rtr = tr_dir / "sess-r.jsonl"
-        append(rtr, said("OK", iso(-30)), said("次の案を見せて", iso(-20)), said("OK", iso(-10)))
-        append(rtr, said("BOOK の件は後で", iso(-5)))
+        append(rtr, said("OK", iso(-30)), said("次の案を見せて", iso(-20)), said("BOOK の件は後で", iso(-15)),
+               said("OK", iso(-10)))
         rns = argparse.Namespace(session="claude:sess-r", region=["abstract"], change="案 A",
                                  quote="BOOK", file=str(repo / "src" / "main.tex"), transcript=None)
         check("approve: 短い引用が発言の一部にしか当たらなければ拒否 (exit 4)", approve_mode(rns) == 4)
@@ -1947,16 +1917,22 @@ def selftest() -> int:
         check("approve: 同じ引用の発言が 2 つなら後の発言に結ぶ",
               approve_mode(rns) == 0 and load_approvals("claude", "sess-r")[-1].get("quote_time") == iso(-10))
         rns.change = "案 B の 2"
-        check("approve: 同じ発言で続けてまとめて承認できる (user が次に発言する前)",
+        check("approve: 同じ発言で続けてまとめて承認できる (著者が次に発言する前)",
               approve_mode(rns) == 0 and load_approvals("claude", "sess-r")[-1].get("quote_time") == iso(-10))
         append(rtr, said("別の件を進めて", iso(1)))
         rns.change = "案 C"
         n_before = len(load_approvals("claude", "sess-r"))
-        check("approve: 引かれた発言の後に user が発言したら、 同じ発言の使い回しは拒否 (exit 5)",
+        check("approve: 引いた発言の後に著者が発言したら、 同じ発言はもう引けない (exit 5)",
               approve_mode(rns) == 5 and len(load_approvals("claude", "sess-r")) == n_before)
         append(rtr, said("OK", iso(2)))
         check("approve: 新しい発言が来れば記録でき、 その発言に結ぶ",
               approve_mode(rns) == 0 and load_approvals("claude", "sess-r")[-1].get("quote_time") == iso(2))
+        vtr = tr_dir / "sess-v.jsonl"
+        append(vtr, said("案 X はこの形で確定してよい", iso(-10)), said("ところで別件だけど", iso(-5)))
+        vns = argparse.Namespace(session="claude:sess-v", region=["abstract"], change="案 X",
+                                 quote="案 X はこの形で確定してよい", file=str(repo / "src" / "main.tex"), transcript=None)
+        check("approve: まだ引かれていない古い発言も、 後に著者が発言していれば引けない (exit 5)",
+              approve_mode(vns) == 5 and load_approvals("claude", "sess-v") == [])
         utr = tr_dir / "sess-u.jsonl"
         append(utr, {"type": "user", "message": {"content": "それで"}})
         uns = argparse.Namespace(session="claude:sess-u", region=["abstract"], change="案 1",
@@ -1964,8 +1940,7 @@ def selftest() -> int:
         first_ok = approve_mode(uns) == 0
         append(utr, {"type": "user", "message": {"content": "次へ"}})
         uns.change = "案 2"
-        check("approve: 時刻を読めない transcript では、 引いた発言の後の発言で使い回しを拒否 (安全側)",
-              first_ok and approve_mode(uns) == 5)
+        check("approve: 時刻の無い transcript でも、 最新でない発言は引けない", first_ok and approve_mode(uns) == 5)
         # pre-commit: agent env あり
         (repo / "src" / "main.tex").write_text(paper.replace("b + c", "b - c"), encoding="utf-8")
         g("add", "src/main.tex")
