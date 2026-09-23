@@ -11,8 +11,9 @@
   google-api-python-client / google-auth が要る (無い環境では build_service が None を返す = 呼び手は fail-open)。
 
 使い方:
-    from gmail_read import load_account_creds, build_service, thread_messages, thread_of_message, walk_text
+    from gmail_read import load_account_creds, build_service, service_for, thread_messages, thread_of_message, walk_text
     svc = build_service(load_account_creds(Path.home() / ".gmail-mcp", "alias"))
+    svc = service_for(Path.home() / ".gmail-mcp", "alias", label="my-detector")   # 失敗は stderr に 1 行、 None (検出器向け)
     msgs = thread_messages(svc, thread_id, full=True)   # None = 引けなかった (404 / auth / 一時失敗)
     python3 gmail_read.py                                # selftest (API に触らない = 本文の取り出しと並べ替えだけ)
 """
@@ -21,21 +22,31 @@ from __future__ import annotations
 import base64
 import json
 import re
+import sys
 from pathlib import Path
+
+TOKEN_URI_DEFAULT = "https://oauth2.googleapis.com/token"
+
+
+def _read_creds(creds_dir: Path, account: str) -> dict:
+    """{cred, oauth} を読む (読めなければ例外)。 OAuth client は account の dir に無ければ creds_dir 直下の共有 file、
+    形は "installed" (desktop app) でも "web" でも受ける。"""
+    d = Path(creds_dir) / account
+    cred = json.loads((d / "credentials.json").read_text(encoding="utf-8"))
+    kp = d / "gcp-oauth.keys.json"
+    if not kp.exists():
+        kp = Path(creds_dir) / "gcp-oauth.keys.json"
+    data = json.loads(kp.read_text(encoding="utf-8"))
+    oauth = data.get("installed") or data.get("web") or {}
+    return {"cred": cred, "oauth": oauth}
 
 
 def load_account_creds(creds_dir: Path, account: str) -> dict | None:
-    """{cred, oauth} を読む。 file が無ければ None (= この machine にその account の認証が無い)。"""
-    d = Path(creds_dir) / account
+    """{cred, oauth} を読む。 file が無い・読めなければ None (= この machine にその account の認証が無い)。"""
     try:
-        cred = json.loads((d / "credentials.json").read_text(encoding="utf-8"))
-        kp = d / "gcp-oauth.keys.json"
-        if not kp.exists():
-            kp = Path(creds_dir) / "gcp-oauth.keys.json"
-        oauth = json.loads(kp.read_text(encoding="utf-8"))["installed"]
+        return _read_creds(creds_dir, account)
     except Exception:
         return None
-    return {"cred": cred, "oauth": oauth}
 
 
 def build_service(blob: dict | None):
@@ -48,9 +59,30 @@ def build_service(blob: dict | None):
     except ImportError:
         return None
     cred, oauth = blob["cred"], blob["oauth"]
+    scope = cred.get("scope")
     creds = Credentials(token=cred.get("access_token"), refresh_token=cred.get("refresh_token"),
-                        token_uri=oauth["token_uri"], client_id=oauth["client_id"], client_secret=oauth["client_secret"])
+                        token_uri=oauth.get("token_uri") or TOKEN_URI_DEFAULT,
+                        client_id=oauth.get("client_id"), client_secret=oauth.get("client_secret"),
+                        scopes=scope.split(" ") if isinstance(scope, str) and scope else None)
+    if not creds.valid and creds.refresh_token:   # access token が無い / 期限切れと分かっている時だけ先に更新する
+        from google.auth.transport.requests import Request
+        creds.refresh(Request())
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+
+def service_for(creds_dir: Path, account: str, label: str | None = None, raise_errors: bool = False):
+    """検出器向けの 1 行版。 認証 file が無ければ None (= その account はこの machine に無い、 黙って skip)。
+    読めない・組み立てに失敗したら stderr に `⚠️  <label>: <account> 認証失敗 (<理由>)` を 1 行出して None
+    (= 1 account の失敗で検出器全体を落とさない)。 raise_errors=True なら例外をそのまま上げる (書き込む道具向け)。"""
+    if not (Path(creds_dir) / account / "credentials.json").exists():
+        return None
+    try:
+        return build_service(_read_creds(creds_dir, account))
+    except Exception as e:
+        if raise_errors:
+            raise
+        print(f"⚠️  {label or 'gmail_read'}: {account} 認証失敗 ({e})", file=sys.stderr)
+        return None
 
 
 def header(msg: dict, name: str) -> str:
@@ -161,6 +193,29 @@ def selftest() -> int:
            and msgs[0]["from"] == "A <a@x>" and msgs[0]["subject"] == "(no subject)" and msgs[1]["body"] == "")
     expect("thread_messages / thread_of_message: service 無しは None", thread_messages(None, "x") is None and thread_of_message(None, "x") is None)
     expect("load_account_creds: 無い account は None", load_account_creds(Path("/nonexistent-dir-for-selftest"), "x") is None)
+    import io
+    import tempfile
+    from contextlib import redirect_stderr
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "acct-a").mkdir()
+        (root / "acct-a" / "credentials.json").write_text('{"access_token": "t", "refresh_token": "r"}', encoding="utf-8")
+        (root / "gcp-oauth.keys.json").write_text('{"web": {"client_id": "c", "client_secret": "s"}}', encoding="utf-8")
+        blob = load_account_creds(root, "acct-a")
+        expect("load_account_creds: 共有の OAuth client (web 形) を読む", blob is not None and blob["oauth"].get("client_id") == "c")
+        expect("service_for: 認証 file の無い account は黙って None", service_for(root, "acct-missing", label="t") is None)
+        (root / "acct-b").mkdir()
+        (root / "acct-b" / "credentials.json").write_text("{broken", encoding="utf-8")
+        err = io.StringIO()
+        with redirect_stderr(err):
+            got = service_for(root, "acct-b", label="selftest")
+        expect("service_for: 壊れた認証は stderr に 1 行 + None", got is None and "selftest: acct-b 認証失敗" in err.getvalue())
+        raised = False
+        try:
+            service_for(root, "acct-b", raise_errors=True)
+        except Exception:
+            raised = True
+        expect("service_for: raise_errors=True は例外を上げる", raised)
     print(f"selftest: {'ALL PASS' if not fails else 'FAIL ' + str(len(fails))}")
     return 1 if fails else 0
 
