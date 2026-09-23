@@ -9,7 +9,7 @@
   切り分けの手順と読み方の正本 = conventions/macos-calendar-write.md #google-to-calendar-app-sync-check
 
 見るもの (全部 read-only、 `mode=ro` で開く):
-  1. Calendar.app の DB (~/Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb) の Store 表
+  1. Calendar.app の DB (macOS 26 = ~/Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb、 13 = ~/Library/Calendars/Calendar.sqlitedb) の Store 表
      = アカウントごとの最後の同期の試行 (last_sync_start / last_sync_end、 2001-01-01 起点の秒) と error_id
   2. インターネットアカウントの DB (~/Library/Accounts/Accounts4.sqlite)
      = Store.external_id が CalDAV の子アカウントの ZIDENTIFIER、 その ZPARENTACCOUNT (Google 等) の ZAUTHENTICATED

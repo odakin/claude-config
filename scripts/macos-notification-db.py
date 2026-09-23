@@ -3,7 +3,7 @@
 
 何のためか
     API を持たないアプリ (メッセンジャー・業務アプリ) でも、 macOS の通知として届いた内容は
-    通知センターの SQLite DB (`~/Library/Group Containers/group.com.apple.usernoted/db2/db`) に残る。
+    通知センターの SQLite DB (macOS 26 = `~/Library/Group Containers/group.com.apple.usernoted/db2/db`、 13 = `$(getconf DARWIN_USER_DIR)com.apple.notificationcenter/db2/db`、 選び方 = default_db_path) に残る。
     本 script はその DB を**写しを取ってから**読み、 指定 app の通知を時刻順に並べる。 読むだけ。
     「読む側の機械経路が無いアプリ」 を段 4 (自作経路) に降ろすための engine
     (一般則 = conventions/machine-route-first.md#route-ladder、 手順と限界 = conventions/macos-notification-db.md)。
