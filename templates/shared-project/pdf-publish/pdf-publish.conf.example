@@ -1,0 +1,13 @@
+# .pdf-publish.conf — build した PDF を push のたびに共有フォルダへ写す設定 (repo で共有する)。
+# 仕組みと正本 = claude-config/templates/shared-project/pdf-publish/ (repo の tools/pdf-publish/ はその写し)。
+# 機械ごとに違う値 (Dropbox の場所・共有フォルダの path) は .pdf-publish.local に書く (git に入れない)。
+
+# 共有フォルダ = 各自の Dropbox 直下からの path (共有の招待を受けると、 既定ではこの名前で Dropbox 直下に現れる)
+DEST=example-project-pdf
+
+# 文書 (.tex、 glob 可) と、 PDF が古いときに組むコマンド (文書の dir で走る、 {stem} = 文書名)。 BUILD は省略可
+DOC=paper/main.tex
+BUILD=latexmk -interaction=nonstopmode {stem}
+
+DOC=report/*.tex
+BUILD=./build.sh {stem}

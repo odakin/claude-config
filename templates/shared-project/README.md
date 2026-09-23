@@ -29,7 +29,9 @@ See [`docs/personal-layer.md`](../../docs/personal-layer.md) for the layer model
 
 4. (Optional) Set up git-crypt with a shared key — see [`docs/git-crypt-guide.md`](../../docs/git-crypt-guide.md) and the "共有 git-crypt 鍵パターン" section in `conventions/shared-repo.md`. **If using git-crypt, fill in `SETUP.md` (collaborator-facing setup walkthrough)** with this-repo specific values: encrypted backup path, local key path, plaintext test file. CLAUDE.md should keep only a 1-2 line pointer to SETUP.md (not the full walkthrough — auto-load cost). Both files must be at the repo root (NOT in `docs/` if you have `docs/**` git-crypt encrypted, otherwise un-unlocked collaborators can't read them — catch-22).
 
-5. Create the GitHub private repo and invite collaborators:
+5. (If the project builds PDFs) **Do not commit the built PDFs** — each version is stored whole in history (no delta), see [`conventions/repo-history-growth.md`](../../conventions/repo-history-growth.md). Install the push-triggered publisher instead: `python3 ~/Claude/claude-config/scripts/install-pdf-publish.py install . --dest <shared-folder> --doc '<doc>.tex' --build '<cmd>'`. It vendors [`pdf-publish/`](pdf-publish/) into `tools/pdf-publish/`, ignores the built PDFs, and installs a pre-push hook that builds (if stale) and copies the pushed documents' PDFs into a shared Dropbox folder in the background. Each clone runs `sh tools/pdf-publish/install-hook.sh` once.
+
+6. Create the GitHub private repo and invite collaborators:
    ```bash
    gh repo create <owner>/<your-shared-project> --private --source=. --push
    gh api repos/<owner>/<your-shared-project>/collaborators/<collab> -X PUT
