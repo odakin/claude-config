@@ -47,6 +47,8 @@ invite URL の `permissions=` bitfield は **bot 専用 role の guild-level 権
 
 判別は投稿ごとでなく「この投稿の一人称は誰か」 の 1 問。 迷う例: 事務職員への回答 = 個人 (組織 bot で出すと組織回答に見える) / 会場変更の周知 = 組織 / **組織のメンバー全員への呼びかけ (募集・希望集め) = 組織** — 本文に「頼んでみます」 のような個人の一人称が混ざっていても、 宛先が組織全体なら組織 bot で出し、 末尾に発信者名を 1 行添える (= 一人称の有無でなく宛先の範囲で決める。 個人 bot は特定の相手とのやり取り用)。 trade-off: 個人名義 bot を同 server に足すと Token surface が 1 つ増える (= 上の権限ポリシーで被害範囲を見積もる、 前節の guild-level 注意も込み)。 過去に組織 bot で出した個人名義投稿は遡及修正しない (= 履歴は履歴、 以後の routing を変えるだけ)。
 
+<a id="org-post-byline"></a>末尾の 1 行の書き方 (発信した人の名 / 文面を起草した AI の文責表記、 例 `（文責　<AI 名>）`) は owner が決め、 その選択は個人層に置く。
+
 ## Private channel への Bot 追加手順
 
 `@everyone` の View Channel が deny された private channel では、server-level role による View Channel allow も override される。Bot を入れる手順:
