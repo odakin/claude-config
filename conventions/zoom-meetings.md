@@ -94,6 +94,25 @@ type 3 (No Fixed Time) の部屋は **最終使用から 365 日**で消える�
 ⚠️ 要約が動くことは参加者にも表示される。 相手のいる会議では一言断る前提で設定する。
 ⚠️ 要約の送付先はアカウント側の設定 (`in_meeting.meeting_summary_with_ai_companion`) で決まる。
 
+## <a id="read-summary-and-transcript"></a>終わった会議の要約と文字起こしを読む — 「無い」 も API で言い切る
+
+道具 = `zoom-client.py notes <meeting_id> --date YYYY-MM-DD [--out DIR]` (その日の回を過去の回の一覧から探し、
+要約の JSON と文字起こしの VTT を保存する)。 要る scope は読み取りの 5 つ
+(`meeting:read:list_past_instances:admin` / `meeting:read:past_meeting:admin` / `meeting:read:summary:admin` /
+`meeting:read:list_summaries:admin` / `cloud_recording:read:meeting_transcript:admin`)。 実測では、
+有効化済みの app に scope を足すと、 その直後に発行した token から効いた (Activate し直す操作は要らなかった)。
+
+- **「無い」 の根拠は 2 つの応答**: 過去の回の詳細 (`GET /past_meetings/{uuid}`) の `has_meeting_summary` と、
+  文字起こし (`GET /meetings/{uuid}/transcript`) の code 3322。 通知メールの有無で判断しない
+  (届かない設定もあるし、 メール検索の空振りは「無い」 の証明にならない)
+- **ローカル録画のフォルダには要約も文字起こしも入らない** (入るのは音声・動画・設定 file だけ)。
+  要約は Zoom 側にだけ残る
+- **個人部屋 (PMI) は既定で `auto_start_meeting_summary=false`** = 要約が作られるのは会議中に手で開始したときだけ。
+  講義など「あとで要約が欲しい」 部屋は、 その部屋の設定で自動開始にしておく (参加者に表示される点は上の ⚠️)
+- 過去の回の UUID が `/` で始まるか `//` を含むときは、 path に入れる前に二重に percent-encode する (しないと 404)
+- ⚠️ My Notes (本人のメモ機能の文字起こし) は別の API (`/my_notes/notes`) で、 `my_notes:read:note:admin` 等の
+  別 scope が要る
+
 ## <a id="record-the-room"></a>作った部屋は「番号 + 用途 + 失効条件」 で記録する
 
 常設の部屋は **id だけが残ると何の部屋か分からなくなる** (= 1 年後に作り直すべきか、

@@ -15,6 +15,13 @@ subcommand:
   create --topic T [--like <meeting_id>] [--apply]     部屋を作る (既定 dry-run)
   update <meeting_id> --set k=v [...] [--apply]        既存の部屋の settings を変える (既定 dry-run)
   delete <meeting_id> [--apply]             部屋を消す (既定 dry-run)
+  notes <meeting_id> --date YYYY-MM-DD [--out DIR]    その日の回の AI 要約と文字起こしを取り出す (読むだけ)
+  selftest                                  通信しない部品の自己検査
+
+notes は「無い」 も根拠つきで言う: past meeting の `has_meeting_summary` (= 要約が作られたか) と
+  transcript API の 3322 (= 文字起こしが存在しない)。 要約は録画と独立で、 部屋の
+  `auto_start_meeting_summary` が false なら会議中に手で開始しない限り作られない。
+  ⚠️ 要約の通知メールが来ていない ≠ 要約が無い、 の逆も同じ = 判断はこの 2 つの応答で行う。
 
 create の既定 = **type 3 (定期ミーティング・固定時刻なし)** = 「いつでも入れる常設の部屋」。
   --like <id> を付けると、 その ミーティング (= PMI を渡すのが普通) の設定を写して作る。
@@ -40,6 +47,10 @@ Server-to-Server OAuth app の作り方 (= 本人が 1 回だけ、 5 分):
   3. Scopes タブで付ける: meeting:read / meeting:write / user:read / user:read:settings の admin 版
      (新しい UI の粒度なら meeting:read:meeting:admin, meeting:write:meeting:admin,
       meeting:delete:meeting:admin, user:read:user:admin, user:read:settings:admin)
+     notes を使うなら読み取りを足す: meeting:read:list_past_instances:admin,
+      meeting:read:past_meeting:admin, meeting:read:summary:admin, meeting:read:list_summaries:admin,
+      cloud_recording:read:meeting_transcript:admin (実測: 有効化済みの app なら、 足した直後に
+      発行した token から効く = Activate し直す操作は要らなかった)
   4. Activation タブ → Activate
   5. App Credentials タブの Account ID / Client ID / Client Secret を credential JSON に書く
 """
@@ -55,6 +66,9 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import datetime as dt
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 TOKEN_URL = "https://zoom.us/oauth/token"
 API = "https://api.zoom.us/v2"
@@ -254,6 +268,84 @@ def cmd_delete(token: str, args) -> int:
     return 0
 
 
+def uuid_path(uuid: str) -> str:
+    """past meeting の UUID を path に入れる形にする。 "/" で始まるか "//" を含む UUID は二重に
+    percent-encode しないと Zoom が 404 を返す (API 仕様)。 それ以外は 1 回。"""
+    once = urllib.parse.quote(uuid, safe="")
+    return urllib.parse.quote(once, safe="") if (uuid.startswith("/") or "//" in uuid) else once
+
+
+def local_date(start_time: str, tz: str) -> str:
+    """API の start_time (UTC の ISO 文字列、 末尾 Z) を、 その地域の日付 YYYY-MM-DD にする。"""
+    t = dt.datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+    return t.astimezone(ZoneInfo(tz)).date().isoformat()
+
+
+def _download(token: str, url: str) -> bytes:
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return resp.read()
+
+
+def cmd_notes(token: str, args) -> int:
+    inst = api(token, "GET", f"/past_meetings/{args.meeting_id}/instances").get("meetings", [])
+    hits = sorted((m for m in inst if local_date(m["start_time"], args.tz) == args.date),
+                  key=lambda m: m["start_time"])
+    if not hits:
+        print(f"{args.date} に {args.meeting_id} の回は無い (過去の回 {len(inst)} 件を見た)")
+        return 1
+    out = Path(args.out) if args.out else None
+    if out:
+        out.mkdir(parents=True, exist_ok=True)
+    for m in hits:
+        up = uuid_path(m["uuid"])
+        pm = api(token, "GET", f"/past_meetings/{up}")
+        print(f"== {pm.get('topic')}  {pm.get('start_time')} 〜 {pm.get('end_time')}"
+              f"  ({pm.get('duration')} 分, 参加 {pm.get('participants_count')})")
+        stem = f"{args.date}_{m['start_time'][11:19].replace(':', '')}Z"
+        if pm.get("has_meeting_summary"):
+            summ = api(token, "GET", f"/meetings/{up}/meeting_summary")
+            print("  要約     : あり")
+            if out:
+                (out / f"{stem}_summary.json").write_text(json.dumps(summ, ensure_ascii=False, indent=1))
+            else:
+                print(summ.get("summary_overview") or summ.get("summary_content") or "")
+        else:
+            print("  要約     : 無い (has_meeting_summary=false = この回では AI 要約が作られていない)")
+        try:
+            tr = api(token, "GET", f"/meetings/{up}/transcript")
+        except ZoomError as exc:
+            if "3322" not in str(exc):
+                raise
+            print("  文字起こし: 無い (3322 = この回の文字起こしは存在しない)")
+            continue
+        url = tr.get("download_url")
+        print(f"  文字起こし: あり{'' if url else ' (download_url 無し)'}")
+        if url and out:
+            (out / f"{stem}_transcript.vtt").write_bytes(_download(token, url))
+    if out:
+        print(f"保存先: {out}")
+    return 0
+
+
+def selftest() -> int:
+    fails = []
+
+    def check(cond, name):
+        print(("PASS " if cond else "FAIL ") + name)
+        if not cond:
+            fails.append(name)
+
+    check(uuid_path("AbCdEfGhIjKlMnOpQrSt==") == "AbCdEfGhIjKlMnOpQrSt%3D%3D", "普通の UUID は 1 回 encode")
+    check(uuid_path("/AbCdEfGhIjKlMnOpQrS==") == "%252FAbCdEfGhIjKlMnOpQrS%253D%253D", "/ で始まる UUID は二重に encode")
+    check(uuid_path("Ab//Cd==") == "Ab%252F%252FCd%253D%253D", "// を含む UUID は二重に encode")
+    check(local_date("2030-01-02T03:04:05Z", "Asia/Tokyo") == "2030-01-02", "UTC の朝は東京の同じ日")
+    check(local_date("2030-01-02T16:30:00Z", "Asia/Tokyo") == "2030-01-03", "UTC の夕方以降は東京の翌日")
+    print("zoom-client selftest:", "ALL PASS" if not fails else f"FAIL {fails}")
+    return 1 if fails else 0
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Zoom を Server-to-Server OAuth で読む / 部屋を作る")
     ap.add_argument("--cred", help="credential JSON の path (既定 env ZOOM_CRED → ~/.secrets/zoom-s2s-oauth.json)")
@@ -285,7 +377,17 @@ def main(argv: list[str]) -> int:
     p_del.add_argument("meeting_id")
     p_del.add_argument("--apply", action="store_true")
 
+    p_notes = sub.add_parser("notes", help="その日の回の AI 要約と文字起こしを取り出す (読むだけ)")
+    p_notes.add_argument("meeting_id", help="ミーティング番号 (PMI も可)")
+    p_notes.add_argument("--date", required=True, help="回の日付 YYYY-MM-DD (--tz の地域の日付)")
+    p_notes.add_argument("--tz", default="Asia/Tokyo")
+    p_notes.add_argument("--out", help="保存先 dir (無ければ要約の概要を画面に出すだけ)")
+
+    sub.add_parser("selftest", help="通信しない部品の自己検査")
+
     args = ap.parse_args(argv)
+    if args.cmd == "selftest":
+        return selftest()
     try:
         token = get_token(load_cred(args.cred))
         return {
@@ -295,6 +397,7 @@ def main(argv: list[str]) -> int:
             "create": cmd_create,
             "update": cmd_update,
             "delete": cmd_delete,
+            "notes": cmd_notes,
         }[args.cmd](token, args)
     except ZoomError as exc:
         print(f"⚠️ {exc}", file=sys.stderr)
