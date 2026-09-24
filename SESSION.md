@@ -71,6 +71,7 @@
 
 - [ ] **規則保護 gate の cwd 解決が `cd $VAR` を展開せず親へ上がって cwd の repo に当たる** (2026-09-22 実測: 一時 dir での `cd $T && git commit` が cwd の repo の未 commit 変更で deny、 fail-closed の誤停止)。 直すなら変数を含む cd は検査不能 (WorkingDirectoryUnavailable) に倒す。 記録 = [検証記録](docs/agent-rule-guard-verification.md) 残る境界。
 - [ ] **Codex の hook の timeout 挙動は未測定** (Claude は素通り = 実測、 [manuscript-claim-ownership.md#limits](conventions/manuscript-claim-ownership.md#limits))。 層1 hook-authoring.md への一般形の追記候補 = owner 個人層の plans (保護 file なので承認待ち)。
+- [ ] **transcript を読む道具が、 user 役で入る背景 task の完了通知・別 session の連絡を本人の発言と数える穴** (承認の照合は `turnOrigin` を見て塞いだ = `96bbda4`、 [`agent-rule-ownership.md#approval`](conventions/agent-rule-ownership.md#approval) の 2)。 同じ見方で [`search-agent-transcripts.py`](scripts/search-agent-transcripts.py) (`isMeta` の別 session の連絡)・[`injection-reach-audit.py`](scripts/injection-reach-audit.py) (`user_first_mention`)・[`hooks/pasted-command-comment-guard.sh`](hooks/pasted-command-comment-guard.sh) を点検する。 重くない (検索は `<` 始まりを既定で除く) ので急がない
 - [ ] **`--liveness` の実 session での観察**: 健全なら沈黙 / run-all-checks からの報告が 14 日途絶えると 🟡 (2026-09-22 配線、 この machine のみ確認)。
 
 - [ ] **job health の他マシンでの初回観測** ([`shell-env.md#job-python-by-capability`](conventions/shell-env.md#job-python-by-capability)) — 各マシンで claude-config を pull した後の heartbeat から reader に出る。 常駐機で session を開くまで旧形の beat
