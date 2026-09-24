@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: mail を YAML の台帳に記録する道具を入れる・使うとき + 既存の台帳に「読んだ位置」 の印を機械で足すとき + 未記録の返事を見張る検出器と記録の道具が同じ id を別々に読んでいると気づいたとき
 category: mail
-summary: mail の記録は thread 1 つに entry 1 つ、 id は道具 (scripts/record-reply.py) だけが書き、 読んだ位置の印 recorded_upto と索引 messages[] で「どこまで記録したか」 を明示する。 台帳の形・手順 (dry-run → --apply、 --check、 --migrate は message として記録した id だけ)・失敗の向き (再 parse で戻す / 引けない thread を未記録に倒さない / cache は移行専用)・shim の作り方。
+summary: mail の記録は thread 1 つに entry 1 つ、 id は道具 (scripts/record-reply.py) だけが書き、 読んだ位置の印 recorded_upto と索引 messages[] で「どこまで記録したか」 を明示する。 台帳の形 (索引の名前は相手 = 自分発は宛先、 下書きは message でない)・手順 (dry-run → --apply、 --check、 --migrate は message として記録した id だけ、 --relabel で索引を今の規則に引き直す)・失敗の向き (再 parse で戻す / 引けない thread を未記録に倒さない / cache は移行専用)・shim の作り方。
 -->
 # mail の記録台帳 — thread 単位の entry と、 読んだ位置の印
 

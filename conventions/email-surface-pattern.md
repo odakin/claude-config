@@ -193,7 +193,7 @@ class に見えれば最上位に出る。 実測: 見送りを決めた依頼�
 grep して、 別の台帳に記録済みの続報を「未記録」 と判定した)。 対策 = **id を書くのは道具だけ**にする:
 
 - 記録の単位は message でなく **thread**。 thread 1 つに entry 1 つ、 続報・返事・自分の返信は同じ entry の索引
-  (`messages[]`、 1 通 1 行 = id・日時・方向・差出人) に足し、 読んだ位置の印 (`recorded_upto`) を進める。 印と索引は
+  (`messages[]`、 1 通 1 行 = id・日時・方向・相手 〔相手発 = 差出人 / 自分発 = 宛先〕) に足し、 読んだ位置の印 (`recorded_upto`) を進める。 印と索引は
   harvester の契約の中の書式で書く (= 読み手を変えない。 道具の出力の形を harvester の fixture に足して固定する)。
 - 道具は**全ての台帳**から記録済みを集める (1 つだけ grep しない)。 既定は dry-run で未記録の本文と書く予定の差分を
   出し、 書いた後に再 parse と round-trip (書いた id が harvester で拾われる) を検査し、 外れたら元の text に戻して
@@ -204,3 +204,8 @@ grep して、 別の台帳に記録済みの続報を「未記録」 と判定�
   (= 「記録した」 を捏造しない)、 散文は変えない、 id を消さない (裸の 16 進を読む網が silent に反転する)。
   移行の前後で読み手の出力が変わらないことを実データで確かめてから commit する。
 - 「印 ≠ 索引の最新」 は loud に出る側の失敗 (silent な抑制ではない)。 整合の検査を道具自身に持たせる。
+- **下書きは message ではない**: Gmail の thread には未送信の下書きも入る。 読む部品の既定で落とさないと、 記録の道具は
+  下書きを「送った」 と書き、 返事の見張りは「最後は自分発 = 返事済み」 と読んで相手の未返信を隠す (実測)。
+  正本 = [`mail-thread-ledger.md#drafts-are-not-messages`](mail-thread-ledger.md#drafts-are-not-messages)。
+- 索引の名前・向きのような派生値は id から引き直せる形に保ち、 書き方の規則を変えたら引き直す道具で揃える
+  (手で直さない。 [`convention-design-principles.md#relabel-derived-from-key`](../docs/convention-design-principles.md#relabel-derived-from-key))。
