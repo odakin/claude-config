@@ -93,9 +93,20 @@ class Picker:
         return s
 
     def wait(self, session_id: str, poll_s: float, deadline: float, sleep=time.sleep, now=time.time) -> dict:
-        """本人が選び終わる (mediaItemsSet) まで poll。 deadline (epoch 秒) を過ぎたら TimeoutError。"""
+        """本人が選び終わる (mediaItemsSet) まで poll。 deadline (epoch 秒) を過ぎたら TimeoutError。
+
+        通信の一時的な失敗 (接続・TLS handshake の timeout) は次の poll で読み直す = 1 回の失敗で
+        session ごと捨てない (session id は呼び出し側に残らないので、 落ちると本人が選び直しになる。
+        2026-09-25 実測)。 requests の例外は OSError の子。 HTTP の error 応答 (401 等) は下の
+        raise_for_status で従来どおり止まる。
+        """
         while now() < deadline:
-            r = self.http.get(f"{BASE}/sessions/{session_id}", headers=self._h(), timeout=30)
+            try:
+                r = self.http.get(f"{BASE}/sessions/{session_id}", headers=self._h(), timeout=30)
+            except OSError as e:
+                print(f"  (poll の通信が失敗、 次の poll で読み直す: {type(e).__name__})", file=sys.stderr, flush=True)
+                sleep(poll_s)
+                continue
             r.raise_for_status()
             s = r.json()
             if s.get("mediaItemsSet"):
@@ -151,8 +162,8 @@ class _Resp:
 class _FakeHttp:
     """URL と pageToken で応答を返す偽の通信。 呼ばれた URL を記録する。"""
 
-    def __init__(self, polls_until_set=2):
-        self.calls, self.polls, self.until = [], 0, polls_until_set
+    def __init__(self, polls_until_set=2, poll_failures=0):
+        self.calls, self.polls, self.until, self.fail = [], 0, polls_until_set, poll_failures
 
     def post(self, url, headers=None, json=None, timeout=None):
         self.calls.append(("POST", url, headers))
@@ -162,6 +173,9 @@ class _FakeHttp:
     def get(self, url, headers=None, params=None, timeout=None):
         self.calls.append(("GET", url, dict(params or {})))
         if url.endswith("/sessions/S1"):
+            if self.fail:
+                self.fail -= 1
+                raise TimeoutError("handshake timed out")  # socket.timeout と同じ OSError の子
             self.polls += 1
             return _Resp({"mediaItemsSet": self.polls >= self.until})
         if url.endswith("/mediaItems"):
@@ -196,6 +210,9 @@ def selftest() -> int:
     slept = []
     pk.wait("S1", 5.0, deadline=10**12, sleep=slept.append)
     check(http.polls == 3 and slept == [5.0, 5.0], "選び終わる (mediaItemsSet) まで poll し、 その間だけ待つ")
+    flaky, slept2 = _FakeHttp(polls_until_set=1, poll_failures=2), []
+    Picker(lambda: "T", http=flaky).wait("S1", 5.0, deadline=10**12, sleep=slept2.append)
+    check(flaky.polls == 1 and slept2 == [5.0, 5.0], "poll の通信の一時的な失敗は待って読み直す (session を捨てない)")
     clock = iter([0.0, 1.0, 2.0, 3.0])
     try:
         Picker(lambda: "T", http=_FakeHttp(polls_until_set=99)).wait("S1", 1.0, deadline=2.5,
