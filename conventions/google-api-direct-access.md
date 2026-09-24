@@ -150,6 +150,7 @@ elif mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 2. **保存済 truth は `revisions.list` → 最新 revision の `revisions.get_media`** で読む。 `files.get_media` は Office 編集 mode の autosave 直後に**数分 stale な content を返す**ことがある (2026-09-05 実測: 画面で undo 済なのに旧内容が返り、 revisions は新しかった)。 verify・diff・restore の基準は常に revision
 3. **編集前 snapshot を残す** (= 復元用。 Drive 側にも revision 履歴が残るが、 手元にも 1 枚)
 4. **openpyxl で cell を書く** — round-trip で落ちるもの: 画像 / chart / 一部の条件付き書式。 残るもの: cell comment (legacy note)、 merged、 基本書式。 事前に `load_workbook` で `_images` / `_charts` / comment を列挙し、 単純な記入 sheet であることを確認してから使う。 数値は `8.0` → `8` に正規化されうる (無害)、 複数行は `\n`
+   ⚠️ (2026-09-24 追記) **openpyxl の `_images` / `_charts` の列挙では textbox・図形・checkbox (form control)・拡張の入力規則は見えない** (load の時点で捨てる = 0 に見え、 保存で相手の file から消える)。 事前の列挙は zip の XML で数える = `xl/drawings/drawingN.xml` の anchor 数・`xl/ctrlProps/*`・sheet XML の `x14:dataValidation`。 1 つでもあれば openpyxl で書かない (本人に頼む / 値だけの zip 直編集 = [`office-automation.md#xlsx-cell-value-zip-surgery`](office-automation.md#xlsx-cell-value-zip-surgery))。 機構 = [`office-automation.md#drawings-lost-in-temp-pdf`](office-automation.md#drawings-lost-in-temp-pdf)
 5. **`files().update(fileId, media_body=MediaIoBaseUpload(..., mimetype=xlsx))`** で**同じ file ID** に書く (= URL 不変、 revision に積まれる、 owner も共有設定も不変)。 `files.create` で別 file を作ってはいけない
 6. **再 download (revision) して指定 cell を literal 比較**、 不一致は exit 1。 「upload が 200 だった」 は verify ではない
 
