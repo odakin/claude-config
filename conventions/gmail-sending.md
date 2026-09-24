@@ -129,6 +129,8 @@ rebuilding MIME and verification in each conversation. The generic implementatio
 is [`scripts/reviewed_mail.py`](../scripts/reviewed_mail.py); the account owner
 supplies a gateway with `profile`, `get`, `send`, and `find` methods. The library
 does not discover credentials, accounts, private rules, or agent history.
+The gateway also supplies `thread` (the parent's thread as id / internal date /
+labels / From / Message-ID rows) for the newer-reply check below.
 The shared [CLI and Gmail gateway](../scripts/reviewed_mail_cli.py) accept an
 injected account factory; account aliases and authentication stay in the owner's
 binding. The [Codex installer](../scripts/codex_mail_install.py) takes explicit
@@ -150,6 +152,11 @@ Owner skills supply only identity/style/ledger paths and the chosen launcher.
 - `send` requires an explicit send flag and the current preview fingerprint.
   This checks equality, **not human consent**: the caller still needs explicit
   approval of the final text. Changed content invalidates the earlier review.
+- `send` re-lists the parent's thread before its attempt. Messages from others
+  newer than the parent refuse the send (CLI exit 6, no attempt recorded);
+  `--ack-newer` with the newest one's id is the acknowledgement of having read
+  them. `preview` lists them at the top. Usually prepare a new bundle on the
+  newest message instead ([#reply-newer-in-thread](#reply-newer-in-thread)).
 - An exclusive attempt file precedes the sole POST. After timeout or crash,
   `verify` reconciles by RFC Message-ID and checks the delivered headers, complete
   body, sent label, and thread. An ambiguous result stays unresolved; never

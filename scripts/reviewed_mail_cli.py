@@ -3,6 +3,8 @@
 
 Commands except `send --send` are read-only on Gmail. A review fingerprint is
 an integrity check, not permission: explicit user send approval remains required.
+`send` exits 6 without an attempt when others wrote in the thread after the
+parent; `--ack-newer NEWEST_ID` passes after reading them.
 """
 from __future__ import annotations
 
@@ -13,6 +15,8 @@ import sys
 from pathlib import Path
 
 import reviewed_mail as workflow
+
+NEWER_EXIT = 6
 
 
 class Gateway:
@@ -50,6 +54,22 @@ class Gateway:
     def find(self, mid):
         result = self.api("messages", {"q": "in:sent rfc822msgid:" + mid, "maxResults": 3})
         return [m["id"] for m in result.get("messages", [])]
+
+    def thread(self, thread_id):
+        if not re.fullmatch(r"[0-9a-f]+", thread_id or ""):
+            raise ValueError("Gmail thread ID must be hexadecimal")
+        data = self.api("threads/" + thread_id, {"format": "metadata",
+                        "metadataHeaders": ["From", "Subject", "Date", "Message-ID"]})
+        rows = []
+        for m in data.get("messages", []):
+            h = {v["name"].lower(): v["value"] for v in m.get("payload", {}).get("headers", [])}
+            rows.append({"id": m["id"], "labels": m.get("labelIds", []),
+                         # Missing internalDate stays None so the check fails closed.
+                         "internal_date": int(m["internalDate"]) if m.get("internalDate") else None,
+                         "from": h.get("from", ""), "subject": h.get("subject", ""),
+                         "date": h.get("date", ""), "message_id": h.get("message-id", ""),
+                         "snippet": m.get("snippet", "")})
+        return rows
 
     def search(self, query, limit):
         found, token = [], None
@@ -91,6 +111,8 @@ def parser(accounts=None):
         if name == "send":
             q.add_argument("--approved-sha256", required=True)
             q.add_argument("--send", action="store_true", required=True)
+            q.add_argument("--ack-newer", default="",
+                           help="newest counterpart message ID, after reading it, to keep this parent")
     q = sub.add_parser("pending", allow_abbrev=False)
     q.add_argument("--root", default=str(Path.home() / ".codex/mail-workflow"))
     return p
@@ -115,8 +137,9 @@ def main(gateway_factory, accounts=None):
             workflow.reviewed(Path(a.bundle), a.approved_sha256)  # fail before network
     if a.command == "search" and not 1 <= a.limit <= 500:
         raise ValueError("limit must be 1..500; narrow the query if complete=false")
-    if getattr(a, "message", None) and not re.fullmatch(r"[0-9a-f]+", a.message):
-        raise ValueError("Gmail message ID must be hexadecimal")
+    for value in [getattr(a, "message", None), getattr(a, "ack_newer", None)]:
+        if value and not re.fullmatch(r"[0-9a-f]+", value):
+            raise ValueError("Gmail message ID must be hexadecimal")
     gateway = gateway_factory(a.account)
     if a.command == "read": result = gateway.get(a.message)
     elif a.command == "search": result = gateway.search(a.query, a.limit)
@@ -125,7 +148,8 @@ def main(gateway_factory, accounts=None):
                   Path(a.reply_file).read_text(), a.signature, a.record_target, a.mode)
         print(workflow.preview(directory, gateway)); return
     elif a.command == "preview": print(workflow.preview(Path(a.bundle), gateway)); return
-    elif a.command == "send": result = workflow.send(Path(a.bundle), gateway, a.approved_sha256, a.send)
+    elif a.command == "send":
+        result = workflow.send(Path(a.bundle), gateway, a.approved_sha256, a.send, a.ack_newer)
     elif a.command == "verify": result = workflow.verify(Path(a.bundle), gateway)
     print(workflow.canonical(result))
 
@@ -133,6 +157,9 @@ def main(gateway_factory, accounts=None):
 def run(gateway_factory, accounts=None):
     try:
         main(gateway_factory, accounts)
+    except workflow.NewerCounterpartMessages as exc:
+        print(f"{exc}\nNOT SENT: no attempt was recorded; the bundle is unchanged.", file=sys.stderr)
+        raise SystemExit(NEWER_EXIT)
     except Exception as exc:
         # Never dump credentials or a raw OAuth HTTP response.
         print(f"ERROR ({type(exc).__name__}): {exc}. If send was attempted, use verify; do not resend.", file=sys.stderr)

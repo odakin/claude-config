@@ -100,6 +100,11 @@ a replacement bundle**. Use `verify --bundle`; it reconciles by RFC Message-ID
 without sending. If the result stays uncertain, report it and keep the receipt
 pending; no automatic resend is authorized.
 
+`preview` and `send` also list messages from others that arrived in the thread
+after the parent. `send` then stops with exit 6 and records no attempt. Read
+them and tell the user first; usually prepare a new bundle on the newest one.
+`--ack-newer NEWEST_ID` belongs only on a send the user approved after seeing them.
+
 Record the verified send in the owning ledger in this turn, with date, account,
 messageId, threadId, summary and accurate action status. Existing contact and
 thread IDs must be reused. Do not mark an actual request resolved merely because

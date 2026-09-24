@@ -22,8 +22,18 @@ class Gateway:
         self.corrupt = False
         self.parent = dict(id="parent", thread_id="thread", message_id="<parent-id>",
                            subject="Discussion", body="Original\n\nText\n", date="Some date",
-                           to=ME, cc=CC, **{"from": PEER}, labels=["INBOX"], attachments=[])
+                           to=ME, cc=CC, **{"from": PEER}, labels=["INBOX"], attachments=[],
+                           internal_date=100)
         self.messages = {"parent": self.parent}
+
+    def add(self, mid, when, sender, labels=("INBOX",), message_id=None):
+        self.messages[mid] = dict(id=mid, thread_id="thread", internal_date=when,
+                                  labels=list(labels), message_id=message_id or f"<{mid}>",
+                                  subject="Re: Discussion", snippet=f"text of {mid} &amp; more",
+                                  **{"from": sender})
+
+    def thread(self, thread_id):
+        return [copy.deepcopy(m) for m in self.messages.values() if m["thread_id"] == thread_id]
 
     def profile(self):
         return self.identity
@@ -35,7 +45,7 @@ class Gateway:
         self.calls += 1
         msg = mail.decode_raw(raw)
         data = dict(id="sent-id", thread_id=thread, labels=["SENT"], attachments=[],
-                    body=msg.get_content(), date="Sent date")
+                    body=msg.get_content(), date="Sent date", internal_date=1000)
         for k in ["From", "To", "Cc", "Subject", "Message-ID", "In-Reply-To", "References"]:
             data[k.lower().replace("-", "_")] = str(msg.get(k, ""))
         if self.corrupt:
@@ -207,6 +217,82 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotEqual(receipt["actual_rfc_message_id"], receipt["requested_rfc_message_id"])
         self.gateway.messages["sent-id"]["body"] += "different body"
         with self.assertRaises(ValueError): mail.verify(self.directory, self.gateway)
+
+
+class NewerCounterpartTests(unittest.TestCase):
+    """Others replying in the thread after the parent (measured failure: a follow-up
+    that ignored an answer already in the thread)."""
+    setUp, tearDown, make = WorkflowTests.setUp, WorkflowTests.tearDown, WorkflowTests.make
+
+    def refused(self, ack=""):
+        with self.assertRaises(mail.NewerCounterpartMessages) as caught:
+            mail.send(self.directory, self.gateway, self.sha, True, ack)
+        self.assertEqual(self.gateway.calls, 0)
+        self.assertFalse((self.directory / "attempt.json").exists())
+        return str(caught.exception)
+
+    def test_newer_message_listed_in_preview_and_blocks_send(self):
+        self.gateway.add("reply", 200, "Peer <" + PEER + ">")
+        text = mail.preview(self.directory, self.gateway)
+        self.assertTrue(text.startswith("WARNING: 1 newer message(s)"), text)
+        self.assertIn("(id reply)", text)
+        self.assertIn("text of reply & more", text)
+        self.assertLess(text.index("WARNING"), text.index("DRY RUN"))
+        self.assertEqual(mail.read_json(self.directory / "review.json")["sha256"], self.sha)
+        self.assertIn("send --ack-newer reply", self.refused())
+
+    def test_only_newest_counterpart_id_acknowledges(self):
+        self.gateway.add("reply", 200, PEER)
+        self.assertIn("newest = reply", self.refused("parent"))
+        receipt = mail.send(self.directory, self.gateway, self.sha, True, "reply")
+        self.assertTrue(receipt["verified"])
+        self.assertEqual(self.gateway.calls, 1)
+        attempt = mail.read_json(self.directory / "attempt.json")
+        self.assertEqual(attempt["acknowledged_newer"], "reply")
+
+    def test_later_arrival_invalidates_acknowledgement(self):
+        self.gateway.add("reply", 200, PEER)
+        self.gateway.add("reply2", 300, CC)
+        self.assertIn("newest = reply2", self.refused("reply"))
+
+    def test_no_newer_counterpart_sends_without_acknowledgement(self):
+        self.gateway.add("older", 50, PEER)
+        self.assertNotIn("WARNING", mail.preview(self.directory, self.gateway))
+        self.assertTrue(mail.send(self.directory, self.gateway, self.sha, True)["verified"])
+        self.assertNotIn("acknowledged_newer", mail.read_json(self.directory / "attempt.json"))
+
+    def test_only_own_newer_messages_do_not_block(self):
+        self.gateway.add("own-sent", 200, ME, ["SENT"], "<own>")
+        self.gateway.add("list-copy", 210, "list" + "@" + "example.invalid", ["INBOX"], "<own>")
+        self.gateway.add("own-unlabelled", 220, "Me <" + ME + ">")
+        self.gateway.add("own-draft", 230, ME, ["DRAFT"])
+        self.assertNotIn("WARNING", mail.preview(self.directory, self.gateway))
+        self.assertTrue(mail.send(self.directory, self.gateway, self.sha, True)["verified"])
+
+    def test_listing_problems_fail_closed(self):
+        self.gateway.add("reply", 200, PEER)
+        del self.gateway.messages["reply"]["internal_date"]
+        with self.assertRaises(ValueError):
+            mail.send(self.directory, self.gateway, self.sha, True)
+        self.gateway.messages["reply"]["internal_date"] = 200
+        self.gateway.messages["parent"]["thread_id"] = "elsewhere"
+        with self.assertRaises(ValueError):
+            mail.send(self.directory, self.gateway, self.sha, True)
+        self.gateway.messages["parent"]["thread_id"] = "thread"
+        self.gateway.thread = None
+        with self.assertRaises(ValueError):
+            mail.send(self.directory, self.gateway, self.sha, True)
+        with self.assertRaises(ValueError):
+            mail.preview(self.directory, self.gateway)
+        self.assertEqual(self.gateway.calls, 0)
+        self.assertFalse((self.directory / "attempt.json").exists())
+
+    def test_existing_attempt_still_reports_attempt_first(self):
+        mail.send(self.directory, self.gateway, self.sha, True)
+        self.gateway.add("reply", 2000, PEER)
+        with self.assertRaises(FileExistsError):
+            mail.send(self.directory, self.gateway, self.sha, True)
+        self.assertEqual(self.gateway.calls, 1)
 
 
 if __name__ == "__main__":
