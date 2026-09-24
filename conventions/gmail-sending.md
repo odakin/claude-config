@@ -38,6 +38,8 @@ meta = svc.users().messages().get(
 
 **推奨 (= 平滑化の本体)**: 送信 script に「親 message の Gmail 内部 id を 1 個渡すと 3 点 set + `Re:` 付き Subject を自動解決する」option を実装する (実装例: `--reply-to-message <gmail-id>`)。model が header を手で組み立てる工程そのものを消すのが最も確実。
 
+<a id="reply-newer-in-thread"></a>**返信先より新しい相手の message を送信前に数える**: threading が正しくても、 返信先を決めた後に相手が同じ thread で返事をしていれば、 それを読まない続報 (答え済みの質問の聞き直し) になる (実測)。 返信 option は thread を取り、 返信先より新しく送信アカウント以外からの message を dry-run の先頭に出して実送信を止める。 通す flag には最新の相手 message の id を取らせる (= 読んだ証拠。 後から届けば id が変わり再び止まる)。 自分の判定は From だけでなく SENT label と Message-ID でも行う (ML が配り直した自分の投稿は From が ML 名義になる)。
+
 ## <a id="rfc2231-attachment-filename"></a>3. 非 ASCII 添付 filename は RFC 2231 (最重要の壊れ方)
 
 Python email lib で header 値全体を f-string で渡すと壊れる:
