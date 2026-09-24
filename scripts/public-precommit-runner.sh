@@ -139,6 +139,21 @@ if [ -f "$HG_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
   fi
 fi
 
+# 文中の節参照 (「path §「節名」」 / `path#anchor`) が実在する file の実在しない節を指していたら知らせる
+# + この commit で消した見出しを他の file が指していたら知らせる。 止めない (exit 1 = 🔴 あり・警告済み、
+# 3 = 検査が走っていない → 1 行出す)。 承知済み一覧は engine が各 repo root と個人層から読む。
+# 述語・escape hatch (CLAUDE_TEXT_SECTION_REFS=0) の SoT = check-text-section-refs.py docstring、
+# 一般則 = docs/convention-design-principles.md#text-section-refs。
+TSR_ENGINE="$(dirname "$0")/check-text-section-refs.py"
+if [ -f "$TSR_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  tsr_rc=0
+  tsr_out="$(python3 "$TSR_ENGINE" --staged 2>&1)" || tsr_rc=$?
+  [ -n "$tsr_out" ] && printf '%s\n' "$tsr_out" >&2
+  if [ "$tsr_rc" -ne 0 ] && [ "$tsr_rc" -ne 1 ] && ! printf '%s' "$tsr_out" | grep -q 'check-text-section-refs:'; then
+    echo "⚠️ pre-commit: 文中の節参照の検査が異常終了した (rc=${tsr_rc}) — この commit では走っていない (commit は止めない)。 確認: python3 ${TSR_ENGINE} --selftest" >&2
+  fi
+fi
+
 # root AGENTS.md の入口が無い repo を知らせる (止めない、 SoT = lib/agents-entrypoint-warn.sh header)
 AGENTS_WARN_LIB="$(dirname "$0")/lib/agents-entrypoint-warn.sh"
 if [ -f "$AGENTS_WARN_LIB" ]; then
