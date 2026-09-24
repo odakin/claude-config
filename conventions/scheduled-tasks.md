@@ -285,6 +285,9 @@ headless `claude -p` の routine は、 使う config dir (`CLAUDE_CONFIG_DIR`) 
   対照実験 (desktop で両 account のログアウトと新しいログインを往復) では、 両方の config dir が約 8 時間後の更新に
   成功した = ログアウトや新しいログインだけでは切れない (1 回の実験)。 検知器は切り替えのたびに問い合わせで確かめ、
   失敗したときだけ 🔴 を出す。
+  見張りは keychain が 24 時間以上更新されていない config dir も毎日確かめる (ログアウトと無関係の切れも 1 日以内に分かる)。
+  各 Mac には session 開始から `--ensure-watch` を呼んで配り、 結果は fleet heartbeat が他のマシンへ運ぶ
+  ([`multi-machine-state.md#fleet-heartbeat`](multi-machine-state.md#fleet-heartbeat) の原則 8)。
 
 ## recurring task の jitter
 
