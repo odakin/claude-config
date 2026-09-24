@@ -42,6 +42,8 @@ file の解決 (上から順に、 最初に 1 つに決まったもの):
                                  (= 節の名前を変えた本人に出す)。 呼び元は pre-commit の chain (**警告だけ、 commit は
                                  止めない**。 exit 1 / 3 のどちらでも commit を通す)
   --ack FILE                     承知済みの 🔴 (記録の中で壊れた参照を引用しているもの等) を 1 行 1 件で除く。
+                                 --ack が無くても、 各 repo root の .text-section-refs-ack と個人層 (`.claude-personal-layer`
+                                 の dir) の text-section-refs-ack.txt は読む
                                  行 = `<source の repo 相対 path>\t<path の字面>\t<節名 or #anchor>` (# で始まる行は注釈)
 exit: 0 = 🔴 なし (--staged / --strict 以外は 🔴 があっても 0) / 1 = 🔴 あり (--staged / --strict) /
       3 = 検査が走っていない (git repo でない等。 1 行出す = docs/convention-design-principles.md#failure-exit-equals-violation-exit)
@@ -708,12 +710,32 @@ def scan_repo(fleet: Fleet, repo: Path, hints: bool = True) -> Tuple[List[Findin
 
 
 ACK_BASENAME = ".text-section-refs-ack"
+PERSONAL_ACK = "text-section-refs-ack.txt"
 
 
-def load_ack(path: Optional[str], repos: Iterable[Path] = ()) -> Set[str]:
-    """--ack FILE と、 各 repo の root の .text-section-refs-ack (どちらも行 = `<repo>/<path>\t<path の字面>\t<節名 or #anchor>`)。"""
+def personal_layer(base: Path) -> Optional[Path]:
+    """個人層の dir (lib/find-personal-layer.sh と同じ規則): CLAUDE_PERSONAL_LAYER=none → 無し / =<dir> → その dir /
+    それ以外 → base 直下で `.claude-personal-layer` を持つ dir がちょうど 1 つならそれ。"""
+    env = os.environ.get("CLAUDE_PERSONAL_LAYER", "")
+    if env == "none":
+        return None
+    if env:
+        d = Path(os.path.expanduser(env))
+        return d if (d / ".claude-personal-layer").is_file() else None
+    try:
+        hits = [d for d in base.iterdir() if d.is_dir() and (d / ".claude-personal-layer").is_file()]
+    except Exception:
+        return None
+    return hits[0] if len(hits) == 1 else None
+
+
+def load_ack(path: Optional[str], repos: Iterable[Path] = (), base: Optional[Path] = None) -> Set[str]:
+    """--ack FILE と、 各 repo の root の .text-section-refs-ack と、 個人層の text-section-refs-ack.txt
+    (どれも行 = `<base 相対 path>\t<path の字面>\t<節名 or #anchor>`、 行末の `  # 理由` は読まない)。"""
     out: Set[str] = set()
-    for f in ([Path(path)] if path else []) + [r / ACK_BASENAME for r in repos]:
+    layer = personal_layer(base) if base is not None else None
+    extra = [layer / PERSONAL_ACK] if layer is not None else []
+    for f in ([Path(path)] if path else []) + extra + [r / ACK_BASENAME for r in repos]:
         try:
             lines = f.read_text(encoding="utf-8").splitlines()
         except Exception:
@@ -760,7 +782,7 @@ def run_staged(repo_arg: Optional[str], base_arg: Optional[str], ack: Set[str]) 
         print(f"{HEADING} 検査が走っていない (git repo でない)")
         return 3
     base = Path(base_arg) if base_arg else repo.parent
-    ack = ack | load_ack(None, [repo])
+    ack = ack | load_ack(None, [repo], base=base)
     r = git(["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"], repo)
     if r.returncode != 0:
         print(f"{HEADING} 検査が走っていない (git diff 失敗)")
@@ -900,6 +922,7 @@ def run_fleet(roots: List[str], base_arg: Optional[str], ack: Set[str], surface:
             return 3
         base = Path(base_arg) if base_arg else (rp.parent if (rp / ".git").exists() else rp)
         fleet = Fleet(base)
+        ack = ack | load_ack(None, base=base)
         for repo in repos_under(rp):
             ack = ack | load_ack(None, [repo])
             fs, st = scan_repo(fleet, repo)
@@ -1068,6 +1091,21 @@ def selftest() -> int:
                            as_json=False)
         expect("ack した 🔴 は出ない / 残りで --strict = 1", rc == 1 and "template.md" not in buf.getvalue())
         expect("該当の無い ack 行は「古い行」 として出る", "古い行 1 件" in buf.getvalue() and "gone.md" in buf.getvalue())
+        # 個人層 (.claude-personal-layer の dir) の text-section-refs-ack.txt は --ack なしでも読む
+        layer = base / "prefs"
+        layer.mkdir()
+        (layer / ".claude-personal-layer").write_text("", encoding="utf-8")
+        (layer / PERSONAL_ACK).write_text(tmpl.ack_key() + "  # 理由\n", encoding="utf-8")
+        saved = os.environ.pop("CLAUDE_PERSONAL_LAYER", None)
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                run_fleet([str(base)], None, set(), surface=True, strict=False, list_all=False, as_json=False)
+            expect("個人層の承知済み一覧を --ack なしで読む", "template.md" not in buf.getvalue() and "nope" in buf.getvalue())
+        finally:
+            if saved is not None:
+                os.environ["CLAUDE_PERSONAL_LAYER"] = saved
+            (layer / PERSONAL_ACK).unlink()
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = run_fleet([str(Path(td) / "nope")], None, set(), True, True, False, False)
