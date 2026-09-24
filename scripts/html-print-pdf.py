@@ -17,6 +17,10 @@
      --print-to-pdf。macOS では GUI 稼働中の同じ app bundle を候補から外し、停止中の browser を選ぶ。
      さらに通常 profile と singleton/profile lock を共有しないよう、一時 user-data-dir を使う。
      ヘッダ・フッタ (URL・日付) は付けない。
+     ⚠️ headless の browser を残さない: macOS は headless の process もその app として LaunchServices に登録するので、
+     残ると本人が Dock から開いても窓の無い headless が前に出るだけで「ブラウザが開かない」 (実測: 呼び元が
+     SIGKILL で消えて finally が走らず、 残り続けた)。 ∴ 見張り (呼び元が消えたら browser の process group を
+     止める別 process) を付け、 起動前に前回までの残り (親が消えた headless) を止める。
   4. pdf-print-preflight.py に通し、 --rasterize で RGB raster 版を作る。 ⚠️ Chromium の print-to-pdf は文字を
      Type3 font で書くことがあり、 そのままだと preflight が FAIL する (実測) = 刷るのは raster 版。
 
@@ -131,6 +135,82 @@ def in_codex_seatbelt(env=None):
 
 
 WRITTEN_MARKER = "bytes written to file"
+PROFILE_DIRNAME = "chromium-profile"
+
+# 呼び元 ($1) が消えるか上限 ($3 回 × 2 秒) に達したら、 browser ($2 = process group の長) を group ごと止める。
+# render_pdf の finally は呼び元が SIGKILL されると走らないので、 別の session で動く見張りが要る。
+WATCHDOG_SH = (
+    'parent=$1; child=$2; n=$3\n'
+    'while kill -0 "$child" 2>/dev/null; do\n'
+    '  if ! kill -0 "$parent" 2>/dev/null || [ "$n" -le 0 ]; then\n'
+    '    kill -TERM -"$child" 2>/dev/null; sleep 3; kill -KILL -"$child" 2>/dev/null; exit 0\n'
+    '  fi\n'
+    '  n=$((n - 1)); sleep 2\n'
+    'done\n')
+
+
+def start_watchdog(child_pid, timeout):
+    return subprocess.Popen(["/bin/sh", "-c", WATCHDOG_SH, "html-print-pdf-watchdog",
+                             str(os.getpid()), str(child_pid), str(int(timeout + 60) // 2 + 1)],
+                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            start_new_session=True)
+
+
+def kill_group(pid, grace=3.0):
+    """pid を長とする process group を TERM → (grace 秒待って) KILL で止める。 group が無ければ pid だけ。"""
+    import signal
+    import time
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(pid, sig)
+        except ProcessLookupError:
+            try:
+                os.kill(pid, sig)
+            except ProcessLookupError:
+                return
+        except PermissionError:
+            return
+        deadline = time.monotonic() + grace
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return
+            time.sleep(0.2)
+
+
+def stale_render_pids(ps_output):
+    """`ps -eo pid=,ppid=,args=` の出力から、 前回までの render が残した headless browser の pid を返す。
+    印 = 親が消えている (ppid 1) + --headless + --print-to-pdf= + 一時 dir 直下の chromium-profile (本 script の
+    user-data-dir)。 走っている別の render は親 (その python) が生きているので拾わない。"""
+    pids = []
+    for line in ps_output.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) < 3 or not parts[0].isdigit() or parts[1] != "1":
+            continue
+        args = parts[2]
+        m = re.search(r"--user-data-dir=(\S+)", args)
+        if not (m and "--headless" in args and "--print-to-pdf=" in args):
+            continue
+        profile = m.group(1).rstrip("/")
+        if os.path.basename(profile) == PROFILE_DIRNAME and \
+                os.path.basename(os.path.dirname(profile)).startswith("tmp"):
+            pids.append(int(parts[0]))
+    return pids
+
+
+def sweep_stale_renders():
+    if os.name != "posix":
+        return []
+    try:
+        r = subprocess.run(["ps", "-eo", "pid=,ppid=,args="], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    pids = stale_render_pids(r.stdout)
+    for pid in pids:
+        kill_group(pid)
+        print(f"html-print-pdf: 前回の render が残した headless browser (pid {pid}) を止めた", file=sys.stderr)
+    return pids
 
 
 def render_pdf(browser, html_path, out_pdf, timeout=120):
@@ -148,6 +228,7 @@ def render_pdf(browser, html_path, out_pdf, timeout=120):
     log_path = os.path.join(os.path.dirname(html_path), "browser.log")
     with open(log_path, "wb") as log:
         p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    start_watchdog(p.pid, timeout)
     deadline, last_size, stable = time.monotonic() + timeout, -1, 0
     try:
         while p.poll() is None and time.monotonic() < deadline:
@@ -191,6 +272,7 @@ def run(src, out, base_href=None, paper="A4", expect_pages=None, browser=None, d
     if in_codex_seatbelt():
         print("html-print-pdf: Codex seatbelt 内では macOS GUI browser を起動しない; 承認済みの sandbox 外実行を使う", file=sys.stderr)
         return 2
+    sweep_stale_renders()  # 前回の残りが居ると pgrep が「GUI 稼働中」 と誤って、 そのブラウザを候補から外す
     b = find_browser(browser)
     if not b:
         print("html-print-pdf: Chromium 系ブラウザが見つからない (--browser で path を指定)", file=sys.stderr)
@@ -253,6 +335,52 @@ def selftest():
     render_pdf(fake, os.path.join(fake_dir, "page.html"), os.path.join(fake_dir, "out.pdf"), timeout=30)
     assert time.monotonic() - t0 < 15, "render_pdf waited for a browser that never exits"
     print("  render_pdf: stops a browser that keeps running after writing the PDF PASS")
+    # 前回の残りの判定: 親が消えた本 script の headless だけを拾う (GUI・helper・走っている render・他の profile は拾わない)
+    B = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+    ps = "\n".join([
+        f"  101     1 {B} --headless --print-to-pdf=/v/T/tmpb/t.pdf --user-data-dir=/v/T/tmpa/chromium-profile file:///v/T/tmpa/page.html",
+        f"  102   555 {B} --headless --print-to-pdf=/v/T/tmpd/t.pdf --user-data-dir=/v/T/tmpc/chromium-profile file:///v/T/tmpc/page.html",
+        f"  103     1 {B}",
+        f"  104   101 {B} Helper --type=gpu-process --headless --user-data-dir=/v/T/tmpa/chromium-profile",
+        f"  105     1 {B} --headless --print-to-pdf=/x/o.pdf --user-data-dir=/home/u/profile file:///x/p.html",
+    ])
+    assert stale_render_pids(ps) == [101], stale_render_pids(ps)
+    print("  stale_render_pids: 5/5 PASS")
+    # 呼び元が SIGKILL で消えても browser が残らないか (finally は走らない = 見張りが止める)
+    stuck_dir = tempfile.mkdtemp()
+    pid_file = os.path.join(stuck_dir, "browser.pid")
+    stuck = os.path.join(stuck_dir, "stuck-browser")
+    with open(stuck, "w", encoding="utf-8") as f:
+        f.write(f"#!/bin/sh\necho $$ > '{pid_file}'\nexec sleep 600\n")
+    os.chmod(stuck, 0o755)
+    code = ("import runpy, sys; ns = runpy.run_path(sys.argv[1], run_name='html_print_pdf'); "
+            "ns['render_pdf'](sys.argv[2], sys.argv[3], sys.argv[4], timeout=60)")
+    caller = subprocess.Popen([sys.executable, "-c", code, os.path.abspath(__file__), stuck,
+                               os.path.join(stuck_dir, "page.html"), os.path.join(stuck_dir, "out.pdf")],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    bpid, t0 = None, time.monotonic()
+    while bpid is None and time.monotonic() - t0 < 15:
+        try:
+            with open(pid_file, encoding="utf-8") as f:
+                bpid = int(f.read().strip())
+        except (FileNotFoundError, ValueError):
+            time.sleep(0.1)
+    assert bpid, "偽の browser が起動しなかった"
+    time.sleep(0.5)  # 見張りの起動を待つ
+    caller.kill()
+    caller.wait()
+    alive, t0 = True, time.monotonic()
+    while time.monotonic() - t0 < 12:
+        try:
+            os.kill(bpid, 0)
+        except ProcessLookupError:
+            alive = False
+            break
+        time.sleep(0.2)
+    if alive:
+        kill_group(bpid)
+    assert not alive, "render_pdf の呼び元が消えた後も browser が残った (見張りが止めていない)"
+    print("  render_pdf: 呼び元が SIGKILL で消えても browser を残さない PASS")
     if in_codex_seatbelt():
         print("  render: SKIP (Codex seatbelt 内では macOS GUI browser を起動しない)")
         print("html-print-pdf selftest: PASS")

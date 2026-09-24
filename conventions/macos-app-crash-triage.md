@@ -19,6 +19,21 @@ report ごとに 起動→落ちるまでの秒数 / report の版番号・crash
 faulting thread の先頭 frame / 起動引数 (Chromium 系) / 型 / 起動直後の crash (登録失敗の abort を除く) には unified log の窓 を出す。
 型の判定は手がかりであって結論ではない。 帰属を言う前に [#exclusion-before-vendor-blame](#exclusion-before-vendor-blame) を通す。
 
+### <a id="launch-does-nothing"></a>開いても何も起きない (crash のダイアログも report も無い)
+
+crash ではなく、 **同じ app の窓の無い instance が既に LaunchServices に登録されている**ことがある。 macOS は「もう起動している」
+として、 その instance を前に出すだけになる。 report 0 件で止まらず、 次の 2 つを見る (どちらも読むだけ):
+
+```bash
+lsappinfo list | grep -A6 '"<アプリ名>"'
+pgrep -lf '<アプリ名>'
+```
+
+`type="BackgroundOnly"` の instance や、 起動引数に `--headless` を持つ process が居て、 親が消えている (ppid 1) なら、
+自動化 (headless の print-to-PDF 等) の残りが原因。 それを止めれば普通に開ける。 残した側の直し方 =
+[`office-automation.md#headless-orphan-blocks-gui-launch`](office-automation.md#headless-orphan-blocks-gui-launch)。
+⚠️ 止める前に、 その process が今走っている処理のもの (親が生きている) でないかを見る。
+
 ## <a id="crash-report-sources"></a>証拠の置き場と読み方の罠
 
 - **`.ips`** = `~/Library/Logs/DiagnosticReports/<App>-<日時>.ips` (system 側 `/Library/Logs/DiagnosticReports` は読めないものがある)。
