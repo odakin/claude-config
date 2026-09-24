@@ -323,8 +323,22 @@ def build_index(text: str, ext: str) -> SectionIndex:
                 ix.struct.append(norm(c.group(1)))
             for a in RE_AID.findall(line):
                 ix.anchors.add(a)
+    # 見出しの途中の括弧 (「規約 (convention) fact の…」「… (2026-09-23)」) を除いた形も節の名前にする
     ix.struct = [s for s in ix.struct if s]
+    ix.struct += [t for t in (_strip_paren(h) for h in ix.struct) if t and t not in ix.struct]
     return ix
+
+
+_PAREN = re.compile(r"\([^()]*\)|（[^（）]*）")
+
+
+def _strip_paren(n: str) -> str:
+    """正規化済みの文字列から括弧の部分を除く (NFKC 後なので全角括弧は半角になっている)。"""
+    prev = None
+    while prev != n:
+        prev = n
+        n = _PAREN.sub("", n)
+    return n
 
 
 _PARTICLE_SPLIT = re.compile(r"(?<=[^\sぁ-ん])(?:が|を|に|は|で|と|へ|も|の|や|から|まで|より)")
@@ -341,8 +355,9 @@ def name_variants(name: str) -> List[str]:
         cands += [parts[-1], parts[0]]
     for v in cands:
         n = norm(v)
-        if n and n not in out:
-            out.append(n)
+        for m in (n, _strip_paren(n)):
+            if m and m not in out:
+                out.append(m)
     return out
 
 
@@ -374,8 +389,9 @@ def match_name(ix: SectionIndex, name: str, bare: bool) -> str:
     for h in ix.struct:  # 節名の方が長い (見出し + 補足) = 見出しが節名の頭にある
         if len(h) >= 4 and full.startswith(h):
             return "struct"
+    body_np = _strip_paren(ix.body)  # 本文の途中の括弧 (「応募内容 (アイデア) を…」) も除いて引く
     for v in vs:
-        if v in ix.body:
+        if v in ix.body or v in body_np:
             return "body"
     return "none"
 
@@ -1008,7 +1024,7 @@ def selftest() -> int:
         write(a / "docs/guide/guideline.md",
               "# 運用\n\n<a id=\"fill-v2\"></a>\n## 記入の手順 — 第 2 版\n\n手順。\n\n"
               "- **太字の段落の頭**: 説明\n\n| 行の名前 | 値 |\n|---|---|\n| 印刷物 | x |\n\n"
-              "本文にだけある語句 ここ。\n")
+              "本文にだけある語句 ここ。\n\n## ★ 規約 (convention) fact の序列 (2026-09-24)\n")
         write(a / "DESIGN.md", "# design\n\n## cross_ref によるリポ横断参照\n")
         write(a / "notes/paper.tex", "\\section{Induced action}\\label{sec:hk}\n")
         write(a / "conf.yaml", "# ── 見出しの注釈 ──\nyearly_recurring:\n  - x\n")
@@ -1036,6 +1052,7 @@ def selftest() -> int:
                   "L14 beta/nothere.md §「x」",                                 # ⚪ repo 名つきで無い
                   "L15 README.md §「guide」",                                   # README (同じ dir) の見出し
                   "L16 [`guideline.md`](guideline.md) §「無い手順」 と [g](guideline.md) §「記入の手順」",  # link の後ろの節名
+                  "L17 guideline.md §「規約 fact の序列」",                     # 見出しの途中に括弧 = 通す
               ]) + "\n")
         for r in (a, b):
             sh(["git", "add", "-A"], r)  # 走査は track 済みの file だけ
@@ -1065,6 +1082,8 @@ def selftest() -> int:
         expect("F2 陰性", ("src.md", 13, "記入の手順") not in miss)
         expect("link の後ろの §「名」 も見る (陽性)", ("src.md", 16, "無い手順") in miss)
         expect("link の後ろの §「名」 も見る (陰性)", ("src.md", 16, "記入の手順") not in miss)
+        expect("見出しの途中の括弧を除いて引く (陰性)", ("src.md", 17, "規約 fact の序列") not in miss
+               and not any(f.line == 17 and f.src.endswith("src.md") for f in fs if f.status == "BODY"))
         # 候補が複数 (後方一致が 2 repo) → 🟠 (どれにも無い) / 通る (どれかに在る)
         write(b / "docs/guide/guideline.md", "# other\n\n## 別の節\n")
         d = base / "delta"
