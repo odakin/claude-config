@@ -79,6 +79,7 @@
 3. 本人の発言に前置された `<system-reminder>` の塊は引用元から除く (hook 注入の除外と揃える)。
 4. approve の出力に、 結び付いた発言の時刻と冒頭を出す (結び付け違いがその場で見える)。
 5. 記録したら、 そのターンの最後の返事に引いた発言と対象の file を同じ行に書く。 Stop が確かめ、 無ければ 1 回差し戻す (Claude / Codex、 fail-open、 `8b6d321`) = 「引用の意味」 の取り違えを、 後から記録を読む前提でなく、 著者がその場で見る。
+6. 承認なしで入った規則の文書への追記も、 同じ Stop で入れた turn の返事に書かせる (既読の操作を廃止、 書けなかった分は人のいる session の開始に割り当て。 `5e47df9`、 正本 = [`conventions/agent-rule-ownership.md#additive-and-free-zones`](conventions/agent-rule-ownership.md#additive-and-free-zones))。
 
 **採らなかった案**:
 - *発言が候補 file の作成より後であることを要求 (mtime)*: 承認の後に同じ中身の候補を作り直す手順が実在する (実測) = 正当な承認を落とす。 file の時刻は「著者がいつ見たか」 の証拠にならない。
