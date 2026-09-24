@@ -857,6 +857,10 @@ sections:
     legacy: "8.72"
     level: 3
     title: "8.72 「未対応」 の受け皿は、 上流が既に扱う class を吸ってはいけない — 索引の miss を「resolver 未実装」 に降格しない"
+  - id: fixture-default-bakes-bug
+    legacy: "8.73"
+    level: 3
+    title: "8.73 selftest の fixture の既定値が現実と違う軸は、 その軸に依存する不具合を期待値に焼き込む — helper の既定は現実の向きから取る"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
