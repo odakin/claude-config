@@ -20,6 +20,8 @@ null の後は手元の別の情報に倒れる。 規律側 = docs/convention-d
                F2 = 節名の先頭の語さえ本文に無い (境界が推定なので本文 hit で通す = 確度を守る)
                F3/F4 = anchor が target の (<a id> ∪ GFM 見出し slug) に無い (.md の target だけ)
   🟡 BODY-ONLY F1 の節名が見出し等には無く本文にだけある (節の形になっていない = 数だけ。 --list で一覧)
+  📜 RECORD    🔴 のうち source が履歴の記録 (archive・inbox・threads・incidents) か、 冒頭 20 行に
+               `<!-- text-section-refs: record -->` を宣言した file (壊れた参照を報告・引用する RCA / 結果の doc)
   ⚪ UNRESOLVED file が 1 つに決まらない: 見つからない / 候補が複数 / 読めない (git-crypt lock・binary) / 見本の path
                (`X.md` `<file>` 等) / 節名が見本 (`<節名>` 等)。 **報告対象ではない** (数と --list だけ)。
                ただし候補が複数で、 どの候補にも節が無いものは 🟠 AMBIGUOUS-MISSING として別に数える (--list)
@@ -90,6 +92,14 @@ POSITION_WORDS = {"冒頭", "末尾", "先頭", "最後", "全体", "本文", "�
                   "全文", "目次", "本節", "同節", "当該", "上", "下", "前半", "後半", "頭", "尾", "top", "end"}
 # 履歴の記録 (書いた時点の事実。 節が後で移っても参照は書き換えない) = 🔴 にせず 📜 で数える (--list)
 RECORD_RE = re.compile(r"(^|/)(?:SESSION-archive|archive|inbox|threads)/|-archive(?:[./-]|$)|(^|/)(?:[\w-]+-)?incidents\.md$")
+# file の冒頭 20 行にこの宣言があれば、 その file の 🔴 は 📜 (壊れた参照を報告・引用する RCA / 結果の doc 用)
+RECORD_MARKER = "<!-- text-section-refs: record -->"
+
+
+def is_record(rel_path: str, text: str) -> bool:
+    return bool(RECORD_RE.search(rel_path)) or RECORD_MARKER in "\n".join(text.splitlines()[:20])
+
+
 PLACEHOLDER_ANCHORS = re.compile(r"^(?:foo|bar|baz|x+|y|whatever|anchor|slug|some-?anchor|section|name|id|%s|L)$", re.I)
 # 行番号の anchor (GitHub の `#L29` `#L10-L20`、 数字だけ) = 節ではない
 LINE_ANCHOR_RE = re.compile(r"^(?:L?\d+(?:-L?\d+)?|L\d+C\d+)$")
@@ -115,7 +125,7 @@ RE_LINK = re.compile(r"\[(?:[^\[\]\n]|\[[^\]\n]*\])*\]\((?P<href>[^)\s]+?)(?:\s+
 # F2 の節名の終わり
 BARE_STOP = re.compile(r"[)\]）】〔〕【|\\、。，,;；`\"'<>「」『』]|\s[=→←/+]\s|\s[(（]|[(（]| {2,}|\s—\s|\s-\s|\s(?=[ぁ-ん])|$")
 BARE_TAIL = re.compile(r"(?:\s*(?:を参照|参照|の通り|のとおり|を見よ|を読む|に記載|にある|で定義|が正本|を正本|の手順|に従う|に書く|"
-                       r"に移設|へ移設|に移した|を|に|が|は|で|と|へ|も|の|や|から|まで|より))+$")
+                       r"に移設|へ移設|に移した|準拠|参考|相当|同様|など|等|を|に|が|は|で|と|へ|も|の|や|から|まで|より))+$")
 
 
 @dataclass
@@ -686,11 +696,12 @@ def scan_repo(fleet: Fleet, repo: Path, hints: bool = True) -> Tuple[List[Findin
             continue
         refs, n = extract_refs(text, code=f.endswith((".py", ".sh")))
         stats["numbered"] += n
+        record = is_record(f, text)
         for r in refs:
             stats["refs"] += 1
-            fd = judge(fleet, r, p, repo, hints=hints and not RECORD_RE.search(f))
+            fd = judge(fleet, r, p, repo, hints=hints and not record)
             if fd:
-                if fd.status == "MISSING" and RECORD_RE.search(f):
+                if fd.status == "MISSING" and record:
                     fd.status = "RECORD"
                 out.append(fd)
     return out, stats
@@ -771,8 +782,8 @@ def run_staged(repo_arg: Optional[str], base_arg: Optional[str], ack: Set[str]) 
     fleet.hint_all_repos = False  # commit 時は参照元 repo の中だけで候補を探す (速さ)
     findings: List[Finding] = []
     for p, t in texts.items():
-        if RECORD_RE.search(str(p.relative_to(repo))):
-            continue  # 履歴の記録への追記 (古い文の写し) には出さない
+        if is_record(str(p.relative_to(repo)), t):
+            continue  # 履歴の記録・宣言した記録の doc への追記には出さない
         old_lines = set((heads[p] or "").splitlines())
         refs, _ = extract_refs(t, code=p.suffix in (".py", ".sh"))
         lines = t.splitlines()
@@ -871,10 +882,11 @@ def run_fleet(roots: List[str], base_arg: Optional[str], ack: Set[str], surface:
             all_f += fs
     missing = [f for f in all_f if f.status == "MISSING" and f.ack_key() not in ack]
     acked = [f for f in all_f if f.status == "MISSING" and f.ack_key() in ack]
+    stale_ack = sorted(ack - {f.ack_key() for f in acked})  # 直った / 行が動いた = 一覧から消す行
     by = {k: [f for f in all_f if f.status == k] for k in ("AMBIG_MISSING", "SAME_NAME", "RECORD", "BODY", "UNRESOLVED")}
     if as_json:
         print(json.dumps({"stats": stats, "missing": [f.__dict__ for f in missing],
-                          "acked": len(acked), **{k.lower(): [f.__dict__ for f in v] for k, v in by.items()}},
+                          "acked": len(acked), "stale_ack": stale_ack, **{k.lower(): [f.__dict__ for f in v] for k, v in by.items()}},
                          ensure_ascii=False, indent=1))
         return 1 if (strict and missing) else 0
     if missing or list_all:
@@ -885,6 +897,10 @@ def run_fleet(roots: List[str], base_arg: Optional[str], ack: Set[str], surface:
             print(f"🔴 {fmt(f)}")
         if missing and not surface:
             print(f"  直し方: 節のある file を指す (できれば `path#anchor` にする)。 正本 = {DOC_ANCHOR}")
+    if stale_ack and (list_all or strict):
+        print(f"⚪ 承知済み一覧の古い行 {len(stale_ack)} 件 (該当する 🔴 が無い = 直ったか字面が変わった。 一覧から消す)")
+        for k in stale_ack[:20]:
+            print(f"   {k}")
     if list_all:
         print(f"-- 内訳: 🟠 候補が複数でどれにも無い {len(by['AMBIG_MISSING'])} / 🟠 同名の別 file にある {len(by['SAME_NAME'])} / 📜 履歴の記録の中 {len(by['RECORD'])} / 🟡 本文にだけある {len(by['BODY'])} / "
               f"⚪ 未判定 {len(by['UNRESOLVED'])} / 番号参照 (§数字) {stats['numbered']}")
@@ -949,6 +965,7 @@ def selftest() -> int:
         write(b / "conventions/mcp.md", "# mcp\n\n## 機械 enforcement\n")
         write(b / "README.md", "# beta\n")
         # --- source 側 (alpha)
+        write(a / "docs/rca.md", "# RCA\n<!-- text-section-refs: record -->\n\n旧 `guide/README.md` §「記入の手順」 を指していた\n")
         write(a / "docs/manuals/template.md",
               "詳細は `../guide/README.md` §「記入の手順」 参照\n")  # 陽性対照 (節は guideline.md にある)
         write(a / "docs/guide/src.md",
@@ -990,6 +1007,8 @@ def selftest() -> int:
         expect("後方一致で解決 → 陽性 (存在しない節)", ("src.md", 10, "存在しない節") in miss)
         expect("陰性: 後方一致で解決 (在る節)", ("src.md", 10, "機械 enforcement") not in miss)
         expect("🟡 本文にだけある", (5, "本文にだけある語句") in body)
+        expect("記録の宣言 (<!-- text-section-refs: record -->) のある file の 🔴 は 📜",
+               [f.status for f in fs if f.src.endswith("docs/rca.md")] == ["RECORD"])
         expect("⚪ 見本の path / 無い file / 見本の節名は未判定", {(11, "X.md"), (11, "missing.md"), (11, "guideline.md")} <= unres)
         expect("⚪ repo 名つきの無い path は未判定 (🔴 にしない)", (14, "beta/nothere.md") in unres)
         expect("F2 陽性 (先頭の語さえ無い)", ("src.md", 13, "全然無い語") in miss)
@@ -1013,7 +1032,7 @@ def selftest() -> int:
         # ack
         ackf = Path(td) / "ack.txt"
         tmpl = [f for f in fs if f.status == "MISSING" and f.src.endswith("template.md")][0]
-        ackf.write_text("# 注釈\n" + tmpl.ack_key() + "\n", encoding="utf-8")
+        ackf.write_text("# 注釈\n" + tmpl.ack_key() + "  # 理由\nalpha/gone.md\tx.md\t消えた節\n", encoding="utf-8")
         import io
         import contextlib
         buf = io.StringIO()
@@ -1021,6 +1040,7 @@ def selftest() -> int:
             rc = run_fleet([str(base)], None, load_ack(str(ackf)), surface=True, strict=True, list_all=False,
                            as_json=False)
         expect("ack した 🔴 は出ない / 残りで --strict = 1", rc == 1 and "template.md" not in buf.getvalue())
+        expect("該当の無い ack 行は「古い行」 として出る", "古い行 1 件" in buf.getvalue() and "gone.md" in buf.getvalue())
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = run_fleet([str(Path(td) / "nope")], None, set(), True, True, False, False)
