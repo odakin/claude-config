@@ -57,6 +57,21 @@ def run_docx_tests(tmp: Path, expect) -> None:
            dd.paragraphs[1].text == "2026年9月18日" and dd.tables[0].cell(0, 1).text == "甲野太郎　印"
            and cells == ["（注記）", "研究発表"], cells)
     expect("docx: 読み戻しが一致", DF.readback(spec, tpl, out, vals) == [], DF.readback(spec, tpl, out, vals))
+    expect("docx: 図・field・記号の無い雛形なら消失の行は出ない", DF.object_loss(tpl, out) == [], DF.object_loss(tpl, out))
+    # 欄の段落の run に記号 (w:sym = Wingdings の □ 等) があると、 run の書き換えで黙って消える (2026-09-24 RCA)
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    tpl2, out2 = root / "tpl-sym.docx", root / "case-sym.docx"
+    d2 = docx.Document(tpl)
+    sym = OxmlElement("w:sym")
+    sym.set(qn("w:font"), "Wingdings")
+    sym.set(qn("w:char"), "F0A8")
+    d2.paragraphs[1].add_run("")._r.append(sym)
+    d2.save(tpl2)
+    DF.write(spec, tpl2, vals, out2)
+    loss = DF.object_loss(tpl2, out2)
+    expect("docx: 欄の run の中の記号が書き換えで消えたら ⚠️ の行", len(loss) == 1 and "記号" in loss[0], loss)
     ok, lines = DF.gate(spec, tpl, out)
     expect("docx gate: 必須の選択肢・choice_group・短い値が未記入なら FAIL", not ok
            and any("role" in x and "未選択" in x for x in lines) and any("AB" in x for x in lines)

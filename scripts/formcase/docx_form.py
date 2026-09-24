@@ -173,6 +173,37 @@ def write(spec, template: Path, values: dict, out: Path) -> None:
         else:
             raise DocxFormError(f"{f['id']}: mode {mode!r} は text / append のどれでもない")
     d.save(str(out))
+    for line in object_loss(template, out):      # 欄の run を書き換えると run の中の図・field・記号も消える (warn)
+        print("   " + line)
+
+
+# run の中に居て、 python-docx の ``run.text = …`` (= run の中身を全部消して字を入れる) で黙って消えるもの
+_RUN_OBJECTS = {"w:drawing": "図 (drawing)", "w:pict": "図・textbox (VML)", "w:fldChar": "field (日付・頁番号等)",
+                "w:fldSimple": "field (簡易)", "w:sym": "記号 (Wingdings の □ 等)", "w:object": "埋め込み object",
+                "w:sdt": "content control (checkbox 等)"}
+
+
+def object_loss(template, out) -> list:
+    """雛形と記入後の docx で、 run の中の図・field・記号・content control の数が減っていれば ⚠️ の行 (warn だけ)。
+
+    ``_set_runs`` は欄の段落の 2 つ目以降の run を空にし、 python-docx の ``run.text`` の setter は run の中身
+    (w:t だけでなく w:drawing・w:fldChar・w:sym も) を消す = 欄の段落に図や field があれば紙から黙って消える
+    (Excel 様式の図形消失と同じ class、 office-automation.md#drawings-lost-in-temp-pdf)。"""
+    import re
+    import zipfile
+
+    def count(p):
+        with zipfile.ZipFile(p) as z:
+            x = "".join(z.read(n).decode("utf-8", "replace") for n in z.namelist()
+                        if re.match(r"word/(document|header\d*|footer\d*)\.xml$", n))
+        return {k: len(re.findall("<" + k + r"\b", x)) for k in _RUN_OBJECTS}
+
+    try:
+        b, a = count(template), count(out)
+    except (OSError, zipfile.BadZipFile) as e:
+        return [f"⚪ docx の図・field の数を比べられなかった ({e})"]
+    return [f"⚠️ {_RUN_OBJECTS[k]}: 雛形 {b[k]} → 記入後 {a[k]} (欄の run の書き換えで消えた = 紙から消える)"
+            for k in _RUN_OBJECTS if a[k] < b[k]]
 
 
 def rendered(f, v) -> str:
