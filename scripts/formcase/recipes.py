@@ -47,10 +47,42 @@ SEAL_ENGINE = CC / "overlay-seal-pdf.py"
 GUIDANCE_GATE = CC / "verify-form-guidance.py"
 CLOSE_BOXES = CC / "close-pdf-form-boxes.py"
 CLIPPING = CC / "check-form-clipping.py"
+STATIC_TEXT = CC / "check-form-static-text.py"
 
 
 class BuildError(Exception):
     pass
+
+
+def static_text_lines(spec: dict, group: str, pdf) -> list:
+    """雛形の図形の字 (標題・区分の枠・様式番号・㊞) が group の PDF に在るかの行 (check-form-static-text)。
+
+    **warn だけ = build は止めない** (止める段に上げるかは運用する人の判断 = form-case-pipeline.md#drawings-survive-temp)。
+    他の gate は書いたもの (記入値・字の切れ・記入要領) しか見ず、 雛形が元から紙に出す図形が消えても全部通った
+    (form-case-pipeline.md#drawings-survive-temp)。 検査が走らなかった時も黙らず ⚪ の行を出す。 docx 様式は対象外。"""
+    from . import docx_form as DF
+
+    if DF.is_docx(spec):
+        return []
+    try:
+        args = [sys.executable, str(STATIC_TEXT), str(S.template_path(spec)), str(pdf)]
+        for sh in S.group_sheets(spec, group, with_depends=False):
+            for rng in LY.pages_for(spec, sh):
+                args += ["--target", f"{sh}!{rng}"]
+        for fx in spec.get("render") or []:
+            names = fx.get("drop_shape")
+            for n in (names if isinstance(names, list) else [names] if names else []):
+                args += ["--drop", f"{fx['sheet']}!{n}"]
+        r = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=300)
+    except (ValueError, OSError, subprocess.SubprocessError) as e:
+        return [f"⚪ 雛形の図形の字の検査が走らなかった ({type(e).__name__}: {e})"]
+    body = [x.strip() for x in r.stdout.splitlines()[1:] if x.strip()]
+    if r.returncode == 1:
+        return (["⚠️ 雛形の図形の字が PDF に無い = 紙から見出し (区分の枠・様式番号など) が消えている。 刷る前に直す"
+                 " (warn = build は止めない)"] + ["  " + x for x in body if not x.startswith(("✅", "・"))])
+    if r.returncode != 0:
+        return [f"⚪ 雛形の図形の字の検査が走らなかった (exit {r.returncode}): {r.stdout.strip()[-300:]}"]
+    return ["雛形の図形の字: " + x for x in body if x.startswith(("✅", "⚪"))]
 
 
 def _run(argv, label):
@@ -590,7 +622,9 @@ def _build(m, doc_id, groups, out_dir=None) -> dict:
             for line in declare_pages(plain, spec, g, pages):   # 出力の全頁 = 窓口に出す頁、 と宣言 (刷る直前の gate が読む)
                 print("   " + line)
             rc.post_group(m, doc_id, g, plain)
-            outs = (m.group(doc_id, g).get("current") or {}).get("outputs") or rc.default_outputs(wb.stem)[g]
+            for line in static_text_lines(spec, g, plain):      # 雛形の図形が紙に在るか (warn、 止めない)
+                print("   " + line)
+            outs =(m.group(doc_id, g).get("current") or {}).get("outputs") or rc.default_outputs(wb.stem)[g]
             places = [(pages.index(pp) + 1, spec_) for pp, spec_ in rc.seals_for(g).items() if pp in pages]
             base = Path(out_dir) if out_dir else m.case_dir
             written[g] = {}

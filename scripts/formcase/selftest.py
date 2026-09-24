@@ -451,8 +451,14 @@ def _graft_tests(tmp, expect) -> None:
     wb.create_sheet("T")["A1"] = "y"
     wb.save(src)
     ms = '<a:rPr sz="1600"><a:latin typeface="MS Gothic"/><a:ea typeface="MS Gothic"/></a:rPr>'
+    # form control の DrawingML 側 = cNvPr の拡張に a14:compatExt (VML 側の shape id) を持つ (Excel が書く形)
     ctrl = ('<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">'
-            '<mc:Choice Requires="a14">' + _anchor_xml("Check Box 1", "") + '</mc:Choice><mc:Fallback/></mc:AlternateContent>')
+            '<mc:Choice xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" Requires="a14">'
+            + _anchor_xml("Check Box 1", "").replace('name="Check Box 1"/>', 'name="Check Box 1"><a:extLst>'
+                                                     '<a:ext uri="{63B3BB69-23CF-44E3-9099-C40C66FF867C}">'
+                                                     '<a14:compatExt spid="_x0000_s1025"/></a:ext></a:extLst>'
+                                                     '</xdr:cNvPr>')
+            + '</mc:Choice><mc:Fallback/></mc:AlternateContent>')
     # 16pt × 4 字 = 64pt、 枠 78pt = 余白の既定 7.2pt × 2 を足すと入らない (実雛形の寸法)
     anchors = (_anchor_xml("label", "外部資金", cx=78 * 12700, run="<a:r>" + ms + "<a:t>{t}</a:t></a:r>")
                + _anchor_xml("dup", "二重") + ctrl)
@@ -490,6 +496,24 @@ def _graft_tests(tmp, expect) -> None:
         expect("図形の移植: drawing を既に持つ sheet には重ねない", False)
     except DR.GraftError as e:
         expect("図形の移植: drawing を既に持つ sheet には重ねない", "既にある" in str(e), e)
+    # 2026-09-24 レビュー: form control の印の無い AlternateContent (数式入りの textbox 等 = 紙に出る) を黙って落とさない
+    src2 = tmp / "graft-src-ac.xlsx"
+    wb = openpyxl.Workbook()
+    wb.active.title = "S"
+    wb.save(src2)
+    eq = ('<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">'
+          '<mc:Choice Requires="a14">' + _anchor_xml("数式", "x=1") + '</mc:Choice><mc:Fallback>'
+          + _anchor_xml("数式", "x=1") + '</mc:Fallback></mc:AlternateContent>')
+    _inject_drawing(src2, _sheet_part(src2, "S"), "", anchors=_anchor_xml("label", "見出し") + eq)
+    try:
+        RC._save(RC._load(src2), tmp / "graft-ac.xlsx")
+        expect("図形の移植: form control でない mc:AlternateContent は止める (黙って落とさない)", False)
+    except RC.BuildError as e:
+        expect("図形の移植: form control でない mc:AlternateContent は止める (黙って落とさない)", "form control でない" in str(e), e)
+    # 縦書きの 1 行 label は枠の幅と比べない (字は高さ方向に並ぶ) = 余白・折り返しを触らない
+    vert = _anchor_xml("縦", "業務内容", cx=20 * 12700, run="<a:r>" + ms + "<a:t>{t}</a:t></a:r>").replace(
+        "<a:bodyPr/>", '<a:bodyPr vert="eaVert"/>')
+    expect("図形の移植: 縦書きの label は余白・折り返しを変えない", DR._fit_single_line(vert) == vert)
 
 
 def _value_from_tests(tmp, expect) -> None:

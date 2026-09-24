@@ -125,6 +125,10 @@ issue は `paper: same | differs | unverified` を必須にする。
 枠に字幅ぎりぎりで作られて Excel の丸めで 1 字落ちる (clip の枠では消える) 時は、 枠の余白だけを縮める。
 ⚠️ 図形が落ちても値・罫線の gate は全部通る = 紙から様式番号が消えたまま提出物が作られ続けた (実測)。
 build の後の目視 (👁) で、 様式の見出しと区分の枠が紙に在るかを見る。
+build は group ごとに [`scripts/check-form-static-text.py`](../scripts/check-form-static-text.py) を回し、 雛形の図形の字
+(区分の枠・様式番号・標題・㊞) が group の PDF に無ければ ⚠️ の行を出す (2026-09-24 追記。 **warn = build は止めない**。
+止める段に上げるかは運用する人が決める)。 雛形を刷っても字が出ない狭い枠の図形・字の無い図形 (選択の丸・線) は
+射程外 = そこは目視が残る。
 
 openpyxl で保存すると図形 (標題・checkbox) が落ちる雛形は、 体裁を openpyxl の読み込みの上で計算し、
 **差分だけを Excel の操作として** staged copy に当てる。

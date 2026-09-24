@@ -102,6 +102,11 @@ def _strip_alternate_content(xml: str) -> tuple:
             elif not n.group(2):
                 depth += 1
             j = n.end()
+        # form control の印 (a14:compatExt = VML 側の shape id) の無い AlternateContent は、 数式入りの textbox・
+        # 新しい種類の図形など紙に出る図形でありうる = 黙って落とさず止める (2026-09-24 レビュー)
+        if "compatExt" not in xml[m.start():j]:
+            raise GraftError("drawing に form control でない mc:AlternateContent がある (数式入りの textbox・新しい種類の"
+                             "図形など) = 移植は未対応 (黙って落とさない)")
         pos, removed = j, removed + 1
     return "".join(out), removed
 
@@ -163,6 +168,10 @@ def _fit_single_line(anchor: str) -> str:
     need = _em_width(text) * max(sizes) / 100 * EMU_PT          # 字幅 (EMU)
     bp = re.search(r"<a:bodyPr\b[^>]*?/?>", tb)
     if not bp:
+        return anchor
+    # 縦書き (字は枠の高さ方向に並ぶ = 枠の幅と比べても意味が無い) とグループ化した図形 (最初の ext は子の枠でない) は触らない
+    vert = re.search(r'\bvert="(\w+)"', bp.group(0))
+    if (vert and vert.group(1) != "horz") or "<xdr:grpSp" in anchor:
         return anchor
     l = int((re.search(r'\blIns="(\d+)"', bp.group(0)) or [None, _DEFAULT_INSET])[1])
     r = int((re.search(r'\brIns="(\d+)"', bp.group(0)) or [None, _DEFAULT_INSET])[1])
