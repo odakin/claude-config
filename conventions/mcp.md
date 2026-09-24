@@ -134,6 +134,8 @@ session の会話 / context / tool 許可は **保たれる**。MCP server だ�
 
 Chrome MCP は `claude mcp` 配下ではなく **Claude.app の Chrome extension 経由** で別経路。`claude mcp list` には出ない。復旧 (上から順):
 
+<a id="extension-installed-check"></a>**-1. 拡張がその browser profile に入っているか (新しいマシン・新しい profile で最初に)**: `list_connected_browsers` が `[]` で、 そのマシンでまだ一度も繋いでいないなら、 下の手順より先に profile の拡張 dir を見る — `~/Library/Application Support/BraveSoftware/Brave-Browser/<Profile>/Extensions/fcoeoabgfenejglbffodgkkbkcdhcgfn` (Chrome は `~/Library/Application Support/Google/Chrome/<Profile>/Extensions/` の同じ id)。 無ければ Chrome Web Store からの install が先 (本人の操作)。 install した直後も `switch_browser` はすぐに「No other browsers available」 を返した (実測) = サイドパネルで session と同じ account に sign-in してから下の 1・2 へ。 待つ間の fallback = ログインせずに読めるものは内蔵 Browser pane、 ログインが必須のサイトは pane で本人がログイン ([`web-tools.md#booking-property-messaging`](web-tools.md#booking-property-messaging) が実例)
+
 0. **account 一致 gate (2026-08-29)**: 接続は account-scoped の cloud relay 経由で、 **拡張の署名 account == session の実 account** が前提。 desktop session の実 account は app ログイン側 (= harness の userEmail / `.claude.json` oauthAccount は CLI 土台を映す嘘になりうる、 同定手順と軸の整理 = [multi-account-machine-surface.md #failure-modes](multi-account-machine-surface.md#failure-modes))。 claude.ai サイトの login は無関係。 不一致のまま以下の手順を回しても直らない
 1. 拡張サイドパネルを開き署名 account・警告有無を確認 → session 側から `switch_browser` → browser 側 popup の「Connect」 を 2 分以内に click (= 正規の再接続経路)。 broadcast が**待機なしで**「No other browsers available」 を返すなら relay にその account の拡張 instance がゼロ = パネルのチャットが正常でも automation bridge は未登録 (別経路) と判定できる
 2. Chrome で `chrome://extensions/` → Claude 拡張のトグル OFF → ON で reload → 1 を再試行 (✅ **実測で有効** 2026-08-29: relay instance 0 → 1 に即復活し接続成立 = 「拡張 service worker が relay への接続を張っていない」 仮説と整合。 sign-in し直しだけでは登録されないケースがある)

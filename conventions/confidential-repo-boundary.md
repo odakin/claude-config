@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers) / 触れない dir の中身を機械で処理する必要が出たとき (#work-on-a-copy-not-by-lowering-the-gate)
 category: infra
-summary: 暗号化は中身しか守らない (file 名・commit message・path は平文) ので識別子入り dir は暗号化 tar に畳む (連番+対応表は対応表が単一障害点で不可)、 保存しない > 暗号化する (通知に payload を載せず schema で縛る、 死んだ複製は削除)、 逐語の指紋照合は写しを捕まえるが言い換えは原理的に不可なので経路ごとに制御を変える (閾値は全件集計で決める = 誤検知 6800→24→0 の実測)、 fail-open な gate は必ずカナリアで実効性を毎回確かめ ARMED/NOT ARMED/対象外 の 3 状態を出す (沈黙を作らない)、 是正は go-forward にしか効かず履歴は別問題として人間の判断に委ねる、 公開 repo には未公開文書の逐語 gate を別に置く (漏れる例示は引用符に入った短い断片なので quoted span が主、 全履歴 replay で誤検出 0 を確かめて採用)、 gate が target の pre-commit で実際に走っているかは target ごとに確かめる、 触れない dir の中身を機械で処理する必要が出ても deny を外して戻す形にしない (外れている間は dir 全体が無関係な call にも開く) = user が 1 file だけ許可 scope に複製 → 作業 → 複製と中間生成物を消す、 複製は元の SoT から分岐し記録には file 名も中身も書かない
+summary: 暗号化は中身しか守らない (file 名・commit message・path は平文) ので識別子入り dir は暗号化 tar に畳む (連番+対応表は対応表が単一障害点で不可)、 保存しない > 暗号化する (入室の暗証番号は暗号化 repo にも入れず所在だけ記録 #physical-access-codes、 通知に payload を載せず schema で縛る、 死んだ複製は削除)、 逐語の指紋照合は写しを捕まえるが言い換えは原理的に不可なので経路ごとに制御を変える (閾値は全件集計で決める = 誤検知 6800→24→0 の実測)、 fail-open な gate は必ずカナリアで実効性を毎回確かめ ARMED/NOT ARMED/対象外 の 3 状態を出す (沈黙を作らない)、 是正は go-forward にしか効かず履歴は別問題として人間の判断に委ねる、 公開 repo には未公開文書の逐語 gate を別に置く (漏れる例示は引用符に入った短い断片なので quoted span が主、 全履歴 replay で誤検出 0 を確かめて採用)、 gate が target の pre-commit で実際に走っているかは target ごとに確かめる、 触れない dir の中身を機械で処理する必要が出ても deny を外して戻す形にしない (外れている間は dir 全体が無関係な call にも開く) = user が 1 file だけ許可 scope に複製 → 作業 → 複製と中間生成物を消す、 複製は元の SoT から分岐し記録には file 名も中身も書かない
 -->
 # 機密の境界を機械で守る — 暗号化・file 名・通知・検査
 
@@ -60,6 +60,14 @@ failure mode が必ず付いてくる。 保存しなくて済むなら、 そ�
 1. **そもそも書かないで済むか** (= 通知に payload を載せない、 要約を別の場所に置く) → schema で縛る
 2. **死んだ複製ではないか** (= 誰も読んでいない残骸なら削除が最善)
 3. 残ったものを暗号化する
+
+### <a id="physical-access-codes"></a>入室の暗証番号 (部屋・オートロック・ポスト・キーボックス) は git に入れない — 暗号化 repo でも
+
+短期の宿や施設の入室情報 (チェックイン案内の PDF・部屋の暗証番号) は、 滞在のあいだ本人が携帯で見る必要があり、 滞在が終われば価値が無い。 push される repo に置くと、 暗号化していても remote に複製が残る (= 保存しないで済むものを保存している)。 auto mode の判定も、 暗号化 repo への解錠番号入り file の copy を credential leak として止めた (実測)。
+
+- 正本 = 本人の同期ストレージ (携帯から開ける場所) の滞在ごとの folder に、 案内の原本 + 番号のメモ
+- 記録 (TODO・案件の README・台帳) には**所在だけ**を書き、 番号も写しも書かない
+- 番号を chat で受け取っても、 git に入る file に写さない
 
 ### file 名が漏れる対象に暗号化を足しても、 偽の安心しか増えない
 

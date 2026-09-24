@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot)
 category: web
-summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)**
+summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + booking.com の宿への連絡は確認メールに返信しても届かない = web のメッセージ画面を pane で開きログインは本人 (#booking-property-messaging) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)**
 -->
 # Web ツール (WebSearch / WebFetch) の信頼性 caveat
 
@@ -97,6 +97,17 @@ CSR SPA のニュース/結果ページの URL を多数検証する場面 (例:
 - 料金は**日付・人数で変わる**ので、 幅 (最安〜通常) と取得日を手元の記録に残し、 公開文には幅だけ書く
 - <a id="stale-third-party-prices"></a>**口コミ・地図・まとめ記事の価格は掲載時期が分からず、 古いことが多い** (実測: 地図サイトのメニュー欄の値が、 宅配アプリの現在価格から逆算した店頭価格よりはるかに安かった)。 人に伝える値は、 今注文できる経路 (公式の注文ページ・宅配アプリ・公式 PDF の価格表) で上か下を押さえてから出す。 宅配アプリの価格は店頭の 2〜3 割増し (実測) なので、 上限の目安には使えるが、 店頭価格そのものとしては書かない
 - 店の「公式サイト」 として第三者の頁に載っている domain は、 失効して別物 (広告・カジノ等) に替わっていることがある (実測)。 運営会社の頁から辿った URL を使う
+
+## <a id="booking-property-messaging"></a>予約サイト (booking.com) 経由で宿に連絡する = web のメッセージ画面を Browser pane で、 ログインは本人
+
+予約した宿に書類 (領収書・宿泊の証明の様式) を頼む・到着の段取りを聞くなど、 宿に直接連絡したいとき:
+
+- **確認メール・宿からの通知メールに返信しても宿に届かない** (実測): From も Reply-To も予約サイトの noreply。 宿のメールアドレスは確認メールに載らないことが多く、 無人運営 (スマートチェックイン) の宿はチェックイン案内にも載っていないことがある (実測)。 施設ページの「管理会社」 欄が実際の相手
+- **連絡路 = 予約サイトのメッセージ**。 本人の携帯アプリではメッセージ欄が見つからないことがある (実測) → web の inbox を内蔵 Browser pane で開く: `https://secure.booking.com/inbox/partner-chat?vertical=accommodation&external_id=<予約番号>&bn=<予約番号>&product=post_booking&channel=partner_chat`
+- **ログインは本人**: メールアドレスを入れると英字 6 文字の認証コードがメールで届く (件名にコードが入る、 実測)。 agent は本人のメールからコードを読んで伝えてよいが、 入力は本人 (認証情報を agent が打たない)
+- 送信: 入力欄 (placeholder「メッセージを入力」) に `form_input` で本文 → aria-label「このメッセージを送信する」 のボタン → **送信後に画面の本文を読み戻して照合** (空行を含む改行は保たれた、 実測)
+- **本文に URL を入れない・添付は付かない**: 予約サイトの messaging security がリンクを削除する (施設側が許可した domain だけ通る、 partner 向け資料の二次解説で確認)。 メッセージは「メールアドレスを聞く」 「受け取り方法を相談する」 に使い、 書類はアドレスが分かってからメールで送る
+- 送信は外部発信 = 本文を chat で見せて本人の明示 OK を取ってから
 
 ## <a id="cookie-replay-oauth-spa"></a>Browser cookie replay は OAuth-token SPA を認証しない (= member 限定クラウドフォルダは無人 upload 不可)
 
