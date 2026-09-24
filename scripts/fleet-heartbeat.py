@@ -48,12 +48,29 @@ usage:
 書かれる JSON (subdir/<hostname>.json):
   { host, ts (iso), epoch, servers: [{label, pid, last_status, log_age_min}],
     config_dirs: {alias: email_metadata_or_null},
+    config_dir_auth: {alias: {dead, last_probe, last_probe_ok, last_probe_tag}},  # 部品が在る時のみ
     remote_control_at_startup, old_usr_local_cli, cron_jobs,
     desktop_scheduled_tasks: [{registry, enabled_ids}],
     inventories: {label: [name, ...]},         # --inventory 指定時のみ
     jobs: [{label, last_exit, python, python_runs, python_ok, bare_in_command, bare_in_wrapper,
             log_failure, log_age_h, config_dir?}],               # --job-label-prefix 指定時のみ
     job_python_modules: [module, ...] }                          # 同上
+
+config_dirs の読み方 (実測):
+  - pinned の alias (`~/.claude-<acct>`) = その設定フォルダの `.claude.json` の oauthAccount の email = その
+    フォルダで最後にログインした account
+  - `default` (`~/.claude.json` の oauthAccount) は **desktop app を最後に起動した時の desktop の account** を映す。
+    desktop app の起動がこの欄を書き換える (desktop で account を切り替えても、 起動し直すまで変わらない)。
+    CLI のログインの記録ではない = この欄の変化をログインや切り替えの時刻の手がかりにしない (切り替えの時刻は
+    desktop app の log の `Login-state transition` にある)
+  - `server` の `last_status` = RC サーバーの log 末尾の最後の印。 `Connected` は OAuth の更新が生きている証拠に
+    ならない (待ち受けは更新を使わない経路で動き、 更新トークンが切れても Connected のまま残る実測がある)
+
+config_dir_auth (設定フォルダが切れたか、 部品 = lib/config_dir_auth.py):
+  - 問い合わせは check-desktop-logout-auth.py の見張りが打つ (ログアウトの後 + 長く更新の無いフォルダを毎日)。
+    本 script は記録と keychain の更新時刻 (属性だけ) を読むだけ = `claude` を呼ばない
+  - dead = 最後の問い合わせが失敗し、 その後にログインし直していない。 reader が他のマシンの分を 🔴 で出す
+  - 変化として commit するのは dead の値だけ (問い合わせの時刻では commit しない)
 
 job health (--job-label-prefix、 opt-in、 repeatable):
   launchd の無人ジョブは job 定義の PATH で `python3` を解決する。 その PATH は agent の session や対話 shell と
@@ -102,6 +119,10 @@ try:
     import launchd_job_log as _jl   # 直近 run の log 末尾の判定 (check-cron-health と共有)
 except Exception:                   # 部品が無い古い checkout でも beat は止めない
     _jl = None
+try:
+    import config_dir_auth as _cda  # 設定フォルダが切れたかの判定 (check-desktop-logout-auth と共有、 claude を呼ばない)
+except Exception:
+    _cda = None
 
 RC_LABEL_PREFIX_DEFAULT = "com.claude-config.remote-control-server"
 
@@ -243,6 +264,27 @@ def collect(rc_prefix, cron_prefix, inventory_specs=None, job_prefixes=None, job
         except Exception:
             pass
         data["config_dirs"][alias] = email
+    # 設定フォルダ (pinned) ごとの認証の判定 = 最後の問い合わせが失敗し、 その後ログインし直していないか。
+    # 問い合わせは check-desktop-logout-auth.py の見張りが打つ (claude を呼ぶのはそちら)。 ここは記録と keychain の
+    # 更新時刻 (属性だけ) を読むだけ = claude を呼ばない設計を保つ。 他のマシンの reader が 🔴 を出す
+    if _cda is not None:
+        try:
+            rows = _cda.read_ledger()
+            auth = {}
+            for d in sorted(home.glob(".claude-*")):
+                if not d.is_dir():
+                    continue
+                last = _cda.last_probe(rows, str(d))
+                mdat = _cda.keychain_mdat(_cda.keychain_service(str(d)))
+                auth[d.name[len(".claude-"):]] = {
+                    "dead": _cda.is_dead(rows, str(d), mdat) is not None,
+                    "last_probe": time.strftime("%Y-%m-%d %H:%M", time.localtime(last["t"])) if last else None,
+                    "last_probe_ok": last["ok"] if last else None,
+                    "last_probe_tag": last["tag"] if last else None,
+                }
+            data["config_dir_auth"] = auth
+        except Exception:
+            pass  # fail-open (= beat 全体を落とさない)
     # remoteControlAtStartup
     try:
         s = json.load(open(home / ".claude/settings.json"))
@@ -416,6 +458,8 @@ def essence(d: dict):
         {
             "servers": [(s["label"], s["pid"] is not None, s["last_status"]) for s in d.get("servers", [])],
             "config_dirs": d.get("config_dirs"),
+            # 設定フォルダが切れた / 直った は即 commit (問い合わせの時刻は変化に数えない = 毎日の確認で commit を増やさない)
+            "config_dir_dead": {k: v.get("dead") for k, v in (d.get("config_dir_auth") or {}).items()},
             "rcs": d.get("remote_control_at_startup"),
             "old_cli": d.get("old_usr_local_cli"),
             "cron_jobs": d.get("cron_jobs"),
@@ -498,6 +542,12 @@ def selftest():
         ok += 1
         c = json.loads(json.dumps(a)); c["servers"][0]["last_status"] = "auth_error"
         assert essence(a) != essence(c)
+        # 設定フォルダの判定: 切れた / 直った は変化、 問い合わせの時刻だけの変化は変化に数えない
+        e = json.loads(json.dumps(a)); e["config_dir_auth"] = {"x": {"dead": False, "last_probe": "2000-01-01 00:00"}}
+        f = json.loads(json.dumps(e)); f["config_dir_auth"]["x"]["last_probe"] = "2000-01-02 00:00"
+        g = json.loads(json.dumps(e)); g["config_dir_auth"]["x"]["dead"] = True
+        assert essence(e) == essence(f), "問い合わせの時刻だけでは commit しない"
+        assert essence(e) != essence(g), "切れたら commit する"
         ok += 1
         # git repo での beat → commit → 2 回目は skip
         repo = Path(td) / "repo"

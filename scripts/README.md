@@ -293,6 +293,7 @@
 - **[lib/chat_file_refs.py](lib/chat_file_refs.py)** — chat の最終発話にある file 参照 (markdown link の href と、 path に見える inline code) を、 Claude Code desktop app の右パネルと同じ基準で解決し、 開けないものに正しい path を添えて返す共通部品 (Stop hook chat-file-ref-enforce.sh と校正が共用)
 - **[lib/class_meetings.py](lib/class_meetings.py)** — 授業の「第何回か」 をクラスのカレンダーから数え、 撮影時刻を時限に振り分ける helper (python3 class_meetings.py で selftest)
 - **[lib/commit-msg-leak-matcher.sh](lib/commit-msg-leak-matcher.sh)** — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 10 allowlist の (a)(b)(c) check + 審査中の申請を識別する種目語×評価語の共起 (d))、 claude-code hook + git-side runner の両方が source する DRY 実装
+- **[lib/config_dir_auth.py](lib/config_dir_auth.py)** — Claude Code の設定フォルダ (CLAUDE_CONFIG_DIR) の認証が切れているかを、 `claude` を呼ばずに読む共有判定。
 - **[lib/find-personal-layer.sh](lib/find-personal-layer.sh)** — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
 - **[lib/git_blob.py](lib/git_blob.py)** — git の blob を worktree に出したときの中身で読む helper (git-crypt で暗号化される path も平文で)。
 - **[lib/gmail_read.py](lib/gmail_read.py)** — Gmail を**読むだけ**の最小 helper (service の組み立て / thread の message 列 / 本文の取り出し)。

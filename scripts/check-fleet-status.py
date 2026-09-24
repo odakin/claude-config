@@ -19,6 +19,11 @@ server 異常 (どの役割でも beat が新鮮なら報告):
 - last_status consent_pending → 🟠 初回同意プロンプト待ちで進めない
 - pid 無し (loaded but dead)  → 🟠
 
+設定フォルダの認証 (writer の config_dir_auth、 追加設定不要):
+  最後の問い合わせが失敗し、 その後ログインし直していない pinned の設定フォルダ = 🔴 (他のマシンの分だけ。 自分の分は
+  check-desktop-logout-auth.py が出す)。 server の Connected は OAuth の更新が生きている証拠にならないので、 こちらで見る。
+  ⚠️ config_dirs の `default` は desktop app を最後に起動した時の account = ログインの記録ではない (writer の docstring)。
+
 inventory parity (writer 側 --inventory の対、 追加設定不要):
   writer が記録した `inventories: {label: [name...]}` を全マシン分で突合し、 **他マシンには
   在るのにこのマシンには無い** entry を 🟠 で surface する。 期待集合は **fleet の union** =
@@ -160,6 +165,21 @@ def job_findings(host, d, self_host=None):
     return out
 
 
+def auth_findings(host, d, self_host=None):
+    """1 マシンの beat の config_dir_auth から finding を作る (writer の判定 = lib/config_dir_auth.py、 問い合わせは
+    check-desktop-logout-auth.py の見張り)。 🔴 = 最後の問い合わせが失敗し、 その後ログインし直していない設定フォルダ。
+    自分のマシンの分は check-desktop-logout-auth.py が同じ判定で出すので出さない。 旧 beat (欄なし) は黙る。"""
+    if host == self_host:
+        return []
+    out = []
+    for alias, a in sorted((d.get("config_dir_auth") or {}).items()):
+        if isinstance(a, dict) and a.get("dead"):
+            out.append(f"🔴 {host}: 設定フォルダ ~/.claude-{alias} が切れた ({a.get('last_probe') or '?'} の問い合わせ"
+                       f"〔{a.get('last_probe_tag') or '?'}〕が失敗し、 その後ログインし直していない) = そのマシンの terminal で"
+                       f" `CLAUDE_CONFIG_DIR=~/.claude-{alias} claude auth login` (scheduled-tasks.md#headless-auth-expiry)")
+    return out
+
+
 def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_tasks=False, self_host=None):
     now = now or time.time()
     expect_accounts = expect_accounts or []
@@ -199,6 +219,7 @@ def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_
             elif s.get("pid") is None:
                 findings.append(f"🟠 {host}: server {s.get('label')} が loaded だが process 無し")
         findings.extend(job_findings(host, d, self_host))
+        findings.extend(auth_findings(host, d, self_host))
         if role == "always-on" and not d.get("servers"):
             findings.append(f"🟠 {host} (always-on): RC server が 1 本も loaded されていない")
         # coverage check: expected account の suffix server (= label 末尾 .<acct>) が居るか
@@ -404,7 +425,16 @@ def selftest():
             " scheduled-tasks.md#headless-auth-expiry)"], fa
         assert job_findings("host-b", beat_a, self_host="host-b") == [], "自分の分は cron-health に任せる"
         ok += 1
-    print(f"selftest: {ok}/18 PASS")
+        # 19: 設定フォルダが切れた (writer の config_dir_auth) = 他のマシンの分だけ 🔴 + login の command / 旧 beat は黙る
+        beat_c = {"config_dir_auth": {"x": {"dead": True, "last_probe": "2000-01-02 03:04", "last_probe_tag": "stale-check"},
+                                      "y": {"dead": False, "last_probe": "2000-01-02 03:04"}}}
+        fc = auth_findings("host-a", beat_c, self_host="host-b")
+        assert len(fc) == 1 and fc[0].startswith("🔴 host-a: 設定フォルダ ~/.claude-x が切れた") and "stale-check" in fc[0] \
+            and "CLAUDE_CONFIG_DIR=~/.claude-x claude auth login" in fc[0], fc
+        assert auth_findings("host-b", beat_c, self_host="host-b") == [], "自分の分は check-desktop-logout-auth に任せる"
+        assert auth_findings("old", {"servers": []}) == [], "旧 beat は黙る"
+        ok += 1
+    print(f"selftest: {ok}/19 PASS")
 
 
 def main():

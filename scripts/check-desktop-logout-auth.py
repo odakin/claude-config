@@ -11,8 +11,9 @@ X として無人の `claude -p` / Remote Control が使う設定フォルダ (`
 
   check-desktop-logout-auth.py                     # 表示だけ (dashboard / SessionStart 用。 切れたものだけ、 無ければ silent)
   check-desktop-logout-auth.py --verbose           # 確かめ中のものも出す
-  check-desktop-logout-auth.py --schedule-probes   # 表示 + 未予約のログアウトに問い合わせを launchd で予約 (冪等)
+  check-desktop-logout-auth.py --schedule-probes   # 表示 + 未予約のログアウトに問い合わせを予約 + 長く更新の無いフォルダを今確かめる
   check-desktop-logout-auth.py --probe DIR [--tag T]   # DIR に最小の claude -p を 1 回、 結果を ledger に追記
+  check-desktop-logout-auth.py --ensure-watch      # 見張りが無い・違う時だけ置く (config-bootstrap が毎 session 呼ぶ、 冪等)
   check-desktop-logout-auth.py --install-watch / --uninstall-watch   # 15 分ごとの --schedule-probes を launchd に
   check-desktop-logout-auth.py --selftest
 
@@ -28,7 +29,11 @@ X として無人の `claude -p` / Remote Control が使う設定フォルダ (`
     ログインも成功していない)。 更新が要る目安 = keychain の更新時刻 + AT_LIFETIME_H (desktop の Code タブのトークンが
     約 7h55m ごとに更新され、 実験でも更新から約 8 時間後の問い合わせで更新が走った)。 更新が成功すれば keychain の
     更新時刻がログアウトより後になり、 対象から外れる
-  - 🔴 = 確かめ中のフォルダで、 ログアウト後の問い合わせ (ledger = ~/.claude/state/desktop-logout-probe.log) が失敗
+  - 🔴 = 最後の問い合わせ (ledger = ~/.claude/state/desktop-logout-probe.log) が失敗し、 その後にログインし直して
+    いないフォルダ (判定 = scripts/lib/config_dir_auth.py の is_dead、 heartbeat と共有)。 きっかけ (ログアウト / 毎日の
+    確認) を問わない
+  - 毎日の確認 (stale-check) = keychain が STALE_H 時間以上更新されず、 その間に問い合わせもしていないフォルダを、
+    見張りが今確かめる (= ログアウトと無関係に切れた場合も 1 日以内に分かる。 RC しか使わないフォルダはここでしか確かめない)
   - 確かめ中で失敗の無いものは既定では出さない (--verbose で「確かめ中」 と出す)
   - 予約 = 直後に 1 回 (アクセストークンがその場で失効するか) + 目安 + 15 分に 1 回 (更新トークンが生きているか)。
     同じ (フォルダ, ログアウト時刻) には 1 度だけ (state = ~/.claude/state/desktop-logout-probe-state.json)。
@@ -40,7 +45,6 @@ X として無人の `claude -p` / Remote Control が使う設定フォルダ (`
 """
 from __future__ import annotations
 
-import datetime as dt
 import hashlib
 import json
 import os
@@ -54,40 +58,24 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 import launchd_job_log as jl  # noqa: E402
+import config_dir_auth as cda  # noqa: E402  (keychain の更新時刻・問い合わせの記録・切れたかの判定 = heartbeat と共有)
+from config_dir_auth import KEYCHAIN_PREFIX, keychain_mdat, keychain_service, _MDAT_RE  # noqa: E402,F401
 
 HOME = Path.home()
 DESKTOP_LOG_DIR = Path(os.environ.get("CLAUDE_DESKTOP_LOG_DIR", str(HOME / "Library" / "Logs" / "Claude")))
 LAUNCH_AGENTS = Path(os.environ.get("CLAUDE_LOGOUT_AGENTS", str(HOME / "Library" / "LaunchAgents")))
 STATE_DIR = Path(os.environ.get("CLAUDE_LOGOUT_STATE_DIR", str(HOME / ".claude" / "state")))
-LEDGER = STATE_DIR / "desktop-logout-probe.log"
+LEDGER = STATE_DIR / cda.LEDGER.name
 STATE = STATE_DIR / "desktop-logout-probe-state.json"
 AT_LIFETIME_H = 8
 VERDICT_MARGIN_MIN = 15
+STALE_H = 24  # これより長く keychain が更新されていないフォルダは、 見張りが 1 日 1 回問い合わせる
 PROBE_MODEL = "claude-haiku-4-5-20251001"
 PROBE_LABEL_PREFIX = "com.claude-config.logout-probe"
 WATCH_LABEL = "com.claude-config.desktop-logout-watch"
-KEYCHAIN_PREFIX = "Claude Code-credentials-"
 
 _LOGOUT_RE = re.compile(
     r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) .*Login-state transition \(loggedOut: false → true, uuid: ([0-9a-f-]+) → <none>\)")
-_MDAT_RE = re.compile(r'"mdat"<timedate>=0x[0-9A-F]*\s+"(\d{14})Z')
-
-
-def keychain_service(config_dir: str) -> str:
-    return KEYCHAIN_PREFIX + hashlib.sha256(config_dir.encode()).hexdigest()[:8]
-
-
-def keychain_mdat(service: str) -> float | None:
-    """keychain 項目の更新時刻 (epoch)。 属性だけ読む。 無い・読めないなら None。"""
-    try:
-        cp = subprocess.run(["security", "find-generic-password", "-s", service],
-                            capture_output=True, text=True, timeout=10)
-    except Exception:
-        return None
-    m = _MDAT_RE.search(cp.stdout + cp.stderr)
-    if not m:
-        return None
-    return dt.datetime.strptime(m.group(1), "%Y%m%d%H%M%S").replace(tzinfo=dt.timezone.utc).timestamp()
 
 
 def watched_dirs(agents_dir: Path) -> dict[str, list[str]]:
@@ -132,19 +120,31 @@ def logouts(log_dir: Path) -> dict[str, float]:
 
 
 def read_ledger(ledger: Path) -> list[dict]:
-    rows = []
-    try:
-        for line in ledger.read_text(encoding="utf-8").splitlines():
-            parts = line.split("\t")
-            if len(parts) >= 4:
-                try:
-                    t = time.mktime(time.strptime(parts[0], "%Y-%m-%d %H:%M:%S"))
-                except ValueError:
-                    continue
-                rows.append({"t": t, "tag": parts[1], "dir": parts[2], "ok": parts[3] == "ok"})
-    except OSError:
-        pass
-    return rows
+    return cda.read_ledger(ledger)
+
+
+def dead_dirs(dirs: dict[str, list[str]], mdat_of, rows: list[dict]) -> list[dict]:
+    """最後の問い合わせが失敗し、 その後にログインし直していないフォルダ (きっかけを問わない)。"""
+    out = []
+    for d, labels in sorted(dirs.items()):
+        r = cda.is_dead(rows, d, mdat_of(d))
+        if r:
+            out.append({"dir": d, "labels": labels, "t": r["t"], "tag": r["tag"]})
+    return out
+
+
+def plan_stale(dirs: dict[str, list[str]], mdat_of, rows: list[dict], now: float) -> list[str]:
+    """keychain が STALE_H 時間以上更新されず、 その間に問い合わせもしていないフォルダ (= 使う人がいない or 切れている)。"""
+    out = []
+    for d in sorted(dirs):
+        m = mdat_of(d)
+        if m is None or now - m < STALE_H * 3600:
+            continue
+        last = cda.last_probe(rows, d)
+        if last and now - last["t"] < STALE_H * 3600:
+            continue
+        out.append(d)
+    return out
 
 
 def _hm(t: float) -> str:
@@ -176,15 +176,16 @@ def assess(dirs: dict[str, list[str]], last_logout: dict[str, float], mdat_of, l
     return out
 
 
-def render(items: list[dict], script: str, verbose: bool = False) -> list[str]:
+def render(items: list[dict], script: str, verbose: bool = False, dead: list[dict] | None = None) -> list[str]:
+    """🔴 = 切れたフォルダ (dead_dirs、 きっかけを問わない)。 ⚪ = ログアウト後に確かめ中 (--verbose のときだけ)。"""
     lines = []
+    for x in dead or []:
+        lines.append(f"🔴 {x['dir']} ({len(x['labels'])} 本の launchd job が使う) は切れた ({_hm(x['t'])} の問い合わせ〔{x['tag']}〕が失敗し、"
+                     f" その後ログインし直していない)。 直す = そのマシンで CLAUDE_CONFIG_DIR={x['dir']} claude auth login")
+    dead_set = {x["dir"] for x in dead or []}
     for it in items:
-        who = f"{it['dir']} ({len(it['labels'])} 本の launchd job が使う)"
-        fix = f"CLAUDE_CONFIG_DIR={it['dir']} claude auth login"
-        if it["state"] == "切れた":
-            lines.append(f"🔴 {who} は切れた (desktop で {it['email']} を {_hm(it['logout'])} にログアウトした後の問い合わせが失敗)。"
-                         f" 直す = そのマシンで {fix}")
-        elif verbose:
+        if verbose and it["dir"] not in dead_set:
+            who = f"{it['dir']} ({len(it['labels'])} 本の launchd job が使う)"
             lines.append(f"⚪ 確かめ中: desktop で {it['email']} を {_hm(it['logout'])} にログアウトした後、 {who} の認証はまだ更新されていない"
                          f" (更新の目安 {_hm(it['verdict_at'])}、 状態 = {it['state']})。 今すぐ確かめる = python3 {script} --probe {it['dir']}")
     return lines
@@ -219,7 +220,7 @@ def probe(config_dir: str, tag: str, claude: str = "claude", ledger: Path = LEDG
         notify = Path(__file__).resolve().parent / "claude-notify.sh"
         if notify.exists():
             subprocess.run(["sh", str(notify), "--title", f"認証切れ: {Path(config_dir).name}",
-                            "--body", f"desktop ログアウト後の問い合わせが失敗 ({tag})。 直す = CLAUDE_CONFIG_DIR={config_dir} claude auth login"],
+                            "--body", f"認証の問い合わせが失敗 ({tag})。 直す = CLAUDE_CONFIG_DIR={config_dir} claude auth login"],
                            capture_output=True, timeout=30)
     print(f"{'ok' if ok else 'FAIL'}\t{config_dir}\t{' '.join(raw.split())[:120]}")
     return ok
@@ -278,6 +279,30 @@ def schedule(items: list[dict], now: float | None = None, dry: bool = False) -> 
     return done
 
 
+def _watch_plist() -> dict:
+    log = str(HOME / "Library" / "Logs" / f"{WATCH_LABEL}.log")
+    return {"Label": WATCH_LABEL, "ProgramArguments": [sys.executable, str(Path(__file__).resolve()), "--schedule-probes"],
+            "StartInterval": 900, "RunAtLoad": True, "StandardOutPath": log, "StandardErrorPath": log}
+
+
+def ensure_watch() -> int:
+    """見張りが無い・中身が違う・launchd に載っていない時だけ入れ直す (冪等、 何もしなければ無出力)。
+    見張るフォルダ (launchd の job が使う CLAUDE_CONFIG_DIR) が 1 つも無い機械では何もしない。"""
+    if not watched_dirs(LAUNCH_AGENTS):
+        return 0
+    p = LAUNCH_AGENTS / f"{WATCH_LABEL}.plist"
+    want = _watch_plist()
+    try:
+        have = plistlib.load(p.open("rb"))
+    except Exception:
+        have = None
+    loaded = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{WATCH_LABEL}"],
+                            capture_output=True).returncode == 0
+    if have == want and loaded:
+        return 0
+    return install_watch()
+
+
 def install_watch(uninstall: bool = False) -> int:
     p = LAUNCH_AGENTS / f"{WATCH_LABEL}.plist"
     subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{WATCH_LABEL}"], capture_output=True)
@@ -285,13 +310,10 @@ def install_watch(uninstall: bool = False) -> int:
         p.unlink(missing_ok=True)
         print(f"removed {WATCH_LABEL}")
         return 0
-    log = str(HOME / "Library" / "Logs" / f"{WATCH_LABEL}.log")
-    d = {"Label": WATCH_LABEL, "ProgramArguments": [sys.executable, str(Path(__file__).resolve()), "--schedule-probes"],
-         "StartInterval": 900, "RunAtLoad": True, "StandardOutPath": log, "StandardErrorPath": log}
     with p.open("wb") as fh:
-        plistlib.dump(d, fh)
+        plistlib.dump(_watch_plist(), fh)
     rc = subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(p)], capture_output=True).returncode
-    print(f"installed {WATCH_LABEL} (15 分ごと、 rc={rc})")
+    print(f"認証の見張りを置いた ({WATCH_LABEL}、 15 分ごと、 rc={rc})")
     return rc
 
 
@@ -347,9 +369,31 @@ def selftest() -> int:
 
         fail_row = [{"t": t_out + 7200, "tag": "verdict", "dir": str(cron), "ok": False}]
         it2 = assess(dirs, lo, lambda d: before, fail_row, now=t_out + 8000)
-        r2 = render(it2, "x")
-        ck("ログアウト後の問い合わせが失敗 = 🔴 「切れた」 と login の command", it2 and it2[0]["state"] == "切れた"
-           and r2 and r2[0].startswith("🔴") and "切れた" in r2[0] and "claude auth login" in r2[0])
+        dd = dead_dirs(dirs, lambda d: before, fail_row)
+        r2 = render(it2, "x", dead=dd)
+        ck("ログアウト後の問い合わせが失敗 = 🔴 「切れた」 と login の command (1 行だけ)", it2 and it2[0]["state"] == "切れた"
+           and len(r2) == 1 and r2[0].startswith("🔴") and "切れた" in r2[0] and "claude auth login" in r2[0])
+        ck("--verbose でも切れたフォルダを確かめ中と二重に出さない", len(render(it2, "x", verbose=True, dead=dd)) == 1)
+        ck("失敗の後にログインし直せば 🔴 は消える", dead_dirs(dirs, lambda d: t_out + 9000, fail_row) == [])
+        # きっかけの無い切れ: ログアウトが無くても、 長く更新されていないフォルダを確かめて失敗したら 🔴
+        now = t_out + 3 * 86400
+        ck("keychain が 24 時間以上更新されず問い合わせも無いフォルダを確かめる",
+           plan_stale(dirs, lambda d: now - 30 * 3600, [], now) == sorted(dirs))
+        ck("最近更新されたフォルダは確かめない", plan_stale(dirs, lambda d: now - 3600, [], now) == [])
+        recent = [{"t": now - 3600, "tag": "stale-check", "dir": d, "ok": True} for d in dirs]
+        ck("24 時間以内に確かめたフォルダは確かめない", plan_stale(dirs, lambda d: now - 30 * 3600, recent, now) == [])
+        ck("keychain が読めないフォルダは確かめない (fail-open)", plan_stale(dirs, lambda d: None, [], now) == [])
+        stale_fail = [{"t": now, "tag": "stale-check", "dir": str(other), "ok": False}]
+        r3 = render([], "x", dead=dead_dirs(dirs, lambda d: now - 30 * 3600, stale_fail))
+        ck("毎日の確認の失敗も 🔴 (ログアウトと無関係に)", len(r3) == 1 and str(other) in r3[0] and "stale-check" in r3[0])
+        global LAUNCH_AGENTS
+        saved, LAUNCH_AGENTS = LAUNCH_AGENTS, td / "empty-agents"
+        (td / "empty-agents").mkdir()
+        try:
+            ck("見張るフォルダが無い機械では見張りを置かない", ensure_watch() == 0
+               and not (td / "empty-agents" / f"{WATCH_LABEL}.plist").exists())
+        finally:
+            LAUNCH_AGENTS = saved
         pass_row = [{"t": before + AT_LIFETIME_H * 3600 + 60, "tag": "verdict", "dir": str(cron), "ok": True}]
         it3 = assess(dirs, lo, lambda d: before, pass_row)
         ck("目安を過ぎた成功は既定では出さない", it3 and it3[0]["state"] == "目安を過ぎても通った" and render(it3, "x") == [])
@@ -373,21 +417,30 @@ def selftest() -> int:
 def main(argv: list[str]) -> int:
     if "--selftest" in argv:
         return selftest()
+    if "--ensure-watch" in argv:
+        return ensure_watch()
     if "--install-watch" in argv or "--uninstall-watch" in argv:
         return install_watch(uninstall="--uninstall-watch" in argv)
     if "--probe" in argv:
         i = argv.index("--probe")
         tag = argv[argv.index("--tag") + 1] if "--tag" in argv else "manual"
         return 0 if probe(argv[i + 1], tag) else 1
-    if not (DESKTOP_LOG_DIR / "main.log").exists():
-        return 0
-    items = assess(watched_dirs(LAUNCH_AGENTS), logouts(DESKTOP_LOG_DIR),
-                   lambda d: keychain_mdat(keychain_service(d)), read_ledger(LEDGER))
-    for line in render(items, str(Path(__file__).resolve()), verbose="--verbose" in argv):
-        print(line)
+    dirs = watched_dirs(LAUNCH_AGENTS)
+    mdat_of = lambda d: keychain_mdat(keychain_service(d))  # noqa: E731
+    rows = read_ledger(LEDGER)
+    # ログアウトのきっかけは desktop app の log がある機械だけ (無ければ ログアウト由来の確かめ中は 0 件)
+    last_out = logouts(DESKTOP_LOG_DIR) if (DESKTOP_LOG_DIR / "main.log").exists() else {}
+    items = assess(dirs, last_out, mdat_of, rows)
     if "--schedule-probes" in argv:
         for line in schedule(items):
             print(line)
+        # きっかけの無い切れ (原因不明の失効) も 1 日以内に見つける: 長く更新されていないフォルダを今確かめる
+        for d in plan_stale(dirs, mdat_of, rows, time.time()):
+            probe(d, "stale-check")
+        rows = read_ledger(LEDGER)
+    for line in render(items, str(Path(__file__).resolve()), verbose="--verbose" in argv,
+                       dead=dead_dirs(dirs, mdat_of, rows)):
+        print(line)
     return 0
 
 
