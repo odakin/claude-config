@@ -815,21 +815,48 @@ def run_staged(repo_arg: Optional[str], base_arg: Optional[str], ack: Set[str]) 
     return 1
 
 
+def _grep_files(repo: Path, needles: List[str]) -> List[str]:
+    """repo の track 済み file のうち needle (固定文字列) のどれかを含むもの (git grep = worktree を index 経由で速く)。"""
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_REPO_ENV}
+    args = ["git", "-C", str(repo), "grep", "-l", "-I", "-F"]
+    for n in needles:
+        args += ["-e", n]
+    try:
+        r = subprocess.run(args, capture_output=True, timeout=60, env=env)
+    except Exception:
+        return []
+    return [x for x in r.stdout.decode("utf-8", "replace").splitlines() if x]
+
+
 def find_inbound(fleet: Fleet, target: Path, repo: Path, lost_heads: List[str], lost_anchors: Set[str],
                  ack: Set[str]) -> List[Finding]:
+    """消えた見出し・anchor を指す他 file。 候補の file は git grep で先に絞る (全 file を読むと commit ごとに数秒)。
+    README.md / SESSION.md 等の各 repo にある名前は、 同じ repo の中と、 他 repo からは `<repo>/<名前>` の形だけを探す
+    (裸の名前は参照元 repo の中でしか解決しない = file の解決と同じ規則)。"""
     out: List[Finding] = []
     tres = target.resolve()
     bn = target.name
     stem = target.stem
-    for r in fleet.repos():
-        for f in fleet.files(r):
+    scaffold = bn.lower() in SCAFFOLD_NAMES
+
+    def needles_for(r: Path) -> List[str]:
+        if scaffold and r.resolve() != repo.resolve():
+            return [f"{repo.name}/{bn}"]
+        return [bn] + ([stem] if stem in BARE_SCAFFOLD else [])
+
+    from concurrent.futures import ThreadPoolExecutor
+    repos = fleet.repos()
+    with ThreadPoolExecutor(max_workers=8) as ex:  # repo ごとの git grep を並べる (直列だと repo 数 × 数十 ms)
+        hits = list(ex.map(lambda r: _grep_files(r, needles_for(r)), repos))
+    for r, files in zip(repos, hits):
+        for f in files:
             if os.path.splitext(f)[1].lower() not in SCAN_EXTS:
                 continue
             p = r / f
             if p.resolve() == tres:
                 continue
             text = fleet.overrides.get(p.resolve()) or read_text_file(p)
-            if text is None or (bn not in text and stem not in text):
+            if text is None:
                 continue
             refs, _ = extract_refs(text, code=f.endswith((".py", ".sh")))
             for ref in refs:
