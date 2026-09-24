@@ -109,6 +109,18 @@ CSR SPA のニュース/結果ページの URL を多数検証する場面 (例:
 - **本文に URL を入れない・添付は付かない**: 予約サイトの messaging security がリンクを削除する (施設側が許可した domain だけ通る、 partner 向け資料の二次解説で確認)。 メッセージは「メールアドレスを聞く」 「受け取り方法を相談する」 に使い、 書類はアドレスが分かってからメールで送る
 - 送信は外部発信 = 本文を chat で見せて本人の明示 OK を取ってから
 - **宿の返事はメール通知が来ないことがある** (実測: web の inbox に返事が出てから 1 時間半以上、 通知メールが届かなかった)。 返事を待つときは web の inbox を開いて見る
+- **無人運営の宿は、 勤め先の指定書式への押印・署名を断り、 自社の証明書を有料で (退室後に) 出すことがある** (実測)。 書式への押印が要る出張では予約前にメッセージで確かめる。 施設ページの設備欄に「フロントサービス: 領収書を発行可能」 とあれば、 施設発行の領収書を頼む根拠になる (記載項目を並べて頼む = [`research-email.md#approver-vs-issuer`](research-email.md#approver-vs-issuer))
+
+## <a id="listing-evidence-capture"></a>掲載内容を証拠に残す (後から書き換えられる前に) — pane の画面キャプチャ + 元メールの .eml + ハッシュ
+
+予約サイト・通販の掲載 (料金・設備・規則) や相手とのメッセージを、 争いに備えて残すとき:
+
+- **画面**: 内蔵 Browser pane に該当箇所を出し、 macOS の `screencapture -x -R <x>,<y>,<w>,<h> <file>.png` で pane の範囲を撮る。 範囲の上端を 0 にしてメニューバーの時計を入れると、 撮った日時が画像に残る。 範囲は一度全画面 (`screencapture -x`) を撮って pane の位置を読んでから決める。 横にはみ出す頁は `document.documentElement.style.zoom` を下げてから撮る (表示倍率だけで中身は変わらない = 記録に書き添える)。 被さる通知 (セキュリティの注意等) は × を押してから撮る
+- **元のメール**: Gmail API の `format=raw` で .eml に保存する (送信元の DKIM 署名が付いたまま = 後から改変できない)。 予約番号や暗証番号が入るので、 渡すときは伏せる
+- **本文の検索結果**: 争点の語 (手数料・金額・証明) が掲載に**無い**ことも証拠になる = 頁の全文を読み込ませてから (下までスクロールして遅延読み込みを出す) 語を数え、 件数を記録に書く
+- **一覧**: 各ファイルが何を示すか + 取得日時 + `shasum -a 256` を 1 つの txt にまとめる
+- ⚠️ headless Chromium (`--headless --print-to-pdf`) は予約サイトの頁で終わらなかった (実測、 timeout)。 粘らずに pane + `screencapture` に切り替える
+- 保存先は git の外 (本人の同期ストレージ)。 記録 (TODO 等) には所在だけ書く ([`confidential-repo-boundary.md#physical-access-codes`](confidential-repo-boundary.md#physical-access-codes) と同じ扱い)
 
 ## <a id="cookie-replay-oauth-spa"></a>Browser cookie replay は OAuth-token SPA を認証しない (= member 限定クラウドフォルダは無人 upload 不可)
 

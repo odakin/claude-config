@@ -3742,6 +3742,13 @@ UTF-8 フラグ付き zip (最近の Windows / macOS 生成) は decode が例�
 2. ⚠️ **pulldown 源泉 cell を消さない**: この型の様式は list validation の**選択肢そのものを同 sheet の helper cell** (= 表の右外の列等、 `formula1=$N$34:$N$37` のような cell 参照) に生値で置いていることがある。 記入例クリアの範囲に helper cell を含めると **validation の選択肢が壊れる**。 [`form-dump-first`](#form-dump-first) の data_validations 出力で `formula1` が cell 参照のものを特定し、 クリア範囲から除外する。
 3. 条件付きチェック項目 (= 「上記②〜⑤が確認できない場合…」 型) は**前提が満たされていれば空欄が正**のことがある (= 案内 PDF の補足事項に「チェックは必須ではありません」 と明記される型)。 全項目を ○ で埋める reflex を出さず、 各項目の条件文を読んでから埋める。
 
+## <a id="printed-page-number"></a>人に頁を示すときは冊子の頁番号で — PDF の何枚目かとは違う
+
+規程・マニュアルの PDF は表紙や目次に頁番号が無く、 **本文の頁番号 (footer の数字) と PDF の何枚目か がずれる** (実測: 1 ずれ)。 tool の抽出は PDF の枚数で数えるので、 そのまま「p17」 と書くと相手の冊子では別の頁になる。
+
+- 頁を引く前に、 その頁の footer の数字を確かめる: `page.get_text("words")` のうち y が頁の下端 1 割に入る語 (= 頁番号)。 冊子の番号で書き、 記録には「冊子 pN (= PDF の M 枚目)」 と両方残す
+- 相手 (事務) が頁を引いてきたら、 それは冊子の番号として読む
+
 ## <a id="related-repos"></a>関連リポ
 
 - 実例: ある grant 申請 repo の specific 助成事業 dir 内の `fill_xlsx.py` (= 様式 1 xlsx 自動 fill)
