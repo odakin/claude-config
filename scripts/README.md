@@ -29,6 +29,8 @@
 - **[calibrate-bash-command-pattern.py](calibrate-bash-command-pattern.py)** — Bash の command を見る PreToolUse guard の述語を、 過去の transcript の Bash tool 呼び出しに当てて検出数と例を出す（導入前の誤検出の見積もり用。 --hook で hook file の find_issues(command) をそのまま使う、 --selftest。 conventions/hook-authoring.md#command-guard-calibration）
 - **[calibrate-final-message-pattern.py](calibrate-final-message-pattern.py)** — 発話を見る Stop hook の句を、 過去の transcript の各 turn の最終 assistant 発話に当てて検出数と例を出す（導入前の誤検出の見積もり用。 turn の境界は hook と同じ scripts/lib/transcript_turns.py、 --skip-quoted / --exclude-sentence-with で hook の除外を再現、 --selftest。 conventions/hook-authoring.md#text-pattern-stop-hook）
 - **[campussquare-client.py](campussquare-client.py)** — 大学の教務システム CampusSquare for WEB を **browser session cookie で script から読む** (画面 drive 不要)。
+- **[campussquare-plan-table.mutants.json](campussquare-plan-table.mutants.json)** — campussquare-plan-table.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
+- **[campussquare-plan-table.py](campussquare-plan-table.py)** — CampusSquare の「授業計画表」 (xlsx 出力) を読み、 教員ごとの登録 (開講期・曜時・科目) を並べて予定と突き合わせる。
 - **[campussquare-roster-split.mutants.json](campussquare-roster-split.mutants.json)** — campussquare-roster-split.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[campussquare-roster-split.py](campussquare-roster-split.py)** — CampusSquare の「全担当科目の名簿 CSV」 を、科目 (コマ) ごとの成績登録用の名簿 CSV の形に分ける。
 - **[chat_file_refs.mutants.json](chat_file_refs.mutants.json)** — chat_file_refs.py (Stop hook chat-file-ref-enforce.sh の判定の部品) の修正を 1 つずつ外した mutant 9 本で、 hook の test の該当 case が落ち、 隣の case は通り続けることを確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。

@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: 大学の教務システム CampusSquare for WEB (シラバス・履修者名簿・成績登録) を読む・扱うとき + 名簿 CSV を科目別に分けるとき + 成績を CSV で一括登録するとき + 内蔵 browser でログイン画面が出て「読めない」 と言いそうになったとき
+when: 大学の教務システム CampusSquare for WEB (シラバス・履修者名簿・成績登録) を読む・扱うとき + 名簿 CSV を科目別に分けるとき + 成績を CSV で一括登録するとき + 内蔵 browser でログイン画面が出て「読めない」 と言いそうになったとき + 配られた授業計画表の xlsx で自分の登録 (開講期・曜時) を照合するとき (#plan-table-xlsx)
 category: web
-summary: CampusSquare は学内 SSO の奥だが browser の session cookie 再利用で script から読める (scripts/campussquare-client.py、 シラバス検索・本文) / 画面は Spring Web Flow = hidden の _flowExecutionKey と _eventId を POST → 302 → GET / 教員でログインするとシラバス検索の担当者欄に本人名が既定で入る / 名簿・成績 CSV は CP932・CRLF・全 field quoted・評語は末尾から 2 列目 / アップロードと「提出」 は別操作
+summary: CampusSquare は学内 SSO の奥だが browser の session cookie 再利用で script から読める (scripts/campussquare-client.py、 シラバス検索・本文) / 画面は Spring Web Flow = hidden の _flowExecutionKey と _eventId を POST → 302 → GET / 教員でログインするとシラバス検索の担当者欄に本人名が既定で入る / 名簿・成績 CSV は CP932・CRLF・全 field quoted・評語は末尾から 2 列目 / アップロードと「提出」 は別操作 / 授業計画表 xlsx は曜日ごとの 5 列の組が横に並ぶ = 組ごとに読む、 照合 = scripts/campussquare-plan-table.py (旧課程の別名の行・年次の書き方の違いに注意)
 -->
 # CampusSquare for WEB (教務システム) の自動化
 
@@ -38,3 +38,15 @@ summary: CampusSquare は学内 SSO の奥だが browser の session cookie 再�
 - **提出確定は upload と別の操作**: 各科目の「提出」 にチェック → 「提出済み（全員）」 → 更新。 全科目が提出済みになると一括更新欄が空になる
 - 評価不能 (X) も CSV で通る
 - 現状の script は読むだけ (名簿の download・成績の upload は画面)。 書き込みを足すときは読み戻し照合までを 1 単位にする ([`web-form-automation.md#step-driver-harness`](web-form-automation.md#step-driver-harness))
+
+## <a id="plan-table-xlsx"></a>授業計画表 (xlsx 出力) で自分の登録を照合する
+
+教務の画面から、 科目グループ (学科・課程) ごとの「授業計画表」 を xlsx で出力できる。 学科の取りまとめ役がこれを配り、 各教員に自分のコマ (特に前期・後期) の確認を頼む運用がある (実測)。 画面を開かずに照合できる。
+
+- **形**: 表題 (「授業計画表」・年度・科目グループ) の後に見出し行 `NO | 開講期 | 曜時 | 科目名 | 担当者 | 選必 | 年次 | 曜時2 | 科目名2 | …` = **曜日ごとの 5 列の組が横に 5 つ並ぶ**。 1 行に複数の曜日の組が入るので、 行でなく組ごとに読む。 担当者名は姓と名の間が全角空白。 末尾に曜時も担当者も空の行 (曜時が未設定の枠) が並ぶことがある
+- **照合** = [`scripts/campussquare-plan-table.py`](../scripts/campussquare-plan-table.py): 科目グループの file を全部渡し、 `--teacher <名前>` と、 予定を `--expect "開講期 曜時 科目名"` で 1 件ずつ。 ✅ 一致 / ❌ 予定にあるのに登録が無い / ➕ 登録にあるのに予定に無い、 で出る (不一致があれば exit 1)
+- ⚠️ **読み方の罠** (実測):
+  - 「年次」 は履修できる年次の範囲 (例 `2・3・4`) で、 学科の時間割表に書く配当年次 (例 `(2)`) と書き方が違う。 食い違って見えても登録の誤りではない
+  - 旧課程と新課程の合同開講は、 **旧課程の科目グループに、 同じ曜時で別の科目名の行が出る** (新課程の「X（基礎）」 が旧課程では「X」 など)。 予定に旧課程側の名前も書く (書かないと ➕ で出る)
+  - 全教員で担当する演習・講究の類は、 全員分が同じ曜時に 1 行ずつ並ぶ = 自分の行があるかだけを見る
+  - 開講期「通年」 の行は前期・後期の行とは別に出る (予定も「通年」 で書く)

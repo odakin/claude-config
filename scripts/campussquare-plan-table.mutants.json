@@ -1,0 +1,27 @@
+{
+  "_comment": "campussquare-plan-table.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。",
+  "target": "campussquare-plan-table.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "FAIL ",
+  "pass_marker": "PASS ",
+  "mutants": [
+    {
+      "name": "最初の曜日の列の組しか読まない",
+      "pairs": [["if _s(v).startswith(\"曜時\")]", "if _s(v).startswith(\"曜時\")][:1]"]],
+      "expect_fail": ["5 つ目の曜日の列も読む"],
+      "expect_pass": ["曜時の無い行を落とさない"]
+    },
+    {
+      "name": "名前の空白を無視しない",
+      "pairs": [["    return re.sub(r\"\\s+\", \"\", _s(s))", "    return _s(s)"]],
+      "expect_fail": ["全角空白の名前で当たる"],
+      "expect_pass": ["見出しが無い file は形式エラー"]
+    },
+    {
+      "name": "開講期を照合に入れない",
+      "pairs": [["    return (term, slot, norm(course))", "    return (\"\", slot, norm(course))"]],
+      "expect_fail": ["学期違いを不一致にする"],
+      "expect_pass": ["予定どおりなら一致で 0"]
+    }
+  ]
+}

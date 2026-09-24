@@ -861,6 +861,10 @@ sections:
     legacy: "8.73"
     level: 3
     title: "8.73 selftest の fixture の既定値が現実と違う軸は、 その軸に依存する不具合を期待値に焼き込む — helper の既定は現実の向きから取る"
+  - id: directive-strength-before-cannot
+    legacy: "8.74"
+    level: 3
+    title: "8.74 組織の文書の「〜しないように」 を「できない」 と伝える前に、 文の強さと例外の手続きを確かめる — お願い・手続きつきの可・禁止は別物"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
