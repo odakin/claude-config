@@ -178,6 +178,7 @@
 - **[manuscript-claim-guard.py](manuscript-claim-guard.py)** — 原稿の保護領域 (表題・概要・序論・結論・数式環境) と agent の権限規約を、 著者の項目ごとの承認 (著者の発言の verbatim を transcript で照合) なしに AI agent が書き換える変更を止める engine (Claude / Codex の PreToolUse と git pre-commit が同じ述語で呼ぶ)
 - **[md-note-to-tex.py](md-note-to-tex.py)** — Markdown のノートを、 手元の TeX preamble に載る骨格 (raw/) へ機械で変える (正本が md、 TeX が写しのときの写し作りの前半。 構造だけ)。
 - **[measure-pdf-layout.py](measure-pdf-layout.py)** — 組版された PDF の版面を実測する — 「指定したのに効いていない」 を目視でなく数値で捕まえる.
+- **[newer_in_thread.mutants.json](newer_in_thread.mutants.json)** — lib/newer_in_thread.py (返信先より新しい相手の message の判定) の selftest の foil に歯があることを、 判定の部品を 1 つずつ外した mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[normalize-docx-decl.py](normalize-docx-decl.py)** — 既存 docx の XML 宣言を Word 形式へ後追い正規化する CLI（docx_decl_patch の path-based 版、 office-automation.md#docx-checkbox-content-control）
 - **[office-stage-run.sh](office-stage-run.sh)** — 任意の Office 駆動 command を事前 grant 済み staging dir 経由で 1 回走らせる (入力を stage → `{}` を staged path に置換して実行 → 成功時に書き戻し、 office-automation.md#office-pregranted-staging-dir)
 - **[office-stage-run.test.sh](office-stage-run.test.sh)** — office-stage-run.sh の hermetic test (Office は起こさない: CLAUDE_OFFICE_STAGING_DIR で root を tmp に向け、 command は sh)
@@ -307,6 +308,7 @@
 - **[lib/mail_watch.py](lib/mail_watch.py)** — 既知スレッドを辿るだけでは拾えない mail を拾う helper（待ち項目の検索条件 / 決着済み案件への自動督促の判定 / 本文 text の取り出し。 Gmail API の service を受け取る、 python3 mail_watch.py で selftest）
 - **[lib/merge-hook-event.sh](lib/merge-hook-event.sh)** — settings.json への hook event merge (単一リスト駆動)
 - **[lib/merge-hook-event.test.sh](lib/merge-hook-event.test.sh)** — merge_hook_event の self-test (hermetic、 実 settings.json 不使用)
+- **[lib/newer_in_thread.py](lib/newer_in_thread.py)** — 返信先より新しい相手の message を送信前に数える engine (thread の読みは呼び手が持つ)。
 - **[lib/office-app-guard.sh](lib/office-app-guard.sh)** — Office (Excel / Word / PowerPoint) を osascript で駆動する前後の安全な reset + 背景起動 (user が開いた文書を持つ app は quit も kill もしない・前面に出さない、 sourceable lib + CLI、 office-automation.md#office-app-reset-guard)
 - **[lib/office-app-guard.test.sh](lib/office-app-guard.test.sh)** — office-app-guard.sh の hermetic test (osascript / open を PATH の stub に差し替え、 Office は起こさない。 macOS 以外でも走る)
 - **[lib/office-staging.sh](lib/office-staging.sh)** — Office (Word / Excel / PowerPoint) automation の「事前 grant 済み staging dir」 helper (sourceable lib、 macOS App Sandbox の folder-grant dialog を design-out、 office-automation.md#office-pregranted-staging-dir)

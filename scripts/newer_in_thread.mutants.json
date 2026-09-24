@@ -1,0 +1,49 @@
+{
+  "_comment": "lib/newer_in_thread.py (返信先より新しい相手の message の判定) の selftest の foil に歯があることを、 判定の部品を 1 つずつ外した mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。",
+  "target": "lib/newer_in_thread.py",
+  "run": "python3 {} --selftest",
+  "mutants": [
+    {
+      "name": "SENT/DRAFT label を自分と見ない",
+      "pairs": [["    return bool(SELF_LABELS & set(row.get(\"labels\") or []))\n", "    return False\n"]],
+      "expect_fail": ["own sent / list copy / own From / draft"],
+      "expect_pass": ["newer counterpart after the parent is listed", "ack of the newest id: allowed"]
+    },
+    {
+      "name": "list が配り直した自分の投稿 (同じ Message-ID) を自分と見ない",
+      "pairs": [["             and not (r.get(\"message_id\") and r[\"message_id\"] in own_ids)]", "             ]"]],
+      "expect_fail": ["own sent / list copy / own From / draft"],
+      "expect_pass": ["each self address counts as own", "older counterpart is not counted"]
+    },
+    {
+      "name": "From が自分の address でも相手に数える",
+      "pairs": [["             and parseaddr(r.get(\"from\") or \"\")[1].lower() not in selves\n", ""]],
+      "expect_fail": ["own sent / list copy / own From / draft", "each self address counts as own"],
+      "expect_pass": ["newer counterpart after the parent is listed"]
+    },
+    {
+      "name": "返信先より古い message も数える",
+      "pairs": [["and when_ms(r) > base and", "and"]],
+      "expect_fail": ["older counterpart is not counted"],
+      "expect_pass": ["newer counterpart after the parent is listed"]
+    },
+    {
+      "name": "ack を最新でなく何か 1 つの相手 id と照合する",
+      "pairs": [["    return ack == latest, latest\n", "    return ack in {r[\"id\"] for r in newer}, latest\n"]],
+      "expect_fail": ["later arrival makes the old ack stale"],
+      "expect_pass": ["ack of the newest id: allowed", "ack of another id: refused"]
+    },
+    {
+      "name": "返信先が listing に無くても通す (fail open)",
+      "pairs": [["        raise ValueError(\"Parent not found in its thread listing; cannot check for newer replies\")\n", "        base = 0\n"]],
+      "expect_fail": ["parent missing from the listing fails closed"],
+      "expect_pass": ["missing internal_date fails closed"]
+    },
+    {
+      "name": "日付の無い row を黙って 0 扱い",
+      "pairs": [["        return int(row[\"internal_date\"])\n", "        return int(row.get(\"internal_date\") or 0)\n"]],
+      "expect_fail": ["missing internal_date fails closed"],
+      "expect_pass": ["parent missing from the listing fails closed"]
+    }
+  ]
+}

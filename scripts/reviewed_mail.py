@@ -11,24 +11,28 @@ thread(thread_id) lists the parent's thread as dicts with id, internal_date
 (integer epoch milliseconds), labels, from, message_id, and optionally subject,
 date, snippet. preview() lists messages from others that are newer than the
 parent, and send() refuses while any exist unless acknowledged with the newest
-one's id (conventions/gmail-sending.md#reply-newer-in-thread).
+one's id (conventions/gmail-sending.md#reply-newer-in-thread; judgement =
+lib/newer_in_thread.py).
 """
 from __future__ import annotations
 
 import base64
 import hashlib
-import html
 import json
 import os
 import re
+import sys
 from datetime import datetime, timezone
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
-from email.utils import getaddresses, make_msgid, parseaddr
+from email.utils import getaddresses, make_msgid
 from pathlib import Path
 
-SELF_LABELS = {"SENT", "DRAFT"}
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import newer_in_thread  # noqa: E402
+
+SELF_LABELS = newer_in_thread.SELF_LABELS
 
 
 class NewerCounterpartMessages(ValueError):
@@ -73,79 +77,15 @@ def addresses(value):
     return result
 
 
-def _when(message):
-    try:
-        return int(message["internal_date"])
-    except (KeyError, TypeError, ValueError):
-        raise ValueError("Thread listing needs an integer internal_date per message") from None
-
-
-def _flat(value, limit=None):
-    text = " ".join(str(value or "").split())
-    return text if limit is None or len(text) <= limit else text[:limit] + "..."
-
-
-def newer_counterpart(messages, parent_id, sender):
-    """Messages in the thread newer than the parent that the sending account did
-    not write, oldest first.
-
-    Own (any one suffices): SENT/DRAFT label (also covers send-as aliases), From
-    equal to the sender, or the same Message-ID as an own labelled message (a
-    list redistributing one's own post may rewrite From). Another account of the
-    same person counts as a counterpart, i.e. errs toward warning."""
-    parents = [m for m in messages if m.get("id") == parent_id]
-    if len(parents) != 1:
-        raise ValueError("Parent not found in its thread listing; cannot check for newer replies")
-    base = _when(parents[0])
-    own = lambda m: bool(SELF_LABELS & set(m.get("labels") or []))
-    own_ids = {m.get("message_id") for m in messages if own(m)} - {"", None}
-    newer = [m for m in messages
-             if m.get("id") != parent_id and _when(m) > base and not own(m)
-             and parseaddr(m.get("from") or "")[1].lower() != sender.lower()
-             and not (m.get("message_id") and m["message_id"] in own_ids)]
-    return sorted(newer, key=_when)
-
-
-def describe(message):
-    when = message.get("date") or datetime.fromtimestamp(
-        _when(message) / 1000, timezone.utc).isoformat(timespec="minutes")
-    return (f"  - {_flat(when)}  {_flat(message.get('from'))}  \"{_flat(message.get('subject'))}\""
-            f"  {_flat(html.unescape(message.get('snippet') or ''), 70)}  (id {message['id']})")
-
-
-def newer_notice(newer, ack=""):
-    """(send allowed, display lines). Allowed when nothing is newer, or when ack is
-    the newest counterpart id; a later arrival changes that id and blocks again."""
-    if not newer:
-        return True, []
-    latest = newer[-1]["id"]
-    shown = newer[-10:]
-    lines = [f"WARNING: {len(newer)} newer message(s) from others in this thread "
-             "after the parent (oldest first):"]
-    if len(newer) > len(shown):
-        lines.append(f"  ... {len(newer) - len(shown)} older omitted")
-    lines += [describe(m) for m in shown]
-    lines.append(f"Usually: prepare a new bundle whose parent is the newest one ({latest}).")
-    if ack == latest:
-        lines.append(f"Acknowledged {latest}: read, keeping this parent; send may proceed.")
-        return True, lines
-    if ack:
-        lines.append(f"Acknowledgement {ack} is not the newest counterpart message "
-                     f"(newest = {latest}); read it, then pass its id.")
-    else:
-        lines.append(f"To keep this parent after reading them: send --ack-newer {latest}.")
-    lines.append("Send is refused until then.")
-    return False, lines
-
-
 def check_newer(gateway, envelope, ack=""):
-    """Re-list the parent's thread through the gateway; fail closed without one."""
+    """Re-list the parent's thread through the gateway; fail closed without one.
+    Judgement and wording = lib/newer_in_thread.py (shared with other reply CLIs)."""
     listing = getattr(gateway, "thread", None)
     if not callable(listing):
         raise ValueError("Gateway must provide thread(thread_id) to check for newer replies")
-    newer = newer_counterpart(listing(envelope["thread_id"]), envelope["parent_id"],
-                              envelope["sender"])
-    return newer_notice(newer, ack)
+    newer = newer_in_thread.newer_counterpart(listing(envelope["thread_id"]), envelope["parent_id"],
+                                              {envelope["sender"]})
+    return newer_in_thread.notice(newer, ack)
 
 
 def quote(parent):

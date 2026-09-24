@@ -58,18 +58,11 @@ class Gateway:
     def thread(self, thread_id):
         if not re.fullmatch(r"[0-9a-f]+", thread_id or ""):
             raise ValueError("Gmail thread ID must be hexadecimal")
+        engine = workflow.newer_in_thread
         data = self.api("threads/" + thread_id, {"format": "metadata",
-                        "metadataHeaders": ["From", "Subject", "Date", "Message-ID"]})
-        rows = []
-        for m in data.get("messages", []):
-            h = {v["name"].lower(): v["value"] for v in m.get("payload", {}).get("headers", [])}
-            rows.append({"id": m["id"], "labels": m.get("labelIds", []),
-                         # Missing internalDate stays None so the check fails closed.
-                         "internal_date": int(m["internalDate"]) if m.get("internalDate") else None,
-                         "from": h.get("from", ""), "subject": h.get("subject", ""),
-                         "date": h.get("date", ""), "message_id": h.get("message-id", ""),
-                         "snippet": m.get("snippet", "")})
-        return rows
+                        "metadataHeaders": list(engine.THREAD_HEADERS)})
+        # A missing internalDate stays None so the check fails closed.
+        return engine.rows_from_gmail_thread(data.get("messages", []))
 
     def search(self, query, limit):
         found, token = [], None
