@@ -304,3 +304,9 @@ repo に institution の様式が漏れる。
 <a id="one-packet-per-recipient"></a>**1 人 1 便**。 当事者の束には本人の住所・口座が入る。 同じ行事の複数人でも宛先を 1 通にまとめない (まとめると互いの個人情報を配る)。 窓口の担当を Cc に入れたい連絡 (依頼・報告) は、 認印の画像入りの束とは別便にする (デジタルのまま窓口に届けない = 紙で出すものだけに印影を入れる運用と矛盾する)。
 
 <a id="pii-runtime-source"></a>**個人情報は stub に書かず、 実行時に読む**。 住所・口座は workbook の欄にだけ入れる。 その値を既に持つ workbook (本人が前に出して受理された様式、 案件の置き場の xlsx) があれば、 stub の行を `value_from(<その xlsx>, <sheet>, <cell>)` にする (実装 = [`scripts/formcase/fill.py`](../scripts/formcase/fill.py))。 stub に残るのは出所の path と cell だけ。 読めない・空なら止まる (空欄のまま紙にしない)。
+
+<a id="pii-runtime-source-text"></a>本人の回答が workbook でなく text の記録 (暗号化した markdown の台帳など) にしか無いときは、 stub の行を `value_from_text(<file>, <正規表現>, <group>)` にする (同じ [`scripts/formcase/fill.py`](../scripts/formcase/fill.py))。 当たりが 1 件でなければ止まる (書式が変わった・同じ語が 2 か所にある = どれを取ったか分からない値を紙に出さない)。
+
+<a id="add-group-to-existing-case"></a>**先の group だけで作った案件に後の group を足す = `formcase.py add-group CASE --doc D --group G`**。 同じ workbook の別 sheet に業務後の書類を書く様式で、 group の区切りを持たない時期に作った案件 (manifest に先の group しか無い) を続ける入口。 manifest に draft + recipe の既定の出力名を足し、 その group の欄だけの stub `fill_<D>_<G>.py` を作る。 workbook は作らない・触らない (先の group の凍結 sheet はそのまま)。 manifest と stub を手で書かない (出力名が recipe の既定から外れる / 欄の漏れ)。 stub が並べるのは spec で必須の欄なので、 本人が書く欄 (住所・口座など、 回答があれば当方が書く欄) は回答があれば行を足し、 値は `value_from` / `value_from_text` で読む。
+
+<a id="conditional-label-cell"></a>**記入欄の label が条件を持つ欄は、 条件を満たす時だけ書く** (例: 「左記と異なる場合に記入」 = 同じなら空のまま)。 書くと値が label の末尾に重なり、 字の切れ gate は label との重なりを見ない (実測)。 条件は spec のその欄の規則に書く (stub の comment は spec の写し)。

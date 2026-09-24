@@ -908,6 +908,36 @@ def _recipe_tests(tmp, inst, expect) -> None:
     expect("base がまだ未提出なら notice を返す", res["notice"] and "提出の記録が無い" in res["notice"])
     expect("--from-doc が manifest に無ければ拒否",
            _raises(M.ManifestError, SC.new_case, "fx", c2, "x", group="g2", from_doc="nope"))
+
+    # add-group: 先の group だけで作った案件に、 後の group を足す (workbook は触らない)
+    c3 = tmp / "repo-a" / "docs" / "2026-02-03-case-c"
+    SC.new_case("fx", c3, "d3", group="g1")
+    wb3 = (c3 / "d3.xlsx").read_bytes()
+    r3 = SC.add_group(c3, "d3", "g2")
+    d3 = M.load(c3).doc("d3")
+    stub3 = r3["stub"].read_text(encoding="utf-8")
+    expect("add-group: group が draft + recipe の既定の出力名で足され、 先の group は残り、 workbook は同じ bytes",
+           list(d3["groups"]) == ["g1", "g2"] and d3["groups"]["g2"]["current"]["state"] == "draft"
+           and d3["groups"]["g2"]["current"]["outputs"] == RC.recipe_for("fx").default_outputs("d3")["g2"]
+           and (c3 / "d3.xlsx").read_bytes() == wb3, d3)
+    expect("add-group: stub = fill_<doc>_<group>.py、 その group の欄だけ",
+           r3["stub"].name == "fill_d3_g2.py" and f"'{REPORT}', 'X10'" in stub3 and f"'{REQ}'" not in stub3,
+           stub3[-600:])
+    expect("add-group: 既にある group / spec に無い group / 無い document は拒否 (stub も manifest も作らない)",
+           _raises(M.ManifestError, SC.add_group, c3, "d3", "g2")
+           and _raises(M.ManifestError, SC.add_group, c3, "d3", "nope")
+           and _raises(M.ManifestError, SC.add_group, c3, "zz", "g2"))
+
+    # value_from_text: 台帳の text から 1 つ取る。 当たり 0 / 2 件以上 / 空は止める
+    led = tmp / "ledger.md"
+    led.write_text("# 記録\n## 口座\n- 番号 1234567 / 種別 普通\n- 旧番号 7654321\n", encoding="utf-8")
+    expect("value_from_text: 1 件だけ当たる pattern の group を返す",
+           FI.value_from_text(led, r"^- 番号 (\d+)") == "1234567"
+           and FI.value_from_text(led, r"種別 (?P<k>\S+)", "k") == "普通")
+    expect("value_from_text: 当たり 0 件・2 件以上・file 無しは止める",
+           _raises(SystemExit, FI.value_from_text, led, r"^- 口座名 (\S+)")
+           and _raises(SystemExit, FI.value_from_text, led, r"番号 (\d+)")
+           and _raises(SystemExit, FI.value_from_text, tmp / "none.md", r"x"))
     stub1 = (c2 / "fill_d1.py").read_text(encoding="utf-8")
     expect("stub: fixed の値は spec から入り、 数字だけの文字列は textfmt、 font_size の欄は fontsize 行",
            "'○甲案立替'" in stub1 and "'textfmt', '12345678'" in stub1 and "'fontsize', 7" in stub1,

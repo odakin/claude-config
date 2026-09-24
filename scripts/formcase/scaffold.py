@@ -238,6 +238,46 @@ def new_case(form_id: str, case_dir, doc: str, workbook: str | None = None, todo
     return {"workbook": wb_path, "manifest": mpath, "stub": stub, "readme": readme, "notice": notice}
 
 
+def add_group(case_dir, doc: str, group: str) -> dict:
+    """既にある document に、 spec にあって manifest に無い group を足す (state draft + recipe の既定の出力名) +
+    その group の欄だけの記入 stub `fill_<doc>_<group>.py`。 同じ workbook の別 sheet に後から書く様式で、
+    group の区切りを持たない時期に作った案件 (manifest に先の group しか無い) を続けるための入口。
+    workbook は作らない・触らない (= 先の group の凍結 sheet はそのまま)。"""
+    case_dir = Path(case_dir).resolve()
+    m = M.load(case_dir)
+    if doc not in m.documents:
+        raise M.ManifestError(f"document {doc!r} が {case_dir / M.MANIFEST_NAME} に無い")
+    entry = m.doc(doc)
+    form_id = str(entry.get("form"))
+    spec = S.get(form_id)
+    if spec is None:
+        raise M.ManifestError(f"form {form_id!r} の spec が無い (formcase.py rules で一覧)")
+    if group not in (spec.get("groups") or {}):
+        raise M.ManifestError(f"spec {form_id!r} に group {group!r} が無い ({list(spec.get('groups') or {})})")
+    groups = entry.setdefault("groups", {})
+    if group in groups:
+        raise M.ManifestError(f"{doc}/{group} は既に manifest にある (作り直すなら formcase.py reopen)")
+    wb = m.workbook(doc)
+    if wb is None or not wb.exists():
+        raise M.ManifestError(f"{doc} の workbook が無い")
+    outs = RC.recipe_for(form_id).default_outputs(wb.stem)
+    cur = {"state": "draft"}
+    if group in outs:
+        cur["outputs"] = outs[group]
+    else:
+        cur["note"] = f"recipe {form_id} はこの group を作らない (旧 driver の型を使う。 form-case-pipeline.md #scope)"
+    stub = case_dir / f"fill_{doc}_{group}.py"
+    if stub.exists():
+        raise M.ManifestError(f"{stub.name} が既にある = 上書きしない")
+    groups[group] = {"current": cur}
+    M.Manifest(case_dir, m.data).save()
+    stub.write_text(stub_text(spec, case_dir.name, _case_rel(case_dir), doc, stub.name, only_group=group),
+                    encoding="utf-8")
+    from . import views as V
+    V.refresh_case(case_dir)
+    return {"manifest": case_dir / M.MANIFEST_NAME, "stub": stub}
+
+
 DOCX_STUB_HEAD = '''#!/usr/bin/env python3
 """{case} / {doc} の記入 (Word 様式 {form})。 formcase.py new が生成した stub。
 

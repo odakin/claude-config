@@ -7,6 +7,8 @@ instance (どの repo の / どの様式の案件か) は設定 file (formcase.c
     python3 formcase.py new --form <spec id> --case DIR --doc ID [--workbook NAME] [--todo REPO:ID] [--group G] [--from-doc D]
                                                           新しい案件を配布雛形から (manifest + 記入 stub + README 枠)。
                                                           --group G --from-doc D = 先に出した document の workbook を base に
+    python3 formcase.py add-group CASE --doc D --group G   既にある document に manifest に無い group を足す
+                                                          (draft + 既定の出力名 + その group だけの stub fill_<doc>_<G>.py。 workbook は触らない)
     python3 formcase.py build CASE [--doc D] [--group G ...] [--out-dir DIR]
                                                           draft group の PDF を作る (gate 必須、 凍結 group は作らない)
     python3 formcase.py status [CASE ...|--all]          案件の document / group / 状態の一覧
@@ -314,6 +316,17 @@ def cmd_new(args) -> int:
     return 0
 
 
+def cmd_add_group(args) -> int:
+    from formcase import scaffold as SC
+    res = SC.add_group(args.case, args.doc, args.group)
+    print(f"✏️  manifest → {res['manifest']}  ({args.doc}/{args.group} = draft)")
+    print(f"✏️  記入 stub → {res['stub']}  (value=None の欄を一次情報から埋める。 任意の欄 〔本人の住所・口座など〕 は"
+          f" 回答があれば行を足す、 値は stub に書かず value_from / value_from_text で実行時に読む)")
+    print(f"   次: python3 {res['stub'].name} --group {args.group} --dry-run → 記入 → "
+          f"formcase.py build {args.case} --doc {args.doc} --group {args.group}")
+    return 0
+
+
 def cmd_build(args) -> int:
     from formcase import check as CK
     from formcase import recipes as RC
@@ -506,6 +519,10 @@ def main(argv=None) -> int:
     p.add_argument("--todo")
     p.add_argument("--group", help="その group だけの document (= 後で出す group を別 workbook にする様式)")
     p.add_argument("--from-doc", help="同じ案件の document の workbook を base に copy (数式で先の group を参照する様式)")
+    p = sub.add_parser("add-group")
+    p.add_argument("case")
+    p.add_argument("--doc", required=True)
+    p.add_argument("--group", required=True)
     p = sub.add_parser("build")
     p.add_argument("case")
     p.add_argument("--doc")
@@ -516,7 +533,8 @@ def main(argv=None) -> int:
         return {"status": cmd_status, "check": cmd_check, "freeze": cmd_freeze,
                 "reopen": cmd_reopen, "annotate": cmd_annotate, "guard": cmd_guard, "rules": cmd_rules,
                 "views": cmd_views, "lint": cmd_lint, "audit": cmd_audit,
-                "new": cmd_new, "build": cmd_build, "markers": cmd_markers, "normalize": cmd_normalize}[args.cmd](args)
+                "new": cmd_new, "add-group": cmd_add_group, "build": cmd_build, "markers": cmd_markers,
+                "normalize": cmd_normalize}[args.cmd](args)
     except M.ManifestError as e:
         print(f"🔴 {e}", file=sys.stderr)
         return 2

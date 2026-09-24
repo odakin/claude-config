@@ -36,6 +36,25 @@ def value_from(workbook, sheet: str, cell: str):
     return v
 
 
+def value_from_text(path, pattern: str, group: int | str = 1) -> str:
+    """value_from の text 版: 本人の回答を転記した記録 (暗号化した markdown の台帳など、 workbook でない置き場) から
+    正規表現で 1 つ取る。 stub には出所の path と pattern だけが残る (form-case-pipeline.md #pii-runtime-source)。
+    file が無い・pattern が当たらない・当たった値が空なら止める (= 空欄のまま紙にしない / 書式が変わったら気づく)。
+    複数に当たる pattern も止める (= どれを取ったか分からない値を紙に出さない)。"""
+    import re
+
+    p = Path(path).expanduser()
+    if not p.is_file():
+        raise SystemExit(f"🔴 値の出所の file が無い: {p}")
+    hits = list(re.finditer(pattern, p.read_text(encoding="utf-8"), re.M))
+    if len(hits) != 1:
+        raise SystemExit(f"🔴 値の出所 {p.name} で pattern の当たりが {len(hits)} 件 (1 件だけにする): {pattern}")
+    v = (hits[0].group(group) or "").strip()
+    if not v:
+        raise SystemExit(f"🔴 値の出所 {p.name} で当たった値が空: {pattern}")
+    return v
+
+
 def run_docx(stub_file, doc_id, fields, choices, texts) -> int:
     """Word 様式の記入 (form-case-pipeline.md #docx)。 FIELDS を雛形から作り直した docx に打ち、 CHOICES / TEXTS を overlay.yaml に書き、
     読み戻し → gate。 value=None は未記入 (書かない)。 凍結 group がある document には書かない (先に reopen)。"""
