@@ -1420,7 +1420,7 @@ hook 本体 (script + settings.json schema) = **layer 1** (claude-config、 全 
 
 ### 規律 wording との併用設計
 
-規律本体 (= 個人層 CLAUDE.md の PDF-read-fallback 規律 + work-discipline.md §「PDF Read tool error を別経路への lazy substitution で覆い隠さない」 + memory poppler entry) は **wording-level の reflex 起動**、 hook は **mechanical enforcement layer**。 2 重 (規律 + hook) で reflex の癖に依存しない設計。 加えて当該規律の冒頭 1 行を command-form punchy 化 (= 2026-05-18 同日 commit) して reflex 起動の起点を最短化、 これと hook の system reminder の wording を一致 (= 「`python3 -c "import fitz; ..."` を 1 回」) させて、 Claude が「規律で読んだ 1-liner」 = 「hook が injection した 1-liner」 と認識できるよう設計。
+規律本体 (= 個人層 CLAUDE.md の PDF-read-fallback 規律 + work-discipline-archive.md §「PDF Read tool error を別経路への lazy substitution で覆い隠さない」 + memory poppler entry) は **wording-level の reflex 起動**、 hook は **mechanical enforcement layer**。 2 重 (規律 + hook) で reflex の癖に依存しない設計。 加えて当該規律の冒頭 1 行を command-form punchy 化 (= 2026-05-18 同日 commit) して reflex 起動の起点を最短化、 これと hook の system reminder の wording を一致 (= 「`python3 -c "import fitz; ..."` を 1 回」) させて、 Claude が「規律で読んだ 1-liner」 = 「hook が injection した 1-liner」 と認識できるよう設計。
 
 ### 既知の limitation
 
@@ -1452,7 +1452,7 @@ jq '.hooks.PostToolUse[] | select(.hooks[]?.command | contains("pdf-read-fallbac
 
 ### 関連事故 / 規律
 
-- 2026-05-18 朝 arXiv preprint attribution 誤同定 RCA: 個人層 research repo の関連 plan + 個人層 work-discipline.md §「PDF Read tool error を別経路への lazy substitution で覆い隠さない」 + 個人層 CLAUDE.md の PDF-read-fallback 規律
+- 2026-05-18 朝 arXiv preprint attribution 誤同定 RCA: 個人層 research repo の関連 plan + 個人層 work-discipline-archive.md §「PDF Read tool error を別経路への lazy substitution で覆い隠さない」 + 個人層 CLAUDE.md の PDF-read-fallback 規律
 - 2026-05-18 同日後続 Wolfram lazy substitution (= 第二事例): 同 plan の対応 sub-section + メタ層 RCA (= 規律を書く Claude も §16「context 構築での単一情報源 null 結論飛躍」 を起こす)
 
 ## 2026-09-06: 検証サイクルを `ai-collaboration` (新 layer-1 repo) へ分離 — stub + forwarder で旧 path を生かす

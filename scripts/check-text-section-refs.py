@@ -164,8 +164,8 @@ def extract_refs(text: str, code: bool = False) -> Tuple[List[Ref], int]:
                 link_text_spans.append((m.start(), m.start("href")))
                 f4.append(Ref(ln, "F4", p, a, m.group(0)[:160]))
 
-        def skip(pos: int) -> bool:
-            return (any(a <= pos < b for a, b in spans + link_text_spans + link_href_spans)
+        def skip(pos: int) -> bool:  # `[x](path) §「名」` の href から始まる参照は見る (link に anchor が無ければ節名が唯一の手がかり)
+            return (any(a <= pos < b for a, b in spans + link_text_spans)
                     or (code and _in_string_literal(line, pos)))
 
         if "§" in line:
@@ -968,6 +968,7 @@ def selftest() -> int:
                   "L13 guideline.md §記入の手順 と guideline.md §全然無い語",   # F2 陰性 / 陽性
                   "L14 beta/nothere.md §「x」",                                 # ⚪ repo 名つきで無い
                   "L15 README.md §「guide」",                                   # README (同じ dir) の見出し
+                  "L16 [`guideline.md`](guideline.md) §「無い手順」 と [g](guideline.md) §「記入の手順」",  # link の後ろの節名
               ]) + "\n")
         for r in (a, b):
             sh(["git", "add", "-A"], r)  # 走査は track 済みの file だけ
@@ -993,6 +994,8 @@ def selftest() -> int:
         expect("⚪ repo 名つきの無い path は未判定 (🔴 にしない)", (14, "beta/nothere.md") in unres)
         expect("F2 陽性 (先頭の語さえ無い)", ("src.md", 13, "全然無い語") in miss)
         expect("F2 陰性", ("src.md", 13, "記入の手順") not in miss)
+        expect("link の後ろの §「名」 も見る (陽性)", ("src.md", 16, "無い手順") in miss)
+        expect("link の後ろの §「名」 も見る (陰性)", ("src.md", 16, "記入の手順") not in miss)
         # 候補が複数 (後方一致が 2 repo) → 🟠 (どれにも無い) / 通る (どれかに在る)
         write(b / "docs/guide/guideline.md", "# other\n\n## 別の節\n")
         d = base / "delta"
