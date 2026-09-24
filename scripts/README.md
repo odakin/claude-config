@@ -269,6 +269,7 @@
 - **[formcase/check.py](formcase/check.py)** — 案件 manifest の検査 (構造 + 凍結の不変条件 + 印刷した紙の鮮度)。 gate の実行は gates.py。
 - **[formcase/config.py](formcase/config.py)** — instance 設定 (= engine が持たない、 呼び元の repo に属する値) の唯一の入口。
 - **[formcase/docx_form.py](formcase/docx_form.py)** — Word (docx) 様式の記入・gate・fingerprint・PDF の重ね書き (spec の ``meta.kind: docx``)。 使い方の正本 = form-case-pipeline.md #docx。
+- **[formcase/drawings.py](formcase/drawings.py)** — openpyxl の save が落とす図形 (DrawingML) を、 元の workbook から sheet 名で移し直す。
 - **[formcase/excel.py](formcase/excel.py)** — Excel の操作は全部ここ (staging 経由・前面に出さない・1 回に 1 job)。
 - **[formcase/fill.py](formcase/fill.py)** — 案件の fill stub (fill_<doc>.py) の実行系。 値を Excel で書き → 読み戻し → gate を回して結果を出す。
 - **[formcase/fingerprint.py](formcase/fingerprint.py)** — 凍結 sheet の書式の fingerprint v3 (``frozen.sheet_digest_v3``)。
