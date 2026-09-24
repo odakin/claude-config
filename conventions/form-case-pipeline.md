@@ -204,7 +204,7 @@ engine は instance (どの repo の / どの様式の / 誰の案件か) を一
 
 1. **設定を置く**: repo に `formcase.config.json` (key の一覧と既定 =
    [`scripts/formcase/config.py`](../scripts/formcase/config.py) の docstring)。 spec の dir / 雛形の base /
-   案件を探す root / gate の script / lint の走査対象 / 生成物に入る文 / 押印の画像を出す command
+   案件を探す root / gate の script / lint の走査対象 / 生成物に入る文 / 押印の扱い (`seal_mode`) と画像を出す command
 2. **入口 package を置く** (任意だが、 案件 folder の driver から `formcase.*` を読めるようにするなら必要):
 
    ```python
@@ -274,6 +274,13 @@ RC.register("<spec id>", MyForm)
 
 ⚠️ **押印の位置・sheet 名・出力名の型は recipe (= 呼び元) に置く**。 engine に入れると、 その様式を持たない
 repo に institution の様式が漏れる。
+
+<a id="seal-mode"></a>**押印を重ねるか紙に押すかは設定の `seal_mode` で決める** (recipe は位置だけを持つ)。
+`image` (既定) = print 版に印影の画像を重ね、 紙専用の印を書く ([`office-automation.md#seal-artifact-marker`](office-automation.md#seal-artifact-marker))。
+`physical` = 重ねない。 押印欄は空のまま出力し、 build が「✋ 実押印 (group): N 頁目の「印」 の欄」 の行で押す場所を列挙する
+(= 刷ってから紙に実物で押す)。 紙の窓口が印刷の印影を見分ける組織は `physical` にする
+([`office-automation.md#physical-seal-required`](office-automation.md#physical-seal-required))。 recipe の `seals` は両方の mode で使う
+(image では重ねる位置、 physical では案内する位置) ので、 mode を切り替えても recipe は書き換えない。
 
 ## <a id="limits"></a>12. 分かっている限界
 

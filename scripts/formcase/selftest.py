@@ -877,6 +877,13 @@ def _recipe_tests(tmp, inst, expect) -> None:
     expect("recipe: seals_for は既定で seals", r.seals_for("g1") == R1.seals)
     expect("押印画像の command が設定に無ければ BuildError",
            _raises(RC.BuildError, RC._seal_image))
+    expect("seal_mode: 既定は image、 physical を受け付け、 他の値は ConfigError",
+           CF.seal_mode() == "image" and CF.check_seal_mode("physical") == "physical"
+           and _raises(CF.ConfigError, CF.check_seal_mode, "stamp"))
+    expect("stamp_hint: anchor と occurrence を紙の上で探せる言い方に",
+           RC.stamp_hint("anchor=印,occurrence=2,size=27") == "「印」 の 2 個目 の欄"
+           and RC.stamp_hint("anchor=㊞,occurrence=1") == "「㊞」 の欄"
+           and RC.stamp_hint("x=1").startswith("押印の位置"))
 
     expect("fill: clear / general は値なしでも書く行、 value=None の text は未記入",
            FI._writes(("S", "A1", "clear", None)) and FI._writes(("S", "A1", "general", None))

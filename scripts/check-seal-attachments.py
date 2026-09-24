@@ -60,7 +60,8 @@ def decide(files, pool, name_token, recipients, body, office_addrs, office_res, 
         sig = scan(f, pool, name_token)
         results.append({"file": f, "signals": sig, "strength": strength(sig)})
     strong = [r for r in results if r["strength"] == "strong"]
-    out = {"decision": "ok", "files": results, "reasons": []}
+    out = {"decision": "ok", "files": results, "reasons": [],
+           "proxy_available": bool(proxy_patterns) and not no_proxy_reason}
     if not strong:
         return out
     offices = [a for a in recipients
@@ -68,7 +69,7 @@ def decide(files, pool, name_token, recipients, body, office_addrs, office_res, 
     reasons = []
     if no_proxy_reason:
         reasons.append(f"代理印刷の例外は使えない: {no_proxy_reason}")
-    if not proxy_patterns:
+    if not proxy_patterns and not no_proxy_reason:
         reasons.append("代理印刷の条件が設定されていない")
     if not recipients:
         reasons.append("宛先が無い (共有・upload の出口では代理印刷を判定できない)")
@@ -106,8 +107,10 @@ def render(res) -> str:
     for why in res["reasons"]:
         lines.append(f"  - {why}")
     if res["decision"] == "block":
-        lines.append("  直し方: 紙で出す (印刷して持参・郵送) / 送るなら印影の無い版 (確認用) を添付する /")
-        lines.append("          代理で印刷してもらうなら、窓口でない相手に、本文で印刷して紙で出してほしいと頼む")
+        lines.append("  直し方: 紙で出す (印刷して持参・郵送) / 送るなら印影の無い版 (確認用) を添付する" +
+                     (" /" if res.get("proxy_available") else ""))
+        if res.get("proxy_available"):
+            lines.append("          代理で印刷してもらうなら、窓口でない相手に、本文で印刷して紙で出してほしいと頼む")
     return "\n".join(lines)
 
 

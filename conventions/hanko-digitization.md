@@ -8,6 +8,8 @@ summary: 実写 1 枚 (印影 ~300px 径) から 3000×3000 透過 PNG 30 変奏
 
 スマホ写真に写った押印 (ハンコ) から、書類合成用の透過 PNG を作るフル手順。 実際に 2268×4032 JPEG (印影の実サイズ約 300px 径) から 3000×3000 の透過 PNG 30 枚を量産した session (2026-07) の**確定済みパラメータ付き**。 印影に限らず「小さく写ったベタ塗り図形をシャープに高解像度化したい」 一般 (ロゴ・落款・スタンプ) に使える。
 
+⚠️ **作った印影を紙で出す書類に使う前に、 窓口がそれを受け付けるかを窓口自身に確かめる**。 本 pipeline の出来 (輪郭・かすれ・色・変奏) は、 紙の窓口が印刷の印影を見分けるのを防がない (実測) = [`office-automation.md#seal-image-detected-despite-craft`](office-automation.md#seal-image-detected-despite-craft)。 紙の窓口では実物で押すのが既定 ([`#physical-seal-required`](office-automation.md#physical-seal-required))。
+
 関連 slug: 手書き**署名**の photo → 透過 PNG は [`office-automation.md#signature-photo-to-transparent-png`](office-automation.md#signature-photo-to-transparent-png) (= 輝度しきい値だけの簡易版で足りる系統、 本 doc はそのハンコ版フル pipeline)。 挿入時の濃度調整は [`office-automation.md#signature-image-overlay-density`](office-automation.md#signature-image-overlay-density)。 ⚠️ 運用上の注意 = 電子印影を拒否して実押印を求める事務窓口が存在する ([`office-automation.md#physical-seal-required`](office-automation.md#physical-seal-required))。 どの窓口で画像印影が通るかは組織依存の運用知識なので各自の個人層 (layer 3) に記録する。
 
 ## <a id="vectorize-dont-upscale"></a>全体の設計思想 (先に読むこと)

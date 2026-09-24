@@ -7,6 +7,7 @@ build(m, doc_id, groups, out_dir) は:
   3. Excel の PDF を字の切れ・はみ出し gate (check-form-clipping) で見て、 引っかかった欄を折り返し → 行を伸ばして刷り直す
      (最大 FIT_ROUNDS 回)。 残れば出力を書かずに止める
   4. package から group の page を切り出し、 その group の page にだけ押印を overlay
+     (設定 ``seal_mode: physical`` なら重ねずに「刷ったら押す場所」 を列挙する = 押印欄は空のまま刷る)
   5. group の出力 (print = 紙で出す版 / confirm = 押印なし / 様式固有の派生) を書く
 凍結 group は作らない (呼び元が弾く)。 押印の variant は group ごとに引くので、 他 group の出力は変わらない。
 
@@ -182,6 +183,16 @@ def _ensure_declared(src, like) -> Path:
     out = Path(str(src) + ".decl.pdf")
     d.save(str(out), garbage=3, deflate=True)
     return out
+
+
+def stamp_hint(place_spec: str) -> str:
+    """place spec (``anchor=印,occurrence=2,...``) を紙の上で探せる言い方にする (seal_mode: physical の案内)。"""
+    kv = dict(x.split("=", 1) for x in str(place_spec).split(",") if "=" in x)
+    anchor = kv.get("anchor")
+    if not anchor:
+        return f"押印の位置 ({place_spec})"
+    occ = kv.get("occurrence", "1")
+    return f"「{anchor}」" + (f" の {occ} 個目" if occ not in ("", "1") else "") + " の欄"
 
 
 def _seal(plain, sealed, places):
@@ -568,12 +579,16 @@ def _build(m, doc_id, groups, out_dir=None) -> dict:
             places = [(pages.index(pp) + 1, spec_) for pp, spec_ in rc.seals_for(g).items() if pp in pages]
             base = Path(out_dir) if out_dir else m.case_dir
             written[g] = {}
-            if places:
+            overlay = bool(places) and CF.seal_mode() != "physical"
+            if overlay:
                 sealed = tmp / f"{g}_sealed.pdf"
                 _seal(plain, sealed, places)
+            for page, spec_ in [] if overlay else places:
+                print(f"   ✋ 実押印 ({g}): {page} 頁目の {stamp_hint(spec_)} — 押印欄は空のまま刷る。 刷ったら紙に押す"
+                      " (seal_mode: physical)")
             for role, rel in outs.items():
                 if role == "print":
-                    src = sealed if places else plain
+                    src = sealed if overlay else plain
                 elif role == "confirm":
                     src = plain
                 else:

@@ -27,8 +27,11 @@ key (すべて任意。 相対 path は config file のある dir から、 ``gl
   gates            gate の定義 [{id, script, label, args, scope_flags}]。 script は config dir から
   default_gates    spec が ``meta.gates`` を持たないときに回す gate id
   gates_by_form    {form id: [gate id]} (spec を触らずに様式ごとに変える口)
-  seal_image_cmd   押印の画像 path を 1 行で印字する command (list)。 無いと押印のある recipe は止まる
-  recipes          instance の recipe を register する python file の list (config dir から)
+  seal_mode        押印の扱い: ``"image"`` (既定 = print 版に印影の画像を重ねる) / ``"physical"`` (重ねない =
+                   押印欄は空のまま刷り、 build が「刷ったら押す場所」 を列挙する。 紙の窓口が印刷の印影を
+                   見分ける組織向け、 conventions/office-automation.md#physical-seal-required)
+  seal_image_cmd   押印の画像 path を 1 行で印字する command (list)。 image の時、 無いと押印のある recipe は止まる
+  recipes         instance の recipe を register する python file の list (config dir から)
   instance_selftest  instance 固有の selftest を持つ python file (``run(expect, tmp)`` を持つ)
   lint             {ack, targets, case_readme, forms_by_path, context_stopwords, value_shape_words}
   views            {roots, files, note} (generated view を探す dir / 明示 file / 生成物に書く注記の文)
@@ -62,6 +65,7 @@ DEFAULTS = {
     "gates": [],
     "default_gates": [],
     "gates_by_form": {},
+    "seal_mode": "image",
     "seal_image_cmd": [],
     "recipes": [],
     "instance_selftest": "",
@@ -215,6 +219,20 @@ def stub_sys_path() -> str:
 
 def precedent_doc() -> str:
     return str(cfg()["precedent_doc"])
+
+
+SEAL_MODES = ("image", "physical")
+
+
+def check_seal_mode(v) -> str:
+    v = str(v)
+    if v not in SEAL_MODES:
+        raise ConfigError(f"設定の seal_mode は {' / '.join(SEAL_MODES)} のどれか ({v!r})")
+    return v
+
+
+def seal_mode() -> str:
+    return check_seal_mode(cfg()["seal_mode"])
 
 
 def seal_image_cmd() -> list:
