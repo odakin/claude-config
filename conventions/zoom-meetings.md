@@ -24,6 +24,8 @@ Server-to-Server OAuth app を 1 つ作れる**。 これで token を自己発�
    `meeting:read:meeting:admin` / `meeting:write:meeting:admin` / `meeting:delete:meeting:admin` /
    `user:read:user:admin` / `user:read:settings:admin`
    (旧体系の account なら `meeting:read:admin` / `meeting:write:admin` / `user:read:admin`)
+   既存の部屋の設定を変える (`update`) には `meeting:update:meeting:admin` も要る (実測: `write` だけでは
+   PATCH が 4711 で止まる)。 終わった会議を読む scope は下の [#read-summary-and-transcript](#read-summary-and-transcript)
 4. **Activation** タブ → Activate
 5. **App Credentials** タブの **Account ID / Client ID / Client Secret** の 3 値を保管する
 

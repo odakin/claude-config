@@ -47,6 +47,8 @@ Server-to-Server OAuth app の作り方 (= 本人が 1 回だけ、 5 分):
   3. Scopes タブで付ける: meeting:read / meeting:write / user:read / user:read:settings の admin 版
      (新しい UI の粒度なら meeting:read:meeting:admin, meeting:write:meeting:admin,
       meeting:delete:meeting:admin, user:read:user:admin, user:read:settings:admin)
+     update を使うなら meeting:update:meeting:admin も要る (実測: 無いと 4711 で止まる。 旧い手順の
+      5 つには入っていなかった)
      notes を使うなら読み取りを足す: meeting:read:list_past_instances:admin,
       meeting:read:past_meeting:admin, meeting:read:summary:admin, meeting:read:list_summaries:admin,
       cloud_recording:read:meeting_transcript:admin (実測: 有効化済みの app なら、 足した直後に
