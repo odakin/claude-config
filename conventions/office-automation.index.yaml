@@ -745,6 +745,9 @@ sections:
     title: "「記入例」 シートの実データ化 (= 記入例置換型の様式)"
     related: [diff-form-xlsx-detection, form-dump-first]
     origin: "2026-07-02"
+  - id: printed-page-number
+    level: 2
+    title: "人に頁を示すときは冊子の頁番号で — PDF の何枚目かとは違う"
   - id: related-repos
     legacy: "13"
     level: 2
