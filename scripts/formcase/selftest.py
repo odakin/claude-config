@@ -237,17 +237,21 @@ def _mark_mac(path: Path) -> None:
     Path(path).write_bytes(buf.getvalue())
 
 
-def _inject_drawing(path: Path, sheet_part: str, text: str) -> None:
-    """sheet に図形 (textbox) を 1 つ足す (openpyxl が落とすものの代表)。"""
+def _anchor_xml(name: str, text: str, cx: int = 100, run: str = "<a:r><a:t>{t}</a:t></a:r>") -> str:
+    return ('<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row>'
+            f'<xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="{cx}" cy="100"/><xdr:sp><xdr:nvSpPr>'
+            f'<xdr:cNvPr id="1" name="{name}"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr/><xdr:txBody><a:bodyPr/>'
+            f'<a:p>{run.format(t=text)}</a:p></xdr:txBody></xdr:sp><xdr:clientData/></xdr:oneCellAnchor>')
+
+
+def _inject_drawing(path: Path, sheet_part: str, text: str, anchors: str | None = None) -> None:
+    """sheet に図形 (textbox) を足す (openpyxl が落とすものの代表)。 anchors = wsDr の中身 (既定 = text の 1 つ)。"""
     import io as _io
     import zipfile
 
     draw = ('<?xml version="1.0"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"'
-            ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:oneCellAnchor>'
-            '<xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'
-            '<xdr:ext cx="100" cy="100"/><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="1" name="t"/><xdr:cNvSpPr/></xdr:nvSpPr>'
-            '<xdr:spPr/><xdr:txBody><a:bodyPr/><a:p><a:r><a:t>' + text + '</a:t></a:r></a:p></xdr:txBody>'
-            '</xdr:sp><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>')
+            ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+            + (anchors if anchors is not None else _anchor_xml("t", text)) + '</xdr:wsDr>')
     rels = ('<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
             '<Relationship Id="rIdD1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing"'
             ' Target="../drawings/drawing9.xml"/></Relationships>')
@@ -376,6 +380,7 @@ def run() -> int:
         _case_readme_tests(tmp, expect)
         _value_from_tests(tmp, expect)
         _copy_page_tests(tmp, expect)
+        _graft_tests(tmp, expect)
         from .selftest_docx import run_docx_tests, run_page_role_tests
 
         run_docx_tests(tmp, expect)
@@ -427,6 +432,64 @@ def _copy_page_tests(tmp, expect) -> None:
     except BuildError:
         stopped = True
     expect("with_copy_page: 頁の目印が無ければ止める", stopped)
+
+
+def _graft_tests(tmp, expect) -> None:
+    """openpyxl の save で落ちる図形を _save が元 workbook から移し直す (drawings.graft_drawings)。"""
+    import re
+    import zipfile
+
+    import openpyxl
+
+    from . import drawings as DR
+    from . import recipes as RC
+
+    src = tmp / "graft-src.xlsx"
+    wb = openpyxl.Workbook()
+    wb.active.title = "S"
+    wb["S"]["A1"] = "x"
+    wb.create_sheet("T")["A1"] = "y"
+    wb.save(src)
+    ms = '<a:rPr sz="1600"><a:latin typeface="MS Gothic"/><a:ea typeface="MS Gothic"/></a:rPr>'
+    ctrl = ('<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">'
+            '<mc:Choice Requires="a14">' + _anchor_xml("Check Box 1", "") + '</mc:Choice><mc:Fallback/></mc:AlternateContent>')
+    # 16pt × 4 字 = 64pt、 枠 78pt = 余白の既定 7.2pt × 2 を足すと入らない (実雛形の寸法)
+    anchors = (_anchor_xml("label", "外部資金", cx=78 * 12700, run="<a:r>" + ms + "<a:t>{t}</a:t></a:r>")
+               + _anchor_xml("dup", "二重") + ctrl)
+    _inject_drawing(src, _sheet_part(src, "S"), "", anchors=anchors)
+
+    def drawn(path):
+        with zipfile.ZipFile(path) as z:
+            return "".join(z.read(n).decode() for n in z.namelist() if re.match(r"xl/drawings/drawing\d+\.xml$", n))
+
+    w = RC._load(src)
+    w.remove(w["T"])
+    out = RC._save(w, tmp / "graft-out.xlsx")
+    d = drawn(out)
+    expect("図形の移植: openpyxl の save の後も図形の字が残る", "外部資金" in d and "二重" in d, d[:200])
+    expect("図形の移植: form control (mc:AlternateContent) は移さない", "AlternateContent" not in d and "Check Box" not in d)
+    lab = re.search(r'name="label"/>.*?</xdr:oneCellAnchor>', d, re.S).group(0)
+    ins = re.search(r'lIns="(\d+)"', lab)
+    expect("図形の移植: 枠に入り切らない 1 行の label は余白を縮めて折り返さない",
+           'wrap="none"' in lab and ins is not None and int(ins.group(1)) < 91440, lab[:300])
+    w = RC._load(src)
+    w.__dict__["_formcase_drop_shapes"] = {"S": {"dup"}}
+    d = drawn(RC._save(w, tmp / "graft-drop.xlsx"))
+    expect("図形の移植: spec の drop_shape の図形は移さない", "外部資金" in d and "二重" not in d)
+    w = RC._load(src)
+    w.__dict__["_formcase_drop_shapes"] = {"S": {"無い図形"}}
+    try:
+        RC._save(w, tmp / "graft-stale.xlsx")
+        expect("図形の移植: 雛形に無い drop_shape は止める", False)
+    except RC.BuildError as e:
+        expect("図形の移植: 雛形に無い drop_shape は止める", "無い図形" in str(e), e)
+    expect("図形の移植: data_only の読み込み (値の照合用) は移植しない",
+           getattr(RC._load(src, data_only=True), "_formcase_source", None) is None)
+    try:
+        DR.graft_drawings(src, out)
+        expect("図形の移植: drawing を既に持つ sheet には重ねない", False)
+    except DR.GraftError as e:
+        expect("図形の移植: drawing を既に持つ sheet には重ねない", "既にある" in str(e), e)
 
 
 def _value_from_tests(tmp, expect) -> None:

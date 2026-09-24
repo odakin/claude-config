@@ -115,6 +115,17 @@ issue は `paper: same | differs | unverified` を必須にする。
 見積りは**控えめ**にし、 真偽は PDF で決める (= 上の gate 3 が刷り直す)。 縮み過ぎ (= 行を伸ばし過ぎ / 値が
 長過ぎ) は下限を決めて止める。 元の xlsx は触らない (体裁は temp / staged copy にだけ当てる)。
 
+<a id="drawings-survive-temp"></a>**図形は temp でも紙に出す**: openpyxl で temp を保存すると図形 (標題・「外部資金」 などの区分の枠・
+様式番号・㊞ の丸・線) が落ちる。 temp を openpyxl で作る recipe は、 保存のたびに**読み込み元の workbook から
+同名 sheet の図形を移し直す** (engine `formcase/drawings.py`、 [`office-automation.md#openpyxl-destroys-drawings`](office-automation.md#openpyxl-destroys-drawings)
+の回避 2 を移植の 4 条件つきで)。 移せない図形 (画像等を参照する) は止める。 form control (checkbox) は
+移さない (VML・ctrlProps と対なので片方だけでは壊れる = 該当側の label に文字 ☑ を書く規則で扱う)。
+移した図形が紙で悪さをする雛形の欠陥 (cell と同じ字の textbox が重なって二重に刷られる、 書き方の規則と
+合わない選択の丸) は spec の `render:` の `drop_shape` で名指しして刷らない (上の表の 1 の一種、 理由つき)。 1 行の label が
+枠に字幅ぎりぎりで作られて Excel の丸めで 1 字落ちる (clip の枠では消える) 時は、 枠の余白だけを縮める。
+⚠️ 図形が落ちても値・罫線の gate は全部通る = 紙から様式番号が消えたまま提出物が作られ続けた (実測)。
+build の後の目視 (👁) で、 様式の見出しと区分の枠が紙に在るかを見る。
+
 openpyxl で保存すると図形 (標題・checkbox) が落ちる雛形は、 体裁を openpyxl の読み込みの上で計算し、
 **差分だけを Excel の操作として** staged copy に当てる。
 

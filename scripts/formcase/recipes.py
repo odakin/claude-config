@@ -12,8 +12,10 @@ build(m, doc_id, groups, out_dir) は:
 凍結 group は作らない (呼び元が弾く)。 押印の variant は group ごとに引くので、 他 group の出力は変わらない。
 
 temp の作り方は雛形で 2 通り:
-  - 図形が紙に出ない雛形 = openpyxl で temp workbook を作って Excel に PDF 化させる
-  - 標題・checkbox が図形の雛形 (openpyxl で save すると消える) → 体裁は openpyxl の読み込みの上で計算し、
+  - openpyxl で temp workbook を作って Excel に PDF 化させる。 openpyxl の save は図形 (標題・「外部資金」 の枠・
+    様式番号・㊞ の丸・斜線) を落とすので、 ``_save`` が読み込み元の workbook から同名 sheet の図形を移し直す
+    (drawings.graft_drawings。 form control = checkbox は移さない)
+  - 図形を移せない雛形 (画像等を参照する drawing) → 体裁は openpyxl の読み込みの上で計算し、
     差分だけを Excel の操作として staged copy に当てて PDF 化する (layout.snapshot / excel_ops、 excel.ops_lines)
 
 **様式ごとの recipe はこの module が持たない** (= 雛形の page 構成・sheet 名・押印位置・出力名は呼び元のもの)。
@@ -204,9 +206,19 @@ def _seal(plain, sealed, places):
 
 
 def _save(wb, dst):
+    """openpyxl で save し、 ``_load`` した元 workbook の図形を同名 sheet に移し直す (= 紙から標題・区分の枠・
+    様式番号が消えない)。 移せなければ BuildError (黙って落とさない)。"""
+    from . import drawings as DR
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         wb.save(dst)
+    src = getattr(wb, "_formcase_source", None)
+    if src:
+        try:
+            DR.graft_drawings(src, dst, drop=getattr(wb, "_formcase_drop_shapes", None))
+        except DR.GraftError as e:
+            raise BuildError(f"図形 (標題・様式番号等) を temp に移せない: {e}") from e
     return dst
 
 
@@ -218,7 +230,10 @@ def _load(path, data_only=False):
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return openpyxl.load_workbook(path, data_only=data_only)
+        wb = openpyxl.load_workbook(path, data_only=data_only)
+    if not data_only:
+        wb._formcase_source = str(path)   # _save が図形をここから移し直す (data_only の読み込みは値の照合用 = PDF にしない)
+    return wb
 
 
 def _require_cached(workbook):

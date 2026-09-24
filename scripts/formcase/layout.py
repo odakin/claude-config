@@ -107,7 +107,9 @@ def apply_render_fixes(wb, spec: dict, wbv=None, sheets=None) -> list:
     entry の種類 (各 entry に why): ``merge`` / ``number_format`` / ``font_size`` / ``border_bottom`` /
     ``row_height`` (その行の高さの下限 = 雛形の label が行高に収まらない) / ``horizontal`` / ``vertical`` (揃え) /
     ``black_and_white`` (sheet の印刷を白黒に) / ``print_area`` (雛形に印刷範囲が無い・違う = page の元。
-    ここでは当てず ``pages_for`` が読む)。 ``when`` つきの entry は値の条件が成り立つ時だけ。"""
+    ここでは当てず ``pages_for`` が読む) / ``drop_shape`` (雛形の図形のうち刷らないもの = 名前 〔cNvPr の name〕 の
+    list。 openpyxl の worksheet は図形を持たないので wb に控え、 recipes._save の図形の移植が落とす。 例 = cell と
+    同じ字の textbox が重なって二重に刷られる雛形の欠陥)。 ``when`` つきの entry は値の条件が成り立つ時だけ。"""
     from openpyxl.styles import Alignment
     from openpyxl.utils.cell import range_boundaries
 
@@ -123,6 +125,14 @@ def apply_render_fixes(wb, spec: dict, wbv=None, sheets=None) -> list:
         if "black_and_white" in fx and bool(ws.page_setup.blackAndWhite) != bool(fx["black_and_white"]):
             ws.page_setup.blackAndWhite = bool(fx["black_and_white"])
             changed.append(f"{name} 白黒印刷 {bool(fx['black_and_white'])}")
+        if fx.get("drop_shape"):
+            names = fx["drop_shape"] if isinstance(fx["drop_shape"], list) else [fx["drop_shape"]]
+            drops = wb.__dict__.setdefault("_formcase_drop_shapes", {})
+            have = drops.setdefault(ws.title, set())
+            for n in names:
+                if n not in have:
+                    have.add(n)
+                    changed.append(f"{name} 図形 {n!r} を刷らない")
         if fx.get("row_height"):
             for r in (fx["row"] if isinstance(fx.get("row"), list) else [fx["row"]]):
                 if _row_h(ws, int(r)) < float(fx["row_height"]):
@@ -255,6 +265,9 @@ def snapshot(ws, area: str) -> dict:
 def excel_ops(before: dict, ws, area: str) -> list:
     """snapshot の後に openpyxl で当てた体裁の変更を、 Excel に当てる操作の list にする (excel.ops_lines の形)。
     Excel に当てられない変更 (下罫線) は ("border_bottom", …) として出し、 ops_lines が止める (黙って落とさない)。"""
+    if (getattr(ws.parent, "_formcase_drop_shapes", None) or {}).get(ws.title):
+        raise ValueError(f"{ws.title}: spec の render: drop_shape は Excel の操作に写せない (図形を落とすのは "
+                         "openpyxl の temp + 図形の移植の経路だけ)")
     after = snapshot(ws, area)
     ops = [("unmerge", m) for m in sorted(before["merges"] - after["merges"])]
     ops += [("merge", m) for m in sorted(after["merges"] - before["merges"])]
