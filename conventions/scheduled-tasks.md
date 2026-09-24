@@ -282,6 +282,9 @@ headless `claude -p` の routine は、 使う config dir (`CLAUDE_CONFIG_DIR`) 
   ログアウトの直後の問い合わせは通るので、 翌朝の job の失敗まで見えない。 検知 =
   [`scripts/check-desktop-logout-auth.py`](../scripts/check-desktop-logout-auth.py) (desktop app の log のログアウトと
   keychain 項目の更新時刻を突き合わせて 🔴 を出し、 `--install-watch` で確かめる問い合わせを自動で予約する)。
+  対照実験 (desktop で両 account のログアウトと新しいログインを往復) では、 両方の config dir が約 8 時間後の更新に
+  成功した = ログアウトや新しいログインだけでは切れない (1 回の実験)。 検知器は切り替えのたびに問い合わせで確かめ、
+  失敗したときだけ 🔴 を出す。
 
 ## recurring task の jitter
 

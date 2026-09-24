@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""desktop app でのログアウトの後、 同じ account の無人 job / RC の設定フォルダの認証が更新されていなければ 🔴 (切れる前に言う)。
+"""desktop app でアカウントを切り替えた後、 同じ account の無人 job / RC の設定フォルダが切れていないかを自動で確かめる (切れたら 🔴)。
 
 背景 (実測、 macOS の Claude desktop app + Claude Code CLI): desktop app で account X をログアウトした後、 同じ機械で
 X として無人の `claude -p` / Remote Control が使う設定フォルダ (`CLAUDE_CONFIG_DIR`) が、 次にトークンの更新が要る時点で
-`OAuth session expired and could not be refreshed` になった例がある。 ログアウトの直後はアクセストークンが残っていて
-問い合わせが通るので、 翌朝の job の失敗まで誰も気づかない。 因果は未確定 (同じ account の新しいログインが原因という
-仮説と分けられていない) = 本 script は「疑い」 として出し、 確かめる問い合わせを予約できる。 規約の正本 =
-conventions/scheduled-tasks.md#headless-auth-expiry。
+`OAuth session expired and could not be refreshed` になった例がある。 ただし対照実験 (desktop で両 account のログアウトと
+新しいログインを往復) では、 両方のフォルダが約 8 時間後の更新に成功した = ログアウトや新しいログインだけでは切れない。
+原因は未確定なので、 切り替えのたびに問い合わせで確かめ、 **失敗したときだけ** 🔴 を出す (切り替えるだけで 🔴 は出さない)。
+ログアウトの直後はアクセストークンが残っていて問い合わせが通るので、 更新が要る時刻の後にもう 1 回確かめる。
+規約の正本 = conventions/scheduled-tasks.md#headless-auth-expiry。
 
-  check-desktop-logout-auth.py                     # 表示だけ (dashboard / SessionStart 用。 該当 0 件なら silent)
+  check-desktop-logout-auth.py                     # 表示だけ (dashboard / SessionStart 用。 切れたものだけ、 無ければ silent)
+  check-desktop-logout-auth.py --verbose           # 確かめ中のものも出す
   check-desktop-logout-auth.py --schedule-probes   # 表示 + 未予約のログアウトに問い合わせを launchd で予約 (冪等)
   check-desktop-logout-auth.py --probe DIR [--tag T]   # DIR に最小の claude -p を 1 回、 結果を ledger に追記
   check-desktop-logout-auth.py --install-watch / --uninstall-watch   # 15 分ごとの --schedule-probes を launchd に
@@ -22,11 +24,12 @@ conventions/scheduled-tasks.md#headless-auth-expiry。
     (mdat) は `security find-generic-password -s <項目>` の属性だけを読む (値は読まない)
   - ログアウト = desktop app の log (main.log / main1.log) の
     `Login-state transition (loggedOut: false → true, uuid: <X> → <none>)`。 時刻は log の local time
-  - 🔴 = そのフォルダの account の最新のログアウトが、 keychain の更新時刻より後 (= ログアウト以降、 更新もログインも
-    成功していない)。 更新が要る目安 = keychain の更新時刻 + AT_LIFETIME_H (desktop の Code タブのトークンが約 7h55m
-    ごとに更新されることからの推定)
-  - 問い合わせの ledger (~/.claude/state/desktop-logout-probe.log) に、 ログアウト後の失敗があれば「切れた」、
-    目安の時刻を過ぎた成功があれば「目安では切れていない」 を添える
+  - 確かめ中 = そのフォルダの account の最新のログアウトが、 keychain の更新時刻より後 (= ログアウト以降、 更新も
+    ログインも成功していない)。 更新が要る目安 = keychain の更新時刻 + AT_LIFETIME_H (desktop の Code タブのトークンが
+    約 7h55m ごとに更新され、 実験でも更新から約 8 時間後の問い合わせで更新が走った)。 更新が成功すれば keychain の
+    更新時刻がログアウトより後になり、 対象から外れる
+  - 🔴 = 確かめ中のフォルダで、 ログアウト後の問い合わせ (ledger = ~/.claude/state/desktop-logout-probe.log) が失敗
+  - 確かめ中で失敗の無いものは既定では出さない (--verbose で「確かめ中」 と出す)
   - 予約 = 直後に 1 回 (アクセストークンがその場で失効するか) + 目安 + 15 分に 1 回 (更新トークンが生きているか)。
     同じ (フォルダ, ログアウト時刻) には 1 度だけ (state = ~/.claude/state/desktop-logout-probe-state.json)。
     予約は一回だけ走って自分の plist を消す
@@ -173,7 +176,7 @@ def assess(dirs: dict[str, list[str]], last_logout: dict[str, float], mdat_of, l
     return out
 
 
-def render(items: list[dict], script: str) -> list[str]:
+def render(items: list[dict], script: str, verbose: bool = False) -> list[str]:
     lines = []
     for it in items:
         who = f"{it['dir']} ({len(it['labels'])} 本の launchd job が使う)"
@@ -181,13 +184,9 @@ def render(items: list[dict], script: str) -> list[str]:
         if it["state"] == "切れた":
             lines.append(f"🔴 {who} は切れた (desktop で {it['email']} を {_hm(it['logout'])} にログアウトした後の問い合わせが失敗)。"
                          f" 直す = そのマシンで {fix}")
-        elif it["state"] == "目安を過ぎても通った":
-            lines.append(f"🟡 desktop で {it['email']} を {_hm(it['logout'])} にログアウトしたが、 {who} は更新の目安"
-                         f" ({_hm(it['verdict_at'])}) を過ぎても通った = トークンの寿命が目安より長い可能性。 翌日の run で確かめる")
-        else:
-            lines.append(f"🔴 desktop で {it['email']} を {_hm(it['logout'])} にログアウトした後、 {who} の認証は一度も更新されていない"
-                         f" → 次の更新 ({_hm(it['verdict_at'])} 頃) で切れる疑い。 確かめる = python3 {script} --probe {it['dir']}"
-                         f" / 直す = {fix}")
+        elif verbose:
+            lines.append(f"⚪ 確かめ中: desktop で {it['email']} を {_hm(it['logout'])} にログアウトした後、 {who} の認証はまだ更新されていない"
+                         f" (更新の目安 {_hm(it['verdict_at'])}、 状態 = {it['state']})。 今すぐ確かめる = python3 {script} --probe {it['dir']}")
     return lines
 
 
@@ -333,12 +332,14 @@ def selftest() -> int:
         dirs = watched_dirs(agents)
         ck("plist の CLAUDE_CONFIG_DIR から対象フォルダを集める", set(dirs) == {str(cron), str(other)})
 
-        before = t_out - 5 * 3600  # 9/18 03:50 の更新 (ログアウトより前)
+        before = t_out - 5 * 3600  # ログアウトの 5 時間前の更新
         items = assess(dirs, lo, lambda d: before, [], now=t_out + 600)
-        ck("実測の文言の例で 🔴 (更新がログアウトより前)", len(items) == 1 and items[0]["dir"] == str(cron))
-        lines = render(items, "check-desktop-logout-auth.py")
-        ck("🔴 の行に login の command と目安の時刻", lines and lines[0].startswith("🔴") and "claude auth login" in lines[0]
-           and _hm(before + AT_LIFETIME_H * 3600) in lines[0])
+        ck("実測の文言の例で確かめ中に入る (更新がログアウトより前)", len(items) == 1 and items[0]["dir"] == str(cron))
+        ck("確かめ中で失敗が無ければ既定では何も出さない (切り替えるだけで 🔴 にしない)",
+           render(items, "check-desktop-logout-auth.py") == [])
+        lines = render(items, "check-desktop-logout-auth.py", verbose=True)
+        ck("--verbose では確かめ中を目安の時刻と問い合わせの command つきで出す",
+           lines and lines[0].startswith("⚪") and "--probe" in lines[0] and _hm(before + AT_LIFETIME_H * 3600) in lines[0])
         ck("別の account のフォルダは出さない", all(it["dir"] != str(other) for it in items))
         ck("ログアウト後に更新されていれば silent", assess(dirs, lo, lambda d: t_out + 60, [], now=t_out + 600) == [])
         ck("keychain が読めなければ silent (fail-open)", assess(dirs, lo, lambda d: None, []) == [])
@@ -346,10 +347,12 @@ def selftest() -> int:
 
         fail_row = [{"t": t_out + 7200, "tag": "verdict", "dir": str(cron), "ok": False}]
         it2 = assess(dirs, lo, lambda d: before, fail_row, now=t_out + 8000)
-        ck("ログアウト後の問い合わせが失敗 = 「切れた」", it2 and it2[0]["state"] == "切れた" and "切れた" in render(it2, "x")[0])
+        r2 = render(it2, "x")
+        ck("ログアウト後の問い合わせが失敗 = 🔴 「切れた」 と login の command", it2 and it2[0]["state"] == "切れた"
+           and r2 and r2[0].startswith("🔴") and "切れた" in r2[0] and "claude auth login" in r2[0])
         pass_row = [{"t": before + AT_LIFETIME_H * 3600 + 60, "tag": "verdict", "dir": str(cron), "ok": True}]
         it3 = assess(dirs, lo, lambda d: before, pass_row)
-        ck("目安を過ぎた成功 = 🟡", it3 and it3[0]["state"] == "目安を過ぎても通った" and render(it3, "x")[0].startswith("🟡"))
+        ck("目安を過ぎた成功は既定では出さない", it3 and it3[0]["state"] == "目安を過ぎても通った" and render(it3, "x") == [])
 
         plan = plan_probes(items, {}, now=t_out + 600)
         ck("予約 = 直後 + 目安の 15 分後の 2 回", [p[3] for p in plan] == ["after-logout", "verdict"]
@@ -380,7 +383,7 @@ def main(argv: list[str]) -> int:
         return 0
     items = assess(watched_dirs(LAUNCH_AGENTS), logouts(DESKTOP_LOG_DIR),
                    lambda d: keychain_mdat(keychain_service(d)), read_ledger(LEDGER))
-    for line in render(items, str(Path(__file__).resolve())):
+    for line in render(items, str(Path(__file__).resolve()), verbose="--verbose" in argv):
         print(line)
     if "--schedule-probes" in argv:
         for line in schedule(items):
