@@ -80,6 +80,7 @@
 - **[check-seal-attachments.py](check-seal-attachments.py)** — 印影画像の入った file を、file のまま相手に渡す前に止める (メール添付・共有・upload の出口用)。
 - **[check-session-sot.py](check-session-sot.py)** — Detect durable-data accretion and bloat in SESSION.md files.
 - **[check-sot-drift.py](check-sot-drift.py)** — 「規則の正本は 1 か所、 他所は参照だけ」 を目印の文字列で機械検査する (registry 駆動)
+- **[check-text-section-refs.py](check-text-section-refs.py)** — 文中の「<file> §「<節名>」」 型の参照が、 実在する file の実在しない節を指していないかを検査する。
 - **[check-unpublished-quote.py](check-unpublished-quote.py)** — Stop verbatim text of unpublished documents (your private manuscripts) from being committed to a public repo: matches quoted spans and long prose runs in the staged added lines or a commit message against hashed word shingles of the declared sources; --selftest.
 - **[check-xlsx-integrity.py](check-xlsx-integrity.py)** — xlsx の Excel「破損」判定源を Excel 不要・決定論で検出（XML well-formed〔unbound prefix〕/ rels 両方向参照整合 / rId 重複 / Content_Types coverage。 zip 直編集 xlsx の納品前 gate、 office-automation.md#openpyxl-destroys-drawings）
 - **[check-yaml-lint.py](check-yaml-lint.py)** — fleet 横断 YAML hazard lint (yamllint を危険 rule 限定で全 repo の tracked yaml に回す。 truthy / dup-key / implicit-octal / syntax、 git-crypt lock file skip、 yamllint 未 install や root 不在は SKIP、 --selftest は毒入り fixture で検出能力自体を検証。 規約 = conventions/yaml-hazards.md#yamllint-hazard-config)
