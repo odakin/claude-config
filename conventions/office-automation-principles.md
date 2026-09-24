@@ -86,6 +86,8 @@ content control / XML 宣言 / bookmark)。 **どの道具も、 この地層の
 | ② 視覚 (render) | PDF を**画像として**目視 | `###` / 文字切れ / 標題消失 / ズレ | 次の解釈器の挙動 (printer 化け) |
 | ③ 実機 | 実際に Word/Excel で開く、 実際に印刷する | 「破損」 ダイアログ、 printer RIP 問題 | — (最終 ground truth) |
 
+(2026-09-24 追記) ① に**雛形の図形の字の在否** ([`check-form-static-text.py`](../scripts/check-form-static-text.py)) を足した: 上の ① はどれも「書いたもの」 (記入値・label) を見る。 雛形が元から紙に出す図形 (標題・区分の枠・様式番号) の**不在**は ② の目視でも前の出力と見比べる限り見えない (前の出力も同じ経路なら同じく欠ける) = 参照は雛形から機械で作る ([`convention-design-principles.md#parity-against-own-output`](../docs/convention-design-principles.md#parity-against-own-output))。
+
 応用の指針:
 - **①で済ませた気にならない** — text 層の検証は「値が存在する」 ことしか言わない。 glyph が
   描画されない PDF も text 検証は通る。 layout 問題 (overflow `###`) は text 抽出では不定
