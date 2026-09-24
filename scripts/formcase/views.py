@@ -209,20 +209,28 @@ def region_problems(text: str) -> list:
 
 
 def refresh_case(case_dir) -> str | None:
-    """manifest を変えた後に案件 README の generated view を描き直す (freeze / annotate / reopen / new が呼ぶ)。
-    README が無い・view が無いなら何もしない。 戻り値 = 表示する 1 行 (無ければ None)。"""
+    """manifest を変えた後に案件の生成物を描き直す (freeze / annotate / reopen / new / add-group が呼ぶ):
+    README の generated view と、 隔離 marker (00-⚠️-DO-NOT-USE-AS-BASE.md)。 marker も manifest から描く生成物なので、
+    描き直さないと manifest を変えるたびに audit の 🔴 が残る (= 人に `markers --write` を覚えさせる形。 実測)。
+    README が無い・view が無い・manifest が読めないものは何もしない。 戻り値 = 表示する行 (無ければ None)。"""
+    lines = []
     readme = Path(case_dir) / "README.md"
-    if not readme.exists():
-        return None
-    raw = readme.read_bytes()
-    if raw.startswith(b"\x00GITCRYPT") or b"formcase:view kind=" not in raw:
-        return None
-    (_p, st, detail), = check_files([readme], write=True)
-    if st == "written":
-        return f"✏️  README の状態表を描き直した ({readme})"
-    if st == "error":
-        return f"🔴 README の view を描けない ({readme}): {detail}"
-    return None
+    raw = readme.read_bytes() if readme.exists() else b""
+    if raw and not raw.startswith(b"\x00GITCRYPT") and b"formcase:view kind=" in raw:
+        (_p, st, detail), = check_files([readme], write=True)
+        if st == "written":
+            lines.append(f"✏️  README の状態表を描き直した ({readme})")
+        elif st == "error":
+            lines.append(f"🔴 README の view を描けない ({readme}): {detail}")
+    from . import manifest as M
+    from . import markers as MK
+    try:
+        mst, mpath = MK.check_case(M.load(case_dir), write=True)
+    except M.ManifestError:
+        mst = None
+    if mst == "written":
+        lines.append(f"✏️  隔離 marker を描き直した ({mpath})")
+    return "\n".join(lines) or None
 
 
 def check_files(paths, write=False):

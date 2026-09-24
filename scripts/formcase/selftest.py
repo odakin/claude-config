@@ -1252,6 +1252,9 @@ def _case_readme_tests(tmp, expect) -> None:
     expect("refresh_case (freeze / annotate / reopen / new が呼ぶ) が描き直す",
            line and "描き直した" in line and "🧊 sent" in readme.read_text(encoding="utf-8")
            and VI.check_files([readme])[0][1] == "ok", line)
+    from . import markers as MK2
+    expect("refresh_case は隔離 marker も描き直す (凍結 issue ができたら marker が現れ、 audit が stale を出さない)",
+           "隔離 marker" in (line or "") and MK2.check_case(M.load(case))[0] == "ok", line)
     other = tmp / "repo-a" / "docs" / "reference" / "x.md"
     other.parent.mkdir(parents=True, exist_ok=True)
     other.write_text("<!-- formcase:view kind=status -->\n<!-- /formcase:view -->\n", encoding="utf-8")
