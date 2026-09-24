@@ -238,4 +238,4 @@ worldLine.history 等の **直近 N entry cap** を持つ data structure は、 
 - 由来 session: 2026-05-06 LorentzArena Bug 14 live state capture (= [`2+1/repro/2026-05-06-bug14-state/README.md`](https://github.com/sogebu/LorentzArena/blob/main/2%2B1/repro/2026-05-06-bug14-state/README.md))
 - Android ADB docs: https://developer.android.com/tools/adb
 - Chrome DevTools Protocol: https://chromedevtools.github.io/devtools-protocol/
-- 関連 odakin-prefs 規律: `work-discipline.md §「USB ADB が詰まったら WiFi ADB に即切替」` + `§「mobile-only bug は reload 前に state 吸い出す」`
+- 関連 odakin-prefs 規律: `work-discipline-archive.md §「USB ADB が詰まったら WiFi ADB に即切替」` + `§「mobile-only bug は reload 前に state 吸い出す」`

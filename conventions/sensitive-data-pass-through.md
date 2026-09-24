@@ -35,7 +35,7 @@ forward する**前**に必ず:
 
 ## 関連事象
 
-- Public repo への commit 直前の安全弁 = `work-discipline.md §「4 軸 sweep は PII leak の事前 catch にも効く」` (= leak 検出の 4 軸 sweep)
+- Public repo への commit 直前の安全弁 = `work-discipline-archive.md §「4 軸 sweep は PII leak の事前 catch にも効く」` (= leak 検出の 4 軸 sweep)
 - Email 文体 = recipient と scope の整合性 = `claude-config/conventions/japanese-email-honorifics.md` (= 身内 vs 外、 honorific の scope)
 - Secret handoff = `claude-config/conventions/secret-handoff.md` (= secret を chat 経由で渡さない、 clipboard 経由)
 
