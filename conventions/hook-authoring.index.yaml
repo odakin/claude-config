@@ -314,6 +314,15 @@ sections:
   - id: injection-digest-and-relay
     level: 2
     title: "§15. SessionStart の注入を 1 ブロックに畳み、 期限の近い item は人に伝えたかを Stop で問う"
+  - id: typed-confirmation-in-git-hook
+    level: 2
+    title: "§16. git hook の「打ち込みで確認」 は、 機械で確かめられる事実なら機械で確かめる"
+  - id: typed-confirmation-problem
+    level: 3
+    title: "問題"
+  - id: typed-confirmation-prevention
+    level: 3
+    title: "防止策"
   - id: related-docs
     level: 2
     title: "関連"

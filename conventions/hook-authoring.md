@@ -993,6 +993,25 @@ SessionStart hook の注入は agent の文脈にだけ入り、 人の画面に
 
 ---
 
+## <a id="typed-confirmation-in-git-hook"></a>§16. git hook の「打ち込みで確認」 は、 機械で確かめられる事実なら機械で確かめる
+
+### <a id="typed-confirmation-problem"></a>問題
+
+push 先が非公開か・送り先が正しいか のような事実を、 hook が「YES と打て」 と人に確かめさせる形は 3 つの壊れ方をする (実測):
+
+1. **入力を待つあいだ接続が開いたまま** — pre-push は remote への接続を張った後に走る。 人が打つまでの間に相手側が無通信の接続を切り、 確認が通っても送信は失敗する。
+2. **入力が届かない端末がある** — agent が開いた端末の tab で、 打鍵が hook の `read </dev/tty` に届かず確認が待ち続けた (原因は未確定)。 人から見ると止まらない処理に見え、 手で process を止めることになる。
+3. **端末の無い実行 (agent の shell・無人 job) では必ず止まる** — hook の中止メッセージが検査を飛ばす flag を案内していると、 それが次の手になる (= gate を外す操作を hook 自身が教える)。
+
+### <a id="typed-confirmation-prevention"></a>防止策
+
+- 確かめたい事実を API で読む (例: GitHub の repo の公開設定 = `gh repo view <owner>/<repo> --json visibility`)。 期待どおりなら通し、 違えば止める。
+- 読めないとき (API の無い remote・CLI が無い・呼び出しの失敗) だけ打ち込みの確認に倒れ、 端末が無ければ止める (= 読めないことを「確かめた」 に畳まない)。
+- 中止メッセージには「何が確かめられなかったか」 と「どう直すか」 を書き、 検査を飛ばす flag は書かない。
+- 変えたら、 期待どおりの値・違う値・存在しない対象・API の無い remote・CLI の無い PATH の 5 通りを hook 単体に引数で渡して確かめる (pre-push は `$1` = remote 名・`$2` = URL で直接呼べる。 終了値は pipe の後ろの command でなく hook 自身のものを見る)。
+
+---
+
 ## <a id="related-docs"></a>関連
 
 - `claude-config/setup.sh §Step 2 install_hooks()` — 配信機構の正本 (= delivery 軸 (a) symlink + (b) settings.json を atomic 化する reference implementation。 (c) logic は hook script 側、 (d) invoke 経路は claude-code harness 側で別 layer)
