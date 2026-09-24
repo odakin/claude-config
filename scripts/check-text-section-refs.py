@@ -40,6 +40,9 @@ file の解決 (上から順に、 最初に 1 つに決まったもの):
   [--root DIR]... [--base DIR]   fleet scan (既定)。 root 直下の各 git repo の track 済み text を worktree で読む。
                                  🔴 が 0 件なら何も出さない。 --surface = 枠なし / --strict = 🔴 で exit 1 /
                                  --list = ⚪ 🟠 🟡 の内訳も出す / --json
+                                 --compare BEFORE.json = 検出器を変える前に `--json > BEFORE.json` で取った出力と、
+                                 今の fleet の finding の差を状態ごとに出す (行番号だけのずれは数だけ)。 述語を変えたら
+                                 新しい 🔴 が本物か・消えた ⚪ が期待どおりかをこれで 1 件ずつ見る
   --staged [--repo DIR]          commit 時。 stage した text の、 HEAD に無い行にある参照だけを見る (= 書いた本人に出す)。
                                  さらに stage した .md で消えた見出し・anchor を、 base 下の他の file が指していたら知らせる
                                  (= 節の名前を変えた本人に出す)。 呼び元は pre-commit の chain (**警告だけ、 commit は
@@ -988,8 +991,37 @@ def repos_under(root: Path) -> List[Path]:
     return out
 
 
+def compare_findings(before: dict, after: dict) -> List[str]:
+    """`--json` の 2 つの出力 (検出器を変えた前 / 後) の finding の差。 状態ごとに + (増えた) / - (消えた) を出し、
+    行番号だけがずれた finding (状態・source・path・節名が同じ) は「行の移動」 として数だけにする。"""
+    def keys(d: dict) -> Dict[str, Set[tuple]]:
+        return {k: {(f["status"], f["src"], f["line"], f["form"], f["path_tok"], f["key"]) for f in v}
+                for k, v in d.items() if isinstance(v, list) and v and isinstance(v[0], dict)}
+
+    def noline(x: tuple) -> tuple:
+        return (x[0], x[1], x[3], x[4], x[5])
+
+    kb, ka = keys(before), keys(after)
+    sb, sa = before.get("stats", {}), after.get("stats", {})
+    out = [f"{HEADING} 突き合わせ: 参照 {sb.get('refs', '?')} → {sa.get('refs', '?')} 件 / "
+           f"repo {sb.get('repos', '?')} → {sa.get('repos', '?')}"]
+    for k in sorted(set(kb) | set(ka)):
+        add, rem = ka.get(k, set()) - kb.get(k, set()), kb.get(k, set()) - ka.get(k, set())
+        moved = {noline(x) for x in add} & {noline(x) for x in rem}
+        add = {x for x in add if noline(x) not in moved}
+        rem = {x for x in rem if noline(x) not in moved}
+        if not (add or rem or moved):
+            continue
+        out.append(f"== {k}: +{len(add)} -{len(rem)}" + (f" (行の移動 {len(moved)})" if moved else ""))
+        out += [f"  + {x[1]}:{x[2]} → {x[4]} {x[5]}" for x in sorted(add)]
+        out += [f"  - {x[1]}:{x[2]} → {x[4]} {x[5]}" for x in sorted(rem)]
+    if len(out) == 1:
+        out.append("  差なし")
+    return out
+
+
 def run_fleet(roots: List[str], base_arg: Optional[str], ack: Set[str], surface: bool, strict: bool,
-              list_all: bool, as_json: bool) -> int:
+              list_all: bool, as_json: bool, compare: Optional[str] = None) -> int:
     all_f: List[Finding] = []
     stats = {"refs": 0, "numbered": 0, "repos": 0}
     for root in roots:
@@ -1011,10 +1043,19 @@ def run_fleet(roots: List[str], base_arg: Optional[str], ack: Set[str], surface:
     acked = [f for f in all_f if f.status == "MISSING" and f.ack_key() in ack]
     stale_ack = sorted(ack - {f.ack_key() for f in acked})  # 直った / 行が動いた = 一覧から消す行
     by = {k: [f for f in all_f if f.status == k] for k in ("AMBIG_MISSING", "SAME_NAME", "RECORD", "BODY", "UNRESOLVED")}
+    payload = {"stats": stats, "missing": [f.__dict__ for f in missing], "acked": len(acked), "stale_ack": stale_ack,
+               **{k.lower(): [f.__dict__ for f in v] for k, v in by.items()}}
+    if compare:
+        try:
+            before = json.loads(Path(compare).read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"{HEADING} 検査が走っていない (--compare の file を読めない: {e})")
+            return 3
+        for ln in compare_findings(before, payload):
+            print(ln)
+        return 0
     if as_json:
-        print(json.dumps({"stats": stats, "missing": [f.__dict__ for f in missing],
-                          "acked": len(acked), "stale_ack": stale_ack, **{k.lower(): [f.__dict__ for f in v] for k, v in by.items()}},
-                         ensure_ascii=False, indent=1))
+        print(json.dumps(payload, ensure_ascii=False, indent=1))
         return 1 if (strict and missing) else 0
     if missing or list_all:
         if not surface:
@@ -1093,6 +1134,14 @@ def selftest() -> int:
     keys = {r.key for r in extract_refs(py, code="hash")[0]}
     expect("抽出 (py): 注釈・docstring (英文の apostrophe・backtick つき) は見る", {"庚", "辛", "壬"} <= keys)
     expect("抽出 (py): 文字列 literal は見ない", not keys & {"癸", "子", "丑"})
+    # --compare: 検出器を変えた前後の突き合わせ (行番号だけのずれは移動として数だけ)
+    def fd(line, key, st="MISSING"):
+        return {"status": st, "src": "r/a.md", "line": line, "form": "F1", "path_tok": "b.md", "key": key}
+    cmp = compare_findings({"stats": {"refs": 2}, "missing": [fd(3, "甲"), fd(4, "乙")]},
+                           {"stats": {"refs": 3}, "missing": [fd(5, "甲"), fd(6, "丙")]})
+    expect("--compare: 増えた / 消えた / 行の移動を分ける",
+           "== missing: +1 -1 (行の移動 1)" in cmp and any("丙" in x and x.startswith("  +") for x in cmp)
+           and any("乙" in x and x.startswith("  -") for x in cmp) and not any("甲" in x for x in cmp))
 
     with tempfile.TemporaryDirectory() as td:
         base = Path(td) / "fleet"
@@ -1298,6 +1347,7 @@ def main() -> int:
     ap.add_argument("--strict", action="store_true")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--compare", metavar="BEFORE_JSON", help="検出器を変える前に取った --json と今の fleet の差を出す")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -1306,7 +1356,7 @@ def main() -> int:
     if a.staged:
         return run_staged(a.repo, a.base, ack)
     roots = a.root or [str(Path.home() / "Claude")]
-    return run_fleet(roots, a.base, ack, a.surface, a.strict, a.list, a.json)
+    return run_fleet(roots, a.base, ack, a.surface, a.strict, a.list, a.json, a.compare)
 
 
 if __name__ == "__main__":
