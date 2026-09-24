@@ -53,6 +53,7 @@
 - **[check-fleet-status.py](check-fleet-status.py)** — fleet heartbeat の reader（全マシン分の beat を読み role 別に異常 surface = always-on の heartbeat 停止 🔴 / best-effort のスリープは仕様で silent / beat が新鮮な時の server auth/version error 🔴。finding 0 件 silent、fetch しない = 呼び出し側が鮮度担保、--selftest 内蔵、conventions/multi-machine-state.md#fleet-heartbeat）
 - **[check-foil-teeth.py](check-foil-teeth.py)** — selftest の foil に歯があるかを、 修正の一部だけを外した mutant で確かめる (mutant ごとに、 落ちるはずの check が FAIL し、 残るはずの check は PASS のまま = foil が互いに独立) — mutant は対象 script の隣の `<name>.mutants.json` に宣言する。--selftest 内蔵。
 - **[check-form-clipping.py](check-form-clipping.py)** — 生成 form PDF で「記入値が描画時に clip された」のを機械検出。
+- **[check-form-static-text.py](check-form-static-text.py)** — 様式の雛形が持つ図形の字 (標題・区分の枠・様式番号・㊞ 等) が出力 PDF に在るかを見る。
 - **[check-gitcrypt-readable.py](check-gitcrypt-readable.py)** — 暗号化 file が「このマシンで実際に読めるか」を必ず可視に報告する。
 - **[check-history-growth.py](check-history-growth.py)** — 差分が効かない file (暗号化・PDF・画像) を頻繁に commit して、 版ごとに全体が git の履歴に積まれるのを早めに見つける。
 - **[check-inbound-refs.py](check-inbound-refs.py)** — safety net for restructuring claude-config (layer 1).
