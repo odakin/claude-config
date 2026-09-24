@@ -13,6 +13,9 @@ null の後は手元の別の情報に倒れる。 規律側 = docs/convention-d
   F3 #anchor 文中の `path.md#anchor` (markdown link の href でないもの。 F1/F2 と同じ参照に付いていれば両方を見る)
   F4 link    `[..](path.md#anchor)` (markdown link の href)
   (§ の直後が数字の `path §2.3` は番号参照 = 節の名前を持たないので数だけ数える。 path の無い §「名」 は見ない)
+  code (.py .sh / .ts .tsx .js .jsx .mjs .cjs) は注釈と docstring の中の F1-F3 を見る。 行内で閉じる文字列 literal
+  (test の fixture 等) の中は見ない。 実測 = 設計 doc を design/*.md に分割した後、 code の注釈に分割前の節参照が
+  残っていた (fleet の TS/JS 213 file・参照 40 件で誤検出 0、 同じ変更で .sh の複数行文字列の中の古い参照が 1 件出た)
 
 判定 (**不在と未判定を同じ値にしない** = docs/convention-design-principles.md#catch-all-branch-absorbs-covered-class):
   🔴 MISSING   file は 1 つに解決できた (実在・読める) のに、 節がその file に無い:
@@ -78,8 +81,18 @@ DOC_ANCHOR = "claude-config/docs/convention-design-principles.md#text-section-re
 GITCRYPT_MAGIC = b"\x00GITCRYPT"
 
 # source として読む text (= 参照が書かれうるもの)。 target はどの拡張子でも読む (節の判定は拡張子で変える)
-SCAN_EXTS = {".md", ".markdown", ".txt", ".yaml", ".yml", ".py", ".sh", ".tex"}
+# code は注釈・docstring の中の参照を見る (1 行で閉じる文字列 literal の中 = test の fixture 等は拾わない)。
+# 注釈の記号で 2 系統: `#` の系統 / `//`・`/* */` の系統 (TS/JS。 実測 = 設計 doc を分割した後に残った注釈の節参照)
+HASH_CODE_EXTS = {".py", ".sh", ".bash", ".zsh"}
+SLASH_CODE_EXTS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
+SCAN_EXTS = {".md", ".markdown", ".txt", ".yaml", ".yml", ".tex"} | HASH_CODE_EXTS | SLASH_CODE_EXTS
 MAX_BYTES = 2_000_000
+
+
+def code_lang(path: str) -> str:
+    """'hash' / 'slash' / '' (code でない)。"""
+    ext = os.path.splitext(str(path))[1].lower()
+    return "hash" if ext in HASH_CODE_EXTS else "slash" if ext in SLASH_CODE_EXTS else ""
 # 各 repo に必ずある名前 = 裸で書かれたら参照元 repo の中だけで探す (repo 跨ぎの後方一致で他 repo の同名に当てない)
 SCAFFOLD_NAMES = {"readme.md", "claude.md", "design.md", "session.md", "agents.md", "setup.md", "todo.md",
                   "index.md", "notes.md", "conventions.md", "changelog.md", "license.md", "contributing.md"}
@@ -144,21 +157,70 @@ def _strip_md(s: str) -> str:
     return s.replace("**", "").replace("`", "").strip()
 
 
-def _in_string_literal(line: str, pos: int) -> bool:
-    """code の 1 行で pos が引用符の内側か (= selftest の fixture 文字列。 注釈行 `#` の中は内側と見ない)。"""
-    head = line[:pos]
-    if head.lstrip().startswith("#"):
-        return False
-    return head.count('"') % 2 == 1 or head.count("'") % 2 == 1
+_PY_STR_PREFIX = re.compile(r"(?:^|\W)(?:[rRbBuUfF]|[rR][bBfF]|[bBfF][rR])$")
 
 
-def extract_refs(text: str, code: bool = False) -> Tuple[List[Ref], int]:
-    """(refs, 番号参照の数)。 code = .py / .sh の source (1 行の文字列 literal の中は拾わない)。"""
+def _literal_spans(line: str, lang: str, st: Dict[str, bool]) -> List[Tuple[int, int]]:
+    """code の 1 行のうち、 行内で閉じる文字列 literal の範囲 (= 拾わない所。 selftest の fixture 文字列 等)。
+    注釈 (`#` / `//` / `/* */`) と docstring (閉じない三重引用符の中) は literal にしない = 参照を見る。
+    行内で閉じない引用符と、 語の直後の引用符 (it's / don't) も literal の始まりと見ない (注釈・docstring の英文)。
+    st = 行を跨ぐ状態 (`/* */` の中か)。"""
+    spans: List[Tuple[int, int]] = []
+    i, n = 0, len(line)
+    while i < n:
+        if st.get("block"):
+            j = line.find("*/", i)
+            if j < 0:
+                return spans
+            st["block"] = False
+            i = j + 2
+            continue
+        c = line[i]
+        if (lang == "hash" and c == "#") or (lang == "slash" and line.startswith("//", i)):
+            return spans  # 以降は注釈
+        if lang == "slash" and line.startswith("/*", i):
+            st["block"] = True
+            i += 2
+            continue
+        if lang == "hash" and line.startswith(('"""', "'''"), i):
+            j = line.find(line[i:i + 3], i + 3)
+            if j >= 0:  # 行内で閉じる三重引用符 = literal。 閉じない = docstring の端 = 中を見る
+                spans.append((i, j + 3))
+                i = j + 3
+            else:
+                i += 3
+            continue
+        if c in "\"'" or (c == "`" and lang == "slash"):  # `#` 系の backtick は注釈・docstring の code 表記
+            prev = line[:i]
+            if prev and (prev[-1].isalnum() or prev[-1] == "_") and not (lang == "hash" and _PY_STR_PREFIX.search(prev)):
+                i += 1  # 語の直後 = apostrophe
+                continue
+            j = i + 1
+            while j < n and line[j] != c:
+                j += 2 if line[j] == "\\" else 1
+            if j >= n:  # 行内で閉じない = literal と見ない
+                i += 1
+                continue
+            spans.append((i, j + 1))
+            i = j + 1
+            continue
+        i += 1
+    return spans
+
+
+def extract_refs(text: str, code: object = "") -> Tuple[List[Ref], int]:
+    """(refs, 番号参照の数)。 code = code_lang() の値 ('hash' / 'slash'、 True は 'hash' の旧形) = 行内で閉じる
+    文字列 literal の中は拾わない (注釈・docstring の中は見る)。"""
+    lang = "hash" if code is True else (code or "")
+    st: Dict[str, bool] = {}
     refs: List[Ref] = []
     numbered = 0
     for ln, line in enumerate(text.splitlines(), 1):
         if "§" not in line and "#" not in line:
+            if lang == "slash" and ("/*" in line or "*/" in line):
+                _literal_spans(line, lang, st)  # `/* */` の状態だけ進める
             continue
+        lit = _literal_spans(line, lang, st) if lang else []
         spans: List[Tuple[int, int]] = []
         # markdown link: href の anchor は F4 で見る。 link 文字列の中の §「…」 は label (anchor 側が正本) = F1/F2 にしない
         link_text_spans: List[Tuple[int, int]] = []
@@ -177,8 +239,7 @@ def extract_refs(text: str, code: bool = False) -> Tuple[List[Ref], int]:
                 f4.append(Ref(ln, "F4", p, a, m.group(0)[:160]))
 
         def skip(pos: int) -> bool:  # `[x](path) §「名」` の href から始まる参照は見る (link に anchor が無ければ節名が唯一の手がかり)
-            return (any(a <= pos < b for a, b in spans + link_text_spans)
-                    or (code and _in_string_literal(line, pos)))
+            return any(a <= pos < b for a, b in spans + link_text_spans + lit)
 
         if "§" in line:
             for m in RE_Q.finditer(line):
@@ -210,9 +271,9 @@ def extract_refs(text: str, code: bool = False) -> Tuple[List[Ref], int]:
                 spans.append((m.start(), m.end()))
                 refs.append(Ref(ln, "F2", m.group("path"), name, (m.group(0) + name)[:120], m.group("anchor") or ""))
         if "#" in line:
-            refs.extend(r for r in f4 if not code)
+            refs.extend(r for r in f4 if not lang)
             for m in RE_A.finditer(line):
-                if any(a <= m.start() < b for a, b in link_href_spans) or (code and _in_string_literal(line, m.start())):
+                if any(a <= m.start() < b for a, b in link_href_spans + lit):
                     continue
                 refs.append(Ref(ln, "F3", m.group("path"), m.group("anchor"), m.group(0)))
     # F1/F2 に付いた #anchor も F3 として見る (重複は除く)
@@ -712,7 +773,7 @@ def scan_repo(fleet: Fleet, repo: Path, hints: bool = True) -> Tuple[List[Findin
         text = read_text_file(p)
         if text is None or ("§" not in text and "#" not in text):
             continue
-        refs, n = extract_refs(text, code=f.endswith((".py", ".sh")))
+        refs, n = extract_refs(text, code=code_lang(f))
         stats["numbered"] += n
         record = is_record(f, text)
         for r in refs:
@@ -823,7 +884,7 @@ def run_staged(repo_arg: Optional[str], base_arg: Optional[str], ack: Set[str]) 
         if is_record(str(p.relative_to(repo)), t):
             continue  # 履歴の記録・宣言した記録の doc への追記には出さない
         old_lines = set((heads[p] or "").splitlines())
-        refs, _ = extract_refs(t, code=p.suffix in (".py", ".sh"))
+        refs, _ = extract_refs(t, code=code_lang(p.name))
         lines = t.splitlines()
         for ref in refs:
             if lines[ref.line - 1] in old_lines:
@@ -896,7 +957,7 @@ def find_inbound(fleet: Fleet, target: Path, repo: Path, lost_heads: List[str], 
             text = fleet.overrides.get(p.resolve()) or read_text_file(p)
             if text is None:
                 continue
-            refs, _ = extract_refs(text, code=f.endswith((".py", ".sh")))
+            refs, _ = extract_refs(text, code=code_lang(f))
             for ref in refs:
                 if os.path.basename(BARE_SCAFFOLD.get(ref.path_tok, ref.path_tok)) != bn:
                     continue
@@ -1011,6 +1072,27 @@ def selftest() -> int:
     expect("抽出: URL の中は拾わない", refs == [])
     refs, _ = extract_refs("`guide.md#fill-v2` §「記入の手順」")
     expect("抽出: path#anchor §「名」 は名と anchor の両方", {r.form for r in refs} == {"F1", "F3"})
+    # code: 注釈・docstring は見る / 行内で閉じる文字列 literal (fixture) は見ない
+    ts = "\n".join([
+        "// 詳細: DESIGN.md §描画「甲」",                      # // 注釈 (§ の後ろに分類語)
+        'const s = "b.md §「乙」";',                          # 文字列 literal = 見ない
+        "/* it's c.md §「丙」",                               # /* 注釈 + apostrophe
+        " * d.md §「丁」 */ const t = `e.md §「戊」`;",          # 注釈の続き / template literal = 見ない
+        "x(); // don't: f.md §「己」",                         # 行末注釈
+    ])
+    keys = {r.key for r in extract_refs(ts, code="slash")[0]}
+    expect("抽出 (TS): 注釈の中は見る", {"甲", "丙", "丁", "己"} <= keys)
+    expect("抽出 (TS): 文字列 literal / template の中は見ない", not keys & {"乙", "戊"})
+    py = "\n".join([
+        'x = "don\'t"  # g.md §「庚」',                        # 注釈の前の literal に apostrophe
+        '"""h.md §「辛」 の docstring',                        # 閉じない三重引用符 = docstring
+        "it's `<dir>/i.md` §「壬」 and don't",                 # docstring の英文と backtick
+        'f("j.md §「癸」")',                                   # 文字列 literal = 見ない
+        'g(r"k.md §「子」", """l.md §「丑」""")',               # prefix つき / 行内で閉じる三重引用符 = 見ない
+    ])
+    keys = {r.key for r in extract_refs(py, code="hash")[0]}
+    expect("抽出 (py): 注釈・docstring (英文の apostrophe・backtick つき) は見る", {"庚", "辛", "壬"} <= keys)
+    expect("抽出 (py): 文字列 literal は見ない", not keys & {"癸", "子", "丑"})
 
     with tempfile.TemporaryDirectory() as td:
         base = Path(td) / "fleet"
@@ -1054,6 +1136,14 @@ def selftest() -> int:
                   "L16 [`guideline.md`](guideline.md) §「無い手順」 と [g](guideline.md) §「記入の手順」",  # link の後ろの節名
                   "L17 guideline.md §「規約 fact の序列」",                     # 見出しの途中に括弧 = 通す
               ]) + "\n")
+        # 設計 doc を design/*.md に分割した後、 code の注釈に分割前の節参照が残る形 (陽性対照) と直した形 (陰性)
+        write(a / "design/rendering.md", "# rendering\n\n## 時間的距離 fade\n")
+        write(a / "src/game/constants.ts",
+              "\n".join([
+                  "// 詳細: DESIGN.md §描画「時間的距離 fade」",          # 陽性 (節は design/rendering.md)
+                  "// 詳細: design/rendering.md §「時間的距離 fade」",     # 陰性
+                  'export const X = "DESIGN.md §「fixture の節」";',     # 文字列 literal = 見ない
+              ]) + "\n")
         for r in (a, b):
             sh(["git", "add", "-A"], r)  # 走査は track 済みの file だけ
         fleet = Fleet(base)
@@ -1084,6 +1174,11 @@ def selftest() -> int:
         expect("link の後ろの §「名」 も見る (陰性)", ("src.md", 16, "記入の手順") not in miss)
         expect("見出しの途中の括弧を除いて引く (陰性)", ("src.md", 17, "規約 fact の序列") not in miss
                and not any(f.line == 17 and f.src.endswith("src.md") for f in fs if f.status == "BODY"))
+        ts_miss = [f for f in fs if f.status == "MISSING" and f.src.endswith("constants.ts")]
+        expect("陽性対照 (TS の注釈): 分割前の DESIGN.md §「節」 = 🔴、 候補に design/rendering.md",
+               [f.line for f in ts_miss] == [1] and any("design/rendering.md" in h for h in ts_miss[0].homes))
+        expect("陰性 (TS): 分割先を指す注釈は通る / 文字列 literal は見ない",
+               not any(f.src.endswith("constants.ts") and f.line in (2, 3) and f.status != "UNRESOLVED" for f in fs))
         # 候補が複数 (後方一致が 2 repo) → 🟠 (どれにも無い) / 通る (どれかに在る)
         write(b / "docs/guide/guideline.md", "# other\n\n## 別の節\n")
         d = base / "delta"
