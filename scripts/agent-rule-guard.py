@@ -203,17 +203,26 @@ def prose_policy_doc(path: str, texts: tuple[str, ...], extra_paths: tuple[str, 
 def free_zones(text: str) -> list[tuple[str, int, int]]:
     """(id, body start, body end) of each terminated zone.
 
-    Frees nothing for an unterminated begin, a marker inside a code fence or an
-    HTML comment (documenting the syntax must not unlock text), or a repeated id
-    (only the first zone with an id counts, so a second one cannot widen it).
+    Frees nothing for an unterminated begin, a marker inside an HTML comment, a
+    zone whose begin and end sit on different sides of a code fence boundary (a
+    fence cannot carry a zone out of or into it), or a repeated id (only the
+    first zone with an id counts, so a second one cannot widen it). A zone whose
+    two markers sit in the same code fence frees the lines between them only:
+    the generated trees the owner declared live inside a fence, and the earlier
+    rule (no marker inside a fence counts) had kept them from ever working
+    (owner ruling 2026-09-24). Adding or moving a marker stays a file change.
     """
     if "agent-free:" not in text:
         return []
-    starts, pos = [], 0
+    starts, pos, run, prev_in = [], 0, -1, False
     for ctx, line in zip(_line_contexts(text), text.split("\n")):
-        starts.append((pos, not ctx[1] and not ctx[2]))
+        in_fence, in_comment = ctx[1], ctx[2]
+        if in_fence and not prev_in:
+            run += 1  # a new fence block (its opening line is outside, its closing line inside)
+        prev_in = in_fence
+        starts.append((pos, in_comment, run if in_fence else None))
         pos += len(line) + 1
-    live = lambda at: next((ok for s, ok in reversed(starts) if s <= at), False)
+    where = lambda at: next(((c, f) for s, c, f in reversed(starts) if s <= at), (True, None))
     zones: list[tuple[str, int, int]] = []
     seen: set[str] = set()
     pos = 0
@@ -225,7 +234,8 @@ def free_zones(text: str) -> list[tuple[str, int, int]]:
         end = re.compile(FREE_END_TMPL.format(id=re.escape(zid)), re.M).search(text, begin.end())
         if not end:
             return zones
-        if zid not in seen and live(begin.start()) and live(end.start()):
+        (b_comment, b_fence), (e_comment, e_fence) = where(begin.start()), where(end.start())
+        if zid not in seen and not b_comment and not e_comment and b_fence == e_fence:
             zones.append((zid, begin.end(), end.start()))
         seen.add(zid)
         pos = end.end()
@@ -834,7 +844,25 @@ def selftest() -> int:
     check("an unterminated zone frees nothing",
           moved("x\n<!-- agent-free:begin id=z -->\na\n", "x\n<!-- agent-free:begin id=z -->\nb\n") == ["authority:file"])
     fenced = "x\n```\n<!-- agent-free:begin id=z -->\na\n<!-- agent-free:end id=z -->\n```\n"
-    check("markers shown inside a code fence free nothing", moved(fenced, fenced.replace("\na\n", "\nb\n")) == ["authority:file"])
+    check("a zone whose markers sit in one code fence frees the lines between them",
+          moved(fenced, fenced.replace("\na\n", "\nb\n")) == [])
+    tree = ("# R\n\n規則の文。\n\n```\nrepo/\n├── a.md\n<!-- agent-free:begin id=t -->\n├── scripts/  # 251 file\n"
+            "<!-- agent-free:end id=t -->\n└── z.md\n```\n\n後の規則。\n")
+    check("a generated tree line inside a fenced zone is free (the declared trees)",
+          moved(tree, tree.replace("251 file", "252 file")) == [])
+    check("a fenced zone does not free the fence lines outside its markers",
+          moved(tree, tree.replace("├── a.md", "├── b.md")) == ["authority:file"])
+    check("a fenced zone does not free the prose after the fence",
+          moved(tree, tree.replace("後の規則。", "後の規則は無い。")) == ["authority:file"])
+    crossing = "x\n```\n<!-- agent-free:begin id=z -->\na\n```\n<!-- agent-free:end id=z -->\nrule\n"
+    check("a zone crossing a fence boundary frees nothing",
+          moved(crossing, crossing.replace("\na\n", "\nb\n")) == ["authority:file"])
+    two = "x\n```\n<!-- agent-free:begin id=z -->\na\n```\nrule\n```\n<!-- agent-free:end id=z -->\n```\n"
+    check("a zone spanning two separate fences frees nothing",
+          moved(two, two.replace("\nrule\n", "\nno rule\n")) == ["authority:file"])
+    commented = "x\n<!-- hidden\n<!-- agent-free:begin id=z -->\na\n<!-- agent-free:end id=z -->\ny\n"
+    check("a begin marker inside an HTML comment frees nothing",
+          moved(commented, commented.replace("\na\n", "\nb\n")) == ["authority:file"])
     twice = zoned + "\n<!-- agent-free:begin id=status -->\n規則。\n<!-- agent-free:end id=status -->\n"
     check("a repeated zone id frees only its first zone",
           moved(twice, twice.replace("\n規則。\n", "\n規則でない。\n")) == ["authority:file"])
