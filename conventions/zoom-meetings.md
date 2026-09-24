@@ -109,6 +109,7 @@ type 3 (No Fixed Time) の部屋は **最終使用から 365 日**で消える�
   要約は Zoom 側にだけ残る
 - **個人部屋 (PMI) は既定で `auto_start_meeting_summary=false`** = 要約が作られるのは会議中に手で開始したときだけ。
   講義など「あとで要約が欲しい」 部屋は、 その部屋の設定で自動開始にしておく (参加者に表示される点は上の ⚠️)
+  (⚠️ この PMI の値は 1 アカウントでの実測。 自分の部屋の値は `show <id>` の `auto_start_meeting_summary` で読む)
 - 過去の回の UUID が `/` で始まるか `//` を含むときは、 path に入れる前に二重に percent-encode する (しないと 404)
 - ⚠️ My Notes (本人のメモ機能の文字起こし) は別の API (`/my_notes/notes`) で、 `my_notes:read:note:admin` 等の
   別 scope が要る
