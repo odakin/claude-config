@@ -59,6 +59,7 @@
   manuscript-claim-guard.py --selftest
 
 検査不能は fail-closed: hook は deny JSON、agent の git pre-commit は exit 1。故障を違反と区別して表示する。
+表示は理由の表 (INSPECTION_REASONS) の文と、 呼び手がすでに持つ path だけから作る (conventions/agent-rule-ownership.md#inspection-reasons)。
 state: MANUSCRIPT_CLAIM_GUARD_STATE_DIR (既定 ~/.claude/state/manuscript-claim-guard)。
 """
 from __future__ import annotations
@@ -309,6 +310,50 @@ def copyedit_only(old: str, new: str) -> bool:
 class InspectionError(RuntimeError):
     """The requested change could not be checked; this is not authorization."""
 
+    def __init__(self, code: str, path: str | None = None, source: str | None = None) -> None:
+        super().__init__(code)
+        # 表示に出すのは理由の表の文と、 呼び手がすでに持つ path・snapshot 名だけ (inspection_reason)。
+        self.code = code
+        self.path = path
+        self.source = source
+
+
+# 検査不能の理由の表 = 検査不能の表示の正本 (考え方 = conventions/agent-rule-ownership.md#inspection-reasons)。
+# key = 理由コード、 値 = (何が起きたか, 直し方, 誰が直すか)。 検査不能を作る箇所は必ずここの key を渡す
+# (selftest が自分の source を読んで確かめる = 表に無い止め方・使われない行があると赤)。
+_AGENT, _OWNER, _EITHER = "agent が直せる", "本人の操作が要る", "agent が確かめ、 直せなければ本人"
+INSPECTION_REASONS: dict[str, tuple[str, str, str]] = {
+    "config-invalid": ("repo の .claude/manuscript-guard.json が壊れている (JSON でない・object でない・値の型が違う)",
+                       "設定を直す (設定は lock の下 = 本人の裁定で)", _OWNER),
+    "repo-undetermined": ("編集先の Git repository を決められない",
+                          "git が起動するか確かめて、 同じ操作をやり直す", _EITHER),
+    "git-unreadable": ("Git の状態 (index・HEAD・tree) を読めない",
+                       "git status が通るか (lock file・壊れた index・権限) を確かめて直し、 同じ操作をやり直す", _EITHER),
+    "blob-unreadable": ("保護 file の HEAD / index の版、 または保護 link の行き先を読めない",
+                        "壊れた object や未復号の repo を直して、 同じ操作をやり直す", _EITHER),
+    "content-encrypted": ("変更した file の中身が暗号化されたまま (git-crypt の lock)",
+                          "repo を復号 (unlock) してから、 同じ操作をやり直す", _OWNER),
+    "file-unreadable": ("編集対象の file を UTF-8 の text として読めない",
+                        "権限・文字コードを確かめる", _EITHER),
+    "file-type-unsupported": ("保護 path が通常の file・link 以外 (dir・特殊 file)",
+                              "通常の file か link に戻す (保護 path の変更)", _OWNER),
+    "link-leaves-repo": ("保護 link が repo の外を指す (追跡を外しても作業ツリーに link が残れば同じ)",
+                         "link を、 正本への pointer を書いた通常の file に置き換えて commit する"
+                         " (HEAD に link がある間は agent の commit も止まる)", _OWNER),
+    "link-too-deep": ("保護 link が循環している、 または連鎖が深すぎる",
+                      "link の連鎖を解く (保護 path の変更)", _OWNER),
+    "git-entry-ambiguous": ("保護 path の index に複数の段がある (merge の衝突)",
+                            "衝突を解消してから、 同じ操作をやり直す", _AGENT),
+    "shell-too-deep": ("shell の入れ子が深く、 中の git 操作を辿れない",
+                       "入れ子をやめ、 git add / commit を直接打つ", _AGENT),
+    "git-dir-option": ("--git-dir / --work-tree / --namespace つきの git add / commit は辿れない",
+                       "git -C <repo の絶対 path> の形で打ち直す", _AGENT),
+    "pathspec-required": ("対話型 (-p / -i) や --pathspec-from-file の add / commit は対象の path が決まらない",
+                          "path を明示した git add <path> / git commit -- <path> で打ち直す", _AGENT),
+    "hook-event-invalid": ("hook に渡った event を読めない",
+                           "hook の配線 (settings) を確かめる (設定は lock の下 = 本人の裁定で)", _OWNER),
+}
+
 def load_config(repo: Path | None, text_override: str | None = None) -> dict:
     if text_override is not None:
         raw = text_override
@@ -319,15 +364,15 @@ def load_config(repo: Path | None, text_override: str | None = None) -> dict:
     try:
         cfg = json.loads(raw)
     except ValueError as exc:
-        raise InspectionError("invalid manuscript guard configuration") from exc
+        raise InspectionError("config-invalid") from exc
     if not isinstance(cfg, dict):
-        raise InspectionError("manuscript guard configuration must be an object")
+        raise InspectionError("config-invalid")
     for key in ("include", "exclude", "protect_sections"):
         if key in cfg and (not isinstance(cfg[key], list) or
                            any(not isinstance(x, str) for x in cfg[key])):
-            raise InspectionError(f"invalid manuscript guard {key}")
+            raise InspectionError("config-invalid")
     if "disabled" in cfg and not isinstance(cfg["disabled"], bool):
-        raise InspectionError("invalid manuscript guard disabled flag")
+        raise InspectionError("config-invalid")
     return cfg
 
 
@@ -352,7 +397,7 @@ def repo_root(path: Path) -> Path | None:
                 retry = git(parent, "rev-parse", "--show-toplevel", timeout=5)
                 if retry is not None and retry.returncode == 0 and retry.stdout.strip():
                     return Path(retry.stdout.strip()).resolve()
-                raise InspectionError("cannot determine the existing Git repository (check Git availability)")
+                raise InspectionError("repo-undetermined")
         return None
     return Path(r.stdout.strip()).resolve()
 
@@ -360,7 +405,7 @@ def repo_root(path: Path) -> Path | None:
 def checked_git(repo: Path, *args: str) -> subprocess.CompletedProcess:
     r = git(repo, *args)
     if r is None or r.returncode != 0:
-        raise InspectionError("cannot inspect Git state: " + args[0])
+        raise InspectionError("git-unreadable")
     return r
 
 
@@ -378,7 +423,7 @@ def head_ref(repo: Path, refresh: bool = False) -> str | None:
     if refresh or key not in _HEAD_REF:
         r = git(repo, "rev-parse", "--verify", "--quiet", "HEAD")
         if r is None or r.returncode not in (0, 1):
-            raise InspectionError("cannot inspect Git HEAD")
+            raise InspectionError("git-unreadable")
         _HEAD_REF[key] = r.stdout.strip() if r.returncode == 0 else None
     return _HEAD_REF[key]
 
@@ -438,7 +483,7 @@ def input_graph(repo: Path, revision: str = "worktree") -> set[str]:
         if revision in ("HEAD", "index"):
             t = head_text(repo, f) if revision == "HEAD" else index_text(repo, f)
             if t is None:
-                raise InspectionError("cannot read manuscript snapshot")
+                raise InspectionError("blob-unreadable", f, revision)
             texts[f] = t
             continue
         try:
@@ -549,7 +594,7 @@ def authority_paths(repo: Path | None) -> list[str]:
             elif modes[source].get(rel) == "120000":
                 value = blob_text(repo, (":" if source == "index" else "HEAD:") + rel)
                 if value is None:
-                    raise InspectionError("cannot inspect protected symlink snapshot")
+                    raise InspectionError("blob-unreadable", rel, source)
             else:
                 value = None
             link_cache[key] = value
@@ -559,13 +604,14 @@ def authority_paths(repo: Path | None) -> list[str]:
         pending = original.replace("\\", "/").split("/")
         resolved: list[str] = []
         hops = 0
+        via = original  # 表示用: 最後に辿った link = 検査不能の原因
         while pending:
             part = pending.pop(0)
             if part in ("", "."):
                 continue
             if part == "..":
                 if not resolved:
-                    raise InspectionError("protected symlink leaves the repository")
+                    raise InspectionError("link-leaves-repo", via, source)
                 resolved.pop()
                 continue
             rel = "/".join([*resolved, part])
@@ -575,11 +621,12 @@ def authority_paths(repo: Path | None) -> list[str]:
                 continue
             discovered.add(rel)  # changing a directory link also changes enforcement
             hops += 1
+            via = rel
             if hops > 64:
-                raise InspectionError("protected symlink cycle or excessive depth")
+                raise InspectionError("link-too-deep", via, source)
             value = value.replace("\\", "/")
             if value.startswith("/") or re.match(r"^[A-Za-z]:", value):
-                raise InspectionError("protected symlink leaves the repository")
+                raise InspectionError("link-leaves-repo", via, source)
             pending = value.split("/") + pending
         result = "/".join(resolved)
         discovered.add(result)
@@ -1220,7 +1267,7 @@ def claude_edits(event: dict) -> list[tuple[Path, str, str]]:
         return []
     old = read_text(p) if p.exists() else ""
     if old is None:
-        raise InspectionError("cannot read edit target")
+        raise InspectionError("file-unreadable", str(p))
     if tool == "Write":
         new = ti.get("content")
         return [(p, old, new)] if isinstance(new, str) else []
@@ -1324,7 +1371,7 @@ def codex_edits(event: dict) -> tuple[list[tuple[Path, str, str]], list[tuple[Pa
             continue
         old = read_text(p) if p.exists() else ""
         if old is None:
-            raise InspectionError("cannot read patch target")
+            raise InspectionError("file-unreadable", str(p))
         if kind == "Add":
             added = [ln[1:] for ln in body if ln.startswith("+")]
             done.append((p, old, "\n".join(added) + ("\n" if added else "")))
@@ -1340,7 +1387,7 @@ def codex_edits(event: dict) -> tuple[list[tuple[Path, str, str]], list[tuple[Pa
                     dest = cwd / dest
                 dest_old = read_text(dest) if dest.exists() else ""
                 if dest_old is None:
-                    raise InspectionError("cannot read patch move destination")
+                    raise InspectionError("file-unreadable", str(dest))
                 done.extend(((p, old, ""), (dest, dest_old, new)))
             else:
                 done.append((p, old, new))
@@ -1406,7 +1453,7 @@ def commit_targets(command: str, cwd: Path,
 
     def walk(script: str, current: Path, depth: int = 0) -> None:
         if depth > 4:
-            raise InspectionError("shell wrapper depth exceeds inspected forms")
+            raise InspectionError("shell-too-deep")
         cur = current
         for segment in split_segments(script):
             seg, local_dirs = _rule_guard.executable_argv(segment)
@@ -1451,7 +1498,7 @@ def commit_targets(command: str, cwd: Path,
             if not git_cwd_bound:
                 raise WorkingDirectoryUnavailable("Codex omitted the tool working directory")
             if unsupported:
-                raise InspectionError("use git -C with an inspectable worktree for guarded commits")
+                raise InspectionError("git-dir-option")
             root = repo_root(repo_dir)
             if root is None:
                 continue
@@ -1460,7 +1507,7 @@ def commit_targets(command: str, cwd: Path,
             if rest[0] == "add":
                 add_flags, selected = _rule_guard.git_operation_options("add", rest[1:])
                 if add_flags & {"pathspec_file", "interactive"}:
-                    raise InspectionError("use explicit pathspecs for an inspected add/commit")
+                    raise InspectionError("pathspec-required")
                 if "dry_run" in add_flags:
                     continue
                 tracked_only = "update" in add_flags
@@ -1475,7 +1522,7 @@ def commit_targets(command: str, cwd: Path,
             if "dry_run" in flags:
                 continue
             if flags & {"pathspec_file", "interactive"}:
-                raise InspectionError("use an explicit staged or path commit for inspected changes")
+                raise InspectionError("pathspec-required")
             paths: list[GitPathspec | GitNames]
             if selected_paths or "only" in flags:
                 paths = [GitPathspec(repo_dir, tuple(selected_paths), False)] if selected_paths else []
@@ -1590,14 +1637,14 @@ def head_text(repo: Path, rel: str, rev: str = "HEAD") -> str:
     if rev == "HEAD" and not has_head(repo):
         return ""
     if checked_git(repo, "ls-tree", "-r", "--name-only", rev, "--", rel).stdout.strip():
-        raise InspectionError("cannot read existing HEAD blob")
+        raise InspectionError("blob-unreadable", rel, rev)
     return ""
 
 
 def index_text(repo: Path, rel: str) -> str | None:
     text = blob_text(repo, f":{rel}")
     if text is None and checked_git(repo, "ls-files", "--stage", "--", rel).stdout.strip():
-        raise InspectionError("cannot read existing index blob")
+        raise InspectionError("blob-unreadable", rel, "index")
     return text
 
 
@@ -1610,7 +1657,7 @@ def worktree_mode(path: Path) -> str:
         return "120000"
     if stat.S_ISREG(mode):
         return "100755" if mode & stat.S_IXUSR else "100644"
-    raise InspectionError("unsupported protected file type")
+    raise InspectionError("file-type-unsupported", str(path))
 
 
 def git_mode(repo: Path, rel: str, source: str) -> str:
@@ -1624,7 +1671,7 @@ def git_mode(repo: Path, rel: str, source: str) -> str:
         return "000000"
     entries = [entry for entry in result.stdout.split("\0") if entry]
     if len(entries) != 1:
-        raise InspectionError("ambiguous protected Git entry")
+        raise InspectionError("git-entry-ambiguous", rel, source)
     return entries[0].split(" ", 1)[0]
 
 
@@ -1669,9 +1716,9 @@ def changes_for_repo(repo: Path, mode: str, paths: list[GitPathspec | GitNames |
             path = repo / rel
             new = os.readlink(path) if path.is_symlink() else read_text(path) if path.exists() else ""
             if new is None:
-                raise InspectionError("cannot read changed worktree file")
+                raise InspectionError("file-unreadable", rel, "worktree")
         if old.startswith("\x00GITCRYPT") or new.startswith("\x00GITCRYPT"):
-            raise InspectionError("changed text is locked; cannot inspect its content")
+            raise InspectionError("content-encrypted", rel)
         # 範囲は HEAD と新しい設定の広い方で判定する (設定の緩和で自分を範囲外にする経路を塞ぐ)
         ch_new = protected_changes(rel, old, new, repo, cfg)
         ch_head = protected_changes(rel, old, new, repo, head_cfg) if head_cfg != cfg else []
@@ -1701,7 +1748,7 @@ def hook_mode(agent: str) -> int:
         print(deny_json(inspection_reason(exc)))
         return 0
     if not isinstance(event, dict):
-        print(deny_json(inspection_reason(InspectionError("invalid hook event"))))
+        print(deny_json(inspection_reason(InspectionError("hook-event-invalid"))))
         return 0
     try:
         return _hook(agent, event)
@@ -1721,9 +1768,21 @@ def inspection_reason(exc: BaseException) -> str:
                 "この Codex hook には tool の実作業ディレクトリが渡っていません。"
                 "各 git add / commit を git -C /absolute/repository の形で指定して再検査してください。"
                 "event.cwd や単独の cd から実行先を推測して通しません。")
-    return ("manuscript-claim-guard: inspection unavailable (" + type(exc).__name__ + "). "
-            "検査できないため編集・commit を止めました。違反の確定ではありません。"
-            "Git・設定・読取経路を修復して同じ操作を再検査し、規制の無効化で通さない。")
+    reason = INSPECTION_REASONS.get(exc.code) if isinstance(exc, InspectionError) else None
+    if reason is None:  # 表に無い故障 (guard の外の例外) は型の名前だけ
+        return ("manuscript-claim-guard: inspection unavailable (" + type(exc).__name__ + "). "
+                "検査できないため編集・commit を止めました。違反の確定ではありません。"
+                "Git・設定・読取経路を修復して同じ操作を再検査し、規制の無効化で通さない。")
+    what, fix, who = reason
+    where = ""
+    if exc.path is not None:  # 呼び手がすでに持つ path だけ。 制御文字を潰し長さを切る
+        path = "".join(c if c.isprintable() else "?" for c in exc.path)
+        where = ": " + (path if len(path) <= 160 else path[:160] + "…")
+        if exc.source in ("HEAD", "index", "worktree"):
+            where += " [" + exc.source + "]"
+    return ("manuscript-claim-guard: inspection unavailable (" + exc.code + where + "). " + what +
+            "。 直し方 (" + who + "): " + fix + "。 違反の確定ではない。 規制を無効化して通さない。"
+            " 理由の表 = claude-config/conventions/agent-rule-ownership.md#inspection-reasons")
 
 
 def _hook(agent: str, event: dict) -> int:
@@ -2846,10 +2905,33 @@ def selftest() -> int:
         reset_caches()
         try:
             authority_paths(repo)
-        except InspectionError:
+        except InspectionError as exc:
             check("親 directory link が repo 外へ出ても検査不能として拒否", True)
+            shown = inspection_reason(exc)
+            check("repo 外へ出る link の検査不能は原因の link・snapshot・直し方を 1 行で出し、 行き先は出さない",
+                  "(link-leaves-repo: current [worktree])" in shown and "本人の操作が要る" in shown
+                  and "external-policy" not in shown and "\n" not in shown)
         else:
             check("親 directory link が repo 外へ出ても検査不能として拒否", False)
+        # 理由の表: 検査不能を作る箇所はすべて表のコードを使い、 使われない行も無い (selftest の外だけを読む)
+        import ast
+        module = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+        made = [c for n in module.body if not (isinstance(n, ast.FunctionDef) and n.name == "selftest")
+                for c in ast.walk(n)
+                if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == "InspectionError"]
+        codes = [c.args[0].value if c.args and isinstance(c.args[0], ast.Constant) else None for c in made]
+        check("検査不能を作る箇所はすべて理由の表のコードを使い、 表に使われない行も無い",
+              len(made) >= 20 and all(k in INSPECTION_REASONS for k in codes) and set(codes) == set(INSPECTION_REASONS))
+        check("理由の表の表示はどれも 1 行で、 直し方と誰が直すかを含む",
+              all("\n" not in inspection_reason(InspectionError(k, "p", "HEAD"))
+                  and "直し方 (" + INSPECTION_REASONS[k][2] + ")" in inspection_reason(InspectionError(k))
+                  for k in INSPECTION_REASONS))
+        odd = InspectionError("link-leaves-repo", "a\nb\r" + "p" * 500, "HEAD")
+        foreign = InspectionError("config-invalid", "x.md")
+        foreign.code = "token=SECRET"
+        check("検査不能の表示の path は 1 行・長さの上限つき、 表に無いコードは例外の文も path も出さない",
+              "\n" not in inspection_reason(odd) and "\r" not in inspection_reason(odd) and len(inspection_reason(odd)) < 800
+              and "SECRET" not in inspection_reason(foreign) and "x.md" not in inspection_reason(foreign))
         # 検査不能の表示: 例外の文に改行・blob の bytes があっても 1 行で、 中身を出さない
         big = UnicodeDecodeError("utf-8", b"\x00GITCRYPT\x00\xff" + b"Q" * 5000, 10, 11, "invalid start byte")
         multi = ValueError("line one\nline two\r\n" + "z" * 500)

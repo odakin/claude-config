@@ -52,6 +52,14 @@ manifest は `version: 1` と `protect_paths` の追加宣言だけを持つ。 
 
 規則を検査する述語は共有するが、Git の検査省略はそれ自体を拒否する。規則を改訂する正規の手順は、その具体的な変更を裁定・記録して既存の gate を通すことであり、gate を丸ごと省くことではない。
 
+<a id="inspection-reasons"></a>**検査不能の表示は、 理由の表だけから作る。** 検査不能で止める箇所は、 どれも engine の理由の表 (`INSPECTION_REASONS`、 表の中身の正本 = [manuscript dispatcher](../scripts/manuscript-claim-guard.py)) のコードを 1 つ持って止まる。 表の 1 行は「何が起きたか・直し方・誰が直すか (agent / 本人)」 で、 表示はこの文と、 呼び手がすでに持っている path (repo 内の path か tool に渡された path。 制御文字を潰し長さを切る) と snapshot 名 (HEAD / index / worktree) だけから作る。 考え方は 3 つ:
+
+1. **中身を出さない**: 例外の文は出さない (原稿・認証情報・blob の bytes が混じりうる)。 表に無い故障 (guard の外の例外) は型の名前だけを出す。 通知に中身を載せない原則と同じ ([`confidential-repo-boundary.md#notification-is-not-a-report`](confidential-repo-boundary.md#notification-is-not-a-report))。
+2. **止まった理由と直し方を、 止まった場所で出す**: 検査不能は違反と区別して表示する ([原稿の所有権 §限界](manuscript-claim-ownership.md#limits) の「検査不能」)。 区別しても理由が型の名前だけだと、 読む人は環境を手で再現して原因を探すことになる ([`§8.69`](../docs/convention-design-principles.md#failure-exit-equals-violation-exit) の 1 と 3)。 直し方には誰が直すかを書く: 保護 path・設定・配線の変更で解ける故障は本人の操作とし、 agent に gate を緩めて通す道を示さない ([本人の裁定と候補の記録](#approval))。
+3. **表の漏れを機械で止める**: engine の selftest が自分の source を読み、 検査不能を作る箇所がすべて表のコードを使うこと、 表に使われない行が無いことを確かめる (新しい止め方を足して表を足し忘れると赤)。 不変条件を編集時の検査で守る形 ([`§8.10`](../docs/convention-design-principles.md#fail-loud-not-fail-empty))。
+
+実測: repo の外を指す保護 link が 1 つあるだけで、 その repo の全 file の編集と agent の commit が止まった。 表示が例外の型名だけだったため、 原因の特定に path の解決を手で再現し、 素直な直し方 (追跡を外して gitignore) は作業ツリーの link が残るので効かなかった。 git の引数の形で止めた拒否の調査でも、 同じ型名だけの表示が手間を増やしていた。
+
 ## <a id="wiring-scope"></a>配線 lock の範囲 — 2026-09-22 の裁定
 
 engine の名前を含む code / 設定 file は全文を `authority:wiring` として lock する (上の表)。呼出行を残して周囲から無効化する変更を止めるためだが、診断を集めた file では独立した修正のたびに本人の発言と候補の記録が要った (実測: 個人層の run-all-checks は 30 日で 29 commit、engine の名前は comment 1 行と canary の呼出し 1 行)。[設計比較](../docs/guard-wiring-scope-proposal.md) の A〜E と、検収で出た F を比べて次のとおり決めた。
