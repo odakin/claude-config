@@ -2,6 +2,11 @@
 
 > 📦 [`SESSION.md`](SESSION.md) から分離した古い dated entry (grep 専用、 2026-09-11 〜 2026-04-21。 2026-09-11 の第 3 回縮退で移した分は先頭の節)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md`。 hot/cold 分離日: 2026-06-10 (初回) / 2026-09-01 (第 2 回 = 2026-06-01〜07-31 分を追加)。
 
+## 2026-09-24 SESSION.md の索引から verbatim MOVE した行 (2 行、 SESSION.md の行数を保つため)
+
+- **09-18 入口の doc に状態を写さない + 入口 file を置く単位**: 正本 [`#index-doc-state-copy`](docs/convention-design-principles.md#index-doc-state-copy) (状態は正本から生成・語彙 lint・除外区間は入れ子にしない) と [`#audit-unit-vs-rule-unit`](docs/convention-design-principles.md#audit-unit-vs-rule-unit)。 repo でない容れ物の dir の入口 = [`templates/root-AGENTS.md.default`](templates/root-AGENTS.md.default) + setup.sh Step 5a' + audit、 commit 時の知らせ = [`scripts/lib/agents-entrypoint-warn.sh`](scripts/lib/agents-entrypoint-warn.sh)、 写した入口の形 = [`#rule-variant-drift`](docs/convention-design-principles.md#rule-variant-drift) 21.1
+- **09-18 gate が読む blob と engine の在処**: [`hook-authoring.md#locked-engine-interpreter-rc`](conventions/hook-authoring.md#locked-engine-interpreter-rc) (暗号化された engine を locked のマシンで起動しない = python の版で rc が変わる) + `#blob-read-git-crypt` に「平文 fixture の selftest はこの誤りを通す」 + [`scripts/lib/git_blob.py`](scripts/lib/git_blob.py) に rot13 filter の case。 commit 時 warn = [`scripts/check-memory-file-bloat.py`](scripts/check-memory-file-bloat.py) `--staged`、 [`scripts/verify-verbatim-move.py`](scripts/verify-verbatim-move.py) は数える前に path を確かめる
+
 ## 2026-09-23 SESSION.md の索引から verbatim MOVE した行 (2 行、 SESSION.md の行数を保つため)
 
 - **09-16 macOS 外部表示の「認識済みなのに映らない」を分層する正本**: [`macos-hdmi-external-display.md`](conventions/macos-hdmi-external-display.md) (Control Center の接続待ち / current mode と次回既定値 / EDID 中継機器は下流 projector の生存証明でない / 本体 HDMI と USB-C→HDMI の別経路切り分け / CLI の null は不在証明にならないため診断 script は positive control 確立まで非新設) + [`giving-talks.md`](conventions/giving-talks.md) / [日本語版](conventions/giving-talks.ja.md) から本番前検収を参照
