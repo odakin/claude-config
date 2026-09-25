@@ -355,7 +355,7 @@ M と R0 の差 = **雛形自身の欠陥** (app が刷らない字・`=TODAY()`
 |---|---|---|
 | T 雛形の identity | spec の bind の記録 (`<spec>.bind.json` の sha256) と build が読む雛形が同じか。 違えば ⚠️ = 雛形が新しくなった (差し替わった) → `bind` し直して差を見る | `formcase/fidelity.py` `bind_lines` (build の冒頭に行) |
 | W workbook の census | temp (openpyxl で保存) の「紙に出るもの」 (図形の字・form control・画像・条件付き書式) が読み込み元より減っていないか。 減ることを受け入れる種類は `meta.accept_loss` に理由つきで宣言する | `recipes._save` → `fidelity.temp_census_lines` (⚠️ の行)。 他人の xlsx に書く道具・formcase の外の生成器も同じ census (`office_census.losses`) |
-| R 出力 PDF | (a) 雛形の図形の字が在るか = **無ければ止める** (b) 書き換えていない cell の見出しが在るか (⚠️) (c) 素刷りより画像 (= Excel は checkbox の箱を画像として描く、 実測) が少なくないか (⚠️) (d) 雛形にも記入値にも無い字 (⚪) | [`scripts/check-form-static-text.py`](../scripts/check-form-static-text.py) `--filled` (体裁を当てた temp) `--blank` (素刷り)、 build が group ごとに回す |
+| R 出力 PDF | (a) 雛形の図形の字が在るか = **無ければ止める** (b) 書き換えていない cell の見出しが在るか = **無ければ止める** (2026-09-26〜。 spec の `meta.accept_missing_labels` に名指しした cell だけ ⚠️) (c) 素刷りより画像 (= Excel は checkbox の箱を画像として描く、 実測) が少なくないか (⚠️) (d) 雛形にも記入値にも無い字 (⚪) | [`scripts/check-form-static-text.py`](../scripts/check-form-static-text.py) `--filled` (体裁を当てた temp) `--blank` (素刷り)、 build が group ごとに回す |
 | P 紙 | 刷る直前の preflight が、 出力 PDF の宣言 (`PrintPages` の `fidelity` = 雛形の path・対象・drop・素刷り) から同じ照合を回す。 図形の字が無ければ lp を止める、 雛形がその機械に無ければ ⚪ (照合できない、 と言って通す) | [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) `fidelity_check` (`--hook` / `--template-xlsx`) |
 
 **道具の損失は 2 段で消す**: (a) file を書く道具を**その形式を所有する app** (Excel / Word) だけにする = 損失が構造的に起きない

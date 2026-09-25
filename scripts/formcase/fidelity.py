@@ -242,6 +242,7 @@ def report_lines(rep: dict, spec: dict | None = None) -> tuple:
     lines = []
     image_loss = []
     box_bad = []
+    label_bad = []
     accepted_images = "form control" in accept_loss(spec)
     for r in rep["targets"]:
         where = f"{r['sheet'].strip()}!{r['range']}"
@@ -265,8 +266,19 @@ def report_lines(rep: dict, spec: dict | None = None) -> tuple:
 
         if r["labels_checked"]:
             if r["missing_labels"]:
+                # D3 (2026-09-26、 本人「D3もやっちゃって」): 見出しの欠けは止める。 spec の meta.accept_missing_labels に名指しした cell
+                # (誤検出と判断したもの、 "sheet!cell" か cell) だけ ⚠️ に下げる
+                acc = {str(x).strip().upper().replace("$", "") for x in ((spec or {}).get("meta") or {}).get("accept_missing_labels") or []}
+                sheet_key = str(r.get("sheet") or "").strip().upper()
+                bad = [m for m in r["missing_labels"]
+                       if str(m["cell"]).upper() not in acc and f"{sheet_key}!{str(m['cell']).upper()}" not in acc]
+                accepted = len(r["missing_labels"]) - len(bad)
                 ms = ", ".join(f"{m['cell']}「{m['text'][:14]}」" for m in r["missing_labels"][:6])
-                lines.append(f"⚠️ {where}: 雛形の見出し (書き換えていない cell) が紙に無い {len(r['missing_labels'])}/{r['labels_checked']} — {ms}")
+                if bad:
+                    lines.append(f"🔴 {where}: 雛形の見出し (書き換えていない cell) が紙に無い {len(bad)}/{r['labels_checked']} — {ms}")
+                    label_bad.append(f"{where} {len(bad)} cell")
+                else:
+                    lines.append(f"⚠️ {where}: 雛形の見出しが紙に無い {accepted} cell は spec の accept_missing_labels で受けた — {ms}")
             else:
                 ok(f"見出し {r['labels_checked']} cell")
         # checkbox の箱 (D9): 印のある箱の数と、 紙で読める印の数 (両方 = 選んだ数)。 素刷りが無くても出力の箱は数える (検収 F2)
@@ -329,6 +341,10 @@ def report_lines(rep: dict, spec: dict | None = None) -> tuple:
     if rep.get("missing_total"):
         stop = (f"雛形の図形の字が PDF に無い ({rep['missing_total']} 段落) = 紙から見出し (区分の枠・様式番号・㊞ など) が消える。 "
                 "刷らないと決めた図形なら spec の render: drop_shape に理由つきで (form-case-pipeline.md#fidelity)")
+    elif label_bad:
+        stop = (f"雛形の見出し (書き換えていない cell) が紙に無い ({'; '.join(label_bad)}) = 行を潰した・隠した・cell を上書きした等で見出しが"
+                "消えた (D3、 2026-09-26 から止める)。 消えた cell を上の 🔴 の行で見て recipe (行高・非表示・印刷範囲) か fill の書き先を直す。 "
+                "誤検出と判断した cell だけ spec の meta.accept_missing_labels に理由つきで名指しする (⚠️ に下がる、 form-case-pipeline.md#fidelity)")
     elif box_bad:
         stop = (f"選んだ箱の印が紙と合わない ({'; '.join(box_bad)}) = 選んだのに印が無い、 選んでいない箱に印、 印が紙で読めない、 または箱が"
                 "素刷りの位置から動いた (D9)。 fill_<doc>.py を回して spec の controls の値を Excel で箱に書き直す。 読めない印なら build の"

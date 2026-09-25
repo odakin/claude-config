@@ -1296,6 +1296,15 @@ def _fidelity_tests(tmp, inst, expect) -> None:
            stop9b is not None and "読めない" in stop9b and any(x.startswith("🔴") and "読める印は 1 個" in x for x in lines9b), (lines9b, stop9b))
     lines9c, stop9c = FD.report_lines(_rep9(2, 2), {"meta": {}})
     expect("D9: 数も読める印も合えば ✅ で止めない", stop9c is None and any("箱の印 2 個 = 選んだ数" in x for x in lines9c), (lines9c, stop9c))
+    # D3 (2026-09-26): 雛形の見出しの欠けは 🔴 + 止める。 spec の meta.accept_missing_labels に名指しした cell だけ ⚠️ に下がる
+    rep3 = _rep9(2, 2)
+    rep3["targets"][0].update({"labels_checked": 5, "missing_labels": [{"cell": "B3", "text": "所属"}]})
+    lines3, stop3 = FD.report_lines(rep3, {"meta": {}})
+    expect("D3: 雛形の見出しが紙に無ければ 🔴 + 止める",
+           stop3 is not None and "見出し" in stop3 and any(x.startswith("🔴") and "1/5" in x for x in lines3), (lines3, stop3))
+    lines3b, stop3b = FD.report_lines(rep3, {"meta": {"accept_missing_labels": ["s!b3"]}})
+    expect("D3: accept_missing_labels で名指しした cell は ⚠️ で止めない",
+           stop3b is None and any(x.startswith("⚠️") and "accept_missing_labels" in x for x in lines3b), (lines3b, stop3b))
     rep9d = _rep9(2, 2)
     rep9d["targets"][0]["boxes"].update({"out_shifted": 1, "shifted": [([300.0, 290.0, 318.0, 308.0], 0.0, 1.4)]})
     lines9d, stop9d = FD.report_lines(rep9d, {"meta": {}})
