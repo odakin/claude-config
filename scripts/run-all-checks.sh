@@ -10,6 +10,7 @@
 #   1b. 生成 doc の同期        (generate-tree.py --check: CLAUDE.md tree / CONVENTIONS.md 列挙 / conventions/README.md)
 #   2. 手動保守 index / script inventory / Codex integration contract の整合
 #   3. python validator selftest 群 (--selftest を持つ全 script を自動発見) + 3a. scripts/lib/*.py の selftest
+#   3c. scripts/lib/*.test.mjs (JavaScript の engine の hermetic test、 自動発見)
 #   3b. foil の歯               (scripts/*.mutants.json を check-foil-teeth.py で = 修正の一部を外した mutant でも selftest)
 #   4. bash test 群            (hooks/*.test.sh + scripts/**/*.test.sh)
 #   5. bash 構文検査           (setup.sh + hooks/*.sh + scripts/*.sh の bash -n)
@@ -88,6 +89,16 @@ for py in scripts/lib/*.py; do
     [ -f "$py" ] || continue
     if grep -A2 '__name__ == "__main__"' "$py" | grep -q selftest; then
         run "selftest: lib/$(basename "$py")" python3 "$py"
+    fi
+done
+
+# 3c. scripts/lib/*.test.mjs (JavaScript の engine の hermetic test、 発見条件 = file 名。 node が無い環境は SKIP を宣言)
+for mjs in scripts/lib/*.test.mjs; do
+    [ -f "$mjs" ] || continue
+    if command -v node >/dev/null 2>&1; then
+        run "node test: lib/$(basename "$mjs")" node "$mjs"
+    else
+        echo "SKIP: lib/$(basename "$mjs") (node が無い)"
     fi
 done
 

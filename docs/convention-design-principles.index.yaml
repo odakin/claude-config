@@ -865,6 +865,10 @@ sections:
     legacy: "8.74"
     level: 3
     title: "8.74 組織の文書の「〜しないように」 を「できない」 と伝える前に、 文の強さと例外の手続きを確かめる — お願い・手続きつきの可・禁止は別物"
+  - id: control-dependency-is-dependency
+    legacy: "8.75"
+    level: 3
+    title: "8.75 制御の依存も依存 — 前の結果で次を出すか決まる操作は、 同じ応答に並べない"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
