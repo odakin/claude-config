@@ -42,6 +42,24 @@ import time
 SESSIONS_DIR = os.environ.get("CLAUDE_SESSIONS_DIR") or os.path.expanduser("~/.claude/sessions")
 PROJECTS_DIR = os.environ.get("CLAUDE_PROJECTS_DIR") or os.path.expanduser("~/.claude/projects")
 
+# 各 session の実際の model (transcript の最後の応答の message.model)。 題名の札や chip の tag は推奨で、
+# model を決めない = 仕事を送る前に読む値 (multi-session-coordination.md#delegate-model-routing)。
+# lib が無い配置 (古い checkout) では列を空にして動き続ける。
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+    import session_model as _sm
+except Exception:  # pragma: no cover - 古い配置
+    _sm = None
+
+
+def _model_of(session_id: str, cwd: str) -> str:
+    if _sm is None:
+        return ""
+    try:
+        return _sm.model_of(session_id, cwd or None)
+    except Exception:
+        return ""
+
 
 def _pid_alive(pid: int) -> bool:
     try:
@@ -140,6 +158,7 @@ def collect(self_uuid: str | None = None, cwd_filter: str | None = None) -> list
             "entrypoint": d.get("entrypoint", ""),
             "is_self": bool(self_uuid) and sid == self_uuid,
             "intent": _intent_snippet(sid, cwd),
+            "model": _model_of(sid, cwd),
         })
     out.sort(key=lambda r: (r["cwd"], -(r["started_at"] or 0)))
     return out
@@ -166,7 +185,8 @@ def render(rows: list[dict], self_uuid: str | None) -> str:
             tag = " 👈自分" if r["is_self"] else ""
             sid = r["sessionId"][:8]
             intent = f"  「{r['intent']}」" if r["intent"] else ""
-            lines.append(f"   • pid {r['pid']} / {sid} / {_fmt_age(r['age_min'])}前起動{tag}{intent}")
+            model = f" / {r['model']}" if r.get("model") else " / model ?"
+            lines.append(f"   • pid {r['pid']} / {sid} / {_fmt_age(r['age_min'])}前起動{model}{tag}{intent}")
     return "\n".join(lines)
 
 
@@ -186,7 +206,8 @@ def surface(self_uuid: str | None, cwd_filter: str | None) -> str:
     body = []
     for r in siblings:
         intent = f" — 「{r['intent']}」" if r["intent"] else ""
-        body.append(f"   • {r['sessionId'][:8]} ({_fmt_age(r['age_min'])}前起動){intent}")
+        model = f", {r['model']}" if r.get("model") else ""
+        body.append(f"   • {r['sessionId'][:8]} ({_fmt_age(r['age_min'])}前起動{model}){intent}")
     return head + "\n" + "\n".join(body)
 
 
