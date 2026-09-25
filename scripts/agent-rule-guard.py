@@ -553,6 +553,7 @@ def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
         if u in co and hn[u] > ho[u]:
             return False, "既存の文を code / comment の中に入れた: 「" + u[:30] + "」", what
     used: set[int] = set()
+    sources: dict[int, list[str]] = {}  # added index -> the removed sentences it grew out of (an edit, a merge or a split)
     # candidates for "the edit of r" = added sentences that share a word or start alike; keeps a big restructuring
     # (hundreds of sentences each way) from a quadratic pass of sequence matching inside a hook's timeout
     by_word: dict[str, set[int]] = {}
@@ -563,8 +564,10 @@ def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
             by_word.setdefault(t, set()).add(k)
         by_head.setdefault(a[:8], set()).add(k)
     for r in removed:
-        # an edit = an added sentence that keeps at least EDIT_KEEPS of the removed one's characters, in order (several
-        # removed sentences may be consolidated into one added sentence, each judged on its own retention)
+        # an edit = an added sentence that keeps at least EDIT_KEEPS of the removed one's characters, in order. Several
+        # removed sentences may merge into one added sentence, and one removed sentence may split into several (a
+        # sentence boundary moved): every added sentence that is mostly a piece of r counts r among its sources, so the
+        # terms r already carried are not new in any of them.
         best, keep = -1, 0.0
         s, w = _tokens(r)
         cands: set[int] = set(by_head.get(r[:8], ()))
@@ -572,30 +575,34 @@ def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
             cands |= by_word.get(t, set())
         for k in sorted(cands):
             a = added[k]
-            if len(a) < EDIT_KEEPS * len(r):
-                continue
+            floor = 2 * EDIT_KEEPS * min(len(r), len(a))
             sm = difflib.SequenceMatcher(None, r, a, autojunk=False)
-            if sm.real_quick_ratio() * (len(r) + len(a)) < 2 * EDIT_KEEPS * len(r):  # upper bounds on the matched length
+            if sm.real_quick_ratio() * (len(r) + len(a)) < floor:  # upper bounds on the matched length
                 continue
-            if sm.quick_ratio() * (len(r) + len(a)) < 2 * EDIT_KEEPS * len(r):
+            if sm.quick_ratio() * (len(r) + len(a)) < floor:
                 continue
-            k_keep = sum(b.size for b in sm.get_matching_blocks()) / max(len(r), 1)
-            if k_keep > keep:
-                best, keep = k, k_keep
+            matched = sum(b.size for b in sm.get_matching_blocks())
+            k_r, k_a = matched / max(len(r), 1), matched / max(len(a), 1)
+            if k_a >= EDIT_KEEPS and r not in sources.get(k, []):
+                sources.setdefault(k, []).append(r)
+            if k_r > keep:
+                best, keep = k, k_r
         if best >= 0 and keep >= EDIT_KEEPS:
             used.add(best)
             what["edited"].append((r, added[best]))
+            if r not in sources.get(best, []):
+                sources.setdefault(best, []).append(r)
         else:
             what["removed"].append(r)
     what["added"] = [a for k, a in enumerate(added) if k not in used]
-    hit = relax_hit(what["added"])
-    if hit:
-        return False, f"足した文に緩和の語「{hit}」がある", what
-    for r, a in what["edited"]:
-        had = {t.lower() for t in relax_terms(r)}
-        fresh = [t for t in relax_terms(a) if t.lower() not in had]  # the same rules as for a new sentence, minus what it already said
+    for k, a in enumerate(added):
+        # the same rules as for a new sentence, minus the terms the sentences it grew out of already carried
+        had = {t.lower() for r in sources.get(k, []) for t in relax_terms(r)}
+        fresh = [t for t in relax_terms(a) if t.lower() not in had]
+        if fresh and k in sources:
+            return False, f"言い直しで緩和の語「{fresh[0]}」を足した: 「{sources[k][0][:30]}」→「{a[:30]}」", what
         if fresh:
-            return False, f"言い直しで緩和の語「{fresh[0]}」を足した: 「{r[:30]}」→「{a[:30]}」", what
+            return False, f"足した文に緩和の語「{fresh[0]}」がある", what
     oh: dict[str, set] = {}
     nh: dict[str, set] = {}
     for u, i in ou:
@@ -1205,6 +1212,13 @@ def selftest() -> int:
               and exempt("conventions/deploy.md", old_text, new) is True)
     # Known hole, kept on purpose: a word slipped into a sentence in a non-relaxing position passes, exactly as the
     # same sentence would pass if appended (the line is the same for both forms).
+    merged_old = doc.replace("手順は runbook。", "手順は runbook (ただし急ぐ時は後でよい。 実測)。")  # a 。 inside the parenthesis
+    merged_new = doc.replace("手順は runbook。", "手順は runbook (ただし急ぐ時は後でよい、 実測)。")
+    check("a sentence boundary that moves (two sentences merged) keeps the old sentences' terms",
+          exempt("conventions/deploy.md", merged_old, merged_new) is True and exempt("conventions/deploy.md", merged_new, merged_old) is True)
+    laundered = doc.replace("手順は runbook。", "手順は runbook。 ただし急ぐ時は後でよい。")
+    check("a term carried by a deleted sentence does not excuse an unrelated new sentence",
+          "緩和の語「ただし」" in judge_change(laundered, doc + "\nただし docs は review なしで出す。\n")[1])
     check("known hole: a listed word in a non-relaxing position slipped into a sentence passes",
           exempt("conventions/deploy.md", doc, doc.replace("本人の OK の後", "本人の OK の後でなくても")) is True)
     weakened = {
