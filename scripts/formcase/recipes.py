@@ -511,8 +511,9 @@ CONTROL_FRAME_PT = 18.0   # form control (checkbox) の枠の最低 pt (実測: 
 
 
 def fit_control_lines(workbook, sheets) -> list:
-    """form control (checkbox) の枠を CONTROL_FRAME_PT 以上にする行 (検収の宿題 (a)、 2026-09-25): Mac Excel は箱を control の枠
-    の raster (1 px/pt) で刷り、 枠が 16pt 以下だと箱 (≈13pt) の右辺・下辺が切れる (実測: 枠 ≤ 16pt の箱は辺が欠け、 ≥ 17pt は 4 辺が出る)。
+    """form control (checkbox) の枠の**幅**を CONTROL_FRAME_PT 以上にする行 (検収の宿題 (a)、 2026-09-25): Mac Excel は箱を control の枠
+    の raster (1 px/pt) で刷り、 枠が 16pt 以下だと箱 (≈13pt) の右辺が切れる (実測: 枠 ≤ 16pt の箱は右辺が欠け、 ≥ 17pt は 4 辺が出る)。
+    高さは足さない (Excel は箱を枠の中で縦に中央に描く = 足した分の半分だけ箱が下がる、 実測 = 検収 F7)。
     staged copy にだけ当てる (案件の workbook は変えない)。 印刷する sheet に checkbox が無ければ空。"""
     import office_census as OC
 

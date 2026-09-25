@@ -1066,9 +1066,9 @@ def _excel_tests(tmp, expect) -> None:
            'is "$G$9" then' in sc and "if k is 0 then set value of cb to 1" in sc
            and 'is "$BB$19" then' in sc and "if k is 1 then set value of cb to 0" in sc, sc[-600:])
     cf = XL.ops_lines("S", [("control_frame_min", 18)])
-    expect("ops_lines: control_frame_min = checkbox の枠を 18pt 以上に (index の loop)",
+    expect("ops_lines: control_frame_min = checkbox の枠の幅を 18pt 以上に (index の loop)、 高さは触らない (F7 = 箱が下がる)",
            any("count of checkboxes" in x for x in cf) and any("set width of cb to 18.0" in x for x in cf)
-           and any("set height of cb to 18.0" in x for x in cf), cf)
+           and not any("height" in x for x in cf), cf)
 
     class _R:
         def __init__(self, rc, err=""):
@@ -1296,6 +1296,11 @@ def _fidelity_tests(tmp, inst, expect) -> None:
            stop9b is not None and "読めない" in stop9b and any(x.startswith("🔴") and "読める印は 1 個" in x for x in lines9b), (lines9b, stop9b))
     lines9c, stop9c = FD.report_lines(_rep9(2, 2), {"meta": {}})
     expect("D9: 数も読める印も合えば ✅ で止めない", stop9c is None and any("箱の印 2 個 = 選んだ数" in x for x in lines9c), (lines9c, stop9c))
+    rep9d = _rep9(2, 2)
+    rep9d["targets"][0]["boxes"].update({"out_shifted": 1, "shifted": [([300.0, 290.0, 318.0, 308.0], 0.0, 1.4)]})
+    lines9d, stop9d = FD.report_lines(rep9d, {"meta": {}})
+    expect("D9 (検収 F7): 箱が素刷りの位置から動けば 🔴 + 止める",
+           stop9d is not None and "動いた" in stop9d and any(x.startswith("🔴") and "Δy +1.4" in x for x in lines9d), (lines9d, stop9d))
     # D5: bind の記録
     spec = S.get("fx")
     bf = FD.bind_file(spec)

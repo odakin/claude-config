@@ -282,6 +282,10 @@ def report_lines(rep: dict, spec: dict | None = None) -> tuple:
                 box_bad.append(f"{where} 読める印 {bx.get('out_readable')} ≠ {exp}")
             else:
                 ok(f"箱の印 {exp} 個 = 選んだ数 (紙で読める)")
+        if bx.get("out_shifted"):
+            mv = ", ".join(f"({b[0]:.0f},{b[1]:.0f}) Δx {dx:+.1f} Δy {dy:+.1f}pt" for b, dx, dy in bx.get("shifted") or [])
+            lines.append(f"🔴 {where}: 箱が素刷りの位置から動いた {bx['out_shifted']} 個 — {mv} (画像の置き場でなく画像の中の箱の位置、 検収 F7)")
+            box_bad.append(f"{where} 動いた箱 {bx['out_shifted']}")
         if bx.get("out_clipped"):
             lines.append(f"⚠️ {where}: 辺が欠けた箱 {bx['out_clipped']}/{bx['out']} (素刷り {bx.get('blank_clipped')}/{bx.get('blank')}。 control の枠が狭い"
                          " = Mac Excel の描画、 build は枠を広げて刷るので残るなら別の原因)")
@@ -326,9 +330,10 @@ def report_lines(rep: dict, spec: dict | None = None) -> tuple:
         stop = (f"雛形の図形の字が PDF に無い ({rep['missing_total']} 段落) = 紙から見出し (区分の枠・様式番号・㊞ など) が消える。 "
                 "刷らないと決めた図形なら spec の render: drop_shape に理由つきで (form-case-pipeline.md#fidelity)")
     elif box_bad:
-        stop = (f"選んだ箱の印が紙と合わない ({'; '.join(box_bad)}) = 選んだのに印が無い、 選んでいない箱に印、 または印が紙で読めない (D9)。 "
-                "fill_<doc>.py を回して spec の controls の値を Excel で箱に書き直す。 読めない印なら build の ✓ の重ね描き"
-                " (check-form-static-text --mark-checked) を確かめる (form-case-pipeline.md#fidelity)")
+        stop = (f"選んだ箱の印が紙と合わない ({'; '.join(box_bad)}) = 選んだのに印が無い、 選んでいない箱に印、 印が紙で読めない、 または箱が"
+                "素刷りの位置から動いた (D9)。 fill_<doc>.py を回して spec の controls の値を Excel で箱に書き直す。 読めない印なら build の"
+                " ✓ の重ね描き (check-form-static-text --mark-checked)、 動いた箱なら control の枠の広げ方 (高さを足すと箱が下がる) を"
+                "確かめる (form-case-pipeline.md#fidelity)")
     elif image_loss:
         stop = (f"素刷りより画像が少ない ({'; '.join(image_loss)}) = checkbox の箱・図が紙に無い (D1、 2026-09-25 から止める)。 "
                 "Excel の操作の経路なら案件の workbook の図形・form control を雛形と比べる (openpyxl で保存した workbook は"

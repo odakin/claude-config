@@ -586,15 +586,58 @@ def page_visuals(pdf) -> list:
     return out
 
 
-def _boxes_at(out_boxes, blank_boxes, tol=3.0) -> list:
-    """出力の箱の候補を、 素刷りの箱の位置 (置かれた矩形の中心が tol pt 以内) に在るものに絞る (検収 F4: 印影・図などの小さい画像を
-    箱に数えない。 素刷りが無ければ絞れない = 大きさだけ)。"""
-    def c(b):
-        x0, y0, x1, y1 = b["bbox"]
-        return ((x0 + x1) / 2, (y0 + y1) / 2)
+def _center(b):
+    x0, y0, x1, y1 = b["bbox"]
+    return ((x0 + x1) / 2, (y0 + y1) / 2)
 
-    bc = [c(b) for b in blank_boxes]
-    return [o for o in out_boxes if any(abs(c(o)[0] - x) <= tol and abs(c(o)[1] - y) <= tol for x, y in bc)]
+
+def _box_pairs(out_boxes, blank_boxes, tol=3.0, fmap=None) -> list:
+    """出力の箱と素刷りの箱の対応 [(out, blank)] = 置かれた矩形の中心が tol pt 以内 (1 対 1、 近い順)。 fmap = label_map の
+    (fx, fy) があれば素刷りの中心をそれで出力の座標に写してから比べる (行を伸ばして箱ごと下がった分を吸収する)。"""
+    pairs, used = [], set()
+    for o in out_boxes:
+        ox, oy = _center(o)
+        best = None
+        for i, b in enumerate(blank_boxes):
+            if i in used:
+                continue
+            bx, by = _center(b)
+            if fmap:
+                bx, by = fmap[0](bx), fmap[1](by)
+            d = max(abs(ox - bx), abs(oy - by))
+            if d <= tol and (best is None or d < best[0]):
+                best = (d, i)
+        if best is not None:
+            used.add(best[1])
+            pairs.append((o, blank_boxes[best[1]]))
+    return pairs
+
+
+def _boxes_at(out_boxes, blank_boxes, tol=3.0, fmap=None) -> list:
+    """出力の箱の候補を、 素刷りの箱の位置 (置かれた矩形の中心が tol pt 以内、 fmap で写した上で) に在るものに絞る (検収 F4: 印影・図
+    などの小さい画像を箱に数えない。 素刷りが無ければ絞れない = 大きさだけ)。"""
+    return [o for o, _b in _box_pairs(out_boxes, blank_boxes, tol, fmap)]
+
+
+BOX_SHIFT_PT = 0.5    # 置き場から見た箱の上端・左端が素刷りとこれを超えて違えば止める (実測: 枠の高さ +4pt で箱が +1.4pt 下がり点線に跨った)
+
+
+def box_shifts(out_boxes, blank_boxes, tol=3.0, limit=BOX_SHIFT_PT, fmap=None) -> list:
+    """素刷りの箱と対応する出力の箱で、 **画像の置き場 (bbox) から見た箱の見える範囲 (box_rect) の上端・左端の offset** の差
+    [(bbox, dx, dy)] が limit pt を超えたもの (検収 F7: 画像の置き場は同じでも、 画像の中の箱が動くことがある = control の枠の高さを
+    足すと Excel が箱を枠の中で縦に中央に描く)。 置き場そのものの移動は D4 (位置の写像) が見る = 行を伸ばして箱ごと下がるのは正常。
+    素刷りで欠けている辺の側 (edges に l / t が無い) は比べない (端の位置が箱の端ではない)。"""
+    out = []
+    for o, b in _box_pairs(out_boxes, blank_boxes, tol, fmap):
+        if not o.get("box_rect") or not b.get("box_rect"):
+            continue
+        oo = (o["box_rect"][0] - o["bbox"][0], o["box_rect"][1] - o["bbox"][1])
+        bo = (b["box_rect"][0] - b["bbox"][0], b["box_rect"][1] - b["bbox"][1])
+        dx = oo[0] - bo[0] if "l" in b.get("edges", "") and "l" in o.get("edges", "") else 0.0
+        dy = oo[1] - bo[1] if "t" in b.get("edges", "") and "t" in o.get("edges", "") else 0.0
+        if abs(dx) > limit or abs(dy) > limit:
+            out.append((o["bbox"], round(dx, 2), round(dy, 2)))
+    return out
 
 
 def page_layout(pdf) -> list:
@@ -648,15 +691,13 @@ def _label_points(layout: dict, labels) -> dict:
     return pts
 
 
-def layout_diff(blank: dict, out: dict, labels) -> dict:
-    """素刷り (blank) と出力 (out) を label の位置の組で対応づけ、 画像 (checkbox の箱・図) と水平の罫線の位置を比べる。
-    x は 1 次 (紙 1 枚に収める縮尺)、 y は label の組の間の区分線形 (行を伸ばした分だけ下がる)。
-    返り値 = {pairs, images_missing: [bbox], images_moved: [(bbox, Δx, Δy)], images_added: n, hlines_missing: [(y, x0, x1)],
-    double: [字]} (pairs < 4 なら対応づけできず {"pairs": n} だけ)。"""
+def label_map(blank: dict, out: dict, labels):
+    """素刷り → 出力 の位置の写像を label の組から (x = 1 次 〔紙 1 枚に収める縮尺〕、 y = label の組の間の区分線形 〔行を伸ばした分だけ
+    下がる〕)。 返り値 = (fx, fy, common, ys)、 label の組が 4 未満なら None。 layout_diff と箱の対応づけ (_box_pairs) が共有する。"""
     bp, op = _label_points(blank, labels), _label_points(out, labels)
     common = sorted(set(bp) & set(op), key=lambda t: bp[t][1])
     if len(common) < 4:
-        return {"pairs": len(common)}
+        return None
     xs = [(bp[t][0], op[t][0]) for t in common]
     n = len(xs)
     mx, my = sum(a for a, _ in xs) / n, sum(b for _, b in xs) / n
@@ -675,11 +716,23 @@ def layout_diff(blank: dict, out: dict, labels) -> dict:
             (y0, o0), (y1, o1) = ys[k], ys[k + 1]
         return o0 + (o1 - o0) * (y - y0) / (y1 - y0) if y1 != y0 else o0
 
+    return (lambda x: ax * x + bx), fy, common, ys
+
+
+def layout_diff(blank: dict, out: dict, labels) -> dict:
+    """素刷り (blank) と出力 (out) を label の位置の組で対応づけ、 画像 (checkbox の箱・図) と水平の罫線の位置を比べる。
+    x は 1 次 (紙 1 枚に収める縮尺)、 y は label の組の間の区分線形 (行を伸ばした分だけ下がる)。
+    返り値 = {pairs, images_missing: [bbox], images_moved: [(bbox, Δx, Δy)], images_added: n, hlines_missing: [(y, x0, x1)],
+    double: [字]} (pairs < 4 なら対応づけできず {"pairs": n} だけ)。"""
+    lm = label_map(blank, out, labels)
+    if lm is None:
+        return {"pairs": len(set(_label_points(blank, labels)) & set(_label_points(out, labels)))}
+    fx, fy, common, ys = lm
     tol = max(4.0, 0.006 * out["height"])
     used = set()
     missing, moved = [], []
     for _x, b in blank["images"]:
-        cx, cy = ax * (b[0] + b[2]) / 2 + bx, fy((b[1] + b[3]) / 2)
+        cx, cy = fx((b[0] + b[2]) / 2), fy((b[1] + b[3]) / 2)
         best = None
         for i, (_ox, ob) in enumerate(out["images"]):
             if i in used:
@@ -709,7 +762,7 @@ def layout_diff(blank: dict, out: dict, labels) -> dict:
             skipped += 1
             continue
         checked += 1
-        ey, ex0, ex1 = fy(y), ax * x0 + bx, ax * x1 + bx
+        ey, ex0, ex1 = fy(y), fx(x0), fx(x1)
         ok = any(abs(oy - ey) <= tol and min(ox1, ex1) - max(ox0, ex0) >= 0.5 * (ex1 - ex0) for oy, ox0, ox1 in out["hlines"])
         if not ok:
             hmiss.append((round(y, 1), round(x0, 1), round(x1, 1)))
@@ -846,17 +899,24 @@ def check(template, pdf, targets=None, drop=None, filled=None, blank=None, expec
             # checkbox の箱 (画素、 D9): 印のある箱の数と紙で読める印の数 (選んだ数と照合)、 辺の欠け。 素刷りがあれば素刷りの箱の
             # 位置に在る画像だけを箱に数え (検収 F4)、 素刷り側の欠け (雛形自身の欠陥) も出す。 素刷り無しでも出力の箱は数える (検収 F2)
             ob = vis[res["page"] - 1].get("boxes") or []
-            bb = None
+            bb = fmap = None
             if blank and j.get("blank_page") is not None:
                 bb = bl_vis[j["blank_page"] - 1].get("boxes") or []
-                ob = _boxes_at(ob, bb)
+                if bl_lay is None:
+                    bl_lay, out_lay = page_layout(blank), page_layout(pdf)
+                labels_pos = [t for _c, t in j["untouched"]] if j["untouched"] else j["labels"]
+                lm = label_map(bl_lay[j["blank_page"] - 1], out_lay[res["page"] - 1], labels_pos)
+                fmap = (lm[0], lm[1]) if lm else None      # 行が伸びて箱ごと下がった分を吸収して対応づける (D4 と同じ写像)
+                ob = _boxes_at(ob, bb, fmap=fmap)
             res["boxes"] = {"out": len(ob), "out_clipped": sum(1 for x in ob if x["clipped"]),
                             "out_checked": sum(1 for x in ob if x["checked"]),
                             "out_readable": sum(1 for x in ob if x["checked"] and x["readable"]),
                             "expected_checked": expect_checked.get(_expect_key(j['sheet'], j['range']))}
             if bb is not None:
+                sh = box_shifts(ob, bb, fmap=fmap)   # 画像の中の箱が置き場から見て動いていないか (検収 F7)
                 res["boxes"].update({"blank": len(bb), "blank_clipped": sum(1 for x in bb if x["clipped"]),
-                                     "blank_checked": sum(1 for x in bb if x["checked"])})
+                                     "blank_checked": sum(1 for x in bb if x["checked"]),
+                                     "out_shifted": len(sh), "shifted": sh[:8]})
         if blank:
             bp = j.get("blank_page")
             if bp is not None and res["page"] is not None:
@@ -973,6 +1033,9 @@ def render(rep) -> list:
             if exp is not None:
                 okc = bx["out_checked"] == exp and bx["out_readable"] == exp
                 lines.append(f"   {'✅' if okc else '🔴'} {where}: 印のある箱 {bx['out_checked']} 個 (選んだ {exp})、 紙で読める印 {bx['out_readable']} 個")
+            if bx.get("out_shifted"):
+                mv = ", ".join(f"({b[0]:.0f},{b[1]:.0f}) Δx {dx:+.1f} Δy {dy:+.1f}" for b, dx, dy in bx.get("shifted") or [])
+                lines.append(f"   🔴 {where}: 箱が素刷りの位置から動いた {bx['out_shifted']} 個 (> {BOX_SHIFT_PT}pt): {mv}")
             if bx.get("out_clipped"):
                 lines.append(f"   ⚠️ {where}: 辺が欠けた箱 {bx['out_clipped']}/{bx['out']}"
                              + (f" (素刷り {bx['blank_clipped']}/{bx['blank']})" if bx.get("blank") is not None else ""))
@@ -1031,6 +1094,8 @@ def exit_code(rep, strict=False, strict_labels=False, strict_images=False) -> in
         exp = bx.get("expected_checked")
         if exp is not None and (bx.get("out_checked") != exp or bx.get("out_readable") != exp):
             return 1                 # 選んだ箱に印が無い / 選んでいない箱に印 / 印が紙で読めない (期待を渡した時だけ、 素刷りは要らない)
+        if bx.get("out_shifted"):
+            return 1                 # 箱が素刷りの位置から動いた (素刷りを渡した時だけ見える、 検収 F7)
     if strict_labels and rep["missing_labels_total"]:
         return 1
     if strict_images and rep["missing_images_total"]:
@@ -1269,13 +1334,26 @@ def selftest() -> int:
     ok = ms["marked"] == 0
     fails += not ok
     print(f"{'PASS' if ok else 'FAIL'} mark_checked_boxes: 辺の無い小さい画像 (印影の形) には重ねない = {ms['marked']} 個")
+    # 箱の位置 (検収 F7): 置き場が同じでも画像の中の箱が動く = 見える範囲の上端・左端を素刷りと比べる。 素刷りで欠けた辺の側は比べない
+    bl = [{"bbox": [100, 100, 116, 118], "box_rect": [104.0, 103.0, 115.0, 114.0], "edges": "tblr"},
+          {"bbox": [200, 100, 216, 118], "box_rect": [204.0, 103.0, 216.0, 114.0], "edges": "tbl"}]
+    ou = [{"bbox": [100, 100, 118, 118], "box_rect": [104.1, 104.4, 115.1, 115.4], "edges": "tblr"},
+          {"bbox": [200, 100, 218, 118], "box_rect": [204.2, 103.1, 216.2, 114.1], "edges": "tblr"},
+          {"bbox": [400, 400, 410, 410], "box_rect": [401.0, 401.0, 409.0, 409.0], "edges": "tblr"}]
+    sh = box_shifts(ou, bl)
+    ok = (len(sh) == 1 and sh[0][0] == [100, 100, 118, 118] and abs(sh[0][2] - 1.4) < 0.01
+          and box_shifts([dict(ou[0], box_rect=[104.2, 103.3, 115.2, 114.3])], bl[:1]) == []
+          and box_shifts([dict(ou[1], box_rect=[204.2, 106.0, 216.2, 117.0])], [dict(bl[1], edges="bl")]) == [])
+    fails += not ok
+    print(f"{'PASS' if ok else 'FAIL'} box_shifts: 上端 +1.4pt = 動いた 1 個 / 0.3pt は動かない / 素刷りで上辺が欠けた箱の上端は比べない: {sh}")
     base = {"missing_total": 0, "unmatched": 0, "missing_labels_total": 0, "missing_images_total": 0}
+    r_sh = dict(base, targets=[{"boxes": {"out": 2, "out_checked": 1, "out_readable": 1, "expected_checked": 1, "out_shifted": 1}}])
     r_ok = dict(base, targets=[{"boxes": {"out": 2, "out_checked": 1, "out_readable": 1, "expected_checked": 1}}])
     r_faint = dict(base, targets=[{"boxes": {"out": 2, "out_checked": 1, "out_readable": 0, "expected_checked": 1}}])
     r_none = dict(base, targets=[{"boxes": {"out": 2, "out_checked": 1, "out_readable": 1, "expected_checked": None}}])
-    ok = exit_code(r_ok) == 0 and exit_code(r_faint) == 1 and exit_code(r_none) == 0
+    ok = exit_code(r_ok) == 0 and exit_code(r_faint) == 1 and exit_code(r_none) == 0 and exit_code(r_sh) == 1
     fails += not ok
-    print(f"{'PASS' if ok else 'FAIL'} exit_code: 印の数が合っても紙で読めなければ 1、 期待なしは 0 (素刷りの有無に依らない)")
+    print(f"{'PASS' if ok else 'FAIL'} exit_code: 印の数が合っても紙で読めなければ 1、 期待なしは 0 (素刷りの有無に依らない)、 箱が動けば 1")
     # --expect-checked の key: 渡す側は sheet 名そのまま (末尾の空白つき)、 引く側は strip = 同じ key に寄せる (期待が黙って落ちない)
     ok = (_expect_key("日程表 ", "$A$1:ai51") == _expect_key("日程表", "A1:AI51") == "日程表!A1:AI51"
           and _expect_key(*"日程表 !A1:AI51".rpartition("!")[::2]) == _expect_key("日程表", "A1:AI51"))

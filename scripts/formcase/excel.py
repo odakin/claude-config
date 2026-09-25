@@ -266,11 +266,12 @@ def ops_lines(sheet: str, ops) -> list:
             out.append(f"set visible of worksheet {_q(op[1])} of wbk to sheet hidden")
         elif k in ("border_bottom", "border_top"):
             out += _border_lines(ws, op[1], k.split("_")[1], op[2])
-        elif k == "control_frame_min":     # form control (checkbox) の枠を最低 op[1] pt に。 枠が 16pt 以下だと Mac Excel は箱 (≈13pt) の
-            # 右辺を切って刷る (枠を 1 px/pt で raster にする、 実測 2026-09-25 = 検収の宿題 (a))。 staged copy にだけ当てる
+        elif k == "control_frame_min":     # form control (checkbox) の枠の幅を最低 op[1] pt に。 枠が 16pt 以下だと Mac Excel は箱 (≈13pt) の
+            # 右辺を切って刷る (枠を 1 px/pt で raster にする、 実測 2026-09-25 = 検収の宿題 (a))。 ⚠️ 高さは触らない = Excel は箱を
+            # 枠の中で縦に中央に描くので、 高さを足すと足した分の半分だけ箱が下がる (実測: 高さ +4pt で箱が +1.4pt 下がり点線に跨った、
+            # 検収 F7)。 箱は枠の左に寄せて描かれるので幅を足しても動かない (実測)。 staged copy にだけ当てる
             out += [f"repeat with i from 1 to (count of checkboxes of {ws})", f"set cb to checkbox i of {ws}",
-                    f"if (width of cb) < {float(op[1])} then set width of cb to {float(op[1])}",
-                    f"if (height of cb) < {float(op[1])} then set height of cb to {float(op[1])}", "end repeat"]
+                    f"if (width of cb) < {float(op[1])} then set width of cb to {float(op[1])}", "end repeat"]
         elif k == "delete_shape":
             # 図形は XML の名前 (cNvPr の name、 例 "楕円 2") で引ける。 ⚠️ `every shape whose name is …` は当たらない
             # (Excel が返す name は "Oval 2" 等の英語名 = 実測 2026-09-25)
