@@ -121,6 +121,7 @@
 - **[enhance-scan.py](enhance-scan.py)** — 手書き文書の撮影写真の可読化: 紙の切り出し + 照明ムラ除去 + コントラスト伸張 + タイル出力。
 - **[expand-display-math.py](expand-display-math.py)** — Expand the manuscript's display-math wrapper macros into real environments.
 - **[explain-sensitive-hits.py](explain-sensitive-hits.py)** — 実名 gate (Tier B) の finding を「どの種類の term が・どの行で」 当たったかに分解する (手元で判断する道具)。
+- **[find-openpyxl-writers.py](find-openpyxl-writers.py)** — 「openpyxl で読んで保存する script」 × 「その script が読む雛形が図形・form control・画像を持つ」 を列挙する fleet 検出 (紙から黙って消える経路の棚卸し、 office-automation.md#openpyxl-destroys-drawings)。
 - **[first_reply_stamp.py](first_reply_stamp.py)** — 最初の返信の自己同定 stamp (I7) を hook で支える共通 logic (Claude / Codex)
 - **[fix-bib-unicode.py](fix-bib-unicode.py)** — Unicode→LaTeX 変換スクリプト
 - **[fix-md-links.py](fix-md-links.py)** — markdown の相対 link のうち着地先 file が無いものを分類し、答えが一意に決まる 2 型 (../ の段数ずれ・git が記録した改名) だけ直す。解決は renderer と同じ (symlink は実体 path、%XX decode、`:行番号` 無視、code span・fence・$数式$ の中は link でない)、書換えは link target の終端まで一致した時だけ・保護領域の外だけ、書換え後に「差は link target の中だけ・新しい着地先は全て実在・対象 file ごとに差が在る」 を自己検証する。--selftest 内蔵。
@@ -273,6 +274,7 @@
 - **[formcase/docx_form.py](formcase/docx_form.py)** — Word (docx) 様式の記入・gate・fingerprint・PDF の重ね書き (spec の ``meta.kind: docx``)。 使い方の正本 = form-case-pipeline.md #docx。
 - **[formcase/drawings.py](formcase/drawings.py)** — openpyxl の save が落とす図形 (DrawingML) を、 元の workbook から sheet 名で移し直す。
 - **[formcase/excel.py](formcase/excel.py)** — Excel の操作は全部ここ (staging 経由・前面に出さない・1 回に 1 job)。
+- **[formcase/fidelity.py](formcase/fidelity.py)** — 様式の忠実性 (form-case-pipeline.md#fidelity) = 出力を「雛形の宣言」 と「雛形の素刷り」 に突き合わせる段。
 - **[formcase/fill.py](formcase/fill.py)** — 案件の fill stub (fill_<doc>.py) の実行系。 値を Excel で書き → 読み戻し → gate を回して結果を出す。
 - **[formcase/fingerprint.py](formcase/fingerprint.py)** — 凍結 sheet の書式の fingerprint v3 (``frozen.sheet_digest_v3``)。
 - **[formcase/gates.py](formcase/gates.py)** — gate を group の範囲で回す (= 凍結 group の sheet を今日の spec で裁かない / build 対象外の group を巻き込まない)。
