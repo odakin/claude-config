@@ -364,6 +364,19 @@ M と R0 の差 = **雛形自身の欠陥** (app が刷らない字・`=TODAY()`
 作る recipe は (b) だけで守られている = 図形は移植で戻るが form control の箱は戻らない (`accept_loss` で宣言し、 素刷りとの
 画像の差として毎回 ⚠️ に出る)。
 
+(2026-09-25 追記) 各段の運用と (a) の実装: T = 雛形が bind の記録と違えば**止める** (`formcase.py bind` で記録し直してから build)。
+R の (c) 素刷りより画像が少ない = **止める** (openpyxl の temp で箱を落とすと `meta.accept_loss` に宣言した様式だけ ⚠️)。
+R に段階 2 = **位置の写像**を足した: 素刷りと出力を label の位置の組で対応づけ (x は 1 次、 y は組の間の区分線形)、 画像の位置・
+label の組に挟まれた帯の中の水平の罫線・同じ label の二重刷りを比べる (warn。 帯の外 = 値で行を潰す表 = 圏外と言って本数を出す)。
+出力にも素刷りにも無い図形の字 = 雛形自身の欠陥 (⚪、 止めない)。 (a) の実例 = temp を作らず、 案件の workbook の copy に Excel で
+体裁の差分 (結合・折り返し・揃え・字の大きさ・表示書式・上下の罫線 〔行ごとの range〕・行高・白黒・図形の削除・図形の枠の余白 =
+`layout.excel_ops` + `drawings.single_line_insets`) と刷らない sheet の非表示・印刷範囲・1 枚を当てて刷る recipe
+(`recipes.excel_chunks_pdf` / `hide_lines` / `fit_shape_lines`)。 docx は Word に段落ごとに書く ([`formcase/word.py`](../scripts/formcase/word.py)、
+段落番号の写像 = 本文 → 表の cell の段落 → 行末の記号、 書く前に雛形の字と照合)、 書いた後に欄の run の書式を雛形と照合する
+(`docx_form.run_format_lines`、 python-docx の `run.text` は空欄で既定の run を作り font・大きさが落ちる = 実測)。 build ごとの照合の
+結果は設定 `fidelity_log` (jsonl) に残す (見出しの ⚠️ を止める段に上げる判断の材料)。 formcase の外で openpyxl で保存する生成器は
+保存の直後に `office_census.assert_no_paper_loss` (紙に出るものが減れば止める、 減ると知って出すときは `OFFICE_CENSUS_ALLOW_LOSS=1`)。
+
 ### 14.3 記入欄の宣言 (= 人が番地を書かない)
 
 - 記入欄は**案件と雛形の差**で決まる (spec の `cells:` は「何を・なぜ書くか」 の規則で、 検査の地図ではない)。 雛形が変われば
