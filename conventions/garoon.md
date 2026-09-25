@@ -16,7 +16,7 @@ SAML-only 組織では REST の password auth が admin 限定・OAuth client �
 | 全文検索 (= UI の検索 box と同じ) | `POST /g/fts/api/search?csrf_ticket=<t>` + JSON `{"keyword","apps":["bulletin"\|"cabinet"],"start"}`、 cabinet は `cabinetFolderId:"1"` + `fileOnly:true` 必須 (無いと `GRN_FTS_00001` 520)。 応答 `result.docs[]` = title / url / snippet / modifiedTime / file{title,downloadUrl,size} |
 | csrf ticket | `/g/cabinet/search.csp` 等の inline `grn.__PRELOADED_DATA__.csrfTicket` (portal は 302 なので注意) |
 | 掲示板 REST | `GET /g/api/v1/bulletin/categories` 等、 cookie + `X-Requested-With: XMLHttpRequest` で session auth |
-| 添付 download | `GET /g/bulletin/file_download.csp/-/<name>?fid=F` は session 内 GET で 200 (application/pdf)。 cabinet の `download.csp` は time= token 要の可能性 (未実測) |
+| 添付 download | `GET /g/bulletin/file_download.csp/-/<name>?fid=F` は session 内 GET で 200 (application/pdf)。 cabinet の `download.csp/-/<name>?fid=F` も session 内 GET で 200 (application/pdf) = UI が付ける time= token は要らない (実測) |
 | login 切れ | 302 → `<org>.ex-tic.com` (SSO) / **302 → `<org>.cybozu.com/login?redirect=…` (cybozu 自身の login)** / login page HTML / REST API の 401 `GRN_REST_API_00003` → 下の [#garoon-session-recovery](#garoon-session-recovery) を 1 回試し、 だめなら user が browser で 1 回 login (script はパスワード・OTP を代行しない)。 ⚠️ 死活検査で「SSO への 302 だけ切れ、 他の 302 は健全」 と書くと、 自前 login への 302 で切れているのに silent になる (実測) 。 ⚠️ **login 直後は browser が cookie DB (SQLite) に新しい session cookie を書くまで十数秒の遅れがある** (Chromium 系で実測) = login の直後に 1 回目の検査が「切れ」 のままでも、 少し待って読み直す |
 
 ### <a id="garoon-session-recovery"></a><a id="garoon-browser-reauth"></a>login 切れからの復帰 (手順)

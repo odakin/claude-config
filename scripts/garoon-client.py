@@ -31,8 +31,8 @@ subcommand:
     302 → index.csp?pid=N なので allow_redirects なしだと取れない) `grn.__PRELOADED_DATA__ = {"csrfTicket": "..."}` から取る。
   - REST = `GET /g/api/v1/bulletin/...` (session auth = cookie + X-Requested-With で通る)。
   - file = `GET /g/bulletin/file_download.csp/-/<name>?fid=F` / `GET /g/cabinet/download.csp/-/<name>?fid=F`
-    (cabinet 側は UI では time= 署名 token が付くが、 session 内 GET で通るかは要実測 = 本 script の download が
-    login page を返したら token 要 → 検索結果の downloadUrl をそのまま使う)。
+    (cabinet 側は UI では time= 署名 token が付くが、 session 内 GET なら token なしの fid だけで 200 application/pdf
+    が返る = 実測。 返らなくなったら検索結果の downloadUrl をそのまま使う)。
   - login 切れの判定 = 302 → SSO (別 host) / 302 → `<org>.cybozu.com/login` / 200 + `<title>ログイン` /
     REST の 401。 切れていたら下の「login 切れからの復帰」。 script はパスワードも OTP も扱わない。
 
@@ -291,7 +291,7 @@ class Garoon:
         path = "/g/bulletin/file_download.csp/-/f" if app == "bulletin" else "/g/cabinet/download.csp/-/f"
         r = self.get(path, params={"fid": fid})
         if r.status_code != 200 or r.headers.get("content-type", "").startswith("text/html"):
-            raise SystemExit(f"download fid={fid} 失敗 {r.status_code} {r.headers.get('content-type')} (cabinet は time= token 要かも)")
+            raise SystemExit(f"download fid={fid} 失敗 {r.status_code} {r.headers.get('content-type')} (cabinet は fid だけで通る実測だが、 変わったら検索結果の downloadUrl を get で)")
         Path(out).write_bytes(r.content)
         return len(r.content), r.headers.get("content-type")
 
