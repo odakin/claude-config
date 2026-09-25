@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき
+when: Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript)
 category: infra
-summary: Zoom の機械経路は Server-to-Server OAuth app 1 つで開く (#s2s-oauth-route、 scope は meeting read/write/delete + user read/settings の admin 版、 token は account_id + Basic 認証で自己発行)。 常設の部屋を PMI と分ける判断 (#dedicated-room-vs-pmi)。 create の 2 つの罠 = アカウント既定「予定されたミーティングに PMI を使用」 が ON だと新しい id が発番されるのに参加 URL は PMI のものになる (#use-pmi-silently-hijacks-create)、 passcode なしで作ると waiting_room が要求を無視して true に上書きされる (#passcode-or-waiting-room)。 固定時刻なしの定期ミーティングは最終使用から 365 日で失効する (#no-fixed-time-expiry)。 録画と議事録は別機能で、 録画せずに要約だけ回せる (#recording-vs-summary)。 作った部屋は番号だけ残ると用途が失われる (#record-the-room)
+summary: Zoom の機械経路は Server-to-Server OAuth app 1 つで開く (#s2s-oauth-route、 scope は用途ごとに admin 版を 1 つずつ足す = 部屋の作成・読み取り・変更・削除 / 自分と設定 / 終わった会議、 token は account_id + Basic 認証で自己発行)。 常設の部屋を PMI と分ける判断 (#dedicated-room-vs-pmi)。 create の 2 つの罠 = アカウント既定「予定されたミーティングに PMI を使用」 が ON だと新しい id が発番されるのに参加 URL は PMI のものになる (#use-pmi-silently-hijacks-create)、 passcode なしで作ると waiting_room が要求を無視して true に上書きされる (#passcode-or-waiting-room)。 固定時刻なしの定期ミーティングは最終使用から 365 日で失効する (#no-fixed-time-expiry)。 録画と議事録は別機能で、 録画せずに要約だけ回せる (#recording-vs-summary)。 終わった会議の要約と文字起こしは `notes` で取り出し、 「無い」 も過去の回の `has_meeting_summary` と transcript の 3322 で言い切る (#read-summary-and-transcript)。 作った部屋は番号だけ残ると用途が失われる (#record-the-room)
 -->
 # Zoom のミーティングを script から扱う
 
@@ -11,7 +11,7 @@ Server-to-Server OAuth app を 1 つ作れる**。 これで token を自己発�
 画面を開いて毎回 click する必要は無くなる。
 
 実装 = [`../scripts/zoom-client.py`](../scripts/zoom-client.py) (stdlib のみ、 `whoami` / `show` / `list` /
-`create` / `update` / `delete`。 作成・削除・変更は既定 dry-run)。
+`create` / `update` / `delete` / `notes`。 作成・削除・変更は既定 dry-run)。
 
 ## <a id="s2s-oauth-route"></a>Server-to-Server OAuth (= 唯一の常設 credential)
 
@@ -20,12 +20,13 @@ Server-to-Server OAuth app を 1 つ作れる**。 これで token を自己発�
 1. Marketplace → Develop → Build App → **Server-to-Server OAuth** → Create
 2. **Information** タブの必須欄 (Company Name / Developer Contact Name / Developer Contact Email)
 3. **Scopes** タブ → Add Scopes。 ⚠️ 検索欄に製品名 (`meeting` 等) を入れると数百件出るので、
-   **スコープ名をそのまま入れて 1 つずつ足す**:
-   `meeting:read:meeting:admin` / `meeting:write:meeting:admin` / `meeting:delete:meeting:admin` /
-   `user:read:user:admin` / `user:read:settings:admin`
+   **スコープ名をそのまま入れて 1 つずつ足す**。 使う操作の分だけ:
+   - 部屋を作る・読む・消す (`create` / `show` / `list` / `delete`): `meeting:write:meeting:admin` /
+     `meeting:read:meeting:admin` / `meeting:delete:meeting:admin`
+   - 既存の部屋の設定を変える (`update`): `meeting:update:meeting:admin` (`write` だけでは PATCH が 4711 で止まる、 実測)
+   - 自分と設定を読む (`whoami`): `user:read:user:admin` / `user:read:settings:admin`
+   - 終わった会議の要約と文字起こし (`notes`): [#read-summary-and-transcript](#read-summary-and-transcript) の 5 つ
    (旧体系の account なら `meeting:read:admin` / `meeting:write:admin` / `user:read:admin`)
-   既存の部屋の設定を変える (`update`) には `meeting:update:meeting:admin` も要る (実測: `write` だけでは
-   PATCH が 4711 で止まる)。 終わった会議を読む scope は下の [#read-summary-and-transcript](#read-summary-and-transcript)
 4. **Activation** タブ → Activate
 5. **App Credentials** タブの **Account ID / Client ID / Client Secret** の 3 値を保管する
 
@@ -37,9 +38,9 @@ base64(client_id:client_secret)` を header で。 有効 1 時間。
 これは client_id が間違っているのではなく**アプリが未有効化**の合図で、 逆に言えば
 **この文言が返れば Account ID と Client ID は正しい** (= 切り分けに使える)。
 
-⚠️ 3 値は secret として扱う (= 平文で chat・issue・commit message に載せない)。 ⚠️ 変更系のスコープを
-後から足すと既存 token では足りず `4711 Invalid access token, does not contain scopes:[...]` が返る
-(= エラーが必要な scope 名をそのまま教えてくれるので、 それを足して再 Activate する)。
+⚠️ 3 値は secret として扱う (= 平文で chat・issue・commit message に載せない)。 ⚠️ 足りない scope の操作は
+`4711 Invalid access token, does not contain scopes:[...]` で止まる = **エラーが要る scope 名をそのまま教える**ので、
+それを足す。 有効化済みの app なら、 足した直後に発行した token から効く (Activate し直す操作は要らなかった、 実測)。
 
 ## <a id="dedicated-room-vs-pmi"></a>常設の部屋を PMI と分けるか
 
@@ -98,20 +99,22 @@ type 3 (No Fixed Time) の部屋は **最終使用から 365 日**で消える�
 
 ## <a id="read-summary-and-transcript"></a>終わった会議の要約と文字起こしを読む — 「無い」 も API で言い切る
 
-道具 = `zoom-client.py notes <meeting_id> --date YYYY-MM-DD [--out DIR]` (その日の回を過去の回の一覧から探し、
-要約の JSON と文字起こしの VTT を保存する)。 要る scope は読み取りの 5 つ
-(`meeting:read:list_past_instances:admin` / `meeting:read:past_meeting:admin` / `meeting:read:summary:admin` /
-`meeting:read:list_summaries:admin` / `cloud_recording:read:meeting_transcript:admin`)。 実測では、
-有効化済みの app に scope を足すと、 その直後に発行した token から効いた (Activate し直す操作は要らなかった)。
+道具 = `zoom-client.py notes <meeting_id> --date YYYY-MM-DD [--between HH:MM-HH:MM] [--out DIR]`
+(その日の回を過去の回の一覧から探し、 要約の JSON と文字起こしの VTT を保存する)。 同じ部屋を 1 日に何度も使う
+(個人部屋で授業と打ち合わせ、 など) なら `--between` で開始時刻を絞る = 別の会議の要約を拾わない。
+終了値で分岐できる: 0 = 要約か文字起こしを取れた / 4 = 回はあるが両方とも無い (= 手元の録音を起こす合図、
+[`audio-transcription.md#loop-runs-in-speech`](audio-transcription.md#loop-runs-in-speech)) / 5 = その日 (時間帯) の回が無い / 1 = API の失敗。
+要る scope は読み取りの 5 つ (`meeting:read:list_past_instances:admin` / `meeting:read:past_meeting:admin` /
+`meeting:read:summary:admin` / `meeting:read:list_summaries:admin` / `cloud_recording:read:meeting_transcript:admin`)。
 
 - **「無い」 の根拠は 2 つの応答**: 過去の回の詳細 (`GET /past_meetings/{uuid}`) の `has_meeting_summary` と、
   文字起こし (`GET /meetings/{uuid}/transcript`) の code 3322。 通知メールの有無で判断しない
   (届かない設定もあるし、 メール検索の空振りは「無い」 の証明にならない)
 - **ローカル録画のフォルダには要約も文字起こしも入らない** (入るのは音声・動画・設定 file だけ)。
   要約は Zoom 側にだけ残る
-- **個人部屋 (PMI) は既定で `auto_start_meeting_summary=false`** = 要約が作られるのは会議中に手で開始したときだけ。
-  講義など「あとで要約が欲しい」 部屋は、 その部屋の設定で自動開始にしておく (参加者に表示される点は上の ⚠️)
-  (⚠️ この PMI の値は 1 アカウントでの実測。 自分の部屋の値は `show <id>` の `auto_start_meeting_summary` で読む)
+- **要約が作られるのは、 その部屋の `auto_start_meeting_summary` が true の回か、 会議中に手で開始した回だけ**。
+  個人部屋 (PMI) では false だった (実測)。 あとで要約が欲しい部屋は自動開始にしておく
+  (`update <id> --set auto_start_meeting_summary=true`、 参加者に表示される点は上の ⚠️)。 自分の部屋の値は `show <id>` で読む
 - 過去の回の UUID が `/` で始まるか `//` を含むときは、 path に入れる前に二重に percent-encode する (しないと 404)
 - ⚠️ My Notes (本人のメモ機能の文字起こし) は別の API (`/my_notes/notes`) で、 `my_notes:read:note:admin` 等の
   別 scope が要る

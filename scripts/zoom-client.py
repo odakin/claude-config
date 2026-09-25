@@ -15,13 +15,16 @@ subcommand:
   create --topic T [--like <meeting_id>] [--apply]     部屋を作る (既定 dry-run)
   update <meeting_id> --set k=v [...] [--apply]        既存の部屋の settings を変える (既定 dry-run)
   delete <meeting_id> [--apply]             部屋を消す (既定 dry-run)
-  notes <meeting_id> --date YYYY-MM-DD [--out DIR]    その日の回の AI 要約と文字起こしを取り出す (読むだけ)
+  notes <meeting_id> --date YYYY-MM-DD [--between HH:MM-HH:MM] [--out DIR]
+                                            その日の回の AI 要約と文字起こしを取り出す (読むだけ)
   selftest                                  通信しない部品の自己検査
 
 notes は「無い」 も根拠つきで言う: past meeting の `has_meeting_summary` (= 要約が作られたか) と
   transcript API の 3322 (= 文字起こしが存在しない)。 要約は録画と独立で、 部屋の
   `auto_start_meeting_summary` が false なら会議中に手で開始しない限り作られない。
   ⚠️ 要約の通知メールが来ていない ≠ 要約が無い、 の逆も同じ = 判断はこの 2 つの応答で行う。
+  終了値: 0 = 要約か文字起こしを 1 つ以上取れた / 4 = 回はあるが両方とも無い (手元の録音を起こす合図) /
+  5 = その日 (時間帯) の回が無い / 1 = API の失敗。 呼び元は 4 と 5 を「失敗」 と区別して分岐する。
 
 create の既定 = **type 3 (定期ミーティング・固定時刻なし)** = 「いつでも入れる常設の部屋」。
   --like <id> を付けると、 その ミーティング (= PMI を渡すのが普通) の設定を写して作る。
@@ -283,6 +286,16 @@ def local_date(start_time: str, tz: str) -> str:
     return t.astimezone(ZoneInfo(tz)).date().isoformat()
 
 
+def in_window(start_time: str, tz: str, between: str | None) -> bool:
+    """start_time (UTC) の現地の時刻が between ("HH:MM-HH:MM"、 両端を含む) に入るか。 None なら常に真。
+    同じ部屋を 1 日に何度も使うとき (個人部屋で授業と打ち合わせ等)、 取り出す回を時間帯で絞る。"""
+    if not between:
+        return True
+    lo, hi = between.split("-")
+    t = dt.datetime.fromisoformat(start_time.replace("Z", "+00:00")).astimezone(ZoneInfo(tz)).strftime("%H:%M")
+    return lo <= t <= hi
+
+
 def _download(token: str, url: str) -> bytes:
     req = urllib.request.Request(url)
     req.add_header("Authorization", f"Bearer {token}")
@@ -292,14 +305,17 @@ def _download(token: str, url: str) -> bytes:
 
 def cmd_notes(token: str, args) -> int:
     inst = api(token, "GET", f"/past_meetings/{args.meeting_id}/instances").get("meetings", [])
-    hits = sorted((m for m in inst if local_date(m["start_time"], args.tz) == args.date),
+    hits = sorted((m for m in inst if local_date(m["start_time"], args.tz) == args.date
+                   and in_window(m["start_time"], args.tz, args.between)),
                   key=lambda m: m["start_time"])
     if not hits:
-        print(f"{args.date} に {args.meeting_id} の回は無い (過去の回 {len(inst)} 件を見た)")
-        return 1
+        span = f" {args.between}" if args.between else ""
+        print(f"{args.date}{span} に {args.meeting_id} の回は無い (過去の回 {len(inst)} 件を見た)")
+        return 5
     out = Path(args.out) if args.out else None
     if out:
         out.mkdir(parents=True, exist_ok=True)
+    found = 0
     for m in hits:
         up = uuid_path(m["uuid"])
         pm = api(token, "GET", f"/past_meetings/{up}")
@@ -308,6 +324,7 @@ def cmd_notes(token: str, args) -> int:
         stem = f"{args.date}_{m['start_time'][11:19].replace(':', '')}Z"
         if pm.get("has_meeting_summary"):
             summ = api(token, "GET", f"/meetings/{up}/meeting_summary")
+            found += 1
             print("  要約     : あり")
             if out:
                 (out / f"{stem}_summary.json").write_text(json.dumps(summ, ensure_ascii=False, indent=1))
@@ -323,12 +340,13 @@ def cmd_notes(token: str, args) -> int:
             print("  文字起こし: 無い (3322 = この回の文字起こしは存在しない)")
             continue
         url = tr.get("download_url")
+        found += 1
         print(f"  文字起こし: あり{'' if url else ' (download_url 無し)'}")
         if url and out:
             (out / f"{stem}_transcript.vtt").write_bytes(_download(token, url))
-    if out:
+    if out and found:
         print(f"保存先: {out}")
-    return 0
+    return 0 if found else 4
 
 
 def selftest() -> int:
@@ -344,6 +362,9 @@ def selftest() -> int:
     check(uuid_path("Ab//Cd==") == "Ab%252F%252FCd%253D%253D", "// を含む UUID は二重に encode")
     check(local_date("2030-01-02T03:04:05Z", "Asia/Tokyo") == "2030-01-02", "UTC の朝は東京の同じ日")
     check(local_date("2030-01-02T16:30:00Z", "Asia/Tokyo") == "2030-01-03", "UTC の夕方以降は東京の翌日")
+    check(in_window("2030-01-02T05:00:00Z", "Asia/Tokyo", "13:30-15:00"), "時間帯の中 (東京 14:00)")
+    check(not in_window("2030-01-02T01:00:00Z", "Asia/Tokyo", "13:30-15:00"), "時間帯の外 (東京 10:00)")
+    check(in_window("2030-01-02T01:00:00Z", "Asia/Tokyo", None), "時間帯の指定なしは常に通す")
     print("zoom-client selftest:", "ALL PASS" if not fails else f"FAIL {fails}")
     return 1 if fails else 0
 
@@ -383,6 +404,7 @@ def main(argv: list[str]) -> int:
     p_notes.add_argument("meeting_id", help="ミーティング番号 (PMI も可)")
     p_notes.add_argument("--date", required=True, help="回の日付 YYYY-MM-DD (--tz の地域の日付)")
     p_notes.add_argument("--tz", default="Asia/Tokyo")
+    p_notes.add_argument("--between", help="開始時刻で絞る 'HH:MM-HH:MM' (--tz の現地時刻、 両端を含む)")
     p_notes.add_argument("--out", help="保存先 dir (無ければ要約の概要を画面に出すだけ)")
 
     sub.add_parser("selftest", help="通信しない部品の自己検査")

@@ -258,6 +258,7 @@
 - **[verify-prototype-feedback.py](verify-prototype-feedback.py)** — Verify a prototype-feedback record and its local packet.
 - **[verify-verbatim-move.py](verify-verbatim-move.py)** — 「移しただけ」 の変更を読まずに検算する: 指定 file から消えた行が、すべて移動先 (同じ file を含む) に追加行として現れるかを git の差分で数える。markdown link の深さの付け替えは --normalize-links で同一視する。
 - **[web-page-watch.py](web-page-watch.py)** — 公開 web ページの本文が変わったら知らせる (台帳の URL を定期に読み、 目印で切り出した本文の差分を state に残して、 macOS 通知と SessionStart 用の行を出す。 標準ライブラリだけで動き、 YAML 台帳のときだけ PyYAML が要る)
+- **[whisper-transcribe.py](whisper-transcribe.py)** — 録音を whisper.cpp で文字起こしし、 同じ語の繰り返し (ループ) が出た区間を自動で転写し直す。
 - **[with-gnu-userland.sh](with-gnu-userland.sh)** — macOS で Homebrew の GNU coreutils / sed / grep / findutils を PATH 先頭に差して command を走らせる (CI の ubuntu と同じ BSD/GNU 差を push 前に再現)
 - **[with-gnu-userland.test.sh](with-gnu-userland.test.sh)** — with-gnu-userland.sh の self-test (Homebrew の GNU userland が無い環境 = CI の ubuntu は SKIP)
 - **[xlsx-to-pdf.sh](xlsx-to-pdf.sh)** — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
@@ -317,6 +318,7 @@
 - **[lib/office-app-guard.test.sh](lib/office-app-guard.test.sh)** — office-app-guard.sh の hermetic test (osascript / open を PATH の stub に差し替え、 Office は起こさない。 macOS 以外でも走る)
 - **[lib/office-staging.sh](lib/office-staging.sh)** — Office (Word / Excel / PowerPoint) automation の「事前 grant 済み staging dir」 helper (sourceable lib、 macOS App Sandbox の folder-grant dialog を design-out、 office-automation.md#office-pregranted-staging-dir)
 - **[lib/office-staging.test.sh](lib/office-staging.test.sh)** — office-staging.sh + office_staging.py の self-test (hermetic、 Office 不要、 fake HOME)
+- **[lib/office_census.py](lib/office_census.py)** — OOXML package (xlsx / docx / pptx) が「紙に出すもの」 を、 道具に依らず zip の XML から数える。
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
 - **[lib/permission_rules.py](lib/permission_rules.py)** — settings.json の permission rule を宣言した形に揃える (engine)
 - **[lib/photos_picker.py](lib/photos_picker.py)** — Google Photos Picker API の client (session を作る → 本人が URL を開いて写真を選ぶ → 選ばれた写真を列挙・download。 python3 photos_picker.py で selftest)

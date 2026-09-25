@@ -97,7 +97,7 @@ class Picker:
 
         通信の一時的な失敗 (接続・TLS handshake の timeout) は次の poll で読み直す = 1 回の失敗で
         session ごと捨てない (session id は呼び出し側に残らないので、 落ちると本人が選び直しになる。
-        2026-09-25 実測)。 requests の例外は OSError の子。 HTTP の error 応答 (401 等) は下の
+        実測)。 requests の例外は OSError の子。 HTTP の error 応答 (401 等) は下の
         raise_for_status で従来どおり止まる。
         """
         while now() < deadline:
