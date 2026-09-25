@@ -184,26 +184,23 @@ _RUN_OBJECTS = {"w:drawing": "図 (drawing)", "w:pict": "図・textbox (VML)", "
 
 
 def object_loss(template, out) -> list:
-    """雛形と記入後の docx で、 run の中の図・field・記号・content control の数が減っていれば ⚠️ の行 (warn だけ)。
+    """雛形と記入後の docx で、 run の中の図・field・記号・content control・textbox の字・画像が減っていれば ⚠️ の行 (warn だけ)。
 
     ``_set_runs`` は欄の段落の 2 つ目以降の run を空にし、 python-docx の ``run.text`` の setter は run の中身
     (w:t だけでなく w:drawing・w:fldChar・w:sym も) を消す = 欄の段落に図や field があれば紙から黙って消える
-    (Excel 様式の図形消失と同じ class、 office-automation.md#drawings-lost-in-temp-pdf)。"""
-    import re
+    (Excel 様式の図形消失と同じ class、 office-automation.md#drawings-lost-in-temp-pdf)。
+    数え方の実体 = 層1 lib/office_census.py (formcase の外の docx 生成器からも同じ関数を呼ぶ = 1 か所)。"""
+    import sys
     import zipfile
 
-    def count(p):
-        with zipfile.ZipFile(p) as z:
-            x = "".join(z.read(n).decode("utf-8", "replace") for n in z.namelist()
-                        if re.match(r"word/(document|header\d*|footer\d*)\.xml$", n))
-        return {k: len(re.findall("<" + k + r"\b", x)) for k in _RUN_OBJECTS}
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+    import office_census as OC
 
     try:
-        b, a = count(template), count(out)
+        lo = OC.losses(template, out)
     except (OSError, zipfile.BadZipFile) as e:
         return [f"⚪ docx の図・field の数を比べられなかった ({e})"]
-    return [f"⚠️ {_RUN_OBJECTS[k]}: 雛形 {b[k]} → 記入後 {a[k]} (欄の run の書き換えで消えた = 紙から消える)"
-            for k in _RUN_OBJECTS if a[k] < b[k]]
+    return [f"⚠️ {k}: 雛形 {b} → 記入後 {a} (欄の run の書き換えで消えた = 紙から消える)" for k, b, a, paper in lo if paper]
 
 
 def rendered(f, v) -> str:

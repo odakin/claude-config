@@ -333,7 +333,11 @@ def _untouched_labels(wt, wf, rng) -> list:
                 continue                                    # 記入した cell (= 雛形との差) は label でない
             if _row_collapsed(wf, c.row) or _col_hidden(wf, c.column):
                 continue
-            out.append((c.coordinate, t))
+            # 改行を含む label (「出発␊␊到着」) は PDF の text で行の間に隣の cell の字が挟まる = 行ごとに照合する (実測)
+            pieces = [norm(x) for x in v.split("\n")] if "\n" in v else [t]
+            for pc in pieces:
+                if len(pc) >= 2:
+                    out.append((c.coordinate, pc))
     return out
 
 
@@ -414,12 +418,9 @@ def page_visuals(pdf) -> list:
     out = []
     with fitz.open(pdf) as d:
         for p in d:
-            # get_image_info = 描かれた回数 (同じ画像を 2 か所に置いても 2)。 get_images は参照する画像の種類の数
-            try:
-                n_img = len(p.get_image_info())
-            except Exception:  # noqa: BLE001  古い PyMuPDF
-                n_img = len(p.get_images())
-            out.append({"images": n_img, "drawings": len(p.get_drawings())})
+            # get_images = 頁が参照する画像 (xref) の数。 Excel は checkbox の箱を 1 個ずつ別の画像で描く (実測: 9 個 = 9)。
+            # get_image_info (描かれた回数) は点線の pattern の tile まで数えて体裁で増減する (実測: 日程表 11 → 0) = 使わない
+            out.append({"images": len(p.get_images()), "drawings": len(p.get_drawings())})
     return out
 
 

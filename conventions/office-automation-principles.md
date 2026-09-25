@@ -199,6 +199,11 @@ origin: ある研究費 docx 申請様式で同一様式に 4 記入ミス連続
 
 1. **その場で root cause を 1 段掘る** — 「どの解釈器が、 地層のどの層を、 どう壊したか」 を特定する
    (= 「もう一度やったら直った」 で済ませない。 同じ穴に必ず落ち直す)
+   - (2026-09-25 追記) **同じ解釈器・同じ保存で、 他に何が消えたかを 1 回数える** — 症状の名前 (標題・checkbox・様式番号) で
+     検査を組むと、 同じ機構の兄弟は見えない (実測: checkbox だけを数えた RCA が、 同じ一覧に出ていた図形の消失を見なかった)。
+     zip の部品と要素の数を雛形と比べる ([`scripts/lib/office_census.py`](../scripts/lib/office_census.py)) = 名前を知らない種類も
+     「数が減った」 として現れる。 一般則 = [`debugging-discipline.md#same-mechanism-sweep`](debugging-discipline.md#same-mechanism-sweep)、
+     様式が何であっても成り立つ検査 = [`form-case-pipeline.md#fidelity`](form-case-pipeline.md#fidelity)
 2. **回避策は「判断を要しない形」 まで機械化する** — 規律 prose より script、 script より
    built-in 検証付き script。 将来の session のモデル性能に依存させない
 3. **[`office-automation.md`](office-automation.md) に slug 付き subsection で記録** — 症状 / 原因 /

@@ -139,6 +139,8 @@ structural rule の違反は同 codebase / 同型コード設計で **再生産�
 - ✗ fix 適用後に「同 file の他 instance がないか」 を grep skip (= narrow scope closure)
 - ✗ commit message に「foo を fix」 と書くが「他 sibling は不明」 と sweep 状態を明示しない
 
+<a id="same-mechanism-sweep"></a>**機構で束ねる sibling sweep (= 2026-09-25 追記: 症状の名前でなく、 同じ機構が他に何を壊したかを数える)**: RCA が報告された症状 (例: 「checkbox が消えた」) の名前で検査を組むと、 **同じ機構 (例: ある library の保存) が同じ file から落とした別の物** (図形・標題・画像・数式の cache) は見えない。 実測: 1 つの保存で 22 個の form control と 9 部の図形が同時に消えていたのに、 checkbox の数だけを数えた RCA は図形の消失を見ず、 後に別の症状として別の RCA が立った。 → RCA の型に 1 段を足す: **「同じ機構・同じ経路で、 他に何が消えた・変わったか」 を、 症状の名前を持たない数え方 (部品と要素の数の差) で 1 回出す**。 名前を知らない種類の損失も「数が減った」 として現れる (Office file の instance = [`office-automation-principles.md#extending-the-catalog`](office-automation-principles.md#extending-the-catalog) 1 / [`form-case-pipeline.md#fidelity`](form-case-pipeline.md#fidelity))。 sweep の単位は「repo」 でなく「機構 × 対象」 = 同じ機構が別の repo の同じ様式を通っていれば、 そこまで掛ける ([`office-automation.md#cross-repo-sweep`](office-automation.md#cross-repo-sweep))。
+
 **meta-meta**: 本 §4 拡張 = §4 主旨 (= violation 発見 → sibling sweep) を **fix 時 timeline にも適用**。 violation 発見 → sibling A 認識 → A を fix する commit を書く際、 sibling B/C/D を再 sweep。 「発見 sweep」 と「fix sweep」 は別タイミングで両方必要。 narrow fix の自己強化 cycle (= 1 件 fix で「片付いた感」 が出て次の sweep を skip する) を防ぐ。
 
 ---

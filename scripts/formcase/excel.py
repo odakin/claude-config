@@ -208,7 +208,7 @@ def ops_lines(sheet: str, ops) -> list:
 
     ops の形: ("unmerge", range) / ("merge", range) / ("row_height", row, pt) / ("wrap", cell, bool) /
     ("halign", cell, name) / ("valign", cell, name) / ("font_size", cell, pt) / ("number_format", cell, fmt) /
-    ("print_area", range) / ("one_page",) / ("black_and_white", bool)。"""
+    ("print_area", range) / ("one_page",) / ("black_and_white", bool) / ("hide_sheet", name)。"""
     ws = f"worksheet {_q(sheet)} of wbk"
     out = []
     for op in ops:
@@ -237,6 +237,8 @@ def ops_lines(sheet: str, ops) -> list:
                     f"set fit to pages tall of page setup object of {ws} to 1"]
         elif k == "black_and_white":
             out.append(f'set black and white of page setup object of {ws} to {"true" if op[1] else "false"}')
+        elif k == "hide_sheet":            # 素刷り (fidelity.blank_pdf): 他の sheet を刷らない = 非表示 (削除しない = 参照の数式を壊さない)
+            out.append(f"set visible of worksheet {_q(op[1])} of wbk to sheet hidden")
         else:
             raise ExcelError(f"Excel に当てる体裁の変更に未対応: {op!r} ({sheet})")
     return out

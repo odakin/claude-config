@@ -88,8 +88,8 @@ PAGE_FIX = ("→ 窓口に出す頁だけの file を作って刷る: pdf-print-
             "説明書き等に見える頁を残すなら --include-flagged '<理由>')")
 
 
-def inspect(path, expect_pages=None, template=None, pages_check=True):
-    """return (findings:list[str], infos:list[str])"""
+def inspect(path, expect_pages=None, template=None, pages_check=True, fidelity=None):
+    """return (findings:list[str], infos:list[str])。 fidelity = 雛形との照合の指定 (無ければ PDF の宣言から読む)。"""
     findings, infos = [], []
     doc = fitz.open(path)
     n = doc.page_count
@@ -148,6 +148,59 @@ def inspect(path, expect_pages=None, template=None, pages_check=True):
             findings.append(f"🔴 頁: {b}")
         if blocking:
             findings.append("   " + PAGE_FIX)
+        fid = (rec or {}).get("fidelity") if rec else None
+        if fidelity:
+            fid = fidelity
+        if fid:
+            f2, i2 = fidelity_check(path, fid)
+            findings.extend(f2)
+            infos.extend(i2)
+    return findings, infos
+
+
+STATIC_TEXT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "check-form-static-text.py")
+
+
+def fidelity_check(path, fid: dict) -> tuple:
+    """6. 雛形との照合 (K3): 宣言 (formcase の build が書く {template, targets, drop, blank}) か --template-xlsx から雛形を引き、
+    check-form-static-text.py を回す。 図形の字が無い = 🔴 (build と同じ = 止める) / 見出し・画像 = 情報 / 雛形が無い = ⚪ (照合できない、
+    止めない = 別の機械で刷るとき。 conventions/form-case-pipeline.md#fidelity)。"""
+    import json
+    import subprocess
+
+    findings, infos = [], []
+    tpl = fid.get("template")
+    if not tpl or not os.path.exists(tpl):
+        infos.append(f"⚪ 雛形との照合: 雛形が無い ({tpl}) = 照合できない (作った機械で刷るか、 --template-xlsx で雛形を渡す)")
+        return findings, infos
+    args = [sys.executable, STATIC_TEXT, tpl, path, "--json"]
+    for t in fid.get("targets") or []:
+        args += ["--target", t]
+    for dr in fid.get("drop") or []:
+        args += ["--drop", dr]
+    if fid.get("blank") and os.path.exists(fid["blank"]):
+        args += ["--blank", fid["blank"]]
+    try:
+        r = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=300)
+        rep = json.loads(r.stdout) if r.stdout.strip() else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        rep = None
+    if rep is None:
+        infos.append(f"⚪ 雛形との照合が走らなかった ({os.path.basename(tpl)})")
+        return findings, infos
+    for t in rep.get("targets") or []:
+        where = f"{str(t['sheet']).strip()}!{t['range']}" if rep.get("kind") != "docx" else "docx"
+        if t["missing"]:
+            ms = ", ".join(f"{m['name']}「{m['text'][:16]}」" for m in t["missing"][:4])
+            findings.append(f"🔴 雛形の図形の字が無い {where}: {len(t['missing'])}/{t['checked']} — {ms} "
+                            "(紙から見出し・区分の枠・様式番号が消える = 作り直す)")
+        elif t["checked"]:
+            infos.append(f"雛形の図形の字 {where}: {t['checked']} 段落 ✓")
+        b = t.get("blank")
+        if b and b.get("images") is not None and b["images"][1] < b["images"][0]:
+            infos.append(f"⚠️ {where}: 素刷りより画像が少ない {b['images'][0]} → {b['images'][1]} (checkbox の箱・図)")
+        if t.get("missing_labels"):
+            infos.append(f"⚠️ {where}: 雛形の見出しが無い {len(t['missing_labels'])}/{t['labels_checked']}")
     return findings, infos
 
 
@@ -312,8 +365,45 @@ def selftest():
     assert rc == 2 and "本体の用紙" in msg and seen == [("Q", {(210, 297)}, ["sides=one-sided"])], (rc, msg, seen)
     assert hook(ev(f"PRINT_PREFLIGHT_PRINTER=0 lp -d Q {two}"), env={}, printer_check=fake)[0] == 0
     assert hook(ev(f"lp -d Q {two}"), env={}, printer_check=lambda *x, **k: ([], ["⚪ 未確認"]))[0] == 0
+    # N: 雛形との照合 (K3): 宣言に fidelity を持つ PDF は、 雛形の図形の字が無ければ止め、 在れば通す。 雛形が無ければ ⚪ で通す
+    import importlib.util
+    import openpyxl
+
+    sp = importlib.util.spec_from_file_location("cfst", STATIC_TEXT)
+    cfst = importlib.util.module_from_spec(sp); sp.loader.exec_module(cfst)
+    tpl = os.path.join(d, "tpl.xlsx")
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "様式"
+    for coord, v in {"B3": "申請者", "B4": "所属", "B5": "用務"}.items():
+        ws[coord] = v
+    ws.print_area = "A1:J20"; wb.save(tpl)
+    cfst._inject_drawing(tpl, "xl/worksheets/sheet1.xml", cfst._anchor("Shape 1", 1, 1, "外部資金"))
+
+    def fpdf(name, words):
+        p = os.path.join(d, name); doc = fitz.open(); pg = doc.new_page(); y = 60
+        for t in words:
+            pg.insert_text((50, y), t, fontname="japan", fontsize=10); y += 16
+        write_record(doc, [{"role": "submit", "label": "様式"}], "selftest",
+                     fidelity={"template": tpl, "targets": ["様式!A1:J20"], "drop": [], "blank": None})
+        doc.save(p); return p
+    ok_pdf = fpdf("fid_ok.pdf", ["申請者", "所属", "用務", "外部資金"])
+    bad_pdf = fpdf("fid_bad.pdf", ["申請者", "所属", "用務"])
+    # (合成 PDF は組み込み font なので font の 🔴 も出る = 雛形の行だけを見る)
+    fo, io_ = inspect(ok_pdf)
+    fb, _ = inspect(bad_pdf)
+    assert not [f for f in fo if "雛形の図形の字" in f] and any("✓" in x for x in io_), (fo, io_)
+    assert any("雛形の図形の字が無い" in f for f in fb), fb
+    rb, mb = hook(ev(f"lp -d Q {bad_pdf}"), env=E)
+    _ro, mo = hook(ev(f"lp -d Q {ok_pdf}"), env=E)
+    assert rb == 2 and "雛形の図形の字が無い" in mb and "雛形の図形の字が無い" not in mo, (mb, mo)
+    gone = fpdf("fid_gone.pdf", ["申請者"])
+    doc = fitz.open(gone)
+    write_record(doc, [{"role": "submit", "label": "様式"}], "selftest",
+                 fidelity={"template": os.path.join(d, "no_such.xlsx"), "targets": [], "drop": [], "blank": None})
+    doc.save(gone, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+    fg, ig = inspect(gone)
+    assert not [f for f in fg if "雛形" in f] and any("雛形が無い" in x for x in ig), (fg, ig)
     printer_media._selftest()
-    print("pdf-print-preflight selftest: 13/13 PASS (printer_media 含む)")
+    print("pdf-print-preflight selftest: 14/14 PASS (printer_media 含む)")
 
 
 HOOK_LP = re.compile(r"(^|[;&|\s])lpr?\s")
@@ -495,6 +585,8 @@ def main():
     ap.add_argument("--dpi", type=int, default=600)
     ap.add_argument("--printer", nargs="?", const="", metavar="QUEUE",
                     help="本体にトレイの用紙を IPP で聞いて PDF と比べる (QUEUE 省略 = 既定の送信先)")
+    ap.add_argument("--template-xlsx", metavar="雛形.xlsx", help="雛形との照合 (図形の字・見出し) を手で指定 (宣言が無い PDF 用)")
+    ap.add_argument("--target", action="append", help="--template-xlsx の対象 'sheet' / 'sheet!A1:AH60' (繰り返し可)")
     ap.add_argument("--hook", action="store_true",
                     help="PreToolUse(Bash) hook として動く: 入力 JSON を stdin から読み、 lp に渡す PDF が FAIL なら exit 2")
     ap.add_argument("--selftest", action="store_true")
@@ -568,7 +660,8 @@ def run_checks(a, ap):
             print(" ", f)
         return 1 if findings else 0
 
-    findings, infos = inspect(a.pdf, a.expect_pages, a.template)
+    fid = {"template": a.template_xlsx, "targets": a.target or [], "drop": [], "blank": None} if a.template_xlsx else None
+    findings, infos = inspect(a.pdf, a.expect_pages, a.template, fidelity=fid)
     for i in infos:
         print("  ·", i)
     for f in findings:

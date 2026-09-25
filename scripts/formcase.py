@@ -367,6 +367,34 @@ def cmd_build(args) -> int:
     return rc
 
 
+def cmd_bind(args) -> int:
+    """雛形の identity (sha256) と素刷り (Excel が雛形をそのまま刷った PDF、 cache) を記録し、 雛形の宣言と素刷りの差
+    (= 雛形自身の欠陥: Excel が刷らない字・####) を出す。 build は記録と違う雛形なら ⚠️ (form-case-pipeline.md#fidelity)。"""
+    import subprocess
+
+    from formcase import fidelity as FD
+    from formcase import specs as S
+    spec = S.get(args.form)
+    if spec is None:
+        print(f"🔴 spec {args.form!r} が無い (在るのは {S.spec_ids()})")
+        return 2
+    rec = FD.write_bind(spec, blank=not args.no_blank)
+    print(f"── bind {args.form}: {rec['template']} sha256 {rec['template_sha256'][:12]}… → {FD.bind_file(spec)}")
+    tpl = S.template_path(spec)
+    for key, p in (rec.get("blank") or {}).items():
+        if not p:
+            print(f"   ⚪ {key}: 素刷りを作れなかった")
+            continue
+        sheet = key.split("!")[0]
+        r = subprocess.run([sys.executable, str(FD.STATIC_TEXT), str(tpl), p, "--target", key, "--filled", str(tpl), "--blank", p],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        body = [x.rstrip() for x in r.stdout.splitlines()[1:] if x.strip()]
+        print(f"   素刷り {sheet}: {p}")
+        for x in body:
+            print("   " + x.strip() + ("   ← 雛形自身の欠陥 (Excel が刷らない字) = render: で直すか受け入れる" if x.strip().startswith("🔴") else ""))
+    return 0
+
+
 def cmd_normalize(args) -> int:
     """workbook を Excel で開いて保存するだけ (値は書かない) = Mac Excel の格子の形にする (freeze の前提、 fingerprint.py)。
     凍結 group の記録 (値・書式) が変わらないことを後で確かめ、 変わったら元の bytes に戻す。"""
@@ -528,13 +556,16 @@ def main(argv=None) -> int:
     p.add_argument("--doc")
     p.add_argument("--group", action="append")
     p.add_argument("--out-dir")
+    p = sub.add_parser("bind", help="雛形の sha256 と素刷りを記録する (雛形を採用・改訂したとき)")
+    p.add_argument("form")
+    p.add_argument("--no-blank", action="store_true", help="素刷り (Excel) を作らない = sha256 だけ記録")
     args = ap.parse_args(argv)
     try:
         return {"status": cmd_status, "check": cmd_check, "freeze": cmd_freeze,
                 "reopen": cmd_reopen, "annotate": cmd_annotate, "guard": cmd_guard, "rules": cmd_rules,
                 "views": cmd_views, "lint": cmd_lint, "audit": cmd_audit,
                 "new": cmd_new, "add-group": cmd_add_group, "build": cmd_build, "markers": cmd_markers,
-                "normalize": cmd_normalize}[args.cmd](args)
+                "normalize": cmd_normalize, "bind": cmd_bind}[args.cmd](args)
     except M.ManifestError as e:
         print(f"🔴 {e}", file=sys.stderr)
         return 2

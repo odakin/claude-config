@@ -325,3 +325,58 @@ repo に institution の様式が漏れる。
 <a id="add-group-to-existing-case"></a>**先の group だけで作った案件に後の group を足す = `formcase.py add-group CASE --doc D --group G`**。 同じ workbook の別 sheet に業務後の書類を書く様式で、 group の区切りを持たない時期に作った案件 (manifest に先の group しか無い) を続ける入口。 manifest に draft + recipe の既定の出力名を足し、 その group の欄だけの stub `fill_<D>_<G>.py` を作る。 workbook は作らない・触らない (先の group の凍結 sheet はそのまま)。 manifest と stub を手で書かない (出力名が recipe の既定から外れる / 欄の漏れ)。 stub が並べるのは spec で必須の欄なので、 本人が書く欄 (住所・口座など、 回答があれば当方が書く欄) は回答があれば行を足し、 値は `value_from` / `value_from_text` で読む。
 
 <a id="conditional-label-cell"></a>**記入欄の label が条件を持つ欄は、 条件を満たす時だけ書く** (例: 「左記と異なる場合に記入」 = 同じなら空のまま)。 書くと値が label の末尾に重なり、 字の切れ gate は label との重なりを見ない (実測)。 条件は spec のその欄の規則に書く (stub の comment は spec の写し)。
+
+## <a id="fidelity"></a>14. 様式の忠実性 (= 記入欄以外が紙から黙って消える・変わるのを、 様式が何であっても止める)
+
+同じ機構 (openpyxl の保存が図形を落とす) の別の現れ (標題・checkbox・区分の枠・様式番号・㊞) が、 症状の名前ごとに
+別々に見つかっては別々に直され、 紙から見出しが消えたまま提出物が作られ続けた (実測)。 消え方の名前を
+検査に持つ限り、 様式が新しくなっても・初めての様式でも・道具が変わっても次の名前で同じことが起きる。 ∴ 検査は
+**様式が何であっても成り立つ不変条件**から組む:
+
+> **出力 (紙になる PDF) と、 雛形を道具を通さず同じ app で刷った素刷りとの差は、 記入の宣言で説明できるものしか無い。**
+> 差 = 消えた / 増えた / 変わった / 動いた。 説明できない差が 1 つでもあれば出力を書かない。
+
+### 14.1 参照は 3 つ (どれも「前の出力」 ではない)
+
+| 参照 | 何か | どう作るか |
+|---|---|---|
+| 雛形の宣言 (M) | 雛形 file が紙に出すつもりのもの = 印刷範囲の cell の字・図形 (字と数)・画像・form control・罫線・印刷設定 | 雛形の zip の XML を**道具に依らない parser** で読む ([`scripts/lib/office_census.py`](../scripts/lib/office_census.py)。 openpyxl / python-docx は読む時点で図形・form control を捨てる = 消す道具の目で数えない) |
+| 雛形の素刷り (R0) | 雛形を**道具を通さず** app (Excel / Word) がそのまま刷った PDF。 印刷範囲・sheet の選択も app の操作で当てる | `formcase.py bind <form>` が Excel で 1 回刷り、 雛形の sha256 で cache する (`~/.cache/formcase/blank/`) |
+| 記入の宣言 (F) | 案件が変える場所と変え方 | **雛形との差から導く** (人が番地を書かない): 記入欄 = 案件 workbook で雛形と値が違う cell / 導出欄 = 数式 cell (期待値 = app が保存した計算済みの値) / 体裁 = spec の `render:` と値の長さで伸ばした行 / 刷らない図形 = `render: drop_shape` (理由つき) / 受け入れる損失 = `meta.accept_loss` (理由つき) |
+
+M と R0 の差 = **雛形自身の欠陥** (app が刷らない字・`=TODAY()` の `####`。 実測: 枠に字幅ぎりぎりの様式番号は素刷りでも末尾が切れる)。
+`bind` が 1 回出し、 `render:` で直すか窓口に確かめるか受け入れるかを決める = build のたびに人が見るものではない。
+前の出力を参照にしない理由 = [`docs/convention-design-principles.md#parity-against-own-output`](../docs/convention-design-principles.md#parity-against-own-output)。
+
+### 14.2 どこで何を数えるか (層)
+
+| 層 | 検査 | 実装 |
+|---|---|---|
+| T 雛形の identity | spec の bind の記録 (`<spec>.bind.json` の sha256) と build が読む雛形が同じか。 違えば ⚠️ = 雛形が新しくなった (差し替わった) → `bind` し直して差を見る | `formcase/fidelity.py` `bind_lines` (build の冒頭に行) |
+| W workbook の census | temp (openpyxl で保存) の「紙に出るもの」 (図形の字・form control・画像・条件付き書式) が読み込み元より減っていないか。 減ることを受け入れる種類は `meta.accept_loss` に理由つきで宣言する | `recipes._save` → `fidelity.temp_census_lines` (⚠️ の行)。 他人の xlsx に書く道具・formcase の外の生成器も同じ census (`office_census.losses`) |
+| R 出力 PDF | (a) 雛形の図形の字が在るか = **無ければ止める** (b) 書き換えていない cell の見出しが在るか (⚠️) (c) 素刷りより画像 (= Excel は checkbox の箱を画像として描く、 実測) が少なくないか (⚠️) (d) 雛形にも記入値にも無い字 (⚪) | [`scripts/check-form-static-text.py`](../scripts/check-form-static-text.py) `--filled` (体裁を当てた temp) `--blank` (素刷り)、 build が group ごとに回す |
+| P 紙 | 刷る直前の preflight が、 出力 PDF の宣言 (`PrintPages` の `fidelity` = 雛形の path・対象・drop・素刷り) から同じ照合を回す。 図形の字が無ければ lp を止める、 雛形がその機械に無ければ ⚪ (照合できない、 と言って通す) | [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) `fidelity_check` (`--hook` / `--template-xlsx`) |
+
+**道具の損失は 2 段で消す**: (a) file を書く道具を**その形式を所有する app** (Excel / Word) だけにする = 損失が構造的に起きない
+(Excel の AppleScript で cell の値・行高・結合・罫線・sheet の非表示・印刷範囲は当てられる = 実測。 openpyxl は読むだけ) /
+(b) それでも残る損失 (app 自身の描画の癖、 未知の道具) を上の検査が止める。 (a) が本命、 (b) が網。 temp を openpyxl で
+作る recipe は (b) だけで守られている = 図形は移植で戻るが form control の箱は戻らない (`accept_loss` で宣言し、 素刷りとの
+画像の差として毎回 ⚠️ に出る)。
+
+### 14.3 記入欄の宣言 (= 人が番地を書かない)
+
+- 記入欄は**案件と雛形の差**で決まる (spec の `cells:` は「何を・なぜ書くか」 の規則で、 検査の地図ではない)。 雛形が変われば
+  記入欄も変わり、 ずれた番地に書けば「雛形の見出しが消えた」 として現れる
+- 宣言するのは 3 種だけ、 全部理由つき: `drop_shape` (刷らない図形。 理由に**雛形の中の衝突か、 自分の spec の規則との衝突か**を
+  書く = 前の欠けを雛形の欠陥と読み違えた実測から) / `accept_loss` (temp で減ることを受け入れる種類) / `render:` (雛形の欠陥の体裁直し)
+- 雛形が新しくなれば sha256 が bind の記録と違って気づく。 新しい雛形で spec の番地の意味が変わっていないかは `bind` の後の**素刷りの差** (見出し・図形・
+  画像の数) と記入内容 gate で見る。 番地を label の anchor から再導出する段 (spec の番地を cache にする) は段階 2
+
+### 14.4 限界 (= 人に残るもの)
+
+| 見えないもの | 理由 | 埋め方 |
+|---|---|---|
+| 図形・画像の**位置**のずれ、 二重刷り、 重なり | 検査は在るか・数だけを見る (位置に依らない = 行を伸ばしても誤検出しない、 の裏) | 段階 2 (素刷りと label の位置で対応づけて比べる)。 それまでは build 末尾の「素刷りとの差」 の行を見て目視 |
+| 雛形自身の欠陥 (素刷りでも切れる字・####) | 参照 R0 が同じ癖を持つ | `bind` の M∖R0 の一覧 = 採用時に 1 回人が決める |
+| 相手の機械で刷る xlsx の描画 (font の有無・字幅の丸め) | こちらの app の外 | 紙はこちらで刷る。 xlsx を渡す経路は「刷って見せてもらう」 しか無い |
+| 値の中身 (正しい日付か・所属が最新か) | 忠実性は「雛形 + 記入の宣言」 の外を見ない | 記入内容 gate (spec) と人 |

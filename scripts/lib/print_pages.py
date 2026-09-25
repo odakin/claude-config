@@ -105,8 +105,11 @@ def read_record(doc) -> dict | None:
     return rec if isinstance(rec, dict) and isinstance(rec.get("pages"), list) else None
 
 
-def write_record(doc, pages: list, src: str, dropped: list | None = None, include_flagged: str | None = None) -> dict:
-    """開いている fitz.Document に宣言を書く (保存は呼び出し側)。 pages = [{"role", "label"}] を頁の順に、長さ = 頁数。"""
+def write_record(doc, pages: list, src: str, dropped: list | None = None, include_flagged: str | None = None,
+                 fidelity: dict | None = None) -> dict:
+    """開いている fitz.Document に宣言を書く (保存は呼び出し側)。 pages = [{"role", "label"}] を頁の順に、長さ = 頁数。
+    fidelity = 様式の雛形との照合に要るもの {template, sha256, targets, drop, blank} (formcase の build が書き、 刷る直前の
+    preflight が同じ照合を回す = conventions/form-case-pipeline.md#fidelity)。 raster 化・頁の抜き出しでも copy_record が引き継ぐ。"""
     _need_fitz()
     if len(pages) != doc.page_count:
         raise ValueError(f"宣言の頁数 {len(pages)} ≠ file の頁数 {doc.page_count}")
@@ -119,6 +122,8 @@ def write_record(doc, pages: list, src: str, dropped: list | None = None, includ
         rec["dropped"] = dropped
     if include_flagged:
         rec["include_flagged"] = str(include_flagged)
+    if fidelity:
+        rec["fidelity"] = fidelity
     doc.xref_set_key(_info_xref(doc, create=True), KEY, fitz.get_pdf_str(json.dumps(rec, ensure_ascii=False)))
     return rec
 
@@ -133,7 +138,7 @@ def copy_record(src_doc, dst_doc, page_indices=None) -> bool:
     if any(i >= len(rec["pages"]) for i in idx):
         return False
     write_record(dst_doc, [rec["pages"][i] for i in idx], rec.get("src", ""), rec.get("dropped"),
-                 rec.get("include_flagged"))
+                 rec.get("include_flagged"), fidelity=rec.get("fidelity"))
     return True
 
 

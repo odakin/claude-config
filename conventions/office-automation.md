@@ -234,6 +234,8 @@ unzip -l form.xlsx | grep -iE 'drawing|media|ctrlProp'
 
 <a id="drawings-lost-in-temp-pdf"></a>**PDF にするための temp でも同じ・xlsx の走査では見えない** (2026-09-24 追記): 元の xlsx を触らず、 PDF にする使い捨ての temp だけを openpyxl で保存する経路でも、 その PDF から図形が消える。 xlsx の成果物が残らないので、 上の drawing 数の走査にも、 xlsx の書式の fingerprint にも出ない (= 痕跡は出力の PDF にしか無い)。 「元は触らない」 は元を守るだけで、 出力を守らない。 そういう code は load と save を warnings の filter で包んで警告を捨てがちで、 上の reflex 2 の予告も消える。 **検出は出力の PDF で行う** = [`scripts/check-form-static-text.py`](../scripts/check-form-static-text.py) (雛形の図形の字が出力 PDF の text 層に在るか。 様式番号の末尾 1 字が枠で切れたのも拾う、 字の無い図形 〔選択の丸・線〕 は射程外)。 ⚠️ **比べる基準を前の出力にしない**: 同じ経路で作った前の出力は同じ欠けを持つので、 「前の出力と語が同一」 の照合は欠けを正しいと認定する (実測: 経路の移行を旧 driver の出力との一致で確かめ、 見出しの欠けを引き継いだ)。 基準は雛形そのもの。
 
+<a id="cross-repo-sweep"></a>**事後の横断 sweep は repo を跨いで、 同じ様式・同じ機構の全経路に掛ける** (2026-09-25 追記): 上の「過去の openpyxl 製 xlsx を走査」 を同じ repo の中だけで行うと、 同じ様式を別の repo の案件が同じ経路 (openpyxl の保存) で刷っていても届かない (実測: 1 つの repo で 4 件を確定した走査が、 隣の repo の同じ様式の案件に届かなかった)。 sweep の単位は「repo」 でなく「機構 × 様式」 = ① openpyxl で保存する script の一覧を repo を跨いで機械で出す ([`scripts/find-openpyxl-writers.py`](../scripts/find-openpyxl-writers.py)、 走査する repo は呼び元が渡す) ② xlsx の drawing 数だけでなく、 その経路で刷った PDF も雛形と照合する ([`scripts/check-form-static-text.py`](../scripts/check-form-static-text.py))。 RCA の型としての一般則 = [`debugging-discipline.md#same-mechanism-sweep`](debugging-discipline.md#same-mechanism-sweep)、 様式が何であっても成り立つ検査の形 = [`form-case-pipeline.md#fidelity`](form-case-pipeline.md#fidelity)。
+
 **事後の救済 (= 既に喪失してしまった file の復元)**: Excel.app で xlsx を **open + save 1-pass** すると、 Excel が元 file に在った drawing 構造を知っているケース (= vmlDrawing 等の legacy drawing で base 雛形に痕跡が残っている場合) では drawing が **re-emit される**ことが観察されている (= `commentsDrawing1.vml` → `vmlDrawing1.vml` への戻りを観測した実例あり)。 ⚠️ **universal な復元保証ではない** (= sample size 限定、 base 雛形が drawing 情報を完全に失っているケースは復元しない)。 osascript snippet は [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) の修復経路を流用 (= 副次効果として formula cache も同時復元)。 = 喪失検出 → まず Excel.app open+save で復元を試す → drawing 数 (`unzip -l xxx.xlsx | grep -iE 'drawing'`) で復元成否を verify → 復元しなければ回避 2 (= drawing XML migration) で再構成。
 
 origin: 連続発生した「様式の標題テキストボックスが openpyxl save で消える」 事故。 cell value の一致検証では検出できず、 [`pdf-visual-confirm`](#pdf-visual-confirm) の PDF 画像確認で初めて気づく。 2026-06-12 に前例 script 流用経路で再発 (= 上記 reflex の起源)。 2026-06-23 に Excel.app open+save 経由の drawing re-emit を観測 (= 上記「事後の救済」 の起源)。
@@ -3620,6 +3622,8 @@ origin: 実測 (autofit 表の docx 様式) — 変換を繰り返して (1)+(2)
 検証 = 手作業で作った既存の出力と同じ値で作り直し、 頁ごとの語・線の数・○ の数・印影の中心を突き合わせる (位置は 1 pt 未満の差まで一致させた、 実測)。
 
 ## <a id="print-preflight"></a>印刷直前の preflight (= 「画面で見えた」 を印刷の保証にしない)
+
+<a id="print-preflight-fidelity"></a>(2026-09-25 追記) preflight は **雛形との照合**も回す: 様式の生成道具 (formcase) が出力 PDF の宣言 (`PrintPages`) に雛形の path・対象・刷らない図形・素刷りを載せ、 `lp` の hook がそれを読んで [`check-form-static-text.py`](../scripts/check-form-static-text.py) を回す。 雛形の図形の字 (区分の枠・様式番号・㊞) が無ければ刷らせない (build と同じ判定)、 見出し・画像の減少は情報、 雛形がその機械に無ければ ⚪ (照合できない、 と言って通す = 別の機械で刷るとき)。 宣言の無い PDF は `--template-xlsx 雛形.xlsx --target 'sheet!A1:AH60'` で手で指定できる。 不変条件と層の全体 = [`form-case-pipeline.md#fidelity`](form-case-pipeline.md#fidelity)。
 
 **起源 (実測、 同じ 1 枚の様式の刷り直しが続いた)**: ① docx 様式が 2 頁にはみ出し (= [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow)) → ② 直したら PyMuPDF 追記文字が紙で文字化け (= [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake)) → ③ raster を gray で作って認印が黒 → ④ 電話番号が罫線に被る (= [`pdf-overlay-anchoring`](#pdf-overlay-anchoring))。 **どれも個別には既知の罠**で、 欠けていたのは「lp に渡す前に機械と目で確認する段」。 user が remote で紙を見られないと、 1 回の失敗 = 1 往復 + 紙 1 枚。
 

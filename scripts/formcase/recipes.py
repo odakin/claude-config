@@ -35,6 +35,7 @@ from pathlib import Path
 
 from . import config as CF
 from . import excel as X
+from . import fidelity as FD
 from . import gates as GT
 from . import layout as LY
 from . import specs as S
@@ -54,35 +55,20 @@ class BuildError(Exception):
     pass
 
 
-def static_text_lines(spec: dict, group: str, pdf) -> list:
-    """雛形の図形の字 (標題・区分の枠・様式番号・㊞) が group の PDF に在るかの行 (check-form-static-text)。
+# _build が設定する「今の build」 = _save の census (spec の accept_loss) と、 照合に渡す体裁つき temp の所在
+_CURRENT: dict = {"spec": None, "temp": None}
 
-    **warn だけ = build は止めない** (止める段に上げるかは運用する人の判断 = form-case-pipeline.md#drawings-survive-temp)。
-    他の gate は書いたもの (記入値・字の切れ・記入要領) しか見ず、 雛形が元から紙に出す図形が消えても全部通った
-    (form-case-pipeline.md#drawings-survive-temp)。 検査が走らなかった時も黙らず ⚪ の行を出す。 docx 様式は対象外。"""
-    from . import docx_form as DF
 
-    if DF.is_docx(spec):
-        return []
-    try:
-        args = [sys.executable, str(STATIC_TEXT), str(S.template_path(spec)), str(pdf)]
-        for sh in S.group_sheets(spec, group, with_depends=False):
-            for rng in LY.pages_for(spec, sh):
-                args += ["--target", f"{sh}!{rng}"]
-        for fx in spec.get("render") or []:
-            names = fx.get("drop_shape")
-            for n in (names if isinstance(names, list) else [names] if names else []):
-                args += ["--drop", f"{fx['sheet']}!{n}"]
-        r = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=300)
-    except (ValueError, OSError, subprocess.SubprocessError) as e:
-        return [f"⚪ 雛形の図形の字の検査が走らなかった ({type(e).__name__}: {e})"]
-    body = [x.strip() for x in r.stdout.splitlines()[1:] if x.strip()]
-    if r.returncode == 1:
-        return (["⚠️ 雛形の図形の字が PDF に無い = 紙から見出し (区分の枠・様式番号など) が消えている。 刷る前に直す"
-                 " (warn = build は止めない)"] + ["  " + x for x in body if not x.startswith(("✅", "・"))])
-    if r.returncode != 0:
-        return [f"⚪ 雛形の図形の字の検査が走らなかった (exit {r.returncode}): {r.stdout.strip()[-300:]}"]
-    return ["雛形の図形の字: " + x for x in body if x.startswith(("✅", "⚪"))]
+def static_text_lines(spec: dict, group: str, pdf, filled=None, blank=None) -> tuple:
+    """雛形との照合 (fidelity.check_group = check-form-static-text --json)。 返り値 = (行, 止める理由 or None)。
+
+    雛形の図形の字 (標題・区分の枠・様式番号・㊞) が無ければ**止める** (2026-09-25、 それまでは warn。 他の gate は
+    書いたもの 〔記入値・字の切れ・記入要領〕 しか見ず、 雛形が元から紙に出す図形が消えても全部通った =
+    form-case-pipeline.md#fidelity)。 書き換えていない cell の見出し・素刷りとの画像の数・増えた字は行に出す (warn)。
+    filled = 体裁を当てた temp (無ければ案件の workbook) / blank = 素刷り。 docx 様式は雛形 docx で照合。
+    検査が走らなかった時も黙らず ⚪ の行を出す (止めない = 検査の故障を違反と同じにしない)。"""
+    rep = FD.check_group(spec, group, pdf, filled=filled, blank=blank)
+    return FD.report_lines(rep)
 
 
 def _run(argv, label):
@@ -179,11 +165,13 @@ def check_page_anchors(pdf, spec) -> list:
     return PP.anchor_misses(fitz.open(str(pdf)), S.page_roles(spec))
 
 
-def declare_pages(pdf, spec, group, pages) -> list:
+def declare_pages(pdf, spec, group, pages, blank=None) -> list:
     """group の出力 PDF (pages = package の頁番号) に「全頁 = 窓口に出す頁」 の宣言を書く。 返り値 = 表示用の行。
     実体 = 層1 print_pages.declare_submit: spec の page_roles の無い頁 (Excel 様式) に記載例・控え・注意事項・白紙の推定が
     当たれば書かずに BuildError (= spec の page_roles に submit + anchor を書くか、 group の pages から外すかを決める)。
-    page_roles で submit と宣言した頁は推定が疑わしくても止めない (anchor で中身を照合済み)、 行に出すだけ。"""
+    page_roles で submit と宣言した頁は推定が疑わしくても止めない (anchor で中身を照合済み)、 行に出すだけ。
+    宣言には雛形との照合に要るもの (雛形の path・sha256・対象・drop_shape・素刷り) も載せる = 刷る直前の preflight が
+    同じ照合を回す (form-case-pipeline.md#fidelity)。"""
     import fitz
 
     roles = S.page_roles(spec)
@@ -195,6 +183,10 @@ def declare_pages(pdf, spec, group, pages) -> list:
         raise BuildError(f"group {group} の出力に窓口に出さない頁に見える頁が入る (出力の頁番号): " + " / ".join(stop)
                          + "。 出す頁なら spec の page_roles に submit + anchor を書く、 出さないなら group の pages から外す "
                          "(form-case-pipeline.md #page-roles)")
+    rec = PP.read_record(d)
+    fid = FD.fidelity_record(spec, group, blank)
+    if rec is not None and fid:
+        PP.write_record(d, rec["pages"], rec.get("src", ""), rec.get("dropped"), rec.get("include_flagged"), fidelity=fid)
     tmp = Path(str(pdf) + ".decl.pdf")
     d.save(str(tmp), garbage=3, deflate=True)
     d.close()
@@ -237,9 +229,11 @@ def _seal(plain, sealed, places):
     _run(argv, "押印 overlay")
 
 
-def _save(wb, dst):
+def _save(wb, dst, census: bool = True):
     """openpyxl で save し、 ``_load`` した元 workbook の図形を同名 sheet に移し直す (= 紙から標題・区分の枠・
-    様式番号が消えない)。 移せなければ BuildError (黙って落とさない)。"""
+    様式番号が消えない)。 移せなければ BuildError (黙って落とさない)。
+    census=True (刷る temp) なら、 保存で読み込み元より減った「紙に出るもの」 (form control・画像・条件付き書式…) を
+    spec の meta.accept_loss に無い限り ⚠️ の行で出す (fidelity.temp_census_lines = 名前を知らない損失も数で見る)。"""
     from . import drawings as DR
 
     with warnings.catch_warnings():
@@ -247,10 +241,16 @@ def _save(wb, dst):
         wb.save(dst)
     src = getattr(wb, "_formcase_source", None)
     if src:
+        drops = getattr(wb, "_formcase_drop_shapes", None) or {}
         try:
-            DR.graft_drawings(src, dst, drop=getattr(wb, "_formcase_drop_shapes", None))
+            DR.graft_drawings(src, dst, drop=drops)
         except DR.GraftError as e:
             raise BuildError(f"図形 (標題・様式番号等) を temp に移せない: {e}") from e
+        if census:
+            for line in FD.temp_census_lines(_CURRENT.get("spec"), src, dst, dropped=sum(len(v) for v in drops.values())):
+                print("   " + line)
+    if census:
+        _CURRENT["temp"] = str(dst)
     return dst
 
 
@@ -311,7 +311,7 @@ def _clip_source(workbook, tpl, keep: dict, dst: Path) -> Path:
                 if kept and (ranges is None or _in_ranges(c.coordinate, ranges)):
                     continue
                 c.value = src[c.coordinate].value if src is not None else None
-    return _save(wb, dst)
+    return _save(wb, dst, census=False)          # 検査用の temp (刷らない) = census は取らない
 
 
 # 記入値の描画の倍率の下限 (= 描画の字の大きさ / cell の font size)。 提出して受理された紙で一番縮んでいた page が
@@ -610,6 +610,11 @@ def _build(m, doc_id, groups, out_dir=None) -> dict:
     if role_probs:
         raise BuildError("spec の頁の役割が矛盾している: " + " / ".join(role_probs))
     GT.run_scoped(m, doc_id, groups)                     # FAIL なら BuildError
+    from . import docx_form as DF
+
+    for line in FD.bind_lines(spec)[0]:                  # 雛形の identity (bind の記録と同じか。 違えば ⚠️ = 改訂された)
+        print("   " + line)
+    _CURRENT.update({"spec": spec, "temp": None})
     written = {}
     with tempfile.TemporaryDirectory(prefix="formcase-build-") as td:
         tmp = Path(td)
@@ -619,11 +624,16 @@ def _build(m, doc_id, groups, out_dir=None) -> dict:
             pages = [int(p) for p in gdef.get("pages") or []]   # package 内の page (recipe の package 構成と一致させる)
             plain = tmp / f"{g}_plain.pdf"
             _extract(pkg, pages, plain)
-            for line in declare_pages(plain, spec, g, pages):   # 出力の全頁 = 窓口に出す頁、 と宣言 (刷る直前の gate が読む)
+            blank = None if DF.is_docx(spec) else FD.group_blank(spec, g, tmp)   # 素刷り (cache、 Excel が無ければ None)
+            for line in declare_pages(plain, spec, g, pages, blank=blank):   # 出力の全頁 = 窓口に出す頁、 と宣言 (刷る直前の gate が読む)
                 print("   " + line)
             rc.post_group(m, doc_id, g, plain)
-            for line in static_text_lines(spec, g, plain):      # 雛形の図形が紙に在るか (warn、 止めない)
+            # 雛形との照合: 図形の字が無ければ止める / 見出し・素刷りとの画像の差・増えた字は行に (form-case-pipeline.md#fidelity)
+            lines, stop = static_text_lines(spec, g, plain, filled=_CURRENT.get("temp") or wb, blank=blank)
+            for line in lines:
                 print("   " + line)
+            if stop:
+                raise BuildError(stop + " → 出力を書かずに中断")
             outs =(m.group(doc_id, g).get("current") or {}).get("outputs") or rc.default_outputs(wb.stem)[g]
             places = [(pages.index(pp) + 1, spec_) for pp, spec_ in rc.seals_for(g).items() if pp in pages]
             base = Path(out_dir) if out_dir else m.case_dir
@@ -642,6 +652,11 @@ def _build(m, doc_id, groups, out_dir=None) -> dict:
                     src = plain
                 else:
                     src = rc.derive(g, role, plain, wb, tmp)
+                    if src is None and out_dir:
+                        # 照合用の build (案件 dir に書かない) = 凍結 issue の記録にある recipe 外の役割名は飛ばす
+                        # (K8: 記録は変えない、 print / confirm だけ作れれば照合できる)
+                        print(f"   ⏭️  {g}/{role}: recipe {rc.form} が知らない役割 = 照合用の build では飛ばす")
+                        continue
                     if src is None:
                         raise BuildError(f"recipe {rc.form} は group {g} の出力 role {role!r} を作れない "
                                          "(manifest の outputs の役割名を recipe の既定に揃える)")

@@ -43,6 +43,8 @@ _XLSX_PART_KINDS = [
 ]
 _ANCHOR = re.compile(r"<xdr:(?:twoCellAnchor|oneCellAnchor|absoluteAnchor)\b")
 _A_T = re.compile(r"<a:t>[^<]+</a:t>")
+# form control (checkbox 等) の DrawingML 側は mc:AlternateContent に包まれる = 図形とは別に数える (form control の part で数える)
+_ALT = re.compile(r"<mc:AlternateContent\b.*?</mc:AlternateContent>", re.S)
 # cell = <c …/> (空、 自己閉じ) か <c …>…</c>。 自己閉じを別に受けないと次の </c> まで読んで O(n²) に落ちる (実測)
 _CELL = re.compile(r"<c\b[^>]*?(?:/>|>(.*?)</c>)", re.S)
 _X14_DV = re.compile(r"<x14:dataValidation\b")
@@ -84,21 +86,75 @@ def _text(z, n) -> str:
     return z.read(n).decode("utf-8", "replace")
 
 
-def census(src) -> dict:
-    """package の「紙に出るもの」 の数。 壊れた zip は zipfile.BadZipFile のまま (呼び元が扱う)。"""
+def _xlsx_sheet_parts(z, names) -> dict:
+    """sheet 名 → worksheet part。"""
+    import posixpath
+    import xml.etree.ElementTree as ET
+
+    if "xl/workbook.xml" not in names:
+        return {}
+    ns_r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    rels = {}
+    if "xl/_rels/workbook.xml.rels" in names:
+        for r in ET.fromstring(z.read("xl/_rels/workbook.xml.rels")):
+            t = r.get("Target") or ""
+            rels[r.get("Id")] = t.lstrip("/") if t.startswith("/") else posixpath.normpath(posixpath.join("xl", t))
+    out = {}
+    for sh in ET.fromstring(z.read("xl/workbook.xml")).iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheet"):
+        rid = sh.get("{%s}id" % ns_r)
+        if rid in rels:
+            out[sh.get("name")] = rels[rid]
+    return out
+
+
+def _reachable(z, names, parts) -> set:
+    """parts (worksheet の part) から rels を辿って届く part (drawing / vml / ctrlProp / comment / media)。"""
+    import posixpath
+    import xml.etree.ElementTree as ET
+
+    seen, todo = set(), list(parts)
+    while todo:
+        part = todo.pop()
+        if part in seen:
+            continue
+        seen.add(part)
+        rp = posixpath.join(posixpath.dirname(part), "_rels", posixpath.basename(part) + ".rels")
+        if rp not in names:
+            continue
+        for r in ET.fromstring(z.read(rp)):
+            if r.get("TargetMode") == "External":
+                continue
+            t = r.get("Target") or ""
+            tgt = t.lstrip("/") if t.startswith("/") else posixpath.normpath(posixpath.join(posixpath.dirname(part), t))
+            if tgt in names:
+                todo.append(tgt)
+    return seen
+
+
+def census(src, sheets=None) -> dict:
+    """package の「紙に出るもの」 の数。 壊れた zip は zipfile.BadZipFile のまま (呼び元が扱う)。
+    sheets = xlsx でこの名前の sheet だけを数える (= sheet を消した temp と読み込み元を同じ範囲で比べるため。 sheet から
+    rels で届く drawing・VML・ctrlProp・comment・media だけを数える)。 None = 全部。"""
     with _open(src) as z:
         names = set(z.namelist())
         kind = _kind(names)
         counts: dict = {}
+        keep = None
+        if kind == "xlsx" and sheets is not None:
+            sp = _xlsx_sheet_parts(z, names)
+            want = {s.strip() for s in sheets}
+            keep = _reachable(z, names, [p for n, p in sp.items() if n.strip() in want])
         if kind == "xlsx":
             for label, rx in _XLSX_PART_KINDS:
-                counts[label] = sum(1 for n in names if rx.search(n))
+                counts[label] = sum(1 for n in names if rx.search(n) and (keep is None or n in keep))
             counts["図形の字"] = 0
             counts["拡張の入力規則"] = counts["条件付き書式"] = counts["数式"] = counts["数式の cache"] = 0
             counts["定義名"] = 0
             for n in sorted(names):
+                if keep is not None and n not in keep and n != "xl/workbook.xml":
+                    continue
                 if re.match(r"^xl/drawings/drawing\d+\.xml$", n):
-                    x = _text(z, n)
+                    x = _ALT.sub("", _text(z, n))           # form control の anchor と caption は除く (別の種類で数える)
                     counts["図形"] = counts.get("図形", 0) - 1 + len(_ANCHOR.findall(x))   # part 数でなく anchor 数
                     counts["図形の字"] += len(_A_T.findall(x))
                 elif re.match(r"^xl/worksheets/sheet\d+\.xml$", n):
@@ -126,7 +182,7 @@ def census(src) -> dict:
             counts["図形 (slide)"] = sum(len(re.findall(r"<p:sp\b", _text(z, n))) for n in names
                                        if re.match(r"^ppt/slides/slide\d+\.xml$", n))
             counts["画像"] = sum(1 for n in names if n.startswith("ppt/media/"))
-        return {"kind": kind, "counts": counts, "parts": _part_kinds(names)}
+        return {"kind": kind, "counts": counts, "parts": _part_kinds(names if keep is None else {n for n in names if n in keep})}
 
 
 def losses(before, after, accept=()) -> list:
@@ -171,25 +227,36 @@ def lines(loss_list, note: str = "") -> list:
 # ---------------------------------------------------------------------------
 # selftest (合成の package、 Office 不要)
 # ---------------------------------------------------------------------------
-def _mk_xlsx(with_drawing=True, with_ctrl=True, with_x14=True, cache=True) -> bytes:
+def _mk_xlsx(with_drawing=True, with_ctrl=True, with_x14=True, cache=True, with_cf=True) -> bytes:
     sheet = ('<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
              '<sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><f>A1</f>' + ("<v>1</v>" if cache else "") + "</c></row></sheetData>"
-             '<conditionalFormatting sqref="A1"><cfRule type="expression"/></conditionalFormatting>'
+             + ('<conditionalFormatting sqref="A1"><cfRule type="expression"/></conditionalFormatting>' if with_cf else "")
              + ('<extLst><ext><x14:dataValidations xmlns:x14="x"><x14:dataValidation/></x14:dataValidations></ext></extLst>' if with_x14 else "")
              + "</worksheet>")
     drawing = ('<xdr:wsDr xmlns:xdr="x" xmlns:a="a"><xdr:twoCellAnchor><xdr:sp><xdr:txBody><a:p><a:r><a:t>外部資金</a:t></a:r></a:p>'
                "</xdr:txBody></xdr:sp></xdr:twoCellAnchor><xdr:oneCellAnchor><xdr:sp/></xdr:oneCellAnchor></xdr:wsDr>")
+    R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    P = "http://schemas.openxmlformats.org/package/2006/relationships"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("[Content_Types].xml", "<Types/>")
-        z.writestr("xl/workbook.xml", '<workbook><definedNames><definedName name="a"/></definedNames></workbook>')
+        z.writestr("xl/workbook.xml", f'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="{R}">'
+                   '<sheets><sheet name="Sheet" sheetId="1" r:id="rId1"/></sheets>'
+                   '<definedNames><definedName name="a"/></definedNames></workbook>')
+        z.writestr("xl/_rels/workbook.xml.rels", f'<Relationships xmlns="{P}"><Relationship Id="rId1" Type="{R}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>')
         z.writestr("xl/worksheets/sheet1.xml", sheet)
+        rels = ""
         if with_drawing:
             z.writestr("xl/drawings/drawing1.xml", drawing)
+            z.writestr("xl/drawings/_rels/drawing1.xml.rels", f'<Relationships xmlns="{P}"><Relationship Id="rId1" Type="{R}/image" Target="../media/image1.png"/></Relationships>')
             z.writestr("xl/media/image1.png", b"\x89PNG")
+            rels += f'<Relationship Id="rIdD" Type="{R}/drawing" Target="../drawings/drawing1.xml"/>'
         if with_ctrl:
             z.writestr("xl/ctrlProps/ctrlProp1.xml", "<formControlPr/>")
             z.writestr("xl/drawings/vmlDrawing1.vml", "<xml/>")
+            rels += (f'<Relationship Id="rIdC" Type="{R}/ctrlProp" Target="../ctrlProps/ctrlProp1.xml"/>'
+                     f'<Relationship Id="rIdV" Type="{R}/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/>')
+        z.writestr("xl/worksheets/_rels/sheet1.xml.rels", f'<Relationships xmlns="{P}">{rels}</Relationships>')
     return buf.getvalue()
 
 
@@ -232,6 +299,9 @@ def selftest() -> int:
     expect("xlsx: 数式そのものは残っている (cache だけが減る)", "数式" not in got, got)
     expect("xlsx: accept で宣言した種類は出ない", not any(k == "form control" for k, *_ in losses(full, bare, accept=["form control"])))
     expect("xlsx: 同じ package なら損失なし", losses(full, full) == [])
+    expect("xlsx: sheets= で無い sheet 名を指すと 0 (= sheet を消した temp と同じ範囲で比べられる)",
+           census(full, sheets=["無い"])["counts"]["図形"] == 0 and census(full, sheets=["Sheet"])["counts"]["図形"] == 2,
+           (census(full, sheets=["無い"])["counts"], census(full, sheets=["Sheet"])["counts"]))
     ls = lines(lo)
     expect("lines: 🔴 と ⚪ の印", any(x.startswith("🔴 図形:") for x in ls) and any(x.startswith("⚪ 拡張の入力規則:") for x in ls), ls)
     d1, d0 = _mk_docx(), _mk_docx(with_objects=False)
