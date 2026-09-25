@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot)
+when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check)
 category: web
 summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + booking.com の宿への連絡は確認メールに返信しても届かない = web のメッセージ画面を pane で開きログインは本人 (#booking-property-messaging) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)**
 -->
@@ -109,7 +109,7 @@ CSR SPA のニュース/結果ページの URL を多数検証する場面 (例:
 - **本文に URL を入れない・添付は付かない**: 予約サイトの messaging security がリンクを削除する (施設側が許可した domain だけ通る、 partner 向け資料の二次解説で確認)。 メッセージは「メールアドレスを聞く」 「受け取り方法を相談する」 に使い、 書類はアドレスが分かってからメールで送る
 - 送信は外部発信 = 本文を chat で見せて本人の明示 OK を取ってから
 - **宿の返事はメール通知が来ないことがある** (実測: web の inbox に返事が出てから 1 時間半以上、 通知メールが届かなかった)。 返事を待つときは web の inbox を開いて見る
-- **ログインしているかは header のアカウント名 (screenshot) で見る**。 text 検索の「ログイン」 は当てにならない = 「管理画面ログイン」 (footer の施設向け) と「ログインしてクチコミを投稿」 (lightbox) はログイン中でも出る (実測)。 inbox の URL を推測で作らない (`messages.html` は「お探しのページが見つかりません」 に落ち、 text には検索フォームしか出ない = ログアウトに見える、 実測)。 予約番号が手元に無いときは header の吹き出しアイコンから「メールボックス」 を開く
+- ログインしているかの判定は [`#login-state-check`](#login-state-check) (booking.com の実例: 「管理画面ログイン」 は footer の施設向けリンクでログイン中も出る / 推測した `messages.html` は「お探しのページが見つかりません」 に落ちる)。 予約番号が手元に無いときは header の吹き出しアイコンから「メールボックス」 を開く
 - **無人運営の宿は、 勤め先の指定書式への押印・署名を断り、 自社の証明書を有料で (退室後に) 出すことがある** (実測)。 書式への押印が要る出張では予約前にメッセージで確かめる。 施設ページの設備欄に「フロントサービス: 領収書を発行可能」 とあれば、 施設発行の領収書を頼む根拠になる (記載項目を並べて頼む = [`research-email.md#approver-vs-issuer`](research-email.md#approver-vs-issuer))
 
 ## <a id="listing-evidence-capture"></a>掲載内容を証拠に残す (後から書き換えられる前に) — pane の画面キャプチャ + 元メールの .eml + ハッシュ
@@ -382,6 +382,11 @@ frameset の app では空文字と ref 無しが返る。 読み書きは `java
   値を入れて `input` イベントを発火させ、**値を読み戻して**確かめる
 - **スクリーンショットが真っ白（灰一色）で返る**ことがある（ページ遷移・再読み込みの直後に続いた、実測）。
   待っても直らないときは、見た目の確認を `javascript_tool` / `read_page` での要素の位置・状態の読み取りに切り替える
+- <a id="login-state-check"></a>**ログインしているかは、ページ上部のアカウント表示（名前・アイコン）をスクリーンショットで見て判定する**。
+  ページの文字に「ログイン」 があることはログアウトの証拠にならない（施設・業者向けの管理画面リンクや、
+  機能ごとの「ログインして〜」 はログイン中でも出る、実測）。推測で作った URL が 404 やトップページに落ちると、
+  文字には検索フォームしか出ずログアウトに見える（実測）= 正しい入口（手順書の URL・ヘッダのメニュー）から開き直してから判定する。
+  ログアウトと言う前に 1 枚撮る
 - **`#` だけ違う URL への `navigate` はページを読み直さない**（古い版が表示されたまま）。作り直したページを確かめるときは
   `location.reload()` を使う
 - **ロボット判定（Turnstile 等）は自動操作では通れない**（トークンが発行されない、実測）。**突破しようとしない**。

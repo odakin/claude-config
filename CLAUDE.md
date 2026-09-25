@@ -136,7 +136,7 @@ claude-config/
 │   ├── rebuttal-letter.md                  # referee report への point-by-point 返信を書くとき
 │   ├── remote-control-server.md            # Remote Control サーバーモードを常駐・troubleshoot するとき
 │   ├── repo-history-growth.md              # build した PDF・図・様式の出力を commit しようとするとき + git-crypt で暗号化した file を頻繁に書き足す台帳にするとき + 自動生成の data を定期 job で commit するとき + repo (.git) が大きい・clone や fetch が重いと気づいたとき + check-history-growth.py の 🟠 / commit 時の ⚠️ を見たとき
-│   ├── research-email.md                   # 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき + 成人の学生について保護者から様子や期待を尋ねられ返信を書くとき (#guardian-inquiry) + 学内の運用ルールに止められた依頼を出し直すとき (#blocking-rule-origin) + 先に短い返事 (了解・あとで返事します) を送ったスレッドに続きの返信を書くとき (#follow-up-after-quick-ack)
+│   ├── research-email.md                   # 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき + 成人の学生について保護者から様子や期待を尋ねられ返信を書くとき (#guardian-inquiry) + 学内の運用ルールに止められた依頼を出し直すとき (#blocking-rule-origin) + 先に短い返事 (了解・あとで返事します) を送ったスレッドに続きの返信を書くとき (#follow-up-after-quick-ack) + 事務から懇親会・夕食会などを出張の用務に入れた理由を聞かれたとき (#event-duty-justification)
 │   ├── researchmap.md                      # researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
 │   ├── scanned-book-survey.md              # 他人から共有された書籍スキャン PDF の束 (自炊 PDF・参考書の束) を、書誌・刷り色・関連箇所で棚卸しするとき + スキャン PDF から刷り色・奥付・ページ番号を読み取るとき
 │   ├── scheduled-tasks.md                  # scheduled task / launchd routine を作成・管理するとき
@@ -161,7 +161,7 @@ claude-config/
 │   ├── verification-cycle-ops.md           # 検証サイクルを session を越えて回し続ける仕組みを設計・運用・診断するとき
 │   ├── web-form-automation.md              # 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき
 │   ├── web-map-projections.md              # d3-geo / Natural Earth で世界地図ビューア (図法切替・中央経線回転・国境・国名・拡大) を作る・直すとき
-│   ├── web-tools.md                        # WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot)
+│   ├── web-tools.md                        # WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check)
 │   ├── windows-msys.md                     # Windows (Git Bash / MSYS) 上で本リポの script・hook を動かす / 移植性のある shell・Python を書くとき
 │   ├── wolfram-scripting.md                # wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき
 │   ├── yaml-hazards.md                     # YAML を読む・書く・新規 data file の形式 (yaml/toml/json) を選ぶ・yamllint を設定するとき
