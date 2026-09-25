@@ -75,6 +75,9 @@ sections:
     legacy: "10"
     level: 2
     title: "10. delegate の model 選択と routing — main と別 model で走らせる"
+  - id: model-fit-before-sending
+    level: 3
+    title: "送る前に宛先の実際の model を読む — 仕事の難しさと合わせる"
   - id: remote-handoff-constraints
     legacy: "11"
     level: 2
