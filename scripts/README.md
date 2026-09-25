@@ -291,6 +291,7 @@
 - **[formcase/selftest_docx.py](formcase/selftest_docx.py)** — Word 様式 (docx_form) と 刷る頁 (page_roles) の test。 fixture は全部合成 (Office 不要)。
 - **[formcase/specs.py](formcase/specs.py)** — お手本 spec (``<spec_dir>/*.yaml``) の読み込み。 spec の書式の正本は各 yaml と記入内容 gate。
 - **[formcase/views.py](formcase/views.py)** — doc の中の generated view (規則の表・checklist・セル定数表) を spec から描く。
+- **[formcase/word.py](formcase/word.py)** — Word の操作は全部ここ (staging 経由・前面に出さない・1 回に 1 文書)。 D6 (2026-09-25): docx の欄に値を **Word で** 書く。
 
 ## lib/ — sourceable helper 群
 
