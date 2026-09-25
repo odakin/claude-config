@@ -52,6 +52,11 @@ transcript の置き場が無く、 直近 2 枚に写っていた新規候補 8
 - source = 画像 metadata (fetch 済 JSON・ディレクトリの日付) / target = transcript の日付節
 - 未読 = 猶予期間内 🟡 / 超過 🔴。 finding 0 件なら silent、 source 不在は fail-open
 - `--selftest` を内蔵し、 CI / check runner で回す
+- <a id="per-item-not-per-bucket"></a>**1 つの節 (日付) に画像が複数ある日は、 画像 1 枚ずつ名前で照合する**。 節の有無だけを見ると、
+  同じ日の 2 枚目 (別の板・撮り直し・添付) が未読のまま済んだ顔をする (実測 = 別の板を写した 2 枚目が長く未読のまま見えなかった)。
+  transcript の節には**読んだ画像の file 名を全部**書き、 detector は複数枚の日だけ file 名で照合する (拡張子を省いた記録も一致とみなす)。
+  1 枚だけの日は従来どおり節の有無で見る。 導入するときは、 過去の複数枚の日の節に file 名を書き足す — 各節に複数枚を読んだ跡
+  (「① + ②」「N 枚一括」) があるかを先に確かめ、 跡の無い日は画像を開いて読んでから書く
 
 これが**harness 非依存の backstop** になる: 下記の自動読取 routine が死んでも・人が忘れても、
 未読は surface され続ける。
@@ -80,6 +85,8 @@ transcript の置き場が無く、 直近 2 枚に写っていた新規候補 8
 ハルシネーション・収録側の欠陥) は [`audio-transcription.md`](audio-transcription.md)。
 
 ## 変更履歴
+
+- 2026-09-25: §3 に「複数枚の日は画像ごとに照合」 ([#per-item-not-per-bucket](#per-item-not-per-bucket)) を追加 (実測 = 日付単位の照合で 2 枚目の未読が見えなかった)
 
 - 2026-07-21: 初版 (= 研究室ミーティング板書 2 年半分が transcript home 不在で未読不可視だった
   incident から抽出。 現時点の実例は 1 件 = N=1、 別 domain の 2 例目で内容を再検証する)
