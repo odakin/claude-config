@@ -122,6 +122,13 @@ def stub_text(spec, case_label, case_rel, doc, name, only_group: str | None = No
             lines.append(f"    ({sheet!r}, {cell!r}, {kind!r}, {val}, {grp_id!r}),")
             if e.get("font_size"):
                 lines.append(f"    ({sheet!r}, {cell!r}, 'fontsize', {e['font_size']}, {grp_id!r}),   # 既定 font だと切れる (spec の font_size)")
+    ctl = spec.get("controls") or []
+    if ctl:
+        lines.append("    # --- form control の箱 (spec の controls): fill が自動で Excel の箱に on / off を書く = ここに行は要らない ---")
+        for e in ctl:
+            if only_group and (e.get("group") or _default_group(spec)) != only_group:
+                continue
+            lines.append(f"    #   {e.get('sheet') or main}!{e.get('anchor')} {e.get('label', e.get('id', ''))} = {e.get('state')}")
     n = spec.get("nittei") if only_group in (None, _default_group(spec)) else None
     if n:
         lines.append("    # --- 1 日 1 block の表 (block は日数に応じて上から使う) -------------------------------")

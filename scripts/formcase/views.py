@@ -76,6 +76,8 @@ def _where(r: dict) -> str:
         return f"`{r['form']}` {shown}"
     if r["kind"] == "nittei":
         return f"`{r['form']}` 日程表"
+    if r["kind"] == "control":
+        return f"`{r['form']}` {', '.join(r['refs'])}"
     return f"`{r['form']}` 横断"
 
 

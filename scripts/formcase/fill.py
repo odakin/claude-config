@@ -16,6 +16,8 @@ from . import gates as GT
 from . import guard as G
 from . import manifest as M
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))   # office_census (form control の読み戻し)
+
 
 def value_from(workbook, sheet: str, cell: str):
     """住所・口座のような個人情報を stub に書かずに EDITS へ入れる: 既にその値を持つ workbook (本人が前に出して受理された様式・
@@ -117,6 +119,41 @@ def run_docx(stub_file, doc_id, fields, choices, texts) -> int:
     return 0 if good else 1
 
 
+def control_edits(doc: dict, targets) -> list:
+    """spec の controls (form control の箱、 D9) のうち、 この fill の対象 group のもの = [(sheet, "G9" | "G9#1", on, entry)]。"""
+    from . import specs as S
+
+    spec = S.get(doc.get("form"))
+    if spec is None:
+        return []
+    groups = list(spec.get("groups") or {})
+    first = groups[0] if groups else None
+    out = []
+    for e in S.controls(spec):
+        if (e.get("group") or first) not in targets:
+            continue
+        cell = e["anchor"] + (f"#{e['index']}" if e["index"] else "")
+        out.append((e["sheet"], cell, e["state"] == "on", e))
+    return out
+
+
+def _readback_controls(wb_path, ctl) -> list:
+    """箱の値を zip の XML (ctrlProp の checked) で読み戻す = [違いの説明]。"""
+    if not ctl:
+        return []
+    import office_census as OC
+
+    fc = OC.form_controls(wb_path)
+    bad = []
+    for sheet, cell, on, e in ctl:
+        c = OC.find_control(fc, sheet, e["anchor"], e["index"])
+        if c is None:
+            bad.append(f"箱の読み戻し {sheet}!{cell} ({e.get('label', e.get('id'))}): その cell に form control が無い (雛形が spec と違う)")
+        elif c["checked"] != on:
+            bad.append(f"箱の読み戻し {sheet}!{cell} ({e.get('label', e.get('id'))}): 期待 {'on' if on else 'off'} / 実際 {'on' if c['checked'] else 'off'}")
+    return bad
+
+
 def _readback(wb_path, edits) -> list:
     import openpyxl
 
@@ -195,16 +232,23 @@ def run(stub_file, doc_id, edits) -> int:
         return 0
     edits4 = [(s, c, k, v) for s, c, k, v, _g in rows if _writes((s, c, k, v))]
     wb = m.workbook(doc_id)
-    if edits4:
+    targets = [only] if only else [g for g in groups if g not in frozen]
+    ctl = control_edits(m.doc(doc_id), targets)          # form control の箱 (spec の controls、 D9) = Excel で on / off を書く
+    if edits4 or ctl:
         try:
-            X.write_cells(wb, edits4)
+            X.write_cells(wb, edits4 + [(s, c, "checkbox", v) for s, c, v, _e in ctl])
         except X.ExcelError as e:          # osascript の標準エラーは逐語で e に入っている (excel.run_osascript)
             print(f"🔴 {e}")
             return 2
     bad = _readback(wb, edits4)
     for s, c, want, got in bad:
         print(f"🔴 読み戻し {s}!{c}: 期待 {want!r} / 実際 {got!r}")
-    targets = [only] if only else [g for g in groups if g not in frozen]
+    bad_ctl = _readback_controls(wb, ctl)
+    for line in bad_ctl:
+        print(f"🔴 {line}")
+    bad = bad + bad_ctl
+    if ctl:
+        print(f"   ☑ 箱: {sum(1 for _s, _c, v, _e in ctl if v)} 個に印、 {sum(1 for _s, _c, v, _e in ctl if not v)} 個は空 (spec の controls)")
     ok = GT.run_scoped(m, doc_id, targets, raise_on_fail=False)
     print("✅ 記入と gate が通った → formcase.py build で PDF" if ok and not bad and not todo else
           "🔴 まだ直すところがある (上の 未記入 / FAIL / 読み戻し)")

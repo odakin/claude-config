@@ -377,6 +377,8 @@ label の組に挟まれた帯の中の水平の罫線・同じ label の二重�
 結果は設定 `fidelity_log` (jsonl) に残す (見出しの ⚠️ を止める段に上げる判断の材料)。 formcase の外で openpyxl で保存する生成器は
 保存の直後に `office_census.assert_no_paper_loss` (紙に出るものが減れば止める、 減ると知って出すときは `OFFICE_CENSUS_ALLOW_LOSS=1`)。
 
+(2026-09-25 追記 = form control の箱) 様式の checkbox が Excel の form control (VML + `xl/ctrlProps/*`) のとき、 選択は**箱の値**で表し、 label の cell は雛形の字のまま (文字の ☑ / ○ を前置しない)。 宣言 = spec の `controls:` (sheet / `anchor` = 箱が載る cell 〔controlPr の from〕 / `index` / `state: "on"` | `"off"`。 名前 "Check Box N" で決め打ちしない = 雛形の改訂で名前が変わっても cell で対応が付く。 ⚠️ YAML は裸の on / off を bool に読むので quote する)。 fill は cell の値と同じ Excel の 1 回で箱の値を書き ([`formcase/fill.py`](../scripts/formcase/fill.py) `control_edits`)、 zip の `ctrlProp` の `checked` で読み戻す。 照合は 3 段: ① 記入内容 gate が `checked` を spec と照合する (anchor に箱が無ければ 雛形が spec と違う = 止める) ② build が出力の箱の画像を画素で数え ([`check-form-static-text.py`](../scripts/check-form-static-text.py) `box_pixels` = 4 辺の濃い帯が辺、 内側の濃い画素が印)、 印のある箱の数が on の数と違えば止める (`--expect-checked`) ③ 辺が欠けた箱は、 素刷りにも欠ければ雛形自身の欠陥 (⚪、 `bind` で 1 回見る類)、 出力だけ欠ければ ⚠️。 欠けの原因 (実測) = Excel は control を枠の大きさ (pt) のまま raster にするので、 枠が描く箱より小さいと辺が切れる (枠 ≤ 16pt で右辺が欠け、 ≥ 17pt で 4 辺が出る) → Excel の経路の recipe は刷る前に枠を `recipes.CONTROL_FRAME_PT` (18pt) まで広げる (`control_frame_min` op = `fit_control_lines`)。 箱の値は案件の workbook に入るので、 凍結の fingerprint (VML の Checked) がそれを含む = 凍結した issue を読み直しても同じ紙。
+
 ### 14.3 記入欄の宣言 (= 人が番地を書かない)
 
 - 記入欄は**案件と雛形の差**で決まる (spec の `cells:` は「何を・なぜ書くか」 の規則で、 検査の地図ではない)。 雛形が変われば

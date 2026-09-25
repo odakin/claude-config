@@ -266,6 +266,11 @@ def ops_lines(sheet: str, ops) -> list:
             out.append(f"set visible of worksheet {_q(op[1])} of wbk to sheet hidden")
         elif k in ("border_bottom", "border_top"):
             out += _border_lines(ws, op[1], k.split("_")[1], op[2])
+        elif k == "control_frame_min":     # form control (checkbox) の枠を最低 op[1] pt に。 枠が 16pt 以下だと Mac Excel は箱 (≈13pt) の
+            # 右辺を切って刷る (枠を 1 px/pt で raster にする、 実測 2026-09-25 = 検収の宿題 (a))。 staged copy にだけ当てる
+            out += [f"repeat with i from 1 to (count of checkboxes of {ws})", f"set cb to checkbox i of {ws}",
+                    f"if (width of cb) < {float(op[1])} then set width of cb to {float(op[1])}",
+                    f"if (height of cb) < {float(op[1])} then set height of cb to {float(op[1])}", "end repeat"]
         elif k == "delete_shape":
             # 図形は XML の名前 (cNvPr の name、 例 "楕円 2") で引ける。 ⚠️ `every shape whose name is …` は当たらない
             # (Excel が返す name は "Oval 2" 等の英語名 = 実測 2026-09-25)
@@ -301,6 +306,15 @@ def script_for(edits) -> str:
             continue
         if kind == "fontsize":            # 長い値が結合セルで切れる欄 (spec の font_size)
             lines.append(f"set font size of font object of {r} to {float(val)}")
+            continue
+        if kind == "checkbox":            # form control の箱 (D9): cell = 箱が載る cell (同じ cell に複数なら "G9#1")、 val = on/off
+            addr, _sep, idx = str(cell).partition("#")
+            col, row = re.sub(r"\d+", "", addr).upper(), re.sub(r"\D+", "", addr)
+            ws_ = f"worksheet {_q(sheet)} of wbk"
+            lines.append("\n      ".join([
+                "set k to 0", f"repeat with i from 1 to (count of checkboxes of {ws_})", f"  set cb to checkbox i of {ws_}",
+                f'  if (get address of top left cell of cb) is "${col}${row}" then',
+                f"    if k is {int(idx or 0)} then set value of cb to {1 if val else 0}", "    set k to k + 1", "  end if", "end repeat"]))
             continue
         if kind == "text":
             lines.append(f"set value of {r} to {_q(val)}")

@@ -23,6 +23,7 @@ selftest: python3 office_census.py --selftest (合成の xlsx / docx、 Office �
 from __future__ import annotations
 
 import io
+import posixpath
 import re
 import zipfile
 
@@ -257,6 +258,10 @@ def _mk_xlsx(with_drawing=True, with_ctrl=True, with_x14=True, cache=True, with_
              '<sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><f>A1</f>' + ("<v>1</v>" if cache else "") + "</c></row></sheetData>"
              + ('<conditionalFormatting sqref="A1"><cfRule type="expression"/></conditionalFormatting>' if with_cf else "")
              + ('<extLst><ext><x14:dataValidations xmlns:x14="x"><x14:dataValidation/></x14:dataValidations></ext></extLst>' if with_x14 else "")
+             + ('<controls><mc:AlternateContent xmlns:mc="mc"><mc:Choice Requires="x14"><control shapeId="4100" r:id="rIdC" name="Check Box 1">'
+                '<controlPr><anchor moveWithCells="1"><from><xdr:col>6</xdr:col><xdr:colOff>238125</xdr:colOff><xdr:row>8</xdr:row><xdr:rowOff>9525</xdr:rowOff></from>'
+                '<to><xdr:col>7</xdr:col><xdr:colOff>114300</xdr:colOff><xdr:row>8</xdr:row><xdr:rowOff>247650</xdr:rowOff></to></anchor></controlPr></control>'
+                '</mc:Choice></mc:AlternateContent></controls>' if with_ctrl else "")
              + "</worksheet>")
     drawing = ('<xdr:wsDr xmlns:xdr="x" xmlns:a="a"><xdr:twoCellAnchor><xdr:sp><xdr:txBody><a:p><a:r><a:t>外部資金</a:t></a:r></a:p>'
                "</xdr:txBody></xdr:sp></xdr:twoCellAnchor><xdr:oneCellAnchor><xdr:sp/></xdr:oneCellAnchor></xdr:wsDr>")
@@ -277,7 +282,7 @@ def _mk_xlsx(with_drawing=True, with_ctrl=True, with_x14=True, cache=True, with_
             z.writestr("xl/media/image1.png", b"\x89PNG")
             rels += f'<Relationship Id="rIdD" Type="{R}/drawing" Target="../drawings/drawing1.xml"/>'
         if with_ctrl:
-            z.writestr("xl/ctrlProps/ctrlProp1.xml", "<formControlPr/>")
+            z.writestr("xl/ctrlProps/ctrlProp1.xml", '<formControlPr objectType="CheckBox" checked="Checked"/>')
             z.writestr("xl/drawings/vmlDrawing1.vml", "<xml/>")
             rels += (f'<Relationship Id="rIdC" Type="{R}/ctrlProp" Target="../ctrlProps/ctrlProp1.xml"/>'
                      f'<Relationship Id="rIdV" Type="{R}/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/>')
@@ -360,8 +365,70 @@ def selftest() -> int:
         expect("assert_no_paper_loss: OFFICE_CENSUS_ALLOW_LOSS=1 なら通す", isinstance(assert_no_paper_loss(pf, pb), list))
     finally:
         del os.environ["OFFICE_CENSUS_ALLOW_LOSS"]
+    # form control の一覧 (D9): sheet・名前・anchor (from の cell)・checked
+    fc = form_controls(pf)
+    expect("form_controls: sheet / 名前 / anchor G9 / checked を zip の XML から読む",
+           len(fc) == 1 and fc[0]["sheet"] == "Sheet" and fc[0]["name"] == "Check Box 1" and fc[0]["anchor"] == "G9"
+           and fc[0]["type"] == "CheckBox" and fc[0]["checked"] is True, fc)
+    expect("find_control: sheet + anchor で引く (無ければ None)",
+           find_control(fc, "Sheet", "g9")["name"] == "Check Box 1" and find_control(fc, "Sheet", "A1") is None
+           and find_control(fc, "Sheet", "G9", index=1) is None)
+    expect("form_controls: form control の無い package は空", form_controls(pb) == [])
     print("ALL PASS" if not fails else f"{fails} FAIL")
     return 1 if fails else 0
+
+
+# ---------------------------------------------------------------------------
+# form control (checkbox) の一覧 (D9、 2026-09-25) — zip の XML から (openpyxl は読む時点で捨てる)
+# ---------------------------------------------------------------------------
+def form_controls(src, sheets=None) -> list:
+    """xlsx の form control (checkbox 等) = [{sheet, name, type, anchor, from, to, checked, part}]。
+    anchor = 箱が載る cell (sheet の <controlPr><anchor><from> の col/row、 A1 形式)。 checked = ctrlProp の checked 属性。
+    同じ anchor に複数の control が載ることがある (印字面が 2 つある雛形) = 呼び元は sheet + anchor + 並び (from の offset) で選ぶ。
+    sheets = この名前の sheet だけ (None = 全部)。"""
+    from openpyxl.utils import get_column_letter
+
+    out = []
+    with _open(src) as z:
+        names = set(z.namelist())
+        if "xl/workbook.xml" not in names:
+            return out
+        wbx = _text(z, "xl/workbook.xml")
+        wrels = _text(z, "xl/_rels/workbook.xml.rels") if "xl/_rels/workbook.xml.rels" in names else ""
+        rid2t = {m.group(1): m.group(2) for m in re.finditer(r'Id="([^"]+)"[^>]*Target="([^"]+)"', wrels)}
+        for m in re.finditer(r'<sheet\b[^>]*?name="([^"]+)"[^>]*?r:id="([^"]+)"', wbx):
+            name, tgt = m.group(1), rid2t.get(m.group(2), "")
+            if sheets is not None and name.strip() not in {str(s).strip() for s in sheets}:
+                continue
+            part = tgt.lstrip("/") if tgt.startswith("/") else "xl/" + tgt
+            if part not in names:
+                continue
+            s = _text(z, part)
+            relp = part.rsplit("/", 1)[0] + "/_rels/" + part.rsplit("/", 1)[1] + ".rels"
+            rels = _text(z, relp) if relp in names else ""
+            r2t = {mm.group(1): mm.group(2) for mm in re.finditer(r'Id="([^"]+)"[^>]*Target="([^"]+)"', rels)}
+            for c in re.finditer(r'<control\b[^>]*?shapeId="(\d+)"[^>]*?r:id="([^"]+)"[^>]*?name="([^"]*)"[^>]*>(.*?)</control>', s, re.S):
+                body = c.group(4)
+                fr = re.search(r"<from>\s*<xdr:col>(\d+)</xdr:col>\s*<xdr:colOff>(-?\d+)</xdr:colOff>\s*<xdr:row>(\d+)</xdr:row>\s*<xdr:rowOff>(-?\d+)</xdr:rowOff>", body)
+                to = re.search(r"<to>\s*<xdr:col>(\d+)</xdr:col>\s*<xdr:colOff>(-?\d+)</xdr:colOff>\s*<xdr:row>(\d+)</xdr:row>\s*<xdr:rowOff>(-?\d+)</xdr:rowOff>", body)
+                cp = r2t.get(c.group(2), "")
+                cpp = posixpath.normpath(posixpath.join(part.rsplit("/", 1)[0], cp)) if cp else ""
+                cx = _text(z, cpp) if cpp in names else ""
+                typ = re.search(r'objectType="(\w+)"', cx)
+                out.append({"sheet": name, "name": c.group(3), "type": typ.group(1) if typ else None,
+                            "anchor": f"{get_column_letter(int(fr.group(1)) + 1)}{int(fr.group(3)) + 1}" if fr else None,
+                            "from": tuple(int(v) for v in fr.groups()) if fr else None,
+                            "to": tuple(int(v) for v in to.groups()) if to else None,
+                            "checked": bool(re.search(r'\bchecked="Checked"', cx)), "part": cpp})
+    return out
+
+
+def find_control(controls: list, sheet: str, anchor: str, index: int = 0, kind: str = "CheckBox") -> dict | None:
+    """sheet + anchor (+ 同じ anchor の中の並び index = from の row/col の offset の順) で 1 つ選ぶ。 無ければ None。"""
+    hits = [c for c in controls if c["sheet"].strip() == str(sheet).strip() and c["anchor"] == str(anchor).upper()
+            and (kind is None or c["type"] == kind)]
+    hits.sort(key=lambda c: (c["from"][2], c["from"][3], c["from"][0], c["from"][1]) if c["from"] else (0, 0, 0, 0))
+    return hits[index] if 0 <= index < len(hits) else None
 
 
 if __name__ == "__main__":

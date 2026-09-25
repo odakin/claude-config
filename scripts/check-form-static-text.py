@@ -411,16 +411,64 @@ def page_texts(pdf) -> list:
         return [norm(p.get_text()) for p in d]
 
 
+def box_pixels(pix) -> dict:
+    """form control の箱の画像を画素で見る (D9 / 検収の宿題 (a)、 2026-09-25)。 箱の画像 = control の枠を 1 px/pt で raster に
+    したもの (実測): 縁の帯 (濃い画素が 70% 以上の行・列が端から続く) = 辺、 帯の内側の濃い画素 = 印 (✓)。
+    返り値 = {size, edges (在る辺 t/b/l/r), clipped (4 辺揃わない = 枠が狭くて切れた), checked, mark_px}。"""
+    import fitz
+
+    if pix.alpha:
+        pix = fitz.Pixmap(pix, 0)
+    if pix.n != 1:
+        pix = fitz.Pixmap(fitz.csGRAY, pix)
+    w, h, s = pix.width, pix.height, pix.samples
+    if w < 4 or h < 4:
+        return {"size": (w, h), "edges": "", "clipped": True, "checked": False, "mark_px": 0}
+
+    def row(y):
+        return sum(1 for x in range(w) if s[y * w + x] < 100) / w
+
+    def col(x):
+        return sum(1 for y in range(h) if s[y * w + x] < 100) / h
+
+    t = b = l = r = 0
+    while t < h and row(t) >= 0.7:
+        t += 1
+    while b < h - t and row(h - 1 - b) >= 0.7:
+        b += 1
+    while l < w and col(l) >= 0.7:
+        l += 1
+    while r < w - l and col(w - 1 - r) >= 0.7:
+        r += 1
+    marks = sum(1 for y in range(t + 1, h - b - 1) for x in range(l + 1, w - r - 1) if s[y * w + x] < 170)
+    edges = "".join(k for k, v in (("t", t), ("b", b), ("l", l), ("r", r)) if v)
+    return {"size": (w, h), "edges": edges, "clipped": len(edges) < 4, "checked": marks >= 3, "mark_px": marks}
+
+
 def page_visuals(pdf) -> list:
-    """頁ごとの {images, drawings} (Excel は checkbox の箱を画像として描く = 画像の数で字の無い図形の消失を見る)。"""
+    """頁ごとの {images, drawings, boxes}。 images = 置かれた画像の数 (Excel は checkbox の箱を 1 個ずつ画像で描く。 同じ
+    大きさの箱は同じ bitmap = 1 つの xref を何度も置くので、 xref の数でなく置いた数で数える = 実測 2026-09-25)。
+    get_image_info (描かれた回数) は点線の pattern の tile まで数えて体裁で増減する (実測: 日程表 11 → 0) = 使わない。
+    boxes = 小さい画像 (≤ 40pt 角 = checkbox の箱) の画素の検査 (box_pixels) を置いた場所ごとに。"""
     import fitz
 
     out = []
     with fitz.open(pdf) as d:
         for p in d:
-            # get_images = 頁が参照する画像 (xref) の数。 Excel は checkbox の箱を 1 個ずつ別の画像で描く (実測: 9 個 = 9)。
-            # get_image_info (描かれた回数) は点線の pattern の tile まで数えて体裁で増減する (実測: 日程表 11 → 0) = 使わない
-            out.append({"images": len(p.get_images()), "drawings": len(p.get_drawings())})
+            n_img, boxes = 0, []
+            for img in p.get_images(full=True):
+                xref = img[0]
+                rects = p.get_image_rects(xref)
+                n_img += len(rects)
+                if not rects or max(r.width for r in rects) > 40 or max(r.height for r in rects) > 40:
+                    continue
+                try:
+                    bp = box_pixels(fitz.Pixmap(d, xref))
+                except (ValueError, RuntimeError):
+                    continue
+                for r in rects:
+                    boxes.append(dict(bp, bbox=[round(v, 1) for v in r]))
+            out.append({"images": n_img, "drawings": len(p.get_drawings()), "boxes": boxes})
     return out
 
 
@@ -432,11 +480,9 @@ def page_layout(pdf) -> list:
     out = []
     with fitz.open(pdf) as d:
         for p in d:
-            info = p.get_image_info(xrefs=True)
-            per = {}
-            for it in info:
-                per.setdefault(it.get("xref"), []).append(it["bbox"])
-            images = [(x, b) for x, bs in per.items() if x and len(bs) <= 4 for b in bs]
+            # 頁の画像 (get_images) を置いた場所ごとに。 同じ bitmap を何度も置く (同じ大きさの箱) のは正常 = 回数で落とさない。
+            # 点線の pattern の tile は頁の画像に載らない (get_image_info には出る = 使わない)
+            images = [(img[0], tuple(r)) for img in p.get_images(full=True) for r in p.get_image_rects(img[0])]
             hl = {}
             for dr in p.get_drawings():
                 for it in dr["items"]:
@@ -573,10 +619,12 @@ def _assign_pages(jobs, texts) -> None:
 # ---------------------------------------------------------------------------
 # 照合 (xlsx)
 # ---------------------------------------------------------------------------
-def check(template, pdf, targets=None, drop=None, filled=None, blank=None) -> dict:
+def check(template, pdf, targets=None, drop=None, filled=None, blank=None, expect_checked=None) -> dict:
     """targets = [(sheet, range or None)] (None = 雛形の全 sheet)。 drop = {(sheet, 図形名)}。
-    filled = 案件 (or 体裁を当てた temp) の xlsx = cell の label と記入値を見る。 blank = 素刷りの PDF = 画像・線の数を比べる。"""
+    filled = 案件 (or 体裁を当てた temp) の xlsx = cell の label と記入値を見る。 blank = 素刷りの PDF = 画像・線の数を比べる。
+    expect_checked = {"sheet!range": N} = その範囲で印のある箱 (checkbox) の数 (spec の controls の on の数、 D9)。"""
     drop = {(s.strip(), n) for s, n in (drop or set())}
+    expect_checked = {k.strip(): v for k, v in (expect_checked or {}).items()}
     wb = _template_book(template)
     shp = shapes(template, wb)
     texts = page_texts(pdf)
@@ -668,6 +716,14 @@ def check(template, pdf, targets=None, drop=None, filled=None, blank=None) -> di
             if bp is not None and res["page"] is not None:
                 b, o = bl_vis[bp - 1], vis[res["page"] - 1]
                 res["blank"] = {"page": bp, "images": [b["images"], o["images"]], "drawings": [b["drawings"], o["drawings"]]}
+                # checkbox の箱 (画素): 辺の欠け (素刷り = 雛形自身の欠陥 / 出力 = 直っていない) と、 印のある箱の数 (選んだ数と照合)
+                bb, ob = b.get("boxes") or [], o.get("boxes") or []
+                res["blank"]["boxes"] = {"blank": len(bb), "out": len(ob),
+                                         "blank_clipped": sum(1 for x in bb if x["clipped"]),
+                                         "out_clipped": sum(1 for x in ob if x["clipped"]),
+                                         "blank_checked": sum(1 for x in bb if x["checked"]),
+                                         "out_checked": sum(1 for x in ob if x["checked"]),
+                                         "expected_checked": expect_checked.get(f"{j['sheet'].strip()}!{j['range']}")}
                 # 段階 2 (D4): 位置の写像 = 動いた画像・素刷りの罫線の欠け・二重刷り (warn)
                 if bl_lay is None:
                     bl_lay, out_lay = page_layout(blank), page_layout(pdf)
@@ -784,6 +840,15 @@ def render(rep) -> list:
                     lines.append(f"   🔴 {where}: 素刷りより画像が少ない {bi} → {oi} (checkbox の箱・図が紙に無い)")
                 else:
                     lines.append(f"   ✅ {where}: 画像 {oi} = 素刷り {bi}" + (f"、 線・矩形 {od} (素刷り {bd})" if od != bd else f"、 線・矩形 {od} 同じ"))
+                bx = b.get("boxes") or {}
+                if bx.get("out"):
+                    exp = bx.get("expected_checked")
+                    if exp is not None:
+                        lines.append(f"   {'✅' if bx['out_checked'] == exp else '🔴'} {where}: 印のある箱 {bx['out_checked']} 個 (選んだ {exp})")
+                    if bx.get("out_clipped"):
+                        lines.append(f"   ⚠️ {where}: 辺が欠けた箱 {bx['out_clipped']}/{bx['out']} (素刷り {bx['blank_clipped']}/{bx['blank']})")
+                    elif bx.get("blank_clipped"):
+                        lines.append(f"   ⚪ {where}: 素刷りの箱 {bx['blank_clipped']}/{bx['blank']} は辺が欠ける (雛形自身の欠陥 = control の枠が狭い)、 出力は欠けなし")
                 lay = b.get("layout") or {}
                 if lay.get("pairs", 0) < 4:
                     lines.append(f"   ⚪ {where}: 位置の写像は label の組が {lay.get('pairs', 0)} で足りない")
@@ -821,6 +886,10 @@ def _parse_drop(vals):
 def exit_code(rep, strict=False, strict_labels=False, strict_images=False) -> int:
     if rep["missing_total"] or (strict and rep["unmatched"]):
         return 1
+    for r in rep.get("targets") or []:
+        bx = (r.get("blank") or {}).get("boxes") or {}
+        if bx.get("expected_checked") is not None and bx.get("out_checked") != bx["expected_checked"]:
+            return 1                                       # 選んだ箱に印が無い / 選んでいない箱に印 (期待を渡した時だけ)
     if strict_labels and rep["missing_labels_total"]:
         return 1
     if strict_images and rep["missing_images_total"]:
@@ -978,6 +1047,25 @@ def selftest() -> int:
           and t["extra"] == ["余計な字"])
     fails += not ok
     print(f"{'PASS' if ok else 'FAIL'} --filled: 欠けた見出し = {miss} (8 cell 照合、 記入例の字・潰した行は除く、 ⻑ を受ける)、 増えた字 = {t['extra']}")
+    # checkbox の箱の画素 (D9 / (a)): 縁の帯 = 辺、 内側の濃い画素 = 印。 合成の 20×19 の bitmap で
+    def _box(w=20, h=19, right=True, mark=False):
+        pm = fitz.Pixmap(fitz.csGRAY, fitz.IRect(0, 0, w, h), 0)
+        pm.clear_with(255)
+        for y in range(h):
+            for x in range(w):
+                band = y < 4 or y >= h - 4 or x < 6 or (right and x >= w - 3)
+                if band:
+                    pm.set_pixel(x, y, (0,))
+        if mark:
+            for k in range(4):
+                pm.set_pixel(9 + k, 9 + k, (30,))
+                pm.set_pixel(9 + k, 13 - k, (30,))
+        return pm
+    b_ok, b_mark, b_clip = box_pixels(_box()), box_pixels(_box(mark=True)), box_pixels(_box(right=False))
+    ok = (b_ok["edges"] == "tblr" and not b_ok["clipped"] and not b_ok["checked"]
+          and b_mark["checked"] and not b_mark["clipped"] and b_clip["clipped"] and "r" not in b_clip["edges"] and not b_clip["checked"])
+    fails += not ok
+    print(f"{'PASS' if ok else 'FAIL'} box_pixels: 4 辺 / 印あり / 右辺なし = {b_ok['edges']} {b_mark['checked']} {b_clip['edges']}")
     # --blank: 素刷りより画像が少ない (checkbox の箱の消失)
     blank = pdf("blank.pdf", [labels1 + shapes_ok, labels2], images=2)
     out = pdf("out2.pdf", [labels1 + shapes_ok + ["山田花子"], labels2], images=1)
@@ -1021,6 +1109,8 @@ def main(argv=None) -> int:
     ap.add_argument("--strict", action="store_true", help="対象の頁が見つからない (⚪) も exit 1")
     ap.add_argument("--strict-labels", action="store_true", help="雛形の見出し (cell) の欠けも exit 1")
     ap.add_argument("--strict-images", action="store_true", help="素刷りより画像が少ないのも exit 1")
+    ap.add_argument("--expect-checked", action="append",
+                    help="'sheet!range=N' = その範囲で印のある箱 (checkbox) の数の期待 (繰り返し可)。 違えば exit 1")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
     if a.selftest:
@@ -1032,7 +1122,12 @@ def main(argv=None) -> int:
         if str(a.template).lower().endswith(".docx"):
             rep = check_docx(a.template, a.pdf, filled=a.filled)
         else:
-            rep = check(a.template, a.pdf, _parse_targets(a.target), _parse_drop(a.drop), filled=a.filled, blank=a.blank)
+            exp = {}
+            for v in a.expect_checked or []:
+                k, _, n = v.rpartition("=")
+                exp[k] = int(n)
+            rep = check(a.template, a.pdf, _parse_targets(a.target), _parse_drop(a.drop), filled=a.filled, blank=a.blank,
+                        expect_checked=exp)
     except (ValueError, KeyError, zipfile.BadZipFile, FileNotFoundError) as e:
         print(f"check-form-static-text: {e}", file=sys.stderr)
         return 2

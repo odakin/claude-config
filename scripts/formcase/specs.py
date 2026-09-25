@@ -68,6 +68,24 @@ def template_path(spec: dict) -> Path:
     return (CF.template_root() / spec["meta"]["template"]).resolve()
 
 
+def controls(spec: dict) -> list:
+    """spec の ``controls:`` (form control の箱 = checkbox、 D9 2026-09-25) を正規化する:
+    [{id, sheet, anchor, index, state, label, rule, group, why, …}]。 anchor = 箱が載る cell (雛形の controlPr の from、 A1 形式)、
+    index = 同じ cell に載る箱の並び (既定 0)、 state = on (選んだ側 = 印を入れる) / off (入れない)。 sheet の既定 = meta.sheet。"""
+    out = []
+    main = (spec.get("meta") or {}).get("sheet")
+    for e in spec.get("controls") or []:
+        raw = e.get("state", "")
+        st = {True: "on", False: "off"}.get(raw, str(raw).lower())     # YAML 1.1 は裸の on / off を bool に読む = 両方受ける
+        if st not in ("on", "off"):
+            raise ValueError(f"controls {e.get('id')!r}: state は on / off ({e.get('state')!r})")
+        if not e.get("anchor"):
+            raise ValueError(f"controls {e.get('id')!r}: anchor (箱が載る cell) が無い")
+        out.append(dict(e, sheet=str(e.get("sheet") or main), anchor=str(e["anchor"]).upper().replace("$", ""),
+                        index=int(e.get("index") or 0), state=st))
+    return out
+
+
 def history_homes() -> set:
     """規則の理由・経緯の home = spec の ``meta.history_home`` (spec file からの相対 path) の実在するもの。"""
     out = set()

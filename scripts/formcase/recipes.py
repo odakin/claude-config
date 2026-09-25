@@ -507,6 +507,26 @@ def hide_lines(wb, keep) -> list:
     return X.ops_lines(wb.sheetnames[0], [("hide_sheet", n) for n in hide])
 
 
+CONTROL_FRAME_PT = 18.0   # form control (checkbox) の枠の最低 pt (実測: 枠 ≤ 16pt = 箱の右辺が切れる、 ≥ 17pt = 4 辺揃う)
+
+
+def fit_control_lines(workbook, sheets) -> list:
+    """form control (checkbox) の枠を CONTROL_FRAME_PT 以上にする行 (検収の宿題 (a)、 2026-09-25): Mac Excel は箱を control の枠
+    の raster (1 px/pt) で刷り、 枠が 16pt 以下だと箱 (≈13pt) の右辺・下辺が切れる (実測 = 3_ の旅費請求書で 10 個中 4 個)。
+    staged copy にだけ当てる (案件の workbook は変えない)。 印刷する sheet に checkbox が無ければ空。"""
+    import office_census as OC
+
+    want = {str(s).strip() for s in sheets}
+    have = []
+    for c in OC.form_controls(workbook):
+        if c["type"] == "CheckBox" and c["sheet"].strip() in want and c["sheet"] not in have:
+            have.append(c["sheet"])
+    lines = []
+    for name in have:
+        lines += X.ops_lines(name, [("control_frame_min", CONTROL_FRAME_PT)])
+    return lines
+
+
 def fit_shape_lines(workbook, sheets) -> list:
     """雛形の 1 行の label (様式番号等) が枠に入り切らず末尾が消える図形の余白を縮める行 (drawings.single_line_insets =
     移植の経路の ``_fit_single_line`` と同じ判定。 sheets = 刷る sheet の名前)。 図形の無い workbook は空。"""

@@ -39,6 +39,10 @@ def all_rules() -> dict:
         for x in spec.get("cross_checks") or []:
             if x.get("summary") or x.get("same_as"):
                 _add(out, sid, x["id"], x, "cross", [x.get("expr", "")])
+        main = (spec.get("meta") or {}).get("sheet") or ""
+        for c in spec.get("controls") or []:            # form control の箱 (D9): 規則の所在 = sheet!anchor の箱
+            if c.get("rule"):
+                _add(out, sid, c["rule"], c, "control", [f"{c.get('sheet') or main}!{c.get('anchor')} の箱"])
     # same_as の解決 (1 段。 連鎖は禁止 = 読む人が辿れなくなる)
     for key, r in out.items():
         tgt = r.get("same_as")

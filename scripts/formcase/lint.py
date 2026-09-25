@@ -303,13 +303,16 @@ def rule_entries() -> list:
         for e in list((spec.get("nittei") or {}).get("rules") or []) + list(spec.get("cross_checks") or []):
             if e.get("summary") or e.get("same_as"):
                 out.append((f"{sid}/{e['id']}", e, sid))
+        for e in spec.get("controls") or []:              # form control の箱 (D9) の規則
+            if e.get("rule"):
+                out.append((f"{sid}/{e['rule']}", e, sid))
     return out
 
 
 def value_shaped(rule: dict, entry: dict) -> bool:
     """値・yes/no の規則か (= claims が要る)。 cell の state が値そのもの (fixed / empty / as_template / changed / checkbox)、
     ``values:`` を持つ、 または summary が値・否定・誰が書くかの形を含む。"""
-    if entry.get("state") in ("fixed", "empty", "as_template", "changed", "checkbox", "checkbox_pair", "checkbox_exclusive"):
+    if entry.get("state") in ("fixed", "empty", "as_template", "changed", "checkbox", "checkbox_pair", "checkbox_exclusive", "on", "off"):
         return True
     if entry.get("values") or entry.get("type") in ("date", "number", "textfmt"):
         return True
