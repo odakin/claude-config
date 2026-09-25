@@ -13,6 +13,7 @@ summary: CampusSquare は学内 SSO の奥だが browser の session cookie 再�
 - cookie = host の `JSESSIONID` (CampusSquare) と `_shibsession_*` (SP)。 IdP の cookie は読まない。 CampusSquare 本体の session は短い (30 分程度) が、 IdP のログインが browser に生きていれば、 起動中の browser に裏で開かせて入り直す (= [`garoon.md#garoon-session-recovery`](garoon.md#garoon-session-recovery) と同じ仕組み、 部品 = `scripts/lib/browser_tab.py`)
 - 同じ組織の別サイト (groupware 等) が同じ IdP で cookie 再利用に乗っているなら、 CampusSquare もほぼそのまま乗る
 - <a id="auth-error-page"></a>⚠️ **本体の session が切れると、 flow の GET は 302 でなく 200 で「認証エラー」 画面を返すことがある** (title が「認証エラー」、 form `authorizationError` を JavaScript で親画面へ POST し直すだけの画面)。 切れ判定を「302 か login 画面か」 だけにすると、 この画面を普通の画面として読み、 次の form が無いという別のエラーに化ける。 client の `expired()` はこの画面も切れとして扱い、 入り直す (実測)
+- <a id="portal-ssologin-redirect"></a>⚠️ **未ログインの portal (`campusportal.do`) は同じ host の `ssologin.do` への 302 を返し、 同時に未認証の `JSESSIONID` を配る** (実測)。 切れ判定が `/login` の path だけを見ていると、 この 302 を「読める」 と読む (`status` が切れているのに「読める (302 )」 と答えた)。 また browser が portal を開いただけで cookie DB が変わるので、 それを「入り直せた」 と読むと未認証の cookie で撃ち直して失敗する。 client は `ssologin` も切れとして扱い、 入り直しは読み直した cookie を server が受け入れた時だけとする (= [`garoon.md#login-page-mints-session-cookie`](garoon.md#login-page-mints-session-cookie) と同じ罠)
 
 ## <a id="web-flow"></a>画面の仕組み (Spring Web Flow)
 

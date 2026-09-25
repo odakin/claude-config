@@ -39,7 +39,7 @@ from urllib.parse import urlparse
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from lib.browser_tab import BROWSER_APPS, BrowserTab, watch, selftest_cases as _tab_selftest_cases  # noqa: E402
+from lib.browser_tab import BROWSER_APPS, POLL_S, BrowserTab, watch, selftest_cases as _tab_selftest_cases  # noqa: E402
 
 EX_LOGIN = 75  # 本人のログインが要る
 CTX = "/campusweb"
@@ -72,7 +72,8 @@ def expired(code, location, text, base_host):
         u = urlparse(location)
         if u.hostname and u.hostname != base_host:
             return "SSO redirect"
-        if "Shibboleth.sso" in u.path or re.search(r"/login\b", u.path, re.I):
+        # 未ログインの portal は同じ host の ssologin.do へ 302 (実測) = /login だけを見ると「読める」 と誤る
+        if "Shibboleth.sso" in u.path or re.search(r"/(sso)?login\b", u.path, re.I):
             return "login redirect"
     if code == 200 and re.search(r"<title>[^<]*(ログイン|Login)", (text or "")[:3000], re.I):
         return "login page"
@@ -134,6 +135,8 @@ class CampusSquare:
         self.h = {"User-Agent": "Mozilla/5.0"}
         self._recovered = False
         self.recovered_by = None
+        self._clock, self._sleep = time.time, time.sleep  # selftest が偽の時計に差し替える
+        self._probe_gap, self._next_probe = 0, 0.0  # 未認証の cookie を掴んだ後の確かめ直しの間隔 (_renewed)
         self._load()
 
     def _stamp(self):
@@ -160,37 +163,73 @@ class CampusSquare:
         self.s.cookies.clear()
         self.s.cookies.update(_cc().load_cookies(self.browser, [self.host], self.profile))  # IdP の cookie は読まない
 
-    def _recover(self, why):
-        if self._recovered:
-            return
-        self._recovered = True
+    def _alive(self):
+        """手元の cookie を server が受け入れるか (portal を GET 1 本、 redirect は辿らない)。"""
+        r = self.s.get(self.base + PORTAL, headers=self.h, timeout=30, allow_redirects=False)
+        return not expired(r.status_code, r.headers.get("Location", ""), r.text, self.host)
+
+    def _renewed(self):
+        """watch に渡す「入り直せたか」。 cookie DB が変わったら読み直し、 **server が受け入れた時だけ** True。
+
+        cookie が変わった ≠ 入り直せた: 未ログインの portal は ssologin.do への 302 と一緒に未認証の JSESSIONID を配る
+        (実測) = browser が portal を開いただけで cookie DB は変わる。 詳細と間隔の理由 = garoon-client.py の同名 method。
+        """
         if self._stamp_changed():
+            self._sleep(2)  # 同じ書き出しで他の cookie も揃うのを待つ
             self._load()
-            yield "reload"
+        elif not self._probe_gap or self._clock() < self._next_probe:
+            return False
+        if self._alive():
+            return True
+        if not self._probe_gap:
+            _say("cookie は変わったがまだ受け入れられない (未認証の cookie) → tab の行き先を見続ける")
+        self._probe_gap = min(15, self._probe_gap + 5)
+        self._next_probe = self._clock() + self._probe_gap
+        return False
+
+    def _open_tab(self, why):
+        """起動中の browser に裏で tab を開かせる。 開かなければ None。"""
         app = BROWSER_APPS.get(self.browser)
-        tab = None
-        if self.refresh != "off" and app and platform.system() == "Darwin" and BrowserTab.running(app):
-            _say(f"session 切れ ({why}) → 起動中の {app} に裏で開かせて入り直す")
-            tab = BrowserTab(app)
-            tab.open(self.base + PORTAL)
-        elif not self.wait_login:
-            return
-        t0 = time.time()
-        end, saw_login, at = watch(tab.where if tab else (lambda: None), self._stamp_changed,
-                                   lambda u: inside(u, self.host), self.wait_login, say=_say)
+        if self.refresh == "off" or not app or platform.system() != "Darwin" or not BrowserTab.running(app):
+            return None
+        _say(f"session 切れ ({why}) → 起動中の {app} に裏で開かせて入り直す")
+        tab = BrowserTab(app)
+        tab.open(self.base + PORTAL)
+        return tab
+
+    def _recover(self, why):
+        """login 切れからの復帰 (process ごとに 1 回)。 入り直せた = 読み直した cookie を server が受け入れた時だけ True。"""
+        if self._recovered:
+            return False
+        self._recovered = True
+        if self._stamp_changed():  # browser はもう入り直していて、 手元が古いだけ
+            self._load()
+            if self._alive():
+                self.recovered_by = "reload"
+                return True
+        tab = self._open_tab(why)
+        if not tab and not self.wait_login:
+            return False
+        t0 = self._clock()
+        self._probe_gap, self._next_probe = 0, 0.0
+        end, saw_login, at = watch(tab.where if tab else (lambda: None), self._renewed,
+                                   lambda u: inside(u, self.host), self.wait_login,
+                                   clock=self._clock, sleep=self._sleep, say=_say)
         if end == "login":
             if self.refresh == "close":
                 tab.close(at)
             raise LoginRequired(why, observed=True)
         if end == "timeout":
-            return
-        if end == "fresh":
-            time.sleep(2)
+            return False
+        if end == "stale":  # tab は中に着いたが cookie DB は変わらなかった
+            self._load()
+            if not self._alive():
+                return False
         if tab and self.refresh == "close" and not saw_login:
             tab.close(self.base + CTX)
-        self._load()
-        _say(f"入り直した ({time.time() - t0:.0f} 秒)")
-        yield "refresh"
+        _say(f"入り直した ({self._clock() - t0:.0f} 秒)")
+        self.recovered_by = "refresh"
+        return True
 
     def _request(self, method, path, **kw):
         def send():
@@ -199,12 +238,10 @@ class CampusSquare:
 
         r, why = send()
         if why:
-            for how in self._recover(why):
-                r, again = send()
-                if not again:
-                    self.recovered_by = how
-                    break
-            else:
+            if not self._recover(why):
+                raise LoginRequired(why)
+            r, again = send()
+            if again:
                 raise LoginRequired(why)
         return r
 
@@ -280,12 +317,47 @@ def doctor(browser, profile, base):
     return []
 
 
+def _fake_recover(tab_script, stamp_changes, alive_from, wait_login=0):
+    """selftest 用: 偽の tab・時計・cookie DB・server で _recover を回す (形は garoon-client.py の同名関数)。
+    → (結末, 自分の tab を閉じたか, 経過秒)。 結末 = "reload" / "refresh" / "failed" / "login" / "login-observed"。"""
+    global _say
+    t, closed, said = [0.0], [], []
+
+    class Tab:
+        def where(self):
+            return tab_script[min(int(t[0] / POLL_S), len(tab_script) - 1)]
+
+        def close(self, prefix):
+            closed.append(prefix)
+            return True
+
+    cs = CampusSquare.__new__(CampusSquare)  # network と browser に触る __init__ を通さない
+    cs.base, cs.host, cs.browser, cs.profile = "https://cs.example.ac.jp", "cs.example.ac.jp", "brave", "Default"
+    cs.refresh, cs.wait_login, cs._recovered, cs.recovered_by = "close", wait_login, False, None
+    cs._clock, cs._sleep = (lambda: t[0]), (lambda s: t.__setitem__(0, t[0] + s))
+    cs._probe_gap, cs._next_probe = 0, 0.0
+    cs._stamp = lambda: sum(1 for c in stamp_changes if t[0] >= c)
+    cs._load = lambda: setattr(cs, "_loaded_stamp", cs._stamp())
+    cs._alive = lambda: alive_from is not None and t[0] >= alive_from
+    cs._open_tab = lambda why: Tab()
+    cs._loaded_stamp = cs._stamp()
+    saved, _say = _say, said.append
+    try:
+        end = cs.recovered_by if cs._recover("login redirect") else "failed"
+    except LoginRequired as e:
+        end = "login-observed" if e.observed else "login"
+    finally:
+        _say = saved
+    return end, bool(closed), t[0]
+
+
 def selftest():
     host = "cs.example.ac.jp"
     cases = [
         ((302, "https://idp.example.com/auth/saml2/x?SAMLRequest=z", ""), "SSO redirect"),
         ((302, "https://cs.example.ac.jp/Shibboleth.sso/Login?target=x", ""), "login redirect"),
         ((302, "/campusweb/login.do", ""), "login redirect"),
+        ((302, "/campusweb/ssologin.do", ""), "login redirect"),
         ((200, "", "<html><head><title>ログイン</title>"), "login page"),
         ((200, "", '<title>認証エラー</title><form name="authorizationError" method="post">'), "auth error page"),
         ((302, "/campusweb/campussquare.do?_flowExecutionKey=_cX_kY", ""), None),
@@ -301,7 +373,21 @@ def selftest():
             '</form><table><tr><td>1</td><td>学科</td><td>後期</td><td>金2</td><td>123456</td><td>科目&amp;名</td><td>'
             '<a onclick="refer(\'2026\',\'99\',\'123456\',\'ja_JP\');">参照</a></td></tr></table>')
     rows = result_rows(page)
+    pt = ("https://cs.example.ac.jp/campusweb/campusportal.do", True)
+    sso = ("https://cs.example.ac.jp/campusweb/ssologin.do", False)
+    idp = ("https://idp.example.com/auth/session", False)
+    back = ("https://cs.example.ac.jp/campusweb/campusportal.do", False)
     checks = _tab_selftest_cases() + [
+        # 実測: 未ログインの portal が配る未認証の JSESSIONID で cookie DB が変わる → 旧版は「入り直した」 と言って失敗していた
+        ("IdP が切れている: portal が配った cookie を入り直しと読まず、 本人のログインが要ると言う",
+         _fake_recover([pt, sso, idp], [3], None)[0] == "login-observed"),
+        ("IdP が生きていて cookie DB が先に変わった → 確かめ直しで入り直し、 自分の tab を閉じる",
+         (lambda r: r[0] == "refresh" and r[1] and r[2] <= 15)(_fake_recover([pt, sso, back], [3], 6))),
+        ("wait-login: 本人がログインし終えたら入り直す (ログインに使った tab は閉じない)",
+         (lambda r: r[0] == "refresh" and not r[1])(_fake_recover([pt, sso] + [idp] * 40 + [back], [3], 63, wait_login=300))),
+        ("tab が中に着いても server が cookie を受け入れない → 入り直したと言わない",
+         _fake_recover([pt, back], [], None)[0] == "failed"),
+
         ("form_fields: hidden と値なし hidden を拾う", form_fields(page, "ReferForm") ==
          {"_flowExecutionKey": "_cA_kB", "_eventId": "input", "secchikbncd": ""}),
         ("result_rows: refer の引数と entity 解決", len(rows) == 1 and rows[0]["refer"] == ("2026", "99", "123456", "ja_JP")
