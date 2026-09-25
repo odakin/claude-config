@@ -619,12 +619,18 @@ def _assign_pages(jobs, texts) -> None:
 # ---------------------------------------------------------------------------
 # 照合 (xlsx)
 # ---------------------------------------------------------------------------
+def _expect_key(sheet, rng) -> str:
+    """--expect-checked の key (sheet!range)。 sheet 名の前後の空白と range の $ を落として合わせる = 渡す側 (sheet 名そのまま)
+    と引く側 (strip した sheet 名) の食い違いで期待が黙って落ちない (末尾に空白のある sheet 名は実在する)。"""
+    return f"{str(sheet).strip()}!{str(rng).strip().replace('$', '').upper()}"
+
+
 def check(template, pdf, targets=None, drop=None, filled=None, blank=None, expect_checked=None) -> dict:
     """targets = [(sheet, range or None)] (None = 雛形の全 sheet)。 drop = {(sheet, 図形名)}。
     filled = 案件 (or 体裁を当てた temp) の xlsx = cell の label と記入値を見る。 blank = 素刷りの PDF = 画像・線の数を比べる。
     expect_checked = {"sheet!range": N} = その範囲で印のある箱 (checkbox) の数 (spec の controls の on の数、 D9)。"""
     drop = {(s.strip(), n) for s, n in (drop or set())}
-    expect_checked = {k.strip(): v for k, v in (expect_checked or {}).items()}
+    expect_checked = {_expect_key(*k.rpartition("!")[::2]): v for k, v in (expect_checked or {}).items()}
     wb = _template_book(template)
     shp = shapes(template, wb)
     texts = page_texts(pdf)
@@ -723,7 +729,7 @@ def check(template, pdf, targets=None, drop=None, filled=None, blank=None, expec
                                          "out_clipped": sum(1 for x in ob if x["clipped"]),
                                          "blank_checked": sum(1 for x in bb if x["checked"]),
                                          "out_checked": sum(1 for x in ob if x["checked"]),
-                                         "expected_checked": expect_checked.get(f"{j['sheet'].strip()}!{j['range']}")}
+                                         "expected_checked": expect_checked.get(_expect_key(j['sheet'], j['range']))}
                 # 段階 2 (D4): 位置の写像 = 動いた画像・素刷りの罫線の欠け・二重刷り (warn)
                 if bl_lay is None:
                     bl_lay, out_lay = page_layout(blank), page_layout(pdf)
@@ -1066,6 +1072,11 @@ def selftest() -> int:
           and b_mark["checked"] and not b_mark["clipped"] and b_clip["clipped"] and "r" not in b_clip["edges"] and not b_clip["checked"])
     fails += not ok
     print(f"{'PASS' if ok else 'FAIL'} box_pixels: 4 辺 / 印あり / 右辺なし = {b_ok['edges']} {b_mark['checked']} {b_clip['edges']}")
+    # --expect-checked の key: 渡す側は sheet 名そのまま (末尾の空白つき)、 引く側は strip = 同じ key に寄せる (期待が黙って落ちない)
+    ok = (_expect_key("日程表 ", "$A$1:ai51") == _expect_key("日程表", "A1:AI51") == "日程表!A1:AI51"
+          and _expect_key(*"日程表 !A1:AI51".rpartition("!")[::2]) == _expect_key("日程表", "A1:AI51"))
+    fails += not ok
+    print(f"{'PASS' if ok else 'FAIL'} --expect-checked の key: 末尾に空白のある sheet 名・$ つき range でも同じ key")
     # --blank: 素刷りより画像が少ない (checkbox の箱の消失)
     blank = pdf("blank.pdf", [labels1 + shapes_ok, labels2], images=2)
     out = pdf("out2.pdf", [labels1 + shapes_ok + ["山田花子"], labels2], images=1)
