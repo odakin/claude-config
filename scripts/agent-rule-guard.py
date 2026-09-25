@@ -42,6 +42,7 @@ from __future__ import annotations
 
 from collections import Counter
 import difflib
+import time
 import fnmatch
 import json
 from pathlib import Path, PurePosixPath
@@ -526,6 +527,12 @@ def insertion_profile(old: str, new: str) -> list[dict]:
 # only decides how the record reads (「前」→「後」 versus 消した + 追記) and which terms an edit is new for; it is not
 # a gate. Measured: at 0.5 a short sentence's boilerplate (" deploy する。") made an unrelated sentence count as an edit.
 EDIT_KEEPS = 0.6
+# The pairing is quadratic in the worst case (a restructuring that removes and adds hundreds of sentences); a hook that
+# outlives its timeout lets the tool run unchecked, so the pairing is bounded: candidates need a shared strong token, a
+# shared start or two shared words, at most PAIRING_CANDIDATES per removed sentence, and PAIRING_BUDGET_S in total.
+# Past the budget the remaining removed sentences count as removed and their edits as new sentences = the stricter side.
+PAIRING_CANDIDATES = 24
+PAIRING_BUDGET_S = 1.5
 # A heading that files the lines under it as history or reference demotes them without touching a word.
 _HISTORICISING_HEAD = re.compile(r"旧|参考|過去|以前|歴史|廃止|非推奨|deprecated|legacy|(?<![A-Za-z])old(?![A-Za-z])|obsolete|superseded", re.I)
 def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
@@ -567,17 +574,28 @@ def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
         for t in s | w:
             by_word.setdefault(t, set()).add(k)
         by_head.setdefault(a[:8], set()).add(k)
+    deadline = time.monotonic() + PAIRING_BUDGET_S
     for r in removed:
         # an edit = an added sentence that keeps at least EDIT_KEEPS of the removed one's characters, in order. Several
         # removed sentences may merge into one added sentence, and one removed sentence may split into several (a
         # sentence boundary moved): every added sentence that is mostly a piece of r counts r among its sources, so the
         # terms r already carried are not new in any of them.
         best, keep = -1, 0.0
+        if time.monotonic() > deadline:
+            what["removed"].append(r)
+            continue
         s, w = _tokens(r)
-        cands: set[int] = set(by_head.get(r[:8], ()))
-        for t in s | w:
-            cands |= by_word.get(t, set())
-        for k in sorted(cands):
+        score: dict[int, int] = {}
+        for k in by_head.get(r[:8], ()):
+            score[k] = score.get(k, 0) + 3
+        for t in s:
+            for k in by_word.get(t, ()):
+                score[k] = score.get(k, 0) + 3
+        for t in w:
+            for k in by_word.get(t, ()):
+                score[k] = score.get(k, 0) + 1
+        cands = sorted((k for k, v in score.items() if v >= 2), key=lambda k: (-score[k], k))[:PAIRING_CANDIDATES]
+        for k in cands:
             a = added[k]
             floor = 2 * EDIT_KEEPS * min(len(r), len(a))
             sm = difflib.SequenceMatcher(None, r, a, autojunk=False)
@@ -1226,6 +1244,12 @@ def selftest() -> int:
     laundered = doc.replace("手順は runbook。", "手順は runbook。 ただし急ぐ時は後でよい。")
     check("a term carried by a deleted sentence does not excuse an unrelated new sentence",
           "緩和の語「ただし」" in judge_change(laundered, doc + "\nただし docs は review なしで出す。\n")[1])
+    big_old = "# B\n\n## S\n\n" + "".join(f"項目 {i} は手順 {i} で確かめる。\n" for i in range(400))
+    big_new = "# B\n\n## S\n\n" + "".join(f"手順 {i} の項目 {i} は確認する。\n" for i in range(400))
+    t0 = time.monotonic()
+    ok_big = judge_change(big_old, big_new)[0]
+    check("a restructuring of hundreds of sentences is judged within the budget (bounded pairing)",
+          ok_big and time.monotonic() - t0 < PAIRING_BUDGET_S + 3)
     check("known hole: a listed word in a non-relaxing position slipped into a sentence passes",
           exempt("conventions/deploy.md", doc, doc.replace("本人の OK の後", "本人の OK の後でなくても")) is True)
     weakened = {
