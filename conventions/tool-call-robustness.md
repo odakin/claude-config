@@ -33,9 +33,10 @@ malformed (or §別の症状変種「silent 捏造」) を観測したら、 **�
 **切替先の優先順位**:
 
 1. 🥇 `/model claude-fable-5` — Fable 5 (= **最賢**。 2026-07-10 の local transcript 実測で 4,169 turn / malformed 0 件 = 発生報告なし。 ⚠️ #64774 は Fable 5 の統計を持たない = 公開定量は未収集、 local n=1 環境の 0 件である点は明示しておく。 ⚠️ 旧版本 doc は「日本不可」 と書いていたが 2026-07-10 に日本の owner 環境で実稼働を確認済 = 可用性は時点依存、 選べなければ次へ)
-2. 🥈 `/model claude-opus-5[1m]` — Opus 5 1M (= **1M context が必要な作業の本命**。 2026-07-29 owner 判定で bug 非該当: 07-25 からの watch 〔#64774 新着 0 + issue 検索 0 + local 実測〕 で malformed 0 件、 全 pin を旧本命 Opus 4.7 から切替。 ⚠️ Opus 5 は母数がまだ薄い = 「報告が無い」 ≠ 「発生しない」、 万一観測したら #64774 に data point + 下の 4.7 へ)
-3. 🥉 `/model claude-opus-4-7[1m]` — Opus 4.7 1M (= 旧本命 〔2026-07-12〜07-29〕、 #64774 統計で失敗率 0% の実績 = Opus 5 で万一観測した場合の確実な fallback)
-4. `/model claude-sonnet-4-6` — Sonnet 4.6 (= 次善、 bug 0% だが上より賢さで劣る)
+2. 🥈 `/model claude-opus-5-5[1m]` — Opus 5.5 1M (= **1M context が必要な作業の本命**。 2026-09-25 owner 判定で Opus 5 から切替: local 実測で 4,228 message / malformed 0 件 〔CLI の文言と desktop local agent mode の文言の両方で数えた = `scripts/count-malformed-tool-call-events.py`〕。 ⚠️ 母数はまだ薄い = 「報告が無い」 ≠ 「発生しない」、 万一観測したら下の Opus 5 へ。 ⚠️ **Claude Code 2.1.280 未満は Opus 5.5 を 400 で拒否する** = 古い CLI の session・headless・Remote Control では先に CLI を上げる)
+3. 🥉 `/model claude-opus-5[1m]` — Opus 5 1M (= 旧本命 〔2026-07-29〜09-25〕。 2026-07-29 owner 判定で bug 非該当: 07-25 からの watch 〔#64774 新着 0 + issue 検索 0 + local 実測〕 で malformed 0 件、 全 pin を旧本命 Opus 4.7 から切替。 ⚠️ Opus 5 は母数がまだ薄い = 「報告が無い」 ≠ 「発生しない」、 万一観測したら #64774 に data point + 下の 4.7 へ)
+4. `/model claude-opus-4-7[1m]` — Opus 4.7 1M (= 旧本命 〔2026-07-12〜07-29〕、 #64774 統計で失敗率 0% の実績 = Opus 5 で万一観測した場合の確実な fallback)
+5. `/model claude-sonnet-4-6` — Sonnet 4.6 (= 次善、 bug 0% だが上より賢さで劣る)
 
 **なぜ「諦める」 と書くか**:
 
