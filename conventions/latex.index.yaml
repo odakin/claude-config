@@ -93,7 +93,7 @@ sections:
     title: "silent に効かない組版指定 — 書いたのに無視される 5 型 (2026-09-12)"
   - id: dvipdfmx-papersize
     level: 3
-    title: "documentclass の用紙指定は PDF の用紙に届かない (dvipdfmx)"
+    title: "documentclass の用紙指定は、 papersize special が出ないと PDF の用紙に届かない (dvipdfmx)"
   - id: tabular-cell-trailing-hspace
     level: 3
     title: "tabular セル末尾の裸 `\\hspace` は `\\unskip` に消される"
