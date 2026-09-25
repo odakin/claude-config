@@ -58,6 +58,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[session-start-windows-bootstrap.sh](session-start-windows-bootstrap.sh)** — SessionStart hook (layer 1): Windows 環境の毎 session 自動自己修復
 - **[session-start-windows-bootstrap.test.sh](session-start-windows-bootstrap.test.sh)** — self-tests for session-start-windows-bootstrap.sh
 - **[settings-entries.json](settings-entries.json)** — 層1 hook の settings.json 配線の唯一の list (event → entries)。
+- **[spawn-dedupe-guard.sh](spawn-dedupe-guard.sh)** — 同じ依頼の worker を 2 つ起動させる chip (spawn_task) を止める + chip の台帳を付ける
+- **[spawn-dedupe-guard.test.sh](spawn-dedupe-guard.test.sh)** — spawn-dedupe-guard.sh の self-test (hermetic)
 - **[stale-read-nudge.sh](stale-read-nudge.sh)** — PostToolUse(Read) hook (layer 1)
 - **[stale-read-nudge.test.sh](stale-read-nudge.test.sh)** — logic selftest (= 決定的 mock git repo ベース)
 - **[standing-cc-guard.sh](standing-cc-guard.sh)** — 定型の Cc (ある種類のメールに毎回入れる宛先) の送信前検査 (PreToolUse)

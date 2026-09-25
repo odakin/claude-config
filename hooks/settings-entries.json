@@ -169,6 +169,15 @@
           "command": "~/.claude/hooks/mcp-search-scope-reminder-nudge.sh"
         }
       ]
+    },
+    {
+      "matcher": "mcp__.*__spawn_task",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/spawn-dedupe-guard.sh"
+        }
+      ]
     }
   ],
   "PostToolUse": [
@@ -241,6 +250,15 @@
         {
           "type": "command",
           "command": "~/.claude/hooks/protected-dir-access-guard.py"
+        }
+      ]
+    },
+    {
+      "matcher": "mcp__.*__(spawn_task|dismiss_task)",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/spawn-dedupe-guard.sh"
         }
       ]
     }

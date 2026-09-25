@@ -171,7 +171,7 @@ claude-config/
 <!-- agent-free:end id=auto-tree-conventions -->
 <!-- agent-free:begin id=auto-tree-hooks -->
 <!-- AUTO-TREE:hooks BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は hooks/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── hooks/                # Claude Code hooks (62 file。 setup.sh が ~/.claude/hooks/ に symlink。 全列挙 + 説明 = hooks/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── hooks/                # Claude Code hooks (64 file。 setup.sh が ~/.claude/hooks/ に symlink。 全列挙 + 説明 = hooks/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:hooks END -->
 <!-- agent-free:end id=auto-tree-hooks -->
 ├── hammerspoon/
