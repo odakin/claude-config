@@ -353,9 +353,9 @@ M と R0 の差 = **雛形自身の欠陥** (app が刷らない字・`=TODAY()`
 
 | 層 | 検査 | 実装 |
 |---|---|---|
-| T 雛形の identity | spec の bind の記録 (`<spec>.bind.json` の sha256) と build が読む雛形が同じか。 違えば ⚠️ = 雛形が新しくなった (差し替わった) → `bind` し直して差を見る | `formcase/fidelity.py` `bind_lines` (build の冒頭に行) |
+| T 雛形の identity | spec の bind の記録 (`<spec>.bind.json` の sha256) と build が読む雛形が同じか。 違えば**止める** = 雛形が新しくなった (差し替わった) → `bind` し直して差を見てから build | `formcase/fidelity.py` `bind_lines` (build の冒頭に行) |
 | W workbook の census | temp (openpyxl で保存) の「紙に出るもの」 (図形の字・form control・画像・条件付き書式) が読み込み元より減っていないか。 減ることを受け入れる種類は `meta.accept_loss` に理由つきで宣言する | `recipes._save` → `fidelity.temp_census_lines` (⚠️ の行)。 他人の xlsx に書く道具・formcase の外の生成器も同じ census (`office_census.losses`) |
-| R 出力 PDF | (a) 雛形の図形の字が在るか = **無ければ止める** (b) 書き換えていない cell の見出しが在るか = **無ければ止める** (2026-09-26〜。 spec の `meta.accept_missing_labels` に名指しした cell だけ ⚠️) (c) 素刷りより画像 (= Excel は checkbox の箱を画像として描く、 実測) が少なくないか (⚠️) (d) 雛形にも記入値にも無い字 (⚪) | [`scripts/check-form-static-text.py`](../scripts/check-form-static-text.py) `--filled` (体裁を当てた temp) `--blank` (素刷り)、 build が group ごとに回す |
+| R 出力 PDF | (a) 雛形の図形の字が在るか = **無ければ止める** (b) 書き換えていない cell の見出しが在るか = **無ければ止める** (2026-09-26〜。 spec の `meta.accept_missing_labels` に名指しした cell だけ ⚠️) (c) 素刷りより画像 (= Excel は checkbox の箱を画像として描く、 実測) が少なくないか = **少なければ止める** (openpyxl の temp で箱を落とすと `meta.accept_loss` に宣言した様式だけ ⚠️) (d) 雛形にも記入値にも無い字 (⚪) (e) 位置の写像 = 画像の置き場・label の帯の中の罫線・同じ label の二重刷り (⚠️) (f) form control の箱 = 印のある箱と読める印の数・置き場から見た箱の offset = **違えば止める** (下の「form control の箱」) | [`scripts/check-form-static-text.py`](../scripts/check-form-static-text.py) `--filled` (体裁を当てた temp) `--blank` (素刷り)、 build が group ごとに回す |
 | P 紙 | 刷る直前の preflight が、 出力 PDF の宣言 (`PrintPages` の `fidelity` = 雛形の path・対象・drop・素刷り) から同じ照合を回す。 図形の字が無ければ lp を止める、 雛形がその機械に無ければ ⚪ (照合できない、 と言って通す) | [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) `fidelity_check` (`--hook` / `--template-xlsx`) |
 
 **道具の損失は 2 段で消す**: (a) file を書く道具を**その形式を所有する app** (Excel / Word) だけにする = 損失が構造的に起きない
@@ -364,9 +364,7 @@ M と R0 の差 = **雛形自身の欠陥** (app が刷らない字・`=TODAY()`
 作る recipe は (b) だけで守られている = 図形は移植で戻るが form control の箱は戻らない (`accept_loss` で宣言し、 素刷りとの
 画像の差として毎回 ⚠️ に出る)。
 
-(2026-09-25 追記) 各段の運用と (a) の実装: T = 雛形が bind の記録と違えば**止める** (`formcase.py bind` で記録し直してから build)。
-R の (c) 素刷りより画像が少ない = **止める** (openpyxl の temp で箱を落とすと `meta.accept_loss` に宣言した様式だけ ⚠️)。
-R に段階 2 = **位置の写像**を足した: 素刷りと出力を label の位置の組で対応づけ (x は 1 次、 y は組の間の区分線形)、 画像の位置・
+**各段の運用と (a) の実装**: R に段階 2 = **位置の写像**を足した: 素刷りと出力を label の位置の組で対応づけ (x は 1 次、 y は組の間の区分線形)、 画像の位置・
 label の組に挟まれた帯の中の水平の罫線・同じ label の二重刷りを比べる (warn。 帯の外 = 値で行を潰す表 = 圏外と言って本数を出す)。
 出力にも素刷りにも無い図形の字 = 雛形自身の欠陥 (⚪、 止めない)。 (a) の実例 = temp を作らず、 案件の workbook の copy に Excel で
 体裁の差分 (結合・折り返し・揃え・字の大きさ・表示書式・上下の罫線 〔行ごとの range〕・行高・白黒・図形の削除・図形の枠の余白 =
@@ -377,11 +375,13 @@ label の組に挟まれた帯の中の水平の罫線・同じ label の二重�
 結果は設定 `fidelity_log` (jsonl) に残す (見出しの ⚠️ を止める段に上げる判断の材料)。 formcase の外で openpyxl で保存する生成器は
 保存の直後に `office_census.assert_no_paper_loss` (紙に出るものが減れば止める、 減ると知って出すときは `OFFICE_CENSUS_ALLOW_LOSS=1`)。
 
-(2026-09-25 追記 = form control の箱) 様式の checkbox が Excel の form control (VML + `xl/ctrlProps/*`) のとき、 選択は**箱の値**で表し、 label の cell は雛形の字のまま (文字の ☑ / ○ を前置しない)。 宣言 = spec の `controls:` (sheet / `anchor` = 箱が載る cell 〔controlPr の from〕 / `index` / `state: "on"` | `"off"`。 名前 "Check Box N" で決め打ちしない = 雛形の改訂で名前が変わっても cell で対応が付く。 ⚠️ YAML は裸の on / off を bool に読むので quote する)。 fill は cell の値と同じ Excel の 1 回で箱の値を書き ([`formcase/fill.py`](../scripts/formcase/fill.py) `control_edits`)、 zip の `ctrlProp` の `checked` で読み戻す。 照合は 3 段: ① 記入内容 gate が `checked` を spec と照合する (anchor に箱が無ければ 雛形が spec と違う = 止める) ② build が出力の箱の画像を画素で数え ([`check-form-static-text.py`](../scripts/check-form-static-text.py) `box_pixels` = 4 辺の濃い帯が辺、 内側の濃い画素が印)、 印のある箱の数が on の数と違えば止める (`--expect-checked`) ③ 辺が欠けた箱は、 素刷りにも欠ければ雛形自身の欠陥 (⚪、 `bind` で 1 回見る類)、 出力だけ欠ければ ⚠️。 欠けの原因 (実測) = Excel は control を枠の大きさ (pt) のまま raster にするので、 枠が描く箱より小さいと辺が切れる (枠 ≤ 16pt で右辺が欠け、 ≥ 17pt で 4 辺が出る) → Excel の経路の recipe は刷る前に枠を `recipes.CONTROL_FRAME_PT` (18pt) まで広げる (`control_frame_min` op = `fit_control_lines`)。 箱の値は案件の workbook に入るので、 凍結の fingerprint (VML の Checked) がそれを含む = 凍結した issue を読み直しても同じ紙。
-
-(2026-09-25 追記 2 = 箱の印の読みやすさ) Excel (Mac) の form control の ✓ は、 control の枠を raster にした画像の中の数 px の灰色にしかならず、 紙では約 1 mm の点で読めない (実測、 検収で見つかった)。 build は印の入った箱 (画像の bitmap に control 自身の ✓ が在る箱) の外枠の内側を白で塗って太い黒の ✓ を PDF の vector で重ね (`check-form-static-text.py --mark-checked` = `fidelity.mark_boxes`)、 照合は「印のある箱の数」 に加えて「紙で読める印の数」 (箱の内側を render した黒の面積比 `box_ink` ≥ `INK_READABLE`) も選んだ数と比べる (合わなければ止める)。 箱の外枠は画像の SMask (透明の余白) から取る (alpha を落として読むと余白が黒に見える = 実測)。 素刷りが無くても出力の箱は数え (期待の照合は素刷りに依らない)、 素刷りがある時は素刷りの箱の位置に在る画像だけを箱に数える (印影・図などの小さい画像を箱にしない)。 ✓ を重ねるのは辺が 3 本以上の画像 (箱の形) だけ = 印影のように辺が無く内側が濃い画像には重ねない (実測: 印影の内側を白で塗って ✓ を描いた)。 画素は透明を紙 (白) として読む (透明の画素を 0 = 黒で保存した画像は 4 辺の箱に見える)。 ✓ は開いた折れ線 2 本で描く (描画 library の既定で閉じると三角になり、 黒の面積比は形を見ないので照合を通る = 実測)。
-
-(2026-09-26 追記 3 = 箱の縦ズレ) 枠を広げるのは**幅だけ** = 高さを足すと Excel は枠の中で箱を縦に中央に描くので箱が下がる (実測: +4pt で +1.4pt、 点線に跨った)。 画像の置き場の照合 (位置の写像) は画像の中の箱の移動を見ないので、 置き場から見た箱の上端・左端の offset を素刷りと比べ、 0.5pt を超えれば止める (`box_shifts`、 対応づけは同じ label の写像で = 行が伸びて箱ごと下がるのは正常)。
+**form control の箱** (様式の checkbox が Excel の form control 〔VML + `xl/ctrlProps/*`〕 のとき): 選択は**箱の値**で表し、 label の cell は雛形の字のまま (文字の ☑ / ○ を前置しない)。
+- **宣言** = spec の `controls:` (sheet / `anchor` = 箱が載る cell 〔controlPr の from〕 / `index` / `state: "on"` | `"off"`)。 名前 "Check Box N" で決め打ちしない = 雛形の改訂で名前が変わっても cell で対応が付く。 ⚠️ YAML は裸の on / off を bool に読むので quote する。 箱の値は案件の workbook に入るので、 凍結の fingerprint (VML の Checked) がそれを含む = 凍結した issue を読み直しても同じ紙。
+- **fill** = cell の値と同じ Excel の 1 回で箱の値を書き ([`formcase/fill.py`](../scripts/formcase/fill.py) `control_edits`)、 zip の `ctrlProp` の `checked` で読み戻す。
+- **刷る前** = Excel の経路の recipe は control の枠を `recipes.CONTROL_FRAME_PT` (18pt) まで**幅だけ**広げる (`control_frame_min` op = `fit_control_lines`)。 理由 = Excel は control を枠の大きさ (pt) のまま raster にするので、 枠が描く箱より小さいと辺が切れる (枠 ≤ 16pt で右辺が欠け、 ≥ 17pt で 4 辺が出る、 実測)。 高さは足さない = Excel は枠の中で箱を縦に中央に描くので箱が下がる (実測: +4pt で +1.4pt、 点線に跨った)。
+- **印** = control 自身の ✓ は raster の数 px の灰色で紙では読めない (実測) ので、 build は照合の前に、 印の入った箱の外枠の内側を白で塗って太い黒の ✓ を PDF の vector で重ねる ([`check-form-static-text.py`](../scripts/check-form-static-text.py) `--mark-checked` = `fidelity.mark_boxes`、 print / 確認用 / 当事者に渡す版の全部に載る)。 描き方 = ✓ は開いた折れ線 2 本 (描画 library の既定で閉じると三角になり、 黒の面積比は形を見ないので照合を通る = 実測) / 重ねるのは辺が 3 本以上の画像 (箱の形) だけ = 印影のように辺が無く内側が濃い画像には重ねない (実測: 印影の内側を白で塗って ✓ を描いた) / 箱の外枠は画像の SMask (透明の余白) から取り、 透明は紙 (白) として読む (alpha を落とすと余白が黒に見え、 透明を 0 で保存した画像は 4 辺の箱に見える = 実測)。
+- **照合** = 4 段: ① 記入内容 gate が `checked` を spec と照合する (anchor に箱が無ければ 雛形が spec と違う = 止める) ② build が出力の箱の画像を画素で数え (`box_pixels` = 4 辺の濃い帯が辺、 内側の濃い画素が印)、 「印のある箱の数」 と「紙で読める印の数」 (箱の内側を render した黒の面積比 `box_ink` ≥ `INK_READABLE`) の両方を on の数と比べ、 違えば止める (`--expect-checked`。 素刷りが無くても出力の箱は数え、 素刷りがある時は素刷りの箱の位置に在る画像だけを箱に数える = 印影・図などの小さい画像を箱にしない) ③ 辺が欠けた箱は、 素刷りにも欠ければ雛形自身の欠陥 (⚪、 `bind` で 1 回見る類)、 出力だけ欠ければ ⚠️ ④ 画像の置き場の写像は画像の中の箱の移動を見ないので、 置き場から見た箱の上端・左端の offset を素刷りと比べ、 0.5pt を超えれば止める (`box_shifts`、 対応づけは同じ label の写像で = 行が伸びて箱ごと下がるのは正常)。
+- Excel の描画の一般形と、 検出器を書く側の罠 (`get_images` は同じ bitmap を畳む / SMask) = [`office-automation.md#excel-form-control-render`](office-automation.md#excel-form-control-render)。 描いた印は数値の検査が通っても形を crop で見る = [`multi-session-coordination.md#review-handoff`](multi-session-coordination.md#review-handoff) の受け手 7。
 
 ### 14.3 記入欄の宣言 (= 人が番地を書かない)
 
@@ -396,7 +396,7 @@ label の組に挟まれた帯の中の水平の罫線・同じ label の二重�
 
 | 見えないもの | 理由 | 埋め方 |
 |---|---|---|
-| 図形・画像の**位置**のずれ、 二重刷り、 重なり | 検査は在るか・数だけを見る (位置に依らない = 行を伸ばしても誤検出しない、 の裏) | 段階 2 (素刷りと label の位置で対応づけて比べる)。 それまでは build 末尾の「素刷りとの差」 の行を見て目視 |
+| 図形・画像の**位置**のずれのうち、 label の写像の帯の外 (値で行を潰す表)・回転・重なり | 位置の写像 (段階 2、 実装済み) は素刷りと label の位置で対応づけて画像の置き場・帯の中の罫線・二重刷り・箱の offset を比べるが、 帯の外は圏外と言って本数を出すだけ | build 末尾の「素刷りとの差」 の行を見て crop で目視 |
 | 雛形自身の欠陥 (素刷りでも切れる字・####) | 参照 R0 が同じ癖を持つ | `bind` の M∖R0 の一覧 = 採用時に 1 回人が決める |
 | 相手の機械で刷る xlsx の描画 (font の有無・字幅の丸め) | こちらの app の外 | 紙はこちらで刷る。 xlsx を渡す経路は「刷って見せてもらう」 しか無い |
 | 値の中身 (正しい日付か・所属が最新か) | 忠実性は「雛形 + 記入の宣言」 の外を見ない | 記入内容 gate (spec) と人 |

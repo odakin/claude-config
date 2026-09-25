@@ -22,6 +22,12 @@ WHAT (xlsx の雛形):
   - --blank 素刷り.pdf (雛形を道具を通さず app で刷った PDF): 対象の頁を label で選び、 **画像の数** (Excel は form control の
     checkbox を PDF に画像として描く = 実測) と線・矩形の数を比べる。 画像が減っていれば「image」 として数える
     (--strict-images でなければ exit code に入れない)。 線の減少は情報 (行を潰す体裁で減るので止めない)
+  - form control の箱 (checkbox の画像): 出力の箱を画素で読む (box_pixels = SMask の alpha で外枠、 4 辺の濃い帯が辺、 内側の濃い画素が印。
+    配置は get_image_rects で数える = get_images は同じ bitmap を 1 つに畳む)。 --expect-checked 'sheet!range=N' で印のある箱の数と
+    紙で読める印の数 (box_ink ≥ INK_READABLE) の両方を N と比べ、 違えば exit 1。 --blank があれば素刷りの箱の位置に在る画像だけを
+    箱に数え、 置き場から見た箱の上端・左端の offset が BOX_SHIFT_PT を超えれば「shifted」 (exit 1) = 枠を広げて箱が下がる型。
+    --mark-checked = 印の入った箱 (辺 3 本以上の画像だけ) の内側を白で塗り太い ✓ を vector で重ねて上書きする (検査はしない、
+    ✓ は開いた折れ線 2 本)。 一般形 = office-automation.md#excel-form-control-render
   - 対象 = --target の sheet (と印刷範囲)。 範囲を書かなければ雛形の印刷範囲、 それも無ければ sheet 全体。
     範囲の外に anchor がある図形 (記入例・作成上の注意など横に置かれた注記) は数えない
   - 対象ごとに PDF の頁を 1 つ選ぶ = 雛形のその範囲の cell の字 (label) が一番多く出ている頁
@@ -45,10 +51,12 @@ WHAT (docx の雛形): 雛形.docx を渡すと、 textbox (w:txbxContent)・hea
   check-form-static-text.py 雛形.xlsx 出力.pdf --target 請求書 --drop '請求書!楕円 2'
   check-form-static-text.py 雛形.xlsx 出力.pdf --filled 案件.xlsx --blank 素刷り.pdf   # label と画像の数も
   check-form-static-text.py 雛形.docx 出力.pdf --filled 案件.docx
+  check-form-static-text.py 雛形.xlsx 出力.pdf --blank 素刷り.pdf --expect-checked '請求書!A1:AH60=3'   # 箱の印の数 (と読める印の数)
+  check-form-static-text.py 雛形.xlsx 出力.pdf --mark-checked                         # 印の入った箱に ✓ を重ねて上書き (build が照合の前に呼ぶ)
   check-form-static-text.py ... --json      # 機械向け
   check-form-static-text.py ... --strict    # 対象の頁が見つからない (⚪) も exit 1
   check-form-static-text.py --selftest
-exit: 0 = 全部在る (⚪ は --strict でなければ 0) / 1 = 無い図形の字がある (--strict-labels / --strict-images で label・画像も) /
+exit: 0 = 全部在る (⚪ は --strict でなければ 0) / 1 = 無い図形の字がある (--strict-labels / --strict-images で label・画像も)、 箱の印の数が期待と違う、 箱が素刷りの位置から動いた /
       2 = 使い方・読めない file
 """
 from __future__ import annotations

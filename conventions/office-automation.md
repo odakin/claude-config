@@ -64,7 +64,10 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 | **印影・署名の画像を xlsx に置きたい** | openpyxl `add_image` は comments part を倍増させ Excel が破損警告 (+ formula cache も消える) | Excel osascript で `make new picture` (= anchor cell の left/top から points 指定) → [`xlsx-image-via-excel`](#xlsx-image-via-excel)、 script = `affix-image-xlsx.py` |
 | 標題・縦書きラベル・textbox が消えた | openpyxl の save が drawing (shape) を破壊 | Excel osascript / fitz 直印字 / 別 file XML 移植 の 3 経路 → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
 | **刷った PDF から様式番号・区分の枠・㊞ の図形が消えた** (案件の xlsx には在る / 様式番号の末尾 1 字だけ欠ける) | PDF 用の temp を openpyxl で保存した (xlsx の走査に出ない) / 字幅ぎりぎりの枠の clip | 図形を移し直す or Excel で刷る。 検出 = `check-form-static-text.py` → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) の末尾「PDF にするための temp でも同じ」 |
-| 様式の**チェックボックスの箱が紙 / PDF から消える** (窓口から「どちらか判別できない」 と照会が来る) | openpyxl の save が form control (= `xl/ctrlProps/*` + VML Checkbox) を drop (標題 textbox と同経路・より無症状) | 雛形と ctrlProps 数比較で検出 → 該当側 label セルに文字 ☑ 前置の fallback → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
+| 様式の**チェックボックスの箱が紙 / PDF から消える** (窓口から「どちらか判別できない」 と照会が来る) | openpyxl の save が form control (= `xl/ctrlProps/*` + VML Checkbox) を drop (標題 textbox と同経路・より無症状) | **Excel の経路で刷る** (箱が画像として紙に戻る) + 選択は箱の値で表す → [`excel-form-control-render`](#excel-form-control-render)。 検出 = 雛形と ctrlProps 数の比較 + 素刷りとの画像の数 (`check-form-static-text.py --blank`)。 文字 ☑ を label に前置するのは箱を戻せない経路の fallback → [`openpyxl-destroys-drawings`](#openpyxl-destroys-drawings) |
+| checkbox の**箱の辺が欠けて刷られる** (右辺だけ無い箱がある、 素刷りでも同じ) | control の枠 (pt) が描く箱より小さい (Excel は control を枠の大きさの raster にする) | 刷る前に枠を 18pt へ**幅だけ**広げる (`formcase` の Excel 経路は自動) → [`excel-form-control-render`](#excel-form-control-render) |
+| checkbox の**箱が隣の行の点線に跨った** / 枠を広げたら箱が下がった | 枠の高さを足した (Excel は箱を枠の中で縦に中央に描く) | 幅だけ広げる + 置き場から見た箱の offset を素刷りと比べる → [`excel-form-control-render`](#excel-form-control-render) |
+| checkbox に ✓ を入れたのに**紙では灰色の点** (画面では見える) | control 自身の ✓ は raster の数 px (紙で約 1 mm) | 印の入った箱に太い ✓ を PDF の vector で重ねる (`check-form-static-text.py --mark-checked`) → [`excel-form-control-render`](#excel-form-control-render) |
 | formula 編集後 PDF / xlsx で別 cell の値が空欄 / `None` 化 | openpyxl の save が周辺 cell の formula cache を消す (= AST は保持するが cached value を再計算せず drop) | sentinel guard で abort + Excel.app open+save で再計算復元 → [`openpyxl-clears-formula-cache`](#openpyxl-clears-formula-cache) |
 | 値は書けたが見た目を PDF で確認したい | — | [`xlsx-to-pdf.sh`](#xlsx-to-pdf-script) で render。 ⚠️ **Quick Look (`qlmanage`) は textbox/標題 を忠実に描かない** → drawing 健在は zip 内 drawing 数で、 体裁は xlsx-to-pdf.sh の PDF で |
 | 承認欄/印影欄ボックスの**下罫線が出ない** (box が下に開く) | Excel→PDF が最下部の結合セル下罫線を落とす (罫線は xlsx に在るのに出力で消える) | **`close-pdf-form-boxes.py`** を pipeline 最後に挟む (= 開いた枠を全検出して閉じる、 print_area 拡張では直らない) → [`excel-pdf-bottom-border-drop`](#excel-pdf-bottom-border-drop) |
@@ -631,6 +634,20 @@ sh.finish(color=(0,0,0), width=0.75); sh.commit(); d.save(pdf+'.t')  # → os.re
 Excel 側で結合セル border を再設定する手もあるが merged-cell border は描画が不安定なので、 出力 PDF への線描が確実。 ⚠️ ただし**生成物 PDF への後描画なので、 再生成したら再度引く必要**がある (= pipeline の最後に挟む)。
 
 origin: 実測 — 様式の承認欄ボックス (`AC48:AG51`/`AH49:AJ51`) 下罫線が複数件とも未描画 → user 指摘 → 当初 1 箇所を座標手描きで閉じたが、 user「他も全部チェックする system を作れ」 で [`scripts/close-pdf-form-boxes.py`](../scripts/close-pdf-form-boxes.py) に格上げ (= 全枠を検査して閉じる、 selftest 付)。
+
+### <a id="excel-form-control-render"></a>⚠️ Excel の form control (checkbox) は枠の大きさの raster 画像として刷られる — 辺の欠け・箱の縦ズレ・読めない ✓ の 3 つの罠
+
+**前提**: 様式の checkbox が Excel の form control (VML + `xl/ctrlProps/*`) のとき、 Excel は PDF に**箱を 1 個ずつ画像 (PNG + SMask、 余白は透明) として描く** (実測。 = 素刷りと出力で画像の数を比べれば箱の消失が見える)。 画像の大きさは control の**枠** (pt) で決まり、 箱の描画はその中で行われる。 ここから 3 つの罠が出る。 どれも xlsx の値・数式・cell の検査には出ず、 出力の PDF か紙でしか見えない:
+
+1. **枠が箱より小さいと辺が切れる**: 枠の幅が 16pt 以下だと右辺が欠け、 17pt 以上で 4 辺が出る (実測。 雛形の control の枠は様式の作者が手で置くので箱ごとに差がある)。 素刷り (雛形を道具を通さず Excel で刷った PDF) にも同じ欠けが出れば雛形自身の欠陥。 直し = 刷る前に staged copy の枠を 18pt まで広げる (`formcase` の Excel 経路は `control_frame_min` op で自動)。
+2. **枠の高さを足すと箱が下がる**: Excel は枠の中で箱を**縦に中央**に描くので、 高さを +4pt 足すと箱が +1.4pt 下がり、 隣の行の点線に跨った (実測)。 箱は左寄せなので**幅だけ**広げる (左端の移動 0.00pt)。 検出 = 画像の置き場だけでなく、 置き場から見た箱の上端・左端の offset を素刷りと比べる ([`scripts/check-form-static-text.py`](../scripts/check-form-static-text.py) `--blank` の `box_shifts`、 0.5pt 超で止める。 行が伸びて箱ごと下がるのは label の写像で正常と読む)。
+3. **control 自身の ✓ は紙で読めない**: 箱の値を on にしても、 画像の中の ✓ は数 px の灰色 = 紙では約 1 mm の点で、 画面の確認では見えてしまう (実測)。 → 印の入った箱の外枠の内側を白で塗り、 太い黒の ✓ を PDF の **vector** で重ねる (`check-form-static-text.py --mark-checked`)。 描き方の規則: ✓ は開いた折れ線 2 本 (PyMuPDF `Shape.finish` の既定 `closePath=True` で閉じると三角になる。 黒の面積比の検査は形を見ないので通る = 実測) / 重ねるのは辺が 3 本以上の画像だけ (印影のように辺が無く内側が濃い画像に描かない = 実測で印影の内側を白で塗った) / 「紙で読める印」 の物差し = 箱の内側を render した黒の面積比 ≥ 0.10 (印なし 0.00 / control 自身の ✓ 0.01 / 重ねた ✓ 0.44)。
+
+**画像を読む側の 2 つの罠** (検出器を書くとき): (a) `page.get_images()` は同じ bitmap を 1 つに畳む = 箱は同じ画像の複数配置なので**配置は `page.get_image_rects()` で数える**。 (b) 箱の画像は SMask で余白が透明 = alpha を落として読むと余白が黒に見え、 印の無い箱まで 4 辺つきの「箱」 に見える。 SMask を合成した pixmap で読み、 透明を紙 (白) として扱う (合成 fixture で透明を 0 で保存すると同じ罠を自分で作る)。
+
+**検証の罠**: 重ねた印は数値の検査 (面積比・辺の数) が通っても**形**までは保証しない = 紙の大きさの render と高い倍率の crop で形を見る (実測: 3 倍・8 倍の crop を ☑ と読み違えた三角が、 別の目の検収で見つかった)。 selftest には PDF の path 命令の本数 (折れ線 2 本) を数える形で入れる。
+
+origin: 様式の checkbox が Excel の form control で、 Excel の経路で箱が紙に戻った後に 3 つとも順に出た (実測)。 pipeline 側の宣言・fill・照合の段 = [`form-case-pipeline.md#fidelity`](form-case-pipeline.md#fidelity) §14.2「form control の箱」。
 
 ### <a id="numeric-string-becomes-number"></a>ID 的な数字列は書式を text に固定してから書く (= Excel が数値化して機械照合が落ちる)
 

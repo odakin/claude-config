@@ -83,6 +83,9 @@ sections:
     level: 3
     title: "⚠️ Excel→PDF はフォーム最下部の結合セル下罫線を落とす (= 承認欄ボックス等が下に開く)"
     related: [fitz-pdf-toolkit, xlsx-to-pdf-script, excel-osascript-cell-write, symptom-index]
+  - id: excel-form-control-render
+    level: 3
+    title: "⚠️ Excel の form control (checkbox) は枠の大きさの raster 画像として刷られる — 辺の欠け・箱の縦ズレ・読めない ✓ の 3 つの罠"
   - id: numeric-string-becomes-number
     level: 3
     title: "ID 的な数字列は書式を text に固定してから書く (= Excel が数値化して機械照合が落ちる)"

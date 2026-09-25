@@ -516,6 +516,7 @@ hook の配線 (hooks dir の symlink + `settings.json` の entry) は「無い�
 - **event だけの退役**: 同じ file を別の event で使い続けるなら `Event:file 名` と書く (その event の entry だけを外し、 symlink は触らない)。
 - **安全側の既定**: registry に名前が在っても、 hook の実体が repo にまだ在れば外さない (書き間違いで生きている hook を消さない)。 消すのは symlink だけで、 entry は「command の語のどれかが `/<file 名>` で終わる hook」 だけを抜く (同じ entry に同居する他の hook・他の層の entry は残す)。 `--check` は残骸を不足と同じ「配線のずれ」 として数える。
 - **list と registry の矛盾は test で止める**: 同じ名前が両方に在ると、 毎回足して毎回外す (= [`scripts/sync-hook-settings.test.sh`](../scripts/sync-hook-settings.test.sh) が検査)。
+- **個人層の hook を層1 へ上げるときは file 名を変える**: 同じ名前のまま個人層で退役し層1 で新設すると、 退役の prune (symlink を消す) と層1 の sync (symlink を作る) が hooks dir の同じ path を取り合う (実測、 別名にして回避)。 退役の registry の理由には行き先の名前を書く。
 - **settings の entry を持たない symlink だけの配線 (custom agent 定義・skill 等) は registry なしで外せる**: 外す対象を「自分の source dir の中を指し、 その先がもう無い link」 に限れば所有が明らかで、 書き間違いで生きているものを消す経路も無い (他所を指す壊れた link は触らない)。 定義を消した後の壊れた link は、 次の session の registry 読み込みで「読めない定義」 として残り続ける (実測: 版を切り替えて旧 agent の定義を消した後、 各マシンに壊れた link が残っていた)。 installer の `--check` はこの残骸も配線のずれに数える
 
 origin: hook を 1 本消した時に、 各マシンの `settings.json` に command が残る形だと分かった (実測)。 同じ型の掃除が installer に hardcode で在り、 構造上、 その installer を再実行しないマシンには届かない形だった。
