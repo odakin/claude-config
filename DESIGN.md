@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-25: 規則の文書への変更は形 (追記か書き換えか) でなく語で見る — 追記の特権を外し、 書き換えだけを止める門も外す](#rule-doc-change-by-vocabulary-not-form)
 - [2026-09-25: SSO の入り直しは server の受け入れで決め、 入り直しの処理を部品 1 つに置く](#sso-recovery-server-acceptance)
 - [2026-09-23: memory file の予算 gate — 予算を超えて育つ commit だけ止める (縮める commit は通す)](#memory-budget-gate)
 - [2026-09-23: approve の引用照合 — 引けるのは記録する時点で著者の最新の発言だけ (短い引用は発言の全体)](#approve-quote-binding)
@@ -47,6 +48,20 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="rule-doc-change-by-vocabulary-not-form"></a>2026-09-25: 規則の文書への変更は形 (追記か書き換えか) でなく語で見る — 追記の特権を外し、 書き換えだけを止める門も外す
+
+**背景 (実測)**: 2026-09-23 に「既存の文を変えずに足すだけの変更」 を事前に止めない線を引いた。 2 日後、 足すだけが無料で書き換えが裁定になると agent は文書が良くなる形でなく通る形を選ぶことが出た (直すべき文の隣に段落を積む、 見出しの言い切りと食い違う行を足す、 古い文と新しい文を同居させる)。 本人の裁定 = 「追記だけするようになってごちゃごちゃになっている、 無意味」。 最初の直しは規則の文の削除・置き換えを止める門 (6 割以上を残す言い直しだけ、 言い直しの差分の語、 指示の向き) を残したが、 それも書き換えを追記より厳しく見る = 追記に逃げる動機が残るので、 本人「外して」 で外した。
+
+**判断** (engine = [`scripts/agent-rule-guard.py`](scripts/agent-rule-guard.py) の `judge_change` / `change_exemption`、 規則 = [`conventions/agent-rule-ownership.md#additive-and-free-zones`](conventions/agent-rule-ownership.md#additive-and-free-zones)):
+1. 事前に止めるのは語と隠しだけ: 足した文・言い直した文の緩める位置の緩和の語 (言い直した文は、 元の文が既に持っていた語を数えない)、 既存の文の fence / comment / 取り消し線への隠し、 下の行を過去のものにする見出し、 文書の全消し。
+2. 消す・置き換える・向きを変えるは通り、 記録と返事の行 (「消した「…」」「「前」→「後」」) に出る。 形は意味を守らない = 本人が読む面 (返事と差分) に検出を寄せる。
+3. 言い直しの対応は元の文の 6 割の文字の一致で取り、 2 文が 1 文になる・1 文が 2 文になる変更でも元の文の語を数えない。 対応の計算は候補を絞る (共有する語、 1 文あたり 24 件、 全体で 1.5 秒の予算) = hook の timeout を越えない。 予算を越えた分は厳しい側 (消した + 新しい文) に倒す。
+4. 規則の文書への追記は、 その tool の結果と一緒に隣の文と「既存の文は正しく残るか」 を agent に返す (止めない)。 止めた変更は denied-log に残す。 生きている session の変更は圧縮の開始で他の session に割り当てない。 Stop の案内の行は発言の先頭と file 名だけ。
+
+**採らなかった案**: (a) 追記も修正も本人の最新の依頼に結びつける (`apply --latest` 1 手) = agent は最新の発言を何でも引くので束縛が儀式になり、 手数だけ増える。 (b) 9/23 より前に戻す = 承認を何度も求める状態。 (c) 規則の文の削除だけ門に残す = 隣に逆向きの文を足せば通るので、 書き換えを避ける動機だけが残る。
+
+**実測**: 2 か月の規則の文書の版で、 裁定なしで通る割合 = 公開 repo 28% → 80%、 個人層 22% → 88% (止まる残りはほぼ緩和の語)。 適用の途中で engine を呼び元より先に写した数分、 全 session の Edit / commit が fail-closed で止まった = engine と呼び元は候補の呼び元で続けて写す ([`conventions/hook-authoring.md#engine-edit-is-deploy`](conventions/hook-authoring.md#engine-edit-is-deploy))。 候補と実測の記録は個人層の plans (同日の results)。
 
 ## <a id="sso-recovery-server-acceptance"></a>2026-09-25: SSO の入り直しは server の受け入れで決め、 入り直しの処理を部品 1 つに置く
 

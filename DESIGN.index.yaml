@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: rule-doc-change-by-vocabulary-not-form
+    legacy: "2026-09-25"
+    level: 2
+    title: "2026-09-25: 規則の文書への変更は形 (追記か書き換えか) でなく語で見る — 追記の特権を外し、 書き換えだけを止める門も外す"
   - id: sso-recovery-server-acceptance
     legacy: "2026-09-25"
     level: 2
