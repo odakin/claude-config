@@ -93,10 +93,16 @@ def run_docx(stub_file, doc_id, fields, choices, texts) -> int:
     wb = m.workbook(doc_id)
     tpl = S.template_path(spec)
     try:
-        DF.write(spec, tpl, fields, wb)
+        if DF.word_available():
+            DF.write_word(spec, tpl, fields, wb)          # D6 (2026-09-25): Word で書く = 欄の run の書式・図・field が雛形のまま
+        else:
+            print("⚪ Word が無い (か FORMCASE_DOCX_WRITER=python) = python-docx で書く (空欄の run の書式が既定に落ちうる、 下の ⚠️)")
+            DF.write(spec, tpl, fields, wb)
     except DF.DocxFormError as e:
         print(f"🔴 {e}")
         return 2
+    for line in DF.run_format_lines(spec, tpl, wb, fields):   # 欄の run の書式を雛形と照合 (D6)
+        print("   " + line)
     ov = {"choices": {k: v for k, v in choices.items() if v is not None},
           "texts": {k: v for k, v in texts.items() if v is not None}}
     DF.overlay_path(wb).write_text(

@@ -485,3 +485,175 @@ def seal_places(pdf: Path, spec) -> dict:
     # engine: 画像の左端 = anchor の右端 + dx、 インク径 = size → インクの中心 = anchor.x1 + dx + size/2
     dx = (target.x0 + target.x1) / 2 + float(s.get("dx", 0)) - target.x1 - size / 2
     return {page_no: f"anchor={s['anchor']},occurrence={occurrence},size={size:g},dx={dx:.2f},dy={float(s.get('dy', 0)):g},avoid=none"}
+
+
+# ---------------------------------------------------------------------------
+# Word で書く (D6、 2026-09-25) — 段落番号の写像と run の書式の照合
+# ---------------------------------------------------------------------------
+def word_available() -> bool:
+    from . import word as W
+
+    return W.available()
+
+
+class WordIndex:
+    """python-docx の欄の場所 → Word の Paragraphs の番号 (1 始まり)。 Word は本文・表の cell の段落・**表の行末の記号**を
+    順に数える (content control の中の段落も数えるが python-docx の paragraphs には無い)。 ずれは Word で書く前に
+    雛形の字と照合して止める (word.write_paragraphs の expect)。"""
+
+    def __init__(self, d):
+        self.body = []            # python-docx d.paragraphs[k] → Word の番号
+        self.cells = {}           # tc の path → [Word の番号 (直下の段落)]
+        self._tree = d.element.getroottree()
+        self._i = 0
+        for child in d.element.body.iterchildren():
+            self._block(child, top=True)
+
+    def _block(self, el, top=False):
+        tag = el.tag
+        if tag == _w("p"):
+            self._i += 1
+            if top:
+                self.body.append(self._i)
+        elif tag == _w("tbl"):
+            for tr in el.iterchildren(_w("tr")):
+                for tc in tr.iterchildren(_w("tc")):
+                    paras = []
+                    for c in tc.iterchildren():
+                        if c.tag == _w("p"):
+                            self._i += 1
+                            paras.append(self._i)
+                        elif c.tag in (_w("tbl"), _w("sdt")):
+                            self._block(c)
+                    self.cells[self._tree.getpath(tc)] = paras
+                self._i += 1                                  # 行末の記号 (end-of-row mark) も段落
+        elif tag == _w("sdt"):
+            content = el.find(_w("sdtContent"))
+            for c in (content.iterchildren() if content is not None else []):
+                self._block(c)
+
+    def of(self, d, at) -> list:
+        """欄の場所 (spec の at) → [Word の番号] (paragraph 指定なら 1 つ、 cell なら直下の段落全部)。"""
+        if "table" in at:
+            tc = _cell(d, at)._tc
+            paras = self.cells.get(self._tree.getpath(tc))
+            if paras is None:
+                raise DocxFormError(f"欄の場所 {at} の cell が段落の写像に無い")
+            if "paragraph" in at:
+                try:
+                    return [paras[int(at["paragraph"])]]
+                except IndexError as e:
+                    raise DocxFormError(f"欄の場所 {at} の段落が無い") from e
+            return paras
+        try:
+            return [self.body[int(at["para"])]]
+        except (IndexError, KeyError) as e:
+            raise DocxFormError(f"段落の場所 {at} が docx に無い = 雛形が spec と違う") from e
+
+
+def word_edits(spec, template: Path, values: dict) -> tuple:
+    """(edits, expect) = Word に当てる編集 [(番号, 種類, 値)] と、 書く前に照合する {番号: 雛形の字}。 write() と同じ規則。"""
+    d = _doc(template)
+    wi = WordIndex(d)
+    edits, expect = [], {}
+
+    def note(idxs, at_):
+        for i, p in zip(idxs, _paragraphs(d, at_) if "paragraph" not in at_ else [_paragraphs(d, at_)[int(at_["paragraph"])]]):
+            expect.setdefault(i, p.text)
+
+    for r in conf(spec).get("render") or []:
+        idxs = wi.of(d, r["at"])
+        if r.get("size"):
+            for i in idxs:
+                edits.append((i, "size", float(r["size"])))
+    for f in fields(spec):
+        v = values.get(f["id"])
+        if v is None:
+            continue
+        v = rendered(f, v)
+        at_ = f["at"]
+        idxs = wi.of(d, at_)
+        note(idxs, at_)
+        mode = f.get("mode", "text")
+        if mode == "text":
+            edits.append((idxs[0], "text", str(v)))
+            for i in idxs[1:]:
+                edits.append((i, "text", ""))
+            if f.get("size"):
+                edits.append((idxs[0], "size", float(f["size"])))
+        elif mode == "append":
+            if "table" not in at_:
+                raise DocxFormError(f"{f['id']}: mode append は表の cell だけ")
+            edits.append((idxs[-1], "insert_after", (str(v), float(f["size"]) if f.get("size") else None)))
+        else:
+            raise DocxFormError(f"{f['id']}: mode {mode!r} は text / append のどれでもない")
+    return edits, expect
+
+
+def write_word(spec, template: Path, values: dict, out: Path) -> None:
+    """雛形の copy に Word で値を書く (python-docx で run を書き換えない = run の書式・図・field・記号が雛形のまま)。"""
+    import shutil
+
+    from . import word as W
+
+    edits, expect = word_edits(spec, template, values)
+    shutil.copy2(str(template), str(out))
+    try:
+        W.write_paragraphs(out, edits, expect)
+    except W.WordError as e:
+        raise DocxFormError(str(e)) from e
+
+
+def _rpr_of(p) -> dict:
+    """段落の最初の run の書式 (run が無ければ段落記号の書式) = {ascii, eastAsia, sz, b}。 None = 指定なし。"""
+    rpr = None
+    if p.runs:
+        rpr = p.runs[0]._element.find(_w("rPr"))
+    else:
+        ppr = p._p.find(_w("pPr"))
+        rpr = ppr.find(_w("rPr")) if ppr is not None else None
+    out = {"ascii": None, "eastAsia": None, "sz": None, "b": None}
+    if rpr is None:
+        return out
+    fonts = rpr.find(_w("rFonts"))
+    if fonts is not None:
+        out["ascii"] = fonts.get(_w("ascii")) or fonts.get(_w("hAnsi"))
+        out["eastAsia"] = fonts.get(_w("eastAsia"))
+    sz = rpr.find(_w("sz"))
+    out["sz"] = sz.get(_w("val")) if sz is not None else None
+    out["b"] = rpr.find(_w("b")) is not None
+    return out
+
+
+def run_format_lines(spec, template: Path, docx_path: Path, values: dict | None = None) -> list:
+    """欄の run の書式を雛形と照合する検査 (D6): 雛形が欄に付けた font (rFonts の ascii / eastAsia)・大きさ (sz)・太字が、
+    記入後の欄の最初の run で違えば ⚠️ (= 既定に落ちた。 python-docx の run.text は空欄で既定の run を作る)。
+    spec の size を指定した欄は大きさの差を ⚠️ にしない。 values を渡せば書いた欄だけ見る。"""
+    t, d = _doc(template), _doc(docx_path)
+    counts = template_counts(spec, template)
+    out = []
+    for f in fields(spec):
+        if values is not None and values.get(f["id"]) is None:
+            continue
+        try:
+            tp, dp = _paragraphs(t, f["at"]), _paragraphs(d, f["at"])
+        except DocxFormError:
+            continue
+        if f.get("mode", "text") == "append":
+            base = counts.get(f["id"], len(tp))
+            pairs = [(tp[-1], p) for p in dp[base:]]
+        elif "paragraph" in f["at"]:
+            k = int(f["at"]["paragraph"])
+            pairs = [(tp[k], dp[k])] if k < len(tp) and k < len(dp) else []
+        else:
+            pairs = [(tp[0], dp[0])] if tp and dp else []
+        for a, b in pairs:
+            ra, rb = _rpr_of(a), _rpr_of(b)
+            diff = [k for k in ("ascii", "eastAsia", "sz", "b") if ra[k] not in (None, False) and ra[k] != rb[k]]
+            if f.get("size"):
+                diff = [k for k in diff if k != "sz"]
+            if diff:
+                out.append(f"⚠️ {f['id']} ({f.get('label', f['id'])}): run の書式が雛形と違う "
+                           + ", ".join(f"{k} {ra[k]!r} → {rb[k]!r}" for k in diff)
+                           + " (= 既定に落ちた。 Word で書く経路 〔write_word〕 なら雛形の書式が付く)")
+    return out

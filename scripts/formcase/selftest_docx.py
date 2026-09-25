@@ -58,6 +58,34 @@ def run_docx_tests(tmp: Path, expect) -> None:
            and cells == ["（注記）", "研究発表"], cells)
     expect("docx: 読み戻しが一致", DF.readback(spec, tpl, out, vals) == [], DF.readback(spec, tpl, out, vals))
     expect("docx: 図・field・記号の無い雛形なら消失の行は出ない", DF.object_loss(tpl, out) == [], DF.object_loss(tpl, out))
+    # D6 (Word で書く): 段落番号の写像 = 本文 → 表の cell の段落 → 行末の記号 の順 (実物 2 雛形で 319/321 一致、 残り 2 = 改行・改頁の表記)
+    dt = docx.Document(tpl)
+    wi = DF.WordIndex(dt)
+    expect("D6: WordIndex = 本文 [1, 2]、 表 (0,0)=3 (0,1)=4 行末=5 (1,0)=6 (1,1)=7",
+           wi.body == [1, 2] and wi.of(dt, {"table": 0, "row": 0, "col": 1}) == [4]
+           and wi.of(dt, {"table": 0, "row": 1, "col": 1}) == [7], (wi.body, wi.cells))
+    edits, expect_txt = DF.word_edits(spec, tpl, vals)
+    expect("D6: word_edits = text は番号と値、 append は insert_after、 照合の字は雛形の段落の字",
+           (2, "text", "2026年9月18日") in edits and (4, "text", "甲野太郎　印") in edits
+           and any(e[0] == 7 and e[1] == "insert_after" and e[2][0] == "研究発表" for e in edits)
+           and expect_txt.get(7) == "（注記）" and expect_txt.get(2) == "20　　年　　月　　日", (edits, expect_txt))
+    # run の書式の照合: 雛形の空欄の段落記号に sz=20 が付いていると、 python-docx の記入 (既定の run) は ⚠️
+    from docx.oxml.ns import qn
+    from lxml import etree
+
+    tpl2 = root / "tpl-sz.docx"
+    d2 = docx.Document(tpl)
+    p2 = d2.tables[0].cell(0, 1).paragraphs[0]
+    ppr = p2._p.get_or_add_pPr()
+    rpr = etree.SubElement(ppr, qn("w:rPr"))
+    etree.SubElement(rpr, qn("w:sz")).set(qn("w:val"), "20")
+    d2.save(tpl2)
+    out2b = root / "case-sz.docx"
+    DF.write(spec, tpl2, vals, out2b)
+    fl = DF.run_format_lines(spec, tpl2, out2b, vals)
+    expect("D6: run_format_lines = 雛形の sz 20 が記入後の run に無い → ⚠️ (name)",
+           len(fl) == 1 and "name" in fl[0] and "sz '20'" in fl[0], fl)
+    expect("D6: 書式の指定が無い雛形 (tpl) は ⚠️ 0", DF.run_format_lines(spec, tpl, out, vals) == [])
     # 欄の段落の run に記号 (w:sym = Wingdings の □ 等) があると、 run の書き換えで黙って消える (2026-09-24 RCA)
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
