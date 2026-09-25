@@ -14,6 +14,9 @@
        section:<名>  repo の設定 (protect_sections) が指定した節
        eq:<label> / math#<hash>  数式の display 環境 (equation / align / gather / multline / eqnarray /
                   flalign / alignat / displaymath / \\[ \\])。 label があれば label、 無ければ中身の hash で識別
+                  display 環境を 1 引数の macro で包む原稿 (\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}} 型) は、
+                  その macro の引数も同じ識別で式として読み、 原稿の範囲 (.sty / .cls を含む) でその macro の定義が
+                  変わる変更も math#<hash> として止める (拾い方 = wrapper_context)
      列挙した英米綴り・冠詞・句読点・大文字小文字・ハイフン・空白・コメントだけの差分は通す。
   2. agent の権限規約 (一般述語は agent-rule-guard.py が所有。marker 無しの指示文書・制御設定と repo の追加宣言も含む):
        authority:<id>    自分の行に置いた `agent-authority:begin id=<id>` 〜 `agent-authority:end id=<id>` の間
@@ -44,7 +47,7 @@
   file を書く (Stop が確かめ、 無ければ 1 回差し戻す = 意味の取り違えを著者がその場で見る。 後から記録を読む前提にしない)。
 
 原稿の範囲 (scope): repo の `.claude/manuscript-guard.json` があればそれ (include / exclude / protect_sections /
-  disabled)、 無ければ既定 = abstract 環境を持つ .tex と、 そこから \\input / \\include / \\subfile される .tex。
+  disabled。 math_macros = 定義を自動で拾えない数式の wrapper macro の名前)、 無ければ既定 = abstract 環境を持つ .tex と、 そこから \\input / \\include / \\subfile される .tex。
 
 使い方:
   manuscript-claim-guard.py hook claude|codex      PreToolUse の event を stdin で受け deny JSON を出す
@@ -67,16 +70,19 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import fnmatch
+import functools
 import glob
 import importlib.util
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shlex
 import stat
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import NamedTuple
 
@@ -88,7 +94,8 @@ except ImportError:  # lib が無い古い配置 = git show に戻す
 
 RULE_REF_TOKEN = "manuscript-claim-ownership.md" + "#rule"  # 分けて書く = 本 file の行が参照行に見えないように
 CONFIG_REL = ".claude/manuscript-guard.json"
-TEXT_SUFFIXES = {".tex", ".md", ".txt", ".py", ".sh", ".js", ".ts", ".json", ".toml", ".yaml", ".yml", ".rules", ""}
+TEXT_SUFFIXES = {".tex", ".sty", ".cls", ".def", ".clo", ".md", ".txt", ".py", ".sh", ".js", ".ts", ".json", ".toml", ".yaml", ".yml",
+                 ".rules", ""}
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 # One authority predicate across domains; keep these names for compatibility.
@@ -109,6 +116,49 @@ MATH_RE = re.compile(
     r"|\\\[(?P<br>.*?)\\\]",
     re.S,
 )
+
+
+def _name_re(braced: str, bare: str) -> str:
+    """定義される名前 = {\\名前} か \\名前 (group 名を渡す)。"""
+    return r"(?:\{\s*\\(?P<" + braced + r">[A-Za-z@]+)\s*\}|\\(?P<" + bare + r">[A-Za-z@]+))"
+
+
+# display 環境を 1 引数の macro で包む原稿 (\newcommand{\al}[1]{\begin{align}#1\end{align}})。 包んだ式は \begin の
+# 形を持たないので MATH_RE では見えない = 定義を拾い、 使う側の brace の中身を式として読む。 拾う定義は、 本体が
+# 数式環境 1 つで引数をそのまま包むものだけ (\newcommand / \renewcommand / \providecommand / \DeclareRobustCommand
+# の [1]、 \def 系の #1、 xparse の {m})。 それ以外の書き方は設定の math_macros で名前を宣言する。
+# 定義の側も守る: wrapper の名前の定義 (どの形でも) が原稿の範囲で変われば、 それ自体を式の変更として止める
+# (定義を検出できない形に書き換えてから式を直す 2 段の編集を、 1 段目で止める)
+WRAPPER_DEF_RE = re.compile(
+    r"\\(?:(?:re)?newcommand|providecommand|DeclareRobustCommand)\*?\s*" + _name_re("a", "b")
+    + r"\s*\[\s*1\s*\]\s*(?=\{)"
+    r"|\\[gex]?def\s*\\(?P<c>[A-Za-z@]+)\s*#1\s*(?=\{)"
+    r"|\\(?:New|Renew|Provide|Declare)DocumentCommand\s*" + _name_re("d", "e") + r"\s*\{\s*m\s*\}\s*(?=\{)"
+)
+# 名前を定義する文の全部 (wrapper でない定義を含む) = 定義の出来事を比べるため
+DEF_ANY_RE = re.compile(
+    r"\\(?:(?:re)?newcommand|providecommand|DeclareRobustCommand|(?:New|Renew|Provide|Declare)DocumentCommand)"
+    r"\*?\s*" + _name_re("a", "b")
+    + r"|\\(?:[gex]?def|let)\s*\\(?P<c>[A-Za-z@]+)"
+)
+WRAPPER_BODY_RE = re.compile(
+    r"\\begin\{(?P<env>(?:" + "|".join(MATH_ENVS) + r")\*?)\}#1\\end\{(?P=env)\}|\\\[#1\\\]"
+)
+MACRO_NAME_RE = re.compile(r"^\\?([A-Za-z@]+)$")
+WRAPPER_SOURCE_GLOBS = ("*.tex", "*.sty", "*.cls", "*.def", "*.clo")  # 原稿の範囲で wrapper の定義を探す file
+DEF_SOURCE_SUFFIXES = (".sty", ".cls", ".def", ".clo")  # 原稿の範囲の外の拡張子だが、 wrapper の定義の変更は見る
+# verbatim 系の中身 (LaTeX を解説する原稿の例示) は定義でも読み込みでもない = 同じ長さの空白にしてから探す
+VERBATIM_RE = re.compile(
+    r"\\begin\{(verbatim\*?|Verbatim|lstlisting|minted|alltt|comment)\}.*?\\end\{\1\}"
+    r"|\\verb\*?([^\sA-Za-z*])(?:(?!\2)[^\n])*\2",
+    re.S,
+)
+INPUT_DEP_RE = re.compile(
+    r"\\(?:input|include|subfile|(?:sub)?import\s*\{(?P<dir>[^}]*)\})\s*\{(?P<file>[^}]+)\}"
+    r"|\\input\s+(?P<bare>[^\s{}\\]+)"
+)
+PKG_DEP_RE = re.compile(r"\\(?P<cmd>usepackage|RequirePackage|documentclass|LoadClass)\s*(?:\[[^\]]*\])?\s*"
+                        r"\{(?P<names>[^}]+)\}")
 INTRO_RE = re.compile(r"^(introduction|introductory remarks|motivation|序論|はじめに|導入|序)$")
 CONCL_RE = re.compile(
     r"^(conclusions?|concluding remarks|summary|discussions?|outlook|"
@@ -200,10 +250,74 @@ def norm_math(body: str) -> str:
     return s.rstrip(".,;:")
 
 
-def math_regions(text: str) -> dict[str, str]:
+def blank_verbatim(text: str) -> str:
+    """verbatim 系の中身を、 改行を残して同じ長さの空白にする (位置で照合する呼び元のため長さを保つ)。"""
+    if "\\begin{" not in text and "\\verb" not in text:
+        return text
+    return VERBATIM_RE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
+
+
+@functools.lru_cache(maxsize=4096)
+def macro_definitions(text: str) -> tuple[tuple[int, str, str], ...]:
+    """text の中の名前の定義 = (定義される \\名前 の位置, 名前, 出来事)。 出来事 = "math:<環境>" (数式の wrapper) か
+    "other" (それ以外の定義。 \\let・引数の数や本体の違う定義を含む)。 text はコメント除去済み。 同じ text は
+    1 回だけ読む (原稿の範囲の版 × 前後で同じ file を何度も渡すため)。"""
+    text = blank_verbatim(text)
+    out: list[tuple[int, str, str]] = []
+    for m in DEF_ANY_RE.finditer(text):
+        g = next(k for k in ("a", "b", "c") if m.group(k))
+        name, event = m.group(g), "other"
+        w = WRAPPER_DEF_RE.match(text, m.start())
+        if w and next((w.group(k) for k in ("a", "b", "c", "d", "e") if w.group(k)), None) == name:
+            arg = balanced_arg(text, w.end())
+            bm = WRAPPER_BODY_RE.fullmatch(re.sub(r"\s+", "", arg[0])) if arg else None
+            if bm:
+                event = "math"  # 環境の種類は区別しない (直の環境の align → align* も変更でない)
+        out.append((m.start(g) - 1, name, event))
+    return tuple(out)
+
+
+def math_wrappers(text: str) -> set[str]:
+    """text が数式の wrapper として定義する macro の名前。"""
+    return {name for _, name, event in macro_definitions(text) if event == "math"}
+
+
+def math_spans(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> list[tuple[int, int, str]]:
+    """(開始, 終わり, 中身) を文頭から順に。 数式環境と wrapper macro の使用を 1 本の走査で読む = macro の引数の中の
+    文字列 (align の中の \\\\[2pt] 等) を別の式の始まりと読まない。 使用 = 名前の後の [...] (宣言した macro の optional
+    引数) を飛ばした最初の brace の中身。 定義の文の中の名前は使用でない。 macros が空なら MATH_RE.finditer と同じ。"""
+    use_re = (re.compile(r"\\(?:" + "|".join(re.escape(n) for n in sorted(macros, key=len, reverse=True))
+                         + r")(?![A-Za-z@])\s*(?:\[[^\]]*\]\s*)*(?=\{)") if macros else None)
+    defined_at = {p for p, _, _ in macro_definitions(text)} if macros else set()
+    out: list[tuple[int, int, str]] = []
+    pos = 0
+    m = MATH_RE.search(text)
+    u = use_re.search(text) if use_re else None
+    while True:
+        if m is not None and m.start() < pos:
+            m = MATH_RE.search(text, pos)
+        if u is not None and u.start() < pos:
+            u = use_re.search(text, pos)
+        if u is not None and u.start() in defined_at:  # \newcommand\al[1]{…} の \al[1] は使用でない
+            u = use_re.search(text, u.start() + 1)
+            continue
+        if u is not None and (m is None or u.start() < m.start()):
+            arg = balanced_arg(text, u.end())
+            if arg is None:  # 閉じていない引数 = 式として読めない (書きかけの file)
+                pos = u.end()
+                continue
+            out.append((u.start(), arg[1], arg[0]))
+            pos = arg[1]
+            continue
+        if m is None:
+            return out
+        out.append((m.start(), m.end(), m.group("body") if m.group("body") is not None else m.group("br")))
+        pos = m.end()
+
+
+def math_regions(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> dict[str, str]:
     out: dict[str, str] = {}
-    for m in MATH_RE.finditer(text):
-        body = m.group("body") if m.group("body") is not None else m.group("br")
+    for _, _, body in math_spans(text, macros):
         lab = re.search(r"\\label\{([^}]*)\}", body)
         norm = norm_math(body)
         label = lab.group(1).strip() if lab else ""
@@ -217,8 +331,16 @@ def math_regions(text: str) -> dict[str, str]:
     return out
 
 
-def strip_math(text: str) -> str:
-    return MATH_RE.sub(" ", text)
+def strip_math(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> str:
+    if not macros:
+        return MATH_RE.sub(" ", text)
+    parts, pos = [], 0
+    for start, end, _ in math_spans(text, macros):
+        parts.append(text[pos:start])
+        parts.append(" ")
+        pos = end
+    parts.append(text[pos:])
+    return "".join(parts)
 
 
 def section_title_norm(raw: str) -> str:
@@ -266,8 +388,8 @@ def prose_regions(text: str, protect_sections: list[str]) -> dict[str, str]:
     return out
 
 
-def prose_tokens(raw: str) -> list[str]:
-    s = strip_math(strip_tex_comments(raw))
+def prose_tokens(raw: str, macros: frozenset[str] | set[str] | tuple = ()) -> list[str]:
+    s = strip_math(strip_tex_comments(raw), macros)
     toks: list[str] = []
     for m in re.finditer(
         r"\$[^$]*\$|\\\(.*?\\\)|\\[A-Za-z@]+|[A-Za-z]+|\d+(?:\.\d+)?|[\u3040-\u30ff\u3400-\u9fff]",
@@ -291,8 +413,8 @@ def prose_tokens(raw: str) -> list[str]:
     return toks
 
 
-def copyedit_only(old: str, new: str) -> bool:
-    a, b = prose_tokens(old), prose_tokens(new)
+def copyedit_only(old: str, new: str, macros: frozenset[str] | set[str] | tuple = ()) -> bool:
+    a, b = prose_tokens(old, macros), prose_tokens(new, macros)
     if a == b:
         return True
     if len(a) != len(b):
@@ -367,10 +489,12 @@ def load_config(repo: Path | None, text_override: str | None = None) -> dict:
         raise InspectionError("config-invalid") from exc
     if not isinstance(cfg, dict):
         raise InspectionError("config-invalid")
-    for key in ("include", "exclude", "protect_sections"):
+    for key in ("include", "exclude", "protect_sections", "math_macros"):
         if key in cfg and (not isinstance(cfg[key], list) or
                            any(not isinstance(x, str) for x in cfg[key])):
             raise InspectionError("config-invalid")
+    if any(not MACRO_NAME_RE.match(x) for x in cfg.get("math_macros", [])):
+        raise InspectionError("config-invalid")
     if "disabled" in cfg and not isinstance(cfg["disabled"], bool):
         raise InspectionError("config-invalid")
     return cfg
@@ -453,6 +577,10 @@ def begin_inspection(repo: Path) -> None:
 def reset_caches() -> None:
     """process 内の Git 由来の cache を全部捨てる (selftest が commit を重ねた後に呼ぶ)。"""
     _INPUT_CACHE.clear()
+    _SOURCE_BASE_CACHE.clear()
+    _SOURCE_TARGET_CACHE.clear()
+    _SOURCE_CLOSURE_CACHE.clear()
+    macro_definitions.cache_clear()
     _AUTHORITY_PATH_CACHE.clear()
     _MANIFEST_PATTERN_CACHE.clear()
     _HEAD_REF.clear()
@@ -525,6 +653,221 @@ def manuscript_in_scope(repo: Path | None, rel: str, old: str, new: str, cfg: di
     if "\\begin{abstract}" in strip_tex_comments(old) or "\\begin{abstract}" in strip_tex_comments(new):
         return True
     return repo is not None and any(rel in input_graph(repo, rev) for rev in ("worktree", "HEAD", "index"))
+
+
+# 原稿の範囲で wrapper の定義を読むための cache (1 回の検査の process の間だけ。 hook-authoring.md#hook-cost-per-item)
+_SOURCE_BASE_CACHE: dict[str, tuple[list[dict[str, str]], frozenset[str]]] = {}   # repo -> (中身の違う版, 追跡 path)
+_SOURCE_TARGET_CACHE: dict[tuple[str, str, str], list[tuple[tuple[str, ...], str | None]]] = {}     # (repo, path, 中身) -> 参照先
+_SOURCE_CLOSURE_CACHE: dict[tuple[str, int, str], frozenset[str]] = {}           # (repo, 版の番号, root) -> 到達範囲
+TEX_SOURCE_SUFFIXES = (".tex", ".sty", ".cls", ".def", ".clo")
+KNOWN_TEX_EXTS = TEX_SOURCE_SUFFIXES + (".ltx",)
+
+
+def _index_entries(repo: Path) -> dict[str, str]:
+    """index の .tex / .sty / .cls = {path: blob id} (stage 0 だけ。 衝突中の path は作業ツリーの版に任せる)。"""
+    r = checked_git(repo, "ls-files", "-s", "-z", "--", *WRAPPER_SOURCE_GLOBS)
+    out: dict[str, str] = {}
+    for rec in filter(None, r.stdout.split("\0")):
+        meta, _, path = rec.partition("\t")
+        parts = meta.split()
+        if len(parts) == 3 and parts[2] == "0":
+            out[path] = parts[1]
+    return out
+
+
+def _head_entries(repo: Path) -> dict[str, str]:
+    if not has_head(repo):
+        return {}
+    r = checked_git(repo, "ls-tree", "-r", "-z", "HEAD")
+    out: dict[str, str] = {}
+    for rec in filter(None, r.stdout.split("\0")):
+        meta, _, path = rec.partition("\t")
+        parts = meta.split()
+        if len(parts) == 3 and parts[1] == "blob" and path.endswith(TEX_SOURCE_SUFFIXES):
+            out[path] = parts[2]
+    return out
+
+
+def _readable(t: str | None) -> bool:
+    return t is not None and not t.startswith("\x00GITCRYPT")
+
+
+def source_bases(repo: Path) -> tuple[list[dict[str, str]], frozenset[str]]:
+    """repo の .tex / .sty / .cls / .def / .clo の版 (作業ツリー 〔未追跡を含む〕・index・HEAD) のうち中身の違うもの。 {path: コメント除去済み}。
+    HEAD は index と blob の違う path だけ読む (git の呼び出しは版の数によらず 3-5 回)。 読めない版 (未復号・
+    作業ツリーで消した file) は入れない = 他の版に任せる (定義の源は補助の入力)。 2 つ目 = index か HEAD に在る path
+    (原稿の起点はこの中からだけ選ぶ = 置き忘れの未追跡の draft を原稿にしない)。"""
+    key = str(repo)
+    if key in _SOURCE_BASE_CACHE:
+        return _SOURCE_BASE_CACHE[key]
+    index, head = _index_entries(repo), _head_entries(repo)
+    prefetch_blobs(repo, [(":" + p, p) for p in index]
+                   + [("HEAD:" + p, p) for p, sha in head.items() if index.get(p) != sha])
+    idx: dict[str, str] = {}
+    for p in index:
+        t = blob_text(repo, ":" + p)
+        if _readable(t):
+            idx[p] = strip_tex_comments(t)
+    hd: dict[str, str] = {}
+    for p, sha in head.items():
+        if index.get(p) == sha and p in idx:
+            hd[p] = idx[p]
+            continue
+        t = blob_text(repo, "HEAD:" + p)
+        if _readable(t):
+            hd[p] = strip_tex_comments(t)
+    untracked = checked_git(repo, "ls-files", "-o", "--exclude-standard", "-z", "--", *WRAPPER_SOURCE_GLOBS)
+    wt: dict[str, str] = {}
+    for p in [*index, *filter(None, untracked.stdout.split("\0"))]:
+        try:
+            t = (repo / p).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if _readable(t):
+            wt[p] = strip_tex_comments(t)
+    bases: list[dict[str, str]] = []
+    for d in (wt, idx, hd):
+        if not any(d == b for b in bases):  # 同じ中身の版は 1 回だけ数える (前後で同じ数え方になる)
+            bases.append(d)
+    _SOURCE_BASE_CACHE[key] = (bases, frozenset(index) | frozenset(head))
+    return _SOURCE_BASE_CACHE[key]
+
+
+def source_targets(f: str, text: str) -> list[tuple[tuple[str, ...], str | None]]:
+    """f が読み込む file の候補。 1 件 = (優先順の候補 path (f の dir、 repo の root), fallback の file 名)。 fallback =
+    \\usepackage 系・\\documentclass 系 (TEXINPUTS で別の dir から読むのが普通) だけ、 同じ名前の file を全部読む
+    (\\input 系の解決できない行は辿らない = 移動で腐った行が別原稿の file を引き込まない)。 \\input 系 (\\input{x} / \\input x / \\include / \\subfile / \\import{dir}{x} /
+    \\subimport{dir}{x}) は拡張子が無ければ .tex を足す。 \\usepackage / \\RequirePackage → .sty、
+    \\documentclass / \\LoadClass → .cls。 text はコメント除去済み。"""
+    here = posixpath.dirname(f)
+    text = blank_verbatim(text)
+    out: list[tuple[tuple[str, ...], str | None]] = []
+
+    def add(dirs: tuple[str, ...], target: str, suffix: str, fallback: bool = False) -> None:
+        if posixpath.splitext(target)[1] not in KNOWN_TEX_EXTS:
+            target += suffix
+        seen: list[str] = []
+        for d in dirs:
+            c = posixpath.normpath(posixpath.join(d, target))
+            if c not in seen:
+                seen.append(c)
+        out.append((tuple(seen), posixpath.basename(target) if fallback else None))
+
+    for m in INPUT_DEP_RE.finditer(text):
+        target = (m.group("file") or m.group("bare") or "").strip()
+        if not target:
+            continue
+        sub = (m.group("dir") or "").strip()
+        add((posixpath.join(here, sub), sub) if m.group("dir") is not None else (here, ""), target, ".tex")
+    for m in PKG_DEP_RE.finditer(text):
+        suffix = ".cls" if m.group("cmd") in ("documentclass", "LoadClass") else ".sty"
+        for name in m.group("names").split(","):
+            if name.strip():
+                add((here, ""), name.strip(), suffix, fallback=True)
+    return out
+
+
+def _targets(rkey: str, f: str, text: str) -> list[tuple[tuple[str, ...], str | None]]:
+    k = (rkey, f, text)  # str は hash を持ち回る = 2 回目からは中身を読み直さない
+    if k not in _SOURCE_TARGET_CACHE:
+        _SOURCE_TARGET_CACHE[k] = source_targets(f, text)
+    return _SOURCE_TARGET_CACHE[k]
+
+
+def _closure(rkey: str, universe: dict[str, str], by_name: dict[str, list[str]], root: str) -> frozenset[str]:
+    seen: set[str] = set()
+    stack = [root]
+    while stack:
+        f = stack.pop()
+        if f in seen or f not in universe:
+            continue
+        seen.add(f)
+        for cands, fallback in _targets(rkey, f, universe[f]):
+            hit = next((c for c in cands if c in universe), None)
+            if hit is not None:
+                stack.append(hit)
+            elif fallback:  # TEXINPUTS 等で別の dir から読む構成 = 同じ名前の file を全部 (複数なら多い方に倒す)
+                stack.extend(by_name.get(fallback, ()))
+    return frozenset(seen)
+
+
+def manuscript_component(repo: Path, bi: int, base: dict[str, str], rel: str, rel_text: str, cfg: dict,
+                         tracked: frozenset[str] = frozenset()) -> set[str]:
+    """rel を含む原稿の file の集合 (原稿 = abstract を持つ .tex か設定 include の .tex から辿れる file)。 base =
+    source_bases の bi 番目の版、 rel だけ rel_text に置き換えて辿る。 rel を含む原稿が無ければ空。 exclude は
+    保護する範囲を外す設定で、 定義を探す起点からは外さない。 起点は追跡 file と rel だけ (tracked)。"""
+    include = cfg.get("include", []) or []
+
+    def is_root(f: str, text: str) -> bool:
+        return (f.endswith(".tex") and (f in tracked or f == rel)
+                and ("\\begin{abstract}" in text or any(fnmatch.fnmatch(f, g) for g in include)))
+
+    universe = base if base.get(rel) == rel_text else {**base, rel: rel_text}
+    by_name: dict[str, list[str]] = {}
+    for p in universe:
+        by_name.setdefault(posixpath.basename(p), []).append(p)
+    # rel の読み込み先が base と同じなら、 各 root の到達範囲は base のもの (cache) と同じ
+    rkey = str(repo)
+    same_edges = rel in base and _targets(rkey, rel, base[rel]) == _targets(rkey, rel, rel_text)
+    out: set[str] = set()
+    for root, text in universe.items():
+        if not is_root(root, rel_text if root == rel else text):
+            continue
+        if same_edges and root != rel:
+            k = (rkey, bi, root)
+            if k not in _SOURCE_CLOSURE_CACHE:
+                _SOURCE_CLOSURE_CACHE[k] = _closure(rkey, base, by_name, root)
+            reach = _SOURCE_CLOSURE_CACHE[k]
+        else:
+            reach = _closure(rkey, universe, by_name, root)
+        if rel in reach:
+            out |= reach
+    return out
+
+
+def wrapper_context(rel: str, so: str, sn: str, repo: Path | None, cfg: dict,
+                    need_component: bool = False) -> tuple[frozenset[str], list[tuple[str, str]]]:
+    """(式として読む wrapper macro の名前, 定義が変わった wrapper の [(名前, add/delete/change)])。 so / sn =
+    コメント除去済みの変更の前後の rel。
+
+    名前 = rel を含む原稿の file (作業ツリー・index・HEAD の版、 rel は前後の版) が wrapper として定義する名前 ∪
+    設定の math_macros。 定義の変化 = その名前の定義の出来事 (macro_definitions の "math" / "other") の回数が前後で
+    違う = 定義を消す・wrapper でない形に書き換える・別の定義を足す・定義の file を原稿の読み込みから外す。 rel を
+    含む原稿が無ければ rel 自身だけを見る (need_component = 原稿の外の .sty / .cls なら何も見ない)。"""
+    declared: set[str] = set()
+    for x in cfg.get("math_macros", []) or []:
+        mm = MACRO_NAME_RE.match(x) if isinstance(x, str) else None
+        if mm is None:
+            raise InspectionError("config-invalid")
+        declared.add(mm.group(1))
+    events: dict[str, Counter] = {"old": Counter(), "new": Counter()}
+    found = False
+    bases, tracked = source_bases(repo) if repo is not None else ([], frozenset())
+    for bi, base in enumerate(bases):
+        for side, text in (("old", so), ("new", sn)):
+            files = manuscript_component(repo, bi, base, rel, text, cfg, tracked)
+            found = found or bool(files)
+            for f in files:
+                defs = macro_definitions(text if f == rel else base[f])
+                events[side].update((name, event) for _, name, event in defs)
+    if not found:
+        if need_component:
+            return frozenset(declared), []
+        for side, text in (("old", so), ("new", sn)):
+            events[side].update((name, event) for _, name, event in macro_definitions(text))
+    names = {n for side in events.values() for (n, e) in side if e == "math"} | declared
+    changed: list[tuple[str, str]] = []
+    for n in sorted(names):
+        eo = Counter({e: c for (m, e), c in events["old"].items() if m == n})
+        en = Counter({e: c for (m, e), c in events["new"].items() if m == n})
+        if eo != en:
+            changed.append((n, "add" if not eo else "delete" if not en else "change"))
+    return frozenset(names), changed
+
+
+def wrapper_change_region(name: str) -> str:
+    """定義が変わった wrapper の領域名 (math selector で覆える形)。"""
+    return f"math#{sha8(chr(92) + name)}"
 
 
 _AUTHORITY_PATH_CACHE: dict[str, list[str]] = {}
@@ -733,9 +1076,24 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
         note_exemption(rel, repo, new, exempt, exempt["ok"] and any(k in INSERTION_REGIONS for k in moved))
 
     cfg_eff = cfg if cfg is not None else load_config(repo)
-    if not manuscript_in_scope(repo, rel, old, new, cfg_eff):
+
+    def add_wrapper_changes(changed: list[tuple[str, str]]) -> None:
+        for name, kind in changed:
+            add(wrapper_change_region(name), kind, f"数式を包む macro \\{name} の定義")
+
+    in_scope = manuscript_in_scope(repo, rel, old, new, cfg_eff)
+    if not in_scope:
+        # 原稿の範囲の外 (.sty / .cls、 \import や brace 無しの \input で読まれる .tex) でも、 原稿が読み込む file の
+        # wrapper の定義の変更だけは見る
+        if (rel.lower().endswith(DEF_SOURCE_SUFFIXES + (".tex",)) and repo is not None
+                and cfg_eff.get("disabled") is not True
+                and not any(fnmatch.fnmatch(rel, g) for g in cfg_eff.get("exclude", []) or [])):
+            add_wrapper_changes(wrapper_context(rel, strip_tex_comments(old), strip_tex_comments(new), repo, cfg_eff,
+                                                need_component=True)[1])
         return changes
     so, sn = strip_tex_comments(old), strip_tex_comments(new)
+    macros, wrapper_changed = wrapper_context(rel, so, sn, repo, cfg_eff)
+    add_wrapper_changes(wrapper_changed)
     protect = [p for p in cfg_eff.get("protect_sections", []) or [] if isinstance(p, str)]
     po, pn = prose_regions(so, protect), prose_regions(sn, protect)
     for k in sorted(set(po) | set(pn)):
@@ -743,9 +1101,9 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
             add(k, "add")
         elif k not in pn:
             add(k, "delete")
-        elif not copyedit_only(po[k], pn[k]):
+        elif not copyedit_only(po[k], pn[k], macros):
             add(k, "change")
-    mo, mn = math_regions(so), math_regions(sn)
+    mo, mn = math_regions(so, macros), math_regions(sn, macros)
     old_vals = {}
     for k, v in mo.items():
         old_vals.setdefault(v, []).append(k)
@@ -1849,8 +2207,9 @@ def _hook(agent: str, event: dict) -> int:
         regions = dict(authority_regions(old, rel, authority_paths(repo))) if is_authority else {}
         if manuscript_in_scope(repo, rel, old, old):
             so = strip_tex_comments(old)
-            regions.update(prose_regions(so, load_config(repo).get("protect_sections", []) or []))
-            regions.update({k: v for k, v in math_regions(so).items()})
+            cfg = load_config(repo)
+            regions.update(prose_regions(so, cfg.get("protect_sections", []) or []))
+            regions.update({k: v for k, v in math_regions(so, wrapper_context(rel, so, so, repo, cfg)[0]).items()})
         raw = {k: v for k, v in regions.items()}
         for ln in removed:
             s = collapse_ws(ln)
@@ -2259,6 +2618,245 @@ def selftest() -> int:
     check("protect_sections で追加の節",
           [c["region"] for c in protected_changes("src/main.tex", paper, paper.replace("can change freely", "x"), None,
                                                    {"protect_sections": ["^setup$"]})] == ["section:setup"])
+    print("[macro で包んだ数式]")
+    wrapped = (
+        "\\documentclass{article}\n"
+        "\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}}\n"
+        "\\newcommand\\als[1]{\\begin{align*}#1\\end{align*}}\n"
+        "\\def\\eqq#1{ \\begin{equation} #1 \\end{equation} }\n"
+        "\\newcommand{\\bx}[1]{\\fbox{#1}}\n"
+        "\\begin{document}\n\\begin{abstract}\nThe toy chain relaxes.\n\\end{abstract}\n"
+        "\\section{Introduction}\nChains are useful \\als{ e = f } here.\n"
+        "\\section{Setup}\nBody text with $\\alpha$ and \\bx{a box}.\n"
+        "\\al{\n  u &= v + w \\label{eq:uv}\n}\n"
+        "\\als{ p = q \\\\[2pt] r = s }\n"
+        "\\eqq{ k = l }\n"
+        "\\begin{align}\n  a &= b + c \\label{eq:ab}\n\\end{align}\n"
+        "\\[ t = 1 \\]\n"
+        "\\end{document}\n"
+    )
+
+    def cw(new: str, old: str = wrapped, cfg: dict | None = None, rel: str = "src/main.tex") -> list[str]:
+        return sorted(f"{c['region']}:{c['kind']}" for c in protected_changes(rel, old, new, None, cfg or {}))
+
+    def kinds(regions: list[str]) -> list[str]:
+        return sorted(r.split(":", 1)[0].split("#", 1)[0] + ":" + r.rsplit(":", 1)[1] for r in regions)
+
+    check("定義の検出: \\newcommand{\\x}[1] / \\newcommand\\x[1] / \\def\\x#1 の数式環境の wrapper だけ",
+          math_wrappers(wrapped) == {"al", "als", "eqq"})
+    check("数式環境でない 1 引数の macro (\\fbox で包む) は wrapper でない", "bx" not in math_wrappers(wrapped))
+    check("変更なし = 0 件", cw(wrapped) == [])
+    check("wrapper の中の 1 文字の変更 (label あり) → eq:uv:change", cw(wrapped.replace("v + w", "v - w")) == ["eq:uv:change"])
+    check("wrapper の中の変更 (label なし) → 削除 + 追加",
+          kinds(cw(wrapped.replace("p = q", "p = 2q"))) == ["math:add", "math:delete"])
+    check("\\def の wrapper の中の変更 → 削除 + 追加",
+          kinds(cw(wrapped.replace("k = l", "k = 2l"))) == ["math:add", "math:delete"])
+    check("wrapper の中の空白だけの変更は通す", cw(wrapped.replace("v + w", "v+w")) == [])
+    check("序論の中の wrapper の変更は式の変更として出る (序論の prose は変わっていない)",
+          kinds(cw(wrapped.replace("e = f", "e = g"))) == ["math:add", "math:delete"])
+    check("wrapper の式 → \\begin{align} への書き換え (同じ中身・同じ label) は変更でない",
+          cw(wrapped.replace("\\al{\n  u &= v + w \\label{eq:uv}\n}",
+                             "\\begin{align}\n  u &= v + w \\label{eq:uv}\n\\end{align}")) == [])
+    check("wrapper の式を消す → eq:uv:delete",
+          cw(wrapped.replace("\\al{\n  u &= v + w \\label{eq:uv}\n}\n", "")) == ["eq:uv:delete"])
+    check("wrapper の定義を消す → 定義の変更 + 定義の中の数式環境の削除として止まる",
+          cw(wrapped.replace("\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}}\n", ""))
+          == sorted([f"{wrapper_change_region('al')}:delete", f"math#{sha8('#1')}:delete"]))
+    al_def = "\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}}"
+    for label, bad in (("引数の数を変える ([1] → [2])", al_def.replace("[1]", "[2]")),
+                       ("本体に 1 語足す (\\relax)", al_def.replace("\\end{align}}", "\\end{align}\\relax}")),
+                       ("本体を group で包む", al_def.replace("{\\begin", "{\\begingroup\\begin")
+                        .replace("\\end{align}}", "\\end{align}\\endgroup}")),
+                       ("名前を変える", al_def.replace("{\\al}", "{\\alz}"))):
+        check(f"2 段の編集の 1 段目 = 定義を wrapper と読めない形にする ({label}) → 定義の変更で止まる",
+              f"{wrapper_change_region('al')}:" in " ".join(cw(wrapped.replace(al_def, bad))))
+    check("後ろに wrapper でない再定義を足す (\\renewcommand{\\al}[1]{#1}) → 定義の変更で止まる",
+          cw(wrapped.replace("\\begin{document}", "\\renewcommand{\\al}[1]{#1}\n\\begin{document}"))
+          == [f"{wrapper_change_region('al')}:change"])
+    check("同じ wrapper の書き方の言い換え (xparse の {m}) は変更でない",
+          cw(wrapped.replace(al_def, "\\NewDocumentCommand{\\al}{m}{\\begin{align}#1\\end{align}}")) == [])
+    check("定義の環境だけを変える (align → align*) は、 直の環境の同じ変更と同じく変更でない",
+          cw(wrapped.replace(al_def, al_def.replace("{align}", "{align*}"))) == []
+          and ch(paper.replace("{align}", "{align*}")) == [])
+    check("定義と使用を同じ編集で消しても、 前の定義で読んで止まる",
+          "eq:uv:delete" in cw(wrapped.replace("\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}}\n", "")
+                                      .replace("\\al{\n  u &= v + w \\label{eq:uv}\n}\n", "")))
+    sw = strip_tex_comments(wrapped)
+    regs = math_regions(sw, math_wrappers(sw))
+    check("wrapper の引数の中の \\\\[2pt] を \\[ の始まりと読まない (後ろの \\[ t = 1 \\] も 1 つの式)",
+          "t=1" in regs.values() and len(regs) == 9)
+    check("\\alpha は \\al の使用でない (接頭辞の一致)",
+          len(math_regions("\\alpha{x} \\al{y = z}", {"al"})) == 1)
+    check("既存: \\begin{align} の中の変更 → eq:ab:change (wrapper を持つ原稿でも同じ)",
+          cw(wrapped.replace("b + c", "b - c")) == ["eq:ab:change"])
+    check("既存: wrapper の無い原稿の領域は macro を渡しても同じ",
+          math_regions(strip_tex_comments(paper), frozenset()) == math_regions(strip_tex_comments(paper)))
+    child = "\\al{ m = n \\label{eq:mn} }\nText.\n"
+    child_cfg = {"include": ["sec/*.tex"]}
+    check("定義の無い子 file (repo の外) は設定が無ければ見えない (限界の固定)",
+          cw(child.replace("m = n", "m = 2n"), child, child_cfg, "sec/a.tex") == [])
+    check("設定 math_macros で宣言した macro は式として読む",
+          cw(child.replace("m = n", "m = 2n"), child, dict(child_cfg, math_macros=["\\al"]), "sec/a.tex")
+          == ["eq:mn:change"])
+    check("宣言した macro の optional 引数を飛ばして brace の中身を読む",
+          cw("\\al[t]{ m = 2n \\label{eq:mn} }\n", "\\al[t]{ m = n \\label{eq:mn} }\n",
+             dict(child_cfg, math_macros=["al"]), "sec/a.tex") == ["eq:mn:change"])
+    try:
+        load_config(None, '{"math_macros": ["al x"]}')
+        bad_name = False
+    except InspectionError:
+        bad_name = True
+    check("設定 math_macros の名前が macro 名でなければ設定の故障", bad_name)
+    try:
+        protected_changes("sec/a.tex", child, child, None, dict(child_cfg, math_macros=["al x"]))
+        bad_raw = "通った"
+    except InspectionError as exc:
+        bad_raw = exc.code
+    except Exception as exc:  # noqa: BLE001 = 検査不能の経路に乗らない例外を selftest で捕まえる
+        bad_raw = type(exc).__name__
+    check("設定を直に渡しても不正な macro 名は検査不能 (config-invalid) に倒す", bad_raw == "config-invalid")
+    with tempfile.TemporaryDirectory() as wd:
+        wroot = Path(wd).resolve()
+        wenv = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="t",
+                    GIT_AUTHOR_EMAIL="t@example.invalid", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
+
+        def wgit(repo_dir: Path, *a: str) -> None:
+            subprocess.run(["git", "-C", str(repo_dir), *a], env=wenv, capture_output=True, check=False)
+
+        def wrepo_of(name: str, files: dict[str, str]) -> Path:
+            d = wroot / name
+            d.mkdir()
+            wgit(d, "init", "-q")
+            for rel_path, body in files.items():
+                (d / rel_path).parent.mkdir(parents=True, exist_ok=True)
+                (d / rel_path).write_text(body, encoding="utf-8")
+            wgit(d, "add", "-A")
+            wgit(d, "commit", "-q", "-m", "init")
+            reset_caches()
+            return d
+
+        def wch(repo_dir: Path, rel_path: str, old: str, new: str, cfg: dict | None = None) -> list[str]:
+            return sorted(f"{c['region']}:{c['kind']}" for c in protected_changes(rel_path, old, new, repo_dir, cfg or {}))
+
+        main = ("\\documentclass{article}\n\\usepackage{mymacros}\n\\input{defs}\n\\begin{document}\n"
+                "\\begin{abstract}\nX.\n\\end{abstract}\n\\input{sec/a}\n\\end{document}\n")
+        defs = "\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}}\n"
+        sty = "\\newcommand{\\eqb}[1]{\\begin{equation}#1\\end{equation}}\n"
+        child2 = child + "\\eqb{ g = h }\n"
+        w1 = wrepo_of("w1", {"main.tex": main, "defs.tex": defs, "mymacros.sty": sty, "sec/a.tex": child2})
+        check("preamble が別 file (\\input の .tex) の原稿: 子 file の wrapper を読む",
+              wch(w1, "sec/a.tex", child2, child2.replace("m = n", "m = 2n")) == ["eq:mn:change"])
+        check("preamble が .sty (\\usepackage) の原稿: 子 file の wrapper を読む",
+              kinds(wch(w1, "sec/a.tex", child2, child2.replace("g = h", "g = 2h"))) == ["math:add", "math:delete"])
+        check("原稿が読む .sty の定義の本体を変える → 定義の変更で止まる",
+              wch(w1, "mymacros.sty", sty, sty.replace("#1\\end", "#1 + c\\end"))
+              == [f"{wrapper_change_region('eqb')}:change"])
+        check("原稿が読む .sty から定義を消す → 定義の削除で止まる",
+              wch(w1, "mymacros.sty", sty, "") == [f"{wrapper_change_region('eqb')}:delete"])
+        check("\\input の定義 file から定義を消す → 定義の削除で止まる",
+              f"{wrapper_change_region('al')}:delete" in wch(w1, "defs.tex", defs, ""))
+        check("preamble から定義 file の読み込みを外す → 定義の削除で止まる",
+              wch(w1, "main.tex", main, main.replace("\\usepackage{mymacros}\n", ""))
+              == [f"{wrapper_change_region('eqb')}:delete"])
+        evil = "\\renewcommand{\\al}[1]{#1}\n"
+        (w1 / "evil.sty").write_text(evil, encoding="utf-8")
+        wgit(w1, "add", "evil.sty")
+        reset_caches()
+        check("原稿が読まない .sty の編集は見ない (原稿の範囲の外)",
+              wch(w1, "evil.sty", "", evil) == [])
+        check("2 段の編集の 2 段目 = wrapper を再定義する .sty を原稿に読ませる → 定義の変更で止まる",
+              wch(w1, "main.tex", main, main.replace("\\input{defs}", "\\input{defs}\n\\usepackage{evil}"))
+              == [f"{wrapper_change_region('al')}:change"])
+        (w1 / "evil.sty").unlink()
+        wgit(w1, "rm", "-q", "--cached", "evil.sty")
+        (w1 / "defs.tex").unlink()
+        reset_caches()
+        check("作業ツリーで定義 file を消しても HEAD の版の定義で読む",
+              wch(w1, "sec/a.tex", child2, child2.replace("m = n", "m = 2n")) == ["eq:mn:change"])
+        other = ("\\documentclass{article}\n\\newcommand{\\eq}[1]{\\begin{equation}#1\\end{equation}}\n"
+                 "\\begin{document}\n\\begin{abstract}\nA.\n\\end{abstract}\n\\eq{ x = 1 }\n\\end{document}\n")
+        refs = ("\\documentclass{article}\n\\newcommand{\\eq}[1]{Eq.~(\\ref{#1})}\n\\begin{document}\n"
+                "\\begin{abstract}\nB.\n\\end{abstract}\n\\section{Introduction}\nAs shown in \\eq{eq:one}, it holds.\n"
+                "\\end{document}\n")
+        w2 = wrepo_of("w2", {"a/paper.tex": other, "b/paper.tex": refs})
+        check("同じ repo の別の原稿の wrapper の定義は、 この原稿の同名の macro を式にしない",
+              wch(w2, "b/paper.tex", refs, refs.replace("eq:one", "eq:two")) == ["intro:change"])
+        check("別の原稿の中の wrapper は従来どおり式", kinds(wch(w2, "a/paper.tex", other, other.replace("x = 1", "x = 2")))
+              == ["math:add", "math:delete"])
+        # 定義の file の読み込み方 (検品の反例): 別 dir の .sty / 拡張子つきの \input / brace 無しの \input / \import
+        pre = "\\documentclass{article}\n{load}\n\\begin{document}\n\\begin{abstract}\nX.\n\\end{abstract}\n\\input{sec/a}\n\\end{document}\n"
+        for label, load, def_path in (("\\usepackage の .sty が別の dir (TEXINPUTS 型)", "\\usepackage{mymacros}", "styles/mymacros.sty"),
+                                      ("\\input{x.sty}", "\\input{mymacros.sty}", "mymacros.sty"),
+                                      ("brace 無しの \\input", "\\input defs", "defs.tex"),
+                                      ("\\import{dir}{file}", "\\import{common/}{defs}", "common/defs.tex")):
+            wr = wrepo_of(f"w3-{def_path.replace('/', '-')}", {"main.tex": pre.replace("{load}", load), def_path: defs,
+                                                               "sec/a.tex": child})
+            check(f"定義の読み込み方 = {label}: 子 file の式を読み、 定義の変更も止める",
+                  wch(wr, "sec/a.tex", child, child.replace("m = n", "m = 2n")) == ["eq:mn:change"]
+                  and f"{wrapper_change_region('al')}:change" in " ".join(
+                      wch(wr, def_path, defs, defs.replace("#1\\end", "#1 + c\\end"))))
+        w4 = wrepo_of("w4", {"main.tex": main.replace("\\usepackage{mymacros}\n", ""), "defs.tex": defs, "sec/a.tex": child})
+        check("exclude で root を外しても、 include の子 file は root の preamble の定義で読む",
+              wch(w4, "sec/a.tex", child, child.replace("m = n", "m = 2n"),
+                  {"exclude": ["main.tex"], "include": ["sec/*.tex"]}) == ["eq:mn:change"])
+        w5 = wrepo_of("w5", {"main.tex": main.replace("\\usepackage{mymacros}\n", ""), "sec/a.tex": child})
+        (w5 / "defs.tex").write_text(defs, encoding="utf-8")
+        wgit(w5, "add", "defs.tex")
+        (w5 / "defs.tex").unlink()
+        reset_caches()
+        check("index にだけある定義 file を作業ツリーで消しても、 index の版の定義で読む",
+              wch(w5, "sec/a.tex", child, child.replace("m = n", "m = 2n")) == ["eq:mn:change"])
+        w6 = wrepo_of("w6", {"main.tex": main.replace("\\usepackage{mymacros}\n", ""), "sec/a.tex": child})
+        (w6 / "defs.tex").write_text(defs, encoding="utf-8")  # 未追跡 (git add 前) の定義 file
+        reset_caches()
+        check("未追跡の定義 file (git add 前) も作業ツリーの版として読む",
+              wch(w6, "sec/a.tex", child, child.replace("m = n", "m = 2n")) == ["eq:mn:change"])
+        w7 = wrepo_of("w7", {"main.tex": pre.replace("{load}", "\\input{macros.def}"), "macros.def": defs, "sec/a.tex": child})
+        check("拡張子 .def の定義 file も読み、 その定義の変更も止める",
+              wch(w7, "sec/a.tex", child, child.replace("m = n", "m = 2n")) == ["eq:mn:change"]
+              and wch(w7, "macros.def", defs, "") == [f"{wrapper_change_region('al')}:delete"])
+        broken = refs.replace("\\begin{document}", "\\input{tex/macros}\n\\begin{document}")
+        w8 = wrepo_of("w8", {"a/paper.tex": other.replace("\\newcommand{\\eq}[1]{\\begin{equation}#1\\end{equation}}\n",
+                                                          "\\input{tex/macros}\n"),
+                             "a/tex/macros.tex": "\\newcommand{\\eq}[1]{\\begin{equation}#1\\end{equation}}\n",
+                             "b/paper.tex": broken,
+                             "notes/defs.tex": "\\newcommand{\\x}[1]{\\begin{equation}#1\\end{equation}}\nNotes.\n",
+                             "c/paper.tex": pre.replace("{load}", "\\input{sec/defs}").replace("\\input{sec/a}\n", "")})
+        check("解決できない \\input は同じ名前の別原稿の file を引き込まない (別原稿の wrapper で式にしない)",
+              wch(w8, "b/paper.tex", broken, broken.replace("eq:one", "eq:two")) == ["intro:change"])
+        check("解決できない \\input は、 原稿でない同じ名前の file を保護対象にしない",
+              wch(w8, "notes/defs.tex", "\\newcommand{\\x}[1]{\\begin{equation}#1\\end{equation}}\nNotes.\n", "Notes.\n") == [])
+        check("別原稿の中の解決できる \\input は従来どおり辿る",
+              kinds(wch(w8, "a/paper.tex", w8.joinpath("a/paper.tex").read_text(),
+                        w8.joinpath("a/paper.tex").read_text().replace("x = 1", "x = 2"))) == ["math:add", "math:delete"])
+        shown = pre.replace("{load}", "\\input{defs}\n\\begin{verbatim}\n\\input{other}\n"
+                            "\\renewcommand{\\al}[1]{#1}\n\\end{verbatim}")
+        w9 = wrepo_of("w9", {"main.tex": shown, "defs.tex": defs, "other.tex": "\\renewcommand{\\al}[1]{#1}\n",
+                             "sec/a.tex": child})
+        w10 = wrepo_of("w10", {"main.tex": pre.replace("{load}", "\\usepackage{mymacros}"), "styles/mymacros.sty": defs,
+                               "sec/a.tex": child})
+        check("同じ名前の .sty の複製を足す編集 → 定義の追加として止まる",
+              f"{wrapper_change_region('al')}:change" in " ".join(wch(w10, "archive/mymacros.sty", "", defs)))
+        (w10 / "archive").mkdir()
+        (w10 / "archive" / "mymacros.sty").write_text(defs, encoding="utf-8")
+        wgit(w10, "add", "archive/mymacros.sty")
+        reset_caches()
+        check("同じ名前の .sty が 2 つになっても、 子 file の式は両方の定義で読む",
+              wch(w10, "sec/a.tex", child, child.replace("m = n", "m = 2n")) == ["eq:mn:change"])
+        draft = ("\\documentclass{article}\n\\newcommand{\\eq}[1]{\\begin{align}#1\\end{align}}\n\\begin{document}\n"
+                 "\\begin{abstract}\nOld.\n\\end{abstract}\n\\input{sec/intro}\n\\end{document}\n")
+        intro = "\\section{Introduction}\nWe use \\eq{eq:one} before \\eq{eq:two}.\n"
+        w11 = wrepo_of("w11", {"main.tex": refs.replace("\\section{Introduction}\nAs shown in \\eq{eq:one}, it holds.\n",
+                                                          "\\input{sec/intro}\n"), "sec/intro.tex": intro})
+        (w11 / "main-old.tex").write_text(draft, encoding="utf-8")  # 置き忘れの未追跡の draft
+        reset_caches()
+        check("未追跡の古い draft は原稿の起点にならない (その wrapper で本文の macro を式にしない)",
+              wch(w11, "sec/intro.tex", intro, intro.replace("\\eq{eq:one} before \\eq{eq:two}",
+                                                            "\\eq{eq:two} before \\eq{eq:one}")) == ["intro:change"])
+        check("verbatim の中の \\input と定義は、 読み込みでも定義でもない",
+              wch(w9, "sec/a.tex", child, child.replace("m = n", "m = 2n")) == ["eq:mn:change"]
+              and wch(w9, "other.tex", "\\renewcommand{\\al}[1]{#1}\n", "") == [])
+        reset_caches()
     print("[権限規約の lock]")
     doc = ("# Rules\n<!-- agent-authority:begin id=manuscript-claims -->\nAgents must not rewrite claims.\n"
            "<!-- agent-authority:end id=manuscript-claims -->\nOther text.\n")

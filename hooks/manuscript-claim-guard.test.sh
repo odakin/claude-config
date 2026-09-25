@@ -72,6 +72,48 @@ _check "綴りだけ (analyse → analyze)" "$(_edit 'analyse' 'analyze')" none
 _check "保護外の本文" "$(_edit 'Body text may change.' 'Body text was changed.')" none
 _check "原稿でない file" "$(printf 'x\n' > "$REPO/notes.md"; _edit 'x' 'y' notes.md)" none
 
+echo "=== Claude Edit: display 数式を 1 引数の macro で包む原稿 ==="
+# 架空の原稿: preamble が \newcommand{\al}[1]{\begin{align}#1\end{align}} を定義し、 式を \al{...} で書く。
+# 子 file (sec/wrapped-body.tex) は定義を持たず、 親の preamble の定義で読む
+mkdir -p "$REPO/sec"
+cat > "$REPO/src/wrapped.tex" <<'TEX'
+\documentclass{article}
+\newcommand{\al}[1]{\begin{align}#1\end{align}}
+\usepackage{wrapmacros}
+\begin{document}
+\begin{abstract}
+The toy chain relaxes.
+\end{abstract}
+\section{Setup}
+Wrapped body text.
+\al{
+  u &= v + w \label{eq:uv}
+}
+\al{ p = q }
+\input{../sec/wrapped-body}
+\end{document}
+TEX
+printf '%s\n' 'Child text.' '\al{ m = n \label{eq:mn} }' '\eqb{ g = h }' > "$REPO/sec/wrapped-body.tex"
+printf '%s\n' '\newcommand{\eqb}[1]{\begin{equation}#1\end{equation}}' '\newcommand{\note}[1]{\textbf{#1}}' \
+  > "$REPO/src/wrapmacros.sty"
+git -C "$REPO" add -A && git -C "$REPO" commit -q -m wrapped
+_check "macro で包んだ式 (label あり) の 1 文字" "$(_edit 'v + w' 'v - w' src/wrapped.tex)" deny
+_check "macro で包んだ式 (label なし) の 1 文字" "$(_edit 'p = q' 'p = r' src/wrapped.tex)" deny
+_check "macro の定義を消す" "$(_edit '\newcommand{\al}[1]{\begin{align}#1\end{align}}
+' '' src/wrapped.tex)" deny
+_check "定義を wrapper と読めない形にする (2 段の編集の 1 段目)" "$(_edit '\end{align}}' '\end{align}\relax}' src/wrapped.tex)" deny
+_check "定義の無い子 file の macro の式 (親の preamble の定義で読む)" "$(_edit 'm = n' 'm = 2n' sec/wrapped-body.tex)" deny
+_check "定義が .sty にある macro の式" "$(_edit 'g = h' 'g = 2h' sec/wrapped-body.tex)" deny
+_check "原稿が読む .sty の wrapper の定義を変える" "$(_edit '#1\end{equation}' '#1 + c\end{equation}' src/wrapmacros.sty)" deny
+_check "同じ .sty の数式でない macro は通す" "$(_edit '\textbf{#1}' '\emph{#1}' src/wrapmacros.sty)" none
+_check "同じ原稿の保護外の本文は通す" "$(_edit 'Wrapped body text.' 'Wrapped body words.' src/wrapped.tex)" none
+_check "子 file の本文も通す" "$(_edit 'Child text.' 'Child words.' sec/wrapped-body.tex)" none
+_check "既存の equation の中の変更は従来どおり止まる" "$(_edit 'f = g + h' 'f = g + 2h')" deny
+sed 's/#1\\end{equation}/#1 + c\\end{equation}/' "$REPO/src/wrapmacros.sty" > "$T/sty.new" && mv "$T/sty.new" "$REPO/src/wrapmacros.sty"
+_check "sed で .sty の定義を変えて git commit -- path も止める" "$(jq -n --arg c "$REPO" \
+  '{hook_event_name:"PreToolUse", tool_name:"Bash", session_id:"sess-a", cwd:$c, tool_input:{command:"git commit -m x -- src/wrapmacros.sty"}}' | _run)" deny
+git -C "$REPO" checkout -q -- src/wrapmacros.sty
+
 echo "=== 承認 ==="
 _check "tool 結果の文を引用した承認は拒否" \
   "$(python3 "$ENGINE" approve --session claude:sess-a --file "$REPO/src/main.tex" --region conclusion \
