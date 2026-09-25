@@ -716,6 +716,7 @@ pre-commit hook A (= LaTeX Unicode fixer) が「対象 file (LaTeX) が staged �
 - 途中の壊れた版を保存しない。 大きな書き換えは別名 file で作って test を通し、 最後に 1 回で置き換える。
 - 機械化 = [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) `TARGET PAIRS.py --test 'python3 {} --selftest'` (親 dir ごと一時 dir に写した版で test を通し、 通った時だけ一時 file + `os.replace` で置き換える。 写すのは親 dir だけなので、 repo root を前提にする `*.test.sh` は `--test` では回らない = 制約の正本は同 script の docstring。 install 先の symlink の path を渡しても実体に解決して書く = [batch-text-edits.md#symlink-target](batch-text-edits.md#symlink-target))。 2026-09-13 の実例: engine の patch script を写しに当てるつもりで再実行し、 target の引数を付け忘れて本物に二重に入った ([batch-text-edits.md#insertion-pair-rerun](batch-text-edits.md#insertion-pair-rerun))。 module として import する pre-commit 経路は動き続け、 CLI として呼ぶ suite 側だけが約 1 分落ちていた = 壊れ方が経路で分かれるので、 片方の経路が緑でも安全の証拠にならない。
 - 配線した直後に、 **他 session が今 stage している内容**が新しい guard に止められないかを読み取りだけで確かめる (`python3 <engine> --staged` を相手の repo で実行、 書き込みはしない)。
+- **止められた側** (別 session の commit): pre-commit が engine の `SyntaxError` や import 失敗で止まったら、 自分で engine を直す前に、 その engine の repo で `git status --short -- <engine>` と `python3 -m py_compile <engine>` を見る。 相手の未 commit の変更があり、 今は compile が通るなら、 相手が保存した途中の版に当たっただけ = 同じ commit を打ち直す。 相手の作業中の file を自分で直さない (相手の次の保存と衝突する)。 fail-closed を選んだ gate ([#engine-failure-must-not-block](#engine-failure-must-not-block) の最後の項) では、 この型が全 repo の commit を止める。 実測: 無関係な repo の記録の commit が止まり、 数十秒後に打ち直すと通った。
 
 ---
 
