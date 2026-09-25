@@ -60,6 +60,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[settings-entries.json](settings-entries.json)** — 層1 hook の settings.json 配線の唯一の list (event → entries)。
 - **[stale-read-nudge.sh](stale-read-nudge.sh)** — PostToolUse(Read) hook (layer 1)
 - **[stale-read-nudge.test.sh](stale-read-nudge.test.sh)** — logic selftest (= 決定的 mock git repo ベース)
+- **[standing-cc-guard.sh](standing-cc-guard.sh)** — 定型の Cc (ある種類のメールに毎回入れる宛先) の送信前検査 (PreToolUse)
+- **[standing-cc-guard.test.sh](standing-cc-guard.test.sh)** — Test for standing-cc-guard.sh (config は fixture = STANDING_CC_CONFIG で渡す)
 - **[turn-complete-sound-nudge.sh](turn-complete-sound-nudge.sh)** — 応答が終わるたびに音を鳴らす Stop hook (opt-in、 既定は無音。 conventions/macos-claude-app-notifications.md#turn-complete-sound-hook)
 - **[turn-complete-sound-nudge.test.sh](turn-complete-sound-nudge.test.sh)** — opt-in marker / entrypoint gate / stop_hook_active / 音声 path の selftest (実際には鳴らさない)
 - **[visible-html-comment-enforce.py](visible-html-comment-enforce.py)** — Stop: 最終メッセージに HTML comment (`<!-- ... -->`) が裸で出ていたら、 1 回だけ差し戻して置き場所を直させる
