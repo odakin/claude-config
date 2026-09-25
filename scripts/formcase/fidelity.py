@@ -238,6 +238,27 @@ def report_lines(rep: dict, spec: dict | None = None) -> tuple:
                     image_loss.append(f"{where} {bi} → {oi}")
             else:
                 ok(f"画像 {oi} = 素刷り")
+            lay = b.get("layout") or {}
+            if lay.get("pairs", 0) < 4:
+                lines.append(f"⚪ {where}: 位置の写像 (段階 2) は label の組が {lay.get('pairs', 0)} で足りず見ていない")
+            else:
+                probs = []
+                if lay.get("images_missing"):
+                    probs.append(f"素刷りの位置に画像が無い {len(lay['images_missing'])} 個")
+                if lay.get("images_moved"):
+                    mv = lay["images_moved"][0]
+                    probs.append(f"動いた画像 {len(lay['images_moved'])} 個 (例 Δ{mv[1]:+.1f}, {mv[2]:+.1f} pt)")
+                if lay.get("hlines_missing"):
+                    hm = lay["hlines_missing"]
+                    probs.append(f"素刷りの水平の罫線が無い {len(hm)} 本 (最下 y={max(h[0] for h in hm)})")
+                if lay.get("double"):
+                    probs.append("二重刷り " + ", ".join(f"「{t[:10]}」" for t in lay["double"][:3]))
+                cov = f"罫線 {lay.get('hlines_checked', 0)}/{lay.get('hlines_checked', 0) + lay.get('hlines_skipped', 0)} 本を照合"
+                if probs:
+                    lines.append(f"⚠️ {where}: 位置の写像 (label {lay['pairs']} 組、 {cov}): " + " / ".join(probs)
+                                 + " (段階 2 = warn、 実物で誤検出を測る段階)")
+                else:
+                    ok(f"位置 (label {lay['pairs']} 組) 画像は素刷りどおり、 {cov}")
         if r.get("extra"):
             lines.append(f"⚪ {where}: 雛形にも記入値にも無い字 {len(r['extra'])} 片: "
                          + ", ".join(f"「{x[:10]}」" for x in r["extra"][:4]) + (" …" if len(r["extra"]) > 4 else ""))

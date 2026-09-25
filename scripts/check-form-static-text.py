@@ -424,6 +424,133 @@ def page_visuals(pdf) -> list:
     return out
 
 
+def page_layout(pdf) -> list:
+    """段階 2 (D4、 2026-09-25) の材料 = 頁ごとの {images: [(xref, bbox)], hlines: [(y, x0, x1)], words: [(字, bbox)]}。
+    画像 = 描かれた位置つき (pattern の tile = 同じ xref が何度も描かれるものは除く)。 線 = 線と細い矩形 (罫線) の水平なもの。"""
+    import fitz
+
+    out = []
+    with fitz.open(pdf) as d:
+        for p in d:
+            info = p.get_image_info(xrefs=True)
+            per = {}
+            for it in info:
+                per.setdefault(it.get("xref"), []).append(it["bbox"])
+            images = [(x, b) for x, bs in per.items() if x and len(bs) <= 4 for b in bs]
+            hl = {}
+            for dr in p.get_drawings():
+                for it in dr["items"]:
+                    if it[0] == "l":
+                        (x0, y0), (x1, y1) = (it[1].x, it[1].y), (it[2].x, it[2].y)
+                        if abs(y0 - y1) <= 0.6 and abs(x1 - x0) >= 5:
+                            hl.setdefault(round((y0 + y1) / 2, 1), []).append((min(x0, x1), max(x0, x1)))
+                    elif it[0] == "re":
+                        r = it[1]
+                        if r.height <= 1.5 and r.width >= 5:
+                            hl.setdefault(round((r.y0 + r.y1) / 2, 1), []).append((r.x0, r.x1))
+            hlines = []
+            for y, segs in hl.items():
+                segs.sort()
+                cur = list(segs[0])
+                for a, b in segs[1:]:
+                    if a <= cur[1] + 3:
+                        cur[1] = max(cur[1], b)
+                    else:
+                        hlines.append((y, cur[0], cur[1]))
+                        cur = [a, b]
+                hlines.append((y, cur[0], cur[1]))
+            words = [(norm(w[4]), fitz.Rect(w[:4])) for w in p.get_text("words")]
+            out.append({"images": images, "hlines": hlines, "words": words, "height": p.rect.height, "width": p.rect.width})
+    return out
+
+
+def _label_points(layout: dict, labels) -> dict:
+    """頁の中で 1 回だけ出る label → その中心 (x, y)。 位置の対応づけの基準点。"""
+    pts = {}
+    for t in set(labels):
+        if len(t) < 2:
+            continue
+        hits = [r for w, r in layout["words"] if w == t]
+        if len(hits) == 1:
+            r = hits[0]
+            pts[t] = ((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2)
+    return pts
+
+
+def layout_diff(blank: dict, out: dict, labels) -> dict:
+    """素刷り (blank) と出力 (out) を label の位置の組で対応づけ、 画像 (checkbox の箱・図) と水平の罫線の位置を比べる。
+    x は 1 次 (紙 1 枚に収める縮尺)、 y は label の組の間の区分線形 (行を伸ばした分だけ下がる)。
+    返り値 = {pairs, images_missing: [bbox], images_moved: [(bbox, Δx, Δy)], images_added: n, hlines_missing: [(y, x0, x1)],
+    double: [字]} (pairs < 4 なら対応づけできず {"pairs": n} だけ)。"""
+    bp, op = _label_points(blank, labels), _label_points(out, labels)
+    common = sorted(set(bp) & set(op), key=lambda t: bp[t][1])
+    if len(common) < 4:
+        return {"pairs": len(common)}
+    xs = [(bp[t][0], op[t][0]) for t in common]
+    n = len(xs)
+    mx, my = sum(a for a, _ in xs) / n, sum(b for _, b in xs) / n
+    var = sum((a - mx) ** 2 for a, _ in xs)
+    ax = (sum((a - mx) * (b - my) for a, b in xs) / var) if var > 1e-6 else 1.0
+    bx = my - ax * mx
+    ys = sorted({(round(bp[t][1], 1), op[t][1]) for t in common})
+
+    def fy(y):
+        if y <= ys[0][0]:
+            (y0, o0), (y1, o1) = ys[0], ys[1]
+        elif y >= ys[-1][0]:
+            (y0, o0), (y1, o1) = ys[-2], ys[-1]
+        else:
+            k = max(i for i in range(len(ys) - 1) if ys[i][0] <= y)
+            (y0, o0), (y1, o1) = ys[k], ys[k + 1]
+        return o0 + (o1 - o0) * (y - y0) / (y1 - y0) if y1 != y0 else o0
+
+    tol = max(4.0, 0.006 * out["height"])
+    used = set()
+    missing, moved = [], []
+    for _x, b in blank["images"]:
+        cx, cy = ax * (b[0] + b[2]) / 2 + bx, fy((b[1] + b[3]) / 2)
+        best = None
+        for i, (_ox, ob) in enumerate(out["images"]):
+            if i in used:
+                continue
+            d = ((ob[0] + ob[2]) / 2 - cx, (ob[1] + ob[3]) / 2 - cy)
+            dist = (d[0] ** 2 + d[1] ** 2) ** 0.5
+            if best is None or dist < best[0]:
+                best = (dist, i, d)
+        if best is not None and best[0] <= tol:
+            used.add(best[1])
+        elif best is not None and best[0] <= 8 * tol:
+            used.add(best[1])
+            moved.append(([round(v, 1) for v in b], round(best[2][0], 1), round(best[2][1], 1)))
+        else:
+            missing.append([round(v, 1) for v in b])
+    added = len(out["images"]) - len(used)
+    # 罫線は label の組に挟まれた帯 (隣の組まで BAND pt 以内) だけ比べる = 帯の外 (label の無い表 = 日程表の block を
+    # 値で潰す様式) は行の高さが値で決まり、 素刷りから写像できない = 圏外 (数だけ出す)
+    BAND = 250.0
+    hmiss, checked, skipped = [], 0, 0
+    for y, x0, x1 in blank["hlines"]:
+        if not (ys[0][0] - tol <= y <= ys[-1][0] + tol):
+            skipped += 1
+            continue
+        k = max((i for i in range(len(ys) - 1) if ys[i][0] <= y), default=0)
+        if ys[min(k + 1, len(ys) - 1)][0] - ys[k][0] > BAND:
+            skipped += 1
+            continue
+        checked += 1
+        ey, ex0, ex1 = fy(y), ax * x0 + bx, ax * x1 + bx
+        ok = any(abs(oy - ey) <= tol and min(ox1, ex1) - max(ox0, ex0) >= 0.5 * (ex1 - ex0) for oy, ox0, ox1 in out["hlines"])
+        if not ok:
+            hmiss.append((round(y, 1), round(x0, 1), round(x1, 1)))
+    double = []
+    for t in common:
+        hits = [r for w, r in out["words"] if w == t]
+        if len(hits) >= 2:
+            double.append(t)
+    return {"pairs": len(common), "images_missing": missing, "images_moved": moved, "images_added": max(0, added),
+            "hlines_missing": hmiss, "hlines_checked": checked, "hlines_skipped": skipped, "double": double}
+
+
 def _score(labels, text) -> int:
     return sum(1 for t in set(labels) if t in text)
 
@@ -483,6 +610,7 @@ def check(template, pdf, targets=None, drop=None, filled=None, blank=None) -> di
         for j, bj in zip(jobs, bjobs):
             j["blank_page"] = bj.get("page")
     vis = page_visuals(pdf) if blank else None
+    bl_lay = out_lay = None
     report = []
     for j in jobs:
         res = {"sheet": j["sheet"], "range": j["range"], "page": j.get("page"), "checked": 0, "missing": [],
@@ -540,6 +668,11 @@ def check(template, pdf, targets=None, drop=None, filled=None, blank=None) -> di
             if bp is not None and res["page"] is not None:
                 b, o = bl_vis[bp - 1], vis[res["page"] - 1]
                 res["blank"] = {"page": bp, "images": [b["images"], o["images"]], "drawings": [b["drawings"], o["drawings"]]}
+                # 段階 2 (D4): 位置の写像 = 動いた画像・素刷りの罫線の欠け・二重刷り (warn)
+                if bl_lay is None:
+                    bl_lay, out_lay = page_layout(blank), page_layout(pdf)
+                labels_pos = [t for _c, t in j["untouched"]] if j["untouched"] else j["labels"]
+                res["blank"]["layout"] = layout_diff(bl_lay[bp - 1], out_lay[res["page"] - 1], labels_pos)
             else:
                 res["blank"] = {"page": bp, "images": None, "drawings": None}
         report.append(res)
@@ -651,6 +784,16 @@ def render(rep) -> list:
                     lines.append(f"   🔴 {where}: 素刷りより画像が少ない {bi} → {oi} (checkbox の箱・図が紙に無い)")
                 else:
                     lines.append(f"   ✅ {where}: 画像 {oi} = 素刷り {bi}" + (f"、 線・矩形 {od} (素刷り {bd})" if od != bd else f"、 線・矩形 {od} 同じ"))
+                lay = b.get("layout") or {}
+                if lay.get("pairs", 0) < 4:
+                    lines.append(f"   ⚪ {where}: 位置の写像は label の組が {lay.get('pairs', 0)} で足りない")
+                else:
+                    probs = ([f"画像が無い {len(lay['images_missing'])}"] if lay.get("images_missing") else []) \
+                        + ([f"動いた画像 {len(lay['images_moved'])}"] if lay.get("images_moved") else []) \
+                        + ([f"罫線が無い {len(lay['hlines_missing'])} 本 (最下 y={max(h[0] for h in lay['hlines_missing'])})"] if lay.get("hlines_missing") else []) \
+                        + (["二重刷り " + ", ".join(lay["double"][:3])] if lay.get("double") else [])
+                    cov = f"罫線 {lay.get('hlines_checked', 0)}/{lay.get('hlines_checked', 0) + lay.get('hlines_skipped', 0)} 本を照合"
+                    lines.append(f"   {'⚠️' if probs else '✅'} {where}: 位置の写像 (label {lay['pairs']} 組、 {cov})" + (": " + " / ".join(probs) if probs else " 画像は素刷りどおり"))
     return lines
 
 
