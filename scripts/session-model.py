@@ -8,7 +8,7 @@ that turn was — the check to make before a `SendMessage` / board `request` to 
 (conventions/multi-session-coordination.md#delegate-model-routing). Read-only.
 
 Usage:
-  session-model.py <target>            target = session id or its prefix (5d7b7b2e), a `local_…` host id
+  session-model.py <target>            target = session id or its prefix (0123abcd), a `local_…` host id
                                        (the from-session of a cross-session message), or a substring of the
                                        name ListAgents shows
   session-model.py --live              every live session on this machine with its model
