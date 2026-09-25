@@ -112,7 +112,7 @@ recipe (2026-09-07 Cybozu Garoon で確立、 部品 = [`scripts/chromium-cookie
 
 ### <a id="sso-session-recovery"></a>login 切れからの復帰 — 見積もらずに見る・使う時にだけ・本人に頼むのは要る時だけ
 
-recipe 4 の中身。 部品 = [`scripts/lib/browser_tab.py`](../scripts/lib/browser_tab.py) (browser に裏で tab を開かせ、 行き先を見て、 自分の tab だけ閉じる) + 結末の判定 `watch()`。 初例の手順 = [`garoon.md#garoon-session-recovery`](garoon.md#garoon-session-recovery)。
+recipe 4 の中身。 部品 = [`scripts/lib/sso_cookie_session.py`](../scripts/lib/sso_cookie_session.py) (cookie の読み直し・受け入れの確認・入り直し・撃ち直し・配線の診断・切れ方の採取。 client は subclass でサイト固有の切れ判定と「サイトの中」 の判定だけを書く) + [`scripts/lib/browser_tab.py`](../scripts/lib/browser_tab.py) (browser に裏で tab を開かせ、 行き先を見て、 自分の tab だけ閉じる + 結末の判定 `watch()`)。 初例の手順 = [`garoon.md#garoon-session-recovery`](garoon.md#garoon-session-recovery)、 2 例目 = [`campussquare.md#script-route`](campussquare.md#script-route)。
 
 SSO 保護サイトの切れは 2 層ある: **サイト本体のセッション**と **IdP のログイン**。 本体だけが切れていて IdP が生きていれば、 browser がそのサイトを開くだけで (パスワードも追加認証もなしに) 入り直せる。 IdP も切れていれば本人のログインが要る。 script の復帰は次の順:
 
@@ -129,6 +129,8 @@ SSO 保護サイトの切れは 2 層ある: **サイト本体のセッション
 - **人の browser に触る副作用は opt-in**。 公開の client の既定は「何も開かない」。 開かせる・閉じるは、 利用者が自分の入口 (org と流儀を env で渡す数行の wrapper) で選ぶ。 閉じるのは自分が開いた tab だけで、 閉じる直前に「まだ自分が開いた場所に居るか」 を確かめる。 本人がログインに使った tab、 ログイン待ちが時間切れになった tab (入力の途中かもしれない) は閉じない。 待たずに止まる時はログイン画面の tab も閉じる (失敗のたびに tab が溜まらない)。
 - **既に開いている同じサイトの tab を使い回さない**。 reload は本人の入力中の form を壊しうる。 tab の id を run をまたいで覚える案も、 「その tab は今も自分のものか」 を判定できないので採らない (= 状態を持たない)。
 - **cookie の更新は「入り直せた」 の証拠ではない — server に確かめる**。 ログイン画面そのものが未認証の session cookie を配るサイトがある (初例 = [`garoon.md#login-page-mints-session-cookie`](garoon.md#login-page-mints-session-cookie))。 その cookie が disk に出た時点を「入り直せた」 と読むと、 IdP が切れている時に撃ち直して失敗し、 本人のログインが要ることも言えない。 cookie の書き出しの速さで出たり出なかったりするので、 機械ごとの故障に見える。 更新を見たら読み直して軽い GET 1 本で受け入れを確かめ、 だめなら tab を見続ける。
+- <a id="capture-expiry-shape"></a>**切れ方は採取してから判定を書く**。 未ログインの応答を cookie なし・偽の session id で 1 本ずつ撃ち、 302 の行き先・配られる cookie の名前・自分の切れ判定の結論を並べる (client の `probe`)。 未認証の session cookie を配るか、 判定に穴があるか (同じ host の中の SSO 入口への 302 を「読める」 と読む等) がその場で分かる (実測: 2 サイトとも配り、 1 サイトは判定の穴もあった)。 入り直しの途中を疑う時は `--trace` で tab の行き先・cookie の変化・受け入れの確認を秒つきで見る (値は出さない)。
+- <a id="recovery-in-one-component"></a>**入り直しの処理は client ごとに写さず、 部品 1 つに置く**。 写すと誤りも写る (実測: cookie の変化を入り直しと読む同じ誤りが 2 つの client にあった)。 配線の診断 (doctor) は「復号できるか」 だけでなく「復号した値が壊れていないか」 まで見る (鍵や暗号の形式が変わると AES-CBC は例外なしに化けた値を返す = 「復号できた」 は健全の証拠にならない)。
 - **ログイン画面の判定は「外に、 読み込み完了のまま、 数回続けて同じ場所」**。 SSO の通過は一瞬 IdP の URL を通るので、 1 回見ただけでは決めない。 サイトの外かどうかは host と path で決め、 IdP ごとの URL の形は持たない (= 組織固有の値が client に要らない)。
 - AppleScript が使えない環境 (自動操作の許可が無い・無人実行) では「開くだけ」 に落ち、 cookie の更新だけを上限つきで待つ。 incognito 等の窓には開かない (SSO のログインを共有していない)。 機構 = [`macos-gui-app-automation.md#chromium-tab-scripting`](macos-gui-app-automation.md#chromium-tab-scripting)。
 - **browser の中で読む経路 (browser MCP) に寄せない理由**: SSO は browser が面倒を見てくれるが、 拡張の接続と domain 許可が機械 × account ごとの配線になり、 無人の検査から使えず、 1 回の読み取りが tool call 数回になる。 cookie 再利用を第一選択のまま、 入り直しだけを browser に任せるのが両者の良い所取り。

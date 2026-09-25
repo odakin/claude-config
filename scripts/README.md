@@ -340,6 +340,7 @@
 - **[lib/seal_artifact.py](lib/seal_artifact.py)** — 画像の押印 (ハンコ画像) が入った成果物に、作る時に印を付け、出口で見つける。
 - **[lib/sensitive-terms.sh](lib/sensitive-terms.sh)** — 実名 gate (Tier B) の検出語 file を読む共通部品 (source して使う、 bash 3.2 可)
 - **[lib/session_model.py](lib/session_model.py)** — a Claude Code session's actual model, read from its transcript (never from a title or a tag).
+- **[lib/sso_cookie_session.py](lib/sso_cookie_session.py)** — browser の session cookie を借りて SSO 保護サイトを script から読む client の共通部品 (ログイン切れからの入り直し・撃ち直し・配線の診断・切れ方の採取、 macOS + Chromium 系)
 - **[lib/staged-conflict-markers.sh](lib/staged-conflict-markers.sh)** — merge conflict marker の staged-content gate (sourceable lib)
 - **[lib/staged-conflict-markers.test.sh](lib/staged-conflict-markers.test.sh)** — staged-conflict-markers.sh の self-test (hermetic)
 - **[lib/staged_diff.py](lib/staged_diff.py)** — staged 追加行を読む helper (= pre-commit の warn 検査が binary を含む commit で落ちないように)。

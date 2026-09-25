@@ -3,8 +3,9 @@
 
 背景: 学内 SSO (Shibboleth SP + 外部 IdP) の奥にあり、 user が発行できる API credential が無い。 残る機械経路 =
 user が browser でログイン済みの session cookie を再利用する (= `chromium-cookies.py`)。 形は `garoon-client.py`
-と同じ (切れ判定 → 起動中の browser に裏で入り直させる → 1 回だけ撃ち直す)。 一般則 = conventions/machine-route-first.md
-#sso-session-recovery、 tab の駆動 = scripts/lib/browser_tab.py。 script はパスワードも OTP も扱わない。
+と同じ (切れ判定 → 起動中の browser に裏で入り直させる → 1 回だけ撃ち直す)。 入り直しの部品 = scripts/lib/sso_cookie_session.py
+(入り直せた = 読み直した cookie を server が受け入れた時だけ)、 一般則 = conventions/machine-route-first.md#sso-session-recovery。
+script はパスワードも OTP も扱わない。
 
 subcommand:
   syllabus-search [--year Y] [--code C] [--name 科目名] [--teacher 教員名] [--word 語]   シラバス検索 (一覧)
@@ -12,58 +13,45 @@ subcommand:
   roster-csv --out-dir DIR [--year Y] [--exam 1]                                      全担当科目の履修者名簿 CSV を DIR に保存 (成績登録画面の CSV 一括ダウンロード)
   get <path>                                                                         任意 path を GET (debug 用)
   status                                                                             いま読めるか (GET 1 本、 切れていれば復帰を試す)
-  doctor                                                                             配線だけ (browser の cookie を読めるか。 network なし、 健全なら無言)
+  doctor                                                                             配線だけ (cookie を復号できて値が壊れていないか。 network なし、 健全なら無言)
+  probe [path ...]                                                                   切れ方の採取 (cookie なし・偽の session id で撃ち、 302 の行き先・Set-Cookie の名前・切れ判定を並べる)
 
 共通 option: --base https://<host> (env CAMPUSSQUARE_BASE)  --browser brave|chrome  --profile Default
-             --browser-refresh off|keep|close (env CAMPUSSQUARE_BROWSER_REFRESH)  --wait-login 秒
+             --browser-refresh off|keep|close (env CAMPUSSQUARE_BROWSER_REFRESH)  --wait-login 秒  --trace
 
 画面の仕組み (Spring Web Flow・シラバス検索の form・教員ログイン時の担当者欄の罠・CSV の形式) = conventions/campussquare.md。
-切れの判定 = 3xx で別 host (IdP) / `Shibboleth.sso` / login を含む path へ、 または 200 でログイン画面の title。
+切れの判定 = 3xx で別 host (IdP) / `Shibboleth.sso` / `login` か `ssologin` の path へ、 または 200 でログイン画面か「認証エラー」 の title。
+  未ログインの portal は ssologin.do への 302 と一緒に未認証の JSESSIONID を配る (実測、 `probe` で見える)。
   ⚠️ CampusSquare 本体の timeout 画面の形は未実測 (出たら expired() に足して selftest に回帰を足す)。
 
 ⚠️ 出力に cookie / flow key を出さない。 取得した学生情報 (名簿・成績) は private 層にしか置かない。 書き込み (成績登録等) は射程外。
 """
 import argparse
 import html as htmllib
-import importlib.util
 import os
-import platform
 import re
-import shutil
-import sqlite3
 import sys
-import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlparse
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from lib.browser_tab import BROWSER_APPS, POLL_S, BrowserTab, watch, selftest_cases as _tab_selftest_cases  # noqa: E402
+from lib.browser_tab import BROWSER_APPS, selftest_cases as _tab_selftest_cases  # noqa: E402
+from lib.sso_cookie_session import (  # noqa: E402
+    EX_LOGIN, CookieSession, LoginRequired, doctor as _doctor, print_probe, probe_anonymous,
+    selftest_cases as _session_selftest_cases, site_selftest_cases)
 
-EX_LOGIN = 75  # 本人のログインが要る
 CTX = "/campusweb"
 PORTAL = CTX + "/campusportal.do?page=main"
 FLOW = CTX + "/campussquare.do"
 SYLLABUS_FLOW = "SYW0001000-flow"
 GRADE_FLOW = "SIW0001000-flow"  # 成績登録 / 履修者名簿ダウンロード
-
-
-class LoginRequired(Exception):
-    def __init__(self, why, observed=False):
-        super().__init__(why)
-        self.why, self.observed = why, observed
+PROBE_PATHS = [PORTAL, f"{FLOW}?_flowId={SYLLABUS_FLOW}"]
 
 
 def _say(msg):
     print(f"CampusSquare: {msg}", file=sys.stderr, flush=True)
-
-
-def _cc():
-    spec = importlib.util.spec_from_file_location("cc", HERE / "chromium-cookies.py")
-    cc = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cc)
-    return cc
 
 
 def expired(code, location, text, base_host):
@@ -125,125 +113,17 @@ def result_rows(page):
     return rows
 
 
-class CampusSquare:
-    def __init__(self, base, browser="brave", profile="Default", refresh="off", wait_login=0):
-        self.base = base.rstrip("/")
-        self.host = urlparse(self.base).hostname
-        self.browser, self.profile, self.refresh, self.wait_login = browser, profile, refresh, wait_login
-        import requests
-        self.s = requests.Session()
-        self.h = {"User-Agent": "Mozilla/5.0"}
-        self._recovered = False
-        self.recovered_by = None
-        self._clock, self._sleep = time.time, time.sleep  # selftest が偽の時計に差し替える
-        self._probe_gap, self._next_probe = 0, 0.0  # 未認証の cookie を掴んだ後の確かめ直しの間隔 (_renewed)
-        self._load()
+class CampusSquare(CookieSession):
+    label = "CampusSquare"
+    entry_path = PORTAL
+    alive_path = PORTAL  # 生きていれば 200 の portal、 切れていれば ssologin.do への 302
+    close_path = CTX
 
-    def _stamp(self):
-        db = Path(_cc().BROWSERS[self.browser][0]).expanduser() / self.profile / "Cookies"
-        try:
-            with tempfile.TemporaryDirectory() as td:
-                p = Path(td) / "c.db"
-                shutil.copy(db, p)
-                con = sqlite3.connect(p)
-                try:
-                    return con.execute("select max(creation_utc), max(last_update_utc) from cookies where host_key = ? "
-                                       "and name = 'JSESSIONID'", (self.host,)).fetchone()
-                finally:
-                    con.close()
-        except Exception:  # noqa: BLE001
-            return None
+    def expired(self, code, location, text):
+        return expired(code, location, text, self.host)
 
-    def _stamp_changed(self):
-        now = self._stamp()
-        return now is not None and now != self._loaded_stamp
-
-    def _load(self):
-        self._loaded_stamp = self._stamp()
-        self.s.cookies.clear()
-        self.s.cookies.update(_cc().load_cookies(self.browser, [self.host], self.profile))  # IdP の cookie は読まない
-
-    def _alive(self):
-        """手元の cookie を server が受け入れるか (portal を GET 1 本、 redirect は辿らない)。"""
-        r = self.s.get(self.base + PORTAL, headers=self.h, timeout=30, allow_redirects=False)
-        return not expired(r.status_code, r.headers.get("Location", ""), r.text, self.host)
-
-    def _renewed(self):
-        """watch に渡す「入り直せたか」。 cookie DB が変わったら読み直し、 **server が受け入れた時だけ** True。
-
-        cookie が変わった ≠ 入り直せた: 未ログインの portal は ssologin.do への 302 と一緒に未認証の JSESSIONID を配る
-        (実測) = browser が portal を開いただけで cookie DB は変わる。 詳細と間隔の理由 = garoon-client.py の同名 method。
-        """
-        if self._stamp_changed():
-            self._sleep(2)  # 同じ書き出しで他の cookie も揃うのを待つ
-            self._load()
-        elif not self._probe_gap or self._clock() < self._next_probe:
-            return False
-        if self._alive():
-            return True
-        if not self._probe_gap:
-            _say("cookie は変わったがまだ受け入れられない (未認証の cookie) → tab の行き先を見続ける")
-        self._probe_gap = min(15, self._probe_gap + 5)
-        self._next_probe = self._clock() + self._probe_gap
-        return False
-
-    def _open_tab(self, why):
-        """起動中の browser に裏で tab を開かせる。 開かなければ None。"""
-        app = BROWSER_APPS.get(self.browser)
-        if self.refresh == "off" or not app or platform.system() != "Darwin" or not BrowserTab.running(app):
-            return None
-        _say(f"session 切れ ({why}) → 起動中の {app} に裏で開かせて入り直す")
-        tab = BrowserTab(app)
-        tab.open(self.base + PORTAL)
-        return tab
-
-    def _recover(self, why):
-        """login 切れからの復帰 (process ごとに 1 回)。 入り直せた = 読み直した cookie を server が受け入れた時だけ True。"""
-        if self._recovered:
-            return False
-        self._recovered = True
-        if self._stamp_changed():  # browser はもう入り直していて、 手元が古いだけ
-            self._load()
-            if self._alive():
-                self.recovered_by = "reload"
-                return True
-        tab = self._open_tab(why)
-        if not tab and not self.wait_login:
-            return False
-        t0 = self._clock()
-        self._probe_gap, self._next_probe = 0, 0.0
-        end, saw_login, at = watch(tab.where if tab else (lambda: None), self._renewed,
-                                   lambda u: inside(u, self.host), self.wait_login,
-                                   clock=self._clock, sleep=self._sleep, say=_say)
-        if end == "login":
-            if self.refresh == "close":
-                tab.close(at)
-            raise LoginRequired(why, observed=True)
-        if end == "timeout":
-            return False
-        if end == "stale":  # tab は中に着いたが cookie DB は変わらなかった
-            self._load()
-            if not self._alive():
-                return False
-        if tab and self.refresh == "close" and not saw_login:
-            tab.close(self.base + CTX)
-        _say(f"入り直した ({self._clock() - t0:.0f} 秒)")
-        self.recovered_by = "refresh"
-        return True
-
-    def _request(self, method, path, **kw):
-        def send():
-            r = self.s.request(method, self.base + path, headers=self.h, timeout=60, allow_redirects=False, **kw)
-            return r, expired(r.status_code, r.headers.get("Location", ""), r.text, self.host)
-
-        r, why = send()
-        if why:
-            if not self._recover(why):
-                raise LoginRequired(why)
-            r, again = send()
-            if again:
-                raise LoginRequired(why)
-        return r
+    def inside(self, url):
+        return inside(url, self.host)
 
     def _follow(self, r):
         """flow 内の 302 (同じ host。 別 host なら _request が切れとして先に捕まえている) を追って画面 HTML にする。"""
@@ -302,53 +182,10 @@ class CampusSquare:
 
 
 def doctor(browser, profile, base):
-    if platform.system() != "Darwin" or not base:
+    """script 経路の配線だけを見る (cookie を復号できて値が壊れていないか)。 network なし。 健全・対象外なら []。"""
+    if not base:
         return []
-    try:
-        cc = _cc()
-        if not (Path(cc.BROWSERS[browser][0]).expanduser() / profile / "Cookies").exists():
-            return []
-        cc.load_cookies(browser, [urlparse(base).hostname], profile)
-    except SystemExit as e:
-        first = (str(e).splitlines() or [""])[0][:80]
-        return [f"🟠 CampusSquare script 経路: browser の cookie を復号できない ({first}) = 対話 session で 1 回実行して Keychain を許可"]
-    except Exception as e:  # noqa: BLE001
-        return [f"🟠 CampusSquare script 経路: browser の cookie を読めない ({type(e).__name__})"]
-    return []
-
-
-def _fake_recover(tab_script, stamp_changes, alive_from, wait_login=0):
-    """selftest 用: 偽の tab・時計・cookie DB・server で _recover を回す (形は garoon-client.py の同名関数)。
-    → (結末, 自分の tab を閉じたか, 経過秒)。 結末 = "reload" / "refresh" / "failed" / "login" / "login-observed"。"""
-    global _say
-    t, closed, said = [0.0], [], []
-
-    class Tab:
-        def where(self):
-            return tab_script[min(int(t[0] / POLL_S), len(tab_script) - 1)]
-
-        def close(self, prefix):
-            closed.append(prefix)
-            return True
-
-    cs = CampusSquare.__new__(CampusSquare)  # network と browser に触る __init__ を通さない
-    cs.base, cs.host, cs.browser, cs.profile = "https://cs.example.ac.jp", "cs.example.ac.jp", "brave", "Default"
-    cs.refresh, cs.wait_login, cs._recovered, cs.recovered_by = "close", wait_login, False, None
-    cs._clock, cs._sleep = (lambda: t[0]), (lambda s: t.__setitem__(0, t[0] + s))
-    cs._probe_gap, cs._next_probe = 0, 0.0
-    cs._stamp = lambda: sum(1 for c in stamp_changes if t[0] >= c)
-    cs._load = lambda: setattr(cs, "_loaded_stamp", cs._stamp())
-    cs._alive = lambda: alive_from is not None and t[0] >= alive_from
-    cs._open_tab = lambda why: Tab()
-    cs._loaded_stamp = cs._stamp()
-    saved, _say = _say, said.append
-    try:
-        end = cs.recovered_by if cs._recover("login redirect") else "failed"
-    except LoginRequired as e:
-        end = "login-observed" if e.observed else "login"
-    finally:
-        _say = saved
-    return end, bool(closed), t[0]
+    return _doctor("CampusSquare", browser, profile, [urlparse(base).hostname])
 
 
 def selftest():
@@ -373,21 +210,10 @@ def selftest():
             '</form><table><tr><td>1</td><td>学科</td><td>後期</td><td>金2</td><td>123456</td><td>科目&amp;名</td><td>'
             '<a onclick="refer(\'2026\',\'99\',\'123456\',\'ja_JP\');">参照</a></td></tr></table>')
     rows = result_rows(page)
-    pt = ("https://cs.example.ac.jp/campusweb/campusportal.do", True)
-    sso = ("https://cs.example.ac.jp/campusweb/ssologin.do", False)
-    idp = ("https://idp.example.com/auth/session", False)
-    back = ("https://cs.example.ac.jp/campusweb/campusportal.do", False)
-    checks = _tab_selftest_cases() + [
-        # 実測: 未ログインの portal が配る未認証の JSESSIONID で cookie DB が変わる → 旧版は「入り直した」 と言って失敗していた
-        ("IdP が切れている: portal が配った cookie を入り直しと読まず、 本人のログインが要ると言う",
-         _fake_recover([pt, sso, idp], [3], None)[0] == "login-observed"),
-        ("IdP が生きていて cookie DB が先に変わった → 確かめ直しで入り直し、 自分の tab を閉じる",
-         (lambda r: r[0] == "refresh" and r[1] and r[2] <= 15)(_fake_recover([pt, sso, back], [3], 6))),
-        ("wait-login: 本人がログインし終えたら入り直す (ログインに使った tab は閉じない)",
-         (lambda r: r[0] == "refresh" and not r[1])(_fake_recover([pt, sso] + [idp] * 40 + [back], [3], 63, wait_login=300))),
-        ("tab が中に着いても server が cookie を受け入れない → 入り直したと言わない",
-         _fake_recover([pt, back], [], None)[0] == "failed"),
-
+    b = "https://cs.example.ac.jp"
+    checks = _tab_selftest_cases() + _session_selftest_cases() + site_selftest_cases(
+        CampusSquare, b, entry=(b + "/campusweb/campusportal.do", True), login=(b + "/campusweb/ssologin.do", False),
+        idp=("https://idp.example.com/auth/session", False), back=(b + "/campusweb/campusportal.do", False)) + [
         ("form_fields: hidden と値なし hidden を拾う", form_fields(page, "ReferForm") ==
          {"_flowExecutionKey": "_cA_kB", "_eventId": "input", "secchikbncd": ""}),
         ("result_rows: refer の引数と entity 解決", len(rows) == 1 and rows[0]["refer"] == ("2026", "99", "123456", "ja_JP")
@@ -411,6 +237,8 @@ def main():
     ap.add_argument("--browser-refresh", choices=("off", "keep", "close"),
                     default=os.environ.get("CAMPUSSQUARE_BROWSER_REFRESH", "off"))
     ap.add_argument("--wait-login", type=int, default=0, metavar="秒")
+    ap.add_argument("--trace", action="store_true",
+                    help="入り直しの途中の tab の行き先・cookie DB の変化・受け入れの確認を秒つきで stderr に出す (値は出さない)")
     ap.add_argument("--selftest", action="store_true")
     sub = ap.add_subparsers(dest="cmd")
     p = sub.add_parser("syllabus-search")
@@ -424,6 +252,8 @@ def main():
     p = sub.add_parser("get"); p.add_argument("path")
     sub.add_parser("status")
     sub.add_parser("doctor")
+    p = sub.add_parser("probe", help="切れ方の採取 (cookie を使わない)")
+    p.add_argument("paths", nargs="*", help=f"既定 = {' '.join(PROBE_PATHS)}")
     a = ap.parse_args()
     if a.selftest:
         sys.exit(selftest())
@@ -435,8 +265,12 @@ def main():
         return
     if not a.base:
         raise SystemExit("--base か env CAMPUSSQUARE_BASE が要る (= 組織の host、 private 層の入口 script が与える)")
+    if a.cmd == "probe":  # browser の cookie を使わない = CampusSquare() を作らない
+        host = urlparse(a.base).hostname
+        print_probe(probe_anonymous(a.base, a.paths or PROBE_PATHS, lambda c, l, t: expired(c, l, t, host)))
+        return
     try:
-        cs = CampusSquare(a.base, a.browser, a.profile, refresh=a.browser_refresh, wait_login=a.wait_login)
+        cs = CampusSquare(a.base, a.browser, a.profile, refresh=a.browser_refresh, wait_login=a.wait_login, trace=a.trace)
         run(a, cs)
     except LoginRequired as e:
         app = BROWSER_APPS.get(a.browser, a.browser)
@@ -445,7 +279,8 @@ def main():
                  f"{app} にログイン画面を開いたまま、 ログインし終えるのを待って続きから進む")
         else:
             _say(f"session 切れ ({e.why}) から復帰できなかった → {app} で {a.base}{PORTAL} を開いてログインしてから再実行"
-                 + ("" if a.browser_refresh != "off" else " (`--browser-refresh keep|close` で browser に入り直させられる)"))
+                 + ("" if a.browser_refresh != "off" else " (`--browser-refresh keep|close` で browser に入り直させられる)")
+                 + " / 途中を見るなら `--trace`")
         sys.exit(EX_LOGIN)
 
 

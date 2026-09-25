@@ -31,7 +31,7 @@ Garoon のセッション切れは 2 層ある: **Garoon 本体のセッショ�
    <a id="login-page-mints-session-cookie"></a>⚠️ **cookie DB が変わった ≠ 入り直せた**: Garoon のログイン画面 (`/login`) は開かれるたびに**未認証の** JSESSIONID を配る (実測、 cookie なしで `/g/` に来た時の 302 も配る)。 IdP が切れていても、 browser がログイン画面を通るだけで cookie DB は変わる。 変わったことを「入り直せた」 と読むと、 未認証の cookie で撃ち直して失敗し、 本人のログインが要ることも言えない (実例: 「入り直した (11 秒)」 の直後に「復帰できなかった」、 exit 75 の案内が出ない)。 cookie DB の書き出しが速い時ほど、 ログイン画面で止まるのを見届ける前にこの cookie を掴むので、 機械・時刻によって出たり出なかったりする。 SAML が済むと同じ cookie のまま認証済みになることもある (= その後 DB は変わらない) ので、 未認証の cookie を掴んだ後は間隔を空けて確かめ直す。
 3. 本人のログインが要る時は、 agent が user に 1 行で頼み、 同じ command を `--wait-login <秒>` つき (subcommand の前でも後でも効く) ・background で実行し直す。 ログイン画面の tab が開いたままになり、 本人がログインし終えたら続きから進む (= user は「終わった」 と報告しなくてよい)。 本人がログインに使った tab は閉じない。
 
-**設計の要点と理由 (見積もらずに見る / 通常の周期を警告にしない / IdP を延命しない / browser に触る副作用は opt-in / 既存の tab を使い回さない / browser の中で読む経路に寄せない理由) の正本 = [`machine-route-first.md#sso-session-recovery`](machine-route-first.md#sso-session-recovery)** (別の SSO 保護サイトで同じ形を組む時もそこから)。 tab を駆動する部品 = [`scripts/lib/browser_tab.py`](../scripts/lib/browser_tab.py)。
+**設計の要点と理由 (見積もらずに見る / 通常の周期を警告にしない / IdP を延命しない / browser に触る副作用は opt-in / 既存の tab を使い回さない / browser の中で読む経路に寄せない理由) の正本 = [`machine-route-first.md#sso-session-recovery`](machine-route-first.md#sso-session-recovery)** (別の SSO 保護サイトで同じ形を組む時もそこから)。 復帰の部品 = [`scripts/lib/sso_cookie_session.py`](../scripts/lib/sso_cookie_session.py) (tab の駆動 = [`scripts/lib/browser_tab.py`](../scripts/lib/browser_tab.py))。
 
 利用者の入口は数行の wrapper で足りる (org と流儀を 1 箇所で決める。 組織名を含むので private 層に置く):
 
@@ -46,6 +46,7 @@ Garoon 固有の実測:
 - Garoon を開いたままの tab は、 ページ移動なしに裏の通信で JSESSIONID を差し替えることがある (理由は未確認)。 script は起動時に読んだ cookie を長く持ち続けず、 実行のたびに読み直す。
 - Chromium の cookie DB 書き出しの遅れは一定しない = 数秒で出ることも、 30 秒ほどかかることもある (実測)。 遅い側では login 直後の 1 回目が「切れ」 に見え、 速い側ではログイン画面が配った未認証の cookie が認証より先に DB に出る。 どちらも書き出しの速さで結末を決めず、 server に確かめて決める ([#login-page-mints-session-cookie](#login-page-mints-session-cookie))。
 - 本体セッションの寿命を測るときは、 途中で IdP をログアウトしないこと (ログアウト後に切れていても寿命の証拠にならない)。
+- 切れ方の採取 = client の `probe` (cookie なし・偽の JSESSIONID で `/g/` 等を撃つ。 未認証の JSESSIONID を配ることと、 `expired()` が全部を切れと判定することがその場で見える)。 復帰の途中を見る = `--trace` (実測: `/g/` → IdP の assertions → `/saml/acs` → `/g/index.csp` と進み、 cookie DB の更新は tab が中に着いてから数秒後)。
 - 死活監視は `doctor` (配線だけ・network なし) に留める。 `status` は読む前に 1 回だけ (user が席を外す前に、 ログインが要るかをその場で知るため)。
 
 ⚠️ **`search.csp` の HTML 自体は結果を含まない** (JS が上の API を叩いて描画、 no-data 文言は template に常在) — HTML を grep して「0 件」 と結論しない。 browser MCP の `get_page_text` も描画前に読むと同じ罠。

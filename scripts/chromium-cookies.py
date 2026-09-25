@@ -64,23 +64,35 @@ def _derive_key(password: bytes) -> bytes:
     return hashlib.pbkdf2_hmac("sha1", password, b"saltysalt", 1003, dklen=16)
 
 
-def _decrypt(enc: bytes, key: bytes, host_key: str) -> str:
+def _decrypt_checked(enc: bytes, key: bytes, host_key: str):
+    """→ (値, 壊れていないか)。 鍵や暗号の形式が変わると AES-CBC は例外なしに化けた値を返すので、
+    PKCS#7 の padding と「復号した値が印字できる文字だけか」 で見分ける。"""
     if not enc:
-        return ""
+        return "", True
     if enc[:3] not in (b"v10", b"v11"):
-        return enc.decode("utf-8", "replace")
+        text = enc.decode("utf-8", "replace")
+        return text, "�" not in text
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes  # lazy import
     cipher = Cipher(algorithms.AES(key), modes.CBC(b" " * 16))
     dec = cipher.decryptor()
     raw = dec.update(enc[3:]) + dec.finalize()
-    raw = raw[: -raw[-1]]  # PKCS#7
+    pad = raw[-1] if raw else 0
+    ok = 1 <= pad <= 16 and raw[-pad:] == bytes([pad]) * pad  # PKCS#7
+    if ok:
+        raw = raw[:-pad]
     # Chromium 130+: SHA-256(host_key) prefix
     if len(raw) >= 32 and raw[:32] == hashlib.sha256(host_key.encode()).digest():
         raw = raw[32:]
-    return raw.decode("utf-8", "replace")
+    text = raw.decode("utf-8", "replace")
+    return text, ok and "�" not in text and text.isprintable()
 
 
-def load_cookies(browser: str, domains, profile: str = "Default", names=None) -> dict:
+def _decrypt(enc: bytes, key: bytes, host_key: str) -> str:
+    return _decrypt_checked(enc, key, host_key)[0]
+
+
+def _rows(browser: str, domains, profile: str, names):
+    """domain (suffix match) と名前で絞った cookie を (host_key, name, 値, 壊れていないか) で返す。"""
     base, service, account = BROWSERS[browser]
     db = Path(base).expanduser() / profile / "Cookies"
     if not db.exists():
@@ -92,15 +104,25 @@ def load_cookies(browser: str, domains, profile: str = "Default", names=None) ->
         con = sqlite3.connect(str(tmp))
         rows = con.execute("select host_key, name, encrypted_value, value from cookies").fetchall()
         con.close()
-    out = {}
     for host_key, name, enc, value in rows:
         h = host_key.lstrip(".")
         if not any(h == d or h.endswith("." + d) for d in domains):
             continue
         if names and name not in names:
             continue
-        out[name] = value or _decrypt(enc, key, host_key)
-    return out
+        if value:
+            yield host_key, name, value, True
+        else:
+            yield (host_key, name) + _decrypt_checked(enc, key, host_key)
+
+
+def load_cookies(browser: str, domains, profile: str = "Default", names=None) -> dict:
+    return {name: v for _h, name, v, _ok in _rows(browser, domains, profile, names)}
+
+
+def cookie_health(browser: str, domains, profile: str = "Default", names=None) -> list:
+    """[(name, host_key, 値の長さ, 壊れていないか)] (値そのものは返さない)。 配線の診断 (doctor) 用。"""
+    return [(name, h, len(v), ok) for h, name, v, ok in _rows(browser, domains, profile, names)]
 
 
 def main():
@@ -110,8 +132,17 @@ def main():
     ap.add_argument("--domain", action="append", required=True, help="suffix match、 複数可")
     ap.add_argument("--names", help="comma 区切りで cookie 名を絞る")
     ap.add_argument("--format", choices=["lines", "header", "json"], default="lines")
+    ap.add_argument("--check", action="store_true",
+                    help="値を出さずに、 名前・host・長さ・復号した値が壊れていないかだけを出す (壊れていれば exit 1)")
     a = ap.parse_args()
     names = set(a.names.split(",")) if a.names else None
+    if a.check:
+        health = cookie_health(a.browser, a.domain, a.profile, names)
+        for name, h, n, ok in health:
+            print(f"{'ok' if ok else '壊れている'}\t{h}\t{name}\t{n} 文字")
+        if not health:
+            print("(該当 cookie なし = browser で未 login か domain 違い)", file=sys.stderr)
+        sys.exit(0 if all(ok for *_x, ok in health) else 1)
     jar = load_cookies(a.browser, a.domain, a.profile, names)
     if not jar:
         print("(該当 cookie なし = browser で未 login か domain 違い)", file=sys.stderr)

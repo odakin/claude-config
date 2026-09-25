@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-09-25: SSO の入り直しは server の受け入れで決め、 入り直しの処理を部品 1 つに置く](#sso-recovery-server-acceptance)
 - [2026-09-23: memory file の予算 gate — 予算を超えて育つ commit だけ止める (縮める commit は通す)](#memory-budget-gate)
 - [2026-09-23: approve の引用照合 — 引けるのは記録する時点で著者の最新の発言だけ (短い引用は発言の全体)](#approve-quote-binding)
 - [2026-09-22: CI の 6 件の赤は runner の環境差 — font・<base> の AGENTS.md・ext4 の inode 再利用](#ci-runner-env-failures)
@@ -46,6 +47,23 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="sso-recovery-server-acceptance"></a>2026-09-25: SSO の入り直しは server の受け入れで決め、 入り直しの処理を部品 1 つに置く
+
+**起点 (実測)**: cookie 再利用の client が「入り直した」 と言った直後に「復帰できなかった」 で止まり、 本人のログインが要るという案内 (exit 75) も出なかった。 ログイン画面そのものが未認証の session cookie を配り、 client は cookie DB の時刻の変化を入り直しと読んでいた = IdP が切れていても、 browser がログイン画面を通るだけで条件が満たされる。 cookie の書き出しが速い時ほどログイン画面を見届ける前にこの cookie を掴むので、 機械・時刻によって出たり出なかったりした。 同じ判定が別サイトの client にも写されていて、 そちらは同じ host の中の SSO 入口への 302 を切れと判定しない穴も持っていた (切れているのに `status` が「読める」)。
+
+**判断**:
+- **入り直せた = 読み直した cookie を server が受け入れた時だけ** (軽い GET 1 本)。 cookie の変化は「確かめる時機」 の合図にだけ使う ([principles §8.8 の「成功でも失敗でも起きる変化」](docs/convention-design-principles.md#change-on-both-paths))。
+- 受け入れられなければ見続ける (ログイン画面で止まるのを見届けて exit 75 / SAML の完了を待つ)。 同じ cookie のまま認証済みになるサイトのために、 未認証の cookie を掴んだ後は DB が変わらなくても 5 → 10 → 15 秒で確かめ直す。
+- **入り直しの処理を [`scripts/lib/sso_cookie_session.py`](scripts/lib/sso_cookie_session.py) に集約**し、 client は subclass でサイト固有の切れ判定と「サイトの中」 の判定だけを書く。 selftest の場面 (IdP 切れ / 先に変わる cookie / wait-login / server が受け入れない) は部品が持ち、 各 client は本物の URL の形で同じ場面を通す (`site_selftest_cases`)。 規約 = [`machine-route-first.md#recovery-in-one-component`](conventions/machine-route-first.md#recovery-in-one-component)。
+- 手で追った切り分けを道具にした: `probe` (切れ方の採取、 [`#capture-expiry-shape`](conventions/machine-route-first.md#capture-expiry-shape)) / `--trace` (復帰の途中の tab・cookie・受け入れ) / doctor が復号した値の破損まで見る ([`chromium-cookies.py --check`](scripts/chromium-cookies.py)。 鍵や暗号の形式が変わると AES-CBC は例外なしに化けた値を返し、 「復号できた」 だけの検査は通ってしまう)。
+
+**棄却した案**:
+- *cookie の変化の後に固定時間待ってから撃ち直す*: 必要な長さは SAML の往復と IdP の状態で変わり、 IdP が切れている時は何秒待っても受け入れられない。 待ちでなく確かめで決める。
+- *ログイン画面が配った cookie を名前や値の形で見分ける*: サイトの内部に依存し、 cookie の値を読むことになる (値は読まない約束)。
+- *修正を 2 つの client にそれぞれ当てる*: 次の SSO サイトの client がまた古い形から写す。
+
+**未検証**: IdP が切れた状態からの復帰の実走 (exit 75 → `--wait-login`)。 selftest の偽の tab と時計でだけ通している。
 
 ## <a id="memory-budget-gate"></a>2026-09-23: memory file の予算 gate — 予算を超えて育つ commit だけ止める (縮める commit は通す)
 
@@ -158,7 +176,7 @@ commit: `7c9cee2` (最新の一致 + 再利用の判定 + system-reminder) → `
 - *別 window・最小化した window で開く*: 窓の出現と Dock の動きの方が tab 1 枚より目に付く。 前面の tab を元に戻すだけにした
 - *ログイン待ちで OS 通知を出す / browser を前面に出す*: 頼む経路は agent の chat で足りる。 部品を増やさない
 
-**未検証**: 入り直せる側 (IdP が生きている時の本体切れ) と `--wait-login`・`close` の実走。 selftest は結末判定を偽の tab で通すだけで、 AppleScript 本体は「開く」 「行き先を見る」 しか実機で確かめていない (閉じる側は `osacompile` のみ)。
+**未検証**: `--wait-login` の実走 (IdP が切れた状態からの復帰)。 入り直せる側 (IdP が生きている時の本体切れ) と `close` (自分の tab を閉じる) は 2 サイトで実走して確かめた = [SSO の入り直しは server の受け入れで決める](#sso-recovery-server-acceptance)。
 
 ## <a id="hook-retirement-registry"></a>2026-09-17: hook の退役は registry に書き、 毎回の sync が外す (installer の hardcode をやめる)
 

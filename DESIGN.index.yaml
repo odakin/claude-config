@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: sso-recovery-server-acceptance
+    legacy: "2026-09-25"
+    level: 2
+    title: "2026-09-25: SSO の入り直しは server の受け入れで決め、 入り直しの処理を部品 1 つに置く"
   - id: memory-budget-gate
     legacy: "2026-09-23"
     level: 2
