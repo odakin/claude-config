@@ -452,8 +452,9 @@ def box_pixels(pix) -> dict:
     if x1 - x0 < 3 or y1 - y0 < 3:
         return dict(none, box=(x0, y0, x1, y1))
 
-    def g(x, y):
-        return s[(y * w + x) * n]
+    def g(x, y):   # 透明は紙 (白) として読む = 透明の画素の値 (0 = 黒で保存されることがある) を墨に数えない
+        i = (y * w + x) * n
+        return s[i] if not pix.alpha else (s[i] * s[i + 1] + 255 * (255 - s[i + 1])) // 255
 
     def row(y):
         return sum(1 for x in range(x0, x1 + 1) if g(x, y) < 100) / (x1 - x0 + 1)
@@ -548,8 +549,8 @@ def mark_checked_boxes(pdf, pages=None) -> dict:
                 continue
             n = 0
             for r, bp in _small_images(p, d):
-                if not bp["checked"] or not bp.get("box"):
-                    continue
+                if not bp["checked"] or not bp.get("box") or len(bp["edges"]) < 3:
+                    continue   # 辺が 2 本以下 = 箱の形でない (印影・ロゴ・図。 箱は欠けても 3 辺は出る = 実測)
                 br = box_rect(r, bp)
                 if box_ink(p, br) >= INK_READABLE:
                     continue
@@ -1249,6 +1250,25 @@ def selftest() -> int:
     fails += not ok
     print(f"{'PASS' if ok else 'FAIL'} mark_checked_boxes: ✓ は開いた折れ線 2 本 (三角に閉じない)"
           f" = {[[it[0] for it in s['items']] for s in strokes]} closePath={[s.get('closePath') for s in strokes]}")
+    # 箱でない小さい画像 (透明の地に丸い線 = 印影・ロゴの形) には重ねない: 辺が無いのに内側が濃いので checked に見える
+    # (検収の実測 = 印影つきの過去の出力の複製で 1 個に ✓ を描いた)
+    def _round_mark():
+        pm = fitz.Pixmap(fitz.csGRAY, fitz.IRect(0, 0, 40, 40), 1)
+        for y in range(40):
+            for x in range(40):
+                d2 = (x - 19.5) ** 2 + (y - 19.5) ** 2
+                on = 15 ** 2 <= d2 <= 18 ** 2 or (d2 < 15 ** 2 and x in (14, 15, 24, 25))
+                pm.set_pixel(x, y, (120, 255) if on else (0, 0))   # 朱の線 = 印の判定 (< 170) には入り、 黒 (< 90) には入らない
+        return pm
+    spdf = os.path.join(d, "round.pdf")
+    sdoc = fitz.open()
+    sdoc.new_page().insert_image(fitz.Rect(100, 100, 130, 130), pixmap=_round_mark())
+    sdoc.save(spdf)
+    sdoc.close()
+    ms = mark_checked_boxes(spdf)
+    ok = ms["marked"] == 0
+    fails += not ok
+    print(f"{'PASS' if ok else 'FAIL'} mark_checked_boxes: 辺の無い小さい画像 (印影の形) には重ねない = {ms['marked']} 個")
     base = {"missing_total": 0, "unmatched": 0, "missing_labels_total": 0, "missing_images_total": 0}
     r_ok = dict(base, targets=[{"boxes": {"out": 2, "out_checked": 1, "out_readable": 1, "expected_checked": 1}}])
     r_faint = dict(base, targets=[{"boxes": {"out": 2, "out_checked": 1, "out_readable": 0, "expected_checked": 1}}])
