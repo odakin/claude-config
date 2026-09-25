@@ -132,7 +132,11 @@ def watch(where, state_changed, is_inside, wait_login=0, clock=time.time, sleep=
     """browser に開かせた tab と、 script 側から見える状態 (cookie DB 等) を見て、 入り直しの結末を返す (判定だけ)。
 
     where()         → BrowserTab.where と同じ形
-    state_changed() → script が読む状態が、 手元に読んだ時から変わったか (例: cookie DB の session cookie の時刻)
+    state_changed() → script が読む状態が、 手元に読んだ時から変わったか (例: cookie DB の session cookie の時刻)。
+                      ⚠️ "fresh" を「入り直せた」 と扱うなら、 時刻の変化だけでなく **server が受け入れること**まで
+                      この中で確かめる (ログイン画面そのものが未認証の session cookie を配るサイトがある = 時刻だけだと
+                      IdP が切れていても fresh になる。 実装例 = garoon-client.py の `_renewed`、
+                      一般則 = conventions/machine-route-first.md#sso-session-recovery)
     is_inside(url)  → その URL がサイトの中か (ログイン画面でも別 host でもない)
     wait_login      → 0 = ログイン画面で止まったらすぐ返す / N = 本人がログインし終えるのを N 秒まで待つ
 

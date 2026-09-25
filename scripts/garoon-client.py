@@ -43,7 +43,11 @@ login 切れからの復帰 (手順 = conventions/garoon.md#garoon-session-recov
     1. 手元の cookie が古いだけ (= browser はもう入り直していて、 cookie DB への書き出しが遅れていた) なら読み直して終わり。
     2. `--browser-refresh keep|close` (env GAROON_BROWSER_REFRESH、 **既定 off** = 人の browser に触る副作用は opt-in) なら、
        **起動中の** browser に tab を 1 枚、 裏で開かせる (前面の tab は元に戻す。 browser が起動していなければ何もしない)。
-       - tab が Garoon の中に着いた = 入り直せた → cookie DB の更新を待って読み直し、 1 回だけ撃ち直す。
+       - cookie DB が変わったら読み直し、 **server が受け入れた時だけ** 入り直せたとする (GET 1 本で確かめる)。
+         ⚠️ cookie が変わった ≠ 入り直せた: ログイン画面 (/login) は開かれるたびに未認証の JSESSIONID を配る (実測)
+         = IdP が切れていても browser がログイン画面を通るだけで cookie DB は変わる。 受け入れられなければ見続ける。
+       - tab が Garoon の中に着いたのに cookie DB が変わらない時は、 読み直して server に確かめる (同じ cookie のまま認証が済む場合)。
+         入り直せたら 1 回だけ撃ち直す。
          `close` なら自分が開いたその tab を閉じる (tab が Garoon の外に居る・本人がログインに使った時は閉じない)。
        - tab が Garoon の外 (ログイン画面) で止まった = 本人のログインが要る → exit 75 で止まる (`close` なら、 その
          ログイン画面の tab も閉じる = 失敗のたびに tab が溜まらない)。 `--wait-login 秒` を付けると、 tab をログインの
@@ -73,7 +77,7 @@ from urllib.parse import urlparse
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))  # importlib 経由で読まれた時も lib を引けるように
-from lib.browser_tab import BROWSER_APPS, BrowserTab, watch, selftest_cases as _tab_selftest_cases  # noqa: E402
+from lib.browser_tab import BROWSER_APPS, POLL_S, BrowserTab, watch, selftest_cases as _tab_selftest_cases  # noqa: E402
 
 EX_LOGIN = 75  # exit code (EX_TEMPFAIL): 本人のログインが要る
 
@@ -130,6 +134,8 @@ class Garoon:
         self._csrf = None
         self._recovered = False
         self.recovered_by = None  # None / "reload" / "refresh" (status の表示用)
+        self._clock, self._sleep = time.time, time.sleep  # selftest が偽の時計に差し替える
+        self._probe_gap, self._next_probe = 0, 0.0  # 未認証の cookie を掴んだ後の確かめ直しの間隔 (_renewed)
         self._load()
 
     def _stamp(self):
@@ -160,38 +166,76 @@ class Garoon:
         self.s.cookies.update(_cc().load_cookies(self.browser, ["cybozu.com"], self.profile))  # IdP の cookie は読まない
         self._csrf = None
 
+    def _alive(self):
+        """手元の cookie を server が受け入れるか (GET 1 本。 生きていれば同じ host の中への 302 で本文なし = 軽い)。"""
+        r = self.s.get(self.base + "/g/portal/index.csp", headers=self.h, timeout=30, allow_redirects=False)
+        return not expired(r.status_code, r.headers.get("Location", ""), r.text, self.host)
+
+    def _renewed(self):
+        """watch に渡す「入り直せたか」。 cookie DB が変わったら読み直し、 **server が受け入れた時だけ** True。
+
+        cookie が変わった ≠ 入り直せた: Garoon のログイン画面 (/login) は開かれるたびに未認証の JSESSIONID を配る
+        (実測) = browser がログイン画面を通っただけで cookie DB は変わる。 それを「入り直せた」 と読むと、
+        IdP が切れている時に未認証の cookie で撃ち直して失敗し、 本人のログインが要ることも言えない。 受け入れられなければ
+        読み直した時刻を新しい基準にして見続ける (= ログイン画面で止まるのを見届ける / SAML の完了を待つ)。
+        未認証の cookie を掴んだ後は、 cookie DB が変わらなくても間隔を空けて確かめ直す (SAML の完了で同じ cookie が
+        認証済みになる場合、 DB はもう変わらない。 間隔は 5 → 10 → 15 秒で頭打ち = 待つ間の GET は軽い 302 だけ)。
+        """
+        if self._stamp_changed():
+            self._sleep(2)  # 同じ書き出しで他の cookie も揃うのを待つ
+            self._load()
+        elif not self._probe_gap or self._clock() < self._next_probe:
+            return False
+        if self._alive():
+            return True
+        if not self._probe_gap:
+            _say("cookie は変わったがまだ受け入れられない (ログイン画面が配った未認証の cookie) → tab の行き先を見続ける")
+        self._probe_gap = min(15, self._probe_gap + 5)
+        self._next_probe = self._clock() + self._probe_gap
+        return False
+
+    def _open_tab(self, why):
+        """起動中の browser に裏で tab を開かせる。 開かなければ None。"""
+        app = BROWSER_APPS.get(self.browser)
+        if self.refresh == "off" or not app or platform.system() != "Darwin" or not BrowserTab.running(app):
+            return None
+        _say(f"session 切れ ({why}) → 起動中の {app} に裏で開かせて入り直す")
+        tab = BrowserTab(app)
+        tab.open(f"{self.base}/g/")
+        return tab
+
     def _recover(self, why):
-        """login 切れからの復帰 (process ごとに 1 回)。 cookie を読み直すたびに yield = 呼び元が 1 回ずつ撃ち直す。"""
+        """login 切れからの復帰 (process ごとに 1 回)。 入り直せた = 読み直した cookie を server が受け入れた時だけ True。"""
         if self._recovered:
-            return
+            return False
         self._recovered = True
         if self._stamp_changed():  # browser はもう入り直していて、 手元が古いだけ
             self._load()
-            yield "reload"
-        app = BROWSER_APPS.get(self.browser)
-        tab = None
-        if self.refresh != "off" and app and platform.system() == "Darwin" and BrowserTab.running(app):
-            _say(f"session 切れ ({why}) → 起動中の {app} に裏で開かせて入り直す")
-            tab = BrowserTab(app)
-            tab.open(f"{self.base}/g/")
-        elif not self.wait_login:
-            return
-        t0 = time.time()
-        end, saw_login, at = watch(tab.where if tab else (lambda: None), self._stamp_changed, lambda u: inside(u, self.host),
-                                   self.wait_login, say=_say)
+            if self._alive():
+                self.recovered_by = "reload"
+                return True
+        tab = self._open_tab(why)
+        if not tab and not self.wait_login:
+            return False
+        t0 = self._clock()
+        self._probe_gap, self._next_probe = 0, 0.0
+        end, saw_login, at = watch(tab.where if tab else (lambda: None), self._renewed, lambda u: inside(u, self.host),
+                                   self.wait_login, clock=self._clock, sleep=self._sleep, say=_say)
         if end == "login":
             if self.refresh == "close":
                 tab.close(at)  # 待たないなら入口も残さない (= 失敗のたびにログイン画面の tab が溜まらない)
             raise LoginRequired(why, observed=True)
         if end == "timeout":
-            return  # wait-login の時間切れも含む。 本人が入力の途中かもしれないので tab は閉じない
-        if end == "fresh":
-            time.sleep(2)  # 同じ書き出しで他の cookie も揃うのを待つ
+            return False  # wait-login の時間切れも含む。 本人が入力の途中かもしれないので tab は閉じない
+        if end == "stale":  # tab は中に着いたが cookie DB は変わらなかった (= 手元の cookie のまま認証が済んだ場合を含む)
+            self._load()
+            if not self._alive():
+                return False
         if tab and self.refresh == "close" and not saw_login:
             tab.close(self.base + "/")  # 本人がログインに使った tab は本人のものなので閉じない
-        self._load()
-        _say(f"入り直した ({time.time() - t0:.0f} 秒)")
-        yield "refresh"
+        _say(f"入り直した ({self._clock() - t0:.0f} 秒)")
+        self.recovered_by = "refresh"
+        return True
 
     def _request(self, method, path, allow_redirects=False, **kw):
         headers, timeout = kw.pop("headers", self.h), kw.pop("timeout", 60)
@@ -204,10 +248,9 @@ class Garoon:
         r, why = send()
         if not why:
             return r
-        for how in self._recover(why):
+        if self._recover(why):
             r, again = send()
             if not again:
-                self.recovered_by = how
                 return r
         raise LoginRequired(why)
 
@@ -278,6 +321,41 @@ def doctor(browser, profile):
     return []
 
 
+def _fake_recover(tab_script, stamp_changes, alive_from, wait_login=0, local_stale=False):
+    """selftest 用: 偽の tab (行き先の台本、 1 poll に 1 つ) ・時計・cookie DB (JSESSIONID が変わる時刻の list) ・
+    server (その時刻から cookie を受け入れる。 None = 受け入れない) で _recover を回す。
+    → (結末, tab を開いたか, 自分の tab を閉じたか, 経過秒)。 結末 = "reload" / "refresh" / "failed" / "login" / "login-observed"。"""
+    global _say
+    t, opened, closed, said = [0.0], [], [], []
+
+    class Tab:
+        def where(self):
+            return tab_script[min(int(t[0] / POLL_S), len(tab_script) - 1)]
+
+        def close(self, prefix):
+            closed.append(prefix)
+            return True
+
+    g = Garoon.__new__(Garoon)  # network と browser に触る __init__ を通さない
+    g.base, g.host, g.browser, g.profile = "https://x.cybozu.com", "x.cybozu.com", "brave", "Default"
+    g.refresh, g.wait_login, g._recovered, g.recovered_by, g._csrf = "close", wait_login, False, None, None
+    g._clock, g._sleep = (lambda: t[0]), (lambda s: t.__setitem__(0, t[0] + s))
+    g._probe_gap, g._next_probe = 0, 0.0
+    g._stamp = lambda: sum(1 for c in stamp_changes if t[0] >= c)
+    g._load = lambda: setattr(g, "_loaded_stamp", g._stamp())
+    g._alive = lambda: alive_from is not None and t[0] >= alive_from
+    g._open_tab = lambda why: opened.append(why) or Tab()
+    g._loaded_stamp = -1 if local_stale else g._stamp()
+    saved, _say = _say, said.append
+    try:
+        end = g.recovered_by if g._recover("login redirect") else "failed"
+    except LoginRequired as e:
+        end = "login-observed" if e.observed else "login"
+    finally:
+        _say = saved
+    return end, bool(opened), bool(closed), t[0]
+
+
 def selftest():
     host = "x.cybozu.com"
     cases = [
@@ -299,7 +377,26 @@ def selftest():
     # 入り直しの結末判定 (偽の tab と時計) は lib 側の台本を回す
     def _parsed(argv):
         return build_parser().parse_args(argv)
+    gl, lg = ("https://x.cybozu.com/g/", True), ("https://x.cybozu.com/login", False)
+    idp, asr = ("https://x.ex-tic.com/auth/session", False), ("https://x.ex-tic.com/auth/saml2/x/assertions", False)
+    portal = ("https://x.cybozu.com/g/portal/index.csp", False)
     checks = _tab_selftest_cases() + [
+        # 実測: ログイン画面 (/login) が配る未認証の JSESSIONID で cookie DB が変わる → 旧版は「入り直した」 と言って
+        # 撃ち直し、 失敗して「復帰できなかった」 (本人のログインが要ることを言えない) で止まっていた
+        ("IdP が切れている: ログイン画面が配った cookie を入り直しと読まず、 本人のログインが要ると言う",
+         _fake_recover([gl, lg, idp], [3], None)[0] == "login-observed"),
+        ("IdP が生きていて、 cookie DB がログイン画面の cookie を先に書いた → 確かめ直しで入り直し、 自分の tab を閉じる",
+         (lambda r: r[0] == "refresh" and r[2] and r[3] <= 15)(_fake_recover([gl, lg, asr, portal], [3], 6))),
+        ("普通の入り直し (cookie DB が SAML の後に変わる) → すぐ入り直す",
+         (lambda r: r[0] == "refresh" and r[2] and r[3] <= 8)(_fake_recover([gl, asr, portal], [4], 3))),
+        ("wait-login: 本人がログインし終えたら入り直す (ログインに使った tab は閉じない)",
+         (lambda r: r[0] == "refresh" and not r[2] and r[3] <= 80)(
+             _fake_recover([gl, lg] + [idp] * 40 + [portal], [3], 63, wait_login=300))),
+        ("tab が中に着いても server が cookie を受け入れない → 入り直したと言わない",
+         _fake_recover([gl, portal], [], None)[0] == "failed"),
+        ("手元の cookie が古いだけ (browser は入り直し済み) → tab を開かずに読み直す",
+         _fake_recover([portal], [], 0, local_stale=True)[:2] == ("reload", False)),
+
         ("--wait-login は subcommand の後ろでも効く", _parsed(["search", "k", "--wait-login", "5"]).wait_login == 5),
         ("--wait-login は subcommand の前でも効く", _parsed(["--wait-login", "7", "search", "k"]).wait_login == 7),
         ("後ろで指定しなければ前の値が残る", _parsed(["--wait-login", "7", "--json", "search", "k"]).json is True
@@ -349,7 +446,8 @@ def build_parser():
 
 
 def main():
-    a = build_parser().parse_args()
+    ap = build_parser()
+    a = ap.parse_args()
     if a.selftest:
         sys.exit(selftest())
     if not a.cmd:

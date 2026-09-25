@@ -117,7 +117,7 @@ recipe 4 の中身。 部品 = [`scripts/lib/browser_tab.py`](../scripts/lib/bro
 SSO 保護サイトの切れは 2 層ある: **サイト本体のセッション**と **IdP のログイン**。 本体だけが切れていて IdP が生きていれば、 browser がそのサイトを開くだけで (パスワードも追加認証もなしに) 入り直せる。 IdP も切れていれば本人のログインが要る。 script の復帰は次の順:
 
 1. 手元の cookie が古いだけなら読み直す (browser は既に入り直していて、 cookie の disk への書き出しが遅れていた場合。 browser に触らない)。
-2. 起動中の browser に tab を 1 枚、 裏で開かせ、 **tab の行き先を見る**。 サイトの中に着いた = 入り直せた → cookie の更新を待って読み直し、 撃ち直す / 外 (ログイン画面) で数秒止まった = 本人のログインが要る → 専用の exit code で止まる。
+2. 起動中の browser に tab を 1 枚、 裏で開かせ、 **tab の行き先を見る**。 cookie が更新された、 またはサイトの中に着いた → 読み直し、 **server が受け入れた時だけ**入り直せたとして撃ち直す / 外 (ログイン画面) で数秒止まった = 本人のログインが要る → 専用の exit code で止まる。
 3. 本人のログインが要る時は、 agent が user に 1 行で頼み、 同じ command を「ログイン完了を待つ」 option つき・background で実行し直す。 本人がログインし終えたら続きから進む = [完了は報告させず、 機械が状態で見る](../docs/convention-design-principles.md#completion-by-observation)。
 
 設計の要点と理由:
@@ -128,6 +128,7 @@ SSO 保護サイトの切れは 2 層ある: **サイト本体のセッション
 - **見るのは tab の URL (query と fragment を落としたもの) と読み込み中かだけ**。 ページの中身・認証応答 (SAML 等) は読まず、 IdP の cookie も読まない。 query は AppleScript の中で落とし、 script に渡さない。 入り直すのは browser 自身で、 script は認証に触れない。
 - **人の browser に触る副作用は opt-in**。 公開の client の既定は「何も開かない」。 開かせる・閉じるは、 利用者が自分の入口 (org と流儀を env で渡す数行の wrapper) で選ぶ。 閉じるのは自分が開いた tab だけで、 閉じる直前に「まだ自分が開いた場所に居るか」 を確かめる。 本人がログインに使った tab、 ログイン待ちが時間切れになった tab (入力の途中かもしれない) は閉じない。 待たずに止まる時はログイン画面の tab も閉じる (失敗のたびに tab が溜まらない)。
 - **既に開いている同じサイトの tab を使い回さない**。 reload は本人の入力中の form を壊しうる。 tab の id を run をまたいで覚える案も、 「その tab は今も自分のものか」 を判定できないので採らない (= 状態を持たない)。
+- **cookie の更新は「入り直せた」 の証拠ではない — server に確かめる**。 ログイン画面そのものが未認証の session cookie を配るサイトがある (初例 = [`garoon.md#login-page-mints-session-cookie`](garoon.md#login-page-mints-session-cookie))。 その cookie が disk に出た時点を「入り直せた」 と読むと、 IdP が切れている時に撃ち直して失敗し、 本人のログインが要ることも言えない。 cookie の書き出しの速さで出たり出なかったりするので、 機械ごとの故障に見える。 更新を見たら読み直して軽い GET 1 本で受け入れを確かめ、 だめなら tab を見続ける。
 - **ログイン画面の判定は「外に、 読み込み完了のまま、 数回続けて同じ場所」**。 SSO の通過は一瞬 IdP の URL を通るので、 1 回見ただけでは決めない。 サイトの外かどうかは host と path で決め、 IdP ごとの URL の形は持たない (= 組織固有の値が client に要らない)。
 - AppleScript が使えない環境 (自動操作の許可が無い・無人実行) では「開くだけ」 に落ち、 cookie の更新だけを上限つきで待つ。 incognito 等の窓には開かない (SSO のログインを共有していない)。 機構 = [`macos-gui-app-automation.md#chromium-tab-scripting`](macos-gui-app-automation.md#chromium-tab-scripting)。
 - **browser の中で読む経路 (browser MCP) に寄せない理由**: SSO は browser が面倒を見てくれるが、 拡張の接続と domain 許可が機械 × account ごとの配線になり、 無人の検査から使えず、 1 回の読み取りが tool call 数回になる。 cookie 再利用を第一選択のまま、 入り直しだけを browser に任せるのが両者の良い所取り。

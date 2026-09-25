@@ -25,8 +25,10 @@ Garoon のセッション切れは 2 層ある: **Garoon 本体のセッショ�
 
 1. **手元の cookie が古いだけ**なら読み直す (browser は既に入り直していて、 cookie DB への書き出しが遅れていた場合。 browser には触らない)。
 2. `--browser-refresh keep|close` (env `GAROON_BROWSER_REFRESH`) を指定していれば、 **起動中の** browser に tab を 1 枚、 裏で開かせる (AppleScript。 前面の tab は開いた直後に元へ戻し、 browser を前面に出さない。 起動していなければ何もしない)。 そのうえで **tab の行き先を見る**:
-   - Garoon の中に着いた = 入り直せた → cookie DB の更新を待って読み直し、 撃ち直す。 `close` なら自分が開いたその tab を閉じる。
+   - cookie DB が変わった、 または Garoon の中に着いた → cookie を読み直し、 **server が受け入れた時だけ**入り直せたとして撃ち直す (GET 1 本で確かめる)。 `close` なら自分が開いたその tab を閉じる。 受け入れられなければ tab を見続ける。
    - Garoon の外 (ログイン画面) で数秒止まった = **本人のログインが要る** → exit 75。 `close` ならそのログイン画面の tab も閉じる (失敗のたびに tab が溜まらない)。
+
+   <a id="login-page-mints-session-cookie"></a>⚠️ **cookie DB が変わった ≠ 入り直せた**: Garoon のログイン画面 (`/login`) は開かれるたびに**未認証の** JSESSIONID を配る (実測、 cookie なしで `/g/` に来た時の 302 も配る)。 IdP が切れていても、 browser がログイン画面を通るだけで cookie DB は変わる。 変わったことを「入り直せた」 と読むと、 未認証の cookie で撃ち直して失敗し、 本人のログインが要ることも言えない (実例: 「入り直した (11 秒)」 の直後に「復帰できなかった」、 exit 75 の案内が出ない)。 cookie DB の書き出しが速い時ほど、 ログイン画面で止まるのを見届ける前にこの cookie を掴むので、 機械・時刻によって出たり出なかったりする。 SAML が済むと同じ cookie のまま認証済みになることもある (= その後 DB は変わらない) ので、 未認証の cookie を掴んだ後は間隔を空けて確かめ直す。
 3. 本人のログインが要る時は、 agent が user に 1 行で頼み、 同じ command を `--wait-login <秒>` つき (subcommand の前でも後でも効く) ・background で実行し直す。 ログイン画面の tab が開いたままになり、 本人がログインし終えたら続きから進む (= user は「終わった」 と報告しなくてよい)。 本人がログインに使った tab は閉じない。
 
 **設計の要点と理由 (見積もらずに見る / 通常の周期を警告にしない / IdP を延命しない / browser に触る副作用は opt-in / 既存の tab を使い回さない / browser の中で読む経路に寄せない理由) の正本 = [`machine-route-first.md#sso-session-recovery`](machine-route-first.md#sso-session-recovery)** (別の SSO 保護サイトで同じ形を組む時もそこから)。 tab を駆動する部品 = [`scripts/lib/browser_tab.py`](../scripts/lib/browser_tab.py)。
@@ -42,7 +44,7 @@ exec env GAROON_ORG=<org> GAROON_BROWSER_REFRESH="${GAROON_BROWSER_REFRESH:-clos
 Garoon 固有の実測:
 
 - Garoon を開いたままの tab は、 ページ移動なしに裏の通信で JSESSIONID を差し替えることがある (理由は未確認)。 script は起動時に読んだ cookie を長く持ち続けず、 実行のたびに読み直す。
-- Chromium の cookie DB 書き出しは最大 30 秒ほど遅れる (login 直後の 1 回目が「切れ」 に見えるのはこれ)。
+- Chromium の cookie DB 書き出しは最大 30 秒ほど遅れる (login 直後の 1 回目が「切れ」 に見えるのはこれ)。 逆に数秒で書かれることもある (実測、 ログイン画面の cookie が 3〜7 秒で DB に出た) = 書き出しの速さで結末を決めない ([#login-page-mints-session-cookie](#login-page-mints-session-cookie))。
 - 本体セッションの寿命を測るときは、 途中で IdP をログアウトしないこと (ログアウト後に切れていても寿命の証拠にならない)。
 - 死活監視は `doctor` (配線だけ・network なし) に留める。 `status` は読む前に 1 回だけ (user が席を外す前に、 ログインが要るかをその場で知るため)。
 
