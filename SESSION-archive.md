@@ -2,6 +2,10 @@
 
 > 📦 [`SESSION.md`](SESSION.md) から分離した古い dated entry (grep 専用、 2026-09-11 〜 2026-04-21。 2026-09-11 の第 3 回縮退で移した分は先頭の節)。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md`。 hot/cold 分離日: 2026-06-10 (初回) / 2026-09-01 (第 2 回 = 2026-06-01〜07-31 分を追加)。
 
+## 2026-09-25 SESSION.md の索引から verbatim MOVE した行 (1 行、 SESSION.md の行数を保つため)
+
+- **09-18 原稿の主張の所有権と agent の編集境界 + 3 面の機械 gate + 権限規約の lock**: 正本 [`manuscript-claim-ownership.md`](conventions/manuscript-claim-ownership.md) (保護領域 = 表題・概要・序論・結論・数式 / 裁定 = 著者の発言の verbatim を transcript で照合して記録 / 印字しない指示は直接書く許可でない / 規則の本文・参照行・配線も lock)。 engine [`scripts/manuscript-claim-guard.py`](scripts/manuscript-claim-guard.py) を Claude hook・Codex hook・git pre-commit が同じ述語で呼ぶ。 配線の確認 = `hooks/manuscript-claim-guard.py --canary`
+
 ## 2026-09-24 (続き) SESSION.md の索引から verbatim MOVE した行 (2 行、 SESSION.md の行数を保つため)
 
 - **09-18 manuscript-claim-guard が git-crypt の repo で fail-open していた (4da3820 〜 247413e)**: staged / HEAD の blob を `git show` の UTF-8 decode で読み、 暗号文で例外 → 範囲判定の前に落ちるので、 暗号化された text file (.tex / .md / .py 等) を 1 つでも含む commit は同じ commit の平文の原稿・権限規約も素通り (commit を見る面 = hook の Bash commit と pre-commit。 Edit 面は worktree を読むので無事)。 修正 = [`lib/git_blob.py`](scripts/lib/git_blob.py) で smudge 経由に + fail-open 表示を 1 行に (247413e)、 test = [`hooks/manuscript-claim-guard.test.sh`](hooks/manuscript-claim-guard.test.sh) の git-crypt 相当 filter の節 (鍵なし、 旧 engine で 6 件 NG を確認)。 実測 = 窓の間に範囲内の原稿の commit は無し。 規則 = [`hook-authoring.md#blob-read-git-crypt`](conventions/hook-authoring.md#blob-read-git-crypt)
