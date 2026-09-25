@@ -301,6 +301,28 @@ pr = PlotRange /. AbsoluteOptions[p, PlotRange];   (* 自然対数座標 *)
 
 ---
 
+## <a id="nested-comments"></a>6. コメントは**ネスト**する — 説明文に `(*.nb)` と書いた瞬間に file 全体が無音でコメント扱いになる
+
+### 問題
+
+Wolfram Language の `(* ... *)` は C と違って**入れ子**になる。 script 冒頭の説明コメントに `(*.nb)` / `(*.pdf)` のような glob を書くと、 その `(*` が内側のコメントを開き、 最初の `*)` は内側を閉じるだけで外側は閉じない。 file の残り全部がコメントになり、 `wolframscript -file foo.wls` は
+
+- 構文 error も warning も出さない
+- rc = 0 で終わる
+- `Print` も `Export` も走らない (出力ゼロ、 生成物は前の版のまま = mtime 不変)
+
+`Get["foo.wls"]` で読んでも `Null` が返るだけ。 **「無音・rc 0・生成物の mtime 不変」 の 3 点が揃ったらこれを疑う** (実測: 図生成 script の冒頭コメントで起き、 PDF が更新されないことで気づいた)。
+
+### 見つけ方と対処
+
+```bash
+grep -o '(\*' foo.wls | wc -l; grep -o '\*)' foo.wls | wc -l   # 個数が合わなければ入れ子
+```
+
+コメント内の glob は `[*.nb]` か `*.nb` と書く。 文字列リテラルの中の `"(*"` はコメントにならないので code 側は影響しない。
+
+---
+
 ## 関連
 
 - 数値計算の scale-dependent default 等 numerical silent failure: [`scientific-computing.md`](scientific-computing.md)
