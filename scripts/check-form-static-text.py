@@ -515,7 +515,7 @@ def _draw_check(page, r):
     sh.finish(color=None, fill=(1, 1, 1))
     sh.draw_polyline([fitz.Point(r.x0 + 0.20 * w, r.y0 + 0.55 * h), fitz.Point(r.x0 + 0.42 * w, r.y0 + 0.80 * h),
                       fitz.Point(r.x0 + 0.80 * w, r.y0 + 0.22 * h)])
-    sh.finish(color=(0, 0, 0), width=0.13 * m, lineCap=1, lineJoin=1)
+    sh.finish(color=(0, 0, 0), width=0.13 * m, lineCap=1, lineJoin=1, closePath=False)   # 既定 True は折れ線を閉じて三角にする
     sh.commit()
 
 
@@ -1241,6 +1241,14 @@ def selftest() -> int:
     fails += not ok
     print(f"{'PASS' if ok else 'FAIL'} mark_checked_boxes: 重ねる前 ink={v0[0]['ink'] if v0 else None} → 後 ink={v1[0]['ink'] if v1 else None}"
           f" (読める ≥ {INK_READABLE})、 重ねた {mk['marked']} 個、 二度目 0 個")
+    # 重ねた ✓ は開いた折れ線 2 本 (Shape.finish の既定 closePath=True のままだと 3 本目で閉じて三角になる = 検収の実測。
+    # 黒の面積比 (box_ink) は形を見ないので三角でも「読める」 を通る = 形はここで見る)
+    with fitz.open(apdf) as ad:
+        strokes = [dr for dr in ad[0].get_drawings() if dr.get("type") == "s"]
+    ok = len(strokes) == 1 and not strokes[0].get("closePath") and [it[0] for it in strokes[0]["items"]] == ["l", "l"]
+    fails += not ok
+    print(f"{'PASS' if ok else 'FAIL'} mark_checked_boxes: ✓ は開いた折れ線 2 本 (三角に閉じない)"
+          f" = {[[it[0] for it in s['items']] for s in strokes]} closePath={[s.get('closePath') for s in strokes]}")
     base = {"missing_total": 0, "unmatched": 0, "missing_labels_total": 0, "missing_images_total": 0}
     r_ok = dict(base, targets=[{"boxes": {"out": 2, "out_checked": 1, "out_readable": 1, "expected_checked": 1}}])
     r_faint = dict(base, targets=[{"boxes": {"out": 2, "out_checked": 1, "out_readable": 0, "expected_checked": 1}}])
