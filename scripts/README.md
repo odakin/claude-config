@@ -240,6 +240,7 @@
 - **[smoke-googleapis.mjs](smoke-googleapis.mjs)** — googleapis / google-auth-library の依存 bump 後 read-only smoke test (対象 dir 自身の node_modules を createRequire で load し、 実 API read か token refresh で更新実体を検証。 書き込み API・token 永続化なし。 規約 = conventions/google-api-direct-access.md)
 - **[sot-registry-add.py](sot-registry-add.py)** — check-sot-drift.py の registry に topic を足す前に検査し、 通ったものだけ registry の書式で末尾に追記する
 - **[sot-registry-edit.py](sot-registry-edit.py)** — check-sot-drift.py の registry を topic 単位の操作で行ごと書き換える (comment と書式を保つ)
+- **[spawn-dispatch-dedupe.py](spawn-dispatch-dedupe.py)** — 同じ依頼に worker session を 2 つ起動させない検出 (chip の二重起票) の CLI。
 - **[substack-fetch.py](substack-fetch.py)** — Substack の公開一覧・記事本文・有料全文 (browser session 再利用)・購読メール整形を CLI で取る。
 - **[surface-discord-bot-dm.py](surface-discord-bot-dm.py)** — Discord bot DM channel の未記録 message surface engine（daily fetcher が吐く JSON と user 側 ledger（text/YAML 内 messageId）の diff で「bot DM に返事が来ても誰も読まない」 死角を埋める汎用 CLI、 個別環境への依存ゼロ＝引数で bot ID / json-dir / ledger-dir / counterpart map / title を渡す、 finding 0 件 silent、 --selftest 内蔵。 personal layer に thin wrapper を 1 つ置いて呼ぶ、 conventions/discord-bot.md#bot-dm-surface）
 - **[sync-built-pdfs.py](sync-built-pdfs.py)** — TeX から組んだ PDF (原稿・ノート) の最新版を、 同期フォルダ (Dropbox 等) の 1 か所へ写す — 携帯で常に読めるようにする。
@@ -344,6 +345,7 @@
 - **[lib/seal_artifact.py](lib/seal_artifact.py)** — 画像の押印 (ハンコ画像) が入った成果物に、作る時に印を付け、出口で見つける。
 - **[lib/sensitive-terms.sh](lib/sensitive-terms.sh)** — 実名 gate (Tier B) の検出語 file を読む共通部品 (source して使う、 bash 3.2 可)
 - **[lib/session_model.py](lib/session_model.py)** — a Claude Code session's actual model, read from its transcript (never from a title or a tag).
+- **[lib/spawn_dedupe.py](lib/spawn_dedupe.py)** — 同じ依頼に worker session を 2 つ起動させない検出の engine (chip の二重起票)。
 - **[lib/sso_cookie_session.py](lib/sso_cookie_session.py)** — browser の session cookie を借りて SSO 保護サイトを script から読む client の共通部品 (ログイン切れからの入り直し・撃ち直し・配線の診断・切れ方の採取、 macOS + Chromium 系)
 - **[lib/staged-conflict-markers.sh](lib/staged-conflict-markers.sh)** — merge conflict marker の staged-content gate (sourceable lib)
 - **[lib/staged-conflict-markers.test.sh](lib/staged-conflict-markers.test.sh)** — staged-conflict-markers.sh の self-test (hermetic)
