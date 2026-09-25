@@ -9,6 +9,7 @@ user が browser でログイン済みの session cookie を再利用する (= `
 subcommand:
   syllabus-search [--year Y] [--code C] [--name 科目名] [--teacher 教員名] [--word 語]   シラバス検索 (一覧)
   syllabus <時間割番号> [--year Y] [--html]                                           シラバス 1 件の本文 (text)
+  roster-csv --out-dir DIR [--year Y] [--exam 1]                                      全担当科目の履修者名簿 CSV を DIR に保存 (成績登録画面の CSV 一括ダウンロード)
   get <path>                                                                         任意 path を GET (debug 用)
   status                                                                             いま読めるか (GET 1 本、 切れていれば復帰を試す)
   doctor                                                                             配線だけ (browser の cookie を読めるか。 network なし、 健全なら無言)
@@ -45,6 +46,7 @@ CTX = "/campusweb"
 PORTAL = CTX + "/campusportal.do?page=main"
 FLOW = CTX + "/campussquare.do"
 SYLLABUS_FLOW = "SYW0001000-flow"
+GRADE_FLOW = "SIW0001000-flow"  # 成績登録 / 履修者名簿ダウンロード
 
 
 class LoginRequired(Exception):
@@ -243,6 +245,24 @@ class CampusSquare:
         f.update({"_eventId": "input", "nendo": y, "jikanwariShozokuCode": shozoku, "jikanwaricd": jcd, "locale": locale})
         return self.post_flow(f)
 
+    def roster_csv(self, year, exam="1"):
+        """成績登録画面の「CSV一括ダウンロード」 = 全担当科目の履修者名簿 (bytes は CP932 のまま)。 読むだけ。
+        画面の downloadAllCsv(年度, 試験区分) と同じ POST。 年度・学期は画面が開いた時点の学期で決まる。"""
+        page = self.open_flow(GRADE_FLOW)
+        f = form_fields(page, "downloadForm")
+        f.update({"_eventId": "outputCsvAll", "nendo": str(year), "shikenKbnCd": exam})
+        r = self._request("POST", FLOW, data=f)
+        for _ in range(4):
+            if r.status_code not in (301, 302, 303):
+                break
+            r = self._request("GET", urlparse(r.headers["Location"])._replace(scheme="", netloc="").geturl())
+        disp = r.headers.get("Content-Disposition", "")
+        if r.status_code != 200 or "csv" not in (r.headers.get("Content-Type", "") + disp).lower():
+            title = re.search(r"<title>(.*?)</title>", r.text, re.S)
+            raise SystemExit(f"名簿 CSV が返らなかった ({r.status_code} {title.group(1).strip() if title else ''})")
+        name = re.search(r'filename="?([^";]+)', disp)
+        return r.content, (name.group(1) if name else f"regis{time.strftime('%Y%m%d')}.csv")
+
 
 def doctor(browser, profile, base):
     if platform.system() != "Darwin" or not base:
@@ -312,6 +332,9 @@ def main():
     p.add_argument("--name", default=""); p.add_argument("--teacher", default=""); p.add_argument("--word", default="")
     p = sub.add_parser("syllabus"); p.add_argument("code"); p.add_argument("--year", default=time.strftime("%Y"))
     p.add_argument("--html", action="store_true")
+    p = sub.add_parser("roster-csv"); p.add_argument("--year", default=time.strftime("%Y"))
+    p.add_argument("--exam", default="1", help="試験区分 (画面の既定 = 1)")
+    p.add_argument("--out-dir", required=True, help="保存先 dir (file 名は server が付ける regisYYYYMMDD.csv)")
     p = sub.add_parser("get"); p.add_argument("path")
     sub.add_parser("status")
     sub.add_parser("doctor")
@@ -349,6 +372,14 @@ def run(a, cs):
     elif a.cmd == "syllabus":
         page = cs.syllabus(a.year, a.code)
         print(page if a.html else html_to_text(page))
+    elif a.cmd == "roster-csv":
+        body, name = cs.roster_csv(a.year, a.exam)
+        out = Path(a.out_dir).expanduser() / Path(name).name
+        if out.exists() and out.read_bytes() != body:
+            out = out.with_name(f"{out.stem}-{time.strftime('%H%M%S')}{out.suffix}")  # 同じ日の取り直しは上書きしない
+        out.write_bytes(body)
+        rows = max(body.count(b"\n") - 1, 0)
+        print(f"{out} ({len(body)} bytes, {rows} 行)")  # 中身 (個人情報) は出さない
     elif a.cmd == "get":
         print(cs._request("GET", a.path).text)
     elif a.cmd == "status":
