@@ -75,4 +75,4 @@ scope を足したら token を取り直す (consent を 1 回)。 同じ OAuth 
 
 ## 実装の置き場所
 
-参照実装 (MCP server + CLI: クラス作成・変更・招待・添付つきお知らせ・提出の取り込み) は owner の private な MCP 設定 repo (`gmail-mcp-config`) にある。 node の依存と MCP の登録がその repo に結びついているため、 engine はまだ上げていない (もう 1 つ使う場所が出たら層1 に移す)。 上の挙動はその実装で確かめたもの。
+engine = [`scripts/lib/classroom-courses.mjs`](../scripts/lib/classroom-courses.mjs) (クラスの作成・変更・招待・添付つきお知らせ・名簿と参加者の突き合わせ)。 googleapis の classroom client を引数で受け取るので、 この module 自体は外部 module を import しない = 認証と googleapis の install は呼び元が持つ。 hermetic test = [`scripts/lib/classroom-courses.test.mjs`](../scripts/lib/classroom-courses.test.mjs) (偽の client、 `node` で直接実行)。 MCP server と CLI (認証・引数の解釈・提出の取り込み) は owner の private な MCP 設定 repo (`gmail-mcp-config`) にあり、 engine を re-export の shim で読む。 上の挙動はその実装で確かめたもの。
