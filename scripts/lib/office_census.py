@@ -215,6 +215,31 @@ def _covered(part_kind: str, seen: set) -> bool:
     return part_kind.startswith("xl/comments") and "comment" in seen
 
 
+class PaperLossError(RuntimeError):
+    """openpyxl 等の保存で「紙に出るもの」 が減った (図形・form control・画像・条件付き書式…)。"""
+
+
+def assert_no_paper_loss(before, after, accept=(), label: str = "", sheets=None) -> list:
+    """保存の直後の関門 (D7、 2026-09-25): ``after`` (保存した file) を ``before`` (読み込み元の雛形) と比べ、 紙に出るものが
+    減っていれば PaperLossError (行を message に)。 減っていなければ損失の list (紙に出ないものだけ) を返す。
+    明示して通すには環境変数 ``OFFICE_CENSUS_ALLOW_LOSS=1`` (= 減ったと知って出す。 stderr に行を出す)。
+    使い方 (openpyxl で保存する script の ``wb.save(OUT)`` の直後に 2 行):
+        import office_census as OC; OC.assert_no_paper_loss(TEMPLATE, OUT, label=__file__)"""
+    import os
+    import sys
+
+    lo = losses(census(before, sheets=sheets), census(after, sheets=sheets), accept=accept)
+    paper = [x for x in lo if x[3]]
+    if not paper:
+        return lo
+    msg = lines(paper, note=f"{label or after}: 保存で紙に出るものが減った (openpyxl の保存 = 層1 office-automation.md#openpyxl-destroys-drawings)")
+    if os.environ.get("OFFICE_CENSUS_ALLOW_LOSS") == "1":
+        print("\n".join("⚠️ (OFFICE_CENSUS_ALLOW_LOSS=1 で通す) " + m for m in msg), file=sys.stderr)
+        return lo
+    raise PaperLossError("\n".join(msg) + "\n→ Excel で書く経路 (drive-xlsx-set-cells.py / formcase の Excel の操作) へ。 "
+                         "減ったと知って出すなら OFFICE_CENSUS_ALLOW_LOSS=1")
+
+
 def lines(loss_list, note: str = "") -> list:
     out = []
     for k, bv, av, paper in loss_list:
@@ -314,6 +339,27 @@ def selftest() -> int:
     expect("docx: run の中身が消えた損失が出る (図・記号・field・textbox の字・content control・画像)",
            {"図", "記号", "field", "textbox の字", "content control", "画像", "図・textbox"} <= gd, gd)
     expect("docx: footer は残っている", "footer" not in gd)
+    # 保存の直後の関門 (D7): 紙に出るものが減れば PaperLossError、 OFFICE_CENSUS_ALLOW_LOSS=1 で通す
+    import os
+    import tempfile
+
+    td = tempfile.mkdtemp(prefix="office-census-")
+    pf, pb = os.path.join(td, "full.xlsx"), os.path.join(td, "bare.xlsx")
+    with open(pf, "wb") as f:
+        f.write(full)
+    with open(pb, "wb") as f:
+        f.write(bare)
+    try:
+        assert_no_paper_loss(pf, pb, label="t")
+        expect("assert_no_paper_loss: 減れば止める", False)
+    except PaperLossError as e:
+        expect("assert_no_paper_loss: 減れば止める (行に 🔴 と案内)", "🔴 図形" in str(e) and "OFFICE_CENSUS_ALLOW_LOSS" in str(e), str(e)[:200])
+    expect("assert_no_paper_loss: 減っていなければ通る (紙に出ない損失は返す)", isinstance(assert_no_paper_loss(pf, pf), list))
+    os.environ["OFFICE_CENSUS_ALLOW_LOSS"] = "1"
+    try:
+        expect("assert_no_paper_loss: OFFICE_CENSUS_ALLOW_LOSS=1 なら通す", isinstance(assert_no_paper_loss(pf, pb), list))
+    finally:
+        del os.environ["OFFICE_CENSUS_ALLOW_LOSS"]
     print("ALL PASS" if not fails else f"{fails} FAIL")
     return 1 if fails else 0
 

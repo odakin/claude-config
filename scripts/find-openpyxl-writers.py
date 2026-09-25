@@ -91,6 +91,8 @@ def _resolve(script: str, lit: str) -> list:
 
 
 def classify(src: str) -> str:
+    if "formcase: superseded" in src:
+        return "案内済"                      # 冒頭に「新しい案件は formcase へ」 と書いた旧 fill = 再実行しない (2026-09-25 D7)
     if "graft_drawings" in src or "formcase.drawings" in src or "formcase import drawings" in src:
         return "移植あり"
     if "legacy_guard(" in src:
@@ -121,7 +123,11 @@ def scan(roots, exclude=()) -> list:
                 paper = {k: c.get(k, 0) for k in PAPER_KEYS if c.get(k, 0)}
                 tpls.append({"path": h, "counts": c, "paper": paper})
         kind = classify(s)
-        if any(t["paper"] for t in tpls):
+        if kind == "案内済":
+            status = "superseded"
+        elif "assert_no_paper_loss(" in s and any(t["paper"] for t in tpls):
+            status = "guarded"                # 保存の直後に census の関門 (減れば止まる) = 紙に出るものは守られる
+        elif any(t["paper"] for t in tpls):
             status = "warn"
         elif not tpls:
             status = "unknown"
@@ -139,11 +145,13 @@ def render(items, show_all=False, home=None) -> list:
 
     out = []
     legacy = [it for it in items if it["kind"] == "旧 driver" and it["status"] != "ok"]
+    superseded = [it for it in items if it["status"] == "superseded"]
+    guarded = [it for it in items if it["status"] == "guarded"]
     for it in sorted(items, key=lambda x: (x["status"] != "warn", x["status"] != "unknown", x["script"])):
         if it["status"] == "ok" and not show_all:
             continue
-        if it in legacy and not show_all:
-            continue                                            # 下で 1 行に畳む (凍結 guard あり = 止まる経路)
+        if (it in legacy or it in superseded or it in guarded) and not show_all:
+            continue                                            # 下で 1 行に畳む (凍結 guard あり = 止まる経路 / 案内済 / 関門あり)
         tag = f" [{it['kind']}]" if it["kind"] != "生" else ""
         if it["status"] == "warn":
             for t in it["templates"]:
@@ -158,6 +166,12 @@ def render(items, show_all=False, home=None) -> list:
             out.append(f"⚪ {short(it['script'])}{tag}: 未判定 ({why})")
         else:
             out.append(f"✅ {short(it['script'])}{tag}: 雛形に紙に出るものが無い")
+    if guarded and not show_all:
+        out.append(f"✅ 保存の直後に census の関門がある script {len(guarded)} 本 (紙に出るものが減れば止まる): "
+                   + ", ".join(os.path.basename(it["script"]) for it in guarded[:8]) + (" …" if len(guarded) > 8 else ""))
+    if superseded and not show_all:
+        out.append(f"⚪ 案内済 (formcase へ、 再実行しない) {len(superseded)} 本: "
+                   + ", ".join(os.path.basename(it["script"]) for it in superseded[:8]) + (" …" if len(superseded) > 8 else ""))
     if legacy and not show_all:
         dirs = sorted({os.path.basename(os.path.dirname(it["script"])) for it in legacy})
         out.append(f"⚪ 旧 driver (案件 dir、 凍結 guard あり) {len(legacy)} 本は openpyxl で保存する経路のまま: "
@@ -180,6 +194,8 @@ def selftest() -> int:
     (d / "c_dyn.py").write_text("import openpyxl, sys\nwb = openpyxl.load_workbook(sys.argv[1])\nwb.save(sys.argv[2])\n")
     (d / "d_graft.py").write_text("from formcase import drawings as DR\nfrom openpyxl import load_workbook\nwb = load_workbook('forms/with_shapes.xlsx')\nwb.save('t.xlsx')\nDR.graft_drawings('a', 't.xlsx')\n")
     (d / "e_read.py").write_text("from openpyxl import load_workbook\nwb = load_workbook('forms/with_shapes.xlsx')\nprint(wb.sheetnames)\n")
+    (d / "f_super.py").write_text("# formcase: superseded — 新しい案件は formcase へ\nfrom openpyxl import load_workbook\nwb = load_workbook('forms/with_shapes.xlsx')\nwb.save('s.xlsx')\n")
+    (d / "g_guard.py").write_text("from openpyxl import load_workbook\nwb = load_workbook('forms/with_shapes.xlsx')\nwb.save('g.xlsx')\nimport office_census as _oc; _oc.assert_no_paper_loss('forms/with_shapes.xlsx', 'g.xlsx')\n")
     (d / "engine").mkdir()
     (d / "engine" / "x.py").write_text("from openpyxl import load_workbook\nwb = load_workbook('../forms/with_shapes.xlsx')\nwb.save('z.xlsx')\n")
     items = scan([str(d)], exclude=[str(d / "engine" / "*")])
@@ -197,10 +213,16 @@ def selftest() -> int:
     expect("移植ありは印つきで warn (form control・画像は戻らない)", by.get("d_graft.py", {}).get("kind") == "移植あり"
            and by["d_graft.py"]["status"] == "warn", by.get("d_graft.py"))
     expect("読むだけ (.save 無し) は候補にしない", "e_read.py" not in by, list(by))
+    expect("冒頭に formcase: superseded = 案内済 (数えない)", by.get("f_super.py", {}).get("status") == "superseded", by.get("f_super.py"))
+    expect("保存の直後に assert_no_paper_loss = 関門あり (⚠️ にしない)", by.get("g_guard.py", {}).get("status") == "guarded", by.get("g_guard.py"))
+    lg = render(items)
+    expect("render: 案内済と関門ありは 1 行ずつに畳む", any(x.startswith("⚪ 案内済") and "f_super.py" in x for x in lg)
+           and any(x.startswith("✅ 保存の直後に census") and "g_guard.py" in x for x in lg), lg)
     expect("--exclude で engine を外す", "x.py" not in by, list(by))
     ls = render(items)
-    expect("render: ⚠️ と ⚪ が出て ✅ は出ない", any(x.startswith("⚠️") for x in ls) and any(x.startswith("⚪") for x in ls)
-           and not any(x.startswith("✅") for x in ls), ls)
+    expect("render: ⚠️ と ⚪ が出て、 ✅ は関門ありの 1 行だけ (紙に出るものが無い script は出ない)",
+           any(x.startswith("⚠️") for x in ls) and any(x.startswith("⚪") for x in ls)
+           and not any(x.startswith("✅") and "関門" not in x for x in ls), ls)
     print("ALL PASS" if not fails else f"{fails} FAIL")
     return 1 if fails else 0
 
