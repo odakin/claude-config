@@ -507,6 +507,7 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 - `dvipdfmx -p a4` でも直るが、**誰がどこで組んでも同じにしたいなら tex 側に書く**
 - jsclasses (jsarticle / jsbook) なら、class option に `papersize` を足すだけでよい (`\documentclass[uplatex,dvipdfmx,a5paper,papersize]{jsbook}`)。用紙の option を変えたとき (A4 → A5 など) も special が追随する。実測: `dvipdfmx` option だけでは Letter のままだった
 - ⚠️ `geometry` を読み込むと papersize special が出るため A4 になる。∴ **同じ repo でも `geometry` を使う file だけ A4、使わない file が Letter**、という分岐が起きる (両方を並べて刷って初めて気づく)
+- ⚠️ `hyperref` も (driver が dvipdfmx なら) 既定で class の用紙寸法を special として出す。 ∴ 標準 class (`letter` / `article`) は `a4paper` を書けば hyperref 経由で A4 になる。 ところが **`hyperref` に `setpagesize=false` を渡すと、 この special が止まり dvipdfmx の既定に落ちる**。 古い雛形にこの option が残っていることがある。 実測 (platex + dvipdfmx、 `letter` class): `a4paper` + `setpagesize=false` → Letter / `a4paper` のみ → A4 / どちらも無し → Letter (標準 class の既定は letterpaper)
 
 ### <a id="tabular-cell-trailing-hspace"></a>tabular セル末尾の裸 `\hspace` は `\unskip` に消される
 
