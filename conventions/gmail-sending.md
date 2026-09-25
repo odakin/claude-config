@@ -122,6 +122,7 @@ file 名 substring パターンは「file 名に言及するだけの無害コ�
 1. **draft は 1 source から導出**: 送信 body-file を**先に Write** し、 chat 提示はその file 内容を read した結果を貼る (= file が SoT、 chat は view)。 逆順 (chat で起草 → 承認後に file 化) になった場合は、 **送信前 dry-run の decoded body を chat 提示文と突合**してから送る (= §5 の dry-run truncation に注意、 末尾まで比較する)。
 2. **承認後の文面変更は再提示**: 承認済み draft に 1 字でも手を入れたら (typo 修正・改行調整含む) 再提示 + 再承認。 「良くなる方向の修正だから」 は skip の理由にならない (= user が見た物と違う物を送らない)。
 3. **mail に限らず全外部発信に適用**: Discord 投稿・issue comment・公開 site へ載せる text 等、 「draft 承認 → 送信」 flow を踏む全てで同じ 2 度書き乖離が起きうる (= content-file 経由の送信 tool は全部同型)。
+4. <a id="draft-revisions-recoverable"></a>**直しの往復が続く draft は、 版を後から取り出せるようにしておく**: 本人が「2 回目ぐらいのがよかった」「さっき出していた案で」 と戻ることがある (実測)。 (a) 版を直すたびに draft file を commit する (commit message に何を変えたか 1 行) (b) chat で**代わりの言い回しを提案したら、 その案も draft file の末尾の「候補」 欄に書く** (chat だけに出した案は後で見つからない。 実測: 本人が覚えていた提案を agent が思い出せなかった) (c) 「何回目」 が一つに決まらないときは、 版ごとの該当段落を並べて番号で選んでもらう。 git-crypt で暗号化される path の旧版は `git show --textconv <rev>:<path>` で読む (`--textconv` が無いと暗号文が返る = [`hook-authoring.md#blob-read-git-crypt`](hook-authoring.md#blob-read-git-crypt))。
 
 ## <a id="reviewed-reply-bundle"></a>Reviewed reply bundle: preview, one send attempt, receipt
 

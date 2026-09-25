@@ -198,6 +198,7 @@ git の状態管理は 1 本の `PostToolUse` hook で機械的に支援する: 
 > **設計補足:** 以前は SessionStart hook (`session-git-check.sh`) が session 起動時に独立して fetch + 警告を行っていたが、Claude Code が hook 実行のたびに「セッションを初期化しました / セッションstartupでフックを実行しました」notification を出すため平常時にもノイズになっていた。そこで SessionStart を撤廃し、divergence 検出を `git-state-nudge.sh` の first-sighting 経路に統合した。失う機能は「Bash 実行前の divergence 警告」だけで、初 Bash で同等の警告が出る。
 
 - **作業単位ごとの push を推奨。** まとまった単位 (1 件の処理完了、1 つの構造変更など) が終わるごとに commit + push すると、後で他の作業者と衝突したときの解決が楽になる。バッチ push する流儀の人は各自の判断で。ただし §4 の「コミット後は常に push」は必須で、その強制は hook が担う。
+- <a id="push-ssh-hang"></a>**push が返ってこないときは ssh の接続待ちを疑う。** `ps` に `ssh git@github.com git-receive-pack` が生きたまま残っていれば、 網の側で接続が黙って止まっている (実測: Bash tool の timeout で background に回ったまま何分も戻らず、 出し直すと数秒で通った)。 その push を止めて `GIT_SSH_COMMAND='ssh -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3' timeout 90 git push` で出し直す。 background に回った push を「そのうち終わる」 と放置しない (= 完了報告の前に remote の head を照合する、 下の [`#completion-git-gate`](#completion-git-gate))。
 - **push 障害は即座に解決する。** rebase コンフリクト・認証エラー等を放置しない。大規模な diverge が判明した場合は、破壊的な `reset --hard` を実行する前に必ず `/tmp` などに現状をバックアップ。
 
 #### <a id="completion-git-gate"></a>変更タスクの完了報告直前 Git gate

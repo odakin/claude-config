@@ -116,7 +116,7 @@ layer 1 (public) のドメイン固有規約 137 file をカテゴリ別に列�
   - mail の記録は thread 1 つに entry 1 つ、 id は道具 (scripts/record-reply.py) だけが書き、 読んだ位置の印 recorded_upto と索引 messages[] で「どこまで記録したか」 を明示する。 台帳の形 (索引の名前は相手 = 自分発は宛先、 下書きは message でない)・手順 (dry-run → --apply、 --check、 --migrate は message として記録した id だけ、 --relabel で索引を今の規則に引き直す)・失敗の向き (再 parse で戻す / 引けない thread を未記録に倒さない / cache は移行専用)・shim の作り方。
 - **[ml-forward-judgment.md](ml-forward-judgment.md)** — ML forward された依頼メールを inbox 化するとき
   - ML forward された依頼メールの inbox 化時の reflex 判定 trap 防止 (= 元 TO に名前なし = action なし、 ではない / 過去 ML の分野割当を遡る規律)
-- **[research-email.md](research-email.md)** — 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき + 成人の学生について保護者から様子や期待を尋ねられ返信を書くとき (#guardian-inquiry) + 学内の運用ルールに止められた依頼を出し直すとき (#blocking-rule-origin) + 先に短い返事 (了解・あとで返事します) を送ったスレッドに続きの返信を書くとき (#follow-up-after-quick-ack) + 事務から懇親会・夕食会などを出張の用務に入れた理由を聞かれたとき (#event-duty-justification)
+- **[research-email.md](research-email.md)** — 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき + 成人の学生について保護者から様子や期待を尋ねられ返信を書くとき (#guardian-inquiry) + 学内の運用ルールに止められた依頼を出し直すとき (#blocking-rule-origin) + 先に短い返事 (了解・あとで返事します) を送ったスレッドに続きの返信を書くとき (#follow-up-after-quick-ack) + 事務から懇親会・夕食会などを出張の用務に入れた理由を聞かれたとき (#event-duty-justification) + 出張・購入の手引きや事務の回答を当てる前に、 その財源に掛かる規則かを確かめるとき (#rules-by-funding-source) + 出張の宿泊を証明する書類を決めるとき・施設が指定様式や領収書を断ったとき (#lodging-proof-choice)
   - 研究メールの分類・記録と、事実提供・規程判断・将来確約を分ける対外文面規約
 
 ## 論文・発表・研究文書 (`paper`)
