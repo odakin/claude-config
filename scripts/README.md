@@ -8,6 +8,7 @@
 
 - **[actions-usage-estimate.py](actions-usage-estimate.py)** — GitHub Actions の月の使用量を、 課金 API を使わずに run の履歴から workflow ごとに見積もる (private repo の無料枠の棚卸し用)。
 - **[affix-image-xlsx.py](affix-image-xlsx.py)** — Place an image (seal / signature) into an .xlsx via Excel.app — without destroying the file.
+- **[agent-rule-guard-history.py](agent-rule-guard-history.py)** — replay the rule-document exemption (change_exemption) over a repo's git history: how many committed versions of the rule documents would pass without a ruling, what stops the rest, and which listed terms fire (for tuning the position rules) — read-only.
 - **[agent-rule-guard.py](agent-rule-guard.py)** — Protect agent-governance documents, enforcement configuration and declared gates; compatible approval/scan entry point.
 - **[apply-text-pairs.mutants.json](apply-text-pairs.mutants.json)** — apply-text-pairs.py の selftest の foil に歯があることを、 修正の一部を外した mutant 6 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[apply-text-pairs.py](apply-text-pairs.py)** — (old, new) の置換 pair 列を 1 file に当てる前に、 契約 (各 old は正確に 1 回 / 全検査が通るまで書かない) に加えて「再実行で二重に入る」「old が長い別物の先頭」 を拒否し、 必要なら patch 後の写しで test を回してから、 原子的に書く。--selftest 内蔵。
