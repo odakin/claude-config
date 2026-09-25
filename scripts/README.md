@@ -64,6 +64,7 @@
 - **[check-markup-artifacts.py](check-markup-artifacts.py)** — 赤入れ・校正済み現物の台帳漏れ / 未読 / 書き起こし消失を surface（config 駆動、スキャンは grep に掛からないので file 単位で持つ）
 - **[check-md-anchors.py](check-md-anchors.py)** — markdown の `#anchor` 付き link を PATH で解決し、着地先の file にその anchor が実在するかを検査する (repo 内の自己参照も対象、 basename 一致でなく path 解決なので同名 file が複数 repo にあっても取り違えない)。--selftest 内蔵。
 - **[check-md-tex-copy.py](check-md-tex-copy.py)** — md が正本・TeX が写しのノートで、 写しの文が正本と一致しているか、 写しが古くなっていないかを見る (骨格 raw/ と数式を直した TeX の突き合わせ)。
+- **[check-media-ledger.py](check-media-ledger.py)** — 画像 stream の読取記録 (transcript ledger) に、 読んでいない画像が残っていないかを見る detector。
 - **[check-memory-file-bloat.py](check-memory-file-bloat.py)** — memory file (CLAUDE.md / SESSION.md) の肥大 surface。
 - **[check-mktemp-template.py](check-mktemp-template.py)** — `mktemp` の template で X の後ろに拡張子を付けた書き方を見つける (BSD/macOS で固定名になる)。
 - **[check-office-automation-index.py](check-office-automation-index.py)** — Validate office-automation.md against its slug index (office-automation.index.yaml).
