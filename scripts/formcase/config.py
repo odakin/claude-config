@@ -38,6 +38,8 @@ key (すべて任意。 相対 path は config file のある dir から、 ``gl
   markers          {errata_note, precedent_prefix} (隔離 marker に入る呼び元の文 = errata の注記 /
                    「前例を base にしない」 一般則の link の前に置く語)
   scaffold         {spec_hint, process_hint, derived_workbook_suffix}
+  fidelity_log     雛形との照合の結果 (build ごと・group ごとの見出しの ⚠️ / ✅・画像の数) を足す jsonl (config dir から。
+                   空 = 記録しない)。 呼び元の dashboard が読んで「見出しの ⚠️ を block に上げる判断」 を出す (D3)
 """
 from __future__ import annotations
 
@@ -74,6 +76,7 @@ DEFAULTS = {
     "views": {"roots": [], "files": [],
               "note": "<!-- 生成物 (formcase.py views --write)。 手で直さない — 規則はお手本 spec を直す -->"},
     "markers": {"errata_note": "", "precedent_prefix": ""},
+    "fidelity_log": "",
     "scaffold": {"spec_hint": "", "process_hint": "", "derived_workbook_suffix": {}},
 }
 
@@ -229,6 +232,12 @@ def check_seal_mode(v) -> str:
     if v not in SEAL_MODES:
         raise ConfigError(f"設定の seal_mode は {' / '.join(SEAL_MODES)} のどれか ({v!r})")
     return v
+
+
+def fidelity_log():
+    """雛形との照合の記録 (jsonl) の path。 設定が空なら None。"""
+    v = cfg().get("fidelity_log") or ""
+    return from_config_dir(v) if v else None
 
 
 def seal_mode() -> str:

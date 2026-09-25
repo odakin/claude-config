@@ -68,7 +68,33 @@ def static_text_lines(spec: dict, group: str, pdf, filled=None, blank=None) -> t
     filled = 体裁を当てた temp (無ければ案件の workbook) / blank = 素刷り。 docx 様式は雛形 docx で照合。
     検査が走らなかった時も黙らず ⚪ の行を出す (止めない = 検査の故障を違反と同じにしない)。"""
     rep = FD.check_group(spec, group, pdf, filled=filled, blank=blank)
-    return FD.report_lines(rep, spec)
+    lines, stop = FD.report_lines(rep, spec)
+    return lines, stop, rep
+
+
+def log_fidelity(m, doc_id: str, group: str, rep: dict, stop, out_dir) -> None:
+    """雛形との照合の結果を設定 ``fidelity_log`` (jsonl) に 1 行足す (D3 の carrier = 見出しの ⚠️ / ✅ が案件ごとに残り、
+    誤検出の実測が溜まる。 読み手 = 呼び元の dashboard)。 設定が無ければ何もしない。 書けなくても build は止めない。"""
+    import datetime as _dt
+    import json
+
+    path = CF.fidelity_log()
+    if not path or not isinstance(rep, dict) or "targets" not in rep:
+        return
+    rec = {"date": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "case": Path(m.case_dir).name, "doc": doc_id,
+           "group": group, "scratch": bool(out_dir), "stop": bool(stop),
+           "targets": [{"where": f"{t['sheet'].strip()}!{t['range']}", "page": t.get("page"),
+                        "shapes": t.get("checked", 0), "missing": len(t.get("missing") or []),
+                        "labels": t.get("labels_checked", 0), "missing_labels": len(t.get("missing_labels") or []),
+                        "missing_label_cells": [x["cell"] for x in (t.get("missing_labels") or [])][:8],
+                        "images": (t.get("blank") or {}).get("images"),
+                        "template_defect": len(t.get("template_defect") or [])} for t in rep["targets"]]}
+    try:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError as e:
+        print(f"   ⚪ 照合の記録を書けない ({path}: {e})")
 
 
 def _run(argv, label):
@@ -676,9 +702,10 @@ def _build(m, doc_id, groups, out_dir=None) -> dict:
                 print("   " + line)
             rc.post_group(m, doc_id, g, plain)
             # 雛形との照合: 図形の字が無ければ止める / 見出し・素刷りとの画像の差・増えた字は行に (form-case-pipeline.md#fidelity)
-            lines, stop = static_text_lines(spec, g, plain, filled=_CURRENT.get("temp") or wb, blank=blank)
+            lines, stop, rep = static_text_lines(spec, g, plain, filled=_CURRENT.get("temp") or wb, blank=blank)
             for line in lines:
                 print("   " + line)
+            log_fidelity(m, doc_id, g, rep, stop, out_dir)   # D3 の carrier (見出しの ⚠️ / ✅ の記録)
             if stop:
                 raise BuildError(stop + " → 出力を書かずに中断")
             outs =(m.group(doc_id, g).get("current") or {}).get("outputs") or rc.default_outputs(wb.stem)[g]
