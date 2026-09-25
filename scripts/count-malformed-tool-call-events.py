@@ -16,6 +16,18 @@ Methodology (mirrors the #64774 OP):
 
       Your tool call was malformed and could not be parsed. Please retry.
 
+  The Claude Desktop local agent mode injects a *different* string, and keeps
+  its transcripts elsewhere (reported upstream on #64774):
+
+      The previous response failed to produce a valid tool call. Please retry the tool call now.
+
+      ~/Library/Application Support/Claude/local-agent-mode-sessions/**/*.jsonl  (macOS)
+      ~/.config/Claude/local-agent-mode-sessions/**/*.jsonl                      (Linux)
+
+  Counting only the CLI string in ~/.claude/projects reports 0 for that surface
+  no matter how often it fires, so both strings are counted and the desktop
+  directories are scanned when they exist (--no-desktop to skip).
+
   Counting naive substring hits massively overcounts: the same string appears
   as *echoes* inside doc attachments, file-read tool results, and discussions
   about the bug that end up in transcripts (measured 2026-07-10: 590 raw hits
@@ -29,10 +41,11 @@ Methodology (mirrors the #64774 OP):
   scanning for assistant entries' "model" field).
 
 Usage:
-    python3 count-malformed-tool-call-events.py [--projects-dir DIR]
+    python3 count-malformed-tool-call-events.py [--projects-dir DIR] [--extra-dir DIR ...] [--no-desktop]
     python3 count-malformed-tool-call-events.py --selftest
 
-Read-only; scans ~/.claude/projects/*/*.jsonl by default.
+Read-only; scans ~/.claude/projects/*/*.jsonl, plus the desktop local agent
+mode directories (recursively) when they exist.
 """
 import argparse
 import glob
@@ -43,6 +56,12 @@ import sys
 from collections import Counter
 
 SYNTH = "Your tool call was malformed and could not be parsed. Please retry."
+SYNTH_DESKTOP = "The previous response failed to produce a valid tool call. Please retry the tool call now."
+MARKERS = {"cli": SYNTH, "desktop": SYNTH_DESKTOP}
+DESKTOP_DIRS = (
+    "~/Library/Application Support/Claude/local-agent-mode-sessions",
+    "~/.config/Claude/local-agent-mode-sessions",
+)
 
 MODEL_RE = re.compile(r'"model":"([^"]+)"')
 MONTH_RE = re.compile(r'"timestamp":"(\d{4}-\d{2})')
@@ -50,11 +69,33 @@ DATE_RE = re.compile(r'"timestamp":"(\d{4}-\d{2}-\d{2})')
 VER_RE = re.compile(r'"version":"([^"]+)"')
 
 
-def scan(projects_dir):
+def _genuine_marker(content):
+    """The marker kind if this user content is a short injected retry string, else None.
+    Echoes (doc attachments / tool_result file reads / discussion text) live in long
+    strings or in structured lists that carry non-text parts."""
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list) and content and all(
+            isinstance(p, dict) and p.get("type") == "text" for p in content):
+        text = "".join(p.get("text", "") for p in content)
+    else:
+        return None
+    if len(text) >= 300:
+        return None
+    for kind, marker in MARKERS.items():
+        if marker in text:
+            return kind
+    return None
+
+
+def scan(projects_dir, extra_dirs=()):
     turns = Counter()   # (month, model) -> assistant message count
-    events = []         # dicts: date, month, model, version, file
+    events = []         # dicts: date, month, model, version, file, marker
     files_scanned = 0
-    for f in sorted(glob.glob(os.path.join(projects_dir, "*", "*.jsonl"))):
+    paths = sorted(glob.glob(os.path.join(projects_dir, "*", "*.jsonl")))
+    for d in extra_dirs:
+        paths += sorted(glob.glob(os.path.join(d, "**", "*.jsonl"), recursive=True))
+    for f in paths:
         last_model = "?"
         last_ver = "?"
         try:
@@ -74,16 +115,13 @@ def scan(projects_dir):
                         mo = MONTH_RE.search(line[:2000])
                         if mo:
                             turns[(mo.group(1), last_model)] += 1
-                if SYNTH in line and '"type":"user"' in line:
+                if '"type":"user"' in line and any(m in line for m in MARKERS.values()):
                     try:
                         obj = json.loads(line)
                     except Exception:
                         continue
-                    c = (obj.get("message") or {}).get("content")
-                    # Genuine signature: short plain-string content. Echoes
-                    # (doc attachments / tool_result file reads / discussion
-                    # text) live in long strings or structured content lists.
-                    if isinstance(c, str) and SYNTH in c and len(c) < 300:
+                    kind = _genuine_marker((obj.get("message") or {}).get("content"))
+                    if kind:
                         dm = DATE_RE.search(line[:2000])
                         events.append({
                             "date": dm.group(1) if dm else "?",
@@ -91,6 +129,7 @@ def scan(projects_dir):
                             "model": last_model,
                             "version": last_ver,
                             "file": os.path.basename(f),
+                            "marker": kind,
                         })
     return files_scanned, turns, events
 
@@ -101,6 +140,9 @@ def report(files_scanned, turns, events, out=sys.stdout):
     p(f"\n=== genuine synthetic error events: {len(events)} ===")
     for k in sorted(Counter(e["month"] for e in events)):
         p(f"  {k}: {Counter(e['month'] for e in events)[k]}")
+    p("\nby marker (cli = Claude Code / desktop = Claude Desktop local agent mode):")
+    for k, v in Counter(e.get("marker", "cli") for e in events).most_common():
+        p(f"  {k}: {v}")
     p("\nby model:")
     for k, v in Counter(e["model"] for e in events).most_common():
         p(f"  {k}: {v}")
@@ -150,15 +192,33 @@ def selftest():
         ]
         with open(os.path.join(d, "s.jsonl"), "w") as fh:
             fh.write("\n".join(lines) + "\n")
-        files, turns, events = scan(td)
+        # desktop local agent mode: different string, nested location, text-part list
+        dd = os.path.join(td, "desktop", "org", "acct", "local_x")
+        os.makedirs(dd)
+        with open(os.path.join(dd, "audit.jsonl"), "w") as fh:
+            fh.write("\n".join([
+                j({"type": "assistant", "timestamp": "2026-09-01T01:00:00Z",
+                   "message": {"model": "claude-opus-5", "content": []}}),
+                j({"type": "user", "timestamp": "2026-09-01T01:00:05Z",
+                   "message": {"content": [{"type": "text", "text": SYNTH_DESKTOP}]}}),
+                # echo: a tool_result quoting the desktop string is not an event
+                j({"type": "user", "timestamp": "2026-09-01T01:01:00Z",
+                   "message": {"content": [{"type": "tool_result", "content": SYNTH_DESKTOP}]}}),
+            ]) + "\n")
+        files0, turns0, events0 = scan(td)
+        files, turns, events = scan(td, extra_dirs=[os.path.join(td, "desktop")])
 
         def check(name, cond):
             nonlocal ok
             print(("PASS" if cond else "FAIL"), name)
             ok = ok and cond
 
-        check("1 file scanned", files == 1)
-        check("exactly 1 genuine event (echoes excluded)", len(events) == 1)
+        check("projects only: 1 file, 1 genuine event (echoes excluded)", files0 == 1 and len(events0) == 1)
+        check("with desktop dir: 2 files scanned", files == 2)
+        check("desktop marker counted, its echo excluded",
+              sorted(e["marker"] for e in events) == ["cli", "desktop"])
+        check("desktop event attributed to opus-5",
+              [e["model"] for e in events if e["marker"] == "desktop"] == ["claude-opus-5"])
         check("event attributed to opus-4-8",
               events and events[0]["model"] == "claude-opus-4-8")
         check("event version captured", events and events[0]["version"] == "2.1.170")
@@ -173,11 +233,20 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--projects-dir",
                     default=os.path.expanduser("~/.claude/projects"))
+    ap.add_argument("--extra-dir", action="append", default=[],
+                    help="another transcript dir to scan recursively (repeatable)")
+    ap.add_argument("--no-desktop", action="store_true",
+                    help="do not scan the Claude Desktop local agent mode dirs")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
         sys.exit(selftest())
-    report(*scan(args.projects_dir))
+    extra = list(args.extra_dir)
+    if not args.no_desktop:
+        extra += [os.path.expanduser(d) for d in DESKTOP_DIRS if os.path.isdir(os.path.expanduser(d))]
+    for d in extra:
+        print(f"also scanning: {d}")
+    report(*scan(args.projects_dir, extra))
 
 
 if __name__ == "__main__":
