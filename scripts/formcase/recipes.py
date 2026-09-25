@@ -512,7 +512,7 @@ CONTROL_FRAME_PT = 18.0   # form control (checkbox) の枠の最低 pt (実測: 
 
 def fit_control_lines(workbook, sheets) -> list:
     """form control (checkbox) の枠を CONTROL_FRAME_PT 以上にする行 (検収の宿題 (a)、 2026-09-25): Mac Excel は箱を control の枠
-    の raster (1 px/pt) で刷り、 枠が 16pt 以下だと箱 (≈13pt) の右辺・下辺が切れる (実測 = 3_ の旅費請求書で 10 個中 4 個)。
+    の raster (1 px/pt) で刷り、 枠が 16pt 以下だと箱 (≈13pt) の右辺・下辺が切れる (実測: 枠 ≤ 16pt の箱は辺が欠け、 ≥ 17pt は 4 辺が出る)。
     staged copy にだけ当てる (案件の workbook は変えない)。 印刷する sheet に checkbox が無ければ空。"""
     import office_census as OC
 
@@ -709,6 +709,10 @@ def _build(m, doc_id, groups, out_dir=None) -> dict:
     unsupported = [g for g in groups if g not in rc.outputs]
     if unsupported:
         raise BuildError(f"recipe {rc.form} は group {unsupported} を作れない (form-case-pipeline.md #scope)")
+    try:
+        S.controls(spec)                                 # controls: の state / anchor の不正は build の前にきれいに止める (検収 H8)
+    except ValueError as e:
+        raise BuildError(f"spec の controls: が不正 = {e}")
     role_probs = S.page_role_problems(spec)              # 刷る頁の宣言の矛盾 (form-case-pipeline.md #page-roles)
     if role_probs:
         raise BuildError("spec の頁の役割が矛盾している: " + " / ".join(role_probs))
@@ -735,6 +739,13 @@ def _build(m, doc_id, groups, out_dir=None) -> dict:
             for line in declare_pages(plain, spec, g, pages, blank=blank):   # 出力の全頁 = 窓口に出す頁、 と宣言 (刷る直前の gate が読む)
                 print("   " + line)
             rc.post_group(m, doc_id, g, plain)
+            if S.controls(spec) and not DF.is_docx(spec):
+                # D9 (検収 F1): control 自身の ✓ は raster の灰色の点で紙では読めない → 印の入った箱に太い ✓ を vector で重ねる
+                mk = FD.mark_boxes(spec, plain)
+                if mk.get("error"):
+                    print(f"   ⚪ 箱の ✓ の重ね描きが走らなかった ({mk['error'][:80]}) = 読めない印は次の照合が止める")
+                else:
+                    print(f"   ☑ 印の入った箱に ✓ を重ねた {mk.get('marked', 0)} 個 (control 自身の ✓ は紙で読めない = 実測)")
             # 雛形との照合: 図形の字が無ければ止める / 見出し・素刷りとの画像の差・増えた字は行に (form-case-pipeline.md#fidelity)
             lines, stop, rep = static_text_lines(spec, g, plain, filled=_CURRENT.get("temp") or wb, blank=blank)
             for line in lines:

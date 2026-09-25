@@ -188,6 +188,25 @@ def controls_on(spec: dict, sheet: str, rng: str):
     return n
 
 
+def mark_boxes(spec: dict, pdf) -> dict:
+    """印の入った箱 (control 自身の ✓) に太い黒の ✓ を PDF に重ねる (check-form-static-text --mark-checked、 検収 F1 2026-09-25:
+    Mac Excel の control の ✓ は raster の灰色の小さな点で紙では読めない = 実測)。 controls の無い spec は {"marked": 0}。
+    走らなかった時は {"error": …} で止めない (検査の故障を違反と同じにしない。 読めない印は check_group が止める)。"""
+    if not S.controls(spec):
+        return {"marked": 0, "pages": {}}
+    args = [sys.executable, str(STATIC_TEXT), str(S.template_path(spec)), str(pdf), "--mark-checked", "--json"]
+    try:
+        r = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=300)
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"error": f"{type(e).__name__}: {e}"}
+    if r.returncode != 0 or not r.stdout.strip():
+        return {"error": (r.stderr or r.stdout).strip()[-300:] or f"exit {r.returncode}"}
+    try:
+        return json.loads(r.stdout)
+    except ValueError:
+        return {"error": r.stdout[-300:]}
+
+
 def check_group(spec: dict, group: str, pdf, filled=None, blank=None) -> dict:
     """check-form-static-text --json。 走らなかった時は {"error": …}。"""
     args = [sys.executable, str(STATIC_TEXT), str(S.template_path(spec)), str(pdf), "--json"]
@@ -250,6 +269,24 @@ def report_lines(rep: dict, spec: dict | None = None) -> tuple:
                 lines.append(f"⚠️ {where}: 雛形の見出し (書き換えていない cell) が紙に無い {len(r['missing_labels'])}/{r['labels_checked']} — {ms}")
             else:
                 ok(f"見出し {r['labels_checked']} cell")
+        # checkbox の箱 (D9): 印のある箱の数と、 紙で読める印の数 (両方 = 選んだ数)。 素刷りが無くても出力の箱は数える (検収 F2)
+        bx = r.get("boxes") or {}
+        exp = bx.get("expected_checked")
+        if exp is not None:
+            if bx.get("out_checked") != exp:
+                lines.append(f"🔴 {where}: 印のある箱 {bx.get('out_checked')} 個 ≠ 選んだ {exp} 個 (選んだ箱に印が無い / 選んでいない箱に印)")
+                box_bad.append(f"{where} {bx.get('out_checked')} ≠ {exp}")
+            elif bx.get("out_readable") != exp:
+                lines.append(f"🔴 {where}: 印のある箱 {exp} 個のうち紙で読める印は {bx.get('out_readable')} 個 (control 自身の ✓ は灰色の小さな点"
+                             " = 読めない。 build の ✓ の重ね描きが走っていないか効いていない)")
+                box_bad.append(f"{where} 読める印 {bx.get('out_readable')} ≠ {exp}")
+            else:
+                ok(f"箱の印 {exp} 個 = 選んだ数 (紙で読める)")
+        if bx.get("out_clipped"):
+            lines.append(f"⚠️ {where}: 辺が欠けた箱 {bx['out_clipped']}/{bx['out']} (素刷り {bx.get('blank_clipped')}/{bx.get('blank')}。 control の枠が狭い"
+                         " = Mac Excel の描画、 build は枠を広げて刷るので残るなら別の原因)")
+        elif bx.get("blank_clipped"):
+            lines.append(f"⚪ {where}: 素刷りの箱 {bx['blank_clipped']}/{bx['blank']} は辺が欠ける (雛形自身の欠陥 = control の枠が狭い)、 出力は欠けなし")
         b = r.get("blank")
         if b and b.get("images") is not None:
             bi, oi = b["images"]
@@ -260,19 +297,6 @@ def report_lines(rep: dict, spec: dict | None = None) -> tuple:
                     image_loss.append(f"{where} {bi} → {oi}")
             else:
                 ok(f"画像 {oi} = 素刷り")
-            bx = b.get("boxes") or {}
-            exp = bx.get("expected_checked")
-            if exp is not None:
-                if bx.get("out_checked") != exp:
-                    lines.append(f"🔴 {where}: 印のある箱 {bx.get('out_checked')} 個 ≠ 選んだ {exp} 個 (選んだ箱に印が無い / 選んでいない箱に印)")
-                    box_bad.append(f"{where} {bx.get('out_checked')} ≠ {exp}")
-                else:
-                    ok(f"箱の印 {exp} 個 = 選んだ数")
-            if bx.get("out_clipped"):
-                lines.append(f"⚠️ {where}: 辺が欠けた箱 {bx['out_clipped']}/{bx['out']} (素刷り {bx.get('blank_clipped')}/{bx.get('blank')}。 control の枠が狭い"
-                             " = Mac Excel の描画、 build は枠を広げて刷るので残るなら別の原因)")
-            elif bx.get("blank_clipped"):
-                lines.append(f"⚪ {where}: 素刷りの箱 {bx['blank_clipped']}/{bx['blank']} は辺が欠ける (雛形自身の欠陥 = control の枠が狭い)、 出力は欠けなし")
             lay = b.get("layout") or {}
             if lay.get("pairs", 0) < 4:
                 lines.append(f"⚪ {where}: 位置の写像 (段階 2) は label の組が {lay.get('pairs', 0)} で足りず見ていない")
@@ -302,8 +326,9 @@ def report_lines(rep: dict, spec: dict | None = None) -> tuple:
         stop = (f"雛形の図形の字が PDF に無い ({rep['missing_total']} 段落) = 紙から見出し (区分の枠・様式番号・㊞ など) が消える。 "
                 "刷らないと決めた図形なら spec の render: drop_shape に理由つきで (form-case-pipeline.md#fidelity)")
     elif box_bad:
-        stop = (f"選んだ箱の印が紙と合わない ({'; '.join(box_bad)}) = 選んだのに印が無い、 または選んでいない箱に印 (D9)。 "
-                "fill_<doc>.py を回して spec の controls の値を Excel で箱に書き直す (form-case-pipeline.md#fidelity)")
+        stop = (f"選んだ箱の印が紙と合わない ({'; '.join(box_bad)}) = 選んだのに印が無い、 選んでいない箱に印、 または印が紙で読めない (D9)。 "
+                "fill_<doc>.py を回して spec の controls の値を Excel で箱に書き直す。 読めない印なら build の ✓ の重ね描き"
+                " (check-form-static-text --mark-checked) を確かめる (form-case-pipeline.md#fidelity)")
     elif image_loss:
         stop = (f"素刷りより画像が少ない ({'; '.join(image_loss)}) = checkbox の箱・図が紙に無い (D1、 2026-09-25 から止める)。 "
                 "Excel の操作の経路なら案件の workbook の図形・form control を雛形と比べる (openpyxl で保存した workbook は"

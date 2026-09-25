@@ -411,65 +411,189 @@ def page_texts(pdf) -> list:
         return [norm(p.get_text()) for p in d]
 
 
-def box_pixels(pix) -> dict:
-    """form control の箱の画像を画素で見る (D9 / 検収の宿題 (a)、 2026-09-25)。 箱の画像 = control の枠を 1 px/pt で raster に
-    したもの (実測): 縁の帯 (濃い画素が 70% 以上の行・列が端から続く) = 辺、 帯の内側の濃い画素 = 印 (✓)。
-    返り値 = {size, edges (在る辺 t/b/l/r), clipped (4 辺揃わない = 枠が狭くて切れた), checked, mark_px}。"""
+def _image_pixmap(doc, img):
+    """get_images(full=True) の 1 行から Pixmap。 SMask (透明) があれば alpha を付けて返す = Excel の checkbox の画像は control の
+    枠を透明にした PNG + SMask (実測 2026-09-25)。 alpha を落として読むと透明の余白が黒に見え、 箱の外枠の位置が読めない。"""
     import fitz
 
-    if pix.alpha:
-        pix = fitz.Pixmap(pix, 0)
-    if pix.n != 1:
+    pix = fitz.Pixmap(doc, img[0])
+    smask = img[1] if len(img) > 1 else 0
+    if smask and not pix.alpha:
+        try:
+            pix = fitz.Pixmap(pix, fitz.Pixmap(doc, smask))
+        except (ValueError, RuntimeError):
+            pass
+    return pix
+
+
+def box_pixels(pix) -> dict:
+    """form control の箱の画像を画素で見る (D9 / 検収の宿題 (a)、 2026-09-25)。 箱の画像 = control の枠を raster にしたもので、
+    箱の外枠より外は透明 (実測: SMask、 _image_pixmap で alpha を付けて読む)。 見える範囲 (alpha > 0、 無ければ画像全体) の
+    縁の帯 (濃い画素が 70% 以上の行・列が端から続く) = 辺、 帯の内側の濃い画素 = 印 (control 自身の ✓)。
+    返り値 = {size, box (見える範囲 x0 y0 x1 y1 = 画像 px、 外枠を含む), edges (在る辺 t/b/l/r), clipped (4 辺揃わない = 枠が
+    狭くて切れた), checked, mark_px}。 ⚠️ control 自身の ✓ は raster の 5 px ほどの灰色で紙では読めない (検収 F1) = 読めるかは
+    box_ink (紙の render) で見る。"""
+    import fitz
+
+    if pix.n - pix.alpha != 1:                       # 色 → gray (alpha は保つ)
         pix = fitz.Pixmap(fitz.csGRAY, pix)
-    w, h, s = pix.width, pix.height, pix.samples
+    w, h, s, n = pix.width, pix.height, pix.samples, pix.n
+    none = {"size": (w, h), "box": None, "edges": "", "clipped": True, "checked": False, "mark_px": 0}
     if w < 4 or h < 4:
-        return {"size": (w, h), "edges": "", "clipped": True, "checked": False, "mark_px": 0}
+        return none
+    if pix.alpha:
+        seen = [(x, y) for y in range(h) for x in range(w) if s[(y * w + x) * n + 1] > 0]
+        if not seen:
+            return none
+        x0, x1 = min(p[0] for p in seen), max(p[0] for p in seen)
+        y0, y1 = min(p[1] for p in seen), max(p[1] for p in seen)
+    else:
+        x0, y0, x1, y1 = 0, 0, w - 1, h - 1
+    if x1 - x0 < 3 or y1 - y0 < 3:
+        return dict(none, box=(x0, y0, x1, y1))
+
+    def g(x, y):
+        return s[(y * w + x) * n]
 
     def row(y):
-        return sum(1 for x in range(w) if s[y * w + x] < 100) / w
+        return sum(1 for x in range(x0, x1 + 1) if g(x, y) < 100) / (x1 - x0 + 1)
 
     def col(x):
-        return sum(1 for y in range(h) if s[y * w + x] < 100) / h
+        return sum(1 for y in range(y0, y1 + 1) if g(x, y) < 100) / (y1 - y0 + 1)
 
+    bw, bh = x1 - x0 + 1, y1 - y0 + 1
     t = b = l = r = 0
-    while t < h and row(t) >= 0.7:
+    while t < bh and row(y0 + t) >= 0.7:
         t += 1
-    while b < h - t and row(h - 1 - b) >= 0.7:
+    while b < bh - t and row(y1 - b) >= 0.7:
         b += 1
-    while l < w and col(l) >= 0.7:
+    while l < bw and col(x0 + l) >= 0.7:
         l += 1
-    while r < w - l and col(w - 1 - r) >= 0.7:
+    while r < bw - l and col(x1 - r) >= 0.7:
         r += 1
-    marks = sum(1 for y in range(t + 1, h - b - 1) for x in range(l + 1, w - r - 1) if s[y * w + x] < 170)
+    marks = sum(1 for y in range(y0 + t + 1, y1 - b) for x in range(x0 + l + 1, x1 - r) if g(x, y) < 170)
     edges = "".join(k for k, v in (("t", t), ("b", b), ("l", l), ("r", r)) if v)
-    return {"size": (w, h), "edges": edges, "clipped": len(edges) < 4, "checked": marks >= 3, "mark_px": marks}
+    return {"size": (w, h), "box": (x0, y0, x1, y1), "edges": edges, "clipped": len(edges) < 4,
+            "checked": marks >= 3, "mark_px": marks}
+
+
+INK_READABLE = 0.10   # 箱の内側 (外枠から 15% 内側) の黒 (< 90) の面積比。 control 自身の ✓ ≈ 0.00〜0.06、 重ねた ✓ ≈ 0.5〜0.6 (実測)
+
+
+def box_rect(placed, bp):
+    """置かれた画像の矩形 (PDF pt) と box_pixels の box (画像 px) から、 紙の上の箱の外枠の矩形。"""
+    import fitz
+
+    if not bp.get("box"):
+        return fitz.Rect(placed)
+    x0, y0, x1, y1 = bp["box"]
+    w, h = bp["size"]
+    return fitz.Rect(placed.x0 + placed.width * x0 / w, placed.y0 + placed.height * y0 / h,
+                     placed.x0 + placed.width * (x1 + 1) / w, placed.y0 + placed.height * (y1 + 1) / h)
+
+
+def box_ink(page, rect, zoom=4.0, inset=0.15, dark=90) -> float:
+    """紙の上の箱 (rect) を render して、 外枠から inset 内側の領域で黒 (< dark) の画素の割合 = 印が読める大きさかの物差し。
+    画像の bitmap でなく頁を描くので、 PDF に vector で重ねた ✓ も数える。"""
+    import fitz
+
+    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), clip=rect, colorspace=fitz.csGRAY, alpha=False)
+    w, h, s = pix.width, pix.height, pix.samples
+    x0, x1, y0, y1 = int(w * inset), int(w * (1 - inset)), int(h * inset), int(h * (1 - inset))
+    if x1 <= x0 or y1 <= y0:
+        return 0.0
+    return sum(1 for y in range(y0, y1) for x in range(x0, x1) if s[y * w + x] < dark) / ((x1 - x0) * (y1 - y0))
+
+
+def _draw_check(page, r):
+    """箱の外枠 r の内側を白で塗り (control 自身の灰色の点を消す、 外枠は残す)、 太い黒の ✓ を vector で描く。"""
+    import fitz
+
+    w, h, m = r.width, r.height, min(r.width, r.height)
+    sh = page.new_shape()
+    sh.draw_rect(fitz.Rect(r.x0 + 0.12 * w, r.y0 + 0.12 * h, r.x1 - 0.12 * w, r.y1 - 0.12 * h))
+    sh.finish(color=None, fill=(1, 1, 1))
+    sh.draw_polyline([fitz.Point(r.x0 + 0.20 * w, r.y0 + 0.55 * h), fitz.Point(r.x0 + 0.42 * w, r.y0 + 0.80 * h),
+                      fitz.Point(r.x0 + 0.80 * w, r.y0 + 0.22 * h)])
+    sh.finish(color=(0, 0, 0), width=0.13 * m, lineCap=1, lineJoin=1)
+    sh.commit()
+
+
+def _small_images(page, doc):
+    """頁の小さい画像 (≤ 40pt 角 = checkbox の箱の候補) を (置かれた矩形, box_pixels) で。"""
+    out = []
+    for img in page.get_images(full=True):
+        rects = page.get_image_rects(img[0])
+        if not rects or max(r.width for r in rects) > 40 or max(r.height for r in rects) > 40:
+            continue
+        try:
+            bp = box_pixels(_image_pixmap(doc, img))
+        except (ValueError, RuntimeError):
+            continue
+        out += [(r, bp) for r in rects]
+    return out
+
+
+def mark_checked_boxes(pdf, pages=None) -> dict:
+    """印の入った箱 (control 自身の ✓ が在る = box_pixels の checked) に、 太い黒の ✓ を PDF の vector で重ねる (検収 F1、 2026-09-25):
+    Mac Excel の control の ✓ は枠の raster の中の 5 px ほどの灰色で、 紙では約 1 mm の点にしかならない (実測)。 既に読める印
+    (box_ink ≥ INK_READABLE) の箱には重ねない (二重描きしない)。 pages = 対象の頁 (1 始まり、 None = 全頁)。
+    返り値 = {"marked": N, "pages": {頁: N}}。 PDF は incremental save で上書き (印が無ければ触らない)。"""
+    import fitz
+
+    marked, per = 0, {}
+    with fitz.open(pdf) as d:
+        for pno, p in enumerate(d, 1):
+            if pages and pno not in pages:
+                continue
+            n = 0
+            for r, bp in _small_images(p, d):
+                if not bp["checked"] or not bp.get("box"):
+                    continue
+                br = box_rect(r, bp)
+                if box_ink(p, br) >= INK_READABLE:
+                    continue
+                _draw_check(p, br)
+                n += 1
+            if n:
+                per[pno] = n
+                marked += n
+        if marked:
+            d.save(pdf, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+    return {"marked": marked, "pages": per}
 
 
 def page_visuals(pdf) -> list:
     """頁ごとの {images, drawings, boxes}。 images = 置かれた画像の数 (Excel は checkbox の箱を 1 個ずつ画像で描く。 同じ
     大きさの箱は同じ bitmap = 1 つの xref を何度も置くので、 xref の数でなく置いた数で数える = 実測 2026-09-25)。
     get_image_info (描かれた回数) は点線の pattern の tile まで数えて体裁で増減する (実測: 日程表 11 → 0) = 使わない。
-    boxes = 小さい画像 (≤ 40pt 角 = checkbox の箱) の画素の検査 (box_pixels) を置いた場所ごとに。"""
+    boxes = 小さい画像 (≤ 40pt 角 = checkbox の箱) の画素の検査 (box_pixels) を置いた場所ごとに + 紙の上の箱の矩形 (box_rect) と
+    印の読める大きさ (ink = box_ink、 readable = ink ≥ INK_READABLE)。"""
     import fitz
 
     out = []
     with fitz.open(pdf) as d:
         for p in d:
-            n_img, boxes = 0, []
-            for img in p.get_images(full=True):
-                xref = img[0]
-                rects = p.get_image_rects(xref)
-                n_img += len(rects)
-                if not rects or max(r.width for r in rects) > 40 or max(r.height for r in rects) > 40:
-                    continue
-                try:
-                    bp = box_pixels(fitz.Pixmap(d, xref))
-                except (ValueError, RuntimeError):
-                    continue
-                for r in rects:
-                    boxes.append(dict(bp, bbox=[round(v, 1) for v in r]))
+            n_img = sum(len(p.get_image_rects(img[0])) for img in p.get_images(full=True))
+            boxes = []
+            for r, bp in _small_images(p, d):
+                br = box_rect(r, bp)
+                ink = box_ink(p, br)
+                boxes.append(dict(bp, bbox=[round(v, 1) for v in r], box_rect=[round(v, 1) for v in br],
+                                  ink=round(ink, 3), readable=ink >= INK_READABLE))
             out.append({"images": n_img, "drawings": len(p.get_drawings()), "boxes": boxes})
     return out
+
+
+def _boxes_at(out_boxes, blank_boxes, tol=3.0) -> list:
+    """出力の箱の候補を、 素刷りの箱の位置 (置かれた矩形の中心が tol pt 以内) に在るものに絞る (検収 F4: 印影・図などの小さい画像を
+    箱に数えない。 素刷りが無ければ絞れない = 大きさだけ)。"""
+    def c(b):
+        x0, y0, x1, y1 = b["bbox"]
+        return ((x0 + x1) / 2, (y0 + y1) / 2)
+
+    bc = [c(b) for b in blank_boxes]
+    return [o for o in out_boxes if any(abs(c(o)[0] - x) <= tol and abs(c(o)[1] - y) <= tol for x, y in bc)]
 
 
 def page_layout(pdf) -> list:
@@ -663,13 +787,13 @@ def check(template, pdf, targets=None, drop=None, filled=None, blank=None, expec
         _assign_pages(bjobs, bl_texts)
         for j, bj in zip(jobs, bjobs):
             j["blank_page"] = bj.get("page")
-    vis = page_visuals(pdf) if blank else None
+    vis = page_visuals(pdf)
     bl_lay = out_lay = None
     report = []
     for j in jobs:
         res = {"sheet": j["sheet"], "range": j["range"], "page": j.get("page"), "checked": 0, "missing": [],
                "textless": 0, "dropped": 0, "hidden": 0, "invisible": 0, "outside": j["outside"],
-               "labels_checked": 0, "missing_labels": [], "extra": None, "blank": None}
+               "labels_checked": 0, "missing_labels": [], "extra": None, "blank": None, "boxes": None}
         want = []
         for s in j["items"]:
             if (j["sheet"].strip(), s["name"]) in drop:
@@ -717,19 +841,26 @@ def check(template, pdf, targets=None, drop=None, filled=None, blank=None, expec
                         if not ok:
                             break
                 res["extra"] = _extra_fragments(text2, j["singles"])
+        if res["page"] is not None:
+            # checkbox の箱 (画素、 D9): 印のある箱の数と紙で読める印の数 (選んだ数と照合)、 辺の欠け。 素刷りがあれば素刷りの箱の
+            # 位置に在る画像だけを箱に数え (検収 F4)、 素刷り側の欠け (雛形自身の欠陥) も出す。 素刷り無しでも出力の箱は数える (検収 F2)
+            ob = vis[res["page"] - 1].get("boxes") or []
+            bb = None
+            if blank and j.get("blank_page") is not None:
+                bb = bl_vis[j["blank_page"] - 1].get("boxes") or []
+                ob = _boxes_at(ob, bb)
+            res["boxes"] = {"out": len(ob), "out_clipped": sum(1 for x in ob if x["clipped"]),
+                            "out_checked": sum(1 for x in ob if x["checked"]),
+                            "out_readable": sum(1 for x in ob if x["checked"] and x["readable"]),
+                            "expected_checked": expect_checked.get(_expect_key(j['sheet'], j['range']))}
+            if bb is not None:
+                res["boxes"].update({"blank": len(bb), "blank_clipped": sum(1 for x in bb if x["clipped"]),
+                                     "blank_checked": sum(1 for x in bb if x["checked"])})
         if blank:
             bp = j.get("blank_page")
             if bp is not None and res["page"] is not None:
                 b, o = bl_vis[bp - 1], vis[res["page"] - 1]
                 res["blank"] = {"page": bp, "images": [b["images"], o["images"]], "drawings": [b["drawings"], o["drawings"]]}
-                # checkbox の箱 (画素): 辺の欠け (素刷り = 雛形自身の欠陥 / 出力 = 直っていない) と、 印のある箱の数 (選んだ数と照合)
-                bb, ob = b.get("boxes") or [], o.get("boxes") or []
-                res["blank"]["boxes"] = {"blank": len(bb), "out": len(ob),
-                                         "blank_clipped": sum(1 for x in bb if x["clipped"]),
-                                         "out_clipped": sum(1 for x in ob if x["clipped"]),
-                                         "blank_checked": sum(1 for x in bb if x["checked"]),
-                                         "out_checked": sum(1 for x in ob if x["checked"]),
-                                         "expected_checked": expect_checked.get(_expect_key(j['sheet'], j['range']))}
                 # 段階 2 (D4): 位置の写像 = 動いた画像・素刷りの罫線の欠け・二重刷り (warn)
                 if bl_lay is None:
                     bl_lay, out_lay = page_layout(blank), page_layout(pdf)
@@ -835,6 +966,17 @@ def render(rep) -> list:
             if r.get("extra"):
                 lines.append(f"   ⚪ {where}: 雛形にも記入値にも無い字 {len(r['extra'])} 片: "
                              + ", ".join(f"「{x[:12]}」" for x in r["extra"][:6]) + (" …" if len(r["extra"]) > 6 else ""))
+        bx = r.get("boxes") or {}
+        if bx.get("out"):
+            exp = bx.get("expected_checked")
+            if exp is not None:
+                okc = bx["out_checked"] == exp and bx["out_readable"] == exp
+                lines.append(f"   {'✅' if okc else '🔴'} {where}: 印のある箱 {bx['out_checked']} 個 (選んだ {exp})、 紙で読める印 {bx['out_readable']} 個")
+            if bx.get("out_clipped"):
+                lines.append(f"   ⚠️ {where}: 辺が欠けた箱 {bx['out_clipped']}/{bx['out']}"
+                             + (f" (素刷り {bx['blank_clipped']}/{bx['blank']})" if bx.get("blank") is not None else ""))
+            elif bx.get("blank_clipped"):
+                lines.append(f"   ⚪ {where}: 素刷りの箱 {bx['blank_clipped']}/{bx['blank']} は辺が欠ける (雛形自身の欠陥 = control の枠が狭い)、 出力は欠けなし")
         if r.get("blank"):
             b = r["blank"]
             if b.get("images") is None:
@@ -846,15 +988,6 @@ def render(rep) -> list:
                     lines.append(f"   🔴 {where}: 素刷りより画像が少ない {bi} → {oi} (checkbox の箱・図が紙に無い)")
                 else:
                     lines.append(f"   ✅ {where}: 画像 {oi} = 素刷り {bi}" + (f"、 線・矩形 {od} (素刷り {bd})" if od != bd else f"、 線・矩形 {od} 同じ"))
-                bx = b.get("boxes") or {}
-                if bx.get("out"):
-                    exp = bx.get("expected_checked")
-                    if exp is not None:
-                        lines.append(f"   {'✅' if bx['out_checked'] == exp else '🔴'} {where}: 印のある箱 {bx['out_checked']} 個 (選んだ {exp})")
-                    if bx.get("out_clipped"):
-                        lines.append(f"   ⚠️ {where}: 辺が欠けた箱 {bx['out_clipped']}/{bx['out']} (素刷り {bx['blank_clipped']}/{bx['blank']})")
-                    elif bx.get("blank_clipped"):
-                        lines.append(f"   ⚪ {where}: 素刷りの箱 {bx['blank_clipped']}/{bx['blank']} は辺が欠ける (雛形自身の欠陥 = control の枠が狭い)、 出力は欠けなし")
                 lay = b.get("layout") or {}
                 if lay.get("pairs", 0) < 4:
                     lines.append(f"   ⚪ {where}: 位置の写像は label の組が {lay.get('pairs', 0)} で足りない")
@@ -893,9 +1026,10 @@ def exit_code(rep, strict=False, strict_labels=False, strict_images=False) -> in
     if rep["missing_total"] or (strict and rep["unmatched"]):
         return 1
     for r in rep.get("targets") or []:
-        bx = (r.get("blank") or {}).get("boxes") or {}
-        if bx.get("expected_checked") is not None and bx.get("out_checked") != bx["expected_checked"]:
-            return 1                                       # 選んだ箱に印が無い / 選んでいない箱に印 (期待を渡した時だけ)
+        bx = r.get("boxes") or {}
+        exp = bx.get("expected_checked")
+        if exp is not None and (bx.get("out_checked") != exp or bx.get("out_readable") != exp):
+            return 1                 # 選んだ箱に印が無い / 選んでいない箱に印 / 印が紙で読めない (期待を渡した時だけ、 素刷りは要らない)
     if strict_labels and rep["missing_labels_total"]:
         return 1
     if strict_images and rep["missing_images_total"]:
@@ -1072,6 +1206,48 @@ def selftest() -> int:
           and b_mark["checked"] and not b_mark["clipped"] and b_clip["clipped"] and "r" not in b_clip["edges"] and not b_clip["checked"])
     fails += not ok
     print(f"{'PASS' if ok else 'FAIL'} box_pixels: 4 辺 / 印あり / 右辺なし = {b_ok['edges']} {b_mark['checked']} {b_clip['edges']}")
+    # alpha (SMask) つきの箱 = Excel の checkbox の実物の形 (透明の余白 + 1 px の外枠 + 内側の灰色の小さな ✓): box は外枠の範囲、
+    # 紙では読めない (ink < INK_READABLE) → mark_checked_boxes が ✓ を重ねると読める (二度目は重ねない)。 期待の数は checked と
+    # readable の両方で照合 (検収 F1)、 素刷り無しでも照合する (F2)
+    def _abox(mark=True):
+        pm = fitz.Pixmap(fitz.csGRAY, fitz.IRect(0, 0, 19, 20), 1)
+        for y in range(20):                                # 余白は透明 (clear_with は alpha を触らない = 全画素を明示)
+            for x in range(19):
+                inside = 4 <= y <= 16 and 5 <= x <= 17
+                ring = inside and (y in (4, 16) or x in (5, 17))
+                pm.set_pixel(x, y, (0, 0) if not inside else ((0, 255) if ring else (255, 255)))
+        if mark:
+            for k in range(3):
+                pm.set_pixel(10 + k, 10 + k, (120, 255))
+                pm.set_pixel(13 - k, 10 + k, (120, 255))
+        return pm
+    a_mark, a_none = box_pixels(_abox()), box_pixels(_abox(mark=False))
+    ok = (a_mark["box"] == (5, 4, 17, 16) and a_mark["edges"] == "tblr" and a_mark["checked"] and not a_mark["clipped"]
+          and a_none["box"] == (5, 4, 17, 16) and not a_none["checked"])
+    fails += not ok
+    print(f"{'PASS' if ok else 'FAIL'} box_pixels (alpha): 外枠の範囲 {a_mark['box']} / 4 辺 / 印 {a_mark['checked']} {a_none['checked']}")
+    apdf = os.path.join(d, "abox.pdf")
+    adoc = fitz.open()
+    apg = adoc.new_page()
+    apg.insert_image(fitz.Rect(100, 100, 114.2, 115), pixmap=_abox())
+    adoc.save(apdf)
+    adoc.close()
+    v0 = page_visuals(apdf)[0]["boxes"]
+    mk = mark_checked_boxes(apdf)
+    v1 = page_visuals(apdf)[0]["boxes"]
+    ok = (len(v0) == 1 and v0[0]["checked"] and not v0[0]["readable"] and abs(v0[0]["box_rect"][0] - (100 + 14.2 * 5 / 19)) < 0.3
+          and mk["marked"] == 1 and len(v1) == 1 and v1[0]["checked"] and v1[0]["readable"] and v1[0]["ink"] >= INK_READABLE
+          and mark_checked_boxes(apdf)["marked"] == 0)
+    fails += not ok
+    print(f"{'PASS' if ok else 'FAIL'} mark_checked_boxes: 重ねる前 ink={v0[0]['ink'] if v0 else None} → 後 ink={v1[0]['ink'] if v1 else None}"
+          f" (読める ≥ {INK_READABLE})、 重ねた {mk['marked']} 個、 二度目 0 個")
+    base = {"missing_total": 0, "unmatched": 0, "missing_labels_total": 0, "missing_images_total": 0}
+    r_ok = dict(base, targets=[{"boxes": {"out": 2, "out_checked": 1, "out_readable": 1, "expected_checked": 1}}])
+    r_faint = dict(base, targets=[{"boxes": {"out": 2, "out_checked": 1, "out_readable": 0, "expected_checked": 1}}])
+    r_none = dict(base, targets=[{"boxes": {"out": 2, "out_checked": 1, "out_readable": 1, "expected_checked": None}}])
+    ok = exit_code(r_ok) == 0 and exit_code(r_faint) == 1 and exit_code(r_none) == 0
+    fails += not ok
+    print(f"{'PASS' if ok else 'FAIL'} exit_code: 印の数が合っても紙で読めなければ 1、 期待なしは 0 (素刷りの有無に依らない)")
     # --expect-checked の key: 渡す側は sheet 名そのまま (末尾の空白つき)、 引く側は strip = 同じ key に寄せる (期待が黙って落ちない)
     ok = (_expect_key("日程表 ", "$A$1:ai51") == _expect_key("日程表", "A1:AI51") == "日程表!A1:AI51"
           and _expect_key(*"日程表 !A1:AI51".rpartition("!")[::2]) == _expect_key("日程表", "A1:AI51"))
@@ -1122,6 +1298,8 @@ def main(argv=None) -> int:
     ap.add_argument("--strict-images", action="store_true", help="素刷りより画像が少ないのも exit 1")
     ap.add_argument("--expect-checked", action="append",
                     help="'sheet!range=N' = その範囲で印のある箱 (checkbox) の数の期待 (繰り返し可)。 違えば exit 1")
+    ap.add_argument("--mark-checked", action="store_true",
+                    help="印の入った箱 (control 自身の ✓) に太い黒の ✓ を PDF に vector で重ねて上書きし、 数を出して終わる (検査はしない)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
     if a.selftest:
@@ -1129,6 +1307,14 @@ def main(argv=None) -> int:
     if not a.template or not a.pdf:
         ap.print_usage(sys.stderr)
         return 2
+    if a.mark_checked:
+        try:
+            r = mark_checked_boxes(a.pdf)
+        except (RuntimeError, ValueError, FileNotFoundError) as e:
+            print(f"check-form-static-text: {e}", file=sys.stderr)
+            return 2
+        print(json.dumps(r, ensure_ascii=False) if a.json else f"印の入った箱に ✓ を重ねた: {r['marked']} 個 (頁ごと {r['pages']})")
+        return 0
     try:
         if str(a.template).lower().endswith(".docx"):
             rep = check_docx(a.template, a.pdf, filled=a.filled)

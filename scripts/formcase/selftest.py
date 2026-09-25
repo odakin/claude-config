@@ -1268,26 +1268,34 @@ def _fidelity_tests(tmp, inst, expect) -> None:
            RC.case_is_scratch(tmp / "x", out_dir="/tmp/o") and RC.case_is_scratch(tmp / "outside" / "case")
            and (root_case is None or not RC.case_is_scratch(root_case / "2026-01-01-case")), (root_case, CF.case_roots()))
     # D9: spec の controls (form control の箱) と、 範囲ごとの「選んだ箱の数」
-    sc9 = {"meta": {"sheet": "旅費請求書"}, "controls": [
-        {"id": "a", "anchor": "g9", "state": "on", "label": "国内"}, {"id": "b", "anchor": "W9", "state": "off"},
-        {"id": "c", "sheet": "承諾書", "anchor": "S46", "state": "on", "index": 1}]}
+    sc9 = {"meta": {"sheet": "合成 主票"}, "controls": [
+        {"id": "a", "anchor": "c3", "state": "on", "label": "甲"}, {"id": "b", "anchor": "H3", "state": "off"},
+        {"id": "c", "sheet": "合成 副票", "anchor": "E9", "state": "on", "index": 1}]}
     cs = S.controls(sc9)
     expect("specs.controls: sheet の既定・anchor の正規化・index・state",
-           cs[0]["sheet"] == "旅費請求書" and cs[0]["anchor"] == "G9" and cs[0]["index"] == 0 and cs[0]["state"] == "on"
-           and cs[2]["sheet"] == "承諾書" and cs[2]["index"] == 1, cs)
+           cs[0]["sheet"] == "合成 主票" and cs[0]["anchor"] == "C3" and cs[0]["index"] == 0 and cs[0]["state"] == "on"
+           and cs[2]["sheet"] == "合成 副票" and cs[2]["index"] == 1, cs)
     expect("specs.controls: state が on / off 以外は ValueError",
            _raises(ValueError, S.controls, {"meta": {}, "controls": [{"id": "x", "anchor": "A1", "state": "yes"}]}))
     expect("fidelity.controls_on: 範囲に載る on の数 / controls の無い spec は None",
-           FD.controls_on(sc9, "旅費請求書", "A1:AI55") == 1 and FD.controls_on(sc9, "旅費請求書", "A10:AI55") == 0
-           and FD.controls_on(sc9, "承諾書", "A1:AI53") == 1 and FD.controls_on({"meta": {}}, "x", "A1:B2") is None)
-    lines9, stop9 = FD.report_lines({"targets": [{"sheet": "s", "range": "A1:B2", "page": 0, "checked": 0, "missing": [],
-                                                  "labels_checked": 0, "missing_labels": [], "extra": [],
-                                                  "blank": {"images": [10, 10], "boxes": {"blank": 10, "out": 10, "blank_clipped": 4, "out_clipped": 0,
-                                                                                            "blank_checked": 0, "out_checked": 1, "expected_checked": 2}}}],
-                                     "missing_total": 0}, {"meta": {}})
+           FD.controls_on(sc9, "合成 主票", "A1:K20") == 1 and FD.controls_on(sc9, "合成 主票", "A5:K20") == 0
+           and FD.controls_on(sc9, "合成 副票", "A1:K12") == 1 and FD.controls_on({"meta": {}}, "x", "A1:B2") is None)
+
+    def _rep9(out_checked, out_readable, expected=2):
+        return {"targets": [{"sheet": "s", "range": "A1:B2", "page": 0, "checked": 0, "missing": [], "labels_checked": 0,
+                             "missing_labels": [], "extra": [], "blank": {"images": [10, 10]},
+                             "boxes": {"blank": 10, "out": 10, "blank_clipped": 4, "out_clipped": 0, "blank_checked": 0,
+                                       "out_checked": out_checked, "out_readable": out_readable, "expected_checked": expected}}],
+                "missing_total": 0}
+    lines9, stop9 = FD.report_lines(_rep9(1, 1), {"meta": {}})
     expect("D9: 印のある箱の数が選んだ数と違えば 🔴 + 止める、 素刷りだけ辺が欠ける箱は ⚪ (雛形自身の欠陥)",
            stop9 is not None and "選んだ箱の印" in stop9 and any(x.startswith("🔴") and "1 個 ≠ 選んだ 2" in x for x in lines9)
            and any(x.startswith("⚪") and "素刷りの箱 4/10" in x for x in lines9), (lines9, stop9))
+    lines9b, stop9b = FD.report_lines(_rep9(2, 1), {"meta": {}})
+    expect("D9 (検収 F1): 印の数が合っても紙で読める印が足りなければ 🔴 + 止める (読めない印)",
+           stop9b is not None and "読めない" in stop9b and any(x.startswith("🔴") and "読める印は 1 個" in x for x in lines9b), (lines9b, stop9b))
+    lines9c, stop9c = FD.report_lines(_rep9(2, 2), {"meta": {}})
+    expect("D9: 数も読める印も合えば ✅ で止めない", stop9c is None and any("箱の印 2 個 = 選んだ数" in x for x in lines9c), (lines9c, stop9c))
     # D5: bind の記録
     spec = S.get("fx")
     bf = FD.bind_file(spec)
