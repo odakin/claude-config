@@ -28,11 +28,11 @@ a Git repository): an `agent-free` zone the owner declared is masked out of the
 file lock, and a change that does not loosen a rule by proxy, whatever its form
 (append, rewrite, deletion, move), is exempt from prior approval: its added
 sentences carry no relaxation vocabulary or hiding markup, an edited sentence
-keeps six tenths of the old one with no listed term in the delta and the same
-directive polarity, no rule-carrying sentence is removed without such an edit,
-no existing sentence is moved into a fence or comment, no new heading files the
-lines under it as history, and it is not a brand-new entry document (judge_change);
-the dispatcher logs it for the owner to read afterwards. Whether an edit strengthens or weakens a rule is not
+carries no relaxing term it did not carry before, no existing sentence is moved
+into a fence or comment, no new heading files the lines under it as history, the
+document is not emptied, and it is not a brand-new entry document (judge_change).
+Removed, replaced and flipped sentences pass; the dispatcher logs every such
+change for the owner to read afterwards. Whether an edit strengthens or weakens a rule is not
 decided here; the inserted-only shape and the vocabulary tripwire are proxies
 with known holes (conventions/agent-rule-ownership.md#additive-and-free-zones).
 Callers pass manifest patterns as extra_paths, never the expanded set of every
@@ -330,31 +330,32 @@ def mask_free_zones(text: str) -> str:
     return "".join(out)
 
 
-def relax_hit(text: str | list[str]) -> str | None:
-    """First relaxation-shaped term in inserted text, or None.
 
-    A list is judged unit by unit (position rules in RELAX_FORMS need the sentence);
-    a string is one unit. Markup and invisible characters always count, and so does a new heading
-    that files the lines under it as history or reference.
-    """
-    units = [text] if isinstance(text, str) else text
-    for unit in units:
-        hm = _HEADING_RE.match(unit)
-        if hm:
-            hh = _HISTORICISING_HEAD.search(_EN_NOISE.sub(" ", hm.group(2)))  # the anchor id is not the heading's words
-            if hh:
-                return hh.group(0)
-        for term in RELAX_MARKUP:
-            if term in unit:
-                return term
-        for term in RELAX_TERMS_JA:
-            if _relax_term_in_unit(term, unit):
-                return term
-        plain = _EN_NOISE.sub(" ", unit)
-        for m in _RELAX_EN_RE.finditer(plain):
-            form = RELAX_FORMS_EN.get(m.group(1).lower())
-            if form is None or form.search(plain):
-                return m.group(1)
+def relax_terms(unit: str) -> list[str]:
+    """Every relaxation-shaped term a sentence carries in a relaxing position (RELAX_FORMS / RELAX_FORMS_EN), plus
+    hiding markup and, for a heading, a word that files the lines under it as history. First found first."""
+    out: list[str] = []
+    hm = _HEADING_RE.match(unit)
+    if hm:
+        hh = _HISTORICISING_HEAD.search(_EN_NOISE.sub(" ", hm.group(2)))  # the anchor id is not the heading's words
+        if hh:
+            out.append(hh.group(0))
+    out.extend(term for term in RELAX_MARKUP if term in unit)
+    out.extend(term for term in RELAX_TERMS_JA if _relax_term_in_unit(term, unit))
+    plain = _EN_NOISE.sub(" ", unit)
+    for m in _RELAX_EN_RE.finditer(plain):
+        form = RELAX_FORMS_EN.get(m.group(1).lower())
+        if form is None or form.search(plain):
+            out.append(m.group(1))
+    return out
+
+
+def relax_hit(text: str | list[str]) -> str | None:
+    """First relaxation-shaped term in inserted text, or None (a list is judged unit by unit)."""
+    for unit in ([text] if isinstance(text, str) else text):
+        terms = relax_terms(unit)
+        if terms:
+            return terms[0]
     return None
 
 
@@ -517,48 +518,24 @@ def insertion_profile(old: str, new: str) -> list[dict]:
 
 
 
-def _plain_relax(text: str) -> str | None:
-    """A listed term anywhere in a short text, without position rules: what an edit added to an existing sentence."""
-    for term in RELAX_MARKUP + RELAX_TERMS_JA:
-        if term in text:
-            return term
-    m = _RELAX_EN_RE.search(_EN_NOISE.sub(" ", text))
-    return m.group(1) if m else None
-
-
-_RULE_SIGNAL = ("**", "⚠️", "🚫", "❌", "必ず", "常に", "だけ", "のみ", "禁止", "必須", "never", "must", "only", "always")
-# What a removed sentence needs before the change passes without a ruling. "signal" = a sentence that carries a rule
-# (a directive, emphasis, a scoping or listed term) may only be edited, i.e. an added sentence keeps at least half of
-# it; a descriptive sentence may go (the reply says so). "all" = every sentence.
-REMOVAL_NEEDS_EDIT = "signal"
-# Share of a removed sentence's characters an added sentence must keep, in order, to count as its edit. Measured:
-# at 0.5 a short sentence's boilerplate (" deploy する。") made an unrelated sentence count as an edit.
+# Share of a removed sentence's characters an added sentence must keep, in order, to count as its edit. The pairing
+# only decides how the record reads (「前」→「後」 versus 消した + 追記) and which terms an edit is new for; it is not
+# a gate. Measured: at 0.5 a short sentence's boilerplate (" deploy する。") made an unrelated sentence count as an edit.
 EDIT_KEEPS = 0.6
 # A heading that files the lines under it as history or reference demotes them without touching a word.
 _HISTORICISING_HEAD = re.compile(r"旧|参考|過去|以前|歴史|廃止|非推奨|deprecated|legacy|(?<![A-Za-z])old(?![A-Za-z])|obsolete|superseded", re.I)
-
-
-def rule_signal(unit: str) -> bool:
-    """A sentence that carries a rule: a directive, emphasis, a scoping or listed term."""
-    return _polarity(unit) != 0 or any(s in unit for s in _RULE_SIGNAL) or _plain_relax(unit) is not None
-
-
-def _edit_delta(old_unit: str, new_unit: str) -> str:
-    sm = difflib.SequenceMatcher(None, old_unit, new_unit, autojunk=False)
-    return "".join(new_unit[j1:j2] for tag, _i1, _i2, j1, j2 in sm.get_opcodes() if tag in ("replace", "insert"))
-
-
 def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
-    """(ok, reason, what) for a change to a rule document, judged by what it does to sentences, not by its form.
+    """(ok, reason, what) for a change to a rule document, judged by what it adds, not by its form.
 
-    An append and a rewrite are held to the same line (an append-only rule made agents pile sentences up beside the
-    ones they should have fixed; a form is not a meaning). The change passes when: the added sentences carry no
-    relaxing term in a relaxing position; what an edit added to an existing sentence carries no listed term at all
-    (the delta is short, so no position rule); no edit flips a directive; no existing sentence is moved into a code
-    fence or a comment; no new heading files the lines under it as history; and every removed sentence that carries
-    a rule survives as an edit keeping at least half of it (REMOVAL_NEEDS_EDIT). what = {"added", "edited":
-    [(old, new)], "removed", "moved"} is what the record and the reply show. Meaning itself is still not decided
-    here: a rewrite that loosens a rule in unlisted words passes and is caught by the reply and the diff.
+    An append, a rewrite, a deletion and a move are held to the same line (an append-only rule made agents pile
+    sentences up beside the ones they should have fixed, and a gate on replacing a rule sentence did the same in a
+    smaller way; a form is not a meaning). The change passes when the sentences it adds carry no relaxing term in a
+    relaxing position, an edited sentence carries no relaxing term it did not carry before (a sentence that already
+    says ただし can be edited), no existing sentence is moved into a code fence or a comment, and no new heading
+    files the lines under it as history. Removed, replaced and flipped sentences pass and are shown to the owner:
+    what = {"added", "edited": [(old, new)], "removed", "moved"} is what the record and the reply carry. Meaning
+    itself is not decided here: a rule deleted, flipped or loosened in unlisted words passes and is caught by the
+    reply and the diff (the owner's ruling: a form cannot protect a meaning, reading does).
     """
     ou, nu = _units(old), _units(new)
     oc, nc = _line_contexts(old), _line_contexts(new)
@@ -567,6 +544,8 @@ def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
     removed = list((co - cn).elements())
     added = list((cn - co).elements())
     what: dict = {"added": [], "edited": [], "removed": [], "moved": []}
+    if co and not cn:  # erasing a document is not an edit of it (a file deleted or emptied stays a ruling)
+        return False, "文書の中身を全部消した", what
     # a kept sentence now inside a fence or a comment (the fence delimiters themselves are not sentences)
     ho = Counter(u for u, i in ou if u != "\n" and (oc[i][1] or oc[i][2]) and not _FENCE_RE.match(u))
     hn = Counter(u for u, i in nu if u != "\n" and (nc[i][1] or nc[i][2]) and not _FENCE_RE.match(u))
@@ -613,15 +592,10 @@ def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
     if hit:
         return False, f"足した文に緩和の語「{hit}」がある", what
     for r, a in what["edited"]:
-        h = _plain_relax(_edit_delta(r, a))
-        if h:
-            return False, f"言い直しで緩和の語「{h}」を足した: 「{r[:30]}」→「{a[:30]}」", what
-        pr, pa = _polarity(r), _polarity(a)
-        if pr and pa != pr:  # a directive must survive its edit with the same polarity
-            return False, f"言い直しで指示が消えた・向きが変わった: 「{r[:30]}」→「{a[:30]}」", what
-    for r in what["removed"]:
-        if REMOVAL_NEEDS_EDIT == "all" or rule_signal(r):
-            return False, f"規則の文を消した・別の文に置き換えた (6 割以上を残す言い直しでない): 「{r[:40]}」", what
+        had = {t.lower() for t in relax_terms(r)}
+        fresh = [t for t in relax_terms(a) if t.lower() not in had]  # the same rules as for a new sentence, minus what it already said
+        if fresh:
+            return False, f"言い直しで緩和の語「{fresh[0]}」を足した: 「{r[:30]}」→「{a[:30]}」", what
     oh: dict[str, set] = {}
     nh: dict[str, set] = {}
     for u, i in ou:
@@ -1207,19 +1181,37 @@ def selftest() -> int:
     check("the record says which sentence moved", what["moved"] == ["送信は本人の OK の後。"] and not what["added"] and not what["removed"])
     check("a heading reworded moves the lines under it, in the record", "レビューを経てから deploy する。" in judge_change(doc, rewritten["a heading reworded"])[2]["moved"])
     check("the rewritten flat heading and lead sentence are two edits", len(judge_change(latex_old, latex_new)[2]["edited"]) == 2)
-    check("a rule sentence: signal / a descriptive one: none",
-          rule_signal("レビューを経てから deploy する。") and rule_signal("**必ず** 読む") and not rule_signal("手順は runbook。"))
+    # A rule sentence deleted, replaced or flipped passes (the owner's ruling: a form cannot protect a meaning, reading
+    # does) and the record says what happened, so the reply can show it.
+    disclosed = {
+        "a rule sentence replaced by a different one": (doc.replace("レビューを経てから deploy する。", "deploy は担当が判断する。"),
+                                                        lambda w: w["removed"] == ["レビューを経てから deploy する。"] and w["added"] == ["deploy は担当が判断する。"]),
+        "a rule sentence deleted": (doc.replace("レビューを経てから deploy する。 手順は runbook。", "手順は runbook。"),
+                                    lambda w: w["removed"] == ["レビューを経てから deploy する。"] and not w["added"]),
+        "a rule flipped in place": (doc.replace("レビューを経てから deploy する。", "レビューを経ずに deploy する。"),
+                                    lambda w: w["edited"] == [("レビューを経てから deploy する。", "レビューを経ずに deploy する。")]),
+        "a directive edited into a choice": (doc.replace("レビューを経てから deploy する。", "レビューを経てから deploy するか決める。"),
+                                             lambda w: len(w["edited"]) == 1 and not w["removed"]),
+        "an existing sentence rewritten to loosen in unlisted words": (doc.replace("レビューを経てから deploy する。", "急ぐ時は deploy してから見る。"),
+                                                                       lambda w: bool(w["removed"] or w["edited"])),
+        "a sentence that already says ただし, edited": (doc.replace("手順は runbook。", "手順は runbook。 ただし急ぐ時は後でよい (実測)。"),
+                                                       lambda w: len(w["edited"]) == 1),
+    }
+    base_tadashi = doc.replace("手順は runbook。", "手順は runbook。 ただし急ぐ時は後でよい。")
+    for name, (new, cond) in disclosed.items():
+        old_text = base_tadashi if name.startswith("a sentence that already says") else doc
+        ok, _reason, what = judge_change(old_text, new)
+        check("passes and the record says what changed: " + name, ok and cond(what)
+              and exempt("conventions/deploy.md", old_text, new) is True)
+    # Known hole, kept on purpose: a word slipped into a sentence in a non-relaxing position passes, exactly as the
+    # same sentence would pass if appended (the line is the same for both forms).
+    check("known hole: a listed word in a non-relaxing position slipped into a sentence passes",
+          exempt("conventions/deploy.md", doc, doc.replace("本人の OK の後", "本人の OK の後でなくても")) is True)
     weakened = {
-        "a rule sentence replaced by a different one": doc.replace("レビューを経てから deploy する。", "deploy は担当が判断する。"),
-        "a rule sentence deleted": doc.replace("レビューを経てから deploy する。 手順は runbook。", "手順は runbook。"),
-        "a rule flipped in place": doc.replace("レビューを経てから deploy する。", "レビューを経ずに deploy する。"),
-        "a warn flipped to a block in place": (doc.replace("手順は runbook。", "warn は build を止めない。"),
-                                                doc.replace("手順は runbook。", "warn も build を止める。")),
-        "an existing sentence rewritten to loosen": doc.replace("レビューを経てから deploy する。", "急ぐ時は deploy してから見る。"),
-        "a directive edited into a choice": doc.replace("レビューを経てから deploy する。", "レビューを経てから deploy するか決める。"),
         "an English rule replaced by its opposite": ("# R\n\nReview is required before deployment.\n", "# R\n\nDeploy without review.\n"),
         "without an obligation": doc + "\nDeploy without prior approval when in a hurry.\n",
-        "a word inserted into a sentence": doc.replace("本人の OK の後", "本人の OK の後でなくても"),
+        "an edit that moves a listed word into a relaxing position": doc.replace("手順は runbook。", "手順は runbook (docs は例外とする)。"),
+        "an edit that adds a permission to an existing sentence": doc.replace("送信は本人の OK の後。", "送信は本人の OK の後でよい。"),
         "an exception added": doc.replace("手順は runbook。", "手順は runbook。 ただし急ぐ時は後でよい。"),
         "an English exception added": doc + "\nReview is not required for docs.\n",
         "a sub-heading that re-parents lines": doc.replace("\nレビューを", "\n### 旧手順 (参考)\n\nレビューを"),
@@ -1243,13 +1235,16 @@ def selftest() -> int:
           exempt("docs/policy.md", doc, grown["a new section at the end"], ("docs/*",)) is None)
     check("settings are not prose policy documents", exempt(".claude/settings.json", "{}", '{"a": 1}') is None)
     check("a deletion of the document is not an insertion", exempt("conventions/deploy.md", doc, "") is False)
+    check("the reason names what failed",
+          "緩和の語「without」" in judge_change("# R\n\nReview is required before deployment.\n", "# R\n\nDeploy without review.\n")[1]
+          and "言い直しで緩和の語「例外」" in judge_change(doc, weakened["an edit that moves a listed word into a relaxing position"])[1]
+          and "言い直しで緩和の語「でよい」" in judge_change(doc, weakened["an edit that adds a permission to an existing sentence"])[1]
+          and "code / comment" in judge_change(doc, weakened["a fence wrapping a rule"])[1]
+          and relax_hit("### 旧手順 (参考)") in ("旧", "参考"))
+    check("relax_terms lists every term of a sentence, in a relaxing position only",
+          {"ただし", "してよい"} <= set(relax_terms("ただし急ぐ時は deploy してよい。")) and relax_terms("様式が改訂されても同じ。") == []
+          and relax_terms("<!-- x") == ["<!--"])
     check("everyday use of a listed term passes: without a thing", exempt("conventions/deploy.md", doc, doc + "\nThe check works without a network.\n") is True)
-    check("the reason names what failed", "向きが変わった" in judge_change(doc, weakened["a rule flipped in place"])[1]
-          and "指示が消えた" in judge_change(doc, weakened["a directive edited into a choice"])[1]
-          and "規則の文を消した" in judge_change(doc, weakened["an existing sentence rewritten to loosen"])[1]
-          and "規則の文を消した" in judge_change(doc, weakened["a rule sentence deleted"])[1]
-          and "緩和の語「なくても」" in judge_change(doc, weakened["a word inserted into a sentence"])[1]
-          and "参考" == relax_hit("### 旧手順 (参考)") or "旧" == relax_hit("### 旧手順 (参考)"))
 
     zoned = ("# P\n\n規則の文。\n\n<!-- agent-free:begin id=status -->\n- a: 進行中\n<!-- agent-free:end id=status -->\n"
              "\n<!-- agent-authority:begin id=gate -->\n門は下げない。\n<!-- agent-authority:end id=gate -->\n")

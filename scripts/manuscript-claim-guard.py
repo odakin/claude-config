@@ -26,9 +26,9 @@
        config            <repo>/.claude/manuscript-guard.json
      強める変更と弱める変更は機械で区別できないので、 どちらも承認を要る。 例外は 2 つ (述語は agent-rule-guard.py):
        規則の文書 (CLAUDE.md / AGENTS.md / CONVENTIONS.md / conventions/*.md。 規則保護の正本 2 本・marker・manifest の
-       file は除く) で、 意味を緩めない変更 (緩和の語を足さない・規則の文を消さず 6 割以上を残す言い直しで保つ・既存の文を
-       隠さない。 追記も書き換えも同じ線 = 足すだけの形を特別扱いしない) は事前の承認なしに通し、 記録 (additive-log) に
-       残して、 入れた turn の最後の返事に書かせる (Stop。 本人の既読の操作は無い)。 本人が宣言した `agent-free` の区画 (状況の一覧・生成物) の中は保護しない。
+       file は除く) で、 緩和の語を足さず既存の文を隠さない変更 (追記も書き換えも削除も同じ線 = 消した文・言い直した文は
+       記録と返事に出る) は事前の承認なしに通し、 記録 (additive-log) に残して、 入れた turn の最後の返事に書かせる
+       (Stop。 本人の既読の操作は無い)。 本人が宣言した `agent-free` の区画 (状況の一覧・生成物) の中は保護しない。
 
 誰に効くか: AI agent の session だけ。 人が terminal で commit した場合 (agent の session env が無い) は通す。
   Claude / Codex の hook は常に agent。 git pre-commit は CLAUDE_CONFIG_AGENT_SESSION / CLAUDE_CODE_SESSION_ID /
@@ -1038,10 +1038,6 @@ ADDITIVE_KEEP_DAYS = 30
 DENIED_LOG = "denied-log.jsonl"  # 止めた変更の記録 (検出だけ。 語の誤検出の率を transcript を掘らずに測る)
 
 
-def unit_hash(u: str) -> str:
-    return hashlib.sha256(u.encode("utf-8")).hexdigest()[:16]
-
-
 def note_exemption(rel: str, repo: Path | None, new: str, exempt: dict, inserted: bool) -> None:
     sha = hashlib.sha256(new.encode("utf-8")).hexdigest()
     base = {"file": rel, "repo": str(repo) if repo else "", "sha": sha}
@@ -1064,10 +1060,6 @@ def note_exemption(rel: str, repo: Path | None, new: str, exempt: dict, inserted
                 r0 = next((r for r in hits if r["flip"]), max(sentences, key=lambda r: len(r["shared"])) if sentences else hits[0])
                 row["near"] = {"text": r0["text"][:160], "existing": r0["near"][:160],
                                "shared": r0["shared"][:6], "flip": r0["flip"], "kind": r0.get("near_kind") or "sentence"}
-        # この編集で入った文だけ (推敲では profile が HEAD からの差分 = 他の未 commit の文も含むので、 記録の鍵にしない)
-        units = list(exempt.get("units") or []) or [r["text"] for r in prof]
-        if units:
-            row["units"] = [unit_hash(u) for u in units]  # 推敲 (基準 = HEAD) で「自分が足した文」 を見分ける鍵 (text は 400 字で切れる)
         if exempt.get("refined"):
             row["refined"] = True
         PENDING_EXEMPTIONS.append(row)
@@ -1093,19 +1085,6 @@ def _insertion_delta(old: str, new: str) -> str:
     return " ".join(_insertion_units(old, new))
 
 
-def _own_units(session: tuple[str, str] | None, rel: str, repo: Path | None) -> tuple[set[str], list[str]]:
-    """この session が additive-log に残した、 この file への追記の文 (hash の集合と、 古い行のための text の list)。"""
-    hashes: set[str] = set()
-    texts: list[str] = []
-    if session is None:
-        return hashes, texts
-    me, rep = f"{session[0]}:{session[1]}", str(repo) if repo else ""
-    for e in load_additive_log():
-        if e.get("session") == me and e.get("file") == rel and e.get("repo") == rep and e.get("kind") == "insert":
-            hashes.update(str(h) for h in (e.get("units") or []))
-            texts.append(str(e.get("text") or ""))
-    return hashes, texts
-
 
 def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict | None = None,
                       authority: bool = True, baseline: str | None = None,
@@ -1113,10 +1092,9 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
     """(file, old, new) の保護領域の変更を列挙する。 各要素 = {file, region, kind, detail}。
 
     authority=False = 権限の lock を見ない (git repo の外の file = 規約の面でない scratch 等)。
-    baseline = HEAD の全文 (編集 hook だけが渡す): old (作業ツリー) からは追記でなくても、 HEAD からは追記だけなら
-    追記として通す = 同じ session が足した未 commit の文の推敲。 commit 時の gate (HEAD → index) と同じ基準。
-    session = 推敲の主 (編集 hook が渡す): 変えた・消した未 commit の文が、 この session の追記の記録 (additive-log) に
-    無ければ推敲でない (別 session か本人の未 commit の文、 shell で書いた文) = 従来どおり止まる。"""
+    baseline = HEAD の全文 (編集 hook だけが渡す): old (作業ツリー) からは通らなくても、 HEAD からは通る変更 (自分の未 commit
+    の文を隠す等) は推敲として通す。 commit 時の gate (HEAD → index) と同じ基準。 別の session の未 commit の文も同じ扱い
+    (同じ file を並列に触る session の race と同じ穴)。 session は記録の主 (編集 hook が渡す)。"""
     changes: list[dict] = []
 
     def add(region: str, kind: str, detail: str = "") -> None:
@@ -1138,17 +1116,9 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
         # 追記でない (commit 済みの文を変えた・緩和の語が入った) なら従来どおり止まる
         against = _rule_guard.change_exemption(rel, baseline, new, manifest_patterns(repo))
         if against is not None and against["ok"]:
-            gone = _insertion_units(new, old)  # 作業ツリーにあって new に無い文 = 変えた・消した未 commit の文
-            hashes, texts = _own_units(session, rel, repo)
-            foreign = [u for u in gone if unit_hash(u) not in hashes and not any(u in t for t in texts)]
-            if foreign:
-                exempt = {**exempt, "reason": "HEAD に無い文を変えた・消したが、 この session の追記の記録に無い"
-                          " (別 session か本人の未 commit の文、 または shell で書いた文) = commit されてから裁定を取るか、"
-                          " 書いた側に任せる: 「" + collapse_ws(foreign[0])[:40] + "」"}
-            else:
-                exempt = {**against, "refined": True, "delta": _insertion_delta(old, new),
-                          "what": _rule_guard.judge_change(_rule_guard.mask_free_zones(old), _rule_guard.mask_free_zones(new))[2]}
-                refined = True
+            exempt = {**against, "refined": True, "delta": _insertion_delta(old, new),
+                      "what": _rule_guard.judge_change(_rule_guard.mask_free_zones(old), _rule_guard.mask_free_zones(new))[2]}
+            refined = True
     if exempt is not None and exempt["ok"]:
         # 足した文がどこに (既存の行の続き / 既存の節の新しい行 / 新しい節) 入り、 同じ対象を扱う既存の文の隣か = 記録と
         # 返事の行に出す (判定ではない = 追記でも意味は反転できる、 を本人の目に入れる)
@@ -1156,7 +1126,6 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
         profile = getattr(_rule_guard, "insertion_profile", None)  # 無い engine (別の版) では記録に位置が付かないだけ
         if profile is not None:
             exempt["profile"] = profile(_rule_guard.mask_free_zones(ref), _rule_guard.mask_free_zones(new))
-        exempt["units"] = _insertion_units(_rule_guard.mask_free_zones(old), _rule_guard.mask_free_zones(new))
     for k in moved:
         kind = "add" if k not in ao else "delete" if k not in an else "change"
         if exempt is not None and k in INSERTION_REGIONS:
@@ -1569,10 +1538,17 @@ def stop_check(agent: str, event: dict) -> str | None:
 
     parts = []
     if left:
+        by_quote: dict[str, list[dict]] = {}
+        for a in left:
+            by_quote.setdefault(str(a.get("quote", "")), []).append(a)
+        lines = []
+        for q, items in by_quote.items():
+            files = sorted({str(a.get("file")) for a in items})
+            changes = list(dict.fromkeys(str(a.get("change", "")) for a in items if a.get("change")))
+            lines.append(f"- 「{short(q)}」 を {', '.join(files)} の承認として記録した: " + " / ".join(changes))
         parts.append("このターンで著者の発言を承認として記録したが、 最後の返事にそれを書いていない"
-                     " (著者が見ないまま記録だけが残る)。 次の行を返事に入れる:\n" +
-                     "\n".join(f"- 「{short(str(a.get('quote', '')))}」 を {a.get('file')} の承認として記録した"
-                               f" ({', '.join(a.get('regions') or [])}): {a.get('change', '')}" for a in left) +
+                     " (著者が見ないまま記録だけが残る)。 次の行を返事に入れる (発言 1 つにつき 1 行、 file を並べる):\n" +
+                     "\n".join(lines) +
                      "\n引いた発言と file 名が同じ行にあれば足りる。 違う意味で引いていたら、 そう書いて著者の判断を仰ぐ。")
     if left_add:
         parts.append("承認なしで規則の文書に追記したが、 最後の返事にそれを書いていない (本人の目に入らないまま入る)。"
@@ -1651,10 +1627,10 @@ def deny_reason(left: list[dict], session: tuple[str, str] | None) -> str:
     if prose:
         parts.append(
             "「追記扱いにならない理由」 が付いた規則の文書 (CLAUDE.md / AGENTS.md / CONVENTIONS.md / conventions/*.md):\n"
-            "  1. 追記も書き換えも同じ線で通る: 緩和の語を足さず、 規則の文を消さず・別の文に置き換えず (半分以上を残す言い直しは通る)、"
-            " 既存の文を隠さなければ、 承認なしで通って本人が後で読む記録と返事の行に残る。 止まった理由がそのどれかなら、"
-            " 文書が良くなる形で言い直して通す (緩和の語 = 言い方を変える。 本当に緩めるなら 3 へ / 規則の文を消したい = 言い直しで残すか、"
-            " 消す理由を添えて 3 へ)。 古い文と新しい文を同居させない = 追記で誤りとして残る文は言い直す。\n"
+            "  1. 追記も書き換えも削除も同じ線で通る: 足した文・言い直した文に緩める位置の緩和の語が無く、 既存の文を隠さず、"
+            " 見出しで過去のものにしなければ、 承認なしで通って本人が後で読む記録と返事の行に残る (消した文・言い直した文も返事に出る)。"
+            " 止まった理由が緩和の語なら、 本当に緩めるのでなければ言い方を変えて通す (緩めるなら 3 へ)。"
+            " 古い文と新しい文を同居させない = 追記で誤りとして残る文は言い直す。\n"
             "  2. 本人の最新の発言 (依頼) が、 この変更をすでに含むか確かめる (例: 「知見を上層に整備して」 は"
             " conventions の知見の更新とその参照の更新を含む)。 含み、 かつ規則を緩めない変更なら、 聞き直さずに"
             " その発言を --quote に引いて記録する。 引けるのは本人の最新の発言だけ = 本人が次に発言する前に、"
@@ -1706,7 +1682,7 @@ def insertion_notice(rows: list[dict]) -> str:
         return ""
     return ("📝 manuscript-claim-guard: 規則の文書に承認なしで追記した (記録済み、 止めていない)。 足した文の隣:\n" + "\n".join(lines) +
             "\n既存の文 (見出しと冒頭の言い切りを含む) がそのまま正しく残るか、 今この節を読んで決める。 残らないなら追記のままにせず、"
-            " その文を言い直す (規則を緩めない言い直し・6 割以上を残す言い直しは同じく承認なしで通る。 緩める言い直しは差分を本人に見せて裁定 ="
+            " その文を言い直す (緩和の語を足さない言い直しは同じく承認なしで通る。 緩める言い直しは差分を本人に見せて裁定 ="
             f" {engine_cmd()} apply --file <path> --candidate <全文 file> --change '<1 行>' --latest)。"
             " この turn の最後の返事に「規則の文書に承認なしで追記した / 変えた: <file> — …」 の行を書く (Stop が確かめる)。"
             " 正本 = conventions/agent-rule-ownership.md#additive-and-free-zones")
@@ -2770,8 +2746,7 @@ def additive_line(e: dict) -> str:
         label = {"heading": "見出し", "same-line": "同じ行の前の文"}.get(str(near.get("kind")), "既存の文")
         tail = (f" ⚠️ {label}「{ex}」 と同じ対象で向きが逆かもしれない (読んで決める)" if near.get("flip")
                 else f" ({label}「{ex}」 の{'下' if near.get('kind') == 'heading' else '隣'})")
-    if e.get("refined"):
-        text = "(自分の未 commit の追記を推敲) " + text
+    pre = "(自分の未 commit の文を推敲) " if e.get("refined") else ""
     if e.get("kind") == "change":
         n = e.get("n") or {}
         parts = [f"{label} {n.get(k)}" for k, label in (("added", "追記"), ("edited", "言い直し"), ("removed", "消した"), ("moved", "移動")) if n.get(k)]
@@ -2779,9 +2754,8 @@ def additive_line(e: dict) -> str:
         rm = e.get("removed") or []
         sample = (f" 「{collapse_ws(ed[0][0])[:40]}」→「{collapse_ws(ed[0][1])[:40]}」" if ed
                   else f" 消した「{collapse_ws(rm[0])[:40]}」" if rm else "")
-        pre = "(自分の未 commit の追記を推敲) " if e.get("refined") else ""
         return f"- 規則の文書を承認なしで変えた: {where} — {pre}{' / '.join(parts)}:{sample}{tail}"
-    return f"- 規則の文書に承認なしで追記した: {where} — {text}{tail}"
+    return f"- 規則の文書を承認なしで変えた: {where} — {pre}追記: 「{text}」{tail}"
 
 
 def live_claude_sessions() -> set[str]:
@@ -2845,7 +2819,7 @@ def additive_log_mode(args: argparse.Namespace) -> int:
             files[name] = files.get(name, 0) + 1
         shown = ", ".join(f"{k}{'' if v == 1 else f' ×{v}'}" for k, v in list(files.items())[:6])
         more = f" ほか {len(files) - 6} file" if len(files) > 6 else ""
-        print(f"📜 承認なしで入った規則の文書への追記のうち、 その場の返事で本人に伝わっていないもの {len(pend)} 件: {shown}{more}。"
+        print(f"📜 承認なしで入った規則の文書への変更のうち、 その場の返事で本人に伝わっていないもの {len(pend)} 件: {shown}{more}。"
               " この session の最初の返事に次の行をそのまま書く (Stop が確かめる。 書けば処理済み = 本人の操作は要らない。"
               " 正本 = claude-config/conventions/agent-rule-ownership.md#additive-and-free-zones):")
         for e in pend:
@@ -2861,9 +2835,12 @@ def additive_log_mode(args: argparse.Namespace) -> int:
         status = (f"処理済み ({done.get('how')})" if isinstance(done, dict) else
                   f"未処理 (割り当て先 {state['assigned'][key]})" if key in state["assigned"] else "未処理")
         where = f"{Path(e.get('repo') or '~').name}/{e.get('file')}"
-        label = "追記" if e.get("kind") == "insert" else f"区画 {e.get('zone')} (緩和の語「{e.get('term')}」)"
+        label = ("追記" if e.get("kind") == "insert" else "変更" if e.get("kind") == "change"
+                 else f"区画 {e.get('zone')} (緩和の語「{e.get('term')}」)")
+        extra = ("".join(f"\n  消した: {collapse_ws(str(r))[:160]}" for r in (e.get("removed") or []))
+                 + "".join(f"\n  言い直し: 「{collapse_ws(str(a))[:80]}」→「{collapse_ws(str(b))[:80]}」" for a, b in (e.get("edited") or [])))
         print(f"{str(e.get('at', ''))[:16]} {where} [{label}] {status} session={e.get('session')}\n"
-              f"  {collapse_ws(str(e.get('text', '')))}")
+              f"  {collapse_ws(str(e.get('text', '')))}" + extra)
     return 0
 
 
@@ -3249,8 +3226,8 @@ def selftest() -> int:
     prose_stop = {"file": "conventions/mail.md", "region": "authority:file", "kind": "change",
                   "detail": PROSE_DETAIL + "既存の文を変えた・消した"}
     reason = deny_reason([prose_stop], ("claude", "s"))
-    check("止めた表示: 規則の文書には「追記も書き換えも同じ線で通る」「古い文と新しい文を同居させない」「依頼がすでに含むなら聞き直さない」",
-          "追記も書き換えも同じ線" in reason and "同居させない" in reason
+    check("止めた表示: 規則の文書には「追記も書き換えも削除も同じ線で通る」「古い文と新しい文を同居させない」「依頼がすでに含むなら聞き直さない」",
+          "追記も書き換えも削除も同じ線" in reason and "同居させない" in reason
           and "聞き直さずに" in reason and "一般的な依頼" not in reason)
     for label, region in (("原稿", "abstract"), ("配線", "authority:wiring"), ("block", "authority:gate"),
                           ("参照の行", "authority:rule-ref")):
@@ -4049,6 +4026,7 @@ def selftest() -> int:
         ss_ev = {"session_id": "sess-ss", "transcript_path": str(one_msg("sess-ss", "こんにちは", -1))}
         out = stop_check("claude", dict(ss_ev, last_assistant_message="こんにちは"))
         check("割り当てた追記を返事に書かなければ差し戻す", out is not None and "mail.md" in json.loads(out)["reason"])
+        check("差し戻しの案内の行は「変えた」 の形", "規則の文書を承認なしで変えた" in json.loads(out)["reason"])
         check("返事に書けば通り、 処理済みになる (本人の既読の操作は無い)",
               stop_check("claude", dict(ss_ev, last_assistant_message="- 規則の文書に承認なしで追記した: conventions/mail.md"))
               is None and not pending_additive())
@@ -4115,30 +4093,26 @@ def selftest() -> int:
         for a in (["add", "-A"], ["commit", "-q", "-m", "d"]):
             subprocess.run(["git", *a], cwd=rr, env=genv, capture_output=True, check=False)
         reset_caches()
-        wt, refined = dep + "宛先は必ず読む。\n", dep  # 自分が足した規則の文を消す (推敲) = HEAD からは何も消えていない
+        wt = dep + "宛先は必ず読む。\n"
+        fenced = dep + "```\n宛先は必ず読む。\n```\n"  # 自分が足した未 commit の文を fence に入れる = HEAD からは足しただけ
         PENDING_EXEMPTIONS.clear()
         s1 = ("claude", "sess-1")
-        check("推敲の前提: 消す規則の文が自分の追記の記録に無ければ止まる (別 session か本人の未 commit の文、 shell で書いた文)",
-              "追記の記録に無い" in protected_changes("conventions/deploy.md", wt, refined, rr, {}, baseline=dep, session=s1)[0]["detail"])
-        PENDING_EXEMPTIONS.clear()
-        protected_changes("conventions/deploy.md", dep, wt, rr, {}, baseline=dep, session=s1)  # 自分の追記として記録する
-        check("追記の記録に文の hash が付く", bool(PENDING_EXEMPTIONS) and PENDING_EXEMPTIONS[-1].get("units") == [unit_hash("宛先は必ず読む。")])
-        write_exemptions(s1)
-        check("未 commit の規則の文を消す推敲: 作業ツリーからは削除でも HEAD からは何も消えていない → 通る (自分の追記の記録にある文)",
-              protected_changes("conventions/deploy.md", wt, refined, rr, {}, baseline=dep, session=s1) == [])
+        check("未 commit の文を隠す推敲: 作業ツリーからは隠しでも HEAD からは追記だけ → 通る",
+              protected_changes("conventions/deploy.md", wt, fenced, rr, {}, baseline=dep, session=s1) == [])
         check("推敲の記録には推敲の印が付く",
               bool(PENDING_EXEMPTIONS) and PENDING_EXEMPTIONS[-1].get("refined") is True and "推敲" in additive_line(PENDING_EXEMPTIONS[-1]))
         PENDING_EXEMPTIONS.clear()
-        check("別 session の記録では推敲にならない",
-              [c["region"] for c in protected_changes("conventions/deploy.md", wt, refined, rr, {}, baseline=dep, session=("claude", "sess-2"))]
-              == ["authority:file"])
-        check("baseline 無し (commit 時の gate の呼び方) では規則の文の削除として止まる",
-              [c["region"] for c in protected_changes("conventions/deploy.md", wt, refined, rr, {})] == ["authority:file"])
-        check("commit 済みの規則の文を逆向きにするのは baseline があっても止まる",
-              [c["region"] for c in protected_changes("conventions/deploy.md", wt, wt.replace("経てから", "経ずに"), rr, {}, baseline=dep, session=s1)]
+        check("baseline 無し (commit 時の gate の呼び方) では隠しとして止まる",
+              [c["region"] for c in protected_changes("conventions/deploy.md", wt, fenced, rr, {})] == ["authority:file"])
+        check("commit 済みの文を隠すのは baseline があっても止まる",
+              [c["region"] for c in protected_changes("conventions/deploy.md", wt, wt.replace("レビューを経てから deploy する。 手順は runbook。\n",
+                                                                                                "```\nレビューを経てから deploy する。 手順は runbook。\n```\n"), rr, {}, baseline=dep, session=s1)]
               == ["authority:file"])
         check("推敲で緩和の語が入れば止まる",
               bool(protected_changes("conventions/deploy.md", wt, dep + "宛先は読まなくてよい。\n", rr, {}, baseline=dep, session=s1)))
+        check("未 commit の規則の文を消すのは推敲を待たずに通る (削除の門は無い)、 記録に「消した」 が残る",
+              protected_changes("conventions/deploy.md", wt, dep, rr, {}) == [] and PENDING_EXEMPTIONS[-1].get("removed") == ["宛先は必ず読む。"]
+              and "消した「宛先は必ず読む。」" in additive_line(PENDING_EXEMPTIONS[-1]))
         PENDING_EXEMPTIONS.clear()
         flip = dep.replace("手順は runbook。\n", "手順は runbook。\n急ぐ deploy はレビューを経ずに deploy する。\n")
         check("同じ対象の既存の文と向きが逆の追記は通るが、 記録と返事の行に既存の文が出る",
@@ -4148,32 +4122,32 @@ def selftest() -> int:
         PENDING_EXEMPTIONS.clear()
         dep_path.write_text(wt, encoding="utf-8")
         ev = {"tool_name": "Edit", "session_id": "sess-1", "cwd": str(rr),
-              "tool_input": {"file_path": str(dep_path), "old_string": "宛先は必ず読む。\n", "new_string": ""}}
+              "tool_input": {"file_path": str(dep_path), "old_string": "宛先は必ず読む。\n", "new_string": "```\n宛先は必ず読む。\n```\n"}}
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             _hook("claude", ev)
-        check("hook: 自分の未 commit の規則の文を消す推敲は止まらない (基準 = HEAD)", "permissionDecision" not in out.getvalue())
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            _hook("claude", dict(ev, session_id="sess-9"))
-        check("hook: 別 session の未 commit の規則の文を消すのは止まる (記録に無い)",
-              "permissionDecision" in out.getvalue() and "追記の記録に無い" in out.getvalue())
+        check("hook: 自分の未 commit の文を隠す推敲は止まらない (基準 = HEAD)", "permissionDecision" not in out.getvalue())
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             _hook("claude", dict(ev, tool_input={"file_path": str(dep_path), "old_string": "経てから", "new_string": "経ずに"}))
-        check("hook: commit 済みの規則の文を逆向きにするのは止まる", "permissionDecision" in out.getvalue() and "向きが変わった" in out.getvalue())
+        check("hook: commit 済みの規則の文を逆向きにするのは止まらず、 記録に「前」→「後」 が残る",
+              "permissionDecision" not in out.getvalue()
+              and any(e.get("edited") and "経ずに" in e["edited"][0][1] for e in load_additive_log()))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             _hook("claude", dict(ev, tool_input={"file_path": str(dep_path), "old_string": "手順は runbook。", "new_string": "手順は wiki にある。"}))
-        check("hook: 説明の文の言い直しは止まらない (形でなく意味の代理で見る)", "permissionDecision" not in out.getvalue())
+        check("hook: 説明の文の言い直しは止まらない", "permissionDecision" not in out.getvalue())
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            _hook("claude", dict(ev, tool_input={"file_path": str(dep_path), "old_string": "手順は runbook。", "new_string": "手順は runbook。 ただし急ぐ時は後でよい。"}))
+        check("hook: 緩和の語を足す変更は止まる", "permissionDecision" in out.getvalue() and "緩和の語「ただし」" in out.getvalue())
         den = load_denied_log()
         check("止めた変更は denied-log に残る (mode / file / 理由)",
-              len(den) >= 2 and den[-1]["mode"] == "edit" and den[-1]["file"] == "conventions/deploy.md"
-              and "向きが変わった" in den[-1]["detail"] and "追記の記録に無い" in den[-2]["detail"])
+              len(den) >= 1 and den[-1]["mode"] == "edit" and den[-1]["file"] == "conventions/deploy.md" and "緩和の語「ただし」" in den[-1]["detail"])
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             denied_log_mode(argparse.Namespace(days=None))
-        check("denied-log は理由ごとの件数と行を出す", "conventions/deploy.md" in out.getvalue() and "向きが変わった" in out.getvalue())
+        check("denied-log は理由ごとの件数と行を出す", "conventions/deploy.md" in out.getvalue() and "緩和の語「ただし」" in out.getvalue())
         dep_path.write_text(dep, encoding="utf-8")
         out = io.StringIO()
         with contextlib.redirect_stdout(out):

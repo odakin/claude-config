@@ -146,9 +146,9 @@ _check "marker の外は自由" "$(_edit 'Free text.' 'Other text.' RULES.md)" n
 _check "Write で規約の file ごと置き換える" "$(jq -n --arg f "$REPO/RULES.md" --arg c "$REPO" \
   '{hook_event_name:"PreToolUse", tool_name:"Write", session_id:"sess-a", cwd:$c, tool_input:{file_path:$f, content:"# Rules\n"}}' | _run)" deny
 
-echo "=== 規則の文書の変更 (形でなく意味の代理、 基準 = HEAD、 隣の文、 止めた記録) ==="
-# agent-rule-ownership.md#additive-and-free-zones: 追記も書き換えも同じ線 (緩和の語 / 規則の文の削除 / 隠し) で見る。 既存の
-# 節への追記は止めずに、 その tool の結果と一緒に隣の文を見せる / 自分の未 commit の規則の文を消すのは自分の記録にある文だけ /
+echo "=== 規則の文書の変更 (形でなく語で見る、 基準 = HEAD、 隣の文、 止めた記録) ==="
+# agent-rule-ownership.md#additive-and-free-zones: 追記も書き換えも削除も同じ線 (緩和の語 / 隠し / 歴史化の見出し) で見る。
+# 既存の節への追記は止めずに、 その tool の結果と一緒に隣の文を見せる / 消した・言い直した文は記録と返事に出る /
 # 止めた変更は denied-log に残る
 _edit_raw() {  # $1=old $2=new $3=file (repo 相対) -> hook の stdout そのまま
   jq -n --arg f "$REPO/$3" --arg o "$1" --arg n "$2" --arg c "$REPO" --arg t "$TR" \
@@ -165,17 +165,20 @@ _check "既存の節への追記は止まらない" "$(printf '%s' "$OUT" | grep
 _check "追記の直後、 tool の結果と一緒に隣の文と「既存の文は正しく残るか」 が届く (向きが逆の印つき)" \
   "$(printf '%s' "$OUT" | grep -c 'additionalContext.*レビューを経てから.*向きが逆.*言い直す' || true)" 1
 printf '%s\n' "$ADD" >> "$REPO/conventions/deploy.md"   # tool が書いたことにする
-_check "自分の未 commit の規則の文を消す推敲は止まらない (基準 = HEAD、 自分の記録にある文)" \
-  "$(_edit "$ADD
+_check "未 commit の文を消すのは止まらない" "$(_edit "$ADD
 " '' conventions/deploy.md)" none
-printf '%s\n' '別の session が足した文: 必ず確認する。' >> "$REPO/conventions/deploy.md"   # hook を通らず作業ツリーに現れた規則の文
-_check "記録に無い未 commit の規則の文 (別 session・本人・shell) を消すのは止まる" \
-  "$(_edit '別の session が足した文: 必ず確認する。
-' '' conventions/deploy.md)" deny
-_check "commit 済みの規則の文を逆向きにするのは止まる" "$(_edit 'レビューを経てから' 'レビューを経ずに' conventions/deploy.md)" deny
-_check "規則の文を別の文に置き換えるのは止まる" "$(_edit 'レビューを経てから deploy する。' 'deploy は担当が判断する。' conventions/deploy.md)" deny
-_check "規則を緩めない言い直し (6 割以上を残す) は止まらない" \
-  "$(_edit 'レビューを経てから deploy する。' 'レビューを経てから deploy する (実測: 3 分)。' conventions/deploy.md)" none
+_check "commit 済みの規則の文を逆向きにするのは止まらない (記録と返事に「前」→「後」)" \
+  "$(_edit 'レビューを経てから' 'レビューを経ずに' conventions/deploy.md)" none
+_check "規則の文を別の文に置き換えるのも消すのも止まらない (記録に「消した」)" \
+  "$(_edit 'レビューを経てから deploy する。' 'deploy は担当が判断する。' conventions/deploy.md)" none
+_check "その記録が additive-log に「消した」 として残る" \
+  "$([ "$(python3 "$ENGINE" additive-log 2>/dev/null | grep -c 'レビューを経てから deploy する')" -ge 1 ] && echo yes || echo no)" yes
+_check "緩める言い直し (既存の文に「でよい」 を足す) は止まる" \
+  "$(_edit 'レビューを経てから deploy する。' 'レビューを経てから deploy するのでよい。' conventions/deploy.md)" deny
+_check "既存の文を fence に入れるのは止まる" "$(_edit 'レビューを経てから deploy する。 手順は runbook。' '```
+レビューを経てから deploy する。 手順は runbook。
+```' conventions/deploy.md)" deny
+_check "見出しで下の行を過去のものにするのは止まる" "$(_edit '## Deploy' '## Deploy (旧手順、 参考)' conventions/deploy.md)" deny
 _check "説明の文の言い直し・削除は止まらない" "$(_edit ' 手順は runbook。' '' conventions/deploy.md)" none
 _check "止めた変更が denied-log に残る (2 件以上、 理由つき)" \
   "$([ "$(python3 "$ENGINE" denied-log 2>/dev/null | grep -c 'conventions/deploy.md ::')" -ge 2 ] && echo yes || echo no)" yes
