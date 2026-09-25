@@ -502,6 +502,16 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Check**: (a) 符号を持つ印字量を列挙し、 各々の外部 anchor と global-flip foil を表 (登録簿) にする。 (b) foil は**入力 (原稿) を反転して** end-to-end で当てる — parse した変数を script 内で反転する foil は parse の取り違えを見ない。 (c) 例外 (traceback) で落ちたのは歯ではない (assertion で落ちること)。 (d) 同型の不変量 = 全体規格化 (kernel-level と action-level の因子 2)、 因子 i、 Levi-Civita の向き、 D = 4 − ε と 4 − 2ε の違い。 比と恒等式に不変な量は全部同じ扱い (全体規格化でも同型の事故が起きうる。 決着は物理観測量の直接計算で付ける)。 機械 backstop = ai-collaboration の [`scripts/check-sign-anchors.py`](../../ai-collaboration/scripts/check-sign-anchors.py) (登録簿の coverage / `--run` = foil の歯を end-to-end で / `--fleet-scan` = fleet のどの検査が変換を見分けるか / `--readers` = どの検査が原稿 file をそもそも開くか / `--deferrals` = 下の carrier 無し「規約差」 の ratchet)。 (e) 「原稿を開く検査は何本か」 は実行時に数える (`--readers` = audit hook)。 source を file 名で grep すると docstring・コメントの言及まで拾って過大になる (起源事例では grep の数が実行時の十倍以上)。
 
+## <a id="closed-form-transcription-carries-its-metric"></a>検証 script の閉形式を数値 notebook に写すときは、 符号を「その閉形式の計量」 ごと写す — 確率の cross 項は $A_0^*A_1$ であって $A_0A_1$ ではない
+
+**Pattern** (実測、 2 件が同じ図で同居): (1) spinor 縮約の閉形式を mostly-minus で確立した検証 script が docstring に「原稿は mostly-plus なので −1 倍」 と書いていたのに、 数値 notebook にはその値が符号を落として写された。 縮約 $(\bar u_3\gamma^\mu u_1)(\bar u_4\gamma_\mu u_2)\to4P_1\cdot P_2$ は 4-vector の内積なので、 signature を変えると符号が反転する (spinor の位相規約には依らない)。 一次の振幅の全体符号が反転し、 零次 (散乱なし) 項との干渉が constructive ↔ destructive で入れ替わった。 大きさの検査 ($|A_1|^2$、 零次と一次の交点、 符号反転の位置) は全部 PASS のままなので、 fleet は何も言わない。 (2) 原稿が「零次の共役を掛ける」 と書きながら位相だけ落として分母の $(1+i\cdots)$ を共役し忘れ、 notebook が `A0 A1 + c.c.` をそのまま継承した。 $|A_0+A_1|^2$ の cross 項は $A_0^*A_1+{\rm c.c.}$ で、 二つは $A_0$ が位相を持つ帯 (波束の広がり因子 $\sim1$) でだけ違うため、 まさにその帯にある符号反転の位置と回数が変わっていた。
+
+**Rule**:
+
+1. 閉形式を別の文書・notebook に写すときは、 **その閉形式の計量・規約を値と一緒に運ぶ** (docstring の「原稿は −1 倍」 は写す側が当てる義務)。 写した先では、 符号を運ぶ量 (零次との相対符号 = 干渉の向き) に外部 anchor を 1 本置く: 一次項 $=iM$ なら $S=1+iT$ の規約で 斥力 ⇔ $M<0$ (同符号電荷の vector 交換の非相対論極限 $M=-(2m)^2\tilde V$)、 吸収 ⇔ 光学定理の $\mathrm{Im}\,M>0$ — [`#absolute-sign-external-anchor`](#absolute-sign-external-anchor) の一次振幅版。
+2. cross 項は $|A_0+A_1|^2-|A_0|^2-|A_1|^2$ を**別経路で数値評価して恒等式で assert** する (共役の取り違えは大きさの検査では出ない)。 図に $|A_0+A_1|^2$ 自体を 1 本足せば、 cross 項の符号が目で見える (足したことで (2) が露見した)。
+3. t-channel propagator の幅 $m^2\to m^2-im\Gamma$ が作る虚部は s-channel の吸収ではない: その符号は光学定理の制約の外にあり、 物理の吸収振幅と逆向きにもなる。 toy の幅由来の干渉の符号を物理の主張に使わない (使うなら振幅を物理の位相 〔$(\rho+i)\sigma_{\rm tot}$ 型〕 に置換する)。
+
 ## <a id="convention-difference-closure"></a>「規約差」 は写像を書いて閉じる — 語で済ませた符号の食い違いは unverified として carrier に載せる (2026-09-11)
 
 **Pattern**: 外部の値と符号が逆に出た食い違いを「Euclidean と Minkowski の規約差」 と書いて閉じる。 起源事例 (2026-09) では、 同じ Wick の符号が 3 か月で 3 回「規約」 として処理された。 ① 教科書に符号が載っている量を自前の計算機構で出して逆符号になり、 設計記録に「規約差、 絶対符号は規約の追跡が要る」 と書いて、 大きさの一致だけを採った。 ② signature の違う二つの独立計算の全体 −1 を、 signature に共通な別の由来の −1 と同定した。 裏付けに使った検査 (特定の成分だけを比べる) は添字の signature を消すが、 作用密度の全体符号 (Wick の −1) は添字に依らないので消さない — 残った −1 は Wick の符号だった。 同定の第一原理導出は「整合が閉じているので実害なし」 として残された。 ③ その −1 が signature の注記なしに原稿の辞書として印字され、 付録の検算と「同符号」 と確認された。 どの記録にも carrier (担当・期日・写像が書かれるまで落ち続ける検査) は無く、 「規約」 の語が open の食い違いを closed に見せた。 ① の時点で写像 (Euclidean の有効作用密度 = −Lorentzian の有効作用密度) を 1 行書いていれば、 ② の数値一致と合わせて正しい辞書がその場で決まっていた。
