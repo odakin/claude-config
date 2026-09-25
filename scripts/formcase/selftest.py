@@ -376,6 +376,7 @@ def run() -> int:
         _recipe_tests(tmp, inst, expect)
         _excel_tests(tmp, expect)
         _layout_tests(tmp, expect)
+        _fidelity_tests(tmp, inst, expect)
         _view_lint_tests(tmp, expect)
         _case_readme_tests(tmp, expect)
         _value_from_tests(tmp, expect)
@@ -1201,7 +1202,74 @@ def _layout_tests(tmp, expect) -> None:
            and any('"$A$1:$AH$60"' in x for x in lines) and any("fit to pages tall" in x for x in lines)
            and any("black and white" in x for x in lines), lines[:3])
     expect("ops_lines: 未対応の体裁の変更は止める (黙って落とさない)",
-           _raises(XL.ExcelError, XL.ops_lines, MAIN, [("border_bottom", "A1", "thin")]))
+           _raises(XL.ExcelError, XL.ops_lines, MAIN, [("nope", "A1", "thin")]))
+    bl = XL.ops_lines(MAIN, [("border_bottom", "B93:AG93", "thin"), ("border_top", "C11:AE11", None), ("delete_shape", "楕円 2")])
+    expect("ops_lines: 罫線 (style / 消す) と図形の削除を AppleScript に (D2 = Excel の操作の経路)",
+           any("which border edge bottom" in x and "continuous" in x for x in bl)
+           and any("border weight thin" in x for x in bl)
+           and any("which border edge top" in x and "line style none" in x for x in bl)
+           and any(x == 'delete shape "楕円 2" of worksheet "' + MAIN + '" of wbk' for x in bl), bl)
+    si = XL.ops_lines(MAIN, [("shape_insets", "正方形/長方形 1", 4.37, 4.37)])
+    expect("ops_lines: 図形の枠の余白 (shape_insets) = 名前で引いて margin left / right",
+           len(si) == 2 and all('text frame of shape "正方形/長方形 1"' in x for x in si) and "margin left" in si[0], si)
+    expect("ops_lines: 未知の罫線 style は止める", _raises(XL.ExcelError, XL.ops_lines, MAIN, [("border_bottom", "A1", "wavy")]))
+    expect("ops_lines: one_page は手動改ページも消す", any("reset all page breaks" in x for x in XL.ops_lines(MAIN, [("one_page",)])))
+    # 罫線の差分は行ごとの range に (結合の内側は続きとみなす)。 drop_shape は delete_shape に
+    snap6 = LY.snapshot(ws5, "A1:AH60")
+    LY._set_bottom(ws5["A60"], "thin")
+    for col in "BCDEFG":
+        try:
+            LY._set_bottom(ws5[f"{col}60"], "thin")
+        except AttributeError:
+            pass
+    w5.__dict__.setdefault("_formcase_drop_shapes", {})[MAIN] = {"楕円 2"}
+    ops6 = LY.excel_ops(snap6, ws5, "A1:AH60")
+    bo = [o for o in ops6 if o[0] == "border_bottom"]
+    expect("excel_ops: 下罫線の変更を行ごとの range にまとめ、 drop_shape を delete_shape に",
+           ops6 and ops6[0] == ("delete_shape", "楕円 2") and len(bo) >= 1 and bo[0][1].startswith("A60:")
+           and all(o[2] == "thin" for o in bo), ops6[:6])
+    expect("bbox: page の list を 1 つの range に", LY.bbox(["A1:AH60", "A61:AH118"]) == "A1:AH118" and LY.bbox("B2:C3") == "B2:C3")
+
+
+def _fidelity_tests(tmp, inst, expect) -> None:
+    """雛形との照合の段 (fidelity): D1 = 素刷りより画像が少なければ止める / D5 = 雛形が bind の記録と違えば止める。"""
+    import json
+
+    from . import fidelity as FD
+
+    def rep(images, missing=0):
+        return {"targets": [{"sheet": MAIN, "range": "A1:AH60", "page": 0, "checked": 3, "missing": [{"name": "t", "text": "x"}] * missing,
+                             "labels_checked": 5, "missing_labels": [], "blank": {"images": images}, "extra": []}],
+                "missing_total": missing}
+
+    lines, stop = FD.report_lines(rep((5, 3)), {"meta": {}})
+    expect("D1: 素刷りより画像が少ない = 🔴 + 止める (宣言なし)",
+           stop is not None and "画像" in stop and any(x.startswith("🔴") and "5 → 3" in x for x in lines), (lines, stop))
+    lines, stop = FD.report_lines(rep((5, 3)), {"meta": {"accept_loss": [{"kind": "form control", "why": "openpyxl の temp"}]}})
+    expect("D1: accept_loss に form control を宣言した様式だけ ⚠️ (止めない)",
+           stop is None and any(x.startswith("⚠️") and "5 → 3" in x for x in lines), (lines, stop))
+    lines, stop = FD.report_lines(rep((5, 5)), None)
+    expect("D1: 画像が素刷りと同じなら ✅ (spec 無しでも落ちない)", stop is None and any("画像 5 = 素刷り" in x for x in lines), lines)
+    lines, stop = FD.report_lines(rep((5, 3), missing=2), None)
+    expect("D1: 図形の字の欠けが先 (止める理由は図形の字)", stop is not None and "図形の字" in stop, stop)
+    # D5: bind の記録
+    spec = S.get("fx")
+    bf = FD.bind_file(spec)
+    try:
+        FD.write_bind(spec, blank=False)
+        l1, d1 = FD.bind_lines(spec)
+        rec = json.loads(bf.read_text(encoding="utf-8"))
+        rec["template_sha256"] = "0" * 64
+        bf.write_text(json.dumps(rec), encoding="utf-8")
+        l2, d2 = FD.bind_lines(spec)
+        bf.unlink()
+        l3, d3 = FD.bind_lines(spec)
+        expect("D5: bind の記録どおり = ✅ / 違う = ⚠️ + 止める / 記録なし = ⚪ で止めない",
+               (not d1 and l1[0].startswith("✅")) and (d2 and l2[0].startswith("⚠️") and "bind fx" in l2[0])
+               and (not d3 and l3[0].startswith("⚪")), (l1, l2, l3))
+    finally:
+        if bf.exists():
+            bf.unlink()
 
 
 # ---------------------------------------------------------------------------

@@ -68,7 +68,7 @@ def static_text_lines(spec: dict, group: str, pdf, filled=None, blank=None) -> t
     filled = 体裁を当てた temp (無ければ案件の workbook) / blank = 素刷り。 docx 様式は雛形 docx で照合。
     検査が走らなかった時も黙らず ⚪ の行を出す (止めない = 検査の故障を違反と同じにしない)。"""
     rep = FD.check_group(spec, group, pdf, filled=filled, blank=blank)
-    return FD.report_lines(rep)
+    return FD.report_lines(rep, spec)
 
 
 def _run(argv, label):
@@ -437,6 +437,49 @@ class Recipe:
         return [("clip", c) for c in res["clip"]] + [("overflow", o) for o in res["overflow"]]
 
 
+def excel_chunks_pdf(workbook, sheet: str, chunks, lines, tmp, tag):
+    """Excel の操作の経路 (D2): 案件の workbook の copy を chunks (紙 1 枚ずつの range) ごとに、 lines (体裁 + 他 sheet の
+    非表示、 excel.ops_lines の行) + 印刷範囲 + 1 枚に収める、 を staged copy に当てて PDF にし、 並べる。
+    openpyxl で保存しない = 図形・form control・数式の cache が案件の workbook のまま紙に出る。"""
+    import fitz
+
+    jobs = []
+    for k, area in enumerate(chunks):
+        x = Path(tmp) / f"{tag}_{k}.xlsx"
+        shutil.copy2(workbook, x)                        # 同じ名前の workbook は 1 つの staging dir に置けない
+        jobs.append((x, Path(tmp) / f"{tag}_{k}.pdf", list(lines) + X.ops_lines(sheet, [("print_area", area), ("one_page",)])))
+    X.export_pdfs(jobs)
+    out = fitz.open()
+    for (_x, p, _o), area in zip(jobs, chunks):
+        d = fitz.open(p)
+        if d.page_count != 1:
+            raise BuildError(f"{sheet} {area} が紙 1 枚にならない ({d.page_count} page)")
+        out.insert_pdf(d)
+    raw = Path(tmp) / f"{tag}.pdf"
+    out.save(raw)
+    return raw
+
+
+def hide_lines(wb, keep) -> list:
+    """keep (sheet 名の list) 以外の sheet を非表示にする行 (= 刷らない。 削除しない = 参照の数式を壊さない)。"""
+    keep = {str(s).strip() for s in keep}
+    hide = [n for n in wb.sheetnames if n.strip() not in keep]
+    return X.ops_lines(wb.sheetnames[0], [("hide_sheet", n) for n in hide])
+
+
+def fit_shape_lines(workbook, sheets) -> list:
+    """雛形の 1 行の label (様式番号等) が枠に入り切らず末尾が消える図形の余白を縮める行 (drawings.single_line_insets =
+    移植の経路の ``_fit_single_line`` と同じ判定。 sheets = 刷る sheet の名前)。 図形の無い workbook は空。"""
+    from . import drawings as DR
+
+    want = {str(s).strip() for s in sheets}
+    lines = []
+    for name, fixes in DR.single_line_insets(workbook).items():
+        if name.strip() in want:
+            lines += X.ops_lines(name, [("shape_insets", n, pt, pt) for n, pt in fixes])
+    return lines
+
+
 def _chunks_pdf(wb, sheet, chunks, tmp, tag):
     """sheet だけが残った wb を、 chunks (紙 1 枚ずつの range) ごとに 1 枚に収めて Excel で PDF にし、 並べる。"""
     import fitz
@@ -612,8 +655,12 @@ def _build(m, doc_id, groups, out_dir=None) -> dict:
     GT.run_scoped(m, doc_id, groups)                     # FAIL なら BuildError
     from . import docx_form as DF
 
-    for line in FD.bind_lines(spec)[0]:                  # 雛形の identity (bind の記録と同じか。 違えば ⚠️ = 改訂された)
+    bind_msgs, bind_differs = FD.bind_lines(spec)        # 雛形の identity (bind の記録と同じか)
+    for line in bind_msgs:
         print("   " + line)
+    if bind_differs:                                     # D5 (2026-09-25): 違えば止める = 雛形が改訂・差し替わった (または無い)
+        raise BuildError(f"雛形が bind の記録と違う (または無い) → 出力を書かない。 `formcase.py bind {spec['meta']['id']}` で"
+                         " sha256 と素刷りを記録し直し、 差 (見出し・図形・欄) を見てから build (form-case-pipeline.md#fidelity)")
     _CURRENT.update({"spec": spec, "temp": None})
     written = {}
     with tempfile.TemporaryDirectory(prefix="formcase-build-") as td:

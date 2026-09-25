@@ -193,11 +193,15 @@ def check_group(spec: dict, group: str, pdf, filled=None, blank=None) -> dict:
         return {"error": r.stdout[-300:]}
 
 
-def report_lines(rep: dict) -> tuple:
-    """(表示の行, 止める理由 or None)。 図形の字の欠け = 止める (J1)。 見出し・画像 = ⚠️、 増えた字 = ⚪。"""
+def report_lines(rep: dict, spec: dict | None = None) -> tuple:
+    """(表示の行, 止める理由 or None)。 図形の字の欠け = 止める (J1)。 素刷りより画像が少ない (checkbox の箱・図が
+    紙に無い) = 止める (D1、 2026-09-25。 spec の ``meta.accept_loss`` に form control を理由つきで宣言した様式 =
+    openpyxl の temp で箱を落とすと決めた様式だけ ⚠️)。 見出し = ⚠️、 増えた字 = ⚪。"""
     if "error" in rep:
         return [f"⚪ 雛形との照合が走らなかった: {rep['error']}"], None
     lines = []
+    image_loss = []
+    accepted_images = "form control" in accept_loss(spec)
     for r in rep["targets"]:
         where = f"{r['sheet'].strip()}!{r['range']}"
         if r["page"] is None and (r["checked"] or r["labels_checked"]):
@@ -208,19 +212,32 @@ def report_lines(rep: dict) -> tuple:
             lines.append(f"🔴 {where}: 雛形の図形の字が無い {len(r['missing'])}/{r['checked']} — {ms}")
         elif r["checked"]:
             lines.append(f"✅ {where}: 図形の字 {r['checked']} 段落")
+        if r.get("template_defect"):
+            ms = ", ".join(f"{m['name']}「{m['text'][:20]}」" for m in r["template_defect"])
+            lines.append(f"⚪ {where}: 雛形自身の欠陥 = 素刷りにも無い字 {len(r['template_defect'])} 段落 (枠が字幅に足りない等、"
+                         f" formcase.py bind が一覧に出す) — {ms}")
+        def ok(text):        # 同じ対象の ✅ 行に足す (無ければ新しい ✅ 行)
+            if lines and lines[-1].startswith(f"✅ {where}:"):
+                lines[-1] += f"、 {text}"
+            else:
+                lines.append(f"✅ {where}: {text}")
+
         if r["labels_checked"]:
             if r["missing_labels"]:
                 ms = ", ".join(f"{m['cell']}「{m['text'][:14]}」" for m in r["missing_labels"][:6])
                 lines.append(f"⚠️ {where}: 雛形の見出し (書き換えていない cell) が紙に無い {len(r['missing_labels'])}/{r['labels_checked']} — {ms}")
             else:
-                lines[-1:] = [lines[-1] + f"、 見出し {r['labels_checked']} cell"] if lines and lines[-1].startswith("✅") else lines + [f"✅ {where}: 見出し {r['labels_checked']} cell"]
+                ok(f"見出し {r['labels_checked']} cell")
         b = r.get("blank")
         if b and b.get("images") is not None:
             bi, oi = b["images"]
             if oi < bi:
-                lines.append(f"⚠️ {where}: 素刷りより画像が少ない {bi} → {oi} (checkbox の箱・図が紙に無い)")
+                mark = "⚠️" if accepted_images else "🔴"
+                lines.append(f"{mark} {where}: 素刷りより画像が少ない {bi} → {oi} (checkbox の箱・図が紙に無い)")
+                if not accepted_images:
+                    image_loss.append(f"{where} {bi} → {oi}")
             else:
-                lines[-1:] = [lines[-1] + f"、 画像 {oi} = 素刷り"] if lines and lines[-1].startswith("✅") else lines + [f"✅ {where}: 画像 {oi} = 素刷り"]
+                ok(f"画像 {oi} = 素刷り")
         if r.get("extra"):
             lines.append(f"⚪ {where}: 雛形にも記入値にも無い字 {len(r['extra'])} 片: "
                          + ", ".join(f"「{x[:10]}」" for x in r["extra"][:4]) + (" …" if len(r["extra"]) > 4 else ""))
@@ -228,6 +245,11 @@ def report_lines(rep: dict) -> tuple:
     if rep.get("missing_total"):
         stop = (f"雛形の図形の字が PDF に無い ({rep['missing_total']} 段落) = 紙から見出し (区分の枠・様式番号・㊞ など) が消える。 "
                 "刷らないと決めた図形なら spec の render: drop_shape に理由つきで (form-case-pipeline.md#fidelity)")
+    elif image_loss:
+        stop = (f"素刷りより画像が少ない ({'; '.join(image_loss)}) = checkbox の箱・図が紙に無い (D1、 2026-09-25 から止める)。 "
+                "Excel の操作の経路なら案件の workbook の図形・form control を雛形と比べる (openpyxl で保存した workbook は"
+                "箱を失う = formcase.py normalize でなく雛形から作り直す)。 openpyxl の temp の経路で箱を落とすと決めた様式だけ"
+                " spec の meta.accept_loss に form control を理由つきで (⚠️ に下がる、 form-case-pipeline.md#fidelity)")
     return lines, stop
 
 
