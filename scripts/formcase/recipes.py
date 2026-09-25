@@ -72,9 +72,23 @@ def static_text_lines(spec: dict, group: str, pdf, filled=None, blank=None) -> t
     return lines, stop, rep
 
 
+def case_is_scratch(case_dir, out_dir=None) -> bool:
+    """照合用の build か = --out-dir で案件 dir に書かない build、 または案件 dir が設定の case_roots の外 (repo の外に複製した
+    案件 = 検収・実験の build)。 D3 の「案件の数」 に数えない印 (fidelity_log の scratch)。"""
+    if out_dir:
+        return True
+    try:
+        cd = Path(case_dir).resolve()
+        roots = [Path(r).resolve() for r in CF.case_roots()]
+    except Exception:  # noqa: BLE001  設定が無い等 = 判断できない → 数える側に倒さない
+        return True
+    return not any(cd == r or r in cd.parents for r in roots)
+
+
 def log_fidelity(m, doc_id: str, group: str, rep: dict, stop, out_dir) -> None:
     """雛形との照合の結果を設定 ``fidelity_log`` (jsonl) に 1 行足す (D3 の carrier = 見出しの ⚠️ / ✅ が案件ごとに残り、
-    誤検出の実測が溜まる。 読み手 = 呼び元の dashboard)。 設定が無ければ何もしない。 書けなくても build は止めない。"""
+    誤検出の実測が溜まる。 読み手 = 呼び元の dashboard)。 設定が無ければ何もしない。 書けなくても build は止めない。
+    scratch = 照合用 (--out-dir) か repo の外に複製した案件の build (= 案件の数に数えない、 検収 2026-09-25 の指摘)。"""
     import datetime as _dt
     import json
 
@@ -82,7 +96,7 @@ def log_fidelity(m, doc_id: str, group: str, rep: dict, stop, out_dir) -> None:
     if not path or not isinstance(rep, dict) or "targets" not in rep:
         return
     rec = {"date": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "case": Path(m.case_dir).name, "doc": doc_id,
-           "group": group, "scratch": bool(out_dir), "stop": bool(stop),
+           "group": group, "scratch": case_is_scratch(m.case_dir, out_dir), "stop": bool(stop),
            "targets": [{"where": f"{t['sheet'].strip()}!{t['range']}", "page": t.get("page"),
                         "shapes": t.get("checked", 0), "missing": len(t.get("missing") or []),
                         "labels": t.get("labels_checked", 0), "missing_labels": len(t.get("missing_labels") or []),

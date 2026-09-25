@@ -1252,6 +1252,13 @@ def _fidelity_tests(tmp, inst, expect) -> None:
     expect("D1: 画像が素刷りと同じなら ✅ (spec 無しでも落ちない)", stop is None and any("画像 5 = 素刷り" in x for x in lines), lines)
     lines, stop = FD.report_lines(rep((5, 3), missing=2), None)
     expect("D1: 図形の字の欠けが先 (止める理由は図形の字)", stop is not None and "図形の字" in stop, stop)
+    # D3: 照合の記録の scratch = --out-dir か、 案件 dir が case_roots の外 (repo の外に複製した案件 = 数えない)
+    from . import recipes as RC
+
+    root_case = next((Path(r) for r in CF.case_roots()), None)
+    expect("D3: case_is_scratch = --out-dir なら True / case_roots の外なら True / 中なら False",
+           RC.case_is_scratch(tmp / "x", out_dir="/tmp/o") and RC.case_is_scratch(tmp / "outside" / "case")
+           and (root_case is None or not RC.case_is_scratch(root_case / "2026-01-01-case")), (root_case, CF.case_roots()))
     # D5: bind の記録
     spec = S.get("fx")
     bf = FD.bind_file(spec)
