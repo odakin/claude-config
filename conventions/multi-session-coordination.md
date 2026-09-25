@@ -609,6 +609,8 @@ orientation 直後の silent stall (session は running のまま・活動 times
    料金の比 (Claude API の定価、 一次情報 = API の価格表): Fable 5.1 は Opus 5.5 の 2.5 倍、 Opus 5 の 2 倍 (入力・出力とも)。 定額の app でも premium の budget と 1 turn の時間 (Fable の turn は長い) を払う。
 4. **逆向きの兆候** (下位 tier に難しすぎた): 成果物が依頼書を言い換えて終わる / 節どうしが矛盾する / 「確認した」 に証拠が無い / 依頼書に答えのある blocker を何度も返す / 受領側で導出し直す羽目になる。 出たら上位 tier の session に回すか本人に聞く。
 
+<a id="named-recipient-is-a-live-session"></a>**本人が model 名や session の呼び名で宛先を言ったら (「X に投げて」)、 まず今動いている session を探す**: 直前にその model・その名前で仕事を返した session が生きていれば、 本人が指しているのはたいていその session で、 新しい session ではない (続きを頼むなら文脈を持つ相手に渡すのが自然)。 送る前に `ListAgents` (と `scripts/session-model.py`) でその名前の session を探し、 居ればその session に頼む (掲示板の request は同じく立て、 宛先の role / session で claim してもらい、 `SendMessage` で 1 行)。 居ない・複数居て決まらない時だけ新しい session を前提にし、 そう言ってから貼る文面を出す。 実測: 前の仕事を返したばかりの session を指した依頼を、 新しい session に貼る文面として返して本人に聞き直させた。
+
 ---
 
 ## <a id="remote-handoff-constraints"></a>11. リモート session への hand-off — 物理不在で完了できない step の全分岐着地設計
