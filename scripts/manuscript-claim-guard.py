@@ -1534,7 +1534,7 @@ def stop_check(agent: str, event: dict) -> str | None:
 
     def short(q: str) -> str:
         q = collapse_ws(q)
-        return q if len(q) <= 40 else q[:40] + "…"
+        return q if len(q) <= 20 else q[:20] + "…"  # the check reads the first 20 characters
 
     parts = []
     if left:
@@ -1543,13 +1543,12 @@ def stop_check(agent: str, event: dict) -> str | None:
             by_quote.setdefault(str(a.get("quote", "")), []).append(a)
         lines = []
         for q, items in by_quote.items():
-            files = sorted({str(a.get("file")) for a in items})
-            changes = list(dict.fromkeys(str(a.get("change", "")) for a in items if a.get("change")))
-            lines.append(f"- 「{short(q)}」 を {', '.join(files)} の承認として記録した: " + " / ".join(changes))
+            files = sorted({Path(str(a.get("file"))).name for a in items})
+            lines.append(f"- 「{short(q)}」 を {', '.join(files)} の承認として記録した")
         parts.append("このターンで著者の発言を承認として記録したが、 最後の返事にそれを書いていない"
-                     " (著者が見ないまま記録だけが残る)。 次の行を返事に入れる (発言 1 つにつき 1 行、 file を並べる):\n" +
-                     "\n".join(lines) +
-                     "\n引いた発言と file 名が同じ行にあれば足りる。 違う意味で引いていたら、 そう書いて著者の判断を仰ぐ。")
+                     " (著者が見ないまま記録だけが残る)。 次の行をそのまま返事に入れる (発言 1 つにつき 1 行。 file 名だけで足り、"
+                     " 変更の説明は要らない):\n" + "\n".join(lines) +
+                     "\n引いた発言の先頭と file 名が同じ行にあれば足りる。 違う意味で引いていたら、 そう書いて著者の判断を仰ぐ。")
     if left_add:
         parts.append("承認なしで規則の文書に追記したが、 最後の返事にそれを書いていない (本人の目に入らないまま入る)。"
                      " 次の行を返事に入れる:\n" + "\n".join(additive_line(e) for e in left_add) +
@@ -2512,8 +2511,8 @@ def approve_mode(args: argparse.Namespace) -> int:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
     print(f"approve: 記録した = {rel} :: {', '.join(args.region)} (著者の発言 {hit[0] or '時刻不明'} 「{said}」)")
     shown = collapse_ws(quote)
-    shown = shown if len(shown) <= 40 else shown[:40] + "…"
-    print(f"  このターンの最後の返事に書く (Stop が確かめる): 「{shown}」 を {rel} の承認として記録した")
+    shown = shown if len(shown) <= 20 else shown[:20] + "…"
+    print(f"  このターンの最後の返事に書く (Stop が確かめる、 これだけで足りる): 「{shown}」 を {Path(rel).name} の承認として記録した")
     return 0
 
 
@@ -3448,6 +3447,9 @@ def selftest() -> int:
         out = stop_check("claude", s_ev)
         check("Stop: 記録した承認を最後の返事に書いていなければ差し戻す",
               s_rec and out is not None and json.loads(out)["decision"] == "block" and "main.tex" in json.loads(out)["reason"])
+        check("Stop の案内の行は発言の先頭と file 名だけ (変更の説明や path を並べない)",
+              "- 「この案で表題を変えてよい」 を main.tex の承認として記録した\n" in json.loads(out)["reason"]
+              and "src/main.tex" not in json.loads(out)["reason"])
         check("Stop: 2 回目 (stop_hook_active) は通す", stop_check("claude", dict(s_ev, stop_hook_active=True)) is None)
         check("Stop: 発言と file 名が別の行なら書いたことにしない",
               stop_check("claude", dict(s_ev, last_assistant_message=f"「{s_said}」 を記録した\nfile = main.tex")) is not None)
