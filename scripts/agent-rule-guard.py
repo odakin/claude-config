@@ -96,6 +96,44 @@ RELAX_TERMS_EN = (
 RELAX_MARKUP = ("<!--", "-->", "~~", "<div", "<span", "<details", "<style", "<script", "<template", "<noscript",
                 "<iframe", "​", "‌", "‍", "⁠", "﻿", "­")
 _RELAX_EN_RE = re.compile(r"(?<![A-Za-z])(" + "|".join(re.escape(t) for t in RELAX_TERMS_EN) + r")(?![A-Za-z])", re.I)
+# Listed terms that are also everyday words count only in the position where they relax a rule (measured on two
+# months of committed additions: the bare substring fired on a form's revision, a file overwrite, a Python exception,
+# a physics constraint, "X とは違う", "…てよい種類"). The position is decided per unit (sentence), not by shrinking the
+# list; a term absent from this table keeps the plain substring match (over-matching on purpose).
+_NOUN_NEXT = r"(?=[一-鿿ァ-ヺA-Za-z0-9])"  # the term modifies a following noun (attributive) — not a statement
+_RULE_NOUN = r"(?:規則|規約|ルール|方針|本節|本書|本 ?file|この節|上の節|前の節|手順|設定|指示|検査|gate|hook|rule|policy)"
+_OBLIGATION = r"(?:確認|承認|裁定|許可|同意|OK|検査|記録|報告|連絡|返事|返送|review|test|verify|承諾)"
+RELAX_FORMS: dict[str, re.Pattern] = {
+    # a permission is a predicate; before a noun it is an attribute ("減ってよい種類")
+    **{t: re.compile(re.escape(t) + r"(?![一-鿿ァ-ヺA-Za-z0-9])") for t in (
+        "してよい", "しても良い", "してもよい", "でよい", "でもよい", "て良い", "ても良い", "で良い", "なくてよい",
+        "てよい", "ていい", "てもいい")},
+    "とは": re.compile(r"(?<!こ)とは[、,]?[^。．]*?(?:を指す|をいう|を言う|である|の意味|を意味|と定義|と呼ぶ|の略|のこと)"),
+    "改訂": re.compile(r"^\s*#{1,6}\s.*改訂|改訂版|[(（]\s*(?:\d{4}-\d{2}-\d{2}\s*)?改訂|" + _RULE_NOUN + r"[^。．]{0,12}改訂|改訂(?:して|しても)?(?:よい|良い|いい|可)"),
+    "改定": re.compile(r"^\s*#{1,6}\s.*改定|改定版|[(（]\s*(?:\d{4}-\d{2}-\d{2}\s*)?改定|" + _RULE_NOUN + r"[^。．]{0,12}改定|改定(?:して|しても)?(?:よい|良い|いい|可)"),
+    "更新)": re.compile(r"[(（]\s*(?:\d{4}-\d{2}-\d{2}\s*)?更新\s*[)）]"),
+    "例外": re.compile(r"(?<!想定外の)例外(?!なし|無し|なく|を認めない|は無い|はない|ではない|の型|を catch|を捕|が出|で落ち|を投げ|が上が|を握)"),
+    "上書き": re.compile(_RULE_NOUN + r"(?:を|は|も|ごと)?[^。．]{0,4}上書き"),
+    "除外": re.compile(r"^\s*#{1,6}\s.*除外|(?:" + _RULE_NOUN + r"|対象|範囲|保護|lock|禁止|必須|要件|条件)(?:を|から|は|も)[^。．]{0,4}除外"),
+    "除く": re.compile(r"(?:" + _RULE_NOUN + r"|対象|範囲|保護|lock|禁止|必須|要件|条件)(?:を|から|は|も)[^。．]{0,4}除く"),
+    "除いて": re.compile(r"(?:" + _RULE_NOUN + r"|対象|範囲|保護|lock|禁止|必須|要件|条件)(?:を|から|は|も)[^。．]{0,4}除いて"),
+    "なしで": re.compile(_OBLIGATION + r"\s*なしで"),
+    "限らない": re.compile(r"(?<!と)(?<!とは)限らない"),  # "に限らない" widens scope; "とは限らない" is epistemic
+    "無視": re.compile(r"無視(?:する。|する$|してよい|して良い|していい|できる|可|し、|して、)"),
+    "拘束": re.compile(r"拘束(?:しない|されない|されず|力|は無い|はない|を外|を解)"),
+    "無効": re.compile(r"無効(?:に|と)(?:する|して|なる)|無効化(?:する|して|できる|可)"),
+    "任意": re.compile(r"任意(?![一-鿿ァ-ヺA-Za-z0-9])(?!の)"),
+    "優先": re.compile(r"優先(?!順|度|化|席|権|的)"),
+}
+
+
+def _relax_term_in_unit(term: str, unit: str) -> bool:
+    form = RELAX_FORMS.get(term)
+    if form is None:
+        return term in unit
+    if term not in unit:
+        return False
+    return form.search(unit) is not None
 _SENTENCE_END_RE = re.compile(r"(?<=[。．])")
 _HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.*?)[ \t#]*$")
 _FENCE_RE = re.compile(r"^[ \t]*(```|~~~)")
@@ -251,13 +289,24 @@ def mask_free_zones(text: str) -> str:
     return "".join(out)
 
 
-def relax_hit(text: str) -> str | None:
-    """First relaxation-shaped term in inserted text, or None."""
-    for term in RELAX_MARKUP + RELAX_TERMS_JA:
-        if term in text:
-            return term
-    m = _RELAX_EN_RE.search(text)
-    return m.group(1) if m else None
+def relax_hit(text: str | list[str]) -> str | None:
+    """First relaxation-shaped term in inserted text, or None.
+
+    A list is judged unit by unit (position rules in RELAX_FORMS need the sentence);
+    a string is one unit. Markup and invisible characters always count.
+    """
+    units = [text] if isinstance(text, str) else text
+    for unit in units:
+        for term in RELAX_MARKUP:
+            if term in unit:
+                return term
+        for term in RELAX_TERMS_JA:
+            if _relax_term_in_unit(term, unit):
+                return term
+        m = _RELAX_EN_RE.search(unit)
+        if m:
+            return m.group(1)
+    return None
 
 
 def _units(text: str) -> list[tuple[str, int]]:
@@ -347,10 +396,83 @@ def insertion_only(old: str, new: str) -> tuple[bool, str, str]:
     kept = set(good)
     inserted = [u for j, (u, _) in enumerate(nu) if j not in kept and u != "\n"]
     text = " ".join(inserted)
-    hit = relax_hit(text)
+    hit = relax_hit(inserted)
     if hit:
         return False, f"足した文に緩和の語「{hit}」がある", text
     return True, "", text
+
+
+# Directives and their polarity, for reporting where an addition sits next to an existing rule about the same thing.
+_DIRECTIVE_NEG = re.compile(r"止めない|通さない|しない|せず|ずに|できない|要らない|不要|禁止|ならない|してはいけない|ない。|never|(?<![A-Za-z])not(?![A-Za-z])|(?<![A-Za-z])no(?![A-Za-z])")
+_DIRECTIVE_POS = re.compile(r"止める|止まる|通す|必須|要る|拒否|deny|block|must|allow|する。|すること")
+_TOKEN_STRONG = re.compile(r"`([^`]+)`|\*\*([^*]+)\*\*|id=\"([^\"]+)\"|#([A-Za-z][A-Za-z0-9_-]{3,})")
+_TOKEN_WORD = re.compile(r"[一-鿿ァ-ヺ]{2,}|[A-Za-z][A-Za-z0-9_-]{3,}")
+_TOKEN_STOP = {"実測", "追記", "場合", "変更", "対象", "規則", "本人", "自分", "以下", "以上", "参照", "正本", "一般",
+               "一般則", "確認", "記録", "判断", "操作", "経路", "結果", "目的", "実装", "宣言", "機構", "瞬間", "時間",
+               "file", "path", "repo", "session", "tool", "hook", "script", "python", "commit", "agent", "claude",
+               "claude-config", "conventions", "docs", "scripts", "plans", "json", "yaml", "settings", "readme"}
+_LINK_TARGET = re.compile(r"\]\([^)]*\)")  # a link's path is not what the sentence is about
+
+
+def _tokens(unit: str) -> tuple[set[str], set[str]]:
+    strong = {next(g for g in m.groups() if g) for m in _TOKEN_STRONG.finditer(unit)}
+    plain = _LINK_TARGET.sub("]", unit)
+    for s in strong:
+        plain = plain.replace(s, " ")
+    words = {w for w in _TOKEN_WORD.findall(plain) if w.lower() not in _TOKEN_STOP}
+    return strong, words
+
+
+def _polarity(unit: str) -> int:
+    """+1 directive, -1 negated directive, 0 no directive found."""
+    if _DIRECTIVE_NEG.search(unit):
+        return -1
+    if _DIRECTIVE_POS.search(unit):
+        return 1
+    return 0
+
+
+def insertion_profile(old: str, new: str) -> list[dict]:
+    """Where each inserted unit sits, and the existing unit about the same thing next to it (detection, not a verdict).
+
+    Each row: {"text", "line", "placement": "in-line" | "new-line" | "new-section", "near": existing unit text or "",
+    "shared": sorted tokens both mention, "flip": both carry a directive of opposite polarity}. "in-line" = appended
+    to a line that already had units; "new-line" = a new line under a heading that already existed; "new-section" =
+    under a heading the change created. Empty when the change is not an insertion (the caller judges that first).
+    """
+    ou, nu = _units(old), _units(new)
+    oc, nc = _line_contexts(old), _line_contexts(new)
+    for rev in (False, True):
+        a = _greedy_alignment([u for u, _ in ou], [u for u, _ in nu], rev)
+        if a is not None and all(ou[i][0] == "\n" or oc[ou[i][1]] == nc[nu[j][1]] for i, j in enumerate(a)):
+            break
+    else:
+        return []
+    kept = set(a)
+    kept_lines = {nu[j][1] for j in kept if nu[j][0] != "\n"}
+    old_heads = {ctx[0] for ctx in oc}
+    existing = [(j, nu[j][0], nu[j][1]) for j in kept if nu[j][0] != "\n"]
+    rows = []
+    for j, (u, ln) in enumerate(nu):
+        if j in kept or u == "\n":
+            continue
+        head = nc[ln][0]
+        placement = ("in-line" if ln in kept_lines else
+                     "new-section" if head and head not in old_heads else "new-line")
+        strong, words = _tokens(u)
+        best, best_score, shared_best = "", 0, []
+        for _, eu, eln in existing:
+            if nc[eln][0] != head:
+                continue
+            es, ew = _tokens(eu)
+            shared = sorted(strong & es) + sorted(words & ew)
+            score = 3 * len(strong & es) + len(words & ew) - abs(eln - ln) / 100
+            if score > best_score and (strong & es or len(words & ew) >= 2):
+                best, best_score, shared_best = eu, score, shared
+        pu, pn = _polarity(u), _polarity(best) if best else 0
+        rows.append({"text": u, "line": ln, "placement": placement, "near": best, "shared": shared_best,
+                     "flip": bool(best) and pu != 0 and pn != 0 and pu != pn})
+    return rows
 
 
 def insertion_exemption(path: str, old: str, new: str,
@@ -797,6 +919,55 @@ def selftest() -> int:
         check("a relaxation-shaped insertion needs approval: " + name,
               exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is False)
     check("CLAUDE.md is a prose policy document", exempt("CLAUDE.md", doc, grown["a new section at the end"]) is True)
+    # Position rules (RELAX_FORMS): everyday uses of listed terms pass; the relaxing position still needs approval.
+    # Old implementation (plain substring): every "passes" case below was sent to approval.
+    for name, inserted in (("a form's revision", "様式が改訂されても同じ手順で埋める。"),
+                           ("a comparison, not a definition", "頁番号は冊子のもので、 PDF の何枚目かとは違う。"),
+                           ("a noun phrase, not a permission", "減ってよい種類は前の版の実測で決まる。"),
+                           ("an exclusion list as data", "対象 repo と除外は呼び元が渡す。"),
+                           ("a Python exception", "想定外の例外は 3 に落として表示する。"),
+                           ("a file overwrite", "写し先の PDF は上書きしない。"),
+                           ("epistemic", "末尾が直近の run とは限らないので拾わない。"),
+                           ("a physics constraint", "消すと δ 汎関数 (= 拘束) が出る。"),
+                           ("arbitrary", "任意の file を渡せる。"),
+                           ("a priority order", "重大度の優先順で並べる。"),
+                           ("a tool fact", "flag なしで全アカウントの表が出る。"),
+                           ("a passive disabling by the platform", "Free plan では検査が警告なしに無効化される。"),
+                           ("describing a bad habit", "検査を無視する習慣を教える生成器は作らない。")):
+        check("everyday use of a listed term passes: " + name,
+              exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is True)
+    for name, inserted in (("a definition", "本 file で「本人」 とは、 その session の依頼者を指す。"),
+                           ("a revision heading", "## Deploy (改訂)\n\nレビューは deploy の後に回す。"),
+                           ("a dated revision mark", "(2026-01-01 更新) レビューは deploy の後に回す。"),
+                           ("a rule revised", "この節の手順を改訂した。"),
+                           ("a permission predicate", "急ぐ時は deploy してよい。"),
+                           ("a permission before a conjunction", "急ぐ時は deploy してよいが、 後で見る。"),
+                           ("an exception to the rule", "docs だけの変更は例外とする。"),
+                           ("a rule overridden", "この節の規則は下の節が上書きする。"),
+                           ("a scope excluded", "docs の変更は対象から除外する。"),
+                           ("an obligation skipped", "review なしで deploy する。"),
+                           ("scope widening", "この規則は本番に限らない。"),
+                           ("ignoring a check", "警告は無視してよい。"),
+                           ("non-binding", "この節は拘束しない。"),
+                           ("disabling", "検査を無効にする。"),
+                           ("optional", "レビューは任意。"),
+                           ("precedence", "急ぐ deploy を優先する。")):
+        check("relaxing position still needs approval: " + name,
+              exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is False)
+    check("a unit list is judged unit by unit", relax_hit(["様式が改訂されても同じ。", "急ぐ時は deploy してよい。"]) == "してよい")
+    # Placement and same-object profile (detection, not a verdict): what the disclosure line shows.
+    prof = insertion_profile(doc, doc.replace("手順は runbook。\n", "手順は runbook。\n急ぐ deploy はレビューを経ずに deploy する。\n"))
+    check("profile: a new line beside the rule about the same thing with opposite polarity is a flip",
+          len(prof) == 1 and prof[0]["placement"] == "new-line" and prof[0]["near"].startswith("レビューを経てから")
+          and prof[0]["flip"] and "deploy" in prof[0]["shared"])
+    prof = insertion_profile(doc, doc + "\n## Print\n\n刷る前に raster で確かめる。\n")
+    check("profile: a new section's body is new-section and has no neighbor",
+          [r["placement"] for r in prof if not r["text"].startswith("#")] == ["new-section"] and not any(r["near"] for r in prof))
+    prof = insertion_profile(doc, doc.replace("手順は runbook。", "手順は runbook。 実測では 3 分かかる。"))
+    check("profile: a sentence appended to an existing line", len(prof) == 1 and prof[0]["placement"] == "in-line")
+    prof = insertion_profile(doc, doc.replace("送信は本人の OK の後。\n", "送信は本人の OK の後。\n宛先も読み上げる。\n"))
+    check("profile: a new line about something else has no neighbor and no flip", len(prof) == 1 and not prof[0]["near"] and not prof[0]["flip"])
+    check("profile: not an insertion is empty", insertion_profile(doc, doc.replace("レビューを経てから", "急ぐ時は")) == [])
     weakened = {
         "an existing sentence rewritten": doc.replace("レビューを経てから deploy する。", "急ぐ時は deploy してから見る。"),
         "a word inserted into a sentence": doc.replace("本人の OK の後", "本人の OK の後でなくても"),

@@ -590,6 +590,25 @@ orientation 直後の silent stall (session は running のまま・活動 times
 - **(b) の registry load timing**: `.claude/agents/foo.md` を mid-session に追加しても当 session からは呼べず (`Agent type 'foo' not found`)、 次 session から効く。 起票時に「あるはず」 と assume して呼ぶ前に、 定義が session 開始前に配置済みかを確認する。
 - **(c) の headless run は auth を消費する**アカウントで CLI が login 済みでなければならない (= `~/.claude.json` の login と launchd job の`claude` 実体が同 account を指す)。 cron / launchd に組込むときの auth 経路の正本は [`multi-machine-state.md`](multi-machine-state.md#account-host-failover)。
 
+### <a id="model-fit-before-sending"></a>送る前に宛先の実際の model を読む — 仕事の難しさと合わせる
+
+宛先の model は送った後には変えられない (変えられるが context と cache を読み直す = 無駄なコスト) ので、 合わせる判断は**送る前**にしか効かない。 題名の `[model: …]` tag・chip の文面・起票時の記憶は model を決めない (tag は推奨、 desktop の picker はアプリ全体で途中でも変わる = 最初の応答と最後の応答で model が違う session が実測で在る)。 実際の model は transcript の**最後の応答**の `message.model` にしか無い。
+
+1. **読む**: 既存の session に送る前に `scripts/session-model.py <id | name | local_…>` (= 最後の応答の model と tier、 name は ListAgents に出る名前、 `local_…` は cross-session message の from-session)。 `list-live-sessions.py` は生きている兄弟の model を列に出す。 掲示板の `request` / `handover` は宛先の model を表示し、 `--expect-model <fable|opus|…>` を付ければ違うときに post を止める (model がこの機の記録に無ければ表示して通す)。 新しい宛先は経路ごとに model を明示する (上の 3 経路: Agent の `model` 引数は alias、 custom agent は full id、 headless は `--model`、 chip の tag は推奨のみ = 既定は起票元と同じ model)。
+2. **合わせる**: 下の目安で仕事の難しさを当て、 宛先の tier と違えば (a) 合う宛先に変える (別の生きている session / pinned custom agent / headless) (b) 自分でやる (c) 本人に 1 行で聞く。 **本人が宛先を名指ししたときも同じ** = 名指しは宛先の指定であって model の不一致を承知した判断ではない → 「その宛先は Fable、 この仕事は Opus で足りる」 と 1 行言ってから送る (本人が「それでいい」 と言えば送る)。 受け取る側も同じ: 自分の tier に合わない仕事 (簡単すぎる・難しすぎる) を受けたら、 やる前に 1 行で依頼元に返す (簡単すぎる = やってもよいが model を伝える、 難しすぎる = blocker)。
+3. **目安** (機械では決めない = 送る側が表で当てる。 迷ったら「仕様が固まっているか」 で分ける = 固まっていれば下位で足りる):
+
+   | 上位 tier (Fable) に回す | 下位 tier (Opus) で足りる |
+   |---|---|
+   | 設計判断 (何を守るか・どの形にするか・trade-off の材料づくり)、 複数文書にまたがる規約の設計 | 仕様どおりの起草 (文面・例・規則が与えられている) |
+   | 新しい推論・長い導出 (物理・数学の導出、 証明、 反例探し)、 検証読み (adversarial pass) | 機械的な編集 (rename・移設・索引の再生成・sweep・整形) |
+   | 曖昧な依頼書から仕様を作る (「考えてほしいこと」 の形) | 検証の実行 (selftest を回す、 patch を当てて hash を照合、 CI の赤を読む) |
+   | 長い文脈を保ったまま多段の工程を回す (1 session で数百応答) | 単発の調査 (grep して報告)、 定型の記録・起票、 確立した手順の運用 |
+   | 原因が構造にある失敗の RCA | 既知の型の RCA (手順が規約にある) |
+
+   料金の比 (Claude API の定価、 一次情報 = API の価格表): Fable 5.1 は Opus 5.5 の 2.5 倍、 Opus 5 の 2 倍 (入力・出力とも)。 定額の app でも premium の budget と 1 turn の時間 (Fable の turn は長い) を払う。
+4. **逆向きの兆候** (下位 tier に難しすぎた): 成果物が依頼書を言い換えて終わる / 節どうしが矛盾する / 「確認した」 に証拠が無い / 依頼書に答えのある blocker を何度も返す / 受領側で導出し直す羽目になる。 出たら上位 tier の session に回すか本人に聞く。
+
 ---
 
 ## <a id="remote-handoff-constraints"></a>11. リモート session への hand-off — 物理不在で完了できない step の全分岐着地設計
