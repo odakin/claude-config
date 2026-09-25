@@ -165,6 +165,10 @@ RELAX_FORMS: dict[str, re.Pattern] = {
     "いらない": re.compile(_NOT_NEEDED + r"[^。．]{0,6}?いらない|" + _CONDITION + r"[^。．]{0,4}?いらない"),
     # "without X" relaxes only as a permission or sufficiency ("読まなくてもよい / 済む / 足りる"); "読まなくても分かる" describes
     "なくても": re.compile(r"なくても\s*(?:よい|良い|いい|構わない|かまわない|足りる|通る|可|済む|済ませ|済み|OK|問題ない|支障ない)"),
+    # the guard's own words: "緩和の語" names the list, "緩めない / 緩める位置 / 緩める語" describe the line (measured: every
+    # sentence about the guard tripped on them); "規則を緩和する" and "検査を緩める" still count
+    "緩和": re.compile(r"緩和(?!の語|の項|の位置|の形)"),
+    "緩め": re.compile(r"緩め(?!ない|ず|ません|る位置|る語|る言い直し|る変更|る方向|るなら|るのでなければ|た文)"),
 }
 
 
@@ -1110,7 +1114,8 @@ def selftest() -> int:
                            ("an override as a namespace", "検証は namespace override の diff で見る。"),
                            ("an anchor id", '## <a id="exception-by-category"></a>既定と違う支給額を頼む'),
                            ("a platform feature disabled", "audit with interpreter discovery disabled."),
-                           ("a bounce vocabulary", "`5.2.1` の inactive / disabled = 停止、 `4xx` = 一時的。")):
+                           ("a bounce vocabulary", "`5.2.1` の inactive / disabled = 停止、 `4xx` = 一時的。"),
+                           ("the guard's own words", "緩和の語は一覧が持ち、 緩めない言い直しは通る (緩める位置の語だけ数える)。")):
         check("everyday use of a listed term passes: " + name,
               exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is True)
     for name, inserted in (("an obligation not needed", "小さな変更なら確認は不要。"),
@@ -1126,7 +1131,9 @@ def selftest() -> int:
                            ("overriding a rule", "This section overrides the rule above."),
                            ("an exception to", "Small fixes are an exception to the review rule."),
                            ("a check disabled", "The check is disabled on this branch."),
-                           ("disabling a hook", "Disable the hook before pushing.")):
+                           ("disabling a hook", "Disable the hook before pushing."),
+                           ("relaxing a rule, in the guard's words", "急ぐ時はこの規則を緩和する。"),
+                           ("loosening a check", "docs の変更では検査を緩める。")):
         check("relaxing position still needs approval: " + name,
               exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is False)
     # Placement and same-object profile (detection, not a verdict): what the disclosure line shows.

@@ -877,7 +877,7 @@ _MANIFEST_PATTERN_CACHE: dict[str, tuple[str, ...]] = {}
 
 
 def manifest_patterns(repo: Path | None) -> tuple[str, ...]:
-    """repo の manifest (HEAD・index・作業ツリーの和) が宣言した path。 追記の例外と区画はここに当たる file に効かない。"""
+    """repo の manifest (HEAD・index・作業ツリーの和) が宣言した path。 変更の例外と区画はここに当たる file に効かない。"""
     if repo is None:
         return ()
     authority_paths(repo)
@@ -1106,13 +1106,13 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
     declared = authority_paths(repo) if authority else []
     ao, an = (authority_regions(old, rel, declared), authority_regions(new, rel, declared)) if authority else ({}, {})
     moved = [k for k in sorted(set(ao) | set(an)) if ao.get(k) != an.get(k)]
-    # 追記の例外と区画は git repo の中の文書だけ (記録を git の差分で読み返せ、 戻せることが前提)。 区画の中だけの
+    # 変更の例外と区画は git repo の中の文書だけ (記録を git の差分で読み返せ、 戻せることが前提)。 区画の中だけの
     # 変更は moved に出ないが、 緩和の語の記録のために判定は回す
     exempt = (_rule_guard.change_exemption(rel, old, new, manifest_patterns(repo))
               if authority and repo is not None and old != new else None)
     refined = False
     if exempt is not None and not exempt["ok"] and baseline is not None and baseline != old:
-        # 既存の文 = commit 済みの文。 作業ツリーの文を変えても HEAD からは追記だけなら推敲として通す。 HEAD から見ても
+        # 既存の文 = commit 済みの文。 作業ツリーからは通らなくても HEAD からは通るなら推敲として通す。 HEAD から見ても
         # 追記でない (commit 済みの文を変えた・緩和の語が入った) なら従来どおり止まる
         against = _rule_guard.change_exemption(rel, baseline, new, manifest_patterns(repo))
         if against is not None and against["ok"]:
@@ -1478,7 +1478,7 @@ def undisclosed_approvals(agent: str, sid: str, msgs: list[tuple[str, str]], rep
 
 
 def undisclosed_additive(me: str, since: str, replies: list[str], state: dict) -> list[dict]:
-    """この session が著者の最新の発言の後に入れた追記と、 session 開始でこの session に割り当てた追記のうち、 返事に
+    """この session が著者の最新の発言の後に入れた変更と、 session 開始でこの session に割り当てた変更のうち、 返事に
     書いていないもの。 書いてあったものは処理済みにする (本人の既読の操作は無い)。"""
     start = _utc(since)
     start = start.replace(microsecond=0) if start else None
@@ -1615,7 +1615,7 @@ def deny_reason(left: list[dict], session: tuple[str, str] | None) -> str:
         if r not in uniq:
             uniq.append(r)
     regions = " ".join(f"--region {r}" for r in uniq[:6])
-    # 規則の文書 (追記の例外の対象) だけに「依頼がすでに含むなら聞き直さない」 を出す。 配線・設定・block・原稿は従来どおり
+    # 規則の文書 (変更の例外の対象) だけに「依頼がすでに含むなら聞き直さない」 を出す。 配線・設定・block・原稿は従来どおり
     prose = any(str(c.get("detail", "")).startswith(PROSE_DETAIL) for c in left)
     strict = any(not str(c.get("detail", "")).startswith(PROSE_DETAIL) for c in left)
     parts = [
@@ -2521,7 +2521,7 @@ def apply_mode(args: argparse.Namespace) -> int:
 
     対象 (作業ツリー) と候補の差分を HEAD を基準に判定し、 保護領域が残れば approve と同じ記録 (候補の hash に束縛、
     --latest か --quote で本人の発言に照合) を先に書き、 通ったときだけ候補の全文をそのまま対象に写して照合する。
-    追記だけなら承認は記録せず、 追記の記録 (additive-log) に残す。 guard の state・symlink・git repo の外には写さない。
+    裁定なしで通る変更なら承認は記録せず、 記録 (additive-log) に残す。 guard の state・symlink・git repo の外には写さない。
     写した差分の先頭を出す = 何を写したかが transcript に残る。
     """
     p = Path(args.file)
@@ -4088,7 +4088,7 @@ def selftest() -> int:
         with contextlib.redirect_stdout(io.StringIO()):
             gone = additive_log_mode(argparse.Namespace(ack=True, surface=False, days=None, quote="読んだ", session=None))
         check("--ack は廃止 (何も書かず 0)", gone == 0 and not (state_dir() / ADDITIVE_HANDLED).exists())
-        print("[推敲 = HEAD からは追記だけ / 同じ対象の隣の文 / --latest / apply]")
+        print("[推敲 = HEAD からは通る / 同じ対象の隣の文 / --latest / apply]")
         dep = "# D\n\n## Deploy\n\nレビューを経てから deploy する。 手順は runbook。\n"
         dep_path = rr / "conventions" / "deploy.md"
         dep_path.write_text(dep, encoding="utf-8")
@@ -4099,7 +4099,7 @@ def selftest() -> int:
         fenced = dep + "```\n宛先は必ず読む。\n```\n"  # 自分が足した未 commit の文を fence に入れる = HEAD からは足しただけ
         PENDING_EXEMPTIONS.clear()
         s1 = ("claude", "sess-1")
-        check("未 commit の文を隠す推敲: 作業ツリーからは隠しでも HEAD からは追記だけ → 通る",
+        check("未 commit の文を隠す推敲: 作業ツリーからは隠しでも HEAD からは通る → 通る",
               protected_changes("conventions/deploy.md", wt, fenced, rr, {}, baseline=dep, session=s1) == [])
         check("推敲の記録には推敲の印が付く",
               bool(PENDING_EXEMPTIONS) and PENDING_EXEMPTIONS[-1].get("refined") is True and "推敲" in additive_line(PENDING_EXEMPTIONS[-1]))
@@ -4212,7 +4212,7 @@ def selftest() -> int:
         PENDING_EXEMPTIONS.clear()
         with contextlib.redirect_stdout(io.StringIO()):
             rc3 = apply_mode(argparse.Namespace(**{**vars(ap_ns), "candidate": str(cand3), "latest": False}))
-        check("apply: 追記だけなら承認を記録せず、 追記の記録に残して写す",
+        check("apply: 裁定なしで通る変更なら承認を記録せず、 記録に残して写す",
               rc3 == 0 and mail.read_text(encoding="utf-8") == cand3.read_text(encoding="utf-8")
               and any(e.get("file") == "conventions/mail.md" and "宛名も読む" in str(e.get("text")) for e in load_additive_log()))
         subprocess.run(["git", "checkout", "-q", "--", "conventions/mail.md"], cwd=rr, env=genv, capture_output=True, check=False)
@@ -4253,7 +4253,7 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--candidate", help="権限規約・設定の適用後の全文。承認をこの内容の SHA-256 に束縛する")
     a.add_argument("--target-mode", choices=["000000", "100644", "100755", "120000"],
                    help="保護 file の Git mode/type。省略時は候補 file の属性を使う。000000 は削除")
-    y = sub.add_parser("apply", help="承認の記録 + 候補の書込み + 照合を 1 command で (追記だけなら記録して写す)")
+    y = sub.add_parser("apply", help="承認の記録 + 候補の書込み + 照合を 1 command で (裁定なしで通る変更なら記録して写す)")
     y.add_argument("--file", required=True)
     y.add_argument("--candidate", required=True, help="適用後の全文 file (承認はこの内容の SHA-256 に束縛)")
     y.add_argument("--change", required=True, help="何を変えるか 1 行")

@@ -22,7 +22,7 @@ scripts/public-precommit-runner.sh から呼ぶ同じ engine。
 agent-authority の block で守る (= その file の他の行は普通に直せる)。 block の外側からの迂回 (手前の exit 0・
 helper 関数の差し替え = canary が走らない / `|| true` = 失敗が消える) は止めずに、 ここで「報告が途絶えた」
 「NOT ARMED」 として表に出す。 判断の記録と残る穴 = conventions/agent-rule-ownership.md#wiring-scope。
-同じ面で、 承認なしで入った規則の文書への追記のうち、 その場の返事で伝わっていないもの (engine の
+同じ面で、 承認なしで入った規則の文書への変更のうち、 その場の返事で伝わっていないもの (engine の
 `additive-log --surface`) を、 人のいる session の開始に割り当てて出す (その session の Stop が返事に書かせる。
 人のいない session = CLAUDE_CODE_ENTRYPOINT が sdk-* には渡さない、 conventions/agent-rule-ownership.md#additive-and-free-zones)。
 """
