@@ -17,7 +17,7 @@ SAML-only 組織では REST の password auth が admin 限定・OAuth client �
 | csrf ticket | `/g/cabinet/search.csp` 等の inline `grn.__PRELOADED_DATA__.csrfTicket` (portal は 302 なので注意) |
 | 掲示板 REST | `GET /g/api/v1/bulletin/categories` 等、 cookie + `X-Requested-With: XMLHttpRequest` で session auth |
 | 添付 download | `GET /g/bulletin/file_download.csp/-/<name>?fid=F` は session 内 GET で 200 (application/pdf)。 cabinet の `download.csp/-/<name>?fid=F` も session 内 GET で 200 (application/pdf) = UI が付ける time= token は要らない (実測) |
-| login 切れ | 302 → `<org>.ex-tic.com` (SSO) / **302 → `<org>.cybozu.com/login?redirect=…` (cybozu 自身の login)** / login page HTML / REST API の 401 `GRN_REST_API_00003` → 下の [#garoon-session-recovery](#garoon-session-recovery) を 1 回試し、 だめなら user が browser で 1 回 login (script はパスワード・OTP を代行しない)。 ⚠️ 死活検査で「SSO への 302 だけ切れ、 他の 302 は健全」 と書くと、 自前 login への 302 で切れているのに silent になる (実測) 。 ⚠️ **login 直後は browser が cookie DB (SQLite) に新しい session cookie を書くまで十数秒の遅れがある** (Chromium 系で実測) = login の直後に 1 回目の検査が「切れ」 のままでも、 少し待って読み直す |
+| login 切れ | 302 → `<org>.ex-tic.com` (SSO) / **302 → `<org>.cybozu.com/login?redirect=…` (cybozu 自身の login)** / login page HTML / REST API の 401 `GRN_REST_API_00003` → 下の [#garoon-session-recovery](#garoon-session-recovery) を 1 回試し、 だめなら user が browser で 1 回 login (script はパスワード・OTP を代行しない)。 ⚠️ 死活検査で「SSO への 302 だけ切れ、 他の 302 は健全」 と書くと、 自前 login への 302 で切れているのに silent になる (実測) 。 ⚠️ **login 直後は browser が cookie DB (SQLite) に新しい session cookie を書くまで遅れがある** (数秒〜30 秒ほどで一定しない、 下の「Garoon 固有の実測」) = login の直後に 1 回目の検査が「切れ」 のままでも、 少し待って読み直す |
 
 ### <a id="garoon-session-recovery"></a><a id="garoon-browser-reauth"></a>login 切れからの復帰 (手順)
 
@@ -44,7 +44,7 @@ exec env GAROON_ORG=<org> GAROON_BROWSER_REFRESH="${GAROON_BROWSER_REFRESH:-clos
 Garoon 固有の実測:
 
 - Garoon を開いたままの tab は、 ページ移動なしに裏の通信で JSESSIONID を差し替えることがある (理由は未確認)。 script は起動時に読んだ cookie を長く持ち続けず、 実行のたびに読み直す。
-- Chromium の cookie DB 書き出しは最大 30 秒ほど遅れる (login 直後の 1 回目が「切れ」 に見えるのはこれ)。 逆に数秒で書かれることもある (実測、 ログイン画面の cookie が 3〜7 秒で DB に出た) = 書き出しの速さで結末を決めない ([#login-page-mints-session-cookie](#login-page-mints-session-cookie))。
+- Chromium の cookie DB 書き出しの遅れは一定しない = 数秒で出ることも、 30 秒ほどかかることもある (実測)。 遅い側では login 直後の 1 回目が「切れ」 に見え、 速い側ではログイン画面が配った未認証の cookie が認証より先に DB に出る。 どちらも書き出しの速さで結末を決めず、 server に確かめて決める ([#login-page-mints-session-cookie](#login-page-mints-session-cookie))。
 - 本体セッションの寿命を測るときは、 途中で IdP をログアウトしないこと (ログアウト後に切れていても寿命の証拠にならない)。
 - 死活監視は `doctor` (配線だけ・network なし) に留める。 `status` は読む前に 1 回だけ (user が席を外す前に、 ログインが要るかをその場で知るため)。
 
