@@ -170,7 +170,7 @@ def canary(caller: str | None) -> int:
     return 0 if armed else 1
 
 
-def liveness(max_age_hours: float, silent_days: float, session: str | None = None) -> int:
+def liveness(max_age_hours: float, silent_days: float, session: str | None = None, source: str | None = None) -> int:
     state = load_state()
     if state is None or age_hours(state.get("at")) > max_age_hours:
         armed, detail = probe()
@@ -196,7 +196,8 @@ def liveness(max_age_hours: float, silent_days: float, session: str | None = Non
                              " conventions/agent-rule-ownership.md#wiring-scope)")
     # 承認なしで入った規則の文書への追記 = 本人が後で読む面 (conventions/agent-rule-ownership.md#additive-and-free-zones)
     try:
-        r = subprocess.run([sys.executable, ENGINE, "additive-log", "--surface"] + (["--session", session] if session else []),
+        r = subprocess.run([sys.executable, ENGINE, "additive-log", "--surface"] + (["--session", session] if session else [])
+                           + (["--source", source] if source else []),
                            capture_output=True, text=True,
                            timeout=10, stdin=subprocess.DEVNULL)
         if r.returncode != 0:
@@ -233,9 +234,16 @@ def main(argv: list[str]) -> int:
         except (OSError, ValueError):
             pass
         try:
-            sid = str((json.loads(raw) if raw.strip() else {}).get("session_id") or "")
-        except (ValueError, AttributeError):
-            sid = ""
+            ev = json.loads(raw) if raw.strip() else {}
+        except ValueError:
+            ev = {}
+        if not isinstance(ev, dict):
+            ev = {}
+        sid = str(ev.get("session_id") or "")
+        # startup / resume / clear / compact: 圧縮の開始は同じ session の続きなので、 他の session の追記を割り当てない
+        source = str(ev.get("source") or "")
+        if not re.fullmatch(r"[a-z]{1,16}", source):
+            source = ""
         session = None
         if re.fullmatch(r"[A-Za-z0-9._-]{1,128}", sid) and not os.environ.get("CLAUDE_CODE_ENTRYPOINT", "").startswith("sdk-"):
             session = "claude:" + sid
@@ -247,7 +255,7 @@ def main(argv: list[str]) -> int:
                 except ValueError:
                     return default
             return default
-        return liveness(num("--max-age-hours", 24.0), num("--silent-days", 14.0), session)
+        return liveness(num("--max-age-hours", 24.0), num("--silent-days", 14.0), session, source or None)
     if not os.path.isfile(ENGINE):
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
             "permissionDecisionReason": "manuscript-claim-guard: inspection unavailable (missing engine); repair and retry."}}))

@@ -38,6 +38,7 @@ protected path (that set contains every tracked rule document).
 from __future__ import annotations
 
 from collections import Counter
+import difflib
 import fnmatch
 import json
 from pathlib import Path, PurePosixPath
@@ -90,12 +91,39 @@ RELAX_TERMS_EN = (
     "no longer", "need not", "needn't", "don't need", "do not need", "override", "overrides", "supersede",
     "supersedes", "ignore", "disregard", "disable", "disabled", "deprecated", "obsolete", "bypass", "waive",
     "allowed to", "permitted", "omit", "relax", "loosen", "only applies", "only apply", "does not apply",
-    "doesn't apply", "not apply", "no-verify",
+    "doesn't apply", "not apply", "no-verify", "without",
 )
 # Markup that hides or demotes text, and invisible characters that make a changed sentence look unchanged.
 RELAX_MARKUP = ("<!--", "-->", "~~", "<div", "<span", "<details", "<style", "<script", "<template", "<noscript",
                 "<iframe", "​", "‌", "‍", "⁠", "﻿", "­")
 _RELAX_EN_RE = re.compile(r"(?<![A-Za-z])(" + "|".join(re.escape(t) for t in RELAX_TERMS_EN) + r")(?![A-Za-z])", re.I)
+# English listed terms that are also ordinary words count only in a relaxing position: a permission or imperative to
+# skip / ignore / override / disable a check or rule, "is optional", "an exception to". A name inside an anchor id,
+# a link target or a hashtag is not a sentence about a rule and is dropped first (measured on two months of
+# committed additions: git's ignore, a skip flag, "optional content", a namespace override, an anchor id
+# "exception-by-category" and "discovery disabled" were the hits).
+_EN_NOISE = re.compile(r'id="[^"]*"|\]\([^)]*\)|(?<![A-Za-z0-9])#[A-Za-z][A-Za-z0-9_-]*')
+_EN_MAY = r"(?:may|can|could|should|might|allowed to|ok to|okay to|safe to|free to|just|simply|to)\s+"
+_EN_GATE = (r"(?:(?:the|this|that|a|an|any|all|every|these|those|our|its)\s+)?(?:pre-?commit\s+)?"
+            r"(?:checks?|reviews?|tests?|gates?|approvals?|verification|confirmation|validation|hooks?|rules?|steps?|"
+            r"guards?|lint|linter|scans?|policy|policies|restrictions?|locks?|protection|prompts?|nudges?|reminders?|"
+            r"warnings?|errors?|failures?|findings?|results?|deny|block|limits?|defaults?|settings?|conventions?|"
+            r"instructions?)\b")
+RELAX_FORMS_EN: dict[str, re.Pattern] = {
+    "skip": re.compile(_EN_MAY + r"skip\b|\bskip(?:s|ped|ping)?\s+" + _EN_GATE, re.I),
+    "ignore": re.compile(_EN_MAY + r"ignore\b|\bignor(?:e|es|ed|ing)\s+" + _EN_GATE, re.I),
+    "optional": re.compile(r"\boptional\b(?!\s+[a-z])", re.I),  # "is optional." relaxes; "optional content" describes
+    "override": re.compile(_EN_MAY + r"override\b|\boverrid(?:e|es|den|ing)\s+" + _EN_GATE, re.I),
+    "exception": re.compile(r"\b(?:an|the|as an|is an|make an|makes an|made an|grant(?:ed|s)? an|allow(?:ed|s)? an|"
+                            r"with an|with the)\s+exception\b|\bexceptions?\s+(?:to|for|is|are|:)", re.I),
+    "disable": re.compile(_EN_MAY + r"disabl(?:e|ing)\b|\bdisabl(?:e|es|ed|ing)\s+" + _EN_GATE + r"|" + _EN_GATE +
+                          r"\s+(?:is|are|was|were|be|being|can be|may be|should be|remains?|stays?)\s+disabled\b", re.I),
+}
+RELAX_FORMS_EN["overrides"] = RELAX_FORMS_EN["override"]
+RELAX_FORMS_EN["without"] = re.compile(
+    r"\bwithout\s+(?:(?:the|a|an|any|this|that|prior|my|our|their)\s+)?(?:asking|permission|consent|ruling|approvals?|"
+    r"reviews?|confirmation|verification|validation|checks?|tests?|gates?|hooks?|sign-?off)\b", re.I)
+RELAX_FORMS_EN["disabled"] = RELAX_FORMS_EN["disable"]
 # Listed terms that are also everyday words count only in the position where they relax a rule (measured on two
 # months of committed additions: the bare substring fired on a form's revision, a file overwrite, a Python exception,
 # a physics constraint, "X とは違う", "…てよい種類"). The position is decided per unit (sentence), not by shrinking the
@@ -103,6 +131,8 @@ _RELAX_EN_RE = re.compile(r"(?<![A-Za-z])(" + "|".join(re.escape(t) for t in REL
 _NOUN_NEXT = r"(?=[一-鿿ァ-ヺA-Za-z0-9])"  # the term modifies a following noun (attributive) — not a statement
 _RULE_NOUN = r"(?:規則|規約|ルール|方針|本節|本書|本 ?file|この節|上の節|前の節|手順|設定|指示|検査|gate|hook|rule|policy)"
 _OBLIGATION = r"(?:確認|承認|裁定|許可|同意|OK|検査|記録|報告|連絡|返事|返送|review|test|verify|承諾)"
+_NOT_NEEDED = r"(?:" + _OBLIGATION + r"|" + _RULE_NOUN + r")(?:は|も|が|の|を)?"  # what is "not needed" is a duty or a rule
+_CONDITION = r"(?:時は|ときは|場合は|場合には|なら|であれば|限り)"  # "…なら不要" = the rule is waived in a case
 RELAX_FORMS: dict[str, re.Pattern] = {
     # a permission is a predicate; before a noun it is an attribute ("減ってよい種類")
     **{t: re.compile(re.escape(t) + r"(?![一-鿿ァ-ヺA-Za-z0-9])") for t in (
@@ -124,6 +154,14 @@ RELAX_FORMS: dict[str, re.Pattern] = {
     "無効": re.compile(r"無効(?:に|と)(?:する|して|なる)|無効化(?:する|して|できる|可)"),
     "任意": re.compile(r"任意(?![一-鿿ァ-ヺA-Za-z0-9])(?!の)"),
     "優先": re.compile(r"優先(?!順|度|化|席|権|的)"),
+    # "not needed" relaxes when what is not needed is an obligation or a rule ("確認は不要", "承認不要"), or when it
+    # follows a condition ("急ぐ時は不要"); a tool fact ("ログイン不要"), a quantity ("不要な中間量") or a document
+    # part ("caveat 節ごと不要になる") passes (measured: 16 of 16 committed uses were the latter)
+    "不要": re.compile(_NOT_NEEDED + r"[^。．]{0,6}?不要|" + _CONDITION + r"[^。．]{0,4}?不要|不要(?:とする|にする|でよい|で良い|でいい)"),
+    "要らない": re.compile(_NOT_NEEDED + r"[^。．]{0,6}?要らない|" + _CONDITION + r"[^。．]{0,4}?要らない"),
+    "いらない": re.compile(_NOT_NEEDED + r"[^。．]{0,6}?いらない|" + _CONDITION + r"[^。．]{0,4}?いらない"),
+    # "without X" relaxes only as a permission or sufficiency ("読まなくてもよい / 済む / 足りる"); "読まなくても分かる" describes
+    "なくても": re.compile(r"なくても\s*(?:よい|良い|いい|構わない|かまわない|足りる|通る|可|済む|済ませ|済み|OK|問題ない|支障ない)"),
 }
 
 
@@ -293,19 +331,27 @@ def relax_hit(text: str | list[str]) -> str | None:
     """First relaxation-shaped term in inserted text, or None.
 
     A list is judged unit by unit (position rules in RELAX_FORMS need the sentence);
-    a string is one unit. Markup and invisible characters always count.
+    a string is one unit. Markup and invisible characters always count, and so does a new heading
+    that files the lines under it as history or reference.
     """
     units = [text] if isinstance(text, str) else text
     for unit in units:
+        hm = _HEADING_RE.match(unit)
+        if hm:
+            hh = _HISTORICISING_HEAD.search(_EN_NOISE.sub(" ", hm.group(2)))  # the anchor id is not the heading's words
+            if hh:
+                return hh.group(0)
         for term in RELAX_MARKUP:
             if term in unit:
                 return term
         for term in RELAX_TERMS_JA:
             if _relax_term_in_unit(term, unit):
                 return term
-        m = _RELAX_EN_RE.search(unit)
-        if m:
-            return m.group(1)
+        plain = _EN_NOISE.sub(" ", unit)
+        for m in _RELAX_EN_RE.finditer(plain):
+            form = RELAX_FORMS_EN.get(m.group(1).lower())
+            if form is None or form.search(plain):
+                return m.group(1)
     return None
 
 
@@ -362,49 +408,14 @@ def _line_contexts(text: str) -> list[tuple[tuple[str, ...], bool, bool]]:
     return out
 
 
-def _greedy_alignment(old: list[str], new: list[str], from_end: bool = False) -> list[int] | None:
-    """Index in new of each old unit (old as a subsequence of new), matched earliest (or latest). None = not one."""
-    out: list[int] = []
-    order = range(len(new) - 1, -1, -1) if from_end else range(len(new))
-    it = iter(order)
-    for u in (reversed(old) if from_end else old):
-        for j in it:
-            if new[j] == u:
-                out.append(j)
-                break
-        else:
-            return None
-    return out[::-1] if from_end else out
 
 
-def insertion_only(old: str, new: str) -> tuple[bool, str, str]:
-    """(ok, reason, inserted text): new = old with whole units inserted and no existing unit moved in context."""
-    if old == new:
-        return True, "", ""
-    ou, nu = _units(old), _units(new)
-    oc, nc = _line_contexts(old), _line_contexts(new)
-    # Only insertions are acceptable, so a greedy subsequence walk decides it in linear time (a general diff
-    # grows with the product of the lengths: 4 s on a 280 KB document, and a hook that outlives its timeout
-    # lets the tool run unchecked). Greedy from either end; either alignment that keeps every context passes.
-    alignments = [_greedy_alignment([u for u, _ in ou], [u for u, _ in nu], rev) for rev in (False, True)]
-    if alignments[0] is None:
-        return False, "既存の文を変えた・消した", ""
-    good = next((a for a in alignments if a is not None and all(
-        ou[i][0] == "\n" or oc[ou[i][1]] == nc[nu[j][1]] for i, j in enumerate(a))), None)
-    if good is None:
-        return False, "既存の行の所属 (見出し・コード・コメント) が変わる", ""
-    kept = set(good)
-    inserted = [u for j, (u, _) in enumerate(nu) if j not in kept and u != "\n"]
-    text = " ".join(inserted)
-    hit = relax_hit(inserted)
-    if hit:
-        return False, f"足した文に緩和の語「{hit}」がある", text
-    return True, "", text
 
 
 # Directives and their polarity, for reporting where an addition sits next to an existing rule about the same thing.
 _DIRECTIVE_NEG = re.compile(r"止めない|通さない|しない|せず|ずに|できない|要らない|不要|禁止|ならない|してはいけない|ない。|never|(?<![A-Za-z])not(?![A-Za-z])|(?<![A-Za-z])no(?![A-Za-z])")
-_DIRECTIVE_POS = re.compile(r"止める|止まる|通す|必須|要る|拒否|deny|block|must|allow|する。|すること")
+_DIRECTIVE_POS = re.compile(r"止める|止まる|通す|必須|要る|拒否|deny|block|must|allow|する。|すること|"
+                            r"(?<![A-Za-z])(?:required|require|requires|should|shall|ensure|always)(?![A-Za-z])")
 _TOKEN_STRONG = re.compile(r"`([^`]+)`|\*\*([^*]+)\*\*|id=\"([^\"]+)\"|#([A-Za-z][A-Za-z0-9_-]{3,})")
 _TOKEN_WORD = re.compile(r"[一-鿿ァ-ヺ]{2,}|[A-Za-z][A-Za-z0-9_-]{3,}")
 _TOKEN_STOP = {"実測", "追記", "場合", "変更", "対象", "規則", "本人", "自分", "以下", "以上", "参照", "正本", "一般",
@@ -412,46 +423,58 @@ _TOKEN_STOP = {"実測", "追記", "場合", "変更", "対象", "規則", "本�
                "file", "path", "repo", "session", "tool", "hook", "script", "python", "commit", "agent", "claude",
                "claude-config", "conventions", "docs", "scripts", "plans", "json", "yaml", "settings", "readme"}
 _LINK_TARGET = re.compile(r"\]\([^)]*\)")  # a link's path is not what the sentence is about
+_HEADING_MARKUP = re.compile(r"<a id=\"[^\"]*\"></a>|[`*]")  # a heading's anchor and emphasis are not its words
 
 
 def _tokens(unit: str) -> tuple[set[str], set[str]]:
     strong = {next(g for g in m.groups() if g) for m in _TOKEN_STRONG.finditer(unit)}
     plain = _LINK_TARGET.sub("]", unit)
+    words: set[str] = set()
     for s in strong:
         plain = plain.replace(s, " ")
-    words = {w for w in _TOKEN_WORD.findall(plain) if w.lower() not in _TOKEN_STOP}
+        # what a code span names is also a word: `\documentclass[a4paper]{...}` and `a4paper` are about the same option
+        words |= {w for w in _TOKEN_WORD.findall(s) if w.lower() not in _TOKEN_STOP}
+    words |= {w for w in _TOKEN_WORD.findall(plain) if w.lower() not in _TOKEN_STOP}
     return strong, words
 
 
+_TRAILING_PAREN = re.compile(r"\s*[(（〔][^()（）〔〕]*[)）〕]\s*(?=[。．]?$)")
+
+
 def _polarity(unit: str) -> int:
-    """+1 directive, -1 negated directive, 0 no directive found."""
-    if _DIRECTIVE_NEG.search(unit):
+    """+1 directive, -1 negated directive, 0 no directive found (a trailing parenthetical does not hide the verb)."""
+    core = _TRAILING_PAREN.sub("", unit)
+    if _DIRECTIVE_NEG.search(core):
         return -1
-    if _DIRECTIVE_POS.search(unit):
+    if _DIRECTIVE_POS.search(core):
         return 1
     return 0
 
 
 def insertion_profile(old: str, new: str) -> list[dict]:
-    """Where each inserted unit sits, and the existing unit about the same thing next to it (detection, not a verdict).
+    """Where each sentence the change added sits, and the existing sentence about the same thing next to it (detection, not a verdict).
 
-    Each row: {"text", "line", "placement": "in-line" | "new-line" | "new-section", "near": existing unit text or "",
-    "shared": sorted tokens both mention, "flip": both carry a directive of opposite polarity}. "in-line" = appended
-    to a line that already had units; "new-line" = a new line under a heading that already existed; "new-section" =
-    under a heading the change created. Empty when the change is not an insertion (the caller judges that first).
+    Works for any change: a sentence is "kept" when the document had it before (anywhere), everything else the new
+    document contains is "added" (an edited sentence counts as added). Each row: {"text", "line", "placement":
+    "in-line" | "new-line" | "new-section", "near": existing unit text or "", "shared": sorted tokens both mention,
+    "flip": both carry a directive of opposite polarity, "near_kind": "sentence" | "heading" | "same-line" | ""}.
+    "in-line" = on a line that also has kept sentences; "new-line" = a new line under a heading that already
+    existed; "new-section" = under a heading the change created. When no existing sentence shares the subject, a
+    new line falls back to its section's heading (the sentence every line under it answers to: a heading that
+    states a fact flatly is contradicted by a line adding the case where it fails) and an appended sentence falls
+    back to the sentence before it on the same line. Empty when nothing was added.
     """
     ou, nu = _units(old), _units(new)
     oc, nc = _line_contexts(old), _line_contexts(new)
-    for rev in (False, True):
-        a = _greedy_alignment([u for u, _ in ou], [u for u, _ in nu], rev)
-        if a is not None and all(ou[i][0] == "\n" or oc[ou[i][1]] == nc[nu[j][1]] for i, j in enumerate(a)):
-            break
-    else:
-        return []
-    kept = set(a)
-    kept_lines = {nu[j][1] for j in kept if nu[j][0] != "\n"}
+    left = Counter(u for u, _ in ou if u != "\n")
+    kept: set[int] = set()
+    for j, (u, _) in enumerate(nu):
+        if u != "\n" and left[u] > 0:
+            left[u] -= 1
+            kept.add(j)
+    kept_lines = {nu[j][1] for j in kept}
     old_heads = {ctx[0] for ctx in oc}
-    existing = [(j, nu[j][0], nu[j][1]) for j in kept if nu[j][0] != "\n"]
+    existing = [(j, nu[j][0], nu[j][1]) for j in kept]
     rows = []
     for j, (u, ln) in enumerate(nu):
         if j in kept or u == "\n":
@@ -469,23 +492,157 @@ def insertion_profile(old: str, new: str) -> list[dict]:
             score = 3 * len(strong & es) + len(words & ew) - abs(eln - ln) / 100
             if score > best_score and (strong & es or len(words & ew) >= 2):
                 best, best_score, shared_best = eu, score, shared
+        hm = _HEADING_RE.match(u)
+        if hm and head + (hm.group(2),) not in old_heads:
+            placement = "new-section"  # a heading the change created belongs to its own new section, not to its parent
+        kind = "sentence" if best else ""
+        if not best and placement == "new-line" and head:
+            ht = _HEADING_MARKUP.sub("", head[-1]).strip()
+            hs, hw = _tokens(ht)
+            shared = sorted(strong & hs) + sorted(words & hw)
+            if shared:
+                best, shared_best, kind = ht, shared, "heading"
+        if not best and placement == "in-line":
+            prev = next((nu[k][0] for k in range(j - 1, -1, -1) if nu[k][1] != ln or nu[k][0] == "\n" or k in kept), "")
+            if prev and prev != "\n":
+                best, kind = prev, "same-line"
         pu, pn = _polarity(u), _polarity(best) if best else 0
         rows.append({"text": u, "line": ln, "placement": placement, "near": best, "shared": shared_best,
-                     "flip": bool(best) and pu != 0 and pn != 0 and pu != pn})
+                     "flip": bool(best) and pu != 0 and pn != 0 and pu != pn, "near_kind": kind})
     return rows
 
 
-def insertion_exemption(path: str, old: str, new: str,
-                        extra_paths: tuple[str, ...] | list[str] = ()) -> dict | None:
-    """Decide whether a prose-document change skips prior approval. None = not a prose policy document.
 
-    Returns {"ok", "reason", "inserted", "free"}; "free" lists (zone id, term, text)
-    for relaxation-shaped text written inside a free zone (logged, not blocked).
-    Rule-reference lines may only be added, never changed or removed.
+
+def _plain_relax(text: str) -> str | None:
+    """A listed term anywhere in a short text, without position rules: what an edit added to an existing sentence."""
+    for term in RELAX_MARKUP + RELAX_TERMS_JA:
+        if term in text:
+            return term
+    m = _RELAX_EN_RE.search(_EN_NOISE.sub(" ", text))
+    return m.group(1) if m else None
+
+
+_RULE_SIGNAL = ("**", "⚠️", "🚫", "❌", "必ず", "常に", "だけ", "のみ", "禁止", "必須", "never", "must", "only", "always")
+# What a removed sentence needs before the change passes without a ruling. "signal" = a sentence that carries a rule
+# (a directive, emphasis, a scoping or listed term) may only be edited, i.e. an added sentence keeps at least half of
+# it; a descriptive sentence may go (the reply says so). "all" = every sentence.
+REMOVAL_NEEDS_EDIT = "signal"
+# Share of a removed sentence's characters an added sentence must keep, in order, to count as its edit. Measured:
+# at 0.5 a short sentence's boilerplate (" deploy する。") made an unrelated sentence count as an edit.
+EDIT_KEEPS = 0.6
+# A heading that files the lines under it as history or reference demotes them without touching a word.
+_HISTORICISING_HEAD = re.compile(r"旧|参考|過去|以前|歴史|廃止|非推奨|deprecated|legacy|(?<![A-Za-z])old(?![A-Za-z])|obsolete|superseded", re.I)
+
+
+def rule_signal(unit: str) -> bool:
+    """A sentence that carries a rule: a directive, emphasis, a scoping or listed term."""
+    return _polarity(unit) != 0 or any(s in unit for s in _RULE_SIGNAL) or _plain_relax(unit) is not None
+
+
+def _edit_delta(old_unit: str, new_unit: str) -> str:
+    sm = difflib.SequenceMatcher(None, old_unit, new_unit, autojunk=False)
+    return "".join(new_unit[j1:j2] for tag, _i1, _i2, j1, j2 in sm.get_opcodes() if tag in ("replace", "insert"))
+
+
+def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
+    """(ok, reason, what) for a change to a rule document, judged by what it does to sentences, not by its form.
+
+    An append and a rewrite are held to the same line (an append-only rule made agents pile sentences up beside the
+    ones they should have fixed; a form is not a meaning). The change passes when: the added sentences carry no
+    relaxing term in a relaxing position; what an edit added to an existing sentence carries no listed term at all
+    (the delta is short, so no position rule); no edit flips a directive; no existing sentence is moved into a code
+    fence or a comment; no new heading files the lines under it as history; and every removed sentence that carries
+    a rule survives as an edit keeping at least half of it (REMOVAL_NEEDS_EDIT). what = {"added", "edited":
+    [(old, new)], "removed", "moved"} is what the record and the reply show. Meaning itself is still not decided
+    here: a rewrite that loosens a rule in unlisted words passes and is caught by the reply and the diff.
+    """
+    ou, nu = _units(old), _units(new)
+    oc, nc = _line_contexts(old), _line_contexts(new)
+    co = Counter(u for u, _ in ou if u != "\n")
+    cn = Counter(u for u, _ in nu if u != "\n")
+    removed = list((co - cn).elements())
+    added = list((cn - co).elements())
+    what: dict = {"added": [], "edited": [], "removed": [], "moved": []}
+    # a kept sentence now inside a fence or a comment (the fence delimiters themselves are not sentences)
+    ho = Counter(u for u, i in ou if u != "\n" and (oc[i][1] or oc[i][2]) and not _FENCE_RE.match(u))
+    hn = Counter(u for u, i in nu if u != "\n" and (nc[i][1] or nc[i][2]) and not _FENCE_RE.match(u))
+    for u in cn:
+        if u in co and hn[u] > ho[u]:
+            return False, "既存の文を code / comment の中に入れた: 「" + u[:30] + "」", what
+    used: set[int] = set()
+    # candidates for "the edit of r" = added sentences that share a word or start alike; keeps a big restructuring
+    # (hundreds of sentences each way) from a quadratic pass of sequence matching inside a hook's timeout
+    by_word: dict[str, set[int]] = {}
+    by_head: dict[str, set[int]] = {}
+    for k, a in enumerate(added):
+        s, w = _tokens(a)
+        for t in s | w:
+            by_word.setdefault(t, set()).add(k)
+        by_head.setdefault(a[:8], set()).add(k)
+    for r in removed:
+        # an edit = an added sentence that keeps at least EDIT_KEEPS of the removed one's characters, in order (several
+        # removed sentences may be consolidated into one added sentence, each judged on its own retention)
+        best, keep = -1, 0.0
+        s, w = _tokens(r)
+        cands: set[int] = set(by_head.get(r[:8], ()))
+        for t in s | w:
+            cands |= by_word.get(t, set())
+        for k in sorted(cands):
+            a = added[k]
+            if len(a) < EDIT_KEEPS * len(r):
+                continue
+            sm = difflib.SequenceMatcher(None, r, a, autojunk=False)
+            if sm.real_quick_ratio() * (len(r) + len(a)) < 2 * EDIT_KEEPS * len(r):  # upper bounds on the matched length
+                continue
+            if sm.quick_ratio() * (len(r) + len(a)) < 2 * EDIT_KEEPS * len(r):
+                continue
+            k_keep = sum(b.size for b in sm.get_matching_blocks()) / max(len(r), 1)
+            if k_keep > keep:
+                best, keep = k, k_keep
+        if best >= 0 and keep >= EDIT_KEEPS:
+            used.add(best)
+            what["edited"].append((r, added[best]))
+        else:
+            what["removed"].append(r)
+    what["added"] = [a for k, a in enumerate(added) if k not in used]
+    hit = relax_hit(what["added"])
+    if hit:
+        return False, f"足した文に緩和の語「{hit}」がある", what
+    for r, a in what["edited"]:
+        h = _plain_relax(_edit_delta(r, a))
+        if h:
+            return False, f"言い直しで緩和の語「{h}」を足した: 「{r[:30]}」→「{a[:30]}」", what
+        pr, pa = _polarity(r), _polarity(a)
+        if pr and pa != pr:  # a directive must survive its edit with the same polarity
+            return False, f"言い直しで指示が消えた・向きが変わった: 「{r[:30]}」→「{a[:30]}」", what
+    for r in what["removed"]:
+        if REMOVAL_NEEDS_EDIT == "all" or rule_signal(r):
+            return False, f"規則の文を消した・別の文に置き換えた (6 割以上を残す言い直しでない): 「{r[:40]}」", what
+    oh: dict[str, set] = {}
+    nh: dict[str, set] = {}
+    for u, i in ou:
+        if u != "\n":
+            oh.setdefault(u, set()).add(oc[i][0])
+    for u, i in nu:
+        if u != "\n":
+            nh.setdefault(u, set()).add(nc[i][0])
+    what["moved"] = [u for u in oh if u in nh and oh[u] != nh[u]]
+    return True, "", what
+
+
+def change_exemption(path: str, old: str, new: str,
+                     extra_paths: tuple[str, ...] | list[str] = ()) -> dict | None:
+    """Decide whether a change to a prose rule document skips prior approval. None = not a prose policy document.
+
+    The line is drawn by what the change does to sentences (judge_change), not by its form: an append and a rewrite
+    are treated alike. Returns {"ok", "reason", "inserted", "what", "free"}; "free" lists (zone id, term, text)
+    for relaxation-shaped text written inside a free zone (logged, not blocked). Rule-reference lines may only be
+    added, never changed or removed.
     """
     if not prose_policy_doc(path, (old, new), extra_paths):
         return None
-    ok, reason, inserted = insertion_only(mask_free_zones(old), mask_free_zones(new))
+    ok, reason, what = judge_change(mask_free_zones(old), mask_free_zones(new))
     if ok and not old and new and PurePosixPath(path.replace("\\", "/")).name in ENTRYPOINT_NAMES:
         # a new entry document is read automatically for a whole directory tree: a new scope of standing orders
         ok, reason = False, "新しい入口の文書 (CLAUDE.md / AGENTS.md 等) を作る"
@@ -505,7 +662,7 @@ def insertion_exemption(path: str, old: str, new: str,
         hit = relax_hit(written)
         if hit:
             free.append((zid, hit, written))
-    return {"ok": ok, "reason": reason, "inserted": inserted, "free": free}
+    return {"ok": ok, "reason": reason, "inserted": " ".join(what["added"]), "what": what, "free": free}
 
 
 def shell_segments(command: str) -> list[list[str]]:
@@ -888,11 +1045,11 @@ def selftest() -> int:
                 "rg -- '--no-verify' scripts", "git status", "git push origin main"):
         check("inspection or ordinary Git stays allowed: " + cmd, not git_bypass_attempts(cmd))
 
-    # Insertion exemption (#additive-and-free-zones). Old implementation: every case below is a change.
+    # Changes that pass without a ruling (#additive-and-free-zones): judged by what they do to sentences, not by form.
     doc = ("# Rules\n\n## Deploy\n\nレビューを経てから deploy する。 手順は runbook。\n\n"
            "## Mail\n\n送信は本人の OK の後。\n")
     def exempt(path, old, new, extra=()):
-        r = insertion_exemption(path, old, new, extra)
+        r = change_exemption(path, old, new, extra)
         return None if r is None else r["ok"]
     grown = {
         "a sentence appended to a line": doc.replace("手順は runbook。", "手順は runbook。 実測では 3 分かかる。"),
@@ -955,6 +1112,39 @@ def selftest() -> int:
         check("relaxing position still needs approval: " + name,
               exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is False)
     check("a unit list is judged unit by unit", relax_hit(["様式が改訂されても同じ。", "急ぐ時は deploy してよい。"]) == "してよい")
+    # Second round of position rules: "not needed" / "without" and the English everyday words (measured on the
+    # committed additions that the first round still sent to approval).
+    for name, inserted in (("a tool fact: no login needed", "この URL はログイン不要で読める。"),
+                           ("an unneeded quantity", "不要な中間量や重複を減らす。"),
+                           ("a document part becoming unneeded", "定義を本文に書けば caveat 節ごと不要になる。"),
+                           ("a document that is not needed", "定額の支給なら金額の書類は要らないのが普通。"),
+                           ("describing what one can do without", "住所を入れなくても価格が取れる。"),
+                           ("a look of being done", "読んでいなくても済んだ顔をする。"),
+                           ("git's ignore", "親の repo が ignore している入れ子の clone は数えない。"),
+                           ("a skip flag as a mechanism", "警告つき export や skip flag にすると FAIL は読まれない。"),
+                           ("optional material", "Mark optional content plainly."),
+                           ("an override as a namespace", "検証は namespace override の diff で見る。"),
+                           ("an anchor id", '## <a id="exception-by-category"></a>既定と違う支給額を頼む'),
+                           ("a platform feature disabled", "audit with interpreter discovery disabled."),
+                           ("a bounce vocabulary", "`5.2.1` の inactive / disabled = 停止、 `4xx` = 一時的。")):
+        check("everyday use of a listed term passes: " + name,
+              exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is True)
+    for name, inserted in (("an obligation not needed", "小さな変更なら確認は不要。"),
+                           ("a condition then not needed", "急ぐ時は不要。"),
+                           ("a compound", "docs の変更は承認不要とする。"),
+                           ("a permission not needed", "runner の許可は要らない。"),
+                           ("without an obligation", "レビューを経なくてもよい。"),
+                           ("without, then suffices", "本人に聞かなくても済む。"),
+                           ("skipping a check", "You may skip the review when in a hurry."),
+                           ("skipping a gate", "Deploys skip the pre-commit check."),
+                           ("ignoring a warning", "Ignore the warning and continue."),
+                           ("is optional", "The review is optional."),
+                           ("overriding a rule", "This section overrides the rule above."),
+                           ("an exception to", "Small fixes are an exception to the review rule."),
+                           ("a check disabled", "The check is disabled on this branch."),
+                           ("disabling a hook", "Disable the hook before pushing.")):
+        check("relaxing position still needs approval: " + name,
+              exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is False)
     # Placement and same-object profile (detection, not a verdict): what the disclosure line shows.
     prof = insertion_profile(doc, doc.replace("手順は runbook。\n", "手順は runbook。\n急ぐ deploy はレビューを経ずに deploy する。\n"))
     check("profile: a new line beside the rule about the same thing with opposite polarity is a flip",
@@ -964,16 +1154,69 @@ def selftest() -> int:
     check("profile: a new section's body is new-section and has no neighbor",
           [r["placement"] for r in prof if not r["text"].startswith("#")] == ["new-section"] and not any(r["near"] for r in prof))
     prof = insertion_profile(doc, doc.replace("手順は runbook。", "手順は runbook。 実測では 3 分かかる。"))
-    check("profile: a sentence appended to an existing line", len(prof) == 1 and prof[0]["placement"] == "in-line")
+    check("profile: a sentence appended to an existing line shows the sentence before it on that line",
+          len(prof) == 1 and prof[0]["placement"] == "in-line" and prof[0]["near"] == "手順は runbook。"
+          and prof[0]["near_kind"] == "same-line" and not prof[0]["flip"])
+    # The measured miss: a line added under a heading that states a fact flatly, about the same option as the lead
+    # sentence, showed no neighbor (the option's name sat inside a code span; the heading was never a candidate).
+    latex = ("# L\n\n## <a id=\"paper\"></a>用紙の指定は PDF に届かない (driver)\n\n"
+             "`\\documentclass[a4paper]{...}` と書いても、 PDF の用紙は **driver の既定**で決まる。\n\n- 診断: 出力を測る\n")
+    prof = insertion_profile(latex, latex + "- ⚠️ `hyperref` も driver が dvipdfmx なら既定で用紙の寸法を special として出す。\n")
+    check("profile: a word inside a code span pairs the new line with the lead sentence",
+          len(prof) == 1 and prof[0]["near"].startswith("`\\documentclass[a4paper]") and prof[0]["near_kind"] == "sentence"
+          and "driver" in prof[0]["shared"])
+    prof = insertion_profile(latex, latex + "- ⚠️ `geometry` を読むと用紙の指定は届く。\n")
+    check("profile: with no sentence about the same thing, a new line falls back to its heading",
+          len(prof) == 1 and prof[0]["near"] == "用紙の指定は PDF に届かない (driver)" and prof[0]["near_kind"] == "heading"
+          and prof[0]["shared"] == ["指定", "用紙"])
+    prof = insertion_profile(latex, latex + "\n## Fonts\n\n字体は埋め込む。\n")
+    check("profile: a new section never falls back to a heading, and its heading is new-section too",
+          all(not r["near"] and not r["near_kind"] and r["placement"] == "new-section" for r in prof))
     prof = insertion_profile(doc, doc.replace("送信は本人の OK の後。\n", "送信は本人の OK の後。\n宛先も読み上げる。\n"))
     check("profile: a new line about something else has no neighbor and no flip", len(prof) == 1 and not prof[0]["near"] and not prof[0]["flip"])
-    check("profile: not an insertion is empty", insertion_profile(doc, doc.replace("レビューを経てから", "急ぐ時は")) == [])
+    prof = insertion_profile(doc, doc.replace("レビューを経てから", "急ぐ時は"))
+    check("profile: a rewritten sentence counts as added on its existing line", len(prof) == 1 and prof[0]["placement"] == "in-line")
+    check("profile: nothing added is empty", insertion_profile(doc, doc.replace("## Mail\n\n送信", "## Mail\n送信")) == [])
+    # Rewrites that keep the meaning pass too (an append-only line only piled sentences up); the record says what changed.
+    latex_old = ("# L\n\n## <a id=\"p\"></a>documentclass の用紙指定は PDF の用紙に届かない (driver)\n\n"
+                 "`\\documentclass[a4paper]{...}` と書いても、 PDF の MediaBox は **driver の既定**で決まる。\n")
+    latex_new = ("# L\n\n## <a id=\"p\"></a>documentclass の用紙指定は、 papersize special が出ないと PDF の用紙に届かない (driver)\n\n"
+                 "`\\documentclass[a4paper]{...}` の用紙 option は版面の寸法を決めるだけで、 PDF の MediaBox は **papersize special** で決まる。\n")
+    rewritten = {
+        "a rule sentence edited, keeping most of it": doc.replace("レビューを経てから deploy する。", "レビューを経てから deploy する (実測: 3 分)。"),
+        "a descriptive sentence removed": doc.replace(" 手順は runbook。", ""),
+        "a descriptive sentence replaced": doc.replace("手順は runbook。", "手順は wiki にある。"),
+        "a sentence moved to another section": doc.replace("\n送信は本人の OK の後。\n", "\n").replace("手順は runbook。\n", "手順は runbook。\n送信は本人の OK の後。\n"),
+        "a heading reworded": doc.replace("## Deploy", "## Deploy の手順"),
+        "lines joined (formatting only)": doc.replace("## Mail\n\n送信", "## Mail\n送信"),
+        "indentation changed (formatting only)": doc.replace("\n送信は", "\n  送信は"),
+        "a flat heading and its lead sentence rewritten to say when they hold": (latex_old, latex_new),
+    }
+    for name, new in rewritten.items():
+        old_text, new_text = new if isinstance(new, tuple) else (doc, new)
+        check("a rewrite that keeps the rules passes without approval: " + name,
+              exempt("conventions/deploy.md", old_text, new_text) is True)
+    what = judge_change(doc, rewritten["a rule sentence edited, keeping most of it"])[2]
+    check("the record says which sentence was edited", what["edited"] == [("レビューを経てから deploy する。", "レビューを経てから deploy する (実測: 3 分)。")] and not what["added"])
+    what = judge_change(doc, rewritten["a descriptive sentence removed"])[2]
+    check("the record says which sentence was removed", what["removed"] == ["手順は runbook。"] and not what["edited"])
+    what = judge_change(doc, rewritten["a sentence moved to another section"])[2]
+    check("the record says which sentence moved", what["moved"] == ["送信は本人の OK の後。"] and not what["added"] and not what["removed"])
+    check("a heading reworded moves the lines under it, in the record", "レビューを経てから deploy する。" in judge_change(doc, rewritten["a heading reworded"])[2]["moved"])
+    check("the rewritten flat heading and lead sentence are two edits", len(judge_change(latex_old, latex_new)[2]["edited"]) == 2)
+    check("a rule sentence: signal / a descriptive one: none",
+          rule_signal("レビューを経てから deploy する。") and rule_signal("**必ず** 読む") and not rule_signal("手順は runbook。"))
     weakened = {
-        "an existing sentence rewritten": doc.replace("レビューを経てから deploy する。", "急ぐ時は deploy してから見る。"),
+        "a rule sentence replaced by a different one": doc.replace("レビューを経てから deploy する。", "deploy は担当が判断する。"),
+        "a rule sentence deleted": doc.replace("レビューを経てから deploy する。 手順は runbook。", "手順は runbook。"),
+        "a rule flipped in place": doc.replace("レビューを経てから deploy する。", "レビューを経ずに deploy する。"),
+        "a warn flipped to a block in place": (doc.replace("手順は runbook。", "warn は build を止めない。"),
+                                                doc.replace("手順は runbook。", "warn も build を止める。")),
+        "an existing sentence rewritten to loosen": doc.replace("レビューを経てから deploy する。", "急ぐ時は deploy してから見る。"),
+        "a directive edited into a choice": doc.replace("レビューを経てから deploy する。", "レビューを経てから deploy するか決める。"),
+        "an English rule replaced by its opposite": ("# R\n\nReview is required before deployment.\n", "# R\n\nDeploy without review.\n"),
+        "without an obligation": doc + "\nDeploy without prior approval when in a hurry.\n",
         "a word inserted into a sentence": doc.replace("本人の OK の後", "本人の OK の後でなくても"),
-        "a sentence deleted": doc.replace(" 手順は runbook。", ""),
-        "lines joined": doc.replace("## Mail\n\n送信", "## Mail\n送信"),
-        "indentation changed": doc.replace("\n送信は", "\n  送信は"),
         "an exception added": doc.replace("手順は runbook。", "手順は runbook。 ただし急ぐ時は後でよい。"),
         "an English exception added": doc + "\nReview is not required for docs.\n",
         "a sub-heading that re-parents lines": doc.replace("\nレビューを", "\n### 旧手順 (参考)\n\nレビューを"),
@@ -997,6 +1240,13 @@ def selftest() -> int:
           exempt("docs/policy.md", doc, grown["a new section at the end"], ("docs/*",)) is None)
     check("settings are not prose policy documents", exempt(".claude/settings.json", "{}", '{"a": 1}') is None)
     check("a deletion of the document is not an insertion", exempt("conventions/deploy.md", doc, "") is False)
+    check("everyday use of a listed term passes: without a thing", exempt("conventions/deploy.md", doc, doc + "\nThe check works without a network.\n") is True)
+    check("the reason names what failed", "向きが変わった" in judge_change(doc, weakened["a rule flipped in place"])[1]
+          and "指示が消えた" in judge_change(doc, weakened["a directive edited into a choice"])[1]
+          and "規則の文を消した" in judge_change(doc, weakened["an existing sentence rewritten to loosen"])[1]
+          and "規則の文を消した" in judge_change(doc, weakened["a rule sentence deleted"])[1]
+          and "緩和の語「なくても」" in judge_change(doc, weakened["a word inserted into a sentence"])[1]
+          and "参考" == relax_hit("### 旧手順 (参考)") or "旧" == relax_hit("### 旧手順 (参考)"))
 
     zoned = ("# P\n\n規則の文。\n\n<!-- agent-free:begin id=status -->\n- a: 進行中\n<!-- agent-free:end id=status -->\n"
              "\n<!-- agent-authority:begin id=gate -->\n門は下げない。\n<!-- agent-authority:end id=gate -->\n")
@@ -1037,11 +1287,11 @@ def selftest() -> int:
     twice = zoned + "\n<!-- agent-free:begin id=status -->\n規則。\n<!-- agent-free:end id=status -->\n"
     check("a repeated zone id frees only its first zone",
           moved(twice, twice.replace("\n規則。\n", "\n規則でない。\n")) == ["authority:file"])
-    r = insertion_exemption("CLAUDE.md", zoned, zoned.replace("- a: 進行中", "- a: 進行中、 確認不要"))
+    r = change_exemption("CLAUDE.md", zoned, zoned.replace("- a: 進行中", "- a: 進行中、 確認不要"))
     check("relaxation words inside a free zone are logged, not blocked",
           r is not None and r["ok"] and r["free"] and r["free"][0][1] == "不要")
     unzoned = zoned.replace("<!-- agent-free:begin id=status -->\n", "").replace("<!-- agent-free:end id=status -->\n", "")
-    r = insertion_exemption("CLAUDE.md", unzoned, zoned)
+    r = change_exemption("CLAUDE.md", unzoned, zoned)
     check("creating a zone (a locked change) does not log its initial body as written into the zone",
           r is not None and not r["ok"] and r["free"] == [])
     print(f"agent-rule-guard selftest: {len(failures)} failure(s)")
