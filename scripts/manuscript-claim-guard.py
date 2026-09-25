@@ -1706,7 +1706,7 @@ def insertion_notice(rows: list[dict]) -> str:
         return ""
     return ("📝 manuscript-claim-guard: 規則の文書に承認なしで追記した (記録済み、 止めていない)。 足した文の隣:\n" + "\n".join(lines) +
             "\n既存の文 (見出しと冒頭の言い切りを含む) がそのまま正しく残るか、 今この節を読んで決める。 残らないなら追記のままにせず、"
-            " その文を言い直す (規則を緩めない言い直し・半分以上を残す言い直しは同じく承認なしで通る。 緩める言い直しは差分を本人に見せて裁定 ="
+            " その文を言い直す (規則を緩めない言い直し・6 割以上を残す言い直しは同じく承認なしで通る。 緩める言い直しは差分を本人に見せて裁定 ="
             f" {engine_cmd()} apply --file <path> --candidate <全文 file> --change '<1 行>' --latest)。"
             " この turn の最後の返事に「規則の文書に承認なしで追記した / 変えた: <file> — …」 の行を書く (Stop が確かめる)。"
             " 正本 = conventions/agent-rule-ownership.md#additive-and-free-zones")

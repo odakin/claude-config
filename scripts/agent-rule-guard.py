@@ -25,11 +25,14 @@ Two exceptions apply only to built-in prose instruction documents (CLAUDE.md /
 AGENTS.md / CONVENTIONS.md / conventions/*.md, not the guard's own rule docs,
 not marker files, not manifest-declared patterns; the dispatcher also requires
 a Git repository): an `agent-free` zone the owner declared is masked out of the
-file lock, and a change that only inserts whole sentences, lines or sections
-(existing units intact, their heading/code/comment context unchanged, no
-relaxation vocabulary or hiding markup in the inserted text, not a brand-new
-entry document) is exempt from prior approval; the dispatcher logs it for the
-owner to read afterwards. Whether an edit strengthens or weakens a rule is not
+file lock, and a change that does not loosen a rule by proxy, whatever its form
+(append, rewrite, deletion, move), is exempt from prior approval: its added
+sentences carry no relaxation vocabulary or hiding markup, an edited sentence
+keeps six tenths of the old one with no listed term in the delta and the same
+directive polarity, no rule-carrying sentence is removed without such an edit,
+no existing sentence is moved into a fence or comment, no new heading files the
+lines under it as history, and it is not a brand-new entry document (judge_change);
+the dispatcher logs it for the owner to read afterwards. Whether an edit strengthens or weakens a rule is not
 decided here; the inserted-only shape and the vocabulary tripwire are proxies
 with known holes (conventions/agent-rule-ownership.md#additive-and-free-zones).
 Callers pass manifest patterns as extra_paths, never the expanded set of every
@@ -259,7 +262,7 @@ def wiring_inside_blocks(text: str, blocks: list[tuple[int, int]]) -> bool:
 
 
 def prose_policy_doc(path: str, texts: tuple[str, ...], extra_paths: tuple[str, ...] | list[str] = ()) -> bool:
-    """True for a built-in prose instruction document where free zones and the insertion exemption apply.
+    """True for a built-in prose instruction document where free zones and the change exemption apply.
 
     Excluded: the guard's own rule documents, files carrying the whole-file
     marker (in any of the given versions) and paths a manifest declared.
