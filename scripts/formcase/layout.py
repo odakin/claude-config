@@ -242,8 +242,19 @@ def pages_for(spec: dict, name: str) -> list:
 # ---------------------------------------------------------------------------
 # Excel に当てる体裁の差分 (openpyxl で save すると図形が消える様式 = 標題・checkbox 等の drawing を持つ雛形)
 # ---------------------------------------------------------------------------
+def bbox(ranges) -> str:
+    """range の list (紙 1 枚ずつの page) を 1 つの range に (snapshot / excel_ops の対象 = 刷る全域)。"""
+    from openpyxl.utils import get_column_letter
+    from openpyxl.utils.cell import range_boundaries
+
+    bs = [range_boundaries(str(r).replace("$", "")) for r in (ranges if isinstance(ranges, (list, tuple)) else [ranges])]
+    c0, r0 = min(b[0] for b in bs), min(b[1] for b in bs)
+    c1, r1 = max(b[2] for b in bs), max(b[3] for b in bs)
+    return f"{get_column_letter(c0)}{r0}:{get_column_letter(c1)}{r1}"
+
+
 def snapshot(ws, area: str) -> dict:
-    """area の中の体裁 (行高・結合・折り返し・揃え・字の大きさ・表示書式・下罫線・白黒) を控える。"""
+    """area の中の体裁 (行高・結合・折り返し・揃え・字の大きさ・表示書式・下罫線・上罫線・白黒) を控える。"""
     from openpyxl.cell.cell import MergedCell
     from openpyxl.utils.cell import range_boundaries
 
@@ -254,24 +265,59 @@ def snapshot(ws, area: str) -> dict:
             if isinstance(c, MergedCell):
                 continue
             a = c.alignment
+            bd = c.border
             cells[c.coordinate] = (bool(a.wrap_text), a.horizontal, a.vertical,
                                    float(c.font.sz) if c.font is not None and c.font.sz else None, c.number_format,
-                                   c.border.bottom.style if c.border is not None and c.border.bottom is not None else None)
+                                   bd.bottom.style if bd is not None and bd.bottom is not None else None,
+                                   bd.top.style if bd is not None and bd.top is not None else None)
     return {"rows": {r: ws.row_dimensions[r].height for r in range(r0, r1 + 1)},
             "merges": {str(m) for m in ws.merged_cells.ranges}, "cells": cells,
             "bw": bool(ws.page_setup.blackAndWhite)}
 
 
+def _border_ranges(changes: list, anchors: set) -> list:
+    """罫線の変更 [(coord, edge, style)] を、 同じ行・同じ縁・同じ style で列が続く分ごとに 1 つの range にまとめる
+    (= AppleScript の行数を cell の数でなく行の数にする)。 間の列が snapshot に無い cell (結合の内側) なら続きとみなす。
+    結合の内側も range に入れて Excel に当てる = 結合セルの縁の罫線が結合の全幅に付く (openpyxl は内側の cell に
+    border を持てず、 anchor の cell にしか当たらなかった)。"""
+    from openpyxl.utils import get_column_letter
+    from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
+
+    by = {}
+    for coord, edge, style in changes:
+        col, row = coordinate_from_string(coord)
+        by.setdefault((row, edge, style), []).append(column_index_from_string(col))
+    anchor_cols = {}
+    for coord in anchors:
+        col, row = coordinate_from_string(coord)
+        anchor_cols.setdefault(row, set()).add(column_index_from_string(col))
+    out = []
+    for (row, edge, style), cols in sorted(by.items(), key=lambda kv: (kv[0][0], kv[0][1], str(kv[0][2]))):
+        cols = sorted(set(cols))
+        runs, start, prev = [], cols[0], cols[0]
+        for c in cols[1:]:
+            gap = [x for x in range(prev + 1, c) if x in anchor_cols.get(row, set())]
+            if gap:                     # 間に変えていない anchor の cell がある = 別の range
+                runs.append((start, prev))
+                start = c
+            prev = c
+        runs.append((start, prev))
+        for a, b in runs:
+            rng = f"{get_column_letter(a)}{row}:{get_column_letter(b)}{row}"
+            out.append((f"border_{edge}", rng, style))
+    return out
+
+
 def excel_ops(before: dict, ws, area: str) -> list:
     """snapshot の後に openpyxl で当てた体裁の変更を、 Excel に当てる操作の list にする (excel.ops_lines の形)。
-    Excel に当てられない変更 (下罫線) は ("border_bottom", …) として出し、 ops_lines が止める (黙って落とさない)。"""
-    if (getattr(ws.parent, "_formcase_drop_shapes", None) or {}).get(ws.title):
-        raise ValueError(f"{ws.title}: spec の render: drop_shape は Excel の操作に写せない (図形を落とすのは "
-                         "openpyxl の temp + 図形の移植の経路だけ)")
+    罫線 (下・上) の変更は行ごとの range にまとめる (``_border_ranges``)。 spec の render: drop_shape は
+    ("delete_shape", 名前) = Excel が staged copy の図形を落とす (保存しないので元は変わらない)。"""
+    ops = [("delete_shape", n) for n in sorted((getattr(ws.parent, "_formcase_drop_shapes", None) or {}).get(ws.title, ()))]
     after = snapshot(ws, area)
-    ops = [("unmerge", m) for m in sorted(before["merges"] - after["merges"])]
+    ops += [("unmerge", m) for m in sorted(before["merges"] - after["merges"])]
     ops += [("merge", m) for m in sorted(after["merges"] - before["merges"])]
-    for coord, (w, h, v, sz, nf, bb) in after["cells"].items():
+    borders = []
+    for coord, (w, h, v, sz, nf, bb, bt) in after["cells"].items():
         b = before["cells"].get(coord)
         if b is None:
             continue
@@ -286,7 +332,10 @@ def excel_ops(before: dict, ws, area: str) -> list:
         if w != b[0]:
             ops.append(("wrap", coord, w))
         if bb != b[5]:
-            ops.append(("border_bottom", coord, bb))
+            borders.append((coord, "bottom", bb))
+        if bt != (b[6] if len(b) > 6 else None):
+            borders.append((coord, "top", bt))
+    ops += _border_ranges(borders, set(after["cells"]))
     ops += [("row_height", r, h) for r, h in after["rows"].items() if h is not None and h != before["rows"].get(r)]
     if after["bw"] != before["bw"]:
         ops.append(("black_and_white", after["bw"]))

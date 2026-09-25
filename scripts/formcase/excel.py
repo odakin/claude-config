@@ -203,12 +203,35 @@ def _dollar(area: str) -> str:
     return f"${get_column_letter(c0)}${r0}:${get_column_letter(c1)}${r1}"
 
 
+# openpyxl の罫線の style 名 → Excel の AppleScript (line style, border weight)。 None = 罫線なし
+_BORDER = {None: ("line style none", None), "none": ("line style none", None),
+           "thin": ("continuous", "thin"), "medium": ("continuous", "medium"), "thick": ("continuous", "thick"),
+           "hair": ("continuous", "hairline"), "dotted": ("dot", "thin"), "dashed": ("dash", "thin"),
+           "mediumDashed": ("dash", "medium"), "dashDot": ("dash dot", "thin"), "mediumDashDot": ("dash dot", "medium"),
+           "dashDotDot": ("dash dot dot", "thin"), "mediumDashDotDot": ("dash dot dot", "medium"),
+           "slantDashDot": ("slant dash dot", "medium"), "double": ("double", "thick")}
+
+
+def _border_lines(ws: str, rng: str, edge: str, style) -> list:
+    """range の縁 (edge = bottom / top / left / right) の罫線を openpyxl の style 名どおりに。 未知の style は止める。"""
+    if style not in _BORDER:
+        raise ExcelError(f"Excel に当てる罫線の style に未対応: {style!r} ({rng} {edge})")
+    ls, weight = _BORDER[style]
+    b = f'(get border (range "{rng}" of {ws}) which border edge {edge})'
+    out = [f"set line style of {b} to {ls}"]
+    if weight:
+        out.append(f"set weight of {b} to border weight {weight}")
+    return out
+
+
 def ops_lines(sheet: str, ops) -> list:
     """体裁の変更 (layout.excel_ops の tuple) を AppleScript の行に。 未対応の変更は ExcelError (黙って落とさない)。
 
     ops の形: ("unmerge", range) / ("merge", range) / ("row_height", row, pt) / ("wrap", cell, bool) /
     ("halign", cell, name) / ("valign", cell, name) / ("font_size", cell, pt) / ("number_format", cell, fmt) /
-    ("print_area", range) / ("one_page",) / ("black_and_white", bool) / ("hide_sheet", name)。"""
+    ("print_area", range) / ("one_page",) / ("black_and_white", bool) / ("hide_sheet", name) /
+    ("border_bottom", range, style) / ("border_top", range, style) (style = openpyxl の名前、 None = 消す) /
+    ("delete_shape", name) (= spec の render: drop_shape を staged copy で落とす。 保存しないので元は変わらない)。"""
     ws = f"worksheet {_q(sheet)} of wbk"
     out = []
     for op in ops:
@@ -232,13 +255,24 @@ def ops_lines(sheet: str, ops) -> list:
         elif k == "print_area":
             out.append(f'set print area of page setup object of {ws} to "{_dollar(op[1])}"')
         elif k == "one_page":
-            out += [f"set zoom of page setup object of {ws} to false",
+            # 手動改ページも消す (= openpyxl 側の layout.one_page と同じ。 印刷範囲 1 つ = 紙 1 枚)
+            out += [f"reset all page breaks {ws}",
+                    f"set zoom of page setup object of {ws} to false",
                     f"set fit to pages wide of page setup object of {ws} to 1",
                     f"set fit to pages tall of page setup object of {ws} to 1"]
         elif k == "black_and_white":
             out.append(f'set black and white of page setup object of {ws} to {"true" if op[1] else "false"}')
         elif k == "hide_sheet":            # 素刷り (fidelity.blank_pdf): 他の sheet を刷らない = 非表示 (削除しない = 参照の数式を壊さない)
             out.append(f"set visible of worksheet {_q(op[1])} of wbk to sheet hidden")
+        elif k in ("border_bottom", "border_top"):
+            out += _border_lines(ws, op[1], k.split("_")[1], op[2])
+        elif k == "delete_shape":
+            # 図形は XML の名前 (cNvPr の name、 例 "楕円 2") で引ける。 ⚠️ `every shape whose name is …` は当たらない
+            # (Excel が返す name は "Oval 2" 等の英語名 = 実測 2026-09-25)
+            out.append(f"delete shape {_q(op[1])} of {ws}")
+        elif k == "shape_insets":          # 1 行の label の枠の左右の余白を縮める (drawings.single_line_insets)。
+            sh = f"text frame of shape {_q(op[1])} of {ws}"      # word wrap / auto size は Excel の text frame に無い (実測)
+            out += [f"set margin left of {sh} to {float(op[2])}", f"set margin right of {sh} to {float(op[3])}"]
         else:
             raise ExcelError(f"Excel に当てる体裁の変更に未対応: {op!r} ({sheet})")
     return out

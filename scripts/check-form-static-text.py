@@ -508,10 +508,17 @@ def check(template, pdf, targets=None, drop=None, filled=None, blank=None) -> di
             for lab in sorted(set(j["labels"]), key=len, reverse=True):
                 if any(p in lab for p, _n in want):
                     text, _ok = _consume(lab, text)
+            # 素刷り (雛形を道具を通さず app で刷った PDF) にも無い字 = 雛形自身の欠陥 (枠が字幅に足りず末尾が消える等)。
+            # 出力と素刷りの差ではないので「消えた」 に数えない (⚪ で出す)。 素刷りが無ければ従来どおり全部「消えた」
+            btext = bl_texts[j["blank_page"] - 1] if blank and j.get("blank_page") else None
+            res["template_defect"] = []
             for p, n in sorted(want, key=lambda x: len(x[0]), reverse=True):
                 text, ok = _consume(p, text)
                 if not ok:
-                    res["missing"].append({"name": n, "text": p})
+                    if btext is not None and not _consume(p, btext)[1]:
+                        res["template_defect"].append({"name": n, "text": p})
+                    else:
+                        res["missing"].append({"name": n, "text": p})
             if j["untouched"] or j["values"]:
                 text2 = texts[res["page"] - 1]
                 # label (書き換えていない cell) → 図形の字 → 記入値・導出値 の順に長い方から消し込み、 残りが「増えた字」

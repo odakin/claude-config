@@ -146,39 +146,69 @@ def _em_width(text: str) -> float:
     return sum(0.5 if ord(c) < 0x100 or 0xFF61 <= ord(c) <= 0xFF9F else 1.0 for c in text)
 
 
+def _single_line_inset(anchor: str):
+    """``_fit_single_line`` の判定と計算: 縮めるなら (bodyPr の match, 左右の余白 EMU)、 触らないなら None。"""
+    body = re.search(r"<xdr:txBody>.*?</xdr:txBody>", anchor, re.S)
+    ext = re.search(r'<xdr:ext cx="(\d+)"', anchor) or re.search(r'<a:ext cx="(\d+)"', anchor)
+    if not body or not ext:
+        return None
+    tb = body.group(0)
+    paras = [p for p in re.findall(r"<a:p>.*?</a:p>|<a:p\b[^>]*>.*?</a:p>", tb, re.S)
+             if re.search(r"<a:t>[^<]+</a:t>", p)]
+    if len(paras) != 1 or "<a:br" in paras[0]:
+        return None
+    text = "".join(re.findall(r"<a:t>([^<]*)</a:t>", paras[0]))
+    faces = set(re.findall(r'<a:(?:latin|ea) typeface="([^"]*)"', paras[0]))
+    sizes = [int(s) for s in re.findall(r"<a:rPr\b[^>]*\bsz=\"(\d+)\"", paras[0])]
+    if not text.strip() or not sizes or not faces or not faces <= set(_FIXED_PITCH):
+        return None
+    need = _em_width(text) * max(sizes) / 100 * EMU_PT          # 字幅 (EMU)
+    bp = re.search(r"<a:bodyPr\b[^>]*?/?>", tb)
+    if not bp:
+        return None
+    # 縦書き (字は枠の高さ方向に並ぶ = 枠の幅と比べても意味が無い) とグループ化した図形 (最初の ext は子の枠でない) は触らない
+    vert = re.search(r'\bvert="(\w+)"', bp.group(0))
+    if (vert and vert.group(1) != "horz") or "<xdr:grpSp" in anchor:
+        return None
+    l = int((re.search(r'\blIns="(\d+)"', bp.group(0)) or [None, _DEFAULT_INSET])[1])
+    r = int((re.search(r'\brIns="(\d+)"', bp.group(0)) or [None, _DEFAULT_INSET])[1])
+    box = int(ext.group(1)) * _TIGHT      # twoCellAnchor の実幅は列幅の丸めで ext より狭く出る = 逃げを見る
+    if need + l + r <= box:
+        return None
+    return bp, max(0, int((box - need) / 2))                     # 左右均等
+
+
+def single_line_insets(src) -> dict:
+    """Excel の操作の経路 (D2) 用: sheet 名 → [(図形の名前, 左右の余白 pt)] = ``_fit_single_line`` と同じ判定で、 1 行の
+    label が枠に入り切らず末尾が消える図形と、 その枠の余白 (excel.ops_lines の ("shape_insets", name, pt, pt))。
+    移植の経路では XML を書き換えるが、 Excel に開かせる案件の workbook は書き換えない = Excel に同じ余白を当てさせる。"""
+    out = {}
+    with zipfile.ZipFile(src) as z:
+        for name, part in sheet_parts(z).items():
+            drels = [(rid, tgt) for rid, typ, tgt, _m in _rels(z, part) if typ == REL_DRAWING]
+            if len(drels) != 1:
+                continue
+            xml = z.read(_resolve(part, drels[0][1])).decode("utf-8")
+            xml, _n = _strip_alternate_content(xml)
+            for m in _ANCHOR.finditer(xml):
+                calc = _single_line_inset(m.group(0))
+                if calc is None:
+                    continue
+                nm = re.search(r'<xdr:cNvPr\b[^>]*\bname="([^"]*)"', m.group(0))
+                if nm:
+                    out.setdefault(name, []).append((nm.group(1), round(calc[1] / EMU_PT, 2)))
+    return out
+
+
 def _fit_single_line(anchor: str) -> str:
     """1 行の label (段落 1 つ・改行なし・固定ピッチ font) が雛形の枠に入り切らず折り返される時だけ、 左右の余白を
     入る分まで縮める (枠の大きさ・字の大きさは変えない)。 雛形の枠は余白込みで字幅ぎりぎりに作られていて、
     Excel の字幅の丸めで 1 字だけ次の行に落ちる (実測: 枠 78pt に 16pt × 4 字 + 余白 7.2pt × 2 = 78.4pt で 4 字目が
     次の行へ。 枠の 99.5% を使う様式番号は末尾の 1 字が 2 行目に落ち、 雛形の vertOverflow="clip" で消えたまま刷られた)。"""
-    body = re.search(r"<xdr:txBody>.*?</xdr:txBody>", anchor, re.S)
-    ext = re.search(r'<xdr:ext cx="(\d+)"', anchor) or re.search(r'<a:ext cx="(\d+)"', anchor)
-    if not body or not ext:
+    calc = _single_line_inset(anchor)
+    if calc is None:
         return anchor
-    tb = body.group(0)
-    paras = [p for p in re.findall(r"<a:p>.*?</a:p>|<a:p\b[^>]*>.*?</a:p>", tb, re.S)
-             if re.search(r"<a:t>[^<]+</a:t>", p)]
-    if len(paras) != 1 or "<a:br" in paras[0]:
-        return anchor
-    text = "".join(re.findall(r"<a:t>([^<]*)</a:t>", paras[0]))
-    faces = set(re.findall(r'<a:(?:latin|ea) typeface="([^"]*)"', paras[0]))
-    sizes = [int(s) for s in re.findall(r"<a:rPr\b[^>]*\bsz=\"(\d+)\"", paras[0])]
-    if not text.strip() or not sizes or not faces or not faces <= set(_FIXED_PITCH):
-        return anchor
-    need = _em_width(text) * max(sizes) / 100 * EMU_PT          # 字幅 (EMU)
-    bp = re.search(r"<a:bodyPr\b[^>]*?/?>", tb)
-    if not bp:
-        return anchor
-    # 縦書き (字は枠の高さ方向に並ぶ = 枠の幅と比べても意味が無い) とグループ化した図形 (最初の ext は子の枠でない) は触らない
-    vert = re.search(r'\bvert="(\w+)"', bp.group(0))
-    if (vert and vert.group(1) != "horz") or "<xdr:grpSp" in anchor:
-        return anchor
-    l = int((re.search(r'\blIns="(\d+)"', bp.group(0)) or [None, _DEFAULT_INSET])[1])
-    r = int((re.search(r'\brIns="(\d+)"', bp.group(0)) or [None, _DEFAULT_INSET])[1])
-    box = int(ext.group(1)) * _TIGHT      # twoCellAnchor の実幅は列幅の丸めで ext より狭く出る = 逃げを見る
-    if need + l + r <= box:
-        return anchor
-    ins = max(0, int((box - need) / 2))                          # 左右均等
+    bp, ins = calc
     new = bp.group(0)
     for k in ("lIns", "rIns"):
         new = re.sub(rf'\b{k}="\d+"', f'{k}="{ins}"', new) if f"{k}=" in new else new.replace("<a:bodyPr", f'<a:bodyPr {k}="{ins}"', 1)
