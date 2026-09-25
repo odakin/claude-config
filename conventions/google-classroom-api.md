@@ -15,7 +15,7 @@ summary: Classroom API の実測済み挙動 = 先生はクラスを ACTIVE で�
 | `classroom.courses` | クラスの作成・変更 (名前・section・状態 = ARCHIVED 等) | — |
 | `classroom.rosters.readonly` | 学生・教師の一覧 (userId と氏名、 実測) | 招待はできない |
 | `classroom.rosters` | 招待の作成 | — |
-| `classroom.profile.emails` | 一覧に mail address が付く | 無いと userId と氏名だけ (address で突き合わせられない、 実測) |
+| `classroom.profile.emails` | 一覧に mail address が付く | 無いと一覧は userId と氏名だけ。 address で突き合わせるには 1 人ずつ逆に引く = [#roster-match-by-address](#roster-match-by-address) (実測) |
 | `classroom.announcements` | お知らせの読み書き | — |
 | `classroom.coursework.students` | 課題の作成・提出の読み書き | — |
 
@@ -51,6 +51,7 @@ scope を足したら token を取り直す (consent を 1 回)。 同じ OAuth 
 - **先生は学生を直接追加できない**: `courses.students.create` は管理者か、 参加コードを持つ本人の自己登録用。 先生からは `invitations.create` (`role: STUDENT | TEACHER`) で招待する
 - 招待すると **Google が招待した全員に mail を出す** = 取り消せない外向きの送信。 対象と人数を人に見せて OK をもらってから送る。 実装は既定を dry-run にする
 - 招待を受け入れた時点でクラスに入る。 送った直後でもすぐ参加する人がいるので (実測)、 検算は「参加済み + 承諾待ちの招待 (`invitations.list`) = 招待した数」 で見る
+- <a id="roster-match-by-address"></a>**名簿と参加者の突き合わせは、 address を userId にして 1 人ずつ引く** (実測): 一覧 (`courses.students.list`) は `classroom.profile.emails` が無いと address を返さないが、 `courses.students.get` と `invitations.list` は userId に address を受け付ける (前者は参加していなければ 404)。 名簿の address ごとに「参加済み / 承諾待ち / 未招待」 を決め、 一覧の userId から「参加済みだが名簿に無い人」 (LA・聴講・参加コードで入った人) も出す。 1 人 2 呼び出しなので招待と同じく数本並列にする。 学期途中に履修登録が増えたら、 名簿を取り直してこの突き合わせで未招待を拾う (読むだけ。 招待は人に見せてから)
 - 招待は 1 人 1 回の API 呼び出しで、 1 回に 1 秒強かかる (実測) = 1 クラス分を逐次で送ると分単位になる → 数本を並列にする (結果は入力順に並べ、 失敗と「済み」 を集計して返す)
 - すでに招待済み・参加済みの人への招待は `ALREADY_EXISTS` で返る (未実測) = 実装はこれを失敗でなく「済み」 として数える
 - **`userId` は mail address でも数値の userId でもよい** (実測): 1 人が複数の address (学内の複数ドメイン等) を持つと、 どれが Classroom のアカウントか推測になる。 以前のクラスの教師一覧 (`courses.teachers.list`) に出ている数値 userId で招待すれば、 同じアカウントに確実に届く

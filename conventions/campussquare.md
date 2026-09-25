@@ -39,6 +39,7 @@ summary: CampusSquare は学内 SSO の奥だが browser の session cookie 再�
 - **提出確定は upload と別の操作**: 各科目の「提出」 にチェック → 「提出済み（全員）」 → 更新。 全科目が提出済みになると一括更新欄が空になる
 - 評価不能 (X) も CSV で通る
 - <a id="roster-csv-download"></a>**名簿の download は script で取れる** (実測): `campussquare-client.py roster-csv --out-dir <dir>`。 成績登録の flow (`SIW0001000-flow`) の form `downloadForm` を `_eventId=outputCsvAll` / `nendo=<年度>` / `shikenKbnCd=1` で POST → 302 → GET で `text/csv` の attachment (`regis<YYYYMMDD>.csv`、 全担当科目 1 file の形) が返る。 画面の「CSV一括ダウンロード」 ボタンと同じ操作 = 読むだけで、 学期は画面が開いた時点の学期。 学期途中の履修登録の追加を拾うときは、 取り直して前の版と学生番号で突き合わせる
+- 成績登録の flow の画面の JavaScript が使う event (form `downloadForm`。 画面の source から読んだだけで、 実行して確かめたのは `outputCsvAll` だけ): 科目ごとの名簿 = `outputCsv` (`nendo` / `jikanwariShozokuCd` / `jikanwariCd` / `shikenKbnCd` / `chukanSeisekiFlg` / `chukanFlg` を埋める)、 同じ引数の PDF = `outputPdf`、 一括 upload の画面へ進む = `csvInputAll`。 同じ tab に成績提出 (`SIW0001020-flow`) と成績確認表出力 (`SIW0401400-flow`) の flow もある = upload (書き込み) を足すときの入口
 - 成績の upload は今も画面。 書き込みを足すときは読み戻し照合までを 1 単位にする ([`web-form-automation.md#step-driver-harness`](web-form-automation.md#step-driver-harness))
 
 ## <a id="plan-table-xlsx"></a>授業計画表 (xlsx 出力) で自分の登録を照合する
