@@ -495,9 +495,9 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 
 いずれも **error も warning も出ず、出力だけが指定と違う**。目視では気づけないので、疑ったら**出力 PDF を測る** ([`scripts/measure-pdf-layout.py`](../scripts/measure-pdf-layout.py))。
 
-### <a id="dvipdfmx-papersize"></a>documentclass の用紙指定は PDF の用紙に届かない (dvipdfmx)
+### <a id="dvipdfmx-papersize"></a>documentclass の用紙指定は、 papersize special が出ないと PDF の用紙に届かない (dvipdfmx)
 
-`\documentclass[a4paper]{...}` と書いても、PDF の MediaBox は **dvipdfmx の既定**で決まる。既定は環境依存なので、**同じ tex が機械によって A4 になったり Letter になったりする**。版面は指定どおりの寸法のまま別サイズの紙に載るので、**上下の余白だけが非対称に詰まる**という出方をする。
+`\documentclass[a4paper]{...}` の用紙 option は版面の寸法を決めるだけで、 PDF の MediaBox は **papersize special** で決まる。 special を出すのは `hyperref` (driver が dvipdfmx のときの既定)・`geometry`・jsclasses の `papersize` option で、 **どれも無ければ dvipdfmx の既定**になる。 既定は環境依存なので、**同じ tex が機械によって A4 になったり Letter になったりする**。版面は指定どおりの寸法のまま別サイズの紙に載るので、**上下の余白だけが非対称に詰まる**という出方をする。
 
 - 診断: `python3 -c "import fitz; print(fitz.open('x.pdf')[0].rect)"` → A4 = 595.28 × 841.89 pt / Letter = 612 × 792 pt
 - 対策 (環境非依存、preamble に 1 行):
@@ -506,8 +506,8 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
   ```
 - `dvipdfmx -p a4` でも直るが、**誰がどこで組んでも同じにしたいなら tex 側に書く**
 - jsclasses (jsarticle / jsbook) なら、class option に `papersize` を足すだけでよい (`\documentclass[uplatex,dvipdfmx,a5paper,papersize]{jsbook}`)。用紙の option を変えたとき (A4 → A5 など) も special が追随する。実測: `dvipdfmx` option だけでは Letter のままだった
-- ⚠️ `geometry` を読み込むと papersize special が出るため A4 になる。∴ **同じ repo でも `geometry` を使う file だけ A4、使わない file が Letter**、という分岐が起きる (両方を並べて刷って初めて気づく)
-- ⚠️ `hyperref` も (driver が dvipdfmx なら) 既定で class の用紙寸法を special として出す。 ∴ 標準 class (`letter` / `article`) は `a4paper` を書けば hyperref 経由で A4 になる。 ところが **`hyperref` に `setpagesize=false` を渡すと、 この special が止まり dvipdfmx の既定に落ちる**。 古い雛形にこの option が残っていることがある。 実測 (platex + dvipdfmx、 `letter` class): `a4paper` + `setpagesize=false` → Letter / `a4paper` のみ → A4 / どちらも無し → Letter (標準 class の既定は letterpaper)
+- ⚠️ special を出す package を読むかどうかで、 **同じ repo でも file ごとに A4 と Letter が分かれる** (`geometry` を使う file だけ A4、 使わない file が Letter。 両方を並べて刷って初めて気づく)
+- ⚠️ `hyperref` の special は **`setpagesize=false` で止まり**、 dvipdfmx の既定に落ちる。 古い雛形にこの option が残っていることがある。 実測 (platex + dvipdfmx、 `letter` class): `a4paper` + `setpagesize=false` → Letter / `a4paper` のみ → A4 / どちらも無し → Letter (標準 class の既定は letterpaper)
 
 ### <a id="tabular-cell-trailing-hspace"></a>tabular セル末尾の裸 `\hspace` は `\unskip` に消される
 
