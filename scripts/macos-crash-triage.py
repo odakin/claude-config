@@ -13,6 +13,9 @@
     crash key (ver / ptype / switch-N) と FATAL 行。 report の時刻 ±10 秒の dump を対応づける
   - --log のとき unified log (/usr/bin/log。 zsh では素の `log` が組み込み関数に取られる) の、
     起動 90 秒前〜落ちた 2 秒後の 更新器・起動要求・窓の有無・process death
+  - --app のとき、 report の有無に関わらず起動中の本体 process (ps + lsof)。 crash を残さない
+    「開いても何も起きない」 型の印: headless-orphan (自動化の headless が親を失って残る) /
+    stale-binary (更新で置き換わった旧版の binary のまま動いている) / no-startup-window (窓なしで起動された)
 
 型 (class):
   startup-during-bundle-replacement  起動 5 秒以内に落ち、 report に版番号が無い (= report を書いた瞬間に
@@ -300,6 +303,89 @@ def render(record: dict) -> None:
         print(f"    log| {line}")
 
 
+# ---------------------------------------------------------------- 起動中の process (開いても何も起きない型)
+
+LIVE_ANCHOR = DOC + "#launch-does-nothing"
+
+
+def live_processes(app: str, ps_output: str, running_inode, disk_inode) -> list[dict]:
+    """`ps -axo pid=,ppid=,etime=,args=` から、 <app>.app の本体 (helper でない) の起動中 process を拾って印を付ける。
+
+    running_inode(pid, path) = その process が実行中の binary の inode (取れなければ None)、
+    disk_inode(path) = 同じ path に今ある file の inode (無ければ None)。 test のため注入する。
+    """
+    exe = re.compile(rf"^(.*?/{re.escape(app)}\.app/Contents/MacOS/{re.escape(app)})(?=\s|$)")
+    found = []
+    for line in ps_output.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) < 4 or not parts[0].isdigit():
+            continue
+        m = exe.match(parts[3])
+        if not m:
+            continue
+        pid, path, args = int(parts[0]), m.group(1), parts[3][m.end():].split()
+        marks = []
+        if "--headless" in args:
+            marks.append("headless-orphan" if parts[1] == "1" else "headless")
+        running, on_disk = running_inode(pid, path), disk_inode(path)
+        if running is not None and running != on_disk:
+            marks.append("stale-binary")
+        if "--no-startup-window" in args:
+            marks.append("no-startup-window")
+        found.append({"pid": pid, "ppid": int(parts[1]), "etime": parts[2], "path": path, "marks": marks,
+                      "running_inode": running, "disk_inode": on_disk})
+    return found
+
+
+LIVE_MEANING = {
+    "headless-orphan": "画面を持たない自動化の browser が、 呼び元が消えた後も残っている (Dock から開いても窓の無いこれが前に出る)",
+    "headless": "画面を持たない自動化の browser (呼び元は生きている = 今走っている処理かもしれない)",
+    "stale-binary": "実行中の binary が、 今 disk にある版と別物 (更新で置き換えられた旧版のまま動いている)",
+    "no-startup-window": "窓を開かない指定で起動された (更新の再起動・背景の再起動の形)",
+}
+
+
+def _lsof_exe_inode(pid: int, path: str) -> int | None:
+    try:
+        out = subprocess.run(["/usr/sbin/lsof", "-a", "-p", str(pid), "-d", "txt", "-F", "in"],
+                             capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    inode = None
+    for line in out.splitlines():
+        if line.startswith("i"):
+            inode = line[1:]
+        elif line.startswith("n") and line[1:] == path and inode and inode.isdigit():
+            return int(inode)
+    return None
+
+
+def _disk_inode(path: str) -> int | None:
+    try:
+        return os.stat(path).st_ino
+    except OSError:
+        return None
+
+
+def render_live(app: str) -> None:
+    try:
+        ps = subprocess.run(["/bin/ps", "-axo", "pid=,ppid=,etime=,args="], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f"起動中の process: 見られなかった ({e})")
+        return
+    procs = live_processes(app, ps, _lsof_exe_inode, _disk_inode)
+    if not procs:
+        print(f"起動中の {app}: なし")
+        return
+    print(f"起動中の {app} (本体の process):")
+    for p in procs:
+        print(f"  pid {p['pid']}  ppid {p['ppid']}  経過 {p['etime']}  印: {', '.join(p['marks']) or '-'}")
+        for mark in p["marks"]:
+            print(f"    - {mark}: {LIVE_MEANING[mark]}")
+    if any(m in ("headless-orphan", "stale-binary") for p in procs for m in p["marks"]):
+        print(f"  → 開いても何も起きない型。 止める前に読むこと = {LIVE_ANCHOR}")
+
+
 def collect(args: argparse.Namespace, home: Path, system_reports: Path) -> list[dict]:
     if args.report:
         paths = [Path(p) for p in args.report]
@@ -348,13 +434,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not records:
         print(f"report 0 件 (見た場所 = {args.home}/Library/Logs/DiagnosticReports と {args.system_reports} の読める分、 直近 {args.days} 日)")
-        return 0
-    for record in records:
-        render(record)
-    counts: dict[str, int] = {}
-    for record in records:
-        counts[record["class"]] = counts.get(record["class"], 0) + 1
-    print("-- " + ", ".join(f"{name} {n}" for name, n in sorted(counts.items())))
+    else:
+        for record in records:
+            render(record)
+        counts: dict[str, int] = {}
+        for record in records:
+            counts[record["class"]] = counts.get(record["class"], 0) + 1
+        print("-- " + ", ".join(f"{name} {n}" for name, n in sorted(counts.items())))
+    if args.app:  # report 0 件でも止めない = 「開いても何も起きない」 は crash を残さない
+        render_live(args.app)
     return 0
 
 
@@ -446,6 +534,25 @@ def selftest() -> int:
         checks.append(("log filter: 更新器は先頭 1 行 + sparkle 行", sum(" Autoupdate[" in x for x in kept) == 2 and any("PID to listen" in x for x in kept)))
         checks.append(("log filter: 他 process の death は残す (偶然の同時刻を見るため)", any("(Wallpaper)" in x for x in kept)))
         checks.append(("log filter: 空なら「null は証拠にならない」", "証拠にならない" in filter_log_lines(["Timestamp"], "X")[0]))
+        exe = "/Applications/Example Browser.app/Contents/MacOS/Example Browser"
+        helper = "/Applications/Example Browser.app/Contents/Frameworks/F.framework/Helpers/Example Browser Helper.app/Contents/MacOS/Example Browser Helper"
+        ps = "\n".join([
+            f"  101     1 19:39:04 {exe} --headless --print-to-pdf=/t/o.pdf --user-data-dir=/t/p",
+            f"  102   500    01:00 {exe} --headless --print-to-pdf=/t/o2.pdf",
+            f"  103     1    11:11 {exe} --no-startup-window --disable-domain-reliability",
+            f"  104     1    00:25 {exe}",
+            f"  105   104    00:25 {helper} --type=renderer",
+            f"  106     1    00:01 /Applications/Example Browser Beta.app/Contents/MacOS/Example Browser Beta",
+        ])
+        inodes = {101: 7, 102: 7, 103: 5, 104: 7}
+        live = {p["pid"]: p["marks"] for p in live_processes("Example Browser", ps, lambda pid, path: inodes.get(pid), lambda path: 7)}
+        checks.append(("live: 本体だけ拾う (helper・名前の似た別アプリは拾わない)", set(live) == {101, 102, 103, 104}))
+        checks.append(("live: 親を失った headless", live.get(101) == ["headless-orphan"]))
+        checks.append(("live: 親が生きている headless は orphan と言わない", live.get(102) == ["headless"]))
+        checks.append(("live: 更新で置き換わった旧版 + 窓なし起動", live.get(103) == ["stale-binary", "no-startup-window"]))
+        checks.append(("live: 普通の起動は印なし (foil)", live.get(104) == []))
+        unknown = live_processes("Example Browser", f"  107     1 00:01 {exe}", lambda pid, path: None, lambda path: 7)
+        checks.append(("live: 実行中の inode が取れない時は stale と言わない", unknown and unknown[0]["marks"] == []))
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
         print(("PASS " if ok else "FAIL ") + name)

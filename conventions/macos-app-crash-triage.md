@@ -34,6 +34,17 @@ pgrep -lf '<アプリ名>'
 [`office-automation.md#headless-orphan-blocks-gui-launch`](office-automation.md#headless-orphan-blocks-gui-launch)。
 ⚠️ 止める前に、 その process が今走っている処理のもの (親が生きている) でないかを見る。
 
+**もう 1 つの形 = 更新の後、 旧版の binary のまま窓を開かずに居座る** (実測、 Chromium 系): 動いている最中に
+更新器が bundle を差し替え、 その後で app が自分を起動し直すと、 起動し直した側が**差し替え前の binary** (disk からは
+消えた版) で、 `--no-startup-window` つきで立ち上がることがある。 LaunchServices には普通の app (`type="Foreground"`) として
+登録され、 窓は 0 枚で AppleScript にも応答するのに、 Dock から開いても窓が出ない。 見分け方は、 実行中の
+binary の inode と、 同じ path に今ある file の inode が違うこと (`lsappinfo` の Version が Info.plist の版と違うのも
+同じ印)。 [#update-relaunch-race](#update-relaunch-race) の、 落ちずに生き残った側。 その process を止めて開き直すと、
+新しい版が立ち上がる (更新後の初回起動は遅いことがある)。
+
+2 つの形はどちらも `macos-crash-triage.py --app "<App>"` が report の後に「起動中の本体 process」 として印を付ける
+(`headless-orphan` / `stale-binary` / `no-startup-window`、 読むだけ)。 report が 0 件のときもこの段は出る。
+
 ## <a id="crash-report-sources"></a>証拠の置き場と読み方の罠
 
 - **`.ips`** = `~/Library/Logs/DiagnosticReports/<App>-<日時>.ips` (system 側 `/Library/Logs/DiagnosticReports` は読めないものがある)。
