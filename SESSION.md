@@ -1,5 +1,7 @@
 # SESSION — claude-config
 
+2026-09-26 総合CIの `checks` で残っていた 2 件を修復 (`2feb035`)。対象は [`pdf-print-preflight.py`](scripts/pdf-print-preflight.py) と [`todo_thread_links.py`](scripts/lib/todo_thread_links.py)。別セッションの独立検収で旧版の失敗・修正後の解消を再現し、追加で見つかった空の照合結果も赤に補強。[修正後の CI run 36225721373](https://github.com/odakin/claude-config/actions/runs/36225721373) は成功。次 = この 2 件についてなし。非空だが対象の一部だけを返す照合器の異常応答は今回の検証範囲外（通常の検査器では未観測）。
+
 規則保護の gate は、 性能の差し戻し (commit の検査が file 数に比例して git を呼ぶ) を直し (3000 file の dir で 201 s → 0.4 s)、 wiring lock の範囲を裁定して実装した ([`agent-rule-ownership.md#wiring-scope`](conventions/agent-rule-ownership.md#wiring-scope) = 既定は全文 lock のまま、 言及が全部 agent-authority の block の中にある file だけ block、 迂回は canary の生存記録が session 開始の面で表に出す)。 redirect 付き commit の誤停止と素通りも同じ commit で直した。 資料の入口は [成果物台帳](docs/guard-review-records.md)、 試験と実測は [検証記録](docs/agent-rule-guard-verification.md) の末尾。 次 = 実 session での `--liveness` の沈黙 / 表示を数日見る (run-all-checks からの報告の途絶えは 14 日で 🟡)。
 
 > 📌 **このファイル = 直近の作業の索引 + Open items (目安 ~80 行 = [`CONVENTIONS.md#pre-push-check`](CONVENTIONS.md#pre-push-check))**。 entry は「日付 + 何を + 正本への pointer」 の 1-3 行で「直近」 の先頭に足す。 経緯・実測・RCA は正本 doc か [`SESSION-archive.md`](SESSION-archive.md) (grep 用) へ。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md`、 Codex 統合の正本は [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot)。 縮退: 2026-06-10 hot/cold 分離 / 2026-09-01 第 2 回 / 2026-09-11 第 3 回 (2026-08-12〜09-11 の 55 entry を archive へ verbatim MOVE、 義務行は Open items へ lift)。
