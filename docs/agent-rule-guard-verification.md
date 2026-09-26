@@ -176,7 +176,7 @@ engine の selftest が git の呼び出し回数を数える (件数に依ら�
 | source | SHA-256 |
 |---|---|
 | `scripts/manuscript-claim-guard.py` | `333252a3a627e044107bb58555eeee536ee50f36835ef072ccf80f973ec789e1` |
-| `scripts/audit-codex-hook-runtime.py` | `b2818213d48d716175078f209ff1bf9d75aae675304433e71e953b67d2903d48` |
+| `scripts/audit-codex-hook-runtime.py` | `d2cf7c1c67a0dd32e1c96ba5570f83197ed3c413d6de9afde3b988650df7f529` |
 | `scripts/audit-codex-integration.sh` | `37ea54f50b009cd85deafdb89a158d2821fdcf8eba0a9179e403558b6674ea4b` |
 | `hooks/manuscript-claim-guard.test.sh` | `111cce1a000b96a6bc0110a61c450adec474002e44ab6734aa1e1f6ce2cf20b7` |
 | `codex/hooks/codex-hooks.test.sh` | `1c06aac89cf8e089b297e8db8998a48b1824d41e734e27fdae39676571412abf` |

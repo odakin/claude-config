@@ -33,9 +33,17 @@ def assess(data: dict, needle: str) -> tuple[dict, int]:
         raise ValueError("unexpected hooks/list row")
     if row.get("errors"):
         raise ValueError("Codex reported hook configuration errors")
-    if any(not isinstance(h, dict) or not isinstance(h.get("command"), str) for h in row["hooks"]):
+    if any(not isinstance(h, dict) for h in row["hooks"]):
         raise ValueError("unexpected hooks/list hook")
-    hooks = [h for h in row.get("hooks", []) if needle in h.get("command", "")]
+    hooks = []
+    for h in row["hooks"]:
+        # hooks/list also contains valid prompt, agent and MCP handlers without a command field.
+        if h.get("handlerType") in ("prompt", "agent", "mcpTool"):
+            continue
+        if h.get("handlerType") not in (None, "command") or not isinstance(h.get("command"), str):
+            raise ValueError("unexpected command hook metadata")
+        if needle in h["command"]:
+            hooks.append(h)
     states = [{k: h.get(k) for k in ("eventName", "matcher", "enabled", "trustStatus", "source")} for h in hooks]
     expected = {"Bash", "apply_patch", "stop"}
     active = set()
@@ -150,6 +158,16 @@ def selftest() -> int:
     result, rc = assess(stop, "manuscript_claim_guard.py")
     checks.append(("absent Stop is not armed", rc == 1 and result.get("missing") == ["stop"]))
     checks.append(("managed hooks are ready", assess(fixture("managed"), "manuscript_claim_guard.py")[1] == 0))
+    for kind in ("prompt", "agent", "mcpTool"):
+        mixed = fixture()
+        mixed["data"][0]["hooks"].append({"handlerType": kind, "eventName": "stop",
+                                        "enabled": True, "trustStatus": "trusted"})
+        checks.append(("valid " + kind + " handler does not invalidate command-hook audit",
+                       assess(mixed, "manuscript_claim_guard.py")[1] == 0))
+        mixed["data"][0]["hooks"].pop(-2)  # Only the unrelated non-command Stop remains.
+        result, rc = assess(mixed, "manuscript_claim_guard.py")
+        checks.append((kind + " handler does not satisfy the reporting Stop requirement",
+                       rc == 1 and result["missing"] == ["stop"]))
     malformed = [None, {"data": [None]}, {"data": [{"hooks": [None]}]}]
     bad_regex = fixture(); bad_regex["data"][0]["hooks"][0]["matcher"] = "["
     malformed.append(bad_regex)
