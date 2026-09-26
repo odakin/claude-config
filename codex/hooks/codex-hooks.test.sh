@@ -631,4 +631,44 @@ assert p.returncode != 0 and 'MISSING: Codex authority hook(s): stop' in p.stdou
 print('Codex audit: untrusted Stop, trusted Stop, failure exit and caller display passed')
 PY
 
+# Approval sources: generated hook feedback is not an author's message.
+python3 - "$SCRIPT_DIR/../../scripts/manuscript-claim-guard.py" "$TEMP_ROOT" "$MCG_REPO" <<'PY'
+import json, os, pathlib, subprocess, sys
+engine, root, repo = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
+human = 'Keep the existing constraints and fix the parser.'
+generated = 'Generated feedback cannot authorize a change.'
+envelope = '<hook_prompt hook_run_id="stop:1:synthetic">' + generated + '</hook_prompt>'
+env = dict(os.environ, MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(root / 'source-state'),
+           MANUSCRIPT_CLAIM_GUARD_HOME=str(root / 'source-home'))
+for carrier in ('event_msg', 'response_item'):
+    sid = 'source-' + carrier
+    tr = root / (sid + '.jsonl')
+    def row(text):
+        payload = ({'type':'user_message','message':text} if carrier == 'event_msg' else
+                   {'type':'message','role':'user','content':[{'type':'input_text','text':text}]})
+        return {'type':carrier,'payload':payload}
+    tr.write_text('\n'.join(json.dumps(row(t)) for t in (human, envelope)) + '\n')
+    args = [sys.executable, str(engine), 'approve', '--session', 'codex:' + sid,
+            '--transcript', str(tr), '--file', str(repo / 'src/main.tex'), '--region', 'abstract',
+            '--change', 'synthetic source check']
+    def run(*extra):
+        return subprocess.run(args + list(extra), capture_output=True, text=True, env=env)
+    p = run('--latest')
+    assert p.returncode == 0, (carrier, p.returncode, p.stderr)
+    state = root / 'source-state' / 'approvals' / ('codex-' + sid + '.jsonl')
+    rows = [json.loads(s) for s in state.read_text().splitlines()]
+    assert len(rows) == 1 and rows[0]['quote'] == human, (carrier, rows)
+    before = state.read_bytes()
+    p = run('--quote', generated)
+    assert p.returncode == 4 and state.read_bytes() == before, (carrier, p.returncode, p.stderr)
+    with tr.open('a') as f:
+        f.write(json.dumps(row('Leave the parser unchanged.')) + '\n')
+    p = run('--quote', human)
+    assert p.returncode == 5 and state.read_bytes() == before, (carrier, p.returncode, p.stderr)
+    tr.write_text(json.dumps(row(envelope)) + '\n')
+    p = run('--latest')
+    assert p.returncode == 4 and state.read_bytes() == before, (carrier, p.returncode, p.stderr)
+    print('R5:', carrier, 'latest human, generated quote rejection, recency and hook-only checks passed')
+PY
+
 echo "Codex hook tests passed"

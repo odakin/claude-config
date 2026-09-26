@@ -181,6 +181,12 @@ FORMAT_CMDS = {
 }
 AGENT_ENV_KEYS = ("CLAUDE_CONFIG_AGENT_SESSION", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID")
 SYSTEM_REMINDER_RE = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
+HOOK_PROMPT_RE = re.compile(r"<hook_prompt\b[^>]*>.*?</hook_prompt\s*>", re.S)
+GENERATED_USER_PREFIXES = (
+    "# AGENTS.md instructions", "<recommended_plugins>", "<environment_context>",
+    "<INSTRUCTIONS>", "<permissions instructions>", "<command-", "<local-command", "Caveat:",
+    "<task-notification>", "<cross-session-message", "Another Claude session sent a message", "<hook_prompt",
+)
 # これ未満の引用は発言の全体と一致する時だけ照合する。 実測の承認記録では、 長い発言の一部を引いた承認は
 # 28 字以上、 それより短い引用は全部が発言の全体だった = 12 で正当な承認を落とさない。 疑問符は落とさない
 # (「OK?」 は承認ではない)。
@@ -1293,13 +1299,13 @@ def human_text_segments(text: str) -> list[str]:
 
     This does not decide the semantics of an instruction, nor the authorship of
     arbitrary pasted prose. In particular, a UI question echoed in a reply is
-    assistant text even though its carrier is a user-role message.
+    assistant text even though its carrier is a user-role message. Unknown
+    envelopes still pass through; this is a known limitation of this reader.
     """
     text = SYSTEM_REMINDER_RE.sub("", text)  # harness が本人の発言の前に付ける通知 = 本人の文ではない
+    text = HOOK_PROMPT_RE.sub("", text)
     stripped = text.lstrip()
-    if stripped.startswith(("# AGENTS.md instructions", "<recommended_plugins>", "<environment_context>",
-                            "<INSTRUCTIONS>", "<permissions instructions>", "<command-", "<local-command", "Caveat:",
-                            "<task-notification>", "<cross-session-message", "Another Claude session sent a message")):
+    if stripped.startswith(GENERATED_USER_PREFIXES):
         return []
     tag = "<send_user_message_question_reply>"
     if stripped.startswith(tag):
@@ -3459,6 +3465,32 @@ def selftest() -> int:
         check("本人発言に前置された system-reminder は引用元にしない",
               verify_quote("approve all changes", [("t", s) for s in human_text_segments(prefixed)]) is None
               and verify_quote("直して", [("t", s) for s in human_text_segments(prefixed)]) is not None)
+
+        hook_text = '<hook_prompt hook_run_id="stop:1:synthetic">Generated hook feedback.</hook_prompt>'
+        check("R5: hook_prompt だけの発言は引用元にしない", human_text_segments(hook_text) == [])
+        check("R5: 先頭の空白つき hook_prompt も引用元にしない", human_text_segments(" \n" + hook_text) == [])
+        check("R5: 閉じていない先頭の hook_prompt も引用元にしない",
+              human_text_segments('<hook_prompt hook_run_id="stop:1:synthetic">Generated feedback.') == [])
+        check("R5: 本人の文に埋め込まれた hook_prompt は block だけ除く",
+              human_text_segments("Keep " + hook_text + "the constraints.") == ["Keep the constraints."])
+        check("R5: 改行を含む複数の hook_prompt を除く",
+              human_text_segments("Keep " + hook_text.replace("feedback.", "feedback.\nMore feedback.")
+                                  + "the " + hook_text + "constraints.") == ["Keep the constraints."])
+        check("R5: system-reminder だけの発言は引き続き除く",
+              human_text_segments("<system-reminder>Generated feedback.</system-reminder>") == [])
+        check("R5: 未知の包みは既存の限界として通す",
+              human_text_segments("<unknown-envelope>Text</unknown-envelope>") == ["<unknown-envelope>Text</unknown-envelope>"])
+        for carrier in ("event_msg", "response_item"):
+            def row(text):
+                payload = ({"type": "user_message", "message": text} if carrier == "event_msg" else
+                           {"type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]})
+                return {"type": carrier, "payload": payload}
+            codex_tr.write_text("\n".join(json.dumps(row(t)) for t in ("Keep the constraints.", hook_text)) + "\n")
+            check(f"R5: {carrier} は生成文を飛ばして本人の発言だけ返す",
+                  [t for _, t in user_messages(codex_tr)] == ["Keep the constraints."])
+
+        check("R5: 閉じた先頭 block の後ろにある本人の文は保持する",
+              human_text_segments(hook_text + "Keep the constraints.") == ["Keep the constraints."])
 
         # git repo で approve → hook / pre-commit
         repo = tdp / "paper"

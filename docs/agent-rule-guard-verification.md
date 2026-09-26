@@ -180,3 +180,11 @@ engine の selftest が git の呼び出し回数を数える (件数に依ら�
 | `scripts/audit-codex-integration.sh` | `37ea54f50b009cd85deafdb89a158d2821fdcf8eba0a9179e403558b6674ea4b` |
 | `hooks/manuscript-claim-guard.test.sh` | `111cce1a000b96a6bc0110a61c450adec474002e44ab6734aa1e1f6ce2cf20b7` |
 | `codex/hooks/codex-hooks.test.sh` | `1c06aac89cf8e089b297e8db8998a48b1824d41e734e27fdae39676571412abf` |
+
+## 承認の引用元の修正候補の照合用 SHA-256 (2026-09-26)
+
+| source | SHA-256 |
+|---|---|
+| `scripts/manuscript-claim-guard.py` | `8970c42e970c8e6904e180a15f55efa716dbdfea4fd583940153978d149003e4` |
+| `hooks/manuscript-claim-guard.test.sh` | `2ecfd1adbfb04f9d8d2d19b36ea900d3c7785fe35839aff095b1ddeb992ad17e` |
+| `codex/hooks/codex-hooks.test.sh` | `99b7ba51fd832b626686b145fb6922a10efe7d55cde6e12c44fca2e3bd4dcab7` |

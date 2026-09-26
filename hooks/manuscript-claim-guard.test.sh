@@ -613,5 +613,33 @@ _check "|| true で script の exit は 0 になるが、 NOT ARMED は --livene
   "$true_rc $(_live --liveness --silent-days 30 | grep -c 'NOT ARMED')" "0 1"
 
 echo
+echo "=== Claude approval-source regression ==="
+python3 - "$ENGINE" "$T" "$REPO" <<'PY'
+import json, os, pathlib, subprocess, sys
+engine, root, repo = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
+human = 'Keep the existing constraints and fix the parser.'
+generated = 'Generated feedback cannot authorize a change.'
+env = dict(os.environ, MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(root / 'source-state'),
+           MANUSCRIPT_CLAIM_GUARD_HOME=str(root / 'source-home'))
+for kind in ('meta', 'reminder'):
+    sid = 'source-' + kind
+    tr = root / (sid + '.jsonl')
+    rows = [{'type':'user','turnOrigin':'human','message':{'content':human}}]
+    rows.append({'type':'user','isMeta':True,'message':{'content':generated}} if kind == 'meta' else
+                {'type':'user','message':{'content':'<system-reminder>' + generated + '</system-reminder>'}})
+    tr.write_text('\n'.join(json.dumps(r) for r in rows) + '\n')
+    args = [sys.executable, str(engine), 'approve', '--session', 'claude:' + sid,
+            '--transcript', str(tr), '--file', str(repo / 'src/main.tex'), '--region', 'abstract',
+            '--change', 'synthetic source check']
+    p = subprocess.run(args + ['--latest'], capture_output=True, text=True, env=env)
+    assert p.returncode == 0, (kind, p.returncode, p.stderr)
+    state = root / 'source-state' / 'approvals' / ('claude-' + sid + '.jsonl')
+    entries = [json.loads(s) for s in state.read_text().splitlines()]
+    assert len(entries) == 1 and entries[0]['quote'] == human, (kind, entries)
+    before = state.read_bytes()
+    p = subprocess.run(args + ['--quote', generated], capture_output=True, text=True, env=env)
+    assert p.returncode == 4 and state.read_bytes() == before, (kind, p.returncode, p.stderr)
+    print('R5 Claude:', kind, 'latest human and generated quote rejection passed')
+PY
 echo "manuscript-claim-guard.test: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
