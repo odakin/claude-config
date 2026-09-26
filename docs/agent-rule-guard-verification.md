@@ -188,3 +188,12 @@ engine の selftest が git の呼び出し回数を数える (件数に依ら�
 | `scripts/manuscript-claim-guard.py` | `8970c42e970c8e6904e180a15f55efa716dbdfea4fd583940153978d149003e4` |
 | `hooks/manuscript-claim-guard.test.sh` | `2ecfd1adbfb04f9d8d2d19b36ea900d3c7785fe35839aff095b1ddeb992ad17e` |
 | `codex/hooks/codex-hooks.test.sh` | `99b7ba51fd832b626686b145fb6922a10efe7d55cde6e12c44fca2e3bd4dcab7` |
+
+## 承認元の既定除外 — 照合用 SHA-256
+
+| source | SHA-256 |
+|---|---|
+| `scripts/manuscript-claim-guard.py` | `6d143b33c9279db40166fcbd7985d6cebe7067ccaf64e70801fceeb7929386c0` |
+| `scripts/approval-source-census.py` | `1adf51a0b8d94e4330e1e4bdd936c1f49610ebbd39de13c58493cb72f0cf9352` |
+| `hooks/manuscript-claim-guard.test.sh` | `76581a38b409295e294077fbc005b869811a11da65bf1bb6e7b5cb568a50ee42` |
+| `codex/hooks/codex-hooks.test.sh` | `100ea163d01d9f09d23f1749058d6bc64657023f3219fba2848ee89de881261f` |

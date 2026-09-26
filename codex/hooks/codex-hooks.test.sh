@@ -671,4 +671,34 @@ for carrier in ('event_msg', 'response_item'):
     print('R5:', carrier, 'latest human, generated quote rejection, recency and hook-only checks passed')
 PY
 
+python3 - "$SCRIPT_DIR/../../scripts/manuscript-claim-guard.py" "$TEMP_ROOT" "$MCG_REPO" <<'PY'
+import json, os, pathlib, subprocess, sys
+engine, root, repo = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
+human = 'Keep the constraints and repair the parser.'
+body = 'PRIVATE_GENERATED_BODY_DO_NOT_PRINT'
+env = dict(os.environ, MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(root/'tag-state'), MANUSCRIPT_CLAIM_GUARD_HOME=str(root/'tag-home'))
+for carrier in ('event_msg','response_item'):
+    sid = 'tags-' + carrier
+    tr = root/(sid+'.jsonl')
+    def row(text):
+        payload = {'type':'user_message','message':text} if carrier == 'event_msg' else {
+            'type':'message','role':'user','content':[{'type':'input_text','text':text}]}
+        return {'type':carrier,'payload':payload}
+    tr.write_text('\n'.join(json.dumps(row(t)) for t in [human,'<turn_aborted>'+body,'<foo bar="1">'+body])+'\n')
+    args = [sys.executable,str(engine),'approve','--session','codex:'+sid,'--transcript',str(tr),
+            '--file',str(repo/'src/main.tex'),'--region','abstract','--change','synthetic tag check']
+    p = subprocess.run(args+['--latest'],capture_output=True,text=True,env=env)
+    assert p.returncode == 0, (p.returncode,p.stderr)
+    state=root/'tag-state/approvals'/('codex-'+sid+'.jsonl')
+    assert json.loads(state.read_text().splitlines()[-1])['quote']==human
+    saved=state.read_bytes()
+    p=subprocess.run(args+['--quote',body],capture_output=True,text=True,env=env)
+    assert p.returncode==4 and state.read_bytes()==saved, (p.returncode,p.stderr)
+    assert 'foo=1' in p.stderr and 'turn_aborted=1' in p.stderr and body not in p.stderr
+    tr.write_text(json.dumps(row('<foo/>'+body))+'\n')
+    p=subprocess.run(args+['--latest'],capture_output=True,text=True,env=env)
+    assert p.returncode==4 and 'foo=1' in p.stderr and body not in p.stderr and state.read_bytes()==saved
+print('Approval sources: unknown tags excluded, latest human retained and body-free diagnostics passed')
+PY
+
 echo "Codex hook tests passed"

@@ -181,6 +181,7 @@ FORMAT_CMDS = {
 }
 AGENT_ENV_KEYS = ("CLAUDE_CONFIG_AGENT_SESSION", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID")
 SYSTEM_REMINDER_RE = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
+LEADING_USER_TAG_RE = re.compile(r"^\s*<([A-Za-z_][\w:-]*)(?=[\s>/])")
 HOOK_PROMPT_RE = re.compile(r"<hook_prompt\b[^>]*>.*?</hook_prompt\s*>", re.S)
 GENERATED_USER_PREFIXES = (
     "# AGENTS.md instructions", "<recommended_plugins>", "<environment_context>",
@@ -1294,32 +1295,46 @@ def find_transcript(agent: str, sid: str, hint: str | None = None) -> Path | Non
     return Path(max(hits, key=lambda h: os.path.getmtime(h)))
 
 
-def human_text_segments(text: str) -> list[str]:
+def human_text_segments(text: str, excluded_tags: dict[str, int] | None = None, *, claude_human: bool = False) -> list[str]:
     """Exclude known generated user-role envelopes; keep actual answer fields.
 
     This does not decide the semantics of an instruction, nor the authorship of
     arbitrary pasted prose. In particular, a UI question echoed in a reply is
-    assistant text even though its carrier is a user-role message. Unknown
-    envelopes still pass through; this is a known limitation of this reader.
+    assistant text even though its carrier is a user-role message. A leading
+    tag is excluded by default. Claude's explicitly human-origin pasted input
+    and the question UI's answer fields are retained without semantic inference.
     """
-    text = SYSTEM_REMINDER_RE.sub("", text)  # harness が本人の発言の前に付ける通知 = 本人の文ではない
-    text = HOOK_PROMPT_RE.sub("", text)
-    stripped = text.lstrip()
-    if stripped.startswith(GENERATED_USER_PREFIXES):
+    def excluded(name, count=1):
+        if excluded_tags is not None and count:
+            excluded_tags[name] = excluded_tags.get(name, 0) + count
         return []
+
+    text, count = SYSTEM_REMINDER_RE.subn("", text)
+    excluded("system-reminder", count)
+    text, count = HOOK_PROMPT_RE.subn("", text)
+    excluded("hook_prompt", count)
+    stripped = text.lstrip()
     tag = "<send_user_message_question_reply>"
     if stripped.startswith(tag):
         try:
             rows = json.loads(stripped[len(tag):].split("</send_user_message_question_reply>", 1)[0].strip())
         except ValueError:
-            return []
+            return excluded("send_user_message_question_reply")
         if not isinstance(rows, list):
-            return []
+            return excluded("send_user_message_question_reply")
         return [r["answer"] for r in rows if isinstance(r, dict) and isinstance(r.get("answer"), str)]
+    leading = LEADING_USER_TAG_RE.match(stripped)
+    if leading:
+        name = leading.group(1)
+        if claude_human and name == "pasted_content":
+            return [text]
+        return excluded(name)
+    if stripped.startswith(GENERATED_USER_PREFIXES):
+        return []
     return [text] if text.strip() else []
 
 
-def user_messages(path: Path) -> list[tuple[str, str]]:
+def user_messages(path: Path, excluded_tags: dict[str, int] | None = None) -> list[tuple[str, str]]:
     """transcript の、 人が書いた user 発言だけ (時刻, 本文)。"""
     out: list[tuple[str, str]] = []
     try:
@@ -1350,7 +1365,8 @@ def user_messages(path: Path) -> list[tuple[str, str]]:
                     text = "".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
                 else:
                     continue
-                out.extend((str(e.get("timestamp", "")), t) for t in human_text_segments(text))
+                out.extend((str(e.get("timestamp", "")), t) for t in human_text_segments(
+                    text, excluded_tags, claude_human=e.get("turnOrigin") == "human"))
             elif e.get("type") == "attachment":  # Claude: 作業中 (turn の途中) に届いた本人の発言
                 # type=user の行にならず queued_command の attachment として入る。 同じ型で背景 task の通知
                 # (commandMode=task-notification、 origin 無し) と別 session の連絡 (origin.kind=peer) も入るので、
@@ -1367,11 +1383,12 @@ def user_messages(path: Path) -> list[tuple[str, str]]:
                     text = "".join(b.get("text", "") for b in p if isinstance(b, dict) and b.get("type") == "text")
                 else:
                     continue
-                out.extend((str(a.get("timestamp") or e.get("timestamp", "")), t) for t in human_text_segments(text))
+                out.extend((str(a.get("timestamp") or e.get("timestamp", "")), t) for t in human_text_segments(
+                    text, excluded_tags, claude_human=True))
             elif e.get("type") == "event_msg":  # Codex
                 p = e.get("payload") or {}
                 if isinstance(p, dict) and p.get("type") == "user_message" and isinstance(p.get("message"), str):
-                    out.extend((str(e.get("timestamp", "")), t) for t in human_text_segments(p["message"]))
+                    out.extend((str(e.get("timestamp", "")), t) for t in human_text_segments(p["message"], excluded_tags))
             elif e.get("type") == "response_item":  # Codex app rollout
                 p = e.get("payload") or {}
                 if not isinstance(p, dict) or p.get("type") != "message" or p.get("role") != "user":
@@ -1382,7 +1399,7 @@ def user_messages(path: Path) -> list[tuple[str, str]]:
                 ):
                     continue
                 text = "".join(b.get("text", "") for b in content if b.get("type") == "input_text")
-                out.extend((str(e.get("timestamp", "")), t) for t in human_text_segments(text))
+                out.extend((str(e.get("timestamp", "")), t) for t in human_text_segments(text, excluded_tags))
             elif e.get("type") == "session_meta":
                 p = e.get("payload") or {}
                 source = p.get("source") if isinstance(p, dict) else None
@@ -2457,6 +2474,16 @@ def git_precommit_mode() -> int:
     return 0
 
 
+def print_excluded_tags(counts: dict[str, int]) -> None:
+    """Report structural tag names/counts only; never message bodies or source paths."""
+    if counts:
+        items = sorted(counts.items())
+        labels = [f"{name[:80]}={count}" for name, count in items[:20]]
+        if len(items) > 20:
+            labels.append(f"other_tags={len(items) - 20}")
+        print("approve: 除外した生成tag: " + ", ".join(labels), file=sys.stderr)
+
+
 def approve_mode(args: argparse.Namespace) -> int:
     session = parse_session(args.session) if args.session else session_from_env()
     if session is None:
@@ -2484,7 +2511,8 @@ def approve_mode(args: argparse.Namespace) -> int:
         print(f"approve: session {session[0]}:{session[1]} の transcript が見つからない = 著者の発言を照合できないので記録しない。",
               file=sys.stderr)
         return 3
-    msgs = user_messages(transcript)
+    excluded_tags: dict[str, int] = {}
+    msgs = user_messages(transcript, excluded_tags)
     latest = bool(getattr(args, "latest", False))
     if latest and args.quote:
         print("approve: --latest と --quote は同時に渡さない (--latest = 本人の最新の発言そのものを引く)。", file=sys.stderr)
@@ -2495,6 +2523,7 @@ def approve_mode(args: argparse.Namespace) -> int:
     if latest:
         if not msgs:
             print("approve: この session に本人の発言が無い = 引けない。 記録しない。", file=sys.stderr)
+            print_excluded_tags(excluded_tags)
             return 4
         idx, quote = len(msgs) - 1, msgs[-1][1]
     else:
@@ -2508,10 +2537,12 @@ def approve_mode(args: argparse.Namespace) -> int:
                   f"  その発言の全体をそのまま引くか、 {SHORT_QUOTE} 文字以上を引く"
                   " (「OK」 が「BOOK」「OK じゃない」 に当たらないように)。",
                   file=sys.stderr)
+            print_excluded_tags(excluded_tags)
             return 4
         print("approve: --quote が、 この session の著者 (user) の発言に verbatim で見つからない。 記録しない。\n"
               "  自分の要約・言い換え・伝聞は引用元にならない。 著者の発言をそのまま写す。",
               file=sys.stderr)
+        print_excluded_tags(excluded_tags)
         return 4
     hit = (msgs[idx][0], message_sha(msgs[idx][1]))
     said = collapse_ws(msgs[idx][1])
@@ -3478,8 +3509,24 @@ def selftest() -> int:
                                   + "the " + hook_text + "constraints.") == ["Keep the constraints."])
         check("R5: system-reminder だけの発言は引き続き除く",
               human_text_segments("<system-reminder>Generated feedback.</system-reminder>") == [])
-        check("R5: 未知の包みは既存の限界として通す",
-              human_text_segments("<unknown-envelope>Text</unknown-envelope>") == ["<unknown-envelope>Text</unknown-envelope>"])
+        check("T1: 未知の先頭tagも生成文として除く",
+              human_text_segments("<unknown-envelope>Text</unknown-envelope>") == [])
+        for text in ('<turn_aborted>Generated', '<foo bar="1">Generated', '<foo/>', ' \n<foo>Generated'):
+            check("T1: tag形の先頭を既定で除く " + text.split('>')[0].strip(), human_text_segments(text) == [])
+        for text in ('a < b の場合', '`<div>` を直して', '文の中の <foo> はそのまま'):
+            check("T1: 本文中の比較記号とtagは保持", human_text_segments(text) == [text])
+        pasted = '<pasted_content>Keep the constraints.</pasted_content>'
+        pasted_tr = home / 'pasted-fixture.jsonl'
+        for origin, extra, expected in [('human', {}, [pasted]), (None, {}, []), ('peer', {}, []),
+                                        ('human', {'isMeta': True}, [])]:
+            pasted_tr.write_text(json.dumps({'type':'user','turnOrigin':origin,'message':{'content':pasted}, **extra}) + '\n')
+            check("T1: Claudeの本人貼付けだけ保持 " + str(origin) + str(bool(extra)),
+                  [t for _, t in user_messages(pasted_tr)] == expected)
+        pasted_tr.write_text(json.dumps({'type':'attachment','attachment':{'type':'queued_command','commandMode':'prompt',
+            'origin':{'kind':'human'},'prompt':pasted}}) + '\n')
+        check("T1: 既存のpositiveな出どころを持つqueued貼付けは保持",
+              [t for _, t in user_messages(pasted_tr)] == [pasted])
+        check("T1: Codexや出どころ不明のpasted_contentは許可しない", human_text_segments(pasted) == [])
         for carrier in ("event_msg", "response_item"):
             def row(text):
                 payload = ({"type": "user_message", "message": text} if carrier == "event_msg" else

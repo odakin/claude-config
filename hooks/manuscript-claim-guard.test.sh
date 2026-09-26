@@ -641,5 +641,25 @@ for kind in ('meta', 'reminder'):
     assert p.returncode == 4 and state.read_bytes() == before, (kind, p.returncode, p.stderr)
     print('R5 Claude:', kind, 'latest human and generated quote rejection passed')
 PY
+python3 - "$ENGINE" "$T" "$REPO" <<'PY'
+import json, os, pathlib, subprocess, sys
+engine, root, repo = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
+env = dict(os.environ, MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(root/'pasted-state'), MANUSCRIPT_CLAIM_GUARD_HOME=str(root/'pasted-home'))
+pasted = '<pasted_content>Keep the constraints and fix the parser.</pasted_content>'
+for origin, expected in [('human',0),(None,4)]:
+    sid='pasted-'+str(origin)
+    tr=root/(sid+'.jsonl')
+    tr.write_text(json.dumps({'type':'user','turnOrigin':origin,'message':{'content':pasted}})+'\n')
+    p=subprocess.run([sys.executable,str(engine),'approve','--session','claude:'+sid,'--transcript',str(tr),
+                      '--file',str(repo/'src/main.tex'),'--region','abstract','--change','synthetic pasted-input check','--latest'],
+                     capture_output=True,text=True,env=env)
+    assert p.returncode==expected, (origin,p.returncode,p.stderr)
+    if expected==0:
+        state=root/'pasted-state/approvals'/('claude-'+sid+'.jsonl')
+        assert json.loads(state.read_text().splitlines()[-1])['quote']==pasted
+    else:
+        assert 'pasted_content=1' in p.stderr and 'Keep the constraints' not in p.stderr
+print('Claude approval sources: human-origin pasted input retained, unproven origin excluded')
+PY
 echo "manuscript-claim-guard.test: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
