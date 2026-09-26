@@ -23,27 +23,46 @@ import time
 
 
 def assess(data: dict, needle: str) -> tuple[dict, int]:
+    if not isinstance(data, dict):
+        raise ValueError("unexpected hooks/list response")
     rows = data.get("data")
     if not isinstance(rows, list) or len(rows) != 1:
         raise ValueError("unexpected hooks/list response")
     row = rows[0]
+    if not isinstance(row, dict) or not isinstance(row.get("hooks"), list):
+        raise ValueError("unexpected hooks/list row")
     if row.get("errors"):
         raise ValueError("Codex reported hook configuration errors")
+    if any(not isinstance(h, dict) or not isinstance(h.get("command"), str) for h in row["hooks"]):
+        raise ValueError("unexpected hooks/list hook")
     hooks = [h for h in row.get("hooks", []) if needle in h.get("command", "")]
     states = [{k: h.get(k) for k in ("eventName", "matcher", "enabled", "trustStatus", "source")} for h in hooks]
-    expected = {"Bash", "apply_patch"}
+    expected = {"Bash", "apply_patch", "stop"}
     active = set()
     for hook in hooks:
-        if hook.get("eventName") != "preToolUse" or hook.get("enabled") is not True or hook.get("trustStatus") not in ("trusted", "managed"):
+        if hook.get("enabled") is not True or hook.get("trustStatus") not in ("trusted", "managed"):
+            continue
+        if hook.get("eventName") == "stop":
+            if re.search(r"(?:^|\s)--stop(?:\s|$)", hook.get("command", "")):
+                active.add("stop")
+            continue
+        if hook.get("eventName") != "preToolUse":
             continue
         matcher = hook.get("matcher") or ""
-        for name in expected:
+        if not isinstance(matcher, str):
+            raise ValueError("unexpected hook matcher")
+        try:
+            re.compile(matcher)
+        except re.error as exc:
+            raise ValueError("invalid hook matcher") from exc
+        for name in ("Bash", "apply_patch"):
             aliases = (name, "Edit", "Write") if name == "apply_patch" else (name,)
             if matcher in ("", "*") or any(re.search(matcher, alias) for alias in aliases):
                 active.add(name)
-    ready = expected <= active
+    missing = sorted(expected - active)
+    ready = not missing
     return {"configuration": "ready_for_live_probe" if ready else "not_armed",
-            "hooks": states, "live_dispatch": "not_tested"}, 0 if ready else 1
+            "hooks": states, "missing": missing, "live_dispatch": "not_tested"}, 0 if ready else 1
 
 
 def read_hooks(binary: str, cwd: str, timeout: float) -> dict:
@@ -105,18 +124,42 @@ def selftest() -> int:
     def fixture(trust="trusted", enabled=True):
         return {"data": [{"errors": [], "hooks": [{"eventName": "preToolUse", "matcher": name,
             "enabled": enabled, "trustStatus": trust, "source": "user", "command": "python3 manuscript_claim_guard.py"}
-            for name in ("Bash", "apply_patch")]}]}
+            for name in ("Bash", "apply_patch")] + [{"eventName": "stop", "matcher": None,
+            "enabled": enabled, "trustStatus": trust, "source": "user",
+            "command": "python3 manuscript_claim_guard.py --stop"}]}]}
     checks = []
     result, rc = assess(fixture(), "manuscript_claim_guard.py")
     checks.append(("trusted is ready, never proof of live dispatch", rc == 0 and result["live_dispatch"] == "not_tested"))
     for state in ("untrusted", "modified"):
         checks.append((state + " cannot be reported armed", assess(fixture(state), "manuscript_claim_guard.py")[1] == 1))
     checks.append(("disabled trusted hook is not armed", assess(fixture(enabled=False), "manuscript_claim_guard.py")[1] == 1))
-    missing = fixture(); missing["data"][0]["hooks"].pop()
+    missing = fixture(); missing["data"][0]["hooks"].pop(1)
     checks.append(("one missing matcher is not armed", assess(missing, "manuscript_claim_guard.py")[1] == 1))
-    combined = fixture(); combined["data"][0]["hooks"] = [combined["data"][0]["hooks"][0]]
+    combined = fixture(); combined["data"][0]["hooks"].pop(1)
     combined["data"][0]["hooks"][0]["matcher"] = "^(Bash|Edit)$"
     checks.append(("regex and patch aliases follow the documented matcher", assess(combined, "manuscript_claim_guard.py")[1] == 0))
+    for state in ("untrusted", "modified"):
+        stop = fixture(); stop["data"][0]["hooks"][-1]["trustStatus"] = state
+        result, rc = assess(stop, "manuscript_claim_guard.py")
+        checks.append(("Stop " + state + " is explicitly missing", rc == 1 and result.get("missing") == ["stop"]))
+    for field, value in (("enabled", False), ("command", "python3 manuscript_claim_guard.py")):
+        stop = fixture(); stop["data"][0]["hooks"][-1][field] = value
+        result, rc = assess(stop, "manuscript_claim_guard.py")
+        checks.append(("Stop " + field + " is required", rc == 1 and result.get("missing") == ["stop"]))
+    stop = fixture(); stop["data"][0]["hooks"].pop()
+    result, rc = assess(stop, "manuscript_claim_guard.py")
+    checks.append(("absent Stop is not armed", rc == 1 and result.get("missing") == ["stop"]))
+    checks.append(("managed hooks are ready", assess(fixture("managed"), "manuscript_claim_guard.py")[1] == 0))
+    malformed = [None, {"data": [None]}, {"data": [{"hooks": [None]}]}]
+    bad_regex = fixture(); bad_regex["data"][0]["hooks"][0]["matcher"] = "["
+    malformed.append(bad_regex)
+    for value in malformed:
+        try:
+            assess(value, "manuscript_claim_guard.py")
+        except Exception as exc:
+            checks.append(("malformed configuration is inspection failure", isinstance(exc, ValueError)))
+        else:
+            checks.append(("malformed configuration is inspection failure", False))
     errors = fixture(); errors["data"][0]["errors"] = [{"message": "bad config"}]
     try:
         assess(errors, "manuscript_claim_guard.py")

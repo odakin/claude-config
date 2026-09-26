@@ -702,6 +702,7 @@ allowed. This boundary is tested separately from hook trust and installation.
 
 Persisted trust can be checked with `scripts/audit-codex-integration.sh --runtime`
 (or [`audit-codex-hook-runtime.py`](../scripts/audit-codex-hook-runtime.py) directly).
+The runtime audit requires trusted, enabled Bash/apply_patch pre-tool guards and the reporting Stop guard; `missing` names any absent or untrusted surface.
 Select the Desktop executable with `--codex` when inspecting that runtime. The
 helper creates no model task and writes no trust decision. It always labels
 live dispatch `not_tested`: a fresh server's trusted configuration does not

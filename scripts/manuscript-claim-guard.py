@@ -1425,7 +1425,7 @@ def verify_quote(quote: str, messages: list[tuple[str, str]]) -> tuple[str, str]
 # ---------------------------------------------------------------- Stop: 記録した承認を最後の返事に書かせる
 
 def assistant_replies_since(agent: str, path: Path, since: str) -> list[str]:
-    """著者の発言 (時刻 since) 以降の assistant の返事。 Claude = 各 turn の最終 text、 Codex = output_text。"""
+    """著者の発言以降の最終回答。 Codex は窓全体に phase が無い旧版だけ全 message を読む。"""
     out: list[str] = []
     if agent == "claude":
         try:
@@ -1444,6 +1444,8 @@ def assistant_replies_since(agent: str, path: Path, since: str) -> list[str]:
         handle = open(path, encoding="utf-8", errors="replace")
     except OSError:
         return out
+    phased = False
+    finals: list[str] = []
     with handle:
         for line in handle:
             try:
@@ -1454,10 +1456,13 @@ def assistant_replies_since(agent: str, path: Path, since: str) -> list[str]:
             if (not isinstance(p, dict) or e.get("type") != "response_item" or p.get("type") != "message"
                     or p.get("role") != "assistant" or (since and str(e.get("timestamp", "")) < since)):
                 continue
+            phased = phased or "phase" in p
             text = "".join(b.get("text", "") for b in p.get("content") or [] if isinstance(b, dict))
             if text.strip():
                 out.append(text)
-    return out
+                if p.get("phase") == "final_answer":
+                    finals.append(text)
+    return finals if phased else out
 
 
 def disclosed(a: dict, reply: str) -> bool:
@@ -1479,16 +1484,37 @@ def undisclosed_approvals(agent: str, sid: str, msgs: list[tuple[str, str]], rep
 
 def undisclosed_additive(me: str, since: str, replies: list[str], state: dict) -> list[dict]:
     """この session が著者の最新の発言の後に入れた変更と、 session 開始でこの session に割り当てた変更のうち、 返事に
-    書いていないもの。 書いてあったものは処理済みにする (本人の既読の操作は無い)。"""
+    書いていないもの。 古い記録から照合し、 返事の 1 行は最多 1 記録に使う。 同じ窓で既に報告済みの記録にも
+    行を割り当て直し、 次の Stop が過去の同じ行をもう一度使わない (本人の既読の操作は無い)。"""
     start = _utc(since)
     start = start.replace(microsecond=0) if start else None
-    demand = []
-    for e in pending_additive(state):
+    demand, reserve = [], []
+    for e in load_additive_log():
+        key = additive_key(e)
+        handled = state["handled"].get(key)
+        if handled:
+            told_at = _utc(str(handled.get("at", "")))
+            if (handled.get("how") == "reply" and handled.get("session") == me
+                    and start is not None and told_at is not None and told_at >= start):
+                reserve.append(e)
+            continue
         at = _utc(str(e.get("at", "")))
-        if state["assigned"].get(additive_key(e)) == me or (
+        if state["assigned"].get(key) == me or (
                 e.get("session") == me and start is not None and at is not None and at >= start):
             demand.append(e)
-    told = [e for e in demand if any(additive_disclosed(e, r) for r in replies)]
+    lines = [line for reply in replies for line in reply.splitlines()]
+    used: set[int] = set()
+    told = []
+    oldest = _dt.datetime.min.replace(tzinfo=_dt.timezone.utc)
+    # Equal timestamps are common (the log uses seconds); preserve previously consumed lines first on ties.
+    for e in sorted(demand + reserve, key=lambda row: (
+            _utc(str(row.get("at", ""))) or oldest, additive_key(row) not in state["handled"])):
+        for i, line in enumerate(lines):
+            if i not in used and additive_disclosed(e, line):
+                used.add(i)
+                if additive_key(e) not in state["handled"]:
+                    told.append(e)
+                break
     if told:
         now = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
         for e in told:
@@ -1523,7 +1549,8 @@ def stop_check(agent: str, event: dict) -> str | None:
             return None
         replies = assistant_replies_since(agent, tr, msgs[-1][0])
         last = event.get("last_assistant_message")
-        if isinstance(last, str) and last.strip():
+        # The event can repeat the final message already present in the rollout: it is one report, not two.
+        if isinstance(last, str) and last.strip() and (not replies or collapse_ws(last) != collapse_ws(replies[-1])):
             replies.append(last)
         left = undisclosed_approvals(agent, sid, msgs, replies) if has_appr else []
         left_add = undisclosed_additive(me, msgs[-1][0], replies, state) if mine_add else []
@@ -1550,11 +1577,16 @@ def stop_check(agent: str, event: dict) -> str | None:
                      " 変更の説明は要らない):\n" + "\n".join(lines) +
                      "\n引いた発言の先頭と file 名が同じ行にあれば足りる。 違う意味で引いていたら、 そう書いて著者の判断を仰ぐ。")
     if left_add:
-        parts.append("承認なしで規則の文書に追記したが、 最後の返事にそれを書いていない (本人の目に入らないまま入る)。"
+        parts.append("承認なしで規則の文書を変えたが、 最後の返事にそれを書いていない (本人の目に入らないまま入る)。"
                      " 次の行を返事に入れる:\n" + "\n".join(additive_line(e) for e in left_add) +
-                     "\nfile 名と「追記」 が同じ行にあれば足りる。")
+                     "\n上の行をそのまま入れる (repo/file と「」の引用が同じ行にあれば足りる)。")
     reason = ("manuscript-claim-guard: " + "\n\n".join(parts) + "\n返事の全文を出し直す。"
               " 正本 = conventions/agent-rule-ownership.md#approval と #additive-and-free-zones")
+    # Presence only, never message or transcript contents: distinguish runtime delivery from fixture behavior.
+    present = {key: key in event for key in ("hook_event_name", "session_id", "cwd", "transcript_path",
+                                            "stop_hook_active", "last_assistant_message")}
+    present["last_assistant_message_nonempty"] = isinstance(last, str) and bool(last.strip())
+    reason += "\nStop 入力の診断 (値は記録しない): " + json.dumps(present, ensure_ascii=False)
     return json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False)
 
 
@@ -2725,19 +2757,38 @@ def pending_additive(state: dict | None = None) -> list[dict]:
     return [e for e in load_additive_log() if additive_key(e) not in state["handled"]]
 
 
+def additive_anchor(e: dict, limit: int = 20) -> list[str]:
+    """印字と照合が共有する引用元。 照合は 20 字、 読める案内の印字には 40 字を使う。"""
+    if e.get("kind") == "free":
+        source = [e.get("term", "")]
+    elif e.get("kind") == "change":
+        source = [pair[0] for pair in e.get("edited") or [] if isinstance(pair, (list, tuple)) and pair]
+        source += list(e.get("removed") or [])
+        if not source:
+            source = list(e.get("moved") or []) or [e.get("text", "")]
+    else:
+        source = [e.get("text", "")]
+    return list(dict.fromkeys(collapse_ws(str(s))[:limit] for s in source if collapse_ws(str(s))))
+
+
 def additive_disclosed(e: dict, reply: str) -> bool:
-    """返事の同じ行に、 変えた file の名前と「追記」「変えた」「言い直し」 (区画なら「緩和」) がある。"""
-    name = Path(str(e.get("file", ""))).name
-    if not name:
-        return True
-    return any(name in line and any(w in line for w in ("追記", "変えた", "言い直し", "緩和")) for line in reply.splitlines())
+    """返事の同じ行で repo/file と記録の引用の冒頭を照合する。 basename と動詞だけでは足りない。"""
+    where = f"{Path(e.get('repo') or '~').name}/{e.get('file')}"
+    anchors = additive_anchor(e)
+    if not e.get("file") or not anchors:
+        return False
+    path_re = re.compile(r"(?<![\w./~-])" + re.escape(where) + r"(?![\w./~-])")
+    return any(path_re.search(line) and any(a in collapse_ws(line) for a in anchors)
+               and (e.get("kind") != "free" or str(e.get("zone") or "") in line)
+               for line in reply.splitlines())
 
 
 def additive_line(e: dict) -> str:
     where = f"{Path(e.get('repo') or '~').name}/{e.get('file')}"
-    text = collapse_ws(str(e.get("text", "")))[:60]
+    anchors = additive_anchor(e, 40)
+    text = anchors[0] if anchors else ""
     if e.get("kind") == "free":
-        return f"- 規則でない区画 {e.get('zone')} に緩和の語「{e.get('term')}」 を含む追記をした: {where} — {text}"
+        return f"- 規則でない区画 {e.get('zone')} に緩和の語「{text}」 を含む追記をした: {where}"
     tail = ""
     near = e.get("near")
     if isinstance(near, dict) and near.get("existing"):
@@ -2751,8 +2802,8 @@ def additive_line(e: dict) -> str:
         parts = [f"{label} {n.get(k)}" for k, label in (("added", "追記"), ("edited", "言い直し"), ("removed", "消した"), ("moved", "移動")) if n.get(k)]
         ed = e.get("edited") or []
         rm = e.get("removed") or []
-        sample = (f" 「{collapse_ws(ed[0][0])[:40]}」→「{collapse_ws(ed[0][1])[:40]}」" if ed
-                  else f" 消した「{collapse_ws(rm[0])[:40]}」" if rm else "")
+        sample = (f" 「{text}」→「{collapse_ws(ed[0][1])[:40]}」" if ed
+                  else f" 消した「{text}」" if rm else f" 「{text}」")
         return f"- 規則の文書を承認なしで変えた: {where} — {pre}{' / '.join(parts)}:{sample}{tail}"
     return f"- 規則の文書を承認なしで変えた: {where} — {pre}追記: 「{text}」{tail}"
 
@@ -2936,6 +2987,84 @@ def selftest() -> int:
     check("protect_sections で追加の節",
           [c["region"] for c in protected_changes("src/main.tex", paper, paper.replace("can change freely", "x"), None,
                                                    {"protect_sections": ["^setup$"]})] == ["section:setup"])
+    print("[報告の内容と最終回答]")
+    identity = {"repo": "/tmp/synthetic/demo", "file": "CLAUDE.md"}
+    variants = [
+        {"kind": "insert", "text": "Read the destination before sending."},
+        {"kind": "change", "removed": ["Keep the review record."], "n": {"removed": 1}},
+        {"kind": "change", "edited": [["Keep the review record.", "Keep the audit record."]], "n": {"edited": 1}},
+        {"kind": "change", "moved": ["Keep the review record."], "n": {"moved": 1}},
+        {"kind": "free", "term": "optional", "zone": "status"},
+        {"kind": "insert", "text": "Read the destination before sending.", "refined": True},
+    ]
+    for i, fields in enumerate(variants):
+        entry = {**identity, **fields}
+        line = additive_line(entry)
+        check(f"報告の全 kind {i}: 印字した行を照合できる", additive_disclosed(entry, line))
+        check(f"報告の全 kind {i}: 案内は同じ引用元の先頭 40 字を印字する",
+              ["Read the destination before sending.", "Keep the review record.", "Keep the review record.",
+               "Keep the review record.", "optional", "Read the destination before sending."][i] in line)
+        check(f"報告の全 kind {i}: basename と動詞だけでは通らない", not additive_disclosed(entry, "CLAUDE.md を変えた。"))
+        check(f"報告の全 kind {i}: 引用の無い repo/file だけでは通らない", not additive_disclosed(entry, "demo/CLAUDE.md を変えた。"))
+        check(f"報告の全 kind {i}: 他 repo の同名 file は通らない", not additive_disclosed(entry, line.replace("demo/", "other-demo/")))
+        split = "demo/CLAUDE.md\n" + line.replace("demo/CLAUDE.md", "")
+        check(f"報告の全 kind {i}: file と引用を別行にしない", not additive_disclosed(entry, split))
+    with tempfile.TemporaryDirectory() as phases_dir:
+        phase_path = Path(phases_dir) / "phases.jsonl"
+        def phase_message(text, phase=None, stamp="2020-01-02", present=True):
+            payload = {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": text}]}
+            if present:
+                payload["phase"] = phase
+            return json.dumps({"type": "response_item", "timestamp": stamp, "payload": payload}) + "\n"
+        phase_path.write_text(phase_message("partial", "commentary") + phase_message("final", "final_answer"))
+        check("Codex は final_answer だけを読む", assistant_replies_since("codex", phase_path, "2020-01-01") == ["final"])
+        phase_path.write_text(phase_message("partial", "commentary") + phase_message("legacy", present=False))
+        check("phase が混在した窓では旧形の message に逃げない", assistant_replies_since("codex", phase_path, "2020-01-01") == [])
+        phase_path.write_text(phase_message("older", "commentary", "2019-01-01") + phase_message("legacy", present=False))
+        check("窓全体に phase が無い旧版は互換経路", assistant_replies_since("codex", phase_path, "2020-01-01") == ["legacy"])
+        phase_path.write_text(phase_message("unknown", None))
+        check("phase key が在る未知の phase は final にしない", assistant_replies_since("codex", phase_path, "2020-01-01") == [])
+
+    print("[報告の行を 1 記録だけに使う]")
+    from unittest.mock import patch as mock_patch
+    me = "codex:row-fixture"
+    row_base = {"kind": "change", "repo": "/tmp/synthetic/demo", "file": "CLAUDE.md",
+                "session": me, "n": {"removed": 1}}
+    older = {**row_base, "sha": "older", "at": "2020-01-02T00:00:00Z",
+             "removed": ["Keep the review record, including the first item."]}
+    newer = {**row_base, "sha": "newer", "at": "2020-01-03T00:00:00Z",
+             "removed": ["Keep the review record, including the second item."]}
+    since = "2020-01-01T00:00:00Z"
+    one_line = additive_line(older)
+    # Deliberately reverse log order: selection must follow event time, not list order.
+    with mock_patch.dict(globals(), load_additive_log=lambda: [newer, older], save_handled=lambda value: True):
+        state = {"handled": {}, "assigned": {}}
+        left = undisclosed_additive(me, since, [one_line], state)
+        check("同じ where/20 字の 2 記録に 1 行なら古い方だけ handled", left == [newer] and set(state["handled"]) == {additive_key(older)})
+        left = undisclosed_additive(me, since, [one_line], state)
+        check("次の Stop で同じ過去の行をもう一度使わない", left == [newer] and len(state["handled"]) == 1)
+        left = undisclosed_additive(me, since, [one_line + "\n" + one_line], state)
+        check("同じ行が 2 本あれば 2 記録とも handled", not left and len(state["handled"]) == 2)
+        state = {"handled": {}, "assigned": {}}
+        check("初回から 2 行の場合も両方 handled", not undisclosed_additive(me, since, [one_line + "\n" + one_line], state)
+              and len(state["handled"]) == 2)
+    tied = {**newer, "at": older["at"]}
+    with mock_patch.dict(globals(), load_additive_log=lambda: [older, tied], save_handled=lambda value: True):
+        state = {"handled": {}, "assigned": {}}
+        undisclosed_additive(me, since, [one_line], state)
+        check("秒が同じ記録でも既に使った行を予約する", undisclosed_additive(me, since, [one_line], state) == [tied]
+              and len(state["handled"]) == 1)
+    distinct = {**newer, "repo": "/tmp/synthetic/other"}
+    with mock_patch.dict(globals(), load_additive_log=lambda: [older, distinct], save_handled=lambda value: True):
+        state = {"handled": {}, "assigned": {}}
+        check("異なる記録を同じ 1 行で消さない", undisclosed_additive(me, since, [one_line], state) == [distinct])
+        check("異なる記録の 2 行で両方 handled", not undisclosed_additive(me, since, [one_line + "\n" + additive_line(distinct)], state))
+    assigned = {**older, "session": "claude:other-session", "at": "1999-01-01T00:00:00Z"}
+    with mock_patch.dict(globals(), load_additive_log=lambda: [assigned], save_handled=lambda value: True):
+        state = {"handled": {}, "assigned": {additive_key(assigned): me}}
+        check("割り当てた古い 1 記録も 1 行で報告できる", not undisclosed_additive(me, since, [additive_line(assigned)], state)
+              and len(state["handled"]) == 1 and not state["assigned"])
+
     print("[macro で包んだ数式]")
     wrapped = (
         "\\documentclass{article}\n"
@@ -3972,8 +4101,9 @@ def selftest() -> int:
               protected_changes("conventions/mail.md", rules, rules.replace("OK の後。", "OK の後 (記録も残す)。"), rr, {}) == []
               and PENDING_EXEMPTIONS and PENDING_EXEMPTIONS[-1]["kind"] == "change" and PENDING_EXEMPTIONS[-1]["n"]["edited"] == 1
               and "言い直し 1" in additive_line(PENDING_EXEMPTIONS[-1]) and "変えた" in additive_line(PENDING_EXEMPTIONS[-1]))
-        check("変えた記録は返事の「変えた」 の行で処理済みになる",
-              additive_disclosed(PENDING_EXEMPTIONS[-1], "- 規則の文書を承認なしで変えた: demo/conventions/mail.md — 言い直し 1")
+        check("変えた記録は内容を含む印字の行で処理済みになる",
+              additive_disclosed(PENDING_EXEMPTIONS[-1], additive_line(PENDING_EXEMPTIONS[-1]))
+              and not additive_disclosed(PENDING_EXEMPTIONS[-1], "- 規則の文書を承認なしで変えた: demo/conventions/mail.md — 言い直し 1")
               and not additive_disclosed(PENDING_EXEMPTIONS[-1], "mail.md を直した"))
         PENDING_EXEMPTIONS.clear()
         check("緩和の語を含む追記 → 止まり、 語が出る",
@@ -4030,7 +4160,7 @@ def selftest() -> int:
         check("割り当てた追記を返事に書かなければ差し戻す", out is not None and "mail.md" in json.loads(out)["reason"])
         check("差し戻しの案内の行は「変えた」 の形", "規則の文書を承認なしで変えた" in json.loads(out)["reason"])
         check("返事に書けば通り、 処理済みになる (本人の既読の操作は無い)",
-              stop_check("claude", dict(ss_ev, last_assistant_message="- 規則の文書に承認なしで追記した: conventions/mail.md"))
+              stop_check("claude", dict(ss_ev, last_assistant_message=additive_line(pending_additive()[0])))
               is None and not pending_additive())
         check("処理済みは session 開始に二度と出ない", surface("claude:sess-tt") == "")
         reg = tdp / "sessions"
@@ -4072,8 +4202,8 @@ def selftest() -> int:
               stop_check("claude", dict(ad_ev, last_assistant_message="規則の文書に追記した: mail.md")) is None
               and len(pending_additive()) == 1)
         os.environ["CLAUDE_CODE_ENTRYPOINT"] = "cli"
-        check("file 名と「追記」 が同じ行にあれば通し、 処理済みにする",
-              stop_check("claude", dict(ad_ev, last_assistant_message="- 規則の文書に承認なしで追記した: demo/conventions/mail.md"))
+        check("repo/file と引用の冒頭が同じ行にあれば通し、 処理済みにする",
+              stop_check("claude", dict(ad_ev, last_assistant_message=additive_line(pending_additive()[0])))
               is None and not pending_additive())
         with open(state_dir() / ADDITIVE_LOG, "a", encoding="utf-8") as fh:
             fh.write(json.dumps({"kind": "insert", "file": "old.md", "repo": "", "sha": "1", "text": "t",

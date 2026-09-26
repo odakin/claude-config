@@ -190,6 +190,50 @@ _check "新しい節の追記には案内を出さない" \
 刷る前に確かめる。' conventions/deploy.md | grep -c 'additionalContext' || true)" 0
 git -C "$REPO" checkout -q -- conventions/deploy.md
 
+echo "=== Stop: 変更内容の報告 ==="
+if python3 - "$ENGINE" "$HOOK" "$T" <<'PY'
+import importlib.util, json, os, subprocess, sys
+from pathlib import Path
+engine, hook, root = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+spec = importlib.util.spec_from_file_location("disclosure_test", engine)
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+# Use a deletion already recorded by the real Edit adapter above; isolate the Stop state.
+rows = [json.loads(line) for line in (Path(os.environ['MANUSCRIPT_CLAIM_GUARD_STATE_DIR']) / m.ADDITIVE_LOG).read_text().splitlines()]
+entry = next(e for e in rows if e.get('removed'))
+entry = dict(entry, session='claude:report-fixture')
+state = root / 'report-state'; state.mkdir()
+(state / m.ADDITIVE_LOG).write_text(json.dumps(entry, ensure_ascii=False) + '\n')
+tr = root / 'report-fixture.jsonl'
+tr.write_text(json.dumps({'type':'user', 'turnOrigin':'human', 'timestamp':'2000-01-01T00:00:00Z',
+                         'message':{'content':'Check this fixture.'}}) + '\n')
+env = dict(os.environ, MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(state), CLAUDE_CODE_ENTRYPOINT='cli')
+def stop(reply):
+    event = {'session_id':'report-fixture','transcript_path':str(tr),'last_assistant_message':reply}
+    p = subprocess.run([sys.executable, str(hook), '--stop'], input=json.dumps(event),
+                       capture_output=True, text=True, check=True, env=env)
+    return json.loads(p.stdout) if p.stdout.strip() else {}
+assert stop('Done.').get('decision') == 'block'
+assert stop('deploy.md を変えた。').get('decision') == 'block'
+assert stop(m.additive_line(entry)) == {}
+assert len(json.loads((state / m.ADDITIVE_HANDLED).read_text())['handled']) == 1
+print('Claude Stop: missing, vague and complete disclosure controls passed')
+(state / m.ADDITIVE_HANDLED).unlink()
+second = dict(entry, sha='second-report-fixture')
+(state / m.ADDITIVE_LOG).write_text(json.dumps(entry,ensure_ascii=False)+'\n'+json.dumps(second,ensure_ascii=False)+'\n')
+line = m.additive_line(entry)
+assert stop(line).get('decision') == 'block'
+assert len(json.loads((state / m.ADDITIVE_HANDLED).read_text())['handled']) == 1
+assert stop(line).get('decision') == 'block'
+assert stop(line + '\n' + line) == {}
+assert len(json.loads((state / m.ADDITIVE_HANDLED).read_text())['handled']) == 2
+print('Claude Stop: one line per record and repeated Stop controls passed')
+PY
+then
+  _check "Stop: 内容の無い報告は拒否し、 印字した行だけを処理済みにする" yes yes
+else
+  _check "Stop: 内容の無い報告は拒否し、 印字した行だけを処理済みにする" no yes
+fi
+
 echo "=== Claude Bash: git commit も同じ述語 ==="
 printf '%s' "$(cat "$REPO/src/main.tex")" | sed 's/f = g + h/f = g * h/' > "$REPO/src/main.tex.new" && mv "$REPO/src/main.tex.new" "$REPO/src/main.tex"
 _bash() { jq -n --arg cmd "$1" --arg c "$REPO" '{hook_event_name:"PreToolUse", tool_name:"Bash", session_id:"sess-a", cwd:$c, tool_input:{command:$cmd}}' | _run; }

@@ -536,4 +536,99 @@ for command in ('git status', 'git add --dry-run .', 'git commit --dry-run'):
 print('Codex working-directory contract: 8 cases passed')
 PY
 
+# Stop uses recorded content and final-answer phase, preserving the legacy unphased format.
+python3 - "$SCRIPT_DIR" "$TEMP_ROOT" <<'PY'
+import datetime, importlib.util, json, os, subprocess, sys
+from pathlib import Path
+hooks, root = Path(sys.argv[1]), Path(sys.argv[2])
+engine = hooks.parent.parent / 'scripts/manuscript-claim-guard.py'
+spec = importlib.util.spec_from_file_location('reporting_test', engine)
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+state = root / 'reporting-state'; state.mkdir()
+sid = 'codex-reporting-fixture'; tr = root / (sid + '.jsonl')
+now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+entry = {'kind':'change','repo':'/tmp/synthetic/demo','file':'CLAUDE.md','sha':'fixture',
+         'removed':['Keep the review record.'],'n':{'removed':1},'session':'codex:'+sid,'at':now}
+(state / m.ADDITIVE_LOG).write_text(json.dumps(entry) + '\n')
+user = {'type':'event_msg','timestamp':'2000-01-01T00:00:00Z',
+        'payload':{'type':'user_message','message':'Check this fixture.'}}
+env = dict(os.environ, MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(state))
+def transcript(partial, final):
+    lines = [user]
+    for phase,text in [('commentary',partial),('final_answer',final)]:
+        lines.append({'type':'response_item','timestamp':now,'payload':{'type':'message','role':'assistant',
+                      'phase':phase,'content':[{'type':'output_text','text':text}]}})
+    tr.write_text(''.join(json.dumps(e,ensure_ascii=False)+'\n' for e in lines))
+def stop(final):
+    p = subprocess.run([sys.executable,str(hooks/'manuscript_claim_guard.py'),'--stop'],
+        input=json.dumps({'session_id':sid,'transcript_path':str(tr),'last_assistant_message':final}),
+        capture_output=True,text=True,check=True,env=env)
+    return json.loads(p.stdout) if p.stdout.strip() else {}
+line = m.additive_line(entry)
+transcript(line, 'Done.')
+blocked = stop('Done.')
+assert blocked.get('decision') == 'block', 'commentary must not discharge final reporting'
+assert '"last_assistant_message": true' in blocked['reason'], 'diagnostic reports key presence'
+assert '"transcript_path": true' in blocked['reason'] and str(tr) not in blocked['reason'], 'diagnostic omits field values'
+transcript('Done.', 'CLAUDE.md を変えた。')
+assert stop('CLAUDE.md を変えた。').get('decision') == 'block', 'vague report must not discharge reporting'
+transcript('Done.', line)
+assert stop(line) == {}, 'canonical final report must pass'
+assert len(json.loads((state/m.ADDITIVE_HANDLED).read_text())['handled']) == 1
+print('Codex Stop: commentary, vague final and complete final controls passed')
+# One physical final is present in both the rollout and Stop input; count it once.
+(state / m.ADDITIVE_HANDLED).unlink()
+second = dict(entry, sha='fixture-second', removed=['Keep the review record, including another item.'])
+(state / m.ADDITIVE_LOG).write_text(json.dumps(entry) + '\n' + json.dumps(second) + '\n')
+transcript('Done.', line)
+assert stop(line).get('decision') == 'block', 'one physical final line cannot disclose two records'
+assert len(json.loads((state/m.ADDITIVE_HANDLED).read_text())['handled']) == 1
+assert stop(line.replace(' ', '  ')).get('decision') == 'block', 'whitespace-normalized event is not a second physical answer'
+assert len(json.loads((state/m.ADDITIVE_HANDLED).read_text())['handled']) == 1
+assert stop(line).get('decision') == 'block', 'the next Stop cannot reuse a previously consumed line'
+assert len(json.loads((state/m.ADDITIVE_HANDLED).read_text())['handled']) == 1
+transcript('Done.', line + '\n' + line)
+assert stop(line + '\n' + line) == {}, 'two physical lines must disclose two matching records'
+assert len(json.loads((state/m.ADDITIVE_HANDLED).read_text())['handled']) == 2
+print('Codex Stop: one line per record, event/rollout deduplication and repeated Stop controls passed')
+
+# Exercise runtime CLI exit codes and the shell caller with a deterministic app-server.
+audit = hooks.parent.parent/'scripts/audit-codex-hook-runtime.py'
+caller = hooks.parent.parent/'scripts/audit-codex-integration.sh'
+server = root/'fixture-app-server'
+server.write_text('''#!/usr/bin/env python3
+import json, os, sys
+for line in sys.stdin:
+    request = json.loads(line)
+    if 'id' not in request:
+        continue
+    if request.get('method') == 'initialize':
+        result = {}
+    else:
+        records = [{'eventName':'preToolUse','matcher':name,'enabled':True,'trustStatus':'trusted',
+                    'source':'user','command':'python3 manuscript_claim_guard.py'} for name in ['Bash','apply_patch']]
+        records.append({'eventName':'stop','matcher':None,'enabled':True,
+                        'trustStatus':os.environ.get('FIXTURE_STOP_TRUST','untrusted'),
+                        'source':'user','command':'python3 manuscript_claim_guard.py --stop'})
+        result = {'data':[{'hooks':records,'errors':[]}]}
+        if os.environ.get('FIXTURE_BROKEN'):
+            result = {'data':[None]}
+    print(json.dumps({'id':request['id'],'result':result}),flush=True)
+''')
+server.chmod(0o755)
+for trust, rc in [('untrusted',1),('trusted',0)]:
+    p = subprocess.run([sys.executable,str(audit),'--codex',str(server)],
+        capture_output=True,text=True,env=dict(os.environ,FIXTURE_STOP_TRUST=trust))
+    report = json.loads(p.stdout)
+    assert p.returncode == rc, (trust,p.returncode,p.stdout,p.stderr)
+    assert report.get('missing') == (['stop'] if rc else []), report
+    assert report['live_dispatch'] == 'not_tested'
+p = subprocess.run([sys.executable,str(audit),'--codex',str(server)],
+    capture_output=True,text=True,env=dict(os.environ,FIXTURE_BROKEN='1'))
+assert p.returncode == 3 and json.loads(p.stdout)['configuration'] == 'inspection_unavailable', (p.returncode,p.stdout,p.stderr)
+p = subprocess.run(['bash',str(caller),'--runtime','--codex',str(server)],capture_output=True,text=True)
+assert p.returncode != 0 and 'MISSING: Codex authority hook(s): stop' in p.stdout, (p.returncode,p.stdout,p.stderr)
+print('Codex audit: untrusted Stop, trusted Stop, failure exit and caller display passed')
+PY
+
 echo "Codex hook tests passed"

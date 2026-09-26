@@ -168,3 +168,15 @@ engine の selftest が git の呼び出し回数を数える (件数に依ら�
 | `scripts/guard-review-pathspec.sh` (GUARD_REVIEW_HOOK = 候補の hook) | 20 / 20 (非原稿 4・保護の変更 9・新規/削除 4・非保護 1・fail-closed 1・規模 3000 file = 0.7 s) |
 | `scripts/guard-review-compare.py 300 --before-ref 7f25cee` (text 300 file) | hook「add files && commit -- files」 15.9 s → 0.3 s / 「add dir && commit -- dir」 InspectionError (7f25cee の dir の誤拒否) → 0.2 s ok / pre-commit (index) 19.7 s → 0.2 s。PDF は両方 0.1〜0.2 s。3000 file は 7f25cee 側が長すぎて打ち切った (候補側の 3000 は上の表と pathspec harness) |
 | `scripts/guard-review-profile.py 150 .txt` (候補) | `subprocess` の communicate 10 回 = git 10 回で 150 file (件数に依らない) |
+
+## 報告経路の修正候補の照合用 SHA-256 (2026-09-26)
+
+以下は候補確認後の修正内容の識別子であり、先行する独立検品の hash を置き換えない。構成監査と実際の Stop 発火は別々に確認する。
+
+| source | SHA-256 |
+|---|---|
+| `scripts/manuscript-claim-guard.py` | `333252a3a627e044107bb58555eeee536ee50f36835ef072ccf80f973ec789e1` |
+| `scripts/audit-codex-hook-runtime.py` | `b2818213d48d716175078f209ff1bf9d75aae675304433e71e953b67d2903d48` |
+| `scripts/audit-codex-integration.sh` | `37ea54f50b009cd85deafdb89a158d2821fdcf8eba0a9179e403558b6674ea4b` |
+| `hooks/manuscript-claim-guard.test.sh` | `111cce1a000b96a6bc0110a61c450adec474002e44ab6734aa1e1f6ce2cf20b7` |
+| `codex/hooks/codex-hooks.test.sh` | `1c06aac89cf8e089b297e8db8998a48b1824d41e734e27fdae39676571412abf` |

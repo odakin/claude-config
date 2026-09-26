@@ -312,7 +312,24 @@ done
 fi
 
 if [ "$CHECK_RUNTIME" -eq 1 ]; then
-  python3 "$SCRIPT_DIR/audit-codex-hook-runtime.py" --codex "$RUNTIME_CODEX" --cwd "$PWD" || ISSUES=$((ISSUES + 1))
+  runtime_status=0
+  runtime_report="$(python3 "$SCRIPT_DIR/audit-codex-hook-runtime.py" --codex "$RUNTIME_CODEX" --cwd "$PWD")" || runtime_status=$?
+  printf '%s\n' "$runtime_report"
+  if [ "$runtime_status" -ne 0 ]; then
+    ISSUES=$((ISSUES + 1))
+    printf '%s\n' "$runtime_report" | python3 -c '
+import json, sys
+try:
+    report = json.load(sys.stdin)
+except ValueError:
+    report = {}
+missing = report.get("missing", [])
+if missing:
+    print("MISSING: Codex authority hook(s): " + ", ".join(missing))
+else:
+    print("NOT CHECKED: Codex hook runtime inspection failed")
+'
+  fi
 else
   echo "NOT CHECKED: runtime trust (use --runtime); actual tool rejection needs a separate live probe."
 fi
