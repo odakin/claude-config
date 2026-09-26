@@ -12,6 +12,7 @@ import argparse
 from collections import Counter
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -56,12 +57,21 @@ def census(roots, tag_re, strip_patterns=()):
                    "tags": Counter(), "tags_after_known_blocks": Counter()}
                for k in ("codex_event_msg", "codex_response_item", "claude_human")}
     errors, seen, read = Counter(), set(), 0
+    def files_in(root):
+        if root.is_file():
+            yield root
+            return
+        def unreadable(exc):
+            errors[type(exc).__name__] += 1
+        for folder, _dirs, names in os.walk(root, onerror=unreadable, followlinks=False):
+            for name in names:
+                if name.endswith(".jsonl"):
+                    yield Path(folder) / name
     for root in roots:
         if not root.exists():
             errors["missing_root"] += 1
             continue
-        paths = [root] if root.is_file() else root.rglob("*.jsonl")
-        for path in paths:
+        for path in files_in(root):
             resolved = path.resolve()
             if resolved in seen:
                 continue
@@ -127,6 +137,16 @@ def selftest():
         failed = subprocess.run([sys.executable, __file__, "--root", str(root)], capture_output=True, text=True)
         assert failed.returncode == 3 and str(root) not in failed.stdout + failed.stderr
         assert "PRIVATE_BODY" not in failed.stdout + failed.stderr and not failed.stderr
+        if os.name != "nt" and os.geteuid() != 0:
+            denied = root / "private-unreadable"
+            denied.mkdir()
+            denied.chmod(0)
+            try:
+                failed = subprocess.run([sys.executable, __file__, "--root", str(denied)], capture_output=True, text=True)
+                assert failed.returncode == 3 and json.loads(failed.stdout)["inspection_errors"] == {"PermissionError": 1}
+                assert str(denied) not in failed.stdout + failed.stderr and not failed.stderr
+            finally:
+                denied.chmod(0o700)
     print("approval-source-census: carrier isolation, origin filter, bounded labels, privacy and missing-input checks passed")
     return 0
 
