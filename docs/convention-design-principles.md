@@ -650,6 +650,8 @@ worked example: 運用台帳 yaml の status を unquoted scalar のまま自由
 - **編集時 gate (= 破損を source で止める)**: 構造化データ file を編集した直後に parse 検証し、 壊れていたら loud に弾く (= PostToolUse hook 等)。 「壊れてから下流で気づく」 より「編集時に弾く」 が圧倒的に安い (= mechanism の重心を「検出」 でなく「予防 gate」 に置く)。
 - **consume 時 fail-loud (= 破損を下流で増幅しない)**: parse/load 失敗を `or []` で空に潰さず、 source 名 + error を叫んで**破壊的 action を中止**する。 特に削除・除去・上書き等の destructive path は「入力が不完全なら実行しない」 を pre-flight で保証する (= 不完全データで破壊しない invariant)。
 
+子プロセスから JSON を受ける場合も同じ。 終了値、 JSON の構造、 対象の件数を別々に確認する。対象を要求した検査で `0` と空の配列を「検査成功」 に畳むと、検査器が一件も調べずに下流の gate を通す。機械向けの stdout には JSON だけを出し、診断は stderr に分ける。依存 library の更新で import 時の警告が stdout に混ざることもあるため、警告を含む出力と空の対象を合成した回帰試験を呼び手に置く。様式 PDF の印刷直前照合は [`form-case-pipeline.md#fidelity`](../conventions/form-case-pipeline.md#fidelity) に適用例がある。
+
 reflex: 構造化データを read して何か (特に削除/上書き) する script を書く時「入力が parse 失敗したら、 これは空として進むか? それは破壊的か?」 を問う。 fail-empty が destructive path に繋がるなら fail-loud + abort に変える。 cf. [`conventions/data-pipeline-automation.md §1`](../conventions/data-pipeline-automation.md#single-source-of-truth) (= SoT invariant を経路非依存 commit gate で enforce = 生成 script の guard が手動編集をすり抜ける問題の対) — 本節は consume 側の双対。
 
 origin: 2026-06-09、 編集時 gate (= 編集後 yaml parse 検証 hook) と consume 側の fail-loud pre-flight (= 監視 yaml が 1 件でも parse 不能なら破壊的 label 除去を中止) の 2 本を実装。 ⚠️ 根拠は **直接事故 1 件** (本 yaml 破損 → fail-empty で破壊的誤動作) + §1 (生成側 gate) という **sibling 原則** であり、 §9.8 の「2 独立観察」 には厳密には届かない (= 直接観察は 1 件)。 ただし fail-loud / 編集時検証 は確立した一般原則で、 既存 §1 と双対をなすため layer 1 に置く (= 過度な一般化でなく、 既存原則の欠けていた対辺の補完)。

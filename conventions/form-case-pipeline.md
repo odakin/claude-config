@@ -358,6 +358,10 @@ M と R0 の差 = **雛形自身の欠陥** (app が刷らない字・`=TODAY()`
 | R 出力 PDF | (a) 雛形の図形の字が在るか = **無ければ止める** (b) 書き換えていない cell の見出しが在るか = **無ければ止める** (2026-09-26〜。 spec の `meta.accept_missing_labels` に名指しした cell だけ ⚠️) (c) 素刷りより画像 (= Excel は checkbox の箱を画像として描く、 実測) が少なくないか = **少なければ止める** (openpyxl の temp で箱を落とすと `meta.accept_loss` に宣言した様式だけ ⚠️) (d) 雛形にも記入値にも無い字 (⚪) (e) 位置の写像 = 画像の置き場・label の帯の中の罫線・同じ label の二重刷り (⚠️) (f) form control の箱 = 印のある箱と読める印の数・置き場から見た箱の offset = **違えば止める** (下の「form control の箱」) | [`scripts/check-form-static-text.py`](../scripts/check-form-static-text.py) `--filled` (体裁を当てた temp) `--blank` (素刷り)、 build が group ごとに回す |
 | P 紙 | 刷る直前の preflight が、 出力 PDF の宣言 (`PrintPages` の `fidelity` = 雛形の path・対象・drop・素刷り) から同じ照合を回す。 図形の字が無ければ lp を止める、 雛形がその機械に無ければ ⚪ (照合できない、 と言って通す) | [`scripts/pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) `fidelity_check` (`--hook` / `--template-xlsx`) |
 
+P 段では、雛形が見つからない場合と、雛形は在るのに照合器が働かなかった場合を分ける。前者は上表の ⚪、後者は 🔴 で印刷を止める。照合器の終了値と JSON の形を調べ、対象が空の「成功」も照合器の異常として止める。stdout に混入した警告は JSON の破損として扱う。一般則は [`fail-loud-not-fail-empty`](../docs/convention-design-principles.md#fail-loud-not-fail-empty)、実装と正常・欠落・異常の fixture は [`pdf-print-preflight.py`](../scripts/pdf-print-preflight.py) に置く。
+
+現行の呼び手は返却対象の非空までは確認する。要求した対象の一部だけが返る異常な応答との対応までは照合していない (通常の照合器がその応答を返す事例は未観測)。
+
 **道具の損失は 2 段で消す**: (a) file を書く道具を**その形式を所有する app** (Excel / Word) だけにする = 損失が構造的に起きない
 (Excel の AppleScript で cell の値・行高・結合・罫線・sheet の非表示・印刷範囲は当てられる = 実測。 openpyxl は読むだけ) /
 (b) それでも残る損失 (app 自身の描画の癖、 未知の道具) を上の検査が止める。 (a) が本命、 (b) が網。 temp を openpyxl で

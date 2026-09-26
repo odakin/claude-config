@@ -164,7 +164,9 @@ STATIC_TEXT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "check-fo
 def fidelity_check(path, fid: dict) -> tuple:
     """6. 雛形との照合 (K3): 宣言 (formcase の build が書く {template, targets, drop, blank}) か --template-xlsx から雛形を引き、
     check-form-static-text.py を回す。 図形の字が無い = 🔴 (build と同じ = 止める) / 見出し・画像 = 情報 / 雛形が無い = ⚪ (照合できない、
-    止めない = 別の機械で刷るとき。 conventions/form-case-pipeline.md#fidelity)。"""
+    止めない = 別の機械で刷るとき)。 雛形が在るのに検査器が異常終了・JSON 破損・対象 0 件なら 🔴。
+    機械向け stdout は JSON だけとし、依存 library の警告が混ざっても照合成功にしない。
+    正本 = conventions/form-case-pipeline.md#fidelity。"""
     import json
     import subprocess
 
@@ -401,11 +403,17 @@ def selftest():
     try:
         globals()["STATIC_TEXT"] = os.path.join(d, "missing-checker.py")
         assert any("雛形との照合が走らなかった" in f for f in inspect(ok_pdf)[0])
+        noisy_checker = os.path.join(d, "noisy-checker.py")
+        with open(noisy_checker, "w", encoding="utf-8") as fh:
+            fh.write('print("warning: diagnostic on stdout")\nprint(\'{"targets": [{"sheet": "様式", "range": "A1:J20", "missing": [], "checked": 1}]}\')\n')
+        globals()["STATIC_TEXT"] = noisy_checker
+        assert any("雛形との照合が走らなかった" in f for f in inspect(ok_pdf)[0])
         empty_checker = os.path.join(d, "empty-checker.py")
         with open(empty_checker, "w", encoding="utf-8") as fh:
             fh.write('print(\'{"targets": []}\')\n')
         globals()["STATIC_TEXT"] = empty_checker
         assert any("雛形との照合が走らなかった" in f for f in inspect(ok_pdf)[0])
+        assert hook(ev(f"lp -d Q {ok_pdf}"), env=E)[0] == 2
     finally:
         globals()["STATIC_TEXT"] = checker
     gone = fpdf("fid_gone.pdf", ["申請者"])

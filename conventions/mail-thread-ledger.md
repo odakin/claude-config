@@ -40,6 +40,7 @@ entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house st
 
 - **書いた後に再 parse して検証、 外れたら元の text に戻す** (entry 数 / 対象 entry の field / round-trip = 書いた id が harvester で拾われる)。 exit 3 = 検査不能・故障、 exit 1 = 違反 (enum 外・id 未定・項目が無い) と分ける ([`#failure-exit-equals-violation-exit`](../docs/convention-design-principles.md#failure-exit-equals-violation-exit))。
 - **引けない thread は「未記録」 に倒さない** (auth / 404 / 一時失敗は「引けなかった」 と出す)。 項目の `email_ref` が返信の messageId だと threads.get は 404 になる = messages.get で本当の thread を引き直す。
+- **ID の読み手は正規化済みの文字列を受け取る**。`email_ref` から thread と message の候補を読むときは [`recorded_ids.py`](../scripts/lib/recorded_ids.py) の `harvest_text`、thread だけなら `harvest_thread_ids` を使う。正規表現を直接 `findall()` した返り値を Gmail や逆引きの key に渡さない (一般則 = [`multipath-key-normalization`](data-pipeline-automation.md#multipath-key-normalization))。
 - <a id="drafts-are-not-messages"></a>**下書きは message ではない**: threads.get は未送信の下書きも thread の message として返す。 除かないと、 記録の道具は下書きを「自分が送った」 と書き、 返事を見張る検出器は「最後は自分発 = 返事済み」 と読んで相手の未返信の mail を隠す (実測 = 下書きのまま止まった返信が記録済みになっていた)。 除くのは読む部品 1 か所 (`lib/gmail_read.normalize_messages`、 既定) = 同じ部品を使う検出器にも効く。 下書きかを見たい呼び手 (`--relabel`) だけ `include_drafts=True`。
 - **cache は移行の一括読み専用**。 通常の記録は毎回 Gmail を引く (古い cache が並列 session の新着を隠す)。 移行でも entry が知っている id が cache の thread に無ければ引き直す。
 - **並列 session と同じ file を触る**: 書く直前に file を読み直し、 commit は path 指定 (`git commit -- <path>`)。 ⚠️ 相手が path 指定で commit しても、 作業ツリーにあった自分の差分ごと入る ([`multi-session-coordination.md#staging-window-race`](multi-session-coordination.md#staging-window-race)) = 移行のような大きな差分は短い窓で書いて即 commit する。

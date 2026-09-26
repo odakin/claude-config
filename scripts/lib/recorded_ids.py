@@ -34,6 +34,9 @@ harvest_message_ids = messageId だけの変種 (threadId を含めない)。 �
     known |= harvest_entry(entry_dict)      # 台帳 entry 1 つ
     known |= harvest_text(free_text)        # yaml 外の散文
     python3 recorded_ids.py                 # selftest (= round-trip contract)。 消費者の delegation 検査は下の層の shim が持つ
+
+消費者は上の harvest 関数から文字列の集合を受け取る。 MSGID_RE / THREADID_RE の findall を直接使うと、
+捕捉群を 2 つに増やした時に返り値が文字列から tuple に変わり、 index と Gmail の id に tuple が混ざる。
 """
 from __future__ import annotations
 
