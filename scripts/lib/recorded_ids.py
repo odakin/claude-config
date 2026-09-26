@@ -13,8 +13,11 @@
   1. top-level `messageId` / `threadId` / `thread_id` field の**素値** (= prefix 無し bare hex)
   2. entry の全 string 値 (入れ子の dict / list の中も) に対する prefix regex:
      - message id: `messageId:` / `mid:` (log 行の短縮形)
-     - thread id:  `threadId:`
+     - thread id:  `threadId:` / `thread_id:`
      `[:=]` 両対応、 直前は word boundary (= "pyramid:" 等の偶発 substring を弾く)。
+     区切りが空白の散文形 (`messageId <hex>、` / `threadId <hex>`) も読む。 ただし 12 桁以上に限る
+     (= 「mid a」 のような偶発一致を弾く)。 空白形を読まなかった間、 台帳に散文で記録した mail が
+     検出器に「未認識」 のまま出続けた (実測) = 書式を 1 つに固定できない以上、 読み手が全書式を持つ。
   ⚠️ 認識**しない**もの (= 書き手側の禁止事項):
      - YAML コメント内の id (parser が捨てるため構造的に不可視。 記録は必ず値として書く)
      - prefix 無しの bare hex が散文中に単独出現 (偶発 hex 一致の偽 suppress を避ける)
@@ -38,8 +41,15 @@ import re
 import sys
 
 # canonical 述語 (= 書き手 house style との round-trip は本 file の selftest が固定)
-MSGID_RE = re.compile(r"\b(?:messageId|mid)[:=]\s*([a-fA-F0-9]+)")
-THREADID_RE = re.compile(r"\bthreadId[:=]\s*([a-fA-F0-9]+)")
+# 区切りは `:` / `=` (id の長さ不問) か、 空白 (= 散文の「messageId <hex>、」 形。 偶発一致を避けるため 12 桁以上に限る)。
+# 空白形を読まなかった間、 散文で記録した mail が検出器に「未認識」 のまま出続けた (実測)。
+MSGID_RE = re.compile(r"\b(?:messageId|mid)(?:[:=]\s*([a-fA-F0-9]+)|\s+([a-fA-F0-9]{12,})\b)")
+THREADID_RE = re.compile(r"\b(?:threadId|thread_id)(?:[:=]\s*([a-fA-F0-9]+)|\s+([a-fA-F0-9]{12,})\b)")
+
+
+def _ids(pattern: re.Pattern, text: str) -> set[str]:
+    """2 つの捕捉群 (区切りが :/= か空白か) のどちらかに入った id を集める。"""
+    return {a or b for a, b in pattern.findall(text) if a or b}
 BARE_FIELDS = ("messageId", "threadId", "thread_id")   # 契約 1
 
 
@@ -48,8 +58,8 @@ def harvest_text(text: str) -> set[str]:
     if not isinstance(text, str):
         return set()
     out: set[str] = set()
-    out.update(MSGID_RE.findall(text))
-    out.update(THREADID_RE.findall(text))
+    out |= _ids(MSGID_RE, text)
+    out |= _ids(THREADID_RE, text)
     return out
 
 
@@ -92,7 +102,7 @@ def harvest_message_ids(e: dict) -> set[str]:
     if isinstance(v, str) and v.strip():
         out.add(v.strip())
     for s in iter_strings(e):
-        out.update(MSGID_RE.findall(s))
+        out |= _ids(MSGID_RE, s)
     return out
 
 
@@ -135,7 +145,14 @@ FIXTURES: list[tuple[str, dict, set[str]]] = [
      {"messages": ["mid:aaaa000000000015 2026-01-01 21:25 ← Example Admin",
                    "mid:aaaa000000000016 2026-01-02 09:00 → Example Admin"]},
      {"aaaa000000000015", "aaaa000000000016"}),
+    ("散文の空白区切り (messageId <hex>、 全角読点で終わる)",
+     {"summary": "**[1] 2026-01-01 X → Y** (messageId aaaa000000000017、 threadId 同じ): 用件"}, {"aaaa000000000017"}),
+    ("散文の空白区切り threadId <hex> と thread_id: の素値",
+     {"notes": "同 thread (threadId aaaa000000000018) に続報", "thread_id": "aaaa000000000019"},
+     {"aaaa000000000018", "aaaa000000000019"}),
+    ("mid <hex> の空白形も 12 桁以上なら読む", {"log": ["返信 mid aaaa00000000001a 済"]}, {"aaaa00000000001a"}),
     # negatives
+    ("空白形の短い hex (mid a / messageId abc) は偶発一致として非認識", {"notes": "mid a、 messageId abc の件"}, set()),
     ("入れ子でも prefix 無しの bare hex は非認識", {"refs": {"gmail_msg_id": "aaaa000000000012"}}, set()),
     ("偶発 substring (pyramid:) は非認識", {"notes": "pyramid:aaaa00000000000c"}, set()),
     ("散文中の bare hex は非認識", {"notes": "対応済 aaaa00000000000d です"}, set()),
