@@ -413,7 +413,7 @@ def _inside(cell, rng) -> bool:
 # PDF
 # ---------------------------------------------------------------------------
 def page_texts(pdf) -> list:
-    import fitz
+    import pymupdf as fitz
 
     with fitz.open(pdf) as d:
         return [norm(p.get_text()) for p in d]
@@ -422,7 +422,7 @@ def page_texts(pdf) -> list:
 def _image_pixmap(doc, img):
     """get_images(full=True) の 1 行から Pixmap。 SMask (透明) があれば alpha を付けて返す = Excel の checkbox の画像は control の
     枠を透明にした PNG + SMask (実測 2026-09-25)。 alpha を落として読むと透明の余白が黒に見え、 箱の外枠の位置が読めない。"""
-    import fitz
+    import pymupdf as fitz
 
     pix = fitz.Pixmap(doc, img[0])
     smask = img[1] if len(img) > 1 else 0
@@ -441,7 +441,7 @@ def box_pixels(pix) -> dict:
     返り値 = {size, box (見える範囲 x0 y0 x1 y1 = 画像 px、 外枠を含む), edges (在る辺 t/b/l/r), clipped (4 辺揃わない = 枠が
     狭くて切れた), checked, mark_px}。 ⚠️ control 自身の ✓ は raster の 5 px ほどの灰色で紙では読めない (検収 F1) = 読めるかは
     box_ink (紙の render) で見る。"""
-    import fitz
+    import pymupdf as fitz
 
     if pix.n - pix.alpha != 1:                       # 色 → gray (alpha は保つ)
         pix = fitz.Pixmap(fitz.csGRAY, pix)
@@ -491,7 +491,7 @@ INK_READABLE = 0.10   # 箱の内側 (外枠から 15% 内側) の黒 (< 90) の
 
 def box_rect(placed, bp):
     """置かれた画像の矩形 (PDF pt) と box_pixels の box (画像 px) から、 紙の上の箱の外枠の矩形。"""
-    import fitz
+    import pymupdf as fitz
 
     if not bp.get("box"):
         return fitz.Rect(placed)
@@ -504,7 +504,7 @@ def box_rect(placed, bp):
 def box_ink(page, rect, zoom=4.0, inset=0.15, dark=90) -> float:
     """紙の上の箱 (rect) を render して、 外枠から inset 内側の領域で黒 (< dark) の画素の割合 = 印が読める大きさかの物差し。
     画像の bitmap でなく頁を描くので、 PDF に vector で重ねた ✓ も数える。"""
-    import fitz
+    import pymupdf as fitz
 
     pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), clip=rect, colorspace=fitz.csGRAY, alpha=False)
     w, h, s = pix.width, pix.height, pix.samples
@@ -516,7 +516,7 @@ def box_ink(page, rect, zoom=4.0, inset=0.15, dark=90) -> float:
 
 def _draw_check(page, r):
     """箱の外枠 r の内側を白で塗り (control 自身の灰色の点を消す、 外枠は残す)、 太い黒の ✓ を vector で描く。"""
-    import fitz
+    import pymupdf as fitz
 
     w, h, m = r.width, r.height, min(r.width, r.height)
     sh = page.new_shape()
@@ -548,7 +548,7 @@ def mark_checked_boxes(pdf, pages=None) -> dict:
     Mac Excel の control の ✓ は枠の raster の中の 5 px ほどの灰色で、 紙では約 1 mm の点にしかならない (実測)。 既に読める印
     (box_ink ≥ INK_READABLE) の箱には重ねない (二重描きしない)。 pages = 対象の頁 (1 始まり、 None = 全頁)。
     返り値 = {"marked": N, "pages": {頁: N}}。 PDF は incremental save で上書き (印が無ければ触らない)。"""
-    import fitz
+    import pymupdf as fitz
 
     marked, per = 0, {}
     with fitz.open(pdf) as d:
@@ -578,7 +578,7 @@ def page_visuals(pdf) -> list:
     get_image_info (描かれた回数) は点線の pattern の tile まで数えて体裁で増減する (実測: 日程表 11 → 0) = 使わない。
     boxes = 小さい画像 (≤ 40pt 角 = checkbox の箱) の画素の検査 (box_pixels) を置いた場所ごとに + 紙の上の箱の矩形 (box_rect) と
     印の読める大きさ (ink = box_ink、 readable = ink ≥ INK_READABLE)。"""
-    import fitz
+    import pymupdf as fitz
 
     out = []
     with fitz.open(pdf) as d:
@@ -651,7 +651,7 @@ def box_shifts(out_boxes, blank_boxes, tol=3.0, limit=BOX_SHIFT_PT, fmap=None) -
 def page_layout(pdf) -> list:
     """段階 2 (D4、 2026-09-25) の材料 = 頁ごとの {images: [(xref, bbox)], hlines: [(y, x0, x1)], words: [(字, bbox)]}。
     画像 = 描かれた位置つき (pattern の tile = 同じ xref が何度も描かれるものは除く)。 線 = 線と細い矩形 (罫線) の水平なもの。"""
-    import fitz
+    import pymupdf as fitz
 
     out = []
     with fitz.open(pdf) as d:
@@ -1171,7 +1171,7 @@ def selftest() -> int:
     import os
     import tempfile
 
-    import fitz
+    import pymupdf as fitz
     import openpyxl
 
     d = tempfile.mkdtemp(prefix="static-text-selftest-")

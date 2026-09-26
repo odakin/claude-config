@@ -82,7 +82,7 @@ def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "lib"))
-from recorded_ids import MSGID_RE, THREADID_RE, harvest_entry, harvest_message_ids  # noqa: E402
+from recorded_ids import harvest_entry, harvest_message_ids, harvest_thread_ids  # noqa: E402
 from todo_thread_links import harvest_todo_refs, norm_account, owner_from, resolve_threads, thread_ids  # noqa: E402
 # 項目の台帳 = <ledger>/todo/<id>.yaml (1 entry 1 file、 旧 <ledger>/TODO.yaml が残っていればそれも読む) = lib/todo_ledger.py
 from todo_ledger import (LEGACY_NAME as TODO_LEGACY_NAME, TodoLedgerError, dedent_entry,  # noqa: E402
@@ -886,7 +886,7 @@ def run_migrate(cfg: Config, name: str, ledger: Ledger, gmail, apply: bool, limi
         n += 1
         acct = norm_account(e.get("account"), cfg.accounts)
         accounts = [acct] if acct else list(cfg.accounts)
-        tids = thread_ids(e.get("threadId")) or sorted(set(THREADID_RE.findall("\n".join(map(str, base.values())))))
+        tids = thread_ids(e.get("threadId")) or sorted(harvest_thread_ids("\n".join(map(str, base.values()))))
         msgs = None
         for a in accounts:
             if gmail.service(a) is None:
@@ -1367,6 +1367,16 @@ def _selftest() -> int:
         check(rc == 0 and old.get("messages") == [f"mid:{m2} 2026-09-22 01:00 ← Counter Part"] and "threadId" not in old
               and old.get("recorded_upto") == f"messageId:{m2} (2026-09-22 01:00)" and harvest_entry(old) == {m2},
               "t10 移行は entry 自身の message id だけを索引に書き、 threadId を足さない (harvest 集合は不変)")
+        embedded = td / "ledger-a" / "inbox" / "2026-06.yaml"
+        embedded.write_text(
+            f'- id: "2026-06-01-embedded-thread"\n  account: acct-a\n'
+            f'  email_ref: "threadId:{m1} / messageId:{m2}"\n', encoding="utf-8")
+        out_lines.clear()
+        rc = run_migrate(cfg, "ledger-a", Ledger(cfg), gm, apply=True, limit=None,
+                         only="2026-06-01-embedded-thread", out=pr)
+        linked = _yaml_safe_load(embedded.read_text(encoding="utf-8"))[0]
+        check(rc == 0 and linked.get("messages") == [f"mid:{m2} 2026-09-22 01:00 ← Counter Part"],
+              "t10 threadId が email_ref にだけ在る entry も文字列 id で thread を引く")
         out_lines.clear()
         rc = run_migrate(cfg, "ledger-a", Ledger(cfg), gm, apply=True, limit=None, only="2026-08-01-legacy", out=pr)
         check(rc == 0 and "既に印あり 1" in "\n".join(out_lines), "移行は冪等 (印のある entry を飛ばす)")

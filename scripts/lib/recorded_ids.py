@@ -30,7 +30,7 @@ harvest_message_ids = messageId だけの変種 (threadId を含めない)。 �
   続報の未認識が隠れる。
 
 使い方:
-    from recorded_ids import MSGID_RE, THREADID_RE, harvest_entry, harvest_message_ids, harvest_text
+    from recorded_ids import harvest_entry, harvest_message_ids, harvest_text, harvest_thread_ids
     known |= harvest_entry(entry_dict)      # 台帳 entry 1 つ
     known |= harvest_text(free_text)        # yaml 外の散文
     python3 recorded_ids.py                 # selftest (= round-trip contract)。 消費者の delegation 検査は下の層の shim が持つ
@@ -61,6 +61,11 @@ def harvest_text(text: str) -> set[str]:
     out |= _ids(MSGID_RE, text)
     out |= _ids(THREADID_RE, text)
     return out
+
+
+def harvest_thread_ids(text: str) -> set[str]:
+    """散文の threadId / thread_id だけを正規化して返す。"""
+    return _ids(THREADID_RE, text) if isinstance(text, str) else set()
 
 
 def iter_strings(v):
@@ -175,6 +180,10 @@ MSG_FIXTURES: list[tuple[str, dict, set[str]]] = [
 
 def run_selftest() -> bool:
     ok = True
+    threads = harvest_thread_ids("threadId:aaaa000000000001 / thread_id aaaa000000000002 / messageId:aaaa000000000003")
+    thread_ok = threads == {"aaaa000000000001", "aaaa000000000002"}
+    print(f"  {'PASS' if thread_ok else 'FAIL'}: thread-only の id は文字列で返し、 message は除く")
+    ok &= thread_ok
     for name, entry, want in FIXTURES:
         got = harvest_entry(entry)
         print(f"  {'PASS' if got == want else 'FAIL'}: {name}" + ("" if got == want else f": want={sorted(want)} got={sorted(got)}"))

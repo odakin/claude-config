@@ -180,13 +180,15 @@ def fidelity_check(path, fid: dict) -> tuple:
         args += ["--drop", dr]
     if fid.get("blank") and os.path.exists(fid["blank"]):
         args += ["--blank", fid["blank"]]
+    rc = None
     try:
         r = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=300)
+        rc = r.returncode
         rep = json.loads(r.stdout) if r.stdout.strip() else None
     except (OSError, subprocess.SubprocessError, ValueError):
         rep = None
-    if rep is None:
-        infos.append(f"⚪ 雛形との照合が走らなかった ({os.path.basename(tpl)})")
+    if rc not in (0, 1) or not isinstance(rep, dict) or not isinstance(rep.get("targets"), list) or not rep["targets"]:
+        findings.append(f"🔴 雛形との照合が走らなかった ({os.path.basename(tpl)}) — 検査器の出力を確認する")
         return findings, infos
     for t in rep.get("targets") or []:
         where = f"{str(t['sheet']).strip()}!{t['range']}" if rep.get("kind") != "docx" else "docx"
@@ -395,6 +397,17 @@ def selftest():
     rb, mb = hook(ev(f"lp -d Q {bad_pdf}"), env=E)
     _ro, mo = hook(ev(f"lp -d Q {ok_pdf}"), env=E)
     assert rb == 2 and "雛形の図形の字が無い" in mb and "雛形の図形の字が無い" not in mo, (mb, mo)
+    checker = STATIC_TEXT
+    try:
+        globals()["STATIC_TEXT"] = os.path.join(d, "missing-checker.py")
+        assert any("雛形との照合が走らなかった" in f for f in inspect(ok_pdf)[0])
+        empty_checker = os.path.join(d, "empty-checker.py")
+        with open(empty_checker, "w", encoding="utf-8") as fh:
+            fh.write('print(\'{"targets": []}\')\n')
+        globals()["STATIC_TEXT"] = empty_checker
+        assert any("雛形との照合が走らなかった" in f for f in inspect(ok_pdf)[0])
+    finally:
+        globals()["STATIC_TEXT"] = checker
     gone = fpdf("fid_gone.pdf", ["申請者"])
     doc = fitz.open(gone)
     write_record(doc, [{"role": "submit", "label": "様式"}], "selftest",

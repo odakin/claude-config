@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from recorded_ids import MSGID_RE, THREADID_RE  # noqa: E402
+from recorded_ids import harvest_text  # noqa: E402
 
 # cross_ref / related_todo の TODO pointer: "TODO:<id>" と "<repo>/TODO:<id>" の両方
 TODO_REF_RE = re.compile(r"(?:^|/)TODO:([^\s\"]+)")
@@ -116,7 +116,7 @@ def resolve_threads(todo: dict, inbox_by_id: dict, inverse_by_todo: dict | None 
 
     er = todo.get("email_ref")
     if isinstance(er, str):
-        for tid in set(THREADID_RE.findall(er)) | set(MSGID_RE.findall(er)):
+        for tid in sorted(harvest_text(er)):
             if tid not in seen:
                 seen.add(tid)
                 out.append((tid, default))
