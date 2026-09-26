@@ -703,7 +703,9 @@ allowed. This boundary is tested separately from hook trust and installation.
 Persisted trust can be checked with `scripts/audit-codex-integration.sh --runtime`
 (or [`audit-codex-hook-runtime.py`](../scripts/audit-codex-hook-runtime.py) directly).
 The runtime audit requires trusted, enabled Bash/apply_patch pre-tool guards and the reporting Stop guard; `missing` names any absent or untrusted surface.
-Select the Desktop executable with `--codex` when inspecting that runtime. The
+Select the Desktop executable with `--codex` when inspecting that runtime. `--codex auto` prefers a running app executable, then current and legacy application bundles, then PATH; the report includes the selected path and version and warns when PATH may identify a different runtime. Dashboard and scheduled checks refresh a machine-local observation with `--cache`; SessionStart uses only `--read-cache --surface` and starts no app-server. Missing, invalid or older-than-two-day observations are visible warnings; a fresh ready app observation is silent.
+
+<a id="restore-hook-trust"></a>Hook trust is stored under `[hooks.state]` in the user's `config.toml` and is bound to the hook definition hash; changing a definition in `hooks.json` can invalidate its trust. To restore it, the user starts the app-bundled executable selected by the audit in a terminal, then uses the startup trust dialog or `/hooks` and the trust-all action. A PATH executable may be a different version. Re-run the audit and check that the required Bash, patch and Stop surfaces are trusted; this verifies persisted configuration, not live dispatch. Agents only read this state and never write trust settings or invoke a trust RPC. The
 helper creates no model task and writes no trust decision. It always labels
 live dispatch `not_tested`: a fresh server's trusted configuration does not
 prove that an existing task has reloaded it. Complete verification uses actual

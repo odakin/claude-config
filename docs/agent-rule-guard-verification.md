@@ -197,3 +197,10 @@ engine の selftest が git の呼び出し回数を数える (件数に依ら�
 | `scripts/approval-source-census.py` | `1adf51a0b8d94e4330e1e4bdd936c1f49610ebbd39de13c58493cb72f0cf9352` |
 | `hooks/manuscript-claim-guard.test.sh` | `76581a38b409295e294077fbc005b869811a11da65bf1bb6e7b5cb568a50ee42` |
 | `codex/hooks/codex-hooks.test.sh` | `100ea163d01d9f09d23f1749058d6bc64657023f3219fba2848ee89de881261f` |
+
+## Hook 信頼監査の探索とcache — 照合用 SHA-256
+
+| source | SHA-256 |
+|---|---|
+| `scripts/audit-codex-hook-runtime.py` | `ab27c8a227f97781e1a76bb7b6ab75eb58b6fd6733e14274276cd8a4eb9c9ba6` |
+| `codex/hooks/codex-hooks.test.sh` | `3dbb162515460773dfaf04626fb6acb10ef10a36a8474124e943afecaa536755` |

@@ -598,6 +598,9 @@ caller = hooks.parent.parent/'scripts/audit-codex-integration.sh'
 server = root/'fixture-app-server'
 server.write_text('''#!/usr/bin/env python3
 import json, os, sys
+if '--version' in sys.argv:
+    print('codex fixture')
+    raise SystemExit(0)
 for line in sys.stdin:
     request = json.loads(line)
     if 'id' not in request:
@@ -629,6 +632,28 @@ assert p.returncode == 3 and json.loads(p.stdout)['configuration'] == 'inspectio
 p = subprocess.run(['bash',str(caller),'--runtime','--codex',str(server)],capture_output=True,text=True)
 assert p.returncode != 0 and 'MISSING: Codex authority hook(s): stop' in p.stdout, (p.returncode,p.stdout,p.stderr)
 print('Codex audit: untrusted Stop, trusted Stop, failure exit and caller display passed')
+cache = root/'trust-cache.json'
+for trust, broken, prefix, rc in [('trusted',False,'',0),('untrusted',False,'🔴',1),('trusted',True,'⚠️',3)]:
+    env = dict(os.environ, FIXTURE_STOP_TRUST=trust)
+    if broken:
+        env['FIXTURE_BROKEN'] = '1'
+    p = subprocess.run([sys.executable,str(audit),'--codex',str(server),'--cache',str(cache),'--surface'],
+                       capture_output=True,text=True,env=env)
+    assert p.returncode == rc, (p.returncode,p.stderr)
+    assert p.stdout.startswith(prefix) if prefix else not p.stdout, p.stdout
+    saved = cache.read_bytes()
+    # A cached read must not try even an explicitly missing executable.
+    q = subprocess.run([sys.executable,str(audit),'--codex',str(root/'absent'),'--cache',str(cache),'--read-cache','--surface'],
+                       capture_output=True,text=True)
+    assert q.returncode == rc and q.stdout == p.stdout and cache.read_bytes() == saved, (q.returncode,q.stdout,q.stderr)
+    report = json.loads(saved)
+    assert report['binary'] == str(server.resolve()) and report['binary_version'] == 'codex fixture'
+    from datetime import datetime, timezone, timedelta
+    report['checked_at'] = (datetime.now(timezone.utc)-timedelta(days=3)).isoformat()
+    cache.write_text(json.dumps(report))
+    q = subprocess.run([sys.executable,str(audit),'--cache',str(cache),'--read-cache','--surface'],capture_output=True,text=True)
+    assert '古い' in q.stdout, q.stdout
+print('Codex audit: cache round-trip, read-only states and stale observations passed')
 PY
 
 # Approval sources: generated hook feedback is not an author's message.

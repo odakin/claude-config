@@ -12,14 +12,128 @@ allowed control must be observed separately (conventions/agent-rule-ownership.md
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import queue
 import re
+import shlex
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
+
+
+BUNDLE_PATHS = (
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "/Applications/ChatGPT.app/Contents/Resources/codex",
+)
+
+
+def discover_codex(requested="auto", *, process_lines=None, bundle_paths=None, which=None):
+    """Prefer a running app executable, then current/legacy bundles, then PATH."""
+    which = which or shutil.which
+    if requested != "auto":
+        found = which(requested)
+        if not found:
+            raise FileNotFoundError("selected Codex executable missing")
+        return str(Path(found).resolve()), "explicit"
+    if process_lines is None:
+        try:
+            result = subprocess.run(["ps", "-axo", "comm="], capture_output=True, text=True, timeout=3)
+            process_lines = result.stdout.splitlines() if result.returncode == 0 else []
+        except (OSError, subprocess.TimeoutExpired):
+            process_lines = []
+    for line in process_lines:
+        path = line.strip()
+        if (".app/Contents/" in path and path.endswith(("/Contents/MacOS/codex", "/Contents/Resources/codex"))
+                and Path(path).is_file() and os.access(path, os.X_OK)):
+            return str(Path(path).resolve()), "process"
+    for path in BUNDLE_PATHS if bundle_paths is None else bundle_paths:
+        if Path(path).is_file() and os.access(path, os.X_OK):
+            return str(Path(path).resolve()), "bundle"
+    found = which("codex")
+    if found:
+        return str(Path(found).resolve()), "PATH"
+    raise FileNotFoundError("Codex executable unavailable")
+
+
+def default_cache():
+    return Path.home() / ".claude" / "state" / "codex-hook-trust.json"
+
+
+def write_cache(path, report):
+    """Atomically publish one observation; never touch Codex trust settings."""
+    path = Path(path).expanduser()
+    codex_home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex").expanduser().resolve()
+    resolved = path.resolve()
+    if (path.is_symlink() or codex_home == resolved or codex_home in resolved.parents
+            or path.name.lower() in ("config.toml", "hooks.json", "settings.json", "settings.local.json")):
+        raise ValueError("cache destination must not be a configuration file or symlink")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, prefix=".codex-hook-trust-", delete=False) as fh:
+            temp = fh.name
+            json.dump(report, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+        os.replace(temp, path)
+        temp = None
+    finally:
+        if temp is not None:
+            os.unlink(temp)
+
+
+def read_cache(path, now=None):
+    """Read only. Missing, malformed or future-dated observations cannot be green."""
+    try:
+        value = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
+        if (not isinstance(value, dict) or value.get("cache_version") != 1
+                or value.get("configuration") not in ("ready_for_live_probe", "not_armed", "inspection_unavailable")):
+            raise ValueError("cache schema")
+        stamp = datetime.fromisoformat(value["checked_at"])
+        if stamp.tzinfo is None:
+            raise ValueError("cache timestamp")
+        age = ((now or datetime.now(timezone.utc)) - stamp).total_seconds()
+        if age < -300:
+            raise ValueError("future cache timestamp")
+        if not isinstance(value.get("missing", []), list) or any(not isinstance(s, str) for s in value.get("missing", [])):
+            raise ValueError("cache missing list")
+        value["cache_stale"] = age > 2 * 24 * 60 * 60
+        return value
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        return {"configuration": "inspection_unavailable", "error_type": type(exc).__name__,
+                "cache_unavailable": True, "live_dispatch": "not_tested"}
+
+
+def one_line(value, limit=400):
+    return " ".join(str(value).split())[:limit]
+
+
+def surface_line(report):
+    state = report.get("configuration")
+    stale = " (古い: 2日超)" if report.get("cache_stale") else ""
+    path_note = " [PATH の codex、app とは別物かもしれない]" if report.get("binary_source") == "PATH" else ""
+    if state == "ready_for_live_probe":
+        if stale:
+            return "⚠️ Codex の hook 信頼: 監査cacheが古い (2日超)。dashboardで再監査する。"
+        return "⚠️ " + path_note.strip() if path_note else ""
+    if state == "not_armed":
+        binary = shlex.quote(one_line(report.get("binary") or "codex"))
+        return ("🔴 Codex の hook 信頼が落ちている: missing = " + one_line(report.get("missing", []))
+                + stale + "、付け直し = terminalで " + binary + " を起動して /hooks" + path_note)
+    suffix = "、監査cache未取得・読取不能" if report.get("cache_unavailable") else ""
+    return "⚠️ Codex の hook 信頼: 検査不能 (" + one_line(report.get("error_type", "UnknownState")) + ")" + suffix + stale + path_note
+
+
+def result_code(report):
+    if report.get("configuration") == "not_armed":
+        return 1
+    if report.get("configuration") == "ready_for_live_probe" and not report.get("cache_stale"):
+        return 0
+    return 3
 
 
 def assess(data: dict, needle: str) -> tuple[dict, int]:
@@ -185,6 +299,66 @@ def selftest() -> int:
         checks.append(("configuration errors are inspection failure", True))
     else:
         checks.append(("configuration errors are inspection failure", False))
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp).resolve()
+        running = root / "Example App.app/Contents/MacOS/codex"
+        bundle = root / "Bundle.app/Contents/Resources/codex"
+        for path in (running, bundle):
+            path.parent.mkdir(parents=True)
+            path.write_text("synthetic executable\n")
+            path.chmod(0o755)
+        absent = lambda _name: None
+        checks.append(("auto prefers running app, including spaces", discover_codex(
+            process_lines=[str(running)], bundle_paths=[str(bundle)], which=absent) == (str(running), "process")))
+        checks.append(("auto skips obsolete bundle paths", discover_codex(
+            process_lines=[], bundle_paths=[str(root / "obsolete"), str(bundle)], which=absent) == (str(bundle), "bundle")))
+        checks.append(("auto PATH fallback is identified", discover_codex(
+            process_lines=[], bundle_paths=[], which=lambda _name: str(bundle)) == (str(bundle), "PATH")))
+        try:
+            discover_codex(process_lines=[], bundle_paths=[], which=absent)
+        except FileNotFoundError:
+            checks.append(("auto with no executable fails inspection", True))
+        else:
+            checks.append(("auto with no executable fails inspection", False))
+        cache = root / "state/trust.json"
+        now = datetime.now(timezone.utc)
+        good, _ = assess(fixture(), "manuscript_claim_guard.py")
+        good.update(cache_version=1, checked_at=now.isoformat(), binary=str(bundle), binary_source="bundle")
+        write_cache(cache, good)
+        before = cache.read_bytes()
+        checks.append(("fresh ready cache is silent", surface_line(read_cache(cache, now)) == ""))
+        checks.append(("cache reading never changes bytes", cache.read_bytes() == before))
+        checks.append(("cache file is private", cache.stat().st_mode & 0o777 == 0o600))
+        protected = root / "hooks.json"
+        protected.write_text("keep existing configuration")
+        alias = root / "cache-alias.json"
+        alias.symlink_to(protected)
+        for target in (protected, alias):
+            try:
+                write_cache(target, good)
+            except ValueError:
+                checks.append(("cache writer refuses configuration or symlink targets", protected.read_text() == "keep existing configuration"))
+            else:
+                checks.append(("cache writer refuses configuration or symlink targets", False))
+        bad, _ = assess(fixture("untrusted"), "manuscript_claim_guard.py")
+        bad.update(cache_version=1, checked_at=now.isoformat(), binary=str(bundle))
+        write_cache(cache, bad)
+        checks.append(("untrusted cache renders red", surface_line(read_cache(cache, now)).startswith("🔴")))
+        unknown = dict(good, configuration="inspection_unavailable", error_type="TimeoutError")
+        write_cache(cache, unknown)
+        checks.append(("inspection failure cache renders warning", surface_line(read_cache(cache, now)).startswith("⚠️")))
+        from datetime import timedelta
+        write_cache(cache, good)
+        stale = read_cache(cache, now + timedelta(days=3))
+        checks.append(("old ready cache is not silent success", "古い" in surface_line(stale) and result_code(stale) == 3))
+        write_cache(cache, bad)
+        checks.append(("old untrusted cache remains red and marked old", surface_line(read_cache(cache, now + timedelta(days=3))).startswith("🔴")
+                       and "古い" in surface_line(read_cache(cache, now + timedelta(days=3)))))
+        checks.append(("absent cache is inspection failure", result_code(read_cache(root / "absent")) == 3))
+        for invalid in ([], {"configuration": "ready_for_live_probe"}, dict(good, checked_at=(now + timedelta(days=1)).isoformat())):
+            cache.write_text(json.dumps(invalid))
+            checks.append(("invalid cache cannot look ready", surface_line(read_cache(cache, now)).startswith("⚠️")))
+        checks.append(("PATH-ready observation carries runtime warning", "PATH" in surface_line(dict(good, binary_source="PATH"))))
     for name, ok in checks:
         print(("PASS: " if ok else "FAIL: ") + name)
     return 0 if all(ok for _, ok in checks) else 1
@@ -192,25 +366,45 @@ def selftest() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--codex", default="codex", help="installed executable; select the Desktop binary explicitly when auditing Desktop")
+    parser.add_argument("--codex", default="auto", help="auto: running app, known bundles, then PATH; or an explicit executable")
     parser.add_argument("--cwd", default=str(Path.cwd()))
     parser.add_argument("--command-substring", default="manuscript_claim_guard.py")
     parser.add_argument("--timeout", type=float, default=15)
     parser.add_argument("--selftest", action="store_true")
+    parser.add_argument("--cache", nargs="?", const=str(default_cache()), help="write the observation to this machine-local cache")
+    parser.add_argument("--read-cache", action="store_true", help="read the cache only; start no process and write nothing")
+    parser.add_argument("--surface", action="store_true", help="print one diagnostic line; a fresh ready app configuration is silent")
     args = parser.parse_args()
     if args.selftest:
         return selftest()
+    if args.read_cache:
+        report = read_cache(args.cache or default_cache())
+        output = surface_line(report) if args.surface else json.dumps(report, ensure_ascii=False, indent=2)
+        if output:
+            print(output)
+        return result_code(report)
+    report = {"cache_version": 1, "checked_at": datetime.now(timezone.utc).isoformat(), "live_dispatch": "not_tested"}
     try:
-        binary = shutil.which(args.codex)
-        if not binary:
-            raise FileNotFoundError("selected Codex executable missing")
-        report, rc = assess(read_hooks(binary, str(Path(args.cwd).resolve()), args.timeout), args.command_substring)
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        return rc
-    except (OSError, RuntimeError, ValueError, TimeoutError) as exc:
-        print(json.dumps({"configuration": "inspection_unavailable", "error_type": type(exc).__name__,
-                          "live_dispatch": "not_tested"}))
-        return 3
+        binary, source = discover_codex(args.codex)
+        report.update(binary=binary, binary_source=source)
+        version = subprocess.run([binary, "--version"], stdin=subprocess.DEVNULL, capture_output=True,
+                                 text=True, timeout=min(args.timeout, 5), check=True)
+        report["binary_version"] = one_line(version.stdout.strip() or "unknown", 160)
+        if source == "PATH":
+            report["binary_warning"] = "PATH の codex、app とは別物かもしれない"
+        observation, _ = assess(read_hooks(binary, str(Path(args.cwd).resolve()), args.timeout), args.command_substring)
+        report.update(observation)
+    except (OSError, RuntimeError, ValueError, TimeoutError, subprocess.SubprocessError) as exc:
+        report.update(configuration="inspection_unavailable", error_type=type(exc).__name__)
+    if args.cache:
+        try:
+            write_cache(args.cache, report)
+        except (OSError, ValueError) as exc:
+            report.update(configuration="inspection_unavailable", error_type=type(exc).__name__, cache_write_failed=True)
+    output = surface_line(report) if args.surface else json.dumps(report, ensure_ascii=False, indent=2)
+    if output:
+        print(output)
+    return result_code(report)
 
 
 if __name__ == "__main__":
