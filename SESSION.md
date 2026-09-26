@@ -1,7 +1,5 @@
 # SESSION — claude-config
 
-2026-09-26 総合CIの PDF 印刷前照合と mail thread ID 読取は修復・CI確認済み。汎用の失敗型を正本と実装の自己検査に反映した。次 = この 2 件についてなし。印刷の検査契約は [`form-case-pipeline.md#fidelity`](conventions/form-case-pipeline.md#fidelity)、ID の正規化契約は [`mail-thread-ledger.md#failure-modes`](conventions/mail-thread-ledger.md#failure-modes)。実装は [`pdf-print-preflight.py`](scripts/pdf-print-preflight.py) と [`recorded_ids.py`](scripts/lib/recorded_ids.py)。
-
 規則保護の gate は、 性能の差し戻し (commit の検査が file 数に比例して git を呼ぶ) を直し (3000 file の dir で 201 s → 0.4 s)、 wiring lock の範囲を裁定して実装した ([`agent-rule-ownership.md#wiring-scope`](conventions/agent-rule-ownership.md#wiring-scope) = 既定は全文 lock のまま、 言及が全部 agent-authority の block の中にある file だけ block、 迂回は canary の生存記録が session 開始の面で表に出す)。 redirect 付き commit の誤停止と素通りも同じ commit で直した。 資料の入口は [成果物台帳](docs/guard-review-records.md)、 試験と実測は [検証記録](docs/agent-rule-guard-verification.md) の末尾。 次 = 実 session での `--liveness` の沈黙 / 表示を数日見る (run-all-checks からの報告の途絶えは 14 日で 🟡)。
 
 > 📌 **このファイル = 直近の作業の索引 + Open items (目安 ~80 行 = [`CONVENTIONS.md#pre-push-check`](CONVENTIONS.md#pre-push-check))**。 entry は「日付 + 何を + 正本への pointer」 の 1-3 行で「直近」 の先頭に足す。 経緯・実測・RCA は正本 doc か [`SESSION-archive.md`](SESSION-archive.md) (grep 用) へ。 変更履歴の正本は `git log`、 設計判断は `DESIGN.md`、 Codex 統合の正本は [`codex/PARITY.md#codex-integration-sot`](codex/PARITY.md#codex-integration-sot)。 縮退: 2026-06-10 hot/cold 分離 / 2026-09-01 第 2 回 / 2026-09-11 第 3 回 (2026-08-12〜09-11 の 55 entry を archive へ verbatim MOVE、 義務行は Open items へ lift)。
