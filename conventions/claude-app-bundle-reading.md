@@ -18,6 +18,8 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 
 道具 = [`scripts/claude-app-bundle.py`](../scripts/claude-app-bundle.py)。 読んだ結論には **`version` の出力 (app と engine の版) を添える** — 挙動は版で変わる。
 
+**Windows (Store 版)**: 画面の chunk は `C:\Program Files\WindowsApps\Claude_<版>_x64__pzs8sxrjxfjjc\app\resources\ion-dist\assets\v1\*.js`、 main process は同 `app\resources\app.asar`、 埋込 engine は `%APPDATA%\Claude\claude-code\<版>\<hash>\claude.exe`。 動いている版と path は `Get-Process` の `Path` で分かる。 `WindowsApps` 配下は **dir への `cd` と `ls` の glob は Permission denied だが、 file は full path を渡せば読める** (`grep -l … "<dir>/*.js"` は失敗、 `grep -rl … "<dir>"` と `cp "<file>" <scratch>` は通る)。 1 行が数十 KB の chunk に `.{0,N}` の grep を当てると固まるので、 scratch に写して Python で位置を指定して切り出す。
+
 ## <a id="trace-from-screen-text"></a>画面の文言から原因を辿る
 
 1. **文言 → 翻訳 key**: `claude-app-bundle.py i18n "このファイルが見つかりませんでした"` → key と英語原文。
