@@ -12,6 +12,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[cd-git-write-guard.test.sh](cd-git-write-guard.test.sh)** — 述語の selftest + hook 入出力 (deny の JSON / cd なしは無音 / opt-out / Bash 以外は無音)
 - **[chat-file-ref-enforce.sh](chat-file-ref-enforce.sh)** — Stop: 最終メッセージの file 参照 (link / path に見える inline code) が desktop の右パネルで開けない形なら、 正しい path を添えて 1 回だけ書き直させる
 - **[chat-file-ref-enforce.test.sh](chat-file-ref-enforce.test.sh)** — logic + incident-replay selftest
+- **[chat-math-render-guard.py](chat-math-render-guard.py)** — Stop: 最終発話の数式 (`\(…\)` / `$…$` / `$$…$$` / `\[…\]`) のうち desktop の Code タブが生 TeX のまま出す形を、 本体の判定式を写して見つけ、 直し方を添えて出し直させる
+- **[chat-math-render-guard.test.sh](chat-math-render-guard.test.sh)** — logic + incident-replay selftest
 - **[chat-path-base-nudge.sh](chat-path-base-nudge.sh)** — PostToolUse(Bash): 作業ディレクトリが session を始めたフォルダから離れたとき、 chat の file 参照 (link の href・inline code の dir/file.ext) を右パネルが開く基準は変わらないことを、 session × 作業ディレクトリごとに 1 回だけ知らせる
 - **[chat-path-base-nudge.test.sh](chat-path-base-nudge.test.sh)** — logic selftest
 - **[codex-parent-worker-record-nudge.py](codex-parent-worker-record-nudge.py)** — Codex由来の環境IDがあるClaude workerだけに記録条項を渡す (UserPromptSubmit/Stop、非blocking)。

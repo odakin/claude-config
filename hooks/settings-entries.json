@@ -386,6 +386,15 @@
       "hooks": [
         {
           "type": "command",
+          "command": "~/.claude/hooks/chat-math-render-guard.py",
+          "timeout": 20
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
           "command": "~/.claude/hooks/visible-html-comment-enforce.py"
         }
       ]
