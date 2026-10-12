@@ -17,6 +17,7 @@
 - **[audio-bgm-underlay.py](audio-bgm-underlay.py)** — 仕上がった配信音声 (ジングル + 本編 + ジングル) の本編の下に BGM を敷いた試作を作る (ffmpeg の入口)。
 - **[audio-finish-episode.py](audio-finish-episode.py)** — ポッドキャストの 1 回分を仕上げる: 本編にジングルを頭と尾に付け、音量を揃えて配信用 MP3 に書き出し、測り直して検査する。
 - **[audio-split-by-frames.py](audio-split-by-frames.py)** — 長い録音 (AAC の .m4a) を、指定したフレームの境目で無劣化 (再符号化なし) に分け、元と一致するかを確かめる。
+- **[audio-window-check.py](audio-window-check.py)** — 音声の短い区間を確かめる: 切れ目の両側の再転写・ある時刻の前後の音量の並び・大きな山の一覧。
 - **[audit-codex-hook-runtime.py](audit-codex-hook-runtime.py)** — Read Codex hook trust through hooks/list; distinguish trusted configuration from untested live dispatch.
 - **[audit-codex-integration.sh](audit-codex-integration.sh)** — Codex 導入と指定 repo の root AGENTS.md / Git gate を read-only で確認する
 - **[audit-codex-integration.test.sh](audit-codex-integration.test.sh)** — Codex integration audit の fixture test
