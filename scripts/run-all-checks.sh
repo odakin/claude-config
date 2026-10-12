@@ -82,6 +82,9 @@ for py in scripts/*.py; do
     fi
 done
 
+# 3-sh. shell の --selftest (python の自動発見の外。 Linux の CI でも回る = 配線の script の OS 差をここで見る)
+run "selftest: install-shared-skills.sh" bash scripts/install-shared-skills.sh --selftest
+
 # 3a. scripts/lib/*.py の selftest (発見条件 = `if __name__ == "__main__"` の行か直後 2 行に selftest の語。
 #     直接実行が selftest の module と、 --selftest を渡したときだけ selftest を回す module の両方があるので、
 #     いつも --selftest を付けて呼ぶ (前者は引数を見ないので同じ結果、 後者は付けないと説明を出して 0 で終わる =

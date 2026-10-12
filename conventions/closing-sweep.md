@@ -1,13 +1,13 @@
 <!-- doc-meta
 when: session の終わりに、 その session (と委ねた agent・子 session・別 session) で得た知見・手順・使い捨ての script を正本へ上げ、 正本と参照・SESSION・TODO を整えて commit するとき (= 締めの sweep・仕上げ) + 締めの sweep を個人層の skill や定型の指示にするとき
 category: harness-core
-summary: 締めの sweep (仕上げ) の手順の正本 — 集める (会話記録・委ねた先の 5 つの口) → 層を決める (1 件を分けて置く・2 回目は仕組みに・公開層の境界) → 並列の締めと分担 → 正本と参照 → SESSION・TODO → commit → 横断と報告 (「残り」 に入れる前に会話で決まっていないかを確かめる)。 個人層の skill はこの doc を順に読ませ、 道具の path と本人の決めごとだけを持つ (#personal-skill)
+summary: 締めの sweep (仕上げ) の手順の正本 — 集める (会話記録・委ねた先の 5 つの口) → 層を決める (1 件を分けて置く・2 回目は仕組みに・公開層の境界) → 並列の締めと分担 → 正本と参照 → SESSION・TODO → commit → 横断と報告 (「残り」 に入れる前に会話で決まっていないかを確かめる)。 誰でも使える `/wrap` = skills/wrap (この doc を順に読ませる)、 個人層の同名の skill はそれを正本として指し、 道具の path と本人の決めごとだけを持つ (#personal-skill)。 層1 に置くものは claude-config に PR で出す (#upstream-pr)
 -->
 # 締めの sweep (仕上げ) — 知見を正本へ上げて整える手順
 
 session の終わりに「全ての知見・手順・script をなるべく上の層に上げ、 session・正本・参照を整える」 作業の手順の正本。
 各段の規則の本文はそれぞれの正本にあり、 ここは順番と入口だけを持つ (= 規則を複製しない)。
-個人層で skill (`/wrap` など) にするときの形 = [#personal-skill](#personal-skill)。
+skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md`](../skills/wrap/SKILL.md))、 個人の値の持ち方 = [#personal-skill](#personal-skill)。 層1 に置くものの出し方 = [#upstream-pr](#upstream-pr)。
 
 以下の `<id8>` = その session の id の先頭 8 文字 (Claude Code の記録 file 名の uuid)、 道具の path は本 repo からの相対。
 
@@ -196,10 +196,25 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
   4. **会話に出ていない** → 残りに入れる。 「残りを全部やって」 がかかるのはこの群だけ。
   - 予防 = 勧めた turn で、 その件の記録に推奨を書いておく (後の一覧を記録から組める)。 決定の書き方の一般則 = [`actor-attribution.md#decision-state-at-record-time`](actor-attribution.md#decision-state-at-record-time)。
 
-## <a id="personal-skill"></a>個人層の skill にするとき
+## <a id="personal-skill"></a>`/wrap` skill — 誰でも使える版と、 個人の値
 
-- skill (`~/.claude/skills/<名前>/SKILL.md`) の本文は「手順の正本 = この doc を 0 から 5 まで順に読んでそのとおりにする」 の 1 行と、 その人に固有の値だけを持つ:
+- claude-config は誰でも使える `/wrap` を [`../skills/wrap/SKILL.md`](../skills/wrap/SKILL.md) に持つ (本文 = 「この doc を 0 から 5 まで順に」 + 誰にでも同じ値 + [#upstream-pr](#upstream-pr))。
+  配線 = [`../scripts/install-shared-skills.sh`](../scripts/install-shared-skills.sh) (Claude Code の `~/.claude/skills/` と Codex の `~/.codex/skills/` に置く。 macOS・Linux は symlink、 Windows は copy で、 元が変われば作り直す)。
+  呼ぶのは `setup.sh`・pull の post-merge・個人層の session 開始の bootstrap (どれも [`../scripts/sync-hook-settings.sh`](../scripts/sync-hook-settings.sh) 経由) と Codex の [`../scripts/setup-codex.sh`](../scripts/setup-codex.sh) = 人が覚えて入れる手順は無い
+- 個人層に同名の skill (`~/.claude/skills/wrap`、 Codex は個人層の `codex/skills.json` の宣言) を置くと、 そちらが起動する (配線の script は個人層・本人の skill を置き換えない)。
+  その skill の本文は「手順の正本 = 誰でも使える版 (`skills/wrap/SKILL.md`) → この doc」 を指す 1 行と、 その人に固有の値だけを持つ:
   個人層の道具の path と引数 (どの掲示板・どの thread で宣言するか、 file 受け渡しの道具、 生成索引の生成器、 正本の登録簿)、 本人の決めごとのうち一般形を持たないもの (言葉のまま、 日付つき)。
   個人層の置き場所の一覧は持たない (= 1 の冒頭どおり入口から辿る)。
 - 手順そのものを skill に写さない (2 か所が食い違う)。 手順を直すときはこの doc を直す。 個人の決めごとが誰にでも効く一般形を持つなら、 一般形をこの doc に置いて skill からは消す
   (本人が skill に置くよう言った言葉は残す)。 OS ごとの罠・Codex の入口と読み替え・合成 file の作り直しも 0.9 / 0.95 が持つ = skill に書かない。
+
+## <a id="upstream-pr"></a>claude-config への改善案は PR で出す
+
+1 の表で層1 (claude-config) に置くと決めたもの (誰にでも効く手順・道具の壊れ方・規約の穴・雛形の不足) は、 手元 (個人層・作業 repo) だけに置かず claude-config に入れる。
+claude-config に push できない人は fork から PR を出す。 誰でも使える `/wrap` はこれを既定にしている = 1 件ごとに user に可否を聞かない (止めるのは user が止めたとき)。
+
+1. **一般形にする** — 1 の ⚠️ の境界 (識別子・本人や第三者の活動の事実・未公開の中身・個人の path) を 1 文ずつ当てる。 PR の本文・diff・commit message・branch 名・commit の author は公開される。 author は GitHub の noreply (`git config user.email` が `@users.noreply.github.com` か確かめる)。 なぜ気づいたか (個人の事例) は自分の個人層・作業 repo の記録に残す
+2. **1 PR = 1 つの改善** — 本文 = 何が困ったか (一般形)・何を変えたか・どう確かめたか
+3. **確かめる** — claude-config の root で `bash scripts/run-all-checks.sh` を回し、 落ちた検査が自分の変更か既存か (main でも落ちるか) を本文に書く。 OS の違いが関わる変更は、 確かめた OS を書く (PR では Linux の CI = `.github/workflows/checks.yml` も回る)。 Windows・Codex の罠は [§0.9](#any-os) / [§0.95](#codex) とそこから辿る正本
+4. **出す** — claude-config の clone で `gh repo fork --remote --remote-name fork` (fork が既にあれば不要) → branch を切る → `git push fork <branch>` → `gh pr create`。 push できる人 (所有者) は fork せず [4](#commit) の規則で直接 commit する
+5. **報告** — 出した PR の link と要約を最終 message に書く

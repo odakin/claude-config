@@ -7,6 +7,7 @@
 #   --check    書かずに、 足りない symlink / entry を列挙して exit 1 (揃っていれば exit 0)
 #
 # 何をするか:
+#   0. skill: claude-config の skills/<name>/ (誰でも使う skill) を ~/.claude/skills/ (と ~/.codex/skills/) に (scripts/install-shared-skills.sh)
 #   1. link:  entry が参照する hook file (hooks/<name>) の symlink を張る。 無いもの・壊れた symlink
 #             (= 指す先が消えた。 例: 他の層から本 repo へ移設された hook) だけを張り直し、 生きている
 #             symlink と通常 file (Windows の copy 方式) は触らない。 Windows は copy で置く
@@ -45,6 +46,23 @@ done
 SETTINGS="${SETTINGS:-$HOME/.claude/settings.json}"
 HOOKS_DST="$(dirname "$SETTINGS")/hooks"
 
+# ---------- 0. 誰でも使う skill (skills/<name>/ = 例 /wrap。 jq 不要なので jq の有無より先) ----------
+# 実体 = scripts/install-shared-skills.sh (個人層・本人の同名の skill が在ればそちらを残す)。 既定の settings のときだけ
+# Codex 側も配線する (= test が別の SETTINGS を渡したとき本物の ~/.codex を触らない)
+skills_missing=0
+if [ "$LINK" -eq 1 ] && [ -f "$ROOT/scripts/install-shared-skills.sh" ]; then
+  skills_args=""
+  [ "$SETTINGS" = "$HOME/.claude/settings.json" ] || skills_args="--claude-dir $(dirname "$SETTINGS")"
+  if [ "$CHECK" -eq 1 ]; then
+    # shellcheck disable=SC2086
+    bash "$ROOT/scripts/install-shared-skills.sh" --check $skills_args || skills_missing=1
+  else
+    mkdir -p "$(dirname "$SETTINGS")"   # 後の段も settings をここに作る = 先に dir を用意 (無いと skill を置く先が無い)
+    # shellcheck disable=SC2086
+    bash "$ROOT/scripts/install-shared-skills.sh" --quiet $skills_args
+  fi
+fi
+
 if ! command -v jq >/dev/null 2>&1; then
   echo "sync-hook-settings: jq が無いので何もしない" >&2
   [ "$CHECK" -eq 1 ] && exit 2
@@ -52,7 +70,7 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 [ -f "$ENTRIES" ] || { echo "sync-hook-settings: $ENTRIES が無い" >&2; exit 0; }
 
-missing=0
+missing=$skills_missing
 
 # ---------- 1. link ----------
 if [ "$LINK" -eq 1 ]; then

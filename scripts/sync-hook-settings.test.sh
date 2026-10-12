@@ -42,6 +42,12 @@ while IFS= read -r name; do
 done < <(jq -r 'to_entries[] | select(.key | startswith("_") | not) | .value[].hooks[]?.command' "$ENTRIES" \
            | sed -e 's#^.*/hooks/##' -e 's/ .*$//' | sort -u)
 
+for sk in "$ROOT"/skills/*/; do
+  sk="$(basename "$sk")"
+  [ -f "$ROOT/skills/$sk/SKILL.md" ] || continue
+  [ -L "$TMP/claude/skills/$sk" ] && [ "$(readlink "$TMP/claude/skills/$sk")" = "$ROOT/skills/$sk" ] \
+    && ok || ng "誰でも使う skill の symlink: $sk"
+done
 bash "$SYNC" --check "$S" >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 0 ] && ok || ng "--check は揃った後 exit 0" "rc=$rc"
 out="$(bash "$SYNC" "$S" 2>&1)"

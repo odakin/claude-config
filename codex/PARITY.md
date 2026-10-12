@@ -123,6 +123,8 @@ running session has reread instructions or that a client delivered a hook.
 
 ### <a id="wrap-workflow-integration"></a>Selected wrap workflow and worker reports
 
+Every user gets the shared `wrap` skill from [`../skills/wrap/SKILL.md`](../skills/wrap/SKILL.md): `scripts/install-shared-skills.sh --codex-only` links it into the Codex skill directory at the end of `setup-codex.sh` (after the personal-layer step), and the Claude-side wiring script does the same on pull. It never replaces a skill the selected personal layer declares under the same name, a live link to another folder, or a user's own folder; a personal `wrap` reads the shared skill as its procedure source and keeps only personal values ([`../conventions/closing-sweep.md#personal-skill`](../conventions/closing-sweep.md#personal-skill)).
+
 An explicitly selected personal layer may declare `codex/skills.json` with
 `{"version":1,"skills":{"wrap":"skill/wrap"}}`. The installer links that existing
 folder into the user skill directory; it does not copy the procedure or require

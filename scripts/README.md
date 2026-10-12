@@ -197,6 +197,7 @@
 - **[install-public-precommit.sh](install-public-precommit.sh)** — 各 public repo に pre-commit stub を冪等配置
 - **[install-remote-control-server.sh](install-remote-control-server.sh)** — Remote Control サーバーモードを launchd 常駐化（--dir / --replace-agent / --status / --uninstall、KeepAlive 60s 自動復帰、preflight で auth/同意の欠落を案内、idempotent、macOS 限定、conventions/remote-control-server.md）
 - **[install-session-trailer.sh](install-session-trailer.sh)** — 各 repo に prepare-commit-msg stub を冪等配置 (agent/session/model/effort trailer)
+- **[install-shared-skills.sh](install-shared-skills.sh)** — claude-config の skills/<name>/ (誰でも使う skill、 例 = /wrap) を Claude Code と Codex の skill の置き場に配線する (個人層・本人の skill が同名で在れば、 そちらを残す)
 - **[jps-program-talks.py](jps-program-talks.py)** — 日本物理学会 (JPS) 年次大会 / 春季大会の Web program を機械で読む。
 - **[kakenhi-preflight.py](kakenhi-preflight.py)** — 科研費 研究計画調書の「機関事務が必ず突く点」を提出前に機械検出（様式骨格の生存 / 埋め込み指示の抽出 / 表記 lint / 経費明細の粒度・費目帰属、kakenhi-proposal.md#office-review-loop）
 - **[keynote-iwa-text.py](keynote-iwa-text.py)** — Extract a text inventory from Keynote .key slide IWA archives (layout/order not reconstructed).

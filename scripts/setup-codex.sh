@@ -588,4 +588,9 @@ if [ -n "$PERSONAL_LAYER" ]; then
   install_personal_refresh_hook
 fi
 
+# 誰でも使う skill (claude-config の skills/<name>/ = 例 wrap)。 個人層の宣言の後に回す = 同じ名前を個人層が宣言していれば
+# そちらを残す (install-shared-skills.sh が個人層の state を読んで飛ばす)。 失敗しても他の配線は止めない
+bash "$SCRIPT_DIR/install-shared-skills.sh" --codex-only --codex-dir "$CODEX_USER_DIR" \
+  || echo "warning: shared skills were not linked (scripts/install-shared-skills.sh --codex-only --codex-dir $CODEX_USER_DIR)" >&2
+
 echo "Codex layer-4 integration installed. Claude Code files were not modified."

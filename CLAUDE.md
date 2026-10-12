@@ -198,11 +198,12 @@ claude-config/
 <!-- agent-free:end id=auto-tree-hooks -->
 ├── hammerspoon/
 │   └── init.lua                # Hammerspoon 設定（Claude の Cmd+Q 長押しで終了 = 誤終了防止〔挙動と罠の正本 = 同 file 冒頭〕 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
+├── skills/                      # 誰でも使う skill (Claude Code と Codex 共通。 例 = wrap/ = 締めの sweep の入口)。 配線 = scripts/install-shared-skills.sh (個人層・本人の同名の skill があればそちらが起動する、 正本 = conventions/closing-sweep.md#personal-skill)
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (321 file + formcase/ 26 module + lib/ 68 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (322 file + formcase/ 26 module + lib/ 68 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
@@ -251,7 +252,7 @@ cd claude-config && ./setup.sh
 setup.sh が自動で行うこと:
 1. `<base>/CONVENTIONS.md` → `claude-config/CONVENTIONS.md` の symlink（Windows は cp）
 2. `~/.gitignore_global` → `claude-config/gitignore_global` の symlink + `git config --global core.excludesfile` 設定
-3. Claude Code hooks を `~/.claude/hooks/` に symlink + `settings.json` に設定マージ
+3. Claude Code hooks を `~/.claude/hooks/` に symlink + `settings.json` に設定マージ + 誰でも使う skill (`skills/`、 例 `/wrap`) を `~/.claude/skills/` に置く (Codex を使う機は `~/.codex/skills/` にも。 同名の個人層・本人の skill があれば触らない。 Windows は copy。 pull だけで新しい skill も届く = `scripts/install-shared-skills.sh`)
 4. *(macOS のみ)* PATH 消失防止（`.zprofile` の重複 `brew shellenv` 修正 + スナップショット自動パッチ用 launchd エージェント）+ **Claude.app の新セッション folder picker を `<base>` に固定する launchd エージェント**（default-ON = **デスクトップアプリ使用時のみ** install〔CLI 専用 Mac は skip〕、 1 秒間隔だが drift 時のみ書込 = steady-state は read のみ、 opt-out 可 = `touch ~/.claude/pin-claude-cwd.off` or `CLAUDE_PIN_CWD=0`。 詳細・除去手順は `conventions/claude-app-cwd-pin.md`）
 5. Claude Code パーミッション設定 — 安全なツール（Bash, Read, Edit, Write, Glob, Grep, WebFetch, WebSearch）を自動許可
 6. git post-merge hook をインストール（`git pull` 後に hooks と CONVENTIONS.md を自動同期）
