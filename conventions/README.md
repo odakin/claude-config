@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 147 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 148 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -211,6 +211,8 @@ layer 1 (public) のドメイン固有規約 147 file をカテゴリ別に列�
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/cold-eyes-isolation.md (汚染経路 7 口 / 封じた sandbox / spec に書いてよいこと / 審査文書の変種 / 受領後の汚染 grep)。 本 file は旧 anchor を保つ stub
 - **[collaborators.md](collaborators.md)** — 共同研究者 DB (collaborators.yaml) を作成・更新するとき
   - 共同研究者DB規約 (= 連絡先・所属に加え、native 表記は parts ごとの source と確度を持ち、発音は本人録音 / 母語話者録音 / 対象言語 TTS / IPA / 近似を区別。生成音声の一時 URL は正本に保存しない)
+- **[dirac-conventions.md](dirac-conventions.md)** — Dirac 行列・計量の規約を教科書 (Peskin–Schroeder / Srednicki / Weinberg) の間で読み替えるとき + 規約の違う文献から式を写すとき + 自分の project が「どの教科書の行を使うか」 を repo の記号の規約に宣言するとき + 共同研究者と「我々の (−,+,+,+) は Srednicki か Weinberg か」 を確かめるとき
+  - Dirac 規約の対応表 (教科書 3 冊: 計量 / Clifford / (γ⁰)² と Hermite 性 / β / 正振動数 / Dirac 方程式 / 自由ラグランジアン / 伝播関数。 全セルが宣言の式番号つき、 推定は明記) + 変換の辞書 (γ_W = −iγ_S、 γ_P = γ_S で η が反転) + 数値検算 script + 「project ごとに使う行を宣言し、 規約の違う文献から式を記号のまま写さない」 規則
 - **[physics-notes.md](physics-notes.md)** — 物理・数理ノートを書くとき
   - 物理・数理ノートの 5 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側 / 検証 note は問題・結論・手当のみ / 配布物に内部記号を出さない) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
 - **[physics-verification-cycle.md](physics-verification-cycle.md)** — 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき

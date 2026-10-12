@@ -38,6 +38,8 @@ summary: 物理・数理ノートの 5 規約 (= 添字は常に全部顕に / �
 
 **How:** 表を書く・読むとき、各セルに「この値の出典は宣言か推定か」を 1 周問う。宣言が見つからないセルは隠さず「(undeclared; inferred from …)」と書く。宣言は孫引きせず、可能な限り宣言箇所そのもの (式番号) を確認する。
 
+この規律で作った公開の表の実例 = [`dirac-conventions.md`](dirac-conventions.md) (教科書 3 冊の Dirac 規約の対応表と変換の辞書、 全セルに式番号、 数値検算つき)。
+
 ## 3. ノートは snapshot、歴史は repo 側 (md + git)
 
 **ルール:** 配布物としてのノート (tex/PDF) には「その時点の最良の知見」だけを self-contained に書く。旧版の誤り・訂正経緯・version 史話 (「v1 ではこうだった」「旧 narrative を訂正」) はノート本文に入れない。履歴の home は repo 側の md (SESSION/DESIGN/RETRACTIONS 等) と git log。
