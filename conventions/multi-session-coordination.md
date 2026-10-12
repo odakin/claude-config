@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment) + 作ったものの検収を別 session に頼む・頼まれたとき (#review-handoff) + 並行した worker が同じ file の全文の候補を作ったとき (#parallel-full-text-candidates)
+when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment) + 作ったものの検収を別 session に頼む・頼まれたとき (#review-handoff) + 並行した worker が同じ file の全文の候補を作ったとき (#parallel-full-text-candidates) + 並列 session の開始時の一覧・turn 終わりの検査が同じ用事 (mail・台帳の項目・依頼) を求めるとき (#pending-item-claims)
 category: harness-core
 summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**生成物の再生成はその防御を貫通する (#generated-file-contamination)**、**起きた後の追跡は commit の `Agent-Session:` + model/effort trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
 -->
@@ -848,6 +848,32 @@ checkout を作り、latest `main` を fetch → event 1 件を schema validate 
 → push する。non-fast-forward は最新履歴を取得し、**新状態でも遷移が合法か再検証してから**
 少回数だけ retry する。Git の競合がなくても二重 claim は不正になり得る。結果不明の投稿は同一
 event ID で照合・再送できるよう保持し、別 ID で同じ依頼を増やさない。失敗時は event を失わず停止する。
+
+### <a id="pending-item-claims"></a>同じ「用事」 の通知を並列 session が受け取る — 用事の claim
+
+session 開始時の一覧や turn 終わりの検査が「この session で処理せよ」 と各 session に別々に求めると、 同じ機械の並列
+session が同じ mail を読み、 同じ用事の記録を 2 つ作る (実測)。 file の宣言 (`touch`) は path の単位で、 依頼の `claim` は
+request の単位。 mail の thread・台帳の項目のような「用事」 はどちらでもない。
+
+1. **用事に鍵を決める**: mail id・台帳の項目 id・依頼 id。 同じ用事を別の道具が別の名で呼ぶ (返信の message と thread と、
+   結んだ台帳の項目) ので、 別名をまとめて 1 つの用事として claim する (全部取るか、 1 つも取らない)。
+2. **用事を求める側が求める前に claim する**: turn 終わりの検査は、 止める理由にする用事を先に claim し、 別の生きている
+   session が持つ用事では止めない (他の理由で止めるときだけ「誰が対応中か」 を 1 行添える)。 一覧はその行に「<session> が
+   対応中」 を付けるだけで、 行は消さない。 記録の道具も記録する用事を claim し、 別の session が持つ用事への書き込みは止める
+   (読むだけは通す)。 人やエージェントが思い出して claim する形にしない。
+3. **claim は lease と生死で切れる**: 先に取った session が持ち、 取り直せば lease が延びる。 lease が切れる・claim した
+   session が終わる・手放す、 のどれかで切れ、 用事は元どおり出る (= 黙って落ちない)。 生死は runtime の session の登録で
+   引く (claim した時に登録に居た session が今は居ない = 終わった)。 登録に現れない session (無人の実行) は lease だけで切れる。
+4. **台帳の項目の二重起票は claim と別の網で止める**: claim は「今どちらが手をつけているか」 しか言わない。 新しい項目を
+   作る前に、 同じ thread を指す open な項目を作業 tree の全部 (未 commit・untracked = 並列 session が書いたばかりの file を
+   含む) と upstream から引き、 あれば作らせない。 同じ thread の別の用事だと承知して分けるなら、 新しい項目から既存を
+   指す相互参照を書かせる (承知の記録が残る)。
+5. **台帳は同じ checkout を使う session に即時に見える手元の state に置く**: claim は分の単位で、 履歴は永続の event 用。
+   claim を event として post すると、 turn ごとに post の費用 (board の clone) と履歴の増分がかかる。 別の機械との重なりは、
+   記録 (台帳の項目) の push と 4 の upstream の読みが網。
+
+参照実装 = ai-collaboration [`board/board_items.py`](../../ai-collaboration/board/board_items.py)
+(CLI と台帳の置き場 = [`CONTRACT.md#item-claims`](../../ai-collaboration/board/CONTRACT.md#item-claims))。
 
 ### privacy と source-classification gate
 

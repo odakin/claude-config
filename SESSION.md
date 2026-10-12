@@ -1,11 +1,12 @@
 # SESSION — claude-config
 
-最終更新: 2026-09-29
+最終更新: 2026-10-12
 
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
 
+- **並列 session の用事の claim** — 一般形 = [`multi-session-coordination.md#pending-item-claims`](conventions/multi-session-coordination.md#pending-item-claims)、 参照実装は ai-collaboration `board/board_items.py`。
 - **履歴から個人の識別子を消す書き換えと再発防止** — 道具 (`git-scrub-history.py`)・commit 時の識別子の検査・検査を切る操作の hook・書き換えられた remote への追従・旧 sha を今の sha に引く `git-rewrite-follow.py map` は入った。 規約 = [confidential-repo-boundary.md#role-words-in-names](conventions/confidential-repo-boundary.md#role-words-in-names) / [agent-rule-ownership.md#guard-escape-hatch](conventions/agent-rule-ownership.md#guard-escape-hatch)、 手順 = [docs/sensitive-repo-patterns.ja.md#pattern-2-5](docs/sensitive-repo-patterns.ja.md#pattern-2-5)
 - **書き換えた履歴への追従を、 知らせが届いたかに依らせない** — push の検査 (別の pre-push hook が在る clone では、 その hook を残して先に通す)・`guard-head`・remote 側の検出・machine × repo の点呼・無人の追従 (heartbeat `--repos-follow`)・書き換える push の前の点呼 (`ready_gate`)・push 範囲の中身の検査・古い branch にしか無い中身の数え上げ → [multi-machine-state.md#rewrite-follow-without-notice](conventions/multi-machine-state.md#rewrite-follow-without-notice)、 一般則 = [convention-design-principles.md#hub-first-follow-by-courier](docs/convention-design-principles.md#hub-first-follow-by-courier)。 見送り = pre-commit の runner 2 本への `guard-head` の段。 残る穴 = hook の dir が track されていて pre-push を持たない clone
 - **SESSION / README の形の gate** — engine・書き込み hook・全 repo の pre-commit・規約・一括移行の道具 (`migrate-session-shape.py`) まで済、 既存 file は寄せた。 残り = 他の machine での hook と pre-commit の実走の観測 (bootstrap と pull で入る) → [DESIGN.md#session-shape-gate](DESIGN.md#session-shape-gate)
