@@ -22,7 +22,9 @@
 #   B (truncate-before-grep): pipeline で head / tail / sed -n (= 窓切り詰め) が
 #     grep 系より **前** の segment にある = grep は切り詰めた窓の上しか見ていない。
 #     正常 idiom は grep→head の順なので、 逆順は構造自体が signal (hit 有無に
-#     関わらず fire)。 `tail -f` は stream 監視 idiom ゆえ除外。
+#     関わらず fire)。 `tail -f` は stream 監視 idiom ゆえ除外。 見るのは同じ
+#     pipeline の中だけ (`;` / `&&` / `||` / 改行で区切った別 command は別 pipeline)。
+#     `head -c N | grep -q` (file 形式の magic の真偽判定) も除外。
 #
 # FP 設計 (= conservative、 miss を許容して FP を避ける — sibling と同哲学):
 #   - 単一 file への grep / pipe 入力の grep は対象外 (= leak check の
@@ -87,21 +89,37 @@ FIRED=""
 DETECTOR_DESC=""
 
 # ---------- detector B: truncate-before-grep ----------
-# naive '|' split (quoted '|' の誤 split は truncator/grep 語 match に達しないので実害無し)
+# 先に command を pipeline ごとに分け (`;` / `&&` / `||` / 改行)、 同じ pipeline の中で
+# truncator が grep より前の segment にあるときだけ発火する。 分けずに command 全体を
+# '|' で割ると、 `a | tail -1; b | grep x` のように別 command の tail と grep が
+# 1 本の pipeline に見えて発火する (実測)。
+# `head -c N | grep -q MAGIC` は file 形式の先頭 magic を真偽で確かめる idiom
+# (conventions/secret-handoff.md の git-crypt 判定) = 窓を読んで不在を言う形ではないので除く。
+# naive split (quoted '|' ';' の誤 split は truncator/grep 語 match に達しないので実害無し)
 if [ -n "$COMMAND" ]; then
   B_HIT="$(printf '%s' "$COMMAND" | awk '
-    BEGIN { RS="|"; i = 0; trunc = -1; grepseg = -1 }
-    {
-      i++
-      seg = $0
-      if (trunc < 0) {
-        if (seg ~ /(^|[[:space:];&(])head([[:space:]]|$)/) trunc = i
-        else if (seg ~ /(^|[[:space:];&(])tail([[:space:]]|$)/ && seg !~ /tail[[:space:]]+-[a-zA-Z]*f/) trunc = i
-        else if (seg ~ /(^|[[:space:];&(])sed[[:space:]]+-n([[:space:]]|$)/) trunc = i
+    { buf = buf $0 "\n" }
+    END {
+      gsub(/\|\||&&|;/, "\n", buf)
+      nl = split(buf, lines, "\n")
+      for (l = 1; l <= nl; l++) {
+        ns = split(lines[l], segs, "|")
+        trunc = -1; grepseg = -1; bytehead = 0; quiet = 0
+        for (i = 1; i <= ns; i++) {
+          seg = segs[i]
+          if (trunc < 0) {
+            if (seg ~ /(^|[[:space:]&(])head([[:space:]]|$)/) { trunc = i; bytehead = (seg ~ /head[[:space:]]+-c/) }
+            else if (seg ~ /(^|[[:space:]&(])tail([[:space:]]|$)/ && seg !~ /tail[[:space:]]+-[a-zA-Z]*f/) trunc = i
+            else if (seg ~ /(^|[[:space:]&(])sed[[:space:]]+-n([[:space:]]|$)/) trunc = i
+          }
+          if (grepseg < 0 && seg ~ /(^|[[:space:]&(])(grep|egrep|fgrep)([[:space:]]|$)/) {
+            grepseg = i
+            quiet = (seg ~ /(grep|egrep|fgrep)[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*(-[a-zA-Z]*q[a-zA-Z]*|--quiet)([[:space:]]|$)/)
+          }
+        }
+        if (trunc > 0 && grepseg > 0 && trunc < grepseg && !(bytehead && quiet)) { print "yes"; exit }
       }
-      if (grepseg < 0 && seg ~ /(^|[[:space:];&(])(grep|egrep|fgrep)([[:space:]]|$)/) grepseg = i
-    }
-    END { if (trunc > 0 && grepseg > 0 && trunc < grepseg) print "yes" }' 2>/dev/null || true)"
+    }' 2>/dev/null || true)"
   if [ "$B_HIT" = "yes" ]; then
     FIRED="B"
     DETECTOR_DESC="truncate-before-grep (= head/tail/sed -n が grep より前 → grep は切り詰めた窓しか見ていない)"
