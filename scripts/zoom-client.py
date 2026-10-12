@@ -15,9 +15,15 @@ subcommand:
   create --topic T [--like <meeting_id>] [--apply]     部屋を作る (既定 dry-run)
   update <meeting_id> --set k=v [...] [--apply]        既存の部屋の settings を変える (既定 dry-run)
   delete <meeting_id> [--apply]             部屋を消す (既定 dry-run)
-  notes <meeting_id> --date YYYY-MM-DD [--between HH:MM-HH:MM] [--out DIR]
+  notes <meeting_id> --date YYYY-MM-DD [--between HH:MM-HH:MM] [--out DIR] [--rec-start HH:MM:SS]
                                             その日の回の AI 要約と文字起こしを取り出す (読むだけ)
   selftest                                  通信しない部品の自己検査
+
+文字起こし (VTT) は**参加者ごとの名前つき** = 話者を分けない録音の転写 (whisper 等) の帰属に使える。
+  ⚠️ VTT の時刻は**会議の開始から** (ローカル録画の開始からではない)。 `--rec-start` に録画を始めた現地の時刻
+  (Zoom の録画フォルダ名の時刻) を渡すと、 録画の時刻に直して話者ごとにまとめた `*_transcript-rec.txt`
+  (`[h:mm:ss] 名前: 本文`、 録画より前は負の時刻) も書く。 Zoom の cue は実際の発話より 2〜3 秒遅れる (実測)。
+  ⚠️ 話者の名前は参加者の表示名 = 実名が入る。 共有の場所に置く前に通称へ置き換える。
 
 notes は「無い」 も根拠つきで言う: past meeting の `has_meeting_summary` (= 要約が作られたか) と
   transcript API の 3322 (= 文字起こしが存在しない)。 要約は録画と独立で、 部屋の
@@ -303,6 +309,40 @@ def _download(token: str, url: str) -> bytes:
         return resp.read()
 
 
+def vtt_to_rec_lines(vtt: str, offset_s: float, merge_gap_s: float = 8.0) -> list[str]:
+    """Zoom の VTT を `[h:mm:ss] 名前: 本文` の行にする。 時刻 = cue の開始 − offset_s (録画の開始からの秒)。
+    同じ話者の cue が merge_gap_s 秒以内に続けば 1 行にまとめる。 名前の無い cue は名前を空にする。"""
+    rows: list[list] = []
+    for block in vtt.replace("\r\n", "\n").split("\n\n"):
+        lines = [ln for ln in block.strip().split("\n") if ln.strip()]
+        ts = next((i for i, ln in enumerate(lines) if " --> " in ln), None)
+        if ts is None or ts + 1 >= len(lines):
+            continue
+        h, m, s = lines[ts].split(" --> ")[0].strip().split(":")
+        t = int(h) * 3600 + int(m) * 60 + float(s) - offset_s
+        text = " ".join(lines[ts + 1:]).strip()
+        who, sep, body = text.partition(": ")
+        if not sep:
+            who, body = "", text
+        if rows and rows[-1][1] == who and t - rows[-1][2] < merge_gap_s:
+            rows[-1][3] += " " + body
+            rows[-1][2] = t
+        else:
+            rows.append([t, who, t, body])
+
+    def hms(t: float) -> str:
+        sign, t = ("-" if t < 0 else ""), int(abs(t))
+        return f"{sign}{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}"
+    return [f"[{hms(t)}] {who + ': ' if who else ''}{body}" for t, who, _, body in rows]
+
+
+def rec_offset_s(meeting_start_utc: str, date: str, rec_start: str, tz: str) -> float:
+    """会議の開始 (API の start_time、 UTC) から録画の開始 (現地の date + rec_start) までの秒。"""
+    ms = dt.datetime.fromisoformat(meeting_start_utc.replace("Z", "+00:00"))
+    rs = dt.datetime.fromisoformat(f"{date}T{rec_start}").replace(tzinfo=ZoneInfo(tz))
+    return (rs - ms).total_seconds()
+
+
 def cmd_notes(token: str, args) -> int:
     inst = api(token, "GET", f"/past_meetings/{args.meeting_id}/instances").get("meetings", [])
     hits = sorted((m for m in inst if local_date(m["start_time"], args.tz) == args.date
@@ -343,7 +383,13 @@ def cmd_notes(token: str, args) -> int:
         found += 1
         print(f"  文字起こし: あり{'' if url else ' (download_url 無し)'}")
         if url and out:
-            (out / f"{stem}_transcript.vtt").write_bytes(_download(token, url))
+            vtt = _download(token, url)
+            (out / f"{stem}_transcript.vtt").write_bytes(vtt)
+            if args.rec_start:
+                off = rec_offset_s(pm.get("start_time") or m["start_time"], args.date, args.rec_start, args.tz)
+                (out / f"{stem}_transcript-rec.txt").write_text(
+                    "\n".join(vtt_to_rec_lines(vtt.decode("utf-8"), off)) + "\n", encoding="utf-8")
+                print(f"  録画の時刻に直した文字起こし: 会議の開始から {off:.0f} 秒ずらした")
     if out and found:
         print(f"保存先: {out}")
     return 0 if found else 4
@@ -365,6 +411,16 @@ def selftest() -> int:
     check(in_window("2030-01-02T05:00:00Z", "Asia/Tokyo", "13:30-15:00"), "時間帯の中 (東京 14:00)")
     check(not in_window("2030-01-02T01:00:00Z", "Asia/Tokyo", "13:30-15:00"), "時間帯の外 (東京 10:00)")
     check(in_window("2030-01-02T01:00:00Z", "Asia/Tokyo", None), "時間帯の指定なしは常に通す")
+    vtt = ("WEBVTT\n\n00:09:58.000 --> 00:10:00.000\n話者 A: 始めます。\n\n"
+           "00:10:05.000 --> 00:10:07.000\n話者 B: はい。\n\n00:10:08.000 --> 00:10:09.000\n話者 B: どうぞ。\n\n"
+           "00:10:30.000 --> 00:10:31.000\n話者 B: 続き。\n\n00:10:40.000 --> 00:10:41.000\n名前の無い行\n")
+    got = vtt_to_rec_lines(vtt, 600)
+    check(got[0] == "[-0:00:02] 話者 A: 始めます。", "録画の前の cue は負の時刻")
+    check(got[1] == "[0:00:05] 話者 B: はい。 どうぞ。", "同じ話者の近い cue は 1 行にまとめる")
+    check(got[2] == "[0:00:30] 話者 B: 続き。", "間が空いた同じ話者は別の行")
+    check(got[3] == "[0:00:40] 名前の無い行", "名前の無い cue は本文だけ")
+    check(rec_offset_s("2030-01-02T11:00:00Z", "2030-01-02", "20:10:30", "Asia/Tokyo") == 630,
+          "録画の開始 (東京 20:10:30) − 会議の開始 (UTC 11:00:00) = 630 秒")
     print("zoom-client selftest:", "ALL PASS" if not fails else f"FAIL {fails}")
     return 1 if fails else 0
 
@@ -406,6 +462,8 @@ def main(argv: list[str]) -> int:
     p_notes.add_argument("--tz", default="Asia/Tokyo")
     p_notes.add_argument("--between", help="開始時刻で絞る 'HH:MM-HH:MM' (--tz の現地時刻、 両端を含む)")
     p_notes.add_argument("--out", help="保存先 dir (無ければ要約の概要を画面に出すだけ)")
+    p_notes.add_argument("--rec-start", help="録画を始めた現地の時刻 HH:MM:SS。 付けると文字起こしを録画の時刻に直した"
+                         " *_transcript-rec.txt も書く (--out と一緒に)")
 
     sub.add_parser("selftest", help="通信しない部品の自己検査")
 
