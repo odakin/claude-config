@@ -1021,6 +1021,8 @@ origin: ある institutional 締切超過の指摘を受け、 person-to-person 
 
 <a id="permission-rule-scope"></a>**変種 = 条件つきの許可を、 その規則が扱わない事柄の禁止と読む**: 「〜の場合は X してよい」 という規則 (手引きの Q&A・規程の条) が決めているのは、 その問いが扱う X だけ。 X に当たらない事柄 Y について規則が黙っているのは「Y は禁止」 の証拠ではない。 Y に当てはめるのは、 規則に書いていない解釈になる (合成例: 「用務の前の晩・後の晩に泊まってよいのは、 出発が一定の時刻より早くなる場合」 という条件を、 数日にわたる用務の**期間中の夜**を禁じる根拠に読む)。 reflex: 規則を当てはめる前に (1) 規則が答えている問いを原文で引く (Q&A なら問いの文) (2) その規則が**何について書いていないか**を 1 行で言う (3) 手元の記録に規則を写すときは、 言い換え (「当日往復が不可能なら可」) でなく原文の条件と射程を写す。 言い換えると、 条件の数値と「何についての規則か」 が両方落ちる (実測: 言い換えた記録からは、 時刻の条件も、 前後の夜だけの規則であることも読めなかった)。
 
+<a id="recipient-model-from-counterparty-doc"></a>**変種 = 「誰にその通知が届くか」 を相手の文書から決める**: 施工店・販売店・事務局向けの手順書は、 **その読者に届く通知**を書く。 「自分には来ない / 見えない」 の根拠が相手側の文書 (や業者の口頭) だけなら、 自分の受信箱を差出人で 1 回引く (費用 = 1 query)。 実例: 手順書に「完了通知は販売店に届く」 とあるのを「こちらからは見えない」 と読み替え、 同じ差出人から自分宛てに毎日届いていた確認メールを引かずに閉じた。 業者の「通知書は郵送」 も、 発行元の手引き (メールで配信) と突き合わせずに中継し、 受信箱で未読のまま DL 期限が切れた。 台帳に「完了の確証 = 相手からのメール (未確認)」 と書くときは、 その turn で引くか、 引く条件 (差出人・件名) を機械に残す (= [`§8.30`](#expected-inbound-tripwire) の裏返し: 来るはずのものだけでなく「来ないはず」 も検証の対象)。
+
 ### <a id="broadcast-obligation-blind-spot"></a>8.17 broadcast で届く個人義務 — per-person addressing proxy の構造的 false negative
 
 個人を拘束する義務 (= 受講報告・書類提出・会議出席・投票、 締切付き) は、 個人宛 mail だけでなく **broadcast 形態** (= BCC 一斉配信・ML・宛名「各位」) でも届く。 mail surfacing / triage を **per-person addressing** (= To/Cc の自分一致・本文/件名の名前 mention) を proxy に設計すると、 この class は**構造的に全通貫通する** — 宛名は「各位」 で名前はどこにも現れず、 To は list アドレスだから。 [`§8.8`](#proxy-blind-spot) の proxy 盲点の 1 具体形だが、 盲点が「institution が義務を配る**標準経路**そのもの」 と重なる点で被害が大きい: 初回 + リマインド数通が全て素通りし、 institution 側の escalation (= 業を煮やした個別名指しの催促) が唯一の catch になる = 最後の網が相手の善意。 [`§8.16`](#absence-channel-coverage) が「不在主張」 で broadcast channel を取りこぼす軸なら、 本節は「義務検出」 で broadcast channel を取りこぼす軸 (= 同じ channel category の別 direction)。
@@ -1117,6 +1119,8 @@ origin: 出版社 domain の noise 登録 (= 出版勧誘 spam が着信の大�
 
 **domain 軸 (追記 2026-09-01)**: 抑制の各軸 (sender / bracket / category / 語彙) を正しく設計しても、 **網がどの domain を張っているか**が未宣言だと死角は残る — 監視系の死角は「検出器の穴」 より先に「そもそも張っていない domain」 に開き、 未宣言の死角は発見が偶然 (= 別調査の副産物への写り込み・human-steering) に 100% 依存する。 実例: 業務義務用に設計された mail surface 網の scope 外で、 金融口座のセキュリティ設定必須化督促 16 通 (週次 3 ヶ月) が category suppress で全通埋没し、 口座の機能制限 2 ヶ月を誰も知らなかった (実害なしは口座が空だった僥倖。 なお金融機関の mail は宛名が username mask で氏名 token を含まず、 名指し検出はこの domain で原理的に無力 — class 語彙が唯一の識別面という副発見つき)。 対策: 網を持つ system は**カバー domain と declared-out domain を config 自身に宣言**し、 scope 外 domain には (a) 網を張る / (b) 別 system に carrier を接続 / (c) 明示 declared out のいずれかを選んで書く。 最悪の状態は「宣言なき網羅感」 = 網が在ること自体が scope 外 domain への安心感まで生む。 audit・RCA の副産物として scope 外 domain の高 stakes finding が出たときは、 「scope 外」 を理由に未読で手放さない — 同 turn で本文 1 読 + 影響・期限の 1 行評価 + clock つき carrier 起票までがその finding の消費 (= 手放しは [`§8.24`](#surfaced-not-consumed) の audit 版)。
 
+<a id="repetition-axis"></a>**反復軸 (追記)**: 語彙・差出人・宛名のどれにも掛からない義務 mail でも、 「認証・同意・設定が済むまで毎日 (毎週) 同じ件名で**別 thread として**送り続ける」 形は共通で、 検出面としては**同じ差出人・同じ件名の未読が日をまたいで積み上がること**が「何かを待たれている」 の信号になる。 自動送信の定型 (`noreply@` 等) で重要の印も無いもの (CI の失敗通知) と購読解除 header を持つ newsletter を除けば、 実測で誤検出はほぼ出ない (個人 account の受信箱 60 日分 ≈ 4 千通で 1 群 = 真陽性のみ、 組織 account で 0 群)。 語彙 tier は class ごとに列挙が要るが、 反復は class を問わない = 「列挙で収束しない残余」 の受け皿を、 人が読む棚卸しだけでなく機械の信号にも持つ (純関数 = [`scripts/lib/mail_repeat.py`](../scripts/lib/mail_repeat.py))。 実例: 分類で抑制された毎日の確認メールが 2 か月近く積み、 業者からの連絡で初めて気づいた。 同じ期間に同じ軸・同じ account の見落とし RCA が 3 回あり、 どれも語彙か差出人を 1 つ足して閉じていた。
+
 ### <a id="lapsing-deadline"></a>8.22 失効型期限 — 超過が「遅れ」でなく「義務の消滅」になる deadline class
 
 期限には 2 class ある。 **通常の期限**は超過後も挽回できる (= 遅れて出す・詫びる・延長を頼む — 損失は連続的に増える)。 **失効型期限** (lapsing deadline) は超過の瞬間に義務・機会そのものが不可逆に消える — 依頼の自動取消・役割の解任・応募窓の閉鎖・権利の失効。 損失が階段関数なので、 期限管理の設計要件が通常の期限と質的に違う:
@@ -1169,6 +1173,8 @@ reflex: surfacing 機構を設計・監査するとき「この表示は**何を
 - **通知 job の実行 locus は受け手で決める**: 人間への local OS 通知は、共有 state を更新する singleton job と違って、**通知を受ける各端末**で動かなければ配信にならない。active-host gate の背後に置くと standby 端末では正しく defer している顔のまま人間への channel が消える。一般の配備・検証契約は [`scheduled-tasks.md#per-recipient-notification-locus`](../conventions/scheduled-tasks.md#per-recipient-notification-locus)。
 
 origin: 期限つきの判断 TODO が 2 つの独立 surface 経路で 30 日間毎日 named 表示 (最終週は最高強度 + 実働中の同〆切案件の 1 行隣) されながら一度も消費されず期限を通過した RCA (= 機械 replay で表示履歴を verify 済)。 同月 sibling = 別の期限つき依頼が名指し horizon に 6 日 named 表示のまま未消費で自動取消 ([`§8.22`](#lapsing-deadline) origin の consumption 軸)。 対照の成功例 = 明示 disposition を要求する mail triage 段は同環境で機能し続けている。 [`§9.8`](#single-observation-scope-check) は同月 2 観察 + 対照 1 で充足。 instance (= 検出器名・ack field 実装・対策 ledger) は個人層に残置 (= kernel-up / instance-down)。
+
+<a id="true-positive-in-fp-sample"></a>**変種 (追記) — 検出器を測るための出力に真陽性が混じる**: 誤検出の標本・差出人の分布・task 外の検索 result は「読むもの」 として提示されないので、 その中の義務は見えたまま消費されない。 実例: 「名前の token は取引 mail に遍在し識別力ゼロ」 を示すために出した誤検出の標本 16 行に、 後に事故になる毎日の督促が 2 行入っていた (同じ出力の差出人分布でも 5 位)。 標本は「誤検出の例」 として読まれ、 1 行ずつ義務かは問われなかった。 対策: **抑制済み mail を列挙する出力は、 目的 (計測・検索・例示) に関わらず 1 行ずつ「義務か」 を問い、 高 stakes の行は同 turn で本文 1 読 + carrier** (= 棚卸しの footer に焼いた規律を、 probe の出力と task 外の検索 result にも当てる)。 RCA の worker 自身がこの罠を踏みやすい (= 完遂間際の cognitive closure)。
 
 ### <a id="detection-zero-location"></a>8.25 検出失敗の RCA は「ゼロの位置」を先に特定する — 能力の不在と trigger の不在を分離する
 
