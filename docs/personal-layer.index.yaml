@@ -12,6 +12,10 @@ sections:
     level: 3
     title: "What \"depend\" means: structural dependency vs. mention"
     related: [what-is-personal-layer]
+  - id: shared-table-vs-choice
+    level: 3
+    title: "A reference several projects need: the table goes up, each choice stays with whoever makes it"
+    related: [what-depend-means-structural-dependency-vs-mention, what-is-personal-layer]
   - id: why-layer-4-isolates-machine-local
     level: 3
     title: "Why does layer 4 isolate machine-local facts?"

@@ -66,6 +66,16 @@ The compact rule: **name it, don't path into it.**
 
 Per-layer documents apply this principle to their own boundary. The L2-specific application (= what an L2 shared-project repo may or may not contain) lives in [`conventions/shared-repo.md`](../conventions/shared-repo.md) §「L2 における「名指し」 の適用 (boundary 明示付き)」, which references this section as the canonical source. The L1-specific application (= claude-config itself as a public repo) adds a **separate leak-prevention axis** on top of the layer rule, documented in `claude-config/CLAUDE.md` §「安全規則（公開リポ）」. The leak axis is stricter: even mention with a boundary statement is governed by an explicit exception list, because once a name appears in public git history, the boundary statement cannot un-publish it.
 
+### <a id="shared-table-vs-choice"></a>A reference several projects need: the table goes up, each choice stays with whoever makes it
+
+When several layer-2 projects with *different* collaborator sets need the same reference (a table of notation conventions, a conversion dictionary, a checklist), a copy in each repo forks, and the projects cannot point at each other. Split the reference by **whose fact each sentence is**:
+
+- **The options and how to convert between them** are true for every reader → layer 1, **with no default**. Each cell cites its source, so any collaborator can check it.
+- **Which option a project uses** is a fact about that project, true for exactly its collaborators → one line in that project's repo (the option + a link to the layer-1 table + any exceptions).
+- **The owner's own default** (what they reach for in a new project) is a fact about the owner → layer 3, even when every current project happens to use it. A public reader gains nothing from it, and it is an owner fact on a public surface.
+
+Test: for each sentence, ask whose choice it records; a choice belongs to the layer of whoever makes it, and only the menu goes up. Worked example: [`conventions/dirac-conventions.md`](../conventions/dirac-conventions.md) (the table and the dictionary, no default; each project declares its row).
+
 ### <a id="why-layer-4-isolates-machine-local"></a>Why does layer 4 isolate machine-local facts?
 
 Each step downward narrows the audience by **one meaningful boundary**:
