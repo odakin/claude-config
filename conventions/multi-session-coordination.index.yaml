@@ -109,6 +109,9 @@ sections:
   - id: chat-board-bridge
     level: 3
     title: "chat bridge — 人間の入口を chat に置く (2026-09-08)"
+  - id: pending-item-claims
+    level: 3
+    title: "同じ「用事」 の通知を並列 session が受け取る — 用事の claim"
   - id: parallel-full-text-candidates
     legacy: "14"
     level: 2
