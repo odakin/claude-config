@@ -20,8 +20,15 @@
 ```bash
 gh repo create <username>/<name> --private --description "<English description>" --clone
 cd <name> && git branch -M main
+bash ~/Claude/claude-config/scripts/install-precommit-bib.sh .
+~/Claude/claude-config/scripts/install-session-trailer.sh .
+~/Claude/claude-config/scripts/install-public-commit-msg.sh --any-repo .
 git add . && git commit -m "Initial commit: <概要>" && git push -u origin main
 ```
+
+`<username>` は `gh api user --jq .login` で取る。`gh auth status` の表示名は login した時の名前のままで、GitHub 側で改名しても変わらない（実測）。
+3〜5 行目 = setup.sh が他のリポに配った git hook を、最初の commit の前にこのリポにも入れる（setup.sh は実行した時に在るリポにしか配らない）。public リポは `.claude/public-repo.marker` を置いてから、3 行目の代わりに `install-public-precommit.sh .`、5 行目は `--any-repo` なしで打つ（setup.sh Step 8）。`./setup.sh --no-clone` を流し直しても同じ hook が全リポに入る（冪等）。
+git-crypt で暗号化するリポは、最初の `git add` の前に `git-crypt init` と `.gitattributes` を済ませる（[docs/git-crypt-guide.md](docs/git-crypt-guide.md)）。
 
 description は英語。リポ一覧の正本は個人層の `repos.md`（未設定なら MEMORY.md）。新規作成前に既存リポを確認。
 新規リポは **remote の作成と初回 push までが 1 単位**。リポ一覧への登録はその後にし、`gh api repos/<owner>/<name>` で remote が在ることを確かめる（手元で init しただけのリポを一覧に載せると、別マシンからは存在しないリポになる。2026-09-10 実例: 一覧への登録だけが push され、GitHub にリポが無かった）。一覧と実在の突合 = [`scripts/check-ci-red.py`](scripts/check-ci-red.py) `--from-repos-md` の検査不能行（未 clone / remote 未設定）。

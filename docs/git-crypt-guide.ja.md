@@ -34,6 +34,8 @@ chmod 600 ~/.secrets/git-crypt.key
 
 > **なぜ `~/.secrets/`？** `setup.sh` がこのパスを自動検出し、ブートストラップ時（Step 5b）に暗号化リポを自動 unlock する。別のパスを使う場合は `setup.sh` を更新すること。
 
+> **この repo 専用の鍵にするか？** `setup.sh` は `~/.secrets/<repo>.key` を先に試し、 無ければ `~/.secrets/git-crypt.key` を使う。 後で人と共有するかもしれない repo や、 他人の個人情報を持つ repo は `~/.secrets/<repo>.key` に書き出す。 共有するときにこの repo の鍵だけを渡せばよく、 先に[鍵を付け替える](#rotate-key)必要が無い。
+
 ### 4. `.gitattributes` の設定
 
 リポルートに `.gitattributes` を作成し、暗号化対象を指定する：
@@ -57,12 +59,21 @@ private/** filter=git-crypt diff=git-crypt
 SESSION.md filter=git-crypt diff=git-crypt
 ```
 
-### 5. コミット・push
+### 5. コミット・確認・push
+
+機密の file を add する前に `.gitattributes` を書く。 パターンが掛かる前に commit した file は、 履歴に平文で残る。
 
 ```bash
 git add .gitattributes
 git add .  # 暗号化ファイルも通常通り add
+git-crypt status
 git commit -m "Initial commit (git-crypt encrypted)"
+```
+
+`git-crypt status` は各 file を `encrypted:` か `not encrypted:` で出す。 後者に並ぶのが、 平文で残すつもりの file だけであることを確かめる。 最初の push の前に、 commit した blob が本当に暗号文かを確かめる。 中身は印字せず、 真偽だけで見る (暗号化に失敗していれば、 印字した先頭はそのまま平文になる):
+
+```bash
+git cat-file -p HEAD:<暗号化される file> | head -c 9 | grep -qa GITCRYPT && echo encrypted || echo "PLAINTEXT - do not push"
 git push
 ```
 
@@ -203,8 +214,16 @@ Dropbox の共有フォルダパスが手元と違う場合: `mdfind -name "my-r
 **鍵ファイルはデータを復号する唯一の手段。** 紛失してバックアップがなければ、GitHub 上の暗号化ファイルは復元不能。
 
 推奨プラクティス：
-- 暗号化したバックアップを別の場所に保管（クラウドストレージ、USB ドライブ等）
-- バックアップの暗号化には強いパスフレーズを使用
+- **控えはその機械の外に置く。** 同じディスクの別フォルダは控えにならない (機械ごと一緒に失う)。 別の端末から別のログインで開ける場所 (クラウドストレージ、 パスワード管理アプリ) か USB ドライブに置く
+- **文字列にする** (パスワード管理アプリやメモ欄に貼るとき): macOS は `base64 -i ~/.secrets/<repo>.key | pbcopy` (Linux は `base64 -w0 ~/.secrets/<repo>.key`)。 貼り終えたらクリップボードを `pbcopy < /dev/null` で空にする
+- **頼る前に、 控えから戻せることを確かめる。** 次の往復は秘密を何も印字しない:
+  ```bash
+  base64 -D -i <控えの file> | cmp - ~/.secrets/<repo>.key && echo match
+  ```
+  Linux は `base64 -d <控えの file>`。 「控えを作った」 と「控えを開ける」 は別の主張 ([`secret-handoff.md#backup-round-trip`](../conventions/secret-handoff.md#backup-round-trip))
+- **戻し方**: `base64 -D -i <控えの file> -o ~/.secrets/<repo>.key && chmod 600 ~/.secrets/<repo>.key`
+- **控えの場所 (値ではなく場所だけ) を、 鍵なしで読める所に書いておく** (例: その repo の平文の `CLAUDE.md`)。 暗号化した側に書いたメモは、 必要になったときに読めない ([`secret-handoff.md#do-not-store-inside-the-lock`](../conventions/secret-handoff.md#do-not-store-inside-the-lock))
+- 控え自体を暗号化するなら強いパスフレーズを使い、 パスフレーズは控えと別の場所に置く
 - 定期的に復元テストを実施
 
 ## トラブルシューティング
