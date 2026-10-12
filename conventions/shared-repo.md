@@ -167,6 +167,8 @@ grep -rE '<other-private-repo>/[a-z]' --exclude-dir=.git .
 > 設計詳細は `DESIGN.md` §公開リポ leak 防止。
 >
 > **カバレッジ ギャップ**: 上の hook chain は **public** リポを対象とする (`.claude/public-repo.marker` の有無で判定)。**private shared** リポ (= collaborator あり、public marker なし) では fire しないため、layer-2 違反 (= owner literal) は session-end / push-time の手動 audit に依存する。private shared リポで新規 file に絶対パスを焼き付ける commit を書いた直後は、`grep -rn "/Users/<owner>"` を 4 軸 sweep の整合性軸に組み込むのが安全。
+>
+> <a id="private-shared-plaintext-gate"></a>**機密の重い private shared リポは、 平文の面の gate を repo 自身に持たせる** (共同編集者の機械に上の hook chain は無い)。 形: 追跡する hook の dir (`.githooks/`) を `core.hooksPath` で有効にする (clone ごとの同意 = repo の `setup.sh` で入れる。 自動では有効にしない) → hook が repo 内の検査 script を呼び、 終わったら元の `.git/hooks/<hook>` (所有者の機械では上の chain) を同じ引数で呼ぶ。 検査は 3 面: 平文 file の足した行 (値の形 + 暗号化側に置いた固有の語の一覧)・新しい path 名・commit message。 git-crypt の repo では、 **lock 中の commit を止める** (filter が無いと暗号化対象が平文のまま index に入る) と、 暗号化対象の staged blob が暗号文かを確かめる。 検査が走れない commit は入れない (fail-closed)。 効いているかは session 開始で `ARMED / NOT ARMED` の 1 行を出す ([`#collaborator-check`](#collaborator-check) と同じ配り方)
 
 ## <a id="pii-data-minimization"></a>連絡先・PII を共有リポに書くかの判断基準（data minimization）
 
@@ -370,6 +372,9 @@ gh api repos/<owner>/<repo>/invitations
 4. 強いパスフレーズを共同編集者に **out-of-band で共有** (対面 / Signal 等。GitHub / クラウドストレージ / メール経由は禁止)
 5. リポに `.claude/git-crypt-backup` を作成、暗号化ファイル名 (= `<project-name>.key.enc`) を 1 行で記載 ← これが setup.sh の検索キー
 6. `~/.secrets/<project-name>.key` をローカルに配置して `git-crypt unlock` で動作確認
+
+- <a id="key-folder-audience"></a>**鍵を置く共有フォルダの参加者 = その repo の共同編集者と同じにする** — より広い集団と共有している既存のフォルダに置かず、 鍵だけのフォルダを新しく作って共同編集者を招待する (暗号化してあっても、 読める人を増やす理由が無い)。 「対面で渡せるから手渡し」 で代えない = 受け取った側の setup.sh の自動復元から外れ、 控えが人の手元に散る (実測)
+- 既存の repo を共有に切り替えるとき、 その repo が個人の鍵 (他の repo と使い回しの鍵) で暗号化されていたら、 先に専用の鍵へ付け替える ([`docs/git-crypt-guide.ja.md#rotate-key`](../docs/git-crypt-guide.ja.md#rotate-key))
 
 ### 共同編集者向けの SETUP.md
 

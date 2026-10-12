@@ -90,6 +90,26 @@ git-crypt unlock ~/.secrets/git-crypt.key  # replaces with your shared key
 
 **Trade-off**: Simpler key management, but one compromised key exposes all repos. Acceptable when all repos belong to the same owner and threat model.
 
+## <a id="rotate-key"></a>Rotating the Key (sharing a repo that used a reused key, or someone leaves)
+
+Before sharing a repo that uses a reused key (above) with another person, give that repo its own key (handing over a reused key opens every repo). Do the same when someone leaves or the key may have leaked. Content stays the same; every encrypted file is re-encrypted with the new key:
+
+```bash
+# in an unlocked clone with no uncommitted changes
+git-crypt status -e | awk '$1=="encrypted:"{print $2}' > /tmp/enc-paths
+mkdir -p /tmp/plain && while IFS= read -r p; do mkdir -p "/tmp/plain/$(dirname "$p")"; cp -p "$p" "/tmp/plain/$p"; done < /tmp/enc-paths
+git-crypt lock && rm -rf "$(git rev-parse --absolute-git-dir)/git-crypt" && git-crypt init
+(cd /tmp/plain && find . -type f | sed 's#^\./##') | while IFS= read -r f; do cp -p "/tmp/plain/$f" "$f"; done
+git add --renormalize . && git-crypt status | grep -c WARNING              # 0 = everything encrypted
+git-crypt export-key ~/.secrets/<repo>.key && chmod 600 ~/.secrets/<repo>.key
+git commit -m "git-crypt: rotate the key (no content change)" && git push
+rm -rf /tmp/plain /tmp/enc-paths
+```
+
+- Commits before the rotation stay readable only with the old key. To re-encrypt old plaintext versions too, rewrite history ([`sensitive-repo-patterns.md`](sensitive-repo-patterns.md), Pattern 2-5).
+- Generate and export keys, and commit the rotation, in the owner's terminal (observed: Claude Code's auto mode blocks key generation as a write to a secret store, and right after the rotation an agent-side check that reads HEAD's encrypted files cannot inspect them).
+- Other clones must not pull while still unlocked with the old key: smudging new-key commits fails and changed encrypted files disappear from the worktree (observed). Order: place the new key → `git-crypt lock` → `git pull` (or the follow tool for rewritten history) → `git-crypt unlock ~/.secrets/<repo>.key`. A clone that already broke recovers with `git-crypt lock --force` → `git reset --hard origin/<branch>` → `git-crypt unlock <new key>`. `scripts/git-rewrite-follow.py` stops such a clone before resetting.
+
 ## Setting Up on Another Machine
 
 1. Transfer the key file securely (e.g., encrypted backup, direct copy via SSH)

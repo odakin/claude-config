@@ -90,6 +90,27 @@ git-crypt unlock ~/.secrets/git-crypt.key  # 共有鍵で置き換え
 
 **トレードオフ**: 鍵管理がシンプルになるが、1つの鍵が漏洩すると全リポが露出する。全リポが同一オーナーで脅威モデルが同じなら許容範囲。
 
+## <a id="rotate-key"></a>鍵を付け替える (使い回しの鍵の repo を人と共有する・人が抜けた)
+
+使い回しの鍵 (上の節) の repo を他人と共有するときは、 その repo だけ専用の鍵に付け替えてから渡す (使い回しの鍵を渡すと全リポが開く)。 人が抜けた・鍵が漏れた疑いのときも同じ。 中身は変えず、 暗号化 file を全部新しい鍵で暗号化し直す:
+
+```bash
+# unlock 済み・未 commit の変更なしの clone で
+git-crypt status -e | awk '$1=="encrypted:"{print $2}' > /tmp/enc-paths     # 暗号化対象の一覧
+mkdir -p /tmp/plain && while IFS= read -r p; do mkdir -p "/tmp/plain/$(dirname "$p")"; cp -p "$p" "/tmp/plain/$p"; done < /tmp/enc-paths
+git-crypt lock && rm -rf "$(git rev-parse --absolute-git-dir)/git-crypt" && git-crypt init
+(cd /tmp/plain && find . -type f | sed 's#^\./##') | while IFS= read -r f; do cp -p "/tmp/plain/$f" "$f"; done
+git add --renormalize . && git-crypt status | grep -c WARNING              # 0 = 全部暗号化された
+git-crypt export-key ~/.secrets/<repo>.key && chmod 600 ~/.secrets/<repo>.key
+git commit -m "git-crypt: 鍵を付け替える (中身の変更なし)" && git push
+rm -rf /tmp/plain /tmp/enc-paths
+```
+
+- **付け替えより前の commit は古い鍵でしか読めない** — 新しい鍵の持ち主に古い版は見えない (共有の前の版を渡さない、 という意味ではちょうどよい)。 古い版の平文も消したいときは、 履歴の書き換えで「今は暗号化と宣言した path の平文だった版」 を新しい鍵で暗号化し直す ([`sensitive-repo-patterns.ja.md#pattern-2-5`](sensitive-repo-patterns.ja.md#pattern-2-5))
+- **鍵を作る・書き出す操作と、 付け替えの commit は本人の terminal で** (実測: Claude Code の auto mode は鍵の生成・書き出しを秘密の置き場への書き込みとして止める。 付け替えの直後は HEAD の暗号化 file が古い鍵のままなので、 HEAD を読む agent 側の検査も検査不能で止まる)。 agent には上の手順を script にして渡させる
+- **他の clone は、 古い鍵のまま pull しない** — 新しい鍵の commit を古い鍵で smudge できず、 変わった暗号化 file が作業 tree から消えたまま止まる (実測)。 順序は: 新しい鍵を置く → `git-crypt lock` → `git pull` (書き換えた履歴なら追従の道具) → `git-crypt unlock ~/.secrets/<repo>.key`。 もう壊れた clone は `git-crypt lock --force` → `git reset --hard origin/<branch>` → `git-crypt unlock <新しい鍵>` で戻る (未 commit の変更があれば先に退避)。 追従の道具 (`scripts/git-rewrite-follow.py`) は、 鍵が合わない clone を reset の前に止める
+- 鍵の配布は 下の §「共有リポでの自動復元」 の形で (暗号化した鍵を共有フォルダに置き、 パスフレーズだけ別経路)
+
 ## 別端末でのセットアップ
 
 1. 鍵ファイルを安全に転送（暗号化バックアップ、SSH 経由の直接コピー等）

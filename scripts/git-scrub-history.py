@@ -41,7 +41,7 @@
   work (mirror と対応表の置き場。 git の work tree の中なら止まる) / identity_file (下) /
   id_shape (識別子の形の正規表現。 英数字の境界で囲んで使う。 既定は大文字小文字を区別しない = id_shape_ignore_case) /
   id_shape_verify (検証だけに使う緩い形。 既定 = id_shape) / hex_exclusion ("lower" 既定 = 16 進の小文字だけの token は
-  git の短い hash と見なして形から外す / "any" / "none") / id_replacement (既定 "<ID>") / name_replacement (既定 "<NAME>") /
+  git の短い hash と見なして形から外す。 数字だけの token は外さない = 番号の消し残しを防ぐ / "any" / "none") / id_replacement (既定 "<ID>") / name_replacement (既定 "<NAME>") /
   path_rules [{"literal"|"re", "to"}] (順に path へ。 pass 1) / path_id_token (例 "s{n:03d}"。 規則の後の path に残る識別子を
   履歴の path の識別子の集合の順位で番号にする = 同じ履歴なら同じ番号。 履歴にしか無い file 用。 今の tree の path が
   これに落ちると plan-current は止まる = 明示の規則を足す) / content_rules [{"literal"|"re", "to", "paths"?}] (平文の中身) /
@@ -334,6 +334,8 @@ def compile_rule(r, where):
     extra = set(r) - {"literal", "re", "to", "paths", "why", "id", "tier"} - {k for k in r if k.startswith("_")}
     if extra:
         raise Stop(f"{where}: 知らない key {sorted(extra)}")
+    if r.get("paths") is not None and not isinstance(r["paths"], str):
+        raise Stop(f"{where}: paths は正規表現の文字列 1 つ (list ではない。 複数なら | でつなぐ)")
     paths = re.compile(r["paths"]) if r.get("paths") else None
     if "literal" in r:
         if not r["literal"]:
@@ -446,7 +448,9 @@ class Rules:
 
     # --- 識別子
     def _is_hex(self, tok):
-        return bool(self.hex_rx and self.hex_rx.fullmatch(tok))
+        # 数字だけの token は 16 進の形にも当たるが、 外すと 7 桁以上の番号 (受付・口座・納付) が message に残る (実測)。
+        # hash と見なすのは a-f の文字を 1 つ以上含む token だけ (数字だけの短い hash が置き換わる方へ倒す = 漏れより安全)
+        return bool(self.hex_rx and self.hex_rx.fullmatch(tok) and not tok.isdigit())
 
     def id_tokens(self, text, verify=False):
         """(種類, token) の list。 種類 = known (一覧) / shape (形。 16 進だけの token と一覧のものは除く)。"""
@@ -1658,6 +1662,10 @@ def selftest():
               scr.scrub("dir QZX31415 here", "message") == "dir s-a here")
         check("git の短い hash の形 (16 進の小文字だけ) は形から外す", "abc16180" in s2 and "abc1234" in s2)
         check("既知の一覧に在るものは 16 進に見えても置き換える", "fed27182" not in s2)
+        Rd = Rules(dict(cfg, id_shape=r"\d{7,}", id_shape_verify=None))
+        s3 = Rd.text_scrubber({}).scrub("受付番号1234567890 と 7654321 と abc1234 と 1a2b3c4d", "message")
+        check("数字だけの token (番号) は 16 進に当たっても形から外さない (消し残さない)",
+              "1234567890" not in s3 and "7654321" not in s3 and "abc1234" in s3 and "1a2b3c4d" in s3, s3)
         check("形の境界: 長い英数字の列の一部は識別子と見なさない", "QZX314159" in s2)
         r = scr.residual("see people/s-a/notes.md and notes.md", "content", "a.md")
         check("残りの検査: 新しい path の中の旧 token は数えない", "OLD" not in r, r)

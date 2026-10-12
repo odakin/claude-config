@@ -117,6 +117,7 @@ import glob as globmod
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -494,6 +495,45 @@ def old_branches(repo, gen, upstream, current_branch):
     return names
 
 
+def crypt_key_mismatch(repo, target, head=None, limit=3):
+    """この clone が git-crypt の鍵で unlock 済みなのに、 target の tree の暗号化 blob をその鍵で復号できなければ、 その path を返す
+    (無ければ None)。 鍵を付け替えた repo の古い clone が追従すると、 smudge が失敗して作業 tree の file が消えたまま止まる (実測 =
+    reset --keep が rc 128 で HEAD は動かず、 変わった暗号化 file が削除された状態で残る)。 だから reset の前に、 head と違う暗号化
+    blob を limit 個まで試しに復号する。 lock 中 (鍵が無い) の clone は filter が無いので暗号文のまま揃う = 検査しない。"""
+    try:
+        key = git(repo, "rev-parse", "--git-path", "git-crypt/keys/default")
+    except RuntimeError:
+        return None
+    key_path = Path(key) if os.path.isabs(key) else Path(repo) / key
+    if not key_path.is_file() or not shutil.which("git-crypt") or not _crypt_declared(repo):
+        return None
+    if git(repo, "config", "--get", "filter.git-crypt.smudge", check=False) == "":
+        return None
+    try:
+        if head:
+            names = git(repo, "diff", "--name-only", "-z", head, target).split("\0")
+        else:
+            names = git(repo, "ls-tree", "-r", "--name-only", "-z", target).split("\0")
+    except RuntimeError:
+        return None
+    tried = 0
+    for path in (n for n in names if n):
+        try:
+            blob = git(repo, "rev-parse", f"{target}:{path}")
+        except RuntimeError:
+            continue
+        data = subprocess.run(["git", "-C", str(repo), "cat-file", "-p", blob], capture_output=True, env=_env()).stdout
+        if not data.startswith(CRYPT_MAGIC):
+            continue
+        r = subprocess.run(["git-crypt", "smudge"], cwd=str(repo), input=data, capture_output=True, env=_env())
+        if r.returncode != 0:
+            return path
+        tried += 1
+        if tried >= limit:
+            break
+    return None
+
+
 def follow_repo(repo, cli_globs=(), fetch=True, max_count=DEFAULT_MAX, dry_run=False, log=True):
     repo = Path(repo)
     name = repo.name
@@ -534,6 +574,12 @@ def follow_repo(repo, cli_globs=(), fetch=True, max_count=DEFAULT_MAX, dry_run=F
     if dry_run:
         return Result("followed", f"{name}: [dry-run] 揃える: HEAD {head[:7]} → 新履歴の {target[:7]} ({how}) → {upstream} {up_sha[:7]}",
                       how=how, target=target)
+    bad = crypt_key_mismatch(repo, up_sha, head)
+    if bad:
+        return Result("stopped",
+                      f"{name}: 新しい履歴の暗号化 file ({bad}) をこの clone の git-crypt の鍵で復号できない (鍵が付け替えられた)"
+                      f" = 追従すると作業 tree の file が消えたまま止まるので触らない。 新しい鍵を置いてから:"
+                      f" git-crypt lock → 追従をやり直す → git-crypt unlock <新しい鍵> (docs/git-crypt-guide.ja.md#rotate-key)", exit_code=1)
     if not git_ok(repo, "reset", "-q", "--keep", up_sha):
         return Result("stopped", f"{name}: reset --keep が止まった (未 commit の変更が書き換えで変わった file に重なる) = 手で揃える"
                                  f" (git status で file を見て、 退避してから再実行)", exit_code=1)
@@ -2551,6 +2597,38 @@ def _selftest():
     check("self-path hook: one that an earlier version had already wrapped is put back as it was",
           "元に戻した" in line and 'dirname "$0"' in (hooks_dir(cu) / "pre-push").read_text() and not kept_u.exists()
           and prepush_state(cu) == "foreign", line)
+
+    # --- 鍵の付け替え: 古い鍵で unlock 済みの clone は、 新しい鍵の履歴に追従しない (作業 tree を壊さない)
+    if shutil.which("git-crypt"):
+        kr = tmp / "crypt-remote.git"
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(kr)], check=True, env=_env())
+        ka = tmp / "crypt-a"
+        init(ka)
+        subprocess.run(["git-crypt", "init"], cwd=str(ka), capture_output=True, check=True)
+        commit(ka, {".gitattributes": "s.txt filter=git-crypt diff=git-crypt\n", "s.txt": "v1\n"}, "k1")
+        git(ka, "remote", "add", "origin", str(kr))
+        git(ka, "push", "-q", "origin", "main")
+        old_key = tmp / "crypt-old.key"
+        subprocess.run(["git-crypt", "export-key", str(old_key)], cwd=str(ka), capture_output=True, check=True)
+        kb = tmp / "crypt-b"
+        subprocess.run(["git", "clone", "-q", str(kr), str(kb)], check=True, env=_env())
+        subprocess.run(["git-crypt", "unlock", str(old_key)], cwd=str(kb), capture_output=True, check=True)
+        plain = (ka / "s.txt").read_text()
+        subprocess.run(["git-crypt", "lock"], cwd=str(ka), capture_output=True, check=True)
+        shutil.rmtree(Path(git(ka, "rev-parse", "--absolute-git-dir")) / "git-crypt")
+        subprocess.run(["git-crypt", "init"], cwd=str(ka), capture_output=True, check=True)
+        (ka / "s.txt").write_text(plain)
+        git(ka, "add", "--renormalize", ".")
+        git(ka, "commit", "-q", "--amend", "-m", "k1 rewritten")
+        git(ka, "push", "-q", "-f", "origin", "main")
+        kmap = tmp / "crypt.commit-map"
+        kmap.write_text("old new\n" + git(kb, "rev-parse", "HEAD") + " " + git(ka, "rev-parse", "HEAD") + "\n")
+        r = follow_repo(kb, cli_globs=[str(kmap)], fetch=True, log=False)
+        check("key rotated: a clone unlocked with the old key is stopped before reset (worktree intact)",
+              r.state == "stopped" and "鍵" in r.line and (kb / "s.txt").read_text() == "v1\n"
+              and git(kb, "status", "--porcelain") == "", r.line)
+    else:
+        print("  skip: key-rotation case (git-crypt not installed)")
 
     print(f"selftest: {'PASS' if not fails else 'FAIL'} ({len(fails)} failing)")
     return 0 if not fails else 1
