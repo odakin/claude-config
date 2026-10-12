@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: build した PDF・図・様式の出力を commit しようとするとき + git-crypt で暗号化した file を頻繁に書き足す台帳にするとき + 自動生成の data を定期 job で commit するとき + repo (.git) が大きい・clone や fetch が重いと気づいたとき + check-history-growth.py の 🟠 / commit 時の ⚠️ を見たとき
+when: build した PDF・図・様式の出力を commit しようとするとき + git-crypt で暗号化した file を頻繁に書き足す台帳にするとき + 自動生成の data を定期 job で commit するとき + repo (.git) が大きい・clone や fetch が重いと気づいたとき + repo は小さいのに fetch・push・ls-remote が毎回数秒かかるとき (#slow-round-trip) + git-crypt の repo を一時 clone して unlock する道具を書くとき + check-history-growth.py の 🟠 / commit 時の ⚠️ を見たとき
 category: infra
 summary: git は text の版を差分で詰めるが、 暗号化 blob と binary (PDF・画像・Office) は詰められないので、 版の数 × 大きさがそのまま履歴に積まれる (#mechanism)。 縮めるには履歴の書き換え (不可逆) しかないので、 増え方の段階で置き方を変える。 3 種類で対策が違う (#three-kinds): 生成物は作り直すたびに commit しない = 追跡から外すか節目だけ (#generated-binaries) / 暗号化して書き足す台帳は 1 entry 1 file (#encrypted-ledgers) / 素材は 1 回置いて変えない。 見つけ方 = scripts/check-history-growth.py (定期の一覧 + commit 時の警告、 #detection)。 GitHub は 1 file 100 MiB 超を push で拒否する = commit 時に止める (#hosting-limits)。 既に積まれた分は所有者の判断で scripts/git-drop-path-history.py (#already-accumulated)
 -->
@@ -83,6 +83,23 @@ GitHub の上限 (公式 docs: [About large files on GitHub](https://docs.github
 - ⚠️ **上限の直前の file は、 作り直して少し増えただけで越える** (暗号化は大きさをわずかに増やす)。 高解像度の印刷用 raster PDF がこの大きさになりやすい = 印刷用の raster は生成物として追跡しない
 - 越える前に止める = commit 時の検査が 100 MiB 超を止め、 50 MiB 超に残りの余白を出す ([#detection](#detection))
 - 100 MiB を超える file をどうしても版管理するなら Git LFS (保存量と転送量に別の上限がある)。 まず「git に置く必要があるか」 を問う
+
+## <a id="slow-round-trip"></a>repo は小さいのに fetch・push が遅い — 時間は握手と復号にある
+
+履歴の大きさより先に、 1 回の操作の時間がどこに出ているかを測る (`time git ls-remote origin <branch>` と、 道具の段ごとの時間)。
+
+- **往復の大半は host への SSH の握手** (実測: 1 往復 約 2 秒、 転送する中身が小さくても同じ)。 host の block に
+  `ControlMaster auto` / `ControlPath ~/.ssh/cm-%r@%h-%p` / `ControlPersist 10m` を足すと、 2 回目から既存の接続を使い回して
+  1 秒未満になる (実測)。 `~/.ssh/config` は機械ごとなので、 手で直さず、 setup か session 開始の自動適用に「効いていなければ足す」 段を置く
+  (効いているかは `ssh -G <host>` の `controlmaster` の行で見る)。
+- **git-crypt の repo を一時 dir に clone して `git-crypt unlock` する道具は、 file 数に比例して遅くなる** — unlock は tracked file
+  1 本ごとに filter の process を起こす (実測: 1 本 数十 ms、 千件で数十秒)。 毎回読む道具は clone をやめ、 手元の checkout に `fetch`
+  して、 要る blob だけ `git cat-file --filters <rev>:<path>` で復号し、 blob id で cache する (暗号文は中身で決まる id なので cache は古くならない)。
+  書く側も作業 tree と index を使わない形にする: `hash-object -w --path <path>` (path の clean filter が暗号化) → 一時 index
+  (`GIT_INDEX_FILE`) で `read-tree` + `update-index --cacheinfo` → `write-tree` → `commit-tree -p <fetched>` → `push <sha>:refs/heads/<branch>`。
+  拒否された push は「他の書き手が先に入った」 なので、 fetch して検証し直してから作り直す。 実装例 = ai-collaboration [`board/board_transport.py`](../../ai-collaboration/board/board_transport.py)。
+- ⚠️ repo の subdir を対象にする plumbing は、 repo の top で root からの path を渡す — `git -C <subdir>` だと pathspec・`ls-tree` の出力・
+  `hash-object --path` が cwd 相対になり、 黙って空や別の path になる (実測)。 `ls-tree` は `--full-tree` も付ける。
 
 ## <a id="already-accumulated"></a>既に積まれた分 — 落とすのは所有者の判断
 
