@@ -87,7 +87,7 @@ open(path, "w", encoding="utf-8").write(txt)
 
 **なぜ起きるか**: 契約が数えるのは部分文字列の出現で、 `old` が**トークンの終わり**まで含むことは保証しない。 path・識別子・URL のように「長い別物の先頭」 になりうる key では、 1 回一致が正しい 1 回とは限らない。
 
-**対処**: `old` に**終端の区切り**まで含める (`](DESIGN.md)` / `](DESIGN.md#`)、 正規表現なら先読みで終端を要求する (`\]\(DESIGN\.md(?=[)#])`)。 構造を持つ対象 (markdown の link、 LaTeX の命令) は、 文字列置換でなく**構文解析した単位が完全一致した時だけ**書き換える道具を使う (link なら [`scripts/fix-md-links.py`](../scripts/fix-md-links.py)、 selftest に「素朴な `str.replace` が正しい sibling link を壊す」 foil)。 文字列置換のまま進めるなら、 old の両端が識別子・path の途中でないことを検査する ([`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) は既定で拒否)。 **先頭の側も同じ**: YAML や設定の key `ask: ` は `task: ` の末尾と一致する = `s.index("ask: ")` は別の key の途中を指す (実測: 間の field をまとめて消した)。 key は行頭の改行から含めて探す (`"\nask: "`)。
+**対処**: `old` に**終端の区切り**まで含める (`](DESIGN.md)` / `](DESIGN.md#`)、 正規表現なら先読みで終端を要求する (`\]\(DESIGN\.md(?=[)#])`)。 構造を持つ対象 (markdown の link、 LaTeX の命令) は、 文字列置換でなく**構文解析した単位が完全一致した時だけ**書き換える道具を使う (link なら [`scripts/fix-md-links.py`](../scripts/fix-md-links.py)、 selftest に「素朴な `str.replace` が正しい sibling link を壊す」 foil)。 文字列置換のまま進めるなら、 old の両端が識別子・path の途中でないことを検査する ([`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) は既定で拒否)。 **先頭の側も同じ**: YAML や設定の key `ask: ` は `task: ` の末尾と一致する = `s.index("ask: ")` は別の key の途中を指す (実測: 間の field をまとめて消した)。 key は行頭の改行から含めて探す (`"\nask: "`)。 台帳の field の置き換え・削除は道具でやる = [`scripts/yaml-set-top-keys.py`](../scripts/yaml-set-top-keys.py) (行頭の top-level key とその字下げ行だけを置き換え、 読み直して「ほかの key の値はすべて同じ」 を確かめてから書く。 この罠は実測 2 回)。
 
 ### <a id="insertion-pair-rerun"></a>6. 挿入型の pair は再実行しても「正確に 1 回」 を通る (2026-09-13)
 

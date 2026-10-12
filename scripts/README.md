@@ -325,6 +325,7 @@
 - **[with-gnu-userland.test.sh](with-gnu-userland.test.sh)** — with-gnu-userland.sh の self-test (Homebrew の GNU userland が無い環境 = CI の ubuntu は SKIP)
 - **[xlsx-to-pdf.sh](xlsx-to-pdf.sh)** — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
 - **[xlsx-zip-set-cells.py](xlsx-zip-set-cells.py)** — xlsx / xlsm の値セルだけを zip 直編集で書き換える (Excel も openpyxl も使わない。 他の zip member は byte 同一、 VBA・drawings・form control は無傷。 office-automation.md#xlsx-cell-value-zip-surgery の実装)
+- **[yaml-set-top-keys.py](yaml-set-top-keys.py)** — YAML の file の top-level の key を、 行頭で見つけて置き換える・消す (ほかの key は 1 文字も変えず、 読み直して確かめてから書く)。
 - **[zoom-client.py](zoom-client.py)** — Zoom を **Server-to-Server OAuth で script から** 読む / 部屋を作る (画面 drive 不要)。
 
 ## formcase/ — 様式の案件 pipeline の engine (入口 = formcase.py、 規約 = conventions/form-case-pipeline.md)
