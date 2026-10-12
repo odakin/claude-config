@@ -5,7 +5,9 @@
 
 = なぜ存在するか:
   harness は全 live session を `~/.claude/sessions/<pid>.json` に刻印している
-  ({pid, sessionId(=transcript UUID), cwd, startedAt, entrypoint})。 これは
+  ({pid, sessionId(=transcript UUID), cwd, startedAt, entrypoint})。 無人の `claude -p` も実行中は刻印を書き、 終了で消す
+  (実測)。 ⚠️ 刻印の `kind` / `entrypoint` は起動した側の env を継ぐ = desktop の session の Bash から起動した `claude -p` は
+  `kind: interactive`・`entrypoint: claude-desktop` と書いた (実測) = 刻印の欄から無人の実行かは判別できない。 これは
   multi-session-coordination.md §1「同 file path を別 session が独立に上書きする race」 の
   awareness 素材として既に在るのに、 session には surface されていない。 本 script は
   その disk 刻印を読み、 *同じ cwd で今 生きてる兄弟 session* を一覧化する (= discovery 半分の robust 実体)。

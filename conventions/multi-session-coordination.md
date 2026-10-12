@@ -873,8 +873,7 @@ request の単位。 mail の thread・台帳の項目のような「用事」 �
    作る前に、 同じ thread を指す open な項目を作業 tree の全部 (未 commit・untracked = 並列 session が書いたばかりの file を
    含む) と upstream から引き、 あれば作らせない。 同じ thread の別の用事だと承知して分けるなら、 新しい項目から既存を
    指す相互参照を書かせる (承知の記録が残る)。 項目を作る操作の入口で止め、 そこを通らない作り方 (shell・script) は commit の
-   時に同じ検査で警告する。 commit の中では git が一時 index を env で渡すので、 その検査が他の repo を読む git からはその env
-   を外す (外さないと他の repo が commit 中の repo の index を読む = 実測)。
+   時に同じ検査で警告する (その検査が他の repo の台帳を読むときの git の注意 = [`hook-authoring.md#hook-git-env-cross-repo`](hook-authoring.md#hook-git-env-cross-repo))。
 5. **台帳は同じ checkout を使う session に即時に見える手元の state に置く**: claim は分の単位で、 履歴は永続の event 用。
    claim を event として post すると、 用事 1 件ごとに履歴が 1〜2 件増える。 別の機械との重なりは、 記録 (台帳の項目) の push と
    4 の upstream の読みが網。 その網が別の機械の項目と重複を見つけた回を記録しておき、 実測で出てから claim を写すかを決める。
