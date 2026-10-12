@@ -12,6 +12,7 @@
 #   4.  git post-merge hook をインストール（git pull 時に hooks を自動同期）
 #   5.  GitHub 上の全リポを <base> 以下に clone（未取得のもののみ）
 #   5a. 個人層 (.claude-personal-layer マーカー) を検出し ~/Claude/CLAUDE.md を symlink
+#        + 個人層の root に AGENTS.md が無ければ雛形を置く (commit は本人)
 #   5a2. 個人層に dropbox-collabs.yaml があれば dropbox-refs symlinks を作成
 #        + 個人層 .git/hooks/post-merge を設置（git pull で自動再生成）
 #   5a3. 個人層に scripts/setup-file-associations.sh があれば実行（macOS のみ、
@@ -751,6 +752,15 @@ if [ -n "$LAYER" ]; then
         rm -f "$HOME_CLAUDE"
         (cd "$CLAUDE_DIR" && ln -s "$REL_LAYER_TARGET" "CLAUDE.md")
         echo "  Linked: $HOME_CLAUDE -> $REL_LAYER_TARGET"
+    fi
+    # 個人層の root AGENTS.md (= Codex がこの repo で task を始めたときの入口、
+    # CONVENTIONS.md#agent-instruction-entrypoints)。 無い時だけ雛形を置く: 手で書いた file は
+    # 上書きしない。 個人層は owner だけの layer 3 なので、 layer 2 project file を生成しない規則には当たらない。
+    LAYER_AGENTS="$LAYER/AGENTS.md"
+    LAYER_AGENTS_TEMPLATE="$SCRIPT_DIR/templates/personal-layer/AGENTS.md.template"
+    if [ -f "$LAYER_AGENTS_TEMPLATE" ] && [ ! -e "$LAYER_AGENTS" ] && [ ! -L "$LAYER_AGENTS" ]; then
+        cp "$LAYER_AGENTS_TEMPLATE" "$LAYER_AGENTS"
+        echo "  Installed $LAYER_AGENTS (commit it in the personal layer)"
     fi
 elif [ -f "$DEFAULT_ROOT_TEMPLATE" ]; then
     echo ""

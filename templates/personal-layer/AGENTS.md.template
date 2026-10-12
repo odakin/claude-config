@@ -1,0 +1,14 @@
+# Agent instructions — personal layer
+
+Before working in this repository, read `CLAUDE.md`, then `SESSION.md` when it
+exists, and follow the task-relevant rows of the required-reading table in
+`CLAUDE.md` to their owning files before acting.
+
+This file is the thin Codex discovery entry point for work inside this
+personal-layer repository. Do not duplicate personal rules, identity, current
+state, or design decisions here; their homes are `CLAUDE.md` and the files it
+lists. It is not the Codex global overlay: that is `codex/AGENTS.md`, selected
+only by `setup-codex.sh --personal-layer`.
+
+Contract: https://github.com/odakin/claude-config/blob/main/CONVENTIONS.md#agent-instruction-entrypoints
+Kernel: https://github.com/odakin/claude-config/blob/main/codex/PARITY.md#instruction-entrypoint-kernel

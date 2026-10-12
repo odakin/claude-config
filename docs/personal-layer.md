@@ -114,6 +114,7 @@ A personal layer is a **directory** (typically a private git repo, but a local-o
 <your>-prefs/
 ├── .claude-personal-layer        # marker file (zero bytes) — claude-config setup.sh detects this
 ├── CLAUDE.md                     # the personal home instruction file (~/Claude/CLAUDE.md symlinks here)
+├── AGENTS.md                     # thin Codex entry point for this repo → CLAUDE.md (setup.sh places it when missing)
 ├── repos.md                      # your repo list (optional, replaces having it in MEMORY.md)
 ├── shared-project-keys.md        # mapping of shared-project repo names → local key paths (optional)
 ├── user-profile.md               # identity, signatures, account info (optional)

@@ -20,6 +20,7 @@ See [`docs/personal-layer.md`](../../docs/personal-layer.md) for the conceptual 
 3. Copy the templates you want into your personal layer directory:
    ```bash
    cp ~/Claude/claude-config/templates/personal-layer/CLAUDE.md.template ./CLAUDE.md
+   cp ~/Claude/claude-config/templates/personal-layer/AGENTS.md.template ./AGENTS.md  # setup.sh also places it when missing
    cp ~/Claude/claude-config/templates/personal-layer/repos.md.template ./repos.md
    cp ~/Claude/claude-config/templates/personal-layer/shared-project-keys.md.template ./shared-project-keys.md
    cp ~/Claude/claude-config/templates/personal-layer/user-profile.md.template ./user-profile.md
@@ -66,6 +67,7 @@ current post-merge hook. The audit reports otherwise. The installer refuses a
 ## What goes in which file
 
 - **CLAUDE.md** — your personal home instruction file. Lists which other files in this directory Claude should read and when.
+- **AGENTS.md** — the thin root entry point Codex discovers when a task starts in this repository; it only routes to `CLAUDE.md` (and `SESSION.md` when present). `setup.sh` copies the template here when the file is missing; commit it. Not the same file as `codex/AGENTS.md` below.
 - **repos.md** — your repo list with purpose and visibility. Replaces having repo lists in volatile MEMORY.md.
 - **shared-project-keys.md** — mapping of shared-project repo names → local git-crypt key paths. Lets Claude auto-resolve unlock paths when working in shared projects.
 - **user-profile.md** — your identity, signatures, account info. Used when Claude drafts emails or fills forms.
