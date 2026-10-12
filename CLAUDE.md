@@ -213,6 +213,7 @@ claude-config/
 │   ├── personal-layer/                 # 個人層 (layer 3) bootstrap skeleton
 │   │   ├── README.md
 │   │   ├── CLAUDE.md.template
+│   │   ├── AGENTS.md.template         # 個人層 root の Codex 入口 (setup.sh が無い時だけ置く)
 │   │   ├── repos.md.template
 │   │   ├── user-profile.md.template
 │   │   ├── shared-project-keys.md.template
@@ -256,6 +257,7 @@ setup.sh が自動で行うこと:
 6. git post-merge hook をインストール（`git pull` 後に hooks と CONVENTIONS.md を自動同期）
 7. 認証ユーザーの全リポを `<base>/` 以下に clone（未取得のもののみ。対話実行では確認 prompt あり・既定 = No、 `--no-clone` で skip、非対話は従来どおり自動 clone）
    - *(条件付き)* 個人層 (`.claude-personal-layer` マーカーファイルを持つディレクトリ) を `<base>/` 直下から検出し、見つかれば `<base>/CLAUDE.md` をそのディレクトリの `CLAUDE.md` への symlink にする。`CLAUDE_PERSONAL_LAYER` 環境変数で明示指定可（`none` で無効化）。検出ロジックの詳細は `docs/personal-layer.md` 参照
+   - *(条件付き)* 個人層の root に `AGENTS.md` が無ければ `templates/personal-layer/AGENTS.md.template` を置く (既存の file は上書きしない、 commit は本人)
    - *(条件付き)* 個人層が見つからない場合は `templates/root-CLAUDE.md.default` をデフォルトの `<base>/CLAUDE.md` として設置
    - *(条件付き)* 個人層に `dropbox-collabs.yaml` があれば `scripts/setup-dropbox-refs.sh` を呼んで `<base>/<repo>/dropbox-refs` symlink を生成 + 個人層 `.git/hooks/post-merge` に同スクリプトを install（次回 `git pull` で symlink 自動再生成）。詳細は `conventions/dropbox-refs.md` 参照
    - *(条件付き、macOS のみ)* 個人層に `scripts/setup-file-associations.sh` があれば実行（Launch Services のファイル拡張子別デフォルトアプリ設定）

@@ -54,6 +54,7 @@ INSTRUCTION_ENTRYPOINT_MAX_BYTES = {
     "codex/AGENTS.md": 2048,
     "templates/shared-project/AGENTS.md.template": 2048,
     "templates/personal-layer/codex/AGENTS.md.template": 2048,
+    "templates/personal-layer/AGENTS.md.template": 2048,
 }
 SESSION_HANDOFF_REQUIREMENTS = {
     "CONVENTIONS.md": ("codex/PARITY.md#session-handoff-contract",),
@@ -216,6 +217,13 @@ PROJECT_ENTRYPOINT_REQUIREMENTS = {
         "codex/PARITY.md#instruction-entrypoint-kernel",
     ),
     "templates/shared-project/README.md": ("AGENTS.md.template",),
+    "templates/personal-layer/AGENTS.md.template": (
+        "CLAUDE.md",
+        "SESSION.md",
+        "CONVENTIONS.md#agent-instruction-entrypoints",
+        "codex/PARITY.md#instruction-entrypoint-kernel",
+    ),
+    "setup.sh": ("templates/personal-layer/AGENTS.md.template",),
     "templates/shared-project/AUDIT.md.template": (
         "root `AGENTS.md`",
         "`CLAUDE.md` と `SESSION.md`",
