@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# zsh-word-split-guard.test.sh — 述語の selftest + hook 入出力 (deny の JSON / zsh 以外は無音 / opt-out / Bash 以外は無音)
+# zsh-word-split-guard.test.sh — 述語の selftest + hook 入出力 (deny の JSON / == だけの語は判断なしの updatedInput / zsh 以外は無音 / opt-out / Bash 以外は無音)
 #
 # 正本: claude-config/hooks/zsh-word-split-guard.test.sh
 
@@ -17,6 +17,14 @@ echo "=== 述語 (--selftest) ==="
 st="$(python3 "$HOOK" --selftest 2>&1)"; rc=$?
 printf '%s\n' "$st" | sed 's/^/  /'
 [ "$rc" -eq 0 ] && ok "selftest" || ng "selftest rc=$rc"
+
+EQ='{"tool_name":"Bash","tool_input":{"command":"echo ======; echo after","description":"d"}}'
+echo "=== equals の書き換え (判断なしの updatedInput) ==="
+out="$(printf '%s' "$EQ" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin)["hookSpecificOutput"]; assert "permissionDecision" not in d; assert d["updatedInput"]["command"]==chr(101)+"cho "+chr(39)+"======"+chr(39)+"; echo after" and d["updatedInput"]["description"]=="d", d' \
+  && ok "== だけの語 → quote した command を updatedInput で返す (判断なし、 他の field は残す)" || ng "書き換えの出力が違う: $out"
+out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"echo =python3"}}' | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+case "$out" in *'"permissionDecision": "deny"'*) ok "=X (=cmd を意図しうる) は今まで通り deny" ;; *) ng "=X が deny されない: $out" ;; esac
 
 BAD='{"tool_name":"Bash","tool_input":{"command":"ids=$(gh run list); for id in $ids; do echo $id; done"}}'
 GOOD='{"tool_name":"Bash","tool_input":{"command":"gh run list | while read -r id; do echo $id; done"}}'

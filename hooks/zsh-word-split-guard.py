@@ -32,6 +32,10 @@ path に展開し、 見つからないと `not found` で rc=1 になって同�
 
 発火: 実行 shell が zsh のとき (CLAUDE_CODE_SHELL か SHELL)。 opt-out = CLAUDE_ZSH_SPLIT_GUARD=0 (=1 で shell 判定を飛ばす、 test 用)。
 出力: permissionDecision=deny + 直し方。 誤検出のコストは書き直し 1 回。 fail-open (読めない入力は黙って通す)。
+  例外 (2026-10-12 本人の承認): 問題が equals 展開だけで、 その語が全部 `==` で始まるなら (区切りの `======`、 `[ a == b ]`)
+  止めずに、 その語を single quote で囲んだ command を updatedInput で返して通す (意味は変わらない = zsh 5.9 と bash で実測)。
+  permissionDecision は付けない = 書き換えた command が通常の許可の判定を受ける (allow を付けると判定を飛ばして自動で通す、
+  ask を付けると毎回 確認になる = hook-authoring.md 9.2)。 `=X` (= `=cmd` を意図しうる) と、 単語分割の問題は今まで通り止める。
 """
 from __future__ import annotations
 
@@ -144,6 +148,25 @@ def equals_issues(cmd: str) -> list[str]:
     return sorted({m.group(0) for m in EQ_WORD.finditer(masked)})
 
 
+def equals_rewrite(cmd: str) -> str | None:
+    """`==` で始まる未 quote の語を single quote で囲んだ command (意味は変わらない: echo の区切り `======` は同じ文字列、
+    `[ a == b ]` は `[ a '==' b ]` で同じ真偽 = zsh 5.9 と bash で実測)。 書き換えられない語 (`=cmd` を意図しうる `=X`、
+    語の中に quote 文字) が 1 つでもあれば None (= 今まで通り止める)。 問題の語が無ければ None。"""
+    if not cmd:
+        return None
+    masked = COND.sub(_blank, _masked(cmd))
+    spans = [(m.start(), m.end()) for m in EQ_WORD.finditer(masked)]
+    if not spans:
+        return None
+    out = cmd
+    for a, b in reversed(spans):
+        word = cmd[a:b]
+        if not word.startswith("==") or "'" in word or '"' in word or "\\" in word:
+            return None
+        out = out[:a] + "'" + word + "'" + out[b:]
+    return out if not equals_issues(out) else None
+
+
 def equals_reason_text(words: list[str]) -> str:
     items = " / ".join(f"`{w}`" for w in words)
     return ("zsh は未 quote の語の先頭の `=` を command の path に展開し、 見つからないと `not found` で止まって "
@@ -173,6 +196,17 @@ def main() -> int:
     issues = find_issues(cmd)
     eq_words = equals_issues(cmd)
     if not issues and not eq_words:
+        return 0
+    fixed = None if issues else equals_rewrite(cmd)
+    if fixed is not None:
+        # 止めずに書き換えて通す (2026-10-12 本人「1と2を実装しよう」)。 判断 (permissionDecision) は付けない =
+        # 書き換えた command が通常の許可の判定 (allow rule・classifier) を受ける。 付けると判定を飛ばして通すので付けない。
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "updatedInput": {**(data.get("tool_input") or {}), "command": fixed},
+            "additionalContext": "zsh-word-split-guard: `==` で始まる語を quote して実行した (" + " / ".join(f"`{w}`" for w in eq_words)
+                                 + " → 'quote')。 次からは最初から quote するか `-----` で区切る (shell-env.md#equals-word-expansion)",
+        }}, ensure_ascii=False))
         return 0
     reasons = ([reason_text(issues)] if issues else []) + ([equals_reason_text(eq_words)] if eq_words else [])
     print(json.dumps({"hookSpecificOutput": {
@@ -247,6 +281,20 @@ def selftest() -> int:
     eq("diff <(ls) =(ls)", False, "=(…) の process 置換")
     eq("python3 - <<'EOF'\nprint('==')\n==\nEOF", False, "heredoc の本文")
     eq("A= cmd; B=x cmd", False, "代入")
+
+    def rw(cmd: str, want: str | None, label: str) -> None:
+        nonlocal fails
+        got = equals_rewrite(cmd)
+        ok = got == want
+        print(("  ok   " if ok else "  FAIL ") + label + ("" if ok else f"  (got {got!r})"))
+        fails += 0 if ok else 1
+
+    rw("a; echo ===; b", "a; echo '==='; b", "書き換え: 区切りの echo ===")
+    rw('[ "$a" == b ] && echo y', '[ "$a" \'==\' b ] && echo y', "書き換え: [ ] の中の ==")
+    rw("ls && echo ====SECTION && echo ======", "ls && echo '====SECTION' && echo '======'", "書き換え: 2 語")
+    rw("echo =SECTION", None, "=X (=cmd を意図しうる) は書き換えない = 止める")
+    rw("echo ===; echo =python3", None, "1 つでも書き換えられない語があれば全体を止める")
+    rw("echo '==='", None, "問題の語が無ければ None")
     print("selftest:", "PASS" if not fails else f"{fails} FAIL")
     return 1 if fails else 0
 

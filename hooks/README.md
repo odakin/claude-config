@@ -86,4 +86,4 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[visible-html-comment-enforce.py](visible-html-comment-enforce.py)** — Stop: 最終メッセージに HTML comment (`<!-- ... -->`) が裸で出ていたら、 1 回だけ差し戻して置き場所を直させる
 - **[visible-html-comment-enforce.test.sh](visible-html-comment-enforce.test.sh)** — logic + incident-replay selftest
 - **[zsh-word-split-guard.py](zsh-word-split-guard.py)** — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash を実行前に止める (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion)。
-- **[zsh-word-split-guard.test.sh](zsh-word-split-guard.test.sh)** — 述語の selftest + hook 入出力 (deny の JSON / zsh 以外は無音 / opt-out / Bash 以外は無音)
+- **[zsh-word-split-guard.test.sh](zsh-word-split-guard.test.sh)** — 述語の selftest + hook 入出力 (deny の JSON / == だけの語は判断なしの updatedInput / zsh 以外は無音 / opt-out / Bash 以外は無音)
