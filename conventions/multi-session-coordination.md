@@ -859,18 +859,23 @@ request の単位。 mail の thread・台帳の項目のような「用事」 �
    結んだ台帳の項目) ので、 別名をまとめて 1 つの用事として claim する (全部取るか、 1 つも取らない)。
 2. **用事を求める側が求める前に claim する**: turn 終わりの検査は、 止める理由にする用事を先に claim し、 別の生きている
    session が持つ用事では止めない (他の理由で止めるときだけ「誰が対応中か」 を 1 行添える)。 一覧はその行に「<session> が
-   対応中」 を付けるだけで、 行は消さない。 記録の道具も記録する用事を claim し、 別の session が持つ用事への書き込みは止める
-   (読むだけは通す)。 人やエージェントが思い出して claim する形にしない。
+   対応中」 を付けるだけで、 行は消さない。 記録の道具も記録する用事を claim し、 別の session が処理中の用事への書き込みは
+   止める (読むだけは通す)。 claim には種類を持たせる = **処理** (読んで記録する) と **伝達** (user に伝えただけ)。 伝達の
+   claim は「二重に伝えない」 だけを求め、 他の session の処理は止めない (止めると、 伝えただけの session が lease の間ずっと
+   記録を塞ぐ)。 人やエージェントが思い出して claim する形にしない。
 3. **claim は lease と生死で切れる**: 先に取った session が持ち、 取り直せば lease が延びる。 lease が切れる・claim した
    session が終わる・手放す、 のどれかで切れ、 用事は元どおり出る (= 黙って落ちない)。 生死は runtime の session の登録で
-   引く (claim した時に登録に居た session が今は居ない = 終わった)。 登録に現れない session (無人の実行) は lease だけで切れる。
+   引く (claim した時に登録に居た session が今は居ない = 終わった)。 登録に現れない session は lease だけで切れる (無人の実行も
+   実行中は登録を書く runtime がある = 実測)。 session の終わりの hook で手放せば、 用事は lease を待たずに戻る。
 4. **台帳の項目の二重起票は claim と別の網で止める**: claim は「今どちらが手をつけているか」 しか言わない。 新しい項目を
    作る前に、 同じ thread を指す open な項目を作業 tree の全部 (未 commit・untracked = 並列 session が書いたばかりの file を
    含む) と upstream から引き、 あれば作らせない。 同じ thread の別の用事だと承知して分けるなら、 新しい項目から既存を
-   指す相互参照を書かせる (承知の記録が残る)。
+   指す相互参照を書かせる (承知の記録が残る)。 項目を作る操作の入口で止め、 そこを通らない作り方 (shell・script) は commit の
+   時に同じ検査で警告する。 commit の中では git が一時 index を env で渡すので、 その検査が他の repo を読む git からはその env
+   を外す (外さないと他の repo が commit 中の repo の index を読む = 実測)。
 5. **台帳は同じ checkout を使う session に即時に見える手元の state に置く**: claim は分の単位で、 履歴は永続の event 用。
-   claim を event として post すると、 turn ごとに post の費用 (board の clone) と履歴の増分がかかる。 別の機械との重なりは、
-   記録 (台帳の項目) の push と 4 の upstream の読みが網。
+   claim を event として post すると、 用事 1 件ごとに履歴が 1〜2 件増える。 別の機械との重なりは、 記録 (台帳の項目) の push と
+   4 の upstream の読みが網。 その網が別の機械の項目と重複を見つけた回を記録しておき、 実測で出てから claim を写すかを決める。
 
 参照実装 = ai-collaboration [`board/board_items.py`](../../ai-collaboration/board/board_items.py)
 (CLI と台帳の置き場 = [`CONTRACT.md#item-claims`](../../ai-collaboration/board/CONTRACT.md#item-claims))。
