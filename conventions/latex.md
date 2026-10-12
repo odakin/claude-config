@@ -120,7 +120,7 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 - `--math-markup=off`: 式中の add/del は色付けしない（式の変更は新版として出るが色は付かない）。数式の add/del markup はコンパイルを壊しやすいので既定 off にし、文章・構造・コメント削除の差分を確実に出す方を取る。
 - **「投稿用でなく差分レビュー用」と割り切る**: markup 除去・図 placeholder・数式色なしは*意図的な簡略化*。
 
-<a id="latexdiff-item-labels"></a>**項目の一覧と照らして読んでもらう diff には、 変更箇所に項目名の印を付ける**: 変更の一覧 (項目番号つき) と照らして diff を読む人のために、 新しい側だけに `\itemtag{A1}` のような印を足して diff する。 印の command は両側の preamble に同じ定義で置き（preamble は差分にならない）、 latexdiff の safe-command list に入れない（list に無い command は `\DIFadd` に包まれず、 印は下線の付かない普通の文字で出る）。 caption の中に置くなら `\DeclareRobustCommand` で定義する。 印は数式環境の中に置けないので、 式の変更は直前の地の文の行に付ける。 印の位置は行番号でなく行の書き出しの文字列で決めると、 原稿が少し動いても付け直せる。 変わった頁だけを渡すときも印で頁を選ぶ（`figure*` は後ろの頁へ流れるので、 頁を「節の頁」 で決めると図が抜ける）。 数式の変更を見せる diff では `--math-markup=off` を使わない（off は新しい式だけを無印で出すので、 式の項目が読めない。 coarse か whole、 上の表）。
+<a id="latexdiff-item-labels"></a>**項目の一覧と照らして読んでもらう diff には、 変更箇所に項目名の印を付ける**: 変更の一覧 (項目番号つき) と照らして diff を読む人のために、 新しい側だけに `\itemtag{A1}` のような印を足して diff する。 印の command は両側の preamble に同じ定義で置き（preamble は差分にならない）、 latexdiff の safe-command list に入れない（list に無い command は `\DIFadd` に包まれず、 印は下線の付かない普通の文字で出る）。 caption の中に置くなら `\DeclareRobustCommand` で定義する。 印は数式環境の中に置けないので、 式の変更は直前の地の文の行に付ける。 印の位置は行番号でなく行の書き出しの文字列で決めると、 原稿が少し動いても付け直せる。 変わった頁だけを渡すときは、 差分の色 (追加・削除) が出ている頁で選ぶ（道具 = [`scripts/latexdiff-changed-pages.py`](../scripts/latexdiff-changed-pages.py)、 説明の頁は `--keep 1`）。 印の頁だけで選ぶと、 頁をまたぐ節・段落の続きの頁と、 印を付けていない小さな変更 (参照の言い換えなど) の頁が落ちる（実測）。 頁を「節の頁」 で決めると、 `figure*` が後ろの頁へ流れて図が抜ける。 印は頁を選ぶためでなく、 一覧と照らして読むための目印。 数式の変更を見せる diff では `--math-markup=off` を使わない（off は新しい式だけを無印で出すので、 式の項目が読めない。 coarse か whole、 上の表）。
 
 **共著 review 中の原稿は「清掃版どうし」で diff する**: 着色 (`\red{...}`) と著者間問答が残っていると、 latexdiff では **着色の差が実質の差を埋める**。
 `ai-collaboration/scripts/review-markup-clean.py` を **基準版と現在版の両方に当ててから** latexdiff を回すと、 実質の変更だけが見える
@@ -240,6 +240,8 @@ comm -23 <(grep -o '^\\bibitem{[^}]*}' paper.bbl | sed 's/.*{\(.*\)}/\1/' | sort
 実 incident (2026-08-04): 共著論文の baseline 比較で `TEXINPUTS="$SRC:"` を使い、 共著者が当日追加した cite 1 件を「未解決」 と誤報告しかけた。 `.bbl` には `\bibitem` があるのに `.aux` の `\bibcite` が 1 件だけ足りない、 が決め手だった。 **根治は scratch dir を汚さないことでなく、 source dir 側の古い生成物を掴ませないこと** — source tree で一度でも in-place compile したことがあるなら常に該当する。
 
 ⚠️ 同じ shadowing は `\input` / `\includegraphics` の解決先でも起きる (= source dir 側の古い生成 tex / 古い図を掴む)。 cwd 優先は path 変数 3 つ全部に効かせる。
+
+⚠️ <a id="eq-number-from-current-build"></a>**人が式番号・頁で指したときも、 source dir に残った `.aux` で引かない**: 共著者が「(77) 式」 と書いたら、 その番号は相手が読んだ版 (送った PDF・いまの版) のもの。 source dir の `.aux` は前に in-place で組んだ古い版のことがあり、 同じ label が別の番号を指す (実測)。 いまの版を tree 外で組み、 その `.aux` の `\newlabel` で番号から label を引く。 相手が読んだのが差分の PDF なら、 その PDF の番号とも突き合わせる。
 
 ## <a id="text-structure-hierarchy"></a>文章の構造化と見出し階層 (`\paragraph` は `\subsubsection` より下)
 
