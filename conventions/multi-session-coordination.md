@@ -607,6 +607,7 @@ orientation 直後の silent stall (session は running のまま・活動 times
 | **(a) Agent per-call `model` 引数** | **alias のみ** (`sonnet`/`opus`/`haiku`/`fable`) | ✗ **alias は最新解決** = `opus` → `claude-opus-4-8[1m]` (実測)、 特定 version への固定は構造的に不能 | main から subagent を投げるだけ・model 保証不要な bg 調査 |
 | **(b) custom agent 定義** (`.claude/agents/*.md` の frontmatter `model:` + `effort:`) | **full model ID** (例: `claude-opus-5[1m]`)+`effort:` | ○ pin 可、 durable | delegate の既定を version 単位で固定・毎回 CLI 引数を書きたくない (⚠️ registry は session 開始時 load = mid-session 追加した定義は次 session から) |
 | **(c) headless CLI** (`claude --model <full-id> --effort <level> -p …`) | **full model ID** + effort | ○ pin 可、 起動時即時反映 | scheduled / cron / launchd から model を明示的に pin して走らせる・(b) との組合せ可 |
+| **(d) background CLI** (`claude --bg --model <full-id> --effort <level> '<hand-off 文>'`、 依頼元の session の Bash から) | **full model ID** + effort | ○ pin 可 (実測: 起動 1〜2 s、 banner に model と effort が出る) | 別 session の worker を**人の手でコピペせず**に起こす (掲示板の request の後、 hand-off 文を引数に)。 `claude attach <id>` で端末に開ける、 `claude agents --json` が desktop の session と並べて出す。 ⚠️ 依頼元の環境変数を継ぐ = 課金・account は起動した shell の設定 (banner で確かめる) |
 
 - ⚠️ **`spawn_task` (chip → 別 session) には model 引数が無い** (= chip はアプリ既定 model で開く)。 ⚠️ さらに **desktop app の model 選択は session 単位でなくアプリ全体** (2026-09-08 user 実測): chip を別 model で開こうとしてアプリの model を切り替えると、 起票元の session も同じ model に変わり、 context を読み直す (= 起票元が Fable で走行中に chip 用に Opus へ切り替えると、 親が Opus になって cache が捨てられる)。 ∴ chip の推奨 model は**起票元と同じ**を既定にし、 別 model にしたい chip は起票元の区切り (session 終了直前・長い待ちの前) で起動する。 起票文面の model tag はこの制約を前提に書く。 起票側から見て model は成り行きになる。
 - **chip の起動 UI は model / effort / worktree を自動で pin できないので、 推奨は起票文面で運ぶ** (2026-09-08): title か tldr 1 行目に `[model: <model> <effort>]` を worktree/local tag (§8) と並べて必ず書く。 既定 = 起票元と同じ model (上の picker 制約)、 別 model を推すときは「起票元の区切りで起動」 を添える。 tag が無いと user は起動のたびに「この model でいい？」 を聞く羽目になる (= 判断が人間に落ちる)。 個人層は PreToolUse warn hook で tag の存在を検査してよい (存在検査のみ、 中身の妥当性は起票者の判断)。 chip を通した独立 session に version pin したい needs が生じたら、 現状は upstream 依存 (= harness 側で model 引数を追加してもらう) しかない。
@@ -615,7 +616,7 @@ orientation 直後の silent stall (session は running のまま・活動 times
 ### 使い分け litmus
 
 - **model 保証 + 非 block + fresh context で足りる** → (b) の pinned custom agent、 または (c) の headless CLI で pin。
-- **真の並列 UI session が要る** (= 人が途中で対話する / user が独立に steer する) → `spawn_task` (§7)。 model 保証は諦める (= アプリ既定で開く) — その代わり真の並列と live steer が得られる。
+- **真の並列 session が要る** (= 人が途中で対話する / user が独立に steer する) → desktop の窓で steer するなら `spawn_task` (§7、 model はアプリ既定 = 諦める)、 model を固定したいなら (d) の `claude --bg` (窓は端末の `claude attach <id>`)。 どちらも真の並列と live steer が得られる。
 
 ### 注意
 

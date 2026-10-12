@@ -17,6 +17,10 @@
 #     fast-forward で最新にする (作業中の変更がある・分岐している時は触らない)。 URL は https:// か file:// だけ。
 #     別の場所に置いている人は環境変数にその path、 要らない人は none。 人に「隣に clone して」 と頼まない
 #     (人の記憶は carrier でない) ための項目 = 規約 conventions/shared-repo.md#collaborator-check
+#   board <board dir> [<engine の dir の環境変数>] -- <何か>   例: board board AI_COLLABORATION_DIR -- 掲示板の自分宛て
+#     この repo の中の掲示板 (<board dir>/board.json) で要注意の thread (引受待ち・検収待ち・質問) を session の冒頭に出す。
+#     engine = 環境変数の dir (既定 AI_COLLABORATION_DIR)、 無ければこの repo の隣の ai-collaboration (= 上の repo 行が clone する)。
+#     手元の写しを読む (network なし)。 要注意が無ければ何も出さない。 engine が無ければ黙る (repo 行の ❌ が先に出る)
 #
 # 出力: file / command / repo が揃っていれば何も出さない。 read は clone ごとの初回だけ出す
 # (印 = .git/collaborator-check.seen)。 欠けた項目・その場で clone した repo・初回の read を 1 block で出す。
@@ -41,6 +45,7 @@ missing=""
 ok=""
 reads=""
 done_now=""
+boards=""
 PARENT="$(dirname "$ROOT")"
 PULL_EVERY_MIN=1200
 
@@ -161,6 +166,19 @@ while IFS= read -r line || [ -n "$line" ]; do
         fi
       fi
       ;;
+    board)
+      bdir="${2:-board}"
+      envvar="${3:-AI_COLLABORATION_DIR}"
+      engine="$(printenv "$envvar" 2>/dev/null)"
+      [ "$engine" = "none" ] && continue
+      [ -n "$engine" ] && engine="$(expand_home "$engine")" || engine="$PARENT/ai-collaboration"
+      start="$engine/board/board-session-start.py"
+      if [ -f "$ROOT/$bdir/board.json" ] && [ -f "$start" ] && command -v python3 >/dev/null 2>&1; then
+        text="$(python3 "$start" --no-sync --plain --root "$ROOT/$bdir" 2>/dev/null)"
+        [ -n "$text" ] && boards="$boards
+$text"
+      fi
+      ;;
     *)
       missing="$missing
   ⚠️ .collaborator-check.conf の読めない行: $line"
@@ -172,18 +190,24 @@ show_reads=0
 [ "$FIRST" = 1 ] && [ -n "$reads" ] && show_reads=1
 [ "$ALL" = 1 ] && [ -n "$reads" ] && show_reads=1
 
-if [ -z "$missing" ] && [ -z "$done_now" ] && [ "$show_reads" = 0 ] && [ "$ALL" = 0 ]; then
+if [ -z "$missing" ] && [ -z "$done_now" ] && [ "$show_reads" = 0 ] && [ "$ALL" = 0 ] && [ -z "$boards" ]; then
   exit 0
 fi
 
-echo "🧩 この共有リポを手元で使う準備 (tools/collaborator-check。 設定 = .collaborator-check.conf)"
-[ "$show_reads" = 1 ] && [ "$ALL" = 0 ] && echo "  この clone で初めての session:"
-[ "$show_reads" = 1 ] && printf '%s\n' "${reads#?}"
-[ -n "$done_now" ] && printf '%s\n' "${done_now#?}"
-[ -n "$missing" ] && printf '%s\n' "${missing#?}"
-[ "$ALL" = 1 ] && [ -n "$ok" ] && printf '%s\n' "${ok#?}"
-if [ -n "$missing" ] || [ -n "$done_now" ] || [ "$show_reads" = 1 ]; then
-  echo "  → agent はこの block を user に 1 項目 1 行で伝える (❌ は直すまで毎回出る)"
+if [ -n "$missing" ] || [ -n "$done_now" ] || [ "$show_reads" = 1 ] || [ "$ALL" = 1 ]; then
+  echo "🧩 この共有リポを手元で使う準備 (tools/collaborator-check。 設定 = .collaborator-check.conf)"
+  [ "$show_reads" = 1 ] && [ "$ALL" = 0 ] && echo "  この clone で初めての session:"
+  [ "$show_reads" = 1 ] && printf '%s\n' "${reads#?}"
+  [ -n "$done_now" ] && printf '%s\n' "${done_now#?}"
+  [ -n "$missing" ] && printf '%s\n' "${missing#?}"
+  [ "$ALL" = 1 ] && [ -n "$ok" ] && printf '%s\n' "${ok#?}"
+  if [ -n "$missing" ] || [ -n "$done_now" ] || [ "$show_reads" = 1 ]; then
+    echo "  → agent はこの block を user に 1 項目 1 行で伝える (❌ は直すまで毎回出る)"
+  fi
+fi
+if [ -n "$boards" ]; then
+  printf '%s\n' "${boards#?}"
+  echo "  → 自分 (この session) 宛ての依頼・検収があれば、 最初の返答で user に 1 行で伝え、 作業の始めに inbox --sync で読む"
 fi
 
 if [ "$FIRST" = 1 ] && [ "$ALL" = 0 ] && [ -n "$SEEN" ]; then

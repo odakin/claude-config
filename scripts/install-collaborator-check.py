@@ -27,6 +27,9 @@ repo 自身に project の SessionStart hook を持たせ、 **相手が repo �
 `--item 'repo tool-repo https://github.com/<owner>/tool-repo TOOL_REPO_DIR -- 道具'` = この repo の隣に無ければ
 session 開始時に clone し、 あれば 20 時間に 1 回 fast-forward で最新にする (人に clone を頼まない。 URL は https:// か file://)
 (既に同じ行が conf にあれば足さない)。 commit と push はしない。 CLAUDE.md に足す文面は最後に出す (保護 file なので書かない)。
+`--item 'board board AI_COLLABORATION_DIR -- 掲示板の自分宛て'` = この repo の中の掲示板 (`board/`) で要注意の thread
+(引受待ち・検収待ち・質問) を、 相手の session の冒頭に出す (engine = 隣の ai-collaboration、 手元の写しを読む。
+実測: 共同研究者側の session は engine を持つだけで掲示板を見ず、 依頼が止まったままだった)。
 
 ## 限界
 
@@ -55,7 +58,7 @@ TOOLS = Path("tools") / "collaborator-check"
 CONF = ".collaborator-check.conf"
 HOOK_CMD = 'bash "$CLAUDE_PROJECT_DIR/tools/collaborator-check/collaborator-check.sh"'
 GITIGNORE_LINE = "!.claude/settings.json"
-KINDS = ("file", "command", "read", "repo")
+KINDS = ("file", "command", "read", "repo", "board")
 
 CONF_HEADER = """# .collaborator-check.conf — この共有リポを各自の手元で使うのに要るもの
 # 書式と挙動の正本 = tools/collaborator-check/collaborator-check.sh の冒頭
