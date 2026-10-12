@@ -384,6 +384,7 @@
 - **[lib/macos_apps.py](lib/macos_apps.py)** — Discover macOS app bundles and read their declared identity without launching them.
 - **[lib/mail_delivery.py](lib/mail_delivery.py)** — Gmail で送ったメールが「届かなかった」 ことを、 送る前と送った直後に機械で拾う部品。
 - **[lib/mail_intake.py](lib/mail_intake.py)** — 「人が自分に宛てて書いた mail で、 まだ誰も読んで処分していないもの」 (受付の待ち行列) の判定と並べ方（送り主が人か・宛先が自分か / 行列の組み立て / 古さと期限による印 / 表示行と最古の年齢。 docs/convention-design-principles.md#unstaffed-intake-queue、 --selftest）
+- **[lib/mail_repeat.py](lib/mail_repeat.py)** — 「同じ差出人から同じ件名の未読が、 別スレッドで日をまたいで積み上がる」 を拾う純関数
 - **[lib/mail_watch.py](lib/mail_watch.py)** — 既知スレッドを辿るだけでは拾えない mail を拾う helper（待ち項目の検索条件 / 決着済み案件への自動督促の判定 / 本文 text の取り出し。 Gmail API の service を受け取る、 python3 mail_watch.py で selftest）
 - **[lib/merge-hook-event.sh](lib/merge-hook-event.sh)** — settings.json への hook event merge (単一リスト駆動)
 - **[lib/merge-hook-event.test.sh](lib/merge-hook-event.test.sh)** — merge_hook_event の self-test (hermetic、 実 settings.json 不使用)
