@@ -163,12 +163,13 @@ scope の中の file でも、 **相対 path の基準を取り違えると開�
 - markdown link の href = **絶対 path** (表示文字列は file 名でよい)。 基準を覚えていなくても壊れない
 - inline code に path を書くなら、 **session を始めたフォルダからの path** (repo 名から書く)。 repo の中からの path を inline code に書くと、 押せるのに開けない link になる
 - 例示の path (`path/to/file.md` 等) も inline code に入れると押せるリンクになる (実在を見ないので必ず開けない)。 例示は fenced code block に入れるか backtick を付けない (fence の中はリンクにならない)
+- **右パネルはフォルダを開かない** (file だけ)。 「この中の file を見て」 と渡すときは中の file を 1 本ずつ link する。 フォルダごと渡すなら desktop の host tool (`reveal_path`) で Finder に出す
 
 **表示で原因を見分ける** (日本語 UI の文言):
 
 | 表示 | 原因 |
 |---|---|
-| 「このファイルが見つかりませんでした」 + 「削除または移動された可能性があります。」 | フォルダの中だが、 連結した path に file が無い = **基準の取り違え**を先に疑う |
+| 「このファイルが見つかりませんでした」 + 「削除または移動された可能性があります。」 | フォルダの中だが、 連結した path に file が無い = **基準の取り違え**を先に疑う。 **link の先がフォルダのときも同じ表示**になる (実測: 在るフォルダの絶対 path) |
 | 「このファイルは作業ディレクトリの外にあります」 | 連結した path が scope の外 = [§chat-link-rendering-scope](#chat-link-rendering-scope) |
 | 「見つかりませんでした」 + 「…または作業ディレクトリの外にあります。」 | 上の 2 つのどちらか |
 | 「このファイルは、このリモートコントロールセッションを実行しているマシン上にあり、ここからは読み込めませんでした。…」 | [#rc-chat-panel-no-render](#rc-chat-panel-no-render) |
