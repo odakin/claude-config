@@ -8,7 +8,7 @@
     {
       "name": "16 進だけの token を形から外さない (git の短い hash を識別子と見なす)",
       "pairs": [
-        ["        return bool(self.hex_rx and self.hex_rx.fullmatch(tok))\n", "        return False\n"]
+        ["        return bool(self.hex_rx and self.hex_rx.fullmatch(tok) and not tok.isdigit())\n", "        return False\n"]
       ],
       "expect_fail": ["git の短い hash の形"],
       "expect_pass": ["既知の一覧に在るものは 16 進に見えても置き換える"]
@@ -60,6 +60,14 @@
       ],
       "expect_fail": ["今の path が番号に落ちるなら止まる"],
       "expect_pass": ["plan-current: dry-run は書かない"]
+    },
+    {
+      "name": "数字だけの token も 16 進として形から外す (番号を消し残す)",
+      "pairs": [
+        ["        return bool(self.hex_rx and self.hex_rx.fullmatch(tok) and not tok.isdigit())\n", "        return bool(self.hex_rx and self.hex_rx.fullmatch(tok))\n"]
+      ],
+      "expect_fail": ["数字だけの token (番号) は 16 進に当たっても形から外さない"],
+      "expect_pass": ["git の短い hash の形"]
     }
   ]
 }
