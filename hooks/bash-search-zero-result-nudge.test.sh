@@ -113,6 +113,26 @@ assert_fire "B5: tail -f → grep (stream 監視 idiom) → silent" 0 \
 assert_fire "B6: sed 置換 (s///、 -n なし) → grep → silent" 0 \
   '{"tool_name":"Bash","tool_input":{"command":"sed \"s/foo/bar/\" /tmp/x.txt | grep bar"},"tool_response":{"stdout":"bar","stderr":""}}'
 
+# 別 command の truncator と grep は 1 本の pipeline ではない (実測の誤発火 3 形)
+assert_fire "B7: a | tail -1; b | grep (; で区切った別 command) → silent" 0 \
+  '{"tool_name":"Bash","tool_input":{"command":"git fetch -q 2>&1 | tail -1; git remote -v | grep -v fork"},"tool_response":{"stdout":"origin\thttps://example.invalid/x.git (fetch)","stderr":""}}'
+
+assert_fire "B8: a | head -1 && b | grep -c (&& で区切った別 command) → silent" 0 \
+  '{"tool_name":"Bash","tool_input":{"command":"git status -sb | head -1 && git diff -U0 -- x.md | grep -c \"^@@\""},"tool_response":{"stdout":"## main\n1","stderr":""}}'
+
+assert_fire "B9: a || b | head; c | grep (|| を pipe と取り違えない) → silent" 0 \
+  '{"tool_name":"Bash","tool_input":{"command":"test -d /tmp/demo || ls /tmp | head -3\ncat /tmp/x.txt | grep foo"},"tool_response":{"stdout":"foo","stderr":""}}'
+
+assert_fire "B10: head -c N | grep -q MAGIC (形式の magic を真偽で判定) → silent" 0 \
+  '{"tool_name":"Bash","tool_input":{"command":"git cat-file -p HEAD:x.md | head -c 9 | grep -qa GITCRYPT && echo encrypted"},"tool_response":{"stdout":"encrypted","stderr":""}}'
+
+# 区切りを入れても、 同じ pipeline の中の逆順は従来どおり発火する
+assert_fire "B11: x; a | head -60 | grep (同じ pipeline の逆順) → fire" 1 \
+  '{"tool_name":"Bash","tool_input":{"command":"cd /tmp/demo; mycli --help | head -60 | grep -i import"},"tool_response":{"stdout":"","stderr":""}}'
+
+assert_fire "B12: head -c N | grep (-q なし = 窓の中を読む) → fire" 1 \
+  '{"tool_name":"Bash","tool_input":{"command":"curl -s https://example.invalid/ | head -c 5000 | grep -i title"},"tool_response":{"stdout":"","stderr":""}}'
+
 # === rate limit ===
 sdir="$(mktemp -d)"
 in_a='{"tool_name":"Bash","tool_input":{"command":"grep -rn needle /tmp/demo-repo-a/"},"tool_response":{"stdout":"","stderr":""}}'
