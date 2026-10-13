@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""flight-search-urls.py — 航空券の往復検索 URL を比較サイト別に作る (Kayak / Expedia)。 --selftest 内蔵。
+"""flight-search-urls.py — 航空券の往復検索 URL を比較サイト別に作る (Kayak / Expedia / Google フライト)。 --selftest 内蔵。
 
-Why: 航空会社の公式サイトは検索の前に bot 判定を置いていることが多く、 Google フライトは URL の自然文
-パラメータを受け付けず入力欄を 1 つずつ操作することになる (実測)。 Kayak と Expedia は URL だけで
-検索結果まで開ける (実測) ので、 内蔵 Browser pane の `navigate` に渡す URL をここで作る。
+Why: 航空会社の公式サイトは検索の前に bot 判定を置いていることが多い (実測)。 Kayak と Expedia は URL だけで
+検索結果まで開け、 Google フライトも `?q=` に英語の決まった形 (Flights to <着> from <発> on <日> through <日>)
+を入れたときだけ結果まで開ける (実測。 日本語の文や航空会社名を足した文は初期画面になる)。 内蔵 Browser pane の
+`navigate` に渡す URL をここで作る。
 手順・結果の読み方・止まる所 = conventions/flight-search.md。
 
 usage:
-  flight-search-urls.py <出発> <到着> <往路 YYYY-MM-DD> <復路 YYYY-MM-DD> [--site kayak|expedia|all]
+  flight-search-urls.py <出発> <到着> <往路 YYYY-MM-DD> <復路 YYYY-MM-DD> [--site kayak|expedia|google|all]
                         [--kayak-filter FS]
   flight-search-urls.py --selftest
 
@@ -18,6 +19,7 @@ usage:
     複数条件の組み合わせ書式は未実測なので、 1 回に 1 条件で使う。
   Expedia は URL で絞り込みを指定せず、 結果画面左の「航空会社」 欄で絞る (実測)。
   Expedia に都市 code (TYO 等) を渡した動作は未実測 = 空港 code を推奨。
+  Google フライトは都市 code (TYO) も空港 code も通る (実測)。 絞り込みは結果画面で (URL に航空会社名を足すと開けない)。
 
 出力: サイトごとに 1 行 `<site>\t<URL>`。 検索の実行はしない (ネットワークに出ない)。
 
@@ -53,6 +55,11 @@ def expedia_url(orig, dest, d1, d2):
     )
 
 
+def google_url(orig, dest, d1, d2):
+    q = f"Flights to {dest} from {orig} on {d1} through {d2}"
+    return "https://www.google.com/travel/flights?q=" + quote(q) + "&hl=ja&curr=JPY"
+
+
 def validate(orig, dest, d1, d2):
     errs = []
     for name, v in (("出発", orig), ("到着", dest)):
@@ -86,6 +93,9 @@ def selftest():
           == "https://www.expedia.co.jp/Flights-Search?trip=roundtrip&leg1=from:NRT,to:CDG,departure:2027/03/01TANYT"
              "&leg2=from:CDG,to:NRT,departure:2027/03/08TANYT&passengers=adults:1&options=cabinclass:economy&mode=search",
           "expedia 基本 (復路は出発・到着を入れ替える)")
+    check(google_url("TYO", "CDG", "2027-03-01", "2027-03-08")
+          == "https://www.google.com/travel/flights?q=Flights%20to%20CDG%20from%20TYO%20on%202027-03-01%20through%202027-03-08&hl=ja&curr=JPY",
+          "google 基本 (英語の決まった形、 着が先)")
     check(validate("nrt", "CDG", "2027-03-01", "2027-03-08") != [], "小文字 code を弾く")
     check(validate("NRT", "CDG", "2027-03-08", "2027-03-01") != [], "復路が往路より前を弾く")
     check(validate("NRT", "CDG", "2027/03/01", "2027-03-08") != [], "日付の区切りを弾く")
@@ -95,12 +105,12 @@ def selftest():
 
 
 def main():
-    ap = argparse.ArgumentParser(description="航空券の往復検索 URL を作る (Kayak / Expedia)")
+    ap = argparse.ArgumentParser(description="航空券の往復検索 URL を作る (Kayak / Expedia / Google フライト)")
     ap.add_argument("orig", nargs="?")
     ap.add_argument("dest", nargs="?")
     ap.add_argument("depart", nargs="?")
     ap.add_argument("ret", nargs="?")
-    ap.add_argument("--site", choices=["kayak", "expedia", "all"], default="all")
+    ap.add_argument("--site", choices=["kayak", "expedia", "google", "all"], default="all")
     ap.add_argument("--kayak-filter")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
@@ -119,6 +129,8 @@ def main():
         if a.kayak_filter and a.site == "expedia":
             print("note: --kayak-filter は Expedia には効かない (結果画面で絞る)", file=sys.stderr)
         print("expedia\t" + expedia_url(a.orig, a.dest, a.depart, a.ret))
+    if a.site in ("google", "all"):
+        print("google\t" + google_url(a.orig, a.dest, a.depart, a.ret))
     return 0
 
 

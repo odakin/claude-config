@@ -26,7 +26,7 @@ summary: 航空券の候補調べを agent が内蔵 Browser pane で行う手�
 
 ## <a id="google-flights-form"></a>Google フライトの入口 = 英語の決まった形の URL か、 入力欄の操作
 
-- **`?q=` に英語の決まった形を入れると結果画面まで開ける** (実測): `https://www.google.com/travel/flights?q=Flights%20to%20<着 code>%20from%20<発 code>%20on%20<YYYY-MM-DD>%20through%20<YYYY-MM-DD>&hl=ja&curr=JPY`。 発着は都市 code (`TYO`) でも空港 code でも通る。
+- **`?q=` に英語の決まった形を入れると結果画面まで開ける** (実測): `https://www.google.com/travel/flights?q=Flights%20to%20<着 code>%20from%20<発 code>%20on%20<YYYY-MM-DD>%20through%20<YYYY-MM-DD>&hl=ja&curr=JPY`。 発着は都市 code (`TYO`) でも空港 code でも通る。 URL は [`scripts/flight-search-urls.py`](../scripts/flight-search-urls.py) `--site google` が作る。
   日本語の文や、 航空会社名を足した英文 (「… Turkish Airlines」) を入れると、 **条件は入らず初期画面になる** (実測)。 決まった形で開けないときは、 入力欄を 1 つずつ操作する:
   1. 出発地の欄を click → 候補一覧から選ぶ (欄に文字が残っていると、 `cmd+a` では選択されず追記になる 〔実測〕)
   2. 目的地の欄に英語の都市名を type → 候補の空港を click
