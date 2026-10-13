@@ -141,6 +141,8 @@ scope の中の file でも、 **相対 path の基準を取り違えると開�
 | 絶対 path (`/…/file.md`) | そのまま (実測: 右パネルで開いた) |
 | `~/…` | home に展開 |
 | 本文に素で書いた絶対 path / `~/…` (拡張子つき) | 自動でリンクになる |
+| `[x](<path>)` (CommonMark の山括弧で囲んだ href) | **開けない**: 山括弧ごと path になる (実測 = 「見つかりませんでした」 の path 欄に `<…>` が付いて出た)。 囲まずに書き、 空白は `%20` にする (href は `decodeURI` してから解釈される) |
+| 濁点・半濁点を含む日本語の file 名 (Dropbox・macOS は濁点を分けた NFD で持つことがある) | 書いた字 (NFC) と disk 上の名前が正規化だけ違うと開けないことがある (実測 = 右パネルへの表示要求が「解決できない」、 link では未確認)。 ASCII の名前の写し (例 = repo の build 出力) に link するか、 SendUserFile で渡す。 見分け方 = `python3 -c "import os,unicodedata as u; print([u.is_normalized('NFC',n) for n in os.listdir('<dir>')])"` |
 | inline code の `dir/file.ext` | **形だけで**リンクになり (実測: 実在しない path も青く描かれた。 区切りの無い `file.md` と `dir/` はならない)、 相対 path と同じ基準で開く |
 
 連結した結果が、 そのフォルダか session に追加したフォルダ (`additionalDirectories` 等) の中にあれば開く。
