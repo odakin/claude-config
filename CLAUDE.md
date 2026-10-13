@@ -13,7 +13,7 @@ user LaunchAgent の 1 つは、 Claude デスクトップのフォルダ選択�
 
 0. Windows で `git` か実体の `python3` が無い (または Claude アプリが Git の関門で止まっている) なら、 先に bootstrap の 1 行を実行する (README の Quick start → Windows)。 `setup.sh` は Git Bash の上で動く。
 1. `./setup.sh` を最後まで走らせる。 冪等なので再実行しても壊れない。
-2. personal layer は、 user の `*-prefs` repo に `.claude-personal-layer` marker があれば自動で見つかる。 無ければ作るかを user に 1 回だけ聞く (step ごとに聞かない。 雛形 = [`templates/personal-layer/`](templates/personal-layer/))。
+2. personal layer は、 user の `*-prefs` repo に `.claude-personal-layer` marker があれば自動で見つかる。 無ければ作るかを user に 1 回だけ聞く (step ごとに聞かない。 雛形 = [`templates/personal-layer/`](templates/personal-layer/))。 作ると決まったら `bash scripts/new-personal-layer.sh <name>-prefs` を実行する。marker・雛形・Git の初期化を行い、global identity がある場合は初回 commit も作る。GitHub に置くと本人が選んだ場合は `--github` で private repo を作る。既存の個人層があれば停止する。
 3. 終わったら、 入ったもの・入れなかったもの (理由つき)・次に足せるもの (MCP server / scheduled task / 追加の `conventions/` など) を報告する。
 
 [`README.md`](README.md) の `## For Claude` 節 (英) と [`README.ja.md`](README.ja.md) の `## Claude へ` 節 (日) は、 CLAUDE.md を開かずに README から入る agent のための本節の写し。 本節を変えたら同じ commit で 2 つの README も直す。
@@ -203,7 +203,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (322 file + formcase/ 26 module + lib/ 68 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (324 file + formcase/ 26 module + lib/ 68 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式

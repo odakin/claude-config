@@ -6,6 +6,14 @@ See [`docs/personal-layer.md`](../../docs/personal-layer.md) for the conceptual 
 
 ## How to use
 
+From claude-config, run `bash scripts/new-personal-layer.sh my-prefs --name 'Your name'`.
+The helper refuses an existing personal layer, copies the core templates, replaces the
+home-title and path placeholders, and initializes a `main` branch. It commits only
+when global Git identity is set. Choose `--github` to create a private GitHub repo.
+Fill in your remaining profile and repository fields, then rerun `setup.sh`.
+
+The manual equivalent follows:
+
 1. Pick a directory next to claude-config:
    ```bash
    mkdir -p ~/Claude/my-prefs
