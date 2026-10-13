@@ -143,15 +143,20 @@ git-crypt unlock ~/.secrets/git-crypt.key
 
 Recommended practices:
 - **Keep the backup off the machine.** Another folder on the same disk is not a backup, because it is lost together with the machine. Use a place you can open from another device with a separate login (cloud storage, a password manager) or a USB drive.
-- **Text form** for a password manager or a note field: `base64 -i ~/.secrets/<repo>.key | pbcopy` on macOS (`base64 -w0 ~/.secrets/<repo>.key` on Linux). Clear the clipboard afterwards with `pbcopy < /dev/null`.
-- **Check that the backup restores before relying on it.** This round trip prints nothing secret:
+- **In cloud storage, keep only an encrypted backup.** A plaintext key there lets anyone who can open that storage decrypt the repo. Encrypt it with a passphrase, the same way as the shared-repo backups that `setup.sh` restores:
   ```bash
-  base64 -D -i <backup file> | cmp - ~/.secrets/<repo>.key && echo match
+  /usr/bin/openssl enc -aes-256-cbc -pbkdf2 -salt -in ~/.secrets/<repo>.key -out <cloud folder>/<repo>.key.enc
   ```
-  On Linux, use `base64 -d <backup file>`. Making a backup and being able to open it are separate claims ([`secret-handoff.md#backup-round-trip`](../conventions/secret-handoff.md#backup-round-trip)).
-- **Restore** with `base64 -D -i <backup file> -o ~/.secrets/<repo>.key && chmod 600 ~/.secrets/<repo>.key`.
+  Keep the passphrase outside that storage (a password manager, for example). Put the backup's file name (not its path) on the first line of `.claude/git-crypt-backup` in the repo, and keep that file in plaintext (`.claude/git-crypt-backup !filter !diff` in `.gitattributes`). On a new machine, `setup.sh` (Step 5b-pre) then finds the backup in the cloud folder, asks for the passphrase, and places the key at `~/.secrets/<repo>.key`.
+- **Keep the plain text form only in a password manager**, which encrypts what it stores: `base64 -i ~/.secrets/<repo>.key | pbcopy` on macOS (`base64 -w0 ~/.secrets/<repo>.key` on Linux). Clear the clipboard afterwards with `pbcopy < /dev/null`.
+- **Check that the backup restores before relying on it.** These round trips print nothing secret. For the encrypted backup:
+  ```bash
+  /usr/bin/openssl enc -aes-256-cbc -d -pbkdf2 -in <backup>.key.enc | cmp - ~/.secrets/<repo>.key && echo match
+  ```
+  For the text form: `base64 -D -i <backup file> | cmp - ~/.secrets/<repo>.key && echo match` (on Linux, `base64 -d <backup file>`). Making a backup and being able to open it are separate claims ([`secret-handoff.md#backup-round-trip`](../conventions/secret-handoff.md#backup-round-trip)).
+- **Restore**: run `setup.sh` (it uses `.claude/git-crypt-backup`). By hand, decrypt with `/usr/bin/openssl enc -aes-256-cbc -d -pbkdf2 -in <backup>.key.enc -out ~/.secrets/<repo>.key`, then run `chmod 600 ~/.secrets/<repo>.key` only if openssl succeeded. If it failed, delete the output file before retrying, because a failed decryption leaves garbage that looks like a key. For the text form, use `base64 -D -i <backup file> -o ~/.secrets/<repo>.key`.
 - **Record where the backup is (the location, never the value) somewhere readable without the key**, such as the repo's plaintext `CLAUDE.md`. A note inside the encrypted part cannot be read at the moment you need it ([`secret-handoff.md#do-not-store-inside-the-lock`](../conventions/secret-handoff.md#do-not-store-inside-the-lock)).
-- If you encrypt the backup itself, use a strong passphrase and keep the passphrase apart from the backup.
+- **If a plaintext copy ever reached cloud storage, delete it from the service's deleted-files area too.** Cloud services keep deleted files restorable for a while.
 - Test restoration periodically
 
 ## Troubleshooting

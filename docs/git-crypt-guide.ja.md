@@ -218,15 +218,20 @@ Dropbox の共有フォルダパスが手元と違う場合: `mdfind -name "my-r
 
 推奨プラクティス：
 - **控えはその機械の外に置く。** 同じディスクの別フォルダは控えにならない (機械ごと一緒に失う)。 別の端末から別のログインで開ける場所 (クラウドストレージ、 パスワード管理アプリ) か USB ドライブに置く
-- **文字列にする** (パスワード管理アプリやメモ欄に貼るとき): macOS は `base64 -i ~/.secrets/<repo>.key | pbcopy` (Linux は `base64 -w0 ~/.secrets/<repo>.key`)。 貼り終えたらクリップボードを `pbcopy < /dev/null` で空にする
-- **頼る前に、 控えから戻せることを確かめる。** 次の往復は秘密を何も印字しない:
+- **クラウドストレージには暗号化した控えだけを置く。** 平文の鍵を置くと、 そのストレージを開ける人なら誰でも repo を復号できる。 上の「共有リポでの自動復元」 の控えと同じ方式でパスフレーズ暗号化する:
   ```bash
-  base64 -D -i <控えの file> | cmp - ~/.secrets/<repo>.key && echo match
+  /usr/bin/openssl enc -aes-256-cbc -pbkdf2 -salt -in ~/.secrets/<repo>.key -out <クラウドのフォルダ>/<repo>.key.enc
   ```
-  Linux は `base64 -d <控えの file>`。 「控えを作った」 と「控えを開ける」 は別の主張 ([`secret-handoff.md#backup-round-trip`](../conventions/secret-handoff.md#backup-round-trip))
-- **戻し方**: `base64 -D -i <控えの file> -o ~/.secrets/<repo>.key && chmod 600 ~/.secrets/<repo>.key`
+  パスフレーズはそのストレージの外 (パスワード管理アプリなど) に置く。 控えの file 名 (path ではない) を repo の `.claude/git-crypt-backup` の 1 行目に書き、 その file は平文にしておく (`.gitattributes` に `.claude/git-crypt-backup !filter !diff`)。 別のマシンでは `setup.sh` (Step 5b-pre) がクラウドのフォルダから控えを探し、 パスフレーズを聞いて `~/.secrets/<repo>.key` に置く
+- **文字列のままの控えはパスワード管理アプリにだけ置く** (中身を暗号化して保管する): macOS は `base64 -i ~/.secrets/<repo>.key | pbcopy` (Linux は `base64 -w0 ~/.secrets/<repo>.key`)。 貼り終えたらクリップボードを `pbcopy < /dev/null` で空にする
+- **頼る前に、 控えから戻せることを確かめる。** 次の往復は秘密を何も印字しない。 暗号化した控えなら:
+  ```bash
+  /usr/bin/openssl enc -aes-256-cbc -d -pbkdf2 -in <控え>.key.enc | cmp - ~/.secrets/<repo>.key && echo match
+  ```
+  文字列の控えなら `base64 -D -i <控えの file> | cmp - ~/.secrets/<repo>.key && echo match` (Linux は `base64 -d <控えの file>`)。 「控えを作った」 と「控えを開ける」 は別の主張 ([`secret-handoff.md#backup-round-trip`](../conventions/secret-handoff.md#backup-round-trip))
+- **戻し方**: `setup.sh` を走らせる (`.claude/git-crypt-backup` を使う)。 手で戻すなら `/usr/bin/openssl enc -aes-256-cbc -d -pbkdf2 -in <控え>.key.enc -out ~/.secrets/<repo>.key` で復号し、 openssl が成功したときだけ `chmod 600 ~/.secrets/<repo>.key` を打つ。 失敗したら、 できた file を消してからやり直す (復号に失敗すると、 鍵のように見えて使えない中身が残る)。 文字列の控えは `base64 -D -i <控えの file> -o ~/.secrets/<repo>.key`
 - **控えの場所 (値ではなく場所だけ) を、 鍵なしで読める所に書いておく** (例: その repo の平文の `CLAUDE.md`)。 暗号化した側に書いたメモは、 必要になったときに読めない ([`secret-handoff.md#do-not-store-inside-the-lock`](../conventions/secret-handoff.md#do-not-store-inside-the-lock))
-- 控え自体を暗号化するなら強いパスフレーズを使い、 パスフレーズは控えと別の場所に置く
+- **平文の控えを一度でもクラウドに置いたら、 そのサービスの「削除済み」 からも消す。** クラウドのサービスは、 消した file をしばらく復元できる形で残している
 - 定期的に復元テストを実施
 
 ## トラブルシューティング
