@@ -70,11 +70,14 @@ git-crypt status
 git commit -m "Initial commit (git-crypt encrypted)"
 ```
 
-`git-crypt status` lists every file as `encrypted:` or `not encrypted:`; only the files you meant to leave readable should be in the second group. Before the first push, confirm that a committed blob really is ciphertext. Check it as a yes/no and never print its bytes, because if encryption failed those bytes are the plaintext:
+`git-crypt status` lists every file as `encrypted:` or `not encrypted:`; only the files you meant to leave readable should be in the second group. Before the first push, confirm that a committed blob really is ciphertext. Check it as a yes/no and never print its bytes, because if encryption failed those bytes are the plaintext. Push only inside the branch where the check passed; a `git push` on its own next line would run after a failed check too:
 
 ```bash
-git cat-file -p HEAD:<an encrypted file> | head -c 9 | grep -qa GITCRYPT && echo encrypted || echo "PLAINTEXT - do not push"
-git push
+if git cat-file -p HEAD:<an encrypted file> | head -c 9 | grep -qa GITCRYPT; then
+  echo encrypted && git push
+else
+  echo "PLAINTEXT - do not push"
+fi
 ```
 
 Files matching the `.gitattributes` patterns are now encrypted on GitHub.

@@ -70,11 +70,14 @@ git-crypt status
 git commit -m "Initial commit (git-crypt encrypted)"
 ```
 
-`git-crypt status` は各 file を `encrypted:` か `not encrypted:` で出す。 後者に並ぶのが、 平文で残すつもりの file だけであることを確かめる。 最初の push の前に、 commit した blob が本当に暗号文かを確かめる。 中身は印字せず、 真偽だけで見る (暗号化に失敗していれば、 印字した先頭はそのまま平文になる):
+`git-crypt status` は各 file を `encrypted:` か `not encrypted:` で出す。 後者に並ぶのが、 平文で残すつもりの file だけであることを確かめる。 最初の push の前に、 commit した blob が本当に暗号文かを確かめる。 中身は印字せず、 真偽だけで見る (暗号化に失敗していれば、 印字した先頭はそのまま平文になる)。 push は確認が通った分岐の中でだけ打つ (次の行に `git push` を置くと、 確認に落ちた後でも走る):
 
 ```bash
-git cat-file -p HEAD:<暗号化される file> | head -c 9 | grep -qa GITCRYPT && echo encrypted || echo "PLAINTEXT - do not push"
-git push
+if git cat-file -p HEAD:<暗号化される file> | head -c 9 | grep -qa GITCRYPT; then
+  echo encrypted && git push
+else
+  echo "PLAINTEXT - do not push"
+fi
 ```
 
 `.gitattributes` のパターンにマッチするファイルが GitHub 上で暗号化される。
