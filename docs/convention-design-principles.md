@@ -3667,6 +3667,20 @@ origin: 実測 (検出には掛かっていた依頼が、 開始時の一覧で
 一般形 = 認識に依存する検査は、 認識の入力を同じ強さで守る。 例 = 原稿の数式の guard ([`conventions/manuscript-claim-ownership.md#mechanism`](../conventions/manuscript-claim-ownership.md#mechanism))。
 近い原則 = 検出器の設定は導出する ([#detector-config-must-be-derived](#detector-config-must-be-derived))。
 
+### <a id="state-detector-source-must-move"></a>8.83 状態を読む検出器は、 状態を 1 回変えて読み値が動くのを見てから入れる — 源が古い写しのことがある
+
+状態 (許可・設定・接続) を file や cache から読んで「切れている」 と知らせる検出器は、 源が今の状態を映していなければ、 判定の論理が正しくても誤報を出し続ける。
+設定の保存先は OS の版や機械の移行で移り、 前の場所の file は消えずに残る
+(実測: 設定を画面で変えても読んでいた file は書き換わらず、 更新日時は機械の移行より前だった。 判定は「切れている」 のまま、 本人が直した後も知らせ続けた)。
+
+- **入れる前に 1 回、 状態を変えて読み直す** — 読み値が動かない源は使わない。 状態を変えられないなら、 file の更新日時が最後に変えた時より新しいかを見る。
+- **同じ源の中の比較は源の正しさを示さない** — 許可された対象と切れた対象の値が違って見えても、 それは過去のある時点の差かもしれない (古い写しの中でも比較は「もっともらしく」 揃う)。
+- **読めない・古い源は「不明」 として黙る** — 「切れている」 と言い切るのは、 源が生きていると確かめた後だけ。 誤報が続くと、 その知らせの面ごと読まれなくなる。
+- **誤報を出したら、 直すか取り下げるまでを同じ turn で** — 残すと、 本人が状態を直した後も知らせが消えない。
+
+例 = macOS の通知の設定の file ([`conventions/macos-claude-app-notifications.md#macos-notification-prefs`](../conventions/macos-claude-app-notifications.md#macos-notification-prefs))。
+近い原則 = 近似した検出器は実物に fixture で固定する ([#slug-detector-pinned-to-renderer](#slug-detector-pinned-to-renderer))、 検出の失敗はゼロの位置から ([#detection-zero-location](#detection-zero-location))。
+
 ## <a id="environment-literal-placement"></a>24. 環境に依存する値は「配る物」 に焼かない — 実行時に導くか、 導けない形式なら install 時に生成する
 
 ### <a id="literal-placement-question"></a>24.1 判別の 1 問
@@ -3726,6 +3740,7 @@ origin: 実測 (検出には掛かっていた依頼が、 開始時の一覧で
 
 | 日付 | 変更 | 動機 |
 |------|------|------|
+| 2026-10-13 | §8.83 新設「状態を読む検出器は、 状態を 1 回変えて読み値が動くのを見てから入れる — 源が古い写しのことがある」 (#state-detector-source-must-move) | 設定の file を源にした検出器が、 本人が設定を直した後も「切れている」 と誤報を出し続けた (実測)。 file は機械の移行で残った古い写しだった |
 | 2026-10-10 | §8.12g 新設「前提は、 それを使う人の入口で機械が満たす — 自動配線の作り方」 (#self-provisioning-prerequisites)、 §8.12d の 2 から参照 | 共有リポが別の公開 repo の道具を「隣に clone してある」 前提で使い、 その clone を説明書きで共同編集者に頼む形だった (点検の script も「無い」 と出すだけ)。 判断の要らない取得は入口でその場で済ませ、 配線は依存する側が持ち込み、 依存を作る道具が配線の command を出す形に一般化 |
 | 2026-10-09 | §8.82 新設「形で見分ける guard は、 見分けの元 (定義) の変化も止める — でないと 2 段の編集で抜かれる」 (#recognizer-inputs-are-protected) | 利用者定義の macro で包んだ式を guard が見ていなかった穴を塞ぐ実装で、 別 context の検品が 2 段の編集・範囲の汚染・解決漏れを順に見つけた (実測) |
 | 2026-10-03 | §8.79 新設「受付に担当がいない待ち行列 — 表示をどれだけ磨いても、 読む主体と刻限が無ければ『読まないと急ぎと分からない依頼』 は残る」 (#unstaffed-intake-queue / #unclassified-defaults-to-loud) | 検出には掛かっていた依頼が、 開始時の一覧では件数に畳まれたまま読まれなかった (実測)。 過去の対策は検出と表示の追加で、 処理する主体を決めたものが無かった |

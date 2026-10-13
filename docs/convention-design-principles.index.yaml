@@ -921,6 +921,10 @@ sections:
     legacy: "8.82"
     level: 3
     title: "8.82 形で見分ける guard は、 見分けの元 (定義) の変化も止める — でないと 2 段の編集で抜かれる"
+  - id: state-detector-source-must-move
+    legacy: "8.83"
+    level: 3
+    title: "8.83 状態を読む検出器は、 状態を 1 回変えて読み値が動くのを見てから入れる — 源が古い写しのことがある"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
