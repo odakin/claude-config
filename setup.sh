@@ -37,7 +37,7 @@
 #        （conventions/hook-authoring.md#killed-hook-stub）
 #   6d. zsh の interactive_comments を有効化（貼り付けたコマンドの行内 `#` が
 #        argv に化けて壊れるのを防ぐ保険。conventions/shell-env.md
-#        #no-inline-comments-in-pasted-commands。odakin は自動 / 他は tip 表示のみ）
+#        #no-inline-comments-in-pasted-commands。owner / --recommended は自動、その他は案内）
 #   9.  python-docx XML 宣言 auto-patch をインストール（Word「破損」回避）
 #   10. (macOS) pty-leak mitigation の案内（--recommended で user watchdog、
 #        conventions/macos-claude-app-pty-leak.md）

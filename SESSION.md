@@ -1,10 +1,12 @@
 # SESSION — claude-config
 
-最終更新: 2026-10-12
+最終更新: 2026-10-13
 
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
+
+- **初回導入と委任の成果報告** — 導入の opt-in・ログ配置・個人層作成・試験の修正を反映。次は Claude の最小 Agent の実 API 呼出しで報告文面を確認する (自己試験まで検証済み)。正本 = [報告条項](conventions/multi-session-coordination.md#worker-record-clause)、[導入 script](setup.sh)、[個人層 helper](scripts/new-personal-layer.sh)。
 
 - **並列 session の用事の claim** — 一般形 = [`multi-session-coordination.md#pending-item-claims`](conventions/multi-session-coordination.md#pending-item-claims)、 参照実装は ai-collaboration `board/board_items.py`。
 - **履歴から個人の識別子を消す書き換えと再発防止** — 道具 (`git-scrub-history.py`)・commit 時の識別子の検査・検査を切る操作の hook・書き換えられた remote への追従・旧 sha を今の sha に引く `git-rewrite-follow.py map` は入った。 規約 = [confidential-repo-boundary.md#role-words-in-names](conventions/confidential-repo-boundary.md#role-words-in-names) / [agent-rule-ownership.md#guard-escape-hatch](conventions/agent-rule-ownership.md#guard-escape-hatch)、 手順 = [docs/sensitive-repo-patterns.ja.md#pattern-2-5](docs/sensitive-repo-patterns.ja.md#pattern-2-5)
