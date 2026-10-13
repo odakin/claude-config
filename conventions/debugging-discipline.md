@@ -648,6 +648,13 @@ Codex の外部 Chromium browser では、公式の profile 選択契約と具�
    - 放置型か絶対時間型かは 1 回の測定では分からない: 短い一定間隔で撃ち続けても切れる → 絶対時間、 間隔を倍々に空けると切れる → 放置の上限 (経過時間とも両立するので、 別のログインで間隔の型を変えた 2 回目が要る)。
 6. **SQLite の時刻比較の罠** (Chromium の履歴・cookie DB を読むとき): 時刻は 1601-01-01 UTC からのマイクロ秒の整数。 `strftime('%s', …)` は **TEXT** を返し、 SQLite では整数の列と TEXT の比較が常に偽になる = **エラーなしの 0 件** になる。 `CAST(strftime('%s', …) AS INTEGER)` にするか、 整数を計算してから比べる。
 
+## <a id="aggregate-check-runtime"></a>集計検査の待ち時間
+
+`bash scripts/run-all-checks.sh` は多数の selftest・変異試験・shell 試験を順に回すため、
+環境によって十数分かかる。短い tool timeout で打ち切る前に、出力の進みと process の生存を確認する。
+長い実行は出力を一時 file に保存し、終了コードと末尾の PASS / FAIL の集計まで回収する。
+所要時間を固定の保証値にせず、個別の失敗は表示された test の command で切り分ける。
+
 ## 関連
 
 - [`CONVENTIONS.md §3`](../CONVENTIONS.md) — 4 軸 sweep の base 規約
