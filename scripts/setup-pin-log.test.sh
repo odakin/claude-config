@@ -32,13 +32,14 @@ PL="$T/home/Library/LaunchAgents/com.claude-config.pin-claude-cwd.plist"
 
 out="$(run)"
 check "1 fresh install loads"          '[ -e "$T/loaded" ] && [[ "$out" == *"Installing launchd agent"* ]]'
-check "2 log is per-user"              'grep -q "<string>$T/home/Library/Logs/pin-claude-cwd.log</string>" "$PL" && ! grep -q /tmp/ "$PL"'
+OLD_LOG="<string>/tmp/pin-claude-cwd.log</string>"   # 旧版の共有 log (Linux の mktemp は /tmp の下なので「/tmp/ を含まない」 では見ない)
+check "2 log is per-user"              'grep -q "<string>$T/home/Library/Logs/pin-claude-cwd.log</string>" "$PL" && ! grep -qF "$OLD_LOG" "$PL"'
 check "3 log dir exists"               '[ -d "$T/home/Library/Logs" ]'
 : > "$T/launchctl.log"; out="$(run)"
 check "4 re-run is a no-op"            '[[ "$out" == *"already loaded"* ]] && ! grep -q -E "bootstrap|bootout" "$T/launchctl.log"'
-sed -i '' "s#$T/home/Library/Logs/pin-claude-cwd.log#/tmp/pin-claude-cwd.log#" "$PL"   # an old-version plist
+sed "s#$T/home/Library/Logs/pin-claude-cwd.log#/tmp/pin-claude-cwd.log#" "$PL" > "$PL.tmp" && mv "$PL.tmp" "$PL"   # an old-version plist (sed -i は BSD と GNU で書き方が違う = 使わない)
 : > "$T/launchctl.log"; out="$(run)"
-check "5 old plist is replaced"        '[[ "$out" == *"plist changed"* ]] && grep -q bootout "$T/launchctl.log" && grep -q bootstrap "$T/launchctl.log" && ! grep -q /tmp/ "$PL" && [ -e "$T/loaded" ]'
+check "5 old plist is replaced"        '[[ "$out" == *"plist changed"* ]] && grep -q bootout "$T/launchctl.log" && grep -q bootstrap "$T/launchctl.log" && ! grep -qF "$OLD_LOG" "$PL" && [ -e "$T/loaded" ]'
 : > "$T/launchctl.log"; out="$(CLAUDE_PIN_CWD=0 run)"
 check "6 opt-out still removes"        '[ ! -e "$PL" ] || [[ "$out" == *"SKIPPED"* ]]'
 
