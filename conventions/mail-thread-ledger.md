@@ -32,6 +32,7 @@ entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house st
 
 1. **dry-run** (既定): `record-reply.py <項目 id | threadId | messageId | entry id>` → thread の全 message を「この entry に在る / 他所で記録済み / 未記録」 に分けて出し、 未記録の本文 (引用行を除く) と書く予定の差分を見せる。 項目 → thread は 3 経路 (cross_ref の inbox 参照 / email_ref / related_todo の逆引き) を読む。
 2. **--apply**: 台帳の月 file の home entry (結ぶ項目に link する最新の entry) に足す or 新規に作る (`--slug` か `--id`)、 結ぶ項目の現在地を `--next` で上書き。 書くのはこの 2 file だけ。 案件の正本・calendar・mail の label / 既読は書かない。
+   - ⚠️ `--next` は現在地の欄を丸ごと置き換える = **台帳を pull した後の dry-run が出す「今の現在地」 を読んでから組む**。 pull の前に見た現在地から組むと、 並列の session がその間に足した手順を消す (実測)。 消したら、 その場で新旧を合わせた 1 欄に書き直す
 3. **--check**: 全 entry の印と索引の整合 (印の id が索引にある / 印 = 索引の最新 / 日付順 / round-trip)。 `印 ≠ 最新` は loud に出る側の失敗 (silent な抑制ではない)。
 4. **--migrate <ledger>** (既存分): 印と索引を**追記**する。 索引に書くのは entry が **message として**記録した id (top-level messageId ∪ 全 string の `messageId:` / `mid:`) と一致する message だけ。 threadId と同値の root message は載せない (threadId は thread の記録であって root を読んだ記録ではない。 載せると message 専用の読み手の集合が変わる = 実測)。 散文は 1 字も変えず、 threadId / related_todo も足さない。 `--remigrate` は印のある entry の規則に外れる root の行だけ外す。 移行の前後で読み手の出力が変わらないことを実データで確かめてから commit する。
 5. **--relabel <ledger>** (索引の書き方を変えたとき): 既存の索引の向きと相手を今の規則で Gmail から引き直す。 id と日時は元の行のまま、 下書きを記録していた行は外して印が指していれば残る最新の行へ戻す。 Gmail に無い id の行・並列 session が書いた直後の行はそのまま。 索引と印以外の field は変えない (再 parse で検証)。 冪等、 cache を使わない (下書きが後で送られたことを隠すため)。 索引の名前は id から毎回引き直せる = 規則を変えたらもう一度流せばよい。
