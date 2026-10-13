@@ -20,6 +20,24 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 from staged_diff import staged_added_lines  # noqa: E402
 
+# 暗号化される file の行を見本に出すときの代わりの文字列。 staged_diff は textconv で git-crypt の file を
+# 平文に戻して読むので、 そのまま stderr に出すと暗号化した値 (口座番号・電話など) が端末と会話の記録に写る (実測)。
+MASKED_SAMPLE = "<暗号化される file の行 = 本文は出さない>"
+
+
+def encrypted_paths(paths, cwd: str | None = None) -> set[str]:
+    """paths のうち `.gitattributes` で filter=git-crypt の path (検査は続け、 見本の表示だけを伏せる)。"""
+    paths = [p for p in dict.fromkeys(paths) if p]
+    if not paths:
+        return set()
+    try:
+        result = subprocess.run(["git", "check-attr", "--stdin", "-z", "filter"], cwd=cwd, capture_output=True,
+                                input="\0".join(paths).encode("utf-8"), check=False, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return set(paths)  # 判定できないときは伏せる側に倒す
+    out = result.stdout.decode("utf-8", "replace").split("\0")
+    return {out[i] for i in range(0, len(out) - 2, 3) if out[i + 2] == "git-crypt"}
+
 
 SKIP_BASENAMES = {
     "pre-commit-sot-declaration-warn.py",
@@ -45,16 +63,20 @@ PHRASES = [
 ]
 
 
-def scan_added_lines(added: list[str]) -> list[str]:
+def scan_added_lines(added: list, masked: frozenset | set = frozenset()) -> list[str]:
+    """added = 行 (str) か (path, 行)。 masked の path の行は見本を伏せる (暗号化される file の値を端末に出さない)。"""
     warnings: list[str] = []
     seen: set[str] = set()
-    for line in added:
+    for item in added:
+        path, line = item if isinstance(item, tuple) else ("", item)
         for phrase in PHRASES:
             if phrase not in line or phrase in seen:
                 continue
             seen.add(phrase)
             sample = line.strip()
-            if len(sample) > 60:
+            if path in masked:
+                sample = f"{MASKED_SAMPLE} ({path})"
+            elif len(sample) > 60:
                 sample = sample[:57] + "…"
             warnings.append(f"{phrase!r}: {sample}")
             break
@@ -65,9 +87,28 @@ def skip_path(path: str) -> bool:
     return os.path.basename(path.strip()) in SKIP_BASENAMES
 
 
-def git_added_lines(cwd: str | None = None) -> list[str]:
+def git_added_lines(cwd: str | None = None) -> list[tuple[str, str]]:
     # binary (PDF 等) を含む commit でも落ちず、 同じ commit の text file は読む (lib/staged_diff.py)
-    return [text for _path, _lineno, text in staged_added_lines(cwd=cwd, skip=skip_path)]
+    return [(path, text) for path, _lineno, text in staged_added_lines(cwd=cwd, skip=skip_path)]
+
+
+def masked_paths(added: list[tuple[str, str]], cwd: str | None = None) -> set[str]:
+    return encrypted_paths([path for path, _text in added], cwd=cwd)
+
+
+def encrypted_commit_case() -> bool | None:
+    """一時 repo で filter=git-crypt の file に trigger を足し、 見本が伏せられ値が出ないか (git 無し = None)。"""
+    with tempfile.TemporaryDirectory() as td:
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+        git = lambda *a: subprocess.run(["git", *a], cwd=td, env=env, capture_output=True, check=False)
+        if git("init", "-q").returncode != 0:
+            return None
+        Path(td, ".gitattributes").write_text("values.md filter=git-crypt diff=git-crypt\n", encoding="utf-8")
+        Path(td, "values.md").write_text("携帯の正本は 000-0000-0000\n", encoding="utf-8")
+        git("add", "-A")
+        added = git_added_lines(cwd=td)
+        warnings = scan_added_lines(added, masked_paths(added, cwd=td))
+        return bool(warnings) and all("000-0000-0000" not in w and MASKED_SAMPLE in w for w in warnings)
 
 
 def binary_commit_case() -> bool | None:
@@ -112,6 +153,11 @@ def run_selftest() -> int:
         print("  [SKIP] staged binary + text: git not available")
     else:
         checks.append(("staged binary + text: warning still fires for the text file", fired))
+    masked = encrypted_commit_case()
+    if masked is None:
+        print("  [SKIP] encrypted file: git not available")
+    else:
+        checks.append(("filter=git-crypt file: warning fires with the sample masked (no value printed)", masked))
     ok = True
     for label, condition in checks:
         print(f"  [{'PASS' if condition else 'FAIL'}] {label}")
@@ -123,7 +169,8 @@ def run_selftest() -> int:
 def main() -> int:
     if "--selftest" in sys.argv:
         return run_selftest()
-    warnings = scan_added_lines(git_added_lines())
+    added = git_added_lines()
+    warnings = scan_added_lines(added, masked_paths(added))
     if warnings:
         print("Warning: staged additions contain a source-of-truth declaration:", file=sys.stderr)
         for warning in warnings:
