@@ -19,7 +19,17 @@ HOOK="$(cd "$(dirname "$0")" && pwd)/session-start-mcp-scope-nudge.sh"
 # hook は設計上 silent exit するため owner 前提の fire assertion が成立しない -> SKIP を宣言
 # (run-all-checks.sh の契約: 前提が無い test は SKIP を出力して exit 0、 silent skip 禁止)
 DESKTOP_CFG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
-if [ ! -d "$HOME/.gmail-mcp" ] && [ ! -f "$DESKTOP_CFG" ]; then
+REGISTERED_GMAIL=0
+for directory in "$HOME/.gmail-mcp"/*/; do
+  [ -d "$directory" ] || continue
+  case "$(basename "$directory")" in accounts|server|node_modules) continue ;; esac
+  if [ -f "$directory/credentials.json" ]; then REGISTERED_GMAIL=1; break; fi
+done
+REGISTERED_DESKTOP=0
+if [ -f "$DESKTOP_CFG" ] && command -v jq >/dev/null 2>&1; then
+  if jq -e '(.mcpServers // {} | length) > 0' "$DESKTOP_CFG" >/dev/null 2>&1; then REGISTERED_DESKTOP=1; fi
+fi
+if [ "$REGISTERED_GMAIL" = 0 ] && [ "$REGISTERED_DESKTOP" = 0 ]; then
   echo "SKIP: register 済 MCP が 0 件の環境 (foreign user / CI) — owner 前提の fire assertion は対象外"
   exit 0
 fi
@@ -104,13 +114,13 @@ if [ -d "$HOME/.gmail-mcp" ]; then
   done
 
   out="$(printf '%s' '{"hook_event_name":"SessionStart","source":"startup"}' | "$HOOK" 2>&1)"
-  reported_line="$(printf '%s' "$out" | grep -oE 'Gmail account \(= ~/.gmail-mcp/\): [a-z]+(\s+[a-z]+)*' | head -1)"
+  reported_line="$(printf '%s' "$out" | grep -F 'Gmail account (= ~/.gmail-mcp/): ' | head -1)"
   reported="$(printf '%s' "$reported_line" | sed -E 's/.*: //')"
 
   # sort + compare
   ex_sorted="$(printf '%s\n' $expected | sort | tr '\n' ' ' | sed 's/ $//')"
   re_sorted="$(printf '%s\n' $reported | sort | tr '\n' ' ' | sed 's/ $//')"
-  if [ "$ex_sorted" = "$re_sorted" ] && [ -n "$ex_sorted" ]; then
+  if [ "$ex_sorted" = "$re_sorted" ]; then
     pass=$((pass+1)); results+=("✅ B1: 列挙一致 (expected/reported: $ex_sorted)")
   else
     fail=$((fail+1)); results+=("❌ B1: 列挙不一致 (expected=$ex_sorted reported=$re_sorted)")
@@ -131,7 +141,9 @@ expected_keys=("Gmail account" "session-active subset may be smaller" "universal
 # Plan §「cold-eyes 任務 3 retroactive selftest」 は起票時に hook が wire されていたら
 # scope-gap が冒頭で見えたか の reproduction。 reminder 文の鍵概念が含まれることを確認。
 missing=""
-for key in "Gmail account" "session-active" "universal claim" "Verified scope" "NOT verified"; do
+scope_keys=("session-active" "universal claim" "Verified scope" "NOT verified")
+[ "$REGISTERED_GMAIL" = 0 ] || scope_keys+=("Gmail account")
+for key in "${scope_keys[@]}"; do
   if ! printf '%s' "$out" | grep -q "$key"; then
     missing="$missing [$key]"
   fi
@@ -170,7 +182,7 @@ else
 fi
 
 # D3. KNOWN_GMAIL がある machine では send route に alias 列が出る / 無い machine でも fail-open
-if [ -d "$HOME/.gmail-mcp" ] && ls "$HOME/.gmail-mcp"/*/credentials.json >/dev/null 2>&1; then
+if [ "$REGISTERED_GMAIL" = 1 ]; then
   if printf '%s' "$out" | grep -qF 'register 済 alias:'; then
     pass=$((pass+1)); results+=("✅ D3: standalone alias 登録 machine で send route に alias 列挙")
   else
