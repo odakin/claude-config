@@ -54,6 +54,9 @@ sections:
   - id: hook-git-env-cross-repo
     level: 3
     title: "§0 補足 14: hook から別 repo に git を打つときは `GIT_INDEX_FILE` を外す"
+  - id: tmp-path-not-absence-marker
+    level: 3
+    title: "§0 補足 12: test の一時 dir の path を「無いこと」 の印にしない — Linux の `mktemp -d` は `/tmp` の下"
   - id: bash32-heredoc-parser-bug
     legacy: "1"
     level: 2

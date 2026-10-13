@@ -238,6 +238,11 @@ origin: 印刷の gate hook の test で、 無効化の env switch を立てた
 - **実測**: 全 repo の pre-commit から呼ばれる個人層の検査が、 既定で特定の 1 repo を見る作りだった。 他の repo で path 指定の commit をすると、 その repo にしか無い script を「新規」 と誤判定し、 commit を止めた (普通の `git add` + `commit` では `GIT_INDEX_FILE` が相対 path で、 たまたま正しい index を指すので出ない = 気づきにくい)。
 - **直し方**: (1) 別 repo を見る検査は、 commit している repo がその repo のときだけ回す (`git rev-parse --show-toplevel` を比べる)。 (2) 本当に別 repo を読むなら、 子 process の env から `GIT_INDEX_FILE` / `GIT_DIR` / `GIT_WORK_TREE` / `GIT_OBJECT_DIRECTORY` を外す。 **再現** = 別 repo の index の path を `GIT_INDEX_FILE` に入れて、 対象 repo で `git diff --cached --name-only` を打つ。
 
+### <a id="tmp-path-not-absence-marker"></a>§0 補足 12: test の一時 dir の path を「無いこと」 の印にしない — Linux の `mktemp -d` は `/tmp` の下
+
+- 「旧版の `/tmp/…` の path が残っていない」 を確かめるのに `! grep -q /tmp/ "$file"` と書くと、 macOS (一時 dir = `/var/folders/…`) では通り、 Linux の CI (一時 dir = `/tmp/tmp.XXXX`) では、 test が作った正しい path 自体が `/tmp/` を含むので常に落ちる (実測)。 消えたはずの**値そのもの** (例 `<string>/tmp/old.log</string>`) を `grep -qF` で見る。
+- test の中で file を書き換えるときも `sed -i ''` (BSD) / `sed -i` (GNU) の差で片方が落ちる (GNU では `sed: can't read s#…` = 空の引数を script と取り、 script を file 名と取る)。 一時 file に書いて `mv` する。 push 前に GNU の挙動で回す道具 = [`scripts/with-gnu-userland.sh`](../scripts/with-gnu-userland.sh) ([#set-e-test-failure-report](#set-e-test-failure-report))。
+
 ## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug
 
 - <a id="hook-git-env-same-repo"></a>**逆向き = commit しようとしている同じ repo の staged を読む段は `GIT_INDEX_FILE` を残す**。 捨てると main の index を読み、 `git commit -- <path>` の一時 index にだけある staged を見落とし、 commit されない file を数える (実装例 = `scripts/check-history-growth.py` の `staged_warnings`、 一時 index を捨てる実装では落ちる test つき)。 1 本の script に両方の段があるなら、 git を呼ぶ関数を 2 つに分けて env の扱いを名前で区別する

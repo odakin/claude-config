@@ -45,6 +45,11 @@
       "match": "Workspace not trusted",
       "doc": "conventions/remote-control-server.md#ts-workspace-trust",
       "hint": "新しい config dir の headless 起動で、 作業 dir の trust が未承認"
+    },
+    {
+      "match": "sed: can't read s#",
+      "doc": "conventions/hook-authoring.md#tmp-path-not-absence-marker",
+      "hint": "BSD 版の sed -i '' を GNU の sed で走らせた形 (空の引数を script、 script を file 名と取る)。 一時 file に書いて mv する"
     }
   ]
 }
