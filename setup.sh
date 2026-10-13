@@ -366,35 +366,16 @@ fi
 PIN_LABEL="com.claude-config.pin-claude-cwd"
 PIN_PLIST="$HOME/Library/LaunchAgents/$PIN_LABEL.plist"
 PIN_SCRIPT="$SCRIPT_DIR/scripts/pin-claude-cwd.sh"
+# log は user ごとの場所に置く。 /tmp は Mac の全 user で共有なので、 別の user が先に作った
+# /tmp/pin-claude-cwd.log (0644) には書けず、 launchd が stdout を開けずに agent が毎回
+# EX_CONFIG (78) で終わる = pin が黙って効かない。
+PIN_LOG="$HOME/Library/Logs/pin-claude-cwd.log"
 
-if [ "$(uname -s)" = "Darwin" ]; then
-    if [ -f "$HOME/.claude/pin-claude-cwd.off" ] || [ "$CLAUDE_PIN_CWD" = "0" ]; then
-        echo ""
-        echo "=== Step 2b2: Claude folder-picker pin — SKIPPED (opted out) ==="
-        # Opt-out must also STOP a job a previous run already loaded — otherwise the
-        # marker says "off" while the agent keeps rewriting the preference.
-        if launchctl list "$PIN_LABEL" &>/dev/null; then
-            launchctl bootout "gui/$(id -u)" "$PIN_PLIST" 2>/dev/null
-            rm -f "$PIN_PLIST"
-            echo "  Stopped and removed previously-installed $PIN_LABEL."
-        fi
-    elif launchctl list "$PIN_LABEL" &>/dev/null; then
-        echo ""
-        echo "=== Step 2b2: Claude folder-picker pin — already loaded ($PIN_LABEL) ==="
-    elif ! defaults read com.anthropic.claudefordesktop &>/dev/null; then
-        # The pin only matters for the Claude desktop app. If its prefs domain
-        # doesn't exist, this is a CLI-only Mac — don't install a 1s poller it
-        # would never benefit from. Re-running setup.sh after first opening the
-        # desktop app picks it up.
-        echo ""
-        echo "=== Step 2b2: Claude folder-picker pin — SKIPPED (Claude desktop app not detected) ==="
-    elif [ -f "$PIN_SCRIPT" ]; then
-        echo ""
-        echo "=== Step 2b2: Installing launchd agent to pin the Claude folder picker ==="
-        mkdir -p "$(dirname "$PIN_PLIST")"
-        # launchd's default ThrottleInterval is 10s, which would floor StartInterval;
-        # set both so the rewrite actually fires every ~1s.
-        cat > "$PIN_PLIST" << PIN_EOF
+# 入れる plist の全文。 既に load 済みでも中身が違えば (= 古い版の setup.sh が入れた plist) 入れ直す。
+pin_plist_body() {
+    # launchd's default ThrottleInterval is 10s, which would floor StartInterval;
+    # set both so the rewrite actually fires every ~1s.
+    cat << PIN_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -415,12 +396,45 @@ if [ "$(uname -s)" = "Darwin" ]; then
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/pin-claude-cwd.log</string>
+    <string>$(xml_escape "$PIN_LOG")</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/pin-claude-cwd.log</string>
+    <string>$(xml_escape "$PIN_LOG")</string>
 </dict>
 </plist>
 PIN_EOF
+}
+
+if [ "$(uname -s)" = "Darwin" ]; then
+    if [ -f "$HOME/.claude/pin-claude-cwd.off" ] || [ "$CLAUDE_PIN_CWD" = "0" ]; then
+        echo ""
+        echo "=== Step 2b2: Claude folder-picker pin — SKIPPED (opted out) ==="
+        # Opt-out must also STOP a job a previous run already loaded — otherwise the
+        # marker says "off" while the agent keeps rewriting the preference.
+        if launchctl list "$PIN_LABEL" &>/dev/null; then
+            launchctl bootout "gui/$(id -u)" "$PIN_PLIST" 2>/dev/null
+            rm -f "$PIN_PLIST"
+            echo "  Stopped and removed previously-installed $PIN_LABEL."
+        fi
+    elif launchctl list "$PIN_LABEL" &>/dev/null && [ "$(cat "$PIN_PLIST" 2>/dev/null)" = "$(pin_plist_body)" ]; then
+        echo ""
+        echo "=== Step 2b2: Claude folder-picker pin — already loaded ($PIN_LABEL) ==="
+    elif ! launchctl list "$PIN_LABEL" &>/dev/null && ! defaults read com.anthropic.claudefordesktop &>/dev/null; then
+        # The pin only matters for the Claude desktop app. If its prefs domain
+        # doesn't exist, this is a CLI-only Mac — don't install a 1s poller it
+        # would never benefit from. Re-running setup.sh after first opening the
+        # desktop app picks it up.
+        echo ""
+        echo "=== Step 2b2: Claude folder-picker pin — SKIPPED (Claude desktop app not detected) ==="
+    elif [ -f "$PIN_SCRIPT" ]; then
+        echo ""
+        if launchctl list "$PIN_LABEL" &>/dev/null; then
+            echo "=== Step 2b2: Updating launchd agent to pin the Claude folder picker (plist changed) ==="
+            launchctl bootout "gui/$(id -u)" "$PIN_PLIST" 2>/dev/null
+        else
+            echo "=== Step 2b2: Installing launchd agent to pin the Claude folder picker ==="
+        fi
+        mkdir -p "$(dirname "$PIN_PLIST")" "$(dirname "$PIN_LOG")"
+        pin_plist_body > "$PIN_PLIST"
         launchctl bootstrap "gui/$(id -u)" "$PIN_PLIST" 2>/dev/null || launchctl load "$PIN_PLIST" 2>&1
         if launchctl list "$PIN_LABEL" &>/dev/null; then
             echo "  Installed and loaded: pins picker to $CLAUDE_DIR (opt out: touch ~/.claude/pin-claude-cwd.off)"

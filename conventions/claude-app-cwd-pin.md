@@ -26,7 +26,10 @@ value on a short interval:
 - **Pins to:** `<base>` = the parent of your `claude-config` checkout (where `setup.sh`
   clones your repos). Passed to the script as `$1` at install time.
 - **Interval:** every ~1 second (see the throttle note below)
-- **Log:** `/tmp/pin-claude-cwd.log` (normally empty)
+- **Log:** `~/Library/Logs/pin-claude-cwd.log` (normally empty). Per user, not `/tmp`: on a Mac
+  shared by several users, another user's `/tmp/pin-claude-cwd.log` is not writable, launchd
+  cannot open the log, and the agent exits with `EX_CONFIG` (78) on every run. Re-running
+  `setup.sh` replaces a loaded agent whose plist differs from the current one.
 
 This only affects the **Claude desktop app's folder picker**. It does not touch
 any other app, the CLI, or any file.
