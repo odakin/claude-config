@@ -122,7 +122,7 @@ rm -rf /tmp/plain /tmp/enc-paths
 
 - **付け替えより前の commit は古い鍵でしか読めない** — 新しい鍵の持ち主に古い版は見えない (共有の前の版を渡さない、 という意味ではちょうどよい)。 古い版の平文も消したいときは、 履歴の書き換えで「今は暗号化と宣言した path の平文だった版」 を新しい鍵で暗号化し直す ([`sensitive-repo-patterns.ja.md#pattern-2-5`](sensitive-repo-patterns.ja.md#pattern-2-5))
 - **鍵を作る・書き出す操作と、 付け替えの commit は本人の terminal で** (実測: Claude Code の auto mode は鍵の生成・書き出しを秘密の置き場への書き込みとして止める。 付け替えの直後は HEAD の暗号化 file が古い鍵のままなので、 HEAD を読む agent 側の検査も検査不能で止まる)。 agent には上の手順を script にして渡させる
-- **他の clone は、 古い鍵のまま pull しない** — 新しい鍵の commit を古い鍵で smudge できず、 変わった暗号化 file が作業 tree から消えたまま止まる (実測)。 順序は: 新しい鍵を置く → `git-crypt lock` → `git pull` (書き換えた履歴なら追従の道具) → `git-crypt unlock ~/.secrets/<repo>.key`。 もう壊れた clone は `git-crypt lock --force` → `git reset --hard origin/<branch>` → `git-crypt unlock <新しい鍵>` で戻る (未 commit の変更があれば先に退避)。 追従の道具 (`scripts/git-rewrite-follow.py`) は、 鍵が合わない clone を reset の前に止める
+- **他の clone は、 古い鍵のまま pull しない** — 新しい鍵の commit を古い鍵で smudge できず、 変わった暗号化 file が作業 tree から消えたまま止まる (実測)。 順序は: 新しい鍵を置く → `git-crypt lock` → `git pull` (書き換えた履歴なら追従の道具) → `git-crypt unlock ~/.secrets/<repo>.key`。 もう壊れた clone は `git-crypt lock --force` → `git reset --hard origin/<branch>` → `git-crypt unlock <新しい鍵>` で戻る (未 commit の変更があれば先に退避)。 追従の道具 (`scripts/git-rewrite-follow.py`) は、 鍵が合わない clone を reset の前に止める。 ⚠️ **`lock --force` が戻すのは暗号化 file だけ** — 壊れ方によっては新しい履歴の平文 file (`.gitattributes` など) の変更と新しい未追跡 file が作業 tree に残り、 追従の `reset --keep` が「未 commit の変更が重なる」 で止まる (実測)。 その時は残った file が新しい履歴の版と同じか (`git show origin/<branch>:<path> | cmp - <path>`) を確かめ、 同じなら退避してから追従をやり直す。 違う file は、 新しい履歴の古い版 (`git log -p origin/<branch> -- <path>` で探す) か手元の編集かを確かめてから扱う (実測では、 途中まで書かれた版が新しい履歴の少し前の版だった)
 - 鍵の配布は 下の §「共有リポでの自動復元」 の形で (暗号化した鍵を共有フォルダに置き、 パスフレーズだけ別経路)
 
 ## 別端末でのセットアップ
