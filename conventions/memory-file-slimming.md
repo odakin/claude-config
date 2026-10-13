@@ -257,7 +257,7 @@ gate ([`scripts/check-session-shape.py`](../scripts/check-session-shape.py)、 p
 
 | finding | 直し方 |
 |---|---|
-| `dated-heading` (日付を見出しにした節) | その案件の entry を探して**置き換える**。 無ければ `- <案件> — 現在地 / 次の一手 → [正本](link)` の 1〜2 行を足す。 「何をした」 は git log、 「何を決めた」 は DESIGN.md / 案件の記録へ |
+| `dated-heading` (日付を見出しにした節) | その案件の entry を探して**置き換える**。 無ければ `- <案件> — 現在地 / 次の一手 → [正本](link)` の 1〜2 行を足す。 「何をした」 は git log、 「何を決めた」 は DESIGN.md / 案件の記録へ。 ⚠️ 見出しの日付を本文へ移して finding を消すのは直しでない (実測 = README の節の中身 〔判断・照合・返事〕 は残ったまま)。 README の節なら、 中身を台帳・note へ移し、 README は入口の link だけにする |
 | `commit-hash` / `message-id` | 識別子は正本 (plan / DESIGN / 台帳 / inbox) に置き、 SESSION には正本への link だけ。 `最終更新: … (sweep 済: <hash>)` の 1 行は通る |
 | `long-line` (1000 byte 超) | 経緯を正本へ移し、 SESSION の行は現在地と次の一手に絞る |
 | `line-budget` (200 行を超えて育つ) | 案件ごとの現在地に組み直す。 残す価値のある経緯は SESSION-archive.md へ verbatim MOVE ([#verbatim-retreat](#verbatim-retreat))。 **縮める commit は通る** (予算 gate と同じ形 = [#commit-budget-gate](#commit-budget-gate)) |
