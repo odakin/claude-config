@@ -32,7 +32,7 @@ summary: Claude for Mac の通知が鳴らない原因を 5 層で切り分け�
 
 ## <a id="macos-notification-prefs"></a>macOS の通知許可と音量
 
-- `defaults export com.apple.ncprefs -` の `apps[]` で `bundle-id == com.anthropic.claudefordesktop` の `flags`。 観測からの bit 推定: 25 = 通知を許可 / 1 = バッジ / 2 = サウンド / 3 = バナー / 4 = 通知パネル。 **公開仕様ではない**ので、 「通知を許可している他の app と同じ bit が立っているか」 の比較で補強する (script がやる)。
+- `defaults export com.apple.ncprefs -` の `apps[]` で `bundle-id == com.anthropic.claudefordesktop` の `flags`。 観測からの bit 推定: 25 = 通知を許可 / 1 = バッジ / 2 = サウンド / 3 = バナー / 4 = 通知パネル。 **公開仕様ではない**ので、 「通知を許可している他の app と同じ bit が立っているか」 の比較で補強する (script がやる)。 ⚠️ **file が今の設定を映しているとは限らない**: 移行アシスタントで移した macOS 26 の機械で、 通知の設定を画面で変えても `~/Library/Preferences/com.apple.ncprefs.plist` が書き換わらず、 更新日時は移行前のままだった (今の設定は TCC の下の Group Containers 側)。 読む前に file の更新日時を見て、 古ければ許可の状態は「読めない」 と扱い、 本人に設定画面を見てもらう。
 - 同じ plist の `dnd_prefs` (中身は binary plist) の `dndMirrored` = 集中モードの「デバイス間で共有」。
 - 音量: `osascript -e 'get volume settings'` の `alert volume` と `output muted`。
 
