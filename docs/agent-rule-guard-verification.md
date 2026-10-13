@@ -243,3 +243,34 @@ engine の selftest が git の呼び出し回数を数える (件数に依ら�
 8. **候補の hook を本番の前に走らせる**: 候補 dir に engine への symlink を置き、 test が期待する相対 path (`../scripts/<engine>`) を満たしてから test を回す。 本番 path に写す前に赤を見つける (実測: 存在しない dir に書く場合の repo 解決の誤りを候補の段で捕まえた)。
 9. **data 形式の file は場所で判定する**: 記録の file (台帳・掲示板の event・manifest) に engine の名前を書いても lock しないこと、 制御 path (`.codex/hooks.json` 等) と manifest で宣言した data file と code file は lock のままであることを、 述語 engine と dispatcher の selftest で固定した。 新しい検査が変更前の述語で赤くなることは、 候補の selftest 部分を変更前の述語に継いだ変種 (= 修正前の対照) で確かめる ([DESIGN#wiring-lock-data-files-by-location](../DESIGN.md#wiring-lock-data-files-by-location))。
 10. **承認 CLI の allow の生存**: hook の `--liveness` は `~/.claude/settings.json` の `permissions.defaultMode` が `auto` で、 `Bash(python3 …<engine>.py *)` の形の allow が engine 2 本ぶん無ければ 🟡 を出す。 hook test の合成 HOME で「無い = 出る / 広い rule だけ = 出る / 片方だけ = 出る / 両方 = 沈黙 / auto でない = 沈黙」 を固定し、 変更前の hook では 3 件が赤になることを確かめた ([DESIGN#approval-cli-allow-in-auto-mode](../DESIGN.md#approval-cli-allow-in-auto-mode))。
+
+## <a id="apply-content-mode-idempotence"></a>apply の内容・属性・同一候補の検証
+
+`apply` と commit の構造差検査は、[dispatcher](../scripts/manuscript-claim-guard.py) の
+`authority_mode_changes` を共有する。内容の差分だけでは、新規 file や chmod の承認が commit 時に不足する。
+また、対象と候補の本文が同じという事実だけでは、HEAD と違う未承認の変更と、承認済みの再実行を区別できない。
+振る舞いと承認の条件は [規約の approval](../conventions/agent-rule-ownership.md#approval) が所有する。
+
+回帰試験は `apply_mode_selftests` に置き、合成 Git repo・transcript・一時 HOME と guard state だけを使う。
+実際に stage した内容へ `git-precommit` を呼び、記録を読むだけの試験と分けている。
+
+| 試験群 | 反例と正常例 | 件数 |
+|---|---|---|
+| `[apply-1]` | 新設の content と mode が同じ候補・発言の 1 記録となり commit を通る。別の本文・mode への承認転用は止まる。明示／省略 mode、属性だけの変更、空 file、新設の通常文書と参照行だけの既存例外も確認 | 15 |
+| `[apply-2a]` | HEAD と違い、既に候補と同じ file でも記録する。本文・inode・mtime を保持し commit を通す。別候補に古い発言を使う場合、発言も一致する承認も無い場合は止まる | 4 |
+| `[apply-2b]` | 承認済み再実行では対象と承認記録の bytes・mode・inode・mtime を変えない。別 session、repo 外、Git 検査不能を同一候補というだけで成功にしない | 4 |
+| `[apply-3]` | 規約と docstring が HEAD の検査、mode、承認済み再実行を説明している | 2 |
+
+mode の試験には、0600 の候補へ明示の `100755` を適用して 0700 を得る例を含む。
+Git の実行属性を合わせるために読み書きの権限まで広げていないこと、既存対象の属性を省略時に保つことを別々に検査する。
+
+修正前の `9e4050f2` へ追加試験だけを移すと、25 件のうち 20 件が失敗する。
+承認済みの同一候補で成功を返す正常例は旧版でも通り、2b の旧版赤は残る 3 つの境界例である。
+修正版 `c6921215` は既存 455 件と追加 25 件の selftest が成功し、
+[Linux の全体検査](https://github.com/odakin/claude-config/actions/runs/38339294506) も 330 成功・0 失敗。
+`approve_mode`・`unapproved`・`protected_changes`・`user_messages`・`quote_index` の AST は変更前と一致し、
+本人発言の照合や緩和語の判定の変更で試験を通していない。
+
+一律の早期 return の撤去だけでは HEAD の差を拾えず、apply 専用の mode 特例では commit と判定がずれる。
+このため、既存の記録経路と構造差の述語を共有し、承認確認の後で書込みの要否を決める形にした。
+Windows 実機の属性の扱いと、任意の shell 書込みを実行時に監視することは、この検証に含めない。
