@@ -126,10 +126,12 @@ AUTHORITY_CONFIG_REL = _rule_guard.MANIFEST_REL
 MATH_ENVS = ("equation", "align", "gather", "multline", "eqnarray", "flalign", "alignat", "displaymath")
 # \[ は前に続く backslash の数で読む: 奇数個の後ろの [ (表の行送り \\[0.3em] の後半) は式の始まりでない、
 # 偶数個 (\\\[ = 行送りの直後の式) は始まり。 閉じの \] も中身を backslash の対ごとに読み、 \\] の ] で閉じない。
+# 中身は次の \[ で打ち切る (\[ の中の \[ は LaTeX でも誤り)。 打ち切らないと、 閉じの無い \[ (verbatim の例示の
+# \[ a \\] など) が後ろの \] まで式を呑み、 \[ ごとに末尾まで読むので時間も 2 乗になる。
 # Python の re は可変長の後読みを持たないので、 前の backslash の対は span に含める (prose_tokens は \\ を読まない)。
 MATH_RE = re.compile(
     r"\\begin\{(?P<env>(?:" + "|".join(MATH_ENVS) + r")\*?)\}(?P<body>.*?)\\end\{(?P=env)\}"
-    r"|(?<!\\)(?:\\\\)*\\\[(?P<br>(?:[^\\]|\\.)*?)\\\]",
+    r"|(?<!\\)(?:\\\\)*\\\[(?P<br>(?:[^\\]|\\[^\[])*?)\\\]",
     re.S,
 )
 
@@ -4006,6 +4008,22 @@ def selftest() -> int:
     check("式の中の \\\\] は閉じでない、 \\\\\\] (行送り + 閉じ) は閉じ",
           list(math_regions("\\[ [a \\\\] b \\]\n").values()) == ["[a\\\\]b"]
           and list(math_regions("\\[ a \\\\\\]\n").values()) == ["a\\\\"])
+    check("行送り 2 つの直後の \\[ (\\\\\\\\\\[) も式の始まり",
+          list(math_regions("a \\\\\\\\\\[ x = y \\]\n").values()) == ["x=y"])
+    check("\\\\\\\\] (行送り 2 つ + ]) は閉じでない", list(math_regions("\\[ a \\\\\\\\] b \\]\n").values()) == ["a\\\\\\\\]b"])
+    check("閉じの無い \\[ は式にしない (\\\\] で閉じたことにしない)", math_regions("\\[ a \\\\] b\n") == {})
+    verb = ("\\begin{verbatim}\n\\[ a \\\\]\n\\end{verbatim}\n"
+            "\\begin{equation} p = q \\label{eq:pq} \\end{equation}\nBody.\n"
+            "\\begin{equation} u = v \\label{eq:uv} \\end{equation}\n\\[ t = 1 \\]\n")
+    check("閉じの無い \\[ (verbatim の例示) が後ろの式を呑まない",
+          sorted(math_regions(strip_tex_comments(verb))) == sorted(["eq:pq", "eq:uv", f"math#{sha8('t=1')}"]))
+    check("\\[ の中の \\[ で打ち切る (LaTeX でも誤り) = 後ろの \\[ … \\] だけが式",
+          list(math_regions("\\[ a \\[ b \\]\n").values()) == ["b"])
+    import time
+    started = time.monotonic()
+    math_spans("\\[ a \\\\] " * 20000)
+    math_spans("\\[ " * 20000)
+    check("閉じの無い \\[ の連続で 2 乗の時間にならない (各 200 KB 前後)", time.monotonic() - started < 5)
     print("[範囲]")
     note = "\\section{Introduction}\nFree text.\n\\begin{equation}q=1\\end{equation}\n"
     check("abstract の無い単独 .tex は範囲外", protected_changes("notes/n.tex", note, note.replace("q=1", "q=2"), None, {}) == [])
