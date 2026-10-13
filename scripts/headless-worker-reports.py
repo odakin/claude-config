@@ -543,7 +543,6 @@ def followup_regression(repo, case=None):
                 'env NOTE=sample command claude -p task', '/opt/sample/claude -p task',
                 'codex -m sample exec task', 'codex e task',
                 '/opt/sample/App.app/Contents/MacOS/codex exec task',
-                'cd "$SB" && caffeinate -i /opt/sample/codex exec --json -o out.md resume 0123abcd "task" < /dev/null',
                 'claude -p "$(cat prompt.txt)" < /dev/null',
                 "python3 /opt/sample/headless-record-clause-nudge.py --run claude -p task",
             ]
@@ -554,9 +553,11 @@ def followup_regression(repo, case=None):
             assert output('synthetic-parent').count('== 起動 ') == 2
             # Unsupported or nested execution still has a visible manual-inspection route.
             for c in ('if true; then claude -p task; fi', 'bash -c "cd /tmp; codex exec task"',
+                      'cd "$SB" && caffeinate -i /opt/sample/codex exec --json -o out.md resume 0123abcd "task" < /dev/null',
                       'echo "$(codex exec task)"'):
                 log.write_text(row(c))
-                assert '== 文字列候補 ' in output('synthetic-parent'), c
+                fallback = output('synthetic-parent')
+                assert '== 文字列候補 ' in fallback and '== 起動 ' not in fallback, c
             print('OK executable-position positives, multiple launches and unsupported-syntax fallback remain visible')
 
         if case in (None, 'retention'):

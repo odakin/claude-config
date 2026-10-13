@@ -30,6 +30,12 @@ from pathlib import Path
 
 import yaml
 
+_SAFE_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+
+
+def _yaml_safe_load(text):
+    return yaml.load(text, Loader=_SAFE_LOADER)
+
 
 def blocks(lines: list[str]) -> list[tuple[str | None, int, int]]:
     """top-level の key ごとの (key, 開始行, 終了行の次) を返す。 key の前の空行・comment 行は key=None の塊。"""
@@ -91,7 +97,7 @@ def edit(text: str, sets: dict[str, str], drops: list[str], after: str | None, c
 
 
 def verify(before: str, after_text: str, sets: dict[str, str], drops: list[str]) -> list[str]:
-    a, b = yaml.safe_load(before), yaml.safe_load(after_text)
+    a, b = _yaml_safe_load(before), _yaml_safe_load(after_text)
     if not isinstance(a, dict) or not isinstance(b, dict):
         return ["file 全体が mapping でない"]
     errs = []
@@ -113,7 +119,7 @@ def selftest() -> int:
     sets = {"status": "完了", "status_context": "閉じた", "decided": "2030-01-03 本人「OK」"}
     out = edit(src, sets, ["ask", "ask_default"], "status_context", {"status": "2030-01-03"})
     assert verify(src, out, sets, ["ask", "ask_default"]) == [], verify(src, out, sets, ["ask", "ask_default"])
-    d = yaml.safe_load(out)
+    d = _yaml_safe_load(out)
     assert d["task"] == "一行目 ask: これは本文\n二行目\n" and d["cross_ref"] == ["a", "b"], d
     assert "status: \"完了\"   # 2030-01-03" in out and list(d).index("decided") == list(d).index("status_context") + 1, out
     assert "ask" not in d and "ask_default" not in d and d["asked"] == "2030-01-02", d
@@ -126,7 +132,7 @@ def selftest() -> int:
         p = Path(tmp) / "t.yaml"
         p.write_text(src, encoding="utf-8")
         assert main([str(p), "--set", "status=完了", "--drop", "ask"]) == 0
-        assert yaml.safe_load(p.read_text(encoding="utf-8"))["status"] == "完了"
+        assert _yaml_safe_load(p.read_text(encoding="utf-8"))["status"] == "完了"
     print("yaml-set-top-keys selftest: ALL PASS (行頭の key だけを置き換え・本文の中の同じ語は触らない・ほかの key は不変を確かめる)")
     return 0
 
