@@ -422,6 +422,15 @@
           "timeout": 5
         }
       ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/chat-math-render-guard.py",
+          "timeout": 20
+        }
+      ]
     }
   ],
   "SubagentStart": [
