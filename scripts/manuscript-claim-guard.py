@@ -124,9 +124,12 @@ WIRING_SUFFIXES = _rule_guard.WIRING_SUFFIXES
 AUTHORITY_CONFIG_REL = _rule_guard.MANIFEST_REL
 
 MATH_ENVS = ("equation", "align", "gather", "multline", "eqnarray", "flalign", "alignat", "displaymath")
+# \[ は前に続く backslash の数で読む: 奇数個の後ろの [ (表の行送り \\[0.3em] の後半) は式の始まりでない、
+# 偶数個 (\\\[ = 行送りの直後の式) は始まり。 閉じの \] も中身を backslash の対ごとに読み、 \\] の ] で閉じない。
+# Python の re は可変長の後読みを持たないので、 前の backslash の対は span に含める (prose_tokens は \\ を読まない)。
 MATH_RE = re.compile(
     r"\\begin\{(?P<env>(?:" + "|".join(MATH_ENVS) + r")\*?)\}(?P<body>.*?)\\end\{(?P=env)\}"
-    r"|\\\[(?P<br>.*?)\\\]",
+    r"|(?<!\\)(?:\\\\)*\\\[(?P<br>(?:[^\\]|\\.)*?)\\\]",
     re.S,
 )
 
@@ -3972,6 +3975,37 @@ def selftest() -> int:
     check("近い綴りでも意味の反転は校正でない",
           not copyedit_only("The model is stable.", "The model is unstable.") and
           not copyedit_only("The rate grows.", "The rate drops."))
+    print("[表の行送り \\\\[…] は式の始まりでない]")
+    table = (
+        "\\documentclass{article}\n\\begin{document}\n"
+        "\\begin{abstract}\nThe toy table relaxes.\n\\end{abstract}\n"
+        "\\section{Setup}\n"
+        "\\begin{tabular}{cc}\n$a$ & $b$ \\\\[0.3em]\n$c$ & $d$ \\\\\n\\end{tabular}\n"
+        "\\begin{equation} p = q \\label{eq:pq} \\end{equation}\n"
+        "The body has $r = s$ inline.\n"
+        "\\begin{equation} u = v \\label{eq:uv} \\end{equation}\n"
+        "\\[ t = 1 \\]\n"
+        "\\end{document}\n"
+    )
+    st = strip_tex_comments(table)
+    check("表の \\\\[0.3em] の後ろを 1 つの式にまとめない (式 3 本がそれぞれの領域)",
+          sorted(math_regions(st)) == sorted(["eq:pq", "eq:uv", f"math#{sha8('t=1')}"]))
+    check("表の後の本文の inline 数式の変更は式の変更でない", ch(table.replace("r = s", "r = 2s"), table) == [])
+    check("表の後の式の変更は、 その式の label の領域として出る",
+          ch(table.replace("u = v", "u = 2v"), table) == ["eq:uv:change"])
+    old_math = re.compile(  # 直す前の読み方 = この fixture が誤りを突いていることの対照
+        r"\\begin\{(?P<env>(?:" + "|".join(MATH_ENVS) + r")\*?)\}(?P<body>.*?)\\end\{(?P=env)\}"
+        r"|\\\[(?P<br>.*?)\\\]", re.S)
+    old_first = old_math.search(st)
+    check("対照: 直す前の読み方では \\\\[0.3em] から最後の \\] までが 1 つの式 (eq:pq と eq:uv を呑む)",
+          old_first is not None and old_first.group("br") is not None
+          and "eq:pq" in old_first.group("br") and "eq:uv" in old_first.group("br"))
+    check("行送りの直後の \\[ (\\\\\\[) は式の始まり", list(math_regions("a \\\\\\[ x = y \\]\n").values()) == ["x=y"])
+    check("偶数個の backslash の後の [ (\\\\\\\\[2pt]) は式の始まりでない",
+          math_regions("a \\\\\\\\[2pt] b \\[ z = w \\]\n") == {f"math#{sha8('z=w')}": "z=w"})
+    check("式の中の \\\\] は閉じでない、 \\\\\\] (行送り + 閉じ) は閉じ",
+          list(math_regions("\\[ [a \\\\] b \\]\n").values()) == ["[a\\\\]b"]
+          and list(math_regions("\\[ a \\\\\\]\n").values()) == ["a\\\\"])
     print("[範囲]")
     note = "\\section{Introduction}\nFree text.\n\\begin{equation}q=1\\end{equation}\n"
     check("abstract の無い単独 .tex は範囲外", protected_changes("notes/n.tex", note, note.replace("q=1", "q=2"), None, {}) == [])
