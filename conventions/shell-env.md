@@ -293,6 +293,18 @@ git stash show --name-only 123456a   # error: 123456a is not a valid reference  
 
 <a id="stash-show-no-pathspec"></a>**同じ族の近縁 — `git stash show` は path を取らない**: `git stash show -p 'stash@{0}' -- <path>` は `--` の後ろも revision と読み `Too many revisions specified` で rc 1 (実測 git 2.39)。 stash の 1 file だけを見るなら、 stash の commit とその親の diff にする: `git diff 'stash@{0}^1' 'stash@{0}' -- <path>` (未追跡 file を含めた stash の分は `'stash@{0}^3'` 側)。 stash を drop する前に中身を file 単位で確かめる時に踏むが、 実体は **3.7% で user に壊れた手順を渡していた**バグだった。
 
+## <a id="dependent-step-inside-success-branch"></a>渡すコマンドで、 確認の結果に依る操作は、 確認が通った分岐の中に置く
+
+`<確認> && echo ok || echo NG` の形は、 確認が失敗しても最後の `echo` が成功するので、 行全体の終了コードは 0 になる。 次の行に確認の結果に依る操作 (`git push`・削除・上書き・鍵の配置) を書くと、 確認が落ちても操作が走る (実測: 手順書の「暗号文かを確かめる行」 の次の行に `git push` を書いていた)。 貼り付けて実行する人は、 表示を読む前に次の行まで実行している。
+
+- 依る操作は分岐の中に入れる:
+  ```sh
+  if <確認>; then <操作>; else echo "NG - <操作> はしない"; fi
+  ```
+- script の中なら、 操作の前に「確認に失敗したら止める」 行を置く (`<確認> || { echo NG; exit 1; }`)
+- `… && echo match` のような表示だけの確認の後ろには、 操作を続けて書かない
+- 失敗しても出力の file を残すコマンドがある (例: 復号に失敗した `openssl enc -d -out <file>` は使えない中身の file を残す)。 成功の分岐で次へ進み、 失敗の分岐ではその file を消す
+
 ## <a id="bound-command-runtime"></a>Bind reusable command runtimes at installation
 
 A successful `python3` invocation in one shell does not establish the runtime
