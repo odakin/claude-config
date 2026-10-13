@@ -714,7 +714,9 @@ def show_plan(cfg: Config, p: dict, out=print) -> None:
     h = p["home"]
     where = (f"{h[0]}/{h[1].name}:{h[2].get('id')}" if h else
              (f"新規 → {p['create']['ledger']}/{p['create']['path'].name}:{p['create']['id']}" if p["create"] else "新規 (id 未定)"))
-    out(f"\n● thread {p['tid']} ({p['account']}) — {len(p['msgs'])} 通 / 未記録 {len(p['new'])} / 他所で記録済み {len(p['known_elsewhere'])} / home = {where}")
+    out(f"\n● thread {p['tid']} ({p['account']}) — {len(p['msgs'])} 通 / 未記録 {len(p['new'])} / 他所で記録済み {len(p['known_elsewhere'])} / home へ反映 {len(p['record'])} / home = {where}")
+    if p["known_elsewhere"] and (p["home"] or p["create"]):
+        out("  (他所済も --apply で home の索引へ反映する。 未記録 0 でも反映対象が残る)")
     if len(p["cands"]) > 1:
         out(f"  (この thread の entry は {len(p['cands'])} 件: " + ", ".join(f"{c[0]}:{c[2].get('id')}" for c in p["cands"]) + " — home に足す。 他は触らない)")
     for m in p["msgs"]:
@@ -1258,6 +1260,35 @@ def _selftest() -> int:
               "t2 片方の台帳にしか無い entry (ledger-b の e3) も thread の entry として見つける")
         check("返事の本文です" in text and "> 前の引用" not in text, "dry-run は未記録の本文を引用行抜きで出す")
         check(before == {p: p.read_text(encoding="utf-8") for p in td.rglob("*.yaml")}, "t4 dry-run は file を byte 単位で変えない")
+        # 未記録が無くても、 他所済の message は home への反映対象。
+        known_gm = FakeGmail({("acct-a", m1): threads[("acct-a", m1)][:3]})
+        known_ns = argparse.Namespace(**vars(ns))
+        known_ns.no_todo = True
+        out_lines.clear()
+        check(run_record(cfg, known_ns, Ledger(cfg), known_gm, "2026-09-22", pr) == 0
+              and "未記録 0 / 他所で記録済み 2 / home へ反映 2" in "\n".join(out_lines)
+              and "他所済も --apply" in "\n".join(out_lines),
+              "他所済だけの dry-run も home への反映対象を表示する")
+        other_before = (td / "ledger-b" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8")
+        known_ns.apply = True
+        out_lines.clear()
+        check(run_record(cfg, known_ns, Ledger(cfg), known_gm, "2026-09-22", pr) == 0,
+              "他所済だけでも apply が exit 0")
+        known_home = next(e for e in _yaml_safe_load((td / "ledger-a" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8"))
+                          if e["id"] == "2026-09-20-e1")
+        check(harvest_entry(known_home) == {m1, m2, m3}
+              and {MSG_LINE_RE.fullmatch(row).group(1) for row in known_home.get("messages", [])} == {m1, m2, m3}
+              and known_home.get("recorded_upto") == f"messageId:{m3} (2026-09-22 02:00)"
+              and (td / "ledger-b" / "inbox" / "2026-09.yaml").read_text(encoding="utf-8") == other_before,
+              "他所済を home の索引と印へ反映し、 他所の entry は変えない")
+        known_ns.apply = False
+        out_lines.clear()
+        check(run_record(cfg, known_ns, Ledger(cfg), known_gm, "2026-09-22", pr) == 0
+              and "未記録 0 / 他所で記録済み 0 / home へ反映 0" in "\n".join(out_lines)
+              and "他所済も --apply" not in "\n".join(out_lines),
+              "反映後の dry-run は home への反映 0、 他所済の案内を残さない")
+        for path, original in before.items():
+            path.write_text(original, encoding="utf-8")  # 元の new + known の apply 検査を保つ
         ns.apply = True
         out_lines.clear()
         check(run_record(cfg, ns, Ledger(cfg), gm, "2026-09-22", pr) == 0, "apply が exit 0")

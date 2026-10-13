@@ -40,7 +40,7 @@ entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house st
 ## <a id="failure-modes"></a>3. 失敗の向き
 
 - **書いた後に再 parse して検証、 外れたら元の text に戻す** (entry 数 / 対象 entry の field / round-trip = 書いた id が harvester で拾われる)。 exit 3 = 検査不能・故障、 exit 1 = 違反 (enum 外・id 未定・項目が無い) と分ける ([`#failure-exit-equals-violation-exit`](../docs/convention-design-principles.md#failure-exit-equals-violation-exit))。
-- **項目を手で作ってから記録するときは、 項目に `email_ref` を書かない** (道具が `"threadId:<id>"` で書く)。 記録済みの集計は台帳と項目の両方から ID を拾うので、 先に項目へ messageId を書くとその message は「他所で記録済み」 に入り、 台帳の entry が作られない (実測)。
+- **項目を手で作ってから記録するときは、 項目に `email_ref` を書かない** (道具が `"threadId:<id>"` で書く)。 記録済みの集計は台帳と項目の両方から ID を拾うので、 先に項目へ messageId を書くとその message は「他所で記録済み」 に入るが、 `--apply` では home entry の作成・更新と索引への反映の対象になる (実測)。
 - **引けない thread は「未記録」 に倒さない** (auth / 404 / 一時失敗は「引けなかった」 と出す)。 項目の `email_ref` が返信の messageId だと threads.get は 404 になる = messages.get で本当の thread を引き直す。
 - **ID の読み手は正規化済みの文字列を受け取る**。`email_ref` から thread と message の候補を読むときは [`recorded_ids.py`](../scripts/lib/recorded_ids.py) の `harvest_text`、thread だけなら `harvest_thread_ids` を使う。正規表現を直接 `findall()` した返り値を Gmail や逆引きの key に渡さない (一般則 = [`multipath-key-normalization`](data-pipeline-automation.md#multipath-key-normalization))。
 - <a id="drafts-are-not-messages"></a>**下書きは message ではない**: threads.get は未送信の下書きも thread の message として返す。 除かないと、 記録の道具は下書きを「自分が送った」 と書き、 返事を見張る検出器は「最後は自分発 = 返事済み」 と読んで相手の未返信の mail を隠す (実測 = 下書きのまま止まった返信が記録済みになっていた)。 除くのは読む部品 1 か所 (`lib/gmail_read.normalize_messages`、 既定) = 同じ部品を使う検出器にも効く。 下書きかを見たい呼び手 (`--relabel`) だけ `include_drafts=True`。
