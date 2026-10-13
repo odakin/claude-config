@@ -344,7 +344,8 @@ def stop_reason(flavor: str, stamp: str) -> str:
         return ("The identity stamp did not lead any reply in this session's first turn. "
                 "End with a short message consisting only of this line (do not repeat the body):\n"
                 f"{stamp}")
-    return ("🖥 自己同定 stamp が、 この session の最初の turn のどの返信の 1 行目にもありません (I7)。 "
+    return ("🖥 自己同定 stamp が、 会話記録では この session の最初の turn のどの返信の 1 行目にも見つかりません (I7。 "
+            "表示された途中の text が記録に残らないこともある)。 "
             "次の 1 行だけの短い message を出して終わってください (本文の再掲は不要):\n"
             f"{stamp}")
 

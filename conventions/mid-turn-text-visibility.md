@@ -36,6 +36,13 @@ text) が context に鮮明に在るため参照が自然に感じられるが�
 (link / render) だけ**である。terminal への text dump を「見せた」に数えない
 規律 (chat の file 提示規約) も同じ核の別 instance。
 
+## <a id="shown-text-missing-from-transcript"></a>表示された途中の text が会話記録に残らないことがある
+
+ツール呼び出しの前に書いた途中の text が、 user には表示された (user がその文に応じた返事をした) のに、 会話記録 (transcript の jsonl) には 1 字も残っていなかった (実測 1 件。 同じ turn の後の途中の text は残っていた。 その間に user の途中の message が入っていた。 機序は未確認)。 上の 2 節と向きが逆で、 「記録にある ≠ 表示された」 だけでなく「表示された ≠ 記録にある」 も起きる。
+
+1. **会話記録で「その text を書いたか」 を判定する Stop hook は、 この形で偽陽性になる** (例 = session の最初の返事の 1 行目を確かめる検査)。 差し戻しは「足りない行だけの短い message を出す」 形にして実害を 1 行に抑え ([`hook-authoring.md#stop-hook-addendum-not-reemission`](hook-authoring.md#stop-hook-addendum-not-reemission))、 文面は「書かなかった」 と言い切らず「記録に見つからない」 と書く。
+2. **締めの sweep や RCA で会話記録から自分の発言を集めるとき、 途中の text は欠けうる** = 記録の 0 件を「言っていない」 の証明にしない。 user の返事がその text に応じていれば、 書いて表示されたことの証拠になる。
+
 ## <a id="html-comment-not-hidden"></a>逆向きの取り違え: 提示面は raw で出る — 「user に見えない印」 を最終メッセージに埋め込めない (2026-09-12)
 
 上の 2 節は「context に在るのに提示されない」 側だが、 同じ境界には逆向きの取り違えがある: **最終メッセージに置いた HTML comment (`<!-- ... -->`) は、 Claude Code の chat renderer では literal に表示される** (2026-09-12 desktop 実測 = user が応答末尾の marker を指して「こういうのが表示されるんのはなんで？」)。 GitHub 等の web markdown renderer で消えることを根拠に、 「user には不可視の印」 として最終メッセージに埋め込む設計は成立しない。 frontend 依存の可能性はあるが、 **消えることを前提にしてはならない**: 消えなかったときに user の画面が毎ターン汚れ、 しかも**それを Claude 側から観測できない** (= 表示落ちと同じ非対称で、 user の指摘まで分からない)。
