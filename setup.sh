@@ -39,13 +39,13 @@
 #        argv に化けて壊れるのを防ぐ保険。conventions/shell-env.md
 #        #no-inline-comments-in-pasted-commands。odakin は自動 / 他は tip 表示のみ）
 #   9.  python-docx XML 宣言 auto-patch をインストール（Word「破損」回避）
-#   10. (macOS) pty-leak mitigation の opt-in ヒント表示（自動 install しない、
+#   10. (macOS) pty-leak mitigation の案内（--recommended で user watchdog、
 #        conventions/macos-claude-app-pty-leak.md）
 #
 # 使い方:
 #   mkdir -p <base> && cd <base>
 #   gh repo clone <your-username>/claude-config
-#   cd claude-config && ./setup.sh [--no-clone] [--hammerspoon]
+#   cd claude-config && ./setup.sh [--no-clone] [--hammerspoon] [--recommended]
 #
 #   --no-clone : Step 5 (全リポ clone) を skip する。対話実行では flag が無くても
 #                clone 前に確認 prompt が出る (既定 = No)。非対話 (pipe / cron) は
@@ -60,15 +60,19 @@ REPO_DIRNAME="$(basename "$SCRIPT_DIR")"
 # --- 引数 parse ---
 NO_CLONE=0
 WANT_HAMMERSPOON=0
+WANT_RECOMMENDED="${CLAUDE_RECOMMENDED:-0}"
 for _arg in "$@"; do
     case "$_arg" in
         --no-clone) NO_CLONE=1 ;;
         --hammerspoon) WANT_HAMMERSPOON=1 ;;
+        --recommended) WANT_RECOMMENDED=1 ;;
         -h|--help)
-            echo "Usage: ./setup.sh [--no-clone] [--hammerspoon]"
+            echo "Usage: ./setup.sh [--no-clone] [--hammerspoon] [--recommended]"
             echo "  --no-clone   Skip Step 5 (cloning all your GitHub repos into $CLAUDE_DIR/)."
             echo "               Interactive runs also confirm before cloning (default: No)."
             echo "  --hammerspoon  Install the Hammerspoon config in Step 7 (opt-in; also CLAUDE_HAMMERSPOON=1)."
+            echo "  --recommended  Apply user-scoped tips: JHEP.bst, noreply email, zsh comments, macOS pty watchdog."
+            echo "                 Also CLAUDE_RECOMMENDED=1; never invokes the admin --persist option."
             exit 0 ;;
         *) echo "WARNING: unknown option: $_arg (ignored)" ;;
     esac
@@ -1162,7 +1166,7 @@ fi
 # ⚠️ 旧方式 (texmf-local + texhash) は ls-R が root 所有のマシンで texhash が
 # silent fail し「cp 成功・index されず・kpsewhich 不可視」 の死角を作っていた
 # (2026-07-24 実測 RCA: 4/7 install 分が一度も index されていなかった)。
-# odakin: 自動インストール / 他ユーザー: オプション表示のみ
+# owner または --recommended: 自動インストール / その他: 案内のみ
 JHEP_SRC="$SCRIPT_DIR/JHEP.bst"
 
 if [ -f "$JHEP_SRC" ] && command -v kpsewhich &> /dev/null; then
@@ -1182,7 +1186,7 @@ if [ -f "$JHEP_SRC" ] && command -v kpsewhich &> /dev/null; then
         if [ "$NEEDS_UPDATE" = true ]; then
             echo ""
             echo "=== Step 6b: JHEP.bst (TEXMFHOME) ==="
-            if [ "$GH_USER" = "odakin" ]; then
+            if [ "$GH_USER" = "odakin" ] || [ "$WANT_RECOMMENDED" = 1 ]; then
                 # 自分の端末: 自動インストール（sudo 不要）
                 mkdir -p "$BST_DIR" 2>/dev/null
                 if cp -f "$JHEP_SRC" "$BST_DST" 2>/dev/null; then
@@ -1207,7 +1211,7 @@ fi
 # 公開リポの commit author に実 email が焼き付くのを防ぐ。 各ユーザーの
 # GitHub noreply (= <id>+<login>@users.noreply.github.com) を gh api から
 # 導出する (= email をハードコードしない)。 既に noreply / 未設定なら no-op。
-# odakin: 自動適用 (idempotent) / 他ユーザー: 推奨 tip を表示のみ (非破壊)。
+# owner または --recommended: 自動適用 (idempotent) / その他: 案内のみ。
 CUR_EMAIL="$(git config --global user.email 2>/dev/null)"
 case "$CUR_EMAIL" in
     ""|*@users.noreply.github.com)
@@ -1218,7 +1222,7 @@ case "$CUR_EMAIL" in
         if [ -n "$NOREPLY" ]; then
             echo ""
             echo "=== Step 6c: GitHub noreply email ==="
-            if [ "$GH_USER" = "odakin" ]; then
+            if [ "$GH_USER" = "odakin" ] || [ "$WANT_RECOMMENDED" = 1 ]; then
                 git config --global user.email "$NOREPLY"
                 echo "  commit author email を GitHub noreply に設定 (実 email を公開しない)。"
                 echo "  user.email = $NOREPLY"
@@ -1237,7 +1241,7 @@ esac
 # (bash の interactive は既定 ON = zsh 固有の非対称)。
 # 詳細と「保険で出し手の規律を緩めない」理由は
 # conventions/shell-env.md#no-inline-comments-in-pasted-commands。
-# odakin: 自動追記 (idempotent) / 他ユーザー: 推奨 tip を表示のみ (非破壊)。
+# owner または --recommended: 自動追記 (idempotent) / その他: 案内のみ。
 case "${SHELL:-}" in
     *zsh*)
         if [ -f "$HOME/.zshrc" ] && grep -q 'interactive_comments' "$HOME/.zshrc" 2>/dev/null; then
@@ -1245,7 +1249,7 @@ case "${SHELL:-}" in
         else
             echo ""
             echo "=== Step 6d: zsh interactive_comments ==="
-            if [ "$GH_USER" = "odakin" ]; then
+            if [ "$GH_USER" = "odakin" ] || [ "$WANT_RECOMMENDED" = 1 ]; then
                 {
                     printf '\n'
                     printf '%s\n' '# 貼り付けたコマンドの行内 # をコメントとして扱う (zsh 既定は OFF = 引数に化ける)'
@@ -1492,18 +1496,22 @@ else
     echo "  python3 not found → skip"
 fi
 
-# --- 10. (macOS) pty-leak mitigation のヒント (= opt-in、 自動 install しない) ---
+# --- 10. (macOS) pty-leak mitigation (--recommended で user watchdog) ---
 # Claude.app の /dev/ptmx leak で `forkpty: Device not configured` が出る既知バグ。
-# 通知 agent / sudo を黙って入れないため、 ここでは案内のみ (= 発見用 1 行ヒント)。
+# フラグ無しは案内のみ。--recommended は user watchdog を入れ、sudo を使う --persist は渡さない。
 # 詳細・原理・upstream issue は conventions/macos-claude-app-pty-leak.md。
 if [ "$(uname -s)" = "Darwin" ]; then
     echo ""
     echo "=== Step 10: pty-leak mitigation (macOS, opt-in) ==="
     echo "  既知バグ: 長い session で Claude.app が pty を溜め込み、 Terminal 等が"
     echo "  'forkpty: Device not configured' で開けなくなる (kern.tty.ptmx_max 枯渇)。"
-    echo "  緩和を入れるなら (自動 install はしない):"
-    echo "    bash $SCRIPT_DIR/scripts/install-pty-leak-mitigation.sh           # watchdog のみ (sudo 不要)"
-    echo "    bash $SCRIPT_DIR/scripts/install-pty-leak-mitigation.sh --persist  # + 起動時 bump (admin 1 回)"
+    if [ "$WANT_RECOMMENDED" = 1 ]; then
+        bash "$SCRIPT_DIR/scripts/install-pty-leak-mitigation.sh" || echo "  WARNING: pty watchdog install failed."
+    else
+        echo "  緩和を入れるなら (user watchdog):"
+        echo "    bash \"$SCRIPT_DIR/scripts/install-pty-leak-mitigation.sh\""
+    fi
+    echo "  管理者の操作が必要な起動時 bump は別途 --persist を選んでください。"
     echo "  詳細: conventions/macos-claude-app-pty-leak.md"
 fi
 

@@ -19,7 +19,7 @@ user がこのリポを指して「セットアップして」 と頼んだ場�
 **Flow** (フル step list は [CLAUDE.md](CLAUDE.md)):
 
 0. Windows で `git` や実体の `python3` が無い場合 (もしくは Claude アプリ自体が Git gate で止まっている場合)、先に bootstrap 1 行を実行する — [クイックスタート → Windows](#windows-の-claude-code-はまずこれ-まっさらな機) 参照。 `setup.sh` 自体が Git Bash 前提。
-1. `./setup.sh` を end-to-end で実行。 idempotent なので re-run 安全。
+1. `./setup.sh` を end-to-end で実行。 idempotent なので re-run 安全。 `--recommended` (または `CLAUDE_RECOMMENDED=1`) で JHEP.bst・GitHub noreply email・zsh comments・macOS の user watchdog を入れる。管理者の `--persist` は別の選択とする。
 2. Personal-layer 検出は automatic (= user に既に `*-prefs` リポ + `.claude-personal-layer` marker があれば script が auto-detect)。 なければ user に**一度だけ**「start するか」 を聞く ([`templates/personal-layer/`](templates/personal-layer/) が skeleton) — step ごとに聞かない、 一度きり。 作ると決まったら `bash scripts/new-personal-layer.sh <name>-prefs` を実行する。marker・雛形・Git の初期化を行い、global identity がある場合は初回 commit も作る。GitHub に置くと本人が選んだ場合は `--github` で private repo を作る。既存の個人層があれば停止する。
 3. 完了したら報告: 何が land したか / 何を skip したか (理由付き) / 次に検討しうる optional capabilities (MCP servers / scheduled tasks / 追加の `conventions/` / …)。
 
@@ -55,6 +55,8 @@ cd claude-config && ./setup.sh
 ```
 
 `setup.sh` は symlink・グローバル gitignore・Claude Code hooks とパーミッション・`post-merge` による自動同期・LaTeX pre-commit hooks・git-crypt 自動 unlock、macOS では PATH スナップショット修正・Claude デスクトップの folder picker 固定（default-ON・opt-out 可、 [conventions/claude-app-cwd-pin.md](conventions/claude-app-cwd-pin.md)）・Hammerspoon 設定（opt-in = `./setup.sh --hammerspoon`）までを一括で処理する。**全ステップの列挙と副作用の範囲**は [CLAUDE.md](CLAUDE.md) を参照。
+
+`./setup.sh --recommended` (または `CLAUDE_RECOMMENDED=1`) で user 単位の推奨設定 (JHEP.bst・GitHub noreply email・zsh `interactive_comments`・macOS の pty watchdog) を入れられる。管理者の操作が必要な `--persist` は別の選択とする。フラグ無しの挙動はこれまでどおり。
 
 ### Codex を併用する
 

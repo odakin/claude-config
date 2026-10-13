@@ -290,6 +290,7 @@
 - **[setup-dropbox-refs.sh](setup-dropbox-refs.sh)** — personal layer の dropbox-collabs.yaml を読んで symlink を生成
 - **[setup-hammerspoon.test.sh](setup-hammerspoon.test.sh)** — Run the proposed Step 7 (Hammerspoon opt-in) block in isolation. macOS with /Applications/Hammerspoon.app only.
 - **[setup-pin-log.test.sh](setup-pin-log.test.sh)** — Run setup.sh Step 2b2 (folder-picker pin agent) in isolation with stub launchctl/defaults.
+- **[setup-recommended.test.sh](setup-recommended.test.sh)** — Exercise opt-in recommendations with a temporary HOME and command stubs.
 - **[shared-drive-folder-watch.mutants.json](shared-drive-folder-watch.mutants.json)** — shared-drive-folder-watch.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 8 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[shared-drive-folder-watch.py](shared-drive-folder-watch.py)** — 他人から共有された Google Drive folder を台帳で監視し、 版の差分だけを手元の写しに落とす (標準ライブラリだけで動く)
 - **[short-answer-themes.mutants.json](short-answer-themes.mutants.json)** — short-answer-themes.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 7 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。

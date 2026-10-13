@@ -12,7 +12,7 @@ user LaunchAgent の 1 つは、 Claude デスクトップのフォルダ選択�
 手順:
 
 0. Windows で `git` か実体の `python3` が無い (または Claude アプリが Git の関門で止まっている) なら、 先に bootstrap の 1 行を実行する (README の Quick start → Windows)。 `setup.sh` は Git Bash の上で動く。
-1. `./setup.sh` を最後まで走らせる。 冪等なので再実行しても壊れない。
+1. `./setup.sh` を最後まで走らせる。 冪等なので再実行しても壊れない。 `./setup.sh --recommended` (または `CLAUDE_RECOMMENDED=1`) で user 単位の推奨設定 (JHEP.bst・GitHub noreply email・zsh `interactive_comments`・macOS の pty watchdog) を入れられる。管理者の操作が必要な `--persist` は別の選択とする。フラグ無しの挙動はこれまでどおり。
 2. personal layer は、 user の `*-prefs` repo に `.claude-personal-layer` marker があれば自動で見つかる。 無ければ作るかを user に 1 回だけ聞く (step ごとに聞かない。 雛形 = [`templates/personal-layer/`](templates/personal-layer/))。 作ると決まったら `bash scripts/new-personal-layer.sh <name>-prefs` を実行する。marker・雛形・Git の初期化を行い、global identity がある場合は初回 commit も作る。GitHub に置くと本人が選んだ場合は `--github` で private repo を作る。既存の個人層があれば停止する。
 3. 終わったら、 入ったもの・入れなかったもの (理由つき)・次に足せるもの (MCP server / scheduled task / 追加の `conventions/` など) を報告する。
 
@@ -203,7 +203,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (327 file + formcase/ 26 module + lib/ 68 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (328 file + formcase/ 26 module + lib/ 68 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
@@ -266,8 +266,8 @@ setup.sh が自動で行うこと:
 8b. 全リポに prepare-commit-msg hook をインストール（commit message に `Agent-Session: claude:<id>` + `Agent-Model:` + `Agent-Effort:` を足し、並列 session の commit と使用 model/effort を事後に区別する forensics。model は SessionStart の runtime 値を machine-local cache、effort は commit 時の公式 Bash env `CLAUDE_EFFORT` から取り、取得不能なら捏造せず `unknown`。⚠️ Step 8 と違い `.claude/public-repo.marker` を要求しない = **全 repo 対象** — host/account は書かず public/private の分岐を消す。session env が無ければ no-op、message 内に既存 `Agent-Session:` または legacy `Claude-Session:` / `Codex-Session:` があれば追記しない〔= rebase 混入の回避、`--amend -m` 全置換は例外〕、fail-open。repo 単位の opt-out = `git config agent.sessionTrailer false`〔legacy key も尊重〕。Codex 側の配線は `scripts/setup-codex.sh --repo/--repo-root`。既存 stub が同じ runner を指していれば触らず、 git が track している stub は書き換えない〔Step 8 の 2 installer と共通 = [`conventions/hook-authoring.md#installer-tracked-stub`](conventions/hook-authoring.md#installer-tracked-stub)〕。設計判断 = [`DESIGN.md#session-provenance-trailer-design`](DESIGN.md#session-provenance-trailer-design) / 規約 = [`conventions/multi-session-coordination.md#session-provenance-trailer`](conventions/multi-session-coordination.md#session-provenance-trailer)）
 8c. *(macOS のみ)* 全リポの git hook を exec で検査し、 macOS に kill される hook (commit が `died of signal 9` で止まる) を同じ中身の新しい file に作り直す（`scripts/heal-hook-stubs.sh`。 SessionStart から毎回呼べば commit が止まる前に直る。 規約 = [`conventions/hook-authoring.md#killed-hook-stub`](conventions/hook-authoring.md#killed-hook-stub)）
 9. *(条件付き)* JHEP.bst を texmf-local にインストール（odakin: 自動、他ユーザー: オプション表示）
-9b. *(条件付き)* commit author email の privacy（Step 6c）— `user.email` が実 email（`@users.noreply.github.com` 以外）なら、各ユーザーの GitHub noreply（`<id>+<login>@users.noreply.github.com`、`gh api user` から導出 = ハードコードしない）を提示。odakin: 自動設定（冪等）/ 他ユーザー: 推奨コマンドを表示のみ（非破壊）。public commit に実 email を焼き付けないため
-9c. *(条件付き、shell が zsh のとき)* `~/.zshrc` に `setopt interactive_comments` を追記（Step 6d）— interactive zsh は同オプションが既定 OFF で、**貼り付けたコマンドの行内 `#` がコメントにならず argv に化けて壊れる**（bash は既定 ON = zsh 固有の非対称）。既に設定済なら no-op（冪等）。odakin: 自動追記 / 他ユーザー: 推奨コマンドを表示のみ（非破壊）。⚠️ これは**受け手側の保険**であって、コマンドを提示する側の authoring 規律の代替ではない（提示先の環境は選べない）— 正本 [`conventions/shell-env.md#no-inline-comments-in-pasted-commands`](conventions/shell-env.md#no-inline-comments-in-pasted-commands)
+9b. *(条件付き)* commit author email の privacy（Step 6c）— `user.email` が実 email（`@users.noreply.github.com` 以外）なら、各ユーザーの GitHub noreply（`<id>+<login>@users.noreply.github.com`、`gh api user` から導出 = ハードコードしない）を提示。odakin: 自動設定（冪等）/ 他ユーザー: `--recommended` で適用、フラグ無しでは推奨コマンドを表示。public commit に実 email を焼き付けないため
+9c. *(条件付き、shell が zsh のとき)* `~/.zshrc` に `setopt interactive_comments` を追記（Step 6d）— interactive zsh は同オプションが既定 OFF で、**貼り付けたコマンドの行内 `#` がコメントにならず argv に化けて壊れる**（bash は既定 ON = zsh 固有の非対称）。既に設定済なら no-op（冪等）。odakin: 自動追記 / 他ユーザー: `--recommended` で適用、フラグ無しでは推奨コマンドを表示。⚠️ これは**受け手側の保険**であって、コマンドを提示する側の authoring 規律の代替ではない（提示先の環境は選べない）— 正本 [`conventions/shell-env.md#no-inline-comments-in-pasted-commands`](conventions/shell-env.md#no-inline-comments-in-pasted-commands)
 10. *(条件付き)* git-crypt 暗号化リポを自動 unlock。共有プロジェクト鍵 (`~/.secrets/<repo>.key`) があればそれを優先、なければ個人鍵 (`~/.secrets/git-crypt.key`) で fallback
 11. *(opt-in)* Hammerspoon 設定をインストール（macOS + Hammerspoon インストール済みで、 `--hammerspoon` か `CLAUDE_HAMMERSPOON=1` を付けた時。 既に入れた機・個人層に `hammerspoon/local.lua` がある機・owner は付けなくても続く。 `CLAUDE_HAMMERSPOON=0` なら触らない。Claude の Cmd+Q 長押しで終了 (誤終了防止) + ⌃⌥⌘V クリップボード整形+貼り付け hotkey）
 

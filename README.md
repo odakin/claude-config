@@ -19,7 +19,7 @@ If a user pointed you at this repo and asked you to set it up, **read this secti
 **Flow** (full step list in [CLAUDE.md](CLAUDE.md)):
 
 0. On Windows, if `git` or a real `python3` is missing (or the Claude app itself is blocked on the Git gate), run the bootstrap one-liner first — see [Quick start → Windows](#windows-claude-code-start-here-fresh-machine). `setup.sh` needs Git Bash to run at all.
-1. Run `./setup.sh` end-to-end. It is idempotent — safe to re-run.
+1. Run `./setup.sh` end-to-end. It is idempotent — safe to re-run. Use `--recommended` (or `CLAUDE_RECOMMENDED=1`) to apply JHEP.bst, GitHub noreply email, zsh comments, and the macOS user watchdog; administrator `--persist` stays a separate choice.
 2. Personal-layer detection is automatic if the user already has a `*-prefs` repo with a `.claude-personal-layer` marker. If not, ask the user **once** (not per step) whether they want one started — [`templates/personal-layer/`](templates/personal-layer/) is the skeleton. After the user chooses to create it, run `bash scripts/new-personal-layer.sh <name>-prefs`. It creates the marker and templates, initializes Git, and makes an initial commit when global Git identity is set. Use `--github` only when the user chooses to create a private GitHub repo. Existing personal layers stop creation.
 3. When done, report: what landed, what was skipped (with reason), and what optional capabilities (MCP servers, scheduled tasks, additional `conventions/`, …) they may want next.
 
@@ -55,6 +55,8 @@ cd claude-config && ./setup.sh
 ```
 
 `setup.sh` handles symlinks, global gitignore, Claude Code hooks and permissions, a `post-merge` hook for auto-sync, LaTeX pre-commit hooks, git-crypt auto-unlock, and (on macOS) a PATH snapshot fix, a Claude desktop folder-picker pin (default-on, opt-out — see [conventions/claude-app-cwd-pin.md](conventions/claude-app-cwd-pin.md)), plus an opt-in Hammerspoon config (`./setup.sh --hammerspoon`). **Full step list and exactly what it touches**: [CLAUDE.md](CLAUDE.md).
+
+Use `./setup.sh --recommended` (or `CLAUDE_RECOMMENDED=1`) to apply the user-scoped recommendations: JHEP.bst, GitHub noreply email, zsh `interactive_comments`, and the macOS pty watchdog. The administrator-only `--persist` option is a separate choice. Without the flag, the existing behavior is retained.
 
 ### Use with Codex
 
