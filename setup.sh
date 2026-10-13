@@ -22,7 +22,9 @@
 #        hook 自体が staged file 判定で no-op skip するので全 repo に install）
 #   6b. JHEP.bst を texmf-local にインストール（全リポからグローバル利用）
 #   7.  Hammerspoon 設定をインストール（Claude Cmd+Q 誤終了防止 + クリップボード
-#        整形 hotkey、macOS のみ）。個人層に hammerspoon/local.lua があれば
+#        整形 hotkey、macOS のみ、 opt-in = --hammerspoon / CLAUDE_HAMMERSPOON=1。
+#        既に入れた機・個人層に hammerspoon/local.lua がある機・owner は付けなくても続く）。
+#        個人層に hammerspoon/local.lua があれば
 #        ~/.hammerspoon/local.lua に symlink（init.lua 末尾の拡張 hook が読む）
 #   8.  Public repo pre-commit + commit-msg stubs をインストール
 #        （`.claude/public-repo.marker` を持つ repo のみ、冪等）+ missing
@@ -43,11 +45,13 @@
 # 使い方:
 #   mkdir -p <base> && cd <base>
 #   gh repo clone <your-username>/claude-config
-#   cd claude-config && ./setup.sh [--no-clone]
+#   cd claude-config && ./setup.sh [--no-clone] [--hammerspoon]
 #
 #   --no-clone : Step 5 (全リポ clone) を skip する。対話実行では flag が無くても
 #                clone 前に確認 prompt が出る (既定 = No)。非対話 (pipe / cron) は
 #                従来どおり自動 clone (= 既存ユーザーの再走の後方互換)。
+#   --hammerspoon : Step 7 (Hammerspoon 設定) を入れる。 個人の生産性ツールなので既定では入れない
+#                (環境変数 CLAUDE_HAMMERSPOON=1 でも同じ。 =0 なら既に入れた機でも触らない)。
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAUDE_DIR="$(dirname "$SCRIPT_DIR")"
@@ -55,13 +59,16 @@ REPO_DIRNAME="$(basename "$SCRIPT_DIR")"
 
 # --- 引数 parse ---
 NO_CLONE=0
+WANT_HAMMERSPOON=0
 for _arg in "$@"; do
     case "$_arg" in
         --no-clone) NO_CLONE=1 ;;
+        --hammerspoon) WANT_HAMMERSPOON=1 ;;
         -h|--help)
-            echo "Usage: ./setup.sh [--no-clone]"
+            echo "Usage: ./setup.sh [--no-clone] [--hammerspoon]"
             echo "  --no-clone   Skip Step 5 (cloning all your GitHub repos into $CLAUDE_DIR/)."
             echo "               Interactive runs also confirm before cloning (default: No)."
+            echo "  --hammerspoon  Install the Hammerspoon config in Step 7 (opt-in; also CLAUDE_HAMMERSPOON=1)."
             exit 0 ;;
         *) echo "WARNING: unknown option: $_arg (ignored)" ;;
     esac
@@ -1242,19 +1249,55 @@ case "${SHELL:-}" in
         ;;
 esac
 
-# --- 7. Install Hammerspoon config ---
-# Hammerspoon がインストール済みの場合のみ実行（なければサイレントスキップ）
+# --- 7. Install Hammerspoon config (opt-in) ---
+# 個人の生産性ツール (Claude の Cmd+Q 誤終了防止 + クリップボード整形 hotkey) なので全員には配らない
+# (conventions/clipboard-cleaner.md の「全 user にデフォルト ON で入れない」 と同じ判断。 /Applications は
+# Mac の全 user で共有なので、 別の user が入れた Hammerspoon でも設定が入ってしまっていた)。 入れるのは:
+#   --hammerspoon / CLAUDE_HAMMERSPOON=1 (明示)
+#   ~/.hammerspoon/init.lua が既に本リポの init.lua への symlink (= 前に入れた機。 再走で外さない)
+#   個人層に hammerspoon/local.lua がある (= 個人層が使うと宣言している)
+#   owner (6b・6c・6d と同じ扱い)
+# CLAUDE_HAMMERSPOON=0 なら触らない。 どれでもなければ入れ方を案内するだけ。
 HS_SRC="$SCRIPT_DIR/hammerspoon/init.lua"
 HS_DIR="$HOME/.hammerspoon"
 HS_DST="$HS_DIR/init.lua"
+
+hs_linked_here() {
+    [ -L "$HS_DST" ] || return 1
+    local target
+    target="$(readlink "$HS_DST")"
+    case "$target" in /*) ;; *) target="$HS_DIR/$target" ;; esac
+    [ "$target" -ef "$HS_SRC" ]
+}
+HS_REASON=""
+if [ "${CLAUDE_HAMMERSPOON:-}" = "0" ]; then
+    HS_REASON=""
+elif [ "$WANT_HAMMERSPOON" = 1 ] || [ "${CLAUDE_HAMMERSPOON:-}" = "1" ]; then
+    HS_REASON="requested"
+elif hs_linked_here; then
+    HS_REASON="already installed"
+elif [ -n "${LAYER:-}" ] && [ -f "$LAYER/hammerspoon/local.lua" ]; then
+    HS_REASON="personal layer has hammerspoon/local.lua"
+elif [ "$GH_USER" = "odakin" ]; then
+    HS_REASON="owner"
+fi
 
 if [ "$(uname -s)" != "Darwin" ] || [ ! -d "/Applications/Hammerspoon.app" ]; then
     : # macOS 以外 or Hammerspoon 未インストール → サイレントスキップ
 elif [ ! -f "$HS_SRC" ]; then
     : # init.lua がリポにない → スキップ
+elif [ -z "$HS_REASON" ]; then
+    echo ""
+    echo "=== Step 7: Hammerspoon config — SKIPPED (opt-in) ==="
+    if [ "${CLAUDE_HAMMERSPOON:-}" = "0" ]; then
+        echo "  CLAUDE_HAMMERSPOON=0 → 触らない"
+    else
+        echo "  Hammerspoon があります。 Claude の Cmd+Q 誤終了防止と ⌃⌥⌘V クリップボード整形を使うなら:"
+        echo "    ./setup.sh --hammerspoon"
+    fi
 else
     echo ""
-    echo "=== Step 7: Installing Hammerspoon config ==="
+    echo "=== Step 7: Installing Hammerspoon config ($HS_REASON) ==="
     mkdir -p "$HS_DIR"
     if [ -L "$HS_DST" ]; then
         CURRENT_TARGET="$(readlink "$HS_DST")"

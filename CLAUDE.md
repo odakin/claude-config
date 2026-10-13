@@ -203,7 +203,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (325 file + formcase/ 26 module + lib/ 68 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (326 file + formcase/ 26 module + lib/ 68 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
@@ -269,7 +269,7 @@ setup.sh が自動で行うこと:
 9b. *(条件付き)* commit author email の privacy（Step 6c）— `user.email` が実 email（`@users.noreply.github.com` 以外）なら、各ユーザーの GitHub noreply（`<id>+<login>@users.noreply.github.com`、`gh api user` から導出 = ハードコードしない）を提示。odakin: 自動設定（冪等）/ 他ユーザー: 推奨コマンドを表示のみ（非破壊）。public commit に実 email を焼き付けないため
 9c. *(条件付き、shell が zsh のとき)* `~/.zshrc` に `setopt interactive_comments` を追記（Step 6d）— interactive zsh は同オプションが既定 OFF で、**貼り付けたコマンドの行内 `#` がコメントにならず argv に化けて壊れる**（bash は既定 ON = zsh 固有の非対称）。既に設定済なら no-op（冪等）。odakin: 自動追記 / 他ユーザー: 推奨コマンドを表示のみ（非破壊）。⚠️ これは**受け手側の保険**であって、コマンドを提示する側の authoring 規律の代替ではない（提示先の環境は選べない）— 正本 [`conventions/shell-env.md#no-inline-comments-in-pasted-commands`](conventions/shell-env.md#no-inline-comments-in-pasted-commands)
 10. *(条件付き)* git-crypt 暗号化リポを自動 unlock。共有プロジェクト鍵 (`~/.secrets/<repo>.key`) があればそれを優先、なければ個人鍵 (`~/.secrets/git-crypt.key`) で fallback
-11. *(条件付き)* Hammerspoon 設定をインストール（macOS + Hammerspoon インストール済みの場合のみ。Claude の Cmd+Q 長押しで終了 (誤終了防止) + ⌃⌥⌘V クリップボード整形+貼り付け hotkey）
+11. *(opt-in)* Hammerspoon 設定をインストール（macOS + Hammerspoon インストール済みで、 `--hammerspoon` か `CLAUDE_HAMMERSPOON=1` を付けた時。 既に入れた機・個人層に `hammerspoon/local.lua` がある機・owner は付けなくても続く。 `CLAUDE_HAMMERSPOON=0` なら触らない。Claude の Cmd+Q 長押しで終了 (誤終了防止) + ⌃⌥⌘V クリップボード整形+貼り付け hotkey）
 
 ## How to Resume
 1. SESSION.md を読む → 現在状態と残タスクを把握

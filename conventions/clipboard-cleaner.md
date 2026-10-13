@@ -50,7 +50,7 @@ PDF からテキストをコピーして Word 等に貼ると、(a) PDF の見�
    明示発火は user が押した瞬間に 1 回読むだけなので、この原則と両立する。
 3. **setup.sh での自動 install は scope 超過**: 個人の生産性ツールを
    全 user にデフォルト ON で入れない。Hammerspoon hotkey は
-   Step 7（Hammerspoon インストール済み環境のみ、設定 symlink）に
+   Step 7（opt-in = `--hammerspoon`、Hammerspoon インストール済み環境のみ、設定 symlink）に
    相乗りするだけで、新たな常駐プロセスを増やさない。
 
 ## 実装ノート
