@@ -90,10 +90,12 @@ def staged_warn(repo: Path) -> int:
         return 3
     findings = []
     for f in files:
-        p = subprocess.run(['git', '-C', str(repo), 'show', f':{f.relative_to(repo)}'], capture_output=True, text=True)
+        # cat-file --filters applies the smudge filter: in a git-crypt repo the index holds the encrypted blob, which
+        # `git show :path` prints as raw bytes (and text=True then dies on the first non-UTF-8 byte)
+        p = subprocess.run(['git', '-C', str(repo), 'cat-file', '--filters', f':{f.relative_to(repo)}'], capture_output=True)
         if p.returncode != 0:
             continue
-        findings += report_file(f.relative_to(repo), p.stdout)
+        findings += report_file(f.relative_to(repo), p.stdout.decode('utf-8', errors='replace'))
     if findings:
         print("⚠️ paper size not declared in \\documentclass (commit is not blocked): the standard classes typeset on Letter "
               "when no paper option is given; the print preflight then rejects the PDF against an A4 tray. Add a4paper "
