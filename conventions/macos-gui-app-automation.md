@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: macOS の GUI app (Office / Pages / Keynote / Preview 等) を osascript・AppleScript・JXA で駆動する script を書く・直すとき + app を quit / kill / 再起動しようとした瞬間 + 自動化のたびに app が前面に出る・user の文書が閉じられたと言われたとき + 本人が使っている browser に script から tab を開かせる・閉じるとき (#chromium-tab-scripting) + 自動化が止まった原因が app の dialog かを script から確かめるとき (#dialog-presence-probe) + script で動かせない項目を本人に Finder で操作してもらうとき (#hand-off-selected-item)
+when: macOS の GUI app (Office / Pages / Keynote / Preview 等) を osascript・AppleScript・JXA で駆動する script を書く・直すとき + app を quit / kill / 再起動しようとした瞬間 + 自動化のたびに app が前面に出る・user の文書が閉じられたと言われたとき + 本人が使っている browser に script から tab を開かせる・閉じるとき (#chromium-tab-scripting) + 自動化が止まった原因が app の dialog かを script から確かめるとき (#dialog-presence-probe) + script で動かせない項目を本人に Finder で操作してもらうとき (#hand-off-selected-item) + この Mac で特定の app を自動で起動させない・起動の経路が無いことを確かめるとき (#autostart-route-inventory)
 category: macos
-summary: macOS の GUI app を script で駆動するときの作法。 (1) quit の前に app へ開いている文書を聞き、 自分が開いたもの以外が 1 つでもあれば quit も kill もしない (数え直しと quit は同じ osascript の中、 plain quit で saving no を付けない、 app 名指定の killall/pkill は禁止) (2) 背景で動かす = `open -g`、 `activate` を書かない、 `open -j` (hidden) は dialog まで隠して quit が -128 で取り消されたまま残るので使わない (3) `application id "…" is running` は app を起動しない probe、 `tell application` は起動する (4) 前面を奪ったら `path to frontmost application` で覚えた app へ `open -a` で返す (System Events 権限不要) (5) 文書は path か open が返す参照で指す (`active document` / `workbook 1` は user の文書を指しうる、 /private/tmp と /tmp の表記差を揃える) (6) Chromium 系 browser の tab = 裏で開いて前面の tab を戻す・id で指す・見るのは query を落とした URL と loading だけ・閉じるのは自分が開いた tab を場所を確かめてから (scripts/lib/browser_tab.py) (7) app が dialog を出しているかを読む = System Events は補助アクセスが要り無いと -25211、 代わりは画面撮影か「AppleScript が -1712 で止まったか」、 probe 自身の失敗 message に検出語が入る罠 (8) 本人に手で押してもらう項目 = 名前で探させず `open -R` で選択状態にして 1 つずつ渡す (同じ folder への連続の `open -R` は同じ窓の選択を移すだけ、 container の表示名は app を消すと bundle id に戻る、 保護された folder ではまとめて選ばせる AppleScript が通らない)。 Office 向け実装 = scripts/lib/office-app-guard.sh
+summary: macOS の GUI app を script で駆動するときの作法。 (1) quit の前に app へ開いている文書を聞き、 自分が開いたもの以外が 1 つでもあれば quit も kill もしない (数え直しと quit は同じ osascript の中、 plain quit で saving no を付けない、 app 名指定の killall/pkill は禁止) (2) 背景で動かす = `open -g`、 `activate` を書かない、 `open -j` (hidden) は dialog まで隠して quit が -128 で取り消されたまま残るので使わない (3) `application id "…" is running` は app を起動しない probe、 `tell application` は起動する (4) 前面を奪ったら `path to frontmost application` で覚えた app へ `open -a` で返す (System Events 権限不要) (5) 文書は path か open が返す参照で指す (`active document` / `workbook 1` は user の文書を指しうる、 /private/tmp と /tmp の表記差を揃える) (6) Chromium 系 browser の tab = 裏で開いて前面の tab を戻す・id で指す・見るのは query を落とした URL と loading だけ・閉じるのは自分が開いた tab を場所を確かめてから (scripts/lib/browser_tab.py) (7) app が dialog を出しているかを読む = System Events は補助アクセスが要り無いと -25211、 代わりは画面撮影か「AppleScript が -1712 で止まったか」、 probe 自身の失敗 message に検出語が入る罠 (8) 本人に手で押してもらう項目 = 名前で探させず `open -R` で選択状態にして 1 つずつ渡す (同じ folder への連続の `open -R` は同じ窓の選択を移すだけ、 container の表示名は app を消すと bundle id に戻る、 保護された folder ではまとめて選ばせる AppleScript が通らない) (9) app を自動で起こす経路の数え上げ = launchd の agent / ログイン項目 / `sfltool dumpbtm` (bundle id で照合) / 再ログイン時のウインドウ復元 / 自分の script の `open -a`、 「無い」 は起動役の間隔より長く閉じたまま待って確かめ、 起動の時刻は launchservicesd の CHECKIN 行。 Office 向け実装 = scripts/lib/office-app-guard.sh
 -->
 
 # macOS の GUI app を script で駆動する作法 <a id="macos-gui-app-automation"></a>
@@ -74,6 +74,21 @@ script では動かせず本人の操作が要る時 (保護された folder の
 - **1 つずつ**: 同じ folder の項目に続けて `open -R` すると、 Finder は新しい窓を開かず同じ窓の選択を移すだけ = 最後の 1 つしか選ばれていない (実測)。 出す → 本人の「やった」 → 消えたかを path で確かめる → 次を出す、 を繰り返す。
 - **まとめて選ばせる AppleScript は保護された folder では使えない**: `~/Library/Containers` の項目は Finder の `select` に渡す参照が作れない (`POSIX file … as alias` が `-1700`、 `item "<名前>" of folder` が `-1728`、 `whose displayed name is …` は `-1712` で時間切れ = 実測)。
 - 本人が窓を閉じた・見失ったと言ったら、 残っている項目を path で確かめてから、 残りの 1 つ目をもう一度 `open -R` で出す。
+
+## <a id="autostart-route-inventory"></a>9. app を自動で起こしている経路を数え上げる
+
+「この Mac ではこの app を自動で起動しないで」 と頼まれた時 (例 = 同時に 1 台しかログインできない app を別の機械に常駐させる)。 システム設定のログイン項目だけを見て「無い」 と言わない。 経路は 5 つあり、 どれも script で読める:
+
+| 経路 | 読み方 | 止め方 |
+|---|---|---|
+| launchd の agent (KeepAlive の plist が、 app を起こす script を呼ぶ形を含む) | `ls ~/Library/LaunchAgents/` と `launchctl list` | 入れた installer の uninstall、 無ければ `launchctl bootout gui/$(id -u)/<label>` + plist を消す |
+| ログイン項目 (ログイン時に開く) | `osascript -e 'tell application "System Events" to get the name of every login item'` | システム設定 › 一般 › ログイン項目から外す |
+| app が自分で登録した起動 (SMAppService・背景の helper) | `sfltool dumpbtm` の `Identifier:` / `Name:` の行を bundle id で照合 (一般ユーザーで読める = 実測)。 app 名の短い語で grep すると別の語の一部に当たる (`line` が `deadline` に当たる = 実測) | app の設定の「ログイン時に起動」、 またはシステム設定 › ログイン項目の「バックグラウンドで許可」 |
+| 再ログイン時のウインドウ復元 | `defaults read com.apple.loginwindow TALLogoutSavesState` (1 = ON) | 全 app に効く設定なので変えるなら本人に聞く。 変えなくても、 その app を閉じてから再起動・ログアウトすれば戻らない |
+| 自分の script・定期処理が `open -a` で起こす | 自分の repo を `command grep -rn -e 'open .*-a <App>'` で引く ([`shell-env.md#bash-tool-grep-ignores-gitignore`](shell-env.md#bash-tool-grep-ignores-gitignore)) | 呼び元を止める |
+
+- **「無い」 の確かめ方**: app が閉じた後、 常駐の起動役が持ちうる間隔 (毎分起こす常駐なら 1 分) より長く待って戻らなければ、 常駐で起こす経路は無い (実測)。 閉じるのは本人に頼む (本人が使っている app を script で quit しない = [§1](#ask-before-quit))。
+- **いつ起動したか** = unified log: `/usr/bin/log show --last 12h --style compact --predicate 'process == "launchservicesd" AND eventMessage CONTAINS "CHECKIN" AND eventMessage CONTAINS "<bundle id>"'` が起動の時刻と pid を出す (helper は `<bundle id>.<suffix>` の別の行)。 誰が起こしたか (手か script か) はこの行だけでは決まらない。 log の保存期間より前の起動は出ない。 zsh では素の `log` が組み込みに取られる = full path ([`shell-env.md#zsh-log-builtin`](shell-env.md#zsh-log-builtin))。
 
 ## <a id="implementations"></a>実装と検査
 

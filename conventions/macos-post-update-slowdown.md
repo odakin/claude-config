@@ -318,6 +318,7 @@ sudo tmutil deletelocalsnapshots <YYYY-MM-DD-HHMMSS>
 - 「開いた時に開く」 に不要 App (= Zoom / Slack / Discord 等) が居ないか
 - 「バックグラウンドで許可」 の 3rd-party を吟味 (= 使わないなら OFF)
 - **再ログイン時のウインドウ復元をオフに**
+- 特定の app を起こしている経路を script で数え上げる (launchd・ログイン項目・app 自身の登録・ウインドウ復元・自作の script) = [`macos-gui-app-automation.md#autostart-route-inventory`](macos-gui-app-automation.md#autostart-route-inventory)
 
 これをやらないと消したはずの重い App が全部復活する = 「再起動しても重い」 の 8 割はこれ。
 
