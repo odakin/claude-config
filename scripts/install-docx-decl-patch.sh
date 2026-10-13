@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-docx-decl-patch.sh — 上記 patch を user site-packages に `.pth`+symlink で install（setup.sh Step 9、 全 python3 起動で auto-load、 idempotent）
+# install-docx-decl-patch.sh — Install the docx patch in available Python user sites, or --python PATH (setup Step 9).
 # python-docx の Document.save() を全 python3 起動で自動正規化する patch を install。
 # = single-quote XML 宣言 → Word ネイティブ (double-quote+CRLF) を save 時に自動適用し、
 #   厳格 macOS Word の「破損/開いて修復」ダイアログを source で根絶する (race-free)。
@@ -18,27 +18,48 @@ if [ ! -f "$MODULE_SRC" ]; then
     exit 1
 fi
 
-# 既定 python3 の user site-packages (= python-docx もここに入る運用)
-USER_SITE="$(python3 -c 'import site; print(site.getusersitepackages())' 2>/dev/null || true)"
-if [ -z "$USER_SITE" ]; then
-    echo "⚠️  python3 の user site-packages を解決できず → skip" >&2
-    exit 0
-fi
-
-mkdir -p "$USER_SITE"
-ln -sf "$MODULE_SRC" "$USER_SITE/docx_decl_patch.py"
-printf 'import docx_decl_patch\n' > "$USER_SITE/docx_decl_patch.pth"
-
-# 検証: 素の python3 が Word 形式宣言を書くか (docx があれば)
-if python3 -c 'import docx' 2>/dev/null; then
-    VERIFY="$(python3 - <<'PY'
-import docx, tempfile, os, zipfile
-d = docx.Document(); d.add_paragraph("x"); p = tempfile.mktemp(suffix=".docx"); d.save(p)
-ok = zipfile.ZipFile(p).read("word/document.xml")[:20] == b'<?xml version="1.0" '
-os.remove(p); print("OK" if ok else "FAIL")
-PY
-)"
-    echo "✅ docx-decl auto-patch installed → $USER_SITE (自動正規化 verify: $VERIFY)"
+# Install for each available user-site runtime; an explicit Python limits the scope.
+if [ "${1:-}" = "--python" ]; then
+    [ "$#" -eq 2 ] || { echo "Usage: $0 [--python /path/to/python3]" >&2; exit 2; }
+    candidates=("$2")
+elif [ "$#" -eq 0 ]; then
+    candidates=()
+    while IFS= read -r executable; do candidates+=("$executable"); done < <(type -a -p python3)
+    for executable in /opt/homebrew/bin/python3 /usr/local/bin/python3 /opt/homebrew/opt/python@3.12/libexec/bin/python3; do
+        [ ! -x "$executable" ] || candidates+=("$executable")
+    done
 else
-    echo "✅ docx-decl auto-patch installed → $USER_SITE (python-docx 未導入 = 現状 no-op、導入後に自動有効)"
+    echo "Usage: $0 [--python /path/to/python3]" >&2
+    exit 2
 fi
+seen_sites=""
+for runtime in "${candidates[@]}"; do
+    USER_SITE="$("$runtime" -c 'import site; print(site.getusersitepackages())' 2>/dev/null || true)"
+    if [ -z "$USER_SITE" ]; then
+        echo "WARNING: cannot resolve user site for $runtime" >&2
+        continue
+    fi
+    case "$seen_sites" in *"|$USER_SITE|"*) continue ;; esac
+    seen_sites="$seen_sites|$USER_SITE|"
+    mkdir -p "$USER_SITE"
+    ln -sf "$MODULE_SRC" "$USER_SITE/docx_decl_patch.py"
+    printf 'import docx_decl_patch\n' > "$USER_SITE/docx_decl_patch.pth"
+    echo "Installed docx-decl auto-patch: $runtime -> $USER_SITE"
+    if "$runtime" -c 'import docx' 2>/dev/null; then
+        "$runtime" - <<'VERIFY'
+import docx, tempfile, zipfile
+from pathlib import Path
+with tempfile.TemporaryDirectory() as directory:
+    path = Path(directory) / 'verify.docx'
+    document = docx.Document()
+    document.add_paragraph('fixture')
+    document.save(path)
+    with zipfile.ZipFile(path) as archive:
+        assert archive.read('word/document.xml').startswith(b'<?xml version="1.0" '), 'docx declaration patch not active'
+print('docx declaration verified')
+VERIFY
+    else
+        echo "  python-docx is not installed in this runtime; patch activates when it is imported."
+    fi
+done
+[ -n "$seen_sites" ] || { echo "No usable Python user site found" >&2; exit 1; }
