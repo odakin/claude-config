@@ -6,6 +6,7 @@
 
 ## 現在地
 
+- **導入先での実測で見つかった問題の一式 (別 vendor の worker が担当)** — 入った = headless の fixture と YAML loader・運用の注意・個人層の作成 (`scripts/new-personal-layer.sh`)・docx の patch の python・git-crypt-guide の push 前の確認。 残り = 保護 file に当たる候補 (委任の一節の文面 = Agent tool が API の安全フィルタで止まる件、 setup.sh の opt-in 群、 貼り付け用コマンドの hook の誤検出、 MCP の test) の owner の裁定と適用、 適用後に Opus / Sonnet の最小の Agent で通るかを確かめること。 扱い方 = [tool-call-robustness.md#api-safety-filter-on-main-response](conventions/tool-call-robustness.md#api-safety-filter-on-main-response)
 - **初回導入と委任の成果報告** — 導入の opt-in・ログ配置・個人層作成・試験の修正を反映。次は Claude の最小 Agent の実 API 呼出しで報告文面を確認する (自己試験まで検証済み)。正本 = [報告条項](conventions/multi-session-coordination.md#worker-record-clause)、[導入 script](setup.sh)、[個人層 helper](scripts/new-personal-layer.sh)。
 
 - **並列 session の用事の claim** — 一般形 = [`multi-session-coordination.md#pending-item-claims`](conventions/multi-session-coordination.md#pending-item-claims)、 参照実装は ai-collaboration `board/board_items.py`。
