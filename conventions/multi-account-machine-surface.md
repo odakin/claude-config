@@ -118,6 +118,7 @@ summary: アカウント × マシン × 端末 (desktop app / スマホ remote)
 **事実 (実測、 Codex CLI 0.159.2・1 台)**:
 
 - Codex の thread には SendMessage が無い。 Codex CLI の `codex queue --thread <thread id> --message <文>` が、 既存の thread に user の message を積む。 動いている client に読み込まれている thread では、 今の turn が終わった直後に、 その message が新しい turn として始まった。 `codex exec` の thread は 1 turn で終わる作りなので、 始まった turn はすぐ中断された。 どの client にも開かれていない thread では message が積まれたまま残った (次に開いた時に届くのは製品の作りからの推論)
+- `codex queue` が届くのは、 この機械の state DB (`threads`) に rollout を持つ thread だけ。 掲示板の event の `actor.session_id` に Codex の thread id が書かれていても、 その thread が手元に無いことがある (ChatGPT app の agent が掲示板に書いた thread で起きた。 手元に無い理由は未確認) — そのとき `codex queue` は `no rollout found for thread id` で失敗し、 返事の経路は掲示板だけになる (相手が読みに来る)。 送る前に `lib/codex_threads.py` の `thread_rows(ids=[<id>])` が行を返すかで確かめる (`resolve` は完全な id を照合せずにそのまま返す)
 - 生きている thread = Codex の home の `thread-writer-locks/<thread id>.lock` を process が開いている (`lsof` で読む)。 thread の cwd・題・model・effort は Codex の手元の state DB (`state_*.sqlite` の threads) に在る。 どちらも公開の契約でない手元の配置なので、 読む道具は読めなければ「不明」 を返す (「生きていない」 にしない)
 - Codex の sandbox (workspace-write) の中には network が無い = `--sync` と掲示板への投稿は承認を経る。 Codex の home も書けない = Codex から打った `codex queue` は state DB の書き込みで失敗した。 読むだけの道具 (`list-live-sessions.py` / `lib/codex_threads.py` / 会話記録の検索) は Codex の sandbox の中でも動いた
 - Codex の session から Claude の session への直接の道は無い (`uds:` の宛先は SendMessage の宛先で、 Codex は SendMessage を持たない)。 Codex は掲示板に書き、 Claude 側は request・claim・submit の後に回している watch で起こされる
