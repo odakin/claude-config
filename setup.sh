@@ -713,6 +713,21 @@ else
     [ "$RENAMED_SKIP" -gt 0 ] && echo "  Skipped (renamed local dir, remote already present): $RENAMED_SKIP repos"
 fi
 
+# Pending invitations are displayed only, including when --no-clone was chosen.
+if [ -n "$GH_USER" ] && command -v gh >/dev/null 2>&1; then
+    INVITATIONS="$(gh api --paginate user/repository_invitations --jq '.[] | [.id, .repository.full_name] | @tsv' 2>/dev/null)"
+    if [ -n "$INVITATIONS" ]; then
+        echo "  Pending repository invitations (review before accepting):"
+        while IFS=$'\t' read -r invitation_id invitation_repo; do
+            [[ "$invitation_id" =~ ^[0-9]+$ ]] || continue
+            [[ "$invitation_repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || continue
+            printf '    %s (invitation %s)\n' "$invitation_repo" "$invitation_id"
+            printf '    gh api --method PATCH user/repository_invitations/%s\n' "$invitation_id"
+            printf '    gh repo clone %q %q\n' "$invitation_repo" "$CLAUDE_DIR/${invitation_repo##*/}"
+        done <<< "$INVITATIONS"
+    fi
+fi
+
 # --- 5a. Personal home symlink (four-layer architecture, layer 3) ---
 # ユーザの個人層 (personal layer) を検出し、~/Claude/CLAUDE.md をそこへ symlink する。
 # 詳しい層モデルは docs/personal-layer.md 参照。
