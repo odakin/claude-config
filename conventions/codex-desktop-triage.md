@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: ChatGPT app (Codex desktop) の task が 401 / auth error で止まったとき + 「Incorrect API key provided: sk-svcacct…」 が出たとき + Codex の hook が走らない・監査が untrusted と言うとき + app の更新で Codex の binary の path が変わったとき + 承認 CLI が「本人の発言が無い」 と言うとき + task の結果の要約が見当たらず最後の message が完了 gate への返事のとき
+when: ChatGPT app (Codex desktop) の task が 401 / auth error で止まったとき + 「Incorrect API key provided: sk-svcacct…」 が出たとき + Codex の hook が走らない・監査が untrusted と言うとき + app の更新で Codex の binary の path が変わったとき + 承認 CLI が「本人の発言が無い」 と言うとき + task の結果の要約が見当たらず最後の message が完了 gate への返事のとき + ChatGPT desktop の不具合を公式フィードバックへ送るとき
 category: harness-core
-summary: Codex desktop の auth error は client の鍵でなく backend 側のことが多い (= 手元に sk-svcacct は無い、 status page を見る、 再ログインしない) / 切り分けの読み方 (auth.json の auth_mode、 logs_2.sqlite の feedback_tags、 rollout の task_complete) / hook の信頼は hooks.json の定義 hash に束縛され TUI の /hooks で付け直す (agent は書かない) / app 同梱 binary の path は更新で動く = process から探す / 承認の引用元は生成文を除く / 結果が見当たらないときは rollout で gate の差し戻しの直前を読む
+summary: Codex desktop の auth error は client の鍵でなく backend 側のことが多い (= 手元に sk-svcacct は無い、 status page を見る、 再ログインしない) / 切り分けの読み方 (auth.json の auth_mode、 logs_2.sqlite の feedback_tags、 rollout の task_complete) / hook の信頼は hooks.json の定義 hash に束縛され TUI の /hooks で付け直す (agent は書かない) / app 同梱 binary の path は更新で動く = process から探す / 承認の引用元は生成文を除く / 結果が見当たらないときは rollout で gate の差し戻しの直前を読む / 公式フィードバックは操作ツールの制約とアプリの機能を分け、本人への貼付本文・添付範囲・送信識別子を引き継ぐ
 -->
 # Codex desktop の切り分け (auth error / hook 信頼 / binary の path)
 
@@ -47,3 +47,17 @@ Codex の rollout では、 Stop hook の差し戻し文 (`<hook_prompt …>`) �
 - **読み方**: rollout (`~/.codex/sessions/<年>/<月>/<日>/rollout-…jsonl`) を末尾から読む。 `<hook_prompt …>` で始まる user message の直前の agent message が本当の結果 (時刻を `task_complete` と並べる)。 成果物は commit・file に残っているので、 画面が壊れて見えても作り直さない。
 - **原因の一つ**: 完了 gate ([`codex/hooks/session_touch.py`](../codex/hooks/session_touch.py) の `nudge`) は、 remote を持つ repo で HEAD が remote の先頭と違うと終了を 1 回差し戻す (remote が 0 本なら黙る)。 push しない仕事では満たせないので、 worker は理由を述べてもう 1 turn 使って終わる。 その turn も利用枠を食う。 push 先が手元の作業ツリーの checkout 中の branch (git が push を拒む = 手元の repo から clone した写し) なら、 gate は head を比べない。
 - **予防**: push しない仕事を渡す写しで remote が手元の作業ツリー以外 (GitHub など) を指すなら、 渡す前に remote を外す (手順 = ai-collaboration [`physics-verification-cycle.md#cross-vendor-repo-copy`](../../ai-collaboration/conventions/physics-verification-cycle.md#cross-vendor-repo-copy) の 1)。
+
+## <a id="official-feedback-handoff"></a>アプリ内の公式フィードバックと本人操作への引き継ぎ
+
+**ツールの操作制限とアプリの機能を分けて記録する。** computer-use が対象アプリの操作を安全制限で拒否しても、アプリにフィードバック機能が存在するかは別に確かめる。拒否された操作経路を別の操作技術で迂回せず、公式資料と本人の画面から最小手順を用意する。
+
+- **窓口を確認する**: [公式の slash command 一覧](https://learn.chatgpt.com/docs/reference/slash-commands) は ChatGPT desktop の `/feedback` を記載している。候補の表示は環境と権限に依存するため、実画面の候補・メニューも確かめる。CLI の同名コマンドの記憶を desktop の根拠にしない。
+- **本人が操作できるときは本文を渡す**: 作成欄で `/` → フィードバック → 「バグ」 → 貼付本文 → 添付範囲の点検 → 送信。本人が「コピペをくれ」と言った後は本人が操作を持ち、agent は追加送信や並行操作を止める。
+- **添付の既定値を確認する**: フォームの「診断ログ」「すべてのブラウザータブとブラウザーログ」が選択済みで表示される場合がある (実測)。本文だけの報告範囲なら、双方のチェックを外す手順を本文と一緒に渡す。状態を読み戻していない送信では、実際の添付内容を断定しない。既存セッション共有の選択とログの選択も別々に確認する。
+- **報告本文を絞る**: 事象、期待する動作、時刻とタイムゾーン、該当メッセージの ID、エラー文、アプリ・OS の版、再現の有無と未確認範囲を書く。本人の観察、通知や返り値、agent の直接観察を分け、食い違いの原因を推測で埋めない。版番号の確認は app bundle の Info.plist と `sw_vers` などの限定した metadata から行う。
+- **ヘルプ窓口へ引き継ぐ**: [公式サポートへの連絡方法](https://help.openai.com/ja-jp/articles/6614161-how-can-i-contact-support) は [Help Center](https://help.openai.com/) 右下のチャット吹き出しを案内している。記事の評価・翻訳へのフィードバックは問い合わせ窓口と分ける。認証を本人が行った browser と agent が先に開いた browser は、ログイン状態と会話の連続性を個別に確かめる。
+- **送信状態を分ける**: [公式の Feedback and logs](https://learn.chatgpt.com/docs/reference/troubleshooting#feedback-and-logs) は、送信後にチームへ共有できる session ID を案内している。本文の入力、送信後の表示、ID の共有、担当の受付、調査開始、修正を別の状態として記録する。session ID を受付番号や新規 issue の番号と言い換えず、サポートが参照可能と回答した状態を調査開始の確約に広げない。
+- **公開先への変更を確かめる**: サポートが公開 GitHub issue を提案しても、非公開窓口への送信承認を公開への承認に読み替えない。掲載する本文と識別子、公開先の製品との適合を確かめ、公開範囲への本人の明示指示を得る。
+
+フォームの保持や承認状態の不整合の報告と、ルール内容が安全要件を満たすかの審査は別の論点として記録する。許可可能との断定や安全要件の解除を、UI の不具合報告に混ぜない。
