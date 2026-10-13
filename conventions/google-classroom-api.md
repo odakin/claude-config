@@ -78,7 +78,7 @@ scope を足したら token を取り直す (consent を 1 回)。 同じ OAuth 
 - <a id="short-answers-by-theme"></a>**短答の回答を名前なしで取り、 テーマ別に数える** = engine の `shortAnswers` (submission ごとに文字列 1 つ、 userId は返さない。 提出済み 〔`TURNED_IN` / `RETURNED`〕 でなければ "" = list の長さが課題の対象の人数) → [`scripts/short-answer-themes.py`](../scripts/short-answer-themes.py) (テーマの表で人数・どの項目にも入らない語・docx)。 課題の id は engine の `listCourseWork`
 - 画面の「ファイルを開いていない」 は API に無い
 - 画面で作った課題を読み戻して確かめられるのは、 タイトル・本文・期限・状態まで。 **`dueDate` / `dueTime` は UTC** (日本時間 23:59 の期限は `dueTime` 14:59 で返る、 実測)。 「期限後に提出を締め切る」 などの画面のスイッチは読み戻しの対象にならない (= 画面で見る)
-- <a id="grade-ui-created-coursework"></a>**画面で作った課題の点は API で書けない**: `studentSubmissions.patch` (`draftGrade`) は 403 `@ProjectPermissionDenied` で返る (実測、 `classroom.coursework.students` の scope があっても)。 API が点・返却を書けるのは、 同じ OAuth client の project で作った課題だけ。 点を機械で付けたい課題は API で作る必要があるが、 そうすると「期限後に提出を締め切る」 を画面で入れられない ([#late-submission-lock](#late-submission-lock)) = どちらを取るかを課題を作る前に決める。 画面で作った課題の点は画面で付ける (読むのは API でできる)
+- <a id="grade-ui-created-coursework"></a>**画面で作った課題の点は API で書けない**: `studentSubmissions.patch` (`draftGrade`) は 403 `@ProjectPermissionDenied` で返る (実測、 `classroom.coursework.students` の scope があっても)。 API が点・返却を書けるのは、 同じ OAuth client の project で作った課題だけ。 点を機械で付けたい課題は API で作る必要があるが、 そうすると「期限後に提出を締め切る」 を画面で入れられない ([#late-submission-lock](#late-submission-lock)) = どちらを取るかを課題を作る前に決める。 画面で作った課題の点は画面で付ける (読むのは API でできる)。 browser 自動化で付けるなら、 「すべての生徒の解答」 の一覧の各行の「<名前> さんの成績を追加」 ボタンを 1 つずつ押す → 少し待つ → 点を打つ → Enter (実測)。 Enter の後に次の行へ移った focus にそのまま打つだけだと、 点の入らない行が出る (実測 = 3 行に 1 行ほど落ちた)。 ボタンの名前を、 API で取った提出者の名前と突き合わせてから押す (未提出の人は自動の 0 点が下書きで入っていて、 このボタンには出ない、 実測)。 終わったら API で `draftGrade` を数えて照合する
 
 ## 実装の置き場所
 
