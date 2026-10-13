@@ -34,6 +34,8 @@ chmod 600 ~/.secrets/git-crypt.key
 
 > **Why `~/.secrets/`?** `setup.sh` auto-detects this path and unlocks encrypted repos automatically during bootstrap (Step 5b). If you use a different path, update `setup.sh` accordingly.
 
+> **One key for this repo only?** `setup.sh` tries `~/.secrets/<repo>.key` first and falls back to `~/.secrets/git-crypt.key`. For a repo you may share later, or one that holds other people's personal data, export to `~/.secrets/<repo>.key` instead: sharing it then hands over this repo's key only, with no [rotation](#rotate-key) first.
+
 ### 4. Configure `.gitattributes`
 
 Create `.gitattributes` in the repo root to specify which files to encrypt:
@@ -57,12 +59,21 @@ private/** filter=git-crypt diff=git-crypt
 SESSION.md filter=git-crypt diff=git-crypt
 ```
 
-### 5. Commit and push
+### 5. Commit, check, and push
+
+Write `.gitattributes` before adding any sensitive file: a file committed before a pattern covers it stays in plaintext in the history.
 
 ```bash
 git add .gitattributes
 git add .  # encrypted files are added normally
+git-crypt status
 git commit -m "Initial commit (git-crypt encrypted)"
+```
+
+`git-crypt status` lists every file as `encrypted:` or `not encrypted:`; only the files you meant to leave readable should be in the second group. Before the first push, confirm that a committed blob really is ciphertext. Check it as a yes/no and never print its bytes, because if encryption failed those bytes are the plaintext:
+
+```bash
+git cat-file -p HEAD:<an encrypted file> | head -c 9 | grep -qa GITCRYPT && echo encrypted || echo "PLAINTEXT - do not push"
 git push
 ```
 
@@ -128,8 +139,16 @@ git-crypt unlock ~/.secrets/git-crypt.key
 **The key file is the only way to decrypt your data.** If you lose it and don't have a backup, encrypted files on GitHub are unrecoverable.
 
 Recommended practices:
-- Store an encrypted backup in a separate location (cloud storage, USB drive, etc.)
-- Use a strong passphrase for the backup encryption
+- **Keep the backup off the machine.** Another folder on the same disk is not a backup, because it is lost together with the machine. Use a place you can open from another device with a separate login (cloud storage, a password manager) or a USB drive.
+- **Text form** for a password manager or a note field: `base64 -i ~/.secrets/<repo>.key | pbcopy` on macOS (`base64 -w0 ~/.secrets/<repo>.key` on Linux). Clear the clipboard afterwards with `pbcopy < /dev/null`.
+- **Check that the backup restores before relying on it.** This round trip prints nothing secret:
+  ```bash
+  base64 -D -i <backup file> | cmp - ~/.secrets/<repo>.key && echo match
+  ```
+  On Linux, use `base64 -d <backup file>`. Making a backup and being able to open it are separate claims ([`secret-handoff.md#backup-round-trip`](../conventions/secret-handoff.md#backup-round-trip)).
+- **Restore** with `base64 -D -i <backup file> -o ~/.secrets/<repo>.key && chmod 600 ~/.secrets/<repo>.key`.
+- **Record where the backup is (the location, never the value) somewhere readable without the key**, such as the repo's plaintext `CLAUDE.md`. A note inside the encrypted part cannot be read at the moment you need it ([`secret-handoff.md#do-not-store-inside-the-lock`](../conventions/secret-handoff.md#do-not-store-inside-the-lock)).
+- If you encrypt the backup itself, use a strong passphrase and keep the passphrase apart from the backup.
 - Test restoration periodically
 
 ## Troubleshooting
