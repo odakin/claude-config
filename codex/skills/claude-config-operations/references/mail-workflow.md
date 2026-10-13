@@ -113,6 +113,8 @@ and verify the record. Then `recorded --bundle` checks the IDs are present and
 marks the local receipt consumed. `pending` must show no unresolved item for
 this send. Receipt files are recovery evidence; the project remains the SoT.
 
+Apply [post-send ledger and agent handoff](../../../../conventions/gmail-sending.md#post-send-ledger-handoff) for every delivery route, including a verified send reported by another agent. Use the owning project's formal inbox recorder and update the existing TODO before consuming the receipt or reporting the work recorded. An unread flag, a pending reply, a delivery receipt and an acknowledged agent handoff are separate states. Preserve all existing approval and account boundaries; report any incomplete recording or synchronization without resending.
+
 ## Installation and repair
 
 The shared installer `scripts/codex_mail_install.py` requires explicit `--skill`
