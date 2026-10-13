@@ -201,6 +201,8 @@ collaborator 本人の連絡先（メールアドレス等）や PII を layer 2
 
 配布器は source の公開範囲・必須項目と、選択された全 target の生成 marker を**書込み前に**検査する。エラーを数えて終了コードを失敗にするだけでは、途中で不正な本文を配布できてしまう。検査と書込みを分け、後段の target が不正でも先行 target を変更しないことを fixture で検査する。配布先を限定する場合は registry の既存 target を明示選択し、未知の名前を無視しない。部分同期の成功を digest 全体の一致と報告せず、残る差分と次の完全同期の入口を区別する。
 
+<a id="l2-digest-first-deploy"></a>**初めて配る repo では、 生成してから承認を記録する** (実測): 規則の文書 (CLAUDE.md) の変更に承認を要する guard がある環境で、 空の marker を置いた候補を先に承認すると、 その後の生成で block の中身が変わり、 commit の検査が「承認した候補と違う」 で止まる。 順番は marker を置く → 配布器で生成する → 生成後の全文を候補にして承認を記録する → commit。 配布先の registry に足す変更も同じ commit の範囲に含める。
+
 ### <a id="style-checker-mirror"></a>機械化できる style subset は layer 1 engine + layer 2 mirror にする
 
 American spelling のように複数 project で再利用できる検査アルゴリズムは layer 1 に正本を置く。project がその style を採用したという意味上の規則は layer 2 の CLAUDE.md digest が所有し、layer 1 script は選好そのものを全 project へ強制しない。標準 engine は [`scripts/check-american-spelling.py`](../scripts/check-american-spelling.py) で、curated word list、TeX comment / identifier masking、Python figure-string scan、`brit-ok` 例外、positive / negative / scope selftest を所有する。

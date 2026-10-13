@@ -882,6 +882,8 @@ JHEP.bst のような `F.~Last` 形式の bst では、ブレース内が全部 
 2. **PDF 実物がない** → 同論文を引用している後発論文の参考文献欄で交差検証
 3. **どちらも無い** → entry を作らない（推測で作らない）
 
+**照合の道具**: entry を足した turn のうちに [`../scripts/inspire-bib-audit.py`](../scripts/inspire-bib-audit.py) を bib 全体に回す (INSPIRE 収録の文献は題・第一著者・誌・巻・初頁・DOI を突き合わせる)。 SKIP になったもの (graphics・CS の会議録・本) は手元の PDF の 1 頁目を読んで照合する。 ⚠️ 原稿の起草と同じ turn で文献をまとめて足すと、 本文の流れに気を取られて書誌を記憶で埋める (実測: 記憶で足した題のうち複数が別の題・別の名だった)。 起草中は key と arXiv / DOI だけを置き、 題と著者は道具か PDF から入れる。
+
 **やってはいけないこと**:
 
 - WebSearch の summary だけを根拠に entry を作る（summary は hallucinate する。[`web-tools.md` websearch-summary-hallucinates](web-tools.md#websearch-summary-hallucinates) 参照）
