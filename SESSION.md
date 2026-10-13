@@ -7,7 +7,6 @@
 ## 現在地
 
 - **導入先での実測で見つかった問題の一式 (別 vendor の worker が担当)** — owner の裁定を受けて全部入った (委任の一節の文面・setup.sh の opt-in 群と招待の表示・貼り付け用コマンドの hook の誤検出・MCP の test・headless の fixture と YAML loader・個人層の作成・docx の patch の python・運用の注意・git-crypt-guide の push 前の確認)。 委任の一節は差し替えの後、 中身の無い依頼の Agent が Sonnet と Opus で安全フィルタに止まらず通ることを確かめた (Fable は未試行)。 worker の提出は受領済み。 残り = 規則保護 gate の新規 file の mode の記録 (下の Open item の `apply` の件と並ぶ判断材料、 worker の結果に再現の手順)。 扱い方 = [tool-call-robustness.md#api-safety-filter-on-main-response](conventions/tool-call-robustness.md#api-safety-filter-on-main-response)
-- **初回導入と委任の成果報告** — 導入の opt-in・ログ配置・個人層作成・試験の修正を反映。次は Claude の最小 Agent の実 API 呼出しで報告文面を確認する (自己試験まで検証済み)。正本 = [報告条項](conventions/multi-session-coordination.md#worker-record-clause)、[導入 script](setup.sh)、[個人層 helper](scripts/new-personal-layer.sh)。
 
 - **並列 session の用事の claim** — 一般形 = [`multi-session-coordination.md#pending-item-claims`](conventions/multi-session-coordination.md#pending-item-claims)、 参照実装は ai-collaboration `board/board_items.py`。
 - **履歴から個人の識別子を消す書き換えと再発防止** — 道具 (`git-scrub-history.py`)・commit 時の識別子の検査・検査を切る操作の hook・書き換えられた remote への追従・旧 sha を今の sha に引く `git-rewrite-follow.py map` は入った。 規約 = [confidential-repo-boundary.md#role-words-in-names](conventions/confidential-repo-boundary.md#role-words-in-names) / [agent-rule-ownership.md#guard-escape-hatch](conventions/agent-rule-ownership.md#guard-escape-hatch)、 手順 = [docs/sensitive-repo-patterns.ja.md#pattern-2-5](docs/sensitive-repo-patterns.ja.md#pattern-2-5)
