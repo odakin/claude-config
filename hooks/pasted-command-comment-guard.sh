@@ -49,8 +49,7 @@
 #   - 貼り付け指示語 regex は **日本語のみ実データ校正済** (49 日 / 真陽性 3 / FP 0)。
 #     英語 cue は推定で足してあるだけなので、 英語 session で FP が出たら削る方向で
 #     調整すること (= 校正データが無い部分は「効く」 と主張しない)。
-#   - fence の言語指定 (```sh 等) は見ていない。 見せるだけの例示 fence と貼り付け用
-#     fence を構文で区別する手段が無いため、 貼り付け指示語との共起で代用している。
+#   - 明示された非 shell 言語の fence は飛ばす。言語なし・shell・未知の指定は従来の検査を保つ。
 
 set -uo pipefail
 
@@ -78,7 +77,9 @@ CMD_RE = re.compile(r"^\s*(?:%s)\b" % CMD)
 INLINE_HASH_RE = re.compile(r"\S\s+#(?!!)")        # 行内 # (shebang は除外)
 FULLLINE_HASH_RE = re.compile(r"^\s*#(?!!)")       # 行頭 # 単独行
 # bash 3.2 parses heredoc bodies inside $(...) incorrectly; avoid literal backticks here.
-FENCE_RE = re.compile(r"^\s*" + chr(96) * 3)
+FENCE_RE = re.compile(r"^\s*(" + chr(96) + r"{3,}|~{3,})(.*)$")
+NON_SHELL = set("diff patch python py yaml yml json text txt markdown md javascript js "
+                "typescript ts ruby rb html css sql xml toml ini c cpp rust go java latex tex".split())
 PASTE_CUE = re.compile(
     # 日本語 (2026-09-09 に transcript 49 日で校正、 真陽性 3 / FP 0)
     r"実行して|打って|貼って|貼り付け|ターミナル|コピペ|流して|叩いて|"
@@ -109,12 +110,21 @@ def strip_quoted(line):
 def scan(text):
     if not PASTE_CUE.search(text):
         return None
-    in_fence = False
+    fence = None
+    inspect = False
     for ln in text.split("\n"):
-        if FENCE_RE.match(ln):
-            in_fence = not in_fence
+        match = FENCE_RE.match(ln)
+        if match:
+            delimiter, info = match.groups()
+            if fence is None:
+                fence = delimiter
+                language = info.strip().split()[0].lower() if info.strip() else ""
+                inspect = language not in NON_SHELL
+            elif delimiter[0] == fence[0] and len(delimiter) >= len(fence) and not info.strip():
+                fence = None
+                inspect = False
             continue
-        if not in_fence:
+        if fence is None or not inspect:
             continue
         if CMD_RE.match(ln) and INLINE_HASH_RE.search(strip_quoted(ln)):
             return ln.strip()[:120]

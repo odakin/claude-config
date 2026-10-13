@@ -142,3 +142,37 @@ else fail=$((fail+1)); results+=("  FAIL  B7 transcript 不在で出力: $out");
 printf '%s\n' "${results[@]}"
 echo "pasted-command-comment-guard: PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ] || exit 1
+
+# Explicit non-shell fence regression (synthetic transcripts).
+python3 - "$HOOK" <<'PY'
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+hook = sys.argv[1]
+cases = []
+for language in ('', 'bash', 'sh', 'zsh', 'shell', 'console', 'unknown-language'):
+    cases.append((language or 'unlabelled', f'貼って実行してください\n```{language}\ngit status # note\n```', True))
+for language in ('diff', 'patch', 'python', 'yaml', 'json', 'text', 'markdown', 'js', 'html', 'toml', 'PYTHON'):
+    cases.append((language, f'貼り付け\n```{language}\n # explanation\ngit status # data\n```', False))
+cases += [
+    ('mixed fences', '貼って\n```diff\n # data\n```\n```sh\ngit status # bad\n```', True),
+    ('long fence', '貼って\n````diff\n```\n # data\n````\n```bash\n# bad\n```', True),
+    ('tilde non-shell', '貼って\n~~~python\n # data\n~~~', False),
+    ('tilde shell', '貼って\n~~~sh\ngit status # bad\n~~~', True),
+    ('quoted hash', '貼って\n```sh\nprintf "%s" "# fine"\n```', False),
+    ('no cue', '```sh\ngit status # explanation\n```', False),
+    ('clean shell', '貼って\n```bash\ngit status\n```', False),
+]
+with tempfile.TemporaryDirectory() as directory:
+    transcript = Path(directory) / 'transcript.jsonl'
+    for label, text, blocked in cases:
+        transcript.write_text(json.dumps({'type':'assistant','message':{'content':[{'type':'text','text':text}]}}, ensure_ascii=False) + '\n')
+        event = json.dumps(dict(transcript_path=str(transcript), stop_hook_active=False))
+        result = subprocess.run(['bash', hook], input=event, text=True, capture_output=True, check=True)
+        actual = bool(result.stdout.strip() and json.loads(result.stdout).get('decision') == 'block')
+        assert actual == blocked, (label, result.stdout, result.stderr)
+print(f'pasted-command fences: {len(cases)}/{len(cases)} PASS')
+PY
