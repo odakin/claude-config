@@ -346,6 +346,10 @@ frameset の app では空文字と ref 無しが返る。 読み書きは `java
 - **連動 select** (親の change で子の選択肢が入る) は `e.dispatchEvent(new frames[i].Event('change',{bubbles:true}))` — **Event は frame の window のもの**を使う。
 - **popup** (`window.open('',name)` + hidden form `target=name` で開く画面) は pane で潰れて権限エラー等の副作用が出る →
   同じ form を **`target='_self'` にして submit** すれば同 frame に出る (権限エラーは popup 不成立の副作用で、 データ権限の問題ではない)。
+- <a id="browser-pane-popup-fetch"></a>**page が開いた popup (`window.open(url)`) は agent が読めない・閉じられない**。 開いている間は他の tab の JS も止まる (閉じるのは本人)。
+  中身が普通の GET の画面なら、 popup を開かずに **opener の tab から `fetch(url,{credentials:'include'})` → `TextDecoder(<page の charset>)` → `DOMParser`** で読む
+  (同じ origin なので login の cookie が付く。 使うのは読むだけの GET だけ)。 値が `input` の `value` に入っている画面 (業務 app の伝票・申請書) は `innerText` に出ないので、
+  `name` で拾う。 url は opener の `onclick` / frame の `location.href` から取る (frameset の中に読み込まれていることもある = 上の frame の読み方で先に探す) (実測)
 - **lockButton + setTimeout 型の submit** (古い業務 app に多い) は、 関数を呼んだ後 **3〜4 秒待ってから次の JS**。 連続呼びは 2 回目以降が捨てられる。
   行追加・再計算がサーバ往復なら 1 回ごとに待つ。
 - **file input は JS から置けない** (CSV 取込 / 添付 upload) → 人間の 1 操作。 行追加 + 代入で代替できるなら AI 側で済ませる。

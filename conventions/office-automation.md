@@ -3562,7 +3562,8 @@ with zipfile.ZipFile(src, 'w', zipfile.ZIP_DEFLATED) as zout:
 4. **検証 3 点 set**: openpyxl readback で値 assert + `scripts/check-xlsx-integrity.py` (= zip 直編集の納品前 gate) + [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で label 上書きゼロ確認。
 5. **cell 要素が無い (= 空セルは XML に存在しないことがある) / self-closing `<c r="X" s="n"/>` のとき**: 同じ `<row r="N">` 内に**列順を保って挿入**する (style `s=` は同列の近傍 cell から流用)。 regex は `<c r="REF"(attrs)(/>|>…</c>)` の両形を受ける。 実測: 表の最終行は `<row>` だけ在って値を入れる `<c>` が 1 つも無かった → 挿入で対応。
 6. **date 書式済みの cell は serial を書く** (例: 日付 cell = `45658` → 2025-01-01)。 serial ↔ date の換算は openpyxl readback で確認 (`datetime` が返れば書式が生きている)。
-7. Excel automation との**hybrid が実戦形**: 値の大半は Excel osascript で書き、 **書式起因の後修正だけ本手術**で当てる (= Excel 再起動 round を 1 つ消す。 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 回避にも効く)。
+7. <a id="xlsx-zip-stale-formula-cache"></a>**書き換えた cell を参照する数式の計算結果は古いまま残る** (= `<v>` の cache は Excel が開いて再計算するまで更新されない)。 送り先の Excel が開いたときに必ず再計算させるなら、 `xl/workbook.xml` の `<calcPr>` に `fullCalcOnLoad="1"` を足す (先方が保存すると Excel が外す)。 足す前に、 その workbook の差がこの属性 1 つだけかを確かめる。 実測: 入力欄を VLOOKUP で拾う事務作業用の sheet が、 値を入れた後も 0 のまま見えた (道具の option にはまだ無い = その場で足した)
+8. Excel automation との**hybrid が実戦形**: 値の大半は Excel osascript で書き、 **書式起因の後修正だけ本手術**で当てる (= Excel 再起動 round を 1 つ消す。 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 回避にも効く)。
 
 origin: マクロ入り様式 xlsm (= VBA + drawings 持ち) の日付 cell。 Excel scripting が -1728/-1708 で不安定な throttled マシン上で、 値は AppleScript・書式は本手術の hybrid で完了。
 

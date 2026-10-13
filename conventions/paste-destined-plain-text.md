@@ -36,6 +36,7 @@ span 消失・後続全損は記号剥がれより悪性 (= 欠落に気づき�
    - Linux は `xclip -selection clipboard` / WSL は `clip.exe`。 どちらも読み戻しで確かめてから渡す
 2. **第二選択 = chat の code block**: ``` で囲んだテキストは rendered されないので、 そこからのコピーは安全
 3. **禁止 = rendered md 表示からのコピー**: chat の地の文や viewer panel で開いた .md の描画をコピー元にしない (= span 消失の事故経路)。 draft file を目視レビューに使うのは OK、 コピー元にしない
+4. <a id="live-chat-text-first"></a>**相手が live chat で待っている文は、 道具の作業より先に出す** — user が窓口の chat (サポートの担当者など) を中継しているとき、 貼る文を作ったら、 保存・記録・確認の tool 作業に入る前に、 その文だけの返事で渡す (tool を挟むと文が返事の終わりまで出ず、 相手を待たせる)。 (実測)
 
 ### ③ verification — 投稿後 read-back 照合
 
