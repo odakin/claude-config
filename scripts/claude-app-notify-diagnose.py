@@ -188,6 +188,13 @@ def diagnose(hours: int) -> int:
             print(f"   {'✅' if dec[key] else '・'} {label}: {'on' if dec[key] else 'off'}")
         print(f"   ・ 比較: 通知を許可している {nc['allowed_apps']} app 中 {nc['allowed_with_sound']} app でサウンド bit が立つ"
               " (bit 位置は推定 = 同じ値なら同じ設定と読む)")
+        try:   # 源が今の設定を映しているとは限らない (docs/convention-design-principles.md#state-detector-source-must-move)
+            import datetime as _dt
+            mt = _dt.datetime.fromtimestamp((Path.home() / "Library/Preferences/com.apple.ncprefs.plist").stat().st_mtime)
+            print(f"   ・ 設定の file の更新 = {mt:%Y-%m-%d %H:%M}。 設定を画面で変えてもこの日時が動かなければ、 上の on/off は古い写し"
+                  " (機械の移行で残った file を読んでいる実測がある) = swift.log の行と本人の画面を正とする")
+        except OSError:
+            pass
         if not dec["allow"]:
             stops.append("macOS で Claude の通知が許可されていない")
         elif not dec["sound"]:
