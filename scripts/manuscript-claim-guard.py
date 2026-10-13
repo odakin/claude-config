@@ -2672,6 +2672,29 @@ def git_mode(repo: Path, rel: str, source: str) -> str:
     return entries[0].split(" ", 1)[0]
 
 
+def authority_mode_changes(rel: str, old: str, new: str, repo: Path, *, source: str = "worktree",
+                           before_mode: str | None = None, after_mode: str | None = None,
+                           declared: list[str] | None = None) -> list[dict]:
+    """commit / apply 共通の保護 file の構造差。参照行だけと通常の規則文書の新設は従来の述語に任せる。"""
+    declared = authority_paths(repo) if declared is None else declared
+    regions_old, regions_new = authority_regions(old, rel, declared), authority_regions(new, rel, declared)
+    ref_only = all(not r or rule_ref_only_regions(r) for r in (regions_old, regions_new))
+    if not (regions_old or regions_new) or ref_only:
+        return []
+    before_mode = git_mode(repo, rel, "HEAD") if before_mode is None else before_mode
+    if after_mode is None:
+        after_mode = git_mode(repo, rel, "index") if source == "index" else worktree_mode(repo / rel)
+    if (before_mode, after_mode) == ("000000", "100644"):
+        born = _rule_guard.change_exemption(rel, old, new, manifest_patterns(repo))
+        if born is not None and born["ok"]:
+            return []
+    if before_mode == after_mode:
+        return []
+    return [{"file": rel, "region": "authority:mode", "kind": "change",
+             "detail": f"Git mode {before_mode} -> {after_mode}", "target_mode": after_mode,
+             "content_sha256": hashlib.sha256(new.encode("utf-8")).hexdigest()}]
+
+
 def changes_for_repo(repo: Path, mode: str, paths: list[GitPathspec | GitNames | str]) -> list[dict]:
     begin_inspection(repo)
     rels: dict[str, str] = {}  # rel -> source (index / worktree)
@@ -2737,20 +2760,7 @@ def changes_for_repo(repo: Path, mode: str, paths: list[GitPathspec | GitNames |
                 gone[rel] = old
             elif rel in appeared:
                 came[rel] = new
-        regions_old, regions_new = authority_regions(old, rel, declared), authority_regions(new, rel, declared)
-        ref_only = all(not r or rule_ref_only_regions(r) for r in (regions_old, regions_new))
-        if (regions_old or regions_new) and not ref_only:  # 参照の行だけの file は保護 file でない = mode の記録は要らない
-            before_mode = git_mode(repo, rel, "HEAD")
-            after_mode = git_mode(repo, rel, "index") if src == "index" else worktree_mode(repo / rel)
-            if (before_mode, after_mode) == ("000000", "100644"):
-                # 新しい規則の文書 (通常の file) を足すだけ = 中身の追記と同じ述語に任せる
-                born = _rule_guard.change_exemption(rel, old, new, manifest_patterns(repo))
-                if born is not None and born["ok"]:
-                    continue
-            if before_mode != after_mode:
-                changes.append({"file": rel, "region": "authority:mode", "kind": "change",
-                                "detail": f"Git mode {before_mode} -> {after_mode}", "target_mode": after_mode,
-                                "content_sha256": hashlib.sha256(new.encode("utf-8")).hexdigest()})
+        changes.extend(authority_mode_changes(rel, old, new, repo, source=src, declared=declared))
     # 移動 (同じ commit で消える path と現れる path の組) は、 原稿の領域を同じ原稿の書き換えとして比べ直す。 権限の
     # finding (authority:* / config) は path ごとのまま
     configs = [cfg] + ([head_cfg] if head_cfg != cfg else [])
@@ -3080,12 +3090,13 @@ def approve_mode(args: argparse.Namespace) -> int:
 
 
 def apply_mode(args: argparse.Namespace) -> int:
-    """承認の記録 + 候補を対象に写す + 照合を 1 command で (本人の指示で規則の文書・権限規約を書き換える経路)。
+    """承認の記録 + 候補の書込み + 内容と Git mode の照合を 1 command で行う。
 
-    対象 (作業ツリー) と候補の差分を HEAD を基準に判定し、 保護領域が残れば approve と同じ記録 (候補の hash に束縛、
-    --latest か --quote で本人の発言に照合) を先に書き、 通ったときだけ候補の全文をそのまま対象に写して照合する。
-    裁定なしで通る変更なら承認は記録せず、 記録 (additive-log) に残す。 guard の state・symlink・git repo の外には写さない。
-    写した差分の先頭を出す = 何を写したかが transcript に残る。
+    作業ツリー → 候補と HEAD → 候補を調べ、commit と同じ構造差も記録する。既に対象と候補が同じでも、
+    HEAD との差に未承認の保護領域があれば approve と同じ照合で記録する。承認済みの同じ候補は書き直さない。
+    --target-mode は通常 file の 100644 / 100755。省略時は既存対象の属性、新設時は候補の属性を使う。
+    読み書きの権限を広げず、明示の 100755 は所有者の実行 bit を足し、100644 は実行 bit を外す。
+    裁定なしで通る変更は additive-log に残す。guard の state・symlink・git repo の外には写さない。
     """
     p = Path(args.file)
     if not p.is_absolute():
@@ -3094,28 +3105,51 @@ def apply_mode(args: argparse.Namespace) -> int:
     if guard_state_path(p) or p.is_symlink() or cp.is_symlink():
         print("apply: guard の state と symlink には写さない。", file=sys.stderr)
         return 2
+    requested_mode = getattr(args, "target_mode", None)
+    if requested_mode not in (None, "100644", "100755"):
+        print("apply: --target-mode は通常 file の 100644 / 100755 だけ。削除・symlink は approve で記録する。", file=sys.stderr)
+        return 2
     try:
         new = cp.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        print("apply: 候補 (--candidate) が読めない。", file=sys.stderr)
+        candidate_mode = worktree_mode(cp)
+        exists = p.exists()
+        old = read_text(p) if exists else ""
+        current_mode = worktree_mode(p)
+        permissions = stat.S_IMODE(p.stat().st_mode) if exists else stat.S_IMODE(cp.stat().st_mode) & 0o777
+    except (OSError, UnicodeDecodeError, InspectionError):
+        print("apply: 対象か候補 (--candidate) を通常 file として読めない。", file=sys.stderr)
         return 2
-    old = read_text(p) if p.exists() else ""
     if old is None:
         print("apply: 対象が読めない。", file=sys.stderr)
         return 2
-    if old == new:
-        print("apply: 対象と候補が同じ = 何もしない。")
-        return 0
-    repo = repo_root(p)
-    if repo is None:
-        print("apply: git repo の外の file には写さない (規約の面でない file は通常の編集で)。", file=sys.stderr)
-        return 2
-    rel, is_authority = target_identity(p, repo)
+    target_mode = requested_mode or (current_mode if exists else candidate_mode)
+    if requested_mode == "100755":
+        permissions |= stat.S_IXUSR
+    elif requested_mode == "100644":
+        permissions &= ~(stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     session = parse_session(args.session) if args.session else session_from_env()
-    begin_inspection(repo)
     PENDING_EXEMPTIONS.clear()
     try:
-        changes = protected_changes(rel, old, new, repo, authority=is_authority, baseline=head_text(repo, rel))
+        repo = repo_root(p)
+        if repo is None:
+            print("apply: git repo の外の file には写さない (規約の面でない file は通常の編集で)。", file=sys.stderr)
+            return 2
+        rel, is_authority = target_identity(p, repo)
+        begin_inspection(repo)
+        baseline = head_text(repo, rel)
+        cfg = load_config(repo, new) if rel == CONFIG_REL else load_config(repo)
+        cfg_text = head_text(repo, CONFIG_REL)
+        head_cfg = load_config(repo, cfg_text) if cfg_text else {}
+        changes = []
+        # HEAD の保護も残す = 先に shell が写した候補や、設定の緩和で範囲を狭めた候補を見落とさない。
+        for config in [cfg] + ([head_cfg] if head_cfg != cfg else []):
+            changes.extend(protected_changes(rel, old, new, repo, config, authority=is_authority, baseline=baseline))
+            if baseline != old:
+                changes.extend(protected_changes(rel, baseline, new, repo, config, authority=is_authority))
+        changes.extend(authority_mode_changes(rel, baseline, new, repo, after_mode=target_mode))
+        changes.extend(authority_mode_changes(rel, old, new, repo, before_mode=current_mode, after_mode=target_mode))
+        unique = {(c["region"], c["kind"], c.get("target_mode")): c for c in changes}
+        changes = list(unique.values())
     except Exception as exc:
         print("apply: " + inspection_reason(exc), file=sys.stderr)
         return 1
@@ -3125,37 +3159,44 @@ def apply_mode(args: argparse.Namespace) -> int:
         r = c["region"].split("~", 1)[0]
         if r not in regions:
             regions.append(r)
+    unchanged = exists and old == new and current_mode == target_mode
     if left:
         ns = argparse.Namespace(file=str(p), region=regions, change=args.change, quote=args.quote,
                                 latest=getattr(args, "latest", False), session=args.session,
-                                transcript=getattr(args, "transcript", None), candidate=str(cp),
-                                target_mode=getattr(args, "target_mode", None))
+                                transcript=getattr(args, "transcript", None), candidate=str(cp), target_mode=target_mode)
         rc = approve_mode(ns)
         if rc:
             return rc
+        if unapproved(changes, repo, session):
+            print("apply: 記録した承認と候補の内容・属性が一致しない。", file=sys.stderr)
+            return 1
+    elif unchanged and not PENDING_EXEMPTIONS:
+        print("apply: 対象・属性と候補が同じ、未承認の保護領域なし = 何も変えない。")
+        return 0
     elif not write_exemptions(session):
         print(LOG_UNWRITABLE, file=sys.stderr)
         return 1
     tmp = p.with_name(p.name + ".guard-apply.tmp")
     try:
-        mode = p.stat().st_mode if p.exists() else None
-        tmp.write_text(new, encoding="utf-8")
-        if mode is not None:
-            os.chmod(tmp, stat.S_IMODE(mode))
-        os.replace(tmp, p)
+        if not exists or old != new:
+            tmp.write_text(new, encoding="utf-8")
+            os.chmod(tmp, permissions)
+            os.replace(tmp, p)
+        elif current_mode != target_mode:
+            os.chmod(p, permissions)
     except OSError:
         print("apply: 対象に書けない。", file=sys.stderr)
         tmp.unlink(missing_ok=True)
         return 1
-    if read_text(p) != new:
-        print("apply: 写した後の照合が一致しない = 対象を確かめる。", file=sys.stderr)
+    if read_text(p) != new or worktree_mode(p) != target_mode:
+        print("apply: 写した後の内容・属性が一致しない = 対象を確かめる。", file=sys.stderr)
         return 1
     import difflib
     diff = list(difflib.unified_diff(old.splitlines(), new.splitlines(), f"a/{rel}", f"b/{rel}", lineterm="", n=1))
     print("\n".join(diff[:60]) + (f"\n… ほか {len(diff) - 60} 行" if len(diff) > 60 else ""))
-    print(f"apply: {rel} に候補を写した ({'承認を記録して' if left else '追記として記録して'}、 照合 一致)。")
+    print(f"apply: {rel} の候補を確認 ({'承認を記録して' if left else '変更の記録を確認して'}、内容・属性 一致)。")
     if not left and LAST_WRITTEN and (session is None or session[0] == "claude") and not headless():
-        print(echo_notice(LAST_WRITTEN))  # 裁定なしで通った分も、 返事に書く行を先に渡す (Stop の差し戻しを経させない)
+        print(echo_notice(LAST_WRITTEN))
     return 0
 
 
@@ -3690,6 +3731,192 @@ def scan_mode(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------- selftest
+
+def apply_mode_selftests(check) -> None:
+    """apply の content / mode / 再実行を、合成 repo・発言・state だけで検証する。"""
+    import contextlib
+    import io
+    import tempfile
+    saved_env = dict(os.environ)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td).resolve()
+        repo = root / "repo"
+        repo.mkdir()
+        home = root / "home"
+        home.mkdir()
+        env = dict(saved_env, HOME=str(home), GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                   GIT_AUTHOR_NAME="fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",
+                   GIT_COMMITTER_NAME="fixture", GIT_COMMITTER_EMAIL="fixture@example.invalid",
+                   MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(root / "state"), MANUSCRIPT_CLAIM_GUARD_HOME=str(home))
+        for key in (*AGENT_ENV_KEYS, "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+            env.pop(key, None)
+        os.environ.clear()
+        os.environ.update(env)
+        try:
+            def g(*args):
+                return subprocess.run(["git", *args], cwd=repo, env=env, capture_output=True, text=True, check=True)
+
+            body = '# agent-authority:file\nprint("before")\n'
+            new_body = body.replace("before", "after")
+            g("init", "-q")
+            g("config", "core.filemode", "true")
+            for name, mode in (("locked.py", 0o600), ("exec.py", 0o700)):
+                (repo / name).write_text(body, encoding="utf-8")
+                (repo / name).chmod(mode)
+            g("add", "locked.py", "exec.py")
+            g("commit", "-qm", "fixture")
+            sid = "fixture-apply-mode"
+            session = ("claude", sid)
+            transcript = root / f"{sid}.jsonl"
+            quote = "この試験候補の本文と属性を適用してよい。"
+            transcript.write_text(json.dumps({"type": "user", "timestamp": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                                              "message": {"content": quote}}, ensure_ascii=False) + "\n", encoding="utf-8")
+            candidate = root / "candidate.py"
+
+            def fresh(content=new_body, mode=0o600):
+                g("reset", "--hard", "-q", "HEAD")
+                g("clean", "-qfd")
+                candidate.write_text(content, encoding="utf-8")
+                candidate.chmod(mode)
+                reset_caches()
+
+            def run(name="locked.py", **overrides):
+                ns = dict(file=str(repo / name), candidate=str(candidate), change="fixture content and mode", quote=None,
+                          latest=True, session=f"claude:{sid}", transcript=str(transcript), target_mode=None)
+                ns.update(overrides)
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    return apply_mode(argparse.Namespace(**ns))
+
+            def records():
+                return load_approvals(*session)
+
+            def snap(path):
+                st = path.stat()
+                return path.read_bytes(), st.st_mode, st.st_ino, st.st_mtime_ns
+
+            def gate():
+                g("add", "-A")
+                proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), "git-precommit"], cwd=repo,
+                                      env=dict(env, CLAUDE_CONFIG_AGENT_SESSION=f"claude:{sid}"),
+                                      capture_output=True, text=True, check=False)
+                return proc.returncode, proc.stderr
+
+            fresh()
+            before = len(records())
+            rc = run("new.py")
+            added = records()[before:]
+            check("[apply-1] 新設: content と mode を同じ候補・本人発言の 1 記録にする",
+                  rc == 0 and len(added) == 1 and set(added[0]["regions"]) == {"authority:file", "authority:mode"}
+                  and added[0].get("target_mode") == "100644" and added[0]["quote"] == quote
+                  and added[0].get("content_sha256") == hashlib.sha256(candidate.read_bytes()).hexdigest())
+            check("[apply-1] 新設: 実際の staged pre-commit が通る", gate()[0] == 0)
+            (repo / "new.py").chmod(0o700)
+            blocked = gate()
+            check("[apply-1] 新設: 承認後に属性だけ変えると止まる", blocked[0] == 1 and "authority:mode" in blocked[1])
+            (repo / "new.py").chmod(0o600)
+            (repo / "new.py").write_text(new_body + "print('extra')\n", encoding="utf-8")
+            check("[apply-1] 新設: 承認後に本文だけ変えると止まる", gate()[0] == 1)
+
+            fresh()
+            rc = run("explicit.py", target_mode="100755")
+            check("[apply-1] 明示 mode: 0600 の候補から所有者だけ実行可、記録と実体が一致",
+                  rc == 0 and stat.S_IMODE((repo / "explicit.py").stat().st_mode) == 0o700
+                  and records()[-1].get("target_mode") == "100755" and gate()[0] == 0)
+            fresh(mode=0o700)
+            rc = run("default-exec.py")
+            check("[apply-1] 新設の既定 mode: 実行可の候補を保ち commit も通る",
+                  rc == 0 and worktree_mode(repo / "default-exec.py") == "100755" and gate()[0] == 0)
+            fresh()
+            rc = run("exec.py")
+            check("[apply-1] 既存の既定 mode: 非実行の候補でも対象の実行属性を保つ",
+                  rc == 0 and worktree_mode(repo / "exec.py") == "100755"
+                  and records()[-1].get("target_mode") == "100755" and gate()[0] == 0)
+            fresh(content=body)
+            before = snap(repo / "locked.py")
+            rc = run(target_mode="100755")
+            after = snap(repo / "locked.py")
+            check("[apply-1] 属性だけ: 同じ本文を写し直さず mode を記録・適用",
+                  rc == 0 and before[0] == after[0] and before[2:] == after[2:]
+                  and worktree_mode(repo / "locked.py") == "100755"
+                  and "authority:mode" in records()[-1]["regions"] and gate()[0] == 0)
+            fresh(content=body)
+            rc = run("exec.py", target_mode="100644")
+            check("[apply-1] 属性だけ: 実行属性を外した候補も記録と実体が一致",
+                  rc == 0 and worktree_mode(repo / "exec.py") == "100644" and gate()[0] == 0)
+            fresh(content="")
+            rc = run("empty.py")
+            check("[apply-1] 空の候補でも新規 file を作る", rc == 0 and (repo / "empty.py").is_file())
+            fresh()
+            before = len(records())
+            rc = run(target_mode="120000")
+            check("[apply-1] apply は symlink mode を受け付けず、記録も本文も変えない",
+                  rc == 2 and len(records()) == before and (repo / "locked.py").read_text() == body)
+            check("[apply-1] apply は削除 mode を通常 file に変換しない", run(target_mode="000000") == 2)
+
+            fresh(content=body)
+            (repo / "locked.py").chmod(0o700)
+            rc = run(target_mode="100644", latest=False)
+            check("[apply-1] HEAD と同じ属性へ戻す時も作業ツリーの保護を検査する",
+                  rc != 0 and worktree_mode(repo / "locked.py") == "100755")
+            fresh(content="実行前に確認する。\n", mode=0o600)
+            (repo / "conventions").mkdir()
+            rc = run("conventions/new-rule.md", latest=False)
+            check("[apply-1] 通常の規則文書の新設は既存の例外述語を保つ", rc == 0 and gate()[0] == 0)
+            fresh(content=f"手順 = {RULE_REF_TOKEN}\n", mode=0o700)
+            rc = run("reference.md", latest=False)
+            check("[apply-1] 参照行だけの file は mode の保護対象に広げない", rc == 0 and gate()[0] == 0)
+
+            fresh(content=body.replace("before", "prewritten"))
+            target = repo / "locked.py"
+            target.write_bytes(candidate.read_bytes())
+            before_target, before_records = snap(target), len(records())
+            rc = run()
+            check("[apply-2a] 先に写した候補: HEAD 差分の承認を記録し対象は写し直さない",
+                  rc == 0 and len(records()) == before_records + 1 and snap(target) == before_target
+                  and records()[-1].get("content_sha256") == hashlib.sha256(candidate.read_bytes()).hexdigest())
+            check("[apply-2a] 先に写した候補: 実際の staged pre-commit が通る", gate()[0] == 0)
+            approval_path = approvals_path(*session)
+            before_state = snap(approval_path)
+            with transcript.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"type": "user", "message": {"content": "別の話です。"}}) + "\n")
+            rc = run(latest=False)
+            check("[apply-2b] 承認済み再実行: 次の本人発言があっても file と承認 state を変えない",
+                  rc == 0 and snap(target) == before_target and snap(approval_path) == before_state)
+            rc = run(session="claude:fixture-other", latest=False)
+            check("[apply-2b] 別 session の同一候補: 既存承認を流用せず止まる",
+                  rc != 0 and snap(target) == before_target and snap(approval_path) == before_state)
+            fresh(content=body.replace("before", "different"))
+            target.write_bytes(candidate.read_bytes())
+            before_target = snap(target)
+            rc = run(latest=False, quote=quote)
+            check("[apply-2a] 先に写した別候補: 古い本人発言では記録しない (exit 5)",
+                  rc == 5 and snap(approval_path) == before_state and snap(target) == before_target)
+            rc = run(latest=False)
+            check("[apply-2a] 先に写した別候補: 発言も一致する承認も無ければ止まる",
+                  rc != 0 and snap(approval_path) == before_state)
+            outside = root / "outside.py"
+            outside.write_bytes(candidate.read_bytes())
+            check("[apply-2b] repo 外の同一候補も検査の前に成功へ抜けない", run(file=str(outside)) == 2)
+            # HEAD が壊れた fixture。実 repo の参照・state は触らない。
+            (repo / ".git" / "HEAD").write_text("invalid HEAD\n", encoding="utf-8")
+            reset_caches()
+            try:
+                rc = run(latest=False)
+            except InspectionError:
+                rc = 1
+            check("[apply-2b] 同一候補でも Git 検査不能は成功にしない", rc != 0)
+
+            doc = (Path(__file__).resolve().parents[1] / "conventions/agent-rule-ownership.md").read_text(encoding="utf-8")
+            check("[apply-3] 正本は同一候補の HEAD 検査と承認済み再実行を説明する",
+                  "`apply` は拒む" not in doc and "同じ候補の再実行" in doc and "HEAD との差" in doc)
+            check("[apply-3] docstring は content と Git mode と再実行を説明する",
+                  "Git mode" in (apply_mode.__doc__ or "") and "HEAD → 候補" in apply_mode.__doc__)
+        finally:
+            os.environ.clear()
+            os.environ.update(saved_env)
+            PENDING_EXEMPTIONS.clear()
+            reset_caches()
+
 
 def selftest() -> int:
     import tempfile
@@ -5836,6 +6063,8 @@ def selftest() -> int:
             os.environ["MANUSCRIPT_CLAIM_GUARD_STATE_DIR"] = saved_state
         reset_caches()
 
+    apply_mode_selftests(check)
+
     print(f"selftest: {'FAILED ' + str(len(fails)) if fails else 'ALL PASS'}")
     return 1 if fails else 0
 
@@ -5867,7 +6096,8 @@ def main(argv: list[str] | None = None) -> int:
     y.add_argument("--latest", action="store_true", help="本人の最新の発言そのものを引く")
     y.add_argument("--session")
     y.add_argument("--transcript")
-    y.add_argument("--target-mode", choices=["000000", "100644", "100755", "120000"])
+    y.add_argument("--target-mode", choices=["100644", "100755"],
+                   help="書込み後の Git mode。省略時は既存対象、新設時は候補の属性。読み書き権限は広げない")
     l = sub.add_parser("approvals")
     l.add_argument("--session")
     s = sub.add_parser("scan")
