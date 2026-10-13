@@ -318,7 +318,7 @@ display math・図は行数でなく rendered での専有量で別途見積も�
 
 例外は以下 **2 つに限定** (狭く解釈する):
 1. プリアンブル定義が**無い**概念 (= grep で見つからない)
-2. author drafting marker (= `\cl{}` `\green{}` 等の一時的 highlight、後で消す前提のスクラッチ、semantic 意味なし)
+2. author drafting marker (= `\cl{}` `\green{}` 等の一時的 highlight、後で消す前提のスクラッチ、semantic 意味なし)。 著者が自分の推敲に使う印で、 AI が原稿に入れる文には付けない (正本 = [`edit-intent-record.md#no-draft-color-marks`](../../ai-collaboration/conventions/edit-intent-record.md#no-draft-color-marks))
 
 これ以外、「raw でも動くから raw で書く」 「見た目同じだから raw で OK」 「タイプが少し短いから raw で済ます」 は全部 NG。
 
