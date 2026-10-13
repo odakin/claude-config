@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Claude が書いた文面 / コマンドを user が手で貼り付けて実行・投稿する workflow を設計・実行するとき (= 貼り先が plain text 入力欄でも terminal でも)
+when: Claude が書いた文面 / コマンドを user が手で貼り付けて実行・投稿する workflow を設計・実行するとき (= 貼り先が plain text 入力欄でも terminal でも) + 他人が自分の mail client から送る英文の draft を渡すとき (#non-ascii-via-other-client)
 category: web
 summary: 貼り付け先行きテキストの 3 層規律 (= ① authoring: 最終的に plain text 入力欄へ貼られる文面は中間 artifact 込みで最初から markdown 装飾ゼロ 〔「いま md/yaml に書いている」 は適用除外の理由にならない〕 / ② delivery: クリップボード直渡し 〔pbcopy 等〕 か code block、 rendered md 表示からのコピーは bold span ごとテキスト消失する事故源なので禁止 / ③ verification: 投稿後に read-back API で読み戻して draft と機械照合、 記録 commit はその後。 記号剥がれ 〔文は残る〕 / span 消失 〔文ごと消える〕 / 後続全損 〔最初の span 以降が全部消える〕 の 3 段階の悪性差 + 切断位置 fingerprinting 〔切断点と装飾境界の照合で経路確定〕 + chat に出す参考データも貼り付け素材)。 3 層は貼り先一般の framework = 貼り先が対話 zsh なら ① は shell-env.md の 2 規律 (行内 # / tilde) で最上位 mode は silent 成功、 共通 kernel = 機械生成 artifact を人間貼り付け用に書き直した瞬間に元の保証が消える ∴ 提示文面それ自体が検査対象
 -->
@@ -26,6 +26,8 @@ span 消失・後続全損は記号剥がれより悪性 (= 欠落に気づき�
 強調の代替は plain text 内で可能な手段 (「鍵カッコ」 / `[見出し]` 独立行 / ・箇条書き / 番号 (1)(2))。
 
 ⚠️ **「draft」 だけでなく chat に出す参考データも貼り付け素材になる**: 集計値・基準の一覧など「user が文面を自作するための素材」 として提示したテキストからも、 user は部分コピペで転記する。 貼り先が plain text UI と分かっている文脈では、 素材も code block か装飾ゼロで出す (= 実測: 装飾付きで出した参考データから user が転記し、 bold 境界で後続全損 ×2)。
+
+<a id="non-ascii-via-other-client"></a>⚠️ **他人が自分の mail client から送る文面の非 ASCII は化けることがある** (実測): 共著者などに渡した英文の draft の é が、 その人の送信で `\UTF{00E9}` のような escape に化けて相手に届いた (受け手の 1 人が気づいた)。 化けるのは渡した側の file でなく、 貼る側の client や貼り付けの経路。 他人が送る英文の draft は、 アクセント記号・en-dash・曲がった引用符を避けるか、 送る前に「非 ASCII が化けていないか」 を 1 行頼む。 送った後で気づいたら、 次の送信の前に直してもらう。
 
 ### ② delivery — コピー操作を機械側に寄せる
 

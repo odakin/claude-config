@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: referee report への point-by-point 返信を書くとき
+when: referee report への point-by-point 返信を書くとき + 不採択の直後に編集者へ第 2 referee を頼む返信を書くとき (#ask-editor-second-referee)
 category: paper
-summary: referee report への point-by-point 返信 (= author response) 作成 6 reflex (= 回答は本文 grep 照合・起源でない文献は see e.g.・referee 誤記は静かに正す・自己否定語回避・全 comment フル引用・旧式番号は submission 版基準)、 paper-audit.md と相補
+summary: referee report への point-by-point 返信 (= author response) 作成 6 reflex (= 回答は本文 grep 照合・起源でない文献は see e.g.・referee 誤記は静かに正す・自己否定語回避・全 comment フル引用・旧式番号は submission 版基準)、 paper-audit.md と相補。 不採択の直後の 1 通 (専任の編集者に確かめられる事実 1 つ・誤読を言い切る 1 文・report の限定まで引いて答える) = #ask-editor-second-referee
 -->
 # Rebuttal Letter (= Author Response to referees)
 
@@ -101,3 +101,19 @@ reject 後の改訂や誌替え再投稿の準備で、 **土台にした版が�
 **Rule (2026-09-09 改訂)**: 既定は (ii) と (iv) の併用、 companion が近ければ (i) を重ねる。 **(iv) の可否は「印字済み量だけで閉じる部分」 の切れ目が構造的境界かで決まる**。 切れ目が「どの振幅が入るか」 で決まり (例: 最低次の恒等式には異なる sector を混ぜる振幅が入らない = 背景の対称性がその次数の混合項を作る定数 tensor を許さないので、 混合項は次の次数から)、 本稿と companion の sector 分担線に一致するなら、 (iv) は fig leaf にならない。 その場合の書き方 = ① 恒等式**全体**を Γ レベルで display する (混合項は記号だけ、 値と規約辞書は companion) ② 印字部分は loop 計算の check として 3 拍 (何が決まるか / 調整余地なし / 一致した値) で書き、 機械 anchor (印字式からの audit script) を残す ③ 残りは「混合振幅が入る次数」 と名指しして companion へ送り、 検証範囲 (成分数・generic q・pole) を明記する。 切れ目が展開の途中の恣意的な打ち切りなら「自明部だけ印字して非自明部は次の論文」 に見えて「残りも出せ」 を誘うので、 (iv) は避けて (ii) だけにする。 (ii) の条件 = 本文の文が「係数決定には使わない cross-check」 のように主張の重さを既に限定していること、 材料 (note + 機械検証 script) が即座に出せる状態にあること。 ⚠️ 「既に本文で示した別の結果の言い換えだから印字する価値が無い」 は却下理由にならない — Ward–Takahashi 恒等式は誘導作用への制約でなく loop 計算の check で、 印字済みの別の対称性の恒等式も同じ立場 (誘導作用が共変なら自動) にある。 検査可能な式がゼロの現状が floor で、 恒等式と閉じる部分の印字は checkable 量を単調に増やすだけで、 referee の要求はそれ以上強くならない。
 
 起源 = 第 2 ラウンドの AI 査読 (ある恒等式を本稿でどこまで示すか)、 著者裁定「(ii) でいこう」 → **後日、 著者が (iv) を再提起して採用** (趣旨: 全く書かないのは有り得ない、 閉じる次数だけ書いて残りを次の論文に回すのが、 何もしないより悪いことは無い)。 印字式からの実測で、 閉じる次数が構造的な境界と判明し、 付録 (導出) + 本文 (最低次の形) に印字、 audit script が anchor。 ⚠️ meta: 前日版の rule「(iv) は罠」 は単一 instance の referee 心理推測をその日のうちに層1 へ hoist したもので、 後日の first-principles 検算で反転した。 一般則の hoist は instance が settle してから (= 著者が採否を実際に運用した後)。 sibling = [`paper-audit.md#claim-strength-three-tests`](paper-audit.md#claim-strength-three-tests) (言明の強さ)、 [`#defensive-revision`](#defensive-revision) (断言 → test framing)。
+
+## <a id="ask-editor-second-referee"></a>不採択の直後に編集者へ出す 1 通: 第 2 referee を頼む
+
+report が 1 本で、 その中の具体的な主張が原稿で確かめられる誤読のとき、 誌替えの前に担当編集者へ返信で第 2 referee を頼む。 正式 appeal ではない。
+
+- **段を分ける**: 例 = APS (Physical Review) は公開の規程で 3 段 (journals.aps.org/authors/editorial-appeal-procedures)。 (1) 担当編集者への再考依頼 (慣行) (2) 正式 appeal = Editorial Board の 1 名が記録を見て助言、 著者は適任・不適任の member を挙げられる (3) 手続きの公正さだけを見る最終段。 最初の 1 通は (1) だけにし、 (2) の候補名は返事を見てから使う。
+- **読み手は専任の編集者**: 多くの誌の associate editor は研究歴のある専任職で、 その分野の現役研究者ではない。 物理の優劣は判定できないので、 技術語・節の列挙・関連文献の比較を並べても説得にならない。 書くのは 3 つだけ:
+  1. 編集者が原稿を開いて 1 分で確かめられる事実 (例 = 「report が挙げた文献を、 本稿は付録の照合でだけ引いている」)
+  2. 誤読を平易に言い切る 1 文 (例 = 「report はその照合を本稿の結果と読んだ」)
+  3. 本稿の結果が何かを 1 文
+- **report の文は限定まで verbatim で引き、 限定ごと答える**: "see Refs. X, for example" なら、 例を崩すだけでは「many papers」 の本体が残る。 「挙がったのは X だけ / X は照合で引いた / 近い先行研究の一覧と違いは §N に書いた / report は他を挙げていない」 の形で本体に答える。
+- **頼み方**: 第 2 referee の分野を 1 句で指定する。 report が挙げた文献の著者本人を候補に挙げると、 自分たちの読みへの自信として効く (その人が当の referee でも、 自分の論文との違いは当人が判断する)。
+- **文体**: 簡潔・平易・論理的。 1 段落 1 主張。 読みにくい英文 (主語が抽象名詞の受け身、 "questions no equation" のような詰めすぎた言い方) は短い普通の文に言い直す。 冗長の差し戻しが続いた (実測) = 初稿から絞る。
+- **共著者に「appeal は効かない、 誌替えが安い」 と言われたら**: これは正式 appeal でなく 1 通であること、 費用は書き終えた 1 通だけであること、 期限 (例 = 3 週) を切って動きがなければ誌替えに移ることで答える。 決めた人たちの連名で「こう決めた、 今日中に異論が無ければ出す」 の形にする。 誌替え先の cover letter にも同じ線引きを入れる (同じ referee に回ることがある)。
+- **予防 (原稿の側)**: 古典的な文献との一致を付録で確かめると、 その付録が主結果と読まれることがある。 照合のための引用は「照合のため」 と本文に明示し、 序論で既知との線引きを 1 文で言う ([`paper-audit.md`](paper-audit.md) の主張の配置の検査)。
+- 他人の mail client から送られる文面の非 ASCII = [`paste-destined-plain-text.md#non-ascii-via-other-client`](paste-destined-plain-text.md#non-ascii-via-other-client)。

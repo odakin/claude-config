@@ -140,7 +140,7 @@ claude-config/
 │   ├── paper-audit.md                      # 論文 merger 等の構造 issue を体系 audit するとき
 │   ├── paper-submission.md                 # 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき
 │   ├── passkey-cross-device.md             # パスキーでしか入れないサービスに別の端末 (スマホ・別の PC) から入れないとき + 「この QR コードをスキャン」 と出て止まったとき + パスキーを 2 台目の端末に足すとき + パスキーの保存先を選ぶ画面が出たとき
-│   ├── paste-destined-plain-text.md        # Claude が書いた文面 / コマンドを user が手で貼り付けて実行・投稿する workflow を設計・実行するとき (= 貼り先が plain text 入力欄でも terminal でも)
+│   ├── paste-destined-plain-text.md        # Claude が書いた文面 / コマンドを user が手で貼り付けて実行・投稿する workflow を設計・実行するとき (= 貼り先が plain text 入力欄でも terminal でも) + 他人が自分の mail client から送る英文の draft を渡すとき (#non-ascii-via-other-client)
 │   ├── peer-review-workflow.md             # referee・審査委員として他者の paper / 申請書を評価するとき
 │   ├── personal-skills.md                  # personal skill (~/.claude/skills/) を規律の発火面として使うとき
 │   ├── photographed-document-transcription.md # スキャナを通していない「撮っただけ」 の紙 (手書きの提出物・ノート・書類) を大量にモデルで読んで構造化するとき + その読み取りを複数 session に分担するとき + 撮影した印刷資料から引用を起こして文章の根拠にするとき + 自分の文書に他人が手書きで朱を入れて返してきた PDF (差し戻し・添削・紙の査読票) を読むとき + 通知書・明細など数字の表を写真から転記するとき (#printed-totals-checksum)
@@ -153,7 +153,7 @@ claude-config/
 │   ├── pronunciation-verification.md       # 未知の言語・転写された人名や語の発音を調べるとき / user が「実際に音で聞きたい」と言ったとき
 │   ├── prototype-feedback.md               # 外部からウェブアプリ・制作物・企画等の試用とコメントを頼まれ、スクリーンショット・QR・一時URLから実物を確認して返却文面を作るとき
 │   ├── public-page-watch.md                # 「いつ変わるか分からないが、 変わったらすぐ動く」 公開ページの告知 (受付の再開・募集の開始・日程の変更・議事の結果) を待つとき + 待っている告知の正本を記録に書くとき + 無人の定期実行から人に知らせる経路 (OS 通知・ダイアログ・スマホ push) を組むとき + headless `claude -p` から通知を送ろうとしたとき (スマホには届かない、 #sealed-headless-push) + 見張っていたページが変わったが判断に要る中身がそこに無いとき (#watch-where-the-content-lands)
-│   ├── rebuttal-letter.md                  # referee report への point-by-point 返信を書くとき
+│   ├── rebuttal-letter.md                  # referee report への point-by-point 返信を書くとき + 不採択の直後に編集者へ第 2 referee を頼む返信を書くとき (#ask-editor-second-referee)
 │   ├── remote-control-server.md            # Remote Control サーバーモードを常駐・troubleshoot するとき
 │   ├── repo-history-growth.md              # build した PDF・図・様式の出力を commit しようとするとき + git-crypt で暗号化した file を頻繁に書き足す台帳にするとき + 自動生成の data を定期 job で commit するとき + repo (.git) が大きい・clone や fetch が重いと気づいたとき + repo は小さいのに fetch・push・ls-remote が毎回数秒かかるとき (#slow-round-trip) + git-crypt の repo を一時 clone して unlock する道具を書くとき + check-history-growth.py の 🟠 / commit 時の ⚠️ を見たとき
 │   ├── research-email.md                   # 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき + 成人の学生について保護者から様子や期待を尋ねられ返信を書くとき (#guardian-inquiry) + 学内の運用ルールに止められた依頼を出し直すとき (#blocking-rule-origin) + 先に短い返事 (了解・あとで返事します) を送ったスレッドに続きの返信を書くとき (#follow-up-after-quick-ack) + 事務から懇親会・夕食会などを出張の用務に入れた理由を聞かれたとき (#event-duty-justification) + 出張・購入の手引きや事務の回答を当てる前に、 その財源に掛かる規則かを確かめるとき (#rules-by-funding-source) + 出張の宿泊を証明する書類を決めるとき・施設が指定様式や領収書を断ったとき (#lodging-proof-choice)
