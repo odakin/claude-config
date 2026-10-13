@@ -18,7 +18,7 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[chat-path-base-nudge.test.sh](chat-path-base-nudge.test.sh)** — logic selftest
 - **[codex-parent-worker-record-nudge.py](codex-parent-worker-record-nudge.py)** — Codex由来の環境IDがあるClaude workerだけに記録条項を渡す (UserPromptSubmit/Stop、非blocking)。
 - **[currentdate-anchor.py](currentdate-anchor.py)** — session start temporal anchor
-- **[delegation-record-clause.py](delegation-record-clause.py)** — agent (subagent) に仕事を委ねる瞬間に、 その指示の末尾へ「考えたことを書き残す約束」 を機械で足す (PreToolUse[Agent])
+- **[delegation-record-clause.py](delegation-record-clause.py)** — 委任時に成果報告の3項目を追加する (PreToolUse[Agent])。
 - **[escape-hatch-guard.py](escape-hatch-guard.py)** — PreToolUse(Bash): commit gate を外す操作 (CLAUDE_*_GUARD=0 / git の --no-verify・commit -n / core.hooksPath の差し替え) を、 本人がこの session で明示に指示し承認として記録していない限り deny
 - **[escape-hatch-guard.test.sh](escape-hatch-guard.test.sh)** — gate の escape hatch の deny と、 本人の指示の記録 (承認台帳) による通過を hook の入出力で検査 (承認は実物の approve CLI で記録)
 - **[expensive-tmp-guard.sh](expensive-tmp-guard.sh)** — PreToolUse(Bash): Audiveris / oemer / ML training 系の -output /tmp/ パターンを検出して `permissionDecision: ask`

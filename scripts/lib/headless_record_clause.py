@@ -808,11 +808,15 @@ def main() -> int:
 def selftest(hook):
     import subprocess
     import tempfile
+    from worker_record_clause import CLAUSE
     checks = []
 
     def check(ok, label):
         checks.append(bool(ok))
         print(('OK ' if ok else 'FAIL ') + label)
+
+    check(CLAUSE.splitlines()[3].startswith('作業の最後に、次の3項目を簡潔に報告してください。'),
+          'shared clause requests final report items')
 
     def invoke(command, **event):
         ev = dict(hook_event_name='PreToolUse', tool_name='Bash',

@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""delegation-record-clause.py — agent (subagent) に仕事を委ねる瞬間に、 その指示の末尾へ「考えたことを書き残す約束」 を機械で足す (PreToolUse[Agent])
+"""delegation-record-clause.py — 委任時に成果報告の3項目を追加する (PreToolUse[Agent])。
 
-なぜ委ねる瞬間か (実測):
-  agent の「考え中」 の中身は会話記録に残らない (記録の thinking 欄は空)。 agent が捨てた案・途中で気づいた壊れ方・
-  確かめていないことは、 agent 自身が報告か成果物に書いた分しか後から引けない。 締めの整理 (知見を正本へ移す手順) に
-  「書かせる」 と書いても、 そこを読む時には agent はもう考え終わっている = 後の祭り。 委ねる側が毎回指示に書くのも、
-  書き忘れれば落ちる。 → 委ねる tool call そのものを書き換えて、 約束の段を必ず渡す。
+報告項目は、捨てた案と理由・作業中の発見・未確認事項。
+成果物の受領と後の整理に必要な項目を、最初の依頼で伝える。
+共通文面は scripts/lib/worker_record_clause.py が所有する。
 
 動作:
   PreToolUse で tool_name が Agent (旧名 Task) の時だけ、 tool_input.prompt の末尾に下の CLAUSE を足した
@@ -75,6 +73,12 @@ def selftest() -> int:
                          "run_in_background": True}}
     out = rewrite(ev)
     new = (out or {}).get("hookSpecificOutput", {}).get("updatedInput", {})
+    expected = (
+        "作業の最後に、次の3項目を簡潔に報告してください。成果物のfileに書く場合は、そのpathを報告してください。"
+        "該当が無い項目は「なし」と書いてください。"
+    )
+    check(CLAUSE.splitlines()[3] == expected, "report introduction requests only deliverable items")
+    check(new.get("prompt", "").endswith(CLAUSE), "Agent receives the full shared report contract")
     check(new.get("prompt", "").startswith("調べて直して") and MARKER in new.get("prompt", ""), "Agent: 指示の末尾に約束の段を足す")
     check({k: v for k, v in new.items() if k != "prompt"} == {k: v for k, v in ev["tool_input"].items() if k != "prompt"},
           "prompt 以外の入力は変えない")

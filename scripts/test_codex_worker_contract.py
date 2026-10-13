@@ -34,6 +34,8 @@ def selftest(against=None):
                 assert contract.MARKER in json.dumps(contract.handle(event),ensure_ascii=False)
             event={'hook_event_name':'UserPromptSubmit','session_id':CHILD,'turn_id':'child-turn','prompt':'synthetic task'}
             result=contract.handle(event)
+            assert result['hookSpecificOutput']['additionalContext'] == contract.CLAUSE
+            assert contract.CLAUSE.splitlines()[3].startswith('作業の最後に、次の3項目を簡潔に報告してください。')
             assert contract.MARKER in result['hookSpecificOutput']['additionalContext']
             assert 'permissionDecision' not in json.dumps(result) and 'updatedInput' not in json.dumps(result)
             assert contract.handle(dict(event,session_id=PARENT)) is None
