@@ -1062,7 +1062,8 @@ def authority_paths(repo: Path | None) -> list[str]:
 def target_identity(path: Path, repo: Path | None) -> tuple[str, bool]:
     resolved = path.resolve()
     if repo is not None:
-        return os.path.relpath(resolved, repo), True
+        # Git と同じ "/" 区切りに揃える (Windows の relpath は "\" を返し、 commit 時の変更の file と一致しなかった)
+        return os.path.relpath(resolved, repo).replace(os.sep, "/"), True
     # Machine-local control files are protected even outside any Git checkout.
     # Other scratch files do not become policies merely by mentioning an engine.
     home = Path.home().resolve()
@@ -1924,7 +1925,8 @@ def unapproved(changes: list[dict], repo: Path | None, session: tuple[str, str] 
     for ch in changes:
         ok = False
         for a in appr:
-            if a.get("repo") != rep or a.get("file") != ch["file"]:
+            # 記録済みの承認 (Windows で "\" 区切りのまま書かれたもの) も "/" に揃えて比べる
+            if a.get("repo") != rep or str(a.get("file", "")).replace("\\", "/") != ch["file"].replace("\\", "/"):
                 continue
             if ch["region"].startswith("authority:") or ch["region"] == "config":
                 if not ch.get("content_sha256") or a.get("content_sha256") != ch["content_sha256"]:
@@ -2136,7 +2138,7 @@ def looks_binary(p: Path, repo: Path | None = None) -> bool:
     except OSError:
         return False
     if repo is not None:
-        rel = os.path.relpath(p.absolute(), repo)
+        rel = os.path.relpath(p.absolute(), repo).replace(os.sep, "/")
         for spec in (f":{rel}", f"HEAD:{rel}"):  # 復号した中身で見る (git-crypt の path は生の blob が暗号文)
             try:
                 if read_blob is not None:
@@ -2234,7 +2236,7 @@ def relevant_text_file(p: Path, repo: Path | None = None) -> bool:
     # merely because its target has a different name.
     if repo is None:
         repo = repo_root(p.parent)
-    rel = os.path.relpath(p.absolute(), repo) if repo else str(p.absolute())
+    rel = os.path.relpath(p.absolute(), repo).replace(os.sep, "/") if repo else str(p.absolute())
     if gitlink and declared_reaches_inside(rel.replace(os.sep, "/"), repo):
         return True
     return _rule_guard.protected_path(rel, authority_paths(repo))
@@ -2994,7 +2996,7 @@ def approve_mode(args: argparse.Namespace) -> int:
         p = Path.cwd() / p
     if p.is_symlink() or "authority:mode" in args.region:
         repo = repo_root(p.parent)
-        rel = os.path.relpath(p.absolute(), repo) if repo else str(p.absolute())
+        rel = os.path.relpath(p.absolute(), repo).replace(os.sep, "/") if repo else str(p.absolute())
     else:
         repo = repo_root(p)
         rel, _ = target_identity(p, repo)
@@ -3679,7 +3681,7 @@ def scan_mode(args: argparse.Namespace) -> int:
             detail = " " + c["detail"] if c.get("detail") else ""
             print(f"{c['file']} :: {c['region']} ({c['kind']}){detail}")
         return 0
-    rel = os.path.relpath(p, repo) if repo else p.name
+    rel = os.path.relpath(p, repo).replace(os.sep, "/") if repo else p.name
     old = head_text(repo, rel, args.rev) if repo else ""
     new = read_text(p) or ""
     for c in protected_changes(rel, old, new, repo):
