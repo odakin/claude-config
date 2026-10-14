@@ -299,3 +299,6 @@ sections:
   - id: braket-set-ket
     level: 2
     title: "braket.sty の `\\Set{…}` の中で `\\ket` / `\\bra` が壊れる — `\\vert` で再定義する"
+  - id: smash-parbox-into-ruled-box
+    level: 2
+    title: "表の空行を積んだ記入欄に、 枠の大きさを変えずに文章を流し込む"
