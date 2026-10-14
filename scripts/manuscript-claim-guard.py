@@ -13,7 +13,7 @@
        conclusion 見出しが Conclusion(s) / Summary / Discussion / Concluding remarks / Outlook / まとめ / 結論 等
        section:<名>  repo の設定 (protect_sections) が指定した節
        eq:<label> / math#<hash>  数式の display 環境 (equation / align / gather / multline / eqnarray /
-                  flalign / alignat / displaymath / \\[ \\])。 label があれば label、 無ければ中身の hash で識別
+                  flalign / alignat / displaymath / \\[ \\] / $$ $$)。 label があれば label、 無ければ中身の hash で識別
                   display 環境を 1 引数の macro で包む原稿 (\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}} 型) は、
                   その macro の引数も同じ識別で式として読み、 原稿の範囲 (.sty / .cls を含む) でその macro の定義が
                   変わる変更も math#<hash> として止める (拾い方 = wrapper_context)
@@ -81,6 +81,7 @@ state: MANUSCRIPT_CLAIM_GUARD_STATE_DIR (既定 ~/.claude/state/manuscript-claim
 from __future__ import annotations
 
 import argparse
+import bisect
 import datetime as _dt
 import fnmatch
 import functools
@@ -128,12 +129,33 @@ MATH_ENVS = ("equation", "align", "gather", "multline", "eqnarray", "flalign", "
 # 偶数個 (\\\[ = 行送りの直後の式) は始まり。 閉じの \] も中身を backslash の対ごとに読み、 \\] の ] で閉じない。
 # 中身は次の \[ で打ち切る (\[ の中の \[ は LaTeX でも誤り)。 打ち切らないと、 閉じの無い \[ (verbatim の例示の
 # \[ a \\] など) が後ろの \] まで式を呑み、 \[ ごとに末尾まで読むので時間も 2 乗になる。
-# Python の re は可変長の後読みを持たないので、 前の backslash の対は span に含める (prose_tokens は \\ を読まない)。
+# Python の re は可変長の後読みを持たないので、 前の backslash の対は span に含める (prose_tokens は \\ を語にしない)。
+# \begin{環境} も同じく backslash の数で読む (\\begin は行送り + 文字)。 \begin・\end と { の間の空白は TeX と同じく
+# 読み飛ばす。 環境の中身も backslash の対ごとに読み、 \\end{環境} (行送り + 文字) で閉じない。 中身は次の数式環境の
+# \begin で打ち切る (数式環境の入れ子は LaTeX でも誤り。 打ち切らないと、 閉じの無い \begin ごとに末尾まで読んで
+# 時間が 2 乗になる)。
+_MATH_ENV_NAME = r"(?:" + "|".join(MATH_ENVS) + r")\*?"
 MATH_RE = re.compile(
-    r"\\begin\{(?P<env>(?:" + "|".join(MATH_ENVS) + r")\*?)\}(?P<body>.*?)\\end\{(?P=env)\}"
-    r"|(?<!\\)(?:\\\\)*\\\[(?P<br>(?:[^\\]|\\[^\[])*?)\\\]",
+    r"(?<!\\)(?:\\\\)*(?:"
+    r"\\begin\s*\{(?P<env>" + _MATH_ENV_NAME + r")\}"
+    r"(?P<body>[^\\]*(?:\\(?!end\s*\{(?P=env)\}|begin\s*\{" + _MATH_ENV_NAME + r"\})[\s\S][^\\]*)*)"
+    r"\\end\s*\{(?P=env)\}"
+    r"|\\\[(?P<br>(?:[^\\]|\\[^\[])*?)\\\])",
     re.S,
 )
+# plain TeX の $$ … $$。 中身は単独の $ (escape されていないもの) を越えず、 \[ と同じく次の \[ で打ち切る。 中の
+# brace の組には $ を含んでよい (\mbox{… $n$ …}) が、 re は再帰を持たないので 3 段の入れ子までしか読めない。 brace で
+# 読めなければ brace を読まない読み方 (最初の $ まで) に戻る = 4 段以上の brace の式も、 中に $ が無ければ読める。
+# 限界: 4 段以上の brace と $ (式のどこにあっても) を両方持つ式は両方の読み方で読めず、 後ろの $$ の組がずれる。
+# 組の合わない $$ (\verb|$$| など) が、 後ろの brace の中の $$ (\footnote{… $$ … $$ …}) と組むこともある。
+_BRACED = r"\{(?:[^{}\\]|\\.)*\}"
+for _ in range(2):
+    _BRACED = r"\{(?:[^{}\\]|\\.|" + _BRACED + r")*\}"
+_DOLLAR_DISPLAY_BODY = r"(?:[^$\\{]|\\[^\[]|" + _BRACED + r")*?|(?:[^$\\]|\\[^\[])*?"
+# $$ は開きと閉じが同じ記号なので、 組み方が前の文脈 (\verb|$$|、 $$ を値に持つ定義) で食い違う。 食い違っても中身を
+# 取りこぼさないよう、 (1) 式の領域では数式環境・\[ \]・wrapper の使用を先に取り、 $$ はその間だけで組む (式の中で
+# 閉じない)、 (2) prose からは外さない (prose_tokens が 1 つの数式の語として読む) = 保護節の $$ は語と式の両方で見る。
+DOLLAR_DISPLAY_RE = re.compile(r"(?<!\\)(?:\\\\)*\$\$(?P<dd>" + _DOLLAR_DISPLAY_BODY + r")\$\$", re.S)
 
 
 def _name_re(braced: str, bare: str) -> str:
@@ -160,15 +182,16 @@ DEF_ANY_RE = re.compile(
     + r"|\\(?:[gex]?def|let)\s*\\(?P<c>[A-Za-z@]+)"
 )
 WRAPPER_BODY_RE = re.compile(
-    r"\\begin\{(?P<env>(?:" + "|".join(MATH_ENVS) + r")\*?)\}#1\\end\{(?P=env)\}|\\\[#1\\\]"
+    r"\\begin\{(?P<env>(?:" + "|".join(MATH_ENVS) + r")\*?)\}#1\\end\{(?P=env)\}|\\\[#1\\\]|\$\$#1\$\$"
 )
 MACRO_NAME_RE = re.compile(r"^\\?([A-Za-z@]+)$")
 WRAPPER_SOURCE_GLOBS = ("*.tex", "*.sty", "*.cls", "*.def", "*.clo")  # 原稿の範囲で wrapper の定義を探す file
 DEF_SOURCE_SUFFIXES = (".sty", ".cls", ".def", ".clo")  # 原稿の範囲の外の拡張子だが、 wrapper の定義の変更は見る
-# verbatim 系の中身 (LaTeX を解説する原稿の例示) は定義でも読み込みでもない = 同じ長さの空白にしてから探す
+# verbatim 系の中身 (LaTeX を解説する原稿の例示) は定義でも読み込みでもない = 同じ長さの空白にしてから探す。
+# 始まりは backslash の数で読む (\\verb|…| は行送り + 文字 = その後ろの \input や定義を空白にしない)
 VERBATIM_RE = re.compile(
-    r"\\begin\{(verbatim\*?|Verbatim|lstlisting|minted|alltt|comment)\}.*?\\end\{\1\}"
-    r"|\\verb\*?([^\sA-Za-z*])(?:(?!\2)[^\n])*\2",
+    r"(?<!\\)(?:\\\\)*(?:\\begin\{(verbatim\*?|Verbatim|lstlisting|minted|alltt|comment)\}.*?\\end\{\1\}"
+    r"|\\verb\*?([^\sA-Za-z*])(?:(?!\2)[^\n])*\2)",
     re.S,
 )
 INPUT_DEP_RE = re.compile(
@@ -307,12 +330,31 @@ def math_wrappers(text: str) -> set[str]:
     return {name for _, name, event in macro_definitions(text) if event == "math"}
 
 
-def math_spans(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> list[tuple[int, int, str]]:
+def math_spans(text: str, macros: frozenset[str] | set[str] | tuple = (),
+               dollars: bool = False) -> list[tuple[int, int, str]]:
     """(開始, 終わり, 中身) を文頭から順に。 数式環境と wrapper macro の使用を 1 本の走査で読む = macro の引数の中の
     文字列 (align の中の \\\\[2pt] 等) を別の式の始まりと読まない。 使用 = 名前の後の [...] (宣言した macro の optional
-    引数) を飛ばした最初の brace の中身。 定義の文の中の名前は使用でない。 macros が空なら MATH_RE.finditer と同じ。"""
-    use_re = (re.compile(r"\\(?:" + "|".join(re.escape(n) for n in sorted(macros, key=len, reverse=True))
-                         + r")(?![A-Za-z@])\s*(?:\[[^\]]*\]\s*)*(?=\{)") if macros else None)
+    引数) を飛ばした最初の brace の中身。 定義の文の中の名前は使用でない。 名前の前の backslash は数で読む (\\\\al{…} は
+    行送り + 文字)。 macros が空なら MATH_RE.finditer と同じ。 dollars = $$ … $$ も読む (式の領域。 その他の式の
+    間だけで組む = DOLLAR_DISPLAY_RE の注)。"""
+    spans = _formula_spans(text, macros)
+    if not dollars:
+        return spans
+    out: list[tuple[int, int, str]] = []
+    pos = 0
+    for start, end, body in spans + [(len(text), len(text), None)]:
+        out.extend((d.start(), d.end(), d.group("dd")) for d in DOLLAR_DISPLAY_RE.finditer(text, pos, start))
+        if body is not None:
+            out.append((start, end, body))
+        pos = end
+    return out
+
+
+def _formula_spans(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> list[tuple[int, int, str]]:
+    """math_spans の数式環境・\\[ \\]・wrapper の使用の部分。"""
+    use_re = (re.compile(r"(?<!\\)(?:\\\\)*(?P<use>\\(?:"
+                         + "|".join(re.escape(n) for n in sorted(macros, key=len, reverse=True))
+                         + r"))(?![A-Za-z@])\s*(?:\[[^\]]*\]\s*)*(?=\{)") if macros else None)
     defined_at = {p for p, _, _ in macro_definitions(text)} if macros else set()
     out: list[tuple[int, int, str]] = []
     pos = 0
@@ -323,8 +365,8 @@ def math_spans(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> lis
             m = MATH_RE.search(text, pos)
         if u is not None and u.start() < pos:
             u = use_re.search(text, pos)
-        if u is not None and u.start() in defined_at:  # \newcommand\al[1]{…} の \al[1] は使用でない
-            u = use_re.search(text, u.start() + 1)
+        if u is not None and u.start("use") in defined_at:  # \newcommand\al[1]{…} の \al[1] は使用でない
+            u = use_re.search(text, u.start("use") + 1)
             continue
         if u is not None and (m is None or u.start() < m.start()):
             arg = balanced_arg(text, u.end())
@@ -342,16 +384,18 @@ def math_spans(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> lis
 
 def math_regions(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> dict[str, str]:
     out: dict[str, str] = {}
-    for _, _, body in math_spans(text, macros):
+    next_suffix: dict[str, int] = {}  # 同じ key の次の番号 (毎回 ~2 から探すと、 同じ式が多い原稿で 2 乗になる)
+    for _, _, body in math_spans(text, macros, dollars=True):
         lab = re.search(r"\\label\{([^}]*)\}", body)
         norm = norm_math(body)
         label = lab.group(1).strip() if lab else ""
         key = (label if label.startswith("eq:") else f"eq:{label}") if label else f"math#{sha8(norm)}"
-        n = 2
-        base = key
-        while key in out:
+        if key in out:
+            base, n = key, next_suffix.get(key, 2)
+            while f"{base}~{n}" in out:
+                n += 1
             key = f"{base}~{n}"
-            n += 1
+            next_suffix[base] = n + 1
         out[key] = norm
     return out
 
@@ -414,17 +458,39 @@ def prose_regions(text: str, protect_sections: list[str]) -> dict[str, str]:
 
 
 def prose_tokens(raw: str, macros: frozenset[str] | set[str] | tuple = ()) -> list[str]:
+    """先頭から順に読む。 backslash は後ろの記号 1 文字と組で読む (\\$ は文字の $ = inline 数式の区切りでない、
+    \\\\( は行送り + 文字の ( = \\( の始まりでない)。 数式の中も同じ組で読み、 \\$ や \\\\) で閉じない。 \\( は次の
+    \\) まで (閉じの位置は先に 1 回だけ数える = 閉じの無い \\( が続いても 2 乗にならない)。 $$ … $$ は 1 つの数式の
+    語 (演算子を落とさない。 式の比較と同じく空白・\\, 等・末尾の句点は語にしない)。 文字の \\$ \\% \\& \\# は語にする。"""
     s = strip_math(strip_tex_comments(raw), macros)
+    closes = [m.start(1) for m in re.finditer(r"(?<!\\)(?:\\\\)*(\\\))", s)]
     toks: list[str] = []
-    for m in re.finditer(
-        r"\$[^$]*\$|\\\(.*?\\\)|\\[A-Za-z@]+|[A-Za-z]+|\d+(?:\.\d+)?|[\u3040-\u30ff\u3400-\u9fff]",
-        s,
+    token_re = re.compile(
+        r"\$\$(?:" + _DOLLAR_DISPLAY_BODY + r")\$\$|\$(?:[^$\\]|\\.)*\$|\\\(|\\[A-Za-z@]+"
+        r"|\\[\x00-\x2f\x3a-\x3f\x5b-\x60\x7b-\x7f]"
+        r"|[A-Za-z]+|\d+(?:\.\d+)?|[\u3040-\u30ff\u3400-\u9fff]",
         re.S,
-    ):
+    )
+    pos = 0
+    while (m := token_re.search(s, pos)) is not None:
         t = m.group(0)
-        if t.startswith("$") or t.startswith("\\("):
-            toks.append("$" + re.sub(r"\s+", "", t.strip("$")) + "$")
+        pos = m.end()
+        if t == "\\(":
+            k = bisect.bisect_left(closes, pos)
+            if k < len(closes):  # 閉じの無い \\( は今までどおり語にしない
+                pos = closes[k] + 2
+                toks.append("$" + re.sub(r"\s+", "", s[m.start():pos]) + "$")
             continue
+        if t.startswith("$$") and len(t) >= 4:
+            toks.append("$$" + norm_math(t[2:-2]) + "$$")
+            continue
+        if t.startswith("$"):
+            toks.append("$" + re.sub(r"\s+", "", t[1:-1]) + "$")
+            continue
+        if len(t) == 2 and t[0] == "\\" and not re.fullmatch(r"[A-Za-z@]", t[1]):
+            if t[1] in "$%&#":
+                toks.append(t)  # 文字の $ % & # (\\$5 → 5 は通さない)
+            continue  # それ以外の記号 1 文字の命令 (\\\\ \\, \\{ …) は今までどおり語にしない
         if t.startswith("\\"):
             name = t[1:]
             if name in FORMAT_CMDS:
@@ -4024,6 +4090,136 @@ def selftest() -> int:
     math_spans("\\[ a \\\\] " * 20000)
     math_spans("\\[ " * 20000)
     check("閉じの無い \\[ の連続で 2 乗の時間にならない (各 200 KB 前後)", time.monotonic() - started < 5)
+    print("[\\$ と $$ と、 backslash の数で読む始まり]")
+    dollar = (
+        "\\documentclass{article}\n\\begin{document}\n"
+        "\\begin{abstract}\nIt costs \\$5 and $x = y$ holds. We show $$ p = q $$ here.\n\\end{abstract}\n"
+        "\\section{Setup}\nBody text.\n$$ u = v $$\n"
+        "\\end{document}\n"
+    )
+    check("概要の \\$ の後ろの inline 数式の演算子の変更 → abstract:change (\\$ を $ の区切りと読まない)",
+          ch(dollar.replace("x = y", "x > y"), dollar) == ["abstract:change"])
+    check("\\$ は文字の $ の語、 後ろの $…$ を 1 つの数式として読む",
+          prose_tokens("It costs \\$5 and $x = y$ holds.") == ["it", "costs", "\\$", "5", "and", "$x=y$", "holds"])
+    check("概要の \\$5 → 5 (文字の $ を消す) → abstract:change", ch(dollar.replace("\\$5", "5"), dollar) == ["abstract:change"])
+    check("概要の中の $$ … $$ の変更 → 概要の変更 + 式の削除 + 追加 (語の比較と式の比較の両方で見る)",
+          ch(dollar.replace("p = q", "p + q"), dollar)
+          == sorted(["abstract:change", f"math#{sha8('p+q')}:add", f"math#{sha8('p=q')}:delete"]))
+    check("$$ … $$ は 1 つの数式の語 (演算子を落とさない)",
+          prose_tokens("We show $$ x = y $$ here.") == ["we", "show", "$$x=y$$", "here"])
+    check("保護外の節の $$ … $$ の変更も式の変更として出る",
+          ch(dollar.replace("u = v", "u + v"), dollar) == sorted([f"math#{sha8('u+v')}:add", f"math#{sha8('u=v')}:delete"]))
+    check("$$ の空白だけの変更は通す",
+          ch(dollar.replace("$$ u = v $$", "$$u=v$$").replace("$$ p = q $$", "$$p=q$$"), dollar) == [])
+    check("\\$$ (文字の $ の後ろの $) は $$ の始まりでない", math_regions("\\$$a$$ b\n") == {})
+    check("隣り合う inline 数式 $a$$b$ は $$ の式でない", math_regions("$a$$b$ c\n") == {})
+    check("行送りの直後の $$ (\\\\$$) は式の始まり", list(math_regions("a \\\\$$ x = y $$\n").values()) == ["x=y"])
+    check("$$ の中の \\$ は閉じでない", list(math_regions("$$ \\$5 = x $$\n").values()) == ["\\$5=x"])
+    check("閉じの無い $$ は brace の外の単独の $ を越えない (後ろの式を呑まない)",
+          sorted(math_regions("$$ a $b$ \\begin{equation} p = q \\label{eq:pq} \\end{equation} $$ c $$\n"))
+          == sorted(["eq:pq", f"math#{sha8('c')}"]))
+    check("$$ の中身は次の \\[ で打ち切る", sorted(math_regions("$$ a \\[ b \\] c $$\n").values()) == ["b"]
+          and math_regions("$$ a \\[ c $$ d\n") == {})
+    check("$$ の中身は brace の外の単独の $ を越えない (間に式が無くても)",
+          list(math_regions("$$ a $b$ text $$ c $$\n").values()) == ["c"])
+    check("~n と同じ名前の label は飛ばし、 上書きしない",
+          list(math_regions("\\[ a \\label{eq:x} \\] \\[ b \\label{eq:x} \\] \\[ c \\label{eq:x~3} \\] "
+                            "\\[ d \\label{eq:x} \\]\n").items())
+          == [("eq:x", "a"), ("eq:x~2", "b"), ("eq:x~3", "c"), ("eq:x~4", "d")])
+    check("中身の違う式がそれぞれ繰り返すと、 それぞれ ~2 から",
+          list(math_regions("\\[ a \\] \\[ b \\] \\[ a \\] \\[ b \\]\n"))
+          == [f"math#{sha8('a')}", f"math#{sha8('b')}", f"math#{sha8('a')}~2", f"math#{sha8('b')}~2"])
+    check("同じ中身の式の名前は ~2, ~3 … (番号の振り方は今までどおり)",
+          list(math_regions("\\[ a \\] \\[ a \\] $$ a $$\n")) == [f"math#{sha8('a')}", f"math#{sha8('a')}~2",
+                                                               f"math#{sha8('a')}~3"])
+    check("空の $$ (\\verb|$$| など) は inline の語 $$", prose_tokens("\\verb|$$| x") == ["\\verb", "$$", "x"])
+    check("$$ の中の brace の組は $ を含んでよい (\\mbox{… $n$ …})",
+          list(math_regions("$$ r = 1 \\mbox{ for all $n$} $$\n").values()) == ["r=1\\mbox{forall$n$}"])
+    deep = "\\gamma = \\sqrt{\\frac{1}{1-\\frac{v^{2}}{c^{2}}}}"  # brace の入れ子 4 段
+    check("brace が 4 段の $$ も式 (brace で読めなければ最初の $ まで読む)",
+          list(math_regions(f"$$ {deep} $$\n").values()) == [norm_math(deep)])
+    check("brace が 4 段の $$ の後ろの $$ の組がずれない",
+          sorted(math_regions(f"$$ {deep} $$ text $$ u = v $$\n").values()) == sorted([norm_math(deep), "u=v"]))
+    deep_ab = dollar.replace("It costs", f"Here ${deep}$ and $E = m c^2$. It costs")
+    check("brace が 4 段の inline 数式の後ろの inline 数式の演算子の変更も概要の変更",
+          ch(deep_ab.replace("E = m", "E < m"), deep_ab) == ["abstract:change"])
+    check("inline の \\( の中の \\text{… \\(n\\) …} で打ち切らない (最初の \\) まで 1 つの数式)",
+          ch(dollar.replace("It costs", "Here \\( x = y \\text{ if \\(n>0\\)} \\) and it costs"),
+             dollar.replace("It costs", "Here \\( x < y \\text{ if \\(n>0\\)} \\) and it costs")) == ["abstract:change"])
+    check("$$ の中の式としての校正 (末尾の句点・\\,) は概要の変更にしない",
+          ch(dollar.replace("p = q $$", "p = q. $$"), dollar) == []
+          and ch(dollar.replace("p = q $$", "p =\\, q $$"), dollar) == [])
+    two = ("\\documentclass{article}\n\\begin{document}\n\\begin{abstract}\nToy.\n\\end{abstract}\n"
+           "\\section{Setup}\nWe use $$ r = 1 \\mbox{ for all $n$} $$ here.\n"
+           "\\section{Conclusion}\nThus $$ E = m c^2 $$ holds.\n\\end{document}\n")
+    check("前の節の $$ の中に $ (\\mbox{… $n$ …}) があっても、 結論の $$ の中の演算子の変更は出る",
+          "conclusion:change" in ch(two.replace("E = m", "E > m"), two))
+    for label, stray in (("\\verb|$$|", "Type \\verb|$$| for display.\n"),
+                         ("$$ を値に持つ定義", "\\def\\beq{$$}\n"),
+                         ("verbatim の中の $$", "\\begin{verbatim}\n$$\n\\end{verbatim}\n")):
+        t2 = two.replace("\\section{Setup}\n", "\\section{Setup}\n" + stray)
+        check(f"前に組の合わない $$ ({label}) があっても、 結論の $$ の中の演算子の変更は結論の変更として出る",
+              "conclusion:change" in ch(t2.replace("E = m", "E > m"), t2))
+    t3 = two.replace("\\section{Setup}\n", "\\section{Setup}\nType \\verb|$$| here.\n"
+                     "\\begin{equation} \\verb|$$| F = m a \\label{eq:f} \\end{equation}\n")
+    check("$$ は数式環境の中で閉じない (前の \\verb|$$| と組んで環境の途中で終わらない)",
+          ch(t3.replace("F = m", "F > m"), t3) == ["eq:f:change"])
+    neg = ("\\documentclass{article}\n\\def\\[{$$}\\def\\]{$$}\n\\begin{document}\n"
+           "\\begin{abstract}\nWe show $$ a = b $$ and the lattice conducts heat.\n\\end{abstract}\n"
+           "\\section{Setup}\nBody.\n\\end{document}\n")
+    check("前に $$ を値に持つ定義があっても、 概要の $$ の中の変更は概要の変更として出る",
+          "abstract:change" in ch(neg.replace("a = b", "a = c"), neg))
+    box = ("\\documentclass{article}\n\\begin{document}\n\\begin{abstract}\n"
+           "We show $$ r = 1 \\mbox{ for all $n$} $$ and conclude that the lattice conducts heat. $$ s = 2 $$\n"
+           "\\end{abstract}\n\\section{Introduction}\n$$ r = 1 \\mbox{ for all $n$} $$\nWe analyse the model.\n"
+           "$$ s = 2 $$\n\\section{Setup}\nBody.\n\\end{document}\n")
+    check("$$ の間の概要の文への否定の挿入は概要の変更として出る (式の変更だけにしない = math の承認で通らない)",
+          "abstract:change" in ch(box.replace("conducts heat", "does not conduct heat"), box))
+    check("$$ の間の綴りの校正は通す", ch(box.replace("analyse", "analyze"), box) == [])
+    check("\\begin {equation} … \\end {equation} (\\begin・\\end と { の間の空白) も式",
+          list(math_regions("\\begin {equation} p = q \\end {equation}\n").values()) == ["p=q"])
+    dm = ("\\documentclass{article}\n\\newcommand{\\dm}[1]{$$#1$$}\n\\begin{document}\n"
+          "\\begin{abstract}\nThe toy relaxes.\n\\end{abstract}\n\\section{Setup}\nBody.\n\\dm{ k = l }\n\\end{document}\n")
+    check("$$#1$$ で包む macro も数式の wrapper", math_wrappers(dm) == {"dm"})
+    check("$$ の wrapper の中の変更 → 削除 + 追加",
+          ch(dm.replace("k = l", "k + l"), dm) == sorted([f"math#{sha8('k+l')}:add", f"math#{sha8('k=l')}:delete"]))
+    check("\\\\( (行送り + 文字の () は \\( の始まりでない",
+          prose_tokens("Rows \\\\(b) and \\(x = y\\) hold.") == ["rows", "b", "and", "$\\(x=y\\)$", "hold"])
+    check("\\( の中の \\\\) は閉じでない", prose_tokens("\\(a \\\\) b\\) c") == ["$\\(a\\\\)b\\)$", "c"])
+    check("$ の中の \\$ は閉じでない", prose_tokens("$a \\$ b$ c") == ["$a\\$b$", "c"])
+    check("\\ の後ろの数字・日本語は今までどおり語にする", prose_tokens("x \\2 y \\あ") == ["x", "2", "y", "あ"])
+    check("\\\\al{…} (行送り + 文字) は wrapper の使用でない、 \\\\\\al{…} (行送り + 使用) は使用",
+          math_regions("a \\\\al{x = y} b\n", {"al"}) == {}
+          and list(math_regions("a \\\\\\al{x = y} b\n", {"al"}).values()) == ["x=y"])
+    check("\\\\begin{equation} (行送り + 文字) は式の始まりでない、 \\\\\\begin は始まり",
+          math_regions("a \\\\begin{equation} p = q \\end{equation}\n") == {}
+          and list(math_regions("a \\\\\\begin{equation} p = q \\end{equation}\n").values()) == ["p=q"])
+    check("環境の中の \\\\end{…} (行送り + 文字) は閉じでない",
+          list(math_regions("\\begin{equation} p \\\\end{equation} q \\end{equation}\n").values())
+          == ["p\\\\end{equation}q"])
+    check("閉じの無い \\begin{equation} (verbatim の例示) は次の数式環境の \\begin で打ち切る = 後ろの式を呑まない",
+          math_regions("\\begin{verbatim}\n\\begin{equation} x\n\\end{verbatim}\n"
+                       "\\begin{equation} p = q \\label{eq:pq} \\end{equation}\nBody.\n"
+                       "\\begin{align} u &= v \\label{eq:uv} \\end{align}\n") == {"eq:pq": "p=q", "eq:uv": "u&=v"})
+    check("数式環境の中の aligned 等 (一覧に無い内側の環境) では打ち切らない",
+          list(math_regions("\\begin{equation} \\begin{aligned} a &= b \\end{aligned} \\end{equation}\n").values())
+          == ["\\begin{aligned}a&=b\\end{aligned}"])
+    al_line = "\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}}"
+    check("\\\\verb|…| (行送り + 文字) の後ろの定義を空白にしない、 \\verb|…| の中は空白にする",
+          math_wrappers("a \\\\verb|" + al_line + "|\n") == {"al"}
+          and math_wrappers("a \\verb|" + al_line + "|\n") == set())
+    started = time.monotonic()
+    math_spans("$$ a " * 20000, dollars=True)
+    math_spans("$$ { a " * 20000, dollars=True)
+    math_spans("\\\\begin{equation} " * 20000)
+    math_spans("\\begin{equation} a " * 20000)
+    prose_tokens("\\\\( a \\$ " * 20000)
+    prose_tokens("\\( a " * 20000)
+    prose_tokens(f"$$ {deep} " * 5000)
+    math_regions("$$ x $$ " * 20000)
+    math_regions("\\[ a \\] " * 20000)
+    prose_tokens("$$ { a " * 20000)
+    check("閉じの無い $$・\\begin・\\( の連続と、 同じ中身の式の連続で 2 乗の時間にならない", time.monotonic() - started < 5)
     print("[範囲]")
     note = "\\section{Introduction}\nFree text.\n\\begin{equation}q=1\\end{equation}\n"
     check("abstract の無い単独 .tex は範囲外", protected_changes("notes/n.tex", note, note.replace("q=1", "q=2"), None, {}) == [])
