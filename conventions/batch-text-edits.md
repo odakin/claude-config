@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape)
+when: 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape) + TeX の数式に macro を正規表現で一括挿入するとき (#regex-into-label-keys)
 category: infra
 summary: plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 9 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる / 1 回一致は prefix 形の key (path・識別子) を守らない = 長い別物の先頭に 1 回だけ一致して誤置換、 終端の区切りまで含めるか構文解析した単位で置換 / 挿入型の pair (new が old を含む) は再実行しても count==1 のまま通って二重に入る = 適用済み検査を足す / TARGET が symlink だと test 用の写しは link 越しに実体へ書き、 一時 file + os.replace は link を普通の file に置き換える = 先に実体の path へ解決する / macOS 付属の python 3.9 は 1023 byte を超える多バイト行を source として読めず Non-UTF-8 の SyntaxError で落ちる = 長い文面は別 file に置いて読む / 計算で作った old 〔slice〕 は終点の anchor が前にも在ると空になり `replace('', new)` が全文字の間に挿入して file が数百倍に膨れる = 終点は始点より後ろで探し、 計算した old にも assert old and count==1、 書いた後に行数の桁を見る、 commit gate = scripts/check-degenerate-text.py。 機械化 = scripts/apply-text-pairs.py)
 -->
@@ -29,7 +29,7 @@ open(path, "w", encoding="utf-8").write(txt)
 | 1-2 箇所 | Edit tool | 差分がそのまま可視になり人間 review が効く |
 | 3 箇所以上 / 長い string / 系統的 sweep | 本 pattern | 手数と転記ミスが線形に増えるのを止める |
 
-## <a id="batch-text-failure-modes"></a>11 の失敗モード
+## <a id="batch-text-failure-modes"></a>12 の失敗モード
 
 ### <a id="assert-does-not-gate-downstream"></a>1. assert の verdict は下流に伝わらない
 
@@ -138,6 +138,14 @@ open(path, "w", encoding="utf-8").write(txt)
 **なぜ契約が守ってくれないか**: 行番号の指定は old を持たないので、 一意性の契約そのものが働かない。 番号がずれていても、 空行でも、 書き込みは成功する。
 
 **対処**: 行番号で読み書きするときは、 その行の中身 (先頭の文字列) を assert してから書く。 「段落の末尾」 は番号でなく、 段落の最後の文の中身で指す。 空行に追記しない。
+
+### <a id="regex-into-label-keys"></a>12. 数式に macro を足す正規表現は、 `\label` と `\ref` の鍵にも入る
+
+**症状** (実測): TeX の source で演算子の記号に印の macro (`\h` など) を付ける正規表現を一括で当てたら、 `\label{eq:pair-H1}` の中の `H` にも当たって `\label{eq:pair-\h H1}` になり、 lualatex が `! Missing \endcsname inserted.` で止まった。 error は `.aux` 由来の行 (目次・相互参照) を指すので、 置換との関係が見えにくい。
+
+**なぜ契約が守ってくれないか**: 置換の回数の assert は、 当たった場所が数式か鍵かを見ない。 鍵 (label・ref・cite・環境名) は数式と同じ文字の並びを含む。
+
+**対処**: 当てる前に鍵の引数 (`\label{…}` `\ref{…}` `\eqref{…}` `\cite{…}` `\begin{…}` `\end{…}`) を退避して戻すか、 正規表現から除外する。 当てた後に `grep -nE '\\(label|ref|eqref|cite)\{[^}]*\\'` で鍵に制御綴が入っていないかを見る。
 
 ## <a id="batch-text-verification"></a>適用後の検証
 

@@ -46,7 +46,7 @@ claude-config/
 │   ├── android-chromium-remote-debug.md    # Android 実機の Brave/Chrome を remote debug (WiFi ADB + CDP) するとき
 │   ├── ask-user-question.md                # AskUserQuestion (選択肢 UI) の使用可否・使い所を判断するとき
 │   ├── audio-transcription.md              # 会議・インタビュー・収録の録音を機械 (whisper 等) で文字起こしして、その結果を引用・記録に使うとき + 転写した語が聞き取れない・機械が割れるとき + 長い録音を配信・共有用に分割するとき + 長い録音の転写で同じ 1 文が延々と続く区間が出たとき (#loop-runs-in-speech)
-│   ├── batch-text-edits.md                 # 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape)
+│   ├── batch-text-edits.md                 # 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape) + TeX の数式に macro を正規表現で一括挿入するとき (#regex-into-label-keys)
 │   ├── beamer-slides.md                    # Beamer/metropolis または編集可能な PPTX / Keynote で研究スライドを作る・直すとき + 既存デッキの「同じ感じ」を引き継ぐとき + 「最新のデザインでかっこよく」 と頼まれたとき (#design-from-principles)
 │   ├── book-purchase-lookup.md             # 図書館に本の購入を頼む前 (書誌を揃える・その館に所蔵が無いか・新刊で買えるか・いくらか) + 共有された本のリストや著者の著作一覧から購入候補を作るとき + 「この著者の本を全部」「この分野の定番を全部」 と頼まれたとき + 申込メールを候補リストから起こすとき
 │   ├── calendar-conflict-detection.md      # 予定の重なり (ダブルブッキング) を機械で先に警告する仕組みを作る・直すとき + カレンダーに入っていない予定 (授業の時間割・当番表・定例の枠表) を重なりの判定に入れるとき + 重なりの前日・数日前の通知の出し方を決めるとき + 重なりの誤検出が多いとき
@@ -122,7 +122,7 @@ claude-config/
 │   ├── manuscript-claim-ownership.md       # AI agent (Claude / Codex / 他 vendor / sub-agent / 無人 worker) が原稿 (.tex) の表題・概要・序論・結論・数式に触れる前 + 著者の依頼を「承認」 と読みそうになった瞬間 + manuscript-claim-guard に deny されたとき + agent の編集権限を定める規則 (本 doc・各層の参照・gate の設定と配線) を変える前
 │   ├── manuscript-value-triage.md          # 他人 (共同研究者・学生) の投稿前 draft や自分の原稿を「価値」 で読む時 + 投稿先の重さ (letter / 通常論文) を選ぶ時 + 進捗報告の draft に返事を書く時
 │   ├── matplotlib-3d-illustrations.md      # matplotlib の 3D (mplot3d) で半透明の模式イラスト (平面波・波束・濃度場などスライド/論文の概念図) を描くとき
-│   ├── matplotlib-figure-qa.md             # matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check)
+│   ├── matplotlib-figure-qa.md             # matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check) + 曲線上の点・基準線・必要量に注記と矢印を付けるとき (#annotation-colors-and-arrows) + 図の文字列の数式が `Unknown symbol` で落ちたとき (#mathtext-unsupported-commands)
 │   ├── mcp.md                              # MCP ツールを使うとき (アカウント確認・scope 判定を含む)
 │   ├── media-transcription-ledger.md       # 定期的に届く画像 stream (板書写真・スキャン書類・写真メモ) を SoT 化する仕組みを設計するとき + 手書き画像の読取結果を記録・転記するとき
 │   ├── memory-file-slimming.md             # CLAUDE.md 等の memory file が肥大して縮退 (slimming) するとき + 完了 entry を archive へ graduate するとき + 長大 bullet / table row を pointer 化するとき
@@ -144,7 +144,7 @@ claude-config/
 │   ├── peer-review-workflow.md             # referee・審査委員として他者の paper / 申請書を評価するとき
 │   ├── personal-skills.md                  # personal skill (~/.claude/skills/) を規律の発火面として使うとき
 │   ├── photographed-document-transcription.md # スキャナを通していない「撮っただけ」 の紙 (手書きの提出物・ノート・書類) を大量にモデルで読んで構造化するとき + その読み取りを複数 session に分担するとき + 撮影した印刷資料から引用を起こして文章の根拠にするとき + 自分の文書に他人が手書きで朱を入れて返してきた PDF (差し戻し・添削・紙の査読票) を読むとき + 通知書・明細など数字の表を写真から転記するとき (#printed-totals-checksum)
-│   ├── physics-notes.md                    # 物理・数理ノートを書くとき
+│   ├── physics-notes.md                    # 物理・数理ノートを書くとき + 共著者がその話題を特定の原論文・教科書で学んでいて、 ノートを「読めない」 と言われたとき (#write-from-readers-source)
 │   ├── physics-verification-cycle.md       # 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
 │   ├── podcast-audio-finishing.md          # 収録を配信用の音声ファイルに仕上げるとき (ジングルを付ける・音量を揃える・書き出す) + 仕上げた回を聞いて「つなぎが雑音っぽい」「間が長い」と言われたとき + 音声の区間の長さや無音を数値で測るとき + 本編の下に敷く BGM を合成で作る・直すとき (「ビブラートがきつい」「和音がもっちゃり」「旋律が埋もれる」「この音が聞こえない」「濁る」「単調」「もっとアンビエントに」 と言われたとき = #synth-bgm-sound-pitfalls)
 │   ├── podcast-distribution.md             # ポッドキャストを RSS で各配信先 (Spotify / Apple Podcasts / Amazon Music / YouTube) に登録するとき + 番組の画像・説明文・各回の紹介文を配信先に載せるとき + 公開予約を API で入れる・配信を自動にするとき + LISTEN (listen.style) を API で操作するとき + 配信の判断 (題・切れ目・予約) を持ち主から任されたとき
