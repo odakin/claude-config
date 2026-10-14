@@ -50,6 +50,21 @@
       "match": "sed: can't read s#",
       "doc": "conventions/hook-authoring.md#tmp-path-not-absence-marker",
       "hint": "BSD 版の sed -i '' を GNU の sed で走らせた形 (空の引数を script、 script を file 名と取る)。 一時 file に書いて mv する"
+    },
+    {
+      "match": "read error while indexing",
+      "doc": "conventions/dropbox-placeholder-diagnosis.md#git-repo-online-only",
+      "hint": "Dropbox の中の git repo で、 作業ツリーや .git の中身がまだ手元に届いていない (online-only)。 dir ごとオフラインで使用可能にしてから git を打ち直す"
+    },
+    {
+      "match": "Paragraph ended before \\makesm@sh was complete",
+      "doc": "conventions/latex.md#smash-parbox-into-ruled-box",
+      "hint": "\\smash の引数に段落区切り (\\par・空行) がある。 改行は \\\\ に、 中央寄せは \\hspace*{\\fill} で挟む"
+    },
+    {
+      "match": "inspection unavailable (blob-unreadable",
+      "doc": "conventions/manuscript-claim-ownership.md#non-utf8-tex-blocks-repo",
+      "hint": "原因の 1 つ = HEAD に UTF-8 でない古い .tex がある。 範囲の設定 (disabled / exclude) で外す、 設定の変更には著者の発言の記録が要る"
     }
   ]
 }
