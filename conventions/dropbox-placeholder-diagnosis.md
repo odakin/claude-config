@@ -44,6 +44,20 @@ Windows では cloud file API 経由で aggressive access が trigger になる�
 
 Claude / 自動化 script から呼ぶ場合: `open <dir>` (macOS) で Finder を開いて user に右クリック操作を依頼するのが現実的。 直接 trigger する macOS API は user-space からは触れない (= Dropbox app extension にしか materialize 権限なし)。
 
+## <a id="git-repo-online-only"></a>Dropbox の中の git repo: `.git` が online-only だと git が固まる
+
+Dropbox 配下に `.git` ごと置いた repo では、 `.git` の中身 (object・index) が online-only のままのことがある (別の機械から移した直後・長く開いていなかった dir)。 このとき file の大きさは元のまま見えることがあり、 上の「0 byte で気づく」 経路に乗らない。
+
+症状 (実測):
+
+- `git status` が返ってこない。 作業ツリーの file の一部だけがまだ届いていないと `read error while indexing <path>: Operation timed out` で止まる
+- git を呼ぶ hook (保護 gate・検査) が、 git の時間切れを「git の状態が読めない」 と報告して編集を止める (違反ではないので、 gate を外して通すのでなく git を直す)
+- `du -sh .git` が object の数に比べて極端に小さい (数百の object で 100 KB 台)
+
+直し方: repo の dir ごと「オフラインで使用可能にする」 (上の表)。 読み込みで 1 つずつ落とそうとするより、 この 1 操作のほうが確実。 届いたかは時間切れつきで確かめる = `timeout 30 git -C <repo> fsck --connectivity-only` が通り、 `du -sh .git` が実体の大きさになる。 `.git` が届いて作業ツリーがまだ届いていない間は、 `.git` だけを読む操作 (`git log` / `git cat-file`) は通り、 `git status` はまだ止まる。
+
+予防: git repo を Dropbox に置くなら、 使う機械ごとにその dir をオフラインで使用可能にしておく。
+
 ## 代替仮説 (= online-only でない 0 byte の場合)
 
 「だいたい」 online-only だが、 ごく稀に:

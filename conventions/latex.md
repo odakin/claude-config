@@ -1505,3 +1505,19 @@ latexdiff old.tex new.tex | sed '1s/^/\\PassOptionsToPackage{normalem}{ulem}\n/'
 ```
 
 `\Ket` / `\Bra` は `\left| … \right|` なので元から安全。 ⚠️ 既存原稿で `\ket` を多数使っていても、 字形が変わらないので一括の書き換えは要らない (build して `\Set` の箇所が通ることだけ確かめる)。
+
+## <a id="smash-parbox-into-ruled-box"></a>表の空行を積んだ記入欄に、 枠の大きさを変えずに文章を流し込む
+
+表の空行を積んで作った記入欄 (`\multirow` の見出し + 空の行 N 本) のセルに後から文章を入れると、 行の高さが変わって枠も頁も崩れる。 枠の 1 行目のセルに、 高さと幅が 0 の箱で置き、 下の空行の上へ流す:
+
+```latex
+\newcommand{\fillin}[1]{\rlap{\smash{\parbox[t]{0.66\textwidth}{#1}}}}
+% 枠の 1 行目 (幅を決める \hspace はそのまま残す)
+  &\multicolumn{3}{|l|}{\fillin{本文…}\mbox{}\hspace{0.68\textwidth}\mbox{}}\\
+  &&\multicolumn{3}{|l|}{}\\   % 残りの空行は触らない
+```
+
+- `\parbox[t]` で 1 行目の baseline がセルの baseline に揃い、 `\smash` で行の高さが、 `\rlap` で幅が 0 になる (幅を決める既存の `\hspace` はそのまま効く)
+- 表の行の高さと本文の行送りはどちらも `\baselineskip` なので、 素の文は空行にそのまま重なる。 分数や別行立ての式は行送りを伸ばす = 枠に入るかは組版して枠の下端で確かめる (はみ出しても警告は出ない、 実測)。 入らなければ別行立てを 1 行の中央寄せに、 分数を斜線に
+- ⚠️ `\smash` の引数に段落区切り (`\par`・空行) を入れると `Paragraph ended before \makesm@sh was complete` で止まる。 改行は `\\`、 中央寄せの 1 行は `\\ \hspace*{\fill}<式>\hspace*{\fill}\\`
+- 表の一番上が、 幅の指定だけを持つ空の細い行になっていたら、 外して幅を次の行のセルの `\makebox[<幅>]{…}` で保つ。 `[t]` の表は先頭の罫線 (`\cline`) の位置で揃うので、 隣に `[t]` で並べた表の上端は揃ったまま (実測)。 その行にあった見出しは `\raisebox{<高さ>}[0pt][0pt]{…}` で次の行に高さ 0 で置く
