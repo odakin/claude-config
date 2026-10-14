@@ -64,6 +64,8 @@ open(path, "w", encoding="utf-8").write(txt)
 
 <a id="tool-arg-unicode-escape"></a>**書く側の同じ罠 — 編集 tool の引数に書いた `\uXXXX` は実文字になる** (実測): Edit / Write の引数は JSON の文字列なので、 `\u0300` と書くと JSON の escape として解釈され、 file には**結合文字そのもの**が入る (backslash を 2 つ重ねた時だけ escape 表記が残る)。 source の正規表現の文字 class に結合文字や不可視の文字が実文字で入ると、 動作は同じでも、 読めない・diff で見えない・次の `old` の照合が byte で外れる (実測: 後から「その行を 1 回だけ含むはず」 の検査が 0 回になって気づいた)。 escape 表記を file に残したいときは、 **script で行を組み立てて書く** (escape を文字列の連結で作る) か、 書いた後に**その行の非 ASCII を検査する** (`grep -nP '[^\x00-\x7F]' <file>` を正規表現の行に当てる)。
 
+<a id="tool-arg-escape-reverse"></a>**逆向きの罠 — 同じ編集の引数に `\uXXXX` の表記があると、 日本語が `\uXXXX` で書かれることがある** (実測 1 回): Edit の old と new の両方に正規表現の文字 class (`[\u3040-\u30ff…]`) を含めた編集で、 new に書いた日本語の docstring とコメントが `\u5148\u982d…` の escape 表記で file に入った (Python の docstring は実行時の値が同じなので試験は通り、 source だけが読めなくなった。 別 context の検品が見つけた)。 同じ session の、 その表記を含まない編集の日本語は正しく入っていた。 **escape 表記の行と日本語を 1 つの編集に混ぜない** — escape の行は元の file の行を script で残し (置換の境目を escape の手前に置く)、 日本語は別の編集で書く。 書いた後に、 足した行の escape を数える: `git diff | grep -n '^+.*\\u[0-9a-f]\{4\}'` (元からある escape の行だけが出れば正しい)。
+
 <a id="edit-empty-new-eats-newline"></a>**編集 tool で置換後を空にすると、 直後の改行も消えることがある** (実測): Edit の `new_string` を空にし、 `old_string` が行の途中から行末までだったとき、 次の行が前の行につながった。 行の一部を消すときは、 前後の文字を `old_string` に含めて空でない `new_string` で置き換え、 置換後の file を期待した全文と `cmp` で照合する。 規則保護の gate は、 Edit のこの削除の扱いを再現して結果を判定する (実物と同じ結果を承認済みの候補と照らす)。 commit 時の gate も、 候補と末尾の改行 1 つでもずれた staged を止める (selftest で実測)。
 
 ### <a id="zero-count-is-ambiguous"></a>4. count==0 は「typo」とは限らない
