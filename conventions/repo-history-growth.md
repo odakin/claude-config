@@ -40,7 +40,8 @@ source (`.tex` / script / 元の data) が repo にあるなら、 生成物は 
    共同編集者は claude-config を持たないので、 repo には単体で動く写しを置く (drift は `install-pdf-publish.py check`)
    ⚠️ push の直後に同じ文書を手元で組むと、 hook が背景で走らせている組み直しと aux・PDF を取り合って失敗する (実測: 終了値 12 で PDF が 0 頁、 別の回は PDF が無い状態で終わった)。 push の直後に組むときは、 背景の `latexmk` / `lualatex` が終わるのを待ってから組む (`pgrep -f 'latexmk|lualatex'` が空になるまで)
 3. **控えとして残す必要がある版だけ commit する** — 投稿した版・提出した版など節目だけ。 版は tag で指す
-   (file 名に版番号を入れない = [`CONVENTIONS.md`](../CONVENTIONS.md#git-conventions))。 途中の build は commit しない
+   (file 名に版番号を入れない = [`CONVENTIONS.md`](../CONVENTIONS.md#git-conventions))。 途中の build は commit しない。
+   <a id="milestone-commit-gate"></a>**機械で守るなら pre-commit で止める**: 止めるのは、 同じ dir に同じ名前の `.tex` がある `.pdf` (= build した PDF) を stage した commit。 節目の commit だけ環境変数 (例 `MILESTONE=1`) で通す。 図・様式・受け取った資料のように `.tex` と対にならない PDF は build の入力なので、 変えたら commit する。 repo ごとに「毎回 commit する path」 の一覧を持てるようにする: **git で配っている生成物** (別の機械の定期ジョブが checkout から拾って公開する、 など) は毎回 commit しないと届かない (実測)。 すでに追跡している PDF は追跡したまま門を掛ければ、 共同編集者の手元は変わらない
 
 - ⚠️ **暗号化された提出書類の PDF も生成物** — 暗号化は差分をさらに効かなくするだけで、 扱いは同じ
 - ⚠️ **追跡をやめるときは** `git rm --cached <file>` + `.gitignore`。 共同編集者のいる repo では、 PDF を git で見ている人がいないか先に一声かける (配り方を 2 に切り替える)
