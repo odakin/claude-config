@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: config file に ID/PII (Discord ID 等) を置く設計をするとき
+when: config file に ID/PII (Discord ID 等) を置く設計をするとき + 人の業績一覧 (INSPIRE の著者ページ・検索) へリンクするとき・著者 ID で論文を機械で拾うとき (#split-and-polluted-author-records)
 category: infra
 summary: Identity-in-Config 規約（Discord 等 PII-in-disguise、layer 2 + env var bridge）
 -->
@@ -101,6 +101,36 @@ INSPIRE BAI (`T.Kono.1`, `H.Otsu.4` のような形式の author ID。 例は架
 - **不一致を発見した場合**: 人物台帳の `inspire_id` と、digestの運用configの `inspire_bai` をそれぞれ未設定に戻す。運用configの自動カテゴリも空にし、`inspire_profile.txt` を削除する。`collaborators.yaml` の該当entryの `notes` に訂正経緯を記録する。
 - **BAIが特定できない場合**: 未設定のまま運用し、scorerは手書きの `interest_profile.txt` を使う。
 - **定期更新で復活させない**: 定期更新は実行時点の設定から対象の識別子を読み取る。取り違えを理由に消した値を、過去のコマンドや固定リストから補わない。設定にないIDを起動例が固定指定すると、修正済みの設定と生成物が再び汚染される（実測）。null・空文字・項目なしでは生成されないことと、有効な設定では生成されることを同じfixtureで確かめる。
+
+### <a id="split-and-polluted-author-records"></a>1 人が複数の record に割れる・record に別人の論文が混じる
+
+上の取り違え (別人を選ぶ) の逆向き。 INSPIRE の著者 record は自動の名寄せで作られるので、 正しい人を選んでも次の 2 つが起きる (実測):
+
+- **割れる**: 1 人の業績が 2 つ以上の record (BAI の末尾の番号だけが違う) に分かれる。 所属が変わった前後で分かれていることが多い。
+  著者ページ `inspirehep.net/authors/<recid>` を業績一覧のリンクにすると、 その record の分しか出ない (一覧が数分の 1 になる)。
+- **混じる**: record に同姓同頭文字の別人の論文 (別分野・別の実験 collaboration・名の綴りが違う人) が付いている。 最新順の先頭に出ることもある。
+
+名前検索の URL (`literature?q=a <姓>, <頭文字>`) をリンクにするのも解にならない (別の頭文字の人まで大量に混じる)。
+
+**確かめ方と直し方** — 道具 = [`../scripts/inspire-author-records.py`](../scripts/inspire-author-records.py) (`--selftest` あり):
+
+1. `survey '<姓>, <頭文字>'` で、 名前検索の hit を record ごとに数える。 本人の行 (所属の履歴・表記で見分ける) が 2 つ以上あれば割れている。
+2. `check <recid> <recid> --name '<表記>' ...` で、 本人の record の合算から、 record に付いた著者の表記が本人のどれでもない論文 (= 別人の候補) を出す。
+   `--name` には `survey` の表記の列から本人のもの (略記と、 名を綴った形の両方) を並べる。
+3. 道具が出す「本人の表記で絞った式」 `(authors.recid:<A> or authors.recid:<B>) and (a "<姓>, <頭文字>" or a "<姓>, <名>")` の画面 URL をリンクにする。
+   API と画面は同じ式を受けるので、 API で件数と「別人の候補の残り 0」 を確かめてから、 画面でも件数・先頭・左の Author / Collaboration の絞り込み欄を見る。
+
+**式の罠** (実測):
+
+- 引用符なしの `a <姓>, <頭文字>` は名寄せ済みの record で引くので、 record に付いた別人の論文も通る = 絞りにならない。 表記の一致で絞るのは引用符つきの `a "<姓>, <頭文字>"`。
+- `not a <別人の表記>` で除く形は期待どおりに効かず、 本人の論文まで大きく落ちた。 除くのでなく、 本人の表記で拾う形にする。
+
+**機械の key は表示用のリンクと分ける** — 業績一覧を機械で拾う道具 (所属の論文の自動更新など) が「リンクが `authors/<recid>` の形なら、 その recid で拾う」 という作りだと、
+機械の都合でリンクを片方の record に寄せた瞬間、 人に見せる一覧が黙って欠ける (実測)。 recid は別の欄 (例 `inspire_authors: [<A>, <B>]`) に並べ、 道具はそちらも読む。
+1 つの欄に「人が開く先」 と「機械の key」 を兼ねさせない。
+
+**根本の直し方は INSPIRE 側** — 本人が ORCID で INSPIRE にログインして自分の論文を claim し、 別人の論文を外す。 record の統合は INSPIRE の窓口に頼む。
+本人でない者が勝手に頼まない (本人に知らせるかは持ち主が決める)。 直るまでは上の絞った式で持ちこたえる。
 
 ## 変更履歴
 

@@ -90,7 +90,7 @@ claude-config/
 │   ├── google-url.md                       # Google サービスの URL をチャットや文書に書くとき
 │   ├── hanko-digitization.md               # 押印 (ハンコ) のスマホ写真から書類合成用の透過 PNG (シャープな輪郭 + 自然なかすれ + 写真由来の色 + 複数バリアント) を作るとき + 印影・ロゴ等の小さいラスタ素材を高解像度化したいのに補間拡大がボケるとき
 │   ├── hook-authoring.md                   # Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき + app や tool の挙動を当てる hook を書くとき (#imitate-target-predicate) + 事後の block の手前に事前の知らせを置くとき (#counter-notice-at-injection) + hook を消す・event から外すとき (#additive-wiring-needs-retirement) + git commit が「hook ... died of signal 9」 で止まったとき (#killed-hook-stub) + 返事に書くべき行を Stop で確かめる hook を書くとき (#stop-hook-addendum-not-reemission) + 並列の session の hook が同じ state file を読み書きするとき (#shared-state-file-merge) + command の option を当てる hook を書くとき (#command-flag-normalization) + git の履歴の fixture を作る test を書くとき (#git-fixture-pinned-dates) + Stop hook が会話記録から「今の turn」 を探すとき (#transcript-user-message-shape)
-│   ├── identity-in-config.md               # config file に ID/PII (Discord ID 等) を置く設計をするとき
+│   ├── identity-in-config.md               # config file に ID/PII (Discord ID 等) を置く設計をするとき + 人の業績一覧 (INSPIRE の著者ページ・検索) へリンクするとき・著者 ID で論文を機械で拾うとき (#split-and-polluted-author-records)
 │   ├── indico-abstract-submission.md       # Indico (CERN 等) の会議に abstract 投稿・参加登録・支払いを進めるとき、会議の実績やアカウント重複を確認するとき
 │   ├── inline-svg-illustration.md          # サイトのロゴ・アイコン・挿絵を SVG のコードで描くとき + 同じ SVG を 1 ページに何枚も埋め込むとき + 「それっぽく見えない」「美味しそうに見えない」と言われたとき
 │   ├── install-failures.md                 # brew install を試行する前後 + source build 陥落時
@@ -203,7 +203,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (329 file + formcase/ 26 module + lib/ 68 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (330 file + formcase/ 26 module + lib/ 68 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式

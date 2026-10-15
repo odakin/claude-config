@@ -179,6 +179,7 @@
 - **[hook-liveness-audit.py](hook-liveness-audit.py)** — user hook が「そもそも走っていない」 root を検出 (disableAllHooks kill switch の settings 全 tier 走査 + transcript 上の SessionStart 発火証拠)
 - **[html-print-pdf.py](html-print-pdf.py)** — 「印刷用 HTML ページ」 (window.print() 前提) を保存 HTML から A4 PDF にし、 刷れる raster 版まで作る。
 - **[injection-reach-audit.py](injection-reach-audit.py)** — hook の注入 (SessionStart 等) に指定の語が何 session 出たか、 その session の assistant と user がそれに触れたかを transcript から数える（配達と伝達を別々に数える RCA 用。 docs/convention-design-principles.md#surface-reader-is-not-the-owner、 --selftest）
+- **[inspire-author-records.py](inspire-author-records.py)** — 1 人の業績が INSPIRE の複数の著者 record に割れていないか・record に別人の論文が混じっていないかを数え、 本人の業績だけを出す検索式 (API と画面の URL) を作る。
 - **[inspire-bib-audit.py](inspire-bib-audit.py)** — refs.bib を INSPIRE-HEP と texkey → arXiv ID → DOI の順で同定し、title / 第一著者 / 誌名 / 巻 / 初頁 / DOI / eprint を突合する gate（TeX 記法 ↔ Unicode・誌名の略記ゆれ・巻の系列文字・再録は正規化、INSPIRE 未収録は SKIP、network 失敗は exit 2、--selftest）
 - **[install-claude-app-account-mirror.sh](install-claude-app-account-mirror.sh)** — desktop の session 一覧の写し (claude-app-account-mirror.py) を launchd に常駐させる / 状態を見る / 外す (macOS、 本人が terminal で実行する)
 - **[install-claude-app-account-mirror.test.sh](install-claude-app-account-mirror.test.sh)** — install-claude-app-account-mirror.sh の入れる / 入れ直し / 状態 / 外す と、 account が 1 つの時・macOS 以外で何もしないことの test
