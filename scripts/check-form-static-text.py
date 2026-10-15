@@ -86,10 +86,13 @@ ANCHORS = ("twoCellAnchor", "oneCellAnchor", "absoluteAnchor")
 COLLAPSED_PT = 3.5          # これ以下の行高は「潰した行」 (formcase の日程表の正規化 = 3pt)
 _PUA = re.compile(r"[-]")
 _RADICAL = "⺀-⿟"  # CJK 部首補助・康熙部首 (PDF の text 層が返す互換字。 NFKC で戻らないものがある)
+# 康熙部首で NFKC の戻り先が旧字体の符号のもの (⿊ U+2FCA → 黑 U+9ED1、 値は 黒 U+9ED2) は NFKC の前に日本語の字へ。
+# 実測した字だけ (check-form-clipping.py の _KANGXI_JP と同じ表)
+_KANGXI_JP = str.maketrans({"⿊": "黒"})
 
 
 def norm(s) -> str:
-    return _PUA.sub("", re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(s or ""))))
+    return _PUA.sub("", re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(s or "").translate(_KANGXI_JP))))
 
 
 def _find(want: str, text: str):

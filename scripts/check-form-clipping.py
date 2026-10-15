@@ -83,10 +83,15 @@ _RADICAL_SUPPLEMENT = {
 }
 _RADICAL_TABLE = str.maketrans(_RADICAL_SUPPLEMENT)
 
+# 康熙部首 (U+2F00-2FD5) は NFKC で統合漢字に戻るが、 戻り先が旧字体の符号のものがある = 値の「黒」 (U+9ED2) が
+# PDF では「⿊」 (U+2FCA) になり、 NFKC で「黑」 (U+9ED1) に戻って値と一致せず、 完全に描かれた値を clip と誤検出する
+# (実測: Mac Excel の PDF、 住所欄の「黒」)。 対応 = NFKC の前に日本語の字形へ置き換える。 実測した字だけを足す。
+_KANGXI_JP = str.maketrans({"⿊": "黒"})
+
 
 def _norm(s: str) -> str:
-    """NFKC 正規化 + CJK 部首補助の統合漢字化 + 空白除去 (= ⾼→高 / ⻑→長 等の互換字、 折り返し空白、 全/半角差を吸収)。"""
-    s = unicodedata.normalize("NFKC", s).translate(_RADICAL_TABLE)
+    """NFKC 正規化 + CJK 部首補助の統合漢字化 + 空白除去 (= ⾼→高 / ⻑→長 / ⿊→黒 等の互換字、 折り返し空白、 全/半角差を吸収)。"""
+    s = unicodedata.normalize("NFKC", s.translate(_KANGXI_JP)).translate(_RADICAL_TABLE)
     return "".join(ch for ch in s if not ch.isspace())
 
 
@@ -386,6 +391,8 @@ def _selftest():
     _d.close()
     cases.append(("CJK 部首補助を同一視 (NFKC で戻らない ⻑)", find_clipping(
         [("S!A1", "架空の長い説明を含む文")], "架空の⻑い説明を含む文") == []))  # ⻑=U+2ED1 → 長
+    cases.append(("康熙部首の旧字体の戻り先を日本語の字に (⿊ は NFKC で 黑)", find_clipping(
+        [("S!A1", "架空の黒い箱を置いた長い説明の文")], "架空の⿊い箱を置いた長い説明の文") == []))  # ⿊=U+2FCA → 黒
     cases.append(("別ページ非検出", find_clipping(
         [("S!A1", "まったく無関係な長い文字列")], "ここには別の短い内容のみ") == []))
     cases.append(("折返し空白吸収", find_clipping(
