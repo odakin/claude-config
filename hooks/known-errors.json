@@ -65,6 +65,16 @@
       "match": "inspection unavailable (blob-unreadable",
       "doc": "conventions/manuscript-claim-ownership.md#non-utf8-tex-blocks-repo",
       "hint": "原因の 1 つ = HEAD に UTF-8 でない古い .tex がある。 範囲の設定 (disabled / exclude) で外す、 設定の変更には著者の発言の記録が要る"
+    },
+    {
+      "match": "ParseFatalException: Unknown symbol",
+      "doc": "conventions/matplotlib-figure-qa.md#mathtext-unsupported-commands",
+      "hint": "matplotlib の mathtext は LaTeX の部分集合 (例 = \\tfrac が無い)。 \\frac か 3/2 に書き換えるか、 rcParams['text.usetex'] = True"
+    },
+    {
+      "match": "Missing \\endcsname inserted",
+      "doc": "conventions/batch-text-edits.md#regex-into-label-keys",
+      "hint": "\\label / \\ref の鍵に制御綴 (一括置換で足した macro など) が入っていないかを grep で見る"
     }
   ]
 }
