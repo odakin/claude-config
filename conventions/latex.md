@@ -979,7 +979,9 @@ bash ~/Claude/claude-config/scripts/install-precommit-bib.sh .
 
 **Claude への規律**: `.tex/.bib` を新規作成・編集する前に本 convention を読むこと。 Markdown 流儀で literal `—` を直書きすると LaTeX で正しく render されない (Unicode em-dash は通常の LaTeX font に欠落することが多い)。 hook が機械的に catch するが、 hook 未 install repo では catch されない (= 2026-05-14 個人層 private repo の深い path で発生、 RCA は `claude-config/DESIGN.md`)。
 
-<a id="fontspec-textendash"></a>⚠️ **LuaLaTeX / XeLaTeX で `\newfontfamily` で読んだ字体には `\textendash` / `\textemdash` を書く**: hook は `–` を `--` に書き換えるが、 `--` を en dash にするのは字体の `Ligatures=TeX` で、 fontspec は `\setmainfont` / `\setsansfont` には既定で付けるのに `\newfontfamily` には付けない。 その字体の中の `--` は 2 本のハイフンのまま組まれる (実測: 大きな数字の指数の負号が「--36」 になった)。 build は通るので、 PDF を画像にして見るか文字を抽出して `--` を探す。
+<a id="fontspec-textendash"></a>⚠️ **LuaLaTeX / XeLaTeX で `\newfontfamily` で読んだ字体には `\textendash` / `\textemdash` を書く**: hook は `–` を `--` に書き換えるが、 `--` を en dash にするのは字体の `Ligatures=TeX` で、 fontspec は `\setmainfont` / `\setsansfont` には既定で付けるのに `\newfontfamily` には付けない。 その字体の中の `--` は 2 本のハイフンのまま組まれる (実測: 大きな数字の指数の負号が「--36」 になった)。 build は通るので、 PDF を画像にして見るか文字を抽出して `--` を探す。 曲引用符も同じ (hook が書く ``` `` ''``` が字のまま出る)。
+
+<a id="generated-tex-opt-out"></a>⚠️ **テンプレートに値を流し込んで `.tex` を書き出す道具 (ポスター・様式など) では、 書き出した `.tex` を hook から外す** (`.gitattributes` に `<出力の path> -latex-autofix` = [`#vendored-latex-opt-out`](#vendored-latex-opt-out))。 正本は道具に流し込む data の側で、 PDF は hook が書き換える前の `.tex` から組まれる。 書き換わるのは commit した `.tex` だけなので、 その `.tex` を組み直したときに初めて `--` が刷られる = build の検査では見えない (実測: 英語の題の en dash)。 流し込む値を道具の側で `\textendash{}` に直す手もあるが、 hook が書き換える字 (dash・曲引用符・アクセント) を道具が追いかけ続けることになる。 外した後は、 道具の test で「出力の path に行が当たる」 と「本物の hook で commit しても字が残る」 を確かめ、 出力の PDF の文字に `--` / ``` `` ``` / `''` が残っていたら止める。
 
 ### <a id="pre-commit-hook-old-design-failure"></a>旧設計の失敗 (2026-05-14)
 
@@ -1034,7 +1036,7 @@ papers/upstream/ms.tex     -latex-autofix
 - 属性なし (= 既定) の file は従来どおり fix される (= 後方互換)。
 - 仕組み: hook が staged LaTeX file 各々に `git check-attr latex-autofix -- <file>` を問い、 `unset` のものを fixer から外す (`scripts/pre-commit-bib`)。 末尾の layer-3 chain hook は除外と無関係に常に走る。
 - `.gitattributes` は commit に乗るので全 clone (共同編集者含む) に伝播する。
-- ⚠️ opt-out は「自動 fix からの保護」 であって「自分が書く新規 .tex でアクセント直書き OK」 ではない。 vendored 取り込み専用。 (もう一つの使い道 = 機械が作り直す照合の基準。 [`#md-tex-source-and-copy`](#md-tex-source-and-copy))
+- ⚠️ opt-out は「自動 fix からの保護」 であって「自分が書く新規 .tex でアクセント直書き OK」 ではない。 外すのは、 正本が別にあって `.tex` を手で書かない file だけ = vendored の取り込み・機械が作り直す照合の基準 ([`#md-tex-source-and-copy`](#md-tex-source-and-copy))・道具が書き出す `.tex` ([`#generated-tex-opt-out`](#generated-tex-opt-out))。
 - <a id="autofix-with-pathspec-commit"></a>⚠️ **`git commit -- <path>` (並列 session 対策の pathspec commit) と自動 fix は噛み合わない** (実測): hook が「auto-fixed … and re-staged」 と言っても、 その修正は今の commit に入らず、 commit の後に `git status` が `MM` (index と作業 tree の両方に修正が残る) になる。 commit の直後に status を見て、 残っていたら同じ path でもう一度 commit する。 fix が掛かった file を別の検査の基準にしているなら、 2 回目の commit の前にその検査を回し直す。
 
 ### <a id="pre-commit-hook-design-motivation"></a>設計動機 (2026-06-09)
