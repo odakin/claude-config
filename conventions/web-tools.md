@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot)
+when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf)
 category: web
 summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter = 文字 whitelist / 戻り値は約 3KB で切れる / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + booking.com の宿への連絡は確認メールに返信しても届かない = web のメッセージ画面を pane で開きログインは本人 (#booking-property-messaging) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)**
 -->
@@ -248,6 +248,16 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
   (`pdftotext -layout x.pdf x-layout.txt; pdftotext x.pdf x-flow.txt`)。
 - 長い `grep` の出力は harness が tool-results dir に退避することがある (= 封じた review では読めない path)。
   文献照合の grep は `| head -40` で切って本文に残す。
+
+### <a id="dead-society-pdf"></a>学会サイトの記事 PDF がリンク切れのとき (和文の学会誌・会誌)
+
+学会誌の記事を探すと、 学会サイトのバックナンバー一覧に本文 PDF への link があるのに、 開くと 404 のことがある。 調べる順と、 入手の経路:
+
+1. **書誌を確かめる**: CiNii Research の OpenSearch (`https://cir.nii.ac.jp/opensearch/all?q=<題> <著者>&format=json`、 app ID なしで引けた) で巻・号・頁を取る。 researchmap の業績欄は号を書いていないことがある = 号は学会の目次 PDF で決める。 researchmap の「MISC」 は査読つき原著でなく解説・総説の欄
+2. **学会サイトの一覧から link を取る**: 古い学会サイトは Shift_JIS が多く、 そのまま grep すると文字化けで当たらない = `iconv -f CP932 -t UTF-8` を通してから。 404 なら**同じ号の他の記事も試す** (号の単位でサーバーから抜けていることがある、 実測)
+3. **Web アーカイブを domain ごと引く**: `http://web.archive.org/cdx/search/cdx?url=<domain>/&matchType=domain&filter=original:.*<file 名>.*&output=txt&fl=timestamp,original,statuscode` は、 サイトの引っ越し前の path (別 dir) の保存も拾う。 `wayback/available?url=` は path の完全一致しか見ないので、 これだけで「保存なし」 と言わない。 status 列で、 いつから 404 かも分かる
+4. **NDL サーチの書誌は所蔵の証拠にならないことがある**: `R100000136-` で始まる record は id の後半が CiNii Research の crid と同じ = CiNii の書誌の写し (実測)。 国会図書館がその雑誌を持っているかは別に確かめる
+5. **入手の経路** (どれも本人か、 頼まれた人が出す): ① 学会事務局にリンク切れを知らせる ② 図書館の文献複写 ③ 著者に PDF を頼む。 ⚠️ 学会サイトの「メーリングリスト」 の address は会員全員に届く = 問い合わせ先にしない。 事務局の address は入会案内・事務局の頁にあり、 JavaScript で組み立てられていて HTML を grep しても出ないことがある (`document.write` で名前と domain をつなぐ形 = script の中の 2 つの文字列を読む、 実測)
 
 ---
 

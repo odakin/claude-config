@@ -23,9 +23,19 @@ Usage:
   python3 discord-post.py ... --attach path/to/file [--attach ...]   # attach file(s)
   python3 discord-post.py --token-file ... --member-probe <USER_ID> [--member-probe ...]
                                          # read-only: is that user/bot in each guild of this bot?
+  python3 discord-post.py --token-file ... --channel <ID> --message <MSG_ID> [--content-file f]
+                                         # read-only: who wrote it (id, username, server nickname),
+                                         # its mentions; with --content-file, whether the text matches
   python3 discord-post.py --selftest
 
-On success prints:  sent message_id=<id> channel_id=<id>
+On success prints:  sent message_id=<id> channel_id=<id> [mentions=<user ids>]
+
+Missing Access (403 / code 50001) does not say why. On that error this script looks the
+channel id up in every guild the bot is in (the guild channel list includes private
+channels the bot cannot open) and says which case it is: the bot is in that server but the
+channel is private (a server admin adds the bot or its role to the channel's permissions),
+or the bot is not in that server (invite it with the OAuth2 authorize URL; discord.gg
+invite links cannot add a bot) (conventions/discord-bot.md #missing-access-triage).
 
 Mass mentions (@everyone / @here) need the bot's "Mention Everyone" permission in
 that channel. Without it Discord still accepts the post (HTTP 200) and just drops the
@@ -67,7 +77,9 @@ HINTS = {
     "401": "Unauthorized: token invalid. If the token file looks like binary noise, "
            "the repo may be git-crypt locked; run setup.sh / git-crypt unlock.",
     "50007": "Cannot send messages to this user (DMs closed or no mutual guild).",
-    "50001": "Missing Access: the bot is not in that channel/guild.",
+    "50001": "Missing Access: the bot cannot see that channel = either it is not in the "
+             "server, or the channel is private and the bot (or its role) is not in the "
+             "channel's permissions. See the 'located:' line for which.",
     "50013": "Missing Permissions: bot lacks Send Messages in that channel.",
     "40005": "Request entity too large: attachment exceeds channel file size cap "
              "(default 25 MB unboosted; higher on boosted server).",
@@ -164,6 +176,72 @@ def _get_retry(url, token, tries=4):
             wait = 1.0
         time.sleep(min(wait, 10) + 0.2)
     return resp, err
+
+
+def _find_channel(channel_id, guild_listings):
+    """guild_listings = [(guild, [channel or thread dict, ...]), ...] から channel_id を探す。
+    見つかれば (guild, channel)、 無ければ None (= 純関数、 selftest 用に API と分ける)。"""
+    for guild, chans in guild_listings:
+        for c in chans:
+            if c.get("id") == channel_id:
+                return guild, c
+    return None
+
+
+def _locate_line(channel_id, found, n_guilds):
+    """403 / 50001 の後に出す 1 行。 どちらの場合かと、 次に人がする操作を書く。"""
+    if found:
+        guild, c = found
+        return (f"located: #{c.get('name')} (type {c.get('type')}) in server "
+                f"'{guild.get('name')}' ({guild.get('id')}) = the bot is in this server but "
+                f"cannot see this channel (private). A server admin adds the bot or its role "
+                f"in the channel's Edit Channel > Permissions. An invite link does not help.")
+    return (f"located: channel {channel_id} is not in any of this bot's {n_guilds} server(s) "
+            f"= the bot is not in that server (add it with the OAuth2 authorize URL; "
+            f"discord.gg invite links cannot add a bot), or the id is not a channel id.")
+
+
+def _locate_channel(token, channel_id):
+    """bot の在席 guild を全部見て channel_id の所在を返す (read-only GET だけ)。
+    GET /guilds/{g}/channels は bot が開けない private channel も名前つきで返す (実測)。"""
+    guilds, err = _get_retry(f"{API}/users/@me/guilds", token)
+    if err or not isinstance(guilds, list):
+        return None, 0
+    listings = []
+    for g in guilds:
+        chans, err = _get_retry(f"{API}/guilds/{g['id']}/channels", token)
+        threads, err2 = _get_retry(f"{API}/guilds/{g['id']}/threads/active", token)
+        items = (chans if isinstance(chans, list) else []) + \
+                ((threads or {}).get("threads", []) if not err2 else [])
+        listings.append((g, items))
+    return _find_channel(channel_id, listings), len(guilds)
+
+
+def _report_error(token, err, channel_id=None):
+    """_explain に加え、 Missing Access なら channel の所在を引いて 1 行足す。"""
+    print(_explain(*err), file=sys.stderr)
+    code, body = err
+    if channel_id and code == 403 and '"code": 50001' in body:
+        found, n = _locate_channel(token, channel_id)
+        print(_locate_line(channel_id, found, n), file=sys.stderr)
+
+
+def _describe_message(msg, nick=None, expected=None):
+    """--message の出力 (行の list)。 nick = その server のニックネーム、
+    expected = 照合する本文 (--content-file)。 純関数。"""
+    a = msg.get("author") or {}
+    lines = [f"message {msg.get('id')} in channel {msg.get('channel_id')} at "
+             f"{(msg.get('timestamp') or '')[:19].replace('T', ' ')}",
+             f"author id={a.get('id')} username={a.get('username')} "
+             f"global_name={a.get('global_name')} bot={bool(a.get('bot'))}"
+             + (f" server_nick={nick}" if nick else ""),
+             f"mentions={[u.get('id') for u in msg.get('mentions') or []]} "
+             f"mention_everyone={bool(msg.get('mention_everyone'))} "
+             f"chars={len(msg.get('content') or '')}"]
+    if expected is not None:
+        same = (msg.get("content") or "").strip() == expected.strip()
+        lines.append(f"matches content-file: {'yes' if same else 'NO'}")
+    return lines
 
 
 def _member_state(err):
@@ -312,6 +390,10 @@ def main(argv=None):
     p.add_argument("--member-probe", action="append", default=[], metavar="USER_ID",
                    help="read-only: for every guild this bot is in, is USER_ID a member? "
                         "(repeat for several; the bot itself is probed as a control)")
+    p.add_argument("--message", metavar="MSG_ID",
+                   help="read-only (with --channel): print who wrote that message (id, "
+                        "username, server nickname) and its mentions; with --content-file, "
+                        "also whether its text matches the file")
     p.add_argument("--selftest", action="store_true")
     a = p.parse_args(argv)
 
@@ -346,10 +428,29 @@ def main(argv=None):
             target = resp["id"]
         resp, err = _request(f"{API}/channels/{target}", token)
         if err:
-            print(_explain(*err), file=sys.stderr); return 1
-        print(f"ok channel_id={resp['id']} type={resp.get('type')}")
+            _report_error(token, err, None if a.dm_user else target); return 1
+        name = f" name=#{resp['name']}" if resp.get("name") else ""
+        guild = f" guild_id={resp['guild_id']}" if resp.get("guild_id") else ""
+        print(f"ok channel_id={resp['id']} type={resp.get('type')}{name}{guild}")
         if resp.get("guild_id"):
             print(_mass_mention_line(*_probe_mass_mention(token, target)))
+        return 0
+
+    if a.message:
+        if not a.channel:
+            p.error("--message needs --channel")
+        msg, err = _request(f"{API}/channels/{a.channel}/messages/{a.message}", token)
+        if err:
+            _report_error(token, err, a.channel); return 1
+        nick = None
+        chan, err = _request(f"{API}/channels/{a.channel}", token)
+        uid = (msg.get("author") or {}).get("id")
+        if not err and chan.get("guild_id") and uid:
+            mem, err = _request(f"{API}/guilds/{chan['guild_id']}/members/{uid}", token)
+            nick = (mem or {}).get("nick") if not err else None
+        expected = (open(a.content_file, encoding="utf-8").read()
+                    if a.content_file else None)
+        print("\n".join(_describe_message(msg, nick, expected)))
         return 0
 
     if a.recent is not None:
@@ -364,7 +465,7 @@ def main(argv=None):
         limit = min(max(a.recent, 1), 100)
         resp, err = _request(f"{API}/channels/{target}/messages?limit={limit}", token)
         if err:
-            print(_explain(*err), file=sys.stderr); return 1
+            _report_error(token, err, None if a.dm_user else target); return 1
         print("\n".join(_format_messages(resp)))
         return 0
 
@@ -423,9 +524,12 @@ def main(argv=None):
         resp, err = _request(f"{API}/channels/{channel}/messages", token,
                              {"content": body})
     if err:
-        print(_explain(*err), file=sys.stderr); return 1
+        _report_error(token, err, None if a.dm_user else channel); return 1
     n_att = len(resp.get("attachments", []))
     tail = f" attachments={n_att}" if n_att else ""
+    mentioned = [u.get("id") for u in resp.get("mentions") or []]
+    if mentioned:
+        tail += f" mentions={','.join(mentioned)}"
     print(f"sent message_id={resp['id']} channel_id={resp['channel_id']}{tail}")
     if _mass_mention_dropped(body, resp):
         print("WARNING: the text has @everyone/@here but Discord did not apply it "
@@ -451,6 +555,33 @@ def selftest():
     check("50007 hint", "DMs closed" in _explain(403, '{"message": "x", "code": 50007}'))
     check("40005 hint", "attachment exceeds" in _explain(413, '{"code": 40005}'))
     check("401 hint", "git-crypt" in _explain(401, "Unauthorized"))
+    check("50001 hint names the private-channel case",
+          "private" in _explain(403, '{"message": "Missing Access", "code": 50001}'))
+    # Missing Access triage: find the channel in the bot's guild listings (synthetic ids)
+    lst = [({"id": "g1", "name": "A"}, [{"id": "c1", "name": "open", "type": 0}]),
+           ({"id": "g2", "name": "B"}, [{"id": "c2", "name": "seminar", "type": 0}])]
+    found = _find_channel("c2", lst)
+    check("locate: found in the second guild",
+          found is not None and found[0]["id"] == "g2" and found[1]["name"] == "seminar")
+    check("locate: found -> says private + permissions, invite does not help",
+          "private" in _locate_line("c2", found, 2)
+          and "Permissions" in _locate_line("c2", found, 2)
+          and "invite link does not help" in _locate_line("c2", found, 2))
+    check("locate: absent -> not in any server + authorize URL",
+          _find_channel("c9", lst) is None
+          and "not in any of this bot's 2" in _locate_line("c9", None, 2)
+          and "authorize URL" in _locate_line("c9", None, 2))
+    # --message: author, server nickname, mentions, content comparison
+    msg = {"id": "m1", "channel_id": "c2", "timestamp": "2026-01-01T00:00:00.000+00:00",
+           "author": {"id": "u1", "username": "x1", "global_name": "X"},
+           "mentions": [{"id": "u2"}], "mention_everyone": False, "content": "hello"}
+    d = _describe_message(msg, nick="Nick", expected="hello\n")
+    check("message: author id + server nick", "id=u1" in d[1] and "server_nick=Nick" in d[1])
+    check("message: mentions listed", "mentions=['u2']" in d[2] and "chars=5" in d[2])
+    check("message: content compare ignores trailing newline", d[3].endswith("yes"))
+    check("message: mismatch says NO",
+          _describe_message(msg, expected="other")[-1].endswith("NO"))
+    check("message: no expected -> no compare line", len(_describe_message(msg)) == 3)
     # --recent formatter: API returns newest first; print oldest first, fold newlines, list attachments
     fmt = _format_messages([
         {"id": "2", "timestamp": "2026-01-02T03:04:05.000+00:00", "author": {"username": "b"},

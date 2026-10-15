@@ -69,7 +69,7 @@ claude-config/
 │   ├── data-pipeline-automation.md         # 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
 │   ├── debugging-discipline.md             # bug fix を提案する前・audit verdict を出す前 (検証規律) + CI が red のとき (= red streak の起点と原因 commit を探す・手元で Linux CI を再現する、 §17) + 外部 GUI app / daemon / browser の復旧で start・open・restart・retry を提案または実行する前 (= #recovery-state-dispatch)
 │   ├── dirac-conventions.md                # Dirac 行列・計量の規約を教科書 (Peskin–Schroeder / Srednicki / Weinberg) の間で読み替えるとき + 規約の違う文献から式を写すとき + 自分の project が「どの教科書の行を使うか」 を repo の記号の規約に宣言するとき + 共同研究者と「我々の (−,+,+,+) は Srednicki か Weinberg か」 を確かめるとき
-│   ├── discord-bot.md                      # Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage)
+│   ├── discord-bot.md                      # Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage) + bot が 403 Missing Access で channel に入れないとき・招待リンクで bot を入れようとしたとき (#missing-access-triage)
 │   ├── dropbox-api-access.md               # Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload)
 │   ├── dropbox-placeholder-diagnosis.md    # Dropbox 配下の file が 0 byte に見えたとき
 │   ├── dropbox-refs.md                     # 共同 PDF を Dropbox に置いてリポから symlink 参照するとき
@@ -181,7 +181,7 @@ claude-config/
 │   ├── verification-cycle-ops.md           # 検証サイクルを session を越えて回し続ける仕組みを設計・運用・診断するとき
 │   ├── web-form-automation.md              # 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき
 │   ├── web-map-projections.md              # d3-geo / Natural Earth で世界地図ビューア (図法切替・中央経線回転・国境・国名・拡大) を作る・直すとき
-│   ├── web-tools.md                        # WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot)
+│   ├── web-tools.md                        # WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf)
 │   ├── webgl-f32-numerics.md               # WebGL / GLSL shader で物理量を f32 で計算するとき + 事前計算 table (texture) の定義域の外まで写像を延ばすとき + shader の出力を f64 の参照実装と画素単位で照合するとき + 実時間 simulation の 1 frame の時間予算を決めるとき + table と metadata を静的 hosting で配るとき (#payload-cache-pairing) + 写真の背景を mip つきで引くとき (#derivatives-in-divergent-flow) + 2 つの lookup engine を切り替えるとき (#engine-handoff)
 │   ├── windows-msys.md                     # Windows (Git Bash / MSYS) 上で本リポの script・hook を動かす / 移植性のある shell・Python を書くとき
 │   ├── wolfram-scripting.md                # wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき + Mathematica / wolframscript を Apple Silicon の Mac に入れ直すとき (#apple-silicon-install)

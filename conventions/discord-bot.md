@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage)
+when: Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage) + bot が 403 Missing Access で channel に入れないとき・招待リンクで bot を入れようとしたとき (#missing-access-triage)
 category: infra
 summary: Discord Bot 運用 (権限ポリシー・private channel 加入・per-channel error non-fatal な fetcher・Token 取扱・組織 NW での API ブロック・グループへの呼びかけの個別 mention と user ID の根拠つき引き方・第三者の bot の侵害時の点検と token 漏洩時の @everyone の絞り方)
 -->
@@ -60,6 +60,15 @@ invite URL の `permissions=` bitfield は **bot 専用 role の guild-level 権
 ### Bot 自身が UI 操作の代行をできない理由
 
 Bot が channel の permission overwrite を API 経由で変更するには `Manage Roles` 権限が必要。これを持たない bot は **自分自身に対する allow を API で追加できない** → server admin (人間) が UI で 1 度だけ操作する必要がある。これを最初に踏まえずに「API で全自動」と思い込むと、最後の 1 ステップで詰まる。
+
+### <a id="missing-access-triage"></a>Missing Access (403 / code 50001) は 2 つの場合を区別しない — 所在を引いてから人に頼む
+
+`Missing Access` は「bot がその server に居ない」 と「server には居るが、 channel が非公開で bot (の role) が channel の許可に無い」 の両方で返る。 直し方が違うので、 人に頼む前にどちらかを決める:
+
+- **見分け方**: bot が在席する guild ごとに `GET /guilds/{guild}/channels` (+ `/threads/active`) を引き、 channel id を探す。 この一覧は bot が開けない非公開 channel も名前つきで返す (実測) = 見つかれば後者、 どの guild にも無ければ前者。 [`scripts/discord-post.py`](../scripts/discord-post.py) は 50001 のときこれを自動で引いて `located:` の 1 行を出す (`--check` / `--recent` / 送信のどれでも)
+- **後者 (非公開 channel)**: server admin が channel の「編集 → 権限」 で bot か bot の role を足す (上の追加手順)。 **招待リンクを送ってもらっても効かない**
+- **前者 (server に居ない)**: OAuth2 の authorize URL (`discord.com/api/oauth2/authorize?client_id=…&scope=bot&permissions=…`) で server に入れる。 ⚠️ **`discord.gg/<code>` の招待リンクで bot は参加できない** (招待の受理 〔`POST /invites/{code}`〕 は user 用で、 bot は使えない)。 人が招待リンクを渡してきたら、 リンクの行き先を `GET /invites/{code}` (認証なし) で確かめ、 bot が既にその server に居るなら後者の手順を頼む
+- 文面の見本 (人に頼むとき): 「その channel は非公開で、 bot はサーバーには居るが channel に入れない。 channel の編集 → 権限 → メンバーまたはロールを追加 で bot を足して、 『チャンネルを見る』『メッセージを送信』『メッセージ履歴を読む』 を許可してほしい」
 
 ## 複数 channel から data を fetch するときの error handling
 
