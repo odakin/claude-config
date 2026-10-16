@@ -165,6 +165,9 @@ RELAX_FORMS: dict[str, re.Pattern] = {
     "無効": re.compile(r"無効(?:に|と)(?:する|して|なる)|無効化(?:する|して|できる|可)"),
     "任意": re.compile(r"任意(?![一-鿿ァ-ヺA-Za-z0-9])(?!の)"),
     "優先": re.compile(r"優先(?!順|度|化|席|権|的)"),
+    # 「取り消し線」 is the typographic name of strikethrough (a diff display term, e.g. a latexdiff legend);
+    # 「取り消す / 取り消し」 still count
+    "取り消": re.compile(r"取り消(?!し線)"),
     # "not needed" relaxes when what is not needed is an obligation or a rule ("確認は不要", "承認不要"), or when it
     # follows a condition ("急ぐ時は不要"); a tool fact ("ログイン不要"), a quantity ("不要な中間量") or a document
     # part ("caveat 節ごと不要になる") passes (measured: 16 of 16 committed uses were the latter)
@@ -1117,7 +1120,8 @@ def selftest() -> int:
                            ("a priority order", "重大度の優先順で並べる。"),
                            ("a tool fact", "flag なしで全アカウントの表が出る。"),
                            ("a passive disabling by the platform", "Free plan では検査が警告なしに無効化される。"),
-                           ("describing a bad habit", "検査を無視する習慣を教える生成器は作らない。")):
+                           ("describing a bad habit", "検査を無視する習慣を教える生成器は作らない。"),
+                           ("strikethrough, a display term", "削除は取り消し線で、 追加は下線で出る。")):
         check("everyday use of a listed term passes: " + name,
               exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is True)
     for name, inserted in (("a definition", "本 file で「本人」 とは、 その session の依頼者を指す。"),
@@ -1135,7 +1139,10 @@ def selftest() -> int:
                            ("non-binding", "この節は拘束しない。"),
                            ("disabling", "検査を無効にする。"),
                            ("optional", "レビューは任意。"),
-                           ("precedence", "急ぐ deploy を優先する。")):
+                           ("precedence", "急ぐ deploy を優先する。"),
+                           ("a rule revoked", "この節の手順を取り消す。"),
+                           ("a revocation noun", "この節の手順は取り消しとする。"),
+                           ("revoked next to a strikethrough", "取り消し線の節は取り消す。")):
         check("relaxing position still needs approval: " + name,
               exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is False)
     check("a unit list is judged unit by unit", relax_hit(["様式が改訂されても同じ。", "急ぐ時は deploy してよい。"]) == "してよい")
