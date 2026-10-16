@@ -146,11 +146,12 @@ PNG は元の絵として手元に残す。
 |---|---|---|
 | ホスト (LISTEN) | GraphQL `podcast(id) { followers { id name username } }` | フォローしている利用者の**一覧**が返る = 誰かまで分かる。持ち主が個人のアカウントでフォローしていればそれも入る = 「自分を除く」 はこの一覧から引く |
 | Spotify | Spotify for Creators の番組のホーム (題の下の「N 人のフォロワー」) | 全期間の総数。誰かは出ない。再生回数・オーディエンス (過去 30 日) が同じ画面に並ぶ |
-| Apple Podcasts | Podcasts Connect の「アナリティクス」の番組の表の「フォロワー」の列 | 少ないと「-」 で数が出ない (Apple の分析は 5 未満を出さない = [Data requirements](https://podcasters.apple.com/support/841-data-requirements)) = 0〜4 の区別は付かない。番組を持たない Apple Account で入ると番組が出ない ([上の表](#rss-directories)) |
-| Amazon Music | Amazon Music for Podcasters の Overview の FOLLOWERS | **右上で選んだ期間の数** = 既定の 7 日では 0 と出ることがある。始めて 90 日以内の番組は「Last 90 days」 で全部になる。定義 = 番組の Follow を押した Amazon Music の利用者 (同 FAQ) |
-| YouTube | YouTube Studio のアナリティクス →「リアルタイム」 の「チャンネル登録者 (現在の数)」 | 番組 (再生リスト) でなく**チャンネル**の登録者。チャンネルの公開ページの見出しに登録者数の行が出ないことがある (どの条件で出ないかは未確認) = Studio で読む。Studio に別のアカウントで入っていると「権限がありません」 = URL に `?authuser=<番組のアカウントのアドレス>` を付けると切り替わる |
+| Apple Podcasts | Podcasts Connect の「アナリティクス」の番組の表の「フォロワー」の列 | 少ないと「-」 で数が出ない (Apple の分析は 5 未満を出さない = [Data requirements](https://podcasters.apple.com/support/841-data-requirements)) = 0〜4 の区別は付かない。番組を持たない Apple Account で入ると番組が出ない ([上の表](#rss-directories))。サインインは同じ日のうちに切れた (実測) = 読むたびに持ち主が入る前提 |
+| Amazon Music | Amazon Music for Podcasters の Overview の FOLLOWERS | **右上で選んだ期間の数** = 既定の 7 日では 0 と出ることがある。始めて 90 日以内の番組は「Last 90 days」 で全部になる。**画面で選べる期間は最長 90 日** = それより古い番組の全期間は、ページの裏の `POST /api/metrics/podcast` (`followsAggregate` を `PODCAST_ID` ごと、ヘッダ `csrf-token` = `localStorage` の `csrfToken`) に番組の開始より前からの期間を渡して、ページの中から読む (実測: 7 日で 0、90 日と開始前からで同じ数)。⚠️ 終わりの時刻を未来にすると HTTP 200 のまま `error` に `DependencyException` が入って数が空になる (実測) = 終わりは今日の 0 時 (UTC)。定義 = 番組の Follow を押した Amazon Music の利用者 (同 FAQ) |
+| YouTube | YouTube Studio のアナリティクス →「リアルタイム」 の「チャンネル登録者 (現在の数)」 | 番組 (再生リスト) でなく**チャンネル**の登録者。チャンネルの公開ページの見出しに登録者数の行が出ないことがある (Studio で 0 のときに出なかった。非表示の設定でも出ないので、行が無いことから 0 とは言えない) = Studio で読む。Studio に別のアカウントで入っていると「権限がありません」 = URL に `?authuser=<番組のアカウントのアドレス>` を付けると切り替わる |
 
 - 配信先を足した数は「のべ」: 同じ人が複数の配信先でフォローしていても除けない。持ち主本人を除けるのも一覧が出るホストだけ
+- 管理画面でしか読めない配信先は、**ページの中で数だけを返す JS** (画面の文から抜く / 裏の口をページの中から叩く) にしておくと、ログイン済みのブラウザで毎回同じ手順で読める。返すのは数だけにする (トークン・利用者名を返さない)。ログインが切れていれば「要ログイン」、頁や画面が違えば「読めない欄」 を返して途中で止めない ([`web-form-automation.md#step-driver-harness`](web-form-automation.md#step-driver-harness) の契約 1)
 - Google でログインする管理画面は、ブラウザに Google のログインが残っていてもパスワードかパスキーを聞かれることがある (持ち主が入れる)
 
 ## <a id="listen-style-api"></a>LISTEN (listen.style) の API
