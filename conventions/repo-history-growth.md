@@ -44,7 +44,7 @@ source (`.tex` / script / 元の data) が repo にあるなら、 生成物は 
    <a id="milestone-commit-gate"></a>**機械で守るなら pre-commit で止める**: 止めるのは、 同じ dir に同じ名前の `.tex` がある `.pdf` (= build した PDF) を stage した commit。 節目の commit だけ環境変数 (例 `MILESTONE=1`) で通す。 図・様式・受け取った資料のように `.tex` と対にならない PDF は build の入力なので、 変えたら commit する。 repo ごとに「毎回 commit する path」 の一覧を持てるようにする: **git で配っている生成物** (別の機械の定期ジョブが checkout から拾って公開する、 など) は毎回 commit しないと届かない (実測)。 すでに追跡している PDF は追跡したまま門を掛ければ、 共同編集者の手元は変わらない
 
 - ⚠️ **暗号化された提出書類の PDF も生成物** — 暗号化は差分をさらに効かなくするだけで、 扱いは同じ
-- ⚠️ **追跡をやめるときは** `git rm --cached <file>` + `.gitignore`。 共同編集者のいる repo では、 PDF を git で見ている人がいないか先に一声かける (配り方を 2 に切り替える)
+- ⚠️ **追跡をやめるときは** `git rm --cached <file>` + `.gitignore`。 共同編集者のいる repo では、 PDF を git で見ている人がいないか先に一声かける (配り方を 2 に切り替える)。 `.gitignore` の `/dir/*.pdf` は `dir` 直下だけで、 サブフォルダの PDF は `dir/**/*.pdf` と書かないと追跡される (実測)。 外す commit は path 指定でなく index 経由で ([multi-session-coordination.md#pathspec-commit-ignores-index](multi-session-coordination.md#pathspec-commit-ignores-index))
 - ⚠️ **自動生成の data を定期 job で commit する場合**、 変わった時だけ commit する (中身が同じなら commit しない)。 大きな 1 file なら分割するか、 追跡をやめて生成を build の段に回す
 - 追跡をやめても、 それまでの版は履歴に残る ([#already-accumulated](#already-accumulated))
 

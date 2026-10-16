@@ -1435,6 +1435,15 @@ luatexja は `$過去$` (= 裸の kanji) も accept するが、 標準 idiom �
 
 `[x=1mm, y=1mm]` で TikZ 座標が mm 単位に固定、 `geometry` で page size mm 指定。 printer で「実寸印刷」 設定にすれば狙い通りの mm 単位で印刷される。 screen 表示では browser / viewer の zoom が効く。
 
+## <a id="texshop-lualatex-and-external-builds"></a>TeXShop で LuaLaTeX 前提の source を開く・外部の build と共存させる
+
+- **LuaLaTeX でしか組めない source (ltjsarticle、 fontspec、 LuaTeX-ja) は先頭に `% !TEX TS-program = lualatex` を書く** (`% !TEX encoding = UTF-8 Unicode` も)。 無いと TeXShop は既定の engine (pdfTeX / uplatex の経路) で typeset してエラーで止まり、 著者には「コンパイル結果が見えない」 になる (実測)。 この行は file を開いた時に読まれるので、 開いたままの文書には効かない = 閉じて開き直す。
+- **tex に紐づいたプレビュー窓は、 その PDF を外部の build (CLI の lualatex・build script) が書き換えると描画しなくなることがある** (ページ番号は出るのに紙が灰色のまま。 ⌘W → ⌘T の再 typeset・ページ送り・表示形式の切替・ズームでは戻らない、 実測)。 PDF 自体は正常で、 **同じ PDF を独立の書類として開く** (ファイル > 開く、 または `open -a TeXShop <pdf>`) と描画する。 壊れた窓は TeXShop の再起動で消える。 外から組むときは、 著者に「開き直して」 と伝えるか、 TeXShop 側の typeset だけで組む ([#scratch-build-dir](#scratch-build-dir) の aux の競合とは別の症状)。
+
+## <a id="enumerate-vs-enumitem-option-syntax"></a>`enumerate` package の下で `[label=(\roman*)]` は組めない
+
+`\usepackage{enumerate}` (option は `[(i)]` `[a)]` のような雛形) を読む preamble で、 `enumitem` の書き方 `\begin{enumerate}[label=(\roman*)]` を書くと `! Missing number, treated as zero.` で止まる。 原稿の preamble の写しで note を組むときに起きる (実測 = 2 本)。 直し方 = その preamble では `[(i)]` の雛形にする。 enumitem を足すのは原稿の preamble の変更なので著者の判断。
+
 ## <a id="latexdiff-ulem-option-clash"></a>latexdiff: 本文が `ulem` を option なしで読むと差分 markup が silent に壊れる (2026-08-21)
 
 **症状**: `latexdiff old.tex new.tex > diff.tex` → pdflatex は `! LaTeX Error: Option clash for package ulem.` を吐くが batchmode では PDF が出てしまい、 **追加/削除の下線・取り消し線が欠落した「差分に見えない差分 PDF」** ができる。 原因 = 本文の `\usepackage{...,ulem}` (option なし) と latexdiff preamble の `\RequirePackage[normalem]{ulem}` の衝突。
