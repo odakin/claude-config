@@ -157,8 +157,8 @@ layer 1 (public) のドメイン固有規約 148 file をカテゴリ別に列�
   - 「天気」投稿の機構 — 種別選択 (調査ノートは 6pp 以内・掲載料無料・和文/英文要旨とも不要 #category-fit)、 掲載料は種別で不連続で格上げは課金を伴い免除条項は課金区分にしか効かない (#page-charge-by-category)、 LaTeX のまま投稿できる 3 点セット (#tex-submission-set)、 著者要件 = 原則会員を含む + 種別非依存 + 会員番号発行まで 3-4 週の lead + 学生のうちに入るのが最安 (#membership-early-check)、 非会員のみの著者構成なら例外を打診する作法 (#non-member-inquiry)、 提出経路ごとに添付書類が違い電子投稿フォームは原稿 1 ファイル制約で TeX と相性が悪い (#channel-vs-attachments)、 様式の実 URL と文中引用規則
 - **[tikz-pgfplots.md](tikz-pgfplots.md)** — TikZ / pgfplots を含む LaTeX project で図を作るとき
   - TikZ/pgfplots 固有 gotchas（infographic / poster / 1 枚 figure 制作で必読、 latex.md と併読）
-- **[writing-discipline.md](writing-discipline.md)** — AI が文章を書く・直すとき常時 (論文・研究ノート・報告書・README・chat・code の docstring と図のラベルまで) + 「kernel」 と書きそうになった瞬間 + 文面を「柔らかく」 と頼まれたとき (#softening-without-self-description) + 初学者向けの入門 (教科書の最初の章・講義の初回・入門の解説) を書く・組み直すとき、 手本の本より分かりにくいと言われたとき (#novice-introduction-concrete-first)
-  - 文章の標語 = 「平易に、論理の流れがスッキリ追えるように、簡潔に」 (AI の文章は放っておくと冗長になる = 書いた文ごとに標語を当てる) + 多義語 kernel を汎称に使わない (重み関数・窓関数・伝播関数・積分核など、その式が表す対象を名指す) + 「柔らかく」 は自分の行為を形容する語 (gently 等) でなく構文で出す + 初学者向けの導入は、 図のある実物と古典の予想を裏切る観察から始め、 新しい数学は既知の現象の類推で要ると分かってから最小の形で出す
+- **[writing-discipline.md](writing-discipline.md)** — AI が文章を書く・直すとき常時 (論文・研究ノート・報告書・README・chat・code の docstring と図のラベルまで) + 「kernel」 と書きそうになった瞬間 + 文面を「柔らかく」 と頼まれたとき (#softening-without-self-description) + 初学者向けの入門 (教科書の最初の章・講義の初回・入門の解説) を書く・組み直すとき、 手本の本より分かりにくいと言われたとき (#novice-introduction-concrete-first) + 論文・研究ノートの本文を書く・組み直す・圧縮する・共著の原稿に注記を入れるとき (#paper-structure 〜 #japanese-academic-prose)
+  - 文章の標語 = 「平易に、論理の流れがスッキリ追えるように、簡潔に」 (AI の文章は放っておくと冗長になる = 書いた文ごとに標語を当てる) + 多義語 kernel を汎称に使わない (重み関数・窓関数・伝播関数・積分核など、その式が表す対象を名指す) + 「柔らかく」 は自分の行為を形容する語 (gently 等) でなく構文で出す + 初学者向けの導入は、 図のある実物と古典の予想を裏切る観察から始め、 新しい数学は既知の現象の類推で要ると分かってから最小の形で出す + 論文の文章の一般則 (構成 = 講演の 3 message を紙に翻訳、 他人の仕事は序論に集め、 要約は「何をしたか / 何を意味するか / 次に何をするか」 / 文と段落 = 言い切り・圧縮の検算・検算の 3 拍・式の項の呼び方・裸の括弧参照を書かない / 引用 = 方向ごとに入口 1 つ・文献ごとに何をしたか / 記号 = 無駄に定義しない・本文で定義・パラメータは定義の式に / 注記は用件だけ・示していない検証を書かない / 日本語の接続詞の糊)
 
 ## macOS (`macos`)
 

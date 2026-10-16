@@ -1,12 +1,12 @@
 <!-- doc-meta
-when: AI が文章を書く・直すとき常時 (論文・研究ノート・報告書・README・chat・code の docstring と図のラベルまで) + 「kernel」 と書きそうになった瞬間 + 文面を「柔らかく」 と頼まれたとき (#softening-without-self-description) + 初学者向けの入門 (教科書の最初の章・講義の初回・入門の解説) を書く・組み直すとき、 手本の本より分かりにくいと言われたとき (#novice-introduction-concrete-first)
+when: AI が文章を書く・直すとき常時 (論文・研究ノート・報告書・README・chat・code の docstring と図のラベルまで) + 「kernel」 と書きそうになった瞬間 + 文面を「柔らかく」 と頼まれたとき (#softening-without-self-description) + 初学者向けの入門 (教科書の最初の章・講義の初回・入門の解説) を書く・組み直すとき、 手本の本より分かりにくいと言われたとき (#novice-introduction-concrete-first) + 論文・研究ノートの本文を書く・組み直す・圧縮する・共著の原稿に注記を入れるとき (#paper-structure 〜 #japanese-academic-prose)
 category: paper
-summary: 文章の標語 = 「平易に、論理の流れがスッキリ追えるように、簡潔に」 (AI の文章は放っておくと冗長になる = 書いた文ごとに標語を当てる) + 多義語 kernel を汎称に使わない (重み関数・窓関数・伝播関数・積分核など、その式が表す対象を名指す) + 「柔らかく」 は自分の行為を形容する語 (gently 等) でなく構文で出す + 初学者向けの導入は、 図のある実物と古典の予想を裏切る観察から始め、 新しい数学は既知の現象の類推で要ると分かってから最小の形で出す
+summary: 文章の標語 = 「平易に、論理の流れがスッキリ追えるように、簡潔に」 (AI の文章は放っておくと冗長になる = 書いた文ごとに標語を当てる) + 多義語 kernel を汎称に使わない (重み関数・窓関数・伝播関数・積分核など、その式が表す対象を名指す) + 「柔らかく」 は自分の行為を形容する語 (gently 等) でなく構文で出す + 初学者向けの導入は、 図のある実物と古典の予想を裏切る観察から始め、 新しい数学は既知の現象の類推で要ると分かってから最小の形で出す + 論文の文章の一般則 (構成 = 講演の 3 message を紙に翻訳、 他人の仕事は序論に集め、 要約は「何をしたか / 何を意味するか / 次に何をするか」 / 文と段落 = 言い切り・圧縮の検算・検算の 3 拍・式の項の呼び方・裸の括弧参照を書かない / 引用 = 方向ごとに入口 1 つ・文献ごとに何をしたか / 記号 = 無駄に定義しない・本文で定義・パラメータは定義の式に / 注記は用件だけ・示していない検証を書かない / 日本語の接続詞の糊)
 -->
 
 # 文章の規律 (writing discipline)
 
-AI が書く文章にかかる規律。 1〜3 は owner の裁定 (発言そのまま) を正本にし、 4 は実測から引いた手順。 下の層は本 doc を参照する。
+AI が書く文章にかかる規律。 1〜3 は owner の裁定 (発言そのまま) を正本にし、 4 は実測から引いた手順、 5〜10 は論文の文章の一般則 (原稿への著者の裁定を一般形に直したもの)。 下の層は本 doc を参照する。
 
 ## <a id="motto"></a>1. 標語: 「平易に、論理の流れがスッキリ追えるように、簡潔に」
 
@@ -18,7 +18,7 @@ AI が書く文章にかかる規律。 1〜3 は owner の裁定 (発言その�
 - **論理の流れがスッキリ追えるように**: 1 文 1 段の論理。 「A なら B、 それが C の起源」 は 2 文に分ける。 指示語は指示先を名詞で名指す。 段落は主張 → 根拠 → 帰結の順で、 順序を示すだけの接続語 (Methodologically, / Note that) を足さない。
 - **簡潔に**: 書いた語を 1 つずつ「落として意味が変わるか」 と問い、 変わらない語は落とす。 ただし load-bearing な語 (量化子・条件・範囲) は落とさない。
 
-適用範囲 = 論文・ノート・報告書・README・chat の返事・code の docstring・図のラベルと caption。 chat の返事だけの規律 (結論先行・deliverable の 1 画面) は [concise-output.md](concise-output.md)、 英語論文の文の形の実例は各 project の執筆スタイル (層 3 / 層 2 digest) が持つ。
+適用範囲 = 論文・ノート・報告書・README・chat の返事・code の docstring・図のラベルと caption。 chat の返事だけの規律 (結論先行・deliverable の 1 画面) は [concise-output.md](concise-output.md)、 英語の論文の文の形は [#plain-short-sentences](#plain-short-sentences)、 原稿ごとの実例は各 project の執筆スタイル (層 3 / 層 2 digest) が持つ。
 
 ## <a id="kernel"></a>2. 「kernel」 を汎称に使わない
 
@@ -30,7 +30,9 @@ kernel は分野をまたいで別物を指す (積分核・畳み込み核・�
 - **本当に必要なとき** = 数学の定義そのものを言うとき (「積分作用素の核 K(x, y)」 「写像の核 ker f」)。 その場合も初出で「integral kernel」 「the kernel (null space) of」 のように限定語を付けて、 どの意味かを固定する。
 - 既存文書の「核」 「kernel」 を一括置換しない。 文献の題名・引用・既存の記号名は残す。
 
-同じ型の語 (overlap・factor・structure・object) にも同じ問いが効く: 「これは何の関数か」 に答える語で書く。 実例と英語の言い換え表は各 project の執筆スタイルにある。
+同じ型の語 (overlap・factor・structure・object) にも同じ問いが効く: 「これは何の関数か」 に答える語で書く。 原稿ごとの実例は各 project の執筆スタイルにある。
+
+<a id="name-the-matrix-element"></a>**英語の論文での言い換え**: 状態の間の量は matrix element、 遷移を表すなら transition amplitude、 ベクトル同士 (真空など) の内積は inner product、 スピノルの双線形は spinor bilinear、 振幅の積を積分する量は interference integral と、 その式が表す対象に合わせる。 位置・運動量の基底での成分は position-space / momentum-space wave function と呼ぶ。 名前を替えるときに、 単一の振幅・振幅の積・スピノルの因子を取り違えない。
 
 ## <a id="softening-without-self-description"></a>3. 「柔らかく」 と頼まれたら、 柔らかさを自分で名乗らない
 
@@ -54,3 +56,268 @@ kernel は分野をまたいで別物を指す (積分核・畳み込み核・�
 - 組み直しでは、 著者が決めた中身 (扱う系・用語・記号の約束・式番号) を保ち、 順番と入口を変える。 順番を変えると既存の方針と衝突することがある。 案を出す段で衝突する決定を名指し、 どちらを採るかを著者に問う。
 - 「手本に負けている」 と言われたら、 文の書き直しに入る前に上の 4 点で差を挙げる。 直し方の案 (組み立てから変える / 書き方だけ直す) と、 書き方だけでは残る差を示して選んでもらう。
 - 後で一般化する対象 (最初に出す簡単な表し方と、 後で出す一般の表し方) は、 最初の箇所で「X が Y である」 と定義として言い切らない。 「Y は X で表せる (この範囲では)」 と書き、 一般形を出す所で二つの関係を一文で言う。 言い切ると、 読者には定義が途中で差し替わったように見える (実測)。
+
+## <a id="paper-structure"></a>5. 論文の構成
+
+5〜10 は論文・研究ノートの文章の一般則。 原稿への著者の裁定を一般形に直したもので、 個々の原稿での実例と著者の言葉は各 project の執筆スタイル (層 3 / 層 2 digest) が持つ。 記法と組版の家風 (定義の記号・display の書き方・綴り・著者の並べ方) は project ごとの宣言に置き、 ここには書かない。 投稿の前の検査は [paper-audit.md](paper-audit.md)、 LaTeX の source の規則は [latex.md](latex.md) が持つ。
+
+### <a id="geroch-three-messages"></a>論文の構成を講演の 3 message 原則で組む
+
+講演の原則 ([giving-talks.md](giving-talks.md)、 Geroch) を紙に翻訳する。 「発した量でなく相手に届いた量が全て」 は読者にもそのまま成り立つ。 skeleton を立てる時と既存の原稿を組み直す時に、 次の 7 点を通す。
+
+1. **3 (〜4) message で組む**: 論文全体を 3 つの message に組織し、 各 message を 1 節にする。 各 message は題と非技術的な 1 文の要約を持つ。 節を切る前に 3 message を書き出す。
+2. **序論の 2 つの仕事**: (a) 文脈を広い所から狭い所へ 3〜4 段で降ろす (読者が知っていそうでも繰り返す)。 (b) message を事前に宣言し、 結論を先に出す。 事前の宣言は流れる散文で書き、 太字の見出しを付けた list (`description` 環境の `\item[…]`) にしない。 定理・命題の中の条項の列挙 (i)(ii) は数学の標準の形なので、 そのまま使う。
+3. **message の境界**: 各 message の節は「その節で何をするか」 の短い purpose 文 (ローマン体) で始める。 message の言い切りを節の冒頭の段落 (italic でもローマン体でも) に置かない。 言い切りは序論の事前宣言と節末の要約の段落が運ぶ。 節末は「In summary, the …」 と平文で次の文に繋ぐ非技術的な 3〜4 文の段落で閉じる (italic の label にしない)。 「Message N:」 のような meta の label を原稿に印字しない。 序論でも「The paper carries three messages」 型の meta の語を避け、 内容の列挙で構造を示す。
+4. **今の message に効かない material を抑える**: 支える検算はその message の中に吸収し、 寄せ集めの「consistency checks」 節を作らない。 計算の連鎖は入力と出力に畳む。 記号と定義は最小にする ([#symbol-definition-economy](#symbol-definition-economy))。
+5. **式は解釈する絵**: 重要な式の直後に、 その式をどう読むかを添える。 重要な式 1 本に 1 文までにし、 節末の要約と重ねない。
+6. **題は平叙文の主張を検討する** (主張か問いの題がよい)。 代替案は file の header comment に残して共著者と議論する材料にし、 盲検に出す写しからは剥がす。 題の検査 = [paper-audit.md#title-claim-check](paper-audit.md#title-claim-check)。
+7. **結論**: 非技術的な要約 + 文脈の再掲 + message を 1 つにまとめる + 開いた問い + (望むなら) 分野の行き先の予測。
+
+message と構成を選ぶときの検査:
+
+- **直近の作業の経緯を message にしない**: 取り下げた主張・直した誤り・苦労した定理の経緯は、 読者が見ていない journey で、 読者には情報にならない。
+- **候補が節の分け方の並べ替えに落ちたら、 3 問から切り直す**: 何が新しく、 面白く、 重要か ([manuscript-value-triage.md](manuscript-value-triage.md))。
+- **論文の題材は 1 つの模型で通す**: 本文が導いた模型を序論から結論まで使い、 別の物理は文脈と検算に置く。 図の入力は本文が導いた量だけ ([paper-audit.md#figure-input-is-a-claim](paper-audit.md#figure-input-is-a-claim))。
+- **data との比較は 1 節に集める**: 同じ図を模型の節と比較の節の両方に置かない。 図に後の節の結果 (下限の線など) が載るなら、 図はその結果の後にしか置けない。
+- **結果の主役が変わったら、 前の題の決め台詞を残そうとしない**。
+- **近似で言える範囲で論文を切る**: 近似の届かない領域は上下界と粗い見積もりで書き、 大規模な数値計算は文献を引いて済ませる形も選べる。
+
+構成の plan を著者に見せるときは、 Geroch の一枚の形のまま出す (主題 → 文脈降下と構造の予告 → 各 message 〔題 + 1 文の要約 + 短句の点 + 締め〕 → 結論)。 式の予算・図・投稿の gate などの制作メモは同じ file の下段に分ける。 一枚の plan に内輪の略号や裸の記号を持ち込まない。 abstract の組み方 = [paper-audit.md#abstract-geroch-compression](paper-audit.md#abstract-geroch-compression)、 講演の abstract = [giving-talks.md#abstract-as-invitation](giving-talks.md#abstract-as-invitation)。
+
+### <a id="prior-work-in-introduction"></a>他人の仕事は序論でまとめて言い、 本文と要約に挟まない
+
+本文や要約の途中に他人の仕事への言及が挟まると、 何が他人の仕事で何が自分の仕事かが読者に分からなくなる。 他人の仕事は序論の先行研究の段落で挙げ尽くす。
+
+- **本文から外すもの**: 導出の途中の帰属の脇道 (「as in the construction of X」「goes back to Y」「in Z's sense」)、 自己正当化 (「What is added here is …」)、 導出に使わない他の構成との比較。 実質は序論の主題ごとの段落に 1 文ずつ移す ([#earlier-work-by-contribution](#earlier-work-by-contribution) の形)。
+- **本文に残すもの**: 導出が使う定理・定義・数値の中立な引用 (「by X's theorem~\cite{…}」)、 自分の結果が既知の量に一致するという同定 (「in the limit … this reduces to the quantity of Ref.~\cite{…}」)。 比較の調子の文は中立な結果の文に直す。
+- **要約 (Summary・Conclusion・Discussion) も同じ**: 他人の仕事との比較・位置づけを要約に置かず、 序論で挙げ尽くす。 要約に残す引用は future work の行き先 (拡張先の手法・対象の文献、 続編の論文) だけにする。 要約は「何をしたか / それが何を意味するか / 次に何をするか」 の 3 つで短く書き、 結果の再掲は message ごとに 1 文、 式の再掲は主結果だけにする。
+- **移した文は原典と照合する**: 本文の脇道にあった文は試稿のまま照合されていないことが多い。 移すことは検証の代わりにならない。
+- **本文から外した `\cite` の行き先を確かめる**: 序論か残った箇所に 1 回以上残す。 どこにも残らないなら、 その文献を外すかどうかを先に決める。
+- **節の途中に論文全体の依存関係の地図を書かない**: 読者はまだどの結果も見ていない。 地図が要るなら結果が出揃った要約に短く置き、 個々の結果の射程はその結果の節の冒頭に書く。
+
+### <a id="deferral-citation-closes-paragraph"></a>先送りの段落は future citation で締める 1 文で書く
+
+scope を絞って残りを別の論文へ送る段落は、 先送りする対象を主語に置き、 短い先送りの動詞句と future citation で締める 1 文で書く (「The explicit form of X, …, and Z are all deferred to a forthcoming paper~\cite{…}.」 型)。 その原稿が既に使っている先送りの文 (`deferred to` / `presented elsewhere` / `separate publication` で grep) の言い回しを使い回す。
+
+- in-preparation の参照を文頭・主語に置かない (「Ref.~\cite{X} will present …」 型にしない)。 行き先の参照は段落の締め。
+- 自己言及の scope の宣言や項目の勘定 (「This paper concentrates on …」「Four items lie beyond this scope:」) を討論の節に新しく作らない。 論文の範囲を区切る仕事は序論が持つ。
+- 主語に対象を積むのは、 動詞句が短ければ読める。 「are all deferred」 の all が列挙の閉じを合図する。
+- 先送りの文だけで 1 段落にせず、 直前の検算の段落の締めに繋ぐ ([#paragraph-by-meaning](#paragraph-by-meaning))。
+
+### <a id="body-defines-its-symbols"></a>本文が使う記号は本文で定義する
+
+- 付録や続編の論文にだけ定義を置かない。 本文の初出に最低限の定義を文中で書く (付録の定義の忠実な写し = 記号と条件を変えない)。 定義域の議論や証明などの詳細は付録に置く。
+- 「定義は Appendix X にある」 と送るだけの文にしない。
+- 同じ式を本文と付録に 2 回書かない。 式は本文に置き、 付録は本文の式番号を引く。 本文と付録の両方で使う表も本文の初出に置く。
+- 双子・連作の論文では、 相手の論文にしか定義の無い記号を使っていないかを見る。 相手の式を引くときは「(Part~I, Eq.~(N))」 と出所を書く (素の `\eqref` は自分の式番号に見える)。
+- 記法の初出の規則と道具 = [latex.md#notation-first-use](latex.md#notation-first-use)、 言明が置き場所の読者の道具だけで読めるか = [paper-audit.md#statement-placement-check](paper-audit.md#statement-placement-check)。
+
+### <a id="chapter-structural-self-audit"></a>章を書いたあとの構造の自己点検 (6 原則)
+
+教科書や論文の章を書き終えた直後に、 章の論理構造が正直か (天下りの持ち込みや衒学が無いか) を点検する。
+
+1. **式番号の順 = 論理の依存の順**: 章の display を番号順に並べ、 それぞれを「天下りの入力」「宣言からの自動的な帰結」「計算の結果」 に分ける。 帰結が入力より前の番号に出ると、 読者は論理の向きを逆に読む。 合っていなければ節の順か式の位置を組み替える。
+2. **厳密性の隙間に触れるか、 衒学か**: 物理の本が通例触れない数学の微妙さを脚注で扱うなら、 「この情報で読者 (学生) の挙動が変わるか」 を問う。 変わる (計算の順序、 収束の意味、 後の章の理解) なら書く。 変わらない (構造的にあり得ない反例、 定義を与えない術語の 1 文) なら衒学なので外す。 術語の名前は勉強の入口として 1 文だけ書き、 反例の提示や対比の構造に使わない。 救いたい中身は、 術語を使わずに operational に書く。
+3. **何を天下りに置くか**: 天下りの候補が複数あり数学的に同値なら、 式番号の順が正直になる方を選ぶ = 抽象的な構造 (代数関係・完全性) を上流で宣言し、 具体的な数は下流で導く。 候補ごとに組み替えた layout を想像し、 宣言と導出の番号の関係を比べる。
+4. **構造の批判は歓迎する**: 「X が先」「Y は持ち込み」「Z は衒学」 のような批判を受けたら、 直す価値でなく直すコストを見積もる。 影響 (相互参照の数・節の順・PDF の作り直し) が小さければすぐ直し、 大きければ現状維持と組み替えを並べて判断を聞く。 段階的な組み替えを認める (次の批判で次の commit がさらに組み替える)。
+5. **「導出で見せる」 規律を依存の鎖の全体に延ばす**: ある事項を宣言から導出に格上げしたら、 同じ鎖の上の似た構造の事項を並べ、 それも格上げできるかを問う。 できるなら全体を一貫した layout にする。 できないなら、 その事項だけを格上げする理由を説明できるようにし、 説明できなければ格上げ自体を見直す。
+6. **N 案の比較が共通に固定している前提を疑う**: 案の比較を終えたら、 各案の入力と宣言を表にし、 全案で同じ行 (共通の前提) を探す。 それを変えた N+1 番目の案が plausible なら、 比較を仮の決定として扱い、 その案を含めて評価し直す。
+
+付録の並べ方 = [paper-audit.md#appendix-order-by-first-reference](paper-audit.md#appendix-order-by-first-reference)、 検算の付録の形 = [paper-audit.md#cross-check-appendix-shape](paper-audit.md#cross-check-appendix-shape)。
+
+## <a id="paper-sentences"></a>6. 論文の文と段落
+
+### <a id="prose-buildup"></a>散文の組み立て: 節頭の purpose 文・一文一意・規約は初出点・段落は意味で
+
+1. 各 section / subsection は「この節で何をするか」 の purpose 文で始める (定義の羅列に直接入らない)。
+2. **一文一意**: 1 文に 1 主張。 セミコロンで節を繋ぐのは最少にする。
+3. **規約・記号は初出点で導入する**: その記号がまだ現れていない場所で規約を前置きしない (括弧の重みの宣言は最初の括弧の直後、 計量の符号は計量が現れる作用の場)。 先行詞の無い定冠詞 (何も導入していない所の「The fields are …」) も同じ根。
+4. **依存の順に積む**: 使う前に定義し、 forward 参照 (「specified below」) を作らない。 まだ印字していない式を引く文には、 その式が何かを一言添える (候補の列挙 = [`scripts/tex-first-use.py`](../scripts/tex-first-use.py) `--forward-refs`、 記法の初出 = [latex.md#notation-first-use](latex.md#notation-first-use))。
+5. **初出の検査**: 添字の位置の括弧 (対称化・反対称化) と単独の記号を本文の先頭から走査し、 最初の出現に宣言があるかを見る。 後の出現に付いた脚注は初出へ移す。 付録の定義を本文がそれより前から使っているなら、 付録では「Here and hereafter」 でなく「Throughout」 と書く。
+6. <a id="paragraph-by-meaning"></a>**段落は意味で切る**: 主張とその根拠は同じ段落に置き、 話題が変わるところで切る。 1 文だけの段落を作らない = 前後どちらの段落の一部かを決めて繋ぐ (結果の位置づけの文は結果の読みの段落へ、 別の論文への先送りの文は直前の検算の段落の締めへ)。 1 段落に 2 つの話題が入って長くなったら、 意味の切れ目で 1 回切る。 空行の連続は 1 行にする。
+7. 冗長を削ることと説明を削ることは別物 = 定義は惜しまない。
+
+見出しの階層と段落の構造化 = [latex.md#text-structure-hierarchy](latex.md#text-structure-hierarchy)。
+
+### <a id="assert-dont-imply"></a>主張は含意に運ばせず、 言い切りの文で書く
+
+論証の各段は、 読者が推論で補うのでなく文がそのまま主張する形で書く。 書き手には含意が自明でも (自分で導出したから)、 読者には文に書いてあることしか届かない。 含意に主張を運ばせる 4 つの型と処方:
+
+| 含意の運び手 | 例 | 処方 |
+|---|---|---|
+| 限定詞 (alone / only) が負の言明を運ぶ | 「X appears in A and B alone」 | 負の側も正に言う: 「… and C contains no X」 |
+| 記号・定理名が導出を運ぶ | 「the term vanishes because d² = 0」 | 代入を display で書き下し、 消える理由を 1 文で言う (対称 × 反対称など) |
+| 比喩・術語が帰結を運ぶ | 「the sector is blind to Y」「Z decouples」 | 帰結を言い切る: 「Y gets no contribution from the sector, so the sector cannot fix the coefficient of Y」「Z does not appear in the action」 |
+| 挿入句が機構を運ぶ | 「Requiring the sum to vanish, as in Ref. X, …」 | 機構を主語つきの単文にする: 誰の寄与が誰の寄与を消すか、 その条件が何を一意に決めるか |
+
+- 文ごとに「この文は主張を述べているか、 読者に推論させているか」 を問う。 専門の読者向けでも同じ (「この読者なら分かるはず」 が当のバイアス)。
+- 式で言えることは式で書く (display 1 本は曖昧な散文 3 文より安い)。
+- 結論の修飾語 (uniquely など) の理由が文面に載っているかを確かめる。
+- 事実が「現れない」 なら、 現れないと書き、 術語に置き換えない (decouple は動力学的な切り離しに響く)。 条件を変えると効きうるなら、 その条件の限定 (minimally coupled など) は残す。
+
+### <a id="compression-drops-load-bearing-words"></a>短くした文は「何が言えなくなったか」 で検算する
+
+文を短くする編集 (冗長の解消・dash の除去・名詞化・語の削除) のたびに、 load-bearing な語ほど「文脈から明らか」 に見えて落ちる。 書き手には直前の文脈が全部見えているので、 落ちた語の欠落が見えない。 落ちやすい 4 種:
+
+| 落ちるもの | 症状 |
+|---|---|
+| 照合相手 | 「合う」 と書いてあるが、 何と合うのかが文中に無い |
+| 対象名詞 | 数文前に導入した対象が代名詞になるか消え、 単独では別物に読める |
+| 主張そのもの | 事実の言い切りが名詞句 (「~との一致は」) に畳まれ、 主張が既成事実の前提に化ける |
+| 動詞の含意 | 短い動詞に置き換えた結果、 時間順序・因果の含意が事実と食い違う (先行文献との一致を predict と書く) |
+
+- 圧縮した直後に、 その文だけを前後を隠して読み、 「誰が / 何を / 何と比べて / どうだと言っているか」 の 4 欄が埋まるかを確かめる。 埋まらない欄が、 今落とした語。
+- dash を外す編集は特に危ない (dash の後ろは独立した言い切りであることが多い)。 名詞化して主節に畳むのでなく、 文を分けるのを第一選択にする。
+- 落ちるのは語だけでなく、 著者と決めた主張の型 (相対の比較 / 予言 / 試験) も落ちる。 圧縮を重ねた文には「この文は決めた型に合っているか」 を 1 問足す。 文の長さの機械の sweep = [paper-audit.md#sentence-length-audit](paper-audit.md#sentence-length-audit)。
+- 本節は「引きすぎ」 の側で、 [#symbol-definition-economy](#symbol-definition-economy) と [#annotation-carries-only-the-errand](#annotation-carries-only-the-errand) が「足しすぎ」 の側。 どちらも読者との情報の非対称を書き手が読み違えることが根。
+
+### <a id="consistency-check-three-beats"></a>「consistency check だ」 と書くときは 3 拍を全部印字する
+
+ある一致を nontrivial な検算だと主張するなら、 次の 3 つを文面に出す。
+
+1. 理論の側が独立に何を決めるか (対象を名指しで)。
+2. 調整の余地が無いこと (自由なパラメータを後から合わせたのではない)。
+3. 照合相手の名指しと、 合っているという言い切り。 その後で「The agreement is a nontrivial consistency check.」 と性格づける。
+
+- 検算の本質は「手が届かないのに合う」 であって「合う」 ではない。 2 が無ければ単なる fit、 3 が無ければ主張が宙に浮き、 1 が無ければ何が検証されたか読めない。
+- 同じ先行計算を入力 (未定の係数の固定) と検証 (固定に使えない部分の一致) の両方に使うときは、 2 つの役を文面で分ける。 分けないと「自分で合わせておいて合ったと言っている」 に読める。
+- 書いたら「理論が間違っていたら、 この文のどこが破れるか」 を自問する。 答えられなければ 3 拍のどれかが落ちている。
+- 動詞は照合相手との時間順序で選ぶ = 先行文献との一致は predict でなく determine と agree (postdiction)。
+
+### <a id="plain-short-sentences"></a>入れ子の大文を平易な短文に
+
+標語「平易に、 論理の流れがスッキリ追えるように、 簡潔に」 ([#motto](#motto)) の、 英語の論文での文の形:
+
+- 前置の大きな「Together with …, the present result advances …」 型をやめ、 何を・誰が・どうした、 を平易な動詞 (produce / add / fill in) の短い平叙文 2〜3 つに開く。
+- 1 文で同じ語を繰り返さない。
+- 口語・飾りの語を落とす (「X and Y alike」→「both X and Y」、 「However, note that」→「However,」、 段落の順を示すだけの「Methodologically,」)。
+- 次の文が言うことを修飾語で先取りしない。
+- 1 文に 2 段の論理を畳まない (「A を消すと B が変わり、 それが C の起源」 は 2 文に)。
+- 「There (先行研究では) … / Here …」 の対があれば、 Here に in this paper を足さない。 対比の要点を足すなら中身の語で足す (「the fluctuations」→「the quantum fluctuations」)。
+- 主語と補語を同じ種類の物にする (量を計算の行為と等号で結ばない: 「the only known X is the computation of Ref. Y」→「the only other known X is that of Ref. Y, computed at …」)。 修飾語を積み上げた 1 文は 2 文に分ける。
+- 文献で見かけない言い回しに補足の条件句を押し込まない。 パラメータへの依存だけを平叙で言い、 式を見れば分かること (冪など) は言わない。 並べた文が否定から肯定へ折れて流れが止まるなら、 前の文の否定を落とす。 呼び名が文献で普通かは数で確かめる ([`ai-collaboration/scripts/inspire-phrase-frequency.py`](../../ai-collaboration/scripts/inspire-phrase-frequency.py))。
+- 言い換えで関係の名詞 (coefficient / form / source / contribution) を入れ替えない (対数発散は次元正則化で極 1/ε として現れるのであって、 極が発散の係数なのではない)。 書き直した文ごとに、 その名詞が式の関係と合っているかを照らす。
+- 動機づけで可能性を持ち出す文は控えめに書く (「we may consider the possibility」)。
+- 指示語は指示先を名指す (display や文が間に入ると This / these two terms の指示先が離れる) = [paper-audit.md#referent-and-scope-pinning](paper-audit.md#referent-and-scope-pinning)。
+- 教科書の説明を論文の段落に挟まない: 1 段落 1 話。 周知の一般論を落とし、 主張と根拠だけを残す。
+- くどさの検算: 書き直した文に「この語を落として意味が変わるか」 を 1 語ずつ問う。 load-bearing な語は残す ([#compression-drops-load-bearing-words](#compression-drops-load-bearing-words))。
+
+### <a id="name-equation-terms-by-position"></a>式の項は、 式での位置か既に定義した語で呼ぶ
+
+散文だけで新しい呼び名を作らない (読者は辞書で引けない)。 名指す手は 2 つで、 併用が最も強い。
+
+- **式での位置**: 「the third and fifth terms of (12)」「the last three terms」。 位置は項の順番で言い、 display の行 (「the second line of (12)」) で呼ばない (式の改行が変わると黙って別の項を指す)。
+- **既に定義した語**: 式の直後で「$\chi$ the trace part of the field」 と定義したなら、 以後は「the kinetic term of the trace part $\chi$」「its mass term」。
+- 呼び名が節をまたいで割れていないかは、 その語で全文を grep すれば分かる (序論と本文で同じ項を別の名で呼ぶのが典型)。 1 つの対象に 1 つの名 = [paper-audit.md#one-name-per-object](paper-audit.md#one-name-per-object)。
+- <a id="no-abstract-noun-for-equation-part"></a>**式の部分を記号の代わりに抽象名詞・比喩で呼ばない** (「the first moment」「the rotation structure」「the flavor coefficients」): 読者はどの記号か特定できない。 記号で書く (「the $\bar p$ term」)。 何が何の回転かを式の量で言う。 定義より前に出る呼び名は記号と節の参照にする。 否定の文は、 何が何倍でないかを式で言う。 照合の文は、 何を何と照合するかを書く ([#consistency-check-three-beats](#consistency-check-three-beats))。 「so」 で繋ぐ文は、 前の文の何から何が出るかを同じ文で言う。
+- 書いた段落は文ごとに「この語は式のどの記号か」 を答え、 記号で答えられなければその記号を文に書く (語彙に信号が無いので機械では拾えない)。
+- 姉妹 = [#kernel](#kernel) (汎称にしない)。 指示対象と射程の他の形 = [paper-audit.md#referent-and-scope-pinning](paper-audit.md#referent-and-scope-pinning)、 検出 = [`scripts/check-paper-prose.py`](../scripts/check-paper-prose.py) の P。
+
+### <a id="defined-term-one-object"></a>定義した語・式番号を別の対象に使わない
+
+- 定義した語を、 定義と違う配置に流用しない (背景場が 0 の配置として定義した呼び名を、 背景場を持つ配置に使うなど)。 違う配置は違う名で書く。
+- 参照を足す・書き換えるときは、 番号の先の式を開いて、 文が言う対象と同じ量かを見る。
+
+### <a id="no-slash-pairing"></a>記号の併記に slash も中黒も使わない
+
+slash は割り算、 中黒は乗算 (\cdot) と紛らわしい。 2 個は「$A$ and $B$」 (和文は「A と B」)、 3 個以上は comma で並べる。 slash を使うのは本当の割り算と「per」 の単位表記だけ。 直すときは `}/` などで数式の記号の間の slash を列挙し、 本当の割り算 (`q^\mu/q^2` など) を分けてから置き換える。
+
+### <a id="no-bare-parenthetical-crossref"></a>裸の括弧参照「(Sec. X)」 を書かない — 参照は動詞つきで
+
+文末でも文中の列挙でも、 `(Sec.~\ref{sec:x})`・`(Appendix~\ref{app:x})` のような裸の括弧参照を書かない。 「X で示した」「X で定義する」「X の設定を使う」 のどれかが読者任せになる。 参照先を読んで、 定義・導出・検証・設定のどれを指すかを選び、 その関係を動詞か前置詞で本文に組み込む (「We define … in Sec.~\ref{sec:x}.」「As derived in Appendix~\ref{app:x}, …」)。 see を足すだけ、 一律に as shown in へ置き換えるだけでは関係を説明したことにならない。 式名の直後に添える同格の番号は別の用法。 検出と保持の検査 = [latex.md#bare-parenthetical-crossrefs](latex.md#bare-parenthetical-crossrefs) (候補ゼロは文意の正しさの証明ではない)。
+
+### <a id="gloss-term-at-first-use"></a>読者が辞書で引く術語は、 初出で何であるかを言葉で言う
+
+定理・構成の名前など、 読者が辞書で引く必要のある術語は、 初出の文で短い同格句か「that is, …」 で中身を言う。 術語の名前だけで済ませない。 どの名前を使うか (同じ構成の 2 つの呼び名のどちらか) は project の執筆スタイルが決め、 文献での頻度は数で確かめる。
+
+### <a id="concise-note-front-matter"></a>note を「簡潔に」 するとき: 冗長は front matter に集まる
+
+冗長な技術 note を「中身を落とさず簡潔に」 するとき:
+
+- 冗長は front matter (abstract・序論) に集まる。 一番削るのはここ。 導出の本体は各文が意味を持ち、 既に締まっていることが多いので、 むやみに削らない。
+- 削るのは 2 か所以上で言っていること (abstract・序論・要約の繰り返し) であって、 中身ではない。 繰り返しは 1 か所に統合する。
+- 細部は消さずに深い節へ移す (簡潔化は中身を失うことではない)。 abstract が細部を述べていたら、 本文の節に委ねる形で短くする。
+
+## <a id="paper-citations"></a>7. 引用と先行研究
+
+### <a id="citation-entry-points"></a>背景の列挙は、 方向ごとに入口を 1 つだけ引く
+
+「いくつかの方向でこう知られている」 型の列挙 (依拠する計算ではなく、 主張の背景) では、 方向ごとに読者の入口を 1 つだけ引く。
+
+1. review・教科書があれば、 その 1 本だけ (創始論文を併記しない = review から辿れる)。
+2. 無ければ創始論文。 機構の創始でなく、 そのシナリオの創始 (機構 + 形式 + program の始点) を引く。
+3. 選び方の方針は footnote で 1 文述べる (本文に置くと物語の弧を切る)。
+
+- 列挙の問題は本数でなく形 = 選び抜いた完全な集合に見えると、 「各方向に関連文献はほかに数百ある」 と言われる。
+- 規則は方向ごとに当てる。 全方向に「review に絞る」 を機械的に当てると、 review の無い方向で創始論文まで落ちる。
+- 創始論文を落として著者自身の論文だけを残す形は、 査読で最悪に読まれる。 創始論文を落とすのは、 その方向を review に置き換えたときだけ。
+- 引用がその文の主張を支えているかを確かめる (「ある拡張模型で X が動的に生成される」 という文に機構の原論文だけを付けると、 拡張模型の例を 1 つも示さない)。
+- 実物を見ずに「review が無い」 と判定しない (bib の `@book`・`Phys. Rept.`・`Ann. Rev.` を見れば分かる)。
+- 引用を削る編集で、 bib に無い review を新しく足さない (捏造の危険)。 既存の key で解けなければ、 その方向は創始論文で残し、 review の追加はその領域の担当者に委ねる。
+
+### <a id="earlier-work-by-contribution"></a>先行研究は、 各文献が何をしたかで引く
+
+- 一括りの「the earlier works~\cite{A,B,C}」 にしない。 文献ごとに、 生成・導出したものへ振り分けて引く (「the kinetic term~\cite{A} and the background~\cite{B}」)。 letter と本論が同じ結果なら、 1 か所で両方を引く。
+- 模型・シナリオが違う文献は違うと言う (同じ公理を共有していても作用が別なら「a variant~\cite{C}」)。 同じ模型なら「in the same model」。
+- 文献の主張を書く前に abstract か本文を開く (記憶で決めない)。 本稿の他の箇所が同じ文献を何の典拠にしているかも grep で揃える。
+- 他人の論文の付録・式番号は出版版で確かめる (arXiv 版と出版版で並びが違いうる)。 手元に arXiv の source しか無ければ、 その旨を記録して著者に確認を回す。
+- 本文が説明を与えていて外部文献が詳説の補足なら「see also」、 本文が説明を文献に委ねるときだけ「see」。 1 句で書く (「; see also Appendix~A of Ref.~\cite{X} for a detailed account.」)。
+- <a id="generalization-states-the-difference"></a>**先行研究の式を再掲・一般化するときは、 違いを主語にした文で言う**: 「This is Y of Ref.~\cite{X} with …」 では違いが通じない。 「In Ref.~\cite{X} the two widths are equal; here they are independent.」 のように、 先行研究が何で本論文が何かを並べる。 先行研究の式の一般化にすぎない式を「one of the main results」 と呼ばない。 書く前に、 その式が先行論文の何番の式と同じで何が違うかを、 先行論文の PDF を開いて確かめる。
+- 本文の途中の帰属と要約の比較の置き場 = [#prior-work-in-introduction](#prior-work-in-introduction)。
+
+## <a id="paper-symbols"></a>8. 記号・定義・式
+
+### <a id="symbol-definition-economy"></a>無駄な記号・量を定義しない
+
+- 新しい記号 (中間量・略記・単位記号) は、 読者が覚える負担に見合うだけ使われるときだけ導入する。 数回しか使わない量は、 その場で書き下すか散文で言う。 計算の都合で要る中間量は付録に置くか消す。
+- 逆に、 節をまたいで何度も使われ主張そのものを運ぶ変数は、 定義した方が読みやすい。 判断の基準 = 定義を消したとき、 式が二重根号や長い積になって、 より読みにくくなるか。
+- 新しい記号を打つ前に「何回使うか、 消したら式はどうなるか」 を問う。 原稿の review では `\newcommand` と `:=` の定義を列挙し、 使用が 2〜3 回以下のものを撤去の候補に挙げる。
+- 一度しか使わない記号が他の記法と文字を共有するなら、 記号を落として言葉で言う。
+- 言葉で言い切った内容を繰り返すだけの display は落とす。
+- 前の節で定義した演算子・接続を付録で再定義しない。
+- 数値検証の詳細 (手法・精度・桁数・再現の主張) を本文の脚注に書かない。 付録の末尾の検証の段落に集め、 脚注は本文の流れに要る最小限と付録への pointer にする。
+- 同じ対象は本文から付録まで同じ記法で書き、 定義した略記は定義の後の全部の式で使う = [paper-audit.md#notation-continuity-across-sections](paper-audit.md#notation-continuity-across-sections)。 記号の衝突 = [paper-audit.md#symbol-collision-sweep](paper-audit.md#symbol-collision-sweep)。
+
+### <a id="parameter-in-defining-equation"></a>本文が使うパラメータは、 定義の式に入れる
+
+- 本文や付録がパラメータで効果を述べるなら、 そのパラメータを、 項を定義する display に入れる。
+- 規格化のスケールは、 その項が修正する既存の結合と揃える。 そうすると文献の無次元のパラメータと一致し、 消去で出る因子が係数の比だけで決まる。
+- 符号が参照文献の規約に依り、 その文献が規約 (Levi-Civita 記号の符号など) を書いていないなら、 「文献と同符号」 では定義にならない。 自分の規約で規格化した形を印字して定義し、 文献との写像は数値で検算する。
+- 読めば分かる補足 (「only the square of the parameter enters below」 型) を書かない。 符号の予防線は決定の台帳と検算に置く。
+
+display は 1 目的 (定義と物理の恒等式を同じ display に並べない) = [paper-audit.md#cross-check-appendix-shape](paper-audit.md#cross-check-appendix-shape)。
+
+## <a id="paper-annotations"></a>9. 原稿の注記・脚注・検証の主張
+
+### <a id="annotation-carries-only-the-errand"></a>注記 (review note・footnote) は用件だけ書く
+
+共著の原稿に入れる review note と、 読者向けの footnote は、 その読み手にとって新しい情報だけを運ぶ。 書くのは用件 3 種 = 何をしたか / 何を落としたか / 何を頼むか。 書かないもの:
+
+- 本文・footnote が既に言っていることの再説明 (note が規則を繰り返す、 note が段落の論証を要約する)。
+- 自分の作業の正当化 (機械の検証を回した・何巡も検討した・こういう理由で妥当だ)。 正当化の置き場は commit message と作業の記録で、 原稿ではない。
+- 読み手に情報量のない弁明 (「この分野の文献はほかにも多数ある」 型 = 指摘者への言い訳であって、 読者への情報ではない)。
+
+書き手の不安 (ちゃんとやったと示したい) が、 読み手に情報量のない文を生む。 note の読み手は共著者であって採点者ではない。 残す用件の例: 共著者自身の論文を落としたという知らせは、 再追加を頼む文の前提なので残す。 note を書いたら各文に「この文が無いと読み手は何を取り違えるか」 を問い、 答えられない文を消す。 footnote も読者に対して同じ問いを当てる。
+
+<a id="footnote-placement-and-home"></a>**脚注の位置と置き場**:
+
+1. 脚注のマークは、 その脚注が説明する語の直後に付ける。
+2. 同じ事実を 2 つの脚注に書かない。 事実はそれを使う場所の 1 か所に置く (記法の脚注は定義の 1 文だけにする)。
+3. 集めた脚注も式を再掲せず、 論理の段を 1 文ずつ書く。
+4. 本文の段落に置くと流れを止める補足の事実 (標準的な扱いとの対比など) は脚注に落とす。
+
+### <a id="no-unshown-verification-claim"></a>本文が示していない検証を書かない
+
+- 「checked in Sec. X」 は、 Sec. X が計算か一致の表示を載せているときだけ書く。 そこが結果を述べるだけなら、 検証の語 (checked / confirmed / reported) を置かず、 恒等式が何になるかだけを書く。
+- 同じ検証を 2 か所で違う強さに言わない (本文が「係数の独立な検算であって図の計算の検算ではない」 と区別したら、 付録の締めもそれに揃える)。
+- 確認の方法: 「checked / confirmed / verified / shown in」 を grep し、 指す節・式を開いて、 そこに計算か表示された一致があるかを見る。 repo の検査の script が確かめていても、 紙面に無ければ紙面の主張にはならない。
+
+### <a id="no-internal-pointers-in-paper"></a>論文の本文に内部の note・audit・script の名前を書かない
+
+本文は中身 (規約の写像なら、 どの因子・どの符号が変わるか) だけを言う。 検算の住所は、 印字されない `% machine: SCRIPT [CHECK-ID] (in the companion repo)` (SCRIPT と CHECK-ID は検算の script と検査の名) の行に置く。 source の comment に査読の記録を書かない規則 = [latex.md#source-comment-scope](latex.md#source-comment-scope)。
+
+## <a id="japanese-academic-prose"></a>10. 日本語の学術文
+
+### <a id="ja-connective-glue"></a>接続詞の糊を貼らない — 段落替えが論理を運ぶ
+
+「そこで、」「その答えとして、」「すなわち、」「この設定で」 のような段落や文の頭の接続語・場面設定の語は、 構成が正しければほぼ常に要らない = 段落替えと文の順そのものが「そこで」 を意味する。 書いたら一度外して読み、 意味が変わらなければ捨てる。 残すのは、 削ると論理が実際に切れるもの (逆接の「しかし」 は残ることが多い。 順接・換言の糊はほぼ全部消える)。 接続詞の糊は構成の弱さを塗り隠す装飾で、 AI が生成する文の典型的な癖でもある。 口語 (「作ってみて」) は書き言葉 (「実装を通じて」) にする。
