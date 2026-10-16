@@ -116,6 +116,8 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 
 - **「なるべく上層に」 = 1 件を分けて置く** — 仕組み・壊れ方・方法の一般形を上げられる一番上の層へ、 固有の事例 (名前・数値・日付) は下の層に残して一般形を指す。
   丸ごと 1 層に置かない (上へ丸ごとは漏洩、 下へ丸ごとは埋没)。 下の ⚠️ の「迷ったら書かない」 は事例の側にかかる。 一般形は境界を通る形に書いて上げる。
+- <a id="protected-files-need-ruling"></a>**規則・検査・hook・設定の保護された file は、 締めの中でも本人の項目ごとの裁定が要る** — 直す前に候補の全文を一時 dir に作り、 diff を本人に見せ、 承認の発言を記録してから当てる (記録と適用の道具・判定の正本 = [`agent-rule-ownership.md`](agent-rule-ownership.md))。
+  先に書いてから commit すると commit の gate で止まり、 同じ commit に入れた別の file も止まる (実測)。 下の [#upstream-pr](#upstream-pr) の「1 件ごとに聞かない」 はこの file には掛からない。
 - **2 回目なら仕組みにするかを決める** — 同じ壊れ方・同じ訂正がこの session で 2 回目なら、 文を足して終えず、
   検出器・hook・script にするかを決める。 その場で作らないなら、 理由と一緒に plan か TODO に積む。
 
@@ -155,7 +157,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
   契約 = [`../CONVENTIONS.md#session-no-durable-record`](../CONVENTIONS.md#session-no-durable-record) / [`#readme-style`](../CONVENTIONS.md#readme-style)、
   gate に止められたときの直し方 = [`memory-file-slimming.md#session-shape-gate`](memory-file-slimming.md#session-shape-gate)。
 - 節を移した・名前を変えたら、 その節を指す参照を同じ commit で直す。
-- 生成物は手で直さず生成し直す: 本 repo に file を足した・doc-meta を変えたら `python3 scripts/generate-tree.py --write` (新しい file は `git add` の後) → `--check` が 0。 他の repo の生成索引も、 その repo の生成器で。
+- 生成物は手で直さず生成し直す。 手で書く file の一部だけが生成区画 (`AUTO-… BEGIN` と `END` の印で囲まれた区画) のときも同じで、 区画の中に足した文は次の作り直しで消える (実測 = 共有 repo に配る規則を区画に直接足して消えた)。 区画に入れたい規則は生成の元に足して作り直す: 本 repo に file を足した・doc-meta を変えたら `python3 scripts/generate-tree.py --write` (新しい file は `git add` の後) → `--check` が 0。 他の repo の生成索引も、 その repo の生成器で。
 - 道具の振る舞いを変えたら、 その道具を説明している doc (repo の CLAUDE.md・使い方の節・層1 規約) を全部直す。 grep は関係 repo 全体に
   (Bash tool の素の `grep -r` は ignore された dir を飛ばす = `command grep -r`、 [`shell-env.md#bash-tool-grep-ignores-gitignore`](shell-env.md#bash-tool-grep-ignores-gitignore))。
 
@@ -212,7 +214,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
 ## <a id="upstream-pr"></a>claude-config への改善案は PR で出す
 
 1 の表で層1 (claude-config) に置くと決めたもの (誰にでも効く手順・道具の壊れ方・規約の穴・雛形の不足) は、 手元 (個人層・作業 repo) だけに置かず claude-config に入れる。
-claude-config に push できない人は fork から PR を出す。 誰でも使える `/wrap` はこれを既定にしている = 1 件ごとに user に可否を聞かない (止めるのは user が止めたとき)。
+claude-config に push できない人は fork から PR を出す。 誰でも使える `/wrap` はこれを既定にしている = 1 件ごとに user に可否を聞かない (止めるのは user が止めたとき)。 保護された file (規則・検査・hook・設定) は、 [#protected-files-need-ruling](#protected-files-need-ruling) のとおり本人の裁定を先に取る。
 
 1. **一般形にする** — 1 の ⚠️ の境界 (識別子・本人や第三者の活動の事実・未公開の中身・個人の path) を 1 文ずつ当てる。 PR の本文・diff・commit message・branch 名・commit の author は公開される。 author は GitHub の noreply (`git config user.email` が `@users.noreply.github.com` か確かめる)。 なぜ気づいたか (個人の事例) は自分の個人層・作業 repo の記録に残す
 2. **1 PR = 1 つの改善** — 本文 = 何が困ったか (一般形)・何を変えたか・どう確かめたか
