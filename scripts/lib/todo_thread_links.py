@@ -79,6 +79,22 @@ def norm_account(v, known_accounts=()) -> str | None:
     return m.group(1) if m and m.group(1) in known_accounts else None
 
 
+def email_ref_accounts(er: str, known_accounts=()) -> dict[str, str]:
+    """email_ref の文 → {id: alias}。 各 id の直後から次の id までの注記に known_accounts の alias が
+    単語として出ていれば、 それをその id の account にする (「<id> (AJO acct-a) + <id> (本人acct-b)」 型)。"""
+    out: dict[str, str] = {}
+    if not isinstance(er, str) or not known_accounts:
+        return out
+    ms = list(GMAIL_ID_RE.finditer(er))
+    for i, m in enumerate(ms):
+        tail = er[m.end(): ms[i + 1].start() if i + 1 < len(ms) else len(er)]
+        for alias in known_accounts:
+            if re.search(rf"(?<![A-Za-z0-9_-]){re.escape(alias)}(?![A-Za-z0-9_-])", tail):
+                out[m.group(0)] = alias
+                break
+    return out
+
+
 def owner_from(from_header: str, owner_tokens=()) -> bool:
     """From ヘッダが自分 (owner) か (= owner_tokens のどれかを lower 化した From に含む)。"""
     f = (from_header or "").lower()
@@ -92,10 +108,19 @@ def resolve_threads(todo: dict, inbox_by_id: dict, inverse_by_todo: dict | None 
     inbox_by_id: entry id → {"threadId": str|None, "account": str|None}。
     account は entry の欄から (注記は norm_account で剥がす)、 無ければ default_account
     (= それも無ければ known_accounts の先頭、 それも無ければ "" = 呼び手が決める)。
+    email_ref の id の account は、 その id の直後の注記に書いた alias (「<id> (… personal)」) →
+    その id を threadId に持つ inbox entry の account → default の順 (= 注記を読まずに default を当てると、
+    別 account の thread を違う account で引いて 404 になる。 実測 = 2 つの account の id を並べた email_ref)。
     """
     out: list[tuple[str, str]] = []
     seen: set[str] = set()
     default = default_account or (known_accounts[0] if known_accounts else "")
+    thread_account: dict[str, str] = {}
+    for meta in inbox_by_id.values():
+        a = norm_account((meta or {}).get("account"), known_accounts)
+        if a:
+            for tid in thread_ids((meta or {}).get("threadId")):
+                thread_account.setdefault(tid, a)
 
     for cr in todo.get("cross_ref") or []:
         if not isinstance(cr, str):
@@ -116,10 +141,11 @@ def resolve_threads(todo: dict, inbox_by_id: dict, inverse_by_todo: dict | None 
 
     er = todo.get("email_ref")
     if isinstance(er, str):
+        annotated = email_ref_accounts(er, known_accounts)
         for tid in sorted(harvest_text(er)):
             if tid not in seen:
                 seen.add(tid)
-                out.append((tid, default))
+                out.append((tid, annotated.get(tid) or thread_account.get(tid) or default))
 
     todo_id = todo.get("id")
     if inverse_by_todo and isinstance(todo_id, str):
@@ -161,6 +187,15 @@ def selftest() -> int:
            got[:2] == [("aaaa000000000001", "acct-b"), ("aaaa000000000002", "acct-b")])
     expect("resolve_threads: (2) email_ref の threadId / messageId", set(got[2:4]) == {("aaaa000000000004", "acct-b"), ("aaaa000000000005", "acct-b")})
     expect("resolve_threads: (3) 逆引き (related_todo / cross_ref TODO: で指す entry)", got[4] == ("aaaa000000000003", "acct-a") and len(got) == 5)
+    got2 = resolve_threads({"email_ref": "messageId:aaaa000000000007 (note acct-b) + messageId:aaaa000000000008 (本人acct-c)"},
+                           {}, None, known_accounts=("acct-a", "acct-b", "acct-c"), default_account="acct-a")
+    expect("resolve_threads: email_ref の id ごとの注記の alias を account にする (default に倒さない)",
+           sorted(got2) == [("aaaa000000000007", "acct-b"), ("aaaa000000000008", "acct-c")])
+    got3 = resolve_threads({"email_ref": "messageId:aaaa000000000009"}, {"e9": {"threadId": "aaaa000000000009", "account": "acct-c"}},
+                           None, known_accounts=("acct-a", "acct-c"), default_account="acct-a")
+    expect("resolve_threads: 注記が無ければ、 その id を threadId に持つ inbox entry の account", got3 == [("aaaa000000000009", "acct-c")])
+    expect("email_ref_accounts: alias は単語としてだけ (他の語の一部は拾わない)",
+           email_ref_accounts("aaaa00000000000a (grant) / aaaa00000000000b (gr)", ("gr",)) == {"aaaa00000000000b": "gr"})
     expect("resolve_threads: 何も無ければ空、 default は known の先頭",
            resolve_threads({"id": "t-9"}, by_id, None, known_accounts=("acct-a",)) == []
            and resolve_threads({"email_ref": "threadId:aaaa000000000006"}, {}, None, known_accounts=("acct-a",)) == [("aaaa000000000006", "acct-a")])
