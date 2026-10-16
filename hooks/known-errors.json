@@ -85,6 +85,11 @@
       "match": "Cannot fast-forward to multiple branches",
       "doc": "conventions/multi-session-coordination.md#pull-fetch-head-race",
       "hint": "同じ clone で別の fetch が .git/FETCH_HEAD を書き換えた疑い。 tree は変わっていない = そのまま git merge --ff-only @{u} で続ける"
+    },
+    {
+      "match": "Missing number, treated as zero.",
+      "doc": "conventions/latex.md#enumerate-vs-enumitem-option-syntax",
+      "hint": "原因の 1 つ = enumerate package の下で enumitem の書き方 [label=(\\roman*)] を書いた。 エラーの行が \\begin{enumerate}[...] ならそれ (直し方 = [(i)] の雛形)。 別の行なら長さ・数値の引数の書き損じを疑う"
     }
   ]
 }
