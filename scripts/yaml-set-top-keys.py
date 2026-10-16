@@ -78,7 +78,7 @@ def edit(text: str, sets: dict[str, str], drops: list[str], after: str | None, c
             done.add(k)
         else:
             new.extend(lines[a:b])
-        if k == after:
+        if after is not None and k == after:  # after 無しで None (空行・comment の塊) に一致させない
             for nk, nv in sets.items():
                 if nk not in keys and nk not in done:
                     c = f"   # {comments[nk]}" if nk in comments else ""
@@ -128,6 +128,11 @@ def selftest() -> int:
     # 確かめ: 触っていない key が変わったら verify が拾う
     assert verify(src, src.replace('asked: "2030-01-02"', 'asked: "2030-01-09"'), {}, []) == \
         ["asked: 触っていない key の値が変わった"]
+    # --after 無しで無い key を足す = 末尾に足し、 末尾の改行を保つ (空行・comment の塊の後ろに入れない。
+    # 実測 = 空行の塊に一致して、 最後の改行の手前に足し file 末尾の改行が消えた)
+    src2 = '# 頭の comment\nid: "x"\nnotes: |\n  a\n'
+    out2 = edit(src2, {"updated": "X"}, [], None, {})
+    assert out2 == src2 + 'updated: "X"\n', repr(out2)
     with tempfile.TemporaryDirectory() as tmp:
         p = Path(tmp) / "t.yaml"
         p.write_text(src, encoding="utf-8")
