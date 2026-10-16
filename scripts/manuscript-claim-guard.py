@@ -143,19 +143,17 @@ MATH_RE = re.compile(
     r"|\\\[(?P<br>(?:[^\\]|\\[^\[])*?)\\\])",
     re.S,
 )
-# plain TeX の $$ … $$。 中身は単独の $ (escape されていないもの) を越えず、 \[ と同じく次の \[ で打ち切る。 中の
-# brace の組には $ を含んでよい (\mbox{… $n$ …}) が、 re は再帰を持たないので 3 段の入れ子までしか読めない。 brace で
-# 読めなければ brace を読まない読み方 (最初の $ まで) に戻る = 4 段以上の brace の式も、 中に $ が無ければ読める。
-# 限界: 4 段以上の brace と $ (式のどこにあっても) を両方持つ式は両方の読み方で読めず、 後ろの $$ の組がずれる。
-# 組の合わない $$ (\verb|$$| など) が、 後ろの brace の中の $$ (\footnote{… $$ … $$ …}) と組むこともある。
-_BRACED = r"\{(?:[^{}\\]|\\.)*\}"
-for _ in range(2):
-    _BRACED = r"\{(?:[^{}\\]|\\.|" + _BRACED + r")*\}"
-_DOLLAR_DISPLAY_BODY = r"(?:[^$\\{]|\\[^\[]|" + _BRACED + r")*?|(?:[^$\\]|\\[^\[])*?"
-# $$ は開きと閉じが同じ記号なので、 組み方が前の文脈 (\verb|$$|、 $$ を値に持つ定義) で食い違う。 食い違っても中身を
-# 取りこぼさないよう、 (1) 式の領域では数式環境・\[ \]・wrapper の使用を先に取り、 $$ はその間だけで組む (式の中で
-# 閉じない)、 (2) prose からは外さない (prose_tokens が 1 つの数式の語として読む) = 保護節の $$ は語と式の両方で見る。
-DOLLAR_DISPLAY_RE = re.compile(r"(?<!\\)(?:\\\\)*\$\$(?P<dd>" + _DOLLAR_DISPLAY_BODY + r")\$\$", re.S)
+# plain TeX の $$ … $$ (_dollar_close / _dollar_displays)。 構造は verbatim を空白にした写しの上で読む = \verb|$$| や verbatim
+# 環境の中の $$ は開きでも閉じでもなく、 式の中に verbatim があってもそこで閉じない。 中身は単独の $ (escape されていない
+# もの) と \[ を越えない。 brace の組は深さに依らず 1 つの塊として読み、 中に $ を含んでよい (\mbox{… $n$ …})。 組の閉じが
+# 読む範囲 (前後の式の間) の外にある { はただの文字。 塊の外の } (開きのいる組の外へ出る) で打ち切る = 組の合わない $$
+# (定義の {$$} など) が、 組の外の $$ や後ろの組の中の $$ (\footnote{… $$ … $$ …}) と組まない (TeX でも数式は開いた組の
+# 中で閉じる)。 打ち切るので、 閉じない開きの走査は自分の組の中で終わる = 閉じない $$ が続いても 2 乗にならない。
+# $$ は開きと閉じが同じ記号なので、 組み方が前の文脈で食い違いうる。 食い違っても中身を取りこぼさないよう、 (1) 式の領域
+# では数式環境・\[ \]・wrapper の使用を先に取り、 $$ はその間だけで組む (式の中で閉じない)、 (2) prose からは外さない
+# (prose_tokens が 1 つの数式の語として読む) = 保護節の $$ は語と式の両方で見る。
+_DOLLAR_OPEN_RE = re.compile(r"(?<!\\)(?:\\\\)*\$\$")
+_DOLLAR_BODY_STOP_RE = re.compile(r"[$\\{}]")
 
 
 def _name_re(braced: str, bare: str) -> str:
@@ -187,13 +185,20 @@ WRAPPER_BODY_RE = re.compile(
 MACRO_NAME_RE = re.compile(r"^\\?([A-Za-z@]+)$")
 WRAPPER_SOURCE_GLOBS = ("*.tex", "*.sty", "*.cls", "*.def", "*.clo")  # 原稿の範囲で wrapper の定義を探す file
 DEF_SOURCE_SUFFIXES = (".sty", ".cls", ".def", ".clo")  # 原稿の範囲の外の拡張子だが、 wrapper の定義の変更は見る
-# verbatim 系の中身 (LaTeX を解説する原稿の例示) は定義でも読み込みでもない = 同じ長さの空白にしてから探す。
-# 始まりは backslash の数で読む (\\verb|…| は行送り + 文字 = その後ろの \input や定義を空白にしない)
+# verbatim 系の中身 (LaTeX を解説する原稿の例示) は定義でも読み込みでもない = 同じ長さの空白にしてから探す。 式と $$ の
+# 組も空白にした写しの上で読む (\verb|\[| や \verb|$$| が後ろの式と組まない)。 prose では verbatim を 1 つの語として比べる
+# (comment 環境 = 印字しない文の下書きは、 中だけを今までどおりの語として読む)。
+# 始まりは backslash の数で読む (\\verb|…| は行送り + 文字 = その後ろの \input や定義を空白にしない)。
+# VERBATIM_RE は読み方の定義 (selftest が verbatim_spans と照合する)。 走査は verbatim_spans = 閉じの位置を環境の名前ごと・
+# 行ごとに先に数えるので、 閉じない \begin{verbatim} や \verb が続いても 2 乗にならない (正規表現の .*? は開きごとに末尾まで読む)。
+_VERBATIM_ENVS = r"verbatim\*?|Verbatim|lstlisting|minted|alltt|comment"
 VERBATIM_RE = re.compile(
-    r"(?<!\\)(?:\\\\)*(?:\\begin\{(verbatim\*?|Verbatim|lstlisting|minted|alltt|comment)\}.*?\\end\{\1\}"
+    r"(?<!\\)(?:\\\\)*(?:\\begin\{(" + _VERBATIM_ENVS + r")\}.*?\\end\{\1\}"
     r"|\\verb\*?([^\sA-Za-z*])(?:(?!\2)[^\n])*\2)",
     re.S,
 )
+_VERBATIM_START_RE = re.compile(r"(?<!\\)(?:\\\\)*\\(?:begin\{(?P<env>" + _VERBATIM_ENVS + r")\}|verb\*?(?P<d>[^\sA-Za-z*]))")
+_VERBATIM_END_RE = re.compile(r"\\end\{(" + _VERBATIM_ENVS + r")\}")
 INPUT_DEP_RE = re.compile(
     r"\\(?:input|include|subfile|(?:sub)?import\s*\{(?P<dir>[^}]*)\})\s*\{(?P<file>[^}]+)\}"
     r"|\\input\s+(?P<bare>[^\s{}\\]+)"
@@ -258,10 +263,33 @@ def strip_tex_comments(text: str) -> str:
     return "\n".join(out)
 
 
-def balanced_arg(text: str, start: int) -> tuple[str, int] | None:
-    """text[start] が '{' のとき、 対応する '}' までの中身と、 その次の位置。"""
+_BRACE_TOKEN_RE = re.compile(r"\\[\s\S]|[{}]")
+
+
+def _brace_pairs(text: str) -> dict[int, int]:
+    """前から読んだときの { の位置 → 対の } の位置 (閉じない { は -1)。 backslash の後ろの 1 文字は読まない (balanced_arg の
+    数え方と同じ)。 呼び元が 1 回の呼び出しの中で 1 回だけ作る。"""
+    pairs: dict[int, int] = {}
+    stack: list[int] = []
+    for m in _BRACE_TOKEN_RE.finditer(text):
+        c = m.group()
+        if c == "{":
+            stack.append(m.start())
+        elif c == "}" and stack:
+            pairs[stack.pop()] = m.start()
+    pairs.update((p, -1) for p in stack)
+    return pairs
+
+
+def balanced_arg(text: str, start: int, pairs: dict[int, int] | None = None) -> tuple[str, int] | None:
+    """text[start] が '{' のとき、 対応する '}' までの中身と、 その次の位置。 pairs = _brace_pairs(text) (同じ text に何度も
+    聞く呼び元が 1 回作って渡す = 閉じない引数が続いても 2 乗にならない。 前から読んで同じ位置に来る { なら、 そこから数える
+    のと同じ組)。 渡さなければ、 または前から読むと backslash の後ろの文字 (\\{ の {) なら、 その位置から数える。"""
     if start >= len(text) or text[start] != "{":
         return None
+    end = pairs.get(start) if pairs is not None else None
+    if end is not None:
+        return (text[start + 1:end], end + 1) if end >= 0 else None
     depth = 0
     i = start
     while i < len(text):
@@ -298,11 +326,64 @@ def norm_math(body: str) -> str:
     return s.rstrip(".,;:")
 
 
+def verbatim_spans(text: str) -> list[tuple[int, int]]:
+    """VERBATIM_RE.finditer(text) と同じ span (左から、 重ならない、 閉じない開きは 1 文字先から探し直す) を線形の時間で。"""
+    if "\\begin{" not in text and "\\verb" not in text:
+        return []
+    ends: dict[str, list[int]] | None = None  # 環境の名前 → \end{名前} の位置
+    newlines: list[int] | None = None
+    last_in_line: dict[int, dict[str, int]] = {}  # 行の終わり → その行の文字ごとの最後の位置 (\verb が閉じなかった行だけ)
+    out: list[tuple[int, int]] = []
+    pos = 0
+    while (m := _VERBATIM_START_RE.search(text, pos)) is not None:
+        end = None
+        env = m.group("env")
+        if env is not None:
+            if ends is None:
+                ends = {}
+                for e in _VERBATIM_END_RE.finditer(text):
+                    ends.setdefault(e.group(1), []).append(e.start())
+            at = ends.get(env, [])
+            k = bisect.bisect_left(at, m.end())
+            if k < len(at):
+                end = at[k] + len(env) + 6  # \end{ + 名前 + }
+        else:
+            d, i = m.group("d"), m.end()
+            if newlines is None:
+                newlines = [n.start() for n in re.finditer("\n", text)]
+            k = bisect.bisect_left(newlines, i)
+            line_end = newlines[k] if k < len(newlines) else len(text)
+            last = last_in_line.get(line_end)
+            j = text.find(d, i, line_end) if last is None or last.get(d, -1) >= i else -1
+            if j < 0 and last is None:
+                line_start = newlines[k - 1] + 1 if k else 0
+                last_in_line[line_end] = {c: line_start + n for n, c in enumerate(text[line_start:line_end])}
+            if j >= 0:
+                end = j + 1
+        if end is None:
+            pos = m.start() + 1
+            continue
+        out.append((m.start(), end))
+        pos = end
+    return out
+
+
+def _blank_spans(text: str, spans: list[tuple[int, int]]) -> str:
+    """spans の中を、 改行を残して同じ長さの空白にする。"""
+    if not spans:
+        return text
+    parts, pos = [], 0
+    for a, b in spans:
+        parts.append(text[pos:a])
+        parts.append(re.sub(r"[^\n]", " ", text[a:b]))
+        pos = b
+    parts.append(text[pos:])
+    return "".join(parts)
+
+
 def blank_verbatim(text: str) -> str:
     """verbatim 系の中身を、 改行を残して同じ長さの空白にする (位置で照合する呼び元のため長さを保つ)。"""
-    if "\\begin{" not in text and "\\verb" not in text:
-        return text
-    return VERBATIM_RE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
+    return _blank_spans(text, verbatim_spans(text))
 
 
 @functools.lru_cache(maxsize=4096)
@@ -312,12 +393,14 @@ def macro_definitions(text: str) -> tuple[tuple[int, str, str], ...]:
     1 回だけ読む (原稿の範囲の版 × 前後で同じ file を何度も渡すため)。"""
     text = blank_verbatim(text)
     out: list[tuple[int, str, str]] = []
+    pairs = None  # 組の表 (初めて要る時に 1 回)
     for m in DEF_ANY_RE.finditer(text):
         g = next(k for k in ("a", "b", "c") if m.group(k))
         name, event = m.group(g), "other"
         w = WRAPPER_DEF_RE.match(text, m.start())
         if w and next((w.group(k) for k in ("a", "b", "c", "d", "e") if w.group(k)), None) == name:
-            arg = balanced_arg(text, w.end())
+            pairs = _brace_pairs(text) if pairs is None else pairs
+            arg = balanced_arg(text, w.end(), pairs)
             bm = WRAPPER_BODY_RE.fullmatch(re.sub(r"\s+", "", arg[0])) if arg else None
             if bm:
                 event = "math"  # 環境の種類は区別しない (直の環境の align → align* も変更でない)
@@ -330,62 +413,147 @@ def math_wrappers(text: str) -> set[str]:
     return {name for _, name, event in macro_definitions(text) if event == "math"}
 
 
-def math_spans(text: str, macros: frozenset[str] | set[str] | tuple = (),
-               dollars: bool = False) -> list[tuple[int, int, str]]:
-    """(開始, 終わり, 中身) を文頭から順に。 数式環境と wrapper macro の使用を 1 本の走査で読む = macro の引数の中の
-    文字列 (align の中の \\\\[2pt] 等) を別の式の始まりと読まない。 使用 = 名前の後の [...] (宣言した macro の optional
-    引数) を飛ばした最初の brace の中身。 定義の文の中の名前は使用でない。 名前の前の backslash は数で読む (\\\\al{…} は
-    行送り + 文字)。 macros が空なら MATH_RE.finditer と同じ。 dollars = $$ … $$ も読む (式の領域。 その他の式の
-    間だけで組む = DOLLAR_DISPLAY_RE の注)。"""
-    spans = _formula_spans(text, macros)
-    if not dollars:
-        return spans
+def _dollar_close(view: str, i: int, end: int, box: list) -> int | None:
+    """view[i:end] を $$ の中身として読み、 閉じの $$ の位置 (閉じなければ None)。 読み方 = _DOLLAR_OPEN_RE の注。 box = 呼び元が
+    持つ view の組の表の入れ物 (空なら初めて要る時に 1 回数えて入れる = 1 回の呼び出しの中で数え直さない)。"""
+    while (st := _DOLLAR_BODY_STOP_RE.search(view, i, end)) is not None:
+        j = st.start()
+        c = view[j]
+        if c == "$":
+            return j if j + 1 < end and view[j + 1] == "$" else None
+        if c == "\\":
+            if j + 1 < end and view[j + 1] != "[":
+                i = j + 2
+                continue
+            return None
+        if c == "}":  # 開きのいる組の外へ出る
+            return None
+        if not box:
+            box.append(_brace_pairs(view))
+        k = box[0].get(j, -1)
+        i = k + 1 if 0 <= k < end else j + 1  # 範囲の中で閉じる組は 1 つの塊、 閉じない { はただの文字
+    return None
+
+
+def _dollar_displays(view: str, pos: int, end: int, box: list) -> list[tuple[int, int, int, int]]:
+    """view[pos:end] の $$ … $$ = (開始, 終わり, 中身の開始, 中身の終わり)。 走り方は正規表現の finditer と同じ (左から、
+    重ならない、 閉じない開きは 1 文字先から探し直す)。"""
+    out = []
+    while (o := _DOLLAR_OPEN_RE.search(view, pos, end)) is not None:
+        c = _dollar_close(view, o.end(), end, box)
+        if c is None:
+            pos = o.start() + 1
+            continue
+        out.append((o.start(), c + 2, o.end(), c))
+        pos = c + 2
+    return out
+
+
+def _with_dollars(text: str, view: str, spans: list[tuple[int, int, str]]) -> list[tuple[int, int, str]]:
+    """spans (式) と、 その間で組んだ $$ … $$ を文頭から順に。"""
     out: list[tuple[int, int, str]] = []
     pos = 0
+    box: list = []
     for start, end, body in spans + [(len(text), len(text), None)]:
-        out.extend((d.start(), d.end(), d.group("dd")) for d in DOLLAR_DISPLAY_RE.finditer(text, pos, start))
+        out.extend((a, b, text[bs:be]) for a, b, bs, be in _dollar_displays(view, pos, start, box))
         if body is not None:
             out.append((start, end, body))
         pos = end
     return out
 
 
-def _formula_spans(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> list[tuple[int, int, str]]:
-    """math_spans の数式環境・\\[ \\]・wrapper の使用の部分。"""
-    use_re = (re.compile(r"(?<!\\)(?:\\\\)*(?P<use>\\(?:"
-                         + "|".join(re.escape(n) for n in sorted(macros, key=len, reverse=True))
-                         + r"))(?![A-Za-z@])\s*(?:\[[^\]]*\]\s*)*(?=\{)") if macros else None)
+def math_spans(text: str, macros: frozenset[str] | set[str] | tuple = (),
+               dollars: bool = False) -> list[tuple[int, int, str]]:
+    """(開始, 終わり, 中身) を文頭から順に。 数式環境と wrapper macro の使用を 1 本の走査で読む = macro の引数の中の
+    文字列 (align の中の \\\\[2pt] 等) を別の式の始まりと読まない。 使用 = 名前の後の [...] (宣言した macro の optional
+    引数) を飛ばした最初の brace の中身。 定義の文の中の名前は使用でない。 名前の前の backslash は数で読む (\\\\al{…} は
+    行送り + 文字)。 構造は verbatim を空白にした写しの上で読み、 中身は原文から取る (\\verb|\\[| が後ろの式と組まない、
+    式の中の \\verb|\\]| で閉じない)。 macros が空で verbatim が無ければ MATH_RE.finditer と同じ。 dollars = $$ … $$ も読む
+    (式の領域。 その他の式の間だけで組む = _DOLLAR_OPEN_RE の注)。 dollars のときは、 式 ($$ を含む) の外の verbatim の中を
+    今までの読み方 (verbatim を知らない読み方) で読んだ式と $$ も足す (LaTeX を解説する例示の中の式も、 今までどおり式の領域)。
+    comment 環境 (印字しない下書き) の中は、 prose (prose_tokens) と同じく中だけを今の読み方で読む (今までの読み方の誤った組を
+    足さない) = 中の verbatim が式の読みを変えても、 prose から外した式が式の領域にもある。 節は verbatim の中で切れない
+    (prose_regions) ので、 comment でない verbatim の中は prose では 1 つの語で、 式を外さない。"""
+    vs = verbatim_spans(text)
+    view = _blank_spans(text, vs)
+    spans = _formula_spans(text, macros, view)
+    if not dollars:
+        return spans
+    out = _with_dollars(text, view, spans)
+    if vs:
+        starts = [s for s, _, _ in out]
+        extra = []
+        for a, b in vs:
+            k = bisect.bisect_right(starts, a) - 1
+            if k >= 0 and out[k][1] >= b:  # 式の中の verbatim = その式の中身として比べる
+                continue
+            cut = _comment_interior(text, a, b)
+            if cut is not None:  # 印字しない下書き = prose と同じく、 中だけを今の読み方で読む
+                extra.extend((cut[0] + s, cut[0] + t, body) for s, t, body in math_spans(text[cut[0]:cut[1]], macros, dollars=True))
+                continue
+            inner = text[a:b]
+            extra.extend((a + s, a + t, body) for s, t, body in _with_dollars(inner, inner, _formula_spans(inner, macros)))
+        out = sorted(out + extra, key=lambda x: (x[0], x[1]))
+    return out
+
+
+def _comment_interior(text: str, a: int, b: int) -> tuple[int, int] | None:
+    """verbatim の span text[a:b] が comment 環境なら中身の (開始, 終わり)、 でなければ None (前の行送りの対は除いて判定)。"""
+    t = text[a:b]
+    k = len(t) - len(t.lstrip("\\")) - 1  # 前の行送り (\\ の対)
+    return (a + k + 15, b - 13) if t.startswith("\\begin{comment}", k) else None
+
+
+@functools.lru_cache(maxsize=64)
+def _wrapper_use_re(macros: frozenset[str]) -> re.Pattern:
+    """wrapper の使用の正規表現 (macro の名前の集合ごとに 1 回だけ作る = verbatim・comment 環境ごとに _formula_spans を呼んでも、
+    名前の数 × 呼ぶ回数で組み立てない)。"""
+    return re.compile(r"(?<!\\)(?:\\\\)*(?P<use>\\(?:"
+                      + "|".join(re.escape(n) for n in sorted(macros, key=len, reverse=True))
+                      + r"))(?![A-Za-z@])\s*(?:\[[^\]]*\]\s*)*(?=\{)")
+
+
+def _formula_spans(text: str, macros: frozenset[str] | set[str] | tuple = (),
+                   view: str | None = None) -> list[tuple[int, int, str]]:
+    """math_spans の数式環境・\\[ \\]・wrapper の使用の部分。 view = 構造を読む写し (text と同じ長さ、 既定は text)。"""
+    view = text if view is None else view
+    use_re = _wrapper_use_re(frozenset(macros)) if macros else None
     defined_at = {p for p, _, _ in macro_definitions(text)} if macros else set()
     out: list[tuple[int, int, str]] = []
     pos = 0
-    m = MATH_RE.search(text)
-    u = use_re.search(text) if use_re else None
+    pairs = None  # view の組の表 (初めて要る時に 1 回 = 閉じない引数が続いても 2 乗にならない)
+    m = MATH_RE.search(view)
+    u = use_re.search(view) if use_re else None
     while True:
         if m is not None and m.start() < pos:
-            m = MATH_RE.search(text, pos)
+            m = MATH_RE.search(view, pos)
         if u is not None and u.start() < pos:
-            u = use_re.search(text, pos)
+            u = use_re.search(view, pos)
         if u is not None and u.start("use") in defined_at:  # \newcommand\al[1]{…} の \al[1] は使用でない
-            u = use_re.search(text, u.start("use") + 1)
+            u = use_re.search(view, u.start("use") + 1)
             continue
         if u is not None and (m is None or u.start() < m.start()):
-            arg = balanced_arg(text, u.end())
+            pairs = _brace_pairs(view) if pairs is None else pairs
+            arg = balanced_arg(view, u.end(), pairs)
             if arg is None:  # 閉じていない引数 = 式として読めない (書きかけの file)
                 pos = u.end()
                 continue
-            out.append((u.start(), arg[1], arg[0]))
+            out.append((u.start(), arg[1], text[u.end() + 1:arg[1] - 1]))
             pos = arg[1]
             continue
         if m is None:
             return out
-        out.append((m.start(), m.end(), m.group("body") if m.group("body") is not None else m.group("br")))
+        g = "body" if m.group("body") is not None else "br"
+        out.append((m.start(), m.end(), text[m.start(g):m.end(g)]))
         pos = m.end()
 
 
-def math_regions(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> dict[str, str]:
+def math_regions(text: str, macros: frozenset[str] | set[str] | tuple = (),
+                 spans: list[tuple[int, int, str]] | None = None) -> dict[str, str]:
+    """spans = 呼び元が読んだ math_spans(text, macros, dollars=True) (無ければここで読む)。"""
     out: dict[str, str] = {}
     next_suffix: dict[str, int] = {}  # 同じ key の次の番号 (毎回 ~2 から探すと、 同じ式が多い原稿で 2 乗になる)
-    for _, _, body in math_spans(text, macros, dollars=True):
+    for _, _, body in (math_spans(text, macros, dollars=True) if spans is None else spans):
         lab = re.search(r"\\label\{([^}]*)\}", body)
         norm = norm_math(body)
         label = lab.group(1).strip() if lab else ""
@@ -401,15 +569,31 @@ def math_regions(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> d
 
 
 def strip_math(text: str, macros: frozenset[str] | set[str] | tuple = ()) -> str:
-    if not macros:
-        return MATH_RE.sub(" ", text)
-    parts, pos = [], 0
-    for start, end, _ in math_spans(text, macros):
+    return _strip_math_views(text, macros)[0]
+
+
+def _strip_math_views(text: str, macros: frozenset[str] | set[str] | tuple = ()
+                      ) -> tuple[str, str, list[tuple[int, int]]]:
+    """式 (数式環境・\\[ \\]・wrapper の使用) をそれぞれ 1 つの空白に置き換えた原文と、 同じ切り方の verbatim を空白にした
+    写しと、 残った verbatim の span (置き換えた後の位置)。 式は写しの上で読むので、 式は verbatim を丸ごと含むか離れている。"""
+    vs = verbatim_spans(text)
+    view = _blank_spans(text, vs)
+    parts, vparts, kept = [], [], []
+    pos = n = k = 0
+    for start, end, body in _formula_spans(text, macros, view) + [(len(text), len(text), None)]:
+        while k < len(vs) and vs[k][0] < start:
+            if vs[k][0] >= pos:
+                kept.append((vs[k][0] - pos + n, vs[k][1] - pos + n))
+            k += 1
         parts.append(text[pos:start])
-        parts.append(" ")
+        vparts.append(view[pos:start])
+        n += start - pos
+        if body is not None:
+            parts.append(" ")
+            vparts.append(" ")
+            n += 1
         pos = end
-    parts.append(text[pos:])
-    return "".join(parts)
+    return "".join(parts), "".join(vparts), kept
 
 
 def section_title_norm(raw: str) -> str:
@@ -418,29 +602,59 @@ def section_title_norm(raw: str) -> str:
     return collapse_ws(s).lower()
 
 
-def prose_regions(text: str, protect_sections: list[str]) -> dict[str, str]:
-    """title / abstract / intro / conclusion / section:<名> の生テキスト (コメント除去済み、 数式込み)。"""
-    out: dict[str, str] = {}
-    m = re.search(r"\\title\s*(\[[^\]]*\])?\s*(?=\{)", text)
+def prose_regions(text: str, protect_sections: list[str], on_view: bool = True) -> dict[str, str]:
+    """title / abstract / intro / conclusion / section:<名> の生テキスト (コメント除去済み、 数式込み) = prose_region_slices の
+    切れ目を改行で繋いだもの。"""
+    return {k: slices_text(text, sl) for k, sl in prose_region_slices(text, protect_sections, on_view).items()}
+
+
+def slices_text(text: str, slices: list[tuple[int, int]]) -> str:
+    return "\n".join(text[a:b] for a, b in slices)
+
+
+def patch_prose_regions(text: str, protect_sections: list[str]) -> dict[str, str]:
+    """当たらない patch の削除行を照らす節の文 = 2 通りの切り方の文 (同じ名前で中身が違えば繋ぐ)。"""
+    out = prose_regions(text, protect_sections, False)
+    for k, v in prose_regions(text, protect_sections, True).items():
+        out[k] = v if out.get(k, v) == v else out[k] + "\n" + v
+    return out
+
+
+def prose_region_slices(text: str, protect_sections: list[str], on_view: bool = True) -> dict[str, list[tuple[int, int]]]:
+    """各保護節の text の上の切れ目 (節は見出しの題と本文の 2 つ)。 on_view = 表題・
+    概要の環境・見出し・終わりの印を verbatim を空白にした写しの上で探す (verbatim や comment 環境の中の \\section{…}・古い
+    概要・\\end{document} で節を切らない)。 False = 原文で探す (今までの切り方)。 中身はどちらも原文から取る。 呼び元は両方の
+    切り方で比べる (manuscript_region_changes) = 写しの切り方は、 guard の知らない verbatim (\\lstinline|\\begin{verbatim}|
+    など) が偽の開きになると後ろの見出しを隠すので、 原文の切り方の保護を下限にする。"""
+    out: dict[str, list[tuple[int, int]]] = {}
+    view = blank_verbatim(text) if on_view else text
+    pairs = None  # view の組の表 (初めて要る時に 1 回 = 閉じない \section{ が続いても 2 乗にならない)
+    # 見出しの名前と { の間の空白・[…] は 1 つの \s* で読む (2 つ並べると、 { の来ない空白の連続で後戻りが 2 乗になる)
+    m = re.search(r"\\title\s*(?:\[[^\]]*\]\s*)?(?=\{)", view)
     if m:
-        arg = balanced_arg(text, m.end())
+        pairs = _brace_pairs(view)
+        arg = balanced_arg(view, m.end(), pairs)
         if arg:
-            out["title"] = arg[0]
-    ab = re.search(r"\\begin\{abstract\}(.*?)\\end\{abstract\}", text, re.S)
-    if ab:
-        out["abstract"] = ab.group(1)
+            out["title"] = [(m.end() + 1, arg[1] - 1)]
+    b = view.find("\\begin{abstract}")  # 最初の開きの後ろに閉じが無ければ、 後ろの開きにも無い (= 正規表現の .*? と同じ組)
+    e = view.find("\\end{abstract}", b + 16) if b >= 0 else -1
+    if e >= 0:
+        out["abstract"] = [(b + 16, e)]
     heads = []
-    for hm in re.finditer(r"\\section\*?\s*(\[[^\]]*\])?\s*(?=\{)", text):
-        arg = balanced_arg(text, hm.end())
+    for hm in re.finditer(r"\\section\*?\s*(?:\[[^\]]*\]\s*)?(?=\{)", view):
+        pairs = _brace_pairs(view) if pairs is None else pairs
+        arg = balanced_arg(view, hm.end(), pairs)
         if arg:
-            heads.append((hm.start(), arg[1], arg[0]))
+            heads.append((hm.start(), arg[1], hm.end() + 1))
     stops = [mm.start() for mm in re.finditer(
-        r"\\appendix\b|\\bibliography\{|\\begin\{thebibliography\}|\\end\{document\}|\\printbibliography", text)]
+        r"\\appendix\b|\\bibliography\{|\\begin\{thebibliography\}|\\end\{document\}|\\printbibliography", view)]
     extra = [re.compile(p, re.I) for p in protect_sections]
-    for idx, (hstart, body_start, raw_title) in enumerate(heads):
-        end_candidates = [h[0] for h in heads[idx + 1:]] + [s for s in stops if s > body_start] + [len(text)]
-        body = text[body_start:min(end_candidates)]
-        title = section_title_norm(raw_title)
+    count: dict[str, int] = {}  # 同じ名前の節の数 (毎回 ~2 から探すと、 同じ見出しが多い原稿で 2 乗になる)
+    for idx, (hstart, body_start, title_start) in enumerate(heads):
+        k = bisect.bisect_right(stops, body_start)
+        end = min(heads[idx + 1][0] if idx + 1 < len(heads) else len(text), stops[k] if k < len(stops) else len(text))
+        end = max(end, body_start)  # 見出しの引数が後ろの見出しを呑む壊れた入力でも切れ目を逆向きにしない (中身は空のまま)
+        title = section_title_norm(text[title_start:body_start - 1])
         key = None
         if INTRO_RE.match(title):
             key = "intro"
@@ -449,43 +663,109 @@ def prose_regions(text: str, protect_sections: list[str]) -> dict[str, str]:
         elif any(p.search(title) for p in extra):
             key = f"section:{title}"
         if key:
-            k, n = key, 2
-            while k in out:
-                k = f"{key}~{n}"
-                n += 1
-            out[k] = raw_title + "\n" + body
+            count[key] = count.get(key, 0) + 1  # 名前は見出しの題を正規化したもので ~ を含まない = 番号の名前と重ならない
+            out[key if count[key] == 1 else f"{key}~{count[key]}"] = [(title_start, body_start - 1), (body_start, end)]
     return out
+
+
+def prose_formula_spans(s: str, macros: frozenset[str] | set[str] | tuple = ()) -> list[tuple[int, int, str]]:
+    """prose_tokens が文 s (コメント除去済み) から外す式 (始まり, 終わり, norm_math の中身) = verbatim を空白にした写しで
+    読んだ式と、 comment 環境の中を再帰で読んで外す式。"""
+    vs = verbatim_spans(s)
+    spans = _formula_spans(s, macros, _blank_spans(s, vs))
+    out = [(a, b, norm_math(body)) for a, b, body in spans]
+    starts = [a for a, _, _ in spans]
+    for a, b in vs:
+        k = bisect.bisect_right(starts, a) - 1
+        cut = _comment_interior(s, a, b)
+        if cut is not None and not (k >= 0 and spans[k][1] >= b):
+            out += [(cut[0] + x, cut[0] + y, body) for x, y, body in prose_formula_spans(s[cut[0]:cut[1]], macros)]
+    return out
+
+
+def lost_formula_bodies(text: str, slices: list[tuple[int, int]], spans_at: set[tuple[int, int]],
+                        macros: frozenset[str] | set[str] | tuple = ()) -> list[str]:
+    """節 (text の slices) の語が式として外す式のうち、 文書全体の読みが同じ位置の式として読まない式の中身 (並べたもの)。
+    spans_at = 文書全体の式の (始まり, 終わり) の集合。 文書全体の式の比較は位置の合う式の中身だけを比べる (span の中の
+    wrapper の名前や [ ] の引数は中身でない) ので、 区間で覆うかでなく位置の一致で照らす。 節の文だけの読みと文書全体の
+    読みが verbatim の組み方で食い違うと (guard の知らない verbatim の偽の開きの後ろなど)、 その式の文字は語にも式の
+    比較にも無い = 節の比較に入れる。 読みが一致する原稿では空。"""
+    region = slices_text(text, slices)
+    stripped = strip_tex_comments(region)
+    spans = prose_formula_spans(stripped, macros)
+    if stripped != region:  # 位置が合わない = 外す式を全部比べる (除去済みの text の切れ目では起きない、 守りとして)
+        return sorted(body for _, _, body in spans)
+    out = []
+    for s, e, body in spans:
+        off, at = 0, None
+        for a, b in slices:  # 節の文の位置 → text の位置 (切れ目の間の改行は text に無い)
+            if off <= s and e <= off + b - a:
+                at = (a + s - off, a + e - off)
+                break
+            off += b - a + 1
+        if at not in spans_at:
+            out.append(body)
+    return sorted(out)
+
+
+_PROSE_TOKEN_RE = re.compile(
+    r"\$\$|\$(?:[^$\\]|\\.)*\$|\\\(|\\[A-Za-z@]+"
+    r"|\\[\x00-\x2f\x3a-\x3f\x5b-\x60\x7b-\x7f]"
+    r"|[A-Za-z]+|\d+(?:\.\d+)?|[\u3040-\u30ff\u3400-\u9fff]",
+    re.S,
+)
 
 
 def prose_tokens(raw: str, macros: frozenset[str] | set[str] | tuple = ()) -> list[str]:
     """先頭から順に読む。 backslash は後ろの記号 1 文字と組で読む (\\$ は文字の $ = inline 数式の区切りでない、
     \\\\( は行送り + 文字の ( = \\( の始まりでない)。 数式の中も同じ組で読み、 \\$ や \\\\) で閉じない。 \\( は次の
     \\) まで (閉じの位置は先に 1 回だけ数える = 閉じの無い \\( が続いても 2 乗にならない)。 $$ … $$ は 1 つの数式の
-    語 (演算子を落とさない。 式の比較と同じく空白・\\, 等・末尾の句点は語にしない)。 文字の \\$ \\% \\& \\# は語にする。"""
-    s = strip_math(strip_tex_comments(raw), macros)
-    closes = [m.start(1) for m in re.finditer(r"(?<!\\)(?:\\\\)*(\\\))", s)]
+    語 (演算子を落とさない。 式の比較と同じく空白・\\, 等・末尾の句点は語にしない)。 文字の \\$ \\% \\& \\# は語にする。
+    組 (式・$・\\( の開きと閉じ) は verbatim を空白にした写しの上で読み、 語は原文から取る。 \\verb|…| と verbatim 環境は
+    空白の連続を 1 つにした 1 つの語 (中の $$ や \\) は組まず、 記号と語の区切りも落とさない。 環境の開きの直後・閉じの直前の
+    空白は語にしない)。 comment 環境 (印字しない文の下書き) の中は、 中だけを
+    今までどおりの語として読む (校正は通る、 中の $$ は外と組まない)。"""
+    s, sv, verb = _strip_math_views(strip_tex_comments(raw), macros)
+    closes = [m.start(1) for m in re.finditer(r"(?<!\\)(?:\\\\)*(\\\))", sv)]
     toks: list[str] = []
-    token_re = re.compile(
-        r"\$\$(?:" + _DOLLAR_DISPLAY_BODY + r")\$\$|\$(?:[^$\\]|\\.)*\$|\\\(|\\[A-Za-z@]+"
-        r"|\\[\x00-\x2f\x3a-\x3f\x5b-\x60\x7b-\x7f]"
-        r"|[A-Za-z]+|\d+(?:\.\d+)?|[\u3040-\u30ff\u3400-\u9fff]",
-        re.S,
-    )
-    pos = 0
-    while (m := token_re.search(s, pos)) is not None:
+    box: list = []  # sv の組の表 (初めて要る時に 1 回)
+    pos = vi = 0
+    while True:
+        m = _PROSE_TOKEN_RE.search(sv, pos)
+        nxt = len(sv) if m is None else m.start()
+        while vi < len(verb) and verb[vi][0] < nxt:
+            a, b = verb[vi]
+            vi += 1
+            if a < pos:  # 前の語 ($$ … $$ など) の中
+                continue
+            t = s[a:b]
+            t = t[len(t) - len(t.lstrip("\\")) - 1:]  # 前の行送り (\\ の対) は語にしない
+            if t.startswith("\\begin{comment}"):  # 印字しない文の下書き = 中は今までどおりの語 (組は中だけで読む)
+                toks.extend(["\\begin", "comment"] + prose_tokens(t[15:-13], macros) + ["\\end", "comment"])
+                continue
+            # 空白は消さない (コードの語の区切り・\verb* の空白) = 連続を 1 つに。 環境の開きの直後と閉じの直前の空白は語に
+            # しない (開きの直後の改行は印字されない)
+            toks.append(re.sub(r"^(\\begin\{[^}]*\}) | (\\end\{[^}]*\})$", r"\1\2", re.sub(r"\s+", " ", t)))
+        if m is None:
+            return toks
         t = m.group(0)
-        pos = m.end()
+        start, pos = m.start(), m.end()
         if t == "\\(":
             k = bisect.bisect_left(closes, pos)
             if k < len(closes):  # 閉じの無い \\( は今までどおり語にしない
                 pos = closes[k] + 2
-                toks.append("$" + re.sub(r"\s+", "", s[m.start():pos]) + "$")
+                toks.append("$" + re.sub(r"\s+", "", s[start:pos]) + "$")
             continue
-        if t.startswith("$$") and len(t) >= 4:
-            toks.append("$$" + norm_math(t[2:-2]) + "$$")
+        if t == "$$":
+            c = _dollar_close(sv, pos, len(sv), box)
+            if c is None:
+                toks.append("$$")  # 組めない $$ = 空の inline 数式の語 (今までどおり)
+                continue
+            pos = c + 2
+            toks.append("$$" + norm_math(s[start + 2:c]) + "$$")
             continue
         if t.startswith("$"):
-            toks.append("$" + re.sub(r"\s+", "", t[1:-1]) + "$")
+            toks.append("$" + re.sub(r"\s+", "", s[start + 1:pos - 1]) + "$")
             continue
         if len(t) == 2 and t[0] == "\\" and not re.fullmatch(r"[A-Za-z@]", t[1]):
             if t[1] in "$%&#":
@@ -1309,15 +1589,32 @@ def manuscript_region_changes(rel: str, old: str, new: str, repo: Path | None, c
     macros, wrapper_changed = wrapper_context(rel, so, sn, repo, cfg_eff)
     add_wrapper_changes(wrapper_changed)
     protect = [p for p in cfg_eff.get("protect_sections", []) or [] if isinstance(p, str)]
-    po, pn = prose_regions(so, protect), prose_regions(sn, protect)
-    for k in sorted(set(po) | set(pn)):
-        if k not in po:
-            add(k, "add")
-        elif k not in pn:
-            add(k, "delete")
-        elif not copyedit_only(po[k], pn[k], macros):
-            add(k, "change")
-    mo, mn = math_regions(so, macros), math_regions(sn, macros)
+    spo, spn = math_spans(so, macros, dollars=True), math_spans(sn, macros, dollars=True)
+    mo, mn = math_regions(so, macros, spo), math_regions(sn, macros, spn)
+    at_o, at_n = {(a, b) for a, b, _ in spo}, {(a, b) for a, b, _ in spn}  # 文書全体の式の位置 (側ごとに 1 回)
+    seen: set[tuple[str, str]] = set()
+    judged: set[tuple] = set()  # 同じ (名前, 旧の切れ目, 新の切れ目) は 2 通りの切り方で同じ結果 = 1 回だけ比べる
+    for on_view in (False, True):  # 節の切り方 2 通り (原文 = 今までどおり / verbatim を空白にした写し) のどちらかで変われば出す
+        qo, qn = prose_region_slices(so, protect, on_view), prose_region_slices(sn, protect, on_view)
+        for k in sorted(set(qo) | set(qn)):
+            sig = (k, tuple(qo.get(k, ())), tuple(qn.get(k, ())))
+            if sig in judged:
+                continue
+            judged.add(sig)
+            if k not in qo:
+                kind = "add"
+            elif k not in qn:
+                kind = "delete"
+            elif not copyedit_only(slices_text(so, qo[k]), slices_text(sn, qn[k]), macros):
+                kind = "change"
+            elif lost_formula_bodies(so, qo[k], at_o, macros) != lost_formula_bodies(sn, qn[k], at_n, macros):
+                # 節の語が式として外し、 文書全体の読みが同じ位置の式として読まない式 (= どちらの比較にも残らない) が変わった
+                kind = "change"
+            else:
+                kind = None
+            if kind is not None and (k, kind) not in seen:
+                seen.add((k, kind))
+                add(k, kind)
     old_vals = {}
     for k, v in mo.items():
         old_vals.setdefault(v, []).append(k)
@@ -2998,7 +3295,7 @@ def _hook(agent: str, event: dict) -> int:
         if manuscript_in_scope(repo, rel, old, old):
             so = strip_tex_comments(old)
             cfg = load_config(repo)
-            regions.update(prose_regions(so, cfg.get("protect_sections", []) or []))
+            regions.update(patch_prose_regions(so, cfg.get("protect_sections", []) or []))
             regions.update({k: v for k, v in math_regions(so, wrapper_context(rel, so, so, repo, cfg)[0]).items()})
         raw = {k: v for k, v in regions.items()}
         for ln in removed:
@@ -4132,7 +4429,7 @@ def selftest() -> int:
     check("同じ中身の式の名前は ~2, ~3 … (番号の振り方は今までどおり)",
           list(math_regions("\\[ a \\] \\[ a \\] $$ a $$\n")) == [f"math#{sha8('a')}", f"math#{sha8('a')}~2",
                                                                f"math#{sha8('a')}~3"])
-    check("空の $$ (\\verb|$$| など) は inline の語 $$", prose_tokens("\\verb|$$| x") == ["\\verb", "$$", "x"])
+    check("組めない $$ は inline の空の語 $$", prose_tokens("b $$ x") == ["b", "$$", "x"])
     check("$$ の中の brace の組は $ を含んでよい (\\mbox{… $n$ …})",
           list(math_regions("$$ r = 1 \\mbox{ for all $n$} $$\n").values()) == ["r=1\\mbox{forall$n$}"])
     deep = "\\gamma = \\sqrt{\\frac{1}{1-\\frac{v^{2}}{c^{2}}}}"  # brace の入れ子 4 段
@@ -4220,6 +4517,319 @@ def selftest() -> int:
     math_regions("\\[ a \\] " * 20000)
     prose_tokens("$$ { a " * 20000)
     check("閉じの無い $$・\\begin・\\( の連続と、 同じ中身の式の連続で 2 乗の時間にならない", time.monotonic() - started < 5)
+    print("[verbatim を空白にした写しで読む構造、 $$ の中の brace の組、 閉じない構造の連続の時間]")
+    hd = "\\documentclass{article}\n\\begin{document}\n\\begin{abstract}\nToy.\n\\end{abstract}\n"
+    ed = "\\end{document}\n"
+
+    def md(before: str, after: str) -> list[str]:  # label の無い式 1 つの書き換え = 削除 + 追加
+        return sorted([f"math#{sha8(norm_math(after))}:add", f"math#{sha8(norm_math(before))}:delete"])
+
+    v1 = ("\\documentclass{article}\n\\begin{document}\n\\begin{abstract}\nType \\verb|$$|; so $$ x = y $$ here.\n"
+          "\\end{abstract}\n\\section{Setup}\nBody.\n" + ed)
+    check("概要の \\verb|$$| の後ろの $$ の中の演算子の変更 → 概要の変更 + 式の削除 + 追加 (\\verb の $$ と組まない)",
+          ch(v1.replace("x = y", "x < y"), v1) == sorted(["abstract:change"] + md("x = y", "x < y")))
+    v2 = hd + "\\section{Setup}\nSee \\verb|$$| then $$ x = y $$ here.\n" + ed
+    v3 = hd + "\\section{Setup}\n\\begin{verbatim}\n$$\n\\end{verbatim}\nso $$ x = y $$ here.\n" + ed
+    check("保護外の節でも、 \\verb|$$|・verbatim 環境の $$ の後ろの $$ の変更は式の変更",
+          all(ch(t.replace("x = y", "x < y"), t) == md("x = y", "x < y") for t in (v2, v3)))
+    v4 = (hd + "\\section{Introduction}\nPlain TeX writes \\verb|$$|; we analyse the model.\n$$ s = 2 $$\n"
+          "\\section{Setup}\nB.\n" + ed)
+    v4m = v4.replace("Introduction", "Methods")
+    check("\\verb|$$| の後ろの綴りの校正は通す (序論でも保護外の節でも、 式の変更にしない)",
+          ch(v4.replace("analyse", "analyze"), v4) == [] and ch(v4m.replace("analyse", "analyze"), v4m) == [])
+    fn = hd + "\\section{Setup}\nBody.\n\\section{Conclusion}\nType \\verb|$$| here\\footnote{see $$ x = y $$}.\n" + ed
+    check("\\verb|$$| の後ろの \\footnote{… $$ … $$} の中の演算子の変更 → 結論の変更 + 式",
+          ch(fn.replace("x = y", "x < y"), fn) == sorted(["conclusion:change"] + md("x = y", "x < y")))
+    beq = hd.replace("\\begin{document}", "\\newcommand{\\beq}{$$}\n\\begin{document}")
+    fn2 = beq + "\\section{Setup}\nBody\\footnote{see $$ x = y $$}.\n" + ed
+    fn3 = beq + "\\section{Setup}\nA\\footnote{a \\b{\\c{\\d{e}}} $$ x = y $$}.\n" + ed
+    check("前の定義の {$$} は後ろの \\footnote の中の $$ と組まない (\\footnote の組が 4 段でも)",
+          all(ch(t.replace("x = y", "x < y"), t) == md("x = y", "x < y") for t in (fn2, fn3)))
+    check("組の合わない $$ は後ろの組の中の $$ と組まない (brace の組を 1 つの塊として読む)",
+          list(math_regions("p $$ b\\footnote{see $$ x = y $$} c\n").values()) == ["x=y"])
+    dd = (hd.replace("\\begin{document}", "\\def\\beq{$$}\\def\\eeq{$$}\n\\begin{document}")
+          + "\\section{Setup}\nWe show $$ a = b $$ here.\n" + ed)
+    check("$$ を値に持つ定義が 2 つ続いても、 保護外の節の $$ の式の変更は式の変更 (組の中の $$ は組の外と組まない)",
+          ch(dd.replace("a = b", "a < b"), dd) == md("a = b", "a < b"))
+    check("組の中の $$ の走査は組の } で終わる (組の外の $$ と組まない)",
+          math_regions("{ $$ a } b $$ c $$\n") == {f"math#{sha8('c')}": "c"})
+    check("組の閉じが無い { と、 閉じが式の向こうにある { は $$ の中のただの文字 (今までどおり)",
+          list(math_regions("$$ { a $$ b\n").values()) == ["{a"]
+          and list(math_regions("$$ { a $$ \\[ b \\] }\n").values()) == ["{a", "b"])
+    g4 = "\\sqrt{\\frac{1}{1-\\frac{v^{2}}{c^{2}}}}"
+    r3 = hd + "\\section{Setup}\nWe set $$ g = " + g4 + " \\mbox{ if $n$} $$ and $$ E = m c^2 $$ holds.\n" + ed
+    check("4 段の brace と box の $ を両方持つ $$ も式、 後ろの $$ の組もずれない",
+          list(math_regions(f"$$ g = {g4} \\mbox{{ if $n$}} $$\n").values()) == [norm_math(f"g = {g4} \\mbox{{ if $n$}}")]
+          and ch(r3.replace("E = m", "E < m"), r3) == md("E = m c^2", "E < m c^2"))
+    check("$ と、 その下の 4 段の入れ子を同じ組に持つ $$ も式 (brace の深さに上限が無い)",
+          list(math_regions("$$ g = \\mbox{ $n$ {{{{x}}}} } $$ and $$ E = m $$\n").values())
+          == [norm_math("g = \\mbox{ $n$ {{{{x}}}} }"), "E=m"])
+    r4 = (hd + "\\section{Setup}\nType \\verb|\\[| for displays.\n\\section{Conclusion}\n"
+          "\\begin{equation} \\verb|\\]| E = m c^2 \\end{equation}\n" + ed)
+    r4b = (hd + "\\section{Setup}\nType \\verb|\\begin{equation}| for numbered ones.\n\\section{Conclusion}\n"
+           "\\[ \\verb|\\end{equation}| E = m c^2 \\]\n" + ed)
+    check("\\verb|\\[| と式の中の \\verb|\\]| (\\begin・\\end でも) で、 後ろの式の中身の変更が式の変更として出る",
+          ch(r4.replace("c^2", "c^3"), r4) == md("\\verb|\\]| E = m c^2", "\\verb|\\]| E = m c^3")
+          and ch(r4b.replace("c^2", "c^3"), r4b) == md("\\verb|\\end{equation}| E = m c^2", "\\verb|\\end{equation}| E = m c^3"))
+    check("$$ の中の \\verb|$$| で閉じない (\\verb ごと 1 つの式、 prose でも 1 つの数式の語)",
+          list(math_regions("We use $$ a \\verb|$$| b = c $$ here.\n").values()) == [norm_math("a \\verb|$$| b = c")]
+          and prose_tokens("We use $$ a \\verb|$$| b = c $$ here.")
+          == ["we", "use", "$$" + norm_math("a \\verb|$$| b = c") + "$$", "here"])
+    check("閉じない $$ の次は 1 文字先から探す ($$$x$$ = 文字の $ + 式 x、 今までどおり)",
+          math_regions("$$$x$$ y\n") == {f"math#{sha8('x')}": "x"})
+    check("$$ の式の閉じの次から探す ($$a$$$b$$$c$$ = 式 a・inline b・式 c、 今までどおり)",
+          list(math_regions("$$a$$$b$$$c$$\n").values()) == ["a", "c"])
+    check("verbatim の例示と本物の式が同じ label を持つときも、 名前の番号は文書の順 (今までどおり)",
+          list(math_regions("words words words words words \\[ y \\label{eq:m} \\] "
+                            "\\begin{verbatim}\\[ x \\label{eq:m} \\]\\end{verbatim} \\[ z \\label{eq:m} \\]\n").items())
+          == [("eq:m", "y"), ("eq:m~2", "x"), ("eq:m~3", "z")])
+    check("verbatim の例示の中の \\[ \\] と $$ $$ は今までどおり式の領域",
+          list(math_regions("\\begin{verbatim}\n\\[ x = y \\]\n$$ u = v $$\n\\end{verbatim}\n").values()) == ["x=y", "u=v"]
+          and list(math_regions("\\begin{verbatim}\n\\al{ k = l }\n\\end{verbatim}\n", {"al"}).values()) == ["k=l"]
+          and list(math_regions("\\begin{verbatim}\n\\al{ k \\verb|}| l }\n\\end{verbatim}\n", {"al"}).values())
+          == [norm_math("k \\verb|")])
+    lz = (hd + "\\section{Setup}\nB.\n\\begin{lstlisting}\nset comment off\n\\verb|\\[| words here \\]\n\\end{lstlisting}\n" + ed)
+    check("comment の判定は環境の名前だけ (中に comment の語がある listing は今までの読み方の式を保つ)",
+          len(ch(lz.replace("words", "terms"), lz)) == 2)
+    check("wrapper の引数の組も verbatim を空白にした写しで数える (verbatim の中の } で閉じない)",
+          list(math_regions("\\al{ k \\verb|}| l }\n", {"al"}).values()) == [norm_math("k \\verb|}| l")])
+    check("式の中の verbatim の中は、 別の式として足さない (その式の中身として比べる)",
+          list(math_regions("\\begin{equation} a \\verb|\\[ x \\]| b \\end{equation}\n").values())
+          == [norm_math("a \\verb|\\[ x \\]| b")])
+    vb = ("\\documentclass{article}\n\\begin{document}\n\\begin{abstract}\nType \\verb|a=b| here.\n\\end{abstract}\n"
+          "\\section{Setup}\nB.\n" + ed)
+    check("\\verb|…| は空白の連続を 1 つにした 1 つの語 (中の $$ は組まず、 中の記号の変更も概要の変更)",
+          prose_tokens("\\verb|$$| x") == ["\\verb|$$|", "x"]
+          and prose_tokens("c \\\\\\verb|p  q| d") == ["c", "\\verb|p q|", "d"]
+          and prose_tokens("\\[ x \\] then \\verb|q r| s") == ["then", "\\verb|q r|", "s"]
+          and prose_tokens("x \\verb|y z|") == ["x", "\\verb|y z|"]
+          and ch(vb.replace("a=b", "a<b"), vb) == ["abstract:change"])
+    vw = ("\\documentclass{article}\n\\begin{document}\n\\begin{abstract}\nToy.\n\\end{abstract}\n\\section{Introduction}\n"
+          "Use \\verb|make all| and\n\\begin{lstlisting}\nrm -r tmp\nint x = y;\nreturn x;\n\\end{lstlisting}\n"
+          "\\section{Setup}\nB.\n" + ed)
+    check("verbatim の中の空白だけの変更 (語の結合・分割) は変更、 折り返しと、 開きの直後・閉じの直前の改行だけは通す",
+          ch(vw.replace("make all", "makeall"), vw) == ["intro:change"] and ch(vw.replace("-r tmp", "-rtmp"), vw) == ["intro:change"]
+          and ch(vw.replace("y;\nreturn", "y; return"), vw) == []
+          and ch(vw.replace("\\begin{lstlisting}\nrm", "\\begin{lstlisting}rm"), vw) == []
+          and ch(vw.replace("x;\n\\end{lstlisting}", "x;\\end{lstlisting}"), vw) == [])
+    vz = vw.replace("int x = y;", "\\begin{equation}\nint x = y;").replace("make all", " make all")
+    check("中身の中の \\begin{…} の直後の空白と、 \\verb の区切りの直後の空白は語に残す (環境の端だけを落とす)",
+          ch(vz.replace("\\begin{equation}\nint", "\\begin{equation}int"), vz) == ["intro:change"]
+          and ch(vz.replace("| make all", "|make all"), vz) == ["intro:change"])
+    gl = (hd.replace("\\begin{document}", "\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}}\n\\begin{document}")
+          + "\\section{Introduction}\nWe show the source:\n\\begin{lstlisting}\n\\[ p \\verb|\\]| b = c \\]\n"
+          "\\al{ k \\verb|}| l = 5 }\n\\[ v \\begin{verbatim}\\]\\end{verbatim} w = x \\]\n\\section{Setup}\n\\end{lstlisting}\nDone.\n" + ed)
+    check("verbatim 環境の中の見出しの行では節を切らない = 中の文字は節の語として比べる (中の \\verb|\\]|・\\verb|}|・verbatim 環境)",
+          all(ch(gl.replace(o, n), gl) == ["intro:change"] for o, n in (("b = c", "q = c"), ("l = 5", "l = 6"), ("w = x", "q = x"))))
+    gx = (hd + "\\section{Introduction}\nWe show the source.\n\\begin{lstlisting}\n\\section{Conclusion}\n\\[ a = b\n"
+          "\\end{lstlisting}\nWe prove that the rate grows; type \\lstinline|\\]| to close it.\n\\section{Setup}\nB.\n" + ed)
+    e2 = ("\\documentclass{article}\n\\begin{document}\n\\begin{comment}\n\\begin{abstract}\nOld toy.\n\\end{abstract}\n"
+          "\\end{comment}\n\\begin{abstract}\nThe lattice conducts heat.\n\\end{abstract}\n\\section{Introduction}\n"
+          "Type \\verb|\\end{document}| to finish. The rate grows.\n\\section{Setup}\nB.\n" + ed)
+    check("listing の中の見出しの行・comment 環境の中の古い概要・verbatim の中の \\end{document} で保護節を切らない (後ろの文も節の語)",
+          "intro:change" in ch(gx.replace("rate grows", "rate drops"), gx)
+          and ch(e2.replace("conducts", "loses"), e2) == ["abstract:change"]
+          and ch(e2.replace("rate grows", "rate drops"), e2) == ["intro:change"])
+    fa = (hd + "\\section{Introduction}\nWe study heat.\n\\section{Methods}\nWe typeset \\lstinline|\\begin{verbatim}| blocks.\n"
+          "\\section{Conclusion}\nWe prove that the rate grows.\n\\begin{verbatim}\nmake all\n\\end{verbatim}\n" + ed)
+    fb = ("\\documentclass{article}\n\\newcommand{\\bverb}{\\begin{verbatim}}\n\\title{Heat flow in a toy lattice}\n"
+          "\\begin{document}\n\\begin{abstract}\nThe lattice conducts heat.\n\\end{abstract}\n\\section{Introduction}\n"
+          "The rate grows.\n\\section{Methods}\n\\begin{verbatim}\nmake all\n\\end{verbatim}\n" + ed)
+    check("guard の知らない verbatim の偽の開き (\\lstinline・定義の本体) が後ろの見出し・概要・表題を隠しても、 原文の切り方で保護する",
+          ch(fa.replace("rate grows", "rate drops"), fa) == ["conclusion:change"]
+          and ch(fb.replace("toy lattice", "real lattice"), fb) == ["title:change"]
+          and ch(fb.replace("conducts", "loses"), fb) == ["abstract:change"]
+          and ch(fb.replace("rate grows", "rate drops"), fb) == ["intro:change"])
+    hdp = hd.replace("\\begin{document}", "\\usepackage{listings}\n\\usepackage{verbatim}\n\\begin{document}")
+
+    def hidden(form: str, intro: str = "We study heat.", pre: str = "") -> str:  # Methods の偽の開きが結論の見出しを写しから隠す
+        return (hdp.replace("\\begin{document}", pre + "\\begin{document}") + "\\section{Introduction}\n" + intro + "\n\\section{Methods}\nWe typeset code with "
+                "\\lstinline|\\begin{verbatim}| blocks.\n\\section{Conclusion}\n" + form
+                + "\\begin{verbatim}\nmake all\n\\end{verbatim}\n" + ed)
+    x1, x2 = "\\[ a \\verb|\\]| b = c \\]\n", "\\[ a \\verb|\\]| q = c \\]\n"
+    fh = hidden("We prove that\n" + x1 + "holds. We analyse the bound.\n")
+    fc = hidden("We prove it.\n\\begin{comment}\n" + x1 + "\\end{comment}\n")
+    check("節だけの読みが式と読み、 文書全体の読みが式と読まない文字 (偽の開きの後ろの式の閉じを示す \\verb の後ろ) も比べる",
+          ch(fh.replace("b = c", "b < c"), fh) == ["conclusion:change"] and ch(fh.replace("b = c", "q = c"), fh) == ["conclusion:change"]
+          and ch(fh.replace("analyse", "analyze"), fh) == [] and ch(fc.replace("b = c", "q = c"), fc) == ["conclusion:change"])
+    m5 = hidden(x1, "We study heat.\n" + x1 + x2)
+    m6 = hidden(x1 + x1 + x2)
+    check("その文字は位置で比べる (同じ中身の式が文書の別の所で正しく読まれていても、 隠れた式の変更を出す)",
+          ch(m5.replace("b = c \\]\n\\begin{verbatim}", "q = c \\]\n\\begin{verbatim}"), m5) == ["conclusion:change"]
+          and ch(m6.replace(x1 + x2, x2 + x2), m6) == ["conclusion:change"])
+    check("隠れた式の正しく読まれる写しを保護外の節に足しても、 節の変更は出ない (式の追加だけ)",
+          ch(fh.replace("We typeset", x1 + "We typeset"), fh) == [f"math#{sha8(norm_math(x1[3:-4]))}:add"])
+    b1 = (hdp + "\\begin{comment}\n\\section{Introduction}\nOld draft.\n\\end{comment}\n\\section{Introduction}\n"
+          "The rate grows.\n\\section{Setup}\nB.\n" + ed)
+    check("節の切り方 2 通りのどちらかで変われば出す (comment の中の古い見出し = 原文では intro~2、 写しでは intro)",
+          ch(b1.replace("rate grows", "rate drops"), b1) == ["intro:change", "intro~2:change"]
+          and ch(b1.replace("Old draft", "Old text"), b1) == ["intro:change"])
+    import contextlib
+    import io
+
+    def patch_denied(text: str, removed: str) -> bool:  # 当たらない patch (2 行目が file に無い) の削除行で止めるか
+        prev = os.environ.get("MANUSCRIPT_CLAIM_GUARD_STATE_DIR")
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as td:
+            os.environ["MANUSCRIPT_CLAIM_GUARD_STATE_DIR"] = str(Path(td) / "state")
+            (Path(td) / "main.tex").write_text(text, encoding="utf-8")
+            try:
+                with contextlib.redirect_stdout(out):
+                    _hook("codex", {"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "session_id": "cdx-v",
+                                    "cwd": td, "tool_input": {"command": "*** Begin Patch\n*** Update File: main.tex\n@@\n-"
+                                                              + removed + "\n-No such line.\n+B.\n*** End Patch"}})
+            finally:
+                if prev is None:
+                    os.environ.pop("MANUSCRIPT_CLAIM_GUARD_STATE_DIR", None)
+                else:
+                    os.environ["MANUSCRIPT_CLAIM_GUARD_STATE_DIR"] = prev
+        return "permissionDecision" in out.getvalue()
+
+    k6 = (hdp + "\\section{Introduction}\nI.\n\\section{Conclusion}\nWe show the end:\n\\begin{lstlisting}\n\\end{document}\n"
+          "\\end{lstlisting}\nThe rate grows linearly.\n" + ed)
+    hp = hidden("We prove that the rate grows.\n")
+    check("当たらない patch の削除行は 2 通りの切り方の文で照らす (隠れた結論・comment の中の古い序論・listing の \\end{document} の後ろ)",
+          patch_denied(hp, "We prove that the rate grows.") and patch_denied(b1, "Old draft.")
+          and patch_denied(k6, "The rate grows linearly.") and not patch_denied(hp, "We typeset code with"))
+    t1 = ("\\documentclass{article}\n\\begin{comment}\n\\title{Old toy}\n\\end{comment}\n\\title{Heat flow in a toy lattice}\n"
+          "\\begin{document}\n\\begin{abstract}\nToy.\n\\end{abstract}\n\\section{Introduction}\nI.\n" + ed)
+    t2 = ("\\documentclass{article}\n\\newcommand{\\closeabs}{\\end{abstract}}\n\\begin{document}\n\\begin{abstract}\n"
+          "The lattice conducts heat.\n\\end{abstract}\n\\section{Introduction}\nI.\n" + ed)
+    t3 = hd + "\\section[Intro] {Introduction}\nThe rate grows.\n\\section{Setup}\nB.\n" + ed
+    t4 = ("\\documentclass{amsart}\n\\title[Heat]  {Heat flow in a toy lattice}\n\\begin{document}\n"
+          "\\begin{abstract}\nToy.\n\\end{abstract}\n\\maketitle\n\\section{Introduction}\nI.\n" + ed)
+    check("表題は写しでも探し (comment の中の古い \\title で取り違えない)、 概要の閉じは開きの後ろから、 [短い題] と { の間の空白も読む",
+          "title:change" in ch(t1.replace("toy lattice", "real lattice"), t1)
+          and ch(t2.replace("conducts", "loses"), t2) == ["abstract:change"]
+          and ch(t3.replace("rate grows", "rate drops"), t3) == ["intro:change"]
+          and ch(t4.replace("toy lattice", "real lattice"), t4) == ["title:change"])
+    j1 = "\\documentclass{article}\n\\usepackage{verbatim}\n\\title{Heat flow in a toy lattice}\n" + hd[24:] + ed
+    j2 = j1.replace("\\title{", "\\begin{comment}\n\\title{Heat flow in a toy lattice}\n\\end{comment}\n\\title{", 1)
+    j2 = j2.replace("toy lattice}\n\\begin{document}", "real lattice}\n\\begin{document}")
+    check("同じ編集で片側だけの切り方が変わる形 (comment に古い表題を残して本物を書き換える・その逆) も比べる",
+          ch(j2, j1) == ["title:change"] and ch(j1, j2) == ["title:change"])
+    c1 = hidden("We prove that\n\\[ a \\verb|\\]\\al[ q = c ]{| b \\]\nholds.\n\\section{Code}\n",
+                pre="\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}}\n").replace(
+        "make all\n", "make }\n")
+    check("節だけが外す式は位置の一致で照らす (文書全体の式の span に覆われても、 中身でない [ ] の中の文字の変更を出す)",
+          ch(c1.replace("q = c", "z = c"), c1) == ["conclusion:change"])
+    e1 = hidden("We prove that\n\\[ a \\verb|\\[| b = c \\]\nholds.\n")
+    check("位置の一致は始まりと終わりの両方 (終わりが同じで始まりの違う式も、 どちらの比較にも残らない式として比べる)",
+          ch(e1.replace("\\[ a", "\\[ d"), e1) == ["conclusion:change"])
+    fw = hidden("We prove that\n\\[ w + w \\]\nholds.\n")
+    check("保護外の節に地の文を足して隠れた節の式の位置がずれても、 旧と新はそれぞれの文書の式の位置で照らす (節の変更は出ない)",
+          ch(fw.replace("We typeset", "We also write text. We typeset"), fw) == [])
+    ap = hd + "\\section{Introduction}\nI.\n\\section{Conclusion}\nThe rate grows.\n\\appendix\nThe sum is 3.\n" + ed
+    bb = hd + "\\section{Introduction}\nI.\n\\section{Conclusion}\nThe rate grows.\n\\bibliography{refs}\nWe thank 4 people.\n" + ed
+    check("本物の \\appendix・\\bibliography で保護節は終わる (見出しが無くても、 後ろの変更は節の変更でない)",
+          ch(ap.replace("sum is 3", "sum is 5"), ap) == [] and ch(bb.replace("thank 4", "thank 7"), bb) == []
+          and ch(ap.replace("rate grows", "rate drops"), ap) == ["conclusion:change"])
+    cm = ("\\documentclass{article}\n\\begin{document}\n\\begin{abstract}\nToy.\n\\end{abstract}\n\\section{Introduction}\n"
+          "Lattices.\n\\begin{comment}\nWe analyse the model.\n$$\n\\end{comment}\nThus $$ x = y $$ holds.\n"
+          "\\section{Setup}\nB.\n" + ed)
+    check("comment 環境の中は今までどおりの語 (綴りの校正は通し、 語の置換は出す)、 中の $$ は外の $$ と組まない",
+          ch(cm.replace("analyse", "analyze"), cm) == [] and ch(cm.replace("model", "theory"), cm) == ["intro:change"]
+          and ch(cm.replace("x = y", "x < y"), cm) == sorted(["intro:change"] + md("x = y", "x < y")))
+    cm2 = ("\\documentclass{article}\n\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}}\n\\begin{document}\n"
+           "\\begin{abstract}\nToy.\n\\end{abstract}\n\\section{Introduction}\nL.\n\\begin{comment}\nType \\verb|\\[| then\n"
+           "\\begin{equation} \\verb|\\]| E = m c^2 \\end{equation}\n\\al{ k \\verb|}| l = 5 }\n\\end{comment}\nDone.\n"
+           "\\section{Setup}\nB.\n" + ed)
+    check("comment 環境の中の式も prose と同じ写しで読んで式の領域に入る (中の \\verb|\\[|・\\verb|\\]|・wrapper の中の \\verb|}|)",
+          ch(cm2.replace("c^2", "c^3"), cm2) == md("\\verb|\\]| E = m c^2", "\\verb|\\]| E = m c^3")
+          and ch(cm2.replace("l = 5", "l = 6"), cm2) == md("k \\verb|}| l = 5", "k \\verb|}| l = 6"))
+    cm3 = ("\\documentclass{article}\n\\begin{document}\n\\begin{abstract}\nToy.\n\\end{abstract}\n\\section{Setup}\nB.\\\\"
+           "\\begin{comment}\n$$ x = y $$\n\\begin{verbatim}\\[ u = v \\]\\end{verbatim}\n\\verb|$$|; we analyse it.\n$$ s = 2 $$\n"
+           "\\end{comment}\n\\section{Introduction}\nLattices.\\\\\\begin{comment}\nType \\verb|\\[| then\n"
+           "\\begin{equation} \\verb|\\]| E = m c^2 \\end{equation}\n\\end{comment}\nDone.\n" + ed)
+    check("comment 環境の中の $$・中の verbatim の例示の式も式の領域 (保護外の節)、 中の綴りの校正は通す、 行送りの直後の comment 環境も読む",
+          ch(cm3.replace("x = y", "x < y"), cm3) == md("x = y", "x < y")
+          and ch(cm3.replace("u = v", "u < v"), cm3) == md("u = v", "u < v")
+          and ch(cm3.replace("analyse", "analyze"), cm3) == []
+          and ch(cm3.replace("c^2", "c^3"), cm3) == md("\\verb|\\]| E = m c^2", "\\verb|\\]| E = m c^3"))
+    cm4 = hd + "\\section{Setup}\nB.\n\\begin{comment}\\[ x = y \\]\\end{comment}\n" + ed
+    lw = "\\begin{lstlisting}\n\\newcommand\\al[1]{\\begin{align}#1\\end{align}}\n\\end{lstlisting}\n"
+    check("comment 環境の中身の式は \\begin{comment} の直後から読む、 verbatim の今までの読み方は開きと閉じを含む span で読む (名前は今までどおり)",
+          ch(cm4.replace("x = y", "x < y"), cm4) == md("x = y", "x < y")
+          and list(math_regions(lw, {"al"}).values()) == [norm_math("\\begin{align}#1\\end{align}")])
+    check("comment 環境の中身は \\begin{comment} の直後から (今までどおりの語)",
+          prose_tokens("\\begin{comment}We deny\\end{comment}") == ["\\begin", "comment", "we", "deny", "\\end", "comment"])
+    check("inline 数式と式の語は原文から取る (中の \\verb|=| の記号を落とさない)、 式の中の verbatim は語にしない",
+          prose_tokens("We set $a \\verb|=| b$ here.") == ["we", "set", "$a\\verb|=|b$", "here"]
+          and prose_tokens("\\[ c \\verb|q| d \\]\nlong words here \\[ c \\verb|q| d \\]\n") == ["long", "words", "here"])
+    check("\\( は verbatim の中の \\) で閉じない", prose_tokens("\\( a \\verb|\\)| b \\) c") == ["$\\(a\\verb|\\)|b\\)$", "c"])
+    import random
+    rng = random.Random(7)
+    pieces = ["\\verb", "\\verb|", "|", "\\verb+", "+", "\\verb*|", "\\verb\\", "\\begin{verbatim}", "\\end{verbatim}",
+              "\\begin{verbatim*}", "\\end{verbatim*}", "\\begin{comment}", "\\end{comment}", "\\\\", "\\", "\n", "x ", "$$"]
+    texts = ["".join(rng.choice(pieces) for _ in range(rng.randint(1, 24))) for _ in range(3000)]
+    check("verbatim の span は VERBATIM_RE と同じ (閉じない開き・\\verb の区切り・行送りの対・* つきの名前)",
+          all(blank_verbatim(t) == VERBATIM_RE.sub(lambda v: re.sub(r"[^\n]", " ", v.group(0)), t) for t in texts))
+
+    def arg_by_scan(t: str, s: int):  # 直す前の balanced_arg (その位置から数える)
+        depth, i = 0, s
+        while i < len(t):
+            if t[i] == "\\":
+                i += 2
+                continue
+            if t[i] == "{":
+                depth += 1
+            elif t[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    return t[s + 1:i], i + 1
+            i += 1
+        return None
+
+    texts = ["".join(rng.choice(["{", "}", "\\", "\\{", "\\}", "x", "\\\\"]) for _ in range(rng.randint(1, 16)))
+             for _ in range(3000)]
+    table = globals().get("_brace_pairs")  # 組の表 (表を持たない版では NG)
+    check("組の表で引く balanced_arg はその位置から数える読み方と同じ (\\{ \\} と、 backslash の後ろの { から数える呼び出しも)",
+          table is not None
+          and all(balanced_arg(t, s, table(t)) == arg_by_scan(t, s) for t in texts for s in range(len(t)) if t[s] == "{"))
+    started = time.monotonic()
+    blank_verbatim("\\begin{verbatim} a " * 12000)
+    check("閉じない \\begin{verbatim} の連続で 2 乗の時間にならない", time.monotonic() - started < 2)
+    started = time.monotonic()
+    blank_verbatim("".join(f"\\verb{chr(0x4e00 + i)} x " for i in range(8000)))
+    check("閉じない \\verb (区切りが全部違う) が 1 行に続いても 2 乗の時間にならない", time.monotonic() - started < 2)
+    started = time.monotonic()
+    math_spans("\\al{ a " * 5000, {"al"})
+    check("閉じない wrapper の引数の連続で 2 乗の時間にならない", time.monotonic() - started < 2)
+    started = time.monotonic()
+    math_wrappers("\\newcommand{\\x}[1]{ a " * 4000)
+    check("閉じない wrapper の定義の連続で 2 乗の時間にならない", time.monotonic() - started < 2)
+    started = time.monotonic()
+    prose_regions("\\section{ a " * 4000, [])
+    check("閉じない \\section{ の連続で 2 乗の時間にならない", time.monotonic() - started < 2)
+    started = time.monotonic()
+    prose_regions("\\section" + " " * 40000 + "x", [])
+    prose_regions("\\title" + " " * 40000 + "x", [])
+    check("\\section・\\title の後ろの { の来ない空白の連続で 2 乗の時間にならない", time.monotonic() - started < 2)
+    started = time.monotonic()
+    prose_regions("\\section{Introduction}\nx\n" * 10000, [])
+    check("同じ名前の見出しの連続で 2 乗の時間にならない", time.monotonic() - started < 2)
+    started = time.monotonic()
+    prose_regions("\\section{Methods}\nx\n\\appendix\n" * 16000, [])
+    check("見出しと終わりの印の連続で 2 乗の時間にならない", time.monotonic() - started < 2)
+    started = time.monotonic()
+    prose_regions("\\begin{abstract} x " * 12000, [])
+    check("閉じない \\begin{abstract} の連続で 2 乗の時間にならない", time.monotonic() - started < 2)
+    started = time.monotonic()
+    for t in ("{$$}" * 20000 + " $", "$$ " + "{" * 20000 + "}" * 20000 + " $$", "\\verb|$$| " * 20000, "{ $$ " * 20000,
+              "{ $$ \\[ " * 20000, "\\[ a \\] $$ {b} $$ " * 4000):
+        math_spans(t, dollars=True)
+        prose_tokens(t)
+    check("組の中の閉じない $$・深い入れ子・\\verb の中の $$ の連続で 2 乗の時間にならない", time.monotonic() - started < 3)
+    started = time.monotonic()
+    prose_tokens("".join("$$ {a} $$ " + "".join(f"\\begin{{comment}}\n$$ {{b{i}_{j}}} $$\n\\end{{comment}}\n" for j in range(20))
+                         for i in range(1200)))
+    check("$$ の間に comment 環境が多くても 2 乗の時間にならない (組の表を数え直さない)", time.monotonic() - started < 2)
+    names = frozenset("w" + chr(97 + i // 676) + chr(97 + i // 26 % 26) + chr(97 + i % 26) for i in range(2000))
+    started = time.monotonic()
+    many = "".join(f"\\begin{{comment}}\nold {i}\n\\end{{comment}}\n\\verb|x{i}| " for i in range(3000))
+    math_regions(many, names)
+    prose_tokens(many, names)
+    check("wrapper の名前が多く、 comment 環境・verbatim も多くても、 名前の数 × 数の時間にならない", time.monotonic() - started < 2)
     print("[範囲]")
     note = "\\section{Introduction}\nFree text.\n\\begin{equation}q=1\\end{equation}\n"
     check("abstract の無い単独 .tex は範囲外", protected_changes("notes/n.tex", note, note.replace("q=1", "q=2"), None, {}) == [])
