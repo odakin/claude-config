@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: API を持たないアプリ (個人向けメッセンジャー・業務アプリ) で「届いたものを読む」 機械経路が要るとき + macOS の通知センター DB を script から読むとき + 読めずに Operation not permitted が出たとき
 category: macos
-summary: API の無いアプリでも、 macOS の通知として表示された内容 (題・副題・本文・時刻) は通知センターの SQLite DB に残る → 写しを取って読めば「受信を読む」 を段 4 に降ろせる (#mechanism、 engine = scripts/macos-notification-db.py)。 DB は TCC の下 = 起動側 app にフルディスクアクセス、 読めない時は exit 3 で 0 件と区別 (#tcc)。 限界 = app が起動していた間の通知だけ・消した通知は消える・本文は切れる (#limits)。 アプリは必要時に背景起動し、 自分が起こしたものは読み終わったら閉じる (#launch-on-demand / #close-what-you-launched)。 全部残すなら常時起動の機械 1 台で、 アプリが取り下げるより短い間隔 (変化の見張り) で写し取り、 暗号化した専用 repo に書き換えない束で積む (#always-on-archive / #retraction-window)。 個人アカウントのプロトコルを模倣する非公式 client は使わない (#no-unofficial-client)。 定期の surface は「見た印」 の台帳と組にする (#seen-ledger)
+summary: API の無いアプリでも、 macOS の通知として表示された内容 (題・副題・本文・時刻) は通知センターの SQLite DB に残る → 写しを取って読めば「受信を読む」 を段 4 に降ろせる (#mechanism、 engine = scripts/macos-notification-db.py)。 DB は TCC の下 = 起動側 app にフルディスクアクセス、 読めない時は exit 3 で 0 件と区別 (#tcc)。 限界 = app が起動していた間の通知だけ・消した通知は消える・本文は切れる (#limits)。 アプリは必要時に背景起動し、 自分が起こしたものは読み終わったら閉じる (#launch-on-demand / #close-what-you-launched)。 全部残すなら常時起動の機械 1 台で、 アプリが取り下げるより短い間隔 (変化の見張り) で写し取り、 暗号化した専用 repo に書き換えない束で積む (#always-on-archive / #retraction-window)。 取りこぼしは unified log の通知の要求と記録を時刻で突き合わせる定期の監査で機械が見る (#archive-audit)。 個人アカウントのプロトコルを模倣する非公式 client は使わない (#no-unofficial-client)。 定期の surface は「見た印」 の台帳と組にする (#seen-ledger)
 -->
 # macOS の通知センター DB から、 API の無いアプリの受信を読む
 
@@ -82,8 +82,22 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
   spool に足す側と束ねる側は同じ lock の下に置く (束ねている最中に足した行は、 索引にだけ載って二度と写されない)。
   見張りは heartbeat を書き、 1 分ごとの係が heartbeat の古さを見て起こし直す (2 本目は lock ですぐ抜ける)。
   applet を作り直すと付与が外れる (下の TCC) ので、 見張りは applet が毎回呼ぶ script が背景に起こす = 子は applet の
-  フルディスクアクセスのまま読めた (実測)。 取りこぼしの確かめ方 = アプリの unified log の通知の要求
-  (`Adding notification request` / `Removing … delivered notifications`) の時刻と、 記録の件数を突き合わせる。
+  フルディスクアクセスのまま読めた (実測)。 取りこぼしは人が突き合わせるのでなく、 下の監査が機械で見る ([#archive-audit](#archive-audit))。
+- <a id="archive-audit"></a>**取りこぼしは定期の監査で機械が見る**: 写す係の失敗 (付与が無い・OS の通知の許可が無い・取り下げに
+  間に合わない) はどれも「新着 0」 で黙る形になり、 人が気づくまで日が過ぎる (実測)。 写す係が 1 時間に 1 回、 背景で
+  アプリの unified log (`log show --predicate 'process == "<App>" AND subsystem == "com.apple.UserNotifications"' --style compact`)
+  を読み、 通知の要求 (`Adding notification request <id>`) の時刻と記録の時刻を数秒の幅で 1 対 1 に合わせる。
+  要求の id は短縮された別の識別子で DB の uuid とは一致しない = 時刻で合わせる (DB の delivered の時刻との差は数十 ms 以内、 実測)。
+  余った要求 (= アプリは通知を出したのに記録に無い) を手元の台帳に積み、 session の開始時の警告に出す。 同じ id の
+  `Removing … delivered notifications with identifiers (` が続けば、 取り下げまでの秒も添える (見張りの間隔より短いかが分かる)。
+  - unified log はこの subsystem だと数日で消える (実測) = 見つけた分は台帳に残し、 原因を確かめた印が付くまで警告を出し続ける。
+  - `log show` は数秒〜数十秒かかる = session の開始時には回さず、 結果の file を読むだけにする。 1 時間ごとの起動は
+    「起こした時刻」 で数える (監査が落ちても毎分は起こさない)。 監査そのものが止まった・失敗したときも警告に出す。
+  - アプリの起動時の通知の許可の問い合わせの結果 (`Requested authorization [ didGrant: 0|1 ]`) も同じ log にある。
+    OS の通知の許可が切れているとアプリは要求そのものを出さない = 要求と記録の突き合わせでは見えないので、 これで拾う
+    (設定の plist は移行の後に古いまま残ることがあり、 今の設定を映さない = 実測)。 起動中に設定を変えた分は次の起動まで見えない。
+  - 記録は束ねる係が動かしている最中に読むと、 束ねる途中の分が両方から消えて見える = spool と同じ lock の下で読む。
+  - 台帳には時刻と要求の id だけを書く (送り主・本文は記録の repo にだけ置く)。
 - **置き場**: 本文は持ち主と第三者のやりとり = 既定で全部暗号化した private repo (git-crypt の default-encrypt)。
   無人の commit を対話で使う repo に混ぜない (別 session の未 commit の変更で `pull --rebase` が止まる) = 専用の repo。
 - **書き換えない束** (暗号文は差分が効かない = 理由と名付け方は [`repo-history-growth.md#encrypted-ledgers`](repo-history-growth.md#encrypted-ledgers)):
