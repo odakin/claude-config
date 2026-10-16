@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: ツール呼び出しを含むターンで user に見せる文面・結論・訂正を出すとき / 応答に機械向けの marker・sentinel を埋め込もうとするとき
+when: ツール呼び出しを含むターンで user に見せる文面・結論・訂正を出すとき / 応答に機械向けの marker・sentinel を埋め込もうとするとき / turn を閉じる「次の一手」 の箱で送信や投稿の承認を問おうとしたとき (#turn-closing-question-box)
 category: harness-core
 summary: user に見える提示面はターン最終テキストメッセージ (+ 明示的な file 提示) だけ — mid-turn テキストは表示されないことがあり (Claude Code desktop で実測、同一 session 内 2 連発)、tool 入力 (Bash heredoc / Edit content) や書き込んだ file はそもそも提示面でない (2026-08-29 再発で確定した変種)。文面 deliverable・結論・訂正は必ずターン最終メッセージに全文置く。「上の文面」「先ほどの訂正」と自ターン内を指す行為自体が事故 signal。逆向きの取り違えとして、最終メッセージの HTML comment は隠れず literal 表示される (2026-09-12 desktop 実測) ため、hook 用 marker 等の機械向け signal は提示面でなく tool 入力に置く。browser tool 側の audio player / screenshot も user-visible の証拠でなく、media は最終応答の direct link / local file まで運ぶ
 -->
@@ -83,6 +83,18 @@ raw media page が crash したり panel が見えなかったりしたら、見
 対象言語の発音を返す場合は [`pronunciation-verification.md#audio-delivery-surface`](pronunciation-verification.md#audio-delivery-surface)
 がこの一般則を発音 workflow に適用する。
 
+## <a id="turn-closing-question-box"></a>turn を閉じる質問の箱は、 その後の最終メッセージを無くす
+
+harness によっては、 turn の終わりに「次の一手」 の箱 (要約 1〜3 文 + 質問 1 つ + ボタン) を描く tool があり、
+**箱に質問を入れるとその呼び出しで turn が終わる** (= その後に text を書かない作り)。 このとき turn の最終メッセージは
+存在しない = 提示面は箱の要約と質問の 2 欄だけになる。
+
+- **箱の欄に入らないもの (文面 deliverable・下書き全文) の承認を箱で問わない**。 送信・投稿・提出の承認のように
+  「この文面で送るか」 を問う質問は、 文面を最終メッセージに全文置き、 質問もそこに text で書く (箱は要約だけで閉じる)。
+- 実測: 送信前の下書きを dry-run の出力 (= tool 結果) で確かめ、 そのまま「この文面で送りますか」 を箱で問うた →
+  user には質問だけが見え、 文面はどこにも出ていなかった (= 上の「tool 入力・tool 結果は提示面でない」 の箱版)。
+- 箱の質問の文字数制限 (1 文) は、 下書きを箱に入れられないことの印でもある。 判断材料が 1 文に収まらない質問は箱に入れない。
+
 ## 規律
 
 1. **user が受け取るべきもの (文面 deliverable・結論・判断材料・訂正) は、
@@ -105,6 +117,8 @@ raw media page が crash したり panel が見えなかったりしたら、見
    確認してから書く**。未確認の不可視前提は、破れても Claude 側から観測できない。
 8. **tool 側で player が見えたことを user-visible と数えない**。media deliverable は最終応答の
    direct link / local file まで運び、user が見えないと言ったら tool screenshot で反論しない。
+9. **turn を閉じる質問の箱で、 文面の承認を問わない** ([#turn-closing-question-box](#turn-closing-question-box))。
+   箱は最終メッセージを無くすので、 承認を求める文面は箱を使わない turn の最終メッセージに全文置く。
 
 ## なぜ滑りやすいか
 
