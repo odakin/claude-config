@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""zsh-word-split-guard.py — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash を実行前に止める (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion)。
+"""zsh-word-split-guard.py — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置 (と、 option を含む loop の語を command の引数) に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash を実行前に止める (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion)。
 
 PreToolUse(Bash)。 zsh は未 quote の `$var` を単語分割しない (bash と逆) ので、
     v="a b"; for x in $v      → 1 回だけ回る ("a b")
@@ -12,6 +12,10 @@ PreToolUse(Bash)。 zsh は未 quote の `$var` を単語分割しない (bash �
 述語 (誤検出を減らすため、 変数が複数語だと同じ command の中で見えるときだけ止める):
   文脈 = `for NAME in … $V …` / `set -- … $V …` / `… -- … $V …` / `git … $V …` / command の位置の `$V …`
          (command の位置は空白入りの文字列・loop 変数のときだけ。 V=$(command -v x) のような 1 語の出力は止めない)
+         / 上のどれでもない引数の位置 = loop 変数で、 回す語に option (空白の後の `-`) があり、 command が echo / printf / print でないときだけ
+         (`for t in "a.py --selftest" …; do python3 $t` = 分割が目的。 空白入りの file 名を回す loop は zsh の方が正しいので止めない。
+          実例と同形: --selftest 付きの 4 本が file 名の誤りで走らず、 loop の末尾の echo が成功に見せた。
+          `$(…)` を回す loop は見ない。 較正 (実測) = 30 日分の Bash で発火は 2 件、 2 件とも同じ誤り)
   $V   = 単独の語 (前後が空白・; | & ( ) 等) で quote されていない。 ${=V}・$V[…]・$V/… (path の連結)・
          特殊 param ($1 $@ …)・quote / heredoc の中は見ない
   複数語と分かる = 同じ command 内に
@@ -53,6 +57,8 @@ SEP = re.compile(r";|&&|\|\||\||\n")
 LEADING_KW = re.compile(r"^(?:(?:do|then|else|elif|if|while|until|\{|\(|!|time)\s+)+")
 BASH_INNER = re.compile(r"\b(?:ba)?sh\s+(?:-\w*c\b|<<)")
 SPECIAL = {"argv"}
+ECHO_LIKE = {"echo", "printf", "print"}
+ARG_CTX = "引数 (loop の語が option を含む)"
 # 単独の語の先頭の `=` (次に 1 文字以上、 `=(` は process 置換なので除く)
 EQ_WORD = re.compile(r"(?<![^\s;|&])=(?!\()[^\s;|&)]+")
 # [[ … ]] と (( … )) の中は equals 展開されない
@@ -97,6 +103,15 @@ def multiword_reason(cmd: str, v: str) -> tuple[str, str] | None:
     return None
 
 
+def _loop_items_have_option(cmd: str, v: str) -> bool:
+    """loop の語が quote した literal で、 その 1 つに option (空白の後の `-`) がある = 語を argv に割るのが目的。
+    `$(…)` を回す loop は見ない (中の quote の対応を取り違えて誤検出した = 30 日分の Bash で較正)。"""
+    m = re.search(r"\bfor\s+" + re.escape(v) + r"\s+in\s+([^;\n]*)", cmd)
+    if not m or "$(" in m.group(1) or "`" in m.group(1):
+        return False
+    return any(re.search(r"\s-", t.group(0)) for t in QUOTED.finditer(m.group(1)))
+
+
 def _context(before: str) -> str | None:
     b = LEADING_KW.sub("", before.lstrip())
     if not b.strip():
@@ -125,13 +140,20 @@ def find_issues(cmd: str) -> list[tuple[str, str, str]]:
         if v in SPECIAL:
             continue
         start = max(s for s in seps if s <= m.start())
-        ctx = _context(masked[start:m.start()])
+        before = masked[start:m.start()]
+        ctx = _context(before)
+        if not ctx:
+            words = LEADING_KW.sub("", before.lstrip()).split()
+            if words and words[0] not in ECHO_LIKE and _loop_items_have_option(cmd, v):
+                ctx = ARG_CTX
         if not ctx or (v, ctx) in seen:
             continue
         mw = multiword_reason(cmd, v)
         if not mw:
             continue
         kind, why = mw
+        if ctx == ARG_CTX and kind != "loop":
+            continue
         # command の位置で $(…) を止めないのは、 c=$(command -v python3); $c x.py のような 1 語の値が普通だから
         if kind == "subst" and ctx not in ("for … in", "set --"):
             continue
@@ -260,6 +282,14 @@ def selftest() -> int:
     check("P=/usr/bin/python3; $P x.py", None, "command の位置でも空白の無い値は止めない")
     check("c=$(command -v python3); $c x.py", None, "command の位置の $(…) の 1 語の値は止めない")
     check('EDITOR="code -w"; echo ok', None, "代入だけで参照が無い")
+    # 引数の位置の loop 変数 (実例と同形: --selftest 付きの 4 本が file 名の誤りで走らなかった)
+    check('for t in "a.py --selftest" "b.py --selftest"; do echo "== $t"; python3 $t > out 2>&1; done', ARG_CTX,
+          "option を含む語を回す loop 変数を command の引数に渡す")
+    check('for f in "My File.txt" "Other File.txt"; do cat $f; done', None, "空白入りの file 名 (zsh の方が正しい)")
+    check('for t in "a.py --x" "b.py --y"; do echo $t; done', None, "引数の位置でも echo は止めない")
+    check('for t in "a.py --x"; do python3 "$t"; done', None, "quote 済みの引数")
+    check("for c in $(git log --since='a b' --format='%h' -- x); do cat $c; done", None,
+          "$(…) を回す loop (中の quote の対応で誤検出しない)")
 
     # equals 展開 (実例と同形: 調査の chain の区切り `echo ===` で後続が走らなかった)
     def eq(cmd: str, want: bool, label: str) -> None:
