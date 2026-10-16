@@ -138,6 +138,21 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 >
 > <a id="math-guard-is-a-pair"></a>⚠️ **上の症状表 3 行 (wrapper 展開 / safe-command / 無印検査) は engine の既定に入っている** (2026-09-12)。 それ以前は**表に対策が書いてあるだけで engine は適用しておらず**、 engine を呼ぶ repo は「compile 0 error・式の変更だけ無色」 の PDF を共著者に渡し得た (= 規約に書いた対策が道具に入っていない型の drift。 合成 repo の実測: 旧挙動は新式を `\DIFadd` 無しで挿入し旧式を comment out、 既定では両式が着色される)。 **展開と検査は対でしか効かない** — 展開前の本文には display-math 環境が無いので、 検査だけ回すと同じ silent miss に対して 0 を返す (= 検査の 0 は「安全」 ではなく「展開していない」 でもあり得る)。 無印が残ったときは deploy 前に停止する: preamble に新しい構造 macro があるなら `LATEXDIFF_BENIGN_EXTRA=名前,名前` で宣言し、 意図して無視するなら `--allow-unmarked-math`、 guard 自体を切るなら `--no-math-guard` (= 旧挙動)。
 
+## <a id="latexdiff-fine-markup"></a>式の中の変わった記号だけに印を付ける差分 (`--math-markup=fine`) の壊れ方と直し方
+
+共著者が「式もちゃんと変更箇所だけ」 と求めるとき (添字 1 つ・関係記号 1 つの変更で式全体に削除線が付くのを避けたいとき) は `--math-markup=fine` (= 2) を使う。 実際の原稿では fine の出力が決まった形で壊れる (実測):
+
+| 症状 | 原因 | 直し方 |
+|---|---|---|
+| `Missing { inserted` が式 1 本から連鎖 | 引数を取る accent (`\widehat` など) が印の前に置き去りになる: `\widehat \DIFadd{L^i}` | accent を印の中へ: `\DIFadd{\widehat L^i}`。 原稿の自作 accent も同じ扱いにする |
+| `Argument of \frac has an extra }` / `Paragraph ended before \frac` | `\frac` を含む `\DIFadd{…}` が 1 つ目の引数で閉じ、 2 つ目の引数が印の外に出る | 2 つ目の引数を同じ `\DIFadd` の中へ戻す |
+| エラーは無いが、 消した側の式が欠けて読める (分数の横線・ハット・`≳` が消える)。 無印検査が削除側の command を数える | 印で包めない command (`\over`・accent・関係記号) を削除側で `%DIFDELCMD` に comment out する | その command を隣の `\DIFdel{…}` の中へ戻す |
+| 行ベクトルを列ベクトルに書き換えた式で、 古い形が見えず、 新しい形に削除線の付いたコンマだけが残る。 `\left(` `\right)` が無印 | 形の書き換えは token の差分では読めない。 `\left` / `\right` は印の外に出る | その式だけ `--math-markup=whole` の出力 (旧 = 削除線 + 新 = 下線) に差し替える。 括弧だけなら両側を素の `(` `)` にしてから比べる |
+
+- 道具 = [`../scripts/latexdiff-fine-fixups.py`](../scripts/latexdiff-fine-fixups.py): `fix diff.tex [--accents 自作名]` が上 3 行を直し、 `splice diff.tex whole.tex --labels eq:a,eq:b` が 4 行目の差し替えをする (`whole.tex` = 同じ入力を `--math-markup=whole` で比べ、 [`latexdiff-strip-dup-labels.py`](../scripts/latexdiff-strip-dup-labels.py) を当てたもの)。 engine ([`latexdiff-review-snapshot.sh`](../scripts/latexdiff-review-snapshot.sh)) は `--math-markup 2` のとき `fix` を自動で通す。
+- 順番 = latexdiff → `latexdiff-strip-dup-labels.py` → `fix` → (`splice`) → [`check-latexdiff-math-markup.py --scan`](../scripts/check-latexdiff-math-markup.py) → 組版。 `fix` の前に検査すると、 削除側の comment out を無印として数える。
+- 組版エラー 0・無印 0 でも、 変えた式の頁を 1 枚画像で見る (消した側の式が正しく読めるか、 形の書き換えが式ごと表示になっているか)。
+
 ## <a id="latexdiff-deleted-blank-lines"></a>latexdiff は削除された空行を comment out できない — diff PDF と live で段落の切れ方が違ったら削除空行の残留を疑う (2026-09-08)
 
 **症状**: diff PDF ではある文から新段落が始まるのに、 live の原稿では前の段落に繋がっている (またはその逆)。

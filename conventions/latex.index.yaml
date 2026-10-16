@@ -25,6 +25,9 @@ sections:
   - id: latexdiff-review-snapshot
     level: 2
     title: "latexdiff で差分レビュー PDF を作る"
+  - id: latexdiff-fine-markup
+    level: 2
+    title: "式の中の変わった記号だけに印を付ける差分 (`--math-markup=fine`) の壊れ方と直し方"
   - id: latexdiff-deleted-blank-lines
     level: 2
     title: "latexdiff は削除された空行を comment out できない — diff PDF と live で段落の切れ方が違ったら削除空行の残留を疑う (2026-09-08)"
