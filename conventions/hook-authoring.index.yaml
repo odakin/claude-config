@@ -344,6 +344,9 @@ sections:
   - id: git-fixture-pinned-dates
     level: 2
     title: "§20. test の git fixture は日付を固定する — 同じ秒に作った 2 つの履歴は同じ sha になる"
+  - id: autofix-hook-path-commit-stale-index
+    level: 2
+    title: "§21. 自動修正して再 stage する pre-commit と `git commit -- <path>` を合わせると、 本当の index に修正前の版が残る"
   - id: related-docs
     level: 2
     title: "関連"
