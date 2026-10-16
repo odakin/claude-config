@@ -201,6 +201,7 @@ claude-config/
 │   └── init.lua                # Hammerspoon 設定（Claude の Cmd+Q 長押しで終了 = 誤終了防止〔挙動と罠の正本 = 同 file 冒頭〕 + ⌃⌥⌘V クリップボード整形+貼り付け hotkey〔conventions/clipboard-cleaner.md〕+ 末尾で ~/.hammerspoon/local.lua を読む個人層拡張 hook〔hooks の layer-3 chain と同じ発想、無ければ no-op〕）
 ├── skills/                      # 誰でも使う skill (Claude Code と Codex 共通。 例 = wrap/ = 締めの sweep の入口)。 配線 = scripts/install-shared-skills.sh (個人層・本人の同名の skill があればそちらが起動する、 正本 = conventions/closing-sweep.md#personal-skill)
 ├── codex/                       # Codex 専用の layer-1 instructions・skill・capability map（Claude 側は変更しない）
+├── texshop/                     # TeXShop の engine (uplatex.engine = uplatex + dvipdfmx + 文献 + 索引)。 原稿の `% !TEX TS-program = uplatex` で選ばれる（正本 = conventions/latex.md#texshop-uplatex-engine）
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->

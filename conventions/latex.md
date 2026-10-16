@@ -1455,6 +1455,12 @@ luatexja は `$過去$` (= 裸の kanji) も accept するが、 標準 idiom �
 - **LuaLaTeX でしか組めない source (ltjsarticle、 fontspec、 LuaTeX-ja) は先頭に `% !TEX TS-program = lualatex` を書く** (`% !TEX encoding = UTF-8 Unicode` も)。 無いと TeXShop は既定の engine (pdfTeX / uplatex の経路) で typeset してエラーで止まり、 著者には「コンパイル結果が見えない」 になる (実測)。 この行は file を開いた時に読まれるので、 開いたままの文書には効かない = 閉じて開き直す。
 - **tex に紐づいたプレビュー窓は、 その PDF を外部の build (CLI の lualatex・build script) が書き換えると描画しなくなることがある** (ページ番号は出るのに紙が灰色のまま。 ⌘W → ⌘T の再 typeset・ページ送り・表示形式の切替・ズームでは戻らない、 実測)。 PDF 自体は正常で、 **同じ PDF を独立の書類として開く** (ファイル > 開く、 または `open -a TeXShop <pdf>`) と描画する。 壊れた窓は TeXShop の再起動で消える。 外から組むときは、 著者に「開き直して」 と伝えるか、 TeXShop 側の typeset だけで組む ([#scratch-build-dir](#scratch-build-dir) の aux の競合とは別の症状)。
 
+## <a id="texshop-uplatex-engine"></a>TeXShop で uplatex の原稿 (jsbook / jsarticle + `uplatex` option) を組む
+
+- **先頭に `% !TEX TS-program = uplatex` を書き、 engine [`texshop/uplatex.engine`](../texshop/uplatex.engine) を `~/Library/TeXShop/Engines/` に置く** (symlink で可: `ln -s <この repo>/texshop/uplatex.engine ~/Library/TeXShop/Engines/`)。 engine は `ptex2pdf -l -u` で組み、 文献 (upbibtex) と索引 (mendex) も回して 3 回組む。 `-interaction=nonstopmode -halt-on-error` なので、 エラーで入力待ちにならず止まる。
+- **TeXShop が知らない program 名を書くと、 黙って既定の経路に落ちる** (実測: `ptex2pdf (uplatex)` と書いた原稿が、 既定の欄を lualatex にした Mac で lualatex で組まれた)。 既定の経路 (環境設定の pdfTeX の欄・TeX+DVI の欄) は Mac ごとの設定なので、 ある Mac で組めた原稿が別の Mac で組めないことがある = 原稿の側で engine を名指す。
+- **落ちた時の見え方**: lualatex は jsbook の `uplatex` option で止まり、 console で入力を待つ。 `main.log` は 0 byte、 `main.synctex(busy)` が残り、 process が残る。 console で中止するか process を止めてから、 原稿を閉じて開き直す (program の行は file を開いた時に読まれる = [#texshop-lualatex-and-external-builds](#texshop-lualatex-and-external-builds) と同じ)。
+
 ## <a id="enumerate-vs-enumitem-option-syntax"></a>`enumerate` package の下で `[label=(\roman*)]` は組めない
 
 `\usepackage{enumerate}` (option は `[(i)]` `[a)]` のような雛形) を読む preamble で、 `enumitem` の書き方 `\begin{enumerate}[label=(\roman*)]` を書くと `! Missing number, treated as zero.` で止まる。 原稿の preamble の写しで note を組むときに起きる (実測 = 2 本)。 直し方 = その preamble では `[(i)]` の雛形にする。 enumitem を足すのは原稿の preamble の変更なので著者の判断。

@@ -1,0 +1,14 @@
+#!/bin/bash
+# uplatex.engine — TeXShop の engine。 uplatex + dvipdfmx (ptex2pdf -l -u) で組み、 文献 (upbibtex) と索引 (mendex) も回す。
+# 選び方 = 原稿の先頭に `% !TEX TS-program = uplatex` (jsbook / jsarticle に `uplatex` option を付けた原稿)。
+# 置き場所 = ~/Library/TeXShop/Engines/uplatex.engine (この file への symlink で可)。
+# 正本 = claude-config/conventions/latex.md#texshop-uplatex-engine
+export PATH="/Library/TeX/texbin:/usr/texbin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+src="$1"
+base="${src%.tex}"
+opts="-synctex=1 -file-line-error -kanji=utf-8 -interaction=nonstopmode -halt-on-error"
+ptex2pdf -l -u -ot "$opts" "$src" || exit $?
+if grep -q '\\bibdata' "$base.aux" 2>/dev/null; then upbibtex "$base" || true; fi
+if [ -f "$base.idx" ]; then mendex "$base" || true; fi
+ptex2pdf -l -u -ot "$opts" "$src" || exit $?
+ptex2pdf -l -u -ot "$opts" "$src"
