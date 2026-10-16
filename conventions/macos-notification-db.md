@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: API を持たないアプリ (個人向けメッセンジャー・業務アプリ) で「届いたものを読む」 機械経路が要るとき + macOS の通知センター DB を script から読むとき + 読めずに Operation not permitted が出たとき
 category: macos
-summary: API の無いアプリでも、 macOS の通知として表示された内容 (題・副題・本文・時刻) は通知センターの SQLite DB に残る → 写しを取って読めば「受信を読む」 を段 4 に降ろせる (#mechanism、 engine = scripts/macos-notification-db.py)。 DB は TCC の下 = 起動側 app にフルディスクアクセス、 読めない時は exit 3 で 0 件と区別 (#tcc)。 限界 = app が起動していた間の通知だけ・消した通知は消える・本文は切れる (#limits)。 アプリは必要時に背景起動し、 自分が起こしたものは読み終わったら閉じる (#launch-on-demand / #close-what-you-launched)。 全部残すなら常時起動の機械 1 台で写し取り、 暗号化した専用 repo に書き換えない束で積む (#always-on-archive)。 個人アカウントのプロトコルを模倣する非公式 client は使わない (#no-unofficial-client)。 定期の surface は「見た印」 の台帳と組にする (#seen-ledger)
+summary: API の無いアプリでも、 macOS の通知として表示された内容 (題・副題・本文・時刻) は通知センターの SQLite DB に残る → 写しを取って読めば「受信を読む」 を段 4 に降ろせる (#mechanism、 engine = scripts/macos-notification-db.py)。 DB は TCC の下 = 起動側 app にフルディスクアクセス、 読めない時は exit 3 で 0 件と区別 (#tcc)。 限界 = app が起動していた間の通知だけ・消した通知は消える・本文は切れる (#limits)。 アプリは必要時に背景起動し、 自分が起こしたものは読み終わったら閉じる (#launch-on-demand / #close-what-you-launched)。 全部残すなら常時起動の機械 1 台で、 アプリが取り下げるより短い間隔 (変化の見張り) で写し取り、 暗号化した専用 repo に書き換えない束で積む (#always-on-archive / #retraction-window)。 個人アカウントのプロトコルを模倣する非公式 client は使わない (#no-unofficial-client)。 定期の surface は「見た印」 の台帳と組にする (#seen-ledger)
 -->
 # macOS の通知センター DB から、 API の無いアプリの受信を読む
 
@@ -72,8 +72,18 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
 ## <a id="always-on-archive"></a>全部残すなら: 常時起動の機械で写し取り、 暗号化した repo に積む
 
 通知 DB は保存場所ではない (起動中の分だけ・消すと消える・OS が捨てる・アプリが取り下げる)。 届いたものを
-全部残したいなら、 常時起動の機械 1 台でアプリを起動したままにし、 短い間隔 (1 分) で未記録の通知を写す。
+全部残したいなら、 常時起動の機械 1 台でアプリを起動したままにし、 アプリが取り下げるより短い間隔で未記録の通知を写す
+([#retraction-window](#retraction-window))。
 
+- <a id="retraction-window"></a>**間隔は取り下げより短く (見張り + 1 分ごとの束)**: メッセンジャーは、 同じアカウントの別の端末
+  (スマホ) で読まれたメッセージの通知を 1〜4 秒で取り下げることがある (実測) = 1 分ごとの写しではその分を落とす。
+  DB と WAL の file の (mtime, size) を 0.5 秒ごとに stat し、 変わった時だけ DB を写して読む見張りを 1 本置く
+  (stat は軽く、 読むのは変化の時だけ)。 束ねる・commit するのは 1 分ごとの側だけにする (commit の途中に束が増えない)。
+  spool に足す側と束ねる側は同じ lock の下に置く (束ねている最中に足した行は、 索引にだけ載って二度と写されない)。
+  見張りは heartbeat を書き、 1 分ごとの係が heartbeat の古さを見て起こし直す (2 本目は lock ですぐ抜ける)。
+  applet を作り直すと付与が外れる (下の TCC) ので、 見張りは applet が毎回呼ぶ script が背景に起こす = 子は applet の
+  フルディスクアクセスのまま読めた (実測)。 取りこぼしの確かめ方 = アプリの unified log の通知の要求
+  (`Adding notification request` / `Removing … delivered notifications`) の時刻と、 記録の件数を突き合わせる。
 - **置き場**: 本文は持ち主と第三者のやりとり = 既定で全部暗号化した private repo (git-crypt の default-encrypt)。
   無人の commit を対話で使う repo に混ぜない (別 session の未 commit の変更で `pull --rebase` が止まる) = 専用の repo。
 - **書き換えない束** (暗号文は差分が効かない = 理由と名付け方は [`repo-history-growth.md#encrypted-ledgers`](repo-history-growth.md#encrypted-ledgers)):
