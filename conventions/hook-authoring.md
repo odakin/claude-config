@@ -1139,6 +1139,13 @@ hook の state (処理済みの記録・割り当て・既読) を「読む → 
 
 履歴の書き換え・追従・分岐を test する fixture で、 「旧い履歴」 と「新しい履歴」 を同じ秒の中で作ると、 中身と日付が同じ commit は同じ sha になり、 分岐していないように見える (速い CI の runner でだけ再現し、 手元では通る = 実測)。 `GIT_AUTHOR_DATE` / `GIT_COMMITTER_DATE` を commit ごとに別の固定値にする。
 
+## <a id="autofix-hook-path-commit-stale-index"></a>§21. 自動修正して再 stage する pre-commit と `git commit -- <path>` を合わせると、 本当の index に修正前の版が残る
+
+並列の session と同じ repo を触るときは `git commit -- <path>` で index を経由せずに commit する ([`multi-session-coordination.md#staging-window-race`](multi-session-coordination.md#staging-window-race))。 このとき git は一時の index で commit を作るので、 pre-commit が file を書き直して `git add` した分は、 一時の index と commit には入るが、 本当の index には修正前の版が staged のまま残る (実測: commit = 修正後、 index = 修正前、 working tree = 修正後、 `git status --short` は `MM`)。 残った staged の差分は「修正を戻す変更」 なので、 次に誰か (並列の session を含む) が path を指定せずに commit すると、 修正が消える。
+
+- 自動修正する pre-commit がある repo では、 path 指定の commit の後に `git status --short -- <path>` を見る。 `MM` か `M ` が出たら `git reset -q -- <path>` で index だけを HEAD に戻す (working tree は hook が直した版 = HEAD と同じなので触らない。 これで消えることを確かめた)
+- hook を書く側: 自動修正したら、 直した path を 1 行出す (path 指定の commit をした人が index を見直すきっかけになる)
+
 ## <a id="related-docs"></a>関連
 
 - `claude-config/setup.sh §Step 2 install_hooks()` — 配信機構の正本 (= delivery 軸 (a) symlink + (b) settings.json を atomic 化する reference implementation。 (c) logic は hook script 側、 (d) invoke 経路は claude-code harness 側で別 layer)
