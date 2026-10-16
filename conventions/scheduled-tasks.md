@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: scheduled task / launchd routine を作成・管理するとき
+when: scheduled task / launchd routine を作成・管理するとき + 定期 job が毎回読む script を直すとき (#live-script-replace) + 定期 job の間隔では間に合わない仕事を常駐の worker に任せるとき (#resident-worker-from-periodic-job)
 category: harness-core
 summary: Scheduled Tasks 規約（SKILL.md 二重構造・同期ルール・headless context budget = cwd の CLAUDE.md 肥大で "Prompt is too long" 全滅する罠と診断 ladder）
 -->
@@ -369,3 +369,38 @@ nextFire ← nextFire + 間隔
 
 ⚠️ **そもそも自前 loop が要るか**を先に問う (= §0)。 OS の定期起動 (launchd の `StartInterval` / `StartCalendarInterval`) に載せられるなら、 周期の維持は OS の仕事になる。 自前 loop が正当化されるのは、 **process を使い回す必要がある時** (= 起動ごとに権限確認が出る / 常駐 state を持つ) など。
 
+## <a id="live-script-replace"></a>定期 job が毎回読む script は、 書き換えずに差し替える
+
+定期 job (launchd・cron・applet の idle) が起動のたびに読む script を直すときは、 その file をその場で書き換えない。
+
+- 書いている最中に job が起動すると、 途中までの file を読む。 python は構文エラーで落ち、 失敗の知らせが外へ飛ぶ。
+  bash は実行中の script を少しずつ読むので、 走っている回が途中から新しい中身を読みうる。
+- 直した版は別の場所で作って試す (test の入口に「試す版の path」 を env で渡せるようにしておく)。 **本番と同じ interpreter で** selftest を通す
+  (定期 job が選ぶ python は対話の shell の python と違うことがある)。
+- 入れるときは**同じ dir** の一時名 (dot 付き) に写してから `mv -f` で置き換える。 rename は原子的で、 走っている回は古い版を読み続け、
+  次の回から新しい版を読む。 別の file system からの `mv` は copy になる = 一度同じ dir に置いてから rename する。
+- 後方互換な変更から順に入れる (呼ばれる側を先、 呼ぶ側を後)。 途中の 1 回も壊れない。
+- 下の常駐の worker は、 rename の瞬間に新しい版で起き直す = 入れる前の selftest が本番での試験になる。
+
+## <a id="resident-worker-from-periodic-job"></a>定期 job から常駐の worker を起こす (間隔より短い仕事)
+
+定期 job の間隔 (1 分など) では間に合わない仕事 (数秒で消えるものを拾う等) は、 定期 job の間隔を縮めずに、
+定期 job が背景に常駐の worker を 1 本置く形にする。 間隔を変えるには起動元 (applet・plist) を作り直すことになり、
+作り直すと付与した権限が外れることがある ([`launchd-cloudstorage-tcc.md`](launchd-cloudstorage-tcc.md) の A')。
+
+- **1 本だけ**: worker は state dir の lock file を non-blocking の排他 lock (`flock`) で取り、 取れなければすぐ抜ける。
+  定期 job が毎回起こしても、 2 本目は自分で消える。
+- **heartbeat**: worker は数秒おきに heartbeat file の mtime を更新する。 定期 job は heartbeat が古い (例: 30 秒) ときだけ起こす。
+  surface は heartbeat の古さで「worker が止まっている」 を出す (定期 job は動いているのに worker だけ死んでいる状態を黙らせない)。
+- **source の更新で自分を exec し直す**: 自分と読み込む module の mtime を覚え、 変わったら lock を放して
+  `os.execv(sys.executable, [sys.executable, *sys.argv])`。 pid も権限の文脈もそのままで新しい版になり、 間が空かない。
+  比べるのは「等しいか」 なので、 `cp -p` で mtime を写して入れ替えても起き直す (実測)。
+- **親が居なくなったら抜ける**: 定期 job の最終実行時刻 (last-run) が閾値 (例: 10 分) より古ければ抜ける。
+  定期 job を外した後に worker だけが残り続けない。 一時停止の印 (paused) も毎回見る。
+- **仕事を分ける**: worker と定期 job が同じ data を触るなら同じ lock の下で触る。 外に効く仕事 (commit・push・知らせ) は片方 (定期 job) だけに残す。
+- **背景に起こす書き方**: `nohup <cmd> </dev/null >/dev/null 2>&1 &`。 AppleScript の `do shell script` は、
+  子が stdout / stderr を握っている間は返らない = 3 本の fd を全部外す。 applet の子として起こした worker は、
+  起こした shell が終わった後も applet のフルディスクアクセスのまま読めた (実測)。
+- **重さ**: 見張る仕事なら、 中身を読む前に file の (mtime, size) を stat で比べ、 変わった時だけ読む。
+  0.5 秒ごとの stat で 1 コアの約 0.1% だった (実測)。 見た回数・読んだ回数を 1 時間に 1 行 log に書くと、 重さを後から確かめられる。
+- **試験**: worker の寿命を env で切れるようにし (例: 20 秒)、 最後に paused の印で止まることと process が残らないことまで見る。

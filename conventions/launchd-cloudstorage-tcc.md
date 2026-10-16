@@ -58,6 +58,8 @@ launchd 経由の実行で `ls_err='ls: <path>: Operation not permitted'` が出
 
 **A' が優れる点**: 「WallpaperRotator.app に FDA」 なら **意味的に「これは wallpaper rotator である」と自己記述**され、 FDA panel を後日見直した時に「なぜ FDA 持ってる?」 が即座に分かる。 permission holder が narrow + 意図明示。
 
+applet から背景に常駐の worker を起こしても、 worker は applet の付与のまま読める (実測)。 起こし方と作り = [`scheduled-tasks.md#resident-worker-from-periodic-job`](scheduled-tasks.md#resident-worker-from-periodic-job)。
+
 **B が最頑健な理由**: `~/Pictures/` `~/Documents/` 等の**通常フォルダは FDA 対象外** = TCC 判定を一切通らないので permission dance ゼロ。 mirror 元を Dropbox に置いたまま `rsync` で local に落とし、 script は local を読む構成。 CloudStorage 側の同期が壊れても local mirror は生き残る (= 独立性が高い)、 permission 変更に依存しない。 disk 二重消費 (13 GB クラスなら要検討) が唯一の trade-off。
 
 ---

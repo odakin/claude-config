@@ -159,7 +159,7 @@ claude-config/
 │   ├── research-email.md                   # 研究メールのスレッド記録・分類・アウトリーチ、または学内事務への事実回答・規程照会を書くとき + 成人の学生について保護者から様子や期待を尋ねられ返信を書くとき (#guardian-inquiry) + 学内の運用ルールに止められた依頼を出し直すとき (#blocking-rule-origin) + 先に短い返事 (了解・あとで返事します) を送ったスレッドに続きの返信を書くとき (#follow-up-after-quick-ack) + 事務から懇親会・夕食会などを出張の用務に入れた理由を聞かれたとき (#event-duty-justification) + 出張・購入の手引きや事務の回答を当てる前に、 その財源に掛かる規則かを確かめるとき (#rules-by-funding-source) + 1 つの出張に財源が複数あるとき・補助の上限を超えたとき・取消料を誰が持つか決めるとき (#split-by-expense-item) + 出張の宿泊を証明する書類を決めるとき・施設が指定様式や領収書を断ったとき (#lodging-proof-choice)
 │   ├── researchmap.md                      # researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
 │   ├── scanned-book-survey.md              # 他人から共有された書籍スキャン PDF の束 (自炊 PDF・参考書の束) を、書誌・刷り色・関連箇所で棚卸しするとき + スキャン PDF から刷り色・奥付・ページ番号を読み取るとき
-│   ├── scheduled-tasks.md                  # scheduled task / launchd routine を作成・管理するとき
+│   ├── scheduled-tasks.md                  # scheduled task / launchd routine を作成・管理するとき + 定期 job が毎回読む script を直すとき (#live-script-replace) + 定期 job の間隔では間に合わない仕事を常駐の worker に任せるとき (#resident-worker-from-periodic-job)
 │   ├── scientific-computing.md             # 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき
 │   ├── script-layer-placement.md           # personal layer / shared project に script を新設するとき + 同じ役割の script が複数層にあると気づいたとき + generic engine と個別設定を分離するとき
 │   ├── secret-handoff.md                   # secret を user から受け取る・別マシンへ運ぶとき + **token を rotate するとき** (= 分業と主体照合、 #rotation-labor-split) + **暗号化 backup を作る/パスフレーズを失ったとき** (#backup-round-trip / #passphrase-loss-is-recoverable)
