@@ -1,0 +1,7 @@
+#!/bin/bash
+# latexmk-lualatex.engine — TeXShop の engine。 latexmk で lualatex を必要な回数だけ回し、 文献と索引も回す (PDF を直接出す)。
+# 選び方 = 原稿の先頭に `% !TEX TS-program = latexmk-lualatex`。 文献・索引の道具 (日本語なら upbibtex / upmendex) は原稿の dir の .latexmkrc で選ぶ。
+# 置き場所 = ~/Library/TeXShop/Engines/ (symlink で可。 入れ方 = scripts/install-texshop-engines.sh)。
+# 正本 = claude-config/conventions/latex.md#texshop-engines
+export PATH="/Library/TeX/texbin:/usr/texbin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+exec latexmk -lualatex -synctex=1 -file-line-error -interaction=nonstopmode -halt-on-error "$1"

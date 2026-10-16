@@ -1455,11 +1455,20 @@ luatexja は `$過去$` (= 裸の kanji) も accept するが、 標準 idiom �
 - **LuaLaTeX でしか組めない source (ltjsarticle、 fontspec、 LuaTeX-ja) は先頭に `% !TEX TS-program = lualatex` を書く** (`% !TEX encoding = UTF-8 Unicode` も)。 無いと TeXShop は既定の engine (pdfTeX / uplatex の経路) で typeset してエラーで止まり、 著者には「コンパイル結果が見えない」 になる (実測)。 この行は file を開いた時に読まれるので、 開いたままの文書には効かない = 閉じて開き直す。
 - **tex に紐づいたプレビュー窓は、 その PDF を外部の build (CLI の lualatex・build script) が書き換えると描画しなくなることがある** (ページ番号は出るのに紙が灰色のまま。 ⌘W → ⌘T の再 typeset・ページ送り・表示形式の切替・ズームでは戻らない、 実測)。 PDF 自体は正常で、 **同じ PDF を独立の書類として開く** (ファイル > 開く、 または `open -a TeXShop <pdf>`) と描画する。 壊れた窓は TeXShop の再起動で消える。 外から組むときは、 著者に「開き直して」 と伝えるか、 TeXShop 側の typeset だけで組む ([#scratch-build-dir](#scratch-build-dir) の aux の競合とは別の症状)。
 
-## <a id="texshop-uplatex-engine"></a>TeXShop で uplatex の原稿 (jsbook / jsarticle + `uplatex` option) を組む
+## <a id="texshop-engines"></a><a id="texshop-uplatex-engine"></a>TeXShop の engine で原稿を組む (latexmk-lualatex / uplatex)
 
-- **先頭に `% !TEX TS-program = uplatex` を書き、 engine [`texshop/uplatex.engine`](../texshop/uplatex.engine) を `~/Library/TeXShop/Engines/` に置く** (symlink で可: `ln -s <この repo>/texshop/uplatex.engine ~/Library/TeXShop/Engines/`)。 engine は `ptex2pdf -l -u` で組み、 文献 (upbibtex) と索引 (mendex) も回して 3 回組む。 `-interaction=nonstopmode -halt-on-error` なので、 エラーで入力待ちにならず止まる。
-- **TeXShop が知らない program 名を書くと、 黙って既定の経路に落ちる** (実測: `ptex2pdf (uplatex)` と書いた原稿が、 既定の欄を lualatex にした Mac で lualatex で組まれた)。 既定の経路 (環境設定の pdfTeX の欄・TeX+DVI の欄) は Mac ごとの設定なので、 ある Mac で組めた原稿が別の Mac で組めないことがある = 原稿の側で engine を名指す。
-- **落ちた時の見え方**: lualatex は jsbook の `uplatex` option で止まり、 console で入力を待つ。 `main.log` は 0 byte、 `main.synctex(busy)` が残り、 process が残る。 console で中止するか process を止めてから、 原稿を閉じて開き直す (program の行は file を開いた時に読まれる = [#texshop-lualatex-and-external-builds](#texshop-lualatex-and-external-builds) と同じ)。
+[`texshop/`](../texshop/) に TeXShop の engine を置いている。 原稿は先頭の `% !TEX TS-program = <engine の名前>` で選ぶ。
+
+| engine | 何をするか | 向く原稿 |
+|---|---|---|
+| [`latexmk-lualatex`](../texshop/latexmk-lualatex.engine) | `latexmk -lualatex` で必要な回数だけ組み、 文献と索引も回す。 PDF を直接出す。 文献・索引の道具は原稿の dir の `.latexmkrc` で選ぶ (日本語なら `$bibtex = 'upbibtex %O %S'` と `$makeindex = 'upmendex %O -o %D %S'`) | LuaLaTeX の原稿 (ltjsbook / ltjsarticle、 LuaTeX-ja) |
+| [`uplatex`](../texshop/uplatex.engine) | `ptex2pdf -l -u` (uplatex + dvipdfmx) を 3 回、 間に upbibtex と mendex | jsbook / jsarticle に `uplatex` option を付けた原稿 |
+
+- **入れ方**: `bash scripts/install-texshop-engines.sh` が `texshop/*.engine` を `~/Library/TeXShop/Engines/` に symlink する (無ければ足すだけ、 本人の同名の file は触らない、 TeXShop を 1 度も起動していない機では何もしない)。 setup.sh (macOS) が呼ぶ。 毎回呼んでも無音なので、 個人層の SessionStart から呼べば、 新しく足した engine も各 Mac に届く。
+- **どちらの engine も `-interaction=nonstopmode -halt-on-error`** で、 エラーで入力待ちにならず止まる。
+- **TeXShop が知らない program 名を書くと、 黙って既定の経路に落ちる** (実測: TeXShop に無い名前を書いた uplatex の原稿が、 既定の欄を lualatex にした Mac で lualatex で組まれた)。 既定の経路 (環境設定の pdfTeX の欄・TeX+DVI の欄) は Mac ごとの設定なので、 ある Mac で組めた原稿が別の Mac で組めないことがある = 原稿の側で engine を名指す。
+- **落ちた時の見え方**: 違う engine は原稿の class で止まり、 console で入力を待つ。 log は 0 byte、 `<name>.synctex(busy)` が残り、 process も残る。 console で中止するか process を止めてから、 原稿を閉じて開き直す (program の行は file を開いた時に読まれる = [#texshop-lualatex-and-external-builds](#texshop-lualatex-and-external-builds) と同じ)。
+- **uplatex の原稿を LuaLaTeX に移すとき** (実測): class を `ltjsbook` / `ltjsarticle` に (`uplatex,dvipdfmx,papersize,nomag*` は外す)、 ふりがなは okumacro の代わりに `luatexja-ruby`、 `pxjahyper` は外す。 版面と字送りは jsclasses と同じで、 頁数も変わらなかった。 狭い表の欄で英字の名前のはみ出しが増えることがある (LuaTeX の改行の違い)。
 
 ## <a id="enumerate-vs-enumitem-option-syntax"></a>`enumerate` package の下で `[label=(\roman*)]` は組めない
 

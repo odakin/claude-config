@@ -606,6 +606,13 @@ if [ -f "$JHEP_SRC" ] && command -v kpsewhich &> /dev/null; then
     fi
 fi
 
+# --- TeXShop の engine (texshop/*.engine) を Engines dir に symlink（macOS + TeXShop を 1 度起動した機のみ、 無ければ足すだけ）---
+# 原稿は先頭の `% !TEX TS-program = <engine の名前>` で選ぶ。 本人の同名の file は置き換えない。 正本 = conventions/latex.md#texshop-engines
+if [ "$(uname -s)" = "Darwin" ] && [ -f "$REPO_DIR/scripts/install-texshop-engines.sh" ]; then
+    ts_out="$(bash "$REPO_DIR/scripts/install-texshop-engines.sh" 2>/dev/null)"
+    [ -n "$ts_out" ] && echo "[claude-config] TeXShop の engine を入れた:" && echo "$ts_out"
+fi
+
 # --- shell-snapshot patch の即時実行（macOS のみ）---
 # REQUIRED_PATHS が更新された場合、git pull 後すぐに既存スナップショットへ
 # 反映させる。新規スナップショットは launchd WatchPaths が捕捉するが、
