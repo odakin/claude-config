@@ -70,7 +70,7 @@ kernel は分野をまたいで別物を指す (積分核・畳み込み核・�
 3. **message の境界**: 各 message の節は「その節で何をするか」 の短い purpose 文 (ローマン体) で始める。 message の言い切りを節の冒頭の段落 (italic でもローマン体でも) に置かない。 言い切りは序論の事前宣言と節末の要約の段落が運ぶ。 節末は「In summary, the …」 と平文で次の文に繋ぐ非技術的な 3〜4 文の段落で閉じる (italic の label にしない)。 「Message N:」 のような meta の label を原稿に印字しない。 序論でも「The paper carries three messages」 型の meta の語を避け、 内容の列挙で構造を示す。
 4. **今の message に効かない material を抑える**: 支える検算はその message の中に吸収し、 寄せ集めの「consistency checks」 節を作らない。 計算の連鎖は入力と出力に畳む。 記号と定義は最小にする ([#symbol-definition-economy](#symbol-definition-economy))。
 5. **式は解釈する絵**: 重要な式の直後に、 その式をどう読むかを添える。 重要な式 1 本に 1 文までにし、 節末の要約と重ねない。
-6. **題は平叙文の主張を検討する** (主張か問いの題がよい)。 代替案は file の header comment に残して共著者と議論する材料にし、 盲検に出す写しからは剥がす。 題の検査 = [paper-audit.md#title-claim-check](paper-audit.md#title-claim-check)。
+6. **題は平叙文の主張を検討する** (主張か問いの題がよい)。 代替案は file の header comment に残して共著者と議論する材料にし、 盲検に出す写しからは剥がす (査読の判定・指摘の一覧・結果の note への path は header comment に書かず結果の note に置く = [latex.md#source-comment-scope](latex.md#source-comment-scope))。 題の検査 = [paper-audit.md#title-claim-check](paper-audit.md#title-claim-check)。
 7. **結論**: 非技術的な要約 + 文脈の再掲 + message を 1 つにまとめる + 開いた問い + (望むなら) 分野の行き先の予測。
 
 message と構成を選ぶときの検査:
