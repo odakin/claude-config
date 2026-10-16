@@ -280,6 +280,12 @@ sections:
   - id: infographic-print-a4
     level: 3
     title: "print fidelity を A4 強制したい場合"
+  - id: texshop-lualatex-and-external-builds
+    level: 2
+    title: "TeXShop で LuaLaTeX 前提の source を開く・外部の build と共存させる"
+  - id: enumerate-vs-enumitem-option-syntax
+    level: 2
+    title: "`enumerate` package の下で `[label=(\\roman*)]` は組めない"
   - id: latexdiff-ulem-option-clash
     level: 2
     title: "latexdiff: 本文が `ulem` を option なしで読むと差分 markup が silent に壊れる (2026-08-21)"
