@@ -21,6 +21,9 @@ git-crypt のような透過暗号は **file の中身だけ**を暗号化する
 - **file 名・dir 名** (= ツリーに一覧として見える)
 - **commit message**
 - **追跡されている path そのもの** (`.gitignore` の行を含む)
+- **commit の author 欄 (名前と email)**。 <a id="external-pr-squash-author"></a>外部からの PR を GitHub の squash merge で入れると、
+  author は PR を出した人の account の email になる (本人が GitHub で email を非公開にしていないとき。 PR の commit が noreply の email でも同じ。 実測)。
+  公開 repo では手元で `git merge --squash` し、 PR の commit の author を `--author` にそのまま渡してから push する
 
 ∴ 識別子を名前に持つ file (`answers/A00X0001-1.jpg`、 `records_2025_A00X0002_surname.docx`) は、
 中身を暗号化しても **「誰が居たか」 の一覧を公開したまま**になる。
