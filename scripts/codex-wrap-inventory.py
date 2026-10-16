@@ -415,6 +415,20 @@ def selftest():
     assert view['reasoning_summaries'][0]['text']=='Visible decision summary.'
     assert view['warnings'] and 'PRIVATE_' not in json.dumps(view)
     print('OK: exposed summaries collected; missing/malformed explicit; raw and encrypted reasoning excluded')
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        fake=Path(tmp)/'codex'
+        fake.write_text('#!/bin/sh\necho "Error: failed to initialize sqlite state runtime under /synthetic/.codex" >&2\nexit 1\n')
+        fake.chmod(0o755)
+        message=''
+        try:
+            with Reader(str(fake),timeout=10):
+                pass
+        except RuntimeError as exc:
+            message=str(exc)
+        assert 'failed to initialize sqlite state runtime' in message, message
+        assert 'outside the Codex sandbox' in message, message
+    print('OK: an app-server that exits at start reports its stderr and the sandbox remedy')
 
     return 0
 

@@ -2,11 +2,17 @@
 
 Only thread/read, skills/list and hooks/list are exposed. No model turn, approval,
 trust write, message, or configuration mutation is started by this client.
+The app-server's stderr is kept (last lines only) so an exit at start reports its
+cause. Measured: app-server exits at start when it cannot write its state under
+CODEX_HOME, which is what happens inside the Codex workspace-write sandbox; the
+error then names the remedy (run the command outside the sandbox).
 """
 from __future__ import annotations
 
+import collections
 import importlib.util
 import json
+import os
 from pathlib import Path
 import queue
 import subprocess
@@ -24,6 +30,23 @@ def runtime_binary(requested='auto'):
     return module.discover_codex(requested)[0]
 
 
+STDERR_LINES = 20
+STATE_FAILURE = 'state runtime'
+
+
+def exit_message(stderr_lines, environ=None):
+    """Explain an app-server exit from its stderr; name the sandbox remedy when it applies."""
+    environ = os.environ if environ is None else environ
+    lines = [line.strip() for line in stderr_lines if line.strip()]
+    detail = ' | '.join(lines)[-600:]
+    message = 'app-server exited' + (': ' + detail if detail else ' (no stderr)')
+    if STATE_FAILURE in detail or environ.get('CODEX_SANDBOX'):
+        message += ('; app-server must write its state under CODEX_HOME, which the Codex '
+                    'workspace-write sandbox does not allow: rerun this command outside the '
+                    'Codex sandbox (an approved escalated command)')
+    return message
+
+
 class Reader:
     def __init__(self, binary='auto', timeout=30):
         self.binary = runtime_binary(binary)
@@ -34,8 +57,14 @@ class Reader:
     def __enter__(self):
         self.process = subprocess.Popen([self.binary, 'app-server', '--stdio'],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                        stderr=subprocess.DEVNULL, text=True)
+                                        stderr=subprocess.PIPE, text=True)
         self.messages = queue.Queue()
+        self.stderr_tail = collections.deque(maxlen=STDERR_LINES)
+        def drain_stderr():
+            for line in self.process.stderr:
+                self.stderr_tail.append(line.rstrip('\n'))
+        self.stderr_worker = threading.Thread(target=drain_stderr, daemon=True)
+        self.stderr_worker.start()
         def receive():
             try:
                 for line in self.process.stdout:
@@ -57,11 +86,22 @@ class Reader:
             raise
         return self
 
+    def _exited(self):
+        try:
+            self.process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+        self.stderr_worker.join(timeout=1)
+        return RuntimeError(exit_message(list(self.stderr_tail)))
+
     def _call(self, method, params):
         self.serial += 1
         ident = self.serial
-        self.process.stdin.write(json.dumps({'id':ident, 'method':method, 'params':params})+'\n')
-        self.process.stdin.flush()
+        try:
+            self.process.stdin.write(json.dumps({'id':ident, 'method':method, 'params':params})+'\n')
+            self.process.stdin.flush()
+        except BrokenPipeError:
+            raise self._exited() from None
         deadline = time.monotonic()+self.timeout
         while True:
             remaining = deadline-time.monotonic()
@@ -72,7 +112,7 @@ class Reader:
             except queue.Empty as exc:
                 raise TimeoutError(method+' timed out') from exc
             if value is None:
-                raise RuntimeError('app-server exited')
+                raise self._exited()
             if isinstance(value, dict) and value.get('id') == ident:
                 if 'error' in value:
                     raise RuntimeError(method+' unavailable: '+str(value['error'].get('code','unknown')))
@@ -99,8 +139,12 @@ class Reader:
                 except subprocess.TimeoutExpired:
                     self.process.kill()
                     self.process.wait(timeout=3)
-            self.process.stdin.close()
+            try:
+                self.process.stdin.close()
+            except BrokenPipeError:
+                pass
             self.worker.join(timeout=1)
+            self.stderr_worker.join(timeout=1)
 
     def __exit__(self, *_):
         self.close()

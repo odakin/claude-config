@@ -87,6 +87,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
   到達を仮定せず記録・報告から確かめる。実装と機械別の限界は上のPARITYへ。
 - worker観測を回収して正本へ記録した後に、`codex-wrap-inventory.py <full-id> --mark-collected <記録先またはcommit>`。
   `--prune-collected` は回収済みのmetadataだけを保存期間後に整理する。未回収のものは残す。
+- inventoryはCodexのsandbox (workspace-write) の中では動かない: 起動するapp-serverが `CODEX_HOME` に状態を書けず、起動直後に終わる (実測)。inventoryのcommandは最初からsandboxの外での実行 (承認を求める実行) で回す。その場合の失敗には、道具が原因と直し方を出す。
 - APIが使えない場合は `search-agent-transcripts.py --agent codex --session <id>` と `--tool-runs` を補助にする。
   Claude専用readerの0件をCodexの不在証明にしない。未確認の口を明記する。
 - 掲示板から来た作業で保護対象の候補ができたら、対象・差分・影響をこのchatでまとめて提示し、本人の具体的な裁定を使う。
