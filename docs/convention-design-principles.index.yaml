@@ -769,6 +769,10 @@ sections:
     legacy: "22.4"
     level: 3
     title: "22.4 判別と由来"
+  - id: reconcile-with-independent-count
+    legacy: "22.5"
+    level: 3
+    title: "22.5 正しく動いて 0 件も健全の証明にならない — 係の外の独立した数と定期に突き合わせる"
   - id: required-field-fabrication
     legacy: "23"
     level: 2

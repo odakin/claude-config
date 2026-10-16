@@ -87,6 +87,7 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
   間に合わない) はどれも「新着 0」 で黙る形になり、 人が気づくまで日が過ぎる (実測)。 写す係が 1 時間に 1 回、 背景で
   アプリの unified log (`log show --predicate 'process == "<App>" AND subsystem == "com.apple.UserNotifications"' --style compact`)
   を読み、 通知の要求 (`Adding notification request <id>`) の時刻と記録の時刻を数秒の幅で 1 対 1 に合わせる。
+  `log show` は通知 DB と違い、 フルディスクアクセスの無い process からも読めた。 写す係の applet から起こした子でも読めた (どちらも実測)。
   要求の id は短縮された別の識別子で DB の uuid とは一致しない = 時刻で合わせる (DB の delivered の時刻との差は数十 ms 以内、 実測)。
   余った要求 (= アプリは通知を出したのに記録に無い) を手元の台帳に積み、 session の開始時の警告に出す。 同じ id の
   `Removing … delivered notifications with identifiers (` が続けば、 取り下げまでの秒も添える (見張りの間隔より短いかが分かる)。
