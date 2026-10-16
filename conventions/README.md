@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 148 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 149 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -110,7 +110,7 @@ layer 1 (public) のドメイン固有規約 148 file をカテゴリ別に列�
 
 ## メール (`mail`)
 
-- **[email-surface-pattern.md](email-surface-pattern.md)** — 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき
+- **[email-surface-pattern.md](email-surface-pattern.md)** — 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき + 会員サービスからの情報流出のお詫びが網から落ちたとき (#vendor-breach-notice-class)
   - 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止。 別スレッドで届く待ち結果は待ち項目の検索条件で拾う (#new-thread-expected-inbound) / 送り手一括の雑音化は class 別の件数を数えてから (#sender-noise-volume-check) / 決着済み案件への自動督促は本文の案件 ID で畳む (#settled-matter-key) / 「記録済み」 の書式は検出器間で 1 つ (#recorded-id-notation)
 - **[gmail-mcp-multiaccount.md](gmail-mcp-multiaccount.md)** — 複数 Gmail アカウントを Claude Code の MCP として繋ぎたいとき + N 個目のアカウントを追加するとき
   - 多アカウント Gmail MCP の end-to-end runbook — @gongrzhe server を account 数ぶん起動 (1:1)、credential は git-crypt な private repo を canonical に symlink 運用 (1 回認証で全マシン)、reauth / runtime-links エンジンは scripts/gmail-mcp-*.sh (state+PKCE / alias 検証 / permission 矯正込み)、送信は ask gate 必須
@@ -303,6 +303,8 @@ layer 1 (public) のドメイン固有規約 148 file をカテゴリ別に列�
   - マシン固有の install 不可 package を layer 4 (machine-local memory) に蓄積する規律 (再試行コスト回避、 frontmatter format + machine-local marker + 試行日/コマンド/原因/代替の必須項目) + source build 陥落時の GitHub Releases prebuilt binary 直置き recipe (#prebuilt-binary-fallback = 配置先は non-interactive PATH 必須〔.zshrc 専用 PATH は Claude Bash から不可視で silent 再発〕+ git-lfs 不在は LFS repo の全 push を diff 内容と無関係に block)
 - **[jma-obsdl-download.md](jma-obsdl-download.md)** — 気象庁の過去観測データ (時別値・日別値等) をスクリプトで一括取得したいとき
   - 気象庁「過去の気象データ・ダウンロード」(obsdl) の機械取得 recipe — show/table POST の現行フィールド (#show-table-post、 旧 recipe の interAnnualFlag は現行 interAnnualType で 400 になる)、 element/地点 ID の動的発見 (#element-station-discovery)、 44,000 値制限に合わせた block 設計と politeness (#volume-limit-politeness)、 CSV の位相 (24 時 = 翌日 0 時)・エンコーディング・ブロック境界の gotcha (#csv-format-gotchas)、 現象なし情報/品質情報/均質番号の一次資料の意味 (#quality-columns)、 長期系列を使う前の QC 点検 4 点 = 行数の暦検算・品質符号の分布・痕跡時間 (実測 15%)・記録分解能の年代 (#long-record-qc)、 protocol はページ自身の JS から読む一般技法 (#protocol-from-page-js)、 取得物は既知データと突合してから使う (#validate-before-use)
+- **[leaked-password-triage.md](leaked-password-triage.md)** — 使っているサービスから「パスワードを含む会員情報が流出した」 と通知が来たとき + 同じメールアドレスとパスワードの組を使い回した先を探すとき + パスワードを保存するアプリ (Apple の「パスワード」 など) で「漏洩の危険」 の勧告が大量に出たとき + user にサイトでのパスワード変更を順に頼むとき
+  - 流出の通知から、 同じパスワードの先を見つけて急ぐ順に変えてもらう手順 — 通知が本物かを公式の告知で確かめる (#verify-notice) / 同じパスワードの先は保存アプリの一覧の並び順からは分からない = 本人が書き出して表計算で並べる、 agent は CSV を開かず名前の列だけ受け取る (#find-same-password) / 急ぐ順 = メールの鍵 → お金 → カード・住所 → 仕事 → 発信 → 残り (#priority) / 開いてもらう前に agent が生存 (名前解決・応答・最後のメール) を調べ、 開かない保存先の型を先に言う (#precheck-before-asking) / 古い項目の自動入力は銀行のログインを止める、 chat に出た復旧コードは作り直す (#lockout-and-codes)
 - **[passkey-cross-device.md](passkey-cross-device.md)** — パスキーでしか入れないサービスに別の端末 (スマホ・別の PC) から入れないとき + 「この QR コードをスキャン」 と出て止まったとき + パスキーを 2 台目の端末に足すとき + パスキーの保存先を選ぶ画面が出たとき
   - パスキーの QR (クロスデバイス認証) を読めるのはスマホ・タブレットのカメラだけで、 PC のカメラや写真からの読み取りでは認証できない。 保存先が iCloud キーチェーンのパスキーは Android から使えない。 2 台目を足すときは、 入れている端末でログインしたまま登録し、 保存先の画面で「スマートフォンまたはタブレットを使用する」 を選んで、 その端末に出る QR を足したいスマホで読む (= 向きが逆)。 まず今のパスキーの保存先をサービスの一覧で確かめる
 - **[public-page-watch.md](public-page-watch.md)** — 「いつ変わるか分からないが、 変わったらすぐ動く」 公開ページの告知 (受付の再開・募集の開始・日程の変更・議事の結果) を待つとき + 待っている告知の正本を記録に書くとき + 無人の定期実行から人に知らせる経路 (OS 通知・ダイアログ・スマホ push) を組むとき + headless `claude -p` から通知を送ろうとしたとき (スマホには届かない、 #sealed-headless-push) + 見張っていたページが変わったが判断に要る中身がそこに無いとき (#watch-where-the-content-lands)
