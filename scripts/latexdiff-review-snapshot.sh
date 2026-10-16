@@ -47,7 +47,7 @@
 #   --strip-color NAME    \color{NAME} token を除去 (repeatable、両版に適用)
 #   --engine CMD          default: lualatex
 #   --bib MODE            bibtex|none (default: bibtex)
-#   --math-markup N       default: 1
+#   --math-markup N       default: 1 (2 = fine: 式の中の変わった token だけ。 fine の壊れ方は latexdiff-fine-fixups.py が直す)
 #   --latexdiff-args STR  latexdiff への追加引数 (空白区切りで展開)
 #   --out-prefix NAME     default: latexdiff
 #   --no-deploy           build のみ (結果 PDF path を表示して終了、repo に触らない)
@@ -69,6 +69,7 @@ EXPANDER="$SCRIPTDIR/expand-display-math.py"
 SAFECMD_GEN="$SCRIPTDIR/latexdiff-safecmd.py"
 MARKUP_CHECK="$SCRIPTDIR/check-latexdiff-math-markup.py"
 DUP_LABELS="$SCRIPTDIR/latexdiff-strip-dup-labels.py"   # deleted copy keeps no \label (whole markup / MOVE), 2026-09-13
+FINE_FIX="$SCRIPTDIR/latexdiff-fine-fixups.py"   # repairs of --math-markup=fine output (accent / \frac / deleted-side commands)
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -134,7 +135,7 @@ run_selftest() {
     echo "naming format OK"
     rm -rf "$d"
     local s
-    for s in "$EXPANDER" "$SAFECMD_GEN" "$MARKUP_CHECK" "$DUP_LABELS"; do
+    for s in "$EXPANDER" "$SAFECMD_GEN" "$MARKUP_CHECK" "$DUP_LABELS" "$FINE_FIX"; do
         if [[ -f "$s" ]]; then
             python3 "$s" --selftest >/dev/null || die "$(basename "$s") selftest failed"
             echo "$(basename "$s") selftest OK"
@@ -252,6 +253,11 @@ latexdiff --math-markup="$MATHMARKUP" --config VERBATIMENV=comment $SAFE_ARG $EX
     "$D/base.tex" "$D/new.tex" > "$D/diff.tex" 2>"$D/latexdiff.err" || die "latexdiff 失敗: $(tail -3 "$D/latexdiff.err")"
 # changed (whole markup) or moved blocks appear twice with the same \label -> amsmath "Multiple \label's" is fatal below;
 # keep each label on the new copy only (conventions/latex.md#latexdiff-move-artifacts)
+# fine markup breaks in recurring ways (accent outside the markup, second argument of \frac outside it,
+# deleted-side commands commented out) -> repair before the guard counts unmarked changes
+if [[ ( "$MATHMARKUP" == "2" || "$MATHMARKUP" == "fine" ) && -f "$FINE_FIX" ]]; then
+    python3 "$FINE_FIX" fix "$D/diff.tex" || die "latexdiff-fine-fixups.py 失敗"
+fi
 if [[ -f "$DUP_LABELS" ]]; then
     NDUP=$(python3 "$DUP_LABELS" "$D/diff.tex")
     [[ "${NDUP:-0}" -gt 0 ]] && echo "label guard: 削除側の \label ${NDUP} 件を除去"

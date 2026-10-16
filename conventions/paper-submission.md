@@ -333,6 +333,9 @@ Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Mana
 
 - **共著者も自分の account から閲覧できる** — ScholarOne の Author dashboard には「Manuscripts I Have Co-Authored」 欄があり、 投稿時に登録された共著者 (= 登録メールが一致する account) は submitting author でなくても status を見られる。 ⚠️ **errata (2026-08-21)**: 旧記載「Author Center は corresponding author のアカウントにしか出ない・共著者は見られない」 は誤り (= 実 dashboard で Co-Authored 欄を確認して訂正)。 ただし **decision メールは submitting author にしか届かない** ので、 decision の共有義務は残る
 - **催促は事務局宛** (= ポータル上の "Contact Journal" リンク or 編集部メール)。 AE / EIC に直接督促しない
+  - 事務局の返事が AE を Cc に入れて来たら、 次の問い合わせはその全員への返信にする (事務局が AE に見せると決めた thread)。 宛名と署名は事務局の担当者の署名に合わせる (ファーストネームで署名していれば、 こちらもファーストネーム)
+  - <a id="post-report-inquiry"></a>**事務局が「査読報告を受け取った、 判定はできるだけ早く」 と返した後に 1〜2 週動きが無ければ、 同じ thread に判定の見込みを聞く短い問い合わせを出す** — 「催促は失礼」 を理由に先延ばしにしない。 謝罪や事情の推測は書かず、 返事へのお礼 + 判定の見込みを尋ねる 1 文にする
+- <a id="coarse-author-status"></a>⚠️ **著者側の表示は誌によって粗い — 査読報告が届いても Under Review のまま動かないことがある** (実測: 事務局が報告の受領を伝えた後も、 判定まで表示は Under Review のままだった)。 下の表の Awaiting AE Recommendation 以降が著者に見えない誌では、 表示が動かないことは「報告がまだ」 の根拠にならない。 事務局の返事を一次情報にする
 - **status を見るのは「音沙汰が無い」 と思った時** — 受領確認から数週間後に一度見るだけで、 「順調に査読中」 と「AE 未割当で止まっている」 を区別できる。 前者なら待つ、 後者なら照会する、 と対処が分かれる
 - **status を見るにはログインが必要だが、 Claude が読めないわけではない** — Claude は認証情報を入力できない (= 規約上の禁則) が、 **user が Claude 操作ブラウザ (= browser MCP 経由で Claude が読めるブラウザ) で一度 login すれば、 以後 Claude が dashboard を直接読んで記録できる**。 ⚠️ 保存 password は**投稿に使ったブラウザ側**にある (= §[browser-fallback](#browser-fallback) で Safari 等に切り替えて投稿した場合、 Claude 操作ブラウザの autofill には出ない → user は手入力 or password manager 参照)。 ⚠️ 旧記載「Claude からは読めない・著者が画面を開いて内容を渡す経路になる」 は不正確 (2026-08-21 訂正、 user login 後の読取は Claude 側でできる)
 
