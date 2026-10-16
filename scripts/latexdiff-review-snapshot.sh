@@ -12,7 +12,10 @@
 #   1. baseline 版 tex を git revision から取り出す (作業 tree を汚さない、mktemp workdir + aux symlink)
 #   2. (option) レビュー markup コマンド (\cl 等) を両版から unwrap (= 中身は残し wrapper だけ除去。
 #      理由: latexdiff の \DIFadd{\cl{...}} は ulem 下線が {...} group を改行不能 box 化して
-#      行がページ外へ溢れる + diff 内で draft 色は冗長)
+#      行がページ外へ溢れる + diff 内で draft 色は冗長)。
+#      実装は ai-collaboration の scripts/review-markup-clean.py を呼ぶ (= 色外しの実装は 1 本、
+#      ここには引数の対応だけを持つ)。 探す順 = $AI_COLLABORATION_DIR → claude-config の隣 → 原稿 repo の隣、
+#      無ければ停止して clone 先を出す (外さずに続けると溢れた行と draft 色のままの PDF を配ってしまう)
 #   3. 数式の silent miss 対策 (既定 ON、--no-math-guard で無効):
 #      両版の display-math wrapper macro を本物の環境へ展開 (expand-display-math.py) +
 #      preamble の全 macro を latexdiff の safe-command list へ (latexdiff-safecmd.py)。
@@ -43,8 +46,9 @@
 #   --base REV            (必須) baseline revision (= 共著者が最後に見た commit)
 #   --repo DIR            対象 repo (default: cwd)
 #   --tex FILE            main tex (default: repo 直下で \documentclass を含む唯一の .tex を自動検出)
-#   --strip-cmd NAME      \NAME{...} を unwrap (repeatable、両版に適用)
-#   --strip-color NAME    \color{NAME} token を除去 (repeatable、両版に適用)
+#   --strip-cmd NAME      \NAME{...} を unwrap (repeatable、両版に適用。 = review-markup-clean.py --macro)
+#   --strip-color NAME    {\color{NAME}...} の群を開く (repeatable、両版に適用。 = review-markup-clean.py --color。
+#                         群の外の \color{NAME} は残る = 残ったら警告。 % コメントの中は触らない)
 #   --engine CMD          default: lualatex
 #   --bib MODE            bibtex|none (default: bibtex)
 #   --math-markup N       default: 1 (2 = fine: 式の中の変わった token だけ。 fine の壊れ方は latexdiff-fine-fixups.py が直す)
@@ -56,7 +60,7 @@
 #   --allow-dirty / --allow-behind
 #   --no-math-guard       wrapper 展開 + safecmd + 無印検査を行わない (= 2026-09-12 以前の挙動)
 #   --allow-unmarked-math 無印の数式変更を検出しても停止しない (警告のみ)
-#   --selftest            strip logic + 命名 format + 同梱 4 script の selftest
+#   --selftest            review-markup-clean.py の selftest と引数の対応 + 命名 format + 同梱 5 script の selftest
 
 set -uo pipefail
 
@@ -73,62 +77,45 @@ FINE_FIX="$SCRIPTDIR/latexdiff-fine-fixups.py"   # repairs of --math-markup=fine
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
-# ---- embedded strip helper (balanced-brace unwrap; escaped brace 対応) ----
-write_strip_py() {
-cat > "$1" << 'PYEOF'
-import sys
-def strip_cmd(text, cmd):
-    out, i, n = [], 0, len(text)
-    pat = '\\' + cmd + '{'
-    while i < n:
-        j = text.find(pat, i)
-        if j < 0:
-            out.append(text[i:]); break
-        out.append(text[i:j])
-        k = j + len(pat); depth = 1
-        while k < n and depth > 0:
-            if text[k] == '{' and text[k-1] != '\\': depth += 1
-            elif text[k] == '}' and text[k-1] != '\\': depth -= 1
-            k += 1
-        out.append(text[j+len(pat):k-1])
-        i = k
-    return ''.join(out)
+# ---- review markup の除去 = ai-collaboration の review-markup-clean.py (実装は向こうの 1 本) ----
+find_cleaner() {
+    local d
+    for d in "${AI_COLLABORATION_DIR:-}" "$SCRIPTDIR/../../ai-collaboration" "$REPO/../ai-collaboration"; do
+        [[ -n "$d" && -f "$d/scripts/review-markup-clean.py" ]] && { echo "$d/scripts/review-markup-clean.py"; return 0; }
+    done
+    return 1
+}
 
-def process(text, cmds, colors):
-    for cmd in cmds:
-        prev = None
-        while prev != text:
-            prev = text
-            text = strip_cmd(text, cmd)
-    for c in colors:
-        text = text.replace('\\color{' + c + '}', '')
-    return text
+# $1 = cleaner, $2 = tex (その場で書き換える)。 --strip-cmd → --macro / --strip-color → --color
+strip_markup() {
+    local a=() x
+    for x in ${STRIP_CMDS[@]+"${STRIP_CMDS[@]}"}; do a+=(--macro "$x"); done
+    for x in ${STRIP_COLORS[@]+"${STRIP_COLORS[@]}"}; do a+=(--color "$x"); done
+    python3 "$1" "$2" "$2" ${a[@]+"${a[@]}"}
+}
 
-if __name__ == '__main__':
-    if sys.argv[1] == '--selftest':
-        t = r'a \cl{x \eqref{y} {n{e}s\}t}} b \CL{deep \cl{in}} c'
-        r = process(t, ['cl', 'CL'], [])
-        assert r == r'a x \eqref{y} {n{e}s\}t} b deep in c', repr(r)
-        t2 = r'{\color{Orange}multi par} \color{Orange} rest'
-        r2 = process(t2, [], ['Orange'])
-        assert r2 == r'{multi par}  rest', repr(r2)
-        t3 = 'no markup at all'
-        assert process(t3, ['cl'], ['Orange']) == t3
-        print('strip selftest OK')
-        sys.exit(0)
-    path = sys.argv[1]
-    cmds = [a for a in sys.argv[2].split(',') if a]
-    colors = [a for a in sys.argv[3].split(',') if a]
-    with open(path) as f: text = f.read()
-    with open(path, 'w') as f: f.write(process(text, cmds, colors))
-PYEOF
+# 群の外に残った \color{NAME} の行数 (% で始まる行は数えない)。 $@ = tex
+count_bare_color() {
+    local c="$1"; shift
+    cat "$@" | grep -v '^[[:space:]]*%' | grep -cF "\\color{$c}"
 }
 
 # ---- selftest (TeX 不要) ----
 run_selftest() {
     local d; d=$(mktemp -d)
-    write_strip_py "$d/strip.py"
-    python3 "$d/strip.py" --selftest || die "strip selftest failed"
+    local cleaner STRIP_CMDS=(cl CL) STRIP_COLORS=(Orange)
+    if cleaner=$(find_cleaner); then
+        python3 "$cleaner" --selftest >/dev/null || die "review-markup-clean.py selftest failed ($cleaner)"
+        echo "review-markup-clean.py selftest OK ($cleaner)"
+        printf '%s\n' 'a \cl{x {n}} {\color{Orange}y} \CL{z} % \cl{kept}' '\begin{quote}\color{Orange} w\end{quote}' > "$d/t.tex"
+        strip_markup "$cleaner" "$d/t.tex" >/dev/null || die "strip の引数の対応が壊れた"
+        [[ "$(cat "$d/t.tex")" == 'a x {n} y z % \cl{kept}'$'\n''\begin{quote}\color{Orange} w\end{quote}' ]] \
+            || die "strip の引数の対応が壊れた: $(cat "$d/t.tex")"
+        [[ "$(count_bare_color Orange "$d/t.tex")" == 1 ]] || die "群の外の \\color の数え方が壊れた"
+        echo "strip mapping OK"
+    else
+        echo "WARN: review-markup-clean.py が無い (AI_COLLABORATION_DIR / claude-config の隣 / cwd の隣) — strip は未検査"
+    fi
     local name="latexdiff-2026-01-02-0304-abc1234-to-def5678.pdf"
     [[ "$name" =~ ^latexdiff-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}-[a-f0-9]{7}-to-[a-f0-9]{7}(-dirty)?\.pdf$ ]] \
         || die "naming format regex failed"
@@ -220,12 +207,18 @@ cp "$REPO/$TEX" "$D/new.tex"
 
 # ---- strip (両版に同一適用 = 未変更 markup が spurious diff にならない) ----
 if [[ ${#STRIP_CMDS[@]} -gt 0 || ${#STRIP_COLORS[@]} -gt 0 ]]; then
-    write_strip_py "$D/strip.py"
+    CLEANER=$(find_cleaner) || die "--strip-cmd / --strip-color は ai-collaboration の scripts/review-markup-clean.py を使う — 見つからない。 claude-config の隣に clone する (git clone https://github.com/odakin/ai-collaboration) か、 置き場所を AI_COLLABORATION_DIR に入れる"
+    for side in base new; do
+        OUT=$(strip_markup "$CLEANER" "$D/$side.tex") || die "strip ($side) 失敗 — 閉じていない wrapper は上の message の位置"
+        echo "stripped $side: ${OUT##*: }"
+    done
     CMDS=$(IFS=,; echo "${STRIP_CMDS[*]:-}")
     COLORS=$(IFS=,; echo "${STRIP_COLORS[*]:-}")
-    python3 "$D/strip.py" "$D/base.tex" "$CMDS" "$COLORS" || die "strip (base) 失敗"
-    python3 "$D/strip.py" "$D/new.tex" "$CMDS" "$COLORS" || die "strip (new) 失敗"
-    echo "stripped: cmds=[$CMDS] colors=[$COLORS]"
+    echo "stripped: cmds=[$CMDS] colors=[$COLORS] ($CLEANER)"
+    for c in ${STRIP_COLORS[@]+"${STRIP_COLORS[@]}"}; do
+        NBARE=$(count_bare_color "$c" "$D/base.tex" "$D/new.tex")
+        [[ "${NBARE:-0}" -gt 0 ]] && echo "WARN: 群の外の \\color{$c} が ${NBARE} 行残った (--strip-color は {\\color{$c}…} の群だけを開く) — diff PDF のその範囲は $c のまま"
+    done
 fi
 
 # ---- 数式 silent miss 対策 (両版に同一適用 = LaTeX 的には no-op) ----

@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-最終更新: 2026-10-13
+最終更新: 2026-10-16
 
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
@@ -20,6 +20,7 @@
 - **desktop の session 一覧を account をまたいで写す (claude-app-account-mirror)** — engine・launchd 常駐の installer・app の版ごとの本体点検・selftest と mutant と installer の test まで済。 正本 = `scripts/claude-app-account-mirror.py` の冒頭 + [multi-account-machine-surface.md#session-list-per-account](conventions/multi-account-machine-surface.md#session-list-per-account)。 残り = 実 app での初回の実走 (Open items)
 - **Codex integration** — 正本 = [codex/PARITY.md#codex-integration-sot](codex/PARITY.md#codex-integration-sot) (SESSION には pointer だけ、 実装の語は書かない)
 - **book-lookup.py** — `amazon` (通販の商品ページの価格・在庫・形態) と OPAC の行の末尾保持を追加。 正本 = script の docstring + [book-purchase-lookup.md#price-source-outage](conventions/book-purchase-lookup.md#price-source-outage) / `#translation-check` / `#canon-sweep` / `#budget-cut`
+- **latexdiff-review-snapshot.sh の色外し** — 埋め込みの実装をやめ、 ai-collaboration の `review-markup-clean.py` を呼ぶ (`--strip-cmd` → `--macro` / `--strip-color` → `--color`、 CLI は不変)。 ⚠️ strip を使うには ai-collaboration が要る (探す順と、 無いときに止まること・群の外の `\color` を外さず警告することは script の docstring が正本)
 - **formcase / record-reply / SSO client / 通知 / 音声の道具** — 直近の変更は各 script の docstring と conventions が正本、 索引は SESSION-archive.md の 09-22〜09-28 の節
 
 ## Open items（forward-looking）
