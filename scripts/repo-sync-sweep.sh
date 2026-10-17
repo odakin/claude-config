@@ -429,7 +429,7 @@ _pull_locked() {
       ov3="$(printf '%s\n' "$overlap" | head -3 | tr '\n' ' ')"
       ovn="$(printf '%s\n' "$overlap" | wc -l | tr -d ' ')"
       [ "$ovn" -gt 3 ] && ov3="${ov3}他 $((ovn - 3)) 件 "
-      printf 'A\t%s: behind=%s だが未 commit の変更が upstream の変更と同じ file に当たる (%s) → stash しない (pop の conflict が作業中の file に入る)。 変更の持ち主が commit してから最新化する (確認 = git -C %s/%s status -sb)\n' \
+      printf 'A\t%s: behind=%s だが未 commit の変更が upstream の変更と同じ file に当たる (%s) → stash しない (pop の conflict が作業中の file に入る)。 変更の持ち主が commit してから最新化する (確認 = git -C %s/%s status -sb。 持ち主が居ないなら conventions/multi-session-coordination.md#owner-gone-intersect-sync)\n' \
         "$name" "$behind" "${ov3% }" "$_DISP" "$name"
       return 0
     fi
