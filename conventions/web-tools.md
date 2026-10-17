@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf)
+when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf) + YouTube の音声を取得するとき・HTML しか渡っていないとき・yt-dlp が SABR / 403 で失敗するとき (#youtube-audio-extraction)
 category: web
 summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter = 文字 whitelist / 戻り値は約 3KB で切れる / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + booking.com の宿への連絡は確認メールに返信しても届かない = web のメッセージ画面を pane で開きログインは本人 (#booking-property-messaging) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)** + Google サイトの編集画面は本文への `type` が確定しない = リンク挿入の窓で文と URL を入れ、 中身は節の削除で消し、 公開は確認画面を経て cookie なしの取得で確かめる (#google-sites-editor)
 -->
@@ -26,6 +26,74 @@ WebSearch の result block 末尾に付く自然言語 summary は検索エン�
 ### <a id="webfetch-answer-is-generated"></a>WebFetch の答えも生成物 — 原文の数・主張の確認に使わない
 
 WebFetch は取った page を小さなモデルに渡し、 prompt への答えを返す。 その答えは原文の写しではなく生成物で、 原文に無い数や主張を足すことがある (実測: 論文 PDF のある節の要約を頼むと、 原文が「3 か 4」 とする数を「5〜7」 と答え、 原文に無い検査の基準まで並べた)。 原文の数・言い回し・ある節の推奨を確かめるときは、 原文を読む = PDF は curl で取って PyMuPDF で text にするか、 手元の写しを開く。 WebFetch の答えと規約の記述が食い違ったら、 まず WebFetch の側を疑う。
+
+## <a id="youtube-audio-extraction"></a>YouTube の音声を取得する — HTML・通常配信・HLS を分ける
+
+音声の解析を頼まれたときは、URL から取得できるかを先に確認する。取得を試す前に、利用者へ音源の用意と再添付を丸投げしない。
+WebFetch の失敗や検索の 0 件は、動画や音声の不存在を意味しない。ページのタイトル・投稿者・説明欄は実ブラウザで確認できる場合がある。
+
+### HTML と音源の区別
+
+- ページをコピーした `<!DOCTYPE html>...` は音声ファイルではない。YouTube は音声を別に配信する。
+- 保存 HTML の `ytInitialPlayerResponse.streamingData.adaptiveFormats` に `audio/mp4` / `audio/webm` があっても、直接取得する `url` があるとは限らない。`serverAbrStreamingUrl` だけ、または映像形式に `signatureCipher` がある場合もある。HTML の JS を実行せず、必要な JSON のフィールドだけを読む。
+- 形式の一覧と、実際にダウンロードできることは別に確かめる。期限付き配信 URL には IP・署名などが含まれ得るため、正本や公開ログには残さず、必要なら通常の動画 URL を案件側で管理する。
+
+### 取得と M4A への格納
+
+使う Python・Node.js・`yt-dlp`・FFmpeg の実体と版を確認する。古い `yt-dlp` が失敗した場合は、対応する Python の一時 venv に現行版を入れて再確認する。既存のシステム環境を更新する作業とは分ける。
+通常の `-f bestaudio` が 403 で失敗しても、同じ公開動画の HLS 音声は取得できる場合がある。
+
+以下は Bash / zsh 用。`python3.14` は実在する対応版に置き換え、URL を指定し、同じ shell で順に実行する。Node.js・`ffmpeg`・`ffprobe` が PATH にあることが前提。
+
+```bash
+audio_work=$(mktemp -d "${TMPDIR:-/tmp}/youtube-audio.XXXXXX")
+python3.14 -m venv "$audio_work/venv"
+"$audio_work/venv/bin/python" -m pip install --disable-pip-version-check 'yt-dlp[default]'
+node_bin=$(command -v node)
+video_url='https://www.youtube.com/watch?v=VIDEO_ID'
+
+"$audio_work/venv/bin/yt-dlp" \
+  --js-runtimes "node:$node_bin" \
+  --no-playlist --no-progress --socket-timeout 15 \
+  --retries 1 --extractor-retries 1 --fragment-retries 1 \
+  --abort-on-unavailable-fragments \
+  -f 'bestaudio[protocol=m3u8_native]/best[protocol=m3u8_native]' \
+  -o "$audio_work/source.media" "$video_url"
+
+ffprobe -v error \
+  -show_entries format=format_name,duration,size:stream=codec_name,codec_type,sample_rate,channels \
+  -of json "$audio_work/source.media"
+```
+
+`/best[...]` は音声と映像を含む HLS も候補にする。取得したファイルに音声 stream があることと codec を読み、**AAC なら**次で無再エンコードの M4A にする。他 codec なら対応するコンテナを選ぶか、必要な変換を明示する。
+
+```bash
+ffmpeg -hide_banner -loglevel warning -n \
+  -i "$audio_work/source.media" -map 0:a:0 -c:a copy "$audio_work/audio.m4a"
+ffprobe -v error \
+  -show_entries format=duration,size:stream=codec_name,codec_type,sample_rate,channels \
+  -of json "$audio_work/audio.m4a"
+ffmpeg -v error -xerror -i "$audio_work/audio.m4a" -map 0:a:0 -f null -
+```
+
+各コマンドの終了値を確認し、失敗した段で止める。HLS の一部欠落を成功扱いしないため、取得時に `--abort-on-unavailable-fragments` を指定する。
+拡張子で中身を判定しない。HLS から `.mp4` 名で保存されたものが生 AAC だった実測があり、その長さは bitrate からの推定値だった。M4A に格納した後の長さ・codec・デコード結果を確認し、動画の表示尺と大きく違えば欠落を調べる。
+一時フォルダは恒久保管先ではない。後続作業に残す音源は、その案件の成果物置き場へ移し、利用者が開けるファイルの参照を渡す。
+
+### 実測範囲と失敗の切り分け
+
+2026-10-17、macOS の公開動画 1 件で確認:
+
+| 経路 | 結果 |
+|---|---|
+| Python 3.9 / `yt-dlp` 2025.10.14 | Python 非推奨・SABR の URL 欠落警告の後、ページ再読込を要求して失敗 |
+| Python 3.14.4 / Node.js 22.16.0 / `yt-dlp[default]` 2026.08.19、`-f bestaudio` | 形式 251 を選べたが、音声本体の取得は HTTP 403 |
+| 同じ一時環境で上の HLS 選択式 | 形式 234、31 fragment を取得。FFmpeg 6.0 で AAC を M4A に格納し、44.1 kHz・2 ch・動画の表示尺に合う長さを確認 |
+
+成功時の取得コマンドには `--abort-on-unavailable-fragments` が付いていなかった。上の再利用手順では欠落時に止める指定を加えた。全動画・認証が要る動画・他 OS での成功を保証する実測ではない。
+DNS エラーは実行環境のネットワーク許可を、403 は選んだ配信形式と現行ツールの対応を切り分ける。sandbox の許可は正規の承認経路で扱い、ログイン・権限・地域制限を越える手順にはしない。
+**音声の取得、デコード、聴取、文字起こし・採譜の検証は別段階**として報告する。ファイルが取れただけで、演奏を聴いた・正確に採譜できると約束しない。
+音声から文章を起こすときの検証は [audio-transcription.md](audio-transcription.md) を参照。
 
 ## WebFetch は `<head>` 内 meta タグ・JSON-LD を落とす
 

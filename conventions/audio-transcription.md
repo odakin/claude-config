@@ -7,6 +7,8 @@ summary: 機械の音声転写も「転記」ではなく「生成」で、聞�
 
 会議・インタビュー・収録を whisper 等でテキスト化して、それを議事録・引用・記録に使う場面。
 
+YouTube の URL から元音声を取得する段階は [web-tools.md#youtube-audio-extraction](web-tools.md#youtube-audio-extraction) を参照。HTML と音源の区別、HLS での取得、M4A への格納と確認を同節で扱う。
+
 出発点は姉妹 doc と同じ: **モデルが起こしたテキストは転記ではなく生成**である
 (画像から起こす場合は
 [`photographed-document-transcription.md#quotation-extraction`](photographed-document-transcription.md#quotation-extraction))。

@@ -1,10 +1,12 @@
 # SESSION — claude-config
 
-最終更新: 2026-10-16
+最終更新: 2026-10-17
 
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
+
+- **YouTube の音声取得** — 再利用する手順と音声転写側からの参照を整え、通常利用へ移る段階。次に取得が失敗したら、実行環境・配信形式・取得後の codec と尺を同じ入口で確かめる。手順・実測範囲 = [web-tools.md#youtube-audio-extraction](conventions/web-tools.md#youtube-audio-extraction)。
 
 - **ポッドキャストのフォロワー取得 CLI** — 通常利用へ移る段階。次に認証や応答が変わったときは、数値の非表示と取得失敗を分けて検証する。履歴の描画を調整するときは同じ engine の `render_history_chart` と呼び元の記録表を照合する。入口・取得値・合成データの検査は [podcast-followers.py](scripts/podcast-followers.py)。
 
