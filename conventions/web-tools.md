@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf)
+when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf)
 category: web
-summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter = 文字 whitelist / 戻り値は約 3KB で切れる / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + booking.com の宿への連絡は確認メールに返信しても届かない = web のメッセージ画面を pane で開きログインは本人 (#booking-property-messaging) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)**
+summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter = 文字 whitelist / 戻り値は約 3KB で切れる / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + booking.com の宿への連絡は確認メールに返信しても届かない = web のメッセージ画面を pane で開きログインは本人 (#booking-property-messaging) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)** + Google サイトの編集画面は本文への `type` が確定しない = リンク挿入の窓で文と URL を入れ、 中身は節の削除で消し、 公開は確認画面を経て cookie なしの取得で確かめる (#google-sites-editor)
 -->
 # Web ツール (WebSearch / WebFetch) の信頼性 caveat
 
@@ -409,10 +409,32 @@ frameset の app では空文字と ref 無しが返る。 読み書きは `java
   機能ごとの「ログインして〜」 はログイン中でも出る、実測）。推測で作った URL が 404 やトップページに落ちると、
   文字には検索フォームしか出ずログアウトに見える（実測）= 正しい入口（手順書の URL・ヘッダのメニュー）から開き直してから判定する。
   ログアウトと言う前に 1 枚撮る
+- <a id="login-page-not-access-restriction"></a>**サイトを開いてログイン画面が出ても、 そのサイトが限定公開とは限らない**。
+  pane に残っていたアカウント選択の画面に回されただけのことがある（実測: 「組織のアカウント限定」 と報告したサイトが、
+  共有の設定では「インターネット上の誰でも」 で、 ログインなしの取得にも本文を返した）。公開範囲を言う前に、
+  cookie を持たない取得（`curl -sL <URL>` の状態コードと本文）か、サイトの共有設定の画面で確かめる
 - **`#` だけ違う URL への `navigate` はページを読み直さない**（古い版が表示されたまま）。作り直したページを確かめるときは
   `location.reload()` を使う
 - **ロボット判定（Turnstile 等）は自動操作では通れない**（トークンが発行されない、実測）。**突破しようとしない**。
   判定を通った送信の確認は人に頼む（[`static-site-form-backend.md#turnstile`](static-site-form-backend.md#turnstile)）
+
+## <a id="google-sites-editor"></a>Google サイト（新しい版）の編集画面を内蔵 Browser pane で操作する
+
+Google サイトには中身を書き換える API が無く、編集は画面の操作になる（経路の順番 = [`machine-route-first.md#route-ladder`](machine-route-first.md#route-ladder) の最後の段）。実測した癖:
+
+- **本文のテキストボックスに `computer` の `type` で入れた文字は確定しないことがある** — 入れたはずの文字が消える、
+  古い文に戻る、一部だけ残る（実測）。`key` で 1 文字ずつ送ると入るが遅い。
+  **リンクを挿入する窓（「テキスト」 と「リンク」 の 2 つの入力欄）は `type` をそのまま受け付ける** = 1 行の文とその URL なら、
+  挿入の panel から「テキスト ボックス」 を置き、その窓で表示の文と URL を入れるのが確実。
+  入れた後は `get_page_text` で本文を読み戻して確かめる（画面の見た目では消えた文字に気づきにくい）
+- **ページの中身を消すときは、ページの削除より節の削除** — 各節の「セクションを削除」 の button で消すと、
+  ページと URL は残る（外から張られたリンクが 404 にならない）。ページの削除は外部サイトのデータの削除として、
+  本人の明示の承認がないと auto mode の分類器に止められる（実測）
+- **「公開」 は 2 段** — 編集画面の「公開」 → 変更点の確認画面（左に変わったページの一覧、右に下書きと公開中の版が並ぶ）→ その画面の「公開」。
+  確認画面は、変えたページの数と中身を本人に見せる面として使える。「サイトを公開しました」 の表示が出たら、
+  上の [`#login-page-not-access-restriction`](#login-page-not-access-restriction) と同じく cookie を持たない取得で
+  各ページの本文とリンク先を確かめる（編集画面で見た文と、公開された版が一致するかを見る）
+- 編集画面の URL は `sites.google.com/d/<site id>/p/<page id>/edit` で、アカウントは `?authuser=<email>` で選ぶ（[`google-url.md`](google-url.md)）
 
 ## <a id="headless-page-screenshot"></a>相手が preview を見られないときは、ページ全体を画像に撮って送る
 
