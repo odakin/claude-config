@@ -20,7 +20,8 @@
       同じ相対 path の別の file が在る (例: 親フォルダと repo の両方に在る CLAUDE.md を repo の中で書いた)。
   (c) href を山括弧で囲んだ link (reason = angle): `[x](<path>)` は CommonMark では正しいが、 app は山括弧ごと path に
       する (実測 = 「見つかりませんでした」 の path 欄に `<…>` が付いた)。 中身の path が在るときだけ拾い、 囲まずに
-      空白を `%20` にした形を示す (href は decodeURI してから解釈される)。
+      空白・丸括弧を `%20`・`%28`・`%29` にした形を示す (href は decodeURI してから解釈される)。 濁点の形も違えば
+      (reason = angle_nfd) disk 上の綴りで示す。
   (d) 濁点の形だけが disk 上の名前と違う (reason = nfd): 実在する file への参照で、 path のある成分が disk 上の名前と
       Unicode の正規化 (NFC / NFD) だけ違う。 macOS の file system は正規化を問わず開けるので exists は通るが、 app の
       表示要求は解決できないことがある (実測 = Dropbox の NFD の file 名)。 disk 上の綴りを示す。
@@ -130,14 +131,17 @@ def disk_spelling(path: str) -> str | None:
 
 
 def _href_form(path: str) -> str:
-    return path.replace(" ", "%20")
+    """囲まずに書ける href の形 = 空白と丸括弧を % で符号化 (app は decodeURI してから解釈する。 丸括弧を残すと link が切れる)。"""
+    return path.replace(" ", "%20").replace("(", "%28").replace(")", "%29")
 
 
 def _form_finding(kind: str, raw: str, shown: str, target: str, angle: bool) -> dict | None:
-    """実在する target への参照の書き方の問題 = 山括弧 (c) か濁点の形 (d)。 無ければ None。"""
-    if angle:
-        return {"kind": kind, "raw": raw, "path": shown, "reason": "angle", "candidates": [_href_form(target)]}
+    """実在する target への参照の書き方の問題 = 山括弧 (c) か濁点の形 (d)、 または両方。 無ければ None。
+    山括弧の提案も disk 上の綴りで出す (囲みを外しても濁点の形が違えば開かない = 2026-10-13 の実例は両方だった)。"""
     disk = disk_spelling(target)
+    if angle:
+        reason = "angle_nfd" if disk else "angle"
+        return {"kind": kind, "raw": raw, "path": shown, "reason": reason, "candidates": [_href_form(disk or target)]}
     if disk:
         return {"kind": kind, "raw": raw, "path": shown, "reason": "nfd", "candidates": [disk]}
     return None
@@ -303,7 +307,9 @@ def build_reason(findings: list[dict], root: str) -> str:
     ]
     where_of = {"outside": "フォルダの外", "missing": "存在しない",
                 "shadowed": "上のフォルダの同名の別 file が開く。 作業中のフォルダの file を指すなら",
-                "angle": "href を山括弧 <…> で囲んでいる = 山括弧ごと path になり開けない。 囲まずに、 空白は %20 で",
+                "angle": "href を山括弧 <…> で囲んでいる = 山括弧ごと path になり開けない。 囲まずに、 空白・丸括弧は %20・%28・%29 で",
+                "angle_nfd": "href を山括弧 <…> で囲んでいて、 file 名の濁点の形 (NFC / NFD) も disk 上の名前と違う。 "
+                             "ASCII の名前の写しに link するか SendUserFile で渡すのが確実。 書くなら囲まずに disk 上の綴りで",
                 "nfd": "file 名の濁点の形 (NFC / NFD) が disk 上の名前と違い、 開けないことがある。 "
                        "ASCII の名前の写しに link するか SendUserFile で渡す。 disk 上の名前は"}
     for f in findings[:8]:

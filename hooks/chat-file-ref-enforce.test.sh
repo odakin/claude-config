@@ -174,9 +174,16 @@ if [ -e "$ROOT/book/$NFC_NAME" ] && ! ls "$ROOT/book" | grep -qxF "$NFC_NAME"; t
   case_ "E5: disk 上は NFD・link は NFC の絶対 path = fire + 濁点の形" 1 "[ポスター]($ROOT/book/$NFC_NAME)" "濁点の形"
   case_ "E6: 基準フォルダからの NFC の link = fire" 1 "[ポスター](book/$NFC_NAME)" "濁点の形"
   case_ "E7: disk 上と同じ NFD で書いた link = silent" 0 "[ポスター]($ROOT/book/$NFD_NAME)"
+  NFD_ODD="$(python3 -c 'import unicodedata, sys; print(unicodedata.normalize("NFD", sys.argv[1]))' "ポスター (案) A.pdf")"
+  : > "$ROOT/book/$NFD_ODD"
+  case_ "E9: 山括弧 + 濁点の形 + 空白・丸括弧 (2026-10-13 の実例の形) = fire + 両方を言う" 1 \
+    "[案](<$ROOT/book/ポスター (案) A.pdf>)" "濁点の形 (NFC / NFD) も"
 else
-  results+=("⏭  E5-E7: この file system は正規化だけ違う名前を同じ file として開かない (macOS の外) ので skip")
+  results+=("⏭  E5-E7・E9: この file system は正規化だけ違う名前を同じ file として開かない (macOS の外) ので skip")
 fi
+: > "$ROOT/book/memo (v2).md"
+case_ "E8: 山括弧で囲んだ丸括弧つきの名前 = 囲まずに %28・%29 で示す" 1 \
+  "[v2](<$ROOT/book/memo (v2).md>)" "memo%20%28v2%29.md"
 
 echo "=== §C fail-open と配線 ==="
 mktranscript "$TMP/c.jsonl" claude-desktop "$ROOT" "[]" "[drafts/intro.md](drafts/intro.md)"
