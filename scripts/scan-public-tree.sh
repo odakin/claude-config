@@ -46,7 +46,9 @@
 #
 # 台帳 (machine-local): $CLAUDE_STATE_DIR (既定 ~/.claude/state)/public-tree-scan.tsv
 #   repo<TAB>HEAD sha<TAB>走査日<TAB>finding 件数
-#   **HEAD が進んでも再走査しない** — 新しい行は gate 本体が見ているので 1 repo 1 回で足りる。
+#   **HEAD が進んでも再走査しない** — 新しい行は gate 本体が見る前提。 ただし gate を通らない commit (GitHub の画面での編集・
+#   他の人の PR の merge・hook の無い機械) はこの前提の外 = 台帳を持たない CI での実行が定期の網になる
+#   (conventions/confidential-repo-boundary.md#ledger-skips-bypassed-commits)。
 #   gate の Tier を足した / 検出語の源を変えた ときだけ --force で回し直す。
 #
 # exit: 0 = finding 無し (or 対象外) / 1 = finding あり / 2 = usage error

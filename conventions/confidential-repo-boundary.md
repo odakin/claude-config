@@ -307,6 +307,11 @@ fresh な index に置き、 **全 file が「追加行」 に見える状態**�
 そのまま tree 全体に当たる)。 `--all` で marker つき repo を横断、 結果は machine-local の台帳に記録し、
 **finding があった repo は「走査済」 にしない**。
 
+<a id="ledger-skips-bypassed-commits"></a>⚠️ 台帳は走査済の repo を HEAD が進んでも見直さない (新しい行は commit の gate が見る前提)。
+この前提は gate を通った commit にしか成り立たない: GitHub の画面での編集・他の人の PR の merge・hook の入っていない機械からの commit は gate を通らない。
+台帳を持たない runner (CI) で棚卸しを回すと毎回 tree 全体を見直すので、 それがこの抜け道を定期的に見る唯一の網になっていることがある (実測)。
+CI を速くするために棚卸しの段を外す前に、 代わりに tree 全体を定期的に見直すものがあるかを確かめる。 外さない理由は workflow の該当の段にコメントで残す。
+
 既に公開されていて「見た上で残す」 と決めたものは、 repo の `.claude/public-tree-accept.txt` に
 理由つきで 1 行書く。 この受理は **棚卸しにだけ効き、 commit gate には効かない** (= 新しい書き込みは
 今までどおり止まる)。 受理できるのは token を名指しできる Tier A だけで、 件数と file 名しか出ない
