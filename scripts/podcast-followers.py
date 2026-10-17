@@ -39,6 +39,14 @@ class ReadError(Exception):
     """Only static, non-sensitive messages belong in this exception."""
 
 
+def api_has_error(obj):
+    error = obj.get("error")
+    # Amazon includes this empty envelope even on a successful metrics response.
+    if error == {"errors": []}:
+        error = None
+    return bool(error or obj.get("errors"))
+
+
 def count(value):
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         raise ReadError("metric_missing")
@@ -205,7 +213,7 @@ class Client:
             obj = json.loads(raw)
             if not isinstance(obj, dict):
                 raise ReadError("response_shape_changed")
-            if obj.get("error") or obj.get("errors"):
+            if api_has_error(obj):
                 raise ReadError("api_error")
             return obj
         except urllib.error.HTTPError as e:
@@ -260,7 +268,7 @@ def amazon(client, fields, show, start, today):
         body={"startTime": start + "T00:00:00.000Z", "endTime": today + "T00:00:00.000Z",
             "pagination": {"pageSize": 50},
             "followsAggregate": {"groupByProperties": ["PODCAST_ID"], "calculationsIncluded": ["TOTAL"]}})
-    if obj.get("error") or obj.get("errors"):
+    if api_has_error(obj):
         raise ReadError("api_error")
     found = [r for r in obj.get("data", {}).get("followsAggregate", []) if r.get("id") == show]
     if len(found) != 1:
@@ -374,7 +382,7 @@ def selftest():
                 def request(self, url, headers, body):
                     assert body["startTime"] == "2020-01-01T00:00:00.000Z"
                     assert body["endTime"] == "2026-10-17T00:00:00.000Z"
-                    return {"data": {"followsAggregate": [{"id": "OTHER", "total": 999}, {"id": "SHOW", "total": 2}]}}
+                    return {"error": {"errors": []}, "data": {"followsAggregate": [{"id": "OTHER", "total": 999}, {"id": "SHOW", "total": 2}]}}
             self.assertEqual(amazon(Fake(), {"cookie": "x=y", "csrf_token": "x"}, "SHOW", "2020-01-01", "2026-10-17")[0], 2)
             class Error:
                 def request(self, *a, **kw):
@@ -399,6 +407,15 @@ def selftest():
             client = Client("spotify")
             client.opener = HTML()
             self.assertEqual(client.request("https://accounts.spotify.com/oauth2/v2/auth", text=True), "<html>synthetic</html>")
+        def test_empty_error_envelope(self):
+            import io
+            class JSON:
+                def open(self, req, timeout):
+                    return io.BytesIO(b'{"error":{"errors":[]},"data":{"followsAggregate":[]}}')
+            client = Client("amazon")
+            client.opener = JSON()
+            self.assertEqual(client.request("https://podcasters.amazon.com/api/metrics/podcast")["error"], {"errors": []})
+            self.assertTrue(api_has_error({"error": {"errors": [{"exception": "synthetic"}]}}))
         def test_long_terminal_input(self):
             import pty
             import select
