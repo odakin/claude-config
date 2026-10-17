@@ -279,8 +279,13 @@ def amazon(client, fields, show, start, today):
 def apple_count(obj):
     if obj.get("measure") != "FOLLOWERS":
         raise ReadError("metric_mismatch")
-    n = count(obj.get("allTimeFollowers", {}).get("all", {}).get("current"))
-    return "-" if n < 5 else n  # A numeric zero can be privacy-censored.
+    all_time = obj.get("allTimeFollowers")
+    all_count = all_time.get("all") if isinstance(all_time, dict) else None
+    if not isinstance(all_count, dict) or "current" not in all_count:
+        raise ReadError("metric_missing")
+    # Apple requires five unique playing users for analytics, not five followers.
+    # A present null supplies no numeric upper bound on followers.
+    return "-" if all_count["current"] is None else count(all_count["current"])
 
 
 def apple(client, fields, show, start, today):
@@ -289,7 +294,9 @@ def apple(client, fields, show, start, today):
     cookie = "; ".join(k + "=" + fields[k] for k in FIELDS["apple"])
     obj = client.request("https://podcastsconnect.apple.com/podcasts/pcc/v1/analytics/showTrendsV2?" + query,
                          {"Cookie": cookie})
-    return apple_count(obj), "API: allTimeFollowers.all.current (small counts kept as 0–4)"
+    n = apple_count(obj)
+    return n, ("API: follower count not disclosed (null; no numeric bound)" if n == "-"
+               else "API: allTimeFollowers.all.current")
 
 
 def collect(site, root, show, start="2017-09-19", today=None, client=None):
@@ -302,7 +309,7 @@ def collect(site, root, show, start="2017-09-19", today=None, client=None):
         fields = load_auth(Path(root), site)
         n, note = {"spotify": spotify, "amazon": amazon, "apple": apple}[site](
             client or Client(site), fields, show, start, today)
-        return {"site": site, "count": n, "status": "ok", "note": note}
+        return {"site": site, "count": n, "status": "not_disclosed" if n == "-" else "ok", "note": note}
     except ReadError as e:
         return {"site": site, "count": None, "status": str(e)}
     except (KeyError, TypeError, AttributeError, ValueError, OverflowError):
@@ -344,9 +351,9 @@ def selftest():
             for bad in (None, True, -1, 1.2, "NaN", float("inf"), "secret"):
                 with self.assertRaises(ReadError):
                     count(bad)
-            for n, expected in ((108.0, 108), (0, "-"), (4, "-")):
+            for n, expected in ((108.0, 108), (0, 0), (4, 4), (None, "-")):
                 self.assertEqual(apple_count({"measure": "FOLLOWERS", "allTimeFollowers": {"all": {"current": n}}}), expected)
-            for obj in ({}, {"measure": "LISTENERS"}, {"measure": "FOLLOWERS", "allTimeFollowers": {"all": {"current": None}}}):
+            for obj in ({}, {"measure": "LISTENERS"}, {"measure": "FOLLOWERS", "allTimeFollowers": {"all": {}}}):
                 with self.assertRaises(ReadError):
                     apple_count(obj)
         def test_state(self):
