@@ -6,7 +6,7 @@
 
 ## 現在地
 
-- **ポッドキャストのフォロワー取得 CLI** — 通常利用へ移る段階。次に認証や応答が変わったときは、数値の非表示と取得失敗を分けて検証する。入口・取得値・合成データの検査は [podcast-followers.py](scripts/podcast-followers.py)。
+- **ポッドキャストのフォロワー取得 CLI** — 通常利用へ移る段階。次に認証や応答が変わったときは、数値の非表示と取得失敗を分けて検証する。履歴の描画を調整するときは同じ engine の `render_history_chart` と呼び元の記録表を照合する。入口・取得値・合成データの検査は [podcast-followers.py](scripts/podcast-followers.py)。
 
 - **導入先での実測で見つかった問題の一式 (別 vendor の worker が担当)** — owner の裁定を受けて全部入った (委任の一節の文面・setup.sh の opt-in 群と招待の表示・貼り付け用コマンドの hook の誤検出・MCP の test・headless の fixture と YAML loader・個人層の作成・docx の patch の python・運用の注意・git-crypt-guide の push 前の確認)。 委任の一節は差し替えの後、 中身の無い依頼の Agent が Sonnet・Opus・Fable で安全フィルタに止まらず通ることを依頼元が確認済み。 worker の提出は受領済み。 規則保護 gate の `apply` は別件として下の entry で扱う。 扱い方 = [tool-call-robustness.md#api-safety-filter-on-main-response](conventions/tool-call-robustness.md#api-safety-filter-on-main-response)
 

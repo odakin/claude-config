@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Read podcast follower counts using owner-supplied sessions, without a browser.
 
-Standard library only. No browser-cookie discovery; no credential output.
+API reads use the standard library; history charts optionally use matplotlib.
+No browser-cookie discovery; no credential output.
 save-auth accepts hidden interactive input. Keep auth-dir outside version control.
 Session expiry requires the owner to sign in and replace the saved fields.
 Unofficial routes and schemas: openpodcast/spotify-connector (authentication,
@@ -316,6 +317,106 @@ def collect(site, root, show, start="2017-09-19", today=None, client=None):
         return {"site": site, "count": None, "status": "response_shape_changed"}
 
 
+def render_history_chart(points, series, output_stem, *, title, subtitle="", footnote="", unit="Followers"):
+    """Write deterministic SVG + PNG small multiples from dated numeric observations.
+
+points: [{date: ISO date, values: {series_key: number or None}, assumed: [keys]}]
+series: [(key, display label), ...]. Missing values break lines; hollow markers
+identify supplied assumptions. Policy and ledger parsing belong to the caller.
+Matplotlib is only required when drawing; SVG embeds glyph paths for portability.
+"""
+    cache = Path(tempfile.gettempdir()) / ("podcast-followers-mpl-" + str(os.getuid()))
+    cache.mkdir(mode=0o700, exist_ok=True)
+    os.environ.setdefault("MPLCONFIGDIR", str(cache))
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        from matplotlib import dates as mdates, font_manager, pyplot as plt, ticker
+    except ImportError:
+        raise RuntimeError("Chart generation requires matplotlib: python3 -m pip install matplotlib") from None
+    if not series:
+        raise ValueError("At least one chart series is required")
+    dates = [dt.date.fromisoformat(p["date"]) for p in points]
+    if dates != sorted(set(dates)):
+        raise ValueError("Chart dates must be unique and increasing")
+    numbers = [v for p in points for k, _ in series if (v := p["values"].get(k)) is not None]
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in numbers):
+        raise ValueError("Chart values must be nonnegative numbers or None")
+    available = {f.name for f in font_manager.fontManager.ttflist}
+    family = next((f for f in ("Hiragino Sans", "Noto Sans CJK JP", "Noto Sans JP", "IPAexGothic") if f in available), "DejaVu Sans")
+    if family == "DejaVu Sans" and re.search(r"[\u3040-\u9fff]", title + subtitle + footnote + unit + "".join(v for _, v in series)):
+        raise RuntimeError("Japanese charts require a Japanese font, e.g. Noto Sans CJK JP")
+    columns = min(2, len(series))
+    rows = math.ceil(len(series) / columns)
+    colors = ("#233b5d", "#167d8d", "#23965b", "#cb8024", "#8463a8", "#cc5263")
+    rc = {"font.family": family, "text.usetex": False, "svg.fonttype": "path",
+          "svg.hashsalt": "podcast-follower-history", "axes.unicode_minus": False,
+          "font.size": 10, "axes.edgecolor": "#c9d1dc", "xtick.color": "#566274", "ytick.color": "#566274"}
+    with matplotlib.rc_context(rc):
+        fig, grid = plt.subplots(rows, columns, figsize=(11, 1.25 + 2.3 * rows), squeeze=False)
+        fig.set_facecolor("#f5f7fb")
+        fig.subplots_adjust(left=.075, right=.97, top=.83, bottom=.14, hspace=.60, wspace=.21)
+        fig.suptitle(title, x=.075, y=.97, ha="left", fontsize=19, weight="bold", color="#20334e")
+        fig.text(.075, .91, subtitle, color="#566274", fontsize=10)
+        fig.text(.075, .035, footnote, fontsize=9, color="#566274", linespacing=1.6)
+        ticks = ticker.MaxNLocator(nbins=4, integer=True).tick_values(0, max(1, max(numbers, default=0) * 1.1))
+        ticks = [t for t in ticks if t >= 0]
+        ceiling = max(ticks)
+        try:
+            for i, ax in enumerate(grid.flat):
+                if i >= len(series):
+                    ax.set_axis_off()
+                    continue
+                key, label = series[i]
+                color = colors[i % len(colors)]
+                values = [p["values"].get(key) for p in points]
+                latest = values[-1] if values else None
+                latest_text = "—" if latest is None else f"{latest:g}"
+                if points and key in points[-1].get("assumed", []):
+                    latest_text += "*"
+                ax.set_title(f"{label}   {latest_text}", loc="left", fontsize=12, weight="bold", color=color, pad=10)
+                ax.set_facecolor("white")
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+                ax.grid(axis="y", color="#e3e8ef", linewidth=.8)
+                ax.set_axisbelow(True)
+                ax.set_yticks(ticks)
+                ax.set_ylim(-ceiling * .06, ceiling)
+                ax.set_ylabel(unit, fontsize=9)
+                if dates:
+                    ax.plot(dates, values, color=color, linewidth=2.2, marker="o", markersize=5, zorder=3)
+                    assumed = [j for j, p in enumerate(points) if key in p.get("assumed", []) and values[j] is not None]
+                    if assumed:
+                        ax.scatter([dates[j] for j in assumed], [values[j] for j in assumed],
+                                   facecolors="white", edgecolors=color, s=40, linewidths=1.6, zorder=4)
+                    tick_count = min(6 if dates[0].year == dates[-1].year else 4, len(dates))
+                    selected = sorted({round(j * (len(dates) - 1) / max(1, tick_count - 1))
+                                       for j in range(tick_count)})
+                    ax.set_xticks([dates[j] for j in selected])
+                    ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d" if dates[0].year == dates[-1].year else "%y/%m/%d"))
+                    lo, hi = mdates.date2num(dates[0]), mdates.date2num(dates[-1])
+                    pad = max(.3, (hi - lo) * .07)
+                    ax.set_xlim(lo - pad, hi + pad)
+                    ax.tick_params(axis="x", labelsize=9)
+                else:
+                    ax.set_xticks([])
+                    ax.text(.5, .5, "No observations yet", ha="center", va="center", transform=ax.transAxes, color="#677489")
+            stem = Path(output_stem)
+            stem.parent.mkdir(parents=True, exist_ok=True)
+            targets = {ext: stem.with_suffix("." + ext) for ext in ("svg", "png")}
+            with tempfile.TemporaryDirectory(prefix=".follower-chart-", dir=stem.parent) as tmp:
+                for ext in targets:
+                    metadata = {"Title": title, "Description": footnote}
+                    if ext == "svg":
+                        metadata.update({"Date": None, "Creator": "podcast-followers"})
+                    fig.savefig(Path(tmp) / ("chart." + ext), format=ext, dpi=160, metadata=metadata)
+                for ext, target in targets.items():
+                    os.replace(Path(tmp) / ("chart." + ext), target)
+            return targets
+        finally:
+            plt.close(fig)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--selftest", action="store_true")
@@ -356,6 +457,25 @@ def selftest():
             for obj in ({}, {"measure": "LISTENERS"}, {"measure": "FOLLOWERS", "allTimeFollowers": {"all": {}}}):
                 with self.assertRaises(ReadError):
                     apple_count(obj)
+        def test_history_chart(self):
+            import importlib.util
+            if importlib.util.find_spec("matplotlib") is None:
+                self.skipTest("optional matplotlib is not installed")
+            with tempfile.TemporaryDirectory() as td:
+                stem = Path(td) / "history"
+                points = [{"date": "2026-01-01", "values": {"a": 0}, "assumed": ["a"]},
+                          {"date": "2026-01-03", "values": {"a": None}},
+                          {"date": "2026-01-10", "values": {"a": 3}}]
+                files = render_history_chart(points, [("a", "Series A")], stem, title="History")
+                svg = files["svg"].read_bytes()
+                self.assertIn(b"<svg", svg)
+                self.assertTrue(files["png"].read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+                render_history_chart(points, [("a", "Series A")], stem, title="History")
+                self.assertEqual(files["svg"].read_bytes(), svg)
+                render_history_chart([], [("a", "Series A")], stem, title="Empty history")
+                self.assertIn(b"No observations yet", files["svg"].read_bytes())
+                with self.assertRaises(ValueError):
+                    render_history_chart([points[0], points[0]], [("a", "Series A")], stem, title="Invalid")
         def test_state(self):
             self.assertEqual(spotify_code('{response:{state:"abc",code:"xyz"}};', "abc"), "xyz")
             for page in ('{state:"wrong",code:"xyz"}', '{state:"abc",error:"login_required"}', '<html>Login</html>'):
