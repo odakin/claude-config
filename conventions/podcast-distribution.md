@@ -158,6 +158,8 @@ PNG は元の絵として手元に残す。
   Spotify・Apple・Amazon の管理画面が使う API は、持ち主が提供した認証で CLI から読む経路もある。
   実装 = [`scripts/podcast-followers.py`](../scripts/podcast-followers.py)。Spotify は番組 metadata の followers、Amazon は followsAggregate、Apple は全期間の FOLLOWERS を読む。
   数値非表示 (Apple の null) と取得失敗を分け、認証エラーを 0 人にしない。端末の長い非表示入力・保存権限・送信先制限・応答検査は共通 engine、番組 ID と非表示を集計へどう入れるかは呼び元が持つ。
+  分けられているかの確かめ方 = 保存した認証と同じ形で値だけを無効にした写しを一時 dir に作り、記録しない形で 1 回読む (engine なら配信先ごとに `--check <配信先> --show <番組 ID> --auth-dir <写し>`)。
+  3 つとも status が認証エラー (`login_required` / `login_required_or_access_denied`) で数が空なら、失効した日に 0 人や非表示として記録されない (実測)。写しは読んだらすぐ消す。
   同じ engine の `render_history_chart` は保存済み履歴から SVG / PNG を描き、欠測と集計上の仮定を区別する。
   - ⚠️ 管理画面のログインの Cookie を保存して読ませる形は、 そのアカウントにログインしているのと同じ力を手元に置く = 漏れたら乗っ取られる
   - ⚠️ Claude Code の auto mode では、 ログイン中のページから値を抜き出す操作も、 Cookie で読む道具を書く操作も、 classifier が「認証情報の探索」 として止めた (実測)。

@@ -31,6 +31,7 @@
 
 ## Open items（forward-looking）
 
+- [ ] **snapshot の PATH の補修が既定の設定フォルダしか見ない** — [`hooks/fix-snapshot-path-patch.sh`](hooks/fix-snapshot-path-patch.sh) と setup.sh が入れる launchd の WatchPaths が `~/.claude/shell-snapshots` に固定。 `CLAUDE_CONFIG_DIR` で別の設定フォルダを使う session の snapshot は補修されず、 Bash tool の PATH から Homebrew の bin と `~/.local/bin` が落ちる (`HOMEBREW_PREFIX` は立っているのに PATH に無い = この形。 実測: LFS の repo で git-lfs の pre-push が push を止めた)。 直す形 = 補修と WatchPaths を全ての設定フォルダの `shell-snapshots` に広げる。 `hooks/*` と setup.sh は保護 = 本人の裁定を取ってから。 同じ裁定で `hooks/known-errors.json` に git-lfs の「not found on your path」 を足し、 [shell-env.md](conventions/shell-env.md) の snapshot の節に設定フォルダの軸を書く
 - [ ] **完了Git gateのリモート照会失敗の切り分け** — 自動照会の検査不能と直接照会の成功が食い違う条件を調べる段階。次は通常SSHと多重化を使わない照会を同時点で比較し、タイムアウトと起動失敗を区別する候補を作る。実装の入口 = [session_touch.py](codex/hooks/session_touch.py)。原因未特定のため検査の変更は未着手。
 - [ ] **既存Linux CIのchat_file_refs変異検査** — Unicode正規化が異なる名前を別ファイルとして扱う環境では、元の[テスト](hooks/chat-file-ref-enforce.test.sh)がE5・E6・E7・E9をskipするが、[変異検査のspec](scripts/chat_file_refs.mutants.json)がこれらを必須ラベルとして要求し失敗する。次は検査強度を保って環境分岐とspecを整合させる候補を作る。音源採譜手順とは独立したテスト定義の問題。
 
