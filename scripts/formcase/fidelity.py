@@ -18,6 +18,16 @@
     spec の ``meta.accept_loss`` (理由つき) に無いものを ⚠️ に
   - fidelity_record: 出力 PDF の宣言 (print_pages の record) に載せる {template, sha256, targets, drop, blank} =
     刷る直前の preflight が同じ照合を回すため (K3)
+
+過去の fidelity_log の追補を検収する場合:
+  - 日付・case・doc・group を案件の manifest と作成 commit に照合する。同じ結果が続いても、別時刻の実行は
+    重複とは限らない。JSON の形が正しいだけでは、当時の検査結果の裏付けにはならない。
+  - 当時の雛形・記入済み workbook・出力 PDF を同じ版でそろえる。Git の filter が復号を担う repo なら
+    ``git cat-file --filters REV:PATH`` で一時領域へ取り出せる。現在の雛形に改訂があれば、そのまま代用しない。
+  - 既存の STATIC_TEXT に --filled / --target / --blank / --json を渡して読むだけの再検査を行い、
+    log_fidelity が保存する各 field を比較する。build / freeze / log_fidelity は再検査のためには呼ばない。
+  - 中間出力が残らなければ、その回単独の再現は未確認。保存版での一致と実行日時の裏付けを区別する。
+    昔の結果の検収は現在の提出可否の認定ではない。個人情報を含む一時コピーは照合後に消す。
 """
 from __future__ import annotations
 
