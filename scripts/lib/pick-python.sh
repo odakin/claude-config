@@ -23,8 +23,13 @@
 # 返り値: 0 = stdout に interpreter の path / 1 = 候補なし (stdout に理由 1 行)。 起動できない候補
 # (Xcode のライセンス未同意の exit 69 等) は import 失敗と同じく飛ばす。 module 無しで呼べば「起動できるか」 だけを見る。
 # test = scripts/lib/pick-python.test.sh
+# zsh で source しても同じに動く (agent の Bash tool は zsh)。 zsh は未 quote の変数を単語分割しないので、
+# 関数の中だけ sh_word_split を立てる。 これが無いと候補の列が 1 語のまま -x に落ち、 1 つも試さずに失敗した (実測)。
 
 pick_python() {
+  if [ -n "${ZSH_VERSION:-}" ]; then
+    setopt local_options sh_word_split
+  fi
   if [ -d /Library/Developer/CommandLineTools ] && [ -z "${DEVELOPER_DIR:-}" ]; then
     export DEVELOPER_DIR=/Library/Developer/CommandLineTools
   fi
@@ -43,8 +48,14 @@ pick_python() {
     _cands="$PICK_PYTHON_CANDIDATES"
   else
     _cands="/Library/Developer/CommandLineTools/usr/bin/python3:/usr/bin/python3"
-    local _p
-    for _p in $(type -a -p python3 2>/dev/null); do _cands="$_cands:$_p"; done
+    local _p _found
+    # zsh の type -p は「python3 is <path>」 の形で出す = path だけを出す whence -p を使う
+    if [ -n "${ZSH_VERSION:-}" ]; then
+      _found="$(whence -a -p python3 2>/dev/null)"
+    else
+      _found="$(type -a -p python3 2>/dev/null)"
+    fi
+    for _p in $_found; do _cands="$_cands:$_p"; done
   fi
   local _tried="" _c _real _seen=":"
   local IFS=":"

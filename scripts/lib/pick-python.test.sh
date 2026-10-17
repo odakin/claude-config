@@ -50,6 +50,15 @@ got="$(PICK_PYTHON_CANDIDATES="$TMP/gated/python3:$TMP/brew/python3" pick_python
 [ "$got" = "$TMP/brew/python3" ] && ok "P7 module なしなら「起動できるか」 だけで選ぶ" || ng "P7 got=$got"
 # 実機: 何かしら python3 が選べる (= 本物の候補列が壊れていない)
 got="$(pick_python)" && [ -x "$got" ] && ok "P8 実機の候補列で起動できる python3 が選べる ($got)" || ng "P8 got=$got"
+# zsh で source しても同じ (zsh は未 quote の変数を単語分割しない = 候補の列が 1 語のまま 1 つも試さずに失敗していた)
+if command -v zsh >/dev/null 2>&1; then
+  got="$(PICK_PYTHON_CANDIDATES="$TMP/brew/python3:$TMP/sys/python3" zsh -c '. "$1"; pick_python yaml' _ "$HERE/pick-python.sh")"
+  [ "$got" = "$TMP/sys/python3" ] && ok "P9 zsh で source しても候補の列を 1 つずつ試す" || ng "P9 got=$got"
+  got="$(zsh -c '. "$1"; pick_python' _ "$HERE/pick-python.sh")" && [ -x "$got" ] \
+    && ok "P10 zsh でも実機の候補列 (PATH 上の python3 を含む) から選べる ($got)" || ng "P10 got=$got"
+else
+  ok "P9/P10 zsh が無い機では飛ばす"
+fi
 
 echo "==== RESULT: PASS=$PASS FAIL=$FAIL ===="
 [ "$FAIL" -eq 0 ]
