@@ -13,7 +13,11 @@ private repo について SKU の倍率 (Linux 1 / Windows 2 / macOS 10) を掛�
 使い方:
   actions-billing-usage.py                  # 今月
   actions-billing-usage.py --month 2026-09  # 指定の月
+  actions-billing-usage.py --alert 80       # 定期の検査用: 今月の見込み (過去の月は確定値) が枠の 80% 以上なら 1 行出して exit 1、 未満なら exit 0
   actions-billing-usage.py --selftest
+
+定期の検査 (手元の local-ci など) に入れれば、 人が覚えて打たなくても、 枠に近づいた月だけ知らせが出る。
+gh は PATH に無ければ Homebrew の既定の場所も探す (session 開始の hook のように PATH が細い環境から呼ばれるため)。
 """
 
 from __future__ import annotations
@@ -21,6 +25,8 @@ from __future__ import annotations
 import argparse
 import calendar
 import json
+import os
+import shutil
 import subprocess
 import sys
 from collections import Counter
@@ -28,10 +34,24 @@ from datetime import date
 
 PLAN_MINUTES = {"free": 2000, "pro": 3000}
 SKU_MULTIPLIER = (("windows", 2), ("macos", 10))  # SKU 名に含まれる語 → 倍率。 無ければ 1 (Linux)
+GH_FALLBACKS = ("/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/home/linuxbrew/.linuxbrew/bin/gh")
+
+
+def _gh_path() -> str | None:
+    found = shutil.which("gh")
+    if found:
+        return found
+    for p in GH_FALLBACKS:
+        if os.access(p, os.X_OK):
+            return p
+    return None
 
 
 def _gh(args: list[str]) -> tuple[int, str, str]:
-    r = subprocess.run(["gh", *args], capture_output=True, text=True)
+    gh = _gh_path()
+    if gh is None:
+        return 127, "", "gh が見つからない (PATH にも Homebrew の既定の場所にも無い)"
+    r = subprocess.run([gh, *args], capture_output=True, text=True)
     return r.returncode, r.stdout, r.stderr
 
 
@@ -87,13 +107,22 @@ def selftest() -> None:
     assert multiplier("Actions Windows") == 2 and multiplier("Actions Linux") == 1
     assert projection(100, 2026, 10, date(2026, 10, 10)) == 310
     assert projection(100, 2026, 9, date(2026, 10, 10)) is None
+    assert alert_level(1700, 2000, 80) and alert_level(1600, 2000, 80)
+    assert not alert_level(1500, 2000, 80) and not alert_level(5000, None, 80)
     print("selftest: PASS")
+
+
+def alert_level(minutes: float, quota: int | None, pct: int) -> bool:
+    """枠の pct% 以上なら True。 枠が分からないプランでは判定しない (False)。"""
+    return quota is not None and minutes >= quota * pct / 100
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--month", help="YYYY-MM (既定 = 今月)")
     ap.add_argument("--top", type=int, default=8)
+    ap.add_argument("--alert", type=int, metavar="PCT",
+                    help="今月の見込み (過去の月は確定値) が枠の PCT%% 以上なら 1 行出して exit 1 (定期の検査用)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -120,6 +149,17 @@ def main() -> None:
 
     s = aggregate(items, private)
     quota = PLAN_MINUTES.get(plan)
+    if a.alert is not None:
+        p = projection(s["private"], year, month, today)
+        basis = p if p is not None else s["private"]
+        what = "月末の見込み" if p is not None else "確定値"
+        if alert_level(basis, quota, a.alert):
+            print(f"GitHub Actions の private repo の分が{what}で枠の {basis / quota:.0%} ({basis:.0f} / {quota} 分、 "
+                  f"今 {s['private']:.0f} 分)。 内訳 = python3 {os.path.abspath(__file__)}")
+            sys.exit(1)
+        tail = f"{basis / quota:.0%}" if quota else f"plan {plan or '不明'} = 枠が分からないので判定しない"
+        print(f"Actions の private repo の分: {what} {basis:.0f} 分 ({tail})")
+        return
     days = sorted({i["date"][:10] for i in items if i.get("date")})
     span = f"{days[0]}〜{days[-1]}" if days else "記録なし"
     print(f"{year}-{month:02d} ({span}) / plan = {plan or '不明'}")
