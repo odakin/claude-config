@@ -142,7 +142,8 @@ class Client:
         p = urllib.parse.urlsplit(url)
         if p.scheme != "https" or p.hostname not in HOSTS[self.site] or p.port not in (None, 443) or p.username:
             raise ReadError("destination_rejected")
-        h = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+        h = {"User-Agent": "Mozilla/5.0",
+             "Accept": "text/html,application/xhtml+xml" if text else "application/json"}
         h.update(headers or {})
         data = None
         if body is not None:
@@ -344,6 +345,15 @@ def selftest():
             client.opener = Failing()
             with self.assertRaisesRegex(ReadError, "^login_required_or_access_denied$"):
                 client.request("https://podcastsconnect.apple.com/", {"Cookie": "secret"})
+        def test_html_accept(self):
+            import io
+            class HTML:
+                def open(self, req, timeout):
+                    assert "text/html" in req.get_header("Accept")
+                    return io.BytesIO(b'<html>synthetic</html>')
+            client = Client("spotify")
+            client.opener = HTML()
+            self.assertEqual(client.request("https://accounts.spotify.com/oauth2/v2/auth", text=True), "<html>synthetic</html>")
         def test_git_exclusion(self):
             with tempfile.TemporaryDirectory() as td:
                 root = Path(td)
