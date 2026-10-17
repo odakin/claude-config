@@ -251,6 +251,7 @@
 - **[permission-dialog-audit.py](permission-dialog-audit.py)** — Claude desktop の承認 dialog を app log から集計し、 transcript と突合して main / sub-agent に振り分け、 1 件ごとに原因を切り分ける
 - **[photos_picker.mutants.json](photos_picker.mutants.json)** — lib/photos_picker.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[pin-claude-cwd.sh](pin-claude-cwd.sh)** — Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
+- **[podcast-followers.py](podcast-followers.py)** — Read podcast follower counts using owner-supplied sessions, without a browser.
 - **[post-length.py](post-length.py)** — SNS 投稿文の長さを X / Bluesky / Mastodon / Vivaldi Social の数え方で並べて数え、上限を超えるものを示す。--selftest 内蔵。
 - **[pptx-to-pdf.sh](pptx-to-pdf.sh)** — PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、PowerPoint 経路は事前 grant 済み staging dir 経由、office-automation.md#pptx-to-pdf-powerpoint）
 - **[pre-commit-bib](pre-commit-bib)** — Git pre-commit hook（上記を呼ぶ）
