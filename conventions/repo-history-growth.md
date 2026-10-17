@@ -83,6 +83,8 @@ GitHub の上限 (公式 docs: [About large files on GitHub](https://docs.github
 
 - ⚠️ **上限の直前の file は、 作り直して少し増えただけで越える** (暗号化は大きさをわずかに増やす)。 高解像度の印刷用 raster PDF がこの大きさになりやすい = 印刷用の raster は生成物として追跡しない
 - 越える前に止める = commit 時の検査が 100 MiB 超を止め、 50 MiB 超に残りの余白を出す ([#detection](#detection))
+- ⚠️ **50 MiB 超の警告は、 素材を 1 回置くだけの commit でも、 push の前に止まって置き場所を決める合図** — 暗号化した file と binary は詰められないので、 その大きさが消すまで全 clone の履歴に残り、 消すには書き換え ([#already-accumulated](#already-accumulated)) が要る。 原本は git の外 (共有フォルダなど) に置き、 repo には用途に足る縮めた版を置く。 実測: 警告を読んだまま push し、 後から書き換えで落とした
+- 前例 (前の回と同じ置き場所) を写すときは、 大きさも前例と比べる — 置き場所が同じでも、 大きさが 1 桁違えば別の判断になる
 - 100 MiB を超える file をどうしても版管理するなら Git LFS (保存量と転送量に別の上限がある)。 まず「git に置く必要があるか」 を問う
 
 ## <a id="slow-round-trip"></a>repo は小さいのに fetch・push が遅い — 時間は握手と復号にある

@@ -41,6 +41,11 @@ file を落とさずに path 名・平文の中身・commit message の中の識
 
 - `rehearse` は `git filter-repo` が要る (`pip install --user git-filter-repo`)。 Claude Code の auto mode は scratch の複製に対して
   でも filter-repo を破壊的な git 操作として止める (実測) = rehearse と apply は本人が terminal で走らせる。
+  Claude Code (desktop を含む) の入力欄に本人が `!` を付けて打つ command も本人の実行として通る (実測) = 印字した 1 行を
+  そのまま貼ってもらえば、 terminal を開かずに済む。
+- `shrink` は届かない reflog を全部切るので、 前の書き換えの旧 object も同時に消える = 手元の `.git` の縮み幅は、
+  今回の書き換えの縮み幅 (`rehearse` の「前 / 後」 の size-pack の差) より大きくなりうる (実測)。 報告では 2 つを分けて書く
+  (手元の縮み = その clone だけの片づけ、 remote と他の clone には関係しない)。
 - `--selftest` は filter-repo を使わない部分 (追従の照合・本番の前提の検査と push・reset) を合成の repo で確かめる。
   filter-repo を通す経路は `--selftest-rewrite` (本人の terminal で、 合成の repo だけを書き換える)。
 - remote が縮むのは host 側の gc の後 (GitHub は数日〜数か月)。 pull request の ref など消せない ref が在ると旧 object は残る
