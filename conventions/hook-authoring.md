@@ -195,6 +195,7 @@ hook や installer が「この file は exec できるか」 を見る必要が
 - **bash の `Killed: 9` の表示**は、 kill された子を待っている側の shell が出す。 検査の出力を汚さないなら `{ cmd; } 2>/dev/null` で囲む (cmd 自体の redirect では消えない)
 - **旧版で歯を確かめるのに stash を使わない**: 並列 session や SessionStart の自動 pull (stash → ff → pop) とぶつかる。 `git archive HEAD scripts | tar -x -C <tmp>` で旧版を一時 dir に展開し、 新しい test だけ上書きして回す (新しい確認が旧版で落ち、 新版で通るのを見る)。 test が兄弟 file (設定・偽物の置き場) に頼るなら、 その分の無関係な失敗は数から除いて報告する
 - **commit せずに hook を git と同じ呼び方で走らせる**: `git hook run <name> -- <引数>` (git 2.36 以降。 `core.hooksPath` を反映)。 prepare-commit-msg なら一時の message file と `message` を渡す。 ⚠️ pre-commit は index に対する本物の検査が走る
+- <a id="fixture-keeps-incident-shape"></a>**検出器の test の再現例は、 起点の実例の形を保つ。 通ったら実物に 1 回流す**: 合成の fixture は名前を短く・きれいにしがちで、 そのとき実例の決め手 (空白・丸括弧・Unicode の正規化・長さ) が落ちる。 旧版で落ち新版で通る歯があっても、 実例では効かない (実測 = file 名に空白と丸括弧のある実物で、 検出器の示す直し方がそのままでは開けない形だった。 test の例は記号の無い短い名前だった)。 起点の実物 (file・会話記録の発話) が手元にあるなら、 完成した検出器をそれに当て、 出た診断どおりに直して解決するかまで見る
 
 ### <a id="hook-stdin-pipe-sigpipe"></a>§0 補足 10: hook に stdin を pipe で渡す test は、 書き手の死に方を hook の判定として読む (`pipefail` × SIGPIPE = 141)
 
