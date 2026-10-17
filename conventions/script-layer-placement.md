@@ -29,6 +29,12 @@ script の置き場所は「最初にどの案件で書いたか」ではなく�
 
 同じ basename の script が上下層にあり、両方が判定ロジックを持つ状態は migration の途中形であって完成形ではない。byte-for-byte copy も二重正本なので、配布 mirror として明示・検査する場合を除き shim 化する。
 
+<a id="embedded-copy"></a>**名前の違う写し (別の script に heredoc で埋め込んだ helper、 別の名前の script) は [`check-script-layering.py`](../scripts/check-script-layering.py) に見つからない** — 同じ basename の二重実装しか数えないため。 同じ層の 2 つの repo にまたがる写しも同じ。 見つけたら 1 本に寄せる:
+
+1. 寄せる前に、 両方を合成の入力の表 (エスケープ・コメント・入れ子・行の形・閉じていない入力) に通して差を並べ、 差ごとにどちらが正しいかを決める。 写しの方が誤っていることがある = 中間の出力の一致を目標にしない (実測 = 埋め込みの写しだけが誤る形が 5 つあった)。
+2. 呼び元には引数の対応だけを残し、 その対応を呼び元の selftest で確かめる (対応を壊した写しで selftest が落ちることも 1 回見る)。 正本の冒頭には呼び元を書く (正本の CLI を変える人が呼び元の selftest も回せるように)。 正本が見つからない機械では、 黙って飛ばさずに置き場所を出して止める (飛ばすと壊れた成果物を配る)。
+3. 人が見る最終の成果物 (組版した PDF の頁画像など) を、 同じ入力で前後に作って比べる。 共有の作業 tree が並列 session で動いているなら、 一時 dir に固定の clone を作って入力を止める (下の「入力を固定する」 と同じ)。
+
 ## <a id="migration-gate"></a>移設の検収
 
 1. 上層 engine を先に追加し、合成 fixture で selftest を通す。selftest の歯は、要所を 1 か所ずつ外した mutant を `<name>.mutants.json` に宣言して [`check-foil-teeth.py`](../scripts/check-foil-teeth.py) で確かめる (scratch の `sed` で壊して見るだけでは次の人が再現できない)。「途中の file が残っていない」 だけを見る検査が、途中の file を使わない版でも通っていた例がある (実測)。
