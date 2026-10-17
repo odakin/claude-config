@@ -68,7 +68,8 @@ your spending limit needs to be increased」)。 **コードの失敗ではな�
   (heartbeat 等) を受ける repo が危ない
 - **見分け方**: red の run の jobs を読み、 全 job が `runner_name` 空かつ steps 0 なら未起動。 検出器 =
   [`scripts/check-ci-red.py`](../scripts/check-ci-red.py) (未起動を件数に数えず 🧾 の 1 行に分ける)。
-  使用量の API (`/users/<u>/settings/billing/usage`) は token に `user` scope が要る (`gh auth refresh -h github.com -s user`、 token は機械ごと)。
+  使用量の API (`/users/<u>/settings/billing/usage`) は token に `user` scope が要る (`gh auth refresh -h github.com -s user` → ブラウザで device code を承認)。
+  token は機械ごと: 権限はコードを発行した機械の gh に入る (承認に使うブラウザがどの機械かは関係しない)。 別の機械で打った refresh のコードを入れると、 そちらの機械の gh に入る (実測)。
   scope があれば正式な値 = [`scripts/actions-billing-usage.py`](../scripts/actions-billing-usage.py) (private repo の分を SKU の倍率つきで枠と比べ、
   今月なら月末の見込み、 請求の net 合計。 請求 0 でも枠を超えた月は spending limit で止まった可能性として出す)。
   **人が覚えて見に行く形にしない** = 手元の定期の検査 (local-ci など) に `--alert <PCT>` で入れ、 月末の見込みが枠の PCT% を超えた日だけ落ちるようにする
