@@ -6,6 +6,7 @@
 
 リポ全体の構造 tree = [CLAUDE.md](../CLAUDE.md)。
 
+- **[actions-billing-usage.py](actions-billing-usage.py)** — GitHub Actions の月の使用分数を課金 API の正式な値で読み、 private repo の無料枠と比べる (今月なら月末までの見込みも)。
 - **[actions-usage-estimate.py](actions-usage-estimate.py)** — GitHub Actions の月の使用量を、 課金 API を使わずに run の履歴から workflow ごとに見積もる (private repo の無料枠の棚卸し用)。
 - **[affix-image-xlsx.py](affix-image-xlsx.py)** — Place an image (seal / signature) into an .xlsx via Excel.app — without destroying the file.
 - **[agent-rule-guard-history.py](agent-rule-guard-history.py)** — replay the rule-document exemption (change_exemption) over a repo's git history: how many committed versions of the rule documents would pass without a ruling, what stops the rest, and which listed terms fire (for tuning the position rules) — read-only.

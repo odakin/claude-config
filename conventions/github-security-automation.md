@@ -68,7 +68,9 @@ your spending limit needs to be increased」)。 **コードの失敗ではな�
   (heartbeat 等) を受ける repo が危ない
 - **見分け方**: red の run の jobs を読み、 全 job が `runner_name` 空かつ steps 0 なら未起動。 検出器 =
   [`scripts/check-ci-red.py`](../scripts/check-ci-red.py) (未起動を件数に数えず 🧾 の 1 行に分ける)。
-  使用量の API (`/users/<u>/settings/billing/usage`) は token に `user` scope が要る。 scope が無いときの見積もり =
+  使用量の API (`/users/<u>/settings/billing/usage`) は token に `user` scope が要る (`gh auth refresh -h github.com -s user`、 token は機械ごと)。
+  scope があれば正式な値 = [`scripts/actions-billing-usage.py`](../scripts/actions-billing-usage.py) (private repo の分を SKU の倍率つきで枠と比べ、
+  今月なら月末の見込み、 請求の net 合計。 請求 0 でも枠を超えた月は spending limit で止まった可能性として出す)。 scope が無いときの見積もり =
   [`scripts/actions-usage-estimate.py`](../scripts/actions-usage-estimate.py) (run の履歴を repo 全部で集め、 workflow ごとに
   回数と run 単位で切り上げた分を出す。 請求額そのものではない。 `--since` で、 止めた後に漏れが無いかを見る)
 - **お金をかけないなら private の検査は手元へ**: 検査の workflow を止め (`gh workflow disable` = 可逆、 file は

@@ -2,7 +2,7 @@
 """actions-usage-estimate.py — GitHub Actions の月の使用量を、 課金 API を使わずに run の履歴から workflow ごとに見積もる (private repo の無料枠の棚卸し用)。
 
 使用量の API (`/users/<u>/settings/billing/usage`) は token に `user` scope が要り、 普段の `gh` の認証では読めない
-(= conventions/github-security-automation.md#private-actions-minutes)。 代わりに各 repo の run の履歴
+(= conventions/github-security-automation.md#private-actions-minutes。 scope があるなら正式な値 = actions-billing-usage.py)。 代わりに各 repo の run の履歴
 (`repos/<owner>/<repo>/actions/runs?created=>=<日付>`) を集め、 run ごとに (updated_at − run_started_at) を分に切り上げて
 workflow ごとに足す。 出力 = 分の多い順に「分 / 回数 / repo / workflow / event の内訳」。
 
