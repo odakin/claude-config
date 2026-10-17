@@ -6,7 +6,7 @@
 
 ## 現在地
 
-- **音源からの採譜** — 共通手順を通常利用へ移す段階。次の採譜では音高検出・音響照合・聴覚照合の範囲を区別し、原音・計測の控え・音符の正本・生成物を同じ入口から辿る。手順 = [music-transcription.md](conventions/music-transcription.md)。
+- **音源からの採譜** — 参照譜の照合・コード表記・編集音源の時刻対応を含む共通手順を通常利用へ移す段階。次の採譜では参照小節と演奏順、未編集録音と編集後の時計、音響・聴覚の検証範囲を同じ入口から確認する。手順 = [music-transcription.md](conventions/music-transcription.md)。
 
 - **YouTube の音声取得** — 再利用する手順と音声転写側からの参照を整え、通常利用へ移る段階。次に取得が失敗したら、実行環境・配信形式・取得後の codec と尺を同じ入口で確かめる。手順・実測範囲 = [web-tools.md#youtube-audio-extraction](conventions/web-tools.md#youtube-audio-extraction)。
 
@@ -31,6 +31,7 @@
 
 ## Open items（forward-looking）
 
+- [ ] **完了Git gateのリモート照会失敗の切り分け** — 自動照会の検査不能と直接照会の成功が食い違う条件を調べる段階。次は通常SSHと多重化を使わない照会を同時点で比較し、タイムアウトと起動失敗を区別する候補を作る。実装の入口 = [session_touch.py](codex/hooks/session_touch.py)。原因未特定のため検査の変更は未着手。
 - [ ] **既存Linux CIのchat_file_refs変異検査** — Unicode正規化が異なる名前を別ファイルとして扱う環境では、元の[テスト](hooks/chat-file-ref-enforce.test.sh)がE5・E6・E7・E9をskipするが、[変異検査のspec](scripts/chat_file_refs.mutants.json)がこれらを必須ラベルとして要求し失敗する。次は検査強度を保って環境分岐とspecを整合させる候補を作る。音源採譜手順とは独立したテスト定義の問題。
 
 
