@@ -95,6 +95,11 @@
       "match": "ProjectPermissionDenied",
       "doc": "conventions/google-classroom-api.md#grade-ui-created-coursework",
       "hint": "Classroom の画面で作った課題の点・返却は API で書けない (scope があっても 403)。 点は画面で付けるか、 API で作った課題に限る"
+    },
+    {
+      "match": "configured for Git LFS but 'git-lfs' was not found on your path",
+      "doc": "conventions/shell-env.md#snapshot-fix-per-config-dir",
+      "hint": "git-lfs が入っていないか、 入っているのに Bash の PATH に無い (設定フォルダを分けた session の snapshot が直っていないと Homebrew の bin が落ちる)。 LFS の pre-push はこの diff に LFS の file が無くても push 全体を止める。 その場しのぎ = command の頭に PATH=<brew の bin>:$PATH"
     }
   ]
 }

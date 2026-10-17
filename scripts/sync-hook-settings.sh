@@ -8,6 +8,8 @@
 #
 # 何をするか:
 #   0. skill: claude-config の skills/<name>/ (誰でも使う skill) を ~/.claude/skills/ (と ~/.codex/skills/) に (scripts/install-shared-skills.sh)
+#   0b. snapshot: shell snapshot の PATH 修正係の launchd agent を、 設定フォルダ全部の snapshot を見張る形に (macOS、
+#             既定の settings のときだけ、 --no-link でも。 scripts/install-snapshot-path-fix.sh)
 #   1. link:  entry が参照する hook file (hooks/<name>) の symlink を張る。 無いもの・壊れた symlink
 #             (= 指す先が消えた。 例: 他の層から本 repo へ移設された hook) だけを張り直し、 生きている
 #             symlink と通常 file (Windows の copy 方式) は触らない。 Windows は copy で置く
@@ -63,6 +65,19 @@ if [ "$LINK" -eq 1 ] && [ -f "$ROOT/scripts/install-shared-skills.sh" ]; then
   fi
 fi
 
+# ---------- 0b. snapshot の PATH 修正係の launchd agent (macOS。 jq 不要) ----------
+# 設定フォルダ (~/.claude と ~/.claude-<name>) の shell-snapshots を全部見張る plist に揃える (揃っていれば何もしない)。
+# 既定の settings のときだけ (= test が別の SETTINGS を渡したとき本物の launchd を触らない)。 symlink でも settings の entry でも
+# ないので --no-link でも走らせる (= 個人層の session 開始 bootstrap は --no-link で呼ぶ)
+snapshot_missing=0
+if [ "$SETTINGS" = "$HOME/.claude/settings.json" ] && [ -f "$ROOT/scripts/install-snapshot-path-fix.sh" ]; then
+  if [ "$CHECK" -eq 1 ]; then
+    bash "$ROOT/scripts/install-snapshot-path-fix.sh" --check || snapshot_missing=1
+  else
+    bash "$ROOT/scripts/install-snapshot-path-fix.sh" --quiet
+  fi
+fi
+
 if ! command -v jq >/dev/null 2>&1; then
   echo "sync-hook-settings: jq が無いので何もしない" >&2
   [ "$CHECK" -eq 1 ] && exit 2
@@ -70,7 +85,7 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 [ -f "$ENTRIES" ] || { echo "sync-hook-settings: $ENTRIES が無い" >&2; exit 0; }
 
-missing=$skills_missing
+missing=$((skills_missing + snapshot_missing))
 
 # ---------- 1. link ----------
 if [ "$LINK" -eq 1 ]; then

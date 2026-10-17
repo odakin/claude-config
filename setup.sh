@@ -312,47 +312,14 @@ fi
 xml_escape() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
 
 # --- 2b. Install launchd agent for snapshot PATH fix (macOS only) ---
-# fix-snapshot-path-patch.sh を自動実行する launchd エージェントをインストール
-PLIST_LABEL="com.user.claude-snapshot-fix"
-PLIST_DST="$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
-
+# fix-snapshot-path-patch.sh を自動実行する launchd エージェントを、 設定フォルダ (~/.claude と CLAUDE_CONFIG_DIR で分けた
+# ~/.claude-<name>) の shell-snapshots を全部見張る形に揃える。 実体 = scripts/install-snapshot-path-fix.sh (揃っていれば
+# 何もしない)。 sync-hook-settings.sh も同じ script を呼ぶので、 setup.sh を再実行しない machine も pull と session 開始で揃う
 if [ "$(uname -s)" = "Darwin" ] && [ -f "$HOOKS_DST/fix-snapshot-path-patch.sh" ]; then
     echo ""
     echo "=== Step 2b: Installing launchd agent for snapshot PATH fix ==="
-
-    PATCH_SCRIPT="$HOOKS_DST/fix-snapshot-path-patch.sh"
-    SNAPSHOT_DIR="$HOME/.claude/shell-snapshots"
-
-    if launchctl list "$PLIST_LABEL" &>/dev/null; then
-        echo "  OK: $PLIST_LABEL already loaded."
-    else
-        mkdir -p "$(dirname "$PLIST_DST")"
-        cat > "$PLIST_DST" << PLIST_EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>$PLIST_LABEL</string>
-    <key>WatchPaths</key>
-    <array>
-        <string>$(xml_escape "$SNAPSHOT_DIR")</string>
-    </array>
-    <key>ProgramArguments</key>
-    <array>
-        <string>$(xml_escape "$PATCH_SCRIPT")</string>
-    </array>
-</dict>
-</plist>
-PLIST_EOF
-        launchctl load "$PLIST_DST" 2>&1
-        if launchctl list "$PLIST_LABEL" &>/dev/null; then
-            echo "  Installed and loaded: $PLIST_DST"
-        else
-            echo "  WARNING: Failed to load $PLIST_LABEL"
-        fi
-    fi
+    SNAPSHOT_FIX_SCRIPT="$HOOKS_DST/fix-snapshot-path-patch.sh" \
+        bash "$SCRIPT_DIR/scripts/install-snapshot-path-fix.sh" | sed 's/^/  /'
 fi
 
 # --- 2b2. Install launchd agent that pins the Claude.app folder picker (macOS only) ---

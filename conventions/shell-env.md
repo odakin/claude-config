@@ -108,7 +108,12 @@ for d in ~/.claude ~/.claude-*; do s=$(ls -t "$d"/shell-snapshots/snapshot-*.sh 
 
 #### launchd エージェント
 
-`~/Library/LaunchAgents/com.user.claude-snapshot-fix.plist`:
+`~/Library/LaunchAgents/com.user.claude-snapshot-fix.plist` は [`scripts/install-snapshot-path-fix.sh`](../scripts/install-snapshot-path-fix.sh) が作る (手で書かない)。
+WatchPaths には `~/.claude` と `~/.claude-<name>` (settings.json・`projects/`・`shell-snapshots/` のどれかを持つ dir) の `shell-snapshots` を全部並べ、
+今の plist と中身が違うか agent が読み込まれていないときだけ入れ直して、 修正係を 1 回走らせる (揃っていれば何もしない)。
+呼び元は setup.sh Step 2b と `scripts/sync-hook-settings.sh` (setup.sh・pull の post-merge・個人層の session 開始の bootstrap から呼ばれる) なので、
+設定フォルダを新しく作っても次の session 開始か pull で見張りに入る。 揃っているかの確認 = `bash scripts/install-snapshot-path-fix.sh --check`。
+できる plist の形 (設定フォルダが 2 つある機械なら WatchPaths の `<string>` が 2 行になる):
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -122,6 +127,7 @@ for d in ~/.claude ~/.claude-*; do s=$(ls -t "$d"/shell-snapshots/snapshot-*.sh 
     <array>
         <!-- plist は $HOME を展開しない。フルパスで記述する -->
         <string>/Users/YOUR_USERNAME/.claude/shell-snapshots</string>
+        <string>/Users/YOUR_USERNAME/.claude-work/shell-snapshots</string>
     </array>
     <key>ProgramArguments</key>
     <array>
@@ -130,8 +136,6 @@ for d in ~/.claude ~/.claude-*; do s=$(ls -t "$d"/shell-snapshots/snapshot-*.sh 
 </dict>
 </plist>
 ```
-
-`launchctl load ~/Library/LaunchAgents/com.user.claude-snapshot-fix.plist` で有効化。
 
 ## <a id="macos-deny-rules"></a>macOS システムコマンドの deny ルール
 
