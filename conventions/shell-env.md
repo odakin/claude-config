@@ -100,7 +100,7 @@ REQUIRED_PATHS リストで管理。各スナップショットをスキャン�
 
 **snapshot bloat 対策:** Claude Code は古いスナップショットを削除しないので無限に蓄積する。patch script 冒頭で **最新 20 個だけ保持**する cleanup ロジックを実行する。判定はファイルの mtime ではなく**ファイル名に埋め込まれた unix_ms** (`snapshot-zsh-<unix_ms>-<random>.sh`) を使う — patch script 自身が書き換えで mtime を更新してしまうため。sort は subshell `cd` で basename だけを対象にする (フルパスだと親ディレクトリ名 `shell-snapshots` の `-` でフィールド分割がずれて壊れる)。
 
-<a id="snapshot-fix-per-config-dir"></a>**設定フォルダを分けた session の snapshot も直す:** snapshot は設定フォルダ (`CLAUDE_CONFIG_DIR`、 例 `~/.claude-<name>`) ごとの `shell-snapshots/` に作られる。 修正係が `~/.claude/shell-snapshots` しか見ていないと、 分けた設定フォルダの session の Bash には Homebrew の bin と `~/.local/bin` が無いままになる (実測 = `gh` と `git-lfs` が見えず、 LFS の pre-push が push を止めた)。 同じ session の中でも新しく起こした `zsh -c` では `.zshenv` が PATH を揃えるので、 shell の設定を見ても異常が見えず見落としやすい。 確かめ方 = 設定フォルダごとに最新の snapshot の `export PATH=` 行に brew の bin があるかを見る (Apple Silicon の例、 0 の行が直っていない):
+<a id="snapshot-fix-per-config-dir"></a>**設定フォルダを分けた session の snapshot も直す:** snapshot は設定フォルダ (`CLAUDE_CONFIG_DIR`、 例 `~/.claude-<name>`) ごとの `shell-snapshots/` に作られる。 修正係が `~/.claude/shell-snapshots` しか見ていないと、 分けた設定フォルダの session の Bash には Homebrew の bin と `~/.local/bin` が無いままになる (実測 = `gh` と `git-lfs` が見えず、 LFS の pre-push が `This repository is configured for Git LFS but 'git-lfs' was not found on your path` を出して push を止めた)。 同じ session の中でも新しく起こした `zsh -c` では `.zshenv` が PATH を揃えるので、 shell の設定を見ても異常が見えず見落としやすい。 確かめ方 = 設定フォルダごとに最新の snapshot の `export PATH=` 行に brew の bin があるかを見る (Apple Silicon の例、 0 の行が直っていない):
 
 ```bash
 for d in ~/.claude ~/.claude-*; do s=$(ls -t "$d"/shell-snapshots/snapshot-*.sh 2>/dev/null | head -1); [ -n "$s" ] && echo "$d $(grep -c /opt/homebrew/bin "$s")"; done

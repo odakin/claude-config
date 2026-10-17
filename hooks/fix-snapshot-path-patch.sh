@@ -23,9 +23,14 @@ sleep 1
 # snapshot は設定フォルダごとに作られる: ~/.claude と、 CLAUDE_CONFIG_DIR で分けた ~/.claude-<name>。
 # ~/.claude だけを見ると、 分けた設定フォルダの session の Bash は Homebrew 等の PATH を欠いたまま動く
 # (正本 = conventions/shell-env.md#snapshot-fix-per-config-dir)。
-SNAPSHOT_DIRS=("$HOME/.claude/shell-snapshots" "$HOME"/.claude-*/shell-snapshots(N/))
-[ -n "${CLAUDE_CONFIG_DIR:-}" ] && SNAPSHOT_DIRS+=("$CLAUDE_CONFIG_DIR/shell-snapshots")
-typeset -U SNAPSHOT_DIRS
+# bash の構文でも読める形で書く (CI の bash -n が全 shell script に掛かる = zsh 固有の glob 修飾子は使わない)。
+setopt null_glob 2>/dev/null
+SNAPSHOT_DIRS=("$HOME/.claude/shell-snapshots")
+for d in "$HOME"/.claude-*/shell-snapshots ${CLAUDE_CONFIG_DIR:+"$CLAUDE_CONFIG_DIR/shell-snapshots"}; do
+  [ -d "$d" ] || continue
+  case " ${SNAPSHOT_DIRS[*]} " in *" $d "*) continue ;; esac
+  SNAPSHOT_DIRS+=("$d")
+done
 SNAPSHOT_KEEP=20
 for SNAPSHOT_DIR in "${SNAPSHOT_DIRS[@]}"; do
   [ -d "$SNAPSHOT_DIR" ] || continue
@@ -67,7 +72,14 @@ REQUIRED_PATHS=(
   "$HOME/.local/bin"
 )
 
-for f in "${^SNAPSHOT_DIRS[@]}"/snapshot-*.sh(N); do
+SNAPSHOT_FILES=()
+for SNAPSHOT_DIR in "${SNAPSHOT_DIRS[@]}"; do
+  for f in "$SNAPSHOT_DIR"/snapshot-*.sh; do
+    [ -f "$f" ] && SNAPSHOT_FILES+=("$f")
+  done
+done
+
+for f in "${SNAPSHOT_FILES[@]}"; do
   [ -f "$f" ] || continue
 
   current_path=$(grep '^export PATH=' "$f" | sed 's/^export PATH=//' | sed 's/\\:/:/g')
