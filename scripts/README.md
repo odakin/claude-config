@@ -42,7 +42,7 @@
 - **[campussquare-plan-table.py](campussquare-plan-table.py)** — CampusSquare の「授業計画表」 (xlsx 出力) を読み、 教員ごとの登録 (開講期・曜時・科目) を並べて予定と突き合わせる。
 - **[campussquare-roster-split.mutants.json](campussquare-roster-split.mutants.json)** — campussquare-roster-split.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[campussquare-roster-split.py](campussquare-roster-split.py)** — CampusSquare の「全担当科目の名簿 CSV」 を、科目 (コマ) ごとの成績登録用の名簿 CSV の形に分ける。
-- **[chat_file_refs.mutants.json](chat_file_refs.mutants.json)** — chat_file_refs.py (Stop hook chat-file-ref-enforce.sh の判定の部品) の修正を 1 つずつ外した mutant 9 本で、 hook の test の該当 case が落ち、 隣の case は通り続けることを確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
+- **[chat_file_refs.mutants.json](chat_file_refs.mutants.json)** — chat_file_refs.py (Stop hook chat-file-ref-enforce.sh の判定の部品) の修正を 1 つずつ外した mutant 11 本で、 hook の test の該当 case が落ち、 隣の case は通り続けることを確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[check-abbreviations.py](check-abbreviations.py)** — Abbreviation hygiene for LaTeX manuscripts: each abbreviation is defined once, at the FIRST body
 - **[check-activity-facts.py](check-activity-facts.py)** — Keep the owner's non-public activity facts (what was applied for, when, how many, what the office said, which deadline passed) out of public repos: pre-commit / commit-msg check on added lines, --scan-tree inventory with an ack list, --replay calibration, --selftest.
 - **[check-american-spelling.py](check-american-spelling.py)** — Reject curated British spellings in live LaTeX prose and figure text.
