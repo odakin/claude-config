@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import base64
 import datetime as dt
-import getpass
 import hashlib
 import json
 import math
@@ -77,6 +76,9 @@ def auth_root(root, create=False):
 
 def save_auth(root, site, fields):
     fields = validate_fields(site, fields)
+    serialized = json.dumps({"version": 1, "site": site, "fields": fields})
+    if len(serialized.encode()) > 65536:
+        raise ReadError("auth_file_too_large")
     auth_root(root, create=True)
     path = root / (site + ".json")
     repo = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True, text=True)
@@ -89,7 +91,7 @@ def save_auth(root, site, fields):
     fd, tmp = tempfile.mkstemp(prefix=".pending-", dir=root)
     try:
         with os.fdopen(fd, "w") as f:
-            json.dump({"version": 1, "site": site, "fields": fields}, f)
+            f.write(serialized)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
@@ -118,12 +120,55 @@ def load_auth(root, site):
         raise ReadError("auth_file_invalid") from None
 
 
+def hidden_input(prompt):
+    """Read long ASCII credentials without canonical terminal line limits or echo.
+
+macOS canonical input (including getpass) stalls on multi-kilobyte cookies.
+Keep signal handling, support erase/Ctrl-U, and always restore the terminal.
+"""
+    if not sys.stdin.isatty():
+        raise ReadError("interactive_terminal_required")
+    import termios
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    new = old[:]
+    new[6] = old[6][:]
+    new[3] &= ~(termios.ECHO | termios.ECHONL | termios.ICANON)
+    new[6][termios.VMIN] = 1
+    new[6][termios.VTIME] = 0
+    value = bytearray()
+    try:
+        termios.tcsetattr(fd, termios.TCSAFLUSH, new)
+        print(prompt, end="", file=sys.stderr, flush=True)
+        while True:
+            char = os.read(fd, 1)
+            if not char or char == b"\x04":
+                raise EOFError
+            if char in (b"\r", b"\n"):
+                break
+            if char in (b"\x7f", b"\x08"):
+                value = value[:-1]
+            elif char == b"\x15":
+                value.clear()
+            else:
+                value.extend(char)
+            if len(value) > 50000:
+                raise ReadError("auth_input_too_long")
+    finally:
+        termios.tcsetattr(fd, termios.TCSAFLUSH, old)
+        print(file=sys.stderr, flush=True)
+    try:
+        return value.decode("ascii")
+    except UnicodeError:
+        raise ReadError("auth_fields_invalid") from None
+
+
 def prompt_auth(root, site):
     if not sys.stdin.isatty():
         raise ReadError("interactive_terminal_required")
     print(f"{site}: paste the requested fields from your own signed-in dashboard.")
     print("Input is hidden. Saved locally; values are never printed.")
-    fields = {k: getpass.getpass(k + ": ").strip() for k in FIELDS[site]}
+    fields = {k: hidden_input(k + ": ").strip() for k in FIELDS[site]}
     save_auth(root, site, fields)
     print(f"{site}: saved (directory 0700, file 0600)")
 
@@ -354,6 +399,37 @@ def selftest():
             client = Client("spotify")
             client.opener = HTML()
             self.assertEqual(client.request("https://accounts.spotify.com/oauth2/v2/auth", text=True), "<html>synthetic</html>")
+        def test_long_terminal_input(self):
+            import pty
+            import select
+            import time
+            master, slave = pty.openpty()
+            code = "import runpy,termios; m=runpy.run_path(" + repr(__file__) + "); old=termios.tcgetattr(0); n=len(m['hidden_input']('probe: ')); assert termios.tcgetattr(0)==old; print('length='+str(n),flush=True)"
+            proc = subprocess.Popen([sys.executable, "-c", code], stdin=slave, stdout=slave, stderr=slave)
+            os.close(slave)
+            try:
+                output = b""
+                end = time.monotonic() + 5
+                while b"probe: " not in output and time.monotonic() < end:
+                    if select.select([master], [], [], .1)[0]:
+                        output += os.read(master, 65536)
+                self.assertIn(b"probe: ", output)
+                payload = b"synthetic-" * 800
+                os.write(master, payload + b"\n")
+                while b"length=" not in output and time.monotonic() < end:
+                    if select.select([master], [], [], .1)[0]:
+                        try:
+                            output += os.read(master, 65536)
+                        except OSError:
+                            break
+                self.assertIn(b"length=8000", output)
+                self.assertNotIn(b"synthetic-", output)  # Terminal must not echo the cookie.
+                self.assertEqual(proc.wait(timeout=5), 0)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait()
+                os.close(master)
         def test_git_exclusion(self):
             with tempfile.TemporaryDirectory() as td:
                 root = Path(td)
