@@ -6,6 +6,8 @@
 
 ## 現在地
 
+- **音源からの採譜** — 共通手順を通常利用へ移す段階。次の採譜では音高検出・音響照合・聴覚照合の範囲を区別し、原音・計測の控え・音符の正本・生成物を同じ入口から辿る。手順 = [music-transcription.md](conventions/music-transcription.md)。
+
 - **YouTube の音声取得** — 再利用する手順と音声転写側からの参照を整え、通常利用へ移る段階。次に取得が失敗したら、実行環境・配信形式・取得後の codec と尺を同じ入口で確かめる。手順・実測範囲 = [web-tools.md#youtube-audio-extraction](conventions/web-tools.md#youtube-audio-extraction)。
 
 - **ポッドキャストのフォロワー取得 CLI** — 通常利用へ移る段階。次に認証や応答が変わったときは、数値の非表示と取得失敗を分けて検証する。履歴の描画を調整するときは同じ engine の `render_history_chart` と呼び元の記録表を照合する。入口・取得値・合成データの検査は [podcast-followers.py](scripts/podcast-followers.py)。
@@ -28,6 +30,8 @@
 - **formcase / record-reply / SSO client / 通知 / 音声の道具** — 直近の変更は各 script の docstring と conventions が正本、 索引は SESSION-archive.md の 09-22〜09-28 の節
 
 ## Open items（forward-looking）
+
+- [ ] **既存Linux CIのchat_file_refs変異検査** — Unicode正規化が異なる名前を別ファイルとして扱う環境では、元の[テスト](hooks/chat-file-ref-enforce.test.sh)がE5・E6・E7・E9をskipするが、[変異検査のspec](scripts/chat_file_refs.mutants.json)がこれらを必須ラベルとして要求し失敗する。次は検査強度を保って環境分岐とspecを整合させる候補を作る。音源採譜手順とは独立したテスト定義の問題。
 
 
 - [ ] **claude-app-account-mirror の実 app での初回の実走** — 常駐は本人が 2 台に入れた。 実測済み = ③ 表示中の account の dir には書かない (`--status` の待ちの数) / app が写しの record を読み込む (切替の後の app の log に読み込みの失敗なし)。 未観察 = ① 写しが一覧に**見える形で**出る (元をアーカイブした session の写しはアーカイブ済みに入る = 元の isArchived を引き継ぐ。 扱いは今のまま = 推奨・異論なし。 探すときはアーカイブ済みの一覧も見る) ② 写しを開くと「インポートしたセッションを再開しますか？」 が出て、 会話記録が `projects/<slug>/<新しい cli id>.jsonl` に移る ④ launchd の log が変化の無い回は無音
