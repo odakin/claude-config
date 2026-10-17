@@ -18,12 +18,20 @@
       どこにも無い path (例示の `path/to/file.md` など) は拾わない。
   (b) 意図と違う file が開く (reason = shadowed): 基準 folder に連結すると file が在るが、 直近の cwd (≠ 基準) にも
       同じ相対 path の別の file が在る (例: 親フォルダと repo の両方に在る CLAUDE.md を repo の中で書いた)。
+  (c) href を山括弧で囲んだ link (reason = angle): `[x](<path>)` は CommonMark では正しいが、 app は山括弧ごと path に
+      する (実測 = 「見つかりませんでした」 の path 欄に `<…>` が付いた)。 中身の path が在るときだけ拾い、 囲まずに
+      空白を `%20` にした形を示す (href は decodeURI してから解釈される)。
+  (d) 濁点の形だけが disk 上の名前と違う (reason = nfd): 実在する file への参照で、 path のある成分が disk 上の名前と
+      Unicode の正規化 (NFC / NFD) だけ違う。 macOS の file system は正規化を問わず開けるので exists は通るが、 app の
+      表示要求は解決できないことがある (実測 = Dropbox の NFD の file 名)。 disk 上の綴りを示す。
+  (c)(d) は絶対 path・`~/` の参照も見る (開くかどうかが基準フォルダに依らない形)。
 """
 from __future__ import annotations
 
 import os
 import re
 import subprocess
+import unicodedata
 from urllib.parse import unquote
 
 # session の基準フォルダ・cwd・追加フォルダ・entrypoint の読み出しは transcript の共通部品が持つ
@@ -48,6 +56,7 @@ _L = r"\w\u0300-\u036F\u1AB0-\u1AFF\u1DC0-\u1DFF\u20D0-\u20FF\u3099\u309A\uFE20-
 CODE_PATH_RE = re.compile(
     rf"^[{_L}.()\[\]-]*(?:/[{_L}.()\[\]-]+)*/[{_L}()\[\]-]*\.[A-Za-z0-9_][A-Za-z0-9_.-]*(?::\d+(?:-\d+|:\d+)?)?$")
 LINE_SUFFIX_RE = re.compile(r":\d+(?:[-:]\d+)?$")
+ANGLE_HREF_RE = re.compile(r"\]\(\s*<")  # `[x](<path>)` = href を山括弧で囲んだ link
 
 
 def _blank(m: re.Match) -> str:
@@ -87,6 +96,51 @@ def normalize(path: str) -> str | None:
     if not p or p.startswith("/") or p == "~" or p.startswith("~/"):
         return None
     return p
+
+
+def local_target(path: str) -> str | None:
+    """href / code span → 絶対 path (絶対 path はそのまま、 `~/` は home に展開)。 相対・URL・anchor のみは None。"""
+    p = path.strip()
+    if not p or p.startswith("#") or SCHEME_RE.match(p) or p.startswith("//"):
+        return None
+    p = unquote(LINE_SUFFIX_RE.sub("", p.split("#", 1)[0].split("?", 1)[0]))
+    if p.startswith("~/"):
+        return os.path.expanduser(p)
+    return p if p.startswith("/") else None
+
+
+def disk_spelling(path: str) -> str | None:
+    """実在する path の各成分を disk 上の名前と文字列で比べ、 正規化 (NFC / NFD) だけが違う成分があれば disk 上の綴りの
+    path を返す。 違いが無い・成分が見つからない・候補が 1 つに決まらないときは None (= 拾わない側に倒す)。"""
+    parts = [x for x in os.path.normpath(path).split(os.sep) if x]
+    cur, changed = os.sep, False
+    for part in parts:
+        try:
+            names = os.listdir(cur)
+        except OSError:
+            return None
+        if part not in names:
+            want = unicodedata.normalize("NFC", part)
+            hits = [n for n in names if unicodedata.normalize("NFC", n) == want]
+            if len(hits) != 1:
+                return None
+            part, changed = hits[0], True
+        cur = os.path.join(cur, part)
+    return cur if changed else None
+
+
+def _href_form(path: str) -> str:
+    return path.replace(" ", "%20")
+
+
+def _form_finding(kind: str, raw: str, shown: str, target: str, angle: bool) -> dict | None:
+    """実在する target への参照の書き方の問題 = 山括弧 (c) か濁点の形 (d)。 無ければ None。"""
+    if angle:
+        return {"kind": kind, "raw": raw, "path": shown, "reason": "angle", "candidates": [_href_form(target)]}
+    disk = disk_spelling(target)
+    if disk:
+        return {"kind": kind, "raw": raw, "path": shown, "reason": "nfd", "candidates": [disk]}
+    return None
 
 
 def _inside(path: str, root: str) -> bool:
@@ -161,16 +215,30 @@ def find_broken(text: str, root: str, seen_cwds: list[str] | None = None, limit:
     findings: list[dict] = []
     seen: set[tuple[str, str]] = set()
     for kind, raw, ref in extract_refs(text):
+        angle = kind == "link" and ANGLE_HREF_RE.search(raw) is not None
+        absolute = local_target(ref)
         p = normalize(ref)
-        if p is None or (kind, p) in seen:
+        key = (kind, p if p is not None else absolute)
+        if key[1] is None or key in seen:
             continue
-        seen.add((kind, p))
+        seen.add(key)
+        if absolute is not None:
+            # 絶対 path・~/ は基準フォルダに依らず開く。 書き方の問題 (山括弧・濁点の形) だけを見る
+            if os.path.exists(absolute):
+                f = _form_finding(kind, raw, ref.strip(), os.path.normpath(absolute), angle)
+                if f:
+                    findings.append(f)
+            continue
         target = os.path.normpath(os.path.join(root, p))
         if not _inside(target, root):
             if os.path.exists(target) and any(_inside(target, d) for d in extras):
                 continue
             reason = "outside"
         elif os.path.exists(target):
+            f = _form_finding(kind, raw, p, target, angle)
+            if f:
+                findings.append(f)
+                continue
             # 開くが、 直近の cwd に同じ相対 path の別の file が在る = repo の中からの path のつもりで書いた可能性
             other = os.path.normpath(os.path.join(cur, p)) if cur and cur != root else None
             if (other and os.path.isfile(target) and os.path.isfile(other)
@@ -203,8 +271,10 @@ def find_broken(text: str, root: str, seen_cwds: list[str] | None = None, limit:
                     listing = git_listing(root)
                     if git_cache is not None:
                         git_cache[root] = listing  # 校正用 (同じ基準フォルダを何百 turn も引くので 1 回にする)
-            if len(git_suffix_matches(listing, p)) == 1:
-                continue  # 基準フォルダが git repo で末尾一致が 1 件 = app はそれを開く
+            if len(git_suffix_matches(listing, p)) == 1 and not angle:
+                continue  # 基準フォルダが git repo で末尾一致が 1 件 = app はそれを開く (山括弧つきは囲みごと探すので開かない)
+        if angle:  # 置き場所も山括弧も直す = 囲まずに、 候補の path で
+            reason, cands = "angle", [_href_form(c) for c in cands]
         findings.append({"kind": kind, "raw": raw, "path": p, "reason": reason, "candidates": cands})
     return findings
 
@@ -232,7 +302,10 @@ def build_reason(findings: list[dict], root: str) -> str:
         f"inline code の {BT}dir/file.ext{BT} もリンクとして描かれます。",
     ]
     where_of = {"outside": "フォルダの外", "missing": "存在しない",
-                "shadowed": "上のフォルダの同名の別 file が開く。 作業中のフォルダの file を指すなら"}
+                "shadowed": "上のフォルダの同名の別 file が開く。 作業中のフォルダの file を指すなら",
+                "angle": "href を山括弧 <…> で囲んでいる = 山括弧ごと path になり開けない。 囲まずに、 空白は %20 で",
+                "nfd": "file 名の濁点の形 (NFC / NFD) が disk 上の名前と違い、 開けないことがある。 "
+                       "ASCII の名前の写しに link するか SendUserFile で渡す。 disk 上の名前は"}
     for f in findings[:8]:
         kind = "link" if f["kind"] == "link" else "inline code"
         cands = " / ".join(_show(c, root) for c in f["candidates"])

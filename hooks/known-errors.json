@@ -90,6 +90,11 @@
       "match": "Missing number, treated as zero.",
       "doc": "conventions/latex.md#enumerate-vs-enumitem-option-syntax",
       "hint": "原因の 1 つ = enumerate package の下で enumitem の書き方 [label=(\\roman*)] を書いた。 エラーの行が \\begin{enumerate}[...] ならそれ (直し方 = [(i)] の雛形)。 別の行なら長さ・数値の引数の書き損じを疑う"
+    },
+    {
+      "match": "ProjectPermissionDenied",
+      "doc": "conventions/google-classroom-api.md#grade-ui-created-coursework",
+      "hint": "Classroom の画面で作った課題の点・返却は API で書けない (scope があっても 403)。 点は画面で付けるか、 API で作った課題に限る"
     }
   ]
 }

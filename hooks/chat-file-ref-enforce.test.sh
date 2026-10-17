@@ -10,6 +10,8 @@
 #     B15-B16 = 同名 file が同じ実体 (symlink) / app が link にしない文字を含む inline code。
 # §A' 検収の追補: 行頭の inline な 3 連 backtick を fence と取り違えない / 基準フォルダの同名の別 file が開く形。
 # §D 基準フォルダが git repo: app の path の末尾一致 (1 件なら開く = silent、 複数なら fire、 untracked も見る)。
+# §E 書き方の問題: href を山括弧 <…> で囲んだ link / file 名の濁点の形 (NFC・NFD) が disk 上の名前と違う参照
+#     (2026-10-13 の実例 = Dropbox の NFD の名前の PDF を山括弧の絶対 path で書いた)。 絶対 path でも拾う。
 # §C fail-open と配線: stop_hook_active / transcript 不在 / 空入力 / 部品の不在・例外 = 沈黙。 symlink 経由で部品を見つける。
 
 set -uo pipefail
@@ -153,6 +155,27 @@ if command -v git >/dev/null 2>&1; then
   case_ "D3: tracked に無く untracked の末尾一致が 1 件 = silent" 0 "${BT}drafts/new.md${BT}" "" "claude-desktop" "$GROOT"
 else
   results+=("⏭  §D: git が無いので skip")
+fi
+
+echo "=== §E 書き方の問題 (山括弧の href / 濁点の形) ==="
+: > "$ROOT/book/My Notes.md"
+case_ "E1: 山括弧で囲んだ絶対 path の href (中身は在る) = fire + 囲まず %20 の形" 1 \
+  "[メモ](<$ROOT/book/My Notes.md>)" "My%20Notes.md"
+case_ "E2: 山括弧で囲んだ基準フォルダからの href (中身は在る) = fire" 1 \
+  "[試稿](<book/drafts/intro.md>)" "山括弧"
+case_ "E3: 山括弧の中身が repo の中からの path (cd の後) = fire + 置き場所も直した形" 1 \
+  "[試稿](<drafts/intro.md>)" "book/drafts/intro.md"
+case_ "E4: 山括弧の URL / どこにも無い path = silent" 0 \
+  "[u](<https://example.com/a b>) [x](<path/to/no such.md>)"
+NFC_NAME="ポスター.pdf"
+NFD_NAME="$(python3 -c 'import unicodedata, sys; print(unicodedata.normalize("NFD", sys.argv[1]))' "$NFC_NAME")"
+: > "$ROOT/book/$NFD_NAME"
+if [ -e "$ROOT/book/$NFC_NAME" ] && ! ls "$ROOT/book" | grep -qxF "$NFC_NAME"; then
+  case_ "E5: disk 上は NFD・link は NFC の絶対 path = fire + 濁点の形" 1 "[ポスター]($ROOT/book/$NFC_NAME)" "濁点の形"
+  case_ "E6: 基準フォルダからの NFC の link = fire" 1 "[ポスター](book/$NFC_NAME)" "濁点の形"
+  case_ "E7: disk 上と同じ NFD で書いた link = silent" 0 "[ポスター]($ROOT/book/$NFD_NAME)"
+else
+  results+=("⏭  E5-E7: この file system は正規化だけ違う名前を同じ file として開かない (macOS の外) ので skip")
 fi
 
 echo "=== §C fail-open と配線 ==="

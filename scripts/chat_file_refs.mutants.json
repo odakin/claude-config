@@ -1,5 +1,5 @@
 {
-  "_comment": "chat_file_refs.py (Stop hook chat-file-ref-enforce.sh の判定の部品) の修正を 1 つずつ外した mutant 9 本で、 hook の test の該当 case が落ち、 隣の case は通り続けることを確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 test は hooks/ に在るので {spec_dir} で指し、 部品の写しの dir を env で渡す。",
+  "_comment": "chat_file_refs.py (Stop hook chat-file-ref-enforce.sh の判定の部品) の修正を 1 つずつ外した mutant 11 本で、 hook の test の該当 case が落ち、 隣の case は通り続けることを確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 test は hooks/ に在るので {spec_dir} で指し、 部品の写しの dir を env で渡す。",
   "target": "lib/chat_file_refs.py",
   "run": "env CHAT_FILE_REF_TEST_LIBDIR=. bash {spec_dir}/../hooks/chat-file-ref-enforce.test.sh",
   "fail_marker": "❌ ",
@@ -90,8 +90,8 @@
       "name": "git の末尾一致が 1 件でも拾う (app が開く参照を開けないと言う)",
       "pairs": [
         [
-          "if len(git_suffix_matches(listing, p)) == 1:",
-          "if len(git_suffix_matches(listing, p)) == -1:"
+          "if len(git_suffix_matches(listing, p)) == 1 and not angle:",
+          "if len(git_suffix_matches(listing, p)) == -1 and not angle:"
         ]
       ],
       "expect_fail": [
@@ -145,6 +145,40 @@
       ],
       "expect_pass": [
         "A10:"
+      ]
+    },
+    {
+      "name": "山括弧で囲んだ href を見ない",
+      "pairs": [
+        [
+          "        angle = kind == \"link\" and ANGLE_HREF_RE.search(raw) is not None\n",
+          "        angle = False\n"
+        ]
+      ],
+      "expect_fail": [
+        "E1:",
+        "E2:"
+      ],
+      "expect_pass": [
+        "E3:",
+        "A1:"
+      ]
+    },
+    {
+      "name": "濁点の形 (NFC / NFD) を disk 上の名前と比べない",
+      "pairs": [
+        [
+          "    disk = disk_spelling(target)\n",
+          "    disk = None\n"
+        ]
+      ],
+      "expect_fail": [
+        "E5:",
+        "E6:"
+      ],
+      "expect_pass": [
+        "E7:",
+        "B2:"
       ]
     }
   ]
