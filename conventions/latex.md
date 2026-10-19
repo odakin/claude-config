@@ -132,7 +132,7 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 
 > **標準ケースは engine script で機械化済**: [`scripts/latexdiff-review-snapshot.sh`](../scripts/latexdiff-review-snapshot.sh) が「baseline 取り出し → markup unwrap (`--strip-cmd`/`--strip-color`) → latexdiff → compile cycle → snapshot 命名 ([`expensive-intermediate-artifacts.md#snapshot-artifact-naming`](expensive-intermediate-artifacts.md#snapshot-artifact-naming) 準拠、 head 側は main tex を最後に触った commit に pin) → 同 baseline 旧版の supersede 削除 → commit+push+open」 を 1 コマンドで回す (= 共著レビュー中に相手の push を取り込んで diff を更新する loop 用。 behind / dirty guard 内蔵、 手順詳細 = script docstring が SoT)。 ⚠️ **「既定」の使い分け**: engine の既定 (`--math-markup=1` + `VERBATIMENV=comment` + lualatex) は**単一 main file・comment 環境・tikz 図なしの素直な原稿**で実証した組合せ。 上の症状表に当たる複雑原稿 (tikz / natbib / 自作数式環境マクロ) では**本節の保守的既定** (`--math-markup=off` / `--disable-citation-markup` / `PICTUREENV` 等) を `--latexdiff-args` で注入する — 2 つの既定は矛盾でなく原稿クラス別。 **原稿固有値 (= baseline commit・strip 対象 markup・engine) は各 repo の CLAUDE.md に呼び出し 1 行として置き、 手法の正本 (本節 + engine) を参照する** (= SoT は上層 1 つ、下層から参照)。 **baseline の選び方は投稿の節目で切り替える**: 投稿前は著者が「この版から」 と決めた内部 snapshot、 **投稿 (preprint / 雑誌) の後は投稿版の commit** を baseline にし、 投稿前の diff は記録として残して再生成しない (投稿後の作業で referee と共著者が見たいのは「投稿版から何が変わったか」 であって内部 snapshot からの差ではない、 実測)。 投稿版の commit は投稿の記録 (package を作った commit、 受付メールの eprint 番号) から同定し、 投稿と最初の投稿後の編集の間に commit が無いことを `git log` で確かめてから既定にする。 engine で吸収できない exotic な pre/post 処理 (マクロ展開・図 placeholder 等) が要る原稿のみ、 従来通り repo の `latexdiff/` 配下に固有スクリプトを置く。
 >
-> <a id="latexdiff-multi-file"></a>⚠️ **engine は main tex が 1 file の原稿だけを扱う** — 付録などを `\input` で分けた原稿では、 sub-file が両版とも working tree の版になり、 sub-file の差分に色が付かない (engine の冒頭に未実装と明記)。 多 file の原稿の差分は、 **両版を同じ手順で平らにしてから** latexdiff に渡す: 旧版は `git show <rev>:<file>` で sub-file ごと取り出し、 両版とも comment を剥がし、 `\input` を中身で置き換える。 display の自作 macro (`\al{…}` 型) は、 上の症状表どおり環境に展開しておかないと式の変更が無色になる。 式の中の細かい変更まで印を付けるなら `--math-markup=2`。 生成した diff の `.tex` は原稿の形をしているので commit しない (原稿の保護の gate に原稿と読まれる)。 渡すのは PDF だけ (実測)。
+> <a id="latexdiff-multi-file"></a>⚠️ **engine は main tex が 1 file の原稿だけを扱う** — 付録などを `\input` で分けた原稿では、 sub-file が両版とも working tree の版になり、 sub-file の差分に色が付かない (engine の冒頭に未実装と明記)。 多 file の原稿の差分は、 **両版を同じ手順で平らにしてから** latexdiff に渡す: 旧版は `git show <rev>:<file>` で sub-file ごと取り出し、 両版とも comment を剥がし、 `\input` を中身で置き換える。 display の自作 macro (`\al{…}` 型) は、 上の症状表どおり環境に展開しておかないと式の変更が無色になる。 式の中の細かい変更まで印を付けるなら `--math-markup=2` (coarse) にし、 下の [#latexdiff-fine-markup](#latexdiff-fine-markup) の順に通す (無印の検査が 0 でない式は whole の出力に差し替える)。 繰り返す原稿は手順を repo の script にする。 生成した diff の `.tex` は原稿の形をしているので commit しない (原稿の保護の gate に原稿と読まれる)。 渡すのは PDF だけ (実測)。
 >
 > ⚠️ markup unwrap が必要な理由: `\DIFadd{\cl{長文}}` のように **group を丸ごと下線 markup に包むと ulem が改行不能 box 化してページ外に溢れる** (= 描画はされるが 1 行で切れる)。 review 注釈系コマンドは diff 前に unwrap するのが根治 (= diff 内で draft 色は冗長でもある)。 両版に同一適用すれば未変更 markup が spurious diff にならない。
 >
@@ -142,7 +142,7 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 
 ## <a id="latexdiff-fine-markup"></a>式の中の変わった記号だけに印を付ける差分 (`--math-markup=fine`) の壊れ方と直し方
 
-共著者が「式もちゃんと変更箇所だけ」 と求めるとき (添字 1 つ・関係記号 1 つの変更で式全体に削除線が付くのを避けたいとき) は `--math-markup=fine` (= 2) を使う。 実際の原稿では fine の出力が決まった形で壊れる (実測):
+共著者が「式もちゃんと変更箇所だけ」 と求めるとき (添字 1 つ・関係記号 1 つの変更で式全体に削除線が付くのを避けたいとき) は `--math-markup=2` を使う (latexdiff の名前では 2 = coarse、 3 = fine。 下の表と道具は 2 の出力で実測した)。 実際の原稿では fine の出力が決まった形で壊れる (実測):
 
 | 症状 | 原因 | 直し方 |
 |---|---|---|

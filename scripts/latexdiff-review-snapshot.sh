@@ -51,7 +51,7 @@
 #                         群の外の \color{NAME} は残る = 残ったら警告。 % コメントの中は触らない)
 #   --engine CMD          default: lualatex
 #   --bib MODE            bibtex|none (default: bibtex)
-#   --math-markup N       default: 1 (2 = fine: 式の中の変わった token だけ。 fine の壊れ方は latexdiff-fine-fixups.py が直す)
+#   --math-markup N       default: 1 (2 = latexdiff の coarse: 式の中の変わった token だけ。 fine の壊れ方は latexdiff-fine-fixups.py が直す)
 #   --latexdiff-args STR  latexdiff への追加引数 (空白区切りで展開)
 #   --out-prefix NAME     default: latexdiff
 #   --no-deploy           build のみ (結果 PDF path を表示して終了、repo に触らない)
