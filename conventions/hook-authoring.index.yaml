@@ -153,6 +153,9 @@ sections:
   - id: additive-wiring-needs-retirement
     level: 3
     title: "§4 補足: 足すだけの配線には、 退役の経路が別に要る"
+  - id: new-hook-protected-bundle
+    level: 3
+    title: "§4 補足 2: 層1 に新しい hook を足す変更は保護された file の束 — 候補を写しで置き、 再生成した索引も 1 件として承認を取る"
   - id: hook-architectural-rationale
     legacy: "5"
     level: 2
