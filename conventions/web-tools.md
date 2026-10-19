@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf) + YouTube の音声を取得するとき・HTML しか渡っていないとき・yt-dlp が SABR / 403 で失敗するとき (#youtube-audio-extraction)
+when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf) + YouTube の音声を取得するとき・HTML しか渡っていないとき・yt-dlp が SABR / 403 で失敗するとき (#youtube-audio-extraction) + 企業サイトの製品の告知ページが WebFetch・curl で 403 を返すとき (#corporate-notice-403)
 category: web
 summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter = 文字 whitelist / 戻り値は約 3KB で切れる / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + booking.com の宿への連絡は確認メールに返信しても届かない = web のメッセージ画面を pane で開きログインは本人 (#booking-property-messaging) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)** + Google サイトの編集画面は本文への `type` が確定しない = リンク挿入の窓で文と URL を入れ、 中身は節の削除で消し、 公開は確認画面を経て cookie なしの取得で確かめる (#google-sites-editor)
 -->
@@ -185,6 +185,16 @@ CSR SPA のニュース/結果ページの URL を多数検証する場面 (例:
 - ログインしているかの判定は [`#login-state-check`](#login-state-check) (booking.com の実例: 「管理画面ログイン」 は footer の施設向けリンクでログイン中も出る / 推測した `messages.html` は「お探しのページが見つかりません」 に落ちる)。 予約番号が手元に無いときは header の吹き出しアイコンから「メールボックス」 を開く
 - **無人運営の宿は、 勤め先の指定書式への押印・署名を断り、 自社の証明書を有料で (退室後に) 出すことがある** (実測)。 書式への押印が要る出張では予約前にメッセージで確かめる。 施設ページの設備欄に「フロントサービス: 領収書を発行可能」 とあれば、 施設発行の領収書を頼む理由として示せる (記載項目を並べて頼む = [`research-email.md#approver-vs-issuer`](research-email.md#approver-vs-issuer))。 ただしこの語が何を指すかは施設で違う: 予約サイトで決済した民泊が「直接の決済が無いので領収書は出せない、 インボイスなら出せる」 と答えた (実測) = 返事は全文を読み、 代わりに出せる書類を拾う。 書類の選び方の順序 = [`research-email.md#lodging-proof-choice`](research-email.md#lodging-proof-choice)
 - **予約時に示されていない料金 (書類の発行手数料など) を求められたら**、 掲載・確認メール・案内のどこにも無いことを証拠に残し ([`#listing-evidence-capture`](#listing-evidence-capture))、 返事の中で「予約時に提示の無かった料金」 と名指しして、 予約サイトへの相談を考えていると添える。 強さは、 条件つき + 「〜も考えております」 程度が通りやすい (断定の「申し立てます」「ご了承ください」 は強すぎ、 「念のため確認させていただければ」 は弱すぎ、 と本人に直された = 実測)
+
+## <a id="corporate-notice-403"></a>企業サイトの製品の告知ページが WebFetch・curl で 403 のとき = 打ち直さず、 同じ会社の別の頁と報道で埋める
+
+大手メーカーの企業サイトの告知ページ (製品のお詫び・お知らせ) が、 WebFetch でも curl でも `403` / `Access Denied` (CDN の bot 判定、 参照番号つきの短い頁) を返すことがある。 ブラウザ風の User-Agent・`Accept-Language`・`Referer` を付けても同じだった (実測)。
+
+- **header を変えて打ち直さない** — 2 回目の 403 で止める。 それ以上は bot 保護の回避に寄る (線は [`#claude-share-page-access`](#claude-share-page-access) の「線を守る」 と同じ)。
+- **同じ会社の別のドメイン (製品サポートの案内の頁) は読めることがある** (実測)。 対象の確かめ方・当面の使い方・受付時間はそちらに出る。 ⚠️ 電話番号と対象品番の一覧は告知の頁にしか無く、 案内の頁は link で指すだけのことがある (実測) = 案内の頁を読んで「電話番号は公表されていない」 と言わない。
+- **品番・台数・事故件数は業界紙・報道が告知を写して載せる** — 使ったら出所 (記事の URL と日付) を記録に書く。
+- **本人が申込フォームを開いているなら、 その頁の文を貼ってもらう** — フォームの頁に問い合わせ先の電話番号・受付時間・項目の一覧が出ていた (実測)。
+- 埋まらない項目は「未確認 (403 で開けず)」 と書き、 推測で埋めない。 内蔵 Browser pane で開けるかは未実測。
 
 ## <a id="listing-evidence-capture"></a>掲載内容を証拠に残す (後から書き換えられる前に) — pane の画面キャプチャ + 元メールの .eml + ハッシュ
 

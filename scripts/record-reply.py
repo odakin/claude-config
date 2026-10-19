@@ -21,7 +21,8 @@ Gmail の読み = lib/gmail_read.py。
   3. dry-run (既定) では未記録の本文 (引用行を除く) と書く予定の差分を出す。 `--apply` で書く。
   4. 書くもの (= この 2 file だけ): 台帳の月 file (thread の home entry を作る or 足す = `threadId` 〔無ければ〕・
      `recorded_upto`・`messages[]`・`related_todo` 〔結ぶ項目が無ければ〕) と、 結ぶ項目 (`status_context` を上書き、
-     `updated`、 `--status`、 `email_ref` が無ければ `threadId:<id>` の 1 行)。 `--next` は項目を書くとき必須。
+     `updated`、 `--status`、 `email_ref` が無ければ `threadId:<id>` の 1 行)。 `--next` は項目を書くとき必須で、
+     渡すのは「→ 次:」 の後ろの一手だけ (日付・相手・件名は template が前に付ける。 現在地の文を丸ごと渡すと日付と出来事が二重になる = 実測)。
   書かないもの: 案件の正本・calendar・Gmail の label と既読・`notes` field・既存 entry の `category`。
 
 失敗の向き:
@@ -1594,7 +1595,7 @@ def main(argv=None) -> int:
     ap.add_argument("target", nargs="?", help="項目 id / threadId / messageId / entry id")
     ap.add_argument("--todo", help="結ぶ項目 id (target が項目 id ならそれ)")
     ap.add_argument("--account")
-    ap.add_argument("--next", help="次の一手 1 行 (項目の status_context に書く)")
+    ap.add_argument("--next", help="次の一手だけ 1 行 (項目の status_context の「→ 次:」 の後ろに入る。 日付・相手・件名は道具が前に付ける = 自分で書くと二重になる)")
     ap.add_argument("--status", help="項目の status (enum を渡していれば検査)")
     ap.add_argument("--summary", help="新規 entry の summary (3 行まで)")
     ap.add_argument("--slug", help="新規 entry の id の中央 (romaji)。 末尾の -sent / -received は道具が付ける = slug に入れない")
