@@ -17,6 +17,7 @@
 使い方:
   pdf-review-render.py <pdf> [--pages 1,3-4] [--dpi 110] [--out <dir>] [--clip x0,y0,x1,y1] [--label <語> ...] [--below 0]
   pdf-review-render.py <pdf> --list            # 頁ごとの塗る数と字の層の有無だけ (画像を作らない)
+  pdf-review-render.py <pdf> --audit           # 塗りの外に残る 4 桁以上の数字・番地らしい語を形だけで (9 / 字 / a)。 画像を Read する前に回す
   pdf-review-render.py --selftest
 --out の既定 = 一時 dir の `pdf-review-render/<名前>/` (repo の中に画像を残さない = 塗っていない氏名などが commit に紛れない)。
 --clip は pt 単位 (左上原点、 頁の座標)。
@@ -93,6 +94,40 @@ def mask_rects(page, labels, below=0.0):
     return rects
 
 
+_ADDR_CHARS = re.compile(r"[都道府県市区町村郡丁番号]")
+
+
+def shape(text):
+    """値を出さない形 (数字 → 9、 英字 → a、 漢字かな → 字)。"""
+    text = re.sub(r"[0-9０-９]", "9", text)
+    text = re.sub(r"[A-Za-z]", "a", text)
+    return re.sub(r"[一-龥ぁ-んァ-ヶー]", "字", text)
+
+
+def audit(pdf, pages=None, labels=None, below=0.0):
+    """[(頁番号, 塗る数, 塗りの外に残る「4 桁以上の数字・番地らしい語」 の形の list)]。 字の層が無い頁は None。
+    画像を読む前に、 塗りが要る行を覆っているかを確かめる (実測: 見出しの行だけを塗ると、 折り返した番地が残った)。"""
+    import fitz
+    doc = fitz.open(str(pdf))
+    res = []
+    for i in parse_pages(pages, doc.page_count):
+        page = doc[i]
+        rects = mask_rects(page, labels or LABELS, below)
+        if rects is None:
+            res.append((i + 1, 0, None))
+            continue
+        left = []
+        for w in page.get_text("words"):
+            r = fitz.Rect(w[:4])
+            if any(m.contains(r) or abs(m & r) > 0.6 * abs(r) for m in rects):
+                continue
+            t = w[4]
+            if len(re.sub(r"\D", "", t)) >= 4 or (_ADDR_CHARS.search(t) and re.search(r"[0-9０-９]", t)):
+                left.append(shape(t)[:24])
+        res.append((i + 1, len(rects), left))
+    return res
+
+
 def render(pdf, out_dir, pages=None, dpi=110, clip=None, labels=None, below=0.0, allow_unmasked=False, list_only=False):
     """[(頁番号, 塗った数, 出した path か理由)]。"""
     import fitz
@@ -132,6 +167,8 @@ def main(argv=None):
     ap.add_argument("--below", type=float, default=0.0, help="見出しの下に塗りを延ばす高さ (pt)")
     ap.add_argument("--allow-unmasked", action="store_true")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--audit", action="store_true",
+                    help="画像を作らず、 塗りの外に残る 4 桁以上の数字・番地らしい語を形だけで出す (日付・番号か、 塗り漏れかを見分ける)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
     if a.selftest:
@@ -141,6 +178,10 @@ def main(argv=None):
     pdf = Path(a.pdf).expanduser()
     out = Path(a.out).expanduser() if a.out else Path(tempfile.gettempdir()) / "pdf-review-render" / pdf.stem
     clip = [float(x) for x in a.clip.split(",")] if a.clip else None
+    if a.audit:
+        for page_no, n, left in audit(pdf, a.pages, LABELS + a.label, a.below):
+            print(f"p{page_no}: 字の層が無い" if left is None else f"p{page_no}: 塗り {n} / 塗りの外の数字・番地らしい語 {len(left)}: {left}")
+        return 0
     rows = render(pdf, out, a.pages, a.dpi, clip, LABELS + a.label, a.below, a.allow_unmasked, a.list)
     for page_no, n, where in rows:
         print(f"p{page_no}: 塗った {n} 箇所 → {where}")
@@ -192,6 +233,10 @@ def selftest():
         expect("見出しより左に語がある次の行 (次の欄) は塗らない", not dark(300, 336))
         rc = main([str(pdf), "--pages", "2"])
         expect("字の層が無い頁だけを頼むと exit 2", rc == 2)
+        rows = audit(pdf)
+        expect("audit: 塗った語は数えず、 形だけを返す (値を出さない)",
+               rows[0][2] is not None and all("1234" not in x and "7654" not in x for x in rows[0][2])
+               and rows[1][2] is None)
     print("pdf-review-render selftest:", "ALL PASS" if ok else "FAILED")
     return 0 if ok else 1
 
