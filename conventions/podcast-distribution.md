@@ -176,6 +176,14 @@ PNG は元の絵として手元に残す。
       通行証の作り直し・Cookie の保存を CLI に足すか、 ブラウザで読むか、 要るときだけ入れ直すかを、 持ち主が決める (認証の扱いを広げるので、 下の ⚠️ のとおり作る前に持ち主の判断が要る)
   - ⚠️ Claude Code の auto mode では、 ログイン中のページから値を抜き出す操作も、 Cookie で読む道具を書く操作も、 classifier が「認証情報の探索」 として止めた (実測)。
     作るかどうかは持ち主が決め、 権限の設定 (毎回確認する mode か、 その作業に絞った規則) も持ち主が先に決める。 止められた操作を別の道具で続けない
+- <a id="plays-and-retention"></a>**再生数と「最後まで聴いた人」**: Spotify for Creators は、 フォロワー数を読むのと同じ access token で次の口を読める (非公式、 実測)。
+  - `shows/{id}/detailedStreams?start&end` = 日ごとの starts (再生を始めた回数) と streams (60 秒以上)
+  - `shows/{id}/listeners?start&end` = 日ごとの聴いた人の数。 日をまたぐと同じ人を重ねるので、 足して総数にしない
+  - `shows/{id}/episodes?start&end&page&size&sortBy&sortOrder&filter` = 回の一覧 (start と end が無いと HTTP 400、 実測)
+  - `episodes/{id}/performance` = 「何秒目に何人がまだ聴いていたか」 の 1 秒ごとの列 (`samples`) と、 25/50/75/95/100 % の位置まで聴いた人の割合 (`percentiles`)、 中央値 (`medianCompletion`)。
+    最後まで聴いた人 = 列の末尾、 聴き始めた人 = 列の最大 (途中から聴き始めた人がいると先頭より大きい)。 列が全部 0 の回は、 聴いた人がいないのか数が出ていないのかを区別できない
+  - `shows/{id}/aggregate?start&end` = 国・年齢・性別の内訳 (合計は再生の回数とほぼ一致 = 人数でなく回数の内訳と読める、 未確認)
+  - ホスト (LISTEN) の GraphQL には再生数・ダウンロード数の欄が無い (型を見て確認、 実測) = 配信先ごとの管理画面か上の口で読む
 
 ## <a id="promo-per-platform"></a>番組の告知文を媒体ごとに書く
 
