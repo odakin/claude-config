@@ -35,6 +35,10 @@ python3 ~/Claude/claude-config/scripts/macos-exec-kill-triage.py --minutes 120 <
 - kill される file は何もしなくても数十分で一部が通るようになったが、 いつ消えるかは読めない
 - macOS の更新の直後ではなかった
 
+- <a id="copied-system-binary"></a>**system の実行 file を写すと、 写しは起動した瞬間に kill される** (`cp /bin/sleep <tmp>/<名前>` → `Killed: 9`)。
+  試験で「名前の決まった偽の process」 を作るのに写しを使わない。 本物を一意の引数で起動し (例 = `sleep 9<pid>`)、
+  `pgrep -f '<command の全体>'` で探す (見張る側に照合の方法を切り替える env を持たせる)。
+
 ## <a id="inferred"></a>推定 (未確認)
 
 macOS は provenance 付きの script を exec するとき、 syspolicyd に XProtect の scan をさせ、 kernel
