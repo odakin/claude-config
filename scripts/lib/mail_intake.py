@@ -299,9 +299,14 @@ def slo(items: list[dict], now: datetime, warn_h: float = WARN_H, crit_h: float 
             "over_warn": sum(1 for a in ages if a >= warn_h), "over_crit": sum(1 for a in ages if a >= crit_h)}
 
 
-def render(items: list[dict], now: datetime, names_cap: int = FRESH_NAMES_CAP, stable: bool = False) -> list[str]:
+def render(items: list[dict], now: datetime, names_cap: int = FRESH_NAMES_CAP, stable: bool = False,
+           suffix_of=None, head_extra: str = "") -> list[str]:
     """表示行。 0 通なら空。 🚨 / ⚠️ は 1 通 1 行、 無印は名前を 1 行に並べる (件数に畳まない)。
-    stable=True = 行の経過時間を段階だけにする (行の文字列で重複を判定する通知の経路に渡すとき)。"""
+    stable=True = 行の経過時間を段階だけにする (行の文字列で重複を判定する通知の経路に渡すとき)。
+    suffix_of = item → 行末に足す句 (空なら足さない)。 呼び出し側が台帳の項目との結び付き (「→ 項目 [id]」) を付ける。
+    head_extra = 句の付いた行が 1 つでもあるときだけ見出しの末尾に足す文 (その行の処分の手順 = 呼び出し側の道具の名)。
+    なぜ: 行列に残った mail が既存の項目 (待っている案件) の続報だと、 行が案件と記録の手順を持たなければ、 読んだ側は
+    「伝える」 で止まり記録しない (実測 = 伝達は数回、 記録 0 回)。 結び付きの読み方と道具は層ごとに違うので引数で受ける。"""
     if not items:
         return []
     ranked = sorted(((level(it, now), it) for it in items), key=lambda p: ({"crit": 0, "warn": 1, "fresh": 2}[p[0]],) + _sort_key(p[1], now))
@@ -309,7 +314,16 @@ def render(items: list[dict], now: datetime, names_cap: int = FRESH_NAMES_CAP, s
     n_crit = sum(1 for lv, _ in ranked if lv == "crit")
     out = [f"📩 人からの直接のメールで、 まだ読んで処分していないもの {len(items)} 通 (記録も返信も無い。 最古 {_age_label(s['oldest_h'])})"
            f" — 🚨 {n_crit} 通は最初の返答で user に 1 行ずつ伝える。 本文を読み、 用件と期限を伝えて記録する"]
-    out += [_row(it, now, lv, stable) for lv, it in ranked if lv != "fresh"]
+    rows, any_suffix = [], False
+    for lv, it in ranked:
+        if lv == "fresh":
+            continue
+        suf = (suffix_of(it) or "") if suffix_of else ""
+        any_suffix = any_suffix or bool(suf)
+        rows.append(_row(it, now, lv, stable) + suf)
+    if head_extra and any_suffix:
+        out[0] += head_extra
+    out += rows
     fresh = [it for lv, it in ranked if lv == "fresh"]
     if fresh:
         names = [((it.get("from_disp") or "?")[:14] + ("" if (it.get("subject") or "").strip() else " (件名なし)")) for it in fresh[:names_cap]]
@@ -403,6 +417,12 @@ def _selftest() -> int:
     many = [dict(attach_deadline_info(cand(f"f{i}", 0.1), "s", "こんにちは。", t), account="work") for i in range(11)]
     check("ほか 3 通" in render(many, now)[-1], "表示: 名前の上限を超えた分は「ほか N 通」")
     check(render([], now) == [], "表示: 0 通なら空")
+    sx = render(items, now, suffix_of=lambda it: " → 項目 [led:t-1]" if it.get("id") == "x" else "", head_extra=" / 項目に結ばれた行は記録する")
+    check(sx[0].endswith(" / 項目に結ばれた行は記録する") and sx[1].rstrip().endswith("[home:x] → 項目 [led:t-1]")
+          and not any("→ 項目" in r for r in sx[2:]),
+          "表示: suffix_of の句は 🚨 / ⚠️ の行末にだけ付き、 句の付いた行があるときだけ見出しに head_extra を足す")
+    check(render(items, now, suffix_of=lambda it: "", head_extra=" / X")[0] == rows[0],
+          "表示: 句の付いた行が無ければ見出しは変わらない")
     st1 = render([dict(z, internal_ms=ms(1.5), account="work")], now, stable=True)
     st2 = render([dict(z, internal_ms=ms(1.9), account="work")], now, stable=True)
     check(st1[1] == st2[1] and "24時間以上" in st1[1]
