@@ -77,6 +77,16 @@ def fix(s, accents=ACCENTS):
     s, counts["over"] = re.subn(
         r"%DIFDELCMD < \{%%%\n\\DIFdel\{(.*?)\}%DIFDELCMD < \\over\s*%%%\n\\DIFdel\{(.*?)\}%DIFDELCMD < \}\n(?:%DIFDELCMD <\s*%%%\n)?",
         r"\\DIFdel{{\1 \\over \2}}\n", s, flags=re.S)
+    # 3b. the same deleted fraction when the closing brace line ends in %%% (measured: `{1\ov4}` deleted,
+    #     \ov = \over expanded before latexdiff)
+    s, counts["over-pct"] = re.subn(
+        r"%DIFDELCMD < \{%%%\n\\DIFdel\{([^{}\n]*)\}%DIFDELCMD < \\over\s*%%%\n\\DIFdel\{([^{}\n]*)\}%DIFDELCMD < \}%%%\n",
+        r"\\DIFdel{{\1 \\over \2}}", s)
+    # 3c. {A \over B} -> A: A is kept, the braces are commented out on both sides of it and only
+    #     `\over B` is marked; drop the commented braces (the \DIFdel group scopes the \over)
+    s, counts["over-tail"] = re.subn(
+        r"%DIFDELCMD < \{%%%\n\\DIFdelend ([^\n]*?)\\DIFdelbegin %DIFDELCMD < \\over\s*%%%\n\\DIFdel\{([^{}\n]*)\}%DIFDELCMD < \}%%%\n",
+        r"\\DIFdelend \1\\DIFdelbegin \\DIFdel{\\over \2}", s)
     s, counts["cmd-before"] = re.subn(r"%DIFDELCMD < (\\[A-Za-z]+)\s*%%%\n\\DIFdel\{", r"\\DIFdel{\1 ", s)
     s, counts["cmd-after"] = re.subn(r"\n\}%DIFDELCMD < (\\[A-Za-z]+)\s*\n%DIFDELCMD < %%%\n", r" \1}\n", s)
     return s, counts
@@ -127,6 +137,10 @@ def selftest():
     check("frac", s, "\\DIFadd{\\sum\\frac{a+b}{c_{1}}\n} .")
     s, c = fix("+ \\DIFdelbegin %DIFDELCMD < {%%%\n\\DIFdel{a-b }%DIFDELCMD < \\over  %%%\n\\DIFdel{c}%DIFDELCMD < }\n%DIFDELCMD <     %%%\n\\DIFdelend")
     check("over", s, "+ \\DIFdelbegin \\DIFdel{{a-b  \\over c}}\n\\DIFdelend")
+    s, c = fix("-\\DIFdelbegin %DIFDELCMD < {%%%\n\\DIFdel{1}%DIFDELCMD < \\over %%%\n\\DIFdel{4}%DIFDELCMD < }%%%\n\\DIFdel{u}\\DIFdelend")
+    check("over-pct", s, "-\\DIFdelbegin \\DIFdel{{1 \\over 4}}\\DIFdel{u}\\DIFdelend")
+    s, c = fix("-\\DIFdelbegin %DIFDELCMD < {%%%\n\\DIFdelend \\sigma\\DIFdelbegin %DIFDELCMD < \\over %%%\n\\DIFdel{4}%DIFDELCMD < }%%%\n\\DIFdel{u}\\DIFdelend")
+    check("over-tail", s, "-\\DIFdelbegin \\DIFdelend \\sigma\\DIFdelbegin \\DIFdel{\\over 4}\\DIFdel{u}\\DIFdelend")
     s, c = fix("\\DIFdel{x\\,}%DIFDELCMD < \\widehat %%%\n\\DIFdel{O }\\DIFdelend")
     check("cmd-before", s, "\\DIFdel{x\\,}\\DIFdel{\\widehat O }\\DIFdelend")
     s, c = fix("\\DIFdelbegin \\DIFdel{L\n}%DIFDELCMD < \\gtrsim\n%DIFDELCMD < %%%\n\\DIFdelend")

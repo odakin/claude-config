@@ -51,7 +51,7 @@
 #                         群の外の \color{NAME} は残る = 残ったら警告。 % コメントの中は触らない)
 #   --engine CMD          default: lualatex
 #   --bib MODE            bibtex|none (default: bibtex)
-#   --math-markup N       default: 1 (2 = latexdiff の coarse: 式の中の変わった token だけ。 fine の壊れ方は latexdiff-fine-fixups.py が直す)
+#   --math-markup N       default: 1 (2 = coarse、 3 = fine: 式の中の変わった token だけ。 fine の壊れ方は latexdiff-fine-fixups.py が直す)
 #   --latexdiff-args STR  latexdiff への追加引数 (空白区切りで展開)
 #   --out-prefix NAME     default: latexdiff
 #   --no-deploy           build のみ (結果 PDF path を表示して終了、repo に触らない)
@@ -248,7 +248,7 @@ latexdiff --math-markup="$MATHMARKUP" --config VERBATIMENV=comment $SAFE_ARG $EX
 # keep each label on the new copy only (conventions/latex.md#latexdiff-move-artifacts)
 # fine markup breaks in recurring ways (accent outside the markup, second argument of \frac outside it,
 # deleted-side commands commented out) -> repair before the guard counts unmarked changes
-if [[ ( "$MATHMARKUP" == "2" || "$MATHMARKUP" == "fine" ) && -f "$FINE_FIX" ]]; then
+if [[ ( "$MATHMARKUP" == "2" || "$MATHMARKUP" == "coarse" || "$MATHMARKUP" == "3" || "$MATHMARKUP" == "fine" ) && -f "$FINE_FIX" ]]; then
     python3 "$FINE_FIX" fix "$D/diff.tex" || die "latexdiff-fine-fixups.py 失敗"
 fi
 if [[ -f "$DUP_LABELS" ]]; then
