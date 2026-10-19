@@ -202,6 +202,17 @@ scope を絞って残りを別の論文へ送る段落は、 先送りする対�
 - 教科書の説明を論文の段落に挟まない: 1 段落 1 話。 周知の一般論を落とし、 主張と根拠だけを残す。
 - くどさの検算: 書き直した文に「この語を落として意味が変わるか」 を 1 語ずつ問う。 load-bearing な語は残す ([#compression-drops-load-bearing-words](#compression-drops-load-bearing-words))。
 
+### <a id="no-run-in-labels"></a>段落の頭に見出し語を置かない — 段落の役は最初の文が言う
+
+序論で先行研究・新規性・主張しないことを並べるとき、 段落の頭にイタリックや太字の見出し語 (「What is known.」「What is new.」「What is not claimed.」「Our contribution.」 の類) を置かない。 定型の書式に見え、 機械が組んだ文章と読まれる。
+
+- 段落の役は最初の文が言う: 先行研究なら「X is known in Y: …」、 新規性なら「We have not found a previous work that …」「This paper adds …」、 主張しないことなら「We do not claim …」。
+- 見出し語を外したら、 その見出しに寄りかかっていた断片 (「Not X itself: …」 のような主語の無い書き出し) を完全文に直すか、 前の段落と重なるなら落とす。
+- 見出しが要るほどの区切りなら番号付きの節にする ([latex.md#text-structure-hierarchy](latex.md#text-structure-hierarchy))。
+- 雑誌が書式として求める見出し (structured abstract の Background・Purpose など) と定理の Proof. は別。
+
+起源 = 2026-10-19、 共著者側の AI が序論に書いた見出し語に対する著者の指摘 (「AI 臭い」)。
+
 ### <a id="name-equation-terms-by-position"></a>式の項は、 式での位置か既に定義した語で呼ぶ
 
 散文だけで新しい呼び名を作らない (読者は辞書で引けない)。 名指す手は 2 つで、 併用が最も強い。
