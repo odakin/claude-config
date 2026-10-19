@@ -97,6 +97,9 @@ sections:
   - id: closed-form-function-class
     level: 3
     title: "閉形式は関数クラスと残る操作を明記する"
+  - id: truncated-profile-asymptotics
+    level: 3
+    title: "有限区間で切った profile の漸近"
   - id: operator-time-state-order
     level: 2
     title: "一般時刻の演算子と初期状態の依存順を分ける"
