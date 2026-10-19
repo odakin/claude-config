@@ -100,6 +100,16 @@
       "match": "configured for Git LFS but 'git-lfs' was not found on your path",
       "doc": "conventions/shell-env.md#snapshot-fix-per-config-dir",
       "hint": "git-lfs が入っていないか、 入っているのに Bash の PATH に無い (設定フォルダを分けた session の snapshot が直っていないと Homebrew の bin が落ちる)。 LFS の pre-push はこの diff に LFS の file が無くても push 全体を止める。 その場しのぎ = command の頭に PATH=<brew の bin>:$PATH"
+    },
+    {
+      "match": "require a different python version",
+      "doc": "conventions/shared-repo.md#python-env-pins-dont-install",
+      "hint": "固定した依存がこの Python の版を受け付けない。 版を外して入れ直さず、 repo の宣言の版 (.python-version) を入口の tools/py で揃える"
+    },
+    {
+      "match": "Could not find a version that satisfies the requirement",
+      "doc": "conventions/shared-repo.md#python-env-pins-dont-install",
+      "hint": "固定した版の wheel がこの Python の版か arch に無い。 版を外して入れ直さず、 repo の宣言の版を入口の tools/py で揃える"
     }
   ]
 }
