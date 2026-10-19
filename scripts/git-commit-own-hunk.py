@@ -82,6 +82,9 @@ commit の後は push と、 相手の session への 1 行 (相手の `git diff
 - hook は作業 tree を読むことがある。 hook が見る作業 tree には相手の変更も在る (index は自分の分だけ)。
 - commit の後に自分の commit を tree と件名で探す。 hook が件名を書き換え、 かつ同じ tree の commit (空の commit など) が
   直後に上に重なった時だけ取り違えうる。
+- pre-commit が一時 index に別の path を足すと (直して `git add` する hook など)、 自分の path 以外を含む commit として
+  HEAD から外し、 やり直しを繰り返して終了値 4 で止まる。 足された path は作業 tree の中身 = 相手の未 commit の変更を
+  含みうるので止まるのは安全側だが、 表示は「HEAD が動いた」 になる (区別していない)。
 - rename と symlink は扱わない。
 """
 from __future__ import annotations

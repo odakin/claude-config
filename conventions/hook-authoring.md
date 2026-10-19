@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき + app や tool の挙動を当てる hook を書くとき (#imitate-target-predicate) + 事後の block の手前に事前の知らせを置くとき (#counter-notice-at-injection) + hook を消す・event から外すとき (#additive-wiring-needs-retirement) + git commit が「hook ... died of signal 9」 で止まったとき (#killed-hook-stub) + 返事に書くべき行を Stop で確かめる hook を書くとき (#stop-hook-addendum-not-reemission) + 並列の session の hook が同じ state file を読み書きするとき (#shared-state-file-merge) + command の option を当てる hook を書くとき (#command-flag-normalization) + command が file を読むかを当てる hook を書くとき (#command-reads-file-tokenize) + SessionStart の一覧が大きくなったとき・予算と警報を置くとき (#digest-size-budget) + git の履歴の fixture を作る test を書くとき (#git-fixture-pinned-dates) + Stop hook が会話記録から「今の turn」 を探すとき (#transcript-user-message-shape) + 層1 に新しい hook を足す変更の承認を取るとき (#new-hook-protected-bundle)
+when: Claude Code hook を作成・配信・debug するとき + bash script / `.test.sh` を書くとき + app や tool の挙動を当てる hook を書くとき (#imitate-target-predicate) + 事後の block の手前に事前の知らせを置くとき (#counter-notice-at-injection) + hook を消す・event から外すとき (#additive-wiring-needs-retirement) + git commit が「hook ... died of signal 9」 で止まったとき (#killed-hook-stub) + 返事に書くべき行を Stop で確かめる hook を書くとき (#stop-hook-addendum-not-reemission) + 並列の session の hook が同じ state file を読み書きするとき (#shared-state-file-merge) + command の option を当てる hook を書くとき (#command-flag-normalization) + command が file を読むかを当てる hook を書くとき (#command-reads-file-tokenize) + SessionStart の一覧が大きくなったとき・予算と警報を置くとき (#digest-size-budget) + git の履歴の fixture を作る test を書くとき (#git-fixture-pinned-dates) + 並列の commit の race (HEAD が動く窓) を test で再現するとき (#git-race-fixture-via-hooks) + Stop hook が会話記録から「今の turn」 を探すとき (#transcript-user-message-shape) + 層1 に新しい hook を足す変更の承認を取るとき (#new-hook-protected-bundle)
 category: harness-core
 summary: Claude Code hooks 作成 + 配信規律 (= bash 3.2 の $(...) + heredoc body quote escape parser bug と runtime backtick 展開を区別 + hook 配信正常性 3 軸 audit 〔symlink + settings.json + try-fire〕 + PreToolUse warn mode 出力 spec uncertainty + partial install state + §9 hook 挙動の build 依存 〔新規 hook の同 session 発火も build 依存 = 2026-06 は session / app 起動時 snapshot、 desktop 2.1.266 は Stop hook を hot-reload → 足した直後に discriminator で測る / permissionDecisionReason silent-skip / updatedInput〕 + **§0 補足 4 gate hook は読めない入力で死んではいけない (#gate-hook-unreadable-input = 1 file の異常が repo 全体の commit を止める、 encoding 明示 + READ_SKIP で 1 行報告して続行)** + **§0 補足 5 set -e の test は落ちた行を自己申告 (#set-e-test-failure-report = scripts/lib/test-err-trap.sh、 ERR trap の bash 3.2 / 5 実測表、 BSD/GNU の手元再現 = scripts/with-gnu-userland.sh)** + **§2 補足 2 #disableallhooks-kill-switch = root 限定の disableAllHooks が「frontend 差」 に化ける 〔自 session では検出不能 = 外側から scripts/hook-liveness-audit.py、 audit-hooks.sh の (d) 自動部分〕** + **test-root-not-parent-dir = test は自分の repo を checkout の親 dir 経由で指さない 〔worktree で落ち・live を検査・python shim は CI でも空振り = 一時 root に symlink 1 本 + 兄弟 repo は正規 layout + 不在は SKIP + mutation で確かめる〕** + **§12 #text-pattern-stop-hook = 最終発話の句で当てる Stop hook は過去の最終発話で校正してから入れる 〔scripts/calibrate-final-message-pattern.py + 共通部品 scripts/lib/transcript_turns.py〕・引用の例示を除く・block は 1 回・fail-open** + **§14 #opt-in-side-effect-hook = 人に向けた副作用だけの hook (音・通知) は層1 に既定 off で置き marker で opt-in、 surface の許可 list は実測値だけ、 実行の証拠を state file に残す** + **#command-guard-calibration = command を見る PreToolUse guard も過去の Bash command で校正 (scripts/calibrate-bash-command-pattern.py) し、 わざと該当する無害な command で live 確認** + **§15 #injection-digest-and-relay = SessionStart の注入は期限の近い item の 1 ブロックに畳み (副作用は止めない・行数で切らない・自分で決めた期日と条件発火は畳まない)、 短い窓の item は伝えたかを Stop で問う 〔scripts/lib/relay_check.py〕**)
 -->
@@ -1167,6 +1167,21 @@ hook の state (処理済みの記録・割り当て・既読) を「読む → 
 
 - 自動修正する pre-commit がある repo では、 path 指定の commit の後に `git status --short -- <path>` を見る。 `MM` か `M ` が出たら `git reset -q -- <path>` で index だけを HEAD に戻す (working tree は hook が直した版 = HEAD と同じなので触らない。 これで消えることを確かめた)
 - hook を書く側: 自動修正したら、 直した path を 1 行出す (path 指定の commit をした人が index を見直すきっかけになる)
+
+## <a id="git-race-fixture-via-hooks"></a>§22. git の race (HEAD が動く窓) を test で決定的に再現する — fixture の repo の hook に相手の commit を打たせる
+
+並列の session が同じ repo に commit する race を直す道具は、 窓を sleep で狙っても再現しない。 fixture の repo の hook に「相手の commit」 を 1 回だけ打たせると、 窓を決定的に開けられる (実測 = 一時 index で commit する道具の selftest、 実装例 = [`../scripts/git-commit-own-hunk.py`](../scripts/git-commit-own-hunk.py) の `move_head_in_hook` / `late_commit_on_top`)。
+
+| 開けたい窓 | 置く場所 | 起きること |
+|---|---|---|
+| `git commit` が HEAD を読んだ後、 ref を更新する前 | pre-commit の中で commit する | 外側の commit は `fatal: cannot lock ref 'HEAD': is at X but expected P` で止まる (commit は入らない) |
+| 自分の commit の直後 (道具が HEAD を読み直す前) | post-commit の中で commit する | HEAD が相手の commit になる = commit の後に HEAD を読み直して自分の commit とする道具の誤りが出る |
+| 道具が版を作った後、 `git commit` を打つ前 | 道具に test 専用の環境変数で shell を 1 回走らせる口を持たせる (この窓には git の hook が無い) | commit の直前に親を照合しない道具は、 相手の変更を戻した commit を作る |
+
+- **1 回だけ打たせる**: 中の commit を打つ前に marker file (`.git/<名前>-once`) を書き、 marker があれば何もしない (中の commit でも同じ hook が走るので、 2 回目はここで止まる)。 post-commit には件名などで「外側の commit の時だけ」 の条件も付ける
+- ⚠️ **hook の中の commit は `GIT_INDEX_FILE` を外して打つ** — git は hook に、 外側の commit が使っている index (一時 index ならその path) を `GIT_INDEX_FILE` で渡す。 外さないと相手の commit が外側の index に入る
+- ⚠️ **外側が一時 index で commit した直後は、 本当の index が新しい HEAD より古い** — post-commit の中でそのまま `git add` + commit すると、 相手の commit が外側の変更を戻す (`--allow-empty` も空の commit にならない。 実測 = fixture の誤りを道具の誤りと取り違えかけた)。 相手の commit の前に `git reset -q` で index を HEAD に揃える。 本物の並列でも同じ形で起きる (共有 index の race = [`multi-session-coordination.md#temp-index-commit`](multi-session-coordination.md#temp-index-commit) の ⑥)
+- 古い実装でその test が落ちることを先に確かめる (fixture が窓を開けていなければ、 直した道具でも古い道具でも通る)
 
 ## <a id="related-docs"></a>関連
 
