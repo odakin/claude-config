@@ -81,7 +81,7 @@ agent の Bash の snapshot を補う [`hooks/fix-snapshot-path-patch.sh`](../ho
 | npx cache の platform 部品 (`*-darwin-x64`) | native 部品を使う package が落ちる | `~/.npm/_npx/<hash>` ごと消す (次回ネイティブで取り直す) |
 | Python の user site の拡張 (`.so`) | numpy・lxml・PyMuPDF 等が import で落ちる | `pip freeze --user` → `pip install --user --force-reinstall --no-deps -r <list>` を arm64 の python で |
 | python.org の Framework Python / pyenv の版 | `python3` が Intel 版に化ける | `.zprofile` の Framework を PATH に足す行を外す。 pyenv は版を作り直すか `pyenv global system` |
-| repo の venv と、 PATH に無い Intel 版の interpreter (`/usr/local/opt/python@3.X` など) | 版だけを見て interpreter を選ぶ道具が Intel 版で venv を作り、 依存も Intel 版の wheel で入る (Rosetta で動くので気付かない) | venv を arm64 の python で作り直す。 **interpreter の arch は起動せずに `file -bL` で見る** (起動して確かめると、 その時点で Rosetta で動いて「Intel プロセッサ用アプリの対応は終了します」 の通知が出る / Rosetta が無ければ Bad CPU type)。 repo の入口 (`tools/py`) が機械ごとに何を使うか (Intel の Mac・Apple Silicon の Rosetta あり / なし) の表 = [`shared-repo.md#python-env-arch`](shared-repo.md#python-env-arch) |
+| repo の venv と、 PATH に無い Intel 版の interpreter (`/usr/local/opt/python@3.X` など) | 版だけを見て interpreter を選ぶ道具が Intel 版で venv を作り、 依存も Intel 版の wheel で入る (Rosetta で動くので気付かない) | venv を arm64 の python で作り直す。 **interpreter の arch は起動せずに `file -bL` で見る** (起動して確かめると、 その時点で Rosetta で動いて「Intel プロセッサ用アプリの対応は終了します」 の通知が出る / Rosetta が無ければ Bad CPU type)。 repo の入口 (`tools/py`) が機械ごとに何を使うか (Intel の Mac・Apple Silicon の Rosetta あり / なし) の表 = [`python-env.md#python-env-arch`](python-env.md#python-env-arch) |
 | git-crypt の filter | `git status` すら `external filter ... git-crypt clean failed 126/127` | unlock 時の git-crypt の**絶対 path** が各 repo の `.git/config` に焼かれている。 `macos-arch-audit.py --fix-git-crypt-paths --repos-root <dir>` が今の git-crypt に書き換える |
 | launchd plist | ジョブが毎回 `exit 126` | 生成した installer を再実行して plist を作り直す (焼かれた PATH・interpreter・機械名も更新される) |
 | アプリ | Rosetta 頼み / 32-bit は起動不能 | Homebrew cask で入れ直す (旧 bundle を退避してから。 ⚠️ cask が**同じ bundle id** かを先に確かめる = 改名したアプリで別物を入れない。 `.pkg` の cask は sudo が要る。 配布停止の cask もある)。 32-bit (i386 / ppc だけ) は削除候補。 種類ごとの入れ替え方 = 下の [§アプリの入れ替え](#app-replacement) |
@@ -129,7 +129,7 @@ base が別 arch か消えた venv (`--repos-root` を付けると repo の venv
   `python3 scripts/search-agent-transcripts.py --tool-runs --since <日> --regex '<path の正規表現>'` (subagent の呼び出しも、 親の session の id で出る)。
   ⚠️ desktop の `search_session_transcripts` は記録の一部しか検索しない ([`multi-session-coordination.md`](multi-session-coordination.md) の caveat) = 0 件を「どの session も起動していない」 の根拠にしない。
 - 直し方 = 起動したものの種類ごとに、 上の 2 つの表で。 候補を起動して arch を確かめる道具は、 起動せずに `file -bL` / `lipo -archs` で見る形に直す
-  (実装例 = [`shared-repo.md#python-env-arch`](shared-repo.md#python-env-arch) の `tools/py`)。
+  (実装例 = [`python-env.md#python-env-arch`](python-env.md#python-env-arch) の `tools/py`)。
 
 ## 関連
 

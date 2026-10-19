@@ -108,13 +108,18 @@
     },
     {
       "match": "require a different python version",
-      "doc": "conventions/shared-repo.md#python-env-pins-dont-install",
+      "doc": "conventions/python-env.md#python-env-pins-dont-install",
       "hint": "固定した依存がこの Python の版を受け付けない。 版を外して入れ直さず、 repo の宣言の版 (.python-version) を入口の tools/py で揃える"
     },
     {
       "match": "Could not find a version that satisfies the requirement",
-      "doc": "conventions/shared-repo.md#python-env-pins-dont-install",
+      "doc": "conventions/python-env.md#python-env-pins-dont-install",
       "hint": "固定した版の wheel がこの Python の版か arch に無い。 版を外して入れ直さず、 repo の宣言の版を入口の tools/py で揃える"
+    },
+    {
+      "match": "ensurepip is not available",
+      "doc": "conventions/python-env.md#python-env-venv-create-fails",
+      "hint": "venv の部品 (ensurepip) が無い python で venv を作ろうとした (依存や版の問題ではない)。 Debian・Ubuntu なら python3.X-venv の package を入れるか、 uv を入れる (uv は ensurepip を使わずに venv を作る)"
     }
   ]
 }

@@ -155,6 +155,7 @@ claude-config/
 │   ├── pronunciation-verification.md       # 未知の言語・転写された人名や語の発音を調べるとき / user が「実際に音で聞きたい」と言ったとき
 │   ├── prototype-feedback.md               # 外部からウェブアプリ・制作物・企画等の試用とコメントを頼まれ、スクリーンショット・QR・一時URLから実物を確認して返却文面を作るとき
 │   ├── public-page-watch.md                # 「いつ変わるか分からないが、 変わったらすぐ動く」 公開ページの告知 (受付の再開・募集の開始・日程の変更・議事の結果) を待つとき + 待っている告知の正本を記録に書くとき + 無人の定期実行から人に知らせる経路 (OS 通知・ダイアログ・スマホ push) を組むとき + headless `claude -p` から通知を送ろうとしたとき (スマホには届かない、 #sealed-headless-push) + 見張っていたページが変わったが判断に要る中身がそこに無いとき (#watch-where-the-content-lands)
+│   ├── python-env.md                       # 計算・検算を Python で回す repo を新しい機械・clone・OS (macOS / Linux / WSL / Windows / CI / Docker) で始めるとき + `pip install -r` が固定した依存で落ちたとき・venv が作れないとき + 検算の script に `.venv/bin/python` を書きかけたとき + repo の入口 `tools/py` の雛形を直す・配るとき + 機械に Python を入れる方法を選ぶとき
 │   ├── rebuttal-letter.md                  # referee report への point-by-point 返信を書くとき + 不採択の直後に編集者へ第 2 referee を頼む返信を書くとき (#ask-editor-second-referee)
 │   ├── remote-control-server.md            # Remote Control サーバーモードを常駐・troubleshoot するとき
 │   ├── repo-history-growth.md              # build した PDF・図・様式の出力を commit しようとするとき + git-crypt で暗号化した file を頻繁に書き足す台帳にするとき + 自動生成の data を定期 job で commit するとき + repo (.git) が大きい・clone や fetch が重いと気づいたとき + repo は小さいのに fetch・push・ls-remote が毎回数秒かかるとき (#slow-round-trip) + git-crypt の repo を一時 clone して unlock する道具を書くとき + check-history-growth.py の 🟠 / commit 時の ⚠️ を見たとき
@@ -167,7 +168,7 @@ claude-config/
 │   ├── secret-handoff.md                   # secret を user から受け取る・別マシンへ運ぶとき + **token を rotate するとき** (= 分業と主体照合、 #rotation-labor-split) + **暗号化 backup を作る/パスフレーズを失ったとき** (#backup-round-trip / #passphrase-loss-is-recoverable)
 │   ├── semgrep-ci.md                       # Semgrep を CI で運用する・finding を読む/消す・false positive を nosemgrep 注記するとき
 │   ├── sensitive-data-pass-through.md      # 受信した URL / file を別 recipient に forward する前
-│   ├── shared-repo.md                      # 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + 計算・検算を Python で回す repo を新しい機械・clone で始めるとき・`pip install -r` が固定した依存で落ちたとき・検算の script に `.venv/bin/python` を書きかけたとき (#repo-python-env)
+│   ├── shared-repo.md                      # 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + 共有リポで計算・検算を Python で回すとき (版・venv・入口 tools/py の正本 = python-env.md、 本 file は招待した相手の手元の点検 #collaborator-check-python だけ)
 │   ├── shell-env.md                        # PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** + **Claude が Bash tool で複数の対象を loop で走査する 1-liner を書く瞬間** (= zsh は未 quote の変数を単語分割しない、 `#claude-issued-shell-commands`) + **Bash tool の `grep -r` で網羅を主張する瞬間** (= ugrep として `.gitignore` を読む、 `#bash-tool-grep-ignores-gitignore`) + **変数の直後に `:` を書く瞬間** (= `"$c:path"` は zsh の修飾子になる) + **macOS の unified log を `log show` で読む瞬間** (= zsh の組み込みに取られる、 `#zsh-log-builtin`) (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
 │   ├── shell-multibyte-truncation.md       # shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths)
 │   ├── slack-mcp.md                        # Slack workspace を MCP で wire するとき
@@ -225,7 +226,7 @@ claude-config/
 │   └── shared-project/                 # 共有プロジェクト (layer 2) bootstrap skeleton
 │       ├── pdf-publish/                # build した PDF を git に入れず、 各自の push で共有フォルダへ写す仕組み (配る = scripts/install-pdf-publish.py)
 │       ├── collaborator-check/         # 各 clone の session 開始時に、 その人の手元に要る準備 (個人の token・道具・最初に読む節) を点検する project hook (配る = scripts/install-collaborator-check.py、 規約 = conventions/shared-repo.md#collaborator-check)
-│       ├── python-env/                 # 計算を Python で回す repo の入口 tools/py の正本 (venv を作る・requirements に追従・宣言 .python-version の版が無ければ入れ方を言って止まる。 配る = scripts/install-collaborator-check.py の python 行、 規約 = conventions/shared-repo.md#repo-python-env)
+│       ├── python-env/                 # 計算を Python で回す repo の入口 tools/py の正本 (venv を作る・requirements に追従・宣言 .python-version の版が無ければ入れ方を言って止まる。 配る = scripts/install-collaborator-check.py の python 行、 規約 = conventions/python-env.md)
 │       ├── README.md
 │       ├── CLAUDE.md.template
 │       ├── README.md.template

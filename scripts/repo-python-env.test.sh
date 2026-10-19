@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# repo-python-env.test.sh — repo の Python の入口 (templates/shared-project/python-env/py = 各 repo の tools/py) の検査。 偽の interpreter と偽の uv で、 venv を作る・追従させる・版が無ければ止まる・作り直しの失敗で元に戻す・機械の arch (arm64 / Intel / 見ない) に合わない候補を起動しない・lock を確かめる
+# repo-python-env.test.sh — repo の Python の入口 (templates/shared-project/python-env/py = 各 repo の tools/py) の検査。 偽の interpreter と偽の uv で、 venv を作る・追従させる・版が無ければ止まる・作り直しの失敗で元に戻す・機械の arch (arm64 / Intel / 見ない) に合わない候補を起動しない・lock・Windows (Git Bash) と Linux (WSL・Debian・musl) を REPO_PY_OS で模した挙動を確かめる
 #
-# 規約 = conventions/shared-repo.md#repo-python-env 。 network は使わない。 最後の 1 件だけ実機の python3 で本物の venv を作る
-# (python3 が無い機では飛ばす)。 bash 3.2 (macOS の /bin/bash) でも回る。
+# 規約 = conventions/python-env.md (環境ごとの表 = #python-env-environments。 表の「確かめ方」 の列が本 file の番号を引く)。
+# network は使わない。 最後の 1 件だけ実機の python3 で本物の venv を作る (python3 が無い機では飛ばす)。 bash 3.2 (macOS の
+# /bin/bash) でも回る。 Windows・Linux は OS (uname) と、 その OS の python の振る舞い (Scripts/python.exe・CRLF・Store の
+# alias・ensurepip の無い python) を模しただけで、 その OS の実機では走らせていない。
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$HERE/../templates/shared-project/python-env/py"
@@ -15,21 +17,30 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
 # 偽の python: 版を答える / -m venv で自分の写しを venv に置く / -m pip install -r を記録する
 # (requirements に "fail-on-<major.minor>" があればその版では失敗) / -m pip freeze は venv の freeze.txt / それ以外は RAN を出す
-mkpy() {  # mkpy <path> <version> [<arch>]
+# arch = arm64 (既定) / x86_64 / universal / win (Windows の python = 出力が CRLF・venv が Scripts/python.exe・machine が AMD64)。
+# 4 つめに novenv = venv の部品 (ensurepip) の無い python (Debian・Ubuntu で python3.X-venv を入れていない状態)
+mkpy() {  # mkpy <path> <version> [<arch>] [novenv]
   mkdir -p "$(dirname "$1")"
   cat > "$1" <<EOF
 #!/bin/bash
-V="$2"; A="${3:-arm64}"; LOG="$LOG"
+V="$2"; A="${3:-arm64}"; NOVENV="${4:-}"; LOG="$LOG"
 MM="\${V%.*}"
 me="\$0"
+NL='\n'; [ "\$A" = win ] && NL='\r\n'
 echo "exec \$me" >> "\$LOG"; echo "run-arch \$A" >> "\$LOG"
 if [ "\${1:-}" = -c ]; then
-  M="\$A"; [ "\$A" = universal ] && M="\${REPO_PY_NATIVE_ARCH:-arm64}"
-  case "\$2" in *platform*) echo "\$V \$M"; exit 0 ;; *version_info*) echo "\$V"; exit 0 ;; esac
+  M="\$A"; [ "\$A" = universal ] && M="\${REPO_PY_NATIVE_ARCH:-arm64}"; [ "\$A" = win ] && M=AMD64
+  case "\$2" in
+    *platform*) printf "%s %s\$NL" "\$V" "\$M"; exit 0 ;;
+    *sys.executable*) printf "%s\$NL" "\$me"; exit 0 ;;
+    *version_info*) echo "\$V"; exit 0 ;;
+  esac
   echo "C \$V \$2"; exit 0
 fi
 if [ "\${1:-}" = -m ] && [ "\${2:-}" = venv ]; then
-  d="\$3"; mkdir -p "\$d/bin"; cp "\$me" "\$d/bin/python"; chmod +x "\$d/bin/python"
+  if [ -n "\$NOVENV" ]; then echo "Error: The virtual environment was not created successfully because ensurepip is not available." >&2; exit 1; fi
+  d="\$3"; b=bin; py=python; [ "\$A" = win ] && { b=Scripts; py=python.exe; }
+  mkdir -p "\$d/\$b"; cp "\$me" "\$d/\$b/\$py"; chmod +x "\$d/\$b/\$py"
   echo "home = \$(dirname "\$me")" > "\$d/pyvenv.cfg"
   echo "venv \$V" >> "\$LOG"; exit 0
 fi
@@ -270,7 +281,126 @@ newrepo r39; echo 3.13 > "$R/.python-version"; : > "$LOG"
 out="$(PATH="$SHIMDIR:$PATH" REPO_PY_SEARCH= "$R/tools/py" --venv-check 2>/dev/null)"
 not_run "$SHIMDIR/python3.13" && ok "R39 組み込みの探し場所では script の候補 (shim) を起動しない" || ng "R39 log=$(cat "$LOG")"
 
-# 16. bash 3.2 (macOS の /bin/bash) でも同じに動く
+# 16. Windows (Git Bash) と Linux (WSL・Debian・musl・CI) を REPO_PY_OS で模す。 組み込みの探し場所を通す件は、 PATH を
+#     最小の道具 (MINBIN) と偽の python の dir だけにし、 HOME も空の dir にして、 この機械の本物の python を起動しない
+MINBIN="$TMP/minbin"; mkdir -p "$MINBIN"
+for t in bash git dirname uname sed grep shasum sha256sum cksum cut head tr sort mkdir rm mv cat sleep cp chmod; do
+  p="$(command -v "$t" 2>/dev/null)" && [ -n "$p" ] && ln -sf "$p" "$MINBIN/$t"
+done
+GITENV="GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1"
+WIN_OS="MINGW64_NT-10.0-22631"
+W13="$TMP/win/Python313/python.exe"; mkpy "$W13" 3.13.4 win
+# Windows の Store の alias: 起動すると「Python」 とだけ出して成功で終わる (版を答えない)
+mkdir -p "$TMP/WindowsApps"
+for n in python python3; do
+  printf '#!/bin/bash\necho "exec %s/%s" >> "%s"\necho Python\n' "$TMP/WindowsApps" "$n" "$LOG" > "$TMP/WindowsApps/$n"; chmod +x "$TMP/WindowsApps/$n"
+done
+# 偽の py launcher: py -3.13 だけを知っている (Windows の native の出力 = CRLF は python の側が出す)
+mkdir -p "$TMP/winbin"
+cat > "$TMP/winbin/py" <<EOF
+#!/bin/bash
+echo "exec-launcher \$*" >> "$LOG"
+case "\$1" in
+  -3.13) shift; exec "$W13" "\$@" ;;
+  *) echo "No suitable Python runtime found" >&2; exit 103 ;;
+esac
+EOF
+chmod +x "$TMP/winbin/py"
+
+# Windows: venv は Scripts/python.exe、 python の出力の CRLF を落として版を読む
+newrepo r42; echo 3.13 > "$R/.python-version"; echo "numpy==9.9" > "$R/requirements.txt"; : > "$LOG"
+out="$(REPO_PY_OS="$WIN_OS" REPO_PY_NATIVE_ARCH= REPO_PY_SEARCH="$W13" "$R/tools/py" w.py 2>&1)"; rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q "RAN 3.13.4 w.py" && [ -x "$R/.venv/Scripts/python.exe" ] && [ ! -e "$R/.venv/bin" ] \
+  && grep -qx "python=3.13.4" "$R/.venv/.tools-py-stamp" \
+  && ok "R42 Windows: venv の python は Scripts/python.exe、 CRLF の出力から版を読み、 その venv で走る" || ng "R42 rc=$rc out=$out"
+v42=$(count venv)
+out="$(REPO_PY_OS="$WIN_OS" REPO_PY_NATIVE_ARCH= REPO_PY_SEARCH="$W13" "$R/tools/py" --venv-path 2>/dev/null)"; rc=$?
+[ $rc -eq 0 ] && [ "$out" = "$(cd "$R" && pwd -P)/.venv/Scripts/python.exe" ] && [ "$(count venv)" = "$v42" ] \
+  && ok "R43 Windows: 2 回目は作らず、 --venv-path は Scripts/python.exe を出す" || ng "R43 rc=$rc out=$out"
+# Windows: py launcher (py -3.13) が知っている python を使う。 launcher の答えの path の CR を落とす
+newrepo r44; echo 3.13 > "$R/.python-version"; : > "$LOG"
+out="$(REPO_PY_OS="$WIN_OS" REPO_PY_NATIVE_ARCH= REPO_PY_SEARCH="$TMP/nowhere" REPO_PY_LAUNCHER="$TMP/winbin/py" "$R/tools/py" l.py 2>&1)"; rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q "RAN 3.13.4 l.py" && grep -q "^exec-launcher -3.13" "$LOG" \
+  && ok "R44 Windows: py launcher の答え (CRLF つきの path) から宣言の版の python を使う" || ng "R44 rc=$rc out=$out log=$(cat "$LOG")"
+# Windows の組み込みの探し場所: Store の alias (python・python3) は起動せず、 python.org の置き場所 (LOCALAPPDATA) の python を使う
+WH="$TMP/winhome"; LAD="$WH/AppData/Local"; mkpy "$LAD/Programs/Python/Python313/python.exe" 3.13.2 win
+newrepo r45; echo 3.13 > "$R/.python-version"; : > "$LOG"
+out="$(env -i $GITENV HOME="$WH" PATH="$TMP/WindowsApps:$MINBIN" LOCALAPPDATA="$LAD" APPDATA="$WH/AppData/Roaming" \
+  REPO_PY_OS="$WIN_OS" REPO_PY_UV=none REPO_PY_LAUNCHER=none "$MINBIN/bash" "$R/tools/py" s.py 2>&1)"; rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q "RAN 3.13.2 s.py" && not_run "$TMP/WindowsApps/python3" && not_run "$TMP/WindowsApps/python" \
+  && ok "R45 Windows: Store の alias は起動せず、 python.org の置き場所 (LOCALAPPDATA\\Programs\\Python) の python を使う" || ng "R45 rc=$rc out=$out"
+# Windows の組み込みの探し場所でも py launcher に聞く (REPO_PY_SEARCH を指さない普段の形)
+newrepo r56; echo 3.13 > "$R/.python-version"; : > "$LOG"
+out="$(env -i $GITENV HOME="$WH" PATH="$TMP/WindowsApps:$MINBIN" REPO_PY_OS="$WIN_OS" REPO_PY_UV=none REPO_PY_LAUNCHER="$TMP/winbin/py" \
+  "$MINBIN/bash" "$R/tools/py" p.py 2>&1)"; rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q "RAN 3.13.4 p.py" && grep -q "^exec-launcher -3.13" "$LOG" && not_run "$TMP/WindowsApps/python3" \
+  && ok "R56 Windows の組み込みの探し場所: py launcher が答える python を使う" || ng "R56 rc=$rc out=$out"
+# Windows で合う python が無い: Store の alias は数えず、 winget の入れ方を言う
+newrepo r46; echo 3.13 > "$R/.python-version"; : > "$LOG"
+out="$(env -i $GITENV HOME="$WH" PATH="$TMP/WindowsApps:$MINBIN" REPO_PY_OS="$WIN_OS" REPO_PY_UV=none REPO_PY_LAUNCHER=none \
+  "$MINBIN/bash" "$R/tools/py" --venv-check 2>/dev/null)"; rc=$?
+[ $rc -eq 1 ] && printf '%s' "$out" | grep -q "winget install --id=astral-sh.uv" && printf '%s' "$out" | grep -q "winget install Python.Python.3.13" \
+  && printf '%s' "$out" | grep -q "見つかった: なし" && not_run "$TMP/WindowsApps/python3" \
+  && ok "R46 Windows で合う python が無い: Store の alias を数えず、 uv と python.org の winget の入れ方を言う" || ng "R46 rc=$rc out=$out"
+# 版を答えない interpreter (明示で指した Store の alias) は使わず、 版の比較で落ちない
+newrepo r55; echo 3.13 > "$R/.python-version"
+out="$(REPO_PY_OS="$WIN_OS" REPO_PY_NATIVE_ARCH= REPO_PY_SEARCH="$TMP/WindowsApps/python3" "$R/tools/py" --venv-check 2>&1)"; rc=$?
+[ $rc -eq 1 ] && printf '%s' "$out" | grep -q "見つかった: なし" && ! printf '%s' "$out" | grep -q "integer expression" \
+  && ok "R55 版を答えない interpreter (「Python」 とだけ出す) は候補に数えない" || ng "R55 rc=$rc out=$out"
+# Windows の checkout で .python-version が CRLF でも宣言を読む
+newrepo r47; printf '3.13\r\n' > "$R/.python-version"
+out="$(REPO_PY_OS="$WIN_OS" REPO_PY_NATIVE_ARCH= REPO_PY_SEARCH="$W13" "$R/tools/py" c.py 2>&1)"; rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q "RAN 3.13.4 c.py" && ok "R47 CRLF の .python-version を読む" || ng "R47 rc=$rc out=$out"
+
+# WSL・Linux: 同じ checkout に Windows の python が作った venv (Scripts/python.exe) がある = 起動も削除もせずに止まる
+newrepo r48; echo 3.13 > "$R/.python-version"; "$W13" -m venv "$R/.venv"; : > "$LOG"
+out="$(REPO_PY_OS=Linux REPO_PY_NATIVE_ARCH= REPO_PY_SEARCH="$P13" "$R/tools/py" x.py 2>&1)"; rc=$?
+[ $rc -eq 3 ] && printf '%s' "$out" | grep -q "Windows の python で作られている" && printf '%s' "$out" | grep -q "REPO_PY_VENV" \
+  && [ -x "$R/.venv/Scripts/python.exe" ] && [ ! -e "$R/.venv/bin" ] && not_run "$R/.venv/Scripts/python.exe" \
+  && ok "R48 WSL・Linux: Windows の venv は起動も作り直しもせず、 REPO_PY_VENV を言って止まる" || ng "R48 rc=$rc out=$out"
+out="$(REPO_PY_OS=Linux REPO_PY_NATIVE_ARCH= REPO_PY_SEARCH="$P13" "$R/tools/py" --venv-check 2>/dev/null)"; rc=$?
+[ $rc -eq 1 ] && printf '%s' "$out" | grep -q "^❌ Python: venv" && ok "R49 その状態の --venv-check は ❌ (人の手が要る)" || ng "R49 rc=$rc out=$out"
+out="$(REPO_PY_OS=Linux REPO_PY_NATIVE_ARCH= REPO_PY_SEARCH="$P13" REPO_PY_VENV="$R/.venv-wsl" "$R/tools/py" x.py 2>&1)"; rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q "RAN 3.13.5 x.py" && [ -x "$R/.venv-wsl/bin/python" ] && [ -x "$R/.venv/Scripts/python.exe" ] \
+  && ok "R50 REPO_PY_VENV で別の場所を指せば、 Windows の venv を残したまま Linux の venv を作る" || ng "R50 rc=$rc out=$out"
+
+# Linux (Debian・Ubuntu): python に venv の部品 (ensurepip) が無い = venv の失敗として言い、 python3.X-venv を案内する
+D13="$TMP/deb/python3.13"; mkpy "$D13" 3.13.3 arm64 novenv
+mkdir -p "$TMP/aptbin" "$TMP/dnfbin"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/aptbin/apt-get"; printf '#!/bin/sh\nexit 0\n' > "$TMP/dnfbin/dnf"; chmod +x "$TMP/aptbin/apt-get" "$TMP/dnfbin/dnf"
+newrepo r51; echo 3.13 > "$R/.python-version"; echo "numpy==9.9" > "$R/requirements.txt"
+out="$(env -i $GITENV HOME="$TMP/linhome" PATH="$TMP/aptbin:$MINBIN" REPO_PY_OS=Linux REPO_PY_LIBC=glibc REPO_PY_UV=none REPO_PY_SEARCH="$D13" \
+  "$MINBIN/bash" "$R/tools/py" x.py 2>&1)"; rc=$?
+[ $rc -eq 3 ] && printf '%s' "$out" | grep -q -- "-m venv が失敗した" && printf '%s' "$out" | grep -q "sudo apt install python3.13-venv" \
+  && ! printf '%s' "$out" | grep -q "固定した依存が" && [ ! -e "$R/.venv" ] \
+  && ok "R51 Debian 系: venv の部品が無い python は「venv が作れない」 と言い、 python3.13-venv を案内する (依存の話にしない)" || ng "R51 rc=$rc out=$out"
+# Linux (musl): 依存が入らないとき、 musllinux の wheel が無いことを足して言う。 glibc では言わない
+newrepo r52; echo 3.13 > "$R/.python-version"; printf 'numpy==9.9\nfail-on-3.13\n' > "$R/requirements.txt"
+out="$(REPO_PY_OS=Linux REPO_PY_NATIVE_ARCH= REPO_PY_LIBC=musl REPO_PY_SEARCH="$P13" "$R/tools/py" x.py 2>&1)"; rc=$?
+out2="$(REPO_PY_OS=Linux REPO_PY_NATIVE_ARCH= REPO_PY_LIBC=glibc REPO_PY_SEARCH="$P13" "$R/tools/py" x.py 2>&1)"
+[ $rc -eq 3 ] && printf '%s' "$out" | grep -q "musllinux の wheel" && ! printf '%s' "$out2" | grep -q "musl" && [ ! -e "$R/.venv" ] \
+  && ok "R52 musl: 依存が入らなければ musllinux の wheel の話を足す (glibc では足さない)" || ng "R52 rc=$rc out=$out"
+# Linux で合う python が無い: uv を先に、 package manager ごとの入れ方を言う
+newrepo r53; echo 3.13 > "$R/.python-version"
+out="$(env -i $GITENV HOME="$TMP/linhome" PATH="$TMP/aptbin:$MINBIN" REPO_PY_OS=Linux REPO_PY_LIBC=glibc REPO_PY_UV=none REPO_PY_SEARCH="$P9" \
+  "$MINBIN/bash" "$R/tools/py" --venv-check 2>/dev/null)"; rc=$?
+out2="$(env -i $GITENV HOME="$TMP/linhome" PATH="$TMP/dnfbin:$MINBIN" REPO_PY_OS=Linux REPO_PY_LIBC=glibc REPO_PY_UV=none REPO_PY_SEARCH="$P9" \
+  "$MINBIN/bash" "$R/tools/py" --venv-check 2>/dev/null)"
+# musl の文は UTF-8 の locale の bash 3.2 でも出す (変数の直後の全角文字を変数名に取り込まない = ${var} で書いてある)
+B32="$MINBIN/bash"; [ -x /bin/bash ] && /bin/bash -c '[ "${BASH_VERSINFO[0]}" -lt 4 ]' && B32=/bin/bash
+out3="$(env -i $GITENV HOME="$TMP/linhome" PATH="$MINBIN" LC_ALL=en_US.UTF-8 REPO_PY_OS=Linux REPO_PY_LIBC=musl REPO_PY_UV=none REPO_PY_SEARCH="$P9" \
+  "$B32" "$R/tools/py" --venv-check 2>/dev/null)"
+[ $rc -eq 1 ] && printf '%s' "$out" | grep -q "uv を入れる (https://docs.astral.sh/uv/" && printf '%s' "$out" | grep -q "sudo apt install python3.13 python3.13-venv" \
+  && printf '%s' "$out2" | grep -q "sudo dnf install python3.13" && printf '%s' "$out3" | grep -q "musl (Alpine など)" \
+  && ok "R53 Linux で合う python が無い: uv を先に、 apt (venv の package つき) / dnf / musl ごとに入れ方を言う" || ng "R53 rc=$rc out=$out / $out2 / $out3"
+# Linux の組み込みの探し場所: PATH の python3.13 (CI の setup-python・Docker の python image と同じ形) を使う
+LB="$TMP/linbin"; mkpy "$LB/python3.13" 3.13.8 x86_64; mkpy "$LB/python3" 3.12.1 x86_64
+newrepo r54; echo 3.13 > "$R/.python-version"; : > "$LOG"
+out="$(env -i $GITENV HOME="$TMP/linhome" PATH="$LB:$MINBIN" REPO_PY_OS=Linux REPO_PY_UV=none "$MINBIN/bash" "$R/tools/py" c.py 2>&1)"; rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q "RAN 3.13.8 c.py" && not_run "$LB/python3" \
+  && ok "R54 Linux: PATH の python3.13 を使い (arch は見ない)、 汎用の python3 (3.12) は起動しない" || ng "R54 rc=$rc out=$out"
+
+# 17. bash 3.2 (macOS の /bin/bash) でも同じに動く
 if [ -x /bin/bash ] && /bin/bash -c '[ "${BASH_VERSINFO[0]}" -lt 4 ]'; then
   newrepo r15; echo 3.13 > "$R/.python-version"; echo "numpy==9.9" > "$R/requirements.txt"
   out="$(REPO_PY_SEARCH="$P9:$P13" /bin/bash "$R/tools/py" f.py 2>/dev/null)"; rc=$?
@@ -279,7 +409,7 @@ else
   ok "R40 bash 3.2 の無い機では飛ばす"
 fi
 
-# 17. 実機: 本物の python3 で本物の venv を作る (依存なし、 network なし)
+# 18. 実機: 本物の python3 で本物の venv を作る (依存なし、 network なし)
 real="$(python3 -c 'import sys; print(sys.executable)' 2>/dev/null)"
 if [ -n "$real" ] && [ -x "$real" ]; then
   newrepo r16; "$real" -c 'import sys; print("%d.%d" % sys.version_info[:2])' > "$R/.python-version"

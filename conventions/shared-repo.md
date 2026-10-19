@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + 計算・検算を Python で回す repo を新しい機械・clone で始めるとき・`pip install -r` が固定した依存で落ちたとき・検算の script に `.venv/bin/python` を書きかけたとき (#repo-python-env)
+when: 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + 共有リポで計算・検算を Python で回すとき (版・venv・入口 tools/py の正本 = python-env.md、 本 file は招待した相手の手元の点検 #collaborator-check-python だけ)
 category: infra
 summary: 共有リポ固有規約
 -->
@@ -350,99 +350,16 @@ gh api repos/<owner>/<repo>/invitations
 
 - **仕組み** — repo に project の SessionStart hook (`.claude/settings.json`)・点検 script の写し (`tools/collaborator-check/collaborator-check.sh`)・要る物の一覧 (`.collaborator-check.conf`) を置く。 相手がその repo で session を開くと、 欠けている物だけが直し方つきで agent に渡り、 agent が user に伝える。 揃えば何も出さない。 最初に読む節は clone ごとの初回だけ出す。 session は止めない (終了値 0)
 - <a id="sibling-repo-auto-clone"></a>**隣に要る repo は、 人に clone を頼まず repo が取りに行く** — 共有リポが別の repo (道具の engine・共通の規約) を「隣に clone してある」 前提で使うなら、 その前提は招待の連絡や README で頼まず、 conf の `repo <dir 名> <URL> [<環境変数>] -- <用途>` 行で満たす。 session 開始時に、 無ければ clone し (📥 で 1 回知らせる)、 あれば 20 時間に 1 回 fast-forward で最新にする (作業中の変更・分岐があれば触らない)。 URL は https:// か file:// (資格情報を使わない取得)。 所有者のマシンは `setup.sh` の Step 7 が自分の repo を全部 clone するので、 この行は共同編集者の手元のためにある。 共有の仕組みを作る道具は、 この行を入れる install の command を出す (例: 掲示板の `board.py init`)。 「❌ を出す」 で止めずにその場で clone する理由と、 この形の一般則 = [`../docs/convention-design-principles.md#self-provisioning-prerequisites`](../docs/convention-design-principles.md#self-provisioning-prerequisites)
-- <a id="collaborator-check-python"></a>**Python の版と venv は conf の `python` 行** — `python tools/py -- <用途>` が session 開始時に repo の Python の入口 (`tools/py`) の `--venv-check` を聞き、 宣言の版の Python がこの機械に無いときだけ ❌ を出す。 venv を作る・requirements に追従させるのは入口が初回の実行でやる = [§repo の Python の版・venv・固定した依存](#repo-python-env)
+- <a id="collaborator-check-python"></a>**Python の版と venv は conf の `python` 行** — `python tools/py -- <用途>` が session 開始時に repo の Python の入口 (`tools/py`) の `--venv-check` を聞き、 宣言の版の Python がこの機械に無いときだけ ❌ を出す。 venv を作る・requirements に追従させるのは入口が初回の実行でやる = [`python-env.md`](python-env.md) (環境ごとの表 = [`#python-env-environments`](python-env.md#python-env-environments))
 - **配り方** — `python3 scripts/install-collaborator-check.py install <repo> --item '<conf の 1 行>' ...`。 写しが正本と同じか・hook が共有されるかは `check <repo>`。 書式と限界 = script の docstring。 **正本 = [`templates/shared-project/collaborator-check/`](../templates/shared-project/collaborator-check/)**、 repo の写しは repo 単体で動くために置く (共同編集者は claude-config を持たない = [§「standalone で成立」](#standalone-operational-definition))。 直すときは正本を直して配り直す
 - **hook を持たない agent** (Codex ほか) — repo の CLAUDE.md に「session 開始時に 1 回 `bash tools/collaborator-check/collaborator-check.sh`」 を書く (installer が文面を出す)
 - **個人の値の置き場所は所有者の配置を前提にしない** — 既定の path + 上書きの環境変数 (conf の `file <path> <ENV>`)。 script 側も同じ環境変数を読む。 その service を使わない人は環境変数に `none` を入れると出なくなる (満たせない ❌ を毎回出し続けると、 他の ❌ まで読まれなくなる)
 - ⚠️ 所有者の global の gitignore が `.claude/*` を落としていると、 hook の設定が共同編集者に届かない。 installer は repo の `.gitignore` に `!.claude/settings.json` を足し、 `check` が ignore されていないことを確かめる
 - `file` と `command` は存在まで確かめる (token が有効かは各 service の検査に任せる)
 
-## <a id="repo-python-env"></a>repo の Python の版・venv・固定した依存 — 宣言は 1 か所、 用意は入口の機械が
+## <a id="repo-python-env"></a>repo の Python の版・venv・固定した依存 → [`python-env.md`](python-env.md)
 
-計算や検算を Python で回す repo を、 別の人・別の機械・新しい clone で動かすときの正本 (共有リポに限らず、 所有者だけの repo を新しい機械で使う場合も同じ)。 一般則 (前提は、 それを使う人の入口で機械が満たす) は [`../docs/convention-design-principles.md#self-provisioning-prerequisites`](../docs/convention-design-principles.md#self-provisioning-prerequisites)、 本節はその Python の版・venv・固定した依存の場合。 道具:
-
-| 道具 | 役 |
-|---|---|
-| [`templates/shared-project/python-env/py`](../templates/shared-project/python-env/py) | 入口の正本。 repo の `tools/py` はその写し (挙動・環境変数の正本 = file の冒頭) |
-| [`scripts/install-collaborator-check.py`](../scripts/install-collaborator-check.py) `--item 'python tools/py -- <用途>'` | 入口を repo に写す・宣言を書く・`.venv/` を ignore・session 開始の点検に載せる。 `check` が写しの drift を言う |
-| [`scripts/python-pin-floor.py`](../scripts/python-pin-floor.py) | 固定した依存が要る Python の下限と、 wheel が揃う上限を PyPI から出して宣言と照合する |
-| [`scripts/repo-python-env.test.sh`](../scripts/repo-python-env.test.sh) | 入口の検査 (偽の interpreter と偽の uv で、 network なし) |
-
-### <a id="python-env-failure-modes"></a>壊れ方 (どれも実測)
-
-1. **黙って全滅** — 検算の script が `.venv/bin/python` を直書きしていて、 venv の無い clone では全項目が FAIL になる。 原因は 1 つなのに N 件の FAIL に見え、 読む人は 1 件ずつ原因を探しに行く
-2. **手で回避して食い違う** — 手順どおりに `python3 -m venv .venv` を打つと、 その機械の `python3` (OS 付属の古い版) で venv が作られ、 固定した依存が requires_python で入らない。 その場で版を外して入れると検算は通るが、 requirements と違う venv が残り、 以後の PASS が何の環境での結果か誰も知らない
-3. **文書の版の主張がずれる** — 引き継ぎ文書の「Python 3.X 以上」 が、 固定した依存の requires_python の下限より古かった (その版の機械でも入らない)。 人の文は依存を上げても追従しない
-4. **venv が追従しない** — requirements を上げても、 各機械の venv は最後に入れた版のまま (Node の lockfile と同型 = [`github-security-automation.md#node-modules-follow-lockfile`](github-security-automation.md#node-modules-follow-lockfile))。 venv の元の interpreter が package manager の更新で消えると、 venv の python が起動しなくなる
-5. **Intel 版を拾う** — Intel の Mac から Apple Silicon へ移した機械には、 旧 Homebrew (`/usr/local/opt/python@3.X`) や python.org の Intel 版が残る。 Rosetta があれば起動できるので、 版だけを見て選ぶ道具は黙ってそれで venv を作る。 候補を起動して arch を確かめる道具も、 起動した時点で macOS の「Intel プロセッサ用アプリの対応は終了します」 の通知を出す (Rosetta が無ければ Bad CPU type) ([`macos-cpu-arch.md#migration-intel-to-apple-silicon`](macos-cpu-arch.md#migration-intel-to-apple-silicon))
-
-### <a id="python-env-declare"></a>宣言 — `.python-version` に 1 行
-
-- repo root の `.python-version` に、 **作者が検算を通した版**を major.minor で 1 行 (例 `3.13`)。 uv・pyenv・CI (`actions/setup-python` の `python-version-file`) がそのまま読む標準の置き場所なので、 版を書く場所はここだけにする
-- 依存は repo root の `requirements.txt`。 検算の repo では `==` で固定する (再現のため)。 冒頭の説明は「入口が venv を作る」 とだけ書き、 `python3 -m venv ...` の手順を書かない (その手順が壊れ方 2 を生む)
-- **下限を機械で確かめる**: 宣言を書くとき・依存を上げるときに `python3 scripts/python-pin-floor.py requirements.txt` (宣言は同じ dir の `.python-version` を読む)。 宣言が下限より古ければ exit 1。 宣言が wheel の揃う上限より新しければ ⚠️ (その版では source から build しようとする)
-- 文書 (README・引き継ぎ・CLAUDE.md) に版を書くなら「`.python-version` のとおり」 と参照にする。 数字を写すと壊れ方 3 になる
-
-### <a id="python-env-entry"></a>入口 — `tools/py`
-
-Python を起動するのは全部 `tools/py` を通す (`tools/py` の後に script の path か `-c ...`)。 入口がすること:
-
-- **venv が無ければ作る**。 interpreter の選び方は上から: 明示の `REPO_PYTHON` → 宣言と同じ minor が既にある → uv があれば uv で宣言の版 (無ければ uv が取ってくる。 管理者権限は要らない) → 宣言より新しい minor (1 行で告知する。 依存が入らなければ元に戻して止まる。 `REPO_PY_EXACT=1` で使わない)。 **古い minor は使わない**。 macOS の `/usr/bin/python3` (Xcode に従う shim = [`shell-env.md#system-python3-is-xcode-gated`](shell-env.md#system-python3-is-xcode-gated)) は候補にしない。 macOS では機械の arch に合う binary だけを使う ([下の表](#python-env-arch))
-- **requirements が変われば追従する** (`pip install -r`、 venv は作り直さない)。 venv の python が起動しない・宣言より古い版や機械に合わない arch の版で作られていれば作り直す。 作り直すときは前の venv を退けておき、 新しい方が出来なければ元に戻す。 前の venv にあって新しい venv に無い package (手で入れた物) は名前を 1 行出す
-- **合う interpreter が無ければ止まる** (exit 3)。 見つかった版の一覧と、 入れ方 (uv / package manager の版つきの Python) を 1 つの文で言う。 黙って全滅しない・黙って別の版で作らない
-- 速い道: venv が宣言を満たし requirements が前回から変わっていなければ、 何も言わずにそのまま実行する
-- 並列の session が同時に呼んでも、 用意は 1 つずつ (lock は `.git/` の中)。 git でない dir (再現用の束など) でも動く (root = `tools/` の 1 つ上)
-
-<a id="python-env-arch"></a>**macOS の arch** — 機械の arch で決める (process の arch でない = Rosetta の shell から呼ばれても同じ)。 候補の arch は**起動せずに** `file -bL` で見る (起動して確かめると、 合わない binary が Rosetta で動いて通知が出るか、 Bad CPU type で落ちる):
-
-| 機械 | `tools/py` が使う python | 起動せずに飛ばす python | 合う python が無いときの案内 |
-|---|---|---|---|
-| Intel の Mac | x86_64 を含む binary (universal2 を含む) | arm64 だけの binary | `/usr/local` の Homebrew か uv |
-| Apple Silicon の Mac (Rosetta あり) | arm64 を含む binary (universal2 を含む) | x86_64 だけの binary (起動すると Rosetta で動き、 Intel 版の対応終了の通知が出る) | `/opt/homebrew` の Homebrew か uv。 Intel 版だけがあるときは「合わない arch の Python はあるが使わない、 arm64 版を入れる」 |
-| Apple Silicon の Mac (Rosetta なし) | 同上 | x86_64 だけの binary (起動すると Bad CPU type) | 同上 |
-| macOS 以外 | arch を見ない | — | uv か OS の package manager |
-
-中身の arch が分からない script (pyenv の shim など) は、 組み込みの探し場所では起動しない (`REPO_PYTHON` で明示すれば使う)。
-
-これは [`#self-provisioning-prerequisites`](../docs/convention-design-principles.md#self-provisioning-prerequisites) の 2 の形: venv を作る・追従させる・uv で interpreter を取ってくるのは判断の要らない作業なので、 点検して待たずにその場でやる。 interpreter を新しく入れる (package manager を使う) のは人の判断なので、 揃うまで毎回言い続ける側に回す。
-
-### <a id="python-env-verify"></a>検算の script は入口を通す
-
-- 検算を一括で回す script は、 **先頭で 1 回 `tools/py --venv-ensure`** を呼び、 失敗したらその理由 1 つで止まる (N 件の FAIL を並べない = 壊れ方 1)。 個々の script も `tools/py` で起動する。 `.venv/bin/python` を直書きしない
-- Python の中から子の Python を起動するときは `sys.executable` を使う (path を組まない)
-- venv の中の path (`.venv/lib/python3.X/site-packages/...`) を直書きしない = 版が変わると path が変わる。 package の data は package の API (`importlib.resources` など) で引く
-
-### <a id="python-env-pins-dont-install"></a>固定した依存が今の Python で入らないとき
-
-pip が `Could not find a version that satisfies the requirement` か、 新しい pip なら `require a different python version` で落ちたら、 たいてい今の Python が宣言より古い。 順に:
-
-1. **宣言の版の Python を入れる** — uv (`tools/py` が以後自分で取ってくる) か、 package manager の版つきの Python。 入れたら `tools/py --venv-ensure`
-2. **既にある interpreter を指す** — `REPO_PYTHON=<path> tools/py --venv-rebuild` (宣言を満たさない指定は止まる)
-3. **一時的に今の venv で回すだけなら明示する** — `REPO_PY_ACCEPT_VENV=1`。 入口は何も直さず、 実行のたびに「宣言外の環境」 を 1 行出し、 session 開始の点検も ⚠️ を出し続ける。 その検算の結果は「宣言外の環境での結果」 と書いて報告し、 宣言の環境での PASS と同じ扱いにしない
-
-❌ **版を外した requirements で venv を作って黙って使わない** (壊れ方 2)。 版の幅を正式に支えたいなら、 それは repo の決定 = 別の requirements の file と別の宣言を置き、 両方を検算で回す。 1 台の機械の回避策にしない。
-
-### <a id="python-env-session-check"></a>session 開始の点検
-
-collaborator-check の conf に `python tools/py -- <用途>` の 1 行を置く ([§collaborator-check](#collaborator-check))。 session 開始時に `tools/py --venv-check` (network を使わず、 何も変えない) を聞き、 **人の手が要るときだけ** ❌ / ⚠️ を出す = 宣言の版の Python がこの機械に無い / 宣言外の venv を使っている。 venv が無い・requirements が変わったは初回の実行で入口が済ませるので出さない。
-
-### <a id="python-env-install"></a>repo に入れる
-
-    python3 <claude-config>/scripts/install-collaborator-check.py install <repo> \
-      --item 'python tools/py -- 計算と検算' --python-version 3.13
-
-- 入口を `tools/py` に写す (既に別の `tools/py` があれば置き換えずに言う。 中身を見て置き換えるなら `--replace-python-wrapper`)、 `.python-version` が無ければ書く、 `.venv/` を ignore に足す、 session 開始の点検に載せる。 repo の CLAUDE.md に足す文面を最後に出す
-- `check <repo>` = 入口の写しが正本と同じか・宣言があるか・`.venv/` が ignore か
-- 写しは repo 単体で動くために置く (共同編集者は claude-config を持たない)。 直すときは正本を直して配り直す
-- 検算の script の `.venv/bin/python` の直書きを `tools/py` に替えるのは repo ごとの作業 (installer は script を書き換えない)
-- 再現用の束を配るなら、 束に `tools/py`・`.python-version`・`requirements.txt` を入れ、 README の手順を `tools/py` から起動する形にする (束の受け手も同じ入口で venv が出来る)
-
-### <a id="python-env-machine-side"></a>機械の側 — どの Python を入れるか
-
-- **`python3` の向き先を変えない入れ方を選ぶ** — uv が取ってくる Python (uv の dir に入る)、 package manager の版つきの Python (例: Homebrew の `python@3.X` は `python3.X` だけを PATH に置く)。 他の自動化 (hook・定期ジョブ) が今の `python3` と、 そこに入れた package に頼っていることがある ([`shell-env.md#job-python-by-capability`](shell-env.md#job-python-by-capability))。 Homebrew の版の無い `python` (や、 それに依存する formula) は `python3` を Homebrew の版に替え、 PATH で Homebrew が先なら全部の `python3` が替わる
-- 無人ジョブの `python3` 選び ([`shell-env.md#job-python-by-capability`](shell-env.md#job-python-by-capability)) と本節は別の問題: ジョブは「依存を import できる既存の interpreter」 を選び、 repo の計算は「宣言の版で作った venv」 を使う
-- どの機械に何の Python があるか・入れるか (uv / Homebrew) は機械ごとの事実なので、 公開層に書かず、 個人層の機械別の表に置く ([`docs/personal-layer.md`](../docs/personal-layer.md))
-- 依存の下限を上げる PR が Python の下限も上げる話 = [`github-security-automation.md#requirement-floor-vs-python`](github-security-automation.md#requirement-floor-vs-python)
+計算や検算を Python で回す repo の版の宣言 (`.python-version`)・入口 `tools/py`・環境ごと (macOS・Linux・WSL・Windows・CI・Docker) に何を使い、 無いとき何を案内するかの正本は [`python-env.md`](python-env.md)。 共有リポでは、 招待した相手の手元の点検 (conf の `python` 行 = [上](#collaborator-check-python)) がその入口を使う。
 
 ## 共有 git-crypt 鍵パターン
 

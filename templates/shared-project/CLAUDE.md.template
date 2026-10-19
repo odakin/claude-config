@@ -12,7 +12,7 @@
 - 自分の個人層（[personal-layer 規約](https://github.com/<owner>/claude-config/blob/main/docs/personal-layer.md)）があればそれが cascade で適用される
 - 個人層を持っていない場合も本リポは standalone で動作する
 - 手元の準備 (各自の token・道具・最初に読む節) は session 開始時に `tools/collaborator-check/collaborator-check.sh` が点検し、 欠けた物を直し方つきで出す (Claude Code の project hook。 hook を持たない agent は session 開始時に 1 回実行。 仕組み = [shared-repo.md#collaborator-check](https://github.com/<owner>/claude-config/blob/main/conventions/shared-repo.md#collaborator-check))
-- (Python で計算する repo なら) Python は `tools/py` から起動する (`tools/py script.py`)。 版の宣言 = `.python-version`、 依存 = `requirements.txt`。 venv は初回の実行で自動で作られ、 宣言の版の Python がこの機械に無ければ `tools/py` が入れ方を言って止まる (仕組み = [shared-repo.md#repo-python-env](https://github.com/<owner>/claude-config/blob/main/conventions/shared-repo.md#repo-python-env))
+- (Python で計算する repo なら) Python は `tools/py` から起動する (`tools/py script.py`)。 版の宣言 = `.python-version`、 依存 = `requirements.txt`。 venv は初回の実行で自動で作られ、 宣言の版の Python がこの機械に無ければ `tools/py` が入れ方を言って止まる (仕組みと環境ごとの挙動 = [python-env.md](https://github.com/<owner>/claude-config/blob/main/conventions/python-env.md))
 - Codex の `~/.codex` 設定は各 collaborator の layer 4 の選択であり、本リポはそれにも
   その人の personal layer にも依存しない。project file から `~/.codex` や個人層の path を
   参照しない

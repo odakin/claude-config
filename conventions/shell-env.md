@@ -394,6 +394,6 @@ You must agree to the Xcode license agreements...
 
 ⚠️ [#xcode-gate-wrong-fix](#xcode-gate-wrong-fix) の「別の python へ逃がすのは誤り」 は、 **PATH の順が黙って逃がしている**場合にも当てはまる = 意図して選んでいないのに、 ジョブは別の interpreter で動いている。 表の「OS の定期ジョブ」 行の `DEVELOPER_DIR` の宣言だけでは足りない (shim を直しても、 PATH が先に別の python3 を返す)。
 
-⚠️ <a id="job-python-vs-repo-venv"></a>**repo の計算の Python は別の問題**: 本節は無人ジョブが既存の interpreter を依存で選ぶ話。 計算・検算を回す repo は、 宣言 (`.python-version`) の版で作った venv を入口 (`tools/py`) が用意する = [`shared-repo.md#repo-python-env`](shared-repo.md#repo-python-env)。 repo の venv のために Python を入れるときは `python3` の向き先を変えない入れ方を選ぶ (変わると、 本節の壊れ方がジョブの側に起きる)。
+⚠️ <a id="job-python-vs-repo-venv"></a>**repo の計算の Python は別の問題**: 本節は無人ジョブが既存の interpreter を依存で選ぶ話。 計算・検算を回す repo は、 宣言 (`.python-version`) の版で作った venv を入口 (`tools/py`) が用意する = [`python-env.md`](python-env.md)。 repo の venv のために Python を入れるときは `python3` の向き先を変えない入れ方を選ぶ (変わると、 本節の壊れ方がジョブの側に起きる)。
 
 ⚠️ <a id="job-python-switch-moves-tcc"></a>**interpreter を替えると、 ジョブが起動する CLI の macOS の権限 (TCC) の帰属先も変わる**: Homebrew の python から起動していた頃は python に付いていた許可が、 Apple 純正の python に替えると子の CLI 自身に求められるようになり、 それまで出なかった許可ダイアログが定期ジョブのたびに出始める (実測)。 替えた後は子の CLI の許可を 1 回取り直す。 押しても出直すなら、 CLI の署名を疑う = [`macos-claude-code-tcc-recurring-prompt.md#half-signed-universal-binary`](macos-claude-code-tcc-recurring-prompt.md#half-signed-universal-binary)。

@@ -31,7 +31,7 @@ session 開始時に clone し、 あれば 20 時間に 1 回 fast-forward で�
 `tools/py` に写し、 session 開始時にその `--venv-check` を聞く (宣言の版の Python がこの機械に無い時だけ ❌)。 宣言の
 `.python-version` が無ければ `--python-version 3.13` で書く (無いままなら言う)。 `.venv/` を ignore に足す。 既に別の
 `tools/py` があれば置き換えず差分の扱いを言う (中身を見て置き換えるなら `--replace-python-wrapper`)。
-規約 = conventions/shared-repo.md#repo-python-env
+規約 = conventions/python-env.md
 `--item 'board board AI_COLLABORATION_DIR -- 掲示板の自分宛て'` = この repo の中の掲示板 (`board/`) で要注意の thread
 (引受待ち・検収待ち・質問) を、 相手の session の冒頭に出す (engine = 隣の ai-collaboration、 手元の写しを読む。
 実測: 共同研究者側の session は engine を持つだけで掲示板を見ず、 依頼が止まったままだった)。
@@ -83,7 +83,7 @@ CLAUDE_MD_PY_TEXT = """- **Python は `tools/py` から起動する** (`tools/py
   venv は初回の実行で自動で作られ、 requirements が変われば追従する。 宣言の版の Python がこの機械に無ければ
   `tools/py` が入れ方を言って止まる (版を外した venv を手で作らない)。 検算の script は `.venv/bin/python` を直書きせず
   `tools/py` を通し、 一括で回すときは先頭で `tools/py --venv-ensure` を 1 回。
-  仕組みの正本 = [claude-config/conventions/shared-repo.md#repo-python-env](https://github.com/<owner>/claude-config/blob/main/conventions/shared-repo.md#repo-python-env)"""
+  仕組みと環境ごとの挙動の正本 = [claude-config/conventions/python-env.md](https://github.com/<owner>/claude-config/blob/main/conventions/python-env.md)"""
 
 
 def _validate_item(item: str) -> str:

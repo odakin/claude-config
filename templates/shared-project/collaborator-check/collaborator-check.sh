@@ -25,7 +25,7 @@
 #     この repo の Python の入口 (既定 tools/py = claude-config の templates/shared-project/python-env/py の写し) に
 #     `--venv-check` を聞く (network なし、 何も変えない)。 venv の用意・requirements への追従は入口が初回の実行で
 #     自動でやるので、 ここで出すのは人の手が要るとき (宣言の版の Python がこの機械に無い / 宣言外の venv を使っている) だけ。
-#     規約 = conventions/shared-repo.md#repo-python-env
+#     規約 = conventions/python-env.md
 #
 # 出力: file / command / repo が揃っていれば何も出さない。 read は clone ごとの初回だけ出す
 # (印 = .git/collaborator-check.seen)。 欠けた項目・その場で clone した repo・初回の read を 1 block で出す。

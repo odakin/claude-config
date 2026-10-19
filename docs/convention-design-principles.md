@@ -910,7 +910,7 @@ origin: macOS の外部 browser adapter が、既に live な singleton に対�
 
 見分け方: 招待の連絡・README・説明書きに「隣に clone して」「先に◯◯を入れて」 と書きかけたら、 それが入口の配線に載っているかを問う。 載っていなければ、 その文は配線の代わりにならない (載っているなら「session 開始で自動」 とだけ書く)。
 
-[§8.12d](#human-memory-not-a-carrier) の 1〜2 (既配線の自動適用に載せる・足す) を、 他人の機械で成立させる形が本節。 正本が変わった後の追従を各複製に届ける側の話は [§8.12f](#hub-first-follow-by-courier)。 先例 = 共有リポが別の公開 repo の道具を隣に置く前提で使う場合 ([`conventions/shared-repo.md#sibling-repo-auto-clone`](../conventions/shared-repo.md#sibling-repo-auto-clone)、 実装 = collaborator-check の `repo` 行と、 共有の仕組みを作る道具が install の command を出す形)。 Python の版・venv・固定した依存の場合 = [`conventions/shared-repo.md#repo-python-env`](../conventions/shared-repo.md#repo-python-env) (入口 `tools/py` が venv を作って requirements に追従させ、 interpreter を新しく入れる判断だけを人に回す)。
+[§8.12d](#human-memory-not-a-carrier) の 1〜2 (既配線の自動適用に載せる・足す) を、 他人の機械で成立させる形が本節。 正本が変わった後の追従を各複製に届ける側の話は [§8.12f](#hub-first-follow-by-courier)。 先例 = 共有リポが別の公開 repo の道具を隣に置く前提で使う場合 ([`conventions/shared-repo.md#sibling-repo-auto-clone`](../conventions/shared-repo.md#sibling-repo-auto-clone)、 実装 = collaborator-check の `repo` 行と、 共有の仕組みを作る道具が install の command を出す形)。 Python の版・venv・固定した依存の場合 = [`conventions/python-env.md`](../conventions/python-env.md) (入口 `tools/py` が venv を作って requirements に追従させ、 interpreter を新しく入れる判断だけを人に回す)。
 
 ### <a id="conditional-firing-visibility"></a>8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる
 
