@@ -194,6 +194,15 @@ def inspect(path, expect_pages=None, template=None, pages_check=True, fidelity=N
 STATIC_TEXT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "check-form-static-text.py")
 
 
+def _pdf_has_text(path) -> bool:
+    """PDF に字の層があるか (raster 版 = 全頁が画像だけなら False)。 読めなければ True (= 照合を省かない側)。"""
+    try:
+        with fitz.open(path) as d:
+            return any(p.get_text("text").strip() for p in d)
+    except Exception:
+        return True
+
+
 def fidelity_check(path, fid: dict) -> tuple:
     """6. 雛形との照合 (K3): 宣言 (formcase の build が書く {template, targets, drop, blank}) か --template-xlsx から雛形を引き、
     check-form-static-text.py を回す。 図形の字が無い = 🔴 (build と同じ = 止める) / 見出し・画像 = 情報 / 雛形が無い = ⚪ (照合できない、
@@ -225,10 +234,16 @@ def fidelity_check(path, fid: dict) -> tuple:
     if rc not in (0, 1) or not isinstance(rep, dict) or not isinstance(rep.get("targets"), list) or not rep["targets"]:
         findings.append(f"🔴 雛形との照合が走らなかった ({os.path.basename(tpl)}) — 検査器の出力を確認する")
         return findings, infos
+    no_text = rep.get("kind") == "docx" and not _pdf_has_text(path)
     for t in rep.get("targets") or []:
         where = f"{str(t['sheet']).strip()}!{t['range']}" if rep.get("kind") != "docx" else "docx"
         if rep.get("kind") != "docx" and "page" in t and t.get("page") is None and (t.get("checked") or t.get("labels_checked")):
             infos.append(f"⚪ 雛形との照合 {where}: この範囲の頁が PDF に見つからない (raster・頁の抜き出し等) = 照合できていない")
+            continue
+        if no_text and (t.get("checked") or t.get("labels_checked")):
+            # Word 様式の raster 版: 字の層が無いので図形の字も見出しも「無い」 と出る (xlsx の頁が見つからない時と同じ扱い)。
+            # 照合は字の層を持つ print 版で build が済ませている
+            infos.append(f"⚪ 雛形との照合 {where}: PDF に字の層が無い (raster) = 照合できていない")
             continue
         if t["missing"]:
             ms = ", ".join(f"{m['name']}「{m['text'][:16]}」" for m in t["missing"][:4])
@@ -573,6 +588,20 @@ def selftest():
         globals()["STATIC_TEXT"] = empty_checker
         assert any("雛形との照合が走らなかった" in f for f in inspect(ok_pdf)[0])
         assert hook(ev(f"lp -d Q {ok_pdf}"), env=E)[0] == 2
+        # Word 様式の raster 版 (字の層なし) は「照合できない ⚪」、 字の層がある版で図形の字が無ければ 🔴 のまま
+        docx_checker = os.path.join(d, "docx-checker.py")
+        with open(docx_checker, "w", encoding="utf-8") as fh:
+            fh.write('print(\'{"kind": "docx", "targets": [{"missing": [{"name": "textbox", "text": "x"}], "checked": 1}]}\')\n')
+        globals()["STATIC_TEXT"] = docx_checker
+        img_pdf = os.path.join(d, "raster_only.pdf")
+        idoc = fitz.open(); ipg = idoc.new_page()
+        ipg.insert_image(fitz.Rect(50, 50, 150, 150), pixmap=fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 8, 8), 0))
+        idoc.save(img_pdf)
+        assert not _pdf_has_text(img_pdf) and _pdf_has_text(ok_pdf)
+        fr, ir = fidelity_check(img_pdf, {"template": tpl})
+        assert not fr and any("字の層が無い" in x for x in ir), (fr, ir)
+        ft, _it = fidelity_check(ok_pdf, {"template": tpl})
+        assert any("雛形の図形の字が無い" in f for f in ft), ft
     finally:
         globals()["STATIC_TEXT"] = checker
     gone = fpdf("fid_gone.pdf", ["申請者"])
