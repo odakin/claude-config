@@ -75,10 +75,10 @@ agent の Bash の snapshot を補う [`hooks/fix-snapshot-path-patch.sh`](../ho
 | 何が来るか | 症状 | 直し方 |
 |---|---|---|
 | Rosetta 未導入 | Intel 専用アプリ (同期クライアント等) が起動しない | `sudo softwareupdate --install-rosetta --agree-to-license` (つなぎ。 下の入れ替えを済ませれば頼らない) |
-| `/usr/local` の Intel Homebrew | brew の CLI・`git-crypt`・`gh`・`jq` が起動しない | `/opt/homebrew` に Homebrew を入れ、 自分で入れた formula (各 `INSTALL_RECEIPT.json` の `installed_on_request`) を入れ直す。 `/usr/local/{bin,lib,...}` の Cellar への symlink を退避し、 `/usr/local/Homebrew` 等の本体は root 所有の親の下なので sudo で後片付け |
+| `/usr/local` の Intel Homebrew | brew の CLI・`git-crypt`・`gh`・`jq` が起動しない | `/opt/homebrew` に Homebrew を入れ、 自分で入れた formula (各 `INSTALL_RECEIPT.json` の `installed_on_request`) を入れ直す。 `/usr/local/{bin,lib,...}` の Cellar への symlink を退避する。 本体の `/usr/local/{Homebrew,Cellar,Caskroom,opt}` は 4 つとも user の持ち物なので、 **中身は sudo なしで退避できる** (実測)。 sudo が要るのは、 root 所有の `/usr/local` の下に残る空のフォルダの `rmdir` だけ |
 | 公式 installer の CLI (`~/.local/share/<tool>/versions/*` 等) | その CLI が起動しない | 古い版を退避して公式 installer を再実行。 ⚠️ installer が PATH 上の `jq` 等を呼ぶので、 **PATH を `/usr/bin:/bin:/usr/sbin:/sbin` に絞って**走らせる (Intel 版の補助 binary を掴むと installer ごと落ちる) |
 | nvm の node | MCP server・`npx` が起動しない | 版の dir を退避して同じ版を `nvm install <ver>` (PATH を絞って)。 global package は入れ直す |
-| npx cache の platform 部品 (`*-darwin-x64`) | native 部品を使う package が落ちる | `~/.npm/_npx/<hash>` ごと消す (次回ネイティブで取り直す) |
+| npx cache の platform 部品 (`*-darwin-x64`) | native 部品を使う package が落ちる | `~/.npm/_npx/<hash>` ごと消す (次回ネイティブで取り直す)。 ⚠️ **使用中の dir は消さない** = そこから動いている MCP server などが壊れる (実測: 全 session の MCP server が 1 つの dir から動いていた)。 点検は使用中の process の数を出す。 別 arch の部品が build 用 (esbuild など) だけなら、 実行には効いていないので急がない |
 | Python の user site の拡張 (`.so`) | numpy・lxml・PyMuPDF 等が import で落ちる | `pip freeze --user` → `pip install --user --force-reinstall --no-deps -r <list>` を arm64 の python で |
 | python.org の Framework Python / pyenv の版 | `python3` が Intel 版に化ける | `.zprofile` の Framework を PATH に足す行を外す。 pyenv は版を作り直すか `pyenv global system` |
 | repo の venv と、 PATH に無い Intel 版の interpreter (`/usr/local/opt/python@3.X` など) | 版だけを見て interpreter を選ぶ道具が Intel 版で venv を作り、 依存も Intel 版の wheel で入る (Rosetta で動くので気付かない) | venv を arm64 の python で作り直す。 **interpreter の arch は起動せずに `file -bL` で見る** (起動して確かめると、 その時点で Rosetta で動いて「Intel プロセッサ用アプリの対応は終了します」 の通知が出る / Rosetta が無ければ Bad CPU type)。 repo の入口 (`tools/py`) が機械ごとに何を使うか (Intel の Mac・Apple Silicon の Rosetta あり / なし) の表 = [`python-env.md#python-env-arch`](python-env.md#python-env-arch) |
@@ -95,7 +95,9 @@ agent の Bash の snapshot を補う [`hooks/fix-snapshot-path-patch.sh`](../ho
 棚卸し = `macos-arch-audit.py` の「アプリ」 節か、 `system_profiler SPApplicationsDataType -json` の `arch_kind`
 (`arch_i64` = Intel だけ / `arch_i32`・`arch_other` = 32-bit・PPC の混在 = 起動しない)。 ⚠️ 移行直後は Spotlight の
 最終使用日 (`kMDItemLastUsedDate`) が全部空 = 「使っていないアプリ」 の判定に使えない。 旧 bundle は消さずに退避先へ移す
-(入れ替えが合わなければ戻せる)。
+(入れ替えが合わなければ戻せる)。 本人が手元の terminal を見られない (遠隔で操作している) ときは sudo のパスワードを入れられない =
+sudo の要らない分 (user の持ち物の退避・gui domain の disable) を先に済ませ、 残りの root の物を 1 本の script (下見の `--dry-run` つき) にして、
+本人が機械の前に来たときに出る記録 (期限つきの TODO など) に command を載せる (実測)。
 
 | 種類 | 入れ替え方 |
 |---|---|
@@ -111,7 +113,7 @@ agent の Bash の snapshot を補う [`hooks/fix-snapshot-path-patch.sh`](../ho
 | 消えたアプリ・Intel だけの部品を起動する LaunchAgent | `launchctl bootout gui/$(id -u)/<label>` → plist を退避先へ (点検の「LaunchAgents」 節が対象を出す) |
 | 自動更新係 (`/Library/Application Support/<vendor>/<Updater>/` と `~/Library/Application Support/...`) | 移行で来た Intel 版の更新係は Rosetta の下で自分を x64 と名乗って更新を取る (実測: updater の log の request が `"arch":"x64"`、 OS は arm64) = 本体を入れ替えても次の更新で Intel 版に戻りうる。 本体に同梱の universal 版 (`<App>.app/Contents/.../Helpers/<Updater>.app`) で入れ直す。 system の Chromium 系 updater は `sudo <Intel 版> --uninstall --system` → `sudo <同梱版> --install --system` で、 入った版が universal・`ARM_64` で動くことを log で確かめた (実測)。 user 領域の更新係は退避すれば本体が次の起動で同梱版を入れる想定 (未確認)。 点検の「アプリ」 節がこの置き場も見る。 Sparkle などが残した旧版の写し (`<App> <版>/`) も同じ置き場に出る = 本体がネイティブなら片付けの対象 (ゴミ箱へ) |
 
-| 古い browser plug-in・設定 pane (`/Library/Internet Plug-Ins/*.plugin`・`/Library/PreferencePanes/*.prefPane`。 例 = Java の plug-in と設定 pane) | 今の browser は plug-in を読まないので、 本体ごと要らない。 中の更新係が `/Library/LaunchAgents`・`/Library/LaunchDaemons` の plist から Rosetta で常駐する (実測)。 sudo で `launchctl bootout` → plug-in・pane・plist を退避先へ (点検の「LaunchAgents」「動いている process」「アプリ」 の 3 節が出す) |
+| 古い browser plug-in・設定 pane (`/Library/Internet Plug-Ins/*.plugin`・`/Library/PreferencePanes/*.prefPane`。 例 = Java の plug-in と設定 pane) | 今の browser は plug-in を読まないので、 本体ごと要らない。 中の更新係が `/Library/LaunchAgents`・`/Library/LaunchDaemons` の plist から Rosetta で常駐する (実測)。 止めるのは sudo なしでできる: `/Library/LaunchAgents` の plist は本人の gui domain に読み込まれるので、 `launchctl bootout gui/$(id -u)/<label>` と `launchctl disable gui/$(id -u)/<label>` (disable は再起動の後も効く、 戻すなら `enable`)。 file (plug-in・pane・plist) の退避と `/Library/LaunchDaemons` の job は sudo (点検の「LaunchAgents」「動いている process」「アプリ」 の 3 節が出す。 disable 済みの job は 🟠) |
 
 点検の終わり = `macos-arch-audit.py` の「実行経路に別 arch なし」 + 定期ジョブを 1 本手で回して最後まで走ること。
 アプリ・npx cache・退避した Intel Homebrew の残置・Rosetta で常駐する process・PATH の外の Framework Python・

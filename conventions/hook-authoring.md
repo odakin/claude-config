@@ -954,7 +954,7 @@ turn 終了時 (Stop) に最終 assistant 発話を読み、 決まった句 (�
 <a id="transcript-user-message-shape"></a>**「今の turn」 の境界は、 user 行の 2 つの形を両方数える** (実測): desktop の会話記録は、 打ち込んだ発言を `message.content` = **文字列**で記録する。 配列になるのは画像つきの発言と tool_result の行で、 Stop hook の block の理由も文字列の user 行として入る。 境界を「配列で text block を持つ user 行」 だけで探すと、 turn の窓が最後に画像を貼った発言まで伸びる (画像が無ければ空 = hook が黙って何もしない)。 定義は層1 の [`scripts/lib/transcript_turns.py`](../scripts/lib/transcript_turns.py) の `is_real_user` (= type が user で tool_result の行でない) に揃える。 jq なら `select(.type == "user") | select(((.message.content | type) == "string") or ([.message.content[]? | select(.type == "tool_result")] | length == 0))`。 test の fixture は文字列の発言と配列の発言の両方を入れ、 古い画像の発言が窓を伸ばさないことも確かめる。
 
 <a id="command-guard-calibration"></a>**command を見る PreToolUse guard も同じ手順** (2026-09-12、 [`hooks/zsh-word-split-guard.py`](../hooks/zsh-word-split-guard.py) で実施):
-- **過去の Bash command で校正する** = [`scripts/calibrate-bash-command-pattern.py`](../scripts/calibrate-bash-command-pattern.py) `--hook <file>` (hook の `find_issues(command)` をそのまま当てる。 同じ command 文字列は 1 回だけ数える)。 hit を全部読み、 本当の誤用と誤検出を数える。
+- **過去の Bash command で校正する** = [`scripts/calibrate-bash-command-pattern.py`](../scripts/calibrate-bash-command-pattern.py) `--hook <file>` (hook の `find_issues(command)` をそのまま当てる。 同じ command 文字列は 1 回だけ数える)。 hit を全部読み、 本当の誤用と誤検出を数える。 1 つの hook に述語を足したときは、 その述語を `--func <名前>` で単独に当てる (例 = zsh-word-split-guard の素の `log show` の述語は `--func log_issues`)。 その場の使い捨ての script で較正すると、 docstring に書いた較正の数字を後から誰も再現できない (実測)。
 - **誤検出の型を見て述語を狭める** — 例: `$(…)` の出力を「複数語」 の根拠にするのは分割が目的の文脈 (`for` / `set --`) だけにした (1 行の値を git に渡す誤検出が消えた)。 残る誤検出の型 (同名変数の再利用など) は hook の docstring と規約に書いておく。
 - **deny の reason に直し方を入れる** — 誤検出のコストを書き直し 1 回に抑える。
 

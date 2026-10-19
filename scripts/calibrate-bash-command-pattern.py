@@ -6,6 +6,8 @@
       [--files N] [--samples 30]
   calibrate-bash-command-pattern.py --pattern 'REGEX' [...]
 --hook の file は find_issues(command: str) -> list (空 = 問題なし) を module level に持つこと。
+  1 つの hook が述語を複数持つときは --func <名前> でそれを呼ぶ (同じ型: command → list)。
+  例 = calibrate-bash-command-pattern.py --hook hooks/zsh-word-split-guard.py --func log_issues (素の log show の述語)
   読み込みは source を読んで exec する (= importlib の .pyc cache を経由しない。 古い述語を掴まないため)。
 --pattern は re.search で 1 件でも当たれば hit。
 読む transcript の既定 = この機械の全部の設定フォルダの projects/*/*.jsonl (~/.claude と、 アカウント固定の
@@ -59,15 +61,15 @@ def bash_commands(entries):
                     yield cmd
 
 
-def load_detector(hook: str | None = None, pattern: str | None = None):
-    """command → 検出の list (空 = 問題なし) を返す関数。"""
+def load_detector(hook: str | None = None, pattern: str | None = None, func: str = "find_issues"):
+    """command → 検出の list (空 = 問題なし) を返す関数。 hook は module level の func を呼ぶ。"""
     if hook:
         src = Path(hook).read_text(encoding="utf-8")
         ns: dict = {"__name__": "guard_under_test", "__file__": hook}
         exec(compile(src, hook, "exec"), ns)
-        fn = ns.get("find_issues")
+        fn = ns.get(func)
         if not callable(fn):
-            raise SystemExit(f"{hook}: module level に find_issues(command) が無い")
+            raise SystemExit(f"{hook}: module level に {func}(command) が無い")
         return lambda c: list(fn(c) or [])
     rx = re.compile(pattern or "")
     return lambda c: [m.group(0) for m in [rx.search(c)] if m]
@@ -145,6 +147,16 @@ def selftest() -> int:
             check(False, "find_issues の無い hook は止める")
         except SystemExit:
             check(True, "find_issues の無い hook は止める")
+        two = Path(d) / "two.py"
+        two.write_text("def find_issues(c):\n    return []\n\ndef log_issues(c):\n    return ['ls'] if c == 'ls' else []\n",
+                       encoding="utf-8")
+        n, u, hits = scan([str(tp)], load_detector(hook=str(two), func="log_issues"))
+        check(len(hits) == 1 and hits[0][1] == ["ls"], "--func で同じ hook の別の述語を呼ぶ")
+        try:
+            load_detector(hook=str(two), func="nope")
+            check(False, "--func の名前が無い hook は止める")
+        except SystemExit:
+            check(True, "--func の名前が無い hook は止める")
         if _ccd is not None:  # 既定 = 全部の設定フォルダ (偽の HOME に既定とアカウント固定の 2 つ)
             for cfg in (".claude", ".claude-alt"):
                 pd = Path(d) / "home" / cfg / "projects" / "-w"
@@ -174,6 +186,7 @@ def main() -> int:
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--hook", help="find_issues(command) を持つ hook file")
     g.add_argument("--pattern", help="re.search の正規表現")
+    ap.add_argument("--func", default="find_issues", help="--hook で呼ぶ述語の名前 (既定 = find_issues)")
     ap.add_argument("--glob", default=None, help="transcript の glob (既定 = この機械の全部の設定フォルダの projects/*/*.jsonl)")
     ap.add_argument("--files", type=int, default=0, help="新しい順に N file だけ (0 = 全部)")
     ap.add_argument("--samples", type=int, default=30)
@@ -186,7 +199,7 @@ def main() -> int:
     files = sorted(transcript_paths(a.glob), key=os.path.getmtime, reverse=True)
     if a.files:
         files = files[:a.files]
-    n, u, hits = scan(files, load_detector(a.hook, a.pattern))
+    n, u, hits = scan(files, load_detector(a.hook, a.pattern, a.func))
     print(f"files {len(files)} / Bash command {n} (同じ文字列を除く {u}) / hit {len(hits)}")
     for sid, found, cmd in hits[:a.samples]:
         print(f"--- {sid} {found}")

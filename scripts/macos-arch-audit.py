@@ -186,14 +186,32 @@ def check_python_user_site(native: str, findings: list) -> list[str]:
     return [f"  ✅ {site}: 拡張 {len(sos)} 個すべてネイティブ"]
 
 
+def running_commands() -> str:
+    try:
+        return subprocess.run(["ps", "-axo", "command="], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
 def check_npx_cache(native: str, findings: list) -> list[str]:
     other = "darwin-x64" if native == "arm64" else "darwin-arm64"
     hits = sorted(glob.glob(str(HOME / ".npm" / "_npx") + "/*/node_modules/**/*" + other + "*", recursive=True))
     dirs = sorted({str(Path(h).relative_to(HOME / ".npm/_npx")).split("/")[0] for h in hits})
-    if dirs:
-        findings.append(f"npx cache の {len(dirs)} 個が別 arch の部品 (*{other}*) を抱えている")
-        return [f"  🟠 npx cache: {len(dirs)} 個 ({', '.join(dirs)}) — その dir を消せば次回 ネイティブで取り直す"]
-    return ["  ✅ npx cache: 別 arch の platform 部品なし"]
+    if not dirs:
+        return ["  ✅ npx cache: 別 arch の platform 部品なし"]
+    findings.append(f"npx cache の {len(dirs)} 個が別 arch の部品 (*{other}*) を抱えている")
+    procs = running_commands()
+    lines = []
+    for d in dirs:
+        n = sum(1 for c in procs.splitlines() if f"/_npx/{d}/" in c)
+        parts = sorted({Path(h).name for h in hits if f"/_npx/{d}/" in h})
+        if n:
+            # 使用中の dir を消すと、 そこから動いている server (MCP など) が壊れる (実測: 全 session の Gmail MCP が 1 つの dir から動いていた)
+            lines.append(f"  🟠 npx cache {d}: 別 arch の部品 {', '.join(parts[:4])} — ⚠️ 使用中 (process {n} 個) = 消さない。"
+                         " 止めた後に消せば次回ネイティブで取り直す (build 用の部品だけなら実行には効いていない)")
+        else:
+            lines.append(f"  🟠 npx cache {d}: 別 arch の部品 {', '.join(parts[:4])} — 使っている process は無い = その dir を消せば次回ネイティブで取り直す")
+    return lines
 
 
 def git_crypt_configs(root: Path) -> list[Path]:
@@ -245,9 +263,27 @@ def check_git_crypt(root: Path | None, native: str, findings: list, fix: bool) -
     return lines
 
 
+def disabled_labels(domain: str) -> set[str]:
+    """`launchctl print-disabled <domain>` で disabled の label (= 読み込まれず、 起動しない)。 読めなければ空。"""
+    try:
+        out = subprocess.run(["launchctl", "print-disabled", domain], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    return parse_disabled(out)
+
+
+def parse_disabled(out: str) -> set[str]:
+    """print-disabled の出力の `"label" => disabled` (古い macOS は `=> true`) の label。 enabled / false は数えない。"""
+    return {m.group(1) for m in re.finditer(r'"([^"]+)"\s*=>\s*(?:disabled|true)\b', out)}
+
+
 def check_launch_agents(native: str, findings: list) -> list[str]:
     nat = PREFIX[native] + "/bin"
     oth = PREFIX["x86_64" if native == "arm64" else "arm64"] + "/bin"
+    # 本人が launchctl disable した job は起動しない = 🔴 にしない (/Library の plist は本人の gui domain に読み込まれるので、
+    # 退避に sudo が要っても、 止めるのは sudo なしでできる = macos-cpu-arch.md#app-replacement)
+    gui = disabled_labels(f"gui/{os.getuid()}")
+    system = disabled_labels("system")
     lines, n = [], 0
     # /Library の 2 つは vendor の常駐 (更新係・helper) の置き場 = 移行で Intel 版がそのまま来る (実測: Java の更新係)
     plists = [p for d in (HOME / "Library/LaunchAgents", Path("/Library/LaunchAgents"), Path("/Library/LaunchDaemons"))
@@ -271,7 +307,11 @@ def check_launch_agents(native: str, findings: list) -> list[str]:
         i_n, i_o = blob.find(nat), blob.find(oth)
         if i_o != -1 and (i_n == -1 or i_o < i_n):
             probs.append(f"PATH で {oth} が {nat} より前")
-        if probs:
+        off = d.get("Label") in (system if "/LaunchDaemons/" in pl else gui)
+        if probs and off:
+            findings.append(f"launchd の disabled の残骸 {Path(pl).name}")
+            lines.append(f"  🟠 {Path(pl).name}: {'; '.join(probs)} (disabled = 起動しない。 /Library の file の退避は sudo)")
+        elif probs:
             findings.append(f"LaunchAgent {Path(pl).name}: {'; '.join(probs)}")
             lines.append(f"  🔴 {Path(pl).name}: {'; '.join(probs)}")
     lines.insert(0, f"  ·  LaunchAgents・LaunchDaemons {n} 個を見た (~/Library/LaunchAgents と /Library の 2 つ)")
@@ -434,7 +474,8 @@ def check_pythons(native: str, findings: list, repos_root: Path | None) -> list[
 # ---------------------------------------------------------------- 本体
 # 🟠 (入れ替え・退避の候補) の指摘。 終了値の 🔴 (= 普段の command・ジョブの実行経路が別 arch) に数えない
 NOT_RED = ("別 arch だけのアプリ", "別 arch の自動更新係", "npx cache", "別 arch の Homebrew",
-           "Rosetta で動いている process", "PATH の外の別 arch の Framework Python", "別 arch・消えた Python を base")
+           "Rosetta で動いている process", "PATH の外の別 arch の Framework Python", "別 arch・消えた Python を base",
+           "launchd の disabled の残骸")
 
 
 def run(args) -> int:
@@ -511,6 +552,11 @@ def selftest() -> int:
         got = apple_component(path)
         ok &= got == want
         print(f"  {'✅' if got == want else '❌'} apple_component({path.split('/')[1]}/…{path[-12:]}) = {got}")
+    sample = ('disabled services = {\n\t\t"com.example.updater" => disabled\n\t\t"com.example.ok" => enabled\n'
+              '\t\t"com.example.old" => true\n\t\t"com.example.old-ok" => false\n\t}\n')
+    got = parse_disabled(sample)
+    ok &= got == {"com.example.updater", "com.example.old"}
+    print(f"  {'✅' if got == {'com.example.updater', 'com.example.old'} else '❌'} parse_disabled: disabled と true だけ ({sorted(got)})")
     if sys.platform == "darwin":
         a = archs_of("/bin/ls")
         ok &= a is not None and hardware_arch() in a
