@@ -8,9 +8,11 @@ manuscript sentences passed all of them. This gate covers the verbatim part only
 unpublished result still passes, and the written rule still applies to it.
 
 Two detectors, calibrated by replaying the public repos' history (--replay):
-  quoted span  = text inside `backticks`, "double quotes" or “curly quotes” with >= QUOTE_MIN_WORDS words and
-                 >= QUOTE_MIN_CONTENT content words, every QUOTE_K-word window of which occurs in a source.
-                 The leaked examples were short quotations of this kind.
+  quoted span  = text inside `backticks`, "double quotes", “curly quotes” or the Japanese brackets 「…」 / 『…』
+                 (each pair of a nesting is its own span, so 「… 『inner』 …」 checks the inner quotation too)
+                 with >= QUOTE_MIN_WORDS words and >= QUOTE_MIN_CONTENT content words, every QUOTE_K-word window
+                 of which occurs in a source. The leaked examples were short quotations of this kind. Japanese
+                 documents quote with the brackets; until 2026-10-19 an English sentence inside them passed.
   prose run    = PROSE_K consecutive content words (>= 3 letters, not a function word) that occur in a source,
                  outside fenced code blocks. Catches a copied sentence or paragraph without quote marks.
 Text is normalised first: LaTeX comments, math, preamble, citation/label keys and control sequences are removed,
@@ -109,6 +111,8 @@ COMMENT_RE = re.compile(r"(?<!\\)%.*")
 ACK_RE = re.compile(r"\\(?:(?:sub)*section\*?\{Acknowledge?ments?\}|begin\{acknowledge?ments?\}|acknowledge?ments?\b)"
                     r".*?(?=\\(?:sub)*section|\\appendix|\\bibliography|\\begin\{thebibliography\}|\\end\{document\}|$)", re.S | re.I)
 QUOTE_RE = re.compile(r"`([^`\n]{8,400})`|\"([^\"\n]{8,400})\"|\u201c([^\u201d\n]{8,400})\u201d")
+JP_QUOTE_CLOSE = {"\u300d": "\u300c", "\u300f": "\u300e"}   # \u300d closes \u300c / \u300f closes \u300e (nested pairs: bracket_spans)
+QUOTE_SPAN_MIN, QUOTE_SPAN_MAX = 8, 400                        # the same span length as QUOTE_RE
 BREAK = None
 FAMILIES = ("prose", "quote")
 
@@ -475,21 +479,44 @@ def prose_runs(lines, index: Index, skip=frozenset()):
     return [(where[a], where[b + k - 1], b - a + k, h) for a, b, h in runs]
 
 
+def bracket_spans(text: str) -> list:
+    """Contents of every 「…」 / 『…』 pair on a line, nested pairs included (outer and inner are separate spans).
+    A closer pairs with the nearest open bracket of its own kind; openers left unclosed inside it are dropped."""
+    out, stack = [], []
+    for i, ch in enumerate(text):
+        if ch in ("「", "『"):
+            stack.append((ch, i))
+        elif ch in JP_QUOTE_CLOSE:
+            for j in range(len(stack) - 1, -1, -1):
+                if stack[j][0] == JP_QUOTE_CLOSE[ch]:
+                    span = text[stack[j][1] + 1:i]
+                    del stack[j:]
+                    if QUOTE_SPAN_MIN <= len(span) <= QUOTE_SPAN_MAX:
+                        out.append(span)
+                    break
+    return out
+
+
+def quoted_spans(text: str) -> list:
+    """Every quoted span on one line: QUOTE_RE (backticks, ASCII and curly double quotes) + the Japanese brackets."""
+    return [next(g for g in m.groups() if g is not None) for m in QUOTE_RE.finditer(text)] + bracket_spans(text)
+
+
 def quoted_hits(lines, index: Index, skip=frozenset(), min_words=QUOTE_MIN_WORDS):
     """Returns [(line, words in the span, hash of its first window)] for quoted spans found verbatim in a source."""
-    out = []
+    out, seen = [], set()
     for ln, text in lines:
         if ln in skip:
             continue
-        for m in QUOTE_RE.finditer(text):
-            span = next(g for g in m.groups() if g is not None)
+        for span in quoted_spans(text):
             if len(span.split()) < min_words:   # paths and identifiers (a/b-c.md) are one space-separated token
                 continue
             words = tokens(span, family="quote")
             if BREAK in words or len(words) < min_words or sum(is_content(w) for w in words) < QUOTE_MIN_CONTENT:
                 continue
             hs = [h for _, h in shingles(words, QUOTE_K, "quote")]
-            if hs and all(index.contains("quote", h) for h in hs):
+            if hs and all(index.contains("quote", h) for h in hs) and (ln, hs[0]) not in seen:
+                seen.add((ln, hs[0]))   # 「"…"」 = the same words in two spans of one line: report once
                 out.append((ln, len(words), hs[0]))
     return out
 
@@ -855,6 +882,21 @@ Then those numbers come from one careful toy run.
         expect("... but not across non-consecutive lines", prose_runs([(10, split[0][1]), (20, split[1][1])], idx) == [])
         expect("a quoted generic phrase with few content words passes", quoted_hits([(1, "`and that the of the`")], idx) == [])
         expect("a quoted path or identifier is not a sentence", quoted_hits([(1, "`outputs-of-a/single-toy-loop.md`")], idx) == [])
+        expect("an English quotation inside 「」 blocks like the same words in backticks",
+               [h[0] for h in quoted_hits([(7, "例: 「then those numbers come from one careful toy run」 と書く。")], idx)] == [7])
+        expect("... and inside 『』 nested in a Japanese 「」 (the inner pair is its own span)",
+               len(quoted_hits([(1, "「彼は 『then those numbers come from one careful toy run』 と書いた」")], idx)) == 1)
+        expect("... foil: the same words without quote marks are too short for both detectors",
+               scan_lines("x.md", [(1, "例: then those numbers come from one careful toy run と書く。")], idx, "") == [])
+        expect("... foil: an unrelated English sentence inside 「」 passes",
+               quoted_hits([(1, "「purple elephants dancing quietly around marble fountains」")], idx) == [])
+        expect("「\"…\"」 (the same words in two spans of one line) is reported once",
+               len(quoted_hits([(1, "「\"then those numbers come from one careful toy run\"」")], idx)) == 1)
+        expect("bracket_spans: nested pairs of either kind and of the same kind are each a span",
+               bracket_spans("「a 『inner text here』 b」 「x「y z w v u」」") ==
+               ["inner text here", "a 『inner text here』 b", "y z w v u", "x「y z w v u」"])
+        expect("bracket_spans: an opener left unclosed inside a pair is dropped, a stray closer is ignored",
+               bracket_spans("」「abc 『def ghi jkl」") == ["abc 『def ghi jkl"])
         ack_tex = "\\begin{document}Body text here.\n\\subsection*{Acknowledgement}We thank the generous funding agency.\n\\section{Next}Tail words.\n\\end{document}"
         expect("acknowledgments are not indexed, and indexing resumes at the next section",
                "funding" not in tokens(ack_tex, latex=True) and {"body", "tail"} <= set(tokens(ack_tex, latex=True)))
