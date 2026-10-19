@@ -177,7 +177,7 @@ scope を絞って残りを別の論文へ送る段落は、 先送りする対�
 
 1. 理論の側が独立に何を決めるか (対象を名指しで)。
 2. 調整の余地が無いこと (自由なパラメータを後から合わせたのではない)。
-3. 照合相手の名指しと、 合っているという言い切り。 その後で「The agreement is a nontrivial consistency check.」 と性格づける。
+3. 照合相手の名指しと、 合っているという言い切り。 その後で「This match is a strong check of the method.」 と性格づける。
 
 - 検算の本質は「手が届かないのに合う」 であって「合う」 ではない。 2 が無ければ単なる fit、 3 が無ければ主張が宙に浮き、 1 が無ければ何が検証されたか読めない。
 - 同じ先行計算を入力 (未定の係数の固定) と検証 (固定に使えない部分の一致) の両方に使うときは、 2 つの役を文面で分ける。 分けないと「自分で合わせておいて合ったと言っている」 に読める。
@@ -215,7 +215,7 @@ scope を絞って残りを別の論文へ送る段落は、 先送りする対�
 
 散文だけで新しい呼び名を作らない (読者は辞書で引けない)。 名指す手は 2 つで、 併用が最も強い。
 
-- **式での位置**: 「the third and fifth terms of (12)」「the last three terms」。 位置は項の順番で言い、 display の行 (「the second line of (12)」) で呼ばない (式の改行が変わると黙って別の項を指す)。
+- **式での位置**: 「the first and fourth terms of (7)」「the last two terms」。 位置は項の順番で言い、 display の行 (「the second line of (7)」) で呼ばない (式の改行が変わると黙って別の項を指す)。
 - **既に定義した語**: 式の直後で「$\chi$ the trace part of the field」 と定義したなら、 以後は「the kinetic term of the trace part $\chi$」「its mass term」。
 - 呼び名が節をまたいで割れていないかは、 その語で全文を grep すれば分かる (序論と本文で同じ項を別の名で呼ぶのが典型)。 1 つの対象に 1 つの名 = [paper-audit.md#one-name-per-object](paper-audit.md#one-name-per-object)。
 - <a id="no-abstract-noun-for-equation-part"></a>**式の部分を記号の代わりに抽象名詞・比喩で呼ばない** (「the first moment」「the rotation structure」「the flavor coefficients」): 読者はどの記号か特定できない。 記号で書く (「the $\bar p$ term」)。 何が何の回転かを式の量で言う。 定義より前に出る呼び名は記号と節の参照にする。 否定の文は、 何が何倍でないかを式で言う。 照合の文は、 何を何と照合するかを書く ([#consistency-check-three-beats](#consistency-check-three-beats))。 「so」 で繋ぐ文は、 前の文の何から何が出るかを同じ文で言う。
@@ -270,7 +270,7 @@ slash は割り算、 中黒は乗算 (\cdot) と紛らわしい。 2 個は「$
 - 模型・シナリオが違う文献は違うと言う (同じ公理を共有していても作用が別なら「a variant~\cite{C}」)。 同じ模型なら「in the same model」。
 - 文献の主張を書く前に abstract か本文を開く (記憶で決めない)。 本稿の他の箇所が同じ文献を何の典拠にしているかも grep で揃える。
 - 他人の論文の付録・式番号は出版版で確かめる (arXiv 版と出版版で並びが違いうる)。 手元に arXiv の source しか無ければ、 その旨を記録して著者に確認を回す。
-- 本文が説明を与えていて外部文献が詳説の補足なら「see also」、 本文が説明を文献に委ねるときだけ「see」。 1 句で書く (「; see also Appendix~A of Ref.~\cite{X} for a detailed account.」)。
+- 本文が説明を与えていて外部文献が詳説の補足なら「see also」、 本文が説明を文献に委ねるときだけ「see」。 1 句で書く (「; see also Sec.~4 of Ref.~\cite{X} for the full derivation.」)。
 - <a id="generalization-states-the-difference"></a>**先行研究の式を再掲・一般化するときは、 違いを主語にした文で言う**: 「This is Y of Ref.~\cite{X} with …」 では違いが通じない。 「In Ref.~\cite{X} the two widths are equal; here they are independent.」 のように、 先行研究が何で本論文が何かを並べる。 先行研究の式の一般化にすぎない式を「one of the main results」 と呼ばない。 書く前に、 その式が先行論文の何番の式と同じで何が違うかを、 先行論文の PDF を開いて確かめる。
 - 本文の途中の帰属と要約の比較の置き場 = [#prior-work-in-introduction](#prior-work-in-introduction)。
 

@@ -238,7 +238,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 
 **問題の機構:** 論文散文の 1 文は、真理値の一部を文の外が解決する束縛に預けている — 指示語・代名詞の先行詞、方向語 (below / in the main text)、対語 (counterpart / former / latter)、接続詞・分詞の係り先、次数限定 (exact / to all orders)、引用の帰属。**文脈手術 (移設・圧縮・文分割/合成・fix の連鎖) は文面を変えずに解決環境を変えるため、束縛は silent に再解決され、文単位の review では見えない。** 数式の `\cref` は rigid (壊れれば ?? で loud) だが、散文束縛は壊れても文法的に読めてしまう。特に危険なのは「先頭次数では真」な圧縮 — 書き手の頭の検算は先頭次数しか sample しないため、exact 文脈に置かれた瞬間に偽になる主張がもっともらしく見える。
 
-**ルール 1 (移設は verbatim-first):** appendix ↔ 本文の昇格/降格・節跨ぎの移動 (>1 段落) は、(a) verbatim 移動 → (b) 新文脈への適応編集、の 2 commit に分解する。移動しながらの再圧縮・言い換えを 1 commit に混ぜない。verbatim 移動なら束縛破れは不在か loud になり (例: "used in the main text" が本文中に来れば自己言及で即座に異様)、(b) の diff は純粋な編集として新文脈で review できる。
+**ルール 1 (移設は verbatim-first):** appendix ↔ 本文の昇格/降格・節跨ぎの移動 (>1 段落) は、(a) verbatim 移動 → (b) 新文脈への適応編集、の 2 commit に分解する。移動しながらの再圧縮・言い換えを 1 commit に混ぜない。verbatim 移動なら束縛破れは不在か loud になり (例: "in the main text" が本文中に来れば自己言及で即座に異様)、(b) の diff は純粋な編集として新文脈で review できる。
 
 **ルール 2 (手術 event → 同 turn で named-class sweep):** 文脈手術 (移設・>3 文の圧縮/展開・文分割/合成・同一段落への fix 3 連以上) を行った turn では、**指示を待たず** touched region に対して以下の checklist で sweep を宣言して回す:
 
@@ -402,7 +402,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Pattern**: 技術的言明を結果の順に並べた abstract (演算子の次元・coupling scale・信用水準の細かい百分率 …) は、 読者に文脈も持ち帰る 1 文も残さない。 abstract は論文の introduction (文脈降下 + 結論の先出し) と conclusion (束ねる 1 文) の圧縮版として組む ([`giving-talks.md`](giving-talks.md) の introduction 節と conclusion 節)。
 
-**Form** (12 文前後): ① 文脈降下 2 文 (なぜこの量が観測に効くか → この模型ではそれが何で決まるか) ② 問い 1 文 ③ 3 message を各 1–2 文の非技術的な言い方で (道具立ての語は落とす、 恒等式は本文へ) ④ 持ち帰る 1 文 = **試験であって判決ではない** (「data は模型に X を求める」 は論文の価値を殺す。 「観測量 Y がこの模型の X を試験し、 次の測定が決着させる」) ⑤ 現状の data との比較は**付加情報として末尾** ⑥ 副産物は最後の 1 文。 **禁止**: 同格の挿入句 (「the only ⟨類⟩, a ⟨具体⟩, …」)、 絶対的な有意度 (「最新 data が Nσ で排除」 = 中心値が動けば死ぬ、 [#moving-observational-baseline](#moving-observational-baseline))、 細かい百分率 (99.7% → 3σ → 不要なら削除)、 自分の旧提案を受け身で書くこと (「proposed for this model」 → 「that we proposed earlier」)、 先行詞の無い複数形 (「the central values will move」 → 「wherever the measured values move」)、 対象の長い言い換え (説明句で呼ぶより標準の名で呼ぶ)。
+**Form** (12 文前後): ① 文脈降下 2 文 (なぜこの量が観測に効くか → この模型ではそれが何で決まるか) ② 問い 1 文 ③ 3 message を各 1–2 文の非技術的な言い方で (道具立ての語は落とす、 恒等式は本文へ) ④ 持ち帰る 1 文 = **試験であって判決ではない** (「data は模型に X を求める」 は論文の価値を殺す。 「観測量 Y がこの模型の X を試験し、 次の測定が決着させる」) ⑤ 現状の data との比較は**付加情報として末尾** ⑥ 副産物は最後の 1 文。 **禁止**: 同格の挿入句 (「the only ⟨類⟩, a ⟨具体⟩, …」)、 絶対的な有意度 (「最新 data が Nσ で排除」 = 中心値が動けば死ぬ、 [#moving-observational-baseline](#moving-observational-baseline))、 細かい百分率 (99.7% → 3σ → 不要なら削除)、 自分の旧提案を受け身で書くこと (「proposed for this model」 → 「that we proposed earlier」)、 先行詞の無い複数形 (「the bounds will tighten」 → 「however the bounds tighten」)、 対象の長い言い換え (説明句で呼ぶより標準の名で呼ぶ)。
 
 ## <a id="sentence-length-audit"></a>文の長さの機械 sweep — 40 語超は分割候補 (2026-09)
 
@@ -714,7 +714,7 @@ origin: 2026-09-12、長く改稿を重ねた原稿で、共著者が外部 tool
 
 bare 作用が一階形式 (vierbein + 独立な接続) で、 誘導作用が二階形式 (metric の Levi-Civita 曲率 + contorsion) で書かれている時、 「誘導された R 項が bare の Planck 質量を補正する」 は**そのままでは 2 つの項を等置していない**。 bare の一階の項は (g, K) 変数に直すと R(g) と捩率² の固定した組合せの和で、 誘導された R(g) 項はその**前半だけ**を rescale する。 後半 (捩率²) は bare の係数のまま残る。 「補正する」 が文字どおり正しいのは K = 0 (接続 = Levi-Civita、 = tree で接続を消した枝) のときで、 原稿はたいてい序論でその同一視を明示し (「接続を消せば Einstein–Hilbert になる」)、 結果の節で暗黙に引き継ぐ。
 
-**検査 (結果の節を書く時に 1 回)**: ① bare 項と誘導項を同じ変数 (metric + contorsion、 または vierbein + 接続) に直す ② 「補正される」 と言う係数がどの単項式の係数かを名指す (「R(g) の係数」 か 「一階の項全体の係数」 か) ③ 残る差 (捩率² の bare 係数と誘導係数のずれ) をどの帳簿に載せるか決め、 **同じ節の中で帳簿を混ぜない** (R 項は 「一階の項の係数が動いた」 と言い、 捩率² 項は 「一階の項の係数 (bare) の固定組合せ」 と言うのは混在)。 ④ 「invisible to the two-point function」 型の免責で覆えるかを確かめる: 捩率² は揺らぎの 2 次なので接続側の 2 点関数に tree で見える = 免責の外。
+**検査 (結果の節を書く時に 1 回)**: ① bare 項と誘導項を同じ変数 (metric + contorsion、 または vierbein + 接続) に直す ② 「補正される」 と言う係数がどの単項式の係数かを名指す (「R(g) の係数」 か 「一階の項全体の係数」 か) ③ 残る差 (捩率² の bare 係数と誘導係数のずれ) をどの帳簿に載せるか決め、 **同じ節の中で帳簿を混ぜない** (R 項は 「一階の項の係数が動いた」 と言い、 捩率² 項は 「一階の項の係数 (bare) の固定組合せ」 と言うのは混在)。 ④ 「invisible to the correlator we compute」 型の免責で覆えるかを確かめる: 捩率² は揺らぎの 2 次なので接続側の 2 点関数に tree で見える = 免責の外。
 
 **なぜ**: 物理 (metric sector の Newton 定数が動く) は正しいのに、 どの係数が動いたかの文が変数の混在で曖昧になり、 「Planck 質量」 が R(g) の係数か一階の項の係数かで読者ごとに割れる。 定義で答える型 ([#dissolve-by-definition](#dissolve-by-definition)) の一例。
 
