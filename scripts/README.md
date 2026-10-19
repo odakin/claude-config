@@ -420,6 +420,7 @@
 - **[lib/office-staging.test.sh](lib/office-staging.test.sh)** — office-staging.sh + office_staging.py の self-test (hermetic、 Office 不要、 fake HOME)
 - **[lib/office_census.py](lib/office_census.py)** — OOXML package (xlsx / docx / pptx) が「紙に出すもの」 を、 道具に依らず zip の XML から数える。
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
+- **[lib/output_numbers.py](lib/output_numbers.py)** — 実行出力の数値と追跡済みの記録を照合する共通規則。--selftest。
 - **[lib/permission_rules.py](lib/permission_rules.py)** — settings.json の permission rule を宣言した形に揃える (engine)
 - **[lib/photos_picker.py](lib/photos_picker.py)** — Google Photos Picker API の client (session を作る → 本人が URL を開いて写真を選ぶ → 選ばれた写真を列挙・download。 python3 photos_picker.py で selftest)
 - **[lib/pick-python.sh](lib/pick-python.sh)** — 無人ジョブ (launchd / cron) の wrapper が使う python3 を、 PATH の順でなく「必要な module を import できるか」 で選ぶ (source して pick_python を呼ぶ)

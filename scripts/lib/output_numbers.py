@@ -21,6 +21,7 @@ git の失敗も一致なしとして扱うため、空の結果は検査の成�
 呼び手は探索範囲と候補を示し、記録するか、記録しない理由を人が確かめる。
 本 module は記録を変更せず、候補の存在で締めを自動停止させない。
 """
+import argparse
 import re
 import subprocess
 
@@ -128,7 +129,6 @@ def selftest():
 
 
 if __name__ == "__main__":
-    import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()

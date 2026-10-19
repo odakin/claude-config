@@ -38,9 +38,8 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 | 考え方 (メタの知見) | 同じく会話を頭から読み、 返事に書いた比較・判断の理由・捨てた案とその理由・壊れ方の推論 (なぜ起きたか) と、 user が述べた考え方・好みを拾う。 user の分は言葉のまま |
 
 - 拾った user の訂正は、 1 の表の「user の訂正」 の行どおり、 訂正された規則の文を記録にある user の言葉で言い直す。
-- <a id="numbers-not-recorded"></a>**`session-scripts-report.py` の最後の 🔢 の行は、 研究の中身の行の入力にする** — その場で流した code と script の実行が出した数値のうち、 作業した repo の記録 (md・tex・txt・out・py など) に見当たらないものの一覧。
+- <a id="numbers-not-recorded"></a>**締めの道具の 🔢 の行は、 研究の中身の行の入力にする** — `session-scripts-report.py` と Codex の inventory が、 実行出力と記録を照合した候補。拾い方・探す記録・丸め・解釈の限界の正本 = [`scripts/lib/output_numbers.py`](../scripts/lib/output_numbers.py) 冒頭。
   1 件ずつ、 note に書く (数値を出した code も根拠として隣に置く) か、 書かない理由 (置き換えた後の値が記録にある、 形式の確かめだけ) を報告に書く。
-  記録の側が別の言い方・別の丸めなら一致しないので、 🔢 は候補であって「記録が無い」 の証明ではない。
   向きは `session-claims-report.py` の逆 (あちらは記録に書いた主張に根拠の code が無いもの、 こちらは code が出した数値が記録に無いもの) = 両方を回す。
   code が「保存済み (✅)」 でも、 その code が出した数値を記録に書いたとは限らない (実測: code は残したのに、 code が出した計算結果を note に書かずに締めた)。
 
@@ -90,6 +89,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 | 別sessionのapp tool | inventoryのother-session routeにある作成・fork・送信の結果から、実際のthreadId/hostIdで `read_thread` 等を使う。clientThreadIdの段階は未解決として追う。先行するforkの写しを今回の発見に数えない |
 | token方式 | inventoryにあるこのsessionの `--record` / tokenだけを0.5の道具で照合する。他sessionのmarkerを消費しない |
 
+- `--section summary` / `--section commands` の 🔢 も、 [0.3 の数値の候補](#numbers-not-recorded)として研究の中身の拾い出しに使う。
 - 委ねるpromptには3項目を最初から入れる。Codexのnative子とCodex環境を引き継ぐheadless子にはworker側hookも渡す。
   親のCLIをrunnerで包んで許可判定を変える方式は使わない。通常のCLI入力を保ち、hookを止めるflagや環境の消去がある場合は
   到達を仮定せず記録・報告から確かめる。実装と機械別の限界は上のPARITYへ。
