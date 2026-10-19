@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""zsh-word-split-guard.py — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置 (と、 option を含む loop の語を command の引数) に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash を実行前に止める (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion)。
+"""zsh-word-split-guard.py — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置 (と、 option を含む loop の語を command の引数) に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash と、 素の `log show` など (zsh の組み込みの log に取られる) を含む Bash を実行前に止める (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion / #zsh-log-builtin)。
 
 PreToolUse(Bash)。 zsh は未 quote の `$var` を単語分割しない (bash と逆) ので、
     v="a b"; for x in $v      → 1 回だけ回る ("a b")
@@ -34,6 +34,18 @@ path に展開し、 見つからないと `not found` で rc=1 になって同�
   較正 (実測): 既存の会話記録の Bash に当てると、 発火した command のほぼ全部が実際に `not found` で止まっていた
   (誤検出は quote の対応の取り違えによる 1 件)。
 
+3 つめの述語 (zsh の組み込みの log、 shell-env.md#zsh-log-builtin): zsh では素の `log` が組み込み (login の監視用) で、
+引数を取らない。 macOS の unified log を読むつもりの `log show …` は `log: too many arguments` で失敗し、 `2>/dev/null` を
+付けると黙って空の出力になって「該当する log が無い」 と読み違える (実測)。 規約に書いた後も再発したので機械化した。
+  止める = command の位置 (行頭・; & | ( の後・$( と ` の中・do / then / time などの後・`VAR=x ` の代入の後) の `log` の直後に
+          macOS の log の subcommand (show / stream / collect / config / stats / erase) がある
+  見ない = `/usr/bin/log …` (full path)・`command log …` / `env log …` / `sudo log …` (外の command になる)・quote / heredoc の中・
+          `git log`・`catalog show` のような語の一部・subcommand の無い `log`
+  直し方は deny の理由に出す (= `/usr/bin/log show …`)。 書き換えて通すことはしない。
+  較正 (実測): 30 日分の会話記録の Bash に当てると、 発火した command は全部、 実際に素の `log show` で失敗していた (誤検出 0)。
+  `timeout 90 log show …` (外の command を通るので動く) は止めない。 zsh 5.9 で実測 = 止める形は全部 too many arguments、
+  通す形 (full path・command・env) は全部 log を出した。
+
 発火: 実行 shell が zsh のとき (CLAUDE_CODE_SHELL か SHELL)。 opt-out = CLAUDE_ZSH_SPLIT_GUARD=0 (=1 で shell 判定を飛ばす、 test 用)。
 出力: permissionDecision=deny + 直し方。 誤検出のコストは書き直し 1 回。 fail-open (読めない入力は黙って通す)。
   例外 (2026-10-12 本人の承認): 問題が equals 展開だけで、 その語が全部 `==` で始まるなら (区切りの `======`、 `[ a == b ]`)
@@ -66,6 +78,14 @@ COND = re.compile(r"\[\[.*?\]\]|\(\(.*?\)\)", re.S)
 EQ_FIX = ("直し方: 区切りの見出しは `echo -----` (`-` で始める) か quote (`echo '==='`) / "
           "比較は `[ a = b ]` か `[[ a == b ]]` / `=cmd` (command の path) を意図したなら `$(command -v cmd)`。 "
           "正本 = claude-config/conventions/shell-env.md#equals-word-expansion")
+
+# command の位置の素の `log` + macOS の log の subcommand (zsh では組み込みの log に取られる)
+LOG_CMD = re.compile(
+    r"(?:^|[;&|(`\n]|\$\()[ \t]*"
+    r"(?:(?:do|then|else|elif|if|while|until|\{|!|time)[ \t]+|" + NAME + r"=[^\s;|&]*[ \t]+)*"
+    r"log[ \t]+(show|stream|collect|config|stats|erase)\b")
+LOG_FIX = ("直し方: `/usr/bin/log show …` と full path で書く (script から呼ぶときも同じ)。 "
+           "正本 = claude-config/conventions/shell-env.md#zsh-log-builtin")
 
 FIX = ("直し方: 出力を行ごとに回す → `cmd | while read -r x; do …; done` / 空白で割る → `${=V}` / "
        "複数の path・引数 → 配列 `F=(a b c); git commit -- $F` か literal に並べる / "
@@ -189,6 +209,19 @@ def equals_rewrite(cmd: str) -> str | None:
     return out if not equals_issues(out) else None
 
 
+def log_issues(cmd: str) -> list[str]:
+    """command の位置で素の `log <subcommand>` を打っている subcommand の list。 空なら問題なし。"""
+    if not cmd or BASH_INNER.search(cmd):
+        return []
+    return sorted({m.group(1) for m in LOG_CMD.finditer(_masked(cmd))})
+
+
+def log_reason_text(subs: list[str]) -> str:
+    items = " / ".join(f"`log {s}`" for s in subs)
+    return ("zsh では素の `log` が組み込み (login の監視用) に取られ、 " + items + " は `log: too many arguments` で失敗する "
+            "(`2>/dev/null` を付けると黙って空の出力になり、 「該当する log が無い」 と読み違える)。 " + LOG_FIX)
+
+
 def equals_reason_text(words: list[str]) -> str:
     items = " / ".join(f"`{w}`" for w in words)
     return ("zsh は未 quote の語の先頭の `=` を command の path に展開し、 見つからないと `not found` で止まって "
@@ -217,9 +250,10 @@ def main() -> int:
     cmd = (data.get("tool_input") or {}).get("command") or ""
     issues = find_issues(cmd)
     eq_words = equals_issues(cmd)
-    if not issues and not eq_words:
+    log_subs = log_issues(cmd)
+    if not issues and not eq_words and not log_subs:
         return 0
-    fixed = None if issues else equals_rewrite(cmd)
+    fixed = None if (issues or log_subs) else equals_rewrite(cmd)
     if fixed is not None:
         # 止めずに書き換えて通す (2026-10-12 本人「1と2を実装しよう」)。 判断 (permissionDecision) は付けない =
         # 書き換えた command が通常の許可の判定 (allow rule・classifier) を受ける。 付けると判定を飛ばして通すので付けない。
@@ -230,7 +264,8 @@ def main() -> int:
                                  + " → 'quote')。 次からは最初から quote するか `-----` で区切る (shell-env.md#equals-word-expansion)",
         }}, ensure_ascii=False))
         return 0
-    reasons = ([reason_text(issues)] if issues else []) + ([equals_reason_text(eq_words)] if eq_words else [])
+    reasons = (([reason_text(issues)] if issues else []) + ([equals_reason_text(eq_words)] if eq_words else [])
+               + ([log_reason_text(log_subs)] if log_subs else []))
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
@@ -325,6 +360,29 @@ def selftest() -> int:
     rw("echo =SECTION", None, "=X (=cmd を意図しうる) は書き換えない = 止める")
     rw("echo ===; echo =python3", None, "1 つでも書き換えられない語があれば全体を止める")
     rw("echo '==='", None, "問題の語が無ければ None")
+
+    # zsh の組み込みの log (実例と同形: `log show … 2>/dev/null` が黙って空を返し、 該当なしと読み違えかけた)
+    def lg(cmd: str, want: bool, label: str) -> None:
+        nonlocal fails
+        got = log_issues(cmd)
+        ok = bool(got) == want
+        print(("  ok   " if ok else "  FAIL ") + label + ("" if ok else f"  (got {got})"))
+        fails += 0 if ok else 1
+
+    lg("log show --last 15m --style compact --predicate 'process == \"x\"' 2>/dev/null | tail", True, "行頭の log show")
+    lg("cd /tmp; echo a; log show --last 1h", True, "; の後の log show")
+    lg("if true; then log stream --level info; fi", True, "then の後の log stream")
+    lg("x=$(log show --last 1m | wc -l)", True, "$( の中の log show")
+    lg("TZ=UTC log show --last 1m", True, "代入の後の log show")
+    lg("time log collect --last 5m", True, "time の後の log collect")
+    lg("/usr/bin/log show --last 1h", False, "full path")
+    lg("command log show --last 1h; env log show --last 1h; sudo log stats", False, "command / env / sudo の後")
+    lg("echo 'log show'; printf \"%s\" \"log show\"", False, "quote の中")
+    lg("git log --oneline; git log show", False, "git log")
+    lg("python3 - <<'EOF'\nlog show\nEOF", False, "heredoc の本文")
+    lg("catalog show x; changelog stream", False, "語の一部")
+    lg("log; log -h", False, "subcommand の無い log")
+    lg("bash -c 'log show --last 1m'", False, "bash -c の中は bash の意味論")
     print("selftest:", "PASS" if not fails else f"{fails} FAIL")
     return 1 if fails else 0
 

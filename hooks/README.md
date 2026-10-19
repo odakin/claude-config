@@ -90,5 +90,5 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[turn-complete-sound-nudge.test.sh](turn-complete-sound-nudge.test.sh)** — opt-in marker / entrypoint gate / stop_hook_active / 音声 path の selftest (実際には鳴らさない)
 - **[visible-html-comment-enforce.py](visible-html-comment-enforce.py)** — Stop: 最終メッセージに HTML comment (`<!-- ... -->`) が裸で出ていたら、 1 回だけ差し戻して置き場所を直させる
 - **[visible-html-comment-enforce.test.sh](visible-html-comment-enforce.test.sh)** — logic + incident-replay selftest
-- **[zsh-word-split-guard.py](zsh-word-split-guard.py)** — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置 (と、 option を含む loop の語を command の引数) に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash を実行前に止める (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion)。
-- **[zsh-word-split-guard.test.sh](zsh-word-split-guard.test.sh)** — 述語の selftest + hook 入出力 (deny の JSON / == だけの語は判断なしの updatedInput / zsh 以外は無音 / opt-out / Bash 以外は無音)
+- **[zsh-word-split-guard.py](zsh-word-split-guard.py)** — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置 (と、 option を含む loop の語を command の引数) に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash と、 素の `log show` など (zsh の組み込みの log に取られる) を含む Bash を実行前に止める (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion / #zsh-log-builtin)。
+- **[zsh-word-split-guard.test.sh](zsh-word-split-guard.test.sh)** — 述語の selftest + hook 入出力 (deny の JSON / == だけの語は判断なしの updatedInput / 素の log show は deny / zsh 以外は無音 / opt-out / Bash 以外は無音)

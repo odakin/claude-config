@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# zsh-word-split-guard.test.sh — 述語の selftest + hook 入出力 (deny の JSON / == だけの語は判断なしの updatedInput / zsh 以外は無音 / opt-out / Bash 以外は無音)
+# zsh-word-split-guard.test.sh — 述語の selftest + hook 入出力 (deny の JSON / == だけの語は判断なしの updatedInput / 素の log show は deny / zsh 以外は無音 / opt-out / Bash 以外は無音)
 #
 # 正本: claude-config/hooks/zsh-word-split-guard.test.sh
 
@@ -39,6 +39,20 @@ printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin)["hookSp
   && ok "出力は PreToolUse の JSON" || ng "JSON 形が違う"
 out="$(printf '%s' "$GOOD" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
 [ -z "$out" ] && ok "while read は通す" || ng "while read で出力: $out"
+LOGBAD='{"tool_name":"Bash","tool_input":{"command":"log show --last 5m 2>/dev/null | grep -c x"}}'
+out="$(printf '%s' "$LOGBAD" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+case "$out" in
+  *'"permissionDecision": "deny"'*'/usr/bin/log show'*) ok "zsh + 素の log show → deny + full path の直し方" ;;
+  *) ng "素の log show が deny されない: $out" ;;
+esac
+LOGEQ='{"tool_name":"Bash","tool_input":{"command":"echo ======; log show --last 5m"}}'
+out="$(printf '%s' "$LOGEQ" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+case "$out" in
+  *'"permissionDecision": "deny"'*) ok "== の書き換えができる command でも、 素の log show があれば書き換えずに deny" ;;
+  *) ng "== と log show の組で deny されない: $out" ;;
+esac
+out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"/usr/bin/log show --last 5m"}}' | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+[ -z "$out" ] && ok "/usr/bin/log show は通す" || ng "full path で出力: $out"
 out="$(printf '%s' "$BAD" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/bash python3 "$HOOK")"
 [ -z "$out" ] && ok "bash では何もしない (分割される)" || ng "bash で出力: $out"
 out="$(printf '%s' "$BAD" | env -u CLAUDE_ZSH_SPLIT_GUARD SHELL=/bin/bash CLAUDE_CODE_SHELL=/bin/zsh python3 "$HOOK")"
