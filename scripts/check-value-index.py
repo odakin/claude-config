@@ -21,7 +21,8 @@
   check-value-index.py --config <value-index.txt> --scan-tree <repo>  # 棚卸し: 追跡する平文の file の全行 (file:行 だけ)
   check-value-index.py --selftest
 
-配線 = 呼ぶ側の pre-commit / commit-msg (例: 個人層の pre-commit の連鎖が、 個人層の value-index.txt を渡して呼ぶ)。
+配線 = 公開 repo の public-precommit-runner.sh / commit-msg-leak-guard-runner.sh の Tier F (個人層に value-index.txt があるとき)
++ 個人層が非公開 repo の pre-commit の連鎖から呼ぶ (どちらも個人層の value-index.txt を渡す)。
 呼ぶ側は「exit 1 かつ見出し `[value-index] ` 」 のときだけ止める (engine の故障で commit を巻き添えにしない)。 一時的に外す = CLAUDE_VALUE_INDEX_GUARD=0。
 規律 = conventions/confidential-repo-boundary.md (暗号化した値の置き場と平文の境界)。 OS: macOS / Linux / Windows (標準 library だけ)。
 """

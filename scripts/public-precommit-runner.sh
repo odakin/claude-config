@@ -470,6 +470,21 @@ if [ -z "$HITS" ]; then
         exit 1
       fi
     fi
+    # Tier F (2026-10-19): owner が暗号化して持つ値 (電話・口座・生年月日・住所) の平文の写し。 A-E は識別子・文・活動の
+    # 語を見るので、 値そのものは見ない。 engine = check-value-index.py (源 = 個人層の value-index.txt が指す、 暗号化された
+    # file の索引の節)。 出力は file と行番号だけ。 索引が読めない機械 (鍵が無い) では 1 行出して通す。
+    # 止めるのは「exit 1 かつ engine の見出し」 のときだけ。 escape hatch: CLAUDE_VALUE_INDEX_GUARD=0
+    VI_ENGINE="$(dirname "$0")/check-value-index.py"
+    if [ "${CLAUDE_VALUE_INDEX_GUARD:-1}" != "0" ] && [ -f "$VI_ENGINE" ] && [ -n "${PERSONAL_LAYER:-}" ] \
+        && [ -f "$PERSONAL_LAYER/value-index.txt" ]; then
+      vi_rc=0
+      vi_out="$(python3 "$VI_ENGINE" --config "$PERSONAL_LAYER/value-index.txt" 2>&1)" || vi_rc=$?
+      [ -n "$vi_out" ] && printf '%s\n' "$vi_out" >&2
+      if [ "$vi_rc" -eq 1 ] && printf '%s' "$vi_out" | grep -q '\[value-index\] the staged change contains'; then
+        echo "[public-precommit-runner] commit rejected by Tier F (value-index). bypass once: CLAUDE_VALUE_INDEX_GUARD=0" >&2
+        exit 1
+      fi
+    fi
   fi
   # markdown 相対 link guard (= leak ではないので leak 判定を通った後で走らせる)。
   # file を sub-dir や archive へ MOVE すると ../ の段数がずれて link が黙って死ぬ。

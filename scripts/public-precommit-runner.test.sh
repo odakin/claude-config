@@ -413,6 +413,19 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-activi
   rm -f "$MOCK_LAYER/activity-fact-terms.txt"
 fi
 
+# Tier F (2026-10-19): a value from the mock layer's value index (a plaintext fixture standing in for the encrypted
+# file) blocks; the same digits inside a longer number pass; an index that is still encrypted only warns and passes.
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-value-index.py" ]; then
+  mkdir -p "$MOCK_LAYER/private"
+  printf '## <a id="leak-index"></a>index\n\n- digits: `090-0000-1234` (mock)\n' > "$MOCK_LAYER/private/v.md"
+  printf 'private/v.md#leak-index\n' > "$MOCK_LAYER/value-index.txt"
+  expect_block "block-value-index-digits" 'call 090 0000 1234 after the talk'
+  expect_pass "pass-value-index-longer-number" 'id 1090000012345 is unrelated'
+  printf '\0GITCRYPT\0x' > "$MOCK_LAYER/private/v.md"
+  expect_pass "pass-value-index-locked" 'call 090 0000 1234 after the talk'
+  rm -rf "$MOCK_LAYER/private" "$MOCK_LAYER/value-index.txt"
+fi
+
 # ====================================================================
 # Tier B の許可複合語 (2026-09-15): `!複合語` 行は照合の前に本文から消す。 姓の 2 字 prefix が地名に
 # 当たる誤検知を、 prefix を落とさずに消すため。 foil = 同じ行・別の行に姓だけの言及が残れば止まる

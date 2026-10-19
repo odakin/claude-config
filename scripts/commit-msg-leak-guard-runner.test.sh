@@ -317,6 +317,17 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-activi
   rm -f "$MOCK_LAYER/activity-fact-terms.txt"
 fi
 
+# Tier F (2026-10-19): a value from the mock layer's value index in the message blocks; the same digits inside a
+# longer number pass.
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-value-index.py" ]; then
+  mkdir -p "$MOCK_LAYER/private"
+  printf '## <a id="leak-index"></a>index\n\n- digits: `090-0000-1234` (mock)\n' > "$MOCK_LAYER/private/v.md"
+  printf 'private/v.md#leak-index\n' > "$MOCK_LAYER/value-index.txt"
+  expect_block "block-value-index-in-message" 'Call 090 0000 1234 about the room'
+  expect_pass "pass-value-index-longer-number-in-message" 'Bump id 1090000012345'
+  rm -rf "$MOCK_LAYER/private" "$MOCK_LAYER/value-index.txt"
+fi
+
 # ====================================================================
 # Stage 0 (2026-09-29): 学生の識別子 (check-student-identifiers.py --commit-msg)。 公開 repo (= ここ) でも、
 # marker の無い private repo でも止まる (= Stage 0 は marker の safety net より前)。 この test だけの架空の一覧を env で渡す。

@@ -156,6 +156,28 @@ if [ -z "$HITS" ] && [ "${CLAUDE_ACTIVITY_FACTS_GUARD:-1}" != "0" ] && [ -f "$AF
 fi
 
 # ----------------------------------------------------------------------
+# Tier F (2026-10-19): owner が暗号化して持つ値 (電話・口座・生年月日・住所) が message に入っていないか
+# (engine = check-value-index.py、 源 = 個人層の value-index.txt が指す索引の節。 出力は行番号だけ)。
+# escape hatch: CLAUDE_VALUE_INDEX_GUARD=0
+# ----------------------------------------------------------------------
+VI_ENGINE="$SELF_DIR/check-value-index.py"
+if [ -z "$HITS" ] && [ "${CLAUDE_VALUE_INDEX_GUARD:-1}" != "0" ] && [ -f "$VI_ENGINE" ] \
+    && [ -r "$SELF_DIR/lib/find-personal-layer.sh" ] && command -v python3 >/dev/null 2>&1; then
+  # shellcheck source=/dev/null
+  . "$SELF_DIR/lib/find-personal-layer.sh"
+  VI_LAYER="$(find_personal_layer 2>/dev/null || true)"
+  if [ -n "$VI_LAYER" ] && [ -f "$VI_LAYER/value-index.txt" ]; then
+    vi_rc=0
+    vi_out="$(python3 "$VI_ENGINE" --config "$VI_LAYER/value-index.txt" --message-file "$MSG_FILE" 2>&1)" || vi_rc=$?
+    [ -n "$vi_out" ] && printf '%s\n' "$vi_out" >&2
+    if [ "$vi_rc" -eq 1 ] && printf '%s' "$vi_out" | grep -q '\[value-index\] the commit message contains'; then
+      echo "[commit-msg-leak-guard-runner] commit rejected (value-index). bypass once: CLAUDE_VALUE_INDEX_GUARD=0" >&2
+      exit 1
+    fi
+  fi
+fi
+
+# ----------------------------------------------------------------------
 # 判定
 # ----------------------------------------------------------------------
 if [ -z "$HITS" ]; then
