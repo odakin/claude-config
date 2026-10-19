@@ -6,6 +6,8 @@
 
 ## 現在地
 
+- **締めの数値照合の共通化** — 実装と通常文書の参照統一を保存し、[Codex 統合の説明](codex/PARITY.md#wrap-workflow-integration)への参照追記候補を確認する段階。次は保護対象文書の候補への裁定を記録して適用し、受領側へ提出する。照合規則の正本 = [output_numbers.py](scripts/lib/output_numbers.py)。
+
 - **音源からの採譜** — 参照譜の照合・コード表記・編集音源の時刻対応を含む共通手順を通常利用へ移す段階。次の採譜では参照小節と演奏順、未編集録音と編集後の時計、音響・聴覚の検証範囲を同じ入口から確認する。手順 = [music-transcription.md](conventions/music-transcription.md)。
 
 - **YouTube の音声取得** — 再利用する手順と音声転写側からの参照を整え、通常利用へ移る段階。次に取得が失敗したら、実行環境・配信形式・取得後の codec と尺を同じ入口で確かめる。手順・実測範囲 = [web-tools.md#youtube-audio-extraction](conventions/web-tools.md#youtube-audio-extraction)。
