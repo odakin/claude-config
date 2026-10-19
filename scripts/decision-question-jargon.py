@@ -28,7 +28,7 @@
 校正 (導入前と、 語を変えるたび): `decision-question-jargon.py calibrate --since YYYY-MM-DD [--show] [--terms F] [--ext F]`
   = この機械の全部の設定フォルダの transcript (lib/claude_config_dirs.py) の各 turn の最終発話・AskUserQuestion・wrap_up に
   本番と同じ述語を当て、 問いの turn の数・鳴った数・語ごとの数を出す。 ⚠️ transcript は private data、 --show の抜粋を公開の場所に貼らない。
-  導入前の校正 (直近 2 週、 問いを含む turn ≈ 640 + 選択肢 UI 13 + 箱 217): 採った語と落とした語の理由は hooks/decision-question-jargon-terms.txt
+  導入前の校正 (直近 2 週、 問いを含む turn 550 + 選択肢 UI 13 + 箱 224): 採った語と落とした語の理由は hooks/decision-question-jargon-terms.txt
   のコメントに。 落とした候補 = commit hash だけの参照 (27 turn、 ほぼ全部が出所の注記)、 `§N` (35 turn、 著者本人には節の位置の語)、
   `--flag` (6 turn、 全部が手順の説明)、 file 名 (64 turn)、 数式記号の連なり (23 turn、 物理の内容そのもの)。
 
