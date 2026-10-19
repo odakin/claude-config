@@ -87,6 +87,11 @@
       "hint": "同じ clone で別の fetch が .git/FETCH_HEAD を書き換えた疑い。 tree は変わっていない = そのまま git merge --ff-only @{u} で続ける"
     },
     {
+      "match": "cannot lock ref 'HEAD': is at",
+      "doc": "conventions/multi-session-coordination.md#temp-index-commit",
+      "hint": "git commit の最中 (hook が走る間) に並列の session が commit して HEAD が動いた。 commit は入っていない = 関門の拒否ではない。 親を取り直してやり直す (git-commit-own-hunk.py は中でやり直す)。 無人の書き手なら落ちた変更を控えて拾い直す = #unattended-writer-pending-retry"
+    },
+    {
       "match": "Missing number, treated as zero.",
       "doc": "conventions/latex.md#enumerate-vs-enumitem-option-syntax",
       "hint": "原因の 1 つ = enumerate package の下で enumitem の書き方 [label=(\\roman*)] を書いた。 エラーの行が \\begin{enumerate}[...] ならそれ (直し方 = [(i)] の雛形)。 別の行なら長さ・数値の引数の書き損じを疑う"
