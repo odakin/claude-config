@@ -438,6 +438,14 @@ frameset の app では空文字と ref 無しが返る。 読み書きは `java
   中身が普通の GET の画面なら、 popup を開かずに **opener の tab から `fetch(url,{credentials:'include'})` → `TextDecoder(<page の charset>)` → `DOMParser`** で読む
   (同じ origin なので login の cookie が付く。 使うのは読むだけの GET だけ)。 値が `input` の `value` に入っている画面 (業務 app の伝票・申請書) は `innerText` に出ないので、
   `name` で拾う。 url は opener の `onclick` / frame の `location.href` から取る (frameset の中に読み込まれていることもある = 上の frame の読み方で先に探す) (実測)
+- <a id="browser-pane-form-post-list"></a>**別窓に見えるボタンが、 実は frame への form の POST のことがある** — 「一覧」「明細」 を開くボタン (画像の `input`) の `onclick` を先に読む。
+  `form.action='…'; form.submit()` の形なら、 その form の `FormData` を同じ action に `fetch` で POST し、 返る frameset の `<FRAME src>` を続けて `fetch` すれば、 別窓も画面遷移も起こさずに一覧が読める。
+  server が POST で「どの行を選んだか」 を session に覚える作りなら、 POST → 一覧の GET を 1 対ずつ順に回す (並列にしない) (実測)。 「popup だから読めない」 と結論する前に onclick を見る。
+- <a id="browser-pane-script-computed-values"></a>**一覧の金額が、 HTML では 0 で、 page の script が足して表示する作りがある** — fetch した HTML には 0 しか無い (画面には額が出る)。
+  page の script の足し算 (例: `el.innerHTML = Number(el.innerHTML) + N`) を、 要素の id ごとに拾って再現する。 古い app は旧版の行をコメントアウトで並べて残しているので、 `//` で始まる行を除いてから拾う (除かないと 2 重に足す)。
+  再現した額の合計を、 画面の別の場所の合計 (残高の表の執行額など) と突き合わせ、 一致したものだけを記録する (実測 = 一致で拾い漏れと 2 重拾いを止められた)。
+- <a id="js-result-to-file-hash"></a>**`javascript_tool` の戻り値を file に写すときは hash で照合する** — 戻り値の文字列を自分で file に書き直すのは転記であって複写ではない (写し間違いが混じりうる)。
+  browser 側で `crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))` を出し、 写した file の SHA-256 と照合してから使う。 取り込む道具に `--sha256` を渡して照合を道具にさせる形にすると、 照合を飛ばせない (実測)。
 - **lockButton + setTimeout 型の submit** (古い業務 app に多い) は、 関数を呼んだ後 **3〜4 秒待ってから次の JS**。 連続呼びは 2 回目以降が捨てられる。
   行追加・再計算がサーバ往復なら 1 回ごとに待つ。
 - **file input は JS から置けない** (CSV 取込 / 添付 upload) → 人間の 1 操作。 行追加 + 代入で代替できるなら AI 側で済ませる。

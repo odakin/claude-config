@@ -13,6 +13,8 @@ conventions/batch-text-edits.md の先頭の側の罠)。 YAML を load → dump
         [--after asked] [--comment status="2026-10-12: …"] [--dry-run]
     python3 yaml-set-top-keys.py --selftest
     --set key=value   値は YAML の二重引用の文字列として書く (改行は \\n で入る)。 key が無ければ足す (--after <key> の直後、 無ければ末尾)
+                      ⚠️ 値を自分で引用符に包まない = 引用符は道具が付ける。 shell で `'key="…"'` と書くと値の両端に " が残り、
+                      file には `\"…\"` が入る (実測 2 回)。 両端が " の値は止める (本当にその値なら --allow-quoted-value)
     --comment key=text  --set した行の末尾に「   # text」 を付ける
     --drop key        その key をまとまりごと消す (無ければ何もしない)
     --dry-run         書かずに差分だけ出す
@@ -138,16 +140,29 @@ def selftest() -> int:
         p.write_text(src, encoding="utf-8")
         assert main([str(p), "--set", "status=完了", "--drop", "ask"]) == 0
         assert _yaml_safe_load(p.read_text(encoding="utf-8"))["status"] == "完了"
+        # 値を自分で引用符に包んだ形 (shell の '…' の中の "…") は止める = file に \"…\" が入るのを防ぐ (実測 2 回)
+        before = p.read_text(encoding="utf-8")
+        try:
+            main([str(p), "--set", 'status_context="閉じた"'])
+            raise AssertionError("両端が \" の値を止めなかった")
+        except SystemExit as e:
+            assert "引用符は道具が付ける" in str(e), e
+        assert p.read_text(encoding="utf-8") == before
+        assert main([str(p), "--set", 'status_context="閉じた"', "--allow-quoted-value"]) == 0
+        assert _yaml_safe_load(p.read_text(encoding="utf-8"))["status_context"] == '"閉じた"'
     print("yaml-set-top-keys selftest: ALL PASS (行頭の key だけを置き換え・本文の中の同じ語は触らない・ほかの key は不変を確かめる)")
     return 0
 
 
-def kv(items: list[str] | None) -> dict[str, str]:
+def kv(items: list[str] | None, allow_quoted: bool = True) -> dict[str, str]:
     out = {}
     for it in items or []:
         k, sep, v = it.partition("=")
         if not sep or not re.fullmatch(r"[A-Za-z_][\w-]*", k):
             raise SystemExit(f"❌ key=value の形でない: {it!r}")
+        if not allow_quoted and len(v) >= 2 and v[0] == v[-1] == '"':
+            raise SystemExit(f"❌ {k} の値の両端に \" がある = 引用符は道具が付ける。 外して渡す "
+                             f"(shell の '…' の中に \"…\" を書かない)。 本当に両端が \" の値なら --allow-quoted-value")
         out[k] = v
     return out
 
@@ -162,10 +177,11 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--after")
     ap.add_argument("--comment", action="append", dest="comments")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--allow-quoted-value", action="store_true")
     a = ap.parse_args(argv)
     p = Path(a.file)
     before = p.read_text(encoding="utf-8")
-    sets, comments = kv(a.sets), kv(a.comments)
+    sets, comments = kv(a.sets, allow_quoted=a.allow_quoted_value), kv(a.comments)
     after_text = edit(before, sets, a.drop, a.after, comments)
     errs = verify(before, after_text, sets, a.drop)
     sys.stdout.writelines(difflib.unified_diff(before.splitlines(True), after_text.splitlines(True), str(p), str(p)))
