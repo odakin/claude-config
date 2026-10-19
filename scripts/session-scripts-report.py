@@ -21,12 +21,8 @@ script は subagent-reports.py、 headless の worker の script は headless-wo
      無ければ ⚠️ 未保存。
   ⚠️ のものは 1 本ずつ決める (closing-sweep.md#placement の script の行): 出力を記録・note・規約の根拠に使ったなら、 その記録の
   隣に file として残す (1 回きりでも)。 根拠に使っていないなら置かず、 報告に「置かない」 と理由を書く。
-  3. 出力の数値 — その場で流した code と、 file の script の実行 (`python3 x.py` など) の出力から、 計算の結果らしい数値
-     (小数 2 桁以上・指数表記。 時刻・版番号・file 名・arXiv 番号は拾わない) を拾い、 探した repo の記録 (md・tex・txt・out・py・yaml
-     など、 json・csv の data は除く) に語の単位で書かれているかを数える (末尾の 0 を落とした形と有効数字 4 桁の丸めも探す)。
-     記録に無い数値が残る行は最後に 🔢 で並べる = 会話の返事にしか無い計算結果の候補 (実測: code は保存したと数えたのに、
-     その code が出した数値を note に書かず、 締めでも拾えなかった)。 書いた記録が別の言い方・別の丸めなら一致しないので、
-     🔢 は「記録が無い」 の証明ではなく、 1 件ずつ確かめる候補。
+  3. 出力の数値 — lib/output_numbers.py の共通規則で記録と照合し、 🔢 の候補を出す。
+     拾う数値・探す記録・丸め・解釈の限界の正本は同 module の冒頭。
 
 使い方:
   session-scripts-report.py <session id か先頭の数文字>     # 既定は環境変数 CLAUDE_CODE_SESSION_ID
@@ -55,6 +51,8 @@ try:
 except Exception:  # pragma: no cover - 古い配置
     _ccd = None
 
+from output_numbers import _number_fields
+
 SCRIPT_EXT = {".py", ".sh", ".bash", ".zsh", ".js", ".mjs", ".ts", ".rb", ".pl", ".r", ".jl",
               ".wl", ".wls", ".m", ".nb", ".ipynb", ".lua", ".tcl", ".awk", ".sed", ".applescript", ".scpt"}
 FILE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
@@ -66,12 +64,6 @@ HEREDOC_RE = re.compile(
     re.S)
 DASH_C_RE = re.compile(r"(?:^|[\s;&|(])(" + INTERP + r")\s+(?:-\w+\s+)*-[ce]\s+(['\"])(.*?)(?<!\\)\2", re.S)
 WRITES_FILE_RE = re.compile(r"open\([^)]*['\"][wa]['\"]|\.write_text\(|\.write_bytes\(|sed\s+-i")
-# 計算の結果らしい数値 = 小数 2 桁以上 か 指数表記。 前後が語の文字・点・コロン・slash なら拾わない (時刻・版番号・file 名・id)
-NUMBER_RE = re.compile(r"(?<![\w.:/-])[-+]?\d+\.\d{2,}(?:[eE][-+]?\d+)?(?![\w.:/])"
-                       r"|(?<![\w.:/-])[-+]?\d+(?:\.\d+)?[eE][-+]?\d+(?![\w.:/])")
-ARXIV_ID_RE = re.compile(r"\d{4}\.\d{4,5}")
-# 数値を探す記録 = 人が書く記録と検算の code・出力。 数字の羅列の data (json・csv) は無関係な数字に一致するので探さない (実測)
-RECORD_PATHSPECS = ["*.md", "*.tex", "*.txt", "*.out", "*.py", "*.yaml", "*.yml", "*.sh", "*.jl", "*.R", "*.wls", "*.log"]
 # file の script の実行 (python3 x.py / tools/py x.py / bash x.sh)
 RUN_SCRIPT_RE = re.compile(r"(?:^|[\s;&|(])(" + INTERP + r")\s+(?:-\w+\s+)*([^\s;&|<>'\"]+\.(?:py|sh|jl|R|rb|pl|js|wls))(?=\s|$)")
 CAT_TO_FILE_RE = re.compile(
@@ -265,53 +257,6 @@ def collect(calls):
     return files, inline, runs
 
 
-def result_numbers(out, k=8):
-    """道具の出力にある計算の結果らしい数値 (小数 2 桁以上・指数表記)。 時刻・版番号・file 名の数字は拾わない。"""
-    seen = []
-    for m in NUMBER_RE.finditer(out or ""):
-        v = m.group(0).lstrip("+")
-        if ARXIV_ID_RE.fullmatch(v):
-            continue
-        if v not in seen:
-            seen.append(v)
-    return seen[:k]
-
-
-def _variants(num):
-    """記録には丸めて書くことが多いので、 末尾の 0 を落とした形と、 有効数字 4 桁に丸めた形も探す
-    (3 桁まで丸めると無関係な数字に一致する = 実測)。"""
-    out = {num}
-    if "." in num and "e" not in num.lower():
-        out.add(num.rstrip("0").rstrip("."))
-    try:
-        x = float(num)
-    except ValueError:
-        return out
-    digits = len(re.sub(r"[^0-9]", "", num.lower().split("e")[0]).lstrip("0"))
-    for sig in (4,):
-        if digits > sig and x != 0:
-            out.add(("%." + str(sig) + "g") % x)
-    return {v for v in out if v}
-
-
-def numbers_recorded(nums, repos):
-    """nums のうち、 repos の追跡済み file のどこかに (丸めた形を含めて) 書かれているもの。"""
-    if not nums or not repos:
-        return []
-    want = {n: _variants(n) for n in nums}
-    pats = sorted({v for vs in want.values() for v in vs})
-    found = set()
-    for repo in repos:
-        args = ["grep", "-F", "-w", "-o", "-h", "--no-color"]   # -w = 0.5536 が 0.553612 の一部に一致しない
-        for v in pats:
-            args += ["-e", v]
-        args += ["--"] + RECORD_PATHSPECS
-        rc, out = _git(args, repo)
-        if rc == 0:
-            found.update(out.split())
-    return [n for n, vs in want.items() if any(v in found for v in vs)]
-
-
 def report(session, pdirs, root, use_all, as_json):
     paths = find_main_transcripts(pdirs, session)
     if not paths:
@@ -362,13 +307,6 @@ def report(session, pdirs, root, use_all, as_json):
             miss = [n for n in r["numbers"] if n not in r["recorded"]]
             print("   " + r["time"] + "  " + r["what"][:100] + "  → 記録に無い: " + ", ".join(miss[:5]))
     return 0, bad
-
-
-def _number_fields(out, repos):
-    nums = result_numbers(out)
-    if not nums:
-        return {}
-    return {"numbers": nums, "recorded": numbers_recorded(nums, repos)}
 
 
 def _number_note(r):
@@ -475,10 +413,11 @@ def selftest():
 
         calls = read_calls(Path(proj, sid + ".jsonl"))
         files, inline, runs = collect(calls)
-        check(result_numbers("ids 2102.12032 and 1809.04285, value 0.0785") == ["0.0785"], "arXiv 番号は数値として拾わない")
-        check(result_numbers(inline[-1][4]) == ["0.23940", "0.5615", "7.6e-10"],
-              "出力の数値 = 小数 2 桁以上と指数表記 (時刻・版番号・file 名の数字は拾わない)")
-        check(numbers_recorded(["0.23940", "0.5615"], [repo]) == ["0.23940"], "丸めた形で記録にある数値は記録あり、 無いものは無し")
+        import output_numbers
+        check(_number_fields is output_numbers._number_fields and
+              _number_fields(inline[-1][4], [repo]) == {
+                  "numbers": ["0.23940", "0.5615", "7.6e-10"], "recorded": ["0.23940"]},
+              "共通 module を import して同じ出力を照合する")
         check([r[1] for r in runs] == [os.path.join(repo, "kept.py")] and "19.635" in runs[0][2], "file の script の実行と出力も拾う")
         inline = inline[:-1]
         check(set(files) == {os.path.join(repo, "kept.py"), os.path.join(repo, "dirty.py"), tmpscript,
