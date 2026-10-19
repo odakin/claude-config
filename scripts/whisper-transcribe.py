@@ -19,6 +19,8 @@ conventions/audio-transcription.md (#hallucination-runs / #loop-runs-in-speech)�
 使い方:
   whisper-transcribe.py <音声 (m4a/mp3/wav…)> -o <out.txt> [--lang ja] [--model <ggml.bin>]
                         [--title "見出しの 1 行目"] [--srt <out.srt>] [--work <dir>]
+  whisper-transcribe.py <音声> --from-srt <whisper-cli で起こし済みの SRT> -o <out.txt> --srt <直した SRT>
+                        # 全体は転写し直さず、 既存の SRT のループ区間だけ -mc 0 で直す
   whisper-transcribe.py selftest     # 通信も whisper も使わない部品の自己検査
 
 必要なもの: ffmpeg / whisper-cli (whisper.cpp) / model file
@@ -121,8 +123,12 @@ def transcribe(args) -> int:
     wav = work / "audio16k.wav"
     print(f"[1/4] 16 kHz に変換: {src.name}", flush=True)
     run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(src), "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(wav)])
-    print("[2/4] 全体を転写 (長い)", flush=True)
-    base = whisper(args.model, args.lang, wav, work / "full", [])
+    if args.from_srt:   # 全体の転写は済んでいる (whisper-cli を直接回した等) = ループ区間だけ直す
+        print(f"[2/4] 全体の転写 = 既存の SRT {args.from_srt} (転写し直さない)", flush=True)
+        base = parse_srt(Path(args.from_srt).expanduser().read_text(encoding="utf-8"))
+    else:
+        print("[2/4] 全体を転写 (長い)", flush=True)
+        base = whisper(args.model, args.lang, wav, work / "full", [])
     total = base[-1][1] if base else 0
     runs = find_loop_runs(base, args.min_run)
     ws = windows(runs, args.pad * 1000, total)
@@ -191,6 +197,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--work", help="中間 file を残す dir (既定 = 一時 dir、 終わったら消す)")
     ap.add_argument("--min-run", type=int, default=8, help="同じ本文が何回続いたらループとみなすか (既定 8)")
     ap.add_argument("--pad", type=int, default=10, help="転写し直す窓の前後に足す秒 (既定 10)")
+    ap.add_argument("--from-srt", help="全体の転写は済んでいる SRT (同じ音声を whisper-cli で起こしたもの)。"
+                                       "渡すと全体は転写し直さず、 ループ区間だけ -mc 0 で直す")
     return transcribe(ap.parse_args(argv))
 
 
