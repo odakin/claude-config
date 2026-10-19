@@ -272,10 +272,12 @@
 - **[pty-leak-watch.sh](pty-leak-watch.sh)** — macOS Claude.app pty leak watchdog（LaunchAgent、枯渇前に macOS 通知、conventions/macos-claude-app-pty-leak.md）
 - **[public-precommit-runner.sh](public-precommit-runner.sh)** — 公開リポ pre-commit gate（Tier A 構造 / B literal / C private repo 名 / D 未公開文書の逐語 + local-only 機密 / E 活動の事実）
 - **[public-precommit-runner.test.sh](public-precommit-runner.test.sh)** — self-tests for the file-body pre-commit gate
+- **[python-pin-floor.py](python-pin-floor.py)** — requirements.txt の固定した依存 (name==version) が要る Python の版の下限と、 wheel が揃う版の上限を PyPI から出し、 宣言 (.python-version) と照合する
 - **[read-plot-axes.py](read-plot-axes.py)** — 公開図 (PDF / PNG) を pixel から数値に読み戻す — 枠・目盛りを検出して軸を較正し、点と境界線を data 座標で返す。
 - **[record-reply.py](record-reply.py)** — mail を thread 単位で台帳に記録する engine (entry に印と索引、 結ぶ項目の現在地。 既定 dry-run)。
 - **[replace-line.py](replace-line.py)** — 一意 prefix assert 付きの 1 行置換 (= 「検証してから書く」 の機械化)。
 - **[replay-public-gate.sh](replay-public-gate.sh)** — 公開 repo の直近の commit を「今の」 pre-commit gate に通し直し、 今なら止まる commit を出す
+- **[repo-python-env.test.sh](repo-python-env.test.sh)** — repo の Python の入口 (templates/shared-project/python-env/py = 各 repo の tools/py) の検査。 偽の interpreter と偽の uv で、 venv を作る・追従させる・版が無ければ止まる・作り直しの失敗で元に戻す・機械の arch (arm64 / Intel / 見ない) に合わない候補を起動しない・lock を確かめる
 - **[repo-sync-sweep.sh](repo-sync-sweep.sh)** — <root>/*/ の git repo を並列 fetch し behind-only は自動で最新化する engine (tracked-dirty は stash→ff-merge→pop、 並列起動は repo 単位の lock で排他、 手当ての要る repo は 1 行ずつ返す)
 - **[repo-sync-sweep.test.sh](repo-sync-sweep.test.sh)** — repo-sync-sweep.sh の test (一時 dir の bare remote + clone で各状態・並列起動・lock・stash の空振りを検証)
 - **[reviewed-mail.test.sh](reviewed-mail.test.sh)** — Exercise reviewed replies without credentials, network, or agent state.

@@ -221,7 +221,7 @@ build step を持たない runtime project (= 自作 MCP server、 CLI、 script
 
 ### <a id="requirement-floor-vs-python"></a>pip の「update X requirement」 は下限と一緒に Python の版の下限も上げることがある (2026-10-03)
 
-`requirements.txt` の `>=` の下限を最新へ引き上げる PR は、 CI (新しい Python) では緑でも、 新しい下限の版が `requires_python` で古い Python を切っていれば、 その Python の利用者は `pip install -r` が通らなくなる (実測: numpy `>=2.5.3` = Python 3.12 以上、 Pillow `>=12.3.0` = 3.10 以上、 fonttools `>=4.66.0` = 3.11 以上。 macOS の `/usr/bin/python3` は 3.9)。 merge の前に `https://pypi.org/pypi/<pkg>/<ver>/json` の `requires_python` を見る。 下限を上げる理由 (security alert・使う API) が無いなら閉じ、 繰り返し来るなら dependabot.yml の pip に `versioning-strategy: increase-if-necessary` (= 今の範囲で満たせるなら下限を動かさない)。
+`requirements.txt` の `>=` の下限を最新へ引き上げる PR は、 CI (新しい Python) では緑でも、 新しい下限の版が `requires_python` で古い Python を切っていれば、 その Python の利用者は `pip install -r` が通らなくなる (実測: numpy `>=2.5.3` = Python 3.12 以上、 Pillow `>=12.3.0` = 3.10 以上、 fonttools `>=4.66.0` = 3.11 以上。 macOS の `/usr/bin/python3` は 3.9)。 merge の前に `https://pypi.org/pypi/<pkg>/<ver>/json` の `requires_python` を見る。 下限を上げる理由 (security alert・使う API) が無いなら閉じ、 繰り返し来るなら dependabot.yml の pip に `versioning-strategy: increase-if-necessary` (= 今の範囲で満たせるなら下限を動かさない)。 依存を `==` で固定した repo で、 その固定が要る Python の下限を PyPI から機械で出す道具 = [`scripts/python-pin-floor.py`](../scripts/python-pin-floor.py) (宣言 `.python-version` と照合する。 宣言の書き方 = [`shared-repo.md#python-env-declare`](shared-repo.md#python-env-declare))。
 
 ### <a id="local-bump-respects-cooldown"></a>手元でまとめて上げる時も cooldown を守る (2026-10-03)
 

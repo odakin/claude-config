@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# collaborator-check.sh — 共有リポの各 clone で session 開始時に走り、 その repo が各自の手元に要る設定 (個人の token・道具) と初回に読む節を、 欠けている時だけ直し方つきで出す。 隣に要る repo は無ければ clone し、 あれば最新にする。
+# collaborator-check.sh — 共有リポの各 clone で session 開始時に走り、 その repo が各自の手元に要る設定 (個人の token・道具・Python の版) と初回に読む節を、 欠けている時だけ直し方つきで出す。 隣に要る repo は無ければ clone し、 あれば最新にする。
 #
 # 正本 = claude-config の templates/shared-project/collaborator-check/ 。 repo の
 # tools/collaborator-check/ は写し (共同編集者は claude-config を持たないので repo 単体で動く)。
@@ -21,6 +21,11 @@
 #     この repo の中の掲示板 (<board dir>/board.json) で要注意の thread (引受待ち・検収待ち・質問) を session の冒頭に出す。
 #     engine = 環境変数の dir (既定 AI_COLLABORATION_DIR)、 無ければこの repo の隣の ai-collaboration (= 上の repo 行が clone する)。
 #     手元の写しを読む (network なし)。 要注意が無ければ何も出さない。 engine が無ければ黙る (repo 行の ❌ が先に出る)
+#   python [<入口の path>] -- <何に使うか>              例: python tools/py -- 計算と検算
+#     この repo の Python の入口 (既定 tools/py = claude-config の templates/shared-project/python-env/py の写し) に
+#     `--venv-check` を聞く (network なし、 何も変えない)。 venv の用意・requirements への追従は入口が初回の実行で
+#     自動でやるので、 ここで出すのは人の手が要るとき (宣言の版の Python がこの機械に無い / 宣言外の venv を使っている) だけ。
+#     規約 = conventions/shared-repo.md#repo-python-env
 #
 # 出力: file / command / repo が揃っていれば何も出さない。 read は clone ごとの初回だけ出す
 # (印 = .git/collaborator-check.seen)。 欠けた項目・その場で clone した repo・初回の read を 1 block で出す。
@@ -177,6 +182,28 @@ while IFS= read -r line || [ -n "$line" ]; do
         text="$(python3 "$start" --no-sync --plain --root "$ROOT/$bdir" 2>/dev/null)"
         [ -n "$text" ] && boards="$boards
 $text"
+      fi
+      ;;
+    python)
+      wrapper="${2:-tools/py}"
+      case "$wrapper" in /*|*..*)
+        missing="$missing
+  ⚠️ .collaborator-check.conf の python の入口は repo の中の相対 path だけ: $line"
+        continue ;;
+      esac
+      if [ ! -f "$ROOT/$wrapper" ]; then
+        missing="$missing
+  ❌ $wrapper (Python の入口) が無い → claude-config の scripts/install-collaborator-check.py で配り直す${how:+ ($how)}"
+        continue
+      fi
+      pyout="$(bash "$ROOT/$wrapper" --venv-check 2>/dev/null)"
+      if [ $? -eq 0 ]; then
+        ok="$ok
+  ✅ Python の環境 ($wrapper)${how:+ = $how}"
+      else
+        [ -n "$pyout" ] || pyout="❌ $wrapper --venv-check が理由を出さずに失敗した"
+        missing="$missing
+$(printf '%s\n' "$pyout" | sed 's/^/  /')"
       fi
       ;;
     *)

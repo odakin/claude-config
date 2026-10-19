@@ -4,8 +4,10 @@
 #   file <path> [<上書きの環境変数>] -- <直し方>
 #   command <名前> -- <直し方>
 #   read <file の節> -- <何が書いてあるか>
+#   python [<入口の path、 既定 tools/py>] -- <何に使うか>
 #
 # 例 (合成):
 # read CLAUDE.md §共同編集者向け -- 招待された人が最初に読む節
 # file ~/.secrets/example-service-token EXAMPLE_TOKEN_FILE -- 自分の example-service の token を発行して置く (chmod 600)
 # command latexmk -- TeX Live を入れる
+# python tools/py -- 計算と検算 (宣言 = .python-version、 入口 = tools/py)

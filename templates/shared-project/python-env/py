@@ -1,0 +1,526 @@
+#!/usr/bin/env bash
+# py — この repo の Python (venv) を起動する入口。 venv が無ければ作り、 requirements.txt が変われば追従させ、 宣言した版 (.python-version) の Python が無ければ何をどう入れるかを言って止まる (黙って全滅しない・黙って別の版で作らない)。
+#
+# 正本 = claude-config の templates/shared-project/python-env/py 。 repo の tools/py は写し
+# (共同編集者は claude-config を持たないので repo 単体で動く)。 直すときは正本を直し、
+#   python3 <claude-config>/scripts/install-collaborator-check.py install <repo> --item 'python tools/py -- <用途>'
+# で配り直す (写しが正本と違えば同じ script の check が言う)。 規約 = conventions/shared-repo.md#repo-python-env
+#
+# 使い方 (python の引数はそのまま渡る):
+#   tools/py script.py [args...]   venv の python で実行 (要れば先に venv を作る・requirements に追従させる)
+#   tools/py -c 'import numpy'
+#   tools/py --venv-ensure         venv を用意するだけ。 検算を一括で回す script の先頭で 1 回呼ぶ
+#                                  (用意できなければ理由 1 つで止まる = 同じ原因で N 件の FAIL を並べない)
+#   tools/py --venv-check          何も変えずに点検 (network なし、 速い)。 人の手が要るときだけ ❌ / ⚠️ を stdout に
+#                                  出して exit 1。 自動で済むこと (venv を作る・追従させる) は黙る = 初回の実行で済む
+#   tools/py --venv-rebuild        venv を作り直す
+#   tools/py --venv-path           venv の python の path を出す (要れば先に用意する)
+#
+# 宣言: repo root の .python-version = 作者が検算を通した版を 1 行 (例 "3.13")。 uv・pyenv・CI もこの file を読む。
+# 依存: repo root の requirements.txt (検算の repo では == で固定)。
+#
+# interpreter の選び方 (venv を作るとき。 上から順に最初に合うもの):
+#   1. $REPO_PYTHON (明示の指定。 版が合わなければ止まる = 指定を黙って無視しない)
+#   2. 宣言と同じ minor の python が既にある (PATH の python3.X / Homebrew / python.org / pyenv / uv が入れたもの)
+#   3. uv があれば、 宣言の版を uv で (無ければ uv が取ってくる = 管理者権限なし・network あり)
+#   4. 宣言より新しい minor (1 行で告知する。 依存が入らなければ元に戻して止まる。 REPO_PY_EXACT=1 で使わない)
+#   宣言より古い minor は使わない。 どれも無ければ、 入れ方を書いて exit 3。
+#   macOS の /usr/bin/python3 は候補にしない (Xcode に従う shim。 Command Line Tools の実体は候補にする)。
+#   macOS では機械の arch に合う binary だけを使う。 arch は**候補を起動せずに** `file -bL` で見る (起動して確かめると、
+#   Apple Silicon では Intel 版が Rosetta で動いて「Intel プロセッサ用アプリの対応は終了します」 の通知が出る / Rosetta が
+#   無ければ Bad CPU type):
+#     Apple Silicon の Mac (Rosetta の有無に依らず、 Rosetta の shell から呼ばれても) = arm64 を含む binary (universal2 を含む)。
+#       x86_64 だけの binary (Intel の Mac から移した機械に残る旧 Homebrew・python.org の Intel 版) は起動しない
+#     Intel の Mac = x86_64 を含む binary (universal2 を含む)。 arm64 だけの binary は起動しない
+#     macOS 以外 = arch を見ない
+#   中身の arch が分からない script (pyenv の shim など) は組み込みの探し場所では起動しない (REPO_PYTHON・REPO_PY_SEARCH なら使う)。
+#   合わない arch で作られた venv は作り直す。
+#
+# 既にある venv: 宣言を満たし、 requirements が前回から変わっていなければそのまま使う (速い道)。 requirements が
+# 変わっていれば pip install -r で追従させる。 venv の python が起動しない・宣言より古い版で作られていれば作り直す。
+# 作り直すときは古い venv を退けておき、 新しい方が出来なければ元に戻す。 前の venv にあって新しい venv に無い
+# package (手で入れた物) は名前を 1 行で出す。 並列の session が同時に呼んでも、 用意は 1 つずつ (lock)。
+#
+# 環境変数:
+#   REPO_PYTHON=<path>        venv を作る interpreter を指定する
+#   REPO_PY_EXACT=1           宣言と同じ minor だけを使う (新しい minor に逃げない)
+#   REPO_PY_ACCEPT_VENV=1     宣言と合わない今の venv をそのまま使う (版を外して手で作った venv 等)。 何も直さず、
+#                             実行のたびに 1 行出す。 その結果は「宣言外の環境での結果」 として報告すること
+#   REPO_PY_VENV=<dir>        venv の場所 (既定 <repo>/.venv)
+#   REPO_PY_REQUIREMENTS=<f>  依存の file (既定 <repo>/requirements.txt)
+#   REPO_PY_ROOT=<dir>        repo root (既定 = git の top、 git でなければこの file の 1 つ上の dir)
+#   REPO_PY_UV=<path>|none    uv の場所 / uv を使わない
+#   REPO_PY_SEARCH=<p1:p2..>  interpreter の探し場所を、 組み込みの一覧の代わりにこの path の並びにする (test・特殊な機械用)
+#   REPO_PY_NATIVE_ARCH=<arch>|any  使ってよい python の arch (既定 = macOS の Apple Silicon なら arm64・Intel なら x86_64、
+#                             macOS 以外は見ない。 any = 見ない)。 test は arm64 / x86_64 / any で 3 種の機械を模す
+#   REPO_PY_FILE_CMD=<cmd>    arch を読む command (既定 file。 test 用)
+#
+# 出力: 自分の文言は stderr ("tools/py:" で始まる。 --venv-check の結果だけ stdout)。 venv を用意できないとき exit 3。
+# Windows の venv (Scripts/python.exe) は扱わない。 test = claude-config の scripts/repo-python-env.test.sh
+
+set -u
+
+ME="tools/py"
+HERE="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || { echo "$ME: 自分の場所が分からない" >&2; exit 3; }
+if [ -n "${REPO_PY_ROOT:-}" ]; then
+  ROOT="$REPO_PY_ROOT"
+else
+  ROOT="$(git -C "$HERE" rev-parse --show-toplevel 2>/dev/null)" || ROOT=""
+  [ -n "$ROOT" ] || ROOT="$(cd "$HERE/.." && pwd)"
+fi
+VENV="${REPO_PY_VENV:-$ROOT/.venv}"
+REQ="${REPO_PY_REQUIREMENTS:-$ROOT/requirements.txt}"
+DECL_FILE="$ROOT/.python-version"
+VPY="$VENV/bin/python"
+STAMP="$VENV/.tools-py-stamp"
+GITDIR="$(git -C "$ROOT" rev-parse --absolute-git-dir 2>/dev/null)" || GITDIR=""
+if [ -n "$GITDIR" ]; then
+  LOCK="$GITDIR/tools-py.lock"
+  PREV="$GITDIR/tools-py-prev-venv"
+else
+  LOCK="$VENV.lock"
+  PREV="$VENV.prev"
+fi
+OS="$(uname -s 2>/dev/null)"
+# 使ってよい python の arch = 機械の arch (process の arch でない = Rosetta の shell から呼ばれても同じ)。
+#   macOS の Apple Silicon (hw.optional.arm64=1) = arm64 / macOS の Intel = x86_64 / macOS 以外 = 見ない (空)
+NATIVE="${REPO_PY_NATIVE_ARCH:-}"
+if [ -z "$NATIVE" ] && [ "$OS" = Darwin ]; then
+  if [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then NATIVE=arm64; else NATIVE=x86_64; fi
+fi
+[ "$NATIVE" = any ] && NATIVE=""
+DECL=""; VSTATE=""; VVER=""; VARCH=""; BASE=""; BASE_HOW=""; LOCKED=0; MOVED_PREV=0
+
+say() { printf '%s\n' "$ME: $*" >&2; }
+die() { say "$*"; exit 3; }
+
+# ---- 版の扱い -------------------------------------------------------------
+mm_of() { printf '%s' "$1" | sed -E 's/^([0-9]+)\.([0-9]+).*/\1.\2/'; }
+# cmp_mm A B → -1 / 0 / 1 (major.minor で比べる)
+cmp_mm() {
+  local a1 a2 b1 b2
+  a1="${1%%.*}"; a2="${1#*.}"; a2="${a2%%.*}"
+  b1="${2%%.*}"; b2="${2#*.}"; b2="${b2%%.*}"
+  if [ "$a1" -ne "$b1" ]; then
+    if [ "$a1" -lt "$b1" ]; then echo -1; else echo 1; fi
+  elif [ "$a2" -ne "$b2" ]; then
+    if [ "$a2" -lt "$b2" ]; then echo -1; else echo 1; fi
+  else
+    echo 0
+  fi
+}
+# Apple Silicon の機械では Intel 版 (x86_64 だけの binary) の python を使わない。 判定は**起動せずに** `file -bL` で見る:
+#   起動すると Rosetta で動き、 macOS が「Intel プロセッサ用アプリの対応は終了します」 の通知を出す (Rosetta が無ければ
+#   Bad CPU type)。 Intel の Mac から移した機械には旧 Homebrew の /usr/local/opt/python@3.X や python.org の Intel 版が残る。
+# arch_ok <path> <explicit 0|1> → 0 = 起動して確かめてよい / 1 = 別の arch の binary (起動しない) / 2 = script (中身の arch が
+#   分からない。 組み込みの探し場所では起動しない = pyenv の shim など。 明示 〔REPO_PYTHON / REPO_PY_SEARCH / venv〕 なら起動する)
+FILE_CMD="${REPO_PY_FILE_CMD:-file}"
+arch_ok() {
+  [ -n "$NATIVE" ] || return 0
+  local f
+  f="$("$FILE_CMD" -bL "$1" 2>/dev/null)" || f=""
+  [ -n "$f" ] || return 0              # file が使えない機械 = 起動して確かめる
+  case "$f" in
+    *Mach-O*|*ELF*) case "$f" in *"$NATIVE"*) return 0 ;; *) return 1 ;; esac ;;
+    *script*|*text*) [ "$2" = 1 ] && return 0; return 2 ;;
+    *) return 1 ;;
+  esac
+}
+arch_label() {  # arch_label <path> → x86_64 など (file の出力から。 起動しない)
+  local f
+  f="$("$FILE_CMD" -bL "$1" 2>/dev/null)"
+  case "$f" in *x86_64*) echo x86_64 ;; *arm64*) echo arm64 ;; *i386*) echo i386 ;; *script*|*text*) echo script ;; *) echo "別の arch" ;; esac
+}
+EXPLICIT_SEARCH=0
+[ -n "${REPO_PY_SEARCH:-}" ] && EXPLICIT_SEARCH=1
+# pyinfo <interp> [<explicit>] → "3.13.1 arm64" (起動できない・起動しない候補は空で 1)
+pyinfo() {
+  [ -n "$1" ] && [ -x "$1" ] || return 1
+  arch_ok "$1" "${2:-$EXPLICIT_SEARCH}" || return 1
+  "$1" -c 'import sys, platform; print("%d.%d.%d %s" % (sys.version_info[:3] + (platform.machine(),)))' </dev/null 2>/dev/null
+}
+pyver() {  # pyver <interp> [<explicit>] → "3.13.1" (使えなければ空で 1)
+  local out
+  out="$(pyinfo "$1" "${2:-}")" || return 1
+  [ -n "$out" ] || return 1
+  if [ -n "$NATIVE" ] && [ "${out#* }" != "$NATIVE" ]; then return 1; fi
+  printf '%s\n' "${out%% *}"
+}
+# satisfies <ver> → 0 なら宣言を満たす (REPO_PY_EXACT=1 なら同じ minor だけ)
+satisfies() {
+  local c
+  c="$(cmp_mm "$(mm_of "$1")" "$DECL")"
+  if [ "${REPO_PY_EXACT:-}" = 1 ]; then [ "$c" = 0 ]; else [ "$c" != -1 ]; fi
+}
+
+read_decl() {
+  DECL=""
+  [ -f "$DECL_FILE" ] || return 1
+  local v
+  v="$(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e 's/^[A-Za-z]*@//' "$DECL_FILE" | grep -m1 -E '^[0-9]+\.[0-9]+')" || return 1
+  DECL="$(mm_of "$v")"
+  [ -n "$DECL" ]
+}
+
+req_hash() {
+  [ -f "$REQ" ] || { echo none; return; }
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$REQ" | cut -d' ' -f1
+  elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$REQ" | cut -d' ' -f1
+  else cksum "$REQ" | cut -d' ' -f1-2 | tr ' ' '-'
+  fi
+}
+req_has_items() { [ -f "$REQ" ] && grep -qvE '^[[:space:]]*(#|$)' "$REQ"; }
+
+stamp_get() { [ -f "$STAMP" ] && sed -n "s/^$1=//p" "$STAMP" | head -1; }
+
+# ---- interpreter を探す ------------------------------------------------------
+find_uv() {
+  local c
+  if [ -n "${REPO_PY_UV:-}" ]; then   # 明示 (none = uv を使わない)
+    [ "$REPO_PY_UV" != none ] && [ -x "$REPO_PY_UV" ] && { printf '%s\n' "$REPO_PY_UV"; return 0; }
+    return 1
+  fi
+  for c in "$(command -v uv 2>/dev/null)" "$HOME/.local/bin/uv" "$HOME/.cargo/bin/uv" /opt/homebrew/bin/uv /usr/local/bin/uv; do
+    [ -n "$c" ] && [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  return 1
+}
+
+# cands_for_minor X.Y → 候補の path を 1 行ずつ (存在しないものも混ざる = 呼ぶ側が pyver で確かめる)
+cands_for_minor() {
+  local maj="${1%%.*}" min="${1#*.}" p
+  if [ -n "${REPO_PY_SEARCH:-}" ]; then printf '%s\n' "$REPO_PY_SEARCH" | tr ':' '\n'; return 0; fi
+  if [ "$OS" = Darwin ]; then
+    type -a -p "python$maj.$min" 2>/dev/null | grep -v '^/usr/bin/'
+  else
+    type -a -p "python$maj.$min" 2>/dev/null
+  fi
+  printf '%s\n' \
+    "/opt/homebrew/opt/python@$maj.$min/bin/python$maj.$min" \
+    "/usr/local/opt/python@$maj.$min/bin/python$maj.$min" \
+    "/opt/homebrew/bin/python$maj.$min" \
+    "/usr/local/bin/python$maj.$min" \
+    "/Library/Frameworks/Python.framework/Versions/$maj.$min/bin/python$maj.$min"
+  for p in "${PYENV_ROOT:-$HOME/.pyenv}"/versions/"$maj.$min".*/bin/python"$maj.$min" \
+           "$HOME"/.local/share/uv/python/cpython-"$maj.$min".*/bin/python"$maj.$min"; do
+    [ -e "$p" ] && printf '%s\n' "$p"
+  done
+  [ "$OS" = Darwin ] || printf '%s\n' "/usr/bin/python$maj.$min"
+  return 0
+}
+cands_generic() {
+  local p
+  [ -n "${REPO_PY_SEARCH:-}" ] && return 0
+  for p in $(type -a -p python3 2>/dev/null); do
+    if [ "$OS" = Darwin ] && [ "$p" = /usr/bin/python3 ]; then continue; fi
+    printf '%s\n' "$p"
+  done
+  [ "$OS" = Darwin ] && printf '%s\n' /Library/Developer/CommandLineTools/usr/bin/python3
+  return 0
+}
+cands_newer() {  # 宣言より新しい minor の候補 + 汎用の python3
+  local maj="${DECL%%.*}" min="${DECL#*.}" m
+  m=$((min + 1))
+  while [ "$m" -le $((min + 12)) ]; do cands_for_minor "$maj.$m"; m=$((m + 1)); done
+  cands_generic
+}
+
+# probe_list exact|newer → 候補 (stdin、 1 行 1 path) のうち合う interpreter の path (stdout)。
+#   exact = 宣言と同じ minor の最初のもの / newer = 宣言より新しい minor のうち宣言に最も近いもの
+probe_list() {
+  local want="$1" c v mm cmp best="" bestv="" seen=" "
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    case "$seen" in *" $c "*) continue ;; esac
+    seen="$seen$c "
+    v="$(pyver "$c")" || v=""
+    [ -n "$v" ] || continue
+    mm="$(mm_of "$v")"
+    cmp="$(cmp_mm "$mm" "$DECL")"
+    if [ "$want" = exact ] && [ "$cmp" = 0 ]; then printf '%s\n' "$c"; return 0; fi
+    if [ "$want" = newer ] && [ "$cmp" = 1 ]; then
+      if [ -z "$best" ] || [ "$(cmp_mm "$mm" "$(mm_of "$bestv")")" = -1 ]; then best="$c"; bestv="$v"; fi
+    fi
+  done
+  [ -n "$best" ] && { printf '%s\n' "$best"; return 0; }
+  return 1
+}
+
+# pick_base → BASE (path) と BASE_HOW (explicit|exact|uv|newer) を決める。 無ければ 1
+pick_base() {
+  BASE=""; BASE_HOW=""
+  local v uvbin
+  if [ -n "${REPO_PYTHON:-}" ]; then
+    if [ -x "$REPO_PYTHON" ] && ! arch_ok "$REPO_PYTHON" 1; then
+      die "REPO_PYTHON=$REPO_PYTHON は $(arch_label "$REPO_PYTHON") 版で、 この機械 ($NATIVE) では使わない (起動していない)"
+    fi
+    v="$(pyver "$REPO_PYTHON" 1)" || v=""
+    [ -n "$v" ] || die "REPO_PYTHON=$REPO_PYTHON が起動できない"
+    satisfies "$v" || die "REPO_PYTHON=$REPO_PYTHON は $v で、 宣言 (.python-version = $DECL) を満たさない"
+    BASE="$REPO_PYTHON"; BASE_HOW=explicit; return 0
+  fi
+  BASE="$( { cands_for_minor "$DECL"; cands_generic; } | probe_list exact)" && { BASE_HOW=exact; return 0; }
+  if uvbin="$(find_uv)"; then
+    BASE="$("$uvbin" python find "$DECL" 2>/dev/null)" || BASE=""
+    if [ -z "$BASE" ]; then
+      say "Python $DECL がこの機械に無いので uv で入れる ($uvbin python install ${DECL}、 初回だけ network を使う)"
+      if "$uvbin" python install "$DECL" >&2; then
+        BASE="$("$uvbin" python find "$DECL" 2>/dev/null)" || BASE=""
+      fi
+    fi
+    if [ -n "$BASE" ] && v="$(pyver "$BASE")" && [ "$(cmp_mm "$(mm_of "$v")" "$DECL")" = 0 ]; then
+      BASE_HOW=uv; return 0
+    fi
+    BASE=""
+  fi
+  if [ "${REPO_PY_EXACT:-}" != 1 ]; then
+    BASE="$(cands_newer | probe_list newer)" && { BASE_HOW=newer; return 0; }
+  fi
+  BASE=""
+  return 1
+}
+
+all_cands() { local m=8; while [ "$m" -le 20 ]; do cands_for_minor "3.$m"; m=$((m + 1)); done; cands_generic; }
+
+# 見つかった interpreter の一覧 (メッセージ用)。 この機械の arch に合わない binary は起動せずに名前だけ出す
+found_summary() {
+  local c v out="" seen=" " rc
+  while IFS= read -r c; do
+    [ -n "$c" ] && [ -x "$c" ] || continue
+    case "$seen" in *" $c "*) continue ;; esac
+    seen="$seen$c "
+    arch_ok "$c" "$EXPLICIT_SEARCH"; rc=$?
+    if [ "$rc" = 1 ]; then out="$out, $c ($(arch_label "$c") 版 = 使わない、 起動していない)"; continue; fi
+    [ "$rc" = 0 ] || continue
+    v="$(pyinfo "$c")" || continue
+    [ -n "$v" ] && out="$out, ${v%% *} ($c)"
+  done <<EOF
+$(all_cands)
+EOF
+  if [ -n "$out" ]; then printf '%s' "${out#, }"; else printf '%s' "なし"; fi
+}
+foreign_found() {  # この機械の arch に合わない python の binary が 1 つでもあれば 0 (起動しない)
+  local c
+  while IFS= read -r c; do
+    [ -n "$c" ] && [ -x "$c" ] || continue
+    arch_ok "$c" "$EXPLICIT_SEARCH"; [ $? = 1 ] && return 0
+  done <<EOF
+$(all_cands)
+EOF
+  return 1
+}
+
+how_to_install() {
+  local hint pre=""
+  if [ "$OS" = Darwin ]; then
+    local brewdir=/opt/homebrew
+    [ "$NATIVE" = x86_64 ] && brewdir=/usr/local
+    if [ -n "$NATIVE" ] && foreign_found; then
+      pre="この機械 ($NATIVE) に合わない arch の Python はあるが使わない。 $NATIVE 版を入れる: "
+    fi
+    if command -v brew >/dev/null 2>&1 || [ -x "$brewdir/bin/brew" ]; then
+      hint="uv を入れる (\`$brewdir/bin/brew install uv\`。 以後 tools/py が宣言の版を自分で取ってくる。 python3 の向き先は変わらない) か、 \`$brewdir/bin/brew install python@$DECL\` (python$DECL だけが入り、 python3 は変わらない)"
+    else
+      hint="uv を入れる (https://docs.astral.sh/uv/ 。 以後 tools/py が宣言の版を自分で取ってくる) か、 Homebrew ($brewdir) を入れて python@${DECL}、 か python.org の $DECL の installer"
+    fi
+  else
+    hint="uv を入れる (https://docs.astral.sh/uv/) か、 OS の package manager で python$DECL (venv module つき)"
+  fi
+  printf '%s' "$pre${hint}。 入れたら \`tools/py --venv-ensure\`。 今の venv で一時的に回すだけなら REPO_PY_ACCEPT_VENV=1 (結果は宣言外の環境のものとして報告する)"
+}
+
+no_base_message() {
+  local more=" 以上の"
+  [ "${REPO_PY_EXACT:-}" = 1 ] && more=" の"
+  printf '%s' "宣言 (.python-version) は Python $DECL だが、 この機械に $DECL$more Python が無い (見つかった: $(found_summary))。 → $(how_to_install)"
+}
+
+# ---- venv の状態 -------------------------------------------------------------
+# venv_state → VSTATE = ok / missing / broken / old (宣言より古い版) / nostamp / declchg / reqchg、 VVER = venv の版
+venv_state() {
+  VVER=""
+  [ -e "$VENV" ] || { VSTATE=missing; return; }
+  if [ -x "$VPY" ] && ! arch_ok "$VPY" 1; then   # 別の arch の python で作られた venv (起動しない)
+    VARCH="$(arch_label "$VPY")"; VVER="起動していない"; VSTATE=arch; return
+  fi
+  VVER="$(pyver "$VPY" 1)" || VVER=""
+  [ -n "$VVER" ] || { VSTATE=broken; return; }
+  satisfies "$VVER" || { VSTATE=old; return; }
+  [ -f "$STAMP" ] || { VSTATE=nostamp; return; }
+  [ "$(stamp_get declared)" = "$DECL" ] || { VSTATE=declchg; return; }
+  [ "$(stamp_get requirements)" = "$(req_hash)" ] || { VSTATE=reqchg; return; }
+  VSTATE=ok
+}
+
+write_stamp() {
+  {
+    echo "# tools/py が書く (手で直さない)。 venv が宣言と requirements に合っているかの印"
+    echo "declared=$DECL"
+    echo "python=$(pyver "$VPY" 1)"
+    echo "requirements=$(req_hash)"
+  } > "$STAMP"
+}
+
+pip_install() {  # 今の venv に requirements を入れる
+  req_has_items || return 0
+  local uvbin
+  if uvbin="$(find_uv)"; then
+    "$uvbin" pip install --python "$VPY" -r "$REQ" >&2
+  else
+    "$VPY" -m pip install --disable-pip-version-check -q -r "$REQ" >&2
+  fi
+}
+
+freeze_names() {  # freeze_names <python> → package 名 (小文字) を 1 行ずつ
+  "$1" -m pip freeze --disable-pip-version-check 2>/dev/null \
+    | sed -E 's/[[:space:]]*(==|@| ).*//' | tr 'A-Z_' 'a-z-' | grep -v '^$' | sort -u
+}
+
+# ---- lock (並列の session が同時に用意しない) -------------------------------
+lock() {
+  local waited=0 pid
+  while ! mkdir "$LOCK" 2>/dev/null; do
+    pid="$(cat "$LOCK/pid" 2>/dev/null)"
+    if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+      rm -rf "$LOCK"; continue
+    fi
+    [ "$waited" = 0 ] && say "別の process (pid ${pid:-?}) が venv を用意しているので待つ"
+    sleep 2; waited=$((waited + 2))
+    [ "$waited" -ge 900 ] && die "15 分待っても venv の用意 (lock = $LOCK) が終わらない。 その process が居なければ $LOCK を消す"
+  done
+  echo $$ > "$LOCK/pid"
+  LOCKED=1
+}
+unlock() { if [ "$LOCKED" = 1 ]; then rm -rf "$LOCK"; fi; LOCKED=0; }
+
+on_abort() {
+  # 作り直しの途中で止まったら、 作りかけを消して前の venv を戻す
+  if [ "$MOVED_PREV" = 1 ] && [ -e "$PREV" ]; then
+    rm -rf "$VENV"; mv "$PREV" "$VENV" && say "中断したので前の venv を戻した"
+    MOVED_PREV=0
+  fi
+  unlock
+}
+
+build() {  # build <理由> → 新しい venv を作る (前の venv は退けて、 失敗したら戻す)
+  local why="$1" old_names="" new_names="" extra="" uvbin ok=1
+  pick_base || die "${why}。 $(no_base_message)"
+  if [ "$BASE_HOW" = newer ]; then
+    say "宣言は $DECL だが同じ版が無いので、 より新しい $(pyver "$BASE") ($BASE) で venv を作る (依存が入らなければ元に戻して止まる。 新しい版を使わせないなら REPO_PY_EXACT=1)"
+  fi
+  say "venv を作る ($why): $(pyver "$BASE") ($BASE) → $VENV"
+  trap 'on_abort; exit 130' INT TERM
+  if [ -e "$VENV" ]; then
+    if [ -x "$VPY" ] && arch_ok "$VPY" 1; then old_names="$(freeze_names "$VPY")"; fi   # 合わない arch の venv は起動しない
+    rm -rf "$PREV"
+    mv "$VENV" "$PREV" || die "前の venv を退けられない ($VENV → $PREV)"
+    MOVED_PREV=1
+  fi
+  if uvbin="$(find_uv)"; then
+    "$uvbin" venv --seed --python "$BASE" "$VENV" >&2 || ok=0
+  else
+    "$BASE" -m venv "$VENV" >&2 || ok=0
+  fi
+  if [ "$ok" = 1 ]; then pip_install || ok=0; fi
+  if [ "$ok" != 1 ]; then
+    rm -rf "$VENV"
+    if [ "$MOVED_PREV" = 1 ]; then mv "$PREV" "$VENV"; MOVED_PREV=0; fi
+    trap - INT TERM
+    die "venv を作れなかった (上の出力を見る)。 固定した依存が Python $(pyver "$BASE") で入らないなら、 版を外して入れずに、 宣言の版 ($DECL) の Python を入れる: $(how_to_install)"
+  fi
+  write_stamp
+  if [ -n "$old_names" ]; then
+    new_names="$(freeze_names "$VPY")"
+    extra="$(printf '%s\n' "$old_names" | grep -vxF -f <(printf '%s\n' "$new_names") | tr '\n' ' ')"
+    if [ -n "${extra// /}" ]; then say "前の venv にあって今は無い package: $extra(要るなら requirements.txt に足す)"; fi
+  fi
+  rm -rf "$PREV"; MOVED_PREV=0
+  trap - INT TERM
+  say "venv を用意した: Python $(pyver "$VPY" 1)$([ -f "$REQ" ] && printf '、 %s を入れた' "${REQ#"$ROOT"/}")"
+}
+
+ensure() {  # 戻れば venv を使える。 使えなければ exit 3
+  read_decl || die "宣言が無い: $DECL_FILE に作者が検算を通した Python の版を 1 行で書く (例 3.13)。 規約 = claude-config の conventions/shared-repo.md#repo-python-env"
+  venv_state
+  if [ "${REPO_PY_ACCEPT_VENV:-}" = 1 ]; then
+    [ -n "$VVER" ] || die "REPO_PY_ACCEPT_VENV=1 だが venv が使えない (状態 $VSTATE: $VENV)"
+    [ "$VSTATE" = ok ] || say "⚠️ 宣言 (Python ${DECL}・requirements) と合わない venv (Python ${VVER}、 状態 $VSTATE) を REPO_PY_ACCEPT_VENV=1 でそのまま使う。 結果は宣言外の環境のもの"
+    return 0
+  fi
+  [ "$VSTATE" = ok ] && return 0
+  lock
+  trap 'on_abort' EXIT
+  venv_state   # 待っている間に別の process が済ませたかもしれない
+  case "$VSTATE" in
+    ok) ;;
+    missing) build "venv が無い" ;;
+    broken) build "venv の python が起動しない" ;;
+    arch) build "venv が $VARCH 版の python ($VVER) で作られていて、 この機械の $NATIVE と合わない" ;;
+    old) build "venv が Python $VVER で作られていて、 宣言 $DECL より古い" ;;
+    nostamp|declchg|reqchg)
+      if [ "$VSTATE" = reqchg ]; then
+        say "requirements が前回から変わったので venv を合わせる"
+      else
+        say "venv を宣言と requirements に合わせる (前回の印が無いか、 宣言が変わった)"
+      fi
+      pip_install || die "requirements を入れられなかった (network か、 固定した版がこの Python $VVER で入らない)。 版を外して入れない: $(how_to_install)"
+      write_stamp
+      ;;
+  esac
+  trap - EXIT
+  unlock
+  return 0
+}
+
+check() {  # 何も変えない。 人の手が要るときだけ stdout に ❌ / ⚠️ を出して 1
+  if ! read_decl; then
+    echo "❌ Python の版の宣言が無い ($DECL_FILE) → 作者が検算を通した版を 1 行で書く (例 3.13)"
+    return 1
+  fi
+  venv_state
+  if [ "${REPO_PY_ACCEPT_VENV:-}" = 1 ]; then
+    [ "$VSTATE" = ok ] && return 0
+    echo "⚠️ 宣言 (Python $DECL) と合わない venv (${VVER:-起動しない}、 状態 $VSTATE) を REPO_PY_ACCEPT_VENV=1 で使っている。 検算の結果は宣言外の環境のもの → $(how_to_install)"
+    return 1
+  fi
+  case "$VSTATE" in
+    ok|nostamp|declchg|reqchg) return 0 ;;   # 追従は初回の実行で自動
+  esac
+  if [ -n "${REPO_PYTHON:-}" ]; then
+    local v
+    if [ -x "$REPO_PYTHON" ] && ! arch_ok "$REPO_PYTHON" 1; then
+      echo "❌ REPO_PYTHON=$REPO_PYTHON は $(arch_label "$REPO_PYTHON") 版で、 この機械 ($NATIVE) では使わない (起動していない)"
+      return 1
+    fi
+    v="$(pyver "$REPO_PYTHON" 1)" || v=""
+    if [ -n "$v" ] && satisfies "$v"; then return 0; fi
+    echo "❌ REPO_PYTHON=$REPO_PYTHON は ${v:-起動できない}で、 宣言 $DECL を満たさない"
+    return 1
+  fi
+  # 作れるか (network を使わずに分かる範囲で)
+  if [ -n "$( { cands_for_minor "$DECL"; cands_generic; } | probe_list exact)" ] || find_uv >/dev/null; then return 0; fi
+  if [ "${REPO_PY_EXACT:-}" != 1 ] && [ -n "$(cands_newer | probe_list newer)" ]; then return 0; fi
+  local what=""
+  case "$VSTATE" in
+    missing) what="venv が無く、 作れない" ;;
+    broken) what="venv の python が起動せず、 作り直せない" ;;
+    arch) what="venv が $VARCH 版の python ($VVER) で作られていて、 作り直せない" ;;
+    old) what="venv が Python $VVER で作られていて宣言より古く、 作り直せない" ;;
+  esac
+  echo "❌ Python: ${what}。 $(no_base_message)"
+  return 1
+}
+
+case "${1:-}" in
+  --venv-check) check; exit $? ;;
+  --venv-ensure) ensure; exit 0 ;;
+  --venv-path) ensure; printf '%s\n' "$VPY"; exit 0 ;;
+  --venv-rebuild)
+    read_decl || die "宣言が無い: $DECL_FILE に作者が検算を通した Python の版を 1 行で書く (例 3.13)"
+    lock; trap 'on_abort' EXIT
+    build "--venv-rebuild"
+    trap - EXIT; unlock; exit 0 ;;
+esac
+
+ensure
+exec "$VPY" "$@"
