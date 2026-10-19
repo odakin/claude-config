@@ -52,6 +52,7 @@ FIX = (
     "  2. 次の Bash で `git add <新規> && git commit -q -m \"…\" -- <paths>` と `git push` を、 cd も -C も付けずに打つ\n"
     "     (git 同士の && は各部分が rule に当たるので構わない。 fetch や rev-list の確認も同じ呼び出しに入れてよい)\n"
     "行き先が今の作業ディレクトリと同じなら、 cd を消すだけでよい。\n"
+    "subagent (Agent tool の子) では単独の cd が次の呼び出しに残らない = scripts/commit-from-origin-worktree.py で commit・push する (claude-code-permissions.md#subagent-commit-route)。\n"
     "正本 = claude-config/conventions/claude-code-permissions.md#cd-with-git-goes-to-classifier"
 )
 

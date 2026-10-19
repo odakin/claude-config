@@ -120,6 +120,11 @@
       "match": "ensurepip is not available",
       "doc": "conventions/python-env.md#python-env-venv-create-fails",
       "hint": "venv の部品 (ensurepip) が無い python で venv を作ろうとした (依存や版の問題ではない)。 Debian・Ubuntu なら python3.X-venv の package を入れるか、 uv を入れる (uv は ensurepip を使わずに venv を作る)"
+    },
+    {
+      "match": "auto-fixed non-LaTeX characters and re-staged",
+      "doc": "conventions/latex.md#autofix-with-pathspec-commit",
+      "hint": "pre-commit が tex の文字を直して re-stage した。 `git commit -- <path>` (pathspec) なら修正は commit に入るが main の index に修正前の版が残る (status が MM) = commit の後に git restore --staged <path>"
     }
   ]
 }

@@ -30,6 +30,10 @@ case "$out" in
   *'"permissionDecision": "deny"'*'cd <repo>'*) ok "別 dir への cd + commit/push → deny + 直し方" ;;
   *) ng "deny されない: $out" ;;
 esac
+case "$out" in
+  *commit-from-origin-worktree.py*) ok "止めの文に subagent の commit の経路がある" ;;
+  *) ng "止めの文に subagent の経路が無い: $out" ;;
+esac
 printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin)["hookSpecificOutput"]; assert d["hookEventName"]=="PreToolUse"' \
   && ok "出力は PreToolUse の JSON" || ng "JSON 形が違う"
 out="$(json "$TMP/repo" "cd $TMP/repo && git commit -q -m m -- a && git push -q" | env -u CLAUDE_CD_GIT_GUARD python3 "$HOOK")"

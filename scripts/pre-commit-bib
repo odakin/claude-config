@@ -58,6 +58,13 @@ if [[ -f "$FIXER" ]]; then
                 git add "$f"
             done
             echo "pre-commit: auto-fixed non-LaTeX characters and re-staged."
+            # pathspec commit (git commit -- <path>) は一時 index で走る = 修正は commit に入るが、 main の index には修正前の版が残る
+            # (commit の後に status が MM)。 直し方 = commit の後に git restore --staged <path> (latex.md#autofix-with-pathspec-commit)
+            # --git-path index は GIT_INDEX_FILE を返すので使わない = git dir の index を直に見る
+            main_index="$(git rev-parse --absolute-git-dir 2>/dev/null)/index"
+            if [[ -n "${GIT_INDEX_FILE:-}" && -n "$main_index" && "$(cd "$(dirname "$GIT_INDEX_FILE")" 2>/dev/null && pwd)/$(basename "$GIT_INDEX_FILE")" != "$(cd "$(dirname "$main_index")" 2>/dev/null && pwd)/$(basename "$main_index")" ]]; then
+                echo "pre-commit: pathspec commit — main の index に修正前の版が残る。 commit の後に git restore --staged$LATEX_FILES (latex.md#autofix-with-pathspec-commit)"
+            fi
         elif [[ $rc -ge 2 ]]; then
             echo "pre-commit: fix-bib-unicode.py failed (exit $rc)." >&2
             exit 1
