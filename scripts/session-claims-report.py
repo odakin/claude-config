@@ -44,7 +44,7 @@ HAND = r"(手で|手計算|暗算|頭の中|by hand|mentally)"
 CHECK = r"(一致|再現|確か|確認|検算|照合|再導出|平方完成|verif|reproduc|check|agree)"
 INDEP = r"(独立検査|独立に再現|独立に再導出|独立の検算|independent(?:ly)?\s+(?:check|re-?deriv|verif))"
 EVIDENCE = r"(\.py\b|\.wls\b|\.nb\b|\.ipynb\b|\.m\b|script|スクリプト)"
-DEFER = r"(次に[^。\n]{0,30}?(とき|時|際)|後で|あとで|次回|そのうち|いずれ|\blater\b|next time)"
+DEFER = r"(次に[^。\n]{0,30}?(とき|時|際)|後で|あとで|次回|そのうち(?!\s*\d|の)|いずれ(?![もか])|\blater\b|next time)"
 CARRIER = r"(\b20\d\d-\d\d-\d\d-[a-z0-9-]+|plan|TODO|掲示板|thread|request|期限|deadline|carrier)"
 
 A1_RE = re.compile(HAND + r".*" + CHECK + "|" + CHECK + r".*" + HAND, re.I)
@@ -150,6 +150,7 @@ def selftest():
         ("t6", "返事", "We independently re-derived eq. (3)."),
         ("t7", "返事", "We independently re-derived eq. (3) in check_eq3.py."),
         ("t8", "返事", "後で直します"),
+        ("t9", "返事", "5 種類あり、 そのうち 2 種類を見た。 いずれも記録先がある"),
     ]
     got = sorted((k[:2], ts) for k, ts, _w, _l in scan(items))
     expect("findings", got, [("A1", "t1"), ("A2", "t1"), ("A2", "t6"), ("B ", "t3"), ("B ", "t8")])
