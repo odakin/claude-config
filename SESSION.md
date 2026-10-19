@@ -6,7 +6,7 @@
 
 ## 現在地
 
-- **締めの数値照合の共通化** — 実装と通常文書の参照統一を保存し、[Codex 統合の説明](codex/PARITY.md#wrap-workflow-integration)への参照追記候補を確認する段階。次は保護対象文書の候補への裁定を記録して適用し、受領側へ提出する。照合規則の正本 = [output_numbers.py](scripts/lib/output_numbers.py)。
+- **締めの数値照合の共通化** — 実装と参照統一を保存し、受領側の検収へ引き渡す段階。次は受領側が比較対象の記録を使って検収する。入口 = [Codex 統合の説明](codex/PARITY.md#wrap-workflow-integration)、照合規則の正本 = [output_numbers.py](scripts/lib/output_numbers.py)。
 
 - **音源からの採譜** — 参照譜の照合・コード表記・編集音源の時刻対応を含む共通手順を通常利用へ移す段階。次の採譜では参照小節と演奏順、未編集録音と編集後の時計、音響・聴覚の検証範囲を同じ入口から確認する。手順 = [music-transcription.md](conventions/music-transcription.md)。
 
