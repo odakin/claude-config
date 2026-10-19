@@ -359,7 +359,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 3. **題の主張は paper 自身が列挙した caveat が倒れても生き残る形にする** — 機構が実際に働くことを断定する題 (「X が宇宙を reheat する」) は、 その regime の整合性が open なら書けない。 「観測は A と B を見分ける」 型は caveat の帰趨に依らず成立する (= [#assumption-dependent-claim-framing](#assumption-dependent-claim-framing) の題版)。
 4. **2σ の主張を題・abstract で「requires」 にしない** — 忠実な形は「within two standard deviations the data leave only X」。 別 baseline で対抗シナリオが生きているなら「requires」 は偽 (= [#claim-strength-three-tests](#claim-strength-three-tests) の偽検査。 対抗シナリオが残っていないかを問う user の一言で発覚)。
 5. **否定語で始まる複合名詞は hyphen で結ぶ** — 英語の「No X does Y」 は「Y する X は無い」 (全称否定)。 「X が無いこと」 を名詞化した「No-X」 を主語にするなら hyphen が意味を担う: 合成例 "No-collision term dominates the sum" と "No collision term dominates the sum" は逆の主張。 冠詞を落とした題ほど滑りやすい ("The no-X …" なら誤読しない)。 "Non-" / "Zero-" / "Null-" を頭に置く題も同じ検査。
-6. **冠詞は題の形で決める** — 名詞句の題は頭の冠詞を落とす慣例 (「Spectral index in …」)、 副題が主語 + 動詞の文なら冠詞を残す (「The spectral index can tell」。 落とすと見出し語になる。 複数形の一般名詞 「Black holes are stable」 だけは無冠詞で文になる)。 無冠詞にしたいなら文を名詞句に変える。
+6. **冠詞は題の形で決める** — 名詞句の題は頭の冠詞を落とす慣例 (「Decay rate in …」)、 副題が主語 + 動詞の文なら冠詞を残す (「The decay rate decides」。 落とすと見出し語になる。 複数形の一般名詞 「Black holes are stable」 だけは無冠詞で文になる)。 無冠詞にしたいなら文を名詞句に変える。
 
 起源 (2026-09): 再構成中の private paper で題を何度も回して確定した session。 却下理由は上の 4 検査にそのまま対応した (無次元量に尺度の語 / 副題が自明 / 「requires」 は統計的な過大表現 / 機構の断定は整合性が未解決)。 確定形 = 「A vs B in ⟨model⟩: The ⟨observable⟩ can tell」 (疑問の形をした平叙断定、 "can tell" が現状の分離の強さに忠実)。 却下案は原稿 header に理由つきで温存する。
 
