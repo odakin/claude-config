@@ -12,7 +12,8 @@
    その間に相手が commit して HEAD が X に進んでいると、 `git commit` は親 = X・tree = 「P + 自分の変更」 の commit を作る
    = X の変更が消える。 error は出ない (git が止めるのは commit の最中に HEAD が動いた時だけ)。
    → 親を最初に 1 回だけ決め、 commit の直前に HEAD がその親のままかを見て、 commit の直後に親を照合する。
-   違えば ref を元に戻して (旧値つき) 版を作り直す。
+   違えば ref を元に戻して (旧値つき) 版を作り直す。 git が commit の最中に HEAD が動いたのを見つけて
+   `cannot lock ref` で止めた時も、 commit は入っていないので同じく親を取り直してやり直す (関門の拒否と取り違えない)。
 2. **temp file を `git hash-object -w` に渡すと、 その path の clean filter が掛からない**。 暗号化 (git-crypt 等) の path なら
    平文の blob が commit に入る。 → `--path <path>` を付けて blob を作る。 親の版も filter を通して読む
    (`git cat-file --filters`)。
@@ -21,6 +22,10 @@
    `git reset -q -- <path>` (作業 tree は不変)。
 5. **commit 時の関門に止められた時に、 作業 tree に当てた自分の変更が残る**。 → 作業 tree への書き込みは commit が
    通った後にだけ行う (止められたら作業 tree は 1 byte も変わらない)。
+6. **commit の直後に HEAD を読み直して 「自分の commit」 とすると、 その間に相手が上に重ねた commit を取り違える**。
+   その親は自分の commit なので 「親が違う」 と読み、 1 の巻き戻しが**相手の commit を HEAD から外す** (selftest で再現)。
+   → 一時 index の tree と同じ tree の commit を HEAD から first-parent で探して自分の commit とする (同じ tree が
+   複数なら件名も照合)。 巻き戻しは旧値つきなので、 誤った commit の上に相手が重ねていれば外さずに止まる (終了値 5)。
 
 commit は `git commit` で作る (pre-commit / prepare-commit-msg / commit-msg / post-commit がそのまま走る)。
 
@@ -40,6 +45,12 @@ commit は `git commit` で作る (pre-commit / prepare-commit-msg / commit-msg 
 
     # 版で指定 (「親の版 + 自分の変更」 の全文を自分で作った時)。 作った時の HEAD を --base に書く
     git-commit-own-hunk.py -F msg.txt --base <sha> --version <path> mine.txt
+    #   その後に並列の session の commit で HEAD が進んでいても、 --base から今の HEAD までの commit が対象の path を
+    #   1 つも触っていなければ (保存された blob と mode で比べる)、 渡した版は今の HEAD の上でもそのまま正しい
+    #   (版 = 親の版 + 自分の変更 で、 親の版が変わっていない) ので今の HEAD を親にして進む。 触っていれば終了値 4
+    #   (= 今の HEAD から版を作り直す)。 commit の最中に HEAD が動いた時 (git の `cannot lock ref`) も、 親の取り直しと
+    #   この確認からやり直す (やり直しは 3 回まで)。 --replace に --base を付けた時も同じ確認をする
+    #   (--base の無い --replace は、 やり直しのたびに新しい親の版に置換を当て直す)
     #   ⚠️ --version は作業 tree に書かない (全文は相手の変更の混ざった作業 tree に当てられない)。 commit の後、
     #   作業 tree が親の版のままだと自分の commit を取り消す差分に見える = 作業 tree が親の版と一致するなら
     #   `git checkout HEAD -- <path>`、 相手の変更が在るなら自分の変更を作業 tree にも当てる (= --replace を使う方が楽)
@@ -57,7 +68,11 @@ commit の後は push と、 相手の session への 1 行 (相手の `git diff
     1 = commit 時の関門 (hook) が止めた。 HEAD も作業 tree も変わっていない
     2 = 使い方・前提の誤り (置換が 1 回一致でない、 変更が無い、 対象が通常の file でない)
     3 = commit は入ったが、 作業 tree に同じ置換を当てられなかった (相手の変更が同じ場所に在る)。 作業 tree を手で直す
-    4 = HEAD が動き続けて版を作り直せなかった / --base が今の HEAD と違う。 何も commit していない
+    4 = --base から今の HEAD までの commit が対象の path を変えている (渡した版が古い) / HEAD が動き続けた。
+        何も commit していない
+    5 = commit の直前に HEAD が動いて誤った commit が入り、 その上に別の commit が重なっていて HEAD から外せなかった
+        (相手の commit を外さないために止めた) / commit の後に HEAD の近くに自分の commit が見つからない。
+        push せずに git log と git reflog を見て手で直す
 
 ## 限界
 
@@ -65,21 +80,28 @@ commit の後は push と、 相手の session への 1 行 (相手の `git diff
   一瞬 HEAD になる。 直後の照合で ref を戻して作り直すが、 その間に push する post-commit hook が在る repo では、
   誤った commit が外へ出うる (そういう hook を持つ repo では使わない)。
 - hook は作業 tree を読むことがある。 hook が見る作業 tree には相手の変更も在る (index は自分の分だけ)。
+- commit の後に自分の commit を tree と件名で探す。 hook が件名を書き換え、 かつ同じ tree の commit (空の commit など) が
+  直後に上に重なった時だけ取り違えうる。
 - rename と symlink は扱わない。
 """
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
-RC_OK, RC_GATE, RC_USAGE, RC_WORKTREE, RC_MOVED = 0, 1, 2, 3, 4
+RC_OK, RC_GATE, RC_USAGE, RC_WORKTREE, RC_MOVED, RC_STUCK = 0, 1, 2, 3, 4, 5
 TEST_HOOK_ENV = "GIT_COMMIT_OWN_HUNK_TEST_HOOK"   # selftest 専用: 最初の commit の直前に 1 回だけ shell で実行する (窓を決定的に開ける)
-RETRIES = 3
+RETRIES = 4                                        # 最初の 1 回 + やり直し 3 回
+BACKOFF = 0.2                                      # やり直しの前に待つ秒 × 何回目のやり直しか
+LOCK_REF_RE = re.compile(r"cannot lock ref '|HEAD\.lock")   # git が ref を更新できなかった (commit は入っていない)
+OWN_SEARCH = 50                                    # commit の後、 自分の commit を HEAD から何個さかのぼって探すか
 
 
 class Stop(Exception):
@@ -131,6 +153,15 @@ def tree_mode(top: Path, parent: str, path: str) -> str:
     return mode
 
 
+def paths_changed(top: Path, a: str, b: str, paths: list) -> bool:
+    """a と b の間で paths のどれかの中身か mode が変わったか。 保存された blob で比べる (filter・textconv に依らない)。
+    pathspec は字面どおり (glob に読まない)。"""
+    r = run(top, "diff-tree", "--quiet", "-r", a, b, "--", *paths, env=dict(os.environ, GIT_LITERAL_PATHSPECS="1"))
+    if r.returncode not in (0, 1):
+        raise Stop(RC_USAGE, f"git diff-tree が失敗: {r.stderr.decode('utf-8', 'replace').strip()[:300]}")
+    return r.returncode == 1
+
+
 def apply_replaces(data: bytes, reps: list, where: str) -> bytes:
     for old, new in reps:
         n = data.count(old)
@@ -159,8 +190,42 @@ def build_versions(top: Path, parent: str, specs: dict) -> dict:
     return built
 
 
+def own_commit(top: Path, env: dict, subject: str) -> str | None:
+    """今 commit した commit。 commit の後に HEAD を読み直すと、 その間に相手が上に重ねた commit を自分のと取り違え、
+    「親が違う」 と読んで ref を戻すと相手の commit が HEAD から消える。 → 一時 index の tree と同じ tree の commit を
+    HEAD から first-parent で探す。 同じ tree が複数なら件名も合うものを選ぶ (上に重なった空の commit と取り違えない。
+    件名を hook が書き換えていれば tree だけで選ぶ)。 見つからなければ None。"""
+    tree = out(top, "write-tree", env=env).decode().strip()
+    cur = first = None
+    for ln in out(top, "rev-list", "--first-parent", "-n", str(OWN_SEARCH), "--format=%T %s", "HEAD").decode("utf-8", "replace").splitlines():
+        if ln.startswith("commit "):          # 出力 = 「commit <sha>」 と 「<tree> <件名>」 の繰り返し
+            cur = ln.split()[1]
+            continue
+        t, _, s = ln.partition(" ")
+        if cur and t == tree:
+            if s == subject:
+                return cur
+            first = first or cur
+    return first
+
+
+def msg_subject(msg_file: Path) -> str:
+    """git の件名 (%s) と同じ形 = 最初の段落の行を空白 1 つで繋いだもの。"""
+    try:
+        lines = msg_file.read_text(encoding="utf-8", errors="replace").strip().splitlines()
+    except OSError:
+        return ""
+    para = []
+    for ln in lines:
+        if not ln.strip():
+            break
+        para.append(ln.strip())
+    return " ".join(para)
+
+
 def commit_once(top: Path, parent: str, built: dict, msg_file: Path, first: bool) -> tuple:
-    """(状態, 値)。 状態 = ok (値 = commit) / gate (値 = git の出力) / moved (値 = 説明)。"""
+    """(状態, 値)。 状態 = ok (値 = commit) / gate (値 = git の出力) / moved (値 = 説明。 何も入っていない = やり直せる)
+    / stuck (値 = 説明。 誤った commit を HEAD から外せなかった = やり直さない)。"""
     tmp = Path(tempfile.mkdtemp(prefix="own-hunk-"))
     try:
         env = dict(os.environ, GIT_INDEX_FILE=str(tmp / "index"))
@@ -175,16 +240,27 @@ def commit_once(top: Path, parent: str, built: dict, msg_file: Path, first: bool
             subprocess.run(hook, shell=True, cwd=str(top), capture_output=True)
         r = run(top, "commit", "-q", "-F", str(msg_file), env=env)
         if r.returncode != 0:
-            return "gate", (r.stdout + r.stderr).decode("utf-8", "replace").strip()
-        new = out(top, "rev-parse", "HEAD").decode().strip()
+            text = (r.stdout + r.stderr).decode("utf-8", "replace").strip()
+            # commit の最中に HEAD が動くと git は ref を更新せずに止める (= 関門の拒否ではない)。 git の文言が翻訳されていても
+            # HEAD が親から動いていれば同じ扱い。 関門の拒否と重なっても、 やり直しで hook がもう一度判定する
+            if LOCK_REF_RE.search(text) or out(top, "rev-parse", "HEAD").decode().strip() != parent:
+                return "moved", "commit の最中に HEAD が動いた (git が ref を更新せずに止めた = commit は入っていない)"
+            return "gate", text
+        new = own_commit(top, env, msg_subject(msg_file))
+        if new is None:
+            return "stuck", (f"commit したが、 HEAD から {OWN_SEARCH} 個以内に自分の commit が見つからない (HEAD が大きく動いた) "
+                             "= push せずに git log と git reflog を見て手で直す")
         parents = out(top, "rev-list", "--parents", "-n", "1", new).decode().split()[1:]
         touched = set(out(top, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", new).decode().split("\0")) - {""}
         if parents[:1] != [parent] or not touched <= set(built):
-            # 親が違う = 相手の commit の上に、 古い tree の commit を作った (相手の変更を戻している)。 ref を元に戻す (旧値つき)
+            # 親が違う = 相手の commit の上に、 古い tree の commit を作った (相手の変更を戻している)。 ref を元に戻す。
+            # 旧値つき = HEAD が自分の commit のままの時だけ戻る (上に相手が重ねていれば失敗する = 相手の commit を外さない)
             back = parents[0] if parents else parent
             rb = run(top, "update-ref", "HEAD", back, new)
-            state = "戻した" if rb.returncode == 0 else "戻せなかった (HEAD がさらに動いた = git log を見て手で直す)"
-            return "moved", f"commit の直前に HEAD が動いた。 誤った commit {new[:9]} を HEAD から外して {state}"
+            if rb.returncode != 0:
+                return "stuck", (f"commit の直前に HEAD が動き、 誤った commit {new[:9]} (親 {back[:9]} の変更を戻している) が入った。 "
+                                 "その上に別の commit が重なっていて HEAD から外せない = push せずに git log を見て手で直す")
+            return "moved", f"commit の直前に HEAD が動いた。 誤った commit {new[:9]} を HEAD から外して戻した"
         return "ok", new
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -233,14 +309,19 @@ def apply_worktree(top: Path, specs: dict) -> list:
 
 
 def do_commit(top: Path, specs: dict, msg_file: Path, base: str | None, dry: bool, worktree: bool) -> int:
-    has_version = any("version" in sp for sp in specs.values())
+    paths = list(specs)
+    anchor = out(top, "rev-parse", "--verify", f"{base}^{{commit}}").decode().strip() if base is not None else None
     for attempt in range(1, RETRIES + 1):
+        if attempt > 1:
+            time.sleep(BACKOFF * (attempt - 1))
+        # 毎回: 親を取り直し、 版を作った親 (--base) から今の HEAD までに対象の path が変わっていないかを見る。
+        # 変わっていなければ 「親の版 + 自分の変更」 は今の HEAD の上でもそのまま正しい
         parent = out(top, "rev-parse", "HEAD").decode().strip()
-        if base is not None:
-            want = out(top, "rev-parse", base).decode().strip()
-            if want != parent:
-                raise Stop(RC_MOVED, f"--base {base[:9]} は今の HEAD ({parent[:9]}) と違う = 渡された版は古い親から作ってある。 "
-                                     "今の HEAD から版を作り直す")
+        if anchor is not None and anchor != parent:
+            if paths_changed(top, anchor, parent, paths):
+                raise Stop(RC_MOVED, f"--base {anchor[:9]} から今の HEAD ({parent[:9]}) までの commit が対象の path を変えている "
+                                     "= 渡された版は古い親から作ってある。 今の HEAD から版を作り直す")
+            print(f"ℹ️ --base {anchor[:9]} から今の HEAD ({parent[:9]}) までの commit は対象の path を触っていない = 今の HEAD を親にする")
         built = build_versions(top, parent, specs)
         if dry:
             print(f"dry-run: 親 = {parent[:9]}。 commit されるのは次だけ (相手の未 commit の変更は入らない):")
@@ -251,10 +332,10 @@ def do_commit(top: Path, specs: dict, msg_file: Path, base: str | None, dry: boo
             print("🛑 commit 時の関門が止めた。 HEAD も作業 tree も変わっていない。 git の出力:", file=sys.stderr)
             print(val, file=sys.stderr)
             return RC_GATE
+        if state == "stuck":
+            raise Stop(RC_STUCK, val)
         if state == "moved":
-            print(f"⚠️ {val}", file=sys.stderr)
-            if has_version:
-                raise Stop(RC_MOVED, "版 (--version) は古い親から作ってある。 今の HEAD から作り直して呼び直す")
+            print(f"⚠️ {val} (試行 {attempt}/{RETRIES})", file=sys.stderr)
             continue
         out(top, "reset", "-q", "--", *built)
         problems = apply_worktree(top, specs) if worktree else []
@@ -393,7 +474,8 @@ def selftest() -> int:
            rc == 0 and g(top, "ls-tree", "HEAD", "--", "n.txt").stdout.decode().startswith("100644") and head_file(top, "n.txt") == "new file\n")
         mine.write_text("new file v2\n")
         rc = call(top, ["-F", str(msg), "--base", base, "--version", "n.txt", str(mine)])
-        ok("--base が今の HEAD と違えば終了値 4、 何も commit しない", rc == RC_MOVED and head_file(top, "n.txt") == "new file\n", f"rc={rc}")
+        ok("--base の後に同じ新しい file を足した commit が在れば終了値 4、 何も commit しない",
+           rc == RC_MOVED and head_file(top, "n.txt") == "new file\n", f"rc={rc}")
 
         # 8. dry-run は commit しない / 相手が実 index に stage した file は自分の commit に入らない
         top = new_repo(root, "r8")
@@ -413,6 +495,108 @@ def selftest() -> int:
         rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "e\n", "e-mine\n"])
         ok("作業 tree に当てられない時は終了値 3 (commit は入り、 作業 tree の相手の変更はそのまま)",
            rc == RC_WORKTREE and head_file(top, "f.txt").endswith("e-mine\n") and (top / "f.txt").read_text().endswith("e-other\n"), f"rc={rc}")
+
+        def other_commit(top: Path, path: str, text: str) -> None:
+            (top / path).write_text(text)
+            g(top, "add", path)
+            g(top, "commit", "-q", "-m", "other")
+
+        def move_head_in_hook(top: Path, path: str, line: str) -> None:
+            """pre-commit の中で 1 回だけ相手の commit を入れる (git commit が HEAD を読んだ後に HEAD が動く = cannot lock ref)。"""
+            h = top / ".git" / "hooks" / "pre-commit"
+            h.write_text("#!/bin/sh\n[ -e .git/moved-once ] && exit 0\n: > .git/moved-once\n"
+                         f"printf '{line}\\n' >> {path}\n"
+                         f"(unset GIT_INDEX_FILE; git add {path} && git commit -q --no-verify -m other)\n")
+            h.chmod(0o755)
+
+        mine = root / "f.mine"
+        mine.write_text("a\nb\nc\nd\ne-mine\n")                      # 版 = P の f.txt + 自分の変更
+
+        # 10. --version: --base の後に対象の path を触らない commit が入った → 今の HEAD を親にして進める
+        top = new_repo(root, "r10")
+        base = g(top, "rev-parse", "HEAD").stdout.decode().strip()
+        other_commit(top, "g.txt", "g0\ng1\n")
+        rc = call(top, ["-F", str(msg), "--base", base, "--version", "f.txt", str(mine)])
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("--base の後の commit が対象の path を触っていなければ、 今の HEAD を親にして進める",
+           rc == 0 and log[:3] == ["mine", "other", "P"] and head_file(top, "f.txt") == "a\nb\nc\nd\ne-mine\n"
+           and head_file(top, "g.txt") == "g0\ng1\n", f"rc={rc} log={log}")
+
+        # 11. --version: --base の後に対象の path を触る commit が入った → 止める (版は古い親から作ってある)
+        top = new_repo(root, "r11")
+        base = g(top, "rev-parse", "HEAD").stdout.decode().strip()
+        other_commit(top, "f.txt", "a-other\nb\nc\nd\ne\n")
+        before_head = g(top, "rev-parse", "HEAD").stdout
+        rc = call(top, ["-F", str(msg), "--base", base, "--version", "f.txt", str(mine)])
+        ok("--base の後の commit が対象の path を触っていれば終了値 4、 何も commit しない (相手の変更が残る)",
+           rc == RC_MOVED and g(top, "rev-parse", "HEAD").stdout == before_head
+           and head_file(top, "f.txt") == "a-other\nb\nc\nd\ne\n", f"rc={rc}")
+
+        # 12. commit の最中に HEAD が動く (cannot lock ref)。 対象の path を触らない commit → 親を取り直してやり直す
+        top = new_repo(root, "r12")
+        base = g(top, "rev-parse", "HEAD").stdout.decode().strip()
+        move_head_in_hook(top, "g.txt", "g1")
+        rc = call(top, ["-F", str(msg), "--base", base, "--version", "f.txt", str(mine)])
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("cannot lock ref で止まっても、 対象の path が変わっていなければ親を取り直してやり直す",
+           rc == 0 and log[:3] == ["mine", "other", "P"] and head_file(top, "g.txt") == "g0\ng1\n"
+           and head_file(top, "f.txt") == "a\nb\nc\nd\ne-mine\n", f"rc={rc} log={log}")
+
+        # 13. commit の最中に HEAD が動き、 その commit が対象の path を触る → --version は止める
+        top = new_repo(root, "r13")
+        base = g(top, "rev-parse", "HEAD").stdout.decode().strip()
+        move_head_in_hook(top, "f.txt", "f-other")
+        rc = call(top, ["-F", str(msg), "--base", base, "--version", "f.txt", str(mine)])
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("cannot lock ref の後に対象の path が変わっていれば終了値 4、 相手の commit が HEAD に残る",
+           rc == RC_MOVED and log[:2] == ["other", "P"] and head_file(top, "f.txt").endswith("f-other\n"), f"rc={rc} log={log}")
+
+        # 14. --replace は cannot lock ref の後、 新しい親の版に置換を当て直す (相手が同じ file の別の場所を変えていても進む)
+        top = new_repo(root, "r14")
+        move_head_in_hook(top, "f.txt", "f-other")
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "a\n", "a-mine\n"])
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("--replace は cannot lock ref の後に新しい親へ当て直す (相手の行も自分の行も HEAD に在る)",
+           rc == 0 and log[:3] == ["mine", "other", "P"] and head_file(top, "f.txt") == "a-mine\nb\nc\nd\ne\nf-other\n",
+           f"rc={rc} log={log} head={head_file(top, 'f.txt')!r}")
+
+        def late_commit_on_top(top: Path) -> None:
+            """自分の commit の直後 (post-commit) に 1 回だけ、 相手がその上に commit を重ねる。"""
+            h = top / ".git" / "hooks" / "post-commit"
+            h.write_text("#!/bin/sh\n[ \"$(git log -1 --format=%s)\" = mine ] || exit 0\n[ -e .git/late-once ] && exit 0\n"
+                         ": > .git/late-once\n"
+                         "(unset GIT_INDEX_FILE; git reset -q && printf 'h\\n' > h.txt && git add h.txt && git commit -q --no-verify -m late)\n")
+            h.chmod(0o755)
+
+        # 15. 自分の commit (親は正しい) の直後に相手が上に重ねる → 相手の commit を外さず、 自分の commit も 1 回だけ
+        top = new_repo(root, "r15")
+        late_commit_on_top(top)
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "c\n", "c-mine\n"])
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("相手が自分の commit の上に重ねた commit を外さない (自分の commit を HEAD から探す)",
+           rc == 0 and log[:3] == ["late", "mine", "P"] and head_file(top, "f.txt") == "a\nb\nc-mine\nd\ne\n"
+           and head_file(top, "h.txt") == "h\n", f"rc={rc} log={log} f={head_file(top, 'f.txt')!r}")
+
+        # 16. 誤った親の commit の上に相手が重ねた → 外せないので終了値 5、 やり直して commit を重ねない
+        top = new_repo(root, "r16")
+        late_commit_on_top(top)
+        os.environ[TEST_HOOK_ENV] = "printf 'g1\\n' >> g.txt && git add g.txt && git commit -q -m other"
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "c\n", "c-mine\n"])
+        os.environ.pop(TEST_HOOK_ENV, None)
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("誤った commit を HEAD から外せない時は終了値 5 で止まり、 相手の commit を外さず上に重ねもしない",
+           rc == RC_STUCK and log[:4] == ["late", "mine", "other", "P"], f"rc={rc} log={log}")
+
+        # 17. 自分の commit の直後に、 相手が同じ tree の commit (空の commit) を上に重ねる → 件名で見分けて外さない
+        top = new_repo(root, "r17")
+        h = top / ".git" / "hooks" / "post-commit"
+        h.write_text("#!/bin/sh\n[ \"$(git log -1 --format=%s)\" = mine ] || exit 0\n[ -e .git/late-once ] && exit 0\n"
+                     ": > .git/late-once\n(unset GIT_INDEX_FILE; git reset -q && git commit -q --no-verify --allow-empty -m late)\n")
+        h.chmod(0o755)
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "c\n", "c-mine\n"])
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("上に重なった同じ tree の commit (空の commit) を自分のと取り違えて外さない",
+           rc == 0 and log[:3] == ["late", "mine", "P"] and head_file(top, "f.txt") == "a\nb\nc-mine\nd\ne\n", f"rc={rc} log={log}")
     finally:
         os.environ.clear()
         os.environ.update(saved)

@@ -1,5 +1,5 @@
 {
-  "_comment": "git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 5 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 各 mutant は docstring の「穴」 1〜5 の塞ぎを 1 つずつ外す。",
+  "_comment": "git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 10 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 各 mutant は docstring の「穴」 1〜6 の塞ぎと、 --base を越えて進む条件・やり直しの判定を 1 つずつ外す。",
   "target": "git-commit-own-hunk.py",
   "run": "python3 {} --selftest",
   "fail_marker": "FAIL ",
@@ -8,7 +8,10 @@
     {
       "name": "commit の直後の親の照合と ref の巻き戻しを外す (穴 1 = HEAD が動いた後の commit が相手の commit の中身を戻す)",
       "pairs": [
-        ["        if parents[:1] != [parent] or not touched <= set(built):", "        if False:"]
+        [
+          "        if parents[:1] != [parent] or not touched <= set(built):",
+          "        if False:"
+        ]
       ],
       "expect_fail": [
         "HEAD が動いても相手の commit の中身が残る"
@@ -21,8 +24,10 @@
     {
       "name": "commit する blob を作る時に --path を外す (穴 2 = clean filter が掛からず、 暗号化の path に平文が入る)",
       "pairs": [
-        ["            blob = out(top, \"hash-object\", \"-w\", \"--path\", path, \"--stdin\", inp=mine).decode().strip()\n            out(top, \"update-index\", \"--add\", \"--cacheinfo\", f\"{mode},{blob},{path}\", env=env)\n        if out(top, \"rev-parse\", \"HEAD\").decode().strip() != parent:",
-         "            blob = out(top, \"hash-object\", \"-w\", \"--stdin\", inp=mine).decode().strip()\n            out(top, \"update-index\", \"--add\", \"--cacheinfo\", f\"{mode},{blob},{path}\", env=env)\n        if out(top, \"rev-parse\", \"HEAD\").decode().strip() != parent:"]
+        [
+          "            blob = out(top, \"hash-object\", \"-w\", \"--path\", path, \"--stdin\", inp=mine).decode().strip()\n            out(top, \"update-index\", \"--add\", \"--cacheinfo\", f\"{mode},{blob},{path}\", env=env)\n        if out(top, \"rev-parse\", \"HEAD\").decode().strip() != parent:",
+          "            blob = out(top, \"hash-object\", \"-w\", \"--stdin\", inp=mine).decode().strip()\n            out(top, \"update-index\", \"--add\", \"--cacheinfo\", f\"{mode},{blob},{path}\", env=env)\n        if out(top, \"rev-parse\", \"HEAD\").decode().strip() != parent:"
+        ]
       ],
       "expect_fail": [
         "blob は path の clean filter を通る"
@@ -35,7 +40,10 @@
     {
       "name": "mode を 100644 に決め打ち (穴 3 = 実行権限が落ちる)",
       "pairs": [
-        ["    mode = line.split()[0]\n", "    mode = '100644'\n"]
+        [
+          "    mode = line.split()[0]\n",
+          "    mode = '100644'\n"
+        ]
       ],
       "expect_fail": [
         "実行 file の mode (100755) が落ちない"
@@ -47,7 +55,10 @@
     {
       "name": "commit の後に実 index を揃えない (穴 4 = 自分の commit を取り消す変更が stage 済みになる)",
       "pairs": [
-        ["        out(top, \"reset\", \"-q\", \"--\", *built)\n", ""]
+        [
+          "        out(top, \"reset\", \"-q\", \"--\", *built)\n",
+          ""
+        ]
       ],
       "expect_fail": [
         "実 index は新しい HEAD に揃う"
@@ -59,8 +70,10 @@
     {
       "name": "commit の前に作業 tree へ書く (穴 5 = 関門に止められた時に自分の変更が作業 tree に残る)",
       "pairs": [
-        ["        state, val = commit_once(top, parent, built, msg_file, first=(attempt == 1))\n",
-         "        apply_worktree(top, specs)\n        state, val = commit_once(top, parent, built, msg_file, first=(attempt == 1))\n"]
+        [
+          "        state, val = commit_once(top, parent, built, msg_file, first=(attempt == 1))\n",
+          "        apply_worktree(top, specs)\n        state, val = commit_once(top, parent, built, msg_file, first=(attempt == 1))\n"
+        ]
       ],
       "expect_fail": [
         "関門が止めたら作業 tree は 1 byte も変わらない"
@@ -68,6 +81,89 @@
       "expect_pass": [
         "関門が止めたら終了値 1、 HEAD は動かない",
         "blob は path の clean filter を通る"
+      ]
+    },
+    {
+      "name": "--base から今の HEAD までの対象の path の不変の確認を外す (版が古い親から作ってあるのに進み、 相手の変更を戻す)",
+      "pairs": [
+        [
+          "            if paths_changed(top, anchor, parent, paths):",
+          "            if False:"
+        ]
+      ],
+      "expect_fail": [
+        "--base の後の commit が対象の path を触っていれば終了値 4",
+        "cannot lock ref の後に対象の path が変わっていれば終了値 4"
+      ],
+      "expect_pass": [
+        "--base の後の commit が対象の path を触っていなければ",
+        "cannot lock ref で止まっても"
+      ]
+    },
+    {
+      "name": "cannot lock ref を関門の拒否と取り違える (やり直さずに終了値 1 で止まる)",
+      "pairs": [
+        [
+          "            if LOCK_REF_RE.search(text) or out(top, \"rev-parse\", \"HEAD\").decode().strip() != parent:",
+          "            if False:"
+        ]
+      ],
+      "expect_fail": [
+        "cannot lock ref で止まっても",
+        "--replace は cannot lock ref の後に"
+      ],
+      "expect_pass": [
+        "関門が止めたら終了値 1",
+        "--base の後の commit が対象の path を触っていなければ"
+      ]
+    },
+    {
+      "name": "commit の後に自分の commit を HEAD を読み直して取る (穴 6 = 上に重なった相手の commit を自分のと取り違えて外す)",
+      "pairs": [
+        [
+          "        new = own_commit(top, env, msg_subject(msg_file))\n",
+          "        new = out(top, \"rev-parse\", \"HEAD\").decode().strip()\n"
+        ]
+      ],
+      "expect_fail": [
+        "相手が自分の commit の上に重ねた commit を外さない",
+        "誤った commit を HEAD から外せない時は終了値 5"
+      ],
+      "expect_pass": [
+        "HEAD が動いても相手の commit の中身が残る",
+        "自分の分だけが commit に入る"
+      ]
+    },
+    {
+      "name": "誤った commit を外せなかった時もやり直す (止まらずに、 誤った commit の上に次の commit を重ねにいく)",
+      "pairs": [
+        [
+          "            if rb.returncode != 0:\n",
+          "            if False:\n"
+        ]
+      ],
+      "expect_fail": [
+        "誤った commit を HEAD から外せない時は終了値 5"
+      ],
+      "expect_pass": [
+        "HEAD が動いても相手の commit の中身が残る",
+        "相手が自分の commit の上に重ねた commit を外さない"
+      ]
+    },
+    {
+      "name": "同じ tree の commit が複数ある時に件名を照合しない (上に重なった空の commit を自分のと取り違えて外す)",
+      "pairs": [
+        [
+          "            if s == subject:\n",
+          "            if True:\n"
+        ]
+      ],
+      "expect_fail": [
+        "上に重なった同じ tree の commit (空の commit) を自分のと取り違えて外さない"
+      ],
+      "expect_pass": [
+        "相手が自分の commit の上に重ねた commit を外さない",
+        "自分の分だけが commit に入る"
       ]
     }
   ]
