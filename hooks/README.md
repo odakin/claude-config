@@ -18,6 +18,9 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[chat-path-base-nudge.test.sh](chat-path-base-nudge.test.sh)** — logic selftest
 - **[codex-parent-worker-record-nudge.py](codex-parent-worker-record-nudge.py)** — Codex由来の環境IDがあるClaude workerだけに記録条項を渡す (UserPromptSubmit/Stop、非blocking)。
 - **[currentdate-anchor.py](currentdate-anchor.py)** — session start temporal anchor
+- **[decision-question-jargon-nudge.sh](decision-question-jargon-nudge.sh)** — Stop + PreToolUse(AskUserQuestion / turn 終わりの箱 wrap_up): 本人への問いに作業側の語 (掲示板の動詞・台帳の符号・event id・内輪の略語) が入っていたら 1 回だけ注意する (Stop は 1 回の block で問いの部分の短い追記を求め、 tool 側は既定で additionalContext。 engine = scripts/decision-question-jargon.py、 語 = hooks/decision-question-jargon-terms.txt + ~/.claude/decision-question-jargon-ext.txt。 conventions/concise-output.md#decision-questions)
+- **[decision-question-jargon-nudge.test.sh](decision-question-jargon-nudge.test.sh)** — 本人への問いの作業側の語の注意 hook の selftest (合成の問いで、 当たり / 通す / fail-open / 3 つの面 / 文面)
+- **[decision-question-jargon-terms.txt](decision-question-jargon-terms.txt)** — 本人への問いに入っていたら注意する「作業側の語」 の既定の一覧 (層1 = どの利用者でも作業側の語である形)。
 - **[delegation-record-clause.py](delegation-record-clause.py)** — 委任時に成果報告の3項目を追加する (PreToolUse[Agent])。
 - **[escape-hatch-guard.py](escape-hatch-guard.py)** — PreToolUse(Bash): commit gate を外す操作 (CLAUDE_*_GUARD=0 / git の --no-verify・commit -n / core.hooksPath の差し替え) を、 本人がこの session で明示に指示し承認として記録していない限り deny
 - **[escape-hatch-guard.test.sh](escape-hatch-guard.test.sh)** — gate の escape hatch の deny と、 本人の指示の記録 (承認台帳) による通過を hook の入出力で検査 (承認は実物の approve CLI で記録)

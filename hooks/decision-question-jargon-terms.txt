@@ -1,0 +1,20 @@
+# decision-question-jargon-terms.txt — 本人への問いに入っていたら注意する「作業側の語」 の既定の一覧 (層1 = どの利用者でも作業側の語である形)。
+# 読む側 = scripts/decision-question-jargon.py (hook = hooks/decision-question-jargon-nudge.sh)。 1 行 1 語、 `re:` で始まる行は正規表現、
+# それ以外は literal、 `#` はコメント。 利用者固有の語 (内輪の略語・呼び名) はここに書かず ~/.claude/decision-question-jargon-ext.txt
+# (個人層が symlink で置く、 env DECISION_QUESTION_JARGON_EXT で差し替え) に書く。 規約 = conventions/concise-output.md#decision-questions。
+#
+# 校正 (導入前、 直近 2 週の transcript = 問いを含む turn 550・選択肢 UI 13・turn 終わりの箱 224): 採った語は陽性 (本人が
+# 「分からない」 と返した問い) を全部当て、 通った問いで鳴るのは少数。 落とした候補と理由 = engine の docstring。
+# 語の直後に `=` `(` `（` `:` が続く (説明つき) と、 「」 の中 (例示) は engine が通す。
+
+# (a) 作業掲示板・検収の動詞。 小文字だけ = 大文字の Accept は査読の招待 UI のボタン名 (通す)。 file 名・URL の中 (- . / : が隣) は通す
+re:(?<![\w./:-])(?:handover|reviewer|accept|claim|submit)(?![\w./:-])
+
+# (b) 掲示板の event id の形
+re:\d{8}T\d{6}Z-[\w-]+
+
+# (c) 検品・台帳・案の符号 = 大文字 1〜2 + 数字 (W-3 / X-7 / C1 / O6 / Q19 / L542)。 除く = 紙の大きさ A4・B5、 Apple の chip M1〜M5、
+#     学年 D1〜D3、 元号 R9・H30、 3DS・4K・8K。 「Q14 = …」 のように直後に説明が続く形は engine が通す
+re:(?<![\w-])(?!(?:[AB]\d|M\d|D[123]|[RH]\d{1,2}|3DS|[48]K)(?![\w.-]))[A-Z]{1,2}-?\d{1,3}(?![\w.-])
+re:追記\s?\d+
+re:\[check\]

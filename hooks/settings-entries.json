@@ -252,6 +252,15 @@
           "timeout": 5
         }
       ]
+    },
+    {
+      "matcher": "AskUserQuestion|mcp__.*__wrap_up",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/decision-question-jargon-nudge.sh"
+        }
+      ]
     }
   ],
   "PostToolUse": [
@@ -429,6 +438,14 @@
           "type": "command",
           "command": "~/.claude/hooks/chat-math-render-guard.py",
           "timeout": 20
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/decision-question-jargon-nudge.sh"
         }
       ]
     }
