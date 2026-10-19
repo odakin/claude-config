@@ -16,6 +16,9 @@ Artifacts are paths from recorded file changes; shell-created files and outputs
 inside scripts still need inspection of the reported commands and worker reports.
 Default text truncation is labeled; --max-chars 0 and --json preserve full visible
 messages/tool outputs. Treat that output as private session material.
+Command outputs also feed the shared reconciliation in lib/output_numbers.py
+(the sole source for its rules and limits). Summary/commands show 🔢 candidates;
+JSON includes number_results, number_repos and numbers_not_recorded (call count).
 """
 from __future__ import annotations
 
@@ -25,12 +28,14 @@ import os
 from pathlib import Path
 import re
 import shlex
+import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'lib'))
 from codex_thread_reader import Reader
 import headless_record_clause as headless
 import worker_observations as observations
+import output_numbers
 
 HINT = re.compile(r'\b(?:claude\b[^\n]*?\s(?:-p|--print)\b|codex\s+(?:exec|e)\b)')
 KNOWN_PASSIVE = {'sleep', 'contextCompaction', 'plan', 'webSearch', 'imageView',
@@ -297,6 +302,84 @@ def add_observed_workers(data, read_thread, directory=None, max_threads=128):
     return data
 
 
+def number_repos(data):
+    """Resolve only recorded working directories, change paths and command paths."""
+    candidates = set()
+
+    def add(path, cwd=None):
+        if not isinstance(path, str) or not path:
+            return
+        if '\0' in path or '\n' in path:
+            return
+        p = Path(path).expanduser()
+        if not p.is_absolute():
+            if not isinstance(cwd, str) or not Path(cwd).is_absolute():
+                return
+            p = Path(cwd) / p
+        candidates.add(p)
+
+    for thread in data['threads']:
+        cwd = thread.get('cwd')
+        add(cwd)
+        for change in thread['files']:
+            add(change['path'], cwd)
+        for tool in thread['tools']:
+            if tool['tool'] != 'Bash':
+                continue
+            working = tool.get('cwd') or cwd
+            add(working)
+            try:
+                words = shlex.split(shell_payload(tool['input']))
+            except ValueError:
+                # Keep the verified cwd/files; never interpret shell code.
+                continue
+            for i, word in enumerate(words):
+                if word.startswith(('/', '~/', './', '../')) or (i and words[i-1] in ('cd', '-C')):
+                    add(word, working)
+    directories = set()
+    for path in candidates:
+        try:
+            while not path.is_dir() and path != path.parent:
+                path = path.parent
+            directories.add(path)
+        except OSError:
+            continue
+    repos = set()
+    for directory in sorted(directories):
+        try:
+            result = subprocess.run(['git', '-C', str(directory), 'rev-parse', '--show-toplevel'],
+                                    text=True, capture_output=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip():
+                repos.add(str(Path(result.stdout.strip()).resolve()))
+        except (OSError, subprocess.SubprocessError):
+            continue
+    return sorted(repos)
+
+
+def add_number_inventory(data):
+    """Reconcile native command output, never messages or tool transport metadata."""
+    repos = number_repos(data)
+    rows = []
+    for thread in data['threads']:
+        for tool in thread['tools']:
+            if tool['tool'] != 'Bash' or not isinstance(tool.get('output'), str):
+                continue
+            nums = output_numbers.result_numbers(tool['output'])
+            if nums:
+                rows.append({'thread': thread['id'], 'turn': tool['turn'], 'call': tool['id'],
+                             'command': tool['input'], 'cwd': tool.get('cwd') or thread.get('cwd'),
+                             'status': tool.get('status'), 'exit_code': tool.get('exit_code'), 'numbers': nums})
+    # One record search per repo, even when many command outputs repeat a value.
+    unique = list(dict.fromkeys(n for row in rows for n in row['numbers']))
+    recorded = set(output_numbers.numbers_recorded(unique, repos))
+    for row in rows:
+        row['recorded'] = [n for n in row['numbers'] if n in recorded]
+    data['number_repos'] = repos
+    data['number_results'] = rows
+    data['numbers_not_recorded'] = sum(len(r['recorded']) < len(r['numbers']) for r in rows)
+    return data
+
+
 def print_report(data, max_chars, section='all', call_id=None):
     def show(value):
         text = value if isinstance(value,str) else json.dumps(value,ensure_ascii=False)
@@ -341,6 +424,19 @@ def print_report(data, max_chars, section='all', call_id=None):
             print(show(report['text']))
     for missing in data['unavailable']:
         print('UNAVAILABLE:',missing)
+    if section in ('all', 'summary', 'commands'):
+        print('数値の照合で探した repo:', ', '.join(data.get('number_repos', [])) or 'なし')
+        lost = [r for r in data.get('number_results', []) if len(r['recorded']) < len(r['numbers'])
+                and (not call_id or r['call'] == call_id)]
+        if lost:
+            print('🔢 探した記録と照合できなかった数値の候補:', len(lost), '件'
+                  ' (規則と限界: scripts/lib/output_numbers.py)。'
+                  ' 1 件ずつ記録するか、記録しない理由を確かめる:')
+            for row in lost:
+                missing = [n for n in row['numbers'] if n not in row['recorded']]
+                print('  thread', row['thread'], 'call', row['call'], '/', row['status'],
+                      'exit', row['exit_code'], '→', ', '.join(missing))
+                print('   ', row['command'].splitlines()[0][:100])
     print('Other-session routes need their native reader; board/token state must be synchronized by the owning workflow.')
 
 
@@ -430,6 +526,46 @@ def selftest():
         assert 'outside the Codex sandbox' in message, message
     print('OK: an app-server that exits at start reports its stderr and the sandbox remedy')
 
+    # Use the real CLI on synthetic thread/read records. These repositories are
+    # outside the source tree so fixture literals cannot satisfy their own search.
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        repo, changed_repo, command_repo, unrelated = [base / name for name in
+            ('working repo', 'changed', 'command', 'unrelated')]
+        for directory, number in ((repo, '0.2394'), (changed_repo, '0.8842'),
+                                  (command_repo, '0.7136'), (unrelated, '0.5615')):
+            directory.mkdir()
+            subprocess.run(['git', 'init', '-q', str(directory)], check=True)
+            (directory / 'note.md').write_text(number + '\n', encoding='utf-8')
+            subprocess.run(['git', '-C', str(directory), 'add', 'note.md'], check=True)
+        fixture_thread = thread(parent, None, [
+            {'type': 'agentMessage', 'id': 'prose', 'text': '0.9898', 'phase': 'final'},
+            {'type': 'commandExecution', 'id': 'numbers', 'command': 'python3 calc.py',
+             'cwd': str(repo), 'status': 'completed', 'exitCode': 0,
+             'aggregatedOutput': '0.23940 0.5615 0.88420 0.71360'},
+            {'type': 'fileChange', 'id': 'change', 'status': 'completed',
+             'changes': [{'path': 'changed/note.md', 'kind': {'type': 'update'}}]},
+            {'type': 'commandExecution', 'id': 'command-path',
+             'command': 'python3 ' + shlex.quote(str(command_repo / 'calc.py')),
+             'cwd': str(base), 'status': 'completed', 'aggregatedOutput': 'no numeric result'},
+            {'type': 'commandExecution', 'id': 'no-output', 'command': 'echo 0.9898',
+             'status': 'inProgress', 'aggregatedOutput': None}])
+        fixture_thread['cwd'] = str(base)
+        fixture = base / 'thread.json'
+        fixture.write_text(json.dumps({parent: fixture_thread}), encoding='utf-8')
+        cli = [sys.executable, str(Path(__file__).resolve()), parent, '--fixture', str(fixture),
+               '--record-dir', str(base / 'observations')]
+        rendered = subprocess.run(cli, capture_output=True, text=True, check=True).stdout
+        inventory = json.loads(subprocess.run(cli + ['--json'], capture_output=True, text=True, check=True).stdout)
+        assert '🔢' in rendered and '→ 0.5615' in rendered, rendered
+        assert inventory['numbers_not_recorded'] == 1
+        assert inventory['number_repos'] == sorted(str(p.resolve()) for p in (repo, changed_repo, command_repo))
+        assert inventory['number_results'][0]['recorded'] == ['0.23940', '0.88420', '0.71360']
+        assert '0.9898' not in str(inventory['number_results'])
+        assert len(inventory['number_results']) == 1
+        assert number_repos({'threads': [summarize(thread(parent, None, []))]}) == []
+        print('OK: Codex fixture CLI emits 🔢 and JSON count without blocking; cwd/change/command paths only; prose, absent output and unrelated repo excluded')
+
     return 0
 
 
@@ -468,6 +604,7 @@ def main():
         else:
             with Reader(args.codex) as reader:
                 data=add_observed_workers(collect(args.session,reader.thread,args.max_threads),reader.thread,args.record_dir,args.max_threads)
+        add_number_inventory(data)
         if args.json:print(json.dumps(data,ensure_ascii=False,indent=2))
         else:print_report(data,args.max_chars,args.section,args.call_id)
         return 2 if data['unavailable'] or any(t['warnings'] for t in data['threads']) else 0
