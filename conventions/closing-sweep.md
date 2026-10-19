@@ -31,6 +31,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 |---|---|
 | user の発言 (訂正・決定・依頼) | `python3 scripts/search-agent-transcripts.py --session <id8> --role user --regex .` (圧縮の前も含めて時刻順に全部) |
 | その場で書いた script (file に書いたもの + heredoc・`-c` で流したもの) | `python3 scripts/session-scripts-report.py <id8>` = 1 本ずつ、 commit 済み (✅) / repo の中で未 commit (🟡) / repo の外 (⚠️) / 流しただけで file に無い (⚠️) を出す。 ✅ でないものは 1 本ずつ、 1 の表の [#evidence-scripts](#evidence-scripts) の行で決める |
+| 根拠の無い検算の主張と先送り (返事と記録に書いた文) | `python3 scripts/session-claims-report.py <id8>` = 「手で確かめて一致」「独立に再現」 のうち根拠の file を指さない行 (A) と、 「次に〜とき」「後で」 のうち carrier を指さない行 (B)。 誤検出は出るので 1 行ずつ読み、 A は 1 の表の [#unbacked-checks](#unbacked-checks)、 B は 3 の [#deferrals](#deferrals) で決める |
 | 打った command・commit | `python3 scripts/search-agent-transcripts.py --session <id8> --tool-runs --regex '<語>'` (例 = `git commit`。 2 回以上打った command は 1 の表の「再利用できる script」 の候補) |
 | agent の報告 | 0.5 の表の 1 行目 |
 | 研究の中身 | 会話を頭から読み、 返事に書いた計算結果・導出・読み・見積もり・否定的な結果・「確かめていない」 の一覧と、 agent の報告の検算済み・未検証の一覧を 1 件ずつ拾う (返事にしか無いものは session が終わると消える) |
@@ -114,6 +115,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 | user の訂正 | 訂正された規則の文そのものを**言い直す** (追記して古い文と同居させない) |
 | その場で 2 回以上打った command・使い捨て script | 再利用できる script にして正しい層の `scripts/` へ (冒頭に説明、 生成索引を作り直す) |
 | <a id="evidence-scripts"></a>その場で書いた script で、 file として残っていないもの (0.3 の `session-scripts-report.py` の ✅ 以外) | 1 本ずつ決める: (a) **出力を記録・note・規約・報告の根拠に使った** (「実測: …」 と書いた、 数値を写した、 結論の理由にした) → 1 回きりでも、 その記録の隣に file として置き、 記録から指す (根拠の再現の手段が記録と一緒に残る) (b) 他でも使える → 上の行 (c) 根拠に使っていない一度きり (形式の確かめ・file を直すための置換) → 置かず、 報告に「置かない・理由」 を 1 行 |
+| <a id="unbacked-checks"></a>検算・照合の主張で、 script も出力も無いもの (頭の中で計算して「一致」「再現」 と書いた) | 記録に残すなら、 その場で script にして回し、 記録の隣に置いて記録から指す (通らなければ主張を直す)。 手計算は記録の根拠にならない = 書いた本人にも後から再現できない。 置かないなら主張を記録と返事から消す。 書く瞬間の規則: 受領・検品の記録に「独立に確かめた」 と書く前に script を書く (実測: 受領の記録に手計算の検算を書き、 script にしたら道具の側の偽の失敗と本物の一致が分かれた) |
 | agent・worker が書いた script (subagent の成果物、 sandbox の `checks/`・`scratch/`、 子 session の使い捨て) | 一覧を道具で出し (`subagent-reports.py` / `headless-worker-reports.py`)、 1 本ずつ決める: (a) その研究・案件に固有 → その project の repo に置き、 索引から指す。 独立な実装であること自体が証拠なので、 起票側の code に混ぜず元の形で残す (b) 分野や案件を問わず使える → 一般化して正しい層の `scripts/` へ (selftest をつけ、 元の script を動かして同じ値が出ることを確かめてから。 公開層へは下の ⚠️ の境界を当てる) (c) 一度きりで再現に要らない → 置かない、 と報告に書く。 worker の HANDOFF が各 script の汎用性を書いていれば、 判断の入力にする (検証前の主張として) |
 | 外部 service の新しい経路 | 個人層の経路台帳 ([`machine-route-first.md`](machine-route-first.md)) |
 
@@ -169,6 +171,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
 - SESSION.md は案件ごとの現在地を**置き換える** (日付つきの節・commit hash・経緯を足さない。 中身の置き場所 = 2 の「正本を README・SESSION に置かない」)。
 - 動いた TODO は現在地の欄を上書きし、 期限と status を実態に合わせる (自分の番が残るなら「待ち」 にしない)。
 - メールを送った・受けたなら記録の道具で記録する。
+- <a id="deferrals"></a>この session が記録や返事に書いた先送り (「次に〜するとき」「後で」「推す = 〜 (次の機会に)」) は、 締めの中で今やるか、 期限つきの TODO・plan・掲示板の依頼に載せる。 記録の中の「次に〜とき」 は carrier ではない (次の session はその文を探さない)。 拾い方 = 0.3 の `session-claims-report.py` の B
 - 一時 dir (scratchpad・`/tmp`) に置いた成果 (候補・証拠・出力) は、 残すなら repo に移して所在を正本に書き、 要らないなら消す (一時 dir は session の後にだれも見つけられない)。 個人情報を含む複製 (記入済みの様式・刷った PDF) は必ず消す。
 
 ## <a id="commit"></a>4. commit + push
@@ -186,6 +189,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
   - 何を・どこへ移したか (repo と file の link、 1 行ずつ。 出所 = この session / agent / 子 session を添える)
   - 研究の中身を扱った session なら、 拾った知見の件数と置いた note (会話にしか無かったものを何件記録したか)。 考え方 (0.3 の表の行) も同じく件数と置き場所
   - その場で書いた script の一覧 (0.3 の道具) の ✅ 以外 1 本ずつの扱い (置いた先か、 置かない理由 = 1 の [#evidence-scripts](#evidence-scripts))
+  - `session-claims-report.py` の A (根拠の無い検算) と B (先送り) を 1 行ずつどうしたか (script にした先・消した・やった・載せた carrier)
   - 2 回目の壊れ方・訂正があれば、 仕組みにしたか、 しなかった理由と積んだ先
   - 委ねた先のうち、 まだ動いている・検収していない・裏が取れなかったもの。 掲示板の状態 (検収待ち・誰の番か) を書く直前に、 その request を `board.py show --request <id> --sync` で読み直す
     (手元の checkout と数分前の表示は古い。 並列の session が検収役を移している・検収を済ませていることがある = 古い状態のまま「本人の一言が要る」 と報告し、 要らない判断を求めた実測がある)
