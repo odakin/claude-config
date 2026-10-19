@@ -399,6 +399,7 @@
 - **[lib/config_dir_auth.py](lib/config_dir_auth.py)** — Claude Code の設定フォルダ (CLAUDE_CONFIG_DIR) の認証が切れているかを、 `claude` を呼ばずに読む共有判定。
 - **[lib/find-personal-layer.sh](lib/find-personal-layer.sh)** — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
 - **[lib/git_blob.py](lib/git_blob.py)** — git の blob を worktree に出したときの中身で読む helper (git-crypt で暗号化される path も平文で)。
+- **[lib/git_crypt_paths.py](lib/git_crypt_paths.py)** — staged の path のうち git-crypt で暗号化される path を判定する (pre-commit の警告が見本を伏せるため)。
 - **[lib/git_rewrite_follow.py](lib/git_rewrite_follow.py)** — 書き換えられた (force-push された) 履歴に手元の clone を **中身で** 揃え、 古い世代の commit / blob の push を止める共有部品。
 - **[lib/gmail_read.py](lib/gmail_read.py)** — Gmail を**読むだけ**の最小 helper (service の組み立て / thread の message 列 / 本文の取り出し)。
 - **[lib/headless_record_clause.py](lib/headless_record_clause.py)** — 共通のheadless記録条項runner・shell解析・実行記録。--selftest。
