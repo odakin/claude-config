@@ -24,11 +24,13 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 ## <a id="collect-from-transcript"></a>0.3 会話の全体から集める (文脈圧縮の前も)
 
 文脈圧縮の後に手元にあるのは要約だけで、 圧縮より前の user の訂正・分かった壊れ方・打った command は要約から落ちていることがある。
-会話記録 (transcript) は圧縮の後も全体が file に残っているので、 要約でなく記録から集める。 圧縮が起きていなければ context で足りる。
+会話記録 (transcript) は圧縮の後も全体が file に残っているので、 要約でなく記録から集める。 圧縮が起きていなければ、 user の発言と研究の中身は context で足りる。
+**その場で書いた script は、 圧縮の有無に関わらず下の道具で一覧を出す** — context から思い出すと file に残らない形 (heredoc で interpreter に流した code・`-c` の code) を数え落とす (実測: file の script だけを数え、 結果を記録の根拠に使った heredoc の code を落とした)。
 
 | 集めるもの | 引き方 |
 |---|---|
 | user の発言 (訂正・決定・依頼) | `python3 scripts/search-agent-transcripts.py --session <id8> --role user --regex .` (圧縮の前も含めて時刻順に全部) |
+| その場で書いた script (file に書いたもの + heredoc・`-c` で流したもの) | `python3 scripts/session-scripts-report.py <id8>` = 1 本ずつ、 commit 済み (✅) / repo の中で未 commit (🟡) / repo の外 (⚠️) / 流しただけで file に無い (⚠️) を出す。 ✅ でないものは 1 本ずつ、 1 の表の [#evidence-scripts](#evidence-scripts) の行で決める |
 | 打った command・commit | `python3 scripts/search-agent-transcripts.py --session <id8> --tool-runs --regex '<語>'` (例 = `git commit`。 2 回以上打った command は 1 の表の「再利用できる script」 の候補) |
 | agent の報告 | 0.5 の表の 1 行目 |
 | 研究の中身 | 会話を頭から読み、 返事に書いた計算結果・導出・読み・見積もり・否定的な結果・「確かめていない」 の一覧と、 agent の報告の検算済み・未検証の一覧を 1 件ずつ拾う (返事にしか無いものは session が終わると消える) |
@@ -111,6 +113,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 | Office の様式・紙の書類で分かった壊れ方・訂正・窓口の指摘 | 一般形 = [`office-automation.md`](office-automation.md) (Office の罠) / [`form-case-pipeline.md`](form-case-pipeline.md) (様式の案件の仕組み)、 機械と運用の差 = 個人層、 様式ごとの規則 = 案件の instance の spec と規則の doc。 道具 (build・検査) で止められる形にできるなら、 文を足すより先にそうする |
 | user の訂正 | 訂正された規則の文そのものを**言い直す** (追記して古い文と同居させない) |
 | その場で 2 回以上打った command・使い捨て script | 再利用できる script にして正しい層の `scripts/` へ (冒頭に説明、 生成索引を作り直す) |
+| <a id="evidence-scripts"></a>その場で書いた script で、 file として残っていないもの (0.3 の `session-scripts-report.py` の ✅ 以外) | 1 本ずつ決める: (a) **出力を記録・note・規約・報告の根拠に使った** (「実測: …」 と書いた、 数値を写した、 結論の理由にした) → 1 回きりでも、 その記録の隣に file として置き、 記録から指す (根拠の再現の手段が記録と一緒に残る) (b) 他でも使える → 上の行 (c) 根拠に使っていない一度きり (形式の確かめ・file を直すための置換) → 置かず、 報告に「置かない・理由」 を 1 行 |
 | agent・worker が書いた script (subagent の成果物、 sandbox の `checks/`・`scratch/`、 子 session の使い捨て) | 一覧を道具で出し (`subagent-reports.py` / `headless-worker-reports.py`)、 1 本ずつ決める: (a) その研究・案件に固有 → その project の repo に置き、 索引から指す。 独立な実装であること自体が証拠なので、 起票側の code に混ぜず元の形で残す (b) 分野や案件を問わず使える → 一般化して正しい層の `scripts/` へ (selftest をつけ、 元の script を動かして同じ値が出ることを確かめてから。 公開層へは下の ⚠️ の境界を当てる) (c) 一度きりで再現に要らない → 置かない、 と報告に書く。 worker の HANDOFF が各 script の汎用性を書いていれば、 判断の入力にする (検証前の主張として) |
 | 外部 service の新しい経路 | 個人層の経路台帳 ([`machine-route-first.md`](machine-route-first.md)) |
 
@@ -182,6 +185,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
 - 最終 message に書くもの:
   - 何を・どこへ移したか (repo と file の link、 1 行ずつ。 出所 = この session / agent / 子 session を添える)
   - 研究の中身を扱った session なら、 拾った知見の件数と置いた note (会話にしか無かったものを何件記録したか)。 考え方 (0.3 の表の行) も同じく件数と置き場所
+  - その場で書いた script の一覧 (0.3 の道具) の ✅ 以外 1 本ずつの扱い (置いた先か、 置かない理由 = 1 の [#evidence-scripts](#evidence-scripts))
   - 2 回目の壊れ方・訂正があれば、 仕組みにしたか、 しなかった理由と積んだ先
   - 委ねた先のうち、 まだ動いている・検収していない・裏が取れなかったもの。 掲示板の状態 (検収待ち・誰の番か) を書く直前に、 その request を `board.py show --request <id> --sync` で読み直す
     (手元の checkout と数分前の表示は古い。 並列の session が検収役を移している・検収を済ませていることがある = 古い状態のまま「本人の一言が要る」 と報告し、 要らない判断を求めた実測がある)
