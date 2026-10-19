@@ -411,7 +411,7 @@ replay が見るのは leak の gate だけ: CI の bot (author が `[bot]`) の
 **新版だけが当てた件**を 1 件ずつ読む (公刊物の文・合成例・一般句の一致 = 誤検出、 未公開の逐語 = 直す)。 変えた形を含まない行は新旧で判定が同じなので、
 その形を含む行だけを照合すれば全履歴でも数分で済む (実測)。 ⚠️ `check-unpublished-quote.py --replay` は message を見ず新旧も比べないので、 今はこの比較を手で組む
 (新旧の engine を import し、 同じ索引で `quoted_hits` を呼んで差を取る)。 新しい版は、 元の `scripts/` を全部 symlink で写した一時 dir に置いて動かす
-(候補だけを一時 dir に置くと同じ dir の lib の import が失敗し、 代わりの既定値で動く = 測定と selftest が別物を見る。 実測)。
+([`agent-rule-ownership.md#candidate-in-mirror-dir`](agent-rule-ownership.md#candidate-in-mirror-dir))。
 
 ### <a id="visibility-decided-at-publish-time"></a>公開にするかは、 中身が出来てから・公開する直前に決める
 
