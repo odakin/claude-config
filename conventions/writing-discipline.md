@@ -201,6 +201,7 @@ scope を絞って残りを別の論文へ送る段落は、 先送りする対�
 - 指示語は指示先を名指す (display や文が間に入ると This / these two terms の指示先が離れる) = [paper-audit.md#referent-and-scope-pinning](paper-audit.md#referent-and-scope-pinning)。
 - 教科書の説明を論文の段落に挟まない: 1 段落 1 話。 周知の一般論を落とし、 主張と根拠だけを残す。
 - くどさの検算: 書き直した文に「この語を落として意味が変わるか」 を 1 語ずつ問う。 load-bearing な語は残す ([#compression-drops-load-bearing-words](#compression-drops-load-bearing-words))。
+- **長さは測る** — 原稿全体の文の長さを [`scripts/tex-sentence-lengths.py`](../scripts/tex-sentence-lengths.py) で数える (文の数・中央値・N 語超の件数・長い順の一覧と行番号)。 AI の校閲が「長いので分けよ」 と挙げた文の一覧は全数でない (実測: 挙げられた文の約 3 倍の文が 60 語を超えていた)。 分けた後は 1 文ずつ、 範囲の限定の句・指示語の指示先・示唆と言い切りの強さが動いていないかを見る (実測: 分割で、 範囲の限定が落ちて普遍の上限に読める文、 指示語が直前に入った別の名詞を指す文、 示唆が言い切りになった文が出た。 圧縮で落ちる語と同じ型 = [#compression-drops-load-bearing-words](#compression-drops-load-bearing-words))。
 
 ### <a id="no-run-in-labels"></a>段落の頭に見出し語を置かない — 段落の役は最初の文が言う
 

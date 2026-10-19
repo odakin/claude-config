@@ -208,6 +208,7 @@
 - **[jps-program-talks.py](jps-program-talks.py)** — 日本物理学会 (JPS) 年次大会 / 春季大会の Web program を機械で読む。
 - **[kakenhi-preflight.py](kakenhi-preflight.py)** — 科研費 研究計画調書の「機関事務が必ず突く点」を提出前に機械検出（様式骨格の生存 / 埋め込み指示の抽出 / 表記 lint / 経費明細の粒度・費目帰属、kakenhi-proposal.md#office-review-loop）
 - **[keynote-iwa-text.py](keynote-iwa-text.py)** — Extract a text inventory from Keynote .key slide IWA archives (layout/order not reconstructed).
+- **[latex-float-placement.py](latex-float-placement.py)** — 本文の図・表が付録の頁に流れていないかを、 組版後の .aux で確かめる (float ごとの頁と、 付録の始まりの頁を比べる)。
 - **[latex-pdf-audit.py](latex-pdf-audit.py)** — Audit a LaTeX log and PDF, and optionally render numbered pages for visual review.
 - **[latex-split-deps.py](latex-split-deps.py)** — 原稿の一部 (節・\input の file) を別の文書へ移す前に、 移すと切れる参照・引用と、 移した文の中で旧い入れ物を指す語を列挙する (読むだけ)。
 - **[latexdiff-changed-pages.py](latexdiff-changed-pages.py)** — latexdiff の PDF から、 差分の色 (追加・削除) が出ている頁だけを残す: 変わった頁を印でなく差分そのもので選ぶ。
@@ -328,6 +329,7 @@
 - **[test_reviewed_mail_cli.py](test_reviewed_mail_cli.py)** — Offline checks: CLI authorization shape, pagination, full source extraction.
 - **[tex-first-use.py](tex-first-use.py)** — Is a notation explained where the reader first meets it? Lists the first body uses of a regex with line and section, checks the first one against the line of the defining \label (a reference to that label near the use counts as a pointer), and lists \cref-type references to equations that are printed further down.
 - **[tex-rename-symbols.py](tex-rename-symbols.py)** — LaTeX 原稿の 1 文字記号 (y → x、 r → \zeta_x の類) を安全に一括改名する (scan / apply)。
+- **[tex-sentence-lengths.py](tex-sentence-lengths.py)** — LaTeX 原稿の英文の文の長さを数える (概数) — 文の数・中央値・N 語超の件数と、 長い順の一覧 (tex の行番号つき)。
 - **[tex2plain.py](tex2plain.py)** — .tex から LaTeX タグを除いたテキストを生成する (数式は Unicode で線形化、図キャプションは末尾へ)。
 - **[todo-ledger-split.py](todo-ledger-split.py)** — 1 file の list (`TODO.yaml`) の TODO 台帳を 1 entry 1 file (`todo/<id>.yaml`) に分割する (既定 dry-run)。
 - **[transcript-images.py](transcript-images.py)** — Claude Code の会話記録 (jsonl) から、 user が貼った画像 (画面写真) を file に取り出す

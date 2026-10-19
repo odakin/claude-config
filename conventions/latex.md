@@ -181,6 +181,20 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 
 **対処**: float の source を、 参照する段落より前 (頁の前半に来る位置) へ移す。 参照文 (`\cref{tab:…} collects …`) は末尾のままでよい。 `[h]` / `[H]` より安定で、 組版後に「Table 1 の頁 < References の頁」 を PDF text で機械確認する。
 
+## <a id="figures-in-body-references-last"></a>本文の図を本文の中に置き、 文献表を付録の後ろに置く — `placeins` の section option と `[tbp]`
+
+**症状**: 本文の `[t]` の図が、 付録と文献表の後ろの最後の数頁にまとめて出る (実測: 本文の図 5 枚のうち 3 枚)。
+
+**原因**: `[t]` の float は頁の上端にしか置けない。 本文の終わりの方で図が続くと置き場が足りず、 置ける頁まで後ろへ送られ、 付録の見出しも文献表も越える。 [#float-drift-after-insert](#float-drift-after-insert) の 1 枚の流れと同じ仕組みの、 本文全体の版。
+
+**対処**:
+
+- `\usepackage[section]{placeins}` を読む。 各 `\section` の手前で溜まった float を出し切るので、 図はその節の中か直後に出て、 付録と文献表へ越えない。 `\FloatBarrier` を手で置く形は、 節を足したときに置き忘れる。
+- 図の位置の指定を `[t]` から `[tbp]` に広げる (`[!t]` は `[!tbp]`)。 出し切るときの置き場 (頁の下端・float だけの頁) が増え、 半端な余白の頁が減る。
+- 確かめ = 組んだ後に [`scripts/latex-float-placement.py`](../scripts/latex-float-placement.py) `paper.tex` (`.aux` の float ごとの頁と付録の始まりの頁を比べ、 本文の float が付録の頁にあれば exit 1)。 PDF の本文から「Fig. N」 を探す形は、 class ごとに caption の書式が違い、 本文の行頭の参照も拾う。
+
+**文献表の位置**: 物理 (特に素粒子) の原稿では 本文 → 謝辞 → 付録 → 文献表 の順が多く、 雛形によっては文献表が付録の前にある。 どちらに置くかは著者の家風と投稿先の指定で決める。 付録の後ろへ移すときは `\bibliographystyle{…}` と `\bibliography{…}` の 2 行を `\end{document}` の直前へ動かす (付録の中の `\cite` も同じ文献表に入る)。 上の道具は source の位置 (付録の前 / 後ろ) も出す。
+
 ## <a id="align-split-tag-orphan"></a>長い display の式番号が下の行に回るのは amsmath の標準 — 欠陥として報告しない (2026-09-12、 著者裁定)
 
 **何が起きるか**: 式が本文幅に収まらないと、 amsmath は式番号 (tag) を式の**下の行**に置く。 `align` を `\nn` で 2 行に割った場合も、 第 1 行に `&` が無く第 2 行が右端まで届けば同じになる。 overfull ではないので log には何も出ない。
@@ -1060,7 +1074,7 @@ papers/upstream/ms.tex     -latex-autofix
 - 仕組み: hook が staged LaTeX file 各々に `git check-attr latex-autofix -- <file>` を問い、 `unset` のものを fixer から外す (`scripts/pre-commit-bib`)。 末尾の layer-3 chain hook は除外と無関係に常に走る。
 - `.gitattributes` は commit に乗るので全 clone (共同編集者含む) に伝播する。
 - ⚠️ opt-out は「自動 fix からの保護」 であって「自分が書く新規 .tex でアクセント直書き OK」 ではない。 外すのは、 正本が別にあって `.tex` を手で書かない file だけ = vendored の取り込み・機械が作り直す照合の基準 ([`#md-tex-source-and-copy`](#md-tex-source-and-copy))・道具が書き出す `.tex` ([`#generated-tex-opt-out`](#generated-tex-opt-out))。
-- <a id="autofix-with-pathspec-commit"></a>⚠️ **`git commit -- <path>` (並列 session 対策の pathspec commit) と自動 fix は噛み合わない** (実測): hook が「auto-fixed … and re-staged」 と言っても、 その修正は今の commit に入らず、 commit の後に `git status` が `MM` (index と作業 tree の両方に修正が残る) になる。 commit の直後に status を見て、 残っていたら同じ path でもう一度 commit する。 fix が掛かった file を別の検査の基準にしているなら、 2 回目の commit の前にその検査を回し直す。
+- <a id="autofix-with-pathspec-commit"></a>⚠️ **`git commit -- <path>` (並列 session 対策の pathspec commit) と自動 fix は噛み合わない** (実測): hook が「auto-fixed … and re-staged」 と言った commit の後、 `git status` が `MM` のまま残る。 hook の `git add` は commit 用の一時 index にしか届かず、 main の index には fix の前の版が残るため。 git 2.39 で再現した形では、 fix は commit に入り、 main の index が fix の前の版を持つ。 この状態は 2 つの害を持つ: path を付けない次の `git commit` は fix の前の版を commit して fix を黙って戻す。 並列の session はこの `MM` を他人の書きかけと読む (実測: 別の agent が「並行 session の未 commit の編集」 と記録した)。 commit の直後に status を見て `MM` なら `git diff HEAD -- <path>` で見分ける: 空 (fix は commit 済み) → `git restore --staged <path>` で index を HEAD に揃える (同じ path でもう一度 commit しても「変更なし」 で揃わない)。 空でない (fix が commit に入っていない) → 同じ path でもう一度 commit する。 fix が掛かった file を別の検査の基準にしているなら、 その検査を回し直す。
 
 ### <a id="pre-commit-hook-design-motivation"></a>設計動機 (2026-06-09)
 

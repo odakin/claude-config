@@ -637,6 +637,7 @@ orientation 直後の silent stall (session は running のまま・活動 times
 
 - **model 保証 + 非 block + fresh context で足りる** → (b) の pinned custom agent、 または (c) の headless CLI で pin。
 - **真の並列 session が要る** (= 人が途中で対話する / user が独立に steer する) → desktop の窓で steer するなら `spawn_task` (§7、 model はアプリ既定 = 諦める)、 model を固定したいなら (d) の `claude --bg` (窓は端末の `claude attach <id>`)。 どちらも真の並列と live steer が得られる。
+- <a id="session-focus-declared"></a>**user が session の主題を宣言したら (「この session は X に集中して、 ほかは投げて」)、 X の外の作業 (整備・環境・点検・規約・締めの sweep) はその session で手を動かさず、 background の agent か別 session に渡す** — 戻ってきた結果は 1 行で伝え、 本人の判断が要る件だけを平文で聞く。 宣言はその session の残り全部に効く (締めの sweep も委ねる)。 委ねた先の報告は検証前の主張として、 記録に書く前に裏を取る ([closing-sweep.md#collect-from-delegates](closing-sweep.md#collect-from-delegates))。
 
 ### 注意
 
