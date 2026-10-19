@@ -381,6 +381,7 @@ nextFire ← nextFire + 間隔
   次の回から新しい版を読む。 別の file system からの `mv` は copy になる = 一度同じ dir に置いてから rename する。
 - 後方互換な変更から順に入れる (呼ばれる側を先、 呼ぶ側を後)。 途中の 1 回も壊れない。
 - 下の常駐の worker は、 rename の瞬間に新しい版で起き直す = 入れる前の selftest が本番での試験になる。
+- session 開始・turn ごとの hook も同じ形で走る (その機械で次に始まる session が作業 tree の版を読む) = [`hook-authoring.md#live-hook-edit-runs-elsewhere`](hook-authoring.md#live-hook-edit-runs-elsewhere)。
 
 ## <a id="resident-worker-from-periodic-job"></a>定期 job から常駐の worker を起こす (間隔より短い仕事)
 
