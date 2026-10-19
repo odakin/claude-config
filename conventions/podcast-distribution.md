@@ -166,14 +166,17 @@ PNG は元の絵として手元に残す。
   3 つとも status が認証エラー (`login_required` / `login_required_or_access_denied`) で数が空なら、失効した日に 0 人や非表示として記録されない (実測)。写しは読んだらすぐ消す。
   同じ engine の `render_history_chart` は保存済み履歴から SVG / PNG を描き、欠測と集計上の仮定を区別する。
   - ⚠️ 管理画面のログインの Cookie を保存して読ませる形は、 そのアカウントにログインしているのと同じ力を手元に置く = 漏れたら乗っ取られる
-  - ⚠️ <a id="follower-cookie-lifetime"></a>**保存した認証で読めるのは、 Amazon・Apple とも入れた後の 1〜2 日だけ** (実測: Apple は 1 日もたず、 Amazon は 2 日目に読めなくなった。 同時に保存した Spotify は 2 日を過ぎても読めた)。
+  - ⚠️ <a id="follower-cookie-lifetime"></a>**保存した認証をそのまま使い回すと、 Amazon・Apple は入れた後の 1〜2 日しか読めない** (実測: Apple は 1 日もたず、 Amazon は 2 日目に読めなくなった。 同時に保存した Spotify は 2 日を過ぎても読めた)。 切れる物は配信先で違う:
     - **Amazon で切れるのは Cookie でなく `csrf-token`** = 管理画面の短命の通行証 (中身は読めない暗号文)。 切れたものを付けると API は 403 "explicit deny"、 付けないと 401 を返す (実測)。
-      管理画面は開くたびに amazon.com のログインから通行証を作り直す (サインインの戻り先 `/auth/csrf` が URL に `csrf-token` を付けて返し、 画面がそれを localStorage に入れる = 画面の JS で確認)。
-      保存した通行証を使い回す CLI だけが切れる = 長くもたせるには、 同じ作り直しを CLI がする (amazon.com のログインが生きている間はもつ見込み、 未検証) か、 ログインしたブラウザの profile で画面を開いて読む
-    - サーバーが返す新しい Cookie (Set-Cookie) を CLI が保存しない作りだと、 使うたびに延びる型のログインも延びない (Apple がこの型かは未確認)
+      管理画面は開くたびに amazon.com のログインから通行証を作り直す (`www.amazon.com/ap/signin?openid…&openid.mode=checkid_setup&openid.return_to=https://podcasters.amazon.com/auth/csrf?path=…` → `/auth/csrf` が `path?csrf-token=…` へ転送し、 画面がそれを localStorage に入れる = 画面の JS で確認)。
+      **engine (`scripts/podcast-followers.py`) は同じ経路を保存した Cookie で辿って作り直す** (403 を受けたら 1 回。 転送先が Amazon の 2 つの host の外へ出たら止める。 途中で受けた Cookie も使う)。
+      サインインの host が転送でなく 200 の頁 (= パスワードの form) を返したら、 amazon.com のログイン自体が切れている = `login_required` で持ち主に入れ直しを頼む
+      (入れ直すときのログインで「ログインしたままにする」 を入れると長くもつ見込み、 未検証。 同じ切り分けを手でするなら `/api/user` に通行証つき・なしで 1 回ずつ)
+    - **サーバーが返す新しい Cookie (Set-Cookie) は、 読めた応答の分を保存に戻す** (失敗した応答の分は戻さない = サインインの頁は匿名の session の Cookie を返すので、 戻すと保存したログインを壊す)。
+      使うたびに延びる型のログイン (Apple の `itctx` がそうかは未検証) はこれで延びる
+    - **無人の機械は延びた分を「その機械の更新分」 (`--auth-overlay`) に書き、 配布された写しは触らない**。 engine は写しと更新分の新しい方を読む = 持ち主が入れ直して配った写しは、 その機械で pull した時刻が新しいので、 そちらが読まれる
     - 内蔵ブラウザの管理画面も同じころログインが外れていたが、 数日開いていなかった = 毎日開くブラウザでどれだけもつかは未確認
-    - 今の作りのまま無人で毎日回すと、 Amazon・Apple は入れ直した後の 1〜2 日しか数が取れず、 残りの日は欠測と失敗の知らせになる。
-      通行証の作り直し・Cookie の保存を CLI に足すか、 ブラウザで読むか、 要るときだけ入れ直すかを、 持ち主が決める (認証の扱いを広げるので、 下の ⚠️ のとおり作る前に持ち主の判断が要る)
+    - 残る限界 = ログインそのもの (Amazon は amazon.com の `at-main` ほか、 Apple は `myacinfo`) が切れたら持ち主の入れ直し。 どれだけもつかは無人の日次で測る (未測定)
   - ⚠️ Claude Code の auto mode では、 ログイン中のページから値を抜き出す操作も、 Cookie で読む道具を書く操作も、 classifier が「認証情報の探索」 として止めた (実測)。
     作るかどうかは持ち主が決め、 権限の設定 (毎回確認する mode か、 その作業に絞った規則) も持ち主が先に決める。 止められた操作を別の道具で続けない
 - <a id="plays-and-retention"></a>**再生数と「最後まで聴いた人」**: Spotify for Creators は、 フォロワー数を読むのと同じ access token で次の口を読める (非公式、 実測)。

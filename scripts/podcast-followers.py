@@ -5,6 +5,13 @@ API reads use the standard library; history charts optionally use matplotlib.
 No browser-cookie discovery; no credential output.
 save-auth accepts hidden interactive input. Keep auth-dir outside version control.
 Session expiry requires the owner to sign in and replace the saved fields.
+Between re-entries the reads keep the saved state fresh: cookies a successful read
+receives (Set-Cookie) are folded back into the saved fields, and Amazon's short-lived
+csrf-token is re-minted the way the dashboard does it (a bounce through the amazon.com
+sign-in page back to /auth/csrf, with the saved cookies; a password form there means the
+amazon.com login itself is gone). An unattended job can write refreshed state to
+--auth-overlay (a machine-local directory) instead of a distributed/read-only auth-dir;
+whichever copy is newer is read, so a re-entered auth-dir wins again.
 Unofficial routes and schemas: openpodcast/spotify-connector (authentication,
 metadata), openpodcast/apple-connector (showTrendsV2), openpodcast/api
 (fixtures/appleTrendsFollowers*.json). Amazon uses the dashboard's
@@ -32,8 +39,19 @@ from pathlib import Path
 FIELDS = {"spotify": ("sp_dc", "sp_key"), "amazon": ("cookie", "csrf_token"),
           "apple": ("myacinfo", "itctx")}
 HOSTS = {"spotify": {"accounts.spotify.com", "generic.wg.spotify.com"},
-         "amazon": {"podcasters.amazon.com"}, "apple": {"podcastsconnect.apple.com"}}
+         "amazon": {"podcasters.amazon.com", "www.amazon.com"}, "apple": {"podcastsconnect.apple.com"}}
 SPOTIFY_CLIENT = "05a1371ee5194c27860b3ff3ff3979d2"  # Public dashboard client
+# The Amazon dashboard mints its csrf-token by sending the browser through the amazon.com sign-in page and back
+# to /auth/csrf, which answers with a redirect carrying ?csrf-token=... (read from the dashboard bundle). A saved
+# token stops working after a day or two; replaying the same hops with the saved cookies mints a fresh one.
+AMAZON_SIGNIN = ("https://www.amazon.com/ap/signin?openid.ns=http://specs.openid.net/auth/2.0"
+                 "&openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select"
+                 "&openid.identity=http://specs.openid.net/auth/2.0/identifier_select"
+                 "&pageId=amzn_ziggy_ui&openid.assoc_handle=amzn_podcaster_portal_us&language=en_US"
+                 "&openid.mode=checkid_setup"
+                 "&openid.return_to=https://podcasters.amazon.com/auth/csrf?path=https://podcasters.amazon.com/podcasts")
+REDIRECTS = (301, 302, 303, 307, 308)
+MAX_HOPS = 6
 
 
 class ReadError(Exception):
@@ -70,6 +88,46 @@ def validate_fields(site, fields):
     return dict(fields)
 
 
+def parse_cookies(header):
+    """'a=1; b=2' -> {'a': '1', 'b': '2'} (order kept, malformed pairs dropped)."""
+    jar = {}
+    for part in header.split(";"):
+        name, sep, value = part.strip().partition("=")
+        if sep and name:
+            jar[name] = value
+    return jar
+
+
+def format_cookies(jar):
+    return "; ".join(f"{k}={v}" for k, v in jar.items())
+
+
+def set_cookie_pair(header):
+    """Name and value of a Set-Cookie header (attributes dropped); None when malformed, empty (a deletion) or not
+    printable ASCII."""
+    name, sep, value = header.split(";", 1)[0].partition("=")
+    name, value = name.strip(), value.strip()
+    if not sep or not name or not value or any(ord(c) < 33 or ord(c) > 126 for c in name + value):
+        return None
+    return name, value
+
+
+def refreshed_fields(site, fields, set_cookies):
+    """The saved fields with what a successful read received folded in: Amazon's cookie string merged by name
+    (the re-minted csrf-token is already in fields), the other sites' named cookies replaced when the server sent
+    a new value. Only after success: a failed read may have been handed anonymous replacement cookies."""
+    out = dict(fields)
+    if site == "amazon":
+        jar = parse_cookies(out["cookie"])
+        jar.update(set_cookies)
+        out["cookie"] = format_cookies(jar)
+    else:
+        for key in FIELDS[site]:
+            if key in set_cookies:
+                out[key] = set_cookies[key]
+    return validate_fields(site, out)
+
+
 def auth_root(root, create=False):
     if root.is_symlink():
         raise ReadError("auth_dir_symlink")
@@ -83,11 +141,34 @@ def auth_root(root, create=False):
         raise ReadError("auth_dir_permissions")
 
 
-def save_auth(root, site, fields):
+def auth_source(root, site, overlay=None):
+    """Which copy to read: the newer of root/<site>.json and overlay/<site>.json (a tie goes to the overlay).
+    The overlay is a machine-local directory an unattended job writes refreshed state to, so a distributed or
+    read-only root is never modified; when the owner re-enters the root it is newer and wins again."""
+    auth_root(root)
+    path = root / (site + ".json")
+    if overlay is None:
+        return path
+    alt = Path(overlay) / (site + ".json")
+    try:
+        alt_mtime = alt.lstat().st_mtime
+    except FileNotFoundError:
+        return path
+    try:
+        if path.lstat().st_mtime > alt_mtime:
+            return path
+    except FileNotFoundError:
+        pass
+    auth_root(Path(overlay))
+    return alt
+
+
+def save_auth(root, site, fields, overlay=None):
     fields = validate_fields(site, fields)
     serialized = json.dumps({"version": 1, "site": site, "fields": fields})
     if len(serialized.encode()) > 65536:
         raise ReadError("auth_file_too_large")
+    root = Path(overlay) if overlay is not None else Path(root)
     auth_root(root, create=True)
     path = root / (site + ".json")
     repo = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True, text=True)
@@ -109,10 +190,10 @@ def save_auth(root, site, fields):
             os.unlink(tmp)
 
 
-def load_auth(root, site):
-    auth_root(root)
+def load_auth(root, site, overlay=None):
+    path = auth_source(Path(root), site, overlay)
     try:
-        fd = os.open(root / (site + ".json"), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(fd) as f:
             st = os.fstat(f.fileno())
             if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
@@ -191,11 +272,50 @@ class Client:
     def __init__(self, site):
         self.site = site
         self.opener = urllib.request.build_opener(NoRedirect())
+        self.set_cookies = {}   # name -> value handed back by responses; folded into the saved fields after a successful read
 
-    def request(self, url, headers=None, body=None, form=False, text=False):
+    def _check(self, url):
         p = urllib.parse.urlsplit(url)
         if p.scheme != "https" or p.hostname not in HOSTS[self.site] or p.port not in (None, 443) or p.username:
             raise ReadError("destination_rejected")
+        return p
+
+    def _absorb(self, headers):
+        get_all = getattr(headers, "get_all", None)
+        for line in (get_all("Set-Cookie") if get_all else None) or []:
+            pair = set_cookie_pair(line)
+            if pair:
+                self.set_cookies[pair[0]] = pair[1]
+
+    def hop(self, url, headers=None):
+        """One request without following redirects: (status, absolute Location or None). The request and every
+        Location must stay on the site's hosts; cookies the response sets are absorbed. Used for sign-in bounces."""
+        self._check(url)
+        h = {"User-Agent": "Mozilla/5.0", "Accept": "text/html,application/xhtml+xml", "Accept-Language": "en-US,en;q=0.9"}
+        h.update(headers or {})
+        req = urllib.request.Request(url, headers=h)
+        try:
+            with self.opener.open(req, timeout=30) as r:
+                self._absorb(getattr(r, "headers", None))
+                r.read(2_000_001)
+                return getattr(r, "status", 200), None
+        except urllib.error.HTTPError as e:
+            self._absorb(e.headers)
+            if e.code in REDIRECTS:
+                location = e.headers.get("Location") if e.headers else None
+                if not location:
+                    raise ReadError("auth_flow_changed") from None
+                absolute = urllib.parse.urljoin(url, location)
+                self._check(absolute)
+                return e.code, absolute
+            if e.code in (401, 403):
+                raise ReadError("login_required_or_access_denied") from None
+            raise ReadError(f"http_{e.code}") from None
+        except (urllib.error.URLError, TimeoutError, OSError):
+            raise ReadError("network_error") from None
+
+    def request(self, url, headers=None, body=None, form=False, text=False):
+        self._check(url)
         h = {"User-Agent": "Mozilla/5.0",
              "Accept": "text/html,application/xhtml+xml" if text else "application/json"}
         h.update(headers or {})
@@ -206,6 +326,7 @@ class Client:
         req = urllib.request.Request(url, headers=h, data=data)
         try:
             with self.opener.open(req, timeout=30) as r:
+                self._absorb(getattr(r, "headers", None))
                 raw = r.read(2_000_001)
             if len(raw) > 2_000_000:
                 raise ReadError("response_too_large")
@@ -218,6 +339,7 @@ class Client:
                 raise ReadError("api_error")
             return obj
         except urllib.error.HTTPError as e:
+            self._absorb(e.headers)
             if e.code in (301, 302, 303, 307, 308, 401, 403):
                 raise ReadError("login_required_or_access_denied") from None
             raise ReadError(f"http_{e.code}") from None
@@ -263,7 +385,49 @@ def spotify(client, fields, show, start, today):
     return count(obj.get("followers")), "API: metadata.followers (all time)"
 
 
+def amazon_refresh_csrf(client, fields):
+    """Mint a fresh csrf-token the way the dashboard does: www.amazon.com/ap/signin (with the saved cookies)
+    -> podcasters.amazon.com/auth/csrf?...openid.mode=id_res -> podcasters.amazon.com/podcasts?csrf-token=...
+    Every hop stays on HOSTS["amazon"] (client.hop enforces it); cookies set on the way join the jar. A 200 page
+    at the sign-in host is the password form = the amazon.com login itself is gone (login_required)."""
+    jar = parse_cookies(fields["cookie"])
+    url = AMAZON_SIGNIN
+    for _ in range(MAX_HOPS):
+        status, location = client.hop(url, {"Cookie": format_cookies(jar)})
+        jar.update(client.set_cookies)
+        if status in REDIRECTS and location:
+            p = urllib.parse.urlsplit(location)
+            if p.hostname == "podcasters.amazon.com":
+                # the dashboard reads the token from the query and turns the decoded spaces back into '+'
+                token = urllib.parse.parse_qs(p.query).get("csrf-token", [""])[0].replace(" ", "+")
+                if token:
+                    if not re.fullmatch(r"[A-Za-z0-9+/=_-]{16,4096}", token):
+                        raise ReadError("auth_response_changed")
+                    fields["csrf_token"] = token
+                    fields["cookie"] = format_cookies(jar)
+                    return
+            url = location
+            continue
+        if status == 200 and urllib.parse.urlsplit(url).hostname == "www.amazon.com":
+            raise ReadError("login_required")
+        raise ReadError("auth_flow_changed")
+    raise ReadError("auth_flow_changed")
+
+
 def amazon(client, fields, show, start, today):
+    """Read with the saved csrf-token; when the dashboard denies it, re-mint the token and read once more.
+    fields is updated in place (token, cookies) so the caller can persist it after success."""
+    try:
+        return amazon_read(client, fields, show, start, today)
+    except ReadError as e:
+        if str(e) != "login_required_or_access_denied" or not callable(getattr(client, "hop", None)):
+            raise
+    amazon_refresh_csrf(client, fields)
+    n, note = amazon_read(client, fields, show, start, today)
+    return n, note + "; csrf-token re-minted via sign-in"
+
+
+def amazon_read(client, fields, show, start, today):
     obj = client.request("https://podcasters.amazon.com/api/metrics/podcast",
         {"Cookie": fields["cookie"], "csrf-token": fields["csrf_token"], "locale": "en-US"},
         body={"startTime": start + "T00:00:00.000Z", "endTime": today + "T00:00:00.000Z",
@@ -300,16 +464,35 @@ def apple(client, fields, show, start, today):
                else "API: allTimeFollowers.all.current")
 
 
-def collect(site, root, show, start="2017-09-19", today=None, client=None):
+def persist_refresh(site, root, before, fields, set_cookies, overlay=None):
+    """After a successful read, save what the session handed back (re-minted token, rotated cookies) so the next
+    run starts from the freshest state. Nothing to save, or a save that fails, leaves the read's result as is."""
+    try:
+        after = refreshed_fields(site, fields, set_cookies)
+    except ReadError:
+        return False
+    if after == before:
+        return False
+    try:
+        save_auth(root, site, after, overlay)
+    except (ReadError, OSError):
+        return False
+    return True
+
+
+def collect(site, root, show, start="2017-09-19", today=None, client=None, overlay=None):
     try:
         if site not in FIELDS or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", show):
             raise ReadError("show_id_invalid")
         today = today or dt.datetime.now(dt.timezone.utc).date().isoformat()
         if dt.date.fromisoformat(start) >= dt.date.fromisoformat(today):
             raise ReadError("date_range_invalid")
-        fields = load_auth(Path(root), site)
-        n, note = {"spotify": spotify, "amazon": amazon, "apple": apple}[site](
-            client or Client(site), fields, show, start, today)
+        fields = load_auth(Path(root), site, overlay)
+        before = dict(fields)
+        client = client or Client(site)
+        n, note = {"spotify": spotify, "amazon": amazon, "apple": apple}[site](client, fields, show, start, today)
+        if persist_refresh(site, Path(root), before, fields, getattr(client, "set_cookies", {}), overlay):
+            note += " (saved auth refreshed)"
         return {"site": site, "count": n, "status": "not_disclosed" if n == "-" else "ok", "note": note}
     except ReadError as e:
         return {"site": site, "count": None, "status": str(e)}
@@ -421,6 +604,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--auth-dir", type=Path)
+    ap.add_argument("--auth-overlay", type=Path, help="machine-local directory where refreshed auth is written and, when newer, read from")
     ap.add_argument("--save-auth", choices=FIELDS)
     ap.add_argument("--check", choices=FIELDS)
     ap.add_argument("--show")
@@ -438,7 +622,7 @@ def main():
             print(str(e) if isinstance(e, ReadError) else "cancelled", file=sys.stderr)
             return 2
     if a.check and a.show:
-        out = collect(a.check, a.auth_dir, a.show, a.start)
+        out = collect(a.check, a.auth_dir, a.show, a.start, overlay=a.auth_overlay)
         print(json.dumps(out, ensure_ascii=False))
         return 0 if out["status"] == "ok" else 2
     ap.error("choose --save-auth SITE or --check SITE --show ID")
@@ -498,6 +682,97 @@ def selftest():
                     save_auth(root, "apple", fields)
                 with self.assertRaises(ReadError):
                     validate_fields("apple", dict(fields, myacinfo="x\r\nHost: evil"))
+        def test_cookie_helpers(self):
+            self.assertEqual(parse_cookies("a=1; b=2=3; junk; =x"), {"a": "1", "b": "2=3"})
+            self.assertEqual(format_cookies({"a": "1", "b": "2"}), "a=1; b=2")
+            self.assertEqual(set_cookie_pair("sess=abc; Path=/; Secure; HttpOnly"), ("sess", "abc"))
+            for bad in ("sess=; Max-Age=0", "nameonly", "x=a b", "x=a\r\nY"):
+                self.assertIsNone(set_cookie_pair(bad))
+            self.assertEqual(refreshed_fields("amazon", {"cookie": "a=1; b=2", "csrf_token": "t"}, {"b": "9", "c": "3"}),
+                             {"cookie": "a=1; b=9; c=3", "csrf_token": "t"})
+            self.assertEqual(refreshed_fields("apple", {"myacinfo": "m", "itctx": "old"}, {"itctx": "new", "other": "x"}),
+                             {"myacinfo": "m", "itctx": "new"})
+        def test_amazon_refresh(self):
+            class Bounce:
+                def __init__(self):
+                    self.set_cookies, self.hops, self.reads = {}, [], 0
+                def hop(self, url, headers=None):
+                    self.hops.append(url)
+                    assert "Cookie" in (headers or {})
+                    if len(self.hops) == 1:
+                        assert url == AMAZON_SIGNIN
+                        self.set_cookies["session-token"] = "rotated"
+                        return 302, "https://podcasters.amazon.com/auth/csrf?path=https://podcasters.amazon.com/podcasts&openid.mode=id_res&openid.sig=synthetic"
+                    return 302, "https://podcasters.amazon.com/podcasts?csrf-token=abcdefghijklmnop+qrs%3D"
+                def request(self, url, headers=None, body=None, **kw):
+                    self.reads += 1
+                    if headers.get("csrf-token") != "abcdefghijklmnop+qrs=":
+                        raise ReadError("login_required_or_access_denied")
+                    assert "session-token=rotated" in headers["Cookie"] and "a=b" in headers["Cookie"]
+                    return {"error": {"errors": []}, "data": {"followsAggregate": [{"id": "SHOW", "total": 3}]}}
+            client, fields = Bounce(), {"cookie": "a=b; session-token=old", "csrf_token": "stale"}
+            n, note = amazon(client, fields, "SHOW", "2020-01-01", "2026-10-17")
+            self.assertEqual((n, client.reads, len(client.hops)), (3, 2, 2))
+            self.assertIn("re-minted", note)
+            self.assertEqual(fields, {"cookie": "a=b; session-token=rotated", "csrf_token": "abcdefghijklmnop+qrs="})
+            class LoginForm(Bounce):
+                def hop(self, url, headers=None):
+                    return 200, None   # the password form at www.amazon.com = the amazon.com login is gone
+            with self.assertRaisesRegex(ReadError, "^login_required$"):
+                amazon(LoginForm(), {"cookie": "a=b", "csrf_token": "stale"}, "SHOW", "2020-01-01", "2026-10-17")
+            class Loop(Bounce):
+                def hop(self, url, headers=None):
+                    return 302, "https://www.amazon.com/ap/signin?again=1"
+            with self.assertRaisesRegex(ReadError, "^auth_flow_changed$"):
+                amazon(Loop(), {"cookie": "a=b", "csrf_token": "stale"}, "SHOW", "2020-01-01", "2026-10-17")
+            class NoHop:   # the plain fakes of the other tests: a denied read stays denied
+                def request(self, *a, **kw):
+                    raise ReadError("login_required_or_access_denied")
+            with self.assertRaisesRegex(ReadError, "^login_required_or_access_denied$"):
+                amazon(NoHop(), {"cookie": "a=b", "csrf_token": "stale"}, "SHOW", "2020-01-01", "2026-10-17")
+        def test_hop_and_overlay(self):
+            import email, io
+            def failing(code, header_text):
+                class Opener:
+                    def open(self, req, timeout):
+                        raise urllib.error.HTTPError(req.full_url, code, "synthetic", email.message_from_string(header_text), io.BytesIO(b""))
+                return Opener()
+            client = Client("amazon")
+            client.opener = failing(302, "Location: /ap/signin?again=1\nSet-Cookie: sid=1; Path=/\nSet-Cookie: gone=; Max-Age=0\n")
+            self.assertEqual(client.hop("https://www.amazon.com/ap/signin?x=1"), (302, "https://www.amazon.com/ap/signin?again=1"))
+            self.assertEqual(client.set_cookies, {"sid": "1"})
+            client.opener = failing(302, "Location: https://example.com/steal\n")
+            with self.assertRaisesRegex(ReadError, "^destination_rejected$"):
+                client.hop("https://www.amazon.com/ap/signin")
+            with self.assertRaisesRegex(ReadError, "^destination_rejected$"):
+                client.hop("https://example.com/")
+            client.opener = failing(403, "")
+            with self.assertRaisesRegex(ReadError, "^login_required_or_access_denied$"):
+                client.hop("https://www.amazon.com/ap/signin")
+            with tempfile.TemporaryDirectory() as td:
+                root, overlay = Path(td) / "base", Path(td) / "state"
+                save_auth(root, "apple", {"myacinfo": "m", "itctx": "old"})
+                class Fake:
+                    set_cookies = {"itctx": "new", "other": "x"}
+                    def request(self, url, headers=None, **kw):
+                        assert "itctx=old" in headers["Cookie"]
+                        return {"measure": "FOLLOWERS", "allTimeFollowers": {"all": {"current": 4}}}
+                out = collect("apple", root, "123", client=Fake(), overlay=overlay)
+                self.assertEqual((out["status"], out["count"]), ("ok", 4))
+                self.assertIn("refreshed", out["note"])
+                self.assertEqual(load_auth(root, "apple"), {"myacinfo": "m", "itctx": "old"})            # the base is untouched
+                self.assertEqual(load_auth(root, "apple", overlay), {"myacinfo": "m", "itctx": "new"})   # the newer overlay is read
+                self.assertEqual((overlay / "apple.json").stat().st_mode & 0o777, 0o600)
+                later = (overlay / "apple.json").stat().st_mtime + 10
+                os.utime(root / "apple.json", (later, later))                                           # re-entered base wins again
+                self.assertEqual(load_auth(root, "apple", overlay), {"myacinfo": "m", "itctx": "old"})
+                class Denied:
+                    set_cookies = {"itctx": "anonymous"}
+                    def request(self, *a, **kw):
+                        raise ReadError("login_required_or_access_denied")
+                (overlay / "apple.json").unlink()
+                self.assertEqual(collect("apple", root, "123", client=Denied(), overlay=overlay)["status"], "login_required_or_access_denied")
+                self.assertFalse((overlay / "apple.json").exists())                                      # a failed read saves nothing
         def test_destinations(self):
             client = Client("apple")
             for url in ("https://example.com/", "http://podcastsconnect.apple.com/", "https://podcastsconnect.apple.com:444/"):
