@@ -220,6 +220,7 @@
 - **[ledger-commit-cadence-gate.py](ledger-commit-cadence-gate.py)** — [forwarder → ai-collaboration/scripts/ledger-commit-cadence-gate.py] YAML ledger の commit cadence gate (pre-commit): 1 commit で追加される list entry (`- id:`) が N 個を超えたら refuse、escape env は hygiene log に記録 + worker scope gate (= env CAMPAIGN_WORKER_DIR が
 - **[library-holdings-ledger.py](library-holdings-ledger.py)** — 図書館に本があるかを OPAC で確かめた結果を、 証拠つきの台帳 (YAML) を正本として持ち、 引き直し・点検する。--selftest 内蔵。
 - **[list-live-sessions.py](list-live-sessions.py)** — 同 cwd で生きてる兄弟 Claude session を surface する read-only reader。
+- **[live-engine-paths.py](live-engine-paths.py)** — hook と git の hook が作業 tree から直接読む file (= 書きかけを別の session が走らせる file) の一覧を作る。--selftest 内蔵。
 - **[local-ci.py](local-ci.py)** — CI を持たない repo の検査を手元で回す runner（config の repo × 検査を、 対象 path の最終 commit が変わったものだけ実行して結果を machine-local state に残し、 --status で red / 検査不能 / 長く未実行を 1 行ずつ出す。 並列起動は lock で 1 本、 --selftest 内蔵）
 - **[macos-app-bundle-audit.py](macos-app-bundle-audit.py)** — Inventory side-by-side macOS app bundles by name or bundle identifier. --selftest included.
 - **[macos-arch-audit.py](macos-arch-audit.py)** — この Mac の CPU (Intel / Apple Silicon) を自動判定し、 ネイティブで動かないものを列挙する (読むだけ)。
