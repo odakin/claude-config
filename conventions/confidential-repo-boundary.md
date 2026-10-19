@@ -191,6 +191,8 @@ schema (= そもそも書けなくする) で守る。 片方で両方を守ろ�
   約 2 万 + message 約 2,600) を通し直すと、 新たな当たりは 9 件で、 誤検出は 3 件 = 全部が公刊版に載っている文 (源の live 版にも
   同じ文が残るため)。 一般句・合成例の一致と、 message・無人の書き手の当たりは 0。 公刊版の文は許可の一覧を作らず、 例の側を合成に
   書き換えた。 鉤括弧の中で日本語と英文が混ざる span を英文の断片ごとに見る案は、 同じ履歴で当たりが path の誤検出 1 件だけだったので入れていない。
+  一般則 = sweep の「無い」 は形ごとに陽性対照を通してから信じる ([`../docs/convention-design-principles.md#sweep-null-needs-per-form-control`](../docs/convention-design-principles.md#sweep-null-needs-per-form-control))。
+  較正の陽性対照は、 書き手の言語で使う引用の形ごとに 1 つずつ selftest に置く。
 
 - **捕まえないもの = 言い換え** (上の表どおり)。 未公開の結果を自分の言葉で書いた例示は通るので、
   規律 ([`CLAUDE.md#non-identifier-content-leak`](../CLAUDE.md#non-identifier-content-leak)) はそのまま要る。
@@ -404,6 +406,12 @@ replay が見るのは leak の gate だけ: CI の bot (author が `[bot]`) の
 (実測: 公開データを毎日 commit する bot が Tier A/B で十数本止まる判定になったが、 その repo の棚卸しは `generated:` 宣言で決着済で直すものは無かった)、
 原稿の主張の gate は「今の session に著者の承認があるか」 を見るので過去の commit では必ず落ちる = agent session の env を外して人の commit として通す。 一般則 =
 [`docs/convention-design-principles.md#detector-change-breaks-downstream-writers`](../docs/convention-design-principles.md#detector-change-breaks-downstream-writers)。
+
+**照合の形そのもの (検出器の述語) を変えたとき**は、 直近の書き手に加えて、 公開 clone の全履歴の追加行と commit message を新旧の検出器の両方に通し、
+**新版だけが当てた件**を 1 件ずつ読む (公刊物の文・合成例・一般句の一致 = 誤検出、 未公開の逐語 = 直す)。 変えた形を含まない行は新旧で判定が同じなので、
+その形を含む行だけを照合すれば全履歴でも数分で済む (実測)。 ⚠️ `check-unpublished-quote.py --replay` は message を見ず新旧も比べないので、 今はこの比較を手で組む
+(新旧の engine を import し、 同じ索引で `quoted_hits` を呼んで差を取る)。 新しい版は、 元の `scripts/` を全部 symlink で写した一時 dir に置いて動かす
+(候補だけを一時 dir に置くと同じ dir の lib の import が失敗し、 代わりの既定値で動く = 測定と selftest が別物を見る。 実測)。
 
 ### <a id="visibility-decided-at-publish-time"></a>公開にするかは、 中身が出来てから・公開する直前に決める
 
