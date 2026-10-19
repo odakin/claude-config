@@ -145,6 +145,13 @@ missing reports and external-session routes remain explicit rather than becoming
 zero workers. Board role aliases and token routes are read from actual commands;
 the owning workflow performs their synchronized receipt operations.
 
+Native command output is reconciled against repositories resolved from recorded working
+directories, file changes and command paths. The matching rules and limits belong only
+to [`output_numbers.py`](../scripts/lib/output_numbers.py). Text summary/commands show
+🔢 candidates; JSON exposes `number_results`, `number_repos` and the call count
+`numbers_not_recorded`. Candidate handling follows the shared
+[closing sweep](../conventions/closing-sweep.md#numbers-not-recorded).
+
 `worker_record_context.py` supplies the shared record contract at SubagentStart
 and at a Codex-origin headless worker's UserPromptSubmit. The worker recognizes
 the inherited `CODEX_THREAD_ID`; a normal session with no distinct parent is left
