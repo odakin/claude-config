@@ -73,9 +73,9 @@ def assistant_texts(path):
 
 
 def written_texts(calls):
-    """file に書いた内容を (ts, where, text)。"""
+    """file に書いた内容を (ts, where, text)。 calls = session-scripts-report.read_calls の tuple (先頭 3 つだけ使う = 後ろに欄が増えても壊れない)。"""
     out = []
-    for name, inp, ts, _err, _cwd in calls:
+    for name, inp, ts, *_ in calls:
         if name == "Write":
             out.append((ts, inp.get("file_path", ""), inp.get("content", "")))
         elif name == "Edit":
