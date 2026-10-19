@@ -81,7 +81,10 @@ staged 差分を読む pre-commit の warn が「見本」 として行を表示
 - **見本を出す検査は、 `.gitattributes` で filter=git-crypt の path の行を伏せる** (検査そのものは続ける。 判定できないときは伏せる側に倒す)。
   例 = [`scripts/pre-commit-sot-declaration-warn.py`](../scripts/pre-commit-sot-declaration-warn.py)。 新しい warn を書くときも同じ
 - **値の仕分けは「形」 で出す** — 数字・英字・漢字の語を記号に置き換えた形と、 件数・path・節の名前だけを出す。
-  ⚠️ かなの語も伏せる (人名の読みが残る、 実測)。 ⚠️ 伏せる道具を一時的に外して「その行だけ」 素のまま出さない (diff の確認・PDF の頁の頭の確認で、 実測 2 件)
+  ⚠️ かなの語も伏せる (人名の読みが残る、 実測)。 ⚠️ 伏せる道具を一時的に外して「その行だけ」 素のまま出さない (diff の確認・PDF の頁の頭の確認で、 実測 2 件)。
+  ⚠️ 値の位置を当てて伏せる形 (「`:` の後ろを伏せる」) は、 想定と違う行 (移す前の行の写し・注記) の値をそのまま出す (実測: 銀行名・支店名・名義が出た) = 暗号化 file の構造を確かめるときは、 行ごとに長さと字の種類 (数字だけか・漢字を含むか) と件数だけを出す
+- **様式の PDF を画像で確かめるときは、 切り取りの位置を目分量で決めない** — 隣の欄の住所・口座が写る (実測)。 [`scripts/pdf-review-render.py`](../scripts/pdf-review-render.py) = 字の層の位置から住所・口座・電話の行 (折り返した行まで) を塗ってから書き出す。 先に `--audit` で塗りの外に残る数字・番地らしい語を形だけで見る
+- **暗号化した値の平文の写しは commit で止める** — 値の file を暗号化しても、 値を写した TODO・script・記録は平文のまま。 [`scripts/check-value-index.py`](../scripts/check-value-index.py) = 暗号化 file の 1 節に置いた索引 (`- digits|date|text: \`値\``) を源に、 平文の追加行と commit message を照合し、 file と行番号だけを出す。 ⚠️ 他の家・機関と同じになる値 (郵便番号など) は索引に入れない = 公開データに偶然一致する (実測)。 全 repo の棚卸し = `--scan-root <作業ルート> --explain` (当たった索引の行の説明だけを出す)
 - 漏れた先は repo ではなく会話の記録 = 書き換えで消えない。 起きたら本人に 1 行で伝え、 個人層の漏洩の記録に件数と種類を残す
 
 ---
@@ -490,6 +493,8 @@ visibility の **判断基準そのもの** (何を公開する人なのか) は
 | [`scan-private-vocabulary.py`](../scripts/scan-private-vocabulary.py) | 公開 repo が非公開 repo と共有する珍しい語の一覧 (言い換えを読む候補、 gate ではない。 tree 全体 / `--staged` / `--diff`) | 無し (`.claude/public-repo.marker` の有無で公開・非公開を分ける、 `--source` / `--exclude` で絞る) |
 | [`commit-hunk-anchors.py`](../scripts/commit-hunk-anchors.py) | commit の hunk の所在 (file・行・直前の anchor / def) だけを出す = 是正の記録を本文なしで書く | 無し |
 | [`scan-public-tree.sh`](../scripts/scan-public-tree.sh) | 公開 repo の tree 全体を pre-commit gate の全 Tier に通す (= gate は差分しか見ないので、 gate より古い中身はこれでしか見つからない)。 `--all` で横断、 台帳で 1 repo 1 回 | 各 repo の `.claude/public-tree-accept.txt` (棚卸しでだけ効く受理一覧) |
+| [`check-value-index.py`](../scripts/check-value-index.py) | 暗号化した値 (電話・口座・生年月日・住所) の平文の写しを、 公開 repo の commit と message (Tier F) と非公開 repo の pre-commit の連鎖で BLOCK / 全 repo の棚卸し (`--scan-root --explain`) ([§1 の decrypted-echo](#decrypted-echo)) | 個人層の `value-index.txt` (索引の在り処 = 暗号化 file の節) |
+| [`pdf-review-render.py`](../scripts/pdf-review-render.py) | 様式の PDF を目視用の PNG にする前に住所・口座・電話の行を塗る / `--audit` = 塗りの外に残る語を形だけで | 無し (見出しの語は `--label` で足す) |
 | [`hooks/protected-dir-access-guard.py`](../hooks/protected-dir-access-guard.py) | 保護 dir へ Bash / Grep / Glob で触れうる操作の前に確認を出す (PreToolUse、 ask) / `--canary` で本番配線の実効性 ([§5 の節](#protected-dir-access-guard)) | `~/.claude/protected-dirs.txt` / `~/.claude/leak-pattern-sources.txt` |
 
 いずれも **機密文字列も個人の配置も script 側に持たない**。 設定 file が無い環境では
