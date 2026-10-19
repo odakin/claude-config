@@ -69,9 +69,18 @@ def fetch(repo: Path) -> None:
 
 
 def default_branch(live: Path) -> str:
+    """origin/HEAD の指す branch。 指す先が remote に無い (default branch の改名後に古い origin/HEAD が残った clone、
+    実測: master → main の後も origin/HEAD が origin/master のままで、 全 file が「live と origin が違う」 で止まった) なら、
+    今の branch の upstream、 それも無ければ今の branch の名前。"""
+    exists = lambda name: git(live, "rev-parse", "-q", "--verify", f"refs/remotes/origin/{name}", check=False).returncode == 0
     r = git(live, "symbolic-ref", "--short", "refs/remotes/origin/HEAD", check=False)
     if r.returncode == 0 and r.stdout.strip().startswith("origin/"):
-        return r.stdout.strip()[len("origin/"):]
+        name = r.stdout.strip()[len("origin/"):]
+        if exists(name):
+            return name
+    up = git(live, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", check=False)
+    if up.returncode == 0 and up.stdout.strip().startswith("origin/") and exists(up.stdout.strip()[len("origin/"):]):
+        return up.stdout.strip()[len("origin/"):]
     return git(live, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
 
 
@@ -251,6 +260,10 @@ def selftest() -> int:
             subprocess.run(["git", "clone", "-q", str(T / "remote.git"), str(c)], check=True)
             sh(c, "config", "user.email", "t@t"); sh(c, "config", "user.name", "t")
         remote = T / "remote.git"
+        # a stale origin/HEAD (points at a branch the remote no longer has) falls back to the upstream
+        sh(other, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master")
+        check("stale origin/HEAD → upstream branch", default_branch(other) == "main")
+        sh(other, "remote", "set-head", "origin", "-a")
         # foreign state in live: a dirty tracked file, a staged file, and an UNPUSHED commit
         (live / "foreign.md").write_text("foreign unpushed\n", encoding="utf-8")
         sh(live, "add", "foreign.md"); sh(live, "commit", "-q", "-m", "foreign unpushed commit")
