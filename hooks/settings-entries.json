@@ -261,6 +261,15 @@
           "command": "~/.claude/hooks/decision-question-jargon-nudge.sh"
         }
       ]
+    },
+    {
+      "matcher": "Edit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/live-engine-edit-guard.py"
+        }
+      ]
     }
   ],
   "PostToolUse": [
@@ -351,6 +360,15 @@
         {
           "type": "command",
           "command": "~/.claude/hooks/known-error-nudge.py"
+        }
+      ]
+    },
+    {
+      "matcher": "Bash|Read|Grep|mcp__.*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/value-index-output-nudge.py"
         }
       ]
     }

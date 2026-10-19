@@ -41,6 +41,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[known-error-nudge.py](known-error-nudge.py)** — PostToolUse / PostToolUseFailure(Bash): 出力・エラー文に既知の壊れ方のエラー文が出たら、 その壊れ方を書いた規約の節を Claude に知らせる (台帳 = hooks/known-errors.json)
 - **[known-error-nudge.test.sh](known-error-nudge.test.sh)** — known-error-nudge.py の検査 (鳴る / 黙る / 1 session 1 回 / 台帳の点検)
 - **[known-errors.json](known-errors.json)** — 既知の壊れ方のエラー文 → その壊れ方を書いた規約の節。
+- **[live-engine-edit-guard.py](live-engine-edit-guard.py)** — PreToolUse(Edit): hook や git の hook が作業 tree から直接読む file を、 その session で初めて Edit するとき 1 回だけ止め、 写しで直すか 1 回で済ませるかを決めさせる
+- **[live-engine-edit-guard.test.sh](live-engine-edit-guard.test.sh)** — live-engine-edit-guard.py の検査 (初回は止める / 2 回目は通す / 読まれない file は通す / MultiEdit・Write は通す / nudge mode)
 - **[long-bash-command-guard.sh](long-bash-command-guard.sh)** — 長すぎる Bash command を block — PreToolUse(Bash): 閾値超は分割 / file 経由に誘導
 - **[long-bash-command-guard.test.sh](long-bash-command-guard.test.sh)** — long-bash-command-guard.sh の self-test (配信対象外)
 - **[manuscript-claim-guard.py](manuscript-claim-guard.py)** — PreToolUse(Edit|Write|MultiEdit|Bash): 原稿の保護領域 (表題・概要・序論・結論・数式) と agent の権限規約を、著者の項目ごとの承認なしに書き換える編集・commit を deny (engine = scripts/manuscript-claim-guard.py、 正本 = conventions/manuscript-claim-ownership.md)
@@ -88,6 +90,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[standing-cc-guard.test.sh](standing-cc-guard.test.sh)** — Test for standing-cc-guard.sh (config は fixture = STANDING_CC_CONFIG で渡す)
 - **[turn-complete-sound-nudge.sh](turn-complete-sound-nudge.sh)** — 応答が終わるたびに音を鳴らす Stop hook (opt-in、 既定は無音。 conventions/macos-claude-app-notifications.md#turn-complete-sound-hook)
 - **[turn-complete-sound-nudge.test.sh](turn-complete-sound-nudge.test.sh)** — opt-in marker / entrypoint gate / stop_hook_active / 音声 path の selftest (実際には鳴らさない)
+- **[value-index-output-nudge.py](value-index-output-nudge.py)** — PostToolUse: tool の出力に、 個人層の暗号化した値の索引の値 (電話・口座・生年月日・住所) が出たら、 その種類だけを Claude に知らせる (値は出さない)
+- **[value-index-output-nudge.test.sh](value-index-output-nudge.test.sh)** — value-index-output-nudge.py の検査 (鳴る / 値を出さない / 1 session 1 回 / 黙る / 個人層なし)
 - **[visible-html-comment-enforce.py](visible-html-comment-enforce.py)** — Stop: 最終メッセージに HTML comment (`<!-- ... -->`) が裸で出ていたら、 1 回だけ差し戻して置き場所を直させる
 - **[visible-html-comment-enforce.test.sh](visible-html-comment-enforce.test.sh)** — logic + incident-replay selftest
 - **[zsh-word-split-guard.py](zsh-word-split-guard.py)** — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置 (と、 option を含む loop の語を command の引数) に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash と、 素の `log show` など (zsh の組み込みの log に取られる) を含む Bash を実行前に止める (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion / #zsh-log-builtin)。
