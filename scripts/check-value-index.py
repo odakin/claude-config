@@ -19,6 +19,9 @@
   check-value-index.py --config <value-index.txt>                     # pre-commit: staged の追加行 (当たれば exit 1)
   check-value-index.py --config <value-index.txt> --message-file <f>  # commit-msg: message の行
   check-value-index.py --config <value-index.txt> --scan-tree <repo>  # 棚卸し: 追跡する平文の file の全行 (file:行 だけ)
+  check-value-index.py --config <value-index.txt> --scan-root ~/Claude [--explain]
+                       # 直下の git repo を全部。 --explain = 当たった索引の行の説明 (例「— 本人の電話」) も出す。 値は出さない
+                       # = 当たった行が何の値かを行を開かずに見分ける (公開データとの偶然の一致の見分けに使った = 実測)
   check-value-index.py --selftest
 
 配線 = 公開 repo の public-precommit-runner.sh / commit-msg-leak-guard-runner.sh の Tier F (個人層に value-index.txt があるとき)
@@ -40,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 from git_crypt_paths import encrypted_paths  # noqa: E402
 
 HEADER = "[value-index] "
-_LINE = re.compile(r"^\s*-\s*(digits|date|text)\s*:\s*`([^`]+)`")
+_LINE = re.compile(r"^\s*-\s*(digits|date|text)\s*:\s*`([^`]+)`\s*(.*)$")
 _SEP = r"[\s\-‐－−ー.()（）]{0,2}"
 _MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october",
            "november", "december"]
@@ -87,7 +90,7 @@ def read_index(config: Path):
             end = next((j for j in range(start + 1, len(text))
                         if text[j].startswith("#") and 0 < len(text[j]) - len(text[j].lstrip("#")) <= level), len(text))
             text = text[start:end]
-        found = [(m.group(1), m.group(2).strip()) for m in map(_LINE.match, text) if m]
+        found = [(m.group(1), m.group(2).strip(), m.group(3).strip()) for m in map(_LINE.match, text) if m]
         if not found:
             unreadable.append(f"{rel} の索引に行が無い")
         entries += found
@@ -139,30 +142,35 @@ def _squash(s: str) -> str:
 
 class Matcher:
     def __init__(self, entries):
-        self.patterns, self.texts, self.short = [], [], []
-        for kind, value in entries:
+        """entries = (kind, 値) か (kind, 値, 説明)。 説明 (索引の行の値の後ろ) は --explain で出す (値は出さない)。"""
+        self.patterns, self.texts = [], []   # [(正規表現, 説明)] / [(空白を除いた値, 説明)]
+        for kind, value, *rest in entries:
+            label = f"{kind} {rest[0]}".strip() if rest else kind
             if kind == "digits":
                 p = _digits_pattern(value)
                 if p:
-                    self.patterns.append(p)
+                    self.patterns.append((p, label))
             elif kind == "date":
                 p = _date_pattern(value)
                 if p:
-                    self.patterns.append(p)
+                    self.patterns.append((p, label))
             elif kind == "text":
                 sq = _squash(value)
                 if re.fullmatch(r"[0-9a-z\-./]+", sq) and len(sq) < 8:
-                    self.short.append(re.compile(r"(?<![0-9A-Za-z\-])" + re.escape(unicodedata.normalize("NFKC", value))
-                                                 + r"(?![0-9A-Za-z\-])", re.I))
+                    self.patterns.append((re.compile(r"(?<![0-9A-Za-z\-])" + re.escape(unicodedata.normalize("NFKC", value))
+                                                     + r"(?![0-9A-Za-z\-])", re.I), label))
                 elif len(sq) >= 4:
-                    self.texts.append(sq)
+                    self.texts.append((sq, label))
+
+    def labels(self, line: str) -> list:
+        """当たった索引の行の説明 (値は含まない)。 空 = 当たらない。"""
+        norm = unicodedata.normalize("NFKC", line)
+        out = [label for p, label in self.patterns if p.search(norm)]
+        sq = _squash(line)
+        return out + [label for t, label in self.texts if t in sq]
 
     def hit(self, line: str) -> bool:
-        norm = unicodedata.normalize("NFKC", line)
-        if any(p.search(norm) for p in self.patterns) or any(p.search(norm) for p in self.short):
-            return True
-        sq = _squash(line)
-        return any(t in sq for t in self.texts)
+        return bool(self.labels(line))
 
 
 # ---- 走査 ---------------------------------------------------------------------------------------------
@@ -197,7 +205,7 @@ def check_message(matcher, path: Path):
     return [("(commit message)", i) for i, l in enumerate(lines, 1) if not l.startswith("#") and matcher.hit(l)]
 
 
-def check_tree(matcher, repo: Path):
+def check_tree(matcher, repo: Path, explain=False):
     ls = subprocess.run(["git", "ls-files", "-z"], cwd=repo, capture_output=True)
     files = [f for f in ls.stdout.decode("utf-8", "replace").split("\0") if f]
     enc = encrypted_paths(files, cwd=str(repo))
@@ -213,9 +221,18 @@ def check_tree(matcher, repo: Path):
         if b"\x00" in data[:8192]:
             continue
         for i, l in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
-            if matcher.hit(l):
-                hits.append((f, i))
+            labels = matcher.labels(l)
+            if labels:
+                hits.append((f, i, labels) if explain else (f, i))
     return hits
+
+
+def scan_root(matcher, root: Path, explain=False):
+    """root の直下の git repo を全部 (= 全 repo の棚卸し)。 [(repo/file, 行[, 説明])]。"""
+    out = []
+    for repo in sorted(d for d in root.iterdir() if (d / ".git").exists()):
+        out += [(f"{repo.name}/{h[0]}",) + tuple(h[1:]) for h in check_tree(matcher, repo, explain)]
+    return out
 
 
 def report(hits, where: str) -> None:
@@ -240,7 +257,8 @@ def main(argv=None) -> int:
 
     config = opt("--config")
     if not config:
-        print("usage: check-value-index.py --config <value-index.txt> [--message-file <f> | --scan-tree <repo>]",
+        print("usage: check-value-index.py --config <value-index.txt> [--message-file <f> | --scan-tree <repo>"
+              " | --scan-root <dir>] [--explain]",
               file=sys.stderr)
         return 2
     entries, unreadable = read_index(Path(config).expanduser())
@@ -251,10 +269,12 @@ def main(argv=None) -> int:
     matcher = Matcher(entries)
     if opt("--message-file"):
         hits, where = check_message(matcher, Path(opt("--message-file"))), "commit message"
-    elif opt("--scan-tree"):
-        hits = check_tree(matcher, Path(opt("--scan-tree")).expanduser())
-        for p, ln in hits:
-            print(f"{p}:{ln}")
+    elif opt("--scan-tree") or opt("--scan-root"):
+        explain = "--explain" in argv
+        hits = (check_tree(matcher, Path(opt("--scan-tree")).expanduser(), explain) if opt("--scan-tree")
+                else scan_root(matcher, Path(opt("--scan-root")).expanduser(), explain))
+        for h in hits:
+            print(f"{h[0]}:{h[1]}" + (f"\t{' / '.join(h[2])}" if explain else ""))
         print(f"value-index: {len(hits)} 行", file=sys.stderr)
         return 1 if hits else 0
     else:
@@ -319,6 +339,9 @@ def selftest() -> int:
             hits = check_staged(m, cwd=str(repo))
             expect("staged: 平文の追加行を file:行 で返し、 暗号化の path は見ない (binary が同じ commit にあっても)",
                    hits == [("note.md", 2)])
+            got = scan_root(m, Path(d), explain=True)
+            expect("scan-root: 直下の repo を見て、 当たった索引の行の説明だけを出す (値は出さない)",
+                   got == [("repo/note.md", 2, ["digits (携帯)"])] and "0000" not in str(got))
             msg = Path(d) / "msg"
             msg.write_text("fix: 1971/2/3 の件\n# 090-0000-1234 (注釈の行)\n", encoding="utf-8")
             expect("commit message: 値の行を拾い、 # の注釈行は見ない", check_message(m, msg) == [("(commit message)", 1)])
