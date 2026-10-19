@@ -20,23 +20,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 from staged_diff import staged_added_lines  # noqa: E402
 
-# 暗号化される file の行を見本に出すときの代わりの文字列。 staged_diff は textconv で git-crypt の file を
-# 平文に戻して読むので、 そのまま stderr に出すと暗号化した値 (口座番号・電話など) が端末と会話の記録に写る (実測)。
-MASKED_SAMPLE = "<暗号化される file の行 = 本文は出さない>"
-
-
-def encrypted_paths(paths, cwd: str | None = None) -> set[str]:
-    """paths のうち `.gitattributes` で filter=git-crypt の path (検査は続け、 見本の表示だけを伏せる)。"""
-    paths = [p for p in dict.fromkeys(paths) if p]
-    if not paths:
-        return set()
-    try:
-        result = subprocess.run(["git", "check-attr", "--stdin", "-z", "filter"], cwd=cwd, capture_output=True,
-                                input="\0".join(paths).encode("utf-8"), check=False, timeout=20)
-    except (OSError, subprocess.TimeoutExpired):
-        return set(paths)  # 判定できないときは伏せる側に倒す
-    out = result.stdout.decode("utf-8", "replace").split("\0")
-    return {out[i] for i in range(0, len(out) - 2, 3) if out[i + 2] == "git-crypt"}
+# 暗号化される file の行は見本を伏せる (判定と代わりの文字列の正本 = lib/git_crypt_paths.py)
+from git_crypt_paths import MASKED_SAMPLE, encrypted_paths  # noqa: E402
 
 
 SKIP_BASENAMES = {
