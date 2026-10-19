@@ -57,6 +57,12 @@ fingerprint** を持つ。 これが「史実の記録」 になり、 3 面で�
 
 作り直すのは `reopen` (= 新しい draft issue を、 出力名に `_r2` をつけて作る)。 **前の file は残る**。
 
+<a id="commit-before-freeze"></a>⚠️ **draft のうちに作り直した出力は、 `freeze` の前に commit する** — 3 の BLOCK は HEAD と staged のどちらかの manifest で凍結の出力に掛かる。
+draft の出力を作り直し (同じ file 名に上書き)、 commit せずに送って `freeze` すると、 次の commit は「凍結出力の変更」 として止まる
+(凍結の記録の sha256 は送った新しい file のものなので、 中身は記録と合っている。 止めの文が勧める `reopen` は要らない = 実測)。
+止まったら 2 つに分ける: ① 作り直した出力と workbook だけを `git commit -- <その path>` (この commit の manifest は HEAD の draft のまま = 止まらない)
+→ ② manifest と残りを commit (この commit では出力が変わらない)。 記録の順も「作り直し → 送付 → 凍結」 になる。
+
 ### <a id="paper"></a>2.3 紙と記録の関係を field で持つ
 
 凍結の記録は「freeze した時の tree」 で、 **実際に刷った / 送った / 出したものと同じとは限らない**
