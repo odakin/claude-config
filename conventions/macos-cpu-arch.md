@@ -111,8 +111,25 @@ agent の Bash の snapshot を補う [`hooks/fix-snapshot-path-patch.sh`](../ho
 | 消えたアプリ・Intel だけの部品を起動する LaunchAgent | `launchctl bootout gui/$(id -u)/<label>` → plist を退避先へ (点検の「LaunchAgents」 節が対象を出す) |
 | 自動更新係 (`/Library/Application Support/<vendor>/<Updater>/` と `~/Library/Application Support/...`) | 移行で来た Intel 版の更新係は Rosetta の下で自分を x64 と名乗って更新を取る (実測: updater の log の request が `"arch":"x64"`、 OS は arm64) = 本体を入れ替えても次の更新で Intel 版に戻りうる。 本体に同梱の universal 版 (`<App>.app/Contents/.../Helpers/<Updater>.app`) で入れ直す。 system の Chromium 系 updater は `sudo <Intel 版> --uninstall --system` → `sudo <同梱版> --install --system` で、 入った版が universal・`ARM_64` で動くことを log で確かめた (実測)。 user 領域の更新係は退避すれば本体が次の起動で同梱版を入れる想定 (未確認)。 点検の「アプリ」 節がこの置き場も見る。 Sparkle などが残した旧版の写し (`<App> <版>/`) も同じ置き場に出る = 本体がネイティブなら片付けの対象 (ゴミ箱へ) |
 
+| 古い browser plug-in・設定 pane (`/Library/Internet Plug-Ins/*.plugin`・`/Library/PreferencePanes/*.prefPane`。 例 = Java の plug-in と設定 pane) | 今の browser は plug-in を読まないので、 本体ごと要らない。 中の更新係が `/Library/LaunchAgents`・`/Library/LaunchDaemons` の plist から Rosetta で常駐する (実測)。 sudo で `launchctl bootout` → plug-in・pane・plist を退避先へ (点検の「LaunchAgents」「動いている process」「アプリ」 の 3 節が出す) |
+
 点検の終わり = `macos-arch-audit.py` の「実行経路に別 arch なし」 + 定期ジョブを 1 本手で回して最後まで走ること。
-アプリ・npx cache・退避した Intel Homebrew の残置は 🟠 として出続ける (= 片付けるまでの carrier)。
+アプリ・npx cache・退避した Intel Homebrew の残置・Rosetta で常駐する process・PATH の外の Framework Python・
+base が別 arch か消えた venv (`--repos-root` を付けると repo の venv も) は 🟠 として出続ける (= 片付けるまでの carrier)。
+
+## <a id="who-launched-intel"></a>「Intel プロセッサ用アプリの対応は終了します」 が出たとき — 何が Intel 版を起動したか
+
+- この通知は、 Apple Silicon の機械で x86_64 だけの binary が Rosetta で起動したことを示す。 通知の名前と icon は起動した bundle のもの
+  (例: 「"Python"」 とロケットの icon = python.org の Framework 版 Python の `Python.app`)。 今は動くが、 Rosetta を外す将来の macOS では起動しなくなる、 という予告。
+- **時刻**は unified log で分かる: `/usr/bin/log show --last 1h --style compact --predicate 'eventMessage CONTAINS "rosettaAnalyze"'`
+  (`ecosystemanalyticsd` が起動ごとに行を出す)。 path は `<private>` で伏せられるので、 何が起動したかは log からは分からない。 zsh では `log` を full path で書く ([`shell-env.md#zsh-log-builtin`](shell-env.md#zsh-log-builtin))。
+- **常駐しているもの** = `macos-arch-audit.py` の「動いている process」 節 (`ps -axo comm=` の実行 file を `lipo -archs` で見る)。
+  `/System` の下には x86_64 だけの Apple の部品 (古い音声 plug-in を調べる `CarbonComponentScannerXPC` など) があり、 Rosetta で動くのが正常なので、 この節の一覧には出さない。
+- **1 回起動して終わったもの** (道具が interpreter を版で探し `--version` を打った、 など) は process に残らない。 agent の session が起動したなら、 会話記録を path で引く:
+  `python3 scripts/search-agent-transcripts.py --tool-runs --since <日> --regex '<path の正規表現>'` (subagent の呼び出しも、 親の session の id で出る)。
+  ⚠️ desktop の `search_session_transcripts` は記録の一部しか検索しない ([`multi-session-coordination.md`](multi-session-coordination.md) の caveat) = 0 件を「どの session も起動していない」 の根拠にしない。
+- 直し方 = 起動したものの種類ごとに、 上の 2 つの表で。 候補を起動して arch を確かめる道具は、 起動せずに `file -bL` / `lipo -archs` で見る形に直す
+  (実装例 = [`shared-repo.md#python-env-arch`](shared-repo.md#python-env-arch) の `tools/py`)。
 
 ## 関連
 

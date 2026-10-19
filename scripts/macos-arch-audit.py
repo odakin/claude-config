@@ -9,9 +9,13 @@
   - 異物は Rosetta が無ければ起動せず (Bad CPU type / EBADARCH / launchd exit 126)、
     Rosetta があれば黙って遅く動く (= 混在すると arm64 で入れ直した部品と噛み合わず import 等で落ちる)
 
+PATH の外も見る: いま Rosetta で動いている process (常駐の自動更新係など)、 PATH に無い Framework 版の Python、
+Intel 版の Python を base にした venv。 どれも普段の command では起動しないが、 版や名前だけで interpreter を探す道具や
+常駐の更新係が Rosetta で起動し、 Apple Silicon では「Intel プロセッサ用アプリの対応は終了します」 の通知が出る (実測)。
+
 使い方:
   python3 macos-arch-audit.py                       # 全項目
-  python3 macos-arch-audit.py --repos-root ~/src    # その下の git repo の git-crypt filter path も見る
+  python3 macos-arch-audit.py --repos-root ~/src    # その下の git repo の git-crypt filter path と venv も見る
   python3 macos-arch-audit.py --no-apps             # アプリの走査 (/Applications と Application Support の自動更新係) を省く (速い)
   python3 macos-arch-audit.py --fix-git-crypt-paths --repos-root ~/src
                                                     # git-crypt filter の絶対 path を今の git-crypt に書き換える
@@ -245,7 +249,10 @@ def check_launch_agents(native: str, findings: list) -> list[str]:
     nat = PREFIX[native] + "/bin"
     oth = PREFIX["x86_64" if native == "arm64" else "arm64"] + "/bin"
     lines, n = [], 0
-    for pl in sorted(glob.glob(str(HOME / "Library/LaunchAgents/*.plist"))):
+    # /Library の 2 つは vendor の常駐 (更新係・helper) の置き場 = 移行で Intel 版がそのまま来る (実測: Java の更新係)
+    plists = [p for d in (HOME / "Library/LaunchAgents", Path("/Library/LaunchAgents"), Path("/Library/LaunchDaemons"))
+              for p in sorted(glob.glob(str(d / "*.plist")))]
+    for pl in plists:
         try:
             d = plistlib.loads(Path(pl).read_bytes())
         except Exception:  # noqa: BLE001 — 壊れた plist は 1 行出して次へ
@@ -267,7 +274,7 @@ def check_launch_agents(native: str, findings: list) -> list[str]:
         if probs:
             findings.append(f"LaunchAgent {Path(pl).name}: {'; '.join(probs)}")
             lines.append(f"  🔴 {Path(pl).name}: {'; '.join(probs)}")
-    lines.insert(0, f"  ·  LaunchAgents {n} 個を見た")
+    lines.insert(0, f"  ·  LaunchAgents・LaunchDaemons {n} 個を見た (~/Library/LaunchAgents と /Library の 2 つ)")
     if len(lines) == 1:
         lines.append("  ✅ 起動 binary と PATH の並びに問題なし")
     return lines
@@ -314,13 +321,17 @@ def check_apps(native: str, findings: list) -> list[str]:
 
 
 def foreign_support_bundles(native: str) -> list[str]:
-    """Application Support と ~/Library/<vendor>/ に置かれた .app (自動更新係・補助) のうち別 arch だけのもの。
+    """Application Support・Internet Plug-Ins・PreferencePanes と ~/Library/<vendor>/ に置かれた .app
+    (自動更新係・補助) のうち別 arch だけのもの。
 
     移行アシスタントは旧機の arch の更新係を運ぶ。 本体を入れ替えても更新係が別 arch のままだと、
     更新係が自分の arch を名乗って更新を取り、 本体を旧 arch の版に戻しうる (実測)。 /Applications の走査では見えない。
+    古い browser plug-in・設定 pane の中の更新係 (例: Java の plug-in の Java Updater) も同じ形で常駐する (実測)。
     """
     pats = []
-    for base in ("/Library/Application Support", str(HOME / "Library/Application Support")):
+    for base in ("/Library/Application Support", str(HOME / "Library/Application Support"),
+                 "/Library/Internet Plug-Ins", str(HOME / "Library/Internet Plug-Ins"),
+                 "/Library/PreferencePanes", str(HOME / "Library/PreferencePanes")):
         pats += [base + "/*/*.app", base + "/*/*/*.app", base + "/*/*/*/*.app"]
     pats.append(str(HOME / "Library") + "/*/*.app")
     seen, out = set(), []
@@ -339,7 +350,93 @@ def foreign_support_bundles(native: str) -> list[str]:
     return out
 
 
+# Apple 自身の部品の中には x86_64 だけのものがあり、 古い plug-in を読むために Rosetta で動くのが正常
+# (例: 古い音声 plug-in を調べる CarbonComponentScannerXPC、 古い printer の設定画面を出す RemotePDEService)。
+APPLE_PREFIXES = ("/System/", "/usr/libexec/", "/usr/bin/", "/usr/sbin/", "/bin/", "/sbin/", "/Library/Apple/")
+
+
+def apple_component(path: str) -> bool:
+    return path.startswith(APPLE_PREFIXES)
+
+
+def check_running(native: str, findings: list) -> list[str]:
+    """いま動いている process のうち別 arch だけの binary (= Rosetta で動いている)。 Apple の部品は除く。"""
+    try:
+        comms = subprocess.run(["ps", "-axo", "comm="], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ["  ·  ps を起動できない"]
+    paths = sorted({c.strip() for c in comms.splitlines() if c.strip().startswith("/")})
+    bad = [p for p in paths if not apple_component(p) and os.path.isfile(p)
+           and verdict(archs_of(p), native) == "foreign"]
+    if not bad:
+        return [f"  ✅ 動いている process ({len(paths)} 個の実行 file) に別 arch なし (Apple の部品は除く)"]
+    findings.append(f"Rosetta で動いている process {len(bad)} 個")
+    return [f"  🟠 Rosetta で動いている process {len(bad)} 個 — 常駐の更新係・旧版の残骸なら止めて退避する "
+            "(直し方 = conventions/macos-cpu-arch.md#who-launched-intel):"] + [f"       {b}" for b in bad]
+
+
+def venv_base(cfg_text: str) -> str | None:
+    """pyvenv.cfg の中身から、 venv を作った interpreter の path。 `executable` が無ければ `home`/python3。"""
+    kv = {}
+    for line in cfg_text.splitlines():
+        k, sep, v = line.partition("=")
+        if sep:
+            kv[k.strip()] = v.strip()
+    if kv.get("executable"):
+        return kv["executable"]
+    if kv.get("home"):
+        return kv["home"].rstrip("/") + "/python3"
+    return None
+
+
+def check_pythons(native: str, findings: list, repos_root: Path | None) -> list[str]:
+    """PATH に無い Framework 版の Python と、 別 arch の (または消えた) Python を base にした venv。"""
+    lines = []
+    fw = []
+    for base in ("/Library/Frameworks/Python.framework", str(HOME / "Library/Frameworks/Python.framework")):
+        fw += [p for p in glob.glob(base + "/Versions/*/bin/python*") if re.search(r"/python\d(\.\d+)?$", p)]
+    bad_fw = [p for p in sorted(set(fw)) if verdict(archs_of(os.path.realpath(p)), native) in ("foreign", "dead")]
+    if bad_fw:
+        findings.append(f"PATH の外の別 arch の Framework Python {len(bad_fw)} 個")
+        lines.append(f"  🟠 PATH の外の別 arch の Framework Python {len(bad_fw)} 個 — 版で interpreter を探す道具が"
+                     " 起動しうる (退避 = sudo で /Library/Frameworks の外へ):")
+        lines += [f"       {p}" for p in bad_fw]
+    elif fw:
+        lines.append(f"  ✅ Framework Python {len(fw)} 個すべてネイティブ")
+    cfgs = [HOME / ".venv" / "pyvenv.cfg"]
+    if repos_root is not None:
+        for pat in ("*/.venv/pyvenv.cfg", "*/*/.venv/pyvenv.cfg", "*/venv/pyvenv.cfg", "*/*/venv/pyvenv.cfg"):
+            cfgs += [Path(p) for p in glob.glob(str(repos_root / pat))]
+    bad_venv, n = [], 0
+    for cfg in sorted({c for c in cfgs if c.is_file()}):
+        n += 1
+        try:
+            base = venv_base(cfg.read_text(errors="replace"))
+        except OSError:
+            continue
+        if not base:
+            continue
+        real = os.path.realpath(base)
+        if not os.path.exists(real):
+            bad_venv.append(f"{cfg.parent}: base の {base} が無い (venv は起動しない = 作り直す)")
+        elif verdict(archs_of(real), native) in ("foreign", "dead"):
+            bad_venv.append(f"{cfg.parent}: base の {real} が別 arch (Rosetta で動く = ネイティブの python で作り直す)")
+    scope = "~/.venv" + (f" と {repos_root} の下 2 階層" if repos_root else " だけ (--repos-root で repo の venv も見る)")
+    if bad_venv:
+        findings.append(f"別 arch・消えた Python を base にした venv {len(bad_venv)} 個")
+        lines.append(f"  🟠 venv {n} 個中 {len(bad_venv)} 個の base が別 arch か無い (見た範囲 = {scope}):")
+        lines += [f"       {b}" for b in bad_venv]
+    else:
+        lines.append(f"  ✅ venv {n} 個の base はネイティブ (見た範囲 = {scope})")
+    return lines
+
+
 # ---------------------------------------------------------------- 本体
+# 🟠 (入れ替え・退避の候補) の指摘。 終了値の 🔴 (= 普段の command・ジョブの実行経路が別 arch) に数えない
+NOT_RED = ("別 arch だけのアプリ", "別 arch の自動更新係", "npx cache", "別 arch の Homebrew",
+           "Rosetta で動いている process", "PATH の外の別 arch の Framework Python", "別 arch・消えた Python を base")
+
+
 def run(args) -> int:
     native = hardware_arch()
     findings: list[str] = []
@@ -359,15 +456,19 @@ def run(args) -> int:
             Path(os.path.expanduser(args.repos_root)) if args.repos_root else None,
             native, findings, args.fix_git_crypt_paths)),
         ("LaunchAgents", check_launch_agents(native, findings)),
+        ("動いている process", check_running(native, findings)),
+        ("PATH の外の Python と venv", check_pythons(
+            native, findings, Path(os.path.expanduser(args.repos_root)) if args.repos_root else None)),
     ]
     if not args.no_apps:
         sections.append(("アプリ", check_apps(native, findings)))
     for title, lines in sections:
         out.append(f"\n## {title}")
         out += lines
-    red = [f for f in findings if not f.startswith(("別 arch だけのアプリ", "別 arch の自動更新係", "npx cache", "別 arch の Homebrew"))]
+    red = [f for f in findings if not f.startswith(NOT_RED)]
     out.append(f"\n{'🔴 実行経路に別 arch あり ' + str(len(red)) + ' 件' if red else '✅ 実行経路に別 arch なし'}"
-               f" (アプリ・cache・残置 Homebrew を含む指摘は全 {len(findings)} 件)。 直し方 = conventions/macos-cpu-arch.md")
+               f" (アプリ・cache・残置 Homebrew・常駐 process・PATH の外の Python を含む指摘は全 {len(findings)} 件)。"
+               " 直し方 = conventions/macos-cpu-arch.md")
     if args.json:
         print(json.dumps({"native": native, "findings": findings, "red": red}, ensure_ascii=False, indent=1))
     else:
@@ -392,6 +493,24 @@ def selftest() -> int:
     m2 = GC_RE.search("\tsmudge = /opt/homebrew/bin/git-crypt smudge\n")
     ok &= bool(m2) and m2.group(2) == "/opt/homebrew/bin/git-crypt"
     print(f"  {'✅' if m2 else '❌'} git-crypt filter の path を拾う (quote なし)")
+    vcases = [
+        ("home = /opt/x/bin\nversion = 3.13.1\nexecutable = /opt/x/bin/python3.13\n", "/opt/x/bin/python3.13"),
+        ("home = /usr/local/opt/python@3.14/bin\ninclude-system-site-packages = false\n",
+         "/usr/local/opt/python@3.14/bin/python3"),
+        ("version = 3.9.6\n", None),
+    ]
+    for text, want in vcases:
+        got = venv_base(text)
+        ok &= got == want
+        print(f"  {'✅' if got == want else '❌'} venv_base → {got} (executable が先、 無ければ home/python3)")
+    acases = [("/System/Library/Frameworks/X.framework/XPCServices/Y.xpc/Contents/MacOS/Y", True),
+              ("/usr/libexec/z", True),
+              ("/Library/Internet Plug-Ins/P.plugin/Contents/Resources/U.app/Contents/MacOS/U", False),
+              ("/Library/Application Support/V/U.app/Contents/MacOS/U", False)]
+    for path, want in acases:
+        got = apple_component(path)
+        ok &= got == want
+        print(f"  {'✅' if got == want else '❌'} apple_component({path.split('/')[1]}/…{path[-12:]}) = {got}")
     if sys.platform == "darwin":
         a = archs_of("/bin/ls")
         ok &= a is not None and hardware_arch() in a
@@ -405,7 +524,7 @@ def selftest() -> int:
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--repos-root", help="git-crypt filter を見る repo 群の親 dir (2 階層まで)")
+    ap.add_argument("--repos-root", help="git-crypt filter と venv を見る repo 群の親 dir (2 階層まで)")
     ap.add_argument("--no-apps", action="store_true", help="アプリ (/Applications と Application Support の自動更新係) を走査しない")
     ap.add_argument("--fix-git-crypt-paths", action="store_true",
                     help="git-crypt filter の古い絶対 path を PATH 上の git-crypt に書き換える")
