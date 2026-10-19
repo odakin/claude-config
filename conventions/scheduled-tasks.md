@@ -23,6 +23,17 @@ Claude Code scheduled tasks を使うリポで適用。CLAUDE.md から参照: `
 
 machine-local job を「どのマシンに登録するか / 登録漏れをどう surface するか」 は [multi-machine-state.md](multi-machine-state.md)。 無人 publish の安全 gate は [`data-pipeline-automation.md` autonomous-execution-gate](data-pipeline-automation.md#autonomous-execution-gate)。
 
+### <a id="session-bound-background-job"></a>session の中で起動した長い 1 回きりの処理は、 session と一緒に止まる
+
+Claude Code の Bash を `run_in_background` で起動した処理は session の process の子で、 session が終わる・作り直される (app の再起動・resume) と止められる (SIGTERM。 実測 = 数十分かかる検証が途中で `Terminated: 15` で終わり、 harness は「前の session が終わる前に終わらなかった」 と知らせた)。
+session より長く生きる必要がある 1 回きりの処理 (長い予行・大きな検証・一括の変換) は、 新しい process group で切り離して起動し、 出力は file に書く:
+
+```bash
+nohup python3 -c "import os; os.setsid(); os.execvp('bash', ['bash', 'job.sh'])" > job.log 2>&1 < /dev/null & disown
+```
+
+終わりを待つのは別の見張り (`until ! pgrep -f job.sh >/dev/null; do sleep 10; done; tail job.log`) を `run_in_background` で。 見張りが session と一緒に止まっても処理は残り、 log を読めば続きから判断できる。 定期の処理はこの形でなく上の表の機構に載せる。
+
 ### <a id="account-switch-independent"></a>アカウント切り替えに非依存にしたいとき (= Claude Code desktop app と CLI の 2 認証ストア)
 
 Claude Code の認証は **2 つの独立ストア**を持つ: **Claude Code desktop app** と **CLI (`claude`、 `~/.claude.json` の単一 `oauthAccount`)**。両者は別アカウントで**共存**しうる — `claude auth` は login/logout/status のみ (= 同時 1 アカウント) だが、 **Claude Code (desktop) 側のアカウント切り替えは CLI の `~/.claude.json` を上書きしない** (実測: Claude Code (desktop) と CLI が別アカウントで同時に存在した)。これが無人ジョブの機構選択に効く:
