@@ -350,6 +350,9 @@ sections:
   - id: autofix-hook-path-commit-stale-index
     level: 2
     title: "§21. 自動修正して再 stage する pre-commit と `git commit -- <path>` を合わせると、 本当の index に修正前の版が残る"
+  - id: git-race-fixture-via-hooks
+    level: 2
+    title: "§22. git の race (HEAD が動く窓) を test で決定的に再現する — fixture の repo の hook に相手の commit を打たせる"
   - id: related-docs
     level: 2
     title: "関連"
