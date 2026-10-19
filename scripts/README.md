@@ -250,6 +250,7 @@
 - **[pdf-print-preflight.mutants.json](pdf-print-preflight.mutants.json)** — pdf-print-preflight.py の「様式の案件の出力の受け入れ」 (7 段目) と派生物の origin の selftest に歯があることを、 判定の一部を外した mutant 4 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[pdf-print-preflight.py](pdf-print-preflight.py)** — 印刷直前の PDF preflight — 「画面で見えた」 を印刷の保証にしない機械 gate (office-automation.md#print-preflight)。
 - **[pdf-redact-text.py](pdf-redact-text.py)** — PDF の中の指定文字列 (暗証番号・口座番号など) を黒塗りし、 消えたことを文字層と画像で確かめる。
+- **[pdf-review-render.py](pdf-review-render.py)** — 様式の PDF を目視用の PNG にする。 住所・口座・電話の行は塗ってから書き出す。--selftest 内蔵。
 - **[pdf-side-by-side.py](pdf-side-by-side.py)** — 2 つの PDF の同じ箇所を左右に並べた比較頁を作る: 案を決めるのは source でなく組版された姿。
 - **[pdf-to-text.py](pdf-to-text.py)** — PDF の本文を grep できる plain text にする — 合字・行末ハイフン・柱・頁番号を直し、直した数を報告する。--selftest 内蔵 (network 不要)。
 - **[pdf_form_fill.py](pdf_form_fill.py)** — 雛形 PDF への直接印字エンジン（library。anchor 印字 / NFKC 照合 / #+ redact / font subset / 内蔵検証 / 600dpi ラスタ化、office-automation.md#pdf-prefill-direct の汎用実装。単票向け — 派生 sheet 数式導出付き workbook は excel-osascript 経路）

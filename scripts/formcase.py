@@ -466,7 +466,8 @@ def cmd_build(args) -> int:
         for g, outs in written.items():
             for role, p in outs.items():
                 print(f"   ✏️  {g}/{role} → {p}")
-        print("   👁 render して目視 (gate は既知の失敗形しか見ない)。 刷ったら formcase.py freeze … --state printed --paper same")
+        print("   👁 render して目視 (gate は既知の失敗形しか見ない) = scripts/pdf-review-render.py <pdf> (住所・口座・電話の行を塗った PNG。"
+              " 切り取りを目分量で決めない)。 刷ったら formcase.py freeze … --state printed --paper same")
     return rc
 
 
