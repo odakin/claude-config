@@ -488,6 +488,24 @@ def _oval(page, rect: "fitz.Rect", width: float = 0.9) -> None:
     sh.commit()
 
 
+def _merge_hit_fragments(rects, *, gap: float = 1.0) -> list:
+    """search_for の 1 つの一致が字体の切れ目 (span) ごとの片で返るのを、 1 つの rect にまとめる。
+
+    Word が作った PDF では「普通預金(総合口座含む)」 の括弧だけが欧文の字体になり、 一致が
+    「普通預金」「(」「総合口座含む」「)」 の 4 片で返る (実測)。 括弧の片は字の箱が高く y0 が小さいので、
+    (y0, x0) で並べると括弧の片が先頭に来て、 そこだけを細い楕円で囲んでいた。
+    返った順に見て、 前の片の右端に接し (隙間 < gap)、 縦が重なる片を前の片に足す。"""
+    out = []
+    for r in rects:
+        if out:
+            prev = out[-1]
+            if r.x0 <= prev.x1 + gap and r.x0 >= prev.x0 and min(r.y1, prev.y1) > max(r.y0, prev.y0):
+                out[-1] = prev | r
+                continue
+        out.append(r)
+    return out
+
+
 def circle_word(page, key: str, *, near: "fitz.Rect" = None, y_tol: float = 8.0,
                 x_min: float = None, x_max: float = None, pick: str = "first",
                 pad: float = 2.5, width: float = 0.9) -> "fitz.Rect":
@@ -499,8 +517,10 @@ def circle_word(page, key: str, *, near: "fitz.Rect" = None, y_tol: float = 8.0,
     候補が 0 件なら LookupError、 `pick="unique"` で 2 件以上なら LookupError (= 取り違えを黙って囲まない)。
     ⚠️ PyMuPDF の search_for は ASCII の大文字小文字を区別しない (= 「C」 は cancel の c にも当たる) ので、
     1 文字の ASCII を囲むときは near / x_min / x_max で必ず絞る。
-    1 文字の語は glyph が細いので正円にする (半径 = 字の大きい方の辺 / 2 + 3)。"""
-    rs = page.search_for(key)
+    1 文字の語は glyph が細いので正円にする (半径 = 字の大きい方の辺 / 2 + 3)。
+    一致が字体の切れ目で複数の片に分かれて返る (和文と欧文の括弧が混ざる語) ので、 片をまとめてから選ぶ
+    (`_merge_hit_fragments`)。"""
+    rs = _merge_hit_fragments(page.search_for(key))
     if near is not None:
         cy = (near.y0 + near.y1) / 2
         rs = [r for r in rs if abs((r.y0 + r.y1) / 2 - cy) < y_tol]
@@ -1129,6 +1149,17 @@ def _selftest():
     assert len(page.get_drawings()) - n0 == 3, f"expected 3 ovals: {len(page.get_drawings()) - n0}"
     print(f"  ✓ C drew exactly 3 ovals")
     doc.close()
+    # 和文 + 欧文の括弧の語が 4 片で返った実測の rect (Word の様式⑲ の「普通預金(総合口座含む)」)。
+    # 括弧の片は y0 が小さい = (y0, x0) で並べると括弧が先頭に来る → まとめて 1 つの語の rect にする
+    frags = [fitz.Rect(217.56, 454.85, 259.62, 465.41), fitz.Rect(259.56, 453.51, 263.08, 466.20),
+             fitz.Rect(263.06, 454.85, 326.12, 465.41), fitz.Rect(326.06, 453.51, 329.57, 466.20)]
+    m = _merge_hit_fragments(frags)
+    assert len(m) == 1 and abs(m[0].x0 - 217.56) < 0.01 and abs(m[0].x1 - 329.57) < 0.01, f"fragments not merged: {m}"
+    two = _merge_hit_fragments([fitz.Rect(10, 10, 40, 20), fitz.Rect(10, 40, 40, 50)])
+    assert len(two) == 2, f"separate lines merged: {two}"
+    sep = _merge_hit_fragments([fitz.Rect(10, 10, 40, 20), fitz.Rect(60, 10, 90, 20)])
+    assert len(sep) == 2, f"separate hits on one line merged: {sep}"
+    print(f"  ✓ C circle_word: a hit split by font into 4 fragments is circled as one word ({m[0]})")
 
     # ------------------------------------------------------------------
     # Fixture E: 罫線 anchor の値配置 / 頁救出 / セル文字差替え
