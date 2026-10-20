@@ -215,7 +215,7 @@ layer 1 (public) のドメイン固有規約 151 file をカテゴリ別に列�
   - 共同研究者DB規約 (= 連絡先・所属に加え、native 表記は parts ごとの source と確度を持ち、発音は本人録音 / 母語話者録音 / 対象言語 TTS / IPA / 近似を区別。生成音声の一時 URL は正本に保存しない)
 - **[dirac-conventions.md](dirac-conventions.md)** — Dirac 行列・計量の規約を教科書 (Peskin–Schroeder / Srednicki / Weinberg) の間で読み替えるとき + 規約の違う文献から式を写すとき + 自分の project が「どの教科書の行を使うか」 を repo の記号の規約に宣言するとき + 共同研究者と「我々の (−,+,+,+) は Srednicki か Weinberg か」 を確かめるとき
   - Dirac 規約の対応表 (教科書 3 冊: 計量 / Clifford / (γ⁰)² と Hermite 性 / β / 正振動数 / Dirac 方程式 / 自由ラグランジアン / 伝播関数。 全セルが宣言の式番号つき、 推定は明記) + 変換の辞書 (γ_W = −iγ_S、 γ_P = γ_S で η が反転) + 数値検算 script + 「project ごとに使う行を宣言し、 規約の違う文献から式を記号のまま写さない」 規則
-- **[physics-notes.md](physics-notes.md)** — 物理・数理ノートを書くとき + 共著者がその話題を特定の原論文・教科書で学んでいて、 ノートを「読めない」 と言われたとき (#write-from-readers-source)
+- **[physics-notes.md](physics-notes.md)** — 物理・数理ノートを書くとき + 共著者がその話題を特定の原論文・教科書で学んでいて、 ノートを「読めない」 と言われたとき (#write-from-readers-source) + 共同研究者の問いにノートで答えるとき (#answer-only-the-question)
   - 物理・数理ノートの 6 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側 / 検証 note は問題・結論・手当のみ / 配布物に内部記号を出さない / 相手が拠っている文献の手順と語で書く) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
 - **[physics-verification-cycle.md](physics-verification-cycle.md)** — 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/physics-verification-cycle.md (何を検査するか: 4 station / 機械 anchor / foil / tier / 3 状態 / verify-to-learn / 第二の目 / rubric / 止まる規律 / cross-vendor / campaign 運用 A-K)。 本 file は旧 anchor を保つ stub
