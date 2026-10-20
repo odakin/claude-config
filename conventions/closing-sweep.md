@@ -59,7 +59,10 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 
 - **報告は検証前の主張** — 正本 (特に層1) に書く前に、 報告が指す commit・file・出力を 1 回見て裏を取る。 裏が取れないものは「未確認」 と書いて queue。
 - **子がすでに上げたものは二重に上げない** — 子の repo の `git log` を先に見る。 子の hoist が公開層の境界 (1 の ⚠️) を破っていたら直す。
-- **まだ動いている子の file には触らない** (並列作業 = 事故の条件)。 相手に届く経路 (`SendMessage` など) があれば「終わったら締めを」 と 1 行頼み、 無ければ queue。
+- <a id="live-child-hoists-own-findings"></a>**まだ動いている子の file には触らず、 子の発見は子の締めで上げさせる** (並列作業 = 事故の条件)。 親は子の報告・提出物に書かれた手順・壊れ方・規則を、 自分で正本 (特に層1) に上げない。
+  上げる前の検証に要るもの (子がその場で書いた code・試した経路・数値の出どころ) は子の会話記録にしか無く、 親が 0.3 の道具を自分の id で回しても出ない (実測: 親が子の報告から規則を先に層1 に上げた後、 子の締めで、 子が使い捨ての code で済ませていた読み方に既存の道具があり、 その道具が壊れていたことと、 根拠の code が file に無かったことが見つかった)。
+  親の持ち場は 2 つ: (1) 検収 (accept) の時点で、 報告の主張を再現できる command で 1 回裏を取る ([`multi-session-coordination.md#review-handoff`](multi-session-coordination.md#review-handoff)) (2) 子の締めの後に、 発見が正本に上がったかを子の commit で確かめる (上がっていなければ子に 1 行頼む)。
+  相手に届く経路 (`SendMessage` など) があれば「終わったら締めを」 と 1 行頼み、 無ければ queue。 子がもう居ない (落ちた・閉じた) ときだけ、 親が子の記録を引いて (`search-agent-transcripts.py <request id か role id> --role any`、 `session-scripts-report.py <子の id8>`) 自分で上げる。
 - **機密の区分を引き継ぐ** — 掲示板に出さない区分の依頼・機密フォルダの成果は中身を上げない (公開層へは方法だけ。 区分の正本 = 掲示板の契約 `ai-collaboration/board/CONTRACT.md` の Source-classification gate)。
 - 子 session の transcript は `search-agent-transcripts.py <request id か role id> --role any` で引ける (報告に書かれなかった壊れ方・user の訂正を拾うとき)。 この session の agent の記録も `--session <id8> --role any '<語>'` で引ける (agent の発言は `assistant(agent)`、 親が渡した指示は `parent` = `--role user` には入らない)。
 - ⚠️ **agent の「考え中」 は記録に中身が残らない** (実測: すべて空) = agent が考えたこと (捨てた案・途中で気づいた壊れ方・確かめていないこと) は、 報告か成果物に書かれた分しか後から引けない。 **書かせるのは委ねる瞬間** (締めの時点では agent はもう考え終わっている): Agent tool への委任は hook [`delegation-record-clause.py`](../hooks/delegation-record-clause.py) が指示の末尾に約束の段を自動で足し、 掲示板の依頼と別 session への依頼は spec に書く。 headless の起動は hook [`headless-record-clause-nudge.py`](../hooks/headless-record-clause-nudge.py) の自動注入経路と sandbox の HANDOFF 要件を確かめる ([`multi-session-coordination.md#worker-record-clause`](multi-session-coordination.md#worker-record-clause))。 締めでは報告と成果物のその段 (捨てた案・途中の発見・未検証) を読み、 1 の表で置き場所を決める。
