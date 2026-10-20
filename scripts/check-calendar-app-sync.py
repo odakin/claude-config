@@ -189,7 +189,7 @@ def render(rows: list[dict], unknown: str | None, surface: bool) -> str:
         if "authorization denied" in unknown:
             # sqlite の SQLITE_AUTH = macOS の TCC が file を拒んだ。 付与先は起動した process (app 本体とは限らない)
             lines.append("     → この process にフルディスクアクセスが無い。 付与先 = 親 process を辿った先 "
-                         "(Claude desktop の Bash なら claude-code/<版>/claude.app の helper、 版が上がると外れうる)。 "
+                         "(Claude desktop の Bash なら claude-code/<版>/<hash>/claude.app の helper 〔旧い版は <hash> の段が無い〕、 版が上がると外れうる)。 "
                          "辿り方 = claude-config conventions/macos-notification-db.md#tcc-responsible-process")
     if surface and bad:
         lines.append("     ⚠️ API / MCP の書き込みは成功と返るので、 ここ以外にエラーは出ない "
