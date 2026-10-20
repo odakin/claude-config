@@ -693,6 +693,10 @@ sections:
     legacy: "19.10"
     level: 3
     title: "19.10 回収と隔離は別の操作 — 「出し直さない」 は「これからも使ってよい」 ではない"
+  - id: prose-handover-is-not-an-edge
+    legacy: "19.11"
+    level: 3
+    title: "19.11 文で渡した引き継ぎは辺にならない — 子を閉じても、 その子に結ばれていた入口と約束は親に移らない"
   - id: premise-bound-rule-expiry
     legacy: "20"
     level: 2

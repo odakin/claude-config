@@ -30,7 +30,7 @@ entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house st
 
 ## <a id="procedure"></a>2. 手順
 
-1. **dry-run** (既定): `record-reply.py <項目 id | threadId | messageId | entry id>` → thread の全 message を「この entry に在る / 他所で記録済み / 未記録」 に分けて出し、 未記録の本文 (引用行を除く) と書く予定の差分を見せる。 項目 → thread は 3 経路 (cross_ref の inbox 参照 / email_ref / related_todo の逆引き) を読む。
+1. **dry-run** (既定): `record-reply.py <項目 id | threadId | messageId | entry id>` → thread の全 message を「この entry に在る / 他所で記録済み / 未記録」 に分けて出し、 未記録の本文 (引用行を除く) と書く予定の差分を見せる。 項目 → thread は 3 経路 (cross_ref の inbox 参照 / email_ref / related_todo の逆引き) を読み、 `--closed-status <閉じた status>` を渡せば 4 つめ = 引き継ぎ (その項目へ現在地で「続きは <id> へ」 と渡して閉じた項目の thread) も読む。 子の項目を文で閉じた後に同じ thread へ返事が来ると、 子に結ばれていた thread はどの開いた項目にも結ばれず、 親を target にしても辿れなかった (実測) = 見張り (未記録の返事の検出器) と同じ辺を記録の道具も辿る ([`../docs/convention-design-principles.md#prose-handover-is-not-an-edge`](../docs/convention-design-principles.md#prose-handover-is-not-an-edge))。
 2. **--apply**: 台帳の月 file の home entry (結ぶ項目に link する最新の entry) に足す or 新規に作る (`--slug` か `--id`)、 結ぶ項目の現在地を `--next` で上書き。 書くのはこの 2 file だけ。 案件の正本・calendar・mail の label / 既読は書かない。
    - ⚠️ `--next` は現在地の欄を丸ごと置き換える = **台帳を pull した後の dry-run が出す「今の現在地」 を読んでから組む**。 pull の前に見た現在地から組むと、 並列の session がその間に足した手順を消す (実測)。 消したら、 その場で新旧を合わせた 1 欄に書き直す
 3. **--check**: 全 entry の印と索引の整合 (印の id が索引にある / 印 = 索引の最新 / 日付順 / round-trip)。 `印 ≠ 最新` は loud に出る側の失敗 (silent な抑制ではない)。

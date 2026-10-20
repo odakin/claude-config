@@ -88,7 +88,7 @@ def _yaml_safe_load(stream):  # yaml.safe_load と同じ結果を C 版 (libyaml
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "lib"))
 from recorded_ids import harvest_entry, harvest_message_ids, harvest_thread_ids  # noqa: E402
-from todo_thread_links import harvest_todo_refs, norm_account, owner_from, resolve_threads, thread_ids  # noqa: E402
+from todo_thread_links import handover_map, harvest_todo_refs, norm_account, owner_from, resolve_threads, thread_ids  # noqa: E402
 # 項目の台帳 = <ledger>/todo/<id>.yaml (1 entry 1 file、 旧 <ledger>/TODO.yaml が残っていればそれも読む) = lib/todo_ledger.py
 from todo_ledger import (LEGACY_NAME as TODO_LEGACY_NAME, TodoLedgerError, dedent_entry,  # noqa: E402
                          entry_text as todo_entry_text, indent_entry, load_todos_with_paths)
@@ -115,6 +115,8 @@ class Config:
     creds_dir: Path = Path.home() / ".gmail-mcp"
     owner_tokens: tuple[str, ...] = ()       # From にこれを含めば自分発 (→)
     status_enum: set[str] | None = None      # None = 検査しない
+    closed_statuses: tuple[str, ...] = ()    # 閉じた項目の status。 渡せば、 項目を target にしたとき、 その項目へ現在地で
+                                             # 続きを渡して閉じた項目の thread も辿る (todo_thread_links の handover)。 空 = 辿らない
     category_in: str = "received"
     category_out: str = "sent"
     ctx_reply: str = "{date} reply from {name} ({subj}) → next: {next}"        # 相手発・返事
@@ -633,7 +635,13 @@ def resolve_target(cfg: Config, target: str, ledger: Ledger, gmail, account_opt:
     default = cfg.accounts[0] if cfg.accounts else ""
     if target in ledger.todos:
         _, _, todo = ledger.todos[target]
-        pairs = resolve_threads(todo, ledger.meta, ledger.inverse, known_accounts=cfg.accounts, default_account=default)
+        handed = ()
+        if cfg.closed_statuses:   # 子を「続きは <id> へ」 と閉じた後の返事も、 親を target にして記録できる (見張りと同じ辺)
+            closed = set(cfg.closed_statuses)
+            handed = handover_map([t for _n, _p, t in ledger.todos.values()],
+                                  lambda t: str(t.get("status", "")).strip() not in closed).get(target, ())
+        pairs = resolve_threads(todo, ledger.meta, ledger.inverse, known_accounts=cfg.accounts, default_account=default,
+                                handed_over=handed)
         if account_opt:
             pairs = [(t, account_opt) for t, _ in pairs]
         if not pairs:
@@ -1569,6 +1577,21 @@ def _selftest() -> int:
               "t18 別 thread の既存の行が今回の thread より後の日付: 既存の行を落とさず間に挟み、 印は既存の最新のまま")
         out_lines.clear()
         check(run_check(Ledger(cfg_e), pr, quiet=True) == 0, "t18 書いた後の --check は緑")
+
+        # t19 引き継ぎ: 閉じた子の現在地が名指す親を target にすると、 子の thread も辿る (closed_statuses を渡したときだけ)
+        (td / "lh" / "todo").mkdir(parents=True)
+        (td / "lh" / "todo" / "2030-01-01-parent.yaml").write_text(
+            'id: "2030-01-01-parent"\ntask: "p"\nstatus: open\nemail_ref: "threadId:dddd000000000001"\n', encoding="utf-8")
+        (td / "lh" / "todo" / "2030-02-01-child.yaml").write_text(
+            'id: "2030-02-01-child"\ntask: "c"\nstatus: done\nemail_ref: "threadId:dddd000000000002"\n'
+            'status_context: "済。 続きは 2030-01-01-parent へ"\n', encoding="utf-8")
+        cfg_h = Config(root=td, ledgers=["lh"], accounts=("acct-a",), owner_tokens=("owner@",), tz="UTC",
+                       cache_dir=td / "cache", closed_statuses=("done",))
+        p_on, _t, _n = resolve_target(cfg_h, "2030-01-01-parent", Ledger(cfg_h), gm, None)
+        cfg_h0 = Config(root=td, ledgers=["lh"], accounts=("acct-a",), owner_tokens=("owner@",), tz="UTC", cache_dir=td / "cache")
+        p_off, _t, _n = resolve_target(cfg_h0, "2030-01-01-parent", Ledger(cfg_h0), gm, None)
+        check([t for t, _a in p_on] == ["dddd000000000001", "dddd000000000002"] and [t for t, _a in p_off] == ["dddd000000000001"],
+              "t19 引き継ぎ: closed_statuses を渡すと閉じた子の thread も親の thread (渡さなければ従来どおり)")
     finally:
         shutil.rmtree(td, ignore_errors=True)
     print(f"selftest: {'ALL PASS' if not fails else f'FAIL {fails}'}")
@@ -1583,6 +1606,7 @@ def build_config(args) -> Config:
                  accounts=tuple(x for x in (args.accounts or "").split(",") if x),
                  creds_dir=Path(args.creds_dir).expanduser(), owner_tokens=tuple(args.owner_token or ()),
                  status_enum=(set(x for x in args.status_enum.split(",") if x) if args.status_enum else None),
+                 closed_statuses=tuple(x for x in (args.closed_status or "").split(",") if x),
                  category_in=args.category_in, category_out=args.category_out,
                  ctx_reply=args.ctx_reply, ctx_sent=args.ctx_sent, ctx_new_in=args.ctx_new_in,
                  ctx_new_out=args.ctx_new_out, tz=args.tz,
@@ -1619,6 +1643,8 @@ def main(argv=None) -> int:
     ap.add_argument("--creds-dir", default=str(Path.home() / ".gmail-mcp"))
     ap.add_argument("--owner-token", action="append", help="From にこれを含めば自分発 (複数可)")
     ap.add_argument("--status-enum", default="", help="項目の status の enum (comma 区切り。 空 = 検査しない)")
+    ap.add_argument("--closed-status", default="", help="閉じた項目の status (comma 区切り)。 渡すと、 項目を target にしたとき、"
+                    " その項目へ現在地で続きを渡して閉じた項目の thread も辿る。 空 = 辿らない")
     ap.add_argument("--category-in", default="received")
     ap.add_argument("--category-out", default="sent")
     ap.add_argument("--ctx-reply", default=Config.ctx_reply, help="相手発で、 thread に自分の先行 message が在る (返事)")

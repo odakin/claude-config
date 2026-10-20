@@ -15,6 +15,9 @@ conventions/batch-text-edits.md の先頭の側の罠)。 YAML を load → dump
     --set key=value   値は YAML の二重引用の文字列として書く (改行は \\n で入る)。 key が無ければ足す (--after <key> の直後、 無ければ末尾)
                       ⚠️ 値を自分で引用符に包まない = 引用符は道具が付ける。 shell で `'key="…"'` と書くと値の両端に " が残り、
                       file には `\"…\"` が入る (実測 2 回)。 両端が " の値は止める (本当にその値なら --allow-quoted-value)
+                      ⚠️ 真偽・数・list の key には使わない = `--set flag=true` は `flag: "true"` (文字列) になり、 list は
+                      1 本の文字列になる (実測)。 読み手が bool() で読むと "false" も真になる。 その key は text で 1 行足して、
+                      読み直して他の key が不変かを確かめる
     --comment key=text  --set した行の末尾に「   # text」 を付ける
     --drop key        その key をまとまりごと消す (無ければ何もしない)
     --dry-run         書かずに差分だけ出す
