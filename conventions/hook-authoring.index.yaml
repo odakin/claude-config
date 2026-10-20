@@ -120,6 +120,9 @@ sections:
   - id: marker-detection-scan-whole-turn
     level: 3
     title: "§2 補足 3: 抑止 marker は turn の転写全体から拾う — assistant text だけを見ると呼ぶ側が可視面を汚す"
+  - id: matcher-regex-partial-match
+    level: 3
+    title: "§2 補足 4: matcher の当たり方 — 英数字と `|` 以外の字が 1 つあると正規表現の部分一致になり、 tool の改名では黙って死ぬ"
   - id: warn-mode-spec-uncertainty
     legacy: "3"
     level: 2
