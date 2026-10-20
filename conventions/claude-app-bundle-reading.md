@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Claude desktop app (Code タブ等) の画面の挙動・文言の原因を、 docs や推測でなく app 本体で確かめたいとき + hook や規約が desktop の挙動を前提にする前 + 読んだ結論を user の画面で裏付ける実験を頼むとき
+when: Claude desktop app (Code タブ等) の画面の挙動・文言の原因を、 docs や推測でなく app 本体で確かめたいとき + hook や規約が desktop の挙動を前提にする前 + Claude Code 本体 (埋込 engine) の挙動 (hook の matcher の当て方・tool の旧名の表など) を確かめるとき + 読んだ結論を user の画面で裏付ける実験を頼むとき
 category: harness-core
 summary: Claude desktop app の挙動を本体から確かめる手順。 置き場所 (画面 = Resources/ion-dist の minified JS と i18n JSON / main process = app.asar / 埋込 engine = Application Support の claude-code/<版>) と、 文言 → 翻訳 key → 描画 chunk → minified 名の import/export 付け替えを辿る → main process の順。 道具 = scripts/claude-app-bundle.py (version / i18n / grep --where renderer|asar|engine / resolve / slice / asar-ls)。 落とし穴 = 素の grep -o は MB 級の 1 行で時間切れ・名前は chunk ごとに付け替わる・版依存 (読んだ版を記録)・条件が複数 chunk に散ると読み切れない → user の画面 1 回で判別する実験 (仮説ごとに結果が分かれる入力を並べる + 答えの形を指定)。 実例 = claude-code-permissions.md#chat-link-resolution-base / macos-claude-app-notifications.md#app-notification-model
 -->
@@ -14,7 +14,7 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 | 画面 (renderer) | `/Applications/Claude.app/Contents/Resources/ion-dist/assets/**/*.js` | minified の JS chunk。 1 行が MB 級 |
 | 画面の文言 | `…/Resources/ion-dist/i18n/<locale>.json` (`ja-JP` / `en-US` 等) | 翻訳 key → 文言。 key は chunk の中に `id:"<key>"` で現れる |
 | main process | `…/Resources/app.asar` | 独自形式の archive。 session の設定 (作業フォルダ等) を決める側 |
-| 埋込 engine (Claude Code) | `~/Library/Application Support/Claude/claude-code/<版>/claude.app/Contents/MacOS/claude` | 単一 binary。 文字列として JS が入っている (entrypoint の一覧など) |
+| 埋込 engine (Claude Code) | `~/Library/Application Support/Claude/claude-code/<版>/<hash>/claude.app/Contents/MacOS/claude` (旧い版は `<hash>` の段が無い。 道具は両方を探す) | 単一 binary。 文字列として JS が入っている (entrypoint の一覧、 hook の matcher の当て方など) |
 
 道具 = [`scripts/claude-app-bundle.py`](../scripts/claude-app-bundle.py)。 読んだ結論には **`version` の出力 (app と engine の版) を添える** — 挙動は版で変わる。
 
@@ -50,4 +50,5 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 - 通知音の仕様 (完了通知は常に無音 等) = [`macos-claude-app-notifications.md#app-notification-model`](macos-claude-app-notifications.md#app-notification-model)
 - 思考の要約が出ない仕組み (表示を「思考」 にするまで engine を `--thinking-display omitted` で動かす / メニューの訳語) = [`macos-claude-app-thinking-display.md`](macos-claude-app-thinking-display.md)
 - hook が frontend を見分ける値 (engine の entrypoint 一覧) = [`hook-authoring.md#entrypoint-values`](hook-authoring.md#entrypoint-values)
+- hook の matcher の当て方 (名の列挙・旧名の表・正規表現の部分一致) = [`hook-authoring.md#matcher-regex-partial-match`](hook-authoring.md#matcher-regex-partial-match)。 engine の関数名は版で変わるので、 名でなく文言から入る (`grep --where engine 'Invalid regex pattern in hook matcher'` = 当てる関数の末尾、 旧名の表 = `'Task:"Agent"'`)。 実測: この道具を知らずに使い捨ての mmap の code で同じことを 7 回した (素の grep は 2 分を超え、 255 回を超える繰り返しで落ちた)
 - インポートした session の record の形・会話記録の変換・再開時の移動 (別 account の session を写す道具が前提にし、 版ごとに本体を機械で点検する) = [`multi-account-machine-surface.md#session-list-per-account`](multi-account-machine-surface.md#session-list-per-account)

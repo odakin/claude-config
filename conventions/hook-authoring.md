@@ -481,7 +481,7 @@ Claude Code 本体の当て方 (本体を読んで確かめた、 実測):
   - 狙った名だけにするなら `^(mcp__.*__start_session|Agent|Task)$` と固定する。 固定しても旧名の `Task` で来た呼び出しは `Agent` に当たる。
   - hook の engine が tool 名を完全一致で振り分けていれば、 害は余分な起動だけで済む。 engine の側も部分一致で振り分けていると、 関係のない tool で誤って動く。 固定した後は、 止めるべき呼び出しを 1 回実際に投げて、 今も止まることを確かめる。
 - **tool が改名されると、 列挙の matcher は新しい名に当たらず黙って死ぬ** (実測 = 改名の後、 二重起動を止める hook が一度も発火していなかった)。 [§2](#delivery-audit-4-axes) の配信の audit は全部 green のまま。
-  - 確かめる道具 = [`scripts/hook-matcher-liveness.py`](../scripts/hook-matcher-liveness.py)。 会話記録に出た tool 名を各 settings の matcher に当て、 「何にも当たらない」「途中で消えた」「部分一致で別の名にも当たる」 を出す。 dashboard では [`scripts/audit-hooks.sh`](../scripts/audit-hooks.sh) の (e) が回す。 当て方の写しは script の中にあり、 本体の版が変わったら読み直す。
+  - 確かめる道具 = [`scripts/hook-matcher-liveness.py`](../scripts/hook-matcher-liveness.py)。 会話記録に出た tool 名を各 settings の matcher に当て、 「何にも当たらない」「途中で消えた」「部分一致で別の名にも当たる」 を出す。 dashboard では [`scripts/audit-hooks.sh`](../scripts/audit-hooks.sh) の (e) が回す。 当て方の写しは script の中にあり、 本体の版が変わったら [`scripts/claude-app-bundle.py`](../scripts/claude-app-bundle.py) `grep --where engine 'Invalid regex pattern in hook matcher'` (当てる関数) と `'Task:"Agent"'` (旧名の表) で読み直す ([`claude-app-bundle-reading.md`](claude-app-bundle-reading.md))。
   - 直し方 = 新しい名の行を足す。 古い名の行は、 全部の機械でこの道具が「途中で消えた」 と出してから外す (古い app の機械ではまだ古い名で来る)。
 
 ## <a id="warn-mode-spec-uncertainty"></a>§3. PreToolUse warn mode 出力の spec uncertainty

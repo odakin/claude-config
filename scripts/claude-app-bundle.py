@@ -29,7 +29,9 @@ import sys
 import tempfile
 
 DEFAULT_APP = "/Applications/Claude.app"
-ENGINE_GLOB = "~/Library/Application Support/Claude/claude-code/*/claude.app/Contents/MacOS/claude"
+ENGINE_ROOT = "~/Library/Application Support/Claude/claude-code"
+# 版の dir の直下 (旧) と、 版の下に hash の dir を 1 段挟む形 (claude-code/<版>/<hash>/claude.app、 実測 2.1.29x) の両方
+ENGINE_GLOBS = ("*/claude.app/Contents/MacOS/claude", "*/*/claude.app/Contents/MacOS/claude")
 
 
 def paths(app: str) -> dict:
@@ -42,14 +44,19 @@ def paths(app: str) -> dict:
     }
 
 
-def engine_path(explicit: str | None = None) -> str | None:
+def engine_path(explicit: str | None = None, root: str | None = None) -> str | None:
     if explicit:
         return explicit
-    cands = glob.glob(os.path.expanduser(ENGINE_GLOB))
+    base = os.path.expanduser(root or ENGINE_ROOT)
+    cands = [p for g in ENGINE_GLOBS for p in glob.glob(os.path.join(glob.escape(base), g))]
 
     def key(p):
-        v = p.split("/claude-code/")[1].split("/")[0]
-        return [int(x) if x.isdigit() else 0 for x in re.split(r"[.-]", v)]
+        v = os.path.relpath(p, base).split(os.sep)[0]
+        try:
+            mtime = os.path.getmtime(p)
+        except OSError:
+            mtime = 0.0
+        return ([int(x) if x.isdigit() else 0 for x in re.split(r"[.-]", v)], mtime)
 
     return max(cands, key=key) if cands else None
 
@@ -331,6 +338,20 @@ def selftest() -> int:
             f.write(b"\0" * 100 + b'var _fn={cli:!0,"claude-desktop":!0}')
         got = [n for n, buf in grep_sources("engine", app, eng) if re.search(rb"claude-desktop", buf)]
         check("grep --where engine: binary を mmap で探す", len(got) == 1)
+
+        root = os.path.join(t, "claude-code")
+        for rel in ("2.1.100/claude.app", "2.1.295/aaa/claude.app", "2.1.299/bbb/claude.app"):
+            d = os.path.join(root, rel, "Contents", "MacOS")
+            os.makedirs(d)
+            open(os.path.join(d, "claude"), "wb").close()
+        check("engine の既定: 版の下に hash の dir を挟む形も探し、 いちばん新しい版を選ぶ",
+              engine_path(None, root) == os.path.join(root, "2.1.299", "bbb", "claude.app", "Contents", "MacOS", "claude"))
+        old = os.path.join(t, "claude-code-old")
+        os.makedirs(os.path.join(old, "2.1.100", "claude.app", "Contents", "MacOS"))
+        open(os.path.join(old, "2.1.100", "claude.app", "Contents", "MacOS", "claude"), "wb").close()
+        check("engine の既定: 旧い形 (版の直下) だけでも見つける",
+              engine_path(None, old) == os.path.join(old, "2.1.100", "claude.app", "Contents", "MacOS", "claude"))
+        check("engine の既定: 無ければ None", engine_path(None, os.path.join(t, "nope")) is None)
 
         import contextlib
         import io

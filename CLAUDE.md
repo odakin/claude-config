@@ -55,7 +55,7 @@ claude-config/
 │   ├── chalkboard-photo-archive.md         # 授業の板書をスマホで撮った写真を、 授業ごとの PDF にまとめて置き場所に保管し受講者に見せる仕組みを作る・回すとき + 板書 PDF の「第何回」 がずれた・上書きしてしまったとき
 │   ├── chat-math-rendering.md              # チャットの返事に数式を書くとき (読ませる数式・コピペ用の LaTeX の両方) + 返事の数式が生の TeX のまま表示されたとき + 数式の書き方の規則を CLAUDE.md や template に置くとき
 │   ├── claude-ai-routines.md               # claude.ai routines (RemoteTrigger / cloud cron) を作成・管理するとき
-│   ├── claude-app-bundle-reading.md        # Claude desktop app (Code タブ等) の画面の挙動・文言の原因を、 docs や推測でなく app 本体で確かめたいとき + hook や規約が desktop の挙動を前提にする前 + 読んだ結論を user の画面で裏付ける実験を頼むとき
+│   ├── claude-app-bundle-reading.md        # Claude desktop app (Code タブ等) の画面の挙動・文言の原因を、 docs や推測でなく app 本体で確かめたいとき + hook や規約が desktop の挙動を前提にする前 + Claude Code 本体 (埋込 engine) の挙動 (hook の matcher の当て方・tool の旧名の表など) を確かめるとき + 読んだ結論を user の画面で裏付ける実験を頼むとき
 │   ├── claude-app-cwd-pin.md               # Claude.app の folder picker 起点固定 (launchd) を設定・解除するとき
 │   ├── claude-code-permissions.md          # Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき + tool call が拒否されて原因 (rule / hook / classifier) を切り分けるとき (#hook-masks-deny) + classifier に止められた操作を user に chat で承認してもらうとき・承認したのにまた止まったとき (#chat-approval-reaches-classifier) + 本人の口座番号などを、 本人が印刷して出す様式に印字するとき (#own-numbers-in-local-forms) + git の commit / push を別の dir から打つとき・allow に入れたのに止められたとき (#cd-with-git-goes-to-classifier)
 │   ├── clipboard-cleaner.md                # PDF コピー由来の段落内改行・RTF 書式をクリップボードで整形したいとき
