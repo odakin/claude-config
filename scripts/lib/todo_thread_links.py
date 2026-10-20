@@ -11,6 +11,13 @@
   片方の経路だけ読む / 読むが正規化しない、 が過去の取りこぼしの型 (一般則 = data-pipeline-automation.md
   #multipath-key-normalization)。 本 module に 3 経路と正規化を置き、 検出器と道具の両方が import する。
 
+引き継ぎ (handover): 子の項目を閉じるとき、 続きを「続きは親の項目 <id> へ」 と現在地 (`status_context`) の文で
+  渡すことがある。 その文は link にならない = 子に結ばれていた thread に閉じた後で返事が来ると、 どの開いた項目にも
+  結ばれず、 続報として親に届かない (実測。 閉じた後の返事が親に結ばれない新しい項目として起票され、 親の現在地に
+  入らなかった)。 → `handover_map` が「閉じた項目の現在地が名指す開いた項目」 を引き、
+  `resolve_threads(..., handed_over=...)` がその閉じた子の thread も親の thread として返す (1 段だけ。 名指しは
+  開いた項目の id の完全一致 = 前後が id の文字でない所。 閉じた項目の notes は読まない = 経緯の文の id を拾わない)。
+
 欄の注記への耐性: threadId / account の欄には人の注記が混ざる (「<id> (誰々) / <id>」 / 「lab (= Cc で受信)」)。
   そのまま Gmail に渡すと 400 / 認証なしで黙って失敗するので、 読む側で id と account だけを取り出す
   (書く側の欄は直さない = 注記は人のための記録)。
@@ -101,9 +108,45 @@ def owner_from(from_header: str, owner_tokens=()) -> bool:
     return any(tok.lower() in f for tok in owner_tokens)
 
 
+_ID_CHAR = r"A-Za-z0-9_-"
+
+
+def handover_targets(todo: dict, open_ids) -> list[str]:
+    """閉じた項目 todo の現在地 (status_context) が名指す、 開いた項目の id (open_ids の中だけ。 文の中の出現順・重複なし・
+    自分を除く)。 呼び手は閉じた項目にだけ呼ぶ (開いた項目の現在地が他の項目を名指すのは引き継ぎではない)。"""
+    sc = todo.get("status_context")
+    if not isinstance(sc, str) or not sc:
+        return []
+    me = todo.get("id")
+    hits: list[tuple[int, str]] = []
+    for oid in open_ids:
+        if not isinstance(oid, str) or not oid or oid == me:
+            continue
+        m = re.search(rf"(?<![{_ID_CHAR}]){re.escape(oid)}(?![{_ID_CHAR}])", sc)
+        if m:
+            hits.append((m.start(), oid))
+    return [oid for _pos, oid in sorted(hits)]
+
+
+def handover_map(todos, is_open) -> dict[str, list[dict]]:
+    """項目の list → {開いた項目の id: [その id へ続きを渡した閉じた項目]} (純関数)。 is_open(todo) -> bool は呼び手の
+    status の語彙で判定する (本 module は status の語を持たない)。 1 段だけ (閉じた → 閉じた の連鎖は辿らない)。"""
+    rows = [t for t in todos if isinstance(t, dict)]
+    open_ids = {t.get("id") for t in rows if is_open(t) and isinstance(t.get("id"), str)}
+    out: dict[str, list[dict]] = {}
+    for t in rows:
+        if is_open(t):
+            continue
+        for oid in handover_targets(t, open_ids):
+            out.setdefault(oid, []).append(t)
+    return out
+
+
 def resolve_threads(todo: dict, inbox_by_id: dict, inverse_by_todo: dict | None = None,
-                    known_accounts=(), default_account: str | None = None) -> list[tuple[str, str]]:
-    """TODO → [(threadId, account)]。 経路 (1) cross_ref の inbox 参照 → (2) email_ref → (3) 逆引き。
+                    known_accounts=(), default_account: str | None = None,
+                    handed_over=()) -> list[tuple[str, str]]:
+    """TODO → [(threadId, account)]。 経路 (1) cross_ref の inbox 参照 → (2) email_ref → (3) 逆引き
+    → (4) 引き継ぎ = handed_over (この TODO へ続きを渡した閉じた項目、 handover_map の値) の (1)〜(3) の thread。
 
     inbox_by_id: entry id → {"threadId": str|None, "account": str|None}。
     account は entry の欄から (注記は norm_account で剥がす)、 無ければ default_account
@@ -157,6 +200,15 @@ def resolve_threads(todo: dict, inbox_by_id: dict, inverse_by_todo: dict | None 
                 if tid not in seen:
                     seen.add(tid)
                     out.append((tid, norm_account(meta.get("account"), known_accounts) or default))
+
+    for child in handed_over or ():
+        if not isinstance(child, dict) or child.get("id") == todo_id:
+            continue
+        for tid, acct in resolve_threads(child, inbox_by_id, inverse_by_todo,
+                                         known_accounts=known_accounts, default_account=default_account):
+            if tid not in seen:
+                seen.add(tid)
+                out.append((tid, acct))
     return out
 
 
@@ -199,6 +251,30 @@ def selftest() -> int:
     expect("resolve_threads: 何も無ければ空、 default は known の先頭",
            resolve_threads({"id": "t-9"}, by_id, None, known_accounts=("acct-a",)) == []
            and resolve_threads({"email_ref": "threadId:aaaa000000000006"}, {}, None, known_accounts=("acct-a",)) == [("aaaa000000000006", "acct-a")])
+
+    # 引き継ぎ: 閉じた子の現在地が開いた親の id を名指す → 親の thread に子の thread を足す
+    is_open = lambda t: t.get("status") != "done"  # noqa: E731
+    parent = {"id": "2030-01-01-parent", "status": "open", "email_ref": "threadId:aaaa0000000000a1"}
+    child = {"id": "2030-02-01-child", "status": "done", "email_ref": "threadId:aaaa0000000000b1",
+             "status_context": "済。 続きは親 2030-01-01-parent へ (2030-01-01-parent-old は別件)"}
+    other = {"id": "2030-02-02-other", "status": "done", "status_context": "2030-01-01-parentx と 2030-01-01-paren は別の id"}
+    child_of_inbox = {"id": "2030-02-03-viainbox", "status": "done", "status_context": "→ 2030-01-01-parent"}
+    hm = handover_map([parent, child, other, child_of_inbox], is_open)
+    expect("handover_map: 閉じた子が名指す開いた id だけ (前後が id の文字の部分一致は拾わない、 開いた項目からは引かない)",
+           sorted(t["id"] for t in hm.get("2030-01-01-parent", [])) == ["2030-02-01-child", "2030-02-03-viainbox"]
+           and set(hm) == {"2030-01-01-parent"})
+    expect("handover_targets: 開いた id の集合の外は拾わない・自分は拾わない",
+           handover_targets(child, {"2030-01-01-parent-old"}) == ["2030-01-01-parent-old"]
+           and handover_targets({"id": "x", "status_context": "x へ"}, {"x"}) == [])
+    by_id_h = {"eh": {"threadId": "aaaa0000000000c1", "account": "acct-b"}}
+    inv_h = {"2030-02-03-viainbox": ["eh"]}
+    got_h = resolve_threads(parent, by_id_h, inv_h, known_accounts=("acct-a", "acct-b"), default_account="acct-a",
+                            handed_over=hm["2030-01-01-parent"])
+    expect("resolve_threads: (4) 引き継ぎ = 子の email_ref と、 子を指す inbox entry (逆引き) の thread も親の thread",
+           [t for t, _a in got_h] == ["aaaa0000000000a1", "aaaa0000000000b1", "aaaa0000000000c1"]
+           and dict(got_h)["aaaa0000000000c1"] == "acct-b")
+    expect("resolve_threads: handed_over を渡さなければ従来どおり (親の thread だけ)",
+           resolve_threads(parent, by_id_h, inv_h, known_accounts=("acct-a",)) == [("aaaa0000000000a1", "acct-a")])
     print(f"selftest: {'ALL PASS' if not fails else 'FAIL ' + str(len(fails))}")
     return 1 if fails else 0
 
