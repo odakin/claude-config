@@ -29,6 +29,7 @@ user_asked の start_session は prompt に掲示板の request id が無いと�
 
 故障は通す (読めない入力・記録が見つからない・例外 = exit 0)。 止めるのは条件が成り立った時だけ。
 env: SESSION_LAUNCH_CHECK_DISABLE=1 / SESSION_LAUNCH_STATE_DIR (test) / CLAUDE_DESKTOP_SESSIONS_DIR (test) /
+     SESSION_LAUNCH_BOARD_FIRST_MARKER (test: the marker's path) /
      SESSION_LAUNCH_WAIT (記録を待つ秒、 既定 3)。
 self-test: python3 scripts/session-launch-check.py --selftest
 """
@@ -167,8 +168,8 @@ def board_launch_record(prompt: str) -> dict | None:
 
 
 def board_first_on() -> bool:
-    return os.environ.get("SESSION_LAUNCH_BOARD_FIRST") == "1" or os.path.exists(
-        os.path.expanduser("~/.claude/session-launch-board-first.on"))
+    marker = os.environ.get("SESSION_LAUNCH_BOARD_FIRST_MARKER") or os.path.expanduser("~/.claude/session-launch-board-first.on")
+    return os.environ.get("SESSION_LAUNCH_BOARD_FIRST") == "1" or os.path.exists(marker)
 
 
 def pre_start(inp: dict) -> tuple[int, str]:
@@ -365,7 +366,7 @@ def selftest() -> int:
 
     with tempfile.TemporaryDirectory() as td:
         os.environ.update(SESSION_LAUNCH_STATE_DIR=os.path.join(td, "state"), CLAUDE_DESKTOP_SESSIONS_DIR=os.path.join(td, "app"),
-                          SESSION_LAUNCH_WAIT="0")
+                          SESSION_LAUNCH_WAIT="0", SESSION_LAUNCH_BOARD_FIRST_MARKER=os.path.join(td, "no-marker"))
         os.environ.pop("SESSION_LAUNCH_BOARD_FIRST", None)
         app = os.path.join(td, "app", "acct", "env")
         os.makedirs(app)
@@ -460,7 +461,7 @@ def selftest() -> int:
         check("pre-send: go passes once fixed → detach_session note", rc == 0 and "detach_session" in out)
 
         check("route ignores other tools", route({"hook_event_name": "PreToolUse", "tool_name": "Bash"}) == "")
-        for k in ("SESSION_LAUNCH_STATE_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR", "SESSION_LAUNCH_WAIT"):
+        for k in ("SESSION_LAUNCH_STATE_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR", "SESSION_LAUNCH_WAIT", "SESSION_LAUNCH_BOARD_FIRST_MARKER"):
             os.environ.pop(k, None)
     print("selftest:", "PASS" if not fails else f"{len(fails)} FAIL")
     return 1 if fails else 0

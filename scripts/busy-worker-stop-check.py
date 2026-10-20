@@ -35,8 +35,16 @@ sys.path.insert(0, os.path.join(HERE, "lib"))
 import session_model as sm  # noqa: E402
 
 RULE = "claude-config/conventions/multi-session-coordination.md#ask-before-stopping-a-busy-worker"
-CLI_STOP = re.compile(r"\bclaude\b[^|;&\n]*?\b(stop|kill|rm)\b")
-ID_TOKEN = re.compile(r"(?<![0-9a-zA-Z_-])([0-9a-f]{8}(?:-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?)(?![0-9a-zA-Z_])")
+CLI_STOP = re.compile(r"\bclaude\b[^|;&\n]*?\b(stop|kill|rm)\b")   # cheap prefilter only; the command word decides
+# The command word is read after heredoc bodies and quoted strings are blanked (the same reading as
+# hooks/cd-git-write-guard.py): text that only mentions `claude stop <id>` (an echo, a commit message, a document
+# written through a heredoc) is not a stop (measured: a heredoc that quoted the words was stopped).
+QUOTED = re.compile(r"\"(?:\\.|[^\"\\])*\"|'[^']*'")
+HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n[ \t]*\2[ \t]*(?=\n|$)", re.S)
+SEP = re.compile(r"&&|\|\||;|\||&|\(|\)|\n")
+LEADING_KW = {"do", "then", "else", "elif", "if", "while", "until", "{", "!", "time", "command", "builtin", "exec", "env", "nohup"}
+ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
+ID_TOKEN =re.compile(r"(?<![0-9a-zA-Z_-])([0-9a-f]{8}(?:-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?)(?![0-9a-zA-Z_])")
 STOP_OK = re.compile(r"#\s*stop-ok:\s*(.+?)\s*$", re.M)
 NOT_HUMAN = ("<task-notification", "<cross-session-message", "Another Claude session sent a message", "Stop hook feedback",
              "<local-command", "<command-name>", "<command-message>", "<side-sessions-event", "[Request interrupted")
@@ -140,13 +148,34 @@ def busy_targets(ids: list[str]) -> list[dict]:
     return out
 
 
+def _blank(m: re.Match) -> str:
+    return re.sub(r"[^\n]", " ", m.group(0))
+
+
+def stops_a_session(cmd: str) -> bool:
+    """Whether a segment of the command runs `claude … stop|kill|rm` (the command word is `claude` or a path to it,
+    after variable assignments and control words; heredoc bodies and quoted strings do not count)."""
+    masked = QUOTED.sub(_blank, HEREDOC.sub(_blank, cmd))
+    for seg in SEP.split(masked):
+        words = seg.split()
+        while words and (words[0] in LEADING_KW or ASSIGN.match(words[0])):
+            words = words[1:]
+        if not words or os.path.basename(words[0]) != "claude":
+            continue
+        sub = next((w for w in words[1:] if not w.startswith("-")), "")
+        if sub in ("stop", "kill", "rm"):
+            return True
+    return False
+
+
 def targets_of(inp: dict) -> tuple[list[str], str]:
     tool, ti = inp.get("tool_name") or "", inp.get("tool_input") or {}
     if tool == "Bash":
         cmd = ti.get("command") or ""
-        if not CLI_STOP.search(cmd):
+        if not CLI_STOP.search(cmd) or not stops_a_session(cmd):
             return [], ""
-        return [m.group(1) for m in ID_TOKEN.finditer(cmd)], cmd
+        masked = HEREDOC.sub(_blank, cmd)   # ids in a for-loop list count; ids inside a heredoc body do not
+        return [m.group(1) for m in ID_TOKEN.finditer(masked)], cmd
     if tool.endswith("__stop_session") or tool.endswith("__archive_session"):
         s = (ti.get("session_id") or "").strip()
         return ([s] if s and s != "self" else []), ""
@@ -285,6 +314,12 @@ def selftest() -> int:
         ok("listing sessions → passes", rc == 0)
         rc, _ = run("Bash", {"command": "git rm b0b0b0b0.txt"})
         ok("an id-looking word without `claude … stop` → passes", rc == 0)
+        rc, _ = run("Bash", {"command": 'echo "claude stop b0b0b0b0 (probe)"'}, sid="L7")
+        ok("a quoted mention of `claude stop <id>` → passes", rc == 0)
+        rc, _ = run("Bash", {"command": "python3 - <<'X'\ntext = 'claude stop b0b0b0b0'\nX"}, sid="L7")
+        ok("a heredoc body that mentions it → passes", rc == 0)
+        rc, _ = run("Bash", {"command": "cd /w && CLAUDE_CONFIG_DIR=/x /usr/local/bin/claude stop b0b0b0b0"}, sid="L8")
+        ok("a path to claude after cd and an assignment → blocked", rc == 2)
         with open(tr, "w", encoding="utf-8") as fh:
             fh.write(json.dumps({"type": "user", "message": {"content": "Another Claude session sent a message: stop it"},
                                  "timestamp": "2099-02-01T00:00:00.000Z"}) + "\n")
