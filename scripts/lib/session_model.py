@@ -258,3 +258,60 @@ def model_of(session_id: str, cwd: str | None = None) -> str:
         return info["model"] if info else ""
     except Exception:
         return ""
+
+
+def _last_tool_use(path: str) -> tuple[str, str]:
+    """(timestamp, input as JSON text) of the last tool_use in a transcript's tail, ('', '') when none."""
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as fh:
+            if size > TAIL_BYTES:
+                fh.seek(size - TAIL_BYTES)
+                fh.readline()
+            raw = fh.read()
+    except OSError:
+        return "", ""
+    best = ("", "")
+    for line in raw.split(b"\n"):
+        if b"tool_use" not in line:
+            continue
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(e, dict) or e.get("type") != "assistant":
+            continue
+        for b in (e.get("message") or {}).get("content") or []:
+            if isinstance(b, dict) and b.get("type") == "tool_use":
+                best = (str(e.get("timestamp") or ""), json.dumps(b.get("input"), ensure_ascii=False))
+    return best
+
+
+def acting_transcript(session_id: str, needles: list[str], max_age_s: float = 900) -> dict | None:
+    """The transcript that is running a command right now: the session's own, or one of its subagents' (Agent tool).
+
+    A subagent shares its parent's session id and environment (measured: no variable of its own), so a command it runs
+    names the parent. Its turns are written to `<parent transcript dir>/<parent id>/subagents/agent-<id>.jsonl`, and the
+    tool call being executed is that file's last tool_use. Among the parent and its recently written subagents, the one
+    whose last tool_use contains every needle (e.g. the request id and the subcommand) is the actor. Returns
+    {"path", "model", "subagent": bool} or None (no match = the caller falls back to the session's own model).
+    """
+    try:
+        import time as _time
+        p = transcript_path(session_id)
+        if not p:
+            return None
+        cands = [p] + [q for q in glob.glob(os.path.join(p[:-len(".jsonl")], "subagents", "agent-*.jsonl"))
+                       if _time.time() - os.path.getmtime(q) <= max_age_s]
+        hits = []
+        for c in cands:
+            ts, text = _last_tool_use(c)
+            if text and all(n in text for n in needles):
+                hits.append((ts, c))
+        if not hits:
+            return None
+        ts, c = max(hits)
+        info = last_model(c)
+        return {"path": c, "model": info["model"] if info else "", "subagent": c != p}
+    except Exception:
+        return None
