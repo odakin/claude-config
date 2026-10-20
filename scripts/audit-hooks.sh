@@ -15,6 +15,9 @@
 #       = disableAllHooks kill switch の settings 全 tier 走査 + transcript 上の SessionStart
 #       発火証拠 (hook-authoring.md#disableallhooks-kill-switch)。 個別 hook の trace による
 #       invoke 確認は manual のまま (hook-authoring.md#delivery-audit-method)。 python3 不在なら skip
+#   (e) matcher の生死 — hook-matcher-liveness.py --findings-only の 🔴 ⚪ ❗ の行
+#       = tool の改名で matcher が何にも当たらなくなった hook ((a)-(d) が全部 green でも 1 度も発火しない)。
+#       🟡 (生きた matcher の中の当たらない選択肢・冗長な行) は hook が走るので出さない。 python3 不在なら skip
 #
 # 出力:
 #   - 全 green: silent skip (= dashboard noise 抑制)
@@ -161,6 +164,17 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$LIVENESS" ]; then
     done < <(python3 "$LIVENESS" --findings-only 2>/dev/null)
 fi
 
+# (e) matcher の生死: 会話記録に出た tool 名と matcher を当てる。 改名で死んだ matcher はここでしか見えない。
+MATCHERS="$(cd "$(dirname "$0")" && pwd)/hook-matcher-liveness.py"
+if command -v python3 >/dev/null 2>&1 && [ -f "$MATCHERS" ]; then
+    while IFS= read -r line; do
+        case "$line" in
+            ""|🟡*) ;;
+            *) issues+=("$line") ;;
+        esac
+    done < <(python3 "$MATCHERS" --findings-only 2>/dev/null)
+fi
+
 # Output
 if [ ${#issues[@]} -eq 0 ]; then
     exit 0  # silent if all green
@@ -172,6 +186,6 @@ for issue in "${issues[@]}"; do
     echo "  $issue"
 done
 echo ""
-echo "  → 4 軸 (symlink + settings.json + syntax + 発火証拠 / kill switch) で expose"
+echo "  → 5 軸 (symlink + settings.json + syntax + 発火証拠 / kill switch + matcher の生死) で expose"
 echo "  → 規律: ~/Claude/claude-config/conventions/hook-authoring.md#delivery-audit-4-axes"
 exit 0
