@@ -226,7 +226,7 @@
       ]
     },
     {
-      "matcher": "mcp__.*__spawn_task",
+      "matcher": "mcp__.*__(spawn_task|start_session)",
       "hooks": [
         {
           "type": "command",
@@ -268,6 +268,26 @@
         {
           "type": "command",
           "command": "~/.claude/hooks/live-engine-edit-guard.py"
+        }
+      ]
+    },
+    {
+      "matcher": "mcp__.*__start_session|SendMessage",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/session-launch-check.sh",
+          "timeout": 10
+        }
+      ]
+    },
+    {
+      "matcher": "Bash|mcp__.*__(stop_session|archive_session)",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/busy-worker-stop-check.sh",
+          "timeout": 10
         }
       ]
     }
@@ -346,7 +366,7 @@
       ]
     },
     {
-      "matcher": "mcp__.*__(spawn_task|dismiss_task)",
+      "matcher": "mcp__.*__(spawn_task|start_session|dismiss_task)",
       "hooks": [
         {
           "type": "command",
@@ -369,6 +389,16 @@
         {
           "type": "command",
           "command": "~/.claude/hooks/value-index-output-nudge.py"
+        }
+      ]
+    },
+    {
+      "matcher": "mcp__.*__(start_session|set_session_model|set_session_effort)",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/session-launch-check.sh",
+          "timeout": 10
         }
       ]
     }
