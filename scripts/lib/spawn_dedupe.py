@@ -356,7 +356,9 @@ def route(inp: dict) -> str:
     """hook の入力 (hook_event_name + tool_name) から mode。 該当しなければ空 = 何もしない。"""
     ev = inp.get("hook_event_name") or ""
     tool = inp.get("tool_name") or ""
-    if tool.endswith("__spawn_task"):
+    # start_session = the desktop app's current name for the tool that starts or proposes a session (the old spawn_task;
+    # its proposal cards return a task_id like the old chips, a direct start returns a session_id and no task_id)
+    if tool.endswith("__spawn_task") or tool.endswith("__start_session"):
         return {"PreToolUse": "pre-spawn", "PostToolUse": "post-spawn"}.get(ev, "")
     if tool.endswith("__dismiss_task") and ev == "PostToolUse":
         return "post-dismiss"
@@ -452,6 +454,8 @@ def selftest() -> int:
         check("core_title strips leading tags", core_title(title) == "合成の依頼 A の見直し")
         check("route: PreToolUse spawn → pre-spawn",
               route({"hook_event_name": "PreToolUse", "tool_name": "mcp__ccd_session__spawn_task"}) == "pre-spawn")
+        check("route: PreToolUse start_session → pre-spawn (the tool's current name)",
+              route({"hook_event_name": "PreToolUse", "tool_name": "mcp__ccd_session__start_session"}) == "pre-spawn")
         check("route: PostToolUse dismiss → post-dismiss",
               route({"hook_event_name": "PostToolUse", "tool_name": "mcp__ccd_session__dismiss_task"}) == "post-dismiss")
         check("route: UserPromptSubmit / Bash → nothing (利用者側の hook の領分)",

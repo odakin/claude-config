@@ -225,12 +225,29 @@ def resolve(target: str) -> list[dict]:
     return [s for s in live if t in s["name"]]
 
 
+def _app_record(s: dict) -> dict | None:
+    """The desktop app's record (model / effort the next turn runs on), for a session the app started; else None."""
+    try:
+        _spec2 = _ilu.spec_from_file_location(
+            "desktop_sessions", os.path.join(os.path.dirname(os.path.abspath(__file__)), "desktop_sessions.py"))
+        ds = _ilu.module_from_spec(_spec2)
+        _spec2.loader.exec_module(ds)
+        host = s.get("host") or ""
+        return ds.find(host) if host.startswith("local_") else ds.find(s["sessionId"])
+    except Exception:
+        return None
+
+
 def describe(s: dict) -> dict:
-    """Add path / model / model_at / tier / tail to a session row (empty strings when unknown)."""
+    """Add path / model / model_at / tier / tail to a session row (empty strings when unknown), and for a desktop
+    session app_model / app_effort = the app's record, which is what the next turn runs on (a session that has not
+    answered yet has no model in its transcript; set_session_model lands in the record first)."""
     path = s.get("path") or transcript_path(s["sessionId"], s.get("cwd") or None)
     info = last_model(path) if path else None
+    rec = _app_record(s)
     return {**s, "path": path or "", "model": info["model"] if info else "", "model_at": info["at"] if info else "",
-            "tier": tier(info["model"]) if info else "", "tail": bool(info and info.get("tail"))}
+            "tier": tier(info["model"]) if info else "", "tail": bool(info and info.get("tail")),
+            "app_model": (rec or {}).get("model", ""), "app_effort": (rec or {}).get("effort", "")}
 
 
 def model_of(session_id: str, cwd: str | None = None) -> str:

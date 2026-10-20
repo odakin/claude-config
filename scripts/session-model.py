@@ -11,6 +11,7 @@ Usage:
   session-model.py <target>            target = session id or its prefix (0123abcd), a `local_…` host id
                                        (the from-session of a cross-session message), or a substring of the
                                        name ListAgents shows
+  session-model.py self                this session (a worker checks the model and effort it was started on)
   session-model.py --live              every live session on this machine with its model
   session-model.py <target> --json     machine-readable rows
   session-model.py --selftest
@@ -38,7 +39,12 @@ def fmt(row: dict) -> str:
     status = f"  status={row['status']}" if row.get("status") else ""
     cfg = f"  config={row['config']}" if row.get("config") and row["config"] != "default" else ""
     to = f"  SendMessage to={row['address']}" if row.get("address") else ""
-    return f"{sid}  {model}  tier={row['tier'] or '?'}{when}{status}{name}{cfg}{to}"
+    app = ""
+    if row.get("app_model") or row.get("app_effort"):
+        app = f"  app の記録={row.get('app_model') or '?'} effort={row.get('app_effort') or '?'}"
+        if row.get("model") and row.get("app_model") and row["model"] != row["app_model"]:
+            app += " (次の turn から = 最後の応答の model と違う)"
+    return f"{sid}  {model}  tier={row['tier'] or '?'}{when}{app}{status}{name}{cfg}{to}"
 
 
 def selftest() -> int:
@@ -166,7 +172,10 @@ def main(argv: list[str] | None = None) -> int:
     if a.live:
         rows = [sm.describe(s) for s in sm.live_sessions()]
     elif a.target:
-        rows = [sm.describe(s) for s in sm.resolve(a.target)]
+        target = a.target
+        if target == "self":  # the session running this command (Claude Code puts its id in the Bash env)
+            target = os.environ.get("CLAUDE_CODE_SESSION_ID") or ""
+        rows = [sm.describe(s) for s in sm.resolve(target)]
     else:
         ap.print_help()
         return 2

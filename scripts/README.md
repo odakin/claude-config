@@ -32,6 +32,7 @@
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入
 - **[browser-post-receiver.py](browser-post-receiver.py)** — browser の page が POST した本文を 1 回だけ受けて file に書く (127.0.0.1)
 - **[build-sensitive-terms.py](build-sensitive-terms.py)** — 実名などの literal gate (Tier B) の term 一覧を SoT から生成する。
+- **[busy-worker-stop-check.py](busy-worker-stop-check.py)** — 動いている (busy) worker session を止める操作 (`claude stop|kill|rm <id>`、 desktop の stop_session / archive_session) を、 本人に聞く前の 1 回目は止める (hook の engine。 正本 = conventions/multi-session-coordination.md#ask-before-stopping-a-busy-worker)。
 - **[calendar-app-occurrence.py](calendar-app-occurrence.py)** — Mac の Calendar.app にある繰り返し予定の「この回だけ」 をずらす / 飛ばす、 写しの系列を丸ごと消す (EventKit、 既定 dry-run)。
 - **[calendar-events.py](calendar-events.py)** — Google Calendar の event を機械で読む / 足す / 直す / 消す。
 - **[calendar_conflicts.mutants.json](calendar_conflicts.mutants.json)** — calendar_conflicts.py (予定の重なりの engine) の判定・台帳・通知・表示の要所を 1 か所ずつ外した mutant で、 selftest の該当 check が落ち、 隣の check は通り続けることを確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
@@ -297,6 +298,7 @@
 - **[scan-public-tree.test.sh](scan-public-tree.test.sh)** — self-tests for the full-tree re-run of the public gate
 - **[search-agent-transcripts.py](search-agent-transcripts.py)** — Claude Code と Codex の会話記録を横断して、発言を文字列で探す
 - **[session-claims-report.py](session-claims-report.py)** — ある session が返事と記録に書いた「根拠の無い検算の主張」 と「先送り」 を会話記録から並べる。--selftest 内蔵。
+- **[session-launch-check.py](session-launch-check.py)** — desktop の start_session で起こした session が、 頼んだ model と effort で起きたかを app の記録で確かめ、 違えば直し方を出し、 直るまで go の SendMessage を止める (hook の engine。 正本 = conventions/multi-session-coordination.md#desktop-start-model-cap)。
 - **[session-model.py](session-model.py)** — print the model a Claude Code session actually runs on (read from its transcript), before sending it work.
 - **[session-scripts-report.py](session-scripts-report.py)** — ある session がその場で書いた script を会話記録から全部並べ、 file として残っているか (commit 済みか) を出す。--selftest 内蔵。
 - **[session_provenance_cache.py](session_provenance_cache.py)** — Own shared Codex model/effort resolution and the hook metadata cache.
@@ -400,6 +402,7 @@
 - **[lib/codex_worker_contract.py](lib/codex_worker_contract.py)** — Worker-side record contract for Codex-origin delegation. No command rewrites.
 - **[lib/commit-msg-leak-matcher.sh](lib/commit-msg-leak-matcher.sh)** — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 10 allowlist の (a)(b)(c) check + 審査中の申請を識別する種目語×評価語の共起 (d))、 claude-code hook + git-side runner の両方が source する DRY 実装
 - **[lib/config_dir_auth.py](lib/config_dir_auth.py)** — Claude Code の設定フォルダ (CLAUDE_CONFIG_DIR) の認証が切れているかを、 `claude` を呼ばずに読む共有判定。
+- **[lib/desktop_sessions.py](lib/desktop_sessions.py)** — the Claude desktop app's own record of a Code session: the model and effort it will run the next turn on, its title and the session that started it.
 - **[lib/find-personal-layer.sh](lib/find-personal-layer.sh)** — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
 - **[lib/git_blob.py](lib/git_blob.py)** — git の blob を worktree に出したときの中身で読む helper (git-crypt で暗号化される path も平文で)。
 - **[lib/git_crypt_paths.py](lib/git_crypt_paths.py)** — staged の path のうち git-crypt で暗号化される path を判定する (pre-commit の警告が見本を伏せるため)。
