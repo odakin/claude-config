@@ -42,7 +42,7 @@ summary: transliteration・正規化された人名 field は不可逆な投影 
 
 ## <a id="name-printing-stakes"></a>高 stakes: 物理的に残る / 対外に出る印字
 
-**招待状・案内状・賞状・名札・記念品・著者名・credit・振込先・名簿**では、誤記が刷り直しや対外的な失礼に直結する。ここでは推測混入を絶対に許さず、**印字の直前に正本と 1 回照合する**。
+**招待状・案内状・賞状・名札・記念品・著者名・credit・振込先・名簿**では、誤記が刷り直しや対外的な失礼に直結する。ここでは推測混入を絶対に許さず、**印字の直前に正本と 1 回照合する**。 照合の相手は、 **出所の記録が付いた正本か、 本人が自分で書いた表記** (署名・メールの表示名・本人の書類) にする。 <a id="unsourced-record-is-not-authority"></a>**出所の無い台帳の値は正本ではない** — 台帳そのものが推測で埋まっていれば、 台帳との照合は推測を素通りさせ、 対外の印字に格上げする (実測: 連絡先台帳の作り直しで名の読みに当てた漢字が出所なしで入り、 数か月後に対外の提出物の著者欄に写った。 本人のメールの表示名と本人の書類に正しい表記があった)。
 
 これは [paper-audit.md](paper-audit.md) の投稿前検査や [office-automation.md #print-preflight](office-automation.md#print-preflight) の刷る前検査と同じ位置にある gate — 不可逆な出力の手前に検査を置く。
 
@@ -63,10 +63,11 @@ summary: transliteration・正規化された人名 field は不可逆な投影 
 
 ## <a id="name-rendering-mechanization-limit"></a>機械化の限界 (honest)
 
-「この表記は推測か観測か」は自然言語 semantic で、hook / lint では判定できない (= [convention-design-principles.md #proxy-blind-spot](../docs/convention-design-principles.md#proxy-blind-spot))。実効的な構造対策は 2 つだけ:
+「この表記は推測か観測か」は自然言語 semantic で、hook / lint では判定できない (= [convention-design-principles.md #proxy-blind-spot](../docs/convention-design-principles.md#proxy-blind-spot))。**本人が自分で書いた表記との突き合わせは、機械でできる**。実効的な構造対策は 3 つ:
 
 - **正本 1 箇所 + pointer** (= 次回の readout を推測不要にする)。
-- **確定時の grep 掃討** (= 既に散った誤形を刈る)。誤形が判明した時点では、それは検索可能な literal なので、ここだけは機械が効く。
+- **確定時の grep 掃討** (= 既に散った誤形を刈る)。誤形が判明した時点では、それは検索可能な literal なので、ここは機械が効く。
+- <a id="self-declared-cross-check"></a>**本人の表記との突き合わせ** (= 台帳の native 表記を、 その人のアドレスから来た便の From の表示名 〔本人が付けた名前〕 と照らし、 食い違いを出す。 他人の便の To / Cc の表示名は他人が付けた名前なので弱い手がかり)。 あわせて出所の記録の無い値の数を出す。 本人が native 表記の表示名を使っていない人には効かない = その人は 3 択の 1・2 で確かめる。
 
 「気をつける」は対策として弱い。名前を書く場面は多く、推測は書いている本人には推測に見えない。
 
