@@ -19,6 +19,8 @@ mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
   (start_session の後と go の SendMessage が通る時) 掲示板の launch 記録が detach を求めていれば、 detach_session を出すよう
                               additionalContext で知らせる (子の turn の終わりの知らせと本人への問いを依頼元に来させない)。
   PostToolUse(set_session_model / set_session_effort)  台帳の「頼んだ値」 を起こした側の最新の指定に揃える。
+  PreToolUse(Agent / Task)    BOARD_FIRST の機械の desktop の session で、 掲示板の worker (prompt に role と request id) か
+                              Fable の Agent tool の呼び出しを止める (subagent は一覧に出ない)。 `[subagent-ok: 理由]` で通す。
   PreToolUse(SendMessage)     宛先が台帳で未解決の session なら app の記録を読み直す。 合っていれば通し、 違えば止める。
                               本人がその model でよいと言ったなら message に `[model-ok]` を入れれば通る (= 本人が app で
                               model を変えた場合を止め続けない)。
@@ -305,6 +307,38 @@ def pre_send(inp: dict) -> tuple[int, str]:
                f"なら message に {OK_TOKEN} を入れて送る。 規約 = {RULE}")
 
 
+AGENT_OK = "[subagent-ok"
+
+
+def pre_agent(inp: dict) -> tuple[int, str]:
+    """BOARD_FIRST machines, desktop sessions: an Agent tool call that is a board worker (its prompt names a role and a
+    request) or runs on the top tier (Fable = the owner's physics workers) is stopped once. A subagent is not listed in
+    the app, so the owner cannot see or talk to it (measured twice: "throw it to an agent" became a subagent).
+    `[subagent-ok: <reason>]` in the description or prompt passes work the owner does not watch."""
+    if not board_first_on() or os.environ.get("CLAUDE_CODE_ENTRYPOINT") != "claude-desktop":
+        return 0, ""
+    ti = inp.get("tool_input") or {}
+    text = (ti.get("description") or "") + " " + (ti.get("prompt") or "")
+    if AGENT_OK in text:
+        return 0, ""
+    why = []
+    rec = board_launch_record(text)
+    if (rec or {}).get("surface") == "agent":   # the request itself asked for a subagent (--surface agent)
+        return 0, ""
+    if REQUEST_ID.search(text) and "role-" in text:
+        why.append("prompt が掲示板の request の worker (role と request id)")
+    if tier(str(ti.get("model") or "")) == "fable":
+        why.append(f"model = {ti.get('model')} (Fable の仕事 = 本人に見せる worker)")
+    if not why:
+        return 0, ""
+    return 2, ("🛑 session-launch-check: Agent tool の subagent は app の一覧に出ない = 本人が見ることも話しかけることもできない。 "
+               + " / ".join(why) + "。\n"
+               "  本人に見せる worker は、 掲示板の request (desktop の session からは既定で desktop) → 出力の引数で start_session。"
+               " 既に request を出したなら、 その出力の start_session の引数で起こす。\n"
+               f"  本人が見ない手元の調査・検算なら description か prompt に {AGENT_OK}: 理由] を書いて出し直す"
+               " (掲示板で受けるなら request は --surface agent)。 規約 = " + RULE)
+
+
 def route(inp: dict) -> str:
     ev, tool = inp.get("hook_event_name") or "", inp.get("tool_name") or ""
     if tool.endswith("__start_session"):
@@ -313,6 +347,8 @@ def route(inp: dict) -> str:
         return "post-set"
     if ev == "PreToolUse" and tool == "SendMessage":
         return "pre-send"
+    if ev == "PreToolUse" and tool in ("Agent", "Task"):
+        return "pre-agent"
     return ""
 
 
@@ -326,6 +362,8 @@ def run(inp: dict) -> int:
         rc, txt = pre_start(inp)
     elif mode == "pre-send":
         rc, txt = pre_send(inp)
+    elif mode == "pre-agent":
+        rc, txt = pre_agent(inp)
     elif mode == "post-start":
         rc, txt = 0, post_start(inp)
     elif mode == "post-set":
@@ -460,6 +498,29 @@ def selftest() -> int:
         rc, out, _ = call("PreToolUse", "SendMessage", {"to": lid, "message": "go"}, sid="launcher-4")
         check("pre-send: go passes once fixed → detach_session note", rc == 0 and "detach_session" in out)
 
+        os.environ["SESSION_LAUNCH_BOARD_FIRST"] = "1"
+        saved_ep = os.environ.get("CLAUDE_CODE_ENTRYPOINT")
+        os.environ["CLAUDE_CODE_ENTRYPOINT"] = "claude-desktop"
+        rc, _, err = call("PreToolUse", "Agent", {"description": "design study", "model": "fable", "run_in_background": True,
+                                                  "prompt": handoff})
+        check("pre-agent: a Fable board worker as a subagent → blocked", rc == 2 and "start_session" in err)
+        rc, _, _ = call("PreToolUse", "Agent", {"description": "env probe", "model": "haiku", "prompt": "print env names"})
+        check("pre-agent: a small local probe → pass", rc == 0)
+        rc, _, _ = call("PreToolUse", "Agent", {"description": "[subagent-ok: 手元の検算] check", "model": "fable", "prompt": "x"})
+        check("pre-agent: [subagent-ok: …] → pass", rc == 0)
+        os.environ["CLAUDE_CODE_ENTRYPOINT"] = "cli"
+        rc, _, _ = call("PreToolUse", "Agent", {"description": "d", "model": "fable", "prompt": handoff})
+        check("pre-agent: not a desktop session → pass", rc == 0)
+        os.environ["CLAUDE_CODE_ENTRYPOINT"] = "claude-desktop"
+        with open(os.path.join(board, ".local", "outbox", rid + ".launch.json"), "w", encoding="utf-8") as fh:
+            json.dump({"model": "claude-opus-5-5", "surface": "agent"}, fh)
+        rc, _, _ = call("PreToolUse", "Agent", {"description": "d", "model": "opus", "prompt": handoff})
+        check("pre-agent: the request was posted with --surface agent → pass", rc == 0)
+        if saved_ep is None:
+            os.environ.pop("CLAUDE_CODE_ENTRYPOINT", None)
+        else:
+            os.environ["CLAUDE_CODE_ENTRYPOINT"] = saved_ep
+        os.environ.pop("SESSION_LAUNCH_BOARD_FIRST", None)
         check("route ignores other tools", route({"hook_event_name": "PreToolUse", "tool_name": "Bash"}) == "")
         for k in ("SESSION_LAUNCH_STATE_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR", "SESSION_LAUNCH_WAIT", "SESSION_LAUNCH_BOARD_FIRST_MARKER"):
             os.environ.pop(k, None)
