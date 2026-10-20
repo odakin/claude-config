@@ -182,6 +182,7 @@
 - **[headless-worker-reports.py](headless-worker-reports.py)** — ある session が Bash から headless で起動した worker (`claude -p` / `codex exec`) を会話記録から数え上げ、 worker の作業 dir に残った成果物 (HANDOFF・結果・教訓候補・script) を読み出す。--selftest 内蔵。
 - **[heal-hook-stubs.sh](heal-hook-stubs.sh)** — 壊れた git hook を直す: 過去の installer が書き換えた git 管理下の stub を track 版に戻す + macOS に exec で kill される hook を同じ中身の新しい file に作り直す (冪等・直すものが無ければ無音)
 - **[hook-liveness-audit.py](hook-liveness-audit.py)** — user hook が「そもそも走っていない」 root を検出 (disableAllHooks kill switch の settings 全 tier 走査 + transcript 上の SessionStart 発火証拠)
+- **[hook-matcher-liveness.py](hook-matcher-liveness.py)** — hook の matcher が今の tool 名に当たっているかを、 会話記録に出た tool 名で確かめる (読むだけ)
 - **[html-print-pdf.py](html-print-pdf.py)** — 「印刷用 HTML ページ」 (window.print() 前提) を保存 HTML から A4 PDF にし、 刷れる raster 版まで作る。
 - **[injection-reach-audit.py](injection-reach-audit.py)** — hook の注入 (SessionStart 等) に指定の語が何 session 出たか、 その session の assistant と user がそれに触れたかを transcript から数える（配達と伝達を別々に数える RCA 用。 docs/convention-design-principles.md#surface-reader-is-not-the-owner、 --selftest）
 - **[inspire-author-records.py](inspire-author-records.py)** — 1 人の業績が INSPIRE の複数の著者 record に割れていないか・record に別人の論文が混じっていないかを数え、 本人の業績だけを出す検索式 (API と画面の URL) を作る。
