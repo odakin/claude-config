@@ -16,6 +16,8 @@ mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
                               <model> at <effort> effort」、 無ければ start_session の引数) と比べる。 違えば additionalContext で
                               直し方 (set_session_model / set_session_effort → worker の 1 行を待つ → 記録を読む → go) を出し、
                               起こした session ごとの台帳 (~/.claude/state/session-launch/<session>.json) に残す。
+  (start_session の後と go の SendMessage が通る時) 掲示板の launch 記録が detach を求めていれば、 detach_session を出すよう
+                              additionalContext で知らせる (子の turn の終わりの知らせと本人への問いを依頼元に来させない)。
   PostToolUse(set_session_model / set_session_effort)  台帳の「頼んだ値」 を起こした側の最新の指定に揃える。
   PreToolUse(SendMessage)     宛先が台帳で未解決の session なら app の記録を読み直す。 合っていれば通し、 違えば止める。
                               本人がその model でよいと言ったなら message に `[model-ok]` を入れれば通る (= 本人が app で
@@ -49,6 +51,7 @@ except Exception:  # pragma: no cover
     sm = None
 
 RULE = "claude-config/conventions/multi-session-coordination.md#desktop-start-model-cap"
+DETACH_RULE = "claude-config/conventions/multi-session-coordination.md#worker-surface-visibility"
 OK_TOKEN = "[model-ok]"
 NO_BOARD = "[no-board]"
 MUST_RUN = re.compile(r"must run on (claude-[a-z0-9.-]+?)(?: at ([a-z]+) effort)?[.\s:*]", re.I)
@@ -212,10 +215,11 @@ def post_start(inp: dict) -> str:
         return (f"[session-launch-check] {local_id} の app の記録がまだ読めない = 何の model で起きたか確かめられていない。"
                 f" 「起きた」 と言う前に python3 ~/Claude/claude-config/scripts/session-model.py {local_id} で読む。")
     diffs = mismatch(want_m, want_e, rec)
-    upsert(sid, local_id, want_model=want_m, want_effort=want_e, state="mismatch" if diffs else "ok",
+    detach = bool((board_launch_record(ti.get("prompt") or "") or {}).get("detach"))
+    upsert(sid, local_id, want_model=want_m, want_effort=want_e, state="mismatch" if diffs else "ok", detach=detach,
            got_model=rec.get("model", ""), got_effort=rec.get("effort", ""), title=ti.get("title") or rec.get("title", ""))
     if not diffs:
-        return ""
+        return detach_note(local_id) if detach else ""
     steps = []
     model_off = bool(want_m) and not model_matches(want_m, rec.get("model", ""))
     if model_off:
@@ -229,7 +233,14 @@ def post_start(inp: dict) -> str:
             " 知らせを待つ (worker の turn の最中の切り替えは効かなかった例がある) (3) python3 ~/Claude/claude-config/scripts/"
             f"session-model.py {local_id} で app の記録が頼んだ値になったのを読む (4) go を送る。\n"
             f"  記録が合うまで、 この session への SendMessage はこの検査が止める (本人がこの model でよいと言ったなら message に"
-            f" {OK_TOKEN})。 本人に「起きた」 と言うのは (3) の後。 規約 = {RULE}")
+            f" {OK_TOKEN})。 本人に「起きた」 と言うのは (3) の後。"
+            + (" go の後に detach_session (掲示板の request の指定)。" if detach else "") + f" 規約 = {RULE}")
+
+
+def detach_note(local_id: str) -> str:
+    return (f"[session-launch-check] {local_id} は頼んだ model・effort で動いている。 掲示板の request の指定どおり、 いま"
+            f" detach_session(session_id={local_id}) を出す = 一覧の上の段に独立させ、 子の turn の終わりの知らせと本人への問いを"
+            f"依頼元に来させない (本人は worker の窓で答える。 提出と blocker は掲示板の watch で届く)。 規約 = {DETACH_RULE}")
 
 
 def post_set(inp: dict) -> str:
@@ -275,16 +286,17 @@ def pre_send(inp: dict) -> tuple[int, str]:
     if not hit or hit.get("state") == "ok":
         return 0, ""
     msg = (ti.get("message") or "") + " " + (ti.get("summary") or "")
+    after = detach_note(local_id) if hit.get("detach") else ""   # the go passes: the worker can leave the requester now
     if OK_TOKEN in msg:
         upsert(sid, local_id, state="ok", accepted=True)
-        return 0, ""
+        return 0, after
     rec = ds.find(local_id)
     if not rec:
         return 0, ""
     diffs = mismatch(hit.get("want_model", ""), hit.get("want_effort", ""), rec)
     if not diffs:
         upsert(sid, local_id, state="ok", got_model=rec.get("model", ""), got_effort=rec.get("effort", ""))
-        return 0, ""
+        return 0, after
     return 2, (f"🛑 session-launch-check: 宛先 {local_id} ({hit.get('title', '')[:40]}) は app の記録で " + " / ".join(diffs)
                + "。 まだ頼んだ model・effort になっていない。\n"
                f"  set_session_model / set_session_effort を出し (worker の turn が終わってから)、 python3 ~/Claude/claude-config/"
@@ -434,6 +446,18 @@ def selftest() -> int:
         check("pre-start: arguments differ from the board's launch record → blocked", rc == 2 and "掲示板の request" in err)
         rc, _, _ = call("PreToolUse", "mcp__ccd_session__start_session", st)
         check("pre-start: arguments equal the record → pass", rc == 0)
+
+        with open(os.path.join(board, ".local", "outbox", rid + ".launch.json"), "w", encoding="utf-8") as fh:
+            json.dump({"model": "claude-fable-5-1", "effort": "high", "surface": "desktop", "detach": True}, fh)
+        app_rec("claude-fable-5-1", "high")
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session__start_session", st, started, sid="launcher-3")
+        check("post-start: right model and the record asks detach → detach_session note", rc == 0 and "detach_session" in out)
+        app_rec("claude-opus-5-5", "xhigh")
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session__start_session", st, started, sid="launcher-4")
+        check("post-start: capped and detach → the fix ends with detach after go", "detach_session" in out and "set_session_model" in out)
+        app_rec("claude-fable-5-1", "high")
+        rc, out, _ = call("PreToolUse", "SendMessage", {"to": lid, "message": "go"}, sid="launcher-4")
+        check("pre-send: go passes once fixed → detach_session note", rc == 0 and "detach_session" in out)
 
         check("route ignores other tools", route({"hook_event_name": "PreToolUse", "tool_name": "Bash"}) == "")
         for k in ("SESSION_LAUNCH_STATE_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR", "SESSION_LAUNCH_WAIT"):
