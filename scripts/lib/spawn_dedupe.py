@@ -25,7 +25,10 @@ extension (任意): `~/.claude/spawn-dedupe-ext.py` (env SPAWN_DEDUPE_EXT で差
   request_keys(prompt: str) -> set[str]         # chip の prompt が宛てる依頼の鍵
   session_keys(sid: str, cwd: str) -> set[str]  # 稼働中の session が受けた依頼の鍵 (人間の発話から)
   FOOTER = "…"                                  # 止めた理由の末尾に足す 1 行 (経緯の所在など、 任意)
+  notices(title: str, prompt: str, sid: str) -> list[str]  # 止めずに知らせる近い仕事 (別経路で頼まれた・終わった同じ仕事の候補)
 を定義する。 読めない・例外 = title だけで見る (extension の故障で止めない)。
+notices は pre-spawn で止める理由が無いときだけ additionalContext に出す (exit 0)。 題も宛先も違う 2 経路で同じ仕事が出ると
+title と鍵の照合は素通りするので、 語の重なりのような誤検出のありうる照合は止めずに知らせる側に置く。
 
 故障の扱い: 例外・入力不足は全部「通す」 (exit 0)。 止めるのは上の条件が成り立った時だけ
 (= 故障の合図を違反の合図と同じ値にしない、 docs/convention-design-principles.md#failure-exit-equals-violation-exit)。
@@ -182,6 +185,10 @@ class _NoExt:
     def session_keys(sid: str, cwd: str) -> set:
         return set()
 
+    @staticmethod
+    def notices(title: str, prompt: str, sid: str) -> list:
+        return []
+
 
 def load_ext(path: str | None = None):
     """extension file を読む。 無い・読めない = _NoExt (title だけで見る)。"""
@@ -213,6 +220,14 @@ def load_ext(path: str | None = None):
                 return set(fn(sid, cwd)) if callable(fn) else set()
             except Exception:
                 return set()
+
+        @staticmethod
+        def notices(title: str, prompt: str, sid: str) -> list:
+            fn = ns.get("notices")
+            try:
+                return [str(x) for x in fn(title, prompt, sid)] if callable(fn) else []
+            except Exception:
+                return []
 
     return Ext
 
@@ -258,6 +273,24 @@ def _same_request(entry: dict, core: str, keys: set) -> bool:
 
 # ── 各 mode ───────────────────────────────────────────────
 
+def _notice_text(ext, title: str, ti: dict, sid: str) -> str:
+    """extension の notices (止めずに知らせる近い仕事) を additionalContext の文に。 無ければ空。"""
+    fn = getattr(ext, "notices", None)
+    if not callable(fn):
+        return ""
+    try:
+        notes = list(dict.fromkeys(fn(title, (ti.get("prompt") or "") + " " + (ti.get("tldr") or ""), sid)))
+    except Exception:
+        return ""
+    if not notes:
+        return ""
+    body = "\n".join(f"  - {n}" for n in notes)
+    return (f"[spawn-dedupe-guard] この起票と近い仕事が別の経路に在る (止めてはいない):\n{body}\n"
+            f"同じ仕事なら、 いま出した card を dismiss_task で取り消し (起動したなら SendMessage で止め)、 その記録を読んで"
+            f"足りない分だけを頼む。 違う仕事ならこのままでよい。 規約 = conventions/multi-session-coordination.md#receiver-side-recognition"
+            + (f"。 {ext.FOOTER}" if getattr(ext, "FOOTER", "") else ""))
+
+
 def pre_spawn(inp: dict, ext=None):
     """→ (rc, text)。 rc 2 = 止める (text は stderr へ)、 rc 0 + text = 注意だけ (additionalContext)。"""
     ext = ext or load_ext()
@@ -268,7 +301,7 @@ def pre_spawn(inp: dict, ext=None):
     keys = set(ext.request_keys(ti.get("prompt") or ""))
     override = OVERRIDE in title or OVERRIDE in (ti.get("tldr") or "")
     if not core and not keys:
-        return 0, ""
+        return 0, _notice_text(ext, title, ti, sid)
 
     reasons = []
     for e in load_ledger(sid):
@@ -297,7 +330,7 @@ def pre_spawn(inp: dict, ext=None):
                                f"新しい chip は作らず、 その session に SendMessage で訂正・追加を送る")
 
     if not reasons:
-        return 0, ""
+        return 0, _notice_text(ext, title, ti, sid)
     body = "\n".join(f"  - {r}" for r in dict.fromkeys(reasons))
     tail = f"規約 = {RULE} (不変条件: 1 つの依頼に同時に働く worker は 1 つ)" + (f"。 {ext.FOOTER}" if ext.FOOTER else "")
     if override:
@@ -470,6 +503,19 @@ def selftest() -> int:
         with open(os.path.join(tmp, "bad.py"), "w") as fh:
             fh.write("raise RuntimeError('broken ext')\n")
         check("load_ext: 壊れた extension は title だけ (止めない)", load_ext(os.path.join(tmp, "bad.py")).request_keys("key-alpha") == set())
+        check("load_ext: notices の無い extension は知らせ無し", e2.notices("t", "p", "s") == [])
+        with open(os.path.join(tmp, "ext_n.py"), "w") as fh:
+            fh.write("def notices(title, prompt, sid):\n    return ['近い thread: x/y'] if '合成の近い仕事' in title else []\n"
+                     "def request_keys(p):\n    raise RuntimeError('broken keys')\n")
+        e3 = load_ext(os.path.join(tmp, "ext_n.py"))
+        rc, txt = pre_spawn(spawn_inp(t="[local推奨] 合成の近い仕事", sid="nnnnnnnn"), e3)
+        check("notices: 止める理由が無ければ知らせとして出す (rc 0 + 文)", rc == 0 and "x/y" in txt and "止めてはいない" in txt)
+        rc, txt = pre_spawn(spawn_inp(t="[local推奨] 関係の無い仕事", sid="nnnnnnnn"), e3)
+        check("notices: 空なら何も出さない", rc == 0 and txt == "")
+        with open(os.path.join(tmp, "ext_bad_n.py"), "w") as fh:
+            fh.write("def notices(title, prompt, sid):\n    raise RuntimeError('broken notices')\n")
+        rc, txt = pre_spawn(spawn_inp(t="[local推奨] 合成の近い仕事", sid="nnnnnnnn"), load_ext(os.path.join(tmp, "ext_bad_n.py")))
+        check("notices: 壊れた notices は通す (知らせ無し)", rc == 0 and txt == "")
 
         # 1. 何も無い → 通す
         rc, _ = pre_spawn(spawn_inp(), Ext)
