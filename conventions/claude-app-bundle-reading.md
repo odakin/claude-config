@@ -15,6 +15,7 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 | 画面の文言 | `…/Resources/ion-dist/i18n/<locale>.json` (`ja-JP` / `en-US` 等) | 翻訳 key → 文言。 key は chunk の中に `id:"<key>"` で現れる |
 | main process | `…/Resources/app.asar` | 独自形式の archive。 session の設定 (作業フォルダ等) を決める側 |
 | 埋込 engine (Claude Code) | `~/Library/Application Support/Claude/claude-code/<版>/<hash>/claude.app/Contents/MacOS/claude` (旧い版は `<hash>` の段が無い。 道具は両方を探す) | 単一 binary。 文字列として JS が入っている (entrypoint の一覧、 hook の matcher の当て方など) |
+| 端末の CLI (`claude` command) | `readlink -f "$(command -v claude)"` の先 (native install なら `~/.local/share/claude/versions/<版>`) | 埋込 engine と同じ形の単一 binary (背景 session・設定の項目と既定値・環境変数の読み順など)。 道具は自動では探さない = `--engine <path>` を **subcommand の前に**渡す (`claude-app-bundle.py --engine <path> grep '<語>' --where engine`。 後ろに置くと unrecognized arguments) |
 
 道具 = [`scripts/claude-app-bundle.py`](../scripts/claude-app-bundle.py)。 読んだ結論には **`version` の出力 (app と engine の版) を添える** — 挙動は版で変わる。
 
@@ -50,5 +51,5 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 - 通知音の仕様 (完了通知は常に無音 等) = [`macos-claude-app-notifications.md#app-notification-model`](macos-claude-app-notifications.md#app-notification-model)
 - 思考の要約が出ない仕組み (表示を「思考」 にするまで engine を `--thinking-display omitted` で動かす / メニューの訳語) = [`macos-claude-app-thinking-display.md`](macos-claude-app-thinking-display.md)
 - hook が frontend を見分ける値 (engine の entrypoint 一覧) = [`hook-authoring.md#entrypoint-values`](hook-authoring.md#entrypoint-values)
-- hook の matcher の当て方 (名の列挙・旧名の表・正規表現の部分一致) = [`hook-authoring.md#matcher-regex-partial-match`](hook-authoring.md#matcher-regex-partial-match)。 engine の関数名は版で変わるので、 名でなく文言から入る (`grep --where engine 'Invalid regex pattern in hook matcher'` = 当てる関数の末尾、 旧名の表 = `'Task:"Agent"'`)。 実測: この道具を知らずに使い捨ての mmap の code で同じことを 7 回した (素の grep は 2 分を超え、 255 回を超える繰り返しで落ちた)
+- hook の matcher の当て方 (名の列挙・旧名の表・正規表現の部分一致) = [`hook-authoring.md#matcher-regex-partial-match`](hook-authoring.md#matcher-regex-partial-match)。 engine の関数名は版で変わるので、 名でなく文言から入る (`grep --where engine 'Invalid regex pattern in hook matcher'` = 当てる関数の末尾、 旧名の表 = `'Task:"Agent"'`)。 実測: この道具を知らずに使い捨ての mmap の code で同じことを 7 回した (素の grep は 2 分を超え、 255 回を超える繰り返しで落ちた)。 端末の CLI の binary でも同じ形で再発した (読み先が埋込 engine でなかったので、 道具は読めないと思い込んだ = 上の表の「端末の CLI」 の行)
 - インポートした session の record の形・会話記録の変換・再開時の移動 (別 account の session を写す道具が前提にし、 版ごとに本体を機械で点検する) = [`multi-account-machine-surface.md#session-list-per-account`](multi-account-machine-surface.md#session-list-per-account)
