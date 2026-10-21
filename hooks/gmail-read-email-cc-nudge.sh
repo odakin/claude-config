@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gmail-read-email-cc-nudge.sh — PostToolUse hook (layer 1)
+# gmail-read-email-cc-nudge.sh — Gmail MCP の read_email の出力のヘッダに Cc 行が無いとき、 「Cc 行が無い ≠ Cc が空」 とヘッダの読み方を 1 行添える (PostToolUse、 layer 1)
 #
 # 正本: ~/Claude/claude-config/hooks/gmail-read-email-cc-nudge.sh
 # 配信: claude-config/setup.sh install_hooks (= ~/.claude/hooks/ に symlink +

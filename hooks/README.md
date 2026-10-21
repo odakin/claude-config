@@ -35,7 +35,7 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[fix-snapshot-path-patch.sh](fix-snapshot-path-patch.sh)** — PATH スナップショット自動パッチ（REQUIRED_PATHS 方式、launchd WatchPaths から呼ばれる）
 - **[git-state-nudge.sh](git-state-nudge.sh)** — PostToolUse(Bash): 直近 commit の未 push 検出 + first-sighting で fetch+stale 検出
 - **[git-state-nudge.test.sh](git-state-nudge.test.sh)** — git-state-nudge.sh の self-test (決定的 mock git repo ベース)
-- **[gmail-read-email-cc-nudge.sh](gmail-read-email-cc-nudge.sh)** — PostToolUse hook (layer 1)
+- **[gmail-read-email-cc-nudge.sh](gmail-read-email-cc-nudge.sh)** — Gmail MCP の read_email の出力のヘッダに Cc 行が無いとき、 「Cc 行が無い ≠ Cc が空」 とヘッダの読み方を 1 行添える (PostToolUse、 layer 1)
 - **[gmail-read-email-cc-nudge.test.sh](gmail-read-email-cc-nudge.test.sh)** — 発火 / 沈黙の検査
 - **[google-url-guard.sh](google-url-guard.sh)** — Google URL 安定性ガード — PreToolUse(Edit|Write|MultiEdit|Bash): /u/N/ 禁止 + `?authuser=<email>` 必須
 - **[google-url-guard.test.sh](google-url-guard.test.sh)** — google-url-guard.sh の self-test (hermetic)

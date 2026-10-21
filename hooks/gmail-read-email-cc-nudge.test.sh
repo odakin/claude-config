@@ -57,4 +57,5 @@ GMAIL_CC_NUDGE_READER="$TMP/none.py" check "読み手が無い → API の読み
 check "壊れた入力 → 黙る (fail-open)" silent "" "not json"
 
 echo "pass=$pass fail=$fail"
-[ "$fail" = 0 ]
+# 走った件数も確かめる (集計が subshell に落ちると 0 件のまま通る = conventions/hook-authoring.md#replay-real-tool-output)
+[ "$pass" -gt 0 ] && [ "$fail" = 0 ]
