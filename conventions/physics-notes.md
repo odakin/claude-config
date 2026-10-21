@@ -120,6 +120,6 @@ summary: 物理・数理ノートの 7 規約 (= 添字は常に全部顕に / �
 - **聞かれていない射程を外す**: 結論の射程は、 問いが聞いた範囲で言い切る。 隣の領域 (別の近似が要る領域・別の模型) は一言だけ、 それも問いに関係するときだけ。
 - **本文の言い直しの表を外す**: 対応表・まとめの表が本文の文をもう一度並べているだけなら、 1 文にする。 検算の結果を並べる表は、 論の根拠でなく展示なので、 数字 1 行に縮める (検算の道具と出力は同じ repo に残す)。
 - **書き方の違いを 1 か所で受ける**: 相手が問題にしている量が別の書き方 (部分積分・場の再定義・運動方程式の中の形) でも出てくるなら、 書き方の違いが同じものであることを 1 段落で示し、 結論に要る性質を 1 文で名指す。
-- 文章全般の規律 = [`writing-discipline.md#motto`](writing-discipline.md#motto)。 相手の文献の手順で書く = [#write-from-readers-source](#write-from-readers-source)。
+- 文章全般の規律 = [`writing-discipline.md#motto`](writing-discipline.md#motto)。 相手の文献の手順で書く = [#write-from-readers-source](#write-from-readers-source)。 英文の動詞は口語・比喩でなく技術的な語で = [`writing-discipline.md#no-colloquial-verbs`](writing-discipline.md#no-colloquial-verbs)。
 
 **Why:** 問いに答えるノートは、 送る側が考えたことを全部入れると、 問いへの答えが材料の中に埋まる。 削るたびに「これは問いに要るか」 を 1 項目ずつ問うと、 表や射程の節は残らないことが多い (実測)。

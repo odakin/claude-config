@@ -203,6 +203,10 @@ scope を絞って残りを別の論文へ送る段落は、 先送りする対�
 - くどさの検算: 書き直した文に「この語を落として意味が変わるか」 を 1 語ずつ問う。 load-bearing な語は残す ([#compression-drops-load-bearing-words](#compression-drops-load-bearing-words))。
 - **長さは測る** — 原稿全体の文の長さを [`scripts/tex-sentence-lengths.py`](../scripts/tex-sentence-lengths.py) で数える (文の数・中央値・N 語超の件数・長い順の一覧と行番号)。 AI の校閲が「長いので分けよ」 と挙げた文の一覧は全数でない (実測: 挙げられた文の約 3 倍の文が 60 語を超えていた)。 分けた後は 1 文ずつ、 範囲の限定の句・指示語の指示先・示唆と言い切りの強さが動いていないかを見る (実測: 分割で、 範囲の限定が落ちて普遍の上限に読める文、 指示語が直前に入った別の名詞を指す文、 示唆が言い切りになった文が出た。 圧縮で落ちる語と同じ型 = [#compression-drops-load-bearing-words](#compression-drops-load-bearing-words))。
 
+### <a id="no-colloquial-verbs"></a>口語・比喩の動詞を使わない — 技術的な語があるところに口語を置かない
+
+科学論文・研究ノートの英文で、 口語や比喩の動詞・句を使わない。 読者 (非母語話者を含む) は辞書の第一義で読むので、 「part」 を「differ」 の意味に、 「fall over」 を「decay」 に、 「go with it」 を「be lost with it」 に、 「be not there」 を「be absent」 に使うと、 文が何を主張しているかが通じず、 読みにくい。 動詞は対象の技術的な語で書く (differ、 vanish、 be absent、 decay、 be lost、 be not produced)。 検査 = 段落ごとに動詞と句を辞書の第一義に置き換えて読み、 意味が変わるものを探す。 比喩が要るなら、 まず技術的な文を書き、 比喩はその後の 1 文に分けて置く。 実測: 英文ノートで differ の意味に part を使い、 指摘を受けた (口語表現は一般に読みにくい)。
+
 ### <a id="no-run-in-labels"></a>段落の頭に見出し語を置かない — 段落の役は最初の文が言う
 
 序論で先行研究・新規性・主張しないことを並べるとき、 段落の頭にイタリックや太字の見出し語 (「What is known.」「What is new.」「What is not claimed.」「Our contribution.」 の類) を置かない。 定型の書式に見え、 機械が組んだ文章と読まれる (実測、 著者の指摘は「AI 臭い」)。
