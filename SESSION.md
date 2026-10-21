@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-最終更新: 2026-10-19
+最終更新: 2026-10-21
 
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
@@ -51,6 +51,7 @@
 - [ ] **manuscript-claim-guard の `\[ … \]` の読み方の foil を spec にする** — 表の行送り・前の backslash の数・閉じの無い `\[` の selftest は、 誤った regex 6 種 (古い形・後読みだけ・1 対だけ数える・後戻りする中身・次の `\[` で打ち切らない形 ほか) で歯を見たが、 scratch でだけ = 次に直す人が再現できない。 [`hook-authoring.md#hook-test-foil-teeth`](conventions/hook-authoring.md#hook-test-foil-teeth) の spec にする前に解くこと: (1) `scripts/*guard*` は保護 = spec の追加も owner の裁定 (2) selftest が一つ上の dir の `conventions/` を読むので、 親 dir だけを写す `check-foil-teeth.py` の上では基準が赤 (3) selftest は 1 回 1〜2 分 = mutant の本数だけ run-all-checks が延びる
 - [ ] **Codex の hook の timeout 挙動は未測定** (Claude は素通り = 実測、 [manuscript-claim-ownership.md#limits](conventions/manuscript-claim-ownership.md#limits))。 層1 hook-authoring.md への一般形の追記候補 = owner 個人層の plans (保護 file なので承認待ち)。
 - [ ] **transcript を読む道具が、 user 役で入る背景 task の完了通知・別 session の連絡を本人の発言と数える穴** (承認の照合は `turnOrigin` を見て塞いだ、 [`agent-rule-ownership.md#approval`](conventions/agent-rule-ownership.md#approval) の 2)。 同じ見方で [`search-agent-transcripts.py`](scripts/search-agent-transcripts.py) (`isMeta` の別 session の連絡)・[`injection-reach-audit.py`](scripts/injection-reach-audit.py) (`user_first_mention`)・[`hooks/pasted-command-comment-guard.sh`](hooks/pasted-command-comment-guard.sh) を点検する。 重くない (検索は `<` 始まりを既定で除く) ので急がない
+- [ ] **会話記録を読む締めの道具が、 API 送信の写しの行 (`api-request-blob`) の tool call も数える** ([`hook-authoring.md#transcript-request-copy-lines`](conventions/hook-authoring.md#transcript-request-copy-lines)) — `headless-worker-reports.py` は飛ばすよう直した。 二重を実測 = `search-agent-transcripts.py --tool-runs` (同じ tool call を時刻なし・`cd … &&` つきでもう 1 回出す)。 未確認 = `session-scripts-report.py` / `session-claims-report.py` / `subagent-reports.py` / `replay-session-scripts.py` / `permission-dialog-audit.py` / `calibrate-bash-command-pattern.py` / `hook-matcher-liveness.py` / `transcript-tool-result.py`。 直す形 = 写しかを決める述語を lib に 1 つ置き、 各道具がそれを使う (型名を道具ごとに書き写さない)。 締めの道具なので、 並列の締めが走っていない時間に 1 本の変更で。
 - [ ] **`--liveness` の実 session での観察**: 健全なら沈黙 / run-all-checks からの報告が 14 日途絶えると 🟡 (2026-09-22 配線、 この machine のみ確認)。
 
 - [ ] **job health の他マシンでの初回観測** ([`shell-env.md#job-python-by-capability`](conventions/shell-env.md#job-python-by-capability)) — 各マシンで claude-config を pull した後の heartbeat から reader に出る。 常駐機で session を開くまで旧形の beat
