@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: referee report への point-by-point 返信を書くとき + 不採択の直後に編集者へ第 2 referee を頼む返信を書くとき (#ask-editor-second-referee)
+when: referee report への point-by-point 返信を書くとき + 不採択の直後に編集者へ第 2 referee を頼む返信を書くとき (#ask-editor-second-referee) + 編集者が再審を許したあと、 referee に転送される返答書と編集者だけへの文を書くとき (#reconsideration-reply)
 category: paper
 summary: referee report への point-by-point 返信 (= author response) 作成 6 reflex (= 回答は本文 grep 照合・起源でない文献は see e.g.・referee 誤記は静かに正す・自己否定語回避・全 comment フル引用・旧式番号は submission 版基準)、 paper-audit.md と相補。 不採択の直後の 1 通 (専任の編集者に確かめられる事実 1 つ・誤読を言い切る 1 文・report の限定まで引いて答える) = #ask-editor-second-referee
 -->
@@ -117,3 +117,24 @@ report が 1 本で、 その中の具体的な主張が原稿で確かめられ
 - **共著者に「appeal は効かない、 誌替えが安い」 と言われたら**: これは正式 appeal でなく 1 通であること、 費用は書き終えた 1 通だけであること、 期限 (例 = 3 週) を切って動きがなければ誌替えに移ることで答える。 決めた人たちの連名で「こう決めた、 今日中に異論が無ければ出す」 の形にする。 誌替え先の cover letter にも同じ線引きを入れる (同じ referee に回ることがある)。
 - **予防 (原稿の側)**: 古典的な文献との一致を付録で確かめると、 その付録が主結果と読まれることがある。 照合のための引用は「照合のため」 と本文に明示し、 序論で既知との線引きを 1 文で言う ([`paper-audit.md`](paper-audit.md) の主張の配置の検査)。
 - 他人の mail client から送られる文面の非 ASCII = [`paste-destined-plain-text.md#non-ascii-via-other-client`](paste-destined-plain-text.md#non-ascii-via-other-client)。
+
+## <a id="reconsideration-reply"></a>編集者が再審を許したあとの返答書: 一問一答・原稿は最小・同じ referee が読む前提
+
+不採択の後に編集者が「referee の反論への詳しく collegial な返答があれば再審する」 と返したとき、 referee に転送される返答書の書き方。
+report が修正を求めず新規性だけを否定している場合を想定する (修正の要求がある report は上の 6 reflex)。
+
+- **同じ referee が先に読む前提で書く**: 「referee に転送できる形で」 という編集者の依頼は定型で、 referee の交代を約束していない。
+  中身は固く、 口調は友好的にする。 友好的で論理の固い文は新しい referee にもそのまま効き、 敵対的な文は同じ referee には逆効果 = 失うものが小さい側を取る。
+  交代の依頼は編集者だけへの欄に書き、 新しい referee には今の report とこちらの返答も見せるよう頼む (交代の判断の材料になる)。
+- **原稿の変更は最小にする**: 求められていない変更を入れると、 その分だけ指摘が正当だったように読める。 返答は原稿の既存の文 (節・付録・表) を指して答え、 「新しい版ではこう書いた」 を約束しない。
+  投稿画面が新しい原稿を必須にするなら、 小さな誤りの訂正と記号の統一だけを入れ、 その一覧は referee 向けの返答書に置かず、 編集者だけへの欄に事実だけで書く (何を外した・何を直した。 訂正の理由の物理を限定句つきで語らない = 1 文で論理が閉じない)。 式番号がずれるなら返答書の冒頭に 1 文。
+- **一問一答で短く**: report の文を全部 verbatim で引き、 各点に 1〜数文で答える。 書けば書くほど、 指摘が正当だったように見える。
+- **書き出しで同意しない**: 「Correct.」「Agreed.」「The summary is accurate.」 で始めると、 その点を譲ったように読める。 自分の主張で始め、 report の記述は「…, as the report describes」 のような従属句で受ける (次の文で、 その対象が新しいと短く言い切る)。
+  report が原稿の主張していないことを否定しているときも、 「原稿はそれを新しいと言っていない」 を主語にして書く (相手の誤読を主語にしない)。
+- **結びで譲歩しない**: 「指摘してくれれば喜んで削る」 は弱い。 「report はどの部分を削れるか示していない。 削れる部分は無いと考える」 のように、 根拠のある判断で閉じる。 文献の招き (「他に計算した仕事を知っていれば引く」) は新規性の点に 1 回だけ置く。
+- **"for example" の反論は種類全体で**: 挙がった例を崩すだけでは「many papers」 が残る (上の [#ask-editor-second-referee](#ask-editor-second-referee))。
+  挙がった例が属する計算の種類全体に効く構造的な理由 (その変数・その設定ではこちらの対象がそもそも現れない) で答え、 「この対象を計算した論文を知らず、 report も挙げていない」 で閉じる。
+  返答書の地の文に「X は例である」 のような議論の手続きの語りを持ち込まない (推敲の会話の流れの語が文に残った形 = 読み手には不自然)。
+- **非母語の読み手に通じる平易さ**: 共著者と referee の多くは英語の非母語話者。 名詞の動詞用法 (「the summary names X」)、 口語の句 (「as much」)、 指示先の曖昧な語 (「the rest」)、 切り詰めた言い方 (「and we see none」) を避ける。 動詞は say より state / specify。 1 文に主張 1 つ、 式番号の尾を長く引かない。
+- **完成稿は更の目で読み直す**: 何十回の直しの後は、 会話で使った語・論点の名前が文に残る。 最後に原稿を見ていない読み手のつもりで頭から読み、 論理の流れだけを追って整える。
+- 編集者だけへの欄の文は ASCII で ([`paste-destined-plain-text.md#non-ascii-via-other-client`](paste-destined-plain-text.md#non-ascii-via-other-client))。 返答書は PDF (上の「構造」)。
