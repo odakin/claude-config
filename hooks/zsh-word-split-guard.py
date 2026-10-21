@@ -101,10 +101,12 @@ LOG_CMD = re.compile(
 LOG_FIX = ("直し方: `/usr/bin/log show …` と full path で書く (script から呼ぶときも同じ)。 "
            "正本 = claude-config/conventions/shell-env.md#zsh-log-builtin")
 
-# bash の PIPESTATUS (zsh では空) の参照。 ${…} の形と、 添字の無い素の $PIPESTATUS と、 素の $PIPESTATUS[ (意図が読めない形)
-PS_BRACE = re.compile(r"\$\{(#?)PIPESTATUS(?:\[([^\]]*)\])?\}")
-PS_BARE = re.compile(r"\$PIPESTATUS(?![\w\[])")
-PS_BARE_SUBSCRIPT = re.compile(r"\$PIPESTATUS\[[^\]\s]*\]?")
+# bash の PIPESTATUS (zsh では空) の参照。 ${…} の形と、 添字の無い素の $PIPESTATUS と、 素の $PIPESTATUS[ (意図が読めない形)。
+# `\$` で escape した形は展開されない文字 (commit message や echo の説明に書いた語) なので見ない (実測: 当てた直後に、
+# 説明に書いた `\${PIPESTATUS[0]}` を書き換えた)。 `\\$` (逃がした backslash の後の本物の $) は区別しない = 見ない側に倒す
+PS_BRACE = re.compile(r"(?<!\\)\$\{(#?)PIPESTATUS(?:\[([^\]]*)\])?\}")
+PS_BARE = re.compile(r"(?<!\\)\$PIPESTATUS(?![\w\[])")
+PS_BARE_SUBSCRIPT = re.compile(r"(?<!\\)\$PIPESTATUS\[[^\]\s]*\]?")
 HEREDOC_BODY = re.compile(r"(<<-?\s*(['\"]?)(\w+)\2[^\n]*)(\n.*?\n[ \t]*\3[ \t]*(?=\n|$))", re.S)
 PS_FIX = ("直し方: zsh では `${pipestatus[N+1]}` (小文字、 添字は 1 始まり。 全部は `${pipestatus[@]}`)。 "
           "bash の意味で書くなら `bash -c '…'` の中に。 正本 = claude-config/conventions/shell-env.md#zsh-pipestatus-lowercase")
@@ -487,6 +489,10 @@ def selftest() -> int:
     ps("a | b; echo $PIPESTATUS[0]", None, True, "$PIPESTATUS[0] の形は止める")
     ps("a | b; echo ${#PIPESTATUS}", None, True, "${#PIPESTATUS} (0 番の文字数) は止める")
     ps("echo MY_PIPESTATUS ${MY_PIPESTATUS}", None, False, "別の名前の一部は見ない")
+    ps('git commit -m "doc: \\${PIPESTATUS[0]} は空"', None, False, "\\ で escape した $ は文字 = 書き換えない")
+    ps('echo "\\${PIPESTATUS[N]} \\$PIPESTATUS[0]"', None, False, "escape した形は止めもしない")
+    ps('a | b; echo "\\${PIPESTATUS[0]}=${PIPESTATUS[0]}"', 'a | b; echo "\\${PIPESTATUS[0]}=${pipestatus[1]}"', False,
+       "同じ行の escape した形は残し、 本物の参照だけを書き換える")
     print("selftest:", "PASS" if not fails else f"{fails} FAIL")
     return 1 if fails else 0
 
