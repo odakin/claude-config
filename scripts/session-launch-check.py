@@ -650,8 +650,12 @@ def selftest() -> int:
 
     with tempfile.TemporaryDirectory() as td:
         os.environ.update(SESSION_LAUNCH_STATE_DIR=os.path.join(td, "state"), CLAUDE_DESKTOP_SESSIONS_DIR=os.path.join(td, "app"),
-                          SESSION_LAUNCH_WAIT="0", SESSION_LAUNCH_BOARD_FIRST_MARKER=os.path.join(td, "no-marker"))
+                          SESSION_LAUNCH_WAIT="0", SESSION_LAUNCH_BOARD_FIRST_MARKER=os.path.join(td, "no-marker"),
+                          # the machine's own markers must not reach the cases (measured: with the premium-gate
+                          # marker on the machine, a pre-start case that expects a pass was blocked)
+                          SESSION_LAUNCH_PREMIUM_GATE_MARKER=os.path.join(td, "no-premium-marker"))
         os.environ.pop("SESSION_LAUNCH_BOARD_FIRST", None)
+        os.environ.pop("SESSION_LAUNCH_PREMIUM_GATE", None)
         app = os.path.join(td, "app", "acct", "env")
         os.makedirs(app)
         lid = "local_aaaaaaaa-0000-4000-8000-000000000001"
