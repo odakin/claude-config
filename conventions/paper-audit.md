@@ -30,7 +30,7 @@ template script で以下を抽出:
 
 ### Phase 2: Section-by-section reader simulation
 
-各 section を「初見 reader が Sec.1 から順に読む」 を simulate、 各文で「ここまでに未定義の symbol / 用語 / 概念」 を flag。 Phase 1 候補を AI 精読で確定 / 棄却 + 概念レベル forward を AI 精読で新規発見。 併せて **cite の束縛検査**: 各引用がその文の主張を実際に支持するか (帰属が怪しければ abstract を一次確認 — 誤帰属 cite は隣の主張と束ね違えても文法的に読めてしまうため、 grep では出ない。 移設・書き換えを経た text は [`#relocation-rebinding-sweep`](#relocation-rebinding-sweep) class (f) と同じ検査)。
+各 section を「初見 reader が Sec.1 から順に読む」 を simulate、 各文で「ここまでに未定義の symbol / 用語 / 概念」 を flag。 Phase 1 候補を AI 精読で確定 / 棄却 + 概念レベル forward を AI 精読で新規発見。 併せて **cite の束縛検査**: 各引用がその文の主張を実際に支持するか (帰属が怪しければ abstract を一次確認し、 abstract が扱った範囲を言わなければ本文の範囲の文 (「〜だけを考える」) まで読む — abstract は主題が合っていても、 本文が別の量しか計算していないことがある (実測)。 複数の文献を 1 つの動詞で束ねる文 (「A–C は X を計算した」) は 1 本ずつ当てる。 誤帰属 cite は隣の主張と束ね違えても文法的に読めてしまうため、 grep では出ない。 移設・書き換えを経た text は [`#relocation-rebinding-sweep`](#relocation-rebinding-sweep) class (f) と同じ検査)。
 
 Pass 単位の分割 (= context window 内で扱える size + 中断耐性):
 - Pass 1: 主要 section (= 機械的検出が集中する場所)
@@ -729,6 +729,23 @@ bare 作用が一階形式 (vierbein + 独立な接続) で、 誘導作用が�
 **なぜ**: 物理 (metric sector の Newton 定数が動く) は正しいのに、 どの係数が動いたかの文が変数の混在で曖昧になり、 「Planck 質量」 が R(g) の係数か一階の項の係数かで読者ごとに割れる。 定義で答える型 ([#dissolve-by-definition](#dissolve-by-definition)) の一例。
 
 起源 (2026-09-29): 著者の問い 「この文は背景の接続 = Levi-Civita を暗黙に仮定していないか」 に対する読み。 背景そのものは explicit に torsion-free を選んでいて仮定漏れは無かったが、 「補正する」 の文だけが一階 = 二階の同一視に依っていた (実測)。 隣接: [#invariant-structure-before-asymmetry-claim](#invariant-structure-before-asymmetry-claim) (2 次形式を書いてから 「固有の運動項」 を言う) / [#headline-claim-budget-check](#headline-claim-budget-check)。
+
+## <a id="novelty-from-variables-or-identities"></a>新規性の論拠に「変数の取り方」 と「恒等式が成り立つ」 を使わない — 既知の汎関数の変分は連鎖律で決まり、 不変な汎関数は恒等式を恒等的に満たす (2026-10)
+
+**型 1 (変数)**: 既知の一ループの汎関数 Γ[Y] (例: 計量と捩率の汎関数) があり、 こちらは別の変数 X (例: 一階形式の vierbein と接続) での 2 点関数を計算した、 という設定で「相手の変数には X が無い」「相手は X を量子化しない、 こちらは量子化する」「X の反対称部分は相手の計算に現れない」 を新規性の論拠にする。
+その一ループに X の内線が無ければ、 X を量子場と呼ぶかどうかは行列式を変えない。 こちらの量は Γ[Y(X)] の X についての 2 階変分で、 連鎖律 Γ_{,ij} = Y^A_{,i} Γ_{,AB} Y^B_{,j} + Γ_{,A} Y^A_{,ij} で決まる (第 2 項 = off-shell の接触項・tadpole)。
+相手の変数に X が無くても、 X は Y(X) を通して入っている (例: 接続を固定した vierbein の反対称部分は、 contorsion の全反対称部にその外微分として係数 1 で入る)。 読み手は数行でこれを示せる (実測)。
+
+**型 2 (恒等式)**: 「Ward–Takahashi 恒等式を確かめた」 を、 相手の有効作用の計算より量子的な中身がある証拠にする。
+不変性から導いた WT 恒等式は、 係数が何であれ、 不変な汎関数の変分で恒等的に成り立つ (機械で示せる: 共変な汎関数の係数を乱数にしても、 その 2 点関数と混合 2 点関数で恒等式の残差は 0)。
+確かめて分かるのは図の計算 (頂点・正則化・図どうしの相対規格化) の整合で、 汎関数に無い情報ではない。 恒等式を破るのは anomaly で、 4 次元の Dirac fermion の局所 Lorentz・一般座標の anomaly は無い。
+
+**検査 (新規性の文を書く前に 1 回)**:
+1. こちらの量を、 既知の汎関数の変数の取り替えと変分で書けるか (その loop の内線にこちらの場があるか) を問う。 書けるなら、 新しいのは「その明示的な評価・整理・その模型での読み」 で、 「新しい一ループの情報」 ではない。
+2. 新規性の文は事実だけで書く = こちらが計算した対象 (どの理論で・どの成分を・どの恒等式を確かめたか) と、 相手が計算したもの (本文で読んだ範囲)。 「別の対象」「相手に無い情報」 とは書かない。
+3. 否定の文 (「その量は先行研究に無い」) は、 挙げた文献を 1 本ずつ本文で読んでから書く ([#three-phase-structure](#three-phase-structure) の cite の束縛検査)。 有料・電子版以前で読めないなら本人に取得を頼む。 裏の取れない文を弱めて済ませない (実測: 弱めた案は退けられ、 取得して読むと、 束ねた文献の 1 本は別の量だけを計算していた = 弱めた動詞の方が誤りだった)。
+
+返答書での使い方 (聞かれていない関係を認めて弱めない・問われたら導出の節を指す) = [`rebuttal-letter.md#reconsideration-reply`](rebuttal-letter.md#reconsideration-reply)。 隣接: [#invariant-structure-before-asymmetry-claim](#invariant-structure-before-asymmetry-claim) / [#induced-vs-bare-same-variables](#induced-vs-bare-same-variables) / [#absolute-sign-external-anchor](#absolute-sign-external-anchor) (恒等式の全 PASS が見ないもの、 という同じ型)。
 
 ## <a id="post-formula-generalization-traps"></a>式の直後の散文が式より広く言う — 解説・教科書の文で盲検が繰り返し拾った 6 つの型 (2026-10)
 
