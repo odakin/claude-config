@@ -16,8 +16,9 @@ mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
                               <model> at <effort> effort」、 無ければ start_session の引数) と比べる。 違えば additionalContext で
                               直し方 (set_session_model / set_session_effort → worker の 1 行を待つ → 記録を読む → go) を出し、
                               起こした session ごとの台帳 (~/.claude/state/session-launch/<session>.json) に残す。
-  (start_session の後と go の SendMessage が通る時) 掲示板の launch 記録が detach を求めていれば、 detach_session を出すよう
-                              additionalContext で知らせる (子の turn の終わりの知らせと本人への問いを依頼元に来させない)。
+  (start_session の後と go の SendMessage が通る時) 掲示板の launch 記録が detach を求めるとき (request の --detach) だけ、
+                              detach_session を出すよう additionalContext で知らせる。 掲示板の既定は worker を依頼元の子のまま
+                              置く (一覧で依頼元の下に並ぶ) ので、 記録に detach が無ければ何も言わない。
   PostToolUse(set_session_model / set_session_effort)  台帳の「頼んだ値」 を起こした側の最新の指定に揃える。
   PreToolUse(Agent / Task)    BOARD_FIRST の機械の desktop の session で、 掲示板の worker (prompt に role と request id) か
                               Fable の Agent tool の呼び出しを止める (subagent は一覧に出ない)。 `[subagent-ok: 理由]` で通す。
@@ -480,11 +481,11 @@ def post_start(inp: dict) -> str:
             f"session-model.py {local_id} で app の記録が頼んだ値になったのを読む (4) go を送る。\n"
             f"  記録が合うまで、 この session への SendMessage はこの検査が止める (本人がこの model でよいと言ったなら message に"
             f" {OK_TOKEN})。 本人に「起きた」 と言うのは (3) の後。"
-            + (" go の後に detach_session (掲示板の request の指定)。" if detach else "") + f" 規約 = {RULE}")
+            + (" go の後に detach_session (掲示板の request の --detach)。" if detach else "") + f" 規約 = {RULE}")
 
 
 def detach_note(local_id: str) -> str:
-    return (f"[session-launch-check] {local_id} は頼んだ model・effort で動いている。 掲示板の request の指定どおり、 いま"
+    return (f"[session-launch-check] {local_id} は頼んだ model・effort で動いている。 掲示板の request の指定 (--detach) どおり、 いま"
             f" detach_session(session_id={local_id}) を出す = 一覧の上の段に独立させ、 子の turn の終わりの知らせと本人への問いを"
             f"依頼元に来させない (本人は worker の窓で答える。 提出と blocker は掲示板の watch で届く)。 規約 = {DETACH_RULE}")
 
@@ -730,6 +731,10 @@ def selftest() -> int:
         check("pre-start: arguments differ from the board's launch record → blocked", rc == 2 and "掲示板の request" in err)
         rc, _, _ = call("PreToolUse", "mcp__ccd_session__start_session", st)
         check("pre-start: arguments equal the record → pass", rc == 0)
+        app_rec("claude-fable-5-1", "high")
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session__start_session", st, started, sid="launcher-2n")
+        check("post-start: the record does not ask detach (the board's default) → no detach_session note",
+              rc == 0 and "detach_session" not in out)
 
         with open(os.path.join(board, ".local", "outbox", rid + ".launch.json"), "w", encoding="utf-8") as fh:
             json.dump({"model": "claude-fable-5-1", "effort": "high", "surface": "desktop", "detach": True}, fh)
