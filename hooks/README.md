@@ -17,6 +17,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[chat-math-render-guard.test.sh](chat-math-render-guard.test.sh)** — logic + incident-replay selftest
 - **[chat-path-base-nudge.sh](chat-path-base-nudge.sh)** — PostToolUse(Bash): 作業ディレクトリが session を始めたフォルダから離れたとき、 chat の file 参照 (link の href・inline code の dir/file.ext) を右パネルが開く基準は変わらないことを、 session × 作業ディレクトリごとに 1 回だけ知らせる
 - **[chat-path-base-nudge.test.sh](chat-path-base-nudge.test.sh)** — logic selftest
+- **[codex-headless-launch-check.sh](codex-headless-launch-check.sh)** — 掲示板の依頼の worker や盲検の判定 session を headless の codex exec で起こす Bash を止め、 Codex アプリに出る起こし方を出す (理由を書けば通す)
+- **[codex-headless-launch-check.test.sh](codex-headless-launch-check.test.sh)** — codex-headless-launch-check.sh の self-test (engine の selftest + hook の入出力)
 - **[codex-parent-worker-record-nudge.py](codex-parent-worker-record-nudge.py)** — Codex由来の環境IDがあるClaude workerだけに記録条項を渡す (UserPromptSubmit/Stop、非blocking)。
 - **[currentdate-anchor.py](currentdate-anchor.py)** — session start temporal anchor
 - **[decision-question-jargon-nudge.sh](decision-question-jargon-nudge.sh)** — Stop + PreToolUse(AskUserQuestion / turn 終わりの箱 wrap_up): 本人への問いに作業側の語 (掲示板の動詞・台帳の符号・event id・内輪の略語) が入っていたら 1 回だけ注意する (Stop は 1 回の block で問いの部分の短い追記を求め、 tool 側は既定で additionalContext。 engine = scripts/decision-question-jargon.py、 語 = hooks/decision-question-jargon-terms.txt + ~/.claude/decision-question-jargon-ext.txt。 conventions/concise-output.md#decision-questions)
