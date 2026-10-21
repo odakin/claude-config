@@ -271,6 +271,9 @@ sections:
   - id: rewritten-input-execution-receipt
     level: 3
     title: "書き換えた入力・実行の記録・モデルの受領を分ける"
+  - id: command-rewrite-hook-checks
+    level: 3
+    title: "Bash の command を書き換えて通す hook — 文字として書いた語を書き換えない・当てる前に shell で構文を見る"
   - id: frontend-dependent-cowork
     legacy: "9.3"
     level: 3

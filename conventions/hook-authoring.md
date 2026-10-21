@@ -838,6 +838,17 @@ CLI の送信内容・hook の発火・記録の対応を測る方法であり�
   古さだけで切らず、由来と親ログの不在を照合する。読めない記録や対応不明を「不要な記録」と推測しない。
   起動の hook と全記録の整理は処理時間を分け、整理が注入の時間切れを起こさない配置にする。
 
+### <a id="command-rewrite-hook-checks"></a>Bash の command を書き換えて通す hook — 文字として書いた語を書き換えない・当てる前に shell で構文を見る
+
+PreToolUse の `updatedInput` で command の一部を書き換えて通す hook は、 止める hook と違って誤りが目に見えない (書き換えた結果で実行される)。 次の 4 点を作る段で確かめる:
+
+- **展開されない文字は書き換えない** — single quote の中・heredoc の本文に加えて、 `\$` で escape した形 (double quote の中の `\${VAR}`) も文字。 commit message や echo の説明にその語を書いた command が当たる (実測: 書き換える hook を当てた直後、 その hook の説明を書いた commit message の中の語を書き換えた = 自分の commit が最初に当たる)。 当てた直後に、 対象の語を説明に含む commit を 1 回打って確かめる
+- **heredoc で消すのは本文と終わりの行だけ** — 始まりの行の残り (`cmd <<'EOF' 2>&1 | tail; echo …`) は shell の code。 始まりの行ごと消す正規表現 (`<<'EOF'[^\n]*\n…`) だと、 その行の後半を見逃す (実測: 較正で見逃しが出て直した)
+- **会話記録の command で較正し、 書き換えた後の command を shell の構文検査に通す** — 対象の語を含む過去の Bash を集め、 書き換える / 止める / 何もしない の件数と例を出し、 書き換えた全部を `zsh -n -c '<command>'` (bash なら `bash -n`) に通す。 何もしない側の例は 1 件ずつ読む (見逃しはここに出る)
+- **書き換えの意味が決まらない形は止める** — 書き換え先が一意に決まる形 (定数の添字など) だけを書き換え、 決まらない形 (変数の添字など) は直し方を付けて止める。 書き換えを推測で広げない
+
+実装例 = [`hooks/zsh-word-split-guard.py`](../hooks/zsh-word-split-guard.py) の PIPESTATUS の述語 (`pipestatus_rewrite`)。 通る形と止める形の出力の作り方 (判断の field を付けない) は同 file の冒頭と [§9.2](#build-dependent-docs-drift) の `updatedInput` の行。
+
 ### <a id="frontend-dependent-cowork"></a>9.3 frontend 依存 — desktop app の hook 出力 honor は**反転して見えた (主因は root 限定の kill switch)。 前提にせず session ごとに測れ**
 
 hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 / desktop app)** にも依存する。 **ただしこの依存は固定の性質ではなく、 同じ version 文字列のまま反転した実績がある** — 下の 2026-09-09 実測を参照。 ⚠️ **2026-09-11**: 反転に見えたものの大部分は、 作業 root に入っていた `disableAllHooks` だった ([#disableallhooks-kill-switch](#disableallhooks-kill-switch))。
