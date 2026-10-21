@@ -181,7 +181,7 @@
 - **[guard-review-profile.py](guard-review-profile.py)** — Profile manuscript-claim-guard changes_for_repo on N untracked files (mock repo).
 - **[guard-review-wiring.py](guard-review-wiring.py)** — Observe synthetic wiring-scope counterexamples; no policy is installed or relaxed.
 - **[headless-push-notification.sh](headless-push-notification.sh)** — 無人の定期実行から、 閉じた headless `claude -p` 1 回で PushNotification を呼ぶ (⚠️ -p からはスマホに届かない = 結果は exit 3、 conventions/public-page-watch.md#sealed-headless-push)。 --probe で CLI とログインだけを見る (token 不要)
-- **[headless-worker-reports.py](headless-worker-reports.py)** — ある session が Bash から headless で起動した worker (`claude -p` / `codex exec`) を会話記録から数え上げ、 worker の作業 dir に残った成果物 (HANDOFF・結果・教訓候補・script) を読み出す。--selftest 内蔵。
+- **[headless-worker-reports.py](headless-worker-reports.py)** — ある session が Bash から起こした worker (headless の `claude -p` / `codex exec` と、 Codex アプリに出る起動の道具 `codex-app-launch.py start|continue`) を会話記録から数え上げ、 worker の作業 dir に残った成果物 (HANDOFF・結果・教訓候補・script) を読み出す。--selftest 内蔵。
 - **[heal-hook-stubs.sh](heal-hook-stubs.sh)** — 壊れた git hook を直す: 過去の installer が書き換えた git 管理下の stub を track 版に戻す + macOS に exec で kill される hook を同じ中身の新しい file に作り直す (冪等・直すものが無ければ無音)
 - **[hook-liveness-audit.py](hook-liveness-audit.py)** — user hook が「そもそも走っていない」 root を検出 (disableAllHooks kill switch の settings 全 tier 走査 + transcript 上の SessionStart 発火証拠)
 - **[hook-matcher-liveness.py](hook-matcher-liveness.py)** — hook の matcher が今の tool 名に当たっているかを、 会話記録に出た tool 名で確かめる (読むだけ)

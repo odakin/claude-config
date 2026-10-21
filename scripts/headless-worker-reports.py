@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""headless-worker-reports.py — ある session が Bash から headless で起動した worker (`claude -p` / `codex exec`) を会話記録から数え上げ、 worker の作業 dir に残った成果物 (HANDOFF・結果・教訓候補・script) を読み出す。--selftest 内蔵。
+"""headless-worker-reports.py — ある session が Bash から起こした worker (headless の `claude -p` / `codex exec` と、 Codex アプリに出る起動の道具 `codex-app-launch.py start|continue`) を会話記録から数え上げ、 worker の作業 dir に残った成果物 (HANDOFF・結果・教訓候補・script) を読み出す。--selftest 内蔵。
 
 用途: Agent tool の subagent は subagent-reports.py、 掲示板と token の子は各々の道具で引けるが、
-Bash から直接起動した headless の worker (封じた sandbox の盲検 reviewer など) はどの口にも現れない。
+Bash から直接起動した worker (封じた sandbox の盲検 reviewer など) はどの口にも現れない。
 worker の報告は端末の log と作業 dir にしか残らず、 起動した側が拾わないと session の終わりに消える。
 締めの整理 (知見を正本へ移す) で取りこぼさないために、 実行位置の分かる候補と文字列だけの候補を分けて引く。
 
@@ -21,12 +21,26 @@ worker の報告は端末の log と作業 dir にしか残らず、 起動し�
 
 作業 dir が sandbox なら、 進み具合と受領検査は ai-collaboration scripts/inspect-review-sandbox.py。
 
+Codex アプリに出る起動 (scripts/codex-app-launch.py、 手元の共有 Codex daemon に thread を作りアプリに開かせる):
+  - 起動と数える tool call = 実行位置で `codex-app-launch.py start|continue` を呼んだもの、 と、 実行位置の board.py
+    (掲示板の request / launch) の出力に掲示板の起動の行 (`→ 起動した: Codex thread <id>`) があるもの。
+  - thread id = 起動の出力 (`→ Codex の仕事を起こした: thread <id>` / `--json` の thread_id / `→ thread <id> に次の turn
+    を送った`)、 無ければ `continue --thread`。 出力に無い start は「thread 不明」 (起動が止まったか出力を切った)。
+  - 作業 dir = `--cwd` (start)、 無ければ thread の rollout の先頭 session_meta の cwd。 model / effort = 起動の出力、
+    無ければ command の `--model` / `--effort`。 worker の会話記録 = その thread の rollout
+    ($CODEX_HOME/sessions/*/*/*/rollout-*-<id>.jsonl と archived_sessions/、 起動以降に更新されたもの)。
+  - 出力に起動の行があっても command の実行位置に起動の道具・board.py が無い tool call (会話記録を grep した出力など)
+    と、 command の文字列に `codex-app-launch.py start|continue` が出るだけの tool call は文字列候補。
+  - 記録の約束は自動では注入されない (注入 hook は claude -p / codex exec だけを書き換える) = 起動文 file の MARKER か
+    作業 dir の AGENTS.md / CLAUDE.md の記載を見る。 掲示板の worker の報告は掲示板の submit。
+
 usage:
   headless-worker-reports.py <session id の先頭> [--max-chars N] [--projects-dir DIR ...]
   headless-worker-reports.py --selftest
   headless-worker-reports.py --selftest --against-root OLD_CHECKOUT  # 元 command のままの連結試験 (旧版は赤)
 検出: 注入器と同じ lexer で単純コマンドの実行位置を読み、1 呼出しの複数 worker も数える。
 引用・commit message などの文字列一致と未対応構文は別表示 (起動の件数や成果物の読出しに混ぜない)。
+会話記録の API 送信の写し (type = api-request-blob) は読まない (前の tool call を送信時の形で繰り返す = 二重に数える)。
 従来の regex に一致する呼出しは文字列候補として残すので、未対応構文の手確認経路を失わない。
 各実行で検索対象 config の古い孤立した注入記録を整理する (保持条件は注入器の docstring)。
 --prune-receipts は整理だけを行う。未使用期間中の定期実行は設けない。
@@ -38,6 +52,7 @@ usage:
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import glob
 import importlib.util
 import hashlib
@@ -62,6 +77,24 @@ MARKER = "記録の約束"
 TOP = ("HANDOFF.md", "REVIEW-RESULTS.md", "ledger.yaml", "DONE")
 TEXTS = ("HANDOFF.md", "scratch/hoist-candidates.md")
 _RECEIPTS = None
+
+# Codex app launches (scripts/codex-app-launch.py): the command names the launcher, the tool result names the thread.
+# The launcher prints `→ Codex の仕事を起こした: thread <id> (model M / effort E…` (start), a JSON line with thread_id
+# (start --json) or `→ thread <id> に次の turn を送った` (continue); the board prints `→ 起動した: Codex thread <id> (host,
+# model M / effort E…` when it ran the launcher. The board's launch note reads `起動した: …` without the arrow and
+# `model … / effort`, so reading the board back is not taken for a launch.
+APP_LAUNCHER = "codex-app-launch.py"
+APP_TEXT_RE = re.compile(r"codex-app-launch\.py['\"]?\s+(?:start|continue)\b")
+_THREAD = r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+THREAD_ID = re.compile(_THREAD)
+APP_STARTED_RE = re.compile(r"→ Codex の仕事を起こした: thread " + _THREAD + r" \(model (\S+) / effort ([^\s,)]+)")
+APP_CONTINUED_RE = re.compile(r"→ thread " + _THREAD + r" に次の turn を送った")
+BOARD_STARTED_RE = re.compile(r"→ 起動した: Codex thread " + _THREAD + r" \(([^,)]*), model (\S+) / effort ([^\s,)]+)")
+PERSISTED_RE = re.compile(r"Full output saved to: (\S+\.txt)")
+# A copy of the request sent to the API repeats earlier tool calls and results, without a timestamp and with the
+# command in its wire form (measured: a `cd <dir> &&` the harness had prefixed), so its hash differs from the
+# recorded command: read as a record it counts a tool call twice and finds no receipt for the copy.
+COPY_TYPES = ("api-request-blob",)
 
 
 def receipt_engine():
@@ -132,8 +165,194 @@ def expand(path: str) -> Path:
     return Path(path).expanduser()
 
 
+def option_value(args, name):
+    """The last literal value of `name` (`--x V` or `--x=V`); None when absent or given by an expansion."""
+    value = None
+    for i, arg in enumerate(args):
+        if arg == name:
+            value = args[i + 1] if i + 1 < len(args) else None
+        elif isinstance(arg, str) and arg.startswith(name + "="):
+            value = arg.partition("=")[2]
+    return value
+
+
+def script_index(argv):
+    """Index of the script in `<script> …` or `python3 [-flags] <script> …`; None when there is none."""
+    i = 0
+    if argv and isinstance(argv[0], str) and Path(argv[0]).name.startswith("python"):
+        i = 1
+        while i < len(argv) and isinstance(argv[i], str) and argv[i].startswith("-"):
+            i += 1
+    return i if i < len(argv) and isinstance(argv[i], str) else None
+
+
+def app_launch_call(argv):
+    """`codex-app-launch.py start|continue …` at an executable position → (subcommand, the rest), else None."""
+    i = script_index(argv)
+    if i is None or Path(argv[i]).name != APP_LAUNCHER or len(argv) <= i + 1 or argv[i + 1] not in ("start", "continue"):
+        return None
+    return argv[i + 1], argv[i + 2:]
+
+
+def board_call(argv) -> bool:
+    """board.py (the board engine or its forwarder) at an executable position."""
+    i = script_index(argv)
+    return i is not None and Path(argv[i]).name == "board.py"
+
+
+def result_text(block: dict) -> str:
+    content = block.get("content")
+    if isinstance(content, list):
+        content = "\n".join(x.get("text", "") for x in content if isinstance(x, dict) and isinstance(x.get("text"), str))
+    return content if isinstance(content, str) else ""
+
+
+def app_markers(text: str) -> dict:
+    """The launcher's lines (start / continue, in output order) and the board's launch lines in one tool result."""
+    found = {"launcher": [], "board": []}
+    for line in text.splitlines():
+        s = line.strip()
+        m = APP_STARTED_RE.search(s)
+        if m:
+            found["launcher"].append({"sub": "start", "thread": m.group(1), "model": m.group(2), "effort": m.group(3)})
+            continue
+        m = APP_CONTINUED_RE.search(s)
+        if m:
+            found["launcher"].append({"sub": "continue", "thread": m.group(1)})
+            continue
+        m = BOARD_STARTED_RE.search(s)
+        if m:
+            found["board"].append({"sub": "start", "thread": m.group(1), "host": m.group(2).strip(),
+                                   "model": m.group(3), "effort": m.group(4)})
+            continue
+        if s.startswith("{") and '"thread_id"' in s:  # start --json (not `codex exec --json`'s thread.started event)
+            try:
+                o = json.loads(s)
+            except ValueError:
+                continue
+            if (isinstance(o, dict) and "instruction_sources" in o and isinstance(o.get("thread_id"), str)
+                    and THREAD_ID.fullmatch(o["thread_id"])):
+                found["launcher"].append({"sub": "start", "thread": o["thread_id"], "model": o.get("model"),
+                                          "effort": o.get("effort"), "cwd": o.get("cwd"), "host": o.get("host")})
+    return found
+
+
+def tool_outputs(transcript: Path) -> dict:
+    """tool_use_id → the Codex launch lines in its result. A large output that the harness saved to a file
+    (`<persisted-output>` with a 2 KB preview) is read from that file."""
+    out = {}
+    with transcript.open(encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if '"tool_result"' not in line or ("thread" not in line and "persisted-output" not in line):
+                continue
+            try:
+                obj = json.loads(line)
+            except ValueError:
+                continue
+            if obj.get("type") in COPY_TYPES:
+                continue
+            content = (obj.get("message") or {}).get("content")
+            for b in content if isinstance(content, list) else []:
+                if not isinstance(b, dict) or b.get("type") != "tool_result" or not isinstance(b.get("tool_use_id"), str):
+                    continue
+                text = result_text(b)
+                saved = PERSISTED_RE.search(text) if "persisted-output" in text else None
+                if saved:
+                    try:
+                        p = Path(saved.group(1))
+                        if p.is_file() and p.stat().st_size <= 8_000_000:
+                            text = p.read_text(encoding="utf-8", errors="replace")
+                    except OSError:
+                        pass
+                found = app_markers(text)
+                if found["launcher"] or found["board"]:
+                    out.setdefault(b["tool_use_id"], found)
+    return out
+
+
+def codex_home() -> Path:
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+
+
+def rollouts(thread) -> list[Path]:
+    """The rollout file of a thread id, or of a unique id prefix (8+ characters, as `continue --thread` takes)."""
+    if not isinstance(thread, str) or not re.fullmatch(r"[0-9a-f][0-9a-f-]{7,35}", thread):
+        return []
+    home, found = codex_home(), []
+    for pattern in (f"sessions/*/*/*/rollout-*{thread}*.jsonl", f"archived_sessions/rollout-*{thread}*.jsonl"):
+        found.extend(p for p in home.glob(pattern) if p.name[-42:-6].startswith(thread) and THREAD_ID.fullmatch(p.name[-42:-6]))
+    return sorted(found) if len({p.name[-42:-6] for p in found}) == 1 else []
+
+
+def rollout_cwd(path: Path):
+    """The working directory in a rollout's first record (session_meta)."""
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            meta = json.loads(fh.readline())
+    except (OSError, ValueError):
+        return None
+    payload = meta.get("payload") if isinstance(meta, dict) and meta.get("type") == "session_meta" else None
+    cwd = payload.get("cwd") if isinstance(payload, dict) else None
+    return Path(cwd) if isinstance(cwd, str) and cwd else None
+
+
+def epoch(ts):
+    try:
+        return _dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def app_launches(obj: dict, cmd: str, sid: str, tool_id: str, apps: list, board: bool, found) -> list[dict]:
+    """The Codex app launches of one tool call: the launcher at an executable position (thread from its output, or
+    `continue --thread`), and board.py whose output carries the board's launch line. Launch lines without either at an
+    executable position, and the launcher named only inside a string, are text candidates."""
+    found = found or {"launcher": [], "board": []}
+    cds = re.findall(r"(?:^|[\s;&|(])cd\s+((?:\"[^\"]+\"|'[^']+'|[^\s;&|]+))", cmd)
+    here = expand(cds[-1]) if cds else None  # a relative --cwd / --prompt-file is read from the shell's directory
+    if not (here and here.is_absolute()):
+        here = Path(obj["cwd"]) if obj.get("cwd") else None
+    base = {"ts": obj.get("timestamp"), "kind": "codex-app", "config": None, "marker": MARKER in cmd, "runner": False,
+            "parent_session": sid, "tool_use_id": tool_id, "receipt": None, "worker_session": None, "shell_cwd": here,
+            "command_sha256": hashlib.sha256(cmd.encode("utf-8", errors="surrogatepass")).hexdigest()}
+    rows, lines = [], {sub: [x for x in found["launcher"] if x["sub"] == sub] for sub in ("start", "continue")}
+    for sub, rest in apps:
+        seen = lines[sub].pop(0) if lines[sub] else {}
+        thread = seen.get("thread") or (option_value(rest, "--thread") if sub == "continue" else None)
+        rows.append(dict(base, sub=sub, via="launcher", detection="execution", thread=thread, seen=bool(seen),
+                         cwd=option_value(rest, "--cwd") or seen.get("cwd"),
+                         model=seen.get("model") or option_value(rest, "--model"),
+                         effort=seen.get("effort") or option_value(rest, "--effort"),
+                         prompt_file=option_value(rest, "--prompt-file"), host=seen.get("host") or option_value(rest, "--host")))
+    if board:
+        for seen in found["board"]:
+            rows.append(dict(base, sub="start", via="board", detection="execution", thread=seen["thread"], seen=True, cwd=None,
+                             model=seen.get("model"), effort=seen.get("effort"), prompt_file=None, host=seen.get("host")))
+    note = None
+    if not rows and (found["launcher"] or found["board"]):
+        note = "出力に Codex の起動の行があるが、 command の実行位置に起動の道具・board.py が無い (記録や log を読んだ出力か、 未対応の構文)"
+    elif not rows and APP_TEXT_RE.search(cmd):
+        note = "command の文字列に codex-app-launch.py start|continue が出る (引用か、 未対応の構文)"
+    if note:
+        rows.append(dict(base, sub=None, via=None, detection="text", thread=None, seen=False, cwd=None, model=None,
+                         effort=None, prompt_file=None, host=None, note=note))
+    for j, row in enumerate(rows):
+        row["launch_index"] = f"app-{j}"
+        row["rollouts"] = rollouts(row["thread"]) if row["detection"] == "execution" else []
+        if row["rollouts"]:
+            row["thread"] = row["rollouts"][0].name[-42:-6]  # a `--thread` prefix becomes the full id
+        cwd = row["cwd"]
+        if isinstance(cwd, str):
+            cwd = expand(cwd)
+            row["cwd"] = Path(os.path.normpath(here / cwd)) if not cwd.is_absolute() and here else cwd
+        elif row["rollouts"]:
+            row["cwd"] = rollout_cwd(row["rollouts"][0])
+    return rows
+
+
 def launches(transcript: Path) -> list[dict]:
     out = []
+    outputs = tool_outputs(transcript)
     with transcript.open(encoding="utf-8", errors="replace") as fh:
         for line in fh:
             if '"Bash"' not in line:
@@ -142,6 +361,8 @@ def launches(transcript: Path) -> list[dict]:
                 obj = json.loads(line)
             except ValueError:
                 continue
+            if obj.get("type") in COPY_TYPES:
+                continue
             content = (obj.get("message") or {}).get("content")
             for b in content if isinstance(content, list) else []:
                 if not isinstance(b, dict) or b.get("type") != "tool_use" or b.get("name") != "Bash":
@@ -149,7 +370,7 @@ def launches(transcript: Path) -> list[dict]:
                 cmd = str((b.get("input") or {}).get("command", ""))
                 sid = str(obj.get('sessionId') or obj.get('session_id') or transcript.stem)
                 tool_id = b.get('id') if isinstance(b.get('id'), str) else ''
-                parsed = []
+                parsed, apps, board = [], [], False
                 try:
                     engine = receipt_engine()
                     receipts = engine.read_receipts(engine.receipt_root(transcript), sid, tool_id, cmd)
@@ -157,6 +378,11 @@ def launches(transcript: Path) -> list[dict]:
                         for words in engine.shell_commands(cmd):
                             position = engine.executable_index(words)
                             argv = [word.value for word in words[position:]] if position is not None else []
+                            app = app_launch_call(argv)
+                            if app:
+                                apps.append(app)
+                                continue
+                            board = board or board_call(argv)
                             runner = False
                             if argv and argv[0] and Path(argv[0]).name.startswith('python') and len(argv) > 2:
                                 if argv[1] and Path(argv[1]).name == 'headless-record-clause-nudge.py' and argv[2] == '--run':
@@ -165,9 +391,10 @@ def launches(transcript: Path) -> list[dict]:
                             if kind:
                                 parsed.append((kind, argv, runner))
                     except ValueError:
-                        parsed = []
+                        parsed, apps, board = [], [], False
                 except Exception:
                     receipts = []  # Legacy inspection stays available; no receipt means unverified.
+                out.extend(app_launches(obj, cmd, sid, tool_id, apps, board, outputs.get(tool_id)))
                 m = LAUNCH_RE.search(cmd)
                 if not m and not receipts and not parsed:
                     continue
@@ -215,8 +442,20 @@ def promise(launch: dict) -> str:
         if state in ('added', 'present'):
             return f"注入記録: {state} (runner の処理を照合済み、モデル受領は未確認{'、resume snapshot に注意' if resume else ''})"
         return f"⚠️ 注入記録: {state} (runner の注入成功を確認できない。起動結果を確認する)"
+    app = launch.get("kind") == "codex-app"
+    if launch.get("via") == "board":
+        return "掲示板の依頼の worker = 報告は掲示板の submit (記録の約束は依頼の spec と hand-off 文。 依頼の thread を inbox / show で確かめる)"
     if launch["marker"]:
         return "起動文に約束の MARKER あり (内容・受領は未確認)"
+    if app and launch.get("prompt_file"):
+        prompt = expand(launch["prompt_file"])
+        if not prompt.is_absolute() and launch.get("shell_cwd"):
+            prompt = launch["shell_cwd"] / prompt
+        try:
+            if MARKER in prompt.read_text(encoding="utf-8", errors="replace"):
+                return "起動文 file に約束の MARKER あり (内容・受領は未確認)"
+        except OSError:
+            pass
     if launch.get("runner"):
         return "起動文に自動注入 runner の指定あり (受領は worker の報告・成果物で確認)"
     cwd = launch["cwd"]
@@ -231,10 +470,21 @@ def promise(launch: dict) -> str:
                 english = all(t in low for t in ('discarded', 'noticed', 'unverified'))
                 if ('HANDOFF' in paragraph or MARKER in paragraph) and (japanese or english):
                     return f"作業 dir の {name} に3項目の記録条項あり (読込・受領は未確認)"
+    if app:
+        return "⚠️ 記録の約束の根拠が無い (起動の道具の起動文には自動で入らない = 起動文 file か作業 dir の AGENTS.md に書く。 worker の報告・成果物を確認する)"
     return "⚠️ 記録から約束の受領を確認できない (hook の有効性・起動形式と、worker の報告・成果物を確認する)"
 
 
 def worker_transcripts(launch: dict) -> list[Path]:
+    if launch.get("kind") == "codex-app":  # the thread id comes from this tool call's own output (or --thread)
+        since, out = epoch(launch.get("ts")), []
+        for path in launch.get("rollouts") or []:
+            try:
+                if since is None or path.stat().st_mtime >= since - 1:
+                    out.append(path)
+            except OSError:
+                pass
+        return out
     cwd = launch["cwd"]
     worker_id = launch.get('worker_session')
     issued = (launch.get('receipt') or {}).get('issued_ns')
@@ -252,13 +502,29 @@ def worker_transcripts(launch: dict) -> list[Path]:
 
 
 def report(launch: dict, n: int, max_chars: int) -> None:
+    app = launch.get('kind') == 'codex-app'
     if launch.get('detection') == 'text':
         print(f"== 文字列候補 {n}: {launch['ts']}  {launch['kind']} (実行位置は未確認)")
-        print("   引用・引数内の言及、または未対応構文。起動と数えず、元の tool call を確認する。")
+        if app:
+            print(f"   {launch.get('note')}。 起動と数えず、元の tool call を確認する。")
+        else:
+            print("   引用・引数内の言及、または未対応構文。起動と数えず、元の tool call を確認する。")
         print(f"   tool call: {launch.get('tool_use_id') or 'ID なし'}")
         return
     cwd = launch["cwd"]
-    print(f"== 起動 {n}: {launch['ts']}  {launch['kind']}  model指定={launch['model'] or '未特定'}  effort指定={launch['effort'] or '未特定'}")
+    if app:
+        print(f"== 起動 {n}: {launch['ts']}  codex-app {launch['sub']}  thread={launch['thread'] or '不明'}"
+              f"  model={launch['model'] or '未特定'}  effort={launch['effort'] or '未特定'}")
+        how = "掲示板 (board.py) が起動の道具を呼んだ" if launch.get('via') == 'board' else "起動の道具 codex-app-launch.py"
+        print(f"   起こし方: {how} = Codex アプリの一覧に出る thread" + (f" (機械 {launch['host']})" if launch.get('host') else ""))
+        if not launch.get('seen'):
+            print("   ⚠️ 起動の出力に thread の行が無い (起動が止まったか、 出力を切った)"
+                  + (" = --thread の値で引いた" if launch['thread'] else ""))
+        ts = worker_transcripts(launch)
+        print(f"   worker の会話記録 (rollout {len(ts)}): " + (", ".join(str(t) for t in ts)
+              or "この機械に起動以降の rollout が無い (別の機械の thread か、 thread id が不明)"))
+    else:
+        print(f"== 起動 {n}: {launch['ts']}  {launch['kind']}  model指定={launch['model'] or '未特定'}  effort指定={launch['effort'] or '未特定'}")
     print(f"   作業 dir: {cwd if cwd else '不明 (command に cd が無く、 記録に cwd も無い)'}")
     print(f"   記録の約束: {promise(launch)}")
     if not cwd or not cwd.is_dir():
@@ -270,8 +536,9 @@ def report(launch: dict, n: int, max_chars: int) -> None:
     print("   作業 dir の成果物候補: " + (", ".join(have) or "なし"))
     scripts = [str(p.relative_to(cwd)) for sub in ("checks", "scratch") for p in sorted((cwd / sub).glob("*.py"))]
     print(f"   作業 dir の script 候補・作成者未確認 ({len(scripts)}): " + (", ".join(scripts) or "なし"))
-    ts = worker_transcripts(launch)
-    print(f"   worker の会話記録 ({len(ts)}): " + (", ".join(str(t) for t in ts) or "起動と結び付く session ID / 記録なし (同じ作業 dir の他 session は列挙しない)"))
+    if not app:
+        ts = worker_transcripts(launch)
+        print(f"   worker の会話記録 ({len(ts)}): " + (", ".join(str(t) for t in ts) or "起動と結び付く session ID / 記録なし (同じ作業 dir の他 session は列挙しない)"))
     for name in TEXTS:
         p = cwd / name
         if p.is_file():
@@ -311,7 +578,8 @@ def run(session: str, dirs: list[Path], max_chars: int) -> int:
             uniq[seen[key]] = l
     print(f"見た記録: {', '.join(str(f) for f in files)}")
     count = sum(l.get('detection') != 'text' for l in uniq)
-    print(f"headless の起動候補: {count} 件 / 文字列候補: {len(uniq) - count} 件 (session {session})")
+    apps = sum(l.get('detection') != 'text' and l.get('kind') == 'codex-app' for l in uniq)
+    print(f"headless・Codex アプリの起動候補: {count} 件 (うち Codex アプリ {apps} 件) / 文字列候補: {len(uniq) - count} 件 (session {session})")
     for i, l in enumerate(uniq, 1):
         report(l, i, max_chars)
     return 0
@@ -624,6 +892,119 @@ def followup_regression(repo, case=None):
     return 0
 
 
+def app_launch_regression() -> None:
+    """Codex app launches: the launcher's start / continue, the board running it, and lookalikes that are not launches."""
+    import contextlib
+    import io
+    a, b, c, d, e, f = (f"{n}1a15c9b-cf1d-74d2-8507-0745d7d7a1b{n}" for n in "abcdef")
+    old_home = os.environ.get("CODEX_HOME")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        os.environ["CODEX_HOME"] = str(tmp / "codex")
+        try:
+            box, board_cwd, gone = tmp / "box", tmp / "workspace", tmp / "gone"
+            box.mkdir()
+            board_cwd.mkdir()
+            (box / "prompt.txt").write_text(f"review the copy\n{MARKER}: write HANDOFF.md\n")
+            day = tmp / "codex" / "sessions" / "2042" / "01" / "02"
+            day.mkdir(parents=True)
+            for tid, cwd in ((a, box), (b, board_cwd), (e, board_cwd)):
+                (day / f"rollout-2042-01-02T10-00-00-{tid}.jsonl").write_text(
+                    json.dumps({"type": "session_meta", "payload": {"id": tid, "cwd": str(cwd)}}) + "\n")
+            archived = tmp / "codex" / "archived_sessions"
+            archived.mkdir()
+            (archived / f"rollout-2042-01-02T11-00-00-{d}.jsonl").write_text(
+                json.dumps({"type": "session_meta", "payload": {"id": d, "cwd": str(gone)}}) + "\n")
+            saved = tmp / "tool-results" / "big.txt"
+            saved.parent.mkdir()
+            saved.write_text("x\n" * 2000 + f"→ 起動した: Codex thread {e} (Mac-mini, model m-big / effort high, アプリに開かせた)。\n")
+            launcher = "/opt/sample/claude-config/scripts/codex-app-launch.py"
+            rows, n = [], 0
+
+            def call(cmd, out, ts="2020-01-01T00:00:00Z", listed=False, line_type="assistant"):
+                nonlocal n
+                n += 1
+                tid = f"tool-app-{n}"
+                rows.append(json.dumps({"type": line_type, "timestamp": ts, "sessionId": "app-parent", "cwd": str(tmp),
+                                        "message": {"content": [{"type": "tool_use", "id": tid, "name": "Bash",
+                                                                 "input": {"command": cmd}}]}}, ensure_ascii=False))
+                body = [{"type": "text", "text": out}] if listed else out
+                rows.append(json.dumps({"type": "user", "timestamp": ts, "sessionId": "app-parent",
+                                        "message": {"content": [{"type": "tool_result", "tool_use_id": tid, "content": body}]}},
+                                       ensure_ascii=False))
+                return tid
+
+            start = call(f"python3 {launcher} start --cwd {box} --prompt-file {box}/prompt.txt --model m-ask --effort low"
+                         " --name 'sealed judge' --sealed 2>&1 | head -5",
+                         f"→ Codex の仕事を起こした: thread {a} (model m-run / effort xhigh ⚠️ 頼んだ値 m-ask / low と違う, cwd {box})\n"
+                         f"  アプリ: 左の「最近の項目」 に載せた (アプリに開かせた) open 'codex://threads/{a}?hostId=local'")
+            cont = call(f"python3 {launcher} continue --thread {a[:8]} --prompt-file round2.txt --effort high",
+                        "⛔ 共有の Codex daemon に繋がらない。 アプリでその thread を開き、 起動文を貼って送る")
+            board = call("python3 ~/Claude/agent-board/scripts/board.py request --to codex --to-session role-x-y --summary s 2>&1 | tail -25",
+                         f"→ 受け手を Codex アプリに出る形で起こす (… cwd {board_cwd} …):\n  python3 {launcher} start --cwd {board_cwd} …\n"
+                         f"→ 起動した: Codex thread {b} (mac mini, model m-board / effort low, アプリに開かせた)。 読んだ指示 file: (なし)\n"
+                         "posted 20420101T000000Z-claude-000000 (起動の記録)", listed=True)
+            call("python3 board.py show --thread t",
+                 f"note: 起動した: Codex thread {c} (Mac-mini, m-note low)。 同じ依頼を別の機械で起こさない")
+            call("python3 board.py request --to codex --to-session role-x-y --launch-host MacBook --summary s",
+                 "→ 起動する機械 = MacBook (この機械 Mac-mini ではない) = ここでは起こさない")
+            grep = call("grep -n 起動した some-session.jsonl",
+                        f"12: → 起動した: Codex thread {c} (Mac-mini, model m-grep / effort low)\n"
+                        f"13: → Codex の仕事を起こした: thread {c} (model m-grep / effort low, cwd /x)")
+            mention = call("git commit -m 'count codex-app-launch.py start in the closing sweep'", "")
+            js = call(f"cd {box} && python3 -I {launcher} start --cwd ../gone --prompt-file p.txt --json",
+                      json.dumps({"thread_id": d, "host": "Mac-mini", "cwd": str(gone), "model": "m-json", "effort": "medium",
+                                  "instruction_sources": []}))
+            call("head -c 600 events.jsonl", json.dumps({"type": "thread.started", "thread_id": c}))  # a codex exec event
+            big = call("python3 board.py launch --request r1",
+                       f"<persisted-output>\nOutput too large (99KB). Full output saved to: {saved}\n\nPreview (first 2KB):\nx\n</persisted-output>")
+            stale = call(f"python3 {launcher} continue --thread {f} --prompt-file r.txt",
+                         f"→ thread {f} に次の turn を送った。 進行 = codex resume {f}", ts="2020-01-03T00:00:00Z")
+            # the copy of the API request repeats the start call in its wire form: not a second launch
+            call(f"cd {tmp} && python3 {launcher} start --cwd {box} --prompt-file {box}/prompt.txt", "", line_type="api-request-blob")
+            proj = tmp / "cfg" / "projects" / "p"
+            proj.mkdir(parents=True)
+            log = proj / "app-parent.jsonl"
+            log.write_text("\n".join(rows) + "\n")
+
+            got = {(l["tool_use_id"], l["detection"]): l for l in launches(log) if l["kind"] == "codex-app"}
+            executed = [k[0] for k in got if k[1] == "execution"]
+            assert sorted(executed) == sorted([start, cont, board, js, big, stale]), executed
+            assert sorted(k[0] for k in got if k[1] == "text") == sorted([grep, mention]), got.keys()
+            s = got[(start, "execution")]
+            assert s["thread"] == a and s["model"] == "m-run" and s["effort"] == "xhigh" and s["cwd"] == box and s["seen"]
+            assert "起動文 file に約束の MARKER" in promise(s) and worker_transcripts(s)
+            k = got[(cont, "execution")]
+            assert k["sub"] == "continue" and k["thread"] == a and not k["seen"] and k["effort"] == "high" and k["cwd"] == box
+            o = got[(board, "execution")]
+            assert o["via"] == "board" and o["thread"] == b and o["cwd"] == board_cwd and o["host"] == "mac mini"
+            assert promise(o).startswith("掲示板の依頼の worker")
+            j = got[(js, "execution")]
+            assert j["thread"] == d and j["model"] == "m-json" and j["cwd"] == gone and worker_transcripts(j)
+            g = got[(big, "execution")]
+            assert g["thread"] == e and g["model"] == "m-big" and g["cwd"] == board_cwd
+            t = got[(stale, "execution")]
+            assert t["thread"] == f and not t["rollouts"]
+            print("OK the launcher's start / continue / --json and the board's launch line count; a grep and a mention do not")
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                assert run("app-parent", [tmp / "cfg" / "projects"], 0) == 0
+            text = buf.getvalue()
+            assert "(うち Codex アプリ 6 件) / 文字列候補: 2 件" in text, text
+            assert text.count("== 起動 ") == 6 and f"thread={a}" in text and "rollout-2042-01-02T10-00-00-" + a in text, text
+            assert "⚠️ 起動の出力に thread の行が無い" in text and "= --thread の値で引いた" in text, text
+            assert "作業 dir が今は無い" in text and "この機械に起動以降の rollout が無い" in text, text
+            os.utime(day / f"rollout-2042-01-02T10-00-00-{a}.jsonl", (1, 1))
+            assert not worker_transcripts(launches(log)[0])
+            print("OK a rollout older than the launch is not taken for the worker's record")
+        finally:
+            if old_home is None:
+                os.environ.pop("CODEX_HOME", None)
+            else:
+                os.environ["CODEX_HOME"] = old_home
+
+
 def selftest() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -669,6 +1050,7 @@ def selftest() -> int:
         assert len(worker_transcripts(ls[0])) == 1
         assert run("abcd1234", [tmp / "cfg" / "projects"], 0) == 0
         assert run("zzzz", [tmp / "cfg" / "projects"], 0) == 1
+    app_launch_regression()
     receipt_regression(Path(__file__).resolve().parents[1])
     followup_regression(Path(__file__).resolve().parents[1])
     print("selftest OK")
