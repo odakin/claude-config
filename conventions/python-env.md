@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 計算・検算を Python で回す repo を新しい機械・clone・OS (macOS / Linux / WSL / Windows / CI / Docker) で始めるとき + `pip install -r` が固定した依存で落ちたとき・venv が作れないとき + 検算の script に `.venv/bin/python` を書きかけたとき + repo の入口 `tools/py` の雛形を直す・配るとき + 機械に Python を入れる方法を選ぶとき
+when: 計算・検算を Python で回す repo を新しい機械・clone・OS (macOS / Linux / WSL / Windows / CI / Docker) で始めるとき + `pip install -r` が固定した依存で落ちたとき・venv が作れないとき + 検算の script に `.venv/bin/python` を書きかけたとき + repo の入口 `tools/py` の雛形を直す・配るとき + 機械に Python を入れる方法を選ぶとき + 外から落とした file を Python で読むとき・`python3 -I` を付けたら module が見つからなくなったとき (#isolated-mode-drops-user-site)
 category: infra
 summary: repo の Python の版は `.python-version` に 1 行で宣言し、 venv の用意・requirements への追従・宣言の版が無いときの案内は入口 `tools/py` (雛形 = templates/shared-project/python-env/py) が機械でやる。 環境ごと (macOS の Apple Silicon・Intel、 Linux の glibc・musl、 WSL、 Windows の Git Bash、 conda、 CI、 Docker) に何を使い、 合う python が無いとき何を案内するかの表が正本 (#python-env-environments)。 macOS の候補の arch は起動せずに `file -bL` で見る (起動すると Intel 版の対応終了の通知が出る)。 Linux と Windows は arch を見ない。 Windows の venv の python は Scripts/python.exe、 Store の alias は候補にしない。 WSL・Linux で Windows の venv を見つけたら消さずに止まる。 venv が作れない (ensurepip が無い) と依存が入らないを分けて言う。 固定した依存が入らないときは版を外さず宣言の版を入れる。 依存の Python の下限と platform ごとの wheel は scripts/python-pin-floor.py
 -->
@@ -135,3 +135,10 @@ collaborator-check の conf に `python tools/py -- <用途>` の 1 行を置く
 - 無人ジョブの `python3` 選び ([`shell-env.md#job-python-by-capability`](shell-env.md#job-python-by-capability)) と本 doc は別の問題: ジョブは「依存を import できる既存の interpreter」 を選び、 repo の計算は「宣言の版で作った venv」 を使う
 - どの機械に何の Python があるか・入れるか (uv / Homebrew) は機械ごとの事実なので、 公開層に書かず、 個人層の機械別の表に置く ([`docs/personal-layer.md`](../docs/personal-layer.md))
 - 依存の下限を上げる PR が Python の下限も上げる話 = [`github-security-automation.md#requirement-floor-vs-python`](github-security-automation.md#requirement-floor-vs-python)
+
+## <a id="isolated-mode-drops-user-site"></a>外から落とした file を読むときの `-I` と user site
+
+- 外から落とした file (download・展開した zip の中身) を読む Python は、 その dir から起動しない: `-c` なら cwd が、 script なら script の dir が sys.path の先頭に入り、 そこに置かれた `json.py` などが標準 library より先に import される
+- その対策に `python3 -I` (隔離 mode) を付けると、 `-I` は `-s` と `-E` を含むので **user site (`pip install --user` の入り先) も切れる** = user site にしか入っていない module (PyMuPDF の `fitz` など) が `ModuleNotFoundError` になる (実測)。 依存が入っていないのではない
+- user site の module を使うなら、 **自分で作った空の dir に cd して、 `-I` を付けずに** `python3 -c '…' <落とした file の path>` (またはその空の dir に置いた script) を走らせる。 sys.path の先頭は空の dir になり、 落とした file は引数で渡すだけで sys.path に入らない。 Python 3.11 以降は `-P` (sys.path の先頭に cwd・script の dir を入れない、 user site は残す) でも同じ
+- venv の python に `-I` を付けても venv の site-packages は残る (切れるのは user site と環境変数) = 依存を venv に入れてある repo では `-I` を付けたまま読める
