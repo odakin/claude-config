@@ -374,7 +374,7 @@ claude-code が hook を起動するには **4 軸全てが揃う必要**:
 0. **まず kill switch を疑う** ([#disableallhooks-kill-switch](#disableallhooks-kill-switch)) — `python3 scripts/hook-liveness-audit.py` (= settings 全 tier の `disableAllHooks` + root ごとの発火記録)。 root 限定の kill switch は「この frontend では効かない」 に見える (= 2026-06〜09 の「desktop は hook を honor しない」 診断の少なくとも一部はこれだった)。 frontend 差 ([§9.3](#frontend-dependent-cowork)) を疑うのはその後で、 それも前提にせずその session で測る。
 1. `[ -e ~/.claude/hooks/<name>.sh ]` (= symlink target 健全?)
 2. `jq -e --arg c "<name>.sh" '.hooks.PreToolUse[] | select(.hooks[]?.command | contains($c))' ~/.claude/settings.json` (= entry 存在?)
-3. realistic JSON stdin で hook 起動 → 期待出力 確認 (= logic 健全?)
+3. realistic JSON stdin で hook 起動 → 期待出力 確認 (= logic 健全?)。 realistic = harness が渡す key を全部持つ形 (`hook_event_name`・`tool_name`・`tool_input` …)。 1 本の engine が event と tool で振り分ける hook は、 `hook_event_name` の無い入力を黙って通す = 「止まらなかった」 が logic の誤りか入力の欠けかを区別できない (実測: 止めるはずの呼び出しの合成入力が exit 0 で通り、 `hook_event_name` を足すと止まった)。 合成で書くより、 会話記録の実際の呼び出しを流す方が欠けない ([#replay-real-tool-output](#replay-real-tool-output))
 4. **(d) trace technique** (= 後述): hook 先頭 (shebang+1) に trace block 投入 → 任意の matching tool call → trace log 作成確認 → trace revert (= harness invoke alive?)
 
 4 つとも yes でない限り「動く」 と claim しない。
