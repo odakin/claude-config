@@ -880,7 +880,8 @@ def main():
     except LoginRequired as e:
         app = BROWSER_APPS.get(a.browser, a.browser)
         if e.observed:
-            _say("学内ログインが切れている = 本人のログインが要る。 `--wait-login 600` を付けて実行し直すと、 "
+            _say(f"学内ログインが切れている = 本人のログインが要る。 `--wait-login 600` を subcommand の前に付けて"
+                 f" (例 = `… --wait-login 600 {a.cmd} …`、 後ろに付けると引数の誤りで止まる) 実行し直すと、 "
                  f"{app} にログイン画面を開いたまま、 ログインし終えるのを待って続きから進む")
         else:
             _say(f"session 切れ ({e.why}) から復帰できなかった → {app} で {a.base}{PORTAL} を開いてログインしてから再実行"
