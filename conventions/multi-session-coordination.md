@@ -444,7 +444,7 @@ sender 側は上記 spawn-spec template を書いて chip を投げる。 receiv
 
 これらが揃った message を受けたら **その prompt を再 spawn しない**。 template の構造要素そのものが「君は終端の worker」 を示す **addressing の form marker** である (sender は自分を「上位」 として frame している = message は自分より下位 = 君に向けて書かれている)。 動詞 semantic 判別 (「投げて」 = spawn 明示 vs 「担当してほしい」 = execute 明示 vs あいまい 3-way) より、 form の syntactic 判別が頑健 = 前者は [`convention-design-principles.md §8.8 (= #proxy-blind-spot)`](../docs/convention-design-principles.md#proxy-blind-spot) の意味的 proxy 判別に該当、 後者は proxy でなく form 直接。
 
-**受け手の最初の 2 手** (掲示板の宛先で起動した worker): (1) 自分宛ての inbox を読み、 request がまだ無ければ仕様を読み進めず、 依頼元に尋ねるか立つのを待つ (claim の関門は request が在って初めて働くので、 request より先に起動した worker は二重起動を止められない)。 (2) claim が「別の claim が生きている」 で拒まれたら、 何も読まず・書かずに終了して人に 1 行伝える。 同じ宛先の worker が別に生きていると分かった時も (2) と同じ。
+**受け手の最初の 3 手** (掲示板の宛先で起動した worker。 (3) は掲示板を経ずに起きた worker にも): (1) 自分宛ての inbox を読み、 request がまだ無ければ仕様を読み進めず、 依頼元に尋ねるか立つのを待つ (claim の関門は request が在って初めて働くので、 request より先に起動した worker は二重起動を止められない)。 (2) claim が「別の claim が生きている」 で拒まれたら、 何も読まず・書かずに終了して人に 1 行伝える。 同じ宛先の worker が別に生きていると分かった時も (2) と同じ。 (3) 作り始める前に、 作るもの (file 名・hook 名・規則の anchor) が既に在るかを、 作業先の repo の file と `git log` で 1 回引く。 在れば作り直さず、 依頼の完了条件と照らして足りない分だけをやり、 二重起票だったことを依頼元に返す。 掲示板を経ない依頼 (提案の card など) と、 起票から時間が経って起きた worker は、 claim の関門も宛先の照合も働かないので、 この一手しか網が無い (実測: 同じ仕事を掲示板の依頼と掲示板を経ない card の 2 経路で出し、 card から起きた worker が起きた時には、 もう一方の worker が実装と配線を終えていた)。
 
 **根**: [`convention-design-principles.md §4.1 (= #motivated-substitution-trap)`](../docs/convention-design-principles.md#motivated-substitution-trap) の inverse-direction 発現 = 泥仕事を admin 役 (chip-authoring) に退避 = deliverer-retention の反方向 substitution。 2026-07-07 Evidence 参照。
 
