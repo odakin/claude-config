@@ -902,6 +902,9 @@ request の単位。 mail の thread・台帳の項目のような「用事」 �
    session が終わる・手放す、 のどれかで切れ、 用事は元どおり出る (= 黙って落ちない)。 生死は runtime の session の登録で
    引く (claim した時に登録に居た session が今は居ない = 終わった)。 登録に現れない session は lease だけで切れる (無人の実行も
    実行中は登録を書く runtime がある = 実測)。 session の終わりの hook で手放せば、 用事は lease を待たずに戻る。
+   伝達の claim は別の寿命を持つ: user に伝えた事実は、 伝えた session が終わっても変わらない。 lease はその user の日の
+   終わりまでにし、 生死で切らず、 session の終わりの hook でも手放さない。 処理の claim と同じ短い lease で切ると、 伝え済みの
+   用事を後の session の検査がもう一度伝えさせ、 user には伝え漏れに見える (実測)。
 4. **台帳の項目の二重起票は claim と別の網で止める**: claim は「今どちらが手をつけているか」 しか言わない。 新しい項目を
    作る前に、 同じ thread を指す open な項目を作業 tree の全部 (未 commit・untracked = 並列 session が書いたばかりの file を
    含む) と upstream から引き、 あれば作らせない。 同じ thread の別の用事だと承知して分けるなら、 新しい項目から既存を
