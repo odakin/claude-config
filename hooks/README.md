@@ -46,8 +46,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[known-error-nudge.py](known-error-nudge.py)** — PostToolUse / PostToolUseFailure(Bash): 出力・エラー文に既知の壊れ方のエラー文が出たら、 その壊れ方を書いた規約の節を Claude に知らせる (台帳 = hooks/known-errors.json)
 - **[known-error-nudge.test.sh](known-error-nudge.test.sh)** — known-error-nudge.py の検査 (鳴る / 黙る / 1 session 1 回 / 台帳の点検)
 - **[known-errors.json](known-errors.json)** — 既知の壊れ方のエラー文 → その壊れ方を書いた規約の節。
-- **[live-engine-edit-guard.py](live-engine-edit-guard.py)** — PreToolUse(Edit): hook や git の hook が作業 tree から直接読む file を、 その session で初めて Edit するとき 1 回だけ止め、 写しで直すか 1 回で済ませるかを決めさせる
-- **[live-engine-edit-guard.test.sh](live-engine-edit-guard.test.sh)** — live-engine-edit-guard.py の検査 (初回は止める / 2 回目は通す / 読まれない file は通す / MultiEdit・Write は通す / nudge mode)
+- **[live-engine-edit-guard.py](live-engine-edit-guard.py)** — PreToolUse(Edit): hook や git の hook が作業 tree から直接読む file を、 その session で初めて Edit するとき止め、 写しで直すか 1 回で済ませるかを決めさせる
+- **[live-engine-edit-guard.test.sh](live-engine-edit-guard.test.sh)** — live-engine-edit-guard.py の検査 (初回は止める / 再送は通す / 再送の前の別の Edit は止める / file が変われば改めて止める / 読まれない file は通す / MultiEdit・Write は通す / nudge mode)
 - **[long-bash-command-guard.sh](long-bash-command-guard.sh)** — 長すぎる Bash command を block — PreToolUse(Bash): 閾値超は分割 / file 経由に誘導
 - **[long-bash-command-guard.test.sh](long-bash-command-guard.test.sh)** — long-bash-command-guard.sh の self-test (配信対象外)
 - **[manuscript-claim-guard.py](manuscript-claim-guard.py)** — PreToolUse(Edit|Write|MultiEdit|Bash): 原稿の保護領域 (表題・概要・序論・結論・数式) と agent の権限規約を、著者の項目ごとの承認なしに書き換える編集・commit を deny (engine = scripts/manuscript-claim-guard.py、 正本 = conventions/manuscript-claim-ownership.md)
