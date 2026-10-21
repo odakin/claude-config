@@ -215,6 +215,8 @@ setopt interactive_comments
 
 機械 backstop: Stop hook [`hooks/pasted-command-comment-guard.sh`](../hooks/pasted-command-comment-guard.sh) が「貼り付け指示語 ∧ fence 内の実行系コマンド行に `#`」 で block する (= `setup.sh` が Stop に登録、 selftest 12 件)。 日本語 cue は 2026-07-22..09-09 の 49 日 transcript で校正済 (真陽性 3 / FP 0)、 **英語 cue は推定なので FP 監視対象**。 ⚠️ Claude Code desktop は hook の model 向け出力を honor しないと観測されていた ([hook-authoring.md](hook-authoring.md#frontend-dependent-cowork)。 2026-09-11: 少なくとも一部は root 限定の `disableAllHooks` が原因 = [#disableallhooks-kill-switch](hook-authoring.md#disableallhooks-kill-switch)) ので、 desktop で効く保証は無い — desktop 側の floor は本規約と script 経路の既定化。
 
+<a id="file-content-not-in-shell-fence"></a>**実行させない code (file の中身・差分・review に見せる script) は shell の言語名の fence (`bash` / `sh` / `zsh`) に入れない**: desktop app は shell の fence に Run ボタンを付け、 上の Stop hook も fence の中を貼り付けるコマンドとして読む (実測: hook の案の全文を `bash` の fence で見せ、 冒頭の `#` comment で止められた)。 新しい file の全文は `diff` の fence に `+` 行で、 または言語名なし・`text` の fence で見せ、 file への link を添える。 貼って実行させる command だけを shell の fence に入れる。
+
 ## <a id="no-tilde-in-pasted-commands"></a>ユーザーに渡すコマンドに `~` を書かない (zsh は `env` 前置で展開しない)
 
 上の兄弟ルールと同じ「zsh 固有 × 貼り付け用コマンド」 の罠。 zsh は **assignment prefix** (`VAR=~/x cmd`) なら tilde を展開するが、 **`env VAR=~/x cmd` では展開しない** (= コマンド引数中の `=` 以降を tilde 展開する `magicequalsubst` が既定 OFF)。 bash は同等挙動が既定 ON で両方展開するため、 bash で書いて zsh で壊れる非対称になる。

@@ -151,6 +151,12 @@ commit gate (pre-commit) が staged file を舐めて検査する形は定石だ
 
 **一般則**: 集計する側が名前しか出さないなら、 **失敗の中身を名指すのは test 自身の責務** (= `run-all-checks.sh` header の「SKIP 理由は test 自身が出力する」 と同じ契約の失敗版)。 無言の失敗は「どこかが赤い」 以上の情報を運ばないので、 直す人が原因を掘り直すことになる。
 
+### <a id="replay-real-tool-output"></a>§0 補足 5b: 新しい hook の test — 件数が 0 でも通る集計にしない、 合成の入力に加えて実際の tool の出力も流す
+
+- **集計の関数を pipeline の右に置くと、 数えた値が消えて 0 件のまま通る** — `make_input … | check …` と書くと、 `check` は subshell で走り、 中で足した `pass` / `fail` は親に戻らない。 最後の `[ "$fail" = 0 ]` は 0 件でも真になり、 test は何も確かめずに exit 0 で終わる (実測: `pass=0 fail=0` と出て成功で終わった)。 入力は引数で渡すか (`check <label> <期待> "$(make_input …)"`)、 `check … < <(make_input …)` にする。 末尾で走った件数も確かめる (例 = `[ "$pass" -gt 0 ]`)。 関連 = 書き手の SIGPIPE で exit code が化ける形 ([§0 補足 10](#hook-stdin-pipe-sigpipe))
+- **PostToolUse の hook は、 会話記録にある実際の tool の結果を入力に組んで流す** — 合成の入力は書いた人の想定どおりの形になり、 想定の外の行 (本文の中の header と同じ形の行、 content block の配列、 前置きの文) を持たない。 実測: 合成の入力の test は全部通ったのに、 実際の出力では本文の行に引っかかって黙る hook だった。 道具 = [`scripts/transcript-tool-calls.py`](../scripts/transcript-tool-calls.py) `<session id> --tool '<tool 名の正規表現>'` (PostToolUse の入力と同じ形の JSON を出す、 `--list` でどれを流すか選ぶ)。 出力は会話記録の中身なので一時 dir に置き、 test の fixture には写さない (fixture は合成で、 実際の出力で見つかった形を合成で書き直して足す)
+- **hook の file の冒頭 comment の 1 行目 (`# <name> — <説明>`) の説明が `hooks/README.md` の説明欄になる** — 何をするか (どの tool の何を見て、 何を出すか) を書く。 「PostToolUse hook (layer 1)」 のような種類だけの説明は、 索引から用途が読めない (実測)
+
 ### <a id="test-root-not-parent-dir"></a>§0 補足 6: test は自分の repo を「checkout の親 dir」 経由で指さない — worktree で落ち、 live を検査する
 
 **罠**: hook / script が `$ROOT/<repo>/...` を組み立てる設計 (ROOT = 正規 layout の base、 既定 `~/Claude`) で、 test が ROOT に「test を含む checkout の親」 (`$(dirname "$0")/../..`) を渡す。 checkout の dir 名が repo 名と違う所 (= `git worktree add <tmp>` の置き場所) では payload が見つからず、 fail-open の hook が黙って exit 0 → 出力が空で test が落ちる。 **dir 名が一致しても**、 その親に別の checkout (= live tree) が居れば test は live の script を検査し、 変更中の copy を検査しない。 ROOT を渡さず `$HOME/<base>` に fallback させる test も同じく live を読む。
