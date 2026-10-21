@@ -216,6 +216,7 @@
 - **[latex-split-deps.py](latex-split-deps.py)** — 原稿の一部 (節・\input の file) を別の文書へ移す前に、 移すと切れる参照・引用と、 移した文の中で旧い入れ物を指す語を列挙する (読むだけ)。
 - **[latexdiff-changed-pages.py](latexdiff-changed-pages.py)** — latexdiff の PDF から、 差分の色 (追加・削除) が出ている頁だけを残す: 変わった頁を印でなく差分そのもので選ぶ。
 - **[latexdiff-fine-fixups.py](latexdiff-fine-fixups.py)** — Repair latexdiff output made with --math-markup=fine, and splice in whole-equation markup where fine is unreadable.
+- **[latexdiff-inline-math.py](latexdiff-inline-math.py)** — Let latexdiff mark only the changed tokens inside in-line math ($...$), as --math-markup=fine does for displays.
 - **[latexdiff-review-snapshot.sh](latexdiff-review-snapshot.sh)** — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex 最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
 - **[latexdiff-safecmd.py](latexdiff-safecmd.py)** — Derive latexdiff's --append-safecmd list from the manuscript preamble.
 - **[latexdiff-strip-dup-labels.py](latexdiff-strip-dup-labels.py)** — Drop \label{...} from the DELETED side of a latexdiff output, so each label survives only on the new text.

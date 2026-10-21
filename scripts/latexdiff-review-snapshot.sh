@@ -74,6 +74,7 @@ SAFECMD_GEN="$SCRIPTDIR/latexdiff-safecmd.py"
 MARKUP_CHECK="$SCRIPTDIR/check-latexdiff-math-markup.py"
 DUP_LABELS="$SCRIPTDIR/latexdiff-strip-dup-labels.py"   # deleted copy keeps no \label (whole markup / MOVE), 2026-09-13
 FINE_FIX="$SCRIPTDIR/latexdiff-fine-fixups.py"   # repairs of --math-markup=fine output (accent / \frac / deleted-side commands)
+INLINE_FINE="$SCRIPTDIR/latexdiff-inline-math.py"   # fine: in-line $..$ and \frac diffed token by token (wrap -> latexdiff -> unwrap)
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -122,7 +123,7 @@ run_selftest() {
     echo "naming format OK"
     rm -rf "$d"
     local s
-    for s in "$EXPANDER" "$SAFECMD_GEN" "$MARKUP_CHECK" "$DUP_LABELS" "$FINE_FIX"; do
+    for s in "$EXPANDER" "$SAFECMD_GEN" "$MARKUP_CHECK" "$DUP_LABELS" "$FINE_FIX" "$INLINE_FINE"; do
         if [[ -f "$s" ]]; then
             python3 "$s" --selftest >/dev/null || die "$(basename "$s") selftest failed"
             echo "$(basename "$s") selftest OK"
@@ -241,8 +242,16 @@ if [[ "$MATH_GUARD" -eq 1 ]]; then
 fi
 
 # ---- latexdiff + compile ----
+# fine: latexdiff takes in-line $..$ (and \frac{..}{..}) as one token -> wrap them so only the changed symbols
+# are marked, as in displays; unwrapped after the guard (conventions/latex.md#latexdiff-fine-markup)
+INLINE_ARG=""
+if [[ ( "$MATHMARKUP" == "3" || "$MATHMARKUP" == "fine" ) && -f "$INLINE_FINE" ]]; then
+    python3 "$INLINE_FINE" wrap "$D/base.tex" "$D/base.tex" >/dev/null || die "latexdiff-inline-math.py wrap 失敗 (base)"
+    python3 "$INLINE_FINE" wrap "$D/new.tex" "$D/new.tex" >/dev/null || die "latexdiff-inline-math.py wrap 失敗 (new)"
+    INLINE_ARG="--add-to-config=MATHENV=difinlinemath"
+fi
 # shellcheck disable=SC2086
-latexdiff --math-markup="$MATHMARKUP" --config VERBATIMENV=comment $SAFE_ARG $EXTRA_ARGS \
+latexdiff --math-markup="$MATHMARKUP" --config VERBATIMENV=comment $INLINE_ARG $SAFE_ARG $EXTRA_ARGS \
     "$D/base.tex" "$D/new.tex" > "$D/diff.tex" 2>"$D/latexdiff.err" || die "latexdiff 失敗: $(tail -3 "$D/latexdiff.err")"
 # changed (whole markup) or moved blocks appear twice with the same \label -> amsmath "Multiple \label's" is fatal below;
 # keep each label on the new copy only (conventions/latex.md#latexdiff-move-artifacts)
@@ -267,6 +276,9 @@ if [[ "$MATH_GUARD" -eq 1 && -f "$MARKUP_CHECK" ]]; then
     else
         echo "math guard: 無印の数式変更 0 件"
     fi
+fi
+if [[ -n "$INLINE_ARG" ]]; then
+    python3 "$INLINE_FINE" unwrap "$D/diff.tex" >/dev/null || die "latexdiff-inline-math.py unwrap 失敗 (上の形)"
 fi
 
 ( cd "$D" && "$ENGINE" -interaction=nonstopmode diff.tex >/dev/null 2>&1

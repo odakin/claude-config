@@ -57,8 +57,10 @@ SYNTHETIC_TEX = "\n".join([
     "",
 ])
 COLOUR_MACROS = ("red", "blue", "green", "magenta", "cyan", "orange", "yellow")
+# difinlinemath = in-line math wrapped by latexdiff-inline-math.py so that fine markup reaches it;
+# scan before its `unwrap` and the in-line formulas are checked too
 MATH_ENVS = ("align", "align*", "equation", "equation*", "gather", "gather*",
-             "multline", "multline*", "eqnarray", "eqnarray*", "flalign", "flalign*")
+             "multline", "multline*", "eqnarray", "eqnarray*", "flalign", "flalign*", "difinlinemath")
 ARGDEF_RE = re.compile(
     r"^\s*\\(?:re|provide)?newcommand\*?\s*\{?\\([A-Za-z]+)\}?\s*\[(\d+)\](\[[^\]]*\])?", re.M)
 
