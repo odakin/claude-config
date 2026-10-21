@@ -221,6 +221,7 @@
 - **[latexdiff-safecmd.py](latexdiff-safecmd.py)** — Derive latexdiff's --append-safecmd list from the manuscript preamble.
 - **[latexdiff-strip-dup-labels.py](latexdiff-strip-dup-labels.py)** — Drop \label{...} from the DELETED side of a latexdiff output, so each label survives only on the new text.
 - **[ledger-commit-cadence-gate.py](ledger-commit-cadence-gate.py)** — [forwarder → ai-collaboration/scripts/ledger-commit-cadence-gate.py] YAML ledger の commit cadence gate (pre-commit): 1 commit で追加される list entry (`- id:`) が N 個を超えたら refuse、escape env は hygiene log に記録 + worker scope gate (= env CAMPAIGN_WORKER_DIR が
+- **[letter-word-count.py](letter-word-count.py)** — LaTeX で組んだ返答書・手紙の語数を、 自分の文と引用 (referee の文など) に分けて数える。 git の前の版との比較つき。
 - **[library-holdings-ledger.py](library-holdings-ledger.py)** — 図書館に本があるかを OPAC で確かめた結果を、 証拠つきの台帳 (YAML) を正本として持ち、 引き直し・点検する。--selftest 内蔵。
 - **[list-live-sessions.py](list-live-sessions.py)** — 同 cwd で生きてる兄弟 Claude session を surface する read-only reader。
 - **[live-engine-paths.py](live-engine-paths.py)** — hook と git の hook が作業 tree から直接読む file (= 書きかけを別の session が走らせる file) の一覧を作る。--selftest 内蔵。
@@ -336,6 +337,7 @@
 - **[test_reviewed_mail.py](test_reviewed_mail.py)** — Network-free adversarial checks of the reviewed-reply transaction.
 - **[test_reviewed_mail_cli.py](test_reviewed_mail_cli.py)** — Offline checks: CLI authorization shape, pagination, full source extraction.
 - **[tex-first-use.py](tex-first-use.py)** — Is a notation explained where the reader first meets it? Lists the first body uses of a regex with line and section, checks the first one against the line of the defining \label (a reference to that label near the use counts as a pointer), and lists \cref-type references to equations that are printed further down.
+- **[tex-label-shift.py](tex-label-shift.py)** — LaTeX 原稿の 2 つの版 (git の commit) を別 dir で組み、 式・節・図表・文献の番号がどう動いたかを .aux から出す。
 - **[tex-rename-symbols.py](tex-rename-symbols.py)** — LaTeX 原稿の 1 文字記号 (y → x、 r → \zeta_x の類) を安全に一括改名する (scan / apply)。
 - **[tex-sentence-lengths.py](tex-sentence-lengths.py)** — LaTeX 原稿の英文の文の長さを数える (概数) — 文の数・中央値・N 語超の件数と、 長い順の一覧 (tex の行番号つき)。
 - **[tex2plain.py](tex2plain.py)** — .tex から LaTeX タグを除いたテキストを生成する (数式は Unicode で線形化、図キャプションは末尾へ)。
