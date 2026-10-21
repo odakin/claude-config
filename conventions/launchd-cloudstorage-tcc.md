@@ -58,6 +58,8 @@ launchd 経由の実行で `ls_err='ls: <path>: Operation not permitted'` が出
 
 **A' が優れる点**: 「WallpaperRotator.app に FDA」 なら **意味的に「これは wallpaper rotator である」と自己記述**され、 FDA panel を後日見直した時に「なぜ FDA 持ってる?」 が即座に分かる。 permission holder が narrow + 意図明示。
 
+<a id="a-prime-runs-editable-script"></a>⚠️ **A' の狭さは、 applet が走らせる中身を書き換えられないときに成り立つ**。 applet が `do shell script` で手元の script を呼ぶ作り (下の template の形) だと、 その script を書き換えられる者 (同じ user の agent も含む) は、 applet の FDA で好きな中身を走らせられる = 許可は script の書き手全員に広がる (推論。 FDA が app に付き、 子に引き継がれるため)。 agent が編集できる場所に、 FDA を持つ applet が呼ぶ script を置かない。 置くなら、 applet に中身を埋め込むか、 呼ぶ前に中身の hash を applet が確かめる。 中身を埋め込むと、 直すたびに作り直し = 署名が変わって許可の付け直しになる。 agent の shell そのもの (agent を起動する helper app) に FDA を付けるのは A と同じ広さ ([`macos-notification-db.md#tcc-responsible-process`](macos-notification-db.md#tcc-responsible-process))。
+
 applet から背景に常駐の worker を起こしても、 worker は applet の付与のまま読める (実測)。 起こし方と作り = [`scheduled-tasks.md#resident-worker-from-periodic-job`](scheduled-tasks.md#resident-worker-from-periodic-job)。
 
 **B が最頑健な理由**: `~/Pictures/` `~/Documents/` 等の**通常フォルダは FDA 対象外** = TCC 判定を一切通らないので permission dance ゼロ。 mirror 元を Dropbox に置いたまま `rsync` で local に落とし、 script は local を読む構成。 CloudStorage 側の同期が壊れても local mirror は生き残る (= 独立性が高い)、 permission 変更に依存しない。 disk 二重消費 (13 GB クラスなら要検討) が唯一の trade-off。

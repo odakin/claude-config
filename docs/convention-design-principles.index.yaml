@@ -969,6 +969,10 @@ sections:
     legacy: "24.6"
     level: 3
     title: "24.6 由来"
+  - id: comparison-window-alignment
+    legacy: "25"
+    level: 2
+    title: "25. 2 つの source を突き合わせて「無い」 と言う検出器は、 両側が同じ範囲を見ているときだけ正しい"
   - id: changelog
     level: 2
     title: "変更履歴"

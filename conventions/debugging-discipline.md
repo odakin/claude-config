@@ -68,6 +68,19 @@ LorentzArena Bug 14 完全治療 (2026-05-06) の spiral で複数の fail-recov
 - **rationalize しない** (= 「これは scope 外」 「これは clean」 等で push back を defuse しない)
 - 「もう変わらない?」 と user に尋ねられても 1 round 余計に push して back-checked V1 V2 V3 で再 confirm してから返事
 
+## <a id="relay-detector-as-judgment"></a>2b. 検出器の判定は、 判定として伝える — 事実として言い切る前に一次の source を 1 回引く
+
+**ルール**: 見張り・一覧・surface の行 (「未登録」「未返信」「期限超過」「不在」) を user に伝えるときは、 検出器の判定であることが分かる形で伝える (「見張りでは未登録と出ています」)。 「〜は入っていません」 と事実として言い切るのは、 一次の source (カレンダーなら API で 1 回 list、 メールなら thread を 1 回読む) を引いて確かめた後だけ。
+
+### Why
+
+検出器は、 照合の相手の写しの範囲がずれる ([`../docs/convention-design-principles.md#comparison-window-alignment`](../docs/convention-design-principles.md#comparison-window-alignment))・取得が失敗して空になる ([`#silent-probe-false-healthy`](../docs/convention-design-principles.md#silent-probe-false-healthy)) と、 正常なものを異常として出す。 判定をそのまま事実の文に言い換えると、 検出器の誤りが agent の断定に格上げされ、 user は agent の誤りとして受け取る (実測: 見張りの「未登録」 を事実の文で伝え、 登録済みだったと指摘されて、 見張りの照合の範囲のずれが分かった)。 一次の source を引くのは 1 コマンドで済むことが多い。
+
+### How to apply
+
+- 伝える文の主語を検出器にする (「見張りでは」「一覧では」)。 次の一手の提案 (「入れましょうか」) も、 確かめていないうちは条件つき (「入っていなければ」)
+- 一次の source を 1 回引けるなら、 伝える前に引く。 食い違ったら、 user に伝えるのは一次の source の方で、 検出器の誤りは直す対象として扱う
+
 ---
 
 ## <a id="multi-commit-sweep"></a>3. Multi-commit refactor で 4 軸 sweep + docstring drift

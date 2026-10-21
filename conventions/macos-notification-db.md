@@ -42,6 +42,7 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
   `~/Library/Application Support/Claude/claude-code/<版>/claude.app` の helper から起動されていて、
   app 本体に付与済みでも読めず、 helper 側の付与で読めた。 ⚠️ path に版番号が入る (今の版は版の下に hash の段も入る =
   `claude-code/<版>/<hash>/claude.app`) = **版が上がると付与が切れる可能性がある** (設定画面に同名の項目が版の数だけ並ぶのがその痕跡)。 exit 3 が戻ったら親を辿り直す。
+- ⚠️ **agent の shell を起動する helper にフルディスクアクセスを付けると、 その shell の全コマンドに効く** = 読みたい DB 1 つのためでも、 メール・メッセージ・閲覧履歴・連絡先・他のアプリのデータまで、 agent が打つどのコマンドからも読めるようになる (外部の文面に仕込まれた指示や誤ったコマンドの被害も同じだけ広がる)。 付ける前に、 許可を足さずに目的を果たす経路 (結果を別の source と突き合わせる = [`macos-calendar-write.md#api-vs-eventkit-compare`](macos-calendar-write.md#api-vs-eventkit-compare)、 CLI 自身の許可で動かす = 下の [#tcc-disclaim-child](#tcc-disclaim-child)) と、 中身を固めた狭い app に付ける経路 ([`launchd-cloudstorage-tcc.md#a-prime-runs-editable-script`](launchd-cloudstorage-tcc.md#a-prime-runs-editable-script)) を先に考え、 付けるかは本人が決める。
 - 付与はシステム設定の操作 = **人が 1 回**。 実測では起動中の process にも再起動なしで効いた
   (効かなければ起動側 app を再起動してから確かめる)。 設定画面を直接開く =
   `open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"`。
