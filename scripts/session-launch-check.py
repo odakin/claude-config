@@ -30,7 +30,7 @@ mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
 BOARD_FIRST: `~/.claude/session-launch-board-first.on` が在るか env SESSION_LAUNCH_BOARD_FIRST=1 のとき、 initiation が
 user_asked の start_session は prompt に掲示板の request id が無いと止める (title か prompt に `[no-board]` で通す)。
 hand-off が掲示板の依頼を名指すのにこの機械に起動の記録が無い start_session (本人が押す card も) も止め、
-`board.py open --request <id>` で記録と引数を作らせる (相手側の AI が出した依頼・別の機械で出した依頼)。
+`board.py launch --request <id>` で記録と引数を作らせる (相手側の AI が出した依頼・別の機械で出した依頼)。
 既定は off (層1 の利用者が掲示板を使うとは限らない)。 起動の記録は whole-repo の掲示板なら `<root>/.local/outbox`、
 project の repo の中の掲示板なら `<git common dir>/board-outbox/<path>` (board.py の outbox_dir と同じ)。
 
@@ -373,7 +373,7 @@ def pre_start(inp: dict) -> tuple[int, str]:
             # for a co-author's review request went out as Fable max by hand).
             return 2, (f"🛑 session-launch-check: この hand-off は掲示板の依頼 {rid} を名指すが、 この機械に起動の記録が無い"
                        " (相手側の AI や別の機械が出した依頼)。 手で書いた引数は model・effort を何とも照合しない。\n"
-                       f"  python3 ~/Claude/ai-collaboration/board/board.py open --root {root} --request {rid} --agent claude --session <自分の id>"
+                       f"  python3 ~/Claude/ai-collaboration/board/board.py launch --root {root} --request {rid} --agent claude --session <自分の id>"
                        " [--expect-model … --effort … --reason '…'] で記録と start_session の引数を作り、 出た引数で起こす"
                        " (本人が押す card なら initiation だけ own_initiative に替える)。"
                        f" 掲示板を通さない理由があるなら {NO_BOARD} と理由。 規約 = {RULE}")
@@ -846,7 +846,7 @@ def selftest() -> int:
         # ---- a hand-off naming a request with no launch record here (BOARD_FIRST)
         os.environ["SESSION_LAUNCH_BOARD_FIRST"] = "1"
         rc, err = start(dict(card, title="共著者の英文の直しの検品"))
-        check("board-first: a card for a request with no launch record here → blocked, board.py open", rc == 2 and "board.py open" in err)
+        check("board-first: a card for a request with no launch record here → blocked, board.py launch", rc == 2 and "board.py launch" in err)
         rc, _ = start(dict(card, title="検品 [no-board] 相手側の依頼を手で", prompt=card["prompt"]))
         check("board-first: [no-board] still passes", rc == 0)
         os.environ.pop("SESSION_LAUNCH_BOARD_FIRST", None)
