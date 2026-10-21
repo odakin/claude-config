@@ -28,6 +28,10 @@ subcommand:
   continue --thread ID --prompt-file FILE [--effort E] [--host HOST] [--no-reveal]
       既存の thread に次の turn を送る (盲検の訂正版の 2 回目を同じ reviewer に返す = `codex exec resume` の代わり)。
       アプリがその thread を開いて書き手になっている間は daemon が開けない = アプリで続けるか、 アプリで閉じてから。
+  rpc METHOD [PARAMS_JSON]
+      daemon に JSON-RPC を 1 回送って結果を出す (起動がおかしいときに daemon の状態を読む。 例 = `rpc thread/loaded/list`
+      = いま daemon が読み込んでいる thread。 実測 = 誰も見ていない idle の thread は turn の終わりから 30〜45 秒で外れ、
+      `thread/unsubscribe` では外れなかった)。 型の一覧 = `codex app-server generate-json-schema --out <dir>`。
   check-self --model M [--effort E]
       worker の 0 段目: 自分の thread ($CODEX_THREAD_ID) の model と effort を状態 DB で読み、 違えば exit 1。
   compose-link --cwd DIR --prompt-file FILE
@@ -403,6 +407,33 @@ def continue_thread(a) -> int:
     return 0
 
 
+def rpc(a) -> int:
+    """One JSON-RPC call to the shared daemon, its result printed as JSON (read the daemon's state when a launch behaves
+    unexpectedly: `rpc thread/loaded/list`, `rpc thread/list '{"limit": 5}'`, `rpc thread/read '{"threadId": "…"}'`)."""
+    try:
+        params = json.loads(a.params or "{}")
+    except ValueError as e:
+        print(f"⛔ params が JSON でない: {e}", file=sys.stderr)
+        return 2
+    sock = daemon_socket(start=False)
+    if not sock:
+        print("⛔ 共有の Codex daemon が動いていない (codex app-server daemon start で起こせる)", file=sys.stderr)
+        return 4
+    w = WS(sock)
+    try:
+        w.call("initialize", {"clientInfo": CLIENT})
+        w.send({"method": "initialized"})
+        try:
+            res = w.call(a.method, params)
+        except RuntimeError as e:
+            print(f"⛔ {e}", file=sys.stderr)
+            return 1
+    finally:
+        w.close()
+    print(json.dumps(res, ensure_ascii=False, indent=1))
+    return 0
+
+
 def check_self(a) -> int:
     tid = os.environ.get("CODEX_THREAD_ID", "")
     rows = ct.thread_rows(ids=[tid]) if (ct is not None and tid) else []
@@ -529,6 +560,12 @@ def _selftest() -> int:
     meths = [m.get("method") for m in log]
     checks.append(("continue → thread/resume の後に turn/start (同じ reviewer に次の turn)", rc == 0
                    and meths[:4] == ["initialize", "initialized", "thread/resume", "turn/start"]))
+    log.clear()
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = rpc(argparse.Namespace(method="thread/loaded/list", params='{"limit": 3}'))
+    checks.append(("rpc → 1 回の呼び出しと結果の JSON", rc == 0 and [m.get("method") for m in log][2:3] == ["thread/loaded/list"]
+                   and json.loads(buf.getvalue()) == {}))
     bad, res = outside_sources(["/a/AGENTS.md"], "/a/b", home="/h")
     checks.append(("outside_sources: 祖先の AGENTS.md は外", bad == ["/a/AGENTS.md"] and res == []))
     u = compose_url("/x y", "a&b=c\nd")
@@ -579,6 +616,9 @@ def main(argv=None) -> int:
     n.add_argument("--effort", choices=EFFORTS)
     n.add_argument("--host")
     n.add_argument("--no-reveal", action="store_true")
+    r = sub.add_parser("rpc")
+    r.add_argument("method", help="app-server の method (例 thread/loaded/list)")
+    r.add_argument("params", nargs="?", help="params の JSON (既定 {})")
     c = sub.add_parser("check-self")
     c.add_argument("--model", required=True)
     c.add_argument("--effort", choices=EFFORTS)
@@ -590,6 +630,8 @@ def main(argv=None) -> int:
         return launch(a)
     if a.cmd == "continue":
         return continue_thread(a)
+    if a.cmd == "rpc":
+        return rpc(a)
     if a.cmd == "check-self":
         return check_self(a)
     print(compose_url(os.path.realpath(os.path.expanduser(a.cwd)), Path(a.prompt_file).read_text(encoding="utf-8")))

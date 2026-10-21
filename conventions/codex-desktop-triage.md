@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: ChatGPT app (Codex desktop) の task が 401 / auth error で止まったとき + 「Incorrect API key provided: sk-svcacct…」 が出たとき + Codex の hook が走らない・監査が untrusted と言うとき + app の更新で Codex の binary の path が変わったとき + 承認 CLI が「本人の発言が無い」 と言うとき + task の結果の要約が見当たらず最後の message が完了 gate への返事のとき + ChatGPT desktop の不具合を公式フィードバックへ送るとき
+when: ChatGPT app (Codex desktop) の task が 401 / auth error で止まったとき + 「Incorrect API key provided: sk-svcacct…」 が出たとき + Codex の hook が走らない・監査が untrusted と言うとき + app の更新で Codex の binary の path が変わったとき + 承認 CLI が「本人の発言が無い」 と言うとき + task の結果の要約が見当たらず最後の message が完了 gate への返事のとき + ChatGPT desktop の不具合を公式フィードバックへ送るとき + script や別の session から起こした Codex の仕事がアプリの一覧に出ないとき (#thread-not-in-app) + sandbox の中の git が `.git` に書けないとき (#sandbox-git-dir-readonly)
 category: harness-core
 summary: Codex desktop の auth error は client の鍵でなく backend 側のことが多い (= 手元に sk-svcacct は無い、 status page を見る、 再ログインしない) / 切り分けの読み方 (auth.json の auth_mode、 logs_2.sqlite の feedback_tags、 rollout の task_complete) / hook の信頼は hooks.json の定義 hash に束縛され TUI の /hooks で付け直す (agent は書かない) / app 同梱 binary の path は更新で動く = process から探す / 承認の引用元は生成文を除く / 結果が見当たらないときは rollout で gate の差し戻しの直前を読む / 公式フィードバックは操作ツールの制約とアプリの機能を分け、本人への貼付本文・添付範囲・送信識別子を引き継ぐ
 -->
@@ -47,6 +47,20 @@ Codex の rollout では、 Stop hook の差し戻し文 (`<hook_prompt …>`) �
 - **読み方**: rollout (`~/.codex/sessions/<年>/<月>/<日>/rollout-…jsonl`) を末尾から読む。 `<hook_prompt …>` で始まる user message の直前の agent message が本当の結果 (時刻を `task_complete` と並べる)。 成果物は commit・file に残っているので、 画面が壊れて見えても作り直さない。
 - **原因の一つ**: 完了 gate ([`codex/hooks/session_touch.py`](../codex/hooks/session_touch.py) の `nudge`) は、 remote を持つ repo で HEAD が remote の先頭と違うと終了を 1 回差し戻す (remote が 0 本なら黙る)。 push しない仕事では満たせないので、 worker は理由を述べてもう 1 turn 使って終わる。 その turn も利用枠を食う。 push 先が手元の作業ツリーの checkout 中の branch (git が push を拒む = 手元の repo から clone した写し) なら、 gate は head を比べない。
 - **予防**: push しない仕事を渡す写しで remote が手元の作業ツリー以外 (GitHub など) を指すなら、 渡す前に remote を外す (手順 = ai-collaboration [`physics-verification-cycle.md#cross-vendor-repo-copy`](../../ai-collaboration/conventions/physics-verification-cycle.md#cross-vendor-repo-copy) の 1)。
+
+## <a id="thread-not-in-app"></a>script や別の session から起こした Codex の仕事がアプリの一覧に出ない
+
+原因 (実測): `codex exec` の thread は状態の記録 (`~/.codex/state_5.sqlite` の `threads`) に `source = exec` で入り、 アプリの一覧は対話の種類だけを出す。
+アプリに出す起こし方 = 手元の共有 daemon (`codex app-server daemon`) に thread を作り、 アプリに `codex://threads/<id>?hostId=local` を開かせる
+([`../scripts/codex-app-launch.py`](../scripts/codex-app-launch.py) = daemon の振る舞いと限界の正本。 掲示板から起こす形 = ai-collaboration `board/CONTRACT.md#codex-worker-launch`)。
+開かせなかった thread は一覧に載らなかった。 daemon が動かしている間、 アプリはその thread を「別のアプリで開いています」 と出す。 daemon が手放した後はアプリで開ける。
+daemon が読み込んでいる thread = `codex-app-launch.py rpc thread/loaded/list`。
+
+## <a id="sandbox-git-dir-readonly"></a>sandbox の中の git が `.git` に書けない (`FETCH_HEAD` など)
+
+`workspace-write` の sandbox で、 書き込み可の dir (作業 dir・`writable_roots`) の中の repo なのに `git fetch` が `.git/FETCH_HEAD` で拒まれる。
+原因 (実測): Codex の sandbox は書き込み可の dir の中の `.git` を読み取り専用にする。 git の dir そのもの (`git rev-parse --path-format=absolute --git-common-dir`) を書き込み可の dir に名指すと書けた
+(`config.sandbox_workspace_write.writable_roots`、 起動の道具なら `--writable-root`)。 承認を出さない無人の thread (approval `never`) では、 起動の時点で名指す。
 
 ## <a id="official-feedback-handoff"></a>アプリ内の公式フィードバックと本人操作への引き継ぎ
 

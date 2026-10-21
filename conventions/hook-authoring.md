@@ -569,7 +569,7 @@ origin: hook を 1 本消した時に、 各マシンの `settings.json` に com
 `hooks/` に足す file 全部 (hook 本体・語や設定の一覧・test)、 配線の `hooks/settings-entries.json`、 **それらを足した後に再生成する `hooks/README.md`**、 個人層の installer。
 `scripts/` に置く engine は保護されないので先に置けるが、 **code の file に guard の engine の名前を書くと、 test の例の文字列であっても file 全体が配線の lock になる** (実測: selftest の例に guard の名前を使った新しい script が書けなかった) = 例に使わない。
 
-1. engine を `scripts/` に置き、 hook 本体・一覧・test は個人層や作業 repo の plan に**候補の写し**として置く。 test は候補の dir からも回る形にする (engine を env か層1 の checkout から探す) = 承認の前に全部を試せる。
+1. engine を `scripts/` に置き、 hook 本体・一覧・test は個人層や作業 repo の plan に**候補の写し**として置く。 test は候補の dir からも回る形にする (engine を env か層1 の checkout から探す) = 承認の前に全部を試せる。 Bash の command を見る engine には module level に `find_issues(command) -> list` を持たせる = §12 の校正の道具がそのまま呼べる (実測: 持たせずに作り、 校正に使い捨ての script を書いた)。
 2. 校正の数字 ([§12](#text-pattern-stop-hook)) と候補の場所を本人に見せ、 **1 つの返事で、 足す file・配線・installer の変更・再生成する索引を全部名指して**承認を頼む。 承認の発言は本人が次に発言するまで複数 file に効く。 ボタンで答えてもらうなら、 その文が長さで切られない長さにする ([`mid-turn-text-visibility.md#turn-closing-question-box`](mid-turn-text-visibility.md#turn-closing-question-box))。
 3. 承認の発言を最新の発言として引き、 1 file ずつ当てる (配線の json・installer は全文の候補を一時 dir に作ってから)。
 4. 新しい file を `git add` してから索引を作り直し、 **変わった `hooks/README.md` も候補として 1 件当てる**。 忘れると commit の gate で止まり、 同じ commit に入れた他の file も止まる (実測)。

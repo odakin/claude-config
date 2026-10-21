@@ -179,6 +179,13 @@ def judge(cmd: str, hook_cwd: str = "") -> tuple[bool, str]:
     return (bool(why), "、 ".join(why))
 
 
+def find_issues(command: str) -> list[str]:
+    """The predicate in the shape scripts/calibrate-bash-command-pattern.py calls (command → list, empty = pass). Without
+    the hook's cwd, a launch that names the sandbox only through the session's working directory is not seen here."""
+    block, why = judge(command, "")
+    return [why] if block else []
+
+
 def message(why: str) -> str:
     return (f"⛔ headless の codex exec で Codex の worker を起こそうとしている ({why})。 codex exec の thread は Codex アプリの"
             " どこにも出ない = 本人が見られない (実測)。 代わりに:\n"
