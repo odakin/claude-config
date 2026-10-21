@@ -78,7 +78,8 @@ NAME = r"[A-Za-z_]\w*"
 # 未 quote・単独の語としての参照 (前後に語の一部になる文字が無い)。 ${=V} と $V[..] と $V/.. は当たらない
 REF = re.compile(r"(?<![^\s;|&(])\$(?:\{(" + NAME + r")\}|(" + NAME + r"))(?![^\s;|&)])")
 QUOTED = re.compile(r"\"(?:\\.|[^\"\\])*\"|'[^']*'")
-HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n[ \t]*\2[ \t]*(?=\n|$)", re.S)
+# heredoc = (始まりの行: `<<'EOF'` とその行の残り = shell の code) + (本文と終わりの行 = 文字)。 消すのは後者だけ
+HEREDOC_BODY = re.compile(r"(<<-?\s*(['\"]?)(\w+)\2[^\n]*)(\n.*?\n[ \t]*\3[ \t]*(?=\n|$))", re.S)
 SEP = re.compile(r";|&&|\|\||\||\n")
 LEADING_KW = re.compile(r"^(?:(?:do|then|else|elif|if|while|until|\{|\(|!|time)\s+)+")
 BASH_INNER = re.compile(r"\b(?:ba)?sh\s+(?:-\w*c\b|<<)")
@@ -107,7 +108,6 @@ LOG_FIX = ("直し方: `/usr/bin/log show …` と full path で書く (script �
 PS_BRACE = re.compile(r"(?<!\\)\$\{(#?)PIPESTATUS(?:\[([^\]]*)\])?\}")
 PS_BARE = re.compile(r"(?<!\\)\$PIPESTATUS(?![\w\[])")
 PS_BARE_SUBSCRIPT = re.compile(r"(?<!\\)\$PIPESTATUS\[[^\]\s]*\]?")
-HEREDOC_BODY = re.compile(r"(<<-?\s*(['\"]?)(\w+)\2[^\n]*)(\n.*?\n[ \t]*\3[ \t]*(?=\n|$))", re.S)
 PS_FIX = ("直し方: zsh では `${pipestatus[N+1]}` (小文字、 添字は 1 始まり。 全部は `${pipestatus[@]}`)。 "
           "bash の意味で書くなら `bash -c '…'` の中に。 正本 = claude-config/conventions/shell-env.md#zsh-pipestatus-lowercase")
 
@@ -122,9 +122,15 @@ def _blank(m: re.Match) -> str:
     return re.sub(r"[^\n]", " ", m.group(0))
 
 
+def _blank_heredoc_bodies(cmd: str) -> str:
+    """heredoc の本文と終わりの行を同じ長さの空白にする。 始まりの行の残り (`cmd <<'EOF' 2>&1 | tail; echo ===`) は
+    shell の code として残す (始まりの行ごと消すと、 その行の後半の誤りを見逃した = 較正で実測)。"""
+    return HEREDOC_BODY.sub(lambda m: m.group(1) + re.sub(r"[^\n]", " ", m.group(4)), cmd)
+
+
 def _masked(cmd: str) -> str:
     """heredoc の本文と quote の中身を同じ長さの空白にする (位置を保ったまま参照の対象から外す)。"""
-    return QUOTED.sub(_blank, HEREDOC.sub(_blank, cmd))
+    return QUOTED.sub(_blank, _blank_heredoc_bodies(cmd))
 
 
 def multiword_reason(cmd: str, v: str) -> tuple[str, str] | None:
@@ -248,10 +254,8 @@ def log_reason_text(subs: list[str]) -> str:
 
 def _mask_single_and_heredoc(cmd: str) -> str:
     """heredoc の本文と single quote の中身だけを同じ長さの空白にする (double quote の中は展開されるので残す)。
-    heredoc は本文と終わりの行だけを消し、 始まりの行の残り (`<<'EOF' 2>&1 | tail; echo ${PIPESTATUS[0]}` の後半) は
-    shell の code として残す (HEREDOC で消すと、 commit の終了値を見る形を見逃した = 較正で実測)。"""
-    s = HEREDOC_BODY.sub(lambda m: m.group(1) + re.sub(r"[^\n]", " ", m.group(4)), cmd)
-    return QUOTED.sub(lambda m: _blank(m) if m.group(0).startswith("'") else m.group(0), s)
+    heredoc の始まりの行の残り (`<<'EOF' 2>&1 | tail; echo ${PIPESTATUS[0]}` の後半) は code として残す (_blank_heredoc_bodies)。"""
+    return QUOTED.sub(lambda m: _blank(m) if m.group(0).startswith("'") else m.group(0), _blank_heredoc_bodies(cmd))
 
 
 def pipestatus_rewrite(cmd: str) -> tuple[str | None, list[str]]:
@@ -385,6 +389,7 @@ def selftest() -> int:
     check('for x in $(printf "a b"); do :; done', None, "$(…) を直接書く (分割される)")
     check("awk '{print $1}' f; set -- $1", None, "特殊 param")
     check("v=\"a b\"; python3 - <<'EOF'\nfor x in $v: pass\nEOF", None, "heredoc の本文")
+    check("F=\"a b\"; cat <<'EOF' | git add -- $F\nx\nEOF", "--", "heredoc の始まりの行の残りは code として見る")
     check("gh run list -q '.[]' | while read -r id; do gh run watch \"$id\"; done", None, "while read")
     check('msg="a b"; echo $msg', None, "文脈外 (echo)")
     check("c=$(git rev-parse HEAD); git log -1 $c", None, "$(…) の 1 行値を git に渡す (分割目的でない)")
@@ -425,6 +430,7 @@ def selftest() -> int:
     eq("echo =; echo -----", False, "= 1 文字と - の区切り")
     eq("diff <(ls) =(ls)", False, "=(…) の process 置換")
     eq("python3 - <<'EOF'\nprint('==')\n==\nEOF", False, "heredoc の本文")
+    eq("git commit -F - <<'EOF' 2>&1 | tail -3; echo ===\nmsg\n===\nEOF", True, "heredoc の始まりの行の残りの ===")
     eq("A= cmd; B=x cmd", False, "代入")
 
     def rw(cmd: str, want: str | None, label: str) -> None:
@@ -460,6 +466,7 @@ def selftest() -> int:
     lg("echo 'log show'; printf \"%s\" \"log show\"", False, "quote の中")
     lg("git log --oneline; git log show", False, "git log")
     lg("python3 - <<'EOF'\nlog show\nEOF", False, "heredoc の本文")
+    lg("cat <<'EOF' > /dev/null; log show --last 1m\nlog stream\nEOF", True, "heredoc の始まりの行の残りの log show")
     lg("catalog show x; changelog stream", False, "語の一部")
     lg("log; log -h", False, "subcommand の無い log")
     lg("bash -c 'log show --last 1m'", False, "bash -c の中は bash の意味論")
