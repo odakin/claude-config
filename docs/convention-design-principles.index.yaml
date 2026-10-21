@@ -937,6 +937,10 @@ sections:
     legacy: "8.84"
     level: 3
     title: "8.84 入力を 2 つの比較に分ける検出器は、 両方の読み方で全部の文字がどちらかに残るようにする — 開きと閉じが同じ記号の構造は、 片方から外さない"
+  - id: exhaustive-lister-scoring
+    legacy: "8.85"
+    level: 3
+    title: "8.85 網羅的に挙げる検出器は、 当たりの率でなく、 問題の無い側での発火と上位の当たりで測る"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
