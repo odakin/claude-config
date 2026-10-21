@@ -113,6 +113,7 @@ def walk_text(payload: dict) -> str:
         if data and (mime.startswith("text/plain") or mime.startswith("text/html")):
             try:
                 txt = base64.urlsafe_b64decode(data + "=" * (-len(data) % 4)).decode("utf-8", "ignore")
+                txt = txt.replace("\r\n", "\n").replace("\r", "\n")  # text/plain は CRLF で届く = 行末の \r が値と正規表現の $ を壊す (claude-config conventions/mcp.md#gmail-body-crlf)
             except Exception:
                 txt = ""
             (plain if mime.startswith("text/plain") else html).append(txt)

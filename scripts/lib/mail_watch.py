@@ -101,6 +101,7 @@ def message_body_text(service, mid: str) -> str:
         if data:
             try:
                 txt = base64.urlsafe_b64decode(data + "=" * (-len(data) % 4)).decode("utf-8", "replace")
+                txt = txt.replace("\r\n", "\n").replace("\r", "\n")  # text/plain は CRLF で届く = 行末の \r が値と正規表現の $ を壊す (claude-config conventions/mcp.md#gmail-body-crlf)
             except Exception:
                 txt = ""
             if p.get("mimeType") == "text/plain":
