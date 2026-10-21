@@ -51,10 +51,13 @@ Codex の rollout では、 Stop hook の差し戻し文 (`<hook_prompt …>`) �
 ## <a id="thread-not-in-app"></a>script や別の session から起こした Codex の仕事がアプリの一覧に出ない
 
 原因 (実測): `codex exec` の thread は状態の記録 (`~/.codex/state_5.sqlite` の `threads`) に `source = exec` で入り、 アプリの一覧は対話の種類だけを出す。
-アプリに出す起こし方 = 手元の共有 daemon (`codex app-server daemon`) に thread を作り、 アプリに `codex://threads/<id>?hostId=local` を開かせる
-([`../scripts/codex-app-launch.py`](../scripts/codex-app-launch.py) = daemon の振る舞いと限界の正本。 掲示板から起こす形 = ai-collaboration `board/CONTRACT.md#codex-worker-launch`)。
-開かせなかった thread は一覧に載らなかった。 daemon が動かしている間、 アプリはその thread を「別のアプリで開いています」 と出す。 daemon が手放した後はアプリで開ける。
-daemon が読み込んでいる thread = `codex-app-launch.py rpc thread/loaded/list`。
+手元の共有 daemon (`codex app-server daemon`) が走らせる thread は、 アプリに開かせると一覧に載るが、 走っている間アプリは「別のアプリで開いています」 と出して進行を出さず、 話しかけられない (書き手の lock が daemon にある。 アプリの log = `thread/resume` が `already has an active writer`)。
+アプリ 26.1002 では、 そうして読み込みに失敗した thread は左の「最近の項目」 にも載らなかった。
+アプリで進行が見え、 話しかけられる起こし方 = **アプリを書き手にする**: 使い捨ての `codex app-server` で thread を作って履歴に起動の記録を 1 項目入れ (turn の無い thread は rollout が無くアプリで開けない)、 起動文を `codex queue` で予約し、 アプリに `codex://threads/<id>?hostId=local` を開かせる = アプリが予約を turn として走らせる
+([`../scripts/codex-app-launch.py`](../scripts/codex-app-launch.py) = 振る舞いと限界の正本。 掲示板から起こす形 = ai-collaboration `board/CONTRACT.md#codex-worker-launch`)。
+アプリの turn の network はこの機械の Codex の既定 (`~/.codex/config.toml`、 既定 off) に戻る。 Codex の `prefix_rule` の `allow` は単独の command にだけ当たり、 当たると承認 `never` の turn でも sandbox の外で走る (`;` で繋いだ command は当たらず sandbox の中)。
+daemon が読み込んでいる thread = `codex-app-launch.py rpc thread/loaded/list` (誰も見ていない idle の thread は turn の終わりから 40〜60 秒で外れる)。
+アプリ本体には、 自分を共有 daemon に繋ぐ経路 (環境変数 `CODEX_APP_SERVER_USE_LOCAL_DAEMON=1`) もあるが、 アプリが自分の app-server に常に `-c` の項目を渡すので、 この版では使われない (アプリ本体の code で確認)。
 
 ## <a id="sandbox-git-dir-readonly"></a>sandbox の中の git が `.git` に書けない (`FETCH_HEAD` など)
 

@@ -122,7 +122,7 @@
 - **[clip-copy.sh](clip-copy.sh)** — 貼り付け用の文面をクリップボードに入れ、読み戻して一致を確かめる (macOS。 日本語などの非 ASCII も通す)
 - **[clipboard-cleaner.py](clipboard-cleaner.py)** — クリップボード一発整形 CLI（PDF コピーの段落内改行除去 + pbcopy 書き戻しで RTF 書式除去、明示発火のみ・常駐なし、--selftest 内蔵、hammerspoon ⌃⌥⌘V から呼ばれる、conventions/clipboard-cleaner.md）
 - **[close-pdf-form-boxes.py](close-pdf-form-boxes.py)** — Excel→PDF 出力で落ちたフォームの枠罫線を検出して閉じる。
-- **[codex-app-launch.py](codex-app-launch.py)** — Codex の仕事を Codex アプリの一覧に出る形で起こす (手元の共有 app-server daemon に thread を作り、 アプリに開かせる)。
+- **[codex-app-launch.py](codex-app-launch.py)** — Codex の仕事を Codex アプリで進行が見え、 その窓から話しかけられる形で起こす (アプリを書き手にする)。
 - **[codex-headless-launch-check.py](codex-headless-launch-check.py)** — 掲示板の依頼の worker や盲検の判定 session を headless の `codex exec` で起こす Bash を止め、 Codex アプリに出る起こし方を出す (理由を書けば通す。 hook の engine)。
 - **[codex-wrap-inventory.py](codex-wrap-inventory.py)** — Codexの指定sessionの会話・道具・委譲先をread-onlyで集める。--selftest。
 - **[codex_mail_install.py](codex_mail_install.py)** — Install/audit only the owner-selected Codex mail skill and narrow prompt rule.

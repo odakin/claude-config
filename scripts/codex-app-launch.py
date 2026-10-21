@@ -1,36 +1,47 @@
 #!/usr/bin/env python3
-"""codex-app-launch.py — Codex の仕事を Codex アプリの一覧に出る形で起こす (手元の共有 app-server daemon に thread を作り、 アプリに開かせる)。
+"""codex-app-launch.py — Codex の仕事を Codex アプリで進行が見え、 その窓から話しかけられる形で起こす (アプリを書き手にする)。
 
-Why (実測、 CLI 0.159.2 / アプリ 26.928): `codex exec` で起こした仕事は Codex アプリのどこにも出ない。 exec の thread は
-状態 DB に source=exec で記録され、 アプリの一覧 (thread/list の既定 = 対話の種類だけ) から外れる。 アプリは自分の
-app-server (stdio) と cloud 側の host を使い、 外の process は前者に繋げない。 一方 CLI は手元に共有の app-server daemon
-(`codex app-server daemon`、 unix socket の上の websocket で JSON-RPC) を持ち、 そこに作った thread は source=vscode
-(対話の種類) で同じ状態 DB に入る。 アプリに `codex://threads/<id>?hostId=local` を開かせると、 その thread を表示し、
-左の「最近の項目」 に載る。 開かせないと一覧に載らなかった (1 分半後の観察)。
-
-限界 (実測): daemon が thread を動かしている間、 アプリはその thread を「別のアプリで開いています」 と出し、 進行を
-表示せず、 そこから話しかけられない (writer lock が daemon にある)。 turn が終わって誰も見ていなければ daemon は
-30〜45 秒で thread を手放し、 その後はアプリで開いて続けられる。 走っている間の進行を見るのは TUI (`codex resume <id>`
-/ `codex agents`、 どちらも同じ daemon に繋ぐ) の役。 model と effort は thread/start と turn/start で固定し、
-応答と状態 DB で読み戻す。
+Why (実測): `codex exec` で起こした仕事は Codex アプリのどこにも出ない (状態 DB に source=exec で入り、 アプリの一覧は
+対話の種類だけを出す)。 手元の共有 app-server daemon (`codex app-server daemon`、 unix socket の上の websocket で JSON-RPC)
+に thread を作って turn を走らせ、 アプリに `codex://threads/<id>?hostId=local` を開かせると一覧には載るが、 走って
+いる間アプリは「別のアプリで開いています」 と出して進行を出さず、 話しかけられない (書き手の lock が daemon にある。
+アプリ 26.1002 では読み込みに失敗した thread は左の「最近の項目」 にも載らなかった)。 アプリが自分で共有 daemon に繋ぐ
+経路 (環境変数 CODEX_APP_SERVER_USE_LOCAL_DAEMON=1) はアプリ本体にあるが、 アプリが常に設定の上書きを渡すので
+この版では使われない (アプリ本体の code で確認)。
+既定の形 (CLI 0.162 / アプリ 26.1002 で実測): (1) 使い捨ての app-server (`codex app-server`、 stdio の JSON 行) で
+thread を作り (model・effort・cwd・sandbox・書き込み可 dir・承認を固定)、 名前を付け、 `thread/inject_items` で履歴に
+起動の記録を 1 項目入れる (rollout file ができる。 model は呼ばない。 turn の無い thread は rollout が無くアプリで
+開けなかった)。 process を閉じると誰も thread を持たない。 (2) 起動文を `codex queue` で予約する (誰も持たない
+thread の予約は DB に残る)。 (3) アプリに開かせる → アプリが書き手として thread を開き、 予約を turn として走らせる
+= 進行はアプリに出て、 その窓から話しかけられる。 固定した model・effort・書き込み可 dir・承認はアプリの turn でも
+保たれた。 **network だけはアプリの既定 (~/.codex/config.toml、 既定 off) に戻る** = 掲示板の command は Codex の
+許可規則で sandbox の外で走らせる (setup-codex-board-rule.py、 `--allow-board-engine`)。
+daemon を書き手にする旧来の形は `--writer daemon` (盲検の封じた sandbox・`--no-reveal` の既定): 固定した network が
+保たれる代わりに、 走っている間はアプリで進行が見えない (進行 = TUI の `codex resume <id>`)。 daemon は誰も見ていない
+idle の thread を turn の終わりから 40〜60 秒で手放す。
 
 subcommand:
   start --cwd DIR --prompt-file FILE [--model M] [--effort E] [--sandbox MODE] [--approval POLICY] [--network]
-        [--writable-root DIR]... [--name TITLE] [--host HOST] [--sealed] [--no-reveal] [--record FILE] [--json]
-      daemon を確かめ (無ければ `codex app-server daemon start`)、 thread を作って最初の turn を始め、 アプリに開かせる。
+        [--writable-root DIR]... [--name TITLE] [--host HOST] [--sealed] [--no-reveal] [--writer app|daemon]
+        [--allow-board-engine BOARD_PY] [--record FILE] [--json]
+      既定 (--writer app) = 上の (1)〜(3)。 --sealed か --no-reveal なら --writer daemon (daemon を確かめ、 無ければ
+      `codex app-server daemon start`、 thread を作って最初の turn を始め、 アプリに開かせる)。
       --host: この機械の名前と違えば何もせず止める (別の機械で起こす仕事を先に起こさない)。
       --sealed: 盲検の封じた sandbox 用。 本番の前に保存しない thread (ephemeral) を同じ設定で作り、 応答の
         instructionSources (Codex が読む指示 file) に cwd の外の file があれば止める (global の ~/.codex/AGENTS.md
-        だけは sandbox から切れない残余として通し、 申告する)。 封じた sandbox では writer を止めない reveal も同じ。
-      --record: 掲示板の launch 記録 (json) に thread id・機械・時刻を書き足す。
-      daemon に繋がらなければ、 アプリの新規 thread の入力欄に起動文を入れて開く deep link
+        だけは sandbox から切れない残余として通し、 申告する)。
+      --allow-board-engine: 掲示板の worker 用。 その engine の worker の subcommand を sandbox の外で走らせる Codex の
+        規則 (setup-codex-board-rule.py) がこの機械に無ければ入れる。
+      --record: 掲示板の launch 記録 (json) に thread id・機械・時刻・書き手を書き足す。
+      Codex の CLI が無い・app-server に繋がらなければ、 アプリの新規 thread の入力欄に起動文を入れて開く deep link
       (`codex://threads/new?path=…&prompt=…`、 本人が送信を押す) を出して exit 4。
   continue --thread ID --prompt-file FILE [--effort E] [--host HOST] [--no-reveal]
       既存の thread に次の turn を送る (盲検の訂正版の 2 回目を同じ reviewer に返す = `codex exec resume` の代わり)。
-      アプリがその thread を開いて書き手になっている間は daemon が開けない = アプリで続けるか、 アプリで閉じてから。
+      daemon で開いて turn を始める。 アプリが書き手として持っている thread は daemon が開けない = `codex queue` で
+      予約し、 アプリが次の turn として拾う (実測)。
   rpc METHOD [PARAMS_JSON]
       daemon に JSON-RPC を 1 回送って結果を出す (起動がおかしいときに daemon の状態を読む。 例 = `rpc thread/loaded/list`
-      = いま daemon が読み込んでいる thread。 実測 = 誰も見ていない idle の thread は turn の終わりから 30〜45 秒で外れ、
+      = いま daemon が読み込んでいる thread。 実測 = 誰も見ていない idle の thread は turn の終わりから 40〜60 秒で外れ、
       `thread/unsubscribe` では外れなかった)。 型の一覧 = `codex app-server generate-json-schema --out <dir>`。
   check-self --model M [--effort E]
       worker の 0 段目: 自分の thread ($CODEX_THREAD_ID) の model と effort を状態 DB で読み、 違えば exit 1。
@@ -165,6 +176,90 @@ class WS:
             pass
 
 
+class Stdio:
+    """JSON-RPC with a one-shot `codex app-server` over stdio (one JSON object per line). Closing it ends the process,
+    so nobody holds the threads it made (the app can then become their writer at once; the daemon keeps an idle thread
+    for 40〜60 s)."""
+
+    def __init__(self, cli: str, timeout: float = 60.0):
+        self.p = subprocess.Popen([cli, "app-server"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                  stderr=subprocess.DEVNULL, text=True, bufsize=1)
+        self.timeout, self.n = timeout, 0
+        self.lines: "list[str]" = []
+        self.t = threading.Thread(target=self._pump, daemon=True)
+        self.cv = threading.Condition()
+        self.t.start()
+
+    def _pump(self) -> None:
+        for line in self.p.stdout:
+            with self.cv:
+                self.lines.append(line)
+                self.cv.notify_all()
+        with self.cv:
+            self.lines.append("")
+            self.cv.notify_all()
+
+    def send(self, obj: dict) -> None:
+        self.p.stdin.write(json.dumps(obj) + "\n")
+        self.p.stdin.flush()
+
+    def call(self, method: str, params: dict) -> dict:
+        self.n += 1
+        rid = self.n
+        self.send({"id": rid, "method": method, "params": params})
+        end = time.time() + self.timeout
+        with self.cv:
+            while True:
+                while not self.lines:
+                    if not self.cv.wait(timeout=max(0.0, end - time.time())):
+                        raise TimeoutError(method)
+                line = self.lines.pop(0)
+                if line == "":
+                    raise EOFError(f"app-server ended during {method}")
+                try:
+                    m = json.loads(line)
+                except ValueError:
+                    continue
+                if m.get("id") == rid and ("result" in m or "error" in m):
+                    if "error" in m:
+                        raise RuntimeError(f"{method}: {m['error'].get('message') or m['error']}")
+                    return m["result"]
+
+    def close(self) -> int:
+        try:
+            self.p.stdin.close()
+        except OSError:
+            pass
+        try:
+            return self.p.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            self.p.kill()
+            return self.p.wait()
+
+
+def queue_message(cli: str, thread_id: str, text: str) -> tuple[bool, str]:
+    """`codex queue`: the thread's writer takes it as its next turn; with no writer it waits until the thread is opened
+    (measured: the app took it as a turn on opening the thread)."""
+    try:
+        p = subprocess.run([cli, "queue", "--thread", thread_id, "--message", text], capture_output=True, text=True,
+                           timeout=60, stdin=subprocess.DEVNULL)
+    except Exception as e:
+        return False, str(e)
+    out = (p.stdout or "") + (p.stderr or "")
+    return p.returncode == 0 and "Queued message" in out, out.strip()[-400:]
+
+
+def ensure_board_rule(engine: str) -> tuple[bool, str]:
+    """Install the Codex rule that runs this board engine's worker subcommands outside the sandbox (an app-run thread
+    has the app's sandbox, whose network is off by default), when it is missing: (current after the call, the line)."""
+    tool = Path(os.environ.get("CODEX_APP_LAUNCH_BOARD_RULE_TOOL") or HERE / "setup-codex-board-rule.py")
+    if not tool.is_file():
+        return False, f"掲示板の許可規則の道具が無い: {tool}"
+    p = subprocess.run([sys.executable, str(tool), "--install", "--engine", engine], capture_output=True, text=True,
+                       timeout=60)
+    return p.returncode == 0, ((p.stdout or "") + (p.stderr or "")).strip()
+
+
 # ---------------------------------------------------------------- machine, daemon, app
 
 def this_host_names() -> set[str]:
@@ -292,6 +387,25 @@ def outside_sources(sources, cwd: str, home: str | None = None) -> tuple[list[st
     return bad, residual
 
 
+def writer_of(a) -> str:
+    """Who runs the thread: the app (default: progress visible in the app, which can be talked to there) or the daemon
+    (a sealed blind-review sandbox keeps the environment it checked and its network; --no-reveal never opens the app)."""
+    w = getattr(a, "writer", None)
+    if w:
+        return w
+    return "daemon" if (a.sealed or a.no_reveal) else "app"
+
+
+def compose_fallback(a, cwd: str, prompt: str, why: str) -> int:
+    url = compose_url(cwd, prompt)
+    print(f"⚠️ {why} = 自動では起こせない。 本人がアプリで送信を押す形にする:")
+    print(f"  入力欄に起動文を入れて開く: open {json.dumps(url)}")
+    print(f"  (起動文 = {a.prompt_file}。 model と effort はアプリの入力欄の下で {a.model or '既定'} / {a.effort or '既定'} を選ぶ)")
+    if not a.no_reveal and open_in_app(url):
+        print("  → アプリに開いた (送信はまだ)")
+    return 4
+
+
 def launch(a) -> int:
     stop = host_mismatch(a.host)
     if stop:
@@ -302,15 +416,103 @@ def launch(a) -> int:
         print(f"⛔ cwd が無い: {cwd}", file=sys.stderr)
         return 2
     prompt = Path(a.prompt_file).read_text(encoding="utf-8")
+    writer, rule = writer_of(a), ""
+    if getattr(a, "allow_board_engine", None):
+        ok, rule = ensure_board_rule(os.path.realpath(os.path.expanduser(a.allow_board_engine)))
+        if not ok and writer == "app":
+            # An app-run board worker without the rule cannot reach the board (the app's sandbox has no network).
+            print(f"⚠️ 掲示板の許可規則が入っていない ({rule}) = daemon を書き手にする (走っている間アプリで進行は見えない)",
+                  file=sys.stderr)
+            writer = "daemon"
+    if writer == "app":
+        return launch_app(a, cwd, prompt, rule)
+    return launch_daemon(a, cwd, prompt, rule)
+
+
+def launch_app(a, cwd: str, prompt: str, rule: str) -> int:
+    """(1) a one-shot stdio app-server makes, names and seeds the thread, (2) the prompt is queued, (3) the app opens it
+    and runs the queued prompt as the thread's writer."""
+    cli = codex_cli()
+    if not cli:
+        return compose_fallback(a, cwd, prompt, "Codex の CLI が見つからない")
+    try:
+        s = Stdio(cli)
+    except OSError as e:
+        return compose_fallback(a, cwd, prompt, f"app-server を起こせない ({e})")
+    try:
+        s.call("initialize", {"clientInfo": CLIENT})
+        s.send({"method": "initialized"})
+        res = s.call("thread/start", thread_params(cwd, a.model, a.effort, a.sandbox, a.approval, a.network,
+                                                    writable=a.writable_root))
+        tid = res["thread"]["id"]
+        if a.name:
+            try:
+                s.call("thread/name/set", {"threadId": tid, "name": a.name})
+            except Exception as e:  # the title falls back to the first message
+                print(f"  (名前を付けられなかった: {e})", file=sys.stderr)
+        # A thread with no history has no rollout file, and the app cannot open it (measured): one model-visible
+        # record, with no turn and no model call, writes it.
+        s.call("thread/inject_items", {"threadId": tid, "items": [{"type": "message", "role": "developer", "content": [
+            {"type": "input_text", "text": f"Launch record: codex-app-launch.py made this thread ({a.name or 'a Codex task'})"
+                                           " for the Codex app to run. Its instructions arrive as the next user message."}]}]})
+    except Exception as e:
+        s.close()
+        return compose_fallback(a, cwd, prompt, f"app-server で thread を作れない ({e})")
+    s.close()
+    queued, qout = queue_message(cli, tid, prompt)
+    if not queued:
+        print(f"⛔ thread {tid} は作ったが、 起動文を予約できない ({qout})。 アプリで開いて起動文を貼って送る:"
+              f" open '{reveal_url(tid)}' (起動文 = {a.prompt_file})", file=sys.stderr)
+        return 6
+    revealed = open_in_app(reveal_url(tid))
+    sources = res.get("instructionSources") or []
+    got_model, got_effort = res.get("model") or "?", res.get("reasoningEffort") or "?"
+    return report(a, tid, cwd, got_model, got_effort, sources, [], revealed, "app", rule)
+
+
+def report(a, tid, cwd, got_model, got_effort, sources, residual, revealed, writer, rule) -> int:
+    cli = codex_cli() or "codex"
+    out = {"thread_id": tid, "host": short_host(), "cwd": cwd, "writer": writer,
+           "model": got_model, "effort": got_effort, "instruction_sources": sources, "residual_sources": residual,
+           "revealed": revealed, "launched_at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    if rule:
+        out["board_rule"] = rule
+    if a.record:
+        try:
+            rec = json.loads(Path(a.record).read_text(encoding="utf-8"))
+        except Exception:
+            rec = {}
+        rec.update(codex_thread=tid, launched_host=out["host"], launched_at=out["launched_at"], surface="codex-app",
+                   writer=writer)
+        Path(a.record).write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
+    if a.json:
+        print(json.dumps(out, ensure_ascii=False))
+        return 0
+    want = " / ".join(x for x in (a.model, a.effort) if x)
+    mismatch = (a.model and got_model != a.model) or (a.effort and got_effort != a.effort)
+    print(f"→ Codex の仕事を起こした: thread {tid} (model {got_model} / effort {got_effort}"
+          + (f" ⚠️ 頼んだ値 {want} と違う" if mismatch else "") + f", cwd {cwd}, 書き手 = {'アプリ' if writer == 'app' else 'daemon'})")
+    if writer == "app":
+        print(f"  アプリ: {'開かせた = アプリが予約した起動文を走らせ、 進行が出る。 その窓から話しかけられる' if revealed else '開かせていない = 予約はアプリで開いたときに走る:'}"
+              f" open '{reveal_url(tid)}'")
+        print("  network はアプリの既定 (Codex の設定) = 掲示板の command は許可規則で sandbox の外で走る"
+              + (f" ({rule})" if rule else ""))
+    else:
+        print(f"  アプリ: {'左の「最近の項目」 に載せた (アプリに開かせた)' if revealed else '開かせていない = 本人が見るなら'}"
+              f" open '{reveal_url(tid)}'")
+        print("  走っている間はアプリに「別のアプリで開いています」 と出る (仕事は手元の共有 daemon が動かす)。 進行を見る ="
+              f" {cli} resume {tid} (同じ daemon に繋ぐ TUI)。 終わって 40〜60 秒後にアプリで開けば続きを話せる")
+    if ct is not None:
+        print(f"  知らせる = {ct.queue_hint(tid, '<掲示板の thread id と書いた中身を 1 行>')}")
+    print(f"  読んだ指示 file: {', '.join(sources) or '(なし)'}"
+          + (f" (封じた sandbox の外の残余 = {', '.join(residual)}: spec と sandbox の AGENTS.md で受ける)" if residual else ""))
+    return 1 if mismatch else 0
+
+
+def launch_daemon(a, cwd: str, prompt: str, rule: str) -> int:
     sock = daemon_socket(start=True)
     if not sock:
-        url = compose_url(cwd, prompt)
-        print("⚠️ 共有の Codex daemon に繋がらない = 自動では起こせない。 本人がアプリで送信を押す形にする:")
-        print(f"  入力欄に起動文を入れて開く: open {json.dumps(url)}")
-        print(f"  (起動文 = {a.prompt_file}。 model と effort はアプリの入力欄の下で {a.model or '既定'} / {a.effort or '既定'} を選ぶ)")
-        if not a.no_reveal and open_in_app(url):
-            print("  → アプリに開いた (送信はまだ)")
-        return 4
+        return compose_fallback(a, cwd, prompt, "共有の Codex daemon に繋がらない")
     w = WS(sock)
     try:
         w.call("initialize", {"clientInfo": CLIENT})
@@ -340,33 +542,7 @@ def launch(a) -> int:
     finally:
         w.close()
     revealed = False if a.no_reveal else open_in_app(reveal_url(tid))
-    cli = codex_cli() or "codex"
-    out = {"thread_id": tid, "host": short_host(), "cwd": cwd,
-           "model": got_model, "effort": got_effort, "instruction_sources": sources, "residual_sources": residual,
-           "revealed": revealed, "launched_at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
-    if a.record:
-        try:
-            rec = json.loads(Path(a.record).read_text(encoding="utf-8"))
-        except Exception:
-            rec = {}
-        rec.update(codex_thread=tid, launched_host=out["host"], launched_at=out["launched_at"], surface="codex-app")
-        Path(a.record).write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
-    if a.json:
-        print(json.dumps(out, ensure_ascii=False))
-        return 0
-    want = " / ".join(x for x in (a.model, a.effort) if x)
-    mismatch = (a.model and got_model != a.model) or (a.effort and got_effort != a.effort)
-    print(f"→ Codex の仕事を起こした: thread {tid} (model {got_model} / effort {got_effort}"
-          + (f" ⚠️ 頼んだ値 {want} と違う" if mismatch else "") + f", cwd {cwd})")
-    print(f"  アプリ: {'左の「最近の項目」 に載せた (アプリに開かせた)' if revealed else '開かせていない = 本人が見るなら'}"
-          f" open '{reveal_url(tid)}'")
-    print("  走っている間はアプリに「別のアプリで開いています」 と出る (仕事は手元の共有 daemon が動かす)。 進行を見る ="
-          f" {cli} resume {tid} (同じ daemon に繋ぐ TUI)。 終わって 30〜45 秒後にアプリで開けば続きを話せる")
-    if ct is not None:
-        print(f"  知らせる = {ct.queue_hint(tid, '<掲示板の thread id と書いた中身を 1 行>')}")
-    print(f"  読んだ指示 file: {', '.join(sources) or '(なし)'}"
-          + (f" (封じた sandbox の外の残余 = {', '.join(residual)}: spec と sandbox の AGENTS.md で受ける)" if residual else ""))
-    return 1 if mismatch else 0
+    return report(a, tid, cwd, got_model, got_effort, sources, residual, revealed, "daemon", rule)
 
 
 def continue_thread(a) -> int:
@@ -393,8 +569,18 @@ def continue_thread(a) -> int:
         try:
             w.call("thread/resume", {"threadId": tid})
         except RuntimeError as e:
-            print(f"⛔ thread {tid[:8]} を daemon で開けない ({e})。 アプリが開いているなら、 アプリで続けるか、 アプリで閉じてから"
-                  " やり直す", file=sys.stderr)
+            cli = codex_cli()
+            if "active writer" in str(e) and cli:
+                # The app holds the thread (it runs app-launched workers): its next turn comes from the queue.
+                queued, qout = queue_message(cli, tid, prompt)
+                if queued:
+                    revealed = False if a.no_reveal else open_in_app(reveal_url(tid))
+                    print(f"→ thread {tid} はアプリが書き手 = 次の turn を予約した (アプリが今の turn の後に走らせる)"
+                          + (" (アプリに開かせた)" if revealed else ""))
+                    return 0
+                print(f"⛔ 予約もできない ({qout})", file=sys.stderr)
+            print(f"⛔ thread {tid[:8]} を daemon で開けない ({e})。 アプリで続けるか、 アプリで閉じてからやり直す",
+                  file=sys.stderr)
             return 5
         turn = {"threadId": tid, "input": [{"type": "text", "text": prompt}]}
         if a.effort:
@@ -480,6 +666,11 @@ def _fake_daemon(path: str, log: list, sources: list[str]):
             if "id" not in m:
                 continue
             p, meth = m.get("params") or {}, m.get("method")
+            if meth == "thread/resume" and p.get("threadId") == "held-by-app":
+                data = json.dumps({"id": m["id"], "error": {"code": -32600,
+                                   "message": "thread held-by-app already has an active writer"}}).encode()
+                c.sendall(bytes([0x81, 126]) + struct.pack(">H", len(data)) + data)
+                continue
             if meth == "thread/start":
                 tid = "eph" if p.get("ephemeral") else "01aaaaaa-0000-7000-8000-000000000001"
                 r = {"thread": {"id": tid}, "model": p.get("model") or "m-default",
@@ -493,6 +684,35 @@ def _fake_daemon(path: str, log: list, sources: list[str]):
 
     threading.Thread(target=serve, daemon=True).start()
     return srv
+
+
+_FAKE_CLI = r'''
+import json, os, sys
+def w(o):
+    with open(os.environ["CAL_FAKE_LOG"], "a") as f:
+        f.write(json.dumps(o) + "\n")
+if sys.argv[1:2] == ["queue"]:
+    a = sys.argv[2:]
+    t = a[a.index("--thread") + 1]
+    w({"queue": t, "message": a[a.index("--message") + 1]})
+    print("Queued message q-1 for thread " + t + ".")
+    sys.exit(0)
+if sys.argv[1:2] == ["app-server"]:
+    for line in sys.stdin:
+        m = json.loads(line)
+        w(m)
+        if "id" not in m:
+            continue
+        p = m.get("params") or {}
+        r = {}
+        if m["method"] == "thread/start":
+            r = {"thread": {"id": "01cccccc-0000-7000-8000-000000000003"}, "model": p.get("model"),
+                 "reasoningEffort": (p.get("config") or {}).get("model_reasoning_effort"), "instructionSources": []}
+        print(json.dumps({"method": "note"}))
+        print(json.dumps({"id": m["id"], "result": r}), flush=True)
+    sys.exit(0)
+sys.exit(2)
+'''
 
 
 def _selftest() -> int:
@@ -514,7 +734,7 @@ def _selftest() -> int:
     def args(**kw):
         d = dict(cwd=cwd, prompt_file=pf, model="gpt-x", effort="xhigh", sandbox="workspace-write", approval="never",
                  network=True, name="worker · gpt-x xhigh", host=None, sealed=False, no_reveal=False, record=None, json=True,
-                 writable_root=["~/.cache/board-fixture"])
+                 writable_root=["~/.cache/board-fixture"], writer="daemon", allow_board_engine=None)
         d.update(kw)
         return argparse.Namespace(**d)
 
@@ -571,6 +791,55 @@ def _selftest() -> int:
     u = compose_url("/x y", "a&b=c\nd")
     checks.append(("compose_url: path と prompt を符号化", u.startswith("codex://threads/new?path=%2Fx%20y&prompt=a%26b%3Dc%0Ad")))
     checks.append(("reveal_url", reveal_url("t1") == "codex://threads/t1?hostId=local"))
+    # the app as the writer: a one-shot stdio app-server (a fake CLI here) makes, names and seeds the thread, and the
+    # prompt goes through `codex queue`; the daemon is not used
+    fake, flog, rec2 = os.path.join(tmp, "fake-codex"), os.path.join(tmp, "fake.jsonl"), os.path.join(tmp, "r2.launch.json")
+    Path(fake).write_text(f"#!{sys.executable}\n" + _FAKE_CLI, encoding="utf-8")
+    os.chmod(fake, 0o755)
+    Path(rec2).write_text('{"role": "role-x-y"}', encoding="utf-8")
+    os.environ.update(CODEX_CLI_PATH=fake, CAL_FAKE_LOG=flog)
+    log.clear()
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = launch(args(writer=None, record=rec2))
+    out = json.loads(buf.getvalue().strip().splitlines()[-1])
+    lines = [json.loads(x) for x in Path(flog).read_text(encoding="utf-8").splitlines()]
+    meths = [m.get("method") for m in lines if "method" in m]
+    checks.append(("app: 使い捨ての app-server で start・name・inject (turn は始めない、 daemon は使わない)", rc == 0
+                   and meths == ["initialize", "initialized", "thread/start", "thread/name/set", "thread/inject_items"]
+                   and not log))
+    ts = next(m for m in lines if m.get("method") == "thread/start")["params"]
+    checks.append(("app: model・effort・書き込み先を thread/start に固定", ts.get("model") == "gpt-x"
+                   and ts["config"]["model_reasoning_effort"] == "xhigh"
+                   and ts["config"]["sandbox_workspace_write"]["writable_roots"]))
+    q = [m for m in lines if "queue" in m]
+    checks.append(("app: 起動文を codex queue で予約", len(q) == 1 and q[0]["queue"].startswith("01cccccc")
+                   and "board worker" in q[0]["message"]))
+    checks.append(("app: 書き手 = app を返し、 launch 記録にも書く", out["writer"] == "app"
+                   and json.loads(Path(rec2).read_text(encoding="utf-8")).get("writer") == "app"))
+    checks.append(("書き手の既定: 封印・--no-reveal は daemon、 ほかは app", writer_of(args(writer=None, sealed=True)) == "daemon"
+                   and writer_of(args(writer=None, no_reveal=True)) == "daemon" and writer_of(args(writer=None)) == "app"))
+    # a board worker: the rule is installed first; without it the daemon runs the thread (the app's sandbox has no network)
+    tool = os.path.join(tmp, "rule-tool.py")
+    for rc_tool, want_writer in ((0, "app"), (1, "daemon")):
+        Path(tool).write_text(f"import sys\nprint('rule probe')\nsys.exit({rc_tool})\n", encoding="utf-8")
+        os.environ["CODEX_APP_LAUNCH_BOARD_RULE_TOOL"] = tool
+        log.clear()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+            rc = launch(args(writer=None, allow_board_engine=os.path.join(tmp, "board.py")))
+        o = json.loads(buf.getvalue().strip().splitlines()[-1])
+        checks.append((f"掲示板の規則が{'入った' if rc_tool == 0 else '入らない'} → 書き手 = {want_writer}",
+                       rc == 0 and o["writer"] == want_writer and o.get("board_rule") == "rule probe"
+                       and (bool(log) == (want_writer == "daemon"))))
+    os.environ.pop("CODEX_APP_LAUNCH_BOARD_RULE_TOOL")
+    Path(flog).write_text("", encoding="utf-8")
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        rc = continue_thread(argparse.Namespace(thread="held-by-app", prompt_file=pf, effort=None, host=None, no_reveal=True))
+    q = [json.loads(x) for x in Path(flog).read_text(encoding="utf-8").splitlines() if '"queue"' in x]
+    checks.append(("continue: アプリが書き手の thread は daemon が断る → 予約に回す", rc == 0 and len(q) == 1
+                   and q[0]["queue"] == "held-by-app"))
+    os.environ.pop("CAL_FAKE_LOG")
     os.environ.pop("CODEX_APP_LAUNCH_SOCKET")
     os.environ["CODEX_CLI_PATH"] = os.path.join(tmp, "none")
     if ct is not None:
@@ -581,6 +850,10 @@ def _selftest() -> int:
         with contextlib.redirect_stdout(buf):
             rc = launch(args(json=False))
         checks.append(("daemon 無し → 本人が押す deep link (exit 4)", rc == 4 and "codex://threads/new?" in buf.getvalue()))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = launch(args(json=False, writer="app"))
+        checks.append(("CLI 無し (書き手 = app) → 本人が押す deep link (exit 4)", rc == 4 and "codex://threads/new?" in buf.getvalue()))
     srv.close()
     for name, ok in checks:
         print(("PASS " if ok else "FAIL ") + name)
@@ -607,8 +880,12 @@ def main(argv=None) -> int:
     s.add_argument("--name", help="アプリの一覧に出る題 (既定 = 起動文の先頭)")
     s.add_argument("--host", help="起こす機械の名前。 この機械でなければ止める")
     s.add_argument("--sealed", action="store_true", help="封じた sandbox: cwd の外の指示 file を読むなら起こさない")
-    s.add_argument("--no-reveal", action="store_true", help="アプリに開かせない (一覧には載らない)")
-    s.add_argument("--record", help="掲示板の launch 記録 (json) に thread id・機械・時刻を書き足す")
+    s.add_argument("--no-reveal", action="store_true", help="アプリに開かせない (一覧には載らない。 書き手 = daemon)")
+    s.add_argument("--writer", choices=["app", "daemon"],
+                   help="thread を走らせる側 (既定 = app。 --sealed か --no-reveal なら daemon)")
+    s.add_argument("--allow-board-engine", help="掲示板の worker: この board.py の worker の subcommand を sandbox の外で"
+                   "走らせる Codex の規則が無ければ入れる (setup-codex-board-rule.py)")
+    s.add_argument("--record", help="掲示板の launch 記録 (json) に thread id・機械・時刻・書き手を書き足す")
     s.add_argument("--json", action="store_true")
     n = sub.add_parser("continue")
     n.add_argument("--thread", required=True, help="thread id か一意な先頭")
