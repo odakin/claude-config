@@ -36,7 +36,6 @@
 
 ## Open items（forward-looking）
 
-- [ ] **`session-launch-check.py --selftest` の 1 件 (「pre-start: arguments equal the record → pass」) が、 実行する機械の設定 (上位 model・max の effort に理由を求める) に引きずられて落ちる** — 自己試験が機械の設定から切り離されていない (変更前の版でも同じく落ちる = 実測)。 直し = 自己試験の中で premium の設定を固定してから回す。 `hooks/worker-launch-checks.test.sh` の engine の段もこれで 1 fail
 - [ ] **完了Git gateのリモート照会失敗の切り分け** — 自動照会の検査不能と直接照会の成功が食い違う条件を調べる段階。次は通常SSHと多重化を使わない照会を同時点で比較し、タイムアウトと起動失敗を区別する候補を作る。実装の入口 = [session_touch.py](codex/hooks/session_touch.py)。原因未特定のため検査の変更は未着手。
 - [ ] **既存Linux CIのchat_file_refs変異検査** — Unicode正規化が異なる名前を別ファイルとして扱う環境では、元の[テスト](hooks/chat-file-ref-enforce.test.sh)がE5・E6・E7・E9をskipするが、[変異検査のspec](scripts/chat_file_refs.mutants.json)がこれらを必須ラベルとして要求し失敗する。次は検査強度を保って環境分岐とspecを整合させる候補を作る。音源採譜手順とは独立したテスト定義の問題。
 
