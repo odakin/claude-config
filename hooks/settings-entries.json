@@ -300,6 +300,16 @@
           "timeout": 10
         }
       ]
+    },
+    {
+      "matcher": "^SendMessage$",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 ~/.claude/hooks/worker-safety-stop-guard.py",
+          "timeout": 10
+        }
+      ]
     }
   ],
   "PostToolUse": [

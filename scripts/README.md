@@ -334,6 +334,7 @@
 - **[sync-hook-settings.test.sh](sync-hook-settings.test.sh)** — 層1 hook の配線 (symlink + settings の entry) を揃える script の test
 - **[sync-permission-rules.py](sync-permission-rules.py)** — settings.json の permission rule を spec (JSON) の宣言どおりに揃える (冪等)
 - **[sync-protected-dirs.py](sync-protected-dirs.py)** — 「触る前に確認を出す dir」 の宣言を machine-local の一覧 file に配る (冪等)
+- **[test-worker-safety-stop.py](test-worker-safety-stop.py)** — synthetic regression checks for refusal handling and duplicate guidance.
 - **[test_codex_mail_install.py](test_codex_mail_install.py)** — Installer tests run only below temporary directories, never real Codex home.
 - **[test_codex_worker_contract.py](test_codex_worker_contract.py)** — record-context boundaries and scoped observations (--selftest, --against OLD_HOOK).
 - **[test_reviewed_mail.py](test_reviewed_mail.py)** — Network-free adversarial checks of the reviewed-reply transaction.
@@ -358,6 +359,7 @@
 - **[whisper-transcribe.py](whisper-transcribe.py)** — 録音を whisper.cpp で文字起こしし、 同じ語の繰り返し (ループ) が出た区間を自動で転写し直す。
 - **[with-gnu-userland.sh](with-gnu-userland.sh)** — macOS で Homebrew の GNU coreutils / sed / grep / findutils を PATH 先頭に差して command を走らせる (CI の ubuntu と同じ BSD/GNU 差を push 前に再現)
 - **[with-gnu-userland.test.sh](with-gnu-userland.test.sh)** — with-gnu-userland.sh の self-test (Homebrew の GNU userland が無い環境 = CI の ubuntu は SKIP)
+- **[worker-safety-stop.py](worker-safety-stop.py)** — inspect refusal metadata and stop sends to a refused local session.
 - **[xlsx-to-pdf.sh](xlsx-to-pdf.sh)** — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
 - **[xlsx-zip-set-cells.py](xlsx-zip-set-cells.py)** — xlsx / xlsm の値セルだけを zip 直編集で書き換える (Excel も openpyxl も使わない。 他の zip member は byte 同一、 VBA・drawings・form control は無傷。 office-automation.md#xlsx-cell-value-zip-surgery の実装)
 - **[yaml-set-top-keys.py](yaml-set-top-keys.py)** — YAML の file の top-level の key を、 行頭で見つけて置き換える・消す (ほかの key は 1 文字も変えず、 読み直して確かめてから書く)。
@@ -465,3 +467,4 @@
 - **[lib/web_driver.py](lib/web_driver.py)** — 「値の正本 → 画面に打つ操作列」 を決定的に生成する site 非依存 harness
 - **[lib/worker_observations.py](lib/worker_observations.py)** — Machine-local worker observations for a Codex parent; metadata, not authority.
 - **[lib/worker_record_clause.py](lib/worker_record_clause.py)** — Shared report contract text for vendor-specific delegation adapters.
+- **[lib/worker_safety_stop.py](lib/worker_safety_stop.py)** — Inspect typed refusal markers without emitting conversation or reasoning text.

@@ -13,7 +13,7 @@ mode (CLI = scripts/spawn-dispatch-dedupe.py、 hook = hooks/spawn-dedupe-guard.
                 本人が 2 つ目を明示に求めたときは title か tldr に OVERRIDE (`[再起票]`) を書く → 止めずに注意だけ
   post-spawn    PostToolUse(spawn_task) — 返りの task_id を session ごとの台帳に「pending」 で記録
   post-dismiss  PostToolUse(dismiss_task) — 返りで台帳を更新 (withdrawn / started / dismissed)。
-                「already started」 なら「作り直さず SendMessage で訂正」 を注入
+                「already started」 なら作り直さず訂正を案内 (安全停止の窓には再送しない)
 
 材料 (どれも読むだけ):
   - harness の session 刻印 `<設定フォルダ>/sessions/<pid>.json` (~/.claude と ~/.claude-* の全部。 pid が生きている = 稼働中。 chip から起動した
@@ -286,9 +286,23 @@ def _notice_text(ext, title: str, ti: dict, sid: str) -> str:
         return ""
     body = "\n".join(f"  - {n}" for n in notes)
     return (f"[spawn-dedupe-guard] この起票と近い仕事が別の経路に在る (止めてはいない):\n{body}\n"
-            f"同じ仕事なら、 いま出した card を dismiss_task で取り消し (起動したなら SendMessage で止め)、 その記録を読んで"
+            f"同じ仕事なら、 いま出した card を dismiss_task で取り消し (起動したなら通常は SendMessage で止める。安全フィルタで止まった窓には送らず、本人に終了を確認)、 その記録を読んで"
             f"足りない分だけを頼む。 違う仕事ならこのままでよい。 規約 = conventions/multi-session-coordination.md#receiver-side-recognition"
             + (f"。 {ext.FOOTER}" if getattr(ext, "FOOTER", "") else ""))
+
+
+def _live_duplicate_advice(session):
+    # Refusal does not make a process dead. Keep the duplicate block and offer
+    # closure with owner approval instead of instructing a resend into that window.
+    import worker_safety_stop
+    state = worker_safety_stop.inspect(transcript_path(session["sid"], session["cwd"]))
+    if state["state"] == "refused":
+        return ("安全フィルタによる停止の記録があります。同じ窓への SendMessage は送らず、"
+                "掲示板に停止を記録して claim を手放してください。"
+                "この窓を閉じてよいか本人に確認してください。自動で除外して二重起動はしません。")
+    unknown = "停止状態を検査できず未確認です。" if state["state"] == "unknown" else ""
+    return (unknown + "通常の訂正はその session に SendMessage で送ります。"
+            "安全フィルタによる停止を本人または app が示している場合は送らず、窓を閉じてよいか本人に確認してください。")
 
 
 def pre_spawn(inp: dict, ext=None):
@@ -313,24 +327,25 @@ def pre_spawn(inp: dict, ext=None):
                 f"この session が出した同じ依頼の chip {e.get('task_id')} (「{e.get('title')}」) は、 取り消しがまだ確認されていない "
                 f"(dismiss_task が「withdrawn」 を返していない)。 本人は chip を十数秒で押すので、 取り消しの結果を読む前に作り直すと二重起動になる。 "
                 f"dismiss_task だけを出し、 その結果を読んだ**次の応答**で決める = withdrawn なら作り直す / already started なら作り直さず、 "
-                f"起動した session に SendMessage で訂正する。 取り消しと作り直しを同じ応答に並べない")
+                f"安全停止の記録や表示がなければ起動した session に SendMessage で訂正する。 取り消しと作り直しを同じ応答に並べない")
         elif st == "started":
             reasons.append(
                 f"この session が出した同じ依頼の chip {e.get('task_id')} は既に起動している (dismiss が already started を返した)。 "
-                f"作り直さず、 起動した session に SendMessage で訂正する (ListAgents で title の session を探す)")
+                f"作り直さず、安全停止の記録や表示がなければ起動した session に SendMessage で訂正する (ListAgents で title の session を探す)")
 
     for s in live_sessions(sid):
         if core and core_title(s["name"]) == core:
-            reasons.append(f"同じ title の session が稼働中: {desc(s)}。 訂正はその session に SendMessage で送る")
+            reasons.append(f"同じ title の session の process が存在します: {desc(s)}。 " + _live_duplicate_advice(s))
             continue
         if keys:
             both = keys & set(ext.session_keys(s["sid"], s["cwd"]))
             if both:
-                reasons.append(f"同じ依頼 ({', '.join(sorted(both))}) の worker が稼働中: {desc(s)}。 "
-                               f"新しい chip は作らず、 その session に SendMessage で訂正・追加を送る")
+                reasons.append(f"同じ依頼 ({', '.join(sorted(both))}) の worker の process が存在します: {desc(s)}。 "
+                               + _live_duplicate_advice(s))
 
     if not reasons:
         return 0, _notice_text(ext, title, ti, sid)
+    reasons.append("安全フィルタで止まった窓には上の訂正・追加の案内を適用せず、同じ窓へ続きを送りません。閉じる操作は本人に確認します。")
     body = "\n".join(f"  - {r}" for r in dict.fromkeys(reasons))
     tail = f"規約 = {RULE} (不変条件: 1 つの依頼に同時に働く worker は 1 つ)" + (f"。 {ext.FOOTER}" if ext.FOOTER else "")
     if override:
@@ -381,7 +396,8 @@ def post_dismiss(inp: dict) -> str:
     if st == "started":
         return (f"[spawn-dedupe-guard] chip {tid} は起動済みで取り消せなかった = その依頼の worker は既に働いている。 "
                 f"**同じ依頼の chip を作り直さない**。 直したいこと (仕様の訂正・依頼 id など) は、 ListAgents で chip の title の session を探して "
-                f"SendMessage で送る。 同じ応答で既に作り直しを出していたら、 後から起動した方に「何もせず終了」 を頼む ({RULE})")
+                f"安全停止の記録や表示がなければ SendMessage で送る。安全フィルタで止まった窓には送らず、本人に終了を確認する。 "
+                f"同じ応答で既に作り直しを出していたら、 後から起動した方にも同じ確認をして「何もせず終了」 を頼む ({RULE})")
     return ""
 
 

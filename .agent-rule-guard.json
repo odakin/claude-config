@@ -52,6 +52,12 @@
     ".claude/pre-commit-extra.sh",
     "scripts/*hook*",
     "scripts/install-*commit*",
-    "setup.sh"
+    "setup.sh",
+    "scripts/worker-safety-stop.py",
+    "scripts/lib/worker_safety_stop.py",
+    "scripts/lib/spawn_dedupe.py",
+    "scripts/spawn-dispatch-dedupe.py",
+    "scripts/lib/session_model.py",
+    "scripts/lib/claude_config_dirs.py"
   ]
 }

@@ -352,7 +352,7 @@ peer review の resourcing は通常 confidentiality 要件あり (= 審査委�
 3. **置き場所は repo の外の、 push しない作業場** — [`../../ai-collaboration/conventions/cold-eyes-isolation.md`](../../ai-collaboration/conventions/cold-eyes-isolation.md) の封じた sandbox (`make-review-sandbox.py create`) をそのまま使う。 検証の台帳・所見・検算 script も原稿の中身なので、 push される repo (検証 campaign の repo・掲示板・SESSION) には置かない。 掲示板には所在も書かない (雑誌名と原稿の所在が push 先に残る)。
 4. **worker の spec に守秘の段を足す** — 原稿の題・文・式・著者名を web 検索・fetch に入れない、 検索は一般の話題と引用文献だけ。 それでも worker が除外語として著者名を検索語に入れた実測がある = 受領時に worker の守秘の申告 (逸脱の記録) を読み、 reviewer に伝える。
 5. **別 vendor に渡すのは reviewer の明示の決定** — Claude Code の auto mode は、 未公開の原稿を別 vendor の CLI に渡す command を data exfiltration として止める (実測)。 止められたら、 掲示板・別 session・別の書き方で同じ結果を狙わない ([`claude-code-permissions.md#chat-approval-reaches-classifier`](claude-code-permissions.md#chat-approval-reaches-classifier) の迂回の禁止)。 reviewer が自分で渡すか、 操作と対象を名指した承認の一文を出す。
-6. **worker が API 側の安全フィルタで止まることがある** — 原稿を読み始めた直後に `safeguards flagged this message` (`reasoning_extraction`) で止まり、 別の model でも同じだった実測がある。 形を変えて何度も投げ直さない (同じ止まり方が続いたら reviewer に戻し、 渡す経路を決めてもらう)。
+6. **worker が API 側の安全フィルタで止まったら** — [共通の停止手順](tool-call-robustness.md#api-safety-filter-on-main-response) に従い、止まった返答を再現せず、同じ窓への続きの送信と自動での別 model・別 vendor への再送を止める。worker が記録できない場合は reviewer が停止と所在を記録する。資料の再入力・窓を閉じる操作・許される範囲での再開は reviewer 本人に判断を戻す。
 7. **受領** — worker の所見と英文の指摘の下書きは input (= [#source-separation](#source-separation) の analysis 側)。 採否と推薦は reviewer が決め、 報告書に AI を検算の一部に使ったことを書く (方針が求める場合。 使った tool を全部)。
 
 ---
