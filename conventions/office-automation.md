@@ -49,6 +49,7 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 | PyMuPDF で追記した日本語/数字が**画面では正常・印刷で文字化け / 位置ずれ** | `japan`/`helv` 組み込み font は glyph 非埋め込み = printer に代替 font が無い | 印刷用は 600dpi **RGB** raster 版を刷る (font 埋め込みでも同 printer で化けた) → [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake) |
 | 値を入れた docx 様式の表で、 **長い本文の後半が画面にも PDF にも無い** (頁は増えない・見出しの検査は通る) | 行の高さが固定 (`hRule="exact"`) = 枠を超えた字は描かれない | Word の PDF の文字に書いた値が全部在るかで止める、 行の高さは変えず本文を詰める → [`docx-exact-row-height-clipping`](#docx-exact-row-height-clipping) |
 | 値を入れた docx 様式が **1 頁→2 頁にはみ出す**、 折り返すのは触っていない行 | autofit 表は 1 セルの長い値で grid 列幅を組み替え、 別行のセルが狭まる (`tblLayout fixed` でも直らず) | 可変長値・○・認印は overlay、 溢れる 1 行だけ 9.5pt、 雛形 render と y 座標突合 → [`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow) |
+| 値を入れた docx 様式が **1 頁→2 頁にはみ出す**、 表は崩れず末尾の行 (「以上」・空の段落) が次頁へ | 本文の段落の値が長く、 下の段落が下余白を越えた (末尾の空の段落も 1 行取る) | 前の版の PDF と docx の下余白から余りの行数を測って詰める、 値が揃う前は案件の写しに仮の値で build → [`docx-body-line-budget`](#docx-body-line-budget) |
 | Excel がクラッシュ /「作業内容を回復」 dialog | 同 session で osascript の open/save/close/quit を多数 cycle し既存 instance を酷使 | **補正を 1 pass に織り込む単発記入** + round が要る時だけ guard の reset (user の文書があれば quit しない) → [`excel-osascript-cell-write`](#excel-osascript-cell-write) / [`office-app-reset-guard`](#office-app-reset-guard) |
 | osascript が `-1712` (AppleEvent timeout) | Excel が固まり / **background 実行で automation 許可 dialog を出せない** | `office-app-guard.sh state` → `clear` なら reset、 user の文書があれば user に終了を頼む (kill しない) / **初回は foreground で許可 dialog に応答** → [`office-app-reset-guard`](#office-app-reset-guard) / [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) |
 | 変換・記入のたびに **Excel / Word が前面に出る** / user が開いていた book が閉じられた・保存 dialog で止まった | 旧手順の `activate`・Finder `open`・毎回の `quit` / `killall` / `pkill` | 起動は `open -g`、 activate しない、 quit は開いている文書を聞いてから自分のものだけ → [`office-app-reset-guard`](#office-app-reset-guard) |
@@ -3646,6 +3647,19 @@ origin: 実測 (様式 + 付属表の overlay 文字が紙で化け → OTF 埋�
 4. ⚠️ 変換結果が変わらない時は Word の stale in-memory cache ([`docx-pdf-stale-cache`](#docx-pdf-stale-cache)) を疑い、 staging 経由 (= 毎回ちがう path) で再変換する (`docx-to-pdf.sh` の既定。 Word は kill しない = [`office-app-reset-guard`](#office-app-reset-guard))。
 
 origin: 実測 (autofit 表の docx 様式) — 変換を繰り返して (1)+(2) に収束、 雛形と y 座標一致を確認してから印刷。
+
+## <a id="docx-body-line-budget"></a>docx 様式の本文の段落に長い値を入れると、 末尾の行 (「以上」・空の段落) が 2 頁目に落ちる — 余りの行数を先に測る
+
+**症状**: 1 頁の Word 様式で、 表の外の本文の段落 (支出の内容・使途・理由のような「見出し：値」 の段落) に長い値を入れると、 Word の PDF が 2 頁になる。 表の列幅は動いていない ([`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow) と別の原因)。
+
+**原因**: 本文の段落は値の長さだけ行が増え、 その下の段落 (添付書類の行・「以上」・雛形の末尾の空の段落) が下余白を越えて次の頁に送られる。 末尾の空の段落も 1 行を取るので、 見た目の余白より 1 行早く溢れる。
+
+**対処**:
+1. **余りの行数を先に測る** — 前に同じ様式で出した版 (または今の版) の PDF で、 最後の字の下端の y を `get_text("blocks")` から、 本文の下限を docx の `sections[0].page_height − bottom_margin` から取り、 行送り (下半分の行の上端の差の最頻値) で割る。 その数から末尾の空の段落の 1 行を引いた分が、 値を延ばせる行数。 1 行の字数 (全角換算、 英数字は半分ほど) で割れば、 削る字数が決まる。
+2. **値が揃う前に長さだけ確かめる** — 金額・日付が届く前でも、 案件 dir を一時 dir に写し、 写しの記入 script にだけ仮の値 (実物に近い長さ) を入れて build する。 頁数の検査 ([`form-case-pipeline.md`](form-case-pipeline.md) の build) がそのまま効き、 本物の案件には仮の値が残らない。 写しの build が様式の照合の記録に行を足すことがある (一時の印つき) = 記録を読むときに見分ける。
+3. 削るときは、 同じ段落の中の重複 (支出の欄で言った語を使途の欄で繰り返す、 年の再掲) から削る。 字を小さくする ([`docx-autofit-grid-overflow`](#docx-autofit-grid-overflow) の 2) より先に。
+
+origin: 実測 (1 頁の Word 様式の使途の欄) — 最初の案が 2 頁、 余りを測って 4 行に詰めて 1 頁。
 
 ## <a id="docx-exact-row-height-clipping"></a>docx 様式の表で行の高さが固定 (`hRule="exact"`) だと、 枠を超えた本文は頁も増えずに黙って消える
 

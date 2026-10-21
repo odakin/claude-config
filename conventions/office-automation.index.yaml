@@ -719,6 +719,9 @@ sections:
   - id: docx-autofit-grid-overflow
     level: 2
     title: "docx 様式の autofit 表は「1 セルの長い値」 で**別の行**が折り返し、 1 頁様式が 2 頁にはみ出す"
+  - id: docx-body-line-budget
+    level: 2
+    title: "docx 様式の本文の段落に長い値を入れると、 末尾の行 (「以上」・空の段落) が 2 頁目に落ちる — 余りの行数を先に測る"
   - id: docx-exact-row-height-clipping
     level: 2
     title: "docx 様式の表で行の高さが固定 (`hRule=\"exact\"`) だと、 枠を超えた本文は頁も増えずに黙って消える"

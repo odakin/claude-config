@@ -604,8 +604,8 @@ class RecipeDocx(Recipe):
             n = fitz.open(raw).page_count
             if n != DF.pages(self.spec):
                 raise BuildError(f"Word の PDF が {n} page (spec の meta.pages = {DF.pages(self.spec)}) = 値の長さで表の頁が"
-                                 "はみ出した (層1 office-automation.md#docx-autofit-grid-overflow)。 欄の値を短くするか spec の "
-                                 "docx.render で字を小さくする")
+                                 "はみ出した (表の列幅が動いた = 層1 office-automation.md#docx-autofit-grid-overflow / 本文の段落の値が"
+                                 "長い = 同 #docx-body-line-budget)。 欄の値を短くするか spec の docx.render で字を小さくする")
             miss = check_page_anchors(raw, self.spec)
             if miss:
                 raise BuildError("Word の PDF の頁が spec の page_roles と合わない (頁の目印が無い): "
