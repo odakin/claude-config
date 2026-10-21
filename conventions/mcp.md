@@ -385,6 +385,7 @@ send (= MCP `send_email` / Gmail API `messages/send`) に file を添付する�
 - Cc に誰が入っているかを**述べる・判断に使う・返信で引き継ぐ**前に、 原メッセージのヘッダを Gmail API で読む (`messages.get?format=metadata&metadataHeaders=To&metadataHeaders=Cc`、 または `format=raw` を `.eml` に保存して読む。 認証は [§API 直接アクセス](#api-direct-access))。
 - 典型の誤り = 「この返事は相手を Cc から外している」 と読み、 要らない転送を起案する (実測)。 書き側の同類 = 全員への返信で Cc を落とす。 本文の宛名の直下の「Cc: ○○様」 の行はヘッダの Cc ではない (書いた本人が実際に Cc に入れたかは分からない)。
 - 機械 = hook [`hooks/gmail-read-email-cc-nudge.sh`](../hooks/gmail-read-email-cc-nudge.sh) (PostToolUse) が、 read_email の出力のヘッダの段に Cc 行が無いとき、 ヘッダの読み方を 1 行添える (文の規則だけでは読む turn で当たらなかった、 実測)。
+- <a id="gmail-header-name-case"></a>**API でヘッダを読む自前の script も、 ヘッダ名を大文字小文字を区別せずに引く**。 ヘッダ名は大文字小文字を区別しない (RFC 5322) が、 Gmail API の `payload.headers` は送り手の書いた綴りのまま返し、 Outlook 系は `CC:` と書く。 `{h["name"]: h["value"]}` の dict を `.get("Cc")` で引くと空になり、 上と同じ「Cc が空」 の誤りが出る (実測)。 dict を作るときに名前を小文字に揃え、 引くときも小文字で引く。
 
 ## Gmail MCP: read_email の大容量出力と chunked 処理
 
