@@ -122,6 +122,11 @@
       "hint": "venv の部品 (ensurepip) が無い python で venv を作ろうとした (依存や版の問題ではない)。 Debian・Ubuntu なら python3.X-venv の package を入れるか、 uv を入れる (uv は ensurepip を使わずに venv を作る)"
     },
     {
+      "match": "This background session hasn't isolated its changes yet",
+      "doc": "conventions/multi-session-coordination.md#bg-worktree-isolation",
+      "hint": "CLI の背景 session の既定 (worktree.bgIsolation) が、 今の cwd の中の Edit/Write を EnterWorktree まで断った。 依頼が worktree を求めていないなら EnterWorktree を呼ばず、 起動に --settings '{\"worktree\": {\"bgIsolation\": \"none\"}}' を付けて起こし直す (起動行の環境変数は job に届かない)。 呼べば作業は main でなく branch に入る"
+    },
+    {
       "match": "auto-fixed non-LaTeX characters and re-staged",
       "doc": "conventions/latex.md#autofix-with-pathspec-commit",
       "hint": "pre-commit が tex の文字を直して re-stage した。 `git commit -- <path>` (pathspec) なら修正は commit に入るが main の index に修正前の版が残る (status が MM) = commit の後に git restore --staged <path>"
