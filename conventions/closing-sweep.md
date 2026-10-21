@@ -179,7 +179,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
 - SESSION.md は案件ごとの現在地を**置き換える** (日付つきの節・commit hash・経緯を足さない。 中身の置き場所 = 2 の「正本を README・SESSION に置かない」)。
 - 動いた TODO は現在地の欄を上書きし、 期限と status を実態に合わせる (自分の番が残るなら「待ち」 にしない)。
 - メールを送った・受けたなら記録の道具で記録する。
-- <a id="deferrals"></a>この session が記録や返事に書いた先送り (「次に〜するとき」「後で」「推す = 〜 (次の機会に)」) は、 締めの中で今やるか、 期限つきの TODO・plan・掲示板の依頼に載せる。 記録の中の「次に〜とき」 は carrier ではない (次の session はその文を探さない)。 拾い方 = 0.3 の `session-claims-report.py` の B
+- <a id="deferrals"></a>この session が記録や返事に書いた先送り (「次に〜するとき」「後で」「推す = 〜 (次の機会に)」) は、 締めの中で今やるか、 期限つきの TODO・plan・掲示板の依頼に載せる。 記録の中の「次に〜とき」 は carrier ではない (次の session はその文を探さない)。 返事の中で自分に約束した先送り (「返事が来たら、 次にこの session で見たときに伝えます」) も同じで、 session は持ち主が閉じる = 待ちを運ぶのは session の外の carrier (新着を拾う surface・期限つき TODO) で、 返事ではその carrier を名指しする (実測)。 拾い方 = 0.3 の `session-claims-report.py` の B
 - 一時 dir (scratchpad・`/tmp`) に置いた成果 (候補・証拠・出力) は、 残すなら repo に移して所在を正本に書き、 要らないなら消す (一時 dir は session の後にだれも見つけられない)。 個人情報を含む複製 (記入済みの様式・刷った PDF) は必ず消す。
 
 ## <a id="commit"></a>4. commit + push
