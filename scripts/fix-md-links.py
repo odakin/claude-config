@@ -12,6 +12,11 @@
 | gone         | 同じ名前の file がどこにも無い / 改名先も消えた | 触らない (報告のみ) |
 | not-a-path   | 拡張子が無い・空白や `\\` を含む (数式・散文・件名の一覧を link と誤認したもの) | 触らない |
 
+linked worktree (`repo/.claude/worktrees/<name>/`) の中の file では、 着地先が worktree の外に出る link (隣の repo への
+`../other/x.md`) を、 本来の checkout の同じ位置から解決する (段数の探索も同じ)。 worktree は本来の checkout より深いので、
+そのままでは正しい link が届かず、 段数の探索が worktree でしか通らない段数で隣の repo を見つけて depth と判定し、
+commit を止めていた (実測)。 worktree の中に着地する link は worktree の file で解決する (本来の checkout の file を見ない)。
+
 使い方:
 
     python3 fix-md-links.py --base ~/Claude                   # 分類の件数
@@ -87,6 +92,7 @@ class Git:
         self.roots: dict[Path, Path | None] = {}
         self.maps: dict[Path, dict[str, str]] = {}
         self.names: dict[Path, dict[str, list[str]]] = {}
+        self.mains: dict[Path, Path | None] = {}
 
     def root(self, d: Path) -> Path | None:
         if d not in self.roots:
@@ -94,6 +100,21 @@ class Git:
                                capture_output=True, text=True)
             self.roots[d] = Path(r.stdout.strip()).resolve() if r.returncode == 0 else None
         return self.roots[d]
+
+    def main_checkout(self, root: Path) -> Path | None:
+        """The main checkout's root when `root` is a linked worktree (`repo/.claude/worktrees/<name>/`),
+        else None. `--git-common-dir` names the main checkout's `.git` (a plain checkout names its own)."""
+        if root not in self.mains:
+            r = subprocess.run(["git", "-C", str(root), "rev-parse", "--git-common-dir"],
+                               capture_output=True, text=True)
+            main = None
+            if r.returncode == 0 and r.stdout.strip():
+                common = Path(r.stdout.strip())
+                common = (common if common.is_absolute() else root / common).resolve()
+                if common.name == ".git" and common.parent != root:
+                    main = common.parent
+            self.mains[root] = main
+        return self.mains[root]
 
     def renames(self, root: Path) -> dict[str, str]:
         if not self.enabled:
@@ -140,11 +161,30 @@ def moved_candidate(src: Path, path_part: str, git: Git) -> str | None:
     return os.path.relpath(root / hits[0], real_dir).replace(" ", "%20") if len(hits) == 1 else None
 
 
+def link_resolver(real_dir: Path, git: Git):
+    """exists(relative link) for a file in real_dir. In a linked worktree, a target that leaves the
+    worktree (`../other-repo/x.md`) is looked up at the same place relative to the main checkout, where
+    the sibling repos are: the worktree sits deeper, so the link did not resolve there and the depth
+    search found the sibling at a worktree-only depth (measured: a correct link was refused as 'depth').
+    A target inside the worktree is the worktree's own file, never the main checkout's."""
+    root = git.root(real_dir)
+    main = git.main_checkout(root) if root is not None else None
+    if main is None:
+        return lambda rel: _exists(real_dir / rel)
+
+    def there(rel: str) -> bool:
+        p = os.path.normpath(real_dir / rel)
+        r = os.path.relpath(p, root)
+        return _exists(Path(os.path.normpath(main / r)) if Path(r).parts[:1] == ("..",) else Path(p))
+    return there
+
+
 def classify(src: Path, path_part: str, git: Git) -> tuple[str, str | None]:
     """(class, new_path_part or None). path_part is the raw (still %XX-encoded) path."""
     real_dir = src.resolve().parent
     dec = unquote(path_part)
-    if _exists(real_dir / dec):
+    there = link_resolver(real_dir, git)
+    if there(dec):
         return "ok", None
     if dec.startswith("~/"):                                      # `~/x` never resolves in a renderer
         home = Path.home() / dec[2:]
@@ -155,7 +195,7 @@ def classify(src: Path, path_part: str, git: Git) -> tuple[str, str | None]:
         return "not-a-path", None
     core_dec = re.sub(r"^(?:\.\./|\./)+", "", dec)
     core_raw = re.sub(r"^(?:\.\./|\./)+", "", path_part)
-    hits = [k for k in range(MAX_DEPTH + 1) if core_dec and _exists(real_dir / ("../" * k + core_dec))]
+    hits = [k for k in range(MAX_DEPTH + 1) if core_dec and there("../" * k + core_dec)]
     # A target with no extension is a path only if it resolves at some depth or is an explicit
     # directory (`dir/`). Otherwise it is prose: `(2)`, `(通知)`, and mail subjects that carry a
     # date slash like `(通知:7/18締切)` all look like `a/b` but are not paths (2026-09-13: 16 such
@@ -573,9 +613,64 @@ def selftest() -> int:
         check("--files --fix rewrites only that file", st.read_text() == "[s](../DESIGN.md)\n"
               and "CHANGED" in r4.stdout)
 
+    selftest_worktree(check)
     selftest_verify_diff(check)
     print("\nALL PASS" if ok else "\nFAILED")
     return 0 if ok else 1
+
+
+def selftest_worktree(check) -> None:
+    """A linked worktree (`repo/.claude/worktrees/<name>/`) sits deeper than the main checkout, so a link
+    that leaves the repo (`../other/x.md`) does not resolve from it, and the depth search found the
+    sibling repo at a worktree-only depth: a correct link was refused as 'depth' (measured)."""
+    import tempfile
+    me = str(Path(__file__).resolve())
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td).resolve()
+        other, repo = base / "other", base / "repo"
+        for d in (other, repo):
+            d.mkdir()
+            subprocess.run(["git", "-C", str(d), "init", "-q"], check=True)
+            for k, v in (("user.email", "t@t"), ("user.name", "t"), ("commit.gpgsign", "false")):
+                subprocess.run(["git", "-C", str(d), "config", k, v], check=True)
+        (other / "x.md").write_text("x\n", encoding="utf-8")
+        body = ("sibling repo [x](../other/x.md)\n"
+                "one ../ too many [d](../../other/x.md)\n"
+                "gone [n](../other/nope.md)\n")
+        (repo / "a.md").write_text(body, encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", "a.md"], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "a"], check=True)
+        wt = repo / ".claude" / "worktrees" / "w"
+        subprocess.run(["git", "-C", str(repo), "worktree", "add", "-q", str(wt)], check=True,
+                       capture_output=True)
+        (repo / "main-only.md").write_text("x\n", encoding="utf-8")       # untracked: only in the main checkout
+        (wt / "b.md").write_text("[m](main-only.md)\n", encoding="utf-8")
+
+        main_rows = scan_files([repo / "a.md"], [], False, Git(False))
+        wt_rows = scan_files([wt / "a.md", wt / "b.md"], [], False, Git(False))
+        mcls = {r[2]: r[3] for r in main_rows}
+        wcls = {r[2]: (r[3], r[4]) for r in wt_rows}
+        check("worktree: a correct link to a sibling repo is ok, as in the main checkout",
+              "../other/x.md" not in mcls and "../other/x.md" not in wcls)
+        check("worktree: a link one ../ off is still 'depth', with the main checkout's fix  [foil]",
+              mcls.get("../../other/x.md") == "depth"
+              and wcls.get("../../other/x.md") == ("depth", "../other/x.md"))
+        check("worktree: a missing target is still 'gone'  [foil]",
+              mcls.get("../other/nope.md") == "gone" and wcls.get("../other/nope.md", ("",))[0] == "gone")
+        check("worktree: a link inside the repo is resolved in the worktree, not the main checkout  [foil]",
+              wcls.get("main-only.md", ("",))[0] == "gone")
+        # --staged from inside the worktree: the correct link passes, the one-off link blocks
+        (wt / "a.md").write_text("sibling repo [x](../other/x.md)\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(wt), "add", "a.md"], check=True)
+        r1 = subprocess.run([sys.executable, me, "--staged"], cwd=wt, capture_output=True, text=True)
+        check("worktree --staged: a correct link to a sibling repo does not block the commit",
+              r1.returncode == 0)
+        (wt / "a.md").write_text("one ../ too many [d](../../other/x.md)\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(wt), "add", "a.md"], check=True)
+        r2 = subprocess.run([sys.executable, me, "--staged"], cwd=wt, capture_output=True, text=True)
+        check("worktree --staged: a link one ../ off still blocks  [foil]",
+              r2.returncode == 1 and re.search(r"depth\s+a\.md\s+::\s+\.\./\.\./other/x\.md\s+->\s+\.\./other/x\.md",
+                                               r2.stdout) is not None)
 
 
 def selftest_verify_diff(check) -> None:
