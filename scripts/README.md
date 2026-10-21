@@ -461,6 +461,7 @@
 - **[lib/staged-conflict-markers.sh](lib/staged-conflict-markers.sh)** — merge conflict marker の staged-content gate (sourceable lib)
 - **[lib/staged-conflict-markers.test.sh](lib/staged-conflict-markers.test.sh)** — staged-conflict-markers.sh の self-test (hermetic)
 - **[lib/staged_diff.py](lib/staged_diff.py)** — staged 追加行を読む helper (= pre-commit の warn 検査が binary を含む commit で落ちないように)。
+- **[lib/tcc_disclaim.py](lib/tcc_disclaim.py)** — macOS で、 子 process を「自分がプライバシー許可 (TCC) の責任者」 として起動する。
 - **[lib/test-err-trap.sh](lib/test-err-trap.sh)** — set -e の bash test で落ちた assertion の行とコマンドを stderr に出す ERR trap (sourceable lib)
 - **[lib/test-err-trap.test.sh](lib/test-err-trap.test.sh)** — test-err-trap.sh の self-test (hermetic、 走らせた bash で fixture を実行)
 - **[lib/todo_ledger.py](lib/todo_ledger.py)** — 1 entry 1 file の TODO 台帳 (`<repo>/todo/<id>.yaml`) の読み書き (単一 home)。

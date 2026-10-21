@@ -45,6 +45,15 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
 - 付与はシステム設定の操作 = **人が 1 回**。 実測では起動中の process にも再起動なしで効いた
   (効かなければ起動側 app を再起動してから確かめる)。 設定画面を直接開く =
   `open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"`。
+- <a id="tcc-disclaim-child"></a>**付与できない種類の許可 (カレンダー・連絡先など) は、 子を自分の責任者として起動する**:
+  これらは起動側 app が Info.plist に利用目的の宣言 (`NSCalendarsUsageDescription` など) を持たないと、 確認の画面も出ずに
+  拒否され、 システム設定のその項目には「＋」 が無いので人が足すこともできない (実測: Claude Code desktop の helper は
+  カレンダーの宣言を持たず、 Bash から呼んだ EventKit の CLI が `access denied` で返った)。 CLI 自身が許可を持っている
+  (launchd の定期ジョブのように CLI が自分の責任者になる経路で付与済み) なら、 posix_spawn に responsibility の disclaim を
+  付けて CLI を起動すると、 CLI 自身の許可で動く (Terminal や launchd がしているのと同じ) = [`../scripts/lib/tcc_disclaim.py`](../scripts/lib/tcc_disclaim.py) の
+  `run_disclaimed(argv, cwd=…, timeout=…)`。 直接の起動が拒否されたときだけ呼び直す形にする。 ⚠️ CLI に許可がまだ無ければ
+  CLI の名前で確認の画面が出て、 応答まで CLI が待つ = 無人の hook からは timeout を短く。 ファイルの読み取り (フルディスク
+  アクセス) はこの手では解決しない (子が python なら python 自身に付与が要る = 広すぎる) = 上の付与で直す。
 
 ## <a id="limits"></a>限界 (出力の読み方に効く)
 
