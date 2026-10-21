@@ -359,6 +359,15 @@
       ]
     },
     {
+      "matcher": "^mcp__gmail.*__read_email$",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/gmail-read-email-cc-nudge.sh"
+        }
+      ]
+    },
+    {
       "matcher": "Bash",
       "hooks": [
         {
