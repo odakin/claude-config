@@ -12,7 +12,9 @@ subcommand:
   bulletin-topics <category_id>                                 category 内の掲示一覧 (REST)
   bulletin-topic <topic_id>                                     掲示 1 件の本文 (REST)
   download <fid> --app bulletin|cabinet --out <file か dir>     添付 file の download (dir なら server の file 名で置く)
-  get <path> [--json]                                           任意 path を GET (= /g/... の HTML/JSON、 debug 用)
+  get <path> [--json|--text]                                    任意 path を GET (= /g/... の HTML/JSON)。 path は貼った URL でもよい (同じ組織の host だけ)。
+                                                                --text = script/style を落として tag を剥がした読める行 (ワークフローの進行状況など)。
+                                                                Garoon のエラー画面 (例: fid の無い view.csp) は code と説明を stderr に出して exit 65
   status                                                        いま読めるか (GET 1 本。 切れていれば下の復帰を試す)
   doctor                                                        配線だけを見る (cookie を復号できて値が壊れていないか。 network なし、 健全なら無言)
   probe [path ...]                                              切れ方の採取 (cookie なし・偽の session id で撃ち、 302 の行き先・Set-Cookie の名前・切れ判定を並べる)
@@ -48,6 +50,7 @@ login 切れからの復帰 = 共通部品 scripts/lib/sso_cookie_session.py (�
 ⚠️ 出力に cookie / ticket を出さない。 取得した掲示本文・file は組織の内部情報 = private 層にしか置かない。
 """
 import argparse
+import html as _html
 import json
 import os
 import re
@@ -64,6 +67,7 @@ from lib.sso_cookie_session import (  # noqa: E402
     selftest_cases as _session_selftest_cases, site_selftest_cases)
 
 PROBE_PATHS = ["/g/", "/g/portal/index.csp", "/g/cabinet/search.csp"]
+EX_GAROON_ERROR = 65  # Garoon がエラー画面を 200 で返した (= path や引数の誤り。 黙って exit 0 にしない)
 
 
 def _say(msg):
@@ -173,6 +177,32 @@ def _strip(s):
     return re.sub(r"<[^>]+>", "", s or "").replace("\n", " ")
 
 
+def page_text(page):
+    """HTML を読める行に: script / style を落とし、 tag を改行にして entity を戻し、 空行を捨てる (`get --text`)。"""
+    s = re.sub(r"(?is)<(script|style)\b.*?</\1\s*>", "", page or "")
+    s = _html.unescape(re.sub(r"<[^>]+>", "\n", s))
+    return "\n".join(line.strip() for line in s.splitlines() if line.strip())
+
+
+def error_page(page):
+    """Garoon のエラー画面 (HTTP 200 で返る) なら (code, 説明)、 そうでなければ None。"""
+    if not re.search(r"<title>\s*ガルーン\s*エラー", page or ""):
+        return None
+    m = re.search(r'id="error_number"[^>]*>\s*エラー\s*\(([A-Z0-9_]+)\)\s*</h2>\s*([^<]*)', page)
+    return (m.group(1), m.group(2).strip()) if m else ("?", "")
+
+
+def site_path(path, base):
+    """`get` の引数を path にする。 同じ組織の https URL なら origin を外す (= 画面から貼った URL で動く)。
+    origin を足し重ねると host が `<org>.cybozu.comhttps` になって名前解決で落ちていた (実測)。 別 host は止める。"""
+    if not re.match(r"(?i)https?://", path):
+        return path
+    u, b = urlparse(path), urlparse(base)
+    if u.scheme != "https" or u.hostname != b.hostname:
+        raise SystemExit(f"get: {u.scheme}://{u.hostname} は {b.scheme}://{b.hostname} でない (別 host は読まない)")
+    return (u.path or "/") + (f"?{u.query}" if u.query else "")
+
+
 def doctor(browser, profile):
     """script 経路の配線だけを見る (cookie を復号できて値が壊れていないか)。 network なし。 健全・対象外なら []。"""
     return _doctor("Garoon", browser, profile, ["cybozu.com"])
@@ -204,6 +234,13 @@ def selftest():
 
     def _parsed(argv):
         return build_parser().parse_args(argv)
+
+    def _raises(f):
+        try:
+            f()
+        except SystemExit:
+            return True
+        return False
     b = "https://x.cybozu.com"
     checks = _tab_selftest_cases() + _session_selftest_cases() + site_selftest_cases(
         Garoon, b, entry=(b + "/g/", True), login=(b + "/login", False),
@@ -219,6 +256,19 @@ def selftest():
         ("Garoon の中の判定: /login と別 host と http は外", inside("https://x.cybozu.com/g/", host)
          and not inside("https://x.cybozu.com/login", host) and not inside("https://y.cybozu.com/g/", host)
          and not inside("http://x.cybozu.com/g/", host) and not inside("chrome-error://chromewebdata/", host)),
+        ("get --text: script/style を落とし tag を行に、 entity を戻す",
+         page_text("<html><script>var x=1;</script><style>p{}</style><td>承認</td><td>A &amp; B</td>\n\n<p> </p></html>")
+         == "承認\nA & B"),
+        ("get: エラー画面の code と説明を取る",
+         error_page('<title>ガルーン エラー</title><h2 id="error_number" class="e">エラー (GRN_WRKF_00000)</h2>\n'
+                    '                フォルダーIDが不正です。\n') == ("GRN_WRKF_00000", "フォルダーIDが不正です。")
+         and error_page("<title>ワークフロー</title>") is None),
+        ("get: 同じ組織の URL は path に、 path はそのまま", site_path(b + "/g/workflow/view.csp?fid=1&pid=2", b)
+         == "/g/workflow/view.csp?fid=1&pid=2" and site_path("/g/", b) == "/g/" and site_path(b, b) == "/"),
+        ("get: 別 host の URL は止める", _raises(lambda: site_path("https://y.cybozu.com/g/", b))
+         and _raises(lambda: site_path("http://x.cybozu.com/g/", b))),
+        ("get --text は subcommand の後ろで受ける", _parsed(["get", "/g/", "--text"]).text is True
+         and _parsed(["get", "/g/"]).text is False),
     ]
     for name, good in checks:
         ok &= bool(good)
@@ -257,6 +307,7 @@ def build_parser():
     p = sub.add_parser("bulletin-topic", parents=[common]); p.add_argument("topic_id")
     p = sub.add_parser("download", parents=[common]); p.add_argument("fid"); p.add_argument("--app", default="bulletin"); p.add_argument("--out", required=True)
     p = sub.add_parser("get", parents=[common]); p.add_argument("path")
+    p.add_argument("--text", action="store_true", help="script/style を落として tag を剥がした読める行で出す")
     sub.add_parser("status", parents=[common])
     sub.add_parser("doctor", parents=[common])
     p = sub.add_parser("probe", parents=[common], help="切れ方の採取 (cookie を使わない)")
@@ -318,8 +369,12 @@ def run(a, g):
     elif a.cmd == "download":
         dest, n, ct = g.download(a.fid, a.app, a.out); print(f"saved {dest} ({n} bytes, {ct})")
     elif a.cmd == "get":
-        r = g.get(a.path)
-        print(r.text if not a.json else json.dumps(r.json(), ensure_ascii=False))
+        r = g.get(site_path(a.path, g.base))
+        err = error_page(r.text)
+        if err:
+            _say(f"エラー画面 ({err[0]}): {err[1]} — path と引数を確かめる (ワークフローの view.csp は fid も要る = conventions/garoon.md#garoon-workflow-status-read)")
+            sys.exit(EX_GAROON_ERROR)
+        print(json.dumps(r.json(), ensure_ascii=False) if a.json else page_text(r.text) if a.text else r.text)
     elif a.cmd == "status":
         g.get(Garoon.alive_path)
         print("読める" + {None: "", "reload": " (cookie を読み直した)", "refresh": " (browser に入り直させた)"}[g.recovered_by])
