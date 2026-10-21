@@ -15,9 +15,10 @@ conventions/batch-text-edits.md の先頭の側の罠)。 YAML を load → dump
     --set key=value   値は YAML の二重引用の文字列として書く (改行は \\n で入る)。 key が無ければ足す (--after <key> の直後、 無ければ末尾)
                       ⚠️ 値を自分で引用符に包まない = 引用符は道具が付ける。 shell で `'key="…"'` と書くと値の両端に " が残り、
                       file には `\"…\"` が入る (実測 2 回)。 両端が " の値は止める (本当にその値なら --allow-quoted-value)
-                      ⚠️ 真偽・数・list の key には使わない = `--set flag=true` は `flag: "true"` (文字列) になり、 list は
-                      1 本の文字列になる (実測)。 読み手が bool() で読むと "false" も真になる。 その key は text で 1 行足して、
-                      読み直して他の key が不変かを確かめる
+                      ⚠️ `--set flag=false` は `flag: "false"` (文字列) になり、 読み手が bool() で読むと真になる (実測 2 回以上)
+                      = 値が真偽・null に読める形 (true/false/yes/no/null/~ など) なら止める。 本当に文字列なら --allow-bool-string
+                      ⚠️ list の key には使わない (1 本の文字列になる) = その key は text で 1 行足して、 読み直して他の key が不変かを確かめる
+    --set-literal key=value  値を真偽・null・数として引用なしで書く (`--set-literal waiting_party=false`)。 文字列になる値は止める
     --comment key=text  --set した行の末尾に「   # text」 を付ける
     --drop key        その key をまとまりごと消す (無ければ何もしない)
     --dry-run         書かずに差分だけ出す
@@ -61,7 +62,13 @@ def blocks(lines: list[str]) -> list[tuple[str | None, int, int]]:
     return out
 
 
-def quote(v: str) -> str:
+def quote(v) -> str:
+    if isinstance(v, bool):  # --set-literal の値 (bool は int の部分型なので先に見る)
+        return "true" if v else "false"
+    if v is None:
+        return "null"
+    if isinstance(v, (int, float)):
+        return repr(v)
     return json.dumps(v, ensure_ascii=False)  # JSON の文字列は YAML の二重引用の文字列として読める
 
 
@@ -153,11 +160,34 @@ def selftest() -> int:
         assert p.read_text(encoding="utf-8") == before
         assert main([str(p), "--set", 'status_context="閉じた"', "--allow-quoted-value"]) == 0
         assert _yaml_safe_load(p.read_text(encoding="utf-8"))["status_context"] == '"閉じた"'
+        # 真偽値・null を --set に渡すと文字列 "false" になり読み手の bool() で真 = 止める (実測 2 回以上)
+        before = p.read_text(encoding="utf-8")
+        for bad in ("waiting_party=false", "flag=True", "x=null", "y=~", "z=no"):
+            try:
+                main([str(p), "--set", bad])
+                raise AssertionError(f"{bad} を止めなかった")
+            except SystemExit as e:
+                assert "--set-literal" in str(e), e
+        assert p.read_text(encoding="utf-8") == before
+        assert main([str(p), "--set", "deadline=2030-01-05", "--set", "count=3", "--set", "memo=[未定 {x"]) == 0  # 日付・数字・YAML で読めない文字列は従来どおり
+        d = _yaml_safe_load(p.read_text(encoding="utf-8"))
+        assert d["deadline"] == "2030-01-05" and d["count"] == "3" and d["memo"] == "[未定 {x", d
+        assert main([str(p), "--set-literal", "waiting_party=false", "--comment", "waiting_party=返事は不要"]) == 0
+        t = p.read_text(encoding="utf-8")
+        assert "waiting_party: false   # 返事は不要" in t and _yaml_safe_load(t)["waiting_party"] is False, t
+        for bad in ("w=完了", "w=[a]", "w=[未定"):
+            try:
+                main([str(p), "--set-literal", bad])
+                raise AssertionError(f"--set-literal {bad} を止めなかった")
+            except SystemExit as e:
+                assert "--set で渡す" in str(e), e
+        assert main([str(p), "--set", "flag=false", "--allow-bool-string"]) == 0
+        assert _yaml_safe_load(p.read_text(encoding="utf-8"))["flag"] == "false"
     print("yaml-set-top-keys selftest: ALL PASS (行頭の key だけを置き換え・本文の中の同じ語は触らない・ほかの key は不変を確かめる)")
     return 0
 
 
-def kv(items: list[str] | None, allow_quoted: bool = True) -> dict[str, str]:
+def kv(items: list[str] | None, allow_quoted: bool = True, allow_bool_string: bool = True) -> dict[str, str]:
     out = {}
     for it in items or []:
         k, sep, v = it.partition("=")
@@ -166,7 +196,32 @@ def kv(items: list[str] | None, allow_quoted: bool = True) -> dict[str, str]:
         if not allow_quoted and len(v) >= 2 and v[0] == v[-1] == '"':
             raise SystemExit(f"❌ {k} の値の両端に \" がある = 引用符は道具が付ける。 外して渡す "
                              f"(shell の '…' の中に \"…\" を書かない)。 本当に両端が \" の値なら --allow-quoted-value")
+        if not allow_bool_string and v.strip() and _reads_as_bool_or_null(v):
+            raise SystemExit(f"❌ {k}={v} は --set だと文字列 \"{v}\" になる (読み手の bool() では \"false\" も真)。 "
+                             f"真偽値・null として書くなら --set-literal {k}={v}、 本当に文字列なら --allow-bool-string")
         out[k] = v
+    return out
+
+
+def _reads_as_bool_or_null(v: str) -> bool:
+    try:
+        val = _yaml_safe_load(v)
+    except yaml.YAMLError:  # 「[未定」 のように YAML として読めない文字列は文字列のまま書く
+        return False
+    return val is None or isinstance(val, bool)
+
+
+def literals(items: list[str] | None) -> dict[str, object]:
+    """--set-literal: 値を YAML の真偽・null・数として読み、 引用なしで書く (文字列になる値は止める)。"""
+    out: dict[str, object] = {}
+    for k, v in kv(items).items():
+        try:
+            val = _yaml_safe_load(v) if v.strip() else None
+        except yaml.YAMLError:
+            val = v
+        if isinstance(val, str) or not (val is None or isinstance(val, (bool, int, float))):
+            raise SystemExit(f"❌ --set-literal {k}={v} は真偽・null・数でない = 文字列は --set で渡す")
+        out[k] = val
     return out
 
 
@@ -180,11 +235,18 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--after")
     ap.add_argument("--comment", action="append", dest="comments")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--set-literal", action="append", dest="set_literals")
     ap.add_argument("--allow-quoted-value", action="store_true")
+    ap.add_argument("--allow-bool-string", action="store_true")
     a = ap.parse_args(argv)
     p = Path(a.file)
     before = p.read_text(encoding="utf-8")
-    sets, comments = kv(a.sets, allow_quoted=a.allow_quoted_value), kv(a.comments)
+    sets = kv(a.sets, allow_quoted=a.allow_quoted_value, allow_bool_string=a.allow_bool_string)
+    lits = literals(a.set_literals)
+    if set(sets) & set(lits):
+        raise SystemExit(f"❌ 同じ key を --set と --set-literal の両方に渡した: {sorted(set(sets) & set(lits))}")
+    sets.update(lits)
+    comments = kv(a.comments)
     after_text = edit(before, sets, a.drop, a.after, comments)
     errs = verify(before, after_text, sets, a.drop)
     sys.stdout.writelines(difflib.unified_diff(before.splitlines(True), after_text.splitlines(True), str(p), str(p)))
