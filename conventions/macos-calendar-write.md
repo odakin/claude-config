@@ -125,6 +125,8 @@ API / MCP で Google 所有 calendar に書いた予定を、 user は Mac の C
 - EventKit で書き出す自作 tool が出力を **cwd 相対の file** に書き、 書けない時に黙る作りだと、 別の cwd から回した poll は古い file を読み続けて「まだ無い」 と誤判定する。 **tool の stdout を読む**か、 出力 path を固定する。
 - DB を開けるかは呼び出し元 process の権限次第 (TCC)。 開けなかったことを「アカウントは正常」 と読まない。
 
+<a id="api-vs-eventkit-compare"></a>**DB を読めない機械では、 結果を突き合わせて代える** — DB を読むにはフルディスクアクセスが要り、 agent の shell を起動する app に付けると、 その shell の全コマンドがメール・メッセージ・閲覧履歴まで読めるようになる。 同期の検査のためだけに付けない方がよい。 代わりに、 API で読んだ予定 (今から N 日先まで) と、 EventKit で書き出した Calendar.app の予定 (同じ calendar) を (日付, 開始時刻, 題名) で突き合わせる。 API にあって Mac に無い予定 (最終更新から 30 分ほど経ったもの = 同期の遅れを除く) があれば同期が止まっている疑い、 Mac にあって API に無い予定は消した・動かした予定が残っている疑い。 EventKit の書き出しは「今より後に終わる予定」 から始まることが多いので、 API の側も同じ窓で読む。 書き出しの CLI が agent の shell から拒否されるときは [`macos-notification-db.md#tcc-disclaim-child`](macos-notification-db.md#tcc-disclaim-child) (実測: フルディスクアクセスなしで照合できた)。 アカウントの認証切れそのものは見えない (結果だけを見る) ので、 DB を読める機械では上の 2 を正本にする。
+
 ## <a id="reminders-not-enforced-by-mcp-hooks"></a>reminder / alarm は AppleScript で個別に付与する
 
 MCP `create_event` を対象にした reminder 強制 hook (= layer 3 の calendar-reminder-guard.sh 等) は **AppleScript 経路を catch しない** — matcher が MCP tool 名にしか反応しないため。 AppleScript で reminder が欲しい event は script 内で明示:
