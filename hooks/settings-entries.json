@@ -272,7 +272,7 @@
       ]
     },
     {
-      "matcher": "^(mcp__.*__start_session|SendMessage|Agent|Task)$",
+      "matcher": "^(mcp__.*__(start_session|set_session_model|set_session_effort)|SendMessage|Agent|Task)$",
       "hooks": [
         {
           "type": "command",
