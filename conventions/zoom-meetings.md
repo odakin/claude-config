@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript)
+when: Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript) + 開催通知のメールから本人を会議に入れるとき (#join-from-notice)
 category: infra
-summary: Zoom の機械経路は Server-to-Server OAuth app 1 つで開く (#s2s-oauth-route、 scope は用途ごとに admin 版を 1 つずつ足す = 部屋の作成・読み取り・変更・削除 / 自分と設定 / 終わった会議、 token は account_id + Basic 認証で自己発行)。 常設の部屋を PMI と分ける判断 (#dedicated-room-vs-pmi)。 create の 2 つの罠 = アカウント既定「予定されたミーティングに PMI を使用」 が ON だと新しい id が発番されるのに参加 URL は PMI のものになる (#use-pmi-silently-hijacks-create)、 passcode なしで作ると waiting_room が要求を無視して true に上書きされる (#passcode-or-waiting-room)。 固定時刻なしの定期ミーティングは最終使用から 365 日で失効する (#no-fixed-time-expiry)。 録画と議事録は別機能で、 録画せずに要約だけ回せる (#recording-vs-summary)。 終わった会議の要約と文字起こしは `notes` で取り出し、 「無い」 も過去の回の `has_meeting_summary` と transcript の 3322 で言い切る (#read-summary-and-transcript)。 作った部屋は番号だけ残ると用途が失われる (#record-the-room)
+summary: Zoom の機械経路は Server-to-Server OAuth app 1 つで開く (#s2s-oauth-route、 scope は用途ごとに admin 版を 1 つずつ足す = 部屋の作成・読み取り・変更・削除 / 自分と設定 / 終わった会議、 token は account_id + Basic 認証で自己発行)。 常設の部屋を PMI と分ける判断 (#dedicated-room-vs-pmi)。 create の 2 つの罠 = アカウント既定「予定されたミーティングに PMI を使用」 が ON だと新しい id が発番されるのに参加 URL は PMI のものになる (#use-pmi-silently-hijacks-create)、 passcode なしで作ると waiting_room が要求を無視して true に上書きされる (#passcode-or-waiting-room)。 固定時刻なしの定期ミーティングは最終使用から 365 日で失効する (#no-fixed-time-expiry)。 録画と議事録は別機能で、 録画せずに要約だけ回せる (#recording-vs-summary)。 終わった会議の要約と文字起こしは `notes` で取り出し、 「無い」 も過去の回の `has_meeting_summary` と transcript の 3322 で言い切る (#read-summary-and-transcript)。 作った部屋は番号だけ残ると用途が失われる (#record-the-room)。 通知メールの会議に本人を入れるときは passcode を chat に出さずクリップボードへ、 末尾の \r を落とす (#join-from-notice)
 -->
 # Zoom のミーティングを script から扱う
 
@@ -145,3 +145,12 @@ type 3 (No Fixed Time) の部屋は **最終使用から 365 日**で消える�
 を書く。 ⚠️ **参加 URL は passcode を含むので記録に書かない** — id を書いておけば
 `zoom-client.py show <id>` で引ける。 これは「秘密は保存しない > 暗号化する」
 ([`confidential-repo-boundary.md`](confidential-repo-boundary.md)) の小さい instance。
+
+## <a id="join-from-notice"></a>通知メールの会議に本人を入れる (URL と passcode が別の行のとき)
+
+「会議の Zoom を開いて」 と頼まれたら、 開催通知のメールから参加 URL を取って開く。
+通知の URL に passcode が埋め込まれていない (`?pwd=` が無い) と、 Zoom は開いた後に passcode を聞いてくる。
+
+- passcode は本文の別の行にある。 **chat に出さず、 クリップボードに入れて「聞かれたら貼る」 と伝える** (会話は他の端末からも読める)。
+- 取り出した値の末尾の `\r` を落としてから入れる = text/plain の本文は CRLF で届く ([`mcp.md#gmail-body-crlf`](mcp.md#gmail-body-crlf)。 実測: 落とさずに入れて「passcode が違う」 と言われた)。 入れた後は中身を出さずに、 字の種類と長さだけを確かめる。
+- 開くのは今の機械の画面 = 本人が別の端末にいるなら、 その端末でメールの URL から入ってもらう。

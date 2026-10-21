@@ -191,7 +191,7 @@ claude-config/
 │   ├── writing-discipline.md               # AI が文章を書く・直すとき常時 (論文・研究ノート・報告書・README・chat・code の docstring と図のラベルまで) + 「kernel」 と書きそうになった瞬間 + 文面を「柔らかく」 と頼まれたとき (#softening-without-self-description) + 初学者向けの入門 (教科書の最初の章・講義の初回・入門の解説) を書く・組み直すとき、 手本の本より分かりにくいと言われたとき (#novice-introduction-concrete-first) + 論文・研究ノートの本文を書く・組み直す・圧縮する・共著の原稿に注記を入れるとき (#paper-structure 〜 #japanese-academic-prose)
 │   ├── yaml-hazards.md                     # YAML を読む・書く・新規 data file の形式 (yaml/toml/json) を選ぶ・yamllint を設定するとき
 │   ├── zenn.md                             # Zenn.dev 記事を執筆・入稿するとき
-│   └── zoom-meetings.md                    # Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript)
+│   └── zoom-meetings.md                    # Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript) + 開催通知のメールから本人を会議に入れるとき (#join-from-notice)
 <!-- AUTO-TREE:conventions END -->
 <!-- agent-free:end id=auto-tree-conventions -->
 <!-- agent-free:begin id=auto-tree-hooks -->
