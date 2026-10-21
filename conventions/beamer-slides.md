@@ -51,7 +51,7 @@ metropolis のパレットを上書き:
 ## <a id="beamer-name-clashes"></a>4b. beamer の既存の名前と、 frame の中の定義 (実測)
 
 - **色の名前に `fg` / `bg` を使わない**: beamer は内部で `fg` / `bg` を通常の文字色・地の色の名前に使う。 design token を `\definecolor{fg}{…}` と名付けると、 題や太字が structure の色で出るなど文字色が狂う (error は出ない)。 token は別の名前 (`vtext` / `vbg` など) にする
-- **`\note` は beamer の命令** (発表者 note): `\newcommand{\note}` は「already defined」 で止まる。 補足の文の macro は別の名前にする
+- **`\note` (発表者 note の命令) と、 beamer が定義済みの定理型の環境の名前を、 自分の macro・環境・箱に使わない**: `\newcommand` / `\newenvironment` / `\newtcolorbox` で同じ名前を作ると `! LaTeX Error: Command \<名前> already defined.` で止まる。 定理型の環境の名前 (beamerbasetheorems.sty) = `theorem` / `corollary` / `fact` / `lemma` / `problem` / `solution` / `definition` / `definitions` / `example` / `examples` (`proof` は amsthm から)。 説明の箱・補足の macro には、 これと重ならない名前 (`infobox` など) を付ける (実測: 箱の名前を `note` → `fact` と変えて 2 回続けて止まった)
 - **frame の中で `#` を含む `\newcommand` を書かない**: frame の本体は macro の引数として読まれるので、 `\newcommand{\x}[2]{… #1 …}` を frame の中に置くと `! Illegal parameter number in definition of \iterate` で止まる。 macro は preamble で定義する
 - fontspec の `\newfontfamily` で読んだ字体に en dash を書くときの罠 = [`latex.md#fontspec-textendash`](latex.md#fontspec-textendash)
 
@@ -65,6 +65,8 @@ metropolis のパレットを上書き:
 ```
 
 現在セクションが通常色、他がグレーの「現在地」扉になる。
+
+<a id="section-pages-count-against-budget"></a>⚠️ **扉は節の数だけ頁を増やす** — 頁数の目安 (1 時間に 10 枚前後 = [`giving-talks.md`](giving-talks.md) の Slide count) は扉も数え、 討論・演習の時間は頁の予算から引く。 話す時間が短い回 (討論・演習を引いて 30 分前後) で節が 5 つ以上なら、 節ごとに扉を挟まず、 冒頭に流れ (節の名前と時間の配分) の 1 枚だけを置く。 作る前に頁数を見積もり、 組み上がったら総頁を数える (実測: 6 節それぞれに扉を挟んで 30 頁になり、 長すぎると言われた。 扉を流れの 1 枚にまとめ、 同じ問いに答える頁を統合して 15 頁にした)
 
 ## 6. フッタ番号・進捗バー
 

@@ -9,7 +9,9 @@ script は subagent-reports.py、 headless の worker の script は headless-wo
 
 拾うもの (session 本体の記録 <projects-dir>/<project>/<session id>.jsonl の道具の呼び出し):
   1. file に書いた script — Write / Edit / MultiEdit / NotebookEdit の path と、 Bash の `cat > path <<EOF` / `tee path <<EOF`
-     のうち、 拡張子が script のもの (SCRIPT_EXT) か本文が shebang で始まるもの
+     のうち、 拡張子が script のもの (SCRIPT_EXT) か本文が shebang で始まるもの。 相対 path は、 同じ command の中の
+     `cd <dir> &&` / `cd <dir>;` を順に当てた位置から解決する (記録の cwd は command を打つ前の位置 = その cd を含まない。
+     実測: `cd <下の dir> && cat > x.py` を 1 つ上の dir で探し、 commit 済みの file を「もう無い」 と出した)
   2. その場で流した code — Bash の `<interpreter> [opts] [-] <<EOF` (stdin に流す heredoc) と `<interpreter> -c '…'` / `-e '…'`
      (interpreter = python/python3/py/tools/py 型の wrapper・node・ruby・perl・Rscript・julia・wolframscript・bash/sh/zsh)。
      MIN_LINES 行未満の短いもの (1 行の確かめ) は数えない。 拾った code が失敗した実行なら印を付ける。
@@ -68,6 +70,8 @@ WRITES_FILE_RE = re.compile(r"open\([^)]*['\"][wa]['\"]|\.write_text\(|\.write_b
 RUN_SCRIPT_RE = re.compile(r"(?:^|[\s;&|(])(" + INTERP + r")\s+(?:-\w+\s+)*([^\s;&|<>'\"]+\.(?:py|sh|jl|R|rb|pl|js|wls))(?=\s|$)")
 CAT_TO_FILE_RE = re.compile(
     r"(?:cat|tee)\s+(?:-a\s+)?>?\s*(['\"]?)([^\s'\";&|<>]+)\1\s*<<-?\s*(['\"]?)(\w+)\3[^\n]*\n(.*?)\n\s*\4\s*(?:\n|$)", re.S)
+# 同じ command の中の `cd <dir> &&` / `cd <dir>;` (記録の cwd は command を打つ前の位置 = この cd を含まない)
+CD_RE = re.compile(r"(?:^|&&|;|\n)\s*cd\s+(['\"]?)([^\s'\";&|<>$`]+)\1\s*(?=&&|;|\n)")
 
 
 def _utf8_stdout():
@@ -135,6 +139,13 @@ def _expand(p, cwd):
     if not os.path.isabs(p) and cwd:
         p = os.path.join(cwd, p)
     return os.path.normpath(p)
+
+
+def _cwd_at(cmd, pos, cwd):
+    """cmd の pos より前にある `cd <dir>` を順に当てた cwd。 変数を含む cd 先は辿らない (前の cwd のまま)。"""
+    for m in CD_RE.finditer(cmd[:pos]):
+        cwd = _expand(m.group(2), cwd)
+    return cwd
 
 
 def _git(args, cwd):
@@ -240,7 +251,7 @@ def collect(calls):
             for m in CAT_TO_FILE_RE.finditer(cmd):
                 p, body = m.group(2), m.group(5)
                 if is_script_path(p, body):
-                    files.setdefault(_expand(p, cwd), ts)
+                    files.setdefault(_expand(p, _cwd_at(cmd, m.start(), cwd)), ts)
             for m in HEREDOC_RE.finditer(cmd):
                 if re.search(r"(?:cat|tee)\s+(?:-a\s+)?>", cmd[max(0, m.start() - 80):m.start() + 1]):
                     continue
@@ -365,7 +376,9 @@ def selftest():
                                 "    return math.pi * radius_value * radius_value", "value = area_of_circle(2.5)",
                                 "print(value)"])
         Path(repo, "kept.py").write_text(saved_body + "\n", encoding="utf-8")
-        _git(["add", "kept.py"], repo)
+        os.makedirs(os.path.join(repo, "sub"))
+        Path(repo, "sub", "gen2.sh").write_text("#!/bin/sh\necho two\n", encoding="utf-8")
+        _git(["add", "kept.py", "sub/gen2.sh"], repo)
         _git(["commit", "-q", "-m", "x"], repo)
         Path(repo, "dirty.py").write_text("print('dirty')\n", encoding="utf-8")
         tmpscript = os.path.join(t, "scratch", "one.py")
@@ -394,6 +407,8 @@ def selftest():
         call(7, "Bash", {"command": "cat > " + os.path.join(repo, "gen.sh") + " <<'EOF'\n#!/bin/sh\necho hi\nEOF"})
         call(8, "Bash", {"command": "python3 -c 'print(1)'"})
         call(9, "Bash", {"command": "tools/py - \"$f\" <<'EOF'\n" + unsaved_body.replace("statistics", "stats") + "\nEOF"})
+        # 記録の cwd = repo のまま、 同じ command の中で sub へ cd してから相対 path に書く
+        call(12, "Bash", {"command": "cd " + os.path.join(repo, "sub") + " && cat > gen2.sh <<'EOF'\n#!/bin/sh\necho two\nEOF"})
         # 出力に計算の結果: 0.23940 は記録 (丸めた 0.2394) にあり、 0.5615 は無い。 時刻・版番号・file 名の数字は拾わない
         Path(repo, "note.md").write_text("weight = 0.2394\n", encoding="utf-8")
         _git(["add", "note.md"], repo)
@@ -421,7 +436,11 @@ def selftest():
         check([r[1] for r in runs] == [os.path.join(repo, "kept.py")] and "19.635" in runs[0][2], "file の script の実行と出力も拾う")
         inline = inline[:-1]
         check(set(files) == {os.path.join(repo, "kept.py"), os.path.join(repo, "dirty.py"), tmpscript,
-                             os.path.join(repo, "gen.sh")}, "file に書いた script = 4 本 (md は数えない、 cat > も拾う)")
+                             os.path.join(repo, "gen.sh"), os.path.join(repo, "sub", "gen2.sh")},
+              "file に書いた script = 5 本 (md は数えない、 cat > も拾う、 同じ command の cd 先で解決する)")
+        check(file_status(os.path.join(repo, "sub", "gen2.sh"))[0] == "✅", "cd 先に書いて commit 済みの file は ✅ (cd の前の位置で探して ❌ にしない)")
+        check(_cwd_at("cd /a/b && cd c && cat > f", 22, "/x") == "/a/b/c" and
+              _cwd_at('cd "$D" && cat > f', 12, "/x") == "/x", "cd を順に当てる / 変数の cd 先は辿らない")
         check(len(inline) == 3, "その場で流した code = 3 本 (1 行の -c は数えない、 tools/py の wrapper も拾う)")
         check(file_status(os.path.join(repo, "kept.py"))[0] == "✅", "commit 済みは ✅")
         check(file_status(os.path.join(repo, "dirty.py"))[0] == "🟡", "未追跡は 🟡")
