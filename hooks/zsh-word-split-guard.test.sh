@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# zsh-word-split-guard.test.sh — 述語の selftest + hook 入出力 (deny の JSON / == だけの語は判断なしの updatedInput / 素の log show は deny / zsh 以外は無音 / opt-out / Bash 以外は無音)
+# zsh-word-split-guard.test.sh — 述語の selftest + hook 入出力 (deny の JSON / == だけの語と PIPESTATUS は判断なしの updatedInput / 素の log show は deny / zsh 以外は無音 / opt-out / Bash 以外は無音)
 #
 # 正本: claude-config/hooks/zsh-word-split-guard.test.sh
 
@@ -53,6 +53,27 @@ case "$out" in
 esac
 out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"/usr/bin/log show --last 5m"}}' | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
 [ -z "$out" ] && ok "/usr/bin/log show は通す" || ng "full path で出力: $out"
+
+echo "=== PIPESTATUS の書き換え (判断なしの updatedInput) ==="
+want_cmd() {  # $1 = hook の出力 / $2 = 期待する command (env で渡す = quote を重ねない)
+  printf '%s' "$1" | WANT="$2" python3 -c 'import json,os,sys; d=json.load(sys.stdin)["hookSpecificOutput"]; assert "permissionDecision" not in d, d; assert d["updatedInput"]["command"]==os.environ["WANT"], d["updatedInput"]["command"]'
+}
+PS='{"tool_name":"Bash","tool_input":{"command":"a | b; echo \"exit=${PIPESTATUS[0]}\"","description":"d"}}'
+out="$(printf '%s' "$PS" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+want_cmd "$out" 'a | b; echo "exit=${pipestatus[1]}"' \
+  && ok "\${PIPESTATUS[0]} → \${pipestatus[1]} を updatedInput で返す (判断なし)" || ng "PIPESTATUS の書き換えが違う: $out"
+PSEQ='{"tool_name":"Bash","tool_input":{"command":"echo ======; a | b; echo ${PIPESTATUS[1]}"}}'
+out="$(printf '%s' "$PSEQ" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+want_cmd "$out" "echo '======'; a | b; echo \${pipestatus[2]}" \
+  && ok "== の quote と PIPESTATUS の書き換えを 1 回で両方当てる" || ng "== と PIPESTATUS の組の書き換えが違う: $out"
+PSBAD='{"tool_name":"Bash","tool_input":{"command":"a | b; echo ${PIPESTATUS[$i]}"}}'
+out="$(printf '%s' "$PSBAD" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+case "$out" in
+  *'"permissionDecision": "deny"'*'pipestatus'*) ok "変数の添字の PIPESTATUS は deny + 直し方" ;;
+  *) ng "変数の添字の PIPESTATUS が deny されない: $out" ;;
+esac
+out="$(printf '%s' "$PS" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/bash python3 "$HOOK")"
+[ -z "$out" ] && ok "bash では PIPESTATUS を書き換えない" || ng "bash で PIPESTATUS を書き換えた: $out"
 out="$(printf '%s' "$BAD" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/bash python3 "$HOOK")"
 [ -z "$out" ] && ok "bash では何もしない (分割される)" || ng "bash で出力: $out"
 out="$(printf '%s' "$BAD" | env -u CLAUDE_ZSH_SPLIT_GUARD SHELL=/bin/bash CLAUDE_CODE_SHELL=/bin/zsh python3 "$HOOK")"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""zsh-word-split-guard.py — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置 (と、 option を含む loop の語を command の引数) に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash と、 素の `log show` など (zsh の組み込みの log に取られる) を含む Bash を実行前に止める (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion / #zsh-log-builtin)。
+"""zsh-word-split-guard.py — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置 (と、 option を含む loop の語を command の引数) に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash と、 素の `log show` など (zsh の組み込みの log に取られる) を含む Bash を実行前に止め、 bash の `${PIPESTATUS[N]}` (zsh では空) は zsh の `${pipestatus[N+1]}` に書き換えて通す (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion / #zsh-log-builtin / #zsh-pipestatus-lowercase)。
 
 PreToolUse(Bash)。 zsh は未 quote の `$var` を単語分割しない (bash と逆) ので、
     v="a b"; for x in $v      → 1 回だけ回る ("a b")
@@ -46,12 +46,26 @@ path に展開し、 見つからないと `not found` で rc=1 になって同�
   `timeout 90 log show …` (外の command を通るので動く) は止めない。 zsh 5.9 で実測 = 止める形は全部 too many arguments、
   通す形 (full path・command・env) は全部 log を出した。
 
+4 つめの述語 (bash の PIPESTATUS、 shell-env.md#zsh-pipestatus-lowercase): zsh の pipeline の各段の終了値は `$pipestatus`
+(小文字、 添字は 1 始まり) で、 bash の `${PIPESTATUS[0]}` は zsh では空になる。 `echo "exit=${PIPESTATUS[0]}"` は空欄を出し、
+`[ "${PIPESTATUS[0]}" -eq 0 ]` のような検査は失敗を通す (実測)。 規約に書いた後も 1 session に 3 回踏んだので機械化した。
+  書き換えて通す = `${PIPESTATUS[N]}` (N は数字) → `${pipestatus[N+1]}` / `${PIPESTATUS[@]}`・`[*]` → `${pipestatus[@]}`・`[*]` /
+          `${#PIPESTATUS[@]}` → `${#pipestatus[@]}` / `${PIPESTATUS}`・`$PIPESTATUS` (bash では 0 番) → `${pipestatus[1]}`。
+          double quote の中も書き換える (展開される場所なので)
+  止める = 書き換えの意味が決まらない形: 変数の添字 (`${PIPESTATUS[$i]}`)・`${#PIPESTATUS}` (0 番の文字数)・
+          `$PIPESTATUS[0]` (bash では 0 番の後に文字の `[0]` が続く = 意図が読めない)
+  見ない = single quote・heredoc の本文・`bash -c` / `bash <<` を含む command (中は bash の意味論)
+  較正 (実測): 会話記録の Bash で `${PIPESTATUS[` を使った実行のうち、 bash -c / bash << の中のものは 0 件 = ほぼ全部が zsh で空を見ていた。
+  zsh 5.9 で実測 = `false | true; echo ${pipestatus[1]} ${pipestatus[2]}` は `1 0`、 `${PIPESTATUS[0]}` は空。
+
 発火: 実行 shell が zsh のとき (CLAUDE_CODE_SHELL か SHELL)。 opt-out = CLAUDE_ZSH_SPLIT_GUARD=0 (=1 で shell 判定を飛ばす、 test 用)。
 出力: permissionDecision=deny + 直し方。 誤検出のコストは書き直し 1 回。 fail-open (読めない入力は黙って通す)。
   例外 (2026-10-12 本人の承認): 問題が equals 展開だけで、 その語が全部 `==` で始まるなら (区切りの `======`、 `[ a == b ]`)
   止めずに、 その語を single quote で囲んだ command を updatedInput で返して通す (意味は変わらない = zsh 5.9 と bash で実測)。
   permissionDecision は付けない = 書き換えた command が通常の許可の判定を受ける (allow を付けると判定を飛ばして自動で通す、
   ask を付けると毎回 確認になる = hook-authoring.md 9.2)。 `=X` (= `=cmd` を意図しうる) と、 単語分割の問題は今まで通り止める。
+  PIPESTATUS の書き換え (4 つめ) も同じ形で返す (`==` の quote と同じ command に両方あれば、 両方を当てて 1 回で返す)。
+  止める問題 (単語分割・素の log・書き換えられない PIPESTATUS・書き換えられない `=X`) が 1 つでもあれば書き換えずに止める。
 """
 from __future__ import annotations
 
@@ -86,6 +100,14 @@ LOG_CMD = re.compile(
     r"log[ \t]+(show|stream|collect|config|stats|erase)\b")
 LOG_FIX = ("直し方: `/usr/bin/log show …` と full path で書く (script から呼ぶときも同じ)。 "
            "正本 = claude-config/conventions/shell-env.md#zsh-log-builtin")
+
+# bash の PIPESTATUS (zsh では空) の参照。 ${…} の形と、 添字の無い素の $PIPESTATUS と、 素の $PIPESTATUS[ (意図が読めない形)
+PS_BRACE = re.compile(r"\$\{(#?)PIPESTATUS(?:\[([^\]]*)\])?\}")
+PS_BARE = re.compile(r"\$PIPESTATUS(?![\w\[])")
+PS_BARE_SUBSCRIPT = re.compile(r"\$PIPESTATUS\[[^\]\s]*\]?")
+HEREDOC_BODY = re.compile(r"(<<-?\s*(['\"]?)(\w+)\2[^\n]*)(\n.*?\n[ \t]*\3[ \t]*(?=\n|$))", re.S)
+PS_FIX = ("直し方: zsh では `${pipestatus[N+1]}` (小文字、 添字は 1 始まり。 全部は `${pipestatus[@]}`)。 "
+          "bash の意味で書くなら `bash -c '…'` の中に。 正本 = claude-config/conventions/shell-env.md#zsh-pipestatus-lowercase")
 
 FIX = ("直し方: 出力を行ごとに回す → `cmd | while read -r x; do …; done` / 空白で割る → `${=V}` / "
        "複数の path・引数 → 配列 `F=(a b c); git commit -- $F` か literal に並べる / "
@@ -222,6 +244,52 @@ def log_reason_text(subs: list[str]) -> str:
             "(`2>/dev/null` を付けると黙って空の出力になり、 「該当する log が無い」 と読み違える)。 " + LOG_FIX)
 
 
+def _mask_single_and_heredoc(cmd: str) -> str:
+    """heredoc の本文と single quote の中身だけを同じ長さの空白にする (double quote の中は展開されるので残す)。
+    heredoc は本文と終わりの行だけを消し、 始まりの行の残り (`<<'EOF' 2>&1 | tail; echo ${PIPESTATUS[0]}` の後半) は
+    shell の code として残す (HEREDOC で消すと、 commit の終了値を見る形を見逃した = 較正で実測)。"""
+    s = HEREDOC_BODY.sub(lambda m: m.group(1) + re.sub(r"[^\n]", " ", m.group(4)), cmd)
+    return QUOTED.sub(lambda m: _blank(m) if m.group(0).startswith("'") else m.group(0), s)
+
+
+def pipestatus_rewrite(cmd: str) -> tuple[str | None, list[str]]:
+    """bash の PIPESTATUS の参照を zsh の pipestatus に書き換えた command と、 書き換えの意味が決まらない参照の list。
+    書き換えられない参照が 1 つでもあれば (None, その list)。 参照が無い・bash -c / bash << を含むなら (None, [])。"""
+    if not cmd or "PIPESTATUS" not in cmd or BASH_INNER.search(cmd):
+        return None, []
+    masked = _mask_single_and_heredoc(cmd)
+    edits, bad = [], []
+    for m in PS_BRACE.finditer(masked):
+        count, idx = m.group(1), m.group(2)
+        if idx is None and not count:
+            new = "${pipestatus[1]}"
+        elif idx in ("@", "*"):
+            new = "${" + count + "pipestatus[" + idx + "]}"
+        elif idx is not None and idx.strip().isdigit() and not count:
+            new = "${pipestatus[" + str(int(idx) + 1) + "]}"
+        else:
+            bad.append(cmd[m.start():m.end()])
+            continue
+        edits.append((m.start(), m.end(), new))
+    for m in PS_BARE.finditer(masked):
+        edits.append((m.start(), m.end(), "${pipestatus[1]}"))
+    bad += [cmd[m.start():m.end()] for m in PS_BARE_SUBSCRIPT.finditer(masked)]
+    if bad:
+        return None, sorted(set(bad))
+    if not edits:
+        return None, []
+    out = cmd
+    for a, b, new in sorted(edits, reverse=True):
+        out = out[:a] + new + out[b:]
+    return out, []
+
+
+def pipestatus_reason_text(refs: list[str]) -> str:
+    items = " / ".join(f"`{r}`" for r in refs)
+    return ("zsh では bash の PIPESTATUS は空で、 この参照は書き換えの意味が決まらない (変数の添字・文字数・`$PIPESTATUS[N]` の形): "
+            + items + "。 " + PS_FIX)
+
+
 def equals_reason_text(words: list[str]) -> str:
     items = " / ".join(f"`{w}`" for w in words)
     return ("zsh は未 quote の語の先頭の `=` を command の path に展開し、 見つからないと `not found` で止まって "
@@ -251,21 +319,31 @@ def main() -> int:
     issues = find_issues(cmd)
     eq_words = equals_issues(cmd)
     log_subs = log_issues(cmd)
-    if not issues and not eq_words and not log_subs:
+    ps_fixed, ps_bad = pipestatus_rewrite(cmd)
+    if not issues and not eq_words and not log_subs and ps_fixed is None and not ps_bad:
         return 0
-    fixed = None if (issues or log_subs) else equals_rewrite(cmd)
+    fixed, notes = None, []
+    if not (issues or log_subs or ps_bad):
+        fixed = ps_fixed or cmd
+        if ps_fixed is not None:
+            notes.append("bash の `${PIPESTATUS[N]}` を zsh の `${pipestatus[N+1]}` に書き換えて実行した (zsh では PIPESTATUS は空、 "
+                         "添字は 1 始まり)。 次からは最初から `${pipestatus[N+1]}` で書く (shell-env.md#zsh-pipestatus-lowercase)")
+        if eq_words:
+            fixed = equals_rewrite(fixed)
+            if fixed is not None:
+                notes.append("`==` で始まる語を quote して実行した (" + " / ".join(f"`{w}`" for w in eq_words)
+                             + " → 'quote')。 次からは最初から quote するか `-----` で区切る (shell-env.md#equals-word-expansion)")
     if fixed is not None:
-        # 止めずに書き換えて通す (2026-10-12 本人「1と2を実装しよう」)。 判断 (permissionDecision) は付けない =
+        # 止めずに書き換えて通す (2026-10-12 本人「1と2を実装しよう」、 PIPESTATUS は 2026-10-21)。 判断 (permissionDecision) は付けない =
         # 書き換えた command が通常の許可の判定 (allow rule・classifier) を受ける。 付けると判定を飛ばして通すので付けない。
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "updatedInput": {**(data.get("tool_input") or {}), "command": fixed},
-            "additionalContext": "zsh-word-split-guard: `==` で始まる語を quote して実行した (" + " / ".join(f"`{w}`" for w in eq_words)
-                                 + " → 'quote')。 次からは最初から quote するか `-----` で区切る (shell-env.md#equals-word-expansion)",
+            "additionalContext": "zsh-word-split-guard: " + " / ".join(notes),
         }}, ensure_ascii=False))
         return 0
     reasons = (([reason_text(issues)] if issues else []) + ([equals_reason_text(eq_words)] if eq_words else [])
-               + ([log_reason_text(log_subs)] if log_subs else []))
+               + ([log_reason_text(log_subs)] if log_subs else []) + ([pipestatus_reason_text(ps_bad)] if ps_bad else []))
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
@@ -383,6 +461,32 @@ def selftest() -> int:
     lg("catalog show x; changelog stream", False, "語の一部")
     lg("log; log -h", False, "subcommand の無い log")
     lg("bash -c 'log show --last 1m'", False, "bash -c の中は bash の意味論")
+
+    # bash の PIPESTATUS (実例と同形: `cmd | tail; echo "exit=${PIPESTATUS[0]}"` が zsh で空欄を出した)
+    def ps(cmd: str, want: str | None, want_bad: bool, label: str) -> None:
+        nonlocal fails
+        got, bad = pipestatus_rewrite(cmd)
+        ok = got == want and bool(bad) == want_bad
+        print(("  ok   " if ok else "  FAIL ") + label + ("" if ok else f"  (got {got!r} bad={bad})"))
+        fails += 0 if ok else 1
+
+    ps('python3 x.py 2>&1 | tail -3; echo "exit=${PIPESTATUS[0]}"', 'python3 x.py 2>&1 | tail -3; echo "exit=${pipestatus[1]}"',
+       False, "double quote の中の ${PIPESTATUS[0]} → ${pipestatus[1]}")
+    ps("a | b | c; echo ${PIPESTATUS[2]} ${PIPESTATUS[@]} ${#PIPESTATUS[@]}",
+       "a | b | c; echo ${pipestatus[3]} ${pipestatus[@]} ${#pipestatus[@]}", False, "数字・@・# の形")
+    ps("a | b; rc=$PIPESTATUS; echo ${PIPESTATUS}", "a | b; rc=${pipestatus[1]}; echo ${pipestatus[1]}", False,
+       "添字の無い形 (bash では 0 番)")
+    ps('a | b; [ "${PIPESTATUS[0]}" -eq 0 ] && echo ok', 'a | b; [ "${pipestatus[1]}" -eq 0 ] && echo ok', False, "検査の中")
+    ps("echo '${PIPESTATUS[0]}'", None, False, "single quote の中は見ない")
+    ps("python3 - <<'EOF'\nprint('${PIPESTATUS[0]}')\nEOF", None, False, "heredoc の本文は見ない")
+    ps("git commit -F - <<'EOF' 2>&1 | tail; echo \"rc=${PIPESTATUS[0]}\"\nmsg ${PIPESTATUS[0]}\nEOF",
+       "git commit -F - <<'EOF' 2>&1 | tail; echo \"rc=${pipestatus[1]}\"\nmsg ${PIPESTATUS[0]}\nEOF", False,
+       "heredoc の始まりの行の残りは code として書き換え、 本文は見ない")
+    ps("bash -c 'a | b; echo ${PIPESTATUS[0]}'", None, False, "bash -c の中は bash の意味論")
+    ps("a | b; echo ${PIPESTATUS[$i]}", None, True, "変数の添字は止める")
+    ps("a | b; echo $PIPESTATUS[0]", None, True, "$PIPESTATUS[0] の形は止める")
+    ps("a | b; echo ${#PIPESTATUS}", None, True, "${#PIPESTATUS} (0 番の文字数) は止める")
+    ps("echo MY_PIPESTATUS ${MY_PIPESTATUS}", None, False, "別の名前の一部は見ない")
     print("selftest:", "PASS" if not fails else f"{fails} FAIL")
     return 1 if fails else 0
 
