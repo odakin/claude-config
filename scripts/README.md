@@ -309,6 +309,7 @@
 - **[session-scripts-report.py](session-scripts-report.py)** — ある session がその場で書いた script を会話記録から全部並べ、 file として残っているか (commit 済みか) を出す。--selftest 内蔵。
 - **[session_provenance_cache.py](session_provenance_cache.py)** — Own shared Codex model/effort resolution and the hook metadata cache.
 - **[set-file-associations.py](set-file-associations.py)** — Apply or verify declared macOS filename-extension handlers with duti; fail loud on unverifiable state. --selftest included.
+- **[setup-codex-board-rule.py](setup-codex-board-rule.py)** — Install or audit the Codex rule that lets a board worker run the agent board's engine outside the sandbox.
 - **[setup-codex-git-push.py](setup-codex-git-push.py)** — Install or audit an opt-in Codex rule for prompt-free normal Git pushes.
 - **[setup-codex.sh](setup-codex.sh)** — claude-config の共有規約を Codex に安全に導入する
 - **[setup-codex.test.sh](setup-codex.test.sh)** — setup-codex.sh の隔離・冪等・非上書き性を検証する
