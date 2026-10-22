@@ -55,7 +55,7 @@ Codex の rollout では、 Stop hook の差し戻し文 (`<hook_prompt …>`) �
 アプリ 26.1002 では、 そうして読み込みに失敗した thread は左の「最近の項目」 にも載らなかった。
 アプリで進行が見え、 話しかけられる起こし方 = **アプリを書き手にする**: 使い捨ての `codex app-server` で thread を作って履歴に起動の記録を 1 項目入れ (turn の無い thread は rollout が無くアプリで開けない)、 起動文を `codex queue` で予約し、 アプリに `codex://threads/<id>?hostId=local` を開かせる = アプリが予約を turn として走らせる
 ([`../scripts/codex-app-launch.py`](../scripts/codex-app-launch.py) = 振る舞いと限界の正本。 掲示板から起こす形 = ai-collaboration `board/CONTRACT.md#codex-worker-launch`)。
-アプリの turn の network はこの機械の Codex の既定 (`~/.codex/config.toml`、 既定 off) に戻る。 Codex の `prefix_rule` の `allow` は単独の command にだけ当たり、 当たると承認 `never` の turn でも sandbox の外で走る (`;` で繋いだ command は当たらず sandbox の中)。
+アプリの turn の network はこの機械の Codex の既定 (`~/.codex/config.toml`、 既定 off) に戻る。 Codex の `prefix_rule` の `allow` は、 値をそのまま書いた単独の command にだけ当たり、 当たると承認 `never` の turn でも sandbox の外で走る (`;` で繋いだ command と、 `${CODEX_THREAD_ID:0:8}` のような変数の展開を含む command は当たらず sandbox の中)。
 daemon が読み込んでいる thread = `codex-app-launch.py rpc thread/loaded/list` (誰も見ていない idle の thread は turn の終わりから 40〜60 秒で外れる)。
 アプリ本体には、 自分を共有 daemon に繋ぐ経路 (環境変数 `CODEX_APP_SERVER_USE_LOCAL_DAEMON=1`) もあるが、 アプリが自分の app-server に常に `-c` の項目を渡すので、 この版では使われない (アプリ本体の code で確認)。
 
