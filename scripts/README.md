@@ -99,6 +99,7 @@
 - **[check-session-sot.py](check-session-sot.py)** — Detect durable-data accretion and bloat in SESSION.md files.
 - **[check-sot-drift.py](check-sot-drift.py)** — 「規則の正本は 1 か所、 他所は参照だけ」 を目印の文字列で機械検査する (registry 駆動)
 - **[check-student-identifiers.py](check-student-identifiers.py)** — 学生の識別子 (学籍番号の形・氏名・path の中の姓) を平文で新しく commit させない: commit gate (--staged = stage した path と平文 file の足した行、 --commit-msg = commit message、 違反で exit 1) + fleet の棚卸し (--tree、 報告だけ)。
+- **[check-tex-engine.py](check-tex-engine.py)** — Report .tex root documents that LuaLaTeX cannot typeset (pTeX classes, DVI-driver options, pTeX-only packages, a TeXShop program line naming pLaTeX); --staged for pre-commit, --fleet to inventory, --selftest.
 - **[check-tex-papersize.py](check-tex-papersize.py)** — Warn when a .tex \documentclass names no paper size (standard classes default to letterpaper); --staged-warn for pre-commit, --pdf to measure a built PDF, --selftest.
 - **[check-text-section-refs.py](check-text-section-refs.py)** — 文中の「<file> §「<節名>」」 型の参照が、 実在する file の実在しない節を指していないかを検査する。
 - **[check-unbraced-multibyte-var.mutants.json](check-unbraced-multibyte-var.mutants.json)** — check-unbraced-multibyte-var.py の selftest の foil に歯があることを、 述語・読み方・終了値の一部を外した mutant 8 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。

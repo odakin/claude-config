@@ -538,7 +538,7 @@ for y0, y1, s in sorted((b[1], b[3], b[4][:40]) for b in p.get_text("blocks") if
 odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2 段ワークフローは**英語論文では使わない**。
 
 - **英語のみ** → **`lualatex`** が odakin の標準 (= TeXShop が `LuaTeX-1.21.0` で生成、PDF Producer 欄で確認済)。`pdflatex` も可 (どちらも pdf 直接出力で互換)
-- **日本語含む** → `ptex2pdf` (内部で platex + dvipdfmx) または `lualatex` (jlreq クラス等)
+- **日本語含む** → `ptex2pdf` (内部で platex + dvipdfmx) または `lualatex` (jlreq クラス等)。 owner が全ての文書を LuaLaTeX で組むと決めた場合の source の書き方・移し方・機械の検査 = [#lualatex-compat](#lualatex-compat)
 - **<a id="class-dictates-engine"></a>class が engine を決める** (= 齟齬は engine 側で patch できない、 class を変えるか engine を変えるかの二択):
 
   | documentclass | 使う engine |
@@ -1492,6 +1492,16 @@ luatexja は `$過去$` (= 裸の kanji) も accept するが、 標準 idiom �
 - **TeXShop が知らない program 名を書くと、 黙って既定の経路に落ちる** (実測: TeXShop に無い名前を書いた uplatex の原稿が、 既定の欄を lualatex にした Mac で lualatex で組まれた)。 既定の経路 (環境設定の pdfTeX の欄・TeX+DVI の欄) は Mac ごとの設定なので、 ある Mac で組めた原稿が別の Mac で組めないことがある = 原稿の側で engine を名指す。
 - **落ちた時の見え方**: 違う engine は原稿の class で止まり、 console で入力を待つ。 log は 0 byte、 `<name>.synctex(busy)` が残り、 process も残る。 console で中止するか process を止めてから、 原稿を閉じて開き直す (program の行は file を開いた時に読まれる = [#texshop-lualatex-and-external-builds](#texshop-lualatex-and-external-builds) と同じ)。
 - **uplatex の原稿を LuaLaTeX に移すとき** (実測): class を `ltjsbook` / `ltjsarticle` に (`uplatex,dvipdfmx,papersize,nomag*` は外す)、 ふりがなは okumacro の代わりに `luatexja-ruby`、 `pxjahyper` は外す。 版面と字送りは jsclasses と同じで、 頁数も変わらなかった。 狭い表の欄で英字の名前のはみ出しが増えることがある (LuaTeX の改行の違い)。
+
+## <a id="lualatex-compat"></a>LuaLaTeX で組める source にする・保つ
+
+owner が文書を LuaLaTeX で組む (TeXShop の既定の経路が lualatex など) なら、 agent が CLI の platex で組めた source を渡しても、 owner の手元では class で止まって PDF が出ない (実測: log 0 byte で console が入力待ち = [#texshop-engines](#texshop-engines) の「落ちた時の見え方」)。 agent の build は何も言わないので、 source の側で engine を合わせる。
+
+- **LuaLaTeX で組めない印**: pTeX / upTeX の class (`jsarticle` / `jsbook` / `jsreport`、 `jarticle` 系、 `ujarticle` 系、 `tarticle` 系)、 class option の `dvipdfmx` / `dvips` / `platex` / `uplatex`、 package の `otf` / `pxjahyper` / `okumacro` / `plext` / `pxcjkcat`、 package に付けた DVI の driver option (`\usepackage[dvipdfmx]{graphicx}` / `{xcolor}` / `{hyperref}`)、 `% !TEX TS-program = platex` / `uplatex` / `ptex2pdf`
+- **書き方・移し方**: 日本語は `ltjsarticle` / `ltjsbook` / `ltjsreport` (英語は `article`)。 class option は `11pt,a4paper` などだけを書く (`dvipdfmx` `uplatex` `papersize` `nomag` `nomag*` は書かない)。 package にも DVI の driver option を書かない (graphicx・xcolor・hyperref は LuaLaTeX の driver を自分で選ぶ)。 `otf` の `\ajMaru` などは `luatexja-otf`、 okumacro のふりがなは `luatexja-ruby` に置き換え、 `pxjahyper` は読まない。 先頭に `% !TEX TS-program = lualatex` と `% !TEX encoding = UTF-8 Unicode` ([#texshop-lualatex-and-external-builds](#texshop-lualatex-and-external-builds))。 組んだら頁数と用紙を前の版と比べる ([#declare-paper-size](#declare-paper-size))
+- **jsarticle の 11pt / 12pt は `\mag` で拡大して組む** (実測): geometry と dvipdfmx の経路では PDF の用紙が A4 より大きくなる (`nomag*` で直る)。 ltjs 系に移すとこの罠も無くなる
+- **機械**: [`scripts/check-tex-engine.py`](../scripts/check-tex-engine.py) が上の印を source から読む。 `FILE …` (1 = 印あり) / `--staged` (pre-commit 用。 新しく足した file は止める = 1、 直した既存の file は警告、 3 = 走らなかった) / `--fleet ROOT` (ROOT 直下の全 repo の棚卸し)。 どの層の pre-commit に繋ぐかは owner の層が決める (本 repo は配線しない)
+- **engine を owner 以外が決める文書** (他者が配った様式の雛形、 diff の基準に取ってある写し、 engine を共著者・学生が決めている原稿) は、 file の中に `% tex-engine-decided-by: <誰が決めるか>` を書く。 file を書き換えたくなければ repo の `.claude/tex-engine-decided-by.txt` に glob と `# 誰が決めるか` を 1 行ずつ書く。 検査はどちらの形も読む
 
 ## <a id="enumerate-vs-enumitem-option-syntax"></a>`enumerate` package の下で `[label=(\roman*)]` は組めない
 
