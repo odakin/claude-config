@@ -292,6 +292,9 @@ sections:
   - id: texshop-engines
     level: 2
     title: "<a id=\"texshop-uplatex-engine\"></a>TeXShop の engine で原稿を組む (latexmk-lualatex / uplatex)"
+  - id: lualatex-compat
+    level: 2
+    title: "LuaLaTeX で組める source にする・保つ"
   - id: enumerate-vs-enumitem-option-syntax
     level: 2
     title: "`enumerate` package の下で `[label=(\\roman*)]` は組めない"
