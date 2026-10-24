@@ -27,7 +27,8 @@ Usage
   check-tex-engine.py FILE.tex [FILE.tex ...]   exit 1 if any root document is reported
   check-tex-engine.py --staged [--repo DIR]     staged .tex: an added file that is reported blocks (exit 1);
                                                 a modified file that is reported only warns (exit 0); 3 = could not run
-  check-tex-engine.py --fleet ROOT              every git repo directly under ROOT: tracked .tex that are reported
+  check-tex-engine.py --fleet ROOT              every git repo directly under ROOT: tracked .tex that are reported;
+                                                exit 1 if any (files decided by others are counted, not reported)
   check-tex-engine.py --selftest
 """
 from __future__ import annotations
@@ -168,7 +169,7 @@ def fleet(root: Path) -> int:
             print('\n'.join(rows)) if rows else None
             total += len(rows)
     print(f"total reported: {total}")
-    return 0
+    return 1 if total else 0
 
 
 def _selftest() -> int:
