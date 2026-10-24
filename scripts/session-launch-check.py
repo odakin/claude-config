@@ -27,6 +27,14 @@ mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
                               model を変えた場合を止め続けない)。
   PreToolUse(set_session_model / set_session_effort)  PREMIUM_GATE の機械で、 Fable (上位 tier) か max への引き上げは、
                               起こした時の理由 (台帳) か本人の直近の名指しが無いと止める。
+  `--workflow-gate` (hooks/workflow-launch-check.sh = PreToolUse の全 tool、 PREMIUM_GATE の機械):
+    PreToolUse(Workflow)      Fable の session からの Workflow は、 script の agent() が全部 opts に model を書くまで止める
+                              (書かない agent は親の model を継ぐ)。 本人の直近の発言が週の切替 (リセット) に触れていれば、
+                              script に `[stop-at: <ISO 時刻>]` を求め、 その時刻を session ごとの記録
+                              (<state>/<session>.stop-at.json) に残す。
+    PreToolUse(ほかの全 tool)   記録した時刻を過ぎたら、 subagent (hook の入力に agent_id) の tool 呼び出しを止め (結果を返す
+                              StructuredOutput は通す)、 本体には workflow を TaskStop で止めて本人に聞くよう 1 回だけ知らせる。
+                              記録は時刻の 6 時間後に消える。 外す = `--clear-stop-at` (CLAUDE_CODE_SESSION_ID の session)。
 
 BOARD_FIRST: `~/.claude/session-launch-board-first.on` が在るか env SESSION_LAUNCH_BOARD_FIRST=1 のとき、 initiation が
 user_asked の start_session は prompt に掲示板の request id が無いと止める (title か prompt に `[no-board]` で通す)。
@@ -48,6 +56,7 @@ env: SESSION_LAUNCH_CHECK_DISABLE=1 / SESSION_LAUNCH_STATE_DIR (test) / CLAUDE_D
      SESSION_LAUNCH_WAIT (記録を待つ秒、 既定 3)。
 self-test: python3 scripts/session-launch-check.py --selftest
 理由を後から残す: python3 scripts/session-launch-check.py --note-reason <local_…> '<理由>'
+切替時刻の止めを外す: python3 scripts/session-launch-check.py --clear-stop-at
 """
 from __future__ import annotations
 
@@ -583,6 +592,221 @@ def pre_agent(inp: dict) -> tuple[int, str]:
                " (掲示板で受けるなら request は --surface agent)。 規約 = " + RULE)
 
 
+# ---- Workflow (hooks/workflow-launch-check.sh = every PreToolUse, `--workflow-gate`): the agents' model, and the stop
+# time of a burst that spends the rest of a weekly limit before its reset ----
+
+WORKFLOW_RULE = "claude-config/conventions/multi-session-coordination.md#workflow-agent-model"
+AGENT_CALL = re.compile(r"(?<![\w$.])agent\s*\(")
+MODEL_OPT = re.compile(r"\bmodel\s*:|[{,]\s*model\s*[,}]")
+STOP_AT = re.compile(r"\[stop-at:\s*([^\]]+)\]")
+NAMES_RESET = re.compile(r"リセット|\breset\b", re.I)
+STOP_AT_GRACE = 6 * 3600         # the state is dropped this long after the stop time
+STOP_AT_PASS = ("StructuredOutput",)   # a stopped agent with a schema still has to hand back its result
+
+
+def workflow_source(ti: dict, cwd: str) -> str:
+    """The script a Workflow call runs: inline `script`, the `scriptPath` file, or a saved workflow by `name`."""
+    if isinstance(ti.get("script"), str) and ti["script"].strip():
+        return ti["script"]
+    paths = []
+    if ti.get("scriptPath"):
+        p = os.path.expanduser(str(ti["scriptPath"]))
+        paths.append(p if os.path.isabs(p) else os.path.join(cwd or ".", p))
+    elif ti.get("name"):
+        for d in (os.path.join(cwd or ".", ".claude", "workflows"), os.path.expanduser("~/.claude/workflows")):
+            paths += [os.path.join(d, str(ti["name"]) + ext) for ext in (".js", ".mjs")]
+    for p in paths:
+        try:
+            with open(p, encoding="utf-8") as fh:
+                return fh.read()
+        except OSError:
+            continue
+    return ""
+
+
+def code_mask(src: str) -> str:
+    """The script with comments and the text of string literals blanked (newlines kept), so that a parenthesis or the
+    word `model:` inside an agent's prompt is not read as code. Template literals keep their `${…}` code."""
+    out, n, i = list(src), len(src), 0
+    stack: list[list] = []   # ["tpl"] inside a template literal's text, ["expr", depth] inside its ${…}
+
+    def blank(a: int, b: int) -> None:
+        for k in range(a, min(b, n)):
+            if out[k] != "\n":
+                out[k] = " "
+
+    while i < n:
+        c = src[i]
+        if stack and stack[-1][0] == "tpl":
+            if c == "\\":
+                blank(i, i + 2); i += 2; continue
+            if c == "`":
+                stack.pop(); i += 1; continue
+            if src.startswith("${", i):
+                stack.append(["expr", 0]); i += 2; continue
+            blank(i, i + 1); i += 1; continue
+        if src.startswith("//", i):
+            j = src.find("\n", i); j = n if j < 0 else j
+            blank(i, j); i = j; continue
+        if src.startswith("/*", i):
+            j = src.find("*/", i + 2); j = n if j < 0 else j + 2
+            blank(i, j); i = j; continue
+        if c in "'\"":
+            j = i + 1
+            while j < n and src[j] not in (c, "\n"):
+                j += 2 if src[j] == "\\" else 1
+            blank(i + 1, j); i = j + 1; continue
+        if c == "`":
+            stack.append(["tpl"])
+        elif stack and c == "{":
+            stack[-1][1] += 1
+        elif stack and c == "}":
+            if stack[-1][1] == 0:
+                stack.pop()
+            else:
+                stack[-1][1] -= 1
+        i += 1
+    return "".join(out)
+
+
+def agent_calls(src: str) -> list[str]:
+    """The argument text of each agent(…) call (strings blanked). Helpers that wrap agent() are read where they call it."""
+    m, calls = code_mask(src), []
+    for hit in AGENT_CALL.finditer(m):
+        depth, j = 0, hit.end() - 1
+        while j < len(m):
+            if m[j] == "(":
+                depth += 1
+            elif m[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        calls.append(m[hit.end():j])
+    return calls
+
+
+def parse_when(text: str) -> float | None:
+    """Epoch seconds of an ISO-8601 time (`2026-01-02T18:00+09:00`, `…Z`); a time without an offset is local time."""
+    from datetime import datetime
+    t = text.strip().replace(" ", "T", 1)
+    if t.endswith("Z"):
+        t = t[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(t)
+    except ValueError:
+        return None
+    return (dt if dt.tzinfo else dt.astimezone()).timestamp()
+
+
+def _stop_at_path(sid: str) -> str:
+    return os.path.join(state_dir(), re.sub(r"[^A-Za-z0-9_.-]", "_", sid or "unknown") + ".stop-at.json")
+
+
+def load_stop_at(sid: str) -> dict | None:
+    try:
+        with open(_stop_at_path(sid), encoding="utf-8") as fh:
+            d = json.load(fh)
+        return d if isinstance(d, dict) and isinstance(d.get("stop_at"), (int, float)) else None
+    except (OSError, ValueError):
+        return None
+
+
+def save_stop_at(sid: str, d: dict) -> None:
+    os.makedirs(state_dir(), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=state_dir(), suffix=".tmp")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(d, fh, ensure_ascii=False)
+    os.replace(tmp, _stop_at_path(sid))
+
+
+def clear_stop_at(sid: str) -> bool:
+    try:
+        os.remove(_stop_at_path(sid))
+        return True
+    except OSError:
+        return False
+
+
+def pre_workflow(inp: dict) -> tuple[int, str]:
+    """PREMIUM_GATE machines, main thread. (1) A Fable session's Workflow: every agent() names its model (an agent
+    without one inherits the session's model; measured: a fan-out of checks a lower tier does ran wholly on the top
+    tier). (2) The owner's last prompts name the reset: the script carries `[stop-at: <time>]`, recorded so that
+    stop_at_check stops the agents at that time (measured: a burst meant to spend the rest of a weekly limit just
+    before its reset kept running past it and spent most of its tokens from the next week's limit)."""
+    if not premium_gate_on() or inp.get("agent_id"):
+        return 0, ""
+    ti = inp.get("tool_input") or {}
+    src = workflow_source(ti, inp.get("cwd") or "")
+    if not src:
+        return 0, ""
+    transcript = inp.get("transcript_path") or ""
+    msgs = []
+    session_model = ((sm.last_model(transcript) if sm is not None and transcript else None) or {}).get("model") or ""
+    if tier(session_model) == "fable":
+        calls = agent_calls(src)
+        missing = sum(1 for a in calls if not MODEL_OPT.search(a))
+        if missing:
+            msgs.append(f"  - この session は {session_model}。 agent() {len(calls)} 件のうち {missing} 件が model を書いていない ="
+                        " 親の model を継いで Fable で動く。 agent ごとに opts の model を書く (読む・照合する・検品する・直す agent は"
+                        " claude-opus-5-5 など一段下、 Fable は agent 自身が導出し判断するものだけ)。 1 本の agent は 10 体未満を目安に。")
+    stop = None
+    if any(NAMES_RESET.search(t) for t in owner_prompts(transcript)):
+        m = STOP_AT.search(src + " " + str(ti.get("description") or ""))
+        stop = parse_when(m.group(1)) if m else None
+        if stop is None:
+            msgs.append("  - 本人の直近の発言が週の切替 (リセット) に触れている = 切替の前に残りを使い切る workflow なら、 切替時刻で止める。"
+                        " script に `// [stop-at: 2026-01-02T18:00+09:00]` の形で切替時刻を書く (時刻は desktop なら get_usage の"
+                        " resetsAt、 CLI なら /usage。 使い切りでないなら、 その workflow が終わってよい時刻)。 その時刻を過ぎると、"
+                        " この session の agent の tool 呼び出しをこの検査が止める。")
+        elif stop <= time.time():
+            msgs.append(f"  - [stop-at: {m.group(1).strip()}] はもう過ぎている = 使い切りの時刻は終わった。 起こすなら本人に聞く。")
+    if msgs:
+        return 2, ("🛑 workflow-launch-check: この Workflow はまだ起こさない。\n" + "\n".join(msgs) + f"\n  規約 = {WORKFLOW_RULE}")
+    if stop is not None:
+        save_stop_at(inp.get("session_id") or "", {"stop_at": stop, "iso": m.group(1).strip(), "notified": False,
+                                                   "set": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+    return 0, ""
+
+
+def stop_at_check(inp: dict) -> tuple[int, str]:
+    """After a recorded stop time: a subagent's tool call is refused (it returns what it has); the main thread is told
+    once to stop the workflows and ask the owner. The record is dropped STOP_AT_GRACE after the stop time."""
+    sid = inp.get("session_id") or ""
+    st = load_stop_at(sid)
+    now = time.time()
+    if not st or now < st["stop_at"]:
+        return 0, ""
+    if now > st["stop_at"] + STOP_AT_GRACE:
+        clear_stop_at(sid)
+        return 0, ""
+    if inp.get("agent_id"):
+        if (inp.get("tool_name") or "").startswith(STOP_AT_PASS):
+            return 0, ""
+        return 2, (f"🛑 workflow-launch-check: 週の切替時刻 {st.get('iso')} を過ぎた。 この workflow は切替の前に残りの枠を使い切るために"
+                   " 起こされたので、 ここで止める。 これ以上 tool を呼ばず、 ここまでに分かったことだけを返して終える。")
+    if st.get("notified"):
+        return 0, ""
+    st["notified"] = True
+    save_stop_at(sid, st)
+    return 0, (f"[workflow-launch-check] 週の切替時刻 {st.get('iso')} を過ぎた。 この session の agent の tool 呼び出しは止めている。"
+               " 走っている workflow を TaskStop で止め、 済んだ結果を本人に報告し、 続けるかは本人に聞く (上限が解けた後に自動で届く"
+               "「続けて」 は本人の指示ではない)。 止めを外す = python3 ~/Claude/claude-config/scripts/session-launch-check.py"
+               f" --clear-stop-at。 規約 = {WORKFLOW_RULE}")
+
+
+def run_workflow_gate(inp: dict) -> int:
+    if inp.get("hook_event_name") != "PreToolUse":
+        return 0
+    rc, txt = pre_workflow(inp) if inp.get("tool_name") == "Workflow" else stop_at_check(inp)
+    if rc == 2:
+        sys.stderr.write(txt + "\n")
+        return 2
+    if txt:
+        emit_context("PreToolUse", txt)
+    return 0
+
+
 def route(inp: dict) -> str:
     ev, tool = inp.get("hook_event_name") or "", inp.get("tool_name") or ""
     if tool.endswith("__start_session"):
@@ -624,7 +848,7 @@ def run(inp: dict) -> int:
     return 0
 
 
-def main() -> int:
+def main(workflow_gate: bool = False) -> int:
     if os.environ.get("SESSION_LAUNCH_CHECK_DISABLE") == "1":
         return 0
     try:
@@ -632,7 +856,7 @@ def main() -> int:
     except (ValueError, OSError):
         return 0
     try:
-        return run(inp)
+        return run_workflow_gate(inp) if workflow_gate else run(inp)
     except Exception:
         return 0  # fail-open
 
@@ -872,6 +1096,72 @@ def selftest() -> int:
         got = board_launch_record(f"request `{rid}` (`--root {os.path.join(repo, 'board')}`)")
         check("outbox: a project board's record under .git/board-outbox is found (backticks stripped)",
               bool(got) and got.get("model") == "opus")
+        # ---- Workflow: the agents' model in a Fable session, and the stop time of a burst before a reset
+        wtr = os.path.join(td, "wf.jsonl")
+
+        def wf_session(model: str, *texts: str) -> None:
+            rows = [{"type": "user", "message": {"role": "user", "content": t}} for t in texts]
+            rows.append({"type": "assistant", "message": {"role": "assistant", "model": model, "content": []}})
+            with open(wtr, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n")
+
+        def wf(ti: dict, tool: str = "Workflow", agent_id: str = "", sid: str = "wf-1") -> tuple[int, str, str]:
+            inp = {"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": ti, "session_id": sid,
+                   "transcript_path": wtr, "cwd": td}
+            if agent_id:
+                inp["agent_id"] = agent_id
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = run_workflow_gate(inp)
+            return rc, out.getvalue(), err.getvalue()
+
+        bare = ("export const meta = {name: 'x', description: 'check (all)'}\n"
+                "const r = await parallel(FILES.map(f => () => agent(`Check ${f.name} (see model: notes)`, {label: f.name})))\n"
+                "await agent('Summarize: model: none', {schema: S})\n")
+        pinned = bare.replace("{label: f.name}", "{label: f.name, model: 'claude-opus-5-5'}").replace(
+            "{schema: S}", "{schema: S, model: 'claude-opus-5-5', effort: 'low'}")
+        check("agent_calls: two calls, prompt text and its parens blanked",
+              len(agent_calls(bare)) == 2 and not any(MODEL_OPT.search(a) for a in agent_calls(bare)))
+        check("agent_calls: a helper that wraps agent() is read at its call",
+              [bool(MODEL_OPT.search(a)) for a in agent_calls("const ask = (p, o) => agent(p, {...o, model: M})\nask('x')")] == [True])
+        wf_session("claude-fable-5-1", "Fable にふさわしい物理の仕事をやろう")
+        check("workflow: gate off → a Fable session's bare script passes", wf({"script": bare})[0] == 0)
+        os.environ["SESSION_LAUNCH_PREMIUM_GATE"] = "1"
+        rc, _, err = wf({"script": bare})
+        check("workflow: Fable session, agents without model → blocked (2 of 2)", rc == 2 and "2 件が model" in err)
+        check("workflow: every agent names its model → pass", wf({"script": pinned})[0] == 0)
+        sp = os.path.join(td, "wf.js")
+        with open(sp, "w", encoding="utf-8") as fh:
+            fh.write(bare)
+        check("workflow: a scriptPath is read too", wf({"scriptPath": sp})[0] == 2)
+        check("workflow: inside a subagent → not this check", wf({"script": bare}, agent_id="a1")[0] == 0)
+        wf_session("claude-opus-5-5", "Fable にふさわしい物理の仕事をやろう")
+        check("workflow: an Opus session's bare script → pass", wf({"script": bare})[0] == 0)
+        wf_session("claude-opus-5-5", "適当に分業して！あと13分でリセット！！")
+        rc, _, err = wf({"script": pinned})
+        check("workflow: the owner names the reset, no stop-at → blocked", rc == 2 and "stop-at" in err)
+        rc, _, err = wf({"script": "// [stop-at: 2001-01-01T09:00:00Z]\n" + pinned})
+        check("workflow: a stop-at already past → blocked", rc == 2 and "過ぎている" in err)
+        later = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 600))
+        rc, _, _ = wf({"script": f"// [stop-at: {later}]\n" + pinned})
+        check("workflow: a stop-at ahead → pass and recorded", rc == 0 and abs(load_stop_at("wf-1")["stop_at"] - time.time() - 600) < 5)
+        check("stop-at: before the time a subagent's call passes", wf({"command": "ls"}, tool="Bash", agent_id="a1")[0] == 0)
+        save_stop_at("wf-1", dict(load_stop_at("wf-1"), stop_at=time.time() - 60))
+        rc, _, err = wf({"command": "ls"}, tool="Bash", agent_id="a1")
+        check("stop-at: after the time a subagent's call → blocked", rc == 2 and "返して終える" in err)
+        check("stop-at: the stopped agent can still hand back its result",
+              wf({}, tool="StructuredOutput", agent_id="a1")[0] == 0)
+        rc, out, _ = wf({"command": "ls"}, tool="Bash")
+        check("stop-at: the main thread is told once to stop the workflows", rc == 0 and "TaskStop" in out)
+        check("stop-at: ... and only once", wf({"command": "ls"}, tool="Bash")[1] == "")
+        check("stop-at: another session is not touched", wf({"command": "ls"}, tool="Bash", agent_id="a2", sid="wf-2")[0] == 0)
+        save_stop_at("wf-1", dict(load_stop_at("wf-1"), stop_at=time.time() - STOP_AT_GRACE - 60))
+        rc, _, _ = wf({"command": "ls"}, tool="Bash", agent_id="a1")
+        check("stop-at: long after the time the record is dropped", rc == 0 and load_stop_at("wf-1") is None)
+        check("parse_when: an offset and a local time", parse_when("2026-10-23T18:00+09:00") == parse_when("2026-10-23T09:00Z")
+              and parse_when("2026-10-23 18:00") is not None and parse_when("tomorrow") is None)
+        os.environ.pop("SESSION_LAUNCH_PREMIUM_GATE", None)
+
         for k in ("SESSION_LAUNCH_PREMIUM_GATE_MARKER",):
             os.environ.pop(k, None)
         check("route ignores other tools", route({"hook_event_name": "PreToolUse", "tool_name": "Bash"}) == "")
@@ -899,4 +1189,8 @@ if __name__ == "__main__":
         sys.exit(selftest())
     if len(sys.argv) > 1 and sys.argv[1] == "--note-reason":
         sys.exit(note_reason(sys.argv[2:]))
-    sys.exit(main())
+    if len(sys.argv) > 1 and sys.argv[1] == "--clear-stop-at":
+        _sid = os.environ.get("CLAUDE_CODE_SESSION_ID") or (sys.argv[2] if len(sys.argv) > 2 else "")
+        print("cleared" if _sid and clear_stop_at(_sid) else "no stop time recorded for this session")
+        sys.exit(0)
+    sys.exit(main(workflow_gate="--workflow-gate" in sys.argv))
