@@ -534,6 +534,17 @@ def crypt_key_mismatch(repo, target, head=None, limit=3):
     return None
 
 
+def _local_rewrite_trace(repo, head, up_sha, gen):
+    """手元にしか無い commit (HEAD から届き upstream から届かない) が、 書き換えで捨てた世代の commit か消した版の blob を
+    抱えているか。 対応表を運ぶ repo でも、 新しい世代の上の通常の分岐 (手元の commit + upstream の前進) は痕跡にしない
+    (2026-10-26 実測: email-office は 9/29 の書き換えの対応表を持ち続けるので、 対応表が在るだけで痕跡と見ると、
+    受付当番の未 push の commit 3 つと upstream の前進が「書き換えられた」 と報告され、 人が揃えるまで止まった)。"""
+    if not (gen.old_shas or gen.forbidden):
+        return False
+    ids = _range_ids(repo, head, [up_sha], objects=bool(gen.forbidden), timeout=60) - TRIVIAL_OBJECTS
+    return bool(ids & (gen.old_shas | gen.forbidden))
+
+
 def follow_repo(repo, cli_globs=(), fetch=True, max_count=DEFAULT_MAX, dry_run=False, log=True):
     repo = Path(repo)
     name = repo.name
@@ -560,9 +571,12 @@ def follow_repo(repo, cli_globs=(), fetch=True, max_count=DEFAULT_MAX, dry_run=F
         return Result("ahead")
     gen = Generation.load(repo, upstream, cli_globs)
     target, how = _find_target(repo, head, upstream, gen, max_count)
+    # 書き換えの痕跡 = fetch が forced-update を記録した / 手元にしか無い commit が対応表の旧世代・消した blob を抱える
+    # (対応表が upstream に在るだけでは痕跡にしない = 書き換えの後の通常の分岐を「書き換え」 と言わない)
+    trace = forced_update_seen(repo, upstream) or _local_rewrite_trace(repo, head, up_sha, gen)
     if not target:
-        if forced_update_seen(repo, upstream) or gen.maps or gen.forbidden:
-            # 書き換えの痕跡がある (fetch が forced-update を記録した / upstream が対応表を運ぶ) = 揃えられない理由は手元だけの中身
+        if trace:
+            # 書き換えの痕跡がある = 揃えられない理由は手元だけの中身
             hint = _replay_hint(repo, head, upstream, gen)
             return Result("stopped",
                           f"{name}: upstream ({upstream}) は書き換えられ、 手元の HEAD ({head[:7]}) と同じ中身の commit が新しい履歴に無い"
@@ -583,7 +597,7 @@ def follow_repo(repo, cli_globs=(), fetch=True, max_count=DEFAULT_MAX, dry_run=F
     if not git_ok(repo, "reset", "-q", "--keep", up_sha):
         return Result("stopped", f"{name}: reset --keep が止まった (未 commit の変更が書き換えで変わった file に重なる) = 手で揃える"
                                  f" (git status で file を見て、 退避してから再実行)", exit_code=1)
-    if how == "volatile-only" and not (forced_update_seen(repo, upstream) or gen.maps or gen.forbidden):
+    if how == "volatile-only" and not trace:
         # 書き換えではない: 手元にだけ在った commit は無人 job の書く path の差分だけ → upstream に揃えた、 と事実のとおりに言う
         line = (f"{name}: 手元にだけ在った commit は volatile な path の差分だけ = upstream に揃えた"
                 f" (手元の HEAD {head[:7]} → {branch or 'HEAD'} = {up_sha[:7]})")
@@ -1986,6 +2000,18 @@ def _selftest():
     (hd / "pre-push").unlink()
     st = status(a_ok)
     check("status: manifest + stub + relation", st["manifest"] and st["prepush_stub"] and st["relation"] == "ahead", json.dumps(st))
+    # 書き換えの後の通常の分岐: 対応表を運ぶ repo でも、 新しい世代の上の手元の commit + upstream の前進は diverged
+    # (= 「書き換えられた」 で止めない。 2026-10-26 email-office の実測)
+    a_adv = clone("a-advance")
+    (a_adv / "e.txt").write_text("remote advance\n")
+    git(a_adv, "add", "e.txt")
+    git(a_adv, "commit", "-q", "-m", "remote advance after the rewrite")
+    git(a_adv, "push", "-q", "origin", "main")
+    r = follow_repo(a_ok, log=False)
+    check("ordinary divergence on the new generation of a manifest repo: diverged, not stopped as a rewrite",
+          r.state == "diverged" and "書き換えられ" not in r.line, r.line)
+    check("ordinary divergence on the new generation: ref untouched", git(a_ok, "log", "-1", "--format=%s") == "legit")
+    git(a_adv, "push", "-q", "--force", "origin", f"{mf}:main")   # 後の検査は remote の先頭 = mf を前提にする
 
     # --- 通常の分岐 (書き換えの痕跡なし): stopped でなく diverged (= 呼び元の従来の扱い)
     od_remote = tmp / "od.git"
