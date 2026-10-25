@@ -64,6 +64,14 @@ coverage check (--expect-account、 repeatable):
   - 台帳の host は --role に無ければ always-on とみなす (= 本番ホストの heartbeat の停止も 🔴)
   - 自分の機械の分も出す (check-cron-health は予定を見ない)
 
+clone の同期 (writer の --repos-root の repos.stopped / repos.sync、 追加設定不要):
+  beat が新鮮なマシンの clone ごとに、 追従が止まった (🔴) / upstream と分岐したまま SYNC_UNPUSHED_H 時間以上 (🔴 = 手元の commit は
+  他の machine に届いていない) / push されていない commit が SYNC_UNPUSHED_H 時間以上 (🟠) / SYNC_BLOCKED_H 時間以上遅れたまま
+  upstream の変更と重なる未 commit が在る (🟠 = 最新化できない、 古さは遅れの最古の commit の時刻) を出す。 自分のマシンの分も出す (session 開始の同期の 1 行は古さを言わない)。
+  path は writer が載せない = どの file かはそのマシンで見る。 実測の動機: 無人の書き手の commit が本番の機械に閉じ、 その機械の
+  記録は毎時「止まっている」 を載せていたが、 人が使っていた別の機械には何も出なかった (= 書き手の log と、 session を開かない機械の
+  session 開始の 1 行にしか出ていなかった)。
+
 usage:
   check-fleet-status.py --dir <fleet-status-dir> [--role HOST=always-on ...]
       [--stale-hours 6] [--expect-account <acct> ...] [--routine-ledger <active-routine-host.json>]
@@ -263,6 +271,55 @@ def auth_findings(host, d, self_host=None):
     return out
 
 
+SYNC_UNPUSHED_H = 3    # 手元にだけ在る commit がこれより古ければ出す (session の途中で push 前の数分は出さない)
+SYNC_BLOCKED_H = 12    # 最新化を止める未 commit がこれより古ければ出す (持ち主が居ない疑い)
+
+
+def _ago(sec):
+    h = max(0, int(sec)) // 3600
+    return f"{h} 時間" if h < 48 else f"{h // 24} 日"
+
+
+def sync_findings(host, d, now, age_h=0.0):
+    """1 マシンの beat の repos.stopped / repos.sync から finding を作る (writer の事実 = fleet-heartbeat.py の sync_facts)。
+    - 🔴 stopped = 追従が止まった (手元にしか無い commit が書き換えで捨てられた世代のもの)
+    - 🔴 分岐したまま SYNC_UNPUSHED_H 時間以上 (手元にだけ在る commit + upstream の前進) = 手元の commit は他の machine に届いていない
+    - 🟠 push されていない commit が SYNC_UNPUSHED_H 時間以上 (遅れてはいない)
+    - 🟠 遅れて SYNC_BLOCKED_H 時間以上 (遅れの最古の commit の時刻で測る)、 upstream の変更と重なる未 commit が在る = 最新化できない
+      (持ち主の居ない変更の疑い。 file の更新時刻は使わない = よく書かれる台帳の file は何日止まっていても新しく見える)
+    なぜ (実測): 無人の書き手の commit が本番の機械の clone に閉じ、 同期の止まった表示は session を開かないその機械の上にしか
+    出なかった。 毎時の記録は「止まっている」 を載せていたが、 読む側が出していなかった = 人が使っている別の機械に届く面に出す。"""
+    rp = d.get("repos") or {}
+    out = []
+    note = f" [beat {age_h:.0f}h 前]" if age_h >= 1 else ""
+    stopped = {x for x in (rp.get("stopped") or []) if isinstance(x, str)}
+    for name in sorted(stopped):
+        out.append(f"🔴 {host}: {name} の追従が止まっている = 手元にしか無い commit が書き換えで捨てられた世代のもの"
+                   f" (pull / rebase をしない。 そのマシンの clone で git log @{{u}}..HEAD を見て揃える = "
+                   f"multi-machine-state.md#history-rewrite-follow){note}")
+    for name, v in sorted((rp.get("sync") or {}).items()):
+        if name in stopped or not isinstance(v, dict):
+            continue
+        a, b, k = v.get("ahead") or 0, v.get("behind") or 0, v.get("wip_overlap") or 0
+        since, ws = v.get("ahead_since"), v.get("behind_since")
+        if a and isinstance(since, (int, float)) and now - since >= SYNC_UNPUSHED_H * 3600:
+            if b:
+                out.append(f"🔴 {host}: {name} が upstream と分岐したまま {_ago(now - since)} (手元にだけ在る commit {a}・"
+                           f"upstream にだけ在る commit {b}) = 手元の commit は他の machine に届いていない。 そのマシンの clone で"
+                           f" git log @{{u}}..HEAD を見て、 退避 → upstream に無い分を載せ直す → 揃える"
+                           f" (multi-session-coordination.md#ordinary-divergence-replay){note}")
+            else:
+                out.append(f"🟠 {host}: {name} に push されていない commit {a} (最古 {_ago(now - since)}前) = 他の machine に"
+                           f"届いていない。 そのマシンの clone で git log @{{u}}..HEAD を見て push する (無人の書き手なら push の失敗を"
+                           f"疑う = multi-session-coordination.md#unattended-writer-stale-base){note}")
+            continue
+        if b and k and isinstance(ws, (int, float)) and now - ws >= SYNC_BLOCKED_H * 3600:
+            out.append(f"🟠 {host}: {name} が {b} commit 遅れたまま最新化できない (未 commit の変更 {k} file が upstream の変更と"
+                       f"重なる、 遅れの最古 {_ago(now - ws)}前) = 持ち主の session に commit させる / 居なければ"
+                       f" multi-session-coordination.md#owner-gone-intersect-sync{note}")
+    return out
+
+
 def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_tasks=False, self_host=None,
          routine=None, plist_dir=None):
     now = now or time.time()
@@ -308,6 +365,7 @@ def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_
         findings.extend(job_findings(host, d, self_host))
         findings.extend(missed_run_findings(host, d, role, routine, plist_dir))
         findings.extend(auth_findings(host, d, self_host))
+        findings.extend(sync_findings(host, d, now, age_h))
         if role == "always-on" and not d.get("servers"):
             findings.append(f"🟠 {host} (always-on): RC server が 1 本も loaded されていない")
         # coverage check: expected account の suffix server (= label 末尾 .<acct>) が居るか
@@ -578,7 +636,37 @@ def selftest():
         assert any("🔴 mini (always-on)" in x for x in scan(d, {}, 6, now, routine=rt)), "本番ホストの停止"
         assert not any("mini" in x for x in scan(d, {}, 6, now)), "台帳なしは best-effort のまま"
         ok += 1
-    print(f"selftest: {ok}/20 PASS")
+        # clone の同期 (repos.stopped / repos.sync): 分岐したまま 3 時間以上 = 🔴 / push されていない commit だけ = 🟠 /
+        # 遅れたまま重なる未 commit 12 時間以上 = 🟠 / それより新しいものは出さない / stopped の repo は stopped の行だけ
+        h = 3600
+        sb = {"host": "mini", "epoch": now - 600, "repos": {"stopped": ["rw"], "sync": {
+            "eo": {"ahead": 3, "ahead_since": now - 20 * h, "behind": 35},
+            "un": {"ahead": 1, "ahead_since": now - 5 * h},
+            "new": {"ahead": 1, "ahead_since": now - 600, "behind": 2},
+            "pr": {"behind": 15, "wip_overlap": 1, "behind_since": now - 44 * h},
+            "fresh_wip": {"behind": 1, "wip_overlap": 2, "behind_since": now - 2 * h},
+            "rw": {"ahead": 2, "ahead_since": now - 50 * h, "behind": 1}}}}
+        fs = sync_findings("mini", sb, now)
+        assert any(x.startswith("🔴 mini: eo が upstream と分岐したまま 20 時間") and "手元にだけ在る commit 3" in x
+                   and "#ordinary-divergence-replay" in x for x in fs), fs
+        assert any(x.startswith("🟠 mini: un に push されていない commit 1 (最古 5 時間前)") for x in fs), fs
+        assert any(x.startswith("🟠 mini: pr が 15 commit 遅れたまま最新化できない") and "遅れの最古 44 時間前" in x
+                   and "#owner-gone-intersect-sync" in x for x in fs), fs
+        assert any(x.startswith("🔴 mini: rw の追従が止まっている") for x in fs), fs
+        assert not any(" new " in x or "mini: new" in x or "fresh_wip" in x for x in fs), f"新しいものは出さない: {fs}"
+        assert sum("mini: rw" in x for x in fs) == 1, f"stopped の repo は stopped の行だけ: {fs}"
+        assert len(fs) == 4, fs
+        assert sync_findings("mini", {"host": "mini", "repos": {"error": "x"}}, now) == [], "集計の失敗だけの beat は黙る"
+        assert sync_findings("mini", {"host": "mini"}, now) == [], "旧 beat (repos 欄なし) は黙る"
+        for f_ in d.glob("*.json"):
+            f_.unlink()
+        (d / "mini.json").write_text(json.dumps(dict(sb, epoch=now - 2 * h)))
+        fs = scan(d, {}, 6, now)
+        assert any("mini: eo が upstream と分岐" in x and "[beat 2h 前]" in x for x in fs), fs
+        (d / "mini.json").write_text(json.dumps(dict(sb, epoch=now - 10 * h)))
+        assert not any("eo" in x for x in scan(d, {}, 6, now)), "寝ている machine の古い beat の同期の事実は出さない"
+        ok += 1
+    print(f"selftest: {ok}/21 PASS")
 
 
 def main():

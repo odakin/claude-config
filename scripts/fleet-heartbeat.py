@@ -60,7 +60,8 @@ usage:
     harness_hooks: [hook file 名, ...],                          # ~/.claude/settings.json に配線された hook の名前だけ
     rewrite_follow: {capable, state, upstream, manifest, prepush_stub, forced_update_seen},  # 下記
     repos: {heads: {repo 名: {head, up, prepush}}, stale: [repo 名], no_stub: [repo 名],
-            stub_placed, stub_failed} }                          # --repos-root 指定時のみ、 下記
+            stub_placed, stub_failed,
+            sync: {repo 名: {ahead, ahead_since, behind, behind_since, wip_overlap}}} }   # --repos-root 指定時のみ、 下記
 
 書き換えられた履歴への追従 (rewrite_follow、 部品 = lib/git_rewrite_follow.py、 2026-09-29):
   heartbeat repo の remote が force-push で書き換えられた後、 従来の `pull --rebase` は古い commit を新しい履歴に
@@ -96,6 +97,10 @@ repo ごとの点呼 (repos、 --repos-root DIR、 opt-in、 部品 = lib/git_re
   - fetch_failed = この beat で fetch に失敗した repo (認証・network・remote の URL)。 失敗した repo は upstream の知識が古いまま =
     その machine には「揃える対象なし」 に見える。 読む側が「次の回が揃える」 と言わないための欄。 変化は即 commit
   - heads の各 repo の old_branches = 捨てられた履歴の commit を抱えた手元の branch (今の branch を除く。 在る時だけ載る)
+  - sync = 書き換えに依らない同期の事実 (sync_facts): 手元にだけ在る commit の数と最古の commit の時刻・遅れている commit の数と
+    最古の commit の時刻・遅れている時に upstream の変更と重なる未 commit の file の数。 在る repo だけ載る。 path は載せない。
+    reader (check-fleet-status.py) が古さで判定する = 手元にだけ在る commit が何時間も残る (push に失敗した無人の書き手・分岐) /
+    最新化を止める未 commit が何時間も残る (持ち主の居ない変更)。 有無の変化は即 commit (essence)、 数と時刻の変化は入れない
   heads は essence に入れない (どこかの repo に commit するたびに beat を commit しないため。 鮮度の上限 = 定期 commit の間隔)。
   --repos-follow (opt-in): 毎 beat、 全 repo を fetch し、 書き換えられた履歴に揃えられる clone を揃える (lib.follow_repo =
   手元の commit の中身が upstream に在る時だけ ref を動かす)。 「書き換えた後、 各 machine で追従を 1 回」 を人にも session の開始にも
@@ -581,6 +586,10 @@ def essence(d: dict):
             "rewrite_follow": {k: (d.get("rewrite_follow") or {}).get(k) for k in ("capable", "state", "manifest", "prepush_stub")},
             # repo ごとの点呼: 「捨てられた履歴の上に居る repo」 と「stub の無い repo」 の変化は即 commit (heads は入れない)
             "repos": {k: (d.get("repos") or {}).get(k) for k in ("stale", "no_stub", "stopped", "events", "error", "fetch_failed")},
+            # 同期の事実は「手元にだけ在る commit が在る / 遅れている / 最新化を止める未 commit が在る」 の有無だけ (数・時刻は入れない
+            # = commit が積もるたびに beat を commit しない。 現れた・消えた時だけ即 commit = 他の machine の reader に早く届く)
+            "sync": sorted([n, bool(v.get("ahead")), bool(v.get("behind")), bool(v.get("wip_overlap"))]
+                           for n, v in ((d.get("repos") or {}).get("sync") or {}).items()),
         },
         sort_keys=True,
     )
@@ -692,6 +701,64 @@ def follow_all(root: Path, skip=()):
     return followed, stopped, sorted(fetch_failed)
 
 
+def _porcelain_paths(z: str):
+    """`git status --porcelain -z` の出力から path の集合 (rename / copy は新旧の両方)。"""
+    out, it = set(), iter(z.split("\0"))
+    for ent in it:
+        if len(ent) < 4:
+            continue
+        out.add(ent[3:])
+        if ent[0] in "RC":
+            old = next(it, "")
+            if old:
+                out.add(old)
+    return out
+
+
+def sync_facts(root: Path, names):
+    """root/*/ の clone ごとの同期の事実 (判定はしない = reader が古さで判定する): 手元にだけ在る commit の数と最古の commit の時刻
+    (ahead / ahead_since)、 upstream にだけ在る commit の数と最古の commit の時刻 (behind / behind_since = どれだけ前から遅れているか)、
+    behind の時に upstream の変更と重なる未 commit の file の数 (wip_overlap)。 ahead が在るか、 behind で重なりが在る repo だけを返す。
+    重なりの古さに file の更新時刻を使わない (よく書かれる台帳の file は、 別の session が書くたびに時刻が新しくなり、 何日止まっていても
+    新しく見える) = 遅れの最古の commit の時刻で測る。
+    path は載せない (file 名に人や案件が出る repo がある = 数と時刻だけ。 どの file かはその machine で git status を見る)。
+    なぜ (実測): 無人の書き手の commit が手元に閉じ、 session を開かない機械では誰も気づかなかった。 heads は sha だけで、
+    reader は「手元にだけ在る commit がいつから在るか」 「最新化を止めている未 commit がいつから在るか」 を見分けられなかった。"""
+    out = {}
+    for name in names:
+        repo = root / name
+        try:
+            rc1, a = git(repo, "rev-list", "--count", "@{u}..HEAD")
+            rc2, b = git(repo, "rev-list", "--count", "HEAD..@{u}")
+            if rc1 or rc2:
+                continue
+            ahead, behind = int(a.strip() or 0), int(b.strip() or 0)
+            e = {}
+            if ahead:
+                _, ts = git(repo, "log", "--format=%ct", "@{u}..HEAD")
+                times = [int(t) for t in ts.split() if t.isdigit()]
+                e["ahead"] = ahead
+                if times:
+                    e["ahead_since"] = min(times)
+            if behind:
+                _, st = git(repo, "status", "--porcelain", "--untracked-files=no", "-z")
+                _, chg = git(repo, "diff", "--name-only", "-z", "HEAD...@{u}")
+                ov = _porcelain_paths(st) & {x for x in chg.split("\0") if x}
+                if ov:
+                    e["wip_overlap"] = len(ov)
+            if e:
+                if behind:
+                    e["behind"] = behind
+                    _, bts = git(repo, "log", "--format=%ct", "HEAD..@{u}")
+                    btimes = [int(t) for t in bts.split() if t.isdigit()]
+                    if btimes:
+                        e["behind_since"] = min(btimes)
+                out[name] = e
+        except Exception:   # 1 つの repo の失敗で、 残りの repo の事実を落とさない
+            continue
+    return out
+
+
 def repos_rollcall(root: Path, follow=False, skip=()):
     """root/*/ の全 repo に pre-push stub を置き、 repo ごとの事実と、 この machine 自身が分かっている未追従を返す
     (docstring「repo ごとの点呼」)。 follow=True なら、 その前に全 repo を fetch して追従する。 部品が古い / 失敗 = None
@@ -711,7 +778,8 @@ def repos_rollcall(root: Path, follow=False, skip=()):
                 pass
         out = {"heads": heads, "stale": sorted(stale),
                "no_stub": sorted(n for n, f in heads.items() if f.get("prepush") != "stub"),
-               "stub_placed": len(placed), "stub_failed": failed[:5]}
+               "stub_placed": len(placed), "stub_failed": failed[:5],
+               "sync": sync_facts(root, sorted(heads))}
         if follow:
             out["followed"], out["stopped"] = sorted(followed), sorted(stopped)
             if fetch_failed:
@@ -983,6 +1051,10 @@ def selftest():
         assert essence(h2) != essence(h3), "未追従の repo が現れたら commit する"
         ok += 1
         if _rf is not None and hasattr(_rf, "repo_facts"):
+            # 追従の記録を一時 file に向ける (向けないと、 fixture の追従が本物の ~/.claude/state/rewrite-follow.log に
+            # 「followed …/rollcall/…」 の行を残す = 実測。 その log は書き換えの追従の調べ物で読む記録)
+            _rf_log_prev = os.environ.get(_rf.LOG_ENV)
+            os.environ[_rf.LOG_ENV] = str(Path(td) / "rf-rollcall.log")
             rc_root = Path(td) / "rollcall"
             rc_root.mkdir()
             rc_remote = Path(td) / "rollcall-remote.git"
@@ -1027,10 +1099,35 @@ def selftest():
             assert rr["followed"] == [] and git(rc_root / "stale", "rev-parse", "HEAD")[1].strip() == new_tip, \
                 "behind なだけの clone は fetch するだけで動かさない"
             assert "fetch_failed" not in rr, rr
+            # 同期の事実: 分岐した clone (手元の commit + upstream の前進) は ahead・ahead_since・behind が載る。
+            # 遅れている clone で upstream の変更と重なる未 commit は数と時刻が載る (path は載せない)。 揃っている clone は載らない
+            sy = rr.get("sync") or {}
+            assert sy.get("local", {}).get("ahead") == 2 and sy["local"].get("behind") == 2 \
+                and isinstance(sy["local"].get("ahead_since"), int), f"分岐した clone の同期の事実: {sy}"
+            assert not ({"stale", "behind", "one"} & set(sy)), f"遅れているだけ・揃っている clone は載らない: {sy}"
+            (rc_root / "stale" / "f.txt").write_text("edited here, not committed\n")
+            assert "stale" not in sync_facts(rc_root, ["stale"]), "upstream の変更 (c2 = g.txt) と重ならない未 commit は載らない"
+            (seed / "f.txt").write_text("3\n")
+            git(seed, "commit", "-q", "-a", "-m", "c3")
+            git(seed, "push", "-q", "origin", "main")
+            git(rc_root / "stale", "fetch", "-q")
+            sy2 = sync_facts(rc_root, ["stale"])
+            assert sy2.get("stale", {}).get("wip_overlap") == 1 and isinstance(sy2["stale"].get("behind_since"), int) \
+                and sy2["stale"].get("behind") == 2 and "ahead" not in sy2["stale"], f"最新化を止める未 commit: {sy2}"
+            assert "f.txt" not in json.dumps(sy2), "path は載せない"
+            git(rc_root / "stale", "checkout", "-q", "--", "f.txt")
+            assert essence({"repos": {"sync": {"x": {"ahead": 1, "ahead_since": 1}}}}) \
+                == essence({"repos": {"sync": {"x": {"ahead": 2, "ahead_since": 5}}}}), "数・時刻の変化では commit しない"
+            assert essence({"repos": {"sync": {}}}) != essence({"repos": {"sync": {"x": {"ahead": 1}}}}), \
+                "手元にだけ在る commit が現れたら commit する"
             git(rc_root / "behind", "remote", "set-url", "origin", str(Path(td) / "no-such-remote.git"))
             rr = repos_rollcall(rc_root, follow=True, skip=[seed])
             assert rr.get("fetch_failed") == ["behind"], f"fetch に失敗した repo は名前が載る: {rr.get('fetch_failed')}"
             assert essence({"repos": {"fetch_failed": ["x"]}}) != essence({"repos": {}}), "fetch の失敗が現れたら commit する"
+            if _rf_log_prev is None:
+                os.environ.pop(_rf.LOG_ENV, None)
+            else:
+                os.environ[_rf.LOG_ENV] = _rf_log_prev
             ok += 1
         if _rf is not None:
             ok += _selftest_rewrite(Path(td))
