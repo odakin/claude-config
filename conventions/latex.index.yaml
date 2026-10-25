@@ -49,6 +49,18 @@ sections:
   - id: dots-before-closing-delimiter
     level: 2
     title: "amsmath は `\\cdots`・`\\dots` の直後が閉じ括弧か `$` のとき右に `\\,` を足す — 括弧の中に点だけだと左右が揃わない"
+  - id: named-refs-without-cleveref
+    level: 2
+    title: "参照に種類の名前 (定理・図・付録) を自動で付ける — cleveref を使わない形と、 `\\autoref` が和文で詰まる罠"
+  - id: tcolorbox-footnotes-to-page
+    level: 2
+    title: "tcolorbox の枠の中の脚注を、 本文と同じ番号で頁の下に出す"
+  - id: lua-ul-highlight-emph
+    level: 2
+    title: "`\\emph` を色の帯 (蛍光ペン) にする — lua-ul の罠と文献表"
+  - id: figure-table-shared-counter
+    level: 2
+    title: "図と表を 1 本の通し番号にする (jsclasses・ltjsbook)"
   - id: symbol-width-repagination
     level: 2
     title: "記号幅の変わる一括置換は、 総頁数が同じまま頁割りだけ動かす — `.aux` の label→頁 で見る (2026-09-12)"

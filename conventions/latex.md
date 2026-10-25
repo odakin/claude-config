@@ -225,6 +225,65 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 - **直し方 (LuaTeX)**: `\extra@` を包み、 amsmath が `\,` を足すと決めたときだけ、 今の数式の最後の要素を Lua で見る (`tex.nest[tex.nest.ptr].tail` が空 = 数式の頭、 開きの noad、 または `\left` の fence)。 点の左がそれで、 右が閉じ括弧か `$` なら `\,` を足さない。 それ以外 (`(1,\dots)`・`(1+\cdots)`) は amsmath のまま。 pdfTeX / XeTeX では今の数式の最後の要素を見られないので、 原稿の側で `\pn{\cdots}` のような書き方を 1 つの macro にして、 そこで点の右の空きを打ち消す。
 - **確かめ方**: `\pn{\cdots}` / `(\cdots)` / `(\dots)` / `(1,\dots)` / `(1+\cdots)` を 1 行ずつ組み、 高解像度の画像で隣り合うインクの塊の間を測る。 本全体は前と後で組み比べる (変わるのは点だけの括弧と、 点だけの行内数式の右の空き)。
 
+## <a id="named-refs-without-cleveref"></a>参照に種類の名前 (定理・図・付録) を自動で付ける — cleveref を使わない形と、 `\autoref` が和文で詰まる罠
+
+**何がしたいか**: 「性質~\ref{…}」 の「性質」 を手で打たず、 ラベルの種類から名前を出す。 cleveref を使わない原稿でも組める形。
+
+- **定理の仲間が番号を共有していると種類が区別できない**: amsthm の `\newtheorem{property}[theorem]{性質}` は counter `theorem` を進めるので、 hyperref の anchor は `theorem.1.7` になり、 `\autoref` は全部「定理」 と出す。 aliascnt で種類ごとの counter 名を付ける: `\newaliascnt{property}{theorem}\newtheorem{property}[property]{性質}\aliascntresetthe{property}` (番号の列は同じ)。 名前は `\def\propertyautorefname{性質}` のように種類ごとに、 図・表・付録は class の名前を使う (`\def\figureautorefname{\figurename}` など)
+- **`\autoref` は番号の後ろに空の箱 (`\null`) を置く**: LuaTeX-ja は英数字と和文の間に空き (xkanjiskip) を入れるが、 空の箱が挟まると入らないので「付録Aに」 と詰まる (実測。 手で書いた「付録~\ref{…}に」 は「付録 A に」)。 和文の原稿では、 anchor の種類から名前を引いて「名前~\ref{ラベル}」 と組む命令を作る (`\r@ラベル` の 4 つめの欄が anchor。 preamble の `\makeatletter` から `\makeatother` の間に置く):
+
+```latex
+\def\rf@name#1.#2\@nil{\@ifundefined{#1autorefname}{}{\csname #1autorefname\endcsname~}}
+\newcommand{\rf}[1]{\@ifundefined{r@#1}{}{%
+  \edef\rf@anchor{\expandafter\expandafter\expandafter\@fourthoffive\csname r@#1\endcsname}%
+  \expandafter\rf@name\rf@anchor.\@nil}\ref{#1}}
+```
+
+  手で書いたのと同じ組みになる (リンクも番号だけ)。 ラベルが未定義の回は名前を出さず `\ref` の ?? だけ
+- 式は `\eqref` のまま (`\autoref` の式は括弧が付かない)。 章・節は「第 1 章」「1.2 節」 の形にならないので、 名前を前に付ける命令では引かない
+- **既存の原稿を置き換えるとき**: 書いてある名前と、 そのラベルの種類から出る名前が一致した所だけを置き換える。 種類は `.aux` の anchor から読む (`\include` した章のラベルは章ごとの `.aux` にあり、 main.aux には無い = 実測)。 置き換えの前と後を同じ原稿の写しで組み比べ、 頁の画素と字が同じなら組みは変わっていない
+
+## <a id="tcolorbox-footnotes-to-page"></a>tcolorbox の枠の中の脚注を、 本文と同じ番号で頁の下に出す
+
+**何が起きるか**: tcolorbox の中身は minipage で組まれるので、 中の `\footnote` は枠の下に a, b… の別系統の番号で出る。
+
+- footnotehyper (hyperref と組める footnote package) の `\savenotes` / `\spewnotes` で、 脚注を枠の外へ預けて頁の下に出す。 `\newtcolorbox` で作った環境は `\makesavenoteenv{環境名}` で包む
+- 枠の中でも本文の脚注の番号を使う: 枠の中身の最初で、 minipage の脚注の counter 名 `\@mpfn` を `footnote` に、 印の書式 `\thempfn` を `\thefootnote` に戻す。 tcolorbox の key で全部の枠に掛ける (`\makeatletter` の中で)。 これが無いと、 頁の下に出ても印は a のまま (実測):
+
+```latex
+\tcbset{every box/.append style={before upper app={%
+  \renewcommand\@mpfn{footnote}%
+  \renewcommand\thempfn{\thefootnote}}}}
+```
+- **`\tcolorboxenvironment` で囲んだ環境 (定理の仲間など) は `\makesavenoteenv` が効かない**: tcolorbox は env の hook にラベル `tcolorbox` で枠を開く処理を登録する。 ラベルの無い preamble の処理は同じ hook の中で後に回るので、 `\savenotes` が枠の内側で走る (実測)。 預ける処理にラベルを付け、 順序の規則で枠の外側に置く:
+
+```latex
+\ExplSyntaxOn
+\clist_map_inline:nn { definition, theorem, lemma }   % 枠で囲んだ環境
+  {
+    \AddToHook{env/#1/before}[boxnotes]{\savenotes}
+    \AddToHook{env/#1/after}[boxnotes]{\spewnotes}
+    \DeclareHookRule{env/#1/before}{boxnotes}{before}{tcolorbox}
+    \DeclareHookRule{env/#1/after}{boxnotes}{after}{tcolorbox}
+  }
+\ExplSyntaxOff
+```
+
+- **確かめ方**: 本文の脚注・`\newtcolorbox` の枠の中の脚注・定理の枠の中の脚注を並べた試しの文書で、 印が続き番号になり、 本文が頁の下に並ぶこと。 本全体は前と後を組み比べ、 変わるのは枠の中に脚注がある頁と、 その後ろの脚注の番号だけ
+
+## <a id="lua-ul-highlight-emph"></a>`\emph` を色の帯 (蛍光ペン) にする — lua-ul の罠と文献表
+
+- lua-ul (LuaLaTeX の下線・帯。 行をまたいでも続く) の `\highLight[色]{…}` で帯を引く。 **色を付けるには luacolor を lua-ul より前に読む** (無いと「Color support in lua-ul requires luacolor」 で止まる)
+- **`\newunderlinetype\名前{…}` が作るのは切り替え**で、 その後ずっと線が引かれる。 引数を取る命令にするには群で包む: `\newcommand\myul[1]{{\名前 #1}}` (実測 = 包まずに使うと文書の終わりまで線が続いた)。 色つきの線は `{\leaders\hbox{\color{色}\vrule width .5pt height -.28ex depth .4ex}}`
+- **luacolor は色を attribute で持つので、 色の境目でも字詰め (kerning) が効く**: 頭の 1 字だけ色の付いた語で、 字が 0.1pt ほど動く (実測)。 入れる前と後を組み比べる (改行・改頁は変わらなかった)
+- **`\emph` を置き換えるなら、 文献表の中では元に戻す**: bst (JHEP.bst など) は題を `\emph` で組む。 `\NewCommandCopy{\origemph}{\emph}` → `\RenewDocumentCommand{\emph}{m}{\highLight[色]{#1}}` → `\AddToHook{env/thebibliography/begin}{\let\emph\origemph}`
+- 和文の強調の案を並べるときの見どころ: 新しい用語の太字と区別がつくか、 白黒で刷っても残るか、 中に数式があっても組めるか (圏点 `\kenten` は数式に点を打てない)。 組んだ姿を並べて決める = [#variant-comparison-images](#variant-comparison-images)
+
+## <a id="figure-table-shared-counter"></a>図と表を 1 本の通し番号にする (jsclasses・ltjsbook)
+
+- `\let\c@table\c@figure` (`\makeatletter` の中で) で表が図の counter を使う。 番号の見た目は `\thefigure` と `\thetable` を同じ形に定義する
+- hyperref の anchor は `figure.…` と `table.…` に分かれたままなので、 種類の名前を付ける参照 ([#named-refs-without-cleveref](#named-refs-without-cleveref)) では「図」「表」 が種類どおりに出る (実測)
+
 ## <a id="symbol-width-repagination"></a>記号幅の変わる一括置換は、 総頁数が同じまま頁割りだけ動かす — `.aux` の label→頁 で見る (2026-09-12)
 
 **症状**: 記法の一括置換 (下付き添字を縦棒つきの label に替える等) で本文の文字列長が変わると、 総頁数は不変でも**付録の開始頁・表・図の頁**が動く。 目次の頁番号も変わる。
@@ -958,7 +1017,12 @@ JHEP.bst はフィールドから自動リンクを生成するので `\href` �
 - `doi`: DOI 本体のみ（例: `10.1103/PhysRevA.61.012104`）
 - `eprint`: arXiv ID のみ（例: `quant-ph/9905023`）。`archivePrefix = "arXiv"` と併用
 - `url`: doi や eprint があれば不要
-- `note`: 自由テキスト。自動リンク対象外の補足情報に使う
+- `note`: 自由テキスト。自動リンク対象外の補足情報に使う。 **全 entry で印字される**ので、 entry の内部の覚え書き (なぜ入れたか・どの note の比較対象か) は `annote` に書く (JHEP.bst は `annote` を読まない = 文献表に出ない)
+- 欧文の著者を `"{Last, First}"` と括弧で包むと、 `F. Last` にならず「Last, First」 のまま出る = 欧文の著者は包まない (和文の著者を包む理由は [#japanese-authors-bibtex](#japanese-authors-bibtex))
+- <a id="jhep-bst-japanese-books"></a>**和書・訳書**:
+  - 題: JHEP.bst は題を `\emph` で組むので、 和文の題はゴシックの太字になり、 数字だけ斜体になる (実測)。 `title = "{\normalfont『題』}"` と『』で括って立てる
+  - 叢書の番号を `number` に入れると「no.~75 in 叢書名」 と英語の形で出る → 和書は番号を `series = "{叢書名 75}"` に含める
+  - 訳書: 原著と訳書は別の entry にして `\cite{原著,訳書}`。 訳書の `author` は原著者の表記 (和文なので括弧で包む)、 訳者は `note = "{訳者 訳}"`。 照合は国立国会図書館の書誌と CiNii Books の 2 つで (版・叢書・訳者・ISBN)
 
 ## <a id="jhep-future-citation"></a>JHEP.bst で future citation（in preparation、タイトル未定）を引く
 
