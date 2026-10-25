@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 気象庁の過去観測データ (時別値・日別値等) をスクリプトで一括取得したいとき
 category: infra
-summary: 気象庁「過去の気象データ・ダウンロード」(obsdl) の機械取得 recipe — show/table POST の現行フィールド (#show-table-post、 旧 recipe の interAnnualFlag は現行 interAnnualType で 400 になる)、 element/地点 ID の動的発見 (#element-station-discovery)、 44,000 値制限に合わせた block 設計と politeness (#volume-limit-politeness)、 CSV の位相 (24 時 = 翌日 0 時)・エンコーディング・ブロック境界の gotcha (#csv-format-gotchas)、 現象なし情報/品質情報/均質番号の一次資料の意味 (#quality-columns)、 長期系列を使う前の QC 点検 4 点 = 行数の暦検算・品質符号の分布・痕跡時間 (実測 15%)・記録分解能の年代 (#long-record-qc)、 protocol はページ自身の JS から読む一般技法 (#protocol-from-page-js)、 取得物は既知データと突合してから使う (#validate-before-use)
+summary: 気象庁「過去の気象データ・ダウンロード」(obsdl) の機械取得 recipe — show/table POST の現行フィールド (#show-table-post、 旧 recipe の interAnnualFlag は現行 interAnnualType で 400 になる)、 element/地点 ID の動的発見 (#element-station-discovery、 地点一覧は JSON・kansoku は 6 文字の文字列・要素表は bundle の中)、 「地域気象観測所一覧」 と obsdl の地点の対応 (#station-master-mapping = 官署 ID は s + 国際地点番号で観測所番号と別・観測開始年月日は今の観測所番号での開始・航空気象観測所は a の ID・cp932)、 44,000 値制限に合わせた block 設計と politeness (#volume-limit-politeness)、 CSV の位相 (24 時 = 翌日 0 時)・エンコーディング・ブロック境界の gotcha (#csv-format-gotchas)、 現象なし情報/品質情報/均質番号の一次資料の意味 (#quality-columns)、 長期系列を使う前の QC 点検 4 点 = 行数の暦検算・品質符号の分布・痕跡時間 (実測 15%)・記録分解能の年代 (#long-record-qc)、 protocol はページ自身の JS から読む一般技法 (#protocol-from-page-js、 minify された bundle は endpoint の文字列と import をたどる)、 取得物は既知データと突合してから使う (#validate-before-use)
 -->
 # 気象庁 obsdl の機械取得 (過去の気象データ・ダウンロード)
 
@@ -15,7 +15,7 @@ summary: 気象庁「過去の気象データ・ダウンロード」(obsdl) の
 
 | field | 例 / 意味 |
 |---|---|
-| `stationNumList` | `'["s47607"]'` (JSON 文字列。官署は `s`+地点番号) |
+| `stationNumList` | `'["s47607"]'` (JSON 文字列。官署は `s` + 国際地点番号 = 「地域気象観測所一覧」 の観測所番号とは別の番号、 [#station-master-mapping](#station-master-mapping)) |
 | `aggrgPeriod` | `9`=時別値, `1`=日別値 (radio 値は index.php の DOM 参照) |
 | `elementNumList` | `'[["101",""]]'` (要素番号と option の組の配列。時別値の降水量=101、気温=201) |
 | `interAnnualType` | `1` (連続期間) ⚠️ **ネット上の旧 recipe の `interAnnualFlag` は現行 protocol に無く、送ると HTTP 400** |
@@ -29,10 +29,22 @@ PHPSESSID 等のセッションは不要。response は Shift_JIS の CSV。
 
 ## <a id="element-station-discovery"></a>要素番号・地点 ID の動的発見
 
-ハードコードされた対応表に頼らず、UI が使う AJAX を直接叩いて調べる:
+ハードコードされた対応表に頼らず、UI が使うものを直接読んで調べる。 ⚠️ 画面は React の bundle に作り直されていて、 旧 recipe の HTML 応答 (`<input name="stid">`・`<input name="element">`) と `web/js/top.*.js` はもう無い (実測):
 
-- 要素一覧: `POST /risk/obsdl/top/element` に `{aggrgPeriod: 9}` → HTML 内の `<input name="element" value="101">降水量` 等から番号を読む
-- 地点一覧: `POST /risk/obsdl/top/station` に `{pd: <都道府県番号>}` (富山=55, 長野=48, 岐阜=52, 三重=53) → 各 station div 内の `<input name="stid" value="s47607">` が ID。`kansoku` (観測種目 bitmask) で当該要素の観測有無も分かる
+- **地点一覧**: `POST /risk/obsdl/top/station` に `pd=<都道府県番号>&format=json` → **JSON**。 `pd=00` が都道府県の表 (`prefTable` の `type: "pref"` の `prid`・`name`)、 `pd=<prid>` がその都道府県の地図の marker の list (`markers`)。 marker の `kind: "station"` の要素が地点で、 `stid` (官署 `s47xxx` / アメダス `a` + 4 桁)・`stname`・`kansoku`・`ended` (観測終了)・`title` (カナ・北緯・東経・標高・「YYYY年MM月DD日に観測終了」) を持つ。 同じ地点の大小 2 つの marker が並ぶので `stid` で 1 つにまとめる。 都道府県番号は観測所番号の上 2 桁と同じ並び (富山=55, 長野=48, 岐阜=52, 三重=53) だが、 沖縄は `pd=91` 1 つにまとまる
+- **`kansoku` は bitmask ではなく 6 文字の文字列**: 位置 i の文字が `"1"` か `"2"` なら画面はその観測種目のアイコンを出す (= 観測あり)。 位置の意味は JS の配列で、 0 = 降水量、 1 = 風、 2 = 気温、 3 = 日照時間、 4 = 積雪・降雪、 5 = その他。 `"2"` の意味は JS に書かれていない (アメダスの四要素地点の日照の位置に出る)。 ⚠️ 官署はどれも全位置が観測ありの同じ値で、 **時別値があるか・いつからかは分からない** (= 期間はデータ本体で確かめる)
+- **要素番号**: 要素の一覧は AJAX でなく bundle の中の静的な配列にある (例: 時別値の `value: "101"` = 降水量 (前 1 時間)、 `"201"` = 気温)。 bundle を日本語の要素名で検索して番号を読む
+- 呼び方の一次資料 = `web/dist/whatsnewHistory.js` (`top.bundle.js` が import する module。 地点 AJAX の関数と観測種目の配列がここにある)。 読み方は [#protocol-from-page-js](#protocol-from-page-js)
+
+### <a id="station-master-mapping"></a>「地域気象観測所一覧」 (AMeDAS master) と obsdl の地点の対応
+
+気象官署の一覧が要るときは、 気象庁の「地域気象観測所一覧」 (アメダスの解説ページからたどる zip の CSV と PDF の凡例) を使う。 そのまま obsdl に繋ぐと次で外れる:
+
+- **ID が違う**: obsdl の官署 ID は `s` + 国際地点番号 (例 `s47607`)。 一覧の観測所番号 (5 桁、 上 2 桁 = 都府県振興局番号) とは別の番号で、 一覧に国際地点番号の列は無い = **`s` + 観測所番号は成り立たない**。 同じ都道府県の中で **名前 + 位置 (緯度経度)** で照合する。 ⚠️ 同じ名前の別地点が他の都道府県にあるので、 他県まで名前で探すときは距離 (例 2 km 以内) も条件にする。 一覧と obsdl で都道府県が違う地点がある (県境の山頂など)。 名前の表記が違う地点 (obsdl 側に括弧の別名が付く) は、 近い距離 (例 0.5 km 以内) で、 まだ名前で照合されていない ID の中から選ぶ
+- **種類「官」 = obsdl の `s` 地点ではない**: 一覧の「官」 には航空気象観測所が含まれ、 これは obsdl では `a` の ID でしか出ない
+- **観測開始年月日は「記載される観測所番号において観測を開始した年月日」** (凡例 (12)): 移設などで観測所番号が変わると新しくなる。 印の読み方 = `#Y.M.D` は降水量が 1974-11-01 から・他の要素が Y.M.D から、 `(y.m.d)Y.M.D` は降水量が y.m.d から、 印なしは全要素が Y.M.D から。 ⚠️ **obsdl の `s47xxx` の系列は、 一覧の開始日より前から均質番号を変えずに続いていることがある** (実測) = 「長期の系列がそろうか」 を一覧の開始日で決めない。 データ本体の均質番号と行数で決める ([#quality-columns](#quality-columns)、 [#long-record-qc](#long-record-qc))
+- **同じ観測所番号に複数行**: 観測種目ごとに所在地が違う地点は行が分かれ、 備考2 に「気温、 雨」「風、 日照」 のように種目が書いてある。 降水量の位置は「雨」 を含む行を使う
+- **エンコーディングは cp932**: `iconv -f SHIFT_JIS` は途中の文字で止まって行が欠ける (実測)。 Python の `cp932` で読む
 
 ## <a id="volume-limit-politeness"></a>データ量制限と politeness 設計
 
@@ -81,7 +93,10 @@ PHPSESSID 等のセッションは不要。response は Shift_JIS の CSV。
 
 ## <a id="protocol-from-page-js"></a>protocol はページ自身の JS から読む (一般技法)
 
-form POST が 400 で拒否されたら、**ネット上の recipe を変えて再試行する前に、ページが読み込む JS (ここでは `web/js/top.*.js`) の ajax 呼び出し部を読む**。field 名・既定値・制限値 (`seigen`) は全部そこに書いてあり、protocol 改版 (例: `interAnnualFlag`→`interAnnualType`) にも追従できる。UI を in-app browser で操作して network capture から学ぶのは第二の経路 (こちらは UI の状態機械が絡んで遠回りになりがち)。
+form POST が 400 で拒否されたら、**ネット上の recipe を変えて再試行する前に、ページが読み込む JS の ajax 呼び出し部を読む**。field 名・既定値・制限値 (`seigen`) は全部そこに書いてあり、protocol 改版 (例: `interAnnualFlag`→`interAnnualType`) にも追従できる。UI を in-app browser で操作して network capture から学ぶのは第二の経路 (こちらは UI の状態機械が絡んで遠回りになりがち)。
+
+- **ページが minify された bundle のとき** (obsdl は `index.php` が `web/dist/top.bundle.js` を読む形): (1) index の script タグの src から bundle を取る (2) endpoint の path の文字列 (`show/table`、 `top/station`) で検索する (3) 見つからなければ、 呼んでいる関数名を bundle 冒頭の `import{… as by …}from"./<module>.js"` で別 module に追い、 その module を取って同じ検索をする。 `show/table` の field は bundle の中で組まれる (obsdl では関数 `Vy` が `stationNumList` … を組む)
+- 取得は静的 file の GET が数回で済む。 照合を再実行できる道具に入れるなら、 読んだ呼び方 (関数の文字列・配列) が JS にまだあるかを毎回確かめ、 違えば止める (= protocol が黙って変わったまま叩き続けない)
 
 ## <a id="validate-before-use"></a>取得物は既知データと突合してから使う
 
