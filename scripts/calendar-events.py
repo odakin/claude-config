@@ -15,6 +15,9 @@ MCP の create_event が使えない session (= server 未接続 / bulk) と、
   - **範囲が空 (--to <= --from) の list は黙って 0 件を返し、 「予定なし」 と
     読み違える** (= 1 日分を見るつもりで --from と --to に同じ日付を渡すと、
     --to は排他なので空になる)。 空の範囲はエラーにする
+  - **複数日の予定を開始日だけで出すと、 開始日だけの予定と読み、 期間の途中の日を
+    空きとして人に出す** (= 実測)。 list は終わりの日も出し (例 2030-01-07〜01-11)、
+    add の前の同じ日の一覧と gaps は期間に入る日すべての予定として扱う (= event_days)
 
 ⚠️ **layer 1 なので calendar id も token path も持たない**。 呼び出し側 (= 個人層) が
    env で渡す。 個人の calendar id は layer 3 の SoT に置く (= 公開 repo に焼かない)。
@@ -82,6 +85,98 @@ def min_to_hhmm(x: int) -> str:
     return f"{x // 60:02d}:{x % 60:02d}"
 
 
+def _next_day(d: str) -> str:
+    return (datetime.date.fromisoformat(d) + datetime.timedelta(days=1)).isoformat()
+
+
+def last_day(start: str, end: str) -> str:
+    """予定が掛かる最後の日 ('YYYY-MM-DD')。
+
+    終日の予定の end は排他 (= 最後の日の翌日) なのでその前日。 時刻つきは end の日、
+    ただし 0:00 ちょうどに終わるならその前日 (= 22:00-24:00 は 1 日の予定)。
+    end が無い・読めない・start より前なら開始日。
+    """
+    s0 = start[:10]
+    if not end or end[:10] <= s0:
+        return s0
+    if "T" in end and end[11:16] != "00:00":
+        return end[:10]
+    try:
+        prev = (datetime.date.fromisoformat(end[:10]) - datetime.timedelta(days=1)).isoformat()
+    except ValueError:
+        return s0
+    return max(prev, s0)
+
+
+def event_days(start: str, end: str) -> list[str]:
+    """予定が掛かる日 ('YYYY-MM-DD') を開始日から最後の日まで並べる。"""
+    if not start:
+        return []
+    days, d, last = [], start[:10], last_day(start, end)
+    try:
+        while d <= last:
+            days.append(d)
+            d = _next_day(d)
+    except ValueError:      # 日付として読めない start = 開始日の文字列だけを返す
+        return [start[:10]]
+    return days
+
+
+def _md(d: str, ref: str) -> str:
+    """ref と同じ年なら 'MM-DD'、 年をまたぐなら 'YYYY-MM-DD'。"""
+    return d[5:10] if d[:4] == ref[:4] else d[:10]
+
+
+def format_when(start: str, end: str) -> str:
+    """list の日時欄。 1 日の予定は '2030-01-10 09:00-10:30' / '2030-01-10    終日     '、
+    複数日の予定は終わりの日も出す = '2030-01-07〜01-11 終日' / '2030-01-10 22:00〜01-11 02:00'。
+    """
+    last = last_day(start, end)
+    if "T" in start:
+        if last == start[:10]:
+            return f"{start[:10]} {start[11:16]}-{end[11:16]}"
+        return f"{start[:10]} {start[11:16]}〜{_md(end, start)} {end[11:16]}"
+    if last == start[:10]:
+        return f"{start[:10]}    終日     "
+    return f"{start[:10]}〜{_md(last, start)} 終日"
+
+
+def span_head(start: str, end: str) -> str:
+    """日付を省いた短い日時 (= 日ごとの一覧の見出し)。 1 日の予定は 'HH:MM' / '終日'、
+    複数日の予定は期間 = '12-07 09:00〜12-08 17:00' / '終日 12-07〜12-11'。
+    """
+    last = last_day(start, end)
+    if "T" in start:
+        if last == start[:10]:
+            return start[11:16]
+        return f"{start[5:10]} {start[11:16]}〜{_md(end, start)} {end[11:16]}"
+    return "終日" if last == start[:10] else f"終日 {start[5:10]}〜{_md(last, start)}"
+
+
+def day_busy(items: list[dict]) -> tuple[dict[str, list[tuple[int, int]]], dict[str, list[str]]]:
+    """gaps 用に (日ごとの busy 区間 〔分〕, 日ごとの終日の予定の見出し) を返す。
+
+    時刻つきの予定は掛かる日すべてで busy にする (開始日は開始時刻から 24:00、 間の日は 1 日中、
+    最後の日は 0:00 から終了時刻)。 終日の予定は busy に入れない (= 会期・学年暦などの印で窓を
+    埋めない) が、 掛かる日すべてに期間つきの見出しを返す = 「空き」 と並べて見せる。
+    """
+    busy: dict[str, list[tuple[int, int]]] = {}
+    allday: dict[str, list[str]] = {}
+    for e in items:
+        st, en = e.get("start", ""), e.get("end", "")
+        days = event_days(st, en)
+        if "T" in st:
+            for d in days:
+                b0 = hhmm_to_min(st[11:16]) if d == st[:10] else 0
+                b1 = hhmm_to_min(en[11:16]) if d == en[:10] else 24 * 60
+                busy.setdefault(d, []).append((b0, b1))
+        else:
+            label = f"{span_head(st, en)} {(e.get('summary') or '').strip()}"
+            for d in days:
+                allday.setdefault(d, []).append(label)
+    return busy, allday
+
+
 def compute_gaps(busy: list[tuple[int, int]], window: tuple[int, int]) -> list[tuple[int, int]]:
     """window 内で busy 区間に覆われていない帯を返す (分単位)。
 
@@ -124,23 +219,31 @@ def find_duplicates(items: list[dict]) -> list[tuple[str, list[str]]]:
 
 
 def same_day_existing(specs: list[dict], existing: list[dict]) -> list[tuple[str, list[str]]]:
-    """足す予定の日付ごとに、 同じ日に既に在る予定 (終日を含む) を返す = [(足す予定の要約, [既存の 'HH:MM 要約' / '終日 要約'])]。
+    """足す予定が掛かる日ごとに、 その日に既に在る予定 (終日・複数日を含む) を返す
+    = [(足す予定の要約, [既存の 'HH:MM 要約' / '終日 要約' / '終日 12-07〜12-11 要約'])]。
 
     足す前に同じ日を見ないと、 学年暦などから入っている終日の予定と同じものを時刻つきで二重に足す
     (実測: 確認の list と add を 1 つの command で流し、 list の結果を読む前に add が走った)。
+    複数日の既存の予定は期間に入る日すべてで期間つきで出す。 足す予定が複数日なら既存の予定に日付を付ける。
     重複かどうかの判定はしない (要約の言い回しが違う = 機械では決められない) = 並べて見せるだけ。
     """
     by_day: dict[str, list[str]] = {}
     for e in existing:
-        st = e.get("start", "")
-        day = st[:10]
-        label = ("終日 " if len(st) == 10 else st[11:16] + " ") + (e.get("summary") or "").strip()
-        by_day.setdefault(day, []).append(label)
+        st, en = e.get("start", ""), e.get("end", "")
+        label = f"{span_head(st, en)} {(e.get('summary') or '').strip()}"
+        for day in event_days(st, en):
+            by_day.setdefault(day, []).append(label)
     out = []
     for s in specs:
-        day = str(s.get("start", ""))[:10]
-        if by_day.get(day):
-            out.append((f"{day} {str(s.get('summary', ''))[:50]}", by_day[day]))
+        st, en = str(s.get("start") or ""), str(s.get("end") or "")
+        days = event_days(st, en)
+        if len(days) > 1:
+            head = f"{days[0]}〜{_md(days[-1], days[0])}"
+            found = [f"{d[5:]} {x}" for d in days for x in by_day.get(d, [])]
+        else:
+            head, found = st[:10], by_day.get(st[:10], [])
+        if found:
+            out.append((f"{head} {str(s.get('summary', ''))[:50]}", found))
     return out
 
 
@@ -298,9 +401,7 @@ def fetch(svc, cal: str, frm: str, to: str) -> list[dict]:
 def cmd_list(a) -> int:
     svc = get_service()
     for e in fetch(svc, _cfg("CLAUDE_CALENDAR_ID"), a.frm, a.to):
-        s, en = e["start"], e["end"]
-        when = f"{s[:10]} {s[11:16]}-{en[11:16]}" if "T" in s else f"{s[:10]}    終日     "
-        print(f"{when}  {e['location'][:22]:<22} {e['summary'][:62]}")
+        print(f"{format_when(e['start'], e['end'])}  {e['location'][:22]:<22} {e['summary'][:62]}")
         if a.ids:
             print(f"{'':>17}  id={e['id']}")
     return 0
@@ -310,18 +411,18 @@ def cmd_gaps(a) -> int:
     svc = get_service()
     items = fetch(svc, _cfg("CLAUDE_CALENDAR_ID"), a.frm, a.to)
     windows = [parse_window(w) for w in a.windows.split(",")]
-    by_day: dict[str, list] = {}
-    for e in items:
-        if "T" in e["start"]:
-            by_day.setdefault(e["start"][:10], []).append(
-                (hhmm_to_min(e["start"][11:16]), hhmm_to_min(e["end"][11:16])))
-    for d in sorted(by_day):
+    busy, allday = day_busy(items)
+    lo, hi = a.frm[:10], _norm_bound(a.to)
+    for d in sorted(x for x in set(busy) | set(allday) if lo <= x and f"{x}T00:00" < hi):
         print(f"\n== {d} ==")
+        for label in allday.get(d, []):
+            print(f"   {label[:60]}   ← 空きの計算に入れていない")
         for w in windows:
-            for g0, g1 in compute_gaps(by_day[d], w):
+            for g0, g1 in compute_gaps(busy.get(d, []), w):
                 print(f"   空き {min_to_hhmm(g0)}-{min_to_hhmm(g1)}")
     print("\n⚠️ 「空き」 = 予定が入っていない時間。 block event が窓を占有していると"
-          "\n   その中の個別候補は検討されない (docstring 参照)。")
+          "\n   その中の個別候補は検討されない (docstring 参照)。"
+          "\n   終日の予定 (複数日を含む) は空きの計算に入れず、 掛かる日の見出しの下に出す。")
     return 0
 
 
@@ -347,23 +448,27 @@ def cmd_add(a) -> int:
     svc = None
     try:
         svc = get_service()
-        days = sorted({str(s["start"])[:10] for s in specs})
-        nxt = (datetime.date.fromisoformat(days[-1]) + datetime.timedelta(days=1)).isoformat()
-        hits = same_day_existing(specs, fetch(svc, _cfg("CLAUDE_CALENDAR_ID"), days[0], nxt))
+        days = sorted({d for s in specs for d in event_days(str(s["start"]), str(s["end"]))})
+        hits = same_day_existing(specs, fetch(svc, _cfg("CLAUDE_CALENDAR_ID"), days[0], _next_day(days[-1])))
         for label, ex in hits:
-            print(f"  ⚠️ 同じ日に既に在る予定 ({label} を足す前に見る): " + " / ".join(x[:40] for x in ex))
+            print(f"  ⚠️ 同じ日に既に在る予定 ({label} を足す前に見る): " + " / ".join(x[:56] for x in ex))
     except Exception as e:   # 読めなくても add 自体は止めない (見られなかったことは言う)
         print(f"  ⚪ 同じ日の既存の予定を読めなかった ({type(e).__name__}) = 重複は未確認")
+
+    def when(b):   # 1 日の予定は開始だけ、 日をまたぐ予定は終わりも
+        s, e = b["start"]["dateTime"], b["end"]["dateTime"]
+        return s[:16] if last_day(s, e) == s[:10] else f"{s[:16]}〜{_md(e, s)} {e[11:16]}"
+
     if not a.apply:
         for b in bodies:
-            print(f"  + {b['start']['dateTime'][:16]} {b['summary'][:66]}")
+            print(f"  + {when(b)} {b['summary'][:66]}")
         print(f"\n(dry-run: {len(bodies)} 件。 --apply で実行)")
         return 0
     svc = get_service()
     cal = _cfg("CLAUDE_CALENDAR_ID")
     for b in bodies:
         ev = svc.events().insert(calendarId=cal, body=b).execute()
-        print(f"  + {b['start']['dateTime'][:16]} {ev['id']}  {b['summary'][:52]}")
+        print(f"  + {when(b)} {ev['id']}  {b['summary'][:52]}")
     return 0
 
 
@@ -377,7 +482,8 @@ def cmd_patch(a) -> int:
                             append_description=a.append_description, reminders=rem)
     s0 = cur["start"].get("dateTime", cur["start"].get("date", ""))
     e0 = cur["end"].get("dateTime", cur["end"].get("date", ""))
-    print(f"  対象: {cur.get('summary', '')}  {s0[:16]}-{e0[11:16]}")
+    rng = f"{s0[:16]}-{e0[11:16]}" if last_day(s0, e0) == s0[:10] else format_when(s0, e0)
+    print(f"  対象: {cur.get('summary', '')}  {rng}")
     for k, v in body.items():
         if k in ("start", "end"):
             print(f"  {k}: {cur.get(k, {}).get('dateTime', '')[:16]} → {v['dateTime'][:16]}")
@@ -402,10 +508,10 @@ def cmd_delete(a) -> int:
     kill, keep = select_for_delete(items, a.match, a.protect, a.frm if "T" in a.frm else None)
     print("=== 残すもの ===")
     for e, why in keep:
-        print(f"  {e['start'][11:16] or '終日':>5}  {e['summary'][:56]}   [{why}]")
+        print(f"  {span_head(e['start'], e['end']):>5}  {e['summary'][:56]}   [{why}]")
     print("\n=== 消すもの ===")
-    for e in kill:
-        print(f"  {e['start'][11:16]:>5}  {e['summary'][:56]}")
+    for e in kill:     # 日をまたぐ予定は期間も出す (= 前の日から続く予定を消すと気づける)
+        print(f"  {span_head(e['start'], e['end']):>5}  {e['summary'][:56]}")
     if not a.apply:
         print(f"\n(dry-run: {len(kill)} 件が対象。 --apply で実行)")
         return 0
@@ -519,6 +625,48 @@ def selftest() -> int:
                               {"start": "2030-01-22T10:00", "summary": "空いている日"}], ex)
     check(len(hits) == 1 and hits[0][1] == ["終日 式典 (学年暦)", "09:00 会議"],
           "T26: add の前に同じ日の既存の予定 (終日と時刻つき) を並べる、 別の日と空いている日は出さない")
+
+    # 複数日の予定 (実測: 開始日だけを出した一覧から、 期間の途中の日を空きとして人に出した)
+    check(format_when("2030-01-10T09:00:00+09:00", "2030-01-10T10:30:00+09:00") == "2030-01-10 09:00-10:30",
+          "T27: 1 日の時刻つきの予定の表示は変わらない")
+    check(format_when("2030-01-10", "2030-01-11") == "2030-01-10    終日     ",
+          "T28: 1 日の終日の予定の表示は変わらない")
+    check(format_when("2030-01-07", "2030-01-12") == "2030-01-07〜01-11 終日",
+          "T29: 複数日の終日の予定は終わりの日も出す (API の end は排他 = その前日が最後の日)")
+    check(format_when("2030-01-10T22:00:00+09:00", "2030-01-11T02:00:00+09:00")
+          == "2030-01-10 22:00〜01-11 02:00", "T30: 複数日の時刻つきの予定は終わりの日と時刻も出す")
+    check(format_when("2030-01-10T22:00:00+09:00", "2030-01-11T00:00:00+09:00") == "2030-01-10 22:00-00:00",
+          "T31: 翌日 0:00 ちょうどに終わる予定は 1 日の予定のまま")
+    check(format_when("2030-12-30", "2031-01-03") == "2030-12-30〜2031-01-02 終日",
+          "T32: 年をまたぐ予定は終わりの日に年も出す")
+    check(event_days("2030-01-07", "2030-01-12")
+          == ["2030-01-07", "2030-01-08", "2030-01-09", "2030-01-10", "2030-01-11"]
+          and event_days("2030-01-10T22:00:00+09:00", "2030-01-11T00:00:00+09:00") == ["2030-01-10"],
+          "T33: 予定が掛かる日 = 開始日から最後の日まで")
+    ex2 = [{"start": "2030-01-07", "end": "2030-01-12", "summary": "集中の行事"},
+           {"start": "2030-01-20T22:00:00+09:00", "end": "2030-01-21T02:00:00+09:00", "summary": "夜通しの作業"}]
+    hits2 = same_day_existing([{"start": "2030-01-09T10:00", "end": "2030-01-09T11:00", "summary": "期間の途中"},
+                               {"start": "2030-01-12T10:00", "end": "2030-01-12T11:00", "summary": "期間の翌日"},
+                               {"start": "2030-01-21T09:00", "end": "2030-01-21T10:00", "summary": "翌朝"}], ex2)
+    check([h[1] for h in hits2] == [["終日 01-07〜01-11 集中の行事"], ["01-20 22:00〜01-21 02:00 夜通しの作業"]],
+          "T34: add の前の一覧は、 複数日の既存の予定を期間に入る日すべてで期間つきで出す (翌日には出さない)")
+    hits3 = same_day_existing(
+        [{"start": "2030-01-08T23:00", "end": "2030-01-09T01:00", "summary": "日をまたぐ"}],
+        [{"start": "2030-01-09T09:00:00+09:00", "end": "2030-01-09T10:00:00+09:00", "summary": "翌日の会議"}])
+    check(hits3 == [("2030-01-08〜01-09 日をまたぐ", ["01-09 09:00 翌日の会議"])],
+          "T35: 足す予定が複数日なら、 掛かる日すべての既存の予定を日付つきで出す")
+    busy, allday = day_busy([
+        {"start": "2030-01-10T09:00:00+09:00", "end": "2030-01-12T12:00:00+09:00", "summary": "3 日の合宿"},
+        {"start": "2030-01-20T22:00:00+09:00", "end": "2030-01-21T00:00:00+09:00", "summary": "夜"},
+        {"start": "2030-01-07", "end": "2030-01-12", "summary": "集中の行事"}])
+    check(busy.get("2030-01-10") == [(540, 1440)] and busy.get("2030-01-11") == [(0, 1440)]
+          and busy.get("2030-01-12") == [(0, 720)] and compute_gaps(busy.get("2030-01-11", []), w) == [],
+          "T36: gaps は複数日の時刻つきの予定を掛かる日すべてで busy にする (間の日は 1 日中)")
+    check(busy.get("2030-01-20") == [(1320, 1440)] and "2030-01-21" not in busy,
+          "T37: 翌日 0:00 に終わる予定は開始日の 24:00 まで busy、 翌日には掛けない")
+    check(all(allday.get(d) == ["終日 01-07〜01-11 集中の行事"] for d in event_days("2030-01-07", "2030-01-12"))
+          and "2030-01-09" not in busy,
+          "T38: 終日の予定は busy に入れず、 掛かる日すべてに期間つきの見出しを出す")
 
     print(f"\n==== RESULT: PASS={ok} FAIL={fail} ====")
     return 1 if fail else 0
