@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: referee report への point-by-point 返信を書くとき + 不採択の直後に編集者へ第 2 referee を頼む返信を書くとき (#ask-editor-second-referee) + 編集者が再審を許したあと、 referee に転送される返答書と編集者だけへの文を書くとき (#reconsideration-reply)
+when: referee report への point-by-point 返信を書くとき + 不採択の直後に編集者へ第 2 referee を頼む返信を書くとき (#ask-editor-second-referee) + 編集者が再審を許したあと、 referee に転送される返答書と編集者だけへの文を書くとき (#reconsideration-reply) + preprint を読んだ人への返信で約束した本文の修正を、 改訂・投稿の前に原稿と照合するとき (#promised-edits-check) + 読み手が引いた式・文献の番号を版ごとに正確に出すとき (#exact-numbers-per-version)
 category: paper
 summary: referee report への point-by-point 返信 (= author response) 作成 6 reflex (= 回答は本文 grep 照合・起源でない文献は see e.g.・referee 誤記は静かに正す・自己否定語回避・全 comment フル引用・旧式番号は submission 版基準)、 paper-audit.md と相補。 不採択の直後の 1 通 (専任の編集者に確かめられる事実 1 つ・誤読を言い切る 1 文・report の限定まで引いて答える) = #ask-editor-second-referee
 -->
@@ -63,6 +63,11 @@ referee の Eq / section / page 番号は **submission 版基準**で、 改訂�
 ## referee の section/Eq 番号 ≠ 改訂版・旧版 tex の番号
 
 referee は submission PDF の番号で書く。 merge/restructure した改訂版とも、 古い source tree の section 構造とも一致しないことがある。 照合時は **番号でなく内容 (= keyword)** で旧版該当箇所を特定する。 submission PDF が repo に無い場合は旧版 tex を内容 grep で辿る (= §1 reflex の旧式番号確認と同じ手法)。
+
+<a id="exact-numbers-per-version"></a>**番号そのものが要るとき** (返答書で「旧 (N) は今の (M)」 と書く・約束の照合 = 下の [#promised-edits-check](#promised-edits-check)) は、 各版の source を一時 dir で組んで読む。
+label のある式・図・節 = `.aux` の `\newlabel`。 文献 = `.aux` の `\bibcite` (引用順の bst では、 前の方に引用を 1 本足すと後ろの番号が全部ずれる)。 label の無い式 = 一時の写しのその式に `\label` を差して組む (原稿は変えない)。
+組んだ番号は、 相手が読んだ PDF の文字層とも突き合わせる (同じ頁にその式番号がある・文献番号の項の著者が key と合う)。 突き合わせには、 番号を全部ずらした写しで食い違いが出ることを foil に置く。
+構成を変えていなくても番号はずれる: 前の式の 1 行を番号なしにしただけで、 後ろの式番号が全部 1 つずれた (実測)。
 
 ## 実例 (= 該当 private paper repo、 2026-06-02)
 
@@ -148,3 +153,14 @@ report が修正を求めず新規性だけを否定している場合を想定�
   文が短くても通じない形 (抽象的な述語・名詞句が運ぶ判断・同格の挟み込み・圧縮した否定の並列・文末の選択肢) と直し方 = [`writing-discipline.md#short-but-unreadable`](writing-discipline.md#short-but-unreadable)。 返答書は全文の長さが 30 語以下でも、 この形で何度も止まった (実測)。
 - **完成稿は更の目で読み直す**: 何十回の直しの後は、 会話で使った語・論点の名前が文に残る。 最後に原稿を見ていない読み手のつもりで頭から読み、 論理の流れだけを追って整える。
 - 編集者だけへの欄の文は ASCII で ([`paste-destined-plain-text.md#non-ascii-via-other-client`](paste-destined-plain-text.md#non-ascii-via-other-client))。 返答書は PDF (上の「構造」)。
+
+## <a id="promised-edits-check"></a>査読の外で約束した修正の照合 (preprint を読んだ人への返信)
+
+preprint を読んだ人への返信で「本文に明示する・引用する・図に足す・別途確かめる」 と書いたら、 改訂・投稿の前に、 その約束が原稿に入っているかを確かめる。 §1 と同じく、 記録でなく本文で照合する。
+
+1. **約束は送った mail の文面から 1 件ずつ拾う** — 下書きや内部の要約から拾わない。 内部の要約は約束を数え落とす (実測)。 下書きと送信版の違いも 1 文ずつ見る。
+2. **外への約束と、 共著者の間の方針を分ける** — 送った文に無い書き換え (主張の範囲を絞る、 など) は外への約束ではない。 照合の表には両方を並べるが、 「約束を守っていない」 と書くのは前者だけ。
+3. **版ごとに 1 対 1 で照合し、 約束より前の版を foil にする** — 相手が読んだ版では「無い」、 約束を入れた版では「有る」 と出なければ、 照合が区別していない。 照合は script にして、 相手が読んだ版・投稿版・いまの原稿・改訂案の全部に回す。 番号は上の [#exact-numbers-per-version](#exact-numbers-per-version)。 改訂案が著者への注の中で置き換えた旧文を引用しているなら、 注の中身を除いてから照合する (旧文を本文と取り違える = 実測)。
+4. **改訂案が約束を当てた文を書き換えるとき** — 文字どおり保たれるか、 中身で保たれるかを分けて書き、 判断を著者に渡す (例: 明示すると約束した仮定が、 書き直しで要らなくなって消える)。 返答書や相手への連絡で触れるかも著者が決める。
+5. **送った後の相手の再返信を拾う** — thread の記録が最初のやりとりで止まり、 こちらの返信への反論が記録に入らないことがある (実測)。 照合のときに、 返信を送った thread を差出人で 1 回引く。
+6. **新しい査読の指摘と重なる文に印を付ける** — 約束した引用の整理 (誰を先行として引くか) と、 査読の新規性の指摘 (既存の文献との違い) は、 同じ文 (「先行文献では明らかでなかった」 型の主張) に効く。 主張の範囲を絞る案は、 査読が既知と言う所に主張を寄せることがある = 印を付けて著者の判断に渡す。
