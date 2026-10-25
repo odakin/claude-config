@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Google API を Python から直接叩く setup をするとき + ML (Google Groups) 宛に送る前に、 購読者一覧を読めない ML に入っていない人を見分けるとき (#group-membership-without-owner)
+when: Google API を Python から直接叩く setup をするとき + ML (Google Groups) 宛に送る前に、 購読者一覧を読めない ML に入っていない人を見分けるとき (#group-membership-without-owner) + Calendar の予定を読んで日付・時刻を出す・日ごとに数える道具を書くとき (#calendar-read-timezone-and-span)
 category: infra
 summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive の検索 query に入れる値のエスケープ 〔' と \ を逃がさないと 400 → 同名なし扱いで重複を作る、 #drive-query-escaping〕、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 他人から共有された folder を読み続ける 〔宛先 account の token (別 account では 404) + 台帳 + id/modifiedTime の差分 + 共有通知メールの照合、 #shared-folder-watch〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避、 loopback OAuth consent フローの CSRF/横取り対策 〔state nonce + PKCE S256 + request-loop + 手動貼付の state 検証 + 補償制御 hard-fail + 識別子 charset 検証、 #oauth-loopback-hardening〕) + #drive-xlsx-inplace-update (= 他人 owner の共有 xlsx に書く: full drive 別 token / revisions.get_media が truth / openpyxl round-trip の損失 / files.update 同 ID / 再 download literal verify)
 -->
@@ -278,6 +278,21 @@ Google アカウントの保存容量 (= Gmail + フォト + Drive の**合算**
 ### 運用 pattern
 
 発行は本 doc の通常手順 (= installed-app flow + localhost redirect + refresh_token 保存)。 check script は `--warn <pct>` (= 閾値超で exit 非 0) を付けておくと cron / dashboard 統合が 1 行で済む。 実装 instance (= 対象 account・保管場所・port 割当) は personal layer 側の各 API 設定リポに置く。
+
+## <a id="calendar-read-timezone-and-span"></a>Calendar の予定を読むとき — timeZone を渡し、 終わりの日まで見る
+
+Calendar API の予定を読んで日付・時刻を出す・日ごとに数える道具は、 次の 3 つを外すと、 予定のある日を空きと読む (実測)。
+
+- **読むときも `timeZone` を渡す** — `events.list` / `events.get` に `timeZone` を渡さないと、 `dateTime` は calendar 自身の timeZone で返る。
+  import した calendar などは UTC のことがあり、 文字列を切って表示する道具は 9 時間ずれた時刻を出し、 朝の予定を前の日に載せる (実測)。
+  書くときに使う timeZone と同じ値を、 読むときも渡す (読んだ現在値と新しい指定を比べる検査 = 変更後の end <= start なども、 揃えないと狂う)。
+- **終日の予定の `end.date` は排他** (最後の日の翌日)。 最後の日 = その前日。 時刻つきの予定は終わりの日まで掛かり、 翌日 0:00 ちょうどに終わる予定は 1 日の予定として扱う。
+- **複数日の予定を開始日だけで扱わない** — 一覧には終わりの日も出す (例 `2030-01-07〜01-11 終日`)。 日ごとの判定 (同じ日に在る予定・空き時間・重なり) は、 予定が掛かる日すべてに掛ける。
+  開始日だけを出した一覧から、 期間の途中の日を空きと読んで人に出した (実測)。
+  空き時間では、 時刻つきの予定を開始日は開始時刻〜24:00、 間の日は 1 日中、 最後の日は 0:00〜終了時刻に割る。 終日の予定を空きの計算に入れるかは道具の用途で決め (学会の会期のような印は入れない、 など)、 入れない場合も掛かる日の一覧には出す。
+  ⚠️ **日付を落として時刻だけを持つ写し** (開始日 + 開始・終了の時刻) を作ると、 終わりの日は戻らない。 その写しでは、 13:00〜翌日 13:00 の予定は開始 = 終了に見え、 長さ 0 の印として捨てられる。 写しを作る段で終わりの日を持たせる。
+
+実装例 = [`../scripts/calendar-events.py`](../scripts/calendar-events.py) の `last_day` / `event_days` / `day_busy` と、 `fetch` の `timeZone`。
 
 ## Token refresh の運用
 

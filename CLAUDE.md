@@ -84,7 +84,7 @@ claude-config/
 │   ├── giving-talks.ja.md                  # giving-talks.md の日本語版
 │   ├── gmail-mcp-multiaccount.md           # 複数 Gmail アカウントを Claude Code の MCP として繋ぎたいとき + N 個目のアカウントを追加するとき
 │   ├── gmail-sending.md                    # Gmail でメールを送信する経路・MIME 実装を選ぶとき
-│   ├── google-api-direct-access.md         # Google API を Python から直接叩く setup をするとき + ML (Google Groups) 宛に送る前に、 購読者一覧を読めない ML に入っていない人を見分けるとき (#group-membership-without-owner)
+│   ├── google-api-direct-access.md         # Google API を Python から直接叩く setup をするとき + ML (Google Groups) 宛に送る前に、 購読者一覧を読めない ML に入っていない人を見分けるとき (#group-membership-without-owner) + Calendar の予定を読んで日付・時刻を出す・日ごとに数える道具を書くとき (#calendar-read-timezone-and-span)
 │   ├── google-classroom-api.md             # Google Classroom をプログラムから操作するとき (クラスの作成・名簿からの招待・お知らせや課題の投稿・提出の読み取り) + 学期はじめにクラスを用意するとき + API で作った課題の設定が画面で変えられないと気づいたとき
 │   ├── google-forms-automation.md          # Google Forms の自動化・prefill・回答提出を扱うとき
 │   ├── google-url.md                       # Google サービスの URL をチャットや文書に書くとき

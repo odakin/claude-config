@@ -47,6 +47,8 @@ env:
 add / patch / delete は **既定 dry-run**。 実行は --apply。
 --to は**排他** (日付だけなら その日の 0:00)。 1 日分を見るなら --to に翌日を渡す。
 event id は `list --ids` で引く。 patch の説明は置き換えず末尾に足す。
+list の行の形 (日時欄・場所・要約の並び) は、 他の repo の道具が正規表現で読んでいる。 形を変えたら、 呼び元を
+`calendar-events` で grep し、 直す前と後の出力を比べる (実測: 複数日の行を足したとき、 読む側の正規表現に合わない行ができた)。
 """
 from __future__ import annotations
 
