@@ -362,7 +362,10 @@ def spotify_code(page, state):
     return field("code")
 
 
-def spotify(client, fields, show, start, today):
+def spotify_access(client, fields):
+    """Mint a Spotify for Creators access token from the saved sp_dc / sp_key (the dashboard's public client,
+    PKCE, prompt=none). The token stays in memory; callers put it in an Authorization header only. Other readers
+    of the same dashboard (plays, comments) call this instead of repeating the flow."""
     state, verifier = secrets.token_urlsafe(24), secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     params = {"response_type": "code", "client_id": SPOTIFY_CLIENT,
@@ -378,6 +381,11 @@ def spotify(client, fields, show, start, today):
     access = tok.get("access_token")
     if not isinstance(access, str) or not access or "\n" in access or "\r" in access:
         raise ReadError("auth_response_changed")
+    return access
+
+
+def spotify(client, fields, show, start, today):
+    access = spotify_access(client, fields)
     obj = client.request("https://generic.wg.spotify.com/podcasters/v0/shows/" + show + "/metadata",
                          {"Authorization": "Bearer " + access})
     if obj.get("id") != show:
