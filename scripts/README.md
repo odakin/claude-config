@@ -367,6 +367,8 @@
 - **[with-gnu-userland.sh](with-gnu-userland.sh)** — macOS で Homebrew の GNU coreutils / sed / grep / findutils を PATH 先頭に差して command を走らせる (CI の ubuntu と同じ BSD/GNU 差を push 前に再現)
 - **[with-gnu-userland.test.sh](with-gnu-userland.test.sh)** — with-gnu-userland.sh の self-test (Homebrew の GNU userland が無い環境 = CI の ubuntu は SKIP)
 - **[worker-safety-stop.py](worker-safety-stop.py)** — inspect refusal metadata and stop sends to a refused local session.
+- **[workflow-estimate.py](workflow-estimate.py)** — Workflow の script を起動の前に空回しして、 起こす agent の本数・波数 (同時実行の上限で割った数)・観点ごとの分け方・再開で cache が効く本数を出す (読むだけ)。
+- **[workflow-run-stats.py](workflow-run-stats.py)** — 走った (走っている) Workflow の記録から、 本数・同時に走った数・時間・token・読み直した file を数え、 済んだ結果を file に書き出す (読むだけ)。
 - **[xlsx-to-pdf.sh](xlsx-to-pdf.sh)** — spreadsheet → PDF 変換（LibreOffice soffice 優先 → macOS Excel osascript fallback、Excel 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避 + 原本を export 時再保存から守る、office-automation.md#xlsx-to-pdf-script）
 - **[xlsx-zip-set-cells.py](xlsx-zip-set-cells.py)** — xlsx / xlsm の値セルだけを zip 直編集で書き換える (Excel も openpyxl も使わない。 他の zip member は byte 同一、 VBA・drawings・form control は無傷。 office-automation.md#xlsx-cell-value-zip-surgery の実装)
 - **[yaml-set-top-keys.py](yaml-set-top-keys.py)** — YAML の file の top-level の key を、 行頭で見つけて置き換える・消す (ほかの key は 1 文字も変えず、 読み直して確かめてから書く)。

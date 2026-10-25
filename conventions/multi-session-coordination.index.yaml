@@ -116,3 +116,7 @@ sections:
     legacy: "14"
     level: 2
     title: "14. 並行した worker が同じ file の全文の候補を作ったら、 共通の土台からの差分を合わせてから当てる"
+  - id: workflow-fan-out
+    legacy: "15"
+    level: 2
+    title: "15. Workflow の fan-out — 起動の前に本数を見積もり、 同じ入力を読み直す割り方は独立が要るときだけにする"

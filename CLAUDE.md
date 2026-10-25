@@ -131,7 +131,7 @@ claude-config/
 │   ├── ml-forward-judgment.md              # ML forward された依頼メールを inbox 化するとき
 │   ├── multi-account-machine-surface.md    # アカウント × マシン × 端末の複数セル運用を設計・診断するとき
 │   ├── multi-machine-state.md              # 複数マシンで同じ Claude Code setup を運用・audit するとき
-│   ├── multi-session-coordination.md       # 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment) + 作ったものの検収を別 session に頼む・頼まれたとき (#review-handoff) + 並行した worker が同じ file の全文の候補を作ったとき (#parallel-full-text-candidates) + 並列 session の開始時の一覧・turn 終わりの検査が同じ用事 (mail・台帳の項目・依頼) を求めるとき (#pending-item-claims)
+│   ├── multi-session-coordination.md       # 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment) + 作ったものの検収を別 session に頼む・頼まれたとき (#review-handoff) + 並行した worker が同じ file の全文の候補を作ったとき (#parallel-full-text-candidates) + 並列 session の開始時の一覧・turn 終わりの検査が同じ用事 (mail・台帳の項目・依頼) を求めるとき (#pending-item-claims) + Workflow (agent を並べる script) を組む・起動する・途中で止める・直して再開する前 (#workflow-fan-out)
 │   ├── music-transcription.md              # 音楽の録音から五線譜・TAB・MusicXML・MIDIを作るとき、または機械採譜の音高・発音・拍節・運指を検証するとき
 │   ├── name-rendering.md                   # 人名を記録・文面・印字物に書く瞬間で、手元にある表記が機械 field (メールヘッダ / git author / CSV・LDAP export / 登録システム) 由来のとき
 │   ├── office-automation-principles.md     # 新しい様式・slug の無い罠に当たったとき (考え方の原則編)
@@ -207,7 +207,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (365 file + formcase/ 26 module + lib/ 73 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (367 file + formcase/ 26 module + lib/ 73 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式

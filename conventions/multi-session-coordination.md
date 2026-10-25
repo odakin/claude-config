@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment) + 作ったものの検収を別 session に頼む・頼まれたとき (#review-handoff) + 並行した worker が同じ file の全文の候補を作ったとき (#parallel-full-text-candidates) + 並列 session の開始時の一覧・turn 終わりの検査が同じ用事 (mail・台帳の項目・依頼) を求めるとき (#pending-item-claims)
+when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment) + 作ったものの検収を別 session に頼む・頼まれたとき (#review-handoff) + 並行した worker が同じ file の全文の候補を作ったとき (#parallel-full-text-candidates) + 並列 session の開始時の一覧・turn 終わりの検査が同じ用事 (mail・台帳の項目・依頼) を求めるとき (#pending-item-claims) + Workflow (agent を並べる script) を組む・起動する・途中で止める・直して再開する前 (#workflow-fan-out)
 category: harness-core
-summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**生成物の再生成はその防御を貫通する (#generated-file-contamination)**、**起きた後の追跡は commit の `Agent-Session:` + model/effort trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格)
+summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**生成物の再生成はその防御を貫通する (#generated-file-contamination)**、**起きた後の追跡は commit の `Agent-Session:` + model/effort trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格、**Workflow は起動の前に本数と波数を空回しで見積もり、 観点は 1 本の prompt に並べ、 script を直したら再開でなく済んだ結果を file で渡す (#workflow-fan-out)**)
 -->
 # Multi-session coordination — 同 user の並列 AI session が race する
 
@@ -684,7 +684,7 @@ orientation 直後の silent stall (session は running のまま・活動 times
 
 <a id="workflow-agent-model"></a>**Workflow の agent は親の model を継ぐ = 上位 tier の session からは agent ごとに model を書く。 週の切替の前に枠を使い切る workflow は、 切替時刻で止める**:
 
-- **model**: `agent()` の opts に `model` を書かない agent は、 起こした session の model で動く。 上位 tier の session で fan-out すると、 一段下の model が向く読み・照合・検品まで全部が上位 tier になる (実測)。 agent 1 体ごとに CLAUDE.md と道具の定義を最初から読み込むので、 費用は体数にほぼ比例する。 agent ごとに model を書き、 上位 tier は agent 自身が導出し判断する仕事に使う。 1 本の workflow で起こす agent は 10 体未満にする。
+- **model**: `agent()` の opts に `model` を書かない agent は、 起こした session の model で動く。 上位 tier の session で fan-out すると、 一段下の model が向く読み・照合・検品まで全部が上位 tier になる (実測)。 agent 1 体ごとに CLAUDE.md と道具の定義を最初から読み込み、 tool を呼ぶたびにそれを読み直すので、 費用は体数と呼び出しの回数にほぼ比例する (実測の内訳 = [§15 の #workflow-cost-model](#workflow-cost-model))。 agent ごとに model を書き、 上位 tier は agent 自身が導出し判断する仕事に使う。 1 本の workflow で起こす agent は 10 体未満にする (越える形は起動の前に本数と波数を見積もって script に書く = [§15 の #workflow-estimate-before-launch](#workflow-estimate-before-launch))。
 - **切替時刻**: 「リセットの前に残りを使い切る」 ために起こす workflow は、 切替時刻を過ぎても止まらない。 workflow の script は時刻を読めない (`Date.now()` が使えない)。 実測では、 切替の数分前に起こした fan-out が切替の後も走り続け、 消費のほとんどが次の週の枠に入った。 起こす前に切替時刻を確かめ (desktop = `get_usage` の `resetsAt`、 CLI = `/usage`)、 時刻までに終わらない大きさの fan-out は起こさない。 使い切りが目的でも、 上限が解けた後に自動で届く「続けて」 で新しい仕事を始めない。
 - **機械**: [`scripts/session-launch-check.py`](../scripts/session-launch-check.py) `--workflow-gate` (hook = `hooks/workflow-launch-check.sh`、 PreToolUse の全 tool、 premium gate と同じ opt-in)。 上位 tier の session からの `Workflow` は、 script の `agent()` が全部 `model` を書くまで止める。 本人の直近の発言が週の切替に触れていれば、 script に `// [stop-at: <ISO 時刻>]` を求める。 その時刻を過ぎると、 その session の subagent の tool 呼び出しを止め (hook の入力の `agent_id` で見分ける)、 本体には workflow を `TaskStop` で止めて本人に聞くよう 1 回知らせる。 記録した時刻を消す = `--clear-stop-at`。
 
@@ -964,6 +964,83 @@ audience・移行と defer 判断、運用文書は CLI、schema は field 契�
 1. 各候補を、 それぞれの土台 (worker が見た版) と今の版の両方に対して diff する。 土台が今の版と違えば、 その候補は古い
 2. 同じ file の候補が 2 つ以上あれば、 今の版に各候補の差分 (追加だけなら挿入位置) を合わせた 1 つの候補を作り、 構文 (JSON / YAML / 行の数) を確かめてから当てる
 3. worker への依頼に「同じ file の候補を作る別の worker がいる」 と書き、 1 人に寄せられるなら寄せる
+
+## <a id="workflow-fan-out"></a>15. Workflow の fan-out — 起動の前に本数を見積もり、 同じ入力を読み直す割り方は独立が要るときだけにする
+
+Workflow の script は `agent()` を並べるほど網羅的に見えるが、 本数・波数・費用は書いた時点では見えない。
+前段の出力で後段の本数が決まる形 (項目ごとに検証役を起こす) では、 起動してから本数が数百に膨らむ (実測)。
+本節は、 起動の前に数を見る段と、 割り方の規律と、 止める・再開するときの規則を持つ。
+agent ごとの model の書き方は [§10 の #workflow-agent-model](#workflow-agent-model)。
+
+<a id="workflow-cost-model"></a>**費用と時間のしくみ (実測)**:
+
+- **同時実行の上限** = min(16, CPU 数 − 2) (Workflow の仕様)。 超えた分は待ち行列に入り、 枠が空くと始まる。 **待機中の agent は token を使わない** (agent の記録は枠に入った時刻から始まる = 実測)。
+- **時間** ≈ 波の数 (本数 ÷ 上限) × 1 本の所要。 前段の出力で本数が決まる形は、 波の数も起動の後に決まる。
+- **費用**: agent は 1 本ごとに起動時の文脈 (CLAUDE.md・道具の定義・skill の一覧・依頼文) を読み込み、 tool を呼ぶたびにそれを cache から読み直す。 実測: 起動時の文脈 ≈ 11 万 token (うち約 3.8 万は agent 間で cache を共有し、 残り約 7 万は 1 本ごとに書き込む)、 入力 token の 5〜6 割がその読み直し。 費用 ≈ Σ (呼び出しの回数 × 起動時の文脈) + 各 agent が読んだもの。
+- **本数を増やすと、 同じ向き付けを本数だけ繰り返す**: repo の状態を読む (`git log`・SESSION・CLAUDE.md)、 道具の使い方を確かめる (`--help`)。 実測: 同じ入力を確かめる 12 本の agent が `git log` を計 35 回打ち、 同じ道具の `--help` を 14 本が打った。
+- **「並べても小分けにしても総量は同じ」 ではない**: 同じ項目を「項目 1 件 × 観点 1 つ = 1 本」 で確かめた形は、 「入力 1 つ × 観点 1 つ = 1 本」 にまとめた形の 2.8〜4 倍の入力換算 token を使った (実測。 入力換算 = input + 1.25 × cache 書き込み + 0.1 × cache 読み + 5 × output)。 判定は 25 件中 21 件で一致し、 食い違った 4 件はまとめた形の方が反証した。 まとめた形は 1 件あたりの証拠の数が少ない (3〜6 件 対 10〜15 件) = 深さと費用の取引で、 「まとめると精度が落ちる」 とも「同じ」 とも言えない。
+
+<a id="workflow-estimate-before-launch"></a>**起動の前に本数と波数を見積もる**:
+
+1. script を書いたら、 起動の前に空回しする: `python3 scripts/workflow-estimate.py 〈script の file〉 --args '〈args の json〉'`。 agent は起こさない。 本数を前段の件数 k の式 (k = 1, 3, 10) で、 phase ごとの内訳・波数・観点の分割と一緒に出す。
+2. **目安は harness の既定 (medium = 10 本未満)**。 それを越える形 (この機械の上限が 10 より大きいなら 1 波を越える形) と、 本数が前段の出力で決まる形は、 script に注釈 `// workflow-size: <本数> — <理由>` を書く。 数を書く行為が、 上限と本数を見たことの記録になる。 理由には、 なぜこの本数が要るか (網羅の単位・独立が要るか) を書く。
+3. **前段の出力で本数が決まる fan-out は件数に上限を置き、 削った分を `log()` で言う** (書き方 = 下の [書き方の型](#workflow-script-patterns))。 上限の無い形は、 空回しで「前段 1 件ごとに約 S 本ふえる」 と出る。
+4. **workflow を既定にする設定 (ultracode) の「token の費用は制約ではない」 は、 見積もらずに起こす理由にならない**。 時間 (波の数) と、 長い待ち行列を見た人が途中で止める損 ([下](#workflow-stop-discards-in-flight)) は token の外にある。 網羅は「入力を全部覆う」 ことで、 「項目ごとに agent を起こす」 ことではない。 「全部やる」 と頼まれたときも同じ。
+
+<a id="workflow-split-by-shared-input"></a>**agent の単位は「同じ入力を読む塊」 — 観点は 1 本の prompt に並べる**:
+
+- **既定**: 1 本の agent = 1 つの入力のまとまり (1 repo・1 群の file・1 文書)。 その入力について確かめる観点と項目は、 1 本の prompt に節として並べ、 結果は観点ごとの field で返させる (schema)。
+- **観点・票を別の agent に分けるのは、 独立が要るときだけにする**: (1) 盲検・cold-eyes (相手の結論や依頼者の見立てを見せない = [`cold-eyes-isolation.md`](cold-eyes-isolation.md)) (2) 同じ問いへの独立の票 (誤りが相関しないことに価値がある反証の票) (3) 1 本の context に入らない量 (4) 並行して別の file を書き換える (worktree)。 分けるときは script に `// workflow-lenses: independent — <理由>` を書き、 票の数 × 項目数が何波になるかを見積もる。
+- **実測**: 同じ項目を 2 つの観点 (今やれるか / 規則に触れないか) で別々に確かめた agent は、 読んだ file の約半分が重なった (file 名の Jaccard 0.47)。 打った command の重なりは 5% = 同じものを別の手順で読み直していた。 観点が別でも入力は同じなので、 独立が要らない観点は 1 本にまとめる。
+- **項目ごとに独立の票を回したいときは段で絞る**: まず入力ごとの 1 本で全項目を判定し、 疑わしい項目 (反証された・証拠が薄い) だけを次の段で独立に確かめる。 次の段の件数にも上限を置く。
+
+<a id="workflow-read-only-agent-type"></a>**読むだけの段は起動時の文脈を小さくできる**: `agentType: 'Explore'` は CLAUDE.md を載せない (Workflow の仕様 = 組み込みの Explore・Plan は CLAUDE.md を載せない)。 Agent tool での実測 = 起動時の文脈 ≈ 2.8 万 token (既定の agent ≈ 11 万)。 費用の半分以上が読み直しなので、 呼び出しの多い読むだけの段で効く。 ⚠️ 取引: Explore は file を抜粋で読む癖があり、 CLAUDE.md の規則が載らない (hook は効く)。 読む深さが要る段・規則で判断する段には向かない。 使うなら要る規則を prompt に名指しする。 workflow の中での実測はまだ無い。
+
+<a id="workflow-stop-discards-in-flight"></a>**途中で止めると、 走っている agent の分は捨てる**: `TaskStop` で止めると、 走っていた agent の途中の成果は残らない (journal に result が無い)。 実測: 止めた時点で走っていた 8 本が、 その run の入力換算の 7%。 長い待ち行列を見て止めたくなる形は、 起動の前の見積もりで避ける。 止めるなら、 済んだ結果を書き出してから次の run に渡す ([下の 2](#workflow-resume-prefix))。
+
+<a id="workflow-resume-prefix"></a>**再開の cache は前から順に変わっていない呼び出しだけ — 呼び出しの順を変えたら再開しない**:
+
+- **仕様**: `resumeFromRunId` での再開は、 前から順に変わっていない `agent()` の呼び出しにだけ cache の結果を返し、 最初に変わった・新しい呼び出しから後ろは全部走らせる。 呼び出しの key は (prompt, opts) から決まる。
+- **parallel / pipeline は thunk の呼び出しを後回しにする** = その後ろで同期に呼んだ `agent()` が先に始まる (実測 = `parallel` の後ろの単発の agent が、 並列の分より先に始まった)。 したがって `await pipeline(…)` の await を外して後の段の agent を並行に回す編集は、 その段の新しい呼び出しを先頭に出し、 済んだ前段を全部走り直させる (実測: 済んでいた読み手が、 同じ key のまま全部走り直した)。
+- **規則**: (1) 再開は「同じ script を続ける」 ときだけ使う。 (2) script の呼び出しの順・数・prompt を変えたら、 再開せず、 済んだ結果を file に書き出し (`python3 scripts/workflow-run-stats.py 〈run の dir〉 --export-results 〈file〉`)、 その file を読む新しい run を起こす。 **前段だけでなく後段の済んだ結果も渡す** (渡さなかった後段は、 新しい run が同じ仕事をやり直す = 実測)。 (3) 再開する前に cache が返る本数を見る: `python3 scripts/workflow-estimate.py 〈script の file〉 --resume-dir 〈前の run の dir〉` (前の run の journal と agent の記録から prompt を読み、 空回しの呼び出しの順に照合する)。
+- **未確かめ**: 変えていない script の再開でも、 前の run が後段の途中で止まっていると、 再開の呼び出しの順 (cache はすぐ返る) と前の run の順 (終わった順) がずれる。 前の run で済んだ後段が返るかは試していない。 見積もりの道具は「最初に前の run に結果の無い呼び出しが来た所で cache が終わる」 として数える (返る本数を少なめに出す)。 確かめるなら、 小さな agent を数本並べた試験の workflow を、 呼び出しの順だけを入れ替えて再開する。
+
+<a id="workflow-script-patterns"></a>**書き方の型**: 入力ごとに 1 本、 観点は schema の field で返させる。
+
+```js
+// workflow-size: 18 — 8 入力を 1 本ずつ読み、 入力ごとに 1 本で全項目を 2 観点で判定、 拾い出し 1 + 批評 1
+const VERDICTS = { type: 'object', required: ['items'], properties: { items: { type: 'array', items: {
+  type: 'object', required: ['title', 'doable_ok', 'rules_ok', 'evidence'],
+  properties: { title: { type: 'string' }, doable_ok: { type: 'boolean' }, rules_ok: { type: 'boolean' },
+                evidence: { type: 'array', items: { type: 'string' } } } } } } }
+const verified = await pipeline(INPUTS,
+  inp => agent(readPrompt(inp), { label: `read:${inp}`, phase: 'Read', schema: TASKS }),
+  (r, inp) => (r && r.tasks.length)
+    ? agent(verifyAllPrompt(inp, r.tasks), { label: `verify:${inp}`, phase: 'Verify', schema: VERDICTS })
+    : null)
+```
+
+前段の出力で件数が決まる段には上限を置き、 削った分を言う (黙って削ると「全部見た」 と読まれる):
+
+```js
+const MAX = 8
+const suspects = verified.filter(Boolean).flatMap(v => v.items.filter(x => !x.doable_ok || x.evidence.length < 2))
+const picked = suspects.slice(0, MAX)
+if (suspects.length > MAX) log(`疑わしい ${suspects.length} 件のうち ${MAX} 件だけを独立に確かめた。 残り: ${suspects.slice(MAX).map(s => s.title).join(', ')}`)
+```
+
+script を直した後は、 前の run の結果を file で渡す新しい run にする (再開しない):
+
+```js
+// args = { previous: '<workflow-run-stats.py --export-results で書いた file>' }
+const v = await agent(`${args.previous} を Read で全部読み、 label が read: の結果を前提に …`, { label: 'verify:…' })
+```
+
+<a id="workflow-fan-out-machine"></a>**機械**:
+
+- **起動の前**: [`scripts/workflow-estimate.py`](../scripts/workflow-estimate.py) (空回し。 本数 = 前段の件数 k の式・波数・観点と票の分割・宣言の有無・再開の見込み)。 当たり方 (実測): 手元の 4 本の script で、 起動した本数と見積もりが一致した (前段の件数で本数が決まる 1 本は、 実際の平均件数を k に入れると一致)。 静的に分からないのは前段の件数だけ = k の式で出す。 `filter` で絞る形は boolean を true として数えるので多めに出る。 PreToolUse(Workflow) の hook (`--hook`) にすると、 起動のたびに数が出る。 enforce (`~/.claude/workflow-fanout-enforce.on` か env `WORKFLOW_FANOUT_ENFORCE=1`) では、 宣言の無い形 (目安を越える・本数が前段の出力で決まる・観点や票の分割・cache が 0 本の再開) を止めて、 数と直し方を見せる。 hook の wrapper と配線は層1 の新しい hook なので本人の承認の後に入れる ([`hook-authoring.md#new-hook-protected-bundle`](hook-authoring.md#new-hook-protected-bundle))。
+- **起動の後**: [`scripts/workflow-run-stats.py`](../scripts/workflow-run-stats.py) (本数・結果の無い本数・同じ key の走り直し・同時に走った最大数・phase ごとの token と所要・起動時の文脈と読み直しの割合・3 本以上が読んだ file と打った command・`--export-results`)。 run の dir = `<config>/projects/<cwd>/<session>/subagents/workflows/<runId>/`。
+- **機械で止められないもの**: 観点を 1 本にまとめたときに prompt が長くなりすぎないか、 独立が本当に要るかの判断。 宣言の理由を読むのは人と review。
 
 ## 関連
 
