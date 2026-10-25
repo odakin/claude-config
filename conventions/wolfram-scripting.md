@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき + Mathematica / wolframscript を Apple Silicon の Mac に入れ直すとき (#apple-silicon-install)
+when: wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき + Mathematica / wolframscript を Apple Silicon の Mac に入れ直すとき (#apple-silicon-install) + notebook (.nb) の入力セルを front end 無しで読む・評価するとき (#read-notebook-input-cells)
 category: research-domain
 summary: wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用、 #plotlegends-export = PlotLegends は Graphics でなく Legended を返すため GUI 保存で凡例が落ち (対処 = 変数に入れて Export)、 位置調整で LineLegend を挟むと PlotStyle の色継承が切れて凡例だけ黒くなる (対処 = Placed にラベルだけ渡す)、 #logplot-ticks = LogLogPlot の目盛は user 指定が「データ座標」 で読み出し (ScaledTicks / AbsoluteOptions) が「自然対数座標」 という非対称があり Log を掛けて渡すとラベルが黙って全消失、 自動生成器は 6〜8 decade を境に decade 内の細目盛を落とす (実測表あり、 密度引数は効かない) 、 #apple-silicon-install = Apple Silicon ネイティブは 12.3.1 から・入手は Wolfram アカウントの Direct File Download (Platform を ARM に、 Standard のダウンロードマネージャは落ちた)・wolframscript は app 同梱の物を symlink・移行した機械では再アクティベーション (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
 -->
@@ -40,7 +40,7 @@ Print["mu = ", fmt[N[mu], {6, 4}]];
 (* → "mu = 0.8169" 正常 format *)
 ```
 
-`ToString` が StandardForm 経由で format function を発火させる。 `NumberForm` 以外 (= `ScientificForm`, `EngineeringForm`, `AccountingForm`, `PaddedForm` 等) も同症状なので、 `fmt[x, spec]` helper を `Print` 前に必ず通す習慣にする。
+`ToString` が StandardForm 経由で format function を発火させる。 `NumberForm` 以外 (= `ScientificForm`, `EngineeringForm`, `AccountingForm`, `PaddedForm` 等) も同症状なので、 `fmt[x, spec]` helper を `Print` 前に必ず通す習慣にする。 機械精度の数を全桁で出したいときの `Print[InputForm[x]]` も同じで `InputForm[…]` が literal に出る (実測) = `ToString[x, InputForm]` を渡す。
 
 ### Alternative: `WriteString` + `ToString`
 
@@ -361,6 +361,30 @@ Intel の Mac から移行アシスタントで移すと、 Intel 版の Mathema
 2. 触る前に **必ず別の場所に写しを取る** (`cp` で別の dir へ)。 Dropbox の版履歴は保険であって手順ではない。
 3. 残った kernel は `pgrep -fl 'WolframKernel|MathematicaServer'` で GUI の分 (古い pid) と見分けて止める (`kill -9`)。 `No valid password found` が出たらまずこれを疑う (license の切れではない)。
 4. 図を出すだけの `UsingFrontEnd[Export[…]]` は短時間で終わり、 壊れたことはない (実測)。 壊れるのは notebook の評価と保存。
+
+---
+
+## <a id="read-notebook-input-cells"></a>9. notebook の入力セルを front end 無しで読む・評価する — `"Input" -> "InputExpression"` と `Hold`
+
+### 問題
+
+`.nb` に書かれた計算の処方 (どの式・どの代入・どの時刻・どの格子) を確かめたい。 GUI で開くと保存で file が変わりうるし、 front end を隠して評価すると上の [#headless-notebook-evaluate](#headless-notebook-evaluate) の事故になる。 `NotebookImport[nb, "Input" -> "Text"]` は front end が無いと、 代入や描画のセルの多くを `Failure[InterpretationFailure, …]` で返す (実測)。
+
+### 対処
+
+```mathematica
+cells = NotebookImport[nb, "Input" -> "InputExpression"];
+(* 読むだけ: 評価せずに InputForm の文字列にする。 巨大な式のセルは長さで切って先頭と末尾だけ出す *)
+Do[WriteString[s, "== cell ", i, " ==\n",
+     ToString[InputForm[ToExpression[cells[[i]], StandardForm, Hold]]], "\n"], {i, Length[cells]}];
+(* 途中の定義を使う: 順に ReleaseHold。 描画のループや重いセルは番号で飛ばす *)
+Do[If[! MemberQ[skip, i], ReleaseHold[ToExpression[cells[[i]], StandardForm, Hold]]], {i, 1, last}];
+```
+
+- `Hold` のまま文字列にすると、 セルの代入 (後で値が入る `xd = xSlit` のような定義を含む) と式が書かれたとおりに読める。 ギリシャ文字は出力の文字コードで化けることがある (実測) = 記号の名前で読む。
+- 番号は `NotebookImport` が返した順の番号で指す。 notebook の `In[n]` とは一致しない (連続するセルが 1 つにまとまることがある = 実測)。
+- 評価して得た式は `Function[{u, v}, Evaluate[N[expr /. {y1 -> u, y2 -> v}]]]` で数値関数に固めると、 1 点の評価が速い。 機械精度の丸めの大きさは、 同じ式を `N[…, 40]` で評価した値と比べて測れる。
+- 読むだけで front end を起動しないので、 notebook は変わらない。 終わったら `git diff -- <notebook>` で確かめる。
 
 ---
 

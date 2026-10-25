@@ -219,11 +219,11 @@ layer 1 (public) のドメイン固有規約 151 file をカテゴリ別に列�
   - 物理・数理ノートの 7 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側 / 検証 note は問題・結論・手当のみ / 配布物に内部記号を出さない / 相手が拠っている文献の手順と語で書く / 問いに答えるノートは問いに要る論だけ) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
 - **[physics-verification-cycle.md](physics-verification-cycle.md)** — 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/physics-verification-cycle.md (何を検査するか: 4 station / 機械 anchor / foil / tier / 3 状態 / verify-to-learn / 第二の目 / rubric / 止まる規律 / cross-vendor / campaign 運用 A-K)。 本 file は旧 anchor を保つ stub
-- **[scientific-computing.md](scientific-computing.md)** — 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき
+- **[scientific-computing.md](scientific-computing.md)** — 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき + 格子で評価した曲線から可視度・コントラストを報告するとき・報告値と独立実装が食い違ったとき (#sampled-extremum-metrics)
   - 数値解析 gotchas (scale-dependent default、複素 null、固定変数、比較精度、基底不変検査の死角、閉形式の関数クラス、研究スクリプト索引等、科学計算リポ共通)
 - **[verification-cycle-ops.md](verification-cycle-ops.md)** — 検証サイクルを session を越えて回し続ける仕組みを設計・運用・診断するとき
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/verification-cycle-ops.md (6 原則 / 導出 state / 台帳 3 種 + retro / 無人層 / fresh session の手順)。 本 file は旧 anchor を保つ stub
-- **[wolfram-scripting.md](wolfram-scripting.md)** — wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき + Mathematica / wolframscript を Apple Silicon の Mac に入れ直すとき (#apple-silicon-install)
+- **[wolfram-scripting.md](wolfram-scripting.md)** — wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき + Mathematica / wolframscript を Apple Silicon の Mac に入れ直すとき (#apple-silicon-install) + notebook (.nb) の入力セルを front end 無しで読む・評価するとき (#read-notebook-input-cells)
   - wolframscript の Print[NumberForm] literal stringification + ToString wrap helper、 SetDirectory[DirectoryName[$InputFileName]] の空文字 fallback、 PDF Plaintext import を secondary fallback として活用、 #plotlegends-export = PlotLegends は Graphics でなく Legended を返すため GUI 保存で凡例が落ち (対処 = 変数に入れて Export)、 位置調整で LineLegend を挟むと PlotStyle の色継承が切れて凡例だけ黒くなる (対処 = Placed にラベルだけ渡す)、 #logplot-ticks = LogLogPlot の目盛は user 指定が「データ座標」 で読み出し (ScaledTicks / AbsoluteOptions) が「自然対数座標」 という非対称があり Log を掛けて渡すとラベルが黙って全消失、 自動生成器は 6〜8 decade を境に decade 内の細目盛を落とす (実測表あり、 密度引数は効かない) 、 #apple-silicon-install = Apple Silicon ネイティブは 12.3.1 から・入手は Wolfram アカウントの Direct File Download (Platform を ARM に、 Standard のダウンロードマネージャは落ちた)・wolframscript は app 同梱の物を symlink・移行した機械では再アクティベーション (= scientific-computing.md の数値 silent failure とは別 scope の Wolfram tool semantics gotcha 集)
 
 ## Web・公開プラットフォーム (`web`)
