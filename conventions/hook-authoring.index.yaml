@@ -362,6 +362,9 @@ sections:
   - id: git-race-fixture-via-hooks
     level: 2
     title: "§22. git の race (HEAD が動く窓) を test で決定的に再現する — fixture の repo の hook に相手の commit を打たせる"
+  - id: dry-run-model-authored-script
+    level: 2
+    title: "§23. model が書いた script を hook が空回しするとき、 node の `vm` は隔離にならない — 起動の flag で閉じる"
   - id: related-docs
     level: 2
     title: "関連"

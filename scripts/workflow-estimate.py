@@ -14,7 +14,8 @@
   - phase / log / args / budget (total = null) / workflow (入れ子は数えずに null) を用意する。 Date.now / Math.random は
     本物と同じく投げる
   - node は `--disallow-code-generation-from-strings` と permission model (file は runner だけ読める) で起こす = script から
-    file・別 process・Node の API に届かない (vm だけでは Function の constructor から process に届く = 実測)
+    file・別 process・Node の API に届かない (vm だけでは Function の constructor から process に届く = 実測)。 flag を
+    持たない node (19 以下) では走らせずに見積もりの失敗を返す
   - 呼び出しが 5000 本を越えたら止めて「前段の出力次第で止まらない形」 と出す
 静的にも見る (source の正規表現): 観点の配列 (`['a','b'].map(… agent(`) と同じ問いの票 (`Array.from({length: N}` … agent(`)。
 宣言 (script の注釈の行):
@@ -182,9 +183,10 @@ def dry_run(src: str, args, k: int, cache: list | None = None, keep_prompts: boo
         p = None
         # 本物の engine は script に file も Node の API も触らせない。 vm は隔離ではない (Function の constructor から
         # process に届く = 実測) ので、 文字列から code を作るのを禁じ、 permission model で file は runner だけ読める
-        # ようにする (child_process・worker も止まる)。 古い node は flag を知らないので順に落とす
+        # ようにする (child_process・worker も止まる)。 node 20 は --experimental-permission。 どちらも知らない node では
+        # 隔離なしに走らせず、 見積もりの失敗として返す (hook は失敗を止めずに通す)
         for flags in (["--permission", f"--allow-fs-read={runner}"],
-                      ["--experimental-permission", f"--allow-fs-read={runner}"], []):
+                      ["--experimental-permission", f"--allow-fs-read={runner}"]):
             try:
                 p = subprocess.run([node, "--disallow-code-generation-from-strings", *flags, runner], input=payload,
                                    capture_output=True, text=True, timeout=30)
@@ -192,6 +194,8 @@ def dry_run(src: str, args, k: int, cache: list | None = None, keep_prompts: boo
                 return {"ok": False, "error": f"RUNNER_FAILED: {e}", "calls": []}
             if "bad option" not in (p.stderr or ""):
                 break
+        else:
+            return {"ok": False, "error": "RUNNER_FAILED: この node は隔離の flag を持たない (node 20 以上が要る)", "calls": []}
     try:
         return json.loads(p.stdout)
     except (json.JSONDecodeError, AttributeError):
@@ -610,6 +614,17 @@ def selftest() -> int:
         with contextlib.redirect_stdout(io.StringIO()):
             rc = hook(json.dumps(ev))
         check("hook fails open without node", rc == 0, rc)
+        old = os.path.join(d, "old-node")  # 隔離の flag を知らない node = 走らせずに失敗を返す (隔離なしで回さない)
+        with open(old, "w") as f:
+            f.write('#!/bin/sh\necho "node: bad option: $2" >&2\nexit 9\n')
+        os.chmod(old, 0o755)
+        os.environ["WORKFLOW_ESTIMATE_NODE"] = old
+        one = dry_run(S["escape"], None, 1)
+        check("node without the isolation flags: refused, not run unisolated",
+              not one["ok"] and "隔離の flag" in one["error"], one)
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = hook(json.dumps(ev))
+        check("hook fails open with an old node", rc == 0, rc)
         os.environ.pop("WORKFLOW_ESTIMATE_NODE", None)
         os.environ.pop("WORKFLOW_FANOUT_ENFORCE_MARKER", None)
     print("selftest:", "OK" if not fails else f"{fails} FAIL")
