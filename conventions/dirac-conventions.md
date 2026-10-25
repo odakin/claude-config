@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Dirac 行列・計量の規約を教科書 (Peskin–Schroeder / Srednicki / Weinberg) の間で読み替えるとき + 規約の違う文献から式を写すとき + 自分の project が「どの教科書の行を使うか」 を repo の記号の規約に宣言するとき + 共同研究者と「我々の (−,+,+,+) は Srednicki か Weinberg か」 を確かめるとき
 category: research-domain
-summary: Dirac 規約の対応表 (教科書 3 冊: 計量 / Clifford / (γ⁰)² と Hermite 性 / β / 正振動数 / Dirac 方程式 / 自由ラグランジアン / 伝播関数。 全セルが宣言の式番号つき、 推定は明記) + 変換の辞書 (γ_W = −iγ_S、 γ_P = γ_S で η が反転。 u = Cv^* の C の条件と書き方が行で変わること、 u の双線形を v で書くと運動量の順序が入れ替わること = #charge-conjugation) + 数値検算 script + 「project ごとに使う行を宣言し、 規約の違う文献から式を記号のまま写さない」 規則
+summary: Dirac 規約の対応表 (教科書 3 冊: 計量 / Clifford / (γ⁰)² と Hermite 性 / β / 正振動数 / Dirac 方程式 / 自由ラグランジアン / 伝播関数。 全セルが宣言の式番号つき、 推定は明記) + 変換の辞書 (γ_W = −iγ_S、 γ_P = γ_S で η が反転。 u = Cv^* の C の条件と書き方が行で変わること、 u の双線形を v で書くと運動量の順序が入れ替わること = #charge-conjugation) + 数値検算 script + 「project ごとに使う行を宣言し、 規約の違う文献から式を記号のまま写さない」「成分で書くなら表示を名指す (規約の行は表示も Hermite 性も決めない)」 規則
 -->
 # Dirac 規約の対応表と変換の辞書
 
@@ -72,6 +72,7 @@ python3 scripts/check-dirac-conventions.py
 1. **project ごとに、 使う行を repo の記号の規約の節で宣言する** (「本 project = 本表の Weinberg の行」 のように、 本 doc の GitHub URL とともに 1 行)。 計量だけ宣言して Clifford を書かない原稿は、 Srednicki と Weinberg のどちらとも整合するので、 共同研究者は決められない。 例外 (別の規約の付録・派生 note) があれば同じ行に書く。
 2. **規約の違う文献から式を記号のまま写さない**。 写すなら §2 の辞書を通し、 写した式を自分の規約で 1 回導出し直す ([`scientific-computing.md#verify-independent-derivation`](scientific-computing.md#verify-independent-derivation))。 γ 行列が同じ数値でも、 添字を下げた量 (p̸ や p²) の符号が変わる (Peskin–Schroeder ↔ Srednicki)。 計量が同じでも γ 行列が −i 倍になる (Srednicki ↔ Weinberg)。
 3. **表に行や列を足すときは、 セルごとに宣言の式番号を添える** ([`physics-notes.md`](physics-notes.md) 第 2 節)。 既存の自前の対応表に式番号が無ければ、 それは下書きであって引用の根拠にならない。 書籍版と arXiv 版で番号が違う本は版を書く。
+4. <a id="representation-and-hermiticity"></a>**スピノルや γ 行列を成分で書くときは表示を名指す。 規約の行は表示も Hermite 性も決めない**。 同じ行の中で表示は選べる: Weinberg の行は印字の (5.4.17) (Weyl 型) でも β = diag(1,1,−1,−1) の Dirac 表示でも満たされ、 両者はユニタリ同値。 ところが正準スピノルを (√(E+m)χ, σ·p χ/√(E+m)) と成分で書くと、 その列は Dirac 表示の方程式しか満たさない。 だから「前の節の規約に従う表示で」 と規約の節を指すだけでは行列が決まらない。 成分の式の前に β の行列を書くか、 mostly minus の γ̃ = iγ_W (= γ_P) を標準の Dirac 表示にとると書く。 Hermite 性も Clifford 代数からは出ない (ユニタリでない相似変換 SγS⁻¹ は Clifford を保ち Hermite 性を壊す)。 なので mostly minus との辞書を書くときは Hermite 性も書く (Weinberg の行の (5.4.30) βγ^{μ†}β = −γ^μ は、 γ̃ = iγ では γ̃^{μ†} = γ̃⁰γ̃^μγ̃⁰ になる)。 検算 = §3 の script の 9。
 
 ## <a id="unverified"></a>5. 未照合・注意
 

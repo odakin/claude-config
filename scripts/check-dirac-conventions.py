@@ -18,6 +18,9 @@
   8. u = C v^* の行列 C: 行ごとの条件 (Weinberg の行 γC = Cγ^*、 Srednicki / Peskin の行 γC = −Cγ^*)、 同じ C の
      各行の γ での書き方 (−γ²_W = +iγ²_S)、 u と v の方程式を実際に結ぶこと、 u の双線形を v で書くと運動量の順序が
      入れ替わること (ū_1 A u_2 = v̄_2 (βC A^T βC) v_1)
+  9. 規約の行は表示も Hermite 性も決めない: β = diag(1,1,−1,−1) の Dirac 表示も Weinberg の行 (Clifford、 β の Hermite 性、
+     (5.4.30)) を満たし (5.4.17) とユニタリ同値だが、 成分で書いた正準スピノル (√(E+m)χ, σ·p χ/√(E+m)) は Dirac 表示の
+     方程式だけを満たす。 ユニタリでない相似変換は Clifford 代数を保ったまま Hermite 性 ((5.4.30)) を壊す
 
 依存: numpy (無ければ exit 2 で理由を出す)。 公開層 (個人・project の値を持たない)。
 """
@@ -231,6 +234,42 @@ def run_checks(G_W_used=None, note="") -> list[str]:
     check(f"Weinberg の行: (βC)² = −1、 βC γ^{{μT}} βC = γ^μ{note}", ok_bc)
     check(f"ū_1(−ia̸ + b)u_2 = v̄_2(−ia̸ − b)v_1 で、 順序をそのままにした v̄_1(…)v_2 とは一致しない (乱数 3 組){note}",
           ok_order and swapped_differs)
+
+    # 9. 規約の行は表示も Hermite 性も決めない (doc §4 規則 4)
+    #    Dirac 表示を Weinberg の行に置く: β_D = diag(1,1,−1,−1), γ⁰ = −iβ_D, γ^i = −iβ_D α^i, α^i = (0 σ^i; σ^i 0)
+    beta_D = block(I2, Z2, Z2, -I2)
+    G_D = [-1j * beta_D] + [-1j * beta_D @ block(Z2, s, s, Z2) for s in SIG]
+    ac_D = anticomm(G_D)
+    B_D = 1j * G_D[0]
+    ok_row_D = (all(close(ac_D[m][n], 2 * ETA_W[m, n] * E4) for m in range(4) for n in range(4))
+                and is_hermitian(B_D)
+                and all(close(B_D @ G_D[mu].conj().T @ B_D, -G_D[mu]) for mu in range(4)))
+    # ユニタリ同値: β_W を対角にする基底変換 (1 1; 1 −1)/√2 の後に β_D で γ^i の符号をそろえる = (1 1; −1 1)/√2
+    U = block(I2, I2, -I2, I2) / np.sqrt(2)
+    ok_unitary = close(U @ U.conj().T, E4) and all(close(U @ G_W[mu] @ U.conj().T, G_D[mu]) for mu in range(4))
+    ok_col_D, col_fails_W = True, True
+    for _ in range(3):
+        p3 = rng.normal(size=3)
+        e = np.sqrt(m**2 + p3 @ p3)
+        pW = ETA_W @ np.concatenate([[e], p3])
+        sp = sum(p3[i] * SIG[i] for i in range(3))
+        for chi in (np.array([1, 0], complex), np.array([0, 1], complex)):
+            u_col = np.concatenate([np.sqrt(e + m) * chi, sp @ chi / np.sqrt(e + m)])   # 正準スピノルの成分
+            ok_col_D &= close((1j * slash(G_D, pW) + m * E4) @ u_col, np.zeros(4))
+            col_fails_W &= not close((1j * slash(GW, pW) + m * E4) @ u_col, np.zeros(4))
+    check("Dirac 表示 (β = diag(1,1,−1,−1)) も Weinberg の行を満たし (Clifford、 β Hermite、 (5.4.30))、 (5.4.17) とユニタリ同値", ok_row_D and ok_unitary)
+    check(f"成分で書いた正準スピノルは Dirac 表示の (iγp + m)u = 0 を満たし、 (5.4.17) の表示では満たさない (乱数 3 組){note}",
+          ok_col_D and col_fails_W)
+    S = E4.astype(complex).copy()
+    S[0, 2], S[1, 1] = 0.7, 2.0
+    G_N = [S @ g @ np.linalg.inv(S) for g in GW]
+    ac_N = anticomm(G_N)
+    B_N = 1j * G_N[0]
+    keeps_clifford = all(close(ac_N[m][n], 2 * ETA_W[m, n] * E4) for m in range(4) for n in range(4))
+    breaks_herm = not (close(G_N[0].conj().T, -G_N[0])
+                       and all(close(B_N @ G_N[mu].conj().T @ B_N, -G_N[mu]) for mu in range(4)))
+    check(f"ユニタリでない相似変換 SγS⁻¹ は Clifford 代数を保ち、 Hermite 性 ((5.4.30)) を壊す (Hermite 性は別の規約){note}",
+          keeps_clifford and breaks_herm)
     return fails
 
 
