@@ -888,6 +888,16 @@ def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) 
         return 3
     for w in dict.fromkeys(written):
         out(f"✓ 書いた: {w}")
+    if written:
+        # 書いた repo を session の「触った repo」 に載せる = turn の終わりの未 commit の催促 (session-commit-nudge.sh) に乗る。
+        # Bash から呼ぶ道具の書き込みは Edit / Write と違って数えられず、 書いたまま別の仕事へ移った session が 1 日以上 commit
+        # しなかった (実測 = 未 commit の記録が同期を止め、 別の機械が同じ記録を二重に書いた)
+        try:
+            import session_touch
+            session_touch.register(list(dict.fromkeys(written)))
+        except Exception:
+            pass
+        out("→ 書いた台帳は commit + push までが 1 単位 (書いたまま別の仕事に移ると、 同期が止まり、 別の機械が同じ記録を二重に書く)")
     return 0
 
 
@@ -1236,6 +1246,7 @@ def _selftest() -> int:
                                 msg(m4, T + 10800000, CP, body="返事の本文です\n> 前の引用"), msg(m5, T + 14400000, OW)],
                ("acct-a", "bbbb000000000001"): [msg("bbbb000000000001", T, CP), msg("bbbb000000000002", T + 1000, CP)]}
     td = Path(tempfile.mkdtemp(prefix="record-reply-selftest-"))
+    os.environ["SESSION_TOUCH_STATE_DIR"] = str(td / "session-touch")   # --apply の「触った repo」 を本物の state に書かない
     cfg = Config(root=td, ledgers=["ledger-a", "ledger-b"], accounts=("acct-a", "acct-b"), owner_tokens=("owner@",),
                  status_enum={"open", "waiting", "doing", "done"}, tz="UTC", cache_dir=td / "cache")
     try:

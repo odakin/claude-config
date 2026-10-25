@@ -33,6 +33,10 @@ Codex で default branch へ送る `HEAD:<branch>` refspec の execution-permiss
   出した場合は消さずに、 origin と一致していれば追いつき方を出す: 同じ中身の変更が unstaged のままだと
   `merge --ff-only` は「would be overwritten」 で止まり、 `git add -- <path>` で index を揃えると fast-forward が通って
   clean になる (2026-09-13 実測)。
+- push の後、 push した変更と同じ変更が live の作業 tree の追跡中の file に未 commit で残っていれば (= live で書いてから
+  `--apply` で当て直した形。 台帳を書く道具は live に書く) `[live] <path>: … UNCOMMITTED` の 1 行で知らせる (live には触らない)。
+  残すと live は upstream の同じ file の変更と重なり、 session 開始の同期が最新化を止める (実測 = 共有の clone に live copy が
+  溜まり、 人が揃えるまで遅れたままだった)。 規約 = [`conventions/multi-session-coordination.md#origin-worktree-live-copy`](../conventions/multi-session-coordination.md#origin-worktree-live-copy)。
 
 exit: 0 = push 済 / 1 = commit 前に止めた (変更なし・検査失敗・hook 拒否) / 2 = rebase 衝突 (push せず、
 worktree を残して path を出す) / 3 = push が retry 後も失敗。
@@ -109,6 +113,36 @@ def remove_worktree(live: Path, tmp: Path, wt: Path) -> None:
     git(live, "worktree", "remove", "--force", str(wt), check=False)
     git(live, "worktree", "prune", check=False)
     shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _plain(repo: Path, rev: str, path: str):
+    """rev の path の平文 (暗号化 file も filter を通す)。 無ければ None。"""
+    r = git(repo, "cat-file", "--filters", f"{rev}:{path}", check=False, binary=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def live_copy_paths(live: Path, wt: Path, head: str, files) -> list[str]:
+    """push した commit (wt の head) が変えた file のうち、 live の作業 tree に同じ変更が未 commit で残っているもの (= live copy)。
+    判定 = push した変更で足した行 (空白だけの行を除く) が全部 live の作業 tree の file に在り、 そのうち 1 行でも live の HEAD の版に無い。
+    暗号化 file も平文で比べる。 読むだけ (live には触らない)。"""
+    out = []
+    for f in files:
+        after = _plain(wt, head, f)
+        lp = live / f
+        if after is None or not lp.is_file():
+            continue
+        before = _plain(wt, f"{head}^", f) or b""
+        added = {ln for ln in after.splitlines() if ln.strip()} - set(before.splitlines())
+        if not added:
+            continue
+        try:
+            cur = set(lp.read_bytes().splitlines())
+        except OSError:
+            continue
+        live_head = set((_plain(live, "HEAD", f) or b"").splitlines())
+        if added <= cur and not added <= live_head:
+            out.append(f)
+    return out
 
 
 def commit_from_origin_worktree(live: Path, message: str, copies=(), apply_cmd: str | None = None,
@@ -222,6 +256,18 @@ def commit_from_origin_worktree(live: Path, message: str, copies=(), apply_cmd: 
                     log(f"[live] removed untracked copy {rel} (identical to origin/{branch}:{dst})")
                 else:
                     log(f"[live] kept {rel}: differs from origin/{branch}:{dst}")
+        # the same change left UNCOMMITTED in a tracked live file (you edited live, e.g. a ledger tool wrote there, then
+        # redid the edit here): it now duplicates origin, and the session-start sync will not fast-forward live while it
+        # is there (the file overlaps the upstream change). Say so; never touch live from here (measured: such copies
+        # piled up in a shared clone until a person reconciled it).
+        hinted = {d for s_, d in copies if remove_live_copies}
+        for f in live_copy_paths(live, wt, head, files):
+            if f in hinted:
+                continue
+            log(f"[live] {f}: the live tree still holds this change UNCOMMITTED (a live copy of what was just pushed). "
+                f"Remove your hunk from the live file (no other session's change in it: git -C {shlex.quote(str(live))} "
+                f"checkout -- {shlex.quote(f)}), so that live can fast-forward to origin/{branch} "
+                f"(conventions/multi-session-coordination.md#origin-worktree-live-copy)")
         if git(live, "rev-parse", "HEAD").stdout != snap_head:
             log("⚠ live HEAD moved during the run (another session?); this script did not touch it")
         elif git(live, "status", "--porcelain=v1", "-z", binary=True).stdout != snap_status and not remove_live_copies:
@@ -351,6 +397,27 @@ def selftest() -> int:
         check("the recipe catches live up cleanly, and without `add` the fast-forward aborts (the foil has teeth)",
               aborted and sh(probe, "status", "--porcelain").stdout == ""
               and sh(probe, "rev-parse", "HEAD").stdout == sh(probe, "rev-parse", "origin/main").stdout)
+
+        # --apply on a file I had ALSO written in live (a ledger tool writes live, then the change is redone in the
+        # worktree): after the push the live copy is reported and live is not touched; a live file that does not
+        # hold the pushed change gets no report
+        p2 = T / "probe2"
+        subprocess.run(["git", "clone", "-q", str(remote), str(p2)], capture_output=True, check=True)
+        sh(p2, "config", "user.email", "t@t"); sh(p2, "config", "user.name", "t")
+        (p2 / "ledger.md").write_text("entry 1\n", encoding="utf-8")
+        sh(p2, "add", "ledger.md"); sh(p2, "commit", "-q", "-m", "ledger"); sh(p2, "push", "-q")
+        (p2 / "ledger.md").write_text("entry 1\nentry 2 mine\n", encoding="utf-8")
+        msgs3 = []
+        rc = commit_from_origin_worktree(p2, "entry 2\n", apply_cmd='printf "entry 2 mine\\n" >> ledger.md',
+                                         log=lambda m: msgs3.append(m))
+        check("a live copy left by --apply is reported, and live is untouched",
+              rc == 0 and any("[live] ledger.md" in m and "UNCOMMITTED" in m for m in msgs3)
+              and (p2 / "ledger.md").read_text() == "entry 1\nentry 2 mine\n")
+        msgs4 = []
+        rc = commit_from_origin_worktree(p2, "entry 3\n", apply_cmd='printf "entry 3\\n" >> ledger.md',
+                                         log=lambda m: msgs4.append(m))
+        check("no live-copy report when the live file does not hold the pushed change",
+              rc == 0 and not any("UNCOMMITTED" in m for m in msgs4))
 
         # whole-file copy guard: upstream changed the file / the live base carries a foreign unpushed hunk
         sh(other, "pull", "-q")
