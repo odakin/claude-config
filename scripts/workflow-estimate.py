@@ -13,6 +13,8 @@
     始まる。 実測 = parallel の後ろの単発の agent が 5 秒先に始まった)
   - phase / log / args / budget (total = null) / workflow (入れ子は数えずに null) を用意する。 Date.now / Math.random は
     本物と同じく投げる
+  - node は `--disallow-code-generation-from-strings` と permission model (file は runner だけ読める) で起こす = script から
+    file・別 process・Node の API に届かない (vm だけでは Function の constructor から process に届く = 実測)
   - 呼び出しが 5000 本を越えたら止めて「前段の出力次第で止まらない形」 と出す
 静的にも見る (source の正規表現): 観点の配列 (`['a','b'].map(… agent(`) と同じ問いの票 (`Array.from({length: N}` … agent(`)。
 宣言 (script の注釈の行):
@@ -63,7 +65,11 @@ DEFAULT_KS = (1, 3, 10)
 RUNNER_JS = r"""
 'use strict';
 const vm = require('vm');
-const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+let raw = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (c) => { raw += c; });
+process.stdin.on('end', () => main(JSON.parse(raw)));
+function main(input) {
 const K = input.k;
 const calls = [];
 const logs = [];
@@ -83,7 +89,7 @@ function mock(s, d) {
   if (!t && Array.isArray(s.anyOf || s.oneOf)) return mock((s.anyOf || s.oneOf)[0], d + 1);
   switch (t) {
     case 'object': { const o = {}; for (const [k, v] of Object.entries(s.properties || {})) o[k] = mock(v, d + 1); return o; }
-    case 'array': return Array.from({ length: K }, () => mock(s.items || {}, d + 1));
+    case 'array': return Array.from({ length: d <= 2 ? K : 1 }, () => mock(s.items || {}, d + 1));  // 深い入れ子は 1 = k の累乗で膨らませない
     case 'boolean': return true;
     case 'number': case 'integer': return 1;
     case 'null': return null;
@@ -146,6 +152,7 @@ let out = { ok: true, error: '' };
   out.calls = calls; out.logs = logs; out.nested = nested;
   process.stdout.write(JSON.stringify(out));
 })();
+}
 """
 
 
@@ -168,17 +175,27 @@ def dry_run(src: str, args, k: int, cache: list | None = None, keep_prompts: boo
     payload = json.dumps({"src": src, "args": args, "k": k, "cache": cache or [], "keep_prompts": keep_prompts,
                           "cap_calls": CALL_CAP})
     with tempfile.TemporaryDirectory() as d:
-        runner = os.path.join(d, "runner.js")
+        # 実体の path を渡す (macOS の temp は /var → /private/var の symlink で、 node は path の解決で /var を読む)
+        runner = os.path.join(os.path.realpath(d), "runner.js")
         with open(runner, "w", encoding="utf-8") as f:
             f.write(RUNNER_JS)
-        try:
-            p = subprocess.run([node, runner], input=payload, capture_output=True, text=True, timeout=30)
-        except (subprocess.TimeoutExpired, OSError) as e:
-            return {"ok": False, "error": f"RUNNER_FAILED: {e}", "calls": []}
+        p = None
+        # 本物の engine は script に file も Node の API も触らせない。 vm は隔離ではない (Function の constructor から
+        # process に届く = 実測) ので、 文字列から code を作るのを禁じ、 permission model で file は runner だけ読める
+        # ようにする (child_process・worker も止まる)。 古い node は flag を知らないので順に落とす
+        for flags in (["--permission", f"--allow-fs-read={runner}"],
+                      ["--experimental-permission", f"--allow-fs-read={runner}"], []):
+            try:
+                p = subprocess.run([node, "--disallow-code-generation-from-strings", *flags, runner], input=payload,
+                                   capture_output=True, text=True, timeout=30)
+            except (subprocess.TimeoutExpired, OSError) as e:
+                return {"ok": False, "error": f"RUNNER_FAILED: {e}", "calls": []}
+            if "bad option" not in (p.stderr or ""):
+                break
     try:
         return json.loads(p.stdout)
-    except json.JSONDecodeError:
-        return {"ok": False, "error": "RUNNER_FAILED: " + (p.stderr or "")[-300:], "calls": []}
+    except (json.JSONDecodeError, AttributeError):
+        return {"ok": False, "error": "RUNNER_FAILED: " + ((p.stderr if p else "") or "")[-300:], "calls": []}
 
 
 LENS_RE = re.compile(r"\[\s*(?:(['\"`])[^'\"`\n]{1,40}\1\s*,\s*)+(['\"`])[^'\"`\n]{1,40}\2\s*,?\s*\]\s*\.\s*(?:flatMap|map|forEach)\s*\(")
@@ -486,6 +503,10 @@ await parallel(F.map(f => () => parallel(Array.from({length: 3}, (_, i) => () =>
     "runaway": """export const meta = { name: 't', description: 't' }
 const seen = []
 while (true) { seen.push(await agent('again ' + seen.length)) }""",
+    "escape": """export const meta = { name: 't', description: 't' }
+let r = 'none'
+try { const p = agent.constructor.constructor('return process')(); r = 'ESCAPED' + typeof p } catch (e) { r = 'blocked' }
+await agent(r, { label: r })""",
     "uses_args": """export const meta = { name: 't', description: 't' }
 await parallel(args.repos.flatMap(r => ['a', 'b'].map(l => () => agent(r + l, { label: r + ':' + l }))))
 await agent('sweep', { label: 'sweep' })""",
@@ -544,6 +565,9 @@ def selftest() -> int:
     check("votes: 2 × 3 = 6 本、 票を見つける", r["agents_mid"] == 6 and len(r["static"]["votes"]) == 1, (r["agents_mid"], r["static"]))
     r = estimate(S["runaway"], cap=8, ks=(1,))
     check("runaway loop stops at the call cap", r["runs"][1]["error"] == "CALL_CAP" and r["runs"][1]["agents"] == CALL_CAP, r["runs"][1])
+    one = dry_run(S["escape"], None, 1)
+    check("sandbox: reaching process through the Function constructor is blocked",
+          [c["label"] for c in one.get("calls", [])] == ["blocked"], one)
     r = estimate(S["uses_args"], {"repos": ["r1", "r2", "r3"]}, cap=4)
     check("args are passed: 3 × 2 + 1 = 7 本 = 2 波 (上限 4)", r["agents_mid"] == 7 and r["waves_mid"] == 2, r)
     r = estimate(S["uses_args"], None, cap=4)
