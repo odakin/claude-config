@@ -7,7 +7,9 @@ owner の枠表 (授業の時間割など) と学期の暦の読み方・予定�
 
 ## adapter が渡すもの
 
-- events: カレンダーの予定の list。 1 件 = {date: "YYYY-MM-DD", start: "HH:MM", end: "HH:MM", all_day, title, calendar, location}
+- events: カレンダーの予定の list。 1 件 = {date: "YYYY-MM-DD", end_date: "YYYY-MM-DD", start: "HH:MM", end: "HH:MM",
+  all_day, title, calendar, location}。 date = 開始日、 end_date = 最後の日 (その日を含む。 省略・読めない・date 以前なら
+  date の 1 日)、 end = end_date の日の終了時刻。 終わりがちょうど 0:00 の予定は前の日を end_date にして渡す
 - provider(d) -> (占有の list, 未チェックの理由の list): カレンダーに入っていない占有 (授業の時間割・当番表・定例の枠表) を
   その日について作る関数。 占有 = {kind: "slot", start: 分, end: 分, title, name, calendar, location}。
   name = 枠の実体の名前 (科目名など)。 予定の題名に name の頭の語が入っていれば同じもの (自己一致) として重ねない。
@@ -20,9 +22,11 @@ owner の枠表 (授業の時間割など) と学期の暦の読み方・予定�
 
 ## 判定 (detect、 既定 7 日先まで = 今日を含む days + 1 日)
 
-- 占有 = provider の枠 + 時刻のある予定。 予定のうち数えないもの = 終日 / 開始と終了が同じ (目印) / 台帳の ignore_titles に
-  当たる題名。 同じ日時・題名の予定が複数のカレンダーにあれば 1 つに数える。 「〜へ移動」 (乗換案内から入る移動の予定) も占有
-  (kind = travel)。 日をまたぐ予定はその日の終わりまで
+- 占有 = provider の枠 + 時刻のある予定。 予定のうち数えないもの = 終日 / 1 日の予定で開始と終了が同じ (目印) /
+  台帳の ignore_titles に当たる題名。 同じ日時・題名の予定が複数のカレンダーにあれば 1 つに数える。 「〜へ移動」 (乗換案内から
+  入る移動の予定) も占有 (kind = travel)。 複数日の予定 (end_date が date より後) は期間に入る日すべての占有 = 開始日は
+  開始時刻から 24:00、 間の日は 1 日中、 最後の日は 0:00 から終了時刻 (開始と終了が同じ時刻でも目印にしない)。 表示は期間
+  (`span`)。 end_date の無い予定で終了が開始より前のもの (古い写し) はその日の 24:00 まで
 - ⚠️ 重なり = 2 つの占有が 1 分でも重なる (終わり = 次の始まりは重ならない)。 枠どうしは見ない。 枠と自己一致の予定は見ない
 - ⏱ 間に合うか = 場所が学外 (location があり oncampus_re に当たらない) の予定と、 直前・直後の枠の間が tight_min (既定 30) 分
   未満で、 その間に移動の予定が無いもの。 重なりとは別の段 (通知しない)
@@ -71,6 +75,7 @@ TRAVEL_RE = re.compile(r"へ移動\s*$")
 ONCAMPUS_RE = re.compile(r"^\s*[0-9０-９]+\s*号館|研究室|zoom|オンライン|online|teams|meet\.google|webex|https?://",
                          re.IGNORECASE)
 REASON_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\s+\S")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TEXT = {"scope": "枠表 + 全カレンダー", "ack_where": "台帳", "slot_word": "枠"}
 
 Provider = Callable[[date], "tuple[list[dict], list[str]]"]
@@ -137,18 +142,40 @@ def load_ledger(path: Path) -> dict:
 # ---------------------------------------------------------------------------
 # カレンダーの占有
 # ---------------------------------------------------------------------------
+def event_last_day(e: dict) -> str:
+    """予定が掛かる最後の日 ('YYYY-MM-DD')。 end_date が無い・読めない・date 以前なら date (= 1 日の予定)。"""
+    d0 = str(e.get("date", ""))[:10]
+    d1 = str(e.get("end_date") or "")[:10]
+    return d1 if DATE_RE.match(d1) and d1 > d0 else d0
+
+
+def _md_label(iso: str) -> str:
+    return f"{int(iso[5:7])}/{int(iso[8:10])}"
+
+
 def event_occupancies(events: list[dict], d: date, ignore: list | None = None, travel_re=TRAVEL_RE) -> list[dict]:
     iso = d.isoformat()
     seen: set = set()
     out: list[dict] = []
     for e in events:
-        if str(e.get("date", ""))[:10] != iso or e.get("all_day"):
+        d0, d1 = str(e.get("date", ""))[:10], event_last_day(e)
+        if not (d0 <= iso <= d1) or e.get("all_day"):
             continue
         s, en = mins(e.get("start")), mins(e.get("end"))
-        if s is None or en is None or s == en:
-            continue  # 終日相当 / 目印 (開始 = 終了)
-        if en < s:
-            en = 24 * 60  # 日をまたぐ予定はその日の終わりまで
+        if s is None or en is None:
+            continue  # 終日相当
+        span = ""
+        if d1 == d0:
+            if s == en:
+                continue  # 目印 (1 日の予定で開始 = 終了)
+            if en < s:
+                en = 24 * 60  # end_date の無い古い写しの日をまたぐ予定はその日の終わりまで
+        else:
+            # 複数日の予定 = 開始日は開始時刻から、 最後の日は終了時刻まで、 間の日は 1 日中
+            span = f"{_md_label(d0)} {hhmm(s)}〜{_md_label(d1)} {hhmm(en)}"
+            s, en = (s if iso == d0 else 0), (en if iso == d1 else 24 * 60)
+            if en <= s:
+                continue  # その日に掛かる時間が無い (最後の日の 0:00 ちょうどに終わる、 整えていない写し)
         title = str(e.get("title") or "").strip()
         if any(r.search(title) for r in (ignore or [])):
             continue
@@ -156,8 +183,11 @@ def event_occupancies(events: list[dict], d: date, ignore: list | None = None, t
         if key in seen:
             continue  # 同じ予定が複数のカレンダーにある
         seen.add(key)
-        out.append({"kind": "travel" if travel_re.search(title) else "event", "start": s, "end": en,
-                    "title": title, "calendar": str(e.get("calendar") or ""), "location": str(e.get("location") or "")})
+        occ = {"kind": "travel" if travel_re.search(title) else "event", "start": s, "end": en,
+               "title": title, "calendar": str(e.get("calendar") or ""), "location": str(e.get("location") or "")}
+        if span:
+            occ["span"] = span
+        out.append(occ)
     return out
 
 
@@ -267,9 +297,10 @@ def day_label(iso: str, today: date) -> str:
 
 
 def occ_label(o: dict, cal: bool = True, limit: int = 32) -> str:
+    """占有の 1 行。 複数日の予定はその日の部分でなく期間を出す (= 「0:00-24:00 会期」 では何の予定か読めない)。"""
     t = o["title"] if len(o["title"]) <= limit else o["title"][:limit] + "…"
     tail = f" [{o['calendar']}]" if cal and o["kind"] != "slot" and o.get("calendar") else ""
-    return f"{hhmm(o['start'])}-{hhmm(o['end'])} {t}{tail}"
+    return f"{o.get('span') or hhmm(o['start']) + '-' + hhmm(o['end'])} {t}{tail}"
 
 
 def visible(item: dict, today: date) -> bool:
@@ -601,6 +632,35 @@ def _selftest() -> int:
     ll = list_lines(res_a, today, "fixture", ["台帳の行が効かない"])
     check(ll[0].startswith("予定の重なり: 2030-09-24 から 7 日先まで (fixture。") and "(うち承知済み 1)" in ll[1]
           and ll[-1] == "  ⚠️ 台帳の行が効かない", "T23 --list の行 (承知済みも・台帳の無効行も)")
+
+    # 複数日の予定 (end_date = 最後の日、 その日を含む)
+    m_events = [
+        E("2030-09-25", "18:00", "09:30", "学外の会期", end_date="2030-09-27"),
+        E("2030-09-26", "15:00", "17:00", "木曜の会議"),
+        E("2030-10-01", "10:00", "10:00", "同じ時刻の 2 日", end_date="2030-10-02"),
+        E("2030-09-25", "22:00", "02:00", "日をまたぐ古い写し"),   # end_date なし = その日の 24:00 まで (従来どおり)
+        dict(date="2030-09-25", end_date="2030-09-27", all_day=True, title="終日の会期", calendar="カレンダー丙"),
+    ]
+    res_m = detect(m_events, today, days=8, provider=provider, ledger=ledger)
+    on = lambda iso, *words: any(c["date"] == iso and all(w in blob(c) for w in words) for c in res_m["conflicts"])  # noqa: E731
+    check(on("2030-09-27", "学外の会期", "枠「科目乙"), "T24 複数日の予定の最後の日 (0:00-9:30) が枠と重なる")
+    check(on("2030-09-26", "学外の会期", "木曜の会議"), "T24 複数日の予定の間の日は 1 日中の占有")
+    check(on("2030-10-02", "同じ時刻の 2 日", "枠「科目甲"), "T24 開始と終了が同じ時刻の複数日の予定は目印にしない")
+    check(on("2030-09-25", "学外の会期", "日をまたぐ古い写し")
+          and not any("日をまたぐ古い写し" in blob(c) for c in res_m["conflicts"] if c["date"] != "2030-09-25"),
+          "T24 end_date の無い日をまたぐ予定は従来どおりその日の 24:00 まで")
+    check(not any("終日の会期" in blob(c) for c in res_m["conflicts"]), "T24 複数日でも終日の予定は数えない")
+    sec_m = render_section(res_m, today)
+    check(any("9/25 18:00〜9/27 9:30 学外の会期" in ln for ln in sec_m), "T24 複数日の予定は期間で表示する")
+    res_mn = detect(m_events, date(2030, 9, 27), days=0, provider=provider, ledger=ledger, now=datetime(2030, 9, 27, 10, 0))
+    res_mn2 = detect(m_events, date(2030, 9, 27), days=0, provider=provider, ledger=ledger, now=datetime(2030, 9, 27, 11, 0))
+    check(any("学外の会期" in blob(c) for c in res_mn["conflicts"]) and not any("学外の会期" in blob(c) for c in res_mn2["conflicts"]),
+          "T24 今日の終わった組は、 複数日の予定もその日の終了時刻で外す")
+    same = detect([dict(e, end_date=e["date"]) for e in events], today, days=7, provider=provider, ledger=ledger)
+    bad_end = detect([dict(e, end_date="2030-09-01") for e in events] + [dict(events[0], end_date="きのう")], today, days=7,
+                     provider=provider, ledger=ledger)
+    keys = lambda r: sorted(c["key"] for c in r["conflicts"])  # noqa: E731
+    check(keys(same) == keys(res) and keys(bad_end) == keys(res), "T25 1 日の予定の結果は end_date の有無・読めない値で変わらない")
 
     # 台帳の読み方
     with tempfile.TemporaryDirectory() as td:
