@@ -49,7 +49,7 @@ claude-config/
 │   ├── batch-text-edits.md                 # 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape) + TeX の数式に macro を正規表現で一括挿入するとき (#regex-into-label-keys)
 │   ├── beamer-slides.md                    # Beamer/metropolis または編集可能な PPTX / Keynote で研究スライドを作る・直すとき + 既存デッキの「同じ感じ」を引き継ぐとき + 「最新のデザインでかっこよく」 と頼まれたとき (#design-from-principles)
 │   ├── book-purchase-lookup.md             # 図書館に本の購入を頼む前 (書誌を揃える・その館に所蔵が無いか・新刊で買えるか・いくらか) + 共有された本のリストや著者の著作一覧から購入候補を作るとき + 「この著者の本を全部」「この分野の定番を全部」 と頼まれたとき + 申込メールを候補リストから起こすとき
-│   ├── calendar-conflict-detection.md      # 予定の重なり (ダブルブッキング) を機械で先に警告する仕組みを作る・直すとき + カレンダーに入っていない予定 (授業の時間割・当番表・定例の枠表) を重なりの判定に入れるとき + 重なりの前日・数日前の通知の出し方を決めるとき + 重なりの誤検出が多いとき
+│   ├── calendar-conflict-detection.md      # 予定の重なり (ダブルブッキング) を機械で先に警告する仕組みを作る・直すとき + カレンダーに入っていない予定 (授業の時間割・当番表・定例の枠表) を重なりの判定に入れるとき + 重なりの前日・数日前の通知の出し方を決めるとき + 重なりの誤検出が多いとき + 人に日程の候補を出す前に空きを見るとき (#proposing-candidate-dates)
 │   ├── campussquare.md                     # 大学の教務システム CampusSquare for WEB (シラバス・履修者名簿・成績登録) を読む・扱うとき + 名簿 CSV を科目別に分けるとき + 成績を CSV で一括登録するとき + 内蔵 browser でログイン画面が出て「読めない」 と言いそうになったとき + 配られた授業計画表の xlsx で自分の登録 (開講期・曜時) を照合するとき (#plan-table-xlsx) + ダウンロードセンターの配布資料 (会議資料・手引き・様式) を一覧・取得・展開するとき (#download-center) + 掲示板 (お知らせ) を読むとき・案内された「お知らせ」 の資料が見つからないとき (#bulletin-board) + 自分の授業の実施教室・コマを確かめるとき (#teacher-schedule)
 │   ├── chalkboard-close-up-merge.md        # 板書写真 PDF に close-up annotation を統合するとき
 │   ├── chalkboard-photo-archive.md         # 授業の板書をスマホで撮った写真を、 授業ごとの PDF にまとめて置き場所に保管し受講者に見せる仕組みを作る・回すとき + 板書 PDF の「第何回」 がずれた・上書きしてしまったとき
