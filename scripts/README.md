@@ -144,6 +144,7 @@
 - **[discord-member-lookup.py](discord-member-lookup.py)** — 取得済みの Discord message log (JSON) から、名前でメンバーの user ID を根拠つきで引く（本人の自己紹介 / 他人の mention / ユーザー名一致の 3 段）。 --selftest 内蔵。 conventions/discord-bot.md#group-call-mentions
 - **[discord-org-build.py](discord-org-build.py)** — 組織図 YAML (部 → 課 → 係 + persona 名) から Discord server の器を冪等に作る (stdlib + PyYAML)。
 - **[discord-post.py](discord-post.py)** — canonical Discord Bot API poster (stdlib only).
+- **[doc-text-diff.py](doc-text-diff.py)** — 同じ文書の 2 つの版 (docx / pdf / md / txt の任意の組) の文字の差を出す — 改訂版を verbatim で取り込む前後の照合用。--selftest 内蔵 (network 不要)。
 - **[docx-to-pdf.sh](docx-to-pdf.sh)** — Word docx/doc → PDF 変換（macOS 既定 Word 忠実版 → --pages で Pages → 非 macOS LibreOffice、Word 経路は事前 grant 済み staging dir 経由で sandbox dialog を回避、office-automation.md#docx-to-pdf-pages）
 - **[docx_decl_patch.py](docx_decl_patch.py)** — python-docx の Document.save() を auto-patch し XML 宣言を Word 形式(double-quote+CRLF)で書く（厳格 Word の「破損」回避、 save 時 source 修正・lazy import hook、 office-automation.md#docx-checkbox-content-control）
 - **[downloaded-file-scan.py](downloaded-file-scan.py)** — ネット由来の file (PDF・zip・Office・script など) を repo や作業 dir に取り込む前に、 来歴 (quarantine)・中身の種類・能動要素・埋め込み・署名 scan (ClamAV が在れば) を検査し、 取り込み先に残す記録の 1 行を出す。 --selftest 内蔵。 conventions/downloaded-file-scan.md#scan-before-import

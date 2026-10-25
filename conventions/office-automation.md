@@ -94,6 +94,7 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 | 研究費様式の提出後に機関事務から**差戻し** (経費の費目分け / 機関コード / 「本人に下線」 等の書式指示欠落) | 費目区分・コード verify・format 指示は fill driver 設計時に発火しないと構造的に落ちる (転記は書式を運ばない) | 差戻し対応 checklist = [erad-submission.md#sashimodoshi-response](erad-submission.md#sashimodoshi-response)、 費目 = [#keihi-himoku-kubun](erad-submission.md#keihi-himoku-kubun)、 コード = [#kikan-code-verify](erad-submission.md#kikan-code-verify)、 下線 = [`xlsx-rich-text-underline`](#xlsx-rich-text-underline) fill-driver caveat |
 | 計算式を持つ xlsx に**画像を挿入**したい (図の貼付欄等) / openpyxl `add_image` 後に cache が消える・Excel 再保存で画像が消える | openpyxl save は cache を落とし、 その復元の Excel open+save が openpyxl 由来 drawing を落とす (= 堂々巡り) | **Excel clipboard paste 一択** (`paste worksheet`、 サイズは PNG の DPI で制御) → [`xlsx-image-insert-excel-paste`](#xlsx-image-insert-excel-paste) |
 | **表 PDF を読んだら**値が隣の行・列と混ざる / 「誰の行の値か」 を取り違える / 数値列が「読めない」 ように見える | plain `get_text()` は内部格納順の連結で視覚順を保証しない (= 崩れて見えないまま誤帰属) | **layout-aware 抽出 ladder** (words+bbox y-band → dict → find_tables → clip) を降りる、 「読めない」 結論は ladder 全段の後 → [`pdf-table-layout-aware-reading`](#pdf-table-layout-aware-reading) |
+| PDF で届いた新しい版を手元の写しに一字一句当てると、 **元に無い空白** (和文と数字の間・段落の終わり) が大量に混ざる | PyMuPDF が字の見た目の隙間に空白を補う (Word の和欧間の自動の空きも隙間) | 字の差と空白の差を分けて比べ、 空白は PDF に実在する字だけで決める (`doc-text-diff.py`) → [`pdf-text-fake-spaces`](#pdf-text-fake-spaces) |
 
 ---
 
@@ -1727,6 +1728,19 @@ assert fitz.open("p1.pdf").page_count == 1
 **Why (= fill 側と同格の工程として扱う)**: 書き側 (fill / 変換) は本 doc で厚く規律化されている一方、 読み側は「fitz で読めば OK」 と暗黙に信頼されがち。 だが plain `get_text()` は **lossy な解釈器** (= [`office-automation-principles.md`](office-automation-principles.md) の「処理 = lossy 解釈器の連鎖」 の読み方向) であり、 表 PDF では**沈黙して間違える**。 誤帰属した値が mail / 記録 / 判断に流れると訂正コストは抽出 1 回のコストの数十倍。
 
 **origin**: ある申請書類の研究組織表。 plain `get_text()` 出力で隣接する分担者の役割分担 wording が行間に混ざり、 **別の分担者の担当テーマを本人の担当と誤帰属して報告** + 経費・エフォート数値列を「layout 依存で抽出できず」 と早断 → user 訂正 (「読めない、 とかありえんやろ」) → `get_text("words")` + y-sort で全行・全数値を回収 (= 経費値は取れ、 エフォート欄は**真に空欄** = 承諾操作時の本人入力待ち、 という「空欄 vs 抽出不能」 の区別も ladder で初めて確定)。
+
+### <a id="pdf-text-fake-spaces"></a>PDF から抜いた字の空白は信用しない (= 新しい版が PDF で届いたときの verbatim 照合)
+
+**症状**: 他人が書いた文書の新しい版が docx でなく PDF で届き、 手元の写しに一字一句当てようとして PDF の字を抜くと、 和文と半角数字の間 (「5 冊」「第2 版」 のような形) や句点の後に**元の文書に無い空白**が出る。 そのまま写すと空白の差が大量に混ざり、 本物の空白の変更と区別できない。
+
+**原因**: PyMuPDF は既定で、 字と字の**見た目の隙間**に空白を補う。 Word が和欧間に入れる自動の空き (文字ではない) も隙間なので空白として出る。 段落の終わり・行の折り返しにも空白が付く (実測)。 逆に全角空白は PDF の字の並びからは確定できないことがある。
+
+**規律**:
+1. **字の差と空白の差を分けて比べる** — まず空白を全部除いて字の足し引きだけを出し、 それだけを写しに当てる。 空白は別に見る。 道具 = [`scripts/doc-text-diff.py`](../scripts/doc-text-diff.py) (docx / pdf / md / txt の任意の組、 既定 = 空白を除いた字の差、 `--whitespace` = 空白だけの差、 行の継ぎ目の差は既定で隠す)。
+2. **PDF に実在する空白の字だけを拾う** — 新しく入った文の空白を決めるときは `TEXT_INHIBIT_SPACES` を付けて抜く (`doc-text-diff.py --pdf-real-spaces`、 PyMuPDF なら `get_text(..., flags=… | fitz.TEXT_INHIBIT_SPACES)`)。 これで補われた空白は消え、 文書が持っていた空白だけが残る。
+3. **全角空白と行末の空白は PDF だけでは決まらない** — 決まらなかった箇所はそう記録に書く。 空白まで一致させる必要があるなら、 送り主に元の docx を頼む。
+4. **色の印も PDF で読める** — Word のマーカーは PDF では塗りの矩形 (`page.get_drawings()` の `fill`)、 色の字は span の `color` に出る。 「マーカーを外した版か」 は矩形の数で確かめる (同じ道具が数える)。
+5. **当てた後に写しと新しい版をもう一度照合する** — 残る差が、 写しの側だけの意図した置き換えだけであることを確かめ、 その command を記録に書く (照合の根拠を file に残す)。
 
 ### <a id="docx-to-pdf-pages"></a>docx → PDF: Pages.app AppleScript が macOS では最も robust
 
