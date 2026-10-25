@@ -381,7 +381,7 @@ Do[WriteString[s, "== cell ", i, " ==\n",
 Do[If[! MemberQ[skip, i], ReleaseHold[ToExpression[cells[[i]], StandardForm, Hold]]], {i, 1, last}];
 ```
 
-- `Hold` のまま文字列にすると、 セルの代入 (後で値が入る `xd = xSlit` のような定義を含む) と式が書かれたとおりに読める。 ギリシャ文字は出力の文字コードで化けることがある (実測) = 記号の名前で読む。
+- `Hold` のまま文字列にすると、 セルの代入 (後で値が入る `xd = x0` のような定義を含む) と式が書かれたとおりに読める。 ギリシャ文字は出力の文字コードで化けることがある (実測) = 記号の名前で読む。
 - 番号は `NotebookImport` が返した順の番号で指す。 notebook の `In[n]` とは一致しない (連続するセルが 1 つにまとまることがある = 実測)。
 - 評価して得た式は `Function[{u, v}, Evaluate[N[expr /. {y1 -> u, y2 -> v}]]]` で数値関数に固めると、 1 点の評価が速い。 機械精度の丸めの大きさは、 同じ式を `N[…, 40]` で評価した値と比べて測れる。
 - 読むだけで front end を起動しないので、 notebook は変わらない。 終わったら `git diff -- <notebook>` で確かめる。
