@@ -100,6 +100,9 @@ sections:
   - id: truncated-profile-asymptotics
     level: 3
     title: "有限区間で切った profile の漸近"
+  - id: zero-inventory-across-cut
+    level: 3
+    title: "cut を越えて解析接続した関数の零点を数える (伝播関数の複素極など)"
   - id: operator-time-state-order
     level: 2
     title: "一般時刻の演算子と初期状態の依存順を分ける"
