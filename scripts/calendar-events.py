@@ -18,6 +18,9 @@ MCP の create_event が使えない session (= server 未接続 / bulk) と、
   - **複数日の予定を開始日だけで出すと、 開始日だけの予定と読み、 期間の途中の日を
     空きとして人に出す** (= 実測)。 list は終わりの日も出し (例 2030-01-07〜01-11)、
     add の前の同じ日の一覧と gaps は期間に入る日すべての予定として扱う (= event_days)
+  - **API は時刻を calendar の timeZone で返す** ので、 timeZone が UTC の calendar
+    (import した calendar など) では時刻も日付も UTC のまま出る (= 実測、 9 時間ずれ、
+    朝の予定は前の日に載る)。 読むときも CLAUDE_CALENDAR_TZ を timeZone として渡す
 
 ⚠️ **layer 1 なので calendar id も token path も持たない**。 呼び出し側 (= 個人層) が
    env で渡す。 個人の calendar id は layer 3 の SoT に置く (= 公開 repo に焼かない)。
@@ -26,7 +29,7 @@ env:
   CLAUDE_CALENDAR_ID         書き先 calendar の id                      (必須)
   CLAUDE_CALENDAR_TOKEN_DIR  credentials.json + gcp-oauth.keys.json の dir (必須)
   CLAUDE_CALENDAR_CRED_NAME  credential file 名 (default credentials.json)
-  CLAUDE_CALENDAR_TZ         timeZone (default Asia/Tokyo)
+  CLAUDE_CALENDAR_TZ         timeZone (default Asia/Tokyo)。 書く予定の timeZone と、 読む時刻の表し方の両方
 
 使い方:
   calendar-events.py list   --from 2030-01-10 --to 2030-01-14
@@ -378,10 +381,11 @@ def fetch(svc, cal: str, frm: str, to: str) -> list[dict]:
             return f"{x}:00+09:00" if len(x) == 16 else x
         return f"{x}T{'00:00' if not end else '00:00'}:00+09:00"
 
+    tz = os.environ.get("CLAUDE_CALENDAR_TZ", "Asia/Tokyo")   # 無いと calendar の timeZone (UTC もある) で返る
     out, token = [], None
     while True:
         r = svc.events().list(calendarId=cal, timeMin=iso(frm), timeMax=iso(to, True),
-                              singleEvents=True, orderBy="startTime",
+                              singleEvents=True, orderBy="startTime", timeZone=tz,
                               pageToken=token, maxResults=2500).execute()
         for e in r.get("items", []):
             out.append({
@@ -476,7 +480,7 @@ def cmd_patch(a) -> int:
     svc = get_service()
     cal = _cfg("CLAUDE_CALENDAR_ID")
     tz = os.environ.get("CLAUDE_CALENDAR_TZ", "Asia/Tokyo")
-    cur = svc.events().get(calendarId=cal, eventId=a.id).execute()
+    cur = svc.events().get(calendarId=cal, eventId=a.id, timeZone=tz).execute()   # 読む時刻を書く時刻の timeZone に揃える
     rem = [int(x) for x in a.reminders.split(",")] if a.reminders else None
     body = build_patch_body(cur, tz, start=a.start, end=a.end, summary=a.summary,
                             append_description=a.append_description, reminders=rem)
@@ -667,6 +671,25 @@ def selftest() -> int:
     check(all(allday.get(d) == ["終日 01-07〜01-11 集中の行事"] for d in event_days("2030-01-07", "2030-01-12"))
           and "2030-01-09" not in busy,
           "T38: 終日の予定は busy に入れず、 掛かる日すべてに期間つきの見出しを出す")
+
+    class _Svc:   # events().list(**kw).execute() の kw を記録するだけの偽物 (API は叩かない)
+        def __init__(self):
+            self.calls: list[dict] = []
+        def events(self):
+            return self
+        def list(self, **kw):
+            self.calls.append(kw)
+            return self
+        def execute(self):
+            return {"items": []}
+    fs, saved = _Svc(), os.environ.pop("CLAUDE_CALENDAR_TZ", None)
+    try:
+        fetch(fs, "cal", "2030-01-10", "2030-01-11")
+    finally:
+        if saved is not None:
+            os.environ["CLAUDE_CALENDAR_TZ"] = saved
+    check(bool(fs.calls) and fs.calls[0].get("timeZone") == "Asia/Tokyo",
+          "T39: 読むときも timeZone を渡す (無いと calendar の timeZone で返り、 UTC の calendar は 9 時間ずれる)")
 
     print(f"\n==== RESULT: PASS={ok} FAIL={fail} ====")
     return 1 if fail else 0
