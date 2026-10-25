@@ -21,6 +21,15 @@ fields that identify the work: title, first author surname, journal, volume,
 first page, DOI, and arXiv eprint.  A local descriptive key can therefore be
 checked without being mistaken for an absent INSPIRE record.
 
+INSPIRE's texkey search matches a prefix (a local key "Surname" returns the
+record "Surname:1970ab", a different work), so a texkey hit counts only when
+the record carries the bib key exactly; otherwise the lookup falls through to
+the arXiv eprint and the DOI.  A first author that is a collaboration
+("{X Collaboration} and Person, A. and others") is skipped for the author
+comparison, which then uses the first person listed, because INSPIRE lists
+persons first.  HTML markup in an INSPIRE title ("<i>Example</i> ...") is
+dropped before the titles are compared.
+
 WHAT IT DOES NOT DO
 -------------------
 It checks *identity*, not *relevance* -- whether the cited work actually
@@ -70,6 +79,9 @@ _TEX_TEXT = {
     r"\\&": "&", r"\\ss": "ss",
 }
 _ALNUM = re.compile(r"[^a-z0-9]")
+# INSPIRE titles can carry HTML markup ("<i>Example</i> Survey Data Release 3");
+# the tags are not part of the title.
+_HTML_TAG = re.compile(r"</?[a-zA-Z][^>]*>")
 _LEADING_ALPHA = re.compile(r"^([a-z]+)")
 
 
@@ -162,12 +174,34 @@ def fetch_query(query):
 
 
 def fetch(entry, fetcher=fetch_query):
-    """Return (metadata, matched kind), trying texkey, arXiv, then DOI."""
+    """Return (metadata, matched kind), trying texkey, arXiv, then DOI.
+
+    A texkey hit is accepted only when the record carries the bib key exactly
+    (INSPIRE's texkey search also matches a prefix of another key)."""
     for kind, query in lookup_queries(entry):
         meta = fetcher(query)
-        if meta is not None:
-            return meta, kind
+        if meta is None:
+            continue
+        if kind == "texkey" and entry["key"] not in (meta.get("texkeys") or []):
+            continue
+        return meta, kind
     return None, None
+
+
+_GROUP_AUTHOR = re.compile(r"\b(collaboration|consortium|group|team)\b")
+
+
+def first_person_surname(author_field):
+    """Surname of the first author who is a person (collaborations and
+    'others' skipped), normalized; '' when there is none."""
+    for name in re.split(r"\s+and\s+", author_field):
+        n = norm(name).strip()
+        if not n or n == "others" or _GROUP_AUTHOR.search(n):
+            continue
+        last = n.split(",")[0] if "," in name else n
+        toks = last.split()
+        return toks[-1] if toks else ""
+    return ""
 
 
 def first_page(pages):
@@ -181,7 +215,7 @@ def compare(entry, meta):
     f = entry["fields"]
 
     bib_title = f.get("title", "")
-    ins_titles = [t.get("title", "") for t in (meta.get("titles") or [{}])]
+    ins_titles = [_HTML_TAG.sub("", t.get("title", "")) for t in (meta.get("titles") or [{}])]
     ins_title = ins_titles[0] if ins_titles else ""
     if bib_title and ins_title:
         # Punctuation carries no identity here: "One loop" vs "One-loop" and
@@ -195,9 +229,9 @@ def compare(entry, meta):
 
     bib_author = f.get("author", "")
     if bib_author:
-        surname = norm(re.split(r",| and ", bib_author)[0]).split()[-1:] or [""]
+        surname = first_person_surname(bib_author)
         ins_authors = [norm(a.get("full_name", "")) for a in meta.get("authors", [])]
-        if surname[0] and not any(surname[0] in a for a in ins_authors):
+        if surname and not any(surname in a for a in ins_authors):
             yield "author", bib_author, "; ".join(ins_authors[:3])
 
     pubs = meta.get("publication_info") or [{}]
@@ -340,6 +374,37 @@ def selftest():
     chk("fetch falls through a missing texkey to arXiv",
         fallback_meta is meta and fallback_kind == "arXiv"
         and seen == ['texkeys:"LocalKey"', 'arxiv:"quant-ph/0103144"'])
+    prefix_entry = {"key": "Surname", "fields": {"doi": "10.1000/example"}}
+    other = dict(meta, texkeys=["Surname:1970ab"])
+    seen = []
+    def prefix_fetcher(query):
+        seen.append(query)
+        if query.startswith("texkeys:"):
+            return other                      # INSPIRE matched a prefix of another key
+        return dict(meta, texkeys=["Right:2000xy"]) if query.startswith("doi:") else None
+    pm, pk = fetch(prefix_entry, prefix_fetcher)
+    chk("a texkey hit whose record lacks the exact key falls through to the DOI",
+        pk == "DOI" and pm is not other)
+    exact = dict(meta, texkeys=["Good:1975im"])
+    em, ek = fetch({"key": "Good:1975im", "fields": {}}, lambda q: exact)
+    chk("foil: an exact texkey hit is still accepted", em is exact and ek == "texkey")
+    collab = dict(meta, authors=[{"full_name": "Person, A."}, {"full_name": "Second, B."}])
+    collab_entry = {"fields": {"author": "{Example Collaboration} and Person, A. and others"}}
+    chk("a collaboration listed first is skipped for the author check",
+        not any(d[0] == "author" for d in compare(collab_entry, collab)))
+    wrong_entry = {"fields": {"author": "{Example Collaboration} and Someone, X. and others"}}
+    chk("foil: a wrong person after the collaboration is still caught",
+        any(d[0] == "author" for d in compare(wrong_entry, collab)))
+    html_meta = dict(meta, titles=[{"title": "<i>Example</i> Survey Data Release 3"}])
+    chk("HTML markup in the INSPIRE title is not a finding",
+        not any(d[0] == "title" for d in compare(
+            {"fields": {"title": "{Example Survey Data Release 3: Summary of the contents}"}}, html_meta)))
+    chk("foil: a different title is still caught against an HTML-marked record",
+        any(d[0] == "title" for d in compare(
+            {"fields": {"title": "{Example Survey Data Release 2: Summary}"}}, html_meta)))
+    chk("first_person_surname reads 'Surname, Given' and 'Given Surname'",
+        first_person_surname("Elitzur, S.") == "elitzur"
+        and first_person_surname("Daniel Weiskopf and others") == "weiskopf")
     chk("clean entry has no diff", not list(compare(entries["Good:1975im"], meta)))
     chk("journal abbreviation difference is not a finding",   # 'Phys. Rev. D' vs 'Phys.Rev.D'
         not any(d[0] == "journal" for d in compare(entries["Good:1975im"], meta)))
