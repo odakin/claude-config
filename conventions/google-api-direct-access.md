@@ -292,7 +292,7 @@ Calendar API の予定を読んで日付・時刻を出す・日ごとに数え�
   空き時間では、 時刻つきの予定を開始日は開始時刻〜24:00、 間の日は 1 日中、 最後の日は 0:00〜終了時刻に割る。 終日の予定を空きの計算に入れるかは道具の用途で決め (学会の会期のような印は入れない、 など)、 入れない場合も掛かる日の一覧には出す。
   ⚠️ **日付を落として時刻だけを持つ写し** (開始日 + 開始・終了の時刻) を作ると、 終わりの日は戻らない。 その写しでは、 13:00〜翌日 13:00 の予定は開始 = 終了に見え、 長さ 0 の印として捨てられる。 写しを作る段で終わりの日を持たせる。
 
-実装例 = [`../scripts/calendar-events.py`](../scripts/calendar-events.py) の `last_day` / `event_days` / `day_busy` と、 `fetch` の `timeZone`。
+実装例 = [`../scripts/calendar-events.py`](../scripts/calendar-events.py) の `last_day` / `event_days` / `day_busy` と、 `fetch` の `timeZone`。 最後の日を持たせた写し (1 件 = 開始日 `date` + 最後の日 `end_date` + 時刻) を日ごとの占有に割る例 = [`../scripts/calendar_conflicts.py`](../scripts/calendar_conflicts.py) の `event_last_day` / `event_occupancies` (規則 = [`calendar-conflict-detection.md#multi-day-events`](calendar-conflict-detection.md#multi-day-events))。
 
 ## Token refresh の運用
 
