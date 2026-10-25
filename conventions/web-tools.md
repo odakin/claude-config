@@ -313,6 +313,8 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 | CiNii (`ci.nii.ac.jp/naid/...`) | 旧 `naid` URL は `cir.nii.ac.jp/crid/...` に 301 redirect | redirect 先で再 WebFetch |
 | arXiv **PDF** (`arxiv.org/pdf/<id>`) | WebFetch は PDF stream を summarizer に渡し「binary で読めない」 と返す (abs page は OK)。 取得物は harness の tool-results dir に落ちる (= sealed review では deny path) | `curl -sL -o x.pdf https://arxiv.org/pdf/<id> && pdftotext -layout x.pdf x.txt` を作業 dir で、 `grep -n` で該当箇所を引く (2026-09 実測: 7 本 + 41 pp まで問題なし) |
 | TLS 証明書の切れた data release site (例: 実験 collaboration の release page) | WebFetch: `certificate has expired` | `curl -skL` (http 経路) で取得し file 名と hash を記録。 中身は公開 data product なので改竄 risk は低いが、 hash を review の note に残す |
+| <a id="paper-pdf-routes"></a>OA の出版版 (Springer・OUP の誌面、 PoS の会議録) を curl で | 出版社のサイトが PDF でなく HTML (bot 検査の頁) を返す | INSPIRE の record が出版社の PDF を保管していることがある = `https://inspirehep.net/api/literature/<recid>?fields=documents.url` の URL を curl (`fields=documents` だけでは空が返った record がある、 実測)。 引く論文の一覧と一緒に出す道具 = `ai-collaboration/scripts/inspire-bibliography.py citing` |
+| 学位論文 (機関リポジトリ、 国の URN resolver 経由) | curl は 403、 内蔵 Browser pane は「セキュリティ検証」 の頁で止まる。 OpenAlex・Semantic Scholar に本体が無いことがある | 検証の頁を通す操作はしない。 先に INSPIRE の `documents.url` を見る (学位論文の PDF を保管していた、 実測)。 無ければ人に普通のブラウザで 1 回保存してもらい、 それまでは「未確認 (取得先が機械の読み取りを断る)」 と書く |
 
 ### How to apply
 

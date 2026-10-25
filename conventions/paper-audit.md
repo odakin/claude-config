@@ -583,6 +583,12 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Downstream 2 (published の符号 1 つ、 縮約の途中で落ちる型)**: 盲検や読者の「符号が逆では」 は、 ① 規約に依らない別経路 (例: スピン和の重みを不変量で書き直す) と直接求積の両方で確かめ、 印字 / 訂正 / 直接の 3 列で数点並べる ② その記号が現れる式を source で全数列挙し、 形が変わる式と値だけ変わる式に分ける ③ erratum に書く式番号は preprint でなく誌面の PDF で照合する (版で番号がずれうる) ④ 訂正版が既知の極限を保つことを 1 行書く。 draft は carrier に紐づく file に置き、 共著者への連絡・投稿・preprint の差し替えを段取りとして列挙する (実測: ①〜④ で 1 session)。
 
+<a id="erratum-vor-reading"></a>**③ の誌面の PDF の読み方**: (a) **誌面の PDF と校正刷りを取り違えない** — 校正刷りは 1 頁目の頭に「ARTICLE IN PRESS」 と雑誌の内部番号があり、 頁数も違う。 file 名や置き場所の名前 (「published」) で決めず、 1 頁目の頭と md5 で区別する (実測: 「published」 と名付けた file が校正刷りだった)。 (b) **番号だけでなく中身も読む** — 誌面の本文は著者の最後の source でなく校正で直した形になっていることがあり、 組版で、 著者のどの版の source にも無い誤植が入ることもある (実測)。 見つけた誤植は、 同じ erratum に入れるかを著者に聞く。 (c) **番号は頁の画像で読む** — 式の右端の番号は PyMuPDF の words に出ないことがあるので、 頁を段ごとに画像にして読む (`scripts/pdf-review-render.py --clip`)。 text 層に番号が単独の行で入っている PDF なら、 その並びを source の `.aux` と比べるのは安い照合だが、 display の最後の行と同じ行に入った番号を落とす (実測) = 画像を正にする。
+
+<a id="erratum-downstream-sweep"></a>**Downstream 3 (他人の論文と、 同じ系統の論文)**: 誤りが published なら、 自分の稿の grep (上の Downstream) に加えて 2 つを確かめる。
+(i) **引用している論文が誤った式を値として使っていないか** — INSPIRE で訂正する論文ごとに「この論文を引く論文」 を引いて和集合を取り、 訂正する論文どうしの相互引用と、 2 つ以上を引く本の重複を分けて数える (`ai-collaboration/scripts/inspire-bibliography.py citing <arXiv|recid>...`。 INSPIRE が保管する出版社の PDF の URL も出る)。 各本の PDF で引用の番号を全部拾い (範囲 [21–25] を展開、 `ai-collaboration/scripts/pdf-citation-contexts.py`)、 その周りで式を値として使っているかを読む。 INSPIRE に出ない手元の未発表の原稿は、 symlink を辿る grep (`command grep -R`) で引用の key を探す。 結果は「使っている式 / 影響の有無 / 根拠の頁」 の表にし、 読めなかった本は理由つきで未確認と書く (入手の経路 = [`web-tools.md#paper-pdf-routes`](web-tools.md#paper-pdf-routes))。
+(ii) **同じ系統の他の論文に同じ形の誤りが独立に入っていないか** — 規格化の検査 (同じ状態の内積 = 1 など) を各論文の規約で当て、 検算の script には印字の形が別の値を出す foil を入れる ([`physics-verification-cycle.md#foil-negative-control`](../../ai-collaboration/conventions/physics-verification-cycle.md#foil-negative-control))。 古い論文の特別な場合 (パラメータが等しい場合など) の式は、 訂正後の式の同じ特別な場合と比べると、 訂正の独立な支えになる (Check 4 の姉妹)。 「その論文も同じ量を持っているはず」 は本文を読むまで仮説 (実測: 検査する量そのものが論文に無かった)。 他人の論文で誤りを見つけたら、 既定で非公開。
+
 ## <a id="figure-input-is-a-claim"></a>図に入れる量は本文が導いた量 — 「置き換えられるはず」 の外部値は新しい主張 (2026-09)
 
 **Pattern**: 本文が模型 (特定の交換粒子・特定の結合) で導いた式を数値にする段で、 agent が「この block は一般の振幅に等しいから、 実測値 (現象論の parametrization) を入れた方が物理的」 と判断し、 図の入力だけを本文に無い量に差し替える。 図と caption はその外部値の語彙で書かれ、 本文のどの式もそれを導いていない。 著者から見れば「勝手に変えた量で、 今の計算に関係が無い」 = 図が論文を説明しなくなる。
