@@ -210,6 +210,21 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 
 **起源**: 2026-09-12 の盲検 review がこの配置を「式番号が 3 行目に単独で落ちる」 と should-fix で報告し、 本節も一度その前提で書かれた。 著者が据え置き、 同じ日のうちに「欠陥ではない」 へ訂正した (= reviewer 側の誤判定の記録、 見慣れない配置は欠陥の証拠ではない)。
 
+## <a id="qed-alone-after-display"></a>証明が数式で終わると ■ だけが次の頁に回る — `\qedhere` は番号つきの式の番号を消す
+
+**何が起きるか**: amsthm の `proof` が別行立ての数式で終わると、 ■ は数式の次の行に 1 つで置かれる。 数式の直後は頁を割ってよい所 (`\postdisplaypenalty` = 0) なので、 そこで頁が割れると ■ だけが次の頁の頭に出る。
+
+- **`\qedhere` は番号つきの amsmath の式では使えない**: ■ を数式の最後の行の右端に置く代わりに、 その行の式番号を消す (実測。 番号を参照していれば参照が壊れ、 後の番号も 1 つずれる)。 番号の無い式 (`align*` など) なら使える。
+- **■ の行と数式を離さない手**: 証明の最後の数式だけ `\postdisplaypenalty` を 10000 にする (LaTeX の既定で `\predisplaypenalty` も 10000 なので、 頁が足りなければ数式の 1 行前から次の頁へ移る)。 「最後の数式か」 は、 数式を組む macro (`\al{…}` 型) の後ろを覗き、 空白と空行を飛ばして `\end{proof}` が来るかで決める (`\futurelet` で見て、 `\end` なら引数を取って名前を比べ、 違えば `\end{…}` を元に戻す)。 penalty は数式の環境の外 (`\begin` の前) で設定する (環境の中の cell で設定しても group を出ると消える)。
+- **確かめ方**: ■ を文字列 (`\renewcommand{\qedsymbol}{QEDMARK}` など) にした試しの文書で、 前に文を足して長さを変えながら組み、 前の定義で ■ が数式と別の頁になる長さを見つけ、 同じ長さを新しい定義で組む。 本全体は前と後の定義で組み比べて頁の画素が同じか ([`compare-tex-builds.py --pixels`](../../ai-collaboration/scripts/compare-tex-builds.py)、 割れていない所は変わらない)。
+
+## <a id="dots-before-closing-delimiter"></a>amsmath は `\cdots`・`\dots` の直後が閉じ括弧か `$` のとき右に `\,` を足す — 括弧の中に点だけだと左右が揃わない
+
+**何が起きるか**: amsmath の `\cdots` (と `\dotso`・`\dotsc`) は、 直後の字を覗いて、 閉じ括弧 (`)` `]` `\}` `\right` `\bigr` …)・数式の終わり `$`・`,` `;` `.` のとき点の右に `\,` を足す (`\extrap@` / `\extra@`)。 `(x_1, \dots)` のように点の左にカンマの後の空きがある並びではこれで左右が揃うが、 `\left(\cdots\right)` や `$\dots$` だけの数式のように点の左が開き括弧か数式の頭だと、 右だけが細い空き 1 つ分広い (実測 = 括弧と点のインクの間が左 1.45pt・右 3.1pt、 10pt)。 log にも警告にも出ない。
+
+- **直し方 (LuaTeX)**: `\extra@` を包み、 amsmath が `\,` を足すと決めたときだけ、 今の数式の最後の要素を Lua で見る (`tex.nest[tex.nest.ptr].tail` が空 = 数式の頭、 開きの noad、 または `\left` の fence)。 点の左がそれで、 右が閉じ括弧か `$` なら `\,` を足さない。 それ以外 (`(1,\dots)`・`(1+\cdots)`) は amsmath のまま。 pdfTeX / XeTeX では今の数式の最後の要素を見られないので、 原稿の側で `\pn{\cdots}` のような書き方を 1 つの macro にして、 そこで点の右の空きを打ち消す。
+- **確かめ方**: `\pn{\cdots}` / `(\cdots)` / `(\dots)` / `(1,\dots)` / `(1+\cdots)` を 1 行ずつ組み、 高解像度の画像で隣り合うインクの塊の間を測る。 本全体は前と後で組み比べる (変わるのは点だけの括弧と、 点だけの行内数式の右の空き)。
+
 ## <a id="symbol-width-repagination"></a>記号幅の変わる一括置換は、 総頁数が同じまま頁割りだけ動かす — `.aux` の label→頁 で見る (2026-09-12)
 
 **症状**: 記法の一括置換 (下付き添字を縦棒つきの label に替える等) で本文の文字列長が変わると、 総頁数は不変でも**付録の開始頁・表・図の頁**が動く。 目次の頁番号も変わる。
@@ -278,6 +293,8 @@ comm -23 <(grep -o '^\\bibitem{[^}]*}' paper.bbl | sed 's/.*{\(.*\)}/\1/' | sort
 実 incident (2026-08-04): 共著論文の baseline 比較で `TEXINPUTS="$SRC:"` を使い、 共著者が当日追加した cite 1 件を「未解決」 と誤報告しかけた。 `.bbl` には `\bibitem` があるのに `.aux` の `\bibcite` が 1 件だけ足りない、 が決め手だった。 **根治は scratch dir を汚さないことでなく、 source dir 側の古い生成物を掴ませないこと** — source tree で一度でも in-place compile したことがあるなら常に該当する。
 
 ⚠️ 同じ shadowing は `\input` / `\includegraphics` の解決先でも起きる (= source dir 側の古い生成 tex / 古い図を掴む)。 cwd 優先は path 変数 3 つ全部に効かせる。
+
+<a id="stale-copy-in-scratch-cwd"></a>⚠️ **逆向きの shadowing — cwd を先に見るなら、 cwd は毎回新しい dir に**: 前の試しで preamble や macro の file を写した scratch dir を使い回すと、 cwd を先に見るので、 その古い写しが source dir の新しい file を隠す。 `$SRC//` (再帰) にすると、 source dir の下の古い写し (build の写しの dir など) も拾う。 試しの文書が「直す前の挙動」 を出し続けて、 仕掛けが効いていないと誤って結論しかけた (実測)。 試しの文書は `mktemp -d` の dir で組み、 log で読んだ path を確かめる (`grep -o '([^ ()]*preamble.tex' t.log`)。
 
 ⚠️ <a id="eq-number-from-current-build"></a>**人が式番号・頁で指したときも、 source dir に残った `.aux` で引かない**: 共著者が「(77) 式」 と書いたら、 その番号は相手が読んだ版 (送った PDF・いまの版) のもの。 source dir の `.aux` は前に in-place で組んだ古い版のことがあり、 同じ label が別の番号を指す (実測)。 いまの版を tree 外で組み、 その `.aux` の `\newlabel` で番号から label を引く。 相手が読んだのが差分の PDF なら、 その PDF の番号とも突き合わせる。
 
@@ -994,6 +1011,13 @@ curl -s https://api.crossref.org/works/10.1007/978-981-19-3079-9 | python3 -c "i
 - 上記 `[bookmarks=true,...]` 設定はリンク本文を黒のままにし、PDF annotation の薄い枠 (border box) のみ追加する。枠表示は viewer 依存（Preview/Adobe では薄く表示、印刷では非表示）
 - 完全に枠も色も無くしたい場合は `\hypersetup{hidelinks}` を追加
 - 既存の `\hypersetup{colorlinks=true}` がある場合はリンク色を改善するため上記に migrate する
+
+<a id="hyperref-publish-only"></a>**紙で読む本の原稿は、 執筆中は hyperref を切り、 画面で配る版だけに入れる手がある**: 刷った本の読者はリンクもしおりも使わない。 切り替えは preamble で `\ifdefined\<名前>` のときだけ hyperref を読み、 配る版を組む make の target が写しの入口の頭にその `\def` を足して組む (repo 直下の PDF と latexmk の記録を変えない)。 hyperref を外すと、 hyperref が黙って隠していたものが出る:
+
+- `\texorpdfstring` が未定義になる → 外した側で `\providecommand{\texorpdfstring}[2]{#1}`。 `\nameref` は `nameref` パッケージ単体で使える。
+- hyperref ありで組んでいた頃の索引 (`.ind`) に `\hyperpage{…}` が残り、 最初の組版が `Undefined control sequence` で止まる → `\providecommand{\hyperpage}[1]{#1}` を置く (latexmk は止まった回の後に索引を作り直さないことがある = 実測。 そのときは写しの `.ind` と `.fdb_latexmk` を消して組み直す)。
+- <a id="jsclasses-footnote-leading-space"></a>**jsclasses / ltjsclasses の脚注の頭に空白が残る**: このクラスは `\footnote{…}` の中身を引数でなく `{` からのかたまりとして読む (`\verb` を使えるように。 `\jsc@f@@t` が `\let` で `{` を取る) ので、 `\footnote{` の直後の改行が空白になり、 番号と本文の間が少し広がる。 hyperref は脚注を引数で読み直すので、 この空白を消していた (実測 = hyperref を外したら脚注のある頁だけ見た目が変わった)。 外した側で `\def\jsc@f@@t{\bgroup\aftergroup\jsc@@foot\afterassignment\ignorespaces\let\jsc@next}`。 hyperref ありとなしで段落の頭の node を書き出して比べると見つかる (`pre_linebreak_filter` で、 glue の subtype 13 = ソースの空白)。
+- **確かめ方**: 同じ原稿の写しから両方の版を組み、 頁の画素を比べる ([`compare-tex-builds.py --pixels`](../../ai-collaboration/scripts/compare-tex-builds.py)、 リンクの枠は描かれない)。 違いがリンクとしおりの有無だけかは PyMuPDF で数える (`sum(len(p.get_links()) for p in doc)`、 `len(doc.get_toc())`)。 PDF の byte を `/Link` で grep すると、 LuaTeX は object を圧縮した stream に入れるので 0 になる (実測)。 著者が原稿を書き進めている repo では、 時間をおいて組んだ 2 つの PDF の差に原稿の変更が混ざるので、 両方を同じ写しから続けて組む。
 
 ## <a id="pre-commit-hook"></a>pre-commit hook（Unicode→LaTeX 自動修正）
 `setup.sh` が **全リポに自動インストール** (Step 6)。 hook 自体が staged file 中の `.tex/.bib/.bst/.cls/.sty` の有無を判定し、 LaTeX file 不在の repo では no-op で exit 0 (`scripts/pre-commit-bib` L31-35)。 よって LaTeX file 検出は install 時に不要、 全 repo install で robust。
