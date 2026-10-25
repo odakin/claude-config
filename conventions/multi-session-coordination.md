@@ -671,7 +671,8 @@ orientation 直後の silent stall (session は running のまま・活動 times
    | 原因が構造にある失敗の RCA | 既知の型の RCA (手順が規約にある) |
 
    料金の比 (Claude API の定価、 一次情報 = API の価格表): Fable 5.1 は Opus 5.5 の 2.5 倍、 Opus 5 の 2 倍 (入力・出力とも)。 定額の app でも premium の budget と 1 turn の時間 (Fable の turn は長い) を払う。
-4. **逆向きの兆候** (下位 tier に難しすぎた): 成果物が依頼書を言い換えて終わる / 節どうしが矛盾する / 「確認した」 に証拠が無い / 依頼書に答えのある blocker を何度も返す / 受領側で導出し直す羽目になる。 出たら上位 tier の session に回すか本人に聞く。
+4. **受け手も区切りで読み直す**: spec が model を指定している worker は、 開始時だけでなく commit と submit の前にも `scripts/session-model.py self` を読む (picker は途中でも変わる。 依頼元が上限を見て切り替えることもある)。 途中で変わっていたら、 submit (か返信の note) に、 どの成果物をどの model で作ったかを書く (依頼元はそれで検収できる = 実測)。 気づく手がかり = commit の attribution の system-reminder に出る model 名が変わる (実測)。
+5. **逆向きの兆候** (下位 tier に難しすぎた): 成果物が依頼書を言い換えて終わる / 節どうしが矛盾する / 「確認した」 に証拠が無い / 依頼書に答えのある blocker を何度も返す / 受領側で導出し直す羽目になる。 出たら上位 tier の session に回すか本人に聞く。
 
 <a id="premium-launch-reason"></a>**上位 tier と max は、 その仕事が要るものを 1 行で言えるときだけ頼む — 分野・repo・前の名指しで選ばない**:
 
