@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Find bare parenthetical cross-references and misplaced \\labelcref numbers.
+"""Find bare parenthetical cross-references and misplaced \\labelcref / \\eqref numbers.
 
 Usage:
   python3 check-latex-crossrefs.py paper.tex appendix.tex [--report audit.json]
   python3 check-latex-crossrefs.py paper.tex --baseline HEAD --report audit.json
   python3 check-latex-crossrefs.py paper.tex --list-all
   python3 check-latex-crossrefs.py paper.tex --no-labelcref-form
+  python3 check-latex-crossrefs.py paper.tex --no-eqref-form
   python3 check-latex-crossrefs.py --selftest
 
 Checks literal parentheses and the common \\pn{...} wrapper. Recognizes
@@ -34,6 +35,13 @@ before "~\\labelcref" is not reported. A \\labelcref already reported as a
 bare parenthetical is not reported again. --no-labelcref-form skips this check
 for manuscripts that do not use the two-tier style.
 
+The same placement check runs on \\eqref, which prints the same bare "(N)".
+A manuscript without cleveref writes the independent tier as "Eq.~\\eqref"
+(or "Eqs.~", "Equation~"); a type word before it counts as the noun, so that
+form is never reported, and "noun~\\eqref" is the appositive tier. A second
+\\eqref joined by "and"/"or"/"to" to a preceding reference is accepted with
+or without "~" ("Eqs.~\\eqref{a} and \\eqref{b}"). --no-eqref-form skips it.
+
 Comments, verbatim-like environments, \\verb, and standard math regions
 (including \\al/\\als) are masked without changing source positions.
 Only supplied files are inspected; includes and arbitrary macros are not
@@ -43,7 +51,7 @@ No automatic rewrite is attempted: the actual relation must be read.
 --baseline REF additionally checks that reference commands, label bindings,
 citations, and protected math/comment/verbatim regions have not changed.
 
-Exit 1 means bare or \\labelcref-placement candidates remain, 0 means none in
+Exit 1 means bare or \\labelcref / \\eqref placement candidates remain, 0 means none in
 the inspected syntax, and 2 means an input/CLI error. This heuristic is not a
 full TeX/style proof.
 """
@@ -81,7 +89,7 @@ BEGIN = re.compile(r"\\begin\s*\{(" + "|".join(map(re.escape, IGNORED_ENVS)) + r
 MATH_WRAPPER = re.compile(r"\\(?:al|als)\s*\{")
 VERB = re.compile(r"\\verb\*?([^A-Za-z\s])")
 VERBATIM_ENVS = ("verbatim", "Verbatim", "lstlisting", "minted")
-LABELCREF = re.compile(r"\\labelcref\s*\{[^{}]*\}")
+LABELCREF = re.compile(r"\\(?P<cmd>labelcref|eqref)\s*\{[^{}]*\}")
 REF_TAIL = re.compile(
     r"\\(?:[cC]ref(?:range)?|[aA]utoref|labelcref|eqref|ref)\*?\s*\{[^{}]*\}"
     r"(?:\s*\{[^{}]*\})?\s*$"
@@ -328,7 +336,7 @@ def labelcref_role(text, ends, s):
     return "noun", tied
 
 
-def inspect_labelcref(text, path="<memory>"):
+def inspect_labelcref(text, path="<memory>", labelcref=True, eqref=True):
     regions = []
     masked = mask_nonprose(text, regions=regions)
     ends = {end: (start, kind) for start, end, kind in regions}
@@ -342,8 +350,11 @@ def inspect_labelcref(text, path="<memory>"):
         s = match.start()
         if escaped(text, s) or any(start <= s < end for start, end in reported):
             continue
+        cmd = match.group("cmd")
+        if (cmd == "labelcref" and not labelcref) or (cmd == "eqref" and not eqref):
+            continue
         role, tied = labelcref_role(text, ends, s)
-        if role == "continued":
+        if role == "continued" or (role == "joined" and cmd == "eqref"):
             form = "continuation"
         elif role == "comma":
             form = "comma-apposition"
@@ -383,7 +394,7 @@ def compare_text(before, after):
     }
 
 
-def baseline_check(path, text, revision, labelcref=True):
+def baseline_check(path, text, revision, labelcref=True, eqref=True):
     root = Path(subprocess.check_output(
         ["git", "-C", str(path.resolve().parent), "rev-parse", "--show-toplevel"], text=True).strip())
     commit = subprocess.check_output(
@@ -396,9 +407,9 @@ def baseline_check(path, text, revision, labelcref=True):
     prior = inspect_text(before, path)
     counts = {"baseline_bare_count": sum(row["bare"] for row in prior),
               "baseline_parenthetical_count": len(prior)}
-    if labelcref:
+    if labelcref or eqref:
         counts["baseline_labelcref_candidate_count"] = sum(
-            row["candidate"] for row in inspect_labelcref(before, path))
+            row["candidate"] for row in inspect_labelcref(before, path, labelcref, eqref))
     return {"path": str(path), "baseline_commit": commit, **counts, **compare_text(before, text)}
 
 
@@ -482,11 +493,29 @@ def selftest():
         rows = inspect_labelcref(text)
         assert [row["form"] for row in rows if row["candidate"]] == forms, (text, rows, forms)
         assert sum(not row["candidate"] for row in rows) == accepted, (text, rows, accepted)
+    eqref_placement = [
+        (r"Equation~\eqref{eq:a} gives the bound.", [], 0),
+        (r"This is Eq.~\eqref{eq:a}, the bound.", [], 0),
+        (r"Together, Eqs.~\eqref{eq:a} and \eqref{eq:b} say so.", [], 1),
+        (r"The cone tends to the exact limit~\eqref{eq:a}.", [], 0),
+        (r"The pixel is carried by the aberration~\eqref{eq:a} with a new velocity.", [], 0),
+        (r"This follows from \eqref{eq:a}.", ["independent-position"], 0),
+        (r"The bound, \eqref{eq:a}, holds.", ["comma-apposition"], 0),
+        (r"The constraint \eqref{eq:a} holds.", ["missing-tie"], 0),
+        ("Some text.\n\n\\eqref{eq:a} holds.", ["independent-position"], 0),
+    ]
+    for text, forms, accepted in eqref_placement:
+        rows = inspect_labelcref(text)
+        assert [row["form"] for row in rows if row["candidate"]] == forms, (text, rows, forms)
+        assert sum(not row["candidate"] for row in rows) == accepted, (text, rows, accepted)
+    assert inspect_labelcref(r"This follows from \eqref{eq:a}.", eqref=False) == []
+    assert inspect_labelcref(r"This follows from \labelcref{eq:a}.", labelcref=False) == []
     assert sum(row["bare"] for row in inspect_text(placement[-1][0])) == 1  # reported once
     row = inspect_labelcref("A\nThe constraint \\labelcref{eq:a}.")[0]
     assert row["line"] == 2 and row["column"] == 16
     print(f"PASS: {len(cases)} syntax/false-positive cases, {len(placement)} "
-          "\\labelcref placement cases, and source positions")
+          f"\\labelcref placement cases, {len(eqref_placement)} \\eqref placement cases, "
+          "and source positions")
 
 
 def main():
@@ -498,6 +527,8 @@ def main():
     parser.add_argument("--baseline", help="git revision for preservation checks")
     parser.add_argument("--no-labelcref-form", action="store_true",
                         help="skip the \\labelcref placement check")
+    parser.add_argument("--no-eqref-form", action="store_true",
+                        help="skip the \\eqref placement check")
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
     if args.selftest:
@@ -519,11 +550,13 @@ def main():
         inputs.append(str(path))
         hashes[str(path)] = hashlib.sha256(raw).hexdigest()
         rows.extend(inspect_text(text, path))
-        if not args.no_labelcref_form:
-            placements.extend(inspect_labelcref(text, path))
+        if not (args.no_labelcref_form and args.no_eqref_form):
+            placements.extend(inspect_labelcref(text, path, not args.no_labelcref_form,
+                                                not args.no_eqref_form))
         if args.baseline:
             try:
-                checks.append(baseline_check(path, text, args.baseline, not args.no_labelcref_form))
+                checks.append(baseline_check(path, text, args.baseline, not args.no_labelcref_form,
+                                             not args.no_eqref_form))
             except (OSError, subprocess.CalledProcessError, ValueError) as error:
                 parser.error(str(error))
     bare = [row for row in rows if row["bare"]]
@@ -537,8 +570,10 @@ def main():
     for row, tag, prefix in shown_rows:
         shown = " ".join(row["text"].split())
         print(f'{row["path"]}:{row["line"]}:{row["column"]}: {tag}: {prefix}{shown}')
-    placement_summary = ("\\labelcref placement not checked" if args.no_labelcref_form
-                         else f"{len(misplaced)} \\labelcref placement candidates")
+    checked = [name for name, skip in (("\\labelcref", args.no_labelcref_form),
+                                       ("\\eqref", args.no_eqref_form)) if not skip]
+    placement_summary = (f"{len(misplaced)} {' / '.join(checked)} placement candidates" if checked
+                         else "\\labelcref / \\eqref placement not checked")
     print(f"{len(bare)} bare candidates; {len(rows)} parenthetical references; "
           f"{placement_summary}; {len(inputs)} files")
     changed = []
@@ -552,11 +587,12 @@ def main():
             "findings": rows,
             "labelcref_placement": {
                 "checked": not args.no_labelcref_form,
+                "eqref_checked": not args.no_eqref_form,
                 "candidate_count": len(misplaced), "findings": placements,
             },
             "source_sha256": hashes, "preservation": checks,
             "scope": "Supplied files, recognized source syntax only; no include or macro expansion; "
-                     "\\labelcref placement uses a closed function-word list.",
+                     "\\labelcref and \\eqref placement use a closed function-word list.",
         }, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
     return int(bool(bare or misplaced or changed))
 

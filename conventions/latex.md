@@ -10,7 +10,7 @@ LaTeX を含むリポで適用。CLAUDE.md から参照: `~/Claude/claude-config
 ## <a id="equation-safety"></a>式の安全規則
 - **原稿の表題・概要・序論・結論・式を AI agent が変える条件は [`manuscript-claim-ownership.md#rule`](manuscript-claim-ownership.md#rule) が正本** (著者の項目ごとの裁定 = 著者の発言の verbatim。 変更は提案として出す。 印字しない指示は直接書く許可ではない。 英語校正は可)。 機械 gate = `scripts/manuscript-claim-guard.py`。
 
-## <a id="bare-parenthetical-crossrefs"></a>裸の括弧参照と `\labelcref` の置き場所の検出、保持検査
+## <a id="bare-parenthetical-crossrefs"></a>裸の括弧参照と `\labelcref`・`\eqref` の置き場所の検出、保持検査
 
 裸の括弧参照を避ける文体を採用した原稿では、[check-latex-crossrefs.py](../scripts/check-latex-crossrefs.py) で候補を列挙する。`(Sec.~\ref{sec:x})` と `(\cref{sec:x})` は同じ表示上の問題なので、片方だけに一致する grep では検査にならない。改行・複数参照・付録や図式の参照・一般的な括弧マクロも対象とし、コメント・数式・verbatim は除外する。
 
@@ -21,6 +21,8 @@ LaTeX を含むリポで適用。CLAUDE.md から参照: `~/Claude/claude-config
 - `missing-tie`: 名詞・インライン数式・マクロ引数の直後にあるが `~` の無い番号。参照に続く `and` / `or` / `to` の 2 つ目も対象。
 
 範囲の 2 つ目 `--\labelcref` と、参照に続くカンマ区切りの項は正しい形として通し、`--list-all` で点検用に表示する。`\blue{...}` のようなインラインのマクロと素の `{...}` は透過し、その前の語で判定する。裸の括弧参照として既に出た `\labelcref` は重ねて出さない。判定は閉じた機能語リストに基づくため、リストに無い動詞の直後の `~\labelcref` は出ない。この文体を採らない原稿では `--no-labelcref-form` で外す。`~` の付かない `\labelcref` だけを拾う grep は、`~` 付きの独立位置を拾えないので代わりにならない (sweep の pattern を違反の一形で書く罠の一般則 = [`convention-design-principles.md#sweep-null-needs-per-form-control`](../docs/convention-design-principles.md#sweep-null-needs-per-form-control))。
+
+<a id="eqref-placement"></a>`\eqref` も同じ素の「(N)」を印字するので、同じ 3 形で検査する。cleveref を使わない文体では独立の位置を `Eq.~\eqref` (`Eqs.~` / `Equation~`) と書き、名詞の直後の同格だけ `~\eqref` にする。型の語が前にある形は名詞の扱いで候補に出ない。参照に続く `and` / `or` / `to` の 2 つ目の `\eqref` は `~` の有無に依らず通す (`Eqs.~\eqref{a} and \eqref{b}`)。`\eqref` を独立の位置で使う文体を採らない原稿では `--no-eqref-form` で外す。実測: この形の検査が `\labelcref` にしか無かった間、cleveref を使わない原稿の「by~\eqref」「formula \eqref」は候補に出ず、手で全部を読むしかなかった。
 
 使い方はスクリプトの `--help` と `--selftest` が正本。`--list-all` は関係を説明した括弧参照も含めて確認でき、`--baseline <git-ref>` は参照コマンド・ラベル・引用・保護領域の保持を比較する。`--report` は入力ハッシュ付きの検査記録を生成する。任意のマクロや include を展開する TeX 処理系ではないため、原稿から読み込むファイルも明示的に渡す。
 

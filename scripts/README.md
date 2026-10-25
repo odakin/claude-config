@@ -71,7 +71,7 @@
 - **[check-gitcrypt-readable.py](check-gitcrypt-readable.py)** — 暗号化 file が「このマシンで実際に読めるか」 と「commit に入った版が暗号文か」 を必ず可視に報告する。
 - **[check-history-growth.py](check-history-growth.py)** — 差分が効かない file (暗号化・PDF・画像) を頻繁に commit して、 版ごとに全体が git の履歴に積まれるのを早めに見つける。
 - **[check-inbound-refs.py](check-inbound-refs.py)** — safety net for restructuring claude-config (layer 1).
-- **[check-latex-crossrefs.py](check-latex-crossrefs.py)** — Find bare parenthetical cross-references and misplaced \labelcref numbers.
+- **[check-latex-crossrefs.py](check-latex-crossrefs.py)** — Find bare parenthetical cross-references and misplaced \labelcref / \eqref numbers.
 - **[check-latexdiff-math-markup.py](check-latexdiff-math-markup.py)** — Gate against latexdiff silently dropping equation changes (2026-09-08).
 - **[check-ledger-merge-loss.py](check-ledger-merge-loss.py)** — merge / rebase で台帳の entry が黙って消えていないかを id で照合する。
 - **[check-legacy-append-only.py](check-legacy-append-only.py)** — the `legacy` forwarding map in a slug index must be
