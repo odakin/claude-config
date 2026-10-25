@@ -310,6 +310,16 @@
           "timeout": 10
         }
       ]
+    },
+    {
+      "matcher": "^Workflow$",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/workflow-fanout-check.sh",
+          "timeout": 30
+        }
+      ]
     }
   ],
   "PostToolUse": [
