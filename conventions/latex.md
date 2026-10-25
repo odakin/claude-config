@@ -993,6 +993,12 @@ author = {{川上 紳一} and {吉田 英太郎}}
 
 JHEP.bst のような `F.~Last` 形式の bst では、ブレース内が全部 Last 扱いになって「川上 紳一」 のまま出力される。
 
+## <a id="bibtex-name-doi-pitfalls"></a>refs.bib の姓と DOI の落とし穴
+
+- **小文字の語を含むハイフンつきの姓** (`Ferrer-i-Cancho` の型): bibtex は小文字で始まる部分を von 部として読み、 姓が割れて `Ferrer-i Cancho` と出る (実測)。 姓をブレースで囲む: `author = {{Ferrer-i-Cancho}, Ramon}`
+- **natbib の plainnat は `\doi{…}` を出す**: `url` パッケージ (か hyperref) を読んでいない文書では `\doi` が生の文字列になり、 DOI や URL に「_」 があると `! Missing $ inserted` で止まる (実測)。 natbib + plainnat 系の style で DOI を持つ bib を使う原稿は `\usepackage{url}` を読む
+- **照合の年**: Crossref の `issued` は最初の公開の年で、 巻の年と 1 違うことがある。 照合の道具の側の扱い = [`web-tools.md#literature-search-apis`](web-tools.md#literature-search-apis)
+
 ## <a id="refs-bib-verification"></a>refs.bib 整備フロー（実物検証によるハルシネーション防止）
 
 文献情報（著者・タイトル・巻号ページ）を refs.bib に追加する前に、次の優先順で**実物検証**する:

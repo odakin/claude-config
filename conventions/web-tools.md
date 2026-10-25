@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf) + YouTube の音声を取得するとき・HTML しか渡っていないとき・yt-dlp が SABR / 403 で失敗するとき (#youtube-audio-extraction) + 企業サイトの製品の告知ページが WebFetch・curl で 403 を返すとき (#corporate-notice-403)
+when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf) + YouTube の音声を取得するとき・HTML しか渡っていないとき・yt-dlp が SABR / 403 で失敗するとき (#youtube-audio-extraction) + 企業サイトの製品の告知ページが WebFetch・curl で 403 を返すとき (#corporate-notice-403) + 先行研究を API で探す・「扱った研究は無い」 を範囲つきで書くとき (#literature-search-apis)
 category: web
 summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter = 文字 whitelist / 戻り値は約 3KB で切れる / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + booking.com の宿への連絡は確認メールに返信しても届かない = web のメッセージ画面を pane で開きログインは本人 (#booking-property-messaging) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)** + Google サイトの編集画面は本文への `type` が確定しない = リンク挿入の窓で文と URL を入れ、 中身は節の削除で消し、 公開は確認画面を経て cookie なしの取得で確かめる (#google-sites-editor)
 -->
@@ -339,6 +339,23 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 3. **Web アーカイブを domain ごと引く**: `http://web.archive.org/cdx/search/cdx?url=<domain>/&matchType=domain&filter=original:.*<file 名>.*&output=txt&fl=timestamp,original,statuscode` は、 サイトの引っ越し前の path (別 dir) の保存も拾う。 `wayback/available?url=` は path の完全一致しか見ないので、 これだけで「保存なし」 と言わない。 status 列で、 いつから 404 かも分かる
 4. **NDL サーチの書誌は所蔵の証拠にならないことがある**: `R100000136-` で始まる record は id の後半が CiNii Research の crid と同じ = CiNii の書誌の写し (実測)。 国会図書館がその雑誌を持っているかは別に確かめる
 5. **入手の経路** (どれも本人か、 頼まれた人が出す): ① 学会事務局にリンク切れを知らせる ② 図書館の文献複写 ③ 著者に PDF を頼む。 ⚠️ 学会サイトの「メーリングリスト」 の address は会員全員に届く = 問い合わせ先にしない。 事務局の address は入会案内・事務局の頁にあり、 JavaScript で組み立てられていて HTML を grep しても出ないことがある (`document.write` で名前と domain をつなぐ形 = script の中の 2 つの文字列を読む、 実測)
+
+---
+
+## <a id="literature-search-apis"></a>先行研究を API で探す (OpenAlex・Crossref・arXiv・CiNii・J-STAGE) — 不在は範囲つきで書く
+
+「この問いを扱った研究は無い」 は、 引いた DB・クエリ・件数を添えたときだけ書ける。 道具 = [`../scripts/lit-search.py`](../scripts/lit-search.py) (DOI ごとの書誌の照合は [`../scripts/check-doi-list.py`](../scripts/check-doi-list.py))。
+
+- **Google Scholar は使わない**: CAPTCHA・ボット検出を回避して叩かない。 被引用の追跡は OpenAlex の `filter=cites:<W id>` で代え、 Scholar にしか無い被引用 (書籍・学位論文・会議録の一部) は範囲外と書く
+- **OpenAlex の 2 つの検索は別物**: `search=<語>` は全文の関連度検索で雑音が多い。 `filter=title_and_abstract.search:<論理式>` は引用符・AND/OR が効き、 題名と要旨だけを見る。 ⚠️ **両方を同じ URL に付けると、 両方に当たる件だけが残り、 件数が小さく出る** (実測 = 論理式のつもりで検索語の欄に仮の 1 字を入れて起きた)
+- 要旨は `abstract_inverted_index` ({語: [位置]}) で返る = 位置の順に並べ直す。 持っていない文献もある (購読誌の一部)
+- **Semantic Scholar は鍵なしの利用ですぐ HTTP 429** (実測)。 打ち直しを連打しない = 検索ログに「使えなかった」 と書く
+- **Crossref の `query.bibliographic` の total-results は関連度の母集団** (数百万件になる) = ヒット数として書かない。 上位だけを見る
+- **Crossref の `issued` は最初の公開 (online-first) の年** = 巻の年と 1 違うことがある。 書誌の照合は年の差 1 までを一致と数え、 entry には巻の年を書く。 記事番号 (`page` / `article-number`) は誌によって内部の id や `n/a` を返す = 推測で埋めず空欄にする
+- 出版社の PDF (Wiley/AGU の `pdfdirect`、 AMS の `downloadpdf`、 MDPI) は curl に 403 か空の応答を返す (ボット検出、 実測)。 迂回しない = arXiv・機関リポジトリの OA 版 (OpenAlex の `best_oa_location`、 arXiv API の題名・著者の検索) を探し、 無ければ要旨止まりと記録する
+- **日本語の文献**: CiNii Research の OpenSearch (`cir.nii.ac.jp/opensearch/articles?q=…&format=json`、 app ID なし) と J-STAGE WebAPI (`api.jstage.jst.go.jp/searchapi/do?service=3&text=…`、 Atom の XML)。 J-STAGE に載らない学会誌 (学会の頁に PDF を置く誌) は J-STAGE の検索では出ない = CiNii も引く
+- **lookup の code を自分で書くなら**: 誤り応答 (4xx/5xx) を cache に残さない (残すと次の試行が cache の誤りを読み、 引き直したつもりで同じ失敗を見続ける、 実測)
+- **検索ログに残すもの**: 日付・DB・クエリ (そのまま)・API の総数・見た件数 (上位何件か、 題名の語で絞ったか)・採用した件数。 見た件数と総数を分ける = 総数を全部見たとは書かない。 被引用の多い起点から追うときは、 起点ごとに見た件数を書く (上位 N 件で切ったなら残りの件数も)
 
 ---
 

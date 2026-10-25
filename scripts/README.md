@@ -231,6 +231,7 @@
 - **[letter-word-count.py](letter-word-count.py)** — LaTeX で組んだ返答書・手紙の語数を、 自分の文と引用 (referee の文など) に分けて数える。 git の前の版との比較つき。
 - **[library-holdings-ledger.py](library-holdings-ledger.py)** — 図書館に本があるかを OPAC で確かめた結果を、 証拠つきの台帳 (YAML) を正本として持ち、 引き直し・点検する。--selftest 内蔵。
 - **[list-live-sessions.py](list-live-sessions.py)** — 同 cwd で生きてる兄弟 Claude session を surface する read-only reader。
+- **[lit-search.py](lit-search.py)** — 先行研究の探索を API で回す (OpenAlex の全文検索・題名と要旨の論理式・被引用・要旨、 Crossref の書誌検索、 arXiv の検索)。 1 件 1 行、 --json も
 - **[live-engine-paths.py](live-engine-paths.py)** — hook と git の hook が作業 tree から直接読む file (= 書きかけを別の session が走らせる file) の一覧を作る。--selftest 内蔵。
 - **[local-ci.py](local-ci.py)** — CI を持たない repo の検査を手元で回す runner（config の repo × 検査を、 対象 path の最終 commit が変わったものだけ実行して結果を machine-local state に残し、 --status で red / 検査不能 / 長く未実行を 1 行ずつ出す。 並列起動は lock で 1 本、 --selftest 内蔵）
 - **[macos-app-bundle-audit.py](macos-app-bundle-audit.py)** — Inventory side-by-side macOS app bundles by name or bundle identifier. --selftest included.

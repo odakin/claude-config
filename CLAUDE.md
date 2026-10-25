@@ -184,7 +184,7 @@ claude-config/
 │   ├── verification-cycle-ops.md           # 検証サイクルを session を越えて回し続ける仕組みを設計・運用・診断するとき
 │   ├── web-form-automation.md              # 過負荷・レガシー・validation の噛み合わない web サイトの入力フォームを browser automation (Chrome MCP 等) で代行するとき
 │   ├── web-map-projections.md              # d3-geo / Natural Earth で世界地図ビューア (図法切替・中央経線回転・国境・国名・拡大) を作る・直すとき
-│   ├── web-tools.md                        # WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf) + YouTube の音声を取得するとき・HTML しか渡っていないとき・yt-dlp が SABR / 403 で失敗するとき (#youtube-audio-extraction) + 企業サイトの製品の告知ページが WebFetch・curl で 403 を返すとき (#corporate-notice-403)
+│   ├── web-tools.md                        # WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf) + YouTube の音声を取得するとき・HTML しか渡っていないとき・yt-dlp が SABR / 403 で失敗するとき (#youtube-audio-extraction) + 企業サイトの製品の告知ページが WebFetch・curl で 403 を返すとき (#corporate-notice-403) + 先行研究を API で探す・「扱った研究は無い」 を範囲つきで書くとき (#literature-search-apis)
 │   ├── webgl-f32-numerics.md               # WebGL / GLSL shader で物理量を f32 で計算するとき + 事前計算 table (texture) の定義域の外まで写像を延ばすとき + shader の出力を f64 の参照実装と画素単位で照合するとき + 実時間 simulation の 1 frame の時間予算を決めるとき + table と metadata を静的 hosting で配るとき (#payload-cache-pairing) + 写真の背景を mip つきで引くとき (#derivatives-in-divergent-flow) + 2 つの lookup engine を切り替えるとき (#engine-handoff) + 操作 (推進のキーなど) を始めた瞬間に画面が跳ぶとき・跳ばないことを確かめるとき (#input-starts-from-shown-state)
 │   ├── windows-msys.md                     # Windows (Git Bash / MSYS) 上で本リポの script・hook を動かす / 移植性のある shell・Python を書くとき
 │   ├── wolfram-scripting.md                # wolframscript を書く・debug するとき + 対数プロット (LogPlot / LogLogPlot) の目盛・凡例を触るとき + Mathematica / wolframscript を Apple Silicon の Mac に入れ直すとき (#apple-silicon-install) + notebook (.nb) の入力セルを front end 無しで読む・評価するとき (#read-notebook-input-cells)
@@ -207,7 +207,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (369 file + formcase/ 26 module + lib/ 73 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (370 file + formcase/ 26 module + lib/ 73 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
