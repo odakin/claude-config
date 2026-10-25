@@ -28,7 +28,9 @@
 #   behind>0 ∧ ahead>0 (diverged)       → 履歴が書き換えられた (force-push) repo なら層1 lib/git_rewrite_follow.py で
 #                                           中身で揃える (対応表 / tree の一致だけで判定、 reset --keep = 未 commit は保つ、
 #                                           pull / merge / rebase はしない) → P 行。 揃えられない (手元にしか無い中身) なら
-#                                           A 行のみ (勝手な merge commit は作らない)。 lock の内側で行う
+#                                           A 行のみ (勝手な merge commit は作らない)。 lock の内側で行う。 書き換えの痕跡の
+#                                           無い通常の分岐は、 手元にだけ在る commit の数・最古の古さと解き方の節
+#                                           (conventions/multi-session-coordination.md#ordinary-divergence-replay) を A 行で出す
 #   behind==0 ∧ ahead>0                  → U 行のみ
 #   fetch が終わらなかった repo         → A 行 (behind 判定が古い ref 由来で当てにならない)
 #
@@ -361,6 +363,8 @@ _follow_locked() {
     case "$out" in
       F*) printf '%s\n' "$out" | awk -F'\t' '$1=="F"{print "P\t"$2}'; return 0 ;;
       S*) printf '%s\n' "$out" | awk -F'\t' '$1=="S"{print "A\t"$2}'; return 0 ;;
+      # 書き換えの痕跡の無い通常の分岐 = 揃えない。 手元にだけ在る commit の数・古さと解き方の節を A 行で渡す
+      D*) printf '%s\n' "$out" | awk -F'\t' -v d="$dirty" '$1=="D"{print "A\t"$2" (dirty="d")"}'; return 0 ;;
     esac
   fi
   printf 'A\t%s: behind=%s ahead=%s dirty=%s (= diverged、 作業前に手動解決。 remote の履歴が書き換えられたなら pull / merge / rebase をせず中身で揃える = python3 %s follow --repo %s/%s)\n' \

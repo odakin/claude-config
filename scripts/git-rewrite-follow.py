@@ -10,7 +10,8 @@ usage:
       diverged な clone を、 対応表 / tree の一致 で新しい履歴に揃える (reset --keep)。 1 行で結果。
       exit 0 = 揃えた / 揃っている / 触らない (upstream 無し等)、 1 = 止まった (手元にしか無い中身、 dirty の重なり、 通信、
       書き換えの痕跡の無い通常の分岐 = 追従の対象外)。
-      --tsv = repo-sync-sweep.sh 向け (F<TAB>行 = 揃えた / S<TAB>行 = 止まった / 無音 = 何もしない)
+      --tsv = repo-sync-sweep.sh 向け (F<TAB>行 = 揃えた / S<TAB>行 = 止まった / D<TAB>行 = 書き換えの痕跡の無い通常の分岐
+      〔揃えない。 手元にだけ在る commit の数と古さ・解き方の節〕 / 無音 = 何もしない)
   git-rewrite-follow.py sweep --root DIR [--fetch] [--map GLOB]... [--max N] [--dry-run] [--no-prepush] [--stub-all]
       DIR/*/ の repo を順に follow (既定は fetch しない = 直前の sync が fetch した ref を読む) + manifest のある repo に
       pre-push stub を置く (--stub-all = manifest の無い repo にも) + manifest か clone の記録のある repo の remote 側を読む (audit、 戻って
@@ -85,8 +86,11 @@ def _print_result(r, tsv):
             print("S\t" + r.line)
         else:
             print(r.line, file=sys.stderr)
-    elif r.state == "diverged" and not tsv:   # 通常の分岐 = tsv (sweep) では無音 → 呼び元が従来の A 行を出す
-        print(r.line, file=sys.stderr)
+    elif r.state == "diverged":   # 通常の分岐 = sweep には D 行 (数・古さ・解き方の節を持つ 1 行。 旧い sweep は読まずに従来の A 行を出す)
+        if tsv:
+            print("D\t" + r.line)
+        else:
+            print(r.line, file=sys.stderr)
 
 
 def cmd_follow(a):

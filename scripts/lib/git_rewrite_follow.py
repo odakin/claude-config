@@ -88,12 +88,17 @@ sha、 7 桁以上の前方一致)。 検査を丸ごと切らず、 名指し�
   commit と tree が一致するのは、 手元の未 push の commit が古い状態へ戻しただけの時 = revert。 それを「upstream に
   同じ中身が在る」 と読むと、 書き換えの無い通常の分岐で未 push の revert を黙って捨てる)。 共通の祖先から HEAD までの
   差分が volatile path だけなら、 tree を探すまでもなく揃える (how = volatile-only)。
-  4. どれも当たらない → 止まる (未 push の中身がある。 中身を確かめてから人が揃える)。
+  4. どれも当たらない → 手元にしか無い commit に**書き換えの痕跡**があれば止まる (stopped = 「書き換えられた」。 中身を確かめてから
+     人が揃える)。 痕跡 = その commit が forced-update で捨てられた upstream の先頭から届く (forced_update_trace) か、 対応表の旧 sha・
+     forbidden の object を抱える (_local_rewrite_trace)。 痕跡が無ければ通常の分岐 (diverged = 呼び元の従来の扱い)。 forced-update の
+     記録・対応表が「在る」 だけでは痕跡にしない (実測: 書き換えの後も残り続けるので、 その repo の通常の分岐を全部「書き換えられた」 と止めていた)。
   揃えた後、 旧 sha を持つ手元の他 branch を名指しする (消さない = push しないよう知らせるだけ)。
 
 forced update の証拠 (heartbeat が rebase の前に見る): remote-tracking ref の reflog に `forced-update` の
 entry が在るか (fetch がその場で書く。 unreachable になった entry は既定 30 日で expire = それより後の判定は
 証拠を失う。 その窓は heartbeat の defer が beat を止め fleet の 🔴 で人に届く、 かつ I3 の pre-push が最後の網)。
+「その repo で書き換えがあった」 (forced_update_seen) と「この clone の手元の commit が捨てられた世代のもの」 (forced_update_trace =
+follow_repo の止まる理由) は別の問い。 前者は repo 単位の旗で、 後者は分岐した clone ごとに答える。
 
 manifest (`<repo>/.rewrite-follow/`、 repo 自身が運ぶ。 読むのは upstream の版):
   ignore-paths      volatile な path (1 行 1 つ、 dir は末尾 `/`、 `#` 以降は注釈)。 書き換えの **前** に通常 commit で置く
@@ -194,6 +199,66 @@ def forced_update_seen(repo, upstream, n=30):
         return False
     out = git(repo, "reflog", "show", "--format=%gs", f"-n{n}", f"refs/remotes/{upstream}", check=False)
     return "forced-update" in out
+
+
+def _forced_update_olds(repo, upstream, n=30):
+    """remote-tracking ref の reflog の直近 n entry のうち forced-update の entry の「更新の前の値」 (= 捨てられた先頭) の list。
+    None = forced-update は在るが前の値が分からない。 前の値は reflog の file の各行の第 1 欄 (git reflog show は後の値しか出さず、
+    clone の直後は remote-tracking ref の reflog が無いので「1 つ前の entry」 では引けない = 実測)。 file が無い ref の保存形式
+    (reftable) では git reflog show の 1 つ前の entry で代える。"""
+    gd = git(repo, "rev-parse", "--git-common-dir", check=False)
+    if gd:
+        p = Path(gd) if Path(gd).is_absolute() else Path(repo) / gd
+        lf = p / "logs" / "refs" / "remotes" / upstream
+        if lf.is_file():
+            try:
+                lines = lf.read_text(encoding="utf-8", errors="replace").splitlines()[-n:]
+            except OSError:
+                return None
+            olds = []
+            for ln in lines:
+                head_part, _, msg = ln.partition("\t")
+                f = head_part.split(" ")
+                if "forced-update" in msg and len(f) >= 2 and _SHA_RE.match(f[0]) and f[0] != ZERO:
+                    olds.append(f[0])
+            return olds
+    out = git(repo, "reflog", "show", "--format=%H %gs", f"-n{n + 1}", f"refs/remotes/{upstream}", check=False)
+    rows = [ln.split(" ", 1) for ln in out.splitlines() if ln.strip()]
+    olds = []
+    for i, row in enumerate(rows[:n]):
+        if len(row) < 2 or "forced-update" not in row[1]:
+            continue
+        if i + 1 >= len(rows):
+            return None
+        olds.append(rows[i + 1][0])
+    return olds
+
+
+def forced_update_trace(repo, head, up_sha, upstream, n=30):
+    """手元にしか無い commit (HEAD から届き upstream から届かない) が、 forced-update で捨てられた upstream の先頭から届くか。
+    remote-tracking ref の reflog の直近 n entry の forced-update ごとに、 更新の前の値 (= 捨てられた先頭) を取り、
+    `HEAD --not up` と `HEAD --not up <捨てられた先頭>` の数が違えば、 手元にしか無い commit の一部は捨てられた世代のもの = 書き換えの痕跡。
+    forced-update の記録が在るだけでは痕跡にしない: 書き換えに追従した後の通常の分岐 (新しい世代の上の手元の commit + upstream の前進) は、
+    reflog の直近に forced-update が残っている間ずっと「書き換えられた」 と止まっていた (実測 = 更新の少ない repo では数週間残る)。
+    捨てられた先頭が分からない・object が引けない時は判定できない = 安全側 (痕跡あり)。"""
+    if not upstream or not head or not up_sha:
+        return False
+    olds = _forced_update_olds(repo, upstream, n)
+    if olds is None:
+        return True
+    if not olds:
+        return False
+    for o in olds:
+        if not git_ok(repo, "cat-file", "-e", o + "^{commit}"):
+            return True
+    try:
+        base = int(git(repo, "rev-list", "--count", head, "--not", up_sha) or "0")
+        if base == 0:
+            return False
+        cut = int(git(repo, "rev-list", "--count", head, "--not", up_sha, *olds) or "0")
+    except (RuntimeError, ValueError, subprocess.TimeoutExpired):
+        return True
+    return cut != base
 
 
 # ---------------------------------------------------------------- manifest / maps
@@ -534,6 +599,22 @@ def crypt_key_mismatch(repo, target, head=None, limit=3):
     return None
 
 
+def _age_text(sec):
+    h = max(0, int(sec)) // 3600
+    return f"{h} 時間前" if h < 48 else f"{h // 24} 日前"
+
+
+def divergence_summary(repo, head, up_sha):
+    """分岐した clone の 1 行の材料: 「手元にしか無い commit N (最古 X 前)・upstream にだけ在る commit M」。 読めなければ空に近い文。"""
+    try:
+        times = [int(t) for t in git(repo, "log", "--format=%ct", f"{up_sha}..{head}").split()]
+        m = int(git(repo, "rev-list", "--count", f"{head}..{up_sha}") or "0")
+    except (RuntimeError, ValueError, subprocess.TimeoutExpired):
+        return "手元にしか無い commit と upstream の commit の数は読めなかった"
+    oldest = f" (最古 {_age_text(time.time() - min(times))})" if times else ""
+    return f"手元にしか無い commit {len(times)}{oldest}・upstream にだけ在る commit {m}"
+
+
 def _local_rewrite_trace(repo, head, up_sha, gen):
     """手元にしか無い commit (HEAD から届き upstream から届かない) が、 書き換えで捨てた世代の commit か消した版の blob を
     抱えているか。 対応表を運ぶ repo でも、 新しい世代の上の通常の分岐 (手元の commit + upstream の前進) は痕跡にしない
@@ -571,9 +652,9 @@ def follow_repo(repo, cli_globs=(), fetch=True, max_count=DEFAULT_MAX, dry_run=F
         return Result("ahead")
     gen = Generation.load(repo, upstream, cli_globs)
     target, how = _find_target(repo, head, upstream, gen, max_count)
-    # 書き換えの痕跡 = fetch が forced-update を記録した / 手元にしか無い commit が対応表の旧世代・消した blob を抱える
-    # (対応表が upstream に在るだけでは痕跡にしない = 書き換えの後の通常の分岐を「書き換え」 と言わない)
-    trace = forced_update_seen(repo, upstream) or _local_rewrite_trace(repo, head, up_sha, gen)
+    # 書き換えの痕跡 = 手元にしか無い commit が、 forced-update で捨てられた upstream の先頭から届く / 対応表の旧世代・消した blob を抱える
+    # (forced-update の記録や対応表が在るだけでは痕跡にしない = 書き換えの後の通常の分岐を「書き換え」 と言わない)
+    trace = forced_update_trace(repo, head, up_sha, upstream) or _local_rewrite_trace(repo, head, up_sha, gen)
     if not target:
         if trace:
             # 書き換えの痕跡がある = 揃えられない理由は手元だけの中身
@@ -582,8 +663,12 @@ def follow_repo(repo, cli_globs=(), fetch=True, max_count=DEFAULT_MAX, dry_run=F
                           f"{name}: upstream ({upstream}) は書き換えられ、 手元の HEAD ({head[:7]}) と同じ中身の commit が新しい履歴に無い"
                           f" = 手元にしか無い commit がある。 中身を確かめてから人が揃える (git pull / merge / rebase {upstream} はしない"
                           f" = 古い履歴が合流して消した中身が push で戻る)" + hint, exit_code=1)
-        # 痕跡が無い = 通常の分岐 (手元の commit + upstream の前進)。 追従の仕事ではない = 呼び元の従来の扱いに返す
-        return Result("diverged", f"{name}: upstream ({upstream}) と分岐 (書き換えの痕跡は無い = 通常の分岐、 手で解決)", exit_code=1)
+        # 痕跡が無い = 通常の分岐 (手元の commit + upstream の前進)。 追従の仕事ではない = 呼び元の従来の扱いに返す。
+        # 数と古さを添える: 手元にだけ在る commit が何時間も残っているなら、 誰かが手元に閉じ込めた (無人の書き手の push の失敗など)
+        return Result("diverged", f"{name}: upstream ({upstream}) と分岐 (diverged、 書き換えの痕跡は無い = 通常の分岐): "
+                                  + divergence_summary(repo, head, up_sha)
+                                  + " → 手元の branch を退避し、 upstream に無い分を載せ直してから reset --keep で揃える"
+                                  " (conventions/multi-session-coordination.md#ordinary-divergence-replay)", exit_code=1)
     branch = git(repo, "symbolic-ref", "--short", "-q", "HEAD", check=False)
     if dry_run:
         return Result("followed", f"{name}: [dry-run] 揃える: HEAD {head[:7]} → 新履歴の {target[:7]} ({how}) → {upstream} {up_sha[:7]}",
@@ -2655,6 +2740,53 @@ def _selftest():
               and git(kb, "status", "--porcelain") == "", r.line)
     else:
         print("  skip: key-rotation case (git-crypt not installed)")
+
+    # --- forced-update の後の通常の分岐 (manifest なし): 追従した clone の新しい世代の上の手元の commit + upstream の前進は diverged。
+    #     捨てられた世代の上の手元の commit は stopped (forced-update の記録が reflog に在るだけでは止めない)
+    fu_remote = tmp / "fu.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(fu_remote)], check=True, env=_env())
+    fu_src = tmp / "fu-src"
+    init(fu_src)
+    commit(fu_src, {"p.txt": "1\n"}, "p1")
+    commit(fu_src, {"p.txt": "2\n"}, "p2")
+    git(fu_src, "remote", "add", "origin", str(fu_remote))
+    git(fu_src, "push", "-q", "origin", "main")
+
+    def fu_clone(name):
+        p = tmp / name
+        subprocess.run(["git", "clone", "-q", str(fu_remote), str(p)], check=True, env=_env())
+        return p
+
+    fu_new = fu_clone("fu-follows")        # 書き換えに追従してから手元で commit する
+    fu_old = fu_clone("fu-stays-old")      # 捨てられた世代のまま手元で commit する
+    fu_rw = tmp / "fu-rw"                  # manifest を置かない書き換え (message だけ変えて force push)
+    init(fu_rw)
+    commit(fu_rw, {"p.txt": "1\n"}, "p1 (rewritten)")
+    commit(fu_rw, {"p.txt": "2\n"}, "p2 (rewritten)")
+    git(fu_rw, "push", "-q", "--force", str(fu_remote), "main:main")
+    r = follow_repo(fu_new)
+    check("forced-update fixture: the clone follows the rewrite via tree", r.state == "followed", r.line)
+    check("forced-update fixture: the forced update is in the reflog", forced_update_seen(fu_new, "origin/main"))
+    commit(fu_new, {"mine.txt": "local\n"}, "local commit on the new generation")
+    commit(fu_old, {"mine.txt": "local\n"}, "local commit on the discarded generation")
+    fu_adv = fu_clone("fu-advance")
+    commit(fu_adv, {"q.txt": "upstream advance\n"}, "upstream advance")
+    git(fu_adv, "push", "-q", "origin", "main")
+    r = follow_repo(fu_new)
+    check("ordinary divergence after a forced update (no manifest): diverged, not stopped as a rewrite",
+          r.state == "diverged" and "書き換えられ" not in r.line, r.line)
+    check("ordinary divergence: the line counts both sides and points at the replay recipe",
+          "手元にしか無い commit 1 (最古" in r.line and "upstream にだけ在る commit 1" in r.line
+          and "#ordinary-divergence-replay" in r.line, r.line)
+    check("ordinary divergence after a forced update: forced_update_trace is False",
+          not forced_update_trace(fu_new, rev(fu_new, "HEAD"), rev(fu_new, "origin/main"), "origin/main"))
+    check("ordinary divergence after a forced update: ref untouched",
+          git(fu_new, "log", "-1", "--format=%s") == "local commit on the new generation")
+    r = follow_repo(fu_old)
+    check("local commit on the discarded generation (no manifest): stopped as a rewrite",
+          r.state == "stopped" and "書き換えられ" in r.line, r.line)
+    check("local commit on the discarded generation: ref untouched",
+          git(fu_old, "log", "-1", "--format=%s") == "local commit on the discarded generation")
 
     print(f"selftest: {'PASS' if not fails else 'FAIL'} ({len(fails)} failing)")
     return 0 if not fails else 1

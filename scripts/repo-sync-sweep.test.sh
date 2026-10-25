@@ -149,6 +149,9 @@ advance_remote "$RC" c
 ( cd "$ROOT/repoC" && echo "localcommit" >> g.txt && git_quiet add -A && git_quiet commit -qm local )
 out="$(run)"
 line_of "$out" A repoC | grep -q "diverged" && ok "diverged が A 行" || ng "expected A repoC diverged (got: $out)"
+# 書き換えの痕跡の無い通常の分岐は、 手元にだけ在る commit の数と解き方の節を添える (follower = 同じ dir の git-rewrite-follow.py)
+line_of "$out" A repoC | grep -q "手元にしか無い commit 1" && line_of "$out" A repoC | grep -q "#ordinary-divergence-replay" \
+  && ok "通常の分岐の A 行に数と解き方の節" || ng "expected count + recipe anchor in A repoC (got: $out)"
 
 echo "=== T10: ahead-only → U 行のみ (push しない) ==="
 RD="$(mk_remote d)"; git_quiet clone -q "$RD" "$ROOT/repoD"
