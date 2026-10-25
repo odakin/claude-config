@@ -130,6 +130,11 @@
       "match": "auto-fixed non-LaTeX characters and re-staged",
       "doc": "conventions/latex.md#autofix-with-pathspec-commit",
       "hint": "pre-commit が tex の文字を直して re-stage した。 `git commit -- <path>` (pathspec) なら修正は commit に入るが main の index に修正前の版が残る (status が MM) = commit の後に git restore --staged <path>"
+    },
+    {
+      "match": "unsupported operand type(s) for |: 'type' and 'NoneType'",
+      "doc": "conventions/python-env.md#new-syntax-on-old-python",
+      "hint": "3.10 からの型注釈 (X | None) を 3.9 の python で読んだ (script の誤りでなく版の問題)。 3.10 以上の python で回し、 依存が要るなら新しい python で作業用の venv を作る"
     }
   ]
 }
