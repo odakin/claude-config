@@ -181,6 +181,9 @@ sections:
   - id: japanese-authors-bibtex
     level: 2
     title: "日本語著者の BibTeX 処理"
+  - id: bibtex-name-doi-pitfalls
+    level: 2
+    title: "refs.bib の姓と DOI の落とし穴"
   - id: refs-bib-verification
     level: 2
     title: "refs.bib 整備フロー（実物検証によるハルシネーション防止）"
