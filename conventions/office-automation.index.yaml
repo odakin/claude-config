@@ -290,6 +290,9 @@ sections:
     level: 3
     title: "表・多段組 PDF は素の `get_text()` で読まない (= layout-aware 抽出 ladder、 「読めない」 禁止)"
     related: [pdf-text-match-nfkc, pdf-cell-label-vs-data-disambiguation, merged-cell-text-clipping, pdf-visual-confirm, scan-pdf-pixel-anchor-overlay, symptom-index]
+  - id: pdf-text-fake-spaces
+    level: 3
+    title: "PDF から抜いた字の空白は信用しない (= 新しい版が PDF で届いたときの verbatim 照合)"
   - id: docx-to-pdf-pages
     legacy: "2-4"
     level: 3
