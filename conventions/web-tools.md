@@ -315,6 +315,7 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 | TLS 証明書の切れた data release site (例: 実験 collaboration の release page) | WebFetch: `certificate has expired` | `curl -skL` (http 経路) で取得し file 名と hash を記録。 中身は公開 data product なので改竄 risk は低いが、 hash を review の note に残す |
 | <a id="paper-pdf-routes"></a>OA の出版版 (Springer・OUP の誌面、 PoS の会議録) を curl で | 出版社のサイトが PDF でなく HTML (bot 検査の頁) を返す | INSPIRE の record が出版社の PDF を保管していることがある = `https://inspirehep.net/api/literature/<recid>?fields=documents.url` の URL を curl (`fields=documents` だけでは空が返った record がある、 実測)。 引く論文の一覧と一緒に出す道具 = `ai-collaboration/scripts/inspire-bibliography.py citing` |
 | 学位論文 (機関リポジトリ、 国の URN resolver 経由) | curl は 403、 内蔵 Browser pane は「セキュリティ検証」 の頁で止まる。 OpenAlex・Semantic Scholar に本体が無いことがある | 検証の頁を通す操作はしない。 先に INSPIRE の `documents.url` を見る (学位論文の PDF を保管していた、 実測)。 無ければ人に普通のブラウザで 1 回保存してもらい、 それまでは「未確認 (取得先が機械の読み取りを断る)」 と書く |
+| <a id="large-scan-pdf-few-pages"></a>数十 MB のスキャンの報告書 (OCR の文字層つき) から数頁の表だけを読む | WebFetch は大きな PDF を要約に渡せず、 OCR の文字層は表の桁と数字が崩れる | 内蔵 Browser pane で PDF と同じ origin の頁を開き (検証の頁で止まる取得先には使わない = 上の行)、 `javascript_tool` で pdf.js (cdnjs の ES module) を読み込んで `getDocument({url, disableAutoFetch: true, disableStream: true})` で開く = 範囲の要求で要る頁だけが来る (file を落とさない)。 文字層 (`getTextContent`) は表の頁を探すのにだけ使い、 表は頁を canvas に描いて画面の写しで読む (OCR の数字をそのまま写さない)。 記録には印字の頁番号を書く (PDF の頁との差を目次で 1 回決める)。 実測 |
 
 ### How to apply
 
