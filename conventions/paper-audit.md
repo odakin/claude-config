@@ -106,6 +106,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 - **1 step = 1 commit** で中断耐性 + revert 可能性確保
 - **page 数の累積効果** を意識: text 行数削減 != page 数削減 (= LaTeX の line breaking で reflow、 累積効果は後段で reflect)
 - <a id="fix-adds-new-claims"></a>**査読の指摘への直しで足した例・限定の文は新しい主張**: 指摘に答えるために足した具体例や「〜だけが決める」 型の言い直しは、 元の文より検査が薄いまま入る。 足した式・例は自分の script で再導出し、 直した版を同じ reviewer に返すときは「新しい式・例も再導出」 を課す (実測: 平均の訂正に添えた小さな例が全体の状態と部分系の状態を取り違え、 射程を絞る言い直しが別の過大を作った。 どちらも突合で出た。 突合の形 = ai-collaboration `conventions/cold-eyes-isolation.md#revised-target-second-round`)
+- <a id="mark-unruled-batch-lines"></a>**著者が項目ごとに裁定していない一括の直し (共著者経由の口頭の許可で提案をまとめて当てた等) の後に監査するときは、 その commit で入った行に印を付けてから finding を書く**: 採否を著者に戻す行が一目で分かり、 保護領域 ([`manuscript-claim-ownership.md#rule`](manuscript-claim-ownership.md#rule)) の確認の範囲が決まる。 印は `git blame -M -s <rev> -- <file>` で、 その commit の hash を持つ行を拾う。 ⚠️ `-M` を付けないと、 後で図の位置を動かした commit がその辺りの行を持っていき、 一括の直しの行が印から落ちる (実測)
 
 ## <a id="compression-vs-self-containment"></a>paper 規模圧縮 vs self-containment review の trade-off
 
