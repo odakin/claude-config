@@ -107,6 +107,8 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 - **page 数の累積効果** を意識: text 行数削減 != page 数削減 (= LaTeX の line breaking で reflow、 累積効果は後段で reflect)
 - <a id="fix-adds-new-claims"></a>**査読の指摘への直しで足した例・限定の文は新しい主張**: 指摘に答えるために足した具体例や「〜だけが決める」 型の言い直しは、 元の文より検査が薄いまま入る。 足した式・例は自分の script で再導出し、 直した版を同じ reviewer に返すときは「新しい式・例も再導出」 を課す (実測: 平均の訂正に添えた小さな例が全体の状態と部分系の状態を取り違え、 射程を絞る言い直しが別の過大を作った。 どちらも突合で出た。 突合の形 = ai-collaboration `conventions/cold-eyes-isolation.md#revised-target-second-round`)
 - <a id="mark-unruled-batch-lines"></a>**著者が項目ごとに裁定していない一括の直し (共著者経由の口頭の許可で提案をまとめて当てた等) の後に監査するときは、 その commit で入った行に印を付けてから finding を書く**: 採否を著者に戻す行が一目で分かり、 保護領域 ([`manuscript-claim-ownership.md#rule`](manuscript-claim-ownership.md#rule)) の確認の範囲が決まる。 印は `git blame -M -s <rev> -- <file>` で、 その commit の hash を持つ行を拾う。 ⚠️ `-M` を付けないと、 後で図の位置を動かした commit がその辺りの行を持っていき、 一括の直しの行が印から落ちる (実測)
+- <a id="read-previous-fix-round-first"></a>**次の読みでは、 前の査読の直しで入った文を先に読む**: 直しの文は元の文より検査が薄い ([#fix-adds-new-claims](#fix-adds-new-claims))。 実測では、 reviewer の提案した句を統合するときに足した 1 語で主語と目的語が逆になり、 数を直した後も別の文に古い数が残り、 足した処方の文が隣の節の処方と食い違った。 前の round の統合の commit の行を `git blame -M -s` で拾い ([#mark-unruled-batch-lines](#mark-unruled-batch-lines) と同じ手)、 それらの文を周りの文と突き合わせて先に読む。
+- <a id="review-note-quotes-verbatim"></a>**提案 note・査読票が原稿の文を引くときは、 引用が逐語か・指した行に在るかを機械で確かめる**: 逐語でない引用 (落とした `~\cite`・`\emph`、 表の欄を「欄名: 値」 と書き直したもの) は、 読み手に存在しない文を探させる。 source を開いたまま書いた note でも出た (実測)。 道具 = [`scripts/check-note-quotes.py`](../scripts/check-note-quotes.py) (`--note NOTE.md --source <原稿> --only-lines '<項目の見出しの regex>'`、 `:NNN「…」` の行の照合も)。
 
 ## <a id="compression-vs-self-containment"></a>paper 規模圧縮 vs self-containment review の trade-off
 
@@ -541,6 +543,28 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 1. 換算を含む数値 (周波数 ↔ 波長、 強度 ↔ 振幅の減衰率、 幅の定義) は、 照合 script の換算に使った基準量 (どの波長・どの規約) を本文の文の基準量と 1 対 1 で確かめる。 script の入力に本文の文と違う名前の量があれば、 それが食い違いの候補。
 2. 非対称になりうる量 (補正を入れたスペクトル、 片側の零点、 符号の変わる点) は両側で読み、 本文の値がどちらの側かを文に書く。 片側の値だけを書くなら、 反対側の値を記録に残す。
 3. 照合 script を書いた人と別の目 (盲検・別の vendor) に、 **本文の文から**照合させる。 同じ script の再実行は同じ読み違いを繰り返す ([`#closed-form-transcription-carries-its-metric`](#closed-form-transcription-carries-its-metric) と同じ形)。
+
+## <a id="printed-number-registry"></a>原稿が印字する数は全数を登録して pin する — 原稿の断片・印字の桁・記録した食い違い・誤った規約の対照
+
+**Pattern** (実測): 長い期間に results の file から写した原稿の数を、 入力から計算し直して印字の桁で照合すると、 個々の照合 ([#checker-reads-what-the-text-states](#checker-reads-what-the-text-states)) が通っていても、 次の 4 つの型の食い違いが出た。
+
+1. **二重丸め** — 記録に 3 桁で残した値 (…5) を、 さらに 2 桁に丸めて印字した。 元の値 (…48) を 2 桁に丸めると 1 小さい。 不確かさの括弧の最後の桁でも同じ形が出た。
+2. **合成の構成の parameter を、 データの統計量として印字した** — 較正のための合成の構成を「データに合わせる」 ときに中心を目分量で置き、 その構成の parameter がデータの値として表と本文に入った。 データから計算すると数値がずれ、 一緒に印字した検出率もその構成の値だった。
+3. **定性の label に計算の記録が無い** — 結果の表の型の名 (「一様」「1 点が支配」 の類) に判定の基準と計算が無く、 計算し直すと逆の型だった。
+4. **下限を切り捨てで書いた** — 下限として印字した数を丸めれば 1 つ上になる。 下限なら保守側だが、 登録で「下限」 と宣言しないと照合が落ちる。
+
+**Rule**:
+
+1. 原稿が印字する数を 1 件ずつ登録表に書く: (a) その数を含む原稿の source の断片 (test は断片がまだあるかを確かめる = 原稿で数を書き換えると test が落ち、 登録の見直しを強制する) (b) 印字の文字列 (c) 入力からの再計算 (d) その数を既に pin している test の名 (e) 状態 = 一致 / 外部の引用 (追跡している text cache の印字で照合) / 食い違い。
+2. 照合は印字の桁で行う: 小数 d 桁の印字 p は |x − p| ≤ ½·10⁻ᵈ。 範囲「a–b」 は再計算の最小と最大で。 「≈」 と下限は、 許容と型を登録に書く。 既存の pin が印字の桁より緩いなら、 その旨を表に残す。
+3. 食い違いは「印字に一致しない」 と「記録した再計算値に一致する」 の両方で pin する。 test は通り続け、 原稿が直された時点で断片の照合が落ちるので、 状態を一致に戻す。 原稿は直さない (直すかは著者が決める = [`manuscript-claim-ownership.md`](manuscript-claim-ownership.md))。
+4. 対照 (foil) を置く: 近い規約の誤り (自由度を N−1 にする・非対称誤差の反復で χ² を出す・look-elsewhere を外す・別の手法の posterior で読む・peak の閾値を変える・BIC を AIC にする) で印字が出ないこと。 再計算を印字の 1 単位ずらすと一致しないこと (許容が印字より緩くない)。 食い違いの出所が分かったら、 その誤った経路が印字を再現することを「出所の対照」 として pin する。
+5. 仕組みが空でないことを mutation で示す: 印字を変えた登録・断片を変えた登録・入力の cache を隠した状態が、 それぞれ不一致・断片なし・理由を名指した skip になること。
+6. 印字は full precision の値から丸める。 丸めた中間の値 (results の file の桁) から丸め直さない。
+7. データに合わせた合成の構成は、 その parameter をデータから code で計算し、 一致を assert する。 構成の parameter をデータの統計量として印字しない。
+8. 表の定性の label には判定の基準を書き、 計算を記録に残す ([`writing-discipline.md#no-unshown-verification-claim`](writing-discipline.md#no-unshown-verification-claim) の表の版)。
+9. 生成器を同じ seed で回し直して一致するのは再現性の検査で、 生成器の正しさの検証ではない (正しさは独立実装か spot-check の仕事)。
+10. 2 つ目の project で同じことをするときに、 登録・照合・対照の engine を層1 の道具にする ([#second-example-refine](#second-example-refine))。
 
 ## <a id="flagged-formula-consumption"></a>付録に「この式は誤り」 の注記が残っているときは、 本文が消費しているかを機械で引き、 本文の数値の出所を辿る
 
