@@ -141,4 +141,10 @@ collaborator-check の conf に `python tools/py -- <用途>` の 1 行を置く
 - 外から落とした file (download・展開した zip の中身) を読む Python は、 その dir から起動しない: `-c` なら cwd が、 script なら script の dir が sys.path の先頭に入り、 そこに置かれた `json.py` などが標準 library より先に import される
 - その対策に `python3 -I` (隔離 mode) を付けると、 `-I` は `-s` と `-E` を含むので **user site (`pip install --user` の入り先) も切れる** = user site にしか入っていない module (PyMuPDF の `fitz` など) が `ModuleNotFoundError` になる (実測)。 依存が入っていないのではない
 - user site の module を使うなら、 **自分で作った空の dir に cd して、 `-I` を付けずに** `python3 -c '…' <落とした file の path>` (またはその空の dir に置いた script) を走らせる。 sys.path の先頭は空の dir になり、 落とした file は引数で渡すだけで sys.path に入らない。 Python 3.11 以降は `-P` (sys.path の先頭に cwd・script の dir を入れない、 user site は残す) でも同じ
-- venv の python に `-I` を付けても venv の site-packages は残る (切れるのは user site と環境変数) = 依存を venv に入れてある repo では `-I` を付けたまま読める
+- venv の python に `-I` を付けても venv の site-packages は残る (切れるのは user site と環境変数)
+
+## <a id="new-syntax-on-old-python"></a>3.10 からの構文の script を古い Python で回したとき
+
+- 型注釈の `X | None` (PEP 604) は 3.10 からの構文。 3.9 で読むと、 関数を定義する時点 (= import の時点) で `TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'` で落ちる (実測 = 他所から配られた script の helper)。 script の誤りでなく interpreter の版の問題
+- 3.10 以上の python で回す。 macOS の Command Line Tools の python3 は 3.9 ([上の表](#python-env-environments))。 依存も要るなら、 新しい python で作業用の venv を作って入れる (`python3.X -m venv <dir> && <dir>/bin/pip install <依存>`)
+- 先頭に `from __future__ import annotations` がある file は注釈を評価しないので落ちない = 落ちるのは、 それの無い file の注釈と、 注釈の外の `|` (`isinstance(x, int | str)` など) = 依存を venv に入れてある repo では `-I` を付けたまま読める

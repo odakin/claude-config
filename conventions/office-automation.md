@@ -2105,6 +2105,28 @@ for line in new_lines:
 
 **保存後**: python-docx で save したら [`docx-checkbox-content-control`](#docx-checkbox-content-control) の XML 宣言正規化を通す (auto-patch 済なら自動)。 ⚠️ **段落 / セル内容を削除する編集は空セル (段落なし `<w:tc>`) を生みうる** → save 後に `check-docx-integrity.py` ([`docx-empty-cell`](#docx-empty-cell) クラス8) を必ず通す。 PDF 化は [`docx-pdf-stale-cache`](#docx-pdf-stale-cache)、 検証は docx でなく **PDF テキスト**で回す (= 削除マーカーの不在・追記の存在を grep + 色 histogram)。 ⚠️ content 保全 verifier (= テンプレ差分照合) は **意図的に消した文字列を「欠落」 と flag する** — 想定どおりで regression ではない ([`docx-guidance-deletion`](#docx-guidance-deletion) 方向 B と同型)。
 
+### <a id="docx-tracked-changes-redline"></a>他人の docx を変更履歴つきで直して返す — 直せる所は変更履歴、 本人しか決められない所はコメント
+
+相手が書いた文書の原案 (docx) を確かめて返すとき、 直す点を本文に並べるより、 **変更履歴つきで直した file を返す**ほうが相手は楽 = 1 つずつ承諾・却下でき、 手元で並行して直していても取り込める。
+相手にしか決められない点 (相手だけが知る日付・事実、 どの項目を残すか) は**コメント**にして該当の箇所に付ける。 変更履歴とコメントの作成者名は送る人の名にし、 コメントの文面は送る前に送る人に見せる (送る人の名で出る)。
+
+**作り方** (XML を直接直す。 python-docx は変更履歴を書けない):
+
+1. 受け取った file は信用しないデータ = 空の新しい dir に展開し、 symlink を消す (`unzip -q in.docx -d unpacked && find unpacked -type l -delete`)
+2. run を結合する — Word は見える 1 語を複数の run に割るので、 文字列が XML で連続しない。 Anthropic の docx skill の `merge_runs.py` が使える
+3. 直す文字列ごとに、 それを含む run が文書中に **1 つだけ**あることを確かめてから (無い・2 つ以上なら止める)、 run を「前 / 削除 (`<w:del>` の中は `<w:delText>`) / 挿入 (`<w:ins>`) / 後」 に割る。 4 つとも元の `<w:rPr>` を写す。 `<w:t>` の前にある子 (`<w:lastRenderedPageBreak/>` など) は最初の片にだけ残す。 `w:id` は文書中の他の id と重ならない値にする。 文字列の置換で XML を書くので、 対象に `&` `<` `>` が無いことも確かめる
+4. コメントは comments.xml と関連の部品 (rels・content types) を作り (docx skill の `comment.py`)、 範囲の印 `<w:commentRangeStart/>` `<w:commentRangeEnd/>` と参照の run を `<w:p>` の直下に置く (run の中に入れない)。 語に付けるなら run を割って範囲をその語だけにする。 **コメントの位置を先に置いてから変更履歴を入れる** (同じ run を両方で割るときに位置がずれない)
+5. 展開した dir の中で `zip -Xr` し直す
+
+**確かめる** (変わったのは直した所だけ、 を示す):
+
+- 変更を**すべて却下した表示の text = 元の file の text** (`pandoc --track-changes=reject -t plain` を両方に当てて diff)
+- **すべて承諾した表示と元の差 = 意図した直しだけ** (`pandoc --track-changes=accept -t html` から段落・セルごとの text を出し、 行で diff)。 ⚠️ 表のある docx の `pandoc -t plain` は格子の表を空白で埋めた長い text になり、 それを `difflib.SequenceMatcher(autojunk=False)` で字ごとに比べると 2 分以上返らない (実測) = 行で比べる
+- docx skill の `validate.py out.docx --original in.docx --author '<作成者名>'` (変更履歴の外で変わった字が無いか) と [`check-docx-integrity.py`](../scripts/check-docx-integrity.py)
+- Word で開いて PDF にし ([`docx-to-pdf.sh`](../scripts/docx-to-pdf.sh)、 macOS は Word を staging 経由で動かす)、 挿入・削除・コメントが表示されるのを目で見る
+
+**環境の罠**: docx skill の script は Python 3.10 以上と `defusedxml`・`lxml` が要る。 macOS の Command Line Tools の python3 (3.9) では helper の import で `TypeError` で落ちる ([`python-env.md#new-syntax-on-old-python`](python-env.md#new-syntax-on-old-python)) → 新しい python で作業用の venv を作り、 2 つを入れる。 skill が描画の確かめに使う LibreOffice (`soffice`) は macOS に入っていないことが多い → 上の `docx-to-pdf.sh` で Word に描かせる。
+
 ### <a id="docx-new-run-rfonts-fallback"></a>python-docx で新規 run を作る時は rFonts を明示する (= docDefault テーマフォント落ち → 様式フォント指定違反)
 
 官製様式 docx (= 記載欄フォントを「MSゴシック 10.5pt」 等と**明示指定**し「書式設定は絶対に変更しない」 と書くタイプ) を python-docx で fill して提出したら、 受付側の書式 audit で**「記載欄のフォントが指定と異なる」 差し戻し**を受ける事故。 実事故 (= 推薦の様式、 記入本文のほぼ全部が指定外フォントで提出され、 差し戻しを受けて再送)。

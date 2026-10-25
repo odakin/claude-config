@@ -344,6 +344,10 @@ sections:
     level: 3
     title: "確定済 docx の外科編集: python-docx で run / 段落を直接いじる"
     related: [docx-fill-xml-edit, docx-guidance-deletion, docx-checkbox-content-control, docx-pdf-stale-cache, docx-password-roundtrip-edit]
+  - id: docx-tracked-changes-redline
+    level: 3
+    title: "他人の docx を変更履歴つきで直して返す — 直せる所は変更履歴、 本人しか決められない所はコメント"
+    related: [docx-python-docx-surgical-edit, docx-word-corruption-diagnosis, docx-pdf-stale-cache]
   - id: docx-new-run-rfonts-fallback
     level: 3
     title: "python-docx で新規 run を作る時は rFonts を明示する (= docDefault テーマフォント落ち → 様式フォント指定違反)"

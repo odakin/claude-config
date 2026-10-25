@@ -59,6 +59,7 @@
 - **[check-display-math-style.py](check-display-math-style.py)** — Display-math house-style gate for LaTeX manuscripts (2026-09-09).
 - **[check-doc-truncation.py](check-doc-truncation.py)** — 台帳 doc の「黙って消える」削除を git 高水位で検出（表の行/list/見出し/entry の大幅減、[truncation-ok] で baseline reset、config 駆動）
 - **[check-docx-integrity.py](check-docx-integrity.py)** — docx の Word「破損」判定源を Word 不要・決定論で検出（single-quote 宣言 / checkbox 状態↔グリフ / bookmark / table grid / dangling r:id 等、 office-automation.md#docx-checkbox-content-control）
+- **[check-doi-list.py](check-doi-list.py)** — 文書 (text / html / docx) から DOI を拾い、 DOI ごとに Crossref の書誌 (題・誌名・巻・頁・年・著者) を並べる。 bib でない業績リストを記載と突き合わせるための入力
 - **[check-duration-beside-dates.py](check-duration-beside-dates.py)** — 散文に書いた期間 (N ヶ月 / N 週 / N 日 / N months …) が、 同じ段落に並べた日付の範囲 (YYYY-MM-DD → YYYY-MM-DD) の実際の差と桁で食い違う箇所を候補として出す (書いた時点の計算違いと、 その写しを拾う on-demand の走査)。--selftest 内蔵。
 - **[check-filevault-posture.py](check-filevault-posture.py)** — 「FileVault は On なのに復旧キーが手元に無い」 を毎回見る
 - **[check-first-reply-stamp.py](check-first-reply-stamp.py)** — 最初の返信に自己同定 stamp (I7) が出たかを transcript から数える事後 audit
