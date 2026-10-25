@@ -73,6 +73,18 @@ sections:
   - id: spectator-check-over-the-roll
     level: 2
     title: "dilaton 型結合の spectator 判定は pivot でなく roll 全体で — 正準場は Weyl 因子で伸びる (2026-09)"
+  - id: rate-diverges-as-amplitude-vanishes
+    level: 2
+    title: "振幅が 0 に近づくほど崩壊率が上がる流体は有限時間で尽きる — event の根でなく $\\Gamma/H\\gg1$ で打ち切る (2026-10)"
+  - id: completion-by-occupied-mode-energy
+    level: 2
+    title: "共鳴の完了をエネルギーで判定するときは、 育った mode 自身の運動量と振動数で数える (2026-10)"
+  - id: model-background-by-late-law
+    level: 2
+    title: "比べるための模型の背景は、 静止から放す時刻でなく後期の法則で指定する (2026-10)"
+  - id: mathieu-q-own-normalization
+    level: 2
+    title: "Mathieu の $q$ は自分の式の規格で第 1 調和から取る — 駆動の振幅 $/\\omega^2$ を $q$ と呼ばない (2026-10)"
   - id: small-sdp-without-solver
     level: 2
     title: "小さな SDP を solver 無しで回す — SLSQP + explicit dual certificate の sandwich (2026-09)"

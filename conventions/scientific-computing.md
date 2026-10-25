@@ -579,6 +579,30 @@ for d in p.get_drawings():           # 曲線 = items が多い path; color/dash
 
 **reviewer 側の追補 (同事例、 2026-09-08)**: 数値の幅 = 同じ plateau 型 potential で、 $\epsilon_V=1$ / $\epsilon_H=1$ / 最初の零点通過の 3 定義は $H$ と振幅をそれぞれ数十 % ずつ変え、 $q=g\Phi$ は定義次第で数倍変わる。 線形成長を「真空から」 数える計算は**真空を置く時刻**にも依存する (末期の tachyonic 相を含めて sub-horizon mode から積分すると e-fold 数が大きく増え、 完了閾値の結合が有意に下がる)。 (c) 真空を置く時刻を引数にした計算を 1 回は走らせ、 閾値は幅で書く。 道具 = ai-collaboration [`scripts/expanding-mode-growth.py`](../../ai-collaboration/scripts/expanding-mode-growth.py) (`--start end|eps_V=1|x=<v>`、 sub-horizon 条件 `--kmin`)、 $N_*$ 側の同じ chain (fixed point・厳密背景の 2 次 HFF・固定 $r$ の分離幅) = [`scripts/nstar-fixed-point.py`](../../ai-collaboration/scripts/nstar-fixed-point.py)。 $N_*$ への影響は $\tfrac14\ln\rho_\text{end}$ の 0.1 e-fold で無視できるが、 共鳴側の数字には効く。
 
+## <a id="rate-diverges-as-amplitude-vanishes"></a>振幅が 0 に近づくほど崩壊率が上がる流体は有限時間で尽きる — event の根でなく $\Gamma/H\gg1$ で打ち切る (2026-10)
+
+**Pattern**: 振動する凝縮を流体 $(\rho,w)$ で書き、 崩壊率が $\rho$ の負冪で増えるとき ($\Gamma\propto\rho^{-n}$、 $n>0$。 例 = 振幅が小さいほど振動数が上がる非調和なポテンシャルで、 率が振動数の冪に比例する崩壊)、 $\rho\to0$ で $\Gamma$ が発散して凝縮は有限時間で尽き、 $\ln\rho$ が $-\infty$ に落ちる。 LSODA に event (残りの割合が閾値を切る点) を置いた実測では、 その手前で `f(a) and f(b) must have different signs` を出して止まった (event の根探しが bracket を取れない)。 打ち切りを緩く取ると ($\Gamma/H=10^3$ 程度) 凝縮が数 % 残り、 その移し方で e-fold 数が動く (起源事例 2026-10、 private paper repo)。
+
+**Fix**: 陰的解法 (`Radau` / `BDF`) で解き、 打ち切りを 2 つ置く = 残りの割合が十分小さい (例 $10^{-10}$) か $\Gamma/H\gg1$ (同事例は $10^5$ で残りが無視できた)。 打ち切った時点の残りは瞬時に移し、 移した量を出力して guard をかける (残りが 1 % を超えたら落とす)。 一様な崩壊の閉じた形があれば、 流体の解との差を selftest に入れる。
+
+## <a id="completion-by-occupied-mode-energy"></a>共鳴の完了をエネルギーで判定するときは、 育った mode 自身の運動量と振動数で数える (2026-10)
+
+**Pattern**: 揺らぎのエネルギー密度を $\rho_\text{fluct}\approx(\text{成分数})\,(k/a)^3\,\omega_k\,n_k/2\pi^2$ で見積もって背景のエネルギーと比べ、 「完了」 を判定するとき、 $\omega_k$ の代わりに背景 (凝縮) の振動数を使うと、 振動数が膨張とともに上がる背景 (非調和なポテンシャル) では $\rho_\text{fluct}$ が過大になり、 完了していない結合で完了と出る (同事例: 大きい結合の 1 点だけが偽の完了)。
+
+**Fix**: 占有された mode 自身の物理運動量 $k/a$ と振動数で数える。 固定の閾値 (例 = 占有数が $(M_\text{P}/\omega)^2$ に届く e-fold 数) と並べて報告し、 2 つの判定が合わない点では判定の定義を先に疑う。
+
+## <a id="model-background-by-late-law"></a>比べるための模型の背景は、 静止から放す時刻でなく後期の法則で指定する (2026-10)
+
+**Pattern**: 膨張する宇宙で振動する場の背景を 「ある $\omega/H$ の時点で振幅を与えて静止から放す」 で作ると、 最初の数周期で振幅が断熱値からずれ、 後期の断熱則 $\omega/H=C\,(a/a_0)^\alpha$ の係数 $C$ が放した時点の $\omega/H$ と大きく違う。 厳密な背景 (インフレーションの終わりから続けて解いたもの) と比べる模型の族を放す時点の $\omega/H$ で並べると、 比べたい後期の法則が族の中で揃わない (同事例)。
+
+**Fix**: 模型の背景は後期の不変量 ($C$、 または $(\omega/H)\,\Phi$ のような断熱不変量) で指定し、 それを満たす放す振幅を根探しで決める (bracket は物理的な振幅の範囲に狭める)。 厳密な背景の側も最初の周期の値と後期の値を両方出す (厳密な背景でも 2 つは数 % 違う)。
+
+## <a id="mathieu-q-own-normalization"></a>Mathieu の $q$ は自分の式の規格で第 1 調和から取る — 駆動の振幅 $/\omega^2$ を $q$ と呼ばない (2026-10)
+
+**Pattern**: 非正弦の駆動 (矩形波など) の共鳴の強さを、 駆動の振幅を $\omega^2$ で割った数で 「$q$」 と書くと、 Mathieu 方程式の規格 ($\ddot x+[A-2q\cos2t]\,x=0$ の $2q$、 時間の単位の取り方) と第 1 調和の係数 (矩形波なら $4/\pi$) の分だけずれ、 共鳴の幅や成長率の見積もりが O(1) の因子で変わる (同事例: 振幅 $/\omega^2$ と規格どおりの $q$ が数倍違った)。
+
+**Fix**: 駆動を Fourier 展開して第 1 調和を取り、 その論文・note が使っている Mathieu の式の規格 (係数 2 の有無、 $t$ を $\omega t/2$ で測るか) に合わせて $q$ を書く。 高調波も効くなら $q$ 1 つで代表させず、 区分的に厳密に解く (区間ごとに定数の質量項なら解析解を貼り合わせる)。
+
 ## <a id="small-sdp-without-solver"></a>小さな SDP を solver 無しで回す — SLSQP + explicit dual certificate の sandwich (2026-09)
 
 **Pattern**: 検証 worker の環境に SDP solver (cvxpy / SCS / MOSEK) が無く、 install も spec で避けたい (再現環境の最小化) が、 qubit〜qutrit 規模の半正定値計画 (共通下界 max Tr c s.t. 0 ≤ c ≤ a, b / joint measurement の最適化) が要る。 scipy の SLSQP で固有値制約を扱うと動くが、 局所 solver の答えは**それ自体では証明にならない**。
