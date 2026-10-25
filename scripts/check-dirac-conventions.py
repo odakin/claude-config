@@ -15,6 +15,9 @@
   5. Dirac 方程式の運動量空間の核が一致する
   6. 伝播関数 ⟨0|Tψ(x)ψ̄(y)|0⟩ の被積分関数 (分子・分母・指数) が一致する
   7. 負の対照: 辞書の符号を 1 つ変えると検査が落ちることを確かめる (検査が判別力を持つ証拠)
+  8. u = C v^* の行列 C: 行ごとの条件 (Weinberg の行 γC = Cγ^*、 Srednicki / Peskin の行 γC = −Cγ^*)、 同じ C の
+     各行の γ での書き方 (−γ²_W = +iγ²_S)、 u と v の方程式を実際に結ぶこと、 u の双線形を v で書くと運動量の順序が
+     入れ替わること (ū_1 A u_2 = v̄_2 (βC A^T βC) v_1)
 
 依存: numpy (無ければ exit 2 で理由を出す)。 公開層 (個人・project の値を持たない)。
 """
@@ -174,6 +177,60 @@ def run_checks(G_W_used=None, note="") -> list[str]:
     check(f"伝播関数 ⟨Tψψ̄⟩ の被積分関数: Srednicki = Peskin (乱数 3 組){note}", ok_SP)
     check(f"伝播関数 ⟨Tψψ̄⟩ の被積分関数: Weinberg = Srednicki (乱数 3 組){note}", ok_WS)
     check("正振動数因子: e^{−ip_P·x} = e^{ip_S·x} = e^{ip_W·x} (乱数 3 組)", ok_exp)
+
+    # 8. u = C v^* の行列 C と、 u の双線形を v で書き直したときの運動量の順序 (doc §2 の「電荷共役」)
+    #    C は「その行の u と v の方程式を結ぶ行列」 として定める (教科書の C の記法には依らない)。
+    #    Weinberg の行: (iγp + m)u = 0, (iγp − m)v = 0 → 条件 γ_W C = C γ_W^*、 C = −γ²_W (任意の位相倍も可)
+    #    Srednicki / Peskin の行: (p̸_S + m)u = 0, (p̸_S − m)v = 0 → 条件 γ_S C = −C γ_S^* (符号が変わる)
+    BW0 = 1j * GW[0]
+    C = -GW[2]
+    ok_cond_W = all(close(GW[mu] @ C, C @ GW[mu].conj()) for mu in range(4))
+    ok_cond_S = all(close(G_S[mu] @ C, -C @ G_S[mu].conj()) for mu in range(4))
+    naive_S = all(close(G_S[mu] @ C, C @ G_S[mu].conj()) for mu in range(4))
+    check(f"C = −γ²_W: 実対称で C² = 1、 γ_W C = C γ_W^*{note}",
+          close(C, C.real) and close(C, C.T) and close(C @ C, E4) and ok_cond_W)
+    check(f"同じ C は Srednicki の行では γ_S C = −C γ_S^* を満たし、 γ_S C = C γ_S^* (Weinberg の条件の写し) は満たさない{note}",
+          ok_cond_S and not naive_S)
+    check(f"同じ C を γ_S で書くと +iγ²_S (−iγ²_S ではない){note}",
+          close(C, 1j * G_S[2]) and not close(C, -1j * G_S[2]))
+    ok_uv_W = ok_uv_S = True
+    for _ in range(3):
+        p_up = rng.normal(size=4)
+        p_up[0] = np.sqrt(m**2 + p_up[1:] @ p_up[1:])
+        pW, pS = ETA_W @ p_up, ETA_S @ p_up
+        # v を v の方程式の零空間から取り、 u = C v^* が u の方程式を満たすか
+        for K_v, K_u, tag in ((1j * slash(GW, pW) - m * E4, 1j * slash(GW, pW) + m * E4, 'W'),
+                              (slash(G_S, pS) - m * E4, slash(G_S, pS) + m * E4, 'S')):
+            _, sv, vh = np.linalg.svd(K_v)
+            vs = vh.conj().T[:, sv < 1e-9]
+            good = vs.shape[1] == 2 and all(close(K_u @ (C @ vs[:, k].conj()), np.zeros(4)) for k in range(2))
+            if tag == 'W':
+                ok_uv_W &= good
+            else:
+                ok_uv_S &= good
+    check(f"Weinberg の行: v が (iγp − m)v = 0 を満たせば u = C v^* は (iγp + m)u = 0 (乱数 3 組){note}", ok_uv_W)
+    check(f"Srednicki の行: v が (p̸ − m)v = 0 を満たせば u = C v^* は (p̸ + m)u = 0 (乱数 3 組){note}", ok_uv_S)
+    # 双線形: u_i = C v_i^* のとき ū_1 A u_2 = v̄_2 (βC A^T βC) v_1 (運動量の順序が入れ替わる)。
+    # βC γ^{μT} βC = γ^μ と (βC)² = −1 から、 A = −i a̸ + b (Weinberg) なら βC A^T βC = −i a̸ − b
+    bc = BW0 @ C
+    ok_bc = close(bc @ bc, -E4) and all(close(bc @ GW[mu].T @ bc, GW[mu]) for mu in range(4))
+    ok_order = True
+    swapped_differs = False
+    for _ in range(3):
+        v1 = rng.normal(size=4) + 1j * rng.normal(size=4)
+        v2 = rng.normal(size=4) + 1j * rng.normal(size=4)
+        a_low = rng.normal(size=4) + 1j * rng.normal(size=4)
+        b = complex(rng.normal(), rng.normal())
+        A = -1j * slash(GW, a_low) + b * E4
+        u1, u2 = C @ v1.conj(), C @ v2.conj()
+        bar = lambda s: s.conj() @ BW0
+        lhs = bar(u1) @ A @ u2
+        Bv = -1j * slash(GW, a_low) - b * E4
+        ok_order &= bool(np.isclose(lhs, bar(v2) @ Bv @ v1)) and close(bc @ A.T @ bc, Bv)
+        swapped_differs |= not bool(np.isclose(lhs, bar(v1) @ Bv @ v2))
+    check(f"Weinberg の行: (βC)² = −1、 βC γ^{{μT}} βC = γ^μ{note}", ok_bc)
+    check(f"ū_1(−ia̸ + b)u_2 = v̄_2(−ia̸ − b)v_1 で、 順序をそのままにした v̄_1(…)v_2 とは一致しない (乱数 3 組){note}",
+          ok_order and swapped_differs)
     return fails
 
 
