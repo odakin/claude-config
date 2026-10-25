@@ -43,6 +43,12 @@ sections:
   - id: align-split-tag-orphan
     level: 2
     title: "長い display の式番号が下の行に回るのは amsmath の標準 — 欠陥として報告しない (2026-09-12、 著者裁定)"
+  - id: qed-alone-after-display
+    level: 2
+    title: "証明が数式で終わると ■ だけが次の頁に回る — `\\qedhere` は番号つきの式の番号を消す"
+  - id: dots-before-closing-delimiter
+    level: 2
+    title: "amsmath は `\\cdots`・`\\dots` の直後が閉じ括弧か `$` のとき右に `\\,` を足す — 括弧の中に点だけだと左右が揃わない"
   - id: symbol-width-repagination
     level: 2
     title: "記号幅の変わる一括置換は、 総頁数が同じまま頁割りだけ動かす — `.aux` の label→頁 で見る (2026-09-12)"
