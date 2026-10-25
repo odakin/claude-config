@@ -542,6 +542,20 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 2. 非対称になりうる量 (補正を入れたスペクトル、 片側の零点、 符号の変わる点) は両側で読み、 本文の値がどちらの側かを文に書く。 片側の値だけを書くなら、 反対側の値を記録に残す。
 3. 照合 script を書いた人と別の目 (盲検・別の vendor) に、 **本文の文から**照合させる。 同じ script の再実行は同じ読み違いを繰り返す ([`#closed-form-transcription-carries-its-metric`](#closed-form-transcription-carries-its-metric) と同じ形)。
 
+## <a id="flagged-formula-consumption"></a>付録に「この式は誤り」 の注記が残っているときは、 本文が消費しているかを機械で引き、 本文の数値の出所を辿る
+
+**Pattern** (実測): 原稿の付録に、 以前の検算で付けた「この閉形式は近似の欠陥で誤り」 の注記が数件残っていた。 注記は「本文のある節がこの式を直接使う」「誤差は別の経路で計算するので影響しない」 と消費関係まで書いていたが、 原稿の再編 (分割・移設) の後では、 その節は式を使っておらず、 「影響しない理由」 に挙げた経路の式にも別の誤りの注記が付いていた。 本文の数値は実際には、 付録のどちらの式でもなく、 厳密な入力から別の検算 script が出していた。 一方で、 本文の著者判断待ちの注記 1 つが、 付録の誤った式から出る比を「本文に書ける一般の言明」 の候補に挙げていた (書けば誤りが本文に入る)。
+
+**Rule**:
+
+1. 注記が書く消費関係 (どの節が使う・何が影響しない) は、 書いた時点の原稿についての主張で、 再編で古くなる。 注記を信じず、 本文の全 `\ref` / `\eqref` の参照先と、 注記の付いた範囲の `\label` を機械で突き合わせる。 範囲は行番号でなく label で探し、 既知の参照 1 つを陽性対照にする。 式番号のほかに、 節の label への参照 (「出所 = 付録 X」) と、 本文の中の判断待ちの注記が誤った式の帰結を候補にしていないかを読む。
+2. 本文が印字する数値ごとに、 どの script のどの入力から出たかを辿り、 誤った式を通っていないことを確かめる。 そのうえで独立な実装で数値を再現し、 誤った式を使った場合の値を foil として並べる (本文の値と食い違うことが出所の確認になる)。
+3. 「誤り」 とされた式は、 数値の前に、 その形式が持つ厳密な一般の不等式と比べる (例: 推定の誤差の量が状態の標準偏差で上から抑えられる、 確率の総和が 1、 正定値性)。 不等式を破る式は parameter に依らず誤り。
+4. 注記の「訂正形」 も検証前の主張として扱う。 「最低次で A に近づく」 とあれば、 どの小さな parameter がそれを支配するかを、 他を固定して 1 つずつ動かして確かめる (補正が注記の言う parameter でなく、 別の parameter の 1 次だった実測がある)。 厳密な恒等式が書けるなら、 近似の言明より先にそれを出す。
+5. 全空間で定義した量が、 有限の窓・有限の切断では有限に見えても、 測度零の領域 (零運動量など) から対数で発散していることがある。 窓や切断を何桁か動かし、 予言した傾きと比べる。 注記の「厳密な値は有限」 は、 どの極限・どの部分空間についての言明かを書き分ける。
+
+記録は注記ごとに「本文での消費 (0 件ならその旨) / 効く・効かない・既に直っている」 の表にし、 注記の文そのものの古い・不正確な箇所は、 原稿に当てる提案と分けて書く (原稿の式と主張は著者の裁定の後 = [`manuscript-claim-ownership.md`](manuscript-claim-ownership.md))。 浮動小数の比較点の選び方 = [`scientific-computing.md#reference-side-numerics`](scientific-computing.md#reference-side-numerics) の 9、 foil の識別力 = `ai-collaboration/conventions/physics-verification-cycle.md#foil-discrimination-measured`。
+
 ## <a id="implementation-claim-reachable-states"></a>実装の振る舞いについての文は、 実装が届く状態の集合で確かめる — 状態の全範囲で探すと、 作れない状態が反例に出る
 
 **Pattern** (実測): 本文の「実装では、 この限界に当たるのは境界のごく近くだけ」 を、 状態の parameter の全範囲で走査すると、 境界から離れたところでも当たる状態が見つかった。 その状態は、 実装の操作 (入力の強さの上限・入る時の初期状態・状態を置き換える操作) では作れなかった。 文は実装の届く範囲では正しく、 状態空間の全体では偽。 同じ原稿で、 同じ操作の語が本文の式と実装で違う量に掛かっていて (どの量の変化率を与えるかが違う)、 結論の符号と上界はどちらでも成り立ち、 数の対応だけがある因子だけ違っていた。
@@ -634,7 +648,7 @@ origin: 2026-09-12、長く改稿を重ねた原稿で、共著者が外部 tool
 - 主張の収支と強さ: [`headline-claim-budget-check`](#headline-claim-budget-check) (**係数の符号を含む**) / [`claim-strength-three-tests`](#claim-strength-three-tests) / [`uniqueness-claim-exhaustion`](#uniqueness-claim-exhaustion) / [`title-claim-check`](#title-claim-check)
 - 符号と規約: [`absolute-sign-external-anchor`](#absolute-sign-external-anchor) / [`convention-difference-closure`](#convention-difference-closure) / [`euclidean-check-in-lorentzian-paper`](#euclidean-check-in-lorentzian-paper)
 - 配置と語彙: [`statement-placement-check`](#statement-placement-check) / [`stale-framing-sweep`](#stale-framing-sweep) / [`abstract-geroch-compression`](#abstract-geroch-compression) / [`sentence-length-audit`](#sentence-length-audit) (機械 = [`check-paper-prose.py`](../scripts/check-paper-prose.py) の L・位置語 P・強い語 W) / 略語の 2 条件 = [`latex.md#abbreviation-first-occurrence`](latex.md#abbreviation-first-occurrence) (機械 = `check-abbreviations.py`)
-- 記号と付録: [`new-symbol-convention-consistency`](#new-symbol-convention-consistency) / [`notation-continuity-across-sections`](#notation-continuity-across-sections) / [`cross-check-appendix-shape`](#cross-check-appendix-shape) / [`appendix-order-by-first-reference`](#appendix-order-by-first-reference) (機械 = `check-paper-prose.py` の A1–A3)
+- 記号と付録: [`new-symbol-convention-consistency`](#new-symbol-convention-consistency) / [`notation-continuity-across-sections`](#notation-continuity-across-sections) / [`cross-check-appendix-shape`](#cross-check-appendix-shape) / [`appendix-order-by-first-reference`](#appendix-order-by-first-reference) (機械 = `check-paper-prose.py` の A1–A3) / [`flagged-formula-consumption`](#flagged-formula-consumption) (付録に誤りの注記が残る原稿)
 - 文献同定: HEP 系の `refs.bib` は [`inspire-bib-audit.py`](../scripts/inspire-bib-audit.py) で title・著者・journal・volume・初頁・DOI・eprint を照合する。ローカルの説明的 texkey が INSPIRE の canonical texkey でなくても、arXiv ID、次に DOI へ fallback して SKIP と誤認しない。引用が本文の主張を実際に支えるかは別の原文確認であり、metadata PASS で代替しない。 bib でない業績リスト (応募書類・CV の論文欄、 docx や text) は [`check-doi-list.py`](../scripts/check-doi-list.py) で DOI ごとに Crossref の書誌を出し、 記載の行と DOI ごとに並べて読む (著者名の綴り・年・巻の違いを拾う。 突き合わせは人)。
 
 符号を持つ印字量の登録簿がある repo では、 gate record に `check-sign-anchors.py --run --deferrals` の結果 (fleet を変えた後なら `--fleet-scan` の表も) を載せる。 gate の worker には「規約文書は検算対象」 ([#absolute-sign-external-anchor](#absolute-sign-external-anchor) の Rule 4) を spec で明示する。 起源 = 2026-09 の gate spec が `headline-claim-budget-check` を含み、 中心主張の検算を worker 自身にさせたことで全体符号の誤りが出た (= 偶然だった手順を標準にする)。
