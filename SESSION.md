@@ -5,6 +5,8 @@
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
+- **重なる未 commit を解く道具の試走 + 無人の routine の log の全文** — 道具 `scripts/intersect-sync.py` は読むだけの試走として同期の sweep と fleet heartbeat に繋いだ。 自動の apply に繋ぐかは 1 週間の記録 (`--report`) を見て owner が決める (見直しの期日つき TODO は owner の台帳)。 skill の routine は stream-json の中継 (`scripts/claude-stream-log.py`) で全部の assistant の文を log に書き、 どの routine にも `CLAUDE_ROUTINE_ID` を焼く (各 machine の次の session 開始の `--ensure` が起動行を書き換える)。 正本 = [`multi-session-coordination.md#owner-gone-intersect-sync`](conventions/multi-session-coordination.md#owner-gone-intersect-sync) / [`scheduled-tasks.md#headless-log-full-report`](conventions/scheduled-tasks.md#headless-log-full-report)。
+
 - **Workflow の並べすぎ (fan-out) の対策** — 規約 [`multi-session-coordination.md#workflow-fan-out`](conventions/multi-session-coordination.md#workflow-fan-out)・道具 2 本 (`scripts/workflow-estimate.py` / `scripts/workflow-run-stats.py`)・hook `hooks/workflow-fanout-check.sh` (配線済み)・空回しの隔離 [`hook-authoring.md#dry-run-model-authored-script`](conventions/hook-authoring.md#dry-run-model-authored-script)。 残り = 再開の cache の実地の試験 (owner の判断待ち) と、 もう 1 台の機械での実走の確認
 
 - **安全停止後の worker への再送** — 実装と合成検査を済ませ、通常利用での観察に進む段階。次は実 harness の呼出しで発火した証拠と、配置だけの確認を区別して検収する。入口と境界 = [停止後の手順](conventions/tool-call-robustness.md#api-safety-filter-on-main-response)、[判定器](scripts/lib/worker_safety_stop.py)。
