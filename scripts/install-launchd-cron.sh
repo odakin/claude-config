@@ -14,7 +14,14 @@
 #             `--no-session-persistence` を併用 = 無人 run の session を保存しない
 #             (= 「最近の項目」/session 一覧を cron session で汚さない。 transcript は残らないため
 #             事後デバッグは StandardOutPath の log file が唯一の手掛かり。 機構差の SoT =
-#             conventions/scheduled-tasks.md#headless-session-persistence)
+#             conventions/scheduled-tasks.md#headless-session-persistence)。
+#             CLI が stream-json を持てば `--output-format stream-json --verbose` で起動し、 同じ dir の
+#             claude-stream-log.py が全部の assistant の文・tool の名前・hook の知らせを log に直して書く
+#             (text 形式は最後の message しか出さず、 Stop hook が追記を求めると本報告が log から消える =
+#             conventions/scheduled-tasks.md#headless-log-full-report)。 claude は TCC の責任者のまま起動する
+#             (sh が exec していた時と同じ許可で動く)。 終了値は claude のもの
+#   - どちらの type も起動行で `CLAUDE_ROUTINE_ID=<task-id>` を export する (= hook や道具が「無人の定期実行の中」
+#             を知る印。 例: 人の居る session にだけ求める検査を、 無人の run では「人に回す」 1 行にする)
 #   - cmd   : script を直接実行 (= 決定的 routine、 claude 不要 = token ゼロ)
 #
 # == 汎用エンジンとしての境界 ==
@@ -31,7 +38,9 @@
 #                                 cron→calendar 変換の版) が plist とずれていれば StartCalendarInterval だけ
 #                                 書き換えて再 load (= 冪等・quiet・fail-open)。 SessionStart 等から呼び、
 #                                 新 routine も cron の変更も git pull したマシンに自動で届く。
-#                                 ⚠️ 届くのは calendar だけ: command 側 (--gate / CRON_MODEL / CRON_EFFORT /
+#                                 ⚠️ 届くのは calendar と起動行の形の更新だけ (関門の旧形 → 新形、 skill の
+#                                 `exec claude -p` → stream-json の log 中継、 CLAUDE_ROUTINE_ID の export = どれも
+#                                 その部分だけを書き換え、 他の文字は変えない): command 側 (--gate / CRON_MODEL / CRON_EFFORT /
 #                                 CRON_CONFIG_DIR / target) の変更は --install-one で入れ直す (= 自動で作り直すと
 #                                 install 時に手で渡した pin が消えるため、 あえて触らない)。 実行中の job は殺さない
 #                                 よう次の --ensure に回す。 照合済み印 = $LCRON_STATE_DIR (既定
@@ -85,7 +94,7 @@ esac
 LA_DIR="${LCRON_LA_DIR:-$HOME/Library/LaunchAgents}"   # LCRON_LA_DIR は test 用 override
 LOG_DIR="${LCRON_LOG_DIR:-$HOME/Library/Logs}"
 STATE_DIR="${LCRON_STATE_DIR:-$HOME/Library/Application Support/install-launchd-cron}"   # --ensure の照合済み印
-CAL_VERSION=3   # plist 変換の版 (2 = 各欄の , / N-M / */S / N-M/S + 月 + 日と曜日の OR、 3 = 関門の起動行が失敗を待機と分ける)
+CAL_VERSION=4   # plist 変換の版 (2 = 各欄の , / N-M / */S / N-M/S + 月 + 日と曜日の OR、 3 = 関門の起動行が失敗を待機と分ける、 4 = skill を stream-json の log 中継で起動 + CLAUDE_ROUTINE_ID)
 DOMAIN="gui/$(id -u)"
 CRON_MODEL="${CRON_MODEL:-}"
 CRON_EFFORT="${CRON_EFFORT:-}"
@@ -113,6 +122,23 @@ printf '%s' "$CLAUDE_HELP" | grep -q -- --no-session-persistence && NOPERSIST_FL
 # 対話 session の I3 (= 手元 session のリモート続行) には影響しない (= cron invocation のみ override)。
 RCOFF=""
 printf '%s' "$CLAUDE_HELP" | grep -q -- --settings && RCOFF=1
+
+# skill routine の log に全部の assistant の文を残す (= text 形式は最後の message だけ。 Stop hook が追記を求めると
+# 本報告が消える)。 CLI が stream-json を持ち、 中継 (同じ dir の claude-stream-log.py) が在るときだけ使う
+# (= 古い CLI・中継の無い配置では従来の `exec claude -p` に degrade)。 hook の event は持っていれば足す
+# (= hook の知らせ・失敗を log に出すため。 中身の大きい SessionStart の注入は中継が捨てる)。
+# ⚠️ stream-json を持たない CLI の時に照合した loaded routine は、 後で CLI を上げても照合済みの印が一致して
+#    照合し直されない = その routine は --install-one で入れ直す (CAL_VERSION を上げれば全件を照合し直す)。
+RENDERER_PATH="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/claude-stream-log.py"
+[ -f "$RENDERER_PATH" ] || RENDERER_PATH=""   # 既存の plist を直す (--ensure) ときは、 plist が指す claude の --help で flag を決める
+RENDERER="$RENDERER_PATH"
+STREAM_FLAGS=""
+if [ -n "$RENDERER" ] && printf '%s' "$CLAUDE_HELP" | grep -q -- stream-json; then
+  STREAM_FLAGS="--output-format stream-json --verbose"
+  printf '%s' "$CLAUDE_HELP" | grep -q -- --include-hook-events && STREAM_FLAGS="$STREAM_FLAGS --include-hook-events"
+else
+  RENDERER=""
+fi
 
 LABEL_PREFIX=""
 WORKDIR='$HOME'           # 既定: literal。 plist の `cd "..."` 内で launchd runtime に展開される
@@ -200,6 +226,57 @@ def upgrade_gate(cmd):
     if not m:
         return cmd
     return cmd[:m.start()] + m.group(1) + gate_block(m.group(2)) + m.group(3) + cmd[m.end():]
+
+
+# skill の起動 (claude の絶対 path の後に -p)。 中継の起動行 = exec python3 "<中継>" -- "<claude>" -p <stream の flag> ...
+_OLD_EXEC_RE = re.compile(r'exec ("[^"]*/claude") -p ')
+_UNSET = 'unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; '
+
+
+def stream_launch(claude_q, renderer, stream_flags):
+    """skill の claude を起動する部分 (末尾の空白まで)。 中継が使えなければ従来の exec。"""
+    if renderer and stream_flags:
+        return 'exec python3 "%s" -- %s -p %s ' % (renderer, claude_q, stream_flags)
+    return 'exec %s -p ' % claude_q
+
+
+def routine_id_export(task_id):
+    return 'export CLAUDE_ROUTINE_ID="%s"; ' % task_id
+
+
+_CAP = {}
+
+
+def stream_flags_of(claude_path):
+    """その claude が持つ stream の flag (`--help` を 1 回読む)。 持たない・読めない = 空 (= 従来の exec のまま)。
+    plist が指す claude 自身で見る (engine の CLAUDE_BIN と plist の claude が別の版でも、 起動できない形に直さない)。"""
+    if claude_path not in _CAP:
+        import subprocess
+        flags = ''
+        try:
+            out = subprocess.run([claude_path, '--help'], capture_output=True, text=True, timeout=20).stdout
+            if 'stream-json' in out:
+                flags = '--output-format stream-json --verbose'
+                if '--include-hook-events' in out:
+                    flags += ' --include-hook-events'
+        except Exception:
+            pass
+        _CAP[claude_path] = flags
+    return _CAP[claude_path]
+
+
+def upgrade_launch(cmd, task_id, renderer):
+    """旧形の起動行を今の形に: `exec "<claude>" -p ` → 中継つき (その claude が持つ stream の flag)、 CLAUDE_ROUTINE_ID の
+    export を足す。 他の文字 (CRON_MODEL / CRON_EFFORT / CRON_CONFIG_DIR の pin・prompt) は変えない。 何度当てても同じ (冪等)。"""
+    if renderer and 'claude-stream-log.py' not in cmd:
+        m = _OLD_EXEC_RE.search(cmd)
+        flags = stream_flags_of(m.group(1).strip('"')) if m else ''
+        if flags:
+            cmd = cmd[:m.start()] + stream_launch(m.group(1), renderer, flags) + cmd[m.end():]
+    if 'CLAUDE_ROUTINE_ID=' not in cmd:
+        cmd = (_UNSET + routine_id_export(task_id) + cmd[len(_UNSET):]) if cmd.startswith(_UNSET) \
+            else routine_id_export(task_id) + cmd
+    return cmd
 
 # 5 欄の名前・plist key・値域。 曜日の 7 は 0 (日曜) と同じ。
 FIELDS = [('分', 'Minute', 0, 59), ('時', 'Hour', 0, 23), ('日', 'Day', 1, 31),
@@ -303,7 +380,9 @@ if sys.argv[1] == 'recal':
             print('missing', task_id)
             continue
         pa = list(d.get('ProgramArguments') or [])
-        new_pa = pa[:2] + [upgrade_gate(pa[2]) if isinstance(pa[2], str) else pa[2]] + pa[3:] if len(pa) >= 3 else pa
+        renderer = os.environ.get('LCRON_RENDERER', '')
+        new_pa = (pa[:2] + [upgrade_launch(upgrade_gate(pa[2]), task_id, renderer)
+                            if isinstance(pa[2], str) else pa[2]] + pa[3:]) if len(pa) >= 3 else pa
         if d.get('StartCalendarInterval') == want and new_pa == pa:
             print('same', task_id)
         elif running == '1':
@@ -317,7 +396,7 @@ if sys.argv[1] == 'recal':
             print('updated', task_id)
     sys.exit(0)
 
-task_id, cron, label, claude_bin, kind, target, prompt, logf, out, model, workdir, gate, nopersist, rcoff, effort, config_dir, node_dir = sys.argv[2:19]
+task_id, cron, label, claude_bin, kind, target, prompt, logf, out, model, workdir, gate, nopersist, rcoff, effort, config_dir, node_dir, renderer, stream_flags = sys.argv[2:21]
 entries = entries_or_exit(task_id, cron)
 sci = entries[0] if len(entries) == 1 else entries
 # CLI 認証で実行。 API key/inference token を unset して必ず claude.ai OAuth を使う。
@@ -327,7 +406,7 @@ pin = ('export CLAUDE_CONFIG_DIR="%s"; ' % config_dir) if config_dir else ''
 base_path = "$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 if node_dir and node_dir not in base_path.split(":"):
     base_path += ":" + node_dir
-prefix = ('unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; ' + pin +
+prefix = (_UNSET + routine_id_export(task_id) + pin +
           'export PATH="%s"; ' % base_path +
           'cd "%s" && ' % workdir)
 # 任意の gate: cd の後・exec の前に挿入。 gate の 1 = defer (exit 0)、 その他の非 0 = 失敗 (= 同じ終了値で終わる。 gate_block)
@@ -337,7 +416,8 @@ if kind == 'skill':
     model_flag += ('--effort %s ' % effort) if effort else ''
     nopersist_flag = (nopersist + ' ') if nopersist else ''
     rcoff_flag = '--settings \'{"remoteControlAtStartup":false}\' ' if rcoff else ''
-    cmd = prefix + gate_prefix + 'exec "%s" -p %s%s--permission-mode bypassPermissions %s"%s"' % (claude_bin, nopersist_flag, rcoff_flag, model_flag, prompt)
+    cmd = (prefix + gate_prefix + stream_launch('"%s"' % claude_bin, renderer, stream_flags) +
+           '%s%s--permission-mode bypassPermissions %s"%s"' % (nopersist_flag, rcoff_flag, model_flag, prompt))
 else:  # cmd = 決定的 script を直接実行 (claude 不要)
     cmd = prefix + gate_prefix + 'exec bash "%s"' % target
 d = {
@@ -358,7 +438,7 @@ write_plist() {
   task_id="$1"; kind="$2"; target="$3"; cron="$4"
   label="$(label_for "$task_id")"; plist="$(plist_path "$task_id")"; logf="$(log_for "$task_id")"
   if [ "$kind" = skill ]; then prompt="$(prompt_for "$target")"; else prompt=""; fi
-  plist_py write "$task_id" "$cron" "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" "$CRON_EFFORT" "$CRON_CONFIG_DIR" "$NODE_BIN_DIR" \
+  plist_py write "$task_id" "$cron" "$label" "$CLAUDE_BIN" "$kind" "$target" "$prompt" "$logf" "$plist" "$CRON_MODEL" "$WORKDIR" "$GATE_SNIPPET" "$NOPERSIST_FLAG" "$RCOFF" "$CRON_EFFORT" "$CRON_CONFIG_DIR" "$NODE_BIN_DIR" "$RENDERER" "$STREAM_FLAGS" \
     || { echo "  ERROR plist を書けず: $task_id (登録しない)" >&2; return 1; }
   record_cron "$task_id" "$cron"
   echo "  plist: $plist  ($kind, cron: $cron)"
@@ -465,8 +545,14 @@ EOF
     mflag=""; [ -n "$CRON_MODEL" ] && mflag="--model $CRON_MODEL"
     [ -n "$CRON_EFFORT" ] && mflag="$mflag --effort $CRON_EFFORT"
     RCOFF_ARGS=""; [ -n "$RCOFF" ] && RCOFF_ARGS='--settings {"remoteControlAtStartup":false}'
+    export CLAUDE_ROUTINE_ID="$task_id"
+    if [ -n "$RENDERER" ]; then
+      # STREAM_FLAGS は空白で分けて渡す (= 引用しない)
+      eval "cd \"$WORKDIR\"" && exec python3 "$RENDERER" -- "$CLAUDE_BIN" -p $STREAM_FLAGS $NOPERSIST_FLAG $RCOFF_ARGS --permission-mode bypassPermissions $mflag "$(prompt_for "$target")"
+    fi
     eval "cd \"$WORKDIR\"" && exec "$CLAUDE_BIN" -p $NOPERSIST_FLAG $RCOFF_ARGS --permission-mode bypassPermissions $mflag "$(prompt_for "$target")"
   else
+    export CLAUDE_ROUTINE_ID="$task_id"
     eval "cd \"$WORKDIR\"" && exec bash "$target"
   fi
 }
@@ -549,7 +635,7 @@ $(find_routine "$task_id")
 EOF
       set -- "$@" "$task_id" "$cron" "$(plist_path "$task_id")" "${tag#V}"
     done
-    [ $# -eq 0 ] || plist_py recal "$@"
+    [ $# -eq 0 ] || LCRON_RENDERER="$RENDERER_PATH" plist_py recal "$@"
   } | while read -r result task_id; do
     IFS='|' read -r _ kind target cron <<EOF
 $(find_routine "$task_id")

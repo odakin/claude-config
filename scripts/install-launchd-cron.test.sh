@@ -249,6 +249,109 @@ if printf '%s' "$c" | grep -q '_g=\$?' && ! printf '%s' "$c" | grep -q ' || exit
    && grep -q "ensure update: g" "$TMP/out"; then ok "--ensure が旧形の関門を新形に直す (pin は残す)"
 else ng "out=$(cat "$TMP/out") err=$(cat "$TMP/err") cmd=$c"; fi
 
+echo "T10 skill は stream-json の log 中継で起動し、 どの type も CLAUDE_ROUTINE_ID を export する"
+SB="$TMP/sbin"; mkdir -p "$SB"
+FIX="$TMP/stream.jsonl"
+cat > "$FIX" <<'JSONL'
+{"type":"system","subtype":"init","model":"fake-model","session_id":"0123456789abcdef"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"本報告の行"}]}}
+{"type":"user","message":{"content":[{"type":"text","text":"Stop hook feedback:\n追記を求める"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"追記の行"}]}}
+{"type":"result","subtype":"success","is_error":false,"result":"追記の行","num_turns":2}
+JSONL
+cat > "$SB/claude" <<EOF
+#!/bin/sh
+if [ "\$1" = "--help" ]; then
+  echo "  --no-session-persistence  --settings <x>  --output-format <format> (text, json, stream-json)  --include-hook-events"
+  exit 0
+fi
+echo "routine=\$CLAUDE_ROUTINE_ID" > "$TMP/seen-env"
+cat "$FIX"
+exit 5
+EOF
+chmod +x "$SB/claude"
+sengine() {  # stream-json を持つ偽の claude で engine を回す
+  PATH="$BIN:$PATH" LCRON_LA_DIR="$LA" LCRON_LOG_DIR="$TMP/log" CLAUDE_BIN="$SB/claude" HOME="$TMP" \
+    sh "$ENGINE" --label-prefix "$PREFIX" "$@"
+}
+SKT="$TMP/SKILL.md"; : > "$SKT"
+pcmd() { python3 -c 'import plistlib,sys; print(plistlib.load(open(sys.argv[1],"rb"))["ProgramArguments"][2])' "$(plist_of "$1")"; }
+RENDER="$HERE/claude-stream-log.py"
+CRON_MODEL=m1 sengine --workdir "$TMP" --routine "sk|skill|$SKT|0 9 * * *" --install-one sk >"$TMP/out" 2>"$TMP/err"
+c="$(pcmd sk)"
+want_launch="exec python3 \"$RENDER\" -- \"$SB/claude\" -p --output-format stream-json --verbose --include-hook-events --no-session-persistence"
+case "$c" in
+  *"$want_launch"*"--model m1 "*) ok "skill の起動行 = 中継 + stream-json + 既存の flag と model の pin" ;;
+  *) ng "skill の起動行: $c" ;;
+esac
+case "$c" in *'export CLAUDE_ROUTINE_ID="sk"; '*) ok "skill も CLAUDE_ROUTINE_ID を export" ;; *) ng "routine id が無い: $c" ;; esac
+python3 - "$(plist_of sk)" "$HERE/lib" <<'PYJL' && ok "runs_claude_p は新しい起動行でも claude -p と読む" || ng "runs_claude_p が読めない"
+import plistlib, sys
+sys.path.insert(0, sys.argv[2])
+import launchd_job_log as j
+sys.exit(0 if j.runs_claude_p(plistlib.load(open(sys.argv[1], "rb"))) else 1)
+PYJL
+
+echo "T11 起動して log に本報告と追記の両方が残る + 終了値は claude のもの"
+mkdir -p "$TMP/log"
+LOGF="$TMP/log/$PREFIX.sk.log"; : > "$LOGF"
+HOME="$TMP" PATH="$PATH" /bin/sh -c "$(pcmd sk)" >>"$LOGF" 2>&1; rc=$?
+[ "$rc" -eq 5 ] && ok "終了値 5 がそのまま出る" || ng "rc=$rc log=$(cat "$LOGF")"
+grep -q "本報告の行" "$LOGF" && grep -q "追記の行" "$LOGF" && ok "本報告と追記の両方が log に残る" || ng "log: $(cat "$LOGF")"
+grep -q "^── .* 開始 · fake-model · session 01234567 ──" "$LOGF" && tail -n 1 "$LOGF" | grep -q "rc=5" \
+  && ok "開始と終わりの行" || ng "log: $(cat "$LOGF")"
+grep -q "routine=sk" "$TMP/seen-env" 2>/dev/null && ok "claude の中から CLAUDE_ROUTINE_ID が見える" || ng "env: $(cat "$TMP/seen-env" 2>&1)"
+
+echo "T12 stream-json を持たない CLI では従来の exec に戻る (routine id は付ける)"
+CRON_MODEL=m1 engine --workdir "$TMP" --routine "old|skill|$SKT|0 9 * * *" --install-one old >/dev/null 2>&1
+c="$(pcmd old)"
+case "$c" in
+  *"exec \"$BIN/claude\" -p "*) case "$c" in *claude-stream-log*) ng "中継が入った: $c" ;; *) ok "従来の exec claude -p" ;; esac ;;
+  *) ng "起動行: $c" ;;
+esac
+case "$c" in *'CLAUDE_ROUTINE_ID="old"'*) ok "degrade しても routine id は付く" ;; *) ng "routine id が無い: $c" ;; esac
+
+echo "T13 旧形の skill の plist を --ensure が中継つきに直す (pin は残す・2 回目は無言)"
+CRON_MODEL=m1 engine --workdir "$TMP" --routine "old2|skill|$SKT|0 9 * * *" --install-one old2 >/dev/null 2>&1
+# old = 旧 engine が書いた形 (routine id 無し) で、 plist の claude は stream-json を持つ版 / old2 = plist の claude が持たない版
+python3 - "$(plist_of old)" "$(plist_of old2)" "$BIN/claude" "$SB/claude" <<'PYOLD2'
+import plistlib, sys
+for p, tid, swap in ((sys.argv[1], "old", True), (sys.argv[2], "old2", False)):
+    d = plistlib.load(open(p, "rb")); c = d["ProgramArguments"][2]
+    c = c.replace('export CLAUDE_ROUTINE_ID="%s"; ' % tid, '') + " # PIN-MARK"
+    if swap:
+        c = c.replace('"%s"' % sys.argv[3], '"%s"' % sys.argv[4])
+    d["ProgramArguments"][2] = c; plistlib.dump(d, open(p, "wb"))
+PYOLD2
+for t in old old2; do printf '3 0 9 * * *\n' > "$TMP/Library/Application Support/install-launchd-cron/$PREFIX.$t.cron"; done
+sengine --workdir "$TMP" --routine "old|skill|$SKT|0 9 * * *" --routine "old2|skill|$SKT|0 9 * * *" --ensure >"$TMP/out" 2>"$TMP/err"
+c="$(pcmd old)"
+case "$c" in
+  *"exec python3 \"$RENDER\" -- \"$SB/claude\" -p --output-format stream-json --verbose --include-hook-events "*"--model m1 "*"PIN-MARK"*)
+    ok "旧形 → 中継つき (claude の path・model の pin・手で足した印は残る)" ;;
+  *) ng "直らない: $c / out=$(cat "$TMP/out") err=$(cat "$TMP/err")" ;;
+esac
+c2="$(pcmd old2)"
+case "$c2" in
+  *claude-stream-log*) ng "stream-json を持たない claude に中継を付けた: $c2" ;;
+  *'export CLAUDE_ROUTINE_ID="old2"; '*"exec \"$BIN/claude\" -p "*PIN-MARK*) ok "plist の claude が stream-json を持たなければ exec のまま (routine id だけ足す)" ;;
+  *) ng "old2: $c2" ;;
+esac
+case "$c" in *'unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN; export CLAUDE_ROUTINE_ID="old"; '*) ok "routine id を unset の直後に足す" ;; *) ng "routine id: $c" ;; esac
+grep -q "ensure update: old" "$TMP/out" && ok "ensure update が出る" || ng "out=$(cat "$TMP/out")"
+c1="$c"
+sengine --workdir "$TMP" --routine "old|skill|$SKT|0 9 * * *" --ensure >"$TMP/out" 2>"$TMP/err"
+[ ! -s "$TMP/out" ] && [ "$(pcmd old)" = "$c1" ] && ok "2 回目は無言・起動行も同じ" || ng "2 回目: out=$(cat "$TMP/out")"
+rm -f "$TMP/Library/Application Support/install-launchd-cron/$PREFIX.old.cron"
+sengine --workdir "$TMP" --routine "old|skill|$SKT|0 9 * * *" --ensure >"$TMP/out" 2>"$TMP/err"
+[ ! -s "$TMP/out" ] && [ "$(pcmd old)" = "$c1" ] && ok "印が無くても照合して書き換えない (冪等)" || ng "冪等でない: $(pcmd old)"
+
+echo "T14 cmd も CLAUDE_ROUTINE_ID を export し、 script から見える"
+CT="$TMP/cmdjob.sh"; printf '#!/bin/sh\necho "cmd-routine=$CLAUDE_ROUTINE_ID" > "%s/cmd-env"\n' "$TMP" > "$CT"; chmod +x "$CT"
+engine --workdir "$TMP" --routine "cj|cmd|$CT|0 9 * * *" --install-one cj >/dev/null 2>&1
+HOME="$TMP" /bin/sh -c "$(pcmd cj)" >/dev/null 2>&1
+grep -q "cmd-routine=cj" "$TMP/cmd-env" 2>/dev/null && ok "cmd の script から routine id が見える" || ng "cmd env: $(cat "$TMP/cmd-env" 2>&1) cmd=$(pcmd cj)"
+
 echo
 echo "install-launchd-cron.test.sh: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

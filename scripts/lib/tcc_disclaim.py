@@ -16,6 +16,9 @@
     if r is not None and r.returncode == 0: ... r.stdout ...
   戻り値 = Result(returncode, stdout, stderr) (str)。 timeout で kill したら returncode = -9 で stderr に一言。
   macOS 以外・関数が無い・起動に失敗したときは None = 呼び元は従来の経路に戻る。
+  終わるまで待たずに出力を流して読むなら spawn_disclaimed (pid を返す。 子の fd は {子の fd: 親の fd} で渡し、
+  渡さない fd は親のものを継ぐ。 待つのは呼び元 = os.waitpid)。 使い手 = scripts/claude-stream-log.py (無人の claude を
+  責任者のまま起動して出力を log に直す)。
 
 ⚠️ 子の許可がまだ無ければ、 子の名前で確認の画面が出て、 応答があるまで子は待つ = timeout で kill する
   (無人の hook から呼ぶなら timeout を短く)。 ⚠️ 責任者を子に移すのは、 子が自分の許可で動くべきときだけに使う
@@ -51,12 +54,18 @@ def _libc():
     return libc if hasattr(libc, "responsibility_spawnattrs_setdisclaim") else None
 
 
-def run_disclaimed(argv: list[str], cwd: str | None = None, timeout: float = 10.0,
-                   env: dict | None = None) -> Result | None:
-    """argv を disclaim つきで起動し、 stdout / stderr を集めて返す。 起動できなければ None。"""
+def spawn_disclaimed(argv: list[str], cwd: str | None = None, env: dict | None = None,
+                     fds: dict[int, int] | None = None) -> int | None:
+    """argv を disclaim つきで起動して pid を返す (待たない)。 起動できなければ None。
+
+    fds = {子の fd: 親の fd} (例 {0: devnull, 1: pipe の書き口})。 渡した親の fd は子では閉じる (dup2 の後)。
+    渡さない fd は親のものを継ぐ。 argv[0] は絶対 path か cwd 相対 (PATH を引かない)。"""
     libc = _libc()
     if libc is None or not argv:
         return None
+    prog = os.fsencode(argv[0])
+    if b"/" not in prog:
+        return None  # PATH を引かない (呼び元が絶対 path か cwd 相対を渡す)
     vp = ctypes.c_void_p
     attr, fa = vp(), vp()
     if libc.posix_spawnattr_init(ctypes.byref(attr)) != 0:
@@ -66,21 +75,17 @@ def run_disclaimed(argv: list[str], cwd: str | None = None, timeout: float = 10.
         libc.posix_spawnattr_destroy(ctypes.byref(attr))
         return None
     libc.posix_spawn_file_actions_init(ctypes.byref(fa))
-    out_r, out_w = os.pipe()
-    err_r, err_w = os.pipe()
     pid = ctypes.c_int()
     try:
-        libc.posix_spawn_file_actions_adddup2(ctypes.byref(fa), out_w, 1)
-        libc.posix_spawn_file_actions_adddup2(ctypes.byref(fa), err_w, 2)
-        for fd in (out_r, err_r, out_w, err_w):
-            libc.posix_spawn_file_actions_addclose(ctypes.byref(fa), fd)
+        pairs = dict(fds or {})
+        for child_fd, parent_fd in pairs.items():
+            libc.posix_spawn_file_actions_adddup2(ctypes.byref(fa), parent_fd, child_fd)
+        for parent_fd in set(pairs.values()) - set(pairs):
+            libc.posix_spawn_file_actions_addclose(ctypes.byref(fa), parent_fd)
         if cwd:
             if not hasattr(libc, "posix_spawn_file_actions_addchdir_np"):
                 return None
             libc.posix_spawn_file_actions_addchdir_np(ctypes.byref(fa), os.fsencode(cwd))
-        prog = os.fsencode(argv[0])
-        if b"/" not in prog:
-            return None  # PATH を引かない (呼び元が絶対 path か cwd 相対を渡す)
         c_argv = (ctypes.c_char_p * (len(argv) + 1))(*[os.fsencode(a) for a in argv], None)
         envl = [os.fsencode(f"{k}={v}") for k, v in (env if env is not None else os.environ).items()]
         c_env = (ctypes.c_char_p * (len(envl) + 1))(*envl, None)
@@ -88,12 +93,29 @@ def run_disclaimed(argv: list[str], cwd: str | None = None, timeout: float = 10.
     finally:
         libc.posix_spawn_file_actions_destroy(ctypes.byref(fa))
         libc.posix_spawnattr_destroy(ctypes.byref(attr))
+    return pid.value if rc == 0 else None
+
+
+def run_disclaimed(argv: list[str], cwd: str | None = None, timeout: float = 10.0,
+                   env: dict | None = None) -> Result | None:
+    """argv を disclaim つきで起動し、 stdout / stderr を集めて返す。 起動できなければ None。"""
+    if _libc() is None or not argv or b"/" not in os.fsencode(argv[0]):
+        return None
+    out_r, out_w = os.pipe()
+    err_r, err_w = os.pipe()
+    try:
+        # 読み口 (out_r / err_r) は子に渡さない = 子の側で閉じる (渡すと子が持ち続け、 親の読みが EOF にならない)
+        for fd in (out_r, err_r):
+            os.set_inheritable(fd, False)
+        spawned = spawn_disclaimed(argv, cwd=cwd, env=env, fds={1: out_w, 2: err_w})
+    finally:
         os.close(out_w)
         os.close(err_w)
-    if rc != 0:
+    if spawned is None:
         os.close(out_r)
         os.close(err_r)
         return None
+    pid = spawned
     bufs = {out_r: b"", err_r: b""}
     open_fds = [out_r, err_r]
     deadline = time.monotonic() + timeout
@@ -101,7 +123,7 @@ def run_disclaimed(argv: list[str], cwd: str | None = None, timeout: float = 10.
     while open_fds:
         left = deadline - time.monotonic()
         if left <= 0:
-            os.kill(pid.value, signal.SIGKILL)
+            os.kill(pid, signal.SIGKILL)
             killed = True
             break
         ready, _, _ = select.select(open_fds, [], [], min(left, 1.0))
@@ -113,7 +135,7 @@ def run_disclaimed(argv: list[str], cwd: str | None = None, timeout: float = 10.
                 open_fds.remove(fd)
     for fd in (out_r, err_r):
         os.close(fd)
-    _, status = os.waitpid(pid.value, 0)
+    _, status = os.waitpid(pid, 0)
     code = -9 if killed else (os.WEXITSTATUS(status) if os.WIFEXITED(status) else -os.WTERMSIG(status))
     err = bufs[err_r].decode("utf-8", "replace")
     if killed:
@@ -141,6 +163,31 @@ def _selftest() -> int:
     check(run_disclaimed([]) is None, "空の argv は None")
     r = run_disclaimed(["/bin/sh", "-c", "printf %s \"$X\""], env={"X": "値"}, timeout=5)
     check(r is not None and r.stdout == "値", "env を渡せる (非 ASCII も)")
+    # spawn_disclaimed: 流して読む経路 (stdin を /dev/null に、 stdout を pipe に、 stderr は継ぐ)
+    rd, wr = os.pipe()
+    dn = os.open(os.devnull, os.O_RDONLY)
+    pid = spawn_disclaimed(["/bin/sh", "-c", "read x; echo \"got=$x\"; exit 4"], fds={0: dn, 1: wr})
+    os.close(wr)
+    os.close(dn)
+    out = b""
+    while pid is not None:
+        chunk = os.read(rd, 4096)
+        if not chunk:
+            break
+        out += chunk
+    os.close(rd)
+    st = os.waitpid(pid, 0)[1] if pid is not None else 0
+    check(pid is not None and out == b"got=\n" and os.WEXITSTATUS(st) == 4,
+          "spawn_disclaimed: pid を返し、 渡した fd (stdin = /dev/null・stdout = pipe) で動き、 終了値を waitpid で読める")
+    getter = getattr(_libc(), "responsibility_get_pid_responsible_for_pid", None)
+    if getter is not None:
+        getter.argtypes, getter.restype = [ctypes.c_int], ctypes.c_int
+        pid = spawn_disclaimed(["/bin/sleep", "1"])
+        time.sleep(0.2)
+        check(pid is not None and getter(pid) == pid, "spawn_disclaimed の子は自分が責任者 (responsible pid = 自分)")
+        if pid is not None:
+            os.waitpid(pid, 0)
+    check(spawn_disclaimed(["sleep", "1"]) is None, "spawn_disclaimed も PATH を引く名前は起動しない (None)")
     print(f"\n==== RESULT: PASS={ok} FAIL={fail} ====")
     return 0 if fail == 0 else 1
 
