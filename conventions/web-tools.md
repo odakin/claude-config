@@ -342,13 +342,14 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 
 ---
 
-## <a id="literature-search-apis"></a>先行研究を API で探す (OpenAlex・Crossref・arXiv・CiNii・J-STAGE) — 不在は範囲つきで書く
+## <a id="literature-search-apis"></a>先行研究を API で探す (OpenAlex・Crossref・arXiv・INSPIRE・CiNii・J-STAGE) — 不在は範囲つきで書く
 
 「この問いを扱った研究は無い」 は、 引いた DB・クエリ・件数を添えたときだけ書ける。 道具 = [`../scripts/lit-search.py`](../scripts/lit-search.py) (DOI ごとの書誌の照合は [`../scripts/check-doi-list.py`](../scripts/check-doi-list.py))。
 
 - **Google Scholar は使わない**: CAPTCHA・ボット検出を回避して叩かない。 被引用の追跡は OpenAlex の `filter=cites:<W id>` で代え、 Scholar にしか無い被引用 (書籍・学位論文・会議録の一部) は範囲外と書く
 - **OpenAlex の 2 つの検索は別物**: `search=<語>` は全文の関連度検索で雑音が多い。 `filter=title_and_abstract.search:<論理式>` は引用符・AND/OR が効き、 題名と要旨だけを見る。 ⚠️ **両方を同じ URL に付けると、 両方に当たる件だけが残り、 件数が小さく出る** (実測 = 論理式のつもりで検索語の欄に仮の 1 字を入れて起きた)
 - 要旨は `abstract_inverted_index` ({語: [位置]}) で返る = 位置の順に並べ直す。 持っていない文献もある (購読誌の一部)
+- **INSPIRE (高エネルギー物理)**: 全文検索 `fulltext:"…"` は INSPIRE が全文を持つ論文 (主に arXiv) だけを見る = 範囲にそう書く。 被引用 `refersto:recid:<recid>` で集めて題・要旨で絞ると、 範囲を数で書ける。 ⚠️ 複合の式の罠 2 つ (`arxiv:<id>` は他の条件と AND にならない / `de > 年` はその年を含まない) と書き方の正本 = [`ai-collaboration/scripts/inspire-bibliography.py`](../../ai-collaboration/scripts/inspire-bibliography.py) 冒頭の「API のこつ」。 陽性対照の式にも意味の無い語の foil を当て、 0 件になるのを先に見る
 - **Semantic Scholar は鍵なしの利用ですぐ HTTP 429** (実測)。 打ち直しを連打しない = 検索ログに「使えなかった」 と書く
 - **Crossref の `query.bibliographic` の total-results は関連度の母集団** (数百万件になる) = ヒット数として書かない。 上位だけを見る
 - **Crossref の `issued` は最初の公開 (online-first) の年** = 巻の年と 1 違うことがある。 書誌の照合は年の差 1 までを一致と数え、 entry には巻の年を書く。 記事番号 (`page` / `article-number`) は誌によって内部の id や `n/a` を返す = 推測で埋めず空欄にする
