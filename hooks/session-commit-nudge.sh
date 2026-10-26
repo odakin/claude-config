@@ -37,6 +37,7 @@
 #     - file_path から repo root 解決 (= git rev-parse --show-toplevel)
 #     - $STATE_DIR/<session_id>.list に repo path append (= dedup)
 #     - silent (exit 0、 stdout 出力なし)
+#     - Bash から呼ぶ道具が書いた file の repo は、 道具の側が scripts/lib/session_touch.py の register() で同じ list に足す (本 hook は Edit / Write / MultiEdit しか見ない = conventions/multi-session-coordination.md#script-writes-count-as-touch)
 #
 #   nudge   (Stop):
 #     - stdin JSON から session_id 抽出
