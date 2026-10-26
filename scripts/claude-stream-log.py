@@ -105,7 +105,10 @@ class Renderer:
             e = json.loads(raw)
         except ValueError:
             e = None
-        out = self._render(e) if isinstance(e, dict) else [_one_line(raw, 500)]
+        try:
+            out = self._render(e) if isinstance(e, dict) else [_one_line(raw, 500)]
+        except Exception as exc:  # 想定外の形の event でも log を書き続ける (中継が落ちると run の記録ごと失う)
+            out = [f"  (読めない event: {type(exc).__name__}: {_one_line(raw, 160)})"]
         self.lines.extend(out)
         return out
 
@@ -302,9 +305,9 @@ def run(argv: list[str], disclaim: bool = True, partial: bool = True) -> int:
         rc = 1
     note = f"signal {stopped_by[0]} で止められた" if stopped_by else ""
     text = "\n".join([rend.header(started, disclaimed)] + rend.lines + rend.footer(time.time(), started, rc, note)) + "\n"
-    try:
-        sys.stdout.write(text)
-        sys.stdout.flush()
+    try:  # bytes で書く (= launchd の C locale でも locale の符号化に依らない)
+        sys.stdout.buffer.write(text.encode("utf-8", "replace"))
+        sys.stdout.buffer.flush()
         wrote = True
     except OSError:
         wrote = False
@@ -348,6 +351,7 @@ def _selftest() -> int:
         {"type": "assistant", "message": {"content": [{"type": "thinking", "thinking": "THINKING-TEXT"},
                                                       {"type": "text", "text": "追記の 1 行"}]}},
         {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed"}},
+        {"type": "assistant", "message": "not-a-dict"},
         {"type": "result", "subtype": "success", "is_error": False, "result": "追記の 1 行", "num_turns": 2},
     ]
     with tempfile.TemporaryDirectory() as td:
@@ -381,6 +385,7 @@ def _selftest() -> int:
         check("⚠ PreToolUse hook (PreToolUse:Bash) が失敗 (終了値 1, error): boom" in text, "hook の失敗を書く")
         check("↩ Stop hook feedback: 追記を 1 行書いてください" in text, "hook が返した文 (user の text) を書く")
         check("plain text line from cli" in text, "JSON でない行はそのまま書く")
+        check("読めない event: AttributeError" in text and "追記の 1 行" in text, "想定外の形の event でも落ちずに書き続ける")
         check("STDIN-WAS-READ" not in text, "stdin は /dev/null (claude が stdin を待たない)")
         check(not os.path.exists(log + ".partial") or sys.platform != "darwin", "正常に書き終えたら経過の file を消す")
         # 認証切れ: 結果の文が log の末尾 6 行に入る (launchd_job_log.failure_kind が読む)
