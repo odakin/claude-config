@@ -349,7 +349,10 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 - **Google Scholar は使わない**: CAPTCHA・ボット検出を回避して叩かない。 被引用の追跡は OpenAlex の `filter=cites:<W id>` で代え、 Scholar にしか無い被引用 (書籍・学位論文・会議録の一部) は範囲外と書く
 - **OpenAlex の 2 つの検索は別物**: `search=<語>` は全文の関連度検索で雑音が多い。 `filter=title_and_abstract.search:<論理式>` は引用符・AND/OR が効き、 題名と要旨だけを見る。 ⚠️ **両方を同じ URL に付けると、 両方に当たる件だけが残り、 件数が小さく出る** (実測 = 論理式のつもりで検索語の欄に仮の 1 字を入れて起きた)
 - 要旨は `abstract_inverted_index` ({語: [位置]}) で返る = 位置の順に並べ直す。 持っていない文献もある (購読誌の一部)
-- **INSPIRE (高エネルギー物理)**: 全文検索 `fulltext:"…"` は INSPIRE が全文を持つ論文 (主に arXiv) だけを見る = 範囲にそう書く。 被引用 `refersto:recid:<recid>` で集めて題・要旨で絞ると、 範囲を数で書ける。 ⚠️ 複合の式の罠 2 つ (`arxiv:<id>` は他の条件と AND にならない / `de > 年` はその年を含まない) と書き方の正本 = [`ai-collaboration/scripts/inspire-bibliography.py`](../../ai-collaboration/scripts/inspire-bibliography.py) 冒頭の「API のこつ」。 陽性対照の式にも意味の無い語の foil を当て、 0 件になるのを先に見る
+- **INSPIRE (高エネルギー物理)**: 全文検索 `fulltext:"…"` は INSPIRE が全文を持つ論文 (主に arXiv) だけを見る = 範囲にそう書く。 要旨の句は `abstracts.value:"…"` で引け、 `and` で組める (`abstract:` の形は 0 件を返すことがある、 実測)。 被引用 `refersto:recid:<recid>` で集めて題・要旨で絞ると、 範囲を数で書ける。 ⚠️ 複合の式の罠 2 つ (`arxiv:<id>` は他の条件と AND にならない / `de > 年` はその年を含まない) と書き方の正本 = [`ai-collaboration/scripts/inspire-bibliography.py`](../../ai-collaboration/scripts/inspire-bibliography.py) 冒頭の「API のこつ」。 陽性対照の式にも意味の無い語の foil を当て、 0 件になるのを先に見る
+- **対照の式が期待と違ったら、 条件を 1 つずつ外して原因を決める**: 2 つの条件を組んだ式の結果から、 片方の不具合を結論しない (実測: 論文の id の条件が他の条件と組めない罠を、 日付の条件の不具合と読み違えた)。 片方だけを変えた式をそれぞれ回してから、 どちらが効いていないかを書く
+- **候補を「新しく見つけた」 と書く前に、 その project の記録 (note・計画・文献の bib・前の検索の記録) を候補の名で引く** (実測: 前の記録が既に扱っていた系統を新顔と書きかけ、 commit の後の点検で直した)。 外の検索の null から不在を言う前に内の記録を引くのと同じ点検の、 逆向き
+- **論文の PDF の本文を語で引くとき**: text にしたら NFKC で合字 (`ﬁ` `ﬂ`) を畳んでから当てる。 行ごとに当てるなら、 行をまたぐ句は当たらない = 1 行に収まる部分で引く (実測: 頁にある句が 0 件と出た)。 0 件を「本文に無い」 と書く前に、 この 2 つを外して確かめる
 - **Semantic Scholar は鍵なしの利用ですぐ HTTP 429** (実測)。 打ち直しを連打しない = 検索ログに「使えなかった」 と書く
 - **Crossref の `query.bibliographic` の total-results は関連度の母集団** (数百万件になる) = ヒット数として書かない。 上位だけを見る
 - **Crossref の `issued` は最初の公開 (online-first) の年** = 巻の年と 1 違うことがある。 書誌の照合は年の差 1 までを一致と数え、 entry には巻の年を書く。 記事番号 (`page` / `article-number`) は誌によって内部の id や `n/a` を返す = 推測で埋めず空欄にする
