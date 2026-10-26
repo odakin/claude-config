@@ -216,6 +216,7 @@
 - **[install-shared-skills.sh](install-shared-skills.sh)** — claude-config の skills/<name>/ (誰でも使う skill、 例 = /wrap) を Claude Code と Codex の skill の置き場に配線する (個人層・本人の skill が同名で在れば、 そちらを残す)
 - **[install-snapshot-path-fix.sh](install-snapshot-path-fix.sh)** — shell snapshot の PATH 修正係 (hooks/fix-snapshot-path-patch.sh) の launchd agent を、 設定フォルダ全部の snapshot を見張る形に揃える (macOS のみ・冪等)
 - **[install-texshop-engines.sh](install-texshop-engines.sh)** — 層1 の texshop/*.engine を TeXShop の Engines dir に symlink する (無ければ足す・在れば触らない)。
+- **[intersect-sync.py](intersect-sync.py)** — 遅れているだけの clone で、 未 commit の変更が upstream の変更と同じ file に当たって最新化できない形を、 相手の変更を保ったまま解く道具 (--trial = 読むだけ・結果を machine-local の記録に / --apply = 手で / --report = 記録の集計、 --selftest)
 - **[jps-program-talks.py](jps-program-talks.py)** — 日本物理学会 (JPS) 年次大会 / 春季大会の Web program を機械で読む。
 - **[kakenhi-preflight.py](kakenhi-preflight.py)** — 科研費 研究計画調書の「機関事務が必ず突く点」を提出前に機械検出（様式骨格の生存 / 埋め込み指示の抽出 / 表記 lint / 経費明細の粒度・費目帰属、kakenhi-proposal.md#office-review-loop）
 - **[keynote-iwa-text.py](keynote-iwa-text.py)** — Extract a text inventory from Keynote .key slide IWA archives (layout/order not reconstructed).
@@ -433,6 +434,7 @@
 - **[lib/headless_record_clause.py](lib/headless_record_clause.py)** — 共通のheadless記録条項runner・shell解析・実行記録。--selftest。
 - **[lib/hook-exec-probe.bash](lib/hook-exec-probe.bash)** — lib/hook-exec-probe.bash — hook の exec 検査で BASH_ENV に渡す file (bash が $BASH_ENV として読む。 直接は実行も source もしない)
 - **[lib/hook-stub.sh](lib/hook-stub.sh)** — lib/hook-stub.sh — hook stub installer 共通の「既存 stub の扱い」 (source して使う、 単体実行しない)
+- **[lib/intersect_sync.py](lib/intersect_sync.py)** — 遅れているだけの clone で、 未 commit の変更が upstream の変更と同じ file に当たって最新化できない形を、
 - **[lib/ja_deadline_dates.py](lib/ja_deadline_dates.py)** — 日本語の文から「期限らしい日付」 を取る共通部品（散文 = task 記録・メモの次の期限 / メール本文 = 入力・提出・申請の〆切。 締切語の隣接・行動語・行動窓の範囲の終端・月の無い日付と相対表現と英文の日付・日付が読めないときの急ぎの語・引用除去・述語の指紋。 docs/convention-design-principles.md#single-deadline-field-many-legs / #elapsed-time-urgency-inversion / #unclassified-defaults-to-loud、 --selftest）
 - **[lib/launchd_job_log.py](lib/launchd_job_log.py)** — launchd の無人ジョブについて「直近の run が既知の形で失敗したか」 を log 末尾から読む共有判定。
 - **[lib/ledger_page.py](lib/ledger_page.py)** — 行で書かれた台帳を、 一目で読める 1 枚の HTML にする。

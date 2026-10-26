@@ -56,6 +56,10 @@
 #   CLAUDE_SYNC_SWEEP_FOLLOWER     diverged を中身で揃える engine の path (既定 = 同じ dir の git-rewrite-follow.py、
 #                                  無ければ <root>/claude-config/scripts/ の同名。 存在しない path を渡すと従来の A 行だけ)
 #   CLAUDE_SYNC_SWEEP_FOLLOW_MAPS  追従の対応表 (old new) の glob を空白区切りで (層3 が書き換えの記録の dir を渡す用)
+#   CLAUDE_SYNC_SWEEP_INTERSECT    「未 commit の変更が upstream と同じ file に当たる」 repo で読むだけの試走をする engine の path
+#                                  (既定 = 同じ dir の intersect-sync.py、 無ければ <root>/claude-config/scripts/ の同名。 存在しない
+#                                  path を渡すと試走しない)。 結果は A 行の末尾に 1 句と machine-local の記録だけ = repo には書かない
+#                                  (自動で解く道具に同期を繋ぐかは試走の記録を見てから決める = intersect-sync.py の docstring)
 #   CLAUDE_SYNC_SWEEP_TEST=1 の時だけ効く (test で並走の窓を決定的に開ける):
 #     CLAUDE_SYNC_SWEEP_TEST_HOLD_PRE / _POST  stash push の直前 / 直後に lock を持ったまま止まる秒数
 #     CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP=1     同じ file に当たる検査を外す (pop conflict の経路を test するため)
@@ -87,6 +91,12 @@ if [ -z "$_FOLLOWER" ]; then
   [ -f "$_FOLLOWER" ] || _FOLLOWER="$ROOT/claude-config/scripts/git-rewrite-follow.py"
 fi
 [ -f "$_FOLLOWER" ] || _FOLLOWER=""
+_INTERSECT="${CLAUDE_SYNC_SWEEP_INTERSECT:-}"
+if [ -z "$_INTERSECT" ]; then
+  _INTERSECT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/intersect-sync.py"
+  [ -f "$_INTERSECT" ] || _INTERSECT="$ROOT/claude-config/scripts/intersect-sync.py"
+fi
+[ -f "$_INTERSECT" ] || _INTERSECT=""
 
 # 手順の表示用 (= $HOME 配下なら ~ で書く)
 _DISP="$ROOT"
@@ -426,15 +436,19 @@ _pull_locked() {
   # (multi-session-coordination.md#autostash-foreign-wip): pop の conflict は変更の持ち主 (別 session
   # のことが多い) が作業中の file の中で起き、 index も unmerged になる。 持ち主の commit を待つ。
   if [ "${CLAUDE_SYNC_SWEEP_TEST:-0}" != "1" ] || [ "${CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP:-0}" != "1" ]; then
-    local overlap ov3 ovn
+    local overlap ov3 ovn tnote=""
     overlap="$(comm -12 <(git diff --name-only HEAD..@{u} 2>/dev/null | sort -u) \
                         <({ git diff --name-only; git diff --cached --name-only; } 2>/dev/null | sort -u))"
     if [ -n "$overlap" ]; then
       ov3="$(printf '%s\n' "$overlap" | head -3 | tr '\n' ' ')"
       ovn="$(printf '%s\n' "$overlap" | wc -l | tr -d ' ')"
       [ "$ovn" -gt 3 ] && ov3="${ov3}他 $((ovn - 3)) 件 "
-      printf 'A\t%s: behind=%s だが未 commit の変更が upstream の変更と同じ file に当たる (%s) → stash しない (pop の conflict が作業中の file に入る)。 変更の持ち主が commit してから最新化する (確認 = git -C %s/%s status -sb。 持ち主が居ないなら conventions/multi-session-coordination.md#owner-gone-intersect-sync)\n' \
-        "$name" "$behind" "${ov3% }" "$_DISP" "$name"
+      # 読むだけの試走 (平文の 3-way + 両側の行の照合。 repo には書かない、 結果は machine-local の記録と下の 1 句だけ)
+      if [ -n "$_INTERSECT" ] && command -v python3 >/dev/null 2>&1; then
+        tnote="$(_t 10 python3 "$_INTERSECT" --trial "$PWD" --log --line --source sweep 2>/dev/null | head -1)"
+      fi
+      printf 'A\t%s: behind=%s だが未 commit の変更が upstream の変更と同じ file に当たる (%s) → stash しない (pop の conflict が作業中の file に入る)。 変更の持ち主が commit してから最新化する (確認 = git -C %s/%s status -sb。 持ち主が居ないなら conventions/multi-session-coordination.md#owner-gone-intersect-sync)%s\n' \
+        "$name" "$behind" "${ov3% }" "$_DISP" "$name" "${tnote:+ [$tnote]}"
       return 0
     fi
   fi

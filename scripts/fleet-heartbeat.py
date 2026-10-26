@@ -186,6 +186,10 @@ try:
     import git_rewrite_follow as _rf  # 書き換えられた履歴の追従 + push 側の防御 (repo-sync-sweep / git-rewrite-follow.py と共有)
 except Exception:                     # 部品が無い古い checkout では従来の pull --rebase 経路
     _rf = None
+try:
+    import intersect_sync as _is      # 重なる未 commit の読むだけの試走 (scripts/intersect-sync.py と共有)
+except Exception:                     # 部品が無い古い checkout では試走しない
+    _is = None
 
 RC_LABEL_PREFIX_DEFAULT = "com.claude-config.remote-control-server"
 
@@ -719,6 +723,9 @@ def sync_facts(root: Path, names):
     """root/*/ の clone ごとの同期の事実 (判定はしない = reader が古さで判定する): 手元にだけ在る commit の数と最古の commit の時刻
     (ahead / ahead_since)、 upstream にだけ在る commit の数と最古の commit の時刻 (behind / behind_since = どれだけ前から遅れているか)、
     behind の時に upstream の変更と重なる未 commit の file の数 (wip_overlap)。 ahead が在るか、 behind で重なりが在る repo だけを返す。
+    重なりが在り手元にだけ在る commit が無い repo は、 読むだけの試走 (lib/intersect_sync.trial = 平文の 3-way と両側の行の照合、
+    repo には書かない) の verdict を trial に載せ (clean = 道具なら衝突も欠けも無く解ける見込み / conflict ほか = 人が解く)、
+    結果を machine-local の記録に足す (source = heartbeat)。 自動で解く道具に同期を繋ぐかは試走の記録を見てから決める。
     重なりの古さに file の更新時刻を使わない (よく書かれる台帳の file は、 別の session が書くたびに時刻が新しくなり、 何日止まっていても
     新しく見える) = 遅れの最古の commit の時刻で測る。
     path は載せない (file 名に人や案件が出る repo がある = 数と時刻だけ。 どの file かはその machine で git status を見る)。
@@ -746,6 +753,13 @@ def sync_facts(root: Path, names):
                 ov = _porcelain_paths(st) & {x for x in chg.split("\0") if x}
                 if ov:
                     e["wip_overlap"] = len(ov)
+                    if not ahead and _is is not None:
+                        try:   # 試走の失敗で beat を止めない
+                            tr = _is.trial(repo)
+                            e["trial"] = tr.get("verdict")
+                            _is.record(tr, mode="trial", source="heartbeat")
+                        except Exception:
+                            e["trial"] = "error"
             if e:
                 if behind:
                     e["behind"] = behind
@@ -1055,6 +1069,8 @@ def selftest():
             # 「followed …/rollcall/…」 の行を残す = 実測。 その log は書き換えの追従の調べ物で読む記録)
             _rf_log_prev = os.environ.get(_rf.LOG_ENV)
             os.environ[_rf.LOG_ENV] = str(Path(td) / "rf-rollcall.log")
+            _is_log_prev = os.environ.get("CLAUDE_INTERSECT_SYNC_LOG")   # 試走の記録も一時 file に (本物の集計に fixture を混ぜない)
+            os.environ["CLAUDE_INTERSECT_SYNC_LOG"] = str(Path(td) / "intersect-trial.jsonl")
             rc_root = Path(td) / "rollcall"
             rc_root.mkdir()
             rc_remote = Path(td) / "rollcall-remote.git"
@@ -1115,6 +1131,12 @@ def selftest():
             assert sy2.get("stale", {}).get("wip_overlap") == 1 and isinstance(sy2["stale"].get("behind_since"), int) \
                 and sy2["stale"].get("behind") == 2 and "ahead" not in sy2["stale"], f"最新化を止める未 commit: {sy2}"
             assert "f.txt" not in json.dumps(sy2), "path は載せない"
+            if _is is not None:
+                assert sy2["stale"].get("trial") == "conflict", f"重なる未 commit の試走の verdict (同じ行を両側が変えた): {sy2}"
+                _tl = (Path(td) / "intersect-trial.jsonl").read_text()
+                assert '"source": "heartbeat"' in _tl and "f.txt" not in _tl, "試走の結果は一時の記録に (path は書かない)"
+                assert essence({"repos": {"sync": {"x": {"wip_overlap": 1, "trial": "clean"}}}}) \
+                    == essence({"repos": {"sync": {"x": {"wip_overlap": 1, "trial": "conflict"}}}}), "試走の verdict の変化では commit しない"
             git(rc_root / "stale", "checkout", "-q", "--", "f.txt")
             assert essence({"repos": {"sync": {"x": {"ahead": 1, "ahead_since": 1}}}}) \
                 == essence({"repos": {"sync": {"x": {"ahead": 2, "ahead_since": 5}}}}), "数・時刻の変化では commit しない"
@@ -1128,6 +1150,10 @@ def selftest():
                 os.environ.pop(_rf.LOG_ENV, None)
             else:
                 os.environ[_rf.LOG_ENV] = _rf_log_prev
+            if _is_log_prev is None:
+                os.environ.pop("CLAUDE_INTERSECT_SYNC_LOG", None)
+            else:
+                os.environ["CLAUDE_INTERSECT_SYNC_LOG"] = _is_log_prev
             ok += 1
         if _rf is not None:
             ok += _selftest_rewrite(Path(td))

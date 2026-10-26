@@ -18,6 +18,7 @@ trap 'rm -rf "$TMP"' EXIT
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_CONFIG_GLOBAL="$TMP/gitconfig"
 export GIT_REWRITE_FOLLOW_LOG="$TMP/rewrite-follow.log"   # 追従の記録を本物 (~/.claude/state/) に書かせない (fixture の repo 名が点呼に出る)
+export CLAUDE_INTERSECT_SYNC_LOG="$TMP/intersect-sync-trial.jsonl"   # 重なりの試走の記録も本物に書かせない (fixture が試走の集計に混ざる)
 git config --global user.email t@t
 git config --global user.name t
 git config --global init.defaultBranch main
@@ -122,6 +123,27 @@ line_of "$out" A repoG | grep -q "同じ file に当たる (f.txt)" \
 [ "$(cd "$ROOT/repoG" && git rev-list --count HEAD..@{u})" -gt 0 ] && grep -q "conflicting-local" "$ROOT/repoG/f.txt" \
   && [ -z "$(cd "$ROOT/repoG" && git stash list)" ] \
   && ok "重なる repo には触らない (behind のまま・変更そのまま・stash なし)" || ng "重なる repo に触った"
+line_of "$out" A repoG | grep -q "\[試走: 道具では解けない (同じ所を両側が変えている) = 人が解く\]" \
+  && ok "重なる repo は読むだけの試走をし、 結果を A 行の末尾に 1 句 (衝突する形)" || ng "試走の句が無い (got: $out)"
+grep -q '"source": "sweep"' "$CLAUDE_INTERSECT_SYNC_LOG" 2>/dev/null && ! grep -q 'f\.txt' "$CLAUDE_INTERSECT_SYNC_LOG" \
+  && ok "試走の結果は machine-local の記録に (path は書かない)" || ng "記録: $(cat "$CLAUDE_INTERSECT_SYNC_LOG" 2>&1)"
+out="$(CLAUDE_SYNC_SWEEP_INTERSECT=/nonexistent/intersect-sync.py run)"
+line_of "$out" A repoG | grep -q "同じ file に当たる" && ! line_of "$out" A repoG | grep -q "試走:" \
+  && ok "試走の engine が無ければ句を付けない (A 行は同じ)" || ng "engine 無しの A 行 (got: $out)"
+
+echo "=== T7a2: 重なるが別の行 → 試走は「衝突も欠けも無く解ける見込み」、 repo には触らない ==="
+RG2="$TMP/remotes/g2.git"; mkdir -p "$RG2"; git_quiet init -q --bare "$RG2"
+git_quiet clone -q "$RG2" "$TMP/seed-g2" 2>/dev/null
+printf 'a\nb\nc\nd\ne\n' > "$TMP/seed-g2/h.txt"
+( cd "$TMP/seed-g2" && git_quiet add -A && git_quiet commit -qm init && git_quiet push -q origin HEAD:main )
+git_quiet clone -q "$RG2" "$ROOT/repoG2"
+( cd "$TMP/seed-g2" && printf 'A\nb\nc\nd\ne\n' > h.txt && git_quiet commit -qam up && git_quiet push -q origin HEAD:main )
+printf 'a\nb\nc\nd\nE\n' > "$ROOT/repoG2/h.txt"
+out="$(run)"
+line_of "$out" A repoG2 | grep -q "\[試走: 道具なら衝突も欠けも無く解ける見込み (1 file" \
+  && ok "別の行の重なり = 解ける見込みの句" || ng "expected 解ける見込み (got: $out)"
+[ "$(cd "$ROOT/repoG2" && git rev-list --count HEAD..@{u})" -gt 0 ] && grep -q '^E$' "$ROOT/repoG2/h.txt" && grep -q '^a$' "$ROOT/repoG2/h.txt" \
+  && ok "試走は repo に触らない (behind のまま・作業 tree の版のまま)" || ng "試走が repo を変えた"
 
 echo "=== T7: (重なり検査を外して) pop conflict → 自動解決せず、 stash list で確かめて「残っている」 と出す ==="
 out="$(CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP=1 run)"

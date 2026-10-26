@@ -286,7 +286,8 @@ def sync_findings(host, d, now, age_h=0.0):
     - 🔴 分岐したまま SYNC_UNPUSHED_H 時間以上 (手元にだけ在る commit + upstream の前進) = 手元の commit は他の machine に届いていない
     - 🟠 push されていない commit が SYNC_UNPUSHED_H 時間以上 (遅れてはいない)
     - 🟠 遅れて SYNC_BLOCKED_H 時間以上 (遅れの最古の commit の時刻で測る)、 upstream の変更と重なる未 commit が在る = 最新化できない
-      (持ち主の居ない変更の疑い。 file の更新時刻は使わない = よく書かれる台帳の file は何日止まっていても新しく見える)
+      (持ち主の居ない変更の疑い。 file の更新時刻は使わない = よく書かれる台帳の file は何日止まっていても新しく見える)。
+      writer が読むだけの試走をしていれば (trial = lib/intersect_sync の verdict) その結果を行に添える
     なぜ (実測): 無人の書き手の commit が本番の機械の clone に閉じ、 同期の止まった表示は session を開かないその機械の上にしか
     出なかった。 毎時の記録は「止まっている」 を載せていたが、 読む側が出していなかった = 人が使っている別の機械に届く面に出す。"""
     rp = d.get("repos") or {}
@@ -314,9 +315,12 @@ def sync_findings(host, d, now, age_h=0.0):
                            f"疑う = multi-session-coordination.md#unattended-writer-stale-base){note}")
             continue
         if b and k and isinstance(ws, (int, float)) and now - ws >= SYNC_BLOCKED_H * 3600:
+            tr = v.get("trial")
+            tnote = (" [試走: 道具なら衝突も欠けも無く解ける見込み]" if tr == "clean"
+                     else f" [試走: 道具では解けない = {tr}]" if isinstance(tr, str) and tr else "")
             out.append(f"🟠 {host}: {name} が {b} commit 遅れたまま最新化できない (未 commit の変更 {k} file が upstream の変更と"
                        f"重なる、 遅れの最古 {_ago(now - ws)}前) = 持ち主の session に commit させる / 居なければ"
-                       f" multi-session-coordination.md#owner-gone-intersect-sync{note}")
+                       f" multi-session-coordination.md#owner-gone-intersect-sync{tnote}{note}")
     return out
 
 
@@ -643,7 +647,8 @@ def selftest():
             "eo": {"ahead": 3, "ahead_since": now - 20 * h, "behind": 35},
             "un": {"ahead": 1, "ahead_since": now - 5 * h},
             "new": {"ahead": 1, "ahead_since": now - 600, "behind": 2},
-            "pr": {"behind": 15, "wip_overlap": 1, "behind_since": now - 44 * h},
+            "pr": {"behind": 15, "wip_overlap": 1, "behind_since": now - 44 * h, "trial": "clean"},
+            "pc": {"behind": 3, "wip_overlap": 1, "behind_since": now - 13 * h, "trial": "conflict"},
             "fresh_wip": {"behind": 1, "wip_overlap": 2, "behind_since": now - 2 * h},
             "rw": {"ahead": 2, "ahead_since": now - 50 * h, "behind": 1}}}}
         fs = sync_findings("mini", sb, now)
@@ -651,11 +656,12 @@ def selftest():
                    and "#ordinary-divergence-replay" in x for x in fs), fs
         assert any(x.startswith("🟠 mini: un に push されていない commit 1 (最古 5 時間前)") for x in fs), fs
         assert any(x.startswith("🟠 mini: pr が 15 commit 遅れたまま最新化できない") and "遅れの最古 44 時間前" in x
-                   and "#owner-gone-intersect-sync" in x for x in fs), fs
+                   and "#owner-gone-intersect-sync" in x and "[試走: 道具なら衝突も欠けも無く解ける見込み]" in x for x in fs), fs
+        assert any(x.startswith("🟠 mini: pc が 3 commit") and "[試走: 道具では解けない = conflict]" in x for x in fs), fs
         assert any(x.startswith("🔴 mini: rw の追従が止まっている") for x in fs), fs
         assert not any(" new " in x or "mini: new" in x or "fresh_wip" in x for x in fs), f"新しいものは出さない: {fs}"
         assert sum("mini: rw" in x for x in fs) == 1, f"stopped の repo は stopped の行だけ: {fs}"
-        assert len(fs) == 4, fs
+        assert len(fs) == 5, fs
         assert sync_findings("mini", {"host": "mini", "repos": {"error": "x"}}, now) == [], "集計の失敗だけの beat は黙る"
         assert sync_findings("mini", {"host": "mini"}, now) == [], "旧 beat (repos 欄なし) は黙る"
         for f_ in d.glob("*.json"):
