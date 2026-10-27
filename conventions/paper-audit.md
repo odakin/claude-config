@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 論文 merger 等の構造 issue を体系 audit するとき
+when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison)
 category: paper
 summary: multi-paper merger 等の forward ref / 重複 subsection / structure issue を Phase1 機械検出 + Phase2 section-by-section AI 精読 + findings.yaml で体系 audit
 -->
@@ -600,6 +600,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 2. 写像を計算するまでは **unverified** ([`physics-verification-cycle.md#claim-states`](../../ai-collaboration/conventions/physics-verification-cycle.md#claim-states)) のまま **carrier** に載せる = 担当と期日のある TODO、 decision ledger の未決項目、 または写像が書かれるまで落ち続ける検査。 設計記録の散文に書いた open は carrier ではない。 同じ行に carrier を書く習慣 (例: `carrier: <ledger 項目 / TODO / audit 名>`) にすれば grep で機械検査できる。
 3. **Wick 回転は二つの効果を持つ**: (a) 座標・添字の signature (mostly-plus なら座標変換で、 相対係数は不変)、 (b) 作用密度の全体符号 (iS_M = −S_E)。 (a) だけを消す検査 (空間成分に限る比較、 parity-even スカラーの不変性、 δ と η で同じ辞書を使う解き比べ) は (b) を見ない。
 4. 「二つの計算が違ったらまず規約差を疑う」 は初手の仮説として正しいが、 仮説は写像の計算で閉じるまで仮説のまま。 数値が「全成分でクリーンに全体 −1」 で合うことは写像の証明ではない (fit であって導出ではない)。
+5. <a id="offshell-2pt-literature-comparison"></a>**文献の 2 点関数・自己エネルギーと比べるときは、 場の変数・場の数え方・量の種類・極の単位を揃えてから比べる**: off-shell の 1PI 2 点関数は場の変数で変わる (1 次の書き換えで係数が、 非線形の部分で真空のエネルギーに比例する接触項が変わる)。 揃えるもの = (a) 場の変数 (計量の揺らぎ h = g − η / 密度つきの逆計量 √g g^{μν} / 対称な vierbein) と、 その間の 1 次の写像 (trace の部分と g = η + 2ŝ の 2 を含めて、 文献の定義式から自分で導いて数値で確かめる) (b) 内線の場の数え方 (2 成分と 4 成分の spinor で全体 2 倍) (c) 文献の量が自己エネルギー (伝播関数の補正 D T D の T) か 1PI の Γ⁽²⁾ か (Γ⁽²⁾ = −T) (d) 極の単位 (D = 4 − 2ε と D = 2ω なら 1/ε = 1/(2 − ω)、 D = 4 − ε なら 2 倍違う)。 比べる前に、 文献の式の転記を、 その文献自身が印字した恒等式 (Ward・trace) が次元を一般にして恒等的に成り立つかで確かめる。 比べ方は、 両側を同じ共変な密度 (例: C² の 2 次の部分) に射影して係数を出すと、 構造 (残差) と規格化 (係数) が分かれる。 foil は因子を 1 つずつ外す (写像の 2 を落とす・数え方を変える・form factor を 1 つ変える) (実測: この手順で、 変数と数え方の違う文献の結果と全体符号まで一致した)。
 
 **Check**: 設計記録・living note・原稿を「規約差 / convention tracking / up to … conventions / absolute sign / at the level of magnitude / not done here」 で grep し、 各 hit に写像の計算か carrier があるかを見る。 機械 = [`check-sign-anchors.py --deferrals`](../../ai-collaboration/scripts/check-sign-anchors.py) (carrier の無い新規 hit を finding にし、 既知の open は baseline に理由つきで載せて毎回表示する)。
 

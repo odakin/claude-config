@@ -139,7 +139,7 @@ claude-config/
 │   ├── office-files.md                     # Office file (Excel/Word/PDF/PowerPoint) 仕事に入るとき最初に開く入口
 │   ├── output-cap-death-loop.md            # worker session (spawn_task / headless claude -p / Agent subagent / 別ベンダー CLI 〔Codex 等〕) に長い導出・生成 task を渡す spec を書くとき・spawn した worker が「isRunning なのに成果ゼロ」 のとき・受け手の context 窓が小さい (自動圧縮が早い) と分かっているとき
 │   ├── overleaf-integration.md             # Overleaf↔GitHub 連携 repo を設定・sync するとき
-│   ├── paper-audit.md                      # 論文 merger 等の構造 issue を体系 audit するとき
+│   ├── paper-audit.md                      # 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison)
 │   ├── paper-submission.md                 # 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき
 │   ├── passkey-cross-device.md             # パスキーでしか入れないサービスに別の端末 (スマホ・別の PC) から入れないとき + 「この QR コードをスキャン」 と出て止まったとき + パスキーを 2 台目の端末に足すとき + パスキーの保存先を選ぶ画面が出たとき
 │   ├── paste-destined-plain-text.md        # Claude が書いた文面 / コマンドを user が手で貼り付けて実行・投稿する workflow を設計・実行するとき (= 貼り先が plain text 入力欄でも terminal でも) + 他人が自分の mail client から送る英文の draft を渡すとき (#non-ascii-via-other-client)
