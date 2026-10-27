@@ -313,6 +313,7 @@
 - **[search-agent-transcripts.py](search-agent-transcripts.py)** — Claude Code と Codex の会話記録を横断して、発言を文字列で探す
 - **[selftest-on-old.py](selftest-on-old.py)** — 新しい版の selftest の関数を、 直す前の版 (git の rev) の module の中で回す = 新しい検査が直す前の実装で赤くなるかを、 file を書き換えずに見る。--selftest 内蔵。
 - **[session-claims-report.py](session-claims-report.py)** — ある session が返事と記録に書いた「根拠の無い検算の主張」 と「先送り」 を会話記録から並べる。--selftest 内蔵。
+- **[session-fetched-docs-report.py](session-fetched-docs-report.py)** — ある session が取得して読んだ原典 (論文・資料の PDF) を会話記録から並べ、 repo に保存したかを出す。--selftest 内蔵。
 - **[session-launch-check.py](session-launch-check.py)** — desktop の start_session で起こした session が、 頼んだ model と effort で起きたかを app の記録で確かめ、 違えば直し方を出し、 直るまで go の SendMessage を止める (hook の engine。 正本 = conventions/multi-session-coordination.md#desktop-start-model-cap)。
 - **[session-model.py](session-model.py)** — print the model a Claude Code session actually runs on (read from its transcript), before sending it work.
 - **[session-scripts-report.py](session-scripts-report.py)** — ある session がその場で書いた script を会話記録から全部並べ、 file として残っているか (commit 済みか) を出す。--selftest 内蔵。
