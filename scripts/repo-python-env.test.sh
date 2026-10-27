@@ -236,8 +236,10 @@ mrun arm64 "$X86:$A64" m.py
 mrun arm64 "$X86:$UNI" m.py
 [ $rc -eq 0 ] && printf '%s' "$out" | grep -q "RAN 3.13.7 m.py" && not_run "$X86" \
   && ok "R28 arm64 の機械: universal2 は arm64 を含むので使う (x86_64 だけの候補は起動しない)" || ng "R28 rc=$rc out=$out"
+# 「<arch> 版を入れる」 は macOS の入れ方の案内だけが言う (macOS 以外は機械の arch を見ない = 模した arch でしか出ない。 Linux の CI で実測)
+wants_arch_hint() { [ "$(uname -s)" != Darwin ] || printf '%s' "$out" | grep -q "$1 版を入れる"; }
 mrun arm64 "$X86" --venv-check
-[ $rc -eq 1 ] && printf '%s' "$out" | grep -q "x86_64 版 = 使わない、 起動していない" && printf '%s' "$out" | grep -q "arm64 版を入れる" \
+[ $rc -eq 1 ] && printf '%s' "$out" | grep -q "x86_64 版 = 使わない、 起動していない" && wants_arch_hint arm64 \
   && not_run "$X86" && ok "R29 arm64 の機械に x86_64 版しか無い: 起動せずに ❌、「arm64 版を入れる」 と言う" || ng "R29 rc=$rc out=$out"
 if [ "$(uname -s)" = Darwin ] && command -v brew >/dev/null 2>&1; then
   printf '%s' "$out" | grep -q "/opt/homebrew/bin/brew install" && ok "R30 arm64 の機械の入れ方の案内は /opt/homebrew" || ng "R30 out=$out"
@@ -252,7 +254,7 @@ mrun x86_64 "$A64:$UNI" m.py
 [ $rc -eq 0 ] && printf '%s' "$out" | grep -q "RAN 3.13.7 m.py" && not_run "$A64" \
   && ok "R32 Intel の機械: universal2 は x86_64 を含むので使う" || ng "R32 rc=$rc out=$out"
 mrun x86_64 "$A64" --venv-check
-[ $rc -eq 1 ] && printf '%s' "$out" | grep -q "arm64 版 = 使わない、 起動していない" && printf '%s' "$out" | grep -q "x86_64 版を入れる" \
+[ $rc -eq 1 ] && printf '%s' "$out" | grep -q "arm64 版 = 使わない、 起動していない" && wants_arch_hint x86_64 \
   && not_run "$A64" && ok "R33 Intel の機械に arm64 版しか無い: 起動せずに ❌、「x86_64 版を入れる」 と言う" || ng "R33 rc=$rc out=$out"
 if [ "$(uname -s)" = Darwin ] && command -v brew >/dev/null 2>&1; then
   printf '%s' "$out" | grep -q "/usr/local/bin/brew install" && ok "R34 Intel の機械の入れ方の案内は /usr/local" || ng "R34 out=$out"

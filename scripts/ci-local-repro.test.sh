@@ -68,7 +68,7 @@ rc=0; bash "$TOOL" --repo "$R" --userland bsd -- true >/dev/null 2>&1 || rc=$?
 if [ "$(uname -s)" = Linux ] || bash "$SCRIPT_DIR/with-gnu-userland.sh" true >/dev/null 2>&1; then
   rc=0
   out="$(TMPDIR="$T" bash "$TOOL" --repo "$R" --userland gnu \
-    -- sh -c 'stat --version 2>/dev/null | head -n 1 | grep -q GNU' 2>&1)" || rc=$?
+    -- sh -c 'stat --version 2>/dev/null | head -n 1 | grep -qE "GNU|uutils"' 2>&1)" || rc=$?  # Ubuntu 26.04 の stat は uutils (GNU 互換の Rust 版)
   [ "$rc" -eq 0 ]
   printf '%s\n' "$out" | grep -qE " gnu +rc=0$"
 else

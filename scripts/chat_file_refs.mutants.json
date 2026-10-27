@@ -158,12 +158,29 @@
       "expect_fail": [
         "E1:",
         "E2:",
-        "E8:",
-        "E9:"
+        "E8:"
       ],
       "expect_pass": [
         "E3:",
         "A1:"
+      ]
+    },
+    {
+      "name": "山括弧で囲んだ href を見ない (濁点の形と組んだ実例の形、 macOS だけで回る case)",
+      "pairs": [
+        [
+          "        angle = kind == \"link\" and ANGLE_HREF_RE.search(raw) is not None\n",
+          "        angle = False\n"
+        ]
+      ],
+      "expect_fail": [
+        "E9:"
+      ],
+      "expect_pass": [
+        "E7:"
+      ],
+      "only_on": [
+        "Darwin"
       ]
     },
     {
@@ -182,6 +199,9 @@
       "expect_pass": [
         "E7:",
         "B2:"
+      ],
+      "only_on": [
+        "Darwin"
       ]
     }
   ]

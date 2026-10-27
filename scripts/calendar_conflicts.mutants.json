@@ -5,7 +5,7 @@
   "mutants": [
     {
       "name": "終日の印を見ない (時刻つきの終日を占有に数える)",
-      "pairs": [["        if str(e.get(\"date\", \"\"))[:10] != iso or e.get(\"all_day\"):", "        if str(e.get(\"date\", \"\"))[:10] != iso:"]],
+      "pairs": [["        if not (d0 <= iso <= d1) or e.get(\"all_day\"):", "        if not (d0 <= iso <= d1):"]],
       "expect_fail": ["T5 終日"],
       "expect_pass": ["T6 同じ日時"]
     },
@@ -17,7 +17,7 @@
     },
     {
       "name": "開始 = 終了の目印を占有に数える",
-      "pairs": [["        if s is None or en is None or s == en:", "        if s is None or en is None:"]],
+      "pairs": [["            if s == en:\n                continue  # 目印 (1 日の予定で開始 = 終了)\n", ""]],
       "expect_fail": ["T8 開始 = 終了"],
       "expect_pass": ["T7 台帳の ignore_titles"]
     },

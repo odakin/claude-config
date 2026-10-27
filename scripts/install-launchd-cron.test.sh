@@ -298,7 +298,7 @@ LOGF="$TMP/log/$PREFIX.sk.log"; : > "$LOGF"
 HOME="$TMP" PATH="$PATH" /bin/sh -c "$(pcmd sk)" >>"$LOGF" 2>&1; rc=$?
 [ "$rc" -eq 5 ] && ok "終了値 5 がそのまま出る" || ng "rc=$rc log=$(cat "$LOGF")"
 grep -q "本報告の行" "$LOGF" && grep -q "追記の行" "$LOGF" && ok "本報告と追記の両方が log に残る" || ng "log: $(cat "$LOGF")"
-grep -q "^── .* 開始 · fake-model · session 01234567 ──" "$LOGF" && tail -n 1 "$LOGF" | grep -q "rc=5" \
+grep -Eq "^── .* 開始 · fake-model · session 01234567( · ⚠ TCC .*)? ──$" "$LOGF" && tail -n 1 "$LOGF" | grep -q "rc=5" \
   && ok "開始と終わりの行" || ng "log: $(cat "$LOGF")"
 grep -q "routine=sk" "$TMP/seen-env" 2>/dev/null && ok "claude の中から CLAUDE_ROUTINE_ID が見える" || ng "env: $(cat "$TMP/seen-env" 2>&1)"
 

@@ -23,7 +23,9 @@ spec (JSON):
        {"name": "修正の何を外したか",
         "pairs": [["old", "new"]],                   # 各 old は target に正確に 1 回
         "expect_fail": ["FAIL するはずの check の label の部分文字列"],
-        "expect_pass": ["PASS のまま残るはずの check の label の部分文字列"]}]}   # 省略可
+        "expect_pass": ["PASS のまま残るはずの check の label の部分文字列"],   # 省略可
+        "only_on": ["Darwin"]}]}                     # 省略可 = その OS (platform.system()) でしか回らない check を当てる mutant。
+                                                     # 他の OS では pair の照合だけをして [SKIP] (test 自身がその OS で check を飛ばすとき)
 
 検査 (外れたら exit 1、 spec の誤りは exit 2):
 
@@ -45,6 +47,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import shlex
 import shutil
 import subprocess
@@ -86,7 +89,16 @@ def load_spec(path: Path) -> dict:
                 raise SpecError(f"{path}: mutant {m['name']!r}: {key} must be a list of non-empty strings")
         if not m["expect_fail"]:
             raise SpecError(f"{path}: mutant {m['name']!r}: expect_fail is empty (name what the mutant must kill)")
+        oo = m.get("only_on")
+        if oo is not None and (not isinstance(oo, list) or not oo or not all(isinstance(s, str) and s for s in oo)):
+            raise SpecError(f"{path}: mutant {m['name']!r}: only_on must be a non-empty list of OS names (platform.system())")
     return spec
+
+
+def runs_here(m: dict, system: str | None = None) -> bool:
+    """mutant の only_on にこの OS が入っているか (only_on が無ければ常に True)。"""
+    oo = m.get("only_on")
+    return oo is None or (system or platform.system()) in oo
 
 
 def mutate(text: str, pairs: list, name: str) -> str:
@@ -115,17 +127,24 @@ def run_copy(target: Path, text: str, cmd: str, timeout: int, spec_dir: Path | N
         return r.returncode, (r.stdout + r.stderr).splitlines()
 
 
-def check_spec(spec_path: Path, timeout: int = TIMEOUT, out=print) -> int:
+def check_spec(spec_path: Path, timeout: int = TIMEOUT, out=print, system: str | None = None) -> int:
     try:
         spec = load_spec(spec_path)
         target = Path(os.path.realpath(spec_path.parent / spec["target"]))
         if not target.is_file():
             raise SpecError(f"{spec_path}: target not found: {target}")
         base_text = target.read_text(encoding="utf-8")
-        mutants = [(m, mutate(base_text, m["pairs"], m["name"])) for m in spec["mutants"]]
+        mutants = [(m, mutate(base_text, m["pairs"], m["name"])) for m in spec["mutants"]]  # pair の照合は全 OS で
     except SpecError as e:
         out(f"[SPEC] {e}")
         return 2
+    here = system or platform.system()
+    for m, _ in mutants:
+        if not runs_here(m, here):
+            out(f"[SKIP] {m['name']}: only on {', '.join(m['only_on'])} (this machine: {here})")
+    mutants = [(m, t) for m, t in mutants if runs_here(m, here)]
+    if not mutants:
+        return 0
     fail_marker = spec.get("fail_marker", DEFAULT_FAIL)
     pass_marker = spec.get("pass_marker", DEFAULT_PASS)
 
@@ -256,6 +275,20 @@ def selftest() -> int:
         rc = check_spec(spec_file("typo", [dict(kill, expect_fail=["clamped to teh floor"])]), out=log.append)
         expect("a label that matches no PASS line of the unmutated run is a spec error (exit 2)",
                rc == 2 and any("label not found" in ln for ln in log))
+
+        log.clear()
+        elsewhere = dict(kill, expect_fail=["only on another OS"], only_on=["NoSuchOS"])
+        rc = check_spec(spec_file("onlyon", [kill, elsewhere]), out=log.append)
+        expect("a mutant with only_on for another OS is [SKIP] here: its labels are not required, the rest still run",
+               rc == 0 and any(ln.startswith("[SKIP]") for ln in log) and any(ln.startswith("[KILLED]") for ln in log))
+        log.clear()
+        rc = check_spec(spec_file("onlyon-drift", [dict(elsewhere, pairs=[["no such line\n", ""]])]), out=log.append)
+        expect("a skipped mutant whose pair no longer matches is still a spec error (exit 2)",
+               rc == 2 and any("matches 0 times" in ln for ln in log))
+        log.clear()
+        rc = check_spec(spec_file("onlyon-here", [dict(kill, only_on=["NoSuchOS"])]), out=log.append, system="NoSuchOS")
+        expect("on the OS it names, an only_on mutant runs as usual",
+               rc == 0 and any(ln.startswith("[KILLED]") for ln in log))
 
         log.clear()
         (pkg / "helper.py").write_text("LOW = 10\n", encoding="utf-8")
