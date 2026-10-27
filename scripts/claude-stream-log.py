@@ -9,7 +9,8 @@
 
 使い方 (launchd の plist の起動行 = scripts/install-launchd-cron.sh が書く。 手で叩く物ではない):
   python3 claude-stream-log.py -- <claude の絶対 path> -p --output-format stream-json --verbose [--include-hook-events] ... "<prompt>"
-  option (-- の前): --no-disclaim (TCC の責任者を移さない = test 用) / --no-partial (経過の file を書かない) / --selftest
+  option (-- の前): --no-disclaim (TCC の責任者を移さない = test 用) / --no-partial (経過の file を書かない) /
+    --max-minutes N (上限の時間。 既定 180 = env CLAUDE_STREAM_LOG_MAX_MINUTES で変えられる、 0 = 上限なし) / --selftest
 
 log に書くもの:
   - 開始の行 (時刻・model・session の先頭 8 字) と終わりの行 (時刻・終了値・turn の数・かかった時間)
@@ -29,6 +30,10 @@ TCC: claude を「自分がプライバシー許可の責任者」 として起�
   (python が責任者になると、 claude と子が使ってきた許可 〔カレンダー・cloud storage の dir など〕 が効かなくなる)。
   disclaim できない (macOS 以外・関数が無い) ときは普通に起動し、 開始の行にその旨を書く。
 signal: SIGTERM / SIGINT / SIGHUP は claude に回し、 claude が終わるのを待ってから、 それまでの分を書いて終える。
+上限の時間: 起動から --max-minutes を過ぎても claude が終わらなければ SIGTERM を送り (30 秒で終わらなければ SIGKILL)、
+  それまでの分と「上限 N 分で止めた」 を書いて終える。 測るのは全体の時間 (event の無い時間ではない = 長い tool の
+  呼び出しを途中で切らない)。 なぜ: API との接続を相手に閉じられた claude が CPU 0% のまま終わらない形があり
+  (実測)、 走っている間は launchd が同じ job を重ねて起動しない = 次の予定の run も来ない。
 stdin は /dev/null (= `claude -p` が stdin を 3 秒待って警告を出す形を避ける)。 stderr は継ぐ (= そのまま log に入る)。
 """
 from __future__ import annotations
@@ -56,6 +61,8 @@ TEXT_HEAD = 300      # user の text・hook の知らせの先頭
 ERR_HEAD = 160       # tool の結果のエラー・hook の失敗の先頭
 RESULT_MAX = 2000    # 結果の文 (エラーのとき)
 DRAIN_AFTER_EXIT = 3.0   # claude が終わった後、 pipe の残りを読む猶予 (孫が書き口を持ち続けても止まらない)
+MAX_MINUTES = 180        # 上限の時間の既定 (env CLAUDE_STREAM_LOG_MAX_MINUTES / --max-minutes で変える、 0 = 上限なし)
+KILL_GRACE = 30.0        # 上限で SIGTERM を送った後、 SIGKILL までの猶予
 
 
 def _one_line(s: str, n: int) -> str:
@@ -222,8 +229,9 @@ def _spawn(argv: list[str], disclaim: bool):
         os.close(dn)
 
 
-def run(argv: list[str], disclaim: bool = True, partial: bool = True) -> int:
+def run(argv: list[str], disclaim: bool = True, partial: bool = True, max_seconds: float | None = None) -> int:
     started = time.time()
+    t0 = time.monotonic()
     try:
         child, rd, disclaimed = _spawn(argv, disclaim)
     except OSError as exc:
@@ -257,6 +265,7 @@ def run(argv: list[str], disclaim: bool = True, partial: bool = True) -> int:
     buf = b""
     status = None
     exited_at = None
+    termed_at = None   # 上限で SIGTERM を送った時刻 (monotonic)
     while True:
         if status is None:
             try:
@@ -265,6 +274,18 @@ def run(argv: list[str], disclaim: bool = True, partial: bool = True) -> int:
                 got, st = pid, 0
             if got == pid:
                 status, exited_at = st, time.monotonic()
+        if status is None and max_seconds and termed_at is None and time.monotonic() - t0 > max_seconds:
+            termed_at = time.monotonic()
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                pass
+        if status is None and termed_at is not None and time.monotonic() - termed_at > KILL_GRACE:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+            termed_at = float("inf")   # SIGKILL は 1 回だけ
         if exited_at is not None and time.monotonic() - exited_at > DRAIN_AFTER_EXIT:
             break
         try:
@@ -304,6 +325,8 @@ def run(argv: list[str], disclaim: bool = True, partial: bool = True) -> int:
     else:
         rc = 1
     note = f"signal {stopped_by[0]} で止められた" if stopped_by else ""
+    if termed_at is not None:
+        note = f"上限 {max_seconds / 60:g} 分で止めた (claude が終わらなかった)"
     text = "\n".join([rend.header(started, disclaimed)] + rend.lines + rend.footer(time.time(), started, rc, note)) + "\n"
     try:  # bytes で書く (= launchd の C locale でも locale の符号化に依らない)
         sys.stdout.buffer.write(text.encode("utf-8", "replace"))
@@ -414,6 +437,23 @@ def _selftest() -> int:
         text = open(log, encoding="utf-8").read()
         check(sys.platform != "darwin" or during, "走っている間は経過を <log>.partial に書く")
         check(rc == 143 and "途中まで" in text and "signal 15 で止められた" in text, f"SIGTERM を回して途中までを書く (rc={rc})")
+        # 上限の時間: 終わらない claude を SIGTERM で止め、 それまでの分と理由を書く (0 = 上限なし)
+        with open(fake, "w") as f:
+            f.write("#!/bin/sh\necho '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"止まる前\"}]}}'\n"
+                    "trap 'exit 143' TERM\nsleep 30 & wait\n")
+        t_start = time.monotonic()
+        with open(log, "w") as lf:
+            rc = subprocess.run([sys.executable, os.path.abspath(__file__), "--max-minutes", "0.02", "--", fake],
+                                stdout=lf, timeout=25).returncode
+        text = open(log, encoding="utf-8").read()
+        check(rc == 143 and "止まる前" in text and "上限 0.02 分で止めた" in text and time.monotonic() - t_start < 20,
+              f"上限の時間を過ぎた claude を止め、 途中までと理由を書く (rc={rc})")
+        with open(fake, "w") as f:
+            f.write("#!/bin/sh\nsleep 2\nexit 0\n")
+        with open(log, "w") as lf:
+            rc = subprocess.run([sys.executable, os.path.abspath(__file__), "--max-minutes", "0", "--", fake],
+                                stdout=lf, env=dict(os.environ, CLAUDE_STREAM_LOG_MAX_MINUTES="0.01"), timeout=25).returncode
+        check(rc == 0 and "上限" not in open(log, encoding="utf-8").read(), "--max-minutes 0 = 上限なし (env より option が勝つ)")
         # 起動できない
         with open(log, "w") as lf:
             rc = subprocess.run([sys.executable, os.path.abspath(__file__), "--", os.path.join(td, "no-such")],
@@ -435,7 +475,17 @@ def main(argv: list[str]) -> int:
     if not cmd:
         print("claude-stream-log: -- の後に起動する command が無い", file=sys.stderr)
         return 2
-    return run(cmd, disclaim="--no-disclaim" not in opts, partial="--no-partial" not in opts)
+    raw = os.environ.get("CLAUDE_STREAM_LOG_MAX_MINUTES", str(MAX_MINUTES))
+    if "--max-minutes" in opts:
+        j = opts.index("--max-minutes")
+        raw = opts[j + 1] if j + 1 < len(opts) else ""
+    try:
+        minutes = float(raw)
+    except ValueError:
+        print(f"claude-stream-log: --max-minutes の値が数でない: {raw!r}", file=sys.stderr)
+        return 2
+    return run(cmd, disclaim="--no-disclaim" not in opts, partial="--no-partial" not in opts,
+               max_seconds=minutes * 60 if minutes > 0 else None)
 
 
 if __name__ == "__main__":
