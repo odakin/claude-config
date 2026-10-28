@@ -282,6 +282,16 @@
       ]
     },
     {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/workflow-launch-check.sh",
+          "timeout": 10
+        }
+      ]
+    },
+    {
       "matcher": "Bash|mcp__.*__(stop_session|archive_session)",
       "hooks": [
         {

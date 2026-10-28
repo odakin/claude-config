@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# worker-launch-checks.test.sh — session-launch-check.sh と busy-worker-stop-check.sh の self-test (engine の selftest + hook の入出力)
+# worker-launch-checks.test.sh — session-launch-check.sh・workflow-launch-check.sh・busy-worker-stop-check.sh の self-test (engine の selftest + hook の入出力)
 #
 # 正本: claude-config/hooks/worker-launch-checks.test.sh
 # 実行: bash hooks/worker-launch-checks.test.sh (run-all-checks.sh が自動発見)。 候補の dir からも回る:
 #       ENGINE_DIR=<claude-config>/scripts bash <候補>/worker-launch-checks.test.sh
 #
-# 歯: engine を外すと block の case が落ちる / 本物の incident の形 (Fable を頼んで Opus で起きた・busy の worker への claude stop) を再現する。
+# 歯: engine を外すと block の case が落ちる / 本物の incident の形 (Fable を頼んで Opus で起きた・busy の worker への claude stop・
+#     Fable の session で model を書かない workflow・切替時刻を過ぎて働き続ける workflow の agent) を再現する。
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ENGINE_DIR="${ENGINE_DIR:-$HERE/../scripts}"
-LAUNCH="$HERE/session-launch-check.sh"; STOP="$HERE/busy-worker-stop-check.sh"
+LAUNCH="$HERE/session-launch-check.sh"; STOP="$HERE/busy-worker-stop-check.sh"; WF="$HERE/workflow-launch-check.sh"
 command -v python3 >/dev/null 2>&1 || { echo "SKIP: python3 not available"; exit 0; }
 export SESSION_LAUNCH_CHECK_ENGINE="$ENGINE_DIR/session-launch-check.py" BUSY_WORKER_STOP_CHECK_ENGINE="$ENGINE_DIR/busy-worker-stop-check.py"
 unset SESSION_LAUNCH_CHECK_DISABLE BUSY_WORKER_STOP_CHECK_DISABLE SESSION_LAUNCH_BOARD_FIRST
@@ -37,6 +38,28 @@ printf '%s' "$SEND" | bash "$LAUNCH" >/dev/null 2>&1; rc=$?
 [ "$rc" = 2 ] && ok "go to the capped worker → exit 2" || ng "go was not blocked (rc=$rc)"
 SESSION_LAUNCH_CHECK_ENGINE="$TMP/none.py" bash "$LAUNCH" <<<"$SEND" >/dev/null 2>&1; rc=$?
 [ "$rc" = 0 ] && ok "engine 不在 → fail-open" || ng "engine 不在で止まった (rc=$rc)"
+
+echo "=== workflow-launch-check.sh: Fable の session の workflow と切替時刻 ==="
+export SESSION_LAUNCH_PREMIUM_GATE=1
+printf '%s\n%s\n' '{"type":"user","message":{"role":"user","content":"Fable にふさわしい仕事をやろう"}}' \
+  '{"type":"assistant","message":{"role":"assistant","model":"claude-fable-5-1","content":[]}}' > "$TMP/wf.jsonl"
+WFJ='{"hook_event_name":"PreToolUse","tool_name":"Workflow","session_id":"W","transcript_path":"'"$TMP/wf.jsonl"'","tool_input":{"script":"await agent(\"check (x)\", {label: \"a\"})"}}'
+printf '%s' "$WFJ" | bash "$WF" >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "Fable の session・model の無い agent → exit 2" || ng "model の無い agent が通った (rc=$rc)"
+WFJ2='{"hook_event_name":"PreToolUse","tool_name":"Workflow","session_id":"W","transcript_path":"'"$TMP/wf.jsonl"'","tool_input":{"script":"await agent(\"check (x)\", {label: \"a\", model: \"claude-opus-5-5\"})"}}'
+printf '%s' "$WFJ2" | bash "$WF" >/dev/null 2>&1; rc=$?
+[ "$rc" = 0 ] && ok "agent が model を書く → 通す" || ng "model を書いた agent が止まった (rc=$rc)"
+printf 'import sys\nsys.exit(2)\n' > "$TMP/always2.py"
+BASHJ='{"hook_event_name":"PreToolUse","tool_name":"Bash","session_id":"W","agent_id":"a1","tool_input":{"command":"ls"}}'
+SESSION_LAUNCH_CHECK_ENGINE="$TMP/always2.py" bash "$WF" <<<"$BASHJ" >/dev/null 2>&1; rc=$?
+[ "$rc" = 0 ] && ok "Workflow 以外・切替時刻の記録なし → engine を起動しない" || ng "記録が無いのに engine が走った (rc=$rc)"
+mkdir -p "$SESSION_LAUNCH_STATE_DIR"
+printf '{"stop_at": %s, "iso": "t", "notified": false}' "$(( $(date +%s) - 60 ))" > "$SESSION_LAUNCH_STATE_DIR/W.stop-at.json"
+printf '%s' "$BASHJ" | bash "$WF" >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "切替時刻の後の subagent の tool → exit 2" || ng "切替時刻の後の subagent が止まらない (rc=$rc)"
+SESSION_LAUNCH_CHECK_ENGINE="$TMP/none.py" bash "$WF" <<<"$BASHJ" >/dev/null 2>&1; rc=$?
+[ "$rc" = 0 ] && ok "engine 不在 → fail-open" || ng "engine 不在で止まった (rc=$rc)"
+unset SESSION_LAUNCH_PREMIUM_GATE
 
 echo "=== busy-worker-stop-check.sh: busy の worker への claude stop ==="
 export CLAUDE_SESSIONS_DIR="$TMP/sessions" CLAUDE_PROJECTS_DIR="$TMP/projects" BUSY_WORKER_STOP_STATE_DIR="$TMP/stop"
