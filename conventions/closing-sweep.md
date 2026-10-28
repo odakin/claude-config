@@ -20,6 +20,11 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
   当たるなら、 **公開層に上げる文のうち事実を含みうるもの**を絞り、 残りは plan か TODO に積んで次の session に回す。
   これは漏洩の対策であって作業量の上限ではない = 技術の仕組み (道具・hook・検査) や手順の一般形を作ることは、 この条件でも絞らない。
   同じ時間帯に走っている他の締めとは、 1.5 の宣言で書く file を分ける。
+- <a id="delegated-sweep"></a>**ある session の締めを別の worker に渡す** (元の session が止まった・context が大きい・別 vendor に任せる) ときは、 依頼の spec に 3 つ書く:
+  (1) 対象の session の完全な id と記録の種類 (Claude Code か Codex)。 worker にとって上の「この session」 は対象の session で、 その種類の道具で読む = Claude の session なら 0.3・0.5 の道具を対象の id で回し、 0.95 の inventory (Codex の session 用) は使わない
+  (2) 既に済んだ拾い出し (考え方・研究の中身の回収など) の結果の file。 それを入力にして拾い直させない
+  (3) 触らせない file (提出前の原稿など) と、 保護された file は本人に聞くこと ([#protected-files-need-ruling](#protected-files-need-ruling))。
+  元の session が掲示板の依頼の依頼元なら、 検収は依頼元か本人の番で、 締めを受けた worker は状態を記録するだけ (実測: この 3 つを書いた spec で、 別 vendor の worker が Claude Code の session の締めを最後まで回した)。
 
 ## <a id="collect-from-transcript"></a>0.3 会話の全体から集める (文脈圧縮の前も)
 
