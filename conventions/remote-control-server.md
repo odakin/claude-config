@@ -97,7 +97,9 @@ launchctl kickstart -k gui/$(id -u)/<RC server の label>
   spinner の枠) を launchd の `StandardOutPath` にそのまま書き続け、 install script は log を回さない
   (実測: 1 本で数百 MB)。 `--status` は末尾の 5 行しか読まないので気づきにくい = 大きさは
   `du -h ~/Library/Logs/com.claude-config.remote-control-server*.log` で見る。 install script は server と対で
-  `<label>.logcap` の launchd job を置き、 1 時間ごとに 20 MB を超えた log を末尾 1 MB に書き戻す (launchd は
+  `com.claude-config.rc-log-cap[.<suffix>]` の launchd job を置き、 1 時間ごとに 20 MB を超えた log を末尾 1 MB に書き戻す (job の label は
+  server の label で始めない = server を label の前方一致や `*remote-control-server*` で拾う見張りが、 常駐しない
+  定期 job を「loaded だが process 無し」 の server に数える。 前の名前 `<server の label>.logcap` は `--ensure-logcap` が外す。 launchd は
   `StandardOutPath` を追記 (`O_APPEND`) で開くので、 書き戻した後の server の書き込みは新しい末尾に続く。 実測 =
   `lsof +fg` の flag が `AP`)。 log cap の無い既存の server には `--ensure-logcap --label-suffix <名前>` が冪等に
   置く (変えたときだけ 1 行) = 毎 session の自動適用から呼べば各機械に届く。 `--status` が log の大きさと

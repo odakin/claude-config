@@ -96,12 +96,26 @@ LOG="$HOME/Library/Logs/$LABEL.log"
 # 小さな launchd job を置き、 1 時間ごとに LOG_CAP_BYTES を超えていたら末尾 LOG_KEEP_BYTES だけを
 # 書き戻す。 launchd は StandardOutPath を追記で開くので、 書き戻した後の server の書き込みは新しい
 # 末尾に続く。 install と --ensure-logcap (毎 session の自動適用から呼ぶ) が冪等に置き、 --uninstall が外す。
-LOGCAP_LABEL="$LABEL.logcap"
+# label は server の label ($LABEL_BASE...) で始めない: server を label の前方一致・`*remote-control-server*` の
+# glob で拾う見張り (fleet-heartbeat.py / check-remote-control-auth.py / 下の status) が、 常駐しない定期 job を
+# 「loaded だが process 無し」 の server に数えてしまう (実測)。 前の名前 ($LABEL.logcap) は ensure_logcap が外す。
+LOGCAP_LABEL="com.claude-config.rc-log-cap${LABEL#"$LABEL_BASE"}"
 LOGCAP_PLIST="$HOME/Library/LaunchAgents/$LOGCAP_LABEL.plist"
+OLD_LOGCAP_LABEL="$LABEL.logcap"
+OLD_LOGCAP_PLIST="$HOME/Library/LaunchAgents/$OLD_LOGCAP_LABEL.plist"
 LOG_CAP_BYTES=20971520   # 20 MB
 LOG_KEEP_BYTES=1048576   # 1 MB
 
+remove_old_logcap() {
+  if [ -f "$OLD_LOGCAP_PLIST" ] || launchctl print "gui/$UID_N/$OLD_LOGCAP_LABEL" >/dev/null 2>&1; then
+    launchctl bootout "gui/$UID_N/$OLD_LOGCAP_LABEL" 2>/dev/null
+    rm -f "$OLD_LOGCAP_PLIST"
+    echo "[ok] 前の名前の log cap ($OLD_LOGCAP_LABEL) を外した"
+  fi
+}
+
 ensure_logcap() {
+  remove_old_logcap
   mkdir -p "$HOME/Library/LaunchAgents"
   lc_tmp=$(mktemp) || return 1
   cat > "$lc_tmp" <<EOF
@@ -167,6 +181,7 @@ case "$MODE" in
     rm -f "$PLIST"
     launchctl bootout "gui/$UID_N/$LOGCAP_LABEL" 2>/dev/null
     rm -f "$LOGCAP_PLIST"
+    remove_old_logcap >/dev/null
     echo "[ok] uninstalled ($LABEL)"
     exit 0 ;;
   ensure-logcap)
