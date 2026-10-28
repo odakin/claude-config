@@ -17,7 +17,8 @@ Server-to-Server OAuth app を 1 つ作れる**。 これで token を自己発�
 
 本人が Marketplace で 1 回だけ行う (以後は不要):
 
-1. Marketplace → Develop → Build App → **Server-to-Server OAuth** → Create
+1. Marketplace → Develop → Build App → **Server-to-Server OAuth** → Create。 作った app を後で開く (scope を足すなど) =
+   古い画面は右上の Develop / Manage、 新しい画面 (右上の「Try new experience」 が on) は左下の **Developers** から作った app の一覧へ (実測)
 2. **Information** タブの必須欄 (Company Name / Developer Contact Name / Developer Contact Email)
 3. **Scopes** タブ → Add Scopes。 ⚠️ 検索欄に製品名 (`meeting` 等) を入れると数百件出るので、
    **スコープ名をそのまま入れて 1 つずつ足す**。 使う操作の分だけ:
@@ -26,6 +27,8 @@ Server-to-Server OAuth app を 1 つ作れる**。 これで token を自己発�
    - 既存の部屋の設定を変える (`update`): `meeting:update:meeting:admin` (`write` だけでは PATCH が 4711 で止まる、 実測)
    - 自分と設定を読む (`whoami`): `user:read:user:admin` / `user:read:settings:admin`
    - 終わった会議の要約と文字起こし (`notes`): [#read-summary-and-transcript](#read-summary-and-transcript) の 5 つ
+   - 自分の account で入った会議の一覧 (`joined`): `report:read:user:admin` ([#presence-from-process](#presence-from-process))
+   - 足した scope が効いたかは `scopes` (token に付いている scope の一覧) で確かめる
    (旧体系の account なら `meeting:read:admin` / `meeting:write:admin` / `user:read:admin`)
 4. **Activation** タブ → Activate
 5. **App Credentials** タブの **Account ID / Client ID / Client Secret** の 3 値を保管する
@@ -162,10 +165,10 @@ type 3 (No Fixed Time) の部屋は **最終使用から 365 日**で消える�
 - **遡れる範囲は限られる**: Zoom の account の参加の記録 (下の report API) は、 今月を含む直近 6 か月の月までしか問えない
   (それより古い月は code 300、 実測)。 macOS の Zoom アプリの参加の履歴は暗号化された DB の中にあって読めず、 unified log は数日で消える (実測)。
   → 6 か月を越えて残すには、 **毎日取って自分の台帳に写す**
-- **第一の出所 = account の参加の記録** (`GET /report/users/{userId}/meetings?type=pastJoined&from=…&to=…`): 入室・退室・会議 id・
+- **第一の出所 = account の参加の記録** (`GET /report/users/{userId}/meetings?type=pastJoined&from=…&to=…`、 道具 = `zoom-client.py joined --from … --to …`): 入室・退室・会議 id・
   主催者 (`host_id` を自分の id と比べれば自分 / 他人) が返る。 server 側の記録なので、 その account で入っていればブラウザ・スマホから入った分も残る
   - Server-to-Server OAuth app に `report:read:user:admin` が要る (無いと 4711)。 足した後は app の Scopes の一覧にその名前が並んでいることを
-    確かめる = 並んでいないと token に入らない (実測: 1 回目は入っておらず、 足し直して一覧に出た後の token から効いた)。 token の応答の `scope` で確かめられる
+    確かめる = 並んでいないと token に入らない (実測: 1 回目は入っておらず、 足し直して一覧に出た後の token から効いた)。 token の応答の `scope` (`zoom-client.py scopes`) で確かめられる
   - `userId` に `me` は効かない (code 1001 「User does not exist: me」) = `GET /users/me` の `id` を使う。 1 回の問い合わせは 1 か月まで (月ごとに区切る)
   - 時刻は UTC で、 書式が混ざる (`join_time` / `leave_time` = `MM/DD/YYYY HH:MM` の分の精度、 `start_time` = `YYYY-MM-DD HH:MM:SS`)。
     同じ入室が 2 行返ることがある = 重複を除く

@@ -17,6 +17,9 @@ subcommand:
   delete <meeting_id> [--apply]             部屋を消す (既定 dry-run)
   notes <meeting_id> --date YYYY-MM-DD [--between HH:MM-HH:MM] [--out DIR] [--rec-start HH:MM:SS]
                                             その日の回の AI 要約と文字起こしを取り出す (読むだけ)
+  scopes                                    token に付いている scope の一覧 (足した scope が効いたかを確かめる)
+  joined --from YYYY-MM-DD --to YYYY-MM-DD [--tz]   自分の account で入った会議 (入室・退室・会議 id・主催)。
+                                            直近 6 か月の月まで = 残すなら自分で写す (conventions/zoom-meetings.md#presence-from-process)
   selftest                                  通信しない部品の自己検査
 
 文字起こし (VTT) は**参加者ごとの名前つき** = 話者を分けない録音の転写 (whisper 等) の帰属に使える。
@@ -127,6 +130,12 @@ def load_cred(path: str | None) -> dict:
 
 
 def get_token(cred: dict) -> str:
+    return token_response(cred)["access_token"]
+
+
+def token_response(cred: dict) -> dict:
+    """token の応答 (access_token と、 app に付いている scope の一覧 `scope`)。 scope を足した後に効いたかはこれで確かめる
+    (app の Scopes の一覧に並んでいないと token に入らない、 実測 = conventions/zoom-meetings.md#presence-from-process)。"""
     body = urllib.parse.urlencode(
         {"grant_type": "account_credentials", "account_id": cred["account_id"]}
     ).encode()
@@ -141,7 +150,7 @@ def get_token(cred: dict) -> str:
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.load(resp)["access_token"]
+            return json.load(resp)
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")
         raise ZoomError(f"token 取得に失敗 ({exc.code}): {detail}") from exc
@@ -161,6 +170,65 @@ def api(token: str, method: str, path: str, payload: dict | None = None) -> dict
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")
         raise ZoomError(f"{method} {path} が失敗 ({exc.code}): {detail}") from exc
+
+
+def report_time(s) -> dt.datetime | None:
+    """report API の時刻 → UTC の datetime。 書式が混ざる (実測): join_time / leave_time = 'MM/DD/YYYY HH:MM' (分の精度)、
+    start_time = 'YYYY-MM-DD HH:MM:SS'、 ほかの API は ISO の 'Z'。 どれも UTC。 読めなければ None。"""
+    for fmt in ("%m/%d/%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"):
+        try:
+            return dt.datetime.strptime(str(s), fmt).replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def month_chunks(d0: dt.date, d1: dt.date) -> list[tuple[dt.date, dt.date]]:
+    """report API は 1 回の問い合わせが 1 か月まで = 暦の月ごとに区切る。"""
+    out, a = [], d0
+    while a <= d1:
+        b = min(d1, (a.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1))
+        out.append((a, b))
+        a = b + dt.timedelta(days=1)
+    return out
+
+
+def joined(token: str, d0: dt.date, d1: dt.date) -> list[dict]:
+    """自分の account で入った会議 (report の pastJoined) = [{join, leave (UTC の datetime), meeting_id, host: self|other, topic}]、 入室の順。
+    scope `report:read:user:admin` が要る (無いと 4711)。 user に `me` は効かない (1001) = 自分の id を引いてから。
+    問えるのは今月を含む直近 6 か月の月だけ (それより古い月は code 300)。 他人が主催した会議は題も開始時刻も返らないが、
+    会議 id は主催者の案内の id と一致する (実測)。 同じ入室が 2 行返ることがある = 重複を除く。
+    使い方と考え方の正本 = conventions/zoom-meetings.md#presence-from-process。"""
+    uid = api(token, "GET", "/users/me")["id"]
+    seen, out = set(), []
+    for a, b in month_chunks(d0, d1):
+        nxt = ""
+        while True:
+            q = f"/report/users/{uid}/meetings?from={a}&to={b}&type=pastJoined&page_size=300"
+            r = api(token, "GET", q + (f"&next_page_token={urllib.parse.quote(nxt)}" if nxt else ""))
+            for x in r.get("meetings", []):
+                j, lv = report_time(x.get("join_time")), report_time(x.get("leave_time"))
+                key = (x.get("id"), x.get("join_time"), x.get("leave_time"))
+                if not j or not lv or key in seen:
+                    continue
+                seen.add(key)
+                out.append({"join": j, "leave": lv, "meeting_id": str(x.get("id", "")),
+                            "host": "self" if x.get("host_id") == uid else "other", "topic": x.get("topic") or ""})
+            nxt = r.get("next_page_token") or ""
+            if not nxt:
+                break
+    return sorted(out, key=lambda m: m["join"])
+
+
+def cmd_joined(token: str, args) -> int:
+    tz = ZoneInfo(args.tz)
+    rows = joined(token, dt.date.fromisoformat(args.date_from), dt.date.fromisoformat(args.date_to))
+    for m in rows:
+        j, lv = m["join"].astimezone(tz), m["leave"].astimezone(tz)
+        print(f"{j:%Y-%m-%d %H:%M}-{lv:%H:%M}  会議 id {m['meeting_id']}  主催 {'自分' if m['host'] == 'self' else '他人'}"
+              f"  {m['topic'] or '(題なし = 他人の主催)'}")
+    print(f"({len(rows)} 件、 {args.date_from}〜{args.date_to}、 時刻は {args.tz})")
+    return 0
 
 
 def cmd_whoami(token: str, args) -> int:
@@ -421,6 +489,11 @@ def selftest() -> int:
     check(got[3] == "[0:00:40] 名前の無い行", "名前の無い cue は本文だけ")
     check(rec_offset_s("2030-01-02T11:00:00Z", "2030-01-02", "20:10:30", "Asia/Tokyo") == 630,
           "録画の開始 (東京 20:10:30) − 会議の開始 (UTC 11:00:00) = 630 秒")
+    check(report_time("10/07/2030 04:16") == dt.datetime(2030, 10, 7, 4, 16, tzinfo=dt.timezone.utc), "report の join_time は UTC の MM/DD/YYYY HH:MM")
+    check(report_time("2030-10-07 04:16:23") == dt.datetime(2030, 10, 7, 4, 16, 23, tzinfo=dt.timezone.utc), "report の start_time は UTC")
+    check(report_time(None) is None and report_time("x") is None, "読めない時刻は None")
+    check(month_chunks(dt.date(2030, 9, 29), dt.date(2030, 11, 3)) == [(dt.date(2030, 9, 29), dt.date(2030, 9, 30)),
+          (dt.date(2030, 10, 1), dt.date(2030, 10, 31)), (dt.date(2030, 11, 1), dt.date(2030, 11, 3))], "問い合わせを暦の月で区切る")
     print("zoom-client selftest:", "ALL PASS" if not fails else f"FAIL {fails}")
     return 1 if fails else 0
 
@@ -465,12 +538,23 @@ def main(argv: list[str]) -> int:
     p_notes.add_argument("--rec-start", help="録画を始めた現地の時刻 HH:MM:SS。 付けると文字起こしを録画の時刻に直した"
                          " *_transcript-rec.txt も書く (--out と一緒に)")
 
+    sub.add_parser("scopes", help="token に付いている scope の一覧 (scope を足した後に効いたかを確かめる)")
+
+    p_joined = sub.add_parser("joined", help="自分の account で入った会議の一覧 (report の pastJoined、 直近 6 か月の月まで)")
+    p_joined.add_argument("--from", dest="date_from", required=True, help="YYYY-MM-DD")
+    p_joined.add_argument("--to", dest="date_to", required=True, help="YYYY-MM-DD")
+    p_joined.add_argument("--tz", default="Asia/Tokyo")
+
     sub.add_parser("selftest", help="通信しない部品の自己検査")
 
     args = ap.parse_args(argv)
     if args.cmd == "selftest":
         return selftest()
     try:
+        if args.cmd == "scopes":
+            for s in sorted(token_response(load_cred(args.cred)).get("scope", "").split()):
+                print(s)
+            return 0
         token = get_token(load_cred(args.cred))
         return {
             "whoami": cmd_whoami,
@@ -480,6 +564,7 @@ def main(argv: list[str]) -> int:
             "update": cmd_update,
             "delete": cmd_delete,
             "notes": cmd_notes,
+            "joined": cmd_joined,
         }[args.cmd](token, args)
     except ZoomError as exc:
         print(f"⚠️ {exc}", file=sys.stderr)
