@@ -15,6 +15,12 @@
             "type": "command",
             "command": "python3 \"$HOME/.codex/claude-config-hooks/session_provenance.py\"",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/board_surface.py\"",
+            "timeout": 10,
+            "statusMessage": "Reading the board"
           }
         ]
       }

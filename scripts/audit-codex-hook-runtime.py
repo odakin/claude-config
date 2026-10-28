@@ -101,6 +101,8 @@ def read_cache(path, now=None):
             raise ValueError("future cache timestamp")
         if not isinstance(value.get("missing", []), list) or any(not isinstance(s, str) for s in value.get("missing", [])):
             raise ValueError("cache missing list")
+        if not isinstance(value.get("pending_trust", []), list) or any(not isinstance(s, str) for s in value.get("pending_trust", [])):
+            raise ValueError("cache pending_trust list")
         value["cache_stale"] = age > 2 * 24 * 60 * 60
         return value
     except (OSError, ValueError, TypeError, KeyError) as exc:
@@ -117,11 +119,22 @@ def surface_line(report):
     stale = " (古い: 2日超)" if report.get("cache_stale") else ""
     path_note = " [PATH の codex、app とは別物かもしれない]" if report.get("binary_source") == "PATH" else ""
     if state == "ready_for_live_probe":
+        if report.get("pending_trust"):
+            # a hook of this bundle added or changed after the last /hooks: it does not run until trusted on this machine
+            binary = shlex.quote(one_line(report.get("binary") or "codex"))
+            return ("⚠️ Codex の hook のうち信頼待ち: " + one_line(report["pending_trust"]) + stale
+                    + "、信頼する = terminalで " + binary + " を起動して /hooks" + path_note)
         if stale:
             return "⚠️ Codex の hook 信頼: 監査cacheが古い (2日超)。dashboardで再監査する。"
         return "⚠️ " + path_note.strip() if path_note else ""
     if state == "not_armed":
         binary = shlex.quote(one_line(report.get("binary") or "codex"))
+        if report.get("cause") == "not_installed":
+            # hooks/list has no hook of this bundle: there is nothing for /hooks to trust (measured on a machine
+            # whose Codex home had been recreated). Install first, then trust.
+            return ("🔴 Codex に hook が入っていない (hooks/list に 0 件 = /hooks の信頼では直らない)" + stale
+                    + "、入れる = claude-config の scripts/setup-codex.sh (個人層を使う機械は --personal-layer <path>)"
+                    + "、その後 terminalで " + binary + " を起動して /hooks" + path_note)
         return ("🔴 Codex の hook 信頼が落ちている: missing = " + one_line(report.get("missing", []))
                 + stale + "、付け直し = terminalで " + binary + " を起動して /hooks" + path_note)
     suffix = "、監査cache未取得・読取不能" if report.get("cache_unavailable") else ""
@@ -186,8 +199,21 @@ def assess(data: dict, needle: str, worker_records=False) -> tuple[dict, int]:
                 active.add(name)
     missing = sorted(expected - active)
     ready = not missing
-    return {"configuration": "ready_for_live_probe" if ready else "not_armed",
-            "hooks": states, "missing": missing, "live_dispatch": "not_tested"}, 0 if ready else 1
+    result = {"configuration": "ready_for_live_probe" if ready else "not_armed",
+              "hooks": states, "missing": missing, "live_dispatch": "not_tested"}
+    if not hooks:
+        result["cause"] = "not_installed"  # none of this bundle's hooks is configured: trust cannot arm it
+    if not worker_records:
+        # the other hooks of the same bundle (installed by setup-codex.sh) that Codex does not run until /hooks
+        pending = set()
+        for h in row["hooks"]:
+            match = re.search(r"claude-config-hooks/([\w.-]+)", h.get("command") or "")
+            if h in hooks or not match or h.get("trustStatus") in ("trusted", "managed"):
+                continue
+            pending.add(str(h.get("eventName")) + ":" + match.group(1))
+        if pending:
+            result["pending_trust"] = sorted(pending)
+    return result, 0 if ready else 1
 
 
 def read_hooks(binary: str, cwd: str, timeout: float) -> dict:
@@ -274,6 +300,34 @@ def selftest() -> int:
     stop = fixture(); stop["data"][0]["hooks"].pop()
     result, rc = assess(stop, "manuscript_claim_guard.py")
     checks.append(("absent Stop is not armed", rc == 1 and result.get("missing") == ["stop"]))
+    checks.append(("a partly configured bundle is untrusted, not uninstalled", "cause" not in result))
+    untrusted, _ = assess(fixture("untrusted"), "manuscript_claim_guard.py")
+    checks.append(("untrusted hooks are not reported as uninstalled", "cause" not in untrusted
+                   and "/hooks" in surface_line(untrusted) and "setup-codex" not in surface_line(untrusted)))
+    empty = {"data": [{"errors": [], "hooks": []}]}
+    result, rc = assess(empty, "manuscript_claim_guard.py")
+    line = surface_line(result)
+    checks.append(("no hook of the bundle is not installed, and says to install before trusting",
+                   rc == 1 and result.get("cause") == "not_installed" and line.startswith("🔴")
+                   and "setup-codex.sh" in line and line.index("setup-codex.sh") < line.rindex("/hooks")))
+    other = {"data": [{"errors": [], "hooks": [{"eventName": "stop", "matcher": None, "enabled": True,
+                                                "trustStatus": "trusted", "source": "user", "command": "python3 other.py"}]}]}
+    checks.append(("another tool's hooks do not count as this bundle installed",
+                   assess(other, "manuscript_claim_guard.py")[0].get("cause") == "not_installed"))
+    with_new = fixture()
+    with_new["data"][0]["hooks"].append({"eventName": "sessionStart", "matcher": None, "enabled": True, "trustStatus": "untrusted",
+                                         "source": "user", "command": 'python3 "$HOME/.codex/claude-config-hooks/board_surface.py"'})
+    result, rc = assess(with_new, "manuscript_claim_guard.py")
+    line = surface_line(result)
+    checks.append(("an untrusted new hook of the bundle is named while the guards stay ready",
+                   rc == 0 and result.get("pending_trust") == ["sessionStart:board_surface.py"]
+                   and line.startswith("⚠️") and "board_surface.py" in line and "/hooks" in line))
+    with_new["data"][0]["hooks"][-1]["trustStatus"] = "trusted"
+    checks.append(("a trusted bundle hook is not pending", "pending_trust" not in assess(with_new, "manuscript_claim_guard.py")[0]))
+    other_tool = fixture()
+    other_tool["data"][0]["hooks"].append({"eventName": "sessionStart", "matcher": None, "enabled": True, "trustStatus": "untrusted",
+                                           "source": "user", "command": "python3 other.py"})
+    checks.append(("another tool's untrusted hook is not this bundle's", "pending_trust" not in assess(other_tool, "manuscript_claim_guard.py")[0]))
     checks.append(("managed hooks are ready", assess(fixture("managed"), "manuscript_claim_guard.py")[1] == 0))
     for kind in ("prompt", "agent", "mcpTool"):
         mixed = fixture()

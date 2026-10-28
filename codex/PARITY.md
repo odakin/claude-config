@@ -789,7 +789,7 @@ allowed. This boundary is tested separately from hook trust and installation.
 
 Persisted trust can be checked with `scripts/audit-codex-integration.sh --runtime`
 (or [`audit-codex-hook-runtime.py`](../scripts/audit-codex-hook-runtime.py) directly).
-The runtime audit requires trusted, enabled Bash/apply_patch pre-tool guards and the reporting Stop guard; `missing` names any absent or untrusted surface.
+The runtime audit requires trusted, enabled Bash/apply_patch pre-tool guards and the reporting Stop guard; `missing` names any absent or untrusted surface. Any other hook of this bundle that the machine has not trusted yet (a hook added or changed since the last `/hooks`) is named in `pending_trust`, and the surface line asks for `/hooks` on that machine until it is trusted; when none of the bundle's hooks is configured, the audit says to install with `scripts/setup-codex.sh` before trusting.
 Select the Desktop executable with `--codex` when inspecting that runtime. `--codex auto` prefers a running app executable, then current and legacy application bundles, then PATH; the report includes the selected path and version and warns when PATH may identify a different runtime. Dashboard and scheduled checks refresh a machine-local observation with `--cache`; SessionStart uses only `--read-cache --surface` and starts no app-server. Missing, invalid or older-than-two-day observations are visible warnings; a fresh ready app observation is silent.
 
 <a id="restore-hook-trust"></a>Hook trust is stored under `[hooks.state]` in the user's `config.toml` and is bound to the hook definition hash; changing a definition in `hooks.json` can invalidate its trust. To restore it, the user starts the app-bundled executable selected by the audit in a terminal, then uses the startup trust dialog or `/hooks` and the trust-all action. A PATH executable may be a different version. Re-run the audit and check that the required Bash, patch and Stop surfaces are trusted; this verifies persisted configuration, not live dispatch. Agents only read this state and never write trust settings or invoke a trust RPC. The
@@ -815,10 +815,17 @@ The managed hook-code inventory is
 [`session_stamp.py`](hooks/session_stamp.py),
 [`first_prompt_stamp.py`](hooks/first_prompt_stamp.py),
 [`first_turn_stamp_check.py`](hooks/first_turn_stamp_check.py),
-[`manuscript_claim_guard.py`](hooks/manuscript_claim_guard.py), and
+[`manuscript_claim_guard.py`](hooks/manuscript_claim_guard.py),
+[`board_surface.py`](hooks/board_surface.py),
 [`session_touch.py`](hooks/session_touch.py), and
 [`worker_record_context.py`](hooks/worker_record_context.py); its regression suite is
 [`codex-hooks.test.sh`](hooks/codex-hooks.test.sh).
+
+`board_surface.py` is the SessionStart adapter of the board engine's
+`board-session-start.py` (layer 1, cloned next to this repository): on the
+local checkouts and only inside the workspace, it passes the board's
+actionable threads on as `additionalContext`; it is silent when the engine is
+absent or nothing waits. Reading the board is otherwise only an instruction.
 
 ## <a id="machine-local-provenance"></a>Machine-local provenance
 
@@ -872,8 +879,10 @@ records only, `block` sends one continuation) is shared with Claude through
 `DEFAULT_STOP_MODE` and `FIRST_REPLY_STAMP_STOP`. The workspace-root scope, the
 opt-out, and the measured failure pattern that motivated both steps are in
 [`multi-account-machine-surface.md#first-reply-stamp-mechanism`](../conventions/multi-account-machine-surface.md#first-reply-stamp-mechanism).
-Their behavior is fixture-tested; live Codex delivery of the UserPromptSubmit
-context still awaits a fresh task after trust review.
+Their behavior is fixture-tested. Live delivery was observed in a fresh CLI task
+(`codex exec`, CLI 0.159.2) after trust review on 2026-10-07: the SessionStart and
+UserPromptSubmit contexts reached the model, the reply led with the stamp, and the
+Stop hooks ran. Desktop delivery has not been observed.
 
 The SessionStart reminder obtains the short hostname only from the current
 hook process. A session title, a prior message, or an audit/report from another
@@ -897,6 +906,33 @@ repository's aggregate local checks and CI.
 Codex requires review and trust for changed user hooks. Treat an installed
 `hooks.json` as configured, not as verified active, until the client has
 accepted that trust review. The audit reports installation state only.
+
+## <a id="cross-session-reach"></a>Reaching other sessions on one machine
+
+Source check: 2026-10-07, Codex CLI 0.159.2, one machine. A Codex session has
+no SendMessage. The rules and tools are in
+[`multi-account-machine-surface.md#codex-peers`](../conventions/multi-account-machine-surface.md#codex-peers)
+and the board engine contract (`ai-collaboration` `board/CONTRACT.md#codex-reach`):
+
+- **To a Codex thread**: `codex queue --thread <thread id> --message <text>`
+  queues a user message. A thread loaded in a running client received it as a
+  new turn right after its current turn; a one-shot `codex exec` then exits and
+  interrupts that turn; a thread open nowhere kept the message queued. The
+  board's posting commands print this command when the next actor is a Codex
+  thread on the machine.
+- **From a Codex thread to a Claude session**: there is no direct path. The
+  Codex session posts to the board; the Claude counterpart is woken by its own
+  background `watch` of the thread.
+- **Liveness and metadata** come from the thread writer locks a process holds
+  open (`lsof` on `<CODEX_HOME>/thread-writer-locks/`) and the local state
+  database, read-only ([`scripts/lib/codex_threads.py`](../scripts/lib/codex_threads.py)).
+  Both are undocumented local layout: a reader that cannot read them reports
+  unknown, never "not live".
+- **Sandbox boundary**: inside `workspace-write`, the board's `--sync` and every
+  post need the network, and `codex queue` writes the Codex state database;
+  both fail until the command is approved to run outside the sandbox. Whether to
+  allow those exact commands by a `prefix_rule` is the owner's decision; this
+  repository installs none. Read-only tools work inside the sandbox.
 
 ## Deliberate non-equivalences
 
