@@ -108,6 +108,7 @@ Anthropic 側 fix を待つ前提なら、 dialog が出たときだけ押す運
   - **複製は APFS の clone** (`cp -c` = 容量を食わない)。 hard link にしない (= 同じ file に名前が 2 つあると、 process の path がどちらで報告されるか保証されない)
   - **差し替えは一時名に置いて `mv`** (= 走っている process は古い file を持ったまま壊れない)。 差し替える前に署名を確かめ、 署名の主 (identifier + Team ID) が前の版と違えば差し替えない
   - **launcher は触らない** = 上流の自動更新・古い版の掃除はそのまま動く。 固定の場所から起動した CLI も `claude doctor` で native の install と認識される (実測)
+  - **対象は native installer の CLI だけ**: npm で入れた CLI は実行 file の path が版を跨いで同じ (版上げは同じ path の file を置き換える) = 固定の場所は要らない見込み (許可が版を跨いで保たれるかは未確認)。 道具は native の launcher が無い機械では見張りを入れず、 何も出さない
   - **揃える契機を 2 つ**: launchd の `WatchPaths` (launcher の dir と versions/ の変化) と、 使う直前の確認 (起動の中継が揃えてから起動する)。 見張りが取りこぼしても run は古い版で走らない
   - **呼び出し側**: 定期 job の起動行の絶対 path と `PATH` の先頭 (= script の中で `claude` を呼ぶ job も同じ file)、 常駐の server の plist の `PATH` の先頭。 常駐の server は止めず、 plist の file だけを直して次の起動から (層1 の engine = [`install-launchd-cron.sh`](../scripts/install-launchd-cron.sh) / [`install-remote-control-server.sh`](../scripts/install-remote-control-server.sh) / [`claude-stream-log.py`](../scripts/claude-stream-log.py))
 - **切り替えた直後に 1 回ずつ** 聞かれる (固定の場所は新しい path)。 これが最後 = 以後の版では出ない。 誰もいない時間の run で初めて出ると止まるので、 切り替えたら人がいる時に一度起こして答えておく

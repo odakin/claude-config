@@ -126,6 +126,9 @@ EOF
 agent_loaded() { launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; }
 
 install_agent() {
+  # native installer の launcher が無い機械 (npm で入れた CLI など = 実行 file の path が版を跨いで変わらない) では
+  # 見張りも固定の場所も要らない = 何も出さずに終わる (毎 session 呼ばれるので、 使えない見張りを入れない・知らせを出さない)
+  [ "$(state)" = no-launcher ] && return 0
   case "$SELF$LAUNCHER$VERSIONS_DIR$LOG" in
     *[\&\<\>\"]*) echo "claude-stable-path: path に XML で使えない文字がある" >&2; return 7 ;;
   esac

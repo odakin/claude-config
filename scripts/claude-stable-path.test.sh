@@ -59,6 +59,9 @@ check '! sh "$S" --print-stable >/dev/null 2>&1 && [ -z "$(sh "$S" --print-stabl
 rm -f "$T/bin/claude"
 sh "$S" sync >/dev/null 2>&1; rc=$?
 check '[ $rc -eq 3 ]' "launcher が無ければ exit 3 (rc=$rc)"
+out="$(sh "$S" --install-agent 2>&1)"; rc=$?
+check '[ $rc -eq 0 ] && [ -z "$out" ] && [ ! -e "$T/agents/com.claude-config.claude-stable-path.plist" ]' \
+  "launcher が無い機械 (npm 版など) では --install-agent が何も出さず見張りも入れない (rc=$rc: $out)"
 
 # 6. 見張りの plist
 sh "$S" --agent-plist > "$T/agent.plist"
