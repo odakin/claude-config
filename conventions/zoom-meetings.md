@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript) + 開催通知のメールから本人を会議に入れるとき (#join-from-notice) + 会議・研修に出ていたかを機械で残すとき (#presence-from-process)
 category: infra
-summary: Zoom の機械経路は Server-to-Server OAuth app 1 つで開く (#s2s-oauth-route、 scope は用途ごとに admin 版を 1 つずつ足す = 部屋の作成・読み取り・変更・削除 / 自分と設定 / 終わった会議、 token は account_id + Basic 認証で自己発行)。 常設の部屋を PMI と分ける判断 (#dedicated-room-vs-pmi)。 create の 2 つの罠 = アカウント既定「予定されたミーティングに PMI を使用」 が ON だと新しい id が発番されるのに参加 URL は PMI のものになる (#use-pmi-silently-hijacks-create)、 passcode なしで作ると waiting_room が要求を無視して true に上書きされる (#passcode-or-waiting-room)。 固定時刻なしの定期ミーティングは最終使用から 365 日で失効する (#no-fixed-time-expiry)。 録画と議事録は別機能で、 録画せずに要約だけ回せる (#recording-vs-summary)。 終わった会議の要約と文字起こしは `notes` で取り出し、 「無い」 も過去の回の `has_meeting_summary` と transcript の 3322 で言い切る (#read-summary-and-transcript)。 作った部屋は番号だけ残ると用途が失われる (#record-the-room)。 通知メールの会議に本人を入れるときは passcode を chat に出さずクリップボードへ、 末尾の \r を落とす (#join-from-notice)。 出ていたかは後から遡れないので、 会議中だけ動く process `CptHost` を各機械の常駐の見張りでその場で残し、 1 台で予定と突き合わせる (#presence-from-process)
+summary: Zoom の機械経路は Server-to-Server OAuth app 1 つで開く (#s2s-oauth-route、 scope は用途ごとに admin 版を 1 つずつ足す = 部屋の作成・読み取り・変更・削除 / 自分と設定 / 終わった会議、 token は account_id + Basic 認証で自己発行)。 常設の部屋を PMI と分ける判断 (#dedicated-room-vs-pmi)。 create の 2 つの罠 = アカウント既定「予定されたミーティングに PMI を使用」 が ON だと新しい id が発番されるのに参加 URL は PMI のものになる (#use-pmi-silently-hijacks-create)、 passcode なしで作ると waiting_room が要求を無視して true に上書きされる (#passcode-or-waiting-room)。 固定時刻なしの定期ミーティングは最終使用から 365 日で失効する (#no-fixed-time-expiry)。 録画と議事録は別機能で、 録画せずに要約だけ回せる (#recording-vs-summary)。 終わった会議の要約と文字起こしは `notes` で取り出し、 「無い」 も過去の回の `has_meeting_summary` と transcript の 3322 で言い切る (#read-summary-and-transcript)。 作った部屋は番号だけ残ると用途が失われる (#record-the-room)。 通知メールの会議に本人を入れるときは passcode を chat に出さずクリップボードへ、 末尾の \r を落とす (#join-from-notice)。 出ていたかは account の参加の記録 (report API の pastJoined、 直近 6 か月の月だけ、 他人主催の会議は会議 id で同定) を毎日写し、 別 account の網として会議中だけ動く process `CptHost` を各機械で見張り、 1 台で予定と突き合わせる (自分主催の会議は開始の前後 15 分に入ったものだけ数える、 #presence-from-process)
 -->
 # Zoom のミーティングを script から扱う
 
@@ -159,22 +159,32 @@ type 3 (No Fixed Time) の部屋は **最終使用から 365 日**で消える�
 
 研修の出席票や会議の出欠の届けは、 数週間後に「出たか」 を問う。 予定 (カレンダー) は残っても、 出たかは誰も残していない。
 
-- **後から遡れない**: macOS の Zoom アプリの参加の履歴は暗号化された DB の中にあって読めず、 unified log は数日で消える (実測)。
-  → 出たかは **その場で** 残すしかない
-- **印 = `CptHost`**: Zoom アプリ (macOS) の補助 process `CptHost` は、 会議に入っている間だけ動く (実測: アプリは数日開いたままで、
-  `CptHost` は会議の間だけ動いていた)。 `aomhost` は会議の中で何本も起きては消えるので区間の印にしない。 アプリの起動の直後に
-  数十秒だけ動いた例もある = 数分未満の区間は出た痕跡に数えない
-- **形**: 機械ごとに常駐の見張り (短い間隔で `pgrep -x CptHost`、 launchd の KeepAlive) → 会議中の区間を machine-local の spool に足す →
-  会議が終わったら未送の分を **新しい file 1 つ** にして repo に送る (書いた file は書き換えない = [`repo-history-growth.md#encrypted-ledgers`](repo-history-growth.md#encrypted-ledgers)。
-  作業 tree を使わない一時 index の書き方 = 同 [`#slow-round-trip`](repo-history-growth.md#slow-round-trip)) → 1 台が毎日、 予定と時刻で突き合わせる
-  (後から届いた別の機械の分が入るよう、 直近の数日を毎回やり直す)
+- **遡れる範囲は限られる**: Zoom の account の参加の記録 (下の report API) は、 今月を含む直近 6 か月の月までしか問えない
+  (それより古い月は code 300、 実測)。 macOS の Zoom アプリの参加の履歴は暗号化された DB の中にあって読めず、 unified log は数日で消える (実測)。
+  → 6 か月を越えて残すには、 **毎日取って自分の台帳に写す**
+- **第一の出所 = account の参加の記録** (`GET /report/users/{userId}/meetings?type=pastJoined&from=…&to=…`): 入室・退室・会議 id・
+  主催者 (`host_id` を自分の id と比べれば自分 / 他人) が返る。 server 側の記録なので、 その account で入っていればブラウザ・スマホから入った分も残る
+  - Server-to-Server OAuth app に `report:read:user:admin` が要る (無いと 4711)。 足した後は app の Scopes の一覧にその名前が並んでいることを
+    確かめる = 並んでいないと token に入らない (実測: 1 回目は入っておらず、 足し直して一覧に出た後の token から効いた)。 token の応答の `scope` で確かめられる
+  - `userId` に `me` は効かない (code 1001 「User does not exist: me」) = `GET /users/me` の `id` を使う。 1 回の問い合わせは 1 か月まで (月ごとに区切る)
+  - 時刻は UTC で、 書式が混ざる (`join_time` / `leave_time` = `MM/DD/YYYY HH:MM` の分の精度、 `start_time` = `YYYY-MM-DD HH:MM:SS`)。
+    同じ入室が 2 行返ることがある = 重複を除く
+  - **他人が主催した会議は題も開始時刻も返らない** (入室・退室・会議 id だけ)。 その **会議 id は主催者の案内メールの会議 id と一致する** (実測) =
+    メールを id で検索すれば、 どの会議かを同定できる
+- **第二の出所 = 会議中だけ動く process `CptHost`** (別の account・サインインしないで入った分の網): Zoom アプリ (macOS) の補助 process
+  `CptHost` は、 会議に入っている間だけ動く (実測: アプリは数日開いたままで、 `CptHost` は会議の間だけ動き、 account の記録の入室・退室と
+  分の単位で一致した)。 `aomhost` は会議の中で何本も起きては消えるので区間の印にしない。 残るのは時間だけ (どの会議かは持たない)
+  - 形: 機械ごとに常駐の見張り (短い間隔で `pgrep -x CptHost`、 launchd の KeepAlive) → 会議中の区間を machine-local の spool に足す →
+    会議が終わったら未送の分を **新しい file 1 つ** にして repo に送る (書いた file は書き換えない = [`repo-history-growth.md#encrypted-ledgers`](repo-history-growth.md#encrypted-ledgers)。
+    作業 tree を使わない一時 index の書き方 = 同 [`#slow-round-trip`](repo-history-growth.md#slow-round-trip))
   - スリープで見えなかった間は区間を切る (寝ていた時間を会議に数えない)。 見張りが会議中に止まったら、 次の起動で最後に見えた時刻で閉じる
-  - 見張りを入れる前の予定は残さない (「痕跡なし」 と区別できない)。 見張りを始めた時刻も記録に送る
-- **見張りは全部の機械、 突き合わせは 1 台**: 会議にはどの機械からも入るので、 無人の定期 job を 1 台だけで走らせる gate を見張りに掛けない
-  ([`scheduled-tasks.md#per-recipient-notification-locus`](scheduled-tasks.md#per-recipient-notification-locus) と同じ「その機械の事実はその機械で」)
-- **痕跡の限界**: 残るのは時間だけで、 どの会議かは持たない = 同じ時間に別の Zoom に入っていれば対面の会にも「痕跡あり」 が付く。
-  ブラウザ・スマホから入った Zoom、 他の会議 service、 対面は残らない = **「痕跡なし」 は欠席ではない**。
+  - **見張りは全部の機械、 突き合わせは 1 台**: 会議にはどの機械からも入るので、 無人の定期 job を 1 台だけで走らせる gate を見張りに掛けない
+    ([`scheduled-tasks.md#per-recipient-notification-locus`](scheduled-tasks.md#per-recipient-notification-locus) と同じ「その機械の事実はその機械で」)
+- **突き合わせ** (1 台が毎日、 予定と時刻で。 後から届いた分が入るよう直近の数日を毎回やり直す):
+  - 他人が主催した会議 = 予定の時間に数分以上重なれば痕跡
+  - **自分が主催した会議は、 予定の開始の前後 15 分に入ったものだけ** を痕跡に数える = 研究の Zoom を自分の部屋で開いたまま、 対面の会に
+    重なることがある (実測)。 数えなかった重なりも記録には「数えない」 として残す
+  - 見張りの区間が account の記録で説明できるとき (同じ時間に account の入室がある) は、 account の記録に任せる
+  - どの出所も記録の無い時期 (見張りを入れる前、 account の記録の 6 か月より前) の予定は残さない (「痕跡なし」 と区別できない)
+- **痕跡の限界**: 別の account でブラウザ・スマホから入った Zoom、 他の会議 service、 対面は残らない = **「痕跡なし」 は欠席ではない**。
   後で出欠が要る会 (研修・正式な会議) で痕跡が無いものだけを、 1 日分まとめて本人に 1 回聞き、 答えは本人の言葉のまま残す
-- **API を先に確かめる**: Zoom の API には「参加した会議」 の一覧 (`GET /report/users/me/meetings?type=pastJoined`) があり、 文書上は
-  その account で入った会議を server 側で返す (ブラウザ・スマホから入った分も含む見込み)。 Server-to-Server OAuth app に
-  `report:read:user:admin` の scope が無いと 4711 で断られる (実測)。 足せるかと返る範囲・保持期間は未確認 = 足したら、 見張りの記録と同じ日で突き合わせて確かめる
