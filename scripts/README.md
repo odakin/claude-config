@@ -181,6 +181,7 @@
 - **[git-rewrite-follow.py](git-rewrite-follow.py)** — 書き換えられた (force-push された) 履歴に手元の clone を中身で揃える / 古い世代の commit・blob の push を止める / 揃える機構が各マシンに届いたかを状態で答える (engine = scripts/lib/git_rewrite_follow.py、 追従の判定は書き換えられない層 = 本 repo に置く)
 - **[git-scrub-history.mutants.json](git-scrub-history.mutants.json)** — git-scrub-history.py の selftest の foil に歯があることを、 検証の独立性と教訓の部品を 1 つずつ外した mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が回す)。
 - **[git-scrub-history.py](git-scrub-history.py)** — 履歴の全ての版の path 名・平文の中身・commit message から識別子 (ID・氏名・旧 path) を置き換える書き換えを、 設定 1 つで今の tree の先行改名・他 repo の参照の置換・予行演習・検証・本人の push の command・push の後の ref の点検まで通す。--selftest 内蔵。
+- **[git-stash-shared-tree.py](git-stash-shared-tree.py)** — 未 commit の変更が居る作業 tree で git stash・--autostash を打つ Bash command を止める PreToolUse(Bash) の述語と本体 (find_issues(command) = 校正の道具が呼ぶ形、 --selftest)。 規約 = conventions/multi-session-coordination.md#autostash-foreign-wip
 - **[gmail-mcp-engines.test.sh](gmail-mcp-engines.test.sh)** — gmail MCP engine 2 本 (reauth / install-runtime-links) の hermetic self-test
 - **[gmail-mcp-install-runtime-links.sh](gmail-mcp-install-runtime-links.sh)** — ~/.gmail-mcp/ の runtime credential を config repo canonical への symlink に張り替える冪等エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)
 - **[gmail-mcp-reauth.sh](gmail-mcp-reauth.sh)** — 多アカウント Gmail MCP の OAuth (再)認証エンジン (generic、 layer 1 が実行実体。 runbook = conventions/gmail-mcp-multiaccount.md)

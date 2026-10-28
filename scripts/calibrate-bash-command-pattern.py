@@ -16,7 +16,9 @@
 出力: 読んだ file 数 / Bash command 数 (同じ文字列を除いた数) / hit した command 数と、 hit ごとに
   session id の先頭 8 桁・検出内容・前後の文脈。 同じ command 文字列は 1 回だけ数える (= 再試行の重複を除く)。
   誤検出かどうかは人が読んで数える (= 述語の一致は意図を識別しない)。
-⚠️ transcript は local の private data。 出力 (command の抜粋) を公開の場所に貼らない。
+⚠️ transcript は local の private data。 出力 (command の抜粋) を公開の場所に貼らない。 件数 (母数・hit) も
+  本人の会話記録から数えた活動の量 = 公開 repo の commit message・本文には形 (誤検出の数・道具・読んだ範囲) だけを
+  書く (conventions/hook-authoring.md#new-hook-protected-bundle の 2。 出力の 2 行目にも出す = 数字を写す瞬間に読む)。
 """
 from __future__ import annotations
 
@@ -38,6 +40,8 @@ except Exception:  # pragma: no cover - 古い配置
     _ccd = None
 
 LEGACY_GLOB = "~/.claude/projects/*/*.jsonl"
+PUBLIC_SHAPE_NOTE = ("⚠️ 上の件数 (母数・hit) は本人の会話記録から数えた活動の量 = 公開 repo の commit message・本文には書かない。 "
+                     "書くのは誤検出の数・道具・読んだ範囲だけ (conventions/hook-authoring.md#new-hook-protected-bundle の 2)")
 
 
 def transcript_paths(pattern: str | None) -> list[str]:
@@ -201,6 +205,7 @@ def main() -> int:
         files = files[:a.files]
     n, u, hits = scan(files, load_detector(a.hook, a.pattern, a.func))
     print(f"files {len(files)} / Bash command {n} (同じ文字列を除く {u}) / hit {len(hits)}")
+    print(PUBLIC_SHAPE_NOTE)
     for sid, found, cmd in hits[:a.samples]:
         print(f"--- {sid} {found}")
         print(f"    {_snippet(cmd, found)}")

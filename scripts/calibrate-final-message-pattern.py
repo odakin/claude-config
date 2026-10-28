@@ -33,6 +33,8 @@ except Exception:  # pragma: no cover - 古い配置
     _ccd = None
 
 LEGACY_GLOB = "~/.claude/projects/*/*.jsonl"
+PUBLIC_SHAPE_NOTE = ("⚠️ 上の件数 (sessions・turns・hits) は本人の会話記録から数えた活動の量 = 公開 repo の commit message・本文には書かない。 "
+                     "書くのは誤検出の数・道具・読んだ範囲だけ (conventions/hook-authoring.md#new-hook-protected-bundle の 2)")
 
 
 def transcript_paths(pattern: str | None) -> list[str]:
@@ -86,6 +88,7 @@ def main(argv=None) -> int:
     n_turns, n_hits, out = scan(files, re.compile(args.pattern), args.skip_quoted,
                                 args.exclude_sentence_with, args.samples)
     print(f"sessions={len(files)} turns={n_turns} hits={n_hits}")
+    print(PUBLIC_SHAPE_NOTE)
     for sid, ctx in out:
         print(f" - {sid} … {ctx}")
     return 0
