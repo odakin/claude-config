@@ -55,6 +55,7 @@ Codex の rollout では、 Stop hook の差し戻し文 (`<hook_prompt …>`) �
 ## <a id="thread-not-in-app"></a>script や別の session から起こした Codex の仕事がアプリの一覧に出ない
 
 原因 (実測): `codex exec` の thread は状態の記録 (`~/.codex/state_5.sqlite` の `threads`) に `source = exec` で入り、 アプリの一覧は対話の種類だけを出す。
+= 本人にアプリでの操作 (アーカイブ・開いて確かめる) を頼む前に、 その thread の `source` を読む (`sqlite3 -readonly ~/.codex/state_5.sqlite "select title, source, archived from threads where title like '%<題の語>%'"`)。 `exec` の thread はアプリの一覧で探しても見つからないので頼まない (実測)。
 手元の共有 daemon (`codex app-server daemon`) が走らせる thread は、 アプリに開かせると一覧に載るが、 走っている間アプリは「別のアプリで開いています」 と出して進行を出さず、 話しかけられない (書き手の lock が daemon にある。 アプリの log = `thread/resume` が `already has an active writer`)。
 アプリ 26.1002 では、 そうして読み込みに失敗した thread は左の「最近の項目」 にも載らなかった。
 アプリで進行が見え、 話しかけられる起こし方 = **アプリを書き手にする**: 使い捨ての `codex app-server` で thread を作って履歴に起動の記録を 1 項目入れ (turn の無い thread は rollout が無くアプリで開けない)、 起動文を `codex queue` で予約し、 アプリに `codex://threads/<id>?hostId=local` を開かせる = アプリが予約を turn として走らせる

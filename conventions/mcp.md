@@ -23,6 +23,7 @@ MCP ツールを使うリポで適用。CLAUDE.md から参照: `~/Claude/claude
 ## <a id="claude-mcp-project-resolution"></a>`claude mcp` の project 解決ルール (注意)
 
 `claude mcp add` / `claude mcp remove` の default scope は **local** = 「対象 Claude Code project 内の MCP 登録」(`~/.claude.json` の `projects[<path>].mcpServers` 配下)。"対象 project" は **cwd が git repo の中ならその repo の root、 そうでなければ cwd そのもの** で決まる。 `.claude/` を持つ親の dir へは辿らない (実測: engine 2.1.309 の `claude mcp get`。 `~/Claude` (git でない、 `.claude/` あり) に登録した server は、 `.claude/` を持たない git repo `~/Claude/<repo>` からも、 その子 dir からも、 git でない子 dir `~/Claude/tmp` からも見えなかった)。
+この解決が効くのは `claude mcp` で登録・読み出す時。 desktop の session で Bash の cd により作業ディレクトリが登録の無い project に移っても、 session の開始時に繋いだ MCP は turn の切れ目を越えて繋がったままだった (実測: app 4.29.0 / engine 2.1.309、 別の session の message で始まる turn と本人の発言で始まる turn の両方)。 = 「MCP が消えた」 を cd のせいと決める前に、 server の process が落ちていないか (下の runbook) を見る。
 
 セットアップ用の bash スクリプト等が、**自分自身のリポ内**から `claude mcp` を呼ぶと、登録先が想定外の project に入る:
 
@@ -126,6 +127,7 @@ session の会話 / context / tool 許可は **保たれる**。MCP server だ�
 ### 6. それでも動かない場合の根本原因別 checklist
 
 - **環境変数の missing**: MCP server は Claude Code 起動時の minimal env を継承する。`$PATH` / `$NODE_OPTIONS` / カスタム credential path 等。`-e KEY=VALUE` で明示的に渡す
+  - <a id="npx-absolute-needs-path"></a>狭い PATH (無人の run・launchd) でも起動させるために command を `node` / `npx` の絶対 path にするとき、 **`npx` は絶対 path だけでは起動しない**: `npx` 自身が `#!/usr/bin/env node` で始まり、 PATH に node が無いと exec の段で落ちる (実測)。 `npx` の server には同じ bin の dir を先頭にした `PATH` を `env` にも渡す (`node` を直に起動する server は絶対 path だけで起動する)。 確かめ方 = `PATH=/usr/bin:/bin claude mcp list` で Connected
 - **working directory**: stdio server は Claude Code の cwd を継承。絶対パスで file を参照する設計が安全
 - **credential lock 競合**: OAuth token file を読む系の server が、別プロセス (Python script 等) と同時に lock を取りに行くと timeout。MCP 起動と batch script の同時実行を避ける
 - **cold-start タイムアウト**: googleapis 等の重い import で 2-3 sec かかる。MCP daemon の timeout (30s) には収まるが、複数 server 同時起動で IO 競合があると押し出される。重い server は esbuild 等で single-file bundle を試す
