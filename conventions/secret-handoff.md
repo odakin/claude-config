@@ -86,6 +86,8 @@ agent の tool call は clipboard を通らないので、 上の罠は起きな
 
 `~/.secrets/<name>` への直書きは **その 1 台でしか有効でない揮発配置**。secret を複数マシンで使う (= ほぼ全ての bot token / API key) なら、**canonical は「private secrets repo に git-crypt 暗号化で commit したファイル」** であるべきで、各マシンの `~/.secrets/<name>` はそこへの **symlink** (= repo の setup が自動生成) にする。
 
+symlink を張るのが新しい機械の setup だけだと、 **後から secrets repo に足した秘密が既存の機械に張られない** (実測: 張られていない秘密が 9 本あって道具が止まった。 secrets repo を直に読む予備の path を持つ道具は欠けに気づかなかった)。 張る本体 = [`scripts/link-secrets.sh`](../scripts/link-secrets.sh) (setup.sh の Step 5d と同じ処理、 張れていれば無音、 中身が違う普通の file は置き換えず知らせるだけ) を **毎 session の自動適用から呼ぶ**。 欠けの数え方 = `for f in <secrets-repo>/secrets/*; do [ -e ~/.secrets/$(basename "$f") ] || echo missing; done | wc -l`。
+
 decouple の失敗形: 「今動かす配置」 (= `~/.secrets` へ直書き) だけ実行し、「耐久化」 (= canonical へ commit) を別ステップとして doc に意図だけ書いて実行しない。**同一マシンの動作確認 (例: API の `GET /me` が通る) は揮発配置でも成功するため、作成したマシン上では耐久性の欠落が構造的に見えない** — 別マシンで読もうとして初めて露見する。これは「条件付き発火 mechanism の非活性は可視信号化せよ」 (= [`convention-design-principles.md §8.13`](../docs/convention-design-principles.md#conditional-firing-visibility)) の secrets domain での現れ。
 
 ### 耐久な secret を作るときの順序 (= handoff の配置先を canonical にする)
