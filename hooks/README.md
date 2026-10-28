@@ -17,6 +17,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[chat-math-render-guard.test.sh](chat-math-render-guard.test.sh)** — logic + incident-replay selftest
 - **[chat-path-base-nudge.sh](chat-path-base-nudge.sh)** — PostToolUse(Bash): 作業ディレクトリが session を始めたフォルダから離れたとき、 chat の file 参照 (link の href・inline code の dir/file.ext) を右パネルが開く基準は変わらないことを、 session × 作業ディレクトリごとに 1 回だけ知らせる
 - **[chat-path-base-nudge.test.sh](chat-path-base-nudge.test.sh)** — logic selftest
+- **[cli-binary-read-nudge.py](cli-binary-read-nudge.py)** — Claude Code 本体 (CLI の binary・埋込 engine・app の bundle) を使い捨ての code で読む Bash に、 道具 claude-app-bundle.py を 1 session に 1 回知らせる PreToolUse の入口 (止めない)。 述語・本体・--selftest = scripts/cli-binary-read-check.py
+- **[cli-binary-read-nudge.test.sh](cli-binary-read-nudge.test.sh)** — cli-binary-read-nudge.py の検査 (本体の binary を読む Bash で鳴る / 1 session 1 回 / 道具と無関係な command・壊れた入力・engine の不在で黙る)
 - **[codex-headless-launch-check.sh](codex-headless-launch-check.sh)** — 掲示板の依頼の worker や盲検の判定 session を headless の codex exec で起こす Bash を止め、 Codex アプリに出る起こし方を出す (理由を書けば通す)
 - **[codex-headless-launch-check.test.sh](codex-headless-launch-check.test.sh)** — codex-headless-launch-check.sh の self-test (engine の selftest + hook の入出力)
 - **[codex-parent-worker-record-nudge.py](codex-parent-worker-record-nudge.py)** — Codex由来の環境IDがあるClaude workerだけに記録条項を渡す (UserPromptSubmit/Stop、非blocking)。
