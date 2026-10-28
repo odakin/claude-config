@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: ChatGPT app (Codex desktop) の task が 401 / auth error で止まったとき + 「Incorrect API key provided: sk-svcacct…」 が出たとき + Codex の hook が走らない・監査が untrusted と言うとき + app の更新で Codex の binary の path が変わったとき + 承認 CLI が「本人の発言が無い」 と言うとき + task の結果の要約が見当たらず最後の message が完了 gate への返事のとき + ChatGPT desktop の不具合を公式フィードバックへ送るとき + script や別の session から起こした Codex の仕事がアプリの一覧に出ないとき (#thread-not-in-app) + sandbox の中の git が `.git` に書けないとき (#sandbox-git-dir-readonly)
+when: ChatGPT app (Codex desktop) の task が 401 / auth error で止まったとき + 「Incorrect API key provided: sk-svcacct…」 が出たとき + Codex の hook が走らない・監査が untrusted と言うとき + app の更新で Codex の binary の path が変わったとき + 承認 CLI が「本人の発言が無い」 と言うとき + task の結果の要約が見当たらず最後の message が完了 gate への返事のとき + ChatGPT desktop の不具合を公式フィードバックへ送るとき + script や別の session から起こした Codex の仕事がアプリの一覧に出ないとき (#thread-not-in-app) + sandbox の中の git が `.git` に書けないとき (#sandbox-git-dir-readonly) + 端末で `codex` が command not found のとき (#cli-on-path)
 category: harness-core
 summary: Codex desktop の auth error は client の鍵でなく backend 側のことが多い (= 手元に sk-svcacct は無い、 status page を見る、 再ログインしない) / 切り分けの読み方 (auth.json の auth_mode、 logs_2.sqlite の feedback_tags、 rollout の task_complete) / hook の信頼は hooks.json の定義 hash に束縛され TUI の /hooks で付け直す (agent は書かない) / app 同梱 binary の path は更新で動く = process から探す / 承認の引用元は生成文を除く / 結果が見当たらないときは rollout で gate の差し戻しの直前を読む / 公式フィードバックは操作ツールの制約とアプリの機能を分け、本人への貼付本文・添付範囲・送信識別子を引き継ぐ
 -->
@@ -34,7 +34,11 @@ zsh -lic 'echo ${OPENAI_API_KEY:+set}'; launchctl getenv OPENAI_API_KEY
 
 ## <a id="binary-path-moves"></a>app 同梱 binary の path は更新で動く
 
-`/Applications/ChatGPT.app/Contents/Resources/codex` が、 同じ日の app 更新で `…/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex` に移った (実測)。 path を決め打ちした script は `FileNotFoundError` = 検査不能になる。 探す順 = ① 動いている process (`pgrep -f 'Contents/MacOS/codex'`) ② 既知の bundle path (新 → 旧) ③ PATH の `codex` (npm 版は別物で版が古いことがある = 出力に注記)。 TUI を起動するときも同じ binary を使う (PATH の codex で信頼を付けても、 hash の算法や hooks.json の解釈が版で違いうる)。
+`/Applications/ChatGPT.app/Contents/Resources/codex` が、 同じ日の app 更新で `…/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex` に移った (実測)。 path を決め打ちした script は `FileNotFoundError` = 検査不能になる。 探す順 = ① 動いている process (`pgrep -f 'Contents/MacOS/codex'`) ② 既知の bundle path (新 → 旧) ③ PATH の `codex` (npm 版は別物で版が古いことがある = 出力に注記)。 TUI を起動するときも同じ binary を使う (PATH の codex で信頼を付けても、 hash の算法や hooks.json の解釈が版で違いうる)。 ⚠️ 動いている process は 1 つとは限らない (実測: app の同梱の版と、 app が `~/.codex/packages/app-server-daemon/releases/<版>/` に落とした別の版が同時に動いていた) = 信頼を付けた後は、 両方の binary を `--codex <path>` に渡して監査し、 どちらからも trusted に見えるか確かめる。
+
+## <a id="cli-on-path"></a>端末で `codex` が command not found
+
+ChatGPT app は CLI を app の中に同梱するだけで PATH に置かない (npm で別に入れていない機械では `codex` が無い、 実測)。 本人に `/hooks` などの CLI の操作を頼む前に [`scripts/install-codex-cli-shim.sh`](../scripts/install-codex-cli-shim.sh) で入口を置く: PATH に載っている `~/.local/bin` (無ければ `~/.npm-global/bin`・`~/bin`) に、 起動のたびに上の順 (動いている process → bundle → app が落とした版の新しいもの) で本体を探して `exec` する小さな script を置く。 冪等で、 本物の `codex` が PATH に在れば置かない (置いた入口は外す)。 owner の層の session 開始の自動適用から毎回呼べば、 app の更新や新しい機械にも届く。 止める = `~/.claude/codex-cli-shim.off`。
 
 ## <a id="approval-source"></a>承認の引用元に生成文が混ざる
 

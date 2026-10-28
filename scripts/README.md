@@ -200,6 +200,7 @@
 - **[inspire-bib-audit.py](inspire-bib-audit.py)** — refs.bib を INSPIRE-HEP と texkey → arXiv ID → DOI の順で同定し、title / 第一著者 / 誌名 / 巻 / 初頁 / DOI / eprint を突合する gate（TeX 記法 ↔ Unicode・誌名の略記ゆれ・巻の系列文字・再録は正規化、INSPIRE 未収録は SKIP、network 失敗は exit 2、--selftest）
 - **[install-claude-app-account-mirror.sh](install-claude-app-account-mirror.sh)** — desktop の session 一覧の写し (claude-app-account-mirror.py) を launchd に常駐させる / 状態を見る / 外す (macOS、 本人が terminal で実行する)
 - **[install-claude-app-account-mirror.test.sh](install-claude-app-account-mirror.test.sh)** — install-claude-app-account-mirror.sh の入れる / 入れ直し / 状態 / 外す と、 account が 1 つの時・macOS 以外で何もしないことの test
+- **[install-codex-cli-shim.sh](install-codex-cli-shim.sh)** — ChatGPT アプリ同梱の Codex CLI を、 端末で `codex` と打って起動できるようにする (PATH 上の dir に小さな入口を置く。 冪等、 変えないときは無出力。 --selftest)
 - **[install-collaborator-check.py](install-collaborator-check.py)** — 共有リポに「各 clone の session 開始時に、 その人の手元に要る設定 (個人の token・道具) と初回に読む節を確かめて出し、 隣に要る repo は自動で clone・更新する」 仕組みを配る。
 - **[install-docx-decl-patch.sh](install-docx-decl-patch.sh)** — Install the docx patch in available Python user sites, or --python PATH (setup Step 9).
 - **[install-docx-decl-patch.test.sh](install-docx-decl-patch.test.sh)** — Explicit interpreter and two-Python installation using isolated stubs.
