@@ -749,7 +749,8 @@ def pre_workflow(inp: dict) -> tuple[int, str]:
         if missing:
             msgs.append(f"  - この session は {session_model}。 agent() {len(calls)} 件のうち {missing} 件が model を書いていない ="
                         " 親の model を継いで Fable で動く。 agent ごとに opts の model を書く (読む・照合する・検品する・直す agent は"
-                        " claude-opus-5-5 など一段下、 Fable は agent 自身が導出し判断するものだけ)。 1 本の agent は 10 体未満を目安に。")
+                        " claude-opus-5-5 など一段下、 Fable は agent 自身が導出し判断するものだけ)。 1 本の agent は 10 体未満"
+                        " (越える形は起動の前に scripts/workflow-estimate.py で見積もって script に書く = #workflow-fan-out)。")
     stop = None
     if any(NAMES_RESET.search(t) for t in owner_prompts(transcript)):
         m = STOP_AT.search(src + " " + str(ti.get("description") or ""))
