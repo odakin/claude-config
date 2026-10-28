@@ -285,7 +285,7 @@ def _directives(env=None, name=None):
 
 
 def _shingles(text):
-    """空白を除いた連続 SHINGLE_N 文字のうち、 日本語が MIN_JA 文字以上のものだけ。
+    r"""空白を除いた連続 SHINGLE_N 文字のうち、 日本語が MIN_JA 文字以上のものだけ。
 
     日本語比率で絞るのは、 誤検知の実体が **LaTeX の定型** (`\documentclass[...]`、
     `\begin{tikzpicture}`、 `\newtheorem{theorem}{定理}`) と **共有された path 文字列**

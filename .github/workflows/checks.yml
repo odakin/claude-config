@@ -20,7 +20,8 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 準備の apt が約 2 分・検査が 8 分弱 (実測) = 10 分では上限に当たって cancelled になった
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - name: Install jq, ffmpeg, git-crypt and a Japanese font (ffmpeg = audio-finish-episode.py / audio-split-by-frames.py selftests, git-crypt = staged-conflict-markers T8/T9, fonts-noto-cjk = html-print-pdf.py / mail-to-pdf.py selftests render Japanese; without them those tests only SKIP)
