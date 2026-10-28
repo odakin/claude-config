@@ -40,7 +40,12 @@ Gmail の読み = lib/gmail_read.py。
 
 使い方 (shim が option を足す):
   record-reply.py <対象> [--todo <id>] [--account <alias>] [--next "<次の一手>"] [--status <enum>]
-                  [--summary "<3 行まで>"] [--slug <romaji>|--id <entry id>] [--ledger-for-new <name>] [--no-todo] [--apply]
+                  [--summary "<3 行まで>"] [--slug <romaji>|--id <entry id>] [--ledger-for-new <name>] [--no-todo]
+                  [--replaces <鍵>] [--apply]
+  現在地の鍵 (`--require-replaces on` を shim が渡したとき): 現在地のある項目を書く `--apply` は、 dry-run が見せる
+  「上書きの鍵 = --replaces <8 桁>」 を求める。 鍵が無い・読んだ後に現在地が変わった = 書かずに exit 1、 ✗ の 1 行に
+  今の現在地を全文出す (= 記憶から --next を書いて、 別の session が先に記録した手順を消す lost update を止める。 実測は
+  replaces_refusal の docstring)。
   record-reply.py --check | --schema | --migrate <ledger> [--remigrate] [--apply] [--limit N] [--only <id>] | --selftest
   record-reply.py --relabel <ledger> [--apply] [--limit N] [--only <id>]
                   (既存の索引の向き・相手を今の規則で Gmail から引き直す。 id と日時は元の行のまま、 下書きの行は外して
@@ -62,7 +67,8 @@ selftest (= 偽の Gmail + 2 台帳の fixture、 API に触らない): t1 legac
   返事でない message (新規・追送・転送) は --ctx-new-out / --ctx-new-in / t15 --relabel (相手の引き直し・下書きの
   行を外して印を戻す・Gmail に無い id は残す・他の field は不変・冪等) / t16 現在地を作る thread = 今回記録する最新を持つ thread /
   t17 途中で止まったらこの実行の書き込みを全部戻す / t18 1 つの entry に複数 thread の行 (別 thread の行が今回より
-  前 / 後の日付) = 索引は全行の日付順・印は全行の最新・既存の行を落とさない。
+  前 / 後の日付) = 索引は全行の日付順・印は全行の最新・既存の行を落とさない / t19 閉じた子の thread を辿る /
+  t20 現在地の鍵 (鍵なし・古い鍵は止めて ✗ の行に現在地、 正しい鍵なら書く、 既定 off・空の現在地は止めない)。
 下書き: Gmail は未送信の下書きも thread の message として返す。 lib/gmail_read が既定で除く (= 記録しない・返事の
   判定に入れない)。 下書きを記録してしまった既存の行は --relabel が外す。
 """
@@ -70,6 +76,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
 import json
 import os
 import re
@@ -126,6 +133,7 @@ class Config:
     tz: str = "local"
     cache_dir: Path = Path.home() / ".cache" / "record-reply"
     month_header: str = "# {year}-{month:02d} mail ledger"
+    require_replaces: bool = False           # True = 現在地のある項目を書く --apply に、 dry-run が見せた鍵 (--replaces) を求める
 
     def tzinfo(self):
         if self.tz == "local":
@@ -805,6 +813,33 @@ def apply_todo(cfg: Config, p: dict, ledger: Ledger, todo_id: str, args, today: 
     return written
 
 
+def context_sig(ctx: str) -> str:
+    """項目の現在地の鍵 (純関数) = 前後の空白を除いた文の sha1 の先頭 8 桁。 dry-run が見せ、 --apply が照合する。"""
+    return hashlib.sha1(str(ctx or "").strip().encode("utf-8")).hexdigest()[:8]
+
+
+def replaces_refusal(cfg: Config, todo_id: str, old_ctx: str, given: str | None) -> str | None:
+    """現在地を上書きする --apply を止める理由の 1 行 (止めないなら None。 純関数)。
+
+    なぜ (実測): 別件の返事を同じ項目に記録した session が、 前日の自分の記憶から --next を書いて --apply を直接打ち、
+    出力も ✓ / ✗ の行だけに絞った。 その数時間前に別の session が記録していた「相手の問い = こちらの番」 が現在地から
+    消え、 項目は 7 日「相手の返事待ち」 に見えた。 dry-run は上書きされる現在地を見せていたが、 読まれなかった
+    = 見せるだけでは足りない。 読んだ印 (鍵) を求め、 読んだ後に変わっていたら止める (楽観的な排他)。
+    ✗ の行に今の現在地を全文入れる = ✓ / ✗ だけを拾う絞り込みでも、 消すところだった中身が読み手に届く。
+    現在地が空の項目は止めない (失うものが無い)。 cfg.require_replaces が偽でも、 鍵を渡されたら照合する。"""
+    old = str(old_ctx or "").strip()
+    if not old or not (cfg.require_replaces or given):
+        return None
+    sig = context_sig(old)
+    if not given:
+        return (f"✗ 項目 {todo_id} の現在地を読まずに上書きしようとした (exit 1)。 今の現在地 = 「{old}」 → 残っている手順"
+                f" (別の相手の返事待ち・こちらが返す問い・未決の点) を --next に入れ直して --replaces {sig} を付ける")
+    if given.strip() != sig:
+        return (f"✗ 項目 {todo_id} の現在地は鍵 {given.strip()} を読んだ後に変わった (exit 1。 別の記録が先に入った)。"
+                f" 今の現在地 = 「{old}」 → これを読んで --next を作り直し、 --replaces {sig} を付ける")
+    return None
+
+
 def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) -> int:
     if ledger.broken:
         for b in ledger.broken:
@@ -852,6 +887,8 @@ def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) 
         old_ctx = str((ledger.todos[todo_id][2] or {}).get("status_context") or "").strip()
         if old_ctx:
             out(f"\n項目 {todo_id} の今の現在地 (上書きされる。 残っている手順は --next に含める):\n  {old_ctx}")
+            if cfg.require_replaces or getattr(args, "replaces", None):
+                out(f"  上書きの鍵 = --replaces {context_sig(old_ctx)} (この現在地を読んだ印。 --apply に付ける)")
     if todo_id and not args.no_todo and not args.next:
         out("\n結ぶ項目の現在地を書くには --next \"<次の一手 1 行>\" が要る (項目を触らないなら --no-todo)")
         if args.apply:
@@ -859,6 +896,11 @@ def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) 
     if not args.apply:
         out("\n(dry-run。 書くなら --apply)")
         return 0
+    if todo_id and not args.no_todo:
+        refusal = replaces_refusal(cfg, todo_id, old_ctx, getattr(args, "replaces", None))
+        if refusal:
+            out(refusal)
+            return 1
     creates = [p for p in plans if p["home"] is None]
     if any(p["create"] is None for p in creates):
         out("新規 entry の id が決まらない thread がある = --slug / --id (exit 1)")
@@ -1603,6 +1645,37 @@ def _selftest() -> int:
         p_off, _t, _n = resolve_target(cfg_h0, "2030-01-01-parent", Ledger(cfg_h0), gm, None)
         check([t for t, _a in p_on] == ["dddd000000000001", "dddd000000000002"] and [t for t, _a in p_off] == ["dddd000000000001"],
               "t19 引き継ぎ: closed_statuses を渡すと閉じた子の thread も親の thread (渡さなければ従来どおり)")
+
+        # t20 現在地の鍵 (require_replaces): 読まずに上書きする --apply を止め、 ✗ の行に今の現在地を全文入れる
+        (td / "lr" / "inbox").mkdir(parents=True)
+        (td / "lr" / "todo").mkdir()
+        old_r = "2026-09-21 reply from B (q) → next: answer B's question / still waiting for A"
+        todo_r = td / "lr" / "todo" / "2030-03-01-r.yaml"
+        todo_r.write_text('id: "2030-03-01-r"\ntask: "r"\nstatus: open\nemail_ref: "threadId:bbbb000000000001"\n'
+                          f'status_context: {json.dumps(old_r, ensure_ascii=False)}\n', encoding="utf-8")
+        cfg_r = Config(root=td, ledgers=["lr"], accounts=("acct-a",), owner_tokens=("owner@",), tz="UTC",
+                       cache_dir=td / "cache", require_replaces=True)
+        ns_r = argparse.Namespace(target="2030-03-01-r", todo=None, account=None, next="wait for A", status=None, summary=None,
+                                  slug="r-thread", id=None, ledger_for_new=None, no_todo=False, apply=False, replaces=None)
+        sig_r = context_sig(old_r)
+        out_lines.clear()
+        rc = run_record(cfg_r, ns_r, Ledger(cfg_r), gm, "2026-09-22", pr)
+        check(rc == 0 and f"上書きの鍵 = --replaces {sig_r}" in "\n".join(out_lines), "t20 dry-run は上書きの鍵を見せる")
+        snap_r = {q: q.read_text(encoding="utf-8") for q in (td / "lr").rglob("*.yaml")}
+        for given, label in ((None, "鍵なし"), ("deadbeef", "古い鍵")):
+            out_lines.clear()
+            rc = run_record(cfg_r, argparse.Namespace(**{**vars(ns_r), "apply": True, "replaces": given}), Ledger(cfg_r), gm, "2026-09-22", pr)
+            refusal = [ln for ln in out_lines if ln.startswith("✗")]
+            check(rc == 1 and refusal and old_r in refusal[0] and f"--replaces {sig_r}" in refusal[0]
+                  and snap_r == {q: q.read_text(encoding="utf-8") for q in (td / "lr").rglob("*.yaml")},
+                  f"t20 {label}の --apply は止まり、 ✗ の 1 行に今の現在地と鍵、 file は不変")
+        out_lines.clear()
+        rc = run_record(cfg_r, argparse.Namespace(**{**vars(ns_r), "apply": True, "replaces": sig_r}), Ledger(cfg_r), gm, "2026-09-22", pr)
+        tr = _yaml_safe_load(todo_r.read_text(encoding="utf-8"))
+        check(rc == 0 and str(tr.get("status_context", "")).endswith("→ next: wait for A"), "t20 正しい鍵なら書く")
+        check(replaces_refusal(Config(root=td, ledgers=["lr"]), "x", old_r, None) is None
+              and replaces_refusal(cfg_r, "x", "", None) is None,
+              "t20 require_replaces が偽 (既定) なら止めない / 現在地が空の項目は止めない")
     finally:
         shutil.rmtree(td, ignore_errors=True)
     print(f"selftest: {'ALL PASS' if not fails else f'FAIL {fails}'}")
@@ -1621,7 +1694,8 @@ def build_config(args) -> Config:
                  category_in=args.category_in, category_out=args.category_out,
                  ctx_reply=args.ctx_reply, ctx_sent=args.ctx_sent, ctx_new_in=args.ctx_new_in,
                  ctx_new_out=args.ctx_new_out, tz=args.tz,
-                 cache_dir=Path(args.cache_dir).expanduser(), month_header=args.month_header)
+                 cache_dir=Path(args.cache_dir).expanduser(), month_header=args.month_header,
+                 require_replaces=str(args.require_replaces or "").strip().lower() in ("on", "1", "true", "yes"))
     return cfg
 
 
@@ -1637,6 +1711,7 @@ def main(argv=None) -> int:
     ap.add_argument("--id", help="新規 entry の id (完全指定)")
     ap.add_argument("--ledger-for-new", help="新規 entry を置く台帳 (既定 = 項目の台帳、 無ければ最初の台帳)")
     ap.add_argument("--no-todo", action="store_true")
+    ap.add_argument("--replaces", help="上書きする現在地の鍵 (dry-run が「上書きの鍵」 として見せる 8 桁)。 読んだ後に現在地が変わっていたら --apply を止める")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--quiet", action="store_true", help="--check で問題が無ければ何も出さない (dashboard 用)")
@@ -1665,6 +1740,7 @@ def main(argv=None) -> int:
     ap.add_argument("--tz", default="local")
     ap.add_argument("--cache-dir", default=str(Path.home() / ".cache" / "record-reply"))
     ap.add_argument("--month-header", default="# {year}-{month:02d} mail ledger")
+    ap.add_argument("--require-replaces", default="off", help="on = 現在地のある項目を書く --apply に --replaces を求める (shim が渡す)")
     args = ap.parse_args(argv)
     if args.selftest:
         return _selftest()
