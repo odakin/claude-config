@@ -232,6 +232,7 @@
 - **[ledger-commit-cadence-gate.py](ledger-commit-cadence-gate.py)** — [forwarder → ai-collaboration/scripts/ledger-commit-cadence-gate.py] YAML ledger の commit cadence gate (pre-commit): 1 commit で追加される list entry (`- id:`) が N 個を超えたら refuse、escape env は hygiene log に記録 + worker scope gate (= env CAMPAIGN_WORKER_DIR が
 - **[letter-word-count.py](letter-word-count.py)** — LaTeX で組んだ返答書・手紙の語数を、 自分の文と引用 (referee の文など) に分けて数える。 git の前の版との比較つき。
 - **[library-holdings-ledger.py](library-holdings-ledger.py)** — 図書館に本があるかを OPAC で確かめた結果を、 証拠つきの台帳 (YAML) を正本として持ち、 引き直し・点検する。--selftest 内蔵。
+- **[link-secrets.sh](link-secrets.sh)** — 個人層の secrets-repos.txt に並べた repo の secrets/* を ~/.secrets/<名前> に symlink で張る (setup.sh Step 5d の本体、 毎 session の自動適用からも呼ぶ)
 - **[list-live-sessions.py](list-live-sessions.py)** — 同 cwd で生きてる兄弟 Claude session を surface する read-only reader。
 - **[lit-search.py](lit-search.py)** — 先行研究の探索を API で回す (OpenAlex の全文検索・題名と要旨の論理式・被引用・要旨、 Crossref の書誌検索、 arXiv の検索)。 1 件 1 行、 --json も
 - **[live-engine-paths.py](live-engine-paths.py)** — hook と git の hook が作業 tree から直接読む file (= 書きかけを別の session が走らせる file) の一覧を作る。--selftest 内蔵。
