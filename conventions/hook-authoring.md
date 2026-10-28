@@ -1090,7 +1090,7 @@ SessionStart hook の注入は agent の文脈にだけ入り、 人の画面に
 
 **数え方**
 
-- 「何 session 表示したか」 の台帳は**注入の経路からだけ記録する** (env で記録を許可)。 dashboard や手動実行からも記録すると、 人に 1 回も見せていないのに回数が増え、 回数で上げる強制が早く発火する (実測)
+- 「何 session 表示したか」 の台帳は**注入の経路からだけ記録する** (env で記録を許可)。 dashboard や手動実行からも記録すると、 人に 1 回も見せていないのに回数が増え、 回数で上げる強制が早く発火する (実測)。 用事を受け持つ session へ台帳の上で渡す形 ([`multi-session-coordination.md#designated-handler-session`](multi-session-coordination.md#designated-handler-session)) は、 回数を増やさず、 受け持つ session を「表示した session」 の列に足す (回数は注入の経路が数えたまま)
 
 **伝えたかの検査 (Stop)**
 
@@ -1100,6 +1100,7 @@ SessionStart hook の注入は agent の文脈にだけ入り、 人の画面に
 - **伝えても記録されない列には、 2 session 目から処分を問う**: 人から直接届いた mail の行列の最も古い印の行は、 出続けて伝えられても、 行列から出す操作 (記録) がされなかった (実測)。 今も行列にいて未記録で、 2 session 以上見せたものだけ、 処分 (記録か返信) を 1 session に 1 回問い、 行に記録の command を添える
 - **workspace の外で動く session (封じた review sandbox など) では止めない** (cwd で gate、 env で外せる) — 隔離した session に外の item を持ち込むと隔離が壊れる
 - 句で当てる Stop hook なので、 語の抽出を変えたら過去の transcript で校正する ([§12](#text-pattern-stop-hook))
+- 一覧の用事を受け持つ session を 1 つに決める運用なら、 ほかの session には問わず claim もせず、 表示の台帳の上で受け持つ session に渡す ([`multi-session-coordination.md#designated-handler-session`](multi-session-coordination.md#designated-handler-session))
 
 **案件単位で見せる**
 

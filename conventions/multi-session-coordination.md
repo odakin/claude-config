@@ -933,6 +933,26 @@ request の単位。 mail の thread・台帳の項目のような「用事」 �
 5. **台帳は同じ checkout を使う session に即時に見える手元の state に置く**: claim は分の単位で、 履歴は永続の event 用。
    claim を event として post すると、 用事 1 件ごとに履歴が 1〜2 件増える。 別の機械との重なりは、 記録 (台帳の項目) の push と
    4 の upstream の読みが網。 その網が別の機械の項目と重複を見つけた回を記録しておき、 実測で出てから claim を写すかを決める。
+6. <a id="designated-handler-session"></a>**用事を受け持つ session を 1 つに決める運用では、 受け持つ session を登録し、 ほかの session の検査は問わずに渡す**:
+   一覧の用事を 1 つの session が受け持ち、 ほかの session は別の仕事に専念する、 と分けることがある。 作業 dir では見分けられない
+   (どちらも同じ dir で動く = 実測) ので、 受け持つ session が自分を登録する (session の id を 1 つの state file に書き、 後の登録が
+   前の登録を置き換える)。 生死は 3 と同じく runtime の session の登録で引き、 終わった session の登録は黙って効かなくなる
+   (消す操作を人に覚えさせない)。 生死が読めない・自分の id が分からないときは登録が無いのと同じに扱う (用事が宙に浮くより、
+   全 session に問う元の振る舞いに倒す)。
+   - turn 終わりの検査は、 受け持つ session が別に生きていれば、 この session に伝達も処理も求めず、 **claim もしない**。
+     伝達の claim を付けると、 受け持つ session の一覧でその用事が「伝え済み」 になり、 実際はだれも扱わない (実測)。
+   - 代わりに、 この session の一覧に出た用事を、 表示の台帳の上で受け持つ session にも出たことにする (表示回数は増やさない)。
+     受け持つ session の次の turn 終わりの検査がそれを問う = 受け持つ session が起動した後に初めて出た用事も落ちない。
+     受け持たない session に「受け持つ session へ message で渡したら完了」 を求める形にしない: その session に turn を使わせ、
+     受け持つ session が同じ一覧で見ている用事を重ねて渡させ、 渡したかを判定する新しい述語 (会話記録の送信先と中身) も要る。
+   - 一覧の file を全 session が読む 1 つの file にしているなら、 段を session ごとに畳めない (受け持つ session と通知の見張りも
+     同じ file を読む)。 頭に「受け持つ session = <id>。 この session がそれでなければ下の段は伝えない」 の 1 行を置き、 読む側が
+     自分の id と比べる。 行頭は通知の見張りが拾う印にしない。
+   - その turn に自分が出した問いの記録を求める網は残す (一覧の用事ではなく、 受け持つ session はその問いを知らない)。
+     無人の定期実行の分岐はこの判定より先に置く (無人の run の用事は受け持つ session に渡さない)。
+   - hook の test は登録の置き場を一時 path に向ける (向けないと、 本物の受け持ちが生きている間は伝達を問う既存の test が黙る)。
+   - 残る穴: 渡すのは台帳の上だけで、 受け持つ session を起こさない (受け持つ session が次に turn を終えるまで問われない)。
+     表示の台帳に載らない段 (自分が動く期限の行など) は渡らない。
 
 参照実装 = ai-collaboration [`board/board_items.py`](../../ai-collaboration/board/board_items.py)
 (CLI と台帳の置き場 = [`CONTRACT.md#item-claims`](../../ai-collaboration/board/CONTRACT.md#item-claims))。
