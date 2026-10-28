@@ -8,6 +8,7 @@ session の締めの整理 (知見を正本へ移す) で、 委ねた先で分�
 
 読む記録:
   <projects-dir>/<project>/<session id>/subagents/agent-*.jsonl  (Claude Code)
+  <projects-dir>/<project>/<session id>/subagents/workflows/<run id>/agent-*.jsonl  (Workflow tool が起こした agent)
   同じ名前の agent-*.meta.json があれば description / agentType を添える。
   報告 = agent が受け渡しの呼び出し (SubagentHandback) で返した本文を**全部、 順に** (再開した agent は再開のたびに
   1 本返す)。 呼び出しが 1 つも無い記録 (古い形) だけ、 最後の assistant 発言の text を報告にする。
@@ -76,10 +77,17 @@ def candidate_projects_dirs(explicit=None):
 FILE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 
 
+# Workflow tool が起こした agent は subagents/workflows/<run id>/ の下に入る (実測: 直下だけを見て 0 件と出していた)
+AGENT_GLOBS = ("subagents/agent-*.jsonl", "subagents/workflows/*/agent-*.jsonl")
+
+
 def find_agent_files(projects_dirs, session):
     if _ccd is not None:  # 同じ file・同じ session の写しは 1 回
-        pat = "*/" + glob.escape(session) + "*/subagents/agent-*.jsonl"
-        return [Path(f) for _lab, f in _ccd.transcript_files(pat, roots=[str(d) for d in projects_dirs])]
+        found = []
+        for tail in AGENT_GLOBS:
+            pat = "*/" + glob.escape(session) + "*/" + tail
+            found.extend(Path(f) for _lab, f in _ccd.transcript_files(pat, roots=[str(d) for d in projects_dirs]))
+        return found
     found = []
     for pdir in projects_dirs:
         if not pdir.is_dir():
@@ -90,7 +98,8 @@ def find_agent_files(projects_dirs, session):
             for sdir in sorted(proj.glob(session + "*")):
                 sub = sdir / "subagents"
                 if sub.is_dir():
-                    found.extend(sorted(sub.glob("agent-*.jsonl")))
+                    for tail in AGENT_GLOBS:
+                        found.extend(sorted(sub.glob(tail[len("subagents/"):])))
     return found
 
 
@@ -233,12 +242,17 @@ def selftest():
         other = root / "-proj" / "ffff0000" / "subagents"
         other.mkdir(parents=True)
         (other / "agent-y.jsonl").write_text(json.dumps(recs[2]) + "\n", encoding="utf-8")
+        wf = sub / "workflows" / "wf_0001"
+        wf.mkdir(parents=True)
+        (wf / "agent-w1.jsonl").write_text(json.dumps(recs[2], ensure_ascii=False) + "\n", encoding="utf-8")
 
         out = io.StringIO()
         with redirect_stdout(out):
             rc = main(["abcd", "--projects-dir", str(root), "--json"])
         rows = json.loads(out.getvalue())
-        check("prefix で該当 session だけを拾う", rc == 0 and len(rows) == 2, out.getvalue())
+        check("prefix で該当 session だけを拾う", rc == 0 and len(rows) == 3, out.getvalue())
+        check("Workflow tool の agent (subagents/workflows/<run>/) も拾う",
+              any(Path(r["file"]).name == "agent-w1.jsonl" for r in rows), out.getvalue())
         rows_by = {Path(r["file"]).name: r for r in rows}
         r1 = rows_by.get("agent-x1.jsonl", {})
         check("受け渡しの呼び出しが無い記録は、 最後の text 発言を報告にする (tool だけの発言・壊れた行は飛ばす)",

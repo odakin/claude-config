@@ -6,6 +6,8 @@
 もう消えていたとき (session-scripts-report.py の ❌ もう無い)。 会話記録には Write の全文と Edit の差分が残っているので、
 その順に当て直せば最後の形が戻る (実測: 締めの時点で scratchpad が消えていて、 根拠に使った script をこの手で戻した)。
 
+読む記録 = 本体の会話記録と、 その session が起こした agent の記録 (Agent tool の subagents/、 Workflow tool の
+subagents/workflows/<run>/)。 時刻順に混ぜて当てる。
 戻せないもの: Bash で直した分 (sed・heredoc の置換・cp)。 最後の Write より後にその file の名を含む Bash の呼び出しがあれば
 「Bash でも触った = 戻した形は最後の形と違いうる」 と出す。 Edit の old_string が見つからない (= 間に Bash の直しがあった) ときも出す。
 戻した file は「復元した形」 であって、 実行した形と同じだと確かめたものではない = 置く前に読み、 差を直す。
@@ -42,17 +44,26 @@ def _utf8_stdout():
             pass
 
 
+# 本体の記録 + その session が起こした agent の記録 (Agent tool = subagents/、 Workflow tool = subagents/workflows/<run>/)。
+# agent が一時 dir に書いた検算の script も戻すため (実測: 本体の記録だけを読み、 agent の書いた script を戻せなかった)
+TRANSCRIPT_GLOBS = ("{s}*.jsonl", "{s}*/subagents/agent-*.jsonl", "{s}*/subagents/workflows/*/agent-*.jsonl")
+
+
 def find_transcripts(session, explicit=None):
-    pat = "*/" + glob.escape(session) + "*.jsonl"
-    if explicit:
-        return sorted(Path(explicit).expanduser().glob(pat))
-    if _ccd is not None:
-        return [Path(f) for _lab, f in _ccd.transcript_files(pat, roots=list(_ccd.projects_dirs()))]
-    return sorted((Path.home() / ".claude" / "projects").glob(pat))
+    found = []
+    for g in TRANSCRIPT_GLOBS:
+        pat = "*/" + g.format(s=glob.escape(session))
+        if explicit:
+            found.extend(sorted(Path(explicit).expanduser().glob(pat)))
+        elif _ccd is not None:
+            found.extend(Path(f) for _lab, f in _ccd.transcript_files(pat, roots=list(_ccd.projects_dirs())))
+        else:
+            found.extend(sorted((Path.home() / ".claude" / "projects").glob(pat)))
+    return found
 
 
-def tool_calls(path):
-    """assistant の tool_use を記録順に (name, input)。"""
+def tool_calls(path, with_time=False):
+    """assistant の tool_use を記録順に (name, input)。 with_time なら (timestamp, name, input)。"""
     out = []
     for line in open(path, encoding="utf-8", errors="replace"):
         try:
@@ -66,7 +77,8 @@ def tool_calls(path):
             continue
         for c in content:
             if isinstance(c, dict) and c.get("type") == "tool_use":
-                out.append((c.get("name"), c.get("input") or {}))
+                call = (c.get("name"), c.get("input") or {})
+                out.append((o.get("timestamp") or "",) + call if with_time else call)
     return out
 
 
@@ -115,7 +127,7 @@ def main(argv=None):
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--projects-dir")
     ap.add_argument("--selftest", action="store_true")
-    a = ap.parse_args(argv)
+    a = ap.parse_intermixed_args(argv)  # 「<id8> --out <dir> foo.py」 の順 (使い方の例) でも名前を拾う
     if a.selftest:
         return selftest()
     if not a.session:
@@ -124,10 +136,11 @@ def main(argv=None):
     if not trs:
         print(f"⚠️ 会話記録が見つからない: {a.session}")
         return 1
-    calls = []
+    timed = []
     for t in trs:
-        calls.extend(tool_calls(t))
-    files = replay(calls)
+        timed.extend(tool_calls(t, with_time=True))
+    timed.sort(key=lambda x: x[0])  # 本体と agent の記録を時刻順に混ぜる (同じ file を両方が触ることがある)
+    files = replay([(n, i) for _ts, n, i in timed])
     if a.list:
         for p, f in files.items():
             mark = "ある" if os.path.exists(p) else "もう無い"
@@ -187,9 +200,20 @@ def selftest():
         expect("最後の Write の後に Bash で名が出たら印", any("Bash" in n for n in files[kept]["notes"]))
         expect("名前なしは もう無い file だけを選ぶ", list(select(files, [], True)) == [gone])
         expect("名前で選べば ある file も戻す", list(select(files, ["kept.py"], True)) == [kept])
+        wf = proj / "abcd1234-0000" / "subagents" / "workflows" / "wf_1"
+        wf.mkdir(parents=True)
+        agent_file = os.path.join(d, "scratch", "agent_check.py")
+        (wf / "agent-w1.jsonl").write_text(json.dumps({"type": "assistant", "timestamp": "2026-01-01T00:00:00Z",
+            "message": {"content": [{"type": "tool_use", "id": "w", "name": "Write",
+                                     "input": {"file_path": agent_file, "content": "ok = True\n"}}]}}) + "\n",
+            encoding="utf-8")
         out = Path(d) / "out"
         rc = main(["abcd1234", "--out", str(out), "--projects-dir", str(Path(d) / "projects")])
         expect("--out に戻した file を書く", rc == 0 and (out / "gone.py").read_text(encoding="utf-8") == "a = 1\nb = 3\n")
+        expect("Workflow の agent が書いた file も戻す", (out / "agent_check.py").read_text(encoding="utf-8") == "ok = True\n")
+        out2 = Path(d) / "out2"
+        rc = main(["abcd1234", "--out", str(out2), "kept.py", "--projects-dir", str(Path(d) / "projects")])
+        expect("--out の後に並べた名前も拾う (使い方の例の順)", rc == 0 and (out2 / "kept.py").exists())
     print("selftest: " + ("ALL PASS" if ok else "FAILED"))
     return 0 if ok else 1
 
