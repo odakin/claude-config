@@ -1010,10 +1010,10 @@ agent ごとの model の書き方は [§10 の #workflow-agent-model](#workflow
 
 <a id="workflow-resume-prefix"></a>**再開の cache は前から順に変わっていない呼び出しだけ — 呼び出しの順を変えたら再開しない**:
 
-- **仕様**: `resumeFromRunId` での再開は、 前から順に変わっていない `agent()` の呼び出しにだけ cache の結果を返し、 最初に変わった・新しい呼び出しから後ろは全部走らせる。 呼び出しの key は (prompt, opts) から決まる。
+- **仕様と実測**: `resumeFromRunId` での再開は、 再開した run の呼び出しの順に前の run の結果を引き、 最初に結果の無い呼び出しが来たら、 そこから後ろは結果があっても全部走らせる。 呼び出しの key は (prompt, opts) と、 `parallel` / `pipeline` の中の位置で決まる (tool の説明は「(prompt, opts) が同じなら cache から」 とだけ書くが、 位置も入る = 実測)。 args は key に入らない (実測)。
 - **parallel / pipeline は thunk の呼び出しを後回しにする** = その後ろで同期に呼んだ `agent()` が先に始まる (実測 = `parallel` の後ろの単発の agent が、 並列の分より先に始まった)。 したがって `await pipeline(…)` の await を外して後の段の agent を並行に回す編集は、 その段の新しい呼び出しを先頭に出し、 済んだ前段を全部走り直させる (実測: 済んでいた読み手が、 同じ key のまま全部走り直した)。
-- **規則**: (1) 再開は「同じ script を続ける」 ときだけ使う。 (2) script の呼び出しの順・数・prompt を変えたら、 再開せず、 済んだ結果を file に書き出し (`python3 scripts/workflow-run-stats.py 〈run の dir〉 --export-results 〈file〉`)、 その file を読む新しい run を起こす。 **前段だけでなく後段の済んだ結果も渡す** (渡さなかった後段は、 新しい run が同じ仕事をやり直す = 実測)。 (3) 再開する前に cache が返る本数を見る: `python3 scripts/workflow-estimate.py 〈script の file〉 --resume-dir 〈前の run の dir〉` (前の run の journal と agent の記録から prompt を読み、 空回しの呼び出しの順に照合する)。
-- **未確かめ**: 変えていない script の再開でも、 前の run が後段の途中で止まっていると、 再開の呼び出しの順 (cache はすぐ返る) と前の run の順 (終わった順) がずれる。 前の run で済んだ後段が返るかは試していない。 見積もりの道具は「最初に前の run に結果の無い呼び出しが来た所で cache が終わる」 として数える (返る本数を少なめに出す)。 確かめるなら、 小さな agent を数本並べた試験の workflow を、 呼び出しの順だけを入れ替えて再開する。
+- **規則**: (1) 再開は「同じ script を続ける」 ときだけ使う。 (2) script の呼び出しの順・数・prompt を変えたら (`parallel` / `pipeline` に渡す項目の並べ替え・途中への追加・削除も含む)、 再開せず、 済んだ結果を file に書き出し (`python3 scripts/workflow-run-stats.py 〈run の dir〉 --export-results 〈file〉`)、 その file を読む新しい run を起こす。 **前段だけでなく後段の済んだ結果も渡す** (渡さなかった後段は、 新しい run が同じ仕事をやり直す = 実測)。 (3) 再開する前に cache が返る本数を見る: `python3 scripts/workflow-estimate.py 〈script の file〉 --resume-dir 〈前の run の dir〉` (前の run の journal と agent の記録から prompt を読み、 空回しの呼び出しの順に照合する)。
+- **実測 (小さな試験の workflow、 4 項目 × 2 段の `pipeline`)**: (a) 前の run が後段の途中で止まった再開 = 前の run の終わった順とは関係なく、 再開の呼び出しの順 (cache はすぐ返るので項目の順) に引く。 最初の新しい呼び出しより前の後段は cache から返り、 後ろの後段は結果があっても走り直した (= 見積もりの道具の数え方どおり)。 (b) 項目の並びだけを入れ替えた再開 = prompt が同じでも 1 本も cache から返らず全部走り直した。 元の並びに戻した再開は全部返った (token 0)。 見積もりの道具は、 前の run の最初の波 (最初の結果より前に始まった呼び出し = 項目の順) と空回しの順を比べて並べ替えを見つける (最初の波より後ろの並べ替えは見えない)。
 
 <a id="workflow-script-patterns"></a>**書き方の型**: 入力ごとに 1 本、 観点は schema の field で返させる。
 

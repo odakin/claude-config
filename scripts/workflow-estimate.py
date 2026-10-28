@@ -30,7 +30,12 @@
   呼び出しの順に、 前の run に同じ (label, prompt) の結果があるかを見る。 Workflow の再開は「前から順に変わっていない
   呼び出しだけ cache を返し、 最初に変わった・新しい呼び出しから後ろは全部走る」 (仕様の文言) ので、 最初に前の run に
   無い呼び出しが来た所で cache は終わる、 として数える。 schema・model の変更は記録に無いので見ない (= 多めに見積もる)。
-  順番の入れ替えだけの再開が cache を返すかは未確かめ (規約 = conventions/multi-session-coordination.md#workflow-resume-prefix)。
+  cache の key は (prompt, opts) だけでなく parallel / pipeline の中の位置でも決まる (実測 = 項目の並びだけを入れ替えた
+  再開は 1 本も cache から返らず、 元の並びに戻すと全部返った。 args は key に入らない)。 前の run の最初の波 (journal で
+  最初の結果より前に始まった呼び出し) は項目の並びどおりに始まるので、 空回しの同じ番目の呼び出しと (label, prompt) が
+  違えば並びが変わったとみなし、 そこから後ろを走り直しに数える。 最初の波より後ろの並びの入れ替えは見えない。
+  同じ run を別の並びで再開した後は、 その並びの結果も cache にあるが、 見積もりは最初の並びだけを基準にする (少なめに出す)
+  (規約 = conventions/multi-session-coordination.md#workflow-resume-prefix)。
 
 hook (`--hook`、 PreToolUse の Workflow): stdin の hook 入力から script (inline の script / scriptPath / name) と args と
 resumeFromRunId を読み、 見積もりを additionalContext で出す。 止める (exit 2) のは enforce のときだけ:
@@ -106,7 +111,11 @@ async function agent(prompt, opts) {
   const c = { label, phase: opts.phase ? String(opts.phase) : curPhase, model: opts.model || '', effort: opts.effort || '',
               agentType: opts.agentType || '', isolation: opts.isolation || '', plen: p.length };
   if (input.keep_prompts) c.prompt = p;
-  if (cache.has(key)) { c.prev = true; c.hit = !live; } else { c.prev = false; c.hit = false; live = true; }
+  const wave = input.first_wave || [];
+  const moved = calls.length < wave.length && wave[calls.length] !== key;
+  if (cache.has(key) && !moved) { c.prev = true; c.hit = !live; }
+  else if (cache.has(key)) { c.prev = true; c.hit = false; c.moved = true; live = true; }
+  else { c.prev = false; c.hit = false; live = true; }
   calls.push(c);
   if (cache.has(key)) return cache.get(key);
   return opts.schema ? mock(opts.schema, 0) : ('s' + (n++));
@@ -169,12 +178,13 @@ def node_path() -> str | None:
     return shutil.which("node")
 
 
-def dry_run(src: str, args, k: int, cache: list | None = None, keep_prompts: bool = False) -> dict:
+def dry_run(src: str, args, k: int, cache: list | None = None, keep_prompts: bool = False,
+            first_wave: list | None = None) -> dict:
     node = node_path()
     if not node:
         return {"ok": False, "error": "NO_NODE", "calls": []}
     payload = json.dumps({"src": src, "args": args, "k": k, "cache": cache or [], "keep_prompts": keep_prompts,
-                          "cap_calls": CALL_CAP})
+                          "first_wave": first_wave or [], "cap_calls": CALL_CAP})
     with tempfile.TemporaryDirectory() as d:
         # 実体の path を渡す (macOS の temp は /var → /private/var の symlink で、 node は path の解決で /var を読む)
         runner = os.path.join(os.path.realpath(d), "runner.js")
@@ -256,7 +266,7 @@ def unindent_task(text: str) -> str | None:
 def load_prev_run(run_dir: str) -> dict:
     """前の run の (label, prompt) → 結果。 prompt は agent の記録の computed task の本文。"""
     jpath = os.path.join(run_dir, "journal.jsonl")
-    started, results = [], {}
+    started, results, first_wave_ids, wave_open = [], {}, [], True
     with open(jpath, encoding="utf-8") as f:
         for line in f:
             try:
@@ -265,9 +275,12 @@ def load_prev_run(run_dir: str) -> dict:
                 continue
             if r.get("type") == "started":
                 started.append(r)
+                if wave_open:
+                    first_wave_ids.append(r.get("agentId"))
             elif r.get("type") == "result":
                 results[r.get("agentId")] = r.get("result")
-    cache, seen = [], set()
+                wave_open = False
+    cache, seen, key_of = [], set(), {}
     for s in started:
         aid = s.get("agentId")
         if aid not in results:
@@ -291,11 +304,18 @@ def load_prev_run(run_dir: str) -> dict:
         if prompt is None:
             continue
         key = (s.get("label") or "") + "\u0000" + prompt
+        key_of[aid] = key
         if key in seen:
             continue
         seen.add(key)
         cache.append([key, results[aid]])
-    return {"cache": cache, "started": len(started), "with_result": len(results)}
+    # 最初の波 = 最初の結果より前に始まった呼び出し = 項目の並びどおりの順。 prompt を読めない呼び出しで打ち切る
+    first_wave = []
+    for aid in first_wave_ids:
+        if aid not in key_of:
+            break
+        first_wave.append(key_of[aid])
+    return {"cache": cache, "started": len(started), "with_result": len(results), "first_wave": first_wave}
 
 
 def estimate(src: str, args=None, cap: int | None = None, ks=DEFAULT_KS, resume_dir: str | None = None) -> dict:
@@ -314,7 +334,7 @@ def estimate(src: str, args=None, cap: int | None = None, ks=DEFAULT_KS, resume_
            "waves_mid": ceil_div(n_mid, cap) if n_mid else 0, "static": static_scan(src)}
     if resume_dir:
         prev = load_prev_run(resume_dir)
-        r = dry_run(src, args, k_mid, cache=prev["cache"])
+        r = dry_run(src, args, k_mid, cache=prev["cache"], first_wave=prev["first_wave"])
         calls = r.get("calls", [])
         hits = sum(1 for c in calls if c.get("hit"))
         rerun = [c.get("label") or "?" for c in calls if c.get("prev") and not c.get("hit")]
@@ -322,7 +342,8 @@ def estimate(src: str, args=None, cap: int | None = None, ks=DEFAULT_KS, resume_
         res["resume"] = {"dir": resume_dir, "prev_started": prev["started"], "prev_with_result": prev["with_result"],
                          "prev_matched_prompts": len(prev["cache"]), "hits": hits, "rerun": rerun,
                          "first_live": (first_live or {}).get("label") or ("(なし)" if not first_live else "?"),
-                         "first_live_prev": bool(first_live and first_live.get("prev")), "ok": r.get("ok"),
+                         "first_live_prev": bool(first_live and first_live.get("prev")),
+                         "first_live_moved": bool(first_live and first_live.get("moved")), "ok": r.get("ok"),
                          "error": r.get("error", "")}
     return res
 
@@ -387,7 +408,10 @@ def render(res: dict, problems: list[dict] | None = None) -> str:
         else:
             lines.append(f"  ♻️ 再開の見込み (前の run: 始まった {rs['prev_started']} 本 / 結果 {rs['prev_with_result']} 本 / prompt を照合できた {rs['prev_matched_prompts']} 本):"
                          f" cache が返るのは前から {rs['hits']} 本。 最初に走る呼び出し = {rs['first_live']}"
-                         + (" (前の run に結果があるのに、 その前で順が崩れた)" if rs["first_live_prev"] else " (前の run に無い呼び出し)"))
+                         + (" (前の run に同じ prompt の結果があるが、 項目の並びの位置が違う = cache の key は位置でも決まる)"
+                            if rs.get("first_live_moved")
+                            else " (前の run に結果があるのに、 その前で順が崩れた)" if rs["first_live_prev"]
+                            else " (前の run に無い呼び出し)"))
             if rs["rerun"]:
                 lines.append(f"     前の run で結果の出た {len(rs['rerun'])} 本を走り直す: " + ", ".join(rs["rerun"][:6])
                              + (" …" if len(rs["rerun"]) > 6 else "")
@@ -514,16 +538,24 @@ await agent(r, { label: r })""",
     "uses_args": """export const meta = { name: 't', description: 't' }
 await parallel(args.repos.flatMap(r => ['a', 'b'].map(l => () => agent(r + l, { label: r + ':' + l }))))
 await agent('sweep', { label: 'sweep' })""",
+    "reorder": """export const meta = { name: 't', description: 't' }
+const ORDER = (args && args.order) || ['a', 'b', 'c']
+await pipeline(ORDER, (it) => agent('read ' + it, { label: 'read:' + it }), (r, it) => agent('check ' + it, { label: 'check:' + it }))""",
 }
 
 
-def _fake_prev_run(d: str, calls: list[tuple[str, str]], with_result: int) -> str:
-    run = os.path.join(d, "wf_prev-000")
+def _fake_prev_run(d: str, calls: list[tuple[str, str]], with_result: int, starts_first: int = 0,
+                   name: str = "wf_prev-000") -> str:
+    """starts_first = 最初の結果より前に始まる呼び出しの数 (本物の run の最初の波。 0 なら 1 本ずつ始まって終わる)。"""
+    run = os.path.join(d, name)
     os.makedirs(run, exist_ok=True)
     rows = [{"type": "launched"}]
+    for i in range(min(starts_first, len(calls))):
+        rows.append({"type": "started", "key": f"v2:{i}", "agentId": f"a{i:03d}", "label": calls[i][0]})
     for i, (label, prompt) in enumerate(calls):
         aid = f"a{i:03d}"
-        rows.append({"type": "started", "key": f"v2:{i}", "agentId": aid, "label": label})
+        if i >= starts_first:
+            rows.append({"type": "started", "key": f"v2:{i}", "agentId": aid, "label": label})
         task = ("[Workflow harness — computed task] The task text below was computed at runtime by a workflow script. "
                 "The computed task text follows:\n" + "\n".join("  " + ln for ln in prompt.split("\n")))
         with open(os.path.join(run, f"agent-{aid}.jsonl"), "w", encoding="utf-8") as f:
@@ -588,6 +620,21 @@ def selftest() -> int:
         check("resume after putting a new call first: 0 hits, 4 re-runs", r["resume"]["hits"] == 0 and len(r["resume"]["rerun"]) == 4
               and r["resume"]["first_live"] == "new", r["resume"])
         check("zero-hit resume is a problem", "resume" in [p["kind"] for p in judge(r)], judge(r))
+        # resume: the cache key also depends on the position in pipeline / parallel (measured). The first wave of the
+        # previous run starts in item order, so items put in another order are not cache hits.
+        ro = S["reorder"]
+        ro_calls = dry_run(ro, None, 3, keep_prompts=True)["calls"]
+        ro_run = _fake_prev_run(d, [(c["label"], c["prompt"]) for c in ro_calls], with_result=6, starts_first=3,
+                                name="wf_prev-reorder")
+        r = estimate(ro, resume_dir=ro_run, cap=8)
+        check("resume in the same item order: all 6 come back", r["resume"]["hits"] == 6 and r["resume"]["rerun"] == [], r["resume"])
+        r = estimate(ro, {"order": ["c", "b", "a"]}, resume_dir=ro_run, cap=8)
+        check("resume with the items reordered: 0 hits, 6 re-runs, the first call is flagged as moved",
+              r["resume"]["hits"] == 0 and len(r["resume"]["rerun"]) == 6 and r["resume"]["first_live"] == "read:c"
+              and r["resume"]["first_live_moved"], r["resume"])
+        r = estimate(ro, {"order": ["a", "c", "b"]}, resume_dir=ro_run, cap=8)
+        check("resume with only the tail moved: the unmoved first item still comes back",
+              r["resume"]["hits"] == 1 and r["resume"]["first_live"] == "read:c", r["resume"])
         # hook: inline script, enforce off → context only; enforce on → exit 2
         ev = {"hook_event_name": "PreToolUse", "tool_name": "Workflow", "tool_input": {"script": S["per_finding_two_lenses"]}}
         marker = os.path.join(d, "enforce.on")
