@@ -585,7 +585,13 @@ CI が長く red のまま (= 複数 session が red の上に push を積んで
 
 9. <a id="early-abort-masks-later-failures"></a>**途中で止まる suite を直したら、 後ろの赤が初めて出る** — `set -u` / `set -e` で途中の 1 行が落ちる検査 suite は、 そこから後ろの検査を 1 本も回していない。 その 1 行を直した時点で「緑になる」 と報告しない。 suite を最後まで回してから言う (実測: 変数 1 つの修正で止まっていた行を越えたら、 その先の別の test が赤だった)。 手元の検査 runner (`scripts/local-ci.py`) の state に残る出力は suite 全体の末尾なので、 落ちた test の中身は入っていない = その test を同じ env で単独で回して見る。
 
-reflex: CI の修正に着手する瞬間に、 (a) 最新 run を今見たか、 (b) 起点の run と導入 commit が一致したか、 (c) CI の userland で再現したか (「手元で通った」 で止まっていないか)、 (d) test は落ちた行を言うか、 (e) **原因を人から聞いたなら、 log で引き直したか**。
+10. <a id="runner-image-vs-commit"></a>**runner の image の切り替わりと commit を、 run log の image の行で切り分ける** — `ubuntu-latest` のような移る tag は、 ある日から新しい OS の image を指し、 coreutils の実装や同梱の道具が替わる (実測: `stat` が GNU でない実装になり、 `--version` の文字列に `GNU` が無くなった)。 赤の原因を「その頃 image が替わったから」 と日付で決めない: 最後の green と最初の red の run log の冒頭の `Image:` の行 (`gh run view <id> --log | grep -m1 'Image: '`) を並べ、 同じ image なら原因は commit (2 の pickaxe へ)、 違えば image の差を疑う。 1 本の red streak に両方が重なることがある = 落ちた test ごとに、 その test が初めて落ちた run の image を見る (実測: image の切り替わりのせいだと報告した赤が、 前の image の上で既に commit から始まっていた)。
+   - GNU かどうかを version の文字列で見分ける test は、 image が替わると落ちる = 見分けたいのは「GNU 互換の引数が通るか」 なので、 その引数を 1 回通して確かめる
+   - 手元の古い Python (macOS の system python など) は docstring の無効な escape (`"""` の中の `\d` など) に警告を出さず、 CI の新しい Python (3.12 以上) は `SyntaxWarning` を出す。 新しい Python で `python3.12 -W error::SyntaxWarning -c "import sys; compile(open(sys.argv[1]).read(), sys.argv[1], 'exec')" <file>` を回して見つけ、 raw 文字列 (`r"""`) にする
+   - 再現の道具に command を複数渡すときは `&&` で繋ぐ (`sh -c 'a; b'` は最後の終了値しか返さず、 前の command の落ちが rc=0 に隠れる。 実測 = これで「手元では再現しない」 と誤読した)
+   - 直したら実行時間も見る: 準備 (apt) と検査の時間が job の上限 (`timeout-minutes`) に近いと、 次の run が上限に当たって cancelled になる (cancel は失敗と別の conclusion = 緑に戻ったかは conclusion で確かめる)
+
+reflex: CI の修正に着手する瞬間に、 (a) 最新 run を今見たか、 (b) 起点の run と導入 commit が一致したか、 (c) CI の userland で再現したか (「手元で通った」 で止まっていないか)、 (d) test は落ちた行を言うか、 (e) **原因を人から聞いたなら、 log で引き直したか**、 (f) 起点の run と直前の green の image が同じかを見たか。
 
 origin: 2026-09-11。 07866f1 (2026-09-01) が test に BSD 専用の `[ "$(stat -f '%Lp' …)" = "600" ]` を足し、 ubuntu runner の GNU stat で落ち続けた。 streak の起点 run (head 07866f1)、 直前の green (ca5d1bc)、 pickaxe の導入 commit が一致し、 手元の行列 (ca5d1bc / 07866f1 / 704ff48 / HEAD × BSD / GNU) で「07866f1 から GNU でだけ落ちる」 を確定した。 修正は bbc1b62 (別 session)、 失敗行の自己申告化は 2d5cc14。 2 本目 (8f17c20 から、 `codex-hooks.test.sh` の fixture が empty repo の clone で local branch `main` を前提にしていた) は、 空 HOME の native では再現せず、 `init.defaultBranch=master` を固定して再現した (手元の system gitconfig が `main` を与えていた)。 失敗行は 2d5cc14 の ERR trap が CI log に直接出しており、 修正は 4ffec7f (別 session)。
 

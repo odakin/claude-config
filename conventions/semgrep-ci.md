@@ -45,6 +45,9 @@ severity は `runs[].tool.driver.rules[].defaultConfiguration.level` (error / wa
 `pip install semgrep` → CI の workflow が指定する **rule pack と同一構成**で
 `semgrep scan --config p/… <file>` を回す。 pack が 1 つでも欠けると当該 rule ごと
 消えて「再現しない」 になる (= rule は pack 所属、 finding 再現には構成一致が必須)。
+手元の検査 runner (repo の設定から semgrep を回すもの) の finding を確かめるときも同じで、
+その設定の command・rule pack・走査する path の範囲をそのまま使う。 path を 1 つの dir に
+絞ると、 その外の finding が消えて 0 件になる (実測: 範囲を絞って緑に見え、 repo 全体で回すと 2 件残っていた)。
 
 **「0 件」 は 「検出器が働いた上での 0 件」 と 「検出器が寝ている 0 件」 を区別できない** —
 config 破損や flag 相違は「クラッシュ + stdout 空」 で clean と誤読されうる。 わざと
