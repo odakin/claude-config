@@ -326,6 +326,12 @@ origin: 大手出版社の commissioning 部門から分野違いの低 tier OA 
 
 **続報の diff の base** (2026-09-14): 前便でも diff を送っていたなら、 次の diff の base は**前便の diff の新しい側の commit** (= 相手の手元にある版) にする。 それより古い版を base にすると、 相手は既に見た変更と新しい変更を区別できない。 投稿の報告でも同じ (投稿した版 vs 前便で送った版、 [`paper-submission.md#arxiv-coauthor-notice`](paper-submission.md#arxiv-coauthor-notice))。
 
+## <a id="no-unreadable-paths"></a>共著者への便で、 相手が読めない場所 (非公開の repo の path・手元の file) を指さない
+
+**Rule**: 便の本文に「詳細は `review/…` にあります」 のように repo の path を書く前に、 宛先がその repo を読めるかを確かめる (GitHub なら `gh api repos/<owner>/<repo>/collaborators` と `…/invitations` に相手が居るか)。 読めないなら path を書かず、 中身を相手が読める形 (共著者向けのノートの PDF、 該当頁) にして添付する。 path だけを書いた便は、 相手には「詳細は書かれていない」 のと同じ。
+
+**Why**: 実測 = 直した原稿を送る便で検査の記録の path を指したが、 共著者はその repo の collaborator ではなく、 「原稿には記述がなく、 詳細がよく分からない」 と詳細を求める返事が来た。 記録を共著者向けのノートに組み直して送り直し、 往復が 1 回増えた。 repo の CLAUDE.md の「共同編集者は git で読んでいる」 という記述が実態と違っていた = 記述を信じず、 権限は API で見る。 上の [#diff-page-attachment](#diff-page-attachment) の「履歴の UI は人間には無理」 と同じ向き (受け手が開けない場所を指さない)。
+
 ## <a id="times-in-recipient-zones"></a>時刻は読み手の現地時刻で書く — 予定を決めた system の時刻をそのまま写さない (2026-09-14)
 
 **Rule**: 公開・締切・会議の時刻を知らせるときは、 **読み手がいる地域の時刻**で書く。 読み手が複数の地域にまたがるなら地域ごとに並べる (例: `at 8:00 in China and 9:00 in Japan`)。 予定を決めた system の時刻 (arXiv の米東部、 会議サイトの UTC など) をそのまま写さない。 換算は夏時間込みで機械に任せる (Python の `zoneinfo` 等)、 暗算しない。
