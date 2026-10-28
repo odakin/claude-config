@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths)
+when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths) + **日本語の文の中の英字の語を Python の正規表現で探すとき** (#python-word-boundary-cjk)
 category: infra
 summary: シェルの多バイト UTF-8 切り詰め gotchas (= cut -c/head -c/bash 部分文字列は byte 単位で多バイト文字を割り invalid UTF-8 → osascript 等下流で文字列全体が文字化け、 launchd は LANG 空で C locale ゆえ特に注意、 安全策=python 文字単位 truncate + valid UTF-8 検証 1-liner、 2026-06-24 osascript 通知 RCA)
 -->
@@ -64,6 +64,11 @@ except UnicodeDecodeError as e: print('INVALID', e)"
 - **探し方**: 追跡中の shell script を byte 列として `(?<![\\'$])\$[A-Za-z_][A-Za-z0-9_]*[\xc0-\xff]` で走査する (コメント行は除く)。 実測では当たりは全件が本物だった。 **機械の検出** = [`scripts/check-unbraced-multibyte-var.py`](../scripts/check-unbraced-multibyte-var.py) (`--staged` = stage した shell script の足した行を見て違反で exit 1 を返す commit gate の段 / `--paths <file>...` / `--tree <dir>` = fleet の棚卸し。 1 行の中で閉じた単一引用符と引用符つき heredoc の本文の扱いを含む述語の正本 = その docstring)。 全 repo の pre-commit (pre-commit-bib と public stub) に `--staged` を配線済み = 足した行の違反は commit で止まる (escape hatch = `CLAUDE_UNBRACED_MB_VAR_GUARD=0`)
 - **新しい bash も同じ**: Homebrew の bash 5.3 (macOS) も UTF-8 の locale で先頭 byte を変数名に取り込み、 `set -u` なら落ちる (実測)。 `#!/usr/bin/env bash` が PATH の新しい bash を選んでも避けられない
 
+## <a id="python-word-boundary-cjk"></a>Python の `\b` は仮名・漢字を単語の文字と数える — 日本語の文の中の英字の語は英字の境界で探す
+
+Python の `re` は既定で Unicode を扱い、 `\w` に仮名・漢字が入る。 だから `\bwrap\b` は「wrap skill」「wrap させて」 には当たるが、 **仮名が続く「wrapして」 には当たらない** (`p` と `し` がどちらも単語の文字 = 境界が無い。 実測 = 子への依頼の message を語で拾う hook が、 この形を素通りした)。
+日本語の文の中で英字の語を探すときは、 前後が英字でないことだけを見る: `(?<![A-Za-z])wrap(?![A-Za-z])` (「unwrapped」 は外し、 「wrapして」「/wrap」 は拾う)。 `re.ASCII` を付けても同じ結果になるが、 同じ pattern の中の他の `\w` まで ASCII に変わる。
+
 ## まとめ (reflex)
 
 - shell で非 ASCII を切る時は `cut -c` / `head -c` / byte slice を**使わない** → python の文字単位 truncate。
@@ -71,6 +76,7 @@ except UnicodeDecodeError as e: print('INVALID', e)"
 - daemon (launchd/cron) は `LANG` 空 = C locale 前提で組む。
 - `grep` / `sed` の `[...]` に非 ASCII を入れない (C locale では byte の集合)。Claude Code の Bash tool も `LANG` 空の前提で書く。
 - 変数の直後に非 ASCII の文字を置くときは `${var}` (UTF-8 の locale では文字が変数名に取り込まれる、 [#unbraced-var-before-multibyte](#unbraced-var-before-multibyte))。
+- 日本語の文の中で英字の語を Python の正規表現で探すときは `\b` を使わず `(?<![A-Za-z])語(?![A-Za-z])` ([#python-word-boundary-cjk](#python-word-boundary-cjk))。
 
 ## <a id="prose-args-quoting"></a>自然文を CLI 引数で渡すときの quoting — backtick は double quote の中で消える (2026-09)
 
