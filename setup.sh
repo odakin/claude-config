@@ -1054,68 +1054,17 @@ fi
 # allow-list 内 repo + 個人層に登録された private repo) の secrets/ 配下にある
 # git-crypt encrypted secret 値を、 ~/.secrets/<basename> に symlink で配置する。
 # 各リポは git-crypt で unlock 済 (Step 5b 完了) を前提とする。
-# 通常ファイル (= ad-hoc 配置の secret) は中身が canonical と一致するときのみ
-# 安全に symlink に置き換える (= out-of-band で運んだ token を git-crypt 経路に
-# 自動移行)。中身が違うときは保護のため警告のみ (手動移行を促す)。
-#
-# SECRETS_REPOS は個人層 (= Step 5a で検出済の $LAYER) の secrets-repos.txt から
-# 動的読み取り。 個人層なし or ファイル無しなら空 array で secrets handling を
-# skip (foreign user 対応)。 設計詳細: DESIGN.md §「SECRETS_REPOS の個人層外出し」
-SECRETS_DEST_DIR="$HOME/.secrets"
-SECRETS_REPOS=()
-if [ -n "$LAYER" ] && [ -f "$LAYER/secrets-repos.txt" ]; then
-    while IFS= read -r repo; do
-        SECRETS_REPOS+=("$repo")
-    done < <(awk '
-        { sub(/#.*/, ""); gsub(/^[ \t]+|[ \t]+$/, ""); }
-        NF > 0 { print }
-    ' "$LAYER/secrets-repos.txt")
-fi
-SECRETS_HEADER_PRINTED=0
-if command -v git-crypt &> /dev/null; then
-    install -d -m 700 "$SECRETS_DEST_DIR"
-    # Step 5d-pre: SECRETS_REPOS を fast-forward pull で最新化 (別 Mac での
-    # token rotate 等を取り込む)。失敗 (remote 不通 / auth failure / divergence)
-    # は既存 commit で続行できるので silently continue。範囲は SECRETS_REPOS に
-    # 限定 (全 repo 自動 pull は uncommitted changes 衝突 risk があるため scope 拡大しない)。
-    for SECRETS_REPO in "${SECRETS_REPOS[@]}"; do
-        REPO_DIR="$CLAUDE_DIR/$SECRETS_REPO"
-        [ -d "$REPO_DIR/.git" ] || continue
-        git -C "$REPO_DIR" pull --ff-only --quiet 2>/dev/null || true
-    done
-    for SECRETS_REPO in "${SECRETS_REPOS[@]}"; do
-        SECRETS_SRC_DIR="$CLAUDE_DIR/$SECRETS_REPO/secrets"
-        [ -d "$SECRETS_SRC_DIR" ] || continue
-        for SRC in "$SECRETS_SRC_DIR"/*; do
-            [ -e "$SRC" ] || continue
-            BASENAME="$(basename "$SRC")"
-            case "$BASENAME" in .*) continue ;; esac
-            DEST="$SECRETS_DEST_DIR/$BASENAME"
-            if [ -L "$DEST" ] && [ "$(readlink "$DEST")" = "$SRC" ]; then
-                continue  # already correct symlink
-            fi
-            if [ $SECRETS_HEADER_PRINTED -eq 0 ]; then
-                echo ""
-                echo "=== Step 5d: Symlinking secrets/ → ~/.secrets/ ==="
-                SECRETS_HEADER_PRINTED=1
-            fi
-            if [ -e "$DEST" ] && [ ! -L "$DEST" ]; then
-                # 通常ファイル — canonical (SRC) と中身が一致すれば安全に置換、
-                # 違えば保護のため警告のみ。
-                if cmp -s "$DEST" "$SRC"; then
-                    rm -f "$DEST"
-                    ln -sfn "$SRC" "$DEST"
-                    echo "  Migrated: $DEST → symlink (regular-file content matched canonical, replaced)"
-                    continue
-                else
-                    echo "  WARNING: $DEST is a regular file with content differing from $SRC (manual migration required), skipping"
-                    continue
-                fi
-            fi
-            ln -sfn "$SRC" "$DEST"
-            echo "  Linked: $DEST -> $SRC"
-        done
-    done
+# 本体 = scripts/link-secrets.sh (毎 session の自動適用からも呼ぶ = 後から足した秘密も他の機械に届く)。
+# 張る前に secrets repo を fast-forward pull し、 通常ファイルは中身が正本と一致するときだけ置き換える。
+# 個人層なし or secrets-repos.txt 無しなら何もしない (foreign user 対応)。
+# 設計詳細: DESIGN.md §「SECRETS_REPOS の個人層外出し」
+LINK_SECRETS="$SCRIPT_DIR/scripts/link-secrets.sh"
+if [ -f "$LINK_SECRETS" ]; then
+    if [ -n "$LAYER" ]; then
+        bash "$LINK_SECRETS" --claude-dir "$CLAUDE_DIR" --layer "$LAYER" --pull \
+            --header "$(printf '\n=== Step 5d: Symlinking secrets/ → ~/.secrets/ ===')" \
+            || echo "  WARNING: link-secrets.sh failed (non-fatal)"
+    fi
 fi
 
 # --- 6. Install pre-commit hook for ALL repos ---
