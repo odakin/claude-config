@@ -5,8 +5,9 @@
 # 実行: bash hooks/workflow-fanout-check.test.sh (run-all-checks.sh が自動発見)。 承認の前の候補の写しからも回る
 #       (engine = env WORKFLOW_FANOUT_ENGINE か、 隣の ../scripts/ か、 ~/Claude/claude-config/scripts/)。
 #
-# 象限: pass (Workflow 以外の tool / 宣言のある script / enforce の印が無い = 数だけ出す / DISABLE / node が無い・engine が
-#       無い・入力が読めない = fail-open) と block (enforce の印があり、 宣言の無い並べすぎ・観点の分割)。 印は temp dir。
+# 象限: pass (Workflow 以外の tool / 一度に走れる本数までの宣言のある script / enforce の印が無い = 数だけ出す / DISABLE /
+#       node が無い・engine が無い・入力が読めない = fail-open) と ask (enforce の印があり、 一度に走れる本数を越える =
+#       宣言があっても本人に聞く) と block (enforce の印があり、 宣言の無い観点の分割)。 印は temp dir、 上限は 8 に固定。
 # 歯: engine の judge が問題を返さなくなると block の 2 case が落ちる。
 set -uo pipefail
 
@@ -27,6 +28,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export WORKFLOW_FANOUT_ENFORCE_MARKER="$TMP/enforce.on"
 unset WORKFLOW_FANOUT_DISABLE WORKFLOW_FANOUT_ENFORCE WORKFLOW_ESTIMATE_NODE
+export WORKFLOW_ESTIMATE_CAP=8  # 一度に走れる本数を機械に依らず 8 に
 
 pass=0; fail=0; results=()
 
@@ -60,13 +62,19 @@ DECL='export const meta = { name: "t", description: "t" }
 const ITEMS = ["a", "b", "c", "d"]
 await pipeline(ITEMS, it => agent("read " + it, { label: "read:" + it }), (r, it) => agent("verify all " + it, { label: "verify:" + it }))
 await agent("critic", { label: "critic" })'
+SMALL='export const meta = { name: "t", description: "t" }
+// workflow-size: 3 — 2 入力を読み、 批評 1
+const TWO = ["a", "b"]
+await parallel(TWO.map(it => () => agent("read " + it, { label: "read:" + it })))
+await agent("critic", { label: "critic" })'
 
 check "other tool passes silently"                0 "$(ev "$BIG" Bash)"
 check "no enforce marker: exit 0 with the numbers" 0 "$(ev "$BIG")" "additionalContext"
 touch "$WORKFLOW_FANOUT_ENFORCE_MARKER"
 check "enforce: undeclared fan-out is stopped"    2 "$(ev "$BIG")" "宣言の無い点"
 check "enforce: the stop names the lens split"     2 "$(ev "$BIG")" "観点"
-check "enforce: a declared script passes"         0 "$(ev "$DECL")"
+check "enforce: a declared script within one wave passes" 0 "$(ev "$SMALL")"
+check "enforce: a declared script over one wave asks"     0 "$(ev "$DECL")" '"permissionDecision": "ask"'
 WORKFLOW_FANOUT_DISABLE=1 check "DISABLE=1 passes" 0 "$(ev "$BIG")"
 WORKFLOW_ESTIMATE_NODE="$TMP/no-node" check "no node: fail-open" 0 "$(ev "$BIG")"
 WORKFLOW_FANOUT_ENGINE="$TMP/missing.py" check "missing engine: fail-open" 0 "$(ev "$BIG")"

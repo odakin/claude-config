@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# workflow-fanout-check.sh — Workflow を起こす前に script を空回しし、 agent の本数・波数・観点の分割・再開で cache が返る本数を出す (enforce の印があれば、 宣言の無い並べすぎを止める)
+# workflow-fanout-check.sh — Workflow を起こす前に script を空回しし、 agent の本数・波数・観点の分割・再開で cache が返る本数を出す (enforce の印があれば、 一度に走れる本数を越える並べ方は起動の前に本人に聞き、 宣言の無い観点の分割・再開を止める)
 #
 # 正本: claude-config/hooks/workflow-fanout-check.sh (setup.sh が ~/.claude/hooks/ に symlink、 hooks/settings-entries.json で
 #       PreToolUse[^Workflow$] に登録)
@@ -9,6 +9,7 @@
 #
 # 故障: engine 不在・python 不在・node 不在・例外は通す (exit 0)。 止めるのは engine が exit 2 を返した時だけ
 #       (= enforce の印 ~/.claude/workflow-fanout-enforce.on か env WORKFLOW_FANOUT_ENFORCE=1 があり、 宣言の無い形のとき)。
+#       本人に聞くのは engine が permissionDecision = ask を出した時 (同じ印があり、 一度に走れる本数を越える形。 宣言では通らない)。
 # 環境変数: WORKFLOW_FANOUT_DISABLE=1 (一時無効) / WORKFLOW_FANOUT_ENGINE (test 用)
 set -u
 [ "${WORKFLOW_FANOUT_DISABLE:-}" = "1" ] && exit 0

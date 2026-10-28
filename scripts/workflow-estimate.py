@@ -38,12 +38,16 @@
   (規約 = conventions/multi-session-coordination.md#workflow-resume-prefix)。
 
 hook (`--hook`、 PreToolUse の Workflow): stdin の hook 入力から script (inline の script / scriptPath / name) と args と
-resumeFromRunId を読み、 見積もりを additionalContext で出す。 止める (exit 2) のは enforce のときだけ:
-`~/.claude/workflow-fanout-enforce.on` が在るか env WORKFLOW_FANOUT_ENFORCE=1。 止める条件 = 宣言の無い (a) k=3 で
-max(10, 上限) 本を越える (b) 本数が前段の出力で決まる (c) 観点・票の分割 (d) 再開で cache が 0 本なのに前の run の結果を
-走り直す。
+resumeFromRunId を読み、 見積もりを additionalContext で出す。 enforce (= `~/.claude/workflow-fanout-enforce.on` が在るか
+env WORKFLOW_FANOUT_ENFORCE=1) のときだけ次をする:
+  - 本人に聞く (permissionDecision = ask、 宣言があっても): その機械で一度に走れる本数 (上限) を k = 1, 3, 10 のどれかで
+    越える、 または本数が前段の出力で決まる (2026-10-28 本人の裁定 = 「一度に走れる本数までは聞かずに走らせ、 越える
+    並べ方だけ起動の前に本数・波数・待ちを見せて本人の OK を取る」。 宣言の 1 行で通すと agent が自分で許可できるため)
+  - 止める (exit 2): 宣言の無い (c) 観点・票の分割 (d) 再開で cache が 0 本なのに前の run の結果を走り直す。
+  無人の run (claude -p) では聞く相手がいない = 上限を越える Workflow は起こさない形にする。
 故障 (node が無い・script が読めない・空回しが途中で止まる) は通す (exit 0、 理由だけ出す)。
-env: WORKFLOW_FANOUT_DISABLE=1 / WORKFLOW_ESTIMATE_NODE (node の path) / WORKFLOW_FANOUT_ENFORCE_MARKER (test)
+env: WORKFLOW_FANOUT_DISABLE=1 / WORKFLOW_ESTIMATE_NODE (node の path) / WORKFLOW_FANOUT_ENFORCE_MARKER (test) /
+     WORKFLOW_ESTIMATE_CAP (上限の上書き = test)
 
 usage:
   workflow-estimate.py <script.js> [--args '<json>' | --args @file.json] [--cap N] [--ks 1,3,10] [--json]
@@ -167,6 +171,9 @@ let out = { ok: true, error: '' };
 
 
 def machine_cap() -> int:
+    env = os.environ.get("WORKFLOW_ESTIMATE_CAP", "")
+    if env.isdigit() and int(env) > 0:
+        return int(env)
     cpus = os.cpu_count() or 4
     return max(1, min(16, cpus - 2))
 
@@ -487,13 +494,38 @@ def hook(stdin_text: str) -> int:
                                                  "additionalContext": f"[workflow-estimate] 見積もりに失敗した ({e})"}}, ensure_ascii=False))
         return 0
     broken = all(not r["ok"] for r in res["runs"].values())
-    problems = [] if broken else [p for p in judge(res) if p["kind"] != "size-soft"]
+    # 本数は止めずに本人に聞く (宣言の 1 行では通さない)。 止めるのは観点の分割・cache 0 本の再開の宣言の無い形だけ
+    problems = [] if broken else [p for p in judge(res) if p["kind"] not in ("size", "size-soft")]
     text = render(res, problems)
-    if problems and _enforced():
+    enforced = _enforced()
+    if problems and enforced:
         print(text, file=sys.stderr)
         return 2
-    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": text}}, ensure_ascii=False))
+    over = None if broken else over_one_wave(res)
+    out = {"hookEventName": "PreToolUse", "additionalContext": text}
+    if over and enforced:
+        out.update({"permissionDecision": "ask", "permissionDecisionReason": over})
+    print(json.dumps({"hookSpecificOutput": out}, ensure_ascii=False))
     return 0
+
+
+def over_one_wave(res: dict) -> str | None:
+    """その機械で一度に走れる本数 (上限) を越えうるなら、 本人に聞く理由の文。 越えないなら None。"""
+    cap = res["cap"]
+    oks = [r["agents"] for r in res["runs"].values() if r["ok"]]
+    most = max(oks) if oks else 0
+    if most <= cap and not res["grows"]:
+        return None
+    st = res["static"]
+    parts = []
+    if res["grows"]:
+        parts.append(f"本数が前段の出力で決まる (前段 1 件ごとに約 {res['slope']} 本、 前段 10 件なら {res['runs'][max(res['runs'])]['agents']} 本)")
+    else:
+        parts.append(f"{most} 本 = {ceil_div(most, cap)} 波")
+    parts.append(f"この機械で一度に走るのは {cap} 本まで、 残りは待ち行列")
+    if st["decl_size"] is not None:
+        parts.append(f"script の宣言 = {st['decl_size']} 本 ({st['decl_size_reason'] or '理由なし'})")
+    return "Workflow が一度に走れる本数を越える: " + "、 ".join(parts) + "。 走らせてよければ許可"
 
 
 # ---------------------------------------------------------------- selftest
@@ -538,6 +570,15 @@ await agent(r, { label: r })""",
     "uses_args": """export const meta = { name: 't', description: 't' }
 await parallel(args.repos.flatMap(r => ['a', 'b'].map(l => () => agent(r + l, { label: r + ':' + l }))))
 await agent('sweep', { label: 'sweep' })""",
+    "big_declared": """export const meta = { name: 't', description: 't' }
+// workflow-size: 20 — test of a declared script over one wave
+const PARTS = []
+for (let i = 0; i < 20; i++) PARTS.push(i)
+await parallel(PARTS.map(i => () => agent('read part ' + i, { label: 'read:' + i })))""",
+    "grows_declared": """export const meta = { name: 't', description: 't' }
+// workflow-size: 30 — test of a declared script whose count follows the first stage
+const f = await agent('find', { label: 'find', schema: { type: 'object', properties: { items: { type: 'array', items: { type: 'string' } } } } })
+await parallel(f.items.map(x => () => agent('check ' + x, { label: 'check' })))""",
     "reorder": """export const meta = { name: 't', description: 't' }
 const ORDER = (args && args.order) || ['a', 'b', 'c']
 await pipeline(ORDER, (it) => agent('read ' + it, { label: 'read:' + it }), (r, it) => agent('check ' + it, { label: 'check:' + it }))""",
@@ -581,6 +622,7 @@ def selftest() -> int:
         print("SKIP node が無い (空回しの試験は node が要る)")
         return 0
     S = SELFTEST_SCRIPTS
+    os.environ["WORKFLOW_ESTIMATE_CAP"] = "8"  # 上限を機械に依らず 8 に (hook の試験は machine_cap を通る)
     r = estimate(S["constant"], cap=8)
     check("constant: 2 本、 k で変わらない", [x["agents"] for x in r["runs"].values()] == [2, 2, 2] and not r["grows"], r["runs"])
     r = estimate(S["per_finding_two_lenses"], cap=8)
@@ -654,7 +696,23 @@ def selftest() -> int:
         ev2 = dict(ev, tool_input={"script": S["batched_with_decl"]})
         with contextlib.redirect_stdout(io.StringIO()):
             rc = hook(json.dumps(ev2))
-        check("hook with enforce passes a declared script", rc == 0, rc)
+        check("hook with enforce: a declared script within one wave runs without asking", rc == 0, rc)
+        for name, label in (("big_declared", "a declared script over one wave"),
+                            ("grows_declared", "a declared script whose count follows the first stage")):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = hook(json.dumps(dict(ev, tool_input={"script": S[name]})))
+            out = json.loads(buf.getvalue() or "{}").get("hookSpecificOutput", {})
+            check(f"hook with enforce: {label} asks the owner (the declaration does not pass it)",
+                  rc == 0 and out.get("permissionDecision") == "ask" and "一度に走れる" in out.get("permissionDecisionReason", ""),
+                  (rc, out))
+        os.environ["WORKFLOW_FANOUT_ENFORCE_MARKER"] = os.path.join(d, "no-marker")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = hook(json.dumps(dict(ev, tool_input={"script": S["big_declared"]})))
+        check("hook without enforce: over one wave only shows the numbers (no ask)",
+              rc == 0 and "permissionDecision" not in buf.getvalue(), buf.getvalue()[:200])
+        os.environ["WORKFLOW_FANOUT_ENFORCE_MARKER"] = marker
         ev3 = dict(ev, tool_name="Bash")
         check("hook ignores other tools", hook(json.dumps(ev3)) == 0)
         os.environ["WORKFLOW_ESTIMATE_NODE"] = os.path.join(d, "no-node")

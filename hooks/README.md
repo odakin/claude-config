@@ -104,7 +104,7 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[visible-html-comment-enforce.test.sh](visible-html-comment-enforce.test.sh)** — logic + incident-replay selftest
 - **[worker-launch-checks.test.sh](worker-launch-checks.test.sh)** — session-launch-check.sh・workflow-launch-check.sh・busy-worker-stop-check.sh の self-test (engine の selftest + hook の入出力)
 - **[worker-safety-stop-guard.py](worker-safety-stop-guard.py)** — stop SendMessage to a local session with a recorded provider refusal.
-- **[workflow-fanout-check.sh](workflow-fanout-check.sh)** — Workflow を起こす前に script を空回しし、 agent の本数・波数・観点の分割・再開で cache が返る本数を出す (enforce の印があれば、 宣言の無い並べすぎを止める)
+- **[workflow-fanout-check.sh](workflow-fanout-check.sh)** — Workflow を起こす前に script を空回しし、 agent の本数・波数・観点の分割・再開で cache が返る本数を出す (enforce の印があれば、 一度に走れる本数を越える並べ方は起動の前に本人に聞き、 宣言の無い観点の分割・再開を止める)
 - **[workflow-fanout-check.test.sh](workflow-fanout-check.test.sh)** — workflow-fanout-check.sh の self-test (hermetic)
 - **[workflow-launch-check.sh](workflow-launch-check.sh)** — Fable の session からの Workflow は agent ごとの model の指定を求め、 週の切替の前に使い切る workflow は切替時刻で agent を止める
 - **[zsh-word-split-guard.py](zsh-word-split-guard.py)** — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置 (と、 option を含む loop の語を command の引数) に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash と、 素の `log show` など (zsh の組み込みの log に取られる) を含む Bash を実行前に止め、 bash の `${PIPESTATUS[N]}` (zsh では空) は zsh の `${pipestatus[N+1]}` に書き換えて通す (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion / #zsh-log-builtin / #zsh-pipestatus-lowercase)。
