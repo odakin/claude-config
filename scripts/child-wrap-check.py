@@ -70,6 +70,10 @@ def _epoch(ts: str) -> float:
     return calendar.timegm(time.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S"))
 
 
+def _iso(epoch: float) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(epoch))
+
+
 def _local_hm(ts: str) -> str:
     """'2026-10-28T09:26:52.608Z' → '10/28 18:26' in local time ('?' when unparsable)."""
     try:
@@ -258,11 +262,13 @@ def owner_reasons(target: str) -> list[str]:
     return out
 
 
-def check_child(target: str, as_of: str = "", need_wrap: bool = True) -> dict:
+def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since: str = "") -> dict:
     c = locate(target)
     if not c:
         return {"target": target, "found": False, "ok": False, "reasons": ["子が見つからない (app の記録にも live の registry にも無い)"]}
     ev = scan_child(c["path"], as_of)
+    if wrap_since:  # after --wait: only a wrap run for this request counts, not one from an earlier request
+        ev["wraps"] = [w for w in ev["wraps"] if w[:19] >= wrap_since[:19]]
     ask = open_ask(ev, parent_wait_notes(c["parent_path"], c["local"], as_of))
     commits = child_commits(c["cli"], ev["first"][:19])
     reasons = []
@@ -335,7 +341,8 @@ def hook_sendmessage(inp: dict, rule: str) -> str:
         return ""
     ti = inp.get("tool_input") or {}
     to, msg = str(ti.get("to") or ""), str(ti.get("message") or "")
-    if not to.startswith("local_") or not re.search(r"\bwrap\b", msg, re.I):
+    # Latin-letter boundaries, not \b: Python counts kana as word characters, so \bwrap\b misses 「wrapして」.
+    if not to.startswith("local_") or not re.search(r"(?<![A-Za-z])wrap(?![A-Za-z])", msg, re.I):
         return ""
     me, child = ds.find(str(inp.get("session_id") or "")), ds.find(to)
     if not me or not child or child.get("parent") != me.get("local_id"):
@@ -379,12 +386,15 @@ def main(argv: list[str]) -> int:
         return 0
     if not a.targets:
         ap.error("子の local_… か transcript id を 1 つ以上")
+    wrap_since = ""
     if a.wait:
-        rc = wait(a.targets, a.since if a.since is not None else time.time() - 60, a.max_minutes)
+        since = a.since if a.since is not None else time.time() - 60
+        rc = wait(a.targets, since, a.max_minutes)
         if rc:
             return rc
+        wrap_since = _iso(since)
         print(f"🧺 子 {len(a.targets)} 件の turn が終わった ({time.strftime('%H:%M')})。 照合:")
-    rows = [check_child(t, a.as_of, not a.no_wrap_needed) for t in a.targets]
+    rows = [check_child(t, a.as_of, not a.no_wrap_needed, wrap_since) for t in a.targets]
     print(json.dumps(rows, ensure_ascii=False, indent=1) if a.json else render(rows))
     if any(not r["found"] for r in rows):
         return 2
@@ -476,6 +486,9 @@ def selftest() -> int:
         r = check_child(ids("nowrap")[0])
         ok("no wrap run → kept", (not r["ok"]) and r["reasons"] == ["wrap の記録が無い"])
         ok("--no-wrap-needed drops that reason", check_child(ids("nowrap")[0], need_wrap=False)["ok"])
+        ok("after --wait, a wrap from an earlier request does not count",
+           not check_child(ids("busy")[0], wrap_since="2026-01-01T02:00:00")["ok"]
+           and "wrap の記録が無い" in check_child(ids("busy")[0], wrap_since="2026-01-01T02:00:00")["reasons"])
         talk = [u("2026-01-01T00:00:00Z", "依頼", origin={"kind": "human"}), peer("2026-01-01T01:00:00Z", "wrap して終えて", parent_l),
                 {"type": "attachment", "timestamp": "2026-01-01T01:02:00Z", "attachment": {
                     "type": "queued_command", "origin": {"kind": "human"}, "prompt": "どうやって消すの？"}},
@@ -509,8 +522,10 @@ def selftest() -> int:
                 "tool_input": {"to": ids("answered")[0], "message": "wrap skill で仕上げて"}}
         ok("hook: wrap request to own child → nudge with --wait and the id", ids("answered")[0] in hook_sendmessage(hook, "R")
            and "--wait" in hook_sendmessage(hook, "R"))
-        hook["tool_input"] = {"to": ids("answered")[0], "message": "進み具合は?"}
-        ok("hook: other message → silent", hook_sendmessage(hook, "") == "")
+        hook["tool_input"] = {"to": ids("answered")[0], "message": "終わったので wrapして"}
+        ok("hook: 'wrap' followed by kana still counts", "--wait" in hook_sendmessage(hook, ""))
+        hook["tool_input"] = {"to": ids("answered")[0], "message": "進み具合は? unwrapped な値も見て"}
+        ok("hook: other message (and 'unwrapped') → silent", hook_sendmessage(hook, "") == "")
         record(ids("nowrap")[0], ids("nowrap")[1], "local_77777777-0000-4000-8000-000000000000")
         hook["tool_input"] = {"to": ids("nowrap")[0], "message": "wrap して"}
         ok("hook: someone else's child → silent", hook_sendmessage(hook, "") == "")
