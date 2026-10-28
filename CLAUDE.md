@@ -133,7 +133,7 @@ claude-config/
 │   ├── multi-machine-state.md              # 複数マシンで同じ Claude Code setup を運用・audit するとき
 │   ├── multi-session-coordination.md       # 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment) + 作ったものの検収を別 session に頼む・頼まれたとき (#review-handoff) + 並行した worker が同じ file の全文の候補を作ったとき (#parallel-full-text-candidates) + 並列 session の開始時の一覧・turn 終わりの検査が同じ用事 (mail・台帳の項目・依頼) を求めるとき (#pending-item-claims) + Workflow (agent を並べる script) を組む・起動する・途中で止める・直して再開する前 (#workflow-fan-out)
 │   ├── music-transcription.md              # 音楽の録音から五線譜・TAB・MusicXML・MIDIを作るとき、または機械採譜の音高・発音・拍節・運指を検証するとき
-│   ├── name-rendering.md                   # 人名を記録・文面・印字物に書く瞬間で、手元にある表記が機械 field (メールヘッダ / git author / CSV・LDAP export / 登録システム) 由来のとき
+│   ├── name-rendering.md                   # 人名を記録・文面・印字物に書く瞬間で、手元にある表記が機械 field (メールヘッダ / git author / CSV・LDAP export / 登録システム) 由来のとき + 中国語の人名 (簡体字) を日本語の印字物・告知に書くとき (#cjk-names-in-japanese-print)
 │   ├── office-automation-principles.md     # 新しい様式・slug の無い罠に当たったとき (考え方の原則編)
 │   ├── office-automation.md                # 研究費/教務/学術様式の xlsx/docx を機械で fill するとき (罠の症例集)
 │   ├── office-files.md                     # Office file (Excel/Word/PDF/PowerPoint) 仕事に入るとき最初に開く入口

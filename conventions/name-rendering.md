@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 人名を記録・文面・印字物に書く瞬間で、手元にある表記が機械 field (メールヘッダ / git author / CSV・LDAP export / 登録システム) 由来のとき
+when: 人名を記録・文面・印字物に書く瞬間で、手元にある表記が機械 field (メールヘッダ / git author / CSV・LDAP export / 登録システム) 由来のとき + 中国語の人名 (簡体字) を日本語の印字物・告知に書くとき (#cjk-names-in-japanese-print)
 category: harness-core
 summary: transliteration・正規化された人名 field は不可逆な投影 — 手元に無い表記形 (native script / 濁点・記号 / 漢字) を推測で復元しない。3 択 (権威 source から取る / 本人に聞く / その表記を使わない) + 高 stakes 印字物の照合 + 確定後の SoT 化と errata
 -->
@@ -49,6 +49,10 @@ summary: transliteration・正規化された人名 field は不可逆な投影 
 **招待状・案内状・賞状・名札・記念品・著者名・credit・振込先・名簿**では、誤記が刷り直しや対外的な失礼に直結する。ここでは推測混入を絶対に許さず、**印字の直前に正本と 1 回照合する**。 照合の相手は、 **出所の記録が付いた正本か、 本人が自分で書いた表記** (署名・メールの表示名・本人の書類) にする。 <a id="unsourced-record-is-not-authority"></a>**出所の無い台帳の値は正本ではない** — 台帳そのものが推測で埋まっていれば、 台帳との照合は推測を素通りさせ、 対外の印字に格上げする (実測: 連絡先台帳の作り直しで名の読みに当てた漢字が出所なしで入り、 数か月後に対外の提出物の著者欄に写った。 本人のメールの表示名と本人の書類に正しい表記があった)。
 
 これは [paper-audit.md](paper-audit.md) の投稿前検査や [office-automation.md #print-preflight](office-automation.md#print-preflight) の刷る前検査と同じ位置にある gate — 不可逆な出力の手前に検査を置く。
+
+## <a id="cjk-names-in-japanese-print"></a>中国語の人名を日本語の印字物に書くとき
+
+本人が書いてきた漢字が簡体字のとき、 日本語の印字物では日本の字体に直して書くのが通例 (例: 习 → 習)。 本人の書いた字のままにする選択肢もあり、 どちらにするかは本人か owner が決める (agent が通例で決めない)。 決める材料として、 両方を実物の字体・大きさ・色で組んだ見本を並べて見せる: 簡体字は日本語の字体に無いことがあり、 字のある字体で補うと 1 字だけ形や太さが違って見える。 日本の字体に直した字でも、 使う太さに無い字が残ることがある ([`latex.md#cjk-font-weight-glyph-coverage`](latex.md#cjk-font-weight-glyph-coverage))。 決まった表記は、 本人の書いた字と並べて出所つきで台帳に記録する ([#name-sot-once](#name-sot-once))。 告知・Web など印字物以外にも同じ表記が流れるので、 印字物の字体の都合 (太さの差し替え) は印字物の側の設定に置き、 台帳の名前の欄には字体の命令を入れない。
 
 ## <a id="name-sot-once"></a>確定したら SoT 化して掃討する
 
