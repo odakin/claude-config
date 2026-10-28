@@ -14,6 +14,9 @@ Why (実測): 見え方や model を直すために、 動いている worker �
   - 対象があれば、 その target について「止めた時刻」 を session ごとの state に記録して止める (exit 2、 理由に model と
     動いた時間 = 本人に聞く 1 行の材料)。 止めた時刻より後に本人の発言 (人の入力。 他 session からの message・hook の
     差し戻し・task の通知は数えない) があれば通す = 聞いて答えをもらった後の 2 回目は通る。
+  - archive_session で子が busy でないときは、 子が本人とのやりとりの途中かを見る (scripts/child-wrap-check.py の
+    owner_reasons = 本人待ちの問いが残る / 親の最後の message の後に本人が子の窓で発言している)。 該当すれば同じく
+    1 回目は止め、 本人の発言の後は通す (正本 = conventions/multi-session-coordination.md#tidy-after-child-turn-ends)。
   - Bash だけ: 本人が直前の発言で止めるよう明示に言ったなら、 command に `# stop-ok: <本人の発言の一部を逐語で>` を
     付けると、 その文字列が本人の最新の発言に在る時に限って 1 回目から通す (逐語でなければ通さない)。
 
@@ -23,6 +26,7 @@ self-test: python3 scripts/busy-worker-stop-check.py --selftest
 """
 from __future__ import annotations
 
+import importlib.util as _ilu
 import json
 import os
 import re
@@ -35,6 +39,7 @@ sys.path.insert(0, os.path.join(HERE, "lib"))
 import session_model as sm  # noqa: E402
 
 RULE = "claude-config/conventions/multi-session-coordination.md#ask-before-stopping-a-busy-worker"
+CHILD_RULE = "claude-config/conventions/multi-session-coordination.md#tidy-after-child-turn-ends"
 CLI_STOP = re.compile(r"\bclaude\b[^|;&\n]*?\b(stop|kill|rm)\b")   # cheap prefilter only; the command word decides
 # The command word is read after heredoc bodies and quoted strings are blanked (the same reading as
 # hooks/cd-git-write-guard.py): text that only mentions `claude stop <id>` (an echo, a commit message, a document
@@ -49,6 +54,7 @@ STOP_OK = re.compile(r"#\s*stop-ok:\s*(.+?)\s*$", re.M)
 NOT_HUMAN = ("<task-notification", "<cross-session-message", "Another Claude session sent a message", "Stop hook feedback",
              "<local-command", "<command-name>", "<command-message>", "<side-sessions-event", "[Request interrupted")
 TAIL_BYTES = 512 * 1024
+REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
 
 
 def state_dir() -> str:
@@ -97,7 +103,9 @@ def _human_text(e: dict) -> str:
                      and not b.get("text", "").lstrip().startswith("<system-reminder>"))
     if not isinstance(c, str):
         return ""
-    t = c.strip()
+    # A peer session's message is written with the app's reminders first (measured: "Linked sessions now …" runs past
+    # 200 characters), so the marker is looked for after the reminders are dropped.
+    t = REMINDER.sub("", c).strip()
     if not t or any(t.startswith(x) or x in t[:200] for x in NOT_HUMAN):
         return ""
     return t
@@ -208,7 +216,7 @@ def check(inp: dict) -> tuple[int, str]:
         return 0, ""
     busy = busy_targets(ids)
     if not busy:
-        return 0, ""
+        return owner_check(inp, ids)
     sid = inp.get("session_id") or ""
     st = load_state(sid)
     h_ts, h_text = last_human(inp.get("transcript_path") or "")
@@ -236,6 +244,37 @@ def check(inp: dict) -> tuple[int, str]:
                "  本人に 1 行で聞く: 何を (上の model と動いた時間)、 なぜ止めたいか、 止めずに済む道。 本人が答えた後なら同じ操作は通る。\n"
                "  本人が直前の発言で止めるよう明示に言っているなら、 Bash の command に `# stop-ok: <その発言の一部を逐語で>` を付けて打ち直す。"
                f" 規約 = {RULE}")
+
+
+def owner_check(inp: dict, ids: list[str]) -> tuple[int, str]:
+    """archive_session of an idle child that still owes the person (an ask left open, or the person talking with it
+    after the parent's last message): stopped once, passes after the person speaks in this window
+    (scripts/child-wrap-check.py owner_reasons; rule = CHILD_RULE)."""
+    if not (inp.get("tool_name") or "").endswith("__archive_session") or not ids:
+        return 0, ""
+    try:
+        spec = _ilu.spec_from_file_location("child_wrap_check", os.path.join(HERE, "child-wrap-check.py"))
+        cw = _ilu.module_from_spec(spec)
+        spec.loader.exec_module(cw)
+        reasons = cw.owner_reasons(ids[0])
+    except Exception:
+        return 0, ""  # fail-open
+    if not reasons:
+        return 0, ""
+    sid, key = inp.get("session_id") or "", "owner:" + ids[0]
+    st = load_state(sid)
+    h_ts, _ = last_human(inp.get("transcript_path") or "")
+    if st.get(key) and h_ts and h_ts > st[key]:
+        st.pop(key, None)
+        save_state(sid, st)
+        return 0, ""
+    st.setdefault(key, time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()))
+    save_state(sid, st)
+    return 2, ("🛑 busy-worker-stop-check: 畳もうとした子は、 本人とのやりとりが終わっていないので 1 回目は止めた。\n"
+               + "\n".join("  - " + r for r in reasons) + "\n"
+               "  子の問いに親が代わりに答えない (本人はその子の窓で答える)。 本人に 1 行で伝え、 畳んでよいかを聞く。"
+               " 本人が答えた後なら同じ操作は通る。 照合の全体 = `python3 ~/Claude/claude-config/scripts/child-wrap-check.py "
+               f"{ids[0]}`。 規約 = {CHILD_RULE}")
 
 
 def main() -> int:
@@ -270,7 +309,10 @@ def selftest() -> int:
         sdir, pdir, stdir = (os.path.join(td, x) for x in ("sessions", "projects", "state"))
         os.makedirs(sdir)
         os.makedirs(os.path.join(pdir, "-w"))
-        os.environ.update(CLAUDE_SESSIONS_DIR=sdir, CLAUDE_PROJECTS_DIR=pdir, BUSY_WORKER_STOP_STATE_DIR=stdir)
+        ddir = os.path.join(td, "desktop", "acct", "env")
+        os.makedirs(ddir)
+        os.environ.update(CLAUDE_SESSIONS_DIR=sdir, CLAUDE_PROJECTS_DIR=pdir, BUSY_WORKER_STOP_STATE_DIR=stdir,
+                          CLAUDE_DESKTOP_SESSIONS_DIR=os.path.join(td, "desktop"), CHILD_WRAP_REPOS_GLOB=os.path.join(td, "none"))
         busy_id, idle_id = "b0b0b0b0-0000-4000-8000-00000000000b", "a0a0a0a0-0000-4000-8000-00000000000a"
         for n, (sid_, status) in enumerate(((busy_id, "busy"), (idle_id, "idle"))):
             with open(os.path.join(sdir, f"{n}.json"), "w", encoding="utf-8") as fh:
@@ -308,8 +350,23 @@ def selftest() -> int:
         ok("stop-ok with words the person did not say → blocked", rc == 2)
         rc, _ = run("mcp__ccd_session_mgmt__stop_session", {"session_id": "local_00000000-0000-4000-8000-000000000000"}, sid="L6")
         ok("desktop stop_session on a busy session → blocked", rc == 2)
-        rc, _ = run("mcp__ccd_session_mgmt__archive_session", {"session_id": "local_00000001-0000-4000-8000-000000000000"}, sid="L6")
+        idle_local, parent_local = "local_00000001-0000-4000-8000-000000000000", "local_0000000f-0000-4000-8000-000000000000"
+        rc, _ = run("mcp__ccd_session_mgmt__archive_session", {"session_id": idle_local}, sid="L6")
         ok("archive of an idle session → passes", rc == 0)
+        with open(os.path.join(ddir, idle_local + ".json"), "w", encoding="utf-8") as fh:
+            json.dump({"sessionId": idle_local, "cliSessionId": idle_id, "spawnedFrom": {"sessionId": parent_local}}, fh)
+        with open(os.path.join(pdir, "-w", idle_id + ".jsonl"), "w", encoding="utf-8") as fh:
+            for e in ({"type": "user", "timestamp": "2026-01-01T01:00:00.000Z", "message": {"content":
+                       f'<cross-session-message from="{parent_local}">wrap して終えて</cross-session-message>'}},
+                      {"type": "user", "timestamp": "2026-01-01T01:02:00.000Z", "origin": {"kind": "human"},
+                       "message": {"content": "どうやって消すの？"}}):
+                fh.write(json.dumps(e, ensure_ascii=False) + "\n")
+        transcript(("2026-01-01T00:00:00.000Z", "終わった子は畳んで"))
+        rc, txt = run("mcp__ccd_session_mgmt__archive_session", {"session_id": idle_local}, sid="L9")
+        ok("archive of an idle child the person is still talking with → blocked with the words", rc == 2 and "どうやって消すの" in txt)
+        transcript(("2026-01-01T00:00:00.000Z", "x"), ("2099-01-01T00:00:00.000Z", "それはもういい、畳んで"))
+        rc, _ = run("mcp__ccd_session_mgmt__archive_session", {"session_id": idle_local}, sid="L9")
+        ok("after the person answered in this window → passes", rc == 0)
         rc, _ = run("Bash", {"command": "claude agents --json | head"})
         ok("listing sessions → passes", rc == 0)
         rc, _ = run("Bash", {"command": "git rm b0b0b0b0.txt"})
@@ -325,10 +382,16 @@ def selftest() -> int:
                                  "timestamp": "2099-02-01T00:00:00.000Z"}) + "\n")
         ok("a peer session's message is not the person's prompt", last_human(tr) == ("", ""))
         with open(tr, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "user", "message": {"content": "<system-reminder>\n" + "Linked sessions now ... " * 20
+                                 + "\n</system-reminder>\n<cross-session-message from=\"p\">wrap して</cross-session-message>"},
+                                 "timestamp": "2099-02-02T00:00:00.000Z"}) + "\n")
+        ok("a peer session's message behind a long reminder is not the person's prompt", last_human(tr) == ("", ""))
+        with open(tr, "w", encoding="utf-8") as fh:
             fh.write(json.dumps({"type": "attachment", "attachment": {"type": "queued_command", "prompt": "止めないで",
                                  "origin": {"kind": "human"}}, "timestamp": "2099-03-01T00:00:00.000Z"}, ensure_ascii=False) + "\n")
         ok("a prompt absorbed mid-turn counts as the person's", last_human(tr)[1] == "止めないで")
-        for k in ("CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "BUSY_WORKER_STOP_STATE_DIR"):
+        for k in ("CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "BUSY_WORKER_STOP_STATE_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR",
+                  "CHILD_WRAP_REPOS_GLOB"):
             os.environ.pop(k, None)
         del uuid
     print("selftest:", "PASS" if not fails else f"{len(fails)} FAIL")
