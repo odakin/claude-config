@@ -7,7 +7,7 @@
 ## 現在地
 - **重なる未 commit を解く道具の試走 + 無人の routine の log の全文** — 道具 `scripts/intersect-sync.py` は読むだけの試走として同期の sweep と fleet heartbeat に繋いだ。 自動の apply に繋ぐかは 1 週間の記録 (`--report`) を見て owner が決める (見直しの期日つき TODO は owner の台帳)。 skill の routine は stream-json の中継 (`scripts/claude-stream-log.py`) で全部の assistant の文を log に書き、 どの routine にも `CLAUDE_ROUTINE_ID` を焼く (各 machine の次の session 開始の `--ensure` が起動行を書き換える)。 正本 = [`multi-session-coordination.md#owner-gone-intersect-sync`](conventions/multi-session-coordination.md#owner-gone-intersect-sync) / [`scheduled-tasks.md#headless-log-full-report`](conventions/scheduled-tasks.md#headless-log-full-report)。
 
-- **Workflow の並べすぎ (fan-out) の対策** — 規約 [`multi-session-coordination.md#workflow-fan-out`](conventions/multi-session-coordination.md#workflow-fan-out)・道具 2 本 (`scripts/workflow-estimate.py` / `scripts/workflow-run-stats.py`)・hook `hooks/workflow-fanout-check.sh` (配線済み)・空回しの隔離 [`hook-authoring.md#dry-run-model-authored-script`](conventions/hook-authoring.md#dry-run-model-authored-script)。 残り = 再開の cache の実地の試験 (owner の判断待ち) と、 もう 1 台の機械での実走の確認
+- **Workflow の並べすぎ (fan-out) の対策** — 規約 [`multi-session-coordination.md#workflow-fan-out`](conventions/multi-session-coordination.md#workflow-fan-out)・道具 2 本 (`scripts/workflow-estimate.py` / `scripts/workflow-run-stats.py`)・hook `hooks/workflow-fanout-check.sh` (配線済み)・空回しの隔離 [`hook-authoring.md#dry-run-model-authored-script`](conventions/hook-authoring.md#dry-run-model-authored-script)。 再開の cache は試験済み (key は並びの位置でも決まる = [`#workflow-resume-prefix`](conventions/multi-session-coordination.md#workflow-resume-prefix))、 一度に走れる本数を越える並べ方は宣言で通さず起動の前に owner に聞く (enforce の機械)。 残り = もう 1 台の機械での実走の確認
 
 - **安全停止後の worker への再送** — 実装と合成検査を済ませ、通常利用での観察に進む段階。次は実 harness の呼出しで発火した証拠と、配置だけの確認を区別して検収する。入口と境界 = [停止後の手順](conventions/tool-call-robustness.md#api-safety-filter-on-main-response)、[判定器](scripts/lib/worker_safety_stop.py)。
 
@@ -40,7 +40,6 @@
 ## Open items（forward-looking）
 
 - [ ] **完了Git gateのリモート照会失敗の切り分け** — 自動照会の検査不能と直接照会の成功が食い違う条件を調べる段階。次は通常SSHと多重化を使わない照会を同時点で比較し、タイムアウトと起動失敗を区別する候補を作る。実装の入口 = [session_touch.py](codex/hooks/session_touch.py)。原因未特定のため検査の変更は未着手。
-- [ ] **既存Linux CIのchat_file_refs変異検査** — Unicode正規化が異なる名前を別ファイルとして扱う環境では、元の[テスト](hooks/chat-file-ref-enforce.test.sh)がE5・E6・E7・E9をskipするが、[変異検査のspec](scripts/chat_file_refs.mutants.json)がこれらを必須ラベルとして要求し失敗する。次は検査強度を保って環境分岐とspecを整合させる候補を作る。音源採譜手順とは独立したテスト定義の問題。
 
 
 - [ ] **claude-app-account-mirror の実 app での初回の実走** — 常駐は本人が 2 台に入れた。 実測済み = ③ 表示中の account の dir には書かない (`--status` の待ちの数) / app が写しの record を読み込む (切替の後の app の log に読み込みの失敗なし)。 未観察 = ① 写しが一覧に**見える形で**出る (元をアーカイブした session の写しはアーカイブ済みに入る = 元の isArchived を引き継ぐ。 扱いは今のまま = 推奨・異論なし。 探すときはアーカイブ済みの一覧も見る) ② 写しを開くと「インポートしたセッションを再開しますか？」 が出て、 会話記録が `projects/<slug>/<新しい cli id>.jsonl` に移る ④ launchd の log が変化の無い回は無音
