@@ -77,7 +77,8 @@ while [ $# -gt 0 ]; do
     --replace-agent) OLD_AGENT="$2"; shift ;;
     --status) MODE="status" ;;
     --uninstall) MODE="uninstall" ;;
-    *) echo "usage: $0 [--dir DIR] [--config-dir DIR] [--label-suffix SUF] [--no-preflight] [--replace-agent LABEL] [--status|--uninstall]" >&2; exit 2 ;;
+    --ensure-logcap) MODE="ensure-logcap" ;;
+    *) echo "usage: $0 [--dir DIR] [--config-dir DIR] [--label-suffix SUF] [--no-preflight] [--replace-agent LABEL] [--status|--uninstall|--ensure-logcap]" >&2; exit 2 ;;
   esac
   shift
 done
@@ -90,10 +91,62 @@ LABEL="$LABEL_BASE"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/$LABEL.log"
 
+# --- log の上限 (conventions/remote-control-server.md#log-growth) ----------------------------
+# server は再接続の表示を StandardOutPath に書き続け、 log は 1 本で数百 MB になる。 server と対で
+# 小さな launchd job を置き、 1 時間ごとに LOG_CAP_BYTES を超えていたら末尾 LOG_KEEP_BYTES だけを
+# 書き戻す。 launchd は StandardOutPath を追記で開くので、 書き戻した後の server の書き込みは新しい
+# 末尾に続く。 install と --ensure-logcap (毎 session の自動適用から呼ぶ) が冪等に置き、 --uninstall が外す。
+LOGCAP_LABEL="$LABEL.logcap"
+LOGCAP_PLIST="$HOME/Library/LaunchAgents/$LOGCAP_LABEL.plist"
+LOG_CAP_BYTES=20971520   # 20 MB
+LOG_KEEP_BYTES=1048576   # 1 MB
+
+ensure_logcap() {
+  mkdir -p "$HOME/Library/LaunchAgents"
+  lc_tmp=$(mktemp) || return 1
+  cat > "$lc_tmp" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LOGCAP_LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>f="$LOG"; s=\$(/usr/bin/stat -f %z "\$f" 2>/dev/null) || exit 0; [ "\$s" -gt $LOG_CAP_BYTES ] || exit 0; /usr/bin/tail -c $LOG_KEEP_BYTES "\$f" > "\$f.cap" &amp;&amp; /bin/cat "\$f.cap" > "\$f"; /bin/rm -f "\$f.cap"</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>StandardOutPath</key><string>/dev/null</string>
+  <key>StandardErrorPath</key><string>/dev/null</string>
+</dict>
+</plist>
+EOF
+  if cmp -s "$lc_tmp" "$LOGCAP_PLIST" && launchctl print "gui/$UID_N/$LOGCAP_LABEL" >/dev/null 2>&1; then
+    rm -f "$lc_tmp"
+    return 0
+  fi
+  mv "$lc_tmp" "$LOGCAP_PLIST"
+  chmod 644 "$LOGCAP_PLIST"
+  launchctl bootout "gui/$UID_N/$LOGCAP_LABEL" 2>/dev/null
+  if launchctl bootstrap "gui/$UID_N" "$LOGCAP_PLIST" 2>/dev/null; then
+    echo "[ok] log cap ($LOGCAP_LABEL): $LOG が $((LOG_CAP_BYTES / 1048576)) MB を超えたら末尾 $((LOG_KEEP_BYTES / 1048576)) MB を残す (1 時間ごと)"
+  else
+    echo "[warn] log cap の launchd 登録に失敗 ($LOGCAP_LABEL)" >&2
+    return 1
+  fi
+}
+
 status() {
   if launchctl print "gui/$UID_N/$LABEL" >/dev/null 2>&1; then
     launchctl print "gui/$UID_N/$LABEL" | grep -E 'state =|pid =|last exit code' | sed 's/^[[:space:]]*/  /'
-    echo "  log: $LOG"
+    echo "  log: $LOG ($(du -h "$LOG" 2>/dev/null | cut -f1))"
+    if launchctl print "gui/$UID_N/$LOGCAP_LABEL" >/dev/null 2>&1; then
+      echo "  log cap: loaded ($LOGCAP_LABEL)"
+    else
+      echo "  log cap: 未登録 = --ensure-logcap で置く"
+    fi
     [ -f "$LOG" ] && { echo "  --- log tail ---"; tail -5 "$LOG" | sed 's/^/  /'; }
   else
     echo "not installed ($LABEL)"
@@ -112,8 +165,15 @@ case "$MODE" in
   uninstall)
     launchctl bootout "gui/$UID_N/$LABEL" 2>/dev/null
     rm -f "$PLIST"
+    launchctl bootout "gui/$UID_N/$LOGCAP_LABEL" 2>/dev/null
+    rm -f "$LOGCAP_PLIST"
     echo "[ok] uninstalled ($LABEL)"
     exit 0 ;;
+  ensure-logcap)
+    # server の plist が在るときだけ (= 入れていない server の log cap は置かない)。 変えたときだけ 1 行出す
+    [ -f "$PLIST" ] || exit 0
+    ensure_logcap
+    exit $? ;;
 esac
 
 # --- preflight ----------------------------------------------------------------
@@ -319,6 +379,7 @@ done
 launchctl kickstart "gui/$UID_N/$LABEL" 2>/dev/null
 
 echo "[ok] installed ($LABEL, dir=$RC_DIR)"
+ensure_logcap || true
 if [ "$VERSION_NG" = 1 ]; then
   # $CLAUDE_VER が空 (parse fail) の時は runtime signal (= `too old for Remote Control`) 経由で
   # ここに来ている。 その場合も同じ fix hint で十分。

@@ -96,7 +96,12 @@ launchctl kickstart -k gui/$(id -u)/<RC server の label>
 - <a id="log-growth"></a>**server の log は増え続ける**: server は端末向けの再接続の表示 (制御文字つきの
   spinner の枠) を launchd の `StandardOutPath` にそのまま書き続け、 install script は log を回さない
   (実測: 1 本で数百 MB)。 `--status` は末尾の 5 行しか読まないので気づきにくい = 大きさは
-  `du -h ~/Library/Logs/com.claude-config.remote-control-server*.log` で見る。 切り詰めの仕組みは未実装。
+  `du -h ~/Library/Logs/com.claude-config.remote-control-server*.log` で見る。 install script は server と対で
+  `<label>.logcap` の launchd job を置き、 1 時間ごとに 20 MB を超えた log を末尾 1 MB に書き戻す (launchd は
+  `StandardOutPath` を追記 (`O_APPEND`) で開くので、 書き戻した後の server の書き込みは新しい末尾に続く。 実測 =
+  `lsof +fg` の flag が `AP`)。 log cap の無い既存の server には `--ensure-logcap --label-suffix <名前>` が冪等に
+  置く (変えたときだけ 1 行) = 毎 session の自動適用から呼べば各機械に届く。 `--status` が log の大きさと
+  log cap の有無を出す。 server を外した後の古い log は残る (消すかは持ち主が決める)。
   ⚠️ log を grep して異常語を数えると、 再起動より前の行まで数える = 異常語の行番号を最後の
   `Reconnected` の行番号と比べて、 今も起きているかを決める。
 - ⚠️ **`--sandbox`/`--no-sandbox` の食い違い**: 公式 docs は server mode の flag に filesystem/network 隔離の `--sandbox` を挙げるが、v2.1.165 の `claude remote-control --help` には**無い** (= 自版で要確認、版依存)。常時公開サーバーで隔離を効かせたい場合は自分の `--help` で実在を確認してから付ける (= docs だけ見て plist に焼くと unknown-flag で永久 cycling し得る)。
