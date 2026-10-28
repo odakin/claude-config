@@ -172,6 +172,9 @@ sections:
   - id: line-initial-punct-scan
     level: 2
     title: "行頭の句読点 (禁則違反) を機械 scan する — bold 境界で prebreakpenalty が不発になる"
+  - id: revtex-short-document
+    level: 2
+    title: "revtex4-2 で 1 頁の文書 (正誤表・短い note) を組むときの崩れ"
   - id: bibliography-style
     level: 2
     title: "Bibliography スタイル"
