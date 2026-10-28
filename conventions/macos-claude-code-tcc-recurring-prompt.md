@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: Claude Code の App Management TCC dialog が繰り返し出るとき + 版番号 (2.1.NNN) だけのポップアップ・process 名を見たとき + 自作 CLI の TCC 許可ダイアログが「許可」 を押しても出直すとき (#half-signed-universal-binary)
+when: Claude Code の App Management TCC dialog が繰り返し出るとき + 版番号 (2.1.NNN) だけのポップアップ・process 名を見たとき + CLI の版が上がるたびにデスクトップ・書類・ダウンロード・cloud storage の許可を聞き直される・無人の run が許可待ちで止まるとき (#stable-cli-path) + 自作 CLI の TCC 許可ダイアログが「許可」 を押しても出直すとき (#half-signed-universal-binary)
 category: macos
-summary: Claude Code の app bundle が `~/Library/Application Support/Claude/claude-code/<version>/claude.app` という versioned path に置かれているため、 App Management TCC 権限が auto-update 毎に invalidate されて dialog が再 prompt される構造的症状 (= sibling pty-leak と同じく Anthropic 側 fix 待ち候補、 stable launcher path 化が root 対策)
+summary: Claude Code の app bundle が `~/Library/Application Support/Claude/claude-code/<version>/claude.app` という versioned path に置かれているため、 App Management TCC 権限が auto-update 毎に invalidate されて dialog が再 prompt される構造的症状 (= sibling pty-leak と同じく Anthropic 側 fix 待ち候補、 stable launcher path 化が root 対策)。 CLI 版 (実行 file の名前が版番号) は手元で直せる = 版に依らない固定の場所に複製してそこから起動する (#stable-cli-path)
 -->
 # macOS Claude Code app-bundle versioned-path → TCC App Management recurring prompt
 
@@ -97,6 +97,25 @@ Anthropic 側 fix を待つ前提なら、 dialog が出たときだけ押す運
 - ∴ macOS が process 名を出す面 (一時的なポップアップ・権限 dialog・Activity Monitor・unified log の `pid[名前]`) には `2.1.NNN` とだけ出て、 Claude だと読めない。 **版番号だけのポップアップを見たら、 まずこれを疑う** (実測)。
 - 切り分け: `readlink ~/.local/bin/claude` の版と一致するか → `/usr/bin/log show --last 2h --style compact --predicate 'eventMessage CONTAINS "<版>"'` で同名 process の起動時刻を見て、 hook・定期実行・session 開始が `claude` を呼んだ時刻と突き合わせる。 ⚠️ 通知センターの DB (`$(getconf DARWIN_USER_DIR)com.apple.notificationcenter/db2/db`) は閉じた通知の record が消えることがある = 「DB に無い」 は通知でなかった証明にならない。
 - desktop アプリの Code タブは同梱の別版 (上の versioned `claude.app`) を使う = **CLI と desktop の版が違うのは正常** (CLI は単体で自動更新、 同梱版はアプリの更新でだけ上がる)。 同梱版の path に付けた権限 (フルディスクアクセス等) は、 同梱版が上がると付け直しになりうる。
+- 版番号だけの名前の **許可 dialog が版上げのたびに出る** なら、 次節の形 (CLI が自分で許可の責任者) — 直し方 = [`#stable-cli-path`](#stable-cli-path)。
+
+## <a id="stable-cli-path"></a>CLI 版: 版上げのたびに許可を聞き直す → 版に依らない固定の場所から起動する
+
+- **症状**: launchd の定期 job・常駐の server など、 CLI が**自分で**許可の責任者になる起動 (= 親が app でない。 中継が責任を手放して起動した子も同じ) で、 版が上がるたびにデスクトップ・書類・ダウンロード・cloud storage (File Provider) の許可を全部聞き直す。 dialog の主は版番号の名前。 端末や desktop アプリから起動した CLI は親の app が責任者なので出ない
+- **dialog は答えるまで呼び出しを止める** (実測: 次の folder の要求は、 前の folder に答えた直後に出る = 順に待っている)。 誰もいない時間の無人の run はそこで止まり、 次の予定の run も来ない (launchd は走っている job を重ねて起動しない)
+- **原因**: macOS はこの形の client を **実行 file の path** で記録する (unified log の tccd の行が `identifier_type=Path, identifier=<…/versions/<版>>`)。 記録と照合する要件は署名の designated requirement = **identifier + Team ID** で、 版を跨いで同じ (log の `kTCCCodeIdentityAuthority = kTCCCodeIdentityDesignatedRequirementAuthority`)。 = path さえ変わらなければ、 一度の許可が次の版にも当たる。 native installer は版ごとに新しい file を置いて launcher の symlink を付け替えるので、 path が毎回変わる
+- **直し方**: launcher の指す版を **版に依らない固定の場所に複製**し、 責任者になる起動をそこから行う。 道具 = [`scripts/claude-stable-path.sh`](../scripts/claude-stable-path.sh) (既定 `~/.local/share/claude-stable/claude`)
+  - **複製は APFS の clone** (`cp -c` = 容量を食わない)。 hard link にしない (= 同じ file に名前が 2 つあると、 process の path がどちらで報告されるか保証されない)
+  - **差し替えは一時名に置いて `mv`** (= 走っている process は古い file を持ったまま壊れない)。 差し替える前に署名を確かめ、 署名の主 (identifier + Team ID) が前の版と違えば差し替えない
+  - **launcher は触らない** = 上流の自動更新・古い版の掃除はそのまま動く。 固定の場所から起動した CLI も `claude doctor` で native の install と認識される (実測)
+  - **揃える契機を 2 つ**: launchd の `WatchPaths` (launcher の dir と versions/ の変化) と、 使う直前の確認 (起動の中継が揃えてから起動する)。 見張りが取りこぼしても run は古い版で走らない
+  - **呼び出し側**: 定期 job の起動行の絶対 path と `PATH` の先頭 (= script の中で `claude` を呼ぶ job も同じ file)、 常駐の server の plist の `PATH` の先頭。 常駐の server は止めず、 plist の file だけを直して次の起動から (層1 の engine = [`install-launchd-cron.sh`](../scripts/install-launchd-cron.sh) / [`install-remote-control-server.sh`](../scripts/install-remote-control-server.sh) / [`claude-stream-log.py`](../scripts/claude-stream-log.py))
+- **切り替えた直後に 1 回ずつ** 聞かれる (固定の場所は新しい path)。 これが最後 = 以後の版では出ない。 誰もいない時間の run で初めて出ると止まるので、 切り替えたら人がいる時に一度起こして答えておく
+- **届かないもの**:
+  - **background session (`claude --bg`)**: CLI が自分の daemon を launcher の path で起動し、 worker を versions/ の path から起こす (実測) = 呼ぶ側の path では変わらない (上流の範囲)
+  - **無人の run だけ folder を除く形**: `--settings` の `permissions.additionalDirectories` は既存の list に足されるだけで、 list から消すことはできない (実測)。 `--setting-sources` で user の設定を読まない形なら list から消えるが、 user の agent と skill も読まなくなる (実測) = 固定の場所の許可で止めるほうが副作用が無い
+  - **カレンダー等の個人情報**: hardened runtime の CLI に entitlement が無い service は prompt すら出ず黙って拒否される (log に `Policy disallows prompt`) = path では直らない。 その service を持つ app 経由で読む
+- **確かめ方**: 版上げの後、 `/usr/bin/log show --last 2h --style compact --predicate 'subsystem == "com.apple.TCC" AND eventMessage CONTAINS "AUTHREQ_PROMPTING"'` に固定の場所の path の行が無いこと (zsh では `log` が組み込みに取られる = [`shell-env.md#zsh-log-builtin`](shell-env.md#zsh-log-builtin))
 
 ## <a id="half-signed-universal-binary"></a>姉妹: 片 slice だけ署名した universal binary は許可が残らない
 

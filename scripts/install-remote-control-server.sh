@@ -188,7 +188,11 @@ if [ -n "$CONFIG_DIR" ]; then
   mkdir -p "$CONFIG_DIR"
 fi
 
-CLAUDE_BIN="$HOME/.local/bin/claude"
+# 版に依らない固定の場所 (claude-stable-path.sh) が使えればそれ: 常駐の server は自分で macOS の許可の責任者になり、
+# 許可は実行 file の path に記録される = 版ごとの path だと版上げのたびに聞き直す
+# (conventions/macos-claude-code-tcc-recurring-prompt.md#stable-cli-path)。 plist の PATH の先頭がその dir になる (下の CLAUDE_DIR)。
+CLAUDE_BIN="$(sh "$(cd "$(dirname "$0")" 2>/dev/null && pwd)/claude-stable-path.sh" --print-stable 2>/dev/null || true)"
+[ -n "$CLAUDE_BIN" ] || CLAUDE_BIN="$HOME/.local/bin/claude"
 [ -x "$CLAUDE_BIN" ] || CLAUDE_BIN="$(command -v claude || true)"
 [ -n "$CLAUDE_BIN" ] || { echo "[error] claude binary not found (native install expected at ~/.local/bin/claude)" >&2; exit 1; }
 

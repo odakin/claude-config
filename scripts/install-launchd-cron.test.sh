@@ -12,6 +12,7 @@
 #   T6 読めない routine が 1 本でもあれば --ensure は他の routine も install しない
 #   T7 --install-one は指定した routine の cron だけ読む / --status と --uninstall-one は止まらない
 #   T6b --ensure は loaded で照合前の routine の cron も読む / 全部照合済みなら python を起動しない
+#   T15 版に依らない固定の場所 (LCRON_STABLE) が使えれば claude の絶対 path と PATH の先頭をそこへ (既存の plist も --ensure で、 冪等)
 #   T8 loaded 済み routine の cron (または変換の版) が変わったら --ensure が StartCalendarInterval だけ書き換えて
 #      再 load (ProgramArguments の pin は残す)、 実行中なら保留、 plist が消えていれば書き直す、 照合済み印の読み書き
 set -uo pipefail
@@ -351,6 +352,28 @@ CT="$TMP/cmdjob.sh"; printf '#!/bin/sh\necho "cmd-routine=$CLAUDE_ROUTINE_ID" > 
 engine --workdir "$TMP" --routine "cj|cmd|$CT|0 9 * * *" --install-one cj >/dev/null 2>&1
 HOME="$TMP" /bin/sh -c "$(pcmd cj)" >/dev/null 2>&1
 grep -q "cmd-routine=cj" "$TMP/cmd-env" 2>/dev/null && ok "cmd の script から routine id が見える" || ng "cmd env: $(cat "$TMP/cmd-env" 2>&1) cmd=$(pcmd cj)"
+
+echo "T15 版に依らない固定の場所が使えれば、 claude の絶対 path と PATH の先頭をそこへ向ける (既存の plist も --ensure で)"
+mkdir -p "$TMP/.local/bin" "$TMP/stable"
+cp "$SB/claude" "$TMP/.local/bin/claude"; cp "$SB/claude" "$TMP/stable/claude"
+lengine() {  # launcher (~/.local/bin/claude) を CLAUDE_BIN に、 固定の場所は LCRON_STABLE で外から渡す
+  PATH="$BIN:$PATH" LCRON_LA_DIR="$LA" LCRON_LOG_DIR="$TMP/log" CLAUDE_BIN="$TMP/.local/bin/claude" HOME="$TMP" \
+    sh "$ENGINE" --label-prefix "$PREFIX" "$@"
+}
+STF="$TMP/Library/Application Support/install-launchd-cron/$PREFIX.st.cron"
+LCRON_STABLE="" lengine --workdir "$TMP" --routine "st|skill|$SKT|0 9 * * *" --install-one st >/dev/null 2>&1
+c="$(pcmd st)"
+case "$c" in *"-- \"$TMP/.local/bin/claude\" -p"*) ok "使えない時は従来どおり launcher" ;; *) ng "launcher でない: $c" ;; esac
+rm -f "$STF"
+LCRON_STABLE="$TMP/stable/claude" lengine --workdir "$TMP" --routine "st|skill|$SKT|0 9 * * *" --ensure >"$TMP/out" 2>"$TMP/err"
+c="$(pcmd st)"
+case "$c" in *"-- \"$TMP/stable/claude\" -p"*) ok "--ensure が既存の plist の claude を固定の場所へ" ;; *) ng "ensure 後: $c / $(cat "$TMP/out" "$TMP/err")" ;; esac
+case "$c" in *"export PATH=\"$TMP/stable:\$HOME/.local/bin:"*) ok "PATH の先頭に固定の場所の dir" ;; *) ng "PATH: $c" ;; esac
+c1="$c"; rm -f "$STF"
+LCRON_STABLE="$TMP/stable/claude" lengine --workdir "$TMP" --routine "st|skill|$SKT|0 9 * * *" --ensure >"$TMP/out" 2>&1
+[ ! -s "$TMP/out" ] && [ "$(pcmd st)" = "$c1" ] && ok "2 回目は書き換えない (冪等)" || ng "冪等でない: out=$(cat "$TMP/out") $(pcmd st)"
+LCRON_STABLE="$TMP/stable/claude" lengine --workdir "$TMP" --routine "sc|cmd|$CT|0 9 * * *" --install-one sc >/dev/null 2>&1
+case "$(pcmd sc)" in *"export PATH=\"$TMP/stable:"*) ok "cmd 型の新しい plist も PATH の先頭に固定の場所" ;; *) ng "cmd: $(pcmd sc)" ;; esac
 
 echo
 echo "install-launchd-cron.test.sh: PASS=$PASS FAIL=$FAIL"

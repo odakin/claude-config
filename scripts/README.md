@@ -122,6 +122,8 @@
 - **[claude-app-thinking-diagnose.py](claude-app-thinking-diagnose.py)** — Claude for Mac (Code タブ) で思考 (thinking) の要約が画面に出ない原因を read-only で診断する (conventions/macos-claude-app-thinking-display.md)。
 - **[claude-notify.sh](claude-notify.sh)** — macOS 通知を出す唯一の入口 (= 押すと行き先がある通知)。
 - **[claude-session-whoami.py](claude-session-whoami.py)** — session の host / surface (desktop|CLI) / account を機械同定する probe。
+- **[claude-stable-path.sh](claude-stable-path.sh)** — native installer の Claude Code CLI を版に依らない固定の場所へ複製して保つ (macOS のフォルダ等の許可を版上げのたびに聞き直さないため。 sync / --print / --print-stable / --check / --install-agent / --uninstall-agent、 macOS 限定、 conventions/macos-claude-code-tcc-recurring-prompt.md#stable-cli-path)
+- **[claude-stable-path.test.sh](claude-stable-path.test.sh)** — claude-stable-path.sh の test (固定の場所を作る・揃っていれば触らない・版上げで差し替える・未署名の版は置かない・使えない時の --print の戻り先・見張りの plist の形)
 - **[claude-stream-log.py](claude-stream-log.py)** — 無人の `claude -p --output-format stream-json` を起動し、 流れてくる event を人が読める log に直して書く (全部の assistant の文・tool の名前・hook の知らせ・結果。 終了値は claude のもの、 --selftest)
 - **[cli-binary-read-check.py](cli-binary-read-check.py)** — Claude Code 本体 (端末の CLI の binary・desktop の埋込 engine・app の bundle) を使い捨ての python / grep / strings で読む Bash command を見つけ、 既存の道具 claude-app-bundle.py を知らせる engine (PreToolUse の Bash の hook が呼ぶ、 知らせるだけで止めない。 --selftest)
 - **[clip-copy.sh](clip-copy.sh)** — 貼り付け用の文面をクリップボードに入れ、読み戻して一致を確かめる (macOS。 日本語などの非 ASCII も通す)

@@ -35,6 +35,11 @@ signal: SIGTERM / SIGINT / SIGHUP は claude に回し、 claude が終わるの
   呼び出しを途中で切らない)。 なぜ: API との接続を相手に閉じられた claude が CPU 0% のまま終わらない形があり
   (実測)、 走っている間は launchd が同じ job を重ねて起動しない = 次の予定の run も来ない。
 stdin は /dev/null (= `claude -p` が stdin を 3 秒待って警告を出す形を避ける)。 stderr は継ぐ (= そのまま log に入る)。
+版に依らない固定の場所: 起動行の claude が native launcher (~/.local/bin/claude) か固定の場所 (claude-stable-path.sh) なら、
+  起動の直前に固定の場所を launcher の版に揃えてからそこを起動する (使えなければ元の path = 従来どおり、 env
+  CLAUDE_STABLE_PATH=0 で切る)。 なぜ = 上の TCC のとおり claude が自分で責任者になるので、 許可は実行 file の path に
+  記録される。 版ごとの path だと版上げのたびに全部聞き直し、 答えるまで run が止まる (実測。
+  conventions/macos-claude-code-tcc-recurring-prompt.md#stable-cli-path)。 見張り (launchd) が取りこぼしても使う直前に揃う。
 """
 from __future__ import annotations
 
@@ -209,6 +214,25 @@ def _stdout_file_path() -> str | None:
         return os.fsdecode(raw.split(b"\0", 1)[0]) or None
     except OSError:
         return None
+
+
+def _stable_cli(prog: str) -> str:
+    """起動する claude の path: native launcher か固定の場所なら、 固定の場所を揃えてからその path (使えなければ元の path)。"""
+    tool = os.path.join(HERE, "claude-stable-path.sh")
+    if os.environ.get("CLAUDE_STABLE_PATH") == "0" or sys.platform != "darwin" or not os.path.isfile(tool):
+        return prog
+    launcher = os.environ.get("CLAUDE_NATIVE_LAUNCHER") or os.path.expanduser("~/.local/bin/claude")
+    stable = os.path.join(os.environ.get("CLAUDE_STABLE_DIR") or os.path.expanduser("~/.local/share/claude-stable"), "claude")
+    if prog not in (launcher, stable):
+        return prog
+    try:
+        out = subprocess.run(["/bin/sh", tool, "--print"], stdin=subprocess.DEVNULL, capture_output=True,
+                             text=True, timeout=120).stdout.strip()
+    except Exception:
+        out = ""
+    if out and os.access(out, os.X_OK):
+        return out
+    return prog if os.access(prog, os.X_OK) else launcher
 
 
 def _spawn(argv: list[str], disclaim: bool):
@@ -484,6 +508,7 @@ def main(argv: list[str]) -> int:
     except ValueError:
         print(f"claude-stream-log: --max-minutes の値が数でない: {raw!r}", file=sys.stderr)
         return 2
+    cmd[0] = _stable_cli(cmd[0])
     return run(cmd, disclaim="--no-disclaim" not in opts, partial="--no-partial" not in opts,
                max_seconds=minutes * 60 if minutes > 0 else None)
 

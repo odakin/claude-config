@@ -94,12 +94,23 @@ esac
 LA_DIR="${LCRON_LA_DIR:-$HOME/Library/LaunchAgents}"   # LCRON_LA_DIR は test 用 override
 LOG_DIR="${LCRON_LOG_DIR:-$HOME/Library/Logs}"
 STATE_DIR="${LCRON_STATE_DIR:-$HOME/Library/Application Support/install-launchd-cron}"   # --ensure の照合済み印
-CAL_VERSION=4   # plist 変換の版 (2 = 各欄の , / N-M / */S / N-M/S + 月 + 日と曜日の OR、 3 = 関門の起動行が失敗を待機と分ける、 4 = skill を stream-json の log 中継で起動 + CLAUDE_ROUTINE_ID)
+CAL_VERSION=5   # plist 変換の版 (2 = 各欄の , / N-M / */S / N-M/S + 月 + 日と曜日の OR、 3 = 関門の起動行が失敗を待機と分ける、 4 = skill を stream-json の log 中継で起動 + CLAUDE_ROUTINE_ID、 5 = claude と PATH を版に依らない固定の場所へ)
 DOMAIN="gui/$(id -u)"
 CRON_MODEL="${CRON_MODEL:-}"
 CRON_EFFORT="${CRON_EFFORT:-}"
 CRON_CONFIG_DIR="${CRON_CONFIG_DIR:-}"
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")}"
+
+# 版に依らない固定の場所の CLI (claude-stable-path.sh、 2026-10-28)。 使えれば plist の claude の絶対 path と PATH の先頭を
+# そこへ向ける (= 無人の run では claude が自分で macOS の許可の責任者になり、 許可は実行 file の path に記録される。
+# native launcher の指す版の path は版上げのたびに変わり、 そのたびに全部聞き直して答えるまで run が止まる)。
+# 使えない (macOS 以外・道具が無い・未署名) なら空 = 従来どおり。 正本 = conventions/macos-claude-code-tcc-recurring-prompt.md#stable-cli-path
+STABLE_TOOL="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/claude-stable-path.sh"
+if [ -z "${LCRON_STABLE+x}" ]; then   # test は LCRON_STABLE を外から渡す (空 = 使わない)
+  LCRON_STABLE=""
+  [ -f "$STABLE_TOOL" ] && LCRON_STABLE="$(sh "$STABLE_TOOL" --print-stable 2>/dev/null || true)"
+fi
+export LCRON_STABLE
 
 # node の場所を install 時に解決して plist PATH へ追記する (2026-08-29)。
 # launchd の PATH には nvm 等の node が乗らないため、 stdio MCP server (command: node / npx) を
@@ -278,6 +289,20 @@ def upgrade_launch(cmd, task_id, renderer):
             else routine_id_export(task_id) + cmd
     return cmd
 
+
+def upgrade_cli(cmd, stable):
+    """起動行の claude を版に依らない固定の場所 (claude-stable-path.sh) へ: native launcher の絶対 path をその path に替え、
+    PATH の先頭にその dir を足す (= cmd 型の script の中の `claude` も同じ file)。 stable が空なら何もしない。 冪等。"""
+    if not stable:
+        return cmd
+    import os
+    cmd = cmd.replace('"%s" ' % os.path.expanduser('~/.local/bin/claude'), '"%s" ' % stable)
+    d = os.path.dirname(stable)
+
+    def _path(m):
+        return m.group(0) if d in m.group(1).split(':') else 'export PATH="%s:%s"' % (d, m.group(1))
+    return re.sub(r'export PATH="([^"]*)"', _path, cmd, count=1)
+
 # 5 欄の名前・plist key・値域。 曜日の 7 は 0 (日曜) と同じ。
 FIELDS = [('分', 'Minute', 0, 59), ('時', 'Hour', 0, 23), ('日', 'Day', 1, 31),
           ('月', 'Month', 1, 12), ('曜日', 'Weekday', 0, 7)]
@@ -381,7 +406,8 @@ if sys.argv[1] == 'recal':
             continue
         pa = list(d.get('ProgramArguments') or [])
         renderer = os.environ.get('LCRON_RENDERER', '')
-        new_pa = (pa[:2] + [upgrade_launch(upgrade_gate(pa[2]), task_id, renderer)
+        stable = os.environ.get('LCRON_STABLE', '')
+        new_pa = (pa[:2] + [upgrade_cli(upgrade_launch(upgrade_gate(pa[2]), task_id, renderer), stable)
                             if isinstance(pa[2], str) else pa[2]] + pa[3:]) if len(pa) >= 3 else pa
         if d.get('StartCalendarInterval') == want and new_pa == pa:
             print('same', task_id)
@@ -420,6 +446,8 @@ if kind == 'skill':
            '%s%s--permission-mode bypassPermissions %s"%s"' % (nopersist_flag, rcoff_flag, model_flag, prompt))
 else:  # cmd = 決定的 script を直接実行 (claude 不要)
     cmd = prefix + gate_prefix + 'exec bash "%s"' % target
+import os
+cmd = upgrade_cli(cmd, os.environ.get('LCRON_STABLE', ''))
 d = {
     'Label': label,
     'ProgramArguments': ['/bin/sh', '-c', cmd],

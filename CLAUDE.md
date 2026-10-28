@@ -107,7 +107,7 @@ claude-config/
 │   ├── macos-claude-app-notifications.md   # Claude for Mac (desktop / Code タブ) の通知音が鳴らない・通知が来ないとき + macOS の通知が全般に鳴らない原因を調べるとき + 集中モード (おやすみモード) の設定画面を user に案内する前
 │   ├── macos-claude-app-pty-leak.md        # macOS で forkpty: Device not configured が出たとき
 │   ├── macos-claude-app-thinking-display.md # Claude for Mac (desktop / Code タブ) で思考 (thinking) の要約が画面に出ない・「考え中」 / 「思考」 の表示が見つからないとき + 思考の表示を既定にしたいとき + settings.json の showThinkingSummaries が desktop で効くか判断する前
-│   ├── macos-claude-code-tcc-recurring-prompt.md # Claude Code の App Management TCC dialog が繰り返し出るとき + 版番号 (2.1.NNN) だけのポップアップ・process 名を見たとき + 自作 CLI の TCC 許可ダイアログが「許可」 を押しても出直すとき (#half-signed-universal-binary)
+│   ├── macos-claude-code-tcc-recurring-prompt.md # Claude Code の App Management TCC dialog が繰り返し出るとき + 版番号 (2.1.NNN) だけのポップアップ・process 名を見たとき + CLI の版が上がるたびにデスクトップ・書類・ダウンロード・cloud storage の許可を聞き直される・無人の run が許可待ちで止まるとき (#stable-cli-path) + 自作 CLI の TCC 許可ダイアログが「許可」 を押しても出直すとき (#half-signed-universal-binary)
 │   ├── macos-clickable-notifications.md    # script や定期ジョブから macOS 通知を出す前 + 出している通知をクリックしても何も起きない / 関係ないアプリが開くと気づいたとき + 通知を出すアプリを作り直す前 + 複数の source から集めた finding の 1 行を通知本文に選ぶとき + 通知を押したら頁は開くのに、その通知の中身が頁に無いとき / 通知を出す source を新しく足すとき (#click-target-contains-the-notification)
 │   ├── macos-cpu-arch.md                   # 新しい Mac を立ち上げるとき + Intel Mac から Apple Silicon Mac へ移行アシスタントで移した直後 + dotfile・script・launchd plist に Homebrew の path や arch を書く前 + `Bad CPU type in executable` / `EBADARCH` / launchd の exit 126 を見たとき + 「どの機械で定期ジョブを回すか」 を arch で決めようとしたとき
 │   ├── macos-exec-policy-kill.md           # script や git hook の実行が SIGKILL で止まるとき (exit 137 / "Killed: 9" / git の "hook ... died of signal 9") + 同じ中身の script が場所によって kill されたりされなかったりするとき + syspolicyd が重い・メモリが膨らんでいるとき + 別のアプリの起動失敗が大量に続いた後に手元の script が動かなくなったとき
@@ -207,7 +207,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (375 file + formcase/ 26 module + lib/ 75 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (377 file + formcase/ 26 module + lib/ 75 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
