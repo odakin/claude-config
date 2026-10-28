@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: LaTeX を含むリポで作業するとき
+when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document)
 category: paper
 summary: LaTeX 固有規約（物理リポで参照）
 -->
@@ -942,6 +942,13 @@ pLaTeX の禁則処理は通常 `。、` の行頭落ちを防ぐが、**`\textb
 
   0 件 = silent でビルド毎に回せる。⚠️ 様式が独自 wrap するセル内文字列 (電子申請システムの経費明細等、
   自分の組版でない部分) は偽陽性として除外してよい。sibling の PDF 検品 = [#pdf-line-collision-detection](#pdf-line-collision-detection)。
+
+## <a id="revtex-short-document"></a>revtex4-2 で 1 頁の文書 (正誤表・短い note) を組むときの崩れ
+
+- **`\date{}` を書くと「(Dated: )」 が出る** — revtex は空の日付も組む。 日付を出さないなら `\date` の行ごと書かない。
+- **itemize の上下の空きが `\setlength{\topsep}` で変わらない** — revtex は list に入るたびに `\@listi` で `\topsep` などを設定し直す。 詰めた箇条書きは `\begin{list}{\textbullet}{\setlength{\topsep}{3pt}\setlength{\itemsep}{0pt}…}` のように list の第 2 引数で設定する。 行内の数式が長く underfull が出るなら、 list を `{\raggedright … \par}` で囲む (囲む前の段落は `\par` で閉じる)。
+- **最後の頁の段そろえで、 見出しが前の項目に貼り付く** — `reprint` の 2 段組は最後の頁の左右の段の高さをそろえる。 そろえ切れない長さのとき、 段の切れ目の後ろの見出し (`\section*{Data Availability}` など) が上の空きを失って前の項目に密着する。 `\vfill` や `\vspace*` を足しても直らない (実測)。 直し方 = class option に `nobalancelastpage` を足し、 `\raggedbottom` を置き、 段を切りたい位置 (箇条書きなら項目の間) に `\pagebreak` を手で置く。 `\raggedbottom` だけだと脚注 (著者の email) が段の途中に出る (実測)。 中身の長さが変わったら `\pagebreak` の位置を動かし直す (頁の画像で左右の段の長さを見る)。
+- 用紙は revtex も既定が letter = [#declare-paper-size](#declare-paper-size)。 版元が組み直す投稿用の原稿では、 用紙は版元の組版が決める。
 
 ## <a id="bibliography-style"></a>Bibliography スタイル
 - **JHEP.bst を使う**（個人的好み）。`note` フィールドも表示するバージョンを使用

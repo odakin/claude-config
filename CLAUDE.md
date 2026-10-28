@@ -98,7 +98,7 @@ claude-config/
 │   ├── jma-obsdl-download.md               # 気象庁の過去観測データ (時別値・日別値等) をスクリプトで一括取得したいとき
 │   ├── jps-talk-submission.md              # 日本物理学会 (JPS) 年次大会の一般講演を申し込むとき + 参加票メールを受けた / 会期前に参加票・領収書を刷るとき + 参加費を所属機関で精算するとき (領収書の宛名)
 │   ├── kakenhi-proposal.md                 # 科研費の研究計画調書 (基盤・挑戦的研究・若手等) を書く/直す/Web 入力するとき + 当年の様式 docx を入手した直後 (= 起草前に scripts/kakenhi-preflight.py で埋め込み指示を吸い出すとき) + 機関事務から差し戻しを受けたとき + 複数種目を同時期に出すとき
-│   ├── latex.md                            # LaTeX を含むリポで作業するとき
+│   ├── latex.md                            # LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document)
 │   ├── launchd-cloudstorage-tcc.md         # launchd agent が ~/Library/CloudStorage/ 配下を読む script を書く前
 │   ├── leaked-password-triage.md           # 使っているサービスから会員情報の流出 (やその疑い) を知らされたとき (パスワードが含まれるか・自分の分が含まれるかが未確定でも) + 同じメールアドレスとパスワードの組を使い回した先を探すとき + パスワードを保存するアプリ (Apple の「パスワード」 など) で「漏洩の危険」 の勧告が大量に出たとき + user にサイトでのパスワード変更を順に頼むとき
 │   ├── machine-route-first.md              # 外部 service / アプリを操作・データ取得する経路を選ぶとき (画面 drive を検討し始めた瞬間) + browser の cookie を再利用する script が login 切れで止まる・本人が毎回ログインに呼ばれるとき / ログインの切れを予告・監視しようとしたとき (#sso-session-recovery) + ログインの内側の配布物 (規則・通知・マニュアル) を読んで記録や文面に写すとき (#keep-fetched-originals) + 月送り・ページ送りが画面の widget だけの一覧を script で読むとき (#page-widget-walk)
@@ -139,7 +139,7 @@ claude-config/
 │   ├── office-files.md                     # Office file (Excel/Word/PDF/PowerPoint) 仕事に入るとき最初に開く入口
 │   ├── output-cap-death-loop.md            # worker session (spawn_task / headless claude -p / Agent subagent / 別ベンダー CLI 〔Codex 等〕) に長い導出・生成 task を渡す spec を書くとき・spawn した worker が「isRunning なのに成果ゼロ」 のとき・受け手の context 窓が小さい (自動圧縮が早い) と分かっているとき
 │   ├── overleaf-integration.md             # Overleaf↔GitHub 連携 repo を設定・sync するとき
-│   ├── paper-audit.md                      # 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison)
+│   ├── paper-audit.md                      # 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text)
 │   ├── paper-submission.md                 # 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき
 │   ├── passkey-cross-device.md             # パスキーでしか入れないサービスに別の端末 (スマホ・別の PC) から入れないとき + 「この QR コードをスキャン」 と出て止まったとき + パスキーを 2 台目の端末に足すとき + パスキーの保存先を選ぶ画面が出たとき
 │   ├── paste-destined-plain-text.md        # Claude が書いた文面 / コマンドを user が手で貼り付けて実行・投稿する workflow を設計・実行するとき (= 貼り先が plain text 入力欄でも terminal でも) + 他人が自分の mail client から送る英文の draft を渡すとき (#non-ascii-via-other-client)

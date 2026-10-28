@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison)
+when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text)
 category: paper
 summary: multi-paper merger 等の forward ref / 重複 subsection / structure issue を Phase1 機械検出 + Phase2 section-by-section AI 精読 + findings.yaml で体系 audit
 -->
@@ -643,6 +643,15 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 <a id="erratum-downstream-sweep"></a>**Downstream 3 (他人の論文と、 同じ系統の論文)**: 誤りが published なら、 自分の稿の grep (上の Downstream) に加えて 2 つを確かめる。
 (i) **引用している論文が誤った式を値として使っていないか** — INSPIRE で訂正する論文ごとに「この論文を引く論文」 を引いて和集合を取り、 訂正する論文どうしの相互引用と、 2 つ以上を引く本の重複を分けて数える (`ai-collaboration/scripts/inspire-bibliography.py citing <arXiv|recid>...`。 INSPIRE が保管する出版社の PDF の URL も出る)。 各本の PDF で引用の番号を全部拾い (範囲 [21–25] を展開、 `ai-collaboration/scripts/pdf-citation-contexts.py`)、 その周りで式を値として使っているかを読む。 INSPIRE に出ない手元の未発表の原稿は、 symlink を辿る grep (`command grep -R`) で引用の key を探す。 結果は「使っている式 / 影響の有無 / 根拠の頁」 の表にし、 読めなかった本は理由つきで未確認と書く (入手の経路 = [`web-tools.md#paper-pdf-routes`](web-tools.md#paper-pdf-routes))。
 (ii) **同じ系統の他の論文に同じ形の誤りが独立に入っていないか** — 規格化の検査 (同じ状態の内積 = 1 など) を各論文の規約で当て、 検算の script には印字の形が別の値を出す foil を入れる ([`physics-verification-cycle.md#foil-negative-control`](../../ai-collaboration/conventions/physics-verification-cycle.md#foil-negative-control))。 古い論文の特別な場合 (パラメータが等しい場合など) の式は、 訂正後の式の同じ特別な場合と比べると、 訂正の独立な支えになる (Check 4 の姉妹)。 「その論文も同じ量を持っているはず」 は本文を読むまで仮説 (実測: 検査する量そのものが論文に無かった)。 他人の論文で誤りを見つけたら、 既定で非公開。
+
+<a id="erratum-text"></a>**正誤表の本文の書き方**: 正誤表は短いほどよい。 読者は訂正を当てたいだけなので、 次の形にする (実測: 経緯や確かめた範囲を書いた初稿は、 著者の直しを重ねて下の形に縮んだ)。
+- **最初の 1 文で結論への影響を言う** — 「下の訂正は論文の結論を変えない」 を冒頭に置くと、 全部の訂正にかかる。 特定の結果 (ある量が変わらない、 など) を理由に「だから結論は変わらない」 とつなぐと、 その結果だけが論文の結論のように読まれる。 値が変わる訂正があるなら「小さな変更」 のような評価は書かない。
+- **訂正は「X should read Y」「should have a minus sign」「should be deleted」 の形だけで書く** — 「〜は誤っている (is in error)」 と宣言してから直し方を書かない。 正しい式を挙げない (挙げていない式は正しいと読まれる)。 誤りが生じた経緯 (どの縮約で符号が落ちたか) は正誤表に書かず、 共著者への便に書く。
+- **主な誤りとその帰結 → それとは独立の誤り → typo の一覧、 の順** — 主な誤りの帰結 (直した量で成り立つ関係) は同じ段落に 1 文で置く。 独立の誤りは段落を分ければ足り、 「Independently of …」 の前置きは要らない。 帰結と独立の誤りを 1 つの一覧に混ぜると、 どれが主な誤りから来るのか読めない。
+- **誤りと typo の線引き** — 結果・値・主張として誤った値が残るなら誤り。 途中の行・添字・二重に書いた因子のように、 結果は他の箇所で正しく書かれているなら typo。 線引きは著者が決める。 一覧の前置きも「直すべき」 の形 (should be corrected) にする (受け身の現在形 are corrected は、 正誤表がもう直したように読める)。 文脈で明らかな添字の取り違えを載せるかも著者に任せる。
+- **同じ種類の typo は 1 項目にまとめる** — 和と演算子の添字の取り違えを 1 項目、 消す因子・余計な引数を 1 項目 (「… should be deleted; likewise …」)。 項目は「Eqs. (a) and (b), second line:」 のように式番号と行で始め、 2 つの式の行の構成が違うなら「Eq. (a), second line, and Eq. (b)」 と書き分ける。
+- **新しい記号を持ち込まない** — 正しい右辺を書くのに論文に無い略記を作らず、 式を直接書く。 論文が一般の関数に同じ括弧の記法を使っているなら、 定義の文も要らない。
+- **組版と渡し方** — revtex で 1 頁の正誤表を組むときの崩れ = [`latex.md#revtex-short-document`](latex.md#revtex-short-document)。 共著者にソースを渡すときは、 作業メモのコメント (著者の指示の引用・検算の記録) を外した写しにする = [`paper-submission.md#arxiv-package-tool`](paper-submission.md#arxiv-package-tool) の `arxiv-package.py build` がコメント除去と元の PDF との文字の一致の確かめを 1 回で行う (1 頁の正誤表でも通る、 実測)。
 
 ## <a id="figure-input-is-a-claim"></a>図に入れる量は本文が導いた量 — 「置き換えられるはず」 の外部値は新しい主張 (2026-09)
 
