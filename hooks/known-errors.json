@@ -135,6 +135,11 @@
       "match": "unsupported operand type(s) for |: 'type' and 'NoneType'",
       "doc": "conventions/python-env.md#new-syntax-on-old-python",
       "hint": "3.10 からの型注釈 (X | None) を 3.9 の python で読んだ (script の誤りでなく版の問題)。 3.10 以上の python で回し、 依存が要るなら新しい python で作業用の venv を作る"
+    },
+    {
+      "match": "encountered in matmul",
+      "doc": "conventions/scientific-computing.md#cas-library-traps",
+      "hint": "macOS の Accelerate に繋いだ numpy が複素行列の積で出す偽の警告のことがある。 消す前に答えの分かっている量を 1 つ再現して確かめ、 確かめたら積を np.einsum で書き直す (警告を握り潰さない)"
     }
   ]
 }
