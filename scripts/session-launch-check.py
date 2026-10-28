@@ -33,7 +33,8 @@ mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
                               script に `[stop-at: <ISO 時刻>]` を求め、 その時刻を session ごとの記録
                               (<state>/<session>.stop-at.json) に残す。
     PreToolUse(ほかの全 tool)   記録した時刻を過ぎたら、 subagent (hook の入力に agent_id) の tool 呼び出しを止め (結果を返す
-                              StructuredOutput は通す)、 本体には workflow を TaskStop で止めて本人に聞くよう 1 回だけ知らせる。
+                              StructuredOutput と SubagentHandback は通す = 止めると手持ちの結果も親に届かない、 実測)、
+                              本体には workflow を TaskStop で止めて本人に聞くよう 1 回だけ知らせる。
                               記録は時刻の 6 時間後に消える。 外す = `--clear-stop-at` (CLAUDE_CODE_SESSION_ID の session)。
 
 BOARD_FIRST: `~/.claude/session-launch-board-first.on` が在るか env SESSION_LAUNCH_BOARD_FIRST=1 のとき、 initiation が
@@ -601,7 +602,9 @@ MODEL_OPT = re.compile(r"\bmodel\s*:|[{,]\s*model\s*[,}]")
 STOP_AT = re.compile(r"\[stop-at:\s*([^\]]+)\]")
 NAMES_RESET = re.compile(r"リセット|\breset\b", re.I)
 STOP_AT_GRACE = 6 * 3600         # the state is dropped this long after the stop time
-STOP_AT_PASS = ("StructuredOutput",)   # a stopped agent with a schema still has to hand back its result
+STOP_AT_PASS = ("StructuredOutput", "SubagentHandback")   # a stopped agent still has to hand back its result
+# (measured: with only StructuredOutput passed, a stopped plain Agent's SubagentHandback was refused 3 times and the
+#  parent got "ended without delivering a report")
 
 
 def workflow_source(ti: dict, cwd: str) -> str:
@@ -1152,6 +1155,8 @@ def selftest() -> int:
         check("stop-at: after the time a subagent's call → blocked", rc == 2 and "返して終える" in err)
         check("stop-at: the stopped agent can still hand back its result",
               wf({}, tool="StructuredOutput", agent_id="a1")[0] == 0)
+        check("stop-at: ... also a plain Agent's report (SubagentHandback)",
+              wf({"message": "x"}, tool="SubagentHandback", agent_id="a1")[0] == 0)
         rc, out, _ = wf({"command": "ls"}, tool="Bash")
         check("stop-at: the main thread is told once to stop the workflows", rc == 0 and "TaskStop" in out)
         check("stop-at: ... and only once", wf({"command": "ls"}, tool="Bash")[1] == "")
