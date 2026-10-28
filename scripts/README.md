@@ -367,6 +367,7 @@
 - **[transcript-tool-calls.py](transcript-tool-calls.py)** — 会話記録にある実際の tool の呼び出しと結果を対にして、 PostToolUse の入力と同じ形の JSON で出す。--selftest 内蔵。
 - **[transcript-tool-result.py](transcript-tool-result.py)** — Claude Code の会話記録 (jsonl) から tool の戻り値を file に取り出す
 - **[tune-seal-image.py](tune-seal-image.py)** — Calibrate a digitized seal PNG against a *printed* reference — stroke width and ink color.
+- **[usage-window-report.py](usage-window-report.py)** — この機械の Claude Code の会話記録から、 ある時間帯に何がどれだけ token を使ったかを、 設定フォルダ × model・session・時間ごとに数える (読むだけ)。
 - **[uyghur-tts.py](uyghur-tts.py)** — Generate Uyghur speech through the public Idirak/MMS-TTS endpoint.
 - **[validate-codex-skills.test.sh](validate-codex-skills.test.sh)** — shipped Codex skills の discovery metadata を検証する
 - **[verification-campaign-report.py](verification-campaign-report.py)** — [forwarder → ai-collaboration/scripts/verification-campaign-report.py] verify-to-learn campaign の集計: ledger.yaml (3 状態 / tier / readings) + git 由来の所要・entries per commit + efficacy proxy (受領側記入 novel_to_requester) を results.md の AUTO block に焼き、👁 未了 ite
