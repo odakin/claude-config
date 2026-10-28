@@ -374,6 +374,13 @@ LCRON_STABLE="$TMP/stable/claude" lengine --workdir "$TMP" --routine "st|skill|$
 [ ! -s "$TMP/out" ] && [ "$(pcmd st)" = "$c1" ] && ok "2 回目は書き換えない (冪等)" || ng "冪等でない: out=$(cat "$TMP/out") $(pcmd st)"
 LCRON_STABLE="$TMP/stable/claude" lengine --workdir "$TMP" --routine "sc|cmd|$CT|0 9 * * *" --install-one sc >/dev/null 2>&1
 case "$(pcmd sc)" in *"export PATH=\"$TMP/stable:"*) ok "cmd 型の新しい plist も PATH の先頭に固定の場所" ;; *) ng "cmd: $(pcmd sc)" ;; esac
+mkdir -p "$TMP/oldfixed"; cp "$SB/claude" "$TMP/oldfixed/claude"; : > "$TMP/oldfixed/.source"   # 前の名前の固定の場所 (道具の印つき)
+LCRON_STABLE="$TMP/oldfixed/claude" lengine --workdir "$TMP" --routine "mv|skill|$SKT|0 9 * * *" --install-one mv >/dev/null 2>&1
+rm -f "$TMP/Library/Application Support/install-launchd-cron/$PREFIX.mv.cron"
+LCRON_STABLE="$TMP/stable/claude" lengine --workdir "$TMP" --routine "mv|skill|$SKT|0 9 * * *" --ensure >/dev/null 2>&1
+c="$(pcmd mv)"
+case "$c" in *"-- \"$TMP/stable/claude\" -p"*) ok "--ensure が前の名前の固定の場所を今の場所へ" ;; *) ng "前の場所のまま: $c" ;; esac
+case "$c" in *"$TMP/oldfixed"*) ng "PATH に前の場所が残る: $c" ;; *"export PATH=\"$TMP/stable:"*) ok "PATH も今の場所が先頭で、 前の場所は消える" ;; *) ng "PATH: $c" ;; esac
 
 echo
 echo "install-launchd-cron.test.sh: PASS=$PASS FAIL=$FAIL"

@@ -94,7 +94,7 @@ esac
 LA_DIR="${LCRON_LA_DIR:-$HOME/Library/LaunchAgents}"   # LCRON_LA_DIR は test 用 override
 LOG_DIR="${LCRON_LOG_DIR:-$HOME/Library/Logs}"
 STATE_DIR="${LCRON_STATE_DIR:-$HOME/Library/Application Support/install-launchd-cron}"   # --ensure の照合済み印
-CAL_VERSION=5   # plist 変換の版 (2 = 各欄の , / N-M / */S / N-M/S + 月 + 日と曜日の OR、 3 = 関門の起動行が失敗を待機と分ける、 4 = skill を stream-json の log 中継で起動 + CLAUDE_ROUTINE_ID、 5 = claude と PATH を版に依らない固定の場所へ)
+CAL_VERSION=6   # plist 変換の版 (2 = 各欄の , / N-M / */S / N-M/S + 月 + 日と曜日の OR、 3 = 関門の起動行が失敗を待機と分ける、 4 = skill を stream-json の log 中継で起動 + CLAUDE_ROUTINE_ID、 5 = claude と PATH を版に依らない固定の場所へ、 6 = 前の名前の固定の場所も今の場所へ)
 DOMAIN="gui/$(id -u)"
 CRON_MODEL="${CRON_MODEL:-}"
 CRON_EFFORT="${CRON_EFFORT:-}"
@@ -296,11 +296,18 @@ def upgrade_cli(cmd, stable):
     if not stable:
         return cmd
     import os
-    cmd = cmd.replace('"%s" ' % os.path.expanduser('~/.local/bin/claude'), '"%s" ' % stable)
     d = os.path.dirname(stable)
 
+    def _old_fixed(p):  # 前の名前の固定の場所 = 道具の印 (.source) を持つ別の dir。 場所を替えても既存の plist が付いてくる
+        return p != d and os.path.isfile(os.path.join(p, '.source'))
+    cmd = cmd.replace('"%s" ' % os.path.expanduser('~/.local/bin/claude'), '"%s" ' % stable)
+    cmd = re.sub(r'"([^"]*)/claude" ', lambda m: ('"%s" ' % stable) if _old_fixed(m.group(1)) else m.group(0), cmd)
+
     def _path(m):
-        return m.group(0) if d in m.group(1).split(':') else 'export PATH="%s:%s"' % (d, m.group(1))
+        parts = [p for p in m.group(1).split(':') if not _old_fixed(p)]
+        if d not in parts:
+            parts.insert(0, d)
+        return 'export PATH="%s"' % ':'.join(parts)
     return re.sub(r'export PATH="([^"]*)"', _path, cmd, count=1)
 
 # 5 欄の名前・plist key・値域。 曜日の 7 は 0 (日曜) と同じ。

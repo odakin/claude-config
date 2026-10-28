@@ -104,7 +104,7 @@ Anthropic 側 fix を待つ前提なら、 dialog が出たときだけ押す運
 - **症状**: launchd の定期 job・常駐の server など、 CLI が**自分で**許可の責任者になる起動 (= 親が app でない。 中継が責任を手放して起動した子も同じ) で、 版が上がるたびにデスクトップ・書類・ダウンロード・cloud storage (File Provider) の許可を全部聞き直す。 dialog の主は版番号の名前。 端末や desktop アプリから起動した CLI は親の app が責任者なので出ない
 - **dialog は答えるまで呼び出しを止める** (実測: 次の folder の要求は、 前の folder に答えた直後に出る = 順に待っている)。 誰もいない時間の無人の run はそこで止まり、 次の予定の run も来ない (launchd は走っている job を重ねて起動しない)
 - **原因**: macOS はこの形の client を **実行 file の path** で記録する (unified log の tccd の行が `identifier_type=Path, identifier=<…/versions/<版>>`)。 記録と照合する要件は署名の designated requirement = **identifier + Team ID** で、 版を跨いで同じ (log の `kTCCCodeIdentityAuthority = kTCCCodeIdentityDesignatedRequirementAuthority`)。 = path さえ変わらなければ、 一度の許可が次の版にも当たる。 native installer は版ごとに新しい file を置いて launcher の symlink を付け替えるので、 path が毎回変わる
-- **直し方**: launcher の指す版を **版に依らない固定の場所に複製**し、 責任者になる起動をそこから行う。 道具 = [`scripts/claude-stable-path.sh`](../scripts/claude-stable-path.sh) (既定 `~/.local/share/claude-stable/claude`)
+- **直し方**: launcher の指す版を **版に依らない固定の場所に複製**し、 責任者になる起動をそこから行う。 道具 = [`scripts/claude-stable-path.sh`](../scripts/claude-stable-path.sh) (既定 `~/.local/share/claude-stable-path/claude`)
   - **複製は APFS の clone** (`cp -c` = 容量を食わない)。 hard link にしない (= 同じ file に名前が 2 つあると、 process の path がどちらで報告されるか保証されない)
   - **差し替えは一時名に置いて `mv`** (= 走っている process は古い file を持ったまま壊れない)。 差し替える前に署名を確かめ、 署名の主 (identifier + Team ID) が前の版と違えば差し替えない
   - **launcher は触らない** = 上流の自動更新・古い版の掃除はそのまま動く。 固定の場所から起動した CLI も `claude doctor` で native の install と認識される (実測)
@@ -112,6 +112,8 @@ Anthropic 側 fix を待つ前提なら、 dialog が出たときだけ押す運
   - **揃える契機を 2 つ**: launchd の `WatchPaths` (launcher の dir と versions/ の変化) と、 使う直前の確認 (起動の中継が揃えてから起動する)。 見張りが取りこぼしても run は古い版で走らない
   - **呼び出し側**: 定期 job の起動行の絶対 path と `PATH` の先頭 (= script の中で `claude` を呼ぶ job も同じ file)、 常駐の server の plist の `PATH` の先頭。 常駐の server は止めず、 plist の file だけを直して次の起動から (層1 の engine = [`install-launchd-cron.sh`](../scripts/install-launchd-cron.sh) / [`install-remote-control-server.sh`](../scripts/install-remote-control-server.sh) / [`claude-stream-log.py`](../scripts/claude-stream-log.py))
 - **切り替えた直後に 1 回ずつ** 聞かれる (固定の場所は新しい path)。 これが最後 = 以後の版では出ない。 誰もいない時間の run で初めて出ると止まるので、 切り替えたら人がいる時に一度起こして答えておく
+  - **1 folder ずつ起こし、 答えを log で確かめてから次へ**: 固定の場所の CLI を責任を手放した形で起こし、 SessionStart hook で 1 つの folder だけを読ませる (`--setting-sources project,local` + `--settings` で `additionalDirectories` を空にする = CLI 自身の走査で他の folder の dialog が続けて出ない)。 各回の後に tccd の `AUTHREQ_RESULT` の `authValue` (2 = 許可、 0 = 拒否) を見る。 続けて出した 1 回では、 1 つの folder が dialog の出た 0.2 秒後に拒否で記録された (実測、 人が押せる時間ではない)
+  - **拒否で記録された項目は、 システム設定の「ファイルとフォルダ」 に出てこないことがある** (実測: 開き直しても出ない) = 画面のスイッチでは直せない。 そのときは固定の場所の **dir の名前を替える** (macOS には新しい項目になる) → 上の形で 1 つずつ聞き直す。 道具・中継・登録の engine は、 前の名前の dir (道具の印 `.source` を持つ) を指す起動行も今の場所へ向ける
 - **届かないもの**:
   - **background session (`claude --bg`)**: CLI が自分の daemon を launcher の path で起動し、 worker を versions/ の path から起こす (実測) = 呼ぶ側の path では変わらない (上流の範囲)
   - **無人の run だけ folder を除く形**: `--settings` の `permissions.additionalDirectories` は既存の list に足されるだけで、 list から消すことはできない (実測)。 `--setting-sources` で user の設定を読まない形なら list から消えるが、 user の agent と skill も読まなくなる (実測) = 固定の場所の許可で止めるほうが副作用が無い

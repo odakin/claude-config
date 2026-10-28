@@ -8,7 +8,7 @@
 #   全部聞き直しになり、 答えるまでその run は止まる (実測)。 path を固定すれば、 一度の許可が次の版にも当たる。
 #
 # 仕組み:
-#   固定の場所 = $CLAUDE_STABLE_DIR/claude (既定 ~/.local/share/claude-stable/claude)。 launcher の指す版を
+#   固定の場所 = $CLAUDE_STABLE_DIR/claude (既定 ~/.local/share/claude-stable-path/claude)。 launcher の指す版を
 #   APFS の clone (`cp -c` = 容量を食わない) で一時名に置き、 署名を確かめてから `mv` で差し替える
 #   (= 走っている process は古い file を持ったまま壊れない)。 hard link にしないのは、 同じ file に名前が
 #   2 つあると、 macOS が process の path をどちらの名前で報告するかが保証されないため (clone なら別の file = 曖昧さが無い)。
@@ -34,7 +34,7 @@
 
 LAUNCHER="${CLAUDE_NATIVE_LAUNCHER:-$HOME/.local/bin/claude}"
 VERSIONS_DIR="${CLAUDE_NATIVE_VERSIONS:-$HOME/.local/share/claude/versions}"
-STABLE_DIR="${CLAUDE_STABLE_DIR:-$HOME/.local/share/claude-stable}"
+STABLE_DIR="${CLAUDE_STABLE_DIR:-$HOME/.local/share/claude-stable-path}"
 STABLE="$STABLE_DIR/claude"
 STAMP="$STABLE_DIR/.source"
 LABEL="com.claude-config.claude-stable-path"

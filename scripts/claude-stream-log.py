@@ -222,8 +222,10 @@ def _stable_cli(prog: str) -> str:
     if os.environ.get("CLAUDE_STABLE_PATH") == "0" or sys.platform != "darwin" or not os.path.isfile(tool):
         return prog
     launcher = os.environ.get("CLAUDE_NATIVE_LAUNCHER") or os.path.expanduser("~/.local/bin/claude")
-    stable = os.path.join(os.environ.get("CLAUDE_STABLE_DIR") or os.path.expanduser("~/.local/share/claude-stable"), "claude")
-    if prog not in (launcher, stable):
+    stable = os.path.join(os.environ.get("CLAUDE_STABLE_DIR") or os.path.expanduser("~/.local/share/claude-stable-path"), "claude")
+    # 前の名前の固定の場所 (道具の印 .source を持つ dir の claude) を指す起動行も、 今の固定の場所へ向ける
+    old_fixed = os.path.basename(prog) == "claude" and os.path.isfile(os.path.join(os.path.dirname(prog), ".source"))
+    if prog not in (launcher, stable) and not old_fixed:
         return prog
     try:
         out = subprocess.run(["/bin/sh", tool, "--print"], stdin=subprocess.DEVNULL, capture_output=True,
