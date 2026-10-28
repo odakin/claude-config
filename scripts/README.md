@@ -123,6 +123,7 @@
 - **[claude-notify.sh](claude-notify.sh)** — macOS 通知を出す唯一の入口 (= 押すと行き先がある通知)。
 - **[claude-session-whoami.py](claude-session-whoami.py)** — session の host / surface (desktop|CLI) / account を機械同定する probe。
 - **[claude-stream-log.py](claude-stream-log.py)** — 無人の `claude -p --output-format stream-json` を起動し、 流れてくる event を人が読める log に直して書く (全部の assistant の文・tool の名前・hook の知らせ・結果。 終了値は claude のもの、 --selftest)
+- **[cli-binary-read-check.py](cli-binary-read-check.py)** — Claude Code 本体 (端末の CLI の binary・desktop の埋込 engine・app の bundle) を使い捨ての python / grep / strings で読む Bash command を見つけ、 既存の道具 claude-app-bundle.py を知らせる engine (PreToolUse の Bash の hook が呼ぶ、 知らせるだけで止めない。 --selftest)
 - **[clip-copy.sh](clip-copy.sh)** — 貼り付け用の文面をクリップボードに入れ、読み戻して一致を確かめる (macOS。 日本語などの非 ASCII も通す)
 - **[clipboard-cleaner.py](clipboard-cleaner.py)** — クリップボード一発整形 CLI（PDF コピーの段落内改行除去 + pbcopy 書き戻しで RTF 書式除去、明示発火のみ・常駐なし、--selftest 内蔵、hammerspoon ⌃⌥⌘V から呼ばれる、conventions/clipboard-cleaner.md）
 - **[close-pdf-form-boxes.py](close-pdf-form-boxes.py)** — Excel→PDF 出力で落ちたフォームの枠罫線を検出して閉じる。
