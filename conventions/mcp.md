@@ -22,12 +22,12 @@ MCP ツールを使うリポで適用。CLAUDE.md から参照: `~/Claude/claude
 
 ## <a id="claude-mcp-project-resolution"></a>`claude mcp` の project 解決ルール (注意)
 
-`claude mcp add` / `claude mcp remove` の default scope は **local** = 「対象 Claude Code project 内の MCP 登録」(`~/.claude.json` の `projects[<path>].mcpServers` 配下)。"対象 project" は cwd ではなく **cwd から ancestor を辿って最初に見つかる `.claude/` を持つディレクトリ** で決まる (= claude CLI が project と認識するディレクトリ)。
+`claude mcp add` / `claude mcp remove` の default scope は **local** = 「対象 Claude Code project 内の MCP 登録」(`~/.claude.json` の `projects[<path>].mcpServers` 配下)。"対象 project" は **cwd が git repo の中ならその repo の root、 そうでなければ cwd そのもの** で決まる。 `.claude/` を持つ親の dir へは辿らない (実測: engine 2.1.309 の `claude mcp get`。 `~/Claude` (git でない、 `.claude/` あり) に登録した server は、 `.claude/` を持たない git repo `~/Claude/<repo>` からも、 その子 dir からも、 git でない子 dir `~/Claude/tmp` からも見えなかった)。
 
 セットアップ用の bash スクリプト等が、**自分自身のリポ内**から `claude mcp` を呼ぶと、登録先が想定外の project に入る:
 
 - 期待: `~/Claude` project に gmail server を登録
-- 実態: スクリプトが `~/Claude/gmail-mcp-config/` 配下から走り、`~/Claude/gmail-mcp-config/.claude/` を最寄り `.claude/` として resolve → 登録先が `gmail-mcp-config` project になる
+- 実態: スクリプトが `~/Claude/gmail-mcp-config/` 配下から走り、 その git repo の root (`gmail-mcp-config`) を project として resolve → 登録先が `gmail-mcp-config` project になる
 
 回避策:
 
