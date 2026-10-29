@@ -1157,6 +1157,7 @@ failure の解剖 (3 点が独立に効く):
 対策 pattern:
 - **機会 intake 規律 (= [`§8.17`](#broadcast-obligation-blind-spot) の義務版と対)**: 〆切つきの機会を認識した同 turn で、 lifecycle ledger に検討 entry を立てる **or** 「検討しない」 を明示して閉じる (= declared skip)。 「読めば終わり」 arm から機会 class を明示的に除外する。
 - **〆切抽出器は書式と距離の両方を audit**: (a) 早期告知が horizon 外に落ちないか (= first-seen surface / 窓連動)、 (b) 締切語の**前置/後置**など書式 variance に頑健か ([`§8.8`](#proxy-blind-spot) の書式 proxy 版)、 を test case に含める。
+- <a id="deadline-net-three-windows"></a>**〆切・予定の網は 3 つの窓を合わせて点検する** (取得・合成・表示): (a) **取得** = 検索結果を 1 頁だけ取ると、 窓の古い側が件数の多い日ほど黙って落ちる = 頁を送って窓の全件を取り、 上限に当たったら 1 行出す。 (b) **合成** = mail を見る窓 W 日と一覧に出す窓 V 日が別々に決まっていると、 日付が到着から W + V 日より先の予定・〆切は一度も一覧に出ない = finding を日付まで持ち越すか、 遠い分を初見で 1 行出す。 (c) **表示の改修** (注入の統合・予算での畳み) は、 前の RCA で足した段を黙って消しうる = 改修の受け入れに、 前の RCA の fixture を表示の面 (session 開始の注入) で通す。 実測: 3 つが重なり、 抽出器が拾える早期告知が一度も一覧に出なかった。
 - **FP は分業で受ける**: 機会案内は高 volume ([`§8.21`](#noise-obligation-signal-sharing) の noise 圧と同源) なので「全案内 surface」 は noise 化する — 〆切を持つ mail だけ機械が surface + 参加検討の判断は人間、 の分業に切る。
 
 reflex: mail triage / surfacing の網を列挙・設計するとき「**義務でも応答でもない、 〆切つきの機会はどの網が拾うか**」 を 1 行問う。 答えが「人間が読めば」 なら、 その class は網の外だと**宣言**する (= silent 死角を declared 死角に)。
