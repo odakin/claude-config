@@ -941,6 +941,14 @@ sections:
     legacy: "8.85"
     level: 3
     title: "8.85 網羅的に挙げる検出器は、 当たりの率でなく、 問題の無い側での発火と上位の当たりで測る"
+  - id: overwrite-needs-read-token
+    legacy: "8.86"
+    level: 3
+    title: "8.86 欄を丸ごと置き換える道具は、 読んだ印を求める — 上書きされる中身を見せるだけでは、 絞った出力で消える"
+  - id: state-field-one-direction
+    legacy: "8.87"
+    level: 3
+    title: "8.87 状態の欄が 1 つの向きしか持たないと、 同居した逆向きの義務が gate から落ちる — 向きごとに欄を分け、 gate は一次の記録も見る"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
