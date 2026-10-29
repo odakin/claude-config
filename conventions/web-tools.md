@@ -308,7 +308,7 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 |---|---|---|
 | 古い scan PDF（例: 日本気象学会「天気」 1990 年代以前、CCITT FAX 圧縮の bitmap） | 本文テキスト抽出不可（画像 PDF） | CiNii / AGU 等の abstract page、後継論文の citation 中の要約 |
 | Wiley Online Library / ResearchGate / Elsevier | 403 Forbidden | arXiv preprint、著者個人ページ、ADS abstract |
-| ADS (`ui.adsabs.harvard.edu/abs/...`) | abstract 取得可 | 引用関係・要旨確認に有効 |
+| <a id="ads-human-verification"></a>ADS (`ui.adsabs.harvard.edu/abs/...`) | curl には「Human Verification」 の頁 (AWS WAF の確認の script) を返し、 WebFetch には HTTP 405 を返すことがある (実測)。 `adsabs.harvard.edu/full/...` も通らなかった | 確認の頁を通す操作はしない。 物理なら INSPIRE の record (`inspirehep.net/api/literature?q=…`)、 他は ADS の API (token が要る) か OpenAlex・Crossref。 学会の講演要旨 (BAAS など) で ADS にしか無いものは「未確認 (取得先が機械の読み取りを断る)」 と書く |
 | arXiv (`arxiv.org/abs/...`) | フルテキスト OK | 物理・数学・CS 系の第一選択 |
 | CiNii (`ci.nii.ac.jp/naid/...`) | 旧 `naid` URL は `cir.nii.ac.jp/crid/...` に 301 redirect | redirect 先で再 WebFetch |
 | arXiv **PDF** (`arxiv.org/pdf/<id>`) | WebFetch は PDF stream を summarizer に渡し「binary で読めない」 と返す (abs page は OK)。 取得物は harness の tool-results dir に落ちる (= sealed review では deny path) | `curl -sL -o x.pdf https://arxiv.org/pdf/<id> && pdftotext -layout x.pdf x.txt` を作業 dir で、 `grep -n` で該当箇所を引く (2026-09 実測: 7 本 + 41 pp まで問題なし) |
@@ -319,7 +319,7 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 
 ### How to apply
 
-- arXiv ID があれば arXiv → なければ ADS abstract → 後継論文の citation 経由、の順で確認する
+- arXiv ID があれば arXiv → なければ INSPIRE・OpenAlex の要旨 (ADS の頁は上の行のとおり機械に読ませないことがある) → 後継論文の citation 経由、の順で確認する
 - 古い和文論文は本文 PDF が画像形式なら諦めて、引用している後継論文の本文中要約を信用する
 - 商用 publisher の paywall ページは内容が取れないので時間を浪費しない
 - ⚠️ **`pdftotext -layout` は 2 段組の論文で左右の段を同じ行に混ぜる**。物理・数学の論文 (REVTeX 等) の
@@ -352,6 +352,7 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
 - **INSPIRE (高エネルギー物理)**: 全文検索 `fulltext:"…"` は INSPIRE が全文を持つ論文 (主に arXiv) だけを見る = 範囲にそう書く。 要旨の句は `abstracts.value:"…"` で引け、 `and` で組める (`abstract:` の形は 0 件を返すことがある、 実測)。 被引用 `refersto:recid:<recid>` で集めて題・要旨で絞ると、 範囲を数で書ける。 ⚠️ 複合の式の罠 2 つ (`arxiv:<id>` は他の条件と AND にならない / `de > 年` はその年を含まない) と書き方の正本 = [`ai-collaboration/scripts/inspire-bibliography.py`](../../ai-collaboration/scripts/inspire-bibliography.py) 冒頭の「API のこつ」。 陽性対照の式にも意味の無い語の foil を当て、 0 件になるのを先に見る
 - **対照の式が期待と違ったら、 条件を 1 つずつ外して原因を決める**: 2 つの条件を組んだ式の結果から、 片方の不具合を結論しない (実測: 論文の id の条件が他の条件と組めない罠を、 日付の条件の不具合と読み違えた)。 片方だけを変えた式をそれぞれ回してから、 どちらが効いていないかを書く
 - **候補を「新しく見つけた」 と書く前に、 その project の記録 (note・計画・文献の bib・前の検索の記録) を候補の名で引く** (実測: 前の記録が既に扱っていた系統を新顔と書きかけ、 commit の後の点検で直した)。 外の検索の null から不在を言う前に内の記録を引くのと同じ点検の、 逆向き
+- <a id="not-published-claim"></a>**「その program・方式は公表されていない」「その資料は有料で読めない」 と書く前に 3 か所を引く**: (1) その program で図を作った論文の本文 (方法・技術の節に方式の一部が載っていることが多い。 program の頁が「公開していない」 と言うのは code のことで、 方式のことではない) (2) 著者の他の著作 (INSPIRE の `a <著者名>` で全件の題を見て、 可視化・実装の題を開く。 学会の講演要旨も数に入れる) (3) 論文が有料でも、 配布物 (program・表・source) は著者の機関の頁で無料のことがある = 「配布物も有料」 と書く前に配布の頁を探す (実測: 別の検査が配布物を有料と書いて未確認にしていたが、 配布の頁で source と表が無料で取れ、 判定が付いた)。 書くときは、 公開されていないもの (program) と公表されている部分 (方式の何が、 どの論文のどの節に) を分ける
 - **論文の PDF の本文を語で引くとき**: text にしたら NFKC で合字 (`ﬁ` `ﬂ`) を畳んでから当てる。 行ごとに当てるなら、 行をまたぐ句は当たらない = 1 行に収まる部分で引く (実測: 頁にある句が 0 件と出た)。 0 件を「本文に無い」 と書く前に、 この 2 つを外して確かめる
 - **Semantic Scholar は鍵なしの利用ですぐ HTTP 429** (実測)。 打ち直しを連打しない = 検索ログに「使えなかった」 と書く
 - **Crossref の `query.bibliographic` の total-results は関連度の母集団** (数百万件になる) = ヒット数として書かない。 上位だけを見る
