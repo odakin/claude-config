@@ -41,7 +41,7 @@ claude-config/
 <!-- AUTO-TREE:conventions BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check、 源 = conventions/*.md 冒頭の doc-meta。 表示 = when 〔trigger〕 のみ、 詳細 summary は conventions/README.md 側 = 2026-09-01 auto-load 税 縮退) -->
 ├── conventions/          # ドメイン固有規約 (各行の説明 = doc-meta の when 〔いつ読むか〕。 詳細 summary + カテゴリ index = conventions/README.md)
 │   ├── academic-program-verification.md    # 研究者向けの割引・無償プログラム (AI ベンダーの academic plan 等) に申請するとき + 所属確認フォームの「研究室ページ」「機関メール」 欄を埋めるとき + 審査で即時不合格になったとき + 手動審査で不承認になり問い合わせるとき (#after-decline)
-│   ├── actor-attribution.md                # 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸) + 記録に「決定」「方針」「担当」 と書く瞬間 (= 決定の状態の軸、 #decision-state-at-record-time)
+│   ├── actor-attribution.md                # 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸) + 記録に「決定」「方針」「担当」 と書く瞬間 (= 決定の状態の軸、 #decision-state-at-record-time) + owner の名義で出す文面に予定・約束を書く瞬間 (#plan-not-owner-promise)
 │   ├── agent-rule-ownership.md             # agent が規則・禁止・必須手順を適用外と判断する前、規則や検査の配線・例外を変更する前、規則との衝突を理由に別経路を選ぶ前
 │   ├── android-chromium-remote-debug.md    # Android 実機の Brave/Chrome を remote debug (WiFi ADB + CDP) するとき
 │   ├── ask-user-question.md                # AskUserQuestion (選択肢 UI) の使用可否・使い所を判断するとき

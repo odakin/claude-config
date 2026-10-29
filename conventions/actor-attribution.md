@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸) + 記録に「決定」「方針」「担当」 と書く瞬間 (= 決定の状態の軸、 #decision-state-at-record-time)
+when: 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸) + 記録に「決定」「方針」「担当」 と書く瞬間 (= 決定の状態の軸、 #decision-state-at-record-time) + owner の名義で出す文面に予定・約束を書く瞬間 (#plan-not-owner-promise)
 category: harness-core
-summary: carrier proxy (= commit author / push 者 / 送信者 / 記録の書き手) を内容の判断主体・発言主体と等値しない — 帰属 5 規律 (proxy 種類の明示 / collaborative default = group product / inline marker = 宛先 tag / 発言者 ≠ 記録者 / load-bearing 帰属は複数 proxy verify) + claim-target 軸 (= 主張は誰についてのものか — 自己生成した名指しの無検証断定・内部略称の衝突展開) + 決定の状態の軸 (= 決定 / 提案 / 他 session の自己申告を記録の瞬間に確かめる、 両方向に壊れる) + 機械化不能の honest 限界
+summary: carrier proxy (= commit author / push 者 / 送信者 / 記録の書き手) を内容の判断主体・発言主体と等値しない — 帰属 5 規律 (proxy 種類の明示 / collaborative default = group product / inline marker = 宛先 tag / 発言者 ≠ 記録者 / load-bearing 帰属は複数 proxy verify) + claim-target 軸 (= 主張は誰についてのものか — 自己生成した名指しの無検証断定・内部略称の衝突展開) + 決定の状態の軸 (= 決定 / 提案 / 他 session の自己申告を記録の瞬間に確かめる、 両方向に壊れる。 台帳の予定を owner の一人称の約束として文面に書かない) + 機械化不能の honest 限界
 -->
 # Actor / statement attribution — 行為・発言の帰属規律
 
@@ -62,6 +62,7 @@ carrier 軸・claim-target 軸と別に、 **記録に「決定」「方針」�
     - **書き手**: git author は commit した account であって書き手ではない。 `Co-Authored-By` と session trailer ([`multi-session-coordination.md#session-provenance-trailer`](multi-session-coordination.md#session-provenance-trailer)) で agent を読む。 trailer の付き始めより前の commit は「trailer 無し = 人の commit」 と読まず、 件名の癖・掲示板・会話記録で判定して根拠を書く。 付き始めの commit を証拠の境界として記録する。
     - **どの clone で作られたか**: 手元の reflog に `commit:` として現れるか、 fast-forward の範囲で届いたかを見る。 fast-forward の行は着地点しか出ないので、 `git merge-base --is-ancestor <commit> <着地点>` を直前と直後の着地点に当てて範囲を決める。 範囲で届いたなら別の clone (別のマシン・別の checkout) で作られた。 reflog は clone ごとで期限もあるので、 見えないことは不在の証拠にならない。
     - **確認状況**: review 台帳で、 前提を含む節を誰がいつ確認したかを引き、 「式の整合を確認した」 と「前提が現実の系に当たるか確認した」 を分けて書く。 前提が一度も著者の確認を通っていなければそう明記する。 headline の変更そのものの扱いは [`manuscript-claim-ownership.md`](manuscript-claim-ownership.md)、 前提を lab の量で検算する手順は [`paper-audit.md#regime-premise-in-lab-quantities`](paper-audit.md#regime-premise-in-lab-quantities)。
+15. <a id="plan-not-owner-promise"></a>**台帳の予定を、 owner の一人称の約束として文面に書かない。** agent が owner の名義 (owner の一人称・owner の account や bot) で出す文面を組むとき、 TODO の期日や計画書の段取り (「確かめてから送ります」「何日に出します」) は台帳の予定であって、 owner が相手に約束したことではない。 一人称で書くと、 台帳の予定が owner の約束として相手に届く (実測: 送る前の下書きで owner が気づいた)。 owner の約束として書けるのは、 owner の発言から引けるものだけ。 発言から引けない予定は書かないか、 agent の名義 (書き手の 1 行 = [`discord-bot.md#org-post-byline`](discord-bot.md#org-post-byline)) で書き、 owner を三人称にする。
 
 ## <a id="attribution-evidence"></a>再発 evidence (genericized)
 
