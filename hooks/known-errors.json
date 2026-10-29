@@ -145,6 +145,16 @@
       "match": "object has no attribute '__dict__'",
       "doc": "conventions/data-pipeline-automation.md#importlib-dataclass",
       "hint": "importlib (module_from_spec → exec_module) で読んだ script の @dataclass が、 sys.modules に登録されていないために落ちていることがある (Python 3.9)。 借りる側で exec の前に sys.modules に入れるか、 借りられる側の class を素の class にする"
+    },
+    {
+      "match": "Invalid access token, does not contain scopes",
+      "doc": "conventions/zoom-meetings.md#s2s-oauth-route",
+      "hint": "Zoom の Server-to-Server OAuth app に、 その操作の scope が無い (code 4711)。 エラーが要る scope 名をそのまま出すので、 app の Scopes に足し、 一覧にその名前が並んだのを確かめてから token を取り直す (token に付いた scope の一覧で確かめられる)"
+    },
+    {
+      "match": "User does not exist: me",
+      "doc": "conventions/zoom-meetings.md#presence-from-process",
+      "hint": "Zoom の report の API は userId に me を受け付けない (code 1001)。 GET /users/me の id を userId に使う"
     }
   ]
 }
