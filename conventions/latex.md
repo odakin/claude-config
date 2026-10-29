@@ -289,6 +289,20 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 - `\let\c@table\c@figure` (`\makeatletter` の中で) で表が図の counter を使う。 番号の見た目は `\thefigure` と `\thetable` を同じ形に定義する
 - hyperref の anchor は `figure.…` と `table.…` に分かれたままなので、 種類の名前を付ける参照 ([#named-refs-without-cleveref](#named-refs-without-cleveref)) では「図」「表」 が種類どおりに出る (実測)
 
+## <a id="luatexja-per-command-kanji-weight"></a>1 つの命令だけ和文の字の太さを替える (luatexja) — 和文の字体を 1 つ足し、 縦組みの宣言も添える
+
+- ltjsclasses の `\bfseries` の和文はゴシックの既定の太さで、 命令ごとに太さを選ぶ指定は無い。 用語の強調など特定の命令だけ細めの太字にしたいときは、 和文の字体を 1 つ足し、 その命令の中でだけ選ぶ:
+  ```latex
+  \DeclareKanjiFamily{JY3}{termweight}{}
+  \DeclareFontShape{JY3}{termweight}{m}{n}{<-> s * [\Cjascale] file:HaranoAjiGothic-Regular.otf:-kern;jfm=min}{}
+  \DeclareKanjiFamily{JT3}{termweight}{}% 縦組み (使わなくても宣言する)
+  \DeclareFontShape{JT3}{termweight}{m}{n}{<->ssub*gt/m/n}{}
+  \newcommand{\term}[1]{{\bfseries\kanjifamily{termweight}\kanjiseries{m}\selectfont #1}}
+  ```
+- 寸法と JFM はクラスの和文に合わせる (`\Cjascale`・`jfm=min`)。 合わせないと字の大きさと詰めが本文と変わる。 太さは字の file 名だけで替わる (TeX Live の haranoaji / haranoaji-extra に明朝・ゴシックの太さ違いがある)。 欧文の字は `\bfseries` のまま。
+- ⚠️ 横組み (JY3) だけ宣言すると、 縦組み (JT3) の font shape が無いという警告が出る (実測)。 縦組みを使わない文書でも、 上のように JT3 を `ssub` で既定の字体に置き換えて添える。
+- 替えたら同じ原稿で前と後を組み比べる。 変わる頁がその命令のある頁とちょうど一致し、 字と頁割りが動かないことを確かめる ([#variant-comparison-images](#variant-comparison-images))。
+
 ## <a id="symbol-width-repagination"></a>記号幅の変わる一括置換は、 総頁数が同じまま頁割りだけ動かす — `.aux` の label→頁 で見る (2026-09-12)
 
 **症状**: 記法の一括置換 (下付き添字を縦棒つきの label に替える等) で本文の文字列長が変わると、 総頁数は不変でも**付録の開始頁・表・図の頁**が動く。 目次の頁番号も変わる。
