@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text)
+when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment)
 category: paper
 summary: multi-paper merger 等の forward ref / 重複 subsection / structure issue を Phase1 機械検出 + Phase2 section-by-section AI 精読 + findings.yaml で体系 audit
 -->
@@ -523,6 +523,17 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 4. **gate の worker は project の規約文書を前提でなく検算対象として扱う**: 規約文書に書かれた符号の同定こそ、 定義から導き直す。 起源事例で誤りを見つけたのは、 規約文書より先に辞書を白紙で導いた pass だった。
 
 **Check**: (a) 符号を持つ印字量を列挙し、 各々の外部 anchor と global-flip foil を表 (登録簿) にする。 (b) foil は**入力 (原稿) を反転して** end-to-end で当てる — parse した変数を script 内で反転する foil は parse の取り違えを見ない。 (c) 例外 (traceback) で落ちたのは歯ではない (assertion で落ちること)。 (d) 同型の不変量 = 全体規格化 (kernel-level と action-level の因子 2)、 因子 i、 Levi-Civita の向き、 D = 4 − ε と 4 − 2ε の違い。 比と恒等式に不変な量は全部同じ扱い (全体規格化でも同型の事故が起きうる。 決着は物理観測量の直接計算で付ける)。 機械 backstop = ai-collaboration の [`scripts/check-sign-anchors.py`](../../ai-collaboration/scripts/check-sign-anchors.py) (登録簿の coverage / `--run` = foil の歯を end-to-end で / `--fleet-scan` = fleet のどの検査が変換を見分けるか / `--readers` = どの検査が原稿 file をそもそも開くか / `--deferrals` = 下の carrier 無し「規約差」 の ratchet)。 (e) 「原稿を開く検査は何本か」 は実行時に数える (`--readers` = audit hook)。 source を file 名で grep すると docstring・コメントの言及まで拾って過大になる (起源事例では grep の数が実行時の十倍以上)。
+
+## <a id="negative-norm-pole-assignment"></a>高階微分の逆伝播関数で「どちらの極が負ノルムか」 を言う前に — 留数を直接出し、 正ノルムの向きを外部の錨で決め、 極は繰り込まれた係数で探す
+
+**Pattern** (実測): 2 階と 4 階の項を持つ逆伝播関数 $K(q^2)=aq^2+bq^4$ (Euclid、 宇宙項は除く) の零点を、 教科書の部分分数 $1/(q^4+M^2q^2)=M^{-2}\,[1/q^2-1/(q^2+M^2)]$ に当てて「重い極が負ノルム」 と読む。 この分解は $a,b>0$ を前提にしているので、 全体に負号のある逆伝播関数に当てると 2 つの極の役を取り違える。 零点の位置・係数の比・Ward 恒等式は全体の符号に不変なので、 取り違えはそれらの検査を通る。
+
+**Rule**:
+
+1. **留数を直接出す**: 零点 $q^2=0$ と $q^2=-a/b$ での $1/K$ の留数は $1/a$ と $-1/a$。 必ず逆符号で、 **どちらが負ノルムかは 2 階の係数 $a$ の符号だけで決まる** (重い極が時間的になるのは $ab>0$ のとき)。 形状因子が運動量に依るときは、 留数を微分 ($1/K'$) と零点のまわりの周回積分の 2 通りで出して照合し、 2 つの零点のあいだに他の零点が無いことを偏角の原理で確かめる。
+2. **正ノルムの向きを外部の錨で決める** — 前提にした scenario の符号を「正しい符号」 と置かない: (i) Euclid で $\Gamma_E\supset\frac12\int\phi K\phi$、 重み $e^{-\Gamma_E}$ なら、 Källén–Lehmann の $\rho\ge0$ から留数 $1/K'>0$ が正ノルム (正準なスカラーの Wick 像 $K=q^2+M^2$ と、 Pais–Uhlenbeck の負ノルムの重い極 $K'<0$ で向きを確かめる)。 (ii) tree の作用の符号は絶対量に結ぶ (Einstein–Hilbert なら、 宇宙項つきの作用の S⁴ の saddle が de Sitter のエントロピー $A/4G>0$ を与える符号)。 2 次形式の辞書 (曲率の 2 次の項が逆伝播関数の各成分に与える係数) も、 球面で曲率の符号を確かめた同じ code で導き直す。 (iii) loop で誘起した係数なら、 loop の全体の符号も絶対量に結ぶ (例: Weyl² 項の log の係数は、 どの unitary な自由場でも $-(c/2)$ × log で、 $c>0$ は Weyl anomaly の係数 = $\langle TT\rangle$ の規格化)。 全体反転の foil で、 留数の主張と (iii) の両方が落ちることを確かめる ([#absolute-sign-external-anchor](#absolute-sign-external-anchor))。
+3. **極は繰り込まれた係数で探す**: 2 階の係数を同じ loop の log の項だけから取る読み (冪の発散の列を落とした読み) は物理の読みではない — 落とすには冪の列をちょうど打ち消す必要があり、 残る係数の符号も物理の符号とは限らない。 伝播関数に入るのは繰り込まれた (観測される) 係数で、 極の有無・位置・ノルムはそれを入れて判定する。 log の係数そのもの (正則化に依らない) には意味があり、 意味がないのは log の係数だけで極を論じること。
+4. **cutoff の外の零点で判定しない**: 繰り込まれた係数を入れて零点が cutoff より上に出たら、 その位置は regulator の profile に依る = その有効作用は極の有無を決めない、 と書く。 cutoff より下の零点が出る条件 (2 階の係数を裸の項でどこまで打ち消したら出るか) を数で示す。
 
 ## <a id="closed-form-transcription-carries-its-metric"></a>検証 script の閉形式を数値 notebook に写すときは、 符号を「その閉形式の計量」 ごと写す — 確率の cross 項は $A_0^*A_1$ であって $A_0A_1$ ではない
 
