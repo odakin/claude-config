@@ -298,6 +298,7 @@ MCP ツールは個別操作に最適だが、バッチ操作（一括削除・�
 | `to` パラメータが array で詰まる場合 | Python + API | 2026-05 `@gongrzhe/server-gmail-autoauth-mcp` v1.1.11 の send_email で、 schema は `to: array` だが harness が JSON array を string と誤って serialize し `invalid_type: expected array, received string` を返す事例あり。 文字列 1 個でも array でも fail。 同一 MCP の他ツール (`search_emails` 等) は影響なし。 fallback として Python Gmail API 直接送信を使う (= `~/.gmail-mcp/{account}/credentials.json` + `gcp-oauth.keys.json` を read して `Credentials` 構築 → `service.users().messages().send`)。 詳細実装例: ある grant 申請 repo の specific 助成事業 dir 内の Python 送信 script (= MCP fallback として `service.users().messages().send` を直接呼ぶ pattern) |
 | Google Sheets / Drive 上のスプレッドシート読み | Python + API | MCP server がないため Python 直接が筋。 `mimeType` で分岐: `application/vnd.google-apps.spreadsheet` (Sheets native) → Sheets API、 `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (xlsx upload) → Drive API で `get_media` + `openpyxl` で parse。 詳細パターンは `conventions/google-api-direct-access.md` |
 | Google Calendar の bulk update (recurring 時限シフト等) | Python + API | MCP の `update_event` は 1 件ずつ。 expansion 後の instance を patch する系は API 直接が筋 |
+| <a id="mcp-tool-idle-hang"></a>何本も検索を重ねる調査 (MCP の tool が応答しないまま止まったとき) | Python + API | MCP の tool が応答も進捗も返さずに止まると、 harness は idle timeout まで turn ごと待つ (実測 = 検索 1 本で 1800 秒、 エラー文は `sent no response or progress for`)。 止まったら同じ server を呼び直さず、 同じ認証情報で API を直接叩く script に切り替える (同じ検索が数秒で返った = 実測)。 server 単位の timeout は MCP の設定の `timeout` (ms) で短くできる |
 
 ### スコープに注意
 
