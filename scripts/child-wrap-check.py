@@ -45,13 +45,15 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
 Usage:
   child-wrap-check.py <local_…|transcript id> [...]     照合して出す (exit 0 = 全部畳んでよい / 1 = 残すものがある / 2 = 子が見つからない)
   child-wrap-check.py --wait <local_…> [...] [--since <epoch 秒>] [--max-minutes N]
-        子の turn が --since (既定 = 今の 60 秒前) より後に終わって動いていない状態になるまで待ち、 照合を出す
-        (親が Bash の run_in_background で回す = 終わると親が起こされる。 時間切れ = exit 3)
+        子のどれか 1 つの turn が --since (既定 = 今の 60 秒前) より後に終わって動いていない状態になるまで待ち、 終わった子の
+        照合と、 残りの子を続けて見張る 1 行を出す (親が Bash の run_in_background で回す = 終わると親が起こされる。
+        全部を待つと先に終えた子が残る = 実測。 時間切れ = exit 3)
   child-wrap-check.py <id> --as-of 2026-01-01T00:00:00 照合をその時点までの記録で (RCA の再現。 動きと commit は今の状態)
   child-wrap-check.py --finished [--parent <local_…|transcript id>] --board-root <dir> [...] [--as-of …]
         掲示板の依頼が受け取られたのに畳まれていない子を数える (--parent 無し = この機械の全部の親。 exit 1 = due / wrapped がある)
   child-wrap-check.py --wait-due <local_…> [...] --board-root … [--max-minutes N]
-        子が親の番 (due / wrapped。 ANSWERED_GRACE_MIN が none なら答え終えて ASK_AFTER_MIN 分も) になるまで待って状態を出す (既定 720 分、 時間切れ = exit 3)。
+        子のどれかが親の番 (due / wrapped。 ANSWERED_GRACE_MIN が none なら答え終えて ASK_AFTER_MIN 分も) になるまで待って
+        状態と、 残りの子を続けて見張る 1 行を出す (既定 720 分、 時間切れ = exit 3)。
         本人を待っている子に親が run_in_background で出す = 本人が子の窓で答えて子が終えたとき、 ほかの子が動いていても親が起こされる
   child-wrap-check.py --hook-sendmessage [--rule <参照>]  PostToolUse(SendMessage) の hook 用: 自分の子に wrap を頼んだ
         message なら、 同じ turn に --wait の見張りを出す 1 行を additionalContext で返す (それ以外は何も出さない)
@@ -405,15 +407,18 @@ def turn_done_after(target: str, since: float) -> tuple[bool, str]:
     return False, "まだ始まっていない"
 
 
-def wait(targets: list[str], since: float, max_minutes: float, interval: float = 20.0) -> int:
+def wait(targets: list[str], since: float, max_minutes: float, interval: float = 20.0) -> tuple[int, list[str]]:
+    """Wait until at least one child's turn has ended after `since`; (0, the children done) or (3, []) on time-out.
+    Measured: waiting for all of them left the child that finished first idle until the person noticed."""
     deadline = time.time() + max_minutes * 60
     while True:
         states = {t: turn_done_after(t, since) for t in targets}
-        if all(done for done, _ in states.values()):
-            return 0
+        done = [t for t, (d, _) in states.items() if d]
+        if done:
+            return 0, done
         if time.time() > deadline:
-            print("⌛ 待ち切れなかった: " + ", ".join(f"{t} ({why})" for t, (done, why) in states.items() if not done))
-            return 3
+            print("⌛ 待ち切れなかった: " + ", ".join(f"{t} ({why})" for t, (d, why) in states.items() if not d))
+            return 3, []
         time.sleep(interval)
 
 
@@ -452,7 +457,7 @@ def hook_sendmessage(inp: dict, rule: str) -> str:
     return ("🧺 child-wrap-check: 子 (" + (child.get("title") or to) + ") に wrap を頼んだ。 ほかの子が動いている間は、 子の turn の終わりで"
             " app はこの session を起こさない (知らせは本人の次の発言まで待たされる、 実測)。 この turn のうちに Bash を"
             f" run_in_background で `python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {to} --since {since}`"
-            " を出す (同じ turn で複数の子に頼んだら id を並べた 1 本)。 子の turn が終わるとこの session が起こされ、 畳んでよいかの照合が出る。"
+            " を出す (同じ turn で複数の子に頼んだら id を並べた 1 本。 どれか 1 つが終わると見張りは終わり、 残りを続けて見張る 1 行が出る)。 子の turn が終わるとこの session が起こされ、 畳んでよいかの照合が出る。"
             + (f" 規則 = {rule}" if rule else ""))
 
 
@@ -702,9 +707,13 @@ def wait_due(targets: list[str], roots: list[str], max_minutes: float, interval:
                 continue
             events = load_board(roots, _iso(child["created_ms"] / 1000 - 86400) if child["created_ms"] else "")
             rows.append(finished_state(child, prec["local_id"], sm.transcript_path(prec["cli_id"]) or "", events, instance_name()))
-        if all(_settled(r) for r in rows):
-            print(f"🧺 子 {len(rows)} 件が親の番になった ({time.strftime('%H:%M')}):")
-            print(render_finished(rows))
+        settled = [r for r in rows if _settled(r)]
+        if settled:  # the first child that is the parent's turn ends the watch (the rest are re-watched)
+            print(f"🧺 子 {len(settled)} 件が親の番になった ({time.strftime('%H:%M')}):")
+            print(render_finished(settled))
+            rest = [r["local"] for r in rows if not _settled(r)]
+            if rest:
+                print(f"⏳ まだ親の番でない子 {len(rest)} 件 → 畳み終えたら、 続けて見張る (run_in_background): `{_wait_due_cmd(rest)}`")
             return 0
         if time.time() > deadline:
             print("⌛ 待ち切れなかった:\n" + render_finished([r for r in rows if not _settled(r)]))
@@ -938,16 +947,20 @@ def main(argv: list[str]) -> int:
         return 1 if any(r["state"] in ("due", "wrapped") for r in rows) else 0
     if not a.targets:
         ap.error("子の local_… か transcript id を 1 つ以上")
-    wrap_since = ""
+    wrap_since, targets, rest = "", a.targets, []
     if a.wait:
         since = a.since if a.since is not None else time.time() - 60
-        rc = wait(a.targets, since, a.max_minutes)
+        rc, done = wait(a.targets, since, a.max_minutes)
         if rc:
             return rc
         wrap_since = _iso(since)
-        print(f"🧺 子 {len(a.targets)} 件の turn が終わった ({time.strftime('%H:%M')})。 照合:")
-    rows = [check_child(t, a.as_of, not a.no_wrap_needed, wrap_since) for t in a.targets]
+        targets, rest = done, [t for t in a.targets if t not in done]
+        print(f"🧺 子 {len(done)} 件の turn が終わった ({time.strftime('%H:%M')})。 照合:")
+    rows = [check_child(t, a.as_of, not a.no_wrap_needed, wrap_since) for t in targets]
     print(json.dumps(rows, ensure_ascii=False, indent=1) if a.json else render(rows))
+    if rest:
+        print(f"⏳ まだ終わっていない子 {len(rest)} 件 → 畳み終えたら、 続けて見張る (run_in_background):"
+              f" `python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {' '.join(rest)} --since {int(since)}`")
     if any(not r["found"] for r in rows):
         return 2
     return 0 if all(r["ok"] for r in rows) else 1
@@ -1109,6 +1122,8 @@ def selftest() -> int:
         ok("--wait: idle, last turn end before since → not started yet", not done and why == "まだ始まっていない")
         done, why = turn_done_after(ids("busy")[0], since=0)
         ok("--wait: busy → not done", not done and why == "動いている")
+        rc_w, first = wait([ids("busy")[0], ids("overridden")[0]], _epoch("2026-01-01T01:00:00"), 0.001, 0)
+        ok("--wait: one child done, another still busy → ends with the done one", rc_w == 0 and first == [ids("overridden")[0]])
 
         # ---- board side: a fresh parent with its own children (B-cases) ----
         board = os.path.join(td, "board")
@@ -1217,6 +1232,8 @@ def selftest() -> int:
            "残し" in line and "--wait-due " + cases["owner"][0] in line and f"--board-root '{board}'" in line)
         ok("wait-due: a child due now → returns at once", wait_due([cases["due"][0]], [board], 0.001, 0) == 0)
         ok("wait-due: a child still waiting on the person → times out", wait_due([cases["owner"][0]], [board], 0.0001, 0) == 3)
+        ok("wait-due: one child due, one waiting → ends at once (the rest re-watched)",
+           wait_due([cases["owner"][0], cases["due"][0]], [board], 0.0001, 0) == 0)
         acc["tool_input"]["command"] = f"python3 board.py accept --request {R['open']}"
         ok("hook-accept: a request still open (accept failed) → silent", hook_accept(acc, [board], "") == "")
         acc["tool_input"]["command"] = f"python3 board.py note --request {R['due']}"
