@@ -44,8 +44,10 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
 
 Usage:
   child-wrap-check.py <local_…|transcript id> [...]     照合して出す (exit 0 = 全部畳んでよい / 1 = 残すものがある / 2 = 子が見つからない)
-  child-wrap-check.py --wait <local_…> [...] [--since <epoch 秒>] [--max-minutes N]
-        子のどれか 1 つの turn が --since (既定 = 今の 60 秒前) より後に終わって動いていない状態になるまで待ち、 終わった子の
+  child-wrap-check.py --wait <local_…> [...] [--since <epoch 秒 か ISO>] [--max-minutes N]
+        子のどれか 1 つの turn が、 子の窓に届いた親の最後の wrap の依頼より後に終わって動いていない状態になるまで待ち
+        (依頼の時刻は道具が子の会話記録から引く = --since は渡さなくてよい。 渡した --since が依頼より後なら依頼の時刻に
+        下げる = 実測: 呼ぶ側が「今」 や「10 分前」 を渡して依頼が窓の外になり、 wrap 済みの子が ⏸ になった)、 終わった子の
         照合と、 残りの子を続けて見張る 1 行を出す (親が Bash の run_in_background で回す = 終わると親が起こされる。
         全部を待つと先に終えた子が残る = 実測。 時間切れ = exit 3)
   child-wrap-check.py <id> --as-of 2026-01-01T00:00:00 照合をその時点までの記録で (RCA の再現。 動きと commit は今の状態)
@@ -90,7 +92,11 @@ _bw = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_bw)
 
 WAIT_NOTE = "finished a turn and then reported that it was waiting on the user"
-PEER_FROM = re.compile(r'<cross-session-message from=\\?"(local_[0-9a-f-]+)')
+PEER_FROM = re.compile(r'<cross-session-message from=\\?"(local_[0-9a-f-]+)')  # kept for callers; scan uses _peer_messages
+PEER_TAG = re.compile(r'<cross-session-message ((?:[a-z-]+=\\?"[^"\\]*\\?"\s*)+)>(.*?)(?:</cross-session-message>|$)', re.S)
+PEER_ATTR = re.compile(r'(from-session|from)=\\?"([^"\\]*)')
+RECENT_REQUEST_MIN = 30  # --wait: a parent's wrap request older than this (before the watch started) is an earlier job's
+DELIVERY_GRACE_S = 60  # --wait without a recent request: the first seconds wait for the request to land in the child's window
 MAX_COMMITS = 30
 RETRY_TEXTS = {"Try again"}  # the app's retry after an API error (measured on the desktop app)
 # Latin-letter boundaries, not \b: Python counts kana as word characters, so \bwrap\b misses 「wrapして」.
@@ -114,6 +120,19 @@ ASK_AFTER_MIN = 10  # an "answered" child idle this long is raised once as "ask 
 RAW_ROOTS: list[str] = []  # the --board-root values as given (patterns), repeated in the commands the hooks suggest
 CHILD_DAYS = 14  # children are looked for among app records touched this recently
 STATE_DIR_DEFAULT = os.path.expanduser("~/.claude/state/child-finished-stop")
+
+
+def _peer_messages(blob: str) -> list[tuple[str, str]]:
+    """(sender's local_… id, text) of each cross-session message in a JSON-dumped transcript entry. The sender is `from` when
+    it is a local_… id, else `from-session` (measured: a message sent to a `uds:/…sock` address arrives with
+    from="uds:…" and from-session="local_…" = only `from` missed the parent's messages sent that way)."""
+    out = []
+    for attrs, text in PEER_TAG.findall(blob or ""):
+        a = dict(PEER_ATTR.findall(attrs))
+        frm = a.get("from", "") if a.get("from", "").startswith("local_") else a.get("from-session", "")
+        if frm.startswith("local_"):
+            out.append((frm, text))
+    return out
 
 
 def _ts(e: dict) -> str:
@@ -179,7 +198,7 @@ def scan_child(path: str, as_of: str = "") -> dict:
     """Events from the child's transcript (timestamps): first entry, replies, turn ends, prompts of the person, asks, wrap runs.
     The app's retry line after an API error ("Try again") goes to `retries`, not to the person's prompts."""
     out = {"first": "", "replies": [], "stops": [], "human": [], "said": [], "peers": [], "asks": [], "wraps": [],
-           "retries": []}
+           "retries": [], "peer_wraps": []}
     try:
         fh = open(path, encoding="utf-8", errors="replace")
     except (OSError, TypeError):
@@ -213,9 +232,11 @@ def scan_child(path: str, as_of: str = "") -> dict:
                 out["human"].append(ts)
                 out["said"].append((ts, said))
             elif kind in ("user", "attachment"):
-                for frm in PEER_FROM.findall(json.dumps((e.get("message") or {}).get("content") or e.get("attachment") or "",
-                                                        ensure_ascii=False)):
+                for frm, text in _peer_messages(json.dumps((e.get("message") or {}).get("content") or e.get("attachment") or "",
+                                                           ensure_ascii=False)):
                     out["peers"].append((ts, frm))
+                    if WRAP_WORD.search(text):
+                        out["peer_wraps"].append((ts, frm))
             content = (e.get("message") or {}).get("content")
             if not isinstance(content, list):
                 continue
@@ -350,7 +371,8 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
     ev = scan_child(c["path"], as_of)
     earlier_wraps = []
     if wrap_since:  # after --wait: only a wrap run for this request counts, not one from an earlier request
-        earlier_wraps = [w for w in ev["wraps"] if w[:19] < wrap_since[:19]]
+        req = max((ts for ts, frm in ev["peer_wraps"] if frm == c["parent"]), default="")
+        earlier_wraps = [w for w in ev["wraps"] if w[:19] < wrap_since[:19] and req and w >= req]
         ev["wraps"] = [w for w in ev["wraps"] if w[:19] >= wrap_since[:19]]
     ask = open_ask(ev, parent_wait_notes(c["parent_path"], c["local"], as_of))
     commits = child_commits(c["cli"], ev["first"][:19])
@@ -365,7 +387,7 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
     if need_wrap and not ev["wraps"]:
         # measured: a parent passed --since 10 minutes after its wrap request, and the wrap run fell outside the window
         reasons.append("wrap の記録が無い" + (f" (--since より前の {_local_hm(max(earlier_wraps))} に wrap の記録がある = --since が"
-                                              " wrap の依頼より後になっている。 依頼の時刻 〔hook が出す --since の値〕 か、 それより前を渡す)"
+                                              " wrap の依頼より後になっている。 --since を渡さなければ、 道具が子の窓に届いた依頼の時刻から数える)"
                                               if earlier_wraps else ""))
     bad = [x for x in commits if not x["pushed"]]
     if bad:
@@ -407,18 +429,54 @@ def turn_done_after(target: str, since: float) -> tuple[bool, str]:
     return False, "まだ始まっていない"
 
 
-def wait(targets: list[str], since: float, max_minutes: float, interval: float = 20.0) -> tuple[int, list[str]]:
-    """Wait until at least one child's turn has ended after `since`; (0, the children done) or (3, []) on time-out.
-    Measured: waiting for all of them left the child that finished first idle until the person noticed."""
+def last_parent_wrap(target: str) -> str:
+    """The latest wrap request from the child's parent as it landed in the child's window ('' when none)."""
+    c = locate(target)
+    if not c or not c["parent"]:
+        return ""
+    return max((ts for ts, frm in scan_child(c["path"])["peer_wraps"] if frm == c["parent"]), default="")
+
+
+def since_for(target: str, given: float | None, start: float, told: set | None = None) -> float | None:
+    """The time the watch counts from for one child: the parent's last wrap request (a recent one = after the watch
+    started minus RECENT_REQUEST_MIN). A given --since later than that request is lowered to it (said once). Without a
+    given --since and without a recent request, None for the first DELIVERY_GRACE_S seconds (the request may not have
+    landed yet = do not count the child's previous turn end), then the old default (start - 60 s)."""
+    req = last_parent_wrap(target)
+    req_e = _epoch(req) if req else None
+    if req_e is not None and req_e < start - RECENT_REQUEST_MIN * 60:
+        req_e = None  # an earlier job's request
+    if given is not None:
+        if req_e is not None and given > req_e:
+            if told is not None and target not in told:
+                told.add(target)
+                print(f"↩︎ {target}: --since ({_local_hm(_iso(given))}) は親の最後の wrap の依頼 ({_local_hm(req)}) より後 = 依頼の時刻から数える")
+            return req_e
+        return given
+    if req_e is not None:
+        return req_e
+    return None if time.time() - start < DELIVERY_GRACE_S else start - 60
+
+
+def wait(targets: list[str], given: float | None, max_minutes: float, interval: float = 20.0,
+         start: float | None = None) -> tuple[int, dict[str, float]]:
+    """Wait until at least one child's turn has ended after its own start (since_for); (0, {child done: its start}) or
+    (3, {}) on time-out. Measured: waiting for all of them left the child that finished first idle until the person noticed."""
+    start = time.time() if start is None else start
     deadline = time.time() + max_minutes * 60
+    told: set = set()
     while True:
-        states = {t: turn_done_after(t, since) for t in targets}
-        done = [t for t, (d, _) in states.items() if d]
+        states, starts = {}, {}
+        for t in targets:
+            s0 = since_for(t, given, start, told)
+            starts[t] = s0
+            states[t] = (False, "依頼が子の窓に届くのを待っている") if s0 is None else turn_done_after(t, s0)
+        done = {t: starts[t] for t, (d, _) in states.items() if d}
         if done:
             return 0, done
         if time.time() > deadline:
             print("⌛ 待ち切れなかった: " + ", ".join(f"{t} ({why})" for t, (d, why) in states.items() if not d))
-            return 3, []
+            return 3, {}
         time.sleep(interval)
 
 
@@ -440,24 +498,37 @@ def _wait_due_cmd(locals_: list[str]) -> str:
             .strip())
 
 
+def _local_of(to: str) -> str:
+    """A SendMessage `to` as the session's local_… id: as is, or a live session's `uds:` address looked up ('' otherwise)."""
+    if to.startswith("local_"):
+        return to
+    if to.startswith("uds:"):
+        for s_ in sm.live_sessions():
+            if s_.get("address") == to and str(s_.get("host") or "").startswith("local_"):
+                return s_["host"]
+    return ""
+
+
 def hook_sendmessage(inp: dict, rule: str) -> str:
     """additionalContext for a SendMessage that asks one's own child to wrap; '' otherwise."""
     if inp.get("tool_name") != "SendMessage":
         return ""
     ti = inp.get("tool_input") or {}
     to, msg = str(ti.get("to") or ""), str(ti.get("message") or "")
-    if not to.startswith("local_") or not WRAP_WORD.search(msg):
+    if not WRAP_WORD.search(msg):
+        return ""
+    to = _local_of(to)
+    if not to:
         return ""
     me, child = ds.find(str(inp.get("session_id") or "")), ds.find(to)
     if not me or not child or child.get("parent") != me.get("local_id"):
         return ""
     if _watch_running(to):
         return ""
-    since = int(time.time()) - 30
     return ("🧺 child-wrap-check: 子 (" + (child.get("title") or to) + ") に wrap を頼んだ。 ほかの子が動いている間は、 子の turn の終わりで"
             " app はこの session を起こさない (知らせは本人の次の発言まで待たされる、 実測)。 この turn のうちに Bash を"
-            f" run_in_background で `python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {to} --since {since}`"
-            " を出す (同じ turn で複数の子に頼んだら id を並べた 1 本。 どれか 1 つが終わると見張りは終わり、 残りを続けて見張る 1 行が出る)。 子の turn が終わるとこの session が起こされ、 畳んでよいかの照合が出る。"
+            f" run_in_background で `python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {to}`"
+            " を出す (--since は要らない = 道具が子の窓に届いた依頼の時刻から数える。 同じ turn で複数の子に頼んだら id を並べた 1 本。 どれか 1 つが終わると見張りは終わり、 残りを続けて見張る 1 行が出る)。 子の turn が終わるとこの session が起こされ、 畳んでよいかの照合が出る。"
             + (f" 規則 = {rule}" if rule else ""))
 
 
@@ -635,7 +706,8 @@ def finished_state(child: dict, parent_local: str, parent_path: str, events: lis
             row["state"] = "owner"
             row["wait_since"] = (ask or talking or {}).get("at", "")
         return row
-    wraps = sorted(t for t in acts["wraps"] + ev["wraps"] if t[:19] >= b["accepted_at"][:19])
+    landed = [ts for ts, frm in ev["peer_wraps"] if frm == parent_local]  # sent to the child's uds address too
+    wraps = sorted(t for t in acts["wraps"] + ev["wraps"] + landed if t[:19] >= b["accepted_at"][:19])
     # a turn end counts only when the child started replying after the request (measured: the child's previous turn
     # ended 3 s after the parent's SendMessage, before the message was delivered)
     last = wraps[-1] if wraps else ""
@@ -948,19 +1020,18 @@ def main(argv: list[str]) -> int:
     if not a.targets:
         ap.error("子の local_… か transcript id を 1 つ以上")
     wrap_since, targets, rest = "", a.targets, []
+    starts: dict[str, float] = {}
     if a.wait:
-        since = a.since if a.since is not None else time.time() - 60
-        rc, done = wait(a.targets, since, a.max_minutes)
+        rc, starts = wait(a.targets, a.since, a.max_minutes)
         if rc:
             return rc
-        wrap_since = _iso(since)
-        targets, rest = done, [t for t in a.targets if t not in done]
-        print(f"🧺 子 {len(done)} 件の turn が終わった ({time.strftime('%H:%M')})。 照合:")
-    rows = [check_child(t, a.as_of, not a.no_wrap_needed, wrap_since) for t in targets]
+        targets, rest = list(starts), [t for t in a.targets if t not in starts]
+        print(f"🧺 子 {len(targets)} 件の turn が終わった ({time.strftime('%H:%M')})。 照合:")
+    rows = [check_child(t, a.as_of, not a.no_wrap_needed, _iso(starts[t]) if t in starts else wrap_since) for t in targets]
     print(json.dumps(rows, ensure_ascii=False, indent=1) if a.json else render(rows))
     if rest:
         print(f"⏳ まだ終わっていない子 {len(rest)} 件 → 畳み終えたら、 続けて見張る (run_in_background):"
-              f" `python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {' '.join(rest)} --since {int(since)}`")
+              f" `python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {' '.join(rest)}`")
     if any(not r["found"] for r in rows):
         return 2
     return 0 if all(r["ok"] for r in rows) else 1
@@ -986,6 +1057,17 @@ def selftest() -> int:
         return {"type": "user", "timestamp": ts, "message": {"role": "user", "content":
                 "<system-reminder>\n" + "Linked sessions now ... " * 20 + f"\n</system-reminder>\n<cross-session-message from=\"{frm}\">"
                 + text + "</cross-session-message>"}}
+
+    def peer_uds(ts: str, text: str, frm: str) -> dict:
+        # a message sent to the child's uds address: from="uds:…" and from-session="local_…" (measured shape)
+        return {"type": "user", "timestamp": ts, "message": {"role": "user", "content":
+                "<system-reminder>\nLinked sessions now ...\n</system-reminder>\nAnother Claude session sent a message:\n"
+                f"<cross-session-message from=\"uds:/tmp/cc-socks/77.sock\" from-session=\"{frm}\" from-name=\"p\" "
+                f"from-mode=\"prompting\">{text}</cross-session-message>"}}
+
+    def skill_wrap(ts: str) -> dict:
+        return {"type": "assistant", "timestamp": ts, "message": {"content": [
+            {"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "wrap"}}]}}
 
     def reply(ts: str, ask: str | None = None) -> dict:
         inp = {"recap": "r"} | ({"ask": ask} if ask else {})
@@ -1060,8 +1142,56 @@ def selftest() -> int:
         r = check_child(ids("nowrap")[0])
         ok("no wrap run → kept", (not r["ok"]) and r["reasons"] == ["wrap の記録が無い"])
         ok("--no-wrap-needed drops that reason", check_child(ids("nowrap")[0], need_wrap=False)["ok"])
-        ok("--since after the wrap run → the reason says --since is too late",
-           any("--since が wrap の依頼より後" in x for x in check_child(ids("answered")[0], wrap_since="2026-01-01T02:00:00")["reasons"]))
+        sf_l, sf_c = "local_66666666-0000-4000-8000-000000000000", "66666666-cccc-4000-8000-000000000000"
+        record(sf_l, sf_c, parent_l)
+        live(90, sf_c, sf_l, "idle")
+        prev_job = [u("2026-01-01T00:00:00Z", "依頼", origin={"kind": "human"}), peer("2026-01-01T00:50:00Z", "前の仕事は wrap して", parent_l),
+                    skill_wrap("2026-01-01T00:51:00Z"), stop("2026-01-01T00:55:00Z")]
+        new_wrap = [peer("2026-01-01T01:00:00Z", "wrap して", parent_l), skill_wrap("2026-01-01T01:01:00Z"),
+                    reply("2026-01-01T01:04:00Z"), stop("2026-01-01T01:05:00Z")]
+        transcript(sf_c, prev_job + new_wrap)
+        st = _epoch("2026-01-01T01:06:00")
+        req = _epoch("2026-01-01T01:00:00")
+        ok("old behaviour reproduced: --since after the request (10 minutes before 'now') → 'no wrap' ⏸ (+ the hint)",
+           any(x.startswith("wrap の記録が無い") and "--since が wrap の依頼より後" in x
+               for x in check_child(sf_l, wrap_since="2026-01-01T01:03:00")["reasons"]))
+        ok("fix: a --since 3 minutes after the request ('10 分前' case) is lowered to the request", since_for(sf_l, _epoch("2026-01-01T01:03:00"), st) == req)
+        ok("fix: a --since seconds after the request ('$(date +%s)' case) is lowered too", since_for(sf_l, req + 5, st) == req)
+        ok("fix: no --since → the request time from the child's window", since_for(sf_l, None, st) == req)
+        rc_s, got = wait([sf_l], None, 0.001, 0, start=st)
+        ok("fix: --wait without --since → done, and the check counts this wrap (not 'no wrap')", rc_s == 0 and got.get(sf_l) == req
+           and not any(x.startswith("wrap の記録が無い") for x in check_child(sf_l, wrap_since=_iso(got[sf_l]))["reasons"]))
+        ok("a --since earlier than the request is kept", since_for(sf_l, req - 600, st) == req - 600)
+        transcript(sf_c, prev_job + [peer("2026-01-01T01:00:00Z", "wrap して", parent_l)])
+        ok("previous job: its turn end does not count for the new request (not done yet)",
+           not turn_done_after(sf_l, since_for(sf_l, None, st))[0])
+        ok("previous job: its wrap run does not count, and no '--since too late' hint",
+           [x for x in check_child(sf_l, wrap_since="2026-01-01T01:00:00")["reasons"] if x.startswith("wrap の記録")] == ["wrap の記録が無い"])
+        ok("a request older than the recent window is an earlier job's → the old default", since_for(sf_l, None, _epoch("2026-01-01T02:00:00"))
+           == _epoch("2026-01-01T02:00:00") - 60)
+        transcript(sf_c, prev_job[:1])
+        ok("no request yet, watch just started → wait for it to land (None)", since_for(sf_l, None, time.time()) is None)
+        uds_rows = [u("2026-01-01T00:00:00Z", "依頼", origin={"kind": "human"}), peer("2026-01-01T00:30:00Z", "これも見て", parent_l),
+                    u("2026-01-01T00:50:00Z", "ここ直して", origin={"kind": "human"}), reply("2026-01-01T00:55:00Z"), stop("2026-01-01T00:55:01Z"),
+                    peer_uds("2026-01-01T01:00:00Z", "終わったので wrap して", parent_l), skill_wrap("2026-01-01T01:01:00Z"),
+                    stop("2026-01-01T01:05:00Z")]
+        transcript(sf_c, uds_rows)
+        ev_u = scan_child(os.path.join(pdir, "-w", sf_c + ".jsonl"))
+        ok("uds: the parent's message sent to the uds address counts as the parent's (peers and wrap request)",
+           ("2026-01-01T01:00:00Z", parent_l) in ev_u["peers"] and ("2026-01-01T01:00:00Z", parent_l) in ev_u["peer_wraps"])
+        ok("uds: the person spoke before the parent's uds message → not 'talking'",
+           not any("話している途中" in x for x in check_child(sf_l, need_wrap=False)["reasons"]))
+        ok("uds: --wait counts from the uds-delivered request", since_for(sf_l, None, st) == req)
+        transcript(sf_c, uds_rows[:5] + [stop("2026-01-01T01:05:00Z")])
+        ok("uds control: without the uds message the person's prompt after the parent's last message is 'talking'",
+           any("話している途中" in x for x in check_child(sf_l, need_wrap=False)["reasons"]))
+        with open(os.path.join(sdir, "90.json"), "w", encoding="utf-8") as fh:
+            json.dump({"pid": os.getpid(), "sessionId": sf_c, "hostSessionId": sf_l, "cwd": "/w", "status": "idle",
+                       "messagingSocketPath": "/tmp/cc-socks/77.sock"}, fh)
+        hk = {"tool_name": "SendMessage", "session_id": parent_c, "tool_input": {"to": "uds:/tmp/cc-socks/77.sock", "message": "wrap して"}}
+        out_h = hook_sendmessage(hk, "")
+        ok("hook: a wrap request to the child's uds address → the nudge with the child's id and no --since",
+           "--wait " + sf_l in out_h and "--since " not in out_h.split("`")[1])
         ok("after --wait, a wrap from an earlier request does not count",
            not check_child(ids("busy")[0], wrap_since="2026-01-01T02:00:00")["ok"]
            and any(x.startswith("wrap の記録が無い") for x in check_child(ids("busy")[0], wrap_since="2026-01-01T02:00:00")["reasons"]))
@@ -1123,7 +1253,7 @@ def selftest() -> int:
         done, why = turn_done_after(ids("busy")[0], since=0)
         ok("--wait: busy → not done", not done and why == "動いている")
         rc_w, first = wait([ids("busy")[0], ids("overridden")[0]], _epoch("2026-01-01T01:00:00"), 0.001, 0)
-        ok("--wait: one child done, another still busy → ends with the done one", rc_w == 0 and first == [ids("overridden")[0]])
+        ok("--wait: one child done, another still busy → ends with the done one", rc_w == 0 and list(first) == [ids("overridden")[0]])
 
         # ---- board side: a fresh parent with its own children (B-cases) ----
         board = os.path.join(td, "board")
