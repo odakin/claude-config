@@ -61,6 +61,10 @@ sections:
   - id: figure-table-shared-counter
     level: 2
     title: "図と表を 1 本の通し番号にする (jsclasses・ltjsbook)"
+  - id: luatexja-per-command-kanji-weight
+    legacy: "1"
+    level: 2
+    title: "1 つの命令だけ和文の字の太さを替える (luatexja) — 和文の字体を 1 つ足し、 縦組みの宣言も添える"
   - id: symbol-width-repagination
     level: 2
     title: "記号幅の変わる一括置換は、 総頁数が同じまま頁割りだけ動かす — `.aux` の label→頁 で見る (2026-09-12)"
