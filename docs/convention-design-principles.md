@@ -912,6 +912,15 @@ origin: macOS の外部 browser adapter が、既に live な singleton に対�
 
 [§8.12d](#human-memory-not-a-carrier) の 1〜2 (既配線の自動適用に載せる・足す) を、 他人の機械で成立させる形が本節。 正本が変わった後の追従を各複製に届ける側の話は [§8.12f](#hub-first-follow-by-courier)。 先例 = 共有リポが別の公開 repo の道具を隣に置く前提で使う場合 ([`conventions/shared-repo.md#sibling-repo-auto-clone`](../conventions/shared-repo.md#sibling-repo-auto-clone)、 実装 = collaborator-check の `repo` 行と、 共有の仕組みを作る道具が install の command を出す形)。 Python の版・venv・固定した依存の場合 = [`conventions/python-env.md`](../conventions/python-env.md) (入口 `tools/py` が venv を作って requirements に追従させ、 interpreter を新しく入れる判断だけを人に回す)。
 
+### <a id="signal-to-readers-channel"></a>8.12h 知らせは、 それを読んで動く人の通知が鳴る場所に出す
+
+新しく何かが届いたことを知らせる仕組み (外の service のコメント・投稿フォームの届け物・定期 job の異常) を作るとき、 出す先は「誰がそれを読んで動くか」 で決める。
+
+- **人が読んで動く知らせ** (リスナーのコメント・届いたお便り) → 人の通知が鳴る場所 (チャットの channel・スマホ)。 共同の持ち主がいるなら、 その人にも見える場所
+- **agent が次の仕事に使う知らせ** (道具の故障・認証切れ・台帳の食い違い) → session 開始の一覧・dashboard。 人にも要るなら両方に出す
+- agent が仕組みを作ると、 自分が毎回読む面 (dashboard・session 開始の一覧) に寄せる引力がある (実測: 人が受け取るコメントの知らせを、 続けて 2 度 agent の dashboard に出す案を出した)。 その面は人の通知にならない = 人は開かないと気づかない
+- 判定の問い = 「これが届いたとき、 最初に動くのは誰か。 その人はどこで通知を受けるか」
+
 ### <a id="conditional-firing-visibility"></a>8.13 条件付き発火の mechanism は「自分が非活性」 を可視信号にしないと、 沈黙が解釈不能になる
 
 §8.12 は発火面の強弱だった。 本節はその前提条件: **出力の不在は ambiguous** — 「動いて該当なし (= 正常な沈黙)」 と「そもそも動いていない (= 未配線・未登録・未 install)」 を外から区別できない。 per-machine wiring / scheduled task 登録 / opt-in install のように **活性化に手動 step を要する mechanism** は、 その step が抜けても何も言わない (= silent dead) ので、 設計者は「動いている」 と誤認し続ける。

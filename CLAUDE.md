@@ -69,7 +69,7 @@ claude-config/
 │   ├── data-pipeline-automation.md         # 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
 │   ├── debugging-discipline.md             # bug fix を提案する前・audit verdict を出す前 (検証規律) + CI が red のとき (= red streak の起点と原因 commit を探す・手元で Linux CI を再現する、 §17) + 外部 GUI app / daemon / browser の復旧で start・open・restart・retry を提案または実行する前 (= #recovery-state-dispatch)
 │   ├── dirac-conventions.md                # Dirac 行列・計量の規約を教科書 (Peskin–Schroeder / Srednicki / Weinberg) の間で読み替えるとき + 規約の違う文献から式を写すとき + 自分の project が「どの教科書の行を使うか」 を repo の記号の規約に宣言するとき + 共同研究者と「我々の (−,+,+,+) は Srednicki か Weinberg か」 を確かめるとき
-│   ├── discord-bot.md                      # Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage) + bot が 403 Missing Access で channel に入れないとき・招待リンクで bot を入れようとしたとき (#missing-access-triage)
+│   ├── discord-bot.md                      # Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage) + bot が 403 Missing Access で channel に入れないとき・招待リンクで bot を入れようとしたとき (#missing-access-triage) + 外の新着を定期 job で channel に中継するとき (#channel-as-ledger)
 │   ├── dropbox-api-access.md               # Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload)
 │   ├── dropbox-placeholder-diagnosis.md    # Dropbox 配下の file が 0 byte に見えたとき
 │   ├── dropbox-refs.md                     # 共同 PDF を Dropbox に置いてリポから symlink 参照するとき
@@ -149,7 +149,7 @@ claude-config/
 │   ├── physics-notes.md                    # 物理・数理ノートを書くとき + 共著者がその話題を特定の原論文・教科書で学んでいて、 ノートを「読めない」 と言われたとき (#write-from-readers-source) + 共同研究者の問いにノートで答えるとき (#answer-only-the-question)
 │   ├── physics-verification-cycle.md       # 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
 │   ├── podcast-audio-finishing.md          # 収録を配信用の音声ファイルに仕上げるとき (ジングルを付ける・音量を揃える・書き出す) + 仕上げた回を聞いて「つなぎが雑音っぽい」「間が長い」と言われたとき + 音声の区間の長さや無音を数値で測るとき + 本編の下に敷く BGM を合成で作る・直すとき (「ビブラートがきつい」「和音がもっちゃり」「旋律が埋もれる」「この音が聞こえない」「濁る」「単調」「もっとアンビエントに」 と言われたとき = #synth-bgm-sound-pitfalls) + 「BGM がでかい」 と言われたとき・BGM の曲を替えて音量を決めるとき (#bgm-level-per-track)
-│   ├── podcast-distribution.md             # ポッドキャストを RSS で各配信先 (Spotify / Apple Podcasts / Amazon Music / YouTube) に登録するとき + 番組の画像・説明文・各回の紹介文を配信先に載せるとき + 公開予約を API で入れる・配信を自動にするとき + LISTEN (listen.style) を API で操作するとき + 配信の判断 (題・切れ目・予約) を持ち主から任されたとき + 配信先ごとのフォロワー数を調べるとき (#follower-counts) + 番組の告知文をニュースレター・SNS の媒体ごとに書き分けるとき (#promo-per-platform)
+│   ├── podcast-distribution.md             # ポッドキャストを RSS で各配信先 (Spotify / Apple Podcasts / Amazon Music / YouTube) に登録するとき + 番組の画像・説明文・各回の紹介文を配信先に載せるとき + 公開予約を API で入れる・配信を自動にするとき + LISTEN (listen.style) を API で操作するとき + 配信の判断 (題・切れ目・予約) を持ち主から任されたとき + 配信先ごとのフォロワー数を調べるとき (#follower-counts) + 番組の告知文をニュースレター・SNS の媒体ごとに書き分けるとき (#promo-per-platform) + リスナーのコメントを配信先から読む・チャットに中継するとき (#listener-comments)
 │   ├── preview.md                          # preview / dev server 稼働中に user へ動作確認を依頼するとき
 │   ├── prompt-injection.md                 # 外部由来 tool result に adversarial 指示文を疑ったとき
 │   ├── pronunciation-verification.md       # 未知の言語・転写された人名や語の発音を調べるとき / user が「実際に音で聞きたい」と言ったとき

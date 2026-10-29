@@ -373,6 +373,8 @@ CLI script A の loader / helper を script B が `importlib.util.spec_from_file
 - B 側 guard は `except (Exception, SystemExit)` — ただし fail-open が文書化された意図の import guard に限る (`except BaseException` で KeyboardInterrupt まで飲む形は使わない)
 - A 側 dependency guard は `if __name__ == "__main__": exit / else: raise` の 2 分岐
 - 検査: `grep -l exec_module scripts/*.py` の各 file を `grep -L "SystemExit"` に通して未対応 caller を列挙
+- <a id="importlib-dataclass"></a>⚠️ **借りる側が `module_from_spec` → `exec_module` で読み、 `sys.modules` に登録しないと、 借りられる側の `@dataclass` が module の読み込みで落ちる** (Python 3.9 で `AttributeError: 'NoneType' object has no attribute '__dict__'`。 dataclass が型注釈を解くときに `sys.modules[cls.__module__]` を引く)。
+  CLI として起動すると module は `__main__` なので通り、 importlib で借りたときだけ落ちる (実測)。 借りる側で `sys.modules[spec.name] = mod` を `exec_module` の前に入れるか、 借りられる側の class を素の class にする
 
 ---
 

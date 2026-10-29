@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage) + bot が 403 Missing Access で channel に入れないとき・招待リンクで bot を入れようとしたとき (#missing-access-triage)
+when: Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage) + bot が 403 Missing Access で channel に入れないとき・招待リンクで bot を入れようとしたとき (#missing-access-triage) + 外の新着を定期 job で channel に中継するとき (#channel-as-ledger)
 category: infra
 summary: Discord Bot 運用 (権限ポリシー・private channel 加入・per-channel error non-fatal な fetcher・Token 取扱・組織 NW での API ブロック・グループへの呼びかけの個別 mention と user ID の根拠つき引き方・第三者の bot の侵害時の点検と token 漏洩時の @everyone の絞り方)
 -->
@@ -395,6 +395,18 @@ sys.exit(subprocess.call(args))
 - channel topic には**禁止語 filter** がある (`50035 CHANNEL_TOPIC_INVALID: Field contains at least one word that is not allowed`)。 どの語かは返らない → 短く言い換える。
 
 instance (組織図 YAML / ids / 人名) は owner の private layer。 一般則の側 = [`multi-session-coordination.md#chat-board-bridge`](multi-session-coordination.md#chat-board-bridge) 原則 6。
+
+## <a id="channel-as-ledger"></a>外の新着を channel に中継するとき、 書いたかどうかは channel 自体に持たせる
+
+外の service の新着 (コメント・レビュー・通知) を定期 job が channel に書く形。 書いたかどうかの状態を repo にも機械にも持たず、 channel の投稿に持たせる。
+
+- **印**: 投稿の最後の行々に `-# id: <経路>:<id>` (Discord の `-# ` は小さい字で出る)。 1 通に印を複数置ける (後から組になった知らせの印を足す)
+- **読む**: 次の回は channel の履歴を読み、 **bot 自身の投稿の、 行頭の印だけ**を数える。 人が書いた印と、 引用 (`> `) の中の印は数えない = 外から来た本文に印を仕込まれても騙されない
+- **止める**: 履歴を読めない回はその channel に何も書かない (読めないまま書くと、 前に書いたものを全部書き直す)。 1 回に書く件数に上限を置く (印の読み違いで洪水にしない)
+- **利点と限界**: 動かす機械が替わっても二重に書かない (状態が channel にある)。 人がその投稿を消すと、 次の回にまた書く
+- **書き方**: `allowed_mentions: {"parse": []}` で誰も名指ししない (外から来た本文に `@everyone` があっても鳴らない = [#mass-mention-silently-dropped](#mass-mention-silently-dropped) の逆向き)、 `flags: 4` (SUPPRESS_EMBEDS) でリンクの埋め込みを出さない。
+  後から分かったこと (別の経路の知らせ) は `PATCH /channels/{c}/messages/{m}` で同じ投稿に足す = 編集は通知を鳴らさない。 本文の行は最初の印の前に足し、 印は最後に足す (実測: 書く → 追記 → 3 回目は何もしない、 を試しの channel で確かめた)
+- bot が channel や category を作るには Manage Channels が要る (標準の posting の権限の組に入っている)
 
 ## <a id="guild-creation-user-only"></a>Bot は server (guild) を作れない = 器は人間が作る
 

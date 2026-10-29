@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: ポッドキャストを RSS で各配信先 (Spotify / Apple Podcasts / Amazon Music / YouTube) に登録するとき + 番組の画像・説明文・各回の紹介文を配信先に載せるとき + 公開予約を API で入れる・配信を自動にするとき + LISTEN (listen.style) を API で操作するとき + 配信の判断 (題・切れ目・予約) を持ち主から任されたとき + 配信先ごとのフォロワー数を調べるとき (#follower-counts) + 番組の告知文をニュースレター・SNS の媒体ごとに書き分けるとき (#promo-per-platform)
+when: ポッドキャストを RSS で各配信先 (Spotify / Apple Podcasts / Amazon Music / YouTube) に登録するとき + 番組の画像・説明文・各回の紹介文を配信先に載せるとき + 公開予約を API で入れる・配信を自動にするとき + LISTEN (listen.style) を API で操作するとき + 配信の判断 (題・切れ目・予約) を持ち主から任されたとき + 配信先ごとのフォロワー数を調べるとき (#follower-counts) + 番組の告知文をニュースレター・SNS の媒体ごとに書き分けるとき (#promo-per-platform) + リスナーのコメントを配信先から読む・チャットに中継するとき (#listener-comments)
 category: office
 summary: 配信先への登録は「ホストの RSS を渡し、RSS のメール宛に届く確認で持ち主を示す」の繰り返しで、先に RSS を完成させる (1 回分以上・長さ入り)。画像は RGB の JPEG で渡す (PNG は透明度つきに保存し直されることがある)。ホストの RSS の番組リンクは変えられないことがあるので、公式サイトへのリンクは番組の説明文と各回の紹介文の末尾に書く (サイトは各回にページを持たせ、紹介文からはそのページへ)。API で公開予約を入れるときは時差が無視されうる = UTC に直して渡し、作ったら読み戻す。無人のマシンに配信させるなら、音声を読む仕事 (上げる・予約する) は OK を出す手元でやり、無人の側は公開の確認と掲載と知らせだけにする。LISTEN は GraphQL で上げられるが、番組の設定を変える口は無い。試しのエピソードは捨ててよい URL を明示して作る (消しても URL は解放されない。付け替えなら空く)。配信の判断を任されたら、出す前に聞く例外を決め、題は言い切られていることにし (転写の聞き違いを疑う)、予約は数日前に入れてまとめて報告する。予約済みの回を組み替えるときは、出した回は切り直さず、予約表を先に直し、外す回は消さずに下書きへ戻して URL を空け、1 回ずつ読み戻す。配信先で聴けるかはログインせずに外から確かめる (公開フィード・検索 API の最新の回をホストの RSS と突き合わせる)。YouTube は取り込みが終わっても非公開のまま = 「公開」を押す。フォロワー数は外から読めない = 管理画面か持ち主の認証で読む口 (ホストの API・YouTube Data API) で、配信先ごとの癖 (期間で変わる・再生者数の閾値で非表示・チャンネル単位) に注意。告知文は媒体ごとに、その読者に効く中身を選び直す (#promo-per-platform)
 -->
@@ -187,6 +187,26 @@ PNG は元の絵として手元に残す。
     最後まで聴いた人 = 列の末尾、 聴き始めた人 = 列の最大 (途中から聴き始めた人がいると先頭より大きい)。 列が全部 0 の回は、 聴いた人がいないのか数が出ていないのかを区別できない
   - `shows/{id}/aggregate?start&end` = 国・年齢・性別の内訳 (合計は再生の回数とほぼ一致 = 人数でなく回数の内訳と読める、 未確認)
   - ホスト (LISTEN) の GraphQL には再生数・ダウンロード数の欄が無い (型を見て確認、 実測) = 配信先ごとの管理画面か上の口で読む
+
+## <a id="listener-comments"></a>リスナーのコメントを読む (配信先ごと)
+
+配信先ごとに、 コメントの機能と読む口が違う。 持ち主の認証で読める口 (実測):
+
+- **Spotify**: 管理画面 (Spotify for Creators) のコメント画面と同じ GraphQL = `POST https://creators-graph.spotify.com/v2/graph-pq` に、 登録済みの問い合わせ (persisted query) の名前と hash を `extensions.persistedQuery` で送る。
+  番組の全回のコメントと返信 = `getCommentsAcrossEpisodes` (変数 = `showUri`・`primaryFilters` 〔公開済み `LIST_COMMENT_PRIMARY_FILTER_PUBLISHED` と承認待ち `…_NEEDS_REVIEW` を別々に〕・`commentTypeFilters` 〔ROOT と REPLY〕・`secondaryFilters` 〔空〕・`repliesFilter`・`pageSize` 15・`pageToken`)。
+  認証 = フォロワー数と同じ access token ([#follower-counts](#follower-counts)) に header `x-creator-client: microfrontend-interactivity`。 番組がコメントを受け付けるかは `getShowData` の `commentsEnabled`
+  - hash は画面の更新で変わる: 古い hash には `PersistedQueryNotFound` が返る → コメント画面 (`creators.spotify.com/interactivity/show/<id>/comments`) が読み込む JS の中で、 `__meta__:{hash:"…"}` の直後に問い合わせの名前が続く所から取り直す (公開の静的 file だけで取れる)
+  - 画面が渡す変数から外す (`secondaryFilters` に `UNSPECIFIED` を入れる・`pageSize` を大きくする) と、 番組までは解決したまま `showComments` の段だけがサーバー側のエラーで null になる (実測) = 画面と同じ変数で送る
+- **LISTEN**: GraphQL ([#listen-style-api](#listen-style-api)) の各回の `rootComments` (返信 = `replyComments`) と `reviews` (感想)。 時刻は UTC の `YYYY-MM-DD HH:MM:SS`。
+  番組のコメントを「承認後に公開」 にしているとき、 承認待ちのコメントは持ち主への通知 (`notifications` の `CommentAdded`) にしか出ない見込み (承認待ちの実物は未確認)。 通知の設定 (`NotificationSetting`) の型はあるが、 たどる口が無い
+- **YouTube**: Data API の `commentThreads.list` は読み取り専用の scope (`youtube.readonly`) では 403 `insufficientPermissions` (実測) = 本文を読むには API key か `youtube.force-ssl` (コメントの管理もできる強い scope)。
+  `videos.list` の `statistics.commentCount` は readonly でも読める = 件数の増えで知り、 本文は YouTube Studio へのリンクで渡す。 アカウントの通知の設定では、 コメントの知らせはプッシュ通知の欄にあり、 メール通知の欄には見えなかった (欄の最後までは未確認)
+- **Apple Podcasts**: 公開のレビュー RSS `https://itunes.apple.com/<国>/rss/customerreviews/id=<番組 id>/sortby=mostrecent/json` が podcast のレビューも返す (レビューのある別の番組で確かめた、 実測)。 `entry` のうち `im:rating` を持つ行がレビュー。 国ごと (日本 = `jp`)
+- **Amazon Music**: コメントの機能が無い
+
+チャットの channel に中継するときは、 書いたかどうかを channel 自体に持たせる = [`discord-bot.md#channel-as-ledger`](discord-bot.md#channel-as-ledger)。
+番組のアカウントに届く知らせのメールで二重に確かめるときは、 API で読んだコメントと時刻・回の題で組にして 1 通にまとめ、 組にならない知らせだけを猶予の後に単独で書く (API の故障と承認待ちを拾う)。
+知らせのメールの件名の語は、 実物を見てから決める (実物の無いうちに決めた語は外れうる = 外れると黙って捨てる)。
 
 ## <a id="promo-per-platform"></a>番組の告知文を媒体ごとに書く
 
