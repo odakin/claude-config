@@ -185,6 +185,18 @@ zsh -l -c 'echo $PATH' | tr ':' '\n' | head -5
 
 **対処**: (1) `main.log` を `code 4090` で grep して時刻を特定 (2) config の projects dir にある `bridge-pointer.json` の pid が死んでいれば stale (= 削除可) (3) 同時期に RC server が cycling していれば先にそれ (前項 trust / auth / version) を治す (4) conversation はメッセージ再送 or 新規作成で復帰 — ⚠️ ただし **worker は eject されず turn を完走している場合がある** (2026-07-02 実測: 「応答しなくなりました」 表示中もホスト側 worker は作業を継続し repo への push まで完遂、 壊れていたのは viewer→worker の再接続だけ 〔sleep/網断後に viewer 側 reconnect が 404 を繰り返す変種、 別マシンから見ると repo には pull で成果が届き続ける〕)。 **再送で同じ作業を二重実行させないよう、 先にホスト側 repo の `git log` / transcript で成果を確認**してから再送する。 ホスト機がどれか曖昧なら、 復帰後にその session に `hostname` を 1 回打たせるのが最速の ground truth。 root は upstream の worker 管理で client 側から予防は不能 — できるのは検出と復旧のみ。
 
+### <a id="ts-messages-typed-while-offline"></a>「Remote Control が切断されました / ホストはオフライン」 の間に打った指示は、 ホストの session に届いていない
+
+**症状**: claude.ai やスマホの viewer が「Remote Control が切断されました」「<host> 上の Claude Code はオフラインです」 を出している間に打った指示は、 viewer の画面には並んで見えるが、 ホスト機の会話記録 (config dir ごとの `projects/**/*.jsonl`) には 1 件も入っていない (実測)。 同じ時期、 ホストの RC server は launchd に loaded だが process が居なかった (fleet heartbeat の「loaded だが process 無し」)。 つまり viewer に見えている指示は、 実行されていない。
+
+**別の session で引き継ぐとき**:
+
+1. 指示に含まれる語で、 その機械の全 config dir の会話記録を引く (`command grep -l '<語>' ~/.claude*/projects/*/*.jsonl`、 または `scripts/search-agent-transcripts.py`)。 引き継ぐ session に指示を貼ると、 その session の記録にも同じ語が入る = 自分の記録は外して読む。
+2. 見つからなければ、 その指示は 1 つも実行されていない = 最初からやる。 見つかったら、 その session が送信・commit をどこまで済ませたかを確かめてから、 続きだけをやる (同じメールを 2 回送らない)。
+3. ホスト側を直す = RC server の process が居ない原因を、 前の節 ([#ts-workspace-trust](#ts-workspace-trust)・auth・version) の順に見る。
+
+⚠️ 復帰したときに、 viewer に溜まった指示が元の session に後から届くかは未確認。 届くなら、 引き継いだ後に元の会話を再接続すると同じ指示が二重に実行されうる = 引き継いだら元の会話は再接続せずに閉じる。
+
 ### <a id="ts-rc-file-panel"></a>RC 閲覧中は chat 内 file link の右パネル rendering が効かない
 
 **症状**: RC で別端末から session を見ているとき、 chat 応答内の markdown link `[label](path)` を click すると「このファイルを読み取れませんでした — 削除または移動された可能性があるか、作業ディレクトリの外に存在する可能性」。 file は worker host に実在し、 permission scope も通っているのに出る (= error 文言が scope 問題と同一で誤誘導)。 file が worker host のディスクにのみ在り、 閲覧端末側に無いのが原因。 診断手順・対処 (唯一 RC で完結するのは「内容を chat 本文に出させる」) の正本 = [claude-code-permissions.md #rc-chat-panel-no-render](claude-code-permissions.md#rc-chat-panel-no-render)。

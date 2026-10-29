@@ -713,7 +713,10 @@ def plan_thread(cfg: Config, tid: str, account: str, msgs: list[dict], ledger: L
             eid = args.id
         elif args.slug:
             kind = "sent" if owner_from(anchor.get("from", ""), cfg.owner_tokens) else "received"
-            eid = f"{stamp(cfg, anchor.get('internalDate'))[:10]}-{args.slug}-{kind}"
+            slug = re.sub(r"-(?:sent|received)$", "", args.slug)
+            if slug != args.slug:
+                p["warn"].append(f"--slug の末尾の -sent / -received は道具が付ける = 外した ({args.slug} → {slug})")
+            eid = f"{stamp(cfg, anchor.get('internalDate'))[:10]}-{slug}-{kind}"
         else:
             eid = None
             p["warn"].append("新規 entry になる = --slug <romaji> か --id <entry id> が要る (apply しない)")
@@ -1413,6 +1416,10 @@ def _selftest() -> int:
         ns4 = argparse.Namespace(target="bbbb000000000001", todo="2026-10-01-todo-b", account="acct-a", next="propose dates", status="doing",
                                  summary="scheduling (facts live elsewhere).", slug=None, id=None, ledger_for_new=None, no_todo=False, apply=True)
         check(run_record(cfg, ns4, Ledger(cfg), gm, "2026-09-22", pr) == 1 and "--slug" in "\n".join(out_lines), "新規 entry は --slug / --id 無しで apply しない")
+        ns4.slug = "cp-dates-received"
+        out_lines.clear()
+        rc = run_record(cfg, argparse.Namespace(**{**vars(ns4), "apply": False}), Ledger(cfg), gm, "2026-09-22", pr)
+        check("cp-dates-received → cp-dates" in "\n".join(out_lines), "--slug の末尾の -received は道具が外して知らせる (id が -received-received にならない)")
         ns4.slug = "cp-dates"
         out_lines.clear()
         rc = run_record(cfg, ns4, Ledger(cfg), gm, "2026-09-22", pr)
@@ -1707,7 +1714,7 @@ def main(argv=None) -> int:
     ap.add_argument("--next", help="次の一手だけ 1 行 (項目の status_context の「→ 次:」 の後ろに入る。 日付・相手・件名は道具が前に付ける = 自分で書くと二重になる)")
     ap.add_argument("--status", help="項目の status (enum を渡していれば検査)")
     ap.add_argument("--summary", help="新規 entry の summary (3 行まで)")
-    ap.add_argument("--slug", help="新規 entry の id の中央 (romaji)。 末尾の -sent / -received は道具が付ける = slug に入れない")
+    ap.add_argument("--slug", help="新規 entry の id の中央 (romaji)。 末尾の -sent / -received は道具が付ける (slug の末尾に付けて渡しても外して付け直す)")
     ap.add_argument("--id", help="新規 entry の id (完全指定)")
     ap.add_argument("--ledger-for-new", help="新規 entry を置く台帳 (既定 = 項目の台帳、 無ければ最初の台帳)")
     ap.add_argument("--no-todo", action="store_true")
