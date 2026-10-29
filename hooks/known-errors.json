@@ -140,6 +140,11 @@
       "match": "encountered in matmul",
       "doc": "conventions/scientific-computing.md#cas-library-traps",
       "hint": "macOS の Accelerate に繋いだ numpy が複素行列の積で出す偽の警告のことがある。 消す前に答えの分かっている量を 1 つ再現して確かめ、 確かめたら積を np.einsum で書き直す (警告を握り潰さない)"
+    },
+    {
+      "match": "object has no attribute '__dict__'",
+      "doc": "conventions/data-pipeline-automation.md#importlib-dataclass",
+      "hint": "importlib (module_from_spec → exec_module) で読んだ script の @dataclass が、 sys.modules に登録されていないために落ちていることがある (Python 3.9)。 借りる側で exec の前に sys.modules に入れるか、 借りられる側の class を素の class にする"
     }
   ]
 }
