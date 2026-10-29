@@ -317,6 +317,9 @@ sections:
   - id: texshop-lualatex-and-external-builds
     level: 2
     title: "TeXShop で LuaLaTeX 前提の source を開く・外部の build と共存させる"
+  - id: write-while-author-has-it-open
+    level: 2
+    title: "著者が editor で開いている原稿に書き込む"
   - id: texshop-engines
     level: 2
     title: "<a id=\"texshop-uplatex-engine\"></a>TeXShop の engine で原稿を組む (latexmk-lualatex / uplatex)"

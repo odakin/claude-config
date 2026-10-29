@@ -39,6 +39,8 @@
 
 ## Open items（forward-looking）
 
+- [ ] **manuscript-claim-guard の Stop の照合が、 文脈圧縮の後の本人の turn の返事を読まない** — 圧縮の後の会話記録は、 圧縮の前の末尾を元の時刻のまま後ろに付け直すので、 本人の発言を含む turn の組の先頭が、 その発言より前の時刻になる。 `assistant_replies_since` は組の先頭の時刻で組ごと飛ばすため、 承認の行を書いた返事を見落とし、 後の event の turn (背景の task の通知など) で同じ行を再び求める (実測)。 直す案 = 組の entry が全部 since より前のときだけ飛ばす。 guard は保護された file = 本人の裁定待ち
+
 - [ ] **完了Git gateのリモート照会失敗の切り分け** — 自動照会の検査不能と直接照会の成功が食い違う条件を調べる段階。次は通常SSHと多重化を使わない照会を同時点で比較し、タイムアウトと起動失敗を区別する候補を作る。実装の入口 = [session_touch.py](codex/hooks/session_touch.py)。原因未特定のため検査の変更は未着手。
 
 

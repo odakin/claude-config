@@ -6,7 +6,7 @@
 共同研究者の側でも同じ数え方で前後を比べられるよう、 判定は単純な規則だけにしてある (概数であって構文解析ではない)。
 
 使い方:
-    python3 tex-sentence-lengths.py paper.tex [more.tex ...] [--over 40] [--display-macro al] [--json]
+    python3 tex-sentence-lengths.py paper.tex [more.tex ...] [--over 40] [--joins [--joins-min 20]] [--display-macro al] [--json]
     python3 tex-sentence-lengths.py --selftest
 
 数え方:
@@ -19,6 +19,10 @@
     大文字・`\\`・`$` が続く所、 または空行。 英字の語だけを数える (20 文字未満の断片は捨てる)。
   - `--over N` = N 語を超える文を長い順に、 文の始まりの概ねの行番号つきで出す。
   - 閾値の既定 = 30, 40, 50, 60, 80 語 (`--thresholds 40,60` で変える)。
+  - `--joins` = `--joins-min` 語以上 (既定 20) の文のうち、 独立した節を `, and` / `, so` / `, but` / `, while` / `, or` /
+    `, whereas` でつないだらしい文 (接続詞の後が限定詞・代名詞・数式・前置詞で始まる = `C<数>`) と、 最初の comma の前に
+    9 語以上の句を置いた文 (`L`) を、 原稿の順に出す。 長さの閾値の下に残る読みにくい文の候補 (実測: N 語超の文を半分に
+    減らした後もまだ長いと言われ、 残っていたのはこの形だった)。 名詞の並列 (`A, B, and the C`) も拾う = 1 件ずつ読む。
 exit: 0 = 数えた / 2 = 入力の file が無い・読めない。
 """
 from __future__ import annotations
@@ -34,6 +38,11 @@ from pathlib import Path
 ABBR = r"\b(Ref|Refs|Eq|Eqs|Sec|Secs|Fig|Figs|App|Apps|Tab|cf|e\.g|i\.e|vs|al|Phys|Rev|Lett|Nat|Opt|No|Vol)\."
 DISPLAY = (r"\\begin\{(equation|align|gather|multline|figure|table|tabular|thebibliography|longtable)\*?\}"
            r".*?\\end\{\1\*?\}")
+# --joins: 接続詞の後が節の頭らしい語 (限定詞・代名詞・数式・前置詞) のときだけ数え、 語の並列 (「A, B, or C」) の大半を外す
+JOIN_START = (r"(?:the|a|an|its|it|their|they|we|this|that|these|those|each|every|no|both|any|one|our|MATH|"
+              r"inside|outside|below|above|at|in|for|with|from|on|by|there|here|then|only|all|most|neither|nor)\b")
+JOIN = re.compile(r",\s+(?:and|so|but|while|or|whereas)\s+" + JOIN_START, re.I)
+LONG_LEAD_WORDS = 9
 
 
 def load(path: Path) -> list[tuple[int, str]]:
@@ -100,17 +109,32 @@ def sentences(path: Path, macros: list[str]) -> list[tuple[int, int, str]]:
     return out
 
 
-def summarize(path: Path, macros: list[str], thresholds: list[int]) -> dict:
+def joins(sents: list[tuple[int, int, str]], min_words: int) -> list[dict]:
+    """節をつないだらしい文と、 最初の comma の前に長い句を置いた文 (min_words 語以上、 原稿の順)。"""
+    out = []
+    for w, line, t in sents:
+        k = len(JOIN.findall(t))
+        lead = re.match(r"^([^,]{0,200}),", t)
+        long_lead = bool(lead) and len(lead.group(1).split()) >= LONG_LEAD_WORDS
+        if w >= min_words and (k or long_lead):
+            out.append({"words": w, "line": line, "joins": k, "long_lead": long_lead, "text": t})
+    return out
+
+
+def summarize(path: Path, macros: list[str], thresholds: list[int], joins_min: int | None = None) -> dict:
     s = sentences(path, macros)
     ws = sorted(w for w, _, _ in s)
     if not ws:
         return {"file": str(path), "sentences": 0}
-    return {
+    r = {
         "file": str(path), "sentences": len(ws), "median": statistics.median(ws),
         "mean": round(sum(ws) / len(ws), 1), "longest": ws[-1],
         "over": {str(th): sum(1 for w in ws if w > th) for th in thresholds},
         "items": [{"words": w, "line": line, "text": c} for w, line, c in sorted(s, reverse=True)],
     }
+    if joins_min is not None:
+        r["joins"] = joins(s, joins_min)
+    return r
 
 
 def selftest() -> int:
@@ -139,6 +163,20 @@ def selftest() -> int:
     first = min(withm["items"], key=lambda it: it["line"])
     if "Ref." not in first["text"] or first["line"] not in (3, 4):  # 略語の点で切らない、 行は文の始まりの概ね
         print(f"FAIL abbreviation / line: {first}"); ok = False
+    jbody = ("\\begin{document}\n"
+             "The sample is heated once in the oven, and the color is checked after every minute of the run. "
+             "We use the flour, the sugar, and the butter in every batch of the recipe here. "
+             "Water boils near the top of the pot and steam leaves the lid from many places at once. "
+             "After the last step of the long procedure in the corner of the old laboratory, the result is written down.\n"
+             "\\end{document}\n")
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "j.tex"
+        p.write_text(jbody, encoding="utf-8")
+        hits = summarize(p, [], [40], joins_min=10)["joins"]
+    got = [(h["text"].split()[0], h["joins"], h["long_lead"]) for h in hits]
+    # 1 = 2 節を comma + and でつないだ文 / 2 = 名詞の並列 (拾う = 誤検出の型) / 3 = comma の無い文は拾わない / 4 = 前置の長い句
+    if got != [("The", 1, False), ("We", 1, False), ("After", 0, True)]:
+        print(f"FAIL --joins: {got}"); ok = False
     print("selftest:", "OK" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -149,6 +187,8 @@ def main() -> int:
     ap.add_argument("--over", type=int)
     ap.add_argument("--display-macro", action="append", default=[], metavar="NAME")
     ap.add_argument("--thresholds", default="30,40,50,60,80")
+    ap.add_argument("--joins", action="store_true", help="list sentences that join independent clauses or open with a long phrase")
+    ap.add_argument("--joins-min", type=int, default=20, metavar="N", help="with --joins: only sentences of at least N words")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
@@ -163,7 +203,7 @@ def main() -> int:
         if not p.is_file():
             print(f"{f}: file が無い", file=sys.stderr)
             return 2
-        results.append(summarize(p, a.display_macro, ths))
+        results.append(summarize(p, a.display_macro, ths, a.joins_min if a.joins else None))
     if a.json:
         print(json.dumps(results, ensure_ascii=False, indent=1))
         return 0
@@ -177,6 +217,11 @@ def main() -> int:
             for it in r["items"]:
                 if it["words"] > a.over:
                     print(f"   {it['words']:3d} 語  l.{it['line']}: {it['text'][:100]}…")
+        if "joins" in r:
+            print(f"   節をつないだ文・前置の長い文の候補 ({a.joins_min} 語以上): {len(r['joins'])}")
+            for it in r["joins"]:
+                flag = (f"C{it['joins']}" if it["joins"] else "  ") + (" L" if it["long_lead"] else "  ")
+                print(f"   l.{it['line']:<5d} {it['words']:3d} 語 {flag}  {it['text'][:100]}…")
     return 0
 
 

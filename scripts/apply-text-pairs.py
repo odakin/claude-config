@@ -10,12 +10,17 @@
     python3 apply-text-pairs.py TARGET PAIRS.py                  # 検査 + 書込み
     python3 apply-text-pairs.py TARGET PAIRS.py --dry-run        # 検査 + unified diff の表示だけ
     python3 apply-text-pairs.py TARGET PAIRS.py --test 'python3 {} --selftest'
+    python3 apply-text-pairs.py TARGET --note NOTE.md [--ids A,B]  # 提案の note の now / new の組を当てる
     python3 apply-text-pairs.py --selftest
 
 - `PAIRS.py` は `PAIRS = [(old, new), ...]` を定義する python file (三重引用符で長い日本語も読める形のまま書ける)。
   pair は前から順に、 **前の pair を当てた後の text** に当たる (後の pair が前の pair の出力を掴んでよい)。
 - `TARGET` は必須 (既定の path を持たない)。 既定値が live な file を指す patch script は、 引数を付け忘れた
   1 回で本物を書き換える (2026-09-13 実測: 写しに当てるつもりの再実行が engine 本体に二重に入った)。
+- `--note NOTE.md` = PAIRS.py の代わりに、 提案の note から組を読む。 note は組ごとに、 `<!-- now ID -->` の行の直後の
+  fenced block (今の文) と `<!-- new ID -->` の行の直後の fenced block (案) を持つ。 `--ids A,B` で当てる組と順を選ぶ
+  (既定 = note に出てくる now の順に全部)。 本人に見せた案の文を写し直さずにそのまま当てる (写すと、 見せた文と当てた文が
+  食い違いうる)。 同じ ID の block が 2 つある・片方が無い note は拒否する。
 
 拒否するもの (1 つでもあれば何も書かない):
 
@@ -64,6 +69,29 @@ def load_pairs(path: Path) -> list[tuple[str, str]]:
             isinstance(p, (list, tuple)) and len(p) == 2 and all(isinstance(s, str) for s in p) for p in pairs):
         raise SystemExit(f"{path}: PAIRS must be a list of (old, new) string pairs")
     return [(o, n) for o, n in pairs]
+
+
+NOTE_BLOCK = re.compile(r"<!-- (now|new) (\S+) -->\n```[^\n]*\n(.*?)\n```", re.S)
+
+
+def load_note_pairs(path: Path, ids: list[str] | None = None) -> list[tuple[str, str]]:
+    """提案の note の `<!-- now ID -->` / `<!-- new ID -->` の直後の fenced block を (old, new) の組にする。"""
+    blocks: dict[tuple[str, str], str] = {}
+    order: list[str] = []
+    for kind, ident, body in NOTE_BLOCK.findall(path.read_text(encoding="utf-8")):
+        if (kind, ident) in blocks:
+            raise SystemExit(f"{path}: <!-- {kind} {ident} --> appears twice")
+        blocks[(kind, ident)] = body
+        if kind == "now":
+            order.append(ident)
+    pairs = []
+    for ident in ids or order:
+        if ("now", ident) not in blocks or ("new", ident) not in blocks:
+            raise SystemExit(f"{path}: {ident} needs both <!-- now {ident} --> and <!-- new {ident} -->")
+        pairs.append((blocks[("now", ident)], blocks[("new", ident)]))
+    if not pairs:
+        raise SystemExit(f"{path}: no <!-- now ID --> / <!-- new ID --> blocks")
+    return pairs
 
 
 def plan(text: str, pairs: list[tuple[str, str]], allow_prefix: bool = False) -> tuple[str, list[str]]:
@@ -253,6 +281,23 @@ def selftest() -> int:
               and "* 10" in tgt.read_text() and via.is_symlink())
         r = subprocess.run([sys.executable, __file__, str(pf)], capture_output=True, text=True)
         check("CLI: there is no default target (one path alone is an error)", r.returncode != 0)
+
+        note = Path(td) / "note.md"
+        note.write_text("# 案\n\n<!-- now A -->\n```latex\nalpha beta\n```\n\n<!-- new A -->\n```latex\nalpha gamma\n```\n\n"
+                        "<!-- now B -->\n```\ndelta\n```\n<!-- new B -->\n```\nepsilon\n```\n", encoding="utf-8")
+        check("--note reads the now/new blocks in the note's order",
+              load_note_pairs(note) == [("alpha beta", "alpha gamma"), ("delta", "epsilon")])
+        check("--note --ids picks and orders the pairs", load_note_pairs(note, ["B"]) == [("delta", "epsilon")])
+        doc = Path(td) / "doc.tex"
+        doc.write_text("x alpha beta y\ndelta z\n", encoding="utf-8")
+        r = subprocess.run([sys.executable, me, str(doc), "--note", str(note)], capture_output=True, text=True)
+        check("CLI: TARGET --note applies the text shown in the note",
+              r.returncode == 0 and doc.read_text() == "x alpha gamma y\nepsilon z\n")
+        half = Path(td) / "half.md"
+        half.write_text("<!-- now A -->\n```\nx\n```\n", encoding="utf-8")
+        r = subprocess.run([sys.executable, me, str(doc), "--note", str(half)], capture_output=True, text=True)
+        check("a note with a now block but no new block is refused", r.returncode != 0
+              and doc.read_text() == "x alpha gamma y\nepsilon z\n")
     print("\nALL PASS" if ok else "\nFAILED")
     return 0 if ok else 1
 
@@ -265,13 +310,22 @@ def main() -> int:
     ap.add_argument("--test", metavar="CMD", help="run CMD on a patched copy first; {} = the copy's path")
     ap.add_argument("--allow-prefix", action="store_true")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--note", type=Path, metavar="NOTE.md",
+                    help="read the pairs from a proposals note's <!-- now ID --> / <!-- new ID --> fenced blocks")
+    ap.add_argument("--ids", metavar="A,B", help="with --note: the IDs to apply, in this order (default: all, in the note's order)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
-    if not (a.target and a.pairs):
-        ap.error("TARGET and PAIRS.py are both required (there is no default target)")
-    return apply(a.target, load_pairs(a.pairs), a.dry_run, a.test, a.allow_prefix, a.quiet)
+    if a.ids and not a.note:
+        ap.error("--ids needs --note")
+    if a.note and a.pairs:
+        ap.error("give PAIRS.py or --note, not both")
+    if not a.target or not (a.pairs or a.note):
+        ap.error("TARGET and PAIRS.py (or --note NOTE.md) are both required (there is no default target)")
+    pairs = (load_note_pairs(a.note, [s.strip() for s in a.ids.split(",") if s.strip()] if a.ids else None)
+             if a.note else load_pairs(a.pairs))
+    return apply(a.target, pairs, a.dry_run, a.test, a.allow_prefix, a.quiet)
 
 
 if __name__ == "__main__":

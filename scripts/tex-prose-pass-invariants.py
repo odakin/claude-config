@@ -10,9 +10,12 @@
 使い方 (git repo の中で):
     python3 tex-prose-pass-invariants.py --base <rev> [--head <rev>] paper.tex [more.tex ...]
         [--display-macro NAME ...] [--over 40] [--json]
+    python3 tex-prose-pass-invariants.py --base <rev> --head-file <写しの path> paper.tex [--over 40]
     python3 tex-prose-pass-invariants.py --selftest
 
   - `--head` を省くと作業 tree の file と比べる。 file の path は今の dir から。
+  - `--head-file PATH` = head を revision でも作業 tree でもなく別の file から読む (repo の外の写しで直し、 原稿に書き込む前に
+    確かめるとき = 著者が editor で原稿を開いている間など)。 比べる file は 1 つ。 `--over` の変わった行は 2 つの本文の差から出す。
   - 比べるもの (`%` のコメント行と行末コメントを除いた全文):
       inline math (`$...$` と `\\(...\\)`) / display (math 環境・`\\[...\\]`・`$$...$$`・`--display-macro` の `\\NAME{...}`) /
       `\\cite` 類のキー / `\\ref` 類 (ref・eqref・cref・Cref・autoref・labelcref・pageref・nameref・vref) のキー / `\\label` のキー /
@@ -24,6 +27,7 @@ exit: 0 = 全項目が同じ / 1 = どこかが違う (差を出す) / 2 = 入�
 from __future__ import annotations
 
 import argparse
+import difflib
 import importlib.util
 import json
 import re
@@ -114,6 +118,16 @@ def changed_lines(base: str, head: str | None, path: str) -> set[int]:
     return lines
 
 
+def changed_lines_text(old: str, new: str) -> set[int]:
+    """old → new で書き換えた・足した new の行番号 (1 始まり)。 `--head-file` の `--over` 用 (git diff を使わない)。"""
+    lines: set[int] = set()
+    sm = difflib.SequenceMatcher(None, old.split("\n"), new.split("\n"), autojunk=False)
+    for tag, _i1, _i2, j1, j2 in sm.get_opcodes():
+        if tag in ("replace", "insert"):
+            lines.update(range(j1 + 1, j2 + 1))
+    return lines
+
+
 def long_changed(text: str, lines: set[int], macros: list[str], over: int) -> list[dict]:
     spec = importlib.util.spec_from_file_location("tsl", Path(__file__).with_name("tex-sentence-lengths.py"))
     tsl = importlib.util.module_from_spec(spec)
@@ -148,6 +162,9 @@ def selftest() -> int:
         print(f"FAIL counts {got} (want {want})"); ok = False
     if sorted(e["numbers"]) != ["0.5", "12", "3"]:
         print(f"FAIL prose numbers {sorted(e['numbers'])}"); ok = False
+    cl = changed_lines_text("a\nb\nc\n", "a\nB\nc\nd\n")
+    if cl != {2, 4}:  # --head-file の --over = 書き換えた行と足した行 (new の行番号)
+        print(f"FAIL changed_lines_text {cl}"); ok = False
     print("selftest:", "OK" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -157,6 +174,7 @@ def main() -> int:
     ap.add_argument("files", nargs="*")
     ap.add_argument("--base")
     ap.add_argument("--head")
+    ap.add_argument("--head-file", type=Path, metavar="PATH")
     ap.add_argument("--display-macro", action="append", default=[], metavar="NAME")
     ap.add_argument("--over", type=int)
     ap.add_argument("--json", action="store_true")
@@ -166,19 +184,27 @@ def main() -> int:
         return selftest()
     if not a.base or not a.files:
         ap.error("--base <rev> と file を 1 つ以上")
+    if a.head_file and (a.head or len(a.files) != 1):
+        ap.error("--head-file は file 1 つと、 --head なしで")
     results, differ = [], False
     for f in a.files:
         try:
             old = git("show", f"{a.base}:./{f}")
-            new = git("show", f"{a.head}:./{f}") if a.head else Path(f).read_text(encoding="utf-8")
+            if a.head_file:
+                new = a.head_file.read_text(encoding="utf-8")
+            else:
+                new = git("show", f"{a.head}:./{f}") if a.head else Path(f).read_text(encoding="utf-8")
         except (subprocess.CalledProcessError, OSError) as exc:
-            print(f"{f}: 読めない ({a.base} / {a.head or '作業 tree'}): {getattr(exc, 'stderr', exc)}", file=sys.stderr)
+            print(f"{f}: 読めない ({a.base} / {a.head_file or a.head or '作業 tree'}): {getattr(exc, 'stderr', exc)}",
+                  file=sys.stderr)
             return 2
         cmp_ = compare(extract(old, a.display_macro), extract(new, a.display_macro))
         differ |= any(v["removed"] or v["added"] for v in cmp_.values())
-        r = {"file": f, "base": a.base, "head": a.head or "working tree", "categories": cmp_}
+        r = {"file": f, "base": a.base, "head": str(a.head_file) if a.head_file else (a.head or "working tree"),
+             "categories": cmp_}
         if a.over is not None:
-            r["long_changed"] = long_changed(new, changed_lines(a.base, a.head, f), a.display_macro, a.over)
+            lines = changed_lines_text(old, new) if a.head_file else changed_lines(a.base, a.head, f)
+            r["long_changed"] = long_changed(new, lines, a.display_macro, a.over)
         results.append(r)
     if a.json:
         print(json.dumps(results, ensure_ascii=False, indent=1))

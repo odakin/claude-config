@@ -1048,6 +1048,7 @@ JHEP.bst のような `F.~Last` 形式の bst では、ブレース内が全部 
 JHEP.bst はフィールドから自動リンクを生成するので `\href` 手書き不要（二重リンクの原因）。
 - `doi`: DOI 本体のみ（例: `10.1103/PhysRevA.61.012104`）
 - `eprint`: arXiv ID のみ（例: `quant-ph/9905023`）。`archivePrefix = "arXiv"` と併用
+- <a id="jhep-bst-no-braced-identifiers"></a>`doi`・`eprint` の値を波括弧で包まない (`doi = "{10.1103/…}"` の形): JHEP.bst は値をそのまま link の URL に入れるので、 波括弧が URL に残って開けない link になる (実測)。 組んだら PDF の link の URL に波括弧が残っていないかを見る (PyMuPDF なら `page.get_links()` の `uri`)
 - `url`: doi や eprint があれば不要
 - `note`: 自由テキスト。自動リンク対象外の補足情報に使う。 **全 entry で印字される**ので、 entry の内部の覚え書き (なぜ入れたか・どの note の比較対象か) は `annote` に書く (JHEP.bst は `annote` を読まない = 文献表に出ない)
 - 欧文の著者を `"{Last, First}"` と括弧で包むと、 `F. Last` にならず「Last, First」 のまま出る = 欧文の著者は包まない (和文の著者を包む理由は [#japanese-authors-bibtex](#japanese-authors-bibtex))
@@ -1599,6 +1600,15 @@ luatexja は `$過去$` (= 裸の kanji) も accept するが、 標準 idiom �
 
 - **LuaLaTeX でしか組めない source (ltjsarticle、 fontspec、 LuaTeX-ja) は先頭に `% !TEX TS-program = lualatex` を書く** (`% !TEX encoding = UTF-8 Unicode` も)。 無いと TeXShop は既定の engine (pdfTeX / uplatex の経路) で typeset してエラーで止まり、 著者には「コンパイル結果が見えない」 になる (実測)。 この行は file を開いた時に読まれるので、 開いたままの文書には効かない = 閉じて開き直す。
 - **tex に紐づいたプレビュー窓は、 その PDF を外部の build (CLI の lualatex・build script) が書き換えると描画しなくなることがある** (ページ番号は出るのに紙が灰色のまま。 ⌘W → ⌘T の再 typeset・ページ送り・表示形式の切替・ズームでは戻らない、 実測)。 PDF 自体は正常で、 **同じ PDF を独立の書類として開く** (ファイル > 開く、 または `open -a TeXShop <pdf>`) と描画する。 壊れた窓は TeXShop の再起動で消える。 外から組むときは、 著者に「開き直して」 と伝えるか、 TeXShop 側の typeset だけで組む ([#scratch-build-dir](#scratch-build-dir) の aux の競合とは別の症状)。
+
+## <a id="write-while-author-has-it-open"></a>著者が editor で開いている原稿に書き込む
+
+著者が自分の buffer を持つ editor (TeXShop など) で原稿を開いている間に disk の file を書き換えると、 editor が読み直さない限り、 著者の次の保存がこちらの変更を消す (editor が「別のアプリが変更した」 と確かめる場合も、 上書きを選べば同じ)。 著者が通読しながら直している最中に、 同じ file を直すときの手順:
+
+1. 作業は写しでする。 書き込みは最後の 1 回にまとめる (書くたびに著者の画面とずれる)。 写しの検査は写しのまま回す (数式・引用・数値の不変量 = [`scripts/tex-prose-pass-invariants.py`](../scripts/tex-prose-pass-invariants.py) `--head-file <写し>`)。
+2. 書く直前に、 著者の保存した変更が disk にあるかを見る。 `git diff -- <file>` が空でなければ、 写しを作った時の版 (base)・著者の版・こちらの版を 3-way merge する (`git merge-file <こちら> <base> <著者>`)。 著者の変更 (段落の区切り・1 語の直し) は残す。
+3. 書いたらすぐ、 著者に「disk の版を読み直してから続けて」 と頼む (閉じて開き直すのが確実)。 読み直す前に打った文字は失われるので、 書く前に一言かけられるならかける。
+4. 著者が自分で入れた変更は、 著者の言葉を添えて別の commit にする (こちらの直しと混ぜない = どちらの変更かが履歴で分かる)。
 
 ## <a id="texshop-engines"></a><a id="texshop-uplatex-engine"></a>TeXShop の engine で原稿を組む (latexmk-lualatex / uplatex)
 

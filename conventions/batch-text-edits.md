@@ -20,7 +20,7 @@ open(path, "w", encoding="utf-8").write(txt)
 
 - **契約**: 各 `old` は file 中に**正確に 1 回** match する。 0 件 (= typo / 既適用 / 別 file) も 2 件以上 (= 誤爆) も abort。 これは Edit tool の「唯一 match 保証」を N 件へ拡張したもの。 ⚠️ 「既適用なら 0 件」 は置換型の pair でしか成り立たない (挿入型 = [モード 6](#insertion-pair-rerun))。
 - **順序が本質**: read → **全 assert** → 全 replace → **単一 write**。 loop 内で write したり `sed -i` を逐次実行すると、 途中で失敗したとき「半分だけ当たった file」が disk に残る。
-- **機械化** = [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) `TARGET PAIRS.py`: 本契約 + [モード 5](#prefix-shaped-key) (old の端が長い token の途中) + [モード 6](#insertion-pair-rerun) (挿入型 pair の再実行) を検査し、 `--test CMD` なら patch 後の写しで test を通してから原子的に書く。 TARGET は必須引数 (既定の path を持たない) で、 最初に実体の path へ解決する ([モード 7](#symlink-target))。
+- **機械化** = [`scripts/apply-text-pairs.py`](../scripts/apply-text-pairs.py) `TARGET PAIRS.py`: 本契約 + [モード 5](#prefix-shaped-key) (old の端が長い token の途中) + [モード 6](#insertion-pair-rerun) (挿入型 pair の再実行) を検査し、 `--test CMD` なら patch 後の写しで test を通してから原子的に書く。 TARGET は必須引数 (既定の path を持たない) で、 最初に実体の path へ解決する ([モード 7](#symlink-target))。 本人に見せた提案の note (組ごとに `now <ID>` と `new <ID>` の印の行の直後に fenced block を置いた形、 書式 = 道具の冒頭) から当てるなら `TARGET --note NOTE.md [--ids A,B]` (案の文を写し直さない = 見せた文と当てた文が食い違わない)。
 
 **使い分け**:
 
