@@ -382,14 +382,14 @@ You must agree to the Xcode license agreements...
 
 ### <a id="job-python-invisible"></a>壊れ方がその機械の中から見えない理由 (実測)
 
-- **session で試すと通る**: session は別の interpreter を掴んでいる。 「手で実行したら動いた」 はジョブの環境の証明にならない
+- **session で試した結果は、 ジョブの環境の証明にならない**: session は別の interpreter を掴んでいる。 「手で実行したら動いた」 はジョブの環境を示さない。 逆に、 rc が PATH の先頭に package manager の python を置いた機械では、 agent の Bash の側が依存の無い interpreter を掴み、 ジョブは動くのに手で打つ道具だけが止まる (実測)
 - **job 定義に PATH が無くても、 launchd の既定の PATH で走るとは限らない**: 本人の shell から `launchctl bootstrap` / `load` したジョブは、 その shell の環境を継ぐ (`launchctl print gui/<uid>/<label>` の `inherited environment` に出る)。 package manager の bin が先頭に居れば `python3` はそこで解決し、 OS 付属の python3 に入れた依存は見えない。 継いだ環境は再 bootstrap や機械の再起動で変わるので、 「昨日まで動いていた」 も証明にならない。 再現するなら `env -i HOME=$HOME PATH=<inherited の値> sh -c '<wrapper>'` で job と同じ PATH を与える (実測)
 - **成功の終了コードで何もしない**: engine を fail-open に書いていると (`ImportError` で exit 0)、 launchd の記録も cron の健康診断も正常を示す。 通知のジョブなら症状は「通知が来ない」 だけで、 来ないことには誰も気づかない
 - **関門が「待機」 に畳む**: 起動行が `<gate> || exit 0` 型だと、 interpreter が起動すらできない場合 (Xcode の gate の exit 69 / 見つからない 127) も「別のマシンが本番なので待機」 と同じ exit 0 になり、 ジョブが黙って永久に休む
 
 ### <a id="job-python-fix"></a>対処 (3 つを組にする)
 
-1. **wrapper は interpreter を能力で選ぶ**: [`scripts/lib/pick-python.sh`](../scripts/lib/pick-python.sh) を source して `PY="$(pick_python yaml)" || { echo "$PY" >&2; exit 3; }` → `"$PY" engine.py`。 候補の順 = OS 付属の実体 (shim を通らない path) → shim (+ `DEVELOPER_DIR`) → PATH 上の順。 1 つも無ければ**非 0 で終わる** (= launchd の終了コードに出る)。 依存の無い engine も `pick_python` (module なし) で「起動できる」 ものを選ぶ
+1. **wrapper は interpreter を能力で選ぶ**: [`scripts/lib/pick-python.sh`](../scripts/lib/pick-python.sh) を source して `PY="$(pick_python yaml)" || { echo "$PY" >&2; exit 3; }` → `"$PY" engine.py`。 候補の順 = OS 付属の実体 (shim を通らない path) → shim (+ `DEVELOPER_DIR`) → PATH 上の順。 Python の入口 (別の engine を `os.execv(sys.executable, …)` で起こす shim) も同じで、 [`scripts/lib/pick_python.py`](../scripts/lib/pick_python.py) の `py, env = pick_python([...])` → `os.execve(py, [py, engine, …], env)` にする (今の interpreter が依存を持てばそのまま)。 依存が無いときに `None` を返す読み手の lib は、 無いことを stderr に 1 行出す = 呼び手が「認証の失敗」 と取り違えない ([`scripts/lib/gmail_read.py`](../scripts/lib/gmail_read.py) の `build_service`)。 1 つも無ければ**非 0 で終わる** (= launchd の終了コードに出る)。 依存の無い engine も `pick_python` (module なし) で「起動できる」 ものを選ぶ
 2. **関門の失敗を待機と分ける**: 関門の終了値は 0 = 実行 / 1 = 待機 と決め、 それ以外の非 0 は失敗として同じ終了値で終わらせる。 [`scheduled-tasks.md#launchd-cron-engine`](scheduled-tasks.md#launchd-cron-engine) の `--gate` はこの形を生成し、 既に入っている job 定義も `--ensure` が 1 回照合して書き換える (model 等の手の指定は残す)
 3. **他の機械から見る**: 壊れた機械の中の検査は、 その機械で誰かが session を開くまで何も言わない。 [`multi-machine-state.md#fleet-heartbeat`](multi-machine-state.md#fleet-heartbeat) の job health (`--job-label-prefix` / `--job-python-modules`) が各ジョブの最後の終了コードと、 job の PATH で解決した python3 が起動できるか・依存を import できるかを記録し、 reader が「関門の python3 が起動できない」 (🔴) / 「wrapper が PATH の python3 を呼ぶのに依存を import できない」 (🟠) / 他の機械の非 0 終了 (🟠) を出す
 

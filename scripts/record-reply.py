@@ -866,7 +866,7 @@ def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) 
     for tid, acct in pairs:
         msgs = gmail.thread(acct, tid, full=True)
         if msgs is None:
-            out(f"\n● thread {tid} ({acct}) — Gmail から引けなかった (auth / 404 / 一時失敗)。 未記録扱いにはしない")
+            out(f"\n● thread {tid} ({acct}) — Gmail から引けなかった (auth / 404 / 一時失敗 / この python に client library が無い = stderr の ⚠️ 行)。 未記録扱いにはしない")
             continue
         if not msgs:
             out(f"\n● thread {tid} ({acct}) — message 0 通")

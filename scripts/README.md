@@ -466,6 +466,7 @@
 - **[lib/photos_picker.py](lib/photos_picker.py)** — Google Photos Picker API の client (session を作る → 本人が URL を開いて写真を選ぶ → 選ばれた写真を列挙・download。 python3 photos_picker.py で selftest)
 - **[lib/pick-python.sh](lib/pick-python.sh)** — 無人ジョブ (launchd / cron) の wrapper が使う python3 を、 PATH の順でなく「必要な module を import できるか」 で選ぶ (source して pick_python を呼ぶ)
 - **[lib/pick-python.test.sh](lib/pick-python.test.sh)** — pick-python.sh (無人ジョブの python3 を import できるかで選ぶ) の検査
+- **[lib/pick_python.py](lib/pick_python.py)** — Python の入口 (shim) が engine を起こす interpreter を、 PATH の順でなく「必要な module を import できるか」 で選ぶ。
 - **[lib/print_pages.py](lib/print_pages.py)** — 刷る PDF の各頁が「窓口に出す頁」 かを、作る時に file へ宣言し、刷る直前に読む。宣言の無い頁は見出しから推定する。
 - **[lib/printer_media.py](lib/printer_media.py)** — CUPS の queue の先にある印刷機本体に、 トレイの用紙を IPP で聞く (pdf-print-preflight.py の --printer と --hook が使う)。
 - **[lib/prune-retired-hooks.sh](lib/prune-retired-hooks.sh)** — 退役した hook を外す (hooks dir の symlink + settings.json の entry)。 registry 駆動・冪等

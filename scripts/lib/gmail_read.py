@@ -8,7 +8,8 @@
 
 前提 (= 認証の置き場): <creds_dir>/<account>/credentials.json (access/refresh token) と
   <creds_dir>/<account>/gcp-oauth.keys.json (無ければ <creds_dir>/gcp-oauth.keys.json) — OAuth の "installed" client。
-  google-api-python-client / google-auth が要る (無い環境では build_service が None を返す = 呼び手は fail-open)。
+  google-api-python-client / google-auth が要る (無い環境では build_service が None を返す = 呼び手は fail-open。
+  無いことは stderr に 1 回出す = 呼び手が「認証の失敗」 と取り違えないため)。
 
 使い方:
     from gmail_read import load_account_creds, build_service, service_for, thread_messages, thread_of_message, walk_text
@@ -49,14 +50,32 @@ def load_account_creds(creds_dir: Path, account: str) -> dict | None:
         return None
 
 
+_MISSING_LIB_NOTED = False
+
+
+def _note_missing_library(err: ImportError) -> None:
+    """client library が無いことを stderr に 1 process 1 回だけ出す。 黙って None を返すと、 呼び手は
+    「Gmail から引けなかった (auth / 404 / 一時失敗)」 としか言えず、 認証を疑って時間を使う (実測: 2 回)。
+    PATH の先頭の python3 が依存を持たない別の版に替わったのが原因 = 依存で interpreter を選ぶ
+    (正本 = conventions/shell-env.md#job-python-by-capability)。"""
+    global _MISSING_LIB_NOTED
+    if _MISSING_LIB_NOTED:
+        return
+    _MISSING_LIB_NOTED = True
+    print(f"⚠️  gmail_read: Google の client library がこの python に無い ({sys.executable}: {err})。"
+          " 認証の問題ではない = 依存の入った python で回す (conventions/shell-env.md#job-python-by-capability)",
+          file=sys.stderr)
+
+
 def build_service(blob: dict | None):
-    """gmail v1 の service。 認証 blob が無い / client library が無い → None。"""
+    """gmail v1 の service。 認証 blob が無い / client library が無い → None (後者は stderr に 1 回 = _note_missing_library)。"""
     if not blob:
         return None
     try:
         from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
-    except ImportError:
+    except ImportError as e:
+        _note_missing_library(e)
         return None
     cred, oauth = blob["cred"], blob["oauth"]
     scope = cred.get("scope")
