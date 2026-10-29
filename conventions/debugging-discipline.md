@@ -499,6 +499,15 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 
 ---
 
+## <a id="reproduce-through-same-channel"></a>12b. 再現は、 落ちた検査と同じ口で観測する
+
+落ちた検査の原因を再現で確かめるとき、 再現の script が検査と別の口で信号を拾っていると、 「再現しなかった」 という 0 件に意味が無い。 例 = 検査は page error と console の error の両方を数えるのに、 再現は page error だけを聞いて 0 件になり、 「再現しない」 と読みかけた。 起動処理の catch が console に書いた error は page error に出ない (実測)。
+
+- 再現を書く前に、 落ちた検査がその信号をどう拾っているか (どの listener・どの filter・どの時点) を読み、 同じ拾い方を写す。
+- 再現の結果には、 拾った口と、 どの段階で出たかを一緒に書く。 0 件のときは「この口で 0 件」 と口を添える (1 つの口の 0 件を、 その信号が無い証明にしない)。
+
+---
+
 ## <a id="firing-probe-execute-vs-honor"></a>13. mechanism が「発火したか」 を検証する時は依存ゼロの unconditional probe + 独立 discriminator、 「実行」 と「honor」 を分ける
 
 §10 は「silent dead は実 e2e でしか expose できない」、 §12 は「再現 ≠ 検証」 だった。 本節は **mechanism (hook / 自動化 / guard) が特定 context で発火・効果したかを切り分ける**作法。 雑にやると「動いていない」 と「動いたが効果が捨てられた」 を取り違え、 誤った root cause を作話する。

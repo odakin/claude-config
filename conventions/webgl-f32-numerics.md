@@ -75,6 +75,14 @@ table (texture の binary) と、 その大きさ・格子を書いた metadata 
 - export の道具が table 本体の内容 hash を metadata に書き、 page は table を `<name>.bin?v=<hash>` で取る (中身が変わらない限り cache が効き、 変われば必ず取り直す)。
 - 受け取った大きさを metadata の格子と照合し、 合わなければ「再読み込みしてください」 と出して止まる (黙って描かない)。
 
+## <a id="reload-after-tables"></a>頁を開き直す検査は、 前の読み込みが table を取り終えてから開き直す
+
+headless の検査が同じ頁を状態ごとに開き直すとき、 load の event の直後に開き直すと、 前の読み込みがまだ取っている table (数 MB の binary) の取得が打ち切られる。 頁の起動処理の catch がそれを error として console に書き (`TypeError: Failed to fetch`)、 console の error を数える検査は、 測った値が正しいのに落ちる (実測)。 手元の server では load の前に読み終わるので出ず、 公開 URL では毎回出る = release の後に初めて見える。
+
+- 開き直す前に、 頁が table を受け取った印 (起動処理の最後で立てる global など) を待つ。 metadata を読むためだけの最初の読み込みも同じ。
+- 待つ形にすると、 本当の取得の失敗 (印が立たない) はその読み込みの時間切れとして止まり、 打ち切りと分かれる。
+- 打ち切りかどうかの確かめ = 回線を絞って開き直す (CDP の network の条件) と同じ error が出て、 印を待ってから開き直すと 0 件になる。 再現の側も、 落ちた検査と同じ口 (page error と console の両方) で error を拾う ([`debugging-discipline.md#reproduce-through-same-channel`](debugging-discipline.md#reproduce-through-same-channel))。
+
 ## <a id="derivatives-in-divergent-flow"></a>画面微分 (dFdx / mip) は分岐した return の後で取らない
 
 写真の背景 (正距円筒図法の全天画像など) を光線の行き先で引くとき、 縮小で砂嵐にならないよう mip level を選ぶ。 ここで:
@@ -88,6 +96,7 @@ table (texture の binary) と、 その大きさ・格子を書いた metadata 
 同じ写像を 2 つの table (例: 外側の静止 frame の table と、 地平面をまたぐ落下 frame の table) で持つとき:
 
 - **各 engine が前提にする観測者の frame を切替の条件に入れる**: 片方が特定の frame (自由落下) しか持たないなら、 別の frame (静止) の観測者をそちらに回さない。 半径だけで切り替えると、 その frame を持たない engine が別の観測者の視界を描く (実測: 静止カメラが切替半径の内側で落下の視界になり、 半径をまたぐと画面全体が影と空で入れ替わった)。
+- <a id="slider-keeps-observer"></a>**位置を動かす control (半径のスライダなど) は観測者を替えない**: その観測者が存在しない所 (例 = 静止観測者は地平面の内側に居られない) まで control が動かすと、 境界で別の観測者に黙って替わり、 両者の相対速度の分の収差で画面が跳ぶ (実測: 地平面で相対速度が光速に届き、 画面の大半が入れ替わった)。 観測者を明示の状態にし、 control はその観測者のまま動かし、 存在しない所の手前で止めて「切り替える」 操作を出す。 確かめ = control の値を書いて入力の event を発火する headless の sweep で、 隣り合う歩の画素の差を周りの歩の中央値と比べる ([#seam-pixel-diff](#seam-pixel-diff))。
 - **切替の位置は、 両 engine を参照実装と比べた精度で決める**: 定義域が重なる範囲で両方を f64 と比べ、 精度の高い方を使える所まで使う (実測: 外側の table は下端の近くまで 2 桁以上正確だった)。 その値を選んだ理由を記録する (理由の無い閾値は、 後から動かせるかを誰も判断できない)。
 - 切替の前後で probe を取り、 視野の向きごとに (正面・横・後ろ) f64 との差を並べる。 一方の向きだけでは段差を見落とす。
 - <a id="frame-convention-rotation"></a>**基準の観測者を切替で取り替えるなら、 camera の軸を回して継ぐ**: 外側では静止観測者、 内側では自由落下観測者を基準にする、 のように engine ごとに基準の観測者が違うとき、 同じ 4 元速度の camera でも「基準の triad を camera の速度で純粋に boost した軸」 は 2 つの基準で一致しない (2 つの boost の合成は回転を含む = Wigner 回転)。 切替の瞬間に、 保存している camera の軸を回転行列 R_ji = η(e'_j, e_i) で一度だけ回す。 回さないとその角度だけ画面が跳ぶ (実測: 横向きの速度を持つ camera で約 8°)。 速度が径方向だけなら回転は単位行列。 回転は両方の基準が存在する側 (例 = 静止観測者がまだ在る外側) で計算する。
