@@ -236,7 +236,7 @@ Codex の lifecycle forcing function と coverage 限界は [`codex/PARITY.md#co
 
 | 軸 | 内容 |
 |---|---|
-| **整合性** | 変更ファイル間で数値・用語・参照先が一致しているか |
+| **整合性** | 変更ファイル間で数値・用語・参照先が一致しているか (md の link と anchor は手書きの検査を書かず `python3 claude-config/scripts/fix-md-links.py --files <md> --list` と `python3 claude-config/scripts/check-md-anchors.py --repo <repo>` で見る) |
 | **無矛盾性** | 既存ルール・テンプレートと矛盾していないか |
 | **効率性** | 重複がないか。SESSION.md ~80行、MEMORY.md は index-only（[§8.7](docs/convention-design-principles.md#mechanism-application-example)）か |
 | **安全性** | 個人情報・認証情報、 **未公開文書の中身** (原稿・査読・申請の文・数値・結果。 識別子の grep では掛からない) が公開リポに含まれていないか |
@@ -245,7 +245,7 @@ Codex の lifecycle forcing function と coverage 限界は [`codex/PARITY.md#co
 
 **sweep の goal alignment** (= 「✓ pass」 closure を禁じ、 cell 埋めではなく error 発見が goal、 終了時に sweep 範囲 / 未 sweep 範囲 / confidence 境界を明示) は次の `### sweep / review / audit の goal alignment` 参照。 上記 4 軸 table が **何を** check するかの axis、 goal alignment が **どの goal で** check するかの mode、 両方を combine して使う。
 
-**<a id="commit-subject-content-parity"></a>commit 後 subject-content 点呼**: `git commit -m "A + B + C"` のように message subject に複数項目を列挙したら、 commit 直後に `git show --stat HEAD` を回して message subject 全部が file 一覧に反映されているか点呼する。 特に (i) staged 未確認で `git commit`、 (ii) 直前に Edit した file の `git add` 忘れ、 の 2 条件が同時に成立すると staged 分だけ commit されて subject と content が silent に乖離する (= renames/moves の diff 量に満足して file 名の見落としが起きやすい)。 点呼で乖離が判明したら追い commit で新規 landing (= history rewrite せず正直な commit message で追う)。 push 前に検知すれば公開されずに済む。 2026-07-13 に或る共同研究 repo で「message は 3 file 更新と書いたが実際は rename のみ commit、 3 file の Edit は git add 忘れで staged 外」 の事故から明文化。
+**<a id="commit-subject-content-parity"></a>commit 後 subject-content 点呼**: `git commit -m "A + B + C"` のように message subject に複数項目を列挙したら、 commit 直後に `git show --stat HEAD` を回して message subject 全部が file 一覧に反映されているか点呼する。 特に (i) staged 未確認で `git commit`、 (ii) 直前に Edit した file の `git add` 忘れ、 の 2 条件が同時に成立すると staged 分だけ commit されて subject と content が silent に乖離する (= renames/moves の diff 量に満足して file 名の見落としが起きやすい)。 (iii) **Edit と `git commit` を同じ message に並べた** 場合も同じ乖離が起きる = Edit が当たらず失敗しても、 同じ message の commit はそのまま走る。 同じ file の別の Edit が通っていれば `--stat` にもその file が出るので、 点呼では気づけない (実測)。 commit は Edit の結果を読んだ後の message で打ち、 入る hunk を `git diff -U0 -- <path> | grep -c '^@@'` で数える。 点呼で乖離が判明したら追い commit で新規 landing (= history rewrite せず正直な commit message で追う)。 push 前に検知すれば公開されずに済む。 2026-07-13 に或る共同研究 repo で「message は 3 file 更新と書いたが実際は rename のみ commit、 3 file の Edit は git add 忘れで staged 外」 の事故から明文化。
 
 **リポでの作業開始手順（全場面共通）:** `git fetch` → CLAUDE.md → SESSION.md（要対応を確認）→ 作業開始。autocompact 復帰・scheduled task・SKILL 実行・手動作業すべてに適用。親ディレクトリで作業中にタスクが既存リポの管轄だと判明した場合も同様（MEMORY.md リポ一覧で特定 → そのリポの CLAUDE.md を読む）。「簡単なタスク」も例外ではない。CLAUDE.md 内のポインタ（「正本は X」「詳細は Y 参照」）は必ず辿る
 
