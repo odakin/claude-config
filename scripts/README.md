@@ -110,7 +110,7 @@
 - **[check-value-index.py](check-value-index.py)** — 本人が暗号化して持つ値 (電話・口座・生年月日・住所) が、 平文の追加行や commit message に写るのを止める。--selftest 内蔵。
 - **[check-xlsx-integrity.py](check-xlsx-integrity.py)** — xlsx の Excel「破損」判定源を Excel 不要・決定論で検出（XML well-formed〔unbound prefix〕/ rels 両方向参照整合 / rId 重複 / Content_Types coverage。 zip 直編集 xlsx の納品前 gate、 office-automation.md#openpyxl-destroys-drawings）
 - **[check-yaml-lint.py](check-yaml-lint.py)** — fleet 横断 YAML hazard lint (yamllint を危険 rule 限定で全 repo の tracked yaml に回す。 truthy / dup-key / implicit-octal / syntax、 git-crypt lock file skip、 yamllint 未 install や root 不在は SKIP、 --selftest は毒入り fixture で検出能力自体を検証。 規約 = conventions/yaml-hazards.md#yamllint-hazard-config)
-- **[child-wrap-check.py](child-wrap-check.py)** — 起こした子の session を畳んで (archive して) よいかを照合する。 `--wait` は子の turn が終わるまで待ってから照合する (desktop app の親 session 用、 読むだけ)。
+- **[child-wrap-check.py](child-wrap-check.py)** — 起こした子の session を畳んで (archive して) よいかを照合する。 `--wait` は子の turn が終わるまで待ってから照合する。 `--finished` は掲示板の依頼が全部受け取られたのに畳まれていない子を数える (desktop app の親 session 用、 読むだけ)。
 - **[chromium-cookies.py](chromium-cookies.py)** — macOS の Chromium 系 browser (Brave / Chrome) の cookie を復号して取り出す。
 - **[ci-local-repro.sh](ci-local-repro.sh)** — Linux CI だけで落ちる command を commit ごとに手元で再現する (使い捨て clone × native/GNU userland × 空の HOME の行列)
 - **[ci-local-repro.test.sh](ci-local-repro.test.sh)** — ci-local-repro.sh の fixture test (commit 行列の rc・空 HOME・元 repo 無変更・hook 非複製・使い方の誤り・GNU shim)
