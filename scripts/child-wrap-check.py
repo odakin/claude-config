@@ -25,7 +25,8 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
   - 本人と話している途中: 親が子へ最後に送った message (wrap の依頼など) より後に、 本人が子の窓で発言しているか
     (実測: 親が「片付けは不要、 wrap して終えて」 と送った直後に、 本人が同じ子に「どうやって消すの？」 と打ち、
     子が答えた 2 分後に親が畳んだ)。 子がその発言に答えて問いを残さず turn を終えていれば、 その時刻を添えて出す
-    (判定は変えない = ANSWERED_GRACE_MIN が None の間は残す側。 None でない値は本人の裁定で入れる)
+    (子が止まってから ANSWERED_GRACE_MIN 分 〔既定 30、 env CHILD_WRAP_ANSWERED_GRACE_MIN、 `none` = 数え続ける〕、
+    本人がその窓で話さなければ、 話している途中ではない)
   - 「Try again」: app が API の誤り (接続が切れた等) の後に入れる再試行の 1 行。 本人の新しい発言ではないので、
     上の 2 つのどちらにも数えない (実測: 子が答え終えて止まっているのに、 これ 1 行で「話している途中」 と出ていた)
 判定: 動いていない・wrap の記録がある・push されていない commit が無い・本人待ちの問いも話の途中も無い = 畳んでよい。
@@ -50,7 +51,7 @@ Usage:
   child-wrap-check.py --finished [--parent <local_…|transcript id>] --board-root <dir> [...] [--as-of …]
         掲示板の依頼が受け取られたのに畳まれていない子を数える (--parent 無し = この機械の全部の親。 exit 1 = due / wrapped がある)
   child-wrap-check.py --wait-due <local_…> [...] --board-root … [--max-minutes N]
-        子が親の番 (due / wrapped / 答え終えて ASK_AFTER_MIN 分) になるまで待って状態を出す (既定 720 分、 時間切れ = exit 3)。
+        子が親の番 (due / wrapped。 ANSWERED_GRACE_MIN が none なら答え終えて ASK_AFTER_MIN 分も) になるまで待って状態を出す (既定 720 分、 時間切れ = exit 3)。
         本人を待っている子に親が run_in_background で出す = 本人が子の窓で答えて子が終えたとき、 ほかの子が動いていても親が起こされる
   child-wrap-check.py --hook-sendmessage [--rule <参照>]  PostToolUse(SendMessage) の hook 用: 自分の子に wrap を頼んだ
         message なら、 同じ turn に --wait の見張りを出す 1 行を additionalContext で返す (それ以外は何も出さない)
@@ -93,9 +94,20 @@ RETRY_TEXTS = {"Try again"}  # the app's retry after an API error (measured on t
 # Latin-letter boundaries, not \b: Python counts kana as word characters, so \bwrap\b misses 「wrapして」.
 WRAP_WORD = re.compile(r"(?<![A-Za-z])wrap(?![A-Za-z])", re.I)
 ID8 = re.compile(r"^([0-9a-f]{8})\b")
+def _grace_from_env() -> float | None:
+    v = (os.environ.get("CHILD_WRAP_ANSWERED_GRACE_MIN") or "").strip().lower()
+    if v in ("none", "off"):
+        return None
+    try:
+        return float(v) if v else 30.0
+    except ValueError:
+        return 30.0
+
+
 # Minutes after the child answered the person's last prompt in its window (and left no question) from which that prompt
-# no longer counts as "talking". None = it still counts (the 2026-10-28 choice: keep). A number is the owner's call.
-ANSWERED_GRACE_MIN: float | None = None
+# no longer counts as "talking" = the child is the parent's to fold. Default 30 (the owner's ruling where this was built);
+# env CHILD_WRAP_ANSWERED_GRACE_MIN=none keeps counting it (then an answered child is raised as "ask the person").
+ANSWERED_GRACE_MIN: float | None = _grace_from_env()
 ASK_AFTER_MIN = 10  # an "answered" child idle this long is raised once as "ask the person whether to fold" (--hook-stop / --wait-due)
 RAW_ROOTS: list[str] = []  # the --board-root values as given (patterns), repeated in the commands the hooks suggest
 CHILD_DAYS = 14  # children are looked for among app records touched this recently
@@ -334,7 +346,9 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
     if not c:
         return {"target": target, "found": False, "ok": False, "reasons": ["子が見つからない (app の記録にも live の registry にも無い)"]}
     ev = scan_child(c["path"], as_of)
+    earlier_wraps = []
     if wrap_since:  # after --wait: only a wrap run for this request counts, not one from an earlier request
+        earlier_wraps = [w for w in ev["wraps"] if w[:19] < wrap_since[:19]]
         ev["wraps"] = [w for w in ev["wraps"] if w[:19] >= wrap_since[:19]]
     ask = open_ask(ev, parent_wait_notes(c["parent_path"], c["local"], as_of))
     commits = child_commits(c["cli"], ev["first"][:19])
@@ -347,7 +361,10 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
     if talking:
         reasons.append(_talking_text(talking))
     if need_wrap and not ev["wraps"]:
-        reasons.append("wrap の記録が無い")
+        # measured: a parent passed --since 10 minutes after its wrap request, and the wrap run fell outside the window
+        reasons.append("wrap の記録が無い" + (f" (--since より前の {_local_hm(max(earlier_wraps))} に wrap の記録がある = --since が"
+                                              " wrap の依頼より後になっている。 依頼の時刻 〔hook が出す --since の値〕 か、 それより前を渡す)"
+                                              if earlier_wraps else ""))
     bad = [x for x in commits if not x["pushed"]]
     if bad:
         reasons.append("push されていない commit: " + ", ".join(f"{os.path.basename(x['repo'])} {x['sha']}" for x in bad))
@@ -652,7 +669,8 @@ DONE_STATES = ("due", "wrapped", "archived", "no-board")
 
 def _settled(r: dict) -> bool:
     """--wait-due ends here: the child is the parent's turn again (or gone)."""
-    return r["state"] in DONE_STATES or (r["state"] == "answered" and r.get("answered_min", 0) >= ASK_AFTER_MIN)
+    return r["state"] in DONE_STATES or (r["state"] == "answered" and ANSWERED_GRACE_MIN is None
+                                         and r.get("answered_min", 0) >= ASK_AFTER_MIN)
 
 
 def child_row(local: str) -> tuple[dict | None, dict | None]:
@@ -728,26 +746,31 @@ def render_finished(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _accept_line(r: dict, rule: str) -> str:
+def _accept_line(r: dict, rule: str, extra: str = "") -> str:
     who = f"子 {r['title'] or r['local']} ({r['local']})"
     tail = f" 規則 = {rule}" if rule else ""
     if r["state"] == "due":
         return (f"🧺 規則 10 の番: {who} の依頼を受け取った (accept)。 この子に開いている依頼は無く、 本人も待っていない。"
                 " この turn のうちに規則 10 の順で畳む = model を確かめる → wrap を頼む → 同じ turn に見張り"
                 f" (`python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {r['local']}`) → 起こされたら照合して archive。"
-                " 後の直しに使うつもりでも、 次の依頼を出していなければ規則 10 では終えた子 (使い回しの扱いは本人の裁定待ち)。" + tail)
+                " 次の仕事に使うなら、 この turn に次の依頼を掲示板に出す (宛先 = その子の役。 道具は開いている依頼と数える)。"
+                + (f" {extra}" if extra else "") + tail)
     if r["state"] == "owner":
         return (f"🧺 {who} の依頼を受け取った。 子は本人を待っている ({'; '.join(r['reasons'])[:300]})"
                 " = 規則 10 では残し、 本人に 1 行で伝える。 本人が子の窓で答えて子が終えたときに起こされるよう、 同じ turn に"
                 f" Bash の run_in_background で `{_wait_due_cmd([r['local']])}` を出す (ほかの子が動いていると、 app は子の"
                 " turn の終わりでこの session を起こさない)。" + tail)
+    if r["state"] == "answered" and ANSWERED_GRACE_MIN is not None:
+        return (f"🧺 {who} の依頼を受け取った。 本人がこの子の窓で話した後、 子は答え終えて問いを残していない"
+                f" ({'; '.join(r['reasons'])[:300]})。 本人がその窓で {ANSWERED_GRACE_MIN:g} 分話さなければ畳む番になる ="
+                f" 起こされるよう Bash の run_in_background で `{_wait_due_cmd([r['local']])}` を出す。" + tail)
     if r["state"] == "answered":
         return (f"🧺 {who} の依頼を受け取った。 本人がこの子の窓で話した後、 子は答え終えて問いを残していない"
-                f" ({'; '.join(r['reasons'])[:300]})。 道具は今は残す側 (本人の裁定待ち) = 畳むかを本人に 1 行で聞く。" + tail)
+                f" ({'; '.join(r['reasons'])[:300]})。 道具は残す側 = 畳むかを本人に 1 行で聞く。" + tail)
     return ""
 
 
-def hook_accept(inp: dict, roots: list[str], rule: str) -> str:
+def hook_accept(inp: dict, roots: list[str], rule: str, extra: str = "") -> str:
     """additionalContext after `board.py accept` of a request one's own child worked on; '' otherwise."""
     if inp.get("tool_name") != "Bash":
         return ""
@@ -772,7 +795,7 @@ def hook_accept(inp: dict, roots: list[str], rule: str) -> str:
     lines = []
     for c in children_of(me["local_id"]):
         if c["cli"][:8] in workers and not c["detached"] and not c["archived"]:
-            line = _accept_line(finished_state(c, me["local_id"], ppath, events, instance), rule)
+            line = _accept_line(finished_state(c, me["local_id"], ppath, events, instance), rule, extra)
             if line:
                 lines.append(line)
     return "\n".join(lines)
@@ -783,7 +806,7 @@ def _state_file(parent_local: str) -> str:
     return os.path.join(d, re.sub(r"[^A-Za-z0-9_.-]", "_", parent_local) + ".json")
 
 
-def hook_stop(inp: dict, roots: list[str], rule: str, mode: str) -> str:
+def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = "") -> str:
     """A Stop decision (JSON) when the session ends a turn leaving a child due to be wrapped/archived; '' otherwise.
     Once per child and accept time: the second Stop for the same child is silent."""
     if mode == "off" or not roots:
@@ -802,7 +825,8 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str) -> str:
     except (OSError, ValueError):
         seen = {}
     def key(r: dict) -> str:
-        late = r["state"] == "answered" and r.get("answered_min", 0) >= ASK_AFTER_MIN  # recent → watch, later → ask
+        late = (r["state"] == "answered" and ANSWERED_GRACE_MIN is None
+                and r.get("answered_min", 0) >= ASK_AFTER_MIN)  # recent → watch, later → ask
         return f"{r['accepted_at']}|{r['state']}{'+' if late else ''}|{r.get('answered_at') or r.get('wait_since') or ''}"
 
     new = [r for r in due if seen.get(r["local"]) != key(r)]
@@ -827,7 +851,8 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str) -> str:
             pass
         return ""
     fold = [r for r in new if r["state"] in ("due", "wrapped")]
-    ask = [r for r in new if r["state"] == "answered" and r.get("answered_min", 0) >= ASK_AFTER_MIN]
+    ask = [r for r in new if r["state"] == "answered" and ANSWERED_GRACE_MIN is None
+           and r.get("answered_min", 0) >= ASK_AFTER_MIN]
     watch = [r for r in new if r not in fold and r not in ask]
     lines = []
     if fold:
@@ -836,7 +861,8 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str) -> str:
             lines.append(f"- {r['title'] or r['local']} ({r['local']}) — 受け取り {_local_hm(r['accepted_at'])} から {r['hours']} 時間"
                          + ("、 wrap は終わっている = 照合して archive" if r["state"] == "wrapped" else ""))
         lines.append("この turn のうちに規則 10 の順で畳む (wrap を頼む → 見張り → 照合 → archive)。 本人がこの子について別の指示を"
-                     "しているなら (例 = 使用量の上限が戻るまで待つ)、 それを本人に 1 行で書いて turn を終える。")
+                     "しているなら (例 = 使用量の上限が戻るまで待つ)、 それを本人に 1 行で書いて turn を終える。"
+                     + (f" {extra}" if extra else ""))
     if ask:
         lines.append(f"🧺 依頼は全部受け取り済みで、 本人がその窓で話した後に子が答え終え、 {ASK_AFTER_MIN} 分以上止まっている子が {len(ask)} つ"
                      " (規則 10 の「話している間」 に入るかは本人の裁定待ち = 道具は残す側):")
@@ -844,7 +870,9 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str) -> str:
             lines.append(f"- {r['title'] or r['local']} ({r['local']}) — 子は {_local_hm(r['answered_at'])} に答え終えた")
         lines.append("畳んでよいかを本人に 1 行で聞く (子の窓で続けるなら残す)。")
     if watch:
-        lines.append(f"🧺 依頼は全部受け取り済みで、 本人を待っている子が {len(watch)} つ (残す): "
+        lines.append(f"🧺 依頼は全部受け取り済みで、 本人を待っている子"
+                     + (f" か本人の発言に答え終えて {ANSWERED_GRACE_MIN:g} 分たたない子" if ANSWERED_GRACE_MIN is not None else "")
+                     + f"が {len(watch)} つ (残す): "
                      + "、 ".join(f"{r['title'] or r['local']} ({r['local']})" for r in watch))
         lines.append("本人に 1 行で伝え (まだなら)、 本人が子の窓で答えて子が終えたときに起こされるよう、 Bash の run_in_background で"
                      f" `{_wait_due_cmd([r['local'] for r in watch])}` を出す (ほかの子が動いていると、 app は子の turn の終わりで"
@@ -874,6 +902,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--parent", default="")
     ap.add_argument("--board-root", action="append", default=[])
     ap.add_argument("--rule", default="")
+    ap.add_argument("--extra", default="", help="hook の文に足す 1 文 (個人層の規則の要点)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
     if a.selftest:
@@ -889,11 +918,12 @@ def main(argv: list[str]) -> int:
             inp = json.loads(sys.stdin.read() or "{}")
             if a.hook_stop:
                 out = hook_stop(inp, board_roots(a.board_root), a.rule,
-                                a.stop_mode or os.environ.get("CHILD_FINISHED_STOP") or "observe")
+                                a.stop_mode or os.environ.get("CHILD_FINISHED_STOP") or "observe", a.extra)
                 if out:
                     print(out)
                 return 0
-            ctx = hook_accept(inp, board_roots(a.board_root), a.rule) if a.hook_accept else hook_sendmessage(inp, a.rule)
+            ctx = (hook_accept(inp, board_roots(a.board_root), a.rule, a.extra) if a.hook_accept
+                   else hook_sendmessage(inp, a.rule))
         except Exception:
             return 0  # fail-open
         if ctx:
@@ -927,6 +957,7 @@ def selftest() -> int:
     import tempfile
 
     global ANSWERED_GRACE_MIN
+    saved_grace, ANSWERED_GRACE_MIN = ANSWERED_GRACE_MIN, None  # the cases below were written for "keep counting"
     fails: list[str] = []
 
     def ok(label: str, cond: bool) -> None:
@@ -1016,9 +1047,11 @@ def selftest() -> int:
         r = check_child(ids("nowrap")[0])
         ok("no wrap run → kept", (not r["ok"]) and r["reasons"] == ["wrap の記録が無い"])
         ok("--no-wrap-needed drops that reason", check_child(ids("nowrap")[0], need_wrap=False)["ok"])
+        ok("--since after the wrap run → the reason says --since is too late",
+           any("--since が wrap の依頼より後" in x for x in check_child(ids("answered")[0], wrap_since="2026-01-01T02:00:00")["reasons"]))
         ok("after --wait, a wrap from an earlier request does not count",
            not check_child(ids("busy")[0], wrap_since="2026-01-01T02:00:00")["ok"]
-           and "wrap の記録が無い" in check_child(ids("busy")[0], wrap_since="2026-01-01T02:00:00")["reasons"])
+           and any(x.startswith("wrap の記録が無い") for x in check_child(ids("busy")[0], wrap_since="2026-01-01T02:00:00")["reasons"]))
         talk = [u("2026-01-01T00:00:00Z", "依頼", origin={"kind": "human"}), peer("2026-01-01T01:00:00Z", "wrap して終えて", parent_l),
                 {"type": "attachment", "timestamp": "2026-01-01T01:02:00Z", "attachment": {
                     "type": "queued_command", "origin": {"kind": "human"}, "prompt": "どうやって消すの？"}},
@@ -1191,9 +1224,29 @@ def selftest() -> int:
         acc["session_id"] = parent_c
         acc["tool_input"]["command"] = f"python3 board.py accept --request {R['due']}"
         ok("hook-accept: someone else's child → silent", hook_accept(acc, [board], "") == "")
+        acc["session_id"] = bp_c
+        ok("hook-accept: --extra text rides on the 'fold' line", "聞かない" in hook_accept(acc, [board], "", "畳む前に聞かない"))
+        ANSWERED_GRACE_MIN = 30
+        st30 = {r["local"]: r for r in finished(bp_l, [board])}
+        ok("grace 30: the person spoke, the child answered long ago → due", st30[cases["said"][0]]["state"] == "due")
+        early = {r["local"]: r for r in finished(bp_l, [board], as_of="2026-01-02T01:10:30")}[cases["said"][0]]
+        ok("grace 30: answered 10 minutes ago → still answered", early["state"] == "answered")
+        ok("grace 30: the accept line for a recent answer → --wait-due, not 'ask'",
+           "--wait-due" in _accept_line(early, "") and "本人に 1 行で聞く" not in _accept_line(early, ""))
+        ok("grace 30: wait-due does not settle on a recent answer", not _settled(early))
+        os.remove(_state_file(bp_l))
+        why30 = json.loads(hook_stop(stop_in, [board], "R", "block") or "{}").get("reason", "")
+        ok("grace 30: the long-answered child is in the 'fold' part, no 'ask' part",
+           cases["said"][0] in why30.split("本人を待っている子")[0] and "本人に 1 行で聞く" not in why30)
+        ANSWERED_GRACE_MIN = None
+        for v, want in (("none", None), ("", 30.0), ("45", 45.0), ("x", 30.0)):
+            os.environ["CHILD_WRAP_ANSWERED_GRACE_MIN"] = v
+            ok(f"env grace {v!r} → {want}", _grace_from_env() == want)
+        os.environ.pop("CHILD_WRAP_ANSWERED_GRACE_MIN", None)
         for k in ("CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR", "CHILD_WRAP_REPOS_GLOB",
                   "CHILD_WRAP_INSTANCE", "CHILD_FINISHED_STATE_DIR"):
             os.environ.pop(k, None)
+    ANSWERED_GRACE_MIN = saved_grace
     print("selftest:", "PASS" if not fails else f"{len(fails)} FAIL")
     return 1 if fails else 0
 
