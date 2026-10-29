@@ -479,7 +479,7 @@ def board_roots(extra: list[str] | None = None) -> list[str]:
 
 
 def _compact(iso: str) -> str:
-    """'2026-10-29T03:22:54' → '20261029T032254Z' (the board's event file names start with this)."""
+    """'2026-01-02T03:04:05' → '20260102T030405Z' (the board's event file names start with this)."""
     s = re.sub(r"[^0-9T]", "", iso[:19])
     return s + "Z" if len(s) == 15 else ""
 
