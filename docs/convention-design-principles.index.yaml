@@ -953,6 +953,10 @@ sections:
     legacy: "8.87"
     level: 3
     title: "8.87 状態の欄が 1 つの向きしか持たないと、 同居した逆向きの義務が gate から落ちる — 向きごとに欄を分け、 gate は一次の記録も見る"
+  - id: missing-sot-is-a-task
+    legacy: "8.88"
+    level: 3
+    title: "8.88 確かめられない事実は、 答えを探して終えず「正本が無い」 を 1 件の仕事にする"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
