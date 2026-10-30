@@ -13,6 +13,7 @@ Characters, not words: line breaks, hyphenation and page order then do not matte
 nothing of how the marks were made.
 
     latexdiff-views-check.py diff.tex old.tex new.tex [--engine pdflatex]
+    latexdiff-views-check.py --same a.pdf b.pdf     (the same text on every page? for two builds of one input)
     latexdiff-views-check.py --selftest
 
 All three files in one directory, with the figures and the .bbl of diff.tex beside them (old.tex and
@@ -88,6 +89,14 @@ def run(diff, old, new, engine="pdflatex"):
     return 1 if bad else 0
 
 
+def same(a, b):
+    import fitz
+    x, y = fitz.open(a), fitz.open(b)
+    equal = sum(p.get_text() == q.get_text() for p, q in zip(x, y))
+    print("%d and %d pages, %d with the same text" % (x.page_count, y.page_count, equal))
+    return 0 if x.page_count == y.page_count == equal else 1
+
+
 def selftest():
     if shutil.which("pdflatex") is None:
         print("SKIP: pdflatex not on PATH")
@@ -122,6 +131,8 @@ def selftest():
 def main(argv):
     if argv[1:] == ["--selftest"]:
         return selftest()
+    if len(argv) == 4 and argv[1] == "--same":
+        return same(argv[2], argv[3])
     args = [a for a in argv[1:] if not a.startswith("--")]
     engine = "pdflatex"
     if "--engine" in argv:

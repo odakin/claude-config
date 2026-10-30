@@ -192,7 +192,7 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 - 見え方の約束 = 式番号は新しい側。 括弧の大きさ・字間・行の切れ目は変更として印を付けない。 旧にしかない式は番号なしで、 それを引く消した文には旧の番号を出す (基準の版の `.aux` を渡す)。 共通の部分が少ない組は式ごと表示 (旧に取り消し線、 新に下線)。 移動した式は旧の場所に取り消し線、 新の場所に下線。
 - ⚠️ 無印の検査 ([`check-latexdiff-math-markup.py --scan`](../scripts/check-latexdiff-math-markup.py)) は、 この経路では式について常に 0 になる (式に latexdiff の印が無い) = 式の合格の根拠にしない。 式の検査は道具の読み戻し (追加を除くと旧、 削除を除くと新、 合わなければ止まる) と次節。
 - ⚠️ placeholder を自作するなら普通の語を 3 つ並べる。 latexdiff は共通の部分が `MINWORDSBLOCK` (既定 3) 語に満たないと前後の変更に畳むので、 1 語の placeholder は「消して足した」 形になり、 同じ式が 2 回出る (実測)。
-- ⚠️ 比較の記憶を `id()` で引かない。 一時の node の id は使い回されるので、 組むたびに結果が変わる (実測)。 生成の道具は同じ入力で 2 回回し、 頁の文字が一致することを確かめる。
+- ⚠️ 比較の記憶を `id()` で引かない。 一時の node の id は使い回されるので、 組むたびに結果が変わる (実測)。 生成の道具は同じ入力で 2 回回し、 頁の文字が一致することを確かめる (`latexdiff-views-check.py --same a.pdf b.pdf`)。
 - engine ([`latexdiff-review-snapshot.sh`](../scripts/latexdiff-review-snapshot.sh)) には組み込んでいない = repo の手順の script から呼ぶ。
 
 ## <a id="latexdiff-views-check"></a>差分 PDF を元の 2 版に読み戻して確かめる (`latexdiff-views-check.py`)
