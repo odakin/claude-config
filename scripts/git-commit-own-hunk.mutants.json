@@ -1,5 +1,5 @@
 {
-  "_comment": "git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 10 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 各 mutant は docstring の「穴」 1〜6 の塞ぎと、 --base を越えて進む条件・やり直しの判定を 1 つずつ外す。",
+  "_comment": "git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 15 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 各 mutant は docstring の「穴」 1〜7 の塞ぎと、 --base を越えて進む条件・やり直しの判定を 1 つずつ外す。",
   "target": "git-commit-own-hunk.py",
   "run": "python3 {} --selftest",
   "fail_marker": "FAIL ",
@@ -56,8 +56,8 @@
       "name": "commit の後に実 index を揃えない (穴 4 = 自分の commit を取り消す変更が stage 済みになる)",
       "pairs": [
         [
-          "        out(top, \"reset\", \"-q\", \"--\", *built)\n",
-          ""
+          "        err = reset_real_index(top, list(built), lock)\n",
+          "        err = None\n"
         ]
       ],
       "expect_fail": [
@@ -138,8 +138,8 @@
       "name": "誤った commit を外せなかった時もやり直す (止まらずに、 誤った commit の上に次の commit を重ねにいく)",
       "pairs": [
         [
-          "            if rb.returncode != 0:\n",
-          "            if False:\n"
+          "            rb = run(top, \"update-ref\", \"HEAD\", back, new)\n            if rb.returncode != 0:\n",
+          "            rb = run(top, \"update-ref\", \"HEAD\", back, new)\n            if False:\n"
         ]
       ],
       "expect_fail": [
@@ -164,6 +164,85 @@
       "expect_pass": [
         "相手が自分の commit の上に重ねた commit を外さない",
         "自分の分だけが commit に入る"
+      ]
+    },
+    {
+      "name": "commit の前に実 index の lock が消えるのを待たない (穴 7 = lock が在るのに commit し、 後始末で外す羽目になる)",
+      "pairs": [
+        [
+          "        if not dry and not wait_unlocked(lock, LOCK_WAIT):\n",
+          "        if False:\n"
+        ]
+      ],
+      "expect_fail": [
+        "実 index の lock が消えなければ commit せずに終了値 6"
+      ],
+      "expect_pass": [
+        "commit の後に lock に当たっても、 lock が消えたら実 index を揃えて",
+        "commit の後の lock が消えなければ commit を HEAD から外して終了値 6"
+      ]
+    },
+    {
+      "name": "commit の後の reset が lock に当たった時に待って打ち直さない (穴 7 = lock がすぐ消えても commit を外して止まる)",
+      "pairs": [
+        [
+          "        if not (LOCK_INDEX_RE.search(text) or lock.exists()):\n",
+          "        if True:\n"
+        ]
+      ],
+      "expect_fail": [
+        "commit の後に lock に当たっても、 lock が消えたら実 index を揃えて"
+      ],
+      "expect_pass": [
+        "実 index の lock が消えなければ commit せずに終了値 6",
+        "commit の後の lock が消えなければ commit を HEAD から外して終了値 6"
+      ]
+    },
+    {
+      "name": "commit の後に実 index を揃えられなかった時に commit を HEAD から外さない (穴 7 = commit だけが残り、 相手の素の commit が自分の変更を戻す)",
+      "pairs": [
+        [
+          "            rb = run(top, \"update-ref\", \"HEAD\", parent, val)\n",
+          "            rb = subprocess.CompletedProcess([], 0)\n"
+        ]
+      ],
+      "expect_fail": [
+        "commit の後の lock が消えなければ commit を HEAD から外して終了値 6"
+      ],
+      "expect_pass": [
+        "実 index の lock が消えなければ commit せずに終了値 6",
+        "commit の後に lock に当たっても、 lock が消えたら実 index を揃えて"
+      ]
+    },
+    {
+      "name": "commit を HEAD から外す時に旧値を渡さない (上に重なった相手の commit ごと外す)",
+      "pairs": [
+        [
+          "            rb = run(top, \"update-ref\", \"HEAD\", parent, val)\n",
+          "            rb = run(top, \"update-ref\", \"HEAD\", parent)\n"
+        ]
+      ],
+      "expect_fail": [
+        "lock で揃えられず、 上に相手の commit が重なっていれば外さずに終了値 5"
+      ],
+      "expect_pass": [
+        "commit の後の lock が消えなければ commit を HEAD から外して終了値 6"
+      ]
+    },
+    {
+      "name": "reset の後に、 自分の commit より後の commit が対象の path を変えたかを見ない (自分の変更が戻ったのに終了値 0)",
+      "pairs": [
+        [
+          "        if head != val and paths_changed(top, val, head, list(built)):\n",
+          "        if False:\n"
+        ]
+      ],
+      "expect_fail": [
+        "実 index を揃える前に入った相手の commit が自分の変更を戻したら終了値 5"
+      ],
+      "expect_pass": [
+        "相手が自分の commit の上に重ねた commit を外さない",
+        "commit の後に lock に当たっても、 lock が消えたら実 index を揃えて"
       ]
     }
   ]

@@ -26,6 +26,13 @@
    その親は自分の commit なので 「親が違う」 と読み、 1 の巻き戻しが**相手の commit を HEAD から外す** (selftest で再現)。
    → 一時 index の tree と同じ tree の commit を HEAD から first-parent で探して自分の commit とする (同じ tree が
    複数なら件名も照合)。 巻き戻しは旧値つきなので、 誤った commit の上に相手が重ねていれば外さずに止まる (終了値 5)。
+7. **4 の `git reset` が実 index の lock (`index.lock`) に当たると、 commit だけが入って実 index と作業 tree が古いまま残る**
+   (一時 index の commit は実 index の lock を取らないので通る)。 実 index には自分の commit を取り消す変更が stage 済みで、
+   相手が素の `git commit` を打つと自分の変更が黙って巻き戻る (実測)。 → commit の前に lock が消えるのを待ち
+   (消えなければ commit しない)、 commit の後の reset も lock が消えるまで待って打ち直す。 それでも揃わなければ
+   commit を HEAD から外して (旧値つき) 止まる (終了値 6)。 上に相手の commit が重なっていて外せなければ終了値 5。
+   lock を持ったまま走る commit (`git commit -a` / `-- <path>`、 実測) の終わりを待った後は、 それが古い実 index・作業 tree から
+   自分の変更を戻していることがある → reset の後に、 自分の commit より後の commit が対象の path を変えていれば終了値 5。
 
 commit は `git commit` で作る (pre-commit / prepare-commit-msg / commit-msg / post-commit がそのまま走る)。
 
@@ -71,14 +78,24 @@ commit の後は push と、 相手の session への 1 行 (相手の `git diff
     4 = --base から今の HEAD までの commit が対象の path を変えている (渡した版が古い) / HEAD が動き続けた。
         何も commit していない
     5 = commit の直前に HEAD が動いて誤った commit が入り、 その上に別の commit が重なっていて HEAD から外せなかった
-        (相手の commit を外さないために止めた) / commit の後に HEAD の近くに自分の commit が見つからない。
-        push せずに git log と git reflog を見て手で直す
+        (相手の commit を外さないために止めた) / commit の後に HEAD の近くに自分の commit が見つからない /
+        commit の後に実 index を揃えられず、 上に別の commit が重なっていて自分の commit を外せない /
+        commit の後、 実 index を揃える前に入った別の commit が対象の path を変えている (自分の変更を戻した恐れ。
+        作業 tree には自分の変更を当ててある)。 push せずに git log と git reflog を見て手で直す
+    6 = 実 index の lock (index.lock) が 30 秒 (LOCK_WAIT) 消えなかった。 何も commit していない (commit の後に当たった時は、
+        入れた commit を HEAD から外して戻した)。 少し待って呼び直す (git の process が 1 つも動いていないのに残るなら、
+        落ちた git が残した lock = 消してから)
 
 ## 限界
 
 - HEAD を見てから `git commit` が HEAD を読むまでの間 (process の起動 1 回ぶん) に相手の commit が入ると、 誤った commit が
   一瞬 HEAD になる。 直後の照合で ref を戻して作り直すが、 その間に push する post-commit hook が在る repo では、
   誤った commit が外へ出うる (そういう hook を持つ repo では使わない)。
+- commit から実 index の reset が通るまでの間 (lock が空いていれば git の起動 1 回ぶん) に相手が素の `git commit` を
+  始めると、 その commit は自分の変更を戻す (始めに読んだ実 index がまだ古い)。 素の commit は lock を始めにだけ取り、
+  hook の走る間は持たない (実測) ので、 reset は通り、 その commit が入るのは reset の後 = 終了値 5 の検査にも掛からない。
+  この窓は閉じていない。 commit の後に lock を待った時は ⚠️ の行が出る = 相手の commit が入った後に git log -p で
+  自分の変更が HEAD に残っているかを見る。
 - hook は作業 tree を読むことがある。 hook が見る作業 tree には相手の変更も在る (index は自分の分だけ)。
 - commit の後に自分の commit を tree と件名で探す。 hook が件名を書き換え、 かつ同じ tree の commit (空の commit など) が
   直後に上に重なった時だけ取り違えうる。
@@ -99,12 +116,15 @@ import tempfile
 import time
 from pathlib import Path
 
-RC_OK, RC_GATE, RC_USAGE, RC_WORKTREE, RC_MOVED, RC_STUCK = 0, 1, 2, 3, 4, 5
+RC_OK, RC_GATE, RC_USAGE, RC_WORKTREE, RC_MOVED, RC_STUCK, RC_LOCKED = 0, 1, 2, 3, 4, 5, 6
 TEST_HOOK_ENV = "GIT_COMMIT_OWN_HUNK_TEST_HOOK"   # selftest 専用: 最初の commit の直前に 1 回だけ shell で実行する (窓を決定的に開ける)
 RETRIES = 4                                        # 最初の 1 回 + やり直し 3 回
 BACKOFF = 0.2                                      # やり直しの前に待つ秒 × 何回目のやり直しか
 LOCK_REF_RE = re.compile(r"cannot lock ref '|HEAD\.lock")   # git が ref を更新できなかった (commit は入っていない)
 OWN_SEARCH = 50                                    # commit の後、 自分の commit を HEAD から何個さかのぼって探すか
+LOCK_WAIT = 30.0                                   # 実 index の lock (index.lock) が消えるのを待つ秒 (commit の前と後でそれぞれ)
+LOCK_POLL = 0.05                                   # lock が消えたかを見る間隔の秒
+LOCK_INDEX_RE = re.compile(r"index\.lock")         # git が実 index の lock を取れなかった
 
 
 class Stop(Exception):
@@ -282,6 +302,44 @@ def dry_run(top: Path, parent: str, built: dict) -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def index_lock(top: Path) -> Path:
+    """実 index の lock file。 別の git が実 index を書いている間だけ在る (落ちた git が残していくこともある)。"""
+    p = Path(out(top, "rev-parse", "--git-path", "index").decode().strip())
+    return Path(f"{p if p.is_absolute() else top / p}.lock")
+
+
+def wait_unlocked(lock: Path, wait: float) -> bool:
+    """lock が消えるのを wait 秒まで待つ。 消えていれば True。"""
+    deadline = time.monotonic() + wait
+    while lock.exists():
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(LOCK_POLL)
+    return True
+
+
+def reset_real_index(top: Path, paths: list, lock: Path) -> str | None:
+    """commit の後に実 index の paths を新しい HEAD に揃える (作業 tree は不変)。 別の git が実 index の lock を持っていて
+    失敗した時は、 lock が消えるのを待ってやり直す (合わせて LOCK_WAIT 秒まで)。 揃ったら None、 揃わなければ git の出力。"""
+    deadline = time.monotonic() + LOCK_WAIT
+    warned = False
+    while True:
+        r = run(top, "reset", "-q", "--", *paths)
+        if r.returncode == 0:
+            return None
+        text = (r.stdout + r.stderr).decode("utf-8", "replace").strip()
+        if not (LOCK_INDEX_RE.search(text) or lock.exists()):
+            return text                       # lock 以外の理由 = 待っても揃わない
+        if not warned:
+            warned = True
+            print(f"⚠️ commit の後、 実 index の lock に当たった。 消えるのを {LOCK_WAIT:g} 秒まで待って打ち直す "
+                  "(相手の commit が始まっていると自分の変更を戻していることがある = 相手の commit が入った後に git log -p で見る)",
+                  file=sys.stderr)
+        if not wait_unlocked(lock, deadline - time.monotonic()) or time.monotonic() >= deadline:
+            return text
+        time.sleep(LOCK_POLL)                 # lock が消えた直後に別の git が取り直すこともある = 少し置いて打ち直す
+
+
 def apply_worktree(top: Path, specs: dict) -> list:
     """置換を作業 tree に当てる。 当てられなかった path の説明の list を返す (空 = 全部当たった / もう当たっていた)。"""
     problems = []
@@ -314,9 +372,15 @@ def apply_worktree(top: Path, specs: dict) -> list:
 def do_commit(top: Path, specs: dict, msg_file: Path, base: str | None, dry: bool, worktree: bool) -> int:
     paths = list(specs)
     anchor = out(top, "rev-parse", "--verify", f"{base}^{{commit}}").decode().strip() if base is not None else None
+    lock = index_lock(top)                    # commit の後に git を 1 回でも減らす (そこで失敗すると commit だけが残る)
     for attempt in range(1, RETRIES + 1):
         if attempt > 1:
             time.sleep(BACKOFF * (attempt - 1))
+        # commit の後の実 index の reset は lock が要る。 lock を別の git が持っている間は commit しない
+        if not dry and not wait_unlocked(lock, LOCK_WAIT):
+            raise Stop(RC_LOCKED, f"実 index の lock ({lock}) が {LOCK_WAIT:g} 秒消えない = 別の git が実 index を使っている。 "
+                                  "何も commit していない。 少し待って呼び直す (git の process が 1 つも動いていないのに残るなら、 "
+                                  "落ちた git が残した lock = 消してから呼び直す)")
         # 毎回: 親を取り直し、 版を作った親 (--base) から今の HEAD までに対象の path が変わっていないかを見る。
         # 変わっていなければ 「親の版 + 自分の変更」 は今の HEAD の上でもそのまま正しい
         parent = out(top, "rev-parse", "HEAD").decode().strip()
@@ -340,7 +404,20 @@ def do_commit(top: Path, specs: dict, msg_file: Path, base: str | None, dry: boo
         if state == "moved":
             print(f"⚠️ {val} (試行 {attempt}/{RETRIES})", file=sys.stderr)
             continue
-        out(top, "reset", "-q", "--", *built)
+        err = reset_real_index(top, list(built), lock)
+        if err is not None:
+            # 実 index が古い版のまま = 自分の commit を取り消す変更が stage 済みで、 作業 tree にも当てていない。
+            # この状態で相手が素の git commit を打つと自分の変更が巻き戻る → commit を HEAD から外して (旧値つき) 元に戻す
+            first_line = err.splitlines()[0] if err else "(出力なし)"
+            rb = run(top, "update-ref", "HEAD", parent, val)
+            if rb.returncode != 0:
+                raise Stop(RC_STUCK, f"commit {val[:9]} は入ったが、 実 index を新しい HEAD に揃えられず ({first_line})、 "
+                                     "その上に別の commit が重なっていて HEAD から外せない。 push せずに、 lock が消えてから "
+                                     f"`git reset -q -- {' '.join(built)}` を打ち、 自分の変更を作業 tree にも当て、 "
+                                     "上の commit が自分の変更を戻していないかを git log -p で見る")
+            raise Stop(RC_LOCKED, f"commit {val[:9]} は入ったが、 実 index を新しい HEAD に揃えられなかった ({first_line})。 "
+                                  "commit を HEAD から外して戻した = 何も commit していない (実 index も作業 tree も触っていない)。 "
+                                  "少し待って呼び直す")
         problems = apply_worktree(top, specs) if worktree else []
         stat = out(top, "show", "--stat", "--format=%h %s", val).decode("utf-8", "replace").strip()
         print(f"✅ commit した (自分の分だけ。 親 = {parent[:9]}、 試行 {attempt} 回目):")
@@ -350,8 +427,14 @@ def do_commit(top: Path, specs: dict, msg_file: Path, base: str | None, dry: boo
             print("🟠 commit は入ったが、 作業 tree に同じ置換を当てられなかった:", file=sys.stderr)
             for x in problems:
                 print("  " + x, file=sys.stderr)
-            return RC_WORKTREE
-        return RC_OK
+        # 実 index を揃える前に相手が commit した (git commit -a など、 実 index の lock を持ったまま走る形は reset が
+        # その終わりを待つ) = 古い実 index・作業 tree から作った commit が自分の変更を戻している恐れ
+        head = out(top, "rev-parse", "HEAD").decode().strip()
+        if head != val and paths_changed(top, val, head, list(built)):
+            print(f"🟠 自分の commit {val[:9]} の後に入った commit (HEAD = {head[:9]}) が対象の path を変えている "
+                  "= 実 index を揃える前に相手が commit し、 自分の変更を戻した恐れ。 push せずに git log -p で見る", file=sys.stderr)
+            return RC_STUCK
+        return RC_WORKTREE if problems else RC_OK
     raise Stop(RC_MOVED, f"HEAD が {RETRIES} 回続けて動いた。 何も commit していない (少し待って呼び直す)")
 
 
@@ -359,6 +442,8 @@ def do_commit(top: Path, specs: dict, msg_file: Path, base: str | None, dry: boo
 # selftest
 # ---------------------------------------------------------------------------
 def selftest() -> int:
+    global LOCK_WAIT                          # lock の待ちを test ごとに短くする (finally で戻す)
+    saved_wait = LOCK_WAIT
     fails = 0
     base_env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
                     GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
@@ -600,7 +685,79 @@ def selftest() -> int:
         log = g(top, "log", "--format=%s").stdout.decode().split()
         ok("上に重なった同じ tree の commit (空の commit) を自分のと取り違えて外さない",
            rc == 0 and log[:3] == ["late", "mine", "P"] and head_file(top, "f.txt") == "a\nb\nc-mine\nd\ne\n", f"rc={rc} log={log}")
+
+        def lock_after_commit(top: Path, release_after: float | None, stack: bool = False) -> None:
+            """自分の commit の直後 (post-commit) に 1 回だけ、 別の git が実 index の lock を取る。 release_after 秒で放す
+            (None = 放さない = 落ちた git が残した lock)。 stack = 相手が index を使わずに上へ commit を重ねる。"""
+            release = f"(sleep {release_after}; rm -f .git/index.lock) >/dev/null 2>&1 &\n" if release_after is not None else ""
+            late = "c=$(git commit-tree 'HEAD^{tree}' -p HEAD -m late) && git update-ref HEAD \"$c\"\n" if stack else ""
+            h = top / ".git" / "hooks" / "post-commit"
+            h.write_text("#!/bin/sh\n[ \"$(git log -1 --format=%s)\" = mine ] || exit 0\n[ -e .git/lock-once ] && exit 0\n"
+                         ": > .git/lock-once\n: > .git/index.lock\n" + release + late)
+            h.chmod(0o755)
+
+        def index_entry(top: Path, path: str) -> str:
+            return g(top, "ls-files", "-s", "--", path).stdout.decode()
+
+        def reflog_len(top: Path) -> int:
+            return len(g(top, "reflog", "--format=%H", "HEAD").stdout.decode().split())
+
+        # 18. 実 index の lock が commit の前から在る (別の git が使っている / 落ちた git が残した) → commit しない
+        LOCK_WAIT = 0.3
+        top = new_repo(root, "r18")
+        (top / "f.txt").write_text("a-other\nb\nc\nd\ne\n")
+        before = (g(top, "rev-parse", "HEAD").stdout, index_entry(top, "f.txt"), reflog_len(top))
+        (top / ".git" / "index.lock").write_text("")
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "e\n", "e-mine\n"])
+        ok("実 index の lock が消えなければ commit せずに終了値 6 (HEAD・reflog・実 index・作業 tree が変わらない)",
+           rc == RC_LOCKED and (g(top, "rev-parse", "HEAD").stdout, index_entry(top, "f.txt"), reflog_len(top)) == before
+           and (top / "f.txt").read_text() == "a-other\nb\nc\nd\ne\n", f"rc={rc}")
+
+        # 19. commit の後に別の git が実 index の lock を取り、 少しして放す → 待って揃え、 作業 tree にも当てる
+        LOCK_WAIT = 5.0
+        top = new_repo(root, "r19")
+        (top / "f.txt").write_text("a-other\nb\nc\nd\ne\n")
+        lock_after_commit(top, release_after=0.2)
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "e\n", "e-mine\n"])
+        ok("commit の後に lock に当たっても、 lock が消えたら実 index を揃えて作業 tree にも当てる",
+           rc == 0 and head_file(top, "f.txt") == "a\nb\nc\nd\ne-mine\n"
+           and (top / "f.txt").read_text() == "a-other\nb\nc\nd\ne-mine\n"
+           and g(top, "status", "--porcelain", "--", "f.txt").stdout.decode().startswith(" M"),
+           f"rc={rc} work={(top / 'f.txt').read_text()!r} status={g(top, 'status', '--porcelain', '--', 'f.txt').stdout!r}")
+
+        # 20. commit の後に取られた lock が消えない → commit を HEAD から外して終了値 6 (何もしなかった状態に戻る)
+        LOCK_WAIT = 0.3
+        top = new_repo(root, "r20")
+        (top / "f.txt").write_text("a-other\nb\nc\nd\ne\n")
+        lock_after_commit(top, release_after=None)
+        before = (g(top, "rev-parse", "HEAD").stdout, index_entry(top, "f.txt"))
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "e\n", "e-mine\n"])
+        ok("commit の後の lock が消えなければ commit を HEAD から外して終了値 6 (実 index・作業 tree も元のまま)",
+           rc == RC_LOCKED and (g(top, "rev-parse", "HEAD").stdout, index_entry(top, "f.txt")) == before
+           and (top / "f.txt").read_text() == "a-other\nb\nc\nd\ne\n", f"rc={rc} log={g(top, 'log', '--format=%s').stdout!r}")
+
+        # 21. 20 の上に、 相手が index を使わずに commit を重ねた → 相手の commit を外さずに終了値 5
+        top = new_repo(root, "r21")
+        lock_after_commit(top, release_after=None, stack=True)
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "e\n", "e-mine\n"])
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("lock で揃えられず、 上に相手の commit が重なっていれば外さずに終了値 5",
+           rc == RC_STUCK and log[:3] == ["late", "mine", "P"], f"rc={rc} log={log}")
+
+        # 22. 自分の commit の後、 実 index を揃える前に相手が作業 tree から commit した (git commit -a) → 自分の変更が戻る
+        top = new_repo(root, "r22")
+        (top / "f.txt").write_text("a-other\nb\nc\nd\ne\n")
+        h = top / ".git" / "hooks" / "post-commit"
+        h.write_text("#!/bin/sh\n[ \"$(git log -1 --format=%s)\" = mine ] || exit 0\n[ -e .git/late-once ] && exit 0\n"
+                     ": > .git/late-once\n(unset GIT_INDEX_FILE; git commit -q -a --no-verify -m late)\n")
+        h.chmod(0o755)
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "e\n", "e-mine\n"])
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("実 index を揃える前に入った相手の commit が自分の変更を戻したら終了値 5 で知らせる (作業 tree には自分の変更を当てる)",
+           rc == RC_STUCK and log[:3] == ["late", "mine", "P"] and head_file(top, "f.txt") == "a-other\nb\nc\nd\ne\n"
+           and (top / "f.txt").read_text() == "a-other\nb\nc\nd\ne-mine\n", f"rc={rc} log={log}")
     finally:
+        LOCK_WAIT = saved_wait
         os.environ.clear()
         os.environ.update(saved)
         shutil.rmtree(root, ignore_errors=True)

@@ -176,7 +176,7 @@
 - **[generate-doc-index.py](generate-doc-index.py)** — regenerate a slug index FROM its markdown, so Claude writes
 - **[generate-tree.py](generate-tree.py)** — CLAUDE.md 構造 tree (conventions/hooks/scripts) + CONVENTIONS.md 冒頭列挙 +
 - **[generate-trigger-table.py](generate-trigger-table.py)** — 全文の markdown table (源) から、 auto-load 面に置く「trigger + ⚠️ だけ」 の表を marker の間に生成する (--write / --check / --selftest)
-- **[git-commit-own-hunk.mutants.json](git-commit-own-hunk.mutants.json)** — git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 10 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
+- **[git-commit-own-hunk.mutants.json](git-commit-own-hunk.mutants.json)** — git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 15 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[git-commit-own-hunk.py](git-commit-own-hunk.py)** — 同じ file に別の session の未 commit の変更が居る時に、 自分の変更だけを commit する (一時 index。 作業 tree の相手の変更は触らない)。
 - **[git-drop-path-history.py](git-drop-path-history.py)** — ある file の全版を git の履歴から落とす (不可逆) を、 予行演習・本番・他 machine の追従の 3 段で安全に行う。
 - **[git-rewrite-follow.py](git-rewrite-follow.py)** — 書き換えられた (force-push された) 履歴に手元の clone を中身で揃える / 古い世代の commit・blob の push を止める / 揃える機構が各マシンに届いたかを状態で答える (engine = scripts/lib/git_rewrite_follow.py、 追従の判定は書き換えられない層 = 本 repo に置く)
