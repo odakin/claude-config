@@ -1,5 +1,5 @@
 {
-  "_comment": "git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 16 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 各 mutant は docstring の「穴」 1〜7 の塞ぎと、 --base を越えて進む条件・やり直しの判定を 1 つずつ外す。",
+  "_comment": "git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 17 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 各 mutant は docstring の「穴」 1〜7 の塞ぎと、 --base を越えて進む条件・やり直しの判定を 1 つずつ外す。",
   "target": "git-commit-own-hunk.py",
   "run": "python3 {} --selftest",
   "fail_marker": "FAIL ",
@@ -259,6 +259,21 @@
       "expect_pass": [
         "実 index を揃える前に入った相手の commit が自分の変更を戻したら終了値 5",
         "相手が自分の commit の上に重ねた commit を外さない"
+      ]
+    },
+    {
+      "name": "足す文がもう親の版にある時の停止を外す (相手の commit に巻き込まれた後に当てると二重に入る)",
+      "pairs": [
+        [
+          "        if old in new and new in data:",
+          "        if False:"
+        ]
+      ],
+      "expect_fail": [
+        "足す文がもう親の版にあれば止まり、 二重に入らない"
+      ],
+      "expect_pass": [
+        "自分の分だけが commit に入る"
       ]
     }
   ]

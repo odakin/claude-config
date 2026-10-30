@@ -69,6 +69,7 @@ commit は `git commit` で作る (pre-commit / prepare-commit-msg / commit-msg 
     --repo DIR  (既定 = cwd の repo)
 
 置換は親の版の中で**ちょうど 1 回**一致しなければ止まる (0 回 = もう入っているか文面が違う / 2 回以上 = どれか決まらない)。
+old の前後に足す置換は、 足した後の文がもう親の版にあっても止まる (相手の commit に巻き込まれた後に当てると、 old は 1 回一致したまま二重に入る)。
 commit の後は push と、 相手の session への 1 行 (相手の `git diff` から自分の分が消えて見える) を忘れない。
 
 ## 終了値
@@ -194,6 +195,9 @@ def apply_replaces(data: bytes, reps: list, where: str) -> bytes:
             hint = "もう入っているか、 文面が違う" if n == 0 else "どれを置き換えるか決まらない"
             raise Stop(RC_USAGE, f"{where}: 置換の old が {n} 回一致 (ちょうど 1 回でなければ止める = {hint}): "
                                  f"{old[:60].decode('utf-8', 'replace')!r}")
+        if old in new and new in data:
+            raise Stop(RC_USAGE, f"{where}: 足した後の文がもう入っている (当てると二重になる = 別の commit に巻き込まれた): "
+                                 f"{new[:60].decode('utf-8', 'replace')!r}")
         data = data.replace(old, new)
     return data
 
@@ -548,6 +552,13 @@ def selftest() -> int:
         g(top, "commit", "-q", "-m", "x")
         rc = call(top, ["-F", str(msg), "--replace-str", "x.sh", "echo 1\n", "echo 2\n"])
         ok("実行 file の mode (100755) が落ちない", rc == 0 and g(top, "ls-tree", "HEAD", "--", "x.sh").stdout.decode().startswith("100755"))
+
+        # 4b. 足す文がもう親の版にある (相手の commit に巻き込まれた) → 止まり、 二重に入らない
+        top = new_repo(root, "r4b")
+        add = ["-F", str(msg), "--no-worktree", "--replace-str", "f.txt", "c\n", "c\nc-mine\n"]
+        rc1, rc2 = call(top, add), call(top, add)
+        ok("足す文がもう親の版にあれば止まり、 二重に入らない",
+           rc1 == 0 and rc2 != 0 and head_file(top, "f.txt").count("c-mine") == 1, f"rc={rc1},{rc2} f={head_file(top, 'f.txt')!r}")
 
         # 5. clean filter が掛かる (暗号化の path に平文の blob を入れない)
         top = new_repo(root, "r5")
