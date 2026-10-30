@@ -136,8 +136,24 @@ selftest_multifile() {
     echo 'A later edit.' >> "$r/sub.tex"
     out=$(bash "${BASH_SOURCE[0]}" --repo "$r" --tex main.tex --base HEAD~1 --diff-only 2>&1) && die "sub-file の未 commit で止まらない"
     [[ "$out" == *"差分あり"* ]] || die "sub-file の未 commit の message が違う: $out"
-    rm -rf "$r"
-    echo "multi-file case OK (marked when flattened, unmarked with --no-flatten, head and dirty follow the sub-file)"
+    # main tex が下の dir にある原稿 + --new-file の隣に置いた sub-file の写し
+    local c; c=$(mktemp -d)
+    git -C "$r" checkout -q -- sub.tex
+    mkdir "$r/paper" && "${g[@]}" mv main.tex sub.tex paper/ && "${g[@]}" commit -qm move
+    cp "$r/paper/main.tex" "$c/copy.tex"
+    echo 'A proposed sentence.' > "$c/sub.tex"
+    out=$(bash "${BASH_SOURCE[0]}" --repo "$r" --tex paper/main.tex --base HEAD --new-file "$c/copy.tex" --diff-only 2>&1) || die "下の dir の main tex の case が止まった: $out"
+    tex=$(sed -n 's/^diff-only: //p' <<< "$out")
+    sed -n '/begin{document}/,$p' "$tex" | grep -q 'proposed' || die "--new-file の隣の sub-file を読まない: $tex"
+    # \input の無い原稿は平らにしない (comment も残る)
+    printf '%s\n' '\documentclass{article}' '\begin{document}' 'One line. % kept' '\end{document}' > "$r/paper/one.tex"
+    "${g[@]}" add -A && "${g[@]}" commit -qm one
+    out=$(bash "${BASH_SOURCE[0]}" --repo "$r" --tex paper/one.tex --base HEAD --diff-only 2>&1) || die "単一 file の case が止まった: $out"
+    tex=$(sed -n 's/^diff-only: //p' <<< "$out")
+    [[ "$out" != *"flatten:"* ]] || die "単一 file の原稿を平らにした: $out"
+    grep -q '% kept' "$(dirname "$tex")/new.tex" || die "単一 file の原稿の comment を剥がした"
+    rm -rf "$r" "$c"
+    echo "multi-file case OK (marked when flattened, unmarked with --no-flatten, head and dirty follow the sub-file, sub-directory, --new-file, single file untouched)"
 }
 
 # ---- selftest (TeX 不要) ----
