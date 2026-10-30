@@ -346,7 +346,8 @@ headless `claude -p` の routine は、 使う config dir (`CLAUDE_CONFIG_DIR`) 
   成功した。 別の機械の 1 か月の記録でも、 desktop の切り替え (ログアウトして 1 分以内に別の account でログイン) 8 回の
   後に切れた config dir は無かった。 もう 1 台の記録では、 切り替えの後に切れたのは 1 回だけで、 ログアウトも新しいログインも
   無い窓で切れた例もあった = 同じ機械でのログアウトや新しいログインは、 切れる十分条件でも必要条件でもない (実測)。 検知器は切り替えのたびに問い合わせで確かめ、
-  失敗したときだけ 🔴 を出す。
+  失敗したときだけ 🔴 を出す。 🔴 の行は最初の失敗の時刻と続けて失敗した回数を出し、 本番ホストの関門で止まる job を本数から分ける。
+  ログアウトの後は、 更新時刻が進んだだけでは見張りから外さず、 問い合わせが通ってから外す ([`#auth-expiry-window`](#auth-expiry-window))。
   見張りは keychain が 24 時間以上更新されていない config dir も毎日確かめる (ログアウトと無関係の切れも 1 日以内に分かる)。
   各 Mac には session 開始から `--ensure-watch` を呼んで配り、 結果は fleet heartbeat が他のマシンへ運ぶ
   ([`multi-machine-state.md#fleet-heartbeat`](multi-machine-state.md#fleet-heartbeat) の原則 8)。

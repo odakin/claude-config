@@ -27,14 +27,20 @@ X として無人の `claude -p` / Remote Control が使う設定フォルダ (`
     (mdat) は `security find-generic-password -s <項目>` の属性だけを読む (値は読まない)
   - ログアウト = desktop app の log (main.log / main1.log) の
     `Login-state transition (loggedOut: false → true, uuid: <X> → <none>)`。 時刻は log の local time
-  - 確かめ中 = そのフォルダの account の最新のログアウトが、 keychain の更新時刻より後 (= ログアウト以降、 更新も
-    ログインも成功していない)。 更新が要る目安 = keychain の更新時刻 + AT_LIFETIME_H (desktop の Code タブのトークンが
-    約 7h55m ごとに更新され、 実験でも更新から約 8 時間後の問い合わせで更新が走った)。 更新が成功すれば keychain の
-    更新時刻がログアウトより後になり、 対象から外れる。 ⚠️ 更新時刻は更新の失敗でも進むので (実測)、 失敗で進んだときも
-    対象から外れる = その場合に気づくのは毎日の確認 (stale-check) と無人 job の log
+  - 確かめ中 = そのフォルダの account の最新のログアウトの後で、 次のどちらか。 ① keychain の更新時刻がログアウトより
+    前 (= ログアウト以降、 更新もログインも起きていない)。 ② 更新時刻はログアウトより後だが、 ログアウトの後に通った
+    問い合わせが無い (⚠️ 更新時刻は更新の失敗でも 1 回進むので = 実測、 進んだだけでは生きていると読まない)。
+    更新が要る目安 = ① keychain の更新時刻 + AT_LIFETIME_H (desktop の Code タブのトークンが約 7h55m ごとに更新され、
+    実験でも更新から約 8 時間後の問い合わせで更新が走った)。 ② 更新時刻そのもの (失敗で進んだなら、 古いトークンが
+    切れた後の問い合わせが失敗する)。 ログアウトの後に問い合わせが通り、 更新時刻もログアウトより後なら対象から外れる。
+    ①で予約した問い合わせは、 更新時刻が進んで対象から外れても走る
   - 🔴 = 最後の問い合わせ (ledger = ~/.claude/state/desktop-logout-probe.log) が失敗し、 その後にログインし直して
     いないフォルダ (判定 = scripts/lib/config_dir_auth.py の is_dead、 heartbeat と共有)。 きっかけ (ログアウト / 毎日の
-    確認) を問わない
+    確認) を問わない。 行には最初の失敗の時刻・続けて失敗した回数・その前に通った時刻を出す (最後の失敗だけ出すと、
+    前から切れているフォルダが今切れたように読める)
+  - job の本数 = plist の本数と、 うちこの機械で止まる本数を分けて出す。 止まる = 起動行が本番ホストの関門
+    (routine-host-gate.py) を通り、 台帳の host がこの機械でない。 関門の本体は git fetch をするので呼ばず、 台帳の
+    手元の写しを読む。 読めなければ止まると言わない (関門の fail-open と同じ)
   - 毎日の確認 (stale-check) = keychain が STALE_H 時間以上更新されず、 その間に問い合わせもしていないフォルダを、
     見張りが今確かめる (= ログアウトと無関係に切れた場合も 1 日以内に分かる。 RC しか使わないフォルダはここでしか確かめない)
   - 確かめ中で失敗の無いものは既定では出さない (--verbose で「確かめ中」 と出す)
@@ -49,6 +55,7 @@ X として無人の `claude -p` / Remote Control が使う設定フォルダ (`
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import plistlib
@@ -79,6 +86,7 @@ WATCH_LABEL = "com.claude-config.desktop-logout-watch"
 
 _LOGOUT_RE = re.compile(
     r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) .*Login-state transition \(loggedOut: false → true, uuid: ([0-9a-f-]+) → <none>\)")
+_GATE_ARGS_RE = re.compile(r'routine-host-gate\.py"?\s+"?([^"\s]+)"?\s+"?([^"\s;&|]+)"?')  # 関門の引数 = 台帳の repo と相対 path
 
 
 def watched_dirs(agents_dir: Path) -> dict[str, list[str]]:
@@ -88,6 +96,35 @@ def watched_dirs(agents_dir: Path) -> dict[str, list[str]]:
         d = jl.config_dir_of(jl.load_plist(p))
         if d.startswith("/") and os.path.isdir(d):
             out.setdefault(d, []).append(p.stem)
+    return out
+
+
+def _my_hostnames() -> set[str]:
+    """この機械の名前 (小文字、 .local なし)。 比べ方を関門とそろえるため関門の関数を使う。"""
+    spec = importlib.util.spec_from_file_location("routine_host_gate", Path(__file__).resolve().parent / "routine-host-gate.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.my_hostnames()
+
+
+def standby_labels(agents_dir: Path, me: set[str] | None = None) -> set[str]:
+    """本番ホストの関門でこの機械では止まる job の label (述語は docstring の「job の本数」)。"""
+    out: set[str] = set()
+    try:
+        me = _my_hostnames() if me is None else me
+    except Exception:
+        return out
+    for p in sorted(agents_dir.glob("*.plist")):
+        pl = jl.load_plist(p)
+        m = _GATE_ARGS_RE.search(" ".join(str(a) for a in (pl or {}).get("ProgramArguments") or []))
+        if not m:
+            continue
+        try:
+            host = json.loads(Path(m.group(1).replace("$HOME", str(HOME)), m.group(2)).read_text(encoding="utf-8")).get("host")
+        except Exception:
+            continue
+        if host and str(host).removesuffix(".local").lower() not in me:
+            out.add(p.stem)
     return out
 
 
@@ -132,7 +169,9 @@ def dead_dirs(dirs: dict[str, list[str]], mdat_of, rows: list[dict]) -> list[dic
     for d, labels in sorted(dirs.items()):
         r = cda.is_dead(rows, d, mdat_of(d))
         if r:
-            out.append({"dir": d, "labels": labels, "t": r["t"], "tag": r["tag"]})
+            run = cda.failure_run(rows, d)
+            out.append({"dir": d, "labels": labels, "t": r["t"], "tag": r["tag"], "first": run["first"]["t"], "n": run["n"],
+                        "last_ok": run["last_ok"]["t"] if run["last_ok"] else None})
     return out
 
 
@@ -165,12 +204,14 @@ def assess(dirs: dict[str, list[str]], last_logout: dict[str, float], mdat_of, l
         if not t_out:
             continue
         m = mdat_of(d)
-        if m is None or m >= t_out:
-            continue  # ログアウト以降に更新 or ログインが成功している = 生きている
-        verdict_at = m + AT_LIFETIME_H * 3600
+        if m is None:
+            continue
         after = [r for r in ledger_rows if r["dir"] == d and r["t"] > t_out]
+        if m >= t_out and any(r["ok"] for r in after):
+            continue  # ログアウトの後に問い合わせが通り、 更新時刻も進んでいる
+        verdict_at = m if m >= t_out else m + AT_LIFETIME_H * 3600  # 更新時刻は失敗でも進む = 進んだ後の問い合わせで確かめる
         state = "未確認"
-        if any(not r["ok"] for r in after):
+        if any(not r["ok"] and r["t"] >= m for r in after):
             state = "切れた"
         elif any(r["ok"] and r["t"] > verdict_at for r in after):
             state = "目安を過ぎても通った"
@@ -179,18 +220,32 @@ def assess(dirs: dict[str, list[str]], last_logout: dict[str, float], mdat_of, l
     return out
 
 
-def render(items: list[dict], script: str, verbose: bool = False, dead: list[dict] | None = None) -> list[str]:
+def _who(d: str, labels: list[str], standby: set[str]) -> str:
+    stopped = sum(1 for x in labels if x in standby)
+    note = f"。 うち {stopped} 本はこの機械が本番ホストでないので動かない" if stopped else ""
+    return f"{d} ({len(labels)} 本の launchd job が使う{note})"
+
+
+def render(items: list[dict], script: str, verbose: bool = False, dead: list[dict] | None = None,
+           standby: set[str] | None = None) -> list[str]:
     """🔴 = 切れたフォルダ (dead_dirs、 きっかけを問わない)。 ⚪ = ログアウト後に確かめ中 (--verbose のときだけ)。"""
     lines = []
+    standby = standby or set()
     for x in dead or []:
-        lines.append(f"🔴 {x['dir']} ({len(x['labels'])} 本の launchd job が使う) は切れた ({_hm(x['t'])} の問い合わせ〔{x['tag']}〕が失敗し、"
-                     f" その後ログインし直していない)。 直す = そのマシンで CLAUDE_CONFIG_DIR={x['dir']} claude auth login")
+        since = (f"{_hm(x['first'])} の問い合わせから {x['n']} 回続けて失敗、 最後 = {_hm(x['t'])}〔{x['tag']}〕" if x["n"] > 1
+                 else f"{_hm(x['t'])} の問い合わせ〔{x['tag']}〕が失敗")
+        prev = f"、 その前に通ったのは {_hm(x['last_ok'])}" if x["last_ok"] else ""
+        lines.append(f"🔴 {_who(x['dir'], x['labels'], standby)} は切れた ({since}{prev}、 その後ログインし直していない)。"
+                     f" 直す = そのマシンで CLAUDE_CONFIG_DIR={x['dir']} claude auth login")
     dead_set = {x["dir"] for x in dead or []}
     for it in items:
         if verbose and it["dir"] not in dead_set:
-            who = f"{it['dir']} ({len(it['labels'])} 本の launchd job が使う)"
-            lines.append(f"⚪ 確かめ中: desktop で {it['email']} を {_hm(it['logout'])} にログアウトした後、 {who} の認証はまだ更新されていない"
-                         f" (更新の目安 {_hm(it['verdict_at'])}、 状態 = {it['state']})。 今すぐ確かめる = python3 {script} --probe {it['dir']}")
+            who = _who(it["dir"], it["labels"], standby)
+            state = f"状態 = {it['state']}"
+            how = (f"の更新時刻は {_hm(it['mdat'])} に進んだが成否はまだ分からない (失敗でも進む、 {state})" if it["mdat"] >= it["logout"]
+                   else f"の認証はまだ更新されていない (更新の目安 {_hm(it['verdict_at'])}、 {state})")
+            lines.append(f"⚪ 確かめ中: desktop で {it['email']} を {_hm(it['logout'])} にログアウトした後、 {who} {how}。"
+                         f" 今すぐ確かめる = python3 {script} --probe {it['dir']}")
     return lines
 
 
@@ -385,7 +440,18 @@ def selftest() -> int:
         ck("--verbose では確かめ中を目安の時刻と問い合わせの command つきで出す",
            lines and lines[0].startswith("⚪") and "--probe" in lines[0] and _hm(before + AT_LIFETIME_H * 3600) in lines[0])
         ck("別の account のフォルダは出さない", all(it["dir"] != str(other) for it in items))
-        ck("ログアウト後に更新されていれば silent", assess(dirs, lo, lambda d: t_out + 60, [], now=t_out + 600) == [])
+        moved = lambda d: t_out + 60  # noqa: E731  (ログアウトの後に更新時刻が進んだ)
+        it_m = assess(dirs, lo, moved, [], now=t_out + 600)
+        ck("ログアウト後に更新時刻が進んだだけでは外さない (更新の失敗でも進む)", len(it_m) == 1 and it_m[0]["state"] == "未確認")
+        ck("更新時刻が進んだフォルダは進んだ時刻の 15 分後に確かめる (古いトークンが切れた後)",
+           [p[3] for p in plan_probes(it_m, {}, now=t_out + 61)] == ["after-logout", "verdict"]
+           and plan_probes(it_m, {}, now=t_out + 61)[1][2] == t_out + 60 + VERDICT_MARGIN_MIN * 60)
+        ck("--verbose は更新時刻が進んだフォルダを「成否はまだ分からない」 と出す",
+           "成否はまだ分からない" in render(it_m, "x", verbose=True)[0] and "まだ更新されていない" not in render(it_m, "x", verbose=True)[0])
+        ok_after = [{"t": t_out + 300, "tag": "verdict", "dir": str(cron), "ok": True}]
+        ck("ログアウト後に問い合わせが通り更新時刻も進んでいれば外す", assess(dirs, lo, moved, ok_after, now=t_out + 600) == [])
+        relog = [{"t": t_out + 30, "tag": "verdict", "dir": str(cron), "ok": False}]
+        ck("更新時刻より前の失敗はログインし直した後の状態にしない", assess(dirs, lo, moved, relog)[0]["state"] == "未確認")
         ck("keychain が読めなければ silent (fail-open)", assess(dirs, lo, lambda d: None, []) == [])
         ck("desktop の log が無ければ silent", logouts(td / "nolog") == {})
 
@@ -396,6 +462,26 @@ def selftest() -> int:
         ck("ログアウト後の問い合わせが失敗 = 🔴 「切れた」 と login の command (1 行だけ)", it2 and it2[0]["state"] == "切れた"
            and len(r2) == 1 and r2[0].startswith("🔴") and "切れた" in r2[0] and "claude auth login" in r2[0])
         ck("--verbose でも切れたフォルダを確かめ中と二重に出さない", len(render(it2, "x", verbose=True, dead=dd)) == 1)
+        ck("1 回だけの失敗は回数を言わず、 通った記録が無ければ通った時刻も言わない", "回続けて" not in r2[0] and "通ったのは" not in r2[0])
+        streak = [{"t": t_out + 3600, "tag": "verdict", "dir": str(cron), "ok": True}, {"t": t_out + 7200, "tag": "verdict", "dir": str(cron), "ok": False},
+                  {"t": t_out + 86400, "tag": "stale-check", "dir": str(cron), "ok": False}]
+        r_s = render([], "x", dead=dead_dirs(dirs, lambda d: before, streak))
+        ck("続けて失敗した 🔴 は最初の失敗・回数・最後・その前に通った時刻を出す", len(r_s) == 1 and f"{_hm(t_out + 7200)} の問い合わせから 2 回続けて失敗" in r_s[0]
+           and f"最後 = {_hm(t_out + 86400)}〔stale-check〕" in r_s[0] and f"その前に通ったのは {_hm(t_out + 3600)}" in r_s[0])
+        r_st = render([], "x", dead=dd, standby={"job.a"})
+        ck("本番ホストで止まる job は本数を分けて出す", "1 本の launchd job が使う。 うち 1 本はこの機械が本番ホストでないので動かない" in r_st[0])
+        ck("止まる job が無ければ本数だけ", "1 本の launchd job が使う)" in r2[0])
+        led_host = td / "active.json"; led_host.write_text('{"host": "Other.local"}')
+        gate_dir = td / "gate"; gate_dir.mkdir()
+        for name, ledger in (("g.a", led_host.name), ("g.gone", "no-such.json")):
+            with (gate_dir / f"{name}.plist").open("wb") as fh:
+                plistlib.dump({"ProgramArguments": ["/bin/sh", "-c", f'cd x && {{ python3 "$HOME/c/routine-host-gate.py" "{td}" {ledger}; _g=$?; }} && exec claude -p x']}, fh)
+        with (gate_dir / "free.plist").open("wb") as fh:
+            plistlib.dump({"ProgramArguments": ["/bin/sh", "-c", "exec claude -p x"]}, fh)
+        ck("台帳の host が別の機械なら止まる、 自分なら止まらない", standby_labels(gate_dir, me={"me"}) == {"g.a"}
+           and standby_labels(gate_dir, me={"other"}) == set())
+        ck("関門の無い job と台帳を読めない job は止まると言わない", "free" not in standby_labels(gate_dir, me={"me"}) and "g.gone" not in standby_labels(gate_dir, me={"me"}))
+        ck("この機械の名前は関門の関数で取れる", bool(_my_hostnames()))
         ck("失敗の後にログインし直せば 🔴 は消える", dead_dirs(dirs, lambda d: t_out + 9000, fail_row) == [])
         # きっかけの無い切れ: ログアウトが無くても、 長く更新されていないフォルダを確かめて失敗したら 🔴
         now = t_out + 3 * 86400
@@ -473,7 +559,7 @@ def main(argv: list[str]) -> int:
             probe(d, "stale-check")
         rows = read_ledger(LEDGER)
     for line in render(items, str(Path(__file__).resolve()), verbose="--verbose" in argv,
-                       dead=dead_dirs(dirs, mdat_of, rows)):
+                       dead=dead_dirs(dirs, mdat_of, rows), standby=standby_labels(LAUNCH_AGENTS)):
         print(line)
     return 0
 

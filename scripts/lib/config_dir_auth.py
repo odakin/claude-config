@@ -7,13 +7,17 @@ heartbeat は `claude` を呼ばない設計なので (監視が監視対象と�
 述語 (= code-as-SoT):
   - keychain の項目 = KEYCHAIN_PREFIX + sha256(設定フォルダの path) の先頭 8 桁 (実測で一致)。 更新時刻 (mdat) は
     `security find-generic-password -s <項目>` の属性だけを読む (値は読まない)。 トークンの更新やログインが
-    成功すると mdat が進む
+    成功すると mdat が進む。 ⚠️ 更新の失敗でも、 切れた最初の 1 回だけ進む (実測 = 失敗した問い合わせ 12 回のうち
+    動いたのは最初の 1 回、 2 回目以降の失敗では動かない) = 失敗の後に進めばログインか更新の成功と読めるが、
+    「ログアウトの後に進んだ」 だけでは生きていると読めない (check-desktop-logout-auth.py の assess が扱う)
   - 問い合わせの記録 (LEDGER、 1 行 = 時刻 TAB tag TAB フォルダ TAB ok|FAIL(...)|UNKNOWN(...) TAB ...) は
     check-desktop-logout-auth.py --probe が書く。 UNKNOWN = 答えが出なかった (CLI が無い・時間切れ = 許可 dialog に
     止められた等) で、 認証の成否を言わない = 読むときに飛ばす (2026-10-30 実測: dialog で時間切れになった問い合わせを
     FAIL と記録し、 切れていないフォルダを 🔴 にした)
   - 切れた (dead) = そのフォルダの最後の問い合わせが失敗 ∧ その後に keychain が更新されていない
     (= ログインし直していない、 更新も成功していない)。 問い合わせが無い・keychain が読めないなら判定しない
+  - 続いている失敗 (failure_run) = 最後の問い合わせから遡って続く失敗の回数と、 その最初の行・その前に通った行。
+    問い合わせは切れた瞬間を見ていない = 最初の失敗は「遅くともこの時刻には切れていた」 を言う
 """
 from __future__ import annotations
 
@@ -80,6 +84,18 @@ def is_dead(rows: list[dict], config_dir: str, mdat: float | None) -> dict | Non
     return r
 
 
+def failure_run(rows: list[dict], config_dir: str) -> dict | None:
+    """最後の問い合わせから遡って続いている失敗 = {first: 最初の失敗の行, n: 回数, last_ok: その前に通った行か None}。
+    最後が成功・問い合わせ無し = None。"""
+    run, last_ok = [], None
+    for r in sorted((r for r in rows if r["dir"] == config_dir), key=lambda r: r["t"], reverse=True):
+        if r["ok"]:
+            last_ok = r
+            break
+        run.append(r)
+    return {"first": run[-1], "n": len(run), "last_ok": last_ok} if run else None
+
+
 def selftest() -> int:
     fails = 0
 
@@ -96,6 +112,13 @@ def selftest() -> int:
     ck("keychain が読めなくても失敗は切れたと数える", is_dead(rows, d, None) is not None)
     ck("最後が成功なら切れていない", is_dead(rows + [{"t": 300.0, "tag": "d", "dir": d, "ok": True}], d, 150.0) is None)
     ck("問い合わせの無いフォルダは判定しない", is_dead(rows, "~/.claude-none", 0.0) is None)
+    run = failure_run(rows + [{"t": 260.0, "tag": "e", "dir": d, "ok": False}, {"t": 230.0, "tag": "f", "dir": d, "ok": False}], d)
+    ck("続いている失敗 = 最初の失敗・回数・その前に通った行 (記録の順に依らない)",
+       run["first"]["tag"] == "b" and run["n"] == 3 and run["last_ok"]["tag"] == "a")
+    ck("成功の後の失敗だけを数える", failure_run(rows + [{"t": 250.0, "tag": "g", "dir": d, "ok": True},
+                                                          {"t": 270.0, "tag": "h", "dir": d, "ok": False}], d)["n"] == 1)
+    ck("その前に通った記録が無ければ last_ok は None", failure_run([rows[2]], "~/.claude-other")["last_ok"] is None)
+    ck("最後が成功・問い合わせ無しは None", failure_run(rows[:1], d) is None and failure_run(rows, "~/.claude-none") is None)
     import tempfile
     with tempfile.TemporaryDirectory() as td:
         led = Path(td) / "probe.log"

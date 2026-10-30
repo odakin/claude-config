@@ -259,14 +259,16 @@ def missed_run_findings(host, d, role, routine=None, plist_dir=None):
 def auth_findings(host, d, self_host=None):
     """1 マシンの beat の config_dir_auth から finding を作る (writer の判定 = lib/config_dir_auth.py、 問い合わせは
     check-desktop-logout-auth.py の見張り)。 🔴 = 最後の問い合わせが失敗し、 その後ログインし直していない設定フォルダ。
-    自分のマシンの分は check-desktop-logout-auth.py が同じ判定で出すので出さない。 旧 beat (欄なし) は黙る。"""
+    自分のマシンの分は check-desktop-logout-auth.py が同じ判定で出すので出さない。 旧 beat (欄なし) は黙る。
+    時刻は失敗が続いた最初の問い合わせ (first_fail)。 この欄の無い beat は最後の問い合わせで出す。"""
     if host == self_host:
         return []
     out = []
     for alias, a in sorted((d.get("config_dir_auth") or {}).items()):
         if isinstance(a, dict) and a.get("dead"):
-            out.append(f"🔴 {host}: 設定フォルダ ~/.claude-{alias} が切れた ({a.get('last_probe') or '?'} の問い合わせ"
-                       f"〔{a.get('last_probe_tag') or '?'}〕が失敗し、 その後ログインし直していない) = そのマシンの terminal で"
+            since = (f"{a['first_fail']} の問い合わせから失敗が続き" if a.get("first_fail")
+                     else f"{a.get('last_probe') or '?'} の問い合わせ〔{a.get('last_probe_tag') or '?'}〕が失敗し")
+            out.append(f"🔴 {host}: 設定フォルダ ~/.claude-{alias} が切れた ({since}、 その後ログインし直していない) = そのマシンの terminal で"
                        f" `CLAUDE_CONFIG_DIR=~/.claude-{alias} claude auth login` (scheduled-tasks.md#headless-auth-expiry)")
     return out
 
@@ -583,6 +585,10 @@ def selftest():
             and "CLAUDE_CONFIG_DIR=~/.claude-x claude auth login" in fc[0], fc
         assert auth_findings("host-b", beat_c, self_host="host-b") == [], "自分の分は check-desktop-logout-auth に任せる"
         assert auth_findings("old", {"servers": []}) == [], "旧 beat は黙る"
+        beat_f = {"config_dir_auth": {"x": {"dead": True, "last_probe": "2000-01-09 03:04", "last_probe_tag": "stale-check",
+                                            "first_fail": "2000-01-02 03:04"}}}
+        ff = auth_findings("host-a", beat_f, self_host="host-b")
+        assert len(ff) == 1 and "2000-01-02 03:04 の問い合わせから失敗が続き" in ff[0] and "2000-01-09" not in ff[0], ff
         ok += 1
         # 20: 予定の run が log に残っていない (本番ホストの関門つき claude -p だけ / 1 本 🟠・2 本以上 🔴 / since より前は見ない)
         import datetime as _dt

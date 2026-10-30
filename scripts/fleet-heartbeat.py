@@ -48,7 +48,7 @@ usage:
 書かれる JSON (subdir/<hostname>.json):
   { host, ts (iso), epoch, servers: [{label, pid, last_status, log_age_min}],
     config_dirs: {alias: email_metadata_or_null},
-    config_dir_auth: {alias: {dead, last_probe, last_probe_ok, last_probe_tag}},  # 部品が在る時のみ
+    config_dir_auth: {alias: {dead, last_probe, last_probe_ok, last_probe_tag, first_fail}},  # 部品が在る時のみ
     remote_control_at_startup, old_usr_local_cli, cron_jobs,
     desktop_scheduled_tasks: [{registry, enabled_ids}],
     inventories: {label: [name, ...]},         # --inventory 指定時のみ
@@ -121,6 +121,9 @@ config_dir_auth (設定フォルダが切れたか、 部品 = lib/config_dir_au
   - 問い合わせは check-desktop-logout-auth.py の見張りが打つ (ログアウトの後 + 長く更新の無いフォルダを毎日)。
     本 script は記録と keychain の更新時刻 (属性だけ) を読むだけ = `claude` を呼ばない
   - dead = 最後の問い合わせが失敗し、 その後にログインし直していない。 reader が他のマシンの分を 🔴 で出す
+  - first_fail = 今続いている失敗の最初の問い合わせの時刻 (失敗が続いていなければ None)。 reader は last_probe でなく
+    これを出す = beat は dead が変わった時しか commit されないので last_probe は古いままのことがあり、 first_fail は
+    失敗が続く間変わらない
   - 変化として commit するのは dead の値だけ (問い合わせの時刻では commit しない)
 
 job health (--job-label-prefix、 opt-in、 repeatable):
@@ -343,11 +346,13 @@ def collect(rc_prefix, cron_prefix, inventory_specs=None, job_prefixes=None, job
                     continue
                 last = _cda.last_probe(rows, str(d))
                 mdat = _cda.keychain_mdat(_cda.keychain_service(str(d)))
+                run = _cda.failure_run(rows, str(d))
                 auth[d.name[len(".claude-"):]] = {
                     "dead": _cda.is_dead(rows, str(d), mdat) is not None,
                     "last_probe": time.strftime("%Y-%m-%d %H:%M", time.localtime(last["t"])) if last else None,
                     "last_probe_ok": last["ok"] if last else None,
                     "last_probe_tag": last["tag"] if last else None,
+                    "first_fail": time.strftime("%Y-%m-%d %H:%M", time.localtime(run["first"]["t"])) if run else None,
                 }
             data["config_dir_auth"] = auth
         except Exception:
