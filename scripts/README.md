@@ -235,8 +235,9 @@
 - **[latexdiff-changed-pages.py](latexdiff-changed-pages.py)** — latexdiff の PDF から、 差分の色 (追加・削除) が出ている頁だけを残す: 変わった頁を印でなく差分そのもので選ぶ。
 - **[latexdiff-eqtree.py](latexdiff-eqtree.py)** — latexdiff for the text, a tree comparison for the equations: only the changed symbols are marked.
 - **[latexdiff-fine-fixups.py](latexdiff-fine-fixups.py)** — Repair latexdiff output made with --math-markup=fine, and splice in whole-equation markup where fine is unreadable.
+- **[latexdiff-flatten.py](latexdiff-flatten.py)** — Flatten one side of a multi-file LaTeX manuscript for latexdiff (\input / \include replaced by the text).
 - **[latexdiff-inline-math.py](latexdiff-inline-math.py)** — Let latexdiff mark only the changed tokens inside in-line math ($...$), as --math-markup=fine does for displays.
-- **[latexdiff-review-snapshot.sh](latexdiff-review-snapshot.sh)** — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex 最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
+- **[latexdiff-review-snapshot.sh](latexdiff-review-snapshot.sh)** — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → \input の多 file は両版を平らに → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex と sub-file の最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
 - **[latexdiff-safecmd.py](latexdiff-safecmd.py)** — Derive latexdiff's --append-safecmd list from the manuscript preamble.
 - **[latexdiff-strip-dup-labels.py](latexdiff-strip-dup-labels.py)** — Drop \label{...} from the DELETED side of a latexdiff output, so each label survives only on the new text.
 - **[latexdiff-views-check.py](latexdiff-views-check.py)** — Check a finished latexdiff document against the two versions it claims to compare.

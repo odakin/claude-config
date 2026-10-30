@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# latexdiff-review-snapshot.sh — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex 最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
+# latexdiff-review-snapshot.sh — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → \input の多 file は両版を平らに → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex と sub-file の最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
 # latexdiff-review-snapshot.sh — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備する engine
 #
 # = このスクリプトが手順の SoT (code-as-SoT)。手法の背景・落とし穴表・「既定」の使い分けは
@@ -9,7 +9,8 @@
 #   (open は command -v guard 済、bash 3.2+ 想定)。
 #
 # やること (= 共著レビュー中に「相手の push を取り込んだ最新の diff PDF」を回す loop の機械化):
-#   1. baseline 版 tex を git revision から取り出す (作業 tree を汚さない、mktemp workdir + aux symlink)
+#   1. baseline 版 tex を git revision から取り出す (作業 tree を汚さない、mktemp workdir + aux symlink)。
+#      main tex が \input / \include で sub-file を読むなら、 両版を同じ手順で平らにする (latexdiff-flatten.py)
 #   2. (option) レビュー markup コマンド (\cl 等) を両版から unwrap (= 中身は残し wrapper だけ除去。
 #      理由: latexdiff の \DIFadd{\cl{...}} は ulem 下線が {...} group を改行不能 box 化して
 #      行がページ外へ溢れる + diff 内で draft 色は冗長)。
@@ -33,12 +34,14 @@
 #   latexdiff-review-snapshot.sh --base <rev> [--strip-cmd cl --strip-cmd CL --strip-color Orange]
 #
 # 前提と guard:
-#   - main tex は単一 file 前提 (\input 多 file 構成は sub-file が両版とも working tree 版になる
-#     = main file の差分のみ色付く。多 file は latexdiff --flatten の導入を検討、未実装)
+#   - 多 file の原稿は、 旧版の sub-file を git show で、 新版を作業 tree から取り、 両版とも comment を
+#     剥がして \input / \include を中身で置き換えてから比べる (conventions/latex.md#latexdiff-multi-file)。
+#     \subfile・\import は平らにできないので止まる。 --no-flatten はこの段を飛ばす
+#     = sub-file が両版とも作業 tree の版になり、 sub-file の差分に色が付かない
 #   - repo が upstream より behind なら abort (= 「相手の push が diff に入っていない」事故の防止。
 #     pull してから再実行)
-#   - main tex が HEAD と異なる working tree 状態なら abort (= snapshot 名の <head7> が嘘になる。
-#     commit するか --allow-dirty で "<head7>-dirty" 名を許可)
+#   - main tex か sub-file が HEAD と異なる working tree 状態なら abort (= snapshot 名の <head7> が嘘になる。
+#     commit するか --allow-dirty で "<head7>-dirty" 名を許可)。 <head7> は main tex と sub-file の最後の commit
 #   - 複雑な原稿で compile が壊れる場合の追加 flag (--disable-citation-markup / PICTUREENV 等) は
 #     --latexdiff-args で注入 (対処表は latex.md の節を参照)
 #
@@ -55,22 +58,25 @@
 #   --latexdiff-args STR  latexdiff への追加引数 (空白区切りで展開)
 #   --out-prefix NAME     default: latexdiff
 #   --no-deploy           build のみ (結果 PDF path を表示して終了、repo に触らない)
+#   --diff-only           latexdiff と検査までで止める (組版しない、 --no-deploy を含む、 結果 = workdir の diff.tex)
 #   --new-file PATH       新版を作業 tree の main tex でなく PATH から読む (--no-deploy を含む、 main tex の dirty は見ない)。
 #                         原稿に当てる前の提案の版や、 差分のために加工した写し (新版だけに入れた体裁の macro を旧版の形に
 #                         戻したもの) と比べるとき。 比べるための一時 repo も commit も要らない
-#                         (conventions/latex.md#latexdiff-new-file)
+#                         (conventions/latex.md#latexdiff-new-file)。 sub-file は PATH の隣を先に見る
+#   --no-flatten          多 file の原稿を平らにしない (上の「前提と guard」)
 #   --keep-superseded     同 baseline の旧 snapshot を git rm しない
 #   --no-push / --no-open
 #   --allow-dirty / --allow-behind
 #   --no-math-guard       wrapper 展開 + safecmd + 無印検査を行わない (= 2026-09-12 以前の挙動)
 #   --allow-unmarked-math 無印の数式変更を検出しても停止しない (警告のみ)
-#   --selftest            review-markup-clean.py の selftest と引数の対応 + 命名 format + 同梱 5 script の selftest
+#   --selftest            review-markup-clean.py の selftest と引数の対応 + 命名 format + 同梱 script の selftest
+#                         + sub-file だけを変えた 2 版の case (latexdiff が要る、 TeX は要らない)
 
 set -uo pipefail
 
 BASE="" REPO="$PWD" TEX="" ENGINE="lualatex" BIB="bibtex" MATHMARKUP="1"
 EXTRA_ARGS="" PREFIX="latexdiff" DEPLOY=1 SUPERSEDE=1 PUSH=1 OPEN=1
-ALLOW_DIRTY=0 ALLOW_BEHIND=0 MATH_GUARD=1 ALLOW_UNMARKED=0 NEWFILE=""
+ALLOW_DIRTY=0 ALLOW_BEHIND=0 MATH_GUARD=1 ALLOW_UNMARKED=0 NEWFILE="" FLATTEN_ON=1 DIFF_ONLY=0
 STRIP_CMDS=() STRIP_COLORS=()
 SCRIPTDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 EXPANDER="$SCRIPTDIR/expand-display-math.py"
@@ -79,6 +85,7 @@ MARKUP_CHECK="$SCRIPTDIR/check-latexdiff-math-markup.py"
 DUP_LABELS="$SCRIPTDIR/latexdiff-strip-dup-labels.py"   # deleted copy keeps no \label (whole markup / MOVE), 2026-09-13
 FINE_FIX="$SCRIPTDIR/latexdiff-fine-fixups.py"   # repairs of --math-markup=fine output (accent / \frac / deleted-side commands)
 INLINE_FINE="$SCRIPTDIR/latexdiff-inline-math.py"   # fine: in-line $..$ and \frac diffed token by token (wrap -> latexdiff -> unwrap)
+FLATTEN="$SCRIPTDIR/latexdiff-flatten.py"   # \input / \include replaced by the text on both sides, old side via git show
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -103,6 +110,34 @@ strip_markup() {
 count_bare_color() {
     local c="$1"; shift
     cat "$@" | grep -v '^[[:space:]]*%' | grep -cF "\\color{$c}"
+}
+
+# sub-file だけを変えた 2 版: 平らにすると印が付き、 平らにしないと付かない (= 直す前の engine の形)。
+# snapshot 名の head が sub-file の commit に動くことと、 sub-file の未 commit で止まることも見る
+selftest_multifile() {
+    command -v latexdiff >/dev/null || { echo "WARN: latexdiff が無い — 多 file の case は未検査"; return 0; }
+    local r out tex head7
+    r=$(mktemp -d)
+    local g=(git -C "$r" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@example.invalid)
+    git init -q "$r"
+    printf '%s\n' '\documentclass{article}' '\begin{document}' 'Opening.' '' '\input{sub}' '\end{document}' > "$r/main.tex"
+    echo 'The original sentence.' > "$r/sub.tex"
+    "${g[@]}" add -A && "${g[@]}" commit -qm base
+    echo 'The revised sentence.' > "$r/sub.tex"
+    "${g[@]}" add -A && "${g[@]}" commit -qm sub
+    head7=$(git -C "$r" rev-parse --short=7 HEAD)
+    out=$(bash "${BASH_SOURCE[0]}" --repo "$r" --tex main.tex --base HEAD~1 --diff-only 2>&1) || die "多 file の case が止まった: $out"
+    tex=$(sed -n 's/^diff-only: //p' <<< "$out")
+    sed -n '/begin{document}/,$p' "$tex" | grep -q '\\DIFadd{' || die "sub-file の変更に印が付かない: $tex"
+    [[ "$out" == *"-to-$head7"* ]] || die "snapshot 名の head が sub-file の commit に動かない: $out"
+    out=$(bash "${BASH_SOURCE[0]}" --repo "$r" --tex main.tex --base HEAD~1 --diff-only --no-flatten 2>&1) || die "--no-flatten の case が止まった: $out"
+    tex=$(sed -n 's/^diff-only: //p' <<< "$out")
+    sed -n '/begin{document}/,$p' "$tex" | grep -q '\\DIFadd{' && die "--no-flatten でも印が付いた = この case は赤を作れていない"
+    echo 'A later edit.' >> "$r/sub.tex"
+    out=$(bash "${BASH_SOURCE[0]}" --repo "$r" --tex main.tex --base HEAD~1 --diff-only 2>&1) && die "sub-file の未 commit で止まらない"
+    [[ "$out" == *"差分あり"* ]] || die "sub-file の未 commit の message が違う: $out"
+    rm -rf "$r"
+    echo "multi-file case OK (marked when flattened, unmarked with --no-flatten, head and dirty follow the sub-file)"
 }
 
 # ---- selftest (TeX 不要) ----
@@ -130,7 +165,7 @@ run_selftest() {
     echo "--new-file option OK"
     rm -rf "$d"
     local s
-    for s in "$EXPANDER" "$SAFECMD_GEN" "$MARKUP_CHECK" "$DUP_LABELS" "$FINE_FIX" "$INLINE_FINE"; do
+    for s in "$EXPANDER" "$SAFECMD_GEN" "$MARKUP_CHECK" "$DUP_LABELS" "$FINE_FIX" "$INLINE_FINE" "$FLATTEN"; do
         if [[ -f "$s" ]]; then
             python3 "$s" --selftest >/dev/null || die "$(basename "$s") selftest failed"
             echo "$(basename "$s") selftest OK"
@@ -138,6 +173,7 @@ run_selftest() {
             echo "WARN: $s 不在 — 数式 guard は未検査"
         fi
     done
+    selftest_multifile
     echo "ALL SELFTESTS PASS"
     exit 0
 }
@@ -156,7 +192,9 @@ while [[ $# -gt 0 ]]; do
         --latexdiff-args) EXTRA_ARGS="$2"; shift 2;;
         --out-prefix) PREFIX="$2"; shift 2;;
         --no-deploy) DEPLOY=0; shift;;
+        --diff-only) DIFF_ONLY=1; DEPLOY=0; shift;;
         --new-file) NEWFILE="$2"; shift 2;;
+        --no-flatten) FLATTEN_ON=0; shift;;
         --keep-superseded) SUPERSEDE=0; shift;;
         --no-push) PUSH=0; shift;;
         --no-open) OPEN=0; shift;;
@@ -176,7 +214,7 @@ if [[ -n "$NEWFILE" ]]; then
     DEPLOY=0   # 写しは commit でない = snapshot の名前の head が決まらない
 fi
 command -v latexdiff >/dev/null || die "latexdiff が見つからない"
-command -v "$ENGINE" >/dev/null || die "engine '$ENGINE' が見つからない"
+[[ "$DIFF_ONLY" -eq 1 ]] || command -v "$ENGINE" >/dev/null || die "engine '$ENGINE' が見つからない"
 git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || die "$REPO は git repo でない"
 
 # ---- guard: behind 検出 (= 相手の push 取りこぼし防止) ----
@@ -195,22 +233,42 @@ if [[ -z "$TEX" ]]; then
 fi
 [[ -f "$REPO/$TEX" ]] || die "$REPO/$TEX が無い"
 
-# ---- guard: main tex の dirty 検出 (= snapshot 名の head hash が嘘にならないように) ----
-DIRTY_SUFFIX=""
-if [[ -z "$NEWFILE" ]] && ! git -C "$REPO" diff --quiet HEAD -- "$TEX"; then
-    if [[ "$ALLOW_DIRTY" -eq 1 ]]; then DIRTY_SUFFIX="-dirty";
-    else die "$TEX が HEAD と差分あり — commit するか --allow-dirty (名前に -dirty が付く)"; fi
-fi
-
 BASE7=$(git -C "$REPO" rev-parse --short=7 "$BASE") || die "baseline '$BASE' を解決できない"
-# head 側は「main tex を最後に触った commit」に pin する (= diff の実 input。
-# snapshot 配備 commit 等の無関係 commit で名前が変わらない)
-HEAD7=$(git -C "$REPO" log -1 --format=%h --abbrev=7 HEAD -- "$TEX")
-[[ -n "$HEAD7" ]] || die "$TEX の履歴を解決できない"
 
 # ---- workdir 構築 (作業 tree 不変) ----
 D=$(mktemp -d) || die "mktemp 失敗"
 echo "workdir: $D"
+git -C "$REPO" show "$BASE:$TEX" > "$D/base.tex" || die "git show $BASE:$TEX 失敗"
+cp "${NEWFILE:-$REPO/$TEX}" "$D/new.tex"
+[[ -n "$NEWFILE" ]] && echo "new: $NEWFILE (--new-file、 配備しない)"
+
+# ---- 多 file: 両版を同じ手順で平らにする (conventions/latex.md#latexdiff-multi-file) ----
+GUARD_FILES=("$TEX")   # snapshot 名の head と dirty の検出が見る file = 差分の実 input
+if [[ "$FLATTEN_ON" -eq 1 && ! -f "$FLATTEN" ]]; then
+    echo "WARN: $FLATTEN が無い — sub-file の差分に色が付かない"
+elif [[ "$FLATTEN_ON" -eq 1 ]] && { python3 "$FLATTEN" --has-inputs "$D/base.tex" || python3 "$FLATTEN" --has-inputs "$D/new.tex"; }; then
+    SEARCH_ARG=()
+    [[ -n "$NEWFILE" ]] && SEARCH_ARG=(--search "$(dirname "$NEWFILE")")
+    python3 "$FLATTEN" "$D/new.tex" "$D/new.tex" --main "$TEX" --repo "$REPO" --list "$D/new.files" ${SEARCH_ARG[@]+"${SEARCH_ARG[@]}"} \
+        || die "新版を平らにできない — 上の message (--no-flatten は sub-file の差分に色が付かない)"
+    python3 "$FLATTEN" "$D/base.tex" "$D/base.tex" --main "$TEX" --repo "$REPO" --rev "$BASE" --list "$D/base.files" \
+        || die "基準版を平らにできない — 上の message (--no-flatten は sub-file の差分に色が付かない)"
+    while IFS= read -r f; do GUARD_FILES+=("$f"); done < "$D/new.files"
+    echo "flatten: sub-file 基準版 $(wc -l < "$D/base.files" | tr -d ' ') 本 / 新版 $(wc -l < "$D/new.files" | tr -d ' ') 本"
+fi
+
+# ---- guard: main tex と sub-file の dirty 検出 (= snapshot 名の head hash が嘘にならないように) ----
+DIRTY_SUFFIX=""
+if [[ -z "$NEWFILE" && -n "$(git -C "$REPO" status --porcelain -- "${GUARD_FILES[@]}")" ]]; then
+    if [[ "$ALLOW_DIRTY" -eq 1 ]]; then DIRTY_SUFFIX="-dirty";
+    else die "${GUARD_FILES[*]} のどれかが HEAD と差分あり — commit するか --allow-dirty (名前に -dirty が付く)"; fi
+fi
+
+# head 側は「main tex と sub-file を最後に触った commit」に pin する (= diff の実 input。
+# snapshot 配備 commit 等の無関係 commit で名前が変わらない)
+HEAD7=$(git -C "$REPO" log -1 --format=%h --abbrev=7 HEAD -- "${GUARD_FILES[@]}")
+[[ -n "$HEAD7" ]] || die "$TEX の履歴を解決できない"
+
 for entry in "$REPO"/* "$REPO"/.[!.]*; do
     b=$(basename "$entry")
     [[ "$b" == ".git" || "$b" == "$TEX" || "$b" == ${PREFIX}-*.pdf ]] && continue
@@ -226,9 +284,6 @@ if [[ "$TEX_DIR" != "." ]]; then
         [[ -e "$entry" && ! -e "$D/$b" ]] && ln -s "$entry" "$D/$b" 2>/dev/null
     done
 fi
-git -C "$REPO" show "$BASE:$TEX" > "$D/base.tex" || die "git show $BASE:$TEX 失敗"
-cp "${NEWFILE:-$REPO/$TEX}" "$D/new.tex"
-[[ -n "$NEWFILE" ]] && echo "new: $NEWFILE (--new-file、 配備しない)"
 
 # ---- strip (両版に同一適用 = 未変更 markup が spurious diff にならない) ----
 if [[ ${#STRIP_CMDS[@]} -gt 0 || ${#STRIP_COLORS[@]} -gt 0 ]]; then
@@ -303,6 +358,11 @@ if [[ "$MATH_GUARD" -eq 1 && -f "$MARKUP_CHECK" ]]; then
 fi
 if [[ -n "$INLINE_ARG" ]]; then
     python3 "$INLINE_FINE" unwrap "$D/diff.tex" >/dev/null || die "latexdiff-inline-math.py unwrap 失敗 (上の形)"
+fi
+if [[ "$DIFF_ONLY" -eq 1 ]]; then
+    echo "diff-only: $D/diff.tex"
+    echo "snapshot の名前の末尾: ${BASE7}-to-${HEAD7}${DIRTY_SUFFIX}"
+    exit 0
 fi
 
 ( cd "$D" && "$ENGINE" -interaction=nonstopmode diff.tex >/dev/null 2>&1
