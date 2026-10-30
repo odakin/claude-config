@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript) + 開催通知のメールから本人を会議に入れるとき (#join-from-notice) + 会議・研修に出ていたかを機械で残すとき (#presence-from-process)
+when: Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript) + 相手と口頭で決めた段取りを探すとき (#summary-mail-holds-agreements) + 開催通知のメールから本人を会議に入れるとき (#join-from-notice) + 会議・研修に出ていたかを機械で残すとき (#presence-from-process)
 category: infra
 summary: Zoom の機械経路は Server-to-Server OAuth app 1 つで開く (#s2s-oauth-route、 scope は用途ごとに admin 版を 1 つずつ足す = 部屋の作成・読み取り・変更・削除 / 自分と設定 / 終わった会議、 token は account_id + Basic 認証で自己発行)。 常設の部屋を PMI と分ける判断 (#dedicated-room-vs-pmi)。 create の 2 つの罠 = アカウント既定「予定されたミーティングに PMI を使用」 が ON だと新しい id が発番されるのに参加 URL は PMI のものになる (#use-pmi-silently-hijacks-create)、 passcode なしで作ると waiting_room が要求を無視して true に上書きされる (#passcode-or-waiting-room)。 固定時刻なしの定期ミーティングは最終使用から 365 日で失効する (#no-fixed-time-expiry)。 録画と議事録は別機能で、 録画せずに要約だけ回せる (#recording-vs-summary)。 終わった会議の要約と文字起こしは `notes` で取り出し、 「無い」 も過去の回の `has_meeting_summary` と transcript の 3322 で言い切る (#read-summary-and-transcript)。 作った部屋は番号だけ残ると用途が失われる (#record-the-room)。 通知メールの会議に本人を入れるときは passcode を chat に出さずクリップボードへ、 末尾の \r を落とす (#join-from-notice)。 出ていたかは account の参加の記録 (report API の pastJoined、 直近 6 か月の月だけ、 他人主催の会議は会議 id で同定) を毎日写し、 別 account の網として会議中だけ動く process `CptHost` を各機械で見張り、 1 台で予定と突き合わせる (自分主催の会議は開始の前後 15 分に入ったものだけ数える、 #presence-from-process)
 -->
@@ -113,6 +113,8 @@ type 3 (No Fixed Time) の部屋は **最終使用から 365 日**で消える�
 - **「無い」 の根拠は 2 つの応答**: 過去の回の詳細 (`GET /past_meetings/{uuid}`) の `has_meeting_summary` と、
   文字起こし (`GET /meetings/{uuid}/transcript`) の code 3322。 通知メールの有無で判断しない
   (届かない設定もあるし、 メール検索の空振りは「無い」 の証明にならない)
+- <a id="summary-mail-holds-agreements"></a>**相手と口頭で決めた段取りを探すときは、 会議の要約のメールも引く** — 通知のメールの本文に要約が丸ごと入っていて、 誰が何をするかの一覧 (Next steps) と日程の見込みが残る。
+  差出人は Zoom の no-reply で本文は HTML だけ、 人の名前と話題で検索に掛かる (実測: 差出人と宛先で探しても出ず、 名前 + 話題で出た)。 AI の要約なので、 人の姓の取り違えや日付と曜日の不一致がある (実測) = 記録には「要約の読み・未確認」 と書く
 - **ローカル録画のフォルダには要約も文字起こしも入らない** (入るのは音声・動画・設定 file だけ)。
   要約は Zoom 側にだけ残る
 - <a id="transcript-speaker-labels"></a>**文字起こし (VTT) は参加者ごとの表示名つき** = ローカル録画は全員を 1 本に混ぜていて

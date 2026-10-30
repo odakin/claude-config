@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき + 会員サービスからの情報流出のお詫びが網から落ちたとき (#vendor-breach-notice-class)
+when: 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき + 会員サービスからの情報流出のお詫びが網から落ちたとき (#vendor-breach-notice-class) + 止まっている待ちの項目を棚卸しするとき (#waiting-item-answer-elsewhere)
 category: mail
 summary: 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止。 別スレッドで届く待ち結果は待ち項目の検索条件で拾う (#new-thread-expected-inbound) / 送り手一括の雑音化は class 別の件数を数えてから (#sender-noise-volume-check) / 決着済み案件への自動督促は本文の案件 ID で畳む (#settled-matter-key) / 「記録済み」 の書式は検出器間で 1 つ (#recorded-id-notation)
 -->
@@ -153,6 +153,19 @@ opt-out list の両方 — 後者にしか痕跡が無い決着もある (= clas
   一般則 = [`convention-design-principles.md#retrieval-key-choice`](../docs/convention-design-principles.md#retrieval-key-choice)
   (thread ID でなく送り手・件名という別の鍵で引く)、 予告された inbound の時計は
   [`#expected-inbound-tripwire`](../docs/convention-design-principles.md#expected-inbound-tripwire)
+
+## <a id="waiting-item-answer-elsewhere"></a>待ちの項目の答えは、 結んだスレッドの外に届いている
+
+止まっている待ちの項目を棚卸しするとき、 結んだスレッドの最後の message だけを読むと「相手が黙っている」 に見える。 実際には答えが別の経路に来ていて、 項目の現在地だけが古いことがある (実測: 棚卸しの結果が「催促」 より「もう動いている」 に多く倒れた)。 催促や問いを書く前に、 1 件ごとに次を引く:
+
+- **一斉配信** — 依頼や結果が ML の転送で、 名指しなしに届いている
+- **成果物の置き場** — 判断を待っていた相手の答えが、 repo の commit や台帳に当たって終わっている
+- **メール以外の依頼の経路** — 掲示板・チャットの依頼に答えが返り、 受け取りも済んでいる
+- **自分の送信済み** — 途中経過の返事を出してあって、 項目に写っていない
+- **自分の下書き** — 送ったつもりの返事が未送信のまま残っている (スレッドの一覧に送信済みと同じ形で混じる道具がある = 道具の側で下書きに印を付ける)
+- **会議の要約** — 相手と口頭で決めた段取り ([`zoom-meetings.md#summary-mail-holds-agreements`](zoom-meetings.md#summary-mail-holds-agreements))
+
+項目の本文にある前提 (「来ていない」「未定」) も疑う: 書いた時点の読みで、 その後の変化は書いた人に届いていない。 本人に問うときは、 何の件かを 1 文で添える (止まっていた項目は本人も覚えていない)。
 
 ## <a id="sender-noise-volume-check"></a>送り手を丸ごと雑音にする前に、 class 別の件数を数える
 

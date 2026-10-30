@@ -175,6 +175,8 @@ q = f"name = '{_q(name)}' and trashed = false"
 
 配布資料が「Drive folder ごと」 で来る場合 (= 説明会資料・様式 template 一式・委員会配布物 等) に、 folder 内の全 file を local に落として保存する recipe。 scope は `drive.readonly` で足りる (= write token 不要)。 手で 1 file ずつ開いて DL するより速く、 provenance (= いつの版を取ったか) が manifest に残る。
 
+⚠️ <a id="bulk-download-restricted-copies"></a>**落とす前に配布の要領を読む** — 一括取得は folder の中を全部落とすので、 個人情報の別紙 (要領に「コピーは回収・処分」 と指定があるもの) や、 他の人の提出物の subfolder も手元に来る (実測)。 指定があるものは repo に入れず、 落としたら消して manifest からも外す。
+
 ### 手順の骨格 (= 4 step、 このまま実装できる)
 
 1. **folder listing** (pagination 必須):

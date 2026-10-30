@@ -175,6 +175,12 @@ def selftest() -> int:
         assert main([str(p), "--set-literal", "waiting_party=false", "--comment", "waiting_party=返事は不要"]) == 0
         t = p.read_text(encoding="utf-8")
         assert "waiting_party: false   # 返事は不要" in t and _yaml_safe_load(t)["waiting_party"] is False, t
+        try:
+            main([str(p), "--comment", "deadline=値を変えない注釈"])
+            raise AssertionError("--set の無い --comment が通った")
+        except SystemExit as e:
+            assert "--comment" in str(e), e
+        assert p.read_text(encoding="utf-8") == t
         for bad in ("w=完了", "w=[a]", "w=[未定"):
             try:
                 main([str(p), "--set-literal", bad])
@@ -247,6 +253,8 @@ def main(argv: list[str]) -> int:
         raise SystemExit(f"❌ 同じ key を --set と --set-literal の両方に渡した: {sorted(set(sets) & set(lits))}")
     sets.update(lits)
     comments = kv(a.comments)
+    if set(comments) - set(sets):
+        raise SystemExit(f"❌ --comment は --set した行にだけ付く = 黙って捨てない (同じ key の --set も渡す): {sorted(set(comments) - set(sets))}")
     after_text = edit(before, sets, a.drop, a.after, comments)
     errs = verify(before, after_text, sets, a.drop)
     sys.stdout.writelines(difflib.unified_diff(before.splitlines(True), after_text.splitlines(True), str(p), str(p)))
