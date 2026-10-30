@@ -2,6 +2,11 @@
   "_comment": "既知の壊れ方のエラー文 → その壊れ方を書いた規約の節。 hooks/known-error-nudge.py が Bash の出力・エラー文と突き合わせる。 規約に壊れ方を書いたら、 そのエラー文の変わらない部分を 1 件足す (match は部分一致、 \"regex\": true で正規表現)。 doc は本 repo からの path + #anchor (anchor の無い doc は path だけ)。 match の文字列は doc の本文にも書く = --check が doc・anchor の実在と、 match が doc にあることを確かめる。 hint は 1 文 (原因と最初の一手)",
   "entries": [
     {
+      "match": "Text line contains an invalid character",
+      "doc": "conventions/shell-env.md#zsh-echo-backslash",
+      "hint": "zsh の echo が `\\e` を ESC に変えた疑い。 TeX の行を echo で足していないかを見て、 `printf '%s\\n' '...'` か Write tool で書き直す"
+    },
+    {
       "match": "Non-UTF-8 code starting with",
       "doc": "conventions/batch-text-edits.md#system-python-long-multibyte-line",
       "hint": "macOS 付属の python 3.9 の既知の不具合 (1023 byte を超える多バイト行)。 file は UTF-8 のままで、 1・2 行目に `# -*- coding: utf-8 -*-` を書けば通る"

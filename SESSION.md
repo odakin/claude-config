@@ -5,7 +5,7 @@
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
-- **TeX の印字される部分だけを探す道具** — [`scripts/tex-printed-grep.py`](scripts/tex-printed-grep.py)、 規則 = [`latex.md#commented-out-not-present`](conventions/latex.md#commented-out-not-present)。 残り = `hooks/known-errors.json` に `Text line contains an invalid character` → [`shell-env.md#zsh-echo-backslash`](conventions/shell-env.md#zsh-echo-backslash) の 1 件を足す案 (保護された file なので本人の裁定待ち)。
+- **TeX の印字される部分だけを探す道具** — [`scripts/tex-printed-grep.py`](scripts/tex-printed-grep.py)、 規則 = [`latex.md#commented-out-not-present`](conventions/latex.md#commented-out-not-present)。 zsh の `echo` の壊れ方 = [`shell-env.md#zsh-echo-backslash`](conventions/shell-env.md#zsh-echo-backslash) と `hooks/known-errors.json` の 1 件。
 
 - **共有 tree の stash・autostash の hook + 公開 commit message の校正の件数の検査** — [`hooks/shared-tree-stash-guard.py`](hooks/shared-tree-stash-guard.py) と Tier E の判定を入れ、 通常利用へ移る段階。 次は止まった実例で誤検出と打ち直しの手間を見る
 
