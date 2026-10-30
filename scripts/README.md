@@ -307,7 +307,7 @@
 - **[replay-public-gate.sh](replay-public-gate.sh)** — 公開 repo の直近の commit を「今の」 pre-commit gate に通し直し、 今なら止まる commit を出す
 - **[replay-session-scripts.py](replay-session-scripts.py)** — 一時 dir に書いて消えた script を、 その session の会話記録の Write / Edit を順に当て直して復元する。--selftest 内蔵。
 - **[repo-python-env.test.sh](repo-python-env.test.sh)** — repo の Python の入口 (templates/shared-project/python-env/py = 各 repo の tools/py) の検査。 偽の interpreter と偽の uv で、 venv を作る・追従させる・版が無ければ止まる・作り直しの失敗で元に戻す・機械の arch (arm64 / Intel / 見ない) に合わない候補を起動しない・lock・Windows (Git Bash) と Linux (WSL・Debian・musl) を REPO_PY_OS で模した挙動を確かめる
-- **[repo-sync-sweep.sh](repo-sync-sweep.sh)** — <root>/*/ の git repo を並列 fetch し behind-only は自動で最新化する engine (tracked-dirty は stash→ff-merge→pop、 並列起動は repo 単位の lock で排他、 手当ての要る repo は 1 行ずつ返す)
+- **[repo-sync-sweep.sh](repo-sync-sweep.sh)** — <root>/*/ の git repo を並列 fetch し behind-only は自動で最新化する engine (tracked-dirty は upstream と同じ file が無ければ stash せずに ff、 ff が断ったときだけ stash→ff-merge→pop、 並列起動は repo 単位の lock で排他、 手当ての要る repo は 1 行ずつ返す)
 - **[repo-sync-sweep.test.sh](repo-sync-sweep.test.sh)** — repo-sync-sweep.sh の test (一時 dir の bare remote + clone で各状態・並列起動・lock・stash の空振りを検証)
 - **[reviewed-mail.test.sh](reviewed-mail.test.sh)** — Exercise reviewed replies without credentials, network, or agent state.
 - **[reviewed_mail.py](reviewed_mail.py)** — Reviewed plain-text replies, independent of credentials and agent products.

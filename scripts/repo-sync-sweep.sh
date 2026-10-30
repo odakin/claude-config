@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# repo-sync-sweep.sh — <root>/*/ の git repo を並列 fetch し behind-only は自動で最新化する engine (tracked-dirty は stash→ff-merge→pop、 並列起動は repo 単位の lock で排他、 手当ての要る repo は 1 行ずつ返す)
+# repo-sync-sweep.sh — <root>/*/ の git repo を並列 fetch し behind-only は自動で最新化する engine (tracked-dirty は upstream と同じ file が無ければ stash せずに ff、 ff が断ったときだけ stash→ff-merge→pop、 並列起動は repo 単位の lock で排他、 手当ての要る repo は 1 行ずつ返す)
 #
 # 呼び出し側 = SessionStart hook (個人層) / 手動の一括 pull。 整形と surface は呼び出し側が持つ
 # (本 engine は tab 区切りの行を返すだけ)。 test = scripts/repo-sync-sweep.test.sh
@@ -449,6 +449,14 @@ _pull_locked() {
       fi
       printf 'A\t%s: behind=%s だが未 commit の変更が upstream の変更と同じ file に当たる (%s) → stash しない (pop の conflict が作業中の file に入る)。 変更の持ち主が commit してから最新化する (確認 = git -C %s/%s status -sb。 持ち主が居ないなら conventions/multi-session-coordination.md#owner-gone-intersect-sync)%s\n' \
         "$name" "$behind" "${ov3% }" "$_DISP" "$name" "${tnote:+ [$tnote]}"
+      return 0
+    fi
+    # 交差が空 = upstream の変更は未 commit の file に触れない = stash せずに ff する (同じ規約の節の「空なら
+    # merge --ff-only は相手の変更に触れずに通る」)。 stash→ff→pop だと、 退避の間に変更の持ち主 (別 session) が
+    # 同じ file を書くと pop が衝突し、 持ち主の作業が stash に残ったまま、 持ち主には何も届かない (実測)。
+    # ff が断ったときだけ下の stash の経路に落とす (従来の挙動)。
+    if _t 20 git merge --ff-only -q '@{u}' >/dev/null 2>&1; then
+      printf 'P\t%s (was behind %s、 未 commit の変更には触れずに ff = upstream と同じ file なし)\n' "$name" "$behind"
       return 0
     fi
   fi

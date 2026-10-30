@@ -82,7 +82,7 @@ out="$(run)"
 b="$(cd "$ROOT/repoA" && git fetch -q; git rev-list --count HEAD..@{u})"
 [ "$b" = "0" ] && ok "repoA が最新化された (behind=0)" || ng "repoA still behind=$b"
 
-echo "=== T4: behind & tracked-dirty (非衝突) → stash→ff→pop + 変更保全 ==="
+echo "=== T4: behind & tracked-dirty (非衝突) → stash せずに ff + 変更保全 ==="
 RB="$(mk_remote b)"; git_quiet clone -q "$RB" "$ROOT/repoB"
 advance_remote "$RB" b
 echo "local-uncommitted" >> "$ROOT/repoB/g.txt"
@@ -92,8 +92,18 @@ b="$(cd "$ROOT/repoB" && git rev-list --count HEAD..@{u})"
 [ "$b" = "0" ] && ok "repoB が最新化された (behind=0)" || ng "repoB still behind=$b"
 grep -q "local-uncommitted" "$ROOT/repoB/g.txt" && ok "未 commit の変更が pop で保全された" || ng "local 変更が失われた (= 重大)"
 [ -z "$(cd "$ROOT/repoB" && git stash list)" ] && ok "stash entry が残っていない" || ng "stash が残存"
+line_of "$out" P repoB | grep -q "触れずに ff" && ok "交差が無いので stash せずに ff した (退避の窓を作らない)" || ng "expected 触れずに ff (got: $out)"
 
-echo "=== T5: behind & staged dirty → pop --index で staged のまま復元 ==="
+echo "=== T4s: (重なり検査を外して) 同じ形 → ff が断ったときの経路 = stash→ff→pop で保全 ==="
+RB2="$(mk_remote b2)"; git_quiet clone -q "$RB2" "$ROOT/repoB2"
+advance_remote "$RB2" b2
+echo "local-uncommitted" >> "$ROOT/repoB2/g.txt"
+out="$(CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP=1 run)"
+line_of "$out" P repoB2 | grep -q "stash→pop で保全" && ok "stash の経路でも P 行と保全" || ng "expected stash→pop P repoB2 (got: $out)"
+grep -q "local-uncommitted" "$ROOT/repoB2/g.txt" && [ -z "$(cd "$ROOT/repoB2" && git stash list)" ] \
+  && ok "stash の経路: 変更保全・stash 残骸なし" || ng "stash の経路で変更か stash が壊れた"
+
+echo "=== T5: behind & staged dirty → stash せずに ff、 staged のまま ==="
 RI="$(mk_remote i)"; git_quiet clone -q "$RI" "$ROOT/repoI"
 advance_remote "$RI" i
 ( cd "$ROOT/repoI" && echo "staged-local" >> g.txt && git_quiet add g.txt )
@@ -102,6 +112,15 @@ b="$(cd "$ROOT/repoI" && git rev-list --count HEAD..@{u})"
 [ "$b" = "0" ] && ok "staged dirty でも最新化された" || ng "repoI still behind=$b"
 st="$(cd "$ROOT/repoI" && git diff --cached --name-only)"
 [ "$st" = "g.txt" ] && ok "staged のまま復元された (= 並列 session の staging window を壊さない)" || ng "staged が失われた (got: '$st')"
+
+echo "=== T5s: (重なり検査を外して) staged dirty → pop --index で staged のまま復元 ==="
+RI2="$(mk_remote i2)"; git_quiet clone -q "$RI2" "$ROOT/repoI2"
+advance_remote "$RI2" i2
+( cd "$ROOT/repoI2" && echo "staged-local" >> g.txt && git_quiet add g.txt )
+out="$(CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP=1 run)"
+st="$(cd "$ROOT/repoI2" && git diff --cached --name-only)"
+[ "$st" = "g.txt" ] && line_of "$out" P repoI2 | grep -q "index ごと復元" \
+  && ok "stash の経路でも staged のまま (pop --index)" || ng "stash の経路で staged が落ちた (got: '$st' / $out)"
 
 echo "=== T6: behind & untracked のみ → stash せず ff ==="
 RF="$(mk_remote f)"; git_quiet clone -q "$RF" "$ROOT/repoF"
@@ -244,9 +263,9 @@ kill "$HOLDER" 2>/dev/null; wait "$HOLDER" 2>/dev/null
 
 echo "=== T14: 2 本同時 (先発が stash を持っている間に後発) → 後発は skip、 変更は 1 回だけ stash→pop ==="
 ROOT="$TMP/root14"; mkdir -p "$ROOT"; mk_behind_dirty "$ROOT" l repoL
-bg_run "$TMP/t14a.out" CLAUDE_SYNC_SWEEP_TEST_HOLD_POST=3; PA=$!
+bg_run "$TMP/t14a.out" CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP=1 CLAUDE_SYNC_SWEEP_TEST_HOLD_POST=3; PA=$!
 wait_for 10 '[ "$(stash_n "$ROOT/repoL")" = 1 ]' || ng "先発が stash しなかった (= test の前提崩れ)"
-bg_run "$TMP/t14b.out"; PB=$!
+bg_run "$TMP/t14b.out" CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP=1; PB=$!
 wait "$PA" "$PB"
 outA="$(cat "$TMP/t14a.out")"; outB="$(cat "$TMP/t14b.out")"
 line_of "$outB" L repoL | grep -q "skip" && ok "後発は lock を見て skip と L 行" || ng "expected L skip in B (got: $outB)"
@@ -276,7 +295,7 @@ done
 
 echo "=== T16: stash した変更が途中で別 process に pop された → 「残っている」 と言わず sha と探し方 ==="
 ROOT="$TMP/root16"; mkdir -p "$ROOT"; mk_behind_dirty "$ROOT" n repoN
-bg_run "$TMP/t16.out" CLAUDE_SYNC_SWEEP_TEST_HOLD_POST=2; PA=$!
+bg_run "$TMP/t16.out" CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP=1 CLAUDE_SYNC_SWEEP_TEST_HOLD_POST=2; PA=$!
 wait_for 10 '[ "$(stash_n "$ROOT/repoN")" = 1 ]' || ng "stash されなかった (= test の前提崩れ)"
 ( cd "$ROOT/repoN" && git stash pop -q )          # sweep 以外の actor が pop する
 wait "$PA"; out="$(cat "$TMP/t16.out")"
@@ -298,7 +317,7 @@ grep -q local-wip "$ROOT/repoN/g.txt" && ok "変更は worktree に在る" || ng
 
 echo "=== T17: stash push が何も作らなかった (直前に別 process が stash) → 他人の stash を pop せず中止 ==="
 ROOT="$TMP/root17"; mkdir -p "$ROOT"; mk_behind_dirty "$ROOT" o repoO
-bg_run "$TMP/t17.out" CLAUDE_SYNC_SWEEP_TEST_HOLD_PRE=2; PA=$!
+bg_run "$TMP/t17.out" CLAUDE_SYNC_SWEEP_TEST_SKIP_OVERLAP=1 CLAUDE_SYNC_SWEEP_TEST_HOLD_PRE=2; PA=$!
 wait_for 10 '[ -d "$(lockdir "$ROOT/repoO")" ]' || ng "lock が取られなかった (= test の前提崩れ)"
 sleep 0.5                                           # 先発が lock 内で状態を読み直し終えるのを待つ
 ( cd "$ROOT/repoO" && git_quiet stash push -q -m foreign )   # 別 actor が先に stash する
