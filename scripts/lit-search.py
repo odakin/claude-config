@@ -45,6 +45,7 @@ USAGE
     python3 lit-search.py arxiv 'cat:hep-ex AND abs:"cross section"' --newest -n 25
     python3 lit-search.py arxiv-abstract 1810.07868
     python3 lit-search.py inspire 'abstracts.value:"cross section" and date > 2026-01-01' -n 25
+    python3 lit-search.py --json inspire 'refersto:recid:<recid>' --all --abstract > citers.json   # 全件を手元で絞る
     python3 lit-search.py --selftest            # network を使わない
     (礼儀として連絡先を名乗るなら環境変数 OPENALEX_MAILTO / CROSSREF_MAILTO = <address>。 既定は名乗らない)
 """
@@ -181,18 +182,35 @@ def arxiv_abstracts(xml):
     return out
 
 
-def inspire_url(query, n):
+def inspire_url(query, n, page=1, abstract=False):
     fields = "titles,arxiv_eprints,earliest_date,publication_info,citation_count"
-    return f"{INSPIRE}?sort=mostrecent&size={n}&fields={fields}&q={urllib.parse.quote(query)}"
+    if abstract:
+        fields += ",abstracts"
+    return f"{INSPIRE}?sort=mostrecent&size={n}&page={page}&fields={fields}&q={urllib.parse.quote(query)}"
 
 
-def inspire_row(hit):
+def inspire_row(hit, abstract=False):
     m = hit["metadata"]
     pub = (m.get("publication_info") or [{}])[0]
-    return {"year": (m.get("earliest_date") or "")[:10], "id": (m.get("arxiv_eprints") or [{}])[0].get("value"),
-            "title": (m.get("titles") or [{}])[0].get("title"),
-            "venue": " ".join(str(pub[k]) for k in ("journal_title", "journal_volume") if pub.get(k)),
-            "cited": m.get("citation_count")}
+    row = {"year": (m.get("earliest_date") or "")[:10], "id": (m.get("arxiv_eprints") or [{}])[0].get("value"),
+           "title": (m.get("titles") or [{}])[0].get("title"),
+           "venue": " ".join(str(pub[k]) for k in ("journal_title", "journal_volume") if pub.get(k)),
+           "cited": m.get("citation_count")}
+    if abstract:
+        row["abstract"] = " ".join(x.get("value", "") for x in m.get("abstracts") or [])
+    return row
+
+
+def inspire_all(get, query, abstract=False, size=100):
+    """全件を頁送りで集める。 get(url) -> 応答の dict。 総数と集めた行を返す (件数が合わなければ呼び手が気づける)。"""
+    rows, page = [], 1
+    while True:
+        d = get(inspire_url(query, size, page, abstract))
+        hits, total = d["hits"]["hits"], d["hits"]["total"]
+        rows += [inspire_row(h, abstract) for h in hits]
+        if not hits or len(rows) >= total:
+            return total, rows
+        page += 1
 
 
 def show(total, rows, as_json, label):
@@ -248,8 +266,12 @@ def run(a):
                 for r in rows:
                     print(f"### {r['id']} | {r['date']} | {r['title']}\n{r['abstract']}\n")
         elif a.cmd == "inspire":
-            d = c.get(inspire_url(a.query, a.n))
-            show(d["hits"]["total"], [inspire_row(h) for h in d["hits"]["hits"]], a.json, "INSPIRE (新しい順)")
+            if a.all:
+                total, rows = inspire_all(c.get, a.query, a.abstract)
+            else:
+                d = c.get(inspire_url(a.query, a.n, abstract=a.abstract))
+                total, rows = d["hits"]["total"], [inspire_row(h, a.abstract) for h in d["hits"]["hits"]]
+            show(total, rows, a.json, "INSPIRE (新しい順)")
     except HttpError as e:
         sys.exit(f"{e} — リトライしない。 429 なら鍵なしの利用の制限 (その source を止めて検索ログに書く)")
 
@@ -279,6 +301,11 @@ def selftest():
                                   "publication_info": [{"journal_title": "J.Test", "journal_volume": "9"}]}})
     assert r == {"year": "2026-01-02", "id": "2601.00001", "title": "A title", "venue": "J.Test 9", "cited": 4}, r
     assert inspire_row({"metadata": {}})["id"] is None, "欠けた欄で落ちる"
+    assert "abstracts" in inspire_url("x", 3, abstract=True) and "abstracts" not in inspire_url("x", 3)
+    assert inspire_row({"metadata": {"abstracts": [{"value": "a"}, {"value": "b"}]}}, True)["abstract"] == "a b"
+    pages = {1: [{"metadata": {}}, {"metadata": {}}], 2: [{"metadata": {}}]}
+    fake = lambda url: {"hits": {"total": 3, "hits": pages[int(re.search(r"page=(\d+)", url).group(1))]}}
+    assert inspire_all(fake, "x", size=2)[0] == 3 and len(inspire_all(fake, "x", size=2)[1]) == 3, "頁送り"
     # 誤り応答を cache に残さないこと (network を使わず、 応答を差し替えて確かめる)
     import tempfile
 
@@ -338,6 +365,8 @@ def main(argv=None):
     p = sub.add_parser("inspire")
     p.add_argument("query")
     p.add_argument("-n", type=int, default=25)
+    p.add_argument("--all", action="store_true", help="全件を頁送りで取る (-n を無視)。 被引用の全件を手元で絞るとき")
+    p.add_argument("--abstract", action="store_true", help="要旨も取る (--json の abstract 欄)")
     a = ap.parse_args(argv)
     if a.selftest:
         selftest()

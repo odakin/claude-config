@@ -481,6 +481,10 @@ sender 側は上記 spawn-spec template を書いて chip を投げる。 receiv
    マシンごとに別で、 同期されない。 別のマシンで書かれた session の記録は読めないので、 spec に「このマシンに無い id は記録なしと書き、
    推測で埋めない」 を入れる (2026-09-14、 原因分析の作業書を別マシンに投げかけて気づいた)。
 
+### <a id="report-after-result"></a>完了の知らせは、 操作の結果を読んでから送る
+
+操作 (掲示板の提出・push・送信) と、 その完了を知らせる message や要約を、 同じ応答に並べない。 並べた呼び出しは前の結果を見ずに順に走るので、 操作が失敗しても「済んだ」 が相手に届く (実測: 提出が引数の誤りで断られたのに、 同じ応答の message と turn の要約が提出済みと言った)。 操作の出力を読んだ次の応答で知らせる。 後から分かったら、 相手に訂正を送り、 有効な記録の id を書く。
+
 ### <a id="review-handoff"></a>作ったものの検収を別 session に頼むとき — 作業書に書くことと、 受け手の進め方
 
 作った本人の 4 軸 sweep は、 自分の説明を自分で確かめる形になる。 道具・hook・検出器のように「説明と実装の食い違い」 が後で高くつくものは、 別 session に検収を頼むと安く見つかる (実測: 起票側の sweep と全 test が緑の成果物から、 誤検出 3 形・見逃し 2 形・説明と本体の食い違い 2 件が出た)。 盲検の査読 ([`cold-eyes-isolation.md`](../../ai-collaboration/conventions/cold-eyes-isolation.md)) と違い、 受け手は repo も記録も読める — 隔離でなく**読む順序**で独立を保つ。 読む順序で守れるのは、 起票側の記録が対象と別の file にあるときだけ — 対象 file の中 (先頭 comment など) に結論や記録への path があれば、 先に剥がした写しを対象にする ([`cold-eyes-isolation.md`](../../ai-collaboration/conventions/cold-eyes-isolation.md#contamination-channels) (d))。 盲検にしたいなら読む順序でなく [`#board-blind-variant`](../../ai-collaboration/conventions/cold-eyes-isolation.md#board-blind-variant) の形にし、 掲示板の依頼は `--review-target` か `--not-blind` のどちらかを付ける。
