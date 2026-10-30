@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき
+when: 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき + 投稿した論文の判定・採択の通知を受け取ったとき (#share-decision-with-coauthors)
 category: paper
 summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕 + **arXiv は source を公開する** = コメント除去・`.bbl`+`.bib`+`.bst` 同梱・元原稿と PDF テキスト一致を gate にした package 〔`scripts/arxiv-package.py`〕、 投稿画面 v1.5 の各段で見るもの、 package 作成後に原稿が動く race、 締切・公開時刻、 primary category と SCOAP3、 **公開直後の引用依頼を journal 投稿の前に仕分ける** 〔個人名なしの宛名は名前検出に掛からない = arXiv 番号で検索〕)、 投稿 checklist + **投稿後の status 追跡** (= ポータルの role 略語 AE/EIC/ADM の役割分担・status 階梯の読み方・共著者も自分の account の Co-Authored 欄で閲覧可〔2026-08-21 訂正〕・**著者向け status API は無い** = 中間 status はメールされず Author Center のみ・decision はメール + 定期実読 backstop の 2 重・Claude 操作ブラウザに user が login すれば Claude が直接読める・催促の宛先) 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
 -->
@@ -338,6 +338,17 @@ Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Mana
 - <a id="coarse-author-status"></a>⚠️ **著者側の表示は誌によって粗い — 査読報告が届いても Under Review のまま動かないことがある** (実測: 事務局が報告の受領を伝えた後も、 判定まで表示は Under Review のままだった)。 下の表の Awaiting AE Recommendation 以降が著者に見えない誌では、 表示が動かないことは「報告がまだ」 の根拠にならない。 事務局の返事を一次情報にする
 - **status を見るのは「音沙汰が無い」 と思った時** — 受領確認から数週間後に一度見るだけで、 「順調に査読中」 と「AE 未割当で止まっている」 を区別できる。 前者なら待つ、 後者なら照会する、 と対処が分かれる
 - **status を見るにはログインが必要だが、 Claude が読めないわけではない** — Claude は認証情報を入力できない (= 規約上の禁則) が、 **user が Claude 操作ブラウザ (= browser MCP 経由で Claude が読めるブラウザ) で一度 login すれば、 以後 Claude が dashboard を直接読んで記録できる**。 ⚠️ 保存 password は**投稿に使ったブラウザ側**にある (= §[browser-fallback](#browser-fallback) で Safari 等に切り替えて投稿した場合、 Claude 操作ブラウザの autofill には出ない → user は手入力 or password manager 参照)。 ⚠️ 旧記載「Claude からは読めない・著者が画面を開いて内容を渡す経路になる」 は不正確 (2026-08-21 訂正、 user login 後の読取は Claude 側でできる)
+
+### <a id="share-decision-with-coauthors"></a>判定は、 全文を共著者に渡すまでが受領
+
+判定 (accept / revise / reject) のメールは誌によって届く相手が違う。 全著者に届く誌もあれば、 投稿した人と編集者にしか届かない誌もある。 後者では、 受けた人が渡さない限り共著者には知る手段が無い (実測)。 記録に書いただけでは渡したことにならない。
+
+- **受けた turn で、 判定の全文と referee report と期限を共著者に渡す下書きを著者に見せる**。 外への発信なので著者の OK を待つ。 待つ間は TODO の問いの欄 (`ask` に当たるもの) に置く。 文の中の「次:」 は機械が問い直さない。
+- **判定の到着で、 次の手の日付を消さない**。 改訂の期限で TODO の期限を上書きすると、 近い次の手が一覧から落ちる。 改訂は別の TODO に分け、 共有は近い日付のまま残す。 待ちの見出しも判定が来た形に言い直す。
+- **共有リポの SESSION に書いても共著者に届いたことにならない**。 相手が読む経路 (メール・チャット) で渡す。
+- **投稿中の TODO には、 原稿 ID で受信箱を見張る検索を結ぶ**。 判定は問い合わせのスレッドに続かず、 新しいスレッドで届く。 自動送信なのでメールの分類が「更新」 に入り、 人からのメールの網からも外れることがある。
+- **問い合わせで共著者を Cc したら、 待っている人として記録する**。 共著者も結果を待っている案件になる。
+- **逆向き**: 投稿した人が別の共著者なら、 判定が届いたら知らせてもらうよう頼み、 こちらから聞く日付を置く。
 
 ### <a id="status-automation"></a>自動追跡の可否 (= 著者向け API は無い)
 

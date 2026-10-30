@@ -328,6 +328,7 @@
 - **[session-fetched-docs-report.py](session-fetched-docs-report.py)** — ある session が取得して読んだ原典 (論文・資料の PDF) を会話記録から並べ、 repo に保存したかを出す。--selftest 内蔵。
 - **[session-launch-check.py](session-launch-check.py)** — desktop の start_session で起こした session が、 頼んだ model と effort で起きたかを app の記録で確かめ、 違えば直し方を出し、 直るまで go の SendMessage を止める (hook の engine。 正本 = conventions/multi-session-coordination.md#desktop-start-model-cap)。
 - **[session-model.py](session-model.py)** — print the model a Claude Code session actually runs on (read from its transcript), before sending it work.
+- **[session-open-questions-report.py](session-open-questions-report.py)** — ある session が turn 終わりの箱で問うて、 本人の答えが無いままの問いを会話記録から並べる。--selftest 内蔵。
 - **[session-scripts-report.py](session-scripts-report.py)** — ある session がその場で書いた script を会話記録から全部並べ、 file として残っているか (commit 済みか) を出す。--selftest 内蔵。
 - **[session_provenance_cache.py](session_provenance_cache.py)** — Own shared Codex model/effort resolution and the hook metadata cache.
 - **[set-file-associations.py](set-file-associations.py)** — Apply or verify declared macOS filename-extension handlers with duti; fail loud on unverifiable state. --selftest included.

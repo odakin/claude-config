@@ -37,6 +37,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 | user の発言 (訂正・決定・依頼) | `python3 scripts/search-agent-transcripts.py --session <id8> --role user --regex .` (圧縮の前も含めて時刻順に全部) |
 | その場で書いた script (file に書いたもの + heredoc・`-c` で流したもの) | `python3 scripts/session-scripts-report.py <id8>` = 1 本ずつ、 commit 済み (✅) / repo の中で未 commit (🟡) / repo の外 (⚠️) / 流しただけで file に無い (⚠️) を出す。 ✅ でないものは 1 本ずつ、 1 の表の [#evidence-scripts](#evidence-scripts) の行で決める |
 | 根拠の無い検算の主張と先送り (返事と記録に書いた文) | `python3 scripts/session-claims-report.py <id8>` = 「手で確かめて一致」「独立に再現」 のうち根拠の file を指さない行 (A) と、 「次に〜とき」「後で」 のうち carrier を指さない行 (B)。 誤検出は出るので 1 行ずつ読み、 A は 1 の表の [#unbacked-checks](#unbacked-checks)、 B は 3 の [#deferrals](#deferrals) で決める |
+| 答えの無い箱の問い (turn 終わりの箱で問い、 本人の答えが無いまま流れたもの) | `python3 scripts/session-open-questions-report.py <id8>` = 1 件ずつ読み、 まだ要る問いは TODO の `ask` に写す (箱の問いは次の自動の turn で画面から消える。 記録に残らないので誰も問い直さない。 実測) |
 | 取得して読んだ原典 (論文・資料の PDF。 一時 dir に落としたもの・取り込み口に置かれたものも) | `python3 scripts/session-fetched-docs-report.py <id8>` = arXiv の取得 (URL のある command と WebFetch の番号) と手元の PDF (Read・curl の書き先・WebFetch の保存先・取り込み口・検査のための写しの元) を 1 件ずつ、 repo に保存あり (✅) / 保存なし (⚠️) / もう無い (❌) で出す。 ✅ でないものは 1 の表の [#fetched-originals](#fetched-originals) の行で決める |
 | 打った command・commit | `python3 scripts/search-agent-transcripts.py --session <id8> --tool-runs --regex '<語>'` (例 = `git commit`。 2 回以上打った command は 1 の表の「再利用できる script」 の候補) |
 | agent の報告 | 0.5 の表の 1 行目 |
@@ -208,6 +209,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
   - 研究の中身を扱った session なら、 拾った知見の件数と置いた note (会話にしか無かったものを何件記録したか)。 考え方 (0.3 の表の行) も同じく件数と置き場所
   - その場で書いた script の一覧 (0.3 の道具) の ✅ 以外 1 本ずつの扱い (置いた先か、 置かない理由 = 1 の [#evidence-scripts](#evidence-scripts))
   - `session-claims-report.py` の A (根拠の無い検算) と B (先送り) を 1 行ずつどうしたか (script にした先・消した・やった・載せた carrier)
+  - `session-open-questions-report.py` の問いを 1 件ずつどうしたか (写した TODO・答えが出ていた・もう要らない)
   - 2 回目の壊れ方・訂正があれば、 仕組みにしたか、 しなかった理由と積んだ先
   - 委ねた先のうち、 まだ動いている・検収していない・裏が取れなかったもの。 掲示板の状態 (検収待ち・誰の番か) を書く直前に、 その request を `board.py show --request <id> --sync` で読み直す
     (手元の checkout と数分前の表示は古い。 並列の session が検収役を移している・検収を済ませていることがある = 古い状態のまま「本人の一言が要る」 と報告し、 要らない判断を求めた実測がある)
