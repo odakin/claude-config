@@ -34,6 +34,8 @@ ORCID 連携を設定済みの研究者では、論文 (published_papers) は OR
 
 ⚠️ **掲載されても ORCID に自動で入るとは限らない** — Crossref から ORCID への自動の流入は、 出版社が Crossref に登録した著者情報にその人の ORCID iD が載っていることが条件 (共著者の分だけ載っていることがある、 実測)。 INSPIRE のような分野の DB からも流入するが、 いつ入るかは DB 側しだいで、 載っていても入らないままのことがある (実測)。 待つ前に `https://api.crossref.org/works/<DOI>` の `author[].ORCID` を見る。 載っていなければ待っても Crossref からは入らないので、 本人が ORCID の Works に DOI を足す (researchmap にはそこから流れる)。 反映の確認は公開 API で見る: ORCID = `https://pub.orcid.org/v3.0/<iD>/works` (`work-summary[].source` で流入元が分かる)、 researchmap = `api.researchmap.jp/{permalink}/published_papers`。 ログインの要る画面 (ORCID の非公開の work、 researchmap の編集一覧) はこの確認の範囲の外。
 
+<a id="orcid-add-by-doi"></a>**ORCID の Works に DOI で足すとき** (Works の Add → Add work with a DOI): 取り込まれた題と著者を見てから保存する = 手元の台帳の DOI が別の著者の論文を指していることがある (実測)。 `Form validation error` が出たら、 欄の下の赤字を探す。 出版社の概要が記号の markup ごと Citation description に入って 5000 字を超えていることがあり (実測)、 この欄を空にすれば保存できる。 会議録は Work type が空で取り込まれることがあるので手で選ぶ (実測)。 抜けと DOI の取り違えは、 台帳の DOI を ORCID の公開 API と Crossref の著者に当てれば機械で見つかる = 定期の点検に載せられる。 ORCID への書き込み API は member 向けなので、 足す操作そのものは本人のログインの画面になる。
+
 ## <a id="doi-import"></a>4. DOI 取り込みボタン
 
 論文 add フォーム冒頭の「検索する DOI」に DOI を入れて「外部システムからの取り込み」を押すと、書誌が自動 populate される。ただし [`web-form-automation.md#imported-metadata-verify`](web-form-automation.md#imported-metadata-verify) の通り **registry metadata は紙面と一致しない**ことがある。researchmap で実測した具体例:
