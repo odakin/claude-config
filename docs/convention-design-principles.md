@@ -799,6 +799,8 @@ origin: 長い変更 task で既存の commit/push 規則と dirty nudge が在�
 3. **人手が本当に要る** (認証・物理操作・人の判断・外部への送信) なら、 **条件付きで出続ける carrier** に載せる: 期限つき TODO、 または特定マシン・特定状態でだけ session 開始時に出る発火 ([`multi-machine-state.md#machine-gated-pending-action`](../conventions/multi-machine-state.md#machine-gated-pending-action))。 完了を機械的に判定して自然に止める
 4. chat に書く手順は carrier の**中身の写し**として添え、 その carrier を名指しする。 chat だけで渡さない
 
+<a id="location-handoff"></a>**人が行く場所に手順を預ける形も同じ** (「その機械の前に行けるときに実行」): 離れた機械の操作は、 その機械で定期に走る無人の job に載せれば人は要らない (例 = [`remote-control-server.md#unattended-refresh`](../conventions/remote-control-server.md#unattended-refresh))。 機械が答えられない段だけを、 上の 3 の carrier で出し続ける。 検出の語に機械の名前を書くと、 機械の入れ替えで黙って抜ける (実測) = 名前でなく形 (「行ったら」 など) も語に入れる。
+
 判別: 最終メッセージに「1 回実行」 「次に〜するとき」 「あとで」 「忘れずに」 と依頼の語尾が並んでいたら、 それが 1〜3 のどれに載ったかを同じメッセージで名指しできるか。 名指しできなければ carrier が無い。 **「〜が出たら決め直す」 「〜になったら見直す」 のような条件つきの将来の判断も同じ形** (実測: 「実測で出たら決め直す」 と書いて終え、 その条件を見に行く者がいなかった)。 条件を機械で検出できるなら、 その状態でだけ出る発火 (3) に載せ、 判断した後に条件を偽へ戻す操作 (既読へ移す等) を一緒に用意する (= 見張りは閉じずに次の発生を待てる)。
 
 <a id="state-handoff-is-the-worse-form"></a>**禁止形は 2 つあり、 後者の方が悪い** — (i) **作業**を渡す (「あとで 1 回やって」)、 (ii) **状態**を渡す (「この点は覚えておいて」 「頭の片隅に」)。

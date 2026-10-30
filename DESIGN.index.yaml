@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: rc-detail-and-unattended-refresh
+    legacy: "2026-10-31"
+    level: 2
+    title: "2026-10-31: RC server の中身を beat に載せ、 古い server は機械が起こし直す"
   - id: session-shape-gate
     legacy: "2026-09-28"
     level: 2

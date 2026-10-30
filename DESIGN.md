@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-10-31: RC server の中身を beat に載せ、 古い server は機械が起こし直す](#rc-detail-and-unattended-refresh)
 - [2026-09-29: 規則の文書の変更の報告 — 差し戻しの後も照合し、 他の session の分は file ごとに畳み、 書かれていた記録は証拠から照合し直す](#additive-echo-bookkeeping)
 - [2026-09-29: auto mode で承認 CLI が classifier に止まる経路は、 本人の狭い allow の宣言で開ける](#approval-cli-allow-in-auto-mode)
 - [2026-09-29: data 形式の file の配線 lock は場所で決める (名前の言及では lock しない)](#wiring-lock-data-files-by-location)
@@ -52,6 +53,20 @@
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
 
 ---
+
+## <a id="rc-detail-and-unattended-refresh"></a>2026-10-31: RC server の中身を beat に載せ、 古い server は機械が起こし直す
+
+**背景 (実測)**: スマホから始めた session に返事が付かないとき、 常駐機の中は他の機械から見えず、 `last_status` と log の経過時間だけでは「受け取っていない」 と「受け取って止まっている」 を分けられなかった。 待機中の表示 `Ready ·` は marker に無く `unknown` に落ちていた。
+
+**決定**: 待機数・接続中の session・子 process・実行中の CLI の新旧・返事の無い会話・答えを待つ許可ダイアログを beat に載せ ([`scripts/lib/rc_server_state.py`](scripts/lib/rc_server_state.py))、 reader が他の機械から出す。 古い server は `--rc-refresh-stale` が無人で起こし直す。 人の手が要る許可ダイアログだけは、 答えの記録が届くまで reader が出し続ける。
+
+**捨てた案**:
+- 再起動の手順を人に渡す = 人の記憶は carrier でない ([`#human-memory-not-a-carrier`](docs/convention-design-principles.md#human-memory-not-a-carrier))。
+- 接続 0 の時だけ起こし直す = 起動時に作られる session が残り続ける server は接続 0 にならず、 発火しない。 代わりに「会話記録が 6 時間止まる ∧ 子孫が忙しくない」 で使用中を見分ける。 代償 = 長く放置した接続は切れる。
+- 別の機械の認証情報で API を直接読む = token を持ち回す経路を増やしてまで得る情報ではない。 beat の経路で足りる。
+- `claude` を呼んで版を読む = beat は claude に依存しない (認証切れの時こそ動く必要がある)。 版は実行 file の path・更新時刻で見る。
+
+**性質**: 読むだけの関数は fail-open で、 読めない項目は欠けるだけ。 許可ダイアログの欄が無い beat は「無い」 でなく「読めなかった」。 session の題 (利用者の文面) は beat に載せない。 essence には異常の有無だけを入れ、 時間の経過では commit しない。
 
 ## <a id="session-shape-gate"></a>2026-09-28: SESSION.md の形を gate にする — 案件ごとの現在地を置き換える file にし、 日付の節・hash・messageId・育つ commit を止める
 

@@ -1,10 +1,11 @@
 # SESSION — claude-config
 
-最終更新: 2026-10-30
+最終更新: 2026-10-31
 
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
+- **Remote Control の中身の報告と無人の起こし直し** — 設計 = [DESIGN.md#rc-detail-and-unattended-refresh](DESIGN.md#rc-detail-and-unattended-refresh)、 診断の手順 = [`remote-control-server.md#ts-session-no-reply`](conventions/remote-control-server.md#ts-session-no-reply)。 読む道具 = [`scripts/leveldb-grep.py`](scripts/leveldb-grep.py)。 起こし直しの実動は未確認 = 失敗すれば reader の 🟠 が出続ける。
 - **TeX の印字される部分だけを探す道具** — [`scripts/tex-printed-grep.py`](scripts/tex-printed-grep.py)、 規則 = [`latex.md#commented-out-not-present`](conventions/latex.md#commented-out-not-present)。 zsh の `echo` の壊れ方 = [`shell-env.md#zsh-echo-backslash`](conventions/shell-env.md#zsh-echo-backslash) と `hooks/known-errors.json` の 1 件。
 
 - **共有 tree の stash・autostash の hook + 公開 commit message の校正の件数の検査** — [`hooks/shared-tree-stash-guard.py`](hooks/shared-tree-stash-guard.py) と Tier E の判定を入れ、 通常利用へ移る段階。 次は止まった実例で誤検出と打ち直しの手間を見る

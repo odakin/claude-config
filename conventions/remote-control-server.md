@@ -187,6 +187,15 @@ zsh -l -c 'echo $PATH' | tr ':' '\n' | head -5
 
 **対処**: (1) `main.log` を `code 4090` で grep して時刻を特定 (2) config の projects dir にある `bridge-pointer.json` の pid が死んでいれば stale (= 削除可) (3) 同時期に RC server が cycling していれば先にそれ (前項 trust / auth / version) を治す (4) conversation はメッセージ再送 or 新規作成で復帰 — ⚠️ ただし **worker は eject されず turn を完走している場合がある** (2026-07-02 実測: 「応答しなくなりました」 表示中もホスト側 worker は作業を継続し repo への push まで完遂、 壊れていたのは viewer→worker の再接続だけ 〔sleep/網断後に viewer 側 reconnect が 404 を繰り返す変種、 別マシンから見ると repo には pull で成果が届き続ける〕)。 **再送で同じ作業を二重実行させないよう、 先にホスト側 repo の `git log` / transcript で成果を確認**してから再送する。 ホスト機がどれか曖昧なら、 復帰後にその session に `hostname` を 1 回打たせるのが最速の ground truth。 root は upstream の worker 管理で client 側から予防は不能 — できるのは検出と復旧のみ。
 
+### <a id="ts-session-no-reply"></a>スマホから始めた session に返事が付かない — どの機械に届いたかを先に決める
+
+**症状**: 一覧に session が載り、 利用者の発言だけが見えて返事が付かない。 エラーは出ない。 原因は「受け取っていない」 と「受け取って止まっている」 で別なので、 直す前にどちらかを決める (実測: 動いている server の前で推測を重ねるより、 下の順で読む方が速い)。
+
+1. **機械ごとの中身を読む** — heartbeat の `servers[].detail` (`capacity`・`session_events`・`unanswered`・`stale`) と `tcc_pending` (項目の意味 = [`scripts/fleet-heartbeat.py`](../scripts/fleet-heartbeat.py) の冒頭)。 手元の server なら log の `Capacity: n/32`。 発言の時刻の後に待機数が増えず `Session …` の行も無ければ、 その機械は受け取っていない。 ⚠️ session の無い待ち受けの表示は `Ready ·`、 session があると `Connected ·` = 「`Connected` が出ない = 切れている」 ではない。 終わった session は `[時刻] Session completed (経過) cse_…` の 1 行になる。
+2. **文面で会話記録を引く** — 次の節の 1 と同じ。 有無はその機械の中だけで言える (他の機械の分は 1 の `unanswered` で読む)。
+3. **session の id と接続先を確かめる** — スマホで始めた session は `session_…` の id で、 desktop app の session の道具 (一覧・`get_session`) には出ない (実測 = not found)。 id は `~/Library/Logs/Claude/main.log` の `setFocusedSession: sessionId=session_…` で分かる。 server の log の `cse_…` は同じ session の別の接頭辞 (後ろが同じ)。 機械ごとの接続先は `detail.environment`、 desktop app が保存した接続先と発言の時刻は Local Storage を [`scripts/leveldb-grep.py`](../scripts/leveldb-grep.py) で読む (`environmentId`、 session id の隣の `{uuid, at}`)。 ⚠️ `~/Library/Application Support/Claude` を丸ごと grep しない = 大きな image があり数分かかる (実測)。 内蔵ブラウザの claude.ai が未ログインなら session の頁は `/logout?involuntary=1` に飛ぶ = 読めない。
+4. **形で分ける** — 受け取っていない = server の不調 ([#unattended-refresh](#unattended-refresh))。 子 process はあるのに会話記録が進まない = 許可ダイアログ待ち (`tcc_pending`) か起動の hook。 session は残っていて `unanswered` が出る = 返事の途中で止まった。
+
 ### <a id="ts-messages-typed-while-offline"></a>「Remote Control が切断されました / ホストはオフライン」 の間に打った指示は、 ホストの session に届いていない
 
 **症状**: claude.ai やスマホの viewer が「Remote Control が切断されました」「<host> 上の Claude Code はオフラインです」 を出している間に打った指示は、 viewer の画面には並んで見えるが、 ホスト機の会話記録 (config dir ごとの `projects/**/*.jsonl`) には 1 件も入っていない (実測)。 同じ時期、 ホストの RC server は launchd に loaded だが process が居なかった (fleet heartbeat の「loaded だが process 無し」)。 つまり viewer に見えている指示は、 実行されていない。
