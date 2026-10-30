@@ -489,21 +489,23 @@ frameset の app では空文字と ref 無しが返る。 読み書きは `java
 - `.claude/launch.json` にその dir を配信する静的 server (`python3 -m http.server <port> --bind 127.0.0.1 -d <dir>`) を置き、 `preview_start {name}` → `navigate` で `http://localhost:<port>/<file>` を開く (既にある設定を使えるなら足さない)
 - 確かめ終わったら `preview_stop` し、 出力を消す (私的な中身の HTML を置きっぱなしにしない)
 
-## <a id="browser-download-automation"></a>**Chrome 拡張**からの file download は user gesture 必須 (= scripted download の silent block)
+## <a id="browser-download-automation"></a>**Chrome 拡張**からの file download — 保存されないように見えたら、 保存先の確認の sheet 待ちか silent block かを見分ける
 
 > ⚠️ **scope (2026-09-02 実測で確定)**: 本 § の silent block は **Claude in Chrome (= 拡張経由の実ブラウザ)** の話。
 > **Claude Code 内蔵の Browser pane は別 surface で、 script 発火の blob download が `~/Downloads` に着地する**
 > — 実測 = pane 内で `javascript_tool` から `Blob` + `<a download>.click()` を撃ち、 2 秒後に `~/Downloads/` に
 > 実体 file を確認 (26 byte、 中身一致)。 ∴ **「ブラウザからは落とせない」 と一般化して下の fallback ladder に
 > 逃げる前に、 内蔵 pane で試す**。 内蔵 pane の読み取り能力は [`#claude-share-page-access`](#claude-share-page-access) の比較表側 (= 完全レンダリング / `get_page_text` / `javascript_tool`)。
+> ⚠️ **内蔵 pane は HTTP Basic 認証の入力欄を出さず、 401 のページを表示して止まる** (実測) = Basic 認証のサイトは拡張 (実ブラウザで本人がログイン) で読む。
+> 本人が URL に ID/PW を埋めて pane で開く形は勧めない (認証情報が URL・履歴に残る)。
 
-**現象**: browser MCP (Claude in Chrome 等) で page 内 JS から download を発火させても、 **保存が一切実行されない** — blob + `<a download>` の `.click()` も `location.assign(<content-disposition URL>)` も、 browser の download 履歴 (History DB の `downloads` table) に **record すら残らず** 無音で落ちる。 extension/CDP 経由の合成 click も user gesture 扱いにならず、 link click での download も発火しない (= 実測、 Chromium 系)。 `fetch()` 自体は page 内で成功する (= bytes は取れている) が、 **base64 で tool 結果に持ち出すのは MCP 側 filter が block する** — これは data-exfiltration guard なので**回避しない** (chunk 分割等での evasion は禁止)。
+**現象**: browser MCP (Claude in Chrome 等) で page 内 JS から download を発火させても、 **保存が一切実行されない** — blob + `<a download>` の `.click()` も `location.assign(<content-disposition URL>)` も、 browser の download 履歴 (History DB の `downloads` table) に **record すら残らず** 無音で落ちる。 extension/CDP 経由の合成 click も user gesture 扱いにならず、 link click での download も発火しない (= 実測、 Chromium 系)。 ⚠️ record も file も無い状態は、 下の診断の「保存先の確認待ち」 と同じ見え方をする = この実測が確認の sheet の見落としでなかったかは確かめていない。 `fetch()` 自体は page 内で成功する (= bytes は取れている) が、 **base64 で tool 結果に持ち出すのは MCP 側 filter が block する** — これは data-exfiltration guard なので**回避しない** (chunk 分割等での evasion は禁止)。
 
-**診断**: 「DL したはずが落ちてこない」 時は、 保存先 dir の監視より先に **browser の download 履歴 DB を直接読む** (= 稼働中でも DB copy → sqlite で `downloads` table)。 record が無ければ「保存先違い」 ではなく「発火していない」 が確定する。 併せて download URL が**期限付き token** (`?time=...` 等の signed param) を持つ場合、 stale な page から取った URL の fetch は **200 + login page HTML** を返す (= サイズが数 KB の HTML なら token 切れ。 page を reload してから再試行)。
+**診断**: 「DL したはずが落ちてこない」 時は、 保存先 dir の監視より先に **browser の download 履歴 DB を直接読む** (= 稼働中でも DB copy → sqlite で `downloads` table)。 record が無ければ「保存先違い」 ではない。 「発火していない」 と「保存先の確認待ち」 の 2 つが残る — <a id="pending-save-sheet"></a>**保存先の確認の sheet** (macOS の保存の panel。 見出しは「<site> が次の保存を要求しています」) が答えを待っている間も、 History DB の record も保存先の file も無い (bytes は見えない一時 file に書かれ、 答えると file が現れて mtime は download を始めた時刻になる)。 sheet は browser の窓のある画面に出て tab の screenshot には写らず、 別の display に出ることもある = 「発火していない」 と決める前に全 display を `screencapture -x <file1> <file2>` で撮って見る (実測: 拡張経由の blob + `<a download>.click()` が sheet で止まっていたのを「保存されない」 と判断し、 本人が sheet の「保存」 を押すと file が出た)。 sheet のボタンは Claude からは押せない (System Events は補助アクセスの許可が要り、 拡張は native の panel に届かない) = 本人に押してもらう。 併せて download URL が**期限付き token** (`?time=...` 等の signed param) を持つ場合、 stale な page から取った URL の fetch は **200 + login page HTML** を返す (= サイズが数 KB の HTML なら token 切れ。 page を reload してから再試行)。
 
 **How to apply** — fallback ladder (上から順に):
 
-1. **user の手 click** (= 物理的に browser の前にいる人に依頼。 リモート操作中の user は click できないことに注意 — 「どの機械の browser を操作しているか」 と「user がどこにいるか」 は別物)。
+1. **user の手 click** (= 物理的に browser の前にいる人に依頼。 先に [`#pending-save-sheet`](#pending-save-sheet) の確認の sheet が出ていないかを見る = 出ていれば「保存」 を押してもらうだけで済む。 リモート操作中の user は click できないことに注意 — 「どの機械の browser を操作しているか」 と「user がどこにいるか」 は別物)。
 2. **cloud 共有リンク経由**: user が手元マシンで DL → cloud storage の共有リンク (Dropbox folder link は `&dl=1` で zip 一括) を chat に貼ってもらい、 worker 側で `curl -L`。 zip の filename mangling は cp437 → utf-8 re-decode で復元 (= office-automation の `zip-cp932-filenames` と同じ手当)。
 3. **メール添付経由**: user が自分宛に添付送信 → Gmail 系 MCP の attachment download で取得。
 
