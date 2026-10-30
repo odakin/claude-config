@@ -82,6 +82,12 @@ def _exists(p: Path) -> bool:
         return False
 
 
+def _plain_env() -> dict:
+    """The environment without what git hands a hook: under GIT_DIR, `--show-toplevel` answers the directory it was
+    asked from, not the repo's root, so a link was judged from the wrong place (measured in a worktree's commit)."""
+    return {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX")}
+
+
 class Git:
     """Per-repo rename maps from `git log -z` (NUL-separated: no path quoting)."""
 
@@ -97,7 +103,7 @@ class Git:
     def root(self, d: Path) -> Path | None:
         if d not in self.roots:
             r = subprocess.run(["git", "-C", str(d), "rev-parse", "--show-toplevel"],
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, env=_plain_env())
             self.roots[d] = Path(r.stdout.strip()).resolve() if r.returncode == 0 else None
         return self.roots[d]
 
@@ -106,7 +112,7 @@ class Git:
         else None. `--git-common-dir` names the main checkout's `.git` (a plain checkout names its own)."""
         if root not in self.mains:
             r = subprocess.run(["git", "-C", str(root), "rev-parse", "--git-common-dir"],
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, env=_plain_env())
             main = None
             if r.returncode == 0 and r.stdout.strip():
                 common = Path(r.stdout.strip())
@@ -650,6 +656,19 @@ def selftest_worktree(check) -> None:
         wt_rows = scan_files([wt / "a.md", wt / "b.md"], [], False, Git(False))
         mcls = {r[2]: r[3] for r in main_rows}
         wcls = {r[2]: (r[3], r[4]) for r in wt_rows}
+        beside = base / "repo-wt"                                         # a worktree next to the main checkout
+        subprocess.run(["git", "-C", str(repo), "worktree", "add", "-q", str(beside)], check=True, capture_output=True)
+        (beside / "sub").mkdir()
+        (beside / "sub" / "c.md").write_text("[x](../../other/x.md)\n", encoding="utf-8")
+        common = subprocess.run(["git", "-C", str(beside), "rev-parse", "--absolute-git-dir"], capture_output=True,
+                                text=True).stdout.strip()
+        os.environ["GIT_DIR"] = common                                    # what git hands a hook in a linked worktree
+        try:
+            hook_rows = scan_files([beside / "sub" / "c.md"], [], False, Git(False))
+        finally:
+            del os.environ["GIT_DIR"]
+        check("worktree: inside a commit's hook (GIT_DIR set) a correct link is still ok  [foil: env-inherited root]",
+              not hook_rows)
         check("worktree: a correct link to a sibling repo is ok, as in the main checkout",
               "../other/x.md" not in mcls and "../other/x.md" not in wcls)
         check("worktree: a link one ../ off is still 'depth', with the main checkout's fix  [foil]",
