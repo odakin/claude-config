@@ -408,14 +408,14 @@ def selftest():
     lines = []
     rc = report([("x.md", 1, ["TERM"])], "the staged change", out=lines.append)
     expect("TERM -> block, exit 1, the literal is not printed", rc == 1 and "MOCKPROGRAM" not in "\n".join(lines))
-    # CALIB fixtures are assembled at run time (this file's own diff passes the staged check)
+    # CALIB fixtures are assembled at run time (this file's own diff passes the staged check); the values are made up
     rec, cmd_en = "会" + "話記録", "trans" + "cripts"
     expect("CALIB: population and hits over the records", calib_counts(
-        "校正 = 道具: 過去の Bash command 約 3.5 万" + "件で当たり 33 件、 読んで誤検出 3 件") == ["3.5 万件", "33 件"])
-    expect("CALIB: records + count", calib_counts("較正 (実測) = " + rec + " 197 件で書き換え 182") == ["197 件"])
-    expect("CALIB: recent weeks + sessions", calib_counts("較正 = 直近 2 週で 17 出力 / 12 session") == ["17 出力", "12 session"])
+        "校正 = 道具: 過去の Bash command 約 1.2 万" + "件で当たり 45 件、 読んで誤検出 6 件") == ["1.2 万件", "45 件"])
+    expect("CALIB: records + count", calib_counts("較正 (実測) = " + rec + " 123 件で書き換え 100") == ["123 件"])
+    expect("CALIB: recent weeks + sessions", calib_counts("較正 = 直近 3 週で 20 出力 / 10 session") == ["20 出力", "10 session"])
     expect("CALIB: English population and hits", calib_counts(
-        "Bash commands of one machine's " + cmd_en + ": 855 mention it, 4 start it") == ["855 mention", "4 start"])
+        "Bash commands of one machine's " + cmd_en + ": 500 mention it, 6 start it") == ["500 mention", "6 start"])
     expect("CALIB: false positives, selftest, 0 and 1 are the shape", calib_counts(
         "較正 = " + rec + " で誤検出 3 件、 selftest 24 件、 止める 0 件、 1 session 1 回") == [])
     expect("CALIB: a version or a duration is not a count",
