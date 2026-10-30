@@ -171,7 +171,7 @@ zsh -l -c 'echo $PATH' | tr ':' '\n' | head -5
 - install script を再実行 (= 2026-07-02 以降、 install 時に `projects[<dir>].hasTrustDialogAccepted` + `remoteDialogSeen` を自動 seed = **headless-ready 化**。 server は 60s 以内に self-heal)
 - 手動 seed: config JSON に上記 2 flag を書く
 - interactive fallback: `cd <dir> && CLAUDE_CONFIG_DIR=<cfg> claude` で trust 承認 → `claude remote-control` に y
-- **RC server 以外でも同じ文で止まる**: 新しい作業 dir (盲検の sandbox など) で background session (`claude --bg`) を起動したときも `Workspace not trusted` で起動しない。 seed 先は `projects[<その作業 dir>]` で、 file は上の機構のとおり = 既定の config dir なら home 直下の `~/.claude.json` (`~/.claude/` の中の同名 file に書いても効かない、 実測)、 `CLAUDE_CONFIG_DIR` を使うならその dir の `.claude.json`。 作業 dir を消したら key も消す
+- **RC server 以外でも同じ文で止まる**: 新しい作業 dir (盲検の sandbox など) で background session (`claude --bg`) を起動したときも `Workspace not trusted` で起動しない。 seed 先は `projects[<その作業 dir>]` で、 file は上の機構のとおり = 既定の config dir なら home 直下の `~/.claude.json` (`~/.claude/` の中の同名 file に書いても効かない、 実測)、 `CLAUDE_CONFIG_DIR` を使うならその dir の `.claude.json`。 作業 dir を消したら key も消す。 信頼は親 dir から継がれる = その config dir で親 (home など) の key が信頼済みなら、 子の作業 dir には書かなくても起動する (実測) ので、 seed の前に親の key を見る (要らない key を足さない)
 
 **検出**: fleet-heartbeat が log marker `Workspace not trusted` → `trust_error` として記録し、 reader (`check-fleet-status.py`) が 🔴 surface する。
 

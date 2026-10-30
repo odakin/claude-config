@@ -828,6 +828,7 @@ bare 作用が一階形式 (vierbein + 独立な接続) で、 誘導作用が�
 1. こちらの量を、 既知の汎関数の変数の取り替えと変分で書けるか (その loop の内線にこちらの場があるか) を問う。 書けるなら、 新しいのは「その明示的な評価・整理・その模型での読み」 で、 「新しい一ループの情報」 ではない。
 2. 新規性の文は事実だけで書く = こちらが計算した対象 (どの理論で・どの成分を・どの恒等式を確かめたか) と、 相手が計算したもの (本文で読んだ範囲)。 「別の対象」「相手に無い情報」 とは書かない。
 3. 否定の文 (「その量は先行研究に無い」) は、 挙げた文献を 1 本ずつ本文で読んでから書く ([#three-phase-structure](#three-phase-structure) の cite の束縛検査)。 有料・電子版以前で読めないなら本人に取得を頼む。 裏の取れない文を弱めて済ませない (束ねた文献の 1 本が別の量だけを計算していると、 弱めた動詞のほうが誤りになる。 実測)。
+4. <a id="open-question-read-footnotes"></a>引いた論文が「未解決」 と書いた問いを、 こちらが「解いた」「説明した」 と書く前に、 その論文の脚注と結びの段を読む。 原因の候補がそこに書いてあれば、 こちらの貢献は解決でなく、 その候補の確認と定量になる = 要旨・序論の動詞もそう書く (実測: 引用元の脚注が原因の候補を名指していたのに、 要旨が「残された未解決の因子」 と書き、 盲検の referee に新規性の書き過ぎとして指摘された)。
 
 返答書での使い方 (聞かれていない関係を認めて弱めない・問われたら導出の節を指す) = [`rebuttal-letter.md#reconsideration-reply`](rebuttal-letter.md#reconsideration-reply)。 隣接: [#invariant-structure-before-asymmetry-claim](#invariant-structure-before-asymmetry-claim) / [#induced-vs-bare-same-variables](#induced-vs-bare-same-variables) / [#absolute-sign-external-anchor](#absolute-sign-external-anchor) (恒等式の全 PASS が見ないもの、 という同じ型)。
 
