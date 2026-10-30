@@ -680,7 +680,7 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 
 - **書く**: `\documentclass[11pt,a4paper]{article}` のように、 用紙を source に書く (刷る紙の側に合わせる。 どの機械で組んでも同じ頁になる)。 jsarticle / ltjsarticle 系は既定が A4 (検査も警告を出さない)
 - **確かめる**: `python3 scripts/check-tex-papersize.py FILE.tex` (option に用紙が無い `\documentclass` を列挙、 exit 1) / `--pdf FILE.pdf` (組んだ PDF の 1 頁目の寸法を A4 / Letter で言う)。 pre-commit に `--staged-warn` を繋ぐと、 staged の .tex で用紙の無い `\documentclass` を warn する (commit は止めない)
-- pdflatex / lualatex (pdf mode) では class option だけで PDF の MediaBox まで届く。 dvipdfmx 経路は次の節 (papersize special が要る)
+- pdflatex / lualatex (pdf mode) では class option だけで PDF の MediaBox まで届く。 hyperref の `setpagesize=false` が残っていても届く (実測、 LuaLaTeX)。 止まるのは dvipdfmx の経路で、 次の節 (papersize special が要る)
 
 ### <a id="dvipdfmx-papersize"></a>documentclass の用紙指定は、 papersize special が出ないと PDF の用紙に届かない (dvipdfmx)
 
@@ -695,6 +695,10 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 - jsclasses (jsarticle / jsbook) なら、class option に `papersize` を足すだけでよい (`\documentclass[uplatex,dvipdfmx,a5paper,papersize]{jsbook}`)。用紙の option を変えたとき (A4 → A5 など) も special が追随する。実測: `dvipdfmx` option だけでは Letter のままだった
 - ⚠️ special を出す package を読むかどうかで、 **同じ repo でも file ごとに A4 と Letter が分かれる** (`geometry` を使う file だけ A4、 使わない file が Letter。 両方を並べて刷って初めて気づく)
 - ⚠️ `hyperref` の special は **`setpagesize=false` で止まり**、 dvipdfmx の既定に落ちる。 古い雛形にこの option が残っていることがある。 実測 (platex + dvipdfmx、 `letter` class): `a4paper` + `setpagesize=false` → Letter / `a4paper` のみ → A4 / どちらも無し → Letter (標準 class の既定は letterpaper)
+
+### <a id="tabular-cell-two-lines"></a>表の 1 つの欄だけが長くて表がはみ出すときは、 その欄の中を小さな tabular で 2 行に折る
+
+1 つの欄を長くすると列の幅がその欄で決まり、 表全体が版面からはみ出す (Overfull \hbox)。 その欄だけを `\begin{tabular}[t]{@{}l@{}}前半,\\ 後半\end{tabular}` にすると、 他の行は 1 行のまま、 その行だけが 2 行になる。 標準の tabular で書け、 `[t]` で 1 行目を同じ行の他の欄にそろえる。 原稿の数を断片で pin している test があれば、 折った後の source の文字列に合わせて断片を直す (実測)。
 
 ### <a id="tabular-cell-trailing-hspace"></a>tabular セル末尾の裸 `\hspace` は `\unskip` に消される
 
