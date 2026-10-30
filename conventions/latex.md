@@ -425,8 +425,8 @@ comm -23 <(grep -o '^\\bibitem{[^}]*}' paper.bbl | sed 's/.*{\(.*\)}/\1/' | sort
 **How to apply:** 「長い / 分割すべき」 と言う前に、 対象範囲の `%` 行を除いた live 本文だけを読む。 安価:
 
 ```bash
-# コメント行・空行を落として live 本文の分量だけ見る
-grep -vE '^\s*%' file.tex
+# comment と空行を落として、 印字される本文の分量だけ見る (comment 環境の中も落ちる)
+python3 scripts/tex-printed-grep.py '\S' file.tex
 ```
 
 display math・図は行数でなく rendered での専有量で別途見積もる。
