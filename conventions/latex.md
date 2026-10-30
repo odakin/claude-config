@@ -44,6 +44,14 @@ LaTeX を含むリポで適用。CLAUDE.md から参照: `~/Claude/claude-config
 - 入口を持つだけでは、 書き忘れた回にまた化ける (実測 = 記号と単位で 2 回)。 生成器は題に化ける形 (小文字の直後に大文字の語 = `eV`・`GeV`・`pH` / 数字/小文字 = `1/f` / 小文字 1 字の関数 = `f(R)`) を見つけたら、 守る版が書かれていない限り止まる。 普通の英単語と頭字語 (all-caps の語) は拾わない形にする。
 - PDF の文字層で題を照合する検査が大文字小文字を無視していると、 この誤りは通る = 大文字化した版の検査では「守った字が小文字で残っているか」 を別に見る。
 
+## <a id="italic-wrapper-upright-text"></a>文を `\textit` で包む macro は、 数式の中の `\text` (添字の P・単位の GeV) まで斜体にする — macro の中で `\let\text\textup`
+
+引用文などを斜体で組む macro (`\newcommand{\qt}[1]{``\textit{#1}''}`) で包むと、 中の数式の `M_\text{P}` の P や `10^{16}\,\text{GeV}` の GeV まで斜体になる (実測)。 amsmath の `\text` は周りの文の字体を継ぐので、 立体の添字・単位が斜体の変数に見える。 compile は通るので目視でしか見えない。
+
+- 直し方 = macro の中で `\text` を立体に差し替える: `\newcommand{\qt}[1]{``\textit{\let\text\textup#1}''}`。 差し替えは macro の群の中だけで効き、 本文の `\text` は変わらない。 `\textup` は数式の中でも働く (中で元の `\text` を呼ぶ = 循環しない)。
+- 記号の macro の側を `\mathrm{P}` にしても直るが、 同じ文書で同じ macro を使う全部の式が変わる。 包む macro の側で直すほうが、 直す所が 1 つで済む。
+- 斜体にしたら、 組んだ PDF の引用の中の添字と単位を拡大して見る (変わったのは字体だけなので、 文字層の検査では見えない)。
+
 ## <a id="cite-set-after-commentout"></a>comment-out 流儀の編集後は live `\cite` 集合を照合する
 
 旧文を `%...` で残して次行に新文を書く「comment-out keep」 流儀で編集すると、 行末まで `%` が
@@ -85,6 +93,8 @@ grep -nE '<element>' file.tex
 
 共著者に「どこを変えたか」を渡すとき（直した後だけでなく、まだ当てていない変更を提案して承認を求めるときも）、`latexdiff old.tex new.tex > diff.tex` で **追加=下線 / 削除=取り消し線** のレンダリング済み PDF を作る。文章で書いた変更の一覧だけでは、数式を含む変更はどこがどう変わるのかが読み取りにくい（実測）。comment-out-keep 流儀（旧文を `%` 化）の編集は raw の git diff でも読みにくい。提案の段階では原稿を変えず、仮に当てた版を一時 dir で組んで diff し、項目の一覧と照らせるよう印を付ける（[#latexdiff-item-labels](#latexdiff-item-labels)）。
 
+<a id="latexdiff-new-file"></a>**作業 tree に無い版と比べるときは engine の `--new-file <写し>`**（仮に当てた提案の版、差分のために加工した写し）。base は git の revision から取り、新版は写しから読む（配備はしない）。比べるために一時 repo を作って commit しない: 原稿の guard は HEAD の無い最初の commit を検査できず、`inspection unavailable (git-unreadable)` で止める（実測、違反ではなく検査不能）。
+
 **baseline は git revision から都度取り出す**（aux file は symlink で借り、作業 tree を汚さない）:
 
 ```bash
@@ -100,6 +110,7 @@ ln -s "$PWD/Figures" "$PWD/ref.bib" "$PWD"/*.bst "$D"/   # 図・bib・bst を�
 
 | 症状 | 原因 | 対処 |
 |---|---|---|
+| 新版だけに入れた体裁の macro（引用を斜体にする `\qt{…}`・`\enquote{…}` など）で、包んだ文がまるごと削除 + 追加になり、下線の付いた追加側が改行できずに右の余白からはみ出す | latexdiff は旧版の ``…'' と新版の `\qt{…}` を、中の字句が同じでも別の token と見る。追加側は ulem の下線の群になり、改行できない（実測） | 差分の写しで、その macro を旧版の形（``…''）に戻し（括弧の釣り合いを数えて置き換える）、engine の `--new-file <写し>` で比べる（[#latexdiff-new-file](#latexdiff-new-file)）。`--strip-cmd` は中身だけを残すので、引用符が消えた差分になる。体裁の変更は差分に出ないので報告に 1 行書き、字句が変わっていないことは [`scripts/tex-prose-pass-invariants.py`](../scripts/tex-prose-pass-invariants.py) `--quote-macro NAME` で数える |
 | diff のノイズが多すぎる | レビュー markup（色付き注釈コマンド等）まで差分対象になる | diff 前に markup を strip（中身は残し注釈コマンドだけ除去） |
 | `Missing \cr` / `\endgroup` / display math 破壊 | 環境を隠した自作マクロ（例: align を包む `\al{}`）が `\DIFadd` に巻かれる | diff 前に当該マクロを本物の `\begin{align}…\end{align}` へ展開 |
 | **数式の変更が diff に色で出ない**（error は無い） | 同上: latexdiff は環境名で数式を認識するので、`\al{…}` の中身の変更は「引数付き command の差し替え」扱い = 旧式は `%DIFDELCMD` で comment out、新式は無印挿入 | 同じ展開を **両側**に当ててから diff。道具 = [`scripts/expand-display-math.py`](../scripts/expand-display-math.py)（展開する macro は入力の preamble から**導出**するので新しい wrapper も自動追随、balanced brace + `%` コメント + `\{` escape を扱う、`--selftest` 22 件）。engine が既定で当てる。2026-09-08 に或る paper repo で付録の式の符号反転が無印だった実例。機構 = [`overleaf-integration.md#latexdiff-wrapper-macro-expansion`](overleaf-integration.md#latexdiff-wrapper-macro-expansion) |
