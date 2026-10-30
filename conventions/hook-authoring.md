@@ -866,7 +866,7 @@ hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 
 >
 > | 面 | 実測 | 証拠 |
 > |---|---|---|
-> | UserPromptSubmit の `hookSpecificOutput.additionalContext` | **届く** | prompt の直後に hook の文面を受領 / 同じ機の直近 60 日の transcript に UPS の `hook_additional_context` record が 42 件 |
+> | UserPromptSubmit の `hookSpecificOutput.additionalContext` | **届く** | prompt の直後に hook の文面を受領 / 同じ機の transcript に UPS の `hook_additional_context` record が在る (実測) |
 > | Stop の `decision: block` | **効く** | 既存の Stop hook の発火条件を最終 message でわざと満たした → transcript に meta の user 行 `Stop hook feedback: …` と `hook_blocking_error` (Stop) が残り、 同じ turn が続いた |
 > | hook の `systemMessage` | **会話に表示されない** | UPS hook が `systemMessage` を出した session で、 owner の画面にその行は無かった (目視)。 transcript には `hook_system_message` として残る = 記録はされるが user には見えない |
 >

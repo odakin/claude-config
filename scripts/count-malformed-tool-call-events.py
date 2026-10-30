@@ -30,9 +30,8 @@ Methodology (mirrors the #64774 OP):
 
   Counting naive substring hits massively overcounts: the same string appears
   as *echoes* inside doc attachments, file-read tool results, and discussions
-  about the bug that end up in transcripts (measured 2026-07-10: 590 raw hits
-  vs 30 genuine events = 19x overcount in an environment whose conventions
-  quote the string).
+  about the bug that end up in transcripts (measured: more than an order of
+  magnitude overcount in an environment whose conventions quote the string).
 
 - Model attribution = model of the immediately preceding assistant message in
   the same session file.

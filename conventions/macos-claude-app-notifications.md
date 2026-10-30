@@ -46,7 +46,7 @@ summary: Claude for Mac の通知が鳴らない原因を 5 層で切り分け�
   ```
   各行の `state:` (その後ろの `previousState:` は変化前) を読む: `activeModeIdentifier` (`(null)` = オフ) / `suppressionState` (`inactive` = オフ) / `reason` (`scheduled` / `user action` / `system state`) / mode の `name` / `startDate` (いつから) / `userVisibleTransitionDate` (**`4001-01-01` = 終了時刻なし**)。
 - **Claude の通知ごとの扱い**: 述語を `… AND eventMessage CONTAINS "claudefordesktop"` にする。 `interruptionSuppression: delay delivery` = 音もバナーも出さず通知センター行き / `none` = 素通り。 `Breakthrough is allowed with reason: mode configuration for application` = 「通知されるアプリ」 に入っているので通過した印。
-- `suppressionState: while UI locked` という表示でも、 画面を使っている最中の通知が `delay delivery` になっていた (2026-09 実測、 直近 2 日の全 7,841 件)。 **この文字列を「ロック中だけ」 と読まない**。 判定は通知ごとの `interruptionSuppression` で。
+- `suppressionState: while UI locked` という表示でも、 画面を使っている最中の通知が `delay delivery` になっていた (実測、 確かめた範囲の全件)。 **この文字列を「ロック中だけ」 と読まない**。 判定は通知ごとの `interruptionSuppression` で。
 - 常時オンか時間帯限定かは、 全 app 分の `process == "NotificationCenter" AND eventMessage CONTAINS "Resolved event behavior"` を時間別に数えると分かる。
 - `log show` は数日分で数十秒かかる。
 
