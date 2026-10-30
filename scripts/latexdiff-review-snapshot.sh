@@ -216,6 +216,16 @@ for entry in "$REPO"/* "$REPO"/.[!.]*; do
     [[ "$b" == ".git" || "$b" == "$TEX" || "$b" == ${PREFIX}-*.pdf ]] && continue
     [[ -e "$entry" ]] && ln -s "$entry" "$D/$b" 2>/dev/null
 done
+# main tex が repo の下の dir にあるときは、 その dir の file も隣に置く
+# (図・bib・bst は tex の隣にあり、 root だけを link すると compile が読めない = 実測)
+TEX_DIR=$(dirname "$TEX")
+if [[ "$TEX_DIR" != "." ]]; then
+    for entry in "$REPO/$TEX_DIR"/* "$REPO/$TEX_DIR"/.[!.]*; do
+        b=$(basename "$entry")
+        [[ "$b" == "$(basename "$TEX")" || "$b" == ${PREFIX}-*.pdf ]] && continue
+        [[ -e "$entry" && ! -e "$D/$b" ]] && ln -s "$entry" "$D/$b" 2>/dev/null
+    done
+fi
 git -C "$REPO" show "$BASE:$TEX" > "$D/base.tex" || die "git show $BASE:$TEX 失敗"
 cp "${NEWFILE:-$REPO/$TEX}" "$D/new.tex"
 [[ -n "$NEWFILE" ]] && echo "new: $NEWFILE (--new-file、 配備しない)"
