@@ -192,6 +192,15 @@
       "hooks": [
         {
           "type": "command",
+          "command": "~/.claude/hooks/downloaded-file-import-guard.py"
+        }
+      ]
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
           "command": "~/.claude/hooks/escape-hatch-guard.py",
           "timeout": 20
         }

@@ -27,6 +27,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[decision-question-jargon-nudge.test.sh](decision-question-jargon-nudge.test.sh)** — 本人への問いの作業側の語と、 変える文を見せない問いの注意 hook の selftest (合成の問いで、 当たり / 通す / fail-open / 3 つの面 / 文面 / 差し戻しの続き)
 - **[decision-question-jargon-terms.txt](decision-question-jargon-terms.txt)** — 本人への問いに入っていたら注意する「作業側の語」 の既定の一覧 (層1 = どの利用者でも作業側の語である形)。
 - **[delegation-record-clause.py](delegation-record-clause.py)** — 委任時に成果報告の3項目を追加する (PreToolUse[Agent])。
+- **[downloaded-file-import-guard.py](downloaded-file-import-guard.py)** — PreToolUse(Bash): ネット由来の file (Downloads の下と、 ダウンロードの印つき) を git の作業 tree へ cp / mv / 展開する command を、 scripts/downloaded-file-scan.py の検査の記録が無ければ deny する (conventions/downloaded-file-scan.md#import-net)
+- **[downloaded-file-import-guard.test.sh](downloaded-file-import-guard.test.sh)** — engine の selftest + hook 入出力 (未検査の取り込み → deny / 検査の後は無音 / heredoc・repo の外・accepted・opt-out・Bash 以外・壊れた入力・engine 不在は無音)
 - **[escape-hatch-guard.py](escape-hatch-guard.py)** — PreToolUse(Bash): commit gate を外す操作 (CLAUDE_*_GUARD=0 / git の --no-verify・commit -n / core.hooksPath の差し替え) を、 本人がこの session で明示に指示し承認として記録していない限り deny
 - **[escape-hatch-guard.test.sh](escape-hatch-guard.test.sh)** — gate の escape hatch の deny と、 本人の指示の記録 (承認台帳) による通過を hook の入出力で検査 (承認は実物の approve CLI で記録)
 - **[expensive-tmp-guard.sh](expensive-tmp-guard.sh)** — PreToolUse(Bash): Audiveris / oemer / ML training 系の -output /tmp/ パターンを検出して `permissionDecision: ask`

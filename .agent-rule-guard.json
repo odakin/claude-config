@@ -58,6 +58,7 @@
     "scripts/lib/spawn_dedupe.py",
     "scripts/spawn-dispatch-dedupe.py",
     "scripts/lib/session_model.py",
-    "scripts/lib/claude_config_dirs.py"
+    "scripts/lib/claude_config_dirs.py",
+    "scripts/downloaded-file-scan.py"
   ]
 }

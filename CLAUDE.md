@@ -71,6 +71,7 @@ claude-config/
 │   ├── debugging-discipline.md             # bug fix を提案する前・audit verdict を出す前 (検証規律) + CI が red のとき (= red streak の起点と原因 commit を探す・手元で Linux CI を再現する、 §17) + 外部 GUI app / daemon / browser の復旧で start・open・restart・retry を提案または実行する前 (= #recovery-state-dispatch)
 │   ├── dirac-conventions.md                # Dirac 行列・計量の規約を教科書 (Peskin–Schroeder / Srednicki / Weinberg) の間で読み替えるとき + 規約の違う文献から式を写すとき + 自分の project が「どの教科書の行を使うか」 を repo の記号の規約に宣言するとき + 共同研究者と「我々の (−,+,+,+) は Srednicki か Weinberg か」 を確かめるとき
 │   ├── discord-bot.md                      # Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage) + bot が 403 Missing Access で channel に入れないとき・招待リンクで bot を入れようとしたとき (#missing-access-triage) + 外の新着を定期 job で channel に中継するとき (#channel-as-ledger)
+│   ├── downloaded-file-scan.md             # ネットから落とした file (browser で取得した PDF・zip・Office・script、 メールの添付、 curl / wget の取得物) を repo や作業 dir に取り込む前・開く前 + 取り込んだ file の来歴に安全検査の 1 行を書くとき + 「ウイルスチェックして」 と頼まれたとき + 取り込みを止める hook (downloaded-file-import-guard) に止められたとき + ClamAV を入れるか決めるとき
 │   ├── dropbox-api-access.md               # Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload)
 │   ├── dropbox-placeholder-diagnosis.md    # Dropbox 配下の file が 0 byte に見えたとき
 │   ├── dropbox-refs.md                     # 共同 PDF を Dropbox に置いてリポから symlink 参照するとき
@@ -197,7 +198,7 @@ claude-config/
 <!-- agent-free:end id=auto-tree-conventions -->
 <!-- agent-free:begin id=auto-tree-hooks -->
 <!-- AUTO-TREE:hooks BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は hooks/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── hooks/                # Claude Code hooks (105 file。 setup.sh が ~/.claude/hooks/ に symlink。 全列挙 + 説明 = hooks/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── hooks/                # Claude Code hooks (107 file。 setup.sh が ~/.claude/hooks/ に symlink。 全列挙 + 説明 = hooks/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:hooks END -->
 <!-- agent-free:end id=auto-tree-hooks -->
 ├── hammerspoon/
