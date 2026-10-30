@@ -133,6 +133,9 @@ sections:
   - id: sampled-extremum-metrics
     level: 2
     title: "格子で標本化した曲線の極値から作る量 (可視度・コントラスト・ピーク比) は格子に依る — 表に写す前に収束を確かめる"
+  - id: truncation-dependence
+    level: 2
+    title: "打ち切りへの依存を読む — 動かない値は収束とは限らない"
   - id: symmetry-of-prescription-finite-part
     level: 2
     title: "計算の処方が対称性を保つかは発散の係数では分からない — Ward 恒等式を極と有限部で別々に検査する"
