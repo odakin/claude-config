@@ -51,6 +51,7 @@ entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house st
 - <a id="handover-pulls-long-thread"></a>**閉じた項目の現在地に別の項目の id を書くと、 渡し先と読まれて子の thread が全部そちらに付く** — 用件をまたいで使う長い thread が付くと、 その thread の最後の問いが渡し先の「こちらの返事待ち」 に出る (実測)。 問いに別の経路で答え済みなら、 渡し先の項目に `waiting_party: false` と理由を書く (新しい返事は未記録の見張りが別に拾う)。
 - **cache は移行の一括読み専用**。 通常の記録は毎回 Gmail を引く (古い cache が並列 session の新着を隠す)。 移行でも entry が知っている id が cache の thread に無ければ引き直す。
 - **並列 session と同じ file を触る**: 書く直前に file を読み直し、 commit は path 指定 (`git commit -- <path>`)。 ⚠️ 相手が path 指定で commit しても、 作業ツリーにあった自分の差分ごと入る ([`multi-session-coordination.md#staging-window-race`](multi-session-coordination.md#staging-window-race)) = 移行のような大きな差分は短い窓で書いて即 commit する。
+- <a id="ledger-rebase-conflict"></a>**台帳の rebase 衝突は upstream 側を取って記録の道具を回し直す** — 暗号化した台帳は conflict marker が読めず、 手で混ぜられない。 `git checkout --ours <台帳>` (rebase の中の ours は upstream 側、 theirs が自分の commit) → 記録の道具を、 項目の現在地を二重に書かない形で回し直す → `git add` → `git rebase --continue`。 push の前に自分の commit の diff を読み、 自分の行だけかを確かめる。 道具が毎回 Gmail から引き直す作りなら、 回し直しで記録は失われない (実測)。
 - **label を書く側の展開範囲は狭く保つ**: 記録済み id の読み手 (検出器) は全 string を読んでよいが、 mail に label を書く同期 script は id を持つ field だけを読む。 散文の引用まで thread 展開すると open 項目が引いた thread が全部「処理中」 になる (実測)。
 
 ## <a id="adoption"></a>4. 導入 (shim の作り方)
