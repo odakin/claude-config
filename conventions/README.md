@@ -139,7 +139,7 @@ layer 1 (public) のドメイン固有規約 153 file をカテゴリ別に列�
   - LaTeX 固有規約（物理リポで参照）
 - **[manuscript-claim-ownership.md](manuscript-claim-ownership.md)** — AI agent (Claude / Codex / 他 vendor / sub-agent / 無人 worker) が原稿 (.tex) の表題・概要・序論・結論・数式に触れる前 + 著者の依頼を「承認」 と読みそうになった瞬間 + manuscript-claim-guard に deny されたとき + agent の編集権限を定める規則 (本 doc・各層の参照・gate の設定と配線) を変える前
   - 原稿の主張の所有権と AI agent の編集境界の正本。 保護領域 (表題・概要・序論・結論・数式) は著者の項目ごとの裁定 (著者の発言の verbatim を file × 領域ごとに記録) なしに agent が書き換えない・削らない・足さない。 変更は提案として出し、 印字しない指示は直接書く許可ではない。 権限の規則そのものも同じ扱い (強める変更も含む。 規則の文書への変更のうち緩和の語を足さず既存の文を隠さないものと、 規則でない区画の中だけは agent-rule-ownership.md#additive-and-free-zones)。 機械 gate = scripts/manuscript-claim-guard.py を Claude / Codex の PreToolUse と git pre-commit が同じ述語で呼ぶ
-- **[manuscript-value-triage.md](manuscript-value-triage.md)** — 他人 (共同研究者・学生) の投稿前 draft や自分の原稿を「価値」 で読む時 + 投稿先の重さ (letter / 通常論文) を選ぶ時 + 進捗報告の draft に返事を書く時
+- **[manuscript-value-triage.md](manuscript-value-triage.md)** — 他人 (共同研究者・学生) の投稿前 draft や自分の原稿を「価値」 で読む時 + 投稿先の重さ (letter / 通常論文) を選ぶ時 + 進捗報告の draft に返事を書く時 + 原稿の主張が先行研究に対して新しいかを文献で確かめる依頼を受けた時 (#prior-work-check)
   - 原稿の価値の読み = 「何が新しくて、 面白くて、 重要なのか」 の 3 問 (= Geroch の 3 message の読み手側)。 正しさの検査 (中心式の独立再導出) を先に済ませてから、 新しい (誰も書いていなかった 1 行 / 新しくない list / 副産物) ・面白い (読者が持ち帰る 1 つの絵、 読み手の再解釈は印つきで提案) ・重要 (誰の何が変わるか、 低/中/高、 媒体の重さ) を書く。 過小評価の検査 (妥当域の図が分野の標準配置を覆うか) と、 記録の帰属 (agent の読み ≠ owner の裁定、 裁定欄は空で置く) を含む。 paper-audit / peer-review-workflow / giving-talks の sibling
 - **[matplotlib-3d-illustrations.md](matplotlib-3d-illustrations.md)** — matplotlib の 3D (mplot3d) で半透明の模式イラスト (平面波・波束・濃度場などスライド/論文の概念図) を描くとき
   - 半透明 3D イラストの実測知見 — 周期構造は視線角で消える (projection averaging)・粗密は alpha でなく点密度で・疑似 volume render はスラブ合成・裾の楕円が生む「下から見てる」錯視の解消・スライド素材の透明背景

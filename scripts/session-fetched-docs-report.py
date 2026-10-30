@@ -9,7 +9,8 @@
 
 拾うもの (session 本体の記録 <projects-dir>/<project>/<session id>.jsonl の道具の呼び出し):
   1. arXiv の原典 — Bash の command か WebFetch の URL に arxiv.org/pdf/ か arxiv.org/e-print/ があれば、 その中の arXiv の番号を全部。
-     loop (`for id in A B C; do curl …/pdf/$id`) も拾える。 URL の無い command の番号は数えない (書誌の API・INSPIRE の検索を除くため)
+     loop (`for id in A B C; do curl …/pdf/$id`) も拾える。 session が Write した script の本文にその URL があれば、 その script を
+     起動した command の番号も数える (実測: 取得を script に書いて番号を引数で渡すと 0 件と出た)。 URL の無い command の番号は数えない (書誌の API・INSPIRE の検索を除くため)
   2. 手元の PDF — (a) Read の file_path、 (b) Bash の curl -o / wget -O の書き先、 (c) Bash の command に現れる取り込み口
      (DROP_DIRS = ~/Desktop・~/Downloads) の下の `….pdf`、 (d) arXiv 以外の URL で WebFetch が保存した PDF (結果の「also saved to」 の path)。 repo の中の PDF (保存済みの原物を読み直した・組版の生成物) と、
      隣に同じ名前の .tex がある PDF (組版の生成物) は数えない。 path の変数は同じ command で先に代入したものだけ展開し、
@@ -73,7 +74,7 @@ def collect(calls, drop_dirs=DROP_DIRS):
     """(arxiv, local) を返す。 arxiv = {id: {"versions": set, "time": 最初の時刻, "cmd": 先頭}}、
     local = {path: {"how": 取得の形, "time": 最初の時刻}}。"""
     drops = [os.path.realpath(os.path.expanduser(d)) for d in drop_dirs]
-    arxiv, local, copied_from = {}, {}, {}
+    arxiv, local, copied_from, fetchers = {}, {}, {}, set()
 
     def add_local(path, how, ts):
         if path and path.lower().endswith(".pdf") and path not in local:
@@ -86,6 +87,8 @@ def collect(calls, drop_dirs=DROP_DIRS):
                 rec["versions"].add(m.group(2))
 
     for name, inp, ts, _err, cwd, _out in calls:
+        if name == "Write" and ARXIV_URL_RE.search(inp.get("content") or ""):
+            fetchers.add(os.path.basename(inp.get("file_path") or ""))
         cmd = inp.get("command") or "" if name == "Bash" else ""
         for m in CP_RE.finditer(cmd):
             src, dst = _expand_at(cmd, m.start(2), m.group(2), cwd), _expand_at(cmd, m.start(4), m.group(4), cwd)
@@ -112,7 +115,7 @@ def collect(calls, drop_dirs=DROP_DIRS):
         if name != "Bash":
             continue
         cmd = inp.get("command") or ""
-        if ARXIV_URL_RE.search(cmd):
+        if ARXIV_URL_RE.search(cmd) or any(os.path.basename(t) in fetchers for t in cmd.split()):
             add_arxiv(cmd, ts, cmd.strip().splitlines()[0][:120])
         for m in OUTPUT_RE.finditer(cmd):
             add_local(_expand_at(cmd, m.start(2), m.group(2), cwd), "URL から取得 (curl / wget の書き先)", ts)
@@ -299,12 +302,17 @@ def selftest():
         Path(saved).write_bytes(b"%PDF-1.4 fetched")
         call(14, "WebFetch", {"url": "https://example.org/report.pdf", "prompt": "p"},
              "読めません\n[Binary content (application/pdf, 1MB) also saved to " + saved + "]")
+        # 取得を script に書いて番号を引数で渡す形。 URL を持たない script の引数は数えない
+        call(15, "Write", {"file_path": os.path.join(scratch, "fetch.sh"), "content": 'curl -o $D/$id.pdf "https://arxiv.org/pdf/$id"'})
+        call(16, "Bash", {"command": "bash " + os.path.join(scratch, "fetch.sh") + " 2407.00007 quant-ph/0311107"})
+        call(17, "Write", {"file_path": os.path.join(scratch, "other.py"), "content": "print('no url')"})
+        call(18, "Bash", {"command": "python3 " + os.path.join(scratch, "other.py") + " 2408.00008"})
         Path(proj, sid + ".jsonl").write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
 
         calls = ssr.read_calls(Path(proj, sid + ".jsonl"))
         arxiv, local = collect(calls, drop_dirs=(drop,))
-        check(set(arxiv) == {"2401.00001", "2402.00002", "hep-th/9901001", "2405.00005"},
-              "arXiv = URL のある command と WebFetch の PDF の番号だけ (loop も、 古い形も。 書誌の API と abs の頁は数えない)")
+        check(set(arxiv) == {"2401.00001", "2402.00002", "hep-th/9901001", "2405.00005", "2407.00007", "quant-ph/0311107"},
+              "arXiv = URL のある command と、 URL を本文に持つ script の引数と、 WebFetch の PDF の番号だけ (loop も、 古い形も。 書誌の API と abs の頁と URL の無い script の引数は数えない)")
         check(arxiv["2405.00005"]["versions"] == {"v2"}, "WebFetch の URL の版も取る")
         check(arxiv["hep-th/9901001"]["versions"] == {"v3"}, "版を取る")
         rows = {r["what"]: r for r in judge(arxiv, local, tracked_files([repo]))}
@@ -323,9 +331,9 @@ def selftest():
               "消えた写しは cp の元で照合する (❌ にしない)")
         res = []
         _capture(lambda: res.append(report(sid[:8], [Path(t, "projects")], root, True, False, drop_dirs=(drop,))))
-        check(res == [(0, 7)], "保存なし・もう無い = 7 (2402.00002・hep-th/9901001・2405.00005・other・vanished・dl・WebFetch の PDF)")
+        check(res == [(0, 9)], "保存なし・もう無い = 9 (2402.00002・hep-th/9901001・2405.00005・2407.00007・quant-ph/0311107・other・vanished・dl・WebFetch の PDF)")
         out = json.loads(_capture(lambda: report(sid[:8], [Path(t, "projects")], root, True, True, drop_dirs=(drop,))))
-        check(out["unsaved"] == 7 and out["repos"] == 1, "json も同じ数")
+        check(out["unsaved"] == 9 and out["repos"] == 1, "json も同じ数")
     print("selftest: " + ("PASS" if ok else "FAIL"))
     return 0 if ok else 1
 

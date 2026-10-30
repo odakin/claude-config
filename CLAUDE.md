@@ -123,7 +123,7 @@ claude-config/
 │   ├── macos-tahoe-wallpaper.md            # macOS Tahoe (26.x) で wallpaper 変更を script/CLI/API から自動化しようとする前 + 起きてる wallpaper rotation が視覚的に効いてないと感じたとき
 │   ├── mail-thread-ledger.md               # mail を YAML の台帳に記録する道具を入れる・使うとき + 既存の台帳に「読んだ位置」 の印を機械で足すとき + 未記録の返事を見張る検出器と記録の道具が同じ id を別々に読んでいると気づいたとき
 │   ├── manuscript-claim-ownership.md       # AI agent (Claude / Codex / 他 vendor / sub-agent / 無人 worker) が原稿 (.tex) の表題・概要・序論・結論・数式に触れる前 + 著者の依頼を「承認」 と読みそうになった瞬間 + manuscript-claim-guard に deny されたとき + agent の編集権限を定める規則 (本 doc・各層の参照・gate の設定と配線) を変える前
-│   ├── manuscript-value-triage.md          # 他人 (共同研究者・学生) の投稿前 draft や自分の原稿を「価値」 で読む時 + 投稿先の重さ (letter / 通常論文) を選ぶ時 + 進捗報告の draft に返事を書く時
+│   ├── manuscript-value-triage.md          # 他人 (共同研究者・学生) の投稿前 draft や自分の原稿を「価値」 で読む時 + 投稿先の重さ (letter / 通常論文) を選ぶ時 + 進捗報告の draft に返事を書く時 + 原稿の主張が先行研究に対して新しいかを文献で確かめる依頼を受けた時 (#prior-work-check)
 │   ├── matplotlib-3d-illustrations.md      # matplotlib の 3D (mplot3d) で半透明の模式イラスト (平面波・波束・濃度場などスライド/論文の概念図) を描くとき
 │   ├── matplotlib-figure-qa.md             # matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check) + 曲線上の点・基準線・必要量に注記と矢印を付けるとき (#annotation-colors-and-arrows) + 図の文字列の数式が `Unknown symbol` で落ちたとき (#mathtext-unsupported-commands)
 │   ├── mcp.md                              # MCP ツールを使うとき (アカウント確認・scope 判定を含む)
