@@ -32,6 +32,8 @@ ORCID 連携を設定済みの研究者では、論文 (published_papers) は OR
 
 ⚠️ preprint を手動登録した後に同論文が published になると ORCID 経由で別 entry が流入して二重化しうる (マージは類似データ確認 §5 で処理される場合もある)。急ぎでなければ **acceptance 後の自動反映を待つ**方が管理が楽。
 
+⚠️ **掲載されても ORCID に自動で入るとは限らない** — Crossref から ORCID への自動の流入は、 出版社が Crossref に登録した著者情報にその人の ORCID iD が載っていることが条件 (共著者の分だけ載っていることがある、 実測)。 INSPIRE のような分野の DB からも流入するが、 いつ入るかは DB 側しだいで、 載っていても入らないままのことがある (実測)。 待つ前に `https://api.crossref.org/works/<DOI>` の `author[].ORCID` を見る。 載っていなければ待っても Crossref からは入らないので、 本人が ORCID の Works に DOI を足す (researchmap にはそこから流れる)。 反映の確認は公開 API で見る: ORCID = `https://pub.orcid.org/v3.0/<iD>/works` (`work-summary[].source` で流入元が分かる)、 researchmap = `api.researchmap.jp/{permalink}/published_papers`。 ログインの要る画面 (ORCID の非公開の work、 researchmap の編集一覧) はこの確認の範囲の外。
+
 ## <a id="doi-import"></a>4. DOI 取り込みボタン
 
 論文 add フォーム冒頭の「検索する DOI」に DOI を入れて「外部システムからの取り込み」を押すと、書誌が自動 populate される。ただし [`web-form-automation.md#imported-metadata-verify`](web-form-automation.md#imported-metadata-verify) の通り **registry metadata は紙面と一致しない**ことがある。researchmap で実測した具体例:

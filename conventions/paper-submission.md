@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき + 投稿した論文の判定・採択の通知を受け取ったとき (#share-decision-with-coauthors)
+when: 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき + 投稿した論文の判定・採択の通知を受け取ったとき (#share-decision-with-coauthors) + 論文が掲載された後に arXiv の journal-ref と ORCID へ反映するとき (#after-publication)
 category: paper
 summary: 論文投稿ポータル (ScholarOne / Editorial Manager / EJP / arXiv) 経由の submit の落とし穴 (= Chromium fork の広告 blocker で generic upload error → Safari 第一選択 / 非標準 TeX package 〔revtex4-2 / tikz-feynman〕 を source zip に同梱 / cover page metadata form は LaTeX source と独立管理 / Type1 font は soft 要求 / arXiv は最終 PDF 拒否 = source から自動ビルド 〔v1/v2 共通〕 + **arXiv は source を公開する** = コメント除去・`.bbl`+`.bib`+`.bst` 同梱・元原稿と PDF テキスト一致を gate にした package 〔`scripts/arxiv-package.py`〕、 投稿画面 v1.5 の各段で見るもの、 package 作成後に原稿が動く race、 締切・公開時刻、 primary category と SCOAP3、 **公開直後の引用依頼を journal 投稿の前に仕分ける** 〔個人名なしの宛名は名前検出に掛からない = arXiv 番号で検索〕)、 投稿 checklist + **投稿後の status 追跡** (= ポータルの role 略語 AE/EIC/ADM の役割分担・status 階梯の読み方・共著者も自分の account の Co-Authored 欄で閲覧可〔2026-08-21 訂正〕・**著者向け status API は無い** = 中間 status はメールされず Author Center のみ・decision はメール + 定期実読 backstop の 2 重・Claude 操作ブラウザに user が login すれば Claude が直接読める・催促の宛先) 込み、 paper-audit / rebuttal-letter / peer-review-workflow / erad-submission の 5 兄弟目 (投稿 side)
 -->
@@ -294,6 +294,12 @@ RSS は web 一覧と更新時刻が違うため、古い RSS だけを遅延の
 - **仕分け**: 本当に欠けている先行研究か、 関連の薄い宣伝かに分ける。 足すかどうかは著者が決める。 返信するなら「あなたの論文を引用した」 と告げる形 ("we cite your X") にせず、 相手の仕事の位置づけで書くか、 引用には触れない。
 - **版のずれ**: 文献を足すと arXiv の版と journal に出す版が食い違う。 replace するか (journal 投稿と同時か、 accept 後にまとめてか) を仕分けと一緒に決める。
 - **journal 投稿を共著者が担当するとき**: 受付と decision のメールは submitting author にしか届かない (§[post-submission-status](#post-submission-status))。 自分に通知が来ないことは未投稿の証拠にならない = 予定日の後に共著者から受付番号を受け取るまでを期限つき TODO に置く。
+
+### <a id="after-publication"></a>掲載の後: arXiv の journal-ref と ORCID
+
+- **journal-ref と DOI は arXiv の論文の持ち主が足す** — 既定の持ち主は投稿者 (abs page の Submission history の From)。 metadata の更新なので新しい版にならない。 投稿者が共著者なら頼む。
+- **付けるのは掲載版と同じ文書の arXiv だけ** — 統合・分割で番号が分かれた相手の preprint でも、 掲載論文が別の文献として引いているなら付けない。 引いているかは `https://api.crossref.org/works/<DOI>` の `reference` で見られる (出版社が登録していれば)。
+- **ORCID と researchmap** = [`researchmap.md#orcid-autofeed`](researchmap.md#orcid-autofeed)。 分野の DB に掲載情報が載っても、 ORCID に入ったとは限らない。
 
 ### 実例
 
