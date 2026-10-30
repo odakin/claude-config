@@ -340,6 +340,16 @@
           "timeout": 30
         }
       ]
+    },
+    {
+      "matcher": "SendMessage|mcp__ccd_session_mgmt__send_message|Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/owner-window-notice.sh",
+          "timeout": 5
+        }
+      ]
     }
   ],
   "PostToolUse": [

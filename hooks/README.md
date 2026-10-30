@@ -64,6 +64,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[memory-guard.test.sh](memory-guard.test.sh)** — memory-guard.sh (Edit/Write 用) の self-test (hermetic)
 - **[office-inplace-guard.py](office-inplace-guard.py)** — PreToolUse(Bash): Excel / Word / PowerPoint に staging 外の path を開かせる・保存させる command を deny (office-automation.md#office-inplace-guard)
 - **[office-inplace-guard.test.sh](office-inplace-guard.test.sh)** — 述語の selftest + hook 入出力 (deny の JSON / 読めない入力で死なない / opt-out) + カナリア (偽 HOME の本番配線で ARMED / NOT ARMED)
+- **[owner-window-notice.sh](owner-window-notice.sh)** — PreToolUse(SendMessage / send_message / Bash の board.py note・request・handover): 宛先が user の直接話している session なら、 送る前に 1 行知らせる (止めない)
+- **[owner-window-notice.test.sh](owner-window-notice.test.sh)** — owner-window-notice.sh の検査 (user の対話の窓への SendMessage・掲示板の note で鳴る / 同じ宛先は 1 時間に 1 回 / 止めない / board.py の無い Bash は engine を起動しない / 壊れた入力・engine の不在で黙る)
 - **[pasted-command-comment-guard.sh](pasted-command-comment-guard.sh)** — user に貼らせるコマンドに `#` コメントが混ざっていたら Stop で書き直させる (対話 zsh は # をコメントにしない)
 - **[pasted-command-comment-guard.test.sh](pasted-command-comment-guard.test.sh)** — logic + incident-replay selftest
 - **[pdf-read-fallback-nudge.sh](pdf-read-fallback-nudge.sh)** — PostToolUse(Read): Read tool が .pdf を `pdftoppm is not installed` で fail した時に PyMuPDF 1-liner を system reminder で injection (= 2026-05-18 RCA、 規律 wording に依存しない機械的 enforcement layer)
