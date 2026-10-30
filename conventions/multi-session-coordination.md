@@ -1109,6 +1109,8 @@ const v = await agent(`${args.previous} を Read で全部読み、 label が re
 
 原稿を書く session を一度に 1 つに絞っていると、 番を持たない session に著者の答えが届く。 発言はその場で guard に記録し、 当てる文を作業ノートに全文で残して push し、 原稿には番が戻ってから当てる。 記録を適用まで待たない理由 = guard が引ける本人の発言は記録の時点で最新の 1 つだけ ([`agent-rule-ownership.md#approval`](agent-rule-ownership.md#approval)) で、 待つ間に本人が別のことを言うと引けなくなる。 待つ間に番の持ち主が同じ file を変えるので、 当てるときは file を読み直し、 当てた後にノートの文が file に逐語で入ったかを script で確かめる (編集の tool の成功は、 承認した文と同じことの確認にならない)。
 
+<a id="writer-turn-table"></a>**書き手が 2 つ以上あるときは、 番の表を最初に file に書く** — 順番を message で継ぎ足すと、 依頼元自身の伝え方が食い違う (実測)。 表 (何を・誰が・どの順で) を repo の plan に書いて SESSION から指し、 番を動かすときは表を直してから掲示板と message で出す。 「いま止まっているのは誰で、 誰の番か」 に表から答えられる形にする。 受け取りの文で次の作業に触れるときは、 「合図を待つ」 か「いま始める」 かを言い切る (実測: 受け取りの記録の未来形の 1 文を合図待ちと読んで、 worker が止まった)。
+
 ## 関連
 
 - cross-session operational board の generic pattern: §13
