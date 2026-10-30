@@ -254,6 +254,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 - (e) **exactness 動詞**: terminates / vanishes / is exact / to all orders / unique / collapses は全次数の主張 — 同文か直後に display (`\labelcref`) を持つか。無ければ display を新設するか主張を弱める (= prose は隠す、式と機械は暴く。display 化した主張は機械 audit の anchor にもなる)
 - (f) **移動 text 内の cite**: 引用が新文脈でも同じ主張に束縛されているか
 - (g) <a id="orphaned-definition-after-move"></a>**定義の孤児**: 移した block の中でだけ定義されていた記号・略記が、 残した側の式や文にまだ使われていないか。 付録の導出を補足へ移して結果だけ残すと起きやすい (実測: 残した display に「2 つの等しい形」 が並んでいて、 片方の形の変数の定義だけが導出と一緒に移り、 残した式に未定義の記号が残った。 ref は壊れないので build は通る)。 残す側の数式に出る記号を列挙し、 残す側の中に定義があるかを確かめる
+- (h) <a id="sentence-table-neighbors"></a>**文の表を当てる pass の隣の文**: 決まった文に置き換える pass では、 式を変えない制約のもとで隣が壊れる。 display の直後の節を消すと、 display の末尾が comma なら次の文は小文字で続ける必要があり、 period の後に so that で始める文は文にならない (末尾の句読点が次の文の形を縛る)。 置き換える文が次の文の指示語 (That of … など) の先行詞を持っていることもある。 表を当てる前に、 前の display の句読点と次の文の指示語を見る (実測: 表どおりに当てると comma の後に大文字の文が続く所と、 先行詞の消える所が出た)。 表の行番号と記号は古くなるので、 文の中身で探し、 今の記号に読み替える
 
 出力は「sweep した class と範囲 / NOT した範囲 / 確信境界」を明示し、「✓ pass」で終わらせない。
 
@@ -473,7 +474,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 **Pattern**: 付録を足す・移す pass のたびに順序が場当たりになり、 本文で先に参照される付録が後ろに来る。 「outlook だから最後」 の例外を作ると、 その付録が実は方法の説明 (レビュー) だったとき例外の根拠が消える (2026-09-08 の研究 LaTeX project の付録 = 題は私が付けた "Outlook"、 中身は方法の段取りの説明)。
 
-**Rule**: 序論の案内文を除いた本文での初参照位置で並べる。 除くのは案内文の段落だけで、 序論の他の段落 (例: 結果の要約が「derived in App. X」 と付録を指す) からの参照は数える (2026-09-11 の gate record は、 結果段落の先行参照を「規則は案内文を除く」 として除外し付録順を ○ にした = 誤適用)。 序論の結果段落まで案内扱いにするかは原稿ごとの著者判断で、 そうするなら判断を記録に残し、 検査の設定 (`--exclude-section`) に書く。 案内文も同順に書き直す。 機械 = [`check-paper-prose.py`](../scripts/check-paper-prose.py) (A1 = 初参照順と file 順の食い違い / A2 = 本文から参照されない付録 / A3 = 案内文の中の順、 除いた行は毎回印字)。 移動は verbatim の MOVE (label 不変で cref は追従)、 位置依存の語 (previous / next appendix、 above / below) を grep 0 にする。 例外は「本当に展望しか書いていない付録」 だけで、 題でなく中身を読んで判断する。
+**Rule**: 序論の案内文を除いた本文での初参照位置で並べる。 除くのは案内文の段落だけで、 序論の他の段落 (例: 結果の要約が「derived in App. X」 と付録を指す) からの参照は数える (2026-09-11 の gate record は、 結果段落の先行参照を「規則は案内文を除く」 として除外し付録順を ○ にした = 誤適用)。 序論の結果段落まで案内扱いにするかは原稿ごとの著者判断で、 そうするなら判断を記録に残し、 検査の設定 (`--exclude-section`) に書く。 案内文も同順に書き直す。 機械 = [`check-paper-prose.py`](../scripts/check-paper-prose.py) (A1 = 初参照順と file 順の食い違い / A2 = 本文から参照されない付録 / A3 = 案内文の中の順、 除いた行は毎回印字)。 ⚠️ この検査が見るのは付録の最上位の節だけ = 1 つの付録に小節を並べる原稿では、 小節の順の null は証拠にならない (実測)。 小節の順は、 小節ごとの label の本文での初参照の行を出して比べる。 移動は verbatim の MOVE (label 不変で cref は追従)、 位置依存の語 (previous / next appendix、 above / below) を grep 0 にする。 例外は「本当に展望しか書いていない付録」 だけで、 題でなく中身を読んで判断する。
 
 **Cost**: 共著者への連絡で付録の letter が変わる → [`research-email.md#appendix-letters-unstable`](research-email.md#appendix-letters-unstable)。 diff PDF には MOVE の artifact が出る → [`latex.md#latexdiff-move-artifacts`](latex.md#latexdiff-move-artifacts)。
 
