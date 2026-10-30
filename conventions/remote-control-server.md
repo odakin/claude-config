@@ -53,7 +53,9 @@ ps aux | grep '[v]ersions/'                      # 実行中 binary の版が pa
 launchctl kickstart -k gui/$(id -u)/<RC server の label>
 ```
 
-⚠️ **再起動すると接続中のセッションは切れる**。 スマホの一覧に残る旧セッション行は開かない (= 「死んだセッションの残骸」、 下記「運用知見」 参照) — 新規セッションを作って入り直す。 ∴ **update は「切れてよいタイミング」 に user 自身が実行する**のが基本で、 Claude が会話中の接続を自分の判断で落とさない (= その会話の経路そのものを切る操作になる)。
+⚠️ **再起動すると接続中のセッションは切れる**。 スマホの一覧に残る旧セッション行は開かない (= 「死んだセッションの残骸」、 下記「運用知見」 参照) — 新規セッションを作って入り直す。 ∴ **Claude が会話中の接続を自分の判断で落とさない** (= その会話の経路そのものを切る操作になる)。
+
+<a id="unattended-refresh"></a>**再起動を人の手順にしない**: 古い CLI で動き続ける server は、 毎時の heartbeat が `--rc-refresh-stale` で起こし直す。 条件 = 動いている CLI が手元の最新より古い ∧ その設定フォルダの会話記録が 6 時間止まっている ∧ 子孫が忙しくない ∧ 前回から 6 時間空いた (判定 = [`scripts/lib/rc_server_state.py`](../scripts/lib/rc_server_state.py) の `decide_refresh`)。 接続数は条件に入れない = 起動時に作られる session が残り続ける server は接続 0 にならない (実測)。 この Mac で止める = `~/.claude/rc-refresh.off`。 reader は古いままの server を理由つきで出し、 機械が答えられない許可ダイアログは、 答えの記録が届くまで 🔴 で出し続ける ([`multi-machine-state.md#fleet-heartbeat`](multi-machine-state.md#fleet-heartbeat))。
 
 同じ罠は **CLI session 自身**にもある: 実行中の session は古い binary のままなので、 update 後に新 model を使うには**新しい session を開く**必要がある (2026-09-05 実測、 2.1.195 → 2.1.261)。
 

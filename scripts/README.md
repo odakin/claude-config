@@ -484,6 +484,7 @@
 - **[lib/prune-retired-hooks.test.sh](lib/prune-retired-hooks.test.sh)** — 退役 hook の掃除 (scripts/lib/prune-retired-hooks.sh) の test
 - **[lib/public_tree_accept.py](lib/public_tree_accept.py)** — 公開 repo の棚卸し受理一覧 (.claude/public-tree-accept.txt) の `generated:` 宣言を読む。
 - **[lib/published_metadata.py](lib/published_metadata.py)** — 公刊済みの著作の書誌 (題名・著者・要旨) の行を、 leak 検出器の対象から外す。
+- **[lib/rc_server_state.py](lib/rc_server_state.py)** — Remote Control サーバーの中身を log と process から読み、 古い server を無人で起こし直す部品 (fleet-heartbeat が使う)
 - **[lib/recorded_ids.py](lib/recorded_ids.py)** — mail ledger の「記録済み message / thread id」 の書式の契約と harvest (単一 home)。
 - **[lib/relay_check.py](lib/relay_check.py)** — surface した item を「この session で人に伝えたか」 と「同じ案件かもしれない別の item」 を判定する共通部品
 - **[lib/run_log.py](lib/run_log.py)** — 検査 script の出力を「証跡 file」 として残す helper (= 後から「いつ何を出したか」 を再構成できるようにする)。

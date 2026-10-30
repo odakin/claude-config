@@ -46,7 +46,8 @@ usage:
   fleet-heartbeat.py --selftest
 
 書かれる JSON (subdir/<hostname>.json):
-  { host, ts (iso), epoch, servers: [{label, pid, last_status, log_age_min}],
+  { host, ts (iso), epoch, servers: [{label, pid, last_status, log_age_min, detail?}],
+    tcc_pending: [{service, client, at}],      # RC server の在る機械のみ、 下記
     config_dirs: {alias: email_metadata_or_null},
     config_dir_auth: {alias: {dead, last_probe, last_probe_ok, last_probe_tag, first_fail}},  # 部品が在る時のみ
     remote_control_at_startup, old_usr_local_cli, cron_jobs,
@@ -116,6 +117,21 @@ config_dirs の読み方 (実測):
     desktop app の log の `Login-state transition` にある)
   - `server` の `last_status` = RC サーバーの log 末尾の最後の印。 `Connected` は OAuth の更新が生きている証拠に
     ならない (待ち受けは更新を使わない経路で動き、 更新トークンが切れても Connected のまま残る実測がある)
+
+server の detail (RC サーバーの中身、 部品 = lib/rc_server_state.py):
+  - capacity [使用中, 上限] / state (ready・connected・reconnecting) / session_ids (接続中の session) /
+    session_events (log の最後の 5 件) / environment (スマホの接続先の id) = log の末尾から。 session の題は読まない
+  - uptime_s / children (直接の子の数) / oldest_child_min / busy_pct (子孫の CPU の合計) / exe / stale = process から。
+    stale = 動いている CLI が手元の最新より古い理由 (古くなければ null)
+  - quiet_min (会話記録が更新されていない分) / unanswered (利用者の発言に返事が付いていない会話の id 先頭 8 字と経過) =
+    その server の設定フォルダの会話記録から
+  - refresh = --rc-refresh-stale の判定 (restarted / off / current / busy / recent activity / cooldown)。 旗が無ければ欠ける
+tcc_pending = 答えを待っている CLI の許可ダイアログ (tccd の log、 直近 24 時間)。 欄が無ければ読めなかった = 「無い」 ではない。
+  ダイアログは機械が答えられないので、 reader が答えの記録が届くまで出し続ける
+
+--rc-refresh-stale (opt-in): 古い CLI で動き続ける server を、 会話記録が 6 時間止まり子孫が忙しくない時に起こし直す
+  (判定 = lib/rc_server_state.decide_refresh、 記録 = ~/.claude/state/rc-refresh.json、 この Mac で止める = ~/.claude/rc-refresh.off)。
+  手順を人に渡さないための旗 = docs/convention-design-principles.md#human-memory-not-a-carrier
 
 config_dir_auth (設定フォルダが切れたか、 部品 = lib/config_dir_auth.py):
   - 問い合わせは check-desktop-logout-auth.py の見張りが打つ (ログアウトの後 + 長く更新の無いフォルダを毎日)。
@@ -193,12 +209,17 @@ try:
     import intersect_sync as _is      # 重なる未 commit の読むだけの試走 (scripts/intersect-sync.py と共有)
 except Exception:                     # 部品が無い古い checkout では試走しない
     _is = None
+try:
+    import rc_server_state as _rs     # RC サーバーの中身と起こし直しの判定
+except Exception:                     # 部品が無い古い checkout では detail を載せない
+    _rs = None
 
 RC_LABEL_PREFIX_DEFAULT = "com.claude-config.remote-control-server"
 
 # server ログ末尾の status marker (新しい出現が勝つ)
 LOG_MARKERS = [
     ("Connected", "connected"),
+    ("Ready ·", "connected"),        # session が 1 つも無い待ち受けの表示 (接続が無ければ Connected は出ない)
     ("Not logged in", "auth_error"),
     ("must be logged in", "auth_error"),
     ("requires a claude.ai subscription", "auth_error"),
@@ -279,6 +300,38 @@ def scan_inventory(spec: str):
     return label, sorted(names)
 
 
+def add_rc_detail(data, home):
+    """各 RC server の中身と、 答えを待っている許可ダイアログを beat に載せる (docstring §server の detail)。"""
+    _, ps_out = sh(["ps", "-axo", "pid=,ppid=,pcpu=,etime="])
+    table = _rs.parse_ps(ps_out)
+    now = time.time()
+    for s in data["servers"]:
+        label = s["label"]
+        s["detail"] = _rs.server_facts(label, s["pid"], home / "Library/Logs" / f"{label}.log",
+                                       home / "Library/LaunchAgents" / f"{label}.plist", home, table, now)
+    pending = _rs.tcc_pending()
+    if pending is not None:
+        data["tcc_pending"] = pending
+
+
+def apply_rc_refresh(data, home):
+    """古くて止まっている RC server を起こし直す (docstring §--rc-refresh-stale)。"""
+    path = home / ".claude/state/rc-refresh.json"
+    state = _rs.load_refresh_state(path)
+    off = (home / ".claude/rc-refresh.off").exists()
+    now = time.time()
+    for s in data.get("servers", []):
+        detail = s.get("detail")
+        if not detail:
+            continue
+        go, why = _rs.decide_refresh(detail, now, state.get(s["label"], 0), off=off)
+        detail["refresh"] = why
+        if go and _rs.refresh(s["label"]):
+            detail["refresh"] = "restarted"
+            state[s["label"]] = int(now)
+            _rs.save_refresh_state(path, state)
+
+
 def collect(rc_prefix, cron_prefix, inventory_specs=None, job_prefixes=None, job_modules=None):
     home = Path.home()
     data = {
@@ -318,6 +371,11 @@ def collect(rc_prefix, cron_prefix, inventory_specs=None, job_prefixes=None, job
         except Exception:
             pass  # fail-open (= beat 全体を落とさない)
     data["servers"].sort(key=lambda s: s["label"])
+    if _rs is not None and data["servers"]:
+        try:
+            add_rc_detail(data, home)
+        except Exception:
+            pass  # fail-open (= beat 全体を落とさない)
     # config dirs の auth metadata (= secret は読まない、 email 欄のみ)。
     # ⚠️ config JSON の場所は default と pinned dir で違う: 既定 (CLAUDE_CONFIG_DIR 未指定) は
     # ~/.claude.json (home 直下)、 pinned dir は <dir>/.claude.json。 旧実装は default も
@@ -575,6 +633,11 @@ def essence(d: dict):
     return json.dumps(
         {
             "servers": [(s["label"], s["pid"] is not None, s["last_status"]) for s in d.get("servers", [])],
+            # RC の異常の有無だけ (分・秒は入れない = 時間が進むだけでは commit しない)。 detail の無い旧 beat からの変化も即 commit
+            "rc": [(s["label"], "detail" in s, ((s.get("detail") or {}).get("capacity") or [0])[0] > 0,
+                    bool((s.get("detail") or {}).get("stale")), len((s.get("detail") or {}).get("unanswered") or []),
+                    (s.get("detail") or {}).get("refresh") == "restarted") for s in d.get("servers", [])],
+            "tcc_pending": len(d.get("tcc_pending") or []),
             "config_dirs": d.get("config_dirs"),
             # 設定フォルダが切れた / 直った は即 commit (問い合わせの時刻は変化に数えない = 毎日の確認で commit を増やさない)
             "config_dir_dead": {k: v.get("dead") for k, v in (d.get("config_dir_auth") or {}).items()},
@@ -845,8 +908,14 @@ def git(repo: Path, *args, timeout=60):
 
 
 def beat(repo: Path, subdir: str, min_interval_h: float, rc_prefix: str, cron_prefix,
-         inventory_specs=None, job_prefixes=None, job_modules=None, repos_root=None, repos_follow=False):
+         inventory_specs=None, job_prefixes=None, job_modules=None, repos_root=None, repos_follow=False,
+         rc_refresh=False):
     data = collect(rc_prefix, cron_prefix, inventory_specs, job_prefixes, job_modules)
+    if rc_refresh and _rs is not None:
+        try:
+            apply_rc_refresh(data, Path.home())
+        except Exception:
+            pass  # fail-open (= 起こし直せなくても beat は出す)
     data["engine_head"] = engine_head()
     hh = harness_hooks(Path.home())
     if hh is not None:
@@ -1004,6 +1073,8 @@ def _selftest_rewrite(td: Path):
 def selftest():
     import tempfile
     ok = 0
+    if _rs is not None:
+        _rs.selftest()
     with tempfile.TemporaryDirectory() as td:
         # ANSI strip + marker priority (後に出た marker が勝つ)
         log = Path(td) / "x.log"
@@ -1019,6 +1090,21 @@ def selftest():
         log.write_bytes("Connected · Claude · HEAD\nError: Workspace not trusted. Please run `claude` in /x first\n".encode())
         st, _ = parse_log_status(log)
         assert st == "trust_error", st
+        ok += 1
+        # 待ち受けの Ready も接続の印 (session が無いと Connected は出ない = unknown に落とさない)
+        log.write_bytes("Reconnecting\n·✔︎· Ready · Claude · main\n".encode())
+        st, _ = parse_log_status(log)
+        assert st == "connected", st
+        ok += 1
+        # essence: RC の異常が現れた時だけ変化 (分の経過では変化しない)、 旧 beat からの変化も検出
+        r0 = {"servers": [{"label": "l", "pid": "1", "last_status": "connected"}]}
+        r1 = json.loads(json.dumps(r0)); r1["servers"][0]["detail"] = {"capacity": [0, 32], "quiet_min": 5, "uptime_s": 9}
+        r2 = json.loads(json.dumps(r1)); r2["servers"][0]["detail"].update(quiet_min=50, uptime_s=99)
+        r3 = json.loads(json.dumps(r1)); r3["servers"][0]["detail"]["stale"] = "exe replaced"
+        r4 = json.loads(json.dumps(r1)); r4["tcc_pending"] = [{"service": "x"}]
+        assert essence(r0) != essence(r1), "detail が初めて載る beat は即 commit"
+        assert essence(r1) == essence(r2), "時間が進むだけでは commit しない"
+        assert essence(r1) != essence(r3) and essence(r1) != essence(r4)
         ok += 1
         # essence: ts/pid 差は無視、 status 差は検出
         a = {"servers": [{"label": "l", "pid": "1", "last_status": "connected", "log_age_min": 3}],
@@ -1281,6 +1367,8 @@ def main():
     ap.add_argument("--repos-follow", action="store_true",
                     help="--repos-root の全 repo を毎 beat fetch し、 書き換えられた履歴に揃えられる clone を揃える "
                          "(session を開かない machine でも追従する)")
+    ap.add_argument("--rc-refresh-stale", action="store_true",
+                    help="古い CLI で動き続ける RC server を、 会話記録が止まっていて子孫が忙しくない時に起こし直す")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
@@ -1294,7 +1382,8 @@ def main():
                    args.min_commit_interval_hours, args.rc_label_prefix,
                    args.cron_label_prefix, args.inventory, args.job_label_prefix,
                    [m.strip() for m in args.job_python_modules.split(",") if m.strip()],
-                   repos_root=args.repos_root, repos_follow=args.repos_follow)
+                   repos_root=args.repos_root, repos_follow=args.repos_follow,
+                   rc_refresh=args.rc_refresh_stale)
         print(msg)
     except Exception as e:
         print(f"fail-open: {e}", file=sys.stderr)

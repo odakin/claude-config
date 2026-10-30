@@ -256,6 +256,29 @@ def missed_run_findings(host, d, role, routine=None, plist_dir=None):
             f" `sample <pid>`、 scheduled-tasks.md#missed-run-detection)"]
 
 
+def rc_findings(host, d):
+    """RC server の中身 (writer の detail / tcc_pending) から、 人に見せる行を作る。 旧 beat は何も言わない。
+
+    - 🔴 答えを待っている許可ダイアログ = 機械が答えられない唯一の段。 答えの記録が届くまで毎回出る
+    - 🟠 古い CLI の server = 無人の起こし直しの判定を添える
+    - 🟠 接続中の session で、 利用者の発言に返事が付いていない"""
+    out = []
+    for p in d.get("tcc_pending") or []:
+        out.append(f"🔴 {host}: 許可ダイアログが答えを待っている ({p.get('service')}、 {p.get('client')}、 "
+                   f"{p.get('at')}〜)。 答えるまで、 その Mac の無人の処理と Remote Control の session は止まる。 "
+                   f"この行は答えの記録が届くと消える")
+    for s in d.get("servers", []):
+        r = s.get("detail") or {}
+        if r.get("stale"):
+            out.append(f"🟠 {host}: RC server が古い CLI で動いている ({r.get('stale')})、 "
+                       f"無人の起こし直しの判定 = {r.get('refresh') or '次の beat から'} "
+                       f"(会話記録の停止 {r.get('quiet_min')} 分、 子孫の CPU {r.get('busy_pct')}%)")
+        if ((r.get("capacity") or [0])[0]) > 0:
+            for u in r.get("unanswered") or []:
+                out.append(f"🟠 {host}: RC の session {u.get('id')} が利用者の発言に {u.get('age_min')} 分 返事を出していない")
+    return out
+
+
 def auth_findings(host, d, self_host=None):
     """1 マシンの beat の config_dir_auth から finding を作る (writer の判定 = lib/config_dir_auth.py、 問い合わせは
     check-desktop-logout-auth.py の見張り)。 🔴 = 最後の問い合わせが失敗し、 その後ログインし直していない設定フォルダ。
@@ -368,6 +391,7 @@ def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_
                 findings.append(f"{mark} {host}: server {s.get('label')} = {st} — {desc}")
             elif s.get("pid") is None:
                 findings.append(f"🟠 {host}: server {s.get('label')} が loaded だが process 無し")
+        findings.extend(rc_findings(host, d))
         findings.extend(job_findings(host, d, self_host))
         findings.extend(missed_run_findings(host, d, role, routine, plist_dir))
         findings.extend(auth_findings(host, d, self_host))
@@ -431,6 +455,15 @@ def selftest():
             json.dump({"host": host, "epoch": epoch, "servers": servers},
                       open(d / f"{host}.json", "w"))
 
+        # RC の中身: 許可ダイアログは 🔴、 古い server と返事の無い session は 🟠、 接続が無ければ返事の行は出さない
+        r = rc_findings("h", {"tcc_pending": [{"service": "S", "client": "c", "at": "t"}],
+                              "servers": [{"detail": {"stale": "a -> b", "refresh": "busy", "capacity": [1, 32],
+                                                      "unanswered": [{"id": "abc", "age_min": 30}]}}]})
+        assert len(r) == 3 and r[0].startswith("🔴 h") and "busy" in r[1] and "abc" in r[2], r
+        r = rc_findings("h", {"servers": [{"detail": {"capacity": [0, 32], "unanswered": [{"id": "abc", "age_min": 30}]}}]})
+        assert r == [], r
+        assert rc_findings("h", {"servers": [{"label": "old beat"}]}) == []
+        ok += 1
         # 1: always-on stale → 🔴
         write("srv", now - 10 * 3600, [])
         f = scan(d, {"srv": "always-on"}, 6, now)
@@ -678,7 +711,7 @@ def selftest():
         (d / "mini.json").write_text(json.dumps(dict(sb, epoch=now - 10 * h)))
         assert not any("eo" in x for x in scan(d, {}, 6, now)), "寝ている machine の古い beat の同期の事実は出さない"
         ok += 1
-    print(f"selftest: {ok}/21 PASS")
+    print(f"selftest: {ok}/22 PASS")
 
 
 def main():
