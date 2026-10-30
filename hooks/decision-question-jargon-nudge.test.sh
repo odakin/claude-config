@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# decision-question-jargon-nudge.test.sh — 本人への問いの作業側の語の注意 hook の selftest (合成の問いで、 当たり / 通す / fail-open / 3 つの面 / 文面)
+# decision-question-jargon-nudge.test.sh — 本人への問いの作業側の語と、 変える文を見せない問いの注意 hook の selftest (合成の問いで、 当たり / 通す / fail-open / 3 つの面 / 文面 / 差し戻しの続き)
 #
 # 正本: claude-config/hooks/decision-question-jargon-nudge.test.sh (run-all-checks.sh が自動発見)
 # §A 当たり (Stop): 掲示板の動詞 / 問いの item の sub-bullet の符号 / 追記 N / event id / [check] / 個人の一覧の語 (pointer つき)
@@ -8,6 +8,8 @@
 # §D tool の面: AskUserQuestion の当たりと通す / wrap_up の recap / deny mode / 対象外の tool
 # §E 文面: 返事の全文の出し直しを求めない (hook-authoring.md#stop-hook-addendum-not-reemission)
 # §F engine の --selftest
+# §G 変える文の検査: 当たり / 対があれば通す / 箱の ask / 他の hook の差し戻しの続き = 見る / 自分の差し戻しの続き = 黙る /
+#    語の検査と 1 つの差し戻し / 語の一覧が無くても見る / tool の面
 # 文は全部合成 (本人の原文・原稿の語・固有名は入れない = 公開 repo)。
 set -uo pipefail
 
@@ -113,6 +115,52 @@ if printf '%s' "$out" | grep -qF '短い追記' && ! printf '%s' "$out" | grep -
 
 # §F engine の selftest
 if python3 "$ENGINE" --selftest >/dev/null 2>&1; then ok "F1 engine --selftest"; else ng "F1 engine --selftest" "$(python3 "$ENGINE" --selftest 2>&1 | grep '❌' | head -3)"; fi
+
+# §G 変える文の検査
+SHOW_MARK='変える文が返事にありません'
+expect_stop "G1 区画の文の変更を対なしで問う" fire "要旨の言い方を、 もっと控えめな形に変えますか？" "$SHOW_MARK"
+expect_stop "G2 今: と 案: の組があれば通す" silent $'要旨をこの案に直しますか？\n- 今: The old sentence stays here.\n- 案: The new sentence goes here.'
+expect_stop "G3 刷り直しの問いは通す" silent "副題を組み直す前の版です。 刷り直しますか？"
+mkboxturn() {  # path, final_text, ask
+  {
+    jq -nc '{type:"user", message:{content:"やって"}}'
+    jq -nc --arg a "$3" '{type:"assistant", message:{content:[{type:"tool_use", name:"mcp__ccd_turn__wrap_up", input:{recap:"文案を作りました。", ask:$a}}]}}'
+    jq -nc '{type:"user", message:{content:[{type:"tool_result", content:"ok"}]}}'
+    jq -nc --arg t "$2" '{type:"assistant", message:{content:[{type:"text", text:$t}]}}'
+  } > "$1"
+}
+tr="$TMP/g4.jsonl"; mkboxturn "$tr" "文案は note に置きました。" "序論の文を変えますか？"
+out="$(run_stop "$tr")"
+printf '%s' "$out" | grep -q '"decision": *"block"' && printf '%s' "$out" | grep -qF "$SHOW_MARK" && ok "G4 箱の ask が対なしで問えば鳴る" || ng "G4" "got: ${out:-silent}"
+tr="$TMP/g5.jsonl"; mkboxturn "$tr" $'並べます。\n- 今: The old sentence stays here.\n- 案: The new sentence goes here.' "序論の文を変えますか？"
+out="$(run_stop "$tr")"; [ -z "$out" ] && ok "G5 箱で問い、 締めの返事に対を並べれば通す" || ng "G5" "got: ${out:0:200}"
+mkchain() {  # path, feedback_text, addendum_text
+  {
+    jq -nc '{type:"user", message:{content:"やって"}}'
+    jq -nc '{type:"assistant", message:{content:[{type:"text", text:"終わりました。"}]}}'
+    jq -nc --arg f "Stop hook feedback:
+$2" '{type:"user", isMeta:true, message:{content:[{type:"text", text:$f}]}}'
+    jq -nc --arg t "$3" '{type:"assistant", message:{content:[{type:"text", text:$t}]}}'
+  } > "$1"
+}
+tr="$TMP/g6.jsonl"; mkchain "$tr" "🔗 別の hook の差し戻し" "追記: 題を見直しますか？ 推す案は「A new look at an old problem」 です。"
+out="$(run_stop "$tr" true)"
+printf '%s' "$out" | grep -qF "$SHOW_MARK" && ok "G6 他の hook の差し戻しの続きの追記も見る" || ng "G6" "got: ${out:-silent}"
+tr="$TMP/g7.jsonl"; mkchain "$tr" "🗣 $SHOW_MARK: 原稿の 題 の文を…" "追記: 題を見直しますか？"
+out="$(run_stop "$tr" true)"; [ -z "$out" ] && ok "G7 自分が差し戻した続きは黙る" || ng "G7" "got: ${out:0:200}"
+tr="$TMP/g8.jsonl"; mkchain "$tr" "🔗 別の hook の差し戻し" "追記: この依頼を accept してよいですか？"
+out="$(run_stop "$tr" true)"; [ -z "$out" ] && ok "G8 差し戻しの続きでは語の検査はしない (従来どおり)" || ng "G8" "got: ${out:0:200}"
+tr="$TMP/g9.jsonl"; mktranscript "$tr" "この依頼を accept してよいですか？ 要旨の文も変えますか？"
+out="$(run_stop "$tr")"
+c="$(printf '%s' "$out" | grep -c '"decision": *"block"')"
+[ "$c" = "1" ] && printf '%s' "$out" | grep -qF 'accept' && printf '%s' "$out" | grep -qF "$SHOW_MARK" && ok "G9 2 つの検査は 1 つの差し戻しにまとめる" || ng "G9" "got: ${out:0:300}"
+tr="$TMP/g10.jsonl"; mktranscript "$tr" "要旨の文を変えますか？"
+out="$(jq -nc --arg p "$tr" '{hook_event_name:"Stop", transcript_path:$p}' | DECISION_QUESTION_JARGON_TERMS="$TMP/no-terms.txt" DECISION_QUESTION_JARGON_EXT="$TMP/no-ext.txt" bash "$HOOK")"
+printf '%s' "$out" | grep -qF "$SHOW_MARK" && ok "G10 語の一覧が無くても変える文の検査は動く" || ng "G10" "got: ${out:-silent}"
+out="$(run_tool mcp__ccd_turn__wrap_up '{"recap":"文案を作りました。","ask":"要旨の言い方を変えますか？","actions":[{"label":"変える"}]}')"
+if printf '%s' "$out" | grep -qF 'additionalContext' && printf '%s' "$out" | grep -qF "$SHOW_MARK" && printf '%s' "$out" | grep -qF '締めの返事'; then ok "G11 箱の ask の注意は締めの返事に向ける"; else ng "G11" "got: ${out:0:200}"; fi
+out="$(run_tool mcp__ccd_turn__wrap_up '{"recap":"要旨をおすすめどおり当てました。","actions":[{"label":"次へ"}]}')"
+[ -z "$out" ] && ok "G12 箱の recap だけなら黙る" || ng "G12" "got: ${out:0:200}"
 
 for r in "${results[@]}"; do echo "  $r"; done
 echo "--- decision-question-jargon-nudge.test: PASS=$pass FAIL=$fail ---"
