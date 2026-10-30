@@ -141,14 +141,14 @@ claude-config/
 │   ├── office-files.md                     # Office file (Excel/Word/PDF/PowerPoint) 仕事に入るとき最初に開く入口
 │   ├── output-cap-death-loop.md            # worker session (spawn_task / headless claude -p / Agent subagent / 別ベンダー CLI 〔Codex 等〕) に長い導出・生成 task を渡す spec を書くとき・spawn した worker が「isRunning なのに成果ゼロ」 のとき・受け手の context 窓が小さい (自動圧縮が早い) と分かっているとき
 │   ├── overleaf-integration.md             # Overleaf↔GitHub 連携 repo を設定・sync するとき
-│   ├── paper-audit.md                      # 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment) + 統計量で型 (外れ値・ばらつき・2 群) を分けると書く前・その較正を組むとき (#classifier-claim-calibration) + 測定や総説を読み込んだ表の入力が今も最新かを投稿の前に確かめるとき (#input-freshness-audit) + 表の入力を直した後に何が動くかを確かめるとき (#input-fix-propagation) + 測定の表で 1 測定を名指す・抜く案を書く前 (#named-measurement-needs-physics)
+│   ├── paper-audit.md                      # 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment) + 統計量で型 (外れ値・ばらつき・2 群) を分けると書く前・その較正を組むとき (#classifier-claim-calibration) + 測定や総説を読み込んだ表の入力が今も最新かを投稿の前に確かめるとき (#input-freshness-audit) + 表の入力を直した後に何が動くかを確かめるとき (#input-fix-propagation) + 測定の表で 1 測定を名指す・抜く案を書く前 (#named-measurement-needs-physics) + 積分路や規約で分けた項に物理の名前を付けたとき (#decomposition-label-check)
 │   ├── paper-submission.md                 # 論文投稿ポータル (ScholarOne / Editorial Manager / arXiv) へ submit するとき + 投稿した論文の判定・採択の通知を受け取ったとき (#share-decision-with-coauthors)
 │   ├── passkey-cross-device.md             # パスキーでしか入れないサービスに別の端末 (スマホ・別の PC) から入れないとき + 「この QR コードをスキャン」 と出て止まったとき + パスキーを 2 台目の端末に足すとき + パスキーの保存先を選ぶ画面が出たとき
 │   ├── paste-destined-plain-text.md        # Claude が書いた文面 / コマンドを user が手で貼り付けて実行・投稿する workflow を設計・実行するとき (= 貼り先が plain text 入力欄でも terminal でも) + 他人が自分の mail client から送る英文の draft を渡すとき (#non-ascii-via-other-client)
 │   ├── peer-review-workflow.md             # referee・審査委員として他者の paper / 申請書を評価するとき
 │   ├── personal-skills.md                  # personal skill (~/.claude/skills/) を規律の発火面として使うとき
 │   ├── photographed-document-transcription.md # スキャナを通していない「撮っただけ」 の紙 (手書きの提出物・ノート・書類) を大量にモデルで読んで構造化するとき + その読み取りを複数 session に分担するとき + 撮影した印刷資料から引用を起こして文章の根拠にするとき + 自分の文書に他人が手書きで朱を入れて返してきた PDF (差し戻し・添削・紙の査読票) を読むとき + 通知書・明細など数字の表を写真から転記するとき (#printed-totals-checksum)
-│   ├── physics-notes.md                    # 物理・数理ノートを書くとき + 共著者がその話題を特定の原論文・教科書で学んでいて、 ノートを「読めない」 と言われたとき (#write-from-readers-source) + 共同研究者の問いにノートで答えるとき (#answer-only-the-question) + 同じ境目で切り替わる 2 つの性質を「だから」 でつなぎそうになったとき (#same-threshold-not-equivalence)
+│   ├── physics-notes.md                    # 物理・数理ノートを書くとき + 共著者がその話題を特定の原論文・教科書で学んでいて、 ノートを「読めない」 と言われたとき (#write-from-readers-source) + 共同研究者の問いにノートで答えるとき (#answer-only-the-question) + 同じ境目で切り替わる 2 つの性質を「だから」 でつなぎそうになったとき (#same-threshold-not-equivalence) + 検算が通ったノートを提出する前 (#prose-not-covered-by-checks)
 │   ├── physics-verification-cycle.md       # 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
 │   ├── podcast-audio-finishing.md          # 収録を配信用の音声ファイルに仕上げるとき (ジングルを付ける・音量を揃える・書き出す) + 仕上げた回を聞いて「つなぎが雑音っぽい」「間が長い」と言われたとき + 音声の区間の長さや無音を数値で測るとき + 本編の下に敷く BGM を合成で作る・直すとき (「ビブラートがきつい」「和音がもっちゃり」「旋律が埋もれる」「この音が聞こえない」「濁る」「単調」「もっとアンビエントに」 と言われたとき = #synth-bgm-sound-pitfalls) + 「BGM がでかい」 と言われたとき・BGM の曲を替えて音量を決めるとき (#bgm-level-per-track)
 │   ├── podcast-distribution.md             # ポッドキャストを RSS で各配信先 (Spotify / Apple Podcasts / Amazon Music / YouTube) に登録するとき + 番組の画像・説明文・各回の紹介文を配信先に載せるとき + 公開予約を API で入れる・配信を自動にするとき + LISTEN (listen.style) を API で操作するとき + 配信の判断 (題・切れ目・予約) を持ち主から任されたとき + 配信先ごとのフォロワー数を調べるとき (#follower-counts) + 番組の告知文をニュースレター・SNS の媒体ごとに書き分けるとき (#promo-per-platform) + リスナーのコメントを配信先から読む・チャットに中継するとき (#listener-comments)
@@ -209,7 +209,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (391 file + formcase/ 26 module + lib/ 76 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (392 file + formcase/ 26 module + lib/ 76 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式

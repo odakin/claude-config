@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment) + 統計量で型 (外れ値・ばらつき・2 群) を分けると書く前・その較正を組むとき (#classifier-claim-calibration) + 測定や総説を読み込んだ表の入力が今も最新かを投稿の前に確かめるとき (#input-freshness-audit) + 表の入力を直した後に何が動くかを確かめるとき (#input-fix-propagation) + 測定の表で 1 測定を名指す・抜く案を書く前 (#named-measurement-needs-physics)
+when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment) + 統計量で型 (外れ値・ばらつき・2 群) を分けると書く前・その較正を組むとき (#classifier-claim-calibration) + 測定や総説を読み込んだ表の入力が今も最新かを投稿の前に確かめるとき (#input-freshness-audit) + 表の入力を直した後に何が動くかを確かめるとき (#input-fix-propagation) + 測定の表で 1 測定を名指す・抜く案を書く前 (#named-measurement-needs-physics) + 積分路や規約で分けた項に物理の名前を付けたとき (#decomposition-label-check)
 category: paper
 summary: multi-paper merger 等の forward ref / 重複 subsection / structure issue を Phase1 機械検出 + Phase2 section-by-section AI 精読 + findings.yaml で体系 audit
 -->
@@ -443,6 +443,18 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 **Check**: 閾値の上について書く前に (a) その regime で「完了」 に必要な量 (占有数・エネルギー移送率) を書き下し、 (b) 膨張・振幅減衰・非線形の各競争相手と時間 scale を比べ、 (c) 引用先が同じ regime (同じ $q$、 同じ $H/m$) を扱っているか確認する。 閾値の上は「記述できる regime の終わり」 と書き、 到達不能な参照点 (瞬時値) は「模型外の参照」 と明記する。
 
 **2026-09-08 追補 (同事例、 第 3 回盲検)**: 閾値が 2 つあると (「式が使えなくなる」 $x_0$ と「膨張が成長を止めなくなる」 $x_1\gg x_0$)、 本文が両方を「the threshold」 と呼び、 表は $x_0$ 未満の history だけを載せ、 abstract の分離幅は $x_0$ 未満だけから取られる、 という型になる。 $x_0<x<x_1$ の history は本文の定義では摂動的なのに表に無く、 載せると分離幅が縮む (同事例でも縮んだ)。 → **(d) 2 つの閾値に別の名前を付け、 その間の history を表・図に 1 行以上載せてから分離幅を書く**。 (e) 閾値の数値は「onset」 の定義 (振動開始を $\epsilon_V=1$ / $\epsilon_H=1$ / 最初の零点通過のどれで取るか) に有意に依存するので、 定義を書かずに 2 桁で書かない ([`scientific-computing.md#onset-is-eps-H-one`](scientific-computing.md#onset-is-eps-H-one))。
+
+## <a id="decomposition-label-check"></a>分け方で定義した項に物理の名前を付けたら、 全域で中身と合うかを確かめる (2026-10)
+
+**Pattern**: 1 つの量を、 積分路・切り方・規約で 2 項に分け、 項に物理の名前 (on-shell / off-shell、 共鳴 / 背景、 極の項 / 残り、 など) を付ける。 すると、 項が切り替わる値が「物理が始まる値」 に読まれ、 項ごとの 2 乗が別々の確率に読まれ、 ある領域で項の中身が文献の同じ語と別の物になっていることが見落とされる。 読者は名前で読むので、 ここで読み違いが起きる。 近似の破れの閾値は [#threshold-is-not-regime-onset](#threshold-is-not-regime-onset)、 こちらは分解の切り替え。
+
+**Check**:
+
+- (a) 切り替わりが分け方に依らないかを確かめる。 別の分け方で同じ値に切り替わらないなら、 その値は分け方の都合で、 開始の時刻や閾値の物理として書かない。 全体の量が滑らかかも見る。
+- (b) パラメータの両極限で、 各項が何を含むかを文献の語で書く。 文献が反対の語で呼ぶものがその項に入る極限があれば、 本文で断る (実測)。
+- (c) 項の 2 乗を確率と読む前に、 全体との差 (干渉) を積分で数える。 干渉が 2 乗の項より大きく符号が逆のことがあり、 符号はチャンネルで変わることがある (実測)。
+- (d) 依存性がどの因子から来るかを恒等式で分ける。 新しい効果と書いた依存が、 既知の因子の言い換えのことがある (実測)。 その場合、 既知の物理との違いの根拠は依存性に置けない。
+- (e) 式は観測量 (積分した率) まで持っていき、 既知の 2 つの極限と、 極限の順序で全体が変わらないことを確かめる。 分け方が順序に依るなら、 それも書く。
 
 ## <a id="abstract-geroch-compression"></a>Abstract = 文脈降下 + 3 message + 持ち帰る 1 文 (Geroch の introduction と conclusion の圧縮) (2026-09)
 
