@@ -98,7 +98,7 @@ DETECTOR_DESC=""
 
 # ---------- detector C: 素の grep が binary 扱いで飛ばす file ----------
 # command の中の素の grep の file 引数だけを、 先頭 256 KiB まで読む。 解けない語・読めない file は
-# 黙って飛ばす (fail-open)。 heredoc を $(...) の中に書かない (bash 3.2 が本文の引用符で壊れる)。
+# 黙って飛ばす (fail-open)。
 binary_skipped_file() {
   python3 - "$1" "$2" 2>/dev/null <<'PY'
 import codecs, glob, os, re, shlex, sys
