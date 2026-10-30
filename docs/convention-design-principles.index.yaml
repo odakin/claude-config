@@ -957,6 +957,10 @@ sections:
     legacy: "8.88"
     level: 3
     title: "8.88 確かめられない事実は、 答えを探して終えず「正本が無い」 を 1 件の仕事にする"
+  - id: status-line-since-and-effect
+    legacy: "8.89"
+    level: 3
+    title: "8.89 検出器の 1 行は「いつから」 と「ここで効く数」 を言う — 最後の観測と設定の数だけでは、 原因を探す場所がずれる"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
