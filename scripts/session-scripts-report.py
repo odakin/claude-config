@@ -20,7 +20,8 @@ script は subagent-reports.py、 headless の worker の script は headless-wo
      MIN_LINES 行未満の短いもの (1 行の確かめ) は数えない。 拾った code が失敗した実行なら印を付ける。
 
 判定:
-  1 の file → ✅ commit 済み (作業ツリーとの差なし) / 🟡 repo の中だが未 commit・未追跡 / ⚠️ repo の外 (一時 dir・scratchpad) / ❌ もう無い
+  1 の file → ✅ commit 済み (作業ツリーとの差なし) / 🟡 repo の中だが未 commit・未追跡 / ⚠️ repo の外 (一時 dir・scratchpad) / ❌ もう無い /
+     🔀 元の path に無いが同じ名前の追跡済み file がある (実測: session の途中で folder を改名し、 commit 済みの file を「もう無い」 と出した。 別の file の同名かもしれないので読んで確かめる)
   2 の code → 特徴的な行 (長い行から最大 4 本) を、 session が触った repo (記録の path から導く。 --all-repos で作業ルートの全部) の
      追跡済み file から `git grep -F` で探す。 半分以上が同じ file にあれば ✅ (その file)、 1 本だけなら 🔸 一部一致 (書き直した版か)、
      無ければ ⚠️ 未保存。
@@ -186,10 +187,25 @@ def repo_of(path):
     return out.strip() if rc == 0 and out.strip() else None
 
 
+def renamed_candidates(path):
+    """無い file と同じ名前の追跡済み file を、 親の dir が残っている repo から探す (session の途中で folder を改名したとき用)。"""
+    repo = repo_of(path)
+    if not repo:
+        return []
+    name = os.path.basename(path)
+    rc, out = _git(["ls-files", "--", name, "*/" + name], repo)
+    if rc != 0:
+        return []
+    return [line for line in out.splitlines() if line.strip()]
+
+
 def file_status(path):
     if not os.path.exists(path):
         if VAR_RE.search(path):
             return "⚠️", "path に展開できない変数 (記録の command を見る)"
+        moved = renamed_candidates(path)
+        if moved:
+            return "🔀", "元の path には無い。 同じ名前の追跡済み file = " + ", ".join(moved[:2]) + " (改名か確かめる)"
         return "❌", "もう無い"
     path = os.path.realpath(path)
     repo = repo_of(path)
@@ -315,7 +331,7 @@ def report(session, pdirs, root, use_all, as_json):
         f = _number_fields(out, repos)
         if f.get("numbers"):
             rows.append({"kind": "run", "time": ts[:19], "what": "実行: " + script, "mark": "·", "note": "script の実行の出力", **f})
-    bad = sum(1 for r in rows if r["mark"] in ("⚠️", "❌", "🟡"))
+    bad = sum(1 for r in rows if r["mark"] in ("⚠️", "❌", "🟡", "🔀"))
     lost = [r for r in rows if r.get("numbers") and len(r.get("recorded", [])) < len(r["numbers"])]
     if as_json:
         print(json.dumps({"session": session, "transcripts": [str(p) for p in paths], "rows": rows,
@@ -479,6 +495,13 @@ def selftest():
         check(file_status(os.path.join(repo, "dirty.py"))[0] == "🟡", "未追跡は 🟡")
         check(file_status(tmpscript)[0] == "⚠️", "repo の外は ⚠️")
         check(file_status(os.path.join(repo, "gen.sh"))[0] == "❌", "書いたはずで無い file は ❌")
+        moved_dir = os.path.join(repo, "moved")
+        os.makedirs(moved_dir)
+        with open(os.path.join(moved_dir, "renamed.py"), "w") as f:
+            f.write("print(1)\n")
+        _git(["add", "moved/renamed.py"], repo)
+        mark, why = file_status(os.path.join(repo, "old-name", "renamed.py"))
+        check(mark == "🔀" and "moved/renamed.py" in why, "folder を改名した file は ❌ でなく 🔀 + 新しい path")
         check(search_saved(unsaved_body, [repo])[0] == "⚠️", "どこにも無い code は ⚠️")
         check(search_saved(saved_body, [repo])[0] == "✅", "commit 済みの file と同じ code は ✅")
         check(inline[1][3] is True, "失敗した実行の印")
