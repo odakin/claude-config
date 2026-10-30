@@ -18,7 +18,8 @@ Why (実測): 調整役が user の対話の窓に別の議題の分析と調整
     (`attachment.type == "queued_command"` で origin が human) を探す (conventions/hook-authoring.md#transcript-human-vs-peer-message)。
     origin の無い行は数えない (別 session の message・hook の差し戻し・task の通知・圧縮の要約は origin を持たない = 実測)。
     ⚠️ CLI・SDK で起こした session の最初の prompt は origin が human で入る (実測: 掲示板の worker の hand-off 文・盲検の
-    起動文) = entrypoint が `claude-desktop` でない session の最初の user 行は数えない。
+    起動文) = entrypoint が `claude-desktop` でない session の最初の user 行は数えない。 本文が `<cross-session-message` で
+    始まる行も数えない (実測: 古い版は desktop の send_message で届いた message を origin が human で記録した)。
   知らせる条件: 最後の発言が RECENT_S (既定 3 時間) 以内。 同じ (送り手, 宛先) には INTERVAL_S (既定 1 時間) に 1 回。
   外すもの: 宛先 = 送り手自身 / 宛先 = 送り手を起こした session (desktop の記録の spawnedFrom = 結果を上に返す向き) /
     note で送り手がその依頼の担当 (= 報告) / 宛先の会話記録がこの機械に無い。
