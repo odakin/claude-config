@@ -1,5 +1,5 @@
 {
-  "_comment": "check-office-staging.py の selftest の foil に歯があることを mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 fallback の読み取り・log の rotate・e2e の合否判定と後始末の判定の各部を 1 つずつ外した版で、 その検査だけが落ち他は残ることを見る。",
+  "_comment": "check-office-staging.py の selftest の foil に歯があることを mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 fallback の読み取り・log の rotate・e2e の合否判定・後始末の判定・失敗の報告の各部を 1 つずつ外した版で、 その検査だけが落ち他は残ることを見る。",
   "target": "check-office-staging.py",
   "run": "python3 {} --selftest",
   "fail_marker": "  [FAIL] ",
@@ -115,6 +115,22 @@
       "expect_pass": [
         "後始末: 応答しない app は失敗",
         "後始末: 起動していない / 空なら clean"
+      ]
+    },
+    {
+      "name": "失敗した wrapper の stderr を末尾 N 行で切る (error の行が落ちる)",
+      "pairs": [
+        [
+          "    keep = {i for i, l in enumerate(lines) if _ERR_RE.search(l)}",
+          "    keep = set()"
+        ]
+      ],
+      "expect_fail": [
+        "失敗の報告: error 番号の行を落とさない"
+      ],
+      "expect_pass": [
+        "失敗の報告: 直し方の末尾も残す",
+        "失敗の報告: 空の stderr は空"
       ]
     }
   ]

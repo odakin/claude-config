@@ -27,12 +27,13 @@ e2e (`--e2e`、 macOS の前面で実行 = 初回は osascript の Automation �
   頁数 1 / 本文の MARKER 一致 (PyMuPDF があれば)」 を 1 行で出す。 folder-grant dialog が出れば wrapper は
   timeout / -1712 で失敗するので、 成功 = dialog 無しの証拠として扱う (UI を読むには Accessibility が
   要るので dialog そのものは見ない)。 staging root が使えない状態では走らない (= 新しい dir で dialog を
-  踏ませない、 exit 2)。 全成功なら probe dir を消す (`--keep` で残す)、 失敗時は残して path を出す。
+  踏ませない、 exit 2)。 全成功なら probe dir を消す (`--keep` で残す)、 失敗時は残して path を出す
+  (失敗した app は stderr 全文を `<probe>/<app>-stderr.txt` に置く = 1 行の要約では足りない時に読む)。
   app の起動・終了は wrapper の app guard に任せる (user の文書を閉じない・前面を返す)。
   **後始末も見る** (after=): wrapper の後に app guard へ状態を聞き、 app が AppleEvent に答えない
   (= dialog が出ている可能性) か、 自分の staged copy が開いたまま (= staging は掃除済みなので次の起動で
   「開けない」 が出る元) なら、 export が成功していても FAIL にする。 app は起こさず、 quit も kill もしない
-  (実測: 長く起動していた PowerPoint で export 成功の後にこの状態になった例がある、 原因は未分離)。
+  (この検査を足した実測 = office-automation.md#office-pregranted-staging-dir)。
 
 ⚠️ 限界: (A) は「root が作れるか」 だけを見る。 root が作れても Office 側が grant を失う形の失敗は (B) か
   e2e でしか拾えず、 (B) は wrapper が実際に走った後にしか出ない。 `--no-stage` / CLAUDE_OFFICE_STAGING=0 の
@@ -49,6 +50,7 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -243,6 +245,28 @@ def judge_after(state: str | None, copy_open: bool) -> tuple[bool, str]:
     return True, "clean"
 
 
+_ERR_RE = re.compile(r"execution error|\(-\d{3,5}\)|error:|AppleEvent|補助アクセス", re.I)
+
+
+def error_lines(stderr: str, limit: int = 6) -> list[str]:
+    """失敗した wrapper の stderr から、 診断に要る行を選ぶ。
+
+    末尾 N 行で切ると**原因の行が落ちる**: wrapper は osascript の error を先に出し、 その後に
+    「失敗した」 と直し方を 2-3 行続ける (実測: 末尾 3 行では error 番号の行が消え、 同じ失敗を
+    もう一度起こして取り直す羽目になった)。 error の形を持つ行 (osascript の `execution error` /
+    `(-1712)` 等の番号 / `error:` / AppleEvent) を拾い、 末尾 2 行 (= 直し方) を足して元の順で返す。
+    """
+    lines = [l.rstrip() for l in stderr.splitlines() if l.strip()]
+    if not lines:
+        return []
+    keep = {i for i, l in enumerate(lines) if _ERR_RE.search(l)}
+    keep.update(range(max(0, len(lines) - 2), len(lines)))
+    idx = sorted(keep)
+    if len(idx) > limit:
+        idx = idx[: limit - 1] + [idx[-1]]
+    return [lines[i] for i in idx]
+
+
 def _guard(*args: str, timeout: int = 90) -> tuple[int | None, str]:
     try:
         p = subprocess.run(["bash", str(GUARD), *args], capture_output=True, text=True, timeout=timeout)
@@ -348,7 +372,14 @@ def e2e(apps: list[str], timeout: int, keep: bool, parent: Path | None) -> int:
         ok_after, after = after_state(app, str(Path(sdir) / src.name) if sdir else "")
         if ok and not ok_after:
             why = "export は成功、 後始末で失敗"
-        tail = [] if ok else err.strip().splitlines()[-3:]
+        tail = [] if ok else error_lines(err)
+        if not ok:
+            log = probe / f"{app}-stderr.txt"
+            try:
+                log.write_text(err, encoding="utf-8")
+                tail = tail + [f"(stderr 全文: {log})"]
+            except OSError:
+                pass
         if after == "unresponsive":
             tail.append(f"⚠️ {bundle[:-4]} が AppleEvent に答えない = dialog が出ている可能性。 その app の窓を人が見る"
                         " (quit / kill はしない = user の文書を持ちうる)")
@@ -429,6 +460,19 @@ def selftest() -> int:
        == (True, "ok (本文未照合 = PyMuPDF 無し)"))
     ck("e2e: wrapper の非 0 exit は失敗", not judge_run(rc=1, stderr=good, pdf_exists=True, pages=1, marker_found=True)[0])
     ck("e2e: 3 app の wrapper が隣に在る", all((HERE / v[0]).is_file() for v in E2E_APPS.values()))
+    fail_err = ("50:88: execution error: Microsoft Excel でエラーが起きました。 (-1712)\n"
+                "x 失敗した (see error above).\n"
+                "   再実行する。 続くなら app を自分で終了してから\n"
+                "   staged copy kept for diagnosis: /r/sub-1\n")
+    sel = error_lines(fail_err)
+    ck("失敗の報告: error 番号の行を落とさない", any("-1712" in l for l in sel))
+    ck("失敗の報告: 直し方の末尾も残す", any("staged copy kept" in l for l in sel))
+    ck("失敗の報告: 元の順のまま", sel == [l for l in fail_err.splitlines() if l.strip() and l.rstrip() in sel])
+    ck("失敗の報告: 空の stderr は空", error_lines("") == [])
+    ck("失敗の報告: 5 桁の error 番号も拾う",
+       any("-25211" in l for l in error_lines("x: 補助アクセス (-25211)\n" + "\n".join("ok" for _ in range(5)))))
+    ck("失敗の報告: limit を越えない",
+       len(error_lines("\n".join(f"execution error {i}" for i in range(20)), limit=4)) == 4)
     ck("e2e: staging 行から subdir を取る", staged_dir_from("x\nstaging: /r/sub-1 (pre-granted, no sandbox dialog)\n") == "/r/sub-1")
     ck("e2e: UNAVAILABLE 行は subdir にしない", staged_dir_from("⚠️  staging: UNAVAILABLE (x: /r)\n") == "")
     ck("後始末: 起動していない / 空なら clean", judge_after("not-running", False) == (True, "clean")

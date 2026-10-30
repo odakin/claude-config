@@ -62,7 +62,7 @@ osascript / AppleScript / JXA で GUI app を動かす script は、 **user が�
 
 「自動化が止まったのは app の dialog のせいか」 を確かめたい時 (例 = sandbox の folder 許可 dialog、 [`office-automation.md#office-pregranted-staging-dir`](office-automation.md#office-pregranted-staging-dir))。
 
-- **System Events で UI を読む** (`tell process "X"` の `windows` / `sheets` / `buttons` / `static texts`) には、 osascript を呼んだ app (Terminal / Claude.app 等) に **補助アクセス (Accessibility) の許可**が要る。 無いと error `-25211` (「補助アクセスは許可されません」)。 app 自身の AppleScript 辞書 (`name of every document` 等) はこの許可が要らないが、 dialog は見えない。
+- **System Events で UI を読む** (`tell process "X"` の `windows` / `sheets` / `buttons` / `static texts`) には、 osascript を呼んだ app (Terminal / Claude.app 等) に **補助アクセス (Accessibility) の許可**が要る。 無いと落ちる。 ⚠️ **error 番号は当てにしない** — 実測で 2 形 (`-25211` / `-1728`) が出た。 変わらないのは**文言**の「補助アクセスは許可されません」 なので、 判定はそちらに当てる (実測は日本語の環境のみ = 英語の環境の文言は未確認。 当てるなら両方の形を並べる)。 app 自身の AppleScript 辞書 (`name of every document` 等) はこの許可が要らないが、 dialog は見えない。 確かめ方 = `osascript -e 'tell application "System Events" to tell process "<app>" to return name of every window'` (許可があれば窓の名前、 無ければ `-25211`)。
 - **許可が無い時の代わり** (実測): (a) `screencapture -x <png>` で画面を撮り、 縮小して画像で見る (他 app の窓を写すには呼び元に画面収録の許可が要る — 写らなければそれを疑う)。 (b) 待っていた AppleScript の結果で推す = modal dialog が出ている間 app は AppleEvent に答えず、 `with timeout` を過ぎて `-1712` で返る。 数秒で成功して返れば dialog は出ていない。 (b) は無人でも回るので、 回帰検査は (b) を合否に使い、 (a) は最初の 1 回の確認に使う。
 - **probe の出力を判定に使う前に、 probe 自身が成功したか (exit code) を見る**: 「アクセス」 のような語で dialog を探すと、 補助アクセスが無い時の失敗 message そのものに一致し、 UI を 1 つも読めていないのに「dialog あり」 と判定する (実測)。 検出語が自分の失敗経路の出力にも現れる形 = [`convention-design-principles.md#detector-fires-on-its-own-signal`](../docs/convention-design-principles.md#detector-fires-on-its-own-signal)。
 
