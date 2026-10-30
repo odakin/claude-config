@@ -100,6 +100,8 @@ sandbox 内の Python/network script が `socket.gaierror: nodename nor servname
 
 file 名 substring パターンは「file 名に言及するだけの無害コマンド」 (py_compile / git add / grep / 送信前に必須の dry-run) に全部誤爆し、承認ダイアログの信号価値を壊す (2026-07-03 実例: syntax check + commit + push の chain で発火)。**一般則の正本 = [`claude-code-permissions.md`](claude-code-permissions.md#ask-pattern-action-anchor)** (= なぜ ask パターン自体を絞るしかないか 〔precedence 上 allow で ask の例外を彫れない〕 + 設計 3 点 set + 起動時ロードの注意)。hook が効かない surface (Claude Code desktop / bridge) では宣言 permission が唯一の機械 gate なので、この anchor 設計がそのまま送信 gate の品質になる。
 
+- <a id="send-tool-alone"></a>**送信の道具は、 試し打ちでも `git commit` と同じ command に並べない** (実測: auto mode の判定が 1 つの実行を丸ごと止めた)。 commit と送信は別の呼び出しにする。 止められたら同じ形で打ち直さず、 文面を見せて本人の答えを待つ。
+
 ## <a id="double-confirmation-design"></a>8. 二重確認の設計: chat 承認と harness chip は別の脅威モデル (= chip は減らすもの、 消すものではない)
 
 送信の確認は 2 層あり、**役割が違う** — この区別を持たないと「chip がうざい → 消す」 か「不安 → 全部に chip」 の両極端に落ちる:

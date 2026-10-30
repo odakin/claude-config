@@ -14,7 +14,7 @@ description: 作業の仕上げ (締めの sweep)。 user が `/wrap` (または
 | 段 | 値 |
 |---|---|
 | 0.3 / 0.5 の `<id8>` | この session の id の先頭 8 文字 (Claude Code = 会話記録の file 名の uuid。 Codex = 渡された session id) |
-| 道具 | claude-config の `scripts/` (`search-agent-transcripts.py` / `session-scripts-report.py` / `codex-wrap-inventory.py` / `session-claims-report.py` / `session-fetched-docs-report.py` / `subagent-reports.py` / `headless-worker-reports.py` / `replay-session-scripts.py` / `fix-md-links.py`) (OS ごとの起動の違い = 上の §0.9)。数値照合の正本 = [`lib/output_numbers.py`](../../scripts/lib/output_numbers.py)、候補の扱い = [0.3](../../conventions/closing-sweep.md#numbers-not-recorded) |
+| 道具 | claude-config の `scripts/` (`search-agent-transcripts.py` / `session-scripts-report.py` / `codex-wrap-inventory.py` / `session-claims-report.py` / `session-open-questions-report.py` / `session-fetched-docs-report.py` / `subagent-reports.py` / `headless-worker-reports.py` / `replay-session-scripts.py` / `fix-md-links.py`) (OS ごとの起動の違い = 上の §0.9)。数値照合の正本 = [`lib/output_numbers.py`](../../scripts/lib/output_numbers.py)、候補の扱い = [0.3](../../conventions/closing-sweep.md#numbers-not-recorded) |
 | 0.5 / 1.5 の掲示板 | 掲示板を使っていなければ飛ばし、 報告に「使っていない」 と書く |
 | 作業した repo の約束 | 各 repo の `CLAUDE.md` (暗号化・平文に書かないもの・commit message の規則・公開か非公開か) を全段に当てる |
 | 個人の値 | 個人層に同名の skill (`/wrap`) があればそちらが起動する。 その skill は本 file を手順の正本として指し、 その人の値だけを持つ ([closing-sweep.md#personal-skill](../../conventions/closing-sweep.md#personal-skill)) |
