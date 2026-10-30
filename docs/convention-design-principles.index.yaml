@@ -989,6 +989,10 @@ sections:
     legacy: "25"
     level: 2
     title: "25. 2 つの source を突き合わせて「無い」 と言う検出器は、 両側が同じ範囲を見ているときだけ正しい"
+  - id: gate-backtest-against-live
+    legacy: "26"
+    level: 2
+    title: "26. 検査を過去の呼び出しに当て直すときは、 実地の結果で当て直しの道具を較正する"
   - id: changelog
     level: 2
     title: "変更履歴"
