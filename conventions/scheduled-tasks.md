@@ -342,11 +342,18 @@ headless `claude -p` の routine は、 使う config dir (`CLAUDE_CONFIG_DIR`) 
   [`scripts/check-desktop-logout-auth.py`](../scripts/check-desktop-logout-auth.py) (desktop app の log のログアウトと
   keychain 項目の更新時刻を突き合わせ、 `--install-watch` で確かめる問い合わせを自動で予約する)。
   対照実験 (desktop で両 account のログアウトと新しいログインを往復) では、 両方の config dir が約 8 時間後の更新に
-  成功した = ログアウトや新しいログインだけでは切れない (1 回の実験)。 検知器は切り替えのたびに問い合わせで確かめ、
+  成功した。 別の機械の 1 か月の記録でも、 desktop の切り替え (ログアウトして 1 分以内に別の account でログイン) 8 回の
+  後に切れた config dir は無かった = 同じ機械でのログアウトや新しいログインだけでは切れない (実験 1 回 + 観察 8 回)。 検知器は切り替えのたびに問い合わせで確かめ、
   失敗したときだけ 🔴 を出す。
   見張りは keychain が 24 時間以上更新されていない config dir も毎日確かめる (ログアウトと無関係の切れも 1 日以内に分かる)。
   各 Mac には session 開始から `--ensure-watch` を呼んで配り、 結果は fleet heartbeat が他のマシンへ運ぶ
   ([`multi-machine-state.md#fleet-heartbeat`](multi-machine-state.md#fleet-heartbeat) の原則 8)。
+- <a id="copied-credentials-after-migration"></a>**認証を別の機械に写した後に切れた例** (移行アシスタント・設定フォルダと keychain の複製):
+  写した先の config dir が、 写した直後から `OAuth session expired and could not be refreshed` で切れた (実測: 移行先の
+  無人 job は最初の run から失敗し、 同じ時刻に移行元の同じ config dir の job は通っていた)。 移行元が動き続けて先に
+  トークンを更新したため、 同じ更新トークンの写しが無効になったと見られる (推定)。 移行の後は移行先の各 config dir で
+  `claude auth login` をし直し、 写した認証に頼らない。 移行元を止めるまでは、 同じ config dir を両方の機械で使わない。
+  上の desktop app のログアウトの例と見分けるには、 ログアウトより前に無人 job が失敗していたかを見る。
 
 ## recurring task の jitter
 
