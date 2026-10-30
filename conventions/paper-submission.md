@@ -297,7 +297,7 @@ RSS は web 一覧と更新時刻が違うため、古い RSS だけを遅延の
 
 ### <a id="after-publication"></a>掲載の後: arXiv の journal-ref と ORCID
 
-- **journal-ref と DOI は arXiv の論文の持ち主が足す** — 既定の持ち主は投稿者 (abs page の Submission history の From)。 metadata の更新なので新しい版にならない。 投稿者が共著者なら頼む。
+- **journal-ref と DOI の入り方は 2 つ** — 出版社が arXiv に渡す自動の更新 ([bib_feed](https://info.arxiv.org/help/bib_feed.html)、 週か月に 1 回の取り込みで、 feed を持つ出版社の論文だけ) と、 論文の持ち主が user page から足す経路 ([jref](https://info.arxiv.org/help/jref.html)、 新しい版にならない。 既定の持ち主は投稿者 = abs page の Submission history の From)。 掲載の直後に共著者へ頼むかは、 自動の更新を待つかと一緒に著者が決める。
 - **付けるのは掲載版と同じ文書の arXiv だけ** — 統合・分割で番号が分かれた相手の preprint でも、 掲載論文が別の文献として引いているなら付けない。 引いているかは `https://api.crossref.org/works/<DOI>` の `reference` で見られる (出版社が登録していれば)。
 - **ORCID と researchmap** = [`researchmap.md#orcid-autofeed`](researchmap.md#orcid-autofeed)。 分野の DB に掲載情報が載っても、 ORCID に入ったとは限らない。
 
