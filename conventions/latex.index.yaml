@@ -137,6 +137,9 @@ sections:
   - id: dvipdfmx-papersize
     level: 3
     title: "documentclass の用紙指定は、 papersize special が出ないと PDF の用紙に届かない (dvipdfmx)"
+  - id: tabular-cell-two-lines
+    level: 3
+    title: "表の 1 つの欄だけが長くて表がはみ出すときは、 その欄の中を小さな tabular で 2 行に折る"
   - id: tabular-cell-trailing-hspace
     level: 3
     title: "tabular セル末尾の裸 `\\hspace` は `\\unskip` に消される"
