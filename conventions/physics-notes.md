@@ -155,6 +155,7 @@ summary: 物理・数理ノートの 10 規約 (= 添字は常に全部顕に / 
 
 - **範囲を書き落としていないか**: ある範囲の値で確かめた文を、 範囲なしの一般の文にしていないか。 同じノートの表の別の行がその文に反していることがある (実測)。
 - **確かめた形より強く書いていないか**: 特別な場合の失敗を、 一般の場合の否定として書いていないか (実測: 一般の置き換えは厳密なのに、 特別な置き換えの失敗を「置き換えでは直らない」 と書いた)。
+- **検算が固定した量を文に書く**: 条件づけ・規格化を挟む比較では、 後の状態を固定した検算の一致を、 入力を固定した測定の文として書かない。 実験で固定できるのは入力の側 (実測)。 比べる量の揃え方 = [`scientific-computing.md#observable-state-generator-audit`](scientific-computing.md#observable-state-generator-audit)。
 - **「手で確かめた」 と書かない**: 照合は script にして同じ repo に置く ([`closing-sweep.md#unbacked-checks`](closing-sweep.md#unbacked-checks))。
 - **表の崩れも機械で見る**: md の表の中の `|x|` は列の区切りになり、 余りの列は黙って捨てられる。 [`check-md-tables.py`](../scripts/check-md-tables.py) で点呼する (`--fix` は code fence の中を触らない。 行の先頭の `|` だけで置換すると fence の中の式まで変わる = 実測)。
 
