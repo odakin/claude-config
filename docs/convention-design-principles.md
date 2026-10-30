@@ -692,11 +692,13 @@ origin: ある追跡システムで「期限つき義務」 が複数回見落�
 
 <a id="notice-on-the-path-actually-read"></a>**表示時の注意を足す面は、 事故の session が実際に使った読み取り経路から選ぶ**: 対策案に書かれた面 (「この command の出力に 1 行出す」) が、 そもそも対象の種類を表示していないことがある (実測: 注意を足す候補だった 2 つの command は、 事故の原因になった種類の記録を表示しなかった)。 どの command・view・生 file で読んだかを事故の session の記録 (tool call) から引き、 その面に足す。 表示を挟めない経路 (生 file を直接読む) が残るなら、 それを射程外として doc に書く。 足す前に、 全履歴に述語を当てて発火件数と誤検出を数える (較正の標本の偏り = [§8.46](#semantic-detector-ack-ratchet))。
 
+<a id="warning-needs-time-to-act"></a>**警告は、 読んで直す間がある経路でだけ止めになる** — commit と push を 1 行で打つ運用では、 commit の警告 (exit 0) が出た時には push まで済んでいる (実測) = 止めたい形は commit-msg の block に置く。 **案内を道具の出力に足す対策は、 同じ内容を別の道具の出力から写す経路に届かない** (実測: 校正の道具に「公開には形だけ」 と足した後、 hook 自身の校正の出力を写した同じ形が入った)。 **1 つの command に違反が 2 つあるとき、 先に当たった gate の deny は後の違反を隠す** — 直し方に沿って打ち直すと、 もう 1 つの違反はそのまま通る (実測) = 打ち直す形の案内は、 その gate の理由の分しか見ていないと読む。
+
 <a id="wired-is-not-yet-firing"></a>**配線した瞬間と、 効き始める瞬間は別** — 発火面ごとに遅れが違う。 検出器を別の機械へ配るとき、 「pull すれば効く」 は面によって正しくない:
 
 | 面 | 効き始める時点 | 理由 |
 |---|---|---|
-| session 開始時に読まれる設定に登録する hook | **次の session から** | その session の hook 一覧は開始時に読み終わっている。 配線した当の session では鳴らない |
+| session 開始時に読まれる設定に登録する hook | **次の session から** (build 依存 = 同じ session で鳴る build もある、 [`hook-authoring.md#new-hook-session-snapshot`](../conventions/hook-authoring.md#new-hook-session-snapshot)) | その session の hook 一覧は開始時に読み終わっている。 配線した当の session では鳴らない |
 | 実行のたびに source を読み直す入口 (手動の dashboard / CLI) | 同期された時点から**即時** | 起動のたびに現在の code を読む |
 | 一覧を自動発見する runner の test / selftest | **その runner の次回起動** | 発見は起動時に 1 度 |
 | 無人の定期実行 | **次の発火時刻** | 登録の変更が届くかは ensure の実装による ([multi-machine-state.md#ensure-reconciles-content](../conventions/multi-machine-state.md#ensure-reconciles-content)) |
