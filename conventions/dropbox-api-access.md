@@ -55,6 +55,9 @@ file でも folder でも同じ。 返る URL は `https://www.dropbox.com/scl/�
 - **path から直接**: folder 名で列挙を探すより `POST /2/files/get_metadata` `{"path": "/<相対 path>"}` が速い — `sharing_info.shared_folder_id` が返れば共有フォルダ (無ければ非共有)
 - **メンバー確認**: `POST /2/sharing/list_folder_members` `{"shared_folder_id": …}` → `users[].user.email` + `access_type` (owner/editor/viewer)、`invitees[]` は招待未承諾
 - **雲内検索**: `POST /2/files/search_v2` `{"query": …, "options": {"file_status": "active"}}` (`"deleted"` で削除済みも)。⚠️ **同期エラーで upload に失敗した file は雲に痕跡ゼロ** — search でも list でも出ない。「雲に無い」は「どのマシンにも無い」を意味しない (実体は作成元マシンのローカルにだけある)
+  - **本文も引ける**: 既定で file の中身も検索し、 結果の `match_type` が `filename`・`file_content`・`filename_and_content` のどれかで返る (実測)。 online-only の file を落とさずに中身で探せるので、 file 名が題名と違う論文の PDF はこれで見つかる。 file 名だけなら `"filename_only": true`
+  - **範囲は `options.path` で絞る**: 付けないと全 file が対象になり、 機密のフォルダの file 名まで手元に返る。 探す先のフォルダを指定する
+  - **本文の一致は言及も拾う**: 上位の結果にその題を引用しているだけの file が並ぶ = 開いて確かめる。 `max_results` の外は見えない。 文字の層が無い scan が本文で掛かるかは未確認
 
 ## <a id="shared-folder-editor-invite"></a>共有フォルダにして相手を編集者として招待する (相手も書き込める)
 

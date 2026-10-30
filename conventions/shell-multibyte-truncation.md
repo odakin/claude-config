@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths) + **日本語の文の中の英字の語を Python の正規表現で探すとき** (#python-word-boundary-cjk)
+when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths) + **日本語の文の中の英字の語を Python の正規表現で探すとき** (#python-word-boundary-cjk) + **macOS の file 名を日本語の語で探して 0 件のとき** (#nfd-file-names)
 category: infra
 summary: シェルの多バイト UTF-8 切り詰め gotchas (= cut -c/head -c/bash 部分文字列は byte 単位で多バイト文字を割り invalid UTF-8 → osascript 等下流で文字列全体が文字化け、 launchd は LANG 空で C locale ゆえ特に注意、 安全策=python 文字単位 truncate + valid UTF-8 検証 1-liner、 2026-06-24 osascript 通知 RCA)
 -->
@@ -69,6 +69,11 @@ except UnicodeDecodeError as e: print('INVALID', e)"
 Python の `re` は既定で Unicode を扱い、 `\w` に仮名・漢字が入る。 だから `\bwrap\b` は「wrap skill」「wrap させて」 には当たるが、 **仮名が続く「wrapして」 には当たらない** (`p` と `し` がどちらも単語の文字 = 境界が無い。 実測 = 子への依頼の message を語で拾う hook が、 この形を素通りした)。
 日本語の文の中で英字の語を探すときは、 前後が英字でないことだけを見る: `(?<![A-Za-z])wrap(?![A-Za-z])` (「unwrapped」 は外し、 「wrapして」「/wrap」 は拾う)。 `re.ASCII` を付けても同じ結果になるが、 同じ pattern の中の他の `\w` まで ASCII に変わる。
 
+## <a id="nfd-file-names"></a>macOS の file 名は濁点が分かれていることがある — 日本語の語の grep の 0 件を信じない
+
+Dropbox や macOS から来た file 名は、 「ピ」 を「ヒ + 半濁点」 のように分けた形 (NFD) で持っていることがある。 手で打った語は合成した形 (NFC) なので、 見た目が同じでも byte が違い、 `ls | grep 'コピー'` は **error なしで 0 件**を返す (実測)。
+濁点・半濁点を含む語で file 名を探すときは、 濁点の無い部分の語で引くか、 python で揃えてから比べる: `unicodedata.normalize('NFC', name)`。 path を組み立てるときの形の違いは [`claude-code-permissions.md`](claude-code-permissions.md) の表にある。
+
 ## まとめ (reflex)
 
 - shell で非 ASCII を切る時は `cut -c` / `head -c` / byte slice を**使わない** → python の文字単位 truncate。
@@ -77,6 +82,7 @@ Python の `re` は既定で Unicode を扱い、 `\w` に仮名・漢字が入�
 - `grep` / `sed` の `[...]` に非 ASCII を入れない (C locale では byte の集合)。Claude Code の Bash tool も `LANG` 空の前提で書く。
 - 変数の直後に非 ASCII の文字を置くときは `${var}` (UTF-8 の locale では文字が変数名に取り込まれる、 [#unbraced-var-before-multibyte](#unbraced-var-before-multibyte))。
 - 日本語の文の中で英字の語を Python の正規表現で探すときは `\b` を使わず `(?<![A-Za-z])語(?![A-Za-z])` ([#python-word-boundary-cjk](#python-word-boundary-cjk))。
+- macOS の file 名を濁点つきの語で grep して 0 件なら、 NFD を疑う ([#nfd-file-names](#nfd-file-names))。
 
 ## <a id="prose-args-quoting"></a>自然文を CLI 引数で渡すときの quoting — backtick は double quote の中で消える (2026-09)
 

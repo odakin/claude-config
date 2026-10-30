@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 共同 PDF を Dropbox に置いてリポから symlink 参照するとき
+when: 共同 PDF を Dropbox に置いてリポから symlink 参照するとき + 論文が引く文献の写しの所在を repo に持たせるとき (#per-reference-copy-table)
 category: infra
 summary: 共同 PDF を Dropbox に置いてリポから symlink で参照する規約 (§10 で OneDrive / Google Drive 等の他クラウド + 索引自動生成 launchd gotchas へ応用。 §11 同期中 file は「元の状態」の証拠にならない = 時系列主張は immutable スナップショットで #live-sync-no-timeline-evidence、 §12 相手側にも AI がいる並行作業 = zone 分担 + commit された note が交換 channel + 自 commit 除外 monitor + 独立再計算の交差検証 #counterpart-ai-parallel-work、 §13 共有 script の OS 絶対パス hardcode = POSIX では `C:\...` が literal 名 file として cwd に生まれ同期エラー化 + 同期エラー表示の「パスに見える file 名」を他マシン起源と誤読する前にローカル 1 find + de-hardcode は出力側 write call の grep 完了まで #cross-platform-path-hardcode)
 -->
@@ -384,3 +384,15 @@ Dropbox で共有する script に片方の OS の絶対パスを hardcode す�
 - **誤読 trap**: 同期エラー dialog に出るこの file 名は **Windows パスと字面が完全に同一** (`C:\claude\_out.txt`)。「別の Windows マシン上の file の問題」と誤読して device 特定に向かう前に、**まずローカルで literal 名の file を探す** (`ls` / `find . -name 'C:*'`) — 1 コマンドで仮説が分岐する (実例: この確認を後回しにして device 調査に数 step 使い、file は最初から手元の共有フォルダ内にあった)。一般化すると「**パスに見える文字列は file 名かもしれない**」— error 表示の字面解釈を検証せず遠隔起源を結論しない ([`debugging-discipline.md`](debugging-discipline.md) の症状-原因距離の一種)
 - **修復**: file は rename で救済 (中身は正常な出力)。script は `_HERE = os.path.dirname(os.path.abspath(__file__))` 基準の相対化で両 OS 動作 + 出力が共有フォルダに載る副次利点
 - **half-migration trap**: パス portable 化の際、**入力側だけ直して出力側 (`open(..., "w")` / `savefig` / `to_csv` 等) を見落とす**のが実測の落ち方 (入力は即エラーで気付くが、出力 hardcode は silent に literal file を生むため残存する)。de-hardcode は **write 系 call を全部 grep してから完了宣言** (`grep -n 'open(\|savefig\|to_csv\|C:' *.py`)
+
+## <a id="per-reference-copy-table"></a>14. 文献ごとの写しの表 (`dropbox-refs/` はフォルダまでしか引けない)
+
+`dropbox-refs/` はフォルダを指すだけで、 「この引用の写しはどの file か」 には答えない。 文献フォルダの file 名は題名・DOI の末尾・雑誌の配布名のことがあり、 著者名だけで探すと見落とす (実測)。 原典を確かめる機会の多い repo は、 引用の鍵ごとの表を repo に置く。
+
+- **列** = 鍵 / 状態 (共有フォルダにある・無い・repo の原稿) / フォルダからの相対 path / 版 (出版版か arXiv の版か) と、 無いときの取れる経路 (arXiv 番号・DOI)
+- **symlink の行き先は共有フォルダの root にする** — 親の場所は人ごとに違っても、 root からの相対 path は同じになる。 表の path はこの root からの相対で書く
+- **対応は PDF の 1 頁目で確かめて書く** — 著者名 + 年の file 名は同じ年の別論文のことがあり、 手元の本は引用と別の版のことがある (実測)。 版が違うときは表に書く = 定理や式の番号が変わる
+- **入口は repo の CLAUDE.md** — session が探し始める前に読む場所に、 「原典を確かめる前に表を鍵で引く」 と書く
+- **共有フォルダの外の個人の path を表に書かない** — 共有層から narrower な層へ path を張らない ([`docs/personal-layer.md`](../docs/personal-layer.md))。 手元にしか無い写しは file 名だけを書く
+- **写しの場所を `.bib` に書かない** — 表と二重になる
+- **保ち方** — 引用を足した turn で行を足す。 表の鍵と原稿の引用の過不足を見る小さな検査を repo に置く

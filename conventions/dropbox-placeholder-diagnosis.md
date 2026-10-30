@@ -1,15 +1,28 @@
 <!-- doc-meta
-when: Dropbox 配下の file が 0 byte に見えたとき
+when: Dropbox 配下の file が 0 byte に見えたとき + 読むのに時間がかかる・`ls -lO` に `dataless` と出るとき (#file-provider-dataless) + Dropbox の多数の file を script で読む前
 category: infra
-summary: Dropbox の online-only placeholder (0 byte) 診断: xattr `com.dropbox.placeholder` 検出 + OS 別 materialize 方法 + 「0 byte = 配置忘れ」 reflex 防止
+summary: Dropbox の online-only の 2 つの形 = 0 byte の placeholder (xattr `com.dropbox.placeholder`、 Finder の操作で落とす) と、 macOS の CloudStorage 配下の dataless (大きさは元のまま、 読むと落ちる #file-provider-dataless) の見分け方 + OS 別 materialize 方法 + 「0 byte = 配置忘れ」 reflex 防止
 -->
-# Dropbox の online-only placeholder (0 byte 診断)
+# Dropbox の online-only placeholder (0 byte・dataless の診断)
 
-`~/Dropbox/...` (macOS) や `%USERPROFILE%\Dropbox\...` (Windows) 配下の file が **0 byte に見える** とき、 第一仮説は **Dropbox Smart Sync の online-only placeholder** (= 実体はクラウド側、 ローカル file system 上は 0 byte stub)。
+Dropbox は disk 容量節約のため、 一定期間 access していない file を自動 で online-only 化する設定を提供している (= "Make available online only" / "オンラインのみ")。 実体はクラウド側にあり、 手元の見え方は Dropbox の形で 2 つに分かれる。
 
-Dropbox は disk 容量節約のため、 一定期間 access していない file を自動 で online-only 化する設定を提供している (= "Make available online only" / "オンラインのみ")。 この状態の file は file system 上は size = 0 だが Dropbox app 経由で再 download される。
+| 形 | 大きさ | 印 | 読むと |
+|---|---|---|---|
+| 0 byte の placeholder | 0 byte | xattr `com.dropbox.placeholder` | 落ちてこない (下の表で materialize) |
+| macOS の `~/Library/CloudStorage/Dropbox` 配下の dataless ([#file-provider-dataless](#file-provider-dataless)) | 元のまま | `ls -lO` の `dataless` | その場で落ちてくる |
 
-## 識別シグナル (macOS)
+`~/Dropbox/...` (macOS) や `%USERPROFILE%\Dropbox\...` (Windows) 配下の file が **0 byte に見える** とき、 第一仮説は **Dropbox Smart Sync の online-only placeholder** (= ローカル file system 上は 0 byte stub)。
+
+## <a id="file-provider-dataless"></a>macOS の CloudStorage 配下: 大きさは元のまま、 読むと落ちる (`dataless`)
+
+`~/Library/CloudStorage/Dropbox` (`~/Dropbox` はここへの symlink のことがある) の online-only の file は、 `ls -l` の大きさが元のまま見えて 0 byte にならない (実測)。 見分ける印は `ls -lO` の flag の `compressed,dataless` で、 `com.dropbox.placeholder` の xattr は付かない (付くのは `com.dropbox.attrs` と `com.dropbox.internal`)。
+
+- **大きさで online-only かを判定しない** (0 byte でなくても手元に実体が無い)。 script からは `os.stat(path).st_flags & 0x40000000` (`SF_DATALESS`) で見る
+- **普通に読めば落ちてくる** (`open()`・PyMuPDF など。 Finder の操作は要らない、 読み終えた file の flag から `dataless` が消える、 実測)。 file ごとに待ち時間が出る
+- **多数の file を読む前に合計の大きさを見る** — 読んだ分だけ disk に落ちる。 中身で file を探すだけなら、 先に Dropbox の全文検索を使う = 落とさずに引ける ([`dropbox-api-access.md#sharing-read-recipes`](dropbox-api-access.md#sharing-read-recipes))
+
+## 0 byte の placeholder の識別シグナル (macOS)
 
 ```bash
 xattr <path>
@@ -21,7 +34,7 @@ xattr <path>
 - `ls -la <path>` で size = 0、 mtime は作成時のまま
 - `file <path>` は "empty" を返す
 - `stat <path>` は 0 byte
-- `cat <path>` / `cp <path>` / `qlmanage` (Quick Look) では materialize **トリガされない** (= Dropbox app の UI 経由のみ)
+- `cat <path>` / `cp <path>` / `qlmanage` (Quick Look) では materialize **トリガされない** (= Dropbox app の UI 経由のみ)。 dataless の形はこの逆で、 読めば落ちる ([#file-provider-dataless](#file-provider-dataless))
 
 ## 識別シグナル (Windows)
 
