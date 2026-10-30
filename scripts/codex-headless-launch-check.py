@@ -4,7 +4,7 @@
 Why (実測、 CLI 0.159.2): `codex exec` の thread は Codex アプリのどこにも出ない (状態 DB に source=exec で入り、 アプリの
 一覧は対話の種類だけを出す)。 本人が見ようとした Codex の仕事がアプリに何も出ず、 別の機械の session が同じ仕事を
 起こしかけた。 Codex の worker はアプリに出る形で起こす: 掲示板の `request --to codex --to-session role-…` (既定 =
-scripts/codex-app-launch.py で手元の共有 daemon に thread を作り、 アプリに開かせる)、 盲検の判定 session は
+scripts/codex-app-launch.py で thread を作り、 アプリが走らせる)、 盲検の判定 session は
 `codex-app-launch.py start --sealed --cwd <sandbox>`。 headless が要る事情 (アプリの無い機械など) は本人か依頼元が選ぶ。
 
 述語 (PreToolUse の Bash):
