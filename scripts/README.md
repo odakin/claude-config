@@ -362,7 +362,7 @@
 - **[test_reviewed_mail_cli.py](test_reviewed_mail_cli.py)** — Offline checks: CLI authorization shape, pagination, full source extraction.
 - **[tex-first-use.py](tex-first-use.py)** — Is a notation explained where the reader first meets it? Lists the first body uses of a regex with line and section, checks the first one against the line of the defining \label (a reference to that label near the use counts as a pointer), and lists \cref-type references to equations that are printed further down.
 - **[tex-label-shift.py](tex-label-shift.py)** — LaTeX 原稿の 2 つの版 (git の commit) を別 dir で組み、 式・節・図表・文献の番号がどう動いたかを .aux から出す。
-- **[tex-prose-pass-invariants.py](tex-prose-pass-invariants.py)** — 英文だけを直した pass の前後で、 LaTeX 原稿の数式・引用・参照・label・数値が変わっていないかを数える — 2 つの git revision の多重集合を比べ、 増えた・減ったものを出す。
+- **[tex-prose-pass-invariants.py](tex-prose-pass-invariants.py)** — 英文だけを直した pass の前後で、 LaTeX 原稿の数式・引用 (\cite)・引用文・参照・label・数値が変わっていないかを数える — 2 つの git revision の多重集合を比べ、 増えた・減ったものを出す (書き換えた文を新旧の対で並べる --pairs つき)。
 - **[tex-rename-symbols.py](tex-rename-symbols.py)** — LaTeX 原稿の 1 文字記号 (y → x、 r → \zeta_x の類) を安全に一括改名する (scan / apply)。
 - **[tex-sentence-lengths.py](tex-sentence-lengths.py)** — LaTeX 原稿の英文の文の長さを数える (概数) — 文の数・中央値・N 語超の件数と、 長い順の一覧 (tex の行番号つき)。
 - **[tex2plain.py](tex2plain.py)** — .tex から LaTeX タグを除いたテキストを生成する (数式は Unicode で線形化、図キャプションは末尾へ)。

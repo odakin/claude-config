@@ -55,6 +55,10 @@
 #   --latexdiff-args STR  latexdiff への追加引数 (空白区切りで展開)
 #   --out-prefix NAME     default: latexdiff
 #   --no-deploy           build のみ (結果 PDF path を表示して終了、repo に触らない)
+#   --new-file PATH       新版を作業 tree の main tex でなく PATH から読む (--no-deploy を含む、 main tex の dirty は見ない)。
+#                         原稿に当てる前の提案の版や、 差分のために加工した写し (新版だけに入れた体裁の macro を旧版の形に
+#                         戻したもの) と比べるとき。 比べるために一時 repo を作って commit しない = 原稿の guard は HEAD の
+#                         無い最初の commit を検査できずに止める (実測、 conventions/latex.md#latexdiff-review-snapshot)
 #   --keep-superseded     同 baseline の旧 snapshot を git rm しない
 #   --no-push / --no-open
 #   --allow-dirty / --allow-behind
@@ -66,7 +70,7 @@ set -uo pipefail
 
 BASE="" REPO="$PWD" TEX="" ENGINE="lualatex" BIB="bibtex" MATHMARKUP="1"
 EXTRA_ARGS="" PREFIX="latexdiff" DEPLOY=1 SUPERSEDE=1 PUSH=1 OPEN=1
-ALLOW_DIRTY=0 ALLOW_BEHIND=0 MATH_GUARD=1 ALLOW_UNMARKED=0
+ALLOW_DIRTY=0 ALLOW_BEHIND=0 MATH_GUARD=1 ALLOW_UNMARKED=0 NEWFILE=""
 STRIP_CMDS=() STRIP_COLORS=()
 SCRIPTDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 EXPANDER="$SCRIPTDIR/expand-display-math.py"
@@ -121,6 +125,9 @@ run_selftest() {
     [[ "$name" =~ ^latexdiff-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}-[a-f0-9]{7}-to-[a-f0-9]{7}(-dirty)?\.pdf$ ]] \
         || die "naming format regex failed"
     echo "naming format OK"
+    local msg; msg=$(bash "${BASH_SOURCE[0]}" --base HEAD --new-file "$d/none.tex" 2>&1)   # TeX も git も要らない段で止まる
+    [[ "$msg" == *"--new-file"*"が無い"* ]] || die "--new-file の引数の扱いが壊れた: $msg"
+    echo "--new-file option OK"
     rm -rf "$d"
     local s
     for s in "$EXPANDER" "$SAFECMD_GEN" "$MARKUP_CHECK" "$DUP_LABELS" "$FINE_FIX" "$INLINE_FINE"; do
@@ -149,6 +156,7 @@ while [[ $# -gt 0 ]]; do
         --latexdiff-args) EXTRA_ARGS="$2"; shift 2;;
         --out-prefix) PREFIX="$2"; shift 2;;
         --no-deploy) DEPLOY=0; shift;;
+        --new-file) NEWFILE="$2"; shift 2;;
         --keep-superseded) SUPERSEDE=0; shift;;
         --no-push) PUSH=0; shift;;
         --no-open) OPEN=0; shift;;
@@ -162,6 +170,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$BASE" ]] || die "--base <rev> は必須 (= 共著者が最後に見た commit)"
+if [[ -n "$NEWFILE" ]]; then
+    [[ -f "$NEWFILE" ]] || die "--new-file $NEWFILE が無い"
+    NEWFILE=$(cd "$(dirname "$NEWFILE")" && pwd)/$(basename "$NEWFILE")   # --repo の dir から読んでも同じ file
+    DEPLOY=0   # 写しは commit でない = snapshot の名前の head が決まらない
+fi
 command -v latexdiff >/dev/null || die "latexdiff が見つからない"
 command -v "$ENGINE" >/dev/null || die "engine '$ENGINE' が見つからない"
 git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || die "$REPO は git repo でない"
@@ -184,7 +197,7 @@ fi
 
 # ---- guard: main tex の dirty 検出 (= snapshot 名の head hash が嘘にならないように) ----
 DIRTY_SUFFIX=""
-if ! git -C "$REPO" diff --quiet HEAD -- "$TEX"; then
+if [[ -z "$NEWFILE" ]] && ! git -C "$REPO" diff --quiet HEAD -- "$TEX"; then
     if [[ "$ALLOW_DIRTY" -eq 1 ]]; then DIRTY_SUFFIX="-dirty";
     else die "$TEX が HEAD と差分あり — commit するか --allow-dirty (名前に -dirty が付く)"; fi
 fi
@@ -204,7 +217,8 @@ for entry in "$REPO"/* "$REPO"/.[!.]*; do
     [[ -e "$entry" ]] && ln -s "$entry" "$D/$b" 2>/dev/null
 done
 git -C "$REPO" show "$BASE:$TEX" > "$D/base.tex" || die "git show $BASE:$TEX 失敗"
-cp "$REPO/$TEX" "$D/new.tex"
+cp "${NEWFILE:-$REPO/$TEX}" "$D/new.tex"
+[[ -n "$NEWFILE" ]] && echo "new: $NEWFILE (--new-file、 配備しない)"
 
 # ---- strip (両版に同一適用 = 未変更 markup が spurious diff にならない) ----
 if [[ ${#STRIP_CMDS[@]} -gt 0 || ${#STRIP_COLORS[@]} -gt 0 ]]; then
@@ -294,7 +308,8 @@ echo "build OK: ${PAGES:-?} pages, 0 errors"
 # ---- deploy ----
 NAME="${PREFIX}-$(date +%Y-%m-%d-%H%M)-${BASE7}-to-${HEAD7}${DIRTY_SUFFIX}.pdf"
 if [[ "$DEPLOY" -eq 0 ]]; then
-    echo "no-deploy: 結果 = $D/diff.pdf (配備時の名前: $NAME)"
+    if [[ -n "$NEWFILE" ]]; then echo "no-deploy: 結果 = $D/diff.pdf (--new-file の写しとの差分 = 配備しない)"
+    else echo "no-deploy: 結果 = $D/diff.pdf (配備時の名前: $NAME)"; fi
     exit 0
 fi
 cp "$D/diff.pdf" "$REPO/$NAME"
