@@ -5,6 +5,7 @@
 #
 # §A logic: detector A (tree-search null / glob 不成立) と detector B
 #   (truncate-before-grep) の fire / silent 境界 + rate-limit + FORCE + surface file
+# §C detector C (素の grep が binary 扱いで飛ばす file): 本物の file を一時 dir に置いて見る
 # §B incident reproduction: 2026-08-24 の 2 実 incident の command 形を
 #   決定的 fixture として再現し、 hook が fire することを固定する
 #   (= sibling の transcript-依存 §B と違い inline fixture = 全環境で決定的。
@@ -163,6 +164,63 @@ if [ -f "$SURFACE_FILE" ] && grep -q 'ローカル検索 null' "$SURFACE_FILE"; 
   pass=$((pass+1)); results+=("✅ S1: surface file written")
 else
   fail=$((fail+1)); results+=("❌ S1: surface file not written")
+fi
+
+# ---------- §C detector C (= file の中身を見るので本物の file を置く) ----------
+echo ""
+echo "=== §C binary-skipped file ==="
+
+CDIR="$SURFACE_TMP/c dir"
+mkdir -p "$CDIR/sub"
+printf 'needle abc\n日本語の行\n' > "$CDIR/ok.txt"
+{ printf 'needle abc\n'; printf '\346\227\245\350\n'; } > "$CDIR/bad.txt"
+printf 'needle a\0b\n' > "$CDIR/nul.txt"
+cp "$CDIR/bad.txt" "$CDIR/sub/rel.txt"
+python3 -c 'import sys; open(sys.argv[1], "wb").write(b"needle\n" + b"x" * 300000 + b"\n\xe8\n")' "$CDIR/deep.txt"
+
+c_input() { jq -n --arg c "$1" --arg d "${2:-}" --arg o "${3:-}" '{tool_name:"Bash",cwd:$d,tool_input:{command:$c},tool_response:{stdout:$o,stderr:""}}'; }
+assert_c() { local MARKER='detector: C'; assert_fire "$1" "$2" "$(c_input "$3" "${4:-}" "${5:-}")"; }
+q() { printf '%q' "$1"; }
+
+assert_c "C1: 不正な UTF-8 の file を素の grep → fire" 1 "grep -n needle $(q "$CDIR/bad.txt")"
+assert_c "C2: NUL の file を素の grep -c → fire" 1 "grep -c needle $(q "$CDIR/nul.txt")"
+assert_c "C3: 正しい UTF-8 → silent" 0 "grep -n needle $(q "$CDIR/ok.txt")"
+assert_c "C4: command grep → silent" 0 "command grep -n needle $(q "$CDIR/bad.txt")"
+assert_c "C5: grep -a → silent" 0 "grep -a -c needle $(q "$CDIR/bad.txt")"
+assert_c "C6: grep -an (束ねた -a) → silent" 0 "grep -an needle $(q "$CDIR/bad.txt")"
+assert_c "C7: pipe 入力 → silent" 0 "cat $(q "$CDIR/bad.txt") | grep needle"
+assert_c "C8: 再帰 → silent" 0 "grep -rn needle $(q "$CDIR")" "" "hit"
+assert_c "C9: 無い file → silent" 0 "grep needle $(q "$CDIR/none.txt")"
+assert_c "C10: 先頭 256 KiB より奥のバイト → silent" 0 "grep -c needle $(q "$CDIR/deep.txt")"
+assert_c "C11: 引数なしの pattern だけ → silent" 0 "grep needle"
+assert_c "C12: heredoc の本文の grep → silent" 0 "python3 - <<'EOF'
+grep needle $(q "$CDIR/bad.txt")
+EOF"
+assert_c "C13: 同じ command の代入で渡した path (別の出力が混ざる実測の形) → fire" 1 "S=$(q "$CDIR"); cat \$S/ok.txt | tail -1; grep -n needle \$S/bad.txt | cut -c1-90" "" "needle abc"
+assert_c "C14: cd の後の相対 path → fire" 1 "cd $(q "$CDIR/sub") && grep -c needle rel.txt"
+assert_c "C15: hook の cwd からの相対 path → fire" 1 "grep -c needle sub/rel.txt" "$CDIR"
+assert_c "C16: 解けない変数 (loop) → silent" 0 "for f in a b; do grep needle \"\$f\"; done"
+assert_c "C17: if の条件の grep → fire" 1 "if grep -q needle $(q "$CDIR/bad.txt"); then echo yes; fi"
+assert_c "C18: -e の pattern の後の file → fire" 1 "grep -e needle $(q "$CDIR/bad.txt")"
+assert_c "C19: 2>/dev/null つき → fire" 1 "grep -c needle $(q "$CDIR/bad.txt") 2>/dev/null"
+assert_c "C20: 環境変数を前に置いた形 → fire" 1 "LC_ALL=C grep -c needle $(q "$CDIR/bad.txt")"
+
+# A・B の窓の中でも detector C は出る (file が決まっている指摘)
+sdir="$(mktemp -d)"
+printf '%s' "$in_a" | BASH_SEARCH_NUDGE_STATE_DIR="$sdir" BASH_SEARCH_NUDGE_WINDOW=9999 "$HOOK" >/dev/null 2>&1 || true
+c_in="$(c_input "grep -c needle $(q "$CDIR/bad.txt")")"
+out1="$(printf '%s' "$c_in" | BASH_SEARCH_NUDGE_STATE_DIR="$sdir" BASH_SEARCH_NUDGE_WINDOW=9999 "$HOOK" 2>/dev/null)" || true
+out2="$(printf '%s' "$c_in" | BASH_SEARCH_NUDGE_STATE_DIR="$sdir" BASH_SEARCH_NUDGE_WINDOW=9999 "$HOOK" 2>/dev/null)" || true
+rm -rf "$sdir" 2>/dev/null || true
+if printf '%s' "$out1" | grep -qF 'detector: C' && ! printf '%s' "$out2" | grep -qF 'detector: C'; then
+  pass=$((pass+1)); results+=("✅ C21: A の窓の中でも 1 回出て、 C の窓の中は 2 回目を出さない")
+else
+  fail=$((fail+1)); results+=("❌ C21: rate limit (out1=$(printf '%s' "$out1" | grep -cF 'detector: C') out2=$(printf '%s' "$out2" | grep -cF 'detector: C'))")
+fi
+if printf '%s' "$out1" | grep -qF 'command grep か grep -a で読み直す' && printf '%s' "$out1" | grep -qF 'bad.txt'; then
+  pass=$((pass+1)); results+=("✅ C22: 読み直し方と file の名前を出す")
+else
+  fail=$((fail+1)); results+=("❌ C22: 読み直し方か file の名前が出ていない")
 fi
 
 # ---------- §B incident reproduction (= 2026-08-24 の 2 実 incident、 決定的 inline) ----------

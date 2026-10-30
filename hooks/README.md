@@ -6,7 +6,7 @@
 
 setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` のみ install 対象、 本 README は対象外)。 リポ全体の構造 tree = [CLAUDE.md](../CLAUDE.md)。
 
-- **[bash-search-zero-result-nudge.sh](bash-search-zero-result-nudge.sh)** — PostToolUse(Bash): ローカル discovery 検索の null (tree 検索空振り / glob 不成立) + truncate-before-grep pipeline を検出し「部分 scope の null で不在断定するな」 の scope 宣言 template を inject
+- **[bash-search-zero-result-nudge.sh](bash-search-zero-result-nudge.sh)** — PostToolUse(Bash): ローカル discovery 検索の null (tree 検索空振り / glob 不成立) + truncate-before-grep pipeline + 素の grep が binary 扱いで飛ばす file を検出し「部分 scope の null で不在断定するな」 の scope 宣言 template を inject
 - **[bash-search-zero-result-nudge.test.sh](bash-search-zero-result-nudge.test.sh)** — logic + incident-reproduction selftest
 - **[busy-worker-stop-check.sh](busy-worker-stop-check.sh)** — PreToolUse(Bash / stop_session / archive_session): 動いている worker session を止める操作を、 本人が発言する前の 1 回目は止める (聞いて答えをもらった後の同じ操作は通す)
 - **[cd-git-write-guard.py](cd-git-write-guard.py)** — PreToolUse(Bash): 別の dir への cd と git commit / push を 1 つの command に入れた形 (と git -C … commit / push) を止め、 cd を単独の 1 回に分けて打ち直させる (conventions/claude-code-permissions.md#cd-with-git-goes-to-classifier)。

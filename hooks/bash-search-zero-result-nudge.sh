@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bash-search-zero-result-nudge.sh — PostToolUse(Bash): ローカル discovery 検索の null (tree 検索空振り / glob 不成立) + truncate-before-grep pipeline を検出し「部分 scope の null で不在断定するな」 の scope 宣言 template を inject
+# bash-search-zero-result-nudge.sh — PostToolUse(Bash): ローカル discovery 検索の null (tree 検索空振り / glob 不成立) + truncate-before-grep pipeline + 素の grep が binary 扱いで飛ばす file を検出し「部分 scope の null で不在断定するな」 の scope 宣言 template を inject
 #
 # 正本: <claude-config>/hooks/bash-search-zero-result-nudge.sh
 # 配信: setup.sh install_hooks (= ~/.claude/hooks/ に symlink + settings.json の
@@ -25,9 +25,16 @@
 #     関わらず fire)。 `tail -f` は stream 監視 idiom ゆえ除外。 見るのは同じ
 #     pipeline の中だけ (`;` / `&&` / `||` / 改行で区切った別 command は別 pipeline)。
 #     `head -c N | grep -q` (file 形式の magic の真偽判定) も除外。
+#   C (binary-skipped file): Bash tool の素の grep (ugrep -I の shell 関数) が指す file の
+#     先頭 256 KiB に NUL か不正な UTF-8 がある = 全部の行が飛ばされる (0 行で rc 1、
+#     `grep -c` は何も出さない。 それより奥のバイトでは飛ばさない = 実測)。 同じ command の
+#     別の出力が混ざるので空の判定では拾えない = 出力の有無に関わらず file を見て発火する。
+#     `command grep` / `grep -a` / 再帰 / pipe 入力は対象外。 変数は同じ command の代入と
+#     環境から解き、 解けない語 (loop の変数など) は飛ばす。 A・B より先に見る (具体的なので)。
+#     conventions/shell-env.md#bash-tool-grep-ignores-gitignore
 #
 # FP 設計 (= conservative、 miss を許容して FP を避ける — sibling と同哲学):
-#   - 単一 file への grep / pipe 入力の grep は対象外 (= leak check の
+#   - detector A は単一 file への grep / pipe 入力の grep を対象外にする (= leak check の
 #     「0 hit = clean」 は bounded 検証で正当、 鳴らさない)
 #   - 出力が 1 byte でもあれば A は沈黙 (= `|| echo` fallback 付きも沈黙 = miss 側)
 #   - glob 不成立は shell error 行の形 (行頭 anchor + 直後のコロン) でだけ拾う
@@ -37,7 +44,8 @@
 #   - 既知の miss (= 射程外、 意図的): 単一 path の存在 probe (ls -d X / test -e)、
 #     Read tool の offset/limit 部分読み、 `grep -c` の "0" 出力、 rg (未使用)、
 #     Bash tool の素の grep が ugrep --ignore-files として ignore された dir を飛ばす部分欠落
-#     (= 0 件でないので鳴らない。 conventions/shell-env.md#bash-tool-grep-ignores-gitignore)。
+#     (= 0 件でないので鳴らない。 conventions/shell-env.md#bash-tool-grep-ignores-gitignore)、
+#     pipe で渡した binary を素の grep が飛ばす形 (= 見る file が無い)、 再帰検索が中の binary を飛ばす形。
 #     単一 path probe は discovery か bounded 検証かが機械判別不能 = claim 時の
 #     scope 宣言規律 (個人層 CLAUDE.md inline §3) が floor。
 #
@@ -88,6 +96,147 @@ fi
 FIRED=""
 DETECTOR_DESC=""
 
+# ---------- detector C: 素の grep が binary 扱いで飛ばす file ----------
+# command の中の素の grep の file 引数だけを、 先頭 256 KiB まで読む。 解けない語・読めない file は
+# 黙って飛ばす (fail-open)。 heredoc を $(...) の中に書かない (bash 3.2 が本文の引用符で壊れる)。
+binary_skipped_file() {
+  python3 - "$1" "$2" 2>/dev/null <<'PY'
+import codecs, glob, os, re, shlex, sys
+
+cmd, cwd = sys.argv[1], sys.argv[2]
+LIMIT = 256 * 1024  # 素の grep が binary かを決める範囲 (実測)
+LEADERS = {"if", "then", "elif", "else", "do", "while", "until", "time", "!", "{"}
+ASSIGN = re.compile(r"([A-Za-z_]\w*)=(.*)", re.S)
+env = {}
+
+
+def expand(word):
+    missing = []
+
+    def sub(m):
+        v = env.get(m.group(1), os.environ.get(m.group(1)))
+        if v is None:
+            missing.append(m.group(1))
+        return v or ""
+
+    out = re.sub(r"\$\{?([A-Za-z_]\w*)\}?", sub, word)
+    return None if missing or "$" in out or "`" in out else os.path.expanduser(out)
+
+
+def skipped(path):
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(LIMIT)
+    except OSError:
+        return False
+    if head.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return False
+    if b"\0" in head:
+        return True
+    try:
+        codecs.getincrementaldecoder("utf-8")().decode(head, False)
+    except UnicodeDecodeError:
+        return True
+    return False
+
+
+def grep_files(args):
+    files, have_pattern, i = [], False, 0
+    while i < len(args):
+        a = args[i]
+        i += 1
+        if a == "--":
+            rest = args[i:]
+            return files + (rest if have_pattern else rest[1:])
+        if a.startswith("--"):
+            name = a.split("=")[0]
+            if name in ("--text", "--recursive", "--dereference-recursive", "--null", "--null-data") or a == "--binary-files=text":
+                return []
+            have_pattern = have_pattern or name in ("--regexp", "--file")
+            if "=" not in a and name in ("--regexp", "--file", "--include", "--exclude", "--exclude-dir",
+                                         "--context", "--after-context", "--before-context", "--max-count"):
+                i += 1
+            continue
+        if a.startswith("-") and len(a) > 1:
+            for j, c in enumerate(a[1:], 1):
+                if c in "arRzZ":
+                    return []
+                have_pattern = have_pattern or c in "ef"
+                if c in "efABCmd":
+                    i += j == len(a) - 1
+                    break
+            continue
+        if have_pattern:
+            files.append(a)
+        have_pattern = True
+    return files
+
+
+delim = None
+for line in cmd.split("\n"):
+    if delim is not None:
+        delim = None if line.strip() == delim else delim
+        continue
+    m = re.search(r"(?<!<)<<-?(?!<)\s*['\"]?([A-Za-z_]\w*)", line)
+    delim = m.group(1) if m else None
+    lex = shlex.shlex(line, posix=True, punctuation_chars=True)
+    lex.whitespace_split = True
+    lex.commenters = ""
+    try:
+        tokens = list(lex)
+    except ValueError:
+        continue
+    simple, cur, skip_next = [], [], False
+    for t in tokens + [";"]:
+        if skip_next:
+            skip_next = False
+        elif set(t) <= set("();<>|&") and set(t) & set("<>"):
+            skip_next = True  # 書き先・読み元は引数でない
+        elif set(t) <= set("();|&"):
+            simple.append(cur)
+            cur = []
+        else:
+            cur.append(t)
+    for words in simple:
+        while words and words[0] in LEADERS:
+            words = words[1:]
+        if words and words[0] == "export":
+            words = words[1:]
+        if len(words) == 1 and ASSIGN.fullmatch(words[0]):
+            name, value = ASSIGN.fullmatch(words[0]).groups()
+            value = expand(value)
+            if value is not None:
+                env[name] = value
+            continue
+        while len(words) > 1 and ASSIGN.fullmatch(words[0]):
+            words = words[1:]
+        if len(words) > 1 and words[0] == "cd":
+            target = expand(words[1])
+            cwd = os.path.join(cwd, target) if target else cwd
+        elif words and words[0] == "grep":
+            for f in grep_files(words[1:]):
+                p = expand(f)
+                if p is None:
+                    continue
+                p = os.path.join(cwd, p)
+                for q in (glob.glob(p) if glob.has_magic(p) else [p])[:200]:  # 広い glob で時間を使わない
+                    if os.path.isfile(q) and skipped(q):
+                        print(q)
+                        sys.exit(0)
+PY
+}
+
+case "$COMMAND" in
+  *grep*)
+    CWD="$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || true)"
+    C_FILE="$(binary_skipped_file "$COMMAND" "${CWD:-$PWD}" || true)"
+    if [ -n "$C_FILE" ]; then
+      FIRED="C"
+      DETECTOR_DESC="素の grep が binary 扱いで飛ばす file (= 先頭に NUL か不正な UTF-8。 0 行・出力なしは件数でない): $C_FILE"
+    fi
+    ;;
+esac
+
 # ---------- detector B: truncate-before-grep ----------
 # 先に command を pipeline ごとに分け (`;` / `&&` / `||` / 改行)、 同じ pipeline の中で
 # truncator が grep より前の segment にあるときだけ発火する。 分けずに command 全体を
@@ -96,7 +245,7 @@ DETECTOR_DESC=""
 # `head -c N | grep -q MAGIC` は file 形式の先頭 magic を真偽で確かめる idiom
 # (conventions/secret-handoff.md の git-crypt 判定) = 窓を読んで不在を言う形ではないので除く。
 # naive split (quoted '|' ';' の誤 split は truncator/grep 語 match に達しないので実害無し)
-if [ -n "$COMMAND" ]; then
+if [ -z "$FIRED" ] && [ -n "$COMMAND" ]; then
   B_HIT="$(printf '%s' "$COMMAND" | awk '
     { buf = buf $0 "\n" }
     END {
@@ -179,6 +328,8 @@ WINDOW="${BASH_SEARCH_NUDGE_WINDOW:-180}"
 if [ "$FORCE" != "1" ]; then
   mkdir -p "$STATE_DIR" 2>/dev/null || true
   STAMP="$STATE_DIR/last-fire"
+  # detector C は file が決まっている具体の指摘 = A・B の窓に畳まない
+  [ "$FIRED" = "C" ] && STAMP="$STATE_DIR/last-fire-binary"
   now="$(date +%s 2>/dev/null || echo 0)"
   if [ -f "$STAMP" ] && [ "$WINDOW" -gt 0 ] 2>/dev/null; then
     last="$(cat "$STAMP" 2>/dev/null || echo 0)"
@@ -193,6 +344,10 @@ fi
 # command 表示 (= 多バイト安全な文字単位 truncate、 shell-multibyte-truncation.md)
 CMD_SHOW="$(printf '%s' "$COMMAND" | python3 -c 'import sys; s = sys.stdin.read().replace("\n", " "); print(s[:200] + ("…" if len(s) > 200 else ""))' 2>/dev/null || printf '%s' "$COMMAND" | head -1)"
 
+C_WIDEN=""
+[ "$FIRED" = "C" ] && C_WIDEN="  ・command grep か grep -a で読み直す (conventions/shell-env.md#bash-tool-grep-ignores-gitignore)
+"
+
 REMINDER="🛑 ローカル検索 null — 部分 scope で不在断定しない zone
 
 detector: $FIRED = $DETECTOR_DESC
@@ -206,7 +361,7 @@ command: $CMD_SHOW
   見た scope = ____ / NOT = ____ / null in [見た scope]
 
 広げる例 (= 正しい行動の限界費用をゼロに):
-  ・同じ検索を 1 つ上の階層 or sibling repo 群で再実行 (grep -r / find <上位 dir>)
+${C_WIDEN}  ・同じ検索を 1 つ上の階層 or sibling repo 群で再実行 (grep -r / find <上位 dir>)
   ・切り詰め (head / sed -n) を外して全長で再実行、 または | wc -l で全長を先に確認
 
 設計動機: 2026-08-24 同一 session 2 連発 (= 1 repo の検索 null で「doc 不在」 誤断定
