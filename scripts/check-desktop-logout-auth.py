@@ -220,27 +220,29 @@ def probe(config_dir: str, tag: str, claude: str | None = None, ledger: Path = L
     cmd = [claude, "-p", "--no-session-persistence", "--strict-mcp-config",
            "--settings", json.dumps({"disableAllHooks": True, "remoteControlAtStartup": False}),
            "--model", PROBE_MODEL, "Reply with the single word OK."]
+    unknown = False
     try:
         cp = subprocess.run(cmd, capture_output=True, text=True, timeout=240, env=env,
                             cwd=tempfile.gettempdir(), stdin=subprocess.DEVNULL)
         rc, raw = cp.returncode, (cp.stdout + cp.stderr)
-    except Exception as e:  # CLI が無い・timeout
-        rc, raw = 99, f"probe error: {e}"
+    except Exception as e:  # CLI が無い・timeout (許可 dialog に止められた等) = 答えが出ていない ≠ 認証切れ
+        rc, raw, unknown = 99, f"probe error: {e}", True
     # 成否は終了コード + 認証エラーの文言 (返答の語では決めない: 設定で日本語になる)
     ok = rc == 0 and not any(mk in raw for mk in jl.AUTH_MARKERS) and not re.search(r"\b401\b", raw)
+    status = "ok" if ok else (f"UNKNOWN(rc={rc})" if unknown else f"FAIL(rc={rc})")
     after = keychain_mdat(svc)
     fmt = lambda t: time.strftime("%m-%d %H:%M:%S", time.localtime(t)) if t else "-"  # noqa: E731
     ledger.parent.mkdir(parents=True, exist_ok=True)
     with ledger.open("a", encoding="utf-8") as fh:
-        fh.write("\t".join([time.strftime("%Y-%m-%d %H:%M:%S"), tag, config_dir, "ok" if ok else f"FAIL(rc={rc})",
+        fh.write("\t".join([time.strftime("%Y-%m-%d %H:%M:%S"), tag, config_dir, status,
                             f"keychain {fmt(before)} -> {fmt(after)}", " ".join(raw.split())[:160]]) + "\n")
-    if not ok:
+    if not ok and not unknown:
         notify = Path(__file__).resolve().parent / "claude-notify.sh"
         if notify.exists():
             subprocess.run(["sh", str(notify), "--title", f"認証切れ: {Path(config_dir).name}",
                             "--body", f"認証の問い合わせが失敗 ({tag})。 直す = CLAUDE_CONFIG_DIR={config_dir} claude auth login"],
                            capture_output=True, timeout=30)
-    print(f"{'ok' if ok else 'FAIL'}\t{config_dir}\t{' '.join(raw.split())[:120]}")
+    print(f"{status.split('(')[0]}\t{config_dir}\t{' '.join(raw.split())[:120]}")
     return ok
 
 
@@ -434,6 +436,10 @@ def selftest() -> int:
                probe_cli(tool=tool_ok) == str(fake_cli))
         ck("固定の場所も launcher も無い機械では PATH の claude", probe_cli(tool=tool_gone) == "claude")
         ck("道具が無ければ PATH の claude", probe_cli(tool=td / "missing.sh") == "claude")
+        led = td / "probe.log"
+        probe(str(cron), "selftest", claude=str(td / "no-such-cli"), ledger=led)
+        ck("答えが出なかった問い合わせ (CLI が無い・時間切れ) は UNKNOWN と記録し、 切れたと数えない",
+           "\tUNKNOWN(rc=99)\t" in led.read_text(encoding="utf-8") and read_ledger(led) == [])
         ck("keychain 項目名 = sha256(path) の先頭 8 桁", keychain_service("~/.claude-acct") == KEYCHAIN_PREFIX + "b50c49a0")
         ck("mdat の属性を UTC として読む", _MDAT_RE.search('"mdat"<timedate>=0x32303236  "20260923034324Z\\000"') is not None)
     print(f"selftest: {ok}/{ok + fail} passed")

@@ -8,8 +8,10 @@ heartbeat は `claude` を呼ばない設計なので (監視が監視対象と�
   - keychain の項目 = KEYCHAIN_PREFIX + sha256(設定フォルダの path) の先頭 8 桁 (実測で一致)。 更新時刻 (mdat) は
     `security find-generic-password -s <項目>` の属性だけを読む (値は読まない)。 トークンの更新やログインが
     成功すると mdat が進む
-  - 問い合わせの記録 (LEDGER、 1 行 = 時刻 TAB tag TAB フォルダ TAB ok|FAIL(...) TAB ...) は
-    check-desktop-logout-auth.py --probe が書く
+  - 問い合わせの記録 (LEDGER、 1 行 = 時刻 TAB tag TAB フォルダ TAB ok|FAIL(...)|UNKNOWN(...) TAB ...) は
+    check-desktop-logout-auth.py --probe が書く。 UNKNOWN = 答えが出なかった (CLI が無い・時間切れ = 許可 dialog に
+    止められた等) で、 認証の成否を言わない = 読むときに飛ばす (2026-10-30 実測: dialog で時間切れになった問い合わせを
+    FAIL と記録し、 切れていないフォルダを 🔴 にした)
   - 切れた (dead) = そのフォルダの最後の問い合わせが失敗 ∧ その後に keychain が更新されていない
     (= ログインし直していない、 更新も成功していない)。 問い合わせが無い・keychain が読めないなら判定しない
 """
@@ -53,7 +55,7 @@ def read_ledger(ledger: Path = LEDGER) -> list[dict]:
         return rows
     for line in text.splitlines():
         parts = line.split("\t")
-        if len(parts) < 4:
+        if len(parts) < 4 or parts[3].startswith("UNKNOWN"):
             continue
         try:
             t = time.mktime(time.strptime(parts[0], "%Y-%m-%d %H:%M:%S"))
@@ -94,6 +96,14 @@ def selftest() -> int:
     ck("keychain が読めなくても失敗は切れたと数える", is_dead(rows, d, None) is not None)
     ck("最後が成功なら切れていない", is_dead(rows + [{"t": 300.0, "tag": "d", "dir": d, "ok": True}], d, 150.0) is None)
     ck("問い合わせの無いフォルダは判定しない", is_dead(rows, "~/.claude-none", 0.0) is None)
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        led = Path(td) / "probe.log"
+        led.write_text(f"2026-10-30 07:00:00\tverdict\t{d}\tok\tx\tOK\n"
+                       f"2026-10-30 09:38:06\tafter-logout\t{d}\tUNKNOWN(rc=99)\tx\tprobe error: timeout\n", encoding="utf-8")
+        got = read_ledger(led)
+        ck("答えが出なかった問い合わせ (UNKNOWN) は飛ばす = 前の成功で判定する",
+           len(got) == 1 and got[0]["ok"] and is_dead(got, d, None) is None)
     ck("keychain 項目名 = sha256(path) の先頭 8 桁",
        keychain_service(d) == KEYCHAIN_PREFIX + hashlib.sha256(d.encode()).hexdigest()[:8])
     ck("mdat の属性を UTC として読む", _MDAT_RE.search('"mdat"<timedate>=0x32303236  "20260923034324Z\\000"') is not None)
