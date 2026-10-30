@@ -67,16 +67,13 @@ browser・メール・curl で手元に来た file を repo や作業 dir に入
 
 ## <a id="clamav-install"></a>ClamAV の入れ方 (macOS・Homebrew)
 
-ClamAV は既知の検体を署名で探す。 入れるかは本人が決める (定義の download が数百 MB、 定義の更新を定期に回す)。 Homebrew の案内 (`brew info clamav` の caveats) に沿った手順:
+ClamAV は既知の検体を署名で探す。 入れるかは本人が決める (定義は 100 MB 余り、 定義の更新を定期に回す)。 道具 = `bash <base>/claude-config/scripts/install-clamav.sh` (足りないものだけ揃える。 `--check` = 確かめるだけ、 `--update` = 定義の更新)。 やること = `brew install clamav`、 `freshclam.conf.sample` の `Example` の行を外して `freshclam.conf` に、 `freshclam` で定義の取得 (Homebrew の案内 = `brew info clamav` の caveats と同じ)。 `brew install` の前に [`install-failures.md`](install-failures.md) を読む。
 
-```sh
-brew install clamav
-cp "$(brew --prefix)/etc/clamav/freshclam.conf.sample" "$(brew --prefix)/etc/clamav/freshclam.conf"
-sed -i '' 's/^Example/#Example/' "$(brew --prefix)/etc/clamav/freshclam.conf"
-freshclam
-```
+入れた後は、 検査の道具が `clamscan` を見つけて自動で回す (PATH に無ければ `/opt/homebrew/bin` と `/usr/local/bin` も探す)。 file ごとに `clamscan` が定義を読むので、 1 file に数秒かかる (実測)。 常駐の `clamd` は使わない。
 
-入れた後は、 道具が `clamscan` を見つけて自動で回す (PATH に無ければ `/opt/homebrew/bin` と `/usr/local/bin` も探す)。 常駐の `clamd` は使わない。 定義が古いままだと新しい検体を拾わないので、 `freshclam` を定期に回す (launchd か `brew services`)。 `brew install` の前に [`install-failures.md`](install-failures.md) を読む。
+- **定義の更新**: 定義が古いままだと新しい検体を拾わない。 `install-clamav.sh --update` を呼ぶ shim を定期 job に載せる ([`install-launchd-cron.sh`](../scripts/install-launchd-cron.sh) の cmd routine。 label と時刻は呼び出し側の層が決める)。 Agent の登録は常駐の仕組みの追加なので、 本人が決めてから入れる。
+- **効いているかの確かめ方**: 無害な検査用の文字列 EICAR の file を scratch に作って検査の道具に渡すと、 `Eicar-Test-Signature` が出て要確認になる (zip の中でも出る、 実測)。 定義の署名は `sigtool --info=<定義の dir>/daily.cvd` の `Verification OK`。
+- 定義の download のときに `ERROR: NULL X509 store` が出ることがある (実測: 終了値は 0 で定義は取れ、 `sigtool` の検証は OK。 原因は見ていない)。
 
 ## <a id="scan-limits"></a>保証の境界
 
