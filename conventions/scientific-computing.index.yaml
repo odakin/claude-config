@@ -136,6 +136,9 @@ sections:
   - id: truncation-dependence
     level: 2
     title: "打ち切りへの依存を読む — 動かない値は収束とは限らない"
+  - id: table-parts-sum-check
+    level: 2
+    title: "全体と内訳を別の経路で計算した表は、 内訳の和が全体に合うことを検査に入れる"
   - id: symmetry-of-prescription-finite-part
     level: 2
     title: "計算の処方が対称性を保つかは発散の係数では分からない — Ward 恒等式を極と有限部で別々に検査する"
