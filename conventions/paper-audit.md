@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment) + 統計量で型 (外れ値・ばらつき・2 群) を分けると書く前・その較正を組むとき (#classifier-claim-calibration) + 測定や総説を読み込んだ表の入力が今も最新かを投稿の前に確かめるとき (#input-freshness-audit) + 表の入力を直した後に何が動くかを確かめるとき (#input-fix-propagation) + 測定の表で 1 測定を名指す・抜く案を書く前 (#named-measurement-needs-physics) + 積分路や規約で分けた項に物理の名前を付けたとき (#decomposition-label-check)
+when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment) + 統計量で型 (外れ値・ばらつき・2 群) を分けると書く前・その較正を組むとき (#classifier-claim-calibration) + 測定や総説を読み込んだ表の入力が今も最新かを投稿の前に確かめるとき (#input-freshness-audit) + 表の入力を直した後に何が動くかを確かめるとき (#input-fix-propagation) + 測定の表で 1 測定を名指す・抜く案を書く前 (#named-measurement-needs-physics) + 積分路や規約で分けた項に物理の名前を付けたとき・分解の恒等式から測定の予言を立てるとき (#decomposition-label-check)
 category: paper
 summary: multi-paper merger 等の forward ref / 重複 subsection / structure issue を Phase1 機械検出 + Phase2 section-by-section AI 精読 + findings.yaml で体系 audit
 -->
@@ -455,6 +455,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 - (c) 項の 2 乗を確率と読む前に、 全体との差 (干渉) を積分で数える。 干渉が 2 乗の項より大きく符号が逆のことがあり、 符号はチャンネルで変わることがある (実測)。
 - (d) 依存性がどの因子から来るかを恒等式で分ける。 新しい効果と書いた依存が、 既知の因子の言い換えのことがある (実測)。 その場合、 既知の物理との違いの根拠は依存性に置けない。
 - (e) 式は観測量 (積分した率) まで持っていき、 既知の 2 つの極限と、 極限の順序で全体が変わらないことを確かめる。 分け方が順序に依るなら、 それも書く。
+- (f) 分解の恒等式から測定の予言を立てる前に、 各項の期待値を取る状態が、 動かすパラメータに依らないかを確かめる。 条件づけ・規格化・選択の後の状態は装置のパラメータに依る。 恒等式が正しくても 2 つのパラメータ値の差で状態の項は消えず、 片方の項に見える振る舞いが和では打ち消し合って消えることがある (実測)。 入力の状態を固定して、 和そのものをパラメータの関数として計算してから書く。 入力の状態の種類で答えが変わるなら、 予言の文に種類を書く。
 
 ## <a id="abstract-geroch-compression"></a>Abstract = 文脈降下 + 3 message + 持ち帰る 1 文 (Geroch の introduction と conclusion の圧縮) (2026-09)
 
