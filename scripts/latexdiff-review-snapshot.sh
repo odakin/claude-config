@@ -57,8 +57,8 @@
 #   --no-deploy           build のみ (結果 PDF path を表示して終了、repo に触らない)
 #   --new-file PATH       新版を作業 tree の main tex でなく PATH から読む (--no-deploy を含む、 main tex の dirty は見ない)。
 #                         原稿に当てる前の提案の版や、 差分のために加工した写し (新版だけに入れた体裁の macro を旧版の形に
-#                         戻したもの) と比べるとき。 比べるために一時 repo を作って commit しない = 原稿の guard は HEAD の
-#                         無い最初の commit を検査できずに止める (実測、 conventions/latex.md#latexdiff-review-snapshot)
+#                         戻したもの) と比べるとき。 比べるための一時 repo も commit も要らない
+#                         (conventions/latex.md#latexdiff-new-file)
 #   --keep-superseded     同 baseline の旧 snapshot を git rm しない
 #   --no-push / --no-open
 #   --allow-dirty / --allow-behind
