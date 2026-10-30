@@ -95,6 +95,8 @@ grep -nE '<element>' file.tex
 
 <a id="latexdiff-new-file"></a>**作業 tree に無い版と比べるときは engine の `--new-file <写し>`**（仮に当てた提案の版、差分のために加工した写し）。base は git の revision から取り、新版は写しから読む（配備はしない）。比べるための一時 repo も commit も要らない。一時 repo に commit するなら、git の path を shell の変数（`$S/…`）で書かない: 原稿の guard は command の文字列を読むので repo を決められず、`inspection unavailable (git-unreadable)` で止める（実測、違反ではなく検査不能。path を展開した形で書けば通る = [`claude-code-permissions.md#git-path-variable-blinds-guard`](claude-code-permissions.md#git-path-variable-blinds-guard)）。
 
+<a id="latexdiff-one-pass-of-two"></a>**2 つの pass が同じ原稿に入った後で、片方の変更にだけ印を付ける**: 依頼の開始時の rev をそのまま基準にすると、相手の変更にも印が付く。基準の版に相手の pass の変更を当て、両側に相手の変更が入った形で比べると、印は自分の pass だけに付き、相手の行は今の値のまま読める。engine の base は git の revision なので、捨てる clone の中で、基準の commit の上に相手の `git diff -U0` を `git apply --unidiff-zero` で当てて commit し、`--repo <clone> --base <その commit> --no-deploy` で組む。段落 1 行の原稿では相手と自分が同じ行を直していて patch が当たらないことがある。その file は新版から自分の変更だけを文字列で戻して基準にする（実測）。組む前に `git diff -U0 <基準> <新版>` の hunk の数が自分の pass の数と合うかを見る。
+
 **baseline は git revision から都度取り出す**（aux file は symlink で借り、作業 tree を汚さない）:
 
 ```bash

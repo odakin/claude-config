@@ -1101,6 +1101,10 @@ const v = await agent(`${args.previous} を Read で全部読み、 label が re
 - **起動の後**: [`scripts/workflow-run-stats.py`](../scripts/workflow-run-stats.py) (本数・結果の無い本数・同じ key の走り直し・同時に走った最大数・phase ごとの token と所要・起動時の文脈と読み直しの割合・3 本以上が読んだ file と打った command・`--export-results`)。 run の dir = `<config>/projects/<cwd>/<session>/subagents/workflows/<runId>/`。
 - **機械で止められないもの**: 観点を 1 本にまとめたときに prompt が長くなりすぎないか、 独立が本当に要るかの判断。 宣言の理由を読むのは人と review。
 
+## <a id="ruling-while-another-holds-writer-turn"></a>16. 原稿の書き手の番が別の session にある間に著者の裁定が出たら
+
+原稿を書く session を一度に 1 つに絞っていると、 番を持たない session に著者の答えが届く。 発言はその場で guard に記録し、 当てる文を作業ノートに全文で残して push し、 原稿には番が戻ってから当てる。 記録を適用まで待たない理由 = guard が引ける本人の発言は記録の時点で最新の 1 つだけ ([`agent-rule-ownership.md#approval`](agent-rule-ownership.md#approval)) で、 待つ間に本人が別のことを言うと引けなくなる。 待つ間に番の持ち主が同じ file を変えるので、 当てるときは file を読み直し、 当てた後にノートの文が file に逐語で入ったかを script で確かめる (編集の tool の成功は、 承認した文と同じことの確認にならない)。
+
 ## 関連
 
 - cross-session operational board の generic pattern: §13
