@@ -597,9 +597,10 @@ def calibrate(days: float, show: bool, recent: float = RECENT_S, interval: float
             # 1. receiver side: a peer message landed in this transcript. It arrives as a user line (isMeta when the
             # receiver was idle) or, while the receiver is busy, as a queued_command attachment with origin "peer"
             # (measured); the same message can be written in both forms = deduplicated on (sender, body).
+            # A compaction summary (isCompactSummary) can quote the tag in its prose = not a message (measured).
             a = e.get("attachment") if e.get("type") == "attachment" else None
-            peer_line = ((e.get("type") == "user" and not any(isinstance(b, dict) and b.get("type") == "tool_result"
-                                                               for b in _blocks(e)))
+            peer_line = ((e.get("type") == "user" and not e.get("isCompactSummary")
+                          and not any(isinstance(b, dict) and b.get("type") == "tool_result" for b in _blocks(e)))
                          or (isinstance(a, dict) and a.get("type") == "queued_command")) and not is_human(e)
             if peer_line:
                 txt = prompt_text(e)
