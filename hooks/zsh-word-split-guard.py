@@ -140,8 +140,9 @@ PS_FIX = ("直し方: zsh では `${pipestatus[N+1]}` (小文字、 添字は 1 
 
 # 変数の直後の `:` を食う修飾子の文字 (zsh 5.9 で実測。 p / f / g / w / x 等は食われない)
 MOD_CHARS = "aAcehlPqQrstu"
-# 波括弧なしの $NAME + `:修飾子` の連鎖 + その後に word 文字 (`$v:h` 単独・`$v:h:t`・`$v:h/x` は意図した用法なので当てない)
-MOD_REF = re.compile(r"(?<![\w$\\])\$(" + NAME + r")(?::[" + MOD_CHARS + r"])+(?=[A-Za-z0-9_])")
+# 波括弧なしの $NAME + `:修飾子` の連鎖 + その後に word 文字 (`$v:h` 単独・`$v:h:t`・`$v:h/x` は意図した用法なので当てない)。
+# 理由文には食われた語の全体 (`$c:hooks/x.md`) を出す (`$c:h` だけ出すと、 書いた本人には `:h` を書いた覚えが無く読めない)
+MOD_REF = re.compile(r"(?<![\w$\\])\$(" + NAME + r")(?::[" + MOD_CHARS + r"])+[A-Za-z0-9_][^\s;|&()<>'\"]*")
 MOD_FIX = ("直し方: 波括弧で閉じる (`git show ${c}:scripts/x.py`)。 修飾子を使いたいなら `${v:h}` の形で書く "
            "(double quote で囲んでも食われる)。 "
            "正本 = claude-config/conventions/shell-env.md#claude-issued-shell-commands")
@@ -618,6 +619,10 @@ def selftest() -> int:
         fails += 0 if ok else 1
 
     md("for c in a b; do git show $c:scripts/x.py | grep -c y; done", True, "実例: $c:scripts/… (:s に食われる)")
+    got_full = modifier_issues("git show $c:hooks/README.md | head -1")
+    ok_full = got_full == ["$c:hooks/README.md"]
+    print(("  ok   " if ok_full else "  FAIL ") + "理由に出す語は食われた語の全体" + ("" if ok_full else f"  (got {got_full})"))
+    fails += 0 if ok_full else 1
     md('git show "$r:src/main.tex"', True, "double quote でも食われる (実測)")
     md("git cat-file --filters $base:todo/x.yaml", True, "$base:todo/… (:t に食われる)")
     md("git show $P:Paper-X/draft.tex", True, "$P:Paper-… (:P に食われる)")
