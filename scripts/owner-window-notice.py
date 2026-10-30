@@ -10,6 +10,8 @@ Why (実測): 調整役が user の対話の窓に別の議題の分析と調整
 述語:
   対象の呼び出し: `SendMessage` (to) / `mcp__ccd_session_mgmt__send_message` (session_id) /
     Bash の `board.py note|request|handover` (掲示板の投稿。 request・handover = `--to-session`、 note = `--request` の依頼の担当)。
+    Bash は command の語の位置を見ない = `echo …/board.py note --request …` のように引数に書いた形でも鳴る (知らせだけなので
+    許容。 引用符で 1 語にした形は鳴らない)。
   宛先の解決 (4 種): `uds:<socket>` = 生きている session の registry (`<config>/sessions/<pid>.json`) の socket /
     `local_…` = registry の hostSessionId、 無ければ desktop の記録の cliSessionId / session id (8 桁以上の 16 進) と名前 =
     lib/session_model.py の resolve (名前は完全一致だけ、 末尾の ` [ref]` は外す) / 掲示板の役割 id (`role-…` など) =
