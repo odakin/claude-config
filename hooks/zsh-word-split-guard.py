@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""zsh-word-split-guard.py — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置 (と、 option を含む loop の語を command の引数) に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash と、 素の `log show` など (zsh の組み込みの log に取られる) を含む Bash を実行前に止め、 bash の `${PIPESTATUS[N]}` (zsh では空) は zsh の `${pipestatus[N+1]}` に書き換えて通す (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion / #zsh-log-builtin / #zsh-pipestatus-lowercase)。
+"""zsh-word-split-guard.py — zsh で未 quote の複数語変数を for / set -- / -- / git の引数・command の位置 (と、 option を含む loop の語を command の引数) に渡す Bash と、 先頭が `=` の未 quote の語 (equals 展開で同じ行の残りが走らない) を含む Bash と、 素の `log show` など (zsh の組み込みの log に取られる) を含む Bash と、 波括弧で閉じていない変数の直後の `:` が修飾子に食われる形 (`git show $c:path`) を含む Bash と、 未 quote の glob で zsh が command 自体を走らせない形 (`--include=*.md`) を含む Bash を実行前に止め、 bash の `${PIPESTATUS[N]}` (zsh では空) は zsh の `${pipestatus[N+1]}` に書き換えて通す (conventions/shell-env.md#claude-issued-shell-commands / #equals-word-expansion / #zsh-log-builtin / #zsh-pipestatus-lowercase / #unquoted-glob-nomatch)。
 
 PreToolUse(Bash)。 zsh は未 quote の `$var` を単語分割しない (bash と逆) ので、
     v="a b"; for x in $v      → 1 回だけ回る ("a b")
@@ -58,6 +58,33 @@ path に展開し、 見つからないと `not found` で rc=1 になって同�
   較正 (実測): 会話記録の Bash で `${PIPESTATUS[` を使った実行のうち、 bash -c / bash << の中のものは 0 件 = ほぼ全部が zsh で空を見ていた。
   zsh 5.9 で実測 = `false | true; echo ${pipestatus[1]} ${pipestatus[2]}` は `1 0`、 `${PIPESTATUS[0]}` は空。
 
+5 つめの述語 (変数の直後の `:` が修飾子に食われる、 shell-env.md の規則 4): 波括弧で閉じていない `$v` の直後の `:` を、
+zsh は履歴修飾子として読む。 `git show $c:scripts/x.py` は `:s` (置換、 区切りは次の 1 文字) と読まれて残りを飲み、
+error を出さずに別の対象 (commit 全体の diff 等) を渡す = 後段の grep はそれらしい行数を返す。 規約に書いた後も再発したので機械化した。
+  止める = 波括弧なしの `$NAME` の直後が `:` + 修飾子の文字 + その後に word 文字が続く形 (`$c:scripts/x` / `$v:hello` / `$host:admin`)
+  修飾子の文字 = a A c e h l P q Q r s t u (zsh 5.9 で実測。 p / f / g / w / x 等は食われない = `$host:port` は安全)
+  見ない = `${v}:scripts/x` (波括弧 = 直し方)・`:port` `:8080` `:/abs` `:$b` (修飾子でない文字 = 実測して安全)・
+          `$v:h` `$v:h:t` `$v:h/x` (修飾子として意図した形 = 壊れていない)・single quote / heredoc の本文・`bash -c` / `bash <<`
+  ⚠️ double quote は効かない (`"$c:src/main.tex"` も食われる = 実測) ので double quote の中も見る。
+  書き換えて通すことはしない (修飾子を意図した形と機械で見分けられないので、 波括弧を足すと意味が変わる場合がある)。
+  較正 (実測): 30 日分の Bash に当てると、 発火した command はすべて `git show`・`git cat-file` の path を食われた
+  本物の事故だった (誤検出 0)。
+
+6 つめの述語 (未 quote の glob と nomatch、 shell-env.md#unquoted-glob-nomatch): zsh は glob が 1 つも一致しないと
+**その command を実行しない** (`no matches found`)。 `;` で繋いだ前後の出力だけが残るので「検索したが 0 件」 と見分けがつかない。
+⚠️ zsh は**語全体**を pattern にするので、 `--include=*.md` は `.md` の file が在っても一致しない (= 常に走らない。 zsh 5.9 で実測)。
+`find . -name *.md` は一致する時に複数の file 名へ展開されて別の error になる (実測)。 この 2 形は cwd に依らず常に壊れる。
+  止める = ① option の形の語 (`-` で始まる) に glob の記号がある (`--include=*.md` / `--exclude=*.pyc`)
+          ② pattern を取る option の次の語 (-name / -iname / -path / -ipath / -regex / -iregex / --include / --exclude / --include-dir / --exclude-dir)
+  見ない = quote 済み・部分 quote した語・heredoc の本文・`[[ … ]]` と `(( … ))` の中・`case … in` を含む command・
+          `noglob` / nomatch を外した `setopt`・`$`・バッククォート・`{`・`#`・`^` や位置 0 でない `~` を含む語 (値・zsh 拡張 glob で判定できない)
+  **cwd 依存の判定は持たない** (較正で落とした): 「この cwd で一致しないなら走らない」 は正しいが、 hook に渡る cwd と shell の
+  実際の cwd は食い違う (Bash tool の cwd は call をまたいで持続する = shell-env.md#cwd-persists-across-calls) ので、
+  正しい command を止めてしまう (較正で実測)。 `ls -d ~/dir/*語*` のような path の glob の nomatch は、 この guard の射程外。
+  書き換えて通すことはしない (`ls *.py` のような「展開させたい glob」 と見分けられない)。
+  較正 (実測): 30 日分の Bash に当てると、 発火はすべて `--include=*.<拡張子>` の未 quote で (= この形は常に走らないので誤検出 0)、
+  落とす前の cwd 依存の判定は、 正しい command と部分 quote した語の残りを大量に拾っていた。
+
 発火: 実行 shell が zsh のとき (CLAUDE_CODE_SHELL か SHELL)。 opt-out = CLAUDE_ZSH_SPLIT_GUARD=0 (=1 で shell 判定を飛ばす、 test 用)。
 出力: permissionDecision=deny + 直し方。 誤検出のコストは書き直し 1 回。 fail-open (読めない入力は黙って通す)。
   例外 (2026-10-12 本人の承認): 問題が equals 展開だけで、 その語が全部 `==` で始まるなら (区切りの `======`、 `[ a == b ]`)
@@ -110,6 +137,28 @@ PS_BARE = re.compile(r"(?<!\\)\$PIPESTATUS(?![\w\[])")
 PS_BARE_SUBSCRIPT = re.compile(r"(?<!\\)\$PIPESTATUS\[[^\]\s]*\]?")
 PS_FIX = ("直し方: zsh では `${pipestatus[N+1]}` (小文字、 添字は 1 始まり。 全部は `${pipestatus[@]}`)。 "
           "bash の意味で書くなら `bash -c '…'` の中に。 正本 = claude-config/conventions/shell-env.md#zsh-pipestatus-lowercase")
+
+# 変数の直後の `:` を食う修飾子の文字 (zsh 5.9 で実測。 p / f / g / w / x 等は食われない)
+MOD_CHARS = "aAcehlPqQrstu"
+# 波括弧なしの $NAME + `:修飾子` の連鎖 + その後に word 文字 (`$v:h` 単独・`$v:h:t`・`$v:h/x` は意図した用法なので当てない)
+MOD_REF = re.compile(r"(?<![\w$\\])\$(" + NAME + r")(?::[" + MOD_CHARS + r"])+(?=[A-Za-z0-9_])")
+MOD_FIX = ("直し方: 波括弧で閉じる (`git show ${c}:scripts/x.py`)。 修飾子を使いたいなら `${v:h}` の形で書く "
+           "(double quote で囲んでも食われる)。 "
+           "正本 = claude-config/conventions/shell-env.md#claude-issued-shell-commands")
+
+# glob の記号 (`[…]` は閉じている組だけ)
+GLOB_META = re.compile(r"\*|\?|\[[^\]]*\]")
+# 値が決まらない・zsh 拡張 glob の記号を含む語は判定しない
+GLOB_UNSURE = ("$", "`", "{", "#", "^")
+# pattern を取る option (値が展開されると別の引数になる = 一致しても壊れる)
+PATTERN_OPTS = {"-name", "-iname", "-path", "-ipath", "-regex", "-iregex",
+                "--include", "--exclude", "--include-dir", "--exclude-dir"}
+NOGLOB = re.compile(r"(?:^|[;&|(\n]\s*)noglob\b|\bsetopt\s+[^;\n]*(?:nonomatch|nullglob|csh_null_glob)")
+CASE_STMT = re.compile(r"(?:^|[;&|(\n]\s*)case\s+\S+\s+in\b")
+SH_WORD = re.compile(r"[^\s;|&()<>]+")
+GLOB_FIX = ("直し方: glob を quote する (`--include='*.md'` / `find . -name '*.md'`)。 "
+            "正本 = claude-config/conventions/shell-env.md#unquoted-glob-nomatch")
+
 
 FIX = ("直し方: 出力を行ごとに回す → `cmd | while read -r x; do …; done` / 空白で割る → `${=V}` / "
        "複数の path・引数 → 配列 `F=(a b c); git commit -- $F` か literal に並べる / "
@@ -302,6 +351,60 @@ def equals_reason_text(words: list[str]) -> str:
             "同じ行の残りの command を走らせない (出力には前半だけが出て、 失敗に見えない): " + items + "。 " + EQ_FIX)
 
 
+def modifier_issues(cmd: str) -> list[str]:
+    """`$v:<修飾子>…` の形で、 zsh が `:` 以降を修飾子として食う参照の list。 空なら問題なし。
+
+    double quote の中も見る (`"$c:src/main.tex"` も食われる = 実測)。 single quote と heredoc の本文は見ない。
+    """
+    if not cmd or BASH_INNER.search(cmd):
+        return []
+    return sorted({m.group(0) for m in MOD_REF.finditer(_mask_single_and_heredoc(cmd))})
+
+
+def modifier_reason_text(refs: list[str]) -> str:
+    items = " / ".join(f"`{r}`" for r in refs)
+    return ("zsh は波括弧で閉じていない変数の直後の `:` を履歴修飾子として読むので、 この参照は残りの文字を飲んで "
+            "error を出さずに別の対象を渡す: " + items + "。 " + MOD_FIX)
+
+
+def glob_issues(cmd: str) -> list[tuple[str, str]]:
+    """未 quote の glob で zsh が command 自体を走らせない語の (語, 理由) の list。 空なら問題なし。
+
+    cwd に依らず常に壊れる 2 形だけを見る (cwd 依存の判定を持たない理由は module の docstring)。
+    """
+    if not cmd or BASH_INNER.search(cmd) or NOGLOB.search(cmd) or CASE_STMT.search(cmd):
+        return []
+    masked = COND.sub(_blank, _masked(cmd))
+    # 語の境界は元の command で取り、 masked で消えている語 (quote / heredoc / 条件式の中、 部分 quote) を外す
+    words = [(m.group(0), m.start(), m.end()) for m in SH_WORD.finditer(cmd)]
+    live = [(w, masked[a:b] == w) for w, a, b in words]
+    out: list[tuple[str, str]] = []
+    seen = set()
+    for i, (w, is_live) in enumerate(live):
+        if not is_live or len(w) > 200 or not GLOB_META.search(w):
+            continue
+        if any(t in w for t in GLOB_UNSURE) or "~" in w[1:]:
+            continue
+        prev = live[i - 1][0] if i else ""
+        if w.startswith("-"):
+            why = "option の形の語に glob がある (zsh は語全体を pattern にするので、 一致する file が在っても走らない)"
+        elif prev in PATTERN_OPTS:
+            why = f"pattern を取る option (`{prev}`) の値 (一致すると複数の file 名へ展開されて別の error になる)"
+        else:
+            continue
+        if w in seen:
+            continue
+        seen.add(w)
+        out.append((w, why))
+    return out
+
+
+def glob_reason_text(words: list[tuple[str, str]]) -> str:
+    items = " / ".join(f"`{w}` ({why})" for w, why in words)
+    return ("zsh は glob が 1 つも一致しないとその command を実行しない (`no matches found`) ので、 "
+            "`;` で繋いだ前後の出力だけが残って「検索したが 0 件」 と見分けがつかない: " + items + "。 " + GLOB_FIX)
+
+
 def reason_text(issues: list[tuple[str, str, str]]) -> str:
     items = " / ".join(f"`{ctx}` の `${v}` (根拠: {why})" for v, ctx, why in issues)
     return ("zsh は未 quote の変数を単語分割しない (bash と逆) ので、 この command は 1 語として渡して黙って別物を処理する: "
@@ -326,10 +429,13 @@ def main() -> int:
     eq_words = equals_issues(cmd)
     log_subs = log_issues(cmd)
     ps_fixed, ps_bad = pipestatus_rewrite(cmd)
-    if not issues and not eq_words and not log_subs and ps_fixed is None and not ps_bad:
+    mod_refs = modifier_issues(cmd)
+    glob_words = glob_issues(cmd)
+    if (not issues and not eq_words and not log_subs and ps_fixed is None and not ps_bad
+            and not mod_refs and not glob_words):
         return 0
     fixed, notes = None, []
-    if not (issues or log_subs or ps_bad):
+    if not (issues or log_subs or ps_bad or mod_refs or glob_words):
         fixed = ps_fixed or cmd
         if ps_fixed is not None:
             notes.append("bash の `${PIPESTATUS[N]}` を zsh の `${pipestatus[N+1]}` に書き換えて実行した (zsh では PIPESTATUS は空、 "
@@ -349,7 +455,9 @@ def main() -> int:
         }}, ensure_ascii=False))
         return 0
     reasons = (([reason_text(issues)] if issues else []) + ([equals_reason_text(eq_words)] if eq_words else [])
-               + ([log_reason_text(log_subs)] if log_subs else []) + ([pipestatus_reason_text(ps_bad)] if ps_bad else []))
+               + ([log_reason_text(log_subs)] if log_subs else []) + ([pipestatus_reason_text(ps_bad)] if ps_bad else [])
+               + ([modifier_reason_text(mod_refs)] if mod_refs else [])
+               + ([glob_reason_text(glob_words)] if glob_words else []))
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
@@ -500,6 +608,52 @@ def selftest() -> int:
     ps('echo "\\${PIPESTATUS[N]} \\$PIPESTATUS[0]"', None, False, "escape した形は止めもしない")
     ps('a | b; echo "\\${PIPESTATUS[0]}=${PIPESTATUS[0]}"', 'a | b; echo "\\${PIPESTATUS[0]}=${pipestatus[1]}"', False,
        "同じ行の escape した形は残し、 本物の参照だけを書き換える")
+
+    # 変数の直後の `:` (実例と同形: `git show $c:scripts/x.py` が commit 全体の diff を渡した)
+    def md(cmd: str, want: bool, label: str) -> None:
+        nonlocal fails
+        got = modifier_issues(cmd)
+        ok = bool(got) == want
+        print(("  ok   " if ok else "  FAIL ") + label + ("" if ok else f"  (got {got})"))
+        fails += 0 if ok else 1
+
+    md("for c in a b; do git show $c:scripts/x.py | grep -c y; done", True, "実例: $c:scripts/… (:s に食われる)")
+    md('git show "$r:src/main.tex"', True, "double quote でも食われる (実測)")
+    md("git cat-file --filters $base:todo/x.yaml", True, "$base:todo/… (:t に食われる)")
+    md("git show $P:Paper-X/draft.tex", True, "$P:Paper-… (:P に食われる)")
+    md("echo $v:hello", True, "$v:hello (:h に食われて ello が残る)")
+    md('git show "${c}:scripts/x"', False, "波括弧で閉じた形 (直し方)")
+    md("curl $host:port; curl $host:8080", False, "修飾子でない文字 (実測して安全)")
+    md('echo "$v:/abs/path"; echo "$a:$b"', False, ": の次が / と $")
+    md("print -r -- $v:h; print -r -- $v:h:t; print -r -- $v:h/x", False, "修飾子として意図した形は止めない")
+    md("echo '$c:scripts/x'", False, "single quote の中")
+    md("python3 - <<'EOF'\nprint('$c:scripts/x')\nEOF", False, "heredoc の本文")
+    md("bash -c 'git show $c:scripts/x'", False, "bash -c の中は bash の意味論")
+
+    # 未 quote の glob (実例と同形: `--include=*.md` を付けた grep が走らず、 前後の出力だけが残った)
+    def gl(cmd: str, want: bool, label: str) -> None:
+        nonlocal fails
+        got = glob_issues(cmd)
+        ok = bool(got) == want
+        print(("  ok   " if ok else "  FAIL ") + label + ("" if ok else f"  (got {got})"))
+        fails += 0 if ok else 1
+
+    gl("grep -rn --include=*.md pat .", True, "option の形の語の glob (一致する .md が在っても走らない)")
+    gl("rsync -a src/ dst/ --exclude=*.pyc", True, "--exclude=*.pyc")
+    gl("find . -name *.md", True, "pattern を取る option の値 (一致すると別の引数に展開される)")
+    gl("find . -iname *.TeX -o -path */build/*", True, "-iname と -path の値")
+    gl("grep -rn --include='*.md' pat .", False, "quote 済みの option の値")
+    gl("find . -name '*.md'", False, "quote 済みの pattern")
+    gl("ls -d *.md; wc -l paper.tex appendix-*.tex", False, "path の glob は射程外 (cwd 依存の判定を持たない)")
+    gl('ls -d "$B"/*/Extensions/x', False, "部分 quote した語の残りを拾わない (較正で実測した誤検出)")
+    gl("ls -d $HOME/*.md", False, "$ を含む語は判定しない")
+    gl("noglob grep -rn --include=*.md pat .", False, "noglob を前置した形")
+    gl("[[ $f == *.md ]] && echo y", False, "[[ ]] の中の pattern")
+    gl("case $f in *.md) echo y ;; esac", False, "case の pattern")
+    gl("python3 - <<'EOF'\nglob.glob('--include=*.md')\nEOF", False, "heredoc の本文")
+    gl("bash -c 'grep -rn --include=*.md pat .'", False, "bash -c の中は bash の意味論")
+    gl("git commit -m 'fix --include=*.md handling'", False, "quote の中の glob の記号")
+    gl("git log --format=%h; tar -xzf a.tgz --strip-components=1", False, "glob の記号が無い option")
     print("selftest:", "PASS" if not fails else f"{fails} FAIL")
     return 1 if fails else 0
 

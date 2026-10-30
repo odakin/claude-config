@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# zsh-word-split-guard.test.sh — 述語の selftest + hook 入出力 (deny の JSON / == だけの語と PIPESTATUS は判断なしの updatedInput / 素の log show は deny / zsh 以外は無音 / opt-out / Bash 以外は無音)
+# zsh-word-split-guard.test.sh — 述語の selftest + hook 入出力 (deny の JSON / == だけの語と PIPESTATUS は判断なしの updatedInput / 素の log show は deny / 変数直後の `:` が修飾子に食われる形と未 quote の glob (`--include=*.md`) は deny / zsh 以外は無音 / opt-out / Bash 以外は無音)
 #
 # 正本: claude-config/hooks/zsh-word-split-guard.test.sh
 
@@ -53,6 +53,31 @@ case "$out" in
 esac
 out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"/usr/bin/log show --last 5m"}}' | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
 [ -z "$out" ] && ok "/usr/bin/log show は通す" || ng "full path で出力: $out"
+
+echo "=== 変数直後の : と未 quote の glob (deny) ==="
+MOD='{"tool_name":"Bash","tool_input":{"command":"for c in a b; do git show $c:scripts/x.py | grep -c y; done"}}'
+out="$(printf '%s' "$MOD" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+case "$out" in
+  *'"permissionDecision": "deny"'*'${c}:scripts'*) ok "git show \$c:path → deny + 波括弧の直し方" ;;
+  *) ng "\$c:path が deny されない: $out" ;;
+esac
+out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git show ${c}:scripts/x.py; print -r -- $v:h"}}' | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+[ -z "$out" ] && ok "波括弧の形と意図した修飾子 (\$v:h) は通す" || ng "波括弧の形で出力: $out"
+GL='{"tool_name":"Bash","tool_input":{"command":"grep -rn --include=*.md pat ."}}'
+out="$(printf '%s' "$GL" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+case "$out" in
+  *'"permissionDecision": "deny"'*"--include='*.md'"*) ok "--include=*.md → deny + quote の直し方" ;;
+  *) ng "--include=*.md が deny されない: $out" ;;
+esac
+GLQ="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"grep -rn --include='*.md' pat .\"}}"
+out="$(printf '%s' "$GLQ" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+[ -z "$out" ] && ok "quote した --include='*.md' は通す" || ng "quote 済みで出力: $out"
+GLEQ='{"tool_name":"Bash","tool_input":{"command":"echo ======; grep -rn --include=*.md pat ."}}'
+out="$(printf '%s' "$GLEQ" | env -u CLAUDE_ZSH_SPLIT_GUARD -u CLAUDE_CODE_SHELL SHELL=/bin/zsh python3 "$HOOK")"
+case "$out" in
+  *'"permissionDecision": "deny"'*) ok "== の書き換えができる command でも、 未 quote の glob があれば書き換えずに deny" ;;
+  *) ng "== と glob の組で deny されない: $out" ;;
+esac
 
 echo "=== PIPESTATUS の書き換え (判断なしの updatedInput) ==="
 want_cmd() {  # $1 = hook の出力 / $2 = 期待する command (env で渡す = quote を重ねない)
