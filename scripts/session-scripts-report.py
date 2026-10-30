@@ -12,9 +12,9 @@ script は subagent-reports.py、 headless の worker の script は headless-wo
      のうち、 拡張子が script のもの (SCRIPT_EXT) か本文が shebang で始まるもの。 相対 path は、 同じ command の中の
      `cd <dir> &&` / `cd <dir>;` を順に当てた位置から解決する (記録の cwd は command を打つ前の位置 = その cd を含まない。
      実測: `cd <下の dir> && cat > x.py` を 1 つ上の dir で探し、 commit 済みの file を「もう無い」 と出した)。
-     書き先の path の変数は、 同じ command の中で先に代入したもの (`D=<dir>; cat > $D/x.py`) を展開する。 展開できない変数が
-     残る path は「もう無い」 でなく「path に展開できない変数」 と出す (実測: `SP=<dir>; cat > $SP/x.py` の file を
-     cwd の下の `$SP/x.py` と読み、 一時 dir に在る file を「もう無い」 と出した)
+     書き先の path と cd 先の変数は、 同じ command の中で先に代入したもの (`D=<dir>; cat > $D/x.py` / `D=<dir>; cd "$D/sub"; cat > x.py`)
+     を展開する。 展開できない変数が残る path は「もう無い」 でなく「path に展開できない変数」 と出す (実測: `SP=<dir>; cat > $SP/x.py` の
+     file を cwd の下の `$SP/x.py` と読み、 変数の cd 先を辿らず相対の書き先を cd の前の位置で探し、 どちらも一時 dir に在る file を「もう無い」 と出した)
   2. その場で流した code — Bash の `<interpreter> [opts] [-] <<EOF` (stdin に流す heredoc) と `<interpreter> -c '…'` / `-e '…'`
      (interpreter = python/python3/py/tools/py 型の wrapper・node・ruby・perl・Rscript・julia・wolframscript・bash/sh/zsh)。
      MIN_LINES 行未満の短いもの (1 行の確かめ) は数えない。 拾った code が失敗した実行なら印を付ける。
@@ -74,7 +74,7 @@ RUN_SCRIPT_RE = re.compile(r"(?:^|[\s;&|(])(" + INTERP + r")\s+(?:-\w+\s+)*([^\s
 CAT_TO_FILE_RE = re.compile(
     r"(?:cat|tee)\s+(?:-a\s+)?>?\s*(['\"]?)([^\s'\";&|<>]+)\1\s*<<-?\s*(['\"]?)(\w+)\3[^\n]*\n(.*?)\n\s*\4\s*(?:\n|$)", re.S)
 # 同じ command の中の `cd <dir> &&` / `cd <dir>;` (記録の cwd は command を打つ前の位置 = この cd を含まない)
-CD_RE = re.compile(r"(?:^|&&|;|\n)\s*cd\s+(['\"]?)([^\s'\";&|<>$`]+)\1\s*(?=&&|;|\n)")
+CD_RE = re.compile(r"(?:^|&&|;|\n)\s*cd\s+(['\"]?)([^\s'\";&|<>`(]+)\1\s*(?=&&|;|\n)")
 # 同じ command の中の `NAME=<value>` / `export NAME=<value>` (cat > の書き先の $NAME を展開するため)
 ASSIGN_RE = re.compile(r"(?:^|&&|;|\n)\s*(?:export\s+)?([A-Za-z_]\w*)=(['\"]?)([^\s'\";&|<>`]*)\2(?=\s|;|&&|\n|$)")
 VAR_RE = re.compile(r"\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))")
@@ -161,9 +161,10 @@ def _vars_at(cmd, pos):
 
 
 def _cwd_at(cmd, pos, cwd):
-    """cmd の pos より前にある `cd <dir>` を順に当てた cwd。 変数を含む cd 先は辿らない (前の cwd のまま)。"""
+    """cmd の pos より前にある `cd <dir>` を順に当てた cwd。 cd 先の変数は同じ command で先に代入したものを展開し、
+    展開できない変数は path に残す (file_status が「もう無い」 でなく ⚠️ と出す)。 `cd $(…)` は辿らない。"""
     for m in CD_RE.finditer(cmd[:pos]):
-        cwd = _expand(m.group(2), cwd)
+        cwd = _expand(_subst(m.group(2), _vars_at(cmd, m.start())), cwd)
     return cwd
 
 
@@ -461,8 +462,13 @@ def selftest():
               "file に書いた script = 5 本 (md は数えない、 cat > も拾う、 同じ command の cd 先で解決する)")
         check(file_status(os.path.join(repo, "sub", "gen2.sh"))[0] == "✅", "cd 先に書いて commit 済みの file は ✅ (cd の前の位置で探して ❌ にしない)")
         check(_cwd_at("cd /a/b && cd c && cat > f", 22, "/x") == "/a/b/c" and
-              _cwd_at('cd "$D" && cat > f', 12, "/x") == "/x", "cd を順に当てる / 変数の cd 先は辿らない")
-        sp_cmd = 'R=/a; SP="$R/b"; mkdir -p $SP/t; cat > $SP/t/x.py <<\'EOF\'\nprint(1)\nEOF'
+              _cwd_at('cd "$D" && cat > f', 12, "/x") == "/x/$D", "cd を順に当てる / 展開できない変数の cd 先は path に残す")
+        cd_cmd = 'D=/a; cd "$D/b"; cat > f'
+        check(_cwd_at(cd_cmd, cd_cmd.index("cat >"), "/x") == "/a/b", "cd 先の変数も同じ command の代入で展開する")
+        check(_cwd_at("cd $(mktemp -d); cat > f", 18, "/x") == "/x", "cd $(…) は辿らない")
+        check(file_status(_expand("f", _cwd_at('cd "$NOPE" && cat > f', 15, repo)))[0] == "⚠️",
+              "展開できない変数の cd 先に書いた相対 path も ❌ (もう無い) でなく ⚠️")
+        sp_cmd ='R=/a; SP="$R/b"; mkdir -p $SP/t; cat > $SP/t/x.py <<\'EOF\'\nprint(1)\nEOF'
         check(_subst("$SP/t/x.py", _vars_at(sp_cmd, sp_cmd.index("cat >"))) == "/a/b/t/x.py" and
               _subst("${R}/y", {"R": "/a"}) == "/a/y" and _subst("$NOPE/z", {}) == "$NOPE/z",
               "cat > の書き先は同じ command で先に代入した変数を展開する (値の中の既知の変数も、 未知の変数は残す)")

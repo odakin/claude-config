@@ -44,6 +44,7 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
   本文の検索と違い、 役割・注入文の絞り込みは使わない。 結果が記録に無い呼び出しは「(結果なし)」。
   code-mode の JavaScript 入力も検索する。内側の tool 実行の成否は外側の完了だけでは決めず、結果を確認する。
   ⚠️ 入力の文字列に当てるので、 script の名前を grep / cat / 編集しただけの呼び出しも当たる (--context で読み分ける)。
+  pattern は出力に見える形 (`"command": "…`) で書ける。
 
 使い方:
   search-agent-transcripts.py 混ぜる
@@ -274,10 +275,18 @@ def _tool_items(agent: str, rec: dict):
     return out
 
 
+def _spaced(line: str) -> str:
+    """生の記録の行を、 本番の照合と表示の形 (json.dumps の `"key": "value", "k2"`) に寄せる。 下読み専用 = 当たりすぎても parse が増えるだけ。"""
+    return line.replace('":', '": ').replace(',"', ', "')
+
+
 def tool_runs(pattern: str, *, regex: bool, agent: str, since: str | None, until: str | None,
               session: str | None, context: int, claude_dir, codex_dir, limit: int) -> list[tuple]:
     """道具の呼び出しの入力に pattern が当たるものを、 結果の冒頭と対にして返す。"""
     rx = re.compile(pattern) if regex else None
+    # 下読みは生の行に当てる。 生の行は区切りの空白なしの JSON、 本番の照合と表示は空白ありの形。 pattern がその空白を含むなら
+    # 下読みも同じ形で当てる (実測: 出力のまま `"command": "…` と書いた pattern が下読みで全部落ち、 黙って 0 件を返した)
+    spaced = '": ' in pattern or ', "' in pattern
     runs: list[tuple] = []
     for ag, f, label in iter_files(agent, claude_dir, codex_dir):
         sid = _session_of(f, ag)
@@ -291,6 +300,9 @@ def tool_runs(pattern: str, *, regex: bool, agent: str, since: str | None, until
         with fh:
             for line in fh:
                 hit = rx.search(line) if rx is not None else pattern in line
+                if not hit and spaced:
+                    wide = _spaced(line)
+                    hit = rx.search(wide) if rx is not None else pattern in wide
                 if not hit and not (pending and any(k in line for k in pending)):
                     continue
                 try:
@@ -447,6 +459,20 @@ def selftest() -> int:
             check("--tool-runs: Codex の function_call も拾う", tr[3][1] == "codex" and "# 1 docs" in tr[3][4]),
             check("--tool-runs: --regex と --since", len(tool_runs(r"fruit-client\.py search", **{**tb, "regex": True, "since": "2099-02-02"})) == 2),
             check("--tool-runs: 本文の検索は道具の入力を拾わない", search("fruit-client", **{**base, "role": "any", "claude_dir": Path(td) / "claude-tools", "agent": "claude"}) == []),
+        ]
+        # 本物の記録の形 = 区切りの空白なしの JSON (上の fixture は json.dumps の既定の形なので、 この形の下読みを通らない)
+        compact = Path(td) / "claude-compact" / "proj"
+        compact.mkdir(parents=True)
+        (compact / "dddddddd-4444.jsonl").write_text(json.dumps(
+            {"type": "assistant", "timestamp": "2099-03-01T00:00:00Z", "message": {"content": [
+                {"type": "tool_use", "id": "t9", "name": "Bash", "input": {"command": "python3 fruit-client.py pick", "description": "x"}}]}},
+            ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+        ctb = {**tb, "agent": "claude", "claude_dir": Path(td) / "claude-compact"}
+        results += [
+            check("--tool-runs: 空白なしの記録に、 出力の形の regex が当たる", len(tool_runs(r'"command": "[^"]*fruit-client', **{**ctb, "regex": True})) == 1),
+            check("--tool-runs: 空白なしの記録に、 出力の形の literal が当たる", len(tool_runs('"command": "python3 fruit', **ctb)) == 1),
+            check("--tool-runs: 項目をまたぐ出力の形も当たる", len(tool_runs(r'pick", "description"', **{**ctb, "regex": True})) == 1),
+            check("--tool-runs: 空白なしの記録で、 当たらない pattern は 0 件のまま", tool_runs(r'"command": "[^"]*no-such-tool', **{**ctb, "regex": True}) == []),
         ]
         # Code-mode tools use custom_tool_call/input, not function_call/arguments.
         custom = cxt / "rollout-2099-02-05T00-00-00-00000000-0000-4000-8000-0000000c0de3.jsonl"
