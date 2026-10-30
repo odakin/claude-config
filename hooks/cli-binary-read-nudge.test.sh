@@ -10,7 +10,9 @@ export CLI_BINARY_READ_NUDGE_STATE_DIR="$TMP/state"
 pass=0; fail=0
 ok() { pass=$((pass+1)); echo "✅ $1"; }
 ng() { fail=$((fail+1)); echo "❌ $1"; }
-run() { printf '%s' "$1" | python3 "$HOOK"; }
+# 書き手を pipeline の外に出す: hook が stdin を読まずに exit する経路で printf が SIGPIPE (141) になり、
+# pipefail の下でその値を hook の終了値として読んでしまう (hook-authoring.md#hook-stdin-pipe-sigpipe)
+run() { python3 "$HOOK" < <(printf '%s' "$1"); }
 ev() { python3 -c 'import json,sys; print(json.dumps({"session_id": sys.argv[1], "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": sys.argv[2]}}))' "$1" "$2"; }
 
 READ_CMD='strings ~/.local/share/claude/versions/2.1.309 | grep remote-control'
@@ -34,7 +36,7 @@ out="$(run 'not json')"
 # engine の無い配置 (hook だけを写した dir) では黙って通す
 mkdir -p "$TMP/lone/hooks"
 cp "$HOOK" "$TMP/lone/hooks/"
-out="$(printf '%s' "$(ev s4 "$READ_CMD")" | python3 "$TMP/lone/hooks/cli-binary-read-nudge.py")"; rc=$?
+out="$(python3 "$TMP/lone/hooks/cli-binary-read-nudge.py" < <(ev s4 "$READ_CMD"))"; rc=$?
 [ -z "$out" ] && [ "$rc" = 0 ] && ok "T6 engine が無ければ黙って exit 0" || ng "T6 rc=$rc out=$out"
 
 python3 "$HOOK" --selftest >/dev/null && ok "T7 engine の --selftest が通る" || ng "T7 selftest が落ちた"
