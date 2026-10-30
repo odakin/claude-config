@@ -194,7 +194,24 @@ def render(items: list[dict], script: str, verbose: bool = False, dead: list[dic
 
 # ── 問い合わせ ─────────────────────────────────────────────
 
-def probe(config_dir: str, tag: str, claude: str = "claude", ledger: Path = LEDGER) -> bool:
+def probe_cli(default: str = "claude", tool: Path | None = None) -> str:
+    """問い合わせに使う claude: 版に依らない固定の場所 (claude-stable-path.sh --print) が使えればそれ、 無ければ default。
+    予約と見張りの問い合わせは launchd から起きる = CLI 自身が macOS の許可の責任者になる。 launcher の指す版の path で
+    起こすと、 版が上がるたびに設定の additionalDirectories (Dropbox 等) の許可 dialog が版番号の名前で出る (2026-10-30 実測、
+    規約 = conventions/macos-claude-code-tcc-recurring-prompt.md#stable-cli-path)。"""
+    tool = tool or Path(__file__).resolve().parent / "claude-stable-path.sh"
+    if os.environ.get("CLAUDE_STABLE_PATH") == "0" or sys.platform != "darwin" or not tool.is_file():
+        return default
+    try:
+        out = subprocess.run(["/bin/sh", str(tool), "--print"], stdin=subprocess.DEVNULL, capture_output=True,
+                             text=True, timeout=120).stdout.strip()
+    except Exception:
+        out = ""
+    return out if out and os.access(out, os.X_OK) else default
+
+
+def probe(config_dir: str, tag: str, claude: str | None = None, ledger: Path = LEDGER) -> bool:
+    claude = claude or probe_cli()
     svc = keychain_service(config_dir)
     before = keychain_mdat(svc)
     env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")}
@@ -409,6 +426,14 @@ def selftest() -> int:
         c = pl["ProgramArguments"][2]
         ck("予約は一回きり (plist を消してから最後に bootout = 順序が逆だと file が残る)",
            "rm -f" in c and "bootout" in c and c.index("rm -f") < c.index("bootout") and pl["StartCalendarInterval"]["Hour"] == 8)
+        fake_cli = td / "stable-claude"; fake_cli.write_text("#!/bin/sh\n"); fake_cli.chmod(0o755)
+        tool_ok = td / "tool-ok.sh"; tool_ok.write_text(f"echo '{fake_cli}'\n")
+        tool_gone = td / "tool-gone.sh"; tool_gone.write_text(f"echo '{td / 'no-launcher'}'\n")
+        if sys.platform == "darwin":
+            ck("問い合わせは固定の場所の claude で起こす (版番号の path で起こすと許可 dialog が版ごとに出る)",
+               probe_cli(tool=tool_ok) == str(fake_cli))
+        ck("固定の場所も launcher も無い機械では PATH の claude", probe_cli(tool=tool_gone) == "claude")
+        ck("道具が無ければ PATH の claude", probe_cli(tool=td / "missing.sh") == "claude")
         ck("keychain 項目名 = sha256(path) の先頭 8 桁", keychain_service("~/.claude-acct") == KEYCHAIN_PREFIX + "b50c49a0")
         ck("mdat の属性を UTC として読む", _MDAT_RE.search('"mdat"<timedate>=0x32303236  "20260923034324Z\\000"') is not None)
     print(f"selftest: {ok}/{ok + fail} passed")
