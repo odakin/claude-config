@@ -1,5 +1,5 @@
 {
-  "_comment": "git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 15 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 各 mutant は docstring の「穴」 1〜7 の塞ぎと、 --base を越えて進む条件・やり直しの判定を 1 つずつ外す。",
+  "_comment": "git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 16 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 各 mutant は docstring の「穴」 1〜7 の塞ぎと、 --base を越えて進む条件・やり直しの判定を 1 つずつ外す。",
   "target": "git-commit-own-hunk.py",
   "run": "python3 {} --selftest",
   "fail_marker": "FAIL ",
@@ -170,7 +170,7 @@
       "name": "commit の前に実 index の lock が消えるのを待たない (穴 7 = lock が在るのに commit し、 後始末で外す羽目になる)",
       "pairs": [
         [
-          "        if not dry and not wait_unlocked(lock, LOCK_WAIT):\n",
+          "        if not dry and not wait_unlocked(lock, lock_deadline - time.monotonic()):\n",
           "        if False:\n"
         ]
       ],
@@ -230,10 +230,10 @@
       ]
     },
     {
-      "name": "reset の後に、 自分の commit より後の commit が対象の path を変えたかを見ない (自分の変更が戻ったのに終了値 0)",
+      "name": "reset の後に、 自分の commit より後の commit の版に自分の変更が残っているかを見ない (自分の変更が戻ったのに終了値 0)",
       "pairs": [
         [
-          "        if head != val and paths_changed(top, val, head, list(built)):\n",
+          "        if lost:\n",
           "        if False:\n"
         ]
       ],
@@ -243,6 +243,22 @@
       "expect_pass": [
         "相手が自分の commit の上に重ねた commit を外さない",
         "commit の後に lock に当たっても、 lock が消えたら実 index を揃えて"
+      ]
+    },
+    {
+      "name": "相手の commit の版に自分の変更が残っているかを見ずに、 対象の path が変わっただけで止める (相手が同じ file に足しただけでも終了値 5)",
+      "pairs": [
+        [
+          "and not change_survives(top, parent, val, head, p)]",
+          "]"
+        ]
+      ],
+      "expect_fail": [
+        "相手が同じ file に自分の変更を残したまま足した commit では止めない"
+      ],
+      "expect_pass": [
+        "実 index を揃える前に入った相手の commit が自分の変更を戻したら終了値 5",
+        "相手が自分の commit の上に重ねた commit を外さない"
       ]
     }
   ]

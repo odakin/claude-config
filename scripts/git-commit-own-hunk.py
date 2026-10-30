@@ -32,7 +32,9 @@
    (消えなければ commit しない)、 commit の後の reset も lock が消えるまで待って打ち直す。 それでも揃わなければ
    commit を HEAD から外して (旧値つき) 止まる (終了値 6)。 上に相手の commit が重なっていて外せなければ終了値 5。
    lock を持ったまま走る commit (`git commit -a` / `-- <path>`、 実測) の終わりを待った後は、 それが古い実 index・作業 tree から
-   自分の変更を戻していることがある → reset の後に、 自分の commit より後の commit が対象の path を変えていれば終了値 5。
+   自分の変更を戻していることがある → reset の後に、 自分の commit より後の commit の版に自分の変更が無ければ終了値 5
+   (自分の変更を 3-way で HEAD の版に当てて変わるかで見る = 相手が同じ file に足しただけなら止めない)。
+   commit の前の待ちと後の待ちは、 それぞれ合わせて LOCK_WAIT 秒まで (待ちの合計が呼び出し側の timeout を越えない)。
 
 commit は `git commit` で作る (pre-commit / prepare-commit-msg / commit-msg / post-commit がそのまま走る)。
 
@@ -80,7 +82,7 @@ commit の後は push と、 相手の session への 1 行 (相手の `git diff
     5 = commit の直前に HEAD が動いて誤った commit が入り、 その上に別の commit が重なっていて HEAD から外せなかった
         (相手の commit を外さないために止めた) / commit の後に HEAD の近くに自分の commit が見つからない /
         commit の後に実 index を揃えられず、 上に別の commit が重なっていて自分の commit を外せない /
-        commit の後、 実 index を揃える前に入った別の commit が対象の path を変えている (自分の変更を戻した恐れ。
+        commit の後、 実 index を揃える前に入った別の commit の版に自分の変更が無い (戻された恐れ。
         作業 tree には自分の変更を当ててある)。 push せずに git log と git reflog を見て手で直す
     6 = 実 index の lock (index.lock) が 30 秒 (LOCK_WAIT) 消えなかった。 何も commit していない (commit の後に当たった時は、
         入れた commit を HEAD から外して戻した)。 少し待って呼び直す (git の process が 1 つも動いていないのに残るなら、
@@ -340,6 +342,22 @@ def reset_real_index(top: Path, paths: list, lock: Path) -> str | None:
         time.sleep(LOCK_POLL)                 # lock が消えた直後に別の git が取り直すこともある = 少し置いて打ち直す
 
 
+def change_survives(top: Path, parent: str, mine: str, head: str, path: str) -> bool:
+    """parent → mine の path の変更が head の版にも入っているか (= その変更を 3-way で head の版に当てても変わらない)。"""
+    cur = parent_version(top, head, path)
+    if cur is None:
+        return False
+    tmp = Path(tempfile.mkdtemp(prefix="own-hunk-"))
+    try:
+        (tmp / "head").write_bytes(cur)
+        (tmp / "base").write_bytes(parent_version(top, parent, path) or b"")
+        (tmp / "mine").write_bytes(parent_version(top, mine, path) or b"")
+        r = run(top, "merge-file", "-p", str(tmp / "head"), str(tmp / "base"), str(tmp / "mine"))
+        return r.returncode == 0 and r.stdout == cur
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def apply_worktree(top: Path, specs: dict) -> list:
     """置換を作業 tree に当てる。 当てられなかった path の説明の list を返す (空 = 全部当たった / もう当たっていた)。"""
     problems = []
@@ -373,11 +391,13 @@ def do_commit(top: Path, specs: dict, msg_file: Path, base: str | None, dry: boo
     paths = list(specs)
     anchor = out(top, "rev-parse", "--verify", f"{base}^{{commit}}").decode().strip() if base is not None else None
     lock = index_lock(top)                    # commit の後に git を 1 回でも減らす (そこで失敗すると commit だけが残る)
+    # やり直しの全部で合わせて LOCK_WAIT 秒 (回ごとに待つと、 呼び出し側の timeout に commit の後で殺されうる)
+    lock_deadline = time.monotonic() + LOCK_WAIT
     for attempt in range(1, RETRIES + 1):
         if attempt > 1:
             time.sleep(BACKOFF * (attempt - 1))
         # commit の後の実 index の reset は lock が要る。 lock を別の git が持っている間は commit しない
-        if not dry and not wait_unlocked(lock, LOCK_WAIT):
+        if not dry and not wait_unlocked(lock, lock_deadline - time.monotonic()):
             raise Stop(RC_LOCKED, f"実 index の lock ({lock}) が {LOCK_WAIT:g} 秒消えない = 別の git が実 index を使っている。 "
                                   "何も commit していない。 少し待って呼び直す (git の process が 1 つも動いていないのに残るなら、 "
                                   "落ちた git が残した lock = 消してから呼び直す)")
@@ -428,11 +448,15 @@ def do_commit(top: Path, specs: dict, msg_file: Path, base: str | None, dry: boo
             for x in problems:
                 print("  " + x, file=sys.stderr)
         # 実 index を揃える前に相手が commit した (git commit -a など、 実 index の lock を持ったまま走る形は reset が
-        # その終わりを待つ) = 古い実 index・作業 tree から作った commit が自分の変更を戻している恐れ
+        # その終わりを待つ) = 古い実 index・作業 tree から作った commit が自分の変更を戻している恐れ。 相手が同じ file に
+        # 自分の変更を残したまま足しただけなら止めない
         head = out(top, "rev-parse", "HEAD").decode().strip()
-        if head != val and paths_changed(top, val, head, list(built)):
-            print(f"🟠 自分の commit {val[:9]} の後に入った commit (HEAD = {head[:9]}) が対象の path を変えている "
-                  "= 実 index を揃える前に相手が commit し、 自分の変更を戻した恐れ。 push せずに git log -p で見る", file=sys.stderr)
+        lost = [] if head == val else [p for p in built
+                                        if paths_changed(top, val, head, [p]) and not change_survives(top, parent, val, head, p)]
+        if lost:
+            print(f"🟠 自分の commit {val[:9]} の後に入った commit (HEAD = {head[:9]}) の版に、 自分の変更が無い: {', '.join(lost)} "
+                  "= 実 index を揃える前に相手が古い実 index・作業 tree から commit した恐れ。 push せずに git log -p で見る",
+                  file=sys.stderr)
             return RC_STUCK
         return RC_WORKTREE if problems else RC_OK
     raise Stop(RC_MOVED, f"HEAD が {RETRIES} 回続けて動いた。 何も commit していない (少し待って呼び直す)")
@@ -756,6 +780,18 @@ def selftest() -> int:
         ok("実 index を揃える前に入った相手の commit が自分の変更を戻したら終了値 5 で知らせる (作業 tree には自分の変更を当てる)",
            rc == RC_STUCK and log[:3] == ["late", "mine", "P"] and head_file(top, "f.txt") == "a-other\nb\nc\nd\ne\n"
            and (top / "f.txt").read_text() == "a-other\nb\nc\nd\ne-mine\n", f"rc={rc} log={log}")
+
+        # 23. 自分の commit の後、 相手が同じ file に自分の変更を残したまま足した commit → 止めない (22 の誤検出の foil)
+        top = new_repo(root, "r23")
+        h = top / ".git" / "hooks" / "post-commit"
+        h.write_text("#!/bin/sh\n[ \"$(git log -1 --format=%s)\" = mine ] || exit 0\n[ -e .git/late-once ] && exit 0\n"
+                     ": > .git/late-once\n(unset GIT_INDEX_FILE; git cat-file -p HEAD:f.txt > f.txt && printf 'late\\n' >> f.txt "
+                     "&& git add f.txt && git commit -q --no-verify -m late)\n")
+        h.chmod(0o755)
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "c\n", "c-mine\n"])
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("相手が同じ file に自分の変更を残したまま足した commit では止めない (終了値 0)",
+           rc == 0 and log[:3] == ["late", "mine", "P"] and head_file(top, "f.txt") == "a\nb\nc-mine\nd\ne\nlate\n", f"rc={rc} log={log}")
     finally:
         LOCK_WAIT = saved_wait
         os.environ.clear()
