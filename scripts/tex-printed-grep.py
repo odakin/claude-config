@@ -7,10 +7,12 @@
 この道具は `%` の後ろ、 `\\begin{comment}` 〜 `\\end{comment}`、 `\\iffalse` 〜 `\\fi` を外して探し、
 一致を file:行番号:行 で出す。 外した所の一致は件数を最後に出す (`--hidden` で行も出す)。
 本文に 0 件でも外した所の件数が見えるので、 「本文に無い」 と「寝かせてある」 を見分けられる。
+`--no-keys` は `\\label` `\\ref` `\\eqref` `\\cite` などの鍵の引数を外して探す。 鍵を変えずに用語だけを置き換えたとき、
+鍵の中の古い語で一致が埋まらない (鍵は印字されない)。
 規則 = conventions/latex.md#commented-out-not-present。
 
 使い方:
-  python3 scripts/tex-printed-grep.py [-i] [--hidden] PATTERN FILE [FILE ...]
+  python3 scripts/tex-printed-grep.py [-i] [--hidden] [--no-keys] PATTERN FILE [FILE ...]
   python3 scripts/tex-printed-grep.py --selftest
 
 PATTERN は Python の正規表現で、 1 行ごとに当てる (文が行をまたぐ原稿では語を短くする)。
@@ -25,6 +27,7 @@ import sys
 
 VERBATIM_ENVS = ("verbatim", "Verbatim", "lstlisting", "minted")
 BEGIN_VERBATIM = re.compile(r"\\begin\{(" + "|".join(VERBATIM_ENVS) + r")\}")
+KEY_ARG = re.compile(r"(\\(?:label|ref|eqref|pageref|autoref|[cC]ref|[a-zA-Z]*cite[a-zA-Z]*\*?)(?:\[[^\]]*\])*\{)[^{}]*(\})")
 
 
 def comment_start(line):
@@ -88,12 +91,14 @@ def classify(lines):
     return out
 
 
-def search(path, regex):
+def search(path, regex, no_keys=False):
     """(印字される一致の [(行番号, 行)], 外した所の一致の [(行番号, 行)]) を返す。"""
     with open(path, encoding="utf-8", errors="replace") as f:
         lines = f.read().split("\n")
     printed, hidden = [], []
     for no, (code, rest) in enumerate(classify(lines), 1):
+        if no_keys:
+            code, rest = KEY_ARG.sub(r"\1\2", code), KEY_ARG.sub(r"\1\2", rest)
         if code and regex.search(code):
             printed.append((no, lines[no - 1]))
         elif rest and regex.search(rest):
@@ -120,6 +125,7 @@ def selftest():
         r"eta % in verbatim",
         r"\end{verbatim}",
         r"\verb|%| theta",
+        r"iota \label{lambda key}\eqref{mu key}\cite[p.~1]{nu key} xi",
         r"\end{document}",
     ])
     d = tempfile.mkdtemp()
@@ -136,6 +142,13 @@ def selftest():
         if (len(pr), len(hi)) != (want_p, want_h):
             print(f"FAIL {pat}: printed {len(pr)} hidden {len(hi)}", file=sys.stderr)
             ok = False
+    for pat, want_plain, want_no_keys in [
+        ("iota", 1, 1), ("xi", 1, 1), ("lambda key", 1, 0), ("mu key", 1, 0), ("nu key", 1, 0),
+    ]:
+        plain, keyless = len(search(p, re.compile(pat))[0]), len(search(p, re.compile(pat), no_keys=True)[0])
+        if (plain, keyless) != (want_plain, want_no_keys):
+            print(f"FAIL --no-keys {pat}: plain {plain} no_keys {keyless}", file=sys.stderr)
+            ok = False
     os.remove(p)
     os.rmdir(d)
     print("selftest ok" if ok else "selftest FAILED")
@@ -148,6 +161,7 @@ def main():
     ap.add_argument("files", nargs="*")
     ap.add_argument("-i", "--ignore-case", action="store_true")
     ap.add_argument("--hidden", action="store_true", help="外した所の一致の行も出す")
+    ap.add_argument("--no-keys", action="store_true", help="\\label \\ref \\cite などの鍵の引数を外して探す")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -163,7 +177,7 @@ def main():
     n_printed = n_hidden = 0
     for path in a.files:
         try:
-            printed, hidden = search(path, regex)
+            printed, hidden = search(path, regex, no_keys=a.no_keys)
         except OSError as e:
             print(f"読めない: {path}: {e}", file=sys.stderr)
             return 2

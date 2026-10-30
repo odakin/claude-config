@@ -150,7 +150,7 @@ open(path, "w", encoding="utf-8").write(txt)
 ## <a id="batch-text-verification"></a>適用後の検証
 
 1. **再 build が通る** (LaTeX なら error 0 + 頁数が期待どおり)
-2. **旧断片の grep が 0 件** (= モード 2 の後段、 assert では代替できない)
+2. **旧断片の grep が 0 件** (= モード 2 の後段、 assert では代替できない)。 TeX の用語の置き換えは素の grep でなく `scripts/tex-printed-grep.py -i --no-keys '<古い語>' <file>` で見る: 段落を 1 行に書く source では `grep -c` は出現数でなく行数で、 comment 環境の中と `\label` の鍵の中も数える ([`latex.md#commented-out-not-present`](latex.md#commented-out-not-present))。 display の式に触っていないことは、 検査を書く前に原稿の guard の `scan` を見る ([`manuscript-claim-ownership.md`](manuscript-claim-ownership.md))
 3. **意図した箇所数と実 diff が一致** (`git diff --stat` の hunk 数を目で突き合わせる)
 4. **戻したら、 戻した箇所の `git diff` が空になることを確かめる**。 戻す pair は、 当てた pair の old と new を入れ替えたものにする (手で書いた削除の pair は、 隣の改行まで削りうる)。 実例 (2026-09-14): 別 session が足した 1 文を取り消した後、 直後の空行も消えていて、 次の段落が箇条書きの続きとして描画される形になっていた (取り消しに使った手段は未確認)。
 5. **形を測る** (= モード 9 の後段): 書いた直後に `wc -l` の前後差か `git diff --stat` を**同じ command 行**で出し、 意図した箇所数と桁が合うか見る。 数百行の file の差分が数千行なら、 old が空か二重挿入。 commit の後も `git show --stat HEAD | tail -1` を同じ行に置く (`-q` と `| tail` で捨てない)。

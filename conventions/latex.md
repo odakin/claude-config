@@ -79,9 +79,11 @@ awk -F'%' '{print $1}' file.tex | grep -oE '\\cite[a-zA-Z]*\{[^}]*\}' | sort -u
 python3 scripts/tex-printed-grep.py '<element>' file.tex
 # 外した所の行も見る
 python3 scripts/tex-printed-grep.py --hidden '<element>' file.tex
+# 鍵を変えずに用語を置き換えた後、 古い語の残りを探す (\label・\ref・\cite の鍵の引数を外す)
+python3 scripts/tex-printed-grep.py -i --no-keys '<古い語>' file.tex
 ```
 
-   `grep -v '^%'` では `\begin{comment}` の中と行末の comment を落とせない。 依頼書や台帳が「本文の文」 と挙げた文、 これから直す文も、 手を付ける前に同じ道具で通す (実測: 依頼書が本文として挙げた文が comment 環境の中にあり、 印字される同じ主張は別の節にあった)。 ある節を丸ごと comment に入れる commit は、 その節に後から足した文も一緒に寝かせる。 記録が本文にあると書いている文は、 節を寝かせた後にこの道具で確かめ直す (実測)。
+   `grep -v '^%'` では `\begin{comment}` の中と行末の comment を落とせない。 鍵の文字列は印字されないので、 用語の置き換えの後に `--no-keys` なしで探すと一致の大半が鍵の中になり、 本物の残りが埋もれる (実測)。 依頼書や台帳が「本文の文」 と挙げた文、 これから直す文も、 手を付ける前に同じ道具で通す (実測: 依頼書が本文として挙げた文が comment 環境の中にあり、 印字される同じ主張は別の節にあった)。 ある節を丸ごと comment に入れる commit は、 その節に後から足した文も一緒に寝かせる。 記録が本文にあると書いている文は、 節を寝かせた後にこの道具で確かめ直す (実測)。
 
 2. prose summary (`SESSION.md`「migration 完了」等) と active source が食い違ったら **active source が勝つ**。summary 側を errata / 更新する。
 3. 第三者 (共著者・レビュアー) が「その要素が原稿のどこにあるか分からない」と言ったら、それは **記憶の曖昧さでなく grep 等価の signal** — 推測で解決策を返す前に自分で active grep を回す。
