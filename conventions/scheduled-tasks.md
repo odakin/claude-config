@@ -344,7 +344,8 @@ headless `claude -p` の routine は、 使う config dir (`CLAUDE_CONFIG_DIR`) 
   keychain 項目の更新時刻を突き合わせ、 `--install-watch` で確かめる問い合わせを自動で予約する)。
   対照実験 (desktop で両 account のログアウトと新しいログインを往復) では、 両方の config dir が約 8 時間後の更新に
   成功した。 別の機械の 1 か月の記録でも、 desktop の切り替え (ログアウトして 1 分以内に別の account でログイン) 8 回の
-  後に切れた config dir は無かった = 同じ機械でのログアウトや新しいログインだけでは切れない (実験 1 回 + 観察 8 回)。 検知器は切り替えのたびに問い合わせで確かめ、
+  後に切れた config dir は無かった。 もう 1 台の記録では、 切り替えの後に切れたのは 1 回だけで、 ログアウトも新しいログインも
+  無い窓で切れた例もあった = 同じ機械でのログアウトや新しいログインは、 切れる十分条件でも必要条件でもない (実測)。 検知器は切り替えのたびに問い合わせで確かめ、
   失敗したときだけ 🔴 を出す。
   見張りは keychain が 24 時間以上更新されていない config dir も毎日確かめる (ログアウトと無関係の切れも 1 日以内に分かる)。
   各 Mac には session 開始から `--ensure-watch` を呼んで配り、 結果は fleet heartbeat が他のマシンへ運ぶ
@@ -355,6 +356,17 @@ headless `claude -p` の routine は、 使う config dir (`CLAUDE_CONFIG_DIR`) 
   トークンを更新したため、 同じ更新トークンの写しが無効になったと見られる (推定)。 移行の後は移行先の各 config dir で
   `claude auth login` をし直し、 写した認証に頼らない。 移行元を止めるまでは、 同じ config dir を両方の機械で使わない。
   上の desktop app のログアウトの例と見分けるには、 ログアウトより前に無人 job が失敗していたかを見る。
+- <a id="auth-expiry-window"></a>**原因を探す窓は「最後の更新の成功 〜 最初の失敗」**: 切れた時刻は失敗の時刻ではなく、 その窓のどこか。
+  問い合わせの ledger を**最初の失敗まで**戻ってから窓を取る (実測: 直近のログアウトの後に切れたように見えた例が、 ledger を
+  戻ると、 そのログアウトより前から毎日失敗していた。 通知や状態の 1 行が最後の失敗しか言わないと、 この取り違えが起きる)。
+  窓の中に手元の出来事が 1 つも無いこともある (実測)。 他の機械や、 共用の account の他の人の端末でのログインは、 手元の log に出ない。
+  - ⚠️ **認証ストア (keychain) の更新時刻が進む = 更新の成功、 ではない**。 更新に失敗した run でも進み (実測)、 認証が消えた後の
+    失敗の run では進まない。 窓の端は、 成功した問い合わせで取る。 無使用の長さでも固定の寿命でも説明できない (実測: 同じ config dir が
+    約 1 週間の無使用の後は更新でき、 別の時に 1 日の無使用で切れた。 別の機械では約 80 日生きた)。
+  - 切れた後の確かめ方: `env -u ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR=<dir> claude auth status` の `authMethod`。 `ANTHROPIC_API_KEY` が
+    混ざると `loggedIn: true` と答え、 `.claude.json` の `oauthAccount` は切れた後も残る (email だけを読む検査は騙される)。
+  - `claude --bg` の daemon は起動時にトークンを更新し、 次の更新を `<config dir>/daemon.log` に時刻つきで残す
+    (`auth: scheduling proactive refresh in Ns`)。 daemon が idle で終わると、 次に使われるまで誰も更新しない。
 
 ## recurring task の jitter
 
