@@ -1238,10 +1238,13 @@ hook の state (処理済みの記録・割り当て・既読) を「読む → 
 | `git commit` が HEAD を読んだ後、 ref を更新する前 | pre-commit の中で commit する | 外側の commit は `fatal: cannot lock ref 'HEAD': is at X but expected P` で止まる (commit は入らない) |
 | 自分の commit の直後 (道具が HEAD を読み直す前) | post-commit の中で commit する | HEAD が相手の commit になる = commit の後に HEAD を読み直して自分の commit とする道具の誤りが出る |
 | 道具が版を作った後、 `git commit` を打つ前 | 道具に test 専用の環境変数で shell を 1 回走らせる口を持たせる (この窓には git の hook が無い) | commit の直前に親を照合しない道具は、 相手の変更を戻した commit を作る |
+| 道具の commit の後、 実 index を揃える前に、 別の git が実 index の lock を持つ | post-commit の中で `: > .git/index.lock` を作る。 放すなら背景の `(sleep 0.2; rm -f .git/index.lock) >/dev/null 2>&1 &` (出力を `/dev/null` へ落とす = pipe を持ったままだと、 出力を読む呼び元が背景の終わりまで待つ) | 一時 index の commit は通り、 `git reset` だけが止まる = commit の後の段の失敗の扱いが出る |
 
 - **1 回だけ打たせる**: 中の commit を打つ前に marker file (`.git/<名前>-once`) を書き、 marker があれば何もしない (中の commit でも同じ hook が走るので、 2 回目はここで止まる)。 post-commit には件名などで「外側の commit の時だけ」 の条件も付ける
 - ⚠️ **hook の中の commit は `GIT_INDEX_FILE` を外して打つ** — git は hook に、 外側の commit が使っている index (一時 index ならその path) を `GIT_INDEX_FILE` で渡す。 外さないと相手の commit が外側の index に入る
 - ⚠️ **外側が一時 index で commit した直後は、 本当の index が新しい HEAD より古い** — post-commit の中でそのまま `git add` + commit すると、 相手の commit が外側の変更を戻す (`--allow-empty` も空の commit にならない。 実測 = fixture の誤りを道具の誤りと取り違えかけた)。 相手の commit の前に `git reset -q` で index を HEAD に揃える。 本物の並列でも同じ形で起きる (共有 index の race = [`multi-session-coordination.md#temp-index-commit`](multi-session-coordination.md#temp-index-commit) の ⑥)
+- **本物の git に lock を持たせる**: 上の file は模造なので、 1 本は本物でも確かめる。 `git commit -a` / `-- <path>` は hook の走る間 lock を持つので、 pre-commit を遅くして背景で走らせる ([`multi-session-coordination.md#index-lock-file-exists`](multi-session-coordination.md#index-lock-file-exists))
+- ⚠️ **相手の commit だけを遅くする条件は環境変数で見分ける** — 一時 dir の path の語を条件にしない (実測: fixture の一時 dir の名前が「道具の commit なら遅くしない」 の条件に当たって相手も遅くならず、 lock の出現を待つループが終わらなかった)。 fixture の待ちのループには必ず上限をつける
 - 古い実装でその test が落ちることを先に確かめる (fixture が窓を開けていなければ、 直した道具でも古い道具でも通る)
 
 ## <a id="dry-run-model-authored-script"></a>§23. model が書いた script を hook が空回しするとき、 node の `vm` は隔離にならない — 起動の flag で閉じる

@@ -93,11 +93,11 @@ commit の後は push と、 相手の session への 1 行 (相手の `git diff
 - HEAD を見てから `git commit` が HEAD を読むまでの間 (process の起動 1 回ぶん) に相手の commit が入ると、 誤った commit が
   一瞬 HEAD になる。 直後の照合で ref を戻して作り直すが、 その間に push する post-commit hook が在る repo では、
   誤った commit が外へ出うる (そういう hook を持つ repo では使わない)。
-- commit から実 index の reset が通るまでの間 (lock が空いていれば git の起動 1 回ぶん) に相手が素の `git commit` を
-  始めると、 その commit は自分の変更を戻す (始めに読んだ実 index がまだ古い)。 素の commit は lock を始めにだけ取り、
-  hook の走る間は持たない (実測) ので、 reset は通り、 その commit が入るのは reset の後 = 終了値 5 の検査にも掛からない。
-  この窓は閉じていない。 commit の後に lock を待った時は ⚠️ の行が出る = 相手の commit が入った後に git log -p で
-  自分の変更が HEAD に残っているかを見る。
+- 素の `git commit` は親を pre-commit の前に読み、 tree は pre-commit の後に読み直した実 index から作る (selftest の
+  「git の前提」 で確かめている)。 親を読むのが自分の commit より前なら相手の commit が `cannot lock ref` で止まり、 読み直しが
+  reset より後なら実 index は新しい。 残る窓 = 相手の開始から読み直しまでの全部が、 自分の commit と reset の間 (git の起動の
+  数回ぶん) に収まる時だけで、 pre-commit が無いか、 ごく短い repo に限られる。 その時は相手の commit が自分の変更を戻す。
+  reset より先に入れば終了値 5 で分かるが、 後に入ると分からない。
 - hook は作業 tree を読むことがある。 hook が見る作業 tree には相手の変更も在る (index は自分の分だけ)。
 - commit の後に自分の commit を tree と件名で探す。 hook が件名を書き換え、 かつ同じ tree の commit (空の commit など) が
   直後に上に重なった時だけ取り違えうる。
@@ -334,9 +334,7 @@ def reset_real_index(top: Path, paths: list, lock: Path) -> str | None:
             return text                       # lock 以外の理由 = 待っても揃わない
         if not warned:
             warned = True
-            print(f"⚠️ commit の後、 実 index の lock に当たった。 消えるのを {LOCK_WAIT:g} 秒まで待って打ち直す "
-                  "(相手の commit が始まっていると自分の変更を戻していることがある = 相手の commit が入った後に git log -p で見る)",
-                  file=sys.stderr)
+            print(f"⚠️ commit の後、 実 index の lock に当たった。 消えるのを {LOCK_WAIT:g} 秒まで待って打ち直す", file=sys.stderr)
         if not wait_unlocked(lock, deadline - time.monotonic()) or time.monotonic() >= deadline:
             return text
         time.sleep(LOCK_POLL)                 # lock が消えた直後に別の git が取り直すこともある = 少し置いて打ち直す
@@ -792,6 +790,78 @@ def selftest() -> int:
         log = g(top, "log", "--format=%s").stdout.decode().split()
         ok("相手が同じ file に自分の変更を残したまま足した commit では止めない (終了値 0)",
            rc == 0 and log[:3] == ["late", "mine", "P"] and head_file(top, "f.txt") == "a\nb\nc-mine\nd\ne\nlate\n", f"rc={rc} log={log}")
+
+        # 24〜26. git の前提 (docstring の「限界」 と規約の文の根拠。 ここが落ちたら、 git の版で振る舞いが変わった = 両方を見直す)
+        def hook_saw_lock(name: str, argv: list) -> bool:
+            top = new_repo(root, name)
+            h = top / ".git" / "hooks" / "pre-commit"
+            h.write_text("#!/bin/sh\nif [ -e .git/index.lock ]; then : > .git/saw-lock; fi\n")
+            h.chmod(0o755)
+            (top / "f.txt").write_text("changed\n")
+            g(top, "add", "f.txt")
+            (top / "f.txt").write_text("changed again\n")
+            g(top, "commit", "-q", "-m", "x", *argv)
+            return (top / ".git" / "saw-lock").exists()
+
+        ok("git の前提: hook の走る間に実 index の lock を持つのは -a と -- <path> で、 素の commit は持たない",
+           (hook_saw_lock("r24a", ["-a"]), hook_saw_lock("r24b", ["--", "f.txt"]), hook_saw_lock("r24c", [])) == (True, True, False))
+
+        top = new_repo(root, "r25")
+        (top / "f.txt").write_text("changed\n")
+        g(top, "add", "f.txt")
+        (top / ".git" / "index.lock").write_text("")
+        before_head = g(top, "rev-parse", "HEAD").stdout
+        r = g(top, "commit", "-q", "-m", "x")
+        ok("git の前提: lock が在ると素の commit は始まらない", r.returncode != 0 and g(top, "rev-parse", "HEAD").stdout == before_head)
+        (top / ".git" / "index.lock").unlink()
+
+        top = new_repo(root, "r26")
+        (top / "f.txt").write_text("changed\n")
+        (top / "g.txt").write_text("g-hook\n")
+        g(top, "add", "f.txt")
+        h = top / ".git" / "hooks" / "pre-commit"
+        h.write_text("#!/bin/sh\ngit add g.txt\n")
+        h.chmod(0o755)
+        g(top, "commit", "-q", "-m", "x")
+        ok("git の前提: 素の commit は pre-commit の後に実 index を読み直して tree を作る", head_file(top, "g.txt") == "g-hook\n")
+
+        def slow_other(top: Path) -> None:
+            """相手の commit の pre-commit だけを遅くする。 環境変数で見分ける = 一時 dir の名前に入る語を条件にしない。"""
+            h = top / ".git" / "hooks" / "pre-commit"
+            h.write_text("#!/bin/sh\n[ -z \"$SLOW_OTHER\" ] || sleep 0.4\n")
+            h.chmod(0o755)
+
+        # 27. 本物の git commit -a が lock を持っている間に呼ぶ → 待って、 相手の commit の上に commit する
+        LOCK_WAIT = 5.0
+        top = new_repo(root, "r27")
+        slow_other(top)
+        (top / "f.txt").write_text("a-other\nb\nc\nd\ne\n")
+        p = subprocess.Popen(["git", "-C", str(top), "commit", "-q", "-a", "-m", "other"], env=dict(os.environ, SLOW_OTHER="1"),
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        lock_file, limit = top / ".git" / "index.lock", time.monotonic() + 5
+        while not lock_file.exists() and time.monotonic() < limit:
+            time.sleep(0.005)
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "e\n", "e-mine\n"])
+        p.wait()
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("本物の git commit -a が lock を持つ間は待ち、 相手の commit の上に commit する",
+           rc == 0 and log[:3] == ["mine", "other", "P"] and head_file(top, "f.txt") == "a-other\nb\nc\nd\ne-mine\n"
+           and (top / "f.txt").read_text() == "a-other\nb\nc\nd\ne-mine\n", f"rc={rc} log={log}")
+
+        # 28. 自分の commit の直後に本物の git commit -a が lock を取る → reset が待ち、 相手が古い作業 tree から戻したのを終了値 5 で知らせる
+        top = new_repo(root, "r28")
+        slow_other(top)
+        (top / "f.txt").write_text("a-other\nb\nc\nd\ne\n")
+        h = top / ".git" / "hooks" / "post-commit"
+        h.write_text("#!/bin/sh\n[ \"$(git log -1 --format=%s)\" = mine ] || exit 0\n[ -e .git/late-once ] && exit 0\n"
+                     ": > .git/late-once\n(unset GIT_INDEX_FILE; SLOW_OTHER=1 git commit -q -a -m late) >/dev/null 2>&1 &\n"
+                     "i=0; while [ ! -e .git/index.lock ] && [ $i -lt 300 ]; do sleep 0.01; i=$((i+1)); done\n")
+        h.chmod(0o755)
+        rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "e\n", "e-mine\n"])
+        log = g(top, "log", "--format=%s").stdout.decode().split()
+        ok("本物の git commit -a が commit の直後に lock を取っても待ち、 戻されたら終了値 5 (作業 tree には自分の変更)",
+           rc == RC_STUCK and log[:3] == ["late", "mine", "P"] and head_file(top, "f.txt") == "a-other\nb\nc\nd\ne\n"
+           and (top / "f.txt").read_text() == "a-other\nb\nc\nd\ne-mine\n", f"rc={rc} log={log}")
     finally:
         LOCK_WAIT = saved_wait
         os.environ.clear()
