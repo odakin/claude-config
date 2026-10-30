@@ -19,9 +19,10 @@ Why (実測): 調整役が user の対話の窓に別の議題の分析と調整
   user の最後の発言: 宛先の会話記録を末尾から読み、 `origin.kind == "human"` の user 行と、 turn の途中に打った発言
     (`attachment.type == "queued_command"` で origin が human) を探す (conventions/hook-authoring.md#transcript-human-vs-peer-message)。
     origin の無い行は数えない (別 session の message・hook の差し戻し・task の通知・圧縮の要約は origin を持たない = 実測)。
-    ⚠️ CLI・SDK で起こした session の最初の prompt は origin が human で入る (実測: 掲示板の worker の hand-off 文・盲検の
-    起動文) = entrypoint が `claude-desktop` でない session の最初の user 行は数えない。 本文が `<cross-session-message` で
-    始まる行も数えない (実測: 古い版は desktop の send_message で届いた message を origin が human で記録した)。
+    ⚠️ session の最初の prompt は数えない: 起こした側が渡した起動文 (掲示板の worker の hand-off 文・盲検の起動文) が、 CLI・SDK
+    でも desktop の start_session でも origin が human で入る (実測。 desktop の記録の親の有無では分けられない = 親の記録の無い
+    worker の起動文もあった)。 本人が最初の発言で始めた窓は、 本人の 2 回目の発言から数える。 本文が `<cross-session-message`
+    で始まる行も数えない (実測: 古い版は desktop の send_message で届いた message を origin が human で記録した)。
   知らせる条件: 最後の発言が RECENT_S (既定 3 時間) 以内。 同じ (送り手, 宛先) には INTERVAL_S (既定 1 時間) に 1 回。
   外すもの: 宛先 = 送り手自身 / 宛先 = 送り手を起こした session (desktop の記録の spawnedFrom = 結果を上に返す向き) /
     note で送り手がその依頼の担当 (= 報告) / 宛先の会話記録がこの機械に無い。
@@ -39,6 +40,7 @@ Why (実測): 調整役が user の対話の窓に別の議題の分析と調整
     出力 = 古さの分布・知らせが出る回数 (1 時間に 1 回の間引きの後)、 --list = 出る回の 1 件ずつ (時刻・送り手・宛先・本文の頭)、
     --all = 全部の送信を判定 (NOTICE / throttled / report to parent / no recent human) つきで。
 env: OWNER_WINDOW_NOTICE_DISABLE=1 / OWNER_WINDOW_RECENT_S / OWNER_WINDOW_INTERVAL_S / OWNER_WINDOW_NOTICE_STATE_DIR (test) /
+  OWNER_WINDOW_FIRST_PROMPT=desktop (校正の比較用 = desktop の最初の prompt を数えた前の規則) /
   AGENT_BOARD_ROOT (`--root`・`--board` の無い投稿の掲示板) / CLAUDE_SESSIONS_DIR・CLAUDE_PROJECTS_DIR・CLAUDE_DESKTOP_SESSIONS_DIR (test)。
 self-test: python3 scripts/owner-window-notice.py --selftest
 """
@@ -68,6 +70,8 @@ BOARD_KINDS = {"note", "request", "handover"}
 BOARD_BOOL_FLAGS = {"sync", "preview", "json", "launch", "no-launch", "detach", "nested", "worktree", "model-ok", "subagent-ok",
                     "not-blind", "include-closed", "all-boards", "wait"}
 RECENT_S = 3 * 3600
+# Measurement switch for --calibrate only: "desktop" = the earlier rule (a desktop session's first prompt counted).
+FIRST_PROMPT_COUNTS = os.environ.get("OWNER_WINDOW_FIRST_PROMPT") == "desktop"
 INTERVAL_S = 3600
 CHUNK = 1 << 20
 TS_RE = re.compile(rb'"timestamp"\s*:\s*"([^"]+)"')
@@ -148,8 +152,8 @@ def _parse_ts(s: str) -> float | None:
 def last_human(path: str, now: float, recent_s: float, before: float | None = None) -> dict | None:
     """The person's latest utterance in a transcript within recent_s before `before` (default now): {"at", "text"}.
 
-    Reads from the end and stops at the first line older than the window. A CLI/SDK session's first prompt carries a
-    human origin although a launcher passed it (measured) = it counts only when the session runs in the desktop app.
+    Reads from the end and stops at the first line older than the window. A session's first prompt is not counted: the
+    launch text a launcher passed (CLI, SDK and the desktop's start_session alike) carries a human origin (measured).
     None when there is none in the window or the file cannot be read.
     """
     ref = before if before is not None else now
@@ -174,8 +178,8 @@ def last_human(path: str, now: float, recent_s: float, before: float | None = No
                     found = {"at": ts if ts is not None else ref, "text": prompt_text(e),
                              "entrypoint": str(e.get("entrypoint") or "")}
                 continue
-            # A human line was found: is there any earlier prompt? (only matters for a non-desktop session)
-            if found["entrypoint"] == "claude-desktop":
+            # A human line was found: is there any earlier prompt? (a session's first prompt is its launch text)
+            if FIRST_PROMPT_COUNTS and found["entrypoint"] == "claude-desktop":
                 return found
             if b'"user"' not in raw:
                 continue
@@ -185,9 +189,9 @@ def last_human(path: str, now: float, recent_s: float, before: float | None = No
                 continue
             if isinstance(e, dict) and is_prompt_line(e):
                 return found
-        if found is not None and found["entrypoint"] == "claude-desktop":
+        if FIRST_PROMPT_COUNTS and found is not None and found["entrypoint"] == "claude-desktop":
             return found
-        return None  # the human line was the session's first prompt in a CLI/SDK session (or nothing was found)
+        return None  # the human line was the session's first prompt (or nothing was found)
     except OSError:
         return None
 
@@ -532,7 +536,7 @@ class _Human:
             if is_prompt_line(e):
                 seen_prompt = True
             if is_human(e):
-                if first and str(e.get("entrypoint") or "") != "claude-desktop":
+                if first and not (FIRST_PROMPT_COUNTS and str(e.get("entrypoint") or "") == "claude-desktop"):
                     continue
                 ts = _parse_ts(str(e.get("timestamp") or ""))
                 if ts is not None:
@@ -763,6 +767,10 @@ def selftest() -> int:
     tagged = human(now - 60, "<system-reminder>r</system-reminder>\n<cross-session-message from=\"local_y\">done")
     check("a peer message recorded with a human origin is not human", not is_human(tagged))
     check("a CLI session's first prompt is not human", last_human(os.path.join(proj, C + ".jsonl"), now, RECENT_S) is None)
+    launched = os.path.join(proj, "launched.jsonl")
+    with open(launched, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(human(now - 900, "You are the board worker")) + "\n" + json.dumps(asst(now - 800)) + "\n")
+    check("a desktop session's first prompt (launch text) is not human", last_human(launched, now, RECENT_S) is None)
 
     msg = decide(pay("SendMessage", {"to": "reader", "message": "x"}), now)
     check("SendMessage by name to the owner window: notice", bool(msg) and "reader" in msg and RULE in msg)
@@ -778,7 +786,7 @@ def selftest() -> int:
     check("non-send tool: quiet", decide(pay("Read", {"file_path": "/x"}), now) is None)
 
     # report back to the parent: the parent is an owner window too, but the sender reports upward
-    write_transcript(P, [human(now - 300), asst(now - 100)])
+    write_transcript(P, [peer(now - 900), human(now - 300), asst(now - 100)])
     check("reporting to the sender's parent: quiet",
           decide(pay("mcp__ccd_session_mgmt__send_message", {"session_id": f"local_{P}", "message": "x"}), now) is None)
 

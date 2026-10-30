@@ -13,12 +13,14 @@ pass=0; fail=0
 ok() { pass=$((pass+1)); echo "✅ $1"; }
 ng() { fail=$((fail+1)); echo "❌ $1"; }
 
-# 架空の session 3 本: 本人が 20 分前に発言した窓 (reader) / 別 session の message だけの worker (helper) / 送り手 (conductor)
+# 架空の session 4 本: 本人が 20 分前に発言した窓 (reader) / 別 session の message だけの worker (helper) / 送り手 (conductor) /
+# 起動文 (origin が human で入る最初の prompt) しか本人側の行が無い worker (launched)
 W=aaaaaaaa-0000-4000-8000-000000000001; P=bbbbbbbb-0000-4000-8000-000000000002; S=dddddddd-0000-4000-8000-000000000004
-python3 - "$TMP" "$W" "$P" "$S" <<'PY'
+L=eeeeeeee-0000-4000-8000-000000000005
+python3 - "$TMP" "$W" "$P" "$S" "$L" <<'PY'
 import json, os, sys, time
 from datetime import datetime, timezone
-tmp, W, P, S = sys.argv[1:5]
+tmp, W, P, S, L = sys.argv[1:6]
 now = time.time()
 iso = lambda t: datetime.fromtimestamp(t, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 proj = os.path.join(tmp, "projects", "-w"); sess = os.path.join(tmp, "sessions"); board = os.path.join(tmp, "board")
@@ -29,10 +31,11 @@ human = lambda t: {"type": "user", "timestamp": iso(t), "entrypoint": "claude-de
 peer = lambda t: {"type": "user", "timestamp": iso(t), "entrypoint": "claude-desktop",
                   "message": {"role": "user", "content": "<cross-session-message from=\"local_x\">hi"}}
 asst = lambda t: {"type": "assistant", "timestamp": iso(t), "message": {"role": "assistant", "content": [{"type": "text", "text": "ok"}]}}
-for sid, lines in ((W, [human(now - 1200), asst(now - 600)]), (P, [peer(now - 300), asst(now - 100)]), (S, [asst(now - 10)])):
+for sid, lines in ((W, [human(now - 3000), asst(now - 2000), human(now - 1200), asst(now - 600)]),
+                   (P, [peer(now - 300), asst(now - 100)]), (S, [asst(now - 10)]), (L, [human(now - 900), asst(now - 800)])):
     with open(os.path.join(proj, sid + ".jsonl"), "w") as fh:
         fh.write("".join(json.dumps(x) + "\n" for x in lines))
-for i, (sid, name) in enumerate(((W, "reader"), (P, "helper"), (S, "conductor"))):
+for i, (sid, name) in enumerate(((W, "reader"), (P, "helper"), (S, "conductor"), (L, "launched"))):
     with open(os.path.join(sess, f"{2000 + i}.json"), "w") as fh:
         json.dump({"sessionId": sid, "name": name, "pid": os.getppid(), "hostSessionId": f"local_{sid}", "cwd": "/w",
                    "messagingSocketPath": f"/tmp/owt/{2000 + i}.sock"}, fh)
@@ -61,6 +64,9 @@ out="$(run "$(ev SendMessage '{"to": "uds:/tmp/owt/2000.sock", "message": "x"}')
 
 out="$(run "$(ev SendMessage '{"to": "helper", "message": "x"}')")"
 [ -z "$out" ] && ok "T4 別 session の message しか無い worker では黙る" || ng "T4 鳴った: $out"
+
+out="$(run "$(ev SendMessage '{"to": "launched", "message": "x"}')")"
+[ -z "$out" ] && ok "T4b 起動文 (最初の prompt) しか本人側の行が無い worker では黙る" || ng "T4b 鳴った: $out"
 
 export OWNER_WINDOW_NOTICE_STATE_DIR="$TMP/state2"
 NOTE="python3 $TMP/board/scripts/board.py note --agent claude --session $S --request 20260101T000000Z-claude-aaaaaa --project p --policy ordinary --summary 'another agenda'"
