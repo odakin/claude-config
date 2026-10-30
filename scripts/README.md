@@ -274,6 +274,7 @@
 - **[pdf-print-preflight.mutants.json](pdf-print-preflight.mutants.json)** — pdf-print-preflight.py の「様式の案件の出力の受け入れ」 (7 段目) と派生物の origin の selftest に歯があることを、 判定の一部を外した mutant 4 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[pdf-print-preflight.py](pdf-print-preflight.py)** — 印刷直前の PDF preflight — 「画面で見えた」 を印刷の保証にしない機械 gate (office-automation.md#print-preflight)。
 - **[pdf-redact-text.py](pdf-redact-text.py)** — PDF の中の指定文字列 (暗証番号・口座番号など) を黒塗りし、 消えたことを文字層と画像で確かめる。
+- **[pdf-render-equal.py](pdf-render-equal.py)** — 2 つの PDF が同じに描けるかを画素で比べる (driver を helper 呼び出しに置き換えた・生成器を作り直したとき、 出力が変わっていないことの根拠にする。 違えば最初に違う頁と、 違う画素の数・囲む矩形 〔PDF pt〕 を出す)
 - **[pdf-review-render.py](pdf-review-render.py)** — 様式の PDF を目視用の PNG にする。 住所・口座・電話の行は塗ってから書き出す。--selftest 内蔵。
 - **[pdf-side-by-side.py](pdf-side-by-side.py)** — 2 つの PDF の同じ箇所を左右に並べた比較頁を作る: 案を決めるのは source でなく組版された姿。
 - **[pdf-to-text.py](pdf-to-text.py)** — PDF の本文を grep できる plain text にする — 合字・行末ハイフン・柱・頁番号を直し、直した数を報告する。--selftest 内蔵 (network 不要)。
