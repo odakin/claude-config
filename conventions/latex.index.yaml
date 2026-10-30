@@ -16,6 +16,9 @@ sections:
   - id: uppercase-protect-symbols
     level: 2
     title: "`\\MakeUppercase` は記号の小文字も大文字にする — 物理量の文字は `\\NoCaseChange{…}` で守る"
+  - id: italic-wrapper-upright-text
+    level: 2
+    title: "文を `\\textit` で包む macro は、 数式の中の `\\text` (添字の P・単位の GeV) まで斜体にする — macro の中で `\\let\\text\\textup`"
   - id: cite-set-after-commentout
     level: 2
     title: "comment-out 流儀の編集後は live `\\cite` 集合を照合する"
