@@ -4,7 +4,7 @@
 
 # conventions/ — カテゴリ別 index
 
-layer 1 (public) のドメイン固有規約 151 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
+layer 1 (public) のドメイン固有規約 152 file をカテゴリ別に列挙する。全 file の名前順 1 行列挙は [CONVENTIONS.md](../CONVENTIONS.md) 冒頭、リポ全体の構造 tree は [CLAUDE.md](../CLAUDE.md) を参照。
 
 ## Claude Code / harness 運用 (`harness-core`)
 
@@ -213,6 +213,8 @@ layer 1 (public) のドメイン固有規約 151 file をカテゴリ別に列�
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/cold-eyes-isolation.md (汚染経路 7 口 / 封じた sandbox / spec に書いてよいこと / 審査文書の変種 / 受領後の汚染 grep)。 本 file は旧 anchor を保つ stub
 - **[collaborators.md](collaborators.md)** — 共同研究者 DB (collaborators.yaml) を作成・更新するとき
   - 共同研究者DB規約 (= 連絡先・所属に加え、native 表記は parts ごとの source と確度を持ち、発音は本人録音 / 母語話者録音 / 対象言語 TTS / IPA / 近似を区別。生成音声の一時 URL は正本に保存しない)
+- **[conference-candidate-search.md](conference-candidate-search.md)** — 「次はどの会議で話すか」 を決めるために候補を洗い出すとき + 旅費の補助・出張の承認の〆切が先に来ていて、 まだ日程の出ていない会議に出せるかを判断するとき + 候補を比べた結果を次の年のために残すとき
+  - 会議の候補を洗い出して選ぶときの探し方と 2 つの罠 — 去年の開催月は当てにならない (シリーズは月を移す) / 資金と承認の〆は会議の告知より前に来る (予定日で出せるかを窓口に先に聞く)。 比べた結果は「選んだ 1 つ」 だけでなく「落とした候補と理由」 まで台帳に残す (次の年に同じ sweep をやり直さないため)
 - **[dirac-conventions.md](dirac-conventions.md)** — Dirac 行列・計量の規約を教科書 (Peskin–Schroeder / Srednicki / Weinberg) の間で読み替えるとき + 規約の違う文献から式を写すとき + 自分の project が「どの教科書の行を使うか」 を repo の記号の規約に宣言するとき + 共同研究者と「我々の (−,+,+,+) は Srednicki か Weinberg か」 を確かめるとき
   - Dirac 規約の対応表 (教科書 3 冊: 計量 / Clifford / (γ⁰)² と Hermite 性 / β / 正振動数 / Dirac 方程式 / 自由ラグランジアン / 伝播関数。 全セルが宣言の式番号つき、 推定は明記) + 変換の辞書 (γ_W = −iγ_S、 γ_P = γ_S で η が反転。 u = Cv^* の C の条件と書き方が行で変わること、 u の双線形を v で書くと運動量の順序が入れ替わること = #charge-conjugation) + 数値検算 script + 「project ごとに使う行を宣言し、 規約の違う文献から式を記号のまま写さない」「成分で書くなら表示を名指す (規約の行は表示も Hermite 性も決めない)」 規則
 - **[physics-notes.md](physics-notes.md)** — 物理・数理ノートを書くとき + 共著者がその話題を特定の原論文・教科書で学んでいて、 ノートを「読めない」 と言われたとき (#write-from-readers-source) + 共同研究者の問いにノートで答えるとき (#answer-only-the-question)
