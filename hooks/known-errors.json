@@ -160,6 +160,11 @@
       "match": "User does not exist: me",
       "doc": "conventions/zoom-meetings.md#presence-from-process",
       "hint": "Zoom の report の API は userId に me を受け付けない (code 1001)。 GET /users/me の id を userId に使う"
+    },
+    {
+      "match": "a worktree-isolated session's git operations must target its own worktree",
+      "doc": "conventions/claude-code-permissions.md#worktree-session-refuses-complex-command",
+      "hint": "worktree に入った session では本体が行き先を読めない command を拒否する。 path を書き下し、 処理は file に書いて回し、 git は 1 回に 1 つずつ打つ"
     }
   ]
 }
