@@ -31,6 +31,12 @@ sections:
   - id: latexdiff-fine-markup
     level: 2
     title: "式の中の変わった記号だけに印を付ける差分 (`--math-markup=fine`) の壊れ方と直し方"
+  - id: latexdiff-eqtree
+    level: 2
+    title: "式を latexdiff に渡さず、 構文木で比べる (`latexdiff-eqtree.py`)"
+  - id: latexdiff-views-check
+    level: 2
+    title: "差分 PDF を元の 2 版に読み戻して確かめる (`latexdiff-views-check.py`)"
   - id: latexdiff-deleted-blank-lines
     level: 2
     title: "latexdiff は削除された空行を comment out できない — diff PDF と live で段落の切れ方が違ったら削除空行の残留を疑う (2026-09-08)"
