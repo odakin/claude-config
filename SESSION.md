@@ -5,6 +5,8 @@
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
+- **共有 tree の stash・autostash の hook + 公開 commit message の校正の件数の検査** — [`hooks/shared-tree-stash-guard.py`](hooks/shared-tree-stash-guard.py) と Tier E の判定を入れ、 通常利用へ移る段階。 次は止まった実例で誤検出と打ち直しの手間を見る
+
 - **ネット由来の file の取り込み検査** — 規約 [`downloaded-file-scan.md`](conventions/downloaded-file-scan.md)・道具 [`scripts/downloaded-file-scan.py`](scripts/downloaded-file-scan.py)・網の hook [`hooks/downloaded-file-import-guard.py`](hooks/downloaded-file-import-guard.py) を入れ、 通常利用へ移る段階。 次に止められた取り込みで、 誤検出と射程外の経路 (curl で repo に直接落とす取得など) を見る
 
 - **出力が変わっていないことの根拠 (PDF)** — 案件の driver を engine の helper 呼び出しに置き換えたときに、 描いた画素で同じかを比べる道具 [`scripts/pdf-render-equal.py`](scripts/pdf-render-equal.py) (低い dpi で丸める・描く側が違えば変わる・raster と vector を比べない の 3 つを docstring に、 selftest)。 入口 = [`office-automation.md`](conventions/office-automation.md) の早見表の行。 次に同じ置き換えをするときは、 置き換える前と後を同じ機械で描いて 1 回通す
