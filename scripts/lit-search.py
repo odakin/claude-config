@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""lit-search.py — 先行研究の探索を API で回す (OpenAlex の全文検索・題名と要旨の論理式・被引用・要旨、 Crossref の書誌検索、 arXiv の検索)。 1 件 1 行、 --json も
+r"""lit-search.py — 先行研究の探索を API で回す (OpenAlex の全文検索・題名と要旨の論理式・被引用・要旨、 Crossref の書誌検索、 arXiv の検索と要旨、 INSPIRE の検索)。 1 件 1 行、 --json も
 
 WHY THIS EXISTS
 ---------------
@@ -18,7 +18,10 @@ WHAT IT DOES
 - `cites <doi|W…>`     その文献を引いている文献 (`filter=cites:`)。 Scholar の「被引用」 の代わり
 - `abstract <doi>…`    OpenAlex の要旨 (`abstract_inverted_index` を語順に戻す) と OA 版の所在
 - `crossref <query>`   Crossref の書誌検索 (`query.bibliographic`)。 総数は関連度の母集団なので「ヒット数」 にしない
-- `arxiv <query>`      arXiv API (`search_query`、 例 `ti:"geoscience revisited"`、 `au:Deluca AND au:Corral`)
+- `arxiv <query>`      arXiv API (`search_query`、 例 `ti:"geoscience revisited"`、 `au:Deluca AND au:Corral`)。
+                       `--newest` = 提出日の新しい順 (既定は関連度順 = 最近の測定を探すときは付ける)
+- `arxiv-abstract <id>…` arXiv の要旨 (id は vN なしで可、 応答の id に版が付く)
+- `inspire <query>`    INSPIRE の検索 (`t …`、 `abstracts.value:"…"`、 `date > 2026-01-01` など)、 新しい順
 - 各行 = 年 | DOI か id | 題 | 誌名 | 被引用数。 先頭行に API の総数 (OpenAlex の `meta.count` 等)
 - `--log <file>` に 1 リクエスト 1 行 (時刻・HTTP status・URL) を追記 = 検索ログの再現の根拠
 - `--cache-dir <dir>` で応答を保存 (同じ URL は引き直さない)。 **誤り応答 (4xx/5xx) は保存しない**
@@ -39,6 +42,9 @@ USAGE
     python3 lit-search.py abstract 10.1137/070710111
     python3 lit-search.py crossref "Clauset Shalizi Newman 2009 Power-law distributions in empirical data" -n 3
     python3 lit-search.py arxiv 'ti:"power-law distributions"'
+    python3 lit-search.py arxiv 'cat:hep-ex AND abs:"cross section"' --newest -n 25
+    python3 lit-search.py arxiv-abstract 1810.07868
+    python3 lit-search.py inspire 'abstracts.value:"cross section" and date > 2026-01-01' -n 25
     python3 lit-search.py --selftest            # network を使わない
     (礼儀として連絡先を名乗るなら環境変数 OPENALEX_MAILTO / CROSSREF_MAILTO = <address>。 既定は名乗らない)
 """
@@ -57,6 +63,7 @@ UA = "lit-search/1.0 (academic literature survey; low volume)"
 OPENALEX = "https://api.openalex.org/works"
 CROSSREF = "https://api.crossref.org/works"
 ARXIV = "https://export.arxiv.org/api/query"
+INSPIRE = "https://inspirehep.net/api/literature"
 
 
 class HttpError(RuntimeError):
@@ -159,6 +166,35 @@ def arxiv_rows(xml):
     return (int(total.group(1)) if total else None), out
 
 
+def arxiv_url(query, n, newest=False):
+    order = "&sortBy=submittedDate&sortOrder=descending" if newest else ""
+    return f"{ARXIV}?search_query={urllib.parse.quote(query, safe=':')}&max_results={n}{order}"
+
+
+def arxiv_abstracts(xml):
+    out = []
+    for e in re.findall(r"<entry>(.*?)</entry>", xml, re.S):
+        g = lambda tag: (re.search(rf"<{tag}[^>]*>(.*?)</{tag}>", e, re.S) or [None, ""])[1]
+        out.append({"id": g("id").rsplit("/abs/", 1)[-1], "date": g("published")[:10],
+                    "title": re.sub(r"\s+", " ", g("title")).strip(),
+                    "abstract": re.sub(r"\s+", " ", g("summary")).strip()})
+    return out
+
+
+def inspire_url(query, n):
+    fields = "titles,arxiv_eprints,earliest_date,publication_info,citation_count"
+    return f"{INSPIRE}?sort=mostrecent&size={n}&fields={fields}&q={urllib.parse.quote(query)}"
+
+
+def inspire_row(hit):
+    m = hit["metadata"]
+    pub = (m.get("publication_info") or [{}])[0]
+    return {"year": (m.get("earliest_date") or "")[:10], "id": (m.get("arxiv_eprints") or [{}])[0].get("value"),
+            "title": (m.get("titles") or [{}])[0].get("title"),
+            "venue": " ".join(str(pub[k]) for k in ("journal_title", "journal_volume") if pub.get(k)),
+            "cited": m.get("citation_count")}
+
+
 def show(total, rows, as_json, label):
     if as_json:
         print(json.dumps({"source": label, "total": total, "results": rows}, ensure_ascii=False, indent=1))
@@ -202,9 +238,18 @@ def run(a):
             show(d["message"].get("total-results"), [crossref_row(m) for m in d["message"].get("items", [])],
                  a.json, "Crossref (total = 関連度の母集団、 ヒット数ではない)")
         elif a.cmd == "arxiv":
-            total, rows = arxiv_rows(c.get(f"{ARXIV}?search_query={urllib.parse.quote(a.query, safe=':')}"
-                                           f"&max_results={a.n}", as_json=False))
+            total, rows = arxiv_rows(c.get(arxiv_url(a.query, a.n, a.newest), as_json=False))
             show(total, rows, a.json, "arXiv")
+        elif a.cmd == "arxiv-abstract":
+            rows = arxiv_abstracts(c.get(f"{ARXIV}?max_results={len(a.ids)}&id_list={','.join(a.ids)}", as_json=False))
+            if a.json:
+                print(json.dumps(rows, ensure_ascii=False, indent=1))
+            else:
+                for r in rows:
+                    print(f"### {r['id']} | {r['date']} | {r['title']}\n{r['abstract']}\n")
+        elif a.cmd == "inspire":
+            d = c.get(inspire_url(a.query, a.n))
+            show(d["hits"]["total"], [inspire_row(h) for h in d["hits"]["hits"]], a.json, "INSPIRE (新しい順)")
     except HttpError as e:
         sys.exit(f"{e} — リトライしない。 429 なら鍵なしの利用の制限 (その source を止めて検索ログに書く)")
 
@@ -223,6 +268,17 @@ def selftest():
     total, rows = arxiv_rows("<feed><opensearch:totalResults>1</opensearch:totalResults><entry><id>http://arxiv.org/abs/1810.07868v2</id>"
                              "<published>2018-10-18T00:00:00Z</published><title>Power-law size\n distributions</title></entry></feed>")
     assert total == 1 and rows[0]["id"] == "1810.07868v2" and rows[0]["title"] == "Power-law size distributions", rows
+    assert "sortBy=submittedDate" in arxiv_url('abs:"x y"', 5, newest=True), "新しい順が URL に入っていない"
+    assert "sortBy" not in arxiv_url('abs:"x y"', 5) and "abs:%22x%20y%22" in arxiv_url('abs:"x y"', 5)
+    abs_rows = arxiv_abstracts("<feed><entry><id>http://arxiv.org/abs/1810.07868v2</id><published>2018-10-18T00:00:00Z"
+                               "</published><title>A title</title><summary>Two\n lines</summary></entry></feed>")
+    assert abs_rows == [{"id": "1810.07868v2", "date": "2018-10-18", "title": "A title", "abstract": "Two lines"}], abs_rows
+    assert "sort=mostrecent" in inspire_url('t "x" and date > 2026-01-01', 3)
+    r = inspire_row({"metadata": {"earliest_date": "2026-01-02T00", "arxiv_eprints": [{"value": "2601.00001"}],
+                                  "titles": [{"title": "A title"}], "citation_count": 4,
+                                  "publication_info": [{"journal_title": "J.Test", "journal_volume": "9"}]}})
+    assert r == {"year": "2026-01-02", "id": "2601.00001", "title": "A title", "venue": "J.Test 9", "cited": 4}, r
+    assert inspire_row({"metadata": {}})["id"] is None, "欠けた欄で落ちる"
     # 誤り応答を cache に残さないこと (network を使わず、 応答を差し替えて確かめる)
     import tempfile
 
@@ -276,12 +332,18 @@ def main(argv=None):
     p = sub.add_parser("arxiv")
     p.add_argument("query")
     p.add_argument("-n", type=int, default=10)
+    p.add_argument("--newest", action="store_true", help="提出日の新しい順 (既定 = 関連度順)")
+    p = sub.add_parser("arxiv-abstract")
+    p.add_argument("ids", nargs="+")
+    p = sub.add_parser("inspire")
+    p.add_argument("query")
+    p.add_argument("-n", type=int, default=25)
     a = ap.parse_args(argv)
     if a.selftest:
         selftest()
         return
     if not a.cmd:
-        ap.error("subcommand が要る (oa / cites / abstract / crossref / arxiv)")
+        ap.error("subcommand が要る (oa / cites / abstract / crossref / arxiv / arxiv-abstract / inspire)")
     if a.cmd == "oa" and a.sort is None:
         a.sort = "cited" if a.boolean else "relevance"
     run(a)
