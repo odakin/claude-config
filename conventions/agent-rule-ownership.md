@@ -126,7 +126,7 @@ engine の名前を含む code / 設定 file は全文を `authority:wiring` と
 - 区画の中の削除と書き換えは記録しない (緩和の語だけを記録する)。 区画に規則を置かない運用が前提。
 - 区画の書き方の例を code fence の中に marker ごと載せると、 その例の中身も外れる (始まりと終わりが同じ fence にあれば区画になるため)。 書き方の例は inline code で書く。 例の追加も marker を足す変更なので本人の裁定を通るが、 そのとき区画になることが差分からは見えにくい。
 - fence の判定は行頭の ```` ``` ```` / `~~~` だけを見る (字下げした行も fence と数え、 CommonMark の字下げ code block と区別しない)。 閉じない fence が後ろの区画の判定を変えることがある。
-- 本 repo の CLAUDE.md の木の区画の中は、 規約を指す行も含めて保護しない。 木は生成物で、 手で消した行は生成との一致検査 (`generate-tree.py --check`) が止める。
+- 本 repo の CLAUDE.md の木の区画の中は、 規約を指す行も含めて保護しない。 木は生成物で、 手で消した行は生成との一致検査 (`generate-tree.py --check`) が見つける。 commit の時は警告だけで、 赤にするのは run-all-checks と CI。
 
 ## <a id="approval"></a>本人の裁定と候補の記録
 
