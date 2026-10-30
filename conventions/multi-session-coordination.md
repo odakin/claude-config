@@ -967,6 +967,19 @@ request の単位。 mail の thread・台帳の項目のような「用事」 �
    - 残る穴: 渡すのは台帳の上だけで、 受け持つ session を起こさない (受け持つ session が次に turn を終えるまで問われない)。
      表示の台帳に載らない段 (自分が動く期限の行など) は渡らない。
 
+7. <a id="reserve-before-work"></a>**別の機械の session とも重ねないなら、 作業の前に、 全体の順序がある場所へ予約を書く**:
+   二度目の書き込みを断る仕組み (claim や受領の二重を断る掲示板など) は記録の重複を防ぐが、 手間の重複は防がない。 断られるのは
+   書き込むときなので、 その手前までは両方の session が動く (2 つが同じ worker を起こす・同じ提出を読み通す = 実測)。 どの機械が
+   拾うかを規約で 1 台に決めても、 2 台目を止める物は無く、 その 1 台が止まると用事が待つ。
+   - 予約は worker を起こす・成果物を読み始める**前に**、 順序を決められる場所 (push の順で勝ち負けが決まる共有の履歴など) に書く。
+     上の claim の台帳は手元の file なので、 同じ機械の session しか分けない。
+   - 予約は次の状態遷移か時間切れで消える形にする (予約したまま止まった session が用事を塞がない)。
+   - 宛先の session が終わったかどうかは、 その会話記録を持つ機械でしか分からない。 ほかの機械からは「不明」 として扱い、
+     終わったものとして動かない。
+   - 背景の見張りで起きた turn は session を起こせない ([`#chip-in-event-turns`](#chip-in-event-turns)) ので、 受け持つ session (6) が
+     見張りで動く運用では、 worker は本人が押す card で出す。 検収や返事はその turn で書ける。
+   - 参照実装 = [`CONTRACT.md#pickup`](../../ai-collaboration/board/CONTRACT.md#pickup)。
+
 参照実装 = ai-collaboration [`board/board_items.py`](../../ai-collaboration/board/board_items.py)
 (CLI と台帳の置き場 = [`CONTRACT.md#item-claims`](../../ai-collaboration/board/CONTRACT.md#item-claims))。
 
