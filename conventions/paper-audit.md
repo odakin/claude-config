@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment)
+when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment) + 統計量で型 (外れ値・ばらつき・2 群) を分けると書く前・その較正を組むとき (#classifier-claim-calibration)
 category: paper
 summary: multi-paper merger 等の forward ref / 重複 subsection / structure issue を Phase1 機械検出 + Phase2 section-by-section AI 精読 + findings.yaml で体系 audit
 -->
@@ -574,9 +574,23 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 5. 仕組みが空でないことを mutation で示す: 印字を変えた登録・断片を変えた登録・入力の cache を隠した状態が、 それぞれ不一致・断片なし・理由を名指した skip になること。
 6. 印字は full precision の値から丸める。 丸めた中間の値 (results の file の桁) から丸め直さない。
 7. データに合わせた合成の構成は、 その parameter をデータから code で計算し、 一致を assert する。 構成の parameter をデータの統計量として印字しない。
-8. 表の定性の label には判定の基準を書き、 計算を記録に残す ([`writing-discipline.md#no-unshown-verification-claim`](writing-discipline.md#no-unshown-verification-claim) の表の版)。
+8. 表の定性の label には判定の基準を書き、 計算を記録に残す ([`writing-discipline.md#no-unshown-verification-claim`](writing-discipline.md#no-unshown-verification-claim) の表の版)。 型を分ける label (外れ値・ばらつき・2 群の類) なら、 基準の較正のしかた = [#classifier-claim-calibration](#classifier-claim-calibration)。
 9. 生成器を同じ seed で回し直して一致するのは再現性の検査で、 生成器の正しさの検証ではない (正しさは独立実装か spot-check の仕事)。
 10. 2 つ目の project で同じことをするときに、 登録・照合・対照の engine を層1 の道具にする ([#second-example-refine](#second-example-refine))。
+
+## <a id="classifier-claim-calibration"></a>「この統計量で型を分ける」 と書く前に、 観測に合わせた合成で混同行列を測る — 感度だけでは label の当たる率は分からない
+
+**Pattern** (実測): 統計量の「型ごとの典型の形」 (外れ値 1 つ・広いばらつき・2 群でそれぞれ形が違う) を理由に、 その統計量で型を分けられると本文に書いていた。 観測と同じ誤差の並びと同じ分散に合わせた合成で測ると、 その統計量の分布は型の間でほとんど重なっていた。 別の部品 (1 点を抜くと分散の警告が消えるか) は本物の外れ値には敏感だったが、 外れ値の無いばらつきでも同じ反応がよく出た = 感度だけを見て「外れ値を見つける」 と書くと、 型を混ぜたときの「外れ値」 の label の多くは本物でない。
+
+**Rule**:
+
+1. **規則と合成の作り方を、 対象の統計量を計算する前に commit で固定する** — 判定の段・閾値の決め方・合成の家系・読み方 (何倍で「示された」 と言うか) を note の節に書いて commit し、 対象の統計量はその後に計算する。 後で気づいたことは別の節 (事後の注) に足す。 締めで、 固定した節を見出しで切り出し、 固定した commit の同じ範囲と 1 字も違わないことを code で確かめる。
+2. **型ごとに純粋な家系を作り、 分散の統計量は観測値に厳密に合わせる** — 家系を混ぜると真の型が決まらず、 混同行列が読めない。 誤差の並びは観測のまま、 χ² のような分散の統計量は replica ごとに観測値と等しくする (平均で合わせない)。 分散の大きさが家系で違うと、 型でなく分散の大きさで「分けた」 ように見える。 各家系の構造を 1 つの振幅に持たせると、 重みつき平均からの残差の 2 乗和は振幅の 2 次式になるので、 2 次方程式の正の根で合わせられる (雑音だけで目標を超えた replica だけを引き直す)。
+3. **閾値を決める replica と率を測る replica は別の乱数列にする** — 同じ列だと、 閾値のゆらぎがその列に合わさって偽警報が少なく見える。 seed は (case・家系・用途・番号) から作り、 並列の worker の数で結果が変わらないことを test で確かめる。
+4. **報告は混同行列と、 label のうち本物の割合の両方** — 真の家系ごとに各 label の率 (二項の標準誤差つき) を出し、 家系を等しく混ぜたときに各 label のうち本物がどれだけかも書く。 感度 (本物を拾う率) だけを書かない。 等しく混ぜる割合は仮定で、 現実の型の頻度ではないと添える。
+5. **観測した 1 件は、 規則の label のほかに家系ごとの密度の比で読む** — 観測した統計量の点での家系の密度の比 (尤度比) を出す。 「示された」 と言う強さ (例: 3 倍以上) は 1 で前もって決める。 label だけでは、 観測が判定の境界のどれだけ内側にいるかが落ちる。
+6. **構造が分かっている case を陽性対照にする** — 期待する型を計算の前に宣言して当てる。 label が期待と合っても、 密度の比が小さければ「分けられる」 根拠にはならない。
+7. **本文の主張は測った率に合わせて絞る** — 分けられなかった型の組は「この統計量では分けず、 別の部品 (分布の形を見る層・前もって宣言した群の検定など) が分ける」 と書く。 絞るかは著者が決める ([`manuscript-claim-ownership.md`](manuscript-claim-ownership.md))。 絞ると、 その統計量を文献の道具と対比した文 (「より狭い問いを立てる」 の類) が成り立たなくなることがある = 一緒に読み直す。
 
 ## <a id="flagged-formula-consumption"></a>付録に「この式は誤り」 の注記が残っているときは、 本文が消費しているかを機械で引き、 本文の数値の出所を辿る
 
