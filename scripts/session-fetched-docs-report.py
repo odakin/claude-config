@@ -8,10 +8,10 @@
 置き場と保存の規則 = closing-sweep.md#fetched-originals。 本 script は session 本体の分だけを数える (agent・worker の取得は数えない)。
 
 拾うもの (session 本体の記録 <projects-dir>/<project>/<session id>.jsonl の道具の呼び出し):
-  1. arXiv の原典 — Bash の command に arxiv.org/pdf/ か arxiv.org/e-print/ の URL があれば、 その command の中の arXiv の番号を全部。
+  1. arXiv の原典 — Bash の command か WebFetch の URL に arxiv.org/pdf/ か arxiv.org/e-print/ があれば、 その中の arXiv の番号を全部。
      loop (`for id in A B C; do curl …/pdf/$id`) も拾える。 URL の無い command の番号は数えない (書誌の API・INSPIRE の検索を除くため)
   2. 手元の PDF — (a) Read の file_path、 (b) Bash の curl -o / wget -O の書き先、 (c) Bash の command に現れる取り込み口
-     (DROP_DIRS = ~/Desktop・~/Downloads) の下の `….pdf`。 repo の中の PDF (保存済みの原物を読み直した・組版の生成物) と、
+     (DROP_DIRS = ~/Desktop・~/Downloads) の下の `….pdf`、 (d) arXiv 以外の URL で WebFetch が保存した PDF (結果の「also saved to」 の path)。 repo の中の PDF (保存済みの原物を読み直した・組版の生成物) と、
      隣に同じ名前の .tex がある PDF (組版の生成物) は数えない。 path の変数は同じ command で先に代入したものだけ展開し、
      展開できない path と glob は数えない (loop の取得は 1 の番号で拾う)
 
@@ -55,6 +55,8 @@ ARXIV_ID_RE = re.compile(
     r"|(?:hep-th|hep-ph|hep-ex|hep-lat|gr-qc|astro-ph|cond-mat|quant-ph|math-ph|nucl-th|nucl-ex|physics|math)"
     r"(?:\.[A-Z]{2})?/\d{7})(v\d+)?(?![\w])")
 PDF_TOKEN_RE = re.compile(r"(['\"]?)((?:~|/|\$\{?\w+\}?/)[^\s'\";|&<>()]*?\.pdf)\1(?=[\s'\";|&<>)]|$)", re.I)
+# WebFetch は PDF を要約に渡せず、 取得物を tool-results の下に保存して結果の末尾にその path を書く
+WEBFETCH_SAVED_RE = re.compile(r"also saved to (\S+?\.pdf)\b", re.I)
 OUTPUT_RE = re.compile(r"\b(?:curl|wget)\b[^\n;|&]*?\s(?:-o|--output|-O|--output-document)\s+(['\"]?)([^\s'\";|&<>]+)\1")
 # 取り込む前の検査のために空の dir へ写した写し (`cp <元> <写し>`)。 写しが消えても元で照合する
 CP_RE = re.compile(r"(?:^|[\s;&|(])cp\s+(?:-\w+\s+)*(['\"]?)([^\s'\";|&<>]+)\1\s+(['\"]?)([^\s'\";|&<>]+)\3(?=\s*(?:$|[;&|\n)]))")
@@ -77,6 +79,12 @@ def collect(calls, drop_dirs=DROP_DIRS):
         if path and path.lower().endswith(".pdf") and path not in local:
             local[path] = {"how": how, "time": ts}
 
+    def add_arxiv(text, ts, head):
+        for m in ARXIV_ID_RE.finditer(text):
+            rec = arxiv.setdefault(m.group(1), {"versions": set(), "time": ts, "cmd": head})
+            if m.group(2):
+                rec["versions"].add(m.group(2))
+
     for name, inp, ts, _err, cwd, _out in calls:
         cmd = inp.get("command") or "" if name == "Bash" else ""
         for m in CP_RE.finditer(cmd):
@@ -86,20 +94,26 @@ def collect(calls, drop_dirs=DROP_DIRS):
                     dst = os.path.join(dst, os.path.basename(src))
                 copied_from[dst] = src
 
-    for name, inp, ts, _err, cwd, _out in calls:
+    for name, inp, ts, _err, cwd, out in calls:
         if name == "Read":
             fp = inp.get("file_path") or ""
             if fp.lower().endswith(".pdf"):
                 add_local(ssr._expand(fp, cwd), "Read で開いた", ts)
             continue
+        if name == "WebFetch":
+            url = inp.get("url") or ""
+            if ARXIV_URL_RE.search(url):
+                add_arxiv(url, ts, "WebFetch " + url[:100])
+            else:
+                saved = WEBFETCH_SAVED_RE.search(out or "")
+                if saved:
+                    add_local(saved.group(1), "WebFetch が保存した (" + url[:80] + ")", ts)
+            continue
         if name != "Bash":
             continue
         cmd = inp.get("command") or ""
         if ARXIV_URL_RE.search(cmd):
-            for m in ARXIV_ID_RE.finditer(cmd):
-                rec = arxiv.setdefault(m.group(1), {"versions": set(), "time": ts, "cmd": cmd.strip().splitlines()[0][:120]})
-                if m.group(2):
-                    rec["versions"].add(m.group(2))
+            add_arxiv(cmd, ts, cmd.strip().splitlines()[0][:120])
         for m in OUTPUT_RE.finditer(cmd):
             add_local(_expand_at(cmd, m.start(2), m.group(2), cwd), "URL から取得 (curl / wget の書き先)", ts)
         for m in PDF_TOKEN_RE.finditer(cmd):
@@ -261,11 +275,11 @@ def selftest():
         sid = "feedface-0000-0000-0000-000000000000"
         recs = []
 
-        def call(i, name, inp):
+        def call(i, name, inp, result="x"):
             recs.append({"type": "assistant", "timestamp": "2026-01-01T00:00:%02d" % i, "cwd": repo,
                          "message": {"content": [{"type": "tool_use", "id": "t%d" % i, "name": name, "input": inp}]}})
             recs.append({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t%d" % i,
-                                                                  "content": "x"}]}})
+                                                                  "content": result}]}})
         call(1, "Bash", {"command": 'D=/tmp/x; for id in 2401.00001 2402.00002; do curl -sL -o $D/$id.pdf "https://arxiv.org/pdf/$id"; done'})
         call(2, "Bash", {"command": "curl -s 'https://export.arxiv.org/api/query?id_list=2403.00003'"})
         call(3, "Read", {"file_path": os.path.join(drop, "given.pdf")})
@@ -278,12 +292,20 @@ def selftest():
         # 検査のために空の dir へ写した写し (消えている) を Read → 元 (取り込み口、 保存済み) で照合する
         call(10, "Bash", {"command": "W=" + os.path.join(t, "scan") + "; mkdir -p $W && cp " + os.path.join(drop, "given.pdf") + " $W/paper.pdf"})
         call(11, "Read", {"file_path": os.path.join(t, "scan", "paper.pdf")})
+        call(12, "WebFetch", {"url": "https://arxiv.org/pdf/2405.00005v2", "prompt": "p"})
+        call(13, "WebFetch", {"url": "https://arxiv.org/abs/2406.00006", "prompt": "p"})
+        saved = os.path.join(t, "tool-results", "webfetch-1.pdf")
+        Path(saved).parent.mkdir()
+        Path(saved).write_bytes(b"%PDF-1.4 fetched")
+        call(14, "WebFetch", {"url": "https://example.org/report.pdf", "prompt": "p"},
+             "読めません\n[Binary content (application/pdf, 1MB) also saved to " + saved + "]")
         Path(proj, sid + ".jsonl").write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
 
         calls = ssr.read_calls(Path(proj, sid + ".jsonl"))
         arxiv, local = collect(calls, drop_dirs=(drop,))
-        check(set(arxiv) == {"2401.00001", "2402.00002", "hep-th/9901001"},
-              "arXiv = URL のある command の番号だけ (loop も、 古い形も。 書誌の API の番号は数えない)")
+        check(set(arxiv) == {"2401.00001", "2402.00002", "hep-th/9901001", "2405.00005"},
+              "arXiv = URL のある command と WebFetch の PDF の番号だけ (loop も、 古い形も。 書誌の API と abs の頁は数えない)")
+        check(arxiv["2405.00005"]["versions"] == {"v2"}, "WebFetch の URL の版も取る")
         check(arxiv["hep-th/9901001"]["versions"] == {"v3"}, "版を取る")
         rows = {r["what"]: r for r in judge(arxiv, local, tracked_files([repo]))}
         check(rows["arXiv:2401.00001 (版の指定なし)"]["mark"] == "✅", "名前に番号がある保存は ✅ (版が違っても)")
@@ -295,14 +317,15 @@ def selftest():
         check(rows[os.path.join(t, "gone", "vanished.pdf")]["mark"] == "❌", "もう無い PDF は ❌")
         check(rows[os.path.join(scratch, "dl.pdf")]["mark"] == "⚠️", "curl -o の書き先は変数を展開して数える")
         check(not any("q.pdf" in k for k in rows), "展開できない変数の書き先は数えない")
+        check(rows[saved]["mark"] == "⚠️", "WebFetch が保存した PDF (arXiv 以外) も数える")
         copy = [r for k, r in rows.items() if k.startswith(os.path.join(t, "scan", "paper.pdf"))]
         check(len(copy) == 1 and copy[0]["mark"] == "✅" and "写し" in copy[0]["what"],
               "消えた写しは cp の元で照合する (❌ にしない)")
         res = []
         _capture(lambda: res.append(report(sid[:8], [Path(t, "projects")], root, True, False, drop_dirs=(drop,))))
-        check(res == [(0, 5)], "保存なし・もう無い = 5 (2402.00002・hep-th/9901001・other・vanished・dl)")
+        check(res == [(0, 7)], "保存なし・もう無い = 7 (2402.00002・hep-th/9901001・2405.00005・other・vanished・dl・WebFetch の PDF)")
         out = json.loads(_capture(lambda: report(sid[:8], [Path(t, "projects")], root, True, True, drop_dirs=(drop,))))
-        check(out["unsaved"] == 5 and out["repos"] == 1, "json も同じ数")
+        check(out["unsaved"] == 7 and out["repos"] == 1, "json も同じ数")
     print("selftest: " + ("PASS" if ok else "FAIL"))
     return 0 if ok else 1
 
