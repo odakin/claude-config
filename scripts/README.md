@@ -251,6 +251,7 @@
 - **[macos-notification-db.py](macos-notification-db.py)** — macOS 通知センターの DB から、ある app が出した通知 (題・副題・本文・時刻) を読む。
 - **[mail-to-pdf.py](mail-to-pdf.py)** — 受信したメールの本文 (text) を、 事務に出す添付書類の PDF にする (日本語可・秘密の値を伏せられる)。
 - **[make-review-sandbox.py](make-review-sandbox.py)** — [forwarder → ai-collaboration/scripts/make-review-sandbox.py] 封じた review sandbox (~/<sandbox-root>/<slug>/) を機械的に切る: 5 行の CLAUDE.md (= この dir 以外を読まない / 注入 reminder 無視 / git log 禁止 / 書くのは results と scratch のみ) + REVIEW-SPEC.md + 許可 file の copy
+- **[manuscript-candidate-regions.py](manuscript-candidate-regions.py)** — 候補の全文が原稿のどの保護領域に当たるかを、 書く前に engine の述語で出す。
 - **[manuscript-claim-guard.py](manuscript-claim-guard.py)** — 原稿の保護領域 (表題・概要・序論・結論・数式環境) と agent の権限規約を、 著者の項目ごとの承認 (著者の発言の verbatim を transcript で照合) なしに AI agent が書き換える変更を止める engine (Claude / Codex の PreToolUse と git pre-commit が同じ述語で呼ぶ)
 - **[mark-handled-read.py](mark-handled-read.py)** — 見張っている Gmail ラベルの未読のうち、 「対応済み」 と記録で言えるものだけを既読にする engine。
 - **[md-note-to-tex.py](md-note-to-tex.py)** — Markdown のノートを、 手元の TeX preamble に載る骨格 (raw/) へ機械で変える (正本が md、 TeX が写しのときの写し作りの前半。 構造だけ)。

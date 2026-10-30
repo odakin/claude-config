@@ -58,8 +58,10 @@ engine = [`scripts/manuscript-claim-guard.py`](../scripts/manuscript-claim-guard
 ## <a id="limits"></a>5. 限界 — 機械で止まらないもの
 
 - **保護領域の外の本文**: §1 は原稿全体の物理主張に及ぶが、 機械が見るのは保護領域と数式だけ。 repo の `protect_sections` で節を足せる。
+- <a id="conclusion-title-boundary"></a>**結論の節の題**: 結論は見出しで判定するので、 engine の名前の一覧 (`CONCL_RE`) に無い題の節は、 原稿の最後の節でも機械の保護の外になる (実測)。 題を変えると保護の境界も動く (同じ作業の途中でも)。 案を当てる前に、 写しに当てた全文を engine の `protected_changes(<repo からの path>, <基準の文>, <候補の文>, <repo>)` に渡すと、 どの領域の記録が要るかが分かる (`scan` は作業ツリーしか読まないので、 まだ当てていない候補は見えない。 道具 = [`scripts/manuscript-candidate-regions.py`](../scripts/manuscript-candidate-regions.py))。 引ける発言は最新のものだけなので、 次の発言が来る前に記録できる。 §1 の主張の範囲は題に依らない = 機械の外でも裁定は要る。
 - **引用の意味**: 「直して」 を概要の削除の裁定として記録することは機械では止まらない。 代わりに、 記録したターンの最後の返事に引いた発言と対象の file を書くことを Stop hook が求める (無ければ 1 回差し戻す) = 著者はその場で見て止められる。 §1-3 が床。
 - **依頼文が user 発言として入る経路**: 別の session が書いた依頼文を著者が貼って送ると、 その中の文も user 発言として照合される。 依頼そのものは著者の指示だが、 依頼文が伝聞として書く「著者は X を承認した」 は裁定ではない。 機械はこの 2 つを区別しない (§1-3 が床)。
+- <a id="blanket-ruling-scope"></a>**一括の裁定の範囲**: 「案をぜんぶ当ててよい」 の類の発言は、 その発言の時点で案の文が書かれていた変更に掛かる。 後から作った案には掛からない = 全部を今の文と案の文で並べて、 もう 1 回聞く (実測)。 機械は発言の範囲を読まない (§1-3 が床)。
 - **校正の判定**: 機械が通す綴りは列挙済みのものだけ。語の意味全体やコメントの著者性を判定する仕組みではない。
 - **人の commit と見分けられない commit**: agent の session の env が無い commit は、 git 面では人の commit として通る。 Claude / Codex の PreToolUse(Bash) が commit の前に同じ述語で止めるのはこのため。
 - **Bash で書き換えて commit しない場合**: 書き換え自体は止めない。 完了 gate ([`CONVENTIONS.md#completion-git-gate`](../CONVENTIONS.md#completion-git-gate)) が commit を求め、 その commit で止まる。
