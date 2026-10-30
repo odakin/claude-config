@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-clamav.test.sh — install-clamav.sh の test (偽の brew と freshclam で、 足りないものだけ揃う・既存の設定を触らない・更新なしを成功と読む・失敗の値を返す)
+# install-clamav.test.sh — install-clamav.sh の test (偽の brew と freshclam で、 足りないものだけ揃う・既存の設定を触らない・freshclam の失敗の値をそのまま返す)
 set -uo pipefail
 
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -50,10 +50,12 @@ bash "$TOOL" >/dev/null 2>&1
 [ "$(wc -l < "$T/fresh.log" | tr -d ' ')" -eq 1 ] && ok "2 回目は定義を取り直さない" || ng "freshclam を 2 回呼んだ"
 grep -q '本人の設定' "$P/etc/clamav/freshclam.conf" && ok "既存の設定を触らない" || ng "設定を上書きした"
 
-FRESHCLAM_RC=1 bash "$TOOL" --update; rc=$?
-[ "$rc" -eq 0 ] && ok "--update: 更新なし (1) は成功" || ng "--update の 1 が rc=$rc"
-FRESHCLAM_RC=52 bash "$TOOL" --update >/dev/null 2>&1; rc=$?
-[ "$rc" -eq 52 ] && ok "--update: 失敗の値を返す" || ng "--update の 52 が rc=$rc"
+FRESHCLAM_RC=0 bash "$TOOL" --update; rc=$?
+[ "$rc" -eq 0 ] && ok "--update: 更新なし (0) は成功" || ng "--update の 0 が rc=$rc"
+for code in 1 52 54; do
+  FRESHCLAM_RC=$code bash "$TOOL" --update >/dev/null 2>&1; rc=$?
+  [ "$rc" -eq "$code" ] && ok "--update: 失敗の値 $code をそのまま返す" || ng "--update の $code が rc=$rc"
+done
 
 CLAMAV_BREW=/nonexistent bash "$TOOL" --check >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 1 ] && ok "Homebrew が無ければ 1" || ng "brew 無しで rc=$rc"

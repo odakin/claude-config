@@ -4,7 +4,7 @@
 # usage: install-clamav.sh [--check | --update]
 #   (なし)    足りないものだけ揃える: brew install clamav → freshclam.conf → 定義の取得
 #   --check   書かずに、 足りないものを出して exit 1 (揃っていれば 0)
-#   --update  定義を更新する (定期 job が呼ぶ。 更新なしも成功 = exit 0、 それ以外は freshclam の終了値)
+#   --update  定義を更新する (定期 job が呼ぶ。 終了値 = freshclam のもの、 更新なしも 0)
 #
 # 定義の毎日の更新は入れない (label と時刻は呼び出し側の層が決める = install-launchd-cron.sh の cmd routine に --update を呼ぶ shim を渡す)。
 # launchd の PATH には Homebrew が無いので brew は固定の path も探す。 常駐の clamd は使わない。
@@ -46,12 +46,9 @@ have_defs() {
   { [ -f "$DB/main.cvd" ] || [ -f "$DB/main.cld" ]; } && { [ -f "$DB/daily.cvd" ] || [ -f "$DB/daily.cld" ]; }
 }
 
+# freshclam の終了値は更新なしも 0 (man freshclam の RETURN CODES)。 それ以外は失敗としてそのまま返す
 update_defs() {
   "$PREFIX/bin/freshclam" --quiet
-  rc=$?
-  # freshclam の 1 = 定義は最新のまま (失敗ではない)
-  [ "$rc" -eq 1 ] && return 0
-  return "$rc"
 }
 
 case "$MODE" in

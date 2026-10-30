@@ -25,7 +25,10 @@ Codex で default branch へ送る `HEAD:<branch>` refspec の execution-permiss
   [`git-commit-own-hunk.py`](git-commit-own-hunk.py) = 一時 index の手順の道具)。
   既定では、 DST の live HEAD 版と origin 版が違う (= upstream が変えた / live の未 push commit が触った) と拒否する
   (丸ごと置換は前者を黙って巻き戻し、 後者を公開する)。 `--apply` で origin 版に編集をやり直すか、 意図した置換なら
-  `--allow-overwrite`。
+  `--allow-overwrite`。 新しい file は SRC の実行 bit を保つ (既にある DST は DST の mode のまま)。
+- ⚠️ **規則保護の guard の対象の file はこの道具では commit できない**: 承認の記録は repo の絶対 path に結びつき、 使い捨ての
+  worktree の path は毎回違うので、 commit の gate が照合できずに止まる (実測)。 live が最新に追いつける状態で live に当てて commit する
+  ([`conventions/hook-authoring.md#new-hook-protected-bundle`](../conventions/hook-authoring.md#new-hook-protected-bundle))。
 - `--apply CMD` = worktree を cwd に bash で走らせる変更 command。 環境変数 `LIVE` (live の top) と `WT` を渡す。
 - `--check CMD` = stage 後・commit 前に worktree で走らせる検査。 非 0 なら commit しない。
 - `--remove-live-copies` = push 後、 live の tree に在る**未追跡**の SRC を、 `origin/<branch>:<DST>` と一致を
@@ -174,7 +177,10 @@ def commit_from_origin_worktree(live: Path, message: str, copies=(), apply_cmd: 
         for src, dst in copies:
             d = wt / dst
             d.parent.mkdir(parents=True, exist_ok=True)
+            is_new = not d.exists()
             shutil.copyfile(src, d)
+            if is_new:  # copyfile drops the exec bit; a tracked DST keeps its own mode
+                shutil.copymode(src, d)
         if apply_cmd:
             env = dict(os.environ, LIVE=str(live), WT=str(wt))
             r = subprocess.run(["bash", "-c", apply_cmd], cwd=wt, env=env, capture_output=True, text=True)
@@ -343,6 +349,22 @@ def selftest() -> int:
         check("a failing --check commits and pushes nothing", rc == 1 and sh(remote, "rev-parse", "main").stdout == before)
         rc = commit_from_origin_worktree(live, "x\n", apply_cmd="true", log=quiet)
         check("an empty change set is refused (vacuous)", rc == 1 and sh(remote, "rev-parse", "main").stdout == before)
+        tool = T / "tool.sh"
+        tool.write_text("#!/bin/sh\n")
+        tool.chmod(0o755)
+        plain = T / "plain.md"
+        plain.write_text("plain\n")
+        tracked = T / "tracked.md"
+        tracked.write_text("記録\n", encoding="utf-8")
+        tracked.chmod(0o755)
+        rc = commit_from_origin_worktree(live, "modes\n", log=quiet,
+                                         copies=[(tool, "bin/tool.sh"), (plain, "docs/plain.md"), (tracked, "§ 記録.md")])
+        modes = sh(remote, "-c", "core.quotepath=off", "ls-tree", "-r", "main").stdout.splitlines()
+        mode = lambda name: next(ln.split()[0] for ln in modes if ln.endswith(name))
+        check("--copy keeps the exec bit of a new file  [foil: copyfile alone gives 100644]",
+              rc == 0 and mode("bin/tool.sh") == "100755")
+        check("--copy keeps a new plain file at 100644", mode("docs/plain.md") == "100644")
+        check("--copy does not change the mode of a tracked DST", mode("§ 記録.md") == "100644")
 
         conflict_src = T / "a-mine.md"
         conflict_src.write_text("mine\n", encoding="utf-8")
