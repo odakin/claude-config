@@ -61,7 +61,7 @@ browser・メール・curl で手元に来た file を repo や作業 dir に入
 - **止める条件** = その file の検査の記録が無い、 要確認が出ている、 未検査の部分がある。 止める文に検査の command が出る。 検査を回せば、 同じ command が次は通る。
 - **検査の記録** = 道具が `~/.claude/state/downloaded-file-scan/` に、 path・大きさ・更新時刻の key と中身の sha256 の key で残す (同じ中身なら、 一度 scratch に写した file からでも通る)。 記録は machine-local = 別の Mac で取り込むときは、 その Mac で検査し直す。
 - **本人が取り込むと決めた file** は、 command に `# downloaded-file-scan: accepted <理由>` を書いて打ち直す。 理由は記録の行にも書く。 この印は agent が自分の判断で付けない。
-- heredoc の本文、 引用符の中、 commit message の中の `cp` は command と読まない。 同じ command の中の代入 (`D=docs; cp … $D/`) は解く。 解けない変数は見ない (fail-open)。
+- heredoc の本文、 引用符の中、 commit message の中の `cp` は command と読まない。 同じ command の中の代入 (`D=docs; cp … $D/`) は解く。 解けない変数は見ない (fail-open)。 `for` の変数と `xargs` の置き換えも見ない。 同じ command の中で一度 scratch へ写してから repo へ写す 2 段も見えない (hook は command の実行前に走るので、 2 段目の元の file がまだ無い)。 別の command に分ければ、 ダウンロードの印の付いた file は scratch でも印を持ったままなので止まる。
 - 校正: 判定の形 (`shape_issues`) を手元の全期間の Bash command に当てると、 当たったものは全部 Downloads から git の作業 tree への本当の取り込みで、 誤検出は 0 だった。 見逃しの側は、 Downloads と取り込みの命令を含む command を広い正規表現で拾って読み、 当たらなかったものは全部、 行き先が scratch・一時 dir・ゴミ箱・Downloads 自身だった (実測。 手順 = [`hook-authoring.md#command-guard-calibration`](hook-authoring.md#command-guard-calibration)、 再現 = `calibrate-bash-command-pattern.py --hook scripts/downloaded-file-scan.py --func shape_issues` と `--pattern`)。
 - **射程外** = curl / wget で repo に直接落とす、 python の `shutil` などの script の中の copy、 redirect (`cat x > y`)、 Finder での移動、 メールの添付を script で repo に直接保存する、 Codex の session (網は Claude Code の hook だけ)。 これらは規則 1 を自分で当てる。
 
