@@ -266,6 +266,7 @@
 - **[office-stage-run.test.sh](office-stage-run.test.sh)** — office-stage-run.sh の hermetic test (Office は起こさない: CLAUDE_OFFICE_STAGING_DIR で root を tmp に向け、 command は sh)
 - **[overlay-seal-pdf.py](overlay-seal-pdf.py)** — Overlay a seal / signature image onto a generated PDF — keeping its color.
 - **[overleaf-push-file.sh](overleaf-push-file.sh)** — GitHub 側で commit 済みの file を、 指定した分だけ Overleaf に載せる。
+- **[owner-window-notice.py](owner-window-notice.py)** — 別の session へ message・掲示板の投稿を送る前に、 宛先が user の直接話している session なら 1 行知らせる (止めない。 PreToolUse hook の engine)
 - **[pack-pii-dirs.sh](pack-pii-dirs.sh)** — 個人情報が file 名に出る dir を、1 個の暗号化 tar に畳む (汎用)。
 - **[page-screenshot.py](page-screenshot.py)** — web ページ全体を、 スマホや PC の画面幅で 1 枚 (か縦に分けた数枚) の PNG に撮る。 --selftest 内蔵。
 - **[pdf-cleaner.html](pdf-cleaner.html)** — clipboard-cleaner.py のブラウザ版 fallback（非 macOS / pbcopy なし環境用、整形ロジックの正本は clipboard-cleaner.py で両実装を同期）
