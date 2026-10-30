@@ -1005,10 +1005,14 @@ def _split_args(op: str, words: list[str]) -> tuple[list[str], str | None]:
     return args[:-1], args[-1]
 
 
+# unzip の展開先に書かない option (一覧 -l -v -Z / 試験 -t / 標準出力 -p -c / 注釈 -z)。 束ねた形 (-tq) も数える
+UNZIP_NO_EXTRACT_FLAGS = set("lvZtpcz")
+
+
 def _archive_args(op: str, words: list[str]) -> tuple[list[str], str | None, bool]:
     """unzip / tar の (archive, 展開先, 展開か)。 展開先が無ければ None (= 今の dir)。"""
     if op == "unzip":
-        src, dest, i = [], None, 1
+        src, dest, extract, i = [], None, True, 1
         while i < len(words):
             w = words[i]
             if w == "-d" and i + 1 < len(words):
@@ -1025,8 +1029,10 @@ def _archive_args(op: str, words: list[str]) -> tuple[list[str], str | None, boo
                 continue
             elif not w.startswith("-") and not src:
                 src.append(w)
+            elif w.startswith("-") and not w.startswith("--") and set(w[1:]) & UNZIP_NO_EXTRACT_FLAGS:
+                extract = False
             i += 1
-        return src, dest, True
+        return src, dest, extract
     # tar
     src, dest, extract, i = [], None, False, 1
     while i < len(words):
@@ -1489,6 +1495,9 @@ def selftest() -> int:
               "heredoc の本文 = 見ない")
         check(find_issues(f"git commit -m 'cp ~/Downloads/paper.txt {repo}'", repo, home) == [], "commit message = 見ない")
         check(len(find_issues(f"unzip -q ~/Downloads/bad.zip -d {repo}/x", repo, home)) == 1, "unzip -d repo")
+        check(len(find_issues("unzip -qo ~/Downloads/bad.zip", repo, home)) == 1, "unzip -qo (今の dir が repo) = 展開する")
+        for flag in ("-l", "-tq", "-Z1", "-v", "-p"):
+            check(find_issues(f"unzip {flag} ~/Downloads/bad.zip", repo, home) == [], f"unzip {flag} = 展開しない")
         check(len(find_issues(f"cd {repo} && tar -xzf ~/Downloads/bad.zip", tmp, home)) == 1, "tar -x (今の dir が repo)")
         check(find_issues(f"tar -czf ~/Downloads/out.tgz {repo}", repo, home) == [], "tar -c (作る側) = 見ない")
         check(len(find_issues(f"rsync -a --exclude .DS_Store ~/Downloads/ {repo}/in/", repo, home)) >= 1, "rsync の dir")
