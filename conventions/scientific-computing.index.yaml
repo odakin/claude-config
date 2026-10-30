@@ -103,6 +103,9 @@ sections:
   - id: reference-side-numerics
     level: 3
     title: "照合の「厳密」 側も数値である — 参照実装の有効域・丸い入力・巨大な位相の差"
+  - id: narrow-reweighting-shift
+    level: 3
+    title: "狭い分布に重みをかける展開は、 重みの 1 階の項を落とさない"
   - id: differentiate-integrands-before-quadrature
     level: 3
     title: "有限微分は可能なら被積分関数に作用させる"
