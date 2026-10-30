@@ -40,6 +40,7 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 
 | 症状 (観察できること) | 真因 | 対処 (→ slug) |
 |---|---|---|
+| 案件の driver を engine の helper 呼び出しに置き換えたが、 **出力が変わっていないと言い切れない** (頁数・文字列の照合は通る) | text だけの照合は置き場所のずれを見ない (数 pt のずれは紙でだけ目立つ) | 置き換える前と後を同じ機械で描いて画素で比べる = [`scripts/pdf-render-equal.py`](../scripts/pdf-render-equal.py) (違えば最初に違う頁と囲む矩形 〔pt〕 が出る。 既定 150 dpi、 低い dpi は丸めて「一致」 と出る) |
 | xlsx / xlsm の値を数セル変えたいだけなのに、 Excel が遅い・落ちる / openpyxl で保存すると図形・ボタンが消える | 値の変更に workbook 全体を開いて保存し直している | worksheet XML の `<c>` だけ差し替える `scripts/xlsx-zip-set-cells.py` → [`xlsx-cell-value-zip-surgery`](#xlsx-cell-value-zip-surgery) |
 | 印刷物を user に見せるたび別の欠陥が出て刷り直しが続く | 各修正後の検証が直前の症状にだけ狭まる + 「画面で見えた」 を印刷の保証にしている | `pdf-print-preflight.py` + crop 目視 + 全頁 PNG を user に → [`print-preflight`](#print-preflight) |
 | 様式付属の**説明書き・記載例・マスタ・白紙の頁まで紙に出た** (頁数の検査は通っていた) | 生成の単位が様式の file 丸ごと + 頁数の一致は刷る頁の集合を問わない + 刷る段からどの頁を出すかが見えない | 頁の役割を記入 map に・刷る file は提出頁だけ (`pdf-print-preflight.py --pages`)・宣言を file に埋めて刷る直前の gate が読む → [`print-submission-pages-only`](#print-submission-pages-only) |
