@@ -11,11 +11,16 @@ subagents/workflows/<run>/)。 時刻順に混ぜて当てる。
 戻せないもの: Bash で直した分 (sed・heredoc の置換・cp)。 最後の Write より後にその file の名を含む Bash の呼び出しがあれば
 「Bash でも触った = 戻した形は最後の形と違いうる」 と出す。 Edit の old_string が見つからない (= 間に Bash の直しがあった) ときも出す。
 戻した file は「復元した形」 であって、 実行した形と同じだと確かめたものではない = 置く前に読み、 差を直す。
+file に書かずに流した code (heredoc・`-c`) は `--bash-match <名前>=<目印>` で、 目印の文字列を含む Bash の command を
+そのまま <名前> に書き出す (冒頭に実行の時刻の注釈。 一致が 2 つ以上なら <名前>.2 …。 実測: 記録の数値の根拠にした heredoc の
+分析が file に無く、 使い捨ての取り出し script を書いた)。 目印は command の中の、 その code にしか無い短い文字列にする
+(引用符・改行を含む目印は記録の escape と合わないことがある = path や変数名のような素の語が確実)。
 
 使い方:
   replay-session-scripts.py <session id か先頭の数文字> --list                 # 戻せる file と、 今あるか (ある / もう無い) の一覧
   replay-session-scripts.py <id8> --out <dir>                                 # もう無い file を全部 <dir> に戻す
   replay-session-scripts.py <id8> --out <dir> foo.py bar.py                    # 名前 (basename か path の一部) で選ぶ (ある file も戻す)
+  replay-session-scripts.py <id8> --out <dir> --bash-match check.sh=<目印>      # 流した command を取り出す (繰り返し可、 file の復元はしない)
   replay-session-scripts.py --selftest
 
 projects-dir の既定 = この機械の全部の設定 dir の projects/ (lib/claude_config_dirs.py、 session-scripts-report.py と同じ)。
@@ -118,6 +123,34 @@ def select(files, names, only_gone):
     return out
 
 
+def bash_matches(timed, needle):
+    """(timestamp, command) の list = 目印を含む Bash の command (記録の順)。"""
+    return [(ts, inp.get("command", "")) for ts, name, inp in timed
+            if name == "Bash" and needle and needle in inp.get("command", "")]
+
+
+def write_bash_matches(timed, specs, out):
+    """specs = ["名前=目印", …]。 一致した command を out/名前 に書く。 一致の無い spec があれば 1。"""
+    rc = 0
+    for spec in specs:
+        name, sep, needle = spec.partition("=")
+        if not sep or not name or not needle:
+            print(f"⚠️ --bash-match は 名前=目印 の形: {spec}")
+            rc = 1
+            continue
+        hits = bash_matches(timed, needle)
+        if not hits:
+            print(f"⚠️ 記録に一致する Bash の command が無い: {name} (目印 = {needle!r})")
+            rc = 1
+            continue
+        for k, (ts, cmd) in enumerate(hits, 1):
+            dest = out / (name if k == 1 else f"{Path(name).stem}.{k}{Path(name).suffix}")
+            head = (f"# 会話記録の Bash の command そのまま (実行 {ts or '?'} UTC)。 path は当時のもの = 回す前に読む。\n")
+            dest.write_text(head + cmd + ("" if cmd.endswith("\n") else "\n"), encoding="utf-8")
+            print(f"取り出し: {dest} ({len(cmd.splitlines())} 行、 {ts or '?'})")
+    return rc
+
+
 def main(argv=None):
     _utf8_stdout()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -126,6 +159,8 @@ def main(argv=None):
     ap.add_argument("--out")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--projects-dir")
+    ap.add_argument("--bash-match", action="append", default=[], metavar="NAME=SUBSTR",
+                    help="目印を含む Bash の command を <out>/NAME に書き出す (heredoc・-c で流した code)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_intermixed_args(argv)  # 「<id8> --out <dir> foo.py」 の順 (使い方の例) でも名前を拾う
     if a.selftest:
@@ -148,9 +183,12 @@ def main(argv=None):
         return 0
     if not a.out:
         ap.error("--out <dir> か --list が要る")
-    chosen = select(files, a.names, only_gone=True)
     out = Path(a.out).expanduser()
     out.mkdir(parents=True, exist_ok=True)
+    rc_bash = write_bash_matches(timed, a.bash_match, out) if a.bash_match else 0
+    if a.bash_match and not a.names:   # 取り出しだけを頼まれた = 消えた file の一括復元はしない
+        return rc_bash
+    chosen = select(files, a.names, only_gone=True)
     used = set()
     for p, f in chosen.items():
         base = os.path.basename(p)
@@ -164,7 +202,7 @@ def main(argv=None):
     for n in a.names:
         if not any(n == os.path.basename(p) or n in p for p in chosen):
             print(f"⚠️ 記録に Write が無い: {n}")
-    return 0
+    return rc_bash
 
 
 def selftest():
@@ -214,6 +252,20 @@ def selftest():
         out2 = Path(d) / "out2"
         rc = main(["abcd1234", "--out", str(out2), "kept.py", "--projects-dir", str(Path(d) / "projects")])
         expect("--out の後に並べた名前も拾う (使い方の例の順)", rc == 0 and (out2 / "kept.py").exists())
+        heredoc = "cd /tmp/x && python3 - <<'EOF'\nimport json\nprint(json.load(open('analysis/report.json')))\nEOF"
+        (proj / "abcd1234-0000.jsonl").open("a", encoding="utf-8").write(json.dumps(
+            {"type": "assistant", "timestamp": "2026-01-02T03:04:05Z", "message": {"content": [
+                {"type": "tool_use", "id": "6", "name": "Bash", "input": {"command": heredoc}}]}}) + "\n")
+        out3 = Path(d) / "out3"
+        rc = main(["abcd1234", "--out", str(out3), "--bash-match", "inspect.sh=analysis/report.json",
+                   "--projects-dir", str(Path(d) / "projects")])
+        got = (out3 / "inspect.sh").read_text(encoding="utf-8") if (out3 / "inspect.sh").exists() else ""
+        expect("--bash-match は目印を含む Bash の command をそのまま書き、 冒頭に時刻の注釈",
+               rc == 0 and got.endswith(heredoc + "\n") and "2026-01-02T03:04:05Z" in got.splitlines()[0])
+        expect("--bash-match だけなら消えた file の一括復元はしない", not (out3 / "gone.py").exists())
+        rc = main(["abcd1234", "--out", str(out3), "--bash-match", "none.sh=no-such-marker",
+                   "--projects-dir", str(Path(d) / "projects")])
+        expect("一致の無い --bash-match は 1 で終わる", rc == 1 and not (out3 / "none.sh").exists())
     print("selftest: " + ("ALL PASS" if ok else "FAILED"))
     return 0 if ok else 1
 
