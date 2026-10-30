@@ -120,3 +120,7 @@ sections:
     legacy: "15"
     level: 2
     title: "15. Workflow の fan-out — 起動の前に本数を見積もり、 同じ入力を読み直す割り方は独立が要るときだけにする"
+  - id: ruling-while-another-holds-writer-turn
+    legacy: "16"
+    level: 2
+    title: "16. 原稿の書き手の番が別の session にある間に著者の裁定が出たら"
