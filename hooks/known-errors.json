@@ -79,7 +79,7 @@
     {
       "match": "but no such ref was fetched",
       "doc": "conventions/multi-session-coordination.md#pull-fetch-head-race",
-      "hint": "同じ clone で別の fetch (並列 session・session の開始の同期・手で打った fetch) が .git/FETCH_HEAD を書き換えたか、 remote に branch が無い。 走り直して通れば前者 = pull をやめて git fetch && git rebase --autostash @{u}"
+      "hint": "同じ clone で別の fetch (並列 session・session の開始の同期・手で打った fetch) が .git/FETCH_HEAD を書き換えたか、 remote に branch が無い。 走り直して通れば前者 = pull をやめて git fetch && git merge --ff-only @{u} (手元に未 push の commit があれば scripts/commit-from-origin-worktree.py。 未 commit の変更がある tree で stash・autostash はしない = #autostash-foreign-wip)"
     },
     {
       "match": "Cannot fast-forward to multiple branches",

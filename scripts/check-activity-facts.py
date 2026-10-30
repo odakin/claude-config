@@ -17,6 +17,14 @@ Two kinds of finding:
          this kind only warns. A provenance marker (origin: / 起源 / 実測 / 実例 / 初出) directly followed by a
          date is a FACT even without an event word (2026-09-14: the house style put "when / which form / how
          many prints" right there), unless the date is the rule's own (追記 / 新設 / 版 next to it).
+  CALIB  a count measured over the owner's conversation records (a calibration's population or hits:
+         "N commands / N 件 / N session over the transcripts", "直近 N 週で N 回") -> BLOCK in the commit message,
+         WARN on a staged added line. Those counts are the owner's activity; the public text carries only the
+         shape (the false positives, the tool, the range read). Counts right after 誤検出 / false positives /
+         selftest / test are not this kind, nor are 0 and 1, nor a count followed by PASS / FAIL. Not part of
+         --scan-tree / --replay (the existing inventory stays as acked). Why: the same form kept reaching public
+         commit messages after the rule was written in conventions/hook-authoring.md#new-hook-protected-bundle (2),
+         and neither the FACT words nor the TERM list saw it.
 The inventory (--scan-tree) reports FACT lines that are not in the ack list (hash of path + normalized line)
 and exits 1 if any are new, so an accepted line is decided once. The list is only consulted when you pass
 --ack: without it every acknowledged line counts as new, so a hand-run total says nothing about what is
@@ -84,6 +92,23 @@ PROVENANCE_RE = re.compile(r"(origin|起源|実例|初出|実測)\s*[:：=]?\s*[
 PROVENANCE_EVENT_RE = re.compile(r"様式|出張|旅費|謝金|招待|勧誘|依頼|成績|講義|受診|診断書|家計|口座|委員|会議|窓口|事務|申請|提出|印刷|刷り|〆|締切|審査|査読|推薦|応募|学生")
 RULE_DATE_RE = re.compile(r"追記|新設|制定|版|hoist|昇格|移動|改訂|split|renumber")
 COUNT_RE = re.compile(r"(?<![0-9.])[0-9]+\s?(種目|本|件|回|箇所|度)")
+# CALIB (2026-10-28): a count measured over the owner's own conversation records. Japanese scope words need a
+# Japanese unit; an English scope word (transcript / calibrat*) takes a bare integer followed by a word.
+# "Bash" is case-sensitive so that "bash 3.2" (a version) is not a scope word.
+CALIB_JP_SCOPE_RE = re.compile(
+    r"会話記録|最終発話|過去の[^。、]{0,16}(command|コマンド|発言|発話|turn|session)"
+    r"|Bash\s?(の\s?)?(command|コマンド)?\s?(約\s?)?[0-9][0-9,.]*\s?(万|千)?\s?件"
+    r"|直近\s?[0-9]+\s?(日|週|か月|ヶ月)|[0-9]+\s?(日|週間?|か月|ヶ月)分の|手元の?\s?transcript")
+CALIB_JP_COUNT_RE = re.compile(
+    r"(?<![0-9.,])([0-9][0-9,]*(?:\.[0-9]+)?)\s?(万|千)?\s?(件|回|turns?|sessions?|出力|発火)(?![A-Za-z])")
+CALIB_EN_SCOPE_RE = re.compile(r"(?<![A-Za-z_])(transcripts?|calibrat\w*)(?![A-Za-z_])", re.I)
+CALIB_EN_COUNT_RE = re.compile(r"(?<![0-9.,§#/A-Za-z~-])([0-9]+(?:,[0-9]{3})*)\s([a-z]{2,})")
+CALIB_EN_NOT_COUNT = re.compile(
+    r"(days?|hours?|h|min|mins|minutes?|seconds?|secs?|years?|weeks?|months?|lines?|ms|bytes?|chars?|characters?"
+    r"|kb|mb|gb|percent|times?|x|of|files?|commits?|repos?)$")
+CALIB_EXEMPT_PREFIX_RE = re.compile(
+    r"(誤検出|false[ -]positives?|selftests?|self-tests?|tests?|試験)\s*(は|=|:|：|が|に)?\s*(約\s?)?$", re.I)
+CALIB_EXEMPT_SUFFIX_RE = re.compile(r"\s*(PASS|FAIL)", re.I)
 TEXT_SUFFIXES = (".md", ".markdown", ".py", ".sh", ".txt", ".yaml", ".yml", ".json", ".toml", ".tex", ".html", ".js", ".ts")
 
 
@@ -143,6 +168,35 @@ def classify(line, terms):
     return kinds
 
 
+def calib_counts(line):
+    """Counts on one line that read as measured over the owner's conversation records (CALIB). [] = none."""
+    out = []
+    if CALIB_JP_SCOPE_RE.search(line):
+        for m in CALIB_JP_COUNT_RE.finditer(line):
+            if CALIB_EXEMPT_PREFIX_RE.search(line[max(0, m.start() - 14):m.start()]):
+                continue
+            if CALIB_EXEMPT_SUFFIX_RE.match(line, m.end()):
+                continue
+            if "." in m.group(1) and not m.group(2):
+                continue
+            mult = 10000 if m.group(2) == "万" else 1000 if m.group(2) == "千" else 1
+            if float(m.group(1).replace(",", "")) * mult <= 1:
+                continue
+            out.append(m.group(0).strip())
+    if CALIB_EN_SCOPE_RE.search(line):
+        for m in CALIB_EN_COUNT_RE.finditer(line):
+            if CALIB_EN_NOT_COUNT.match(m.group(2)):
+                continue
+            if CALIB_EXEMPT_PREFIX_RE.search(line[max(0, m.start() - 16):m.start()]):
+                continue
+            if CALIB_EXEMPT_SUFFIX_RE.match(line, m.end()):
+                continue
+            if int(m.group(1).replace(",", "")) <= 1:
+                continue
+            out.append(m.group(0))
+    return out
+
+
 def added_lines(diff_text):
     path, lineno, out = None, 0, []
     for raw in diff_text.splitlines():
@@ -167,11 +221,25 @@ def line_key(path, text):
     return hashlib.sha256((path + "\0" + " ".join(text.split())).encode("utf-8")).hexdigest()[:20]
 
 
-def report(findings, where, out=print):
+def report(findings, where, out=print, block_calib=False):
     """findings = [(path, lineno, kinds)]; never prints the line text (it may hold the fact)."""
     blocked = any("TERM" in k for _, _, ks in findings for k in ks)
+    calib = any(k == "CALIB" for _, _, ks in findings for k in ks)
     for path, lineno, kinds in findings:
         out(f"  {path}:{lineno}  {', '.join(kinds)}")
+    if calib and block_calib:
+        # "the commit message contains a literal" is the phrase the commit-msg runner blocks on
+        out(f"🚫 [activity-facts] {where} contains a literal count measured over the owner's conversation records "
+            f"(a calibration's population or hits = the owner's activity). Keep the counts in the private record and "
+            f"write only the shape here: the false positives, the tool, the range read "
+            f"(conventions/hook-authoring.md#new-hook-protected-bundle 2). Bypass only for a false match: "
+            f"CLAUDE_ACTIVITY_FACTS_GUARD=0")
+        if not blocked:
+            return 1
+    elif calib:
+        out(f"⚠️ [activity-facts] {where}: a count measured over the owner's conversation records on an added line "
+            f"(CALIB). If it is a calibration's population or hits, keep it in the private record and write the shape "
+            f"(conventions/hook-authoring.md#new-hook-protected-bundle 2). Not blocked.")
     if blocked:
         out(f"🚫 [activity-facts] {where} contains a literal from {TERMS_FILE} (program name / code / file-name stem). "
             f"Rewrite it in general form. Bypass only for a false match: CLAUDE_ACTIVITY_FACTS_GUARD=0")
@@ -195,7 +263,7 @@ def scan_staged(repo, terms, out=print):
                 published[path] = _published_lines(path, _read_blob_text(f":{path}", cwd=repo) or "")
             if lineno in published[path]:
                 continue
-        kinds = classify(text, terms)
+        kinds = classify(text, terms) + (["CALIB"] if calib_counts(text) else [])
         if kinds:
             findings.append((path, lineno, kinds))
     return report(findings, "the staged change", out)
@@ -206,10 +274,10 @@ def scan_message(path, terms, out=print):
     for i, text in enumerate(Path(path).read_text(encoding="utf-8", errors="replace").splitlines(), 1):
         if text.startswith("#"):
             continue
-        kinds = classify(text, terms)
+        kinds = classify(text, terms) + (["CALIB"] if calib_counts(text) else [])
         if kinds:
             findings.append(("<message>", i, kinds))
-    return report(findings, "the commit message", out)
+    return report(findings, "the commit message", out, block_calib=True)
 
 
 def read_ack(path):
@@ -340,6 +408,32 @@ def selftest():
     lines = []
     rc = report([("x.md", 1, ["TERM"])], "the staged change", out=lines.append)
     expect("TERM -> block, exit 1, the literal is not printed", rc == 1 and "MOCKPROGRAM" not in "\n".join(lines))
+    # CALIB fixtures are assembled at run time (this file's own diff passes the staged check)
+    rec, cmd_en = "会" + "話記録", "trans" + "cripts"
+    expect("CALIB: population and hits over the records", calib_counts(
+        "校正 = 道具: 過去の Bash command 約 3.5 万" + "件で当たり 33 件、 読んで誤検出 3 件") == ["3.5 万件", "33 件"])
+    expect("CALIB: records + count", calib_counts("較正 (実測) = " + rec + " 197 件で書き換え 182") == ["197 件"])
+    expect("CALIB: recent weeks + sessions", calib_counts("較正 = 直近 2 週で 17 出力 / 12 session") == ["17 出力", "12 session"])
+    expect("CALIB: English population and hits", calib_counts(
+        "Bash commands of one machine's " + cmd_en + ": 855 mention it, 4 start it") == ["855 mention", "4 start"])
+    expect("CALIB: false positives, selftest, 0 and 1 are the shape", calib_counts(
+        "較正 = " + rec + " で誤検出 3 件、 selftest 24 件、 止める 0 件、 1 session 1 回") == [])
+    expect("CALIB: a version or a duration is not a count",
+           calib_counts("bash 3.2 の parser") == [] and calib_counts("~30 min of " + cmd_en[:-1] + " reading") == [])
+    expect("CALIB: no scope word -> nothing", calib_counts("selftest に 12 本、 3 hook を直した") == [])
+    expect("CALIB: a test result on the scope line is not a count",
+           calib_counts("校正 = " + rec + "。 test を足し 41 件 PASS") == [])
+    expect("CALIB: files and commits on a calibrate line are not counts",
+           calib_counts("calibrate-x.py の結果で 6 file と 1,667 commit を確かめた") == [])
+    expect("CALIB: before and after counts over the records", calib_counts(
+        "校正 (同じ" + rec + "): 知らせ 15 → 14 件、 消えた 7 件は別の形") == ["14 件", "7 件"])
+    lines = []
+    rc = report([("<message>", 3, ["CALIB"])], "the commit message", out=lines.append, block_calib=True)
+    expect("CALIB in the message -> block with the runner's phrase",
+           rc == 1 and "the commit message contains a literal" in "\n".join(lines))
+    lines = []
+    rc = report([("x.md", 3, ["CALIB"])], "the staged change", out=lines.append)
+    expect("CALIB on a staged line -> warn, exit 0", rc == 0 and "Not blocked" in "\n".join(lines))
     with tempfile.TemporaryDirectory() as td:
         repo = Path(td) / "pub"
         (repo / ".claude").mkdir(parents=True)

@@ -94,6 +94,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[session-start-windows-bootstrap.sh](session-start-windows-bootstrap.sh)** — SessionStart hook (layer 1): Windows 環境の毎 session 自動自己修復
 - **[session-start-windows-bootstrap.test.sh](session-start-windows-bootstrap.test.sh)** — self-tests for session-start-windows-bootstrap.sh
 - **[settings-entries.json](settings-entries.json)** — 層1 hook の settings.json 配線の唯一の list (event → entries)。
+- **[shared-tree-stash-guard.py](shared-tree-stash-guard.py)** — 未 commit の変更が居る作業 tree での git stash・--autostash を止める PreToolUse(Bash) の入口 (他の session の作業を退避させない)。 述語・本体・--selftest = scripts/git-stash-shared-tree.py
+- **[shared-tree-stash-guard.test.sh](shared-tree-stash-guard.test.sh)** — shared-tree-stash-guard.py の検査 (未 commit の変更がある tree の autostash・stash で deny / clean な tree・list・理由つきは通す / 壊れた入力・engine の不在で黙る)
 - **[spawn-dedupe-guard.sh](spawn-dedupe-guard.sh)** — 同じ依頼の worker を 2 つ起動させる chip (spawn_task) を止める + chip の台帳を付ける
 - **[spawn-dedupe-guard.test.sh](spawn-dedupe-guard.test.sh)** — spawn-dedupe-guard.sh の self-test (hermetic)
 - **[stale-read-nudge.sh](stale-read-nudge.sh)** — PostToolUse(Read) hook (layer 1)

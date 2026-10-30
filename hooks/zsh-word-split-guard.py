@@ -15,7 +15,7 @@ PreToolUse(Bash)。 zsh は未 quote の `$var` を単語分割しない (bash �
          / 上のどれでもない引数の位置 = loop 変数で、 回す語に option (空白の後の `-`) があり、 command が echo / printf / print でないときだけ
          (`for t in "a.py --selftest" …; do python3 $t` = 分割が目的。 空白入りの file 名を回す loop は zsh の方が正しいので止めない。
           実例と同形: --selftest 付きの 4 本が file 名の誤りで走らず、 loop の末尾の echo が成功に見せた。
-          `$(…)` を回す loop は見ない。 較正 (実測) = 30 日分の Bash で発火は 2 件、 2 件とも同じ誤り)
+          `$(…)` を回す loop は見ない。 較正 (実測) = 手元の Bash での発火はどれも同じ誤り)
   $V   = 単独の語 (前後が空白・; | & ( ) 等) で quote されていない。 ${=V}・$V[…]・$V/… (path の連結)・
          特殊 param ($1 $@ …)・quote / heredoc の中は見ない
   複数語と分かる = 同じ command 内に

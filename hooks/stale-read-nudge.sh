@@ -156,7 +156,7 @@ repo:   $REPO_ROOT  (behind $BEHIND vs $UPSTREAM)
 
 今 Read した内容は origin の最新ではない可能性がある (= この file が behind 区間で変更されている)。
 内容で「X は無い / 未整備 / こうなっている」 と結論する前に、 以下のいずれかで最新を確認:
-  - git -C \"$REPO_ROOT\" pull        (= dirty なら stash → ff-pull、 別 session の WIP に注意)
+  - git -C \"$REPO_ROOT\" merge --ff-only $UPSTREAM   (= fetch 済みの最新を取り込む。 未 commit の変更が重なれば git が止める = stash しない、 別 session の作業でありうる)
   - git -C \"$REPO_ROOT\" show $UPSTREAM:$REL   (= pull せず最新版だけ見る)
 
 未取込みの該当 commit (HEAD..$UPSTREAM -- $REL):

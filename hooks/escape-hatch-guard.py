@@ -40,13 +40,13 @@
   操作・shell の rc file への書き込み・`GIT_CONFIG_GLOBAL` 等で core.hooksPath を書いた設定 file を読ませる経路・
   台帳への shell からの直接の追記 (承認の偽造)。
 
-校正 (2026-09-29、 手元の transcript 360 本の Bash 42,290 件): 当たり 26 件。 本物の repo で gate を外したもの 3 件
-  (push --no-verify 2 件・DEGENERATE_TEXT_GUARD=0 の commit 1 件)。 残り 23 件は試験用の使い捨て repo の中 = --no-verify /
-  commit への -c core.hooksPath 16 件 (この 2 つは 2026-09-22 から manuscript-claim-guard も止めている) と、 本 hook で新しく
-  止まる `git config core.hooksPath` 4 件・gate の試験で env を差し替えた commit 3 件。 使い捨て repo には hook が入って
+校正 (手元の transcript の Bash に当てた): 当たりは本物の repo で gate を外したもの (push --no-verify・
+  DEGENERATE_TEXT_GUARD=0 の commit) と、 試験用の使い捨て repo の中のもの = --no-verify / commit への -c core.hooksPath
+  (この 2 つは manuscript-claim-guard も止めている) と、 本 hook で新しく止まる `git config core.hooksPath`・gate の
+  試験で env を差し替えた commit。 大半は使い捨て repo の中。 使い捨て repo には hook が入って
   いない (git init / clone は hook を写さない) = 外す必要が無いので、 deny の文面でそう伝える。
   `GIT_CONFIG_GLOBAL=/dev/null` (試験の定番、 この機械の global には core.hooksPath が無い) と worktree add / checkout への
-  `-c core.hooksPath` は gate を外さないので当てない (当てると使い捨て repo の当たりが 10 件増えた)。
+  `-c core.hooksPath` は gate を外さないので当てない (当てると使い捨て repo の当たりが増えるだけ)。
 
 失敗の扱い: 解析の部品 (scripts/agent-rule-guard.py) を読めない・hook の内部例外 = fail-open (その command は検査して
   いないことを 1 行出して通す)。 止める対象を見つけた後に承認台帳を読めない = deny (指示の有無を確かめられない)。

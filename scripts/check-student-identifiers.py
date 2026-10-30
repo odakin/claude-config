@@ -19,6 +19,10 @@
       path 全体) に `path_role_patterns` のどれかが在るときだけ当てる (= 学生としての用件 〔推薦・成績・奨学金・TA の
       勤務など〕 と並んだ path は止め、 出張・共同研究の path は通す)。
       本文と commit message には姓を当てない (教員の姓と衝突して、 止める理由の無い commit を止めるため)。
+      ただし一覧の `surname_message_repos` に名がある repo では、 commit message にも (c) を当て、 条件つきの姓も
+      役割の語によらず当てる (= その repo の規則が commit message に学生の姓を書かないと決めている。 教員・同僚の姓は
+      surname_allow で外れたまま)。 由来 (実測): 事務の repo の commit message に学生の姓 + 「さん」 が繰り返し入り、
+      姓だけの形はどの検査も見ていなかった。
 
   値の一覧は machine-local の JSON (既定 ~/.claude/student-identity.json、 env CLAUDE_STUDENT_IDENTITY で差し替え)。
   この repo には値も、 値を集める元 (名簿の置き場所) も置かない。 一覧を作るのは各自の個人層の builder。
@@ -35,6 +39,7 @@
        "surname_allow_by_repo": {"<repo の dir 名>": [...]},  # (c) をその repo の path でだけ外す語
        "surname_skip_repos": ["<repo の dir 名>", ...],     # (c) をしない repo (論文の著者名で file を名付ける repo)
        "surname_conditional": [...],                 # (c) 役割の語と同じ path でだけ当てる姓 (surname_allow が優先)
+       "surname_message_repos": ["<repo の dir 名>", ...],  # (c) を commit message にも当てる repo (条件つきの姓も)
        "path_role_patterns": ["<正規表現>", ...],    # 役割の語 (大文字小文字を問わず path 全体を search)
        "full_name_allow": [...]}                     # (b) から外す氏名 (例示用の架空の名前など)
 
@@ -49,7 +54,7 @@
                           index の blob が暗号文 (先頭 `\\0GITCRYPT`) なので差分に行が出ず、 検査しない (= 暗号化して
                           置くのは正しい置き方)。 暗号化の設定があっても平文のまま stage された file は検査する。
                           binary (NUL を含む・既知の拡張子・UTF-8 でも cp932 でもない) は見ない。
-  --commit-msg FILE       commit message に (a)(b)。 `#` で始まる行と scissors 行から後は git が捨てるので見ない。
+  --commit-msg FILE       commit message に (a)(b)、 一覧の surname_message_repos の repo では (c) も。 `#` で始まる行と scissors 行から後は git が捨てるので見ない。
   --tree DIR [--max N] [--strict]
                           fleet の棚卸し。 DIR が git repo ならその repo、 そうでなければ直下の各 git repo の HEAD の
                           track 済み path (全部) に (a)(b)(c)、 平文の blob (2 MB 以下) の全行に (a)(b)。 報告だけ
@@ -121,8 +126,8 @@ KIND_LABEL = {
     "id-known": "既知の学籍番号",
     "name-cjk": "氏名 (漢字)",
     "name-latin": "氏名 (ローマ字)",
-    "surname-cjk": "姓 (漢字、 path)",
-    "surname-latin": "姓 (ローマ字、 path)",
+    "surname-cjk": "姓 (漢字)",
+    "surname-latin": "姓 (ローマ字)",
 }
 
 Span = Tuple[int, int, str]  # (start, end, kind)
@@ -232,6 +237,7 @@ class Detector:
         self.allow_by_repo: Dict[str, Set[str]] = {
             str(k): {str(a).strip().lower() for a in (v or []) if str(a).strip()} for k, v in by_repo.items()}
         self.surname_skip_repos: Set[str] = {str(r) for r in (cfg.get("surname_skip_repos") or [])}
+        self.message_repos: Set[str] = {str(r) for r in (cfg.get("surname_message_repos") or [])}
         # 条件つきの姓: 当てる姓の集合に足し (一覧の surnames_* に無くても)、 当たったら役割の語を見て決める
         cond = {_norm_cjk(c).replace(" ", "").lower() for c in (cfg.get("surname_conditional") or []) if str(c).strip()}
         self.conditional: Set[str] = {c for c in cond if c not in allow_sn}
@@ -276,8 +282,10 @@ class Detector:
             out.extend((m.start(), m.end(), "name-latin") for m in self.latin_full_re.finditer(text))
         return out
 
-    def surnames(self, text: str, repo: Optional[str] = None, context: Optional[str] = None) -> List[Span]:
-        """path の姓。 context = 役割の語を探す範囲 (既定 = text。 --staged は新しく入る部分を text、 path 全体を context に渡す)。"""
+    def surnames(self, text: str, repo: Optional[str] = None, context: Optional[str] = None,
+                 always_conditional: bool = False) -> List[Span]:
+        """path の姓。 context = 役割の語を探す範囲 (既定 = text。 --staged は新しく入る部分を text、 path 全体を context に渡す)。
+        always_conditional = 条件つきの姓も役割の語によらず当てる (surname_message_repos の commit message)。"""
         out: List[Span] = []
         if repo and repo in self.surname_skip_repos:
             return out
@@ -285,7 +293,7 @@ class Detector:
         role: List[Optional[bool]] = [None]
 
         def keep(tok: str) -> bool:
-            if tok not in self.conditional:
+            if always_conditional or tok not in self.conditional:
                 return True
             if role[0] is None:
                 role[0] = any(r.search(context if context is not None else text) for r in self.role_res)
@@ -531,9 +539,14 @@ def run_commit_msg(msg_file: str) -> int:
     except OSError as e:
         print("%s (commit message を読めない: %s)" % (NOT_RUN, e), file=sys.stderr)
         return 3
+    # 一覧が commit message にも姓を当てると宣言した repo (hook は repo の top で走る = cwd の repo)
+    repo = _repo_name(os.getcwd()) if det.message_repos else None
     findings: List[str] = []
     for lineno, line in message_lines(raw):
-        for s, e, k in det.text_hits(line):
+        spans = det.text_hits(line)
+        if repo in det.message_repos:
+            spans = _dedupe(spans + det.surnames(line, repo, always_conditional=True))
+        for s, e, k in spans:
             findings.append(_format("commit message:%d" % lineno, k, line[s:e]))
     if findings:
         _block(findings, _list_note())
@@ -888,6 +901,25 @@ def selftest() -> int:
                            "+仮野 名子\n", encoding="utf-8")
             rc, out = run(["--commit-msg", str(msg)])
             expect("--commit-msg: 姓だけと scissors 行から後は当てない", rc == 0, out)
+            lst_m = base / "identity-msg.json"
+            lst_m.write_text(json.dumps(dict(cfg, surname_message_repos=["r"], surname_conditional=["共野"]),
+                                        ensure_ascii=False), encoding="utf-8")
+            msg.write_text("fix: 仮野さんの件\n", encoding="utf-8")
+            rc, out = run(["--commit-msg", str(msg)], {ENV_LIST: str(lst_m)})
+            expect("--commit-msg: surname_message_repos の repo では姓だけでも exit 1 (値は伏せる)",
+                   rc == 1 and "commit message:1" in out and "姓 (漢字)" in out and clean(out), out)
+            msg.write_text("fix: 共野さんの立替の件\n", encoding="utf-8")
+            rc, out = run(["--commit-msg", str(msg)], {ENV_LIST: str(lst_m)})
+            expect("--commit-msg: その repo では条件つきの姓も役割の語によらず exit 1", rc == 1, out)
+            msg.write_text("fix: 教員野さんの件\n", encoding="utf-8")
+            rc, out = run(["--commit-msg", str(msg)], {ENV_LIST: str(lst_m)})
+            expect("--commit-msg: surname_allow の姓 (教員) はその repo でも当てない", rc == 0, out)
+            lst_o = base / "identity-other.json"
+            lst_o.write_text(json.dumps(dict(cfg, surname_message_repos=["other-repo"]), ensure_ascii=False),
+                             encoding="utf-8")
+            msg.write_text("fix: 仮野さんの件\n", encoding="utf-8")
+            rc, out = run(["--commit-msg", str(msg)], {ENV_LIST: str(lst_o)})
+            expect("--commit-msg: 一覧に無い repo では姓だけを当てない", rc == 0, out)
             # --tree
             (repo / "plain.md").write_text("x\nKarino Nako\n", encoding="utf-8")
             (repo / "docs" / ("%s.txt" % ID1.lower())).write_text("y\n", encoding="utf-8")
