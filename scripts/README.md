@@ -232,11 +232,13 @@
 - **[latex-pdf-audit.py](latex-pdf-audit.py)** — Audit a LaTeX log and PDF, and optionally render numbered pages for visual review.
 - **[latex-split-deps.py](latex-split-deps.py)** — 原稿の一部 (節・\input の file) を別の文書へ移す前に、 移すと切れる参照・引用と、 移した文の中で旧い入れ物を指す語を列挙する (読むだけ)。
 - **[latexdiff-changed-pages.py](latexdiff-changed-pages.py)** — latexdiff の PDF から、 差分の色 (追加・削除) が出ている頁だけを残す: 変わった頁を印でなく差分そのもので選ぶ。
+- **[latexdiff-eqtree.py](latexdiff-eqtree.py)** — latexdiff for the text, a tree comparison for the equations: only the changed symbols are marked.
 - **[latexdiff-fine-fixups.py](latexdiff-fine-fixups.py)** — Repair latexdiff output made with --math-markup=fine, and splice in whole-equation markup where fine is unreadable.
 - **[latexdiff-inline-math.py](latexdiff-inline-math.py)** — Let latexdiff mark only the changed tokens inside in-line math ($...$), as --math-markup=fine does for displays.
 - **[latexdiff-review-snapshot.sh](latexdiff-review-snapshot.sh)** — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex 最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
 - **[latexdiff-safecmd.py](latexdiff-safecmd.py)** — Derive latexdiff's --append-safecmd list from the manuscript preamble.
 - **[latexdiff-strip-dup-labels.py](latexdiff-strip-dup-labels.py)** — Drop \label{...} from the DELETED side of a latexdiff output, so each label survives only on the new text.
+- **[latexdiff-views-check.py](latexdiff-views-check.py)** — Check a finished latexdiff document against the two versions it claims to compare.
 - **[ledger-commit-cadence-gate.py](ledger-commit-cadence-gate.py)** — [forwarder → ai-collaboration/scripts/ledger-commit-cadence-gate.py] YAML ledger の commit cadence gate (pre-commit): 1 commit で追加される list entry (`- id:`) が N 個を超えたら refuse、escape env は hygiene log に記録 + worker scope gate (= env CAMPAIGN_WORKER_DIR が
 - **[letter-word-count.py](letter-word-count.py)** — LaTeX で組んだ返答書・手紙の語数を、 自分の文と引用 (referee の文など) に分けて数える。 git の前の版との比較つき。
 - **[library-holdings-ledger.py](library-holdings-ledger.py)** — 図書館に本があるかを OPAC で確かめた結果を、 証拠つきの台帳 (YAML) を正本として持ち、 引き直し・点検する。--selftest 内蔵。

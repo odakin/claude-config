@@ -181,6 +181,26 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 - 順番 = (`wrap`) → latexdiff → `latexdiff-strip-dup-labels.py` → `fix` → (`splice`) → [`check-latexdiff-math-markup.py --scan`](../scripts/check-latexdiff-math-markup.py) (`difinlinemath` も数式として見る) → (`unwrap`) → 組版。 `fix` の前に検査すると、 削除側の comment out を無印として数える。
 - 項目の印 (`\itemtag{…}` のような自作の macro) を new 側にだけ足して差分に番号を付けるときは、 その macro も `--append-safecmd` に足す。 足さないと、 display の中や直前に入った印が `\DIFadd` の外に出て、 無印検査が式の変更として数える (実測)。
 - 組版エラー 0・無印 0 でも、 変えた式の頁を 1 枚画像で見る (消した側の式が正しく読めるか、 形の書き換えが式ごと表示になっているか)。
+- 上の表を当てても直らない原稿 (組版が止まる式が残る、 whole に差し替える式が増えて記号単位にならない) は、 式を latexdiff に渡さない = 次の [#latexdiff-eqtree](#latexdiff-eqtree)。
+
+## <a id="latexdiff-eqtree"></a>式を latexdiff に渡さず、 構文木で比べる (`latexdiff-eqtree.py`)
+
+fine は token の平らな列を比べるので、 `_{a` のような波括弧の途中まで一致させ、 消した側に閉じ括弧だけが残る (`\MBLOCKRIGHTBRACE` で組版が止まる)。 消した式を隣の新しい式と 1 つに混ぜることもある。 fix は出てきた形を後から直す手当なので、 形が増えるたびに道具を足すことになる (実測)。
+
+- 道具 = [`../scripts/latexdiff-eqtree.py`](../scripts/latexdiff-eqtree.py): 新旧の display を対応づけ、 組ごとに同じ placeholder に置き換えて latexdiff には地の文だけを比べさせる。 式は構文木 (群・分数・括弧・macro の引数・添字) を単位に比べて placeholder に戻すので、 印は必ず釣り合った単位に付く。 文中の式 (latexdiff が旧と新を丸ごと並べたもの) と図の中の式も同じ比べ方で印が付く。
+- 順番 = 上の [#latexdiff-multi-file](#latexdiff-multi-file) の平らにする段と display の macro の展開 → `protect` → latexdiff → `restore` → 組版 → `overflow` (旧の記号も並べたために列を超えた式の番号) → 番号が出たら平らな file からもう一度、 番号を渡して `protect` → 組版 → [#latexdiff-views-check](#latexdiff-views-check)。 手順の script の雛形は道具の冒頭の usage。
+- 見え方の約束 = 式番号は新しい側。 括弧の大きさ・字間・行の切れ目は変更として印を付けない。 旧にしかない式は番号なしで、 それを引く消した文には旧の番号を出す (基準の版の `.aux` を渡す)。 共通の部分が少ない組は式ごと表示 (旧に取り消し線、 新に下線)。 移動した式は旧の場所に取り消し線、 新の場所に下線。
+- ⚠️ 無印の検査 ([`check-latexdiff-math-markup.py --scan`](../scripts/check-latexdiff-math-markup.py)) は、 この経路では式について常に 0 になる (式に latexdiff の印が無い) = 式の合格の根拠にしない。 式の検査は道具の読み戻し (追加を除くと旧、 削除を除くと新、 合わなければ止まる) と次節。
+- ⚠️ placeholder を自作するなら普通の語を 3 つ並べる。 latexdiff は共通の部分が `MINWORDSBLOCK` (既定 3) 語に満たないと前後の変更に畳むので、 1 語の placeholder は「消して足した」 形になり、 同じ式が 2 回出る (実測)。
+- ⚠️ 比較の記憶を `id()` で引かない。 一時の node の id は使い回されるので、 組むたびに結果が変わる (実測)。 生成の道具は同じ入力で 2 回回し、 頁の文字が一致することを確かめる。
+- engine ([`latexdiff-review-snapshot.sh`](../scripts/latexdiff-review-snapshot.sh)) には組み込んでいない = repo の手順の script から呼ぶ。
+
+## <a id="latexdiff-views-check"></a>差分 PDF を元の 2 版に読み戻して確かめる (`latexdiff-views-check.py`)
+
+印の検査は印の形しか見ない。 [`../scripts/latexdiff-views-check.py`](../scripts/latexdiff-views-check.py) は `diff.tex` の `\DIFadd` と `\DIFdel` を定義し直して 2 つの文書を組み、 追加だけを残した版を新の版と、 削除だけを残した版を旧の版と、 抽出した文字で比べる (語でなく文字なので、 改行・ハイフン・図の順に左右されない)。 印の作り方に依らないので、 自作の道具にも素の latexdiff にも当てられる。
+
+- 新の側は一致が合格 (数字・括弧・ハイフンを除く)。 合わなければ exit 1。
+- 旧の側は読むだけ。 新にしかない display は番号の空行として残り、 新にしかない節と図は label と図そのものが残り、 latexdiff が語の間の空白を追加の側に入れた所は語がつながる (実測)。 出た語がこの 3 つで説明できることを見る。
 
 ## <a id="latexdiff-deleted-blank-lines"></a>latexdiff は削除された空行を comment out できない — diff PDF と live で段落の切れ方が違ったら削除空行の残留を疑う (2026-09-08)
 
