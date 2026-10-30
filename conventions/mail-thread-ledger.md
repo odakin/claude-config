@@ -26,6 +26,8 @@ entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house st
 
 印と索引の値は harvester の契約の中の書式 (`messageId:` / `mid:` 接頭辞) で書く = 読み手を変えない。 道具の出力の形は harvester の fixture に載せて固定する。
 
+<a id="non-mail-records"></a>mail でない message (チャットの記録など、 道具が引けない id) は `messages` / `recorded_upto` に書かない。 id を残すなら別の field 名 (例 `discord_messages`) に書く。 索引の形を手で真似て `messages` だけを書いた entry は、 `--check` が「片方だけ」 と出す (実測 = チャットの記録と、 道具の home entry とは別に手で索引を書いた mail の記録)。
+
 項目側 (TODO): `status_context` = 現在地の 1 欄 (道具が `"<日付> <相手> の返事 (<件名>) → 次: <一手>"` の形で**上書き**、 template は shim が渡す。 template は記録した最新の message の向きと「返事か」 で 4 つから選ぶ = 相手発の返事 `--ctx-reply` / 相手発で返事でない `--ctx-new-in` / 自分発の返信 `--ctx-sent` / 自分発で返信でない `--ctx-new-out`。 「返事か」 = 件名の先頭が転送 (`Fwd:` / `Fw:` / `転送:`、 ML の `[tag]` の後も) でなく、 thread のそれより前に反対側の message が在るか。 新規の送信・追送・転送を「返信」 と書かない。 較正 = 台帳の全索引行を Gmail の header と突き合わせた実測で、 In-Reply-To は送信の道具が付けない / 道具に渡した直前の自分の mail を指すので使えず、 参加者 〔宛先が前に書いたか〕 は ML 宛ての返信を外す)、 `updated` = 今日、 `--status` があれば `status` (enum は shim が渡す)、 `email_ref` が無ければ `"threadId:<id>"` の 1 行。 notes には決定・事実・根拠だけを書き、 日付つきの進捗行を足さない (= 台帳が log になって肥大しない。 履歴は版管理)。
 
 ## <a id="procedure"></a>2. 手順
