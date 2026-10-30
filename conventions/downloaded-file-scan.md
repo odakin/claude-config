@@ -71,7 +71,7 @@ ClamAV は既知の検体を署名で探す。 入れるかは本人が決める
 
 入れた後は、 検査の道具が `clamscan` を見つけて自動で回す (PATH に無ければ `/opt/homebrew/bin` と `/usr/local/bin` も探す)。 file ごとに `clamscan` が定義を読むので、 1 file に数秒かかる (実測)。 常駐の `clamd` は使わない。
 
-- **定義の更新**: 定義が古いままだと新しい検体を拾わない。 `install-clamav.sh --update` を呼ぶ shim を定期 job に載せる ([`install-launchd-cron.sh`](../scripts/install-launchd-cron.sh) の cmd routine。 label と時刻は呼び出し側の層が決める)。 Agent の登録は常駐の仕組みの追加なので、 本人が決めてから入れる。
+- **定義の更新**: 定義が古いままだと新しい検体を拾わない。 `install-clamav.sh --update` を呼ぶ shim を定期 job に載せる ([`install-launchd-cron.sh`](../scripts/install-launchd-cron.sh) の cmd routine。 label と時刻は呼び出し側の層が決める)。 Agent の登録は常駐の仕組みの追加なので、 本人が決めてから入れる。 auto mode では登録の command を classifier が止める (実測) = 本人に操作と対象を名指して承認してもらい、 1 回だけ打ち直す ([`claude-code-permissions.md#chat-approval-reaches-classifier`](claude-code-permissions.md#chat-approval-reaches-classifier))。
 - **効いているかの確かめ方**: 無害な検査用の文字列 EICAR の file を scratch に作って検査の道具に渡すと、 `Eicar-Test-Signature` が出て要確認になる (zip の中でも出る、 実測)。 定義の署名は `sigtool --info=<定義の dir>/daily.cvd` の `Verification OK`。
 - 定義の download のときに `ERROR: NULL X509 store` が出ることがある (実測: 終了値は 0 で定義は取れ、 `sigtool` の検証は OK。 原因は見ていない)。
 
