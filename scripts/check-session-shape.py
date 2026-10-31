@@ -831,6 +831,9 @@ def run_selftest() -> int:
         (repo / "SESSION.md").write_text("# SESSION\n\n最終更新: 2026-01-01 (sweep 済: abc1234)\n\n## 現在地\n\n- 案件 A — 次 = X → [正本](DESIGN.md)\n", encoding="utf-8")
         subprocess.run(["git", "add", "SESSION.md"], cwd=repo, check=True)
         subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=repo, check=True)
+        # A run with no mode (e.g. only --repo) checks nothing; exiting 0 there reads as a pass.
+        r = run(["--repo", str(repo)], repo)
+        check(r.returncode == 2, f"no mode (only --repo) exits 2, not a silent 0 (got {r.returncode})")
 
         def stage(rel: str, text: str) -> None:
             p = repo / rel
@@ -1188,8 +1191,11 @@ def main() -> int:
         return mode_crypt_audit(Path(a.root).expanduser())
     if a.fleet:
         return mode_fleet(Path(a.root).expanduser(), limit=(a.limit if a.limit > 0 else 10**9))
-    ap.print_help()
-    return 0
+    # No mode = nothing was checked (--repo alone only names the repo for --staged).
+    # A 0 here would read as a pass to the caller.
+    ap.print_help(sys.stderr)
+    print("check-session-shape: give a mode (--staged / --text / --fleet / --crypt-audit / --selftest)", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
