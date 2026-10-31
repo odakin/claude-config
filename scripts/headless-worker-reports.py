@@ -28,7 +28,8 @@ Codex アプリに出る起動 (scripts/codex-app-launch.py、 手元の共有 C
     を送った`)、 無ければ `continue --thread`。 出力に無い start は「thread 不明」 (起動が止まったか出力を切った)。
   - 作業 dir = `--cwd` (start)、 無ければ thread の rollout の先頭 session_meta の cwd。 model / effort = 起動の出力、
     無ければ command の `--model` / `--effort`。 worker の会話記録 = その thread の rollout
-    ($CODEX_HOME/sessions/*/*/*/rollout-*-<id>.jsonl と archived_sessions/、 起動以降に更新されたもの)。
+    ($CODEX_HOME/sessions/*/*/*/rollout-*-<id>.jsonl と archived_sessions/、 起動以降に更新されたもの。 Codex が古い記録を
+    zstd で圧縮した .jsonl.zst も含む = lib/compressed_jsonl.py で読み、 読めなかった本数は報告の終わりに 1 行)。
   - 出力に起動の行があっても command の実行位置に起動の道具・board.py が無い tool call (会話記録を grep した出力など)
     と、 command の文字列に `codex-app-launch.py start|continue` が出るだけの tool call は文字列候補。
   - 記録の約束は自動では注入されない (注入 hook は claude -p / codex exec だけを書き換える) = 起動文 file の MARKER か
