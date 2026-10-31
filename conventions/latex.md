@@ -455,7 +455,7 @@ display math・図は行数でなく rendered での専有量で別途見積も�
 
 ## <a id="source-comment-scope"></a>source の comment に査読の記録を書かない — 置き場は results note
 
-**ルール:** source の comment に書くのは、 版ごとの変更の要点・組版の注・コメントアウトした旧文 (盲検に出すときは写しで剥がす) まで。 **査読の verdict・finding の一覧・results や plans への path・依頼の token・依頼者の発言の引用は書かない**。 置き場は results note と commit message の本文 (件名に結論を書くと、 盲検の受け手が repo の log から読む)。
+**ルール:** source の comment に書くのは、 版ごとの変更の要点・組版の注・コメントアウトした旧文 (盲検に出すときは写しで剥がす) まで。 **査読の verdict・finding の一覧・記録の置き場 (results・plans・notes・SESSION・DESIGN) への path・依頼の token (掲示板の request id を含む)・依頼者の発言の引用は書かない**。 置き場は results note と commit message の本文 (件名に結論を書くと、 盲検の受け手が repo の log から読む)。 path の先が査読の記録でない材料の note でも、 置き場への path なら検査は警告する = 材料の所在は repo の索引 (notes の README など) に書く (実測)。
 
 **Why:** comment は剥がす段のある経路 (封じた sandbox の referee copy) では消えるが、 剥がす段の無い経路 (repo を直読する受け手) では対象と一緒に届く。 受領のたびに記録を source に書き戻すと、 次の round の盲検の対象に前回の結論が入る (実測: 掲示板経由の受け手が、 対象の先頭 comment に前回の verdict と訂正の一覧を読んだと申告した)。 汚染経路の分類 = [`cold-eyes-isolation.md`](../../ai-collaboration/conventions/cold-eyes-isolation.md#contamination-channels) (d)。
 
@@ -643,6 +643,19 @@ for y0, y1, s in sorted((b[1], b[3], b[4][:40]) for b in p.get_text("blocks") if
 ```
 
   題名の上端が本文頁の text top (例: 109 pt) より上に出たら詰めすぎ。 詰めた結果 1 頁目に本文が流れ込むのが嫌なら abstract の後に `\newpage` (目次を挟むなら `\newpage\tableofcontents\newpage`)。
+
+## <a id="float-above-handset-title"></a>`\maketitle` を使わず題を手で組んだら、 1 頁目の上に図を置かせない
+
+短いノートでは `\maketitle` を使わず、 `center` 環境で題と日付を手で組むことがある。
+このとき `[t]` や `[tb]` の図は、 1 頁目の**題より上**に置かれうる (実測: 図 1 が題の上に出た)。
+標準の `article`・`ltjsarticle` の `\maketitle` は 1 頁目の上の float を止める (`\global\@topnum\z@`) が、 手で組んだ題は止めない。
+
+```latex
+\begin{center} … 題と日付 … \end{center}
+\suppressfloats[t]   % この頁の上には float を置かない
+```
+
+- 図をその図を使う節の直後に `[ht]` で置くと、 説明の途中で図が次の頁の頭に飛ばず、 読む流れに沿う。 頁数が増えないかは組んで確かめる。
 
 ## <a id="supplement-in-same-pdf"></a>Supplemental Material は、 まず同じ PDF の文献表の後に置く
 
