@@ -33,9 +33,10 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
                 行を落とす。 両方がある形は実測では見ていない)
                 ⚠️ Codex が agent を起こした子の session (先頭の session_meta に parent_thread_id) は、 親の会話を
                 user 役の message として写して持ち、 親からの指示も user 役で持つ。 子の user 役は role「parent」 にする
-                (= `--role user` には入らない。 元の発言は親の session の記録で当たる。 子の記録に人が打った印
-                〔event_msg の user_message〕 は無い = 実測)。 ⚠️ 写しは親の assistant の発言や道具の呼び出しも含むので、
-                `--role any` / `--role assistant` / `--tool-runs` では親の分が子の session id でも重ねて出る
+                (= `--role user` には入らない。 元の発言は親の session の記録で当たる)。 ⚠️ 人が子の thread に直接打った
+                発言があっても記録の形では見分けられない (人が打った印 〔event_msg の user_message〕 は親の記録にも無い
+                = 実測) = 子の中の発言を探すときは `--role parent` も引く。 ⚠️ 写しは親の assistant の発言や道具の呼び出しも
+                含むので、 `--role any` / `--role assistant` / `--tool-runs` では親の分が子の session id でも重ねて出る
 
 既定の挙動:
   - 役割は user だけ (--role any で全部)。 harness が差し込んだ user 側の文
@@ -53,6 +54,8 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
   その呼び出しの**結果の冒頭** (tool_result / function_call_output / custom_tool_call_output) と対にして出す。 用途 = 「その script を
   前にいつ走らせて、 どう終わったか」 (認証切れ・失敗が初めて出た時刻、 成功していた最後の時刻) を RCA で拾う。
   本文の検索と違い、 役割・注入文の絞り込みは使わない。 結果が記録に無い呼び出しは「(結果なし)」。
+  Claude の記録は type が assistant / user の record だけを読む (API 送信の写し 〔api-request-blob、 時刻なし〕 は前の
+  呼び出しを繰り返すので、 読むと時刻が空になり「(結果なし)」 の行が増える = 実測)。
   code-mode の JavaScript 入力も検索する。内側の tool 実行の成否は外側の完了だけでは決めず、結果を確認する。
   ⚠️ 入力の文字列に当てるので、 script の名前を grep / cat / 編集しただけの呼び出しも当たる (--context で読み分ける)。
   pattern は出力に見える形 (`"command": "…`) で書ける。
@@ -323,6 +326,8 @@ def _tool_items(agent: str, rec: dict):
     """1 record から (種別 call|result, id, 文字列, error か) を取り出す。 会話の本文は対象外。"""
     out = []
     if agent == "claude":
+        if rec.get("type") not in ("assistant", "user"):
+            return out  # API 送信の写し (api-request-blob) などは前の呼び出しを繰り返すだけ
         c = (rec.get("message") or {}).get("content")
         if not isinstance(c, list):
             return out
@@ -546,6 +551,23 @@ def selftest() -> int:
             check("--tool-runs: 空白なしの記録に、 出力の形の literal が当たる", len(tool_runs('"command": "python3 fruit', **ctb)) == 1),
             check("--tool-runs: 項目をまたぐ出力の形も当たる", len(tool_runs(r'pick", "description"', **{**ctb, "regex": True})) == 1),
             check("--tool-runs: 空白なしの記録で、 当たらない pattern は 0 件のまま", tool_runs(r'"command": "[^"]*no-such-tool', **{**ctb, "regex": True}) == []),
+        ]
+        # API 送信の写し (type = api-request-blob、 時刻なし) は前の tool_use を送信時の形で繰り返す。 呼び出しと読むと
+        # 時刻が空で上書きされ、 結果を返した後の写しは「(結果なし)」 の行を足す (実測)
+        blob = Path(td) / "claude-blob" / "proj"
+        blob.mkdir(parents=True)
+        use = {"type": "tool_use", "id": "b1", "name": "Bash", "input": {"command": "python3 plum-client.py run"}}
+        (blob / "ffffffff-5555.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in [
+            {"type": "assistant", "timestamp": "2099-03-02T00:00:00Z", "message": {"content": [use]}},
+            {"type": "api-request-blob", "message": {"content": [use]}},
+            {"type": "user", "timestamp": "2099-03-02T00:00:01Z", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "b1", "content": "plum ok"}]}},
+            {"type": "api-request-blob", "message": {"content": [use]}},
+        ]) + "\n", encoding="utf-8")
+        br = tool_runs("plum-client.py", **{**tb, "agent": "claude", "claude_dir": Path(td) / "claude-blob"})
+        results += [
+            check("--tool-runs: API 送信の写しは呼び出しと読まない (時刻が残り、 (結果なし) の行が増えない)",
+                  [(x[0], x[4].split(" → ")[1]) for x in br] == [("2099-03-02T00:00:00Z", "plum ok")]),
         ]
         # Code-mode tools use custom_tool_call/input, not function_call/arguments.
         custom = cxt / "rollout-2099-02-05T00-00-00-00000000-0000-4000-8000-0000000c0de3.jsonl"

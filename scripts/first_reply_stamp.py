@@ -169,18 +169,49 @@ def has_top_stamp(text: str) -> bool:
 
 # ---------- transcript ----------
 
+# Codex は古くなった rollout を zstd で圧縮する (.jsonl.zst)。 事後 audit が読むときは lib/compressed_jsonl.py で
+# 展開し、 読めなかった file を理由ごとに集める (理由 → path の set = 同じ file を 2 度読んでも 1 本)。
+# hook が読む動いている session の記録は平文なので、 平文の読み方は変えない。
+ZST_UNREADABLE: dict = {}
+
+
+def _entries(lines):
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            value = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            yield value
+
+
+def _iter_compressed(path: Path):
+    try:
+        if str(SCRIPT_DIR / "lib") not in sys.path:
+            sys.path.insert(0, str(SCRIPT_DIR / "lib"))
+        import collections
+        import compressed_jsonl
+    except Exception:
+        ZST_UNREADABLE.setdefault("no-means", set()).add(str(path))
+        return
+    tally = collections.Counter()
+    try:
+        with compressed_jsonl.open_lines(path, errors="replace", tally=tally) as lines:
+            yield from _entries(lines)
+    finally:
+        for reason in tally:
+            ZST_UNREADABLE.setdefault(reason, set()).add(str(path))
+
+
 def _iter_jsonl(path: Path):
+    if str(path).endswith(".jsonl.zst"):
+        yield from _iter_compressed(path)
+        return
     with open(path, encoding="utf-8", errors="replace") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                value = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(value, dict):
-                yield value
+        yield from _entries(handle)
 
 
 def _claude_user_text(entry: dict) -> str | None:

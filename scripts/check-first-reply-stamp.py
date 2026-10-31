@@ -8,6 +8,8 @@ trust 未承認) transcript は残るので、 ここは劣化を検出できる
   注入 stamp の「account 未同定」 (Claude: SessionStart hook の record。 whoami の race の監視)
   Stop 段の記録 (stop-log.jsonl = observe なら「block なら差し戻していた」 件数)
 範囲は hook と同じ (workspace base 配下の cwd、 Claude headless と Codex sub-agent を除く)。
+Codex の rollout は、 古くなって zstd で圧縮された `.jsonl.zst` も展開して数える (lib/compressed_jsonl.py)。
+展開できなかった本数は所見に出す (= その session は数えていない、 と分かるように)。
 
 設計と実測 = conventions/multi-account-machine-surface.md#first-reply-stamp-mechanism。
 
@@ -136,7 +138,8 @@ def codex_session(path: Path) -> dict | None:
     prompts, texts = frs.codex_first_turn(path)
     if prompts < 1 or not texts:
         return None
-    return {"flavor": "codex", "session": path.stem[-36:][:8], "date": started, "cwd": cwd,
+    stem = path.name[: -len(".jsonl.zst")] if path.name.endswith(".jsonl.zst") else path.stem
+    return {"flavor": "codex", "session": stem[-36:][:8], "date": started, "cwd": cwd,
             "s1": frs.has_top_stamp(texts[0]), "s2": any(frs.has_top_stamp(t) for t in texts),
             "injected": False, "unresolved": False, "head": frs.top_line(texts[0])[:50]}
 
@@ -155,7 +158,8 @@ def collect(days: int, with_codex: bool, since_date: str = "") -> list[dict]:
         if row:
             rows.append(row)
     if with_codex and codex_root().is_dir():
-        for path in codex_root().glob("**/rollout-*.jsonl"):
+        # 古くなった rollout は zstd で圧縮される (.jsonl.zst)。 平文だけを数えると古い session を数え落とす
+        for path in [*codex_root().glob("**/rollout-*.jsonl"), *codex_root().glob("**/rollout-*.jsonl.zst")]:
             try:
                 if path.stat().st_mtime < cutoff:
                     continue
@@ -182,8 +186,12 @@ def stop_log(days: int) -> list[dict]:
     return out
 
 
+ZST_REASONS = {"no-means": "展開の手段が無い", "failed": "展開の途中で失敗"}
+
+
 def summarize(rows: list[dict], logs: list[dict], threshold: float, min_sessions: int,
-              fix_date: str = WAIT_FIX_DATE) -> dict:
+              fix_date: str = WAIT_FIX_DATE, unreadable: dict | None = None) -> dict:
+    """unreadable = 読めなかった圧縮した rollout (理由 → path の set、 first_reply_stamp.ZST_UNREADABLE)。"""
     by = {}
     for flavor in ("claude", "codex"):
         sub = [r for r in rows if r["flavor"] == flavor]
@@ -201,6 +209,11 @@ def summarize(rows: list[dict], logs: list[dict], threshold: float, min_sessions
     if unresolved:
         findings.append(f"🟡 claude: 注入 stamp が「account 未同定」 の session が {len(unresolved)} 件 "
                         f"({fix_date} 以降) = whoami --wait が効いていない")
+    zst = {k: len(v) for k, v in (unreadable or {}).items() if v}
+    if zst:
+        findings.append("🟡 codex: 圧縮した rollout (.jsonl.zst) を読めなかった = "
+                        + " / ".join(f"{ZST_REASONS.get(k, k)} {n} 本" for k, n in sorted(zst.items()))
+                        + " (その session は数えていない)")
     info = []
     if logs:
         modes = sorted({str(e.get('mode')) for e in logs})
@@ -323,6 +336,39 @@ def selftest() -> int:
         check("breakdown: 促しが最初の返信より先に来たことを拾う", g.get("reminder_first") is True and g.get("tool_first") is False)
         table = breakdown(collect(14, with_codex=False))
         check("breakdown: 表に 3 軸が出る", all(t in table for t in ("注入 stamp:", "状況報告促し:", "tool call:")))
+        # Codex は古くなった rollout を zstd で圧縮する (.jsonl.zst)。 数え落とさず、 読めなければ所見にする
+        try:
+            import compressed_jsonl as cj
+        except Exception:
+            cj = None
+        uid = "00000000-0000-4000-8000-0000000057a2"
+        zrows = [{"type": "session_meta", "payload": {"id": uid, "cwd": cwd}},
+                 {"type": "event_msg", "timestamp": today, "payload": {"type": "user_message", "message": "go"}},
+                 {"type": "response_item", "payload": {"type": "message", "role": "assistant",
+                                                       "content": [{"type": "output_text", "text": f"🖥 h · cli = x · session {uid[:8]}"}]}}]
+        packed = cj.compress_for_test(("\n".join(json.dumps(r, ensure_ascii=False) for r in zrows) + "\n").encode()) if cj else None
+        zpath = codex / f"rollout-2099-01-01T00-00-00-{uid}.jsonl.zst"
+        if packed is None:
+            print("  ⏭ 圧縮した rollout を数える (この機械に展開の手段が無い)")
+        else:
+            zpath.write_bytes(packed)
+            zc = [r for r in collect(14, with_codex=True) if r["flavor"] == "codex"]
+            check("圧縮した rollout (.jsonl.zst) も数え、 session id を名から取る",
+                  len(zc) == 2 and [r["s1"] for r in zc if r["session"] == uid[:8]] == [True])
+        if cj is not None:
+            zpath.write_bytes(packed or b"x")
+            saved_force, cj.FORCE = cj.FORCE, "none"
+            try:
+                getattr(frs, "ZST_UNREADABLE", {}).clear()
+                nz = collect(14, with_codex=True)
+                try:
+                    zs = summarize(nz, [], threshold=0.10, min_sessions=1, unreadable=frs.ZST_UNREADABLE)
+                except (TypeError, AttributeError):  # 直す前の code には引数が無い
+                    zs = {"findings": []}
+            finally:
+                cj.FORCE = saved_force
+            check("展開の手段が無い: 読めなかった本数を所見に出す (黙って数え落とさない)",
+                  any("圧縮した rollout" in f and "展開の手段が無い 1 本" in f for f in zs["findings"]))
     for key, value in saved.items():
         if value is None:
             os.environ.pop(key, None)
@@ -347,7 +393,7 @@ def main(argv: list[str]) -> int:
     if args.selftest:
         return selftest()
     rows = collect(args.days, with_codex=not args.no_codex, since_date=args.since)
-    summary = summarize(rows, stop_log(args.days), args.threshold, args.min_sessions)
+    summary = summarize(rows, stop_log(args.days), args.threshold, args.min_sessions, unreadable=frs.ZST_UNREADABLE)
     if args.json:
         print(json.dumps({"rows": rows, **summary}, ensure_ascii=False, indent=1, default=str))
     elif args.findings_only:

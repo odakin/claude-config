@@ -68,6 +68,12 @@ try:
     import claude_config_dirs as _ccd
 except Exception:  # pragma: no cover - 古い配置
     _ccd = None
+try:
+    import compressed_jsonl as _cj
+except Exception:  # pragma: no cover - 古い配置 (圧縮した rollout は読めなかった本数として出す)
+    _cj = None
+# 読めなかった圧縮した rollout (理由 → path の set)。 run() の終わりに 1 行で出す
+ROLLOUT_UNREADABLE: dict = {}
 
 # the binary may be given by path (an app-bundled CLI, a pinned version) and wrapped (caffeinate, env): the path
 # prefix is consumed before the name so that `/Applications/.../codex exec` and `caffeinate -i /opt/x/codex exec`
@@ -274,21 +280,46 @@ def codex_home() -> Path:
     return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
 
 
+def rollout_id(path: Path) -> str:
+    """The thread id at the end of a rollout's name (`rollout-<time>-<id>.jsonl`, or `.jsonl.zst` once Codex compressed it)."""
+    name = path.name[: -len(".zst")] if path.name.endswith(".jsonl.zst") else path.name
+    return name[: -len(".jsonl")][-36:] if name.endswith(".jsonl") else ""
+
+
 def rollouts(thread) -> list[Path]:
-    """The rollout file of a thread id, or of a unique id prefix (8+ characters, as `continue --thread` takes)."""
+    """The rollout file of a thread id, or of a unique id prefix (8+ characters, as `continue --thread` takes).
+    Codex compresses old rollouts to .jsonl.zst; both forms are found."""
     if not isinstance(thread, str) or not re.fullmatch(r"[0-9a-f][0-9a-f-]{7,35}", thread):
         return []
     home, found = codex_home(), []
     for pattern in (f"sessions/*/*/*/rollout-*{thread}*.jsonl", f"archived_sessions/rollout-*{thread}*.jsonl"):
-        found.extend(p for p in home.glob(pattern) if p.name[-42:-6].startswith(thread) and THREAD_ID.fullmatch(p.name[-42:-6]))
-    return sorted(found) if len({p.name[-42:-6] for p in found}) == 1 else []
+        for p in [*home.glob(pattern), *home.glob(pattern + ".zst")]:
+            if rollout_id(p).startswith(thread) and THREAD_ID.fullmatch(rollout_id(p)):
+                found.append(p)
+    return sorted(found) if len({rollout_id(p) for p in found}) == 1 else []
+
+
+def _first_line(path: Path) -> str:
+    if not path.name.endswith(".jsonl.zst"):
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            return fh.readline()
+    if _cj is None:
+        ROLLOUT_UNREADABLE.setdefault("no-means", set()).add(str(path))
+        return ""
+    import collections
+    tally = collections.Counter()
+    try:
+        with _cj.open_lines(path, errors="replace", tally=tally) as lines:
+            return next(iter(lines), "")
+    finally:
+        for reason in tally:
+            ROLLOUT_UNREADABLE.setdefault(reason, set()).add(str(path))
 
 
 def rollout_cwd(path: Path):
     """The working directory in a rollout's first record (session_meta)."""
     try:
-        with path.open(encoding="utf-8", errors="replace") as fh:
-            meta = json.loads(fh.readline())
+        meta = json.loads(_first_line(path))
     except (OSError, ValueError):
         return None
     payload = meta.get("payload") if isinstance(meta, dict) and meta.get("type") == "session_meta" else None
@@ -340,7 +371,7 @@ def app_launches(obj: dict, cmd: str, sid: str, tool_id: str, apps: list, board:
         row["launch_index"] = f"app-{j}"
         row["rollouts"] = rollouts(row["thread"]) if row["detection"] == "execution" else []
         if row["rollouts"]:
-            row["thread"] = row["rollouts"][0].name[-42:-6]  # a `--thread` prefix becomes the full id
+            row["thread"] = rollout_id(row["rollouts"][0])  # a `--thread` prefix becomes the full id
         cwd = row["cwd"]
         if isinstance(cwd, str):
             cwd = expand(cwd)
@@ -549,6 +580,7 @@ def report(launch: dict, n: int, max_chars: int) -> None:
 
 
 def run(session: str, dirs: list[Path], max_chars: int) -> int:
+    ROLLOUT_UNREADABLE.clear()
     cleanup(dirs)
     files = session_files(dirs, session)
     if not files:
@@ -582,6 +614,11 @@ def run(session: str, dirs: list[Path], max_chars: int) -> int:
     print(f"headless・Codex アプリの起動候補: {count} 件 (うち Codex アプリ {apps} 件) / 文字列候補: {len(uniq) - count} 件 (session {session})")
     for i, l in enumerate(uniq, 1):
         report(l, i, max_chars)
+    if ROLLOUT_UNREADABLE:
+        reasons = {"no-means": "展開の手段が無い", "failed": "展開の途中で失敗"}
+        print("⚠️ 圧縮した rollout (.jsonl.zst) を読めなかった = "
+              + " / ".join(f"{reasons.get(k, k)} {len(v)} 本" for k, v in sorted(ROLLOUT_UNREADABLE.items()))
+              + " (その起動の作業 dir は rollout から取れていない)")
     return 0
 
 
@@ -1005,6 +1042,67 @@ def app_launch_regression() -> None:
                 os.environ["CODEX_HOME"] = old_home
 
 
+def compressed_rollout_regression() -> None:
+    """Codex compresses old rollouts to .jsonl.zst: the thread id, the cwd and the worker's record come from them too,
+    and a rollout that cannot be decompressed here is reported, not taken for a missing one."""
+    import contextlib
+    import io
+    try:
+        import compressed_jsonl as cj
+    except Exception:
+        cj = None
+    g = "00000000-0000-4000-8000-0000000000c7"
+    old_home = os.environ.get("CODEX_HOME")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        os.environ["CODEX_HOME"] = str(tmp / "codex")
+        try:
+            box = tmp / "box"
+            box.mkdir()
+            archived = tmp / "codex" / "archived_sessions"
+            archived.mkdir(parents=True)
+            zpath = archived / f"rollout-2042-01-03T10-00-00-{g}.jsonl.zst"
+            meta = (json.dumps({"type": "session_meta", "payload": {"id": g, "cwd": str(box)}}) + "\n").encode()
+            packed = cj.compress_for_test(meta) if cj is not None else None
+            launcher = "/opt/sample/claude-config/scripts/codex-app-launch.py"
+            proj = tmp / "cfg" / "projects" / "p"
+            proj.mkdir(parents=True)
+            log = proj / "zst-parent.jsonl"
+            log.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in [
+                {"type": "assistant", "timestamp": "2020-01-01T00:00:00Z", "sessionId": "zst-parent", "cwd": str(tmp),
+                 "message": {"content": [{"type": "tool_use", "id": "z-1", "name": "Bash",
+                                          "input": {"command": f"python3 {launcher} continue --thread {g[:8]} --prompt-file r.txt"}}]}},
+                {"type": "user", "timestamp": "2020-01-01T00:00:00Z", "sessionId": "zst-parent",
+                 "message": {"content": [{"type": "tool_result", "tool_use_id": "z-1",
+                                          "content": f"→ thread {g} に次の turn を送った。 進行 = codex resume {g}"}]}},
+            ]) + "\n")
+            if packed is None:
+                print("SKIP a compressed rollout is read (no zstd decompressor on this machine)")
+            else:
+                zpath.write_bytes(packed)
+                z = [l for l in launches(log) if l["kind"] == "codex-app" and l["detection"] == "execution"]
+                assert len(z) == 1 and z[0]["thread"] == g, z
+                assert z[0]["cwd"] == box and worker_transcripts(z[0]) == [zpath], z
+                print("OK a compressed rollout gives the thread id, the cwd and the worker's record")
+            if cj is not None:
+                zpath.write_bytes(packed or b"x")
+                saved, cj.FORCE = cj.FORCE, "none"
+                buf = io.StringIO()
+                try:
+                    with contextlib.redirect_stdout(buf):
+                        assert run("zst-parent", [tmp / "cfg" / "projects"], 0) == 0
+                finally:
+                    cj.FORCE = saved
+                text = buf.getvalue()
+                assert "圧縮した rollout (.jsonl.zst) を読めなかった" in text and "展開の手段が無い 1 本" in text, text
+                print("OK a compressed rollout that cannot be decompressed here is reported")
+        finally:
+            if old_home is None:
+                os.environ.pop("CODEX_HOME", None)
+            else:
+                os.environ["CODEX_HOME"] = old_home
+
+
 def selftest() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -1051,6 +1149,7 @@ def selftest() -> int:
         assert run("abcd1234", [tmp / "cfg" / "projects"], 0) == 0
         assert run("zzzz", [tmp / "cfg" / "projects"], 0) == 1
     app_launch_regression()
+    compressed_rollout_regression()
     receipt_regression(Path(__file__).resolve().parents[1])
     followup_regression(Path(__file__).resolve().parents[1])
     print("selftest OK")
