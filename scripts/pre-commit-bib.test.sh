@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pre-commit-bib.test.sh — pre-commit-bib (全 repo 共通の git pre-commit) の配線 test: SESSION.md の形の gate・変数の直後の全角文字の gate・学生の識別子の gate が commit を止める / 通す / escape hatch で通る (hermetic)
+# pre-commit-bib.test.sh — pre-commit-bib (全 repo 共通の git pre-commit) の配線 test: SESSION.md の形の gate・変数の直後の全角文字の gate・学生の識別子の gate が commit を止める / 通す / escape hatch で通る + path 指定の commit で .bib を自動修正したら止めて打ち直させる (hermetic)
 #
 # 正本: claude-config/scripts/pre-commit-bib.test.sh
 # 実行: bash scripts/pre-commit-bib.test.sh (run-all-checks.sh が自動発見)
@@ -185,5 +185,36 @@ else
 fi
 ln -sf "$HOOK" "$REPO/.git/hooks/pre-commit"
 
+# pathspec commit (git commit -- <path>) で fixer が直す .bib: 作業木だけを直して止め、 打ち直しで通る = main の index に
+# 修正前の版が残らない (latex.md#autofix-with-pathspec-commit)。 普通の commit (git add の後) は従来どおり直して re-stage して通る。
+BREPO="$TMP/brepo"; mkdir -p "$BREPO"
+(
+  cd "$BREPO" && git init -q -b main && git config user.email t@example.invalid && git config user.name t \
+  && ln -sf "$HOOK" .git/hooks/pre-commit \
+  && printf '@article{K,\n  title = "{a--b}",\n}\n' > x.bib && git add x.bib && HOME="$FAKE_HOME" git commit -q -m init
+) >/dev/null 2>&1 || { echo "FAIL: bib の一時 repo の初期化"; exit 1; }
+printf '@article{K,\n  title = "{a–b}",\n  note = "{n1}",\n}\n' > "$BREPO/x.bib"
+if (cd "$BREPO" && HOME="$FAKE_HOME" git commit -q -m p -- x.bib 2>"$TMP/err" >/dev/null); then
+  ng "pathspec commit が直したうえで通った (main の index に修正前の版が残る形)"
+else
+  if grep -q 'pathspec commit' "$TMP/err" && grep -q 'a--b' "$BREPO/x.bib" && (cd "$BREPO" && git diff --cached --quiet); then
+    ok "pathspec commit: 作業木を直して止める (main の index は HEAD のまま)"
+  else
+    ng "pathspec commit の止まり方が違う: $(head -3 "$TMP/err")"
+  fi
+  if (cd "$BREPO" && HOME="$FAKE_HOME" git commit -q -m p -- x.bib 2>"$TMP/err" >/dev/null) \
+     && (cd "$BREPO" && git diff --cached --quiet && git diff --quiet); then
+    ok "打ち直しで通り、 index・作業木・HEAD が揃う"
+  else
+    ng "打ち直しが通らない / index が揃わない: $(head -3 "$TMP/err")"
+  fi
+fi
+printf '@article{K,\n  title = "{a–b}",\n  note = "{n2}",\n}\n' > "$BREPO/x.bib"
+if (cd "$BREPO" && git add x.bib && HOME="$FAKE_HOME" git commit -q -m q 2>"$TMP/err" >/dev/null) \
+   && (cd "$BREPO" && git diff --cached --quiet) && git -C "$BREPO" show HEAD:x.bib | grep -q 'a--b'; then
+  ok "普通の commit は従来どおり直して re-stage して通る"
+else
+  ng "普通の commit の自動修正が変わった: $(head -3 "$TMP/err")"
+fi
 echo "pre-commit-bib.test: pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

@@ -54,17 +54,22 @@ if [[ -f "$FIXER" ]]; then
         # Run the fixer (exit 1 = files were modified, 0 = no changes)
         python3 "$FIXER" $LATEX_FILES && rc=0 || rc=$?
         if [[ $rc -eq 1 ]]; then
+            # pathspec commit (git commit -- <path>) は一時 index (<git dir>/next-index-<pid>.lock) で走る。 ここで git add すると
+            # 修正は commit に入るが、 commit の後に main の index へ修正前の版が書き戻される (status が MM、
+            # latex.md#autofix-with-pathspec-commit)。 = pathspec commit では作業木だけを直して止め、 同じ commit を打ち直させる
+            # (止めた commit は main の index に触らない。 打ち直しでは fixer が直すものが無い)。
+            # -a / --include は <git dir>/index.lock (= commit の後に main の index になる) なので従来どおり直して re-stage する
+            case "$(basename "${GIT_INDEX_FILE:-}")" in
+                next-index-*.lock)
+                    echo "pre-commit: auto-fixed non-LaTeX characters in the work tree:$LATEX_FILES" >&2
+                    echo "pre-commit: pathspec commit — stopped so that the main index does not keep the pre-fix version. Run the same commit again (latex.md#autofix-with-pathspec-commit)." >&2
+                    exit 1
+                    ;;
+            esac
             for f in $LATEX_FILES; do
                 git add "$f"
             done
             echo "pre-commit: auto-fixed non-LaTeX characters and re-staged."
-            # pathspec commit (git commit -- <path>) は一時 index で走る = 修正は commit に入るが、 main の index には修正前の版が残る
-            # (commit の後に status が MM)。 直し方 = commit の後に git restore --staged <path> (latex.md#autofix-with-pathspec-commit)
-            # --git-path index は GIT_INDEX_FILE を返すので使わない = git dir の index を直に見る
-            main_index="$(git rev-parse --absolute-git-dir 2>/dev/null)/index"
-            if [[ -n "${GIT_INDEX_FILE:-}" && -n "$main_index" && "$(cd "$(dirname "$GIT_INDEX_FILE")" 2>/dev/null && pwd)/$(basename "$GIT_INDEX_FILE")" != "$(cd "$(dirname "$main_index")" 2>/dev/null && pwd)/$(basename "$main_index")" ]]; then
-                echo "pre-commit: pathspec commit — main の index に修正前の版が残る。 commit の後に git restore --staged$LATEX_FILES (latex.md#autofix-with-pathspec-commit)"
-            fi
         elif [[ $rc -ge 2 ]]; then
             echo "pre-commit: fix-bib-unicode.py failed (exit $rc)." >&2
             exit 1

@@ -294,7 +294,7 @@
 - **[post-length.py](post-length.py)** — SNS 投稿文の長さを X / Bluesky / Mastodon / Vivaldi Social の数え方で並べて数え、上限を超えるものを示す。--selftest 内蔵。
 - **[pptx-to-pdf.sh](pptx-to-pdf.sh)** — PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、PowerPoint 経路は事前 grant 済み staging dir 経由、office-automation.md#pptx-to-pdf-powerpoint）
 - **[pre-commit-bib](pre-commit-bib)** — Git pre-commit hook（上記を呼ぶ）
-- **[pre-commit-bib.test.sh](pre-commit-bib.test.sh)** — pre-commit-bib (全 repo 共通の git pre-commit) の配線 test: SESSION.md の形の gate・変数の直後の全角文字の gate・学生の識別子の gate が commit を止める / 通す / escape hatch で通る (hermetic)
+- **[pre-commit-bib.test.sh](pre-commit-bib.test.sh)** — pre-commit-bib (全 repo 共通の git pre-commit) の配線 test: SESSION.md の形の gate・変数の直後の全角文字の gate・学生の識別子の gate が commit を止める / 通す / escape hatch で通る + path 指定の commit で .bib を自動修正したら止めて打ち直させる (hermetic)
 - **[pre-commit-google-url-warn.py](pre-commit-google-url-warn.py)** — Warn when staged additions contain unstable account-bound Google URLs.
 - **[pre-commit-sot-declaration-warn.py](pre-commit-sot-declaration-warn.py)** — Warn when staged additions introduce a source-of-truth declaration.
 - **[prepare-commit-msg-session.sh](prepare-commit-msg-session.sh)** — commit に発生元 agent/session/model/effort の trailer block を付ける (並列 session の事後追跡)

@@ -134,7 +134,12 @@
     {
       "match": "auto-fixed non-LaTeX characters and re-staged",
       "doc": "conventions/latex.md#autofix-with-pathspec-commit",
-      "hint": "pre-commit が tex の文字を直して re-stage した。 `git commit -- <path>` (pathspec) なら修正は commit に入るが main の index に修正前の版が残る (status が MM) = commit の後に git restore --staged <path>"
+      "hint": "pre-commit が tex の文字を直して re-stage し、 commit は通った (普通の commit・-a・--include)。 `git commit -- <path>` (pathspec) では今の hook はこの文を出さずに止める。 pathspec commit の後に status が MM なら、 判定の前の古い hook の写し = git diff HEAD -- <path> が空なら git restore --staged <path>"
+    },
+    {
+      "match": "pathspec commit — stopped so that the main index does not keep the pre-fix version",
+      "doc": "conventions/latex.md#autofix-with-pathspec-commit",
+      "hint": "pathspec commit (git commit -- <path>) で、 hook が tex の文字を作業木だけ直して止めた (直して re-stage すると main の index に直す前の版が残るため)。 同じ commit をそのまま打ち直す (直す文字はもう無いので通る)"
     },
     {
       "match": "unsupported operand type(s) for |: 'type' and 'NoneType'",
