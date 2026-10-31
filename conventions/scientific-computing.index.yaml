@@ -157,3 +157,6 @@ sections:
   - id: observable-state-generator-audit
     level: 2
     title: "観測量・状態・生成子を別々に固定して検算する"
+  - id: alternative-method-option-test
+    level: 2
+    title: "別の手法を選ぶ option は、 fallback と違う値を返すことまで test する"

@@ -402,8 +402,8 @@ Do[If[! MemberQ[skip, i], ReleaseHold[ToExpression[cells[[i]], StandardForm, Hol
 
 ### 対処
 
-- 式に入る数を `SetPrecision[x, wp]` で WorkingPrecision に揃えてから渡す (`0.5` のように 2 進で正確な数なら値は変わらない)。 揃えても対数や引き算で精度が数桁減ると `precw` はまだ出る = 落としてよい警告だけを `Quiet[expr, FindRoot::precw]` と名指して消す。
-- `Check` は失敗と取る message を第 3 引数で名指す (`Check[expr, $Failed, {FindRoot::nlnum, FindRoot::cvmit}]`)。 全部の message を失敗にしない。
+- 式に入る数を WorkingPrecision に揃え、 それでも残る `precw` だけを名指しで `Quiet` にする (手順と理由の正本 = [`scientific-computing.md#nintegrate-workingprecision`](scientific-computing.md#nintegrate-workingprecision) の「SetPrecision」 と「限定 Quiet」。 `NIntegrate` と同じく `FindRoot` にも効く)。
+- `Check` も同じく、 失敗と取る message を第 3 引数で名指す (`Check[expr, $Failed, {FindRoot::nlnum, FindRoot::cvmit}]`)。 全部の message を失敗にしない (全部の message を握る `Quiet[expr]` と同じ形の罠)。
 - fallback に入ったら返り値に印をつける (例: `"seMethodUsed" -> "Curvature"`) か `Message` を出す。 黙って別の手法の値を返さない。
 - 区間の端の根は、 始点 1 つの Newton でなく、 両端で符号が変わる区間を `{x, a, b}` と `Method -> "Brent"` で渡して探す。 始点から跳んで反対側の根に落ちることがある (実測: 両側を別々の始点から探したら同じ根が 2 回返った)。 得た端が `lo < 中心 < hi` を満たすかを確かめる。
 - 言語を問わない test の守り方 = [`scientific-computing.md#alternative-method-option-test`](scientific-computing.md#alternative-method-option-test)。
