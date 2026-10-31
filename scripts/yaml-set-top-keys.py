@@ -21,6 +21,10 @@ conventions/batch-text-edits.md の先頭の側の罠)。 YAML を load → dump
                       ⚠️ list の key には使わない (1 本の文字列になる) = その key は text で 1 行足して、 読み直して他の key が不変かを確かめる
     --set-literal key=value  値を真偽・null・数として引用なしで書く (`--set-literal waiting_party=false`)。 文字列になる値と `#` で始まる値は止める
     --comment key=text  --set した行の末尾に「   # text」 を付ける
+    --append key=text   文字列の key の末尾に text を改行で足す (notes に段落を 1 つ足すとき)。 値が block scalar (`|`) なら
+                      形を保ってその字下げで行を足し、 引用・素の文字列なら「旧い値 + 改行 + text」 の二重引用で書き直す。
+                      key が無ければ足す (--set と同じ)。 list・mapping・数の key は止める。 書いた後に読み直し、 足した後の値と
+                      ほかの key の不変を確かめる (`--set` で丸ごと書き直すと block の notes が 1 行の引用文字列に変わる = 実測)
     --drop key        その key をまとまりごと消す (無ければ何もしない)
     --dry-run         書かずに差分だけ出す
 ⚠️ top-level だけを扱う (入れ子の key は対象外)。 file 全体が mapping でなければ止める。 git-crypt の file は worktree の平文を読む。
@@ -109,6 +113,37 @@ def edit(text: str, sets: dict[str, str], drops: list[str], after: str | None, c
     return "\n".join(new)
 
 
+def append_values(text: str, appends: dict[str, str]) -> tuple[str, dict[str, str], dict[str, str]]:
+    """--append: block scalar の key は text のまま行を足し (戻り値の 1 つめ)、 それ以外は --set に回す値を返す (2 つめ)。
+    3 つめ = 足した後に読み直したとき期待する値 (verify に渡す)。"""
+    data = _yaml_safe_load(text) if text.strip() else {}
+    if not isinstance(data, dict):
+        raise SystemExit("❌ file 全体が mapping でない")
+    lines = text.split("\n")
+    to_set: dict[str, str] = {}
+    expect: dict[str, str] = {}
+    for k, add in appends.items():
+        old = data.get(k)
+        if k not in data:
+            to_set[k] = expect[k] = add
+            continue
+        if not isinstance(old, str):
+            raise SystemExit(f"❌ --append {k}: 値が文字列でない ({type(old).__name__}) = list は text で 1 行足す")
+        span = next(((a, b) for kk, a, b in blocks(lines) if kk == k), None)
+        head = lines[span[0]] if span else ""
+        if span and re.match(rf"{re.escape(k)}:\s*\|[0-9]*\s*(#.*)?$", head):  # `|` (clip) の block scalar だけ形を保つ
+            a, b = span
+            while b > a + 1 and lines[b - 1].strip() == "":  # 塊の末尾の空行は block の後ろに残す
+                b -= 1
+            body = [ln for ln in lines[a + 1:b] if ln.strip()]
+            ind = re.match(r"\s*", body[0]).group(0) if body else "  "
+            lines[b:b] = [f"{ind}{ln}" if ln else "" for ln in add.split("\n")]
+            expect[k] = (old if old.endswith("\n") else old + "\n") + add + "\n"
+        else:
+            to_set[k] = expect[k] = old.rstrip("\n") + "\n" + add
+    return "\n".join(lines), to_set, expect
+
+
 def verify(before: str, after_text: str, sets: dict[str, str], drops: list[str]) -> list[str]:
     a, b = _yaml_safe_load(before), _yaml_safe_load(after_text)
     if not isinstance(a, dict) or not isinstance(b, dict):
@@ -192,6 +227,25 @@ def selftest() -> int:
         assert _yaml_safe_load(p.read_text(encoding="utf-8"))["flag"] == "false"
         assert main([str(p), "--set", "note=#3 を相談する"]) == 0  # # で始まる値は null でなく文字列 (引用して書く)
         assert _yaml_safe_load(p.read_text(encoding="utf-8"))["note"] == "#3 を相談する"
+        # --append: block scalar は形を保って字下げで足す / 引用の文字列は改行で足す / 無い key は足す / list は止める
+        p.write_text('id: "x"\nnotes: |\n  一段目\n  二段目\nsc: "前"\ntags:\n  - "a"\nstatus: 待ち\n', encoding="utf-8")
+        assert main([str(p), "--append", "notes=三段目\n四段目", "--append", "sc=後", "--append", "memo=新"]) == 0
+        t = p.read_text(encoding="utf-8")
+        d = _yaml_safe_load(t)
+        assert d["notes"] == "一段目\n二段目\n三段目\n四段目\n" and "  三段目\n  四段目\nsc:" in t, t  # block のまま
+        assert d["sc"] == "前\n後" and d["memo"] == "新" and d["tags"] == ["a"] and d["status"] == "待ち", d
+        before = t
+        try:
+            main([str(p), "--append", "tags=b"])
+            raise AssertionError("list の key への --append を止めなかった")
+        except SystemExit as e:
+            assert "文字列でない" in str(e), e
+        assert p.read_text(encoding="utf-8") == before
+        # 末尾に空行のある block (次の key の前の空行) でも、 空行の手前に足す
+        p.write_text('notes: |\n  a\n\nnext: "n"\n', encoding="utf-8")
+        assert main([str(p), "--append", "notes=b"]) == 0
+        d = _yaml_safe_load(p.read_text(encoding="utf-8"))
+        assert d["notes"] == "a\nb\n" and d["next"] == "n", d
     print("yaml-set-top-keys selftest: ALL PASS (行頭の key だけを置き換え・本文の中の同じ語は触らない・ほかの key は不変を確かめる)")
     return 0
 
@@ -251,6 +305,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--set-literal", action="append", dest="set_literals")
     ap.add_argument("--allow-quoted-value", action="store_true")
     ap.add_argument("--allow-bool-string", action="store_true")
+    ap.add_argument("--append", action="append", dest="appends")
     a = ap.parse_args(argv)
     p = Path(a.file)
     before = p.read_text(encoding="utf-8")
@@ -259,11 +314,15 @@ def main(argv: list[str]) -> int:
     if set(sets) & set(lits):
         raise SystemExit(f"❌ 同じ key を --set と --set-literal の両方に渡した: {sorted(set(sets) & set(lits))}")
     sets.update(lits)
+    appends = kv(a.appends)
+    if set(appends) & set(sets):
+        raise SystemExit(f"❌ 同じ key を --append と --set の両方に渡した: {sorted(set(appends) & set(sets))}")
     comments = kv(a.comments)
     if set(comments) - set(sets):
         raise SystemExit(f"❌ --comment は --set した行にだけ付く = 黙って捨てない (同じ key の --set も渡す): {sorted(set(comments) - set(sets))}")
-    after_text = edit(before, sets, a.drop, a.after, comments)
-    errs = verify(before, after_text, sets, a.drop)
+    base, append_sets, expect = append_values(before, appends) if appends else (before, {}, {})
+    after_text = edit(base, {**sets, **append_sets}, a.drop, a.after, comments)
+    errs = verify(before, after_text, {**sets, **expect}, a.drop)
     sys.stdout.writelines(difflib.unified_diff(before.splitlines(True), after_text.splitlines(True), str(p), str(p)))
     if errs:
         print("❌ 書かなかった: " + " / ".join(errs))
