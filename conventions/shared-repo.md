@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + 共有リポで計算・検算を Python で回すとき (版・venv・入口 tools/py の正本 = python-env.md、 本 file は招待した相手の手元の点検 #collaborator-check-python だけ)
+when: 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + branch が default に入ったかを判定する・依頼書や記録に「未 merge」 と書く前 (#rebased-branch-not-ancestor) + 共有リポで計算・検算を Python で回すとき (版・venv・入口 tools/py の正本 = python-env.md、 本 file は招待した相手の手元の点検 #collaborator-check-python だけ)
 category: infra
 summary: 共有リポ固有規約
 -->
@@ -60,8 +60,16 @@ branch は `git log` からは ahead に見えるが**マージしてはいけ�
 どこか**を repo の設計 doc に 1 行ずつ書く。 書かないと、 次に見た人 (や AI) が「マージ漏れ」 と読んで
 作業を二重化する — 上の watchdog は ahead を数えるだけで、 ahead の**理由**は見ないため。
 
-逆に **default に対して 0 ahead の branch は消す**。 commit は default の履歴に在るので何も失われず、
-共著者から見える branch 一覧が「まだ生きているもの」 だけになる。
+逆に **default に対して 0 ahead の branch と、 ahead の commit が全部同じ変更として default に入っている branch は消す**。
+commit (か同じ変更) は default の履歴に在るので何も失われず、 共著者から見える branch 一覧が「まだ生きているもの」 だけになる。
+
+<a id="rebased-branch-not-ancestor"></a>**「default の祖先でない」 は「default に入っていない」 ではない** — 別の session が branch を rebase して
+default に直線で入れると、 default には同じ変更が別の hash で入り、 元の remote の branch は ahead のまま残る。
+`git merge-base --is-ancestor` も ahead の数もこの branch を「未 merge」 と言うので、 それを依頼書や記録に書くと
+誤った前提で作業が回る (実測)。 「未 merge」 と書く前に `git cherry -v <default> <branch>` を 1 回打つ:
+行頭が `-` の commit は同じ変更 (patch-id が同じ) が default にあり、 `+` の commit だけが default に無い。
+全部 `-` なら取り込み済み = 上のとおり消す。 書き直して取り込んだ branch (上の段落) は変更が違うので `+` に出る =
+設計 doc の 1 行で見分ける。
 
 #### artifact 配信経路の依存
 
