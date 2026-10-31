@@ -128,6 +128,9 @@ sections:
   - id: maketitle-handset-author-block
     level: 2
     title: "手組み author block と `\\maketitle` を併用したら題扉の余白を詰める"
+  - id: float-above-handset-title
+    level: 2
+    title: "`\\maketitle` を使わず題を手で組んだら、 1 頁目の上に図を置かせない"
   - id: supplement-in-same-pdf
     level: 2
     title: "Supplemental Material は、 まず同じ PDF の文献表の後に置く"
