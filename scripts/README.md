@@ -446,6 +446,7 @@
 - **[lib/codex_threads.py](lib/codex_threads.py)** — Codex threads on this machine: which are live, their cwd / title / model, and the command that hands one a message.
 - **[lib/codex_worker_contract.py](lib/codex_worker_contract.py)** — Worker-side record contract for Codex-origin delegation. No command rewrites.
 - **[lib/commit-msg-leak-matcher.sh](lib/commit-msg-leak-matcher.sh)** — commit message leak matcher (= sensitive-terms.txt + repos.md private list - 10 allowlist の (a)(b)(c) check + 審査中の申請を識別する種目語×評価語の共起 (d))、 claude-code hook + git-side runner の両方が source する DRY 実装
+- **[lib/compressed_jsonl.py](lib/compressed_jsonl.py)** — 会話記録の .jsonl と、 zstd で圧縮した .jsonl.zst を、 同じ形で 1 行ずつ読む。
 - **[lib/config_dir_auth.py](lib/config_dir_auth.py)** — Claude Code の設定フォルダ (CLAUDE_CONFIG_DIR) の認証が切れているかを、 `claude` を呼ばずに読む共有判定。
 - **[lib/desktop_sessions.py](lib/desktop_sessions.py)** — the Claude desktop app's own record of a Code session: the model and effort it will run the next turn on, its title and the session that started it.
 - **[lib/find-personal-layer.sh](lib/find-personal-layer.sh)** — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)

@@ -20,11 +20,22 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
                 ⚠️ agent が作業している途中に打たれた発話は user の行にならず、 type が attachment で
                 attachment.type が queued_command の record (本文は prompt) にだけ残る。 これも user の発話として読む
                 (user の行だけを読むと、 途中で足された指示や事実の申告が「言っていない」 に見える = 実測)
-  Codex       : <codex-dir>/**/*.jsonl (既定 ~/.codex/sessions と ~/.codex/archived_sessions)
+  Codex       : <codex-dir>/**/*.jsonl と <codex-dir>/**/*.jsonl.zst (既定 ~/.codex/sessions と ~/.codex/archived_sessions)
                 record の type が response_item、 payload.type が message、
                 payload.role が user / assistant / developer、 content は {text} の list
                 ⚠️ Codex はアーカイブした session を sessions/YYYY/MM/DD から archived_sessions/ (平置き) へ
                 移す。 sessions だけを読むと、 元の発言は見つからず、 別 session に貼られた写しだけが当たる (実測)
+                ⚠️ Codex は古くなった記録を zstd で圧縮して `.jsonl.zst` に置き換える (動いている session の記録は平文 =
+                実測)。 圧縮した記録は展開して読む (手段 = Python 3.14 の compression.zstd → zstandard の module → zstd の
+                command、 lib/compressed_jsonl.py)。 どれも無い機械では、 読めなかった本数を stderr に 1 行出す
+                (黙って 0 件にしない)。 同じ dir に同じ session の `.jsonl` と `.jsonl.zst` が両方あるときは、 圧縮 → 平文の
+                順に 1 本の記録として続けて読み、 両方にある同じ行は 1 回だけ読む (片方だけを選ぶと、 もう片方にしかない
+                行を落とす。 両方がある形は実測では見ていない)
+                ⚠️ Codex が agent を起こした子の session (先頭の session_meta に parent_thread_id) は、 親の会話を
+                user 役の message として写して持ち、 親からの指示も user 役で持つ。 子の user 役は role「parent」 にする
+                (= `--role user` には入らない。 元の発言は親の session の記録で当たる。 子の記録に人が打った印
+                〔event_msg の user_message〕 は無い = 実測)。 ⚠️ 写しは親の assistant の発言や道具の呼び出しも含むので、
+                `--role any` / `--role assistant` / `--tool-runs` では親の分が子の session id でも重ねて出る
 
 既定の挙動:
   - 役割は user だけ (--role any で全部)。 harness が差し込んだ user 側の文
@@ -54,13 +65,16 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
   search-agent-transcripts.py --selftest
 
 出力: 1 件ごとに `時刻  agent  session先頭8文字  役割  本文の前後`。 --tool-runs は役割の欄が `run` / `run(error)` で、
-本文の後に ` → 結果の冒頭`。 exit 0 (見つからなくても 0)。
+本文の後に ` → 結果の冒頭`。 圧縮した記録を読めなかったときは、 その本数と理由を stderr に 1 行。 exit 0 (見つからなくても 0)。
 ⚠️ 射程: 手元のマシンにある記録だけ。 別のマシンで開いた session・消えた記録・claude.ai の会話は見えない
    (0 件は「このマシンの記録に無い」 であって「言っていない」 ではない)。
 """
 from __future__ import annotations
 
 import argparse
+import collections
+import contextlib
+import hashlib
 import json
 import os
 import re
@@ -73,6 +87,10 @@ try:
     import claude_config_dirs as _ccd
 except Exception:  # pragma: no cover - 古い配置
     _ccd = None
+try:
+    import compressed_jsonl as _cj
+except Exception:  # pragma: no cover - 古い配置 (圧縮した記録は読めなかった本数として数える)
+    _cj = None
 
 
 # harness が user 役で差し込む文の書き出し (system-reminder・command 表示・AGENTS.md 指示・文脈圧縮の要約)
@@ -122,8 +140,16 @@ def _texts_codex(rec: dict) -> tuple[str | None, list[str]]:
     return p.get("role"), out
 
 
+def _record_stem(name: str) -> str:
+    """記録の拡張子 (.jsonl / .jsonl.zst) を外した名。"""
+    if _cj is not None:
+        return _cj.stem(name)
+    name = name[: -len(".zst")] if name.endswith(".jsonl.zst") else name
+    return name[: -len(".jsonl")] if name.endswith(".jsonl") else name
+
+
 def _session_of(path: Path, agent: str) -> str:
-    name = path.stem
+    name = _record_stem(path.name)
     if agent == "codex":
         m = re.search(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", name)
         return m.group(1) if m else name
@@ -160,27 +186,79 @@ def _agent_shown(ag: str, label: str) -> str:
 
 
 def iter_files(agent: str, claude_dir, codex_dirs):
-    """(agent, path, 設定フォルダの名) を出す。 名は ~/.claude 以外の設定フォルダの Claude の記録だけ。"""
+    """(agent, 同じ記録の file の tuple, 設定フォルダの名) を出す。 名は ~/.claude 以外の設定フォルダの Claude の記録だけ。
+    Codex は平文 (.jsonl) と圧縮 (.jsonl.zst) の両方を拾い、 同じ dir の同じ名の 2 本は 1 つの tuple (圧縮が先)。"""
     if agent in ("claude", "both"):
         for f, label in _claude_files(claude_dir):
-            yield "claude", f, label
+            yield "claude", (f,), label
     if agent in ("codex", "both"):
         if isinstance(codex_dirs, (str, Path)):
             codex_dirs = [codex_dirs]
         seen: set = set()
+        groups: dict = {}
         for d in codex_dirs:
             d = Path(d)
             if not d.is_dir():
                 continue
-            for f in sorted(d.rglob("*.jsonl")):
-                if f.resolve() not in seen:
-                    seen.add(f.resolve())
-                    yield "codex", f, ""
+            for f in sorted(d.rglob("*.jsonl*")):
+                if not (f.name.endswith(".jsonl") or f.name.endswith(".jsonl.zst")) or f.resolve() in seen:
+                    continue
+                seen.add(f.resolve())
+                key = (f.resolve().parent, _record_stem(f.name))
+                groups.setdefault(key, []).append(f)
+        for files in groups.values():
+            yield "codex", tuple(sorted(files, key=lambda p: not p.name.endswith(".zst"))), ""
+
+
+def _open_record(f: Path, tally):
+    if _cj is not None:
+        return _cj.open_lines(f, errors="ignore", tally=tally)
+    if f.name.endswith(".zst"):
+        tally["no-means"] += 1
+        return contextlib.nullcontext(iter(()))
+    return open(f, encoding="utf-8", errors="ignore")
+
+
+def _lines(files, tally):
+    """1 つの記録の行。 平文と圧縮の 2 本なら続けて読み、 両方にある同じ行は 1 回だけ返す。"""
+    seen = set() if len(files) > 1 else None
+    for f in files:
+        with contextlib.ExitStack() as stack:
+            try:
+                lines = stack.enter_context(_open_record(f, tally))
+            except OSError:
+                continue
+            for line in lines:
+                if seen is not None:
+                    h = hashlib.blake2b(line.rstrip("\r\n").encode("utf-8", "ignore"), digest_size=16).digest()
+                    if h in seen:
+                        continue
+                    seen.add(h)
+                yield line
+
+
+def _is_codex_child(line: str) -> bool:
+    """記録の先頭の session_meta が親の thread を持つ (= Codex が agent を起こした子の session)。"""
+    if '"session_meta"' not in line or '"parent_thread_id"' not in line:
+        return False
+    try:
+        rec = json.loads(line)
+    except ValueError:
+        return False
+    return rec.get("type") == "session_meta" and bool((rec.get("payload") or {}).get("parent_thread_id"))
+
+
+def _report(tally) -> str | None:
+    if _cj is not None:
+        return _cj.report(tally)
+    return f"⚠️ 圧縮した記録 (.jsonl.zst) を読めなかった: {tally['no-means']} 本 (lib/compressed_jsonl.py が無い)" if tally else None
 
 
 def search(pattern: str, *, regex: bool, role: str, agent: str, since: str | None,
            until: str | None, session: str | None, context: int, include_injected: bool,
-           claude_dir, codex_dir, limit: int) -> list[tuple]:
+           claude_dir, codex_dir, limit: int, tally=None) -> list[tuple]:
+    """tally (Counter) に読めなかった圧縮した記録の本数を数える (main が stderr に出す)。"""
+    tally = collections.Counter() if tally is None else tally
     rx = re.compile(pattern) if regex else None
     raw_probe = None if regex else pattern
     # 生の JSON 行での先読みは、 行頭・行末に錨を置いた regex (^…$ / \A / \Z) では本文に当たっても行で外れる
@@ -188,56 +266,55 @@ def search(pattern: str, *, regex: bool, role: str, agent: str, since: str | Non
     line_rx = rx if rx is not None and not _ANCHOR_RE.search(pattern) else None
     seen: set = set()
     hits: list[tuple] = []
-    for ag, f, label in iter_files(agent, claude_dir, codex_dir):
+    for ag, files, label in iter_files(agent, claude_dir, codex_dir):
+        f = files[0]
         sid = _session_of(f, ag)
         if session and not sid.startswith(session):
             continue
-        try:
-            fh = open(f, encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        with fh:
-            for line in fh:
-                if raw_probe is not None and raw_probe not in line:
+        sub_agent = ag == "claude" and _is_subagent(f)
+        child = None  # Codex の子の session か (先頭の session_meta で決める)
+        for line in _lines(files, tally):
+            if ag == "codex" and child is None:
+                child = _is_codex_child(line)
+            if raw_probe is not None and raw_probe not in line:
+                continue
+            if line_rx is not None and not line_rx.search(line):
+                # 本文の改行は JSON では \n なので、 行単位の先読みで落ちる match はない
+                # (改行をまたぐ regex は対象外)
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            ts = rec.get("timestamp") or ""
+            if since and ts[:10] < since:
+                continue
+            if until and ts[:10] > until:
+                continue
+            r, texts = (_texts_claude if ag == "claude" else _texts_codex)(rec)
+            if (sub_agent or child) and r == "user":
+                r = "parent"  # 親が agent に渡した指示・親の会話の写し (user 本人がこの session で打った発言ではない)
+            if r is None or (role != "any" and r != role):
+                continue
+            for tx in texts:
+                if r in ("user", "developer") and not include_injected and tx.lstrip().startswith(INJECTED_PREFIXES):
                     continue
-                if line_rx is not None and not line_rx.search(line):
-                    # 本文の改行は JSON では \n なので、 行単位の先読みで落ちる match はない
-                    # (改行をまたぐ regex は対象外)
+                m = rx.search(tx) if rx is not None else None
+                i = m.start() if m is not None else tx.find(pattern)
+                if i < 0:
                     continue
-                try:
-                    rec = json.loads(line)
-                except ValueError:
+                # 同じ record の写し (同じ file の重複行・複数の記録の dir) だけをまとめる。 時刻を鍵に入れないと、
+                # 同じ文面を別の時刻に打った発言 (「送って」「はい」) が最初の 1 回に潰れ、 2 回目の承認が記録に無いように見える (実測)
+                key = (ag, r, ts, tx)
+                if key in seen:
                     continue
-                ts = rec.get("timestamp") or ""
-                if since and ts[:10] < since:
-                    continue
-                if until and ts[:10] > until:
-                    continue
-                r, texts = (_texts_claude if ag == "claude" else _texts_codex)(rec)
-                sub_agent = ag == "claude" and _is_subagent(f)
-                if sub_agent and r == "user":
-                    r = "parent"  # 親が agent に渡した指示 (user 本人の発言ではない)
-                if r is None or (role != "any" and r != role):
-                    continue
-                for tx in texts:
-                    if r in ("user", "developer") and not include_injected and tx.lstrip().startswith(INJECTED_PREFIXES):
-                        continue
-                    m = rx.search(tx) if rx is not None else None
-                    i = m.start() if m is not None else tx.find(pattern)
-                    if i < 0:
-                        continue
-                    # 同じ record の写し (同じ file の重複行・複数の記録の dir) だけをまとめる。 時刻を鍵に入れないと、
-                    # 同じ文面を別の時刻に打った発言 (「送って」「はい」) が最初の 1 回に潰れ、 2 回目の承認が記録に無いように見える (実測)
-                    key = (ag, r, ts, tx)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    j = m.end() if m is not None else i + len(pattern)
-                    snip = tx[max(0, i - context): j + context].replace("\n", " ")
-                    shown = r + "(写し)" if QUOTED_SPEAKER_RE.search(tx[max(0, i - 40): i]) else r
-                    if sub_agent and r == "assistant":
-                        shown += "(agent)"
-                    hits.append((ts, _agent_shown(ag, label), sid[:8], shown, snip))
+                seen.add(key)
+                j = m.end() if m is not None else i + len(pattern)
+                snip = tx[max(0, i - context): j + context].replace("\n", " ")
+                shown = r + "(写し)" if QUOTED_SPEAKER_RE.search(tx[max(0, i - 40): i]) else r
+                if sub_agent and r == "assistant":
+                    shown += "(agent)"
+                hits.append((ts, _agent_shown(ag, label), sid[:8], shown, snip))
     hits.sort()
     return hits[:limit] if limit else hits
 
@@ -281,49 +358,45 @@ def _spaced(line: str) -> str:
 
 
 def tool_runs(pattern: str, *, regex: bool, agent: str, since: str | None, until: str | None,
-              session: str | None, context: int, claude_dir, codex_dir, limit: int) -> list[tuple]:
-    """道具の呼び出しの入力に pattern が当たるものを、 結果の冒頭と対にして返す。"""
+              session: str | None, context: int, claude_dir, codex_dir, limit: int, tally=None) -> list[tuple]:
+    """道具の呼び出しの入力に pattern が当たるものを、 結果の冒頭と対にして返す。 tally は search と同じ。"""
+    tally = collections.Counter() if tally is None else tally
     rx = re.compile(pattern) if regex else None
     # 下読みは生の行に当てる。 生の行は区切りの空白なしの JSON、 本番の照合と表示は空白ありの形。 pattern がその空白を含むなら
     # 下読みも同じ形で当てる (実測: 出力のまま `"command": "…` と書いた pattern が下読みで全部落ち、 黙って 0 件を返した)
     spaced = '": ' in pattern or ', "' in pattern
     runs: list[tuple] = []
-    for ag, f, label in iter_files(agent, claude_dir, codex_dir):
-        sid = _session_of(f, ag)
+    for ag, files, label in iter_files(agent, claude_dir, codex_dir):
+        sid = _session_of(files[0], ag)
         if session and not sid.startswith(session):
             continue
         pending: dict = {}
-        try:
-            fh = open(f, encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        with fh:
-            for line in fh:
-                hit = rx.search(line) if rx is not None else pattern in line
-                if not hit and spaced:
-                    wide = _spaced(line)
-                    hit = rx.search(wide) if rx is not None else pattern in wide
-                if not hit and not (pending and any(k in line for k in pending)):
-                    continue
-                try:
-                    rec = json.loads(line)
-                except ValueError:
-                    continue
-                ts = rec.get("timestamp") or ""
-                for kind, cid, text, is_err in _tool_items(ag, rec):
-                    if kind == "call":
-                        if (since and ts[:10] < since) or (until and ts[:10] > until):
-                            continue
-                        m = rx.search(text) if rx is not None else None
-                        i = m.start() if m is not None else text.find(pattern)
-                        if i < 0:
-                            continue
-                        j = m.end() if m is not None else i + len(pattern)
-                        pending[cid] = (ts, text[max(0, i - context): j + context].replace("\n", " "))
-                    elif cid in pending:
-                        t0, snip = pending.pop(cid)
-                        head = re.sub(r"\s+", " ", text).strip()[: max(context, 60)]
-                        runs.append((t0, _agent_shown(ag, label), sid[:8], "run(error)" if is_err else "run", f"{snip} → {head}"))
+        for line in _lines(files, tally):
+            hit = rx.search(line) if rx is not None else pattern in line
+            if not hit and spaced:
+                wide = _spaced(line)
+                hit = rx.search(wide) if rx is not None else pattern in wide
+            if not hit and not (pending and any(k in line for k in pending)):
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            ts = rec.get("timestamp") or ""
+            for kind, cid, text, is_err in _tool_items(ag, rec):
+                if kind == "call":
+                    if (since and ts[:10] < since) or (until and ts[:10] > until):
+                        continue
+                    m = rx.search(text) if rx is not None else None
+                    i = m.start() if m is not None else text.find(pattern)
+                    if i < 0:
+                        continue
+                    j = m.end() if m is not None else i + len(pattern)
+                    pending[cid] = (ts, text[max(0, i - context): j + context].replace("\n", " "))
+                elif cid in pending:
+                    t0, snip = pending.pop(cid)
+                    head = re.sub(r"\s+", " ", text).strip()[: max(context, 60)]
+                    runs.append((t0, _agent_shown(ag, label), sid[:8], "run(error)" if is_err else "run", f"{snip} → {head}"))
         for t0, snip in pending.values():
             runs.append((t0, _agent_shown(ag, label), sid[:8], "run", f"{snip} → (結果なし)"))
     runs.sort()
@@ -496,6 +569,95 @@ def selftest() -> int:
             check("--tool-runs: code-mode も session で絞る",
                   tool_runs("fruit-probe.py", **{**tb,"session":"unrelated"}) == []),
         ]
+        # 圧縮した Codex の記録 (.jsonl.zst)。 Codex は古くなった session の記録を zstd で圧縮する
+        try:
+            import compressed_jsonl as cj
+        except Exception:
+            cj = None
+
+        def attempt(fn):
+            try:
+                return fn()
+            except Exception as exc:  # 直す前の code (引数が無い) では例外 = 失敗として数える
+                return exc
+
+        def jl(rows):
+            return ("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n").encode()
+
+        def umsg(ts, text):
+            return {"type": "response_item", "timestamp": ts,
+                    "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]}}
+
+        def fcall(ts, cid, cmd):
+            return {"type": "response_item", "timestamp": ts,
+                    "payload": {"type": "function_call", "name": "shell", "call_id": cid, "arguments": json.dumps({"cmd": cmd})}}
+
+        def fout(ts, cid, out):
+            return {"type": "response_item", "timestamp": ts, "payload": {"type": "function_call_output", "call_id": cid, "output": out}}
+
+        cz = Path(td) / "codex-zst"
+        (cz / "2099" / "04" / "01").mkdir(parents=True)
+        one = cz / "2099" / "04" / "01" / "rollout-2099-04-01T00-00-00-00000000-0000-4000-8000-00000000f1a7.jsonl.zst"
+        pair = cz / "rollout-2099-04-02T00-00-00-00000000-0000-4000-8000-0000000ca1e5.jsonl"
+        zb = dict(base, agent="codex", codex_dir=[cz])
+        tz = dict(tb, agent="codex", codex_dir=[cz])
+        packed = cj.compress_for_test(b"") if cj is not None else None
+        if packed is None:
+            print("SKIP .jsonl.zst を読む (この機械に展開の手段が無い)")
+        else:
+            one.write_bytes(cj.compress_for_test(jl([
+                umsg("2099-04-01T00:00:00Z", "いちじくは甘い"), fcall("2099-04-01T00:00:01Z", "z1", "python3 fig-client.py get"),
+                fout("2099-04-01T00:00:02Z", "z1", "# 2 docs")])))
+            # 同じ session の平文と圧縮が両方ある: 圧縮に古い分、 平文に続き (重なる行は 1 回だけ読む)
+            Path(str(pair) + ".zst").write_bytes(cj.compress_for_test(jl([
+                umsg("2099-04-02T00:00:00Z", "かりんは硬い"), fcall("2099-04-02T00:00:01Z", "z2", "python3 fig-client.py put")])))
+            pair.write_bytes(jl([fcall("2099-04-02T00:00:01Z", "z2", "python3 fig-client.py put"),
+                                 fout("2099-04-02T00:00:02Z", "z2", "# 3 docs"), umsg("2099-04-02T00:00:03Z", "かりんは香る")]))
+            zr = attempt(lambda: tool_runs("fig-client.py", **tz))
+            results += [
+                check(".jsonl.zst: 本文の検索が圧縮した記録に当たる", [x[4] for x in search("いちじく", **zb)] == ["いちじくは甘い"]),
+                check(".jsonl.zst: session id を file 名から取る (.jsonl.zst の名でも)",
+                      len(search("いちじく", **{**zb, "session": "00000000-0000-4000-8000-00000000f1a7"})) == 1),
+                check(".jsonl.zst: --tool-runs も圧縮した記録を読む",
+                      isinstance(zr, list) and len(zr) == 2 and "# 2 docs" in zr[0][4]),
+                check(".jsonl.zst: 平文と圧縮が両方ある session は続けて 1 本として読む",
+                      [x[4] for x in search("かりん", **zb)] == ["かりんは硬い", "かりんは香る"]),
+                check(".jsonl.zst: 両方にある同じ呼び出しは 1 回だけ (結果と対になる)",
+                      isinstance(zr, list) and [x[4].split(" → ")[1] for x in zr] == ["# 2 docs", "# 3 docs"]),
+            ]
+        # 展開の手段が無い: 黙って 0 件にせず、 読めなかった本数を stderr に 1 行
+        if cj is not None:
+            if packed is None:
+                one.write_bytes(b"x")
+                Path(str(pair) + ".zst").write_bytes(b"x")
+            saved_force = cj.FORCE
+            cj.FORCE = "none"
+            try:
+                import io
+                tally = collections.Counter()
+                nz = attempt(lambda: search("いちじく", **{**zb, "tally": tally}))
+                err, out = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+                    rc = attempt(lambda: main(["いちじく", "--agent", "codex", "--codex-dir", str(cz)]))
+            finally:
+                cj.FORCE = saved_force
+            results += [
+                check("手段が無い: 圧縮した記録は数えて飛ばす", nz == [] and tally == {"no-means": 2}),
+                check("手段が無い: 読めなかった本数を stderr に 1 行",
+                      rc == 0 and "2 本は展開の手段が無い" in err.getvalue() and len(err.getvalue().splitlines()) == 2),
+            ]
+        # Codex の子の session (session_meta に parent_thread_id): user 役は親の会話の写しと親の指示 = parent
+        kid = Path(td) / "codex-child"
+        kid.mkdir()
+        (kid / "rollout-2099-05-01T00-00-00-00000000-0000-4000-8000-00000000c41d.jsonl").write_bytes(jl([
+            {"type": "session_meta", "timestamp": "2099-05-01T00:00:00Z",
+             "payload": {"id": "00000000-0000-4000-8000-00000000c41d", "parent_thread_id": "00000000-0000-4000-8000-0000000000aa"}},
+            umsg("2099-05-01T00:00:00Z", "なつめは赤い")]))
+        kb = dict(base, agent="codex", codex_dir=[kid])
+        results += [
+            check("Codex の子の session の user 役は --role user に入らない (role = parent)",
+                  search("なつめ", **kb) == [] and [x[3] for x in search("なつめ", **{**kb, "role": "parent"})] == ["parent"]),
+        ]
         # 既定 (claude_dir=None) = この機械の全部の設定フォルダ。 偽の HOME に既定とアカウント固定の 2 つを置く
         if _ccd is not None:
             home = Path(td) / "home"
@@ -530,7 +692,7 @@ def selftest() -> int:
     return 0 if all(results) else 1
 
 
-def main() -> int:
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Claude Code と Codex の会話記録を横断して発言を探す")
     ap.add_argument("pattern", nargs="?")
     ap.add_argument("--regex", action="store_true", help="pattern を正規表現として扱う")
@@ -549,25 +711,29 @@ def main() -> int:
     ap.add_argument("--tool-runs", action="store_true",
                     help="pattern を道具の呼び出しの入力に当て、 結果の冒頭と対にして出す (RCA で実行時刻と成否を拾う)")
     ap.add_argument("--selftest", action="store_true")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
     if not a.pattern:
         ap.error("pattern が要る")
     codex_dirs = [Path(os.path.expanduser(d)) for d in (a.codex_dir or DEFAULT_CODEX_DIRS)]
     claude_dirs = [Path(os.path.expanduser(d)) for d in a.claude_dir] if a.claude_dir else None
+    tally = collections.Counter()
     if a.tool_runs:
         hits = tool_runs(a.pattern, regex=a.regex, agent=a.agent, since=a.since, until=a.until,
                          session=a.session, context=a.context, claude_dir=claude_dirs,
-                         codex_dir=codex_dirs, limit=a.limit)
+                         codex_dir=codex_dirs, limit=a.limit, tally=tally)
     else:
         hits = search(a.pattern, regex=a.regex, role=a.role, agent=a.agent, since=a.since, until=a.until,
                       session=a.session, context=a.context, include_injected=a.include_injected,
-                      claude_dir=claude_dirs, codex_dir=codex_dirs, limit=a.limit)
+                      claude_dir=claude_dirs, codex_dir=codex_dirs, limit=a.limit, tally=tally)
     for ts, ag, sid, r, snip in hits:
         print(f"{ts[:19]}  {ag:6}  {sid}  {r:9}  {snip}")
     if not hits:
         print("(このマシンの記録には見つからない)", file=sys.stderr)
+    msg = _report(tally)
+    if msg:
+        print(msg, file=sys.stderr)
     return 0
 
 
