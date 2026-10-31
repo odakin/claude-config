@@ -388,6 +388,28 @@ Do[If[! MemberQ[skip, i], ReleaseHold[ToExpression[cells[[i]], StandardForm, Hol
 
 ---
 
+## <a id="check-catches-precision-warning"></a>10. `Check[expr, fallback]` は精度の警告も失敗と取る — option が黙って別の手法の値を返す
+
+### 問題
+
+- 高い `WorkingPrecision` (例 `50`) の `FindRoot` / `FindMinimum` に、 機械精度の数 (option で受けた `0.5` など) が混じった式を渡すと、 `FindRoot::precw` (関数の精度が WorkingPrecision より低い) が出る。 根そのものは返る = ただの警告。
+- その呼び出しを `Quiet@Check[expr, $Failed]` で包むと、 `Check` は message が 1 つでも出れば第 2 引数を返す。 警告が失敗になり、 失敗の枝 (例: 代わりに曲率から出した誤差) に毎回入る。 `Quiet` が message も消すので、 option が一度も効いていないことは出力にも log にも出ない (実測: 区間の端から誤差を出す option が、 もう一方の手法と最後の桁まで同じ値を返し続けていた)。
+
+### 見つけ方
+
+- option を替えた 2 つの出力が最後の桁まで同じなら、 fallback に入っていると疑う。 `Quiet` と `Check` を外して同じ呼び出しを 1 回流し、 出る message を読む。
+- どの message が fallback に入れたかは、 `Check[expr, "caught", FindRoot::precw]` のように message を名指して確かめられる (名指した message のときだけ第 2 引数が返る)。
+
+### 対処
+
+- 式に入る数を `SetPrecision[x, wp]` で WorkingPrecision に揃えてから渡す (`0.5` のように 2 進で正確な数なら値は変わらない)。 揃えても対数や引き算で精度が数桁減ると `precw` はまだ出る = 落としてよい警告だけを `Quiet[expr, FindRoot::precw]` と名指して消す。
+- `Check` は失敗と取る message を第 3 引数で名指す (`Check[expr, $Failed, {FindRoot::nlnum, FindRoot::cvmit}]`)。 全部の message を失敗にしない。
+- fallback に入ったら返り値に印をつける (例: `"seMethodUsed" -> "Curvature"`) か `Message` を出す。 黙って別の手法の値を返さない。
+- 区間の端の根は、 始点 1 つの Newton でなく、 両端で符号が変わる区間を `{x, a, b}` と `Method -> "Brent"` で渡して探す。 始点から跳んで反対側の根に落ちることがある (実測: 両側を別々の始点から探したら同じ根が 2 回返った)。 得た端が `lo < 中心 < hi` を満たすかを確かめる。
+- 言語を問わない test の守り方 = [`scientific-computing.md#alternative-method-option-test`](scientific-computing.md#alternative-method-option-test)。
+
+---
+
 ## 関連
 
 - 数値計算の scale-dependent default 等 numerical silent failure: [`scientific-computing.md`](scientific-computing.md)
