@@ -228,6 +228,9 @@ AGENT_ENV_KEYS = ("CLAUDE_CONFIG_AGENT_SESSION", "CLAUDE_CODE_SESSION_ID", "CODE
 SYSTEM_REMINDER_RE = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
 LEADING_USER_TAG_RE = re.compile(r"^\s*<([A-Za-z_][\w:-]*)(?=[\s>/])")
 HOOK_PROMPT_RE = re.compile(r"<hook_prompt\b[^>]*>.*?</hook_prompt\s*>", re.S)
+# Codex app の追い打ちの提案。 本人が押すと user の発言に入るが、 文は agent が書いたもの (実測 = 本文の主張の
+# 書き換えの依頼がこの形で入った)。 prompt の値の中の括弧・escape も 1 つの提案に含める
+CODEX_FOLLOWUP_RE = re.compile(r':{1,3}codex-followup(?:\[[^\]\n]*\])?\{(?:"(?:[^"\\\n]|\\.)*"|[^{}"\n])*\}')
 GENERATED_USER_PREFIXES = (
     "# AGENTS.md instructions", "<recommended_plugins>", "<environment_context>",
     "<INSTRUCTIONS>", "<permissions instructions>", "<command-", "<local-command", "Caveat:",
@@ -1917,6 +1920,10 @@ def human_text_segments(text: str, excluded_tags: dict[str, int] | None = None, 
     excluded("system-reminder", count)
     text, count = HOOK_PROMPT_RE.subn("", text)
     excluded("hook_prompt", count)
+    # 追い打ちの提案は本人が押して送っても agent の文 = 引用元にしない。 提案だけの発言も本人の操作なので
+    # 空の本文 1 つとして数える (最新の発言はこの発言になり、 その前の発言は引けない)
+    text, followups = CODEX_FOLLOWUP_RE.subn("", text)
+    excluded("codex-followup", followups)
     stripped = text.lstrip()
     tag = "<send_user_message_question_reply>"
     if stripped.startswith(tag):
@@ -1935,7 +1942,9 @@ def human_text_segments(text: str, excluded_tags: dict[str, int] | None = None, 
         return excluded(name)
     if stripped.startswith(GENERATED_USER_PREFIXES):
         return []
-    return [text] if text.strip() else []
+    if not text.strip():
+        return [""] if followups else []
+    return [text]
 
 
 def user_messages(path: Path, excluded_tags: dict[str, int] | None = None) -> list[tuple[str, str]]:
@@ -3398,6 +3407,11 @@ def approve_mode(args: argparse.Namespace) -> int:
             print_excluded_tags(excluded_tags)
             return 4
         idx, quote = len(msgs) - 1, msgs[-1][1]
+        if not quote.strip():
+            print("approve: 本人の最新の発言は、 agent が書いた追い打ちの提案 (codex-followup) を押した文だけ = 引ける本人の文が無い。"
+                  " 記録しない。\n  承認する変更を本人に自分の言葉で 1 行打ってもらってから引く。", file=sys.stderr)
+            print_excluded_tags(excluded_tags)
+            return 4
     else:
         quote = args.quote
         idx = quote_index(quote, msgs)
@@ -5473,6 +5487,27 @@ def selftest() -> int:
         check("approve: 作業中に届いた本人の発言の後は、 その前の発言は引けない (exit 5)", approve_mode(qns) == 5)
         qns.quote = "案 Q は結論の段も直して"
         check("approve: 作業中に届いた本人の発言そのものは引ける", approve_mode(qns) == 0)
+        # Codex の追い打ちの提案 (:codex-followup[題]{prompt="…"}) は本人が押して送っても agent が書いた文
+        fu = ':codex-followup[表題を直す]{prompt="表題と概要を書き換えて修正して。"}'
+        fu_segs = human_text_segments("これもよろしく 1. " + fu)
+        check("追い打ちの提案の文は引用元にならず、 同じ発言の本人の文は残る",
+              fu_segs == ["これもよろしく 1. "]
+              and verify_quote("表題と概要を書き換えて修正して。", [("t", s) for s in fu_segs]) is None)
+        check("提案の値の中の括弧・escape した引用符も 1 つの提案として除く",
+              human_text_segments('直して :codex-followup[式]{prompt="式 \\fn{x} の \\"符号\\" を直して"} 以上')
+              == ["直して  以上"])
+        check("提案の形でない codex-followup の語は本人の文として残る",
+              human_text_segments("codex-followup ってなに？") == ["codex-followup ってなに？"])
+        ftr = tr_dir / "sess-f.jsonl"
+        append(ftr, said("案 F はこの形で確定してよい", iso(-10)), said(fu, iso(-5)))
+        check("提案を押しただけの発言も本人の操作として数える (引ける文は無い)",
+              [t for _, t in user_messages(ftr)] == ["案 F はこの形で確定してよい", ""])
+        fns = argparse.Namespace(session="claude:sess-f", region=["abstract"], change="案 F",
+                                 quote="案 F はこの形で確定してよい", file=str(repo / "src" / "main.tex"), transcript=None)
+        check("approve: 提案を押した後は、 その前の本人の発言は引けない (exit 5)", approve_mode(fns) == 5)
+        fns.quote, fns.latest = None, True
+        check("approve --latest: 最新の発言が提案の文だけなら引けない (exit 4)",
+              approve_mode(fns) == 4 and load_approvals("claude", "sess-f") == [])
         # Stop: 著者の最新の発言に結んだ承認は、 その後の最後の返事に書くまで 1 回差し戻す
         def stop_rows(path: Path, rows: list[dict]) -> None:
             path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
