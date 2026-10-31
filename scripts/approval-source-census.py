@@ -5,6 +5,10 @@ Only explicitly supplied transcript roots are scanned. Codex's two carriers
 are counted separately, not added into an estimate of distinct human turns.
 Claude's human-origin sample requires type=user and turnOrigin=human. Missing
 or unreadable input is reported as an inspection failure, never as zero data.
+Compressed Codex rollouts (`.jsonl.zst`) are decompressed through
+lib/compressed_jsonl.py. A plain and a compressed copy of one record count each
+identical line once. A compressed file that cannot be decompressed is reported
+as `zst_no_means` (no decompressor) or `zst_failed`, not read as empty.
 """
 from __future__ import annotations
 
@@ -16,6 +20,12 @@ import os
 from pathlib import Path
 import re
 import sys
+
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+    import compressed_jsonl as _cj
+except Exception:  # pragma: no cover - older layout: compressed rollouts are reported as unreadable
+    _cj = None
 
 
 def guard_module():
@@ -56,7 +66,7 @@ def census(roots, tag_re, strip_patterns=()):
     samples = {k: {"messages": 0, "empty": 0, "non_tag": 0, "agents_prefix": 0,
                    "tags": Counter(), "tags_after_known_blocks": Counter()}
                for k in ("codex_event_msg", "codex_response_item", "claude_human")}
-    errors, seen, read = Counter(), set(), 0
+    errors, seen, read, tally = Counter(), set(), 0, Counter()
     def files_in(root):
         if root.is_file():
             yield root
@@ -65,8 +75,35 @@ def census(roots, tag_re, strip_patterns=()):
             errors[type(exc).__name__] += 1
         for folder, _dirs, names in os.walk(root, onerror=unreadable, followlinks=False):
             for name in names:
-                if name.endswith(".jsonl"):
+                if name.endswith(".jsonl") or name.endswith(".jsonl.zst"):
                     yield Path(folder) / name
+    def take(line):
+        try:
+            row = json.loads(line)
+        except ValueError:
+            errors["invalid_json"] += 1
+            return
+        for carrier, text in user_texts(row):
+            sample = samples[carrier]
+            sample["messages"] += 1
+            remaining = text
+            for pattern in strip_patterns:
+                remaining = pattern.sub("", remaining)
+            after = tag_re.match(remaining)
+            if after:
+                sample["tags_after_known_blocks"][after.group(1)[:80]] += 1
+            match = tag_re.match(text)
+            if match:
+                # Bound diagnostic labels: the complete message is never emitted.
+                sample["tags"][match.group(1)[:80]] += 1
+            elif text.lstrip().startswith("# AGENTS.md instructions"):
+                sample["agents_prefix"] += 1
+            elif not text.strip():
+                sample["empty"] += 1
+            else:
+                sample["non_tag"] += 1
+    # A plain and a compressed copy of the same record form one unit (compressed first).
+    units = {}
     for root in roots:
         if not root.exists():
             errors["missing_root"] += 1
@@ -76,36 +113,30 @@ def census(roots, tag_re, strip_patterns=()):
             if resolved in seen:
                 continue
             seen.add(resolved)
+            base = path.name[:-len(".zst")] if path.name.endswith(".jsonl.zst") else path.name
+            units.setdefault((resolved.parent, base), []).append(path)
+    for paths in units.values():
+        lines_seen = set() if len(paths) > 1 else None
+        for path in sorted(paths, key=lambda p: not p.name.endswith(".jsonl.zst")):
+            compressed = path.name.endswith(".jsonl.zst")
+            if compressed and (_cj is None or _cj.means() == "none"):
+                errors["zst_no_means"] += 1
+                continue
             try:
-                with path.open(encoding="utf-8") as handle:
+                opener = _cj.open_lines(path, errors="strict", tally=tally) if compressed else path.open(encoding="utf-8")
+                with opener as handle:
                     for line in handle:
-                        try:
-                            row = json.loads(line)
-                        except ValueError:
-                            errors["invalid_json"] += 1
-                            continue
-                        for carrier, text in user_texts(row):
-                            sample = samples[carrier]
-                            sample["messages"] += 1
-                            remaining = text
-                            for pattern in strip_patterns:
-                                remaining = pattern.sub("", remaining)
-                            after = tag_re.match(remaining)
-                            if after:
-                                sample["tags_after_known_blocks"][after.group(1)[:80]] += 1
-                            match = tag_re.match(text)
-                            if match:
-                                # Bound diagnostic labels: the complete message is never emitted.
-                                sample["tags"][match.group(1)[:80]] += 1
-                            elif text.lstrip().startswith("# AGENTS.md instructions"):
-                                sample["agents_prefix"] += 1
-                            elif not text.strip():
-                                sample["empty"] += 1
-                            else:
-                                sample["non_tag"] += 1
+                        if lines_seen is not None:
+                            key = line.rstrip("\r\n")
+                            if key in lines_seen:
+                                continue
+                            lines_seen.add(key)
+                        take(line)
                 read += 1
             except (OSError, UnicodeError, TypeError, AttributeError) as exc:
                 errors[type(exc).__name__] += 1
+    for reason, n in tally.items():
+        errors["zst_" + reason.replace("-", "_")] += n
     return {"files_read": read, "samples": samples, "inspection_errors": dict(errors)}
 
 
@@ -131,6 +162,30 @@ def selftest():
         rendered = json.dumps(result)
         assert "PRIVATE_BODY" not in rendered and str(p) not in rendered and "private-session-id" not in rendered
         assert census([root / "missing"], tag_re)["inspection_errors"] == {"missing_root": 1}
+        # Compressed Codex rollouts (.jsonl.zst) are read like plain ones; a plain and a compressed
+        # copy of one record count each identical line once; no decompressor is a reported failure.
+        zrow = {"type": "event_msg", "payload": {"type": "user_message", "message": "<zipped>PRIVATE_BODY"}}
+        packed = _cj.compress_for_test((json.dumps(zrow) + "\n").encode()) if _cj else None
+        if packed is None:
+            print("approval-source-census: skipped the compressed-record check (no zstd compressor here)")
+        else:
+            zroot = root / "private-compressed"
+            zroot.mkdir()
+            (zroot / "private-z.jsonl.zst").write_bytes(packed)
+            (zroot / "private-pair.jsonl").write_text(json.dumps(zrow) + "\n" + json.dumps(rows[3]) + "\n")
+            (zroot / "private-pair.jsonl.zst").write_bytes(packed)
+            result = census([zroot], tag_re)
+            assert result["files_read"] == 3 and not result["inspection_errors"], result
+            assert result["samples"]["codex_event_msg"]["tags"] == {"zipped": 2}
+            assert result["samples"]["codex_event_msg"]["non_tag"] == 1
+            rendered = json.dumps(result)
+            assert "PRIVATE_BODY" not in rendered and "private-" not in rendered
+            saved, _cj.FORCE = _cj.FORCE, "none"
+            try:
+                result = census([zroot / "private-z.jsonl.zst"], tag_re)
+            finally:
+                _cj.FORCE = saved
+            assert result["inspection_errors"] == {"zst_no_means": 1} and result["files_read"] == 0, result
         import subprocess
         loop = root / "private-loop.jsonl"
         loop.symlink_to(loop.name)
@@ -147,7 +202,7 @@ def selftest():
                 assert str(denied) not in failed.stdout + failed.stderr and not failed.stderr
             finally:
                 denied.chmod(0o700)
-    print("approval-source-census: carrier isolation, origin filter, bounded labels, privacy and missing-input checks passed")
+    print("approval-source-census: carrier isolation, origin filter, bounded labels, privacy, compressed-record and missing-input checks passed")
     return 0
 
 
