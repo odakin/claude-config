@@ -250,24 +250,41 @@ def claude_first_turn(path: Path) -> tuple[int, list[str]]:
     return prompts, texts
 
 
-def codex_first_turn(path: Path) -> tuple[int, list[str]]:
-    """Codex rollout 版。 sub-agent rollout (parent_thread_id あり) は (-1, [])。"""
-    prompts, texts = 0, []
+def _is_user_item(kind, payload: dict) -> bool:
+    item = payload.get("item")
+    return kind == "event_msg" and payload.get("type") == "item_completed" and isinstance(item, dict) \
+        and item.get("type") == "UserMessage"
+
+
+def codex_first_turn(path: Path, *, item_prompts: bool = False) -> tuple[int, list[str]]:
+    """Codex rollout 版。 sub-agent rollout (parent_thread_id あり) は (-1, [])。
+
+    人の発言の数え方: event_msg の user_message。 item_prompts=True なら event_msg の item_completed
+    (item.type = UserMessage) も数える = 今の Codex Desktop の記録は人の発言をこの形でだけ持つ (実測)。
+    両方の形を持つ記録では多い方を数える (同じ発言を 2 度数えない)。 hook の 3 段は既定 (False) で呼ぶ =
+    rollout が見つかる Codex Desktop の session では prompts が 0 になり、 Stop の段は確かめずに黙る。
+    事後 audit (scripts/check-first-reply-stamp.py) は True で呼ぶ。"""
+    events = items = 0
+    texts: list[str] = []
     for entry in _iter_jsonl(path):
         payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
         kind = entry.get("type")
         if kind == "session_meta" and payload.get("parent_thread_id"):
             return -1, []
         if kind == "event_msg" and payload.get("type") == "user_message":
-            prompts += 1
-            if prompts >= 2:
-                break
-        elif (prompts == 1 and kind == "response_item" and payload.get("type") == "message"
-              and payload.get("role") == "assistant"):
-            for block in payload.get("content") or []:
-                if isinstance(block, dict) and block.get("type") == "output_text" and str(block.get("text", "")).strip():
-                    texts.append(block["text"])
-    return prompts, texts
+            events += 1
+        elif item_prompts and _is_user_item(kind, payload):
+            items += 1
+        else:
+            if (max(events, items) == 1 and kind == "response_item" and payload.get("type") == "message"
+                    and payload.get("role") == "assistant"):
+                for block in payload.get("content") or []:
+                    if isinstance(block, dict) and block.get("type") == "output_text" and str(block.get("text", "")).strip():
+                        texts.append(block["text"])
+            continue
+        if max(events, items) >= 2:
+            break
+    return max(events, items), texts
 
 
 def find_codex_rollout(session_id: str) -> Path | None:

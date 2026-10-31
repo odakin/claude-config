@@ -9,7 +9,11 @@ trust 未承認) transcript は残るので、 ここは劣化を検出できる
   Stop 段の記録 (stop-log.jsonl = observe なら「block なら差し戻していた」 件数)
 範囲は hook と同じ (workspace base 配下の cwd、 Claude headless と Codex sub-agent を除く)。
 Codex の rollout は、 古くなって zstd で圧縮された `.jsonl.zst` も展開して数える (lib/compressed_jsonl.py)。
-展開できなかった本数は所見に出す (= その session は数えていない、 と分かるように)。
+展開できなかった本数は所見に出す (= その session は数えていない、 と分かるように)。 アーカイブした session
+(`sessions/` の隣の `archived_sessions/`) も数える。 人の発言は event_msg の user_message に加えて、 今の
+Codex Desktop の形 = event_msg の item_completed (item.type = UserMessage) でも数える (実測: 今の記録は後者
+だけを持つ。 前者だけで数えると Codex の session が 1 本も数えられない)。 ⚠️ hook の Stop の段はまだ前者だけで
+数える (first_reply_stamp.codex_first_turn の既定) = rollout が見つかる session では確かめずに黙る。
 
 設計と実測 = conventions/multi-account-machine-surface.md#first-reply-stamp-mechanism。
 
@@ -131,11 +135,12 @@ def codex_session(path: Path) -> dict | None:
         if entry.get("type") == "session_meta" and payload.get("parent_thread_id"):
             return None
         cwd = cwd or payload.get("cwd")
-        if started is None and entry.get("type") == "event_msg" and payload.get("type") == "user_message":
+        if started is None and entry.get("type") == "event_msg" and (
+                payload.get("type") == "user_message" or frs._is_user_item(entry.get("type"), payload)):
             started = str(entry.get("timestamp") or "")[:10]
     if started is None or not cwd or not frs.in_scope(cwd):
         return None
-    prompts, texts = frs.codex_first_turn(path)
+    prompts, texts = frs.codex_first_turn(path, item_prompts=True)
     if prompts < 1 or not texts:
         return None
     stem = path.name[: -len(".jsonl.zst")] if path.name.endswith(".jsonl.zst") else path.stem
@@ -157,9 +162,11 @@ def collect(days: int, with_codex: bool, since_date: str = "") -> list[dict]:
             continue
         if row:
             rows.append(row)
-    if with_codex and codex_root().is_dir():
-        # 古くなった rollout は zstd で圧縮される (.jsonl.zst)。 平文だけを数えると古い session を数え落とす
-        for path in [*codex_root().glob("**/rollout-*.jsonl"), *codex_root().glob("**/rollout-*.jsonl.zst")]:
+    # Codex がアーカイブした session は sessions/ の隣の archived_sessions/ (平置き) に移る。 古くなった rollout は
+    # zstd で圧縮される (.jsonl.zst)。 sessions/ の平文だけを数えると、 その session を数え落とす
+    roots = [r for r in (codex_root(), codex_root().parent / "archived_sessions") if r.is_dir()] if with_codex else []
+    for root in roots:
+        for path in [*root.glob("**/rollout-*.jsonl"), *root.glob("**/rollout-*.jsonl.zst")]:
             try:
                 if path.stat().st_mtime < cutoff:
                     continue
@@ -355,6 +362,31 @@ def selftest() -> int:
             zc = [r for r in collect(14, with_codex=True) if r["flavor"] == "codex"]
             check("圧縮した rollout (.jsonl.zst) も数え、 session id を名から取る",
                   len(zc) == 2 and [r["s1"] for r in zc if r["session"] == uid[:8]] == [True])
+        # 今の Codex Desktop の記録の形: 人の発言は event_msg の user_message でなく item_completed (item.type = UserMessage)。
+        # アーカイブした session は sessions/ の隣の archived_sessions/ に平置き
+        def desktop_rows(uid_: str, reply: str) -> list[dict]:
+            return [{"type": "session_meta", "payload": {"id": uid_, "cwd": cwd}},
+                    {"type": "event_msg", "timestamp": today, "payload": {"type": "task_started"}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                          "content": [{"type": "input_text", "text": "# AGENTS.md"}]}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                          "content": [{"type": "input_text", "text": "やって"}]}},
+                    {"type": "event_msg", "timestamp": today, "payload": {"type": "item_completed", "item": {"type": "UserMessage"}}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "assistant",
+                                                          "content": [{"type": "output_text", "text": reply}]}},
+                    {"type": "event_msg", "timestamp": today, "payload": {"type": "task_complete"}}]
+        live_id, arch_id = "4e100000-0000-4000-8000-000000000001", "4e200000-0000-4000-8000-000000000002"
+        (codex / f"rollout-2099-01-01T00-00-01-{live_id}.jsonl").write_text(
+            "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in desktop_rows(live_id, "Working")), encoding="utf-8")
+        arch = root / "archived_sessions"
+        arch.mkdir()
+        (arch / f"rollout-2099-01-01T00-00-02-{arch_id}.jsonl").write_text(
+            "".join(json.dumps(r, ensure_ascii=False) + "\n"
+                    for r in desktop_rows(arch_id, f"🖥 h · cli = x · session {arch_id[:8]}")), encoding="utf-8")
+        dc = {r["session"]: r for r in collect(14, with_codex=True) if r["flavor"] == "codex"}
+        check("今の Codex Desktop の形 (人の発言 = item_completed の UserMessage) の session を数える",
+              live_id[:8] in dc and dc[live_id[:8]]["s2"] is False)
+        check("アーカイブした session (archived_sessions/) も数える", arch_id[:8] in dc and dc[arch_id[:8]]["s1"] is True)
         if cj is not None:
             zpath.write_bytes(packed or b"x")
             saved_force, cj.FORCE = cj.FORCE, "none"
