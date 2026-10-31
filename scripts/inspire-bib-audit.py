@@ -77,6 +77,9 @@ _TEX_TEXT = {
     r"\\textendash": "-", r"\\textemdash": "-", r"\\textquoteright": "'",
     r"\\textquoteleft": "'", r"\\textquotedblleft": '"', r"\\textquotedblright": '"',
     r"\\&": "&", r"\\ss": "ss",
+    # Unicode ℓ folds to "l" under NFKD; without this the TeX form drops out
+    # as a command while INSPIRE's ℓ survives as "l", and the titles disagree.
+    r"\\ell(?![a-zA-Z])": "l",
 }
 _ALNUM = re.compile(r"[^a-z0-9]")
 # INSPIRE titles can carry HTML markup ("<i>Example</i> Survey Data Release 3");
@@ -420,6 +423,17 @@ def selftest():
     accent_entry = {"fields": {"title": "{Sakharov's Induced Gravity and the Poincar{\\'e} Gauge Theory}"}}
     chk("TeX accent vs Unicode accent is not a finding",
         not any(d[0] == "title" for d in compare(accent_entry, accent_meta)))
+    # Unicode ℓ folds to "l" under NFKD, so TeX \ell has to become "l" too; the
+    # other symbols in this title (\to, \nu) already drop out on both sides.
+    ell_meta = dict(meta, titles=[{"title": "Synthetic search for B→Dℓνℓ decays"}])
+    ell_entry = {"fields": {"title": "{Synthetic search for $B\\to D\\ell\\nu_\\ell$ decays}"}}
+    chk("TeX \\ell vs Unicode ℓ is not a finding",
+        not any(d[0] == "title" for d in compare(ell_entry, ell_meta)))
+    chk("foil: a different decay mode is still caught after the \\ell fold",
+        any(d[0] == "title" for d in compare(
+            {"fields": {"title": "{Synthetic search for $B\\to D\\ell$ decays}"}}, ell_meta)))
+    chk("\\ell does not eat a longer command name",
+        norm("\\ellipsis") != norm("l ipsis"))
     print("\nALL PASS" if ok else "\nFAILURES PRESENT")
     return 0 if ok else 1
 
