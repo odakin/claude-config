@@ -16,9 +16,10 @@ conventions/batch-text-edits.md の先頭の側の罠)。 YAML を load → dump
                       ⚠️ 値を自分で引用符に包まない = 引用符は道具が付ける。 shell で `'key="…"'` と書くと値の両端に " が残り、
                       file には `\"…\"` が入る (実測 2 回)。 両端が " の値は止める (本当にその値なら --allow-quoted-value)
                       ⚠️ `--set flag=false` は `flag: "false"` (文字列) になり、 読み手が bool() で読むと真になる (実測 2 回以上)
-                      = 値が真偽・null に読める形 (true/false/yes/no/null/~ など) なら止める。 本当に文字列なら --allow-bool-string
+                      = 値が真偽・null に読める形 (true/false/yes/no/null/~ など) なら止める。 本当に文字列なら --allow-bool-string。
+                      `#` で始まる値 (YAML では comment = null) は文字列として通す (引用して書くので comment にならない)
                       ⚠️ list の key には使わない (1 本の文字列になる) = その key は text で 1 行足して、 読み直して他の key が不変かを確かめる
-    --set-literal key=value  値を真偽・null・数として引用なしで書く (`--set-literal waiting_party=false`)。 文字列になる値は止める
+    --set-literal key=value  値を真偽・null・数として引用なしで書く (`--set-literal waiting_party=false`)。 文字列になる値と `#` で始まる値は止める
     --comment key=text  --set した行の末尾に「   # text」 を付ける
     --drop key        その key をまとまりごと消す (無ければ何もしない)
     --dry-run         書かずに差分だけ出す
@@ -181,7 +182,7 @@ def selftest() -> int:
         except SystemExit as e:
             assert "--comment" in str(e), e
         assert p.read_text(encoding="utf-8") == t
-        for bad in ("w=完了", "w=[a]", "w=[未定"):
+        for bad in ("w=完了", "w=[a]", "w=[未定", "w=#3 を相談する"):
             try:
                 main([str(p), "--set-literal", bad])
                 raise AssertionError(f"--set-literal {bad} を止めなかった")
@@ -189,6 +190,8 @@ def selftest() -> int:
                 assert "--set で渡す" in str(e), e
         assert main([str(p), "--set", "flag=false", "--allow-bool-string"]) == 0
         assert _yaml_safe_load(p.read_text(encoding="utf-8"))["flag"] == "false"
+        assert main([str(p), "--set", "note=#3 を相談する"]) == 0  # # で始まる値は null でなく文字列 (引用して書く)
+        assert _yaml_safe_load(p.read_text(encoding="utf-8"))["note"] == "#3 を相談する"
     print("yaml-set-top-keys selftest: ALL PASS (行頭の key だけを置き換え・本文の中の同じ語は触らない・ほかの key は不変を確かめる)")
     return 0
 
@@ -210,6 +213,8 @@ def kv(items: list[str] | None, allow_quoted: bool = True, allow_bool_string: bo
 
 
 def _reads_as_bool_or_null(v: str) -> bool:
+    if v.lstrip().startswith("#"):  # YAML は comment として null に読むが、 --set は引用して書くので文字列 (実測: 項目番号で始まる値 「#N …」 を null と誤判定し、 勧める --set-literal では値が null で書かれる)
+        return False
     try:
         val = _yaml_safe_load(v)
     except yaml.YAMLError:  # 「[未定」 のように YAML として読めない文字列は文字列のまま書く
@@ -224,6 +229,8 @@ def literals(items: list[str] | None) -> dict[str, object]:
         try:
             val = _yaml_safe_load(v) if v.strip() else None
         except yaml.YAMLError:
+            val = v
+        if v.lstrip().startswith("#"):  # YAML は comment として null に読む = 黙って null を書くと値が消える (実測)
             val = v
         if isinstance(val, str) or not (val is None or isinstance(val, (bool, int, float))):
             raise SystemExit(f"❌ --set-literal {k}={v} は真偽・null・数でない = 文字列は --set で渡す")
