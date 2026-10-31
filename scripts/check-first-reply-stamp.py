@@ -12,8 +12,8 @@ Codex の rollout は、 古くなって zstd で圧縮された `.jsonl.zst` �
 展開できなかった本数は所見に出す (= その session は数えていない、 と分かるように)。 アーカイブした session
 (`sessions/` の隣の `archived_sessions/`) も数える。 人の発言は event_msg の user_message に加えて、 今の
 Codex Desktop の形 = event_msg の item_completed (item.type = UserMessage) でも数える (実測: 今の記録は後者
-だけを持つ。 前者だけで数えると Codex の session が 1 本も数えられない)。 ⚠️ hook の Stop の段はまだ前者だけで
-数える (first_reply_stamp.codex_first_turn の既定) = rollout が見つかる session では確かめずに黙る。
+だけを持つ。 前者だけで数えると Codex の session が 1 本も数えられない)。 hook の 3 段も同じ数え方
+(first_reply_stamp.first_turn)。
 
 設計と実測 = conventions/multi-account-machine-surface.md#first-reply-stamp-mechanism。
 

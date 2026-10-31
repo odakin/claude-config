@@ -71,7 +71,7 @@ summary: アカウント × マシン × 端末 (desktop app / スマホ remote)
 
 **「最初の返信の冒頭」 の定義**: この session で最初に書く text の 1 行目。 途中経過の 1 行・状況報告への返答も含む。 ⚠️ 途中経過の行は会話記録に残らないことがある (実測: tool call の合間に書いた途中経過の 1 行目の stamp が記録に無く、 Stop の検査は stamp 無しと読んで差し戻した) = 途中経過に置いた場合も、 最初の turn の最後の返事の冒頭にもう一度置く。 「stamp を確認します」 という予告は stamp の代わりにならない。 注入 stamp の account が埋まっていればそのまま出してよい (whoami は照合用)。 「未同定」 なら最初の text の前に whoami を実行する。
 
-**範囲**: workspace base (= 本 repo の親 dir) の外の cwd では全段が黙る — 盲検 sandbox は base の外に作る規約 ([cold-eyes-isolation.md](cold-eyes-isolation.md)) なので注入が汚染源にならない。 Claude の headless (`CLAUDE_CODE_ENTRYPOINT=sdk-*`) と Codex の sub-agent rollout は後ろ 2 段の対象外。 全段の opt-out = env `FIRST_REPLY_STAMP=off`。
+**範囲**: workspace base (= 本 repo の親 dir) の外の cwd では全段が黙る — 盲検 sandbox は base の外に作る規約 ([cold-eyes-isolation.md](cold-eyes-isolation.md)) なので注入が汚染源にならない。 Claude の headless (`CLAUDE_CODE_ENTRYPOINT=sdk-*`) と Codex の sub-agent rollout は後ろ 2 段の対象外。 全段の opt-out = env `FIRST_REPLY_STAMP=off`。 Codex の rollout の人の発言は、 `event_msg` の `user_message` と、 `event_msg` の `item_completed` (`item.type` = `UserMessage`) のどちらでも数える (実測: 今の Codex Desktop の記録は後者だけを持つ。 前者だけで数えると、 Stop の段は最初の turn を見つけられずに黙り、 prompt の段は再開 session を見分けられない)。
 
 **Stop 段の mode**: `DEFAULT_STOP_MODE` (導入時 = observe、 observe の記録に誤発火が無いのを確かめて block に上げた) を env `FIRST_REPLY_STAMP_STOP` (off / observe / block) で上書きできる。 observe の記録は `<config dir>/state/first-reply-stamp/stop-log.jsonl` (Codex は `~/.codex/state/claude-config-first-reply-stamp/`)。 block に上げるのは、 記録と audit で誤発火が無いのを確かめてから (= 値の変更を commit で残す)。 1 session につき評価は最初の Stop の 1 回だけで、 以後の turn では transcript を読まない。
 

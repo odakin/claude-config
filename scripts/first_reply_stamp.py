@@ -261,9 +261,9 @@ def codex_first_turn(path: Path, *, item_prompts: bool = False) -> tuple[int, li
 
     人の発言の数え方: event_msg の user_message。 item_prompts=True なら event_msg の item_completed
     (item.type = UserMessage) も数える = 今の Codex Desktop の記録は人の発言をこの形でだけ持つ (実測)。
-    両方の形を持つ記録では多い方を数える (同じ発言を 2 度数えない)。 hook の 3 段は既定 (False) で呼ぶ =
-    rollout が見つかる Codex Desktop の session では prompts が 0 になり、 Stop の段は確かめずに黙る。
-    事後 audit (scripts/check-first-reply-stamp.py) は True で呼ぶ。"""
+    両方の形を持つ記録では多い方を数える (同じ発言を 2 度数えない)。 hook (first_turn) も事後 audit
+    (scripts/check-first-reply-stamp.py) も True で呼ぶ。 False (前の形だけ) で数えると、 今の Codex Desktop の
+    rollout では prompts が 0 になり、 Stop の段は確かめずに黙り、 prompt の段は再開 session を見分けられない。"""
     events = items = 0
     texts: list[str] = []
     for entry in _iter_jsonl(path):
@@ -310,7 +310,7 @@ def _transcript(flavor: str, event: dict) -> Path | None:
 
 
 def first_turn(flavor: str, path: Path) -> tuple[int, list[str]]:
-    return claude_first_turn(path) if flavor == "claude" else codex_first_turn(path)
+    return claude_first_turn(path) if flavor == "claude" else codex_first_turn(path, item_prompts=True)
 
 
 # ---------- stamp の組み立て ----------
@@ -643,10 +643,26 @@ def selftest() -> int:
         check("codex stop: last_assistant_message の stamp で黙る",
               handle_stop("codex", {"session_id": "s-last", "cwd": cwd,
                                     "last_assistant_message": "🖥 host · Codex desktop · x"}) is None)
+        # 今の Codex Desktop の形 = 人の発言は item_completed の UserMessage だけ (user_message が無い)
+        user_item = {"type": "event_msg", "payload": {"type": "item_completed", "item": {"type": "UserMessage"}}}
+        reply = {"type": "response_item", "payload": {"type": "message", "role": "assistant",
+                                                      "content": [{"type": "output_text", "text": "Working"}]}}
+        desktop = jl(root / "desktop.jsonl", [{"type": "session_meta", "payload": {"id": "x"}},
+                                              {"type": "event_msg", "payload": {"type": "task_started"}},
+                                              user_item, reply])
+        out = handle_stop("codex", {"session_id": "s-cx-desk", "cwd": cwd, "transcript_path": str(desktop),
+                                    "last_assistant_message": "Done."})
+        check("codex stop block: 今の形の rollout でも最初の turn に stamp が無ければ差し戻す",
+              bool(out) and json.loads(out).get("decision") == "block")
         os.environ.pop("FIRST_REPLY_STAMP_STOP")
         out = handle_prompt("codex", {"hook_event_name": "UserPromptSubmit", "session_id": "s-cx-up", "cwd": cwd})
         ctx = (json.loads(out)["hookSpecificOutput"]["additionalContext"] if out else "")
         check("codex prompt: 英語の指示 + Codex stamp", "Identity stamp" in ctx and "Codex" in ctx)
+        resumed = jl(root / "desktop-resumed.jsonl", [{"type": "session_meta", "payload": {"id": "y"}},
+                                                      user_item, reply, user_item, reply])
+        check("codex prompt: 今の形で最初の turn を過ぎた再開 session は黙る",
+              handle_prompt("codex", {"hook_event_name": "UserPromptSubmit", "session_id": "s-cx-res",
+                                      "cwd": cwd, "transcript_path": str(resumed)}) is None)
 
     for key, value in saved.items():
         if value is None:
