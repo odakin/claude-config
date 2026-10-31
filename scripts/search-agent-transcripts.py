@@ -34,8 +34,9 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
                 ⚠️ Codex が agent を起こした子の session (先頭の session_meta に parent_thread_id) は、 親の会話を
                 user 役の message として写して持ち、 親からの指示も user 役で持つ。 子の user 役は role「parent」 にする
                 (= `--role user` には入らない。 元の発言は親の session の記録で当たる)。 ⚠️ 人が子の thread に直接打った
-                発言があっても記録の形では見分けられない (人が打った印 〔event_msg の user_message〕 は親の記録にも無い
-                = 実測) = 子の中の発言を探すときは `--role parent` も引く。 ⚠️ 写しは親の assistant の発言や道具の呼び出しも
+                発言があっても記録の形では見分けられない (今の Codex Desktop で人の発言に付く印 〔event_msg の item_completed、
+                item.type = UserMessage〕 は、 子では親からの指示の turn にも付くと読める = 実測で子の多くに在る。 前の形の
+                印 〔event_msg の user_message〕 は、 実測した今の記録では親にも子にも無い) = 子の中の発言を探すときは `--role parent` も引く。 ⚠️ 写しは親の assistant の発言や道具の呼び出しも
                 含むので、 `--role any` / `--role assistant` / `--tool-runs` では親の分が子の session id でも重ねて出る
 
 既定の挙動:
