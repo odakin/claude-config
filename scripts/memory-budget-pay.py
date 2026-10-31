@@ -195,7 +195,7 @@ def _append_under_heading(archive_text: str, heading: str, body: str) -> str:
     lines = archive_text.split("\n")
     idx = next((i for i, l in enumerate(lines) if l.strip() == heading.strip()), None)
     if idx is None:
-        base = archive_text if archive_text.endswith("\n") or archive_text == "" else archive_text + "\n"
+        base = archive_text.rstrip("\n") + "\n" if archive_text else ""
         return base + f"\n{heading}\n" + body
     level = len(heading) - len(heading.lstrip("#"))
     end = len(lines)
@@ -206,7 +206,8 @@ def _append_under_heading(archive_text: str, heading: str, body: str) -> str:
             break
     while end > idx + 1 and lines[end - 1].strip() == "":
         end -= 1
-    return "\n".join(lines[:end]) + "\n" + body + ("\n" + "\n".join(lines[end:]) if end < len(lines) else "")
+    # body は改行で終わり、 lines[end:] は節の後ろの空行 (と次の節) = そのまま繋ぐ。 間に "\n" を足すと足すたびに空行が 1 行増える
+    return "\n".join(lines[:end]) + "\n" + body + "\n".join(lines[end:])
 
 
 def _fix_links_if_needed(src: Path, archive: Path, dry: bool) -> str:
@@ -375,6 +376,9 @@ def selftest() -> int:
         r = run("retreat", "--file", str(f), "--prefix", "| tool-b", "--new-file", str(new), "--archive", str(arc), "--reason", "試験")
         a3 = arc.read_text(encoding="utf-8")
         check(a3.count("pointer 化退避") == 1 and a3.find(row_a) < a3.find(row_b), "retreat: 同じ日の 2 本目は同じ節の末尾")
+        check(not a3.endswith("\n\n"), "retreat: 同じ節に足しても末尾の空行が増えない")
+        check(_append_under_heading("# a\n\n## s\n\nx\n\n## t\n\ny\n", "## s", "\n### u\n\nz\n")
+              == "# a\n\n## s\n\nx\n\n### u\n\nz\n\n## t\n\ny\n", "retreat: 途中の節に足しても次の節との空行は 1 行のまま")
         # 長くなる置換は警告
         new.write_text("| tool-b | **B** " + "x" * 50 + " |\n", encoding="utf-8")
         r = run("retreat", "--file", str(f), "--prefix", "| tool-b", "--new-file", str(new), "--archive", str(arc), "--dry-run")
@@ -390,6 +394,7 @@ def selftest() -> int:
         r = run("graduate", "--file", str(f), "--prefix", "- **proj-x", "--archive", str(arc), "--reason", "試験")
         check(r.returncode == 0 and bul_done not in f.read_text(encoding="utf-8") and bul_done in arc.read_text(encoding="utf-8"),
               "graduate: 義務語彙 hit なしはそのまま MOVE")
+        check("\n\n\n" not in arc.read_text(encoding="utf-8"), "retreat・graduate を重ねても節の間の空行が増えない")
         # 別 dir の archive: 書いた後も旧行が (link 正規化で) 見つかる
         sub = tmp / "deep"
         sub.mkdir()
