@@ -44,6 +44,8 @@ script の置き場所は「最初にどの案件で書いたか」ではなく�
    - 関数を import する呼び出し元がいるなら、両版を同じ fake client で動かし、標準出力・呼び出しの列・書き出した file を 1 つの report にまとめて比べる。
    - 差が出たら原因を名指ししてから、その差だけを正規化して比べ直す (例: 定数の文字列を config 由来の名前に置き換えた)。正規化を広げて差を消さない。
    - 全部一致したら、比べる仕組みの歯を 1 回確かめる。旧版の写しの出力を 1 か所だけ壊して同じ照合を回し、その出力を通るケースだけが差になることを見る (比べる仕組みが何も見ていなくても「全部一致」 は出る)。
+   - <a id="shim-runs-the-engine"></a>shim が本当に engine を読んでいることを別に確かめる。engine の写しの符号を 1 か所変え、engine の所在をその写しに向けて下層の入口を回し、検査の失敗で落ちることを見る (import の経路が古い写しを掴んでいても、engine が同じ中身なら出力の一致では見分けがつかない)。所在が無い写しでは、足りない file を名指して止まり traceback を出さないことも見る。
+   - 旧版が git にあるときの旧入口の出力は [`compare-script-output.py`](../../ai-collaboration/scripts/compare-script-output.py) で取れる: 旧版を一時 dir に出し、両側で同じ script を回して時間の表示を除いて比べる。engine の名前を import する script も全部並べる (書き換えた script だけでなく)。
    - 大きな副作用のある mode (実際の download・送信) を回さないなら、その経路は engine の selftest (fake + 一時 dir) で見た、と結果に書く。
 3. 個別値を下層 config / shim に寄せ、上層 diff に owner・第三者・未公開案件の事実が無いか確認する。
 4. 上層の規約・script index を正本にし、下層 index と SESSION は pointer 化する。
