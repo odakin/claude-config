@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""lit-search.py — 先行研究の探索を API で回す (OpenAlex の全文検索・題名と要旨の論理式・被引用・要旨、 Crossref の書誌検索、 arXiv の検索と要旨、 INSPIRE の検索)。 1 件 1 行、 --json も
+r"""lit-search.py — 先行研究の探索を API で回す (OpenAlex の全文検索・題名と要旨の論理式・被引用・要旨、 OpenCitations の被引用、 Crossref の書誌検索と訂正・撤回の登録、 arXiv の検索と要旨、 INSPIRE の検索)。 1 件 1 行、 --json も
 
 WHY THIS EXISTS
 ---------------
@@ -15,7 +15,14 @@ WHAT IT DOES
 - `oa <query>`         OpenAlex の全文検索 (`search=`、 関連度順)。 ゆるい語の検索はここ
 - `oa <expr> --boolean` 題名と要旨の論理式 (`filter=title_and_abstract.search:<expr>`、 引用符・AND/OR)。
                        ⚠️ 検索語 (`search=`) を併用しない = 併用すると両方に当たる件だけが残り、 件数が小さく出る
-- `cites <doi|W…>`     その文献を引いている文献 (`filter=cites:`)。 Scholar の「被引用」 の代わり
+- `cites <doi|W…>`     その文献を引いている文献 (OpenAlex の `filter=cites:`)。 Scholar の「被引用」 の代わり。
+                       DOI で渡すと Crossref の被引用数も引き、 総数が 2 倍以上ずれたら警告する
+                       (OpenAlex の record の合併の誤りで、 分野違いの論文が一覧に混ざることがある = 実測)
+- `citing <doi>`       同じく引いている文献を OpenCitations (Crossref の参照から作る索引) で。 引いている側の
+                       題・著者・誌は Crossref で引く (`--no-meta` で省く)。 `cites` が警告したらこちらで引き直す
+- `updates <doi>…`     Crossref に登録された訂正・撤回・懸念の表明 (`updated-by` と `filter=updates:<doi>`) と
+                       relation (comment・reply など)。 0 件 = Crossref の登録の範囲で無い、 であって
+                       PubPeer・雑誌の頁のコメント欄・著者の後続論文での言い直しは見ていない
 - `abstract <doi>…`    OpenAlex の要旨 (`abstract_inverted_index` を語順に戻す) と OA 版の所在
 - `crossref <query>`   Crossref の書誌検索 (`query.bibliographic`)。 総数は関連度の母集団なので「ヒット数」 にしない
 - `arxiv <query>`      arXiv API (`search_query`、 例 `ti:"geoscience revisited"`、 `au:Deluca AND au:Corral`)。
@@ -29,7 +36,8 @@ WHAT IT DOES
 WHAT IT DOES NOT DO
 -------------------
 - DOI ごとの書誌の照合 → `check-doi-list.py` (Crossref の題・誌・巻・頁・著者を並べる)
-- Semantic Scholar: 鍵なしの利用はすぐ HTTP 429 になる (実測) ので入れていない。 鍵を持つなら別に
+- Semantic Scholar: 鍵なしの利用はすぐ HTTP 429 になる。 429 にならないときも、 Crossref と OpenCitations
+  で 20 件を超えて引かれている論文に被引用 0 件・空の一覧を返した (どちらも実測) ので入れていない
 - 出版社の PDF の取得 (Wiley・AMS・MDPI などはボット検出で 403 / 空応答。 迂回しない = arXiv・機関
   リポジトリの OA 版を `abstract` の所在から辿る)
 - 429 / 5xx の自動リトライ (叩き続けない。 その source を止めて、 検索ログに「使えなかった」 と書く)
@@ -39,6 +47,8 @@ USAGE
     python3 lit-search.py oa "waiting time distribution power law exponential cutoff" -n 12
     python3 lit-search.py oa '("waiting time" OR "inter-event time") AND ("power law" OR "power-law")' --boolean -n 80
     python3 lit-search.py cites 10.1137/070710111 -n 50
+    python3 lit-search.py citing 10.1137/070710111          # OpenCitations で引き直す
+    python3 lit-search.py updates 10.1137/070710111         # 訂正・撤回の登録
     python3 lit-search.py abstract 10.1137/070710111
     python3 lit-search.py crossref "Clauset Shalizi Newman 2009 Power-law distributions in empirical data" -n 3
     python3 lit-search.py arxiv 'ti:"power-law distributions"'
@@ -65,6 +75,7 @@ OPENALEX = "https://api.openalex.org/works"
 CROSSREF = "https://api.crossref.org/works"
 ARXIV = "https://export.arxiv.org/api/query"
 INSPIRE = "https://inspirehep.net/api/literature"
+OPENCITATIONS = "https://api.opencitations.net/index/v2/citations/doi:"  # 旧 opencitations.net/index/coci/api/v1 は移転済み
 
 
 class HttpError(RuntimeError):
@@ -142,6 +153,49 @@ def norm_doi(s):
     return s
 
 
+def oc_ids(field):
+    """OpenCitations の citing 欄 ("omid:br/… doi:10.x/y arxiv:2012.1 pmid:…") を {種類: 値} にする。"""
+    out = {}
+    for tok in (field or "").split():
+        kind, _, val = tok.partition(":")
+        if val and kind not in out:
+            out[kind] = val
+    return out
+
+
+def count_mismatch(other, crossref):
+    """2 つの被引用数が 2 倍以上かつ 5 件以上ずれていれば True (片方の一覧を信じない合図)。"""
+    if other is None or crossref is None:
+        return False
+    lo, hi = sorted((other, crossref))
+    return hi - lo >= 5 and hi >= 2 * max(lo, 1)
+
+
+def _dateparts(x):
+    return "-".join(str(v) for v in (((x or {}).get("date-parts") or [[]])[0] or []) if v is not None)
+
+
+def update_rows(m, notices, doi):
+    """Crossref の work (m) の updated-by と、 filter=updates:<doi> の通知 (notices) を 1 つの一覧にする (通知の DOI で重複を除く)。"""
+    rows, seen = [], set()
+    for u in m.get("updated-by") or []:
+        seen.add((u.get("DOI") or "").lower())
+        rows.append({"type": u.get("type"), "notice": u.get("DOI"), "date": _dateparts(u.get("updated"))})
+    for n in notices:
+        key = (n.get("DOI") or "").lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        to = [u for u in n.get("update-to") or [] if (u.get("DOI") or "").lower() == doi.lower()] or [{}]
+        rows.append({"type": to[0].get("type"), "notice": n.get("DOI"), "date": _dateparts(to[0].get("updated"))})
+    return rows
+
+
+def crossref_work(c, doi):
+    return c.get(CROSSREF + "/" + urllib.parse.quote(norm_doi(doi), safe="/")
+                 + _mailto("CROSSREF_MAILTO").replace("&", "?", 1))["message"]
+
+
 def oa_row(w):
     loc = (w.get("primary_location") or {}).get("source") or {}
     return {"year": w.get("publication_year"), "id": (w.get("doi") or w.get("id") or "").replace("https://doi.org/", ""),
@@ -213,13 +267,17 @@ def inspire_all(get, query, abstract=False, size=100):
         page += 1
 
 
-def show(total, rows, as_json, label):
+def show(total, rows, as_json, label, notes=None):
     if as_json:
-        print(json.dumps({"source": label, "total": total, "results": rows}, ensure_ascii=False, indent=1))
+        print(json.dumps({"source": label, "total": total, "notes": notes or [], "results": rows},
+                         ensure_ascii=False, indent=1))
         return
     print(f"# {label}: total {total}")
+    for n in notes or []:
+        print(f"# {n}")
     for r in rows:
-        print(f"  {r.get('year')} | {r.get('id')} | {r.get('title')} | {r.get('venue') or ''} | cited {r.get('cited')}")
+        au = f"{r['authors']} | " if r.get("authors") else ""
+        print(f"  {r.get('year')} | {r.get('id')} | {au}{r.get('title')} | {r.get('venue') or ''} | cited {r.get('cited')}")
 
 
 def run(a):
@@ -229,11 +287,55 @@ def run(a):
             d = c.get(openalex_url(a.query, a.n, a.boolean, "cited_by_count:desc" if a.sort == "cited" else None))
             show(d.get("meta", {}).get("count"), [oa_row(w) for w in d.get("results", [])], a.json, "OpenAlex")
         elif a.cmd == "cites":
-            wid = a.work
+            wid, cr, notes = a.work, None, []
             if wid.lower().startswith("10.") or "doi.org" in wid:
+                cr = crossref_work(c, wid).get("is-referenced-by-count")
                 wid = c.get(OPENALEX + "/doi:" + norm_doi(wid))["id"].rsplit("/", 1)[-1]
             d = c.get(openalex_url("", a.n, sort="cited_by_count:desc", extra_filter="cites:" + wid))
-            show(d.get("meta", {}).get("count"), [oa_row(w) for w in d.get("results", [])], a.json, f"cites {wid}")
+            total = d.get("meta", {}).get("count")
+            if cr is not None:
+                notes.append(f"Crossref の被引用数 = {cr}")
+                if count_mismatch(total, cr):
+                    notes.append("⚠️ OpenAlex の総数と 2 倍以上ずれている = この一覧を信じず、 citing (OpenCitations) で引き直す")
+            show(total, [oa_row(w) for w in d.get("results", [])], a.json, f"cites {wid}", notes)
+        elif a.cmd == "citing":
+            items = c.get(OPENCITATIONS + norm_doi(a.doi))
+            rows = []
+            for it in items:
+                ids = oc_ids(it.get("citing"))
+                r = {"year": (it.get("creation") or "")[:4], "title": None,
+                     "id": ids.get("doi") or (f"arXiv:{ids['arxiv']}" if "arxiv" in ids else it.get("citing"))}
+                if "doi" in ids and not a.no_meta:
+                    try:
+                        m = crossref_work(c, ids["doi"])
+                        r = crossref_row(m)
+                        r["authors"] = ", ".join(x.get("family") or x.get("name", "") for x in (m.get("author") or [])[:5])
+                        r["type"] = m.get("type")
+                    except HttpError:
+                        r["title"] = "(Crossref で引けない)"
+                rows.append(r)
+            rows.sort(key=lambda r: str(r.get("year") or ""))
+            cr = crossref_work(c, a.doi).get("is-referenced-by-count")
+            show(len(items), rows, a.json, f"OpenCitations citing {norm_doi(a.doi)}", [f"Crossref の被引用数 = {cr}"])
+        elif a.cmd == "updates":
+            out = []
+            for doi in map(norm_doi, a.dois):
+                m = crossref_work(c, doi)
+                notices = c.get(f"{CROSSREF}?rows=50&filter=updates:{urllib.parse.quote(doi, safe='/')}"
+                                + _mailto("CROSSREF_MAILTO"))["message"].get("items", [])
+                out.append({"doi": doi, "title": (m.get("title") or [""])[0], "updates": update_rows(m, notices, doi),
+                            "relation": m.get("relation") or {}})
+            if a.json:
+                print(json.dumps(out, ensure_ascii=False, indent=1))
+            else:
+                for r in out:
+                    print(f"### {r['doi']} | {r['title']}")
+                    for u in r["updates"]:
+                        print(f"  {u['type']} | {u['notice']} | {u['date']}")
+                    for kind, rel in r["relation"].items():
+                        print(f"  relation {kind} | " + ", ".join(x.get("id", "") for x in rel))
+                    if not r["updates"] and not r["relation"]:
+                        print("  登録なし (Crossref の訂正・撤回・懸念の表明と relation の範囲。 PubPeer・雑誌の頁・後続論文は見ていない)")
         elif a.cmd == "abstract":
             out = []
             for doi in a.dois:
@@ -306,6 +408,18 @@ def selftest():
     pages = {1: [{"metadata": {}}, {"metadata": {}}], 2: [{"metadata": {}}]}
     fake = lambda url: {"hits": {"total": 3, "hits": pages[int(re.search(r"page=(\d+)", url).group(1))]}}
     assert inspire_all(fake, "x", size=2)[0] == 3 and len(inspire_all(fake, "x", size=2)[1]) == 3, "頁送り"
+    assert oc_ids("omid:br/0602 doi:10.1016/j.x.1 arxiv:2012.12338") == {
+        "omid": "br/0602", "doi": "10.1016/j.x.1", "arxiv": "2012.12338"}, "citing 欄の分解"
+    assert count_mismatch(98, 20) and count_mismatch(0, 20), "大きなずれを拾わない"
+    assert not count_mismatch(22, 20) and not count_mismatch(3, 1) and not count_mismatch(None, 20), "小さなずれで警告"
+    m = {"updated-by": [{"type": "correction", "DOI": "10.9/c", "updated": {"date-parts": [[2021, 3, 1]]}}]}
+    notices = [{"DOI": "10.9/C", "update-to": [{"DOI": "10.1/X", "type": "correction"}]},
+               {"DOI": "10.9/r", "update-to": [{"DOI": "10.1/x", "type": "retraction",
+                                                 "updated": {"date-parts": [[2022, 1, 2]]}}]}]
+    assert update_rows(m, notices, "10.1/x") == [
+        {"type": "correction", "notice": "10.9/c", "date": "2021-3-1"},
+        {"type": "retraction", "notice": "10.9/r", "date": "2022-1-2"}], update_rows(m, notices, "10.1/x")
+    assert update_rows({}, [], "10.1/x") == []
     # 誤り応答を cache に残さないこと (network を使わず、 応答を差し替えて確かめる)
     import tempfile
 
@@ -351,6 +465,11 @@ def main(argv=None):
     p = sub.add_parser("cites")
     p.add_argument("work", help="DOI か OpenAlex の W id")
     p.add_argument("-n", type=int, default=50)
+    p = sub.add_parser("citing")
+    p.add_argument("doi")
+    p.add_argument("--no-meta", action="store_true", help="引いている側の書誌を Crossref で引かない (id だけ)")
+    p = sub.add_parser("updates")
+    p.add_argument("dois", nargs="+")
     p = sub.add_parser("abstract")
     p.add_argument("dois", nargs="+")
     p = sub.add_parser("crossref")
@@ -372,7 +491,7 @@ def main(argv=None):
         selftest()
         return
     if not a.cmd:
-        ap.error("subcommand が要る (oa / cites / abstract / crossref / arxiv / arxiv-abstract / inspire)")
+        ap.error("subcommand が要る (oa / cites / citing / updates / abstract / crossref / arxiv / arxiv-abstract / inspire)")
     if a.cmd == "oa" and a.sort is None:
         a.sort = "cited" if a.boolean else "relevance"
     run(a)
