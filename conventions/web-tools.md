@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf) + YouTube の音声を取得するとき・HTML しか渡っていないとき・yt-dlp が SABR / 403 で失敗するとき (#youtube-audio-extraction) + 企業サイトの製品の告知ページが WebFetch・curl で 403 を返すとき (#corporate-notice-403) + 先行研究を API で探す・「扱った研究は無い」 を範囲つきで書くとき (#literature-search-apis) + 論文に訂正が出たか・後続の研究があるかを確かめるとき (#correction-notice-check / #citing-list-cross-check)
+when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 内蔵 Browser pane で page から localhost に送れない・ページの global が見えないとき (#browser-pane-localhost-blocked / #browser-pane-isolated-world) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf) + YouTube の音声を取得するとき・HTML しか渡っていないとき・yt-dlp が SABR / 403 で失敗するとき (#youtube-audio-extraction) + 企業サイトの製品の告知ページが WebFetch・curl で 403 を返すとき (#corporate-notice-403) + 先行研究を API で探す・「扱った研究は無い」 を範囲つきで書くとき (#literature-search-apis) + 論文に訂正が出たか・後続の研究があるかを確かめるとき (#correction-notice-check / #citing-list-cross-check)
 category: web
 summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter = 文字 whitelist / 戻り値は約 3KB で切れる / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + booking.com の宿への連絡は確認メールに返信しても届かない = web のメッセージ画面を pane で開きログインは本人 (#booking-property-messaging) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)** + Google サイトの編集画面は本文への `type` が確定しない = リンク挿入の窓で文と URL を入れ、 中身は節の削除で消し、 公開は確認画面を経て cookie なしの取得で確かめる (#google-sites-editor)
 -->
@@ -430,7 +430,7 @@ Claude in Chrome MCP は **自分専用の tab group** で動く。 user が手�
 
 - **async IIFE の戻りは `{}` に潰れる**: `(async () => {...})()` を最後の式に置くと Promise が serialize されて `{}` が返る。 top-level `await` が使えるので `await (async () => {...})()` で結果の文字列/JSON を最後の式にする。
 - **出力 filter**: tool 結果に cookie / query string に見える文字列 (`=` `&` `;` を含む urlencoded 風の並び、 HTML の `href` 群など) が含まれると結果全体が `[BLOCKED: Cookie/query string data]` に置換される。 DOM を調べる時は `outerHTML` を返さず、 属性名・テキスト・長さだけを組み立てて返す (記号は `->` `|` `:` 等に置換)。 body を捕捉した時も同じ。 画面の文字 (店名・件名) を返すときは記号の置換では足りず、 返す文字を **whitelist で絞る** (かな・漢字・英数字と少数の記号だけ残して他は `_`)。 同じ処理でも、 行の中身次第で一部の回だけ伏せられる (実測)。
-- **戻り値は約 3KB で切れる** (末尾に `[TRUNCATED]`): 長い結果は件数を減らして分けて呼ぶか、 localhost の受信 server に POST して file で受ける。 一覧を月ごと・ページごとに回す処理は、 1 回の返り値に収まる範囲で区切る ([`machine-route-first.md #page-widget-walk`](machine-route-first.md#page-widget-walk))。
+- **戻り値は約 3KB で切れる** (末尾に `[TRUNCATED]`): 長い結果は件数を減らして分けて呼ぶか、 localhost の受信 server に POST して file で受ける (内蔵 Browser pane では localhost に届かない = [#browser-pane-localhost-blocked](#browser-pane-localhost-blocked) の受け渡しを使う)。 一覧を月ごと・ページごとに回す処理は、 1 回の返り値に収まる範囲で区切る ([`machine-route-first.md #page-widget-walk`](machine-route-first.md#page-widget-walk))。
 - **「公開 API が無い web app」 の機械経路**: ログイン済みページの page context から、 UI が叩いている内部 endpoint を同じ method / encoding / header で `fetch` する (= XHR を一時 hook して実 UI 操作 1 回分を捕捉すれば method・field 名が全部分かる。 method 違い〔POST vs PUT〕・encoding 違い〔multipart vs urlencoded〕で 404 になるので推測で組まない)。 GUI click の自動化より速く・行数に依らず・座標に依らない。 recipe 全文 = [`machine-route-first.md #internal-endpoint-replay`](machine-route-first.md#internal-endpoint-replay)。
 
 ### 公式ドキュメント
@@ -533,6 +533,17 @@ frameset の app では空文字と ref 無しが返る。 読み書きは `java
   pane に残っていたアカウント選択の画面に回されただけのことがある（実測: 「組織のアカウント限定」 と報告したサイトが、
   共有の設定では「インターネット上の誰でも」 で、 ログインなしの取得にも本文を返した）。公開範囲を言う前に、
   cookie を持たない取得（`curl -sL <URL>` の状態コードと本文）か、サイトの共有設定の画面で確かめる
+- <a id="browser-pane-localhost-blocked"></a>**ページの中から `127.0.0.1` / `localhost` への `fetch` は届かない**（`net::ERR_BLOCKED_BY_CLIENT`、実測 2026-11。
+  受ける側の server に CORS・Private Network Access の header を足しても変わらない = pane の側で止まる）。
+  手元の受信 server に POST して大きな結果を受ける作りの script は、pane では次の受け渡しに切り替える:
+  `javascript_tool` の最後の式を「目印の行 + 結果 + 目印の行 + 数万字の詰め物」 にして返すと、Claude Code が大きい tool 出力を
+  file に保存して path を返す（`Output too large … saved to: <path>`）。その file から目印の間を切り出す小さな script で受ける
+  （保存された file は JSON の文字列のことがあるので、先頭を JSON として decode してから目印を探す）。切り出した中間 file は使い終わったら消す
+- <a id="browser-pane-isolated-world"></a>**`javascript_tool` はページとは別の world で走る** = ページの script が作った global
+  （グラフの library の object、`window` に載せた変数）が `undefined` に見える（実測 2026-11: Claude in Chrome では見えた object が pane では見えない）。
+  ページの global を読むときは、script 要素を作って本体を文字列で入れ `document` に差し込み（= ページの world で走る）、
+  結果を DOM 要素の属性に書かせて、`javascript_tool` の側でその属性を読む。差し込みは同期で走るので、続けて属性を読めば結果がある。
+  ページの CSP が inline の script を禁じていると走らない（属性が空のまま = そのときは画面の表から読む）
 - **`#` だけ違う URL への `navigate` はページを読み直さない**（古い版が表示されたまま）。作り直したページを確かめるときは
   `location.reload()` を使う
 - **ロボット判定（Turnstile 等）は自動操作では通れない**（トークンが発行されない、実測）。**突破しようとしない**。
