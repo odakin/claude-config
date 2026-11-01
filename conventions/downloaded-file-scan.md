@@ -67,13 +67,13 @@ browser・メール・curl で手元に来た file を repo や作業 dir に入
 
 ## <a id="clamav-install"></a>ClamAV の入れ方 (macOS・Homebrew)
 
-ClamAV は既知の検体を署名で探す。 入れるかは本人が決める (定義は 100 MB 余り、 定義の更新を定期に回す)。 道具 = `bash <base>/claude-config/scripts/install-clamav.sh` (足りないものだけ揃える。 `--check` = 確かめるだけ、 `--update` = 定義の更新)。 やること = `brew install clamav`、 `freshclam.conf.sample` の `Example` の行を外して `freshclam.conf` に、 `freshclam` で定義の取得 (Homebrew の案内 = `brew info clamav` の caveats と同じ)。 `brew install` の前に [`install-failures.md`](install-failures.md) を読む。
+ClamAV は既知の検体を署名で探す。 入れるかは本人が決める (定義は 100 MB 余り、 定義の更新を定期に回す)。 道具 = `bash <base>/claude-config/scripts/install-clamav.sh` (足りないものだけ揃える。 `--check` = 確かめるだけ = 定義が無い・古い 〔daily が 4 日より前 = 更新が止まっている〕 も足りないに数える、 `--update` = 定義の更新)。 やること = `brew install clamav`、 `freshclam.conf.sample` の `Example` の行を外して `freshclam.conf` に、 `freshclam` で定義の取得 (Homebrew の案内 = `brew info clamav` の caveats と同じ)。 `brew install` の前に [`install-failures.md`](install-failures.md) を読む。
 
 入れた後は、 検査の道具が `clamscan` を見つけて自動で回す (PATH に無ければ `/opt/homebrew/bin` と `/usr/local/bin` も探す)。 file ごとに `clamscan` が定義を読むので、 1 file に数秒かかる (実測)。 常駐の `clamd` は使わない。
 
 - **定義の更新**: 定義が古いままだと新しい検体を拾わない。 `install-clamav.sh --update` を呼ぶ shim を定期 job に載せる ([`install-launchd-cron.sh`](../scripts/install-launchd-cron.sh) の cmd routine。 label と時刻は呼び出し側の層が決める)。 Agent の登録は常駐の仕組みの追加なので、 本人が決めてから入れる ([`scheduled-tasks.md#launchd-install-classifier`](scheduled-tasks.md#launchd-install-classifier))。
 - **効いているかの確かめ方**: 無害な検査用の文字列 EICAR の file を scratch に作って検査の道具に渡すと、 `Eicar-Test-Signature` が出て要確認になる (zip の中でも出る、 実測)。 定義の署名は `sigtool --info=<定義の dir>/daily.cvd` の `Verification OK`。
-- 定義の download のときに `ERROR: NULL X509 store` が出ることがある (実測: 終了値は 0 で定義は取れ、 `sigtool` の検証は OK。 原因は見ていない)。
+- <a id="openssl4-signature-bug"></a>**Homebrew の clamav が openssl@4 と組まれると、 定義を 1 つも読めない** (実測。 報告 = [Homebrew/homebrew-core#322048](https://github.com/Homebrew/homebrew-core/issues/322048)、 本家 = [Cisco-Talos/clamav#1887](https://github.com/Cisco-Talos/clamav/issues/1887))。 freshclam は定義を download して外側の署名 (`.sign`) も通すが、 読み込みの試験で `cli_loadinfo: Incorrect digital signature` → `Database test FAILED` となり、 取った定義を捨てる。 毎回捨てるので、 定義の dir は空のまま、 定期の更新も終了値の失敗を返し続ける。 見分け方 = その出力 ∧ `otool -L $(brew --prefix)/opt/clamav/lib/libclamav*.dylib` に `openssl@4`。 道具は自分で手当てする = 原因を 1 行出し、 openssl@3 で組まれた 1.5.4 の bottle (homebrew-core の履歴の formula を `local/clamav-pin` の tap に置き、 bottle は homebrew-core の置き場から sha256 つきで取る) に入れ替えて `brew pin`、 もう 1 回取る。 固定した時の homebrew-core の版を `$(brew --prefix)/var/lib/clamav/.install-clamav-pin` に書き、 `--update` はその版が変わったら固定を外して試す (定義を読めれば外したまま、 読めなければ固定し直す)。 ⚠️ `ERROR: NULL X509 store` の行は、 直った状態の freshclam でも出る (外側の署名の検査の行) = これだけでは壊れていると言えない。 壊れているかは `Database test passed.` が出るか、 `clamscan` が定義を読めるかで見る。
 
 ## <a id="scan-limits"></a>保証の境界
 
