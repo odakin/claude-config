@@ -28,6 +28,9 @@ case "\$1" in
     if [ "\$last" = local/clamav-pin/clamav ]; then rm -f "$T/ossl4"
     elif [ "\${BUGGY_CORE:-0}" = 1 ]; then touch "$T/ossl4"
     else rm -f "$T/ossl4"; fi
+    mkdir -p "$P/opt/clamav/lib"
+    if [ -f "$T/ossl4" ]; then ssl=openssl@4; else ssl=openssl@3; fi
+    printf '\\0\\0/x/opt/%s/lib/libcrypto.dylib\\0' "\$ssl" > "$P/opt/clamav/lib/libclamav.12.dylib"
     cat > "$P/bin/clamscan" <<'INNER'
 #!/usr/bin/env bash
 [ "\$1" = --version ] && { echo ClamAV 9.9.9; exit 0; }
@@ -51,10 +54,6 @@ INNER
     ;;
 esac
 EOF
-cat > "$T/bin/otool" <<'EOF'
-#!/usr/bin/env bash
-if [ -f "$STATE_DIR/ossl4" ]; then echo "	/x/opt/openssl@4/lib/libcrypto.4.dylib"; else echo "	/x/opt/openssl@3/lib/libcrypto.3.dylib"; fi
-EOF
 cat > "$T/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 out=""
@@ -69,9 +68,9 @@ case "$2" in
   *revision) printf '%s' "$j" | sed 's/.*"r":"\([^"]*\)".*/\1/' ;;
 esac
 EOF
-chmod +x "$T/bin/brew" "$T/bin/otool" "$T/bin/curl" "$T/bin/plutil"
+chmod +x "$T/bin/brew" "$T/bin/curl" "$T/bin/plutil"
 export CLAMAV_BREW="$T/bin/brew" FRESHCLAM_LOG="$T/fresh.log" FRESHCLAM_DB="$P/var/lib/clamav" STATE_DIR="$T" \
-  CLAMAV_OTOOL="$T/bin/otool" CLAMAV_CURL="$T/bin/curl" CLAMAV_PLUTIL="$T/bin/plutil"
+  CLAMAV_CURL="$T/bin/curl" CLAMAV_PLUTIL="$T/bin/plutil"
 
 out="$(bash "$TOOL" --check 2>&1)"; rc=$?
 [ "$rc" -eq 1 ] && case "$out" in *clamscan*定義*) true ;; *) false ;; esac \
@@ -108,7 +107,7 @@ bash "$TOOL" >/dev/null 2>&1
 bash "$TOOL" --check >/dev/null 2>&1 && ok "古い定義は install で取り直す" || ng "古い定義が残った"
 
 # openssl@4 の署名の不具合: 原因を出し、 固定の版に入れ替えて pin、 もう 1 回取る
-touch "$T/ossl4"; echo 1.5.4 > "$T/core-v"; echo 1 > "$T/core-r"; : > "$T/brew.all"
+touch "$T/ossl4"; printf '\0/x/opt/openssl@4/lib/libcrypto.4.dylib\0' > "$P/opt/clamav/lib/libclamav.12.dylib"; echo 1.5.4 > "$T/core-v"; echo 1 > "$T/core-r"; : > "$T/brew.all"
 out="$(bash "$TOOL" --update 2>&1)"; rc=$?
 [ "$rc" -eq 0 ] && ok "署名の不具合: 入れ替えて取り直し 0" || ng "署名の不具合で rc=$rc: $out"
 case "$out" in *原因*openssl@4*) ok "署名の不具合: 原因を出す" ;; *) ng "原因が出ない: $out" ;; esac

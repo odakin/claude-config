@@ -8,7 +8,7 @@
 #
 # 既知の不具合への自動の手当て (#openssl4-signature-bug): Homebrew の clamav が openssl@4 と組まれていると、 定義の署名を確かめられず、
 # どの定義も読み込みの試験で捨てられる (実測。 Homebrew/homebrew-core#322048、 Cisco-Talos/clamav#1887)。 freshclam の失敗がこの形
-# (出力に Incorrect digital signature / Database test FAILED / Malformed database ∧ libclamav が openssl@4 に link) なら、 原因を 1 行出し、
+# (出力に Incorrect digital signature / Database test FAILED / Malformed database ∧ libclamav が openssl@4 に link = dylib の中の link 先の path を grep -a で読む、 otool は Xcode の部品に依るので使わない) なら、 原因を 1 行出し、
 # openssl@3 で組まれた 1.5.4 の bottle (homebrew-core の PIN_COMMIT の formula、 bottle の sha256 はその formula が持つ) に入れ替えて pin し、
 # もう 1 回取る。 固定した時の homebrew-core の版を PIN_MARK に書き、 --update はその版が変わったら固定を外して試す
 # (定義が読み込めれば戻したまま、 読めなければ固定し直す)。 ⚠️ 「NULL X509 store」 の行は直った状態でも出る = 診断には使わない。
@@ -16,7 +16,7 @@
 # 定義の毎日の更新は入れない (label と時刻は呼び出し側の層が決める = install-launchd-cron.sh の cmd routine に --update を呼ぶ shim を渡す)。
 # launchd の PATH には Homebrew が無いので brew は固定の path も探す。 常駐の clamd は使わない。
 # 環境変数: CLAMAV_MAX_AGE_DAYS = 定義が古いとみなす日数 (既定 4)
-#   test 用: CLAMAV_BREW = brew の path / CLAMAV_OTOOL・CLAMAV_CURL・CLAMAV_PLUTIL = otool・curl・plutil の代わり
+#   test 用: CLAMAV_BREW = brew の path / CLAMAV_CURL・CLAMAV_PLUTIL = curl・plutil の代わり
 # 依存: bash 3.2 compatible。
 
 set -u
@@ -50,7 +50,6 @@ PREFIX="$("$BREW" --prefix)"
 CONF="$PREFIX/etc/clamav/freshclam.conf"
 DB="$PREFIX/var/lib/clamav"
 MAX_AGE_DAYS="${CLAMAV_MAX_AGE_DAYS:-4}"
-OTOOL="${CLAMAV_OTOOL:-otool}"
 CURL="${CLAMAV_CURL:-curl}"
 PLUTIL="${CLAMAV_PLUTIL:-plutil}"
 PIN_COMMIT=10b454e5158c18e560b6dc1e32af551b14a912eb   # homebrew-core の clamav 1.5.4 (openssl@3) の formula の commit
@@ -87,7 +86,7 @@ defs_load() {
 # 直前の失敗が #openssl4-signature-bug の形か
 openssl4_sig_bug() {
   grep -q -e 'Incorrect digital signature' -e 'Database test FAILED' -e 'Malformed database' "$RUN_LOG" 2>/dev/null || return 1
-  "$OTOOL" -L "$PREFIX"/opt/clamav/lib/libclamav*.dylib 2>/dev/null | grep -q 'openssl@4'
+  LC_ALL=C grep -a -q 'openssl@4/lib/libcrypto' "$PREFIX"/opt/clamav/lib/libclamav*.dylib 2>/dev/null
 }
 
 # homebrew-core の clamav の版 (例 1.5.4_1)。 取れなければ失敗
