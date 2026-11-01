@@ -61,6 +61,9 @@ sections:
   - id: named-refs-without-cleveref
     level: 2
     title: "参照に種類の名前 (定理・図・付録) を自動で付ける — cleveref を使わない形と、 `\\autoref` が和文で詰まる罠"
+  - id: inline-math-unbreakable-group-stretches-japanese
+    level: 2
+    title: "和文の行内数式を `{…}` で包んで折れなくすると、 前の行の字間が開く"
   - id: tcolorbox-footnotes-to-page
     level: 2
     title: "tcolorbox の枠の中の脚注を、 本文と同じ番号で頁の下に出す"
