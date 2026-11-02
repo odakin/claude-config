@@ -131,6 +131,11 @@ def fetch_url(url: str) -> str:
     with urllib.request.urlopen(req, timeout=TIMEOUT) as r:  # noqa: S310 (台帳の URL だけを読む)
         raw = r.read()
         charset = r.headers.get_content_charset()
+    return decode_html(raw, charset)
+
+
+def decode_html(raw: bytes, charset: str | None) -> str:
+    """header の charset、 無ければ先頭の <meta charset> で decode する (page-text.py も使う)。"""
     if not charset:
         m = re.search(rb'<meta[^>]+charset=["\']?([A-Za-z0-9_\-]+)', raw[:4096], flags=re.I)
         charset = m.group(1).decode("ascii") if m else "utf-8"

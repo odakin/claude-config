@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 内蔵 Browser pane で page から localhost に送れない・ページの global が見えないとき (#browser-pane-localhost-blocked / #browser-pane-isolated-world) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf) + YouTube の音声を取得するとき・HTML しか渡っていないとき・yt-dlp が SABR / 403 で失敗するとき (#youtube-audio-extraction) + 企業サイトの製品の告知ページが WebFetch・curl で 403 を返すとき (#corporate-notice-403) + 先行研究を API で探す・「扱った研究は無い」 を範囲つきで書くとき (#literature-search-apis) + 論文に訂正が出たか・後続の研究があるかを確かめるとき (#correction-notice-check / #citing-list-cross-check)
+when: WebSearch / WebFetch / browser 自動化の信頼性を判断するとき + 公式の頁・PDF の原文から事実値 (締切・金額・資格) を写すとき (#raw-page-text) + ある図書館が本を所蔵しているかを API で確かめるとき (#cinii-library-holdings) + 生成した HTML を内蔵 Browser pane で開いて tool で確かめるとき (#browser-pane-local-file-snapshot) + 内蔵 Browser pane でサイトにログインしているかを判定するとき (#login-state-check) + ログイン画面を見てサイトの公開範囲を言う前 (#login-page-not-access-restriction) + Google サイトの編集画面を pane で操作するとき (#google-sites-editor) + 内蔵 Browser pane で page から localhost に送れない・ページの global が見えないとき (#browser-pane-localhost-blocked / #browser-pane-isolated-world) + 手元の preview を見られない相手にページを画像で見せるとき (#headless-page-screenshot) + 学会サイトの記事 PDF がリンク切れで入手の経路を探すとき (#dead-society-pdf) + YouTube の音声を取得するとき・HTML しか渡っていないとき・yt-dlp が SABR / 403 で失敗するとき (#youtube-audio-extraction) + 企業サイトの製品の告知ページが WebFetch・curl で 403 を返すとき (#corporate-notice-403) + 先行研究を API で探す・「扱った研究は無い」 を範囲つきで書くとき (#literature-search-apis) + 論文に訂正が出たか・後続の研究があるかを確かめるとき (#correction-notice-check / #citing-list-cross-check)
 category: web
 summary: #javascript-tool-gotchas (async IIFE → `{}` / 出力 filter = 文字 whitelist / 戻り値は約 3KB で切れる / 内部 endpoint 直叩き) + Claude in Chrome の permission 障害は再インストール前に `list_connected_browsers` (再ログイン後の stale 接続) + WebSearch / WebFetch の信頼性 caveat (summary hallucination、 事実値は source 直接確認) + CSR SPA は fetch に空シェル (200≠実在、 実ブラウザ描画で検証) + booking.com の宿への連絡は確認メールに返信しても届かない = web のメッセージ画面を pane で開きログインは本人 (#booking-property-messaging) + **claude.ai share ページは in-app Browser pane が素通し / page 内 same-origin fetch は snapshot API も 200 (= headless / curl は全滅、 #claude-share-page-access)** + **browser cookie replay は OAuth-token SPA を認証しない (= Box `/f/` 等 member 限定クラウドフォルダは無人 upload 不可、 session API 401 / shared-item 404 で spike 1 回で確定)** + Claude in Chrome MCP の 2 層 permission モデル + bug 53630 (sites/docs.google.com domain silent block) + **内蔵 Browser pane で frameset / popup / 連動 select の古い web app を JS で読み書き (#browser-pane-frameset-popups、 拡張が prompt 無しで拒否する domain の逃げ道)** + Google サイトの編集画面は本文への `type` が確定しない = リンク挿入の窓で文と URL を入れ、 中身は節の削除で消し、 公開は確認画面を経て cookie なしの取得で確かめる (#google-sites-editor)
 -->
@@ -26,6 +26,16 @@ WebSearch の result block 末尾に付く自然言語 summary は検索エン�
 ### <a id="webfetch-answer-is-generated"></a>WebFetch の答えも生成物 — 原文の数・主張の確認に使わない
 
 WebFetch は取った page を小さなモデルに渡し、 prompt への答えを返す。 その答えは原文の写しではなく生成物で、 原文に無い数や主張を足すことがある (実測: 論文 PDF のある節の要約を頼むと、 原文が「3 か 4」 とする数を「5〜7」 と答え、 原文に無い検査の基準まで並べた)。 原文の数・言い回し・ある節の推奨を確かめるときは、 原文を読む = PDF は curl で取って PyMuPDF で text にするか、 手元の写しを開く。 WebFetch の答えと規約の記述が食い違ったら、 まず WebFetch の側を疑う。
+
+### <a id="raw-page-text"></a>公式の頁の原文を text にする — comment・frameset・文字コード
+
+締切・金額・資格のような事実値を公式の頁から写すときは、 [`scripts/page-text.py`](../scripts/page-text.py) で原文を見える文だけの text にして読む (`--grep '締切|募集期間'` で当たる行と前後だけ)。 WebFetch の答えは上のとおり生成物 (実測: 組織名の漢字を別の字で答えた)。 curl で取った HTML のタグを手で消すと、 次を落とす:
+
+- **HTML の comment の中の古い文** — 画面には出ないが、 タグを消すだけでは表示中の文と区別なく出てくる (実測: 何年も前の募集期間が comment に残っていて、 今の期間と並んで見えた)。 道具は comment を落として数を言い、 `--comments` で中身を別に出す
+- **frameset / iframe** — 外側の頁は `<frame src>` だけで中身が無い。 道具は 1 段辿る (内蔵 Browser pane で読むときは [#browser-pane-frameset-popups](#browser-pane-frameset-popups))
+- **古い文字コード** (EUC-JP / Shift_JIS) — header か `<meta charset>` で decode する (実装は [`scripts/web-page-watch.py`](../scripts/web-page-watch.py) と共通)
+
+同じ site の中でも頁ごとに更新がずれる (実測: 募集の要項の頁は前年度のまま、 同じ site の予定表は今年度の締切を載せていた) = 年度・回・日付の印がある頁を正とし、 記録にはどの頁から取ったかを書く。 取った原物を記録の根拠にするなら `--save <dir>` で保存して sha256 を記録に書く (repo に入れる前に [`downloaded-file-scan.md`](downloaded-file-scan.md) の検査を通す)。
 
 ## <a id="youtube-audio-extraction"></a>YouTube の音声を取得する — HTML・通常配信・HLS を分ける
 
