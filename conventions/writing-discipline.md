@@ -67,7 +67,7 @@ kernel は分野をまたいで別物を指す (積分核・畳み込み核・�
 
 1. **3 (〜4) message で組む**: 論文全体を 3 つの message に組織し、 各 message を 1 節にする。 各 message は題と非技術的な 1 文の要約を持つ。 節を切る前に 3 message を書き出す。
 2. **序論の 2 つの仕事**: (a) 文脈を広い所から狭い所へ 3〜4 段で降ろす (読者が知っていそうでも繰り返す)。 (b) message を事前に宣言し、 結論を先に出す。 事前の宣言は流れる散文で書き、 太字の見出しを付けた list (`description` 環境の `\item[…]`) にしない。 定理・命題の中の条項の列挙 (i)(ii) は数学の標準の形なので、 そのまま使う。
-3. **message の境界**: 各 message の節は「その節で何をするか」 の短い purpose 文 (ローマン体) で始める。 message の言い切りを節の冒頭の段落 (italic でもローマン体でも) に置かない。 言い切りは序論の事前宣言と節末の要約の段落が運ぶ。 節末は「In summary, the …」 と平文で次の文に繋ぐ非技術的な 3〜4 文の段落で閉じる (italic の label にしない)。 「Message N:」 のような meta の label を原稿に印字しない。 序論でも「The paper carries three messages」 型の meta の語を避け、 内容の列挙で構造を示す。
+3. **message の境界**: 各 message の節の頭の書き方 (短いローマン体の purpose 文で始め、 イタリックの文も言い切りの段落も置かない) = [#no-italic-section-lead](#no-italic-section-lead)。 言い切りは序論の事前宣言と節末の要約の段落が運ぶ。 節末は「In summary, the …」 と平文で次の文に繋ぐ非技術的な 3〜4 文の段落で閉じる (italic の label にしない)。 「Message N:」 のような meta の label を原稿に印字しない。 序論でも「The paper carries three messages」 型の meta の語を避け、 内容の列挙で構造を示す。
 4. **今の message に効かない material を抑える**: 支える検算はその message の中に吸収し、 寄せ集めの「consistency checks」 節を作らない。 計算の連鎖は入力と出力に畳む。 記号と定義は最小にする ([#symbol-definition-economy](#symbol-definition-economy))。
 5. **式は解釈する絵**: 重要な式の直後に、 その式をどう読むかを添える。 重要な式 1 本に 1 文までにし、 節末の要約と重ねない。
 6. **題は平叙文の主張を検討する** (主張か問いの題がよい)。 代替案は file の header comment に残して共著者と議論する材料にし、 盲検に出す写しからは剥がす (査読の判定・指摘の一覧・結果の note への path は header comment に書かず結果の note に置く = [latex.md#source-comment-scope](latex.md#source-comment-scope))。 題の検査 = [paper-audit.md#title-claim-check](paper-audit.md#title-claim-check)。
@@ -156,7 +156,7 @@ scope を絞って残りを別の論文へ送る段落は、 先送りする対�
 
 ### <a id="prose-buildup"></a>散文の組み立て: 節頭の purpose 文・一文一意・規約は初出点・段落は意味で
 
-1. 各 section / subsection は「この節で何をするか」 の purpose 文で始める (定義の羅列に直接入らない)。
+1. 各 section / subsection は「この節で何をするか」 の purpose 文で始める (定義の羅列に直接入らない)。 purpose 文はローマン体の短い 1 文で、 イタリックの要約文にしない = [#no-italic-section-lead](#no-italic-section-lead)。
 2. **一文一意**: 1 文に 1 主張。 セミコロンで節を繋ぐのは最少にする。
 3. **規約・記号は初出点で導入する**: その記号がまだ現れていない場所で規約を前置きしない (括弧の重みの宣言は最初の括弧の直後、 計量の符号は計量が現れる作用の場)。 先行詞の無い定冠詞 (何も導入していない所の「The fields are …」) も同じ根。
 4. **依存の順に積む**: 使う前に定義し、 forward 参照 (「specified below」) を作らない。 まだ印字していない式を引く文には、 その式が何かを一言添える (候補の列挙 = [`scripts/tex-first-use.py`](../scripts/tex-first-use.py) `--forward-refs`、 記法の初出 = [latex.md#notation-first-use](latex.md#notation-first-use))。
@@ -271,6 +271,17 @@ scope を絞って残りを別の論文へ送る段落は、 先送りする対�
 ### <a id="no-colloquial-verbs"></a>口語・比喩の動詞を使わない — 技術的な語があるところに口語を置かない
 
 科学論文・研究ノートの英文で、 口語や比喩の動詞・句を使わない。 読者 (非母語話者を含む) は辞書の第一義で読むので、 「part」 を「differ」 の意味に、 「fall over」 を「decay」 に、 「go with it」 を「be lost with it」 に、 「be not there」 を「be absent」 に使うと、 文が何を主張しているかが通じず、 読みにくい。 動詞は対象の技術的な語で書く (differ、 vanish、 be absent、 decay、 be lost、 be not produced)。 検査 = 段落ごとに動詞と句を辞書の第一義に置き換えて読み、 意味が変わるものを探す。 比喩が要るなら、 まず技術的な文を書き、 比喩はその後の 1 文に分けて置く。 実測: 英文ノートで differ の意味に part を使い、 指摘を受けた (口語表現は一般に読みにくい)。
+
+### <a id="no-italic-section-lead"></a>章・節の頭にイタリックの文を置かない — 節の役は短いローマン体の purpose 文で言う
+
+章・節・小節 (付録の節を含む) の見出しの直後に、 その節の言い切りや要約をイタリックの文・段落で置かない。 科学論文の書式ではない (雑誌の記事の lead 文に見え、 本文と別の声で節の結論を先に言う)。 書き手が節の言い切りを先に出したくなると入り、 一度入ると他の節・他の原稿に写る。 内容が合っているかで読む検品は、 形を咎めずに通す (実測)。
+
+- 節の役を言うのが要るなら、 ローマン体の短い purpose 文 1 つにする (「This section derives …」「We now …」)。 簡潔を旨とし、 purpose 文に節の結論を積まない。
+- 節の頭に言い切りの段落を置かないのは、 ローマン体でも同じ。 言い切りは序論の事前宣言と節末の要約が運ぶ ([#geroch-three-messages](#geroch-three-messages) の 3)。
+- `\emph` は語句の強調と、 定義する語 (初出の術語) にだけ使う。 文や段落を包まない。 文を包む自前の macro (`\lead{…}` の類) も同じ (その macro の組版の罠 = [latex.md#italic-wrapper-upright-text](latex.md#italic-wrapper-upright-text))。
+- **直し方**: イタリックの文が言うことを、 同じ節・序論・節末の要約が言っているかを先に見る。 言っているなら文ごと削る。 その文にしか無い前提・限定 (模型の仮定など) があれば、 それだけを purpose 文か直後の 1 文に移す。 直後の purpose 文が、 消した文の名詞を指示語 (them・it・this point) で受けていたら、 名詞を立て直す。 主張・数値・式・引用は変えない。
+- 段落の頭の見出し語 (「What is new.」) は別の規則 = [#no-run-in-labels](#no-run-in-labels)、 節末の要約を italic の label にしない形 = [#geroch-three-messages](#geroch-three-messages) の 3。
+- 検出 = [`scripts/check-paper-prose.py`](../scripts/check-paper-prose.py) の I1 (見出しの直後に最初に印字されるのがイタリックの 5 語以上なら finding。 空行・コメント・`\label`・`\noindent` を飛ばし、 文を包む自前の macro は preamble から拾う。 短いイタリックの見出し語は info に出す)。 盲検・通読の依頼書でも、 節の頭のイタリックの文は「内容と合っているか」 でなく、 あること自体を指摘させる。
 
 ### <a id="no-run-in-labels"></a>段落の頭に見出し語を置かない — 段落の役は最初の文が言う
 

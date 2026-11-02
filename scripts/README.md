@@ -88,7 +88,7 @@
 - **[check-office-staging.py](check-office-staging.py)** — Office 事前 grant 済み staging dir が使えない (= wrapper が in-place に落ちる / 落ちた) のを surface する検出器 + 実機 e2e (`--e2e`)。 office-automation.md#office-pregranted-staging-dir
 - **[check-overleaf-drift.py](check-overleaf-drift.py)** — Overleaf 正本 repo の drift / 整備漏れ検出（各 repo の scripts/overleaf-sync.sh --status を並列実行、 ID 未設定=CRITICAL / behind>0=WARN / DEPRECATED=silent / ahead-expected marker で恒常 ahead INFO 抑制、 finding 0 件 silent、 --selftest 内蔵。 個人層 dashboard 末尾から呼ぶ、 conventions/overleaf-integration.md#sync-script-contract）
 - **[check-pages-deploy.py](check-pages-deploy.py)** — Surface unresolved deployment check-runs for recent default-branch commits.
-- **[check-paper-prose.py](check-paper-prose.py)** — Prose gates for LaTeX manuscripts: appendix order by first main-text reference, sentence length, position words, strong-word inventory.
+- **[check-paper-prose.py](check-paper-prose.py)** — Prose gates for LaTeX manuscripts: appendix order by first main-text reference, italic section leads, sentence length, position words, strong-word inventory.
 - **[check-pii-filenames.py](check-pii-filenames.py)** — 個人情報が file 名に出ている追跡 file を検出する。
 - **[check-preamble-aliases.py](check-preamble-aliases.py)** — flag raw notation where the preamble defines an alias.
 - **[check-public-marker.py](check-public-marker.py)** — Are the public-repo leak gates switched on? Lists local clones whose GitHub repo is public but lack .claude/public-repo.marker (no public pre-commit gate runs), clones marked public whose repo is private, and marked clones whose gate hooks are not installed on this machine; --fix-hooks installs them; --selftest.

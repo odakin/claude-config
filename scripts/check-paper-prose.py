@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prose gates for LaTeX manuscripts: appendix order by first main-text reference, sentence length, position words, strong-word inventory.
+"""Prose gates for LaTeX manuscripts: appendix order by first main-text reference, italic section leads, sentence length, position words, strong-word inventory.
 
 Why (2026-09).  Pre-submission gates kept re-running four prose sweeps with throw-away scripts
 written against one manuscript (a hard-coded line range for the roadmap paragraph, one display
@@ -8,7 +8,10 @@ a new revision started from scratch and the sweeps could drift between runs.  Th
 claude-config conventions/paper-audit.md #appendix-order-by-first-reference,
 #sentence-length-audit, #relocation-rebinding-sweep and #claim-strength-three-tests; this script
 is their mechanical part.  Reading the sentences stays with the human: only the appendix order
-is a finding by itself.
+and an italic section lead are findings by themselves.  The italic-lead gate (I1) is the
+mechanical part of conventions/writing-discipline.md #no-italic-section-lead: an italic summary
+sentence at the head of a section, once written, is copied to the other sections, and a review
+that reads it for content passes it (measured), so the head of every heading is checked.
 
 Source handling (line numbers are kept): comments are dropped, and a comment-only line does not
 break a paragraph; math (inline, display environments, \\[...\\], $$...$$, and --display-macro
@@ -27,6 +30,16 @@ Findings (exit 1):
   A2  an appendix that the main text never references outside the roadmap paragraph
       (--allow-unreferenced LABEL exempts one, e.g. an appendix that is genuinely an outlook).
   A3  the roadmap paragraph names the appendices in an order different from the file order.
+  I1  a \\part / \\chapter / \\section / \\subsection / \\subsubsection (starred or not, appendices
+      included) whose first printed material is italic text of --lead-min-words words or more
+      (default 5; math counts as one word): \\emph{...}, \\textit{...}, \\textsl{...}, a group
+      {\\itshape ...} / {\\em ...} / {\\it ...} / {\\slshape ...} / {\\sl ...}, a bare \\itshape
+      or \\begin{itshape} up to the end of the paragraph, or a one-argument macro that the
+      preamble defines as one of these (\\newcommand{\\lead}[1]{\\textit{#1}}; --italic-macro
+      names more).  Blank lines, comments, \\label, \\noindent and vertical spacing between the
+      heading and the text are skipped; \\paragraph headings are not checked.  A shorter italic
+      span that ends in "." or ":" is listed as info: it is a run-in label, which is the rule
+      #no-run-in-labels, not this gate; one emphasized word (\\emph{Spin} is ...) is neither.
 Review lists (printed for reading; with --strict, L and P items also fail the run; W never does):
   L   sentences longer than --max-words words (default 40), longest first.
   P   position words that a relocation silently rebinds: previous / next / following / preceding
@@ -48,9 +61,10 @@ introduction whose results summary points to appendices, when the author treats 
 roadmap), and the excluded line ranges are printed.
 
 Usage:
-  check-paper-prose.py paper.tex [--display-macro al,als] [--max-words 40] [--only A,L,P,W]
+  check-paper-prose.py paper.tex [--display-macro al,als] [--max-words 40] [--only A,I,L,P,W]
                        [--roadmap REGEX]... [--roadmap-lines A-B] [--exclude-section REGEX]...
-                       [--allow-unreferenced LABEL]... [--strict]
+                       [--allow-unreferenced LABEL]... [--italic-macro lead,summary]
+                       [--lead-min-words 5] [--strict]
   check-paper-prose.py --selftest
 Exit 0 = no finding, 1 = findings, 2 = input error.
 """
@@ -91,6 +105,17 @@ ABBR_END = re.compile(r"(?:\bet al|\be\.g|\bi\.e|\bcf|\bvs|\bresp|\bRefs?|\bEqs?
                       r"(?<![A-Za-z])[A-Z])\.$")
 TAIL = re.compile(r"(?:\\end\{[^}]*\}|\\\]|\$\$|\}|\\label\{[^}]*\}|\\nonumber|\\notag|\\\\|"
                   r"\\[,;:!]|\s)+$")
+LEAD_HEAD = re.compile(r"\\(?:part|chapter|(?:sub)*section)\*?\s*(?:\[[^\]]*\])?\{")
+ITALIC_CMDS = ("emph", "textit", "textsl")
+ITALIC_DECLS = ("itshape", "em", "it", "slshape", "sl")
+LEAD_SKIP = re.compile(r"\s+|\\label\s*\{[^}]*\}|\\noindent(?![A-Za-z])|\\(?:small|med|big)skip(?![A-Za-z])|"
+                       r"\\[vh]space\*?\s*\{[^}]*\}|\\phantomsection(?![A-Za-z])")
+_IT_BODY = (r"(?:\\(?:%s)\s*\{\s*#1\s*\}|\{\s*\\(?:%s)(?![A-Za-z])\s*#1\s*\})"
+            % ("|".join(ITALIC_CMDS), "|".join(ITALIC_DECLS)))
+WRAPPER_DEF = re.compile(r"\\(?:(?:re|provide)?newcommand|DeclareRobustCommand)\*?\s*\{?\s*\\([A-Za-z@]+)\s*\}?"
+                         r"\s*\[1\]\s*\{\s*" + _IT_BODY
+                         + r"|\\(?:New|Renew|Provide)DocumentCommand\s*\{?\s*\\([A-Za-z@]+)\s*\}?\s*\{\s*m\s*\}\s*\{\s*"
+                         + _IT_BODY + r"|\\def\s*\\([A-Za-z@]+)\s*#1\s*\{\s*" + _IT_BODY)
 
 
 # --------------------------------------------------------------------------- masking
@@ -290,13 +315,52 @@ def appendices(c, a_off, end_off):
     return out
 
 
-def check(tex, display_macros=(), max_words=40, only="ALPW", roadmap=ROADMAP_DEFAULT, roadmap_lines=None,
-          allow_unreferenced=(), strict=False, exclude_sections=()):
+def italic_wrappers(preamble):
+    """One-argument macros that the preamble defines as italic text (\\newcommand{\\lead}[1]{\\textit{#1}})."""
+    return sorted({next(g for g in m.groups() if g) for m in WRAPPER_DEF.finditer(preamble)})
+
+
+def italic_leads(c, masked, start, wrappers=()):
+    """[(line, n words, heading, snippet, span ends a sentence)] for the headings after offset `start`
+    whose first printed material is italic text; `masked` is mask(c) (same length)."""
+    cmd = re.compile(r"\\(?:%s)\s*\{" % "|".join(re.escape(w) for w in ITALIC_CMDS + tuple(wrappers)))
+    group = re.compile(r"\{\s*\\(?:%s)(?![A-Za-z])" % "|".join(ITALIC_DECLS))
+    bare = re.compile(r"\\(?:itshape|slshape)(?![A-Za-z])|\\begin\{(?:itshape|em)\}")
+    out = []
+    for m in LEAD_HEAD.finditer(c, start):
+        j = _balanced_end(c, m.end())
+        head = c[m.start():j].split("{", 1)[0].lstrip("\\") + " " + repr(" ".join(c[m.end():j - 1].split()))
+        while True:
+            s = LEAD_SKIP.match(c, j)
+            if not s:
+                break
+            j = s.end()
+        mo = cmd.match(c, j)
+        if mo:
+            k = _balanced_end(c, mo.end())
+            body = c[mo.end():k - 1], masked[mo.end():k - 1]
+        elif group.match(c, j):
+            k = _balanced_end(c, j + 1)
+            body = c[j + 1:k - 1], masked[j + 1:k - 1]
+        elif bare.match(c, j):
+            b0 = bare.match(c, j).end()
+            e = re.search(r"\n[ \t]*\n|\\end\{(?:itshape|em)\}", c[b0:])
+            k = b0 + (e.start() if e else len(c) - b0)
+            body = c[b0:k], masked[b0:k]
+        else:
+            continue
+        ends = TAIL.sub("", body[0]).rstrip().endswith((".", ":"))
+        out.append((line_of(c, j), len(words(body[1])), head, " ".join(c[j:k].split())[:110], ends))
+    return out
+
+
+def check(tex, display_macros=(), max_words=40, only="AILPW", roadmap=ROADMAP_DEFAULT, roadmap_lines=None,
+          allow_unreferenced=(), strict=False, exclude_sections=(), italic_macros=(), lead_min_words=5):
     """Returns (findings, infos, review) with entries (line, code, message); review is a dict of lists."""
     c = strip_comments(tex)
     lo, app, hi, s_off, e_off = body_bounds(c)
-    masked = mask(c, display_macros)
-    masked = _blank(masked[:s_off]) + masked[s_off:e_off] + _blank(masked[e_off:])
+    masked_all = mask(c, display_macros)
+    masked = _blank(masked_all[:s_off]) + masked_all[s_off:e_off] + _blank(masked_all[e_off:])
     prose, notes = split_footnotes(masked)
     orig_lines, masked_lines, prose_lines = tex.split("\n"), masked.split("\n"), prose.split("\n")
     findings, infos = [], []
@@ -370,6 +434,21 @@ def check(tex, display_macros=(), max_words=40, only="ALPW", roadmap=ROADMAP_DEF
                 findings.append((min(road), "A3", "the roadmap names the appendices in the order "
                                  + ", ".join(name(k) for k in roadmap_seq) + " (file order differs)"))
 
+    if "I" in only:
+        d = re.search(r"\\begin\{document\}", c)
+        d_off = d.end() if d else 0
+        auto = italic_wrappers(c[:d_off])
+        if auto:
+            infos.append((1, "I", "italic wrapper macros from the preamble: " + ", ".join("\\" + w for w in auto)))
+        for ln, n, head, snip, ends in italic_leads(c, masked_all, d_off, tuple(auto) + tuple(italic_macros)):
+            if n >= lead_min_words:
+                findings.append((ln, "I1", f"{head} opens with italic text of {n} words (an italic lead: "
+                                           f"write a short roman purpose sentence, or delete it if the section "
+                                           f"says it anyway): {snip}"))
+            elif ends and n >= 1:
+                infos.append((ln, "I", f"{head} opens with a short italic run-in label ({n} words; the rule is "
+                                       f"#no-run-in-labels): {snip}"))
+
     if "L" in only:
         pars = list(paragraphs(orig_lines, prose_lines, lo, hi))
         for s, e in notes:
@@ -407,12 +486,15 @@ def main(argv):
     ap.add_argument("tex", nargs="?")
     ap.add_argument("--display-macro", default="", help="comma-separated custom display wrappers, e.g. al,als")
     ap.add_argument("--max-words", type=int, default=40)
-    ap.add_argument("--only", default="A,L,P,W", help="subset of A,L,P,W")
+    ap.add_argument("--only", default="A,I,L,P,W", help="subset of A,I,L,P,W")
     ap.add_argument("--roadmap", action="append", default=None, help="regex for the roadmap paragraph (repeatable)")
     ap.add_argument("--roadmap-lines", default=None, help="A-B: the roadmap paragraph's line range")
     ap.add_argument("--exclude-section", action="append", default=[],
                     help="regex on a \\section title whose references do not count as first references (repeatable)")
     ap.add_argument("--allow-unreferenced", action="append", default=[], help="appendix label exempt from A2")
+    ap.add_argument("--italic-macro", default="",
+                    help="comma-separated one-argument macros that print italic text, beyond those the preamble defines")
+    ap.add_argument("--lead-min-words", type=int, default=5, help="I1: italic text of this many words at a heading")
     ap.add_argument("--strict", action="store_true", help="L and P items fail the run too")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv[1:])
@@ -436,7 +518,8 @@ def main(argv):
     only = "".join(x.strip().upper() for x in a.only.split(","))
     findings, infos, review = check(tex, [m for m in a.display_macro.split(",") if m], a.max_words, only,
                                     tuple(a.roadmap) if a.roadmap else ROADMAP_DEFAULT, rl,
-                                    a.allow_unreferenced, a.strict, a.exclude_section)
+                                    a.allow_unreferenced, a.strict, a.exclude_section,
+                                    [m for m in a.italic_macro.split(",") if m], a.lead_min_words)
     for ln, code, msg in findings:
         print(f"{a.tex}:{ln}: [{code}] {msg}")
     for ln, code, msg in infos:
@@ -485,6 +568,32 @@ The next appendix is unrelated.
 Nothing refers here.
 \section*{Acknowledgments}
 Thanks.
+\end{document}
+"""
+
+LEAD = r"""\documentclass{article}
+\newcommand{\lead}[1]{\textit{#1}}
+\newcommand\plain[1]{\textbf{#1}}
+\begin{document}
+\section{Setup}\label{sec:setup}
+
+% a comment between the heading and the lead
+\emph{The action has one invariant, and the invariant fixes every divergence $\Gamma$ of the sector.}
+Roman text follows.
+\subsection{Short label}
+\emph{What is not claimed.} The paragraph starts here.
+\subsection{One emphasized word}
+\emph{Spin} is emphasized at the head; this is not a lead.
+\section*{Starred}
+{\itshape A grouped declaration wraps the first sentence of this section in italics.} Rest.
+\subsection{Macro}
+\noindent\lead{A wrapper macro from the preamble prints italic text too.}
+\subsection{Bold macro}
+\plain{A bold wrapper is not italic and is not this gate.}
+\section{Inline}\label{sec:inline} \textit{Five words are enough here.}
+\section{Roman purpose}
+This section derives the action; \emph{nothing} here is italic at the head.
+\paragraph{Run-in heading.} \emph{A paragraph heading is not checked by this gate, even when long.}
 \end{document}
 """
 
@@ -565,18 +674,46 @@ def selftest():
     al_s = [s for p in paragraphs(al_lines, al_prose.split("\n"), 1, len(al_lines)) for s in sentences(p)]
     expect("--display-macro wrapper counts as math and can end a sentence",
            any(s.startswith("The identity reads 0.") for _, _, s in al_s), [s for _, _, s in al_s if "identity" in s])
+
+    ll = LEAD.split("\n")
+    lat = lambda s: next(i for i, x in enumerate(ll, 1) if s in x)  # noqa: E731
+    fl, infl, _ = check(LEAD)
+    i1 = sorted(ln for ln, c, _ in fl if c == "I1")
+    expect("I1: an italic lead after a blank line, a comment and \\label; a {\\itshape} group; a preamble "
+           "wrapper after \\noindent; \\textit on the heading's own line (5 words = the default threshold)",
+           i1 == sorted([lat("The action has"), lat("A grouped"), lat("A wrapper macro"), lat("Five words")])
+           and {c for _, c, _ in fl} == {"I1"}, fl)
+    expect("I1: math counts as one word (the first lead has 15 words)",
+           any(ln == lat("The action has") and "of 15 words" in m for ln, c, m in fl), fl)
+    il = [(ln, m) for ln, c, m in infl if c == "I"]
+    expect("I info: the preamble wrapper \\lead is found (\\plain, a bold wrapper, is not); a short italic "
+           "label ending in '.' is listed as a run-in label, not a finding",
+           any("\\lead" in m and "\\plain" not in m for _, m in il)
+           and [ln for ln, m in il if "run-in" in m] == [lat("What is not claimed")], il)
+    expect("I1: one emphasized word, a roman purpose sentence, a bold wrapper and a \\paragraph heading are not leads",
+           not {lat("Spin"), lat("This section derives"), lat("A bold wrapper"), lat("Run-in heading")} & set(i1))
+    fl6, infl6, _ = check(LEAD, lead_min_words=6)
+    expect("--lead-min-words 6: the 5-word lead drops to a run-in info line",
+           lat("Five words") not in [ln for ln, c, _ in fl6 if c == "I1"]
+           and lat("Five words") in [ln for ln, c, m in infl6 if c == "I" and "run-in" in m], (fl6, infl6))
+    fm, _, _ = check(LEAD.replace(r"\newcommand{\lead}[1]{\textit{#1}}", ""), italic_macros=["lead"])
+    expect("--italic-macro names a wrapper the preamble does not define",
+           lat("A wrapper macro") in [ln for ln, c, _ in fm if c == "I1"], fm)
+    fa, _, _ = check(LEAD, only="ALPW")
+    expect("--only without I skips the gate", "I1" not in {c for _, c, _ in fa}, fa)
     with tempfile.TemporaryDirectory() as td:
-        pb, pg = os.path.join(td, "bad.tex"), os.path.join(td, "good.tex")
-        with open(pb, "w", encoding="utf-8") as fh:
-            fh.write(BAD)
-        with open(pg, "w", encoding="utf-8") as fh:
-            fh.write(good)
+        pb, pg, pl = (os.path.join(td, x) for x in ("bad.tex", "good.tex", "lead.tex"))
+        for p, txt in ((pb, BAD), (pg, good), (pl, LEAD)):
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write(txt)
 
         def run(*a):
             return subprocess.run([sys.executable, os.path.abspath(__file__), *a], capture_output=True,
                                   text=True).returncode
-        expect("CLI exit 1 on findings, 0 on the clean fixture, 2 on a missing file",
-               (run(pb), run(pg), run(os.path.join(td, "none.tex"))) == (1, 0, 2))
+        expect("CLI exit 1 on findings (appendix order; italic lead), 0 on the clean fixture and with "
+               "--only that leaves out I, 2 on a missing file",
+               (run(pb), run(pg), run(pl), run(pl, "--only", "A,L,P,W"), run(os.path.join(td, "none.tex")))
+               == (1, 0, 1, 0, 2))
     print(f"selftest: {'ALL PASS' if not failed else 'FAILED: ' + ', '.join(failed)}")
     return 0 if not failed else 1
 
