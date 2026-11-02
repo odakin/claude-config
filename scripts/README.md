@@ -477,7 +477,7 @@
 - **[lib/mail_watch.py](lib/mail_watch.py)** — 既知スレッドを辿るだけでは拾えない mail を拾う helper（待ち項目の検索条件 / 決着済み案件への自動督促の判定 / 本文 text の取り出し。 Gmail API の service を受け取る、 python3 mail_watch.py で selftest）
 - **[lib/merge-hook-event.sh](lib/merge-hook-event.sh)** — settings.json への hook event merge (単一リスト駆動)
 - **[lib/merge-hook-event.test.sh](lib/merge-hook-event.test.sh)** — merge_hook_event の self-test (hermetic、 実 settings.json 不使用)
-- **[lib/newer_in_thread.py](lib/newer_in_thread.py)** — 返信先より新しい相手の message を送信前に数える engine (thread の読みは呼び手が持つ)。
+- **[lib/newer_in_thread.py](lib/newer_in_thread.py)** — 返信先より新しい message (相手の続報・自分がもう送った返事) を送信前に数える engine (thread の読みは呼び手が持つ)。
 - **[lib/office-app-guard.sh](lib/office-app-guard.sh)** — Office (Excel / Word / PowerPoint) を osascript で駆動する前後の安全な reset + 背景起動 (user が開いた文書を持つ app は quit も kill もしない・前面に出さない、 sourceable lib + CLI、 office-automation.md#office-app-reset-guard)
 - **[lib/office-app-guard.test.sh](lib/office-app-guard.test.sh)** — office-app-guard.sh の hermetic test (osascript / open を PATH の stub に差し替え、 Office は起こさない。 macOS 以外でも走る)
 - **[lib/office-staging.sh](lib/office-staging.sh)** — Office (Word / Excel / PowerPoint) automation の「事前 grant 済み staging dir」 helper (sourceable lib、 macOS App Sandbox の folder-grant dialog を design-out、 office-automation.md#office-pregranted-staging-dir)
