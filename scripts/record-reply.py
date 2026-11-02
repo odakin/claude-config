@@ -68,7 +68,8 @@ selftest (= 偽の Gmail + 2 台帳の fixture、 API に触らない): t1 legac
   行を外して印を戻す・Gmail に無い id は残す・他の field は不変・冪等) / t16 現在地を作る thread = 今回記録する最新を持つ thread /
   t17 途中で止まったらこの実行の書き込みを全部戻す / t18 1 つの entry に複数 thread の行 (別 thread の行が今回より
   前 / 後の日付) = 索引は全行の日付順・印は全行の最新・既存の行を落とさない / t19 閉じた子の thread を辿る /
-  t20 現在地の鍵 (鍵なし・古い鍵は止めて ✗ の行に現在地、 正しい鍵なら書く、 既定 off・空の現在地は止めない)。
+  t20 現在地の鍵 (鍵なし・古い鍵は止めて ✗ の行に現在地、 正しい鍵なら書く、 既定 off・空の現在地は止めない) /
+  t21 空の要約 (印だけの要約は --summary で埋まる、 中身のある要約・inline の要約は変えない、 dry-run は知らせるだけ)。
 下書き: Gmail は未送信の下書きも thread の message として返す。 lib/gmail_read が既定で除く (= 記録しない・返事の
   判定に入れない)。 下書きを記録してしまった既存の行は --relabel が外す。
 """
@@ -353,8 +354,41 @@ def render_new_entry(cfg: Config, entry_id: str, msgs: list[dict], record_ids: l
         lines.append("  related_todo:")
         lines += [f'    - "{t}"' for t in todo_ids]
     lines.append("  summary: |")
-    lines += [f"    {l}" for l in (summary.strip().splitlines() or ["(summary not written)"])]
+    lines += [f"    {l}" for l in (summary.strip().splitlines() or [SUMMARY_PLACEHOLDER])]
     return "\n".join(lines) + "\n"
+
+
+SUMMARY_PLACEHOLDER = "(summary not written)"
+
+
+def summary_is_empty(entry: dict) -> bool:
+    """要約が空か、 --summary 無しで作った entry の印だけか (純関数)。"""
+    return str((entry or {}).get("summary") or "").strip() in ("", SUMMARY_PLACEHOLDER)
+
+
+def fill_summary_text(text: str, entry_id: str, summary: str) -> str:
+    """既存の entry の空の要約を --summary で埋める (純関数)。 中身のある要約はそのまま返す = 人が書いた要約を上書きしない。
+
+    なぜ (実測): --summary 無しで作った entry は要約が印だけのまま残り、 後で中身を書こうにも道具に口が無く、
+    手で台帳を編集するしかなかった。 印のままの entry が溜まっていた。"""
+    new = [f"    {l}" for l in summary.strip().splitlines()]
+    lines = text.split("\n")
+    b = find_block(lines, entry_id)
+    if not b or not new:
+        return text
+    s, e = b
+    sp = field_span(lines, s, e, "summary")
+    if sp:
+        head = lines[sp[0]].split(":", 1)[1].strip()
+        body = [l.strip() for l in lines[sp[0] + 1:sp[1]] if l.strip()]
+        if head not in ("|", "|-", "") or (body and body != [SUMMARY_PLACEHOLDER]):
+            return text
+        lines[sp[0]:sp[1]] = ["  summary: |"] + new
+    else:
+        pos = next((fs[0] for fs in (field_span(lines, s, e, f) for f in ("notes", "log")) if fs), None)
+        pos = _block_tail(lines, s, e) if pos is None else pos
+        lines[pos:pos] = ["  summary: |"] + new
+    return "\n".join(lines)
 
 
 def find_block(lines: list[str], entry_id: str) -> tuple[int, int] | None:
@@ -770,6 +804,8 @@ def apply_plan(cfg: Config, p: dict, ledger: Ledger, todo_id: str | None, args, 
         text = path.read_text(encoding="utf-8")  # 書く直前に読み直す (並列 session)
         n_before = len([x for x in (_yaml_safe_load(text) or []) if isinstance(x, dict)])
         new_text = update_entry_text(cfg, text, entry["id"], msgs, rec_ids, todo_id, add_thread=True, tid=tid)
+        if args.summary and summary_is_empty(entry):
+            new_text = fill_summary_text(new_text, entry["id"], args.summary)
         if new_text != text:
             want = set(rec_ids) | (harvest_entry(entry) & {m["id"] for m in msgs})
             write_verified(path, new_text, _verify_inbox(entry["id"], n_before, False, want))
@@ -880,6 +916,16 @@ def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) 
         tid = getattr(gmail, "last_tid", None) or tid   # 返信の messageId から引き直した場合は本当の thread id
         p = plan_thread(cfg, tid, acct, msgs, ledger, todo_id, args)
         show_plan(cfg, p, out)
+        if p["home"]:
+            if not summary_is_empty(p["home"][2]):
+                if args.summary:
+                    out("  ℹ️ home の要約には中身がある = --summary は使わない (変えるのは空の要約と新規 entry だけ)")
+            elif args.summary:
+                out("  (home の要約は空 = --apply で --summary の文を入れる)")
+            else:
+                out("  ℹ️ home の要約が空 = --summary \"<3 行まで>\" を付けると埋まる")
+        elif p["create"] and not args.summary:
+            out(f"  ⚠️ --summary が無い = 新規 entry の要約は「{SUMMARY_PLACEHOLDER}」 のまま残る")
         plans.append(p)
     if not plans:
         out("記録できる thread が無い (exit 3)")
@@ -1683,6 +1729,42 @@ def _selftest() -> int:
         check(replaces_refusal(Config(root=td, ledgers=["lr"]), "x", old_r, None) is None
               and replaces_refusal(cfg_r, "x", "", None) is None,
               "t20 require_replaces が偽 (既定) なら止めない / 現在地が空の項目は止めない")
+
+        # t21 空の要約: 既存の entry の印だけの要約は --summary で埋まり、 中身のある要約・inline の要約は変えない
+        blk = ('- id: "e"\n  subject: "s"\n  category: received\n  summary: |\n    ' + SUMMARY_PLACEHOLDER
+               + '\n\n- id: "f"\n  subject: "t"\n  summary: |\n    ' + SUMMARY_PLACEHOLDER + '\n')
+        got = fill_summary_text(blk, "e", "line one.\nline two.")
+        ents = {x["id"]: x for x in _yaml_safe_load(got)}
+        check(ents["e"]["summary"] == "line one.\nline two.\n" and ents["f"]["summary"] == SUMMARY_PLACEHOLDER + "\n"
+              and ents["e"]["category"] == "received",
+              "t21 印だけの要約は埋まる (同じ file の他の entry と他の field は不変)")
+        written_by_hand = '- id: "e"\n  summary: |\n    written by a person.\n'
+        inline = '- id: "e"\n  summary: "inline text."\n'
+        check(fill_summary_text(written_by_hand, "e", "x.") == written_by_hand and fill_summary_text(inline, "e", "x.") == inline,
+              "t21 中身のある要約 (block / inline) は変えない")
+        no_field = '- id: "e"\n  subject: "s"\n  notes: |\n    n.\n'
+        got2 = _yaml_safe_load(fill_summary_text(no_field, "e", "added."))[0]
+        check(got2["summary"] == "added.\n" and got2["notes"] == "n.\n" and summary_is_empty({}) and not summary_is_empty({"summary": "x"}),
+              "t21 要約の field が無い entry には notes の前に足す / 空の判定")
+        pe = td / "lr" / "inbox" / "2026-09.yaml"
+        pe.write_text('- id: "2026-09-22-r-thread"\n  subject: "Re: test"\n  account: acct-a\n'
+                      '  threadId: "bbbb000000000001"\n  messageId: "bbbb000000000001"\n  category: received\n'
+                      '  summary: |\n    ' + SUMMARY_PLACEHOLDER + '\n', encoding="utf-8")
+        ns_s = argparse.Namespace(**{**vars(ns_r), "target": "bbbb000000000001", "account": "acct-a", "no_todo": True,
+                                     "next": None, "summary": "filled by the tool.", "apply": False})
+        out_lines.clear()
+        rc = run_record(cfg_r, ns_s, Ledger(cfg_r), gm, "2026-09-22", pr)
+        check(rc == 0 and any("home の要約は空" in ln for ln in out_lines) and SUMMARY_PLACEHOLDER in pe.read_text(encoding="utf-8"),
+              "t21 dry-run は空の要約を埋めると知らせ、 file は変えない")
+        out_lines.clear()
+        rc = run_record(cfg_r, argparse.Namespace(**{**vars(ns_s), "apply": True}), Ledger(cfg_r), gm, "2026-09-22", pr)
+        e21 = next(x for x in _yaml_safe_load(pe.read_text(encoding="utf-8")) if x.get("id") == "2026-09-22-r-thread")
+        check(rc == 0 and e21["summary"] == "filled by the tool.\n", "t21 --apply で home の空の要約が埋まる")
+        out_lines.clear()
+        rc = run_record(cfg_r, argparse.Namespace(**{**vars(ns_s), "summary": "second try.", "apply": True}), Ledger(cfg_r), gm, "2026-09-22", pr)
+        e21 = next(x for x in _yaml_safe_load(pe.read_text(encoding="utf-8")) if x.get("id") == "2026-09-22-r-thread")
+        check(e21["summary"] == "filled by the tool.\n" and any("中身がある" in ln for ln in out_lines),
+              "t21 中身が入った後の --summary は使わない (知らせる)")
     finally:
         shutil.rmtree(td, ignore_errors=True)
     print(f"selftest: {'ALL PASS' if not fails else f'FAIL {fails}'}")
@@ -1713,7 +1795,7 @@ def main(argv=None) -> int:
     ap.add_argument("--account")
     ap.add_argument("--next", help="次の一手だけ 1 行 (項目の status_context の「→ 次:」 の後ろに入る。 日付・相手・件名は道具が前に付ける = 自分で書くと二重になる)")
     ap.add_argument("--status", help="項目の status (enum を渡していれば検査)")
-    ap.add_argument("--summary", help="新規 entry の summary (3 行まで)")
+    ap.add_argument("--summary", help="新規 entry の summary (3 行まで)。 既存の entry では要約が空のとき (= --summary 無しで作った印だけ) だけ埋める = 中身のある要約は変えない")
     ap.add_argument("--slug", help="新規 entry の id の中央 (romaji)。 末尾の -sent / -received は道具が付ける (slug の末尾に付けて渡しても外して付け直す)")
     ap.add_argument("--id", help="新規 entry の id (完全指定)")
     ap.add_argument("--ledger-for-new", help="新規 entry を置く台帳 (既定 = 項目の台帳、 無ければ最初の台帳)")

@@ -22,7 +22,7 @@ entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house st
 | `messages` | 1 通 1 行 `"mid:<hex> <日時> ← <差出人>"` / `"mid:<hex> <日時> → <宛先>"` = **機械が書く索引**。 名前は常に**相手** (← 相手発 = 差出人 / → 自分発 = 宛先。 自分を除いた最初の宛先 + ` +N`、 To が自分だけなら Cc → Bcc)。 本文・snippet は書かない。 下書き (Gmail の DRAFT) は message ではない = 載せない | 道具だけ |
 | `category` | message の素性 (received / sent)。 案件の状態は項目側 | 道具 (既存 entry は触らない) |
 | `related_todo` | 結ぶ項目の id (裸) | 道具 (無ければ足す) |
-| `summary` | 3 行まで。 事実の正本 (金額・日付・決定) は書かず pointer だけ | 人 / agent |
+| `summary` | 3 行まで。 事実の正本 (金額・日付・決定) は書かず pointer だけ。 新規 entry を `--summary` 無しで作ると印 `(summary not written)` が入る = 道具がそう知らせる。 印だけの要約は後から同じ道具の `--summary` で埋まる (中身のある要約は道具が変えない = 手で直す) | 人 / agent (道具に渡す) |
 
 印と索引の値は harvester の契約の中の書式 (`messageId:` / `mid:` 接頭辞) で書く = 読み手を変えない。 道具の出力の形は harvester の fixture に載せて固定する。
 
