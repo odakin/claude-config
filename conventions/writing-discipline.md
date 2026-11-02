@@ -279,7 +279,7 @@ scope を絞って残りを別の論文へ送る段落は、 先送りする対�
 - 節の役を言うのが要るなら、 ローマン体の短い purpose 文 1 つにする (「This section derives …」「We now …」)。 簡潔を旨とし、 purpose 文に節の結論を積まない。
 - 節の頭に言い切りの段落を置かないのは、 ローマン体でも同じ。 言い切りは序論の事前宣言と節末の要約が運ぶ ([#geroch-three-messages](#geroch-three-messages) の 3)。
 - `\emph` は語句の強調と、 定義する語 (初出の術語) にだけ使う。 文や段落を包まない。 文を包む自前の macro (`\lead{…}` の類) も同じ (その macro の組版の罠 = [latex.md#italic-wrapper-upright-text](latex.md#italic-wrapper-upright-text))。
-- **直し方**: イタリックの文が言うことを、 同じ節・序論・節末の要約が言っているかを先に見る。 言っているなら文ごと削る。 その文にしか無い前提・限定 (模型の仮定など) があれば、 それだけを purpose 文か直後の 1 文に移す。 直後の purpose 文が、 消した文の名詞を指示語 (them・it・this point) で受けていたら、 名詞を立て直す。 主張・数値・式・引用は変えない。
+- **直し方**: イタリックの文が言うことを、 同じ節・序論・節末の要約が言っているかを先に見る。 言っているなら文ごと削る。 その文にしか無い前提・限定 (模型の仮定など) があれば、 それだけを purpose 文か直後の 1 文に移す。 直後の purpose 文が、 消した文の名詞を指示語 (them・it・this point) で受けていたら、 名詞を立て直す。 イタリックの文を purpose 文に替えて 1 文だけの段落になったら、 次の段落の頭につなぐ ([#paragraph-by-meaning](#paragraph-by-meaning)、 実測 = 替えた所に 1 文の段落が残りやすい)。 主張・数値・式・引用は変えない。
 - 段落の頭の見出し語 (「What is new.」) は別の規則 = [#no-run-in-labels](#no-run-in-labels)、 節末の要約を italic の label にしない形 = [#geroch-three-messages](#geroch-three-messages) の 3。
 - 検出 = [`scripts/check-paper-prose.py`](../scripts/check-paper-prose.py) の I1 (見出しの直後に最初に印字されるのがイタリックの 5 語以上なら finding。 空行・コメント・`\label`・`\noindent` を飛ばし、 文を包む自前の macro は preamble から拾う。 短いイタリックの見出し語は info に出す)。 盲検・通読の依頼書でも、 節の頭のイタリックの文は「内容と合っているか」 でなく、 あること自体を指摘させる。
 

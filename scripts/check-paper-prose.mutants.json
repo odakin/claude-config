@@ -1,0 +1,75 @@
+{
+  "_comment": "check-paper-prose.py の selftest のうち節の頭のイタリックの文の検査 (I1) の foil に歯があることを mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 語数の閾値・見出しと文の間の飛ばし・preamble の wrapper の自動検出・{\\itshape} の group の各部を 1 つずつ外した版で、 その検査が落ち他は残ることを見る。",
+  "target": "check-paper-prose.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "  [FAIL] ",
+  "pass_marker": "  [PASS] ",
+  "mutants": [
+    {
+      "name": "閾値ちょうどの語数 (5 語) を finding にしない",
+      "pairs": [
+        [
+          "if n >= lead_min_words:",
+          "if n > lead_min_words:"
+        ]
+      ],
+      "expect_fail": [
+        "I1: an italic lead after a blank line"
+      ],
+      "expect_pass": [
+        "I1: math counts as one word",
+        "--italic-macro names a wrapper"
+      ]
+    },
+    {
+      "name": "見出しとイタリックの文の間の空行・コメント・\\label・\\noindent を飛ばさない",
+      "pairs": [
+        [
+          "s = LEAD_SKIP.match(c, j)",
+          "s = None"
+        ]
+      ],
+      "expect_fail": [
+        "I1: an italic lead after a blank line",
+        "I1: math counts as one word"
+      ],
+      "expect_pass": [
+        "findings A1 (order)",
+        "--only without I skips the gate"
+      ]
+    },
+    {
+      "name": "preamble で文を包む macro を自動で拾わない",
+      "pairs": [
+        [
+          "return sorted({next(g for g in m.groups() if g) for m in WRAPPER_DEF.finditer(preamble)})",
+          "return []"
+        ]
+      ],
+      "expect_fail": [
+        "I1: an italic lead after a blank line",
+        "I info: the preamble wrapper"
+      ],
+      "expect_pass": [
+        "--italic-macro names a wrapper",
+        "I1: math counts as one word"
+      ]
+    },
+    {
+      "name": "{\\itshape ...} の group の形を見ない",
+      "pairs": [
+        [
+          "elif group.match(c, j):",
+          "elif False:"
+        ]
+      ],
+      "expect_fail": [
+        "I1: an italic lead after a blank line"
+      ],
+      "expect_pass": [
+        "I1: math counts as one word",
+        "I info: the preamble wrapper"
+      ]
+    }
+  ]
+}
