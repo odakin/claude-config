@@ -36,6 +36,8 @@
 #
 # 出力: グローバル変数 `LEAK_MATCHER_HITS` に hit summary を set (= 文字列、
 # 空なら hit なし)。 hit detail format は人間可読 (= "[repo-name] X Y" 等)。
+# `LEAK_MATCHER_LITERAL_COUNT` = (a) sensitive-terms.txt に当たった行の数 (0 = なし)。
+# 公開の印の無い repo では (a) だけを止める caller (runner の Stage 0b・Claude 側の hook) が読む。
 #
 # 依存: bash 3.2 (= macOS stock)、 grep、 sed、 wc。 find-personal-layer.sh
 # は本 library と同 dir (lib/) に存在 (= source 済前提)。
@@ -68,6 +70,7 @@ run_leak_matcher() {
   local repo_hits path_hits
 
   LEAK_MATCHER_HITS=""
+  LEAK_MATCHER_LITERAL_COUNT=0
 
   [ -n "$message" ] || return 0
 
@@ -140,6 +143,7 @@ run_leak_matcher() {
     )"
     if [ -n "$literal_hits" ]; then
       hit_count="$(printf '%s\n' "$literal_hits" | wc -l | tr -d ' ')"
+      LEAK_MATCHER_LITERAL_COUNT="$hit_count"
       # 表示時も literal 本体を晒さず count のみ (= public-precommit-runner.sh
       # の Tier B 方針と一致)
       LEAK_MATCHER_HITS="${LEAK_MATCHER_HITS}

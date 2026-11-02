@@ -70,7 +70,12 @@ dir ごと 1 個の `tar` にして、 その tar を暗号化対象に載せる
 2. **既存の間違った例を改名して、 正しい形を例にする** (今の版は通常の commit で。 履歴 = 下の
    [#history-scrub-identity-from-all-versions](#history-scrub-identity-from-all-versions))
 3. **commit 時の検査で止める** (本命 = 例に依らない): 新しい path・平文の追加行・commit message に、
-   識別子の形か、 machine-local の名簿から作った氏名があれば止める。 名簿の値は repo に入れない
+   識別子の形か、 machine-local の名簿から作った氏名があれば止める。 名簿の値は repo に入れない。
+   持ち主が同僚・共著者の名前も commit message に書かない運用にするなら、 個人層の
+   `commit-msg-literal-scope.txt` に `all` と書く。 commit-msg の runner (`scripts/commit-msg-leak-guard-runner.sh`
+   の Stage 0b) が、 個人層の検出語 (`sensitive-terms.txt`) を公開の印の無い repo の commit message でも止める
+   (commit message は暗号化されない平文)。 警告にしないのは、 commit と push を 1 回の command で打つと、
+   commit の前に出す警告は push の後に届くため (実測)
 
 ### <a id="decrypted-echo"></a>手元では復号されている = 検査と確認の出力が値を表示する
 

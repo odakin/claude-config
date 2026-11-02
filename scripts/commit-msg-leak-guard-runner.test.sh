@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# commit-msg-leak-guard-runner.test.sh — 上記 runner の self-test（15 case、 BLOCK / PASS / merge skip 等）
+# commit-msg-leak-guard-runner.test.sh — 上記 runner の self-test（BLOCK / PASS / merge skip / 非公開の repo の検出語 等）
 # commit-msg-leak-guard-runner.test.sh — self-tests for the git-side runner
 #
 # 設計: runner に git commit-msg hook 互換の引数 ($1=msg file path、 $2=
@@ -377,6 +377,48 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-studen
   if [ "$crash_rc" = "0" ] && printf '%s' "$crash_err" | grep -q '学生の識別子の検査が異常終了'; then PASS=$((PASS+1)); else
     FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [exit=$crash_rc, line shown?] pass-student-id-engine-crash-is-not-a-block\n"; fi
 fi
+
+# ====================================================================
+# Stage 0b: 公開の印の無い repo の検出語 (個人層の commit-msg-literal-scope.txt = all のときだけ)。
+# 宣言が無い / comment だけ = 従来どおり通る。 宣言があれば (a) の語で止まり、 repo 名 (b) では止まらない。
+# 拒否の出力に検出語そのものと 1 回だけ通す env の名を出さないことまで見る。
+# ====================================================================
+PRIV0B="$TMPDIR_TEST/private-repo-0b"
+mkdir -p "$PRIV0B" && git -C "$PRIV0B" init -q -b main
+s0b() { # <case> <want exit> <message> [source] [env assignment] → private repo の中で runner を回し、 stderr を S0B_ERR に残す
+  local name="$1" want="$2" content="$3" source="${4:-message}" envset="${5:-}" f rc
+  f="$TMPDIR_TEST/msg-0b-$RANDOM.txt"; printf '%s' "$content" > "$f"
+  if [ -n "$envset" ]; then
+    S0B_ERR="$(cd "$PRIV0B" && env "$envset" "$RUNNER" "$f" "$source" 2>&1 >/dev/null)"; rc=$?
+  else
+    S0B_ERR="$(cd "$PRIV0B" && "$RUNNER" "$f" "$source" 2>&1 >/dev/null)"; rc=$?
+  fi
+  if [ "$rc" = "$want" ]; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [exit!=$want] $name (exit=$rc)\n"; fi
+}
+SCOPE="$MOCK_LAYER/commit-msg-literal-scope.txt"
+rm -f "$SCOPE"
+s0b "pass-0b-literal-without-scope-file" 0 "update MOCK_SECRET_TERM_ALPHA configuration"
+printf '%s\n' '# 範囲の宣言 (この行は読まない)' '# all' > "$SCOPE"
+s0b "pass-0b-literal-scope-comment-only" 0 "update MOCK_SECRET_TERM_ALPHA configuration"
+printf '%s\n' '# 範囲の宣言' 'all' > "$SCOPE"
+s0b "block-0b-ascii-literal-in-private-repo" 1 "update MOCK_SECRET_TERM_ALPHA configuration"
+if printf '%s' "$S0B_ERR" | grep -q 'commit rejected'; then PASS=$((PASS+1)); else
+  FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [no-reject-msg] block-0b-ascii-literal-in-private-repo\n"; fi
+if printf '%s' "$S0B_ERR" | grep -q -e 'MOCK_SECRET_TERM_ALPHA' -e 'CLAUDE_COMMIT_NAME_GUARD'; then
+  FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [echoes term or bypass] block-0b-output-hides-term-and-bypass\n"; else PASS=$((PASS+1)); fi
+s0b "block-0b-nonascii-literal-in-private-repo" 1 "記録: モック秘語さんへ返信した"
+s0b "block-0b-literal-in-body-line" 1 "inbox: 返事を記録
+
+モック秘語さんの 10 時の便"
+s0b "block-0b-amend-source" 1 "記録: モック秘語さんへ返信した" "commit"
+s0b "pass-0b-allowed-compound-only" 0 "map: モック秘語町 の座標を直す"
+s0b "pass-0b-private-repo-name-only" 0 "fix mockpriv-foo/CLAUDE.md path"
+s0b "pass-0b-role-words" 0 "記録: 共著者へ返信した (本人の承認)"
+s0b "pass-0b-merge-source" 0 "Merge branch 'モック秘語'" "merge"
+s0b "pass-0b-comment-lines-only" 0 "記録: 共著者へ返信した
+# モック秘語 (git が消す comment 行)"
+s0b "pass-0b-bypass-once" 0 "記録: モック秘語さんへ返信した" "message" "CLAUDE_COMMIT_NAME_GUARD=0"
+rm -f "$SCOPE"
 
 # ====================================================================
 echo ""

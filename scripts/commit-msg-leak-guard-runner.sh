@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# commit-msg-leak-guard-runner.sh — git commit-msg hook（BLOCK mode）: 全 repo = 学生の識別子 (2026-09-29) / 公開 repo = leak 検出 (2026-05-26 追加。 shared matcher library を source。 claude-code 2.1.x harness invoke bug の修復 option B）
+# commit-msg-leak-guard-runner.sh — git commit-msg hook（BLOCK mode）: 全 repo = 学生の識別子 (2026-09-29) + 個人層が宣言すれば検出語 (sensitive-terms.txt) / 公開 repo = leak 検出 (2026-05-26 追加。 shared matcher library を source。 claude-code 2.1.x harness invoke bug の修復 option B）
 # commit-msg-leak-guard-runner.sh — git native commit-msg hook (BLOCK mode)
 #
 # 正本: claude-config/scripts/commit-msg-leak-guard-runner.sh (layer 1)
@@ -24,9 +24,11 @@
 #   の修復 option B、 詳細 `conventions/hook-authoring.md#delivery-audit-4-axes (d) 軸`)。
 #
 # Gating: Stage 0 (学生の識別子、 2026-09-29) は全 repo で走る = private repo にも
-#   `install-public-commit-msg.sh --any-repo` が同じ stub を置く。 Stage 1 以降 (公開 repo の
-#   leak 検出) は `.claude/public-repo.marker` を持つ repo だけ = 本 runner の marker の
-#   safety net が marker 不在の repo を Stage 0 の後で silent pass させる。
+#   `install-public-commit-msg.sh --any-repo` が同じ stub を置く。 Stage 0b (検出語) は
+#   marker 不在の repo で、 個人層の `commit-msg-literal-scope.txt` に `all` の行があるときに走る
+#   (下の Stage 0b の節)。 Stage 1 以降 (公開 repo の leak 検出) は `.claude/public-repo.marker`
+#   を持つ repo だけ = 本 runner の marker の safety net が marker 不在の repo を Stage 0b の後で
+#   silent pass させる。
 #
 # 設計思想:
 #   既存 `public-precommit-runner.sh` (= file 本文 Tier A 検出) と本 runner
@@ -81,10 +83,60 @@ if [ -f "$SID_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
 fi
 
 # ----------------------------------------------------------------------
+# Stage 0b: 公開の印の無い repo の commit message の検出語 (個人層が範囲を宣言したとき)
+#
+# commit message は暗号化されない平文で履歴に残る (git-crypt は file の中身だけを守る) =
+# 非公開の repo でも、 hosting の事業者・共同編集者・後から access を得た人に読める。
+# 個人層の `commit-msg-literal-scope.txt` に `all` の行 (# の行と空行は読まない) があれば、
+# 個人層の sensitive-terms.txt の語 (matcher の (a)) を、 公開の印の無い repo でも止める。
+# 宣言が無ければ従来どおり (= 印の無い repo は Stage 0 だけ)。 印のある repo は下の Stage 1 が全 tier で止める。
+#
+# 警告だけにしない理由 (実測): commit の前の警告は、 commit と push を 1 回の command で打つ
+# agent には commit の後に届き、 「push 済みなので受容」「非公開なので誤検出」 と読まれて
+# 同じ語が繰り返し入った。 commit を止めれば、 書き直す前に履歴へ入らない。
+#
+# 1 回だけ通す: CLAUDE_COMMIT_NAME_GUARD=0 (拒否の出力には書かない = 「誤検出」 と自分で
+# 決めて通す流れを作らない。 人名・機関名でない語に当たったら、 持ち主が sensitive-terms の
+# 許可の複合語 `!<語>` を足すのが直し方)
+# ----------------------------------------------------------------------
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$REPO_ROOT" ] && [ ! -f "$REPO_ROOT/.claude/public-repo.marker" ] \
+    && [ "${CLAUDE_COMMIT_NAME_GUARD:-1}" != "0" ]; then
+  S0B_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+  if [ -r "$S0B_DIR/lib/find-personal-layer.sh" ] && [ -r "$S0B_DIR/lib/commit-msg-leak-matcher.sh" ]; then
+    # shellcheck source=/dev/null
+    . "$S0B_DIR/lib/find-personal-layer.sh"
+    S0B_LAYER="$(find_personal_layer 2>/dev/null || true)"
+    if [ -n "$S0B_LAYER" ] && [ -f "$S0B_LAYER/commit-msg-literal-scope.txt" ] \
+        && grep -v '^[[:space:]]*#' "$S0B_LAYER/commit-msg-literal-scope.txt" 2>/dev/null | grep -qx '[[:space:]]*all[[:space:]]*'; then
+      S0B_MESSAGE="$(grep -v '^#' "$MSG_FILE" 2>/dev/null || true)"
+      if [ -n "$S0B_MESSAGE" ]; then
+        # shellcheck source=/dev/null
+        . "$S0B_DIR/lib/commit-msg-leak-matcher.sh"
+        run_leak_matcher "$S0B_MESSAGE"
+        if [ "${LEAK_MATCHER_LITERAL_COUNT:-0}" -gt 0 ]; then
+          cat >&2 << EOF
+[commit-msg-leak-guard-runner] commit rejected: commit message の ${LEAK_MATCHER_LITERAL_COUNT} 行に検出語 (個人層の sensitive-terms.txt = 人名・機関名) がある。
+
+repo: $REPO_ROOT
+この repo に公開の印は無いが、 commit message は暗号化されない平文で履歴に残る
+(個人層の commit-msg-literal-scope.txt = all)。
+
+直し方: 人は役割の語 (本人・共著者・事務の担当・講師・学生 A など)、 機関は「本学」「相手の機関」
+に直して打ち直す。 誰のことかは暗号化される中身 (台帳・記録) に書く。
+検出語が人名・機関名でない (地名など) と思ったら、 打ち直さずに持ち主に聞く。
+EOF
+          exit 1
+        fi
+      fi
+    fi
+  fi
+fi
+
+# ----------------------------------------------------------------------
 # repo marker safety net: marker 不在なら silent pass
 # (= 主な gating は install-public-commit-msg.sh、 本 check は double-safe)
 # ----------------------------------------------------------------------
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -n "$REPO_ROOT" ] && [ ! -f "$REPO_ROOT/.claude/public-repo.marker" ]; then
   exit 0
 fi
@@ -203,10 +255,9 @@ literal term が含まれます (= git log で grep 可能な public surface)。
     (= claude-config/CLAUDE.md §「安全規則」 + odakin-prefs/leak-incidents.md
     の運用と整合)
 
-例外 list (= mention OK な非公開 repo 8 個):
-  gmail-mcp-config, research-collab, email-office,
-  odakin-prefs, secrets-config, physics-research,
-  conferences, 推薦書
+例外 list (= mention OK な非公開 repo) の正本:
+  claude-config/CLAUDE.md §「例外 list と criterion」
+  (matcher の LEAK_MATCHER_ALLOWLIST と同期)
 
 意図的に commit したい場合は \`git commit --no-verify\` で bypass 可能
 (escape hatch)。 但し意図的 bypass は leak-incidents.md に記録推奨。
