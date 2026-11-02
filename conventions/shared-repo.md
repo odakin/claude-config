@@ -359,6 +359,8 @@ gh api repos/<owner>/<repo>/invitations
 
 `permission` の選択指針: 卒論・共同論文等の write 必要なケースは `push`。`maintain` は branch 保護や release 管理を任せる場合のみ。`admin` は鍵管理者か co-owner だけ。
 
+<a id="org-base-permission"></a>**org に置く private repo は、 招待した人の外にも見えることがある** — org の base permission (`default_repository_permission`) が `read` 以上だと、 その org の private repo は org の member 全員が読める (collaborator として招待していなくても)。 特定の人とだけ共有する repo (学生の応募の下書き・個人の書類) を org に作る前に `gh api orgs/<org> --jq .default_repository_permission` を見て、 `none` でなければ個人の account に作るか、 base permission を変えるかを決める (実測)。
+
 ## <a id="collaborator-check"></a>招待した相手の手元の準備は repo が session 開始時に確かめる
 
 招待の後に、 相手の手元でしか済まない手順が残る (自分の token を発行して置く・道具を入れる・最初に読む節)。 招待の連絡に書いて伝えると、 相手が読み落とすか忘れた時点で止まり、 誰も気付かない ([`docs/convention-design-principles.md#human-memory-not-a-carrier`](../docs/convention-design-principles.md#human-memory-not-a-carrier))。 そこで**準備の点検を repo 自身に持たせる**:

@@ -33,6 +33,7 @@ git-crypt で暗号化するリポは、最初の `git add` の前に `git-crypt
 description は英語。リポ一覧の正本は個人層の `repos.md`（未設定なら MEMORY.md）。新規作成前に既存リポを確認。
 新規リポは **remote の作成と初回 push までが 1 単位**。リポ一覧への登録はその後にし、`gh api repos/<owner>/<name>` で remote が在ることを確かめる（手元で init しただけのリポを一覧に載せると、別マシンからは存在しないリポになる。2026-09-10 実例: 一覧への登録だけが push され、GitHub にリポが無かった）。一覧と実在の突合 = [`scripts/check-ci-red.py`](scripts/check-ci-red.py) `--from-repos-md` の検査不能行（未 clone / remote 未設定）。
 最初の commit 前に root `AGENTS.md` を作る。shared repo は [`templates/shared-project/AGENTS.md.template`](templates/shared-project/AGENTS.md.template) を使い、全リポ共通の所有関係と検査は [§Agent instruction entrypoint](#agent-instruction-entrypoints) に従う。
+<a id="new-repo-entry-docs-ruling"></a>agent が新規リポを作るとき、 入口の文書 (`CLAUDE.md`・`AGENTS.md`) と設定 (`.claude/settings.json`) を新しく作るには本人の裁定が要る ([`conventions/agent-rule-ownership.md`](conventions/agent-rule-ownership.md) の B)。 全文の候補を先に作り、 本人に「どの file をどの候補どおりに作るか」 を名指した承認の 1 行を頼み、 その発言のある session で `scripts/agent-rule-guard.py apply --latest` で作る。 作成を別の session (worker) に委ねるなら、 承認の 1 行はその worker の会話に要る = guard の `--latest` も auto mode の classifier (`gh repo create` などの外への操作を止める判定) も、 自分の session の会話しか読まない ([`conventions/claude-code-permissions.md#relayed-approval-does-not-reach`](conventions/claude-code-permissions.md#relayed-approval-does-not-reach))。 依頼の spec と、 依頼元から本人への頼みに「worker の窓で 1 行」 と書く (実測: 取り次いだ承認では、 作成も入口の文書も通らなかった)。
 
 ---
 
