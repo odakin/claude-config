@@ -190,6 +190,19 @@ def news(repo: Path, tid: str, session: str, touched: float | None, now: float,
     return "\n".join(lines), ref
 
 
+def quiet_since(repo: Path, tid: str, t: float) -> bool:
+    """t の後に repo の HEAD (commit・pull)・項目の file・inbox の月 file のどれも書かれていない = 新しいものは無い
+    (git を呼ばずに済む速い道。 HEAD の reflog が読めない repo では偽 = いつもの道)。"""
+    head_log = repo / ".git" / "logs" / "HEAD"
+    if not head_log.is_file():
+        return False
+    try:
+        paths = [head_log, repo / "todo" / f"{tid}.yaml", *(repo / "inbox").glob("*.yaml")]
+        return all(p.stat().st_mtime < t for p in paths if p.exists())
+    except OSError:
+        return False
+
+
 def _state_path(state_dir: Path, session: str) -> Path:
     return state_dir / (re.sub(r"[^A-Za-z0-9_.-]", "_", session or "nosession")[:80] + ".json")
 
@@ -210,6 +223,9 @@ def hook_main(repos: list[Path], state_dir: Path, now: float | None = None) -> i
         msgs = []
         for repo, tid in hits:
             key = f"{repo}/{tid}"
+            if state.get(key) and quiet_since(repo, tid, state[key]):
+                state[key] = now
+                continue
             text, _ = news(repo, tid, session, state.get(key), now)
             state[key] = now
             if text:
