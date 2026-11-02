@@ -62,9 +62,11 @@ Exit: 0 = no HARD (render done, or --no-render) / 1 = HARD (or --strict + surfac
       2 = usage / 3 = the render could not be done = 見た目 (頁数・行の折れ・紙の font) は未確認.
       Exit 3 is not a pass: do not show or send the form until one of the other routes
       (office-automation.md#docx-layout-unverified) has confirmed the layout.
-A pass with the render records a receipt (sha256 of the filled file) in
-${XDG_STATE_HOME:-~/.local/state}/claude-form-layout/receipts.tsv; --receipt-status
-answers whether the file as it is now was checked (exit 0) or not (exit 1).
+Every run records one line (sha256 of the filled file, path, result = pass / hard /
+unverified / no-render) in ${XDG_STATE_HOME:-~/.local/state}/claude-form-layout/receipts.tsv;
+--receipt-status answers whether the file as it is now passed with the render (exit 0)
+or not (exit 1, saying whether that path was checked before = a gate can tell a form
+that went through this check from a document that never did).
 
 The check is structural, not semantic: it can tell that a box / column / bullet is
 EMPTY or that a label was REPLACED, but it cannot judge whether prose content is
@@ -565,26 +567,35 @@ def _sha256(path):
     return h.hexdigest()
 
 
-def write_receipt(filled, blank, pages):
+def write_receipt(filled, blank, pages, status="pass"):
+    """1 回の検査を 1 行で記録する。 status = pass (描画つきで通った) / hard / unverified (描けなかった) / no-render。"""
     p = _receipts_path()
     os.makedirs(os.path.dirname(p), exist_ok=True)
     with open(p, "a", encoding="utf-8") as fh:
         fh.write("\t".join([time.strftime("%Y-%m-%dT%H:%M:%S"), _sha256(filled), _sha256(blank),
-                            str(pages), os.path.abspath(filled)]) + "\n")
+                            str(pages if pages is not None else "-"), os.path.abspath(filled), status]) + "\n")
     return p
 
 
 def receipt_status(filled):
+    """0 = 今の中身が描画つきで通った / 1 = 通っていない (その path を検査したことがあるかも言う)。"""
     p = _receipts_path()
     digest = _sha256(filled)
+    path = os.path.abspath(filled)
+    seen_path = False
     if os.path.isfile(p):
         with open(p, encoding="utf-8") as fh:
             for line in fh:
                 f = line.rstrip("\n").split("\t")
-                if len(f) >= 4 and f[1] == digest:
+                if len(f) < 5:
+                    continue
+                status = f[5] if len(f) >= 6 else "pass"
+                if f[1] == digest and status == "pass":
                     print(f"✓ この file (今の中身) は {f[0]} に描画つきで検査済み ({f[3]} 頁)")
                     return 0
-    print("✗ この file の今の中身は、 描画つきの検査を通っていない (diff-form-docx.py <記入済み> <雛形> を回す)")
+                seen_path = seen_path or f[4] == path
+    tail = " (この path は検査したことがある = その後に中身が変わったか、 通らなかった)" if seen_path else ""
+    print(f"✗ この file の今の中身は、 描画つきの検査を通っていない{tail} (diff-form-docx.py <記入済み> <雛形> を回す)")
     return 1
 
 
@@ -829,8 +840,12 @@ def _selftest():
             before = receipt_status(paths["fgood"])
             write_receipt(paths["fgood"], paths["fblank"], 1)
             after = receipt_status(paths["fgood"])
-            other = receipt_status(paths["fadded"])
+            write_receipt(paths["fadded"], paths["fblank"], 2, status="hard")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                other = receipt_status(paths["fadded"])
         checks.append(("receipt: unknown → recorded → other file still unknown", (before, after, other) == (1, 0, 1)))
+        checks.append(("receipt: a failed run is not a pass, and the path is known", "検査したことがある" in buf.getvalue()))
     finally:
         if old is None:
             os.environ.pop("XDG_STATE_HOME", None)
@@ -899,9 +914,13 @@ def main():
             state, note = "failed", why_b or why_f
         shutil.rmtree(work, ignore_errors=True)
     rc = report(findings, strict=strict, render_state=state, render_note=note)
-    if rc == 0 and state == "done":
-        p = write_receipt(filled, blank, pages)
-        print(f"  記録: {p}")
+    status = {0: "pass" if state == "done" else "no-render", 3: "unverified"}.get(rc, "hard")
+    try:
+        p = write_receipt(filled, blank, pages, status=status)
+        if status == "pass":
+            print(f"  記録: {p}")
+    except OSError as e:  # 記録できなくても検査の結果は変えない
+        print(f"  (記録を書けなかった: {e})", file=sys.stderr)
     sys.exit(rc)
 
 
