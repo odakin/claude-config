@@ -53,7 +53,7 @@ carrier 軸・claim-target 軸と別に、 **記録に「決定」「方針」�
 両方向に壊れる (実測):
 
 10. **決定でないものを決定として写さない。** 試稿に書いてある順序や、 他 session が名乗った窓口が、 次の記録では「決まったこと」 になる。 控える側の制約 (「編集しない」) ほど確かめずに受け入れられ、 言い換えで強まり、 「〜なので見送った」 という記録のたびに別の file へ写る。 board 上の形と読む側・書く側の規則 = [multi-session-coordination.md#board-role-claim-is-not-assignment](multi-session-coordination.md#board-role-claim-is-not-assignment)。
-11. **決定を提案のまま置かない。** agent の提案に owner が同意した返事は決定であり、 同じ turn で決定の置き場に書く。 書き落とすと、 後で owner に指摘されるまで正本に無い。 決定か提案のままかが読み切れないときは、 記録する turn で owner に聞く (推測でどちらかに寄せない)。
+11. **決定を提案のまま置かない。** agent の提案に owner が同意した返事は決定であり、 同じ turn で決定の置き場に書く。 書き落とすと、 後で owner に指摘されるまで正本に無い。 決定か提案のままかが読み切れないときは、 記録する turn で owner に聞く (推測でどちらかに寄せない)。 <a id="decided-by-action"></a>**owner が行為で決めたことも決定である**: owner の了解で既に当てた変更を、 後で承認の手続き (相手への確認・承認の一覧) に出し直すときは、 owner の側の答え (可否と文面) を記入済みにして出し、 改めて owner に尋ねない (実測: 了解を得て編集した後、 同じ変更の可否と直し方を owner に 2 回続けて聞き、 「編集したのだから答えは決まっている」 と返された)。
 12. **確かめる先は owner の発言そのもの。** 書いた agent 自身の報告や tool の説明文は、 自分の判断を「指示に基づき」 と書くことがある (実測)。 会話記録の user 役の発言を引く ([debugging-discipline.md#transcript-search-archived-and-quoted](debugging-discipline.md#transcript-search-archived-and-quoted))。
 13. **置き場は 1 か所、 原文の動詞で。** owner の決定は決定を集める 1 か所 (設計 doc の決定欄・project の指示 file) に書き、 他の記録はそこを指す。 提案は「提案」「比較材料」 と明記する。 置き場が無いまま各所に全文で写すと、 出所が消えて後の読み手には (a) と (b)(c) の区別がつかなくなり、 訂正も写しの数だけ要る。
 

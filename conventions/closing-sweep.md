@@ -206,6 +206,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
   壊れた link は手書きの検査を書かず道具で見る: `python3 scripts/fix-md-links.py --base <作業ルート> --files <変えた md> --list` (0 件なら `missing target: 0`)。
 - 最終 message に書くもの:
   - 何を・どこへ移したか (repo と file の link、 1 行ずつ。 出所 = この session / agent / 子 session を添える)
+    - <a id="report-from-diff-stat"></a>**報告を書く前に、 作業の始点からの差分を点呼表にする**: repo ごとに `git diff --stat <始点の commit>..HEAD` を出し、 変えた file が 1 つずつ報告に入っているかを当てる。 依頼元や共同研究者に「やったこと」 を伝える file・便も同じ (実測: 記録の書き直しと規則の文書への節の追加が報告から漏れ、 本人に「漏れなく伝えた？」 と聞かれて見つかった)。 記憶から書いた報告は、 大きな変更だけを拾って周辺の変更を落とす
   - 研究の中身を扱った session なら、 拾った知見の件数と置いた note (会話にしか無かったものを何件記録したか)。 考え方 (0.3 の表の行) も同じく件数と置き場所
   - その場で書いた script の一覧 (0.3 の道具) の ✅ 以外 1 本ずつの扱い (置いた先か、 置かない理由 = 1 の [#evidence-scripts](#evidence-scripts))
   - `session-claims-report.py` の A (根拠の無い検算) と B (先送り) を 1 行ずつどうしたか (script にした先・消した・やった・載せた carrier)
