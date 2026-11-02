@@ -1,0 +1,26 @@
+{
+  "_comment": "child-wrap-check.py の「hand-off の手順 0 で止まった turn は本人待ちに数えない」 の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。",
+  "target": "child-wrap-check.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "NG: ",
+  "pass_marker": "ok: ",
+  "mutants": [
+    {"name": "手順 0 の停止を本人待ちの点から外さない",
+     "pairs": [["    points = [p for p in _wait_points(ev, notes) if not step0_turn(ev, p[0])]\n", "    points = _wait_points(ev, notes)\n"]],
+     "expect_fail": ["step 0: the go came from the parent", "step 0: the archive guard's owner reasons are empty",
+                     "step 0, no go yet → kept as waiting", "step 0, no go yet: the archive guard"],
+     "expect_pass": ["control: a later turn (no model check in it) asks the person", "waited on the person, only another session answered"]},
+    {"name": "同じ turn に claim があっても手順 0 と読む",
+     "pairs": [["    return bool(checks) and not any(min(checks) < c <= at for c in ev[\"claims\"])", "    return bool(checks)"]],
+     "expect_fail": ["control: the model check, a claim and an ask in one turn"],
+     "expect_pass": ["step 0: the go came from the parent"]},
+    {"name": "turn の始まりを見ずに前の turn の確かめも数える",
+     "pairs": [["    start = max((t for t in starts if t <= at), default=\"\")", "    start = \"\""]],
+     "expect_fail": ["control: a worker that never claims (no board)"],
+     "expect_pass": ["step 0: the go came from the parent", "control: the model check, a claim and an ask in one turn"]},
+    {"name": "go 待ちの判定で親の message を見ない",
+     "pairs": [["    if any(ts > at for ts, frm in ev[\"peers\"] if not parent or frm == parent):\n        return None\n    return {\"at\": at}", "    return {\"at\": at}"]],
+     "expect_fail": ["step 0: the go came from the parent"],
+     "expect_pass": ["step 0, no go yet → kept as waiting"]}
+  ]
+}

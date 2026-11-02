@@ -22,7 +22,11 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
   - 本人待ちの問い: 子の turn が本人待ちで終わった最後の時点 (子の wrap_up の ask / blocked、 親の記録の
     「… finished a turn and then reported that it was waiting on the user」 の知らせより前の子の最後の応答) より後に、
     子の窓に本人の発言 (人の入力。 別 session の message・hook の差し戻し・task の通知・API の誤りの後の「Try again」 は
-    数えない) があるか
+    数えない) があるか。 **hand-off の手順 0 で止まった turn は数えない** = その turn で model・effort の確かめ
+    (`session-model.py self`) が走り、 掲示板の claim が続かずに終わった turn は、 依頼元の go を待つ停止で本人待ちではない
+    (app は親にそれも「本人待ち」 と知らせる。 実測: go の後に仕事も wrap も済んだ worker が、 13 分前の手順 0 の停止を
+    「本人待ちの問い」 と読まれて畳む照合と archive の hook で止まった)。 go がまだ届いていない (その停止の後に親の message が
+    無い) 子は「依頼元の go 待ち」 として別の理由で残す (archive の hook が読む owner_reasons には入れない)
   - 本人と話している途中: 親が子へ最後に送った message (wrap の依頼など) より後に、 本人が子の窓で発言しているか
     (実測: 親が「片付けは不要、 wrap して終えて」 と送った直後に、 本人が同じ子に「どうやって消すの？」 と打ち、
     子が答えた 2 分後に親が畳んだ)。 子がその発言に答えて問いを残さず turn を終えていれば、 その時刻を添えて出す
@@ -100,6 +104,10 @@ PEER_FROM = re.compile(r'<cross-session-message from=\\?"(local_[0-9a-f-]+)')  #
 PEER_TAG = re.compile(r'<cross-session-message ((?:[a-z-]+=\\?"[^"\\]*\\?"\s*)+)>(.*?)(?:</cross-session-message>|$)', re.S)
 PEER_ATTR = re.compile(r'(from-session|from)=\\?"([^"\\]*)')
 RECENT_REQUEST_MIN = 30  # --wait: a parent's wrap request older than this (before the watch started) is an earlier job's
+# The hand-off's step 0 (the worker reads its own model and effort and stops when they differ) and the board claim that
+# follows it when they match: a turn that ran the first and not the second waits for the requester's go, not the person.
+STEP0_CHECK = re.compile(r"session-model\.py['\"]?\s+self\b")
+CLAIM_RUN = re.compile(r"board\.py['\"]?\s+claim\b")
 DELIVERY_GRACE_S = 60  # --wait without a recent request: the first seconds wait for the request to land in the child's window
 MAX_COMMITS = 30
 RETRY_TEXTS = {"Try again"}  # the app's retry after an API error (measured on the desktop app)
@@ -202,7 +210,7 @@ def scan_child(path: str, as_of: str = "") -> dict:
     """Events from the child's transcript (timestamps): first entry, replies, turn ends, prompts of the person, asks, wrap runs.
     The app's retry line after an API error ("Try again") goes to `retries`, not to the person's prompts."""
     out = {"first": "", "replies": [], "stops": [], "human": [], "said": [], "peers": [], "asks": [], "wraps": [],
-           "retries": [], "peer_wraps": []}
+           "retries": [], "peer_wraps": [], "model_checks": [], "claims": []}
     try:
         fh = open(path, encoding="utf-8", errors="replace")
     except (OSError, TypeError):
@@ -253,6 +261,12 @@ def scan_child(path: str, as_of: str = "") -> dict:
                         out["asks"].append((ts, str(inp.get("ask") or "(blocked)")))
                     elif name == "Skill" and str(inp.get("skill") or "").split(":")[-1] == "wrap":
                         out["wraps"].append(ts)
+                    elif name == "Bash":
+                        cmd = str(inp.get("command") or "")
+                        if STEP0_CHECK.search(cmd):
+                            out["model_checks"].append(ts)
+                        if CLAIM_RUN.search(cmd):
+                            out["claims"].append(ts)
                 elif kind == "user" and e.get("isMeta") and b.get("type") == "text":
                     t = b.get("text", "")
                     if t.startswith("Base directory for this skill:") and re.search(r"/skills/wrap\s", t[:300]):
@@ -281,11 +295,40 @@ def parent_wait_notes(parent_path: str, local: str, as_of: str = "") -> list[str
     return out
 
 
-def open_ask(ev: dict, notes: list[str]) -> dict | None:
-    """The child's last turn that ended waiting on the person, if no prompt of the person came in the child's window after it."""
+def _wait_points(ev: dict, notes: list[str]) -> list[tuple[str, str]]:
     points = list(ev["asks"])
     for n in notes:  # a note arrives after the child's turn end; date it at the child's last reply before it
         points.append((max((s for s in ev["replies"] if s <= n), default=n), ""))
+    return points
+
+
+def step0_turn(ev: dict, at: str) -> bool:
+    """The turn that ended waiting at `at` is the hand-off's step 0: it ran the model check and no board claim after it
+    (a worker whose model and effort match claims in the same turn). Such a stop waits for the requester's go."""
+    starts = [t for t in ev["human"] if t < at] + [t for t, _ in ev["peers"] if t < at] + ([ev["first"]] if ev["first"] else [])
+    start = max((t for t in starts if t <= at), default="")
+    checks = [m for m in ev["model_checks"] if start <= m <= at]
+    return bool(checks) and not any(min(checks) < c <= at for c in ev["claims"])
+
+
+def go_wait(ev: dict, notes: list[str], parent: str = "") -> dict | None:
+    """The child's latest wait is a step-0 stop and no message of the parent (any peer when the parent is unknown) has
+    come in its window since = it still waits for the requester's go."""
+    points = _wait_points(ev, notes)
+    if not points:
+        return None
+    at = max(p[0] for p in points)
+    if not step0_turn(ev, at) or any(h > at for h in ev["human"]):
+        return None
+    if any(ts > at for ts, frm in ev["peers"] if not parent or frm == parent):
+        return None
+    return {"at": at}
+
+
+def open_ask(ev: dict, notes: list[str]) -> dict | None:
+    """The child's last turn that ended waiting on the person, if no prompt of the person came in the child's window after it.
+    A step-0 stop (step0_turn) is the requester's go to wait for, not the person's: it is not a wait point here."""
+    points = [p for p in _wait_points(ev, notes) if not step0_turn(ev, p[0])]
     if not points:
         return None
     at, text = max(points, key=lambda p: p[0])
@@ -378,7 +421,9 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
         req = max((ts for ts, frm in ev["peer_wraps"] if frm == c["parent"]), default="")
         earlier_wraps = [w for w in ev["wraps"] if w[:19] < wrap_since[:19] and req and w >= req]
         ev["wraps"] = [w for w in ev["wraps"] if w[:19] >= wrap_since[:19]]
-    ask = open_ask(ev, parent_wait_notes(c["parent_path"], c["local"], as_of))
+    notes = parent_wait_notes(c["parent_path"], c["local"], as_of)
+    ask = open_ask(ev, notes)
+    gw = go_wait(ev, notes, c["parent"])
     commits = child_commits(c["cli"], ev["first"][:19])
     reasons = []
     if not as_of and c["status"] == "busy":
@@ -387,6 +432,9 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
         reasons.append(WAITING_TEXT)
     if ask:
         reasons.append(_ask_text(ask))
+    if gw:
+        reasons.append(f"依頼元の go を待って止まっている ({_local_hm(gw['at'])} に hand-off の手順 0 = model・effort が頼んだ値と違う"
+                       " で止まり、 その後に親の message が無い。 本人待ちではない)")
     talking = owner_after_parent(ev, c["parent"], _epoch(as_of) if as_of else None)
     if talking:
         reasons.append(_talking_text(talking))
@@ -400,7 +448,7 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
         reasons.append("push されていない commit: " + ", ".join(f"{os.path.basename(x['repo'])} {x['sha']}" for x in bad))
     return {"target": target, "found": True, "ok": not reasons, "reasons": reasons, "local": c["local"], "title": c["title"],
             "status": c["status"], "archived": c["archived"], "last_wrap": max(ev["wraps"], default=""),
-            "last_turn_end": max(ev["stops"], default=""), "commits": commits, "open_ask": ask}
+            "last_turn_end": max(ev["stops"], default=""), "commits": commits, "open_ask": ask, "go_wait": gw}
 
 
 def render(rows: list[dict]) -> str:
@@ -1156,6 +1204,56 @@ def selftest() -> int:
         r = check_child(ids("nowrap")[0])
         ok("no wrap run → kept", (not r["ok"]) and r["reasons"] == ["wrap の記録が無い"])
         ok("--no-wrap-needed drops that reason", check_child(ids("nowrap")[0], need_wrap=False)["ok"])
+        # hand-off step 0: the worker's first turn stops because its model/effort differ and waits for the requester's go;
+        # the app tells the parent it waits on the person, and the go is a peer message, not the person's prompt
+        gw_l, gw_c = "local_77777777-0000-4000-8000-000000000000", "77777777-cccc-4000-8000-000000000000"
+        record(gw_l, gw_c, parent_l)
+        live(91, gw_c, gw_l, "idle")
+
+        def bash(ts: str, cmd: str) -> dict:
+            return {"type": "assistant", "timestamp": ts, "message": {"content": [
+                {"type": "tool_use", "id": "b", "name": "Bash", "input": {"command": cmd}}]}}
+
+        step0 = [u("2026-01-01T00:00:00Z", "board の worker として", origin={"kind": "human"}),
+                 bash("2026-01-01T00:00:05Z", "python3 /x/session-model.py self; echo ---"),
+                 reply("2026-01-01T00:00:10Z", ask="effort を直してから go を"), stop("2026-01-01T00:00:12Z")]
+        gw_note = u("2026-01-01T00:00:20Z", f"<system-reminder>\nThe session \"g\" you started ({gw_l}) {WAIT_NOTE}. It reported\n</system-reminder>")
+        after_go = [peer("2026-01-01T00:05:00Z", "go", parent_l), bash("2026-01-01T00:05:05Z", "python3 /x/session-model.py self"),
+                    bash("2026-01-01T00:05:10Z", "python3 /x/board.py claim --root /b --request r"), reply("2026-01-01T00:40:00Z"),
+                    skill_wrap("2026-01-01T00:50:00Z"), stop("2026-01-01T00:55:00Z")]
+        transcript(gw_c, step0 + after_go)
+        transcript(parent_c, notes + [gw_note])
+        r = check_child(gw_l)
+        ok("step 0: the go came from the parent, the work and the wrap are done → ok (not the person's ask)",
+           r["ok"] and not r["open_ask"] and not r["go_wait"])
+        ok("step 0: the archive guard's owner reasons are empty", owner_reasons(gw_l) == [])
+        transcript(gw_c, step0)
+        r = check_child(gw_l, need_wrap=False)
+        ok("step 0, no go yet → kept as waiting for the requester's go, not as the person's ask",
+           (not r["ok"]) and not r["open_ask"] and r["go_wait"] and any("go を待って" in x for x in r["reasons"])
+           and not any("本人待ちの問い" in x for x in r["reasons"]))
+        ok("step 0, no go yet: the archive guard does not read it as the person's ask", owner_reasons(gw_l) == [])
+        claim_first = bash("2026-01-01T00:00:07Z", "python3 /x/board.py claim --root /b --request r")
+        transcript(gw_c, step0[:2] + [claim_first] + step0[2:] + after_go[:1] + [reply("2026-01-01T00:40:00Z"), stop("2026-01-01T00:41:00Z")])
+        r = check_child(gw_l, need_wrap=False)
+        ok("control: the model check, a claim and an ask in one turn → the person's ask stays (only the parent answered)",
+           (not r["ok"]) and r["open_ask"] and r["open_ask"]["at"] == "2026-01-01T00:00:10Z")
+        later_ask = [reply("2026-01-01T00:15:00Z"), stop("2026-01-01T00:15:05Z"), peer("2026-01-01T00:20:00Z", "これも見て", parent_l),
+                     reply("2026-01-01T00:30:00Z", ask="どちらにしますか"), stop("2026-01-01T00:30:05Z"), peer("2026-01-01T00:35:00Z", "B で", parent_l)]
+        transcript(gw_c, step0 + after_go[:3] + later_ask)
+        r = check_child(gw_l, need_wrap=False)
+        ok("control: a later turn (no model check in it) asks the person, only the parent answered → the ask stays",
+           (not r["ok"]) and r["open_ask"] and r["open_ask"]["at"] == "2026-01-01T00:30:00Z" and not r["go_wait"])
+        transcript(gw_c, step0 + after_go[:3] + later_ask[:5] + [u("2026-01-01T00:35:00Z", "B で", origin={"kind": "human"})])
+        ok("control: the same later ask answered by the person in the child's window → no open ask",
+           not check_child(gw_l, need_wrap=False)["open_ask"])
+        no_board = [step0[0], bash("2026-01-01T00:00:05Z", "python3 /x/session-model.py self"), reply("2026-01-01T00:02:00Z"),
+                    stop("2026-01-01T00:02:05Z"), peer("2026-01-01T00:20:00Z", "これも見て", parent_l),
+                    reply("2026-01-01T00:30:00Z", ask="どちらにしますか"), stop("2026-01-01T00:30:05Z"), peer("2026-01-01T00:35:00Z", "B で", parent_l)]
+        transcript(gw_c, no_board)
+        ok("control: a worker that never claims (no board) checked its model in an earlier turn → its later ask stays",
+           bool(check_child(gw_l, need_wrap=False)["open_ask"]))
+        transcript(parent_c, notes)
         sf_l, sf_c = "local_66666666-0000-4000-8000-000000000000", "66666666-cccc-4000-8000-000000000000"
         record(sf_l, sf_c, parent_l)
         live(90, sf_c, sf_l, "idle")
