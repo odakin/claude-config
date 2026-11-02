@@ -21,7 +21,8 @@
   <id> 足した|added <根拠>          この締めで記録した。 根拠は同じ形
   <id> 記録しない|不要|skip <理由>   記録しない (知見を含まない・教科書の内容・本人が記録しないと決めた など)
   path は --base (既定 = 今の dir) から。 照合の出力は根拠の行 (commit なら題) を候補の文の隣に出す = 「直していない」 の項目に
-  「その話は扱わない」 と書いた行を根拠に挙げたような食い違いが目に見える。 候補が 1 件でも処分を欠く・根拠が実在しないと exit 1。
+  「その話は扱わない」 と書いた行を根拠に挙げたような食い違いが目に見える。 「記録済み」 の根拠の行そのものが未決の書き方
+  (扱わない・未検算・保留 など) なら ⚠️ を付ける (読み直す印。 exit は変えない)。 候補が 1 件でも処分を欠く・根拠が実在しないと exit 1。
 
 使い方:
   session-reply-knowledge-report.py <session id か先頭の数文字>     # 既定は環境変数 CLAUDE_CODE_SESSION_ID
@@ -63,6 +64,7 @@ BULLET = re.compile(r"^(\s*)(?:[-*•]|\d+\.)\s+(.*)$")
 LABEL_ONLY = re.compile(r"^\*\*(.+?)\*\*\s*[:：]?\s*$")
 NOT_TURN_HEADS = ("Base directory for this skill", "This session is being continued", "<system-reminder>", "<task-notification>",
                   "<local-command", "Another Claude session", "Stop hook feedback", "[Request interrupted")
+PENDING_EVIDENCE = re.compile(r"対象外|扱わない|触れない|未検算|未導出|未検証|未記録|未確認|今後|保留|out of scope|not covered|\bTODO\b", re.I)
 BLOCK_MARK = "返事にしか無い知見の照合が通っていません"
 STATUS = {"記録済み": "recorded", "recorded": "recorded", "足した": "added", "added": "added",
           "記録しない": "skip", "不要": "skip", "skip": "skip"}
@@ -300,17 +302,19 @@ def resolve_evidence(ev, base):
 
 
 def check(cands, disp, base):
+    """rows = [(候補, 処分, 通ったか, 見せる文, 読み直す印)]。 印 = 「記録済み」 の根拠の行そのものが未決の書き方。"""
     rows, bad = [], 0
     for c in cands:
         status, ev = disp.get(c["id"], (None, ""))
         if status is None:
             ok, shown = False, "処分が無い"
         elif status == "skip":
-            ok, shown = len(ev) >= 4, ("理由: " + ev) if len(ev) >= 4 else "不要の理由が無い"
+            ok, shown = len(ev) >= 4, ("理由: " + ev) if len(ev) >= 4 else "記録しない理由が無い"
         else:
             ok, shown = resolve_evidence(ev, base) if ev else (False, "根拠が無い")
+        warn = bool(ok and status == "recorded" and shown.startswith("行: ") and PENDING_EVIDENCE.search(shown))
         bad += not ok
-        rows.append((c, status, ok, shown))
+        rows.append((c, status, ok, shown, warn))
     unknown = sorted(set(disp) - {c["id"] for c in cands})
     return rows, bad, unknown
 
@@ -343,10 +347,12 @@ def report(session, pdirs, args):
     print("文脈圧縮: %d 回。 ⏪ = 圧縮より前 (今の context に無い、 全文 = --show <id>)" % n_comp)
     if args.check:
         rows, bad, unknown = check(cands, read_dispositions(args.check), Path(args.base).expanduser())
-        print("処分の照合: 候補 %d 件、 欠け・根拠の無いもの %d 件" % (len(cands), bad))
-        for c, status, ok, shown in rows:
-            print("%s %-4s %s %s\n      %s" % ("✅" if ok else "❌", c["id"], status or "-", _one_line(c["text"] if c["kind"] == "S" else c["head"], 90),
-                                         _one_line(shown, 180)))
+        n_warn = sum(1 for r in rows if r[4])
+        print("処分の照合: 候補 %d 件、 欠け・根拠の無いもの %d 件、 根拠の行が未決の書き方 %d 件 (⚠️ = 読み直す)" % (len(cands), bad, n_warn))
+        for c, status, ok, shown, warn in rows:
+            mark = "❌" if not ok else ("⚠️" if warn else "✅")
+            print("%s %-4s %s %s\n      %s" % (mark, c["id"], status or "-", _one_line(c["text"] if c["kind"] == "S" else c["head"], 90),
+                                         _one_line(shown, 180) + (" ← 根拠の行も未決の書き方 = 記録したことになるか読み直す" if warn else "")))
         for u in unknown:
             print("⚠️ 処分の file にある id が候補に無い: %s" % u)
         return 1 if bad else 0
@@ -432,8 +438,10 @@ def selftest():
         lines += ["%s 記録済み note.md:2" % rid, "%s 足した note.md:9  # 範囲外" % qfirst, "%s skip 書き方の相談で知見を含まない" % qmid]
         (base / "d.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
         rows, bad, unknown = check(cands, read_dispositions(base / "d.txt"), base)
-        by = {c["id"]: (ok, shown) for c, _s, ok, shown in rows}
+        by = {c["id"]: (ok, shown) for c, _s, ok, shown, _w in rows}
         expect("根拠の行を見せる", by[rid], (True, "行: - 補題の一般化は扱わない。"))
+        expect("根拠の行が未決の書き方なら印", [w for c, _s, _o, _sh, w in rows if c["id"] == rid], [True])
+        expect("理由つきの記録しないには印を付けない", any(w for c, s, _o, _sh, w in rows if s == "skip"), False)
         expect("範囲外の行は通らない", by[qfirst][0], False)
         expect("処分の無い候補は通らない", by[qlast], (False, "処分が無い"))
         expect("欠けの数", bad, 2)
