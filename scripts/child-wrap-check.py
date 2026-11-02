@@ -24,7 +24,7 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
     子の窓に本人の発言 (人の入力。 別 session の message・hook の差し戻し・task の通知・API の誤りの後の「Try again」 は
     数えない) があるか。 **hand-off の手順 0 で止まった turn は数えない** = その turn で model・effort の確かめ
     (`session-model.py self`) が走り、 掲示板の claim が続かずに終わった turn は、 依頼元の go を待つ停止で本人待ちではない
-    (app は親にそれも「本人待ち」 と知らせる。 実測: go の後に仕事も wrap も済んだ worker が、 13 分前の手順 0 の停止を
+    (app は親にそれも「本人待ち」 と知らせる。 実測: go の後に仕事も wrap も済んだ worker が、 手順 0 の停止を
     「本人待ちの問い」 と読まれて畳む照合と archive の hook で止まった)。 go がまだ届いていない (その停止の後に親の message が
     無い) 子は「依頼元の go 待ち」 として別の理由で残す (archive の hook が読む owner_reasons には入れない)
   - 本人と話している途中: 親が子へ最後に送った message (wrap の依頼など) より後に、 本人が子の窓で発言しているか
