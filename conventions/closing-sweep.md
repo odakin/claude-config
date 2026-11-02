@@ -29,20 +29,22 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 ## <a id="collect-from-transcript"></a>0.3 会話の全体から集める (文脈圧縮の前も)
 
 文脈圧縮の後に手元にあるのは要約だけで、 圧縮より前の user の訂正・分かった壊れ方・打った command は要約から落ちていることがある。
-会話記録 (transcript) は圧縮の後も全体が file に残っているので、 要約でなく記録から集める。 圧縮が起きていなければ、 user の発言と研究の中身は context で足りる。
+会話記録 (transcript) は圧縮の後も全体が file に残っているので、 要約でなく記録から集める。 圧縮が起きていなければ、 user の発言と研究の中身は context にある。
+**要約が自分で「未記録」「直していない」「保留」 と書いた項目は、 要約の文で済ませず、 1 件ずつ今の記録と照らす締めの入力にする** (下の「研究の中身」 の行の道具が S として並べる。 実測: 締めが拾ったのは要約の未記録の項目の一部で、 拾わなかった項目に返事にしか無い導出があった)。
+**返事にしか無い知見 (研究の中身・考え方) も、 圧縮の有無に関わらず道具の一覧で回す** — 表に道具のある行と「会話を頭から読む」 行が並ぶと、 道具のある行だけを回して締め、 読む行が抜ける (実測: 道具の行を 1 本の command で全部回し、 返事を 1 件も引かないまま「足したものは無い」 と報告した)。
 **その場で書いた script は、 圧縮の有無に関わらず下の道具で一覧を出す** — context から思い出すと file に残らない形 (heredoc で interpreter に流した code・`-c` の code) を数え落とす (実測: file の script だけを数え、 結果を記録の根拠に使った heredoc の code を落とした)。
 
 | 集めるもの | 引き方 |
 |---|---|
 | user の発言 (訂正・決定・依頼) | `python3 scripts/search-agent-transcripts.py --session <id8> --role user --regex .` (圧縮の前も含めて時刻順に全部) |
 | その場で書いた script (file に書いたもの + heredoc・`-c` で流したもの) | `python3 scripts/session-scripts-report.py <id8>` = 1 本ずつ、 commit 済み (✅) / repo の中で未 commit (🟡) / repo の外 (⚠️) / 流しただけで file に無い (⚠️) を出す。 ✅ でないものは 1 本ずつ、 1 の表の [#evidence-scripts](#evidence-scripts) の行で決める |
-| 根拠の無い検算の主張と先送り (返事と記録に書いた文) | `python3 scripts/session-claims-report.py <id8>` = 「手で確かめて一致」「独立に再現」 のうち根拠の file を指さない行 (A) と、 「次に〜とき」「後で」 のうち carrier を指さない行 (B)。 誤検出は出るので 1 行ずつ読み、 A は 1 の表の [#unbacked-checks](#unbacked-checks)、 B は 3 の [#deferrals](#deferrals) で決める |
+| 根拠の無い検算の主張と先送り (返事と記録に書いた文) | `python3 scripts/session-claims-report.py <id8>` = 「手で確かめて一致」「独立に再現」 のうち根拠の file を指さない行 (A) と、 「次に〜とき」「後で」 のうち carrier を指さない行 (B) と、 「足したものは無い」「すべて記録済み」 のうち下の照合を指さない行 (C)。 誤検出は出るので 1 行ずつ読み、 A は 1 の表の [#unbacked-checks](#unbacked-checks)、 B は 3 の [#deferrals](#deferrals)、 C は下の「研究の中身」 の行の照合で決める |
 | 答えの無い箱の問い (turn 終わりの箱で問い、 本人の答えが無いまま流れたもの) | `python3 scripts/session-open-questions-report.py <id8>` = 1 件ずつ読み、 まだ要る問いは TODO の `ask` に写す (箱の問いは次の自動の turn で画面から消える。 記録に残らないので誰も問い直さない。 実測) |
 | 取得して読んだ原典 (論文・資料の PDF。 一時 dir に落としたもの・取り込み口に置かれたものも) | `python3 scripts/session-fetched-docs-report.py <id8>` = arXiv の取得 (URL のある command、 URL を本文に持つ session の script の起動、 WebFetch の番号) と手元の PDF (Read・curl の書き先・WebFetch の保存先・取り込み口・検査のための写しの元) を 1 件ずつ、 repo に保存あり (✅) / 保存なし (⚠️) / もう無い (❌) で出す。 ✅ でないものは 1 の表の [#fetched-originals](#fetched-originals) の行で決める |
 | 打った command・commit | `python3 scripts/search-agent-transcripts.py --session <id8> --tool-runs --regex '<語>'` (例 = `git commit`。 2 回以上打った command は 1 の表の「再利用できる script」 の候補) |
 | agent の報告 | 0.5 の表の 1 行目 |
-| 研究の中身 | 会話を頭から読み、 返事に書いた計算結果・導出・読み・見積もり・否定的な結果・「確かめていない」 の一覧と、 agent の報告の検算済み・未検証の一覧を 1 件ずつ拾う (返事にしか無いものは session が終わると消える) |
-| 考え方 (メタの知見) | 同じく会話を頭から読み、 返事に書いた比較・判断の理由・捨てた案とその理由・壊れ方の推論 (なぜ起きたか) と、 user が述べた考え方・好みを拾う。 user の分は言葉のまま |
+| <a id="reply-knowledge"></a>研究の中身 | `python3 scripts/session-reply-knowledge-report.py <id8>` = 読む範囲の一覧: 文脈圧縮の要約が「未決」 と書いた項目 (S)・user の問いとその turn の返事 (Q)・圧縮より前の、 問いでない依頼への返事 (R)。 ⏪ = 圧縮より前 (context に無い、 全文 = `--show <id>`)。 1 件ずつ読み、 返事に書いた計算結果・導出・読み・見積もり・否定的な結果・「確かめていない」 の一覧と、 agent の報告の検算済み・未検証の一覧を拾って記録する (返事にしか無いものは session が終わると消える)。 一覧の外の返事 (圧縮の後の、 問いでない依頼への返事) は context で読む。 終わったら 1 件ずつの処分 (記録済み / 足した / 記録しない + 根拠の `path:行` か `<repo>@<commit>`、 記録しないなら理由) を file に書き、 `--check <file>` を通す。 照合は根拠の行を候補の隣に出す = 「直していない」 の項目に、 その話を扱わないと書いた行を根拠に挙げるような食い違いが見える。 `/wrap` の turn では Stop hook がこの照合の通過を確かめる (配線されている環境) |
+| 考え方 (メタの知見) | 同じ一覧 (Q の返事に判断の理由・捨てた案が出やすい) と context を読み、 返事に書いた比較・判断の理由・捨てた案とその理由・壊れ方の推論 (なぜ起きたか) と、 user が述べた考え方・好みを拾う。 user の分は言葉のまま。 処分は上の行の file に一緒に書く |
 
 - 拾った user の訂正は、 1 の表の「user の訂正」 の行どおり、 訂正された規則の文を記録にある user の言葉で言い直す。
 - <a id="numbers-not-recorded"></a>**締めの道具の 🔢 の行は、 研究の中身の行の入力にする** — `session-scripts-report.py` と Codex の inventory が、 実行出力と記録を照合した候補。拾い方・探す記録・丸め・解釈の限界の正本 = [`scripts/lib/output_numbers.py`](../scripts/lib/output_numbers.py) 冒頭。
@@ -207,9 +209,10 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
 - 最終 message に書くもの:
   - 何を・どこへ移したか (repo と file の link、 1 行ずつ。 出所 = この session / agent / 子 session を添える)
     - <a id="report-from-diff-stat"></a>**報告を書く前に、 作業の始点からの差分を点呼表にする**: repo ごとに `git diff --stat <始点の commit>..HEAD` を出し、 変えた file が 1 つずつ報告に入っているかを当てる。 依頼元や共同研究者に「やったこと」 を伝える file・便も同じ (実測: 記録の書き直しと規則の文書への節の追加が報告から漏れ、 本人に「漏れなく伝えた？」 と聞かれて見つかった)。 記憶から書いた報告は、 大きな変更だけを拾って周辺の変更を落とす
-  - 研究の中身を扱った session なら、 拾った知見の件数と置いた note (会話にしか無かったものを何件記録したか)。 考え方 (0.3 の表の行) も同じく件数と置き場所
+  - 研究の中身を扱った session なら、 拾った知見の件数と置いた note (会話にしか無かったものを何件記録したか)。 考え方 (0.3 の表の行) も同じく件数と置き場所。
+    件数は [#reply-knowledge](#reply-knowledge) の照合の結果 (候補 N 件 = 記録済み a / 足した b / 記録しない c) から書く。 「足したものは無い」「すべて記録済み」 は照合が通った後に、 候補の件数と一緒にだけ書く (照合の前に書くと確かめていない不在の主張になる = 実測)
   - その場で書いた script の一覧 (0.3 の道具) の ✅ 以外 1 本ずつの扱い (置いた先か、 置かない理由 = 1 の [#evidence-scripts](#evidence-scripts))
-  - `session-claims-report.py` の A (根拠の無い検算) と B (先送り) を 1 行ずつどうしたか (script にした先・消した・やった・載せた carrier)
+  - `session-claims-report.py` の A (根拠の無い検算)・B (先送り)・C (漏れが無いの主張) を 1 行ずつどうしたか (script にした先・消した・やった・載せた carrier・照合の結果)
   - `session-open-questions-report.py` の問いを 1 件ずつどうしたか (写した TODO・答えが出ていた・もう要らない)
   - 2 回目の壊れ方・訂正があれば、 仕組みにしたか、 しなかった理由と積んだ先
   - 委ねた先のうち、 まだ動いている・検収していない・裏が取れなかったもの。 掲示板の状態 (検収待ち・誰の番か) を書く直前に、 その request を `board.py show --request <id> --sync` で読み直す
