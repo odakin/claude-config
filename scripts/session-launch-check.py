@@ -26,13 +26,14 @@ mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
   PostToolUse(set_session_model / set_session_effort)  台帳の「頼んだ値」 を起こした側の最新の指定に揃える。 起こした時の記録が
                               頼んだ値と違った worker (= go 待ちで止まる) で、 その見張りが走っていなければ、 見張りの 1 行を出す。
   `--wait-first-turn <local_…> [--model M] [--effort E] [--since <epoch|ISO>] [--max-minutes N]` (見張り = 起こした側が
-                              Bash の run_in_background で出す): 子の最初の turn が終わる (registry の status が busy・waiting で
-                              なくなり、 turn の終わりが --since 〔既定 = app の記録の作成時刻〕 より後) か、 子が掲示板の依頼を
+                              Bash の run_in_background で出す): 子の最初の turn が終わる (子の会話記録に --since 〔既定 = app の
+                              記録の作成時刻〕 より後の応答があり = turn が始まり、 registry の status が busy・waiting でない) か、 子が掲示板の依頼を
                               claim する (go を待たずに仕事に入った) まで待ち、 app の記録の model・effort を頼んだ値 (--model /
                               --effort、 無ければ台帳) と比べて次の一手を 1 行で出して終わる: 合う = go を送る / 違う =
                               set_session_* の後にもう一度この見張り (turn が終わっていればすぐ返る) / claim 済み = go は要らない。
-                              子の動きの読み方は child-wrap-check.py の locate / turn_done_after を使う。 時間切れ = exit 3、
-                              子が見つからない = exit 2。
+                              子の動きの読み方は child-wrap-check.py の locate / scan_child を使う (同じ道具の turn_done_after は
+                              app の記録の lastTurnEdgeAt を turn の終わりに数えるが、 作ったばかりの session はその値を最初の prompt
+                              より前に持つ = 始まる前に「終わった」 と読む、 実測)。 時間切れ = exit 3、 子が見つからない = exit 2。
   `--hook-stop [--stop-mode off|observe|block]` (Stop の hook 用、 既定 = env SESSION_LAUNCH_STOP か observe): 起こした時の
                               記録が違った worker に、 見張りも go も出さずに turn を終えるとき、 worker ごとに 1 回だけ記録する
                               (observe = <state>/stop-observe.jsonl) か止める (block)。
@@ -72,7 +73,7 @@ env: SESSION_LAUNCH_CHECK_DISABLE=1 / SESSION_LAUNCH_STATE_DIR (test) / CLAUDE_D
      SESSION_LAUNCH_BOARD_FIRST_MARKER / SESSION_LAUNCH_PREMIUM_GATE_MARKER (test: the markers' paths) /
      SESSION_LAUNCH_WAIT (記録を待つ秒、 既定 3) / SESSION_LAUNCH_STOP (`--hook-stop` の mode) /
      SESSION_LAUNCH_PS_FILE (test: 見張りが走っているかを読む ps の出力の代わり) /
-     SESSION_LAUNCH_WATCH_GRACE (test: 見張りが、 一覧に出ていない子を起動の途中とみなす秒、 既定 90)。
+     SESSION_LAUNCH_WATCH_GRACE (test: 見張りが、 app の記録にも一覧にも無い子を起動の途中とみなす秒、 既定 90)。
 self-test: python3 scripts/session-launch-check.py --selftest
 理由を後から残す: python3 scripts/session-launch-check.py --note-reason <local_…> '<理由>'
 切替時刻の止めを外す: python3 scripts/session-launch-check.py --clear-stop-at
@@ -103,7 +104,7 @@ NO_BOARD = "[no-board]"
 WATCH_FLAG = "--wait-first-turn"
 WATCH_MAX_MIN = 30.0     # a worker that stops for `go` ends its first turn within a minute or two (measured)
 WATCH_INTERVAL = 10.0
-WATCH_GRACE_S = 90.0     # a session just started may not be in the live registry yet
+WATCH_GRACE_S = 90.0     # a session just started may be in neither the app records nor the live registry yet
 CLAIM_CALL = re.compile(r"board\.py['\"]?\s+claim\b")
 STOP_STATES = ("mismatch", "pending")
 STOP_RECENT_S = 6 * 3600
@@ -585,7 +586,7 @@ def post_set(inp: dict) -> str:
 # ---- the watch on a worker's first turn (`--wait-first-turn`) and the Stop check (`--hook-stop`) ----
 
 def _child_wrap():
-    """child-wrap-check.py as a module: its locate / turn_done_after read the child's movement (one implementation)."""
+    """child-wrap-check.py as a module: its locate / scan_child read the child's movement (one implementation)."""
     import importlib.machinery
     import types
     path = os.path.join(HERE, "child-wrap-check.py")
@@ -638,6 +639,21 @@ def last_reply(path: str, width: int = 200) -> str:
     return last[:width] + ("…" if len(last) > width else "")
 
 
+def first_turn_ended(cw, c: dict, since: float) -> tuple[bool, str]:
+    """The worker's first turn has ended: its transcript has a reply after the launch (the turn started) and the live
+    registry does not show it busy or waiting. The app record's lastTurnEdgeAt is not read here: a session just
+    created carries an edge later than its creation before its first prompt arrives (measured: the watch read
+    'ended' 35 s before the worker's first prompt), which child-wrap-check's turn_done_after would count."""
+    if c["status"] == "busy":
+        return False, "動いている"
+    if c["status"] == "waiting":
+        return False, cw.WAITING_TEXT
+    ev = cw.scan_child(c.get("path") or "")
+    if not any(r and cw._epoch(r) > since for r in ev["replies"]):
+        return False, "最初の turn がまだ始まっていない"
+    return True, "終わった" if c["status"] != "(not live)" else "終わった (process は無い)"
+
+
 def wait_first_turn(argv: list[str]) -> int:
     import argparse
     ap = argparse.ArgumentParser(prog="session-launch-check.py " + WATCH_FLAG)
@@ -669,14 +685,15 @@ def wait_first_turn(argv: list[str]) -> int:
     claimed, why, c = False, "", None
     while True:
         c = cw.locate(local)
-        if c and c.get("path") and claimed_after(c["path"], since):
+        if not c:
+            if time.time() - start >= grace and not ds.find(local):
+                break   # nowhere: reported below
+            done, why = False, "app の一覧にまだ出ていない"
+        elif c.get("path") and claimed_after(c["path"], since):
             claimed = True
             break
-        absent = not c or c["status"] == "(not live)"
-        if absent and time.time() - start < grace and not (c and c.get("edge") and c["edge"] > since):
-            done, why = False, "app の一覧にまだ出ていない"
         else:
-            done, why = cw.turn_done_after(local, since)
+            done, why = first_turn_ended(cw, c, since)
         if done:
             break
         if time.time() > deadline:
@@ -1314,11 +1331,27 @@ def selftest() -> int:
         transcript(said, turn_end)
         rc, out = watch("--max-minutes", "0.0005", since="2026-01-02T00:05:00Z")
         check("watch: a turn end before the launch does not count", rc == 3)
+        # the measured start: the app record carries a turn edge later than its creation before the first prompt arrives,
+        # and the worker has written nothing yet (the watch read 'ended' 35 s before the first prompt)
+        with open(os.path.join(app, lid + ".json"), encoding="utf-8") as fh:
+            recd = json.load(fh)
+        recd.update(createdAt=parse_when("2026-01-02T00:05:00Z") * 1000, lastTurnEdgeAt=parse_when("2026-01-02T00:05:30Z") * 1000)
+        with open(os.path.join(app, lid + ".json"), "w", encoding="utf-8") as fh:
+            json.dump(recd, fh)
+        registry("idle")
+        transcript()
+        rc, out = watch("--max-minutes", "0.0005", since="")
+        check("watch: just created, idle in the live list, edge after creation, nothing written → not ended",
+              rc == 3 and "まだ始まっていない" in out)
         os.remove(os.path.join(sess, "1.json"))
+        rc, out = watch("--max-minutes", "0.0005", since="")
+        check("watch: the same, not in the live list yet → not ended", rc == 3 and "まだ始まっていない" in out)
         os.environ["SESSION_LAUNCH_WATCH_GRACE"] = "60"
-        rc, out = watch("--max-minutes", "0.0005", since="2026-01-02T00:05:00Z")
-        check("watch: just started and not in the live list yet → keeps waiting (not read as ended)",
-              rc == 3 and "一覧にまだ出ていない" in out)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = wait_first_turn(["local_eeeeeeee-0000-4000-8000-00000000000e", "--interval", "0.01", "--max-minutes", "0.0005"])
+        check("watch: in neither the app records nor the live list, within the grace → keeps waiting",
+              rc == 3 and "一覧にまだ出ていない" in buf.getvalue())
         os.environ["SESSION_LAUNCH_WATCH_GRACE"] = "0"
         os.environ["CLAUDE_CODE_SESSION_ID"] = "launcher-w"
         buf = io.StringIO()
