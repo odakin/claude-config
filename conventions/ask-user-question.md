@@ -12,7 +12,7 @@ summary: AskUserQuestion (選択肢 UI) の使い所 — turn 同期 block + use
 - AskUserQuestion は **turn を同期 block する** — user が回答 (or 却下) するまで他の処理が一切進まない。 並行で進められたはずの作業も止まる。
 - user が chat 入力欄に text を打ちかけている時に選択肢 dialog が出ると、 **入力中 text が宙に浮く** (= UI 競合。 user は「書きかけの説明」 と「dialog の選択肢」 の二択を強いられる)。
 - 選択肢は少数 + 「Other」 固定の構造 = **open-ended な質問・背景説明が要る質問には構造が合わない** (選択肢に押し込むと user の真の回答空間を狭める)。
-- <a id="answer-is-a-tool-result"></a>**選択肢への答えは、 本人が打った発言として記録されない**: Claude Code の AskUserQuestion の答えは、 会話記録に tool の結果として入る (実測)。 本人の発言そのものを照合する仕組み (規則保護の guard の承認の記録 = `scripts/manuscript-claim-guard.py` の `user_messages`) は tool の結果を本人の裁定として読まないので、 選択肢の答えでは承認を記録できない。 承認の一文が要る変更は、 選択肢で方針を決めた後でも、 対象と変更を名指した一文を本人に打ってもらう。 [`agent-rule-ownership.md`](agent-rule-ownership.md) の「質問 UI の本人の answer」 が指すのは、 答えが本人の入力の形 (`<send_user_message_question_reply>`) で記録される別の surface の質問 UI。
+- <a id="answer-is-a-tool-result"></a>**選択肢への答えは、 本人が打った発言として記録されない**: Claude Code の AskUserQuestion の答えは、 会話記録に tool の結果として入る (実測)。 本人の発言そのものを照合する仕組み (規則保護の guard の承認の記録 = `scripts/manuscript-claim-guard.py` の `user_messages`) は tool の結果を本人の裁定として読まないので、 選択肢の答えでは承認を記録できない。 答えは引ける文の無い本人の操作として数えるので、 答えの後はその前の発言も承認として引けない。 承認の一文が要る変更は、 選択肢で方針を決めた後でも、 対象と変更を名指した一文を本人に打ってもらう。 [`agent-rule-ownership.md`](agent-rule-ownership.md) の「質問 UI の本人の answer」 が指すのは、 答えが本人の入力の形 (`<send_user_message_question_reply>`) で記録される別の surface の質問 UI。
 
 ## 使い分け
 

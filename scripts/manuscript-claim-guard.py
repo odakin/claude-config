@@ -1960,9 +1960,15 @@ def human_text_segments(text: str, excluded_tags: dict[str, int] | None = None, 
     return [text]
 
 
-def user_messages(path: Path, excluded_tags: dict[str, int] | None = None) -> list[tuple[str, str]]:
-    """transcript の、 人が書いた user 発言だけ (時刻, 本文)。"""
+def user_messages(path: Path, excluded_tags: dict[str, int] | None = None, *,
+                  choice_answers: bool = False) -> list[tuple[str, str]]:
+    """transcript の、 人が書いた user 発言だけ (時刻, 本文)。
+
+    choice_answers = 選択肢 UI の答えも引ける文の無い発言として数える (承認の記録だけが使う)。 答えは turn の途中に
+    入るので、 turn の起点を最新の発言で決める Stop の照合では数えない (数えると照合の窓が答えの時刻から始まり、
+    答えの前に記録した承認・追記を返事に書かせなくなる)。"""
     out: list[tuple[str, str]] = []
+    ask_ids: set[str] = set()  # Claude の選択肢 UI (AskUserQuestion) の問いの id
     try:
         handle = open(path, encoding="utf-8", errors="replace")
     except OSError:
@@ -1991,12 +1997,27 @@ def user_messages(path: Path, excluded_tags: dict[str, int] | None = None) -> li
                     text = c
                 elif isinstance(c, list):
                     if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in c):
+                        # 選択肢 UI の答えは本人の操作だが、 文は tool の結果 (問いと選択肢は agent の文) = 引ける文の無い発言
+                        # として数える。 数えないと、 その前の別の依頼への発言が最新になり --latest が黙ってそれを引く。
+                        # 答えずに message を送った問い (本人の message は後の行に入る) と、 誤りで返った結果は数えない
+                        answers = e.get("toolUseResult", {}).get("answers") if isinstance(e.get("toolUseResult"), dict) else None
+                        sent_instead = isinstance(answers, dict) and bool(answers) and all(
+                            str(v).startswith("[User did not answer") for v in answers.values())
+                        if choice_answers and not sent_instead and any(
+                                isinstance(b, dict) and b.get("type") == "tool_result" and not b.get("is_error")
+                                and b.get("tool_use_id") in ask_ids for b in c):
+                            out.append((str(e.get("timestamp", "")), ""))
                         continue
                     text = "".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
                 else:
                     continue
                 out.extend((str(e.get("timestamp", "")), t) for t in human_text_segments(
                     text, excluded_tags, claude_human=e.get("turnOrigin") == "human"))
+            elif e.get("type") == "assistant":  # Claude: 選択肢 UI の問いの id を控える (答えは後の user 行の tool_result)
+                c = (e.get("message") or {}).get("content")
+                if isinstance(c, list) and not e.get("isSidechain"):
+                    ask_ids.update(str(b.get("id")) for b in c if isinstance(b, dict) and b.get("type") == "tool_use"
+                                   and b.get("name") == "AskUserQuestion")
             elif e.get("type") == "attachment":  # Claude: 作業中 (turn の途中) に届いた本人の発言
                 # type=user の行にならず queued_command の attachment として入る。 同じ型で背景 task の通知
                 # (commandMode=task-notification、 origin 無し) と別 session の連絡 (origin.kind=peer) も入るので、
@@ -3406,7 +3427,7 @@ def approve_mode(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 3
     excluded_tags: dict[str, int] = {}
-    msgs = user_messages(transcript, excluded_tags)
+    msgs = user_messages(transcript, excluded_tags, choice_answers=True)
     latest = bool(getattr(args, "latest", False))
     if latest and args.quote:
         print("approve: --latest と --quote は同時に渡さない (--latest = 本人の最新の発言そのものを引く)。", file=sys.stderr)
@@ -3422,8 +3443,9 @@ def approve_mode(args: argparse.Namespace) -> int:
         idx, quote = len(msgs) - 1, msgs[-1][1]
         if not quote.strip():
             print("approve: 本人の最新の入力に引ける本人の文が無い = 記録しない。 slash command を引数なしで起動しただけ"
-                  " (/wrap など = command の名前は項目ごとの裁定でない) か、 agent が書いた追い打ちの提案 (codex-followup)"
-                  " を押しただけ。\n  その前の発言は別の依頼への答え = 引かない。 承認する変更 (file と何を変えるか) を本人に"
+                  " (/wrap など = command の名前は項目ごとの裁定でない) か、 選択肢 UI (AskUserQuestion) で答えただけ"
+                  " (答えは tool の結果) か、 agent が書いた追い打ちの提案 (codex-followup) を押しただけ。\n"
+                  "  その前の発言は別の依頼への答え = 引かない。 承認する変更 (file と何を変えるか) を本人に"
                   "自分の言葉で 1 行打ってもらってから引く。", file=sys.stderr)
             print_excluded_tags(excluded_tags)
             return 4
@@ -3450,7 +3472,7 @@ def approve_mode(args: argparse.Namespace) -> int:
     said = said if len(said) <= 40 else said[:40] + "…"
     if idx != len(msgs) - 1:
         print(f"approve: --quote が一致したのは著者の最新の発言ではない ({hit[0] or '時刻不明'} 「{said}」、 その後に"
-              f"著者が {len(msgs) - 1 - idx} 回発言している。 slash command の起動も発言に数える)。 記録しない。\n"
+              f"著者が {len(msgs) - 1 - idx} 回発言している。 slash command の起動と選択肢 UI の答えも発言に数える)。 記録しない。\n"
               "  引けるのは記録する時点で最新の著者の発言だけ = 古い発言を別の案の承認に使わない。\n"
               "  この案を著者に示し、 承認の発言を新しく得てから、 その発言を引く。",
               file=sys.stderr)
@@ -5551,6 +5573,39 @@ def selftest() -> int:
         check("approve --latest: 引数つきの起動は本人が打った形 (/name 引数) で引く",
               approve_mode(cns) == 0
               and load_approvals("claude", "sess-c")[-1].get("quote") == "/wrap 概要の 2 文目は削ってよい")
+        # 選択肢 UI (AskUserQuestion) の答えも、 承認の記録では引ける文の無い本人の操作として数える (答えは tool の結果)。
+        # 答えずに message を送った問い・誤りで返った結果・ほかの tool の結果は数えない。 Stop の照合 (既定) は数えない
+
+        def asked(qid: str, when: str) -> dict:
+            return {"type": "assistant", "timestamp": when, "message": {"content": [
+                {"type": "tool_use", "id": qid, "name": "AskUserQuestion", "input": {"questions": []}}]}}
+
+        def answered(qid: str, when: str, answer: str, error: bool = False) -> dict:
+            return {"type": "user", "timestamp": when, "toolUseResult": {"questions": [], "answers": {"Q": answer}},
+                    "message": {"content": [{"type": "tool_result", "tool_use_id": qid, "is_error": error,
+                                             "content": f'The user answered: "Q"="{answer}".'}]}}
+
+        atr = tr_dir / "sess-a.jsonl"
+        append(atr, said("表の色を変えて", iso(-10)), asked("q1", iso(-9)),
+               answered("q1", iso(-8), "[User did not answer this question — they sent a message instead.]"),
+               asked("q2", iso(-7)), answered("q2", iso(-6), "x", error=True),
+               {"type": "assistant", "timestamp": iso(-5), "message": {"content": [
+                   {"type": "tool_use", "id": "b1", "name": "Bash", "input": {}}]}},
+               {"type": "user", "timestamp": iso(-5), "message": {"content": [
+                   {"type": "tool_result", "tool_use_id": "b1", "content": "ok"}]}})
+        check("答えずに送った問い・誤りの結果・ほかの tool の結果は数えない",
+              [t for _, t in user_messages(atr, choice_answers=True)] == ["表の色を変えて"])
+        append(atr, asked("q3", iso(-4)), answered("q3", iso(-3), "案 A (推奨)"))
+        check("選択肢 UI の答えは承認の記録では引ける文の無い発言として数え、 Stop の照合 (既定) では数えない",
+              [t for _, t in user_messages(atr, choice_answers=True)] == ["表の色を変えて", ""]
+              and [t for _, t in user_messages(atr)] == ["表の色を変えて"])
+        ans = argparse.Namespace(session="claude:sess-a", region=["abstract"], change="案 A", quote=None, latest=True,
+                                 file=str(repo / "src" / "main.tex"), transcript=None)
+        check("approve --latest: 最新の入力が選択肢 UI の答えなら、 その前の発言を引かない (exit 4)",
+              approve_mode(ans) == 4 and load_approvals("claude", "sess-a") == [])
+        ans.quote, ans.latest = "表の色を変えて", False
+        check("approve --quote: 選択肢 UI で答えた後は、 その前の発言は引けない (exit 5)",
+              approve_mode(ans) == 5 and load_approvals("claude", "sess-a") == [])
         # Stop: 著者の最新の発言に結んだ承認は、 その後の最後の返事に書くまで 1 回差し戻す
         def stop_rows(path: Path, rows: list[dict]) -> None:
             path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
