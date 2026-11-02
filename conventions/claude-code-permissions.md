@@ -47,6 +47,7 @@ cwd 配下のファイルは確認なしで編集できるのに、cwd の**外*
 - **罠**: 「hook の理由が返った = この path は permission を通った」 と読むと誤る。 hook の案内どおりに直して同じ command を打ち直すと、 今度は deny で落ちる (= 2 手かかるだけでなく、 **1 手目の観察が誤った結論を支える**。 hook を満たす作業 〔中間 file の生成など〕 を先に済ませてしまうと、 その作業ごと無駄になる)
 - **見分け方**: 同じ path を、 その hook の matcher に当たらない形の command で 1 回叩く (= hook を外して permission だけを見る)。 hook が無反応なら返るのは permission の判定そのもの
 - **dialog の log は証拠にならない**: [`--diagnose`](#desktop-permission-dialog-log) が読むのは **dialog として出たもの**だけ。 deny で落ちた call も、 `auto` の classifier が落とした call も残らない = **「履歴に出ない」 は「deny されていない」 の証拠ではない**。 確実なのは `permissions.deny` を直接読むこと
+- <a id="blocked-chain-ran-nothing"></a>**`&&` で繋いだ command を hook が止めると、 前段も走っていない** (実測): PreToolUse の判定は command 全体に対して実行の前に下るので、 止まった時点で鎖のどの段も実行されていない。 止めた理由が後段にあっても、 後段だけを打ち直すと前段 (`git add` など) が抜ける (実測 = 生成物の `git add` が抜けたまま commit・push し、 足りない生成物を 2 本目の commit で足した)。 止められた鎖は最初から打ち直すか、 打ち直す前に `git status` などで前段の効果が無いことを確かめる
 - **∴ 拒否されたときの順序**: ① settings の `deny` を読む ② hook を疑う ([#desktop-permission-dialog-log](#desktop-permission-dialog-log) の「mode を疑う前に hook を疑う」) ③ mode。 hook の理由文が返ってきても ① を飛ばさない
 
 ### <a id="chat-approval-reaches-classifier"></a><a id="chat-consent-does-not-reach-classifier"></a>`auto` では chat の承認が classifier に届く — 操作と対象を名指した承認だけ (公式 docs + 実測)
