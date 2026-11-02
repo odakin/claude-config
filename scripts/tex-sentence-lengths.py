@@ -17,6 +17,9 @@
   - インライン数式 `$...$` と `\\cite` / `\\ref` / `\\eqref` / `\\cref` / `\\label` 類は 1 語として数える。
   - 略語の点 (Ref. Eq. Sec. Fig. App. e.g. i.e. vs. al. cf. など) では切らない。 文末 = `.` `!` `?` の後に空白と
     大文字・`\\`・`$` が続く所、 または空行。 英字の語だけを数える (20 文字未満の断片は捨てる)。
+  - `\\footnote{...}` (`\\footnotetext`・`[n]` つきも) の中身は本文から外し、 脚注の文として別に数える (行番号は脚注を
+    書いた行)。 外さないと、 点の直後の `\\footnote{` では文末にならないので本文の文が脚注の最初の文とつながり、 脚注の
+    最後の `.}` で脚注の最後の文が次の本文の文とつながる (実測: 脚注つきの文が実際より 20 語あまり長く出た)。
   - `--over N` = N 語を超える文を長い順に、 文の始まりの概ねの行番号つきで出す。
   - 閾値の既定 = 30, 40, 50, 60, 80 語 (`--thresholds 40,60` で変える)。
   - `--joins` = `--joins-min` 語以上 (既定 20) の文のうち、 独立した節を `, and` / `, so` / `, but` / `, while` / `, or` /
@@ -38,6 +41,7 @@ from pathlib import Path
 ABBR = r"\b(Ref|Refs|Eq|Eqs|Sec|Secs|Fig|Figs|App|Apps|Tab|cf|e\.g|i\.e|vs|al|Phys|Rev|Lett|Nat|Opt|No|Vol)\."
 DISPLAY = (r"\\begin\{(equation|align|gather|multline|figure|table|tabular|thebibliography|longtable)\*?\}"
            r".*?\\end\{\1\*?\}")
+FOOTNOTE = re.compile(r"\\footnote(?:text)?(?:\[[^\]]*\])?\{")  # \footnotemark・\footnotesize は当たらない
 # --joins: 接続詞の後が節の頭らしい語 (限定詞・代名詞・数式・前置詞) のときだけ数え、 語の並列 (「A, B, or C」) の大半を外す
 JOIN_START = (r"(?:the|a|an|its|it|their|they|we|this|that|these|those|each|every|no|both|any|one|our|MATH|"
               r"inside|outside|below|above|at|in|for|with|from|on|by|there|here|then|only|all|most|neither|nor)\b")
@@ -91,15 +95,25 @@ def clean(t: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
-def sentences(path: Path, macros: list[str]) -> list[tuple[int, int, str]]:
-    """(語数, 行番号, 整えた文) の list。"""
-    text, marks = "", []
-    for n, l in load(path):
-        marks.append((len(text), n))
-        text += l + "\n"
-    text = re.sub(DISPLAY, lambda m: " " * len(m.group(0)), text, flags=re.S)
-    text = strip_macros(text, macros)
-    text = re.sub(ABBR, lambda m: m.group(0).replace(".", "\x00"), text)
+def footnotes(t: str) -> list[tuple[int, int, int]]:
+    """`\\footnote{...}` の (命令の始まり, 中身の始まり, 閉じ括弧の次) の list。 括弧は strip_macros と同じく釣り合いを取る。"""
+    out, i = [], 0
+    while (m := FOOTNOTE.search(t, i)):
+        k, depth = m.end(), 1
+        while k < len(t) and depth:
+            if t[k] == "\\":
+                k += 2
+                continue
+            depth += {"{": 1, "}": -1}.get(t[k], 0)
+            k += 1
+        k = min(k, len(t))
+        out.append((m.start(), m.end(), k))
+        i = k
+    return out
+
+
+def split_text(text: str, base: int, marks: list[tuple[int, int]]) -> list[tuple[int, int, int, str]]:
+    """(text の中の位置 + base, 語数, 行番号, 整えた文) の list。 最後の文末より後ろは切らずに捨てる。"""
     out, pos = [], 0
     for m in re.finditer(r"[.!?](?=\s+[A-Z\\$])|\n\s*\n", text):
         seg, seg_start, pos = text[pos:m.end()], pos, m.end()
@@ -107,10 +121,30 @@ def sentences(path: Path, macros: list[str]) -> list[tuple[int, int, str]]:
         if len(c) < 20:
             continue
         w = len(re.findall(r"[A-Za-z][A-Za-z'\-]*", c))
-        lead = len(seg) - len(seg.lstrip())
-        line = max((n for off, n in marks if off <= seg_start + lead), default=1)
-        out.append((w, line, c))
+        at = base + seg_start + len(seg) - len(seg.lstrip())
+        line = max((n for off, n in marks if off <= at), default=1)
+        out.append((at, w, line, c))
     return out
+
+
+def sentences(path: Path, macros: list[str]) -> list[tuple[int, int, str]]:
+    """(語数, 行番号, 整えた文) の list (原稿の順)。"""
+    text, marks = "", []
+    for n, l in load(path):
+        marks.append((len(text), n))
+        text += l + "\n"
+    text = re.sub(DISPLAY, lambda m: " " * len(m.group(0)), text, flags=re.S)
+    text = strip_macros(text, macros)
+    text = re.sub(ABBR, lambda m: m.group(0).replace(".", "\x00"), text)
+    notes = footnotes(text)
+    main, prev = [], 0
+    for start, _, end in notes:  # 脚注は同じ長さの空白で本文から外す (位置 = 行番号の対応を保つ)
+        main += [text[prev:start], " " * (end - start)]
+        prev = end
+    out = split_text("".join(main) + text[prev:], 0, marks)
+    for _, body, end in notes:  # 脚注の中身は別に切る。 末尾の空行で最後の文も切り出す
+        out += split_text(text[body:max(body, end - 1)] + "\n\n", body, marks)
+    return [(w, line, c) for _, w, line, c in sorted(out)]
 
 
 def joins(sents: list[tuple[int, int, str]], min_words: int) -> list[dict]:
@@ -193,6 +227,22 @@ def selftest() -> int:
     # \{ \} を括弧に数えると、 \phantom{…\Big\{} の閉じない \{ で display が文書の終わりまで伸び、 後ろの 2 文が消える
     if esc["sentences"] != 3:
         print(f"FAIL escaped braces in --display-macro: sentences = {esc['sentences']} (want 3)"); ok = False
+    fbody = ("\\begin{document}\n"
+             "The first sentence ends right before a note.\\footnote{The note opens with its own first sentence here. "
+             "A second sentence closes the note.}\n"
+             "The main text then continues with one more sentence.\n"
+             "A sentence carries a mark\\footnote{A short note in the middle of the text.} and then goes on to its end.\n"
+             "\\end{document}\n")
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "f.tex"
+        p.write_text(fbody, encoding="utf-8")
+        fn = summarize(p, [], [40])
+    # 本文 3 文 + 脚注 3 文。 脚注を外さないと `.\footnote{` と `.}` で文がつながり 3 文 (最長 21 語) になる。
+    # 行番号は 2 語目で引く (文書の最初の文の行は \begin{document} の行になる = 概ねの行なので見ない)
+    lines = {it["text"].split()[1]: it["line"] for it in fn["items"]}
+    want = {"note": 2, "second": 2, "main": 3, "sentence": 4, "short": 4}
+    if fn["sentences"] != 6 or fn["longest"] != 12 or any(lines.get(k) != v for k, v in want.items()):
+        print(f"FAIL footnotes: sentences = {fn['sentences']} longest = {fn['longest']} lines = {lines}"); ok = False
     print("selftest:", "OK" if ok else "FAIL")
     return 0 if ok else 1
 
