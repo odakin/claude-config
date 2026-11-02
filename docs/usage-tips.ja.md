@@ -134,3 +134,12 @@ session 開始時に plan を読んで `[x]` を見たら、 該当 task が **�
 
 - **session 切れる直前に「予定として `[x]`」 を書く**: 次 session の自分 (or 別 Claude session) が誤読の温床。 切れる前に `[ ] (next session で実装)` の方が明示的
 - **`[x] (forward-look)` 等のラベル付き forward-look**: 機械的 grep / reflex 解釈で label を見落として誤読される。 forward-look は `[ ]` のままで運用
+
+## <a id="idle-compaction"></a>11. 「圧縮がやたら多い」 と感じたら: 止まっている間の自動圧縮
+
+長い会話がしばらく止まった後に戻ると、 Claude Code は戻る前に会話を要約へ差し替えることがある (止まっている間に要約を用意しておく機能。 設定 `idleCompaction`、 既定 on)。 そのとき圧縮前の token は窓の上限よりずっと小さいので、 「窓が 1M から 200K に戻ったのでは」 と見える (実測)。
+
+- **見分け方** = `python3 scripts/compaction-report.py --days 4`。 1 行 1 圧縮で、 直前の応答から 60 分以上空いていれば「止まった後」、 窓の上限で起きた圧縮は空きが短く、 圧縮前の token が窓の上限の近く (1M なら 90 万台) になる。 窓の設定そのものは settings.json の `model` (`…[1m]`) で見る
+- **切るなら** settings.json に `"idleCompaction": false` (true を書いても on にはならない = 切るときだけ書く)。 複数の機械で揃えるなら、 settings.json を手で直さず、 session 開始で設定を当て直す仕組みに宣言を置く
+- **代償** = 止まっている間に保存された途中の読み込みは 1 時間ほどで切れる。 切った後は、 休憩の後に長い会話を再開するたびに会話を全部読み直すので、 使用量の上限を早く使う。 文脈が落ちるのが困るか、 使用量が困るかで選ぶ
+- 確かめた範囲 = Claude Code 本体 (2.1.309) の設定の説明と、 会話記録の圧縮の記録 (`compact_boundary` の `preTokens`・`precomputed`)。 何分止まると要約を作り始めるかは記録からは読めない

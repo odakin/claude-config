@@ -134,3 +134,12 @@ When you open a session and read a plan, every `[x]` you encounter should be san
 
 - **Marking `[x]` "as a plan" right before a session ends**: the next self (or another Claude session) will misread it. Use `[ ] (implement next session)` to be explicit instead.
 - **Labeled forward-look like `[x] (forward-look)`**: grep-based / reflex-based reads miss the label. Forward-look entries stay `[ ]`.
+
+## <a id="idle-compaction"></a>11. "Compaction happens far too often": idle compaction
+
+When you come back to a long conversation after a break, Claude Code may swap the conversation for a summary before it continues (a summary prepared while the session sat idle; setting `idleCompaction`, on by default). The pre-compaction token count is then far below the window limit, so it looks as if the window dropped from 1M back to 200K (measured).
+
+- **How to tell** = `python3 scripts/compaction-report.py --days 4`. One line per compaction: a gap of 60 minutes or more since the previous reply reads as "after a break"; a compaction at the window limit has a short gap and a pre-compaction count near the limit (in the 900K range for 1M). Check the window setting itself in settings.json `model` (`…[1m]`)
+- **To turn it off**, put `"idleCompaction": false` in settings.json (writing true does not turn it on — write the key only to turn it off). To keep several machines in line, don't hand-edit settings.json; declare it in whatever re-applies settings at session start
+- **The cost** = the cached prefix saved while idle expires after about an hour. With idle compaction off, resuming a long conversation after a break re-reads the whole conversation and uses up your limit faster. Choose between losing context and spending usage
+- Checked against = the setting's description in the Claude Code binary (2.1.309) and the compaction records in transcripts (`compact_boundary` `preTokens` / `precomputed`). How long a session must sit idle before the summary starts is not visible in the records
