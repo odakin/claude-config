@@ -362,6 +362,13 @@ def selftest():
         check("changed word: a visible added word is not an invisible-layer candidate", r["invisible"] == [])
         r = compare(P("base"), P("split"))["pages"][0]
         check("fill + stroke in one command equals fill and stroke in two", "drawings" not in r["diff_axes"])
+        adj = fitz.open()
+        pa = adj.new_page()
+        pa.draw_rect(fitz.Rect(10, 10, 50, 50), fill=(1, 0, 0), color=None)
+        pa.draw_rect(fitz.Rect(10, 10, 50, 50), color=(0, 0, 1), fill=None)
+        adj.save(P("adjacent"))
+        check("PyMuPDF already reads an adjacent fill and stroke of one path as one fs command",
+              [d["type"] for d in fitz.open(P("adjacent"))[0].get_drawings()] == ["fs"])
         r = compare(P("base"), P("hidden"))["pages"][0]
         check("hidden text layer: added word with no pixel difference is flagged",
               r["invisible"] == ["Ghost"] and r["pixels"]["count"] == 0)
