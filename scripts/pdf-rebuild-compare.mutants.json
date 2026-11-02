@@ -1,0 +1,31 @@
+{
+  "_comment": "pdf-rebuild-compare.py の selftest の foil に歯があることを、 判定の部品を 1 つずつ外した mutant 4 本で確かめる spec (check-foil-teeth.py が読む)。 expect_pass は、 その foil が他の foil の失敗に引きずられずに判定していることを見る。",
+  "target": "pdf-rebuild-compare.py",
+  "run": "python3 {} --selftest",
+  "mutants": [
+    {
+      "name": "同じ位置の「塗りだけ」 と「線だけ」 を 1 つに合わせない",
+      "pairs": [["match = next((s for s in left if s[0] == k and left[s] > 0), None)", "match = None"]],
+      "expect_fail": ["fill + stroke in one command equals fill and stroke in two"],
+      "expect_pass": ["identical rebuild", "hidden text layer"]
+    },
+    {
+      "name": "足された語の位置の画素差を見ない (見えない字層の候補を出さない)",
+      "pairs": [["if pixel_diff_at(p_old, p_new, fitz.Rect(w[:4]), dpi) == 0:", "if False:"]],
+      "expect_fail": ["hidden text layer: added word with no pixel difference is flagged"],
+      "expect_pass": ["changed word: removed and added words named", "fill + stroke in one command"]
+    },
+    {
+      "name": "頁全体のずれを差の軸に入れない",
+      "pairs": [["        axes.append(\"position\")\n", "        pass\n"]],
+      "expect_fail": ["whole-page shift: scale 1 and the translation measured in pt"],
+      "expect_pass": ["whole-page shift: no word added or removed", "identical rebuild"]
+    },
+    {
+      "name": "頁数の違いを判定に入れない",
+      "pairs": [["\"same\": do.page_count == dn.page_count and all(", "\"same\": all("]],
+      "expect_fail": ["page count differs: not same, exit 1"],
+      "expect_pass": ["identical rebuild", "removed image"]
+    }
+  ]
+}
