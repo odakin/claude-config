@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document)
+when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof)
 category: paper
 summary: LaTeX 固有規約（物理リポで参照）
 -->
@@ -1660,6 +1660,7 @@ luatexja は `$過去$` (= 裸の kanji) も accept するが、 標準 idiom �
 ## <a id="texshop-lualatex-and-external-builds"></a>TeXShop で LuaLaTeX 前提の source を開く・外部の build と共存させる
 
 - **LuaLaTeX でしか組めない source (ltjsarticle、 fontspec、 LuaTeX-ja) は先頭に `% !TEX TS-program = lualatex` を書く** (`% !TEX encoding = UTF-8 Unicode` も)。 無いと TeXShop は既定の engine (pdfTeX / uplatex の経路) で typeset してエラーで止まり、 著者には「コンパイル結果が見えない」 になる (実測)。 この行は file を開いた時に読まれるので、 開いたままの文書には効かない = 閉じて開き直す。
+- <a id="texshop-shown-pdf-lsof"></a>**TeXShop がどの PDF を表示しているかは `lsof -c TeXShop -Fn` で分かる** (表示中の PDF を開いたままにしている = `n<実体 path>` の行が出る、 実測)。 「TeXShop が起動中」 だけで「その PDF を TeXShop で見ている」 と決める検査 (Preview で開くのを控える hook など) は、 別の文書を表示中でも当たる (実測)。 比べるのは symlink を解いた実体 path。 file 名の正規化 (NFD) が違うと一致しないので、 外れたときに害の小さい側 (Preview の窓が 1 つ重なる) に倒す
 - **tex に紐づいたプレビュー窓は、 その PDF を外部の build (CLI の lualatex・build script) が書き換えると描画しなくなることがある** (ページ番号は出るのに紙が灰色のまま。 ⌘W → ⌘T の再 typeset・ページ送り・表示形式の切替・ズームでは戻らない、 実測)。 PDF 自体は正常で、 **同じ PDF を独立の書類として開く** (ファイル > 開く、 または `open -a TeXShop <pdf>`) と描画する。 壊れた窓は TeXShop の再起動で消える。 外から組むときは、 著者に「開き直して」 と伝えるか、 TeXShop 側の typeset だけで組む ([#scratch-build-dir](#scratch-build-dir) の aux の競合とは別の症状)。
 
 ## <a id="write-while-author-has-it-open"></a>著者が editor で開いている原稿に書き込む

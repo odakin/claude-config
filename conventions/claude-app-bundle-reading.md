@@ -11,8 +11,8 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 
 | 何 | どこ | 中身 |
 |---|---|---|
-| 画面 (renderer) | `/Applications/Claude.app/Contents/Resources/ion-dist/assets/**/*.js` | minified の JS chunk。 1 行が MB 級 |
-| 画面の文言 | `…/Resources/ion-dist/i18n/<locale>.json` (`ja-JP` / `en-US` 等) | 翻訳 key → 文言。 key は chunk の中に `id:"<key>"` で現れる |
+| 画面 (renderer) | `/Applications/Claude.app/Contents/Resources/ion-dist/assets/**/*.js`。 新しい版 (実測 = app 4.4212.0) は dir でなく `Resources/ion-dist.asar` の中 = 道具が初回に cache へ展開して読む (道具の冒頭) | minified の JS chunk。 1 行が MB 級 |
+| 画面の文言 | `…/Resources/ion-dist/i18n/<locale>.json` (`ja-JP` / `en-US` 等。 新しい版は同じく `ion-dist.asar` の中) | 翻訳 key → 文言。 key は chunk の中に `id:"<key>"` で現れる |
 | main process | `…/Resources/app.asar` | 独自形式の archive。 session の設定 (作業フォルダ等) を決める側 |
 | 埋込 engine (Claude Code) | `~/Library/Application Support/Claude/claude-code/<版>/<hash>/claude.app/Contents/MacOS/claude` (旧い版は `<hash>` の段が無い。 道具は両方を探す) | 単一 binary。 文字列として JS が入っている (entrypoint の一覧、 hook の matcher の当て方など) |
 | 端末の CLI (`claude` command) | `readlink -f "$(command -v claude)"` の先 (native install なら `~/.local/share/claude/versions/<版>`) | 埋込 engine と同じ形の単一 binary (背景 session・設定の項目と既定値・環境変数の読み順など)。 道具は自動では探さない = `--engine <path>` を **subcommand の前に**渡す (`claude-app-bundle.py --engine <path> grep '<語>' --where engine`。 後ろに置くと unrecognized arguments) |
@@ -32,7 +32,7 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 ## <a id="pitfalls"></a>落とし穴
 
 - **素の `grep -o '.{0,80}X.{0,200}'` は時間切れになる** (実測: 120 秒で終わらない)。 1 行が MB 級なので、 python の `re` で bytes に当てて前後だけ切り出す (本道具がそうしている)。 ugrep は長い正規表現で `exceeds complexity limits` になることもある。
-- **画面 (renderer) の JS と文言は手元の `ion-dist` にある**。 app.asar と cache だけを探して「画面は remote から来るので読めない」 と結論しない (実測: この取り違えで、 メニューの訳語を読まずに推測で案内した)。
+- **画面 (renderer) の JS と文言は手元の `ion-dist` にある** (dir か `ion-dist.asar`)。 app.asar と cache だけを探して「画面は remote から来るので読めない」 と結論しない (実測: この取り違えで、 メニューの訳語を読まずに推測で案内した)。 道具の `i18n` / `grep --where renderer` が何も返さないときは、 まず版で置き場所が変わっていないかを `ls …/Resources` で見る (実測: dir が asar に移り、 旧い道具は黙って 0 件を返した)。
 - **同じ関数でも chunk ごとに名前が違う**。 ある chunk の `Se` と別 chunk の `Se` は無関係。 必ず import を辿る。
 - **「コードにそう書いてある」 ≠ 「画面でそうなる」**。 条件が複数 chunk の plugin に散っていると、 読み切れないことがある。 読み切れない・結論が load-bearing なら、 次の実験で画面 1 回に決めさせる。
 - **「見つからない」 ≠ 「読めない」 — 探す語を変える**。 実測: inline code をリンクにする条件は、 markdown の plugin 側から探して見つからず画面実験で決めたが、 後の検収で **描画する側** (mdast の node 型名 `inlineCode` と、 描画した要素の `data-…` 属性名を grep → その component が呼ぶ parser を `resolve`) から入ると、 数 KB の 1 chunk に正規表現ごと読めた。 入口の候補 = 画面の文言 (i18n) / node 型名 / DOM の属性名 / log に出る文言 (main process は失敗を `[…] could not resolve` のように log へ書くので、 **app の log の文言を `--where asar` で探す**と解決関数に直接着く)。
@@ -47,7 +47,7 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 
 ## <a id="instances"></a>実例
 
-- chat のリンクの解決基準 (相対 path は session を始めたフォルダ、 Bash の cd に追従しない / 表示文言と原因の対応) = [`claude-code-permissions.md#chat-link-resolution-base`](claude-code-permissions.md#chat-link-resolution-base)
+- chat のリンクの解決基準 (相対 path は session を始めたフォルダ、 Bash の cd に追従しない / 表示文言と原因の対応) = [`claude-code-permissions.md#chat-link-resolution-base`](claude-code-permissions.md#chat-link-resolution-base)。 右パネルが開くフォルダの範囲 (`additionalDirectories` は数えない) = [`claude-code-permissions.md#chat-link-rendering-scope`](claude-code-permissions.md#chat-link-rendering-scope) = 文言 → 状態の名前 (renderer) → main process の判定関数と根の作り方、 の順に辿り、 `show_pane` の実験で裏付けた
 - 通知音の仕様 (完了通知は常に無音 等) = [`macos-claude-app-notifications.md#app-notification-model`](macos-claude-app-notifications.md#app-notification-model)
 - 思考の要約が出ない仕組み (表示を「思考」 にするまで engine を `--thinking-display omitted` で動かす / メニューの訳語) = [`macos-claude-app-thinking-display.md`](macos-claude-app-thinking-display.md)
 - hook が frontend を見分ける値 (engine の entrypoint 一覧) = [`hook-authoring.md#entrypoint-values`](hook-authoring.md#entrypoint-values)

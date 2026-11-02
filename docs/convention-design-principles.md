@@ -1544,13 +1544,14 @@ origin: 2026-09-12、user「こういうのいちいち聞かれるのうざい�
 signal そのものが載る。 source を grep する / test fixture を読む / doc を diff する — どれも signal を
 含む text を観測 channel に流すので、 検出器は**自分自身の整備に対して鳴く**。
 
-観察 (n=4、 いずれも別々の機構):
+観察 (n=5、 いずれも別々の機構):
 
 | 機構 | 自己発火の経路 |
 |---|---|
 | 検索 null の nudge hook | 検出語 (= shell の glob 失敗 message) を素の部分文字列で探していた → **その hook の source を grep した出力**で発火 |
 | URL 規約の guard | 禁止 pattern を含む自分の source / test / doc が、 そのまま違反例として拾われる |
 | 機密 literal の漏洩 gate | pattern 一覧を gate と同じ repo に置くと、 **一覧そのものが push される** (= 自己発火でなく自己 leak) |
+| 止める印 (escape hatch) を持つ side-effect hook | 止める印の語を turn の会話記録の全体 (tool の出力を含む) で探していた → **その hook の source や規則の文書を読んだ turn で、 hook が丸ごと止まる** (= 自己発火の逆の自己無効化。 印の置き場所は決まっていた = Bash の command の comment と返事なので、 そこだけを見れば足りた = 構造 anchor) |
 | GUI app の dialog を探す probe | 検出語 (= 「アクセス」) が **probe 自身の失敗 message** (= UI を読む許可が無いという error) に含まれ、 UI を 1 つも読めていないのに「dialog あり」 と判定 (= 保守中の text でなく失敗経路の出力。 対策 = 出力を判定に使う前に probe の成否を見る、 [`macos-gui-app-automation.md#dialog-presence-probe`](../conventions/macos-gui-app-automation.md#dialog-presence-probe)) |
 
 **対策は 2 つあり、 効く範囲が違う。 混同すると穴が残る**:

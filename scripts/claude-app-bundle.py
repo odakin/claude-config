@@ -14,6 +14,11 @@
 なぜ grep でなく本 script か: bundle は 1 行が MB 級の minified JS で、 `grep -o '.{0,80}X.{0,200}'` は
 時間切れになる (実測)。 python の re で bytes を読み、 前後だけ切り出す。 app.asar は独自形式で、 中の
 main process の file は展開しないと読めない。
+
+画面側 (renderer の JS と翻訳) の置き場所は版で違う: 旧い版 = Resources/ion-dist/ の dir、 新しい版 = Resources/ion-dist.asar
+(実測、 app 4.4212.0)。 asar しか無ければ、 i18n・grep (renderer)・slice (renderer)・resolve の初回に
+~/Library/Caches/claude-app-bundle/ (env CLAUDE_APP_BUNDLE_CACHE で変更) へ 1 回展開して使う (asar の大きさと mtime が
+変われば作り直し、 古い展開は消す)。 version・asar-ls・--where asar|engine は展開しない。
 """
 from __future__ import annotations
 
@@ -23,12 +28,14 @@ import json
 import mmap
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
 import tempfile
 
 DEFAULT_APP = "/Applications/Claude.app"
+CACHE_ROOT = "~/Library/Caches/claude-app-bundle"
 ENGINE_ROOT = "~/Library/Application Support/Claude/claude-code"
 # 版の dir の直下 (旧) と、 版の下に hash の dir を 1 段挟む形 (claude-code/<版>/<hash>/claude.app、 実測 2.1.29x) の両方
 ENGINE_GLOBS = ("*/claude.app/Contents/MacOS/claude", "*/*/claude.app/Contents/MacOS/claude")
@@ -92,6 +99,41 @@ def asar_read(path: str, node: dict, base: int) -> bytes | None:
         return f.read(int(node["size"]))
 
 
+def renderer_dirs(app: str, cache_root: str | None = None) -> dict:
+    """画面側の {"assets": …, "i18n": …}。 Resources/ion-dist/ の dir が在ればそれ、 無くて ion-dist.asar が在れば
+    cache に展開した dir (冒頭の説明)。 どちらも無ければ dir の path をそのまま返す (呼ぶ側が「無い」 を出す)。"""
+    p = paths(app)
+    base = os.path.dirname(p["assets"])
+    if not os.path.isdir(base) and os.path.isfile(base + ".asar"):
+        base = ion_dist_extracted(base + ".asar", cache_root)
+    return {"assets": os.path.join(base, "assets"), "i18n": os.path.join(base, "i18n")}
+
+
+def ion_dist_extracted(asar: str, cache_root: str | None = None) -> str:
+    st = os.stat(asar)
+    root = os.path.expanduser(cache_root or os.environ.get("CLAUDE_APP_BUNDLE_CACHE") or CACHE_ROOT)
+    out = os.path.join(root, f"ion-dist-{st.st_size}-{int(st.st_mtime)}")
+    if os.path.exists(os.path.join(out, ".complete")):
+        return out
+    for old in glob.glob(os.path.join(glob.escape(root), "ion-dist-*")):
+        if old != out:
+            shutil.rmtree(old, ignore_errors=True)
+    print(f"ion-dist.asar を展開する ({st.st_size // 1_000_000} MB、 初回だけ): {out}", file=sys.stderr)
+    header, base = asar_read_header(asar)
+    for name, node in asar_files(header):
+        if "offset" not in node:  # symlink の node など
+            continue
+        data = asar_read(asar, node, base)
+        if data is None:
+            continue
+        fp = os.path.join(out, name.lstrip("/"))
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        with open(fp, "wb") as f:
+            f.write(data)
+    open(os.path.join(out, ".complete"), "w").close()
+    return out
+
+
 def asar_write(path: str, files: dict[str, bytes]) -> None:
     """selftest 用の最小 asar 書き出し (平らな file 群だけ)。"""
     entries, blob, off = {}, b"", 0
@@ -116,9 +158,10 @@ def grep_sources(where: str, app: str, engine: str | None):
     """(表示名, bytes 相当) を順に返す。"""
     p = paths(app)
     if where == "renderer":
-        for fp in sorted(glob.glob(os.path.join(p["assets"], "**", "*.js"), recursive=True)):
+        assets = renderer_dirs(app)["assets"]
+        for fp in sorted(glob.glob(os.path.join(assets, "**", "*.js"), recursive=True)):
             with open(fp, "rb") as f:
-                yield os.path.relpath(fp, p["assets"]), f.read()
+                yield os.path.relpath(fp, assets), f.read()
     elif where == "asar":
         header, base = asar_read_header(p["asar"])
         for name, node in asar_files(header):
@@ -192,7 +235,7 @@ def i18n_lookup(i18n_dir: str, text: str, locale: str, en: str = "en-US") -> lis
 
 
 def cmd_i18n(args) -> int:
-    rows = i18n_lookup(paths(args.app)["i18n"], args.text, args.locale)
+    rows = i18n_lookup(renderer_dirs(args.app)["i18n"], args.text, args.locale)
     for k, v, e in rows:
         print(f"{k}\t{v}\t{e}")
     return 0 if rows else 1
@@ -259,7 +302,7 @@ def resolve(assets: str, chunk: str, name: str, depth: int = 4) -> list[str]:
 
 
 def cmd_resolve(args) -> int:
-    lines = resolve(paths(args.app)["assets"], args.chunk, args.name)
+    lines = resolve(renderer_dirs(args.app)["assets"], args.chunk, args.name)
     for line in lines:
         print(line)
     return 1 if not lines or "見つからない" in lines[-1] else 0
@@ -367,6 +410,44 @@ def selftest() -> int:
         with contextlib.redirect_stdout(io.StringIO()):
             rc = cmd_resolve(argparse.Namespace(app=app, chunk="nope.js", name="Se"))
         check("resolve: 見つからなければ exit 1", rc == 1)
+
+        # 新しい配置: 画面側が Resources/ion-dist.asar に入っている (dir は無い)
+        app2 = os.path.join(t, "Claude2.app")
+        res2 = os.path.join(app2, "Contents", "Resources")
+        os.makedirs(res2)
+        asar2 = os.path.join(res2, "ion-dist.asar")
+        asar_write(asar2, {
+            "i18n/ja-JP.json": json.dumps({"KEY9": "このファイルはこのセッションのフォルダの外にあります"}, ensure_ascii=False).encode(),
+            "i18n/en-US.json": json.dumps({"KEY9": "This file is outside this session's folders"}).encode(),
+            "assets/v1/view-CCC.js": b'import{Gt as Se}from"./lib-DDD.js";' + b"y" * 3000 + b'id:"KEY9"',
+            "assets/v1/lib-DDD.js": b'function Bq(e){return e}export{Bq as Gt};',
+        })
+        cache = os.path.join(t, "cache")
+        saved = os.environ.get("CLAUDE_APP_BUNDLE_CACHE")
+        os.environ["CLAUDE_APP_BUNDLE_CACHE"] = cache
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                d1 = renderer_dirs(app2)
+                rows = i18n_lookup(d1["i18n"], "フォルダの外", "ja-JP")
+                check("ion-dist.asar: 展開して i18n を引く",
+                      rows == [("KEY9", "このファイルはこのセッションのフォルダの外にあります", "This file is outside this session's folders")])
+                hits = [n for n, buf in grep_sources("renderer", app2, None) if re.search(rb"KEY9", buf)]
+                check("ion-dist.asar: grep --where renderer が展開した chunk を探す", hits == [os.path.join("v1", "view-CCC.js")])
+                check("ion-dist.asar: resolve も展開した chunk を辿る",
+                      any("function Bq(" in l for l in resolve(d1["assets"], "view-CCC.js", "Se")))
+                first = os.path.dirname(d1["assets"])
+                check("ion-dist.asar: 2 回目は展開し直さない (同じ dir)", os.path.dirname(renderer_dirs(app2)["assets"]) == first)
+                os.utime(asar2, (1_700_000_000, 1_700_000_000))
+                second = os.path.dirname(renderer_dirs(app2)["assets"])
+                check("ion-dist.asar: asar が変われば作り直し、 古い展開を消す",
+                      second != first and os.path.isdir(second) and not os.path.exists(first))
+            check("ion-dist.asar: version・--where asar は展開しない (paths は dir の形のまま)",
+                  paths(app2)["assets"] == os.path.join(res2, "ion-dist", "assets"))
+        finally:
+            if saved is None:
+                os.environ.pop("CLAUDE_APP_BUNDLE_CACHE", None)
+            else:
+                os.environ["CLAUDE_APP_BUNDLE_CACHE"] = saved
 
     print("ALL PASS" if not fails else f"{len(fails)} FAIL")
     return 1 if fails else 0
