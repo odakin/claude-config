@@ -14,12 +14,28 @@ mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
                               記録と違う start_session を止める (= 起こし方は掲示板の request が決める)。
   PostToolUse(start_session)  返りの `local_…` の app の記録を読み、 頼んだ model・effort (prompt の「This window must run on
                               <model> at <effort> effort」、 無ければ start_session の引数) と比べる。 違えば additionalContext で
-                              直し方 (set_session_model / set_session_effort → worker の 1 行を待つ → 記録を読む → go) を出し、
+                              直し方 (下の見張りを Bash の run_in_background で出して turn を終える → 見張りが出す 1 行どおり:
+                              記録が違う = set_session_model / set_session_effort の後にもう一度見張る / 合う = go) を出し、
                               起こした session ごとの台帳 (~/.claude/state/session-launch/<session>.json) に残す。
+                              見張りが要る理由 (実測): 起こした側のほかの子が動いていると、 app は子の turn の終わりで起こした側を
+                              起こさない (worker が go 待ちで止まった知らせが本人の次の発言まで届かない)。 背景の Bash の終わりは
+                              ほかの子が動いていても起こした側の新しい turn を始める (child-wrap-check.py `--wait` と同じ仕組み)。
   (start_session の後と go の SendMessage が通る時) 掲示板の launch 記録が detach を求めるとき (request の --detach) だけ、
                               detach_session を出すよう additionalContext で知らせる。 掲示板の既定は worker を依頼元の子のまま
                               置く (一覧で依頼元の下に並ぶ) ので、 記録に detach が無ければ何も言わない。
-  PostToolUse(set_session_model / set_session_effort)  台帳の「頼んだ値」 を起こした側の最新の指定に揃える。
+  PostToolUse(set_session_model / set_session_effort)  台帳の「頼んだ値」 を起こした側の最新の指定に揃える。 起こした時の記録が
+                              頼んだ値と違った worker (= go 待ちで止まる) で、 その見張りが走っていなければ、 見張りの 1 行を出す。
+  `--wait-first-turn <local_…> [--model M] [--effort E] [--since <epoch|ISO>] [--max-minutes N]` (見張り = 起こした側が
+                              Bash の run_in_background で出す): 子の最初の turn が終わる (registry の status が busy・waiting で
+                              なくなり、 turn の終わりが --since 〔既定 = app の記録の作成時刻〕 より後) か、 子が掲示板の依頼を
+                              claim する (go を待たずに仕事に入った) まで待ち、 app の記録の model・effort を頼んだ値 (--model /
+                              --effort、 無ければ台帳) と比べて次の一手を 1 行で出して終わる: 合う = go を送る / 違う =
+                              set_session_* の後にもう一度この見張り (turn が終わっていればすぐ返る) / claim 済み = go は要らない。
+                              子の動きの読み方は child-wrap-check.py の locate / turn_done_after を使う。 時間切れ = exit 3、
+                              子が見つからない = exit 2。
+  `--hook-stop [--stop-mode off|observe|block]` (Stop の hook 用、 既定 = env SESSION_LAUNCH_STOP か observe): 起こした時の
+                              記録が違った worker に、 見張りも go も出さずに turn を終えるとき、 worker ごとに 1 回だけ記録する
+                              (observe = <state>/stop-observe.jsonl) か止める (block)。
   PreToolUse(Agent / Task)    BOARD_FIRST の機械の desktop の session で、 掲示板の worker (prompt に role と request id) か
                               Fable の Agent tool の呼び出しを止める (subagent は一覧に出ない)。 `[subagent-ok: 理由]` で通す。
   PreToolUse(SendMessage)     宛先が台帳で未解決の session なら app の記録を読み直す。 合っていれば通し、 違えば止める。
@@ -54,13 +70,16 @@ PREMIUM_GATE: `~/.claude/session-launch-premium-gate.on` が在るか env SESSIO
 故障は通す (読めない入力・記録が見つからない・例外 = exit 0)。 止めるのは条件が成り立った時だけ。
 env: SESSION_LAUNCH_CHECK_DISABLE=1 / SESSION_LAUNCH_STATE_DIR (test) / CLAUDE_DESKTOP_SESSIONS_DIR (test) /
      SESSION_LAUNCH_BOARD_FIRST_MARKER / SESSION_LAUNCH_PREMIUM_GATE_MARKER (test: the markers' paths) /
-     SESSION_LAUNCH_WAIT (記録を待つ秒、 既定 3)。
+     SESSION_LAUNCH_WAIT (記録を待つ秒、 既定 3) / SESSION_LAUNCH_STOP (`--hook-stop` の mode) /
+     SESSION_LAUNCH_PS_FILE (test: 見張りが走っているかを読む ps の出力の代わり) /
+     SESSION_LAUNCH_WATCH_GRACE (test: 見張りが、 一覧に出ていない子を起動の途中とみなす秒、 既定 90)。
 self-test: python3 scripts/session-launch-check.py --selftest
 理由を後から残す: python3 scripts/session-launch-check.py --note-reason <local_…> '<理由>'
 切替時刻の止めを外す: python3 scripts/session-launch-check.py --clear-stop-at
 """
 from __future__ import annotations
 
+import calendar
 import json
 import os
 import re
@@ -81,6 +100,13 @@ RULE = "claude-config/conventions/multi-session-coordination.md#desktop-start-mo
 DETACH_RULE = "claude-config/conventions/multi-session-coordination.md#worker-surface-visibility"
 OK_TOKEN = "[model-ok]"
 NO_BOARD = "[no-board]"
+WATCH_FLAG = "--wait-first-turn"
+WATCH_MAX_MIN = 30.0     # a worker that stops for `go` ends its first turn within a minute or two (measured)
+WATCH_INTERVAL = 10.0
+WATCH_GRACE_S = 90.0     # a session just started may not be in the live registry yet
+CLAIM_CALL = re.compile(r"board\.py['\"]?\s+claim\b")
+STOP_STATES = ("mismatch", "pending")
+STOP_RECENT_S = 6 * 3600
 MUST_RUN = re.compile(r"must run on (claude-[a-z0-9.-]+?)(?: at ([a-z]+) effort)?[.\s:*]", re.I)
 REQUEST_ID = re.compile(r"request `?(\d{8}T\d{6}Z-[a-z]+-[0-9a-f]{6})`?")
 BOARD_ROOT = re.compile(r"--root (\S+)")
@@ -470,13 +496,30 @@ def post_start(inp: dict) -> str:
     if not rec:
         upsert(sid, local_id, want_model=want_m, want_effort=want_e, state="unknown", title=ti.get("title") or "")
         return (f"[session-launch-check] {local_id} の app の記録がまだ読めない = 何の model で起きたか確かめられていない。"
-                f" 「起きた」 と言う前に python3 ~/Claude/claude-config/scripts/session-model.py {local_id} で読む。")
+                f" 「起きた」 と言う前に python3 ~/Claude/claude-config/scripts/session-model.py {local_id} で読む。"
+                f" 違っていれば worker は go 待ちで止まる = Bash の run_in_background で `{watch_cmd(local_id, want_m, want_e)}` を出す"
+                " (worker の最初の turn の終わりでこの session を起こし、 次の一手を 1 行で出す)。")
     diffs = mismatch(want_m, want_e, rec)
     detach = bool((board_launch_record(ti.get("prompt") or "") or {}).get("detach"))
     upsert(sid, local_id, want_model=want_m, want_effort=want_e, state="mismatch" if diffs else "ok", detach=detach,
            got_model=rec.get("model", ""), got_effort=rec.get("effort", ""), title=ti.get("title") or rec.get("title", ""))
     if not diffs:
         return detach_note(local_id) if detach else ""
+    return ("⚠️ session-launch-check: start_session で起こした session は、 app の記録で "
+            + " / ".join(diffs) + " で起きた。 start_session は呼び元より高い model と受けない effort を黙って捨てる (実測)。"
+            " worker は hand-off 文の model の確かめで最初の turn を止め、 go を待つ。\n"
+            f"  直し方: (1) この turn のうちに Bash の run_in_background で `{watch_cmd(local_id, want_m, want_e)}` を出して"
+            " turn を終える。 ほかの子が動いていると、 app は子の turn の終わりでこの session を起こさない (実測) = 背景の見張りの"
+            " 終わりが起こす。 直すのは worker の最初の turn が終わってから (turn の最中の切り替えは効かなかった例がある)。\n"
+            f"  (2) 見張りが終わったら出た 1 行どおり: 記録が違う = {fix_steps(local_id, want_m, want_e, rec)} を出し、 同じ見張りを"
+            " もう一度 (turn が終わっていればすぐ返る) / 合う = go を送る / worker が掲示板の依頼を claim 済み = go は要らない。\n"
+            f"  記録が合うまで、 この session への SendMessage はこの検査が止める (本人がこの model でよいと言ったなら message に"
+            f" {OK_TOKEN})。 本人に「起きた」 と言うのは記録が合ってから。"
+            + (" go の後に detach_session (掲示板の request の --detach)。" if detach else "") + f" 規約 = {RULE}")
+
+
+def fix_steps(local_id: str, want_m: str, want_e: str, rec: dict) -> str:
+    """The setter calls that bring the app's record to the asked model and effort ('' when nothing differs)."""
     steps = []
     model_off = bool(want_m) and not model_matches(want_m, rec.get("model", ""))
     if model_off:
@@ -484,14 +527,28 @@ def post_start(inp: dict) -> str:
     if want_e and (model_off or want_e != (rec.get("effort") or "").lower()):
         # after a model switch the effort moved to another value (measured), so it is set again even when it matched
         steps.append(f"その後に set_session_effort(session_id={local_id}, effort={want_e})")
-    return ("⚠️ session-launch-check: start_session で起こした session は、 app の記録で "
-            + " / ".join(diffs) + " で起きた。 start_session は呼び元より高い model と受けない effort を黙って捨てる (実測)。\n"
-            f"  直し方: (1) {' と '.join(steps)} を出す (2) worker は hand-off 文の model の確かめで最初の turn を止める = その 1 行の"
-            " 知らせを待つ (worker の turn の最中の切り替えは効かなかった例がある) (3) python3 ~/Claude/claude-config/scripts/"
-            f"session-model.py {local_id} で app の記録が頼んだ値になったのを読む (4) go を送る。\n"
-            f"  記録が合うまで、 この session への SendMessage はこの検査が止める (本人がこの model でよいと言ったなら message に"
-            f" {OK_TOKEN})。 本人に「起きた」 と言うのは (3) の後。"
-            + (" go の後に detach_session (掲示板の request の --detach)。" if detach else "") + f" 規約 = {RULE}")
+    return " と ".join(steps)
+
+
+def watch_cmd(local_id: str, want_m: str = "", want_e: str = "") -> str:
+    """The background watch on a worker's first turn, as the literal command for Bash run_in_background."""
+    return (f"python3 ~/Claude/claude-config/scripts/session-launch-check.py {WATCH_FLAG} {local_id}"
+            + (f" --model {want_m}" if want_m else "") + (f" --effort {want_e}" if want_e else ""))
+
+
+def watch_running(local_id: str) -> bool:
+    """A `--wait-first-turn` watch on this worker is running on this machine (ps; a test reads SESSION_LAUNCH_PS_FILE)."""
+    try:
+        f = os.environ.get("SESSION_LAUNCH_PS_FILE")
+        if f:
+            with open(f, encoding="utf-8") as fh:
+                ps = fh.read()
+        else:
+            import subprocess
+            ps = subprocess.run(["ps", "-ax", "-o", "command="], capture_output=True, text=True, timeout=5).stdout
+    except Exception:
+        return False
+    return any("session-launch-check.py" in ln and WATCH_FLAG in ln and local_id in ln for ln in ps.splitlines())
 
 
 def detach_note(local_id: str) -> str:
@@ -509,11 +566,201 @@ def post_set(inp: dict) -> str:
     hit = next((e for e in load(sid) if e.get("local_id") == local_id), None)
     if hit is None:
         return ""
+    was = hit.get("state")
     if ti.get("model"):
-        upsert(sid, local_id, want_model=ti["model"], state="pending")
+        hit = upsert(sid, local_id, want_model=ti["model"], state="pending")
     if ti.get("effort"):
-        upsert(sid, local_id, want_effort=str(ti["effort"]).lower(), state="pending")
-    return ""
+        hit = upsert(sid, local_id, want_effort=str(ti["effort"]).lower(), state="pending")
+    if was == "ok" or watch_running(local_id) or time.time() - float(hit.get("set_told") or 0) < 120:
+        # a worker started as asked is already at work; a running watch reads the new record when it ends; the model
+        # and the effort setters come in a row, so the line is said once for the pair
+        return ""
+    hit = upsert(sid, local_id, set_told=time.time())
+    return (f"[session-launch-check] {local_id} は起こした時の記録が頼んだ値と違った = worker は go 待ちで止まる。"
+            f" この turn のうちに Bash の run_in_background で `{watch_cmd(local_id, hit.get('want_model', ''), hit.get('want_effort', ''))}`"
+            " を出す (worker の最初の turn が終わる = もう終わっていればすぐ、 この session を起こし、 記録を読み直して次の一手を"
+            f" 1 行で出す: 合う = go / 違う = 直してもう一度)。 go は見張りの 1 行の後に送る。 規約 = {RULE}")
+
+
+# ---- the watch on a worker's first turn (`--wait-first-turn`) and the Stop check (`--hook-stop`) ----
+
+def _child_wrap():
+    """child-wrap-check.py as a module: its locate / turn_done_after read the child's movement (one implementation)."""
+    import importlib.machinery
+    import types
+    path = os.path.join(HERE, "child-wrap-check.py")
+    mod = types.ModuleType("child_wrap_check")
+    mod.__file__ = path
+    importlib.machinery.SourceFileLoader("child_wrap_check", path).exec_module(mod)
+    return mod
+
+
+def _transcript_entries(path: str):
+    try:
+        fh = open(path, encoding="utf-8", errors="replace")
+    except (OSError, TypeError):
+        return
+    with fh:
+        for line in fh:
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(e, dict):
+                yield e
+
+
+def claimed_after(path: str, since: float) -> bool:
+    """The worker ran the board's `claim` after `since` = it went to work without waiting for `go`."""
+    for e in _transcript_entries(path):
+        if e.get("type") != "assistant":
+            continue
+        ts = parse_when(str(e.get("timestamp") or "")) or 0
+        if ts < since:
+            continue
+        for b in (e.get("message") or {}).get("content") or []:
+            if (isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Bash"
+                    and CLAIM_CALL.search(str((b.get("input") or {}).get("command") or ""))):
+                return True
+    return False
+
+
+def last_reply(path: str, width: int = 200) -> str:
+    """The worker's last reply text, on one line (for the launcher to see whether it waits for `go`)."""
+    last = ""
+    for e in _transcript_entries(path):
+        if e.get("type") != "assistant":
+            continue
+        texts = [b.get("text", "") for b in (e.get("message") or {}).get("content") or []
+                 if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip()]
+        if texts:
+            last = " ".join(" ".join(texts).split())
+    return last[:width] + ("…" if len(last) > width else "")
+
+
+def wait_first_turn(argv: list[str]) -> int:
+    import argparse
+    ap = argparse.ArgumentParser(prog="session-launch-check.py " + WATCH_FLAG)
+    ap.add_argument("local_id")
+    ap.add_argument("--model", default="")
+    ap.add_argument("--effort", default="")
+    ap.add_argument("--since", default="", help="epoch seconds or ISO time (default: the app record's creation time)")
+    ap.add_argument("--max-minutes", type=float, default=WATCH_MAX_MIN)
+    ap.add_argument("--interval", type=float, default=WATCH_INTERVAL)
+    a = ap.parse_args(argv)
+    local = a.local_id
+    cw = _child_wrap()
+    launcher = os.environ.get("CLAUDE_CODE_SESSION_ID") or ""
+    hit = next((e for e in load(launcher) if e.get("local_id") == local), {}) if launcher else {}
+    want_m = a.model or hit.get("want_model", "")
+    want_e = (a.effort or hit.get("want_effort", "")).lower()
+    since = None
+    if a.since:
+        try:
+            since = float(a.since)
+        except ValueError:
+            since = parse_when(a.since)
+    if since is None:
+        created = cw._raw_record(ds.find(local)).get("createdAt")
+        since = created / 1000 - 1 if isinstance(created, (int, float)) else time.time() - 120
+    grace = float(os.environ.get("SESSION_LAUNCH_WATCH_GRACE", WATCH_GRACE_S))
+    start = time.time()
+    deadline = start + a.max_minutes * 60
+    claimed, why, c = False, "", None
+    while True:
+        c = cw.locate(local)
+        if c and c.get("path") and claimed_after(c["path"], since):
+            claimed = True
+            break
+        absent = not c or c["status"] == "(not live)"
+        if absent and time.time() - start < grace and not (c and c.get("edge") and c["edge"] > since):
+            done, why = False, "app の一覧にまだ出ていない"
+        else:
+            done, why = cw.turn_done_after(local, since)
+        if done:
+            break
+        if time.time() > deadline:
+            print(f"⌛ session-launch-check: {local} の最初の turn が {a.max_minutes:g} 分たっても終わらない ({why})。"
+                  " worker の窓で許可・入力の確認が出ていないかを本人に見てもらうか、 同じ見張りをもう一度"
+                  f" Bash の run_in_background で: {watch_cmd(local, want_m, want_e)}")
+            return 3
+        time.sleep(a.interval)
+    rec = ds.find(local)
+    if not rec and not c:
+        print(f"⚠️ session-launch-check: {local} が app の記録にも生きている session の一覧にも無い = 起きていない。"
+              " 本人に一覧を見てもらう (start_session の返りの id を確かめる)。")
+        return 2
+    rec = rec or {}
+    title = rec.get("title") or (c or {}).get("title") or local
+    asked = f" (頼んだのは {want_m or '指定なし'} / {want_e or '指定なし'})" if (want_m or want_e) else ""
+    head = (f"🚦 session-launch-check: {title} ({local}) — "
+            + ("掲示板の依頼を claim した = go を待たずに仕事に入った" if claimed else f"最初の turn が終わった ({why})")
+            + f"。 app の記録 = model {rec.get('model') or '?'} / effort {rec.get('effort') or '?'}{asked}")
+    lines = [head]
+    reply = last_reply((c or {}).get("path") or "")
+    if reply:
+        lines.append(f"  worker の最後の 1 行: 「{reply}」")
+    diffs = mismatch(want_m, want_e, rec) if rec else ["app の記録が読めない"]
+    if (c or {}).get("status") == "(not live)" and not claimed:
+        lines.append("  (worker の process がこの機械に無い = 窓が閉じられたか archive された。 go が届かなければ本人に一覧で開いてもらう)")
+    if claimed:
+        if launcher:
+            upsert(launcher, local, state="ok", proceeded=True)
+        lines.append("  次の一手: go は要らない (提出は掲示板の watch で届く)。"
+                     + (f" ただし記録が頼んだ値と違う ({' / '.join(diffs)}) = 本人に 1 行で伝える。" if diffs else ""))
+    elif diffs and rec:
+        lines.append(f"  次の一手: 記録が違う ({' / '.join(diffs)}) = {fix_steps(local, want_m, want_e, rec)} を出し、"
+                     f" 同じ見張りをもう一度 Bash の run_in_background で: {watch_cmd(local, want_m, want_e)}"
+                     " (turn が終わっていればすぐ返る)。 go はまだ送らない。")
+    elif diffs:
+        lines.append(f"  次の一手: app の記録が読めない = python3 ~/Claude/claude-config/scripts/session-model.py {local} で読む。")
+    else:
+        lines.append(f"  次の一手: 記録が頼んだ値と合う = いま SendMessage(to={local}) で go を送る"
+                     " (worker の最後の 1 行が go 待ちでなく問いや報告なら、 go ではなくそれに答える)。")
+    print("\n".join(lines))
+    return 0
+
+
+def hook_stop(inp: dict, mode: str) -> str:
+    """Stop: a worker whose start record differed (it stops for `go`) and has neither a running watch nor a delivered
+    `go` (the ledger is not ok) when the launcher ends its turn. Once per worker and asked values; observe = record."""
+    if mode == "off":
+        return ""
+    sid = inp.get("session_id") or ""
+    now = time.time()
+    entries = [e for e in load(sid) if e.get("state") in STOP_STATES and str(e.get("local_id", "")).startswith("local_")]
+    fresh = []
+    for e in entries:
+        try:
+            age = now - calendar.timegm(time.strptime(str(e.get("updated") or ""), "%Y-%m-%dT%H:%M:%SZ"))
+        except ValueError:
+            continue
+        key = f"{e.get('want_model', '')}|{e.get('want_effort', '')}"
+        if age < STOP_RECENT_S and e.get("stop_noted") != key and not watch_running(e["local_id"]):
+            fresh.append((e, key))
+    if not fresh:
+        return ""
+    for e, key in fresh:
+        upsert(sid, e["local_id"], stop_noted=key)
+    if mode == "observe":
+        try:
+            os.makedirs(state_dir(), exist_ok=True)
+            with open(os.path.join(state_dir(), "stop-observe.jsonl"), "a", encoding="utf-8") as fh:
+                for e, _ in fresh:
+                    fh.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)), "launcher": sid,
+                                         "worker": e["local_id"], "title": e.get("title", ""), "state": e.get("state"),
+                                         "want": [e.get("want_model", ""), e.get("want_effort", "")],
+                                         "got": [e.get("got_model", ""), e.get("got_effort", "")]}, ensure_ascii=False) + "\n")
+        except OSError:
+            pass
+        return ""
+    lines = ["🚦 起こした worker が go 待ちで止まるのに、 見張りも go も出さずに turn を終えようとしている"
+             " (ほかの子が動いていると、 worker が止まった知らせではこの session は起こされない):"]
+    for e, _ in fresh:
+        lines.append(f"- {e.get('title') or e['local_id']} ({e['local_id']}) → Bash の run_in_background で"
+                     f" `{watch_cmd(e['local_id'], e.get('want_model', ''), e.get('want_effort', ''))}`")
+    lines.append(f"この知らせは worker ごとに 1 回だけ。 規約 = {RULE}")
+    return json.dumps({"decision": "block", "reason": "\n".join(lines)}, ensure_ascii=False)
 
 
 def resolve_to(to: str) -> str:
@@ -980,6 +1227,127 @@ def selftest() -> int:
         rc, out, _ = call("PreToolUse", "SendMessage", {"to": lid, "message": "go"}, sid="launcher-4")
         check("pre-send: go passes once fixed → detach_session note", rc == 0 and "detach_session" in out)
 
+        # ---- the watch on a worker's first turn: a launcher whose other children run is not woken by the worker's
+        # stop, so the start and the setters hand it a background watch (measured: the go waited for the owner)
+        saved_sid = os.environ.get("CLAUDE_CODE_SESSION_ID")
+        psf = os.path.join(td, "ps.txt")
+        open(psf, "w").close()
+        os.environ["SESSION_LAUNCH_PS_FILE"] = psf
+        app_rec("claude-opus-5-5", "xhigh")
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session__start_session", st, started, sid="launcher-w")
+        check("post-start: capped → the background watch line comes first",
+              rc == 0 and f"{WATCH_FLAG} {lid} --model claude-fable-5-1 --effort high" in out and "run_in_background" in out
+              and out.index(WATCH_FLAG) < out.index("set_session_model"))
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session_mgmt__set_session_model", {"session_id": lid, "model": "claude-fable-5-1"},
+                          "ok", sid="launcher-w")
+        check("post-set: a worker that waits for go and no watch → the watch line", rc == 0 and WATCH_FLAG in out)
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session_mgmt__set_session_effort", {"session_id": lid, "effort": "high"},
+                          "ok", sid="launcher-w")
+        check("post-set: the effort setter right after the model setter → said once", rc == 0 and out == "")
+        upsert("launcher-w", lid, set_told=0)
+        with open(psf, "w", encoding="utf-8") as fh:
+            fh.write(f"python3 /x/session-launch-check.py {WATCH_FLAG} {lid} --model claude-fable-5-1\n")
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session_mgmt__set_session_effort", {"session_id": lid, "effort": "high"},
+                          "ok", sid="launcher-w")
+        check("post-set: the watch is already running → silent (it reads the new record when it ends)", rc == 0 and out == "")
+        open(psf, "w").close()
+        app_rec("claude-fable-5-1", "high")
+        call("PostToolUse", "mcp__ccd_session__start_session", st, started, sid="launcher-ok")
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session_mgmt__set_session_effort", {"session_id": lid, "effort": "high"},
+                          "ok", sid="launcher-ok")
+        check("post-set: a worker started as asked → silent", rc == 0 and out == "")
+
+        sess, projects = os.path.join(td, "sessions"), os.path.join(td, "projects")
+        os.makedirs(sess)
+        os.makedirs(os.path.join(projects, "-w"))
+        os.environ.update(CLAUDE_SESSIONS_DIR=sess, CLAUDE_PROJECTS_DIR=projects, SESSION_LAUNCH_WATCH_GRACE="0")
+        cli = "bbbbbbbb-0000-4000-8000-000000000002"
+
+        def registry(status: str) -> None:
+            with open(os.path.join(sess, "1.json"), "w", encoding="utf-8") as fh:
+                json.dump({"pid": os.getpid(), "sessionId": cli, "hostSessionId": lid, "cwd": "/w", "status": status}, fh)
+
+        def transcript(*entries: dict) -> None:
+            with open(os.path.join(projects, "-w", cli + ".jsonl"), "w", encoding="utf-8") as fh:
+                for e in entries:
+                    fh.write(json.dumps(e, ensure_ascii=False) + "\n")
+
+        said = {"type": "assistant", "timestamp": "2026-01-02T00:00:50.123Z",
+                "message": {"content": [{"type": "text", "text": "effort が頼んだ値と違うので止まります。 go を待ちます"}]}}
+        turn_end = {"type": "system", "subtype": "stop_hook_summary", "timestamp": "2026-01-02T00:01:00Z"}
+        claim = {"type": "assistant", "timestamp": "2026-01-02T00:00:40Z", "message": {"content": [
+            {"type": "tool_use", "name": "Bash", "input": {"command": f"python3 /e/board.py claim --root {board} --request {rid}"}}]}}
+
+        def watch(*extra: str, sid: str = "launcher-w", since: str = "2026-01-02T00:00:00Z") -> tuple[int, str]:
+            os.environ["CLAUDE_CODE_SESSION_ID"] = sid
+            buf = io.StringIO()
+            limit = [] if "--max-minutes" in extra else ["--max-minutes", "0.01"]  # a broken case ends, not hangs
+            with contextlib.redirect_stdout(buf):
+                rc = wait_first_turn([lid, "--since", since, "--interval", "0.01", *limit, *extra])
+            return rc, buf.getvalue()
+
+        registry("idle")
+        transcript(said, turn_end)
+        app_rec("claude-fable-5-1", "high")
+        rc, out = watch("--model", "claude-fable-5-1", "--effort", "high")
+        check("watch: the first turn ended and the record matches → send go (with the worker's last line)",
+              rc == 0 and "go を送る" in out and "go を待ちます" in out)
+        app_rec("claude-opus-5-5", "xhigh")
+        rc, out = watch("--model", "claude-fable-5-1", "--effort", "high")
+        check("watch: the record still differs → the setters, then the same watch again, no go yet",
+              rc == 0 and "set_session_model" in out and WATCH_FLAG in out and "go はまだ送らない" in out)
+        app_rec("claude-fable-5-1", "high")
+        upsert("launcher-w", lid, want_model="claude-fable-5-1", want_effort="high")
+        rc, out = watch()
+        check("watch: the asked values come from the launcher's ledger when not given", rc == 0 and "go を送る" in out)
+        registry("busy")
+        transcript(claim)
+        rc, out = watch()
+        check("watch: the worker claimed (went to work without go) → no go needed, ledger ok",
+              rc == 0 and "go は要らない" in out and load("launcher-w")[-1]["state"] == "ok")
+        transcript(said)
+        rc, out = watch("--max-minutes", "0.0005")
+        check("watch: still busy → time-out (exit 3) with the same watch to run again", rc == 3 and WATCH_FLAG in out)
+        registry("idle")
+        transcript(said, turn_end)
+        rc, out = watch("--max-minutes", "0.0005", since="2026-01-02T00:05:00Z")
+        check("watch: a turn end before the launch does not count", rc == 3)
+        os.remove(os.path.join(sess, "1.json"))
+        os.environ["SESSION_LAUNCH_WATCH_GRACE"] = "60"
+        rc, out = watch("--max-minutes", "0.0005", since="2026-01-02T00:05:00Z")
+        check("watch: just started and not in the live list yet → keeps waiting (not read as ended)",
+              rc == 3 and "一覧にまだ出ていない" in out)
+        os.environ["SESSION_LAUNCH_WATCH_GRACE"] = "0"
+        os.environ["CLAUDE_CODE_SESSION_ID"] = "launcher-w"
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = wait_first_turn(["local_ffffffff-0000-4000-8000-00000000000f", "--interval", "0.01", "--max-minutes", "0.001"])
+        check("watch: a session that is nowhere → exit 2", rc == 2 and "起きていない" in buf.getvalue())
+
+        # ---- Stop: the launcher ends its turn with neither a watch nor a go for such a worker
+        obs = os.path.join(td, "state", "stop-observe.jsonl")
+        upsert("launcher-s", lid, state="mismatch", want_model="claude-fable-5-1", want_effort="high", title="worker A")
+        check("hook-stop observe: records the worker, says nothing",
+              hook_stop({"session_id": "launcher-s"}, "observe") == "" and os.path.exists(obs) and lid in open(obs, encoding="utf-8").read())
+        upsert("launcher-s2", lid, state="pending", want_model="claude-opus-5-5", want_effort="max", title="worker B")
+        out = hook_stop({"session_id": "launcher-s2"}, "block")
+        check("hook-stop block: a decision with the watch line", '"decision": "block"' in out and WATCH_FLAG in out)
+        check("hook-stop: the same worker and asked values → once", hook_stop({"session_id": "launcher-s2"}, "block") == "")
+        upsert("launcher-s3", lid, state="mismatch", want_model="claude-fable-5-1", want_effort="high")
+        with open(psf, "w", encoding="utf-8") as fh:
+            fh.write(f"python3 /x/session-launch-check.py {WATCH_FLAG} {lid}\n")
+        check("hook-stop: a watch is running → silent", hook_stop({"session_id": "launcher-s3"}, "block") == "")
+        open(psf, "w").close()
+        upsert("launcher-s4", lid, state="ok", want_model="claude-fable-5-1")
+        check("hook-stop: the go went through (ledger ok) → silent / off → silent",
+              hook_stop({"session_id": "launcher-s4"}, "block") == "" and hook_stop({"session_id": "launcher-s3"}, "off") == "")
+        for k in ("SESSION_LAUNCH_PS_FILE", "CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "SESSION_LAUNCH_WATCH_GRACE"):
+            os.environ.pop(k, None)
+        if saved_sid is None:
+            os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
+        else:
+            os.environ["CLAUDE_CODE_SESSION_ID"] = saved_sid
+
         os.environ["SESSION_LAUNCH_BOARD_FIRST"] = "1"
         saved_ep = os.environ.get("CLAUDE_CODE_ENTRYPOINT")
         os.environ["CLAUDE_CODE_ENTRYPOINT"] = "claude-desktop"
@@ -1198,5 +1566,19 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--clear-stop-at":
         _sid = os.environ.get("CLAUDE_CODE_SESSION_ID") or (sys.argv[2] if len(sys.argv) > 2 else "")
         print("cleared" if _sid and clear_stop_at(_sid) else "no stop time recorded for this session")
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] == WATCH_FLAG:
+        sys.exit(wait_first_turn(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] == "--hook-stop":
+        if os.environ.get("SESSION_LAUNCH_CHECK_DISABLE") == "1":
+            sys.exit(0)
+        _mode = sys.argv[sys.argv.index("--stop-mode") + 1] if "--stop-mode" in sys.argv[:-1] else (
+            os.environ.get("SESSION_LAUNCH_STOP") or "observe")
+        try:
+            _out = hook_stop(json.loads(sys.stdin.read() or "{}"), _mode)
+        except Exception:
+            _out = ""  # fail-open
+        if _out:
+            print(_out)
         sys.exit(0)
     sys.exit(main(workflow_gate="--workflow-gate" in sys.argv))
