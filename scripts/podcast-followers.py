@@ -12,6 +12,8 @@ sign-in page back to /auth/csrf, with the saved cookies; a password form there m
 amazon.com login itself is gone). An unattended job can write refreshed state to
 --auth-overlay (a machine-local directory) instead of a distributed/read-only auth-dir;
 whichever copy is newer is read, so a re-entered auth-dir wins again.
+Each result carries an auth_trace (names and lifetimes of the cookies the responses set, never their values,
+and the age of the owner's copy) so a scheduled job can log what a read renews and how long a login lasts.
 Unofficial routes and schemas: openpodcast/spotify-connector (authentication,
 metadata), openpodcast/apple-connector (showTrendsV2), openpodcast/api
 (fixtures/appleTrendsFollowers*.json). Amazon uses the dashboard's
@@ -110,6 +112,48 @@ def set_cookie_pair(header):
     if not sep or not name or not value or any(ord(c) < 33 or ord(c) > 126 for c in name + value):
         return None
     return name, value
+
+
+def set_cookie_lifetime(header, now=None):
+    """(name, lifetime) of a Set-Cookie header for the auth trace; the value is never kept. lifetime = seconds until
+    expiry (Max-Age wins over Expires), None for a session cookie, 0 for a deletion. A long hex run in the name (a
+    per-account cookie name) is shortened to '…'. None when the header has no name."""
+    first, _, attrs = header.partition(";")
+    name, sep, value = first.partition("=")
+    name = re.sub(r"[0-9A-Fa-f]{12,}", "…", name.strip())
+    if not sep or not name or any(ord(c) < 33 or ord(c) > 126 for c in name.replace("…", "")):
+        return None
+    if not value.strip():
+        return name, 0
+    max_age, expires = None, None
+    for attr in attrs.split(";"):
+        key, _, raw = attr.strip().partition("=")
+        key = key.strip().lower()
+        if key == "max-age" and re.fullmatch(r"-?\d{1,12}", raw.strip()):
+            max_age = int(raw.strip())
+        elif key == "expires":
+            import email.utils
+            try:
+                expires = email.utils.parsedate_to_datetime(raw.strip())
+            except (TypeError, ValueError, IndexError):
+                expires = None
+    if max_age is not None:
+        return name, max(max_age, 0)
+    if expires is not None:
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=dt.timezone.utc)
+        left = (expires - (now or dt.datetime.now(dt.timezone.utc))).total_seconds()
+        return name, max(int(left), 0)
+    return name, None
+
+
+def lifetime_label(seconds):
+    """'session' / 'deleted' / '3.0h' / '29.9d' for the trace (hours below two days)."""
+    if seconds is None:
+        return "session"
+    if seconds <= 0:
+        return "deleted"
+    return f"{seconds / 3600:.1f}h" if seconds < 172800 else f"{seconds / 86400:.1f}d"
 
 
 def refreshed_fields(site, fields, set_cookies):
@@ -273,6 +317,7 @@ class Client:
         self.site = site
         self.opener = urllib.request.build_opener(NoRedirect())
         self.set_cookies = {}   # name -> value handed back by responses; folded into the saved fields after a successful read
+        self.cookie_trace = {}  # name -> lifetime in seconds (None = session cookie); names and lifetimes only, for measuring
 
     def _check(self, url):
         p = urllib.parse.urlsplit(url)
@@ -286,6 +331,9 @@ class Client:
             pair = set_cookie_pair(line)
             if pair:
                 self.set_cookies[pair[0]] = pair[1]
+            meta = set_cookie_lifetime(line)
+            if meta:
+                self.cookie_trace[meta[0]] = meta[1]
 
     def hop(self, url, headers=None):
         """One request without following redirects: (status, absolute Location or None). The request and every
@@ -488,7 +536,22 @@ def persist_refresh(site, root, before, fields, set_cookies, overlay=None):
     return True
 
 
+def auth_trace(site, root, client, note=""):
+    """What the read learned about the session, without values: the cookies the responses set (name -> lifetime),
+    whether Amazon's token was re-minted and the saved auth refreshed, and how many hours ago the owner's copy
+    (root/<site>.json) was written. Logged by unattended runs to measure how long each login lasts."""
+    try:
+        entered = (Path(root) / (site + ".json")).lstat().st_mtime
+        entered_age_h = round((dt.datetime.now().timestamp() - entered) / 3600, 1)
+    except OSError:
+        entered_age_h = None
+    cookies = getattr(client, "cookie_trace", None)
+    return {"set_cookies": {k: lifetime_label(v) for k, v in sorted(cookies.items())} if isinstance(cookies, dict) else {},
+            "reminted": "re-minted" in note, "refreshed": "refreshed" in note, "entered_age_h": entered_age_h}
+
+
 def collect(site, root, show, start="2017-09-19", today=None, client=None, overlay=None):
+    client = client or (Client(site) if site in FIELDS else None)
     try:
         if site not in FIELDS or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", show):
             raise ReadError("show_id_invalid")
@@ -497,15 +560,15 @@ def collect(site, root, show, start="2017-09-19", today=None, client=None, overl
             raise ReadError("date_range_invalid")
         fields = load_auth(Path(root), site, overlay)
         before = dict(fields)
-        client = client or Client(site)
         n, note = {"spotify": spotify, "amazon": amazon, "apple": apple}[site](client, fields, show, start, today)
         if persist_refresh(site, Path(root), before, fields, getattr(client, "set_cookies", {}), overlay):
             note += " (saved auth refreshed)"
-        return {"site": site, "count": n, "status": "not_disclosed" if n == "-" else "ok", "note": note}
+        return {"site": site, "count": n, "status": "not_disclosed" if n == "-" else "ok", "note": note,
+                "auth_trace": auth_trace(site, root, client, note)}
     except ReadError as e:
-        return {"site": site, "count": None, "status": str(e)}
+        return {"site": site, "count": None, "status": str(e), "auth_trace": auth_trace(site, root, client)}
     except (KeyError, TypeError, AttributeError, ValueError, OverflowError):
-        return {"site": site, "count": None, "status": "response_shape_changed"}
+        return {"site": site, "count": None, "status": "response_shape_changed", "auth_trace": auth_trace(site, root, client)}
 
 
 def render_history_chart(points, series, output_stem, *, title, subtitle="", footnote="", unit="Followers"):
@@ -700,6 +763,14 @@ def selftest():
                              {"cookie": "a=1; b=9; c=3", "csrf_token": "t"})
             self.assertEqual(refreshed_fields("apple", {"myacinfo": "m", "itctx": "old"}, {"itctx": "new", "other": "x"}),
                              {"myacinfo": "m", "itctx": "new"})
+            now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+            self.assertEqual(set_cookie_lifetime("a=1; Max-Age=3600; Expires=Thu, 01 Jan 2099 00:00:00 GMT", now), ("a", 3600))
+            self.assertEqual(set_cookie_lifetime("a=1; Path=/; Expires=Fri, 02 Jan 2026 00:00:00 GMT", now), ("a", 86400))
+            self.assertEqual(set_cookie_lifetime("a=1; Path=/; HttpOnly", now), ("a", None))
+            self.assertEqual(set_cookie_lifetime("a=; Max-Age=0", now), ("a", 0))
+            self.assertEqual(set_cookie_lifetime("DES0123456789abcdef0123=x; Max-Age=60", now), ("DES…", 60))
+            self.assertIsNone(set_cookie_lifetime("nameonly", now))
+            self.assertEqual([lifetime_label(s) for s in (None, 0, 3600, 30 * 86400)], ["session", "deleted", "1.0h", "30.0d"])
         def test_amazon_refresh(self):
             class Bounce:
                 def __init__(self):
@@ -765,9 +836,16 @@ def selftest():
                     def request(self, url, headers=None, **kw):
                         assert "itctx=old" in headers["Cookie"]
                         return {"measure": "FOLLOWERS", "allTimeFollowers": {"all": {"current": 4}}}
-                out = collect("apple", root, "123", client=Fake(), overlay=overlay)
+                fake = Fake()
+                fake.cookie_trace = {"itctx": 1800, "other": None}
+                out = collect("apple", root, "123", client=fake, overlay=overlay)
                 self.assertEqual((out["status"], out["count"]), ("ok", 4))
                 self.assertIn("refreshed", out["note"])
+                trace = out["auth_trace"]
+                self.assertEqual(trace["set_cookies"], {"itctx": "0.5h", "other": "session"})
+                self.assertTrue(trace["refreshed"] and not trace["reminted"])
+                self.assertIsInstance(trace["entered_age_h"], float)
+                self.assertNotIn("new", json.dumps(trace))                                                # never a value
                 self.assertEqual(load_auth(root, "apple"), {"myacinfo": "m", "itctx": "old"})            # the base is untouched
                 self.assertEqual(load_auth(root, "apple", overlay), {"myacinfo": "m", "itctx": "new"})   # the newer overlay is read
                 self.assertEqual((overlay / "apple.json").stat().st_mode & 0o777, 0o600)
