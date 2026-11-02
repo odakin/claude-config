@@ -66,6 +66,7 @@ NOT_TURN_HEADS = ("Base directory for this skill", "This session is being contin
                   "<local-command", "Another Claude session", "Stop hook feedback", "[Request interrupted")
 PENDING_EVIDENCE = re.compile(r"対象外|扱わない|触れない|未検算|未導出|未検証|未記録|未確認|今後|保留|out of scope|not covered|\bTODO\b", re.I)
 BLOCK_MARK = "返事にしか無い知見の照合が通っていません"
+WRAP_MARK = re.compile(rb"<command-name>/wrap</command-name>|skills[/\\]+wrap\b|\"skill\": ?\"(?:[\w-]+:)?wrap\"")
 STATUS = {"記録済み": "recorded", "recorded": "recorded", "足した": "added", "added": "added",
           "記録しない": "skip", "不要": "skip", "skip": "skip"}
 
@@ -192,7 +193,7 @@ def tail_entries(path, max_bytes=4_000_000):
         size = f.tell()
         f.seek(max(0, size - max_bytes))
         raw = f.read()
-    if b"wrap" not in raw:
+    if not WRAP_MARK.search(raw):  # 「wrap」 だけでは絞れない (desktop は毎 turn wrap_up を呼ぶ)
         return []
     lines = raw.split(b"\n")
     if size > max_bytes:
@@ -485,6 +486,12 @@ def selftest():
         expect("末尾から締めを判定", stop_check(tail) is not None, True)
         p.write_text(json.dumps(human("進めて")) + "\n", encoding="utf-8")
         expect("締めの印が無ければ読まない", tail_entries(p), [])
+        box = {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "w", "name": "mcp__ccd_turn__wrap_up", "input": {}}]}}
+        p.write_text(json.dumps(human("進めて")) + "\n" + json.dumps(box) + "\n", encoding="utf-8")
+        expect("turn 終わりの箱 (wrap_up) は締めの印にしない", tail_entries(p), [])
+        sk = {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "wrap"}}]}}
+        p.write_text(json.dumps(human("仕上げて")) + "\n" + json.dumps(sk) + "\n", encoding="utf-8")
+        expect("Skill の起動は締めの印", len(tail_entries(p)), 2)
 
     print("selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
