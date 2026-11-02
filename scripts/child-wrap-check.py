@@ -22,8 +22,9 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
   - 本人待ちの問い: 子の turn が本人待ちで終わった最後の時点 (子の wrap_up の ask / blocked、 親の記録の
     「… finished a turn and then reported that it was waiting on the user」 の知らせより前の子の最後の応答) より後に、
     子の窓に本人の発言 (人の入力。 別 session の message・hook の差し戻し・task の通知・API の誤りの後の「Try again」 は
-    数えない) があるか。 **hand-off の手順 0 で止まった turn は数えない** = その turn で model・effort の確かめ
-    (`session-model.py self`) が走り、 掲示板の claim が続かずに終わった turn は、 依頼元の go を待つ停止で本人待ちではない
+    数えない) があるか。 **hand-off の手順 0 で止まった turn は数えない** = 掲示板の hand-off (「This window must run on
+    <model> at <effort> effort」 の行) で始まった窓で、 その turn で model・effort の確かめ (`session-model.py self`) が走り、
+    掲示板の claim が続かずに終わった turn は、 依頼元の go を待つ停止で本人待ちではない
     (app は親にそれも「本人待ち」 と知らせる。 実測: go の後に仕事も wrap も済んだ worker が、 手順 0 の停止を
     「本人待ちの問い」 と読まれて畳む照合と archive の hook で止まった)。 go がまだ届いていない (その停止の後に親の message が
     無い) 子は「依頼元の go 待ち」 として別の理由で残す (archive の hook が読む owner_reasons には入れない)
@@ -108,6 +109,9 @@ RECENT_REQUEST_MIN = 30  # --wait: a parent's wrap request older than this (befo
 # follows it when they match: a turn that ran the first and not the second waits for the requester's go, not the person.
 STEP0_CHECK = re.compile(r"session-model\.py['\"]?\s+self\b")
 CLAIM_RUN = re.compile(r"board\.py['\"]?\s+claim\b")
+# Only a window started with the board's hand-off has a step 0 (its line "This window must run on <model> at <effort>
+# effort"); the first prompt arrives as an sdk prompt, not as the person's, so it is read from the user entries' text.
+STEP0_HANDOFF = re.compile(r"must run on \S+ at \S+ effort")
 DELIVERY_GRACE_S = 60  # --wait without a recent request: the first seconds wait for the request to land in the child's window
 MAX_COMMITS = 30
 RETRY_TEXTS = {"Try again"}  # the app's retry after an API error (measured on the desktop app)
@@ -210,7 +214,7 @@ def scan_child(path: str, as_of: str = "") -> dict:
     """Events from the child's transcript (timestamps): first entry, replies, turn ends, prompts of the person, asks, wrap runs.
     The app's retry line after an API error ("Try again") goes to `retries`, not to the person's prompts."""
     out = {"first": "", "replies": [], "stops": [], "human": [], "said": [], "peers": [], "asks": [], "wraps": [],
-           "retries": [], "peer_wraps": [], "model_checks": [], "claims": []}
+           "retries": [], "peer_wraps": [], "model_checks": [], "claims": [], "step0_handoff": False}
     try:
         fh = open(path, encoding="utf-8", errors="replace")
     except (OSError, TypeError):
@@ -236,6 +240,10 @@ def scan_child(path: str, as_of: str = "") -> dict:
             if kind == "system" and e.get("subtype") == "stop_hook_summary":
                 out["stops"].append(ts)
                 continue
+            if kind == "user" and not out["step0_handoff"]:
+                c0 = (e.get("message") or {}).get("content")
+                t0 = c0 if isinstance(c0, str) else " ".join(b.get("text", "") for b in (c0 or []) if isinstance(b, dict))
+                out["step0_handoff"] = bool(STEP0_HANDOFF.search(t0))
             said = _bw._human_text(e)
             if said:
                 if api_error and said.strip() in RETRY_TEXTS:
@@ -304,7 +312,10 @@ def _wait_points(ev: dict, notes: list[str]) -> list[tuple[str, str]]:
 
 def step0_turn(ev: dict, at: str) -> bool:
     """The turn that ended waiting at `at` is the hand-off's step 0: it ran the model check and no board claim after it
-    (a worker whose model and effort match claims in the same turn). Such a stop waits for the requester's go."""
+    (a worker whose model and effort match claims in the same turn), in a window the board's hand-off started (only it
+    has a step 0). Such a stop waits for the requester's go."""
+    if not ev.get("step0_handoff"):
+        return False
     starts = [t for t in ev["human"] if t < at] + [t for t, _ in ev["peers"] if t < at] + ([ev["first"]] if ev["first"] else [])
     start = max((t for t in starts if t <= at), default="")
     checks = [m for m in ev["model_checks"] if start <= m <= at]
@@ -1214,7 +1225,8 @@ def selftest() -> int:
             return {"type": "assistant", "timestamp": ts, "message": {"content": [
                 {"type": "tool_use", "id": "b", "name": "Bash", "input": {"command": cmd}}]}}
 
-        step0 = [u("2026-01-01T00:00:00Z", "board の worker として", origin={"kind": "human"}),
+        step0 = [{"type": "user", "timestamp": "2026-01-01T00:00:00Z", "promptSource": "sdk", "message": {"role": "user", "content":
+                  "board の worker として。 This window must run on opus at max effort. 0. session-model.py self を読み、 違えば止まる"}},
                  bash("2026-01-01T00:00:05Z", "python3 /x/session-model.py self; echo ---"),
                  reply("2026-01-01T00:00:10Z", ask="effort を直してから go を"), stop("2026-01-01T00:00:12Z")]
         gw_note = u("2026-01-01T00:00:20Z", f"<system-reminder>\nThe session \"g\" you started ({gw_l}) {WAIT_NOTE}. It reported\n</system-reminder>")
@@ -1253,6 +1265,13 @@ def selftest() -> int:
         transcript(gw_c, no_board)
         ok("control: a worker that never claims (no board) checked its model in an earlier turn → its later ask stays",
            bool(check_child(gw_l, need_wrap=False)["open_ask"]))
+        no_handoff = [u("2026-01-01T00:00:00Z", "これを調べて", origin={"kind": "human"}),
+                      bash("2026-01-01T00:00:05Z", "python3 /x/session-model.py self"), reply("2026-01-01T00:00:10Z", ask="どちらにしますか"),
+                      stop("2026-01-01T00:00:12Z"), peer("2026-01-01T00:05:00Z", "B で", parent_l)]
+        transcript(gw_c, no_handoff)
+        r = check_child(gw_l, need_wrap=False)
+        ok("control: no board hand-off in the window, the model check and an ask in its first turn → the person's ask stays",
+           bool(r["open_ask"]) and not r["go_wait"])
         transcript(parent_c, notes)
         sf_l, sf_c = "local_66666666-0000-4000-8000-000000000000", "66666666-cccc-4000-8000-000000000000"
         record(sf_l, sf_c, parent_l)
