@@ -420,132 +420,111 @@ def list_all(d):
 
 
 def selftest():
+    """check ごとに `[PASS] <label>` / `[FAIL] <label>` を 1 行出す (歯の確かめ = 同じ dir の
+    surface-spawn-results.mutants.json を check-foil-teeth.py が読む)。 文と値はすべて合成。"""
     import tempfile
-    fails = []
+    results = []
+
+    def check(label, ok):
+        results.append(bool(ok))
+        print(f"[{'PASS' if ok else 'FAIL'}] {label}")
+
     saved = {k: os.environ.get(k) for k in ("CLAUDE_LEAK_SOURCES", "CLAUDE_SPAWN_RESULTS_CMD",
                                              "CLAUDE_SPAWN_RESULTS_BASE")}
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
-        # 空 → 沈黙
-        if surface(d) != "":
-            fails.append("empty dir should surface ''")
-        # record done → surface に出る
+        check("空の dir では何も出さない", surface(d) == "")
         record(d, "TOKA", "done", "SoT 監査", "plans/x.md", "3 件 drift 検出。", "依頼元")
         s = surface(d)
-        if "TOKA" not in s and "SoT 監査" not in s:
-            fails.append("done marker not surfaced")
-        if "→ plans/x.md" not in s:
-            fails.append("result_path not in surface")
-        if "3 件 drift 検出。" not in s:
-            fails.append("summary not in surface")
-        # consume → 沈黙
-        if not consume(d, "TOKA"):
-            fails.append("consume returned False")
-        if surface(d) != "":
-            fails.append("consumed marker still surfaced")
-        # consume 冪等
-        if not consume(d, "TOKA"):
-            fails.append("idempotent consume failed")
-        # failed が done より上に出る (順序)
+        check("done の marker を出す", "SoT 監査" in s)
+        check("result_path を出す", "→ plans/x.md" in s)
+        check("summary の 1 行目を出す", "3 件 drift 検出。" in s)
+        check("consume すると出さない", consume(d, "TOKA") and surface(d) == "")
+        check("consume は冪等", consume(d, "TOKA") is True)
         record(d, "TOKB", "done", "task B", "p/b.md", "ok", "")
         record(d, "TOKC", "failed", "task C", "p/c.md", "error: boom", "")
         s = surface(d)
-        if s.index("task C") > s.index("task B"):
-            fails.append("failed should sort above done")
+        check("failed を done より上に並べる", s.index("task C") < s.index("task B"))
         # 「受け取ったら」 行は呼び元が渡した起動の形を出す (shim が自分の path を渡す)
         os.environ["CLAUDE_SPAWN_RESULTS_CMD"] = "python3 /x/shim.py"
-        if "python3 /x/shim.py --consume <token>" not in surface(d):
-            fails.append("CLAUDE_SPAWN_RESULTS_CMD not used in the consume hint")
+        check("受け取りの案内に CLAUDE_SPAWN_RESULTS_CMD を使う",
+              "python3 /x/shim.py --consume <token>" in surface(d))
         os.environ.pop("CLAUDE_SPAWN_RESULTS_CMD", None)
-        # 壊れた marker は skip、 健全分は出る
         (d / "broken.yaml").write_text(": : : not yaml\n\t- [", encoding="utf-8")
-        s2 = surface(d)
-        if "task C" not in s2:
-            fails.append("broken marker broke surfacing (should fail-open)")
-        # 未知 token consume は False
-        if consume(d, "NOPE") is not False:
-            fails.append("consume of missing token should be False")
+        check("壊れた marker を飛ばして残りを出す", "task C" in surface(d))
+        check("無い token の consume は False", consume(d, "NOPE") is False)
         # result_path が dir で HANDOFF.md を含む → 📎 行が出る / 含まない dir → 出ない
         rd = d / "resultdir"; rd.mkdir()
         record(d, "TOKD", "done", "task D", str(rd), "sandbox review", "")
-        if "HANDOFF.md" in surface(d):
-            fails.append("HANDOFF hint shown without HANDOFF.md")
+        check("HANDOFF.md が無ければ案内しない", "HANDOFF.md" not in surface(d))
         (rd / "HANDOFF.md").write_text("# handoff\n", encoding="utf-8")
-        if "📎 HANDOFF.md あり" not in surface(d) or str(rd / "HANDOFF.md") not in surface(d):
-            fails.append("HANDOFF.md present but not surfaced")
+        s = surface(d)
+        check("HANDOFF.md があれば案内する", "📎 HANDOFF.md あり" in s and str(rd / "HANDOFF.md") in s)
         # 相対の result_path は CLAUDE_SPAWN_RESULTS_BASE の下 (とその直下の dir) で解決する
         (d / "repoA" / "plans").mkdir(parents=True)
         (d / "repoA" / "plans" / "r.md").write_text("x\n", encoding="utf-8")
         os.environ["CLAUDE_SPAWN_RESULTS_BASE"] = str(d)
-        if _resolve_result("plans/r.md") != d / "repoA" / "plans" / "r.md":
-            fails.append("relative result_path not resolved under CLAUDE_SPAWN_RESULTS_BASE")
+        check("相対の result_path を基点の下で解決する",
+              _resolve_result("plans/r.md") == d / "repoA" / "plans" / "r.md")
         os.environ.pop("CLAUDE_SPAWN_RESULTS_BASE", None)
     # ---- marker schema の縛り ----
-    # 他の case と marker が混ざらないよう、専用の temp dir で回す。 文はすべて合成。
+    # 他の case と marker が混ざらないよう、専用の temp dir で回す。
     with tempfile.TemporaryDirectory() as td2:
         d2 = Path(td2)
         # 偽の「機密として宣言された作業 dir」 を仕立てる (= 実環境に依存しない)
         work = d2 / "work"; (work / "src").mkdir(parents=True)
         prose = "この段落は自己検査のためだけに組んだ合成の文で、どの実在の文書にも由来しない。" * 2
         (work / "src" / "q.tex").write_text(prose, encoding="utf-8")
+        (work / "src" / "short.txt").write_text("x\n", encoding="utf-8")
         (work / ".leak-patterns").write_text("# index: **\n", encoding="utf-8")
         ptr = d2 / "sources.txt"; ptr.write_text(str(work) + "\n", encoding="utf-8")
         os.environ["CLAUDE_LEAK_SOURCES"] = str(ptr)
 
-        # (a) 機密 dir 配下の成果物 = task/summary/result_path を落とす
         nt = []
         record(d2, "TCONF", "done", "機密文書の盲検", str(work / "src" / "q.tex"),
                "重大 4 件。最重要は…", "", notes=nt)
         y = _load_yaml(d2 / "TCONF.yaml") or {}
-        if y.get("result_path") or "盲検" in str(y.get("task")) or "重大" in str(y.get("summary")):
-            fails.append("機密扱いなのに task/summary/result_path が残っている")
-        if not nt:
-            fails.append("機密扱いにしたことを呼び出し元に伝えていない")
-        # (b) 相対の通常成果物は縛らない
+        check("機密 dir の下の成果物は task・summary・result_path を落とす",
+              not y.get("result_path") and "盲検" not in str(y.get("task"))
+              and "重大" not in str(y.get("summary")))
+        check("機密扱いにしたことを呼び出し元に伝える", bool(nt))
+        # 中身が索引に当たらない短い file でも、 機密 dir の下なら path だけで縛る
+        record(d2, "TSHORT", "done", "機密の短い file", str(work / "src" / "short.txt"), "要旨", "")
+        check("機密 dir の下なら中身が索引に無くても縛る",
+              not (_load_yaml(d2 / "TSHORT.yaml") or {}).get("result_path"))
         record(d2, "TNORM", "done", "SoT 監査", "some-repo/plans/x.md", "3 件検出。", "")
         y = _load_yaml(d2 / "TNORM.yaml") or {}
-        if y.get("result_path") != "some-repo/plans/x.md" or "3 件検出" not in str(y.get("summary")):
-            fails.append("通常の成果物まで縛ってしまっている")
-        # (c) summary が長すぎる = marker の報告書化を拒む
+        check("相対の通常の成果物は縛らない",
+              y.get("result_path") == "some-repo/plans/x.md" and "3 件検出" in str(y.get("summary")))
         try:
             record(d2, "TLONG", "done", "t", "some-repo/a.md", "あ" * (SUMMARY_MAX + 1), "")
-            fails.append("上限超えの summary を受け入れてしまった")
+            check("上限を超える summary を拒む", False)
         except ValueError:
-            pass
-        # (d) 明示 opt-out は尊重する
+            check("上限を超える summary を拒む", True)
         tgt = str(work / "src" / "q.tex")
         record(d2, "TOPT", "done", "検品", tgt, "要旨", "", allow_confidential_text=True)
-        if (_load_yaml(d2 / "TOPT.yaml") or {}).get("result_path") != tgt:
-            fails.append("--not-confidential が効いていない")
-
-        # (e) 機密 dir の外にある成果物でも、 中身が機密索引に一致すれば機密扱い
-        #     (= 判定の道具 check-confidential-leak.py が在る機械でだけ確かめる)
+        check("--not-confidential を尊重する", (_load_yaml(d2 / "TOPT.yaml") or {}).get("result_path") == tgt)
+        # 機密 dir の外にある成果物でも、 中身が機密索引に一致すれば機密扱い
+        # (= 判定の道具 check-confidential-leak.py が在る機械でだけ確かめる)
         out = d2 / "sandbox"; out.mkdir()
         (out / "R.md").write_text("メモ: " + prose[:60] + "\n", encoding="utf-8")
-        nt2 = []
-        record(d2, "TSAND", "done", "盲検", str(out / "R.md"), "要旨", "", notes=nt2)
-        if _leak_engine().is_file() and (_load_yaml(d2 / "TSAND.yaml") or {}).get("result_path"):
-            fails.append("成果物の中身が機密と一致したのに縛られていない")
-
-        # (f) 無関係な成果物は縛らない (= sandbox でも中身が無関係なら通す)
+        record(d2, "TSAND", "done", "盲検", str(out / "R.md"), "要旨", "")
+        if _leak_engine().is_file():
+            check("中身が機密索引に一致する成果物は機密 dir の外でも縛る",
+                  not (_load_yaml(d2 / "TSAND.yaml") or {}).get("result_path"))
         ok = d2 / "other"; ok.mkdir()
         (ok / "R.md").write_text("まったく無関係な調査の結論をここに書いた。\n", encoding="utf-8")
         record(d2, "TOK", "done", "別件", str(ok / "R.md"), "要旨", "")
-        if not (_load_yaml(d2 / "TOK.yaml") or {}).get("result_path"):
-            fails.append("無関係な成果物まで機密扱いにした")
+        check("無関係な成果物は縛らない", bool((_load_yaml(d2 / "TOK.yaml") or {}).get("result_path")))
     for k, v in saved.items():
         if v is None:
             os.environ.pop(k, None)
         else:
             os.environ[k] = v
 
-    if fails:
-        print("SELFTEST FAIL:")
-        for f in fails:
-            print("  -", f)
-        return 1
-    print("SELFTEST PASS (18 checks)")
-    return 0
+    n_fail = results.count(False)
+    print(f"SELFTEST {'PASS' if not n_fail else 'FAIL'} ({len(results) - n_fail}/{len(results)} checks)")
+    return 1 if n_fail else 0
 
 
 def main():

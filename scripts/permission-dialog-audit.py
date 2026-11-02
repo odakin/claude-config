@@ -578,10 +578,18 @@ def brief_input(tool, inp):
     return ""
 
 
+def filter_hooks(hooks, only):
+    """--only-hooks: hook の command に部分文字列 (カンマ区切り) のどれかを含むものだけ残す。 空なら全部。"""
+    keys = [s.strip() for s in str(only or "").split(",") if s.strip()]
+    return [(m, c) for m, c in hooks if not keys or any(k in c for k in keys)]
+
+
 def diagnose(reqs_list, uses, before, after, hooks, long_limit, run_hooks=True, cwd=None,
-             results=None, session_map=None, queue_window=QUEUE_WINDOW):
+             results=None, session_map=None, queue_window=QUEUE_WINDOW, show_command=False):
     """dialog ごとに (req, 種別, 理由, 詳細) を返す。 種別 = hook / fixed / length / rule / rule_unique / unmatched。
-    突合は match_dialogs (同じ session / 応答より後の tool_result / 待ち行列の順)。"""
+    突合は match_dialogs (同じ session / 応答より後の tool_result / 待ち行列の順)。
+    show_command = hook 由来の行の詳細に、 hook の理由に加えて当時の呼び出しの全文 (Bash は command を 1 行に) を足す
+    (= 外部発信の guard の dialog が実際の送信かを 1 件ずつ読むとき。 既定は理由だけ)。"""
     rows = []
     matched = match_dialogs(reqs_list, uses, results, before, after, session_map, queue_window)
     for r in reqs_list:
@@ -613,8 +621,14 @@ def diagnose(reqs_list, uses, before, after, hooks, long_limit, run_hooks=True, 
         if hit:
             # block (exit 2) は Claude にしか返らない = dialog は出ない。 ∴ 当時 dialog が出た
             # この形も、 今は hook が先に止める (= 対処済み) と読める。 ask/deny は今も出る。
+            shown = hit[2] or detail
+            if show_command:
+                full = (str(inp.get("command", "")).replace("\n", " ⏎ ") if tool == "Bash"
+                        else brief_input(tool, inp))
+                if full and full != shown:
+                    shown = f"{shown}\n      ⮑ {full}" if shown else full
             rows.append((r, "fixed" if hit[1] == "block" else "hook",
-                         f"{hit[0]} が {hit[1]}", hit[2] or detail))
+                         f"{hit[0]} が {hit[1]}", shown))
             continue
         if tool == "Bash" and len(str(inp.get("command", ""))) > long_limit:
             n = len(str(inp.get("command", "")))
@@ -852,6 +866,13 @@ def selftest():
               f"分類: 長い Bash=length / 短い Bash=rule / ask 返す hook=hook / 突合不能=unmatched (got {kinds})")
         check("5,000 文字" in rows[0][2], "length の理由に実際の文字数が出る")
         check(rows[2][3] == "理由の 1 行目", "hook の理由を詳細に載せる")
+        rows_sc = diagnose([req("Write", 3000.0)], du, 8.0, 2.0, hooks, 3000, run_hooks=True, cwd=tmp,
+                           show_command=True)
+        check("理由の 1 行目" in rows_sc[0][3] and "/x/y.md" in rows_sc[0][3],
+              "--show-command は hook 由来の行に理由と呼び出しの中身の両方を出す")
+        check(filter_hooks([("Bash", "/h/a-guard.sh"), ("Bash", "/h/b.sh")], "a-guard") == [("Bash", "/h/a-guard.sh")]
+              and len(filter_hooks([("Bash", "/h/a.sh"), ("Bash", "/h/b.sh")], "")) == 2,
+              "--only-hooks は command の部分文字列で hook を絞る (空なら全部)")
         rows_nb = diagnose([req("Write", 3000.0)], du, 8.0, 2.0, hooks, 3000, run_hooks=False, cwd=tmp)
         check(rows_nb[0][1] == "rule", "--no-run-hooks では hook 由来も rule に落ちる (= 表示で断る)")
 
@@ -938,6 +959,11 @@ def main():
                     help="--diagnose で「長すぎる Bash」 とみなす文字数 (既定 3000)")
     ap.add_argument("--settings", default=DEFAULT_SETTINGS,
                     help="hook 定義を読む settings (カンマ区切り)")
+    ap.add_argument("--only-hooks", default="",
+                    help="--diagnose で流し直す hook を、 command の部分文字列 (カンマ区切り) で絞る "
+                         "(例 mail-send-guard,discord-post-guard)")
+    ap.add_argument("--show-command", action="store_true",
+                    help="--diagnose の hook 由来の行に、 当時の呼び出しの全文 (Bash は command を 1 行に) も出す")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -959,10 +985,12 @@ def main():
         if a.latest:
             sel = sel[-a.latest:]
         uses, results = load_tool_events(projects, a.since, want_results=True)
-        hooks = load_pretooluse_hooks([s.strip() for s in a.settings.split(",") if s.strip()])
+        hooks = filter_hooks(load_pretooluse_hooks([s.strip() for s in a.settings.split(",") if s.strip()]),
+                             a.only_hooks)
         rows = diagnose(sel, uses, a.before, a.after, hooks, a.long_limit,
                         run_hooks=not a.no_run_hooks, cwd=home / "Claude",
-                        results=results, session_map=session_map, queue_window=a.queue_window)
+                        results=results, session_map=session_map, queue_window=a.queue_window,
+                        show_command=a.show_command)
         print_diagnosis(rows, not a.no_run_hooks, len(hooks))
         return 0
     if a.latest:

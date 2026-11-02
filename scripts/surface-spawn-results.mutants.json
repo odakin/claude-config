@@ -1,0 +1,99 @@
+{
+  "_comment": "surface-spawn-results.py の selftest の foil に歯があることを、 受け取りの道具の要所を 1 か所ずつ外した mutant 8 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 外すのは、 受け取り済みを出さない絞り・並び順・受け取りの案内の起動の形・相対 path の基点・HANDOFF の判定・summary の上限・機密の置き換え・機密 dir の path の判定。",
+  "target": "surface-spawn-results.py",
+  "run": "python3 {} --selftest",
+  "mutants": [
+    {
+      "name": "受け取り済み (consumed) の marker を surface から外す絞りを外す",
+      "pairs": [
+        [
+          "    pending = [m for m in _markers(d) if not _truthy(m.get(\"consumed\", False))]",
+          "    pending = list(_markers(d))"
+        ]
+      ],
+      "expect_fail": ["consume すると出さない"],
+      "expect_pass": ["done の marker を出す", "上限を超える summary を拒む"]
+    },
+    {
+      "name": "failed → partial → done の並び順を外す (作った時刻だけで並べる)",
+      "pairs": [
+        [
+          "    pending.sort(key=lambda m: (order.get(str(m.get(\"status\", \"done\")), 2), _created_key(m)))",
+          "    pending.sort(key=lambda m: (str(m.get(\"token\")), _created_key(m)))"
+        ]
+      ],
+      "expect_fail": ["failed を done より上に並べる"],
+      "expect_pass": ["done の marker を出す"]
+    },
+    {
+      "name": "受け取りの案内の起動の形を呼び元から受けない (shim の path が出なくなる)",
+      "pairs": [
+        [
+          "    return os.environ.get(\"CLAUDE_SPAWN_RESULTS_CMD\") or f\"python3 {Path(__file__).resolve()}\"",
+          "    return f\"python3 {Path(__file__).resolve()}\""
+        ]
+      ],
+      "expect_fail": ["受け取りの案内に CLAUDE_SPAWN_RESULTS_CMD を使う"],
+      "expect_pass": ["result_path を出す"]
+    },
+    {
+      "name": "相対の result_path の基点を呼び元から受けない",
+      "pairs": [
+        [
+          "    return Path(os.path.expanduser(b)) if b else HERE.parent.parent",
+          "    return HERE.parent.parent"
+        ]
+      ],
+      "expect_fail": ["相対の result_path を基点の下で解決する"],
+      "expect_pass": ["consume すると出さない"]
+    },
+    {
+      "name": "HANDOFF.md の有無を見ずに dir なら案内する",
+      "pairs": [
+        [
+          "        if p.is_dir() and (p / \"HANDOFF.md\").is_file():",
+          "        if p.is_dir():"
+        ]
+      ],
+      "expect_fail": ["HANDOFF.md が無ければ案内しない"],
+      "expect_pass": ["HANDOFF.md があれば案内する"]
+    },
+    {
+      "name": "summary の上限 (marker の報告書化の拒否) を外す",
+      "pairs": [
+        [
+          "    if len(str(summary or \"\")) > SUMMARY_MAX:",
+          "    if False:"
+        ]
+      ],
+      "expect_fail": ["上限を超える summary を拒む"],
+      "expect_pass": ["機密 dir の下の成果物は task・summary・result_path を落とす"]
+    },
+    {
+      "name": "機密と判定した成果物の task・summary・result_path の置き換えを外す",
+      "pairs": [
+        [
+          "    if reason and not allow_confidential_text:",
+          "    if False:"
+        ]
+      ],
+      "expect_fail": [
+        "機密 dir の下の成果物は task・summary・result_path を落とす",
+        "機密扱いにしたことを呼び出し元に伝える",
+        "機密 dir の下なら中身が索引に無くても縛る"
+      ],
+      "expect_pass": ["上限を超える summary を拒む", "無関係な成果物は縛らない"]
+    },
+    {
+      "name": "機密 dir の下かどうかの path の判定を外す (中身の照合だけが残る)",
+      "pairs": [
+        [
+          "        if d == p or d in p.parents:",
+          "        if False:"
+        ]
+      ],
+      "expect_fail": ["機密 dir の下なら中身が索引に無くても縛る"],
+      "expect_pass": ["機密 dir の下の成果物は task・summary・result_path を落とす", "無関係な成果物は縛らない"]
+    }
+  ]
+}

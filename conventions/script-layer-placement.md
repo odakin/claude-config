@@ -48,6 +48,7 @@ script の置き場所は「最初にどの案件で書いたか」ではなく�
    - 旧版が git にあるときの旧入口の出力は [`compare-script-output.py`](../../ai-collaboration/scripts/compare-script-output.py) で取れる: 旧版を一時 dir に出し、両側で同じ script を回して時間の表示を除いて比べる。engine の名前を import する script も全部並べる (書き換えた script だけでなく)。
    - 大きな副作用のある mode (実際の download・送信) を回さないなら、その経路は engine の selftest (fake + 一時 dir) で見た、と結果に書く。
 3. 個別値を下層 config / shim に寄せ、上層 diff に owner・第三者・未公開案件の事実が無いか確認する。
+   - <a id="shim-env-defaults"></a>shim が環境変数で個別値を渡すときは、 空文字の変数も未設定として扱って上書きする。 `os.environ.setdefault` は空文字の変数をそのまま残し、 engine 側の `os.environ.get(...) or <既定>` が汎用の既定に落ちて別の dir を読む (実測)。 engine が見つからない機械の shim は、 表示だけの mode では 0 で抜けて呼び元 (hook・dashboard) を止めず、 記録を書く mode では非 0 で止める (記録できたと読まれないように)。
 4. 上層の規約・script index を正本にし、下層 index と SESSION は pointer 化する。
 5. [`scripts/check-script-layering.py`](../scripts/check-script-layering.py) で同名二重実装が無いことを検査する。新しい lower-layer script は、上層 counterpart を同時に作らない正当な場合だけ先頭 40 行に `layer-placement: layer3 <理由>` を書く。これは配置理由の declaration であり、汎用化できないことの永久免罪ではない。
 
