@@ -227,6 +227,10 @@ FORMAT_CMDS = {
 AGENT_ENV_KEYS = ("CLAUDE_CONFIG_AGENT_SESSION", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID")
 SYSTEM_REMINDER_RE = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
 LEADING_USER_TAG_RE = re.compile(r"^\s*<([A-Za-z_][\w:-]*)(?=[\s>/])")
+# 本人が打った slash command・skill の起動 (Claude の会話記録の user 行 = `<command-message>x</command-message>` と
+# `<command-name>/x</command-name>`、 引数があれば `<command-args>…</command-args>`)
+COMMAND_NAME_RE = re.compile(r"<command-name>(.*?)</command-name>", re.S)
+COMMAND_ARGS_RE = re.compile(r"<command-args>(.*?)</command-args>", re.S)
 HOOK_PROMPT_RE = re.compile(r"<hook_prompt\b[^>]*>.*?</hook_prompt\s*>", re.S)
 # Codex app の追い打ちの提案。 本人が押すと user の発言に入るが、 文は agent が書いたもの (実測 = 本文の主張の
 # 書き換えの依頼がこの形で入った)。 prompt の値の中の括弧・escape も 1 つの提案に含める
@@ -1939,6 +1943,15 @@ def human_text_segments(text: str, excluded_tags: dict[str, int] | None = None, 
         name = leading.group(1)
         if claude_human and name == "pasted_content":
             return [text]
+        # 本人が打った slash command の起動 (/wrap など) は本人の操作として数える = 数えないと、 その前の別の依頼への
+        # 発言が最新になり --latest が黙ってそれを引く (実測)。 command の名前は項目ごとの裁定でないので引ける文にしない。
+        # 本人が打った引数があれば、 打った形 (`/name 引数`) で引ける。 app の local command (/model 等) は turnOrigin
+        # を持たないので、 ここに来ず生成文として除く
+        if claude_human and name in ("command-message", "command-name"):
+            cmd = COMMAND_NAME_RE.search(stripped)
+            args = COMMAND_ARGS_RE.search(stripped)
+            typed = args.group(1).strip() if args else ""
+            return [f"{cmd.group(1).strip() if cmd else ''} {typed}".strip() if typed else ""]
         return excluded(name)
     if stripped.startswith(GENERATED_USER_PREFIXES):
         return []
@@ -3408,8 +3421,10 @@ def approve_mode(args: argparse.Namespace) -> int:
             return 4
         idx, quote = len(msgs) - 1, msgs[-1][1]
         if not quote.strip():
-            print("approve: 本人の最新の発言は、 agent が書いた追い打ちの提案 (codex-followup) を押した文だけ = 引ける本人の文が無い。"
-                  " 記録しない。\n  承認する変更を本人に自分の言葉で 1 行打ってもらってから引く。", file=sys.stderr)
+            print("approve: 本人の最新の入力に引ける本人の文が無い = 記録しない。 slash command を引数なしで起動しただけ"
+                  " (/wrap など = command の名前は項目ごとの裁定でない) か、 agent が書いた追い打ちの提案 (codex-followup)"
+                  " を押しただけ。\n  その前の発言は別の依頼への答え = 引かない。 承認する変更 (file と何を変えるか) を本人に"
+                  "自分の言葉で 1 行打ってもらってから引く。", file=sys.stderr)
             print_excluded_tags(excluded_tags)
             return 4
     else:
@@ -3435,7 +3450,7 @@ def approve_mode(args: argparse.Namespace) -> int:
     said = said if len(said) <= 40 else said[:40] + "…"
     if idx != len(msgs) - 1:
         print(f"approve: --quote が一致したのは著者の最新の発言ではない ({hit[0] or '時刻不明'} 「{said}」、 その後に"
-              f"著者が {len(msgs) - 1 - idx} 回発言している)。 記録しない。\n"
+              f"著者が {len(msgs) - 1 - idx} 回発言している。 slash command の起動も発言に数える)。 記録しない。\n"
               "  引けるのは記録する時点で最新の著者の発言だけ = 古い発言を別の案の承認に使わない。\n"
               "  この案を著者に示し、 承認の発言を新しく得てから、 その発言を引く。",
               file=sys.stderr)
@@ -5508,6 +5523,34 @@ def selftest() -> int:
         fns.quote, fns.latest = None, True
         check("approve --latest: 最新の発言が提案の文だけなら引けない (exit 4)",
               approve_mode(fns) == 4 and load_approvals("claude", "sess-f") == [])
+        # 本人が打った slash command (/wrap) の起動も本人の操作として数える。 数えないと、 その前の別の依頼への発言が
+        # 最新になり --latest が黙ってそれを引く (実測)。 skill の本文 (isMeta) と app の local command (/model) は数えない
+        wrap = "<command-message>wrap</command-message>\n<command-name>/wrap</command-name>"
+
+        def typed(text: str, when: str) -> dict:
+            return {"type": "user", "origin": {"kind": "human"}, "turnOrigin": "human",
+                    "message": {"content": text}, "timestamp": when}
+
+        ctr = tr_dir / "sess-c.jsonl"
+        append(ctr, said("表の色を変えて", iso(-10)), typed(wrap, iso(-5)),
+               {"type": "user", "isMeta": True, "timestamp": iso(-5),
+                "message": {"content": [{"type": "text", "text": "Base directory for this skill: 締めの手順"}]}},
+               said("<command-name>/model</command-name>\n<command-message>model</command-message>\n"
+                    "<command-args>x</command-args>", iso(-4)))
+        check("本人が打った slash command の起動を最新の発言に数える (引数が無ければ引ける文は無い、 skill の本文・/model は数えない)",
+              [t for _, t in user_messages(ctr)] == ["表の色を変えて", ""])
+        cns = argparse.Namespace(session="claude:sess-c", region=["abstract"], change="案 C", quote=None, latest=True,
+                                 file=str(repo / "src" / "main.tex"), transcript=None)
+        check("approve --latest: 最新の入力が引数の無い slash command なら、 その前の発言を引かない (exit 4)",
+              approve_mode(cns) == 4 and load_approvals("claude", "sess-c") == [])
+        cns.quote, cns.latest = "表の色を変えて", False
+        check("approve --quote: slash command を起動した後は、 その前の発言は引けない (exit 5)",
+              approve_mode(cns) == 5 and load_approvals("claude", "sess-c") == [])
+        append(ctr, typed(wrap + "\n<command-args>概要の 2 文目は削ってよい</command-args>", iso(-2)))
+        cns.quote, cns.latest = None, True
+        check("approve --latest: 引数つきの起動は本人が打った形 (/name 引数) で引く",
+              approve_mode(cns) == 0
+              and load_approvals("claude", "sess-c")[-1].get("quote") == "/wrap 概要の 2 文目は削ってよい")
         # Stop: 著者の最新の発言に結んだ承認は、 その後の最後の返事に書くまで 1 回差し戻す
         def stop_rows(path: Path, rows: list[dict]) -> None:
             path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
