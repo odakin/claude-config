@@ -258,7 +258,7 @@ origin: 印刷の gate hook の test で、 無効化の env switch を立てた
 ## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug
 
 - <a id="hook-git-env-same-repo"></a>**逆向き = commit しようとしている同じ repo の staged を読む段は `GIT_INDEX_FILE` を残す**。 捨てると main の index を読み、 `git commit -- <path>` の一時 index にだけある staged を見落とし、 commit されない file を数える (実装例 = `scripts/check-history-growth.py` の `staged_warnings`、 一時 index を捨てる実装では落ちる test つき)。 1 本の script に両方の段があるなら、 git を呼ぶ関数を 2 つに分けて env の扱いを名前で区別する
-- <a id="hook-git-env-toplevel"></a>**linked worktree の hook の中では `GIT_DIR` も入る = 子の `git -C <dir> rev-parse --show-toplevel` が repo の root でなく `<dir>` を返す** (実測: 同じ link が手元の checkout では通り、 worktree の commit でだけ基準の位置を誤って止められた)。 repo の root や本体の checkout を引く子の git は `GIT_DIR`・`GIT_WORK_TREE`・`GIT_INDEX_FILE`・`GIT_PREFIX` を外して呼ぶ (staged を読む段は上のとおり残す)。 test は env に `GIT_DIR` を入れて回す = hook の外の実行では出ない
+- <a id="hook-git-env-toplevel"></a>**linked worktree の hook の中では `GIT_DIR` も入る = 子の `git -C <dir> rev-parse --show-toplevel` が repo の root でなく `<dir>` を返す** (実測: 同じ link が手元の checkout では通り、 worktree の commit でだけ基準の位置を誤って止められた)。 repo の root や本体の checkout を引く子の git は `GIT_DIR`・`GIT_WORK_TREE`・`GIT_INDEX_FILE`・`GIT_PREFIX` を外して呼ぶ (staged を読む段は上のとおり残す)。 test は env に `GIT_DIR` を入れて回す = hook の外の実行では出ない。 fleet でどの道具が取り違えるかを確かめるときは、 一時 repo に linked worktree を作って本物の hook を置き、 git を記録係 (`rev-parse --show-toplevel` の引数・cwd・`GIT_DIR`・答えを書く wrapper) で包んで subdir の file を commit する。 ⚠️ git は子 process の `PATH` の先頭に自分の exec-path を足すので、 `PATH` の先頭に置いた記録係は hook の中では素通りされる (実測 = 記録が 0 行) = hook の入口を「記録係を `PATH` の先頭に戻してから本物の hook を exec する」 stub にする
 
 ### <a id="bash32-problem"></a>問題
 
