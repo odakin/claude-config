@@ -597,7 +597,7 @@ sections:
     related: [form-dump-first, multi-sheet-form, openpyxl-xlsx-fill, all-sheet-sweep, same-pattern-grep-sweep, print-area-bbox-fit, even-margins-centering, trailing-print-artifact, excel-pdf-whole-workbook-export, one-sheet-multi-page-split, fitz-pdf-toolkit, pdf-visual-confirm, pdf-margin-pixel-measure, image-budget-exhaustion]
   - id: excel-pdf-whole-workbook-export
     level: 3
-    title: "Excel の PDF 書き出しは workbook 全体を出す (= sheet 選択は効かない) → 不要 sheet は temp 削除"
+    title: "Excel の PDF 書き出しは workbook 全体を出す (= sheet 選択は効かない) → ほかの sheet を隠してから出す"
     related: [xlsx-to-pdf-script, cross-sheet-formula-chain, one-sheet-multi-page-split]
   - id: one-sheet-multi-page-split
     level: 3

@@ -3213,7 +3213,7 @@ Excel UI の印刷 dialog で **default 「アクティブシート」** の場�
 > 5. **検証**: [`pdf-visual-confirm`](#pdf-visual-confirm) (= 全ページ目視、 LAYOUT) + [`pdf-margin-pixel-measure`](#pdf-margin-pixel-measure) (= 余白を px 実測) + [`image-budget-exhaustion`](#image-budget-exhaustion) (= 画像は 1 枚ずつ・fail したら即 text 切替、 budget 節約)
 > 6. **永続化**: 生成手順が複雑・反復するなら [`expensive-intermediate-artifacts.md`](expensive-intermediate-artifacts.md) 準拠で生成 script をリポに置く (= 毎回手で組み直さない)
 
-### <a id="excel-pdf-whole-workbook-export"></a>Excel の PDF 書き出しは workbook 全体を出す (= sheet 選択は効かない) → 不要 sheet は temp 削除
+### <a id="excel-pdf-whole-workbook-export"></a>Excel の PDF 書き出しは workbook 全体を出す (= sheet 選択は効かない) → ほかの sheet を隠してから出す
 
 **症状**: macOS の Excel osascript で `save as active sheet of wbk ... file format PDF` (や `save as worksheet "名" of wbk ...`) を撃つと、 active sheet だけでなく **workbook 内の全 visible sheet が各 print_area で連続ページ出力**される (= observed: Excel for Mac。 2 sheet の book の 2 枚目を指定して 2 ページ出た実測あり)。 書き出されるのは **visible な sheet だけ** = 隠した sheet は出ない (実測)。 [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の表の Excel engine の「✓ 1 sheet」 は、 script がこの性質を使って成り立たせている: sheet 名を渡されると、 保存せずに閉じる写しの上でほかの worksheet を `set visible of (worksheet i of wbk) to false` で隠してから書き出す (`repeat with ws in worksheets` に `sheet hidden` を当てる形は -50 で落ちた)。 手で osascript を書くときも同じく隠す。
 
