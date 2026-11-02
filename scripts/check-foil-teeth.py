@@ -37,6 +37,7 @@ spec (JSON):
 | mutant で expect_fail の各語を含む FAIL 行が在る | foil に歯がある |
 | mutant で expect_pass の各語が PASS 行に在り、 FAIL 行に無い | その check が前の foil の失敗に引きずられて落ちていない (= 独立) |
 | mutant で exit 0 かつ FAIL 行 0 は `[NO-TEETH]` | どの foil も見ていない修正部分が在る |
+| 最後の行は `[RESULT]` = 全部 KILLED か、 外れた mutant の名前 | 外れた mutant の行が前にあり、 後ろの `[KILLED]` の行だけを末尾で読むと見落とす (実測)。 pipe で終了値も落としやすい |
 
 写しは target の親 dir を丸ごと一時 dir に置く (同じ dir の module を import する selftest のため。 `.git` などは除く)。
 target は最初に実体の path に解決する。 repo root を前提にする selftest は写しの上では回らない
@@ -165,7 +166,7 @@ def check_spec(spec_path: Path, timeout: int = TIMEOUT, out=print, system: str |
         return 2
     out(f"[BASE] {target.name}: exit 0, {len(base_passes)} PASS / 0 FAIL")
 
-    problems = 0
+    problems = []
     for m, text in mutants:
         rc, lines = run_copy(target, text, spec["run"], timeout, spec_dir)
         fails = [ln for ln in lines if ln.startswith(fail_marker)]
@@ -175,7 +176,7 @@ def check_spec(spec_path: Path, timeout: int = TIMEOUT, out=print, system: str |
                        if not any(s in ln for ln in passes) or any(s in ln for ln in fails)]
         survived = rc == 0 and not fails
         if survived or missing_fail or broken_pass:
-            problems += 1
+            problems.append(m["name"])
             out(f"[{'NO-TEETH' if survived else 'UNEXPECTED'}] {m['name']}")
             for s in missing_fail:
                 out(f"    expected FAIL not seen: {s!r}")
@@ -187,6 +188,12 @@ def check_spec(spec_path: Path, timeout: int = TIMEOUT, out=print, system: str |
             kept = len(m.get("expect_pass", []))
             out(f"[KILLED] {m['name']}: {len(fails)} FAIL line(s), all {len(m['expect_fail'])} expected"
                 + (f", {kept} kept PASS" if kept else ""))
+    # The verdict as the last line: a reader of the tail saw only [KILLED] lines while an earlier mutant was UNEXPECTED
+    # (measured), and the exit code is easy to drop in a pipe.
+    if problems:
+        out(f"[RESULT] {target.name}: {len(problems)} of {len(mutants)} mutant(s) not as expected: {', '.join(problems)}")
+    else:
+        out(f"[RESULT] {target.name}: all {len(mutants)} mutant(s) killed")
     return 1 if problems else 0
 
 
@@ -258,6 +265,14 @@ def selftest() -> int:
         rc = check_spec(spec_file("cosmetic", [cosmetic]), out=log.append)
         expect("a mutant that no check notices is reported as NO-TEETH (exit 1)",
                rc == 1 and any(ln.startswith("[NO-TEETH]") for ln in log))
+        log.clear()
+        rc = check_spec(spec_file("mixed", [cosmetic, kill]), out=log.append)
+        expect("the last line names the mutant that was not as expected, after later [KILLED] lines (exit 1)",
+               rc == 1 and log[-1].startswith("[RESULT]") and "comment only" in log[-1] and "1 of 2" in log[-1])
+        (pkg / "mixed.mutants.json").unlink()
+        log.clear()
+        rc = check_spec(spec_file("good", [kill]), out=log.append)
+        expect("all killed → the last line says so (exit 0)", rc == 0 and log[-1] == "[RESULT] tool.py: all 1 mutant(s) killed")
 
         log.clear()
         both = {"name": "returns garbage", "pairs": [["def clamp(x):\n", "def clamp(x):\n    return -1\n"]],
