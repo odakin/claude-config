@@ -69,8 +69,12 @@ def strip_macros(t: str, macros: list[str]) -> str:
             out.append(t[i:j])
             k, depth = j + len(key), 1
             while k < len(t) and depth:
+                if t[k] == "\\":  # \{ \} \\ は 2 字で 1 つ = 括弧に数えない (\phantom{…\Big\{} の閉じない \{ で文書の終わりまで伸びる)
+                    k += 2
+                    continue
                 depth += {"{": 1, "}": -1}.get(t[k], 0)
                 k += 1
+            k = min(k, len(t))
             out.append(" " * (k - j))
             i = k
         t = "".join(out)
@@ -177,6 +181,18 @@ def selftest() -> int:
     # 1 = 2 節を comma + and でつないだ文 / 2 = 名詞の並列 (拾う = 誤検出の型) / 3 = comma の無い文は拾わない / 4 = 前置の長い句
     if got != [("The", 1, False), ("We", 1, False), ("After", 0, True)]:
         print(f"FAIL --joins: {got}"); ok = False
+    ebody = ("\\begin{document}\n"
+             "The first sentence stands before the display.\n"
+             "\\al{ f &= \\exp\\Big\\{ a\\nn &\\phantom{= \\exp\\Big\\{} + c \\Big\\}, }\n"
+             "The second sentence follows the display. The third sentence ends the text.\n"
+             "\\end{document}\n")
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "e.tex"
+        p.write_text(ebody, encoding="utf-8")
+        esc = summarize(p, ["al"], [40])
+    # \{ \} を括弧に数えると、 \phantom{…\Big\{} の閉じない \{ で display が文書の終わりまで伸び、 後ろの 2 文が消える
+    if esc["sentences"] != 3:
+        print(f"FAIL escaped braces in --display-macro: sentences = {esc['sentences']} (want 3)"); ok = False
     print("selftest:", "OK" if ok else "FAIL")
     return 0 if ok else 1
 

@@ -78,8 +78,12 @@ def _cut_macro(t: str, name: str, bag: list[str]) -> str:
         out.append(t[i:j])
         k, depth = j + len(key), 1
         while k < len(t) and depth:
+            if t[k] == "\\":  # \{ \} \\ は 2 字で 1 つ (下の _macro_args と同じ。 閉じない \{ で display が文書の終わりまで伸びない)
+                k += 2
+                continue
             depth += {"{": 1, "}": -1}.get(t[k], 0)
             k += 1
+        k = min(k, len(t))
         bag.append(_norm(t[j:k]))
         out.append(" ")
         i = k
@@ -226,6 +230,12 @@ def selftest() -> int:
         print(f"FAIL counts {got} (want {want})"); ok = False
     if sorted(e["numbers"]) != ["0.5", "12", "3"]:
         print(f"FAIL prose numbers {sorted(e['numbers'])}"); ok = False
+    esc = extract("\\begin{document}\nBefore it.\n"
+                  "\\al{ f &= \\exp\\Big\\{ a\\nn &\\phantom{= \\exp\\Big\\{} + c \\Big\\}, }\n"
+                  "After it $x$ and 7 items.\n\\end{document}\n", ["al"])
+    if sum(esc["display"].values()) != 1 or esc["inline math"] != {"$x$": 1} or esc["numbers"] != {"7": 1}:
+        # \{ を括弧に数えると、 \phantom{…\Big\{} の閉じない \{ で display が後ろの文まで飲み込む
+        print(f"FAIL escaped braces in --display-macro: {dict(esc['inline math'])} {dict(esc['numbers'])}"); ok = False
     cl = changed_lines_text("a\nb\nc\n", "a\nB\nc\nd\n")
     if cl != {2, 4}:  # --head-file の --over = 書き換えた行と足した行 (new の行番号)
         print(f"FAIL changed_lines_text {cl}"); ok = False
