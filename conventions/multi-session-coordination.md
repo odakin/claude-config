@@ -578,6 +578,14 @@ honest な天井: **「起動した」 を *live 親に自動 push* する経路
 
 **限界の宣言**: mint の瞬間の recall (= 「green-light が出た、 carrier を作らねば」 と気づくこと) は規律依存で残る。 plan file の散文から green-light を機械検出する案は棄却 (= 表現が freeform で fragile、 検出器肥大)。 構造的利得は「ambient (push ゼロ) → deadline-horizon pipeline (毎 session push + 強制 disposition)」 への移動であり、 保証ではない — 床は human-steering。
 
+### <a id="session-message-quota"></a>本人が書くまで、 別 session への送信は 10 通で止まる (desktop)
+
+desktop app は、 本人がその session に最後に書いてから、 その session が他の desktop session に送った message が 10 通に達すると、 本人が次にその session に書くまで送信を止める (「session どうしの自動のやり取り」 と見なす。 送った message は届かず、 止まったという結果だけが返る。 実測)。
+worker を何体も起こす指揮役は、 起動の go・番の知らせ・受領・wrap の依頼で 10 通に早く届く。
+
+- **送る前に束ねる** — 同じ相手への知らせは 1 通にまとめる。 相手が答えを返す必要の無い事実 (記録の場所・済んだこと) は掲示板の note にする (掲示板への書き込みはこの数に入らない)。
+- **止まったら** — 本人に 1 行で、 届かなかった宛先と中身を伝える (本人が書けば再開する)。 待てない知らせは掲示板の note にも書くが、 受け手が掲示板を見張っていなければ読まれない = 受け手がその知らせを待たずに先へ進む形 (「返事が無ければ〜で進める」) なら、 進む前に届くとは限らないことも本人に伝える。
+
 ## <a id="worktree-vs-shared-checkout"></a>8. worktree (隔離) か shared checkout (ローカル) か — 並列変更の隔離 vs live 反映
 
 独立 session / subagent を起こすとき (= §7 の spawn_task hand-off、 Agent tool の `isolation: "worktree"` オプション 等)、 その作業を **隔離 worktree** (= 同じリポの別フォルダ checkout、 履歴は共有・作業中の中身は独立) でやるか **本物の checkout (ローカル、 共有作業ツリー)** でやるかを選ぶ。 これは §1「同 file path を別 session が並列上書きする race」 の構造的な解 (= 隔離) と、 その**適用限界**の節。
