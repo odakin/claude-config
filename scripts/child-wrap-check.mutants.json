@@ -1,5 +1,5 @@
 {
-  "_comment": "child-wrap-check.py の「hand-off の手順 0 で止まった turn は本人待ちに数えない」 の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。",
+  "_comment": "child-wrap-check.py の「hand-off の手順 0 で止まった turn は本人待ちに数えない」 と「依頼元の答えを数え、 本人だけが答えられる問いは残す」 の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。",
   "target": "child-wrap-check.py",
   "run": "python3 {} --selftest",
   "fail_marker": "NG: ",
@@ -25,6 +25,22 @@
     {"name": "go 待ちの判定で親の message を見ない",
      "pairs": [["    if any(ts > at for ts, frm in ev[\"peers\"] if not parent or frm == parent):\n        return None\n    return {\"at\": at}", "    return {\"at\": at}"]],
      "expect_fail": ["step 0: the go came from the parent"],
-     "expect_pass": ["step 0, no go yet → kept as waiting"]}
+     "expect_pass": ["step 0, no go yet → kept as waiting"]},
+    {"name": "依頼元の答えを数えない",
+     "pairs": [["    if parent and not owner_only and any(ts > at for ts, frm in ev[\"peers\"] if frm == parent):\n        return None\n", ""]],
+     "expect_fail": ["the parent answered a question of judgment in the child's window", "the parent answered a question of judgment: the archive guard", "the parent's answer sent to the child's uds address"],
+     "expect_pass": ["an ask to send outside", "a question of judgment answered by another session"]},
+    {"name": "本人だけが答えられる問いも依頼元の答えで閉じる",
+     "pairs": [["    owner_only = bool(OWNER_ONLY_ASK.search(text))\n", "    owner_only = False\n"]],
+     "expect_fail": ["an ask to send outside", "an approval ask, answered only by the parent"],
+     "expect_pass": ["the parent answered a question of judgment in the child's window"]},
+    {"name": "親でない session の答えも数える",
+     "pairs": [["    if parent and not owner_only and any(ts > at for ts, frm in ev[\"peers\"] if frm == parent):\n        return None\n", "    if parent and not owner_only and any(ts > at for ts, frm in ev[\"peers\"]):\n        return None\n"]],
+     "expect_fail": ["waited on the person, only another session answered"],
+     "expect_pass": ["waited on the person, the person answered in the child's window"]},
+    {"name": "問いより前の依頼元の message も答えと数える",
+     "pairs": [["    if parent and not owner_only and any(ts > at for ts, frm in ev[\"peers\"] if frm == parent):\n        return None\n", "    if parent and not owner_only and any(True for ts, frm in ev[\"peers\"] if frm == parent):\n        return None\n"]],
+     "expect_fail": ["the parent's message before the ask does not answer it"],
+     "expect_pass": ["the parent answered a question of judgment in the child's window"]}
   ]
 }

@@ -15,7 +15,8 @@ Why (実測): 見え方や model を直すために、 動いている worker �
     動いた時間 = 本人に聞く 1 行の材料)。 止めた時刻より後に本人の発言 (人の入力。 他 session からの message・hook の
     差し戻し・task の通知は数えない) があれば通す = 聞いて答えをもらった後の 2 回目は通る。
   - archive_session で子が busy でないときは、 子が本人とのやりとりの途中かを見る (scripts/child-wrap-check.py の
-    owner_reasons = 本人待ちの問いが残る / 親の最後の message の後に本人が子の窓で発言している)。 該当すれば同じく
+    owner_reasons = 本人も親も答えていない問い・本人だけが答えられる問い (承認・外部への発信) が残る / 親の最後の
+    message の後に本人が子の窓で発言している)。 該当すれば同じく
     1 回目は止め、 本人の発言の後は通す (正本 = conventions/multi-session-coordination.md#tidy-after-child-turn-ends)。
   - Bash だけ: 本人が直前の発言で止めるよう明示に言ったなら、 command に `# stop-ok: <本人の発言の一部を逐語で>` を
     付けると、 その文字列が本人の最新の発言に在る時に限って 1 回目から通す (逐語でなければ通さない)。
@@ -272,8 +273,9 @@ def owner_check(inp: dict, ids: list[str]) -> tuple[int, str]:
     save_state(sid, st)
     return 2, ("🛑 busy-worker-stop-check: 畳もうとした子は、 本人とのやりとりが終わっていないので 1 回目は止めた。\n"
                + "\n".join("  - " + r for r in reasons) + "\n"
-               "  子の問いに親が代わりに答えない (本人はその子の窓で答える)。 本人に 1 行で伝え、 畳んでよいかを聞く。"
-               " 本人が答えた後なら同じ操作は通る。 照合の全体 = `python3 ~/Claude/claude-config/scripts/child-wrap-check.py "
+               "  判断の問いなら親が子に答えを送ってから畳む (送った後なら同じ操作は通る)。 本人だけが答えられる問い"
+               " (承認・外部への発信) と本人が子と話している途中は、 本人に 1 行で伝えて畳んでよいかを聞く (本人が答えた後なら通る)。"
+               " 照合の全体 = `python3 ~/Claude/claude-config/scripts/child-wrap-check.py "
                f"{ids[0]}`。 規約 = {CHILD_RULE}")
 
 

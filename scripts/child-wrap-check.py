@@ -22,7 +22,11 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
   - 本人待ちの問い: 子の turn が本人待ちで終わった最後の時点 (子の wrap_up の ask / blocked、 親の記録の
     「… finished a turn and then reported that it was waiting on the user」 の知らせより前の子の最後の応答) より後に、
     子の窓に本人の発言 (人の入力。 別 session の message・hook の差し戻し・task の通知・API の誤りの後の「Try again」 は
-    数えない) があるか。 **hand-off の手順 0 で止まった turn は数えない** = 掲示板の hand-off (「This window must run on
+    数えない) があるか。 依頼元 (app の記録の親 = spawnedFrom) の message がその時点より後に子の窓に届いていても答えと数える
+    (判断の問いは依頼元が答える = ai-collaboration board/CONTRACT.md#worker-questions-to-requester。 実測: 依頼元が答えて
+    片づいた子の問いを本人待ちと読み、 畳む照合と archive の hook が止めた)。 ただし問いの文が承認・外部への発信の語
+    (OWNER_ONLY_ASK) を含めば本人だけが答えられるので、 本人の発言だけを数える。 親でない session の message は数えない。
+    **hand-off の手順 0 で止まった turn は数えない** = 掲示板の hand-off (「This window must run on
     <model> at <effort> effort」 の行) で始まった窓で、 その turn で model・effort の確かめ (`session-model.py self`) が走り、
     掲示板の claim が続かずに終わった turn は、 依頼元の go を待つ停止で本人待ちではない
     (app は親にそれも「本人待ち」 と知らせる。 実測: go の後に仕事も wrap も済んだ worker が、 手順 0 の停止を
@@ -117,6 +121,11 @@ MAX_COMMITS = 30
 RETRY_TEXTS = {"Try again"}  # the app's retry after an API error (measured on the desktop app)
 # Latin-letter boundaries, not \b: Python counts kana as word characters, so \bwrap\b misses 「wrapして」.
 WRAP_WORD = re.compile(r"(?<![A-Za-z])wrap(?![A-Za-z])", re.I)
+# An ask only the person can answer: an approval that counts only in the window it is given in (a protected file's change,
+# an operation the permission check holds) or a send to the outside. The parent's message does not answer it. A question of
+# judgment that uses these words also stays the person's (keeping a child costs less than folding it past the person).
+OWNER_ONLY_ASK = re.compile(r"承認|裁定|許可|同意|送信|送って|送る|投稿|公開|返信|approv|permission|consent|publish"
+                            r"|(?<![A-Za-z])(?:send|post)(?![A-Za-z])", re.I)
 ID8 = re.compile(r"^([0-9a-f]{8})\b")
 def _grace_from_env() -> float | None:
     v = (os.environ.get("CHILD_WRAP_ANSWERED_GRACE_MIN") or "").strip().lower()
@@ -336,9 +345,11 @@ def go_wait(ev: dict, notes: list[str], parent: str = "") -> dict | None:
     return {"at": at}
 
 
-def open_ask(ev: dict, notes: list[str]) -> dict | None:
-    """The child's last turn that ended waiting on the person, if no prompt of the person came in the child's window after it.
-    A step-0 stop (step0_turn) is the requester's go to wait for, not the person's: it is not a wait point here."""
+def open_ask(ev: dict, notes: list[str], parent: str = "") -> dict | None:
+    """The child's last turn that ended waiting on the person, if no prompt of the person came in the child's window after it
+    and, unless the ask is one only the person can answer (OWNER_ONLY_ASK), no message of the parent either (the requester
+    answers questions of judgment = ai-collaboration board/CONTRACT.md#worker-questions-to-requester). A step-0 stop
+    (step0_turn) is the requester's go to wait for, not the person's: it is not a wait point here."""
     points = [p for p in _wait_points(ev, notes) if not step0_turn(ev, p[0])]
     if not points:
         return None
@@ -347,7 +358,10 @@ def open_ask(ev: dict, notes: list[str]) -> dict | None:
         return None
     if not text:
         text = next((a for t, a in sorted(ev["asks"], reverse=True) if t <= at), "")
-    return {"at": at, "ask": text}
+    owner_only = bool(OWNER_ONLY_ASK.search(text))
+    if parent and not owner_only and any(ts > at for ts, frm in ev["peers"] if frm == parent):
+        return None
+    return {"at": at, "ask": text, "owner_only": owner_only}
 
 
 def owner_after_parent(ev: dict, parent: str, now: float | None = None) -> dict | None:
@@ -401,8 +415,13 @@ def child_commits(cli: str, since: str) -> list[dict]:
 
 
 def _ask_text(ask: dict) -> str:
-    return (f"本人待ちの問いが残っている ({_local_hm(ask['at'])} に本人待ちで止まり、 その後この子の窓に本人の発言が無い)"
-            + (f": {ask['ask'][:160]}" if ask["ask"] else ""))
+    if ask.get("owner_only"):
+        head = (f"本人だけが答えられる問いが残っている ({_local_hm(ask['at'])} に本人待ちで止まり、 その後この子の窓に本人の発言が無い。"
+                " 承認・外部への発信の問いは親の message では答えにならない)")
+    else:
+        head = (f"本人待ちの問いが残っている ({_local_hm(ask['at'])} に本人待ちで止まり、 その後この子の窓に本人の発言も親の message も"
+                " 無い。 判断の問いなら親が子に答えを送ればよい)")
+    return head + (f": {ask['ask'][:160]}" if ask["ask"] else "")
 
 
 def owner_reasons(target: str) -> list[str]:
@@ -413,7 +432,7 @@ def owner_reasons(target: str) -> list[str]:
         return []
     ev = scan_child(c["path"])
     out = []
-    ask = open_ask(ev, parent_wait_notes(c["parent_path"], c["local"]))
+    ask = open_ask(ev, parent_wait_notes(c["parent_path"], c["local"]), c["parent"])
     if ask:
         out.append(_ask_text(ask))
     talking = owner_after_parent(ev, c["parent"])
@@ -433,7 +452,7 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
         earlier_wraps = [w for w in ev["wraps"] if w[:19] < wrap_since[:19] and req and w >= req]
         ev["wraps"] = [w for w in ev["wraps"] if w[:19] >= wrap_since[:19]]
     notes = parent_wait_notes(c["parent_path"], c["local"], as_of)
-    ask = open_ask(ev, notes)
+    ask = open_ask(ev, notes, c["parent"])
     gw = go_wait(ev, notes, c["parent"])
     commits = child_commits(c["cli"], ev["first"][:19])
     reasons = []
@@ -759,7 +778,7 @@ def finished_state(child: dict, parent_local: str, parent_path: str, events: lis
     if busy:
         row["state"] = "busy"
         return row
-    ask = open_ask(ev, parent_wait_notes(parent_path, child["local"], as_of))
+    ask = open_ask(ev, parent_wait_notes(parent_path, child["local"], as_of), parent_local)
     talking = owner_after_parent(ev, parent_local, now)
     if ask:
         row["reasons"].append(_ask_text(ask))
@@ -1246,32 +1265,59 @@ def selftest() -> int:
            and not any("本人待ちの問い" in x for x in r["reasons"]))
         ok("step 0, no go yet: the archive guard does not read it as the person's ask", owner_reasons(gw_l) == [])
         claim_first = bash("2026-01-01T00:00:07Z", "python3 /x/board.py claim --root /b --request r")
-        transcript(gw_c, step0[:2] + [claim_first] + step0[2:] + after_go[:1] + [reply("2026-01-01T00:40:00Z"), stop("2026-01-01T00:41:00Z")])
+        transcript(gw_c, step0[:2] + [claim_first] + step0[2:] + [peer("2026-01-01T00:05:00Z", "go")]
+                   + [reply("2026-01-01T00:40:00Z"), stop("2026-01-01T00:41:00Z")])
         r = check_child(gw_l, need_wrap=False)
-        ok("control: the model check, a claim and an ask in one turn → the person's ask stays (only the parent answered)",
+        ok("control: the model check, a claim and an ask in one turn → the person's ask stays (only another session answered)",
            (not r["ok"]) and r["open_ask"] and r["open_ask"]["at"] == "2026-01-01T00:00:10Z")
         later_ask = [reply("2026-01-01T00:15:00Z"), stop("2026-01-01T00:15:05Z"), peer("2026-01-01T00:20:00Z", "これも見て", parent_l),
-                     reply("2026-01-01T00:30:00Z", ask="どちらにしますか"), stop("2026-01-01T00:30:05Z"), peer("2026-01-01T00:35:00Z", "B で", parent_l)]
+                     reply("2026-01-01T00:30:00Z", ask="どちらにしますか"), stop("2026-01-01T00:30:05Z"), peer("2026-01-01T00:35:00Z", "B で")]
         transcript(gw_c, step0 + after_go[:3] + later_ask)
         r = check_child(gw_l, need_wrap=False)
-        ok("control: a later turn (no model check in it) asks the person, only the parent answered → the ask stays",
+        ok("control: a later turn (no model check in it) asks the person, only another session answered → the ask stays",
            (not r["ok"]) and r["open_ask"] and r["open_ask"]["at"] == "2026-01-01T00:30:00Z" and not r["go_wait"])
         transcript(gw_c, step0 + after_go[:3] + later_ask[:5] + [u("2026-01-01T00:35:00Z", "B で", origin={"kind": "human"})])
         ok("control: the same later ask answered by the person in the child's window → no open ask",
            not check_child(gw_l, need_wrap=False)["open_ask"])
         no_board = [step0[0], bash("2026-01-01T00:00:05Z", "python3 /x/session-model.py self"), reply("2026-01-01T00:02:00Z"),
                     stop("2026-01-01T00:02:05Z"), peer("2026-01-01T00:20:00Z", "これも見て", parent_l),
-                    reply("2026-01-01T00:30:00Z", ask="どちらにしますか"), stop("2026-01-01T00:30:05Z"), peer("2026-01-01T00:35:00Z", "B で", parent_l)]
+                    reply("2026-01-01T00:30:00Z", ask="どちらにしますか"), stop("2026-01-01T00:30:05Z"), peer("2026-01-01T00:35:00Z", "B で")]
         transcript(gw_c, no_board)
         ok("control: a worker that never claims (no board) checked its model in an earlier turn → its later ask stays",
            bool(check_child(gw_l, need_wrap=False)["open_ask"]))
         no_handoff = [u("2026-01-01T00:00:00Z", "これを調べて", origin={"kind": "human"}),
                       bash("2026-01-01T00:00:05Z", "python3 /x/session-model.py self"), reply("2026-01-01T00:00:10Z", ask="どちらにしますか"),
-                      stop("2026-01-01T00:00:12Z"), peer("2026-01-01T00:05:00Z", "B で", parent_l)]
+                      stop("2026-01-01T00:00:12Z"), peer("2026-01-01T00:05:00Z", "B で")]
         transcript(gw_c, no_handoff)
         r = check_child(gw_l, need_wrap=False)
         ok("control: no board hand-off in the window, the model check and an ask in its first turn → the person's ask stays",
            bool(r["open_ask"]) and not r["go_wait"])
+        # The requester answers the child's questions of judgment (CONTRACT.md#worker-questions-to-requester): its message in
+        # the child's window after the ask closes it; an approval or a send to the outside stays the person's.
+
+        def asked(ask: str, answer: dict) -> list[dict]:
+            return [u("2026-01-01T00:00:00Z", "これを調べて", origin={"kind": "human"}), reply("2026-01-01T00:10:00Z", ask=ask),
+                    stop("2026-01-01T00:10:05Z"), answer]
+        transcript(gw_c, asked("run-all-checks に変異の試験の段を足すか", peer("2026-01-01T00:15:00Z", "足さない", parent_l)))
+        r = check_child(gw_l, need_wrap=False)
+        ok("the parent answered a question of judgment in the child's window → no open ask", r["ok"] and not r["open_ask"])
+        ok("the parent answered a question of judgment: the archive guard does not keep the child", owner_reasons(gw_l) == [])
+        transcript(gw_c, asked("どちらにしますか", peer_uds("2026-01-01T00:15:00Z", "B で", parent_l)))
+        ok("the parent's answer sent to the child's uds address counts too", not check_child(gw_l, need_wrap=False)["open_ask"])
+        transcript(gw_c, asked("この下書きを送信してよいか", peer("2026-01-01T00:15:00Z", "送って", parent_l)))
+        r = check_child(gw_l, need_wrap=False)
+        ok("an ask to send outside, answered only by the parent → stays the person's",
+           (not r["ok"]) and bool(r["open_ask"]) and r["open_ask"]["owner_only"] and any("本人だけが答えられる" in x for x in r["reasons"]))
+        transcript(gw_c, asked("表題の変更を承認しますか", peer("2026-01-01T00:15:00Z", "はい", parent_l)))
+        ok("an approval ask, answered only by the parent → the archive guard keeps it",
+           any("本人だけが答えられる" in x for x in owner_reasons(gw_l)))
+        transcript(gw_c, asked("どちらにしますか", peer("2026-01-01T00:15:00Z", "B で")))
+        r = check_child(gw_l, need_wrap=False)
+        ok("a question of judgment answered by another session (not the parent) → stays",
+           (not r["ok"]) and bool(r["open_ask"]) and not r["open_ask"]["owner_only"])
+        transcript(gw_c, [u("2026-01-01T00:00:00Z", "これを調べて", origin={"kind": "human"}), peer("2026-01-01T00:05:00Z", "B で", parent_l),
+                          reply("2026-01-01T00:10:00Z", ask="どちらにしますか"), stop("2026-01-01T00:10:05Z")])
+        ok("the parent's message before the ask does not answer it", bool(check_child(gw_l, need_wrap=False)["open_ask"]))
         transcript(parent_c, notes)
         sf_l, sf_c = "local_66666666-0000-4000-8000-000000000000", "66666666-cccc-4000-8000-000000000000"
         record(sf_l, sf_c, parent_l)
