@@ -43,7 +43,9 @@ HARD (exit 1):
   ❌ LAYOUT_SHIFT     : template text lines (= lines identical in both PDFs) moved
                         down = a fill wrapped onto an extra line or added one.
   ❌ PDF_FONT_NEW     : a font renders letters/digits in the filled PDF but renders
-                        none in the blank PDF.
+                        none in the blank PDF, or renders any visible character in
+                        the filled PDF while the blank uses it for none (a font that
+                        only draws spaces in the blank counts as absent).
 
 SURFACE (printed; exit 0 unless --strict):
   ⚠ BULLET_EMPTY     : a bullet placeholder ( 「・」 alone ) is still empty
@@ -505,10 +507,14 @@ def check_pdfs(filled_pdf, blank_pdf, findings):
         mn = min(d for d, _ in up)
         findings["LAYOUT_SHIFT_UP"].append(("pdf", f"様式の字 {len(up)} 行が上にずれた (最大 {-mn:.1f}pt)"))
     ref = ab or allb
-    new = sorted(f for f in af - ref if f)
-    if new:
+    new_alnum = sorted(f for f in af - ref if f)
+    new_any = sorted(f for f in allf - allb if f and f not in new_alnum)
+    if new_alnum:
         findings["PDF_FONT_NEW"].append(
-            ("pdf", f"欧文・数字を描く font {', '.join(new)} が雛形の紙に無い (雛形 = {', '.join(sorted(ref)) or '-'})"))
+            ("pdf", f"欧文・数字を描く font {', '.join(new_alnum)} が雛形の紙に無い (雛形 = {', '.join(sorted(ref)) or '-'})"))
+    if new_any:
+        findings["PDF_FONT_NEW"].append(
+            ("pdf", f"font {', '.join(new_any)} が雛形の紙では字を描いていない (雛形 = {', '.join(sorted(allb)) or '-'})"))
     return nf, nb
 
 
@@ -784,6 +790,8 @@ def _selftest():
         pdf(twop, [("Heading 1", "helv"), ("fill", "helv"), ("Approval No 7", "helv")], pages=2)
         newf = os.path.join(tmp, "nf.pdf")
         pdf(newf, [("Heading 1", "helv"), ("fill 123", "cour"), ("Approval No 7", "helv")])
+        newg = os.path.join(tmp, "ng.pdf")   # a new font that draws no letters/digits (marks only)
+        pdf(newg, [("Heading 1", "helv"), ("- - -", "cour"), ("Approval No 7", "helv")])
 
         def pf(f):
             fi = _new_findings()
@@ -795,6 +803,7 @@ def _selftest():
             ("pdf wrap: LAYOUT_SHIFT", bool(pf(shifted)["LAYOUT_SHIFT"])),
             ("pdf 2 pages: PAGE_ADDED", bool(pf(twop)["PAGE_ADDED"])),
             ("pdf new latin font: PDF_FONT_NEW", bool(pf(newf)["PDF_FONT_NEW"])),
+            ("pdf new font for marks only: PDF_FONT_NEW", bool(pf(newg)["PDF_FONT_NEW"])),
         ]
     except ImportError:
         print("  SKIP  render checks (PyMuPDF が無い)")
