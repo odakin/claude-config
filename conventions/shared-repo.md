@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + branch が default に入ったかを判定する・依頼書や記録に「未 merge」 と書く前 (#rebased-branch-not-ancestor) + 共有リポで計算・検算を Python で回すとき (版・venv・入口 tools/py の正本 = python-env.md、 本 file は招待した相手の手元の点検 #collaborator-check-python だけ)
+when: 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + branch が default に入ったかを判定する・依頼書や記録に「未 merge」 と書く前 (#rebased-branch-not-ancestor) + 共有リポで計算・検算を Python で回すとき (版・venv・入口 tools/py の正本 = python-env.md、 本 file は招待した相手の手元の点検 #collaborator-check-python だけ) + 共著者が主筆の file の既存部分 (計算・文・記号) を直すとき (#primary-author-consent)
 category: infra
 summary: 共有リポ固有規約
 -->
@@ -191,6 +191,13 @@ collaborator 本人の連絡先（メールアドレス等）や PII を layer 2
 **判断基準にしないもの 2 つ**: (a) **collaborator への信頼度** — 基準 1–3 は collaborator を完全に信頼していても成立する（機能ゼロ・履歴永続・本人期待は信頼と独立）。信頼度を論拠にすると「信頼できるから書く」の per-case 例外が増殖する。(b) **「private だから安全」** — private は現在の visibility 状態であって履歴の性質（基準 2）を変えない。
 
 運用は**一律ルール**にする: repo の CLAUDE.md に「連絡先・PII は書かない」を例外なしで書き、基準 1 の機能テストを pass するデータが現れた時にだけ明示的に緩める（per-case の例外判断は erode する）。所有者側の連絡先 SoT（個人層）には出典・取得日を残す。
+
+## <a id="primary-author-consent"></a>共著者が主筆の file の既存部分を直すときは、 主筆の了解を先に取る
+
+- 共有の file (ノート・原稿の節) のうち、 主筆の共著者が書いた既存部分 (計算・文・記号) を直すときは、 依頼した著者 1 人の了解だけで共有の正本に入れない。 案は別 file か提案の形 (差分つき) で主筆に見せ、 主筆の了解を得てから当てる。
+- 追記 (新しい節・注) と明らかな誤記の修正は、 当てた後に、 入れたことを主筆に知らせる (了解を先に取るのは、 既存部分の計算・文・記号を変えるとき)。
+- 実例の側の手順 (誰が主筆か・了解の取り方) は各 repo の CLAUDE.md が持つ。
+- 理由: 主筆の書いた計算・文・記号を、 依頼した 1 人の了解だけで共有の正本に入れると、 主筆が知らないまま主張が変わる。 どの共同研究でも同じ壊れ方をする (実測)。
 
 ## <a id="l2-style-digest"></a>執筆スタイル規約の層 2 instantiation（style digest pattern）
 
