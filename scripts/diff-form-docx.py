@@ -754,7 +754,7 @@ def _selftest():
     paths["marked"] = os.path.join(tmp, "marked.docx")
     mdoc.save(paths["marked"])
 
-    # 2026-11-02: a fixed-line form whose 記入行 is a self-closing paragraph; latin text in 明朝
+    # a fixed-line form whose 記入行 is a self-closing paragraph; latin text in 明朝
     def raw_form(path, body):
         doc = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
