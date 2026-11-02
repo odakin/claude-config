@@ -387,6 +387,7 @@
 - **[tex-rename-symbols.py](tex-rename-symbols.py)** — LaTeX 原稿の 1 文字記号 (y → x、 r → \zeta_x の類) を安全に一括改名する (scan / apply)。
 - **[tex-sentence-lengths.py](tex-sentence-lengths.py)** — LaTeX 原稿の英文の文の長さを数える (概数) — 文の数・中央値・N 語超の件数と、 長い順の一覧 (tex の行番号つき)。
 - **[tex2plain.py](tex2plain.py)** — .tex から LaTeX タグを除いたテキストを生成する (数式は Unicode で線形化、図キャプションは末尾へ)。
+- **[text-pairs-review.py](text-pairs-review.py)** — 提案の note の「今の文 → 案の文」 の組を、 語の差を色で示した 1 枚の HTML にする (本人が組をまとめて読んで決めるための頁)。
 - **[todo-changed-since-touch.py](todo-changed-since-touch.py)** — TODO 台帳の項目を触る瞬間に、 その session が最後に触った後に入った別の書き手の記録と、 結ばれた thread に届いた相手の message を 1 回だけ知らせる (PreToolUse hook の engine)。
 - **[todo-ledger-split.py](todo-ledger-split.py)** — 1 file の list (`TODO.yaml`) の TODO 台帳を 1 entry 1 file (`todo/<id>.yaml`) に分割する (既定 dry-run)。
 - **[transcript-images.py](transcript-images.py)** — Claude Code の会話記録 (jsonl) から、 user が貼った画像 (画面写真) を file に取り出す
