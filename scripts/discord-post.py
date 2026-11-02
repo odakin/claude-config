@@ -20,6 +20,10 @@ Usage:
   python3 discord-post.py --token-file ... --dm-user <USER_ID> ...   # open DM first
   python3 discord-post.py --token-file ... --channel <ID> --check    # read-only probe
   python3 discord-post.py --token-file ... --channel <ID> --recent 10  # read-only: last N messages
+                                         # (each line has the author's user id)
+  python3 discord-post.py --token-file ... --guilds          # read-only: servers this bot is in
+  python3 discord-post.py --token-file ... --channels <GUILD_ID>
+                                         # read-only: that server's channels + active threads
   python3 discord-post.py ... --attach path/to/file [--attach ...]   # attach file(s)
   python3 discord-post.py --token-file ... --member-probe <USER_ID> [--member-probe ...]
                                          # read-only: is that user/bot in each guild of this bot?
@@ -149,17 +153,75 @@ def _multipart_body(payload_json, attach_paths):
     return b"".join(parts), f"multipart/form-data; boundary={boundary}"
 
 
+MESSAGE_TYPE_LABELS = {7: "member joined"}  # 0 (default) / 19 (reply) には印を付けない
+
+
 def _format_messages(msgs):
     """GET /channels/{id}/messages の結果 (新しい順) を古い順の 1 行ずつにする。
-    改行は ' / ' に畳み、 添付は file 名だけ出す (= 読む用。 本文の全文は API の JSON にある)。"""
+    改行は ' / ' に畳み、 添付は file 名だけ出す (= 読む用。 本文の全文は API の JSON にある)。
+    書き手は username と user id。 通常の投稿と返信以外の message には type の印を付ける
+    (type 7 = 参加の通知の書き手は参加した本人 = Server Members Intent を切った bot でも
+    その人の id がここで引ける)。"""
     lines = []
     for m in reversed(msgs or []):
         ts = (m.get("timestamp") or "")[:19].replace("T", " ")
-        author = (m.get("author") or {}).get("username", "?")
+        a = m.get("author") or {}
+        author = f"{a.get('username', '?')} ({a.get('id', '?')})"
         text = (m.get("content") or "").replace("\n", " / ")
+        mtype = m.get("type", 0)
+        if mtype not in (0, 19):
+            label = MESSAGE_TYPE_LABELS.get(mtype)
+            mark = f"[type {mtype}" + (f" = {label}" if label else "") + "]"
+            text = f"{mark} {text}" if text else mark
         atts = [a.get("filename", "") for a in m.get("attachments") or []]
         tail = f" [attachments: {', '.join(atts)}]" if atts else ""
         lines.append(f"{ts} | {m.get('id', '')} | {author} | {text}{tail}")
+    return lines
+
+
+def _format_guilds(guilds):
+    """GET /users/@me/guilds の結果を 1 server 1 行 (id | 名前) にする。 純関数。"""
+    lines = [f"{g.get('id')} | {g.get('name', '?')}" for g in guilds or []]
+    lines.append(f"guilds={len(guilds or [])} (the bot sees only the servers it is in)")
+    return lines
+
+
+CHANNEL_TYPE_NAMES = {0: "text", 2: "voice", 4: "category", 5: "announcement",
+                      10: "announcement-thread", 11: "thread", 12: "private-thread",
+                      13: "stage", 15: "forum", 16: "media"}
+
+
+def _format_channels(chans, threads=None):
+    """GET /guilds/{g}/channels (+ /threads/active の threads) を 1 channel 1 行にする。
+
+    行 = id | type 番号 = 名前 | #名前 | parent=<id> (#親の名前)。 並びは画面に近い順
+    (親の無いもの → その下の子、 それぞれ position 順。 thread は親 channel の直後)。
+    この一覧は bot が開けない非公開 channel も名前つきで返す (実測) = 読めるかは別に --check で。
+    純関数 (selftest 用に API と分ける)。"""
+    items = list(chans or []) + list(threads or [])
+    by_id = {c.get("id"): c for c in items}
+
+    def pos(c):
+        p = c.get("position")
+        return (p if isinstance(p, int) else 0, c.get("id") or "")
+
+    def key(c):
+        chain = [c]  # c, 親, 親の親 (category → channel → thread の 3 段まで)
+        while len(chain) < 3 and by_id.get(chain[-1].get("parent_id")):
+            chain.append(by_id[chain[-1]["parent_id"]])
+        path = [pos(x) for x in reversed(chain)]  # 上から順の position
+        return path + [(-1, "")] * (3 - len(path))  # 親は子より先に並ぶ
+
+    lines = []
+    for c in sorted(items, key=key):
+        t = c.get("type")
+        line = f"{c.get('id')} | type {t} = {CHANNEL_TYPE_NAMES.get(t, '?')} | #{c.get('name', '?')}"
+        pid = c.get("parent_id")
+        if pid:
+            pname = (by_id.get(pid) or {}).get("name")
+            line += f" | parent={pid}" + (f" (#{pname})" if pname else "")
+        lines.append(line)
+    lines.append(f"channels={len(chans or [])} active_threads={len(threads or [])}")
     return lines
 
 
@@ -387,6 +449,11 @@ def main(argv=None):
     p.add_argument("--recent", type=int, metavar="N",
                    help="read-only: print the last N messages of the channel, oldest first "
                         "(1-100). Use this instead of ad-hoc API reads")
+    p.add_argument("--guilds", action="store_true",
+                   help="read-only: list the servers this bot is in (id and name)")
+    p.add_argument("--channels", metavar="GUILD_ID",
+                   help="read-only: list that server's channels and active threads "
+                        "(id, type, name, parent); private channels are listed too")
     p.add_argument("--member-probe", action="append", default=[], metavar="USER_ID",
                    help="read-only: for every guild this bot is in, is USER_ID a member? "
                         "(repeat for several; the bot itself is probed as a control)")
@@ -401,12 +468,30 @@ def main(argv=None):
         return selftest()
     if not a.token_file:
         p.error("--token-file is required")
-    if not a.channel and not a.dm_user and not a.member_probe:
-        p.error("--channel, --dm-user or --member-probe is required")
+    if not (a.channel or a.dm_user or a.member_probe or a.guilds or a.channels):
+        p.error("--channel, --dm-user, --member-probe, --guilds or --channels is required")
     token = open(a.token_file, encoding="utf-8", errors="replace").read().strip()
     if not token or "\x00" in token:
         print("token file looks empty/binary (git-crypt locked?)", file=sys.stderr)
         return 2
+
+    if a.guilds:
+        guilds, err = _get_retry(f"{API}/users/@me/guilds", token)
+        if err:
+            print(_explain(*err), file=sys.stderr); return 1
+        print("\n".join(_format_guilds(guilds)))
+        return 0
+
+    if a.channels:
+        chans, err = _get_retry(f"{API}/guilds/{a.channels}/channels", token)
+        if err:
+            print(_explain(*err), file=sys.stderr); return 1
+        resp, err = _get_retry(f"{API}/guilds/{a.channels}/threads/active", token)
+        if err:
+            print("note: active threads not listed: " + _explain(*err), file=sys.stderr)
+        threads = [] if err else (resp or {}).get("threads", [])
+        print("\n".join(_format_channels(chans, threads)))
+        return 0
 
     if a.member_probe:
         bad = _probe_members(token, a.member_probe)
@@ -589,8 +674,39 @@ def selftest():
         {"id": "1", "timestamp": "2026-01-01T00:00:00.000+00:00", "author": {"username": "a"},
          "content": "first", "attachments": []},
     ])
-    check("recent: oldest first", len(fmt) == 2 and fmt[0].endswith("| a | first"))
+    check("recent: oldest first", len(fmt) == 2 and fmt[0].endswith("| a (?) | first"))
     check("recent: newline folded + attachments", fmt[1].endswith("line1 / line2 [attachments: x.pdf]"))
+    # --recent: author id on every line; a member-join notice (type 7) is marked and its
+    # author is the person who joined (= how a bot without the Members intent gets the id)
+    fmt = _format_messages([
+        {"id": "4", "type": 19, "timestamp": "2026-01-01T00:00:02.000+00:00",
+         "author": {"id": "u9", "username": "z"}, "content": "re"},
+        {"id": "3", "type": 7, "timestamp": "2026-01-01T00:00:01.000+00:00",
+         "author": {"id": "u7", "username": "newcomer"}, "content": ""},
+    ])
+    check("recent: author id shown", "| newcomer (u7) |" in fmt[0])
+    check("recent: join notice marked", fmt[0].endswith("| [type 7 = member joined]"))
+    check("recent: reply (type 19) not marked", fmt[1].endswith("| z (u9) | re"))
+    # --guilds: one server per line + a count
+    g = _format_guilds([{"id": "g1", "name": "Lab"}, {"id": "g2", "name": "Show"}])
+    check("guilds: id | name per line", g[:2] == ["g1 | Lab", "g2 | Show"])
+    check("guilds: count line", g[-1].startswith("guilds=2"))
+    # --channels: parent by id and name; children follow their category in position order;
+    # a thread follows its parent channel; unknown type is '?'
+    ch = _format_channels(
+        [{"id": "c9", "type": 0, "name": "loose", "position": 0},
+         {"id": "k1", "type": 4, "name": "Talks", "position": 1},
+         {"id": "c2", "type": 0, "name": "seminar", "position": 1, "parent_id": "k1"},
+         {"id": "c1", "type": 2, "name": "room", "position": 0, "parent_id": "k1"},
+         {"id": "c5", "type": 99, "name": "odd", "position": 2}],
+        [{"id": "t1", "type": 11, "name": "q-and-a", "parent_id": "c2"}])
+    order = [line.split(" | ")[0] for line in ch[:-1]]
+    check("channels: category, its children in order, thread after its parent",
+          order == ["c9", "k1", "c1", "c2", "t1", "c5"])
+    check("channels: parent id and name", "| parent=k1 (#Talks)" in ch[order.index("c2")])
+    check("channels: type number and name", "| type 4 = category | #Talks" in ch[1])
+    check("channels: unknown type", "| type 99 = ? | #odd" in ch[order.index("c5")])
+    check("channels: count line", ch[-1] == "channels=5 active_threads=1")
     # arg validation: dry-run is the default (no --send flag -> no POST; the dry run
     # only GETs when it pre-checks a mass mention)
     import inspect
