@@ -26,15 +26,31 @@ conventions/batch-text-edits.md の先頭の側の罠)。 YAML を load → dump
                       key が無ければ足す (--set と同じ)。 list・mapping・数の key は止める。 書いた後に読み直し、 足した後の値と
                       ほかの key の不変を確かめる (`--set` で丸ごと書き直すと block の notes が 1 行の引用文字列に変わる = 実測)
     --drop key        その key をまとまりごと消す (無ければ何もしない)
-    --dry-run         書かずに差分だけ出す
+    --dry-run         書かずに差分だけ出す (守る key を失う書き方なら「上書きの鍵」 も出す)
+    --replaces key=鍵  守る key の今の値を読んだ印 (dry-run が「上書きの鍵」 として見せる 8 桁)。 守る key が 1 つなら `--replaces 鍵` でも可
+    --guard key       この呼び出しで守る key を足す (ふだんは下の git 属性で宣言する)
+守る key (読んだ印): file の git 属性 `yaml-set-guard` (カンマ区切りの key 名、 例 = 台帳の repo の `.gitattributes` に
+    `todo/*.yaml yaml-set-guard=status_context`) か `--guard` で名指した key は、 今の値が空でなく、 その値を失う書き方
+    (旧い値を含まない値への --set / --set-literal / --drop) をするとき、 dry-run が見せる鍵 (`--replaces key=<8 桁>`) を求める。
+    鍵が無い・読んだ後に値が変わった = 書かずに exit 1 で、 最後の 1 行に今の値を全文出す (出力を `tail -1` に絞っても届く)。
+    旧い値を含む値への --set と --append は失うものが無いので鍵は要らない。 渡された鍵は守る key でなくても照合する。
+    鍵の式は record-reply.py の現在地の鍵と同じ (前後の空白を除いた値の sha1 の先頭 8 桁) = どちらの dry-run の鍵も通る。
+    なぜ: 欄を丸ごと置き換える書き手が自分の記憶から新しい値を作ると、 間に別の書き手が記録した中身が消える (実測 = 案件を持つ
+    session が別件で現在地を書き直し、 別の session が記録した相手の返事を消した。 編集の道具の「読んだ後に file が変わった」
+    という注記は出ていた)。 一般形 = docs/convention-design-principles.md#overwrite-needs-read-token
 ⚠️ top-level だけを扱う (入れ子の key は対象外)。 file 全体が mapping でなければ止める。 git-crypt の file は worktree の平文を読む。
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import difflib
+import hashlib
+import io
 import json
+import os
 import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -161,6 +177,75 @@ def verify(before: str, after_text: str, sets: dict[str, str], drops: list[str])
     return errs
 
 
+def value_sig(v) -> str:
+    """値の鍵 (純関数) = 前後の空白を除いた文の sha1 の先頭 8 桁 (record-reply.py の context_sig と同じ式)。"""
+    return hashlib.sha1(str(v if v is not None else "").strip().encode("utf-8")).hexdigest()[:8]
+
+
+def guarded_keys(path: Path, extra=()) -> set[str]:
+    """読んだ印を求める key = file の git 属性 `yaml-set-guard` (カンマ区切り) ∪ extra (--guard)。
+    git の外・属性なし・git が無い = extra だけ (台帳の側が宣言して入れる網 = 宣言が無ければ従来どおり)。"""
+    keys = {k for k in extra if k}
+    env = {k: v for k, v in os.environ.items() if k not in ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE")}
+    try:
+        r = subprocess.run(["git", "-C", str(path.resolve().parent), "check-attr", "yaml-set-guard", "--", path.name],
+                           capture_output=True, text=True, timeout=5, env=env)
+    except (OSError, subprocess.SubprocessError):
+        return keys
+    val = r.stdout.strip().rsplit(": ", 1)[-1] if r.returncode == 0 else ""
+    if val not in ("", "unspecified", "unset", "set"):
+        keys |= {k.strip() for k in val.split(",") if k.strip()}
+    return keys
+
+
+def read_token_needs(before: dict, guarded: set[str], sets: dict, drops: list[str]) -> dict[str, str]:
+    """守る key のうち、 今の値 (空でない) を失う書き方をするもの → 今の値の鍵。 旧い値を含む文字列への --set は要らない。"""
+    need: dict[str, str] = {}
+    for k in sorted(guarded):
+        old = before.get(k)
+        if old is None or not str(old).strip():
+            continue  # 空の欄は失うものが無い
+        if k in drops:
+            need[k] = value_sig(old)
+        elif k in sets:
+            new = sets[k]
+            if new == old or (isinstance(new, str) and isinstance(old, str) and old.strip() in new):
+                continue
+            need[k] = value_sig(old)
+    return need
+
+
+def read_token_refusals(before: dict, need: dict[str, str], given_items: list[str] | None) -> list[str]:
+    """--replaces を照合し、 止める理由の行 (1 key 1 行、 今の値を全文) を返す。 空 = 書いてよい。
+    渡された鍵は守る key でなくても照合する (読んだ後に変わったなら止める)。"""
+    given: dict[str, str] = {}
+    bare: list[str] = []
+    for it in given_items or []:
+        k, sep, v = it.partition("=")
+        if sep:
+            given[k.strip()] = v.strip()
+        else:
+            bare.append(it.strip())
+    if bare:
+        if len(bare) > 1 or len(need) != 1:
+            raise SystemExit("❌ --replaces に鍵だけを渡せるのは、 鍵の要る key が 1 つのとき = `--replaces <key>=<鍵>` で渡す")
+        given.setdefault(next(iter(need)), bare[0])
+    out = []
+    for k in sorted(set(need) | set(given)):
+        now = value_sig(before.get(k))
+        g = given.get(k)
+        if g is not None and g == now:
+            continue
+        if g is None and k not in need:
+            continue
+        why = ("読んだ印 (--replaces) が無い" if g is None
+               else f"読んだ後に値が変わった (渡した鍵 {g} ≠ 今の鍵 {now} = 別の書き手が間に書いた)")
+        cur = str(before.get(k) if before.get(k) is not None else "").strip().replace("\n", " ⏎ ")
+        out.append(f"✗ 書かなかった: {k} の{why}。 今の {k} = 「{cur}」 → これを読み直して新しい値を作り、"
+                   f" --replaces {k}={now} を付けて打ち直す (鍵だけ写して打ち直さない)")
+    return out
+
+
 def selftest() -> int:
     src = ('id: "x"\ntask: |\n  一行目 ask: これは本文\n  二行目\nstatus: 待ち   # 旧\nstatus_context: "前"\n'
            'ask: "問い"\nask_default: "推し"\nasked: "2030-01-02"\ncross_ref:\n  - "a"\n  - "b"\n')
@@ -246,8 +331,66 @@ def selftest() -> int:
         assert main([str(p), "--append", "notes=b"]) == 0
         d = _yaml_safe_load(p.read_text(encoding="utf-8"))
         assert d["notes"] == "a\nb\n" and d["next"] == "n", d
-    print("yaml-set-top-keys selftest: ALL PASS (行頭の key だけを置き換え・本文の中の同じ語は触らない・ほかの key は不変を確かめる)")
+    selftest_read_token()
+    print("yaml-set-top-keys selftest: ALL PASS (行頭の key だけを置き換え・本文の中の同じ語は触らない・ほかの key は不変を確かめる"
+          "・守る key は読んだ印が無いと書かない)")
     return 0
+
+
+def _run(argv: list[str]) -> tuple[int, str]:
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = main(argv)
+    return rc, buf.getvalue()
+
+
+def selftest_read_token() -> None:
+    """守る key (読んだ印)。 再現 = 別の書き手が現在地に相手の返事を記録した後、 記憶から作った値で丸ごと置き換える。"""
+    other = "2030-01-02 甲野さんの返事 (必要書類 3 点) → 次: 書類を送る / 並行: 事務の検討待ち"
+    src = f'id: "x"\nstatus: "待ち"\nstatus_context: "{other}"\nnotes: |\n  a\n'
+    sig = value_sig(other)
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp)
+        have_git = subprocess.run(["git", "init", "-q", str(repo)], capture_output=True).returncode == 0
+        p = repo / "todo" / "x.yaml"
+        p.parent.mkdir()
+        if have_git:
+            (repo / ".gitattributes").write_text("todo/*.yaml yaml-set-guard=status_context\n", encoding="utf-8")
+            assert guarded_keys(p) == {"status_context"}, guarded_keys(p)
+        guard = [] if have_git else ["--guard", "status_context"]
+        p.write_text(src, encoding="utf-8")
+        # 鍵なしの丸ごとの置き換え = 書かない。 最後の行に今の値の全文と鍵 (tail -1 でも届く)
+        rc, out = _run([str(p), "--set", "status_context=記憶から書いた現在地 → 次: 書類を作る"] + guard)
+        last = out.strip().splitlines()[-1]
+        assert rc == 1 and other in last and f"--replaces status_context={sig}" in last, out
+        assert p.read_text(encoding="utf-8") == src
+        # dry-run は書かずに鍵を見せる
+        rc, out = _run([str(p), "--set", "status_context=新しい現在地", "--dry-run"] + guard)
+        assert rc == 0 and f"上書きの鍵 = --replaces status_context={sig}" in out and p.read_text(encoding="utf-8") == src, out
+        # 鍵の形は key=鍵 と鍵だけの両方
+        for rep in (f"status_context={sig}", sig):
+            p.write_text(src, encoding="utf-8")
+            rc, out = _run([str(p), "--set", "status_context=新しい現在地", "--replaces", rep] + guard)
+            assert rc == 0 and _yaml_safe_load(p.read_text(encoding="utf-8"))["status_context"] == "新しい現在地", out
+        # 読んだ後に別の書き手が値を変えた = 古い鍵では書かない
+        rc, out = _run([str(p), "--set", "status_context=さらに新しい", "--replaces", f"status_context={sig}"] + guard)
+        assert rc == 1 and "読んだ後に値が変わった" in out and "「新しい現在地」" in out, out
+        # 失わない書き方は鍵が要らない (旧い値を含む --set / --append / 守らない key / 空の欄)
+        p.write_text(src, encoding="utf-8")
+        assert _run([str(p), "--set", f"status_context=2030-01-03 追記 / {other}"] + guard)[0] == 0
+        assert _run([str(p), "--append", "status_context=もう 1 行"] + guard)[0] == 0
+        assert _run([str(p), "--set", "status=対応中"] + guard)[0] == 0
+        p.write_text('id: "x"\nstatus_context: ""\n', encoding="utf-8")
+        assert _run([str(p), "--set", "status_context=最初の現在地"] + guard)[0] == 0
+        # --drop と --set-literal も値を失う = 鍵が要る
+        p.write_text(src, encoding="utf-8")
+        assert _run([str(p), "--drop", "status_context"] + guard)[0] == 1
+        assert _run([str(p), "--set-literal", "status_context=null"] + guard)[0] == 1
+        assert p.read_text(encoding="utf-8") == src
+        # 宣言の無い file (git の外・属性なし) は従来どおり鍵なしで書ける
+        q = repo / "plain.yaml"
+        q.write_text(src, encoding="utf-8")
+        assert _run([str(q), "--set", "status_context=置き換え"])[0] == 0
 
 
 def kv(items: list[str] | None, allow_quoted: bool = True, allow_bool_string: bool = True) -> dict[str, str]:
@@ -306,6 +449,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--allow-quoted-value", action="store_true")
     ap.add_argument("--allow-bool-string", action="store_true")
     ap.add_argument("--append", action="append", dest="appends")
+    ap.add_argument("--replaces", action="append", dest="replaces")
+    ap.add_argument("--guard", action="append", default=[])
     a = ap.parse_args(argv)
     p = Path(a.file)
     before = p.read_text(encoding="utf-8")
@@ -320,6 +465,14 @@ def main(argv: list[str]) -> int:
     comments = kv(a.comments)
     if set(comments) - set(sets):
         raise SystemExit(f"❌ --comment は --set した行にだけ付く = 黙って捨てない (同じ key の --set も渡す): {sorted(set(comments) - set(sets))}")
+    before_data = _yaml_safe_load(before) if before.strip() else {}
+    before_data = before_data if isinstance(before_data, dict) else {}
+    need = read_token_needs(before_data, guarded_keys(p, a.guard), sets, a.drop)
+    if not a.dry_run:
+        refusals = read_token_refusals(before_data, need, a.replaces)
+        if refusals:  # 差分は出さない = 最後の行が今の値になる (出力を tail -1 に絞る呼び手にも届く)
+            print("\n".join(refusals))
+            return 1
     base, append_sets, expect = append_values(before, appends) if appends else (before, {}, {})
     after_text = edit(base, {**sets, **append_sets}, a.drop, a.after, comments)
     errs = verify(before, after_text, {**sets, **expect}, a.drop)
@@ -327,7 +480,10 @@ def main(argv: list[str]) -> int:
     if errs:
         print("❌ 書かなかった: " + " / ".join(errs))
         return 1
-    if not a.dry_run:
+    if a.dry_run:
+        for k, sig in need.items():
+            print(f"上書きの鍵 = --replaces {k}={sig} (今の {k} を読んだ印。 書くときに付ける)")
+    else:
         p.write_text(after_text, encoding="utf-8")
     return 0
 
