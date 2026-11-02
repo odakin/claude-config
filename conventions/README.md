@@ -129,7 +129,7 @@ layer 1 (public) のドメイン固有規約 153 file をカテゴリ別に列�
 
 ## 論文・発表・研究文書 (`paper`)
 
-- **[beamer-slides.md](beamer-slides.md)** — Beamer/metropolis または編集可能な PPTX / Keynote で研究スライドを作る・直すとき + 既存デッキの「同じ感じ」を引き継ぐとき + 「最新のデザインでかっこよく」 と頼まれたとき (#design-from-principles)
+- **[beamer-slides.md](beamer-slides.md)** — Beamer/metropolis または編集可能な PPTX / Keynote で研究スライドを作る・直すとき + 既存デッキの「同じ感じ」を引き継ぐとき + 「最新のデザインでかっこよく」 と頼まれたとき (#design-from-principles) + 原則から組んだデッキの組版と言葉の罠 (#principled-deck-pitfalls)
   - 研究スライドの技術規約 (= Beamer の build・font・section・page label / 既存デッキの構成・意匠・素材を分けて継承 / editable PPTX の共通 artifact-tool helper / Keynote 読戻し + PDF 出荷 / 全頁 visual QA / QR payload と link 検査。giving-talks.md〔中身/作法〕と相補)
 - **[giving-talks.md](giving-talks.md)** — 講演・セミナー・発表の準備をするとき (+ 日本語版: [giving-talks.ja.md](giving-talks.ja.md))
   - 講演のしかた (= Robert Geroch "Suggestions For Giving Talks" arXiv:gr-qc/9703019 の own-words ダイジェスト、 主題選択 / 3-4 メッセージ構成 / 導入は全体の 1-5 / 視覚資料は図>言葉>式 / 1h で非自明な式 5 本・スライド 10 枚 / 質問は完全に正直に 等。 セミナー・JC・卒論発表の準備時に読む、 英語本体)
@@ -159,7 +159,7 @@ layer 1 (public) のドメイン固有規約 153 file をカテゴリ別に列�
   - 「天気」投稿の機構 — 種別選択 (調査ノートは 6pp 以内・掲載料無料・和文/英文要旨とも不要 #category-fit)、 掲載料は種別で不連続で格上げは課金を伴い免除条項は課金区分にしか効かない (#page-charge-by-category)、 LaTeX のまま投稿できる 3 点セット (#tex-submission-set)、 著者要件 = 原則会員を含む + 種別非依存 + 会員番号発行まで 3-4 週の lead + 学生のうちに入るのが最安 (#membership-early-check)、 非会員のみの著者構成なら例外を打診する作法 (#non-member-inquiry)、 提出経路ごとに添付書類が違い電子投稿フォームは原稿 1 ファイル制約で TeX と相性が悪い (#channel-vs-attachments)、 様式の実 URL と文中引用規則
 - **[tikz-pgfplots.md](tikz-pgfplots.md)** — TikZ / pgfplots を含む LaTeX project で図を作るとき
   - TikZ/pgfplots 固有 gotchas（infographic / poster / 1 枚 figure 制作で必読、 latex.md と併読）
-- **[writing-discipline.md](writing-discipline.md)** — AI が文章を書く・直すとき常時 (論文・研究ノート・報告書・README・chat・code の docstring と図のラベルまで) + 「kernel」 と書きそうになった瞬間 + 文面を「柔らかく」 と頼まれたとき (#softening-without-self-description) + 初学者向けの入門 (教科書の最初の章・講義の初回・入門の解説) を書く・組み直すとき、 手本の本より分かりにくいと言われたとき (#novice-introduction-concrete-first) + 論文・研究ノートの本文を書く・組み直す・圧縮する・共著の原稿に注記を入れるとき (#paper-structure 〜 #japanese-academic-prose)
+- **[writing-discipline.md](writing-discipline.md)** — AI が文章を書く・直すとき常時 (論文・研究ノート・報告書・README・chat・code の docstring と図のラベルまで) + 「kernel」 と書きそうになった瞬間 + 文面を「柔らかく」 と頼まれたとき (#softening-without-self-description) + 初学者向けの入門 (教科書の最初の章・講義の初回・入門の解説) を書く・組み直すとき、 手本の本より分かりにくいと言われたとき (#novice-introduction-concrete-first) + 論文・研究ノートの本文を書く・組み直す・圧縮する・共著の原稿に注記を入れるとき (#paper-structure 〜 #japanese-academic-prose) + 日本語の下書きから英語の文を起こすとき (#ga-is-not-but)
   - 文章の標語 = 「平易に、論理の流れがスッキリ追えるように、簡潔に」 (AI の文章は放っておくと冗長になる = 書いた文ごとに標語を当てる) + 多義語 kernel を汎称に使わない (重み関数・窓関数・伝播関数・積分核など、その式が表す対象を名指す) + 「柔らかく」 は自分の行為を形容する語 (gently 等) でなく構文で出す + 初学者向けの導入は、 図のある実物と古典の予想を裏切る観察から始め、 新しい数学は既知の現象の類推で要ると分かってから最小の形で出す + 論文の文章の一般則 (構成 = 講演の 3 message を紙に翻訳、 他人の仕事は序論に集め、 要約は「何をしたか / 何を意味するか / 次に何をするか」 / 文と段落 = 言い切り・圧縮の検算・検算の 3 拍・式の項の呼び方・裸の括弧参照を書かない / 引用 = 方向ごとに入口 1 つ・文献ごとに何をしたか / 記号 = 無駄に定義しない・本文で定義・パラメータは定義の式に / 注記は用件だけ・示していない検証を書かない / 日本語の接続詞の糊)
 
 ## macOS (`macos`)
@@ -217,7 +217,7 @@ layer 1 (public) のドメイン固有規約 153 file をカテゴリ別に列�
   - 会議の候補を洗い出して選ぶときの探し方と 2 つの罠 — 去年の開催月は当てにならない (シリーズは月を移す) / 資金と承認の〆は会議の告知より前に来る (予定日で出せるかを窓口に先に聞く)。 比べた結果は「選んだ 1 つ」 だけでなく「落とした候補と理由」 まで台帳に残す (次の年に同じ sweep をやり直さないため)
 - **[dirac-conventions.md](dirac-conventions.md)** — Dirac 行列・計量の規約を教科書 (Peskin–Schroeder / Srednicki / Weinberg) の間で読み替えるとき + 規約の違う文献から式を写すとき + 自分の project が「どの教科書の行を使うか」 を repo の記号の規約に宣言するとき + 共同研究者と「我々の (−,+,+,+) は Srednicki か Weinberg か」 を確かめるとき
   - Dirac 規約の対応表 (教科書 3 冊: 計量 / Clifford / (γ⁰)² と Hermite 性 / β / 正振動数 / Dirac 方程式 / 自由ラグランジアン / 伝播関数。 全セルが宣言の式番号つき、 推定は明記) + 変換の辞書 (γ_W = −iγ_S、 γ_P = γ_S で η が反転。 u = Cv^* の C の条件と書き方が行で変わること、 u の双線形を v で書くと運動量の順序が入れ替わること = #charge-conjugation) + 数値検算 script + 「project ごとに使う行を宣言し、 規約の違う文献から式を記号のまま写さない」「成分で書くなら表示を名指す (規約の行は表示も Hermite 性も決めない)」 規則
-- **[physics-notes.md](physics-notes.md)** — 物理・数理ノートを書くとき + 共著者がその話題を特定の原論文・教科書で学んでいて、 ノートを「読めない」 と言われたとき (#write-from-readers-source) + 共同研究者の問いにノートで答えるとき (#answer-only-the-question) + 同じ境目で切り替わる 2 つの性質を「だから」 でつなぎそうになったとき (#same-threshold-not-equivalence) + 検算が通ったノートを提出する前 (#prose-not-covered-by-checks)
+- **[physics-notes.md](physics-notes.md)** — 物理・数理ノートを書くとき + 共著者がその話題を特定の原論文・教科書で学んでいて、 ノートを「読めない」 と言われたとき (#write-from-readers-source) + 共同研究者の問いにノートで答えるとき (#answer-only-the-question) + 同じ境目で切り替わる 2 つの性質を「だから」 でつなぎそうになったとき (#same-threshold-not-equivalence) + 検算が通ったノートを提出する前 (#prose-not-covered-by-checks) + 伝播関数の極・零点を文に書くとき (#pole-not-propagator-zero)
   - 物理・数理ノートの 10 規約 (= 添字は常に全部顕に / 規約表セルは「宣言の引用」か「推定の明記」/ ノートは snapshot で歴史は md + git 側 / 検証 note は問題・結論・手当のみ / 配布物に内部記号を出さない / 相手が拠っている文献の手順と語で書く / 問いに答えるノートは問いに要る論だけ / 表示の取り換えを演算子として書かない / 同じ境目の 2 つの性質を同値と書かない / 検算が通っても散文は別に確かめる) — odakin 個人流儀を全プロジェクト横断で一貫させるための公開層配置
 - **[physics-verification-cycle.md](physics-verification-cycle.md)** — 論文・研究ノートの主張を機械検査で守る体制を組むとき / 外部論文を検証読みするとき / 検証系 AI workflow (verify-to-learn・adversarial pass・campaign) を設計するとき
   - → **移設済 (2026-09-06)**: 正本は ai-collaboration/conventions/physics-verification-cycle.md (何を検査するか: 4 station / 機械 anchor / foil / tier / 3 状態 / verify-to-learn / 第二の目 / rubric / 止まる規律 / cross-vendor / campaign 運用 A-K)。 本 file は旧 anchor を保つ stub

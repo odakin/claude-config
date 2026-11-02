@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Beamer/metropolis または編集可能な PPTX / Keynote で研究スライドを作る・直すとき + 既存デッキの「同じ感じ」を引き継ぐとき + 「最新のデザインでかっこよく」 と頼まれたとき (#design-from-principles)
+when: Beamer/metropolis または編集可能な PPTX / Keynote で研究スライドを作る・直すとき + 既存デッキの「同じ感じ」を引き継ぐとき + 「最新のデザインでかっこよく」 と頼まれたとき (#design-from-principles) + 原則から組んだデッキの組版と言葉の罠 (#principled-deck-pitfalls)
 category: paper
 summary: 研究スライドの技術規約 (= Beamer の build・font・section・page label / 既存デッキの構成・意匠・素材を分けて継承 / editable PPTX の共通 artifact-tool helper / Keynote 読戻し + PDF 出荷 / 全頁 visual QA / QR payload と link 検査。giving-talks.md〔中身/作法〕と相補)
 -->
@@ -261,3 +261,12 @@ python-pptx の notes part を Keynote が拒否する上の既知事例を否�
 - 部品: metropolis を使わず plain beamer にし、 `background` template に tikz で現在地の線・モチーフ・頁番号を描く。 カードは `tcolorbox`
 - 図はすべて自作 (§10)。 写真や観測の画像を使うなら出所の公式頁から取り、 クレジットを頁に入れる
 - 罠 = §4b と §10
+- <a id="principled-deck-pitfalls"></a>組版と言葉の罠 (実測):
+  - `fontspec` の font に `Ligatures=TeX` を付ける。 無いと `--` と `---` がそのまま出る
+  - 本文は左寄せにする = `\usepackage[document]{ragged2e}` と `\setlength{\RaggedRightRightskip}{0pt plus 1fil}`。 両端揃えのままだと狭い欄で字間が崩れ、 長い題が折り返さずにはみ出す
+  - 頁は上から詰める = `\documentclass[...,t]{beamer}`。 縦の中央寄せのままだと、 長い頁の下が切れる
+  - 文を 1 語でも足したら頁を画像にし直す (§9): 高さを揃えたカード (`equal height group`) は 1 枚が 1 行伸びると全部伸び、 下の注記が隅のモチーフに重なる。 組版は error 無しで通る
+  - 討論の頁の問いは、 物理の未解決の問いにする。 手順の選択 (どれを採るか・節を残すか) や、 対称性から自動で従うことは並べない (「自明すぎる」 と言われる)
+  - 会合の後に送るデッキは、 表紙を「会合の後」 の形にし、 状態は送る時点のものを書く
+  - file 名は中身が分かる名前にする (`<project>-<主題>-<日付>.tex`)。 `status.tex` のような名前は、 同じ dir に次のデッキが来たときに区別できない
+  - 人名の付いた呼び方 (「〜の公式」) は聞き手が知らないことがある = 何の式かを言う (「熱核係数の一般公式」)

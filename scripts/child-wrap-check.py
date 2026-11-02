@@ -14,7 +14,8 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
     (`--hook-accept`)、 畳むべき子を残したまま turn を終えると 1 回だけ止める (`--hook-stop`)。
 
 照合 (子ごと):
-  - 動き: live の registry の status (busy = まだ動いている)
+  - 動き: live の registry の status (busy = まだ動いている / waiting = turn の途中で許可・入力の確認が出たまま止まっている。
+    どちらも turn の途中 = 畳まない。 waiting を turn の終わりと読むと、 子が wrap の途中で許可を待っているのに「畳んでよい」 と出た (実測))
   - wrap: 子の記録の wrap skill の起動 (Skill tool の skill=wrap か、 skill の本文の差し込み)
   - commit: 子の commit (全 repo の commit に入る `Agent-Session: claude:<子の transcript id>` の trailer で引く) が、
     その repo の remote-tracking branch に入っているか (push 済みか)
@@ -92,6 +93,9 @@ _bw = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_bw)
 
 WAIT_NOTE = "finished a turn and then reported that it was waiting on the user"
+# registry status "waiting" = the child stopped mid-turn on a permission / input prompt in its own window (measured:
+# a child stuck on a Bash approval read as idle-with-an-old-turn-end and was reported foldable during its wrap)
+WAITING_TEXT = "子の窓で許可・入力の確認が出たまま止まっている (turn の途中 = 本人に子の窓を見てもらう)"
 PEER_FROM = re.compile(r'<cross-session-message from=\\?"(local_[0-9a-f-]+)')  # kept for callers; scan uses _peer_messages
 PEER_TAG = re.compile(r'<cross-session-message ((?:[a-z-]+=\\?"[^"\\]*\\?"\s*)+)>(.*?)(?:</cross-session-message>|$)', re.S)
 PEER_ATTR = re.compile(r'(from-session|from)=\\?"([^"\\]*)')
@@ -379,6 +383,8 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
     reasons = []
     if not as_of and c["status"] == "busy":
         reasons.append("まだ動いている (turn の途中)")
+    if not as_of and c["status"] == "waiting":
+        reasons.append(WAITING_TEXT)
     if ask:
         reasons.append(_ask_text(ask))
     talking = owner_after_parent(ev, c["parent"], _epoch(as_of) if as_of else None)
@@ -421,6 +427,8 @@ def turn_done_after(target: str, since: float) -> tuple[bool, str]:
         return True, "見つからない"
     if c["status"] == "busy":
         return False, "動いている"
+    if c["status"] == "waiting":
+        return False, WAITING_TEXT
     ends = [_epoch(s) for s in scan_child(c["path"])["stops"][-3:] if s]
     if (c["edge"] and c["edge"] > since) or any(e > since for e in ends):
         return True, "終わった"
@@ -687,7 +695,7 @@ def finished_state(child: dict, parent_local: str, parent_path: str, events: lis
     if as_of:
         busy = bool(ev["replies"]) and max(ev["replies"]) > max(ev["stops"], default="")
     else:
-        busy = any((s["sessionId"] == child["cli"] or s["host"] == child["local"]) and s["status"] == "busy"
+        busy = any((s["sessionId"] == child["cli"] or s["host"] == child["local"]) and s["status"] in ("busy", "waiting")
                    for s in sm.live_sessions())
     if busy:
         row["state"] = "busy"
@@ -1139,6 +1147,12 @@ def selftest() -> int:
         ok("the ask is dated at the child's last reply before the note", r["open_ask"]["at"] == "2026-01-01T00:29:00Z")
         r = check_child(ids("busy")[0])
         ok("busy child → kept", (not r["ok"]) and any("動いている" in x for x in r["reasons"]))
+        live(list(kids).index("busy"), ids("busy")[1], ids("busy")[0], "waiting")
+        r = check_child(ids("busy")[0])
+        ok("child stopped on a prompt mid-turn (waiting) → kept", (not r["ok"]) and WAITING_TEXT in r["reasons"])
+        done, why = turn_done_after(ids("busy")[0], since=0)
+        ok("--wait: waiting on a prompt → not done", not done and why == WAITING_TEXT)
+        live(list(kids).index("busy"), ids("busy")[1], ids("busy")[0], "busy")
         r = check_child(ids("nowrap")[0])
         ok("no wrap run → kept", (not r["ok"]) and r["reasons"] == ["wrap の記録が無い"])
         ok("--no-wrap-needed drops that reason", check_child(ids("nowrap")[0], need_wrap=False)["ok"])
