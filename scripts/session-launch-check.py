@@ -707,7 +707,9 @@ def wait_first_turn(argv: list[str]) -> int:
         if launcher:
             upsert(launcher, local, state="ok", proceeded=True)
         lines.append("  次の一手: go は要らない (提出は掲示板の watch で届く)。"
-                     + (f" ただし記録が頼んだ値と違う ({' / '.join(diffs)}) = 本人に 1 行で伝える。" if diffs else ""))
+                     + (f" ただし記録が頼んだ値と違う ({' / '.join(diffs)}) = 本人に 1 行で伝える。" if diffs else "")
+                     + (f" 掲示板の request の指定 (--detach) どおり detach_session(session_id={local}) を出す。"
+                        if hit.get("detach") and not diffs else ""))
     elif diffs and rec:
         lines.append(f"  次の一手: 記録が違う ({' / '.join(diffs)}) = {fix_steps(local, want_m, want_e, rec)} を出し、"
                      f" 同じ見張りをもう一度 Bash の run_in_background で: {watch_cmd(local, want_m, want_e)}"
@@ -1303,8 +1305,8 @@ def selftest() -> int:
         registry("busy")
         transcript(claim)
         rc, out = watch()
-        check("watch: the worker claimed (went to work without go) → no go needed, ledger ok",
-              rc == 0 and "go は要らない" in out and load("launcher-w")[-1]["state"] == "ok")
+        check("watch: the worker claimed (went to work without go) → no go needed, ledger ok, the record's detach asked",
+              rc == 0 and "go は要らない" in out and load("launcher-w")[-1]["state"] == "ok" and "detach_session" in out)
         transcript(said)
         rc, out = watch("--max-minutes", "0.0005")
         check("watch: still busy → time-out (exit 3) with the same watch to run again", rc == 3 and WATCH_FLAG in out)
