@@ -321,6 +321,7 @@ project-hash は `~/.claude/projects/` 直下の `-` 区切り path 表現 (= �
 2. **mutation tool だけ** に絞る (= `delete`/`update`/`patch`/`insert`/`create` 系)、 read-only の `list_*`/`get_*`/`read_*` は除外
 3. 0 件なら Claude を容疑者から外す (= 確信度: 高、 .jsonl ledger 全件で履歴無しなら呼んでない)
 4. 1 件以上なら record の `tool_use_id` + 周辺 message を読んで context 復元 (= どの session / どの user prompt が trigger したか)
+5. <a id="ledger-field-history-first"></a>**git で持つ台帳の欄が誤っている・欠けているときは、 欄の値を commit ごとに並べて、 どの書き手が何を消したかを先に特定する** — `git log --format='%h %ad %s | %(trailers:key=Agent-Session,valueonly)' -- <file>` で書き手を並べ、 `git show --textconv <commit> -- <file>` (git-crypt の file も平文で出る) で各 commit の欄の行の前後を読む。 依頼書や報告の「記録した側が直していない」 は、 この並べ方で確かめるまで仮説 (実測: 記録した側は欄に書いていて、 消したのは後の別の書き手の丸ごとの置き換えだった)。 書き手が分かったら、 その書き手の会話記録 (上の道具) で、 どの道具で・読み直してから書いたか記憶から書いたかを引く
 
 ### 適用範囲
 
@@ -434,7 +435,7 @@ count return「0」 / 「期待と違う中身」 は 3 つの distinct な状�
 ### How to apply
 
 - gate / hook / detector を作ったら、 **catch すべき violation を実際に仕込んだ実 e2e** を 1 回通す (= 「正常 input で通る」 だけでなく「**異常 input が本当に block されるか**」)。 破壊的 e2e (= 実 commit / 実書込) は revert 前提で安全に。
-- <a id="violation-e2e-on-a-copy"></a>⚠️ **違反を仕込む e2e は、 守る対象の複製 (使い捨て git / scratch dir) で行う**。 guard がまだ対象を登録していない段階で本物に違反を起こすと、 guard は発火せず、 **試験そのものが守りたかった破壊になる** (実測: 凍結で止まるはずの旧 builder を、 対象を凍結に登録する前に本物で走らせ、 守る対象の出力を作り直した。 git から戻して差分なしを確認)。 順序 = ① 対象を guard に登録 → ② 複製で違反を起こして止まることを確認 → ③ 本物では dry-run か読み取りだけ。 revert できる場所でも、 revert は「壊れたことに気づいた」 時にしか起きない。
+- <a id="violation-e2e-on-a-copy"></a>⚠️ **違反を仕込む e2e は、 守る対象の複製 (使い捨て git / scratch dir) で行う**。 guard がまだ対象を登録していない段階で本物に違反を起こすと、 guard は発火せず、 **試験そのものが守りたかった破壊になる** (実測: 凍結で止まるはずの旧 builder を、 対象を凍結に登録する前に本物で走らせ、 守る対象の出力を作り直した。 git から戻して差分なしを確認)。 順序 = ① 対象を guard に登録 → ② 複製で違反を起こして止まることを確認 → ③ 本物では dry-run か読み取りだけ (本物の 1 件を選んで「止まるはず」 で打たない = 選んだ 1 件が guard の守る形でない 〔守る欄が空など〕 と、 そのまま書き込む。 実測: 宣言を入れた直後の確かめで欄の空の項目を選び、 書き込んで git から戻した)。 revert できる場所でも、 revert は「壊れたことに気づいた」 時にしか起きない。
 - **confidence 境界を report に明示し、 重要な機構は境界を残さず実検証する**。 「logic ✅ だから動く」 と打ち切らない。 4 軸 sweep (= grep / 論理) で error 0 でも、 実 e2e で silent dead が出ることがある (= 静的 sweep と動的 e2e は別 layer)。
 
 ### 関連事故 / 検証例

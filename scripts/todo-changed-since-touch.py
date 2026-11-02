@@ -119,7 +119,8 @@ def _epoch(d: str, hm: str) -> float | None:
 def linked_incoming(repo: Path, todo: dict, since: float, until: float | None = None,
                     prune_by_mtime: bool = True) -> list[dict]:
     """項目に結ばれた thread の inbox 索引から、 since より後 (until 以前) に届いた相手の message (古い順)。
-    inbox の月 file のうち since より後に書かれていない file は読まない (後に届いた message はその後に記録される)。"""
+    inbox の月 file のうち since より後に書かれていない file は読まない (後に届いた message はその後に記録される。
+    2 つの台帳の月 file を全部読むと 0.18 秒 = 実測)。"""
     entries: dict[str, dict] = {}
     for f in sorted((repo / "inbox").glob("*.yaml")):
         try:
