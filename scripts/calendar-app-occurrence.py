@@ -8,7 +8,8 @@
   そのまま届く。 毎回 Swift や JXA を書き下ろすと span の取り違え (= 系列ごと動く・消える) と紙一重なので道具にする。
   手順と罠の正本 = conventions/macos-calendar-write.md#recurring-one-occurrence
 
-subcommands (calendar 名は Calendar.app が出す名前そのもの。 同名が複数あるなら --source で account を絞る):
+subcommands (calendar 名は Calendar.app が出す名前そのもの。 同名が複数あるなら --source で account を絞る。
+--title は題の完全一致 = 題の一部では 0 件になる (実測)。 題が分からないなら list を --title 無しで回して読む):
   list    --calendar C [--title T] [--from D] [--to D]       回ごとに 日時 / series id / 繰り返し / 個別に変えた回か を出す
   move    --calendar C --title T --date D [--time HH:MM] --to-date D2 [--to-time HH:MM] [--apply]
           その回だけを D2 へ (時刻を省くと元の時刻、 長さは保つ)
