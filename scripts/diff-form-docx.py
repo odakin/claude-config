@@ -18,20 +18,23 @@ Findings
 --------
 HARD (exit 1):
   ❌ LABEL_OVERWRITE  : a table cell that held pre-printed label text in the blank
-                        form now holds *different* text (no containment either way).
+                        form now holds *different* text (no containment either way;
+                        a choice mark ○ ■ ☑ … put into the label does not count).
                         = the cover-sheet bug: writing a value into a LABEL cell
                           (e.g. birth date typed into the 「年令」/age label cell).
   ❌ LABEL_DELETED    : a blank label cell is empty in the filled form.
   ❌ HEADING_VANISHED : a structural heading paragraph ( （N） / N． ) present in the
                         blank form is absent from the filled form (= overwritten /
                         deleted, e.g. a heading clobbered by an off-by-one fill).
-  ❌ PARA_ADDED       : a container (本文 / 表の cell / textbox) has MORE paragraphs
-                        than in the blank, counting self-closing empty paragraphs
-                        `<w:p .../>` (= 記入行). The fill wrote a new paragraph instead
-                        of the template's line; on a fixed-pitch form (docGrid
-                        type="lines") each one pushes the page by a line.
-                        --allow-added-paragraphs turns this into a surface finding
-                        (for documents meant to grow); the render check still runs.
+  ❌ PARA_ADDED       : the body (or a textbox) has MORE paragraphs than in the blank,
+                        counting self-closing empty paragraphs `<w:p .../>` (= 記入行).
+                        The fill wrote a new paragraph instead of the template's line;
+                        on a fixed-pitch form (docGrid type="lines") each one pushes
+                        the page by a line. --allow-added-paragraphs turns this into
+                        PARA_GREW (for documents meant to grow); the render check
+                        still runs. A table cell that grows is PARA_GREW (a cell
+                        takes several lines by design; the render check sees the row
+                        push the page).
   ❌ FONT_MISMATCH    : a run the fill added or changed carries Latin letters/digits
                         whose effective Latin font (run → style → docDefaults → theme)
                         is not the font the blank uses for Latin text in that
@@ -52,6 +55,9 @@ SURFACE (printed; exit 0 unless --strict):
                         = a whole 「・・・」 section left unfilled.
   ⚠ EMPTY_LABELED_COL: a table column with a non-empty header has *all* data cells
                         empty = a labeled column (e.g. 「年月」) left blank.
+  ⚠ PARA_GREW        : a table cell has more paragraphs than in the blank (or the body,
+                        with --allow-added-paragraphs). At a fixed row height the text
+                        can clip without moving anything = look at the rendered PDF.
   ⚠ PARA_REMOVED     : a container has fewer paragraphs than in the blank.
   ⚠ LAYOUT_SHIFT_UP  : template text lines moved up (= a template line was removed).
   ℹ LABEL_PARTIAL    : filled text is a substring of the blank label (label split /
@@ -126,6 +132,14 @@ DOCX_TO_PDF = os.path.join(HERE, "docx-to-pdf.sh")
 WORD_APP = "/Applications/Microsoft Word.app"
 
 
+CHOICE_MARKS = "○◯●◎■□☑☐✓✔"
+
+
+def _unmarked(s):
+    """norm した字から選択の印を除く (印を付けただけの label を上書きと読まない)。"""
+    return "".join(c for c in s if c not in CHOICE_MARKS)
+
+
 def norm(s):
     """NFKC + strip ALL whitespace (incl. full-width 　 and newlines)."""
     if s is None:
@@ -150,7 +164,7 @@ def _new_findings():
     return {k: [] for k in (
         "LABEL_OVERWRITE", "LABEL_DELETED", "HEADING_VANISHED", "PARA_ADDED", "FONT_MISMATCH",
         "PAGE_ADDED", "LAYOUT_SHIFT", "PDF_FONT_NEW",
-        "BULLET_EMPTY", "EMPTY_LABELED_COL", "PARA_REMOVED", "LAYOUT_SHIFT_UP",
+        "BULLET_EMPTY", "EMPTY_LABELED_COL", "PARA_GREW", "PARA_REMOVED", "LAYOUT_SHIFT_UP",
         "LABEL_PARTIAL", "INPUT_FILLED")}
 
 
@@ -190,6 +204,8 @@ def _diff_tables(fdoc, bdoc, findings):
                     findings["LABEL_DELETED"].append((loc, f"blank={_short(bv)} -> empty"))
                 elif bn in fn:                   # label preserved + appended (e.g. ○第１課題)
                     pass                         # OK (mark / box label kept)
+                elif _unmarked(bn) and _unmarked(bn) in _unmarked(fn):
+                    pass                         # OK: only a choice mark moved in (連絡／○面談, □→■)
                 elif fn in bn:                   # filled is a subset of the label (restructure)
                     findings["LABEL_PARTIAL"].append((loc, f"blank={_short(bv)} -> {_short(fv)}"))
                 else:                            # text fully replaced = overwrite
@@ -283,8 +299,11 @@ def _check_paragraph_counts(filled_path, blank_path, findings, allow_added):
         if nf > nb:
             new = [p for p in fps if p.container == cont and p.para_id and p.para_id not in bids]
             hint = ("; new: " + ", ".join(f"#{p.index} {_short(p.text, 30)}" for p in new[:5])) if new else ""
-            if allow_added:
-                findings["PARA_REMOVED"].append((cont, f"(--allow-added-paragraphs) 段落 {nb} → {nf}{hint}"))
+            if "/tc" in cont:
+                # a table cell grows its row (or clips at a fixed row height) = the render check decides
+                findings["PARA_GREW"].append((cont, f"表の cell の段落 {nb} → {nf} (行が伸びるか、 行の高さが固定なら字が切れる = 描いた紙で見る){hint}"))
+            elif allow_added:
+                findings["PARA_GREW"].append((cont, f"(--allow-added-paragraphs) 段落 {nb} → {nf}{hint}"))
             else:
                 findings["PARA_ADDED"].append((cont, f"段落 {nb} → {nf} (自己終了の空段落を含む){hint}"))
         else:
@@ -606,7 +625,7 @@ def _short(v, n=50):
 
 HARD = ("LABEL_OVERWRITE", "LABEL_DELETED", "HEADING_VANISHED", "PARA_ADDED", "FONT_MISMATCH",
         "PAGE_ADDED", "LAYOUT_SHIFT", "PDF_FONT_NEW")
-SOFT = ("BULLET_EMPTY", "EMPTY_LABELED_COL", "PARA_REMOVED", "LAYOUT_SHIFT_UP", "LABEL_PARTIAL")
+SOFT = ("BULLET_EMPTY", "EMPTY_LABELED_COL", "PARA_GREW", "PARA_REMOVED", "LAYOUT_SHIFT_UP", "LABEL_PARTIAL")
 
 
 def report(findings, strict=False, render_state="skipped", render_note=""):
@@ -643,7 +662,7 @@ def report(findings, strict=False, render_state="skipped", render_note=""):
         if found & {"PAGE_ADDED", "LAYOUT_SHIFT"}:
             print("   紙で行が増えた = 記入を縮める (様式の指示の行数に収める) か、 折り返した行を探して直す。 描いた PDF を見る。")
     if soft:
-        print(f"\n⚠ {soft} 完成度 finding(s): 空の箇条書き / 全空の列 / 部分改変 / 段落の減少。")
+        print(f"\n⚠ {soft} 完成度 finding(s): 空の箇条書き / 全空の列 / 部分改変 / 表の cell の段落の増加 / 段落の減少。")
         print("   意図的空欄 (印・提出日・指導者欄 等) か、記入漏れかを 1 件ずつ確認。")
     if render_state == "done":
         print(f"\n🖨 描画: {render_note}")
@@ -725,6 +744,15 @@ def _selftest():
     vpath = os.path.join(tmp, "vanished.docx")
     vdoc.save(vpath)
     paths["vanished"] = vpath
+    # cellgrow: a second paragraph in a table cell / marked: choice marks put into labels
+    cdoc = Document(paths["blank"])
+    cdoc.tables[1].cell(1, 2).add_paragraph("甲野大学 修了")
+    paths["cellgrow"] = os.path.join(tmp, "cellgrow.docx")
+    cdoc.save(paths["cellgrow"])
+    mdoc = Document(paths["blank"])
+    mdoc.tables[0].cell(1, 1).text = "第１課題　○第２課題　（いずれかを○で）"
+    paths["marked"] = os.path.join(tmp, "marked.docx")
+    mdoc.save(paths["marked"])
 
     # 2026-11-02: a fixed-line form whose 記入行 is a self-closing paragraph; latin text in 明朝
     def raw_form(path, body):
@@ -772,7 +800,11 @@ def _selftest():
         ("fadded: 段落を足した = PARA_ADDED", has("fadded", "PARA_ADDED", "fblank")),
         ("fadded + --allow-added-paragraphs = surface only",
          not has("fadded", "PARA_ADDED", "fblank", allow_added=True)
-         and has("fadded", "PARA_REMOVED", "fblank", allow_added=True)),
+         and has("fadded", "PARA_GREW", "fblank", allow_added=True)),
+        ("cell: a paragraph added in a table cell = PARA_GREW (surface), not PARA_ADDED",
+         has("cellgrow", "PARA_GREW") and not has("cellgrow", "PARA_ADDED")),
+        ("cell: a choice mark put into a label (連絡／○面談・□→■) is not LABEL_OVERWRITE",
+         not has("marked", "LABEL_OVERWRITE")),
         ("ffont: rFonts の無い欧文 = FONT_MISMATCH", has("ffont", "FONT_MISMATCH", "fblank")),
         ("naive regex hides the 記入行 (the bug this guards)",
          len(re.findall(r"<w:p[ >].*?</w:p>", dp.read_part(paths["fblank"]), re.S)) == 2

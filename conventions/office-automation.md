@@ -2765,7 +2765,9 @@ python3 ~/Claude/claude-config/scripts/diff-form-docx.py --selftest
 - **`EMPTY_LABELED_COL`** (= surface): ヘッダ非空の列が全データセル空 (= 「年月」 等の labeled 列を空のまま)
 - **`LABEL_PARTIAL`** (= info): filled が blank ラベルの部分集合 (= ラベルを行分割等で再構成、 意図的なら無視)
 - **`INPUT_FILLED`** (= info): blank empty → fill (= 正常)
-- **`PARA_ADDED`** (= HARD): 入れ物 (本文 / 表の cell / textbox) の段落が雛形より多い。 自己終了の空段落を 1 段落として数える ([`docx-paragraph-split`](#docx-paragraph-split))。 伸びる前提の文書 (調書の本文など) は `--allow-added-paragraphs` を付けると surface に回り、 描画の検査は続けて回る
+- **`PARA_ADDED`** (= HARD): 本文 (と textbox) の段落が雛形より多い。 自己終了の空段落を 1 段落として数える ([`docx-paragraph-split`](#docx-paragraph-split))。 伸びる前提の文書 (調書の本文など) は `--allow-added-paragraphs` を付けると `PARA_GREW` (surface) に回り、 描画の検査は続けて回る
+- **`PARA_GREW`** (= surface): 表の cell の段落が雛形より多い (cell に複数行を書くのは記入の普通の形 = [`docx-password-roundtrip-edit`](#docx-password-roundtrip-edit) の `cell.add_paragraph`)。 行が伸びて頁を押せば描画の検査 (`PAGE_ADDED` / `LAYOUT_SHIFT`) が止める。 行の高さが固定の表では何も動かずに字が切れるので、 描いた紙で見る (その様式の道具が切れを検査するならそれも)
+- `LABEL_OVERWRITE` は選択の印 (○ ■ ☑ …) を label の途中に入れた形 (「連絡　／　○面談」・□ → ■) を上書きと読まない
 - **`FONT_MISMATCH`** (= HARD): 記入で足した・変えた run の英字・数字の実効の font (run → style → docDefaults → theme) が、 雛形のその段落 (英字の run が無ければ文書全体) の英字の font と違う = [`docx-new-run-rfonts-fallback`](#docx-new-run-rfonts-fallback) の機械検出
 - **`PAGE_ADDED` / `LAYOUT_SHIFT` / `PDF_FONT_NEW`** (= HARD、 描画): Word で雛形と記入済みの両方を描き (`docx-to-pdf.sh`)、 頁が増えた / 両方に在る様式の字の行が下にずれた (= 記入が折り返した・行を足した) / 雛形の紙では英字・数字を描かない font が出た、 を止める。 本人が Word で書き出した PDF は `--filled-pdf` / `--blank-pdf` で渡す。 `--keep-pdf DIR` で描いた PDF を残す (描いた PDF の目視は続けて要る = 検査は既知の型しか見ない)
 - **`PARA_REMOVED` / `LAYOUT_SHIFT_UP`** (= surface): 段落が減った / 様式の字が上にずれた (= 雛形の行を消した)
