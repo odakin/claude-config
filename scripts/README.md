@@ -362,6 +362,7 @@
 - **[surface-discord-bot-dm.py](surface-discord-bot-dm.py)** — Discord bot DM channel の未記録 message surface engine（daily fetcher が吐く JSON と user 側 ledger（text/YAML 内 messageId）の diff で「bot DM に返事が来ても誰も読まない」 死角を埋める汎用 CLI、 個別環境への依存ゼロ＝引数で bot ID / json-dir / ledger-dir / counterpart map / title を渡す、 finding 0 件 silent、 --selftest 内蔵。 personal layer に thin wrapper を 1 つ置いて呼ぶ、 conventions/discord-bot.md#bot-dm-surface）
 - **[surface-report.mutants.json](surface-report.mutants.json)** — surface-report.py の selftest の foil に歯があることを、 押した通知の文を頁に置く仕組みの部品を 1 つずつ外した mutant 7 本で確かめる spec (check-foil-teeth.py が読む)。
 - **[surface-report.py](surface-report.py)** — 通知を押した先に開く「いま何が鳴っているか」 の 1 枚を作る (surface の行 + 公開ページの見張り + 直近に出した通知を HTML 1 枚に)
+- **[surface-spawn-results.py](surface-spawn-results.py)** — file と token で渡した子 session の完了を、 人が次に居るどの session にも自動で届ける受け取りの道具。
 - **[sync-built-pdfs.py](sync-built-pdfs.py)** — TeX から組んだ PDF (原稿・ノート) の最新版を、 同期フォルダ (Dropbox 等) の 1 か所へ写す — 携帯で常に読めるようにする。
 - **[sync-hook-settings.sh](sync-hook-settings.sh)** — 層1 hook の配線 (symlink + settings.json の entry) を hooks/settings-entries.json に揃える (無いものを足す + 退役 registry の hook を外す・冪等)
 - **[sync-hook-settings.test.sh](sync-hook-settings.test.sh)** — 層1 hook の配線 (symlink + settings の entry) を揃える script の test
