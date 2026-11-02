@@ -44,6 +44,42 @@
       "pairs": [["        return int(row[\"internal_date\"])\n", "        return int(row.get(\"internal_date\") or 0)\n"]],
       "expect_fail": ["missing internal_date fails closed"],
       "expect_pass": ["parent missing from the listing fails closed"]
+    },
+    {
+      "name": "自分がもう送った返事を新着に数えない",
+      "pairs": [["            if r.get(\"id\") != parent_id and \"SENT\" in (r.get(\"labels\") or []) and when_ms(r) > base]\n", "            if False]\n"]],
+      "expect_fail": ["own sent reply after the parent is listed", "own sent reply alone refuses without ack"],
+      "expect_pass": ["newer counterpart after the parent is listed", "counterpart-only callers still ignore own sent replies"]
+    },
+    {
+      "name": "下書きも自分の送った返事に数える",
+      "pairs": [["and \"SENT\" in (r.get(\"labels\") or []) and", "and _own(r) and"]],
+      "expect_fail": ["draft / list copy / own From without SENT are not own sent replies"],
+      "expect_pass": ["own sent reply after the parent is listed"]
+    },
+    {
+      "name": "返信先より古い自分の送信も数える",
+      "pairs": [["and when_ms(r) > base]\n", "]\n"]],
+      "expect_fail": ["own sent reply older than the parent is not counted"],
+      "expect_pass": ["own sent reply after the parent is listed"]
+    },
+    {
+      "name": "自分の送信に印を付けない",
+      "pairs": [["    own = [dict(r, own=True) for r in newer_own_sent(rows, parent_id, parent_internal_date)]\n", "    own = list(newer_own_sent(rows, parent_id, parent_internal_date))\n"]],
+      "expect_fail": ["counterpart and own sent are merged oldest first, own marked"],
+      "expect_pass": ["own sent reply alone refuses without ack"]
+    },
+    {
+      "name": "入力の row に印を書き込む",
+      "pairs": [["[dict(r, own=True) for r in", "[r.update(own=True) or r for r in"]],
+      "expect_fail": ["marking own does not change the input rows"],
+      "expect_pass": ["counterpart and own sent are merged oldest first, own marked"]
+    },
+    {
+      "name": "最新が自分の送信でも返信先の切り替えを案内する",
+      "pairs": [["templates[\"own_latest\" if newer[-1].get(\"own\") else \"switch\"]", "templates[\"switch\"]"]],
+      "expect_fail": ["notice marks the own reply and says the newest is own (no switch line)"],
+      "expect_pass": ["notice lists the id, unescapes the snippet, tells how to ack"]
     }
   ]
 }
