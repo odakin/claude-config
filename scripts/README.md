@@ -148,7 +148,7 @@
 - **[decision-question-jargon.py](decision-question-jargon.py)** — 本人への問い (最終の返事の問いの行・選択肢 UI・turn 終わりの箱) に作業側の語 (掲示板の動詞・台帳の符号・event id・内輪の略語) が入っているか、 原稿の要旨・序論・題・結論の文を変えるかを今の文と直した文を見せずに問うていたら、 1 回だけ注意する engine (hook = hooks/decision-question-jargon-nudge.sh、 語 = hooks/decision-question-jargon-terms.txt + ~/.claude/decision-question-jargon-ext.txt、 校正 = `calibrate --since`、 --selftest。 conventions/concise-output.md#decision-questions / #show-the-text-being-changed)
 - **[decode-qr.py](decode-qr.py)** — Decode QR payloads from screenshots without opening them.
 - **[dependabot-ecosystems.py](dependabot-ecosystems.py)** — dependabot.yml の ecosystem を repo の実体に合わせる（manifest の無い / git-crypt で暗号化された npm・pip・github-actions の entry を検出、 --apply で contents API 経由で削る (全部消えるなら file ごと削除)、 manifest があるのに未設定は ℹ️、 --render で配置時に template から選ぶ、 --selftest。 conventions/github-security-automation.md#dependabot-ecosystem-must-exist）
-- **[diff-form-docx.py](diff-form-docx.py)** — 様式 docx の記入ミスを blank diff で検出（ラベル欄上書き/見出し消失=HARD・空の箇条書き/全空 labeled 列=surface、xlsx 版の docx 対、--selftest 内蔵、office-automation.md#diff-form-docx-detection）
+- **[diff-form-docx.py](diff-form-docx.py)** — 様式 docx の記入ミスを blank diff で検出（ラベル欄上書き/見出し消失/段落の増加/足した欧文の font/Word で描いた頁数と様式の字のずれ=HARD・空の箇条書き/全空 labeled 列=surface、描けなければ exit 3 = 見た目は未確認、--selftest 内蔵、office-automation.md#diff-form-docx-detection）
 - **[diff-form-xlsx.py](diff-form-xlsx.py)** — 様式 xlsx の label 上書き (= 様式改変) を雛形 diff で検出（office-automation.md#diff-form-xlsx-detection）
 - **[discord-board-bridge.py](discord-board-bridge.py)** — Discord ⇄ agent-board bridge engine (決定的 tick、 LLM 不使用、 config 駆動)。
 - **[discord-member-lookup.py](discord-member-lookup.py)** — 取得済みの Discord message log (JSON) から、名前でメンバーの user ID を根拠つきで引く（本人の自己紹介 / 他人の mention / ユーザー名一致の 3 段）。 --selftest 内蔵。 conventions/discord-bot.md#group-call-mentions
@@ -337,7 +337,7 @@
 - **[selftest-on-old.py](selftest-on-old.py)** — 新しい版の selftest の関数を、 直す前の版 (git の rev) の module の中で回す = 新しい検査が直す前の実装で赤くなるかを、 file を書き換えずに見る。--selftest 内蔵。
 - **[session-claims-report.py](session-claims-report.py)** — ある session が返事と記録に書いた「根拠の無い検算の主張」 と「先送り」 を会話記録から並べる。--selftest 内蔵。
 - **[session-fetched-docs-report.py](session-fetched-docs-report.py)** — ある session が取得して読んだ原典 (論文・資料の PDF) を会話記録から並べ、 repo に保存したかを出す。--selftest 内蔵。
-- **[session-launch-check.mutants.json](session-launch-check.mutants.json)** — session-launch-check.py の起動の見張り (--wait-first-turn)・set の後の 1 行・Stop の記録の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。
+- **[session-launch-check.mutants.json](session-launch-check.mutants.json)** — session-launch-check.py の起動の見張り (--wait-first-turn)・set の後の 1 行・Stop の記録の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)、 worker の窓の Stop (起こした session へ 1 行) と card の台帳。
 - **[session-launch-check.py](session-launch-check.py)** — desktop の start_session で起こした session が、 頼んだ model と effort で起きたかを app の記録で確かめ、 違えば直し方を出し、 直るまで go の SendMessage を止める (hook の engine。 正本 = conventions/multi-session-coordination.md#desktop-start-model-cap)。
 - **[session-model.py](session-model.py)** — print the model a Claude Code session actually runs on (read from its transcript), before sending it work.
 - **[session-open-questions-report.py](session-open-questions-report.py)** — ある session が turn 終わりの箱で問うて、 本人の答えが無いままの問いを会話記録から並べる。--selftest 内蔵。
@@ -461,6 +461,7 @@
 - **[lib/compressed_jsonl.py](lib/compressed_jsonl.py)** — 会話記録の .jsonl と、 zstd で圧縮した .jsonl.zst を、 同じ形で 1 行ずつ読む。
 - **[lib/config_dir_auth.py](lib/config_dir_auth.py)** — Claude Code の設定フォルダ (CLAUDE_CONFIG_DIR) の認証が切れているかを、 `claude` を呼ばずに読む共有判定。
 - **[lib/desktop_sessions.py](lib/desktop_sessions.py)** — the Claude desktop app's own record of a Code session: the model and effort it will run the next turn on, its title and the session that started it.
+- **[lib/docx_paragraphs.py](lib/docx_paragraphs.py)** — docx の XML (word/document.xml ほか) を段落に切る共有の部品。 自己終了の空段落 `<w:p .../>` を 1 段落として数え、 textbox の中の段落を外の段落と重ねない。
 - **[lib/find-personal-layer.sh](lib/find-personal-layer.sh)** — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
 - **[lib/git_blob.py](lib/git_blob.py)** — git の blob を worktree に出したときの中身で読む helper (git-crypt で暗号化される path も平文で)。
 - **[lib/git_crypt_paths.py](lib/git_crypt_paths.py)** — staged の path のうち git-crypt で暗号化される path を判定する (pre-commit の警告が見本を伏せるため)。

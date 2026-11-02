@@ -205,8 +205,11 @@ def nbytes(s: str) -> int:
 
 # ── docx 読み取り ────────────────────────────────────────────────────────────
 _WT = re.compile(r"<w:t(?:\s[^>]*)?>(.*?)</w:t>", re.S)
-_WP = re.compile(r"<w:p(?:\s[^>]*)?>.*?</w:p>", re.S)
+# 段落 = 自己終了の空段落 <w:p .../> を先に試す (後ろの形だけだと開きの tag と読み、 次の段落までを抱き込む =
+# scripts/lib/docx_paragraphs.py の PARA_RE と同じ形、 office-automation.md#docx-paragraph-split)
+_WP = re.compile(r"<w:p(?=[\s/>])[^>]*/>|<w:p(?=[\s>])(?:\s[^>]*[^/>])?>.*?</w:p>", re.S)
 _WTC = re.compile(r"<w:tc(?:\s[^>]*)?>.*?</w:tc>", re.S)
+_NODE = re.compile(_WP.pattern + r"|<w:tc(?:\s[^>]*)?>.*?</w:tc>", re.S)
 _TXBX = re.compile(r"<w:txbxContent>.*?</w:txbxContent>", re.S)
 
 
@@ -249,7 +252,7 @@ def read_form(path: Path) -> dict:
 
     # 文書順のノード列 (段落 / 表セル) を作る
     nodes = []
-    for m in re.finditer(r"<w:p(?:\s[^>]*)?>.*?</w:p>|<w:tc(?:\s[^>]*)?>.*?</w:tc>", body, re.S):
+    for m in _NODE.finditer(body):
         kind = "cell" if m.group(0).startswith("<w:tc") else "para"
         t = _runs(m.group(0)).strip()
         if t and not any(d in t for d in DROP_MARKERS):

@@ -84,6 +84,8 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 | 何を / どこに書くか不明 | — | 着手前に [`form を dump`](#form-dump-first) (原則編が先) |
 | 様式の label を誤って上書きしていないか | label vs input row の混同 | [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で機械検出 |
 | **docx 様式**でラベル欄に値を上書き / 欄を空欄のまま / labeled 列が空 / 見出し消失 | label vs input の混同・記入漏れ・視覚確認が「自分の記入箇所」 止まり | [`diff-form-docx.py`](#diff-form-docx-detection) で機械検出 (= 表紙/申請書 docx 様式、 xlsx 版の docx 対) |
+| **docx 様式**を記入したら**頁からはみ出した** / 行が折れた / 足した欧文だけ別の (太く見える) font | 記入行 (自己終了の空段落 `<w:p .../>`) をその場の正規表現が見落とし、 段落を足した / 足した run に `w:rFonts` が無い | 段落は共有の部品で切る → [`docx-paragraph-split`](#docx-paragraph-split)。 検出 = [`diff-form-docx.py`](#diff-form-docx-detection) (段落の増加・足した欧文の font・Word で描いた頁数と様式の字のずれ) |
+| docx の PDF 化が止まり、 「見た目は未確認」 と書いて先へ進みかけた | 変換を目視の唯一の経路にしていた | 確かめ方の順 (Word の画面・本人の書き出し) → [`docx-layout-unverified`](#docx-layout-unverified) |
 | **PDF 様式**で署名・値が label 文字に重なる (= 「○○欄」 が書かれた cell に画像/値を overlay) | label cell vs data cell の判別失敗 (= label を data と早合点)、 真の data cell は隣接の text ゼロ cell | placement 前に隣接 cell も列挙して text ゼロ cell を data と特定 + assert で gate → [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation) |
 | **scan PDF** (= vector 無し / AcroForm 無し / 背景が raster image) のマス目欄に文字を overlay したら**マスの外・下罫線にぶら下がる・ずれる**ずれが多ラウンド収束しない | `get_drawings()` 空で cell 罫線が取れず、 当て勘 baseline で配置している (= scan PDF は pixel 解析が唯一の経路) | 記入見本ページを rosetta stone に + 罫線/文字を**差分法で分離** + baseline 計算 (descender 注意) → [`scan-pdf-pixel-anchor-overlay`](#scan-pdf-pixel-anchor-overlay) (🔥 重要度最大) |
 | fitz `insert_text((x, y), s, ...)` の y にマス中心を渡したら**文字がマス上半分にずれる** | `y` は **font baseline** であって visual top / center / bottom ではない (= 一番混同される PyMuPDF API contract) | 数字は descender 0 / 漢字は descender 0.12em で baseline = visual_center + (ascender - \|descender\|)×size/2、 test PDF で bbox 実測してから本番 → [`pymupdf-insert-text-baseline`](#pymupdf-insert-text-baseline) |
@@ -2018,7 +2020,19 @@ with zipfile.ZipFile(dest_docx, 'w', zipfile.ZIP_DEFLATED) as z:
         z.writestr(name, data)
 ```
 
-**事前 dump 必須**: docx の XML 構造を必ず最初に `unzip -p form.docx word/document.xml | python3 -c "..."` で grep して確認。 placeholder が `＿` 何文字か、 ラベルと placeholder が同じ run か分かれた run かを事前に把握。
+**事前 dump 必須**: docx の XML 構造を必ず最初に `unzip -p form.docx word/document.xml | python3 -c "..."` で grep して確認。 placeholder が `＿` 何文字か、 ラベルと placeholder が同じ run か分かれた run かを事前に把握。 段落の一覧は `python3 ~/Claude/claude-config/scripts/lib/docx_paragraphs.py dump form.docx` (番号・自己終了・paraId・字) で出す = 正規表現で段落を切らない ([`docx-paragraph-split`](#docx-paragraph-split))。
+
+### <a id="docx-paragraph-split"></a>docx の段落は共有の部品で切る (= 自己終了の空段落 `<w:p .../>` が記入行)
+
+**症状**: XML 直編集で記入した 1 頁の様式が 2 頁にはみ出す / 記入行に書いたつもりの値が新しい段落として足される / 雛形と段落の数を比べても差が出ない。
+
+**機構**: 様式の空の記入行は、 run を持たない自己終了の段落 `<w:p w14:paraId="…"/>` で書かれていることが多い。 その場で書く正規表現 `<w:p[ >].*?</w:p>` や `<w:p(?:\s[^>]*)?>.*?</w:p>` は、 開きの tag の `[^>]*` が末尾の `/` まで食べるので、 自己終了の段落を開きの tag と読み、 次の段落の `</w:p>` までを 1 つに抱き込む。 script の段落の一覧から記入行が消え、 記入の値を新しい段落として足すことになる。 段落の数も 1 つ少なく数えるので、 同じ正規表現で雛形と比べても差が出ない。 行の送りが固定の様式 (`<w:docGrid w:type="lines"/>`) では、 段落 1 つ・折り返し 1 つが 1 行ぶん頁を押し、 余りの行の無い雛形は次の頁へはみ出す。 textbox (`w:txbxContent`) の中の段落は外の段落の途中で閉じるので、 素朴な正規表現は外の段落も途中で切る。
+
+**やり方**: 段落は [`scripts/lib/docx_paragraphs.py`](../scripts/lib/docx_paragraphs.py) で切る。 `top_level(xml)` = 重ならない外側の段落、 `replace(xml, {i: 新しい段落})` = 他の byte を保ったまま差し替える、 `counts(xml)` = 入れ物 (本文 / 表の cell / textbox) ごとの数、 CLI の `dump` = 番号・自己終了・paraId・字の一覧 ([`form-dump-first`](#form-dump-first) の docx 版)。 記入行は、 自己終了の段落を同じ `w14:paraId` の段落に置き換えて埋める (段落を足さない)。 足す run の `<w:rPr>` は隣の様式の run から写す ([`docx-new-run-rfonts-fallback`](#docx-new-run-rfonts-fallback))。 記入の後は [`diff-form-docx.py`](#diff-form-docx-detection) が段落の増加 (`PARA_ADDED`) と、 Word で描いた紙の頁・行のずれを止める。
+
+**既に在る同じ形を探す**: `command grep -rnE '<w:p\[ >\]|<w:p\(\?:' --include='*.py' <repo を並べる>`。 見つけた script は、 その script を直す turn で部品に移す。
+
+origin: 実測 (1 頁の様式を XML 直編集で記入し、 記入行が見えずに段落を足して 2 頁にはみ出した。 同じ形の正規表現が別の script にも在った)。
 
 ### <a id="docx-password-roundtrip-edit"></a>PW 暗号化 docx を編集して PW 維持で返す: msoffcrypto + python-docx round-trip 5 step
 
@@ -2751,14 +2765,36 @@ python3 ~/Claude/claude-config/scripts/diff-form-docx.py --selftest
 - **`EMPTY_LABELED_COL`** (= surface): ヘッダ非空の列が全データセル空 (= 「年月」 等の labeled 列を空のまま)
 - **`LABEL_PARTIAL`** (= info): filled が blank ラベルの部分集合 (= ラベルを行分割等で再構成、 意図的なら無視)
 - **`INPUT_FILLED`** (= info): blank empty → fill (= 正常)
+- **`PARA_ADDED`** (= HARD): 入れ物 (本文 / 表の cell / textbox) の段落が雛形より多い。 自己終了の空段落を 1 段落として数える ([`docx-paragraph-split`](#docx-paragraph-split))。 伸びる前提の文書 (調書の本文など) は `--allow-added-paragraphs` を付けると surface に回り、 描画の検査は続けて回る
+- **`FONT_MISMATCH`** (= HARD): 記入で足した・変えた run の英字・数字の実効の font (run → style → docDefaults → theme) が、 雛形のその段落 (英字の run が無ければ文書全体) の英字の font と違う = [`docx-new-run-rfonts-fallback`](#docx-new-run-rfonts-fallback) の機械検出
+- **`PAGE_ADDED` / `LAYOUT_SHIFT` / `PDF_FONT_NEW`** (= HARD、 描画): Word で雛形と記入済みの両方を描き (`docx-to-pdf.sh`)、 頁が増えた / 両方に在る様式の字の行が下にずれた (= 記入が折り返した・行を足した) / 雛形の紙では英字・数字を描かない font が出た、 を止める。 本人が Word で書き出した PDF は `--filled-pdf` / `--blank-pdf` で渡す。 `--keep-pdf DIR` で描いた PDF を残す (描いた PDF の目視は続けて要る = 検査は既知の型しか見ない)
+- **`PARA_REMOVED` / `LAYOUT_SHIFT_UP`** (= surface): 段落が減った / 様式の字が上にずれた (= 雛形の行を消した)
 
-HARD 検出時は exit 1。 完成度 finding (surface) は `--strict` で exit 1 化。 記入版生成 pipeline の最後に必ず通す。 `--selftest` 内蔵。
+HARD 検出時は exit 1。 完成度 finding (surface) は `--strict` で exit 1 化。 記入版生成 pipeline の最後に必ず通す。 `--selftest` 内蔵。 **exit 3 = 描画ができなかった = 見た目 (頁数・行の折れ・紙の font) は未確認** で、 通過ではない (次の手 = [`docx-layout-unverified`](#docx-layout-unverified))。 描画つきで通った file は sha256 を記録し、 `--receipt-status <file>` が今の中身が検査済みかを答える。 `--no-render` で回したときは、 見せる・送る前に [`docx-layout-unverified`](#docx-layout-unverified) の経路で見た目を確かめる。 番号つきの行そのものが記入行の様式 (「３．…：　年　月　日」 の空白に書く) は、 番号で始まり様式の字を順に全部残す段落があれば `HEADING_VANISHED` にしない。
 
 判定は**構造的** = 「箱・列・箇条書きが空」「ラベルが置換」 は機械で言えるが、 **「散文の中身が薄い / 箱が半分しか埋まってない」 は判定不可** = 審査員の目の最終 pass が残る ([`office-automation-principles.md` reviewer-eye-completion](office-automation-principles.md#reviewer-eye-completion) 「記入後は『審査員の目』 で閉じる」)。
 
 ⚠️ EMPTY_LABELED_COL は blank 様式の row 0 が**全セル非空 (= 真のヘッダ行)** の表だけに適用 (= 表紙の key-value 表 〔ラベル|値|ラベル〕 は row 0 に空セルがあるので除外、 略歴/予算表だけ対象) = 列ヘッダ型と key-value 型の誤判定回避。
 
-origin: ある研究費 docx 申請様式で同一様式に 4 記入ミスを連続 (= 年令ラベル上書き / 「（１）」 箇条書き空欄 / 「年月」 列空 / 概要箱が半分・薄い) → そのつど申請者が発見・指摘。 視覚 render しても自分の記入箇所しか見ず素通りした = recall 依存の規律では止まらない実証 → 機械化。
+origin: ある研究費 docx 申請様式で同一様式に 4 記入ミスを連続 (= 年令ラベル上書き / 「（１）」 箇条書き空欄 / 「年月」 列空 / 概要箱が半分・薄い) → そのつど申請者が発見・指摘。 視覚 render しても自分の記入箇所しか見ず素通りした = recall 依存の規律では止まらない実証 → 機械化。 段落の増加・欧文の font・描画の 3 検査は、 1 頁の様式が 2 頁にはみ出した・行が折れた・欧文だけ別の font、 のまま本人に見せた実測から足した ([`docx-paragraph-split`](#docx-paragraph-split) / [`docx-layout-unverified`](#docx-layout-unverified))。
+
+### <a id="docx-layout-unverified"></a>「見た目は未確認」 は止まる理由であって、 先へ進む印ではない (= docx の描画が止まった時の確かめ方の順)
+
+**症状**: Word の PDF 化 (`docx-to-pdf.sh`) が止まり、 台帳や TODO に「見た目は未確認」 と書いて次の作業へ進む。 後で本人が開くと、 頁のはみ出し・行の折れ・欧文だけ別の font が残っている。
+
+**なぜ起きるか**: 変換が止まったのは確かめる経路が 1 つ落ちただけで、 確かめる義務は残っている。 「未確認」 と書く行為が義務を果たした形に見え、 他の経路を試さないまま見せる段に進む。 [`pdf-visual-confirm`](#pdf-visual-confirm) の目視は変換 1 回ごとの規則なので、 変換が止まると目視の機会ごと消える。
+
+**規則**: 見た目 (頁数・行の折れ・紙の font) を確かめていない様式は、 本人に見せる・送る・窓口に出す段に進めない。 次の順に試す:
+
+1. `diff-form-docx.py <記入済み> <雛形>` = Word で雛形と記入済みの両方を描き、 頁数・様式の字の位置・紙の font を照合する (描けなければ exit 3 = 未確認)。 Word が止まった理由は `docx-to-pdf.sh` の stderr の ❌ の行が言う。 直せるなら直してもう一度 (同じ手を 3 回は叩かない = [`docx-pdf-stale-cache`](#docx-pdf-stale-cache) の fallback 階層の reflex)。
+2. Word の画面で見る: 写しを project 配下に置き、 `open -g -a "Microsoft Word" <写し>` → computer-use の `app_screenshot` (Word を前面に出さない) で状態バーの「1/N ページ」 と各頁を見る。 頁の数は縮小表示でも分かる。 閉じるのは自分が開いた写しだけ ([`office-app-reset-guard`](#office-app-reset-guard))。
+3. 本人に Word で PDF に書き出してもらい、 `diff-form-docx.py <記入済み> <雛形> --filled-pdf <記入済み.pdf> --blank-pdf <雛形.pdf>` で照合する。
+
+Pages・LibreOffice の PDF は組み直すので、 頁数と行の折れの判定に使わない ([`docx-to-pdf-pages`](#docx-to-pdf-pages))。 どの経路も通らないときは、 本人に見せる前に「見た目は確かめられていない」 と、 試した経路と止まった理由を 1 行で伝える (台帳に書いて先へ進む形にしない)。
+
+**機械**: `docx-to-pdf.sh` は Word の経路が止まると上の順を stderr に出す。 `diff-form-docx.py` は描画つきで通った file の sha256 を記録し (`${XDG_STATE_HOME:-~/.local/state}/claude-form-layout/receipts.tsv`)、 `--receipt-status <file>` が今の中身が検査済みかを答える (見せる・送る段の gate が読む口)。
+
+origin: 実測 (変換が止まった時点で「未確認」 と台帳に書いて進み、 崩れたまま本人に見せた。 Word の画面で見る経路はその時も使えた)。
 
 ### <a id="template-provenance-check"></a>テンプレの素性確認 (= 「最新様式」 が誰かの記入済み修正版である罠)
 
@@ -2935,6 +2971,8 @@ end tell'
 ```
 
 ⚠️ AppleScript の save as syntax は Excel for Mac の version で異なる + parameter error 出やすい。 fallback として **user に Excel で「ファイル → 印刷 → PDF として保存」 を依頼 + PDF を chat 添付してもらう**。
+
+docx の変換が止まったときは、 目視をやめずに [`docx-layout-unverified`](#docx-layout-unverified) の順で別の経路から見る (変換が止まった ≠ 目視が済んだ)。
 
 **運用 reflex**: 「私の setting した xlsx を 私の判断だけで完成宣言しない」 を 1 つの問い として保持。 PDF visual confirmation は form fill の **必須 prerequisite** で、 「user 指摘待ち」 reactive ではなく **proactive 早期催促** が筋。 user 指摘で初めて気付く pattern は連鎖失敗 (= 同 user に複数 turn の修復依頼) を必ず生む。
 

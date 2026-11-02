@@ -338,6 +338,10 @@ sections:
     legacy: "2-5"
     level: 3
     title: "docx fill: `python-docx` で XML 直編集 (= 共通パターン)"
+  - id: docx-paragraph-split
+    level: 3
+    title: "docx の段落は共有の部品で切る (= 自己終了の空段落 `<w:p .../>` が記入行)"
+    related: [docx-fill-xml-edit, diff-form-docx-detection, docx-new-run-rfonts-fallback, form-dump-first, docx-pdf-page-compress]
   - id: docx-password-roundtrip-edit
     level: 3
     title: "PW 暗号化 docx を編集して PW 維持で返す: msoffcrypto + python-docx round-trip 5 step"
@@ -459,7 +463,11 @@ sections:
   - id: diff-form-docx-detection
     level: 3
     title: "機械的検出: `diff-form-docx.py` (= docx 様式の記入ミス)"
-    related: [diff-form-xlsx-detection, pdf-visual-confirm, docx-fill-xml-edit, docx-checkbox-content-control]
+    related: [diff-form-xlsx-detection, pdf-visual-confirm, docx-fill-xml-edit, docx-checkbox-content-control, docx-paragraph-split, docx-layout-unverified, docx-new-run-rfonts-fallback]
+  - id: docx-layout-unverified
+    level: 3
+    title: "「見た目は未確認」 は止まる理由であって、 先へ進む印ではない (= docx の描画が止まった時の確かめ方の順)"
+    related: [pdf-visual-confirm, diff-form-docx-detection, docx-pdf-stale-cache, docx-to-pdf-pages, office-app-reset-guard]
   - id: template-provenance-check
     level: 3
     title: "テンプレの素性確認 (= 「最新様式」 が誰かの記入済み修正版である罠)"

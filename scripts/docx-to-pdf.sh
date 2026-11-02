@@ -44,6 +44,12 @@
 #   once by hand). Lib = scripts/lib/office-staging.sh,
 #   doc = office-automation.md#office-pregranted-staging-dir.
 #
+# When the Word route fails it prints what is now unverified (page count, wrapped
+# lines, fonts on paper) and the next routes to try (実測 = a failed conversion was
+# taken as the end of the visual check and the form was shown broken;
+# office-automation.md#docx-layout-unverified). The layout check itself =
+# diff-form-docx.py (renders the blank and the filled form with this script).
+#
 # Refs: conventions/office-automation.md  #docx-to-pdf-pages  #docx-pdf-stale-cache
 #
 # Usage:
@@ -100,6 +106,18 @@ warn_tmp_input() {
       echo "    (= ~/<repo>/...) or enable staging (office-automation.md#office-pregranted-staging-dir)." >&2
       ;;
   esac
+}
+
+unverified_note() {
+  # 変換が止まった = 見た目 (頁数・行の折れ・紙の font) を確かめる経路が 1 つ落ちただけ。 ここで目視をやめて
+  # 「見た目は未確認」 と台帳に書いて先へ進むと、 崩れた様式を本人に見せる (実測、 office-automation.md#docx-layout-unverified)
+  echo "" >&2
+  echo "⏸ 見た目 (頁数・行の折れ・紙の font) は未確認のまま = この docx を本人に見せる・送る段に進まない。 次を上から:" >&2
+  echo "   1. 上の ❌ の理由を直せるなら直してもう一度 (同じ手を 3 回は叩かない)" >&2
+  echo "   2. Word の画面で見る: 写しを project 配下に置き open -g -a \"Microsoft Word\" <写し> →" >&2
+  echo "      computer-use の app_screenshot で状態バーの「1/N ページ」 と各頁を見る" >&2
+  echo "   3. 本人に Word で PDF に書き出してもらい、 diff-form-docx.py --filled-pdf / --blank-pdf で照合する" >&2
+  echo "   Pages・LibreOffice の PDF は組み直すので頁数の判定に使わない。" >&2
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -193,6 +211,7 @@ render_word() {
   if ! office_app_launch_background word; then
     echo "❌ Word did not start / answer in the background." >&2
     office_app_failure_hint word
+    unverified_note
     return 1
   fi
   open -g -a "Microsoft Word" "$wsrc"
@@ -201,6 +220,7 @@ render_word() {
       echo "❌ Word did not list the document within 60 s: $wsrc" >&2
       office_app_close_ours word "$wsrc"; office_app_release word; office_front_restore "Microsoft Word.app"
       office_app_failure_hint word
+      unverified_note
       return 1
     fi
     sleep 0.5; ticks=$((ticks + 1))
@@ -238,12 +258,13 @@ AS
     echo "   open the file in Word manually and use File > 名前を付けて保存 > PDF。" >&2
     echo "   srcfile: $SRC" >&2
     [ "$wsrc" != "$SRC" ] && echo "   staged copy kept for diagnosis: $OFFICE_STAGE_DIR" >&2
+    unverified_note
     return 1
   fi
   office_app_release word
   office_front_restore "Microsoft Word.app"
   if [ "$wpdf" != "$PDF" ]; then
-    [ -f "$wpdf" ] || { echo "❌ Word reported success but no PDF in staging: $wpdf" >&2; return 1; }
+    [ -f "$wpdf" ] || { echo "❌ Word reported success but no PDF in staging: $wpdf" >&2; unverified_note; return 1; }
     cp -p "$wpdf" "$PDF"
     office_stage_cleanup
   fi
