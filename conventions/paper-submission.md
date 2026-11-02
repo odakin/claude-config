@@ -367,6 +367,23 @@ Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Mana
 - **headless poller (= Playwright 等 + 認証情報保存 + cron) は見送り推奨**: 毎回 login が要る (ScholarOne は remember-me 無し) = 認証情報を無人 script に持たせる必要 + 新デバイス検証 / bot 検知で壊れうる + status は数週間動かないので日次 polling の情報量が薄い。 「referee report が揃った瞬間を知りたい」 等の明確な需要が出てから再検討
 - **account は 1 つに保つ**: 登録メールを変更しても account は同一 (= User ID と登録メールは別 field、 メール変更時に User ID が連動するかはポータル設定依存)。 login で弾かれたら **新旧両方のメールアドレスを User ID として試す** → Reset Password に現メールを入れて到達確認、 の順。 「2 つ作ったかも」 は account-created 通知メールを数えれば分かる (= 1 通なら 1 account)
 
+## <a id="alt-text-not-printed"></a>7. 雑誌が求める図の alt text は source にだけ置き、 PDF に印字しない
+
+雑誌によっては、 図ごとの alt text (図を見られない読者のための、 図に何が描いてあるかの文) を、 原稿の file の caption の直下に「Alt text:」 で始めて置くよう求め、 雑誌の組版では消す。 これを `\par\noindent Alt text: …` のような本文の段落で書くと、 投稿用の PDF にも arXiv の版にもそのまま印字される (実測)。
+
+- 印字しない macro で包み、 字句は source にだけ残す。 規定の「Alt text:」 の字句は引数の中に残す:
+
+  ```latex
+  \newcommand{\alttext}[1]{}   % 雑誌の規定で source に置く。組版しない
+  ...
+  \caption{...}
+  \alttext{Alt text: ...}
+  ```
+
+  中身を読み返したいときだけ、 定義を一時的に `\newcommand{\alttext}[1]{\par\noindent #1}` に替えて組む。
+- 組んだ PDF の text に「Alt text」 が出ていないことを数えて確かめる (`python3 -c "import fitz,sys; print(sum(p.get_text().count('Alt text') for p in fitz.open(sys.argv[1])))" paper.pdf`)。
+- arXiv は source をそのまま公開するので、 macro の引数の字句は公開される (コメントと違って `scripts/arxiv-package.py` も消さない)。 図の説明として公開してよい文にする。
+
 ## <a id="workflow-checklist"></a>投稿 workflow の定型 checklist
 
 新しい journal に投稿する時、 以下を **submission 開始前** に整えると詰まりが減る:
@@ -381,6 +398,7 @@ Editorial Manager 系は呼称が違う (Handling Editor / Editor / Journal Mana
 3. **PDF 版**
    - journal 用は最終 PDF 同梱 (Main Document)、 arXiv 用は PDF 含めない (v1/v2 共通、§[arxiv-source-only](#arxiv-source-only))
    - Type1 font 状況を確認 (§[type1-fonts](#type1-fonts))
+   - 雑誌が図の alt text を source に求めるなら、 印字しない macro で置き、 PDF に出ていないことを確かめる (§[alt-text-not-printed](#alt-text-not-printed))
 4. **Authors & Institutions form**
    - LaTeX の `\author{}` と form 入力を **両方** update (§[form-vs-source-independence](#form-vs-source-independence))
    - 特に Department 名の変更 / diacritics / ORCID
