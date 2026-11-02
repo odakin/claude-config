@@ -20,6 +20,7 @@
   - 知らせる中身 (基準より後のもの): (1) その項目の file を含む別の書き手の commit (trailer が別の session / trailer なし)
     (2) 項目に結ばれた thread (経路 = lib/todo_thread_links.resolve_threads) の inbox の索引 `messages[]` の受信の行 (←)
   - 知らせたら触った時刻を今に進める = 同じ中身は 2 回出ない。 何も無ければ黙って触った時刻だけ進める
+  - 前に触った後に repo の HEAD の reflog・項目の file・inbox の月 file のどれも書かれていなければ、 git を呼ばずに黙る (速い道)
   - 全部の失敗で黙る (fail-open)。 出力 = PreToolUse の additionalContext
 射程外: 基準より前に届いて基準より後に記録された message (受信の時刻で比べるため。 記録した commit が項目の file も
   書いていれば (1) が拾う) / 作業 tree の未 commit の書き換え (同じ checkout を共有するなら file を読めば見える)。
