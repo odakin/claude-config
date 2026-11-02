@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-最終更新: 2026-10-31
+最終更新: 2026-11-02
 
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
@@ -16,6 +16,7 @@
 
 - **会議の候補の探し方** — 規約 [`conference-candidate-search.md`](conventions/conference-candidate-search.md) を新設 (探す口 3 つ・窓を先に決める・開催月は動く・資金と承認の〆が告知より前・落とした候補と理由まで残す)。 次は次回の sweep でこの doc から入り、 足りない罠を足す
 - **子の提出を受け取った後の畳み忘れの網** — `scripts/child-wrap-check.py` に、 掲示板を読む「畳む番の子」 の判定 (`--finished`)・受け取った直後の 1 行 (`--hook-accept`)・turn の終わりに子ごとに 1 回止める (`--hook-stop`)・本人待ちの子の見張り (`--wait-due`) を足した (本人の発言に子が答え終えて 30 分で畳む番 = 既定、 見張りはどれか 1 つの子で終わり、 開始時刻は子の窓に届いた親の wrap の依頼から道具が引く。 `uds:` の宛先で届いた親の message も `from-session` で親と数える)。 規約 = [`multi-session-coordination.md#tidy-after-child-turn-ends`](conventions/multi-session-coordination.md#tidy-after-child-turn-ends) の (3)(4)。 次 = 個人層の hook での本番の発火の確認 (carrier は個人層)。
+- **起こした worker が go 待ちで止まったときの見張り** — `scripts/session-launch-check.py` に、 子の最初の turn が終わる (か掲示板の依頼を claim する) まで背景で待って次の一手 (go / 直してもう一度 / go を送らない) を出す見張り (`--wait-first-turn`、 子の動きは child-wrap-check の部品) と、 見張りも go も出さずに turn を終えた回の Stop 用 (`--hook-stop`) を足し、 起こした直後と `set_session_*` の後に見張りの 1 行を出す。 規約 = [`multi-session-coordination.md#desktop-start-model-cap`](conventions/multi-session-coordination.md#desktop-start-model-cap) (見張りを先に出し、 直すのは最初の turn の後)。 次 = ほかの子が動いている親で、 見張りの終わりが親の新しい turn を始めるのを実際の起動で観察 (未観察)。
 
 - **重なる未 commit を解く道具の試走 + 無人の routine の log の全文** — 道具 `scripts/intersect-sync.py` は読むだけの試走として同期の sweep と fleet heartbeat に繋いだ。 自動の apply に繋ぐかは 1 週間の記録 (`--report`) を見て owner が決める (見直しの期日つき TODO は owner の台帳)。 skill の routine は stream-json の中継 (`scripts/claude-stream-log.py`) で全部の assistant の文を log に書き、 どの routine にも `CLAUDE_ROUTINE_ID` を焼く (各 machine の次の session 開始の `--ensure` が起動行を書き換える)。 正本 = [`multi-session-coordination.md#owner-gone-intersect-sync`](conventions/multi-session-coordination.md#owner-gone-intersect-sync) / [`scheduled-tasks.md#headless-log-full-report`](conventions/scheduled-tasks.md#headless-log-full-report)。
 
