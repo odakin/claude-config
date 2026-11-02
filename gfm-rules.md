@@ -32,6 +32,12 @@ GFM's autolinker greedily extends a bare URL: if you write `**https://example.co
 - **Fix**: use the explicit `[label](URL)` link form, e.g. `[Open the page](https://example.com)`. To emphasize, bold the *label* (`[**label**](URL)`), never the URL string itself.
 - If you must leave a bare URL, surround it with whitespace and never place `**`, `)`, `。`, or other punctuation directly adjacent to it: `See https://example.com (updated)` works; `**https://example.com**(updated)` does not.
 
+## A newline inside a table cell ends the row
+
+A GFM table row is exactly one line. A newline in the middle of a cell ends the row there, and the following lines render as plain paragraphs after a truncated table (measured: appending an indented continuation paragraph into a long cell broke the table).
+
+- **Fix**: keep each row on one line and use `<br>` for a line break inside a cell. When editing a long cell with a tool, check afterwards that the row is still one line (e.g. print the first characters of the surrounding lines).
+
 ---
 
 # GFM Markdown レンダリングの落とし穴
@@ -67,3 +73,9 @@ GFM の autolinker は裸の URL を貪欲に伸ばす。`**https://example.com*
 
 - **対処**: 明示的な `[ラベル](URL)` link 形式を使う（例: `[ページを開く](https://example.com)`）。強調したいときは *ラベル側* を bold（`[**ラベル**](URL)`）にし、URL 文字列そのものは `**` で囲まない
 - どうしても裸の URL を置くなら前後に空白を入れ、`**`・`）`・`。` 等の記号を直後に密着させない: `https://example.com を参照` は可、`**https://example.com**（更新済み）` は不可
+
+## 表のセルの中で改行しない（行がそこで終わる）
+
+GFM の表の 1 行は、ファイルの 1 行そのもの。セルの途中で改行すると行はそこで終わり、続きの行は切れた表の後ろの普通の段落になる（実測: 長いセルに字下げした続きの段落を書き足して、表が壊れた）。
+
+- **対処**: 1 行は 1 行のまま書き、セルの中の改行は `<br>`。長いセルを道具で書き換えたら、その行がまだ 1 行かを確かめる（前後の行の頭を数文字出すなど）
