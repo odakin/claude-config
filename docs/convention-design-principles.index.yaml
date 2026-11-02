@@ -969,6 +969,10 @@ sections:
     legacy: "8.91"
     level: 3
     title: "8.91 手順の表では、 道具のある行だけが回る — 人が読む行にも、 範囲を絞る道具と処分を照合する出口を付ける"
+  - id: signal-from-the-side-that-knows
+    legacy: "8.92"
+    level: 3
+    title: "8.92 知らせは、 その瞬間を知る側から出す — 起こす側の操作に掛けた仕組みは、 起こす側が手を動かさずに起きる経路を見ない"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
