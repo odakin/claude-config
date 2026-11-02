@@ -1,5 +1,5 @@
 {
-  "_comment": "git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 17 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 各 mutant は docstring の「穴」 1〜7 の塞ぎと、 --base を越えて進む条件・やり直しの判定を 1 つずつ外す。",
+  "_comment": "git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 18 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 各 mutant は docstring の「穴」 1〜7 の塞ぎと、 --base を越えて進む条件・やり直しの判定・上流にまだ無い他の commit の知らせを 1 つずつ外す。",
   "target": "git-commit-own-hunk.py",
   "run": "python3 {} --selftest",
   "fail_marker": "FAIL ",
@@ -273,6 +273,22 @@
         "足す文がもう親の版にあれば止まり、 二重に入らない"
       ],
       "expect_pass": [
+        "自分の分だけが commit に入る"
+      ]
+    },
+    {
+      "name": "commit の後に上流にまだ無い他の commit を並べるのを外す (push で別の session の未 push の commit が一緒に出るのを知らせない)",
+      "pairs": [
+        [
+          "        others = unpushed_others(top, val)\n",
+          "        others = []\n"
+        ]
+      ],
+      "expect_fail": [
+        "上流に無い他の commit を件名つきで知らせ、 自分の commit は並べない"
+      ],
+      "expect_pass": [
+        "上流にある分だけなら知らせない",
         "自分の分だけが commit に入る"
       ]
     }

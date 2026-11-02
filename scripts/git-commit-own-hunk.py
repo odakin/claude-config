@@ -71,6 +71,8 @@ commit は `git commit` で作る (pre-commit / prepare-commit-msg / commit-msg 
 置換は親の版の中で**ちょうど 1 回**一致しなければ止まる (0 回 = もう入っているか文面が違う / 2 回以上 = どれか決まらない)。
 old の前後に足す置換は、 足した後の文がもう親の版にあっても止まる (相手の commit に巻き込まれた後に当てると、 old は 1 回一致したまま二重に入る)。
 commit の後は push と、 相手の session への 1 行 (相手の `git diff` から自分の分が消えて見える) を忘れない。
+commit の後、 今の commit の外に上流 (`@{u}`) にまだ無い commit が在れば件名つきで並べる (push で一緒に出る。 止めはしない。
+別の session が「push は後で」 と残した commit なら、 一緒に出さずに commit-from-origin-worktree.py を使う)。
 
 ## 終了値
 
@@ -295,6 +297,21 @@ def commit_once(top: Path, parent: str, built: dict, msg_file: Path, first: bool
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def unpushed_others(top: Path, mine: str) -> list:
+    """上流 (@{u}) にまだ無い commit のうち、 今作った commit 以外 (push すると一緒に出る) の「hash 件名」。 上流が無ければ空。"""
+    if run(top, "rev-parse", "--verify", "-q", "@{u}").returncode != 0:
+        return []
+    r = run(top, "log", "--format=%H %h %s", "@{u}..HEAD")
+    if r.returncode != 0:
+        return []
+    rows = []
+    for line in r.stdout.decode("utf-8", "replace").splitlines():
+        full, _, rest = line.partition(" ")
+        if full != mine:
+            rows.append(rest)
+    return rows
+
+
 def dry_run(top: Path, parent: str, built: dict) -> None:
     tmp = Path(tempfile.mkdtemp(prefix="own-hunk-"))
     try:
@@ -444,6 +461,14 @@ def do_commit(top: Path, specs: dict, msg_file: Path, base: str | None, dry: boo
         stat = out(top, "show", "--stat", "--format=%h %s", val).decode("utf-8", "replace").strip()
         print(f"✅ commit した (自分の分だけ。 親 = {parent[:9]}、 試行 {attempt} 回目):")
         print(stat)
+        # 別の session が「push は後で」 と残した未 push の commit は、 自分の commit の親として一緒に remote に出る (止めはしない)
+        others = unpushed_others(top, val)
+        if others:
+            print(f"⚠️ push すると、 今の commit の外に上流にまだ無い commit が {len(others)} 件一緒に出る "
+                  "(別の session がまだ出さないと決めた commit かもしれない):")
+            for x in others:
+                print("  " + x)
+            print("  一緒に出してよいかを git log で確かめてから push する。 自分の分だけを出すなら commit-from-origin-worktree.py")
         print("次: push する。 相手の session に 1 行知らせる (相手の git diff から自分の分が消えて見える)。")
         if problems:
             print("🟠 commit は入ったが、 作業 tree に同じ置換を当てられなかった:", file=sys.stderr)
@@ -873,6 +898,31 @@ def selftest() -> int:
         ok("本物の git commit -a が commit の直後に lock を取っても待ち、 戻されたら終了値 5 (作業 tree には自分の変更)",
            rc == RC_STUCK and log[:3] == ["late", "mine", "P"] and head_file(top, "f.txt") == "a-other\nb\nc\nd\ne\n"
            and (top / "f.txt").read_text() == "a-other\nb\nc\nd\ne-mine\n", f"rc={rc} log={log}")
+
+        # 29. 上流にまだ無い他の commit が在る → push で一緒に出るのを知らせる (自分の commit は並べない。 他が無ければ黙る)
+        import contextlib
+        import io
+        remote = root / "r29-remote.git"
+        g(root, "init", "-q", "--bare", str(remote))
+        top = new_repo(root, "r29")
+        g(top, "remote", "add", "origin", str(remote))
+        g(top, "push", "-q", "-u", "origin", "main")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "a\n", "a2\n"])
+        ok("上流にある分だけなら知らせない", rc == 0 and "一緒に出る" not in buf.getvalue(), f"rc={rc} out={buf.getvalue()!r}")
+        g(top, "push", "-q")
+        other_commit(top, "g.txt", "g-held\n")                       # 別の session の 「push は後で」 の commit
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = call(top, ["-F", str(msg), "--replace-str", "f.txt", "e\n", "e-mine\n"])
+        lines = [x.strip() for x in buf.getvalue().splitlines()]
+        start = next((i for i, x in enumerate(lines) if "一緒に出る" in x), None)
+        listed = lines[start + 1:start + 2] if start is not None else []
+        tail = lines[start + 2] if start is not None and len(lines) > start + 2 else ""
+        ok("上流に無い他の commit を件名つきで知らせ、 自分の commit は並べない",
+           rc == 0 and "1 件一緒に出る" in buf.getvalue() and len(listed) == 1 and listed[0].endswith(" other")
+           and tail.startswith("一緒に出してよいか"), f"rc={rc} out={buf.getvalue()!r}")
     finally:
         LOCK_WAIT = saved_wait
         os.environ.clear()
