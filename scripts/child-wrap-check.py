@@ -1318,6 +1318,16 @@ def selftest() -> int:
         transcript(gw_c, [u("2026-01-01T00:00:00Z", "これを調べて", origin={"kind": "human"}), peer("2026-01-01T00:05:00Z", "B で", parent_l),
                           reply("2026-01-01T00:10:00Z", ask="どちらにしますか"), stop("2026-01-01T00:10:05Z")])
         ok("the parent's message before the ask does not answer it", bool(check_child(gw_l, need_wrap=False)["open_ask"]))
+        # The app's continuation after a compaction in the child's window is not the person talking (measured: a wrapped child
+        # with no question was kept from the archive by it)
+        transcript(gw_c, [u("2026-01-01T00:00:00Z", "これを調べて", origin={"kind": "human"}), peer("2026-01-01T00:20:00Z", "wrap して", parent_l),
+                          skill_wrap("2026-01-01T00:21:00Z"), reply("2026-01-01T00:25:00Z"), stop("2026-01-01T00:25:05Z"),
+                          {"type": "user", "isCompactSummary": True, "timestamp": "2026-01-01T00:30:00Z", "message": {"role": "user",
+                           "content": "This session is being continued from a previous conversation that ran out of context."}},
+                          reply("2026-01-01T00:31:00Z"), stop("2026-01-01T00:31:05Z")])
+        r = check_child(gw_l)
+        ok("a compaction summary in the child's window after the parent's message is not the person talking → ok",
+           r["ok"] and owner_reasons(gw_l) == [])
         transcript(parent_c, notes)
         sf_l, sf_c = "local_66666666-0000-4000-8000-000000000000", "66666666-cccc-4000-8000-000000000000"
         record(sf_l, sf_c, parent_l)

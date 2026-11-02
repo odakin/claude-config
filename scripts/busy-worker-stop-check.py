@@ -52,8 +52,12 @@ LEADING_KW = {"do", "then", "else", "elif", "if", "while", "until", "{", "!", "t
 ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
 ID_TOKEN =re.compile(r"(?<![0-9a-zA-Z_-])([0-9a-f]{8}(?:-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?)(?![0-9a-zA-Z_])")
 STOP_OK = re.compile(r"#\s*stop-ok:\s*(.+?)\s*$", re.M)
+# The app's continuation after a compaction ("This session is being continued from a previous conversation …") is a user
+# entry the app writes, not the person's: it carries isCompactSummary (read below); the text is the fallback (measured: the
+# summary read as the person talking kept a wrapped child with no question from being archived).
 NOT_HUMAN = ("<task-notification", "<cross-session-message", "Another Claude session sent a message", "Stop hook feedback",
-             "<local-command", "<command-name>", "<command-message>", "<side-sessions-event", "[Request interrupted")
+             "<local-command", "<command-name>", "<command-message>", "<side-sessions-event", "[Request interrupted",
+             "This session is being continued from a previous conversation")
 TAIL_BYTES = 512 * 1024
 REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
 
@@ -94,7 +98,7 @@ def _human_text(e: dict) -> str:
                              and "<system-reminder>" not in x.get("text", ""))
             return str(p or "")
         return ""
-    if e.get("type") != "user" or e.get("isMeta"):
+    if e.get("type") != "user" or e.get("isMeta") or e.get("isCompactSummary"):
         return ""
     c = (e.get("message") or {}).get("content")
     if isinstance(c, list):
@@ -392,6 +396,14 @@ def selftest() -> int:
             fh.write(json.dumps({"type": "attachment", "attachment": {"type": "queued_command", "prompt": "止めないで",
                                  "origin": {"kind": "human"}}, "timestamp": "2099-03-01T00:00:00.000Z"}, ensure_ascii=False) + "\n")
         ok("a prompt absorbed mid-turn counts as the person's", last_human(tr)[1] == "止めないで")
+        with open(tr, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "user", "isCompactSummary": True, "message": {"content": "要約: 依頼の続き"},
+                                 "timestamp": "2099-04-01T00:00:00.000Z"}, ensure_ascii=False) + "\n")
+        ok("a compaction summary (isCompactSummary) is not the person's prompt", last_human(tr) == ("", ""))
+        with open(tr, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "user", "message": {"content": "This session is being continued from a previous "
+                                 "conversation that ran out of context. The summary below"}, "timestamp": "2099-04-02T00:00:00.000Z"}) + "\n")
+        ok("the compaction continuation text without the flag is not the person's prompt either", last_human(tr) == ("", ""))
         for k in ("CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "BUSY_WORKER_STOP_STATE_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR",
                   "CHILD_WRAP_REPOS_GLOB"):
             os.environ.pop(k, None)

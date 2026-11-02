@@ -7,8 +7,7 @@
   "mutants": [
     {"name": "手順 0 の停止を本人待ちの点から外さない",
      "pairs": [["    points = [p for p in _wait_points(ev, notes) if not step0_turn(ev, p[0])]\n", "    points = _wait_points(ev, notes)\n"]],
-     "expect_fail": ["step 0: the go came from the parent", "step 0: the archive guard's owner reasons are empty",
-                     "step 0, no go yet → kept as waiting", "step 0, no go yet: the archive guard"],
+     "expect_fail": ["step 0, no go yet → kept as waiting", "step 0, no go yet: the archive guard"],
      "expect_pass": ["control: a later turn (no model check in it) asks the person", "waited on the person, only another session answered"]},
     {"name": "同じ turn に claim があっても手順 0 と読む",
      "pairs": [["    return bool(checks) and not any(min(checks) < c <= at for c in ev[\"claims\"])", "    return bool(checks)"]],

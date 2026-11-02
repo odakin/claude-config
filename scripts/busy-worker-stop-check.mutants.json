@@ -1,0 +1,17 @@
+{
+  "_comment": "busy-worker-stop-check.py の「文脈圧縮の要約の続きを本人の発言に数えない」 の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。",
+  "target": "busy-worker-stop-check.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "NG: ",
+  "pass_marker": "ok: ",
+  "mutants": [
+    {"name": "要約の印 (isCompactSummary) を見ない",
+     "pairs": [["    if e.get(\"type\") != \"user\" or e.get(\"isMeta\") or e.get(\"isCompactSummary\"):\n", "    if e.get(\"type\") != \"user\" or e.get(\"isMeta\"):\n"]],
+     "expect_fail": ["a compaction summary (isCompactSummary) is not the person's prompt"],
+     "expect_pass": ["the compaction continuation text without the flag"]},
+    {"name": "印の無い要約の続きの文を本人の発言から外さない",
+     "pairs": [["             \"This session is being continued from a previous conversation\")", "             )"]],
+     "expect_fail": ["the compaction continuation text without the flag"],
+     "expect_pass": ["a compaction summary (isCompactSummary) is not the person's prompt"]}
+  ]
+}

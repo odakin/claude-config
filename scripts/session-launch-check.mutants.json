@@ -60,6 +60,10 @@
     {"name": "依頼元と同じ値の card にも知らせる",
      "pairs": [["    if not (above or other_effort):\n        return \"\"\n", ""]],
      "expect_fail": ["post-start card at the launcher's own values"],
-     "expect_pass": ["post-start card above the launcher"]}
+     "expect_pass": ["post-start card above the launcher"]},
+    {"name": "detach の知らせを本人が worker の窓で答える向きに戻す",
+     "pairs": [["子の turn の終わりの知らせを依頼元に来させない\"\n            f\" (判断の問いは子が掲示板の note か SendMessage で依頼元に出す。", "子の turn の終わりの知らせと本人への問いを\"\n            f\"依頼元に来させない (本人は worker の窓で答える。"]],
+     "expect_fail": ["post-start: the detach note sends the child's questions of judgment to the requester"],
+     "expect_pass": ["post-start: right model and the record asks detach → detach_session note"]}
   ]
 }
