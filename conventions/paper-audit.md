@@ -258,7 +258,7 @@ plan + yaml + TodoWrite の 3 階層併用。 plan = ロードマップ、 yaml 
 - (e) **exactness 動詞**: terminates / vanishes / is exact / to all orders / unique / collapses は全次数の主張 — 同文か直後に display (`\labelcref`) を持つか。無ければ display を新設するか主張を弱める (= prose は隠す、式と機械は暴く。display 化した主張は機械 audit の anchor にもなる)
 - (f) **移動 text 内の cite**: 引用が新文脈でも同じ主張に束縛されているか
 - (g) <a id="orphaned-definition-after-move"></a>**定義の孤児**: 移した block の中でだけ定義されていた記号・略記が、 残した側の式や文にまだ使われていないか。 付録の導出を補足へ移して結果だけ残すと起きやすい (実測: 残した display に「2 つの等しい形」 が並んでいて、 片方の形の変数の定義だけが導出と一緒に移り、 残した式に未定義の記号が残った。 ref は壊れないので build は通る)。 残す側の数式に出る記号を列挙し、 残す側の中に定義があるかを確かめる
-- (h) <a id="sentence-table-neighbors"></a>**文の表を当てる pass の隣の文**: 決まった文に置き換える pass では、 式を変えない制約のもとで隣が壊れる。 display の直後の節を消すと、 display の末尾が comma なら次の文は小文字で続ける必要があり、 period の後に so that で始める文は文にならない (末尾の句読点が次の文の形を縛る)。 置き換える文が次の文の指示語 (That of … など) の先行詞を持っていることもある。 表を当てる前に、 前の display の句読点と次の文の指示語を見る (実測: 表どおりに当てると comma の後に大文字の文が続く所と、 先行詞の消える所が出た)。 表の行番号と記号は古くなるので、 文の中身で探し、 今の記号に読み替える
+- (h) <a id="sentence-table-neighbors"></a>**文の表を当てる pass の隣の文**: 決まった文に置き換える pass では、 式を変えない制約のもとで隣が壊れる。 display の直後の節を消すと、 display の末尾が comma なら次の文は小文字で続ける必要があり、 period の後に so that で始める文は文にならない (末尾の句読点が次の文の形を縛る)。 置き換える文が次の文の指示語 (That of … など) の先行詞を持っていることもある。 表を当てる前に、 前の display の句読点と次の文の指示語を見る (実測: 表どおりに当てると comma の後に大文字の文が続く所と、 先行詞の消える所が出た)。 表の行番号と記号は古くなるので、 文の中身で探し、 今の記号に読み替える。 句読点の食い違い (末尾が period なのに次が小文字の where・which、 末尾が comma なのに次が大文字の文、 句点の抜け) は [`../scripts/tex-display-punctuation.py`](../scripts/tex-display-punctuation.py) が列挙する (display を macro で書く原稿は `--display-macro al`)。 文を分ける pass でも、 終えた後に 1 回回す (実測: 盲検と AI の監査を通った原稿に、 period の後を小文字の where・which で続ける所が残っていた)。 display の中は式なので、 散文の側を直す
 
 出力は「sweep した class と範囲 / NOT した範囲 / 確信境界」を明示し、「✓ pass」で終わらせない。
 
