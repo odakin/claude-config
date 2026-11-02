@@ -2878,7 +2878,7 @@ origin: 学外者旅費様式の支給方法選択。 前 session が `☑` で 
 
 同じ [`pdf-visual-confirm`](#pdf-visual-confirm) PDF visual で**同時に捕捉される他の落とし穴** (= いずれも cell 値検証では見えない。 実測: 1 回の様式 fill で 3 件同時発見):
 - **文字 clipping**: center 配置の長い文字列 (= 例「東京大学大学院工学系研究科」) が cell 幅超過で**両端が clip** (= left 配置なら右のみ clip)。 **非結合セル**なら fix = `cell.alignment = Alignment(horizontal=a.horizontal, vertical=a.vertical, ..., shrink_to_fit=True)` (= 既存 alignment 属性を保持して shrink_to_fit だけ足す)。 ⚠️ **結合セル (例 G13:M13) では shrink_to_fit は no-op** = 効かない。 結合セルは **font size を下げる**のが唯一の手 ([`merged-cell-text-clipping`](#merged-cell-text-clipping))。
-- **multi-sheet workbook → PDF 全ページ出力**: `xlsx-to-pdf.sh` ([`xlsx-to-pdf-script`](#xlsx-to-pdf-script)) に sheet 名を渡しても Excel engine が **workbook 全 sheet を各ページ出力**することがある (= 例 様式 3 枚 + 領収書 + dropdown 用の 5 sheet → 5 ページ PDF)。 提出は目的 sheet のみなので **PyMuPDF で目的ページを抽出**: `import fitz; src=fitz.open(big); out=fitz.open(); out.insert_pdf(src, from_page=0, to_page=0); out.save(submit)`。 [`multi-sheet-form`](#multi-sheet-form) の多 sheet 注意と併読。
+- **multi-sheet workbook → PDF 全ページ出力**: Excel の PDF 書き出しは sheet 名を指定しても **workbook 全 sheet を各ページ出力**する (= 例 様式 3 枚 + 領収書 + dropdown 用の 5 sheet → 5 ページ PDF、 [`excel-pdf-whole-workbook-export`](#excel-pdf-whole-workbook-export))。 `xlsx-to-pdf.sh` ([`xlsx-to-pdf-script`](#xlsx-to-pdf-script)) は 2026-11-02 の版から、 sheet 名を渡されると保存せずに閉じる写しの上でほかの worksheet を隠してから書き出す = 目的の sheet だけの PDF が出る。 それより前の版で作った PDF・手で書いた osascript の PDF は **PyMuPDF で目的ページを抽出**: `import fitz; src=fitz.open(big); out=fitz.open(); out.insert_pdf(src, from_page=0, to_page=0); out.save(submit)`。 [`multi-sheet-form`](#multi-sheet-form) の多 sheet 注意と併読。
 
 ---
 
@@ -2926,7 +2926,7 @@ xlsx fill 完了直前に必ず **PDF preview 生成 + 視認**:
 # AppleScript で Excel に PDF として保存命令 (= macOS、 Excel 起動必要)
 # ⚠️ 2026-09-02 訂正: 下は **hand-roll の anti-pattern** — `save as active workbook … PDF` は -50、
 #    `active workbook` の取り出しは -1728 になる (= 本 file 冒頭の symptom-index 参照)。
-#    **`scripts/xlsx-to-pdf.sh` を使う** (= sheet 単位 `save as <worksheet>` を実装済)。
+#    **`scripts/xlsx-to-pdf.sh` を使う** (= sheet 単位の書き出しは、 ほかの worksheet を隠してから `save as <worksheet>`)。
 #    以下は「何が起きるか」 の説明用に残す歴史的 snippet であって recipe ではない。
 osascript -e 'tell application "Microsoft Excel"
     open POSIX file "/path/to/form.xlsx"
@@ -3215,9 +3215,9 @@ Excel UI の印刷 dialog で **default 「アクティブシート」** の場�
 
 ### <a id="excel-pdf-whole-workbook-export"></a>Excel の PDF 書き出しは workbook 全体を出す (= sheet 選択は効かない) → 不要 sheet は temp 削除
 
-**症状**: macOS の Excel osascript で `save as active sheet of wbk ... file format PDF` (や `save as worksheet "名" of wbk ...`) を撃つと、 active sheet だけでなく **workbook 内の全 visible sheet が各 print_area で連続ページ出力**される (= observed: Excel for Mac)。 [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の表で Excel engine を「✓ 1 sheet」 としているが、 単一 sheet 指定は version 依存で**当てにならない**。
+**症状**: macOS の Excel osascript で `save as active sheet of wbk ... file format PDF` (や `save as worksheet "名" of wbk ...`) を撃つと、 active sheet だけでなく **workbook 内の全 visible sheet が各 print_area で連続ページ出力**される (= observed: Excel for Mac。 2 sheet の book の 2 枚目を指定して 2 ページ出た実測あり)。 書き出されるのは **visible な sheet だけ** = 隠した sheet は出ない (実測)。 [`xlsx-to-pdf-script`](#xlsx-to-pdf-script) の表の Excel engine の「✓ 1 sheet」 は、 script がこの性質を使って成り立たせている: sheet 名を渡されると、 保存せずに閉じる写しの上でほかの worksheet を `set visible of (worksheet i of wbk) to false` で隠してから書き出す (`repeat with ws in worksheets` に `sheet hidden` を当てる形は -50 で落ちた)。 手で osascript を書くときも同じく隠す。
 
-**確実な解法 (= 出力ページを制御する)**: temp copy を作り、 **出したくない sheet を `wb.remove()` してから**出力する。 出力 PDF のページ順 = temp に残した visible sheet の順。
+**複数 sheet を選んで出す解法 (= 出力ページを制御する)**: Excel の写しの上で出したくない sheet を隠して書き出すのが第一 (隠すだけなので、 残す sheet の数式の参照は壊れない)。 openpyxl で組むなら temp copy を作り、 **出したくない sheet を `wb.remove()` してから**出力する。 出力 PDF のページ順 = temp に残した visible sheet の順。
 
 ```python
 import openpyxl
@@ -3603,7 +3603,7 @@ with zipfile.ZipFile(src, 'w', zipfile.ZIP_DEFLATED) as zout:
 4. **検証 3 点 set**: openpyxl readback で値 assert + `scripts/check-xlsx-integrity.py` (= zip 直編集の納品前 gate) + [`diff-form-xlsx.py`](#diff-form-xlsx-detection) で label 上書きゼロ確認。
 5. **cell 要素が無い (= 空セルは XML に存在しないことがある) / self-closing `<c r="X" s="n"/>` のとき**: 同じ `<row r="N">` 内に**列順を保って挿入**する (style `s=` は同列の近傍 cell から流用)。 regex は `<c r="REF"(attrs)(/>|>…</c>)` の両形を受ける。 実測: 表の最終行は `<row>` だけ在って値を入れる `<c>` が 1 つも無かった → 挿入で対応。
 6. **date 書式済みの cell は serial を書く** (例: 日付 cell = `45658` → 2025-01-01)。 serial ↔ date の換算は openpyxl readback で確認 (`datetime` が返れば書式が生きている)。
-7. <a id="xlsx-zip-stale-formula-cache"></a>**書き換えた cell を参照する数式の計算結果は古いまま残る** (= `<v>` の cache は Excel が開いて再計算するまで更新されない)。 送り先の Excel が開いたときに必ず再計算させるなら、 `xl/workbook.xml` の `<calcPr>` に `fullCalcOnLoad="1"` を足す (先方が保存すると Excel が外す)。 足す前に、 その workbook の差がこの属性 1 つだけかを確かめる。 実測: 入力欄を VLOOKUP で拾う事務作業用の sheet が、 値を入れた後も 0 のまま見えた (道具の option にはまだ無い = その場で足した)
+7. <a id="xlsx-zip-stale-formula-cache"></a>**書き換えた cell を参照する数式の計算結果は古いまま残る** (= `<v>` の cache は Excel が開いて再計算するまで更新されない)。 送り先の Excel が開いたときに必ず再計算させるなら、 `xl/workbook.xml` の `<calcPr>` に `fullCalcOnLoad="1"` を足す (先方が保存すると Excel が外す)。 道具では `xlsx-zip-set-cells.py … --recalc-on-load` (calcPr が無ければ schema の順の位置に足し、 読み戻しで印を照合する。 workbook.xml の差はこの属性 1 つだけ)。 実測: 入力欄を VLOOKUP で拾う事務作業用の sheet が、 値を入れた後も 0 のまま見えた (当時は道具の option が無く、 その場で足した)
 8. Excel automation との**hybrid が実戦形**: 値の大半は Excel osascript で書き、 **書式起因の後修正だけ本手術**で当てる (= Excel 再起動 round を 1 つ消す。 [`excel-osascript-cell-write`](#excel-osascript-cell-write) の「多 round crash」 回避にも効く)。
 
 origin: マクロ入り様式 xlsm (= VBA + drawings 持ち) の日付 cell。 Excel scripting が -1728/-1708 で不安定な throttled マシン上で、 値は AppleScript・書式は本手術の hybrid で完了。

@@ -48,8 +48,10 @@
 #
 # Usage:
 #   xlsx-to-pdf.sh [--no-stage] <input.xlsx> [sheet] [output.pdf]
-#     sheet       Excel engine only: export just that worksheet. The LibreOffice
-#                 engine ignores it (with a warning) and exports the whole book.
+#     sheet       Excel engine only: export just that worksheet (the other worksheets are
+#                 hidden in the never-saved copy first; Excel's PDF export otherwise writes
+#                 every visible sheet). The LibreOffice engine ignores it (with a warning)
+#                 and exports the whole book. Without it, both engines export the whole book.
 #     output.pdf  defaults to <input> with a .pdf extension, next to the source.
 set -euo pipefail
 
@@ -140,6 +142,14 @@ on run argv
           set tgt to active sheet of wbk
         else
           set tgt to worksheet sheetName of wbk
+          -- Excel for Mac writes every visible sheet into the PDF even when `save as` is given one
+          -- worksheet (measured: a 2-sheet book asked for its 2nd sheet gave 2 pages, one per sheet).
+          -- Hide the other worksheets in this copy, which is closed without saving below.
+          -- (`set visible of ws to sheet hidden` over `repeat with ws in worksheets` failed with -50;
+          -- the index loop with `false` works.)
+          repeat with i from 1 to (count of worksheets of wbk)
+            if name of (worksheet i of wbk) is not sheetName then set visible of (worksheet i of wbk) to false
+          end repeat
         end if
         save as tgt filename (POSIX file pdfPath) file format PDF file format with overwrite
       on error errMsg number errNum

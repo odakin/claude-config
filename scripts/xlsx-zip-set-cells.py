@@ -22,6 +22,9 @@ Excel の AppleScript は遅いマシンで cold-start 90-120 秒・マクロ付
   - 書いた後に読み戻して全 cell の値を照合 + 他 member の CRC 一致 + check-xlsx-integrity.py を回す。
     どれか落ちたら出力を消して exit 1
   - 既定は --out 必須 (上書きは --in-place を明示)。 git 管理下なら元に戻せるので --in-place でよい
+  - --recalc-on-load: 書いた cell を参照する数式の計算結果 (<v>) は Excel が再計算するまで古いまま = 送り先の
+    Excel が開いたときに全数式を再計算させる印 (workbook.xml の <calcPr fullCalcOnLoad="1"/>) を付ける
+    (calcPr が無ければ schema の順の位置に足す。 先方が保存すると Excel が外す。 #xlsx-zip-stale-formula-cache)
 exit: 0 = 書いた / 1 = 検査落ち・拒否 / 2 = 引数・file の誤り
 """
 from __future__ import annotations
@@ -197,7 +200,32 @@ def read_cell(xml: str, ref: str):
     return None
 
 
-def set_cells(book, sheet: str, cells: dict, out, allow_formula=False, integrity=True) -> list:
+# CT_Workbook で calcPr より後に来る要素 (= 挿入位置はこのどれかの直前、 無ければ </workbook> の直前)
+_AFTER_CALCPR = ("oleSize", "customWorkbookViews", "pivotCaches", "smartTagPr", "smartTagTypes",
+                 "webPublishing", "fileRecoveryPr", "webPublishObjects", "extLst")
+
+
+def recalc_on_load(wb_xml: str) -> str:
+    """workbook.xml に「開いたら全数式を再計算」 の印 (<calcPr fullCalcOnLoad="1"/>) を付ける。
+    書き換えた cell を参照する数式の <v> (計算結果の cache) は Excel が開いて再計算するまで古いまま残る
+    (office-automation.md#xlsx-zip-stale-formula-cache)。 先方の Excel が保存するとこの印は外れる。"""
+    if re.search(r"<\w+:workbook\b", wb_xml):
+        raise Refused("workbook.xml の要素に接頭辞が付いている = calcPr の位置を決められない (--recalc-on-load を外す)")
+    m = re.search(r"<calcPr\b[^>]*?/?>", wb_xml)
+    if m:
+        tag = m.group(0)
+        if re.search(r'\bfullCalcOnLoad="(1|true)"', tag):
+            return wb_xml
+        tag2 = re.sub(r'\s+fullCalcOnLoad="[^"]*"', "", tag)
+        tag2 = re.sub(r"(\s*/?>)$", r' fullCalcOnLoad="1"\1', tag2, count=1)
+        return wb_xml[:m.start()] + tag2 + wb_xml[m.end():]
+    m = re.search(r"<(?:%s)\b" % "|".join(_AFTER_CALCPR), wb_xml) or re.search(r"</workbook>", wb_xml)
+    if not m:
+        raise Refused("workbook.xml に </workbook> が無い")
+    return wb_xml[:m.start()] + '<calcPr fullCalcOnLoad="1"/>' + wb_xml[m.start():]
+
+
+def set_cells(book, sheet: str, cells: dict, out, allow_formula=False, integrity=True, recalc=False) -> list:
     book, out = str(book), str(out)
     with zipfile.ZipFile(book) as zin:
         part, _sid = sheet_part(zin, sheet)
@@ -217,6 +245,11 @@ def set_cells(book, sheet: str, cells: dict, out, allow_formula=False, integrity
             extra["xl/_rels/workbook.xml.rels"] = re.sub(r"<Relationship\b[^>]*calcChain[^>]*/>", "", rels).encode("utf-8")
             ct = zin.read("[Content_Types].xml").decode("utf-8")
             extra["[Content_Types].xml"] = re.sub(r'<Override\b[^>]*PartName="/xl/calcChain.xml"[^>]*/>', "", ct).encode("utf-8")
+        if recalc:
+            wb_xml = zin.read("xl/workbook.xml").decode("utf-8")
+            wb_new = recalc_on_load(wb_xml)
+            if wb_new != wb_xml:
+                extra["xl/workbook.xml"] = wb_new.encode("utf-8")
         fd, tmp = tempfile.mkstemp(suffix=Path(out).suffix, dir=str(Path(out).resolve().parent))
         os.close(fd)
         with zipfile.ZipFile(tmp, "w") as zout:
@@ -236,6 +269,8 @@ def set_cells(book, sheet: str, cells: dict, out, allow_formula=False, integrity
                 want = None if val is None else (float(val) if isinstance(val, (int, float)) and not isinstance(val, bool) else str(val))
                 if read_cell(got, ref) != want:
                     problems.append(f"{ref}: 読み戻し {read_cell(got, ref)!r} ≠ {want!r}")
+            if recalc and not re.search(r'<calcPr\b[^>]*\bfullCalcOnLoad="(1|true)"', zchk.read("xl/workbook.xml").decode("utf-8")):
+                problems.append("xl/workbook.xml: fullCalcOnLoad の印が読み戻せない")
             before = {i.filename: i.CRC for i in zin.infolist() if i.filename not in drop | set(extra) | {part}}
             after = {i.filename: i.CRC for i in zchk.infolist()}
             for name, crc in before.items():
@@ -252,6 +287,8 @@ def set_cells(book, sheet: str, cells: dict, out, allow_formula=False, integrity
     notes = [f"{ref} = {val!r}" for ref, val in cells.items()]
     if drop:
         notes.append("数式を消したので calcChain.xml を外した (Excel が作り直す)")
+    if recalc:
+        notes.append("開いたら全数式を再計算する印 (calcPr fullCalcOnLoad=1) を付けた (先方の Excel が保存すると外れる)")
     return notes
 
 
@@ -321,7 +358,30 @@ def _selftest():
     n_ok += 1
     assert _parse_set(["A1=#3", "A2=#2.5", "A3=##x", "A4=", "A5=文"]) == {"A1": 3, "A2": 2.5, "A3": "#x", "A4": None, "A5": "文"}
     n_ok += 1
-    print(f"xlsx-zip-set-cells selftest: {n_ok}/6 PASS")
+    # --recalc-on-load: calcPr に印が無い book (openpyxl は印付きで書くので外して作る) と calcPr の無い book
+    for label, mutate in (("calcPr に印なし", lambda w: re.sub(r'\s*fullCalcOnLoad="[^"]*"', "", w)),
+                          ("calcPr なし", lambda w: re.sub(r"<calcPr\b[^>]*/>", "", w))):
+        src2 = os.path.join(d, "nocalc.xlsx")
+        with zipfile.ZipFile(src) as a, zipfile.ZipFile(src2, "w") as b:
+            for i in a.infolist():
+                data = a.read(i.filename)
+                if i.filename == "xl/workbook.xml":
+                    data = mutate(data.decode("utf-8")).encode("utf-8")
+                b.writestr(i, data, compress_type=i.compress_type)
+        out2 = os.path.join(d, "recalc.xlsx")
+        set_cells(src2, "表 & 一覧", {"D7": "新"}, out2, recalc=True)
+        with zipfile.ZipFile(out2) as z:
+            w = z.read("xl/workbook.xml").decode("utf-8")
+        assert len(re.findall(r'<calcPr\b[^>]*fullCalcOnLoad="1"', w)) == 1, (label, w)
+        assert w.index("<sheets") < w.index("<calcPr"), (label, "calcPr は sheets より後")
+        assert openpyxl.load_workbook(out2)["表 & 一覧"]["D7"].value == "新"
+        n_ok += 1
+    w0 = "<workbook><sheets/><calcPr calcId=\"191029\"/><extLst/></workbook>"
+    assert recalc_on_load(w0) == '<workbook><sheets/><calcPr calcId="191029" fullCalcOnLoad="1"/><extLst/></workbook>'
+    assert recalc_on_load("<workbook><sheets/><extLst/></workbook>") == '<workbook><sheets/><calcPr fullCalcOnLoad="1"/><extLst/></workbook>'
+    assert recalc_on_load(recalc_on_load(w0)) == recalc_on_load(w0)  # 2 回目は変えない
+    n_ok += 1
+    print(f"xlsx-zip-set-cells selftest: {n_ok}/9 PASS")
 
 
 def main():
@@ -334,6 +394,8 @@ def main():
     g.add_argument("--out")
     g.add_argument("--in-place", action="store_true")
     ap.add_argument("--allow-formula", action="store_true")
+    ap.add_argument("--recalc-on-load", action="store_true",
+                    help="開いたら全数式を再計算する印 (workbook.xml の calcPr に fullCalcOnLoad=1) を付ける = 書いた cell を参照する数式の古い計算結果を送り先で残さない")
     ap.add_argument("--no-integrity", action="store_true", help="check-xlsx-integrity.py を回さない (selftest 等)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
@@ -352,7 +414,7 @@ def main():
     if not sheet or not cells:
         ap.error("--sheet と書く cell (--set / --spec) が要る")
     try:
-        notes = set_cells(a.book, sheet, cells, a.out or a.book, a.allow_formula, not a.no_integrity)
+        notes = set_cells(a.book, sheet, cells, a.out or a.book, a.allow_formula, not a.no_integrity, a.recalc_on_load)
     except Refused as e:
         print(f"xlsx-zip-set-cells: ✗ {e}", file=sys.stderr)
         return 1
