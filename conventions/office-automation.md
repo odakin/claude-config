@@ -2770,7 +2770,7 @@ python3 ~/Claude/claude-config/scripts/diff-form-docx.py --selftest
 - **`PAGE_ADDED` / `LAYOUT_SHIFT` / `PDF_FONT_NEW`** (= HARD、 描画): Word で雛形と記入済みの両方を描き (`docx-to-pdf.sh`)、 頁が増えた / 両方に在る様式の字の行が下にずれた (= 記入が折り返した・行を足した) / 雛形の紙では英字・数字を描かない font が出た、 を止める。 本人が Word で書き出した PDF は `--filled-pdf` / `--blank-pdf` で渡す。 `--keep-pdf DIR` で描いた PDF を残す (描いた PDF の目視は続けて要る = 検査は既知の型しか見ない)
 - **`PARA_REMOVED` / `LAYOUT_SHIFT_UP`** (= surface): 段落が減った / 様式の字が上にずれた (= 雛形の行を消した)
 
-HARD 検出時は exit 1。 完成度 finding (surface) は `--strict` で exit 1 化。 記入版生成 pipeline の最後に必ず通す。 `--selftest` 内蔵。 **exit 3 = 描画ができなかった = 見た目 (頁数・行の折れ・紙の font) は未確認** で、 通過ではない (次の手 = [`docx-layout-unverified`](#docx-layout-unverified))。 描画つきで通った file は sha256 を記録し、 `--receipt-status <file>` が今の中身が検査済みかを答える。 `--no-render` で回したときは、 見せる・送る前に [`docx-layout-unverified`](#docx-layout-unverified) の経路で見た目を確かめる。 番号つきの行そのものが記入行の様式 (「３．…：　年　月　日」 の空白に書く) は、 番号で始まり様式の字を順に全部残す段落があれば `HEADING_VANISHED` にしない。
+HARD 検出時は exit 1。 完成度 finding (surface) は `--strict` で exit 1 化。 記入版生成 pipeline の最後に必ず通す。 `--selftest` 内蔵。 **exit 3 = 描画ができなかった = 見た目 (頁数・行の折れ・紙の font) は未確認** で、 通過ではない (次の手 = [`docx-layout-unverified`](#docx-layout-unverified))。 検査のたびに file の sha256 と結果を記録し、 `--receipt-status <file>` が今の中身が描画つきで通ったか (と、 その path を検査したことがあるか) を答える。 `--no-render` で回したときは、 見せる・送る前に [`docx-layout-unverified`](#docx-layout-unverified) の経路で見た目を確かめる。 番号つきの行そのものが記入行の様式 (「３．…：　年　月　日」 の空白に書く) は、 番号で始まり様式の字を順に全部残す段落があれば `HEADING_VANISHED` にしない。
 
 判定は**構造的** = 「箱・列・箇条書きが空」「ラベルが置換」 は機械で言えるが、 **「散文の中身が薄い / 箱が半分しか埋まってない」 は判定不可** = 審査員の目の最終 pass が残る ([`office-automation-principles.md` reviewer-eye-completion](office-automation-principles.md#reviewer-eye-completion) 「記入後は『審査員の目』 で閉じる」)。
 
@@ -2792,7 +2792,7 @@ origin: ある研究費 docx 申請様式で同一様式に 4 記入ミスを連
 
 Pages・LibreOffice の PDF は組み直すので、 頁数と行の折れの判定に使わない ([`docx-to-pdf-pages`](#docx-to-pdf-pages))。 どの経路も通らないときは、 本人に見せる前に「見た目は確かめられていない」 と、 試した経路と止まった理由を 1 行で伝える (台帳に書いて先へ進む形にしない)。
 
-**機械**: `docx-to-pdf.sh` は Word の経路が止まると上の順を stderr に出す。 `diff-form-docx.py` は描画つきで通った file の sha256 を記録し (`${XDG_STATE_HOME:-~/.local/state}/claude-form-layout/receipts.tsv`)、 `--receipt-status <file>` が今の中身が検査済みかを答える (見せる・送る段の gate が読む口)。
+**機械**: `docx-to-pdf.sh` は Word の経路が止まると上の順を stderr に出す。 `diff-form-docx.py` は検査のたびに file の sha256・path・結果 (通った / HARD / 描けなかった / 描画なし) を記録し (`${XDG_STATE_HOME:-~/.local/state}/claude-form-layout/receipts.tsv`)、 `--receipt-status <file>` が、 今の中身が描画つきで通ったかと、 その path を検査したことがあるかを答える (見せる・送る段の gate が読む口 = この検査を通した様式と、 一度も通していない文書を見分けられる)。
 
 origin: 実測 (変換が止まった時点で「未確認」 と台帳に書いて進み、 崩れたまま本人に見せた。 Word の画面で見る経路はその時も使えた)。
 
