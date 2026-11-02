@@ -1232,7 +1232,7 @@ hook の state (処理済みの記録・割り当て・既読) を「読む → 
 
 ## <a id="git-fixture-pinned-dates"></a>§20. test の git fixture は日付を固定する — 同じ秒に作った 2 つの履歴は同じ sha になる
 
-履歴の書き換え・追従・分岐を test する fixture で、 「旧い履歴」 と「新しい履歴」 を同じ秒の中で作ると、 中身と日付が同じ commit は同じ sha になり、 分岐していないように見える (速い CI の runner でだけ再現し、 手元では通る = 実測)。 `GIT_AUTHOR_DATE` / `GIT_COMMITTER_DATE` を commit ごとに別の固定値にする。
+履歴の書き換え・追従・分岐を test する fixture で、 「旧い履歴」 と「新しい履歴」 を同じ秒の中で作ると、 中身と日付が同じ commit は同じ sha になり、 分岐していないように見える (速い CI の runner でだけ再現し、 手元では通る = 実測)。 `GIT_AUTHOR_DATE` / `GIT_COMMITTER_DATE` を commit ごとに別の固定値にする。 <a id="fixture-clock-and-git-since"></a>固定した日付の fixture に、 本物の時計に相対の窓 (`git log --since=60.days`) を当てると commit が全部窓の外に出る = 試験のために時計を注入できる道具は、 窓も注入した時計からの絶対時刻 (`--since=YYYY-MM-DDTHH:MM:SS`) で渡す (実測: 相対の窓のままの道具で、 注入した時計なら拾えるはずの commit を fixture の test が全部落とした)。 時刻の経過で変わる判定は sleep で待たず、 state に書いた時刻を戻して作る。
 
 ## <a id="autofix-hook-path-commit-stale-index"></a>§21. 自動修正して再 stage する pre-commit と `git commit -- <path>` を合わせると、 本当の index に修正前の版が残る
 
