@@ -590,8 +590,8 @@ def watch_running(local_id: str) -> bool:
 
 def detach_note(local_id: str) -> str:
     return (f"[session-launch-check] {local_id} は頼んだ model・effort で動いている。 掲示板の request の指定 (--detach) どおり、 いま"
-            f" detach_session(session_id={local_id}) を出す = 一覧の上の段に独立させ、 子の turn の終わりの知らせと本人への問いを"
-            f"依頼元に来させない (本人は worker の窓で答える。 提出と blocker は掲示板の watch で届く)。 規約 = {DETACH_RULE}")
+            f" detach_session(session_id={local_id}) を出す = 一覧の上の段に独立させ、 子の turn の終わりの知らせを依頼元に来させない"
+            f" (判断の問いは子が掲示板の note か SendMessage で依頼元に出す。 提出と blocker は掲示板の watch で届く)。 規約 = {DETACH_RULE}")
 
 
 def post_set(inp: dict) -> str:
@@ -1377,6 +1377,8 @@ def selftest() -> int:
         app_rec("claude-fable-5-1", "high")
         rc, out, _ = call("PostToolUse", "mcp__ccd_session__start_session", st, started, sid="launcher-3")
         check("post-start: right model and the record asks detach → detach_session note", rc == 0 and "detach_session" in out)
+        check("post-start: the detach note sends the child's questions of judgment to the requester, not to the person's window",
+              "判断の問いは子が掲示板の note か SendMessage で依頼元に出す" in out and "worker の窓で答える" not in out)
         app_rec("claude-opus-5-5", "xhigh")
         rc, out, _ = call("PostToolUse", "mcp__ccd_session__start_session", st, started, sid="launcher-4")
         check("post-start: capped and detach → the fix ends with detach after go", "detach_session" in out and "set_session_model" in out)
