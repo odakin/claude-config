@@ -12,12 +12,24 @@ Usage:
                                        (the from-session of a cross-session message), or a substring of the
                                        name ListAgents shows
   session-model.py self                this session (a worker checks the model and effort it was started on)
+  session-model.py self --expect-model M [--expect-effort E]
+                                       a worker's step 0: compare the app's record of this session with what the
+                                       hand-off asked for. ✅ = go on / ⏸ = stop, and before stopping send the
+                                       printed line to the session that started this one (the app's record names
+                                       it, for a card the owner clicked too)
   session-model.py --live              every live session on this machine with its model
   session-model.py <target> --json     machine-readable rows
   session-model.py --selftest
 
 Exit: 0 = every matched session has a model / 2 = nothing matched / 3 = matched but no transcript or no assistant
 turn yet (a session that has not answered has no model on record — the app-wide picker decides when it does).
+With --expect-*: 0 = the app's record matches / 4 = it differs or cannot be read (the worker stops at its step 0).
+
+Why the line to the starter (measured): a worker stopped at its step 0 ends its turn, and the app tells the session
+that started it about a child's turn end only when none of that session's other children is running. A requester
+with other children running stayed idle until the owner's next message (the owner had clicked a card, which no tool
+call of the requester's sees). A SendMessage from a child did start a turn in an idle requester while its other
+children ran.
 Engine = scripts/lib/session_model.py (env overrides CLAUDE_SESSIONS_DIR / CLAUDE_PROJECTS_DIR for tests).
 """
 from __future__ import annotations
@@ -45,6 +57,56 @@ def fmt(row: dict) -> str:
         if row.get("model") and row.get("app_model") and row["model"] != row["app_model"]:
             app += " (次の turn から = 最後の応答の model と違う)"
     return f"{sid}  {model}  tier={row['tier'] or '?'}{when}{app}{status}{name}{cfg}{to}"
+
+
+def matches(want: str, got: str) -> bool:
+    """A tier word (opus / fable / …) matches any model of that tier; a full model id matches itself."""
+    w = (want or "").strip().lower()
+    if not w:
+        return True
+    if w in ("fable", "opus", "sonnet", "haiku", "mythos"):
+        return sm.tier(got or "") == ("fable" if w == "mythos" else w)
+    return w == (got or "").strip().lower()
+
+
+def with_starter(row: dict) -> dict:
+    """The row with app_local (its `local_…`) and app_parent (the `local_…` of the session that started it, a clicked
+    card included) from the app's record; unchanged when the app has no record of it."""
+    try:
+        import desktop_sessions as ds
+        host = row.get("host") or ""
+        rec = ds.find(host if host.startswith("local_") else row.get("sessionId", "")) or {}
+    except Exception:
+        rec = {}
+    return {**row, "app_local": row.get("app_local") or rec.get("local_id", ""),
+            "app_parent": row.get("app_parent") or rec.get("parent", "")}
+
+
+def expect_report(row: dict, want_model: str, want_effort: str) -> tuple[int, str]:
+    """(exit, text) of a worker's step 0: does the app's record match what the hand-off asked for? On a mismatch the
+    text carries the SendMessage line to the session that started this one (the app's record names it)."""
+    got_m, got_e = row.get("app_model") or "", (row.get("app_effort") or "").lower()
+    asked = " / ".join(x for x in (want_model, f"effort {want_effort}" if want_effort else "") if x)
+    if not (got_m or got_e):
+        diffs = ["app の記録が読めない"]
+    else:
+        diffs = [] if matches(want_model, got_m) else [f"model {got_m or '?'}"]
+        if want_effort and want_effort.lower() != got_e:
+            diffs.append(f"effort {got_e or '?'}")
+    if not diffs:
+        return 0, f"✅ app の記録 ({got_m} / effort {got_e}) は頼まれた {asked} と合う = 手順 1 へ進む"
+    me = row.get("app_local") or row.get("host") or str(row.get("sessionId", ""))[:8]
+    parent = row.get("app_parent") or ""
+    line = (f"go 待ち: この窓 ({me}) は app の記録で {' / '.join(diffs)}、 頼まれたのは {asked}。 依頼の中身はまだ読んでいない。"
+            " set_session_model / set_session_effort で直してから go を送ってください。")
+    out = [f"⏸ app の記録が頼まれた {asked} と違う ({' / '.join(diffs)}) = 依頼の中身を読まずに止まる。"]
+    if parent:
+        out.append("  止まる前に、 起こした session へ次の 1 行を SendMessage で送る (起こした側のほかの子が動いていると、"
+                   " この窓の turn の終わりでは起こした側が起きない。 message は起こす = 実測):")
+        out.append(f'  SendMessage(to={parent}, message="{line}")')
+    else:
+        out.append("  起こした session が app の記録に無い = 止まると 1 行で言うだけ。")
+    return 4, "\n".join(out)
 
 
 def selftest() -> int:
@@ -156,6 +218,34 @@ def selftest() -> int:
         check("CLI prints the config and the SendMessage address", r.returncode == 0 and "config=alpha" in r.stdout
               and "SendMessage to=uds:/tmp/cc-socks/12.sock" in r.stdout)
         os.environ.pop("CLAUDE_CONFIG_DIRS_HOME", None)
+        # --expect-*: a worker's step 0 against the app's record
+        base = {"sessionId": sid, "host": "local_me", "app_local": "local_me", "app_parent": "local_dad"}
+        rc, out = expect_report({**base, "app_model": "claude-opus-5-5", "app_effort": "max"}, "opus", "max")
+        check("expect: a tier word matches the record's model and the effort matches → ✅ exit 0", rc == 0 and out.startswith("✅"))
+        rc, out = expect_report({**base, "app_model": "claude-opus-5-5", "app_effort": "xhigh"}, "opus", "max")
+        check("expect: the effort differs → ⏸ exit 4 with the SendMessage line to the starter",
+              rc == 4 and "SendMessage(to=local_dad" in out and "effort xhigh" in out and "opus / effort max" in out)
+        rc, out = expect_report({**base, "app_model": "claude-opus-5-5", "app_effort": "max"}, "claude-fable-5-1", "max")
+        check("expect: a full model id differs → ⏸ naming the model", rc == 4 and "model claude-opus-5-5" in out)
+        rc, out = expect_report({**base, "app_parent": "", "app_model": "claude-opus-5-5", "app_effort": "high"}, "opus", "max")
+        check("expect: no starter on record → ⏸ without a SendMessage line", rc == 4 and "SendMessage(" not in out)
+        rc, out = expect_report({"sessionId": sid, "app_model": "", "app_effort": ""}, "opus", "max")
+        check("expect: no app record → ⏸ (cannot confirm = stop)", rc == 4 and "読めない" in out)
+        check("expect: no effort asked → the model alone decides",
+              expect_report({**base, "app_model": "claude-opus-5-5", "app_effort": "high"}, "opus", "")[0] == 0)
+        r = subprocess.run([sys.executable, me, "local_zzz", "--expect-model", "opus"], env=env, capture_output=True, text=True)
+        check("CLI --expect-* with nothing matched → exit 4 (stop)", r.returncode == 4)
+        adir = os.path.join(td, "app", "acct", "env")
+        os.makedirs(adir)
+        with open(os.path.join(adir, "local_aaa.json"), "w", encoding="utf-8") as fh:
+            json.dump({"sessionId": "local_aaa", "cliSessionId": sid, "model": "claude-opus-5-5", "effort": "xhigh",
+                       "spawnedFrom": {"sessionId": "local_starter", "taskId": "task_0000aaaa"}}, fh)
+        os.environ["CLAUDE_DESKTOP_SESSIONS_DIR"] = os.path.join(td, "app")
+        st = with_starter({"sessionId": sid, "host": "local_aaa"})
+        check("with_starter: the app's record names the starter and this window's local id",
+              st.get("app_parent") == "local_starter" and st.get("app_local") == "local_aaa")
+        check("with_starter: no app record → the row unchanged", with_starter({"sessionId": "x", "host": "local_none"}).get("app_parent") == "")
+        os.environ.pop("CLAUDE_DESKTOP_SESSIONS_DIR", None)
     print("session-model selftest: " + ("ALL PASS" if not fails else f"FAILED {len(fails)}"))
     return 1 if fails else 0
 
@@ -166,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--live", action="store_true", help="every live session on this machine")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--expect-model", default="", help="a worker's step 0: the model the hand-off asked for")
+    ap.add_argument("--expect-effort", default="", help="a worker's step 0: the effort the hand-off asked for")
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
@@ -179,6 +271,15 @@ def main(argv: list[str] | None = None) -> int:
     else:
         ap.print_help()
         return 2
+    if (a.expect_model or a.expect_effort) and not a.json:
+        if len(rows) != 1:
+            print("(該当する session が無い・1 つに決まらない)" if not rows else "\n".join(fmt(r) for r in rows))
+            print("⏸ この窓の app の記録を 1 つに決められない = 依頼の中身を読まずに止まる。")
+            return 4
+        print(fmt(rows[0]))
+        rc, text = expect_report(with_starter(rows[0]), a.expect_model, a.expect_effort)
+        print(text)
+        return rc
     if a.json:
         print(json.dumps(rows, ensure_ascii=False, indent=1))
     else:

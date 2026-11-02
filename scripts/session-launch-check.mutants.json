@@ -1,5 +1,5 @@
 {
-  "_comment": "session-launch-check.py の起動の見張り (--wait-first-turn)・set の後の 1 行・Stop の記録の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。",
+  "_comment": "session-launch-check.py の起動の見張り (--wait-first-turn)・set の後の 1 行・Stop の記録の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)、 worker の窓の Stop (起こした session へ 1 行) と card の台帳。",
   "target": "session-launch-check.py",
   "run": "python3 {} --selftest",
   "fail_marker": "NG: ",
@@ -36,6 +36,30 @@
     {"name": "Stop の記録を worker ごとに 1 回にしない",
      "pairs": [["and e.get(\"stop_noted\") != key and", "and"]],
      "expect_fail": ["hook-stop: the same worker and asked values"],
-     "expect_pass": ["hook-stop block: a decision with the watch line"]}
+     "expect_pass": ["hook-stop block: a decision with the watch line"]},
+    {"name": "worker の窓の Stop が起こした session への SendMessage を見ない",
+     "pairs": [[" or sent_to(path, rec[\"parent\"]):", ":"]],
+     "expect_fail": ["worker stop: the line was sent to the starter"],
+     "expect_pass": ["worker stop: record differs, nothing sent to the starter"]},
+    {"name": "worker の窓の Stop が claim を見ない",
+     "pairs": [["if me.get(\"stop_noted\") == key or claimed_after(path, 0) or ", "if me.get(\"stop_noted\") == key or "]],
+     "expect_fail": ["worker stop: the worker claimed"],
+     "expect_pass": ["worker stop: record differs, nothing sent to the starter"]},
+    {"name": "worker の窓の Stop を 1 回にしない",
+     "pairs": [["if me.get(\"stop_noted\") == key or claimed_after", "if claimed_after"]],
+     "expect_fail": ["worker stop: once per window"],
+     "expect_pass": ["worker stop: record differs, nothing sent to the starter"]},
+    {"name": "card の頼んだ値を台帳に残さない",
+     "pairs": [["            upsert(sid, \"proposal:\" + task.group(1), title=ti[\"title\"], state=\"proposal\", **fields)\n", "            pass\n"]],
+     "expect_fail": ["post-start card: the asked model and effort are in the ledger", "post-start by proposal_id: the card's asked values are used"],
+     "expect_pass": ["post-start card above the launcher"]},
+    {"name": "proposal_id で起こしたときに card の台帳を引かない",
+     "pairs": [["    if ti.get(\"proposal_id\") and not (want_m or want_e or reason):", "    if False:"]],
+     "expect_fail": ["post-start by proposal_id: the card's asked values are used"],
+     "expect_pass": ["post-start card: the asked model and effort are in the ledger"]},
+    {"name": "依頼元と同じ値の card にも知らせる",
+     "pairs": [["    if not (above or other_effort):\n        return \"\"\n", ""]],
+     "expect_fail": ["post-start card at the launcher's own values"],
+     "expect_pass": ["post-start card above the launcher"]}
   ]
 }

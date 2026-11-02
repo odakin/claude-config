@@ -108,7 +108,8 @@ WATCH_GRACE_S = 90.0     # a session just started may be in neither the app reco
 CLAIM_CALL = re.compile(r"board\.py['\"]?\s+claim\b")
 STOP_STATES = ("mismatch", "pending")
 STOP_RECENT_S = 6 * 3600
-MUST_RUN = re.compile(r"must run on (claude-[a-z0-9.-]+?)(?: at ([a-z]+) effort)?[.\s:*]", re.I)
+# a board hand-off names a tier word ("must run on opus at max effort") as often as a full model id
+MUST_RUN = re.compile(r"must run on (claude-[a-z0-9.-]+?|fable|opus|sonnet|haiku|mythos)(?: at ([a-z]+) effort)?[.\s:*]", re.I)
 REQUEST_ID = re.compile(r"request `?(\d{8}T\d{6}Z-[a-z]+-[0-9a-f]{6})`?")
 BOARD_ROOT = re.compile(r"--root (\S+)")
 TIER_WORDS = {"fable", "opus", "sonnet", "haiku", "mythos"}
@@ -475,25 +476,35 @@ def launch_reason(ti: dict) -> str:
 def post_start(inp: dict) -> str:
     text = flatten(inp.get("tool_response"))
     ti = inp.get("tool_input") or {}
+    sid = inp.get("session_id") or ""
     task = re.search(r"task_id: (task_[0-9a-z]+)", text)
     if task and "Started session" not in text and ti.get("title"):
-        # A card: no session until the owner clicks it, so the later raise (set_session_model) finds the card by title.
+        # A card: no session until the owner clicks it, so the later raise (set_session_model) finds the card by title,
+        # and a start by proposal_id (no prompt) finds the asked model and effort here.
         reason = launch_reason(ti)
-        if reason:
-            upsert(inp.get("session_id") or "", "proposal:" + task.group(1), title=ti["title"], reason=reason, state="proposal")
-        return ""
+        want_m, want_e = requested(ti)
+        fields = {k: v for k, v in (("reason", reason), ("want_model", want_m), ("want_effort", want_e)) if v}
+        if fields:
+            upsert(sid, "proposal:" + task.group(1), title=ti["title"], state="proposal", **fields)
+        return card_note(sid, ti["title"], want_m, want_e)
     m = ds.LOCAL_RE.search(text)
     if not m or "Started session" not in text:
         return ""
     local_id = m.group(0)
     want_m, want_e = requested(ti)
     reason = launch_reason(ti)
+    if ti.get("proposal_id") and not (want_m or want_e or reason):
+        # the owner told the launcher to start a card: the call carries only its id, the card's entry carries the rest
+        card = next((e for e in load(sid) if e.get("local_id") == "proposal:" + str(ti["proposal_id"])), {})
+        want_m, want_e, reason = card.get("want_model", ""), card.get("want_effort", ""), card.get("reason", "")
+        ti = {**ti, "title": ti.get("title") or card.get("title", "")}
+        if card:
+            upsert(sid, card["local_id"], state="started", started=local_id)
     if reason:
-        upsert(inp.get("session_id") or "", local_id, reason=reason, title=ti.get("title") or "")
+        upsert(sid, local_id, reason=reason, title=ti.get("title") or "")
     if not want_m and not want_e:
         return ""
     rec = ds.wait_for(local_id, float(os.environ.get("SESSION_LAUNCH_WAIT", "3")))
-    sid = inp.get("session_id") or ""
     if not rec:
         upsert(sid, local_id, want_model=want_m, want_effort=want_e, state="unknown", title=ti.get("title") or "")
         return (f"[session-launch-check] {local_id} の app の記録がまだ読めない = 何の model で起きたか確かめられていない。"
@@ -517,6 +528,31 @@ def post_start(inp: dict) -> str:
             f"  記録が合うまで、 この session への SendMessage はこの検査が止める (本人がこの model でよいと言ったなら message に"
             f" {OK_TOKEN})。 本人に「起きた」 と言うのは記録が合ってから。"
             + (" go の後に detach_session (掲示板の request の --detach)。" if detach else "") + f" 規約 = {RULE}")
+
+
+TIER_RANK = {"haiku": 1, "sonnet": 2, "opus": 3, "fable": 4}
+
+
+def card_note(sid: str, title: str, want_m: str, want_e: str) -> str:
+    """A card asking for more than the launcher runs on: the click starts the worker on the launcher's model and
+    effort (measured: a max card from an xhigh launcher started at xhigh), so the worker stops at its step 0. The click
+    is no tool call of the launcher's, so no launch hook and no watch follow it, and with other children running the
+    worker's turn end does not wake the launcher. What wakes it is the worker's own line at step 0 (a SendMessage)."""
+    own = ds.find(sid) if sid else None
+    if not own or not (want_m or want_e):
+        return ""
+    above = TIER_RANK.get(tier(want_m), 0) > TIER_RANK.get(tier(own.get("model", "")), 0) if want_m else False
+    other_effort = bool(want_e and own.get("effort") and want_e != own["effort"].lower())
+    if not (above or other_effort):
+        return ""
+    asked = " / ".join(x for x in (want_m, f"effort {want_e}" if want_e else "") if x)
+    return (f"[session-launch-check] card「{title[:50]}」 は {asked} を頼み、 この session は {own.get('model') or '?'} / effort"
+            f" {own.get('effort') or '?'}。 押されると子は頼んだ値でなくこの session の値で起き、 手順 0 で止まる見込み"
+            " (effort は実測、 model は start_session と同じ扱いと見ている)。"
+            " 押す操作はこの session の tool 呼び出しを経ないので、 起動の hook も見張りも出ない。 子は止まる前に「go 待ち」 の 1 行を"
+            " この session へ SendMessage で送る (掲示板の hand-off の手順 0 と Stop の検査。 message はほかの子が動いていてもこの"
+            " session を起こす = 実測)。 その 1 行が来たら set_session_model / set_session_effort → 記録を読んで go。"
+            f" 規約 = {RULE}")
 
 
 def fix_steps(local_id: str, want_m: str, want_e: str, rec: dict) -> str:
@@ -780,6 +816,108 @@ def hook_stop(inp: dict, mode: str) -> str:
                      f" `{watch_cmd(e['local_id'], e.get('want_model', ''), e.get('want_effort', ''))}`")
     lines.append(f"この知らせは worker ごとに 1 回だけ。 規約 = {RULE}")
     return json.dumps({"decision": "block", "reason": "\n".join(lines)}, ensure_ascii=False)
+
+
+HANDOFF_RUN = re.compile(r"must run on (claude-[a-z0-9.-]+|fable|opus|sonnet|haiku|mythos)\b(?:[^.\n]{0,40}?\bat ([a-z]+) effort)?", re.I)
+HANDOFF_HEAD = 8   # the hand-off is the window's first prompt; only the first user entries are read for it
+
+
+def handoff_asked(path: str) -> tuple[str, str]:
+    """(model, effort) the hand-off line (`must run on <model> at <effort> effort`) in a window's first prompts asks for."""
+    seen = 0
+    for e in _transcript_entries(path):
+        if e.get("type") != "user" or e.get("isMeta") or e.get("isCompactSummary"):
+            continue
+        c = (e.get("message") or {}).get("content")
+        if isinstance(c, list) and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in c):
+            continue
+        text = c if isinstance(c, str) else " ".join(b.get("text", "") for b in (c or []) if isinstance(b, dict) and b.get("type") == "text")
+        m = HANDOFF_RUN.search(text or "")
+        if m:
+            return m.group(1), (m.group(2) or "").lower()
+        seen += 1
+        if seen >= HANDOFF_HEAD:
+            break
+    return "", ""
+
+
+def sent_to(path: str, target: str) -> bool:
+    """The window called SendMessage to `target` (a `local_…`; a uds address or session id prefix resolves to it)."""
+    for e in _transcript_entries(path):
+        if e.get("type") != "assistant":
+            continue
+        for b in (e.get("message") or {}).get("content") or []:
+            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "SendMessage":
+                to = str((b.get("input") or {}).get("to") or "").strip()
+                if to and (to == target or target in to or resolve_to(to) == target):
+                    return True
+    return False
+
+
+def _session_model_cli():
+    """session-model.py as a module: its expect_report writes the worker's line to the starter (one implementation)."""
+    import importlib.machinery
+    import types
+    path = os.path.join(HERE, "session-model.py")
+    mod = types.ModuleType("session_model_cli")
+    mod.__file__ = path
+    importlib.machinery.SourceFileLoader("session_model_cli", path).exec_module(mod)
+    return mod
+
+
+def hook_stop_worker(inp: dict, mode: str) -> str:
+    """Stop in a worker window: the hand-off asked for a model / effort the app's record does not hold (the worker
+    stops at its step 0 for `go`), the app's record names the session that started it, and the window has neither
+    claimed the request nor sent that session a message. The starter is not woken by this turn's end while its other
+    children run (measured), and a click on a card is no tool call of the starter's, so no watch exists either; a
+    SendMessage from the worker wakes it (measured). Once per window and asked values."""
+    if mode == "off":
+        return ""
+    sid = inp.get("session_id") or ""
+    rec = ds.find(sid) if sid else None
+    if not rec or not rec.get("parent"):
+        return ""
+    path = inp.get("transcript_path") or ""
+    want_m, want_e = handoff_asked(path)
+    if not (want_m or want_e):
+        return ""
+    diffs = mismatch(want_m, want_e, rec)
+    if not diffs:
+        return ""
+    key = f"{want_m}|{want_e}"
+    me = next((e for e in load(sid) if e.get("local_id") == "worker-self"), {})
+    if me.get("stop_noted") == key or claimed_after(path, 0) or sent_to(path, rec["parent"]):
+        return ""
+    upsert(sid, "worker-self", stop_noted=key)
+    if mode == "observe":
+        try:
+            os.makedirs(state_dir(), exist_ok=True)
+            with open(os.path.join(state_dir(), "stop-observe.jsonl"), "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "side": "worker",
+                                     "worker": rec.get("local_id", ""), "starter": rec["parent"], "want": [want_m, want_e],
+                                     "got": [rec.get("model", ""), rec.get("effort", "")]}, ensure_ascii=False) + "\n")
+        except OSError:
+            pass
+        return ""
+    row = {"app_model": rec.get("model", ""), "app_effort": rec.get("effort", ""), "app_local": rec.get("local_id", ""),
+           "app_parent": rec["parent"]}
+    _, text = _session_model_cli().expect_report(row, want_m, want_e)
+    return json.dumps({"decision": "block", "reason": "🚦 この窓は hand-off の手順 0 で go を待って止まるのに、 起こした session へ"
+                       " まだ何も送っていない。\n" + text + f"\n送ったら、 止まると 1 行で言って turn を終える。 この知らせは 1 回だけ。 規約 = {RULE}"},
+                      ensure_ascii=False)
+
+
+def combine_stop(*outs: str) -> str:
+    """One Stop answer from several checks: the block reasons joined, else nothing."""
+    reasons = []
+    for o in outs:
+        try:
+            d = json.loads(o) if o else {}
+        except ValueError:
+            continue
+        if d.get("decision") == "block" and d.get("reason"):
+            reasons.append(d["reason"])
+    return json.dumps({"decision": "block", "reason": "\n\n".join(reasons)}, ensure_ascii=False) if reasons else ""
 
 
 def resolve_to(to: str) -> str:
@@ -1376,6 +1514,78 @@ def selftest() -> int:
         upsert("launcher-s4", lid, state="ok", want_model="claude-fable-5-1")
         check("hook-stop: the go went through (ledger ok) → silent / off → silent",
               hook_stop({"session_id": "launcher-s4"}, "block") == "" and hook_stop({"session_id": "launcher-s3"}, "off") == "")
+
+        # ---- Stop in the worker window: stopped at step 0 without a line to the session that started it
+        wcli, wlid, dad = "cccccccc-0000-4000-8000-000000000003", "local_cccccccc-0000-4000-8000-00000000000c", "local_dad"
+
+        def wrec(effort: str, parent: str = dad) -> None:
+            with open(os.path.join(app, wlid + ".json"), "w", encoding="utf-8") as fh:
+                json.dump({"sessionId": wlid, "cliSessionId": wcli, "model": "claude-opus-5-5", "effort": effort,
+                           "title": "card worker", "spawnedFrom": {"sessionId": parent, "taskId": "task_000000cc"} if parent else None}, fh)
+
+        wtr = os.path.join(td, "worker.jsonl")
+
+        def wtrans(*tools: dict, hand: str = "This window must run on opus at max effort.") -> None:
+            with open(wtr, "w", encoding="utf-8") as fh:
+                fh.write(json.dumps({"type": "user", "message": {"role": "user", "content": "You are the board worker. " + hand},
+                                     "timestamp": "2026-01-01T00:00:00Z"}) + "\n")
+                for t in tools:
+                    fh.write(json.dumps({"type": "assistant", "timestamp": "2026-01-01T00:00:05Z",
+                                         "message": {"role": "assistant", "content": [{"type": "tool_use", **t}]}}) + "\n")
+
+        def wstop(mode: str = "block", sid_: str = wcli) -> str:
+            return hook_stop_worker({"session_id": sid_, "transcript_path": wtr}, mode)
+
+        wrec("xhigh")
+        wtrans({"name": "Bash", "input": {"command": "python3 x/session-model.py self"}})
+        out = wstop()
+        check("worker stop: record differs, nothing sent to the starter → block with the SendMessage line to it",
+              '"decision": "block"' in out and f"SendMessage(to={dad}" in out and "effort xhigh" in out)
+        check("worker stop: once per window and asked values", wstop() == "")
+        save(wcli, [])
+        wtrans({"name": "SendMessage", "input": {"to": dad, "message": "go 待ち"}})
+        check("worker stop: the line was sent to the starter → silent", wstop() == "")
+        wtrans({"name": "Bash", "input": {"command": "python3 /e/board.py claim --root r --request x"}})
+        check("worker stop: the worker claimed (went to work) → silent", wstop() == "")
+        wtrans()
+        wrec("max")
+        check("worker stop: the record matches the hand-off → silent", wstop() == "")
+        wrec("xhigh", parent="")
+        check("worker stop: no starter on the app's record → silent", wstop() == "")
+        wrec("xhigh")
+        wtrans(hand="This window can run on anything.")
+        check("worker stop: no hand-off line → silent", wstop() == "")
+        wtrans()
+        check("worker stop: off → silent", wstop("off") == "")
+        check("worker stop: observe records, says nothing",
+              wstop("observe") == "" and '"side": "worker"' in open(obs, encoding="utf-8").read())
+        check("combine_stop: block reasons joined / nothing → nothing",
+              combine_stop('{"decision": "block", "reason": "a"}', "", '{"decision": "block", "reason": "b"}').count("a\\n\\nb") == 1
+              and combine_stop("", "") == "")
+
+        # ---- a card: the asked values go to the ledger; a card above the launcher says what wakes it
+        lcli = "dddddddd-0000-4000-8000-000000000004"
+        with open(os.path.join(app, "local_dddddddd-0000-4000-8000-00000000000d.json"), "w", encoding="utf-8") as fh:
+            json.dump({"sessionId": "local_dddddddd-0000-4000-8000-00000000000d", "cliSessionId": lcli,
+                       "model": "claude-opus-5-5", "effort": "xhigh", "title": "launcher"}, fh)
+        card = {"initiation": "own_initiative", "title": "[model: opus max] R", "prompt": "This window must run on opus at max effort."}
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session__start_session", card,
+                          'Proposed "[model: opus max] R" (task_id: task_000000cc).', sid=lcli)
+        check("post-start card above the launcher: says the click is no tool call and the worker's line wakes it",
+              rc == 0 and "card" in out and "SendMessage" in out and "max" in out)
+        ent = next((e for e in load(lcli) if e.get("local_id") == "proposal:task_000000cc"), {})
+        check("post-start card: the asked model and effort are in the ledger", ent.get("want_effort") == "max" and ent.get("want_model") == "opus")
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session__start_session", {**card, "title": "[model: opus xhigh] S",
+                          "prompt": "This window must run on opus at xhigh effort."}, 'Proposed "S" (task_id: task_000000dd).', sid=lcli)
+        check("post-start card at the launcher's own values → silent", rc == 0 and out == "")
+        with open(os.path.join(app, wlid + ".json"), "w", encoding="utf-8") as fh:
+            json.dump({"sessionId": wlid, "cliSessionId": wcli, "model": "claude-opus-5-5", "effort": "xhigh", "title": "R"}, fh)
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session__start_session", {"proposal_id": "task_000000cc"},
+                          f'Started session "R" (session_id: {wlid}, name: r).', sid=lcli)
+        check("post-start by proposal_id: the card's asked values are used → the mismatch and the watch line",
+              rc == 0 and "effort = xhigh" in out and WATCH_FLAG in out)
+        check("post-start by proposal_id: the card's entry is marked started",
+              next((e for e in load(lcli) if e.get("local_id") == "proposal:task_000000cc"), {}).get("state") == "started")
         for k in ("SESSION_LAUNCH_PS_FILE", "CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "SESSION_LAUNCH_WATCH_GRACE"):
             os.environ.pop(k, None)
         if saved_sid is None:
@@ -1610,9 +1820,16 @@ if __name__ == "__main__":
         _mode = sys.argv[sys.argv.index("--stop-mode") + 1] if "--stop-mode" in sys.argv[:-1] else (
             os.environ.get("SESSION_LAUNCH_STOP") or "observe")
         try:
-            _out = hook_stop(json.loads(sys.stdin.read() or "{}"), _mode)
-        except Exception:
-            _out = ""  # fail-open
+            _inp = json.loads(sys.stdin.read() or "{}")
+        except (ValueError, OSError):
+            sys.exit(0)  # fail-open
+        _outs = []
+        for _check, _m in ((hook_stop, _mode), (hook_stop_worker, os.environ.get("SESSION_LAUNCH_WORKER_STOP") or "block")):
+            try:
+                _outs.append(_check(_inp, _m))
+            except Exception:
+                _outs.append("")  # fail-open, each check on its own
+        _out = combine_stop(*_outs)
         if _out:
             print(_out)
         sys.exit(0)
