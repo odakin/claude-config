@@ -965,6 +965,10 @@ sections:
     legacy: "8.90"
     level: 3
     title: "8.90 事前の注意は、 過去の入力で当たる割合を測ってから入れる — 形がありふれていて害が稀なら、 害の出た出力を見る事後の検出にする"
+  - id: tooled-rows-run-reading-rows-skip
+    legacy: "8.91"
+    level: 3
+    title: "8.91 手順の表では、 道具のある行だけが回る — 人が読む行にも、 範囲を絞る道具と処分を照合する出口を付ける"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
