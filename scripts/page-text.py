@@ -40,6 +40,7 @@ TIMEOUT = 30
 USER_AGENT = "Mozilla/5.0 (compatible; page-text)"
 FRAME_RE = re.compile(r"<i?frame\b[^>]*?\bsrc\s*=\s*[\"']?([^\"'\s>]+)", re.I)
 COMMENT_RE = re.compile(r"<!--(.*?)-->", re.S)
+NOSCRIPT_RE = re.compile(r"<noscript\b.*?</noscript\s*>", re.S | re.I)
 
 
 def _watch_module():
@@ -97,7 +98,8 @@ def comments_of(src_html: str) -> list[str]:
 
 
 def frame_urls(src_html: str, base: str) -> list[str]:
-    body = COMMENT_RE.sub("", src_html)
+    # comment と <noscript> の中の frame は辿らない (後者は計測用の iframe であることが多い = 本文ではない)
+    body = NOSCRIPT_RE.sub("", COMMENT_RE.sub("", src_html))
     seen, out = set(), []
     for m in FRAME_RE.finditer(body):
         u = urllib.parse.urljoin(base, m.group(1))
@@ -172,7 +174,8 @@ def selftest() -> int:
         print(("PASS " if cond else "FAIL ") + name)
         fails += 0 if cond else 1
 
-    top = b"<html><head><meta charset=EUC-JP></head><frameset><frame src='menu.html'><frame src=\"main.html\"></frameset></html>"
+    top = (b"<html><head><meta charset=EUC-JP></head><noscript><iframe src='https://tracker.test/ns.html'></iframe></noscript>"
+           b"<frameset><frame src='menu.html'><frame src=\"main.html\"></frameset></html>")
     main = ("<html><head><meta http-equiv=Content-Type content='text/html; charset=EUC-JP'></head>"
             "<body><h1>募集要項</h1><p>募集期間 2030年1月1日から</p>"
             "<!-- <p>募集期間 1999年12月1日から</p> --><script>x=1</script></body></html>").encode("euc_jp")
@@ -181,7 +184,8 @@ def selftest() -> int:
              "https://example.test/main.html": (main, None, "text/html"),
              "https://example.test/menu.html": (menu, None, "text/html")}
     res = read_one("https://example.test/", fetcher=lambda u: pages[u])
-    check("frames followed", [f["src"] for f in res["frames"]] == ["https://example.test/menu.html", "https://example.test/main.html"])
+    check("frames followed, noscript iframe skipped",
+          [f["src"] for f in res["frames"]] == ["https://example.test/menu.html", "https://example.test/main.html"])
     mlines = res["frames"][1]["lines"]
     check("EUC-JP decoded via meta", "募集要項" in mlines)
     check("visible text kept", any("2030年" in ln for ln in mlines))
