@@ -2794,7 +2794,7 @@ origin: ある研究費 docx 申請様式で同一様式に 4 記入ミスを連
 
 Pages・LibreOffice の PDF は組み直すので、 頁数と行の折れの判定に使わない ([`docx-to-pdf-pages`](#docx-to-pdf-pages))。 どの経路も通らないときは、 本人に見せる前に「見た目は確かめられていない」 と、 試した経路と止まった理由を 1 行で伝える (台帳に書いて先へ進む形にしない)。
 
-**機械**: `docx-to-pdf.sh` は Word の経路が止まると上の順を stderr に出す。 `diff-form-docx.py` は検査のたびに file の sha256・path・結果 (通った / HARD / 描けなかった / 描画なし) を記録し (`${XDG_STATE_HOME:-~/.local/state}/claude-form-layout/receipts.tsv`)、 `--receipt-status <file>` が、 今の中身が描画つきで通ったかと、 その path を検査したことがあるかを答える (見せる・送る段の gate が読む口 = この検査を通した様式と、 一度も通していない文書を見分けられる)。
+**機械**: `docx-to-pdf.sh` は Word の経路が止まると上の順を stderr に出す。 `diff-form-docx.py` は検査のたびに file の sha256・path・結果 (通った / HARD / 描けなかった / 描画なし) を記録し (`${XDG_STATE_HOME:-~/.local/state}/claude-form-layout/receipts.tsv`)、 `--receipt-status <file>` が、 今の中身が描画つきで通ったかと、 その path を検査したことがあるかを答える (見せる・送る段の gate が読む口 = この検査を通した様式と、 一度も通していない文書を見分けられる。 機械が読む形 = `--json`)。 雛形の無い docx (様式でない文書) は `--not-a-form <file> --reason '<本人の言葉>'` で記録する (記録は今の中身の sha256 に結ぶ = 中身が変われば効かない)。 送る段の gate の置き方の例 = 送信の経路が共通に呼ぶ添付の検査に足し、 窓口宛ての docx と、 この検査を回したことのある path の docx について、 `--receipt-status` が 0 でなければ送らない (共同研究者への原稿のように、 窓口宛てでもなく検査もしていない docx は見ない)。 記録は機械ごとなので、 別の機械で検査した file は送る機械で回し直す。
 
 origin: 実測 (変換が止まった時点で「未確認」 と台帳に書いて進み、 崩れたまま本人に見せた。 Word の画面で見る経路はその時も使えた)。
 
