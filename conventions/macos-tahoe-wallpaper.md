@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: macOS Tahoe (26.x) で wallpaper 変更を script/CLI/API から自動化しようとする前 + 起きてる wallpaper rotation が視覚的に効いてないと感じたとき
+when: macOS Tahoe (26.x) で wallpaper 変更を script/CLI/API から自動化しようとする前 + 起きてる wallpaper rotation が視覚的に効いてないと感じたとき + スクリーンセーバーを止める・始めるまでの時間を変える手順を人に案内する前 (#screensaver-start-setting)
 category: macos
 summary: macOS Tahoe (26.5.1) で NSWorkspace.setDesktopImageURL と osascript "tell every desktop to set picture" が silent-fail する (rc=0 + Index.plist は更新するが display に届かない、 CocoaKit API 自体が dead)。 desktoppr / sindresorhus/wallpaper / Swift 直接 call も同一症状。 真の書換え path = ~/Library/Application Support/com.apple.wallpaper/Store/Index.plist を Python で再帰 walker により全 Desktop.Content.Choices 上書き (state は SystemDefault / Spaces × Displays / 個別 Displays の 8 箇所に分散、 1 箇所書きは respawn 時 self-repair)、 + killall -HUP cfprefsd + killall WallpaperAgent (SIGTERM) の double kill (⚠️ killall Dock は不要 — 2026-07-29 ablation で確定、 60s rotation に入れると毎分の WindowServer サーフェス全再構築 = 17 日で WindowServer ~3.8 GB 肥大 + load avg 200 + swap thrash の自傷 load generator、 refresh 不発の OS 版でのみ最後の fallback)、 + launchd は stay-open applet 常駐 (osacompile -s + on idle + KeepAlive=true / RunAtLoad=true / StartInterval なし、 applet binary 直接 exec) にして kTCCServiceSystemPolicyAppData の per-process 発火を 1 回のみに抑える (⚠️ 旧 v1 = 通常 applet の do shell script で script 内 sleep loop を永久 block する形は event loop に戻れず autorelease 非 drain で applet が ~120 MB/日 leak + 「応答なし」、 2026-07-22 実測で v2 に置換)。 CLI tools は現接続 NSScreen displayID を書くが Index.plist の stale UUID と mismatch = active display に効かない。 SIGKILL は /var/db/Wallpapers/<uuid>/Metadata.plist (root:wheel) から last-known-good 復元。 cache prune は 60s 間隔なら 100+ GB 肥大するので file-count cap で KEEP=1 に。 探索経路: notification-based reload や private XPC endpoint / debug listener enable / class-dump ImageFolder provider schema はすべて dead-end
 -->
@@ -62,6 +62,8 @@ macOS 26 は wallpaper API を**完全に封じている**。 「動く」 recip
 ```
 
 **1 箇所だけ書くと WallpaperAgent respawn 時に別 location の値で self-repair される** (revert 現象)。 `Idle` (screensaver) は触らない (Desktop と分離管理)。
+
+<a id="screensaver-start-setting"></a>**スクリーンセーバーを始めるまでの時間は、 26.x の「ロック画面」 の設定には無い** (実測 = 画面): 「ロック画面」 に在るのは、 ディスプレイをオフにするまでの時間 (バッテリー・電源アダプタ) と「スクリーンセーバの開始後またはディスプレイがオフになったあとにパスワードを要求」 だけ。 古い版の場所 (「ロック画面」 の「使用していない場合はスクリーンセーバを開始」) で人に手順を案内すると外れる。 `defaults -currentHost read com.apple.screensaver idleTime` も値を持っていなかった (実測)。 26.x でどこに移ったかは確かめていない = 案内するときは、 システム設定の検索欄に「スクリーンセーバ」 と入れて出た項目を開いてもらう。
 
 ## <a id="stale-display-uuid"></a>stale display UUID mismatch = CLI tools が誤 target を狙う
 

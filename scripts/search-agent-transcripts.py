@@ -19,7 +19,9 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
                 {type: text, text} の list
                 ⚠️ agent が作業している途中に打たれた発話は user の行にならず、 type が attachment で
                 attachment.type が queued_command の record (本文は prompt) にだけ残る。 これも user の発話として読む
-                (user の行だけを読むと、 途中で足された指示や事実の申告が「言っていない」 に見える = 実測)
+                (user の行だけを読むと、 途中で足された指示や事実の申告が「言っていない」 に見える = 実測)。
+                prompt は文字列か、 app が system-reminder を前に付けた {type: text} の list (本人の text だけを読む。
+                list の形を読まずにいた間は、 途中で足された委任や依頼が締めの一覧から落ちた = 実測)
   Codex       : <codex-dir>/**/*.jsonl と <codex-dir>/**/*.jsonl.zst (既定 ~/.codex/sessions と ~/.codex/archived_sessions)
                 record の type が response_item、 payload.type が message、
                 payload.role が user / assistant / developer、 content は {text} の list
@@ -114,9 +116,18 @@ def _texts_claude(rec: dict) -> tuple[str | None, list[str]]:
     if t == "attachment":
         # 作業の途中で打たれた発話。 user の行としては残らず、 この形でしか記録されない
         a = rec.get("attachment")
-        if (isinstance(a, dict) and a.get("type") == "queued_command" and isinstance(a.get("prompt"), str)
+        if (isinstance(a, dict) and a.get("type") == "queued_command"
                 and (a.get("origin") or {}).get("kind", "human") == "human"):
-            return "user", [a["prompt"]]
+            p = a.get("prompt")
+            if isinstance(p, str):
+                return "user", [p]
+            # app が system-reminder を前に付けて届けた発話は {type: text} の list になる (実測)。
+            # 前置きの system-reminder は harness の文なので外し、 本人の text だけを読む
+            if isinstance(p, list):
+                own = [x["text"] for x in p if isinstance(x, dict) and x.get("type") == "text"
+                       and isinstance(x.get("text"), str) and not x["text"].lstrip().startswith("<system-reminder>")]
+                if own:
+                    return "user", own
         return None, []
     if t not in ("user", "assistant"):
         return None, []
@@ -501,11 +512,17 @@ def selftest() -> int:
             {"type": "attachment", "timestamp": "2099-03-01T00:02:00Z",
              "attachment": {"type": "queued_command", "prompt": "柿の通知", "origin": {"kind": "task-notification"}}},
             {"type": "attachment", "timestamp": "2099-03-01T00:03:00Z", "attachment": {"type": "skill_listing", "content": "柿"}},
+            {"type": "attachment", "timestamp": "2099-03-01T00:04:00Z",
+             "attachment": {"type": "queued_command", "commandMode": "prompt", "origin": {"kind": "human"},
+                            "prompt": [{"type": "text", "text": "<system-reminder>\n柿の子 session の一覧\n</system-reminder>"},
+                                       {"type": "text", "text": "柿は干すと甘い"}]}},
         ]) + "\n", encoding="utf-8")
         hm = search("柿", **{**base, "agent": "claude", "claude_dir": Path(td) / "claude-mid"})
         results += [
             check("作業の途中で打たれた発話 (queued_command) を user の発話として拾う",
-                  [(x[3], x[4]) for x in hm] == [("user", "柿は渋いと聞いた")]),
+                  [(x[3], x[4]) for x in hm] == [("user", "柿は渋いと聞いた"), ("user", "柿は干すと甘い")]),
+            check("system-reminder を前に付けた list の発話は本人の text だけを読む",
+                  all("一覧" not in x[4] for x in hm)),
         ]
         # --tool-runs: 呼び出しと結果の対 (Claude の tool_use / tool_result、 Codex の function_call / output)
         tl = Path(td) / "claude-tools" / "proj"
