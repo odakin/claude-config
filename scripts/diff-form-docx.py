@@ -6,7 +6,8 @@ Usage:
     diff-form-docx.py <filled.docx> <blank.docx> [--strict] [--no-render]
                       [--filled-pdf F.pdf --blank-pdf B.pdf] [--keep-pdf DIR]
                       [--allow-added-paragraphs]
-    diff-form-docx.py --receipt-status <filled.docx>
+    diff-form-docx.py --receipt-status <filled.docx> [--json]
+    diff-form-docx.py --not-a-form <file.docx> --reason '<本人の言葉 / 雛形が無い理由>'
     diff-form-docx.py --selftest
 
 The docx analog of `diff-form-xlsx.py`. Word 様式 (cover sheets, 申請書) have no
@@ -72,7 +73,11 @@ Every run records one line (sha256 of the filled file, path, result = pass / har
 unverified / no-render) in ${XDG_STATE_HOME:-~/.local/state}/claude-form-layout/receipts.tsv;
 --receipt-status answers whether the file as it is now passed with the render (exit 0)
 or not (exit 1, saying whether that path was checked before = a gate can tell a form
-that went through this check from a document that never did).
+that went through this check from a document that never did; --json = one object
+{passed, seen_path, status, when, pages, reason} for a gate to read). --not-a-form
+records, for the file's current content only, that a docx has no blank template
+(not a form) with a reason (the owner's words); a gate treats it as passed, and any
+change to the file voids it.
 
 The check is structural, not semantic: it can tell that a box / column / bullet is
 EMPTY or that a label was REPLACED, but it cannot judge whether prose content is
@@ -596,12 +601,13 @@ def write_receipt(filled, blank, pages, status="pass"):
     return p
 
 
-def receipt_status(filled):
-    """0 = 今の中身が描画つきで通った / 1 = 通っていない (その path を検査したことがあるかも言う)。"""
+def receipt_lookup(filled):
+    """今の中身の記録を引く。 返り値 = {passed, seen_path, status, when, pages, reason}。
+    passed = 今の sha256 に pass (描画つきで通った) か not-a-form (様式でないと理由つきで宣言した) の行がある。"""
     p = _receipts_path()
     digest = _sha256(filled)
     path = os.path.abspath(filled)
-    seen_path = False
+    out = {"passed": False, "seen_path": False, "status": None, "when": None, "pages": None, "reason": None}
     if os.path.isfile(p):
         with open(p, encoding="utf-8") as fh:
             for line in fh:
@@ -609,13 +615,44 @@ def receipt_status(filled):
                 if len(f) < 5:
                     continue
                 status = f[5] if len(f) >= 6 else "pass"
-                if f[1] == digest and status == "pass":
-                    print(f"✓ この file (今の中身) は {f[0]} に描画つきで検査済み ({f[3]} 頁)")
-                    return 0
-                seen_path = seen_path or f[4] == path
-    tail = " (この path は検査したことがある = その後に中身が変わったか、 通らなかった)" if seen_path else ""
+                if f[1] == digest and status in ("pass", "not-a-form"):
+                    out.update(passed=True, status=status, when=f[0], pages=f[3],
+                               reason=f[6] if len(f) >= 7 else None)
+                out["seen_path"] = out["seen_path"] or (f[4] == path and status != "not-a-form")
+    return out
+
+
+def receipt_status(filled, as_json=False):
+    """0 = 今の中身が描画つきで通った (か、 様式でないと宣言済み) / 1 = 通っていない (その path を検査したことがあるかも言う)。"""
+    r = receipt_lookup(filled)
+    if as_json:
+        import json
+        print(json.dumps(r, ensure_ascii=False))
+        return 0 if r["passed"] else 1
+    if r["passed"] and r["status"] == "not-a-form":
+        print(f"✓ この file (今の中身) は {r['when']} に様式でないと宣言済み (理由: {r['reason']})")
+        return 0
+    if r["passed"]:
+        print(f"✓ この file (今の中身) は {r['when']} に描画つきで検査済み ({r['pages']} 頁)")
+        return 0
+    tail = " (この path は検査したことがある = その後に中身が変わったか、 通らなかった)" if r["seen_path"] else ""
     print(f"✗ この file の今の中身は、 描画つきの検査を通っていない{tail} (diff-form-docx.py <記入済み> <雛形> を回す)")
     return 1
+
+
+def declare_not_a_form(filled, reason):
+    """雛形の無い docx (様式でない文書) を、 今の中身に限って理由つきで記録する。 中身が変われば効かない。"""
+    reason = " ".join(str(reason or "").split())
+    if len(reason) < 4:
+        print("--reason に理由を書く (本人が様式でないと言った言葉か、 雛形が無い理由)", file=sys.stderr)
+        return 2
+    p = _receipts_path()
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "a", encoding="utf-8") as fh:
+        fh.write("\t".join([time.strftime("%Y-%m-%dT%H:%M:%S"), _sha256(filled), "-", "-",
+                            os.path.abspath(filled), "not-a-form", reason]) + "\n")
+    print(f"記録: {os.path.basename(filled)} (今の中身) は様式でない — 理由: {reason} ({p})")
+    return 0
 
 
 def _short(v, n=50):
@@ -878,6 +915,16 @@ def _selftest():
                 other = receipt_status(paths["fadded"])
         checks.append(("receipt: unknown → recorded → other file still unknown", (before, after, other) == (1, 0, 1)))
         checks.append(("receipt: a failed run is not a pass, and the path is known", "検査したことがある" in buf.getvalue()))
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            short = declare_not_a_form(paths["ffont"], "x")
+            decl = declare_not_a_form(paths["ffont"], "雛形の無い送り状 (架空の理由)")
+            j = receipt_lookup(paths["ffont"])
+        checks.append(("not-a-form: a reason is required, then the current content counts as passed",
+                       short == 2 and decl == 0 and j["passed"] and j["status"] == "not-a-form"
+                       and not j["seen_path"] and receipt_lookup(paths["fgood"])["status"] == "pass"))
+        import shutil as _sh
+        _sh.copyfile(paths["fadded"], paths["ffont"])          # the content changed = the declaration no longer applies
+        checks.append(("not-a-form: a changed file is not covered", not receipt_lookup(paths["ffont"])["passed"]))
     finally:
         if old is None:
             os.environ.pop("XDG_STATE_HOME", None)
@@ -909,9 +956,12 @@ def main():
     args = sys.argv[1:]
     if "--selftest" in args:
         sys.exit(_selftest())
+    nf = _opt(args, "--not-a-form")
+    if nf:
+        sys.exit(declare_not_a_form(nf, _opt(args, "--reason")))
     rs = _opt(args, "--receipt-status")
     if rs:
-        sys.exit(receipt_status(rs))
+        sys.exit(receipt_status(rs, as_json="--json" in args))
     filled_pdf = _opt(args, "--filled-pdf")
     blank_pdf = _opt(args, "--blank-pdf")
     keep = _opt(args, "--keep-pdf")
