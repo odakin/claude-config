@@ -36,7 +36,7 @@ Code タブかどうかは、 system prompt の記述 (Claude desktop app の Co
 - コマンドは KaTeX にあるものだけ。 **physics パッケージは不可** (`\dd` `\dv` `\pdv` `\abs` `\norm` `\ev` `\mel` `\comm` `\tr` `\Tr`) → `\mathrm{d}x`, `\frac{\partial f}{\partial x}`, `|x|`, `\lVert v\rVert`, `\langle A\rangle`, `\operatorname{Tr}` で書く (`\|v\|` は `$…$` の gate が正規表現と見なして生表示にする)。 `\mathbb{1}` `\mathds{1}` `\id` も不可 (→ `\mathbb{I}` か `\mathbf{1}`)。 repo のプリアンブル固有のマクロも不可。
 - 使えるもの (実測): `\ket` `\bra` `\braket` `\mathscr` `\mathfrak` `\bm` `\boldsymbol` `\operatorname` `\dfrac` `\tfrac` `\lVert` `\coloneqq` `\hbar` `\bmod`。
 - 数式を code block や backtick の中に入れない (描かれない)。 `$$` の block の内側に空行を置かない。
-- <a id="display-block-fence-lines"></a>**ディスプレイの式は 1 行の `$$…$$` に書く**。 行をまたぐなら `$$` を単独の行に出し、 **開きの `$$` の行・閉じの `$$` の行に式を続けない** (`$$\begin{aligned}` … `\end{aligned}$$` は不可)。 実測 (desktop 4.4212.0): 開きと閉じの行に式が続く 5 行の aligned が数式にならず、 `\,` と `\\` が Markdown のエスケープとして消え、 `_{` の `_` も落ちた地の文で出た。 `aligned` / `pmatrix` の改行 `\\` も同じ 1 行の中に書く。 hook はこの形を `DD_FENCE_TEXT` で止める。 `$$` だけの行で開閉する形が今の版で描かれるかは未確認 (hook は通す)。
+- <a id="display-block-fence-lines"></a>**ディスプレイの式は 1 行の `$$…$$` に書く**。 行をまたぐなら `$$` を単独の行に出し、 **開きの `$$` の行・閉じの `$$` の行に式を続けない** (`$$\begin{aligned}` … `\end{aligned}$$` は不可)。 実測 (desktop 4.4212.0): 開きと閉じの行に式が続く 5 行の aligned が数式にならず、 `\,` と `\\` が Markdown のエスケープとして消え、 `_{` の `_` も落ちた地の文で出た。 `aligned` / `pmatrix` の改行 `\\` も同じ 1 行の中に書く。 hook はこの形を `DD_FENCE_TEXT` で止める。 `$$` だけの行で開閉する形は 4.4212.0 で数式に描かれることを本人の画面で確認した (hook は通す)。
 - 長い導出はチャットに書かず、 `.md` ファイルや Artifact に出す。
 
 **未知のコマンド 1 つで式全体が生になる理由**: 描画器は KaTeX をエラーを投げない設定で呼び、 エラーの色を地の文と同じにしている。 KaTeX は解釈できない式を丸ごと元の文字列として出すので、 式全体が普通の文字で出る (赤字にならないので、 壊れたと気づきにくい)。
