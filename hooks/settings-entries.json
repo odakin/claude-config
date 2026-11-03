@@ -584,6 +584,15 @@
           "command": "~/.claude/hooks/decision-question-jargon-nudge.sh"
         }
       ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/wrap-reply-knowledge-check.py",
+          "timeout": 10
+        }
+      ]
     }
   ],
   "SubagentStart": [
