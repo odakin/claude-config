@@ -128,6 +128,22 @@ Claude Code (desktop app / VS Code 拡張の chat panel) は、応答本文内�
 
 **frontend 差**: この rendering scope 挙動は **chat 右パネルを持つ frontend** (= desktop app、VS Code 拡張の chat panel) で発生する。CLI-only session には右パネル rendering 自体が無いので該当しない。scope 判定機構自体は harness 側で共通 (= Read/Edit/Write tool と同じ layer)。
 
+### <a id="chat-panel-media-playback"></a>音声・動画: 右パネルが鳴らすのは session のフォルダの中の 25 MB 以下だけ
+
+右パネルは音声・動画の link を再生器 (`<audio controls>` / `<video controls>`) で開く。 鳴るのは次を全部満たす file だけ (desktop app 4.4212.0 の本体を [`claude-app-bundle-reading.md`](claude-app-bundle-reading.md) の手順で読んだ。 25 MB の境目は画面では未確認):
+
+- **場所**: session のフォルダの中 (上の範囲と同じ。 main process の `readSessionPanelMediaAsDataUrl` が `resolveContainedSessionPath` で解決する)。 scratchpad の写しは解決を通る (`show_pane` で実測)
+- **拡張子**: 音声 = mp3・m4a・aac・wav・flac・opus・ogg・oga、 動画 = mp4・webm・mov・m4v・ogv
+- **大きさ**: 25 MB (26,214,400 bytes = `SESSION_PANEL_MEDIA_MAX_BYTES`) 以下。 file 全体を data URL にして画面へ渡すので、 超えると読まない。 配信用に仕上げた 1 回分の MP3 (30〜50 MB) は超える
+
+⚠️ **鳴らないときの文言は原因を言い当てない**: 再生器の枝の失敗は、 path を解決できなかったときも「このファイルはプレビュー用に読み込めませんでした。 ファイルが大きすぎてインラインプレビューできないか、 このブラウザで再生できない形式であるか、 削除または移動された可能性があります」 と出る (実測 = 解決できない相対 path の inline code を押してこの文言が出て、 大きさの問題と読み違えた)。 原因は app の log で見分ける: `~/Library/Logs/Claude/main.log` の `[SessionFileAccess] could not resolve "<path>"` = path の基準の取り違え ([#chat-link-resolution-base](#chat-link-resolution-base))。
+
+**聞いて・見てもらうとき** (場所やリンクを渡しても、 音を渡したことにはならない):
+
+- **相手がその Mac の前にいる** = その Mac で流す。 短い切り出しは `afplay <file>` で 1 本ずつ (何を流すかを先に告げる。 続けて流すループの止め方 = [`podcast-audio-finishing.md#bgm-level-listening`](podcast-audio-finishing.md#bgm-level-listening))、 長い file は `open <file>` (既定の再生アプリ。 アプリによっては開いた瞬間に鳴る = 相手が別の音を聞いている最中なら先に聞く)
+- **右パネルで聞かせたいとき**は、 上の 3 条件を満たす file (切り出し) を session のフォルダか scratchpad に置いて link する
+- **相手が別の端末にいる** = 同期フォルダの中の場所を文で書く (inline code にしない = 押せるのに開かない link になる)。 共有リンクを渡しただけで相手が聞けたことにはならない (実測)
+
 ### <a id="rc-chat-panel-no-render"></a>Remote Control 経由では scope 通過でも render 不可
 
 **scope 診断 (上の 1-3) を全部通過しているのに拒否される**ケースがある: session を **Remote Control で別端末から閲覧している**とき。file は worker host のディスクにあり、**閲覧している端末側には存在しない**ため、右パネルは render できない。error message は scope 外のときと**同一文言** (「削除または移動された可能性があるか、作業ディレクトリの外に存在する可能性」) なので、**scope 問題だと誤誘導される** (= 「作業ディレクトリの外」はどちらの原因でも表示される)。 ⚠️ これは観測時の build の文言。 現行 build は RC 専用の文言 (「このファイルは、このリモートコントロールセッションを実行しているマシン上にあり…」) を持つ = 文言で見分けられる ([#chat-link-resolution-base](#chat-link-resolution-base) の表)。 文言は build で変わるので、 迷ったら [`claude-app-bundle-reading.md`](claude-app-bundle-reading.md) で今の版の出し分けを読む。
