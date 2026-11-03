@@ -12,7 +12,10 @@
   流れた     箱の後、 本人が発言する前に自動の turn が始まった (本人の発言でない user 行) か、 箱が出し直された。
              その後の本人の発言がボタンの文と一致すれば答えたと数える
 同じ問いが続くときは最後の 1 件だけを数える。 本人の発言の見分け = 行の `origin.kind == "human"` (無い記録は、 isMeta でなく、
-tool_result でも system の知らせでもない user 行)。 本人の答えが別の言葉のときは「流れた」 に出ることがある = 1 件ずつ読む。
+tool_result でも system の知らせでもない user 行) と、 自動の turn の途中に本人が打った発言 (`attachment.type == "queued_command"`、
+origin が human)。 本人の言葉として読むのは、 app が前に付けた system-reminder (子 session の知らせなど) を外した残りだけ
+(外さずにいた間は、 知らせの文を「次の本人の発言」 に出し、 途中に打った答えを見落とした = 実測)。
+本人の答えが別の言葉のときは「流れた」 に出ることがある = 1 件ずつ読む。
 
 使い方:
   session-open-questions-report.py <session id か先頭の数文字>     # 既定は環境変数 CLAUDE_CODE_SESSION_ID
@@ -26,6 +29,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -36,6 +40,31 @@ ssr = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ssr)
 
 NOT_HUMAN_HEADS = ("Another Claude session", "Stop hook feedback", "<")
+REMINDER = "<system-reminder>"
+LEADING_REMINDERS = re.compile(r"\A\s*(?:<system-reminder>.*?</system-reminder>\s*)+", re.S)
+
+
+def _queued_human(entry):
+    """自動の turn の途中に本人が打った発言 (queued_command の attachment) なら、 その attachment を返す。"""
+    a = entry.get("attachment") if entry.get("type") == "attachment" else None
+    if (isinstance(a, dict) and a.get("type") == "queued_command" and a.get("commandMode", "prompt") == "prompt"
+            and (a.get("origin") or {}).get("kind") == "human"):
+        return a
+    return None
+
+
+def _own_text(entry):
+    """本人の言葉 = app が前に付けた system-reminder の塊を外した残り (user 行と queued_command の両方)。"""
+    a = _queued_human(entry)
+    content = a.get("prompt") if a else (entry.get("message") or {}).get("content")
+    if isinstance(content, str):
+        return LEADING_REMINDERS.sub("", content)
+    if isinstance(content, list):
+        if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+            return ""
+        return "\n".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"
+                         and not str(b.get("text", "")).lstrip().startswith(REMINDER))
+    return ""
 
 
 def _text(entry):
@@ -50,7 +79,9 @@ def _text(entry):
 
 
 def is_human(entry):
-    """本人が打った user 行か。"""
+    """本人が打った user 行か (自動の turn の途中に打った発言を含む)。"""
+    if _queued_human(entry):
+        return True
     if entry.get("type") != "user" or entry.get("isMeta"):
         return False
     origin = entry.get("origin")
@@ -88,7 +119,10 @@ def scan(entries):
         moved_on, said = False, None
         for e in entries[i + 1:]:
             if is_human(e):
-                said = _text(e).strip()
+                own = _own_text(e).strip()
+                if not own:
+                    continue  # 本人の行でも知らせの塊しか無いなら、 本人の言葉ではない
+                said = own
                 break
             if is_auto_turn(e):
                 moved_on = True
@@ -98,7 +132,8 @@ def scan(entries):
         if answered:
             open_qs.pop(ask, None)
         else:
-            open_qs[ask] = {"ts": ts, "ask": ask, "why": "無回答" if said is None else "流れた", "next": (said or "")[:80]}
+            open_qs[ask] = {"ts": ts, "ask": ask, "why": "無回答" if said is None else "流れた",
+                            "next": " / ".join(x.strip() for x in (said or "").splitlines() if x.strip())[:80]}
     return sorted(open_qs.values(), key=lambda q: q["ts"])
 
 
@@ -159,6 +194,26 @@ def selftest():
     expect("後で答えた問いは消える", scan([box("Q"), peer, box("Q"), human("別の言葉で答える")]), [])
     expect("問いの無い箱は見ない", scan([{"type": "assistant", "message": {"content": [
         {"type": "tool_use", "name": "w__wrap_up", "input": {"recap": "r"}}]}}]), [])
+    notice = "<system-reminder>\nThe session \"子の仕事\" you started is idle.\n</system-reminder>"
+
+    def human_blocks(*texts):
+        return {"type": "user", "origin": {"kind": "human"},
+                "message": {"content": [{"type": "text", "text": t} for t in texts]}}
+
+    def queued(text, kind="human"):
+        return {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt",
+                                                     "origin": {"kind": kind}, "prompt": text}}
+
+    expect("知らせを前に付けた本人の行 (list) は本人の言葉だけを次の発言に出す",
+           [(q["why"], q["next"]) for q in scan([box("Q"), peer, human_blocks(notice, "別の話")])], [("流れた", "別の話")])
+    expect("知らせを前に付けた本人の行 (文字列) も同じ",
+           [q["next"] for q in scan([box("Q"), peer, human(notice + "\n\n別の話")])], ["別の話"])
+    expect("知らせの塊しか無い本人の行は発言に数えない",
+           scan([box("Q"), peer, human_blocks(notice), human("はい")]), [])
+    expect("自動の turn の途中に打った本人の答え (queued_command) を拾う",
+           scan([box("Q"), peer, queued([{"type": "text", "text": notice}, {"type": "text", "text": "はい"}])]), [])
+    expect("別 session の queued_command は本人の発言でない",
+           [q["why"] for q in scan([box("Q"), peer, queued("はい", kind="peer")])], ["無回答"])
     expect("origin の無い本人の行", is_human({"type": "user", "message": {"content": "はい"}}), True)
     expect("origin の無い peer の行", is_human({"type": "user", "message": {"content": "Another Claude session sent"}}), False)
 
