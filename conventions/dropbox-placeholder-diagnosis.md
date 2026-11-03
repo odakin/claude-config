@@ -20,6 +20,7 @@ Dropbox は disk 容量節約のため、 一定期間 access していない fi
 
 - **大きさで online-only かを判定しない** (0 byte でなくても手元に実体が無い)。 script からは `os.stat(path).st_flags & 0x40000000` (`SF_DATALESS`) で見る
 - **普通に読めば落ちてくる** (`open()`・PyMuPDF など。 Finder の操作は要らない、 読み終えた file の flag から `dataless` が消える、 実測)。 file ごとに待ち時間が出る
+- <a id="dataless-edeadlk"></a>**読むと `Resource deadlock avoided` (EDEADLK、 errno 11) で即座に失敗するときは、 Dropbox の file provider が落とせない状態** (実測: Dropbox アプリが更新の途中 = process の引数に `/firstrunupdate` が出ていた時に、 `cat`・Python の `open()`・Read tool が全部この error で止まった。 待っても再試行しても変わらなかった)。 file が壊れたのではない。 手は 2 つ: Dropbox アプリが落ち着くのを待つ (再起動はアプリへの介入 = 本人に聞く) か、 同じ file が手元に dataless でない形で別にあれば (前の版の写し・別の folder) そちらを読む。 Dropbox API で落とすには app に `files.content.read` の scope が要る (共有リンクだけの app には無い = [`dropbox-api-access.md`](dropbox-api-access.md))
 - **多数の file を読む前に合計の大きさを見る** — 読んだ分だけ disk に落ちる。 中身で file を探すだけなら、 先に Dropbox の全文検索を使う = 落とさずに引ける ([`dropbox-api-access.md#sharing-read-recipes`](dropbox-api-access.md#sharing-read-recipes))
 
 ## 0 byte の placeholder の識別シグナル (macOS)

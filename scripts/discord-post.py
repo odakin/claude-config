@@ -156,6 +156,22 @@ def _multipart_body(payload_json, attach_paths):
 MESSAGE_TYPE_LABELS = {7: "member joined"}  # 0 (default) / 19 (reply) には印を付けない
 
 
+def _ts(iso, tz=None):
+    """Discord の timestamp (ISO 8601、 UTC = +00:00) を手元の時刻と時差つきで返す ("2026-01-01 09:00:00 +0900")。
+    API の値は UTC で、 素のまま 19 文字に切ると時差の印が落ち、 手元の時刻と読み違える
+    (実測: UTC の時刻を日本時間として記録と返事に書いた)。 tz = 変換先 (既定 = この機械の時刻)。
+    読めない値はそのまま 19 文字に切って返す。 純関数 (tz を渡せば)。"""
+    from datetime import datetime
+    raw = iso or ""
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return raw[:19].replace("T", " ")
+    if dt.tzinfo is None:
+        return raw[:19].replace("T", " ")
+    return dt.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S %z")
+
+
 def _format_messages(msgs):
     """GET /channels/{id}/messages の結果 (新しい順) を古い順の 1 行ずつにする。
     改行は ' / ' に畳み、 添付は file 名だけ出す (= 読む用。 本文の全文は API の JSON にある)。
@@ -164,7 +180,7 @@ def _format_messages(msgs):
     その人の id がここで引ける)。"""
     lines = []
     for m in reversed(msgs or []):
-        ts = (m.get("timestamp") or "")[:19].replace("T", " ")
+        ts = _ts(m.get("timestamp"))
         a = m.get("author") or {}
         author = f"{a.get('username', '?')} ({a.get('id', '?')})"
         text = (m.get("content") or "").replace("\n", " / ")
@@ -293,7 +309,7 @@ def _describe_message(msg, nick=None, expected=None):
     expected = 照合する本文 (--content-file)。 純関数。"""
     a = msg.get("author") or {}
     lines = [f"message {msg.get('id')} in channel {msg.get('channel_id')} at "
-             f"{(msg.get('timestamp') or '')[:19].replace('T', ' ')}",
+             f"{_ts(msg.get('timestamp'))}",
              f"author id={a.get('id')} username={a.get('username')} "
              f"global_name={a.get('global_name')} bot={bool(a.get('bot'))}"
              + (f" server_nick={nick}" if nick else ""),
@@ -667,6 +683,11 @@ def selftest():
     check("message: mismatch says NO",
           _describe_message(msg, expected="other")[-1].endswith("NO"))
     check("message: no expected -> no compare line", len(_describe_message(msg)) == 3)
+    # timestamps: Discord gives UTC; print local time with the offset (not the bare UTC wall clock)
+    from datetime import timezone, timedelta
+    check("ts: UTC converted to the given zone with offset",
+          _ts("2026-01-01T00:00:00.000+00:00", tz=timezone(timedelta(hours=9))) == "2026-01-01 09:00:00 +0900")
+    check("ts: unparsable value falls back to the raw text", _ts("garbage") == "garbage")
     # --recent formatter: API returns newest first; print oldest first, fold newlines, list attachments
     fmt = _format_messages([
         {"id": "2", "timestamp": "2026-01-02T03:04:05.000+00:00", "author": {"username": "b"},
