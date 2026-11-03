@@ -12,6 +12,8 @@
 # §D 基準フォルダが git repo: app の path の末尾一致 (1 件なら開く = silent、 複数なら fire、 untracked も見る)。
 # §E 書き方の問題: href を山括弧 <…> で囲んだ link / file 名の濁点の形 (NFC・NFD) が disk 上の名前と違う参照
 #     (2026-10-13 の実例 = Dropbox の NFD の名前の PDF を山括弧の絶対 path で書いた)。 絶対 path でも拾う。
+# §F 音声・動画が右パネルで鳴らない (2026-11-03 の実例 = 同期フォルダを起点にした配信用の MP3 の path を inline code で書き、
+#     押すと右パネルが読み込めなかった)。 外 (実体の path で判定) / 25 MB 超 / 同じ turn に afplay・open で流した (= 黙る)。
 # §C fail-open と配線: stop_hook_active / transcript 不在 / 空入力 / 部品の不在・例外 = 沈黙。 symlink 経由で部品を見つける。
 
 set -uo pipefail
@@ -42,16 +44,16 @@ echo "book の指示書" > "$ROOT/book/CLAUDE.md"          # A10: 基準フォ�
 : > "$ROOT/book/LINKED.md"; ln -s "$ROOT/book/LINKED.md" "$ROOT/LINKED.md"   # B15: 同じ実体
 mkdir -p "$ROOT/book/pkg/@scope"; : > "$ROOT/book/pkg/@scope/index.js"       # B16
 
-# mktranscript path entrypoint root additional_json final_text [mid_text]
+# mktranscript path entrypoint root additional_json final_text [mid_text] [bash_command]
 #   環境 snapshot (root) → user → assistant tool_use (cwd = root/book に cd した後) → tool_result → final
 mktranscript() {
-  local path="$1" ep="$2" root="$3" extra="$4" final="$5" mid="${6:-}"
+  local path="$1" ep="$2" root="$3" extra="$4" final="$5" mid="${6:-}" cmd="${7:-cd book && ls}"
   {
     jq -nc --arg r "$root" --argjson x "$extra" \
       '{type:"attachment", cwd:$r, attachment:{type:"environment", snapshot:{workingDirectory:$r, additionalWorkingDirectories:$x}}}'
     jq -nc --arg r "$root" --arg ep "$ep" '{type:"user", cwd:$r, entrypoint:$ep, message:{content:"試稿を開いて"}}'
     [ -n "$mid" ] && jq -nc --arg r "$root/book" --arg t "$mid" '{type:"assistant", cwd:$r, message:{content:[{type:"text", text:$t}]}}'
-    jq -nc --arg r "$root/book" '{type:"assistant", cwd:$r, message:{content:[{type:"tool_use", name:"Bash", input:{command:"cd book && ls"}}]}}'
+    jq -nc --arg r "$root/book" --arg c "$cmd" '{type:"assistant", cwd:$r, message:{content:[{type:"tool_use", name:"Bash", input:{command:$c}}]}}'
     jq -nc --arg r "$root/book" '{type:"user", cwd:$r, message:{content:[{type:"tool_result", content:"ok"}]}}'
     jq -nc --arg r "$root/book" --arg t "$final" '{type:"assistant", cwd:$r, message:{content:[{type:"text", text:$t}]}}'
   } > "$path"
@@ -76,10 +78,10 @@ assert() {
 
 BT='`'
 N=0
-case_() {  # case_ label expect final [needle] [ep] [root] [extra_json] [mid]
+case_() {  # case_ label expect final [needle] [ep] [root] [extra_json] [mid] [bash_command]
   N=$((N+1))
   local t="$TMP/t$N.jsonl"
-  mktranscript "$t" "${5:-claude-desktop}" "${6:-$ROOT}" "${7:-[]}" "$3" "${8:-}"
+  mktranscript "$t" "${5:-claude-desktop}" "${6:-$ROOT}" "${7:-[]}" "$3" "${8:-}" "${9:-cd book && ls}"
   assert "$1" "$2" "$(mkpayload "$t")" "${4:-}"
 }
 
@@ -187,6 +189,27 @@ case_ "E8: 山括弧で囲んだ丸括弧つきの名前 = 囲まずに %28・%2
 
 echo "=== §C fail-open と配線 ==="
 mktranscript "$TMP/c.jsonl" claude-desktop "$ROOT" "[]" "[drafts/intro.md](drafts/intro.md)"
+echo "=== §F 音声・動画 ==="
+mkdir -p "$ROOT/show/clips" "$TMP/sync/配信用"
+: > "$ROOT/show/clips/cut.mp3"                                  # 中・小さい = 鳴る
+: > "$TMP/sync/配信用/ep1.mp3"                                  # 外 (同期フォルダ = settings の追加フォルダ)
+python3 -c "f=open('$ROOT/show/ep2.mp3','wb'); f.seek(26214400); f.write(b'0')"   # 中・25 MB 超 (疎な file)
+ln -s "$TMP/sync" "$ROOT/show/sync-refs"                        # repo の中から同期フォルダへの symlink
+case_ "F1: 聞いてほしい外の音声への絶対 path = fire (流す案内)" 1 "新しい音は [ep1]($TMP/sync/配信用/ep1.mp3) で聞けます。" "afplay"
+case_ "F2: 同期フォルダを起点にした inline code (2026-11-03 の形) = fire、 書き直しでなく流す案内" 1 \
+  "新しい音を聞くなら ${BT}配信用/ep1.mp3${BT} です。" "右パネルで鳴りません" "claude-desktop" "$ROOT" "[\"$TMP/sync\"]"
+case_ "F3: 中の小さい音声 = silent (右パネルで鳴る)" 0 "[cut](show/clips/cut.mp3) を聞いてください。"
+case_ "F4: 中でも 25 MB 超 = fire (大きさを示す)" 1 "[ep2](show/ep2.mp3) を聴いてください。" "25.0 MB"
+case_ "F5: 同じ turn に afplay で流した = silent" 0 "聞いてもらった音: [ep1]($TMP/sync/配信用/ep1.mp3)" "" "claude-desktop" "$ROOT" "[]" "" \
+  "afplay '$TMP/sync/配信用/ep1.mp3'"
+case_ "F6: 中に見えるが実体は外 (symlink) = fire" 1 "試聴は [ep1](show/sync-refs/配信用/ep1.mp3)" "フォルダ (と scratchpad) の外"
+case_ "F7: open -R (Finder で見せるだけ) は流したと数えない = fire" 1 "聞くなら [ep1]($TMP/sync/配信用/ep1.mp3)" "afplay" \
+  "claude-desktop" "$ROOT" "[]" "" "open -R '$TMP/sync/配信用/ep1.mp3'"
+case_ "F8: 音声でない外の絶対 path = silent (従来どおり)" 0 "[memo]($TMP/extra/memo.md) を聞いて"
+case_ "F9: 聞く語の無い置き場所の記録 = silent" 0 "収録の写しは [ep1]($TMP/sync/配信用/ep1.mp3) に置きました。"
+case_ "F10: 聞く語の無い同期フォルダ起点の inline code = 従来の書き直しの案内 (流す案内でない)" 1 \
+  "写しは ${BT}配信用/ep1.mp3${BT} です。" "直し方" "claude-desktop" "$ROOT" "[\"$TMP/sync\"]"
+
 assert "C1: stop_hook_active=true = silent (loop guard)" 0 "$(mkpayload "$TMP/c.jsonl" true)"
 assert "C2: transcript 不在 = silent" 0 "$(mkpayload "$TMP/no-such.jsonl")"
 assert "C3: 空入力 = silent" 0 ""

@@ -1,5 +1,5 @@
 {
-  "_comment": "chat_file_refs.py (Stop hook chat-file-ref-enforce.sh の判定の部品) の修正を 1 つずつ外した mutant 11 本で、 hook の test の該当 case が落ち、 隣の case は通り続けることを確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 test は hooks/ に在るので {spec_dir} で指し、 部品の写しの dir を env で渡す。",
+  "_comment": "chat_file_refs.py (Stop hook chat-file-ref-enforce.sh の判定の部品) の修正を 1 つずつ外した mutant 18 本で、 hook の test の該当 case が落ち、 隣の case は通り続けることを確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 test は hooks/ に在るので {spec_dir} で指し、 部品の写しの dir を env で渡す。",
   "target": "lib/chat_file_refs.py",
   "run": "env CHAT_FILE_REF_TEST_LIBDIR=. bash {spec_dir}/../hooks/chat-file-ref-enforce.test.sh",
   "fail_marker": "❌ ",
@@ -202,6 +202,103 @@
       ],
       "only_on": [
         "Darwin"
+      ]
+    },
+    {
+      "name": "音声・動画の枝を外す (鳴らない参照を拾わない)",
+      "pairs": [
+        [
+          "    if not MEDIA_EXT_RE.search(path) or not os.path.isfile(path):\n        return None\n",
+          "    return None\n"
+        ]
+      ],
+      "expect_fail": [
+        "F1:",
+        "F2:",
+        "F4:",
+        "F6:"
+      ],
+      "expect_pass": [
+        "F3:",
+        "F8:"
+      ]
+    },
+    {
+      "name": "聞く・見るの語を見ない (置き場所の記録も音声として拾う)",
+      "pairs": [
+        [
+          "    return i >= 0 and LISTEN_RE.search(text[max(0, i - 200):i + len(raw) + 80]) is not None\n",
+          "    return True\n"
+        ]
+      ],
+      "expect_fail": [
+        "F9:",
+        "F10:"
+      ],
+      "expect_pass": [
+        "F1:",
+        "F2:"
+      ]
+    },
+    {
+      "name": "右パネルの上限 (25 MB) を見ない",
+      "pairs": [
+        [
+          "        return \"media_large\" if os.path.getsize(real) > PANEL_MEDIA_MAX_BYTES else None\n",
+          "        return None\n"
+        ]
+      ],
+      "expect_fail": [
+        "F4:"
+      ],
+      "expect_pass": [
+        "F1:"
+      ]
+    },
+    {
+      "name": "中かどうかを書いた path で見る (symlink を解かない)",
+      "pairs": [
+        [
+          "    if not (_inside(real, os.path.realpath(root)) or SCRATCHPAD_RE.match(real) or SCRATCHPAD_RE.match(path)):\n",
+          "    if not (_inside(os.path.normpath(path), os.path.normpath(root)) or SCRATCHPAD_RE.match(path)):\n"
+        ]
+      ],
+      "expect_fail": [
+        "F6:"
+      ],
+      "expect_pass": [
+        "F3:",
+        "F1:"
+      ]
+    },
+    {
+      "name": "同じ turn に流したかを見ない",
+      "pairs": [
+        [
+          "    played = \"\\n\".join(cmds)\n",
+          "    played = \"\"\n"
+        ]
+      ],
+      "expect_fail": [
+        "F5:"
+      ],
+      "expect_pass": [
+        "F1:"
+      ]
+    },
+    {
+      "name": "open -R (Finder で見せるだけ) を流したと数える",
+      "pairs": [
+        [
+          "open(?!\\s+-R\\b))\\b\")",
+          "open)\\b\")"
+        ]
+      ],
+      "expect_fail": [
+        "F7:"
+      ],
+      "expect_pass": [
+        "F5:"
       ]
     }
   ]

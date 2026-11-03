@@ -26,6 +26,13 @@
       Unicode の正規化 (NFC / NFD) だけ違う。 macOS の file system は正規化を問わず開けるので exists は通るが、 app の
       表示要求は解決できないことがある (実測 = Dropbox の NFD の file 名)。 disk 上の綴りを示す。
   (c)(d) は絶対 path・`~/` の参照も見る (開くかどうかが基準フォルダに依らない形)。
+  (e) 音声・動画が右パネルで鳴らない (reason = media_outside / media_large): 右パネルの再生器が読むのは基準フォルダ
+      (と scratchpad) の中の 25 MB 以下の file だけ (app 4.4212.0 の本体 = 正本 claude-code-permissions.md
+      #chat-panel-media-playback)。 実在する音声・動画への参照 (絶対 path も、 (a) で示す候補も) で、 近くに聞く・見るの語が
+      ある (listen_intent = 置き場所の記録は除く) ものがその外か上限超なら拾い、 link への書き直しでなく、 流して聞かせる
+      ことを案内する。 語の無い参照は従来どおり (a)〜(d) だけを見る。 外かどうかは実体の path で決める (app と同じ)。
+      settings の追加フォルダ (同期フォルダなど) は右パネルの範囲に入らないので中に数えない。 その turn の Bash で
+      同じ file を afplay・open などで流していれば拾わない (drop_played。 `open -R` は Finder で見せるだけなので数えない)。
 """
 from __future__ import annotations
 
@@ -58,6 +65,15 @@ CODE_PATH_RE = re.compile(
     rf"^[{_L}.()\[\]-]*(?:/[{_L}.()\[\]-]+)*/[{_L}()\[\]-]*\.[A-Za-z0-9_][A-Za-z0-9_.-]*(?::\d+(?:-\d+|:\d+)?)?$")
 LINE_SUFFIX_RE = re.compile(r":\d+(?:[-:]\d+)?$")
 ANGLE_HREF_RE = re.compile(r"\]\(\s*<")  # `[x](<path>)` = href を山括弧で囲んだ link
+# 右パネルが再生器で開く拡張子 (app の画面の音声の式 + 動画の MIME の表) と、 main process が読む上限
+# (SESSION_PANEL_MEDIA_MAX_BYTES、 超えると読まない)。 読んだ版 = 正本の #chat-panel-media-playback
+MEDIA_EXT_RE = re.compile(r"\.(?:mp3|m4a|aac|wav|flac|opus|ogg|oga|mp4|webm|mov|m4v|ogv)$", re.I)
+PANEL_MEDIA_MAX_BYTES = 26214400
+SCRATCHPAD_RE = re.compile(r"^/(?:private/)?tmp/claude-[^/]+/.+/scratchpad(?:/|$)")  # 右パネルの解決を通る (実測)
+PLAY_CMD_RE = re.compile(r"\b(?:afplay|qlmanage|ffplay|mpv|vlc|open(?!\s+-R\b))\b")
+# 聞いて・見てもらうつもりの参照か (参照の前 200 字〜後 80 字)。 置き場所の記録 (講義の動画の置き場・写した先) は拾わない
+# (校正: 14 日の desktop で音声・動画の参照 14 turn のうち、 この語の無い 10 turn は置き場所の記録だった)
+LISTEN_RE = re.compile(r"聞|聴|試聴|視聴|listen", re.I)
 
 
 def _blank(m: re.Match) -> str:
@@ -152,6 +168,25 @@ def _inside(path: str, root: str) -> bool:
     return rel != ".." and not rel.startswith(".." + os.sep)
 
 
+def listen_intent(text: str, raw: str) -> bool:
+    """参照の近く (前 200 字〜後 80 字) に聞く・見るの語があるか = 置き場所の記録でなく、 聞いて・見てもらう参照か。"""
+    i = text.find(raw)
+    return i >= 0 and LISTEN_RE.search(text[max(0, i - 200):i + len(raw) + 80]) is not None
+
+
+def media_block(path: str, root: str) -> str | None:
+    """実在する音声・動画を右パネルが鳴らせない理由 (media_outside / media_large)。 鳴らせるか、 音声・動画でなければ None。"""
+    if not MEDIA_EXT_RE.search(path) or not os.path.isfile(path):
+        return None
+    real = os.path.realpath(path)
+    if not (_inside(real, os.path.realpath(root)) or SCRATCHPAD_RE.match(real) or SCRATCHPAD_RE.match(path)):
+        return "media_outside"
+    try:
+        return "media_large" if os.path.getsize(real) > PANEL_MEDIA_MAX_BYTES else None
+    except OSError:
+        return None
+
+
 def candidate_dirs(root: str, seen_cwds: list[str] | None = None) -> list[str]:
     """別の基準の候補。 transcript に出た cwd (呼び出し側が新しい順に渡す) → root 直下の dir。 重複は除く。
     session の追加フォルダは呼び出し側 (find_broken) が最後に足す。"""
@@ -230,8 +265,12 @@ def find_broken(text: str, root: str, seen_cwds: list[str] | None = None, limit:
             # 絶対 path・~/ は基準フォルダに依らず開く。 書き方の問題 (山括弧・濁点の形) だけを見る
             if os.path.exists(absolute):
                 f = _form_finding(kind, raw, ref.strip(), os.path.normpath(absolute), angle)
+                media = None if f or not listen_intent(text, raw) else media_block(absolute, root)
                 if f:
                     findings.append(f)
+                elif media:
+                    findings.append({"kind": kind, "raw": raw, "path": ref.strip(), "reason": media,
+                                     "candidates": [os.path.normpath(absolute)]})
             continue
         target = os.path.normpath(os.path.join(root, p))
         if not _inside(target, root):
@@ -242,6 +281,10 @@ def find_broken(text: str, root: str, seen_cwds: list[str] | None = None, limit:
             f = _form_finding(kind, raw, p, target, angle)
             if f:
                 findings.append(f)
+                continue
+            media = media_block(target, root) if listen_intent(text, raw) else None
+            if media:  # 開くが鳴らない (repo の中の同期フォルダへの symlink の先 / 25 MB 超)
+                findings.append({"kind": kind, "raw": raw, "path": p, "reason": media, "candidates": [target]})
                 continue
             # 開くが、 直近の cwd に同じ相対 path の別の file が在る = repo の中からの path のつもりで書いた可能性
             other = os.path.normpath(os.path.join(cur, p)) if cur and cur != root else None
@@ -277,6 +320,9 @@ def find_broken(text: str, root: str, seen_cwds: list[str] | None = None, limit:
                         git_cache[root] = listing  # 校正用 (同じ基準フォルダを何百 turn も引くので 1 回にする)
             if len(git_suffix_matches(listing, p)) == 1 and not angle:
                 continue  # 基準フォルダが git repo で末尾一致が 1 件 = app はそれを開く (山括弧つきは囲みごと探すので開かない)
+        media = None if angle or not listen_intent(text, raw) else media_block(cands[0], root)
+        if media:  # 書き直しても鳴らない = 書き直しでなく流すことを案内する
+            reason = media
         if angle:  # 置き場所も山括弧も直す = 囲まずに、 候補の path で
             reason, cands = "angle", [_href_form(c) for c in cands]
         findings.append({"kind": kind, "raw": raw, "path": p, "reason": reason, "candidates": cands})
@@ -296,9 +342,27 @@ def _show(path: str, root: str) -> str:
     return os.path.relpath(path, root) if _inside(path, root) else path
 
 
+def drop_played(findings: list[dict], turn: list[dict]) -> list[dict]:
+    """音声・動画の finding のうち、 同じ turn の Bash で流した (afplay・open など) file のものを除く。"""
+    cmds = []
+    for e in turn:
+        if e.get("type") != "assistant":
+            continue
+        for b in (e.get("message") or {}).get("content") or []:
+            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Bash":
+                cmd = str((b.get("input") or {}).get("command") or "")
+                if PLAY_CMD_RE.search(cmd):
+                    cmds.append(cmd)
+    played = "\n".join(cmds)
+    return [f for f in findings
+            if not (f["reason"].startswith("media_") and os.path.basename(f["candidates"][0]) in played)]
+
+
 def build_reason(findings: list[dict], root: str) -> str:
     shadowed = any(f["reason"] == "shadowed" for f in findings)
-    what = "右パネルで開けないか、 意図と違う file を開きます" if shadowed else "右パネルで開けません"
+    media = [f for f in findings if f["reason"].startswith("media_")]
+    what = ("右パネルで鳴りません" if len(media) == len(findings) else
+            "右パネルで開けないか、 意図と違う file を開きます" if shadowed else "右パネルで開けません")
     lines = [
         f"🔗 chat-file-ref: 最終メッセージの file 参照 {len(findings)} 件が、 {what}。 "
         f"desktop app は相対 path を session を始めたフォルダ ({root}) に連結します "
@@ -311,11 +375,28 @@ def build_reason(findings: list[dict], root: str) -> str:
                 "angle_nfd": "href を山括弧 <…> で囲んでいて、 file 名の濁点の形 (NFC / NFD) も disk 上の名前と違う。 "
                              "ASCII の名前の写しに link するか SendUserFile で渡すのが確実。 書くなら囲まずに disk 上の綴りで",
                 "nfd": "file 名の濁点の形 (NFC / NFD) が disk 上の名前と違い、 開けないことがある。 "
-                       "ASCII の名前の写しに link するか SendUserFile で渡す。 disk 上の名前は"}
+                       "ASCII の名前の写しに link するか SendUserFile で渡す。 disk 上の名前は",
+                "media_outside": "音声・動画。 右パネルは session のフォルダ (と scratchpad) の外の file を鳴らさない",
+                "media_large": "音声・動画。 右パネルが鳴らすのは 25 MB 以下だけ"}
     for f in findings[:8]:
         kind = "link" if f["kind"] == "link" else "inline code"
         cands = " / ".join(_show(c, root) for c in f["candidates"])
-        lines.append(f"- {BT}{f['path']}{BT} ({kind}、 {where_of[f['reason']]}) → {cands}")
+        where = where_of[f["reason"]]
+        if f["reason"] == "media_large":
+            try:
+                where += f"で、 これは {os.path.getsize(f['candidates'][0]) / 1048576:.1f} MB"
+            except OSError:
+                pass
+        lines.append(f"- {BT}{f['path']}{BT} ({kind}、 {where}) → {cands}")
+    if media:
+        lines.append(
+            "🔊 音声・動画は link に書き直しても鳴りません。 聞いて・見てもらうなら、 相手がこの Mac の前にいれば "
+            "afplay (短い切り出しを 1 本ずつ、 何の所かを先に告げる) か open (既定の再生アプリ) で流し、 "
+            "流したことを短い追記で書いてください (最終メッセージ全体は出し直さない)。 右パネルで聞かせたいなら "
+            "25 MB 以下の写しを scratchpad に置いて link する。 相手が別の端末にいるなら、 同期フォルダの中の場所を "
+            "inline code にせず文で書く。 正本 = claude-config/conventions/claude-code-permissions.md#chat-panel-media-playback")
+        if len(media) == len(findings):
+            return "\n".join(lines)
     lines.append(
         "直し方: link の href は絶対 path か上のフォルダからの path に、 inline code は上のフォルダからの path に"
         "書き直した参照だけを短い追記として出してください (最終メッセージ全体は出し直さない = 返事が 2 通並ぶ。"
@@ -340,6 +421,7 @@ def hook_reason(transcript_path: str) -> str:
     if not final or not root:
         return ""
     findings = find_broken(final, root, cwds, extra_roots=session_additional_dirs(entries))
+    findings = drop_played(findings, tt.current_turn(entries))
     return build_reason(findings, os.path.normpath(root)) if findings else ""
 
 
@@ -384,6 +466,7 @@ def calibrate(days: float, show: int = 40, context: bool = False) -> None:
             root, cwds = session_root_and_cwds(upto)
             fs = find_broken(final, root, cwds, extra_roots=session_additional_dirs(upto),
                              git_cache=git_cache) if root else []
+            fs = drop_played(fs, turn)
             if not fs:
                 continue
             n_fire += 1
