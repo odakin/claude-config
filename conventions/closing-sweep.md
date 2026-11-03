@@ -25,6 +25,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
   (2) 既に済んだ拾い出し (考え方・研究の中身の回収など) の結果の file。 それを入力にして拾い直させない
   (3) 触らせない file (提出前の原稿など) と、 保護された file は本人に聞くこと ([#protected-files-need-ruling](#protected-files-need-ruling))。
   元の session が掲示板の依頼の依頼元なら、 検収は依頼元か本人の番で、 締めを受けた worker は状態を記録するだけ (実測: この 3 つを書いた spec で、 別 vendor の worker が Claude Code の session の締めを最後まで回した)。
+  <a id="delegated-reply-knowledge-check"></a>[#reply-knowledge](#reply-knowledge) の処分の file は worker が書いて `--check` を通し、 依頼元も自分の締めの turn で同じ `--check` の 1 行を回す = 締めの turn を確かめる Stop hook は、 その session の会話記録の中の `--check` しか見ない (worker の窓で通しても依頼元の turn には数えない)。 worker は結果の file と提出に、 依頼元がそのまま回せる 1 行を書く (実測: worker が書いた処分の file を、 依頼元が自分の窓で回して通した)。
 
 ## <a id="collect-from-transcript"></a>0.3 会話の全体から集める (文脈圧縮の前も)
 
