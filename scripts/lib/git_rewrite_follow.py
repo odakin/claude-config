@@ -48,7 +48,9 @@ repo ごとの事実を点呼の材料として載せる)。
       (push の検査の stub・無人の追従) が全 machine に在るかを外の command に聞く (ready_gate。 command = env
       GIT_REWRITE_READY_HOOK か ~/.claude/rewrite-ready-check、 引数 = repo の path)。 exit 1 + 「NOT READY」 = 止める /
       exit 0 = 通す / それ以外 = 点呼が走らなかったと 1 行出して通す。 command が無ければ何もしない。 入口で聞くので、
-      書き換えの道具にも手で打った push --force にも同じに効く (I5 までは「書き換えた後」 の網、 これは「書き換える前」 の網)。
+      clone から打つ push は書き換えの道具にも手で打った push --force にも同じに効く (I5 までは「書き換えた後」 の網、
+      これは「書き換える前」 の網)。 stub を持たない mirror から打つ push は入口を通らない = mirror から push を印字する道具
+      (scripts/git-scrub-history.py の push-command) が ready_gate を自分で呼ぶ。
       備えの無い複製が在るまま進めるのは持ち主の判断 = GIT_REWRITE_READY_OVERRIDE=1。
 
 公開 repo には manifest を置かない: 対応表の旧 sha と forbidden の sha は、 host が旧 object を gc するまで、 消した中身を
@@ -1072,7 +1074,8 @@ def _remote_moved(repo, remote, rows):
 #
 # 「正本を先に変え、 追従を後から配る」 の順序を、 正本が変わる瞬間 (既定 branch を fast-forward でなく動かす push) に検査する。
 # 複製の側の備え (push の検査の stub・無人の追従) が全 machine に在るかは、 この engine には分からない (fleet の記録は呼ぶ側の層が
-# 持つ) = 外の command に聞く。 入口で聞くので道具に依らない (書き換えの道具でも、 手で打った push --force でも、 同じ所を通る)。
+# 持つ) = 外の command に聞く。 入口で聞くので、 clone から打つ push は道具に依らない (書き換えの道具でも、 手で打った push --force
+# でも、 同じ所を通る)。 stub の無い mirror から打つ push は入口を通らない = mirror から push を印字する道具が ready_gate を呼ぶ。
 
 READY_HOOK_ENV = "GIT_REWRITE_READY_HOOK"          # 点呼の command の path。 "0" = 呼ばない。 既定 = ~/.claude/rewrite-ready-check
 READY_OVERRIDE_ENV = "GIT_REWRITE_READY_OVERRIDE"  # "1" = 備えの無い複製が在っても通す (持ち主の判断を受けた時だけ)

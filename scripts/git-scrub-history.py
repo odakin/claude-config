@@ -1433,6 +1433,11 @@ def cmd_push_command(cfg, out=print):
         if head != old and not is_ancestor(local, head, old):
             out(f"❌ 手元の HEAD ({head[:10]}) に remote に無い commit がある = 先に通常どおり push してから やり直し = {redo}")
             return 1
+    stop, lines = _ready_gate(local, b)
+    for line in lines:
+        out(line)
+    if stop:
+        return 1
     if v.get("head_changes"):
         out(f"⚠️  書き換えで先頭の tree が変わる ({v['head_changes']} path)。 他の clone の追従で差分が出る"
             " (plan-current で先に通常の commit にしておくと 0)")
@@ -1449,6 +1454,27 @@ def cmd_push_command(cfg, out=print):
     out(f"python3 {q(SELF)} after-push --config {q(cfg['_path'])}")
     out(f"# lease が拒んだら (誰かが push した) = {redo} からやり直す")
     return 0
+
+
+def _ready_gate(local, branch):
+    """書き換える前の点呼 (lib/git_rewrite_follow.py の ready_gate) を push-command が呼ぶ。 (止めるか, 行の list)。
+    印字する push は mirror から打つ = mirror には pre-push の stub が無く、 各 clone の pre-push が呼ぶ点呼を通らない
+    (実測: 備えの無い複製が在るまま、 点呼の 1 行も出ずに書き換えが remote に入った)。 点呼の部品を読めない・local が無い =
+    1 行出して通す (点呼の故障で止めない = ready_gate と同じ契約)。"""
+    if not local or not os.path.isdir(local):
+        return False, []
+    lib = os.path.join(os.path.dirname(SELF), "lib")
+    if lib not in sys.path:
+        sys.path.insert(0, lib)
+    try:
+        import git_rewrite_follow
+    except Exception as exc:  # 部品の故障で push の段を止めない
+        return False, [f"⚠️  書き換える前の点呼の部品を読めなかった ({type(exc).__name__}) = 点呼なしで続ける"]
+    stop, lines = git_rewrite_follow.ready_gate(local, [f"refs/heads/{branch}"])
+    if stop:
+        lines = list(lines) + [f"  (この道具の push は mirror から打つ = {git_rewrite_follow.READY_OVERRIDE_ENV}=1 は"
+                               " push-command に付ける。 印字した push を打つ瞬間には点呼は走らない)"]
+    return stop, lines
 
 
 def _mirror_refs(repo):
@@ -1824,6 +1850,25 @@ def selftest():
         gitb(remote_b, "update-ref", "refs/pull/1/head", rev(remote_b, "main~1"))
         run(["git", "-C", w.mirror, "fetch", "-q", remote_b, "+refs/heads/dependabot/*:refs/heads/dependabot/*",
              "+refs/pull/*:refs/pull/*"])
+        # 書き換える前の点呼: 印字する push は mirror から打ち、 pre-push の点呼を通らない = push-command が呼ぶ (架空の点呼で)
+        os.environ["GIT_REWRITE_FOLLOW_LOG"] = os.path.join(tmp, "follow.log")
+        fake_ready = os.path.join(tmp, "fake-ready-check")
+        open(fake_ready, "w").write("#!/bin/sh\necho 'NOT READY: fx — 点呼 (架空)'\nexit 1\n")
+        os.chmod(fake_ready, 0o755)
+        os.environ["GIT_REWRITE_READY_HOOK"] = fake_ready
+        out = []
+        rc = cmd_push_command(cfg_b, out=out.append)
+        check("push-command: 書き換える前の点呼が NOT READY なら push を印字せずに止める",
+              rc == 1 and any("NOT READY" in x for x in out)
+              and not any(" push --force-with-lease=" in x for x in out), " / ".join(out))
+        os.environ["GIT_REWRITE_READY_OVERRIDE"] = "1"
+        out = []
+        rc = cmd_push_command(cfg_b, out=out.append)
+        check("push-command: 点呼の上書き (持ち主の判断) なら 1 行出して push を印字する",
+              rc == 0 and any("通す" in x for x in out)
+              and any(" push --force-with-lease=" in x for x in out), " / ".join(out))
+        del os.environ["GIT_REWRITE_READY_OVERRIDE"]
+        os.environ["GIT_REWRITE_READY_HOOK"] = "0"
         out = []
         rc = cmd_push_command(cfg_b, out=out.append)
         pcmd = [x for x in out if " push --force-with-lease=" in x]
